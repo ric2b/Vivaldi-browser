@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../../ui/components/icon_button/icon_button.js';
 import '../../../../ui/components/tooltips/tooltips.js';
@@ -21,13 +22,9 @@ import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js'
 import * as PanelCommon from '../../../common/common.js';
 import type * as Utils from '../../utils/utils.js';
 
-import stylesRaw from './entryLabelOverlay.css.js';
+import entryLabelOverlayStyles from './entryLabelOverlay.css.js';
 
 const {html, Directives} = Lit;
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -53,7 +50,7 @@ const UIStrings = {
   /**
    *@description Screen-reader text for a tooltip icon.
    */
-  moreInfoAriaLabel: 'More info',
+  moreInfoAriaLabel: 'More information about this feature',
 } as const;
 
 /*
@@ -116,6 +113,14 @@ const UIStringsNotTranslate = {
   learnMoreButton: 'Learn more about auto annotations',
 } as const;
 
+const enum AIButtonState {
+  ENABLED = 'enabled',
+  DISABLED = 'disabled',
+  HIDDEN = 'hidden',
+  GENERATION_FAILED = 'generation_failed',
+  GENERATING_LABEL = 'generating_label',
+}
+
 const str_ = i18n.i18n.registerUIStrings('panels/timeline/overlays/components/EntryLabelOverlay.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 const lockedString = i18n.i18n.lockedString;
@@ -140,10 +145,10 @@ export class EntryLabelChangeEvent extends Event {
   }
 }
 
-export class LabelAnnotationsConsentDialogVisiblityChange extends Event {
+export class LabelAnnotationsConsentDialogVisibilityChange extends Event {
   static readonly eventName = 'labelannotationsconsentdialogvisiblitychange';
   constructor(public isVisible: boolean) {
-    super(LabelAnnotationsConsentDialogVisiblityChange.eventName, {bubbles: true, composed: true});
+    super(LabelAnnotationsConsentDialogVisibilityChange.eventName, {bubbles: true, composed: true});
   }
 }
 
@@ -161,7 +166,6 @@ export class EntryLabelOverlay extends HTMLElement {
   static readonly MAX_LABEL_LENGTH = 100;
 
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
 
   // Once a label is bound for deletion, we remove it from the DOM via events
   // that are dispatched. But in the meantime the blur event of the input box
@@ -200,10 +204,8 @@ export class EntryLabelOverlay extends HTMLElement {
    * consented, hopefully!
    */
   #inAIConsentDialogFlow = false;
-  // Keep track of the AI label loading state to render a loading component if the label is being generated
-  #isAILabelLoading = false;
-  // Set to true when the generation of an AI label failed so we know when to display the 'generation failed' disclaimer
-  #isAILabelGenerationFailed = false;
+  #currAIButtonState: AIButtonState = AIButtonState.HIDDEN;
+
   /**
    * The entry label overlay consists of 3 parts - the label part with the label string inside,
    * the line connecting the label to the entry, and a black box around an entry to highlight the entry with a label.
@@ -251,10 +253,6 @@ export class EntryLabelOverlay extends HTMLElement {
    */
   overrideAIAgentForTest(agent: AiAssistanceModels.PerformanceAnnotationsAgent): void {
     this.#agent = agent;
-  }
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [styles];
   }
 
   entryHighlightWrapper(): HTMLElement|null {
@@ -349,7 +347,7 @@ export class EntryLabelOverlay extends HTMLElement {
     }
 
     this.#entryLabelVisibleHeight = entryLabelVisibleHeight;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
     // If the label is editable, focus cursor on it.
     // This method needs to be called after rendering the wrapper because it is the last label overlay element to render.
     // By doing this, the cursor focuses when the label is created.
@@ -506,6 +504,8 @@ export class EntryLabelOverlay extends HTMLElement {
 
   set callTree(callTree: Utils.AICallTree.AICallTree|null) {
     this.#callTree = callTree;
+    // If the entry has a calltree, we need to check if we need to show the 'generate label' button.
+    this.#setAIButtonRenderState();
   }
 
   // Generate the AI label suggestion if:
@@ -522,29 +522,28 @@ export class EntryLabelOverlay extends HTMLElement {
       }
       try {
         // Trigger a re-render to display the loading component in the place of the button when the label is being generated.
-        this.#isAILabelLoading = true;
+        this.#currAIButtonState = AIButtonState.GENERATING_LABEL;
         UI.ARIAUtils.alert(UIStringsNotTranslate.generatingLabel);
         // Trigger a re-render to put focus back on the input box, otherwise
         // when the button changes to a loading spinner, it loses focus and the
         // editing state is reset because the component loses focus.
         this.#render();
         this.#focusInputBox();
-        void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+        void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
 
         this.#label = await this.#agent.generateAIEntryLabel(this.#callTree);
         this.dispatchEvent(new EntryLabelChangeEvent(this.#label));
         this.#inputField.innerText = this.#label;
-
-        this.#isAILabelLoading = false;
+        this.#placeCursorAtInputEnd();
+        // Reset the button state because we want to hide it if the label is not empty.
+        this.#setAIButtonRenderState();
         // Trigger a re-render to hide the AI Button and display the generated label.
         this.#render();
       } catch {
-        this.#isAILabelLoading = false;
-        this.#isAILabelGenerationFailed = true;
-        void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+        this.#currAIButtonState = AIButtonState.GENERATION_FAILED;
+        void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
       }
     } else {
-      this.#isAILabelLoading = false;
       this.#inAIConsentDialogFlow = true;
       this.#render();
       const hasConsented = await this.#showUserAiFirstRunDialog();
@@ -564,7 +563,7 @@ export class EntryLabelOverlay extends HTMLElement {
    * @returns `true` if the user has now consented, and `false` otherwise.
    */
   async #showUserAiFirstRunDialog(): Promise<boolean> {
-    this.dispatchEvent(new LabelAnnotationsConsentDialogVisiblityChange(true));
+    this.dispatchEvent(new LabelAnnotationsConsentDialogVisibilityChange(true));
     const userConsented = await PanelCommon.FreDialog.show({
       ariaLabel: i18nString(UIStrings.freDialog),
       header: {iconName: 'pen-spark', text: lockedString(UIStringsNotTranslate.freDisclaimerHeader)},
@@ -597,11 +596,11 @@ export class EntryLabelOverlay extends HTMLElement {
         },
       ],
       onLearnMoreClick: () => {
-        UI.UIUtils.openInNewTab('https://developer.chrome.com/docs/devtools/performance/reference#auto-annotations');
+        UI.UIUtils.openInNewTab('https://developer.chrome.com/docs/devtools/performance/annotations#auto-annotations');
       },
       learnMoreButtonTitle: UIStringsNotTranslate.learnMoreButton,
     });
-    this.dispatchEvent(new LabelAnnotationsConsentDialogVisiblityChange(false));
+    this.dispatchEvent(new LabelAnnotationsConsentDialogVisibilityChange(false));
 
     if (userConsented) {
       this.#aiAnnotationsEnabledSetting.set(true);
@@ -609,7 +608,7 @@ export class EntryLabelOverlay extends HTMLElement {
     return this.#aiAnnotationsEnabledSetting.get();
   }
 
-  #shouldRenderAIButton(): 'enabled'|'disabled'|'hidden' {
+  #setAIButtonRenderState(): void {
     const hasAiExperiment = Boolean(Root.Runtime.hostConfig.devToolsAiGeneratedTimelineLabels?.enabled);
     const aiDisabledByEnterprisePolicy = Root.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue ===
         Root.Runtime.GenAiEnterprisePolicyValue.DISABLE;
@@ -624,24 +623,19 @@ export class EntryLabelOverlay extends HTMLElement {
     const labelIsEmpty = this.#label?.length <= 0;
 
     if (!hasAiExperiment || aiDisabledByEnterprisePolicy || !dataToGenerateLabelAvailable || !labelIsEmpty) {
-      return 'hidden';
+      this.#currAIButtonState = AIButtonState.HIDDEN;
+    } else {
+      // To verify whether AI can be used, check if the user is logged in, over 18, in a supported
+      // location and offline. If the user is not logged in, `blockedByAge` will return true.
+      const aiAvailable = !Root.Runtime.hostConfig.aidaAvailability?.blockedByAge &&
+          !Root.Runtime.hostConfig.aidaAvailability?.blockedByGeo && !navigator.onLine === false;
+      if (aiAvailable) {
+        this.#currAIButtonState = AIButtonState.ENABLED;
+      } else {
+        // If AI features are not available, we show a disabled button.
+        this.#currAIButtonState = AIButtonState.DISABLED;
+      }
     }
-
-    // To verify whether AI can be used, check if the user is logged in, over 18, in a supported
-    // location and offline. If the user is not logged in, `blockedByAge` will return true.
-    const aiAvailable = !Root.Runtime.hostConfig.aidaAvailability?.blockedByAge &&
-        !Root.Runtime.hostConfig.aidaAvailability?.blockedByGeo && !navigator.onLine === false;
-    if (aiAvailable) {
-      return 'enabled';
-    }
-
-    // If AI features are not available, we show a disabled button.
-    if (!aiAvailable) {
-      return 'disabled';
-    }
-
-    console.error('\'Generate label\' button is hidden for an unknown reason');
-    return 'hidden';
   }
 
   #renderAITooltip(opts: {textContent: string, includeSettingsButton: boolean}): Lit.TemplateResult {
@@ -651,8 +645,7 @@ export class EntryLabelOverlay extends HTMLElement {
     id="info-tooltip"
     ${Directives.ref(this.#richTooltip)}>
       <div class="info-tooltip-container">
-        ${opts.textContent}
-        ${opts.includeSettingsButton ? html`
+        ${opts.textContent} ${opts.includeSettingsButton ? html`
           <button
             class="link tooltip-link"
             role="link"
@@ -667,26 +660,24 @@ export class EntryLabelOverlay extends HTMLElement {
     </devtools-tooltip>`;
     // clang-format on
   }
-
-  #renderAiButton(): Lit.LitTemplate {
-    const noLogging = Root.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue ===
-        Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
-
-    if (this.#isAILabelLoading) {
-      // clang-format off
-    return html`
+  #renderGeneratingLabelAiButton(): Lit.LitTemplate {
+    // clang-format off
+      return html`
       <span
         class="ai-label-loading">
         <devtools-spinner></devtools-spinner>
         <span class="generate-label-text">${lockedString(UIStringsNotTranslate.generatingLabel)}</span>
       </span>
     `;
-      // clang-format on
-    }
+    // clang-format on
+  }
 
-    if (this.#isAILabelGenerationFailed) {
+  #renderAiButton(): Lit.LitTemplate {
+    const noLogging = Root.Runtime.hostConfig.aidaAvailability?.enterprisePolicyValue ===
+        Root.Runtime.GenAiEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING;
+
+    if (this.#currAIButtonState === AIButtonState.GENERATION_FAILED) {
       // Only show the error message on the first component render render after the failure.
-      this.#isAILabelGenerationFailed = false;
       // clang-format off
       return html`
         <span
@@ -721,8 +712,8 @@ export class EntryLabelOverlay extends HTMLElement {
         </button>
         <devtools-button
           aria-details="info-tooltip"
-          aria-label=${i18nString(UIStrings.moreInfoAriaLabel)}
           class="pen-icon"
+          .title=${i18nString(UIStrings.moreInfoAriaLabel)}
           .iconName=${'info'}
           .variant=${Buttons.Button.Variant.ICON}
           ></devtools-button>
@@ -811,6 +802,7 @@ export class EntryLabelOverlay extends HTMLElement {
     // clang-format off
     Lit.render(
         html`
+        <style>${entryLabelOverlayStyles}</style>
         <span class="label-parts-wrapper" role="region" aria-label=${i18nString(UIStrings.entryLabel)}
           @focusout=${this.#handleFocusOutEvent}
         >
@@ -829,6 +821,7 @@ export class EntryLabelOverlay extends HTMLElement {
               @paste=${this.#handleLabelInputPaste}
               @keyup=${() => {
                 this.#handleLabelInputKeyUp();
+                this.#setAIButtonRenderState();
                 // Rerender the label component when the label text changes because we need to
                 // make sure the 'auto annotation' button is only shown when the label is empty.
                 this.#render();
@@ -838,12 +831,16 @@ export class EntryLabelOverlay extends HTMLElement {
               tabindex="0"
             ></span>
             ${(() => {
-              switch (this.#shouldRenderAIButton()) {
-                case 'hidden':
+              switch (this.#currAIButtonState) {
+                case AIButtonState.HIDDEN:
                   return Lit.nothing;
-                case 'enabled':
+                case AIButtonState.ENABLED:
                   return this.#renderAiButton();
-                case 'disabled':
+                case AIButtonState.GENERATING_LABEL:
+                  return this.#renderGeneratingLabelAiButton();
+                case AIButtonState.GENERATION_FAILED:
+                  return this.#renderAiButton();
+                case AIButtonState.DISABLED:
                   return this.#renderDisabledAiButton();
               }
             })()}

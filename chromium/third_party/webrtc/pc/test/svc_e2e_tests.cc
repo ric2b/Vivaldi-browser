@@ -55,21 +55,17 @@
 namespace webrtc {
 namespace {
 
-using ::cricket::kAv1CodecName;
-using ::cricket::kH264CodecName;
-using ::cricket::kVp8CodecName;
-using ::cricket::kVp9CodecName;
 using ::testing::Combine;
 using ::testing::Optional;
 using ::testing::UnitTest;
 using ::testing::Values;
 using ::testing::ValuesIn;
-using ::webrtc::webrtc_pc_e2e::EmulatedSFUConfig;
-using ::webrtc::webrtc_pc_e2e::PeerConfigurer;
-using ::webrtc::webrtc_pc_e2e::RunParams;
-using ::webrtc::webrtc_pc_e2e::ScreenShareConfig;
-using ::webrtc::webrtc_pc_e2e::VideoCodecConfig;
-using ::webrtc::webrtc_pc_e2e::VideoConfig;
+using webrtc_pc_e2e::EmulatedSFUConfig;
+using webrtc_pc_e2e::PeerConfigurer;
+using webrtc_pc_e2e::RunParams;
+using webrtc_pc_e2e::ScreenShareConfig;
+using webrtc_pc_e2e::VideoCodecConfig;
+using webrtc_pc_e2e::VideoConfig;
 
 std::unique_ptr<webrtc_pc_e2e::PeerConnectionE2EQualityTestFixture>
 CreateTestFixture(absl::string_view test_case_name,
@@ -133,9 +129,9 @@ class SvcTest : public testing::TestWithParam<
   }
 
   static VideoCodecConfig ToVideoCodecConfig(absl::string_view codec) {
-    if (codec == cricket::kVp9CodecName) {
+    if (codec == kVp9CodecName) {
       return VideoCodecConfig(
-          cricket::kVp9CodecName,
+          kVp9CodecName,
           {{kVP9FmtpProfileId, VP9ProfileToString(VP9Profile::kProfile0)}});
     }
 
@@ -217,7 +213,7 @@ class SvcVideoQualityAnalyzer : public DefaultVideoQualityAnalyzer {
 
   void OnStatsReports(
       absl::string_view pc_label,
-      const rtc::scoped_refptr<const RTCStatsReport>& report) override {
+      const scoped_refptr<const RTCStatsReport>& report) override {
     // Extract the scalability mode reported in the stats.
     auto outbound_stats = report->GetStatsOfType<RTCOutboundRtpStreamStats>();
     for (const auto& stat : outbound_stats) {

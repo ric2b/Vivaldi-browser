@@ -130,6 +130,17 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   // hierarchy.
   virtual void ViewRemoved(View* view) = 0;
 
+  // Notifies the NativeWidget that its Widget was destroyed by the client.
+  // NativeWidgets should override this to clear any references to its
+  // associated Widget. The NativeWidget destruction will be initiated
+  // separately by the host platform.
+  //
+  // Only relevant for CLIENT_OWNS_WIDGET ownership schemes. Not relevant for
+  // other widget ownership schemes
+  //  - NATIVE_WIDGET_OWNS_WIDGET - NativeWidget initiates Widget destruction.
+  //  - WIDGET_OWNS_NATIVE_WIDGET - Widget synchronously destroys NativeWidget.
+  virtual void ClientDestroyedWidget();
+
   // Sets/Gets a native window property on the underlying native window object.
   // Returns NULL if the property does not exist. Setting the property value to
   // NULL removes the property.
@@ -173,8 +184,10 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   // initially parented.
   virtual void InitModalType(ui::mojom::ModalType modal_type) = 0;
 
-  // Sets the color mode used for window styling.
-  virtual void SetColorMode(ui::ColorProviderKey::ColorMode color_mode) = 0;
+  // Notifies the NativeWidget that the widget theme has changed.
+  // At the moment, the platform window only cares about the color mode.
+  virtual void OnWidgetThemeChanged(
+      ui::ColorProviderKey::ColorMode color_mode) = 0;
 
   // See method documentation in Widget.
   virtual gfx::Rect GetWindowBoundsInScreen() const = 0;
@@ -194,6 +207,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
                     const gfx::Rect& restore_bounds) = 0;
   virtual void Hide() = 0;
   virtual bool IsVisible() const = 0;
+  virtual bool IsVisibleOnScreen() const = 0;
   virtual void Activate() = 0;
   virtual void Deactivate() = 0;
   virtual bool IsActive() const = 0;

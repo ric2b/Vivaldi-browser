@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/strings/match.h"
 #include "api/data_channel_interface.h"
 #include "api/dtls_transport_interface.h"
 #include "api/jsep.h"
@@ -34,6 +35,7 @@
 #include "api/units/time_delta.h"
 #include "p2p/base/transport_description.h"
 #include "p2p/base/transport_info.h"
+#include "p2p/test/test_turn_server.h"
 #include "pc/media_session.h"
 #include "pc/session_description.h"
 #include "pc/test/fake_rtc_certificate_generator.h"
@@ -45,8 +47,10 @@
 #include "rtc_base/gunit.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/numerics/safe_conversions.h"
+#include "rtc_base/socket_address.h"
 #include "rtc_base/ssl_stream_adapter.h"
 #include "rtc_base/strings/string_builder.h"
+#include "rtc_base/task_queue_for_test.h"
 #include "rtc_base/virtual_socket_server.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
@@ -130,7 +134,7 @@ void MakeOfferHaveActiveDtlsRole(
     std::unique_ptr<SessionDescriptionInterface>& desc) {
   auto& transport_infos = desc->description()->transport_infos();
   for (auto& transport_info : transport_infos) {
-    transport_info.description.connection_role = cricket::CONNECTIONROLE_ACTIVE;
+    transport_info.description.connection_role = CONNECTIONROLE_ACTIVE;
   }
 }
 
@@ -138,8 +142,7 @@ void MakeOfferHavePassiveDtlsRole(
     std::unique_ptr<SessionDescriptionInterface>& desc) {
   auto& transport_infos = desc->description()->transport_infos();
   for (auto& transport_info : transport_infos) {
-    transport_info.description.connection_role =
-        cricket::CONNECTIONROLE_PASSIVE;
+    transport_info.description.connection_role = CONNECTIONROLE_PASSIVE;
   }
 }
 
@@ -322,10 +325,10 @@ TEST_P(DataChannelIntegrationTest,
   caller()->data_channel()->Close();
 
   EXPECT_THAT(WaitUntil([&] { return caller()->data_observer()->state(); },
-                        Eq(webrtc::DataChannelInterface::kClosed)),
+                        Eq(DataChannelInterface::kClosed)),
               IsRtcOk());
   EXPECT_THAT(WaitUntil([&] { return callee()->data_observer()->state(); },
-                        Eq(webrtc::DataChannelInterface::kClosed)),
+                        Eq(DataChannelInterface::kClosed)),
               IsRtcOk());
 }
 
@@ -356,7 +359,7 @@ TEST_P(DataChannelIntegrationTest, EndToEndCallWithSctpDataChannelFullBuffer) {
 
   std::string data(256 * 1024, 'a');
   for (size_t queued_size = 0;
-       queued_size < webrtc::DataChannelInterface::MaxSendQueueSize();
+       queued_size < DataChannelInterface::MaxSendQueueSize();
        queued_size += data.size()) {
     caller()->data_channel()->SendAsync(DataBuffer(data), nullptr);
   }
@@ -430,7 +433,7 @@ TEST_P(DataChannelIntegrationTest,
   EXPECT_FALSE(caller()->data_observer()->messages().back().binary);
 
   // Sending empty binary data
-  rtc::CopyOnWriteBuffer empty_buffer;
+  CopyOnWriteBuffer empty_buffer;
   caller()->data_channel()->Send(DataBuffer(empty_buffer, true));
   EXPECT_THAT(
       WaitUntil(
@@ -1509,10 +1512,9 @@ class DataChannelIntegrationTestUnifiedPlanFieldTrials
       bool addTurn) {
     RTCConfiguration config;
     if (addTurn) {
-      static const rtc::SocketAddress turn_server_1_internal_address{
-          "192.0.2.1", 3478};
-      static const rtc::SocketAddress turn_server_1_external_address{
-          "192.0.3.1", 0};
+      static const SocketAddress turn_server_1_internal_address{"192.0.2.1",
+                                                                3478};
+      static const SocketAddress turn_server_1_external_address{"192.0.3.1", 0};
       TestTurnServer* turn_server_1 = CreateTurnServer(
           turn_server_1_internal_address, turn_server_1_external_address);
 
@@ -1623,6 +1625,15 @@ class DataChannelIntegrationTestUnifiedPlanFieldTrials
   }
 
   const char* CheckSupported() {
+    const bool callee_active = std::get<0>(GetParam());
+    const bool callee_has_dtls_in_stun = absl::StrContains(
+        std::get<2>(GetParam()), "WebRTC-IceHandshakeDtls/Enabled/");
+    const bool callee2_has_dtls_in_stun = absl::StrContains(
+        std::get<3>(GetParam()), "WebRTC-IceHandshakeDtls/Enabled/");
+    if (callee_active &&
+        (callee_has_dtls_in_stun || callee2_has_dtls_in_stun)) {
+      return "dtls-in-stun when callee(s) are dtls clients";
+    }
     return nullptr;
   }
 };
@@ -1631,7 +1642,10 @@ static const char* kTrialsVariants[] = {
     "",
     "WebRTC-ForceDtls13/Enabled/",
     "WebRTC-IceHandshakeDtls/Enabled/",
+    "WebRTC-ForceDtls13/Enabled/WebRTC-EnableDtlsPqc/Enabled/",
     "WebRTC-ForceDtls13/Enabled/WebRTC-IceHandshakeDtls/Enabled/",
+    ("WebRTC-ForceDtls13/Enabled/WebRTC-IceHandshakeDtls/Enabled/"
+     "WebRTC-EnableDtlsPqc/Enabled/"),
 };
 
 INSTANTIATE_TEST_SUITE_P(DataChannelIntegrationTestUnifiedPlanFieldTrials,

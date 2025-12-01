@@ -4,7 +4,10 @@
 
 #include "content/browser/btm/btm_page_visit_observer.h"
 
+#include <vector>
+
 #include "base/check.h"
+#include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "content/browser/btm/btm_bounce_detector.h"
 #include "content/browser/btm/btm_utils.h"
@@ -26,9 +29,6 @@ BtmNavigationInfo::BtmNavigationInfo(NavigationHandle& navigation_handle)
                    navigation_handle.GetNextPageUkmSourceId()}) {
   CHECK(navigation_handle.HasCommitted());
 }
-BtmNavigationInfo::BtmNavigationInfo(const BtmNavigationInfo&) = default;
-BtmNavigationInfo& BtmNavigationInfo::operator=(const BtmNavigationInfo&) =
-    default;
 BtmNavigationInfo::BtmNavigationInfo(BtmNavigationInfo&&) = default;
 BtmNavigationInfo& BtmNavigationInfo::operator=(BtmNavigationInfo&&) = default;
 BtmNavigationInfo::~BtmNavigationInfo() = default;
@@ -98,7 +98,55 @@ class NavigationState
     urls.push_back(navigation_handle.GetURL());
 
     // TODO - crbug.com/406841434: `CHECK` the result of `filter_.Filter`.
-    filter_.Filter(urls, accesses);
+    bool were_all_accesses_matched = filter_.Filter(urls, accesses);
+    if (!were_all_accesses_matched && !navigation_handle.IsErrorPage()) {
+      DEBUG_ALIAS_FOR_GURL(
+          committed_url_alias,
+          navigation_handle.GetRenderFrameHost()->GetLastCommittedURL());
+      DEBUG_ALIAS_FOR_GURL(navigation_handle_url_alias,
+                           navigation_handle.GetURL());
+
+      GURL::Replacements repl;
+      repl.ClearQuery();
+      repl.ClearRef();
+
+      auto get_debug_strings = [&repl](const std::vector<GURL>& urls) {
+        std::pair<std::string, std::string> debug_strings;
+        std::string& debug_string = debug_strings.first;
+        std::string& simple_debug_string = debug_strings.second;
+        for (const GURL& url : urls) {
+          debug_string += url.spec();
+          debug_string += ", ";
+          simple_debug_string += url.ReplaceComponents(repl).spec();
+          simple_debug_string += ", ";
+        }
+        return debug_strings;
+      };
+
+      // Redirect Chain aliases
+      auto [redirect_chain_debug_string, redirect_chain_simple_debug_string] =
+          get_debug_strings(redirect_chain);
+      DEBUG_ALIAS_FOR_CSTR(redirect_chain_alias,
+                           redirect_chain_debug_string.c_str(), 512);
+      DEBUG_ALIAS_FOR_CSTR(redirect_chain_simple_alias,
+                           redirect_chain_simple_debug_string.c_str(), 512);
+
+      // Server Redirects aliases
+      auto [server_redirects_debug_string,
+            server_redirects_simple_debug_string] = get_debug_strings(urls);
+      DEBUG_ALIAS_FOR_CSTR(server_redirects_alias,
+                           server_redirects_debug_string.c_str(), 512);
+      DEBUG_ALIAS_FOR_CSTR(server_redirects_simple_alias,
+                           server_redirects_simple_debug_string.c_str(), 512);
+
+      // Cookie Accesses aliases
+      auto [accesses_debug_string, accesses_simple_debug_string] =
+          get_debug_strings(filter_.GetUrlsForDebuging());
+      DEBUG_ALIAS_FOR_CSTR(accesses_alias, accesses_debug_string.c_str(), 512);
+      DEBUG_ALIAS_FOR_CSTR(accesses_simple_alias,
+                           accesses_simple_debug_string.c_str(), 512);
+      base::debug::DumpWithoutCrashing();
+    }
 
     int i = 0;
     for (const size_t redirect_chain_index : server_redirect_chain_indices_) {
@@ -197,15 +245,15 @@ void BtmPageVisitObserver::DidFinishNavigation(
   current_page_ = BtmPageVisitInfo{
       .url = navigation_handle->GetURL(),
       .source_id = navigation_handle->GetNextPageUkmSourceId(),
-      .had_qualifying_storage_access = IsWrite(final_url_cookie_access)};
+      .had_active_storage_access = IsWrite(final_url_cookie_access)};
   last_page_change_time_ = now;
 }
 
 void BtmPageVisitObserver::ReportVisit() {
   CHECK(!pending_visits_.empty());
-  VisitTuple& visit = pending_visits_.front();
-  callback_.Run(visit.prev_page, visit.navigation);
+  VisitTuple visit = std::move(pending_visits_.front());
   pending_visits_.pop_front();
+  callback_.Run(std::move(visit.prev_page), std::move(visit.navigation));
 }
 
 void BtmPageVisitObserver::NotifyStorageAccessed(
@@ -215,7 +263,7 @@ void BtmPageVisitObserver::NotifyStorageAccessed(
   if (!render_frame_host->GetPage().IsPrimary() || blocked) {
     return;
   }
-  current_page_.had_qualifying_storage_access = true;
+  current_page_.had_active_storage_access = true;
 }
 
 void BtmPageVisitObserver::OnCookiesAccessed(
@@ -257,7 +305,7 @@ void BtmPageVisitObserver::OnCookiesAccessed(
 
   if (render_frame_host->GetMainFrame()->IsInPrimaryMainFrame()) {
     // Cookie access within the current page.
-    current_page_.had_qualifying_storage_access = true;
+    current_page_.had_active_storage_access = true;
     return;
   }
 
@@ -265,7 +313,7 @@ void BtmPageVisitObserver::OnCookiesAccessed(
   // page, try to find that page's visit.
   for (VisitTuple& visit : pending_visits_) {
     if (first_party_url == visit.prev_page.url) {
-      visit.prev_page.had_qualifying_storage_access = true;
+      visit.prev_page.had_active_storage_access = true;
       return;
     }
   }
@@ -274,7 +322,8 @@ void BtmPageVisitObserver::OnCookiesAccessed(
 void BtmPageVisitObserver::OnCookiesAccessed(
     NavigationHandle* navigation_handle,
     const CookieAccessDetails& details) {
-  // Ignore irrelevant cookie accesses.
+  // Ignore irrelevant cookie accesses. Included in this group are navigational
+  // cookie reads, as they're passive storage accesses.
   if (details.blocked_by_policy ||
       details.type != CookieAccessDetails::Type::kChange ||
       !IsInPrimaryPage(*navigation_handle)) {
@@ -292,7 +341,16 @@ void BtmPageVisitObserver::OnCookiesAccessed(
     }
 
     // Attribute subframe storage accesses to the top-level page.
-    current_page_.had_qualifying_storage_access = true;
+    current_page_.had_active_storage_access = true;
+    return;
+  }
+
+  // Ignore non-navigational cookie accesses reported through this event because
+  // we can't reliably attribute subresources accesses to the URL that is
+  // loading the subresource.
+  // TODO - https://crbug.com/408168195: Attribute non-navigation accesses e.g.
+  // from Early Hints, to the correct URL.
+  if (details.source == CookieAccessDetails::Source::kNonNavigation) {
     return;
   }
 

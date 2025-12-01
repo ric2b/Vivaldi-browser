@@ -4,16 +4,14 @@
 
 package org.chromium.base.test.transit;
 
-import static org.junit.Assert.fail;
-
 import android.app.Activity;
 
-import androidx.annotation.CallSuper;
-import androidx.annotation.Nullable;
 import androidx.test.espresso.Espresso;
 
 import org.chromium.base.test.transit.Transition.TransitionOptions;
 import org.chromium.base.test.transit.Transition.Trigger;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,14 +21,15 @@ import java.util.List;
  *
  * <p>A transit-layer class should be derived from it and instantiated.
  *
- * <p>As a {@link ConditionalState}, it has a defined lifecycle and must declare {@link Elements}
+ * <p>As a {@link ConditionalState}, it has a defined lifecycle and must declare {@link Element}s
  * that determine its enter and exit {@link Condition}s.
  *
- * <p>Transitions should be done with {@link Trip#travelSync(Station, Station, Trigger)}. The
+ * <p>Transitions should be done with {@link Station#travelToSync(Station, Trigger)}. The
  * transit-layer derived class should expose screen-specific methods for the test-layer to use.
  *
  * @param <HostActivity> The activity this station is associate to.
  */
+@NullMarked
 public abstract class Station<HostActivity extends Activity> extends ConditionalState {
     private static final String TAG = "Transit";
     private static int sLastStationId;
@@ -42,7 +41,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
     private final String mName;
     private final @Nullable Class<HostActivity> mActivityClass;
 
-    protected ActivityElement<HostActivity> mActivityElement;
+    protected final @Nullable ActivityElement<HostActivity> mActivityElement;
 
     /**
      * Create a base station.
@@ -53,8 +52,14 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
     protected Station(@Nullable Class<HostActivity> activityClass) {
         mActivityClass = activityClass;
         mId = sLastStationId++;
-        TrafficControl.notifyCreatedStation(this);
         mName = String.format("<S%d: %s>", mId, getClass().getSimpleName());
+        TrafficControl.notifyCreatedStation(this);
+
+        if (mActivityClass != null) {
+            mActivityElement = mElements.declareActivity(mActivityClass);
+        } else {
+            mActivityElement = null;
+        }
     }
 
     protected List<Facility<?>> getFacilitiesWithPhase(@Phase int phase) {
@@ -88,19 +93,31 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
         return mName;
     }
 
-    @CallSuper
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        if (mActivityClass != null) {
-            mActivityElement = elements.declareActivity(mActivityClass);
-        }
-    }
-
     /**
      * @return the self-incrementing id for logging purposes.
      */
     public int getId() {
         return mId;
+    }
+
+    void requireToBeInSameTask(Station<?> originStation) {
+        assertInPhase(Phase.NEW);
+        if (mActivityElement != null) {
+            originStation.assertInPhase(Phase.ACTIVE);
+            ActivityElement<?> originActivityElement = originStation.getActivityElement();
+            if (originActivityElement != null) {
+                mActivityElement.requireToBeInSameTask(originActivityElement.get());
+            } else {
+                mActivityElement.requireNoParticularTask();
+            }
+        }
+    }
+
+    void requireToBeInNewTask() {
+        assertInPhase(Phase.NEW);
+        if (mActivityElement != null) {
+            mActivityElement.requireToBeInNewTask();
+        }
     }
 
     /**
@@ -114,16 +131,19 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @return the destination {@link Station}, now ACTIVE.
      * @param <T> the type of the destination {@link Station}.
      */
-    public final <T extends Station<?>> T travelToSync(T destination, Trigger trigger) {
-        Trip trip = new Trip(this, destination, TransitionOptions.DEFAULT, trigger);
+    public final <T extends Station<?>> T travelToSync(T destination, @Nullable Trigger trigger) {
+        destination.requireToBeInSameTask(this);
+        Trip trip =
+                new Trip(List.of(this), List.of(destination), TransitionOptions.DEFAULT, trigger);
         trip.transitionSync();
         return destination;
     }
 
     /** Version of #travelToSync() with extra TransitionOptions. */
     public final <T extends Station<?>> T travelToSync(
-            T destination, TransitionOptions options, Trigger trigger) {
-        Trip trip = new Trip(this, destination, options, trigger);
+            T destination, TransitionOptions options, @Nullable Trigger trigger) {
+        destination.requireToBeInSameTask(this);
+        Trip trip = new Trip(List.of(this), List.of(destination), options, trigger);
         trip.transitionSync();
         return destination;
     }
@@ -137,13 +157,13 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @return the {@link Facility} entered, now ACTIVE.
      * @param <F> the type of {@link Facility} entered.
      */
-    public <F extends Facility<?>> F enterFacilitySync(F facility, Trigger trigger) {
+    public <F extends Facility<?>> F enterFacilitySync(F facility, @Nullable Trigger trigger) {
         return enterFacilitySync(facility, TransitionOptions.DEFAULT, trigger);
     }
 
     /** Version of {@link #enterFacilitySync(F, Trigger)} with extra TransitionOptions. */
     public <F extends Facility<?>> F enterFacilitySync(
-            F facility, TransitionOptions options, Trigger trigger) {
+            F facility, TransitionOptions options, @Nullable Trigger trigger) {
         registerFacility(facility);
         FacilityCheckIn checkIn = new FacilityCheckIn(List.of(facility), options, trigger);
         checkIn.transitionSync();
@@ -157,13 +177,13 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @param facilities the {@link Facility}s to enter.
      * @param trigger the trigger to start the transition (e.g. clicking a view).
      */
-    public void enterFacilitiesSync(List<Facility<?>> facilities, Trigger trigger) {
+    public void enterFacilitiesSync(List<Facility<?>> facilities, @Nullable Trigger trigger) {
         enterFacilitiesSync(facilities, TransitionOptions.DEFAULT, trigger);
     }
 
     /** Version of {@link #enterFacilitiesSync(List, Trigger)} with extra TransitionOptions. */
     public void enterFacilitiesSync(
-            List<Facility<?>> facilities, TransitionOptions options, Trigger trigger) {
+            List<Facility<?>> facilities, TransitionOptions options, @Nullable Trigger trigger) {
         for (Facility<?> f : facilities) {
             registerFacility(f);
         }
@@ -178,12 +198,13 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @param facility the {@link Facility} to exit.
      * @param trigger the trigger to start the transition (e.g. clicking a view).
      */
-    public void exitFacilitySync(Facility<?> facility, Trigger trigger) {
+    public void exitFacilitySync(Facility<?> facility, @Nullable Trigger trigger) {
         exitFacilitySync(facility, TransitionOptions.DEFAULT, trigger);
     }
 
     /** Version of {@link #exitFacilitySync(Facility, Trigger)} with extra TransitionOptions. */
-    public void exitFacilitySync(Facility<?> facility, TransitionOptions options, Trigger trigger) {
+    public void exitFacilitySync(
+            Facility<?> facility, TransitionOptions options, @Nullable Trigger trigger) {
         exitFacilitiesSync(List.of(facility), options, trigger);
     }
 
@@ -194,13 +215,13 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @param facilities the {@link Facility}s to exit.
      * @param trigger the trigger to start the transition (e.g. clicking a view).
      */
-    public void exitFacilitiesSync(List<Facility<?>> facilities, Trigger trigger) {
+    public void exitFacilitiesSync(List<Facility<?>> facilities, @Nullable Trigger trigger) {
         exitFacilitiesSync(facilities, TransitionOptions.DEFAULT, trigger);
     }
 
     /** Version of {@link #exitFacilitiesSync(List, Trigger)} with extra TransitionOptions. */
     public void exitFacilitiesSync(
-            List<Facility<?>> facilities, TransitionOptions options, Trigger trigger) {
+            List<Facility<?>> facilities, TransitionOptions options, @Nullable Trigger trigger) {
         assertHasFacilities(facilities);
         FacilityCheckOut checkOut = new FacilityCheckOut(facilities, options, trigger);
         checkOut.transitionSync();
@@ -220,7 +241,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @param <F> the type of {@link Facility} entered.
      */
     public <F extends Facility<?>> F swapFacilitySync(
-            Facility<?> facilityToExit, F facilityToEnter, Trigger trigger) {
+            Facility<?> facilityToExit, F facilityToEnter, @Nullable Trigger trigger) {
         return swapFacilitySync(
                 List.of(facilityToExit), facilityToEnter, TransitionOptions.DEFAULT, trigger);
     }
@@ -230,7 +251,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
             Facility<?> facilityToExit,
             F facilityToEnter,
             TransitionOptions options,
-            Trigger trigger) {
+            @Nullable Trigger trigger) {
         return swapFacilitySync(List.of(facilityToExit), facilityToEnter, options, trigger);
     }
 
@@ -248,7 +269,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * @param <F> the type of {@link Facility} entered.
      */
     public <F extends Facility<?>> F swapFacilitySync(
-            List<Facility<?>> facilitiesToExit, F facilityToEnter, Trigger trigger) {
+            List<Facility<?>> facilitiesToExit, F facilityToEnter, @Nullable Trigger trigger) {
         return swapFacilitySync(
                 facilitiesToExit, facilityToEnter, TransitionOptions.DEFAULT, trigger);
     }
@@ -258,7 +279,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
             List<Facility<?>> facilitiesToExit,
             F facilityToEnter,
             TransitionOptions options,
-            Trigger trigger) {
+            @Nullable Trigger trigger) {
         assertHasFacilities(facilitiesToExit);
         registerFacility(facilityToEnter);
         FacilitySwap swap =
@@ -281,7 +302,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
     public void swapFacilitiesSync(
             List<Facility<?>> facilitiesToExit,
             List<Facility<?>> facilitiesToEnter,
-            Trigger trigger) {
+            @Nullable Trigger trigger) {
         swapFacilitiesSync(facilitiesToExit, facilitiesToEnter, TransitionOptions.DEFAULT, trigger);
     }
 
@@ -290,13 +311,40 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
             List<Facility<?>> facilitiesToExit,
             List<Facility<?>> facilitiesToEnter,
             TransitionOptions options,
-            Trigger trigger) {
+            @Nullable Trigger trigger) {
         assertHasFacilities(facilitiesToExit);
         for (Facility<?> facility : facilitiesToEnter) {
             registerFacility(facility);
         }
         FacilitySwap swap = new FacilitySwap(facilitiesToExit, facilitiesToEnter, options, trigger);
         swap.transitionSync();
+    }
+
+    /**
+     * Starts a transition into a {@link Station} without leaving the current one.
+     *
+     * <p>Useful for opening a new window.
+     *
+     * <p>Runs the transition |trigger|, and blocks until the destination {@link Station} is
+     * considered ACTIVE (enter Conditions are fulfilled) and the {@link Trip}'s transition
+     * conditions are fulfilled.
+     *
+     * @param destination the {@link Facility} to arrive at.
+     * @param trigger the trigger to start the transition (e.g. clicking a view).
+     * @return the destination {@link Station}, now ACTIVE.
+     * @param <T> the type of the destination {@link Station}.
+     */
+    public static <T extends Station<?>> T spawnSync(T destination, @Nullable Trigger trigger) {
+        return spawnSync(destination, TransitionOptions.DEFAULT, trigger);
+    }
+
+    /** Version of {@link #spawnSync(T, Trigger)} with extra TransitionOptions. */
+    public static <T extends Station<?>> T spawnSync(
+            T destination, TransitionOptions options, @Nullable Trigger trigger) {
+        destination.requireToBeInNewTask();
+        Trip trip = new Trip(List.of(), List.of(destination), options, trigger);
+        trip.transitionSync();
+        return destination;
     }
 
     /**
@@ -319,10 +367,7 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
     }
 
     /** Get the activity element associate with this station, if there's any. */
-    public ActivityElement<HostActivity> getActivityElement() {
-        if (mActivityClass == null) {
-            fail("Requesting an ActivityElement for a station with no host activity.");
-        }
+    public @Nullable ActivityElement<HostActivity> getActivityElement() {
         return mActivityElement;
     }
 
@@ -333,7 +378,8 @@ public abstract class Station<HostActivity extends Activity> extends Conditional
      * triggers when it is already TRANSITIONING_FROM.
      */
     public HostActivity getActivity() {
-        assertSuppliersCanBeUsed();
+        assert mActivityElement != null
+                : "Requesting an ActivityElement for a station with no host activity.";
         return mActivityElement.get();
     }
 }

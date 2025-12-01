@@ -20,6 +20,7 @@
 #import "ios/chrome/browser/overlays/model/public/overlay_request_support.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_response.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/autofill_address_profile/save_address_profile_infobar_banner_overlay_mediator.h"
+#import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/collaboration_group/collaboration_group_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/confirm/confirm_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/features.h"
 #import "ios/chrome/browser/overlays/ui_bundled/infobar_banner/infobar_banner_overlay_mediator.h"
@@ -35,6 +36,8 @@
 #import "ios/chrome/browser/overlays/ui_bundled/overlay_request_mediator_util.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/non_modal_signin_promo_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
@@ -138,6 +141,9 @@ using vivaldi::IsVivaldiRunning;
          presentsModal:config->has_badge()
                   type:config->infobar_type()];
   mediator.consumer = self.bannerViewController;
+  // Set the nonModalSignInPromoHandler for non modal sign-in promo.
+  mediator.nonModalSignInPromoHandler = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), NonModalSignInPromoCommands);
   mediator.engagementTracker =
       feature_engagement::TrackerFactory::GetForProfile(self.profile);
 
@@ -261,6 +267,9 @@ using vivaldi::IsVivaldiRunning;
       break;
     case InfobarType::kInfobarTypeEnhancedSafeBrowsing:
       mediatorClass = [EnhancedSafeBrowsingBannerOverlayMediator class];
+      break;
+    case InfobarType::kInfobarTypeCollaborationGroup:
+      mediatorClass = [CollaborationGroupInfobarBannerOverlayMediator class];
       break;
     default:
       NOTREACHED() << "Received unsupported infobarType.";

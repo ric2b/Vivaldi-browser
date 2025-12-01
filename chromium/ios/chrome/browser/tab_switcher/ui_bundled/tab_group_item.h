@@ -8,25 +8,15 @@
 #import <UIKit/UIKit.h>
 
 @class TabGroupItem;
-
-@class GroupTabInfo;
 #ifdef __cplusplus
 class TabGroup;
-class WebStateList;
 #endif
-
-// Block invoked when a GroupTabInfo fetching operation completes. The
-// `groupTabInfos` is nil if the operation failed.
-typedef void (^GroupTabInfosFetchingCompletionBlock)(
-    TabGroupItem* _Nullable item,
-    NSArray<GroupTabInfo*>* _Nullable groupTabInfos);
 
 // Model object representing an group item.
 @interface TabGroupItem : NSObject
 
 #ifdef __cplusplus
 - (nonnull instancetype)initWithTabGroup:(const TabGroup* _Nonnull)tabGroup
-                            webStateList:(WebStateList* _Nonnull)webStateList
     NS_DESIGNATED_INITIALIZER;
 #endif
 - (nonnull instancetype)init NS_UNAVAILABLE;
@@ -43,11 +33,6 @@ typedef void (^GroupTabInfosFetchingCompletionBlock)(
 @property(nonatomic, readonly, nullable) UIColor* foregroundColor;
 @property(nonatomic, readonly) NSInteger numberOfTabsInGroup;
 @property(nonatomic, readonly) BOOL collapsed;
-
-// Fetches the groupTabInfos (pair of snapshots and favicons), calling
-// `completion` on the calling sequence when the operation completes.
-- (void)fetchGroupTabInfos:
-    (nonnull GroupTabInfosFetchingCompletionBlock)completion;
 
 @end
 

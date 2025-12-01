@@ -12,7 +12,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/predictors/perform_network_context_prefetch.h"
 #include "chrome/browser/predictors/predictors_features.h"
@@ -29,6 +28,7 @@
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/empty_url_loader_client.h"
+#include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_factory_builder.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
@@ -246,6 +246,12 @@ void PrefetchManager::PrefetchUrl(
   // conservative one (no-referrer) by default.
   request.referrer_policy = net::ReferrerPolicy::NO_REFERRER;
 
+  // The prefetch can happen before the permissions policy is known, so use a
+  // conservative, all-blocking permissions policy.
+  request.permissions_policy =
+      *network::PermissionsPolicy::CreateFromParsedPolicy(
+          {}, {}, url::Origin::Create(request.url));
+
   request.headers.SetHeader(blink::kPurposeHeaderName,
                             blink::kSecPurposePrefetchHeaderValue);
   request.headers.SetHeader(blink::kSecPurposeHeaderName,
@@ -420,7 +426,7 @@ void PrefetchManager::TryToLaunchPrefetchJobs() {
 void PrefetchManager::AllPrefetchJobsForUrlFinished(PrefetchInfo& info) {
   DCHECK(info.is_done());
   auto it = prefetch_info_.find(info.url);
-  CHECK(it != prefetch_info_.end(), base::NotFatalUntil::M130);
+  CHECK(it != prefetch_info_.end());
   DCHECK(&info == it->second.get());
 
   if (delegate_)

@@ -59,23 +59,41 @@ enum class ContainerScrollable {
 
 using ContainerScrollableFlags = unsigned;
 
-inline ContainerScrollableFlags Flip(ContainerScrollableFlags overflowing) {
-  if (overflowing ==
+inline ContainerScrollableFlags Flip(ContainerScrollableFlags scrollable) {
+  if (scrollable ==
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kNone)) {
-    return overflowing;
+    return scrollable;
   }
   ContainerScrollableFlags flipped =
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kNone);
-  if (overflowing &
+  if (scrollable &
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kStart)) {
     flipped |= static_cast<ContainerScrollableFlags>(ContainerScrollable::kEnd);
   }
-  if (overflowing &
+  if (scrollable &
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kEnd)) {
     flipped |=
         static_cast<ContainerScrollableFlags>(ContainerScrollable::kStart);
   }
   return flipped;
+}
+
+enum class ContainerScrollDirection {
+  kNone = 0,
+  kStart = 1 << 0,
+  kEnd = 1 << 1,
+};
+
+inline ContainerScrollDirection Flip(
+    ContainerScrollDirection scroll_direction) {
+  switch (scroll_direction) {
+    case ContainerScrollDirection::kNone:
+      return ContainerScrollDirection::kNone;
+    case ContainerScrollDirection::kStart:
+      return ContainerScrollDirection::kEnd;
+    case ContainerScrollDirection::kEnd:
+      return ContainerScrollDirection::kStart;
+  }
 }
 
 }  // namespace blink

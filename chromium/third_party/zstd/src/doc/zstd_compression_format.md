@@ -16,7 +16,7 @@ Distribution of this document is unlimited.
 
 ### Version
 
-0.4.3 (2024-10-07)
+0.4.4 (2025-03-22)
 
 
 Introduction
@@ -390,7 +390,7 @@ __`Block_Content`__ and __`Block_Maximum_Size`__
 The size of `Block_Content` is limited by `Block_Maximum_Size`,
 which is the smallest of:
 -  `Window_Size`
--  128 KB
+-  128 KiB (131.072 bytes)
 
 `Block_Maximum_Size` is constant for a given frame.
 This maximum is applicable to both the decompressed size
@@ -1742,6 +1742,7 @@ or at least provide a meaningful error code explaining for which reason it canno
 
 Version changes
 ---------------
+- 0.4.4 : minor clarification for block size
 - 0.4.3 : clarifications for Huffman prefix code assignment example
 - 0.4.2 : refactor FSE table construction process, inspired by Donald Pian
 - 0.4.1 : clarifications on a few error scenarios, by Eric Lasota

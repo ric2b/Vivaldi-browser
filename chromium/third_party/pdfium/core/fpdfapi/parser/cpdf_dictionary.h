@@ -40,46 +40,46 @@ class CPDF_Dictionary final : public CPDF_Object {
   bool WriteTo(IFX_ArchiveStream* archive,
                const CPDF_Encryptor* encryptor) const override;
 
-  bool IsLocked() const { return !!m_LockCount; }
+  bool IsLocked() const { return !!lock_count_; }
 
-  size_t size() const { return m_Map.size(); }
-  RetainPtr<const CPDF_Object> GetObjectFor(const ByteString& key) const;
-  RetainPtr<CPDF_Object> GetMutableObjectFor(const ByteString& key);
+  size_t size() const { return map_.size(); }
+  RetainPtr<const CPDF_Object> GetObjectFor(ByteStringView key) const;
+  RetainPtr<CPDF_Object> GetMutableObjectFor(ByteStringView key);
 
-  RetainPtr<const CPDF_Object> GetDirectObjectFor(const ByteString& key) const;
-  RetainPtr<CPDF_Object> GetMutableDirectObjectFor(const ByteString& key);
+  RetainPtr<const CPDF_Object> GetDirectObjectFor(ByteStringView key) const;
+  RetainPtr<CPDF_Object> GetMutableDirectObjectFor(ByteStringView key);
 
   // These will return the string representation of the object specified by
   // |key|, for any object type that has a string representation.
-  ByteString GetByteStringFor(const ByteString& key) const;
-  ByteString GetByteStringFor(const ByteString& key,
-                              const ByteString& default_str) const;
-  WideString GetUnicodeTextFor(const ByteString& key) const;
+  ByteString GetByteStringFor(ByteStringView key) const;
+  ByteString GetByteStringFor(ByteStringView key,
+                              ByteStringView default_str) const;
+  WideString GetUnicodeTextFor(ByteStringView key) const;
 
   // This will only return the string representation of a name object specified
   // by |key|. Useful when the PDF spec requires the value to be an object of
   // type name. i.e. /Foo and not (Foo).
-  ByteString GetNameFor(const ByteString& key) const;
+  ByteString GetNameFor(ByteStringView key) const;
 
-  bool GetBooleanFor(const ByteString& key, bool bDefault) const;
-  int GetIntegerFor(const ByteString& key) const;
-  int GetIntegerFor(const ByteString& key, int default_int) const;
-  int GetDirectIntegerFor(const ByteString& key) const;
-  float GetFloatFor(const ByteString& key) const;
-  RetainPtr<const CPDF_Dictionary> GetDictFor(const ByteString& key) const;
-  RetainPtr<CPDF_Dictionary> GetMutableDictFor(const ByteString& key);
-  RetainPtr<CPDF_Dictionary> GetOrCreateDictFor(const ByteString& key);
-  RetainPtr<const CPDF_Array> GetArrayFor(const ByteString& key) const;
-  RetainPtr<CPDF_Array> GetMutableArrayFor(const ByteString& key);
-  RetainPtr<CPDF_Array> GetOrCreateArrayFor(const ByteString& key);
-  RetainPtr<const CPDF_Stream> GetStreamFor(const ByteString& key) const;
-  RetainPtr<CPDF_Stream> GetMutableStreamFor(const ByteString& key);
-  RetainPtr<const CPDF_Number> GetNumberFor(const ByteString& key) const;
-  RetainPtr<const CPDF_String> GetStringFor(const ByteString& key) const;
-  CFX_FloatRect GetRectFor(const ByteString& key) const;
-  CFX_Matrix GetMatrixFor(const ByteString& key) const;
+  bool GetBooleanFor(ByteStringView key, bool bDefault) const;
+  int GetIntegerFor(ByteStringView key) const;
+  int GetIntegerFor(ByteStringView key, int default_int) const;
+  int GetDirectIntegerFor(ByteStringView key) const;
+  float GetFloatFor(ByteStringView key) const;
+  RetainPtr<const CPDF_Dictionary> GetDictFor(ByteStringView key) const;
+  RetainPtr<CPDF_Dictionary> GetMutableDictFor(ByteStringView key);
+  RetainPtr<CPDF_Dictionary> GetOrCreateDictFor(ByteStringView key);
+  RetainPtr<const CPDF_Array> GetArrayFor(ByteStringView key) const;
+  RetainPtr<CPDF_Array> GetMutableArrayFor(ByteStringView key);
+  RetainPtr<CPDF_Array> GetOrCreateArrayFor(ByteStringView key);
+  RetainPtr<const CPDF_Stream> GetStreamFor(ByteStringView key) const;
+  RetainPtr<CPDF_Stream> GetMutableStreamFor(ByteStringView key);
+  RetainPtr<const CPDF_Number> GetNumberFor(ByteStringView key) const;
+  RetainPtr<const CPDF_String> GetStringFor(ByteStringView key) const;
+  CFX_FloatRect GetRectFor(ByteStringView key) const;
+  CFX_Matrix GetMatrixFor(ByteStringView key) const;
 
-  bool KeyExist(const ByteString& key) const;
+  bool KeyExist(ByteStringView key) const;
   std::vector<ByteString> GetKeys() const;
 
   // Creates a new object owned by the dictionary and returns an unowned
@@ -88,8 +88,8 @@ class CPDF_Dictionary final : public CPDF_Object {
   // a new object with no previous references, they ensure cycles can not be
   // introduced.
   template <typename T, typename... Args>
-  typename std::enable_if<!CanInternStrings<T>::value, RetainPtr<T>>::type
-  SetNewFor(const ByteString& key, Args&&... args) {
+    requires(!CanInternStrings<T>::value)
+  RetainPtr<T> SetNewFor(const ByteString& key, Args&&... args) {
     static_assert(!std::is_same<T, CPDF_Stream>::value,
                   "Cannot set a CPDF_Stream directly. Add it indirectly as a "
                   "`CPDF_Reference` instead.");
@@ -97,10 +97,10 @@ class CPDF_Dictionary final : public CPDF_Object {
         key, pdfium::MakeRetain<T>(std::forward<Args>(args)...))));
   }
   template <typename T, typename... Args>
-  typename std::enable_if<CanInternStrings<T>::value, RetainPtr<T>>::type
-  SetNewFor(const ByteString& key, Args&&... args) {
+    requires(CanInternStrings<T>::value)
+  RetainPtr<T> SetNewFor(const ByteString& key, Args&&... args) {
     return pdfium::WrapRetain(static_cast<T*>(SetForInternal(
-        key, pdfium::MakeRetain<T>(m_pPool, std::forward<Args>(args)...))));
+        key, pdfium::MakeRetain<T>(pool_, std::forward<Args>(args)...))));
   }
 
   // If `object` is null, then `key` is erased from the map. Otherwise, takes
@@ -123,7 +123,7 @@ class CPDF_Dictionary final : public CPDF_Object {
   // Invalidates iterators for the element with the key |oldkey|.
   void ReplaceKey(const ByteString& oldkey, const ByteString& newkey);
 
-  WeakPtr<ByteStringPool> GetByteStringPool() const { return m_pPool; }
+  WeakPtr<ByteStringPool> GetByteStringPool() const { return pool_; }
 
  private:
   friend class CPDF_DictionaryLocker;
@@ -133,13 +133,13 @@ class CPDF_Dictionary final : public CPDF_Object {
   ~CPDF_Dictionary() override;
 
   // No guarantees about result lifetime, use with caution.
-  const CPDF_Object* GetObjectForInternal(const ByteString& key) const;
-  const CPDF_Object* GetDirectObjectForInternal(const ByteString& key) const;
-  const CPDF_Array* GetArrayForInternal(const ByteString& key) const;
-  const CPDF_Dictionary* GetDictForInternal(const ByteString& key) const;
-  const CPDF_Number* GetNumberForInternal(const ByteString& key) const;
-  const CPDF_Stream* GetStreamForInternal(const ByteString& key) const;
-  const CPDF_String* GetStringForInternal(const ByteString& key) const;
+  const CPDF_Object* GetObjectForInternal(ByteStringView key) const;
+  const CPDF_Object* GetDirectObjectForInternal(ByteStringView key) const;
+  const CPDF_Array* GetArrayForInternal(ByteStringView key) const;
+  const CPDF_Dictionary* GetDictForInternal(ByteStringView key) const;
+  const CPDF_Number* GetNumberForInternal(ByteStringView key) const;
+  const CPDF_Stream* GetStreamForInternal(ByteStringView key) const;
+  const CPDF_String* GetStringForInternal(ByteStringView key) const;
   CPDF_Object* SetForInternal(const ByteString& key,
                               RetainPtr<CPDF_Object> pObj);
 
@@ -149,9 +149,9 @@ class CPDF_Dictionary final : public CPDF_Object {
       bool bDirect,
       std::set<const CPDF_Object*>* visited) const override;
 
-  mutable uint32_t m_LockCount = 0;
-  WeakPtr<ByteStringPool> m_pPool;
-  DictMap m_Map;
+  mutable uint32_t lock_count_ = 0;
+  WeakPtr<ByteStringPool> pool_;
+  DictMap map_;
 };
 
 class CPDF_DictionaryLocker {
@@ -165,16 +165,16 @@ class CPDF_DictionaryLocker {
   ~CPDF_DictionaryLocker();
 
   const_iterator begin() const {
-    CHECK(m_pDictionary->IsLocked());
-    return m_pDictionary->m_Map.begin();
+    CHECK(dictionary_->IsLocked());
+    return dictionary_->map_.begin();
   }
   const_iterator end() const {
-    CHECK(m_pDictionary->IsLocked());
-    return m_pDictionary->m_Map.end();
+    CHECK(dictionary_->IsLocked());
+    return dictionary_->map_.end();
   }
 
  private:
-  RetainPtr<const CPDF_Dictionary> const m_pDictionary;
+  RetainPtr<const CPDF_Dictionary> const dictionary_;
 };
 
 inline CPDF_Dictionary* ToDictionary(CPDF_Object* obj) {

@@ -132,10 +132,29 @@ ServiceWorkerClient::ServiceWorkerClient(
       create_time_(base::TimeTicks::Now()),
       client_uuid_(base::Uuid::GenerateRandomV4().AsLowercaseString()),
       is_parent_frame_secure_(is_parent_frame_secure),
+      is_initiated_by_prefetch_(false),
       client_info_(ServiceWorkerClientInfo()),
       process_id_for_worker_client_(ChildProcessHost::kInvalidUniqueID),
       ongoing_navigation_frame_tree_node_id_(
           ongoing_navigation_frame_tree_node_id) {
+  DCHECK(context_);
+}
+
+ServiceWorkerClient::ServiceWorkerClient(
+    base::WeakPtr<ServiceWorkerContextCore> context,
+    bool is_parent_frame_secure,
+    scoped_refptr<network::SharedURLLoaderFactory>
+        network_url_loader_factory_for_prefetch)
+    : context_(std::move(context)),
+      owner_(context_->service_worker_client_owner()),
+      create_time_(base::TimeTicks::Now()),
+      client_uuid_(base::Uuid::GenerateRandomV4().AsLowercaseString()),
+      is_parent_frame_secure_(is_parent_frame_secure),
+      is_initiated_by_prefetch_(true),
+      client_info_(ServiceWorkerClientInfo()),
+      process_id_for_worker_client_(ChildProcessHost::kInvalidUniqueID),
+      network_url_loader_factory_for_prefetch_(
+          std::move(network_url_loader_factory_for_prefetch)) {
   DCHECK(context_);
 }
 
@@ -148,6 +167,7 @@ ServiceWorkerClient::ServiceWorkerClient(
       create_time_(base::TimeTicks::Now()),
       client_uuid_(base::Uuid::GenerateRandomV4().AsLowercaseString()),
       is_parent_frame_secure_(true),
+      is_initiated_by_prefetch_(false),
       client_info_(client_info),
       process_id_for_worker_client_(process_id) {
   DCHECK(context_);
@@ -480,6 +500,9 @@ ServiceWorkerClient::CommitResponse(
       policy_container_policies, std::move(coep_reporter),
       std::move(dip_reporter), std::move(ukm_source_id));
 
+  // `network_url_loader_factory_for_prefetch_` is no longer used after commit.
+  network_url_loader_factory_for_prefetch_.reset();
+
   TransitionToClientPhase(ClientPhase::kResponseCommitted);
 
   return container_info;
@@ -617,15 +640,18 @@ blink::StorageKey ServiceWorkerClient::CalculateStorageKeyForUpdateUrls(
   const std::optional<blink::StorageKey> storage_key = std::visit(
       base::Overloaded(
           [&](GlobalRenderFrameHostId render_frame_host_id) {
+            if (is_initiated_by_prefetch_) {
+              // Falls back to the `CreateFromOriginAndIsolationInfo()` case
+              // below.
+              // Navigation isn't served by prefetch if the key for prefetch
+              // calculated here is wrong/mismatching, checked at
+              // `PrefetchURLLoaderInterceptor::OnGetPrefetchComplete()`.
+              // https://crbug.com/413207408.
+              return std::optional<blink::StorageKey>(std::nullopt);
+            }
             // We use `ongoing_navigation_frame_tree_node_id_` instead of
             // `render_frame_host_id` because this method is called before
             // response commit.
-            //
-            // TODO(https://crbug.com/40947546): For clients for prefetch where
-            // `ongoing_navigation_frame_tree_node_id` is null, this returns
-            // `nullptr` and thus falls back to the
-            // `CreateFromOriginAndIsolationInfo()` case below. Check if this is
-            // correct or fix this.
             return GetStorageKeyFromRenderFrameHost(
                 ongoing_navigation_frame_tree_node_id_, origin,
                 base::OptionalToPtr(isolation_info_from_handle.nonce()));
@@ -783,15 +809,10 @@ NavigationRequest* ServiceWorkerClient::GetOngoingNavigationRequestBeforeCommit(
   DCHECK(IsContainerForWindowClient());
   DCHECK(!GetRenderFrameHostId());
 
-  if (!ongoing_navigation_frame_tree_node_id_) {
-    // For Window clients for prefetch, `ongoing_navigation_frame_tree_node_id_`
-    // is null and tentatively return `nullptr`.
-    //
-    // TODO(https://crbug.com/40947546): Check if this works. Maybe the callers
-    // have to check if the request is prefetch and suppress cert dialogs, just
-    // as prerendering.
-    return nullptr;
-  }
+  // For Window clients for prefetch,
+  // `GetOngoingNavigationRequestBeforeCommit()` isn't called at all, because
+  // prefetching requests don't set `URLLoaderNetworkServiceObserver`.
+  CHECK(!is_initiated_by_prefetch_);
 
   // It is safe to use `ongoing_navigation_frame_tree_node_id_` to obtain the
   // corresponding navigation request without being concerned about the case
@@ -825,6 +846,14 @@ std::string ServiceWorkerClient::GetFrameTreeNodeTypeStringBeforeCommit()
 
 const std::string& ServiceWorkerClient::client_uuid() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return client_uuid_;
+}
+
+std::string ServiceWorkerClient::client_uuid_for_resulting_client_id() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (is_initiated_by_prefetch_) {
+    return "";
+  }
   return client_uuid_;
 }
 
@@ -1160,28 +1189,6 @@ void ServiceWorkerClient::InheritControllerFrom(
   creator_host.SetInherited();
 }
 
-void ServiceWorkerClient::InheritControllerFromPrefetch(
-    ServiceWorkerClient& client_for_prefetch,
-    const GURL& navigation_url) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  CHECK(base::FeatureList::IsEnabled(features::kPrefetchServiceWorker));
-  CHECK(IsContainerForWindowClient());
-  CHECK(client_for_prefetch.IsContainerForWindowClient());
-
-  UpdateUrls(navigation_url, client_for_prefetch.top_frame_origin(),
-             client_for_prefetch.key());
-
-  // Inherit the controller used for prefetching from `client_for_prefetch`.
-  if (client_for_prefetch.controller_registration()) {
-    AddMatchingRegistration(client_for_prefetch.controller_registration());
-    // `client_for_prefetch` shouldn't be in back forward cache because it's for
-    // prefetch.
-    CHECK(!client_for_prefetch.is_in_back_forward_cache());
-    SetControllerRegistration(client_for_prefetch.controller_registration(),
-                              false /* notify_controllerchange */);
-  }
-}
-
 mojo::PendingReceiver<blink::mojom::ServiceWorkerRunningStatusCallback>
 ServiceWorkerClient::GetRunningStatusCallbackReceiver() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1231,6 +1238,17 @@ ServiceWorkerClient::CreateNetworkURLLoaderFactory(
   if (network_url_loader_factory_override_for_testing_) {
     CHECK_IS_TEST();
     return network_url_loader_factory_override_for_testing_;
+  }
+
+  if (is_initiated_by_prefetch_) {
+    // We skip `WillCreateURLLoaderFactory` below, because it is already
+    // included in `network_url_loader_factory_for_prefetch_` (see
+    // `PrefetchNetworkContext::CreateNewURLLoaderFactory()`).
+    // We also skip `CreateURLLoaderHandlerForServiceWorkerNavigationPreload`,
+    // because this is a prefetch request and don't have to consult with search
+    // prefetch cache via
+    // `CreateURLLoaderHandlerForServiceWorkerNavigationPreload`.
+    return network_url_loader_factory_for_prefetch_;
   }
 
   switch (type) {

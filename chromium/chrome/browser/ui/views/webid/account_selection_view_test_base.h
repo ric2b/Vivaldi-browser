@@ -5,6 +5,12 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_WEBID_ACCOUNT_SELECTION_VIEW_TEST_BASE_H_
 #define CHROME_BROWSER_UI_VIEWS_WEBID_ACCOUNT_SELECTION_VIEW_TEST_BASE_H_
 
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "content/public/browser/identity_request_account.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
@@ -13,18 +19,23 @@
 
 namespace webid {
 
-const std::u16string kRpETLDPlusOne = u"rp-example.com";
-const std::u16string kIdpETLDPlusOne = u"idp-example.com";
-const std::u16string kSecondIdpETLDPlusOne = u"idp2.com";
-const std::u16string kTitleSignIn =
+inline constexpr char16_t kRpETLDPlusOne[] = u"rp-example.com";
+inline constexpr char16_t kIdpETLDPlusOne[] = u"idp-example.com";
+inline constexpr char16_t kIframeETLDPlusOne[] = u"iframe-example.com";
+inline constexpr char16_t kSecondIdpETLDPlusOne[] = u"idp2.com";
+inline constexpr char16_t kTitleSignIn[] =
     u"Sign in to rp-example.com with idp-example.com";
-const std::u16string kTitleSignInWithoutIdp = u"Sign in to rp-example.com";
-const std::u16string kTitleSigningIn = u"Verifying…";
-const std::u16string kTitleSigningInWithAutoReauthn = u"Signing you in…";
-const std::u16string kTitleRequestPermission =
+inline constexpr char16_t kTitleIframeSignIn[] =
+    u"Sign in to iframe-example.com with idp-example.com";
+inline constexpr char16_t kSubtitleIframeSignIn[] = u"on rp-example.com";
+inline constexpr char16_t kTitleSignInWithoutIdp[] =
+    u"Sign in to rp-example.com";
+inline constexpr char16_t kTitleSigningIn[] = u"Verifying…";
+inline constexpr char16_t kTitleSigningInWithAutoReauthn[] = u"Signing you in…";
+inline constexpr char16_t kTitleRequestPermission[] =
     u"Confirm you want to sign in to rp-example.com with "
     u"idp-example.com";
-const std::u16string kBodySignIn = u"Choose an account to continue";
+inline constexpr char16_t kBodySignIn[] = u"Choose an account to continue";
 
 // The char version of `kIdpETLDPlusOne`.
 inline constexpr char kIdpForDisplay[] = "idp-example.com";
@@ -66,7 +77,8 @@ class AccountSelectionViewTestBase {
   views::View* GetHoverButtonSecondaryView(HoverButton* account);
 
   void CheckNonHoverableAccountRow(views::View* row,
-                                   const std::string& account_suffix);
+                                   const std::string& account_suffix,
+                                   bool has_display_identifier);
   void CheckHoverableAccountRows(
       const std::vector<raw_ptr<views::View, VectorExperimental>>& accounts,
       const std::vector<std::string>& account_suffixes,
@@ -75,6 +87,7 @@ class AccountSelectionViewTestBase {
       bool is_modal_dialog = false);
   void CheckHoverableAccountRow(views::View* account,
                                 const std::string& account_suffix,
+                                bool has_display_identifier,
                                 bool expect_idp = false,
                                 bool is_modal_dialog = false,
                                 bool is_disabled = false);

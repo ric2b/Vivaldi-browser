@@ -106,15 +106,8 @@ debugging by setting the option to "disable".
 Enables the use of the long term prediction extension which increases coding
 efficiency in very low bandwidth situations such as encoding of voice or
 solo piano music by extending constant harmonic peaks in bands throughout
-frames. This option is implied by profile:a aac_low and is incompatible with
-aac_pred. Use in conjunction with @option{-ar} to decrease the samplerate.
-
-@item aac_pred
-Enables the use of a more traditional style of prediction where the spectral
-coefficients transmitted are replaced by the difference of the current
-coefficients minus the previous "predicted" coefficients. In theory and sometimes
-in practice this can improve quality for low to mid bitrate audio.
-This option implies the aac_main profile and is incompatible with aac_ltp.
+frames. This option is implied by profile:a aac_low.
+Use in conjunction with @option{-ar} to decrease the samplerate.
 
 @item profile
 Sets the encoding profile, possible values:
@@ -131,10 +124,6 @@ MPEG4 specifications.
 @item aac_ltp
 Long term prediction profile, is enabled by and will enable the @option{aac_ltp}
 option. Introduced in MPEG4.
-
-@item aac_main
-Main-type prediction profile, is enabled by and will enable the @option{aac_pred}
-option. Introduced in MPEG2.
 
 @end table
 If this option is unspecified it is set to @samp{aac_low}.
@@ -527,44 +516,6 @@ has no effect if channel coupling is disabled.
 Selected by Encoder (default)
 @end table
 
-@end table
-
-@anchor{ffv1}
-@section ffv1
-
-FFv1 Encoder
-
-@subsection Options
-
-The following options are supported by FFmpeg's FFv1 encoder.
-
-@table @option
-@item context
-Sets the context size, 0 (default) is small, 1 is big.
-
-@item coder
-Set the coder,
-@table @samp
-@item rice
-Golomb rice coder
-@item range_def
-Range coder with default table
-@item range_tab
-Range coder with custom table
-@end table
-
-@item slicecrc
--1 (default, automatic), 1 use crc with zero initial and final state, 2 use crc with non zero initial and final state
-
-@item qtable
-@table @samp
-@item default
-default, automatic
-@item 8bit
-use 8bit default
-@item greater8bit
-use >8bit default
-@end table
 @end table
 
 @anchor{flac}
@@ -1426,6 +1377,48 @@ Vintage compatible is 1..3.
 @item strip_number_adaptivity @var{integer}
 How much number of strips is allowed to change between frames.
 Higher is better but slower.
+
+@end table
+
+@anchor{ffv1}
+@section ffv1
+
+FFv1 Encoder
+
+@subsection Options
+
+The following options are supported by FFmpeg's FFv1 encoder.
+
+@table @option
+@item context
+Sets the context size, 0 (default) is small, 1 is big.
+
+@item coder
+Set the coder,
+@table @samp
+@item rice
+Golomb rice coder
+@item range_def
+Range coder with default table
+@item range_tab
+Range coder with custom table
+@end table
+
+@item slicecrc
+-1 (default, automatic), 1 use crc with zero initial and final state, 2 use crc with non zero initial and final state
+
+@item qtable
+@table @samp
+@item default
+default, automatic
+@item 8bit
+use 8bit default
+@item greater8bit
+use >8bit default
+@end table
+
+@item remap_optimizer
+0 - 5, default 3, how much effort the encoder puts into optimizing the remap table.
 
 @end table
 
@@ -3395,6 +3388,13 @@ Default is 1 (on).
 
 PNG image encoder.
 
+@subsection Options
+
+@table @option
+@item compression_level
+Sets the compression level, from 0 to 9(default)
+@end table
+
 @subsection Private options
 
 @table @option
@@ -3402,6 +3402,8 @@ PNG image encoder.
 Set physical density of pixels, in dots per inch, unset by default
 @item dpm @var{integer}
 Set physical density of pixels, in dots per meter, unset by default
+@item pred @var{method}
+Set prediction method (none, sub, up, avg, paeth, mixed), default is paeth
 @end table
 
 @section ProRes

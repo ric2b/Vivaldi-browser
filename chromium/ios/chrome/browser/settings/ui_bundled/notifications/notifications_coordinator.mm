@@ -110,17 +110,42 @@
 }
 
 - (void)stop {
+  [_trackingPriceCoordinator stop];
+  _trackingPriceCoordinator.delegate = nil;
+  _trackingPriceCoordinator = nil;
   _notificationsObserver.delegate = nil;
   [_notificationsObserver disconnect];
   _notificationsObserver = nil;
   [_optInAlertCoordinator stop];
 }
 
+- (void)highlightClient:(PushNotificationClientId)clientID {
+  self.viewController.highlightedItem = [self itemForClient:clientID];
+  [self.viewController reloadData];
+}
+
+// Returns the table view item identifier for the given `clientID`.
+- (NotificationsItemIdentifier)itemForClient:
+    (PushNotificationClientId)clientID {
+  switch (clientID) {
+    case PushNotificationClientId::kCommerce:
+      return ItemIdentifierPriceTracking;
+    case PushNotificationClientId::kContent:
+    case PushNotificationClientId::kSports:
+      return ItemIdentifierContent;
+    case PushNotificationClientId::kTips:
+      return ItemIdentifierTips;
+    case PushNotificationClientId::kSafetyCheck:
+      return ItemIdentifierSafetyCheck;
+    case PushNotificationClientId::kSendTab:
+    case PushNotificationClientId::kReminders:
+      return ItemIdentifierSendTab;
+  }
+}
+
 #pragma mark - NotificationsAlertPresenter
 
 - (void)presentPushNotificationPermissionAlert {
-  CHECK(IsIOSTipsNotificationsEnabled());
-
   [self resetOptInAlertCoordinator];
 
   // `kTips` is the only client currently included as it's the only feature
@@ -135,11 +160,6 @@
 
 - (void)presentPushNotificationPermissionAlertWithClientIds:
     (std::vector<PushNotificationClientId>)clientIds {
-  CHECK(IsIOSTipsNotificationsEnabled() ||
-        IsSafetyCheckNotificationsEnabled() ||
-        base::FeatureList::IsEnabled(
-            send_tab_to_self::kSendTabToSelfIOSPushNotifications));
-
   // Presents a push notification permission alert for the specified client in
   // `clientIds`. **For now, only ONE client ID should be provided in
   // `clientIds`**, as there exists no generic UI for opting into push

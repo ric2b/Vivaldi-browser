@@ -192,12 +192,17 @@ static const char kDefaultOutputFormat[] = "xml";
 // The default output file.
 static const char kDefaultOutputFile[] = "test_detail";
 
+// These environment variables are set by Bazel.
+// https://bazel.build/reference/test-encyclopedia#initial-conditions
+//
 // The environment variable name for the test shard index.
 static const char kTestShardIndex[] = "GTEST_SHARD_INDEX";
 // The environment variable name for the total number of test shards.
 static const char kTestTotalShards[] = "GTEST_TOTAL_SHARDS";
 // The environment variable name for the test shard status file.
 static const char kTestShardStatusFile[] = "GTEST_SHARD_STATUS_FILE";
+// The environment variable name for the test output warnings file.
+static const char kTestWarningsOutputFile[] = "TEST_WARNINGS_OUTPUT_FILE";
 
 namespace internal {
 
@@ -5875,6 +5880,23 @@ TestSuite* UnitTestImpl::GetTestSuite(
 static void SetUpEnvironment(Environment* env) { env->SetUp(); }
 static void TearDownEnvironment(Environment* env) { env->TearDown(); }
 
+// If the environment variable TEST_WARNINGS_OUTPUT_FILE was provided, appends
+// `str` to the file, creating the file if necessary.
+#if GTEST_HAS_FILE_SYSTEM
+static void AppendToTestWarningsOutputFile(const std::string& str) {
+  const char* const filename = posix::GetEnv(kTestWarningsOutputFile);
+  if (filename == nullptr) {
+    return;
+  }
+  auto* const file = posix::FOpen(filename, "a");
+  if (file == nullptr) {
+    return;
+  }
+  GTEST_CHECK_(fwrite(str.data(), 1, str.size(), file) == str.size());
+  GTEST_CHECK_(posix::FClose(file) == 0);
+}
+#endif  // GTEST_HAS_FILE_SYSTEM
+
 // Runs all tests in this UnitTest object, prints the result, and
 // returns true if all tests are successful.  If any exception is
 // thrown during a test, the test is considered to be failed, but the
@@ -5896,12 +5918,26 @@ bool UnitTestImpl::RunAllTests() {
   // user didn't call InitGoogleTest.
   PostFlagParsingInit();
 
-  if (GTEST_FLAG_GET(fail_if_no_test_linked) && total_test_count() == 0) {
+  // Handle the case where the program has no tests linked.
+  // Sometimes this is a programmer mistake, but sometimes it is intended.
+  if (total_test_count() == 0) {
+    constexpr char kNoTestLinkedMessage[] =
+        "This test program does NOT link in any test case.";
+    constexpr char kNoTestLinkedFatal[] =
+        "This is INVALID. Please make sure to link in at least one test case.";
+    constexpr char kNoTestLinkedWarning[] =
+        "Please make sure this is intended.";
+    const bool fail_if_no_test_linked = GTEST_FLAG_GET(fail_if_no_test_linked);
     ColoredPrintf(
-        GTestColor::kRed,
-        "This test program does NOT link in any test case. This is INVALID. "
-        "Please make sure to link in at least one test case.\n");
-    return false;
+        GTestColor::kRed, "%s %s\n", kNoTestLinkedMessage,
+        fail_if_no_test_linked ? kNoTestLinkedFatal : kNoTestLinkedWarning);
+    if (fail_if_no_test_linked) {
+      return false;
+    }
+#if GTEST_HAS_FILE_SYSTEM
+    AppendToTestWarningsOutputFile(std::string(kNoTestLinkedMessage) + ' ' +
+                                   kNoTestLinkedWarning + '\n');
+#endif  // GTEST_HAS_FILE_SYSTEM
   }
 
 #if GTEST_HAS_FILE_SYSTEM
@@ -6077,6 +6113,17 @@ bool UnitTestImpl::RunAllTests() {
     environments_.clear();
   }
 
+  // Try to warn the user if no tests matched the test filter.
+  if (ShouldWarnIfNoTestsMatchFilter()) {
+    const std::string filter_warning =
+        std::string("filter \"") + GTEST_FLAG_GET(filter) +
+        "\" did not match any test; no tests were run\n";
+    ColoredPrintf(GTestColor::kRed, "WARNING: %s", filter_warning.c_str());
+#if GTEST_HAS_FILE_SYSTEM
+    AppendToTestWarningsOutputFile(filter_warning);
+#endif  // GTEST_HAS_FILE_SYSTEM
+  }
+
   if (!gtest_is_initialized_before_run_all_tests) {
     ColoredPrintf(
         GTestColor::kRed,
@@ -6243,6 +6290,30 @@ int UnitTestImpl::FilterTests(ReactionToSharding shard_tests) {
     }
   }
   return num_selected_tests;
+}
+
+// Returns true if a warning should be issued if no tests match the test filter
+// flag. We can't simply count the number of tests that ran because, for
+// instance, test sharding and death tests might mean no tests are expected to
+// run in this process, but will run in another process.
+bool UnitTestImpl::ShouldWarnIfNoTestsMatchFilter() const {
+  if (total_test_count() == 0) {
+    // No tests were linked in to program.
+    // This case is handled by a different warning.
+    return false;
+  }
+  const PositiveAndNegativeUnitTestFilter gtest_flag_filter(
+      GTEST_FLAG_GET(filter));
+  for (auto* test_suite : test_suites_) {
+    const std::string& test_suite_name = test_suite->name_;
+    for (TestInfo* test_info : test_suite->test_info_list()) {
+      const std::string& test_name = test_info->name_;
+      if (gtest_flag_filter.MatchesTest(test_suite_name, test_name)) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 // Prints the given C-string on a single line by replacing all '\n'

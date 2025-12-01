@@ -83,10 +83,21 @@ public final class BrowserBoundKeyStore {
     }
 
     /**
+     * Creates the corresponding KeyStore alias.
+     *
+     * @param identifier The externally provided identifier.
+     */
+    private String keyStoreAliasOf(byte[] identifier) {
+        return KEYSTORE_ALIAS_PREFIX + Base64.encodeToString(identifier, Base64.URL_SAFE);
+    }
+
+    /**
      * Get the corresponding browser bound key (or creates it).
      *
-     * @param identifier An identifier for the corresponding passkey credential id.
-     * @param allowedAlgorithms A list of allowed credential parameters.
+     * @param identifier An identifier for the browser bound key.
+     * @param allowedAlgorithms A list of allowed credential parameters used if the key needs to be
+     *     created. Consequently, if this list is empty no key will be created but an existing one
+     *     may be returned.
      * @return The BrowserBoundKey object or null when the key pair could not be created.
      */
     @CalledByNative
@@ -96,16 +107,46 @@ public final class BrowserBoundKeyStore {
         // TODO(crbug.com/377278827): Generate a random alias and store the association in a table,
         // so that browser bound public keys can be included in clientDataJson on passkey creation
         // time when the identifier is not know.
-        if (!containsEs256(allowedAlgorithms)) {
-            return null;
-        }
-        String keyStoreAlias =
-                KEYSTORE_ALIAS_PREFIX + Base64.encodeToString(identifier, Base64.URL_SAFE);
-        BrowserBoundKey browserBoundKey = getBrowserBoundKey(keyStoreAlias);
-        if (browserBoundKey == null) {
-            browserBoundKey = createBrowserBoundKey(keyStoreAlias);
+        String keyStoreAlias = keyStoreAliasOf(identifier);
+        BrowserBoundKey browserBoundKey = getBrowserBoundKey(identifier, keyStoreAlias);
+        if (browserBoundKey == null && containsEs256(allowedAlgorithms)) {
+            browserBoundKey = createBrowserBoundKey(identifier, keyStoreAlias);
         }
         return browserBoundKey;
+    }
+
+    /**
+     * Delete the browser bound key from the platform key store.
+     *
+     * <p>If the the underlying delete operation does not succeed the key may still be present.
+     *
+     * @param identifier The identifier from {@link BrowserBoundKey#GetIdentifier()}.
+     */
+    @CalledByNative
+    public void deleteBrowserBoundKey(@JniType("std::vector<uint8_t>") byte[] identifier) {
+        String keyStoreAlias = keyStoreAliasOf(identifier);
+        try {
+            KeyStore keyStore = KeyStore.getInstance(ANDROID_KEY_STORE);
+            try {
+                keyStore.load(null);
+            } catch (IOException | NoSuchAlgorithmException | CertificateException e) {
+                // Cannot delete when the keystore is not functioning, though none of these
+                // exceptions are expected from the AndroidKeyStore implementation.
+                Log.e(
+                        TAG,
+                        "The key store could not be loaded while deleting a browser bound key.",
+                        e);
+            }
+            if (!keyStore.containsAlias(keyStoreAlias)) {
+                // If the key does not exist, there is no need to delete it.
+                return;
+            }
+            keyStore.deleteEntry(keyStoreAlias);
+        } catch (KeyStoreException e) {
+            // There is an unrecoverable exception from the Android KeyStore which has attempted
+            // retries if appropriate. (e.g. The keystore daemon did not respond).
+            Log.e(TAG, "The key store could not delete the browser bound key.", e);
+        }
     }
 
     private boolean containsEs256(List<PublicKeyCredentialParameters> allowedAlgorithms) {
@@ -118,7 +159,7 @@ public final class BrowserBoundKeyStore {
         return false;
     }
 
-    private @Nullable BrowserBoundKey getBrowserBoundKey(String keyStoreAlias) {
+    private @Nullable BrowserBoundKey getBrowserBoundKey(byte[] identifier, String keyStoreAlias) {
         try {
             KeyStore keyStore = KeyStore.getInstance(ANDROID_KEY_STORE);
             keyStore.load(null);
@@ -129,6 +170,7 @@ public final class BrowserBoundKeyStore {
                     (KeyStore.PrivateKeyEntry)
                             keyStore.getEntry(keyStoreAlias, /* protParam= */ null);
             return new BrowserBoundKey(
+                    identifier,
                     new KeyPair(
                             privateKeyEntry.getCertificate().getPublicKey(),
                             privateKeyEntry.getPrivateKey()));
@@ -146,7 +188,8 @@ public final class BrowserBoundKeyStore {
         }
     }
 
-    private @Nullable BrowserBoundKey createBrowserBoundKey(String keyStoreAlias) {
+    private @Nullable BrowserBoundKey createBrowserBoundKey(
+            byte[] identifier, String keyStoreAlias) {
         KeyPairGenerator generator = getAndroidKeyPairGenerator();
         if (generator == null) {
             return null;
@@ -174,7 +217,7 @@ public final class BrowserBoundKeyStore {
                         e);
                 return null;
             }
-            return new BrowserBoundKey(generator.generateKeyPair());
+            return new BrowserBoundKey(identifier, generator.generateKeyPair());
         } catch (StrongBoxUnavailableException e) {
             Log.e(TAG, "StrongBox is not available while creating a browser bound key.");
             return null;

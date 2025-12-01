@@ -300,7 +300,7 @@ An example of Test Layer code:
 ```java
 @Test
 public void testOpenTabSwitcher() {
-    BasePageStation page = mTransitEntryPoints.startOnBlankPage();
+    PageStation page = mTransitEntryPoints.startOnBlankPage();
     AppMenuFacility appMenu = page.openAppMenu();
     page = appMenu.openNewIncognitoTab();
     TabSwitcherStation tabSwitcher = page.openTabSwitcher();
@@ -337,8 +337,8 @@ mostly full) window view. Only one `Station` can be active at any time.
 For each screen in the app, a concrete implementation of `Station` should be
 created in the Transit Layer, implementing:
 
-* **`declareElements()`** declaring the `Views` and other enter/exit conditions
-  define this `Station`.
+* **constructor** and/or **`declareExtraElements()`** declaring the `Views` and
+  other enter/exit conditions define this `Station`.
 * **transition methods** to travel to other `Stations` or to enter `Facilities`.
   These methods are synchronous and return a handle to the entered
   `ConditionalState` only after the transition is done and the new
@@ -348,24 +348,18 @@ Example of a concrete `Station`:
 
 ```java
 /** The tab switcher screen, with the tab grid and the tab management toolbar. */
-public class TabSwitcherStation extends Station {
-    public static final ViewSpec NEW_TAB_BUTTON =
-            viewSpec(withId(R.id.new_tab_button));
-    public static final ViewSpec INCOGNITO_TOGGLE_TABS =
-            viewSpec(withId(R.id.incognito_toggle_tabs));
+public class TabSwitcherStation extends Station<ChromeTabbedActivity> {
+    public ViewElement<View> newTabButtonElement;
+    public ViewElement<View> incognitoToggleTabsElement;
 
-    protected ActivityElement<ChromeTabbedActivity> mActivityElement;
-
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        mActivityElement = elements.declareActivity(ChromeTabbedActivity.class);
-        elements.declareView(NEW_TAB_BUTTON);
-        elements.declareView(INCOGNITO_TOGGLE_TABS);
+    public TabSwitcherStation() {
+        newTabButtonElement = declareView(withId(R.id.new_tab_button));
+        incognitoToggleTabsElement = declareView(withId(R.id.incognito_toggle_tabs));
     }
 
     public NewTabPageStation openNewTabFromButton() {
         NewTabPageStation newTab = new NewTabPageStation();
-        return travelToSync(this, newTab, () -> NEW_TAB_BUTTON.perform(click()))
+        return travelToSync(this, newTab, newTabButtonElement.getClickTrigger())
     }
 }
 ```
@@ -381,7 +375,7 @@ Multiple `Facilities` may be active at one time besides the active Station that
 contains them.
 
 As with `Stations`, concrete, app-specific implementations of Facility should be
-created in the Transit Layer overriding **`declareElements()`** and **transition
+created in the Transit Layer declaring **Elements** and **transition
 methods**.
 
 [**`Facility`**]: https://source.chromium.org/search?q=symbol:org.chromium.base.test.transit.Facility&ss=chromium
@@ -394,8 +388,8 @@ to disk, or a popup that persists through different `Stations`.
 Multiple `CarryOns` may be active at one time.
 
 As with `Stations`, concrete, app-specific implementations of CarryOn should be
-created in the Transit Layer overriding **`declareElements()`**. It often won't
-have any transition methods.
+created in the Transit Layer declaring **Elements**. It usually won't have any
+transition methods.
 
 ### ConditionalStates
 
@@ -440,9 +434,9 @@ method.
 
 Custom Conditions may require a dependency to be checked which might not exist
 before the transition's trigger is run. They should take the dependency as a
-constructor argument of type `Condition` that implements `Supplier<DependencyT>`
-and call `dependOnSupplier()`. The dependency should supply `DependencyT` when
-fulfilled.
+constructor argument of type `Condition` or `Element` that implements
+`Supplier<DependencyT>` and call `dependOnSupplier()`. The dependency should
+supply `DependencyT` when fulfilled.
 
 An example of a custom condition:
 
@@ -450,8 +444,8 @@ An example of a custom condition:
 class PageLoadedCondition extends UiThreadCondition {
     private Supplier<Tab> mTabSupplier;
 
-    PageLoadedCondition(ConditionWithResult<Tab> tabCondition) {
-        mTabSupplier = dependOnCondition(tabCondition, "Tab");
+    PageLoadedCondition(Supplier<Tab> tabCondition) {
+        mTabSupplier = dependOnSupplier(tabCondition, "Tab");
     }
 
     @Override

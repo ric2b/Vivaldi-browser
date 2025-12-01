@@ -8,6 +8,8 @@
 #import "base/memory/raw_ptr.h"
 #import "base/metrics/user_metrics.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/collaboration/public/collaboration_flow_entry_point.h"
+#import "components/collaboration/public/collaboration_flow_type.h"
 #import "components/collaboration/public/collaboration_service.h"
 #import "components/collaboration/public/messaging/messaging_backend_service.h"
 #import "components/data_sharing/public/group_data.h"
@@ -31,6 +33,7 @@
 #import "ios/chrome/browser/shared/model/web_state_list/tab_utils.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/shared_tab_group_last_tab_closed_alert_commands.h"
 #import "ios/chrome/browser/shared/public/commands/tab_groups_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/tab_group_grid_view_controller.h"
@@ -47,6 +50,10 @@
 #import "ios/web/public/web_state_id.h"
 #import "ui/base/device_form_factor.h"
 
+using collaboration::CollaborationServiceShareOrManageEntryPoint;
+using collaboration::FlowType;
+using collaboration::IOSCollaborationControllerDelegate;
+
 namespace {
 constexpr CGFloat kTabGroupPresentationDuration = 0.3;
 constexpr CGFloat kTabGroupDismissalDuration = 0.25;
@@ -56,7 +63,6 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 @interface TabGroupCoordinator () <
     GridViewControllerDelegate,
     SharedTabGroupUserEducationCoordinatorDelegate,
-    TabGroupMediatorDelegate,
     TabGroupPresentationCommands>
 @end
 
@@ -136,7 +142,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
   _mediator.tabGroupsHandler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), TabGroupsCommands);
   _mediator.tabGridIdleStatusHandler = self.tabGridIdleStatusHandler;
-  _mediator.tabGroupDelegate = self;
+  _mediator.baseDelegate = self;
 
   _tabContextMenuHelper = [[TabContextMenuHelper alloc]
              initWithProfile:browser->GetProfile()
@@ -147,6 +153,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
   _viewController.gridViewController.gridProvider = _mediator;
   _viewController.gridViewController.menuProvider = _tabContextMenuHelper;
   _viewController.gridViewController.dragDropHandler = _mediator;
+  _viewController.gridViewController.snapshotAndfaviconDataSource = _mediator;
 
   [self displayViewControllerAnimated:self.animatedPresentation];
 }
@@ -268,7 +275,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 
 - (void)gridViewController:(BaseGridViewController*)gridViewController
        didSelectItemWithID:(web::WebStateID)itemID {
-  BOOL incognito = self.profile->IsOffTheRecord();
+  BOOL incognito = self.isOffTheRecord;
   if ([_mediator isItemWithIDSelected:itemID]) {
     if (incognito) {
       base::RecordAction(base::UserMetricsAction(
@@ -409,12 +416,19 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
     return;
   }
 
-  std::unique_ptr<collaboration::CollaborationControllerDelegate> delegate =
-      std::make_unique<collaboration::IOSCollaborationControllerDelegate>(
-          browser, self.baseViewController);
+  std::unique_ptr<IOSCollaborationControllerDelegate> delegate =
+      std::make_unique<IOSCollaborationControllerDelegate>(
+          browser,
+          CreateControllerDelegateParamsFromProfile(
+              self.profile, self.baseViewController, FlowType::kShareOrManage));
+  tab_groups::TabGroupSyncService* tabGroupSyncService =
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(self.profile);
+  CollaborationServiceShareOrManageEntryPoint entryPoint =
+      tab_groups::utils::IsTabGroupShared(_tabGroup, tabGroupSyncService)
+          ? CollaborationServiceShareOrManageEntryPoint::kiOSTabGroupViewManage
+          : CollaborationServiceShareOrManageEntryPoint::kiOSTabGroupViewShare;
   collaborationService->StartShareOrManageFlow(
-      std::move(delegate), _tabGroup->tab_group_id(),
-      collaboration::CollaborationServiceShareOrManageEntryPoint::kUnknown);
+      std::move(delegate), _tabGroup->tab_group_id(), entryPoint);
 }
 
 #pragma mark - SharedTabGroupUserEducationCoordinatorDelegate
@@ -425,61 +439,7 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
   _userEducationCoordinator = nil;
 }
 
-#pragma mark - TabGroupMediatorDelegate
-
-- (void)tabGroupMediatorCloseLastTabAsOwner:(TabGroupMediator*)mediator
-                          lastTabIdentifier:(web::WebStateID)identifier {
-  CHECK_EQ(_mediator, mediator);
-  __weak TabGroupCoordinator* weakSelf = self;
-  [self lastTabClosingAlertFromActionType:TabGroupActionType::
-                                              kDeleteOrKeepSharedTabGroup
-                            primaryAction:^{
-                              [weakSelf deleteSharedGroup];
-                            }
-                        lastTabIdentifier:identifier];
-}
-
-- (void)tabGroupMediatorCloseLastTabAsMember:(TabGroupMediator*)mediator
-                           lastTabIdentifier:(web::WebStateID)identifier {
-  CHECK_EQ(_mediator, mediator);
-  __weak TabGroupCoordinator* weakSelf = self;
-  [self lastTabClosingAlertFromActionType:TabGroupActionType::
-                                              kLeaveOrKeepSharedTabGroup
-                            primaryAction:^{
-                              [weakSelf addNewTabInsteadOfTab:identifier];
-                              [weakSelf leaveSharedGroup];
-                            }
-                        lastTabIdentifier:identifier];
-}
-
 #pragma mark - Private
-
-// Creates and starts a TabGroupConfirmationCoordinator setuped with the given
-// parameters.
-- (void)lastTabClosingAlertFromActionType:(TabGroupActionType)actionType
-                            primaryAction:(TabGroupActionBlock)action
-                        lastTabIdentifier:(web::WebStateID)identifier {
-  _lastTabClosingAlert = [[TabGroupConfirmationCoordinator alloc]
-      initWithBaseViewController:self.baseViewController
-                         browser:self.browser
-                      actionType:actionType
-                      sourceView:self.baseViewController.view];
-
-  _lastTabClosingAlert.primaryAction = action;
-
-  __weak TabGroupCoordinator* weakSelf = self;
-  _lastTabClosingAlert.secondaryAction = ^{
-    [weakSelf addNewTabInsteadOfTab:identifier];
-  };
-
-  _lastTabClosingAlert.tabGroupName = _tabGroup->GetTitle();
-
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
-    _lastTabClosingAlert.showAsAlert = YES;
-  }
-
-  [_lastTabClosingAlert start];
-}
 
 // Sets up the `_viewController`.
 - (void)setUpViewController {
@@ -488,10 +448,10 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
       self.browser->GetCommandDispatcher(), TabGroupsCommands);
 
   // Initialize the `_viewController`.
-  _viewController = [[TabGroupViewController alloc]
-      initWithHandler:handler
-            incognito:self.profile->IsOffTheRecord()
-             tabGroup:_tabGroup];
+  _viewController =
+      [[TabGroupViewController alloc] initWithHandler:handler
+                                            incognito:self.isOffTheRecord
+                                             tabGroup:_tabGroup];
   _viewController.gridViewController.delegate = self;
   _viewController.presentationHandler = self;
   _viewController.applicationHandler = HandlerForProtocol(
@@ -503,11 +463,8 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
 - (void)startUserEducationIfNeeded {
   tab_groups::TabGroupSyncService* syncService =
       tab_groups::TabGroupSyncServiceFactory::GetForProfile(self.profile);
-  ShareKitService* shareKitService =
-      ShareKitServiceFactory::GetForProfile(self.profile);
 
-  if (!tab_groups::utils::IsTabGroupShared(_tabGroup, syncService,
-                                           shareKitService)) {
+  if (!tab_groups::utils::IsTabGroupShared(_tabGroup, syncService)) {
     return;
   }
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
@@ -544,6 +501,28 @@ constexpr CGFloat kTabGroupBackgroundElementDurationFactor = 0.75;
                                   });
   [_mediator insertNewWebStateAtGridIndex:tabIndex withURL:URL];
   [_mediator closeItemWithID:identifier];
+}
+
+#pragma mark - BaseGridMediatorDelegate
+
+- (void)displayLastTabInSharedGroupAlert:(BaseGridMediator*)mediator
+                                 lastTab:(web::WebStateID)itemID
+                                   group:(const TabGroup*)group {
+  SharedTabGroupLastTabAlertCommand* command =
+      [[SharedTabGroupLastTabAlertCommand alloc]
+               initWithTabID:itemID
+                     browser:self.browser
+                       group:group
+          baseViewController:self.viewController
+                  sourceView:ui::GetDeviceFormFactor() ==
+                                     ui::DEVICE_FORM_FACTOR_PHONE
+                                 ? self.viewController.view
+                                 : nil
+                     closing:YES];
+  id<SharedTabGroupLastTabAlertCommands> lastTabAlertHandler =
+      HandlerForProtocol(self.browser->GetCommandDispatcher(),
+                         SharedTabGroupLastTabAlertCommands);
+  [lastTabAlertHandler showLastTabInSharedGroupAlert:command];
 }
 
 @end

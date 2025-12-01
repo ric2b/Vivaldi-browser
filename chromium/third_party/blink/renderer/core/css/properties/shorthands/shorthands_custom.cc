@@ -5,6 +5,7 @@
 #include "base/memory/values_equivalent.h"
 #include "third_party/blink/renderer/core/animation/timeline_offset.h"
 #include "third_party/blink/renderer/core/css/css_content_distribution_value.h"
+#include "third_party/blink/renderer/core/css/css_gap_decoration_property_utils.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_initial_value.h"
@@ -229,20 +230,24 @@ const CSSValue* Animation::CSSValueFromComputedStyleInternal(
 
 namespace {
 
-// Consume a single <animation-range-start> and a single
-// <animation-range-end>, and append the result to `start_list` and
-// `end_list` respectively.
+// Consume a single <animation-{trigger-{exit-}}range-start> and a single
+// <animation-{trigger-{exit-}}range-end>, and append the result to `start_list`
+// and `end_list` respectively.
+//
+// They keyword `auto` is allowed when parsing animation-trigger-exit-range.
+// https://drafts.csswg.org/css-animations-2/#animation-trigger-exit-range
 bool ConsumeAnimationRangeItemInto(CSSParserTokenStream& stream,
                                    const CSSParserContext& context,
                                    CSSValueList* start_list,
-                                   CSSValueList* end_list) {
+                                   CSSValueList* end_list,
+                                   bool allow_auto) {
   using css_parsing_utils::ConsumeAnimationRange;
   using css_parsing_utils::ConsumeTimelineRangeName;
 
-  const CSSValue* start_range =
-      ConsumeAnimationRange(stream, context, /* default_offset_percent */ 0.0);
+  const CSSValue* start_range = ConsumeAnimationRange(
+      stream, context, /* default_offset_percent */ 0.0, allow_auto);
   const CSSValue* end_range = ConsumeAnimationRange(
-      stream, context, /* default_offset_percent */ 100.0);
+      stream, context, /* default_offset_percent */ 100.0, allow_auto);
 
   if (!end_range) {
     end_range = css_parsing_utils::GetImpliedRangeEnd(start_range);
@@ -252,7 +257,10 @@ bool ConsumeAnimationRangeItemInto(CSSParserTokenStream& stream,
     return false;
   }
   if (!end_range) {
-    end_range = CSSIdentifierValue::Create(CSSValueID::kNormal);
+    // Whenever `auto` is allowed, is it also assumed to be
+    // the default value for an omitted "end".
+    end_range = allow_auto ? CSSIdentifierValue::Create(CSSValueID::kAuto)
+                           : CSSIdentifierValue::Create(CSSValueID::kNormal);
   }
 
   DCHECK(start_range);
@@ -301,14 +309,52 @@ const CSSValue* AnimationRangeCSSValueFromComputedStyle(
   return outer_list;
 }
 
-bool ParseAnimationRangeShorthand(
-    const StylePropertyShorthand& shorthand,
-    CSSPropertyID start_longhand_id,
-    CSSPropertyID end_longhand_id,
-    bool important,
-    CSSParserTokenStream& stream,
-    const CSSParserContext& context,
-    HeapVector<CSSPropertyValue, 64>& properties) {
+const CSSValue* AnimationTriggerExitRangeCSSValueFromComputedStyle(
+    const ComputedStyle& style,
+    const Vector<TimelineOffsetOrAuto>& range_start_list,
+    const Vector<TimelineOffsetOrAuto>& range_end_list) {
+  if (range_start_list.size() != range_end_list.size()) {
+    return nullptr;
+  }
+
+  TimelineOffset default_start(TimelineOffset::NamedRange::kNone,
+                               Length::Percent(0));
+  TimelineOffset default_end(TimelineOffset::NamedRange::kNone,
+                             Length::Percent(100));
+  auto* outer_list = CSSValueList::CreateCommaSeparated();
+
+  for (wtf_size_t i = 0; i < range_start_list.size(); ++i) {
+    const TimelineOffsetOrAuto& start = range_start_list[i];
+    const TimelineOffsetOrAuto& end = range_end_list[i];
+
+    auto* inner_list = CSSValueList::CreateSpaceSeparated();
+    inner_list->Append(*ComputedStyleUtils::ValueForAnimationRangeOrAuto(
+        start, style, Length::Percent(0.0)));
+
+    // The form "name X name 100%" must contract to "name X".
+    //
+    // https://github.com/w3c/csswg-drafts/issues/8438
+    TimelineOffset omittable_end(
+        start.GetTimelineOffset().value_or(default_start).name,
+        Length::Percent(100));
+    if (end.GetTimelineOffset().value_or(default_end) != omittable_end) {
+      inner_list->Append(*ComputedStyleUtils::ValueForAnimationRangeOrAuto(
+          end, style, Length::Percent(100.0)));
+    }
+    outer_list->Append(*inner_list);
+  }
+
+  return outer_list;
+}
+
+bool ParseAnimationRangeShorthand(const StylePropertyShorthand& shorthand,
+                                  CSSPropertyID start_longhand_id,
+                                  CSSPropertyID end_longhand_id,
+                                  bool important,
+                                  CSSParserTokenStream& stream,
+                                  const CSSParserContext& context,
+                                  HeapVector<CSSPropertyValue, 64>& properties,
+                                  bool allow_auto) {
   using css_parsing_utils::AddProperty;
   using css_parsing_utils::ConsumeCommaIncludingWhitespace;
   using css_parsing_utils::IsImplicitProperty;
@@ -317,7 +363,8 @@ bool ParseAnimationRangeShorthand(
   CSSValueList* end_list = CSSValueList::CreateCommaSeparated();
 
   do {
-    if (!ConsumeAnimationRangeItemInto(stream, context, start_list, end_list)) {
+    if (!ConsumeAnimationRangeItemInto(stream, context, start_list, end_list,
+                                       allow_auto)) {
       return false;
     }
   } while (ConsumeCommaIncludingWhitespace(stream));
@@ -346,10 +393,10 @@ bool AnimationRange::ParseShorthand(
   DCHECK_EQ(2u, shorthand.length());
   DCHECK_EQ(&GetCSSPropertyAnimationRangeStart(), shorthand.properties()[0]);
   DCHECK_EQ(&GetCSSPropertyAnimationRangeEnd(), shorthand.properties()[1]);
-  return ParseAnimationRangeShorthand(shorthand,
-                                      CSSPropertyID::kAnimationRangeStart,
-                                      CSSPropertyID::kAnimationRangeEnd,
-                                      important, stream, context, properties);
+  return ParseAnimationRangeShorthand(
+      shorthand, CSSPropertyID::kAnimationRangeStart,
+      CSSPropertyID::kAnimationRangeEnd, important, stream, context, properties,
+      /*allow_auto=*/false);
 }
 
 const CSSValue* AnimationRange::CSSValueFromComputedStyleInternal(
@@ -389,10 +436,10 @@ const CSSValue* AnimationTrigger::CSSValueFromComputedStyleInternal(
       list->Append(*ComputedStyleUtils::ValueForAnimationRange(
           animation_data->TriggerRangeEndList().at(i), style,
           Length::Percent(100)));
-      list->Append(*ComputedStyleUtils::ValueForAnimationRange(
+      list->Append(*ComputedStyleUtils::ValueForAnimationRangeOrAuto(
           animation_data->TriggerExitRangeStartList().at(i), style,
           Length::Percent(0.0)));
-      list->Append(*ComputedStyleUtils::ValueForAnimationRange(
+      list->Append(*ComputedStyleUtils::ValueForAnimationRangeOrAuto(
           animation_data->TriggerExitRangeEndList().at(i), style,
           Length::Percent(100)));
       animations_list->Append(*list);
@@ -410,10 +457,10 @@ const CSSValue* AnimationTrigger::CSSValueFromComputedStyleInternal(
       Length::Percent(0.0)));
   list->Append(*ComputedStyleUtils::ValueForAnimationRange(
       CSSAnimationData::InitialTriggerRangeEnd(), style, Length::Percent(100)));
-  list->Append(*ComputedStyleUtils::ValueForAnimationRange(
+  list->Append(*ComputedStyleUtils::ValueForAnimationRangeOrAuto(
       CSSAnimationData::InitialTriggerExitRangeStart(), style,
       Length::Percent(0.0)));
-  list->Append(*ComputedStyleUtils::ValueForAnimationRange(
+  list->Append(*ComputedStyleUtils::ValueForAnimationRangeOrAuto(
       CSSAnimationData::InitialTriggerExitRangeEnd(), style,
       Length::Percent(100)));
 
@@ -462,7 +509,7 @@ bool AnimationTriggerRange::ParseShorthand(
   return ParseAnimationRangeShorthand(
       shorthand, CSSPropertyID::kAnimationTriggerRangeStart,
       CSSPropertyID::kAnimationTriggerRangeEnd, important, stream, context,
-      properties);
+      properties, /*allow_auto=*/false);
 }
 
 const CSSValue* AnimationTriggerRange::CSSValueFromComputedStyleInternal(
@@ -498,7 +545,7 @@ bool AnimationTriggerExitRange::ParseShorthand(
   return ParseAnimationRangeShorthand(
       shorthand, CSSPropertyID::kAnimationTriggerExitRangeStart,
       CSSPropertyID::kAnimationTriggerExitRangeEnd, important, stream, context,
-      properties);
+      properties, /*allow_auto=*/true);
 }
 
 const CSSValue* AnimationTriggerExitRange::CSSValueFromComputedStyleInternal(
@@ -506,18 +553,18 @@ const CSSValue* AnimationTriggerExitRange::CSSValueFromComputedStyleInternal(
     const LayoutObject*,
     bool allow_visited_style,
     CSSValuePhase value_phase) const {
-  const Vector<std::optional<TimelineOffset>>& range_start_list =
+  const Vector<TimelineOffsetOrAuto>& range_start_list =
       style.Animations()
           ? style.Animations()->TriggerExitRangeStartList()
-          : Vector<std::optional<TimelineOffset>>{
+          : Vector<TimelineOffsetOrAuto>{
                 CSSAnimationData::InitialTriggerExitRangeStart()};
-  const Vector<std::optional<TimelineOffset>>& range_end_list =
+  const Vector<TimelineOffsetOrAuto>& range_end_list =
       style.Animations() ? style.Animations()->TriggerExitRangeEndList()
-                         : Vector<std::optional<TimelineOffset>>{
+                         : Vector<TimelineOffsetOrAuto>{
                                CSSAnimationData::InitialTriggerExitRangeEnd()};
 
-  return AnimationRangeCSSValueFromComputedStyle(style, range_start_list,
-                                                 range_end_list);
+  return AnimationTriggerExitRangeCSSValueFromComputedStyle(
+      style, range_start_list, range_end_list);
 }
 
 bool Background::ParseShorthand(
@@ -1077,7 +1124,9 @@ const CSSValue* BorderSpacing::CSSValueFromComputedStyleInternal(
     CSSValuePhase value_phase) const {
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
   list->Append(*ZoomAdjustedPixelValue(style.HorizontalBorderSpacing(), style));
-  list->Append(*ZoomAdjustedPixelValue(style.VerticalBorderSpacing(), style));
+  if (style.HorizontalBorderSpacing() != style.VerticalBorderSpacing()) {
+    list->Append(*ZoomAdjustedPixelValue(style.VerticalBorderSpacing(), style));
+  }
   return list;
 }
 
@@ -1147,8 +1196,32 @@ bool ColumnRule::ParseShorthand(
     const CSSParserContext& context,
     const CSSParserLocalContext&,
     HeapVector<CSSPropertyValue, 64>& properties) const {
-  return css_parsing_utils::ConsumeShorthandGreedilyViaLonghands(
-      columnRuleShorthand(), important, context, stream, properties);
+  DCHECK_EQ(columnRuleShorthand().length(), 3u);
+  // If the CSSGapDecorations feature is not enabled, consume greedily since
+  // only single values are supported by 'column-rule' today.
+  if (!RuntimeEnabledFeatures::CSSGapDecorationEnabled()) {
+    return css_parsing_utils::ConsumeShorthandGreedilyViaLonghands(
+        columnRuleShorthand(), important, context, stream, properties);
+  }
+
+  CSSValueList* rule_widths = nullptr;
+  CSSValueList* rule_styles = nullptr;
+  CSSValueList* rule_colors = nullptr;
+
+  if (!css_parsing_utils::ConsumeGapDecorationsRuleShorthand(
+          important, context, stream, rule_widths, rule_styles, rule_colors)) {
+    return false;
+  }
+
+  CHECK(rule_widths);
+  CHECK(rule_styles);
+  CHECK(rule_colors);
+
+  CSSGapDecorationUtils::AddProperties(
+      CSSGapDecorationPropertyDirection::kColumn, *rule_widths, *rule_styles,
+      *rule_colors, important, properties);
+
+  return true;
 }
 
 const CSSValue* ColumnRule::CSSValueFromComputedStyleInternal(
@@ -1156,9 +1229,46 @@ const CSSValue* ColumnRule::CSSValueFromComputedStyleInternal(
     const LayoutObject* layout_object,
     bool allow_visited_style,
     CSSValuePhase value_phase) const {
-  return ComputedStyleUtils::ValuesForShorthandProperty(
+  return ComputedStyleUtils::ValueForGapDecorationRuleShorthand(
       columnRuleShorthand(), style, layout_object, allow_visited_style,
-      value_phase);
+      value_phase, CSSGapDecorationPropertyDirection::kColumn);
+}
+
+bool RowRule::ParseShorthand(
+    bool important,
+    CSSParserTokenStream& stream,
+    const CSSParserContext& context,
+    const CSSParserLocalContext&,
+    HeapVector<CSSPropertyValue, 64>& properties) const {
+  DCHECK_EQ(rowRuleShorthand().length(), 3u);
+  CSSValueList* rule_widths = nullptr;
+  CSSValueList* rule_styles = nullptr;
+  CSSValueList* rule_colors = nullptr;
+
+  if (!css_parsing_utils::ConsumeGapDecorationsRuleShorthand(
+          important, context, stream, rule_widths, rule_styles, rule_colors)) {
+    return false;
+  }
+
+  CHECK(rule_widths);
+  CHECK(rule_styles);
+  CHECK(rule_colors);
+
+  CSSGapDecorationUtils::AddProperties(CSSGapDecorationPropertyDirection::kRow,
+                                       *rule_widths, *rule_styles, *rule_colors,
+                                       important, properties);
+
+  return true;
+}
+
+const CSSValue* RowRule::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) const {
+  return ComputedStyleUtils::ValueForGapDecorationRuleShorthand(
+      rowRuleShorthand(), style, layout_object, allow_visited_style,
+      value_phase, CSSGapDecorationPropertyDirection::kRow);
 }
 
 bool Columns::ParseShorthand(
@@ -1335,7 +1445,7 @@ bool Flex::ParseShorthand(bool important,
           flex_shrink = num;
           savepoint.Release();
         } else if (!flex_basis && num->IsNumericLiteralValue() &&
-                   num->GetDoubleValue() == 0) {
+                   To<CSSNumericLiteralValue>(num)->ClampedDoubleValue() == 0) {
           // Unitless zero is a valid <'flex-basis'>. All other <length>s
           // must have some unit, and are handled by the other branch.
           flex_basis = CSSNumericLiteralValue::Create(
@@ -4061,6 +4171,161 @@ const CSSValue* MaskPosition::CSSValueFromComputedStyleInternal(
     CSSValuePhase value_phase) const {
   return ComputedStyleUtils::BackgroundPositionOrMaskPosition(
       *this, style, &style.MaskLayers());
+}
+
+bool Rule::ParseShorthand(bool important,
+                          CSSParserTokenStream& stream,
+                          const CSSParserContext& context,
+                          const CSSParserLocalContext& local_context,
+                          HeapVector<CSSPropertyValue, 64>& properties) const {
+  DCHECK_EQ(ruleShorthand().length(), 6u);
+  CSSValueList* rule_widths = nullptr;
+  CSSValueList* rule_styles = nullptr;
+  CSSValueList* rule_colors = nullptr;
+
+  if (!css_parsing_utils::ConsumeGapDecorationsRuleShorthand(
+          important, context, stream, rule_widths, rule_styles, rule_colors)) {
+    return false;
+  }
+
+  CHECK(rule_widths);
+  CHECK(rule_styles);
+  CHECK(rule_colors);
+
+  CSSGapDecorationUtils::AddProperties(
+      CSSGapDecorationPropertyDirection::kColumn, *rule_widths, *rule_styles,
+      *rule_colors, important, properties);
+  CSSGapDecorationUtils::AddProperties(CSSGapDecorationPropertyDirection::kRow,
+                                       *rule_widths, *rule_styles, *rule_colors,
+                                       important, properties);
+
+  return true;
+}
+
+const CSSValue* Rule::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) const {
+  const CSSValue* column_value =
+      GetCSSPropertyColumnRule().CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase);
+  const CSSValue* row_value = GetCSSPropertyRowRule().CSSValueFromComputedStyle(
+      style, layout_object, allow_visited_style, value_phase);
+
+  if (!base::ValuesEquivalent(column_value, row_value)) {
+    return nullptr;
+  }
+
+  return column_value;
+}
+
+bool RuleColor::ParseShorthand(
+    bool important,
+    CSSParserTokenStream& stream,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context,
+    HeapVector<CSSPropertyValue, 64>& properties) const {
+  DCHECK_EQ(shorthandForProperty(CSSPropertyID::kRuleColor).length(), 2u);
+  CSSValue* rule_color = css_parsing_utils::ConsumeGapDecorationPropertyList(
+      stream, context, CSSGapDecorationPropertyType::kColor);
+
+  if (!rule_color) {
+    return false;
+  }
+
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kColumnRuleColor, CSSPropertyID::kRuleColor, *rule_color,
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kRowRuleColor, CSSPropertyID::kRuleColor, *rule_color,
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
+
+  return true;
+}
+
+const CSSValue* RuleColor::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) const {
+  return ComputedStyleUtils::ValuesForBidirectionalGapRuleShorthand(
+      ruleColorShorthand(), style, layout_object, allow_visited_style,
+      value_phase);
+}
+
+bool RuleWidth::ParseShorthand(
+    bool important,
+    CSSParserTokenStream& stream,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context,
+    HeapVector<CSSPropertyValue, 64>& properties) const {
+  DCHECK_EQ(shorthandForProperty(CSSPropertyID::kRuleWidth).length(), 2u);
+  CSSValue* rule_width = css_parsing_utils::ConsumeGapDecorationPropertyList(
+      stream, context, CSSGapDecorationPropertyType::kWidth);
+
+  if (!rule_width) {
+    return false;
+  }
+
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kColumnRuleWidth, CSSPropertyID::kRuleWidth, *rule_width,
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kRowRuleWidth, CSSPropertyID::kRuleWidth, *rule_width,
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
+
+  return true;
+}
+
+const CSSValue* RuleWidth::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) const {
+  return ComputedStyleUtils::ValuesForBidirectionalGapRuleShorthand(
+      ruleWidthShorthand(), style, layout_object, allow_visited_style,
+      value_phase);
+}
+
+bool RuleStyle::ParseShorthand(
+    bool important,
+    CSSParserTokenStream& stream,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context,
+    HeapVector<CSSPropertyValue, 64>& properties) const {
+  DCHECK_EQ(shorthandForProperty(CSSPropertyID::kRuleStyle).length(), 2u);
+  CSSValue* rule_style = css_parsing_utils::ConsumeGapDecorationPropertyList(
+      stream, context, CSSGapDecorationPropertyType::kStyle);
+
+  if (!rule_style) {
+    return false;
+  }
+
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kColumnRuleStyle, CSSPropertyID::kRuleStyle, *rule_style,
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
+  css_parsing_utils::AddProperty(
+      CSSPropertyID::kRowRuleStyle, CSSPropertyID::kRuleStyle, *rule_style,
+      important, css_parsing_utils::IsImplicitProperty::kNotImplicit,
+      properties);
+
+  return true;
+}
+
+const CSSValue* RuleStyle::CSSValueFromComputedStyleInternal(
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) const {
+  return ComputedStyleUtils::ValuesForBidirectionalGapRuleShorthand(
+      ruleStyleShorthand(), style, layout_object, allow_visited_style,
+      value_phase);
 }
 
 bool TextBox::ParseShorthand(

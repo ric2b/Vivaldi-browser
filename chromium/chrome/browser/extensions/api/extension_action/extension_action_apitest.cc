@@ -1198,7 +1198,7 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest, SetPopupWithInvalidPath) {
   auto get_script = [](int tab_id, const char* popup_input) {
     constexpr char kSetPopup[] = R"(setPopup({tabId: %d, popup: '%s'}, "%s");)";
     return base::StringPrintf(kSetPopup, tab_id, popup_input,
-                              manifest_errors::kInvalidExtensionOriginPopup);
+                              manifest_errors::kInvalidExtensionPopupPath);
   };
 
   content::RenderFrameHost* navigated_host = ui_test_utils::NavigateToURL(
@@ -1296,9 +1296,7 @@ IN_PROC_BROWSER_TEST_P(MultiActionAPITest, GettersAndSetters) {
     std::string cpp;
     std::string js;
 
-    bool operator!=(const ValuePair& rhs) const {
-      return rhs.cpp != this->cpp || rhs.js != this->js;
-    }
+    bool operator==(const ValuePair&) const = default;
   };
 
   // A function that returns the the C++ result for the given ExtensionAction
@@ -1653,8 +1651,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionActionAPITest, IsEnabledIgnoreDeclarative) {
       browser()->tab_strip_model()->GetActiveWebContents();
   GURL url(embedded_test_server()->GetURL("google.com", "/title1.html"));
 
-  EXPECT_TRUE(NavigateToURL(web_contents, url));
-  EXPECT_TRUE(WaitForLoadStop(web_contents));
+  EXPECT_TRUE(content::NavigateToURL(web_contents, url));
+  EXPECT_TRUE(content::WaitForLoadStop(web_contents));
   const int tab_id = sessions::SessionTabHelper::IdForTab(web_contents).id();
 
   // Confirm that the tab is only visible for declarativeContent.

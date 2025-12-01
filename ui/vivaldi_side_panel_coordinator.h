@@ -35,6 +35,8 @@ class SidePanelCoordinator : public SidePanelUI,
 
   std::optional<SidePanelEntryId> GetCurrentEntryId() const override;
 
+  int GetCurrentEntryDefaultContentWidth() const override;
+
   bool IsSidePanelShowing() const override;
 
   bool IsSidePanelEntryShowing(

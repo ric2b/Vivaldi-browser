@@ -29,10 +29,10 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_management_constants.h"
 #include "chrome/browser/extensions/extension_management_test_util.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "chrome/browser/extensions/install_verifier.h"
 #include "chrome/browser/extensions/load_error_waiter.h"
+#include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
@@ -69,6 +69,7 @@
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "extensions/browser/content_verifier/test_utils.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_host_test_helper.h"
@@ -223,7 +224,6 @@ const extensions::Extension* InstallExtensionWithContext(
   scoped_refptr<extensions::CrxInstaller> installer =
       extensions::CrxInstaller::CreateSilent(browser_context);
   installer->set_allow_silent_install(true);
-  installer->set_install_cause(extension_misc::INSTALL_CAUSE_UPDATE);
   installer->set_creation_flags(extensions::Extension::FROM_WEBSTORE);
   installer->set_off_store_install_allow_reason(
       extensions::CrxInstaller::OffStoreInstallAllowReason::
@@ -287,12 +287,6 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
     return test_extension_cache_.get();
   }
 
-  extensions::ExtensionService* extension_service() {
-    extensions::ExtensionSystem* system =
-        extensions::ExtensionSystem::Get(browser()->profile());
-    return system->extension_service();
-  }
-
   extensions::ExtensionRegistrar* extension_registrar() {
     return extensions::ExtensionRegistrar::Get(browser()->profile());
   }
@@ -303,6 +297,10 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
 
   extensions::ExtensionUpdater* extension_updater() {
     return extensions::ExtensionUpdater::Get(browser()->profile());
+  }
+
+  extensions::SharedModuleService* shared_module_service() {
+    return extensions::SharedModuleService::Get(browser()->profile());
   }
 
   web_app::WebAppProvider* web_app_provider() {
@@ -317,12 +315,12 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
   void UninstallExtension(const std::string& id, bool expect_success) {
     if (expect_success) {
       extensions::TestExtensionRegistryObserver observer(extension_registry());
-      extension_service()->UninstallExtension(
+      extension_registrar()->UninstallExtension(
           id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
       observer.WaitForExtensionUninstalled();
     } else {
       extensions::TestExtensionRegistryObserver observer(extension_registry());
-      extension_service()->UninstallExtension(
+      extension_registrar()->UninstallExtension(
           id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
       observer.WaitForExtensionUninstallationDenied();
     }
@@ -330,8 +328,8 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
 
   void DisableExtension(const std::string& id) {
     extensions::TestExtensionRegistryObserver observer(extension_registry());
-    extension_service()->DisableExtension(
-        id, extensions::disable_reason::DISABLE_USER_ACTION);
+    extension_registrar()->DisableExtension(
+        id, {extensions::disable_reason::DISABLE_USER_ACTION});
     observer.WaitForExtensionUnloaded();
   }
 
@@ -377,6 +375,9 @@ class ExtensionPolicyTest : public ExtensionPolicyTestBase {
 
  private:
   web_app::OsIntegrationManager::ScopedSuppressForTesting os_hooks_suppress_;
+
+  // TODO(https://crbug.com/40804030): Remove this when updated to use MV3.
+  extensions::ScopedTestMV2Enabler mv2_enabler_;
 };
 
 }  // namespace
@@ -387,7 +388,8 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
                        ExtensionInstallBlocklistComponentApps) {
   // Load all component extensions.
   extensions::ComponentLoader::EnableBackgroundExtensionsForTesting();
-  extension_service()->component_loader()->AddDefaultComponentExtensions(false);
+  auto* loader = extensions::ComponentLoader::Get(browser()->profile());
+  loader->AddDefaultComponentExtensions(false);
   base::RunLoop().RunUntilIdle();
 
   extensions::ExtensionRegistry* registry = extension_registry();
@@ -488,7 +490,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionWildcardRemovedPolicy) {
 IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallBlocklistWildcard) {
   // Verify that a wildcard blocklist takes effect.
   EXPECT_TRUE(InstallExtension(kSimpleWithIconCrxName));
-  extensions::ExtensionService* service = extension_service();
   extensions::ExtensionRegistrar* registrar = extension_registrar();
   extensions::ExtensionRegistry* registry = extension_registry();
   ASSERT_FALSE(registry->GetExtensionById(
@@ -508,7 +509,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallBlocklistWildcard) {
 
   // It shouldn't be possible to re-enable "simple_with_icon", until it
   // satisfies management policy.
-  service->EnableExtension(kSimpleWithIconCrxId);
+  registrar->EnableExtension(kSimpleWithIconCrxId);
   EXPECT_FALSE(registrar->IsExtensionEnabled(kSimpleWithIconCrxId));
 
   // It shouldn't be possible to install good.crx.
@@ -543,7 +544,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   extensions::ScopedCurrentChannel channel(version_info::Channel::DEV);
 
   // Verify that the extensions are not installed initially.
-  extensions::ExtensionService* service = extension_service();
   extensions::ExtensionRegistry* registry = extension_registry();
   ASSERT_FALSE(registry->GetExtensionById(
       kImporterId, extensions::ExtensionRegistry::EVERYTHING));
@@ -587,7 +587,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
 
   // Verify the dependency.
   std::unique_ptr<extensions::ExtensionSet> set =
-      service->shared_module_service()->GetDependentExtensions(shared_module);
+      shared_module_service()->GetDependentExtensions(shared_module);
   ASSERT_TRUE(set);
   EXPECT_EQ(1u, set->size());
   EXPECT_TRUE(set->Contains(importer->id()));
@@ -796,7 +796,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
   EXPECT_FALSE(extension_registrar()->IsExtensionEnabled(kGoodCrxId));
 
   // Explicitly re-enable the extension.
-  extension_service()->EnableExtension(kGoodCrxId);
+  extension_registrar()->EnableExtension(kGoodCrxId);
   // Extensions that are force-installed come from an update URL, which defaults
   // to the webstore. Use a test URL for this test with an update manifest
   // that includes "good_v1.crx".
@@ -1024,7 +1024,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionInstallForcelist) {
   UninstallExtension(kGoodCrxId, false);
 
   scoped_refptr<extensions::UnpackedInstaller> installer =
-      extensions::UnpackedInstaller::Create(extension_service());
+      extensions::UnpackedInstaller::Create(browser()->profile());
 
   // The user is not allowed to load an unpacked extension with the
   // same ID as a force-installed extension.
@@ -1502,8 +1502,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
 
   const base::FilePath kResourcePath(FILE_PATH_LITERAL("script1.js"));
 
-  extensions::ExtensionService* service = extension_service();
-
   // Step 1: Setup a policy and force-install an extension.
   const extensions::Extension* extension = InstallForceListExtension(
       "/extensions/good_v1_update_manifest.xml", kGoodCrxId);
@@ -1516,13 +1514,13 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
     // Temporarily disable extension, we don't want to tackle with resources of
     // enabled one. Not using command DISABLE_USER_ACTION reason since
     // force-installed extension may not be disabled by user action.
-    service->DisableExtension(kGoodCrxId,
-                              extensions::disable_reason::DISABLE_RELOAD);
+    extension_registrar()->DisableExtension(
+        kGoodCrxId, {extensions::disable_reason::DISABLE_RELOAD});
 
     const std::string kCorruptedContent("// corrupted\n");
     ASSERT_TRUE(base::WriteFile(resource_path, kCorruptedContent));
 
-    service->EnableExtension(kGoodCrxId);
+    extension_registrar()->EnableExtension(kGoodCrxId);
   }
 
   extensions::TestContentVerifyJobObserver content_verify_job_observer;
@@ -1581,8 +1579,6 @@ IN_PROC_BROWSER_TEST_F(
 
   const base::FilePath kResourcePath(FILE_PATH_LITERAL("script1.js"));
 
-  extensions::ExtensionService* service = extension_service();
-
   // Step 1: Setup a policy and force-install an extension.
   const extensions::Extension* extension = InstallForceListExtension(
       "/extensions/good_v1_update_manifest.xml", kGoodCrxId);
@@ -1595,8 +1591,8 @@ IN_PROC_BROWSER_TEST_F(
     // Temporarily disable extension, we don't want to tackle with resources of
     // enabled one. Not using command DISABLE_USER_ACTION reason since
     // force-installed extension may not be disabled by user action.
-    service->DisableExtension(kGoodCrxId,
-                              extensions::disable_reason::DISABLE_RELOAD);
+    extension_registrar()->DisableExtension(
+        kGoodCrxId, {extensions::disable_reason::DISABLE_RELOAD});
 
     const std::string kCorruptedContent("// corrupted\n");
     ASSERT_TRUE(base::WriteFile(resource_path, kCorruptedContent));
@@ -1606,7 +1602,7 @@ IN_PROC_BROWSER_TEST_F(
         extensions::file_util::GetComputedHashesPath(extension->path()),
         kInvalidJson));
 
-    service->EnableExtension(kGoodCrxId);
+    extension_registrar()->EnableExtension(kGoodCrxId);
   }
 
   extensions::TestExtensionRegistryObserver observer(extension_registry());
@@ -1662,8 +1658,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
 
   const base::FilePath kResourcePath(FILE_PATH_LITERAL("script1.js"));
 
-  extensions::ExtensionService* service = extension_service();
-
   // Step 1: Setup a policy and force-install an extension.
   const extensions::Extension* extension = InstallForceListExtension(
       "/extensions/good_v1_update_manifest.xml", kGoodCrxId);
@@ -1676,15 +1670,15 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest,
     // Temporarily disable extension, we don't want to tackle with resources of
     // enabled one. Not using command DISABLE_USER_ACTION reason since
     // force-installed extension may not be disabled by user action.
-    service->DisableExtension(kGoodCrxId,
-                              extensions::disable_reason::DISABLE_RELOAD);
+    extension_registrar()->DisableExtension(
+        kGoodCrxId, {extensions::disable_reason::DISABLE_RELOAD});
 
     const std::string kCorruptedContent("// corrupted\n");
     ASSERT_TRUE(base::WriteFile(resource_path, kCorruptedContent));
     ASSERT_TRUE(base::DeleteFile(
         extensions::file_util::GetComputedHashesPath(extension->path())));
 
-    service->EnableExtension(kGoodCrxId);
+    extension_registrar()->EnableExtension(kGoodCrxId);
   }
 
   extensions::TestContentVerifyJobObserver content_verify_job_observer;
@@ -2233,7 +2227,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionPolicyTest, ExtensionBlockedHostWhenDisabled) {
     extensions::ExtensionManagementPolicyUpdater pref(&provider_);
     pref.AddPolicyBlockedHost(extension->id(), "*://*.google.com");
   }
-  extension_service()->EnableExtension(extension->id());
+  extension_registrar()->EnableExtension(extension->id());
 
   EXPECT_FALSE(
       extension->permissions_data()->CanAccessPage(test_url, tab_id, error));
@@ -2563,6 +2557,9 @@ class ExtensionPolicyTest2Contexts : public PolicyTest {
   raw_ptr<extensions::ExtensionRegistrar> registrar2_ = nullptr;
   raw_ptr<extensions::ExtensionRegistry> registry1_ = nullptr;
   raw_ptr<extensions::ExtensionRegistry> registry2_ = nullptr;
+
+  // TODO(https://crbug.com/40804030): Remove this when updated to use MV3.
+  extensions::ScopedTestMV2Enabler mv2_enabler_;
 };
 
 // Verifies that default policy host block/allow settings are applied as

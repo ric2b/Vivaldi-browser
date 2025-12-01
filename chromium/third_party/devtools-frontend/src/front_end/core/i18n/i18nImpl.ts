@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as I18n from '../../third_party/i18n/i18n.js';
 import type * as Platform from '../platform/platform.js';
@@ -107,7 +108,7 @@ export function getLocalizedString(
  * Register a file's UIStrings with i18n, return function to generate the string ids.
  */
 export function registerUIStrings(
-    path: string, stringStructure: {[key: string]: string}): I18n.LocalizedStringSet.RegisteredFileStrings {
+    path: string, stringStructure: Record<string, string>): I18n.LocalizedStringSet.RegisteredFileStrings {
   return i18nInstance.registerFileStrings(path, stringStructure);
 }
 

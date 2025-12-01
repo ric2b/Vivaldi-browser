@@ -26,6 +26,7 @@
 #include "content/test/test_content_browser_client.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/native/native_view_host.h"
 #include "ui/views/test/views_test_utils.h"
@@ -365,7 +366,7 @@ TEST_F(WebViewUnitTest, CrashedOverlayView) {
   web_view->SetWebContents(web_contents.get());
 
   auto crashed_overlay_view = std::make_unique<View>();
-  crashed_overlay_view->set_owned_by_client();
+  crashed_overlay_view->set_owned_by_client(View::OwnedByClientPassKey());
   web_view->SetCrashedOverlayView(crashed_overlay_view.get());
   EXPECT_FALSE(crashed_overlay_view->IsDrawn());
 
@@ -419,7 +420,8 @@ TEST_F(WebViewUnitTest, ReparentingUpdatesParentAccessible) {
   // a reference to the old parent's accessible object.
   std::unique_ptr<WebView> removed_view =
       contents_view_1->RemoveChildViewT(added_web_view);
-  EXPECT_EQ(nullptr, added_web_view->holder()->GetParentAccessible());
+  EXPECT_EQ(gfx::NativeViewAccessible(),
+            added_web_view->holder()->GetParentAccessible());
   added_web_view = contents_view_2->AddChildView(std::move(removed_view));
 
   // After reparenting the holder's NativeViewAccessible should match that of

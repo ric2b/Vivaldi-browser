@@ -3,14 +3,6 @@ This test documents all interface attributes and methods on the global window ob
 On success, you will see a series of "PASS" messages, followed by "TEST COMPLETE".
 
 [INTERFACES]
-interface AI
-    attribute @@toStringTag
-    method constructor
-interface AICreateMonitor : EventTarget
-    attribute @@toStringTag
-    getter ondownloadprogress
-    method constructor
-    setter ondownloadprogress
 interface AbortController
     attribute @@toStringTag
     getter signal
@@ -1271,6 +1263,7 @@ interface CanvasRenderingContext2D
     method createMesh2DVertexBuffer
     method createPattern
     method createRadialGradient
+    method drawElement
     method drawFocusIfNeeded
     method drawImage
     method drawMesh
@@ -1291,7 +1284,6 @@ interface CanvasRenderingContext2D
     method lineTo
     method measureText
     method moveTo
-    method placeElement
     method putImageData
     method quadraticCurveTo
     method rect
@@ -1518,6 +1510,11 @@ interface CountQueuingStrategy
     getter highWaterMark
     getter size
     method constructor
+interface CreateMonitor : EventTarget
+    attribute @@toStringTag
+    getter ondownloadprogress
+    method constructor
+    setter ondownloadprogress
 interface Credential
     attribute @@toStringTag
     getter id
@@ -1553,6 +1550,7 @@ interface CustomElementRegistry
     method define
     method get
     method getName
+    method initialize
     method upgrade
     method whenDefined
 interface CustomEvent : Event
@@ -1939,6 +1937,7 @@ interface Document : Node
     getter contentType
     getter cookie
     getter currentScript
+    getter customElementRegistry
     getter defaultView
     getter designMode
     getter dir
@@ -2470,6 +2469,7 @@ interface Element : Node
     getter computedRole
     getter containerTiming
     getter currentCSSZoom
+    getter customElementRegistry
     getter elementTiming
     getter firstElementChild
     getter headingOffset
@@ -3052,6 +3052,7 @@ interface GPUAdapterInfo
     getter description
     getter device
     getter isFallbackAdapter
+    getter subgroupMatrixConfigs
     getter subgroupMaxSize
     getter subgroupMinSize
     getter vendor
@@ -3285,6 +3286,14 @@ interface GPUShaderModule
     method constructor
     method getCompilationInfo
     setter label
+interface GPUSubgroupMatrixConfig
+    attribute @@toStringTag
+    getter K
+    getter M
+    getter N
+    getter componentType
+    getter resultComponentType
+    method constructor
 interface GPUSupportedFeatures
     attribute @@toStringTag
     getter size
@@ -3710,6 +3719,7 @@ interface HTMLButtonElement : HTMLElement
 interface HTMLCanvasElement : HTMLElement
     attribute @@toStringTag
     getter height
+    getter layoutSubtree
     getter width
     method captureStream
     method configureHighDynamicRange
@@ -3719,6 +3729,7 @@ interface HTMLCanvasElement : HTMLElement
     method toDataURL
     method transferControlToOffscreen
     setter height
+    setter layoutSubtree
     setter width
 interface HTMLCollection
     attribute @@toStringTag
@@ -4635,11 +4646,26 @@ interface HTMLMediaElement : HTMLElement
     setter src
     setter srcObject
     setter volume
+interface HTMLMenuBarElement : HTMLElement
+    attribute @@toStringTag
+    method constructor
 interface HTMLMenuElement : HTMLElement
     attribute @@toStringTag
     getter compact
     method constructor
     setter compact
+interface HTMLMenuItemElement : HTMLElement
+    attribute @@toStringTag
+    getter checked
+    getter defaultChecked
+    getter disabled
+    method constructor
+    setter checked
+    setter defaultChecked
+    setter disabled
+interface HTMLMenuListElement : HTMLElement
+    attribute @@toStringTag
+    method constructor
 interface HTMLMetaElement : HTMLElement
     attribute @@toStringTag
     getter content
@@ -4803,6 +4829,7 @@ interface HTMLParamElement : HTMLElement
     setter value
     setter valueType
 interface HTMLPermissionElement : HTMLElement
+    static method isTypeSupported
     attribute @@toStringTag
     getter initialPermissionStatus
     getter invalidReason
@@ -5089,12 +5116,14 @@ interface HTMLTemplateElement : HTMLElement
     getter content
     getter parseparts
     getter shadowRootClonable
+    getter shadowRootCustomElementRegistry
     getter shadowRootDelegatesFocus
     getter shadowRootMode
     getter shadowRootSerializable
     method constructor
     setter parseparts
     setter shadowRootClonable
+    setter shadowRootCustomElementRegistry
     setter shadowRootDelegatesFocus
     setter shadowRootMode
     setter shadowRootSerializable
@@ -5593,6 +5622,14 @@ interface InputEvent : UIEvent
     getter isComposing
     method constructor
     method getTargetRanges
+interface IntegrityViolationReportBody : ReportBody
+    attribute @@toStringTag
+    getter blockedURL
+    getter destination
+    getter documentURL
+    getter reportOnly
+    method constructor
+    method toJSON
 interface InterestEvent : Event
     attribute @@toStringTag
     getter source
@@ -5689,6 +5726,7 @@ interface LanguageModel : EventTarget
     getter onquotaoverflow
     getter temperature
     getter topK
+    method append
     method clone
     method constructor
     method destroy
@@ -5696,12 +5734,6 @@ interface LanguageModel : EventTarget
     method prompt
     method promptStreaming
     setter onquotaoverflow
-interface LanguageModelFactory
-    attribute @@toStringTag
-    method availability
-    method constructor
-    method create
-    method params
 interface LanguageModelParams
     attribute @@toStringTag
     getter defaultTemperature
@@ -6610,6 +6642,7 @@ interface NavigationPreloadManager
     method setHeaderValue
 interface NavigationTransition
     attribute @@toStringTag
+    getter committed
     getter finished
     getter from
     getter navigationType
@@ -7162,7 +7195,7 @@ interface PaymentMethodChangeEvent : PaymentRequestUpdateEvent
     getter methodName
     method constructor
 interface PaymentRequest : EventTarget
-    static method isSecurePaymentConfirmationAvailable
+    static method securePaymentConfirmationAvailability
     attribute @@toStringTag
     getter id
     getter onpaymentmethodchange
@@ -7579,6 +7612,7 @@ interface PressureObserver
     method unobserve
 interface PressureRecord
     attribute @@toStringTag
+    getter ownContributionEstimate
     getter source
     getter state
     getter time
@@ -7611,6 +7645,17 @@ interface PromiseRejectionEvent : Event
     getter promise
     getter reason
     method constructor
+interface Proofreader
+    static method availability
+    static method create
+    attribute @@toStringTag
+    getter correctionExplanationLanguage
+    getter expectedInputLanguages
+    getter includeCorrectionExplanations
+    getter includeCorrectionTypes
+    method constructor
+    method destroy
+    method proofread
 interface ProtectedAudience
     attribute @@toStringTag
     method constructor
@@ -7651,6 +7696,11 @@ interface PushSubscriptionOptions
     attribute @@toStringTag
     getter applicationServerKey
     getter userVisibleOnly
+    method constructor
+interface QuotaExceededError : DOMException
+    attribute @@toStringTag
+    getter quota
+    getter requested
     method constructor
 interface RTCCertificate
     attribute @@toStringTag
@@ -9191,9 +9241,11 @@ interface SVGSVGElement : SVGGraphicsElement
     setter zoomAndPan
 interface SVGScriptElement : SVGElement
     attribute @@toStringTag
+    getter async
     getter href
     getter type
     method constructor
+    setter async
     setter type
 interface SVGSetElement : SVGAnimationElement
     attribute @@toStringTag
@@ -9573,6 +9625,7 @@ interface ShadowRoot : DocumentFragment
     getter activeElement
     getter adoptedStyleSheets
     getter clonable
+    getter customElementRegistry
     getter delegatesFocus
     getter fullscreenElement
     getter host
@@ -9582,7 +9635,6 @@ interface ShadowRoot : DocumentFragment
     getter pictureInPictureElement
     getter pointerLockElement
     getter referenceTarget
-    getter registry
     getter serializable
     getter slotAssignment
     getter styleSheets
@@ -10076,6 +10128,7 @@ interface ToggleEvent : Event
     attribute @@toStringTag
     getter newState
     getter oldState
+    getter source
     method constructor
 interface Touch
     attribute @@toStringTag
@@ -10551,6 +10604,7 @@ interface ViewTransition
     attribute @@toStringTag
     getter finished
     getter ready
+    getter transitionRoot
     getter types
     getter updateCallbackDone
     method constructor
@@ -11366,6 +11420,7 @@ interface WebGL2RenderingContext
     method stencilMaskSeparate
     method stencilOp
     method stencilOpSeparate
+    method texElement2D
     method texImage2D
     method texImage3D
     method texParameterf
@@ -11869,6 +11924,7 @@ interface WebGLRenderingContext
     method stencilMaskSeparate
     method stencilOp
     method stencilOpSeparate
+    method texElement2D
     method texImage2D
     method texParameterf
     method texParameteri
@@ -12296,7 +12352,9 @@ interface XRDepthInformation
     attribute @@toStringTag
     getter height
     getter normDepthBufferFromNormView
+    getter projectionMatrix
     getter rawValueToMeters
+    getter transform
     getter width
     method constructor
 interface XRFrame
@@ -12478,7 +12536,9 @@ interface XRRigidTransform
     method constructor
 interface XRSession : EventTarget
     attribute @@toStringTag
+    getter depthActive
     getter depthDataFormat
+    getter depthType
     getter depthUsage
     getter domOverlayState
     getter enabledFeatures
@@ -12505,11 +12565,13 @@ interface XRSession : EventTarget
     method constructor
     method end
     method getTrackedImageScores
+    method pauseDepthSensing
     method requestAnimationFrame
     method requestHitTestSource
     method requestHitTestSourceForTransientInput
     method requestLightProbe
     method requestReferenceSpace
+    method resumeDepthSensing
     method updateRenderState
     method updateTargetFrameRate
     setter onend
@@ -12939,7 +13001,6 @@ namespace console
     attribute propertyNamesInGlobal
     attribute testRunner
     attribute textInputController
-    getter ai
     getter caches
     getter clientInformation
     getter closed
@@ -13191,7 +13252,6 @@ namespace console
     method webkitRequestAnimationFrame
     method webkitRequestFileSystem
     method webkitResolveLocalFileSystemURL
-    setter ai
     setter clientInformation
     setter devicePixelRatio
     setter event

@@ -31,11 +31,11 @@ public class FakeMostVisitedSites implements MostVisitedSites {
     private final List<GURL> mBlocklistedUrls = new ArrayList<>();
 
     private List<SiteSuggestion> mSites = new ArrayList<>();
-    private Observer mObserver;
+    private @Nullable Observer mObserver;
 
     // CustomLinkOperations -> MostVisitedSites implementation.
     @Override
-    public boolean addCustomLink(String name, @Nullable GURL url) {
+    public boolean addCustomLink(String name, @Nullable GURL url, @Nullable Integer pos) {
         // TODO (crbug.com/397421764): Implement when needed by tests.
         return false;
     }
@@ -53,7 +53,13 @@ public class FakeMostVisitedSites implements MostVisitedSites {
     }
 
     @Override
-    public boolean queryCustomLink(GURL keyUrl) {
+    public boolean hasCustomLink(GURL keyUrl) {
+        // TODO (crbug.com/397421764): Implement when needed by tests.
+        return false;
+    }
+
+    @Override
+    public boolean reorderCustomLink(GURL keyUrl, int newPos) {
         // TODO (crbug.com/397421764): Implement when needed by tests.
         return false;
     }
@@ -118,9 +124,9 @@ public class FakeMostVisitedSites implements MostVisitedSites {
     }
 
     /**
-     * Sets new tile suggestion data, generating dummy data for the missing properties.
+     * Sets new tile suggestion data, generating fake data for the missing properties.
      *
-     * If there is an observer it will be notified and the call has to be made on the UI thread.
+     * <p>If there is an observer it will be notified and the call has to be made on the UI thread.
      *
      * @param urls The URLs of the site suggestions.
      * @see #setTileSuggestions(SiteSuggestion[])

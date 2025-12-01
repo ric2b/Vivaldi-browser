@@ -366,6 +366,13 @@
       field_group: "visual",
     },
     {
+      name: "MaybeHasGapDecorations",
+      field_template: "monotonic_flag",
+      type_name: "bool",
+      default_value: "false",
+      field_group: "visual",
+    },
+    {
       name: "HasAutoClip",
       field_template: "primitive",
       type_name: "bool",
@@ -1173,6 +1180,13 @@
       default_value: "false",
     },
     {
+      name: "DependsOnAnchoredContainerQueries",
+      field_template: "primitive",
+      type_name: "bool",
+      field_group: "*",
+      default_value: "false",
+    },
+    {
       // Set to true if this ComputedStyle is for an element whose ::first-line
       // style depends on size container queries.
       name: "FirstLineDependsOnSizeContainerQueries",
@@ -1214,6 +1228,17 @@
     {
       // https://html.spec.whatwg.org/multipage/interaction.html#inert
       name: "IsHTMLInert",
+      inherited: true,
+      independent: true,
+      field_template: "primitive",
+      type_name: "bool",
+      default_value: "false",
+    },
+    {
+      // https://drafts.csswg.org/css-ui-4/#inertness
+      // Bit that is set for interactivity:inert and is never reset in the
+      // subtree even if the interactivity is set back to auto.
+      name: "IsCSSInert",
       inherited: true,
       independent: true,
       field_template: "primitive",
@@ -1328,7 +1353,7 @@
       name: "AnchorCenterOffset",
       field_template: "external",
       field_group: "*",
-      include_paths: ["third_party/blink/renderer/core/layout/geometry/physical_offset.h"],
+      include_paths: ["third_party/blink/renderer/platform/geometry/physical_offset.h"],
       default_value: "std::nullopt",
       type_name: "std::optional<PhysicalOffset>",
       custom_compare: true,

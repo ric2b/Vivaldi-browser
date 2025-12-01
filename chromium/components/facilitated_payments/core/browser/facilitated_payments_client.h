@@ -6,6 +6,7 @@
 #define COMPONENTS_FACILITATED_PAYMENTS_CORE_BROWSER_FACILITATED_PAYMENTS_CLIENT_H_
 
 #include <cstdint>
+#include <memory>
 #include <optional>
 
 #include "base/containers/span.h"
@@ -27,6 +28,7 @@ class StrikeDatabase;
 
 namespace payments::facilitated {
 
+class PixAccountLinkingManager;
 class FacilitatedPaymentsNetworkInterface;
 class MultipleRequestFacilitatedPaymentsNetworkInterface;
 
@@ -34,6 +36,7 @@ class MultipleRequestFacilitatedPaymentsNetworkInterface;
 // A cross-platform client interface for showing UI for non-form based FOPs.
 class FacilitatedPaymentsClient : public autofill::RiskDataLoader {
  public:
+  FacilitatedPaymentsClient();
   ~FacilitatedPaymentsClient() override;
 
   // Gets the `PaymentsDataManager` instance associated with the Chrome profile.
@@ -109,6 +112,22 @@ class FacilitatedPaymentsClient : public autofill::RiskDataLoader {
   // Gets the StrikeDatabase associated with the client. Note: Nullptr may be
   // returned so check before use.
   virtual autofill::StrikeDatabase* GetStrikeDatabase() = 0;
+
+  // Virtual so it can be overridden in tests.
+  virtual void InitPixAccountLinkingFlow();
+
+  // Checks if Pix account linking is supported by the platform.
+  virtual bool IsPixAccountLinkingSupported() const;
+
+  // Shows the PIX account linking prompt. Virtual so it can be overridden in
+  // tests.
+  virtual void ShowPixAccountLinkingPrompt();
+
+  void SetPixAccountLinkingManagerForTesting(
+      std::unique_ptr<PixAccountLinkingManager> pix_account_linking_manager);
+
+ private:
+  std::unique_ptr<PixAccountLinkingManager> pix_account_linking_manager_;
 };
 
 }  // namespace payments::facilitated

@@ -175,12 +175,6 @@ class DeviceBase : public ErrorSink,
 
     ResultOrError<Ref<SamplerBase>> GetOrCreateSampler(const SamplerDescriptor* descriptor);
 
-    ResultOrError<Ref<ShaderModuleBase>> GetOrCreateShaderModule(
-        const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
-        const std::vector<tint::wgsl::Extension>& internalExtensions,
-        ShaderModuleParseResult* parseResult,
-        std::unique_ptr<OwnedCompilationMessages>* compilationMessages);
-
     Ref<AttachmentState> GetOrCreateAttachmentState(AttachmentState* blueprint);
     Ref<AttachmentState> GetOrCreateAttachmentState(
         const RenderBundleEncoderDescriptor* descriptor);
@@ -434,6 +428,14 @@ class DeviceBase : public ErrorSink,
 
     bool HasFlexibleTextureViews() const;
 
+    // Get a stable entry point name containing isolation key for backend shader code generation, so
+    // that devices with different isolation key will generate different backend shader code for the
+    // same WGSL input. In this way underlying driver compilation caches that take backend shader
+    // code as input is possible to be isolated according to devices' isolation keys, while for the
+    // same isolation key the cache will work as expected.
+    // The returned std::string_view is constructed from std::string and ensure null terminated.
+    std::string_view GetIsolatedEntryPointName() const;
+
   protected:
     // Constructor used only for mocking and testing.
     DeviceBase();
@@ -481,7 +483,7 @@ class DeviceBase : public ErrorSink,
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
-        OwnedCompilationMessages* compilationMessages) = 0;
+        std::unique_ptr<OwnedCompilationMessages>* compilationMessages) = 0;
     // Note that previousSwapChain may be nullptr, or come from a different backend.
     virtual ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
@@ -606,6 +608,7 @@ class DeviceBase : public ErrorSink,
     std::string mLabel;
 
     CacheKey mDeviceCacheKey;
+    std::string mIsolatedEntryPointName;
     std::unique_ptr<BlobCache> mBlobCache;
 
     // We cache this toggle so that we can check it without locking the device.

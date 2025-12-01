@@ -139,8 +139,8 @@ void JNI_NetworkFetcherTask_CallPostRequestCompleteCallback(
   native_task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(&NetworkFetcherTask::InvokePostRequestCompleteCallback,
-                     *task, std::make_unique<std::string>(response_body_str),
-                     network_error, header_e_tag, header_x_cup_server_proof,
+                     *task, std::move(response_body_str), network_error,
+                     header_e_tag, header_x_cup_server_proof,
                      x_header_retry_after_sec));
 }
 
@@ -237,7 +237,7 @@ void NetworkFetcherTask::InvokeDownloadToFileCompleteCallback(
 }
 
 void NetworkFetcherTask::InvokePostRequestCompleteCallback(
-    std::unique_ptr<std::string> response_body,
+    std::optional<std::string> response_body,
     int network_error,
     const std::string& header_etag,
     const std::string& header_x_cup_server_proof,
@@ -245,7 +245,8 @@ void NetworkFetcherTask::InvokePostRequestCompleteCallback(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::move(post_request_complete_callback_)
       .Run(std::move(response_body), network_error, header_etag,
-           header_x_cup_server_proof, x_header_retry_after_sec);
+           header_x_cup_server_proof, /*header_cookie=*/"",
+           x_header_retry_after_sec);
 }
 
 }  // namespace android_webview

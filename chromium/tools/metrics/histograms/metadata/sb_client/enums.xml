@@ -47,6 +47,9 @@ chromium-metrics-reviews@google.com.
   <int value="2"
       label="Classification is not triggered because the URL is not forced by
              real-time URL check"/>
+  <int value="3"
+      label="Classification is not triggered because the trigger model ping
+             is converted to force request request type ping"/>
 </enum>
 
 <enum name="BooleanForceRequest">
@@ -75,6 +78,14 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="CancellationFailedDownloadNotFound"/>
   <int value="3" label="CancellationFailedDownloadNotEphemeral"/>
   <int value="4" label="CancellationSucceeded"/>
+</enum>
+
+<enum name="CanExtractVisualFeaturesResult">
+  <int value="0" label="Can extract visual features"/>
+  <int value="1" label="User is not opted in"/>
+  <int value="2" label="User is off the record"/>
+  <int value="3" label="Frame is below minimal width and/or height"/>
+  <int value="4" label="Zoom level is above maximum value"/>
 </enum>
 
 <enum name="ClientSideAllowlistMatchResult">
@@ -142,18 +153,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/safe_browsing/core/browser/referring_app_info.h:GetReferringAppInfoResult) -->
-
-<!-- LINT.IfChange(SafeBrowsingVerifyAppsEnabledResult) -->
-
-<enum name="SafeBrowsingVerifyAppsEnabledResult">
-  <int value="0" label="Enabled"/>
-  <int value="1" label="Disabled"/>
-  <int value="2" label="Request timed out"/>
-  <int value="3" label="Request failed"/>
-  <int value="4" label="Already enabled"/>
-</enum>
-
-<!-- LINT.ThenChange(//components/safe_browsing/android/safe_browsing_api_handler_util.h:VerifyAppsEnabledResult) -->
 
 <enum name="SBClientDetectionClassifyThresholdsResult">
   <int value="0" label="Success"/>

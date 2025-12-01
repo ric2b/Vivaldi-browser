@@ -117,7 +117,7 @@ public class TabBookmarker {
 
     private void addOrEditBookmark(
             final Tab tabToBookmark, @BookmarkType int bookmarkType, boolean fromExplicitTrackUi) {
-        if (tabToBookmark == null || tabToBookmark.isFrozen()) {
+        if (tabToBookmark == null) {
             return;
         }
 
@@ -145,7 +145,8 @@ public class TabBookmarker {
                     if (bookmarkId != null && bookmarkId.getType() == BookmarkType.READING_LIST)
                         bookmarkId = bookmarkModel.getMostRecentlyAddedUserNormalBookmarkIdForUrl(
                                 tabToBookmark.getOriginalUrl());
-                    if (bookmarkModel.isInsideTrashFolder(bookmarkId)) bookmarkId = null;
+                    if (bookmarkId != null && bookmarkModel.isInsideTrashFolder(bookmarkId))
+                        bookmarkId = null;
                     BookmarkItem currentBookmarkItem =
                             bookmarkId == null ? null : bookmarkModel.getBookmarkById(bookmarkId);
                     onBookmarkModelLoaded(
@@ -180,11 +181,12 @@ public class TabBookmarker {
                     }
 
                     // Vivaldi
-                    if (SpeedDialUtils.thumbnailsEnabled()
+                    if (SpeedDialUtils.thumbnailsEnabled() && newBookmarkId != null
                             && bookmarkModel.isInsideSpeedDialFolder(newBookmarkId)) {
                         ChromeActivity activity = (ChromeActivity) mActivity;
-                        activity.captureThumbnailForSpeedDial(
-                                bookmarkModel, bookmarkModel.getBookmarkById(newBookmarkId));
+                        if (newBookmarkId != null)
+                            activity.captureThumbnailForSpeedDial(
+                                    bookmarkModel, bookmarkModel.getBookmarkById(newBookmarkId));
                     }
                     // End vivaldi
                 },

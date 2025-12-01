@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_delegate.h"
 
@@ -25,8 +21,10 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/common.h"
@@ -43,13 +41,17 @@
 #include "components/enterprise/buildflags/buildflags.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/analysis_settings.h"
+#include "components/enterprise/connectors/core/features.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/navigation_simulator.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
@@ -138,6 +140,10 @@ class BaseTest : public testing::Test {
     EXPECT_TRUE(profile_manager_.SetUp());
     profile_ = profile_manager_.CreateTestingProfile("test-user");
     ContentAnalysisDelegate::DisableUIForTesting();
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{safe_browsing::kEnhancedFieldsForSecOps,
+                              kEnterpriseIframeDlpRulesSupport},
+        /*disabled_features=*/{});
   }
 
   void ScanUpload(content::WebContents* web_contents,
@@ -570,10 +576,12 @@ class ContentAnalysisDelegateAuditOnlyTest : public BaseTest {
             ? it->second
             : test::FakeContentAnalysisDelegate::SuccessfulResponse([this]() {
                 std::set<std::string> tags;
-                if (include_dlp_ && !dlp_response_.has_value())
+                if (include_dlp_ && !dlp_response_.has_value()) {
                   tags.insert("dlp");
-                if (include_malware_)
+                }
+                if (include_malware_) {
                   tags.insert("malware");
+                }
                 return tags;
               }());
 
@@ -1489,8 +1497,9 @@ TEST_P(ContentAnalysisDelegateResultHandlingTest, Test) {
   // This is not a desktop platform don't try the non-cloud case since it
   // is not supported.
 #if !BUILDFLAG(ENTERPRISE_LOCAL_CONTENT_ANALYSIS)
-  if (!is_cloud())
+  if (!is_cloud()) {
     return;
+  }
 #endif
 
   GURL url(kTestUrl);
@@ -1694,5 +1703,83 @@ TEST_F(ContentAnalysisDelegateWithLocalClient, FailClosed) {
   EXPECT_TRUE(called);
 }
 #endif
+
+class ContentAnalysisDelegateFrameUrlChainTest
+    : public ContentAnalysisDelegateAuditOnlyTest {
+ public:
+  ContentAnalysisDelegateFrameUrlChainTest() = default;
+
+ protected:
+  void SetUp() override {
+    ContentAnalysisDelegateAuditOnlyTest::SetUp();
+
+    // Create test web contents as we need to navigate to a URL to get a valid
+    // frame chain.
+    web_contents_ = content::WebContentsTester::CreateTestWebContents(
+        profile(), content::SiteInstance::Create(profile()));
+    content::WebContentsTester::For(web_contents_.get())
+        ->NavigateAndCommit(GURL(kTestUrl));
+  }
+
+  void TearDown() override {
+    // `WebContentsTester` needs to be destroyed before the
+    // `RenderViewHostTestEnabler`.
+    if (web_contents_) {
+      web_contents_.reset();
+    }
+    ContentAnalysisDelegateAuditOnlyTest::TearDown();
+  }
+
+ private:
+  // Needed for frame tree and navigation operations.
+  content::RenderViewHostTestEnabler rvh_test_enabler_;
+};
+
+TEST_F(ContentAnalysisDelegateFrameUrlChainTest, UploadWithNestedFrames) {
+  base::HistogramTester histogram_tester;
+  ContentAnalysisDelegate::Data data;
+
+  // Create main frame.
+  content::RenderFrameHost* main_frame = web_contents_->GetPrimaryMainFrame();
+  content::RenderFrameHostTester* main_frame_tester =
+      content::RenderFrameHostTester::For(main_frame);
+
+  // Create and navigate the first child frame.
+  content::RenderFrameHost* child_frame1 =
+      main_frame_tester->AppendChild("child1");
+  content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://child1.example.com/"), child_frame1);
+
+  // Create and navigate the second (nested) child frame.
+  content::RenderFrameHostTester* child_frame1_tester =
+      content::RenderFrameHostTester::For(child_frame1);
+  content::RenderFrameHost* child_frame2 =
+      child_frame1_tester->AppendChild("child2");
+  content::NavigationSimulator::NavigateAndCommitFromDocument(
+      GURL("http://child2.example.com/"), child_frame2);
+
+  // Set focus on the innermost frame.
+  content::FocusWebContentsOnFrame(web_contents_.get(), child_frame2);
+
+  ASSERT_TRUE(ContentAnalysisDelegate::IsEnabled(profile(), GURL(kTestUrl),
+                                                 &data, FILE_ATTACHED));
+
+  bool called = false;
+  ScanUpload(
+      contents(), std::move(data),
+      base::BindOnce(
+          [](bool* called, const ContentAnalysisDelegate::Data& data,
+             ContentAnalysisDelegate::Result& result) { *called = true; },
+          &called));
+  RunUntilDone();
+
+  EXPECT_EQ(0,
+            test::FakeContentAnalysisDelegate::GetTotalAnalysisRequestsCount());
+  EXPECT_TRUE(called);
+  histogram_tester.ExpectTotalCount(
+      "Enterprise.IframeDlpRulesSupport.Upload.UrlChainSize", 1);
+  histogram_tester.ExpectBucketCount(
+      "Enterprise.IframeDlpRulesSupport.Upload.UrlChainSize", 3, 1);
+}
 
 }  // namespace enterprise_connectors

@@ -282,7 +282,9 @@ ExternalSource GetExternalSourceFromExternalImage(
     // generate
     //   required results.
     ImageExtractor image_extractor(image_for_canvas.get(),
-                                   external_image_dst_info.premultiplied_alpha,
+                                   external_image_dst_info.premultiplied_alpha
+                                       ? kPremul_SkAlphaType
+                                       : kUnpremul_SkAlphaType,
                                    PredefinedColorSpaceToSkColorSpace(
                                        external_image_dst_info.color_space));
     sk_image = image_extractor.GetSkImage();
@@ -312,7 +314,7 @@ ExternalSource GetExternalSourceFromExternalImage(
     // PaintImageBuilder. Use the builder to create PaintImage internally.
     // Store the orientation metadata but no transforms apply to the content.
     auto image = UnacceleratedStaticBitmapImage::Create(
-        std::move(sk_image), image_for_canvas->CurrentFrameOrientation());
+        std::move(sk_image), image_for_canvas->Orientation());
 
     // Recruit Image::ResizeAndOrientImage() to apply transformation based on
     // orientation metadata. This API helps rotate contents based on orientation
@@ -323,8 +325,8 @@ ExternalSource GetExternalSourceFromExternalImage(
     if (!image_is_default_orientation) {
       PaintImage paint_image = image->PaintImageForCurrentFrame();
       paint_image = Image::ResizeAndOrientImage(
-          paint_image, image_for_canvas->CurrentFrameOrientation(),
-          gfx::Vector2dF(1, 1), 1, kInterpolationNone);
+          paint_image, image_for_canvas->Orientation(), gfx::Vector2dF(1, 1), 1,
+          kInterpolationNone);
 
       // Have default orientation now.
       image = UnacceleratedStaticBitmapImage::Create(std::move(paint_image));
@@ -1010,7 +1012,13 @@ bool GPUQueue::CopyFromCanvasSourceImage(
 
     wgpu::Extent3D source_image_copy_size = {copy_size.width, copy_size.height};
 
-    wgpu::CommandEncoder encoder = device_->GetHandle().CreateCommandEncoder();
+    wgpu::CommandEncoderDescriptor command_encoder_desc = {
+        .label = "GPUQueue::CopyFromCanvasSourceImage",
+    };
+
+    wgpu::CommandEncoder encoder =
+        device_->GetHandle().CreateCommandEncoder(&command_encoder_desc);
+
     encoder.CopyBufferToTexture(&dawn_intermediate_buffer,
                                 &dawn_intermediate_texture,
                                 &source_image_copy_size);

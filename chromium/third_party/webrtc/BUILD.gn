@@ -251,6 +251,10 @@ config("common_inherited_config") {
   if (is_ubsan) {
     cflags += [ "-fsanitize=float-cast-overflow" ]
   }
+
+  if (rtc_allow_deprecated_namespaces) {
+    defines += [ "WEBRTC_ALLOW_DEPRECATED_NAMESPACES" ]
+  }
 }
 
 # TODO(bugs.webrtc.org/9693): Remove the possibility to suppress this warning
@@ -373,8 +377,7 @@ config("common_config") {
 
   if (is_clang) {
     cflags += [
-      # TODO(webrtc:13219): Fix -Wshadow instances and enable.
-      "-Wno-shadow",
+      "-Wshadow",
 
       # See https://reviews.llvm.org/D56731 for details about this
       # warning.
@@ -533,6 +536,7 @@ if (!build_with_chromium) {
       "api:libjingle_peerconnection_api",
       "api:rtc_error",
       "api:transport_api",
+      "api/audio:create_audio_device_module",
       "api/audio_codecs:opus_audio_decoder_factory",
       "api/crypto",
       "api/rtc_event_log:rtc_event_log_factory",
@@ -628,6 +632,8 @@ if (rtc_include_tests && !build_with_chromium) {
       "api:rtc_api_unittests",
       "api/audio:audio_api_unittests",
       "api/audio_codecs/test:audio_codecs_api_unittests",
+      "api/crypto:crypto_options_unittest",
+      "api/crypto:options",
       "api/numerics:numerics_unittests",
       "api/task_queue:pending_task_safety_flag_unittests",
       "api/test/metrics:metrics_unittests",
@@ -818,4 +824,15 @@ group("poison_environment_construction") {
 }
 
 group("poison_software_video_codecs") {
+}
+
+if (!build_with_chromium) {
+  # Write debug logs to gn_logs.txt.
+  # This is also required for Siso builds.
+  import("//build/gn_logs.gni")
+  lines = [
+            "Generated during 'gn gen' by //BUILD.gn.",
+            "",
+          ] + build_gn_logs
+  write_file("$root_build_dir/gn_logs.txt", lines)
 }

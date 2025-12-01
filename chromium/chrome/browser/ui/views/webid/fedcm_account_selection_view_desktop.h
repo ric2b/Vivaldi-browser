@@ -13,12 +13,14 @@
 #include "chrome/browser/ui/views/webid/fedcm_modal_dialog_view.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
 #include "chrome/browser/ui/webid/identity_dialog_controller.h"
+#include "chrome/browser/ui/webid/identity_ui_utils.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/views/input_event_activation_protector.h"
 
 namespace tabs {
 class TabInterface;
+class ScopedAcceptMouseEventsWhileWindowInactive;
 }  // namespace tabs
 
 namespace webid {
@@ -60,10 +62,6 @@ class FedCmAccountSelectionView : public AccountSelectionView,
                                   public content::WebContentsObserver,
                                   public PictureInPictureOcclusionObserver {
  public:
-  // safe_zone_diameter/icon_size as defined in
-  // https://www.w3.org/TR/appmanifest/#icon-masks
-  static constexpr float kMaskableWebIconSafeZoneRatio = 0.8f;
-
   enum class DialogType {
     // FedCM dialog inherits a bubble dialog, which is typically shown on the
     // top-right corner of the browser. The user can switch tabs and interact
@@ -85,25 +83,29 @@ class FedCmAccountSelectionView : public AccountSelectionView,
       const content::RelyingPartyData& rp_data,
       const std::vector<IdentityProviderDataPtr>& idp_list,
       const std::vector<IdentityRequestAccountPtr>& accounts,
-      Account::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<IdentityRequestAccountPtr>& new_accounts) override;
   bool ShowFailureDialog(
-      const std::string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::string& idp_etld_plus_one,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
       const content::IdentityProviderMetadata& idp_metadata) override;
-  bool ShowErrorDialog(const std::string& rp_for_display,
+  bool ShowErrorDialog(const content::RelyingPartyData& rp_data,
                        const std::string& idp_etld_plus_one,
                        blink::mojom::RpContext rp_context,
                        blink::mojom::RpMode rp_mode,
                        const content::IdentityProviderMetadata& idp_metadata,
                        const std::optional<TokenError>& error) override;
-  bool ShowLoadingDialog(const std::string& rp_for_display,
+  bool ShowLoadingDialog(const content::RelyingPartyData& rp_data,
                          const std::string& idp_etld_plus_one,
                          blink::mojom::RpContext rp_context,
                          blink::mojom::RpMode rp_mode) override;
+  bool ShowVerifyingDialog(const content::RelyingPartyData& rp_data,
+                           const IdentityProviderDataPtr& idp_data,
+                           const IdentityRequestAccountPtr& account,
+                           Account::SignInMode sign_in_mode,
+                           blink::mojom::RpMode rp_mode) override;
 
   void ShowUrl(LinkType link_type, const GURL& url) override;
   std::string GetTitle() const override;
@@ -220,7 +222,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   // Virtual for testing.
   virtual AccountSelectionViewBase* CreateDialogView(
       bool has_modal_support,
-      const std::u16string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::optional<std::u16string>& idp_title,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
@@ -236,6 +238,8 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   virtual std::unique_ptr<FedCmModalDialogView> CreatePopupWindow();
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewBrowserTest,
+                           ModalDialogThenShowThenCloseModalDialog);
   FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
                            MismatchDialogDismissedByCloseIconMetric);
   FRIEND_TEST_ALL_PREFIXES(FedCmAccountSelectionViewDesktopTest,
@@ -336,69 +340,6 @@ class FedCmAccountSelectionView : public AccountSelectionView,
     kMaxValue = kAccountsNotReceivedAndPopupNotClosedByIdp
   };
 
-  // This enum describes the outcome of the account chooser and is used for
-  // histograms. Do not remove or modify existing values, but you may add new
-  // values at the end. This enum should be kept in sync with
-  // AccountChooserResult in
-  // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
-  // FedCmAccountChooserResult in tools/metrics/histograms/enums.xml.
-  enum class AccountChooserResult {
-    kAccountRow = 0,
-    kCancelButton = 1,
-    kUseOtherAccountButton = 2,
-    kTabClosed = 3,
-    // Android-specific
-    kSwipe = 4,
-    // Android-specific
-    kBackPress = 5,
-    // Android-specific
-    kTapScrim = 6,
-
-    kMaxValue = kTapScrim
-  };
-
-  // This enum describes the outcome of the loading dialog and is used for
-  // histograms. Do not remove or modify existing values, but you may add new
-  // values at the end. This enum should be kept in sync with
-  // LoadingDialogResult in
-  // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
-  // FedCmLoadingDialogResult in tools/metrics/histograms/enums.xml.
-  enum class LoadingDialogResult {
-    kProceed = 0,
-    kCancel = 1,
-    kProceedThroughPopup = 2,
-    kDestroy = 3,
-    // Android-specific
-    kSwipe = 4,
-    // Android-specific
-    kBackPress = 5,
-    // Android-specific
-    kTapScrim = 6,
-
-    kMaxValue = kTapScrim
-  };
-
-  // This enum describes the outcome of the disclosure dialog and is used for
-  // histograms. Do not remove or modify existing values, but you may add new
-  // values at the end. This enum should be kept in sync with
-  // DisclosureDialogResult in
-  // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
-  // FedCmDisclosureDialogResult in tools/metrics/histograms/enums.xml.
-  enum class DisclosureDialogResult {
-    kContinue = 0,
-    kCancel = 1,
-    kBack = 2,
-    kDestroy = 3,
-    // Android-specific
-    kSwipe = 4,
-    // Android-specific
-    kBackPress = 5,
-    // Android-specific
-    kTapScrim = 6,
-
-    kMaxValue = kTapScrim
-  };
-
   // Called when the tab's WebContents is discarded.
   void WillDiscardContents(tabs::TabInterface* tab,
                            content::WebContents* old_contents,
@@ -420,7 +361,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
   void ShowDialogWidget();
 
   // Returns the SheetType to be used for metrics reporting.
-  AccountSelectionView::SheetType GetSheetType();
+  webid::SheetType GetSheetType();
 
   // Returns whether an IDP sign-in pop-up window is currently open.
   bool IsIdpSigninPopupOpen();
@@ -444,7 +385,7 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   // Creates account_selection_view_ (different subclasses for
   // bubble/modal) and dialog_widget_.
-  void CreateViewAndWidget(const std::u16string& rp_for_display,
+  void CreateViewAndWidget(const content::RelyingPartyData& rp_data,
                            const std::optional<std::u16string>& idp_title,
                            blink::mojom::RpContext rp_context,
                            blink::mojom::RpMode rp_mode,
@@ -534,15 +475,15 @@ class FedCmAccountSelectionView : public AccountSelectionView,
 
   // The current state of the modal account chooser, if initiated by user. This
   // is nullopt when no modal account chooser has been opened.
-  std::optional<AccountChooserResult> modal_account_chooser_state_;
+  std::optional<webid::AccountChooserResult> modal_account_chooser_state_;
 
   // The current state of the modal loading dialog. This is nullopt when no
   // modal loading dialog has been opened.
-  std::optional<LoadingDialogResult> modal_loading_dialog_state_;
+  std::optional<webid::LoadingDialogResult> modal_loading_dialog_state_;
 
   // The current state of the modal disclosure dialog. This is nullopt when no
   // modal disclosure dialog has been opened.
-  std::optional<DisclosureDialogResult> modal_disclosure_dialog_state_;
+  std::optional<webid::DisclosureDialogResult> modal_disclosure_dialog_state_;
 
   // Whether the widget is occluded by PIP (and therefore we should ignore
   // inputs).

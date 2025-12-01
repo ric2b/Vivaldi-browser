@@ -41,7 +41,7 @@ class RTCCertificateGeneratorInterface {
   // long we want the certificate to be valid, but the implementation may choose
   // its own restrictions on the expiration time.
   virtual void GenerateCertificateAsync(
-      const rtc::KeyParams& key_params,
+      const KeyParams& key_params,
       const std::optional<uint64_t>& expires_ms,
       Callback callback) = 0;
 };
@@ -59,7 +59,7 @@ class RTC_EXPORT RTCCertificateGenerator
   // larger value than that is clamped down to a year. If `expires_ms` is not
   // specified, a default expiration time is used.
   static scoped_refptr<RTCCertificate> GenerateCertificate(
-      const rtc::KeyParams& key_params,
+      const KeyParams& key_params,
       const std::optional<uint64_t>& expires_ms);
 
   RTCCertificateGenerator(Thread* signaling_thread, Thread* worker_thread);
@@ -70,7 +70,7 @@ class RTC_EXPORT RTCCertificateGenerator
   // that many milliseconds from now. `expires_ms` is limited to a year, a
   // larger value than that is clamped down to a year. If `expires_ms` is not
   // specified, a default expiration time is used.
-  void GenerateCertificateAsync(const rtc::KeyParams& key_params,
+  void GenerateCertificateAsync(const KeyParams& key_params,
                                 const std::optional<uint64_t>& expires_ms,
                                 Callback callback) override;
 
@@ -83,9 +83,11 @@ class RTC_EXPORT RTCCertificateGenerator
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::RTCCertificateGenerator;
 using ::webrtc::RTCCertificateGeneratorInterface;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_RTC_CERTIFICATE_GENERATOR_H_

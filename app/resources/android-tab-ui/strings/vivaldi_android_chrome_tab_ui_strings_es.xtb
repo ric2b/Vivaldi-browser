@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es">
-<translation id="2277224997687551299">Editar nombre de grupo</translation>
+<translation id="1062777154504442433">Nueva pila de pestañas</translation>
+<translation id="1625440863545383011">Eliminar pestaña y abandonar pila</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Añadir pestaña a marcadores}
           other {Añadir pestañas a marcadores}
         }</translation>
 <translation id="2947471979790858922">Se eliminará la actividad de estas pestañas privadas en este dispositivo</translation>
+<translation id="3298614730029636660">Abandonar pila</translation>
+<translation id="354698175756845966">Editar color de la pila</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Encontrarás las pestañas cerradas en Pestañas recientes, en el menú principal de Vivaldi. La pestaña privada no estará disponible.}
         other {Encontrarás las pestañas cerradas en Pestañas recientes, en el menú principal de Vivaldi. Las # pestañas privadas no estarán disponibles.}}</translation>
-<translation id="4460014764210899310">Desagrupar</translation>
 <translation id="4871187110787939393">¿Cerrar todas las pestañas privadas?</translation>
 <translation id="5494920125229734069">Seleccionar todo</translation>
-<translation id="6744956528665271406">Editar color del grupo</translation>
+<translation id="6807841890213931603">Eliminar pestaña y pila</translation>
+<translation id="750227952939161636">Las pestañas se guardan y actualizan automáticamente en todos los dispositivos en los que hayas iniciado sesión</translation>
+<translation id="7640137753339219124">Eliminar pila</translation>
+<translation id="7653857400289671414">Las pilas de pestañas se guardan automáticamente</translation>
+<translation id="8440938071054361204">Editar nombre de la pila</translation>
+<translation id="8602902357364871325">Cerrar pila</translation>
+<translation id="8851621822786801079">Eliminar de la pila</translation>
 </translationbundle>

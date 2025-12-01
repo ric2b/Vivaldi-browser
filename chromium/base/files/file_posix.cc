@@ -103,7 +103,10 @@ int CallFutimes(PlatformFile file, const struct timeval times[2]) {
 
   return futimens(file, ts_times);
 #else
+#pragma clang diagnostic push  // Can be removed once Cronet's min-sdk is >= 26.
+#pragma clang diagnostic ignored "-Wunguarded-availability"
   return futimes(file, times);
+#pragma clang diagnostic pop
 #endif
 }
 
@@ -255,6 +258,11 @@ void File::Close() {
 
   SCOPED_FILE_TRACE("Close");
   ScopedBlockingCall scoped_blocking_call(FROM_HERE, BlockingType::MAY_BLOCK);
+#if BUILDFLAG(IS_ANDROID)
+  if (java_parcel_file_descriptor_) {
+    internal::ContentUriClose(java_parcel_file_descriptor_);
+  }
+#endif
   file_.reset();
 }
 
@@ -630,7 +638,8 @@ void File::DoInitialize(const FilePath& path, uint32_t flags) {
 
 #if BUILDFLAG(IS_ANDROID)
   if (path.IsContentUri()) {
-    int fd = internal::OpenContentUri(path, flags);
+    java_parcel_file_descriptor_ = internal::OpenContentUri(path, flags);
+    int fd = internal::ContentUriGetFd(java_parcel_file_descriptor_);
     if (fd < 0) {
       error_details_ = FILE_ERROR_FAILED;
       return;

@@ -11,6 +11,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/bookmarks/bookmark_expanded_state_tracker_factory.h"
@@ -29,6 +30,7 @@
 #include "components/bookmarks/common/bookmark_metrics.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_fixer.h"
 #include "components/user_prefs/user_prefs.h"
@@ -276,6 +278,11 @@ void BookmarkEditorView::ShowContextMenuForViewImpl(
                                   source_type);
 }
 
+bool BookmarkEditorView::IsNewFolderButtonEnabledForTesting() const {
+  CHECK(new_folder_button_);
+  return new_folder_button_->GetEnabled();
+}
+
 void BookmarkEditorView::BookmarkNodeMoved(const BookmarkNode* old_parent,
                                            size_t old_index,
                                            const BookmarkNode* new_parent,
@@ -314,6 +321,14 @@ void BookmarkEditorView::BookmarkNodeRemoved(const BookmarkNode* parent,
     // A node, or its parent was removed. Close the dialog.
     GetWidget()->Close();
   } else {
+    Reset();
+  }
+}
+
+void BookmarkEditorView::BookmarkNodeChanged(
+    const bookmarks::BookmarkNode* node) {
+  // Only reset for folders, since bookmarks (urls) are not shown in the dialog.
+  if (node->is_folder()) {
     Reset();
   }
 }
@@ -482,13 +497,19 @@ void BookmarkEditorView::AddLabels() {
 }
 
 void BookmarkEditorView::ExpandAndSelect() {
-  BookmarkExpandedStateTracker::Nodes expanded_nodes =
-      expanded_state_tracker_->GetExpandedNodes();
-  for (const BookmarkNode* node : expanded_nodes) {
-    EditorNode* editor_node =
-        FindNodeWithID(tree_model_->GetRoot(), node->id());
-    if (editor_node) {
-      tree_view_->Expand(editor_node);
+  // Only expand tracked nodes if the feature flag is disabled. With the flag
+  // enabled, only the nodes leading up to the selected node's parent should be
+  // expanded.
+  if (!base::FeatureList::IsEnabled(
+          switches::kSyncEnableBookmarksInTransportMode)) {
+    BookmarkExpandedStateTracker::Nodes expanded_nodes =
+        expanded_state_tracker_->GetExpandedNodes();
+    for (const BookmarkNode* node : expanded_nodes) {
+      EditorNode* editor_node =
+          FindNodeWithID(tree_model_->GetRoot(), node->id());
+      if (editor_node) {
+        tree_view_->Expand(editor_node);
+      }
     }
   }
 
@@ -500,9 +521,16 @@ void BookmarkEditorView::ExpandAndSelect() {
   EditorNode* b_node =
       FindNodeWithID(tree_model_->GetRoot(), folder_id_to_select);
   if (!b_node) {
-    b_node = tree_model_->GetRoot()->children().front().get();  // Bookmark bar.
+    // Default to the bookmark bar folder.
+    bool has_title_node =
+        tree_model_->GetRoot()->children().front()->value.type ==
+        EditorNodeData::Type::kTitle;
+    b_node = FindNodeWithID(tree_model_->GetRoot(),
+                            has_title_node
+                                ? bb_model_->account_bookmark_bar_node()->id()
+                                : bb_model_->bookmark_bar_node()->id());
+    CHECK(b_node);
   }
-
   tree_view_->SetSelectedNode(b_node);
 }
 
@@ -634,33 +662,76 @@ void BookmarkEditorView::ApplyEdits(EditorNode* parent) {
 }
 
 void BookmarkEditorView::ApplyNameChangesAndCreateNewFolders(
-    const BookmarkNode* bb_node,
-    BookmarkEditorView::EditorNode* b_node,
-    BookmarkEditorView::EditorNode* parent_b_node,
-    const BookmarkNode** parent_bb_node) {
-  if (parent_b_node == b_node) {
-    *parent_bb_node = bb_node;
+    const BookmarkNode* target_node,
+    BookmarkEditorView::EditorNode* source_node,
+    BookmarkEditorView::EditorNode* parent_source_node,
+    const BookmarkNode** parent_target_node) {
+  CHECK(target_node);
+  if (parent_source_node == source_node) {
+    *parent_target_node = target_node;
   }
-  for (const auto& child_b_node : b_node->children()) {
-    const BookmarkNode* child_bb_node = nullptr;
-    if (child_b_node->value.type == EditorNodeData::Type::kFolder) {
-      if (child_b_node->value.bookmark_node_id == 0) {
-        // New folder.
-        child_bb_node = bb_model_->AddFolder(
-            bb_node, bb_node->children().size(), child_b_node->GetTitle());
-        child_b_node->value.bookmark_node_id = child_bb_node->id();
-      } else {
-        // Existing node, reset the title (BookmarkModel ignores changes if the
-        // title is the same).
-        child_bb_node = bookmarks::GetBookmarkNodeByID(
-            bb_model_, child_b_node->value.bookmark_node_id);
-        CHECK(child_bb_node);
-        bb_model_->SetTitle(child_bb_node, child_b_node->GetTitle(),
-                            bookmarks::metrics::BookmarkEditSource::kUser);
-      }
+  for (const auto& child_source_node : source_node->children()) {
+    const BookmarkNode* child_target_node = nullptr;
+    switch (child_source_node->value.type) {
+      case EditorNodeData::Type::kFolder:
+        if (child_source_node->value.bookmark_node_id == 0) {
+          // New folder.
+          child_target_node =
+              bb_model_->AddFolder(target_node, target_node->children().size(),
+                                   child_source_node->GetTitle());
+          child_source_node->value.bookmark_node_id = child_target_node->id();
+        } else {
+          // Existing node, reset the title (BookmarkModel ignores changes if
+          // the title is the same).
+          auto i = std::ranges::find_if(
+              target_node->children(), [&child_source_node](const auto& node) {
+                return node->is_folder() &&
+                       node->id() == child_source_node->value.bookmark_node_id;
+              });
+          CHECK(i != target_node->children().cend());
+          child_target_node = i->get();
+          bb_model_->SetTitle(child_target_node, child_source_node->GetTitle(),
+                              bookmarks::metrics::BookmarkEditSource::kUser);
+        }
+        break;
+      case EditorNodeData::Type::kTitle:
+        // Editor nodes of type kTitle (e.g., "In your Google Account", "Only on
+        // this device") do not have corresponding persistent nodes in the
+        // BookmarkModel.
+        //
+        // However, the children of these kTitle editor nodes do correspond to
+        // actual permanent BookmarkNodes residing directly under the
+        // BookmarkModel's root node.
+        //
+        // BookmarkEditorView:
+        //   Root
+        //     +-- In your Google Account
+        //     |     +-- Bookmark Bar
+        //     |     +-- Other Bookmarks
+        //     |     +-- etc.
+        //     +-- Only on this device
+        //           +-- Bookmark Bar
+        //           +-- Other Bookmarks
+        //           +-- etc.
+        //
+        // BookmarkModel:
+        //   Root
+        //     +-- Bookmark Bar (Account)
+        //     +-- Other Bookmarks (Account)
+        //     +-- Bookmark Bar (Local)
+        //     +-- Other Bookmarks (Local)
+        //     +-- etc.
+
+        // Pass the model root as the recursive target for correct model
+        // anchoring.
+        child_target_node = bb_model_->root_node();
+        break;
+      case EditorNodeData::Type::kRoot:
+        NOTREACHED();
     }
-    ApplyNameChangesAndCreateNewFolders(child_bb_node, child_b_node.get(),
-                                        parent_b_node, parent_bb_node);
+    ApplyNameChangesAndCreateNewFolders(child_target_node,
+                                        child_source_node.get(),
+                                        parent_source_node, parent_target_node);
   }
 }
 

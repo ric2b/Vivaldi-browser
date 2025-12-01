@@ -7,7 +7,6 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
-#include "base/not_fatal_until.h"
 #include "base/process/process.h"
 #include "base/synchronization/lock.h"
 #include "base/task/single_thread_task_runner.h"
@@ -19,6 +18,16 @@
 #include "services/resource_coordinator/public/mojom/memory_instrumentation/memory_instrumentation.mojom.h"
 
 namespace memory_instrumentation {
+
+struct ClientProcessImpl::OSMemoryDumpArgs {
+  OSMemoryDumpArgs();
+  OSMemoryDumpArgs(OSMemoryDumpArgs&&);
+  ~OSMemoryDumpArgs();
+  mojom::MemoryMapOption mmap_option;
+  OSMetrics::MemDumpFlagSet flags;
+  std::vector<base::ProcessId> pids;
+  RequestOSMemoryDumpCallback callback;
+};
 
 // static
 void ClientProcessImpl::CreateInstance(
@@ -93,8 +102,7 @@ void ClientProcessImpl::OnChromeMemoryDumpDone(
   DCHECK(success || !process_memory_dump);
 
   auto callback_it = pending_chrome_callbacks_.find(dump_guid);
-  CHECK(callback_it != pending_chrome_callbacks_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(callback_it != pending_chrome_callbacks_.end());
 
   auto callback = std::move(callback_it->second);
   pending_chrome_callbacks_.erase(callback_it);
@@ -144,12 +152,16 @@ void ClientProcessImpl::RequestGlobalMemoryDump_NoCallback(
 
 void ClientProcessImpl::RequestOSMemoryDump(
     mojom::MemoryMapOption mmap_option,
+    const std::vector<mojom::MemDumpFlags>& flags,
     const std::vector<base::ProcessId>& pids,
     RequestOSMemoryDumpCallback callback) {
   OSMemoryDumpArgs args;
   args.mmap_option = mmap_option;
   args.pids = pids;
   args.callback = std::move(callback);
+  for (const auto& flag : flags) {
+    args.flags.Put(flag);
+  }
 
 #if BUILDFLAG(IS_MAC)
   // If the most recent chrome memory dump hasn't finished, wait for that to
@@ -173,7 +185,8 @@ void ClientProcessImpl::PerformOSMemoryDump(OSMemoryDumpArgs args) {
     auto handle = base::Process::Open(pid).Handle();
     mojom::RawOSMemDumpPtr result = mojom::RawOSMemDump::New();
     result->platform_private_footprint = mojom::PlatformPrivateFootprint::New();
-    bool success = OSMetrics::FillOSMemoryDump(handle, result.get());
+    bool success =
+        OSMetrics::FillOSMemoryDump(handle, args.flags, result.get());
     if (args.mmap_option != mojom::MemoryMapOption::NONE) {
       success = success && OSMetrics::FillProcessMemoryMaps(
                                handle, args.mmap_option, result.get());

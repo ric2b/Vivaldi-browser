@@ -90,8 +90,17 @@ class ReadAnythingAppModel {
     // is added.
   };
 
+  // Represents a grouping of AXTreeUpdates received in the same accessibility
+  // event.
   using Updates = std::vector<ui::AXTreeUpdate>;
-  using PendingUpdates = std::map<ui::AXTreeID, Updates>;
+
+  // Updates need to be grouped by the order in which they were received,
+  // rather than just a single vector containing all updates from multiple
+  // accessibility events. This is so that Unserialize can be called in
+  // batches on the group of Updates received from each call to
+  // AccessibilityEventReceived. Otherwise, intermediary updates might
+  // cause tree inconsistency issues with the final update.
+  using PendingUpdates = std::map<ui::AXTreeID, std::vector<Updates>>;
 
   static constexpr char kEmptyStateHistogramName[] =
       "Accessibility.ReadAnything.EmptyState";
@@ -130,9 +139,14 @@ class ReadAnythingAppModel {
   bool redraw_required() const { return redraw_required_; }
   void reset_redraw_required() { redraw_required_ = false; }
 
-  bool selection_from_action() const { return selection_from_action_; }
-  void set_selection_from_action(bool selection_from_action) {
-    selection_from_action_ = selection_from_action;
+  int unprocessed_selections_from_reading_mode() {
+    return selections_from_reading_mode_;
+  }
+  void increment_selections_from_reading_mode() {
+    ++selections_from_reading_mode_;
+  }
+  void decrement_selections_from_reading_mode() {
+    --selections_from_reading_mode_;
   }
 
   const std::string& base_language_code() const { return base_language_code_; }
@@ -176,7 +190,11 @@ class ReadAnythingAppModel {
     color_theme_ = color_theme;
   }
 
-  bool has_selection() const { return start_.is_valid(); }
+  // Sometimes iframes can return selection objects that have a valid id but
+  // aren't in the tree.
+  bool has_selection() const {
+    return start_.is_valid() && GetAXNode(start_.id);
+  }
   ui::AXNodeID start_node_id() const { return start_.id; }
   ui::AXNodeID end_node_id() const { return end_.id; }
   int start_offset() const { return start_.offset; }
@@ -227,9 +245,11 @@ class ReadAnythingAppModel {
 
   const ui::AXTreeID& active_tree_id() const { return active_tree_id_; }
   void SetActiveTreeId(ui::AXTreeID active_tree_id);
+  void SetRootTreeId(ui::AXTreeID root_tree_id);
 
   ukm::SourceId GetUkmSourceId() const;
-  void SetUkmSourceId(ukm::SourceId ukm_source_id);
+  void SetUkmSourceIdForTree(const ui::AXTreeID& tree,
+                             ukm::SourceId ukm_source_id);
 
   int GetNumSelections() const;
   void SetNumSelections(int num_selections);
@@ -237,6 +257,8 @@ class ReadAnythingAppModel {
   void SetUrlInformationCallback(base::OnceCallback<void()> callback);
   bool IsDocs() const;
   bool IsReload() const;
+
+  const std::set<ui::AXNodeID>* GetCurrentlyVisibleNodes() const;
 
   ui::AXNode* GetAXNode(const ui::AXNodeID& ax_node_id) const;
 
@@ -260,8 +282,6 @@ class ReadAnythingAppModel {
 
   void OnScroll(bool on_selection, bool from_reading_mode) const;
 
-  void OnSelection(ax::mojom::EventFrom event_from);
-
   void Reset(std::vector<ui::AXNodeID> content_node_ids);
 
   // Helper functions for the rendering algorithm. Post-process the AXTree and
@@ -280,9 +300,11 @@ class ReadAnythingAppModel {
   // displayed in the Read Anything app.ts by default.
   void ComputeDisplayNodeIdsForDistilledTree();
 
-  ui::AXSerializableTree* GetTreeFromId(const ui::AXTreeID& tree_id) const;
+  ui::AXSerializableTree* GetActiveTree() const;
 
   bool ContainsTree(const ui::AXTreeID& tree_id) const;
+
+  bool ContainsActiveTree() const;
 
   void UnserializePendingUpdates(const ui::AXTreeID& tree_id);
 
@@ -314,6 +336,15 @@ class ReadAnythingAppModel {
   void AddObserver(ModelObserver* observer);
   void RemoveObserver(ModelObserver* observer);
 
+  // TODO: crbug.com/416483312 - Longer term, reading mode should support
+  // distilling from multiple trees, if they have important content.
+  // Currently, reading mode only distills from a child tree if the root tree
+  // has no distillable content.
+
+  // Signal if reading mode should allow use of child trees for the active tree
+  // if the web content's root AXTree has no distillable content.
+  void AllowChildTreeForActiveTree(bool use_child_tree);
+
  private:
   struct SelectionEndpoint {
     enum class Source {
@@ -331,6 +362,8 @@ class ReadAnythingAppModel {
     ui::AXNodeID id = ui::kInvalidAXNodeID;
     int offset = -1;
   };
+
+  ui::AXSerializableTree* GetTreeFromId(const ui::AXTreeID& tree_id) const;
 
   void ResetSelection();
 
@@ -357,6 +390,7 @@ class ReadAnythingAppModel {
   void OnTreeChangeTimerTriggered();
 
   void SetFontSize(double font_size, int increment = 0);
+  void SetUkmSourceId(ukm::SourceId ukm_source_id);
 
   // State.
   std::map<ui::AXTreeID, std::unique_ptr<AXTreeInfo>> tree_infos_;
@@ -365,6 +399,11 @@ class ReadAnythingAppModel {
   // always be the AXTreeID of the main web contents (not the PDF iframe or its
   // child).
   ui::AXTreeID active_tree_id_ = ui::AXTreeIDUnknown();
+
+  // The AXTreeID of the root tree of the web contents. This will be the same
+  // as active_tree_id_ unless root_tree_id_ has no distillable content but has
+  // a child tree with distillable content.
+  ui::AXTreeID root_tree_id_ = ui::AXTreeIDUnknown();
 
   // For determining whether the latest tree is a reload or new page.
   std::string previous_tree_url_;
@@ -437,7 +476,7 @@ class ReadAnythingAppModel {
   bool requires_distillation_ = false;
   bool reset_draw_timer_ = false;
   bool requires_post_process_selection_ = false;
-  bool selection_from_action_ = false;
+  int selections_from_reading_mode_ = 0;
 
   // For screen2x data collection, Chrome is launched from the CLI to open one
   // webpage. We record the result of the distill() call for this entire
@@ -460,6 +499,17 @@ class ReadAnythingAppModel {
   bool requires_tree_lang_ = false;
 
   bool will_hide_ = false;
+
+  std::map<ui::AXTreeID, ukm::SourceId> pending_ukm_sources_;
+
+  // Possible child tree ids that could be used to distill content if the
+  // root tree has no distillable content. This will only be used if
+  // may_use_child_for_active_tree_ is true.
+  std::set<ui::AXTreeID> child_tree_ids_;
+
+  // If reading mode should attempt to use child trees to distill content. This
+  // should only be true if the root tree has no distillable content.
+  bool may_use_child_for_active_tree_ = false;
 
   // List of observers of model state changes.
   base::ObserverList<ModelObserver, /*check_empty=*/true> observers_;

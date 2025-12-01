@@ -23,6 +23,7 @@
 #include "src/base/enum-set.h"
 #include "src/base/platform/condition-variable.h"
 #include "src/base/platform/mutex.h"
+#include "src/base/platform/platform.h"
 #include "src/base/small-vector.h"
 #include "src/builtins/accessors.h"
 #include "src/common/assert-scope.h"
@@ -189,6 +190,22 @@ enum class GCFlag : uint8_t {
   kLastResort = 1 << 2,
 };
 
+// Temporarily enables CSS to conservatively scan the stack starting from the
+// current frame. This scope should not yet be used in production!
+class V8_EXPORT_PRIVATE ConservativePinningScope {
+  V8_STACK_ALLOCATED();
+
+ public:
+  // `frame_address` is used an initial fast frame address. If it doesn't cover
+  // this scope, it will be ignored and replaced with a frame address that does
+  // include this scope.
+  explicit ConservativePinningScope(Heap* heap);
+  ~ConservativePinningScope();
+
+ private:
+  Heap* const heap_;
+};
+
 using GCFlags = base::Flags<GCFlag, uint8_t>;
 DEFINE_OPERATORS_FOR_FLAGS(GCFlags)
 
@@ -281,10 +298,6 @@ class Heap final {
     std::atomic<uint64_t> low_since_mark_compact_{0};
   };
 
-  // Taking this mutex prevents the GC from entering a phase that relocates
-  // object references.
-  base::Mutex* relocation_mutex() { return &relocation_mutex_; }
-
   // Support for context snapshots.  After calling this we have a linear
   // space to write objects in each space.
   struct Chunk {
@@ -363,6 +376,33 @@ class Heap final {
   // by pointer size.
   static inline void CopyBlock(Address dst, Address src, int byte_size);
 
+  enum class StackScanMode { kNone, kFull, kSelective };
+  StackScanMode ConservativeStackScanningModeForMinorGC() const {
+    if (v8_flags.scavenger_conservative_object_pinning) {
+      return StackScanMode::kFull;
+    }
+    if (selective_stack_scan_start_address_.has_value()) {
+      return StackScanMode::kSelective;
+    }
+    return StackScanMode::kNone;
+  }
+  StackScanMode ConservativeStackScanningModeForMajorGC() const {
+    if (v8_flags.conservative_stack_scanning) {
+      return StackScanMode::kFull;
+    }
+    if (selective_stack_scan_start_address_.has_value()) {
+      return StackScanMode::kSelective;
+    }
+    return StackScanMode::kNone;
+  }
+
+  bool ShouldUsePrecisePinningForMinorGC() const {
+    return v8_flags.scavenger_precise_object_pinning;
+  }
+  bool ShouldUsePrecisePinningForMajorGC() const {
+    return v8_flags.precise_object_pinning;
+  }
+
   EphemeronRememberedSet* ephemeron_remembered_set() {
     return ephemeron_remembered_set_.get();
   }
@@ -402,13 +442,14 @@ class Heap final {
   size_t NewSpaceCapacity() const;
   size_t NewSpaceTargetCapacity() const;
 
-  // Move len non-weak tagged elements from src_slot to dst_slot of dst_object.
+  // Move `len` tagged elements from `src_slot` to `dst_slot` of `dst_object`.
   // The source and destination memory ranges can overlap.
+  template <typename TSlot>
   V8_EXPORT_PRIVATE void MoveRange(Tagged<HeapObject> dst_object,
-                                   ObjectSlot dst_slot, ObjectSlot src_slot,
-                                   int len, WriteBarrierMode mode);
+                                   TSlot dst_slot, TSlot src_slot, int len,
+                                   WriteBarrierMode mode);
 
-  // Copy len non-weak tagged elements from src_slot to dst_slot of dst_object.
+  // Copy `len` tagged elements from `src_slot` to `dst_slot` of `dst_object`.
   // The source and destination memory ranges must not overlap.
   template <typename TSlot>
   V8_EXPORT_PRIVATE void CopyRange(Tagged<HeapObject> dst_object,
@@ -467,10 +508,14 @@ class Heap final {
         native_contexts_list_.load(std::memory_order_acquire));
   }
 
-  void set_allocation_sites_list(Tagged<Object> object) {
+  void set_allocation_sites_list(
+      Tagged<UnionOf<Smi, Undefined, AllocationSiteWithWeakNext>> object) {
     allocation_sites_list_ = object;
   }
-  Tagged<Object> allocation_sites_list() { return allocation_sites_list_; }
+  Tagged<UnionOf<Smi, Undefined, AllocationSiteWithWeakNext>>
+  allocation_sites_list() {
+    return allocation_sites_list_;
+  }
 
   void set_dirty_js_finalization_registries_list(Tagged<Object> object) {
     dirty_js_finalization_registries_list_ = object;
@@ -798,6 +843,7 @@ class Heap final {
   // ===========================================================================
 
   GCTracer* tracer() { return tracer_.get(); }
+  const GCTracer* tracer() const { return tracer_.get(); }
 
   MemoryAllocator* memory_allocator() { return memory_allocator_.get(); }
   const MemoryAllocator* memory_allocator() const {
@@ -854,18 +900,19 @@ class Heap final {
   MUTABLE_ROOT_LIST(ROOT_ACCESSOR)
 #undef ROOT_ACCESSOR
 
-  V8_INLINE Tagged<FixedArray> single_character_string_table();
-
   V8_INLINE void SetRootMaterializedObjects(Tagged<FixedArray> objects);
   V8_INLINE void SetRootScriptList(Tagged<Object> value);
   V8_INLINE void SetRootNoScriptSharedFunctionInfos(Tagged<Object> value);
   V8_INLINE void SetMessageListeners(Tagged<ArrayList> value);
   V8_INLINE void SetFunctionsMarkedForManualOptimization(
       Tagged<Object> bytecode);
+  V8_INLINE void SetSmiStringCache(Tagged<SmiStringCache> cache);
+  V8_INLINE void SetDoubleStringCache(Tagged<DoubleStringCache> cache);
 
 #if V8_ENABLE_WEBASSEMBLY
-  V8_INLINE void SetWasmCanonicalRttsAndJSToWasmWrappers(
-      Tagged<WeakFixedArray> rtts, Tagged<WeakFixedArray> js_to_wasm_wrappers);
+  V8_INLINE void SetWasmCanonicalRtts(Tagged<WeakFixedArray> rtts);
+  V8_INLINE void SetJSToWasmWrappers(
+      Tagged<WeakFixedArray> js_to_wasm_wrappers);
 #endif
 
   StrongRootsEntry* RegisterStrongRoots(const char* label, FullObjectSlot start,
@@ -1002,7 +1049,8 @@ class Heap final {
   void IterateConservativeStackRoots(
       RootVisitor* root_visitor,
       IterateRootsMode roots_mode = IterateRootsMode::kMainIsolate);
-  void IterateConservativeStackRoots(::heap::base::StackVisitor* stack_visitor);
+  void IterateConservativeStackRoots(::heap::base::StackVisitor* stack_visitor,
+                                     StackScanMode stack_scan_mode);
 
   void IterateRootsForPrecisePinning(RootVisitor* visitor);
 
@@ -1189,6 +1237,10 @@ class Heap final {
   V8_EXPORT_PRIVATE bool InSpaceSlow(Address addr, AllocationSpace space) const;
 
   static inline Heap* FromWritableHeapObject(Tagged<HeapObject> obj);
+
+  // Returns whether this heap can reference a HeapObject. Mostly useful for
+  // DCHECKs.
+  V8_EXPORT_PRIVATE bool CanReferenceHeapObject(Tagged<HeapObject> obj);
 
   // ===========================================================================
   // Object statistics tracking. ===============================================
@@ -1549,6 +1601,7 @@ class Heap final {
   V8_EXPORT_PRIVATE void EnsureSweepingCompleted(
       SweepingForcedFinalizationMode mode);
   void EnsureYoungSweepingCompleted();
+  void EnsureQuarantinedPagesSweepingCompleted();
 
   // =============================================================================
 
@@ -1584,9 +1637,6 @@ class Heap final {
 #endif  // V8_TARGET_ARCH_X64
     return result;
   }
-
-  // Calculates the nof entries for the full sized number to string cache.
-  inline int MaxNumberToStringCacheSize() const;
 
   // Ensure that we have swept all spaces in such a way that we can iterate
   // over all objects.
@@ -1700,7 +1750,6 @@ class Heap final {
   };
 
   static const int kInitialEvalCacheSize = 64;
-  static const int kInitialNumberStringCacheSize = 256;
 
   static const int kRememberedUnmappedPages = 128;
 
@@ -1787,12 +1836,13 @@ class Heap final {
   // Record statistics after garbage collection.
   void ReportStatisticsAfterGC();
 
-  // Flush the number to string cache.
-  void FlushNumberStringCache();
-
   void ActivateMemoryReducerIfNeededOnMainThread();
 
   void ShrinkOldGenerationAllocationLimitIfNotConfigured();
+
+  // Extends the allocation limit such that at least |at_least_remaining| unused
+  // memory is left before hitting the allocation limit.
+  void EnsureMinimumRemainingAllocationLimit(size_t at_least_remaining);
 
   double ComputeMutatorUtilization(const char* tag, double mutator_speed,
                                    std::optional<double> gc_speed);
@@ -1948,7 +1998,8 @@ class Heap final {
   // Sets allocation limits for both old generation and the global heap.
   void SetOldGenerationAndGlobalAllocationLimit(
       size_t new_old_generation_allocation_limit,
-      size_t new_global_allocation_limit);
+      size_t new_global_allocation_limit,
+      const char* reason = __builtin_FUNCTION());
 
   void ResetOldGenerationAndGlobalAllocationLimit();
 
@@ -1986,7 +2037,7 @@ class Heap final {
   // GC Tasks. =================================================================
   // ===========================================================================
 
-  V8_EXPORT_PRIVATE void StartMinorMSIncrementalMarkingIfNeeded();
+  V8_EXPORT_PRIVATE void StartMinorMSConcurrentMarkingIfNeeded();
   bool MinorMSSizeTaskTriggerReached() const;
 
   MinorGCJob* minor_gc_job() { return minor_gc_job_.get(); }
@@ -2110,6 +2161,11 @@ class Heap final {
   // True if initial heap size was provided by the embedder.
   bool initial_size_overwritten_ = false;
 
+  // True if the old space size was preconfigured. This is different from
+  // initial_size_overwritten_ because it is not also minimum and because of
+  // different behavior in NotifyContextDisposed().
+  bool preconfigured_old_generation_size_ = false;
+
   size_t maximum_committed_ = 0;
   size_t old_generation_capacity_after_bootstrap_ = 0;
 
@@ -2230,7 +2286,8 @@ class Heap final {
   // {native_contexts_list_} is an Address instead of an Object to allow the use
   // of atomic accessors.
   std::atomic<Address> native_contexts_list_;
-  Tagged<Object> allocation_sites_list_ = Smi::zero();
+  Tagged<UnionOf<Smi, Undefined, AllocationSiteWithWeakNext>>
+      allocation_sites_list_ = Smi::zero();
   Tagged<Object> dirty_js_finalization_registries_list_ = Smi::zero();
   // Weak list tails.
   Tagged<Object> dirty_js_finalization_registries_list_tail_ = Smi::zero();
@@ -2362,8 +2419,6 @@ class Heap final {
 
   const AllocationType allocation_type_for_in_place_internalizable_strings_;
 
-  base::Mutex relocation_mutex_;
-
   std::unique_ptr<CollectionBarrier> collection_barrier_;
 
   int ignore_local_gc_requests_depth_ = 0;
@@ -2409,11 +2464,16 @@ class Heap final {
   // actually finished.
   bool is_full_gc_during_loading_ = false;
 
+  // On-stack address used for selective consevative stack scanning. No value
+  // means that selective conservative stack scanning is not enabled.
+  std::optional<const void*> selective_stack_scan_start_address_;
+
   // Classes in "heap" can be friends.
   friend class ActivateMemoryReducerTask;
   friend class AlwaysAllocateScope;
   friend class ArrayBufferCollector;
   friend class ArrayBufferSweeper;
+  friend class ConservativePinningScope;
   friend class ConcurrentMarking;
   friend class ConservativeTracedHandlesMarkingVisitor;
   friend class CppHeap;

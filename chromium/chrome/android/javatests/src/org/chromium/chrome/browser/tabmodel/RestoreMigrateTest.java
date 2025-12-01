@@ -30,7 +30,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.AdvancedMockContext;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.crypto.CipherFactory;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -103,7 +103,7 @@ public class RestoreMigrateTest {
     }
 
     static class AdvancedMockContextWithTestDir extends AdvancedMockContext {
-        private File mFileTestDir;
+        private final File mFileTestDir;
 
         AdvancedMockContextWithTestDir(Context base) {
             super(base);

@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
-#include <list>
 #include <memory>
 #include <optional>
 #include <ostream>
@@ -21,7 +20,7 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "quiche/quic/core/crypto/null_encrypter.h"
+#include "quiche/quic/core/crypto/crypto_protocol.h"
 #include "quiche/quic/core/crypto/quic_client_session_cache.h"
 #include "quiche/quic/core/frames/quic_blocked_frame.h"
 #include "quiche/quic/core/frames/quic_crypto_frame.h"
@@ -33,8 +32,8 @@
 #include "quiche/quic/core/io/quic_event_loop.h"
 #include "quiche/quic/core/qpack/value_splitting_header_list.h"
 #include "quiche/quic/core/quic_connection.h"
+#include "quiche/quic/core/quic_connection_id.h"
 #include "quiche/quic/core/quic_constants.h"
-#include "quiche/quic/core/quic_data_writer.h"
 #include "quiche/quic/core/quic_default_clock.h"
 #include "quiche/quic/core/quic_dispatcher.h"
 #include "quiche/quic/core/quic_error_codes.h"
@@ -47,10 +46,10 @@
 #include "quiche/quic/core/quic_packet_writer_wrapper.h"
 #include "quiche/quic/core/quic_packets.h"
 #include "quiche/quic/core/quic_session.h"
+#include "quiche/quic/core/quic_tag.h"
 #include "quiche/quic/core/quic_types.h"
 #include "quiche/quic/core/quic_utils.h"
 #include "quiche/quic/core/quic_versions.h"
-#include "quiche/quic/core/tls_client_handshaker.h"
 #include "quiche/quic/platform/api/quic_expect_bug.h"
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_ip_address.h"
@@ -85,14 +84,13 @@
 #include "quiche/quic/test_tools/simple_quic_framer.h"
 #include "quiche/quic/test_tools/web_transport_test_tools.h"
 #include "quiche/quic/tools/quic_backend_response.h"
-#include "quiche/quic/tools/quic_memory_cache_backend.h"
 #include "quiche/quic/tools/quic_server.h"
-#include "quiche/quic/tools/quic_simple_client_stream.h"
 #include "quiche/quic/tools/quic_simple_server_stream.h"
 #include "quiche/common/http/http_header_block.h"
 #include "quiche/common/platform/api/quiche_test.h"
 #include "quiche/common/quiche_stream.h"
 #include "quiche/common/test_tools/quiche_test_utils.h"
+#include "quiche/web_transport/web_transport_headers.h"
 
 using quiche::HttpHeaderBlock;
 using spdy::SpdyFramer;
@@ -295,9 +293,9 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
         std::make_unique<QuicClientSessionCache>(),
         GetParam().event_loop->Create(QuicDefaultClock::Get()));
     client->SetUserAgentID(kTestUserAgentId);
-    if (enable_kyber_in_client_) {
+    if (enable_mlkem_in_client_) {
       std::vector<uint16_t> client_supported_groups = {
-          SSL_GROUP_X25519_KYBER768_DRAFT00, SSL_GROUP_X25519};
+          SSL_GROUP_X25519_MLKEM768, SSL_GROUP_X25519};
       client->SetPreferredGroups(client_supported_groups);
     }
     client->UseWriter(writer);
@@ -854,7 +852,8 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
 
   WebTransportHttp3* CreateWebTransportSession(
       const std::string& path, bool wait_for_server_response,
-      QuicSpdyStream** connect_stream_out = nullptr) {
+      std::initializer_list<std::pair<absl::string_view, absl::string_view>>
+          extra_headers = {}) {
     // Wait until we receive the settings from the server indicating
     // WebTransport support.
     client_->WaitUntil(
@@ -869,6 +868,9 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
     headers[":path"] = path;
     headers[":method"] = "CONNECT";
     headers[":protocol"] = "webtransport";
+    for (const auto& [key, value] : extra_headers) {
+      headers[key] = std::string(value);
+    }
 
     client_->SendMessage(headers, "", /*fin=*/false);
     QuicSpdyStream* stream = client_->latest_created_stream();
@@ -885,9 +887,6 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
       client_->WaitUntil(-1,
                          [stream]() { return stream->headers_decompressed(); });
       EXPECT_TRUE(session->ready());
-    }
-    if (connect_stream_out != nullptr) {
-      *connect_stream_out = stream;
     }
     return session;
   }
@@ -1036,7 +1035,7 @@ class EndToEndTest : public QuicTestWithParam<TestParams> {
   int override_client_connection_id_length_ = -1;
   uint8_t expected_server_connection_id_length_;
   bool enable_web_transport_ = false;
-  bool enable_kyber_in_client_ = false;
+  bool enable_mlkem_in_client_ = false;
   std::vector<std::string> received_webtransport_unidirectional_streams_;
   bool use_preferred_address_ = false;
   QuicSocketAddress server_preferred_address_;
@@ -4517,7 +4516,7 @@ class DowngradePacketWriter : public PacketDroppingTestWriter {
     bool version_present, has_length_prefix;
     QuicVersionLabel version_label;
     ParsedQuicVersion parsed_version = ParsedQuicVersion::Unsupported();
-    QuicConnectionId destination_connection_id, source_connection_id;
+    absl::string_view destination_connection_id, source_connection_id;
     std::optional<absl::string_view> retry_token;
     std::string detailed_error;
     if (QuicFramer::ParsePublicHeaderDispatcher(
@@ -4541,7 +4540,8 @@ class DowngradePacketWriter : public PacketDroppingTestWriter {
     // Send a version negotiation packet.
     std::unique_ptr<QuicEncryptedPacket> packet(
         QuicFramer::BuildVersionNegotiationPacket(
-            destination_connection_id, source_connection_id, /*ietf_quic=*/true,
+            QuicConnectionId(destination_connection_id),
+            QuicConnectionId(source_connection_id), /*ietf_quic=*/true,
             has_length_prefix, supported_versions_));
     QuicPacketWriterParams default_params;
     server_writer_->WritePacket(
@@ -6706,7 +6706,7 @@ void EndToEndTest::TestMultiPacketChaosProtection(int num_packets,
   int discard_length;
   if (kyber) {
     discard_length = 1216;
-    enable_kyber_in_client_ = true;
+    enable_mlkem_in_client_ = true;
   } else {
     discard_length = 1000 * num_packets;
     client_config_.SetDiscardLengthToSend(discard_length);
@@ -7178,6 +7178,40 @@ TEST_P(EndToEndTest, WebTransportSessionSetup) {
   EXPECT_TRUE(server_session->GetWebTransportSession(web_transport->id()) !=
               nullptr);
   server_thread_->Resume();
+}
+
+TEST_P(EndToEndTest, WebTransportSessionProtocolNegotiation) {
+  enable_web_transport_ = true;
+  ASSERT_TRUE(Initialize());
+
+  if (!version_.UsesHttp3()) {
+    return;
+  }
+
+  WebTransportHttp3* session = CreateWebTransportSession(
+      "/selected-subprotocol", /*wait_for_server_response=*/true,
+      {{webtransport::kSubprotocolRequestHeader, "a, b, c, d"},
+       {"subprotocol-index", "1"}});
+  ASSERT_NE(session, nullptr);
+  NiceMock<MockWebTransportSessionVisitor>& visitor =
+      SetupWebTransportVisitor(session);
+  EXPECT_EQ(session->GetNegotiatedSubprotocol(), "b");
+
+  WebTransportStream* received_stream =
+      session->AcceptIncomingUnidirectionalStream();
+  if (received_stream == nullptr) {
+    // Retry if reordering happens.
+    bool stream_received = false;
+    EXPECT_CALL(visitor, OnIncomingUnidirectionalStreamAvailable())
+        .WillOnce(Assign(&stream_received, true));
+    client_->WaitUntil(2000, [&stream_received]() { return stream_received; });
+    received_stream = session->AcceptIncomingUnidirectionalStream();
+  }
+  ASSERT_TRUE(received_stream != nullptr);
+  std::string received_data;
+  WebTransportStream::ReadResult result = received_stream->Read(&received_data);
+  EXPECT_EQ(received_data, "b");
+  EXPECT_TRUE(result.fin);
 }
 
 TEST_P(EndToEndTest, WebTransportSessionSetupWithEchoWithSuffix) {
@@ -8324,6 +8358,48 @@ TEST_P(EndToEndTest, EmptyResponseWithFin) {
     EXPECT_FALSE(client_->response_headers_complete());
     EXPECT_FALSE(client_->response_complete());
   }
+}
+
+TEST_P(EndToEndTest, PragueConnectionOptionSent) {
+  client_extra_copts_.push_back(kPRGC);
+  ASSERT_TRUE(Initialize());
+  EXPECT_TRUE(client_->client()->WaitForHandshakeConfirmed());
+  server_thread_->Pause();
+  QuicSession* session = GetServerSession();
+  // Check the server received the copt.
+  ASSERT_TRUE(session->config()->HasReceivedConnectionOptions());
+  bool found_prgc = false;
+  for (auto it : session->config()->ReceivedConnectionOptions()) {
+    if (it == kPRGC) {
+      found_prgc = true;
+      break;
+    }
+  }
+  server_thread_->Resume();
+  EXPECT_TRUE(found_prgc);
+  // Sent connection option does not select the congestion control.
+  EXPECT_EQ(GetClientConnection()->ecn_codepoint(), ECN_NOT_ECT);
+}
+
+TEST_P(EndToEndTest, CubicConnectionOptionSent) {
+  client_extra_copts_.push_back(kCQBC);
+  ASSERT_TRUE(Initialize());
+  EXPECT_TRUE(client_->client()->WaitForHandshakeConfirmed());
+  server_thread_->Pause();
+  QuicSession* session = GetServerSession();
+  // Check the server received the copt.
+  ASSERT_TRUE(session->config()->HasReceivedConnectionOptions());
+  bool found_cqbc = false;
+  for (auto it : session->config()->ReceivedConnectionOptions()) {
+    if (it == kCQBC) {
+      found_cqbc = true;
+      break;
+    }
+  }
+  server_thread_->Resume();
+  EXPECT_TRUE(found_cqbc);
+  // Sent connection option does not select the congestion control.
+  EXPECT_EQ(GetClientConnection()->ecn_codepoint(), ECN_NOT_ECT);
 }
 
 }  // namespace

@@ -290,12 +290,10 @@ struct ASN1_TEMPLATE_st {
 typedef struct ASN1_ADB_TABLE_st ASN1_ADB_TABLE;
 typedef struct ASN1_ADB_st ASN1_ADB;
 
-typedef struct asn1_must_be_null_st ASN1_MUST_BE_NULL;
-
 struct ASN1_ADB_st {
   uint32_t flags;       /* Various flags */
   unsigned long offset; /* Offset of selector field */
-  ASN1_MUST_BE_NULL *unused;
+  CRYPTO_MUST_BE_NULL *unused;
   const ASN1_ADB_TABLE *tbl;       /* Table of possible types */
   long tblcount;                   /* Number of entries in tbl */
   const ASN1_TEMPLATE *default_tt; /* Type to use if no match */

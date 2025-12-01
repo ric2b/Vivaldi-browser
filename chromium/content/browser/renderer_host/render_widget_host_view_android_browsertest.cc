@@ -29,7 +29,7 @@ class MockJniDelegate : public InputTransferHandlerAndroid::JniDelegate {
  public:
   ~MockJniDelegate() override = default;
 
-  MOCK_METHOD((int), MaybeTransferInputToViz, (int, float), (override));
+  MOCK_METHOD((int), MaybeTransferInputToViz, (int), (override));
   MOCK_METHOD((int), TransferInputToViz, (int), (override));
 };
 
@@ -65,7 +65,8 @@ IN_PROC_BROWSER_TEST_F(InputOnVizBrowserTest, TransfersStateOnTouchDown) {
       shell()->web_contents()->GetRenderWidgetHostView());
   ASSERT_NE(view, nullptr);
   auto* input_transfer_handler = view->GetInputTransferHandlerForTesting();
-  ASSERT_EQ(!!input_transfer_handler, input::IsTransferInputToVizSupported());
+  ASSERT_EQ(!!input_transfer_handler,
+            input::InputUtils::IsTransferInputToVizSupported());
   if (!input_transfer_handler) {
     return;
   }
@@ -77,7 +78,7 @@ IN_PROC_BROWSER_TEST_F(InputOnVizBrowserTest, TransfersStateOnTouchDown) {
 
   gfx::Point point(/*x=*/100, /*y=*/100);
   int tool_type = static_cast<int>(ui::MotionEvent::ToolType::FINGER);
-  ui::MotionEventAndroid::Pointer p(0, point.x(), point.y(), 10, 0, 0, 0,
+  ui::MotionEventAndroid::Pointer p(0, point.x(), point.y(), 10, 0, 0, 0, 0,
                                     tool_type);
   JNIEnv* env = base::android::AttachCurrentThread();
   auto time_ns = (ui::EventTimeForNow() - base::TimeTicks()).InNanoseconds();
@@ -89,7 +90,7 @@ IN_PROC_BROWSER_TEST_F(InputOnVizBrowserTest, TransfersStateOnTouchDown) {
 
   int successfully_transferred =
       static_cast<int>(TransferInputToVizResult::kSuccessfullyTransferred);
-  EXPECT_CALL(*mock_jni, MaybeTransferInputToViz(_, _))
+  EXPECT_CALL(*mock_jni, MaybeTransferInputToViz(_))
       .WillOnce(Return(successfully_transferred));
   view->OnTouchEvent(touch);
 
@@ -109,7 +110,7 @@ IN_PROC_BROWSER_TEST_F(InputOnVizBrowserTest, TransfersStateOnTouchDown) {
   EXPECT_EQ(result.value()[1].size(), 1u);
   const std::string slice_count = result.value()[1][0];
   const std::string expected_count =
-      input::IsTransferInputToVizSupported() ? "1" : "0";
+      input::InputUtils::IsTransferInputToVizSupported() ? "1" : "0";
   EXPECT_EQ(slice_count, expected_count);
 }
 

@@ -62,8 +62,8 @@
 #import "ios/ui/notes/note_home_consumer.h"
 #import "ios/ui/notes/note_home_mediator.h"
 #import "ios/ui/notes/note_home_shared_state.h"
-#import "ios/ui/notes/note_interaction_controller_delegate.h"
 #import "ios/ui/notes/note_interaction_controller.h"
+#import "ios/ui/notes/note_interaction_controller_delegate.h"
 #import "ios/ui/notes/note_model_bridge_observer.h"
 #import "ios/ui/notes/note_navigation_controller.h"
 #import "ios/ui/notes/note_path_cache.h"
@@ -73,12 +73,12 @@
 #import "ios/ui/notes/vivaldi_notes_pref.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/navigation/referrer.h"
-#import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/l10n_util.h"
+#import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-using vivaldi::NoteNode;
 using l10n_util::GetNSString;
+using vivaldi::NoteNode;
 
 // Used to store a pair of NSIntegers when storing a NSIndexPath in C++
 // collections.
@@ -91,11 +91,11 @@ typedef NS_ENUM(NSInteger, NotesContextBarState) {
   NotesContextBarBeginSelection,  // This is the clean start state,
   // selection is possible, but nothing is
   // selected yet.
-  NotesContextBarSingleNoteSelection,       // Single note selected state.
-  NotesContextBarMultipleNoteSelection,     // Multiple notes selected state.
+  NotesContextBarSingleNoteSelection,      // Single note selected state.
+  NotesContextBarMultipleNoteSelection,    // Multiple notes selected state.
   NotesContextBarSingleFolderSelection,    // Single folder selected.
   NotesContextBarMultipleFolderSelection,  // Multiple folders selected.
-  NotesContextBarMixedSelection,  // Multiple notes / Folders selected.
+  NotesContextBarMixedSelection,           // Multiple notes / Folders selected.
 };
 
 // Estimated TableView row height.
@@ -113,18 +113,18 @@ const int kRowsHiddenByNavigationBar = 3;
 }  // namespace
 
 @interface NoteHomeViewController () <NoteFolderChooserViewControllerDelegate,
-                                          NoteHomeConsumer,
-                                          NoteHomeSharedStateObserver,
-                                          NoteInteractionControllerDelegate,
-                                          NoteModelBridgeObserver,
-                                          NoteTableCellTitleEditDelegate,
-                                          TableViewURLDragDataSource,
-                                          TableViewURLDropDelegate,
-                                          UIGestureRecognizerDelegate,
-                                          VivaldiSearchBarViewDelegate,
-                                          SettingsNavigationControllerDelegate,
-                                          UITableViewDataSource,
-                                          UITableViewDelegate> {
+                                      NoteHomeConsumer,
+                                      NoteHomeSharedStateObserver,
+                                      NoteInteractionControllerDelegate,
+                                      NoteModelBridgeObserver,
+                                      NoteTableCellTitleEditDelegate,
+                                      TableViewURLDragDataSource,
+                                      TableViewURLDropDelegate,
+                                      UIGestureRecognizerDelegate,
+                                      VivaldiSearchBarViewDelegate,
+                                      SettingsNavigationControllerDelegate,
+                                      UITableViewDataSource,
+                                      UITableViewDelegate> {
   // Bridge to register for note changes.
   std::unique_ptr<notes::NoteModelBridge> _bridge;
 
@@ -139,10 +139,10 @@ const int kRowsHiddenByNavigationBar = 3;
 @property(nonatomic, weak) UIButton* sortButton;
 
 // Array to hold the sort button context menu options
-@property (strong, nonatomic) NSMutableArray *notesSortActions;
+@property(strong, nonatomic) NSMutableArray* notesSortActions;
 
 // Array to hold ascendeing decending buttons for sort context menu options
-@property (strong, nonatomic) NSMutableArray *sortOrderActions;
+@property(strong, nonatomic) NSMutableArray* sortOrderActions;
 
 // Shared state between NoteHome classes.  Used as a temporary refactoring
 // aid.
@@ -211,7 +211,6 @@ const int kRowsHiddenByNavigationBar = 3;
     NoteInteractionController* noteInteractionController;
 
 @property(nonatomic, assign) WebStateList* webStateList;
-
 
 // Handler for URL drag and drop interactions.
 @property(nonatomic, strong) TableViewURLDragDropHandler* dragDropHandler;
@@ -291,8 +290,7 @@ const int kRowsHiddenByNavigationBar = 3;
   // Configure the root controller Navigationbar at this time when
   // reconstructing from cache, or there will be a loading flicker if this gets
   // done on viewDidLoad.
-  [self setupNavigationForNoteHomeViewController:self
-                                   usingNoteNode:_rootNode];
+  [self setupNavigationForNoteHomeViewController:self usingNoteNode:_rootNode];
   [stack addObject:self];
 
   int64_t cachedFolderID;
@@ -300,27 +298,23 @@ const int kRowsHiddenByNavigationBar = 3;
   // If cache is present then reconstruct the last visited note from
   // cache.
   if (![NotePathCache
-          getNoteTopMostRowCacheWithPrefService:self.profile
-                                                        ->GetPrefs()
-                                              model:self.notes
-                                           folderId:&cachedFolderID
-                                         topMostRow:&cachedIndexPathRow] ||
+          getNoteTopMostRowCacheWithPrefService:self.profile->GetPrefs()
+                                          model:self.notes
+                                       folderId:&cachedFolderID
+                                     topMostRow:&cachedIndexPathRow] ||
       cachedFolderID == self.notes->root_node()->id()) {
     return stack;
   }
 
-  NSArray* path =
-      note_utils_ios::CreateNotePath(self.notes, cachedFolderID);
+  NSArray* path = note_utils_ios::CreateNotePath(self.notes, cachedFolderID);
   if (!path) {
     return stack;
   }
 
-  DCHECK_EQ(self.notes->root_node()->id(),
-            [[path firstObject] longLongValue]);
+  DCHECK_EQ(self.notes->root_node()->id(), [[path firstObject] longLongValue]);
   for (NSUInteger ii = 1; ii < [path count]; ii++) {
     int64_t nodeID = [[path objectAtIndex:ii] longLongValue];
-    const NoteNode* node =
-        note_utils_ios::FindFolderById(self.notes, nodeID);
+    const NoteNode* node = note_utils_ios::FindFolderById(self.notes, nodeID);
     DCHECK(node);
     // if node is an empty permanent node, stop.
     if (node->children().empty() /*&&
@@ -363,17 +357,22 @@ const int kRowsHiddenByNavigationBar = 3;
     [self showLoadingSpinnerBackground];
   }
   [self.tableView reloadData];
+
+  if (@available(iOS 17, *)) {
+    [self registerForTraitChanges:TraitCollectionSetForTraits(nil)
+                       withAction:@selector(stopEdittingNoteOnTraitChange)];
+  }
 }
 
 - (void)viewWillLayoutSubviews {
   if (self.cachedIndexPathRow &&
       [self.tableView numberOfRowsInSection:0] > self.cachedIndexPathRow) {
-      NSIndexPath* indexPath =
-       [NSIndexPath indexPathForRow:self.cachedIndexPathRow inSection:0];
-      [self.tableView scrollToRowAtIndexPath:indexPath
-                            atScrollPosition:UITableViewScrollPositionTop
-                                    animated:NO];
-      self.cachedIndexPathRow = 0;
+    NSIndexPath* indexPath =
+        [NSIndexPath indexPathForRow:self.cachedIndexPathRow inSection:0];
+    [self.tableView scrollToRowAtIndexPath:indexPath
+                          atScrollPosition:UITableViewScrollPositionTop
+                                  animated:NO];
+    self.cachedIndexPathRow = 0;
   }
 }
 
@@ -387,14 +386,15 @@ const int kRowsHiddenByNavigationBar = 3;
   // Hide the toolbar if we're displaying the root node.
   if (self.notes->loaded() &&
       (![self isDisplayingNoteRoot] ||
-     self.sharedState.currentlyShowingSearchResults)) {
-      self.navigationController.toolbarHidden = NO;
+       self.sharedState.currentlyShowingSearchResults)) {
+    self.navigationController.toolbarHidden =
+        self.notes->IsChildOfTrashNode(_rootNode);
   } else {
-     if (_notes->main_node()->children().empty())
-        self.navigationController.toolbarHidden = NO;
-     else {
-        self.navigationController.toolbarHidden = YES;
-     }
+    if (_notes->main_node()->children().empty())
+      self.navigationController.toolbarHidden = NO;
+    else {
+      self.navigationController.toolbarHidden = YES;
+    }
   }
 
   // If we navigate back to the root level, we need to make sure the root level
@@ -433,9 +433,8 @@ const int kRowsHiddenByNavigationBar = 3;
   return NO;
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  // Stop edit of current note folder name, if any.
+// Stop edit of current note folder name, if any.
+- (void)stopEdittingNoteOnTraitChange {
   [self.sharedState.editingFolderCell stopEdit];
 }
 
@@ -456,9 +455,8 @@ const int kRowsHiddenByNavigationBar = 3;
 - (void)loadNoteViews {
   DCHECK(_rootNode);
   [self loadModel];
-  self.sharedState =
-      [[NoteHomeSharedState alloc] initWithNotesModel:_notes
-                                           displayedRootNode:_rootNode];
+  self.sharedState = [[NoteHomeSharedState alloc] initWithNotesModel:_notes
+                                                   displayedRootNode:_rootNode];
   self.sharedState.tableViewModel = self.tableViewModel;
   self.sharedState.tableView = self.tableView;
   self.sharedState.observer = self;
@@ -484,14 +482,12 @@ const int kRowsHiddenByNavigationBar = 3;
   self.sharedState.tableView.allowsMultipleSelectionDuringEditing = YES;
 
   // Create the mediator and hook up the table view.
-  self.mediator =
-      [[NoteHomeMediator alloc] initWithSharedState:self.sharedState
-                                            profile:self.profile];
+  self.mediator = [[NoteHomeMediator alloc] initWithSharedState:self.sharedState
+                                                        profile:self.profile];
   self.mediator.consumer = self;
   [self.mediator startMediating];
 
-  [self setupNavigationForNoteHomeViewController:self
-                                   usingNoteNode:_rootNode];
+  [self setupNavigationForNoteHomeViewController:self usingNoteNode:_rootNode];
 
   [self setupContextBar];
 
@@ -509,8 +505,8 @@ const int kRowsHiddenByNavigationBar = 3;
   if (_rootNode) {
     [NotePathCache
         cacheNoteTopMostRowWithPrefService:self.profile->GetPrefs()
-                                      folderId:_rootNode->id()
-                                    topMostRow:topMostVisibleIndexPathRow];
+                                  folderId:_rootNode->id()
+                                topMostRow:topMostVisibleIndexPathRow];
   } else {
     // TODO(crbug.com/1061882):Remove DCHECK once we know the root cause of the
     // bug, for now this will cause a crash on Dev/Canary and we should get
@@ -525,7 +521,7 @@ const int kRowsHiddenByNavigationBar = 3;
   if (self.sharedState.currentlyShowingSearchResults) {
     NSString* noResults = GetNSString(IDS_HISTORY_NO_SEARCH_RESULTS);
     [self.mediator computeNoteTableViewDataMatching:self.searchTerm
-                             orShowMessageWhenNoResults:noResults];
+                         orShowMessageWhenNoResults:noResults];
   } else {
     [self.mediator computeNoteTableViewData];
   }
@@ -554,7 +550,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (void)showSignin:(ShowSigninCommand*)command {
   [self.applicationCommandsHandler showSignin:command
-        baseViewController:self.navigationController];
+                           baseViewController:self.navigationController];
 }
 
 #pragma mark - Action sheet callbacks
@@ -585,8 +581,7 @@ const int kRowsHiddenByNavigationBar = 3;
   const NoteNode* trashFolder = self.notes->trash_node();
   [self.snackbarCommandsHandler
       showSnackbarMessage:note_utils_ios::MoveNotesWithToast(
-                              nodes, self.notes, trashFolder,
-                              self.profile)];
+                              nodes, self.notes, trashFolder, self.profile)];
   [self setTableViewEditing:NO];
 }
 
@@ -604,25 +599,23 @@ const int kRowsHiddenByNavigationBar = 3;
   if (!self.noteInteractionController) {
     self.noteInteractionController =
         [[NoteInteractionController alloc] initWithBrowser:self.browser
-                                              parentController:self];
+                                          parentController:self];
     self.noteInteractionController.delegate = self;
   }
   [self.noteInteractionController presentEditorForNode:node];
 }
-
 
 /// Open the add note dialog
 - (void)addNote {
   if (!self.noteInteractionController) {
     self.noteInteractionController =
         [[NoteInteractionController alloc] initWithBrowser:self.browser
-                                              parentController:self];
+                                          parentController:self];
     self.noteInteractionController.delegate = self;
   }
-  [self.noteInteractionController presentAddViewController:
-    self.sharedState.tableViewDisplayedRootNode];
+  [self.noteInteractionController
+      presentAddViewController:self.sharedState.tableViewDisplayedRootNode];
 }
-
 
 - (void)openAllURLs:(std::vector<GURL>)urls
         inIncognito:(BOOL)inIncognito
@@ -644,9 +637,9 @@ const int kRowsHiddenByNavigationBar = 3;
 
   [self cacheIndexPathRow];
   [self.homeDelegate noteHomeViewControllerWantsDismissal:self
-                                             navigationToUrls:urls
-                                                  inIncognito:inIncognito
-                                                       newTab:newTab];
+                                         navigationToUrls:urls
+                                              inIncognito:inIncognito
+                                                   newTab:newTab];
 }
 
 #pragma mark - Navigation Bar Callbacks
@@ -669,12 +662,11 @@ const int kRowsHiddenByNavigationBar = 3;
     int unusedIndexPathRow;
     while ([NotePathCache
         getNoteTopMostRowCacheWithPrefService:self.profile->GetPrefs()
-                                            model:self.notes
-                                         folderId:&unusedFolderId
-                                       topMostRow:&unusedIndexPathRow]) {
+                                        model:self.notes
+                                     folderId:&unusedFolderId
+                                   topMostRow:&unusedIndexPathRow]) {
       [NotePathCache
-          clearNoteTopMostRowCacheWithPrefService:self.profile
-                                                          ->GetPrefs()];
+          clearNoteTopMostRowCacheWithPrefService:self.profile->GetPrefs()];
     }
 
     // Rebuild folder controller list, going back up the tree.
@@ -699,10 +691,9 @@ const int kRowsHiddenByNavigationBar = 3;
     }
     // Reconstruct note path cache.
     for (const vivaldi::NoteNode* node : nodes) {
-      [NotePathCache
-          cacheNoteTopMostRowWithPrefService:self.profile->GetPrefs()
-                                        folderId:node->id()
-                                      topMostRow:0];
+      [NotePathCache cacheNoteTopMostRowWithPrefService:self.profile->GetPrefs()
+                                               folderId:node->id()
+                                             topMostRow:0];
     }
 
     [self navigateAway];
@@ -716,15 +707,15 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (void)handleSelectNodesForDeletion:
     (const std::set<const vivaldi::NoteNode*>&)nodes {
-  if (_rootNode->is_trash()) {
-      [self deleteNodes:nodes];
+  if (_rootNode->is_trash() ||
+      self.notes->IsChildOfTrashNode(_rootNode)) {
+    [self deleteNodes:nodes];
   } else {
     [self moveNodesToTrash:nodes];
   }
 }
 
-- (void)handleSelectEditNodes:
-    (const std::set<const vivaldi::NoteNode*>&)nodes {
+- (void)handleSelectEditNodes:(const std::set<const vivaldi::NoteNode*>&)nodes {
   // Early return if notes table is not in edit mode.
   if (!self.sharedState.currentlyInEditMode) {
     return;
@@ -764,7 +755,6 @@ const int kRowsHiddenByNavigationBar = 3;
     }
   }
 
-
   // Only Notes are selected.
   if (foundNote && !foundFolder) {
     [self setContextBarState:NotesContextBarMultipleNoteSelection];
@@ -784,12 +774,11 @@ const int kRowsHiddenByNavigationBar = 3;
   NOTREACHED();
 }
 
-- (void)handleMoveNode:(const vivaldi::NoteNode*)node
-            toPosition:(int)position {
+- (void)handleMoveNode:(const vivaldi::NoteNode*)node toPosition:(int)position {
   [self.snackbarCommandsHandler
-      showSnackbarMessage:
-          note_utils_ios::UpdateNotePositionWithToast(
-              node, _rootNode, position, self.notes, self.profile)];
+      showSnackbarMessage:note_utils_ios::UpdateNotePositionWithToast(
+                              node, _rootNode, position, self.notes,
+                              self.profile)];
 }
 
 - (BOOL)isAtTopOfNavigation {
@@ -802,10 +791,10 @@ const int kRowsHiddenByNavigationBar = 3;
   DCHECK(self.sharedState.editingFolderNode);
   if (newName.length > 0 && self.sharedState.editingFolderNode != nil) {
     self.sharedState.notesModel->SetTitle(self.sharedState.editingFolderNode,
-                                             base::SysNSStringToUTF16(newName));
+                                          base::SysNSStringToUTF16(newName));
   } else if (newName.length > 0 && self.sharedState.editingNoteNode != nil) {
-      self.sharedState.notesModel->SetTitle(self.sharedState.editingNoteNode,
-                                               base::SysNSStringToUTF16(newName));
+    self.sharedState.notesModel->SetTitle(self.sharedState.editingNoteNode,
+                                          base::SysNSStringToUTF16(newName));
   }
   self.sharedState.addingNewFolder = NO;
   self.sharedState.addingNewNote = NO;
@@ -878,9 +867,9 @@ const int kRowsHiddenByNavigationBar = 3;
   // crbug.com/765503.
   if ([NotePathCache
           getNoteTopMostRowCacheWithPrefService:self.profile->GetPrefs()
-                                              model:self.notes
-                                           folderId:&unusedFolderId
-                                         topMostRow:&unusedIndexPathRow]) {
+                                          model:self.notes
+                                       folderId:&unusedFolderId
+                                     topMostRow:&unusedIndexPathRow]) {
     self.isReconstructingFromCache = YES;
   }
 
@@ -923,13 +912,13 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (void)noteNode:(const NoteNode*)noteNode
-     movedFromParent:(const NoteNode*)oldParent
-            toParent:(const NoteNode*)newParent {
+    movedFromParent:(const NoteNode*)oldParent
+           toParent:(const NoteNode*)newParent {
   // No-op here.  Notes might be refreshed in NoteHomeMediator.
 }
 
 - (void)noteNodeDeleted:(const NoteNode*)node
-                 fromFolder:(const NoteNode*)folder {
+             fromFolder:(const NoteNode*)folder {
   if (_rootNode == node) {
     [self setTableViewEditing:NO];
   }
@@ -973,7 +962,8 @@ const int kRowsHiddenByNavigationBar = 3;
 - (void)setupContextBar {
   if (![self isDisplayingNoteRoot] ||
       self.sharedState.currentlyShowingSearchResults) {
-    self.navigationController.toolbarHidden = NO;
+    self.navigationController.toolbarHidden =
+        self.notes->IsChildOfTrashNode(_rootNode);
     [self setContextBarState:NotesContextBarDefault];
   } else {
     self.navigationController.toolbarHidden = YES;
@@ -981,13 +971,11 @@ const int kRowsHiddenByNavigationBar = 3;
   }
 }
 
-
 // Back button callback for the new ui.
 - (void)back {
   [self navigateAway];
   [self.navigationController popViewControllerAnimated:YES];
 }
-
 
 // Saves the current position and asks the delegate to open the url, if delegate
 // is set, otherwise opens the URL using URL loading service.
@@ -998,7 +986,7 @@ const int kRowsHiddenByNavigationBar = 3;
     if (url.is_valid())
       urls.push_back(url);
     [self.homeDelegate noteHomeViewControllerWantsDismissal:self
-                                               navigationToUrls:urls];
+                                           navigationToUrls:urls];
   } else {
     // Before passing the URL to the block, make sure the block has a copy of
     // the URL and not just a reference.
@@ -1024,19 +1012,20 @@ const int kRowsHiddenByNavigationBar = 3;
   if (!self.sharedState.tableViewDisplayedRootNode) {
     return;
   }
-    if (!self.noteInteractionController) {
-      self.noteInteractionController =
-          [[NoteInteractionController alloc] initWithBrowser:self.browser
-                                                parentController:self];
-      self.noteInteractionController.delegate = self;
-    }
-    [self.noteInteractionController presentNoteFolderEditor:nil
-      parent:self.sharedState.tableViewDisplayedRootNode
-        isEditing:NO];
+  if (!self.noteInteractionController) {
+    self.noteInteractionController =
+        [[NoteInteractionController alloc] initWithBrowser:self.browser
+                                          parentController:self];
+    self.noteInteractionController.delegate = self;
+  }
+  [self.noteInteractionController
+      presentNoteFolderEditor:nil
+                       parent:self.sharedState.tableViewDisplayedRootNode
+                    isEditing:NO];
 }
 
 - (void)handleAddBarButtonTap {
-    [self addNote];
+  [self addNote];
 }
 
 - (NoteHomeViewController*)createControllerWithRootFolder:
@@ -1101,7 +1090,7 @@ const int kRowsHiddenByNavigationBar = 3;
   // Other Notes return as "editable" since the user can edit the contents
   // of those folders. Editing notes must also be allowed.
   return self.sharedState.tableViewDisplayedRootNode != NULL &&
-        !self.sharedState.tableViewDisplayedRootNode->is_trash() &&
+         !self.sharedState.tableViewDisplayedRootNode->is_trash() &&
          !self.sharedState.currentlyShowingSearchResults &&
          [self isEditNotesEnabled] &&
          [self
@@ -1142,8 +1131,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Returns YES if the given node is a url or folder node.
 - (BOOL)isUrlOrFolder:(const NoteNode*)node {
-  return node->type() == NoteNode::NOTE ||
-         node->type() == NoteNode::FOLDER;
+  return node->type() == NoteNode::NOTE || node->type() == NoteNode::FOLDER;
 }
 
 // Returns YES if the given node can be edited by user.
@@ -1157,8 +1145,8 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Returns YES if user is allowed to edit any notes.
 - (BOOL)isEditNotesEnabled {
-    return YES; //self.browserState->GetPrefs()->GetBoolean(
-        //prefs::kEditNotesEnabled);
+  return YES;  // self.browserState->GetPrefs()->GetBoolean(
+               // prefs::kEditNotesEnabled);
 }
 
 // Returns the note node associated with |indexPath|.
@@ -1183,8 +1171,7 @@ const int kRowsHiddenByNavigationBar = 3;
   if (!self.sharedState.tableViewDisplayedRootNode)
     return NO;
   if (self.sharedState.currentlyShowingSearchResults) {
-    return [self
-        hasItemsInSectionIdentifier:NoteHomeSectionIdentifierNotes];
+    return [self hasItemsInSectionIdentifier:NoteHomeSectionIdentifierNotes];
   } else {
     return !self.sharedState.tableViewDisplayedRootNode->children().empty();
   }
@@ -1223,13 +1210,13 @@ const int kRowsHiddenByNavigationBar = 3;
 // Triggers the URL sharing flow for the given |URL| and |title|, with the
 // |indexPath| for the cell representing the UI component for that URL.
 - (void)shareText:(NSString*)noteText
-           title:(NSString*)title
-       indexPath:(NSIndexPath*)indexPath {
+            title:(NSString*)title
+        indexPath:(NSIndexPath*)indexPath {
   UIView* cellView = [self.tableView cellForRowAtIndexPath:indexPath];
   SharingParams* params =
       [[SharingParams alloc] initWithText:noteText
-                                     title:title
-                                  scenario:SharingScenario::VivaldiNote];
+                                    title:title
+                                 scenario:SharingScenario::VivaldiNote];
   self.sharingCoordinator =
       [[SharingCoordinator alloc] initWithBaseViewController:self
                                                      browser:self.browser
@@ -1291,18 +1278,18 @@ const int kRowsHiddenByNavigationBar = 3;
 - (void)showEmptyBackground {
   if (!self.emptyViewBackground) {
     NSString* titleString = [self isDisplayingNoteRoot]
-    ? GetNSString(IDS_VIVALDI_NOTE_EMPTY_TITLE)
-    : GetNSString(IDS_VIVALDI_FOLDER_NO_ITEMS);
+                                ? GetNSString(IDS_VIVALDI_NOTE_EMPTY_TITLE)
+                                : GetNSString(IDS_VIVALDI_FOLDER_NO_ITEMS);
 
     NSString* subtitleString = [self isDisplayingNoteRoot]
-    ? GetNSString(IDS_VIVALDI_NOTE_EMPTY_MESSAGE)
-    : @"";
+                                   ? GetNSString(IDS_VIVALDI_NOTE_EMPTY_MESSAGE)
+                                   : @"";
 
     self.emptyViewBackground = [[TableViewIllustratedEmptyView alloc]
-                                initWithFrame:self.sharedState.tableView.bounds
-                                image:[UIImage imageNamed:@"vivaldi_notes_empty"]
-                                title:titleString
-                                subtitle:subtitleString];
+        initWithFrame:self.sharedState.tableView.bounds
+                image:[UIImage imageNamed:@"vivaldi_notes_empty"]
+                title:titleString
+             subtitle:subtitleString];
   }
   // If the Signin promo is visible on the root view, we have to shift the
   // empty TableView background to make it fully visible on all devices.
@@ -1314,9 +1301,8 @@ const int kRowsHiddenByNavigationBar = 3;
     [self.sharedState.tableView reloadData];
 
     self.navigationItem.largeTitleDisplayMode =
-    UINavigationItemLargeTitleDisplayModeNever;
-    self.emptyViewBackground.scrollViewContentInsets =
-    self.view.safeAreaInsets;
+        UINavigationItemLargeTitleDisplayModeNever;
+    self.emptyViewBackground.scrollViewContentInsets = self.view.safeAreaInsets;
   }
 
   self.sharedState.tableView.backgroundView = self.emptyViewBackground;
@@ -1341,8 +1327,7 @@ const int kRowsHiddenByNavigationBar = 3;
   if ([self isAnyControllerPresenting]) {
     return;
   }
-  const std::set<const vivaldi::NoteNode*> nodes =
-      self.sharedState.editNodes;
+  const std::set<const vivaldi::NoteNode*> nodes = self.sharedState.editNodes;
   switch (self.contextBarState) {
     case NotesContextBarDefault:
       // New Folder clicked.
@@ -1376,8 +1361,7 @@ const int kRowsHiddenByNavigationBar = 3;
   if ([self isAnyControllerPresenting]) {
     return;
   }
-  const std::set<const vivaldi::NoteNode*> nodes =
-      self.sharedState.editNodes;
+  const std::set<const vivaldi::NoteNode*> nodes = self.sharedState.editNodes;
   // Center button is shown and is clickable only when at least
   // one node is selected.
   DCHECK(nodes.size() > 0);
@@ -1392,15 +1376,15 @@ const int kRowsHiddenByNavigationBar = 3;
   switch (self.contextBarState) {
     case NotesContextBarSingleNoteSelection:
       [self configureCoordinator:self.actionSheetCoordinator
-            forSingleNote:*(nodes.begin())];
+                   forSingleNote:*(nodes.begin())];
       break;
     case NotesContextBarMultipleNoteSelection:
       [self configureCoordinator:self.actionSheetCoordinator
-          forMultipleNotes:nodes];
+                forMultipleNotes:nodes];
       break;
     case NotesContextBarSingleFolderSelection:
       [self configureCoordinator:self.actionSheetCoordinator
-          forSingleNoteFolder:*(nodes.begin())];
+             forSingleNoteFolder:*(nodes.begin())];
       break;
     case NotesContextBarMultipleFolderSelection:
     case NotesContextBarMixedSelection:
@@ -1435,7 +1419,7 @@ const int kRowsHiddenByNavigationBar = 3;
   }
   std::set<const NoteNode*> nodes;
   for (const auto& child : _rootNode->children()) {
-      nodes.insert(child.get());
+    nodes.insert(child.get());
   }
   DCHECK(nodes.size() > 0);
   [self deleteNodes:nodes];
@@ -1481,11 +1465,10 @@ const int kRowsHiddenByNavigationBar = 3;
   // Set Context Menu button for sorting and new folder
   UIImage* dotsIcon = [UIImage imageNamed:vPanelMoreAction];
   UIBarButtonItem* contextMenu =
-  [[UIBarButtonItem alloc]
-   initWithImage:dotsIcon
-           style:UIBarButtonItemStyleDone
-          target:self
-          action:nil];
+      [[UIBarButtonItem alloc] initWithImage:dotsIcon
+                                       style:UIBarButtonItemStyleDone
+                                      target:self
+                                      action:nil];
   contextMenu.menu = [self contextMenuForNotesSortButton];
 
   UIBarButtonItem* spaceButton = [[UIBarButtonItem alloc]
@@ -1508,31 +1491,32 @@ const int kRowsHiddenByNavigationBar = 3;
       [self isNodeEditableByUser:self.sharedState.tableViewDisplayedRootNode];
 
   if (!_rootNode->is_trash()) {
-      UIImage* image = [UIImage systemImageNamed:@"plus"];
-      UIBarButtonItem* plusButton =
-       [[UIBarButtonItem alloc]
+    UIImage* image = [UIImage systemImageNamed:@"plus"];
+    UIBarButtonItem* plusButton = [[UIBarButtonItem alloc]
         initWithImage:image
-        style:UIBarButtonItemStyleDone
-        target:self
-        action:@selector(handleAddBarButtonTap)];
-      [self setToolbarItems:@[ contextMenu, spaceButton,
-                             plusButton, spaceButton, editButton ]
-                             animated:NO];
+                style:UIBarButtonItemStyleDone
+               target:self
+               action:@selector(handleAddBarButtonTap)];
+    [self setToolbarItems:@[
+      contextMenu, spaceButton, plusButton, spaceButton, editButton
+    ]
+                 animated:NO];
   } else {
     // Set empty trash button.
     titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_EMPTY_TRASH);
-    UIBarButtonItem* emptyTrashButton =
-        [[UIBarButtonItem alloc] initWithTitle:titleString
-                                      style:UIBarButtonItemStylePlain
-                                     target:self
-                                     action:@selector(emptyTrashButtonClicked)];
+    UIBarButtonItem* emptyTrashButton = [[UIBarButtonItem alloc]
+        initWithTitle:titleString
+                style:UIBarButtonItemStylePlain
+               target:self
+               action:@selector(emptyTrashButtonClicked)];
     emptyTrashButton.accessibilityIdentifier =
-      kNoteHomeTrailingButtonIdentifier;
+        kNoteHomeTrailingButtonIdentifier;
     emptyTrashButton.enabled = [self hasNotesOrFolders];
 
-    [self setToolbarItems:@[ spaceButton, spaceButton,
-                           spaceButton, spaceButton, emptyTrashButton ]
-                           animated:NO];
+    [self setToolbarItems:@[
+      spaceButton, spaceButton, spaceButton, spaceButton, emptyTrashButton
+    ]
+                 animated:NO];
   }
 }
 
@@ -1542,23 +1526,22 @@ const int kRowsHiddenByNavigationBar = 3;
   NSString* syncTitleString =
       GetNSString(IDS_IOS_BOOKMARK_CONTEXT_BAR_SYNCHRONIZATION);
   UIAction* syncAction =
-  [UIAction actionWithTitle:syncTitleString
-                      image:nil
-                 identifier:nil
-                    handler:^(__kindof UIAction*_Nonnull action) {
-    [self showVivaldiSync];
-  }];
+      [UIAction actionWithTitle:syncTitleString
+                          image:nil
+                     identifier:nil
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self showVivaldiSync];
+                        }];
 
-  //New Folder action Button
+  // New Folder action Button
   NSString* titleString = GetNSString(IDS_IOS_NOTE_CONTEXT_BAR_NEW_FOLDER);
   UIAction* newFolderAction =
       [UIAction actionWithTitle:titleString
                           image:nil
                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-    [self leadingButtonClicked];
-  }];
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self leadingButtonClicked];
+                        }];
 
   // Sort by manual action button
   titleString = GetNSString(IDS_IOS_NOTE_SORTING_MANUAL);
@@ -1566,10 +1549,9 @@ const int kRowsHiddenByNavigationBar = 3;
       [UIAction actionWithTitle:titleString
                           image:nil
                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                 action) {
-    [self sortNotesWithMode:NotesSortingModeManual];
-  }];
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self sortNotesWithMode:NotesSortingModeManual];
+                        }];
   self.manualSortAction = manualSortAction;
 
   // Sort by title action button
@@ -1578,10 +1560,9 @@ const int kRowsHiddenByNavigationBar = 3;
       [UIAction actionWithTitle:titleString
                           image:nil
                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-    [self sortNotesWithMode:NotesSortingModeTitle];
-  }];
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self sortNotesWithMode:NotesSortingModeTitle];
+                        }];
   self.titleSortAction = titleSortAction;
 
   // Sort by date created action button
@@ -1590,10 +1571,9 @@ const int kRowsHiddenByNavigationBar = 3;
       [UIAction actionWithTitle:titleString
                           image:nil
                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-    [self sortNotesWithMode:NotesSortingModeDateCreated];
-  }];
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self sortNotesWithMode:NotesSortingModeDateCreated];
+                        }];
   self.dateCreatedSortAction = dateCreatedSortAction;
 
   // Sort by date edited action button
@@ -1602,10 +1582,9 @@ const int kRowsHiddenByNavigationBar = 3;
       [UIAction actionWithTitle:titleString
                           image:nil
                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                 action) {
-    [self sortNotesWithMode:NotesSortingModeDateEdited];
-  }];
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self sortNotesWithMode:NotesSortingModeDateEdited];
+                        }];
   self.dateEditedSortAction = dateEditedSortAction;
 
   // Sort by kind action button
@@ -1614,10 +1593,9 @@ const int kRowsHiddenByNavigationBar = 3;
       [UIAction actionWithTitle:titleString
                           image:nil
                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                 action) {
-    [self sortNotesWithMode:NotesSortingModeByKind];
-  }];
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self sortNotesWithMode:NotesSortingModeByKind];
+                        }];
   self.kindSortAction = kindSortAction;
 
   // Ascending sort action button
@@ -1625,11 +1603,10 @@ const int kRowsHiddenByNavigationBar = 3;
   UIAction* ascendingSortAction =
       [UIAction actionWithTitle:titleString
                           image:nil
-                      identifier:nil
-                         handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-        [self refreshSortOrder:NotesSortingOrderAscending];
-      }];
+                     identifier:nil
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self refreshSortOrder:NotesSortingOrderAscending];
+                        }];
   self.ascendingSortAction = ascendingSortAction;
 
   // Descending sort action button
@@ -1637,17 +1614,15 @@ const int kRowsHiddenByNavigationBar = 3;
   UIAction* descendingSortAction =
       [UIAction actionWithTitle:titleString
                           image:nil
-                      identifier:nil
-                        handler:^(__kindof UIAction*_Nonnull
-                                  action) {
-        [self refreshSortOrder:NotesSortingOrderDescending];
-      }];
+                     identifier:nil
+                        handler:^(__kindof UIAction* _Nonnull action) {
+                          [self refreshSortOrder:NotesSortingOrderDescending];
+                        }];
   self.descendingSortAction = descendingSortAction;
 
   if (!self.isSortedByManual) {
-    _sortOrderActions = [[NSMutableArray alloc] initWithArray:@[
-      ascendingSortAction, descendingSortAction]
-    ];
+    _sortOrderActions = [[NSMutableArray alloc]
+        initWithArray:@[ ascendingSortAction, descendingSortAction ]];
   } else {
     _sortOrderActions = nil;
   }
@@ -1655,73 +1630,74 @@ const int kRowsHiddenByNavigationBar = 3;
   // Refresh actions buttons states
   [self updateSortOrderStateOnContextMenuOption];
 
-  UIMenu *sortMenu =
-      [UIMenu menuWithTitle:@""
-                      image:nil
-                  identifier:nil
-                    options:UIMenuOptionsDisplayInline
-                   children:_sortOrderActions];
+  UIMenu* sortMenu = [UIMenu menuWithTitle:@""
+                                     image:nil
+                                identifier:nil
+                                   options:UIMenuOptionsDisplayInline
+                                  children:_sortOrderActions];
 
   _notesSortActions = [[NSMutableArray alloc] initWithArray:@[
-    manualSortAction, titleSortAction,
-    dateCreatedSortAction, dateEditedSortAction, kindSortAction]
-  ];
+    manualSortAction, titleSortAction, dateCreatedSortAction,
+    dateEditedSortAction, kindSortAction
+  ]];
 
   // Refresh actions buttons states
   [self setSortingStateOnContextMenuOption];
 
   titleString = GetNSString(IDS_IOS_NOTE_SORTING_SORT_ORDER);
-  UIMenu *sortOrderMenu =
-    [UIMenu menuWithTitle:@""
-                    image:nil
-               identifier:nil
-                  options:UIMenuOptionsDisplayInline
-                 children:_notesSortActions];
+  UIMenu* sortOrderMenu = [UIMenu menuWithTitle:@""
+                                          image:nil
+                                     identifier:nil
+                                        options:UIMenuOptionsDisplayInline
+                                       children:_notesSortActions];
 
   UIMenuOptions options = UIMenuOptionsDisplayInline;
 
   // iOS allowed multiple selection from iOS17 onwords
-  // see https://developer.apple.com/documentation/uikit/uimenu/options/4195440-displayaspalette
-  // for fallback users it will show as inline (in single list format not the collapsable list format)
+  // see
+  // https://developer.apple.com/documentation/uikit/uimenu/options/4195440-displayaspalette
+  // for fallback users it will show as inline (in single list format not the
+  // collapsable list format)
   if (@available(iOS 17.0, *)) {
     options = UIMenuOptionsDisplayAsPalette;
   }
 
   UIMenu* subMenu =
-    [UIMenu menuWithTitle:titleString
-                    image:[UIImage imageNamed:vPanelSortOrderAction]
-               identifier:nil
-                  options:options
-                 children:@[sortOrderMenu, sortMenu]];
-  UIMenu* menu = [UIMenu menuWithTitle:@""
-                              children:@[subMenu, newFolderAction, syncAction]];
+      [UIMenu menuWithTitle:titleString
+                      image:[UIImage imageNamed:vPanelSortOrderAction]
+                 identifier:nil
+                    options:options
+                   children:@[ sortOrderMenu, sortMenu ]];
+  UIMenu* menu =
+      [UIMenu menuWithTitle:@""
+                   children:@[ subMenu, newFolderAction, syncAction ]];
   return menu;
 }
 
--(void)refreshSortOrder: (NotesSortingOrder) order {
+- (void)refreshSortOrder:(NotesSortingOrder)order {
   if (self.currentSortingOrder == order)
     return;
   [self setSortingOrder:order];
   [self refreshSortingViewWith:self.currentSortingMode];
 }
 
-/// Sets current sorting mode selected by the user on the pref and calls the mediator to handle the sorting
-/// and refreshes the UI with sorted items.
+/// Sets current sorting mode selected by the user on the pref and calls the
+/// mediator to handle the sorting and refreshes the UI with sorted items.
 - (void)sortNotesWithMode:(NotesSortingMode)mode {
   if (self.currentSortingMode == mode)
     return;
   // Reset the sorting order to ascending
   [self setSortingOrder:NotesSortingOrderAscending];
-  [self refreshSortingViewWith: mode];
+  [self refreshSortingViewWith:mode];
 }
 
--(void)refreshSortingViewWith: (NotesSortingMode)mode {
+- (void)refreshSortingViewWith:(NotesSortingMode)mode {
   // Set new mode to the pref.
   [self setCurrentSortingMode:mode];
 
   // Refresh context bar
   [self handleRefreshContextBar];
-   // Restore current list.
+  // Restore current list.
   [self.mediator computeNoteTableViewData];
   [self.sharedState.tableView reloadData];
 }
@@ -1742,7 +1718,8 @@ const int kRowsHiddenByNavigationBar = 3;
   return self.currentSortingMode == NotesSortingModeManual;
 }
 
-/// Gets the sorting mode from prefs and update the selection state on the context menu.
+/// Gets the sorting mode from prefs and update the selection state on the
+/// context menu.
 - (void)setSortingStateOnContextMenuOption {
   switch (self.currentSortingMode) {
     case NotesSortingModeManual:
@@ -1763,7 +1740,8 @@ const int kRowsHiddenByNavigationBar = 3;
   }
 }
 
-/// Updates the state on the context menu actions by unchecking the all apart from the selected one.
+/// Updates the state on the context menu actions by unchecking the all apart
+/// from the selected one.
 - (void)updateSortActionButtonState:(UIAction*)settable {
   for (UIAction* action in self.notesSortActions) {
     if (action == settable) {
@@ -1776,7 +1754,7 @@ const int kRowsHiddenByNavigationBar = 3;
 
 // Updates the state on the context menu actions for sorting order
 // by unchecking the all apart from the selected one.
-- (void) updateSortOrderStateOnContextMenuOption {
+- (void)updateSortOrderStateOnContextMenuOption {
   if (self.currentSortingOrder == NotesSortingOrderAscending) {
     [self updateSortOrderActionButtonState:self.ascendingSortAction];
   } else {
@@ -1785,7 +1763,7 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 /// set sorting order on the prefs
-- (void) setSortingOrder: (NotesSortingOrder) order {
+- (void)setSortingOrder:(NotesSortingOrder)order {
   [VivaldiNotesPrefs setNotesSortingOrder:order];
 }
 
@@ -1815,8 +1793,7 @@ const int kRowsHiddenByNavigationBar = 3;
                                       action:@selector(leadingButtonClicked)];
   self.deleteButton.tintColor = [UIColor colorNamed:kRedColor];
   self.deleteButton.enabled = NO;
-  self.deleteButton.accessibilityIdentifier =
-      kNoteHomeLeadingButtonIdentifier;
+  self.deleteButton.accessibilityIdentifier = kNoteHomeLeadingButtonIdentifier;
 
   // Disabled More button. // More button in right corner, open popup menu
   titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_BAR_MORE);
@@ -1852,7 +1829,7 @@ const int kRowsHiddenByNavigationBar = 3;
 #pragma mark - Context Menu
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
-     forMultipleNotes:(const std::set<const NoteNode*>)nodes {
+            forMultipleNotes:(const std::set<const NoteNode*>)nodes {
   __weak NoteHomeViewController* weakSelf = self;
   coordinator.alertController.view.accessibilityIdentifier =
       kNoteHomeContextMenuIdentifier;
@@ -1870,8 +1847,7 @@ const int kRowsHiddenByNavigationBar = 3;
                     return;
 
                   std::optional<std::set<const NoteNode*>> nodesFromIds =
-                      note_utils_ios::FindNodesByIds(strongSelf.notes,
-                                                         nodeIds);
+                      note_utils_ios::FindNodesByIds(strongSelf.notes, nodeIds);
                   if (nodesFromIds)
                     [strongSelf moveNodes:*nodesFromIds];
                 }
@@ -1879,7 +1855,7 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
-        forSingleNote:(const NoteNode*)node {
+               forSingleNote:(const NoteNode*)node {
   __weak NoteHomeViewController* weakSelf = self;
   std::string urlString = node->GetURL().possibly_invalid_spec();
   coordinator.alertController.view.accessibilityIdentifier =
@@ -1893,70 +1869,69 @@ const int kRowsHiddenByNavigationBar = 3;
   BOOL editEnabled =
       [self isEditNotesEnabled] && [self isNodeEditableByUser:node];
 
-  [coordinator addItemWithTitle:titleString
-                         action:^{
-                           NoteHomeViewController* strongSelf = weakSelf;
-                           if (!strongSelf)
-                             return;
-                           const vivaldi::NoteNode* nodeFromId =
-                               note_utils_ios::FindNodeById(
-                                   strongSelf.notes, nodeId);
-                           if (nodeFromId)
-                             [strongSelf editNode:nodeFromId];
-                         }
-                          style:UIAlertActionStyleDefault
-                        enabled:editEnabled];
-
-    std::set<int64_t> nodeIds;
-    nodeIds.insert(node->id());
-    titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE);
-    [coordinator
-        addItemWithTitle:titleString
-                  action:^{
-                    NoteHomeViewController* strongSelf = weakSelf;
-                    if (!strongSelf)
-                      return;
-
-                    std::optional<std::set<const NoteNode*>> nodesFromIds =
-                        note_utils_ios::FindNodesByIds(strongSelf.notes,
-                                                           nodeIds);
-                    if (nodesFromIds)
-                      [strongSelf moveNodes:*nodesFromIds];
-                  }
-     style:UIAlertActionStyleDefault];
-  GURL nodeURL = node->GetURL();
-  if (!nodeURL.is_empty()) {
-      titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN);
-      [coordinator addItemWithTitle:titleString
-                         action:^{
-                           if ([weakSelf isIncognitoForced])
-                             return;
-                           [weakSelf openAllURLs:{nodeURL}
-                                     inIncognito:NO
-                                          newTab:YES];
-                         }
-                          style:UIAlertActionStyleDefault
-                        enabled:![self isIncognitoForced]];
-      titleString = GetNSString(IDS_IOS_CONTENT_CONTEXT_COPY);
-      [coordinator
-       addItemWithTitle:titleString
+  [coordinator
+      addItemWithTitle:titleString
                 action:^{
-                  // Use strongSelf even though the object is only used once
-                  // because we do not want to change the global pasteboard
-                  // if the view has been deallocated.
                   NoteHomeViewController* strongSelf = weakSelf;
                   if (!strongSelf)
                     return;
-                  UIPasteboard* pasteboard = [UIPasteboard generalPasteboard];
-                  pasteboard.string = base::SysUTF8ToNSString(urlString);
-                  [strongSelf setTableViewEditing:NO];
+                  const vivaldi::NoteNode* nodeFromId =
+                      note_utils_ios::FindNodeById(strongSelf.notes, nodeId);
+                  if (nodeFromId)
+                    [strongSelf editNode:nodeFromId];
+                }
+                 style:UIAlertActionStyleDefault
+               enabled:editEnabled];
+
+  std::set<int64_t> nodeIds;
+  nodeIds.insert(node->id());
+  titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE);
+  [coordinator
+      addItemWithTitle:titleString
+                action:^{
+                  NoteHomeViewController* strongSelf = weakSelf;
+                  if (!strongSelf)
+                    return;
+
+                  std::optional<std::set<const NoteNode*>> nodesFromIds =
+                      note_utils_ios::FindNodesByIds(strongSelf.notes, nodeIds);
+                  if (nodesFromIds)
+                    [strongSelf moveNodes:*nodesFromIds];
                 }
                  style:UIAlertActionStyleDefault];
+  GURL nodeURL = node->GetURL();
+  if (!nodeURL.is_empty()) {
+    titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_OPEN);
+    [coordinator addItemWithTitle:titleString
+                           action:^{
+                             if ([weakSelf isIncognitoForced])
+                               return;
+                             [weakSelf openAllURLs:{nodeURL}
+                                       inIncognito:NO
+                                            newTab:YES];
+                           }
+                            style:UIAlertActionStyleDefault
+                          enabled:![self isIncognitoForced]];
+    titleString = GetNSString(IDS_IOS_CONTENT_CONTEXT_COPY);
+    [coordinator
+        addItemWithTitle:titleString
+                  action:^{
+                    // Use strongSelf even though the object is only used once
+                    // because we do not want to change the global pasteboard
+                    // if the view has been deallocated.
+                    NoteHomeViewController* strongSelf = weakSelf;
+                    if (!strongSelf)
+                      return;
+                    UIPasteboard* pasteboard = [UIPasteboard generalPasteboard];
+                    pasteboard.string = base::SysUTF8ToNSString(urlString);
+                    [strongSelf setTableViewEditing:NO];
+                  }
+                   style:UIAlertActionStyleDefault];
   }
 }
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
-     forSingleNoteFolder:(const NoteNode*)node {
+         forSingleNoteFolder:(const NoteNode*)node {
   __weak NoteHomeViewController* weakSelf = self;
   coordinator.alertController.view.accessibilityIdentifier =
       kNoteHomeContextMenuIdentifier;
@@ -1969,36 +1944,36 @@ const int kRowsHiddenByNavigationBar = 3;
   BOOL editEnabled =
       [self isEditNotesEnabled] && [self isNodeEditableByUser:node];
 
-  [coordinator addItemWithTitle:titleString
-                         action:^{
-                           NoteHomeViewController* strongSelf = weakSelf;
-                           if (!strongSelf)
-                             return;
-                           const vivaldi::NoteNode* nodeFromId =
-                               note_utils_ios::FindNodeById(
-                                   strongSelf.notes, nodeId);
-                           if (nodeFromId)
-                             [strongSelf editNode:nodeFromId];
-                         }
-                          style:UIAlertActionStyleDefault
-                        enabled:editEnabled];
+  [coordinator
+      addItemWithTitle:titleString
+                action:^{
+                  NoteHomeViewController* strongSelf = weakSelf;
+                  if (!strongSelf)
+                    return;
+                  const vivaldi::NoteNode* nodeFromId =
+                      note_utils_ios::FindNodeById(strongSelf.notes, nodeId);
+                  if (nodeFromId)
+                    [strongSelf editNode:nodeFromId];
+                }
+                 style:UIAlertActionStyleDefault
+               enabled:editEnabled];
 
   titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE);
-  [coordinator addItemWithTitle:titleString
-                         action:^{
-                           NoteHomeViewController* strongSelf = weakSelf;
-                           if (!strongSelf)
-                             return;
-                           const vivaldi::NoteNode* nodeFromId =
-                               note_utils_ios::FindNodeById(
-                                   strongSelf.notes, nodeId);
-                           if (nodeFromId) {
-                             std::set<const NoteNode*> nodes{nodeFromId};
-                             [strongSelf moveNodes:nodes];
-                           }
-                         }
-                          style:UIAlertActionStyleDefault
-                        enabled:editEnabled];
+  [coordinator
+      addItemWithTitle:titleString
+                action:^{
+                  NoteHomeViewController* strongSelf = weakSelf;
+                  if (!strongSelf)
+                    return;
+                  const vivaldi::NoteNode* nodeFromId =
+                      note_utils_ios::FindNodeById(strongSelf.notes, nodeId);
+                  if (nodeFromId) {
+                    std::set<const NoteNode*> nodes{nodeFromId};
+                    [strongSelf moveNodes:nodes];
+                  }
+                }
+                 style:UIAlertActionStyleDefault
+               enabled:editEnabled];
 }
 
 - (void)configureCoordinator:(AlertCoordinator*)coordinator
@@ -2014,20 +1989,19 @@ const int kRowsHiddenByNavigationBar = 3;
   }
 
   NSString* titleString = GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_MOVE);
-  [coordinator
-      addItemWithTitle:titleString
-                action:^{
-                  NoteHomeViewController* strongSelf = weakSelf;
-                  if (!strongSelf)
-                    return;
-                  std::optional<std::set<const vivaldi::NoteNode*>>
-                      nodesFromIds = note_utils_ios::FindNodesByIds(
-                          strongSelf.notes, nodeIds);
-                  if (nodesFromIds) {
-                    [strongSelf moveNodes:*nodesFromIds];
-                  }
-                }
-                 style:UIAlertActionStyleDefault];
+  [coordinator addItemWithTitle:titleString
+                         action:^{
+                           NoteHomeViewController* strongSelf = weakSelf;
+                           if (!strongSelf)
+                             return;
+                           std::optional<std::set<const vivaldi::NoteNode*>>
+                               nodesFromIds = note_utils_ios::FindNodesByIds(
+                                   strongSelf.notes, nodeIds);
+                           if (nodesFromIds) {
+                             [strongSelf moveNodes:*nodesFromIds];
+                           }
+                         }
+                          style:UIAlertActionStyleDefault];
 }
 
 #pragma mark - UIGestureRecognizerDelegate and gesture handling
@@ -2074,10 +2048,9 @@ const int kRowsHiddenByNavigationBar = 3;
 
   if (node->is_folder()) {
     [self configureCoordinator:self.actionSheetCoordinator
-        forSingleNoteFolder:node];
+           forSingleNoteFolder:node];
   } else {
-    [self configureCoordinator:self.actionSheetCoordinator
-            forSingleNote:node];
+    [self configureCoordinator:self.actionSheetCoordinator forSingleNote:node];
     return;
   }
 
@@ -2085,9 +2058,10 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (BOOL)canShowContextMenuFor:(NSIndexPath*)indexPath {
-  if (indexPath == nil || [self.sharedState.tableViewModel
-                              sectionIdentifierForSectionIndex:indexPath.section] !=
-                              NoteHomeSectionIdentifierNotes) {
+  if (indexPath == nil ||
+      [self.sharedState.tableViewModel
+          sectionIdentifierForSectionIndex:indexPath.section] !=
+          NoteHomeSectionIdentifierNotes) {
     return NO;
   }
 
@@ -2110,8 +2084,8 @@ const int kRowsHiddenByNavigationBar = 3;
 
 - (UITableViewCell*)tableView:(UITableView*)tableView
         cellForRowAtIndexPath:(NSIndexPath*)indexPath {
-  UITableViewCell* cell =
-      [super tableView:tableView cellForRowAtIndexPath:indexPath];
+  UITableViewCell* cell = [super tableView:tableView
+                     cellForRowAtIndexPath:indexPath];
   TableViewItem* item =
       [self.sharedState.tableViewModel itemAtIndexPath:indexPath];
 
@@ -2121,8 +2095,7 @@ const int kRowsHiddenByNavigationBar = 3;
     NoteHomeNodeItem* nodeItem =
         base::apple::ObjCCastStrict<NoteHomeNodeItem>(item);
     if ((nodeItem.noteNode->is_folder() &&
-        nodeItem.noteNode == self.sharedState.editingFolderNode)
-        ) {
+         nodeItem.noteNode == self.sharedState.editingFolderNode)) {
       TableViewNoteFolderCell* tableCell =
           base::apple::ObjCCastStrict<TableViewNoteFolderCell>(cell);
       // Delay starting edit, so that the cell is fully created. This is
@@ -2199,7 +2172,7 @@ const int kRowsHiddenByNavigationBar = 3;
 - (BOOL)tableView:(UITableView*)tableView
     canMoveRowAtIndexPath:(NSIndexPath*)indexPath {
   // Can only move nodes if the current sorting mode is manual.
-  if(self.currentSortingMode != NotesSortingModeManual) {
+  if (self.currentSortingMode != NotesSortingModeManual) {
     return NO;
   }
   // No reorering with filtered results or when displaying the top-most
@@ -2320,6 +2293,61 @@ const int kRowsHiddenByNavigationBar = 3;
 
   int64_t nodeId = node->id();
   __weak NoteHomeViewController* weakSelf = self;
+
+  BOOL isTrashedItem = self.notes->IsChildOfTrashNode(node);
+
+  // For item in trash only keep move and delete option.
+  if (isTrashedItem) {
+    GURL nodeURL = node->GetURL();
+    actionProvider = ^(NSArray<UIMenuElement*>* suggestedActions) {
+      NoteHomeViewController* strongSelf = weakSelf;
+      if (!strongSelf)
+        return [UIMenu menuWithTitle:@"" children:@[]];
+
+      BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
+          initWithBrowser:strongSelf.browser
+                 scenario:kMenuScenarioHistogramNoteEntry];
+
+      NSMutableArray<UIMenuElement*>* menuElements =
+          [[NSMutableArray alloc] init];
+
+      // Move
+      UIAction* moveAction = [actionFactory actionToMoveFolderWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          std::set<const NoteNode*> nodes{nodeFromId};
+          [innerStrongSelf moveNodes:nodes];
+        }
+      }];
+      [menuElements addObject:moveAction];
+
+      // Delete Action Block
+      UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          std::set<const NoteNode*> nodes{nodeFromId};
+          [innerStrongSelf handleSelectNodesForDeletion:nodes];
+        }
+      }];
+      [menuElements addObject:deleteAction];
+
+      return [UIMenu menuWithTitle:@"" children:menuElements];
+    };
+
+    return
+        [UIContextMenuConfiguration configurationWithIdentifier:nil
+                                                previewProvider:nil
+                                                 actionProvider:actionProvider];
+  }
+
   if (node->is_note()) {
     GURL nodeURL = node->GetURL();
     actionProvider = ^(NSArray<UIMenuElement*>* suggestedActions) {
@@ -2332,58 +2360,137 @@ const int kRowsHiddenByNavigationBar = 3;
                  scenario:kMenuScenarioHistogramNoteEntry];
 
       NSMutableArray<UIMenuElement*>* menuElements =
-            [[NSMutableArray alloc] init];
+          [[NSMutableArray alloc] init];
 
+      UIAction* editAction = [actionFactory actionToEditWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          [innerStrongSelf editNode:nodeFromId];
+        }
+      }];
+      [menuElements addObject:editAction];
 
-        UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-          NoteHomeViewController* innerStrongSelf = weakSelf;
-          if (!innerStrongSelf)
-            return;
-          const vivaldi::NoteNode* nodeFromId =
-              note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
-          if (nodeFromId) {
-            [innerStrongSelf editNode:nodeFromId];
-          }
-        }];
-        [menuElements addObject:editAction];
+      // Rename title action block
+      UIImage* renameImage = [UIImage imageNamed:vMenuEdit];
+      NSString* renameLabel =
+          l10n_util::GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME);
+      UIAction* renameTitleAction = [UIAction
+          actionWithTitle:renameLabel
+                    image:renameImage
+               identifier:nil
+                  handler:^(UIAction* action) {
+                    NoteHomeViewController* innerStrongSelf = weakSelf;
+                    if (!innerStrongSelf)
+                      return;
+                    const vivaldi::NoteNode* nodeFromId =
+                        note_utils_ios::FindNodeById(innerStrongSelf.notes,
+                                                     nodeId);
+                    if (nodeFromId) {
+                      [innerStrongSelf showRenameTitleAlertForNode:nodeFromId];
+                    }
+                  }];
+      [menuElements addObject:renameTitleAction];
 
-        // Rename title action block
-        UIImage* renameImage = [UIImage imageNamed:vMenuEdit];
-        NSString* renameLabel =
-            l10n_util::GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME);
-        UIAction* renameTitleAction =
-            [UIAction actionWithTitle:renameLabel
-                                image:renameImage
-                           identifier:nil
-                              handler:^(UIAction *action) {
+      // Share action block
+      [menuElements
+          addObject:[actionFactory actionToShareWithBlock:^{
             NoteHomeViewController* innerStrongSelf = weakSelf;
             if (!innerStrongSelf)
               return;
             const vivaldi::NoteNode* nodeFromId =
                 note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
             if (nodeFromId) {
-              [innerStrongSelf showRenameTitleAlertForNode:nodeFromId];
+              [weakSelf
+                  shareText:base::SysUTF16ToNSString(nodeFromId->GetContent())
+                      title:note_utils_ios::TitleForNoteNode(nodeFromId)
+                  indexPath:indexPath];
             }
-        }];
-        [menuElements addObject:renameTitleAction];
+          }]];
 
-      // Share action block
-        [menuElements
-            addObject:[actionFactory actionToShareWithBlock:^{
-              NoteHomeViewController* innerStrongSelf = weakSelf;
-              if (!innerStrongSelf)
-                return;
-              const vivaldi::NoteNode* nodeFromId =
-                  note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
-              if (nodeFromId) {
-                [weakSelf
-                    shareText:base::SysUTF16ToNSString(nodeFromId->GetContent())
-                       title:note_utils_ios::TitleForNoteNode(nodeFromId)
-                    indexPath:indexPath];
-              }
-            }]];
+      UIAction* moveAction = [actionFactory actionToMoveFolderWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          std::set<const NoteNode*> nodes{nodeFromId};
+          [innerStrongSelf moveNodes:nodes];
+        }
+      }];
+      [menuElements addObject:moveAction];
 
-        // Delete Action Block
+      // Delete Action Block
+      UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          std::set<const NoteNode*> nodes{nodeFromId};
+          [innerStrongSelf handleSelectNodesForDeletion:nodes];
+        }
+      }];
+      [menuElements addObject:deleteAction];
+
+      // Disable Edit, Rename Title, and Delete if the node cannot be edited.
+      if (!canEditNode) {
+        editAction.attributes = UIMenuElementAttributesDisabled;
+        renameTitleAction.attributes = UIMenuElementAttributesDisabled;
+        moveAction.attributes = UIMenuElementAttributesDisabled;
+        deleteAction.attributes = UIMenuElementAttributesDisabled;
+      }
+
+      return [UIMenu menuWithTitle:@"" children:menuElements];
+    };
+  } else if (node->is_folder()) {
+    actionProvider = ^(NSArray<UIMenuElement*>* suggestedActions) {
+      NoteHomeViewController* strongSelf = weakSelf;
+      if (!strongSelf)
+        return [UIMenu menuWithTitle:@"" children:@[]];
+
+      ActionFactory* actionFactory = [[ActionFactory alloc]
+          initWithScenario:kMenuScenarioHistogramNoteFolder];
+
+      NSMutableArray<UIMenuElement*>* menuElements =
+          [[NSMutableArray alloc] init];
+
+      UIAction* editAction = [actionFactory actionToEditWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          [innerStrongSelf editNode:nodeFromId];
+        }
+      }];
+      UIAction* moveAction = [actionFactory actionToMoveFolderWithBlock:^{
+        NoteHomeViewController* innerStrongSelf = weakSelf;
+        if (!innerStrongSelf)
+          return;
+        const vivaldi::NoteNode* nodeFromId =
+            note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
+        if (nodeFromId) {
+          std::set<const NoteNode*> nodes{nodeFromId};
+          [innerStrongSelf moveNodes:nodes];
+        }
+      }];
+
+      if (!canEditNode) {
+        editAction.attributes = UIMenuElementAttributesDisabled;
+        moveAction.attributes = UIMenuElementAttributesDisabled;
+      }
+
+      [menuElements addObject:editAction];
+      [menuElements addObject:moveAction];
+
+      if (!node->is_permanent_node()) {
         UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
           NoteHomeViewController* innerStrongSelf = weakSelf;
           if (!innerStrongSelf)
@@ -2396,77 +2503,12 @@ const int kRowsHiddenByNavigationBar = 3;
           }
         }];
         [menuElements addObject:deleteAction];
-
-      // Disable Edit, Rename Title, and Delete if the node cannot be edited.
-      if (!canEditNode) {
-        editAction.attributes = UIMenuElementAttributesDisabled;
-        renameTitleAction.attributes = UIMenuElementAttributesDisabled;
-        deleteAction.attributes = UIMenuElementAttributesDisabled;
+        if (!canEditNode)
+          deleteAction.attributes = UIMenuElementAttributesDisabled;
       }
-
-        return [UIMenu menuWithTitle:@"" children:menuElements];
-      };
-    } else if (node->is_folder()) {
-      actionProvider = ^(NSArray<UIMenuElement*>* suggestedActions) {
-        NoteHomeViewController* strongSelf = weakSelf;
-        if (!strongSelf)
-          return [UIMenu menuWithTitle:@"" children:@[]];
-
-        ActionFactory* actionFactory = [[ActionFactory alloc]
-            initWithScenario:kMenuScenarioHistogramNoteFolder];
-
-        NSMutableArray<UIMenuElement*>* menuElements =
-            [[NSMutableArray alloc] init];
-
-        UIAction* editAction = [actionFactory actionToEditWithBlock:^{
-          NoteHomeViewController* innerStrongSelf = weakSelf;
-          if (!innerStrongSelf)
-            return;
-          const vivaldi::NoteNode* nodeFromId =
-              note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
-          if (nodeFromId) {
-            [innerStrongSelf editNode:nodeFromId];
-          }
-        }];
-        UIAction* moveAction = [actionFactory actionToMoveFolderWithBlock:^{
-          NoteHomeViewController* innerStrongSelf = weakSelf;
-          if (!innerStrongSelf)
-            return;
-          const vivaldi::NoteNode* nodeFromId =
-              note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
-          if (nodeFromId) {
-            std::set<const NoteNode*> nodes{nodeFromId};
-            [innerStrongSelf moveNodes:nodes];
-          }
-        }];
-
-        if (!canEditNode) {
-          editAction.attributes = UIMenuElementAttributesDisabled;
-          moveAction.attributes = UIMenuElementAttributesDisabled;
-        }
-
-        [menuElements addObject:editAction];
-        [menuElements addObject:moveAction];
-
-        if (!node->is_permanent_node()) {
-          UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
-            NoteHomeViewController* innerStrongSelf = weakSelf;
-            if (!innerStrongSelf)
-                return;
-            const vivaldi::NoteNode* nodeFromId =
-                note_utils_ios::FindNodeById(innerStrongSelf.notes, nodeId);
-            if (nodeFromId) {
-              std::set<const NoteNode*> nodes{nodeFromId};
-              [innerStrongSelf handleSelectNodesForDeletion:nodes];
-            }
-          }];
-          [menuElements addObject:deleteAction];
-          if (!canEditNode)
-              deleteAction.attributes = UIMenuElementAttributesDisabled;
-        }
-        return [UIMenu menuWithTitle:@"" children:menuElements];
-      };
-    }
+      return [UIMenu menuWithTitle:@"" children:menuElements];
+    };
+  }
   return
       [UIContextMenuConfiguration configurationWithIdentifier:nil
                                               previewProvider:nil
@@ -2480,20 +2522,20 @@ const int kRowsHiddenByNavigationBar = 3;
 
   NSString* currentTitle = note_utils_ios::TitleForNoteNode(node);
 
-  UIAlertController* alertController =
-    [UIAlertController
+  UIAlertController* alertController = [UIAlertController
       alertControllerWithTitle:GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME)
                        message:nil
                 preferredStyle:UIAlertControllerStyleAlert];
 
   [alertController
-    addTextFieldWithConfigurationHandler:^(UITextField* textField) {
-      textField.placeholder =
-          GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME_PLACEHOLDER);
-    textField.text = currentTitle;
-    textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-    textField.autocapitalizationType = UITextAutocapitalizationTypeSentences;
-  }];
+      addTextFieldWithConfigurationHandler:^(UITextField* textField) {
+        textField.placeholder =
+            GetNSString(IDS_VIVALDI_NOTE_CONTEXT_MENU_RENAME_PLACEHOLDER);
+        textField.text = currentTitle;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.autocapitalizationType =
+            UITextAutocapitalizationTypeSentences;
+      }];
 
   UIAlertAction* cancelAction =
       [UIAlertAction actionWithTitle:GetNSString(IDS_CANCEL)
@@ -2501,21 +2543,22 @@ const int kRowsHiddenByNavigationBar = 3;
                              handler:nil];
   __weak NoteHomeViewController* weakSelf = self;
   UIAlertAction* renameAction =
-    [UIAlertAction actionWithTitle:GetNSString(IDS_OK)
-                             style:UIAlertActionStyleDefault
-                           handler:^(UIAlertAction* action) {
-    NoteHomeViewController* strongSelf = weakSelf;
-    if (!strongSelf)
-      return;
-    UITextField* titleField = alertController.textFields.firstObject;
-    NSString* newTitle = titleField.text;
-    // Update the note's title in the data model
-    if (newTitle.length > 0) {
-      strongSelf.sharedState.
-        notesModel->SetTitle(node,base::SysNSStringToUTF16(newTitle));
-      [strongSelf refreshContents];
-    }
-  }];
+      [UIAlertAction actionWithTitle:GetNSString(IDS_OK)
+                               style:UIAlertActionStyleDefault
+                             handler:^(UIAlertAction* action) {
+                               NoteHomeViewController* strongSelf = weakSelf;
+                               if (!strongSelf)
+                                 return;
+                               UITextField* titleField =
+                                   alertController.textFields.firstObject;
+                               NSString* newTitle = titleField.text;
+                               // Update the note's title in the data model
+                               if (newTitle.length > 0) {
+                                 strongSelf.sharedState.notesModel->SetTitle(
+                                     node, base::SysNSStringToUTF16(newTitle));
+                                 [strongSelf refreshContents];
+                               }
+                             }];
   [alertController addAction:cancelAction];
   [alertController addAction:renameAction];
   [self presentViewController:alertController animated:YES completion:nil];
@@ -2548,9 +2591,8 @@ const int kRowsHiddenByNavigationBar = 3;
   if (!node || node->is_folder()) {
     return nil;
   }
-  return [[URLInfo alloc]
-      initWithURL:node->GetURL()
-            title:note_utils_ios::TitleForNoteNode(node)];
+  return [[URLInfo alloc] initWithURL:node->GetURL()
+                                title:note_utils_ios::TitleForNoteNode(node)];
 }
 
 #pragma mark - TableViewURLDropDelegate
@@ -2564,10 +2606,10 @@ const int kRowsHiddenByNavigationBar = 3;
        didDropURL:(const GURL&)URL
       atIndexPath:(NSIndexPath*)indexPath {
   NSUInteger index = base::checked_cast<NSUInteger>(indexPath.item);
-  [self.snackbarCommandsHandler showSnackbarMessage:
-                    note_utils_ios::CreateNoteAtPositionWithToast(
-                        base::SysUTF8ToNSString(URL.spec()), URL, _rootNode,
-                        index, self.notes, self.profile)];
+  [self.snackbarCommandsHandler
+      showSnackbarMessage:note_utils_ios::CreateNoteAtPositionWithToast(
+                              base::SysUTF8ToNSString(URL.spec()), URL,
+                              _rootNode, index, self.notes, self.profile)];
 }
 
 #pragma mark - SettingsNavigationControllerDelegate
@@ -2579,8 +2621,8 @@ const int kRowsHiddenByNavigationBar = 3;
   UIViewController* strongPresentingViewController =
       weakPresentingViewController;
   if (strongPresentingViewController) {
-    [strongPresentingViewController
-        dismissViewControllerAnimated:YES completion:nil];
+    [strongPresentingViewController dismissViewControllerAnimated:YES
+                                                       completion:nil];
   }
   self.settingsNavigationController = nil;
 }
@@ -2593,9 +2635,9 @@ const int kRowsHiddenByNavigationBar = 3;
 - (UIBarButtonItem*)customizedDoneButton {
   UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
       initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
-                                 style:UIBarButtonItemStyleDone
-                                target:self
-                                action:@selector(navigationBarCancel:)];
+              style:UIBarButtonItemStyleDone
+             target:self
+             action:@selector(navigationBarCancel:)];
   doneButton.accessibilityLabel =
       GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
   doneButton.accessibilityIdentifier =
@@ -2605,16 +2647,16 @@ const int kRowsHiddenByNavigationBar = 3;
 }
 
 - (UIBarButtonItem*)customizedDoneTextButton {
-    UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
+  UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
       initWithTitle:GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON)
               style:UIBarButtonItemStyleDone
              target:self
              action:@selector(navigationBarCancel:)];
-    doneButton.accessibilityLabel =
+  doneButton.accessibilityLabel =
       GetNSString(IDS_IOS_NAVIGATION_BAR_DONE_BUTTON);
-    doneButton.accessibilityIdentifier =
+  doneButton.accessibilityIdentifier =
       kNoteHomeNavigationBarDoneButtonIdentifier;
-    return doneButton;
+  return doneButton;
 }
 
 // Set up navigation bar for |viewController|'s navigationBar using |node|.
@@ -2633,32 +2675,33 @@ const int kRowsHiddenByNavigationBar = 3;
   NSArray* items = nil;
   if ([self isDisplayingNoteRoot]) {
     viewController.navigationItem.rightBarButtonItem =
-      [self customizedDoneTextButton];
+        [self customizedDoneTextButton];
   } else {
     viewController.title = note_utils_ios::TitleForNoteNode(node);
-    items = @[[self customizedDoneButton]];
+    items = @[ [self customizedDoneButton] ];
     viewController.navigationItem.rightBarButtonItems = items;
   }
 }
 
 - (void)setupHeaderWithSearch {
-  UIView* tableHeaderView =
-      [[UIView alloc] initWithFrame:
-       CGRectMake(0, 0,self.tableView.bounds.size.width,
-                  self.showingSidePanel ? panel_search_view_height :
-                  panel_header_height)];
+  UIView* tableHeaderView = [[UIView alloc]
+      initWithFrame:CGRectMake(0, 0, self.tableView.bounds.size.width,
+                               self.showingSidePanel ? panel_search_view_height
+                                                     : panel_header_height)];
   VivaldiSearchBarView* searchBarView = [VivaldiSearchBarView new];
   _vivaldiSearchBarView = searchBarView;
   [tableHeaderView addSubview:searchBarView];
   [searchBarView
-      fillSuperviewWithPadding:UIEdgeInsetsMake(self.showingSidePanel ? 0 :
-                                                search_bar_height, 0, 0, 0)];
+      fillSuperviewWithPadding:UIEdgeInsetsMake(self.showingSidePanel
+                                                    ? 0
+                                                    : search_bar_height,
+                                                0, 0, 0)];
   searchBarView.delegate = self;
   [searchBarView setPlaceholder:GetNSString(IDS_VIVALDI_SEARCHBAR_PLACEHOLDER)];
   self.tableView.tableHeaderView = tableHeaderView;
 }
 
-#pragma mark: VIVALDI_SEARCH_BAR_VIEW_DELEGATE
+#pragma mark : VIVALDI_SEARCH_BAR_VIEW_DELEGATE
 - (void)searchBarTextDidChange:(NSString*)searchText {
   self.searchTerm = searchText;
 
@@ -2688,25 +2731,25 @@ const int kRowsHiddenByNavigationBar = 3;
 /// Returns true if device is iPad and multitasking UI has
 /// enough space to show iPad side panel.
 - (BOOL)showingSidePanel {
-  return [VivaldiGlobalHelpers
-              canShowSidePanelForTrait:self.traitCollection];
+  return [VivaldiGlobalHelpers canShowSidePanelForTrait:self.traitCollection];
 }
 
 - (void)showVivaldiSync {
-  self.settingsNavigationController =
-      [SettingsNavigationController
-          vivaldiSyncViewControllerForBrowser:self.browser
-              showCreateAccountFlow:NO
-                  delegate:self];
-  UISheetPresentationController *sheetPc =
+  self.settingsNavigationController = [SettingsNavigationController
+      vivaldiSyncViewControllerForBrowser:self.browser
+                    showCreateAccountFlow:NO
+                                 delegate:self];
+  UISheetPresentationController* sheetPc =
       self.settingsNavigationController.sheetPresentationController;
   // When iPad full screen or 2/3 SplitView support only large detent because
   // medium detent cuts the contents makes the dialog small and off centered.
   if (IsSplitToolbarMode(self.settingsNavigationController)) {
-    sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent,
-                        UISheetPresentationControllerDetent.largeDetent];
+    sheetPc.detents = @[
+      UISheetPresentationControllerDetent.mediumDetent,
+      UISheetPresentationControllerDetent.largeDetent
+    ];
   } else {
-    sheetPc.detents = @[UISheetPresentationControllerDetent.largeDetent];
+    sheetPc.detents = @[ UISheetPresentationControllerDetent.largeDetent ];
   }
   sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
   sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;

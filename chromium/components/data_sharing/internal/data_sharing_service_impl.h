@@ -10,6 +10,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "base/version_info/channel.h"
 #include "components/data_sharing/internal/collaboration_group_sync_bridge.h"
 #include "components/data_sharing/internal/group_data_model.h"
@@ -115,12 +116,10 @@ class DataSharingServiceImpl : public DataSharingService,
       base::OnceCallback<void(PeopleGroupActionOutcome)> callback) override;
   bool IsLeavingOrDeletingGroup(const GroupId& group_id) override;
   std::vector<GroupEvent> GetGroupEventsSinceStartup() override;
-  bool ShouldInterceptNavigationForShareURL(const GURL& url) override;
   void HandleShareURLNavigationIntercepted(
       const GURL& url,
       std::unique_ptr<ShareURLInterceptionContext> context) override;
   std::unique_ptr<GURL> GetDataSharingUrl(const GroupData& group_data) override;
-  ParseUrlResult ParseDataSharingUrl(const GURL& url) override;
   void Shutdown() override;
   void EnsureGroupVisibility(
       const GroupId& group_id,
@@ -205,6 +204,8 @@ class DataSharingServiceImpl : public DataSharingService,
   // Called when the SDK delegate has been updated, allowing the group data
   // model to be updated too.
   void OnSDKDelegateUpdated();
+
+  THREAD_CHECKER(thread_checker_);
 
   // It must be destroyed after the `sdk_delegate_` member because
   // `sdk_delegate` needs the `data_sharing_network_loader_`.

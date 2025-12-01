@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
@@ -53,7 +54,6 @@ export interface EventProperties {
   duration?: number;
   name: string;
   color?: string;
-  hoverData?: Object|null;
 }
 
 /**
@@ -69,12 +69,11 @@ export class Event {
   title: string;
   private colorInternal: string;
   private fontColorInternal: string;
-  private readonly hoverData: Object;
 
   constructor(
       timelineData: PerfUI.FlameChart.FlameChartTimelineData, eventHandlers: EventHandlers,
       eventProperties: EventProperties|
-      undefined = {color: undefined, duration: undefined, hoverData: {}, level: 0, name: '', startTime: 0}) {
+      undefined = {color: undefined, duration: undefined, level: 0, name: '', startTime: 0}) {
     // These allow the event to privately change it's own data in the timeline.
     this.timelineData = timelineData;
     this.setLive = eventHandlers.setLive;
@@ -100,7 +99,6 @@ export class Event {
     this.title = eventProperties['name'] || '';
     this.colorInternal = eventProperties['color'] || HotColorScheme[0];
     this.fontColorInternal = calculateFontColor(this.colorInternal);
-    this.hoverData = eventProperties['hoverData'] || {};
   }
 
   /**

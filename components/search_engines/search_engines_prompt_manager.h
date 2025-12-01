@@ -42,15 +42,16 @@ class SearchEnginesPromptManager {
       PrefService& prefs,
       TemplateURLService* template_url_service) const;
   void MarkCurrentPromptAsSeen(PrefService* prefs) const;
-  void IgnoreCurrentPromptVersion(PrefService* prefs) const;
+  void PutProfileToQuarantine(PrefService* prefs) const;
 
   int GetCurrentVersion() const;
   std::string GetDialogType() const;
   int GetSearchEnginesDataVersionRequired() const;
 
- private:
   bool ShouldPromptForTypeOrURL(const SearchEngineType& type,
                                 const GURL& url) const;
+
+ private:
   bool IsInExcludeList(const SearchEngineType& type, const GURL& url) const;
 
   bool IsQuarantined(PrefService* prefs) const;

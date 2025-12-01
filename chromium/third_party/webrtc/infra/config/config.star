@@ -18,22 +18,28 @@ DEFAULT_CPU = "x86-64"
 
 # Helpers:
 
-def make_reclient_properties(instance, jobs = None):
-    """Makes a default reclient property with the specified argument.
+def make_siso_properties(instance, jobs = None):
+    """Makes a default RBE property with the specified argument.
 
     Args:
       instance: RBE insatnce name.
       jobs: Number of jobs to be used by the builder.
     Returns:
-      A dictonary with the reclient properties.
+      A dictonary with the siso properties.
     """
-    reclient_props = {
-        "instance": instance,
-        "metrics_project": "chromium-reclient-metrics",
+    siso_props = {
+        "project": instance,
+        "configs": ["builder"],
+        "enable_cloud_profiler": True,
+        "enable_cloud_trace": True,
+        "enable_monitoring": True,
     }
     if jobs:
-        reclient_props["jobs"] = jobs
-    return {"$build/reclient": reclient_props}
+        siso_props["remote_jobs"] = jobs
+    props = {
+        "$build/siso": siso_props,
+    }
+    return props
 
 def os_from_name(name):
     """Returns the 'os' dimension based on a builder name.
@@ -588,7 +594,7 @@ def ci_builder(
     dimensions["builderless"] = "1"
     properties = properties or {}
     properties["builder_group"] = "client.webrtc"
-    properties.update(make_reclient_properties("rbe-webrtc-trusted"))
+    properties.update(make_siso_properties("rbe-webrtc-trusted"))
 
     notifies = ["post_submit_failure_notifier", "infra_failure_notifier"]
     notifies += ["webrtc_tree_closer"] if name not in skipped_lkgr_bots else []
@@ -633,7 +639,7 @@ def try_builder(
         dimensions["builderless"] = "1"
     properties = properties or {}
     properties["builder_group"] = "tryserver.webrtc"
-    properties.update(make_reclient_properties("rbe-webrtc-untrusted"))
+    properties.update(make_siso_properties("rbe-webrtc-untrusted"))
     if cq != None:
         luci.cq_tryjob_verifier(name, cq_group = "cq", **cq)
         if branch_cq:
@@ -662,7 +668,7 @@ def perf_builder(name, perf_cat, **kwargs):
     Notifications are also disabled.
     """
     add_milo(name, {"perf": perf_cat})
-    properties = make_reclient_properties("rbe-webrtc-trusted")
+    properties = make_siso_properties("rbe-webrtc-trusted")
     properties["builder_group"] = "client.webrtc.perf"
     dimensions = {"pool": "luci.webrtc.perf", "os": "Linux"}
     return webrtc_builder(

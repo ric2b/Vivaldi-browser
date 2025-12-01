@@ -1,12 +1,13 @@
 {
   "extends": "../../config/typescript/tsconfig.base.json",
   "compilerOptions": {
-    "module": "NodeNext",
+    "module": "nodenext",
     "moduleResolution": "nodenext",
     "lib": ["esnext", "dom"],
     "outDir": "ignored",
     "checkJs": true,
     "noEmit": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "allowImportingTsExtensions": true
   }
 }

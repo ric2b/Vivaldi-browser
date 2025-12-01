@@ -10,8 +10,16 @@
 
 #include "pc/session_description.h"
 
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "absl/algorithm/container.h"
 #include "absl/memory/memory.h"
+#include "absl/strings/string_view.h"
+#include "p2p/base/transport_info.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/strings/string_builder.h"
 
@@ -37,7 +45,7 @@ const ContentInfo* FindContentInfoByName(const ContentInfos& contents,
       return &(*content);
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 const ContentInfo* FindContentInfoByType(const ContentInfos& contents,
@@ -62,7 +70,7 @@ ContentGroup& ContentGroup::operator=(ContentGroup&&) = default;
 ContentGroup::~ContentGroup() = default;
 
 const std::string* ContentGroup::FirstContentName() const {
-  return (!content_names_.empty()) ? &(*content_names_.begin()) : NULL;
+  return (!content_names_.empty()) ? &(*content_names_.begin()) : nullptr;
 }
 
 bool ContentGroup::HasContentName(absl::string_view content_name) const {
@@ -119,8 +127,8 @@ ContentInfo* SessionDescription::GetContentByName(const std::string& name) {
 const MediaContentDescription* SessionDescription::GetContentDescriptionByName(
     absl::string_view name) const {
   const ContentInfo* cinfo = FindContentInfoByName(contents_, name);
-  if (cinfo == NULL) {
-    return NULL;
+  if (cinfo == nullptr) {
+    return nullptr;
   }
 
   return cinfo->media_description();
@@ -129,8 +137,8 @@ const MediaContentDescription* SessionDescription::GetContentDescriptionByName(
 MediaContentDescription* SessionDescription::GetContentDescriptionByName(
     absl::string_view name) {
   ContentInfo* cinfo = FindContentInfoByName(&contents_, name);
-  if (cinfo == NULL) {
-    return NULL;
+  if (cinfo == nullptr) {
+    return nullptr;
   }
 
   return cinfo->media_description();
@@ -142,7 +150,7 @@ const ContentInfo* SessionDescription::FirstContentByType(
 }
 
 const ContentInfo* SessionDescription::FirstContent() const {
-  return (contents_.empty()) ? NULL : &(*contents_.begin());
+  return (contents_.empty()) ? nullptr : &(*contents_.begin());
 }
 
 void SessionDescription::AddContent(
@@ -191,14 +199,12 @@ bool SessionDescription::RemoveContentByName(const std::string& name) {
   return false;
 }
 
-void SessionDescription::AddTransportInfo(
-    const cricket::TransportInfo& transport_info) {
+void SessionDescription::AddTransportInfo(const TransportInfo& transport_info) {
   transport_infos_.push_back(transport_info);
 }
 
 bool SessionDescription::RemoveTransportInfoByName(const std::string& name) {
-  for (cricket::TransportInfos::iterator transport_info =
-           transport_infos_.begin();
+  for (TransportInfos::iterator transport_info = transport_infos_.begin();
        transport_info != transport_infos_.end(); ++transport_info) {
     if (transport_info->content_name == name) {
       transport_infos_.erase(transport_info);
@@ -208,26 +214,26 @@ bool SessionDescription::RemoveTransportInfoByName(const std::string& name) {
   return false;
 }
 
-const cricket::TransportInfo* SessionDescription::GetTransportInfoByName(
+const TransportInfo* SessionDescription::GetTransportInfoByName(
     const std::string& name) const {
-  for (cricket::TransportInfos::const_iterator iter = transport_infos_.begin();
+  for (TransportInfos::const_iterator iter = transport_infos_.begin();
        iter != transport_infos_.end(); ++iter) {
     if (iter->content_name == name) {
       return &(*iter);
     }
   }
-  return NULL;
+  return nullptr;
 }
 
-cricket::TransportInfo* SessionDescription::GetTransportInfoByName(
+TransportInfo* SessionDescription::GetTransportInfoByName(
     const std::string& name) {
-  for (cricket::TransportInfos::iterator iter = transport_infos_.begin();
+  for (TransportInfos::iterator iter = transport_infos_.begin();
        iter != transport_infos_.end(); ++iter) {
     if (iter->content_name == name) {
       return &(*iter);
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 void SessionDescription::RemoveGroupByName(const std::string& name) {
@@ -258,7 +264,7 @@ const ContentGroup* SessionDescription::GetGroupByName(
       return &(*iter);
     }
   }
-  return NULL;
+  return nullptr;
 }
 
 std::vector<const ContentGroup*> SessionDescription::GetGroupsByName(

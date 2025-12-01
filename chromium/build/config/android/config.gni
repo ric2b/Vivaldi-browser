@@ -16,6 +16,8 @@ declare_args() {
   # Java debug on Android. Having this on enables multidexing, and turning it
   # off will enable proguard.
   is_java_debug = is_debug || incremental_install
+
+  enable_javaless_renderers = false
 }
 
 # These two combinations could theoretically be made to work, but they are
@@ -80,22 +82,43 @@ if (is_android) {
     if (is_asan) {
       default_min_sdk_version = 27
     }
+    if (enable_javaless_renderers) {
+      default_min_sdk_version = 29
+    }
 
     # Static analysis can be either "on" or "off" or "build_server". This
     # controls how android lint, error-prone, bytecode checks are run. This
     # needs to be in a separate declare_args as it determines some of the args
     # in the main declare_args block below.
-    # "on" is the default.
-    # "off" avoids running any static analysis. This is the default for
-    #     official builds to reduce build times. Failures in static analysis
-    #     would have been caught by other bots.
-    # "build_server" ensures that fast_local_dev_server.py is running and
-    #     offloads analysis tasks to it to be run after the build completes.
-    #     This is the recommended setting for local development.
-    android_static_analysis = "on"
+    # "build_server" (default)
+    #     Runs static analysis jobs via a daemon process and does not block
+    #     on the results. Does not work on bots (requires autoninja.py).
+    #     See: https://chromium.googlesource.com/chromium/src/+/main/build/android/docs/static_analysis.md#autoninja-integration
+    # "on"
+    #     Runs static analysis as build steps, blocking until they complete.
+    #     This mode will fail builds when analysis steps fail, unless
+    #     treat_warnings_as_errors=false is set.
+    # "off"
+    #     Disables static analysis. Many bots set this so as to not duplicate
+    #     the same analysis steps as other bots.
+    android_static_analysis = "build_server"
     if (is_official_build) {
+      # Speed up official builds by disabling. Any failures should have already
+      # been caught by other bots.
       android_static_analysis = "off"
     }
+  }
+
+  if (android_static_analysis == "build_server" && enable_java_templates &&
+      getenv("SWARMING_TASK_ID") != "") {
+    # All android bots that can build java targets need to explicitly set
+    # android_static_analysis = "on" or "off" rather than rely on the default
+    # value, because the default value of "build_server" does not work on
+    # bots. This is an assert instead of a dynamic default so that copy
+    # pasting gn args reproduces bot behavior.
+    assert(
+        false,
+        "All android bots must explicitly set android_static_analysis gn arg.")
   }
 
   # Our build system no longer supports legacy multidex.
@@ -127,7 +150,7 @@ if (is_android) {
 
   if (!defined(default_android_ndk_root)) {
     default_android_ndk_root = "//third_party/android_toolchain/ndk"
-    default_android_ndk_version = "r27"
+    default_android_ndk_version = "r28"
   } else {
     assert(defined(default_android_ndk_version))
   }
@@ -141,11 +164,6 @@ if (is_android) {
     default_android_sdk_platform_version = public_android_sdk_platform_version
     default_android_sdk_build_tools_version = "36.0.0"
     public_android_sdk = true
-  }
-
-  # For use downstream when we are building with preview Android SDK
-  if (!defined(final_android_sdk)) {
-    final_android_sdk = public_android_sdk
   }
 
   if (!defined(default_lint_android_sdk_root)) {
@@ -191,19 +209,11 @@ if (is_android) {
     android_ndk_root = default_android_ndk_root
     android_ndk_version = default_android_ndk_version
 
-    # Android API level for 32 bits platforms
-    android32_ndk_api_level = default_min_sdk_version
+    android_ndk_api_level = default_min_sdk_version
 
-    # Android API level for 64 bits platforms
-    android64_ndk_api_level = default_min_sdk_version
-
-    if (default_min_sdk_version < 21) {
-      # Android did not support 64 bit before API 21.
-      android64_ndk_api_level = 21
-    }
     if (current_cpu == "riscv64" && default_min_sdk_version < 35) {
       # Android did not support RISC-V64 before API 35.
-      android64_ndk_api_level = 35
+      android_ndk_api_level = 35
     }
 
     android_sdk_root = default_android_sdk_root
@@ -302,6 +312,10 @@ if (is_android) {
     # Disable lint since increasing min_sdk_version can cause ObsoleteSdkInt warnings.
     disable_android_lint = true
   }
+
+  assert(
+      android_ndk_api_level >= min_supported_sdk_version,
+      "android_ndk_api_level ($android_ndk_api_level) must be >= min_supported_sdk_version ($min_supported_sdk_version)")
 
   # We need a second declare_args block to make sure we are using the overridden
   # value of the arguments set above.
@@ -453,11 +467,7 @@ if (is_android) {
     "//third_party/kotlinc/current/lib/kotlin-scripting-jvm.jar",
     "//third_party/kotlinc/current/lib/kotlin-stdlib.jar",
     "//third_party/kotlinc/current/lib/kotlinx-coroutines-core-jvm.jar",
-    "//third_party/kotlinc/current/lib/trove4j.jar",
   ]
 
-  # TODO(crbug.com/40261378): Remove.
-  use_upstream_errorprone_annotations_threadsafe = true
-
-  android_logs = [ "android64_ndk_api_level=${android64_ndk_api_level}" ]
+  android_logs = [ "android_ndk_api_level=${android_ndk_api_level}" ]
 }

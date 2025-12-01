@@ -35,7 +35,7 @@ class CookieControlsIconView : public PageActionIconView,
   // CookieControlsObserver:
   void OnCookieControlsIconStatusChanged(
       bool icon_visible,
-      bool protections_on,
+      CookieControlsState controls_state,
       CookieBlocking3pcdStatus blocking_status,
       bool should_highlight) override;
   void OnFinishedPageReloadWithChangedSettings() override;
@@ -50,9 +50,8 @@ class CookieControlsIconView : public PageActionIconView,
   // Button:
   std::u16string GetAlternativeAccessibleName() const override;
 
-  CookieControlsBubbleCoordinator* GetCoordinatorForTesting() const;
-  void SetCoordinatorForTesting(
-      std::unique_ptr<CookieControlsBubbleCoordinator> coordinator);
+  CookieControlsBubbleCoordinator& GetCoordinatorForTesting() const;
+  void SetCoordinatorForTesting(CookieControlsBubbleCoordinator& coordinator);
 
   void DisableUpdatesForTesting();
 
@@ -78,12 +77,14 @@ class CookieControlsIconView : public PageActionIconView,
   void MaybeAnimateIcon();
   void UpdateIcon();
 
-  int GetLabelForStatus() const;
-  void SetLabelForStatus();
+  // Returns label to use for the icon. If `controls_state_` has changed due to
+  // user interaction, `user_changed_state` will be true.
+  int GetLabelForState(bool user_changed_state) const;
+  void SetLabelForState();
 
   bool icon_visible_ = false;
-  bool protections_on_ = false;
-  bool protections_changed_ = true;
+  CookieControlsState controls_state_ = CookieControlsState::kHidden;
+  bool state_changed_ = true;
   bool did_animate_ = false;
   // Whether we should have a visual indicator highlighting the icon.
   bool should_highlight_ = false;
@@ -101,8 +102,7 @@ class CookieControlsIconView : public PageActionIconView,
   raw_ptr<Browser> browser_ = nullptr;
 
   std::unique_ptr<content_settings::CookieControlsController> controller_;
-  std::unique_ptr<CookieControlsBubbleCoordinator> bubble_coordinator_ =
-      nullptr;
+  raw_ref<CookieControlsBubbleCoordinator> bubble_coordinator_;
   base::ScopedObservation<content_settings::CookieControlsController,
                           content_settings::CookieControlsObserver>
       controller_observation_{this};

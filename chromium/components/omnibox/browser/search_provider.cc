@@ -32,6 +32,7 @@
 #include "components/history/core/browser/keyword_search_term.h"
 #include "components/history/core/browser/keyword_search_term_util.h"
 #include "components/lens/lens_features.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
@@ -237,7 +238,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
   if (base::FeatureList::IsEnabled(omnibox::kAblateSearchProviderWarmup) &&
       (input.IsZeroSuggest() ||
        input.type() == metrics::OmniboxInputType::EMPTY)) {
-    Stop(true, false);
+    Stop(AutocompleteStopReason::kClobbered);
     return;
   }
 
@@ -271,7 +272,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
 
   if (!default_provider && !keyword_provider) {
     // No valid providers.
-    Stop(true, false);
+    Stop(AutocompleteStopReason::kClobbered);
     return;
   }
 
@@ -285,7 +286,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
       !providers_.equal(default_provider_keyword, keyword_provider_keyword)) {
     // Cancel any in-flight suggest requests.
     if (!done_)
-      Stop(false, false);
+      Stop(AutocompleteStopReason::kInteraction);
   }
 
   providers_.set(default_provider_keyword, keyword_provider_keyword);
@@ -306,7 +307,7 @@ void SearchProvider::Start(const AutocompleteInput& input,
       match.allowed_to_be_default_match = true;
       matches_.push_back(match);
     }
-    Stop(true, false);
+    Stop(AutocompleteStopReason::kClobbered);
     return;
   }
 
@@ -344,12 +345,10 @@ void SearchProvider::Start(const AutocompleteInput& input,
   UpdateMatches();
 }
 
-void SearchProvider::Stop(bool clear_cached_results,
-                          bool due_to_user_inactivity) {
-  AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
-
+void SearchProvider::Stop(AutocompleteStopReason stop_reason) {
+  AutocompleteProvider::Stop(stop_reason);
   StopSuggest();
-  if (clear_cached_results)
+  if (stop_reason == AutocompleteStopReason::kClobbered)
     ClearAllResults();
 }
 
@@ -1028,12 +1027,20 @@ void SearchProvider::ConvertResultsToAutocompleteMatches() {
       verbatim.SetAnswerType(match_with_answer->answer_type);
       verbatim.SetRichAnswerTemplate(*match_with_answer->answer_template);
     }
-    // Boost SEARCH_WHAT_YOU_TYPED item if autocomplete is disabled to place it
-    // on top of dropdown.
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+    // Boost SEARCH_WHAT_YOU_TYPED item if autocomplete is disabled and
+    // typed text doesn't look like an URL to place it on top of dropdown.
     if (!client()->GetPrefs()->GetBoolean(
             vivaldiprefs::kAddressBarAutocompleteEnabled)) {
-      verbatim.set_relevance(verbatim.relevance() + 1000);
+      GURL verbatim_url = GURL(trimmed_verbatim);
+      if (!verbatim_url.has_scheme()) {
+        verbatim_url = GURL(u"https://" + trimmed_verbatim);
+      }
+      if (!verbatim_url.is_valid()) {
+        verbatim.set_relevance(verbatim.relevance() + 1000);
+      }
     }
+#endif
     AddMatchToMap(verbatim, GetInput(verbatim.from_keyword()),
                   GetTemplateURL(verbatim.from_keyword()),
                   client()->GetTemplateURLService()->search_terms_data(),

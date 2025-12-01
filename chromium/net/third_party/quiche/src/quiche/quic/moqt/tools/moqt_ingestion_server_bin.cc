@@ -117,7 +117,8 @@ class MoqtIngestionHandler {
 
   // TODO(martinduke): Handle when |announce| is false (UNANNOUNCE).
   std::optional<MoqtAnnounceErrorReason> OnAnnounceReceived(
-      FullTrackName track_namespace, AnnounceEvent /*announce*/) {
+      FullTrackName track_namespace,
+      std::optional<VersionSpecificParameters> /*parameters*/) {
     if (!IsValidTrackNamespace(track_namespace) &&
         !quiche::GetQuicheCommandLineFlag(
             FLAGS_allow_invalid_track_namespaces)) {
@@ -125,7 +126,7 @@ class MoqtIngestionHandler {
                               "disallowed characters; namespace: "
                            << track_namespace;
       return MoqtAnnounceErrorReason{
-          SubscribeErrorCode::kInternalError,
+          RequestErrorCode::kInternalError,
           "Track namespace contains disallowed characters"};
     }
 
@@ -144,7 +145,7 @@ class MoqtIngestionHandler {
       subscribed_namespaces_.erase(it);
       QUICHE_LOG(ERROR) << "Failed to create directory " << directory_path
                         << "; " << status;
-      return MoqtAnnounceErrorReason{SubscribeErrorCode::kInternalError,
+      return MoqtAnnounceErrorReason{RequestErrorCode::kInternalError,
                                      "Failed to create output directory"};
     }
 
@@ -155,7 +156,7 @@ class MoqtIngestionHandler {
       FullTrackName full_track_name = track_namespace;
       full_track_name.AddElement(track);
       session_->JoiningFetch(full_track_name, &it->second, 0,
-                             MoqtSubscribeParameters());
+                             VersionSpecificParameters());
     }
 
     return std::nullopt;
@@ -169,7 +170,7 @@ class MoqtIngestionHandler {
 
     void OnReply(
         const FullTrackName& full_track_name,
-        std::optional<FullSequence> /*largest_id*/,
+        std::optional<Location> /*largest_id*/,
         std::optional<absl::string_view> error_reason_phrase) override {
       if (error_reason_phrase.has_value()) {
         QUICHE_LOG(ERROR) << "Failed to subscribe to the peer track "
@@ -180,10 +181,9 @@ class MoqtIngestionHandler {
     void OnCanAckObjects(MoqtObjectAckFunction) override {}
 
     void OnObjectFragment(const FullTrackName& full_track_name,
-                          FullSequence sequence,
+                          Location sequence,
                           MoqtPriority /*publisher_priority*/,
-                          MoqtObjectStatus /*status*/,
-                          absl::string_view object,
+                          MoqtObjectStatus /*status*/, absl::string_view object,
                           bool /*end_of_message*/) override {
       std::string file_name = absl::StrCat(sequence.group, "-", sequence.object,
                                            ".", full_track_name.tuple().back());

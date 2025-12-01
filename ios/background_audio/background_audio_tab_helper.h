@@ -44,8 +44,6 @@ class BackgroundAudioTabHelper
 
   bool hasInjectedCode = false;
   bool isYoutube = false;
-
-  WEB_STATE_USER_DATA_KEY_DECL();
 };
 
 #endif  // IOS_BACKGROUND_AUDIO_BACKGROUND_AUDIO_TAB_HELPER_H_

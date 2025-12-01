@@ -24,7 +24,9 @@
 #include <EGL/eglext.h>
 #include <GLES/gl.h>
 #include <GLES/glext.h>
-
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+#include <vndk/hardware_buffer.h>
+#endif
 #define PROT_CONTENT_EXT_STR "EGL_EXT_protected_content"
 #define EGL_PROTECTED_CONTENT_EXT 0x32C0
 
@@ -52,6 +54,10 @@ GrBackendFormat GetGLBackendFormat(GrDirectContext* dContext,
 #if __ANDROID_API__ >= 33
         case AHARDWAREBUFFER_FORMAT_R8_UNORM:
             return GrBackendFormats::MakeGL(GR_GL_R8, GR_GL_TEXTURE_EXTERNAL);
+#endif
+#ifdef SK_BUILD_FOR_ANDROID_FRAMEWORK
+        case AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM:
+            return GrBackendFormats::MakeGL(GR_GL_BGRA8, GR_GL_TEXTURE_EXTERNAL);
 #endif
         default:
             if (requireKnownFormat) {
@@ -144,6 +150,16 @@ static GrBackendTexture make_gl_backend_texture(
     }
 
     GrGLuint target = isRenderable ? GR_GL_TEXTURE_2D : GR_GL_TEXTURE_EXTERNAL;
+
+    if (!dContext->priv().caps()->shaderCaps()->fExternalTextureSupport) {
+        // The extension OES_EGL_image_external is mandatory for an
+        // Android-compatible device. See
+        // https://source.android.com/docs/core/graphics/implement-opengl-es
+        //
+        // This path exists to support a RenderDoc fork which supports
+        // OES_EGL_image but not OES_EGL_image_external.
+        target = GR_GL_TEXTURE_2D;
+    }
 
     glBindTexture(target, texID);
     GLenum status = GL_NO_ERROR;

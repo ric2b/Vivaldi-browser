@@ -13,10 +13,13 @@
 #include "chrome/browser/ai/ai_context_bound_object_set.h"
 #include "chrome/browser/ai/ai_create_on_device_session_task.h"
 #include "chrome/browser/ai/ai_language_model.h"
-#include "chrome/browser/ai/ai_on_device_model_component_observer.h"
+#include "chrome/browser/ai/ai_model_download_progress_manager.h"
 #include "chrome/browser/ai/ai_summarizer.h"
 #include "chrome/browser/ai/ai_utils.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_observer.h"
+#include "content/public/browser/weak_document_ptr.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -25,68 +28,50 @@
 #include "third_party/blink/public/mojom/ai/ai_language_model.mojom-forward.h"
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
 #include "third_party/blink/public/mojom/ai/model_download_progress_observer.mojom-forward.h"
+#include "third_party/blink/public/mojom/devtools/console_message.mojom-data-view.h"
 
 namespace base {
 class SupportsUserData;
 }  // namespace base
+
+namespace content {
+class RenderFrameHost;
+}  // namespace content
 
 using blink::mojom::AILanguageCodePtr;
 
 // Owned by the host of the document / service worker via `SupportUserData`.
 // The browser-side implementation of `blink::mojom::AIManager`.
 class AIManager : public base::SupportsUserData::Data,
-                  public blink::mojom::AIManager {
+                  public blink::mojom::AIManager,
+                  public content::RenderWidgetHostObserver {
  public:
   using AILanguageModelOrCreationError =
       base::expected<std::unique_ptr<AILanguageModel>,
                      blink::mojom::AIManagerCreateClientError>;
-  explicit AIManager(content::BrowserContext* browser_context);
+  AIManager(content::BrowserContext* browser_context,
+            component_updater::ComponentUpdateService* component_update_service,
+            content::RenderFrameHost* rfh);
   AIManager(const AIManager&) = delete;
   AIManager& operator=(const AIManager&) = delete;
 
   ~AIManager() override;
 
   void AddReceiver(mojo::PendingReceiver<blink::mojom::AIManager> receiver);
-  void CreateLanguageModelForCloning(
-      base::PassKey<AILanguageModel> pass_key,
-      blink::mojom::AILanguageModelSamplingParamsPtr sampling_params,
-      on_device_model::Capabilities capabilities,
-      AIContextBoundObjectSet& context_bound_object_set,
-      const AILanguageModel::Context& context,
-      mojo::Remote<blink::mojom::AIManagerCreateLanguageModelClient>
-          client_remote,
-      std::unique_ptr<
-          optimization_guide::OptimizationGuideModelExecutor::Session>
-          override_session);
 
   size_t GetContextBoundObjectSetSizeForTesting() {
     return context_bound_object_set_.GetSizeForTesting();
   }
 
   size_t GetDownloadProgressObserversSizeForTesting() {
-    return download_progress_observers_.size();
+    return model_download_progress_manager_.GetNumberOfReporters();
   }
-  void SendDownloadProgressUpdateForTesting(uint64_t downloaded_bytes,
-                                            uint64_t total_bytes);
-
-  void OnTextModelDownloadProgressChange(
-      base::PassKey<AIOnDeviceModelComponentObserver> observer_key,
-      uint64_t downloaded_bytes,
-      uint64_t total_bytes);
 
   // Return the max top k value for the LanguageModel API. Note that this value
   // won't exceed the max top k defined by the underlying on-device model.
   uint32_t GetLanguageModelMaxTopK();
   // Return the max temperature for the LanguageModel API.
   float GetLanguageModelMaxTemperature();
-
- private:
-  FRIEND_TEST_ALL_PREFIXES(AIManagerTest, CanCreate);
-  FRIEND_TEST_ALL_PREFIXES(AIManagerTest, NoUAFWithInvalidOnDeviceModelPath);
-  FRIEND_TEST_ALL_PREFIXES(AISummarizerTest, CreateSummarizerWithoutService);
-  FRIEND_TEST_ALL_PREFIXES(AIManagerIsLanguagesSupportedTest, OneVector);
-  FRIEND_TEST_ALL_PREFIXES(AIManagerIsLanguagesSupportedTest,
-                           TwoVectorsAndOneCode);
 
   // Returns if all of the language codes in `languages` are supported.
   static bool IsLanguagesSupported(
@@ -130,41 +115,60 @@ class AIManager : public base::SupportsUserData::Data,
       mojo::PendingRemote<blink::mojom::ModelDownloadProgressObserver>
           observer_remote) override;
 
+  // Check whether optimization guide supports the feature matching `capability`
+  // and modalities specified by `capabilities`; yields a result to `callback`.
+  void CanCreateSession(optimization_guide::ModelBasedCapabilityKey capability,
+                        on_device_model::Capabilities capabilities,
+                        CanCreateLanguageModelCallback callback);
+
+  bool IsBuiltInAIAPIsEnabledByPolicy();
+
+ private:
   void OnModelPathValidationComplete(const std::string& model_path,
                                      bool is_valid_path);
 
-  void CanCreateSession(optimization_guide::ModelBasedCapabilityKey capability,
-                        CanCreateLanguageModelCallback callback);
+  // Creates an `AILanguageModel`, as a new session. Clones are created
+  // internally within the `AILanguageModel` object.
+  void CreateLanguageModelInternal(
+      mojo::PendingRemote<blink::mojom::AIManagerCreateLanguageModelClient>
+          client,
+      blink::mojom::AILanguageModelCreateOptionsPtr options,
+      base::WeakPtr<optimization_guide::ModelClient> model_client);
 
-  // Creates an `AILanguageModel`, either as a new session, or as a clone of
-  // an existing session with its context copied. When this method is called
-  // during the session cloning, the optional `context` variable should be set
-  // to the existing `AILanguageModel`'s session.
-  // The `CreateLanguageModelOnDeviceSessionTask` will be returned and the
-  // caller is responsible for keeping it alive if the task is waiting for the
-  // model to be available.
-  std::unique_ptr<CreateLanguageModelOnDeviceSessionTask>
-  CreateLanguageModelInternal(
-      blink::mojom::AILanguageModelSamplingParamsPtr sampling_params,
+  // content::RenderWidgetHostObserver:
+  void RenderWidgetHostVisibilityChanged(content::RenderWidgetHost* widget_host,
+                                         bool became_visible) override;
+  void RenderWidgetHostDestroyed(
+      content::RenderWidgetHost* widget_host) override;
+
+  void FinishCanCreateSession(
+      optimization_guide::ModelBasedCapabilityKey capability,
       on_device_model::Capabilities capabilities,
-      AIContextBoundObjectSet& context_bound_object_set,
-      base::OnceCallback<void(AILanguageModelOrCreationError)> callback,
-      const std::optional<const AILanguageModel::Context>& context =
-          std::nullopt,
-      std::unique_ptr<
-          optimization_guide::OptimizationGuideModelExecutor::Session>
-          override_session = nullptr);
+      CanCreateLanguageModelCallback callback,
+      optimization_guide::OnDeviceModelEligibilityReason eligibility);
 
-  void SendDownloadProgressUpdate(uint64_t downloaded_bytes,
-                                  uint64_t total_bytes);
+  void AddMessageToConsoleForUnexpectedLanguage(
+      blink::mojom::ConsoleMessageLevel level,
+      std::string message);
 
   mojo::ReceiverSet<blink::mojom::AIManager> receivers_;
-  mojo::RemoteSet<blink::mojom::ModelDownloadProgressObserver>
-      download_progress_observers_;
-  std::unique_ptr<AIOnDeviceModelComponentObserver> component_observer_;
 
+  on_device_ai::AIModelDownloadProgressManager model_download_progress_manager_;
+
+  raw_ref<component_updater::ComponentUpdateService> component_update_service_;
   AIContextBoundObjectSet context_bound_object_set_;
   raw_ptr<content::BrowserContext> browser_context_;
+
+  base::ScopedObservation<content::RenderWidgetHost,
+                          content::RenderWidgetHostObserver>
+      widget_observer_{this};
+
+  std::unique_ptr<optimization_guide::ModelBrokerClient> model_broker_client_;
+
+  content::WeakDocumentPtr rfh_;
+
+  bool did_add_warning_console_message_for_unexpected_language_ = false;
+  bool did_add_error_console_message_for_unexpected_language_ = false;
 
   base::WeakPtrFactory<AIManager> weak_factory_{this};
 };

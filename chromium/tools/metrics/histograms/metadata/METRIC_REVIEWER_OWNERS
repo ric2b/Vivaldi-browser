@@ -38,6 +38,7 @@ wutao@chromium.com
 xiaohuic@chromium.org
 # attribution_reporting
 csharrison@chromium.org
+linnan@chromium.org
 # autofill
 fleimgruber@google.com
 jihadghanna@google.com
@@ -194,6 +195,8 @@ mcrouse@chromium.org
 perrier@chromium.org
 andreaxg@google.com
 iwells@google.com
+bryantchandler@chromium.org
+sanaakbani@google.com
 # gpu
 jonross@chromium.org
 # hang_watcher
@@ -229,7 +232,7 @@ tby@chromium.org
 # login
 jorgelo@chromium.org
 # mac
-bur@google.com
+avi@chromium.org
 mek@chromium.org
 # magic_stack
 ckitagawa@chromium.org
@@ -286,6 +289,7 @@ tbansal@chromium.org
 # omnibox
 ender@google.com
 jdonnelly@chromium.org
+mahmadi@chromium.org
 manukh@chromium.org
 toyoshim@chromium.org
 # oobe
@@ -432,6 +436,8 @@ alexilin@chromium.org
 bsazonov@chromium.org
 myuu@google.com
 rsult@google.com
+# skia
+robertphillips@google.com
 # software
 drubery@chromium.org
 thefrog@chromium.org
@@ -441,8 +447,7 @@ fdoray@chromium.org
 spvw@chromium.org
 # storage
 ayui@chromium.org
-# structured_metrics
-jongahn@chromium.org
+leimy@chromium.org
 # subresource
 csharrison@chromium.org
 tbansal@chromium.org

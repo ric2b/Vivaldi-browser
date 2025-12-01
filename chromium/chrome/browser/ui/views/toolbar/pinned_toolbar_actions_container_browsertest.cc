@@ -8,8 +8,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/translate/translate_test_utils.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
 #include "chrome/browser/ui/views/toolbar/pinned_action_toolbar_button.h"
@@ -35,6 +37,9 @@ class PinnedToolbarActionsContainerBrowserTest : public InProcessBrowserTest {
     PinnedToolbarActionsModel* const actions_model =
         PinnedToolbarActionsModel::Get(browser()->profile());
     actions_model->UpdatePinnedState(kActionShowChromeLabs, false);
+    if (features::HasTabSearchToolbarButton()) {
+      actions_model->UpdatePinnedState(kActionTabSearch, false);
+    }
     views::test::WaitForAnimatingLayoutManager(container());
     // OS integration is needed to be able to launch web applications. This
     // override ensures OS integration doesn't leave any traces.

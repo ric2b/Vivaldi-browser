@@ -13,31 +13,33 @@
 
 namespace viv_importer {
 
-void DetectOperaMailProfiles(std::vector<importer::SourceProfile>* profiles) {
-  importer::SourceProfile opera;
+void DetectOperaMailProfiles(std::vector<user_data_importer::SourceProfile>* profiles) {
+  user_data_importer::SourceProfile opera;
   opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA_MAIL);
-  opera.importer_type = importer::TYPE_OPERA;
+  opera.importer_type = user_data_importer::TYPE_OPERA;
   opera.source_path = GetProfileDir();
   opera.mail_path = GetMailDirectory();
   if (!opera.mail_path.empty()) {
-    opera.services_supported = importer::EMAIL;
+    opera.services_supported = user_data_importer::EMAIL;
     profiles->push_back(opera);
   }
 }
 
-void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
-  importer::SourceProfile opera;
+void DetectOperaProfiles(
+    std::vector<user_data_importer::SourceProfile>* profiles) {
+  user_data_importer::SourceProfile opera;
   opera.importer_name = l10n_util::GetStringUTF16(IDS_IMPORT_FROM_OPERA);
-  opera.importer_type = importer::TYPE_OPERA;
+  opera.importer_type = user_data_importer::TYPE_OPERA;
   opera.source_path = GetProfileDir();
   opera.mail_path = GetMailDirectory();
 #if BUILDFLAG(IS_WIN)
   opera.app_path = GetOperaInstallPathFromRegistry();
 #endif
-  opera.services_supported = importer::SPEED_DIAL | importer::FAVORITES |
-                             importer::NOTES | importer::PASSWORDS;
+  opera.services_supported =
+      user_data_importer::SPEED_DIAL | user_data_importer::FAVORITES |
+      user_data_importer::NOTES | user_data_importer::PASSWORDS;
   if (!opera.mail_path.empty())
-    opera.services_supported |= importer::EMAIL;
+    opera.services_supported |= user_data_importer::EMAIL;
 
 #if 0
   // Check if this profile need the master password
@@ -48,14 +50,14 @@ void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles) {
     const base::Value::Dict& inifile = inifile_parser.root();
     std::optional<int> val = inifile.FindInt("Security Prefs.Use Paranoid Mailpassword");
     if (val && *val) {
-      opera.services_supported |= importer::MASTER_PASSWORD;
+      opera.services_supported |= user_data_importer::MASTER_PASSWORD;
     }
   }
 #else
   // NOTE(pettern):
   // If we import from a different profile, we can't check the default
   // profile prefs file. Disable it for now until we have a better solution.
-  opera.services_supported |= importer::MASTER_PASSWORD;
+  opera.services_supported |= user_data_importer::MASTER_PASSWORD;
 #endif
   if (!opera.source_path.empty())
     profiles->push_back(opera);

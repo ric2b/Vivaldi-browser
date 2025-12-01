@@ -186,12 +186,17 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     return true;
   }
 
-  bool is_third_party = IsThirdParty(request->request.url, document_origin);
+  PartyMatcher party_matcher =
+      GetPartyMatcher(request->request.url, document_origin);
+  const flat::ResourceType resource_type = ResourceTypeFromRequest(*request);
+  bool block_ping_handling =
+      block_pings_ && resource_type == flat::ResourceType_PING;
 
   // For requests happening outside of pages, we can't rely on the activation
   // checks to discard requests from an allow-listed origin. Just check it
   // directly instead.
-  if (!frame && !IsOriginWanted(rule_service_.get(), group_, document_origin)) {
+  if (!frame && !block_ping_handling &&
+      !IsOriginWanted(rule_service_.get(), group_, document_origin)) {
     std::move(callback).Run(RequestFilter::kAllow, false, GURL());
     return true;
   }
@@ -214,39 +219,47 @@ bool AdBlockRequestFilter::OnBeforeRequest(
                                                               activations);
   }
 
-  std::optional<flat::Decision> document_decision =
-      activations[flat::ActivationType_DOCUMENT].GetDecision();
+  const RulesIndex::ActivationResult& document_activations =
+      activations.by_type[flat::ActivationType_DOCUMENT];
+  if (document_activations.GetDecision().value_or(flat::Decision_MODIFY) ==
+          flat::Decision_PASS &&
+      document_activations.rule_and_source &&
+      rule_service_->GetKnownSourcesHandler()->GetPresetIdForSourceId(
+          group_, document_activations.rule_and_source->source_id) ==
+          base::Uuid::ParseLowercase(
+              adblock_filter::KnownRuleSourcesHandler::kPartnersListUuid)) {
+    block_ping_handling = false;
+  }
 
   // Even if we are to allow the whole document, we keep handling rules as
   // usual, in case we encounter some ad attribution rules.
-  bool allow_whole_document =
-      (document_decision && document_decision == flat::Decision_PASS);
+  bool allow_whole_document = activations.GetDocumentDecision().value_or(
+                                  flat::Decision_MODIFY) == flat::Decision_PASS;
 
   bool disable_generic_rules =
-      activations[flat::ActivationType_GENERIC_BLOCK].GetDecision().value_or(
-          flat::Decision_MODIFY) == flat::Decision_PASS;
+      activations.by_type[flat::ActivationType_GENERIC_BLOCK]
+          .GetDecision()
+          .value_or(flat::Decision_MODIFY) == flat::Decision_PASS;
 
-  const flat::ResourceType resource_type = ResourceTypeFromRequest(*request);
   std::optional<RulesIndex::RuleAndSource> rule_and_source;
-  if (!is_main_frame || allow_blocking_documents_) {
-    rule_and_source =
-        rules_index->FindMatchingBeforeRequestRule(
-            request->request.url, document_origin, resource_type,
-            is_third_party, disable_generic_rules,
-            base::BindRepeating(&AdBlockRequestFilter::DoesAdAttributionMatch,
-                                base::Unretained(this), frame));
+  if (!allow_whole_document && (!is_main_frame || allow_blocking_documents_)) {
+    rule_and_source = rules_index->FindMatchingBeforeRequestRule(
+        request->request.url, document_origin, resource_type, party_matcher,
+        disable_generic_rules,
+        base::BindRepeating(&AdBlockRequestFilter::DoesAdAttributionMatch,
+                            base::Unretained(this), frame));
   }
 
   CHECK(!rule_and_source ||
         rule_and_source->rule->options() & flat::OptionFlag_MODIFY_BLOCK);
 
-  if (!rule_and_source ||
-      rule_and_source->rule->decision() == flat::Decision_PASS ||
-      allow_whole_document) {
+  if ((!rule_and_source && !block_ping_handling) ||
+      (rule_and_source &&
+       rule_and_source->rule->decision() == flat::Decision_PASS)) {
     RulesIndex::FoundModifiersByType modifiers_by_type =
         rules_index->FindMatchingModifierRules(
             RulesIndex::kAllowedRequest, request->request.url, document_origin,
-            resource_type, is_third_party, disable_generic_rules);
+            resource_type, party_matcher, disable_generic_rules);
     if (is_main_frame) {
       RulesIndex::FoundModifiers& ad_query_trigger_results =
           modifiers_by_type[flat::Modifier_AD_QUERY_TRIGGER];
@@ -274,14 +287,14 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     return true;
   }
 
-  if (frame)
+  if (frame && rule_and_source)
     rule_service_->GetStateAndLogsImpl().OnUrlBlocked(
         group_, document_origin, request->request.url, frame);
 
   RulesIndex::FoundModifiersByType modifiers_by_type =
       rules_index->FindMatchingModifierRules(
           RulesIndex::kBlockedRequest, request->request.url, document_origin,
-          resource_type, is_third_party, disable_generic_rules);
+          resource_type, party_matcher, disable_generic_rules);
 
   RulesIndex::FoundModifiers& redirects =
       modifiers_by_type[flat::Modifier_REDIRECT];
@@ -365,7 +378,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
     return true;
   }
 
-  bool is_third_party = IsThirdParty(request->request.url, document_origin);
+  PartyMatcher party_matcher =
+      GetPartyMatcher(request->request.url, document_origin);
   bool is_frame =
       destination == network::mojom::RequestDestination::kDocument ||
       destination == network::mojom::RequestDestination::kIframe ||
@@ -386,8 +400,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
           base::BindRepeating(&IsOriginWanted, rule_service_.get(), group_),
           frame, url_for_activations, origin_for_activations);
 
-  if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
-          flat::Decision_MODIFY) == flat::Decision_PASS) {
+  if (activations.GetDocumentDecision().value_or(flat::Decision_MODIFY) ==
+      flat::Decision_PASS) {
     std::move(callback).Run(RequestFilter::kAllow, false, GURL(),
                             vivaldi::RequestFilter::ResponseHeaderChanges());
     return true;
@@ -396,8 +410,8 @@ bool AdBlockRequestFilter::OnHeadersReceived(
   RulesIndex::FoundModifiersByType modifiers_by_type =
       rules_index->FindMatchingModifierRules(
           RulesIndex::kHeadersReceived, request->request.url, document_origin,
-          flat::ResourceType_ANY, is_third_party,
-          (activations[flat::ActivationType_GENERIC_BLOCK]
+          flat::ResourceType_ANY, party_matcher,
+          (activations.by_type[flat::ActivationType_GENERIC_BLOCK]
                .GetDecision()
                .value_or(flat::Decision_MODIFY) == flat::Decision_PASS));
 

@@ -105,29 +105,43 @@ if (is_linux && use_dbus) {
 }
 
 update_template_instance("//third_party/search_engines_data:prepopulated_engines") {
-  namespace = "TemplateURLPrepopulateDataOriginal"
   source = "//vivaldi/components/search_engines/search_engines.json"
 }
 
 update_target("//third_party/search_engines_data:prepopulated_engines_action") {
   # change the actual output folder from gen/vivaldi/components/search_engines
   # to gen/components/search_engines
-  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/original/")]
+  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/")]
 
   # updates the path of the resulting files to be compiled to match the new
   # output folder
   outputs = []
   outputs = [
-    "$root_gen_dir/third_party/search_engines_data/original/search_engines.cc",
-    "$root_gen_dir/third_party/search_engines_data/original/search_engines.h",
+    "$root_gen_dir/third_party/search_engines_data/search_engines.cc",
+    "$root_gen_dir/third_party/search_engines_data/search_engines.h",
+  ]
+}
+
+update_template_instance("//third_party/search_engines_data:regional_settings") {
+  source = "//vivaldi/components/search_engines/regional_settings.json"
+}
+
+update_target("//third_party/search_engines_data:regional_settings_action") {
+  # change the actual output folder from gen/vivaldi/components/search_engines
+  # to gen/components/search_engines
+  args += ["-b", rebase_path("$root_gen_dir/third_party/search_engines_data/")]
+
+  # updates the path of the resulting files to be compiled to match the new
+  # output folder
+  outputs = []
+  outputs = [
+    "$root_gen_dir/third_party/search_engines_data/regional_settings.cc",
+    "$root_gen_dir/third_party/search_engines_data/regional_settings.h",
   ]
 }
 
 update_target("//components/search_engines:search_engines") {
   if (!is_android) {
-    sources -= [
-      "search_engine_choice/generated_marketing_snippets.cc",
-    ]
     sources += [
       "//vivaldi/components/search_engines/vivaldi_marketting_snippets_and_engine_resource_ids.cc"
     ]
@@ -139,13 +153,12 @@ update_target("//components/search_engines:search_engines") {
     "//vivaldi/components/search_engines/vivaldi_template_url_service.cc",
     "//vivaldi/components/search_engines/vivaldi_template_url_service.h"
   ]
-
-  public_deps -= [
-    "//third_party/search_engines_data:regional_settings",
-  ]
 }
+
 update_target("//components/search_engines:search_engine_utils") {
   sources += [
+    "//vivaldi/components/search_engines/default_search_engine_observer.h",
+    "//vivaldi/components/search_engines/default_search_engine_observer.cc",
     "//vivaldi/components/search_engines/parsed_search_engines.h",
     "//vivaldi/components/search_engines/parsed_search_engines.cc",
     "//vivaldi/components/search_engines/search_engines_manager.h",
@@ -181,19 +194,6 @@ update_target("//components/search_engines:search_engine_utils") {
   ]
 }
 
-if (!is_android) {
-  update_target("//components/search_engines:generate_search_engine_icons") {
-    inputs -= [
-      "//third_party/search_engines_data/resources/definitions/prepopulated_engines.json",
-      "//third_party/search_engines_data/resources/definitions/regional_settings.json",
-    ]
-    inputs += [
-      "//vivaldi/components/search_engines/regional_settings.json",
-      "//vivaldi/components/search_engines/search_engines.json",
-    ]
-  }
-}
-
 if (!is_ios) {
   update_target("//third_party/blink/renderer/platform:platform") {
     sources -= [
@@ -204,12 +204,6 @@ if (!is_ios) {
       "//components/search_engines:search_engine_utils"
       ]
   }
-}
-
-update_target("//components/shared_highlighting/core/common:common") {
-  deps -= [
-    "//components/search_engines:search_engine_utils"
-  ]
 }
 
 if (vivaldi_build_tests) {

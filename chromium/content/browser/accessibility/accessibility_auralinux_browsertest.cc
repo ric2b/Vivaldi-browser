@@ -9,6 +9,7 @@
 
 #include "base/functional/callback_helpers.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -208,7 +209,7 @@ AtkText* AccessibilityAuraLinuxBrowserTest::GetScrollableInputField() {
 
   // Set the caret before the last character.
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
+      shell()->web_contents(),
       ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED);
   long caret_offset = InputContentsString().size() - 1;
   ExecuteScript(base::ASCIIToUTF16(
@@ -263,11 +264,7 @@ AtkText* AccessibilityAuraLinuxBrowserTest::FindNode(AtkObject* root,
 
 IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                        AuraLinuxBrowserAccessibleParent) {
-  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
-                                         ax::mojom::Event::kLoadComplete);
-  EXPECT_TRUE(NavigateToURL(shell(), GURL("data:text/html,")));
-  ASSERT_TRUE(waiter.WaitForNotification());
+  LoadInitialAccessibilityTreeFromHtml({});
 
   // Get the BrowserAccessibilityManager.
   WebContentsImpl* web_contents =
@@ -349,7 +346,6 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   AtkText* atk_text = SetUpInputField();
   ASSERT_NE(nullptr, atk_text);
   AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
                                          ax::mojom::Event::kValueChanged);
   // Place an e acute, and two emoticons in the text field.
   ExecuteScript(
@@ -436,7 +432,6 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   AtkText* atk_text = SetUpTextareaField();
 
   AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
                                          ax::mojom::Event::kValueChanged);
   // Add a blank line at the end of the textarea.
   ExecuteScript(
@@ -894,8 +889,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                             ATK_XY_SCREEN);
 
   AccessibilityNotificationWaiter location_changed_waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kLocationChanged);
+      shell()->web_contents(), ax::mojom::Event::kLocationChanged);
   atk_component_scroll_to_point(atk_component, ATK_XY_PARENT, 0, 0);
   ASSERT_TRUE(location_changed_waiter.WaitForNotification());
 
@@ -974,8 +968,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   ASSERT_EQ(ATK_ROLE_IMAGE, atk_object_get_role(target2));
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kScrollPositionChanged);
+      shell()->web_contents(), ax::mojom::Event::kScrollPositionChanged);
   ASSERT_TRUE(
       atk_component_scroll_to(ATK_COMPONENT(target), ATK_SCROLL_TOP_EDGE));
   ASSERT_TRUE(waiter.WaitForNotification());
@@ -1029,8 +1022,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   // target node like atk_component_scroll_to, so we test that here.
   ASSERT_TRUE(ATK_IS_TEXT(target3));
   AccessibilityNotificationWaiter waiter3(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kScrollPositionChanged);
+      shell()->web_contents(), ax::mojom::Event::kScrollPositionChanged);
   atk_text_set_caret_offset(ATK_TEXT(target3), 0);
   ASSERT_TRUE(waiter3.WaitForNotification());
 
@@ -1085,8 +1077,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   ASSERT_EQ(ATK_ROLE_SECTION, atk_object_get_role(target1));
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kScrollPositionChanged);
+      shell()->web_contents(), ax::mojom::Event::kScrollPositionChanged);
   ASSERT_TRUE(atk_text_scroll_substring_to(ATK_TEXT(target1), 1, 2,
                                            ATK_SCROLL_TOP_EDGE));
   ASSERT_TRUE(waiter.WaitForNotification());
@@ -1152,8 +1143,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                                  nullptr, ATK_XY_SCREEN);
 
   AccessibilityNotificationWaiter location_changed_waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kLocationChanged);
+      shell()->web_contents(), ax::mojom::Event::kLocationChanged);
   atk_text_scroll_substring_to_point(atk_text, 1, 2, ATK_XY_PARENT, 0, 0);
   ASSERT_TRUE(location_changed_waiter.WaitForNotification());
 
@@ -1213,7 +1203,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   EXPECT_EQ(0, end_offset);
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
+      shell()->web_contents(),
       ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED);
   int contents_string_length = static_cast<int>(InputContentsString().size());
   start_offset = 0;
@@ -1270,8 +1260,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   ASSERT_EQ(14, n_characters);
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
 
   // First select the whole of the text found in the hypertext.
   int start_offset = 0;
@@ -1431,8 +1420,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                    &caret_moved_signals);
 
   auto waiter = std::make_unique<AccessibilityNotificationWaiter>(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
   atk_text_set_caret_offset(ATK_TEXT(div), 0);
   ASSERT_TRUE(waiter->WaitForNotification());
   ASSERT_EQ(selection_changed_signals, 0);
@@ -1496,8 +1484,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                    &saw_selection_change_in_child2);
 
   AccessibilityNotificationWaiter selection_waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
   ExecuteScript(
       u"let parent = document.getElementById('parent');"
       u"let child1 = document.getElementById('child1');"
@@ -1573,8 +1560,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   g_free(text);
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
 
   // Caret can't be set inside generated content, it will go to the closest
   // allowed place. Ordered the targets so that the caret will always actually
@@ -1629,7 +1615,7 @@ IN_PROC_BROWSER_TEST_F(
   atk_text_set_caret_offset(ATK_TEXT(child_2), 0);
 
   auto waiter = std::make_unique<AccessibilityNotificationWaiter>(
-      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+      shell()->web_contents(), ax::mojom::Event::kFocus);
 
   // Now send two tab presses to advance the focus.
   // TODO(mrobinson): For some reason, in the test harness two tabs are
@@ -1706,8 +1692,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   ASSERT_EQ(atk_object_get_role(paragraph), ATK_ROLE_PARAGRAPH);
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
 
   EXPECT_TRUE(atk_text_set_selection(ATK_TEXT(paragraph), 0, 0, 5));
   ASSERT_TRUE(waiter.WaitForNotification());
@@ -1745,8 +1730,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   AtkObject* button = atk_object_ref_accessible_child(document, 1);
   ASSERT_EQ(atk_object_get_role(button), ATK_ROLE_PUSH_BUTTON);
 
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ax::mojom::Event::kFocus);
 
   EXPECT_TRUE(atk_text_set_selection(ATK_TEXT(paragraph), 0, 0, 11));
   atk_component_grab_focus(ATK_COMPONENT(button));
@@ -1785,8 +1770,8 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   AtkObject* button = atk_object_ref_accessible_child(document, 1);
   ASSERT_EQ(atk_object_get_role(button), ATK_ROLE_PUSH_BUTTON);
 
-  AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+  AccessibilityNotificationWaiter waiter(shell()->web_contents(),
+                                         ax::mojom::Event::kFocus);
 
   EXPECT_TRUE(atk_text_set_selection(ATK_TEXT(paragraph), 0, 0, 11));
   atk_component_grab_focus(ATK_COMPONENT(button));
@@ -1827,8 +1812,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   ASSERT_FALSE(IsAtkObjectFocused(edit));
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
 
   EXPECT_TRUE(atk_text_set_selection(ATK_TEXT(edit), 0, 1, 2));
   ASSERT_TRUE(waiter.WaitForNotification());
@@ -1886,12 +1870,12 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   EXPECT_NE(field_4, nullptr);
 
   auto waiter = std::make_unique<AccessibilityNotificationWaiter>(
-      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+      shell()->web_contents(), ax::mojom::Event::kFocus);
   atk_component_grab_focus(ATK_COMPONENT(field_1));
   ASSERT_TRUE(waiter->WaitForNotification());
 
   waiter = std::make_unique<AccessibilityNotificationWaiter>(
-      shell()->web_contents(), ui::kAXModeComplete,
+      shell()->web_contents(),
       ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED);
   EXPECT_TRUE(atk_text_set_selection(ATK_TEXT(field_1), 0, 0, 5));
   ASSERT_TRUE(waiter->WaitForNotification());
@@ -1908,7 +1892,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   verify_selection(field_4, nullptr);
 
   waiter = std::make_unique<AccessibilityNotificationWaiter>(
-      shell()->web_contents(), ui::kAXModeComplete, ax::mojom::Event::kFocus);
+      shell()->web_contents(), ax::mojom::Event::kFocus);
   atk_component_grab_focus(ATK_COMPONENT(field_1));
   ASSERT_TRUE(waiter->WaitForNotification());
 
@@ -1979,7 +1963,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
       AdaptGCallbackToSetFlag(&saw_caret_move_in_document));
 
   AccessibilityNotificationWaiter selection_waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
+      shell()->web_contents(),
       ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED);
   ExecuteScript(
       u"let selection = document.getSelection();"
@@ -2001,8 +1985,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   saw_caret_move_in_div = false;
 
   AccessibilityNotificationWaiter document_selection_waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ax::mojom::Event::kDocumentSelectionChanged);
+      shell()->web_contents(), ax::mojom::Event::kDocumentSelectionChanged);
   atk_text_set_caret_offset(ATK_TEXT(anonymous_block), 3);
   ASSERT_TRUE(document_selection_waiter.WaitForNotification());
 
@@ -2085,7 +2068,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
                    &caret_position_from_event);
 
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
+      shell()->web_contents(),
       ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED);
   atk_text_set_caret_offset(ATK_TEXT(div1), 4);
   ASSERT_TRUE(waiter.WaitForNotification());
@@ -2170,8 +2153,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   // Change the heading to a group. This will cause it to get a new AXObject on
   // the renderer side, but the id will remain the same.
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
-      ui::AXEventGenerator::Event::ROLE_CHANGED);
+      shell()->web_contents(), ui::AXEventGenerator::Event::ROLE_CHANGED);
   ExecuteScript(u"document.querySelector('h1').setAttribute('role', 'group');");
   ASSERT_TRUE(waiter.WaitForNotification());
 
@@ -2208,7 +2190,6 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
   // Change the block to a inline_block. This will cause it to get a new
   // AXObject on the renderer side, but the id will remain the same.
   AccessibilityNotificationWaiter waiter(shell()->web_contents(),
-                                         ui::kAXModeComplete,
                                          ax::mojom::Event::kEndOfTest);
   ExecuteScript(
       u"document.querySelector('main').style.display = 'inline-block';");
@@ -2346,7 +2327,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityAuraLinuxBrowserTest,
       R"HTML(<input type="number" value="12">
       )HTML");
   AccessibilityNotificationWaiter waiter(
-      shell()->web_contents(), ui::kAXModeComplete,
+      shell()->web_contents(),
       ui::AXEventGenerator::Event::TEXT_SELECTION_CHANGED);
   auto caret_callback =
       G_CALLBACK(+[](AtkText*, int new_position, int* out_caret_position) {

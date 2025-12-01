@@ -16,6 +16,7 @@
 #import "sdk/objc/native/api/audio_device_module.h"
 #endif
 
+#include "api/environment/environment_factory.h"
 #include "api/scoped_refptr.h"
 
 typedef int32_t (^NeedMorePlayDataBlock)(const size_t nSamples,
@@ -129,7 +130,7 @@ static const NSUInteger kNumIgnoreFirstCallbacks = 50;
 
 @interface RTCAudioDeviceModuleTests : XCTestCase {
   bool _testEnabled;
-  rtc::scoped_refptr<webrtc::AudioDeviceModule> audioDeviceModule;
+  webrtc::scoped_refptr<webrtc::AudioDeviceModule> audioDeviceModule;
   MockAudioTransport mock;
 }
 
@@ -156,7 +157,8 @@ static const NSUInteger kNumIgnoreFirstCallbacks = 50;
   _testEnabled = true;
 #endif
 
-  audioDeviceModule = webrtc::CreateAudioDeviceModule();
+  audioDeviceModule =
+      webrtc::CreateAudioDeviceModule(webrtc::CreateEnvironment());
   XCTAssertEqual(0, audioDeviceModule->Init());
   XCTAssertEqual(
       0, audioDeviceModule->GetPlayoutAudioParameters(&playoutParameters));
@@ -263,8 +265,8 @@ static const NSUInteger kNumIgnoreFirstCallbacks = 50;
   XCTSkipIf(!_testEnabled);
   // Create and initialize a second/extra ADM instance. The default ADM is
   // created by the test harness.
-  rtc::scoped_refptr<webrtc::AudioDeviceModule> secondAudioDeviceModule =
-      webrtc::CreateAudioDeviceModule();
+  webrtc::scoped_refptr<webrtc::AudioDeviceModule> secondAudioDeviceModule =
+      webrtc::CreateAudioDeviceModule(webrtc::CreateEnvironment());
   XCTAssertNotEqual(secondAudioDeviceModule.get(), nullptr);
   XCTAssertEqual(0, secondAudioDeviceModule->Init());
 

@@ -201,7 +201,12 @@ class TestImporter:
             return 0
         testlist_path = self.finder.path_from_web_tests(
             "TestLists", "android.filter")
-        _log.info('Updating testlist based on file changes.')
+        _log.info('Updating android.filter based on file changes.')
+        self.update_testlist_with_idlharness_changes(testlist_path)
+
+        testlist_path = self.finder.path_from_web_tests(
+            "TestLists", "webview.filter")
+        _log.info('Updating webview.filter based on file changes.')
         self.update_testlist_with_idlharness_changes(testlist_path)
 
         self._commit_changes(commit_message)
@@ -640,6 +645,7 @@ class TestImporter:
         # Prevent FindIt from auto-reverting import CLs.
         description += 'NOAUTOREVERT=true\n'
         description += 'No-Export: true\n'
+        description += 'Validate-Test-Flakiness: skip\n'
 
         # If this starts blocking the importer unnecessarily, revert
         # https://chromium-review.googlesource.com/c/chromium/src/+/2451504

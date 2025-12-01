@@ -344,7 +344,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 
 <histogram name="FamilyLinkUser.BlockedSiteVerifyItsYouInterstitialState"
     enum="FamilyLinkUserReauthenticationInterstitialState"
-    expires_after="2025-08-17">
+    expires_after="2025-10-19">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -392,7 +392,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyLinkUser.LocalWebApprovalCompleteRequestTotalDuration"
-    units="ms" expires_after="2025-09-14">
+    units="ms" expires_after="2025-11-16">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -417,7 +417,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyLinkUser.LocalWebApprovalOutcome"
-    enum="FamilyLinkUserLocalWebApprovalOutcome" expires_after="2025-09-14">
+    enum="FamilyLinkUserLocalWebApprovalOutcome" expires_after="2025-11-16">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -429,7 +429,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyLinkUser.LocalWebApprovalResult"
-    enum="FamilyLinkUserLocalWebApprovalResult" expires_after="2025-09-14">
+    enum="FamilyLinkUserLocalWebApprovalResult" expires_after="2025-11-16">
   <owner>agawronska@chromium.org</owner>
   <owner>cros-families-eng@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -455,7 +455,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 
 <histogram name="FamilyLinkUser.SubframeYoutubeReauthenticationInterstitial"
     enum="FamilyLinkUserReauthenticationInterstitialState"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>anthie@google.com</owner>
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -527,7 +527,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteList.Conflict" enum="BooleanHasConflict"
-    expires_after="2025-07-26">
+    expires_after="2025-09-28">
   <owner>anthie@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -539,7 +539,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyUser.ManagedSiteList.SubdomainConflictType"
-    enum="FamilyLinkFilteringSubdomainConflictType" expires_after="2025-07-26">
+    enum="FamilyLinkFilteringSubdomainConflictType" expires_after="2025-09-28">
   <owner>anthie@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -658,7 +658,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="FamilyUser.WebFilterType.PerRecord"
-    enum="FamilyLinkWebFilterType" expires_after="2025-08-10">
+    enum="FamilyLinkWebFilterType" expires_after="2025-10-12">
   <owner>fernandex@chromium.org</owner>
   <owner>agawronska@chromium.org</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -803,7 +803,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 
 <histogram
     name="SupervisedUsers.ClassifyUrlThrottle.EarlierThanContentResponse"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -822,7 +822,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="SupervisedUsers.ClassifyUrlThrottle.FinalStatus"
-    enum="ClassifyUrlThrottleFinalStatus" expires_after="2025-07-27">
+    enum="ClassifyUrlThrottleFinalStatus" expires_after="2025-09-28">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -839,7 +839,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="SupervisedUsers.ClassifyUrlThrottle.LaterThanContentResponse"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -882,8 +882,20 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
   </summary>
 </histogram>
 
+<histogram name="SupervisedUsers.ClassifyUrlThrottle.UseCase"
+    enum="ClassifyUrlThrottleUseCase" expires_after="2026-04-01">
+  <owner>tju@google.com</owner>
+  <owner>chrome-kids-eng@google.com</owner>
+  <summary>
+    Records the use case of the navigation throttle: the reason why it was
+    enabled.
+
+    It is explaining what user configuration caused the throttle to be enabled.
+  </summary>
+</histogram>
+
 <histogram name="SupervisedUsers.ExtensionApprovalsCountOnExtensionToggle"
-    units="Extensions" expires_after="2025-08-24">
+    units="Extensions" expires_after="2025-10-26">
   <owner>anthie@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
@@ -1050,7 +1062,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 
 <histogram
     name="SupervisedUsers.SkipParentApprovalToInstallExtensions.PerRecord"
-    enum="SupervisedUserToggleState" expires_after="2025-09-07">
+    enum="SupervisedUserToggleState" expires_after="2025-11-09">
   <owner>anthie@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <owner>cros-families-eng@google.com</owner>
@@ -1116,7 +1128,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="{RequestType}.AuthError" enum="GoogleServiceAuthError"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>ljjlee@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -1128,7 +1140,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="{RequestType}.HttpStatusOrNetError"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-09-14">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-11-16">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -1138,7 +1150,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
   <token key="RequestType" variants="ProtoFetcherRequestType"/>
 </histogram>
 
-<histogram name="{RequestType}.Latency" units="ms" expires_after="2025-08-10">
+<histogram name="{RequestType}.Latency" units="ms" expires_after="2025-10-12">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>
@@ -1152,7 +1164,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="{RequestType}.Status" enum="SupervisedUserProtoFetcherStatus"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>The status of the fetch in calls to {RequestType}.</summary>
@@ -1160,7 +1172,7 @@ Current expiration date for histograms owned by cros-families-eng@google.com:
 </histogram>
 
 <histogram name="{RequestType}.{Status}.Latency" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>tju@google.com</owner>
   <owner>chrome-kids-eng@google.com</owner>
   <summary>

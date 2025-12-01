@@ -123,6 +123,9 @@ OPENSSL_EXPORT int BIO_eof(BIO *bio);
 // BIO_set_flags ORs |flags| with |bio->flags|.
 OPENSSL_EXPORT void BIO_set_flags(BIO *bio, int flags);
 
+// BIO_clear_flags ANDs |bio->flags| with the bitwise-complement of |flags|.
+OPENSSL_EXPORT void BIO_clear_flags(BIO *bio, int flags);
+
 // BIO_test_flags returns |bio->flags| AND |flags|.
 OPENSSL_EXPORT int BIO_test_flags(const BIO *bio, int flags);
 
@@ -161,9 +164,6 @@ OPENSSL_EXPORT int BIO_get_retry_reason(const BIO *bio);
 // to |reason|, which should be one of the |BIO_RR_*| values.
 OPENSSL_EXPORT void BIO_set_retry_reason(BIO *bio, int reason);
 
-// BIO_clear_flags ANDs |bio->flags| with the bitwise-complement of |flags|.
-OPENSSL_EXPORT void BIO_clear_flags(BIO *bio, int flags);
-
 // BIO_set_retry_read sets the |BIO_FLAGS_READ| and |BIO_FLAGS_SHOULD_RETRY|
 // flags on |bio|.
 OPENSSL_EXPORT void BIO_set_retry_read(BIO *bio);
@@ -184,30 +184,12 @@ OPENSSL_EXPORT void BIO_clear_retry_flags(BIO *bio);
 // values.
 OPENSSL_EXPORT int BIO_method_type(const BIO *bio);
 
-// These are passed to the BIO callback
-#define BIO_CB_FREE 0x01
-#define BIO_CB_READ 0x02
-#define BIO_CB_WRITE 0x03
-#define BIO_CB_PUTS 0x04
-#define BIO_CB_GETS 0x05
-#define BIO_CB_CTRL 0x06
-
-// The callback is called before and after the underling operation,
-// The BIO_CB_RETURN flag indicates if it is after the call
-#define BIO_CB_RETURN 0x80
-
-// bio_info_cb is the type of a callback function that can be called for most
-// BIO operations. The |event| argument is one of |BIO_CB_*| and can be ORed
-// with |BIO_CB_RETURN| if the callback is being made after the operation in
-// question. In that case, |return_value| will contain the return value from
-// the operation.
-typedef long (*bio_info_cb)(BIO *bio, int event, const char *parg, int cmd,
-                            long larg, long return_value);
+typedef int BIO_info_cb(BIO *, int, int);
 
 // BIO_callback_ctrl allows the callback function to be manipulated. The |cmd|
 // arg will generally be |BIO_CTRL_SET_CALLBACK| but arbitrary command values
 // can be interpreted by the |BIO|.
-OPENSSL_EXPORT long BIO_callback_ctrl(BIO *bio, int cmd, bio_info_cb fp);
+OPENSSL_EXPORT long BIO_callback_ctrl(BIO *bio, int cmd, BIO_info_cb *fp);
 
 // BIO_pending returns the number of bytes pending to be read.
 OPENSSL_EXPORT size_t BIO_pending(const BIO *bio);
@@ -702,6 +684,11 @@ OPENSSL_EXPORT int BIO_meth_set_ctrl(BIO_METHOD *method,
                                      long (*ctrl_func)(BIO *, int, long,
                                                        void *));
 
+// BIO_meth_set_callback_ctrl sets the implementation of |BIO_callback_ctrl| for
+// |method| and returns one.
+OPENSSL_EXPORT int BIO_meth_set_callback_ctrl(
+    BIO_METHOD *method, long (*callback_ctrl_func)(BIO *, int, BIO_info_cb *));
+
 // BIO_set_data sets custom data on |bio|. It may be retried with
 // |BIO_get_data|.
 //
@@ -787,6 +774,8 @@ OPENSSL_EXPORT void *BIO_get_ex_data(const BIO *bio, int idx);
 
 // Deprecated functions.
 
+typedef BIO_info_cb bio_info_cb;
+
 // BIO_f_base64 returns a filter |BIO| that base64-encodes data written into
 // it, and decodes data read from it. |BIO_gets| is not supported. Call
 // |BIO_flush| when done writing, to signal that no more data are to be
@@ -811,6 +800,48 @@ OPENSSL_EXPORT int BIO_get_shutdown(BIO *bio);
 // BoringSSL.
 OPENSSL_EXPORT int BIO_meth_set_puts(BIO_METHOD *method,
                                      int (*puts)(BIO *, const char *));
+
+#if !defined(OPENSSL_NO_SOCK)
+// The following functions return function pointers, possibly NULL, which are
+// compatible with the corresponding |BIO_meth_set_*| function. |method| must be
+// |BIO_s_socket| or the program will abort.
+//
+// Using these functions is inherently unsafe and fragile. It is not possible to
+// use them in a future-proof way. See
+// https://github.com/openssl/openssl/issues/26047 for details. BoringSSL
+// implements them solely for compatibility with Folly and older versions of
+// PostgreSQL. To work around the future-proofing problems, the return values
+// may diverge from the true implementation of |BIO_s_socket|.
+//
+// Caller should not use these functions. They are not necessary to define
+// custom |BIO_METHOD|s. Instead, callers should either:
+//
+// - Define a custom |BIO_METHOD| that owns a socket |BIO| somewhere in the
+//   custom data. See |BIO_set_data|.
+//
+// - Define a custom |BIO_METHOD| that wraps a socket |BIO| as a filter. See
+//   |BIO_push| and |BIO_next|.
+//
+// - Define a custom |BIO_METHOD| without |BIO_s_socket| at all. If not using
+//   the built-in read or write functions, |BIO_s_socket| only provides a no-op
+//   |BIO_CTRL_FLUSH| implementation. This can be implemented by the caller.
+OPENSSL_EXPORT int (*BIO_meth_get_write(const BIO_METHOD *method))(BIO *,
+                                                                   const char *,
+                                                                   int);
+OPENSSL_EXPORT int (*BIO_meth_get_read(const BIO_METHOD *method))(BIO *, char *,
+                                                                  int);
+OPENSSL_EXPORT int (*BIO_meth_get_gets(const BIO_METHOD *method))(BIO *, char *,
+                                                                  int);
+OPENSSL_EXPORT int (*BIO_meth_get_puts(const BIO_METHOD *method))(BIO *,
+                                                                  const char *);
+OPENSSL_EXPORT long (*BIO_meth_get_ctrl(const BIO_METHOD *method))(BIO *, int,
+                                                                   long,
+                                                                   void *);
+OPENSSL_EXPORT int (*BIO_meth_get_create(const BIO_METHOD *method))(BIO *);
+OPENSSL_EXPORT int (*BIO_meth_get_destroy(const BIO_METHOD *method))(BIO *);
+OPENSSL_EXPORT long (*BIO_meth_get_callback_ctrl(const BIO_METHOD *method))(
+    BIO *, int, BIO_info_cb *);
+#endif  // !OPENSSL_NO_SOCK
 
 
 // Private functions
@@ -871,7 +902,7 @@ struct bio_method_st {
   long (*ctrl)(BIO *, int, long, void *);
   int (*create)(BIO *);
   int (*destroy)(BIO *);
-  long (*callback_ctrl)(BIO *, int, bio_info_cb);
+  long (*callback_ctrl)(BIO *, int, BIO_info_cb *);
 };
 
 struct bio_st {

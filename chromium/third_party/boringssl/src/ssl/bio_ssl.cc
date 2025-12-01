@@ -166,7 +166,7 @@ static int ssl_free(BIO *bio) {
   return 1;
 }
 
-static long ssl_callback_ctrl(BIO *bio, int cmd, bio_info_cb fp) {
+static long ssl_callback_ctrl(BIO *bio, int cmd, BIO_info_cb *fp) {
   SSL *ssl = get_ssl(bio);
   if (ssl == NULL) {
     return 0;

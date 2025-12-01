@@ -37,6 +37,7 @@
 namespace content {
 
 struct BiddingAndAuctionServerKey;
+class DataDecoderManager;
 
 // Handles caching (not yet implemented) and dispatching of trusted bidding and
 // scoring signals requests. Only handles requests to Trusted Execution
@@ -216,7 +217,8 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
   // around this long, automatically call SetFetchCanStart() for the fetch.
   static constexpr base::TimeDelta kAutoStartDelay = base::Milliseconds(10);
 
-  explicit TrustedSignalsCacheImpl(
+  TrustedSignalsCacheImpl(
+      DataDecoderManager* data_decoder_manager,
       GetCoordinatorKeyCallback get_coordinator_key_callback);
   ~TrustedSignalsCacheImpl() override;
 
@@ -262,6 +264,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
       base::optional_ref<const std::vector<std::string>>
           trusted_bidding_signals_keys,
       base::Value::Dict additional_params,
+      base::optional_ref<const std::string> buyer_tkv_signals,
       int& partition_id);
 
   // Requests scoring signals. Return value is a Handle which must be kept alive
@@ -297,6 +300,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
       const GURL& render_url,
       const std::vector<GURL>& component_render_urls,
       base::Value::Dict additional_params,
+      base::optional_ref<const std::string> seller_tkv_signals,
       int& partition_id);
 
   // TrustedSignalsFetcher implementation:
@@ -482,7 +486,8 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
         const url::Origin& main_frame_origin,
         network::mojom::IPAddressSpace ip_address_space,
         const url::Origin& joining_origin,
-        base::Value::Dict additional_params);
+        base::Value::Dict additional_params,
+        base::optional_ref<const std::string> buyer_tkv_signals);
 
     ~BiddingCacheKey();
 
@@ -501,6 +506,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
     FetchKey fetch_key;
     url::Origin joining_origin;
     base::Value::Dict additional_params;
+    std::optional<std::string> buyer_tkv_signals;
   };
 
   // An indexed entry in the cache for callers of
@@ -544,7 +550,8 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
         const url::Origin& joining_origin,
         const GURL& render_url,
         const std::vector<GURL>& component_render_urls,
-        base::Value::Dict additional_params);
+        base::Value::Dict additional_params,
+        base::optional_ref<const std::string> seller_tkv_signals);
 
     ~ScoringCacheKey();
 
@@ -561,6 +568,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
     url::Origin joining_origin;
     url::Origin interest_group_owner;
     base::Value::Dict additional_params;
+    std::optional<std::string> seller_tkv_signals;
   };
 
   // An indexed entry in the cache for callers of
@@ -679,6 +687,7 @@ class CONTENT_EXPORT TrustedSignalsCacheImpl
   // Virtual for testing.
   virtual std::unique_ptr<TrustedSignalsFetcher> CreateFetcher();
 
+  const raw_ptr<DataDecoderManager> data_decoder_manager_;
   const GetCoordinatorKeyCallback get_coordinator_key_callback_;
 
   mojo::ReceiverSet<auction_worklet::mojom::TrustedSignalsCache,

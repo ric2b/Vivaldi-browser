@@ -415,11 +415,13 @@ enum DeviceType : int {
   PHONE = 1,
   TABLET = 2,
   LAPTOP = 3,
-  CAR = 4
+  CAR = 4,
+  FOLDABLE = 5,
+  XR = 6
 };
 bool DeviceType_IsValid(int value);
 constexpr DeviceType DeviceType_MIN = UNKNOWN_DEVICE_TYPE;
-constexpr DeviceType DeviceType_MAX = CAR;
+constexpr DeviceType DeviceType_MAX = XR;
 constexpr int DeviceType_ARRAYSIZE = DeviceType_MAX + 1;
 
 const std::string& DeviceType_Name(DeviceType value);
@@ -948,11 +950,12 @@ enum AttachmentSourceType : int {
   ATTACHMENT_SOURCE_DRAG_AND_DROP = 2,
   ATTACHMENT_SOURCE_SELECT_FILES_BUTTON = 3,
   ATTACHMENT_SOURCE_PASTE = 4,
-  ATTACHMENT_SOURCE_SELECT_FOLDERS_BUTTON = 5
+  ATTACHMENT_SOURCE_SELECT_FOLDERS_BUTTON = 5,
+  ATTACHMENT_SOURCE_SHARE_ACTIVATION = 6
 };
 bool AttachmentSourceType_IsValid(int value);
 constexpr AttachmentSourceType AttachmentSourceType_MIN = ATTACHMENT_SOURCE_UNKNOWN;
-constexpr AttachmentSourceType AttachmentSourceType_MAX = ATTACHMENT_SOURCE_SELECT_FOLDERS_BUTTON;
+constexpr AttachmentSourceType AttachmentSourceType_MAX = ATTACHMENT_SOURCE_SHARE_ACTIVATION;
 constexpr int AttachmentSourceType_ARRAYSIZE = AttachmentSourceType_MAX + 1;
 
 const std::string& AttachmentSourceType_Name(AttachmentSourceType value);

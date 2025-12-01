@@ -51,6 +51,7 @@ class ColorProvider;
 
 namespace blink {
 class CalculationValue;
+class CSSLengthResolver;
 class CSSValue;
 
 class CORE_EXPORT StyleColor {
@@ -178,7 +179,8 @@ class CORE_EXPORT StyleColor {
                             const CSSValue& channel0,
                             const CSSValue& channel1,
                             const CSSValue& channel2,
-                            const CSSValue* alpha);
+                            const CSSValue* alpha,
+                            const CSSLengthResolver& length_resolver);
     virtual ~UnresolvedRelativeColor() = default;
     void Trace(Visitor* visitor) const override;
     CSSValue* ToCSSValue() const override;
@@ -251,13 +253,6 @@ class CORE_EXPORT StyleColor {
   Color Resolve(const Color& current_color,
                 mojom::blink::ColorScheme color_scheme,
                 bool* is_current_color = nullptr) const;
-
-  // Resolve and override the resolved color's alpha channel as specified by
-  // |alpha|.
-  Color ResolveWithAlpha(Color current_color,
-                         mojom::blink::ColorScheme color_scheme,
-                         int alpha,
-                         bool* is_current_color = nullptr) const;
 
   // Re-resolve the current system color keyword. This is needed in cases such
   // as forced colors mode because initial values for some internal forced

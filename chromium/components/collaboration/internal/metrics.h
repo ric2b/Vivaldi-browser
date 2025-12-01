@@ -5,9 +5,9 @@
 #ifndef COMPONENTS_COLLABORATION_INTERNAL_METRICS_H_
 #define COMPONENTS_COLLABORATION_INTERNAL_METRICS_H_
 
+#include "base/time/time.h"
 #include "components/collaboration/public/collaboration_flow_entry_point.h"
 #include "components/collaboration/public/collaboration_flow_type.h"
-#include "ui/base/page_transition_types.h"
 
 namespace data_sharing {
 class Logger;
@@ -54,7 +54,8 @@ enum class CollaborationServiceJoinEvent {
   kManagedAccountSignin = 31,
   kAccountInfoNotReadyOnSignin = 32,
   kReadNewGroupUserIsAlreadyMember = 33,
-  kMaxValue = kReadNewGroupUserIsAlreadyMember,
+  kFailedAddingUserToGroup = 34,
+  kMaxValue = kFailedAddingUserToGroup,
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/collaboration_service/enums.xml:CollaborationServiceJoinEvent)
 
@@ -69,7 +70,7 @@ enum class CollaborationServiceShareOrManageEvent {
   kCanceledNotSignedIn = 3,
   kShareDialogShown = 4,
   kManageDialogShown = 5,
-  kTabGroupShared = 6,
+  kCollaborationGroupCreated = 6,
   kUrlReadyToShare = 7,
   kFlowRequirementsMet = 8,
   kSigninVerificationFailed = 9,
@@ -89,14 +90,29 @@ enum class CollaborationServiceShareOrManageEvent {
   kDevicePolicyDisableSignin = 23,
   kManagedAccountSignin = 24,
   kAccountInfoNotReadyOnSignin = 25,
-  kMaxValue = kAccountInfoNotReadyOnSignin,
+  kCollaborationIdEmptyGroupToken = 26,
+  kCollaborationIdShareCanceled = 27,
+  kTabGroupShared = 28,
+  kMaxValue = kTabGroupShared,
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/collaboration_service/enums.xml:CollaborationServiceShareOrManageEvent)
+
+enum class CollaborationServiceStep {
+  kUnknown = 0,
+  kAuthenticationInitToSuccess = 1,
+  kWaitingForServicesInitialization = 2,
+  kLinkReadyAfterGroupCreation = 3,
+  kTabGroupFetchedAfterPeopleGroupJoined = 4,
+  kMaxValue = kTabGroupFetchedAfterPeopleGroupJoined,
+};
 
 void RecordJoinEvent(data_sharing::Logger* logger,
                      CollaborationServiceJoinEvent event);
 void RecordShareOrManageEvent(data_sharing::Logger* logger,
                               CollaborationServiceShareOrManageEvent event);
+void RecordLeaveOrDeleteEntryPoint(
+    data_sharing::Logger* logger,
+    CollaborationServiceLeaveOrDeleteEntryPoint event);
 void RecordJoinOrShareOrManageEvent(
     data_sharing::Logger* logger,
     FlowType type,
@@ -104,11 +120,12 @@ void RecordJoinOrShareOrManageEvent(
     CollaborationServiceShareOrManageEvent share_or_manage_event);
 void RecordJoinEntryPoint(data_sharing::Logger* logger,
                           CollaborationServiceJoinEntryPoint entry);
-void RecordJoinPageTransitionType(data_sharing::Logger* logger,
-                                  ui::PageTransition transition);
 void RecordShareOrManageEntryPoint(
     data_sharing::Logger* logger,
     CollaborationServiceShareOrManageEntryPoint entry);
+void RecordLatency(data_sharing::Logger* logger,
+                   CollaborationServiceStep step,
+                   base::TimeDelta duration);
 }  // namespace collaboration::metrics
 
 #endif  // COMPONENTS_COLLABORATION_INTERNAL_METRICS_H_

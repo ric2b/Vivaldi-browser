@@ -7,7 +7,9 @@
 #include <algorithm>
 
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/strings/strcat.h"
 #include "base/types/optional_ref.h"
 #include "chrome/browser/ui/autofill/autofill_ai/save_or_update_autofill_ai_data_controller.h"
 #include "chrome/browser/ui/autofill/autofill_bubble_base.h"
@@ -19,8 +21,9 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/browser/data_model/autofill_ai/entity_instance.h"
 #include "components/autofill/core/browser/data_model/autofill_ai/entity_type.h"
-#include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
+#include "components/autofill/core/browser/integrators/autofill_ai/autofill_ai_delegate.h"
 #include "components/autofill_ai/core/browser/autofill_ai_client.h"
+#include "components/autofill_ai/core/browser/autofill_ai_import_utils.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/navigation_handle.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -34,9 +37,9 @@ using enum SaveOrUpdateAutofillAiDataController::EntityAttributeUpdateType;
 
 bool DidUserDeclineExplicitly(
     SaveOrUpdateAutofillAiDataController::AutofillAiBubbleClosedReason
-        closed_reason) {
+        close_reason) {
   using enum SaveOrUpdateAutofillAiDataController::AutofillAiBubbleClosedReason;
-  switch (closed_reason) {
+  switch (close_reason) {
     case kCancelled:
     case kClosed:
       return true;
@@ -46,6 +49,36 @@ bool DidUserDeclineExplicitly(
     case kLostFocus:
       return false;
   }
+}
+
+void EmitBubbleFunnelMetrics(
+    bool is_save_prompt,
+    autofill::EntityType entity_type,
+    SaveOrUpdateAutofillAiDataController::AutofillAiBubbleClosedReason
+        close_reason) {
+  auto get_save_or_update_histogram_string = [](bool is_save_prompt) {
+    return is_save_prompt ? ".SavePrompt" : ".UpdatePrompt";
+  };
+  auto get_entity_name_for_logging = [](autofill::EntityType entity_type) {
+    switch (entity_type.name()) {
+      case autofill::EntityTypeName::kVehicle:
+        return "Vehicle";
+      case autofill::EntityTypeName::kPassport:
+        return "Passport";
+      case autofill::EntityTypeName::kDriversLicense:
+        return "DriversLicense";
+    }
+    NOTREACHED();
+  };
+  const std::string prefix = "Autofill.Ai";
+  base::UmaHistogramEnumeration(
+      base::StrCat({prefix, get_save_or_update_histogram_string(is_save_prompt),
+                    ".", get_entity_name_for_logging(entity_type)}),
+      close_reason);
+  base::UmaHistogramEnumeration(
+      base::StrCat({prefix, get_save_or_update_histogram_string(is_save_prompt),
+                    ".AllEntities"}),
+      close_reason);
 }
 
 }  // namespace
@@ -104,38 +137,42 @@ SaveOrUpdateAutofillAiDataControllerImpl::GetUpdatedAttributesDetails() const {
   std::vector<EntityAttributeUpdateDetails> details;
 
   auto get_attribute_update_type = [&](const autofill::AttributeInstance&
-                                           new_entity_attribute_instance) {
+                                           new_entity_attribute) {
     if (!old_entity_) {
       return kNewEntityAttributeAdded;
     }
 
     base::optional_ref<const autofill::AttributeInstance> old_entity_attribute =
-        old_entity_->attribute(new_entity_attribute_instance.type());
+        old_entity_->attribute(new_entity_attribute.type());
     if (!old_entity_attribute) {
       return kNewEntityAttributeAdded;
     }
 
-    return std::ranges::all_of(
-               new_entity_attribute_instance.GetSupportedTypes(),
-               [&](autofill::FieldType type) {
-                 return old_entity_attribute->GetInfo(
-                            type, app_locale_,
-                            /*format_string=*/std::nullopt) ==
-                        new_entity_attribute_instance.GetInfo(
-                            type, app_locale_, /*format_string=*/std::nullopt);
-               })
+    return std::ranges::all_of(new_entity_attribute.GetSupportedTypes(),
+                               [&](autofill::FieldType type) {
+                                 return old_entity_attribute->GetInfo(
+                                            type, app_locale_,
+                                            /*format_string=*/std::nullopt) ==
+                                        new_entity_attribute.GetInfo(
+                                            type, app_locale_,
+                                            /*format_string=*/std::nullopt);
+                               })
                ? kNewEntityAttributeUnchanged
                : kNewEntityAttributeUpdated;
   };
 
-  for (const autofill::AttributeInstance& attribute_instance :
+  for (const autofill::AttributeInstance& attribute :
        new_entity_->attributes()) {
     EntityAttributeUpdateType update_type =
-        get_attribute_update_type(attribute_instance);
-    std::u16string attribute_value =
-        attribute_instance.GetCompleteInfo(app_locale_);
+        get_attribute_update_type(attribute);
+    std::u16string attribute_value;
+    if (std::optional<std::u16string> date = MaybeGetLocalizedDate(attribute)) {
+      attribute_value = *std::move(date);
+    } else {
+      attribute_value = attribute.GetCompleteInfo(app_locale_);
+    }
     if (!attribute_value.empty()) {
-      details.emplace_back(attribute_instance.type().GetNameForI18n(),
+      details.emplace_back(attribute.type().GetNameForI18n(),
                            std::move(attribute_value), update_type);
     }
   }
@@ -193,16 +230,19 @@ std::u16string SaveOrUpdateAutofillAiDataControllerImpl::GetDialogTitle()
 
 void SaveOrUpdateAutofillAiDataControllerImpl::OnBubbleClosed(
     SaveOrUpdateAutofillAiDataController::AutofillAiBubbleClosedReason
-        closed_reason) {
+        close_reason) {
+  // Make sure competing close calls does not lead to emitting metrics twice.
+  if (bubble_view()) {
+    EmitBubbleFunnelMetrics(IsSavePrompt(), new_entity_->type(), close_reason);
+  }
   set_bubble_view(nullptr);
   UpdatePageActionIcon();
   if (!save_prompt_acceptance_callback_.is_null()) {
     std::move(save_prompt_acceptance_callback_)
-        .Run(
-            {DidUserDeclineExplicitly(closed_reason),
-             /*entity=*/closed_reason == AutofillAiBubbleClosedReason::kAccepted
-                 ? std::exchange(new_entity_, std::nullopt)
-                 : std::nullopt});
+        .Run({DidUserDeclineExplicitly(close_reason),
+              /*entity=*/close_reason == AutofillAiBubbleClosedReason::kAccepted
+                  ? std::exchange(new_entity_, std::nullopt)
+                  : std::nullopt});
   }
 }
 

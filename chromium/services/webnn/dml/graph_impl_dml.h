@@ -5,10 +5,8 @@
 #ifndef SERVICES_WEBNN_DML_GRAPH_IMPL_DML_H_
 #define SERVICES_WEBNN_DML_GRAPH_IMPL_DML_H_
 
-#include <map>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 
 #include "base/containers/flat_map.h"
@@ -17,11 +15,13 @@
 #include "base/memory/weak_ptr.h"
 #include "base/types/expected.h"
 #include "base/types/fixed_array.h"
+#include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
 #include "services/webnn/webnn_constant_operand.h"
 #include "services/webnn/webnn_context_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "third_party/microsoft_dxheaders/include/directml.h"
 
 // Windows SDK headers should be included after DirectX headers.
@@ -39,7 +39,7 @@ class GraphBuilderDml;
 template <typename Key>
 struct AlignedByteLength {
   size_t total_byte_length = 0;
-  std::map<Key, D3D12_RANGE> key_to_d3d12_range_map;
+  absl::flat_hash_map<Key, D3D12_RANGE> key_to_d3d12_range_map;
 };
 
 // GraphImplDml inherits WebNNGraphImpl to represent a DML graph implementation.
@@ -67,21 +67,23 @@ class GraphImplDml final : public WebNNGraphImpl {
     // order.
     // The index is the DML_INPUT_GRAPH_EDGE_DESC::GraphInputIndex when
     // creating the DML_GRAPH_DESC.
-    std::unordered_map<std::string, uint32_t> graph_input_name_to_index_map;
+    absl::flat_hash_map<std::string, uint32_t> graph_input_name_to_index_map;
     // The map is used to bind output buffers for the graph execution in
     // order.
     // The index is the DML_OUTPUT_GRAPH_EDGE_DESC::GraphOutputIndex when
     // creating the DML_GRAPH_DESC.
-    std::unordered_map<std::string, uint32_t> graph_output_name_to_index_map;
+    absl::flat_hash_map<std::string, uint32_t> graph_output_name_to_index_map;
   };
   static base::expected<void, mojom::ErrorPtr> CreateAndBuildInternal(
       const ContextProperties& context_properties,
       scoped_refptr<Adapter> adapter,
       mojom::GraphInfoPtr& graph_info,
-      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>&
+      base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>&
           constant_operands,
+      const base::flat_map<OperandId, WebNNTensorImpl*>&
+          constant_tensor_operands,
       GraphBuilderDml& graph_builder,
-      std::unordered_map<uint64_t, uint32_t>& constant_id_to_input_index_map,
+      absl::flat_hash_map<OperandId, uint32_t>& constant_id_to_input_index_map,
       GraphBufferBindingInfo& graph_buffer_binding_info);
 
   // This method builds and compiles a DML graph from mojom::GraphInfo via
@@ -91,12 +93,14 @@ class GraphImplDml final : public WebNNGraphImpl {
   // GraphImplDml instance will only be created and bound to the mojom receiver
   // in GraphImplDml::OnInitializationComplete method.
   static void CreateAndBuild(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       scoped_refptr<Adapter> adapter,
       base::WeakPtr<ContextImplDml> context,
       mojom::GraphInfoPtr graph_info,
       ComputeResourceInfo compute_resource_info,
-      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+      base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
           constant_operands,
+      base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
       WebNNContextImpl::CreateGraphImplCallback callback,
       bool disable_dml_meta_commands_for_gpu);
 
@@ -175,6 +179,7 @@ class GraphImplDml final : public WebNNGraphImpl {
       std::unique_ptr<CommandRecorder> init_command_recorder_for_npu);
 
   static void CreateWebNNGraphImpl(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       scoped_refptr<Adapter> adapter,
       base::WeakPtr<ContextImplDml> context,
       scoped_refptr<PersistentResource> persistent_resource,
@@ -183,14 +188,16 @@ class GraphImplDml final : public WebNNGraphImpl {
       GraphBufferBindingInfo graph_buffer_binding_info,
       WebNNContextImpl::CreateGraphImplCallback callback);
 
-  GraphImplDml(scoped_refptr<Adapter> adapter,
+  GraphImplDml(mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
+               scoped_refptr<Adapter> adapter,
                ContextImplDml* context,
                std::unique_ptr<CommandRecorder> command_recorder,
                scoped_refptr<PersistentResource> persistent_resource,
                Microsoft::WRL::ComPtr<IDMLCompiledOperator> compiled_operator,
                ComputeResourceInfo compute_resource_info,
                GraphBufferBindingInfo graph_buffer_binding_info,
-               std::unique_ptr<GraphResources> graph_resources);
+               std::unique_ptr<GraphResources> graph_resources,
+               std::vector<mojom::Device> devices);
 
   // The method compiles all DML operators into an IDMLCompiledOperator
   // which can be dispatched to GPU. Since IDMLDevice1::CompileGraph called in
@@ -207,8 +214,8 @@ class GraphImplDml final : public WebNNGraphImpl {
   // that the compiled_operator might be nullptr if the graph compilation fails.
   //
   // The `constant_id_to_input_index_map` is used to bind constant buffers
-  // for the graph initialization in order. The constant id is the key for
-  // `id_to_operand_map` of `mojom::GraphInfo` interface, the input index is the
+  // for the graph initialization in order. The constant id is the index for
+  // `operands` of `mojom::GraphInfo` interface, the input index is the
   // DML_INPUT_GRAPH_EDGE_DESC::GraphInputIndex when creating the
   // DML_GRAPH_DESC. DirectML graph treats both input tensors and constant
   // tensors to be graph inputs. The difference is the data of the constant
@@ -216,14 +223,16 @@ class GraphImplDml final : public WebNNGraphImpl {
   // initialization, while the data of the input tensor is uploaded for every
   // graph execution.
   static void OnCompilationComplete(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       scoped_refptr<Adapter> adapter,
       base::WeakPtr<ContextImplDml> context,
       WebNNContextImpl::CreateGraphImplCallback callback,
-      std::unordered_map<uint64_t, uint32_t> constant_id_to_input_index_map,
+      absl::flat_hash_map<OperandId, uint32_t> constant_id_to_input_index_map,
       GraphBufferBindingInfo graph_buffer_binding_info,
       ComputeResourceInfo compute_resource_info,
-      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+      base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
           constant_operands,
+      base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
       base::expected<Microsoft::WRL::ComPtr<IDMLCompiledOperator>, HRESULT>
           compilation_result);
 
@@ -232,6 +241,7 @@ class GraphImplDml final : public WebNNGraphImpl {
   // to the renderer process. Notice that the `persistent_resource` could be
   // nullptr which means it isn't required by the graph.
   static void OnInitializationComplete(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       scoped_refptr<Adapter> adapter,
       base::WeakPtr<ContextImplDml> context,
       scoped_refptr<PersistentResource> persistent_resource,
@@ -270,17 +280,16 @@ class GraphImplDml final : public WebNNGraphImpl {
   };
 
   IoBindings CreateAndCacheInputBindings(
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs);
+      const base::flat_map<std::string, WebNNTensorImpl*>& named_inputs);
 
   IoBindings CreateAndCacheOutputBindings(
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs);
+      const base::flat_map<std::string, WebNNTensorImpl*>& named_outputs);
 
   // Execute the compiled platform graph asynchronously. The inputs were
   // validated in base class so we can use them to compute directly.
   void DispatchImpl(
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs)
-      override;
+      base::flat_map<std::string, WebNNTensorImpl*> named_inputs,
+      base::flat_map<std::string, WebNNTensorImpl*> named_outputs) override;
 
   // The persistent resource is allocated after the compilation work is
   // completed for the graph initialization and will be used for the following

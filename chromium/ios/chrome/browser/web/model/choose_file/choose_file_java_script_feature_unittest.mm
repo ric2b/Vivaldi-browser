@@ -10,6 +10,7 @@
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/web/model/choose_file/choose_file_event.h"
+#import "ios/chrome/browser/web/model/choose_file/choose_file_event_holder.h"
 #import "ios/web/public/test/fakes/fake_web_client.h"
 #import "ios/web/public/test/js_test_util.h"
 #import "ios/web/public/test/scoped_testing_web_client.h"
@@ -22,20 +23,38 @@
 
 namespace {
 // A page template that contains a file input in different states.
-const char kPageHtml[] = "<html><body>"
-                         "<input type=\"file\" id=\"choose_file\" "
-                         "ACCEPT_PLACEHOLDER MULTIPLE_PLACEHOLDER/>"
-                         "SET_FILE_PLACEHOLDER"
-                         "</body></html>";
+const char kPageHtml[] =
+    "<html><body>"
+    "<input type=\"file\" id=\"choose_file\" "
+    "ACCEPT_PLACEHOLDER MULTIPLE_PLACEHOLDER/>"
+    "<script>"
+    "const input = document.getElementById(\"choose_file\");"
+    "SET_FILE_PLACEHOLDER"
+    "</script>"
+    "</body></html>";
+
+// A page template that contains a button which, when clicked, creates a file
+// input in different states and calls `click()` on it.
+const char kPageHtmlForSimulatedClick[] =
+    "<html><body>"
+    "<button id=\"choose_file\" onclick=\"createInput()\"/>Choose file</button>"
+    "<script>"
+    "function createInput() {"
+    "  const input = document.createElement('input');"
+    "  input.type = 'file';"
+    "  ACCEPT_PLACEHOLDER"
+    "  MULTIPLE_PLACEHOLDER"
+    "  SET_FILE_PLACEHOLDER"
+    "  input.click();"
+    "}"
+    "</script>"
+    "</body></html>";
 
 // A script that adds a dummy file to the input.
-const char kSetFileScript[] =
-    "<script>"
-    "f = new File([], \"bar\");"
-    "dt = new DataTransfer();"
-    "dt.items.add(f);"
-    "document.getElementById(\"choose_file\").files = dt.files;"
-    "</script>";
+const char kSetFileScript[] = "f = new File([], \"bar\");"
+                              "dt = new DataTransfer();"
+                              "dt.items.add(f);"
+                              "input.files = dt.files;";
 
 // A page with t normal (not file) button.
 const char kPageHtmlWithButton[] = "<html><body>"
@@ -43,11 +62,24 @@ const char kPageHtmlWithButton[] = "<html><body>"
                                    "</body></html>";
 }  // namespace
 
+struct FeatureParam {
+  bool support_simulated_click;
+  bool test_simulated_click;
+};
+
 // Tests metrics are logged when tapping choose file input.
-class ChooseFileJavaScriptFeatureTest : public PlatformTest {
+class ChooseFileJavaScriptFeatureTest
+    : public testing::WithParamInterface<FeatureParam>,
+      public PlatformTest {
  protected:
   ChooseFileJavaScriptFeatureTest()
-      : web_client_(std::make_unique<web::FakeWebClient>()) {}
+      : web_client_(std::make_unique<web::FakeWebClient>()) {
+    if (GetParam().support_simulated_click) {
+      feature_list_.InitAndEnableFeature(kIOSChooseFromDriveSimulatedClick);
+    } else {
+      feature_list_.InitAndDisableFeature(kIOSChooseFromDriveSimulatedClick);
+    }
+  }
 
   void SetUp() override {
     PlatformTest::SetUp();
@@ -59,9 +91,8 @@ class ChooseFileJavaScriptFeatureTest : public PlatformTest {
     web_state_->GetView();
     web_state_->SetKeepRenderProcessAlive(true);
 
-    ChooseFileJavaScriptFeature* feature =
-        ChooseFileJavaScriptFeature::GetInstance();
-    GetWebClient()->SetJavaScriptFeatures({feature});
+    java_script_feature_ = std::make_unique<ChooseFileJavaScriptFeature>();
+    GetWebClient()->SetJavaScriptFeatures({java_script_feature_.get()});
   }
 
   web::FakeWebClient* GetWebClient() {
@@ -74,20 +105,30 @@ class ChooseFileJavaScriptFeatureTest : public PlatformTest {
                 bool has_accept,
                 NSString* accept_value,
                 BOOL already_has_file) {
-    NSString* html = base::SysUTF8ToNSString(kPageHtml);
+    NSString* html = GetParam().test_simulated_click
+                         ? @(kPageHtmlForSimulatedClick)
+                         : @(kPageHtml);
     if (has_multiple) {
+      NSString* replacement = GetParam().test_simulated_click
+                                  ? @"input.setAttribute('multiple', true);"
+                                  : @"multiple";
       html = [html stringByReplacingOccurrencesOfString:@"MULTIPLE_PLACEHOLDER"
-                                             withString:@"multiple"];
+                                             withString:replacement];
     } else {
       html = [html stringByReplacingOccurrencesOfString:@"MULTIPLE_PLACEHOLDER"
                                              withString:@""];
     }
     if (has_accept) {
+      NSString* replacement_template =
+          GetParam().test_simulated_click
+              ? @"input.setAttribute('accept', '%@');"
+              : @"accept=\"%@\"";
       html = [html
           stringByReplacingOccurrencesOfString:@"ACCEPT_PLACEHOLDER"
-                                    withString:[NSString stringWithFormat:
-                                                             @"accept=\"%@\"",
-                                                             accept_value]];
+                                    withString:[NSString
+                                                   stringWithFormat:
+                                                       replacement_template,
+                                                       accept_value]];
 
     } else {
       html = [html stringByReplacingOccurrencesOfString:@"ACCEPT_PLACEHOLDER"
@@ -104,6 +145,8 @@ class ChooseFileJavaScriptFeatureTest : public PlatformTest {
     web::test::LoadHtml(html, web_state());
   }
 
+  base::test::ScopedFeatureList feature_list_;
+  std::unique_ptr<ChooseFileJavaScriptFeature> java_script_feature_;
   web::ScopedTestingWebClient web_client_;
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<TestProfileIOS> profile_;
@@ -112,7 +155,7 @@ class ChooseFileJavaScriptFeatureTest : public PlatformTest {
 
 // Tests that metrics are logged with correct bucket when tapping on an input
 // file. One case for each bucket.
-TEST_F(ChooseFileJavaScriptFeatureTest, TestMetricsLogging) {
+TEST_P(ChooseFileJavaScriptFeatureTest, TestMetricsLogging) {
   // See definitions of ChooseFileAccept enum in
   // choose_file_javascript_feature.mm for the order and values.
   NSArray* accept_attributes = @[
@@ -143,7 +186,7 @@ TEST_F(ChooseFileJavaScriptFeatureTest, TestMetricsLogging) {
 }
 
 // Extra test cases for metrics logging that test corner cases.
-TEST_F(ChooseFileJavaScriptFeatureTest, TestMetricsLoggingExtra) {
+TEST_P(ChooseFileJavaScriptFeatureTest, TestMetricsLoggingExtra) {
   base::HistogramTester histogram_tester;
   int total_count = 0;
   // No accept, no multiple
@@ -244,7 +287,7 @@ TEST_F(ChooseFileJavaScriptFeatureTest, TestMetricsLoggingExtra) {
 }
 
 // Tests that no metrics are logged when tapping on a normal button.
-TEST_F(ChooseFileJavaScriptFeatureTest, TestNoMetricsLoggingOnButtonClick) {
+TEST_P(ChooseFileJavaScriptFeatureTest, TestNoMetricsLoggingOnButtonClick) {
   base::HistogramTester histogram_tester;
   web::test::LoadHtml(base::SysUTF8ToNSString(kPageHtmlWithButton),
                       web_state());
@@ -253,7 +296,7 @@ TEST_F(ChooseFileJavaScriptFeatureTest, TestNoMetricsLoggingOnButtonClick) {
 }
 
 // Tests that no metrics are logged when tapping on a normal button.
-TEST_F(ChooseFileJavaScriptFeatureTest, TestInvalidPayload) {
+TEST_P(ChooseFileJavaScriptFeatureTest, TestInvalidPayload) {
   base::HistogramTester histogram_tester;
   web::test::LoadHtml(base::SysUTF8ToNSString(kPageHtmlWithButton),
                       web_state());
@@ -262,41 +305,41 @@ TEST_F(ChooseFileJavaScriptFeatureTest, TestInvalidPayload) {
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage("
       @"{'acceptType':0,'hasMultiple':true,'hasSelectedFile':false});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 1);
 
   web::test::ExecuteJavaScriptForFeature(
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage({});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 1);
 
   web::test::ExecuteJavaScriptForFeature(
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage("
       @"{'acceptType':-2, 'hasMultiple':true,'hasSelectedFile':false});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 1);
 
   web::test::ExecuteJavaScriptForFeature(
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage("
       @"{'acceptType':37, 'hasMultiple':true,'hasSelectedFile':false});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 1);
 
   web::test::ExecuteJavaScriptForFeature(
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage("
       @"{'acceptType':'invalid', 'hasMultiple':true,'hasSelectedFile':false});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 1);
 
   web::test::ExecuteJavaScriptForFeature(
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage("
       @"{'missing':'invalid', 'hasMultiple':true,'hasSelectedFile':false});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 1);
 
   // Test synchronisation
@@ -304,13 +347,13 @@ TEST_F(ChooseFileJavaScriptFeatureTest, TestInvalidPayload) {
       web_state_.get(),
       @"window.webkit.messageHandlers['ChooseFileHandler'].postMessage("
       @"{'acceptType':0,'hasMultiple':true,'hasSelectedFile':false});",
-      ChooseFileJavaScriptFeature::GetInstance());
+      java_script_feature_.get());
   histogram_tester.ExpectTotalCount("IOS.Web.FileInput.Clicked", 2);
 }
 
 // Tests that `ResetLastChooseFileEvent()` returns the expected file extensions
 // and resets the last event.
-TEST_F(ChooseFileJavaScriptFeatureTest,
+TEST_P(ChooseFileJavaScriptFeatureTest,
        TestResetLastChooseFileEventFileExtensions) {
   base::test::ScopedFeatureList feature_list(kIOSChooseFromDrive);
   const std::map<std::string, std::vector<std::string>>
@@ -341,14 +384,13 @@ TEST_F(ChooseFileJavaScriptFeatureTest,
         ASSERT_TRUE(
             web::test::TapWebViewElementWithId(web_state(), "choose_file"));
         const std::optional<ChooseFileEvent> event =
-            ChooseFileJavaScriptFeature::GetInstance()
-                ->ResetLastChooseFileEvent();
+            ChooseFileEventHolder::GetInstance()->ResetLastChooseFileEvent();
         ASSERT_TRUE(event.has_value());
         EXPECT_EQ(expected_file_extensions, event->accept_file_extensions);
         EXPECT_EQ(multiple_attribute, event->allow_multiple_files);
         EXPECT_EQ(has_file_attributes, event->has_selected_file);
-        EXPECT_FALSE(ChooseFileJavaScriptFeature::GetInstance()
-                         ->ResetLastChooseFileEvent());
+        EXPECT_FALSE(
+            ChooseFileEventHolder::GetInstance()->ResetLastChooseFileEvent());
       }
     }
   }
@@ -356,7 +398,7 @@ TEST_F(ChooseFileJavaScriptFeatureTest,
 
 // Tests that `ResetLastChooseFileEvent()` returns the expected MIME types and
 // resets the last event.
-TEST_F(ChooseFileJavaScriptFeatureTest, TestResetLastChooseFileEventMimeTypes) {
+TEST_P(ChooseFileJavaScriptFeatureTest, TestResetLastChooseFileEventMimeTypes) {
   base::test::ScopedFeatureList feature_list(kIOSChooseFromDrive);
   const std::map<std::string, std::vector<std::string>>
       accept_attributes_mime_types = {
@@ -389,15 +431,24 @@ TEST_F(ChooseFileJavaScriptFeatureTest, TestResetLastChooseFileEventMimeTypes) {
         ASSERT_TRUE(
             web::test::TapWebViewElementWithId(web_state(), "choose_file"));
         const std::optional<ChooseFileEvent> event =
-            ChooseFileJavaScriptFeature::GetInstance()
-                ->ResetLastChooseFileEvent();
+            ChooseFileEventHolder::GetInstance()->ResetLastChooseFileEvent();
         ASSERT_TRUE(event.has_value());
         EXPECT_EQ(expected_mime_types, event->accept_mime_types);
         EXPECT_EQ(multiple_attribute, event->allow_multiple_files);
         EXPECT_EQ(has_file_attributes, event->has_selected_file);
-        EXPECT_FALSE(ChooseFileJavaScriptFeature::GetInstance()
-                         ->ResetLastChooseFileEvent());
+        EXPECT_FALSE(
+            ChooseFileEventHolder::GetInstance()->ResetLastChooseFileEvent());
       }
     }
   }
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    /* No InstantiationName */,
+    ChooseFileJavaScriptFeatureTest,
+    testing::Values(FeatureParam{/* support_simulated_click= */ false,
+                                 /* test_simulated_click= */ false},
+                    FeatureParam{/* support_simulated_click= */ true,
+                                 /* test_simulated_click= */ false},
+                    FeatureParam{/* support_simulated_click= */ true,
+                                 /* test_simulated_click= */ true}));

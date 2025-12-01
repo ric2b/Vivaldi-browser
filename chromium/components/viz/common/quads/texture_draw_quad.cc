@@ -19,10 +19,8 @@ namespace viz {
 
 TextureDrawQuad::TextureDrawQuad()
     : nearest_neighbor(false),
-      premultiplied_alpha(false),
       secure_output_only(false),
       is_video_frame(false),
-      is_stream_video(false),
       protected_video_type(gfx::ProtectedVideoType::kClear) {
   static_assert(static_cast<int>(gfx::ProtectedVideoType::kMaxValue) < 4,
                 "protected_video_type needs more bits in order to represent "
@@ -38,7 +36,6 @@ void TextureDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
                              const gfx::Rect& visible_rect,
                              bool needs_blending,
                              ResourceId resource,
-                             bool premultiplied,
                              const gfx::PointF& top_left,
                              const gfx::PointF& bottom_right,
                              SkColor4f background,
@@ -50,7 +47,6 @@ void TextureDrawQuad::SetNew(const SharedQuadState* shared_quad_state,
   DrawQuad::SetAll(shared_quad_state, DrawQuad::Material::kTextureContent, rect,
                    visible_rect, needs_blending);
   resource_id = resource;
-  premultiplied_alpha = premultiplied;
   uv_top_left = top_left;
   uv_bottom_right = bottom_right;
   background_color = background;
@@ -64,8 +60,6 @@ void TextureDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
                              const gfx::Rect& visible_rect,
                              bool needs_blending,
                              ResourceId resource,
-                             gfx::Size resource_size_in_pixels,
-                             bool premultiplied,
                              const gfx::PointF& top_left,
                              const gfx::PointF& bottom_right,
                              SkColor4f background,
@@ -76,8 +70,6 @@ void TextureDrawQuad::SetAll(const SharedQuadState* shared_quad_state,
   DrawQuad::SetAll(shared_quad_state, DrawQuad::Material::kTextureContent, rect,
                    visible_rect, needs_blending);
   resource_id = resource;
-  overlay_resources.size_in_pixels = resource_size_in_pixels;
-  premultiplied_alpha = premultiplied;
   uv_top_left = top_left;
   uv_bottom_right = bottom_right;
   background_color = background;
@@ -93,7 +85,6 @@ const TextureDrawQuad* TextureDrawQuad::MaterialCast(const DrawQuad* quad) {
 
 void TextureDrawQuad::ExtendValue(base::trace_event::TracedValue* value) const {
   value->SetInteger("resource_id", resource_id.GetUnsafeValue());
-  value->SetBoolean("premultiplied_alpha", premultiplied_alpha);
 
   cc::MathUtil::AddToTracedValue("uv_top_left", uv_top_left, value);
   cc::MathUtil::AddToTracedValue("uv_bottom_right", uv_bottom_right, value);
@@ -114,12 +105,9 @@ void TextureDrawQuad::ExtendValue(base::trace_event::TracedValue* value) const {
 
   value->SetBoolean("nearest_neighbor", nearest_neighbor);
   value->SetBoolean("is_video_frame", is_video_frame);
-  value->SetBoolean("is_stream_video", is_stream_video);
   value->SetInteger("protected_video_type",
                     static_cast<int>(protected_video_type));
 }
-
-TextureDrawQuad::OverlayResources::OverlayResources() = default;
 
 TextureDrawQuad::RoundedDisplayMasksInfo::RoundedDisplayMasksInfo() = default;
 

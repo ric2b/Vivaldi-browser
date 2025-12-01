@@ -143,11 +143,15 @@ std::pair<int, int> BookmarkNicknameProvider::CalculateBookmarkMatchRelevance(
   PrefService* prefs = client_->GetPrefs();
   bool bookmark_boost =
     prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxBookmarksBoosted);
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   const int no_autocomplete_boost =
       nickname == input.text() &&
               !prefs->GetBoolean(vivaldiprefs::kAddressBarAutocompleteEnabled)
           ? 1000
           : 0;
+#else
+  const int no_autocomplete_boost = 0;
+#endif
   int vivaldi_bookmark_boost_score =
       (bookmark_boost ? 500 : 0) + no_autocomplete_boost;
 

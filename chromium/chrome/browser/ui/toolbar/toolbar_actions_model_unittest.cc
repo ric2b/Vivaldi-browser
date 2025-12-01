@@ -23,7 +23,6 @@
 #include "base/values.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_service_user_test_base.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/test_extension_system.h"
@@ -255,8 +254,8 @@ testing::AssertionResult ToolbarActionsModelUnitTest::RemoveExtension(
     return testing::AssertionFailure()
            << "Extension " << extension->name() << " not installed!";
   }
-  service()->UnloadExtension(extension->id(),
-                             extensions::UnloadedExtensionReason::DISABLE);
+  registrar()->RemoveExtension(extension->id(),
+                               extensions::UnloadedExtensionReason::DISABLE);
   if (registry()->enabled_extensions().GetByID(extension->id())) {
     return testing::AssertionFailure()
            << "Failed to unload extension: " << extension->name();
@@ -587,7 +586,7 @@ TEST_F(ToolbarActionsModelUnitTest, ActionsToolbarIncognitoEnableExtension) {
         base::MakeAbsoluteFilePath(dirs[i]->UnpackedPath());
     std::string id = crx_file::id_util::GenerateIdForPath(path_for_id);
     extensions::TestExtensionRegistryObserver observer(registry(), id);
-    extensions::UnpackedInstaller::Create(service())->Load(
+    extensions::UnpackedInstaller::Create(profile())->Load(
         dirs[i]->UnpackedPath());
     observer.WaitForExtensionLoaded();
     extensions[i] = registry()->enabled_extensions().GetByID(id);
@@ -998,7 +997,7 @@ TEST_F(ToolbarActionsModelUnitTest, PinStateErasedOnUninstallation) {
               testing::ElementsAre(extension->id()));
 
   // Uninstall the extension. The pin state should be forgotten.
-  service()->UninstallExtension(
+  registrar()->UninstallExtension(
       extension->id(), extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
 
   EXPECT_FALSE(toolbar_model()->IsActionPinned(extension->id()));
@@ -1133,8 +1132,9 @@ TEST_F(ToolbarActionsModelUnitTest, UnloadedExtensionsPinnedStatePreserved) {
 
   // Disable extension A. It should no longer be reflected in the pinned
   // extensions (or the actions at all).
-  service()->DisableExtension(browser_action_a()->id(),
-                              extensions::disable_reason::DISABLE_USER_ACTION);
+  registrar()->DisableExtension(
+      browser_action_a()->id(),
+      {extensions::disable_reason::DISABLE_USER_ACTION});
   EXPECT_THAT(toolbar_model()->action_ids(),
               ::testing::UnorderedElementsAre(browser_action_b()->id(),
                                               browser_action_c()->id()));
@@ -1144,7 +1144,7 @@ TEST_F(ToolbarActionsModelUnitTest, UnloadedExtensionsPinnedStatePreserved) {
 
   // Re-enable extension A. It should retain it's pinned status (and position,
   // at index 0).
-  service()->EnableExtension(browser_action_a()->id());
+  registrar()->EnableExtension(browser_action_a()->id());
   EXPECT_THAT(toolbar_model()->action_ids(),
               ::testing::UnorderedElementsAre(browser_action_a()->id(),
                                               browser_action_b()->id(),
@@ -1157,8 +1157,9 @@ TEST_F(ToolbarActionsModelUnitTest, UnloadedExtensionsPinnedStatePreserved) {
   // Repeat the unload, reload flow, but move a pinned action
   // (https://crbug.com/1203899) and unpin an action
   // (https://crbug.com/1205561) between the unload and the reload.
-  service()->DisableExtension(browser_action_a()->id(),
-                              extensions::disable_reason::DISABLE_USER_ACTION);
+  registrar()->DisableExtension(
+      browser_action_a()->id(),
+      {extensions::disable_reason::DISABLE_USER_ACTION});
   toolbar_model()->MovePinnedAction(browser_action_b()->id(), 1u);
   toolbar_model()->SetActionVisibility(browser_action_b()->id(), false);
 
@@ -1170,7 +1171,7 @@ TEST_F(ToolbarActionsModelUnitTest, UnloadedExtensionsPinnedStatePreserved) {
               ::testing::ElementsAre(browser_action_c()->id()));
 
   // Reload - state should include all of A, B, C, with pinned order of A, C.
-  service()->EnableExtension(browser_action_a()->id());
+  registrar()->EnableExtension(browser_action_a()->id());
   EXPECT_THAT(toolbar_model()->action_ids(),
               ::testing::UnorderedElementsAre(browser_action_a()->id(),
                                               browser_action_b()->id(),

@@ -62,10 +62,9 @@ void WriteBarrier::MarkingSlowFromTracedHandle(Tagged<HeapObject> value) {
 }
 
 // static
-void WriteBarrier::MarkingSlowFromCppHeapWrappable(Heap* heap,
-                                                   Tagged<JSObject> host,
-                                                   CppHeapPointerSlot slot,
-                                                   void* object) {
+void WriteBarrier::MarkingSlowFromCppHeapWrappable(
+    Heap* heap, Tagged<CppHeapPointerWrapperObjectT> host,
+    CppHeapPointerSlot slot, void* object) {
   // Note: this is currently a combined barrier for marking both the
   // CppHeapPointerTable entry and the referenced object (if any).
 
@@ -489,10 +488,12 @@ template <typename TSlot>
 // static
 void WriteBarrier::ForRange(Heap* heap, Tagged<HeapObject> object,
                             TSlot start_slot, TSlot end_slot) {
-  if (v8_flags.disable_write_barriers) return;
+  if (v8_flags.disable_write_barriers) {
+    return;
+  }
   MemoryChunk* source_chunk = MemoryChunk::FromHeapObject(object);
-  base::Flags<RangeWriteBarrierMode> mode;
 
+  base::Flags<RangeWriteBarrierMode> mode;
   if (!HeapLayout::InYoungGeneration(object) &&
       !source_chunk->InWritableSharedSpace()) {
     mode |= kDoGenerationalOrShared;

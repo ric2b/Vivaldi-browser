@@ -28,7 +28,7 @@
 #include "./centipede/feature.h"
 #include "./common/defs.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 // Returns the hash of the contents of the file `file_path`. Supports the file
 // being remote. Returns an empty string if the `file_path` is empty.
@@ -147,7 +147,7 @@ ByteArray PackFeaturesAndHashAsRawBytes(const ByteArray &data,
 // Given a `blob` created by `PackFeaturesAndHash`, unpack the features into
 // `features` and return the hash.
 std::string UnpackFeaturesAndHash(ByteSpan blob,
-                                  absl::Nonnull<FeatureVec *> features);
+                                  FeatureVec *absl_nonnull features);
 
 // Parses `dictionary_text` representing an AFL/libFuzzer dictionary.
 // https://github.com/google/AFL/blob/master/dictionaries/README.dictionaries
@@ -191,6 +191,6 @@ class MmapNoReserveArray {
   uint8_t *array_;
 };
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_UTIL_H_

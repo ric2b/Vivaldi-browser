@@ -248,6 +248,7 @@ CORE_FILES = [
     "PathRendererChain.h",
     "SkGr.cpp",
     "SkGr.h",
+    "SkGaneshRecorder.h",
     "StencilClip.h",
     "StencilMaskHelper.cpp",
     "StencilMaskHelper.h",
@@ -316,7 +317,6 @@ skia_cc_library(
     ],
     defines = ["SK_GANESH"],
     features = ["layering_check"],
-    local_defines = ["SK_USE_LEGACY_GANESH_TEXT_APIS"],
     visibility = [
         "//src/gpu/ganesh:__subpackages__",
         "//tools/debugger:__pkg__",
@@ -381,7 +381,6 @@ skia_cc_library(
         "SK_GANESH",
     ],
     features = ["layering_check"],
-    local_defines = ["SK_USE_LEGACY_GANESH_TEXT_APIS"],
     visibility = [
         "//src/gpu/ganesh:__subpackages__",
         "//tools:__subpackages__",
@@ -425,6 +424,7 @@ generate_cpp_files_for_headers(
         "GrUserStencilSettings.h",
         "GrWindowRectangles.h",
         "GrWaitRenderTask.h",
+        "SkGaneshRecorder.h",
 
         # Trips an assertion in IWYU
         # /tmp/iwyu/iwyu.cc:2003: Assertion failed:

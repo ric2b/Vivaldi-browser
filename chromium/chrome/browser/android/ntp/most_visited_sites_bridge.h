@@ -42,6 +42,11 @@ class MostVisitedSitesBridge {
                          const base::android::JavaParamRef<jobject>& obj,
                          const base::android::JavaParamRef<jobject>& j_client);
 
+  jboolean AddCustomLinkTo(JNIEnv* env,
+                           const std::u16string& name,
+                           const GURL& url,
+                           jint pos);
+
   jboolean AddCustomLink(JNIEnv* env,
                          const std::u16string& name,
                          const GURL& url);
@@ -53,7 +58,9 @@ class MostVisitedSitesBridge {
 
   jboolean DeleteCustomLink(JNIEnv* env, const GURL& key_url);
 
-  jboolean QueryCustomLink(JNIEnv* env, const GURL& key_url);
+  jboolean HasCustomLink(JNIEnv* env, const GURL& key_url);
+
+  jboolean ReorderCustomLink(JNIEnv* env, const GURL& key_url, jint new_pos);
 
   void AddOrRemoveBlockedUrl(JNIEnv* env,
                              const base::android::JavaParamRef<jobject>& obj,

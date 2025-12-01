@@ -13,7 +13,10 @@ import {
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
 import {createTarget} from '../../../testing/EnvironmentHelpers.js';
-import {describeWithMockConnection} from '../../../testing/MockConnection.js';
+import {
+  describeWithMockConnection,
+  dispatchEvent,
+} from '../../../testing/MockConnection.js';
 import * as ExpandableList from '../../../ui/components/expandable_list/expandable_list.js';
 import * as RenderCoordinator from '../../../ui/components/render_coordinator/render_coordinator.js';
 import * as ReportView from '../../../ui/components/report_view/report_view.js';
@@ -28,7 +31,7 @@ const makeFrame = (target: SDK.Target.Target) => {
     unreachableUrl: () => '',
     adFrameType: () => Protocol.Page.AdFrameType.None,
     adFrameStatus: () => undefined,
-    getAdScriptId: () => '1' as Protocol.Runtime.ScriptId,
+    getAdScriptAncestryIds: () => null,
     resourceForURL: () => null,
     isSecureContext: () => true,
     isCrossOriginIsolated: () => true,
@@ -106,13 +109,45 @@ describeWithMockConnection('FrameDetailsView', () => {
     assert.exists(debuggerModel);
     sinon.stub(SDK.DebuggerModel.DebuggerModel, 'modelForDebuggerId').resolves(debuggerModel);
 
+    const scriptParsedEvent1: Protocol.Debugger.ScriptParsedEvent = {
+      scriptId: '123' as Protocol.Runtime.ScriptId,
+      url: 'https://www.google.com/ad-script1.js',
+      startLine: 0,
+      startColumn: 0,
+      endLine: 10,
+      endColumn: 10,
+      executionContextId: 1234 as Protocol.Runtime.ExecutionContextId,
+      hash: '',
+      buildId: '',
+    };
+    dispatchEvent(target, 'Debugger.scriptParsed', scriptParsedEvent1);
+
+    const scriptParsedEvent2: Protocol.Debugger.ScriptParsedEvent = {
+      scriptId: '456' as Protocol.Runtime.ScriptId,
+      url: 'https://www.google.com/ad-script2.js',
+      startLine: 0,
+      startColumn: 0,
+      endLine: 10,
+      endColumn: 10,
+      executionContextId: 1234 as Protocol.Runtime.ExecutionContextId,
+      hash: '',
+      buildId: '',
+    };
+    dispatchEvent(target, 'Debugger.scriptParsed', scriptParsedEvent2);
+
     const frame = makeFrame(target);
     frame.adFrameType = () => Protocol.Page.AdFrameType.Root;
     frame.parentFrame = () => ({
-      getAdScriptId: () => ({
-        scriptId: 'scriptId' as Protocol.Runtime.ScriptId,
-        debuggerId: '42' as Protocol.Runtime.UniqueDebuggerId,
-      }),
+      getAdScriptAncestryIds: () => ([
+        {
+          scriptId: '123' as Protocol.Runtime.ScriptId,
+          debuggerId: '42' as Protocol.Runtime.UniqueDebuggerId,
+        },
+        {
+          scriptId: '456' as Protocol.Runtime.ScriptId,
+          debuggerId: '42' as Protocol.Runtime.UniqueDebuggerId,
+        }
+      ]),
     } as unknown as SDK.ResourceTreeModel.ResourceTreeFrame);
     const networkManager = target.model(SDK.NetworkManager.NetworkManager);
     assert.exists(networkManager);
@@ -147,7 +182,7 @@ describeWithMockConnection('FrameDetailsView', () => {
       'Owner Element',
       'Frame Creation Stack Trace',
       'Ad Status',
-      'Creator Ad Script',
+      'Creator Ad Script Ancestry',
       'Secure Context',
       'Cross-Origin Isolated',
       'Cross-Origin Embedder Policy (COEP)',
@@ -169,7 +204,11 @@ describeWithMockConnection('FrameDetailsView', () => {
       'Yes',
       'None',
       'SameOrigin',
-      'HTTP header base-uri: \'self\'object-src: \'none\'script-src: \'strict-dynamic\', \'unsafe-inline\', https:, http:, \'nonce-GsVjHiIoejpPhMPOHDQZ90yc9eJn1s\', \'unsafe-eval\'report-uri: https://www.example.com/csp',
+      `HTTP header
+base-uri: 'self'
+object-src: 'none'
+script-src: 'strict-dynamic', 'unsafe-inline', https:, http:, 'nonce-GsVjHiIoejpPhMPOHDQZ90yc9eJn1s', 'unsafe-eval'
+report-uri: https://www.example.com/csp`,
       'available, transferable',
       'available\xA0Learn more',
     ]);
@@ -190,10 +229,28 @@ describeWithMockConnection('FrameDetailsView', () => {
       stackTraceText = stackTraceText.concat(getCleanTextContentFromElements(row.shadowRoot, '.stack-trace-row'));
     });
 
-    assert.deepEqual(stackTraceText[0], 'function1 \xA0@\xA0www.example.com/script.js:16');
+    assert.deepEqual(stackTraceText[0], 'function1\n\xA0@\xA0www.example.com/script.js:16');
 
-    const adScriptLink = component.shadowRoot.querySelector('devtools-report-value.ad-script-link');
-    assert.exists(adScriptLink);
-    assert.strictEqual(adScriptLink.textContent, '');
+    const adStatusList =
+        component.shadowRoot.querySelector('devtools-report-value.ad-status-list devtools-expandable-list');
+    assert.exists(adStatusList);
+    const adStatusExpandableButton = adStatusList.shadowRoot!.querySelector('button');
+    assert.notExists(adStatusExpandableButton);
+    const adStatusItem = adStatusList.shadowRoot!.querySelector('.expandable-list-items');
+    assert.exists(adStatusItem);
+    assert.strictEqual(adStatusItem.textContent?.trim(), 'root');
+
+    const adScriptAncestryList = component.shadowRoot.querySelector(
+        'devtools-report-value.creator-ad-script-ancestry-list devtools-expandable-list');
+    assert.exists(adScriptAncestryList);
+    const adScriptAncestryExpandableButton = adScriptAncestryList.shadowRoot!.querySelector('button');
+    assert.exists(adScriptAncestryExpandableButton);
+    adScriptAncestryExpandableButton!.click();
+
+    const adScriptAncestryItems =
+        adScriptAncestryList!.shadowRoot!.querySelectorAll('.expandable-list-items .devtools-link');
+    const adScriptsText = Array.from(adScriptAncestryItems).map(adScript => adScript.textContent?.trim());
+
+    assert.deepEqual(adScriptsText, ['ad-script1.js:1', 'ad-script2.js:1']);
   });
 });

@@ -55,6 +55,7 @@
 #include "chrome/enterprise_companion/global_constants.h"
 #include "chrome/enterprise_companion/installer_paths.h"
 #include "chrome/updater/activity.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/device_management/dm_policy_builder_for_testing.h"
 #include "chrome/updater/external_constants_builder.h"
@@ -99,7 +100,10 @@ constexpr char kSelfUpdateCRXName[] = "updater_selfupdate.crx3";
 constexpr char kSelfUpdateCRXRun[] = PRODUCT_FULLNAME_STRING "_test.app";
 constexpr char kDoNothingCRXName[] = "updater_qualification_app_dmg.crx";
 constexpr char kDoNothingCRXRun[] = "updater_qualification_app_dmg.dmg";
-constexpr char kEnterpriseCompanionCRXRun[] = "enterprise_companion_test.zip";
+
+// On Mac, the install scripts are in the root ('.') directory of the CRX.
+constexpr char kEnterpriseCompanionCRXRun[] = ".";
+
 // On Mac, the test companion app does not have a different name.
 constexpr base::FilePath::CharType kCompanionAppTestExecutableName[] =
     BROWSER_NAME_STRING "EnterpriseCompanion";
@@ -163,7 +167,9 @@ std::string GetUpdateResponseForAppV4(const std::string& app_id,
       R"(          {"operations":[)"
       R"(            { "type":"download",)"
       R"(              "urls":[{"url":"%s/%s"}],)"
-      R"(              "out":{"sha256":"%s"}},)"
+      R"(              "out":{"sha256":"%s"},)"
+      // arbitrary size, must be greater than 0:
+      R"(              "size": 10},)"
       R"(            { "type":"crx3",)"
       R"(              "arguments":"%s",)"
       R"(              "path":"%s",)"
@@ -797,12 +803,6 @@ void ExpectAppsUpdateSequence(UpdaterScope scope,
                               const base::Value::Dict& request_attributes,
                               const std::vector<AppUpdateExpectation>& apps,
                               const base::Version& updater_version) {
-#if BUILDFLAG(IS_WIN)
-  const base::FilePath::StringType kExeExtension = FILE_PATH_LITERAL(".exe");
-#else
-  const base::FilePath::StringType kExeExtension = FILE_PATH_LITERAL(".zip");
-#endif  // BUILDFLAG(IS_WIN)
-
   base::FilePath exe_path;
   ASSERT_TRUE(base::PathService::Get(base::DIR_EXE, &exe_path));
 
@@ -837,9 +837,16 @@ void ExpectAppsUpdateSequence(UpdaterScope scope,
     }
     const base::FilePath crx_path = exe_path.Append(app.crx_relative_path);
     const base::FilePath base_name = crx_path.BaseName().RemoveExtension();
+
+#if BUILDFLAG(IS_WIN)
     const base::FilePath run_action =
-        base_name.Extension().empty() ? base_name.AddExtension(kExeExtension)
-                                      : base_name;
+        base_name.Extension().empty()
+            ? base_name.AddExtension(FILE_PATH_LITERAL(".exe"))
+            : base_name;
+#else
+    const base::FilePath run_action =
+        base_name.Extension().empty() ? base::FilePath(".") : base_name;
+#endif  // BUILDFLAG(IS_WIN)
     app_response_providers.push_back(base::BindRepeating(
         [](const std::string& app_id, const std::string& url,
            const base::Version& to_version, const base::FilePath& crx_path,
@@ -1313,9 +1320,14 @@ std::vector<TestUpdaterVersion> GetRealUpdaterVersions() {
   return v;
 }
 
-void SetupRealUpdater(UpdaterScope scope, const base::FilePath& updater_path) {
+void SetupRealUpdater(UpdaterScope scope,
+                      const base::FilePath& updater_path,
+                      const base::Value::List& switches) {
   base::CommandLine command_line(updater_path);
   command_line.AppendSwitch(kInstallSwitch);
+  for (const base::Value& cmd_line_switch : switches) {
+    command_line.AppendSwitch(cmd_line_switch.GetString());
+  }
   int exit_code = -1;
   Run(scope, command_line, &exit_code);
   ASSERT_EQ(exit_code, 0);
@@ -1756,7 +1768,9 @@ void ExpectCleanProcesses() {
 #if !BUILDFLAG(IS_WIN)
 void RunOfflineInstall(UpdaterScope scope,
                        bool is_legacy_install,
-                       bool is_silent_install) {
+                       bool is_silent_install,
+                       int installer_result,
+                       int installer_error) {
   ADD_FAILURE();
 }
 

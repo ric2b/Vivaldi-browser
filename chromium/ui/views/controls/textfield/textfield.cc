@@ -36,8 +36,6 @@
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/base/ui_base_switches.h"
-#include "ui/base/ui_base_switches_util.h"
 #include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/canvas_painter.h"
@@ -882,7 +880,7 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
         // handle drag-drop or context menu.
         DestroyTouchSelection();
         StopSelectionDragging();
-        initiating_drag_ = switches::IsTouchDragDropEnabled();
+        initiating_drag_ = ::features::IsTouchDragAndDropEnabled();
         break;
       } else {
         // If long-press happens outside selection, select word and try to
@@ -1942,7 +1940,6 @@ void Textfield::EnsureCaretNotInRect(const gfx::Rect& rect_in_screen) {
 }
 
 bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
-  std::u16string result;
   bool editable = !GetReadOnly();
   bool readable = text_input_type_ != ui::TEXT_INPUT_TYPE_PASSWORD;
   switch (command) {
@@ -1997,13 +1994,16 @@ bool Textfield::IsTextEditCommandEnabled(ui::TextEditCommand command) const {
     case ui::TextEditCommand::COPY:
       return readable && HasSelection();
     case ui::TextEditCommand::PASTE: {
+      if (!editable) {
+        return false;
+      }
       ui::DataTransferEndpoint data_dst(
           ui::EndpointType::kDefault,
           {.notify_if_restricted = show_rejection_ui_if_any_});
-      ui::Clipboard::GetForCurrentThread()->ReadText(
-          ui::ClipboardBuffer::kCopyPaste, &data_dst, &result);
+      return ui::Clipboard::GetForCurrentThread()->IsFormatAvailable(
+          ui::ClipboardFormatType::PlainTextType(),
+          ui::ClipboardBuffer::kCopyPaste, &data_dst);
     }
-      return editable && !result.empty();
     case ui::TextEditCommand::SELECT_ALL:
       return !GetText().empty() &&
              GetSelectedRange().length() != GetText().length();

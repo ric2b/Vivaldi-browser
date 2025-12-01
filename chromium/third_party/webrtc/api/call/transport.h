@@ -28,7 +28,8 @@ struct PacketOptions {
   // as packet_id not being set.
   int64_t packet_id = -1;
   // Whether this is an audio or video packet, excluding retransmissions.
-  bool is_media = true;
+  // Defaults to `false` which is the more common case.
+  bool is_media = false;
   bool included_in_feedback = false;
   bool included_in_allocation = false;
   bool send_as_ect1 = false;
@@ -40,12 +41,13 @@ struct PacketOptions {
 
 class Transport {
  public:
-  virtual bool SendRtp(rtc::ArrayView<const uint8_t> packet,
+  virtual bool SendRtp(ArrayView<const uint8_t> packet,
                        const PacketOptions& options) = 0;
-  virtual bool SendRtcp(rtc::ArrayView<const uint8_t> packet) = 0;
+  virtual bool SendRtcp(ArrayView<const uint8_t> packet,
+                        const PacketOptions& options) = 0;
 
  protected:
-  virtual ~Transport() {}
+  virtual ~Transport() = default;
 };
 
 }  // namespace webrtc

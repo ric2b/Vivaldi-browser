@@ -159,17 +159,15 @@ class AutofillTest : public InProcessBrowserTest {
 
   // Navigate to the form, input values into the fields, and submit the form.
   // The function returns after the PersonalDataManager is updated.
-  void FillFormAndSubmit(const std::string& filename, const FormMap& data) {
-    FillFormAndSubmitWithHandler(filename, data, kDocumentClickHandlerSubmitJS,
-                                 true);
-  }
-
-  // Helper where the actual submit JS code can be specified, as well as whether
-  // the test should `simulate_click` on the document.
-  void FillFormAndSubmitWithHandler(const std::string& filename,
-                                    const FormMap& data,
-                                    const std::string& submit_js,
-                                    bool simulate_click) {
+  //
+  // The optional `submit_js` parameter specifies the JS code to be used for
+  // form submission, and `simulate_click` specifies whether to simulate a
+  // mouse-click on the document.
+  void FillFormAndSubmit(
+      const std::string& filename,
+      const FormMap& data,
+      const std::string& submit_js = kDocumentClickHandlerSubmitJS,
+      bool simulate_click = true) {
     GURL url = embedded_test_server()->GetURL("/autofill/" + filename);
     NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
     params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
@@ -185,10 +183,11 @@ class AutofillTest : public InProcessBrowserTest {
         content::ExecJs(web_contents(), GetJSToFillForm(data) + submit_js));
     if (simulate_click) {
       // Simulate a mouse click to submit the form because form submissions not
-      // triggered by user gestures are ignored.
-      content::SimulateMouseClick(
-          browser()->tab_strip_model()->GetActiveWebContents(), 0,
-          blink::WebMouseEvent::Button::kLeft);
+      // triggered by user gestures are ignored.  Before that, an end of
+      // paint-holding is simulated to enable input event processing.
+      content::SimulateEndOfPaintHoldingOnPrimaryMainFrame(web_contents());
+      content::SimulateMouseClick(web_contents(), 0,
+                                  blink::WebMouseEvent::Button::kLeft);
     }
     ASSERT_TRUE(std::move(submission_waiter).Wait());
     // Form submission might have triggered an import. The imported data is only
@@ -299,8 +298,7 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, AggregatesMinValidProfileDifferentJS) {
   data["ADDRESS_HOME_ZIP"] = "94043";
 
   std::string submit("document.forms[0].submit();");
-  FillFormAndSubmitWithHandler("duplicate_profiles_test.html", data, submit,
-                               false);
+  FillFormAndSubmit("duplicate_profiles_test.html", data, submit, false);
 
   ASSERT_EQ(
       1u, personal_data_manager()->address_data_manager().GetProfiles().size());
@@ -321,8 +319,7 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, ProfilesAggregatedWithSubmitHandler) {
       "var preventFunction = function(event) { event.preventDefault(); };"
       "document.forms[0].addEventListener('submit', preventFunction);"
       "document.querySelector('input[type=submit]').click();");
-  FillFormAndSubmitWithHandler("duplicate_profiles_test.html", data, submit,
-                               false);
+  FillFormAndSubmit("duplicate_profiles_test.html", data, submit, false);
 
   // The BrowserAutofillManager will update the user's profile.
   EXPECT_EQ(
@@ -377,7 +374,15 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, ProfilesNotAggregatedWithInvalidEmail) {
 // country. The data file contains two profiles with valid phone numbers and two
 // profiles with invalid phone numbers from their respective country.
 // Profiles with an invalid number are imported, but their number is removed.
-IN_PROC_BROWSER_TEST_F(AutofillTest, ProfileSavedWithValidCountryPhone) {
+// TODO(https://crbug.com/418932421): Flaky on Mac 13 Tests.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ProfileSavedWithValidCountryPhone \
+  DISABLED_ProfileSavedWithValidCountryPhone
+#else
+#define MAYBE_ProfileSavedWithValidCountryPhone \
+  ProfileSavedWithValidCountryPhone
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillTest, MAYBE_ProfileSavedWithValidCountryPhone) {
   std::vector<FormMap> profiles = {
       {{"NAME_FIRST", "Bob"},
        {"NAME_LAST", "Smith"},
@@ -469,7 +474,15 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, AppendCountryCodeForAggregatedPhones) {
 //   The phone number does not have a leading '+'.
 //   The phone number has a leading international direct dialing (IDD) code.
 // This does not apply to US numbers. For US numbers, '+' is removed.
-IN_PROC_BROWSER_TEST_F(AutofillTest, UsePlusSignForInternationalNumber) {
+// TODO(https://crbug.com/418932421): Flaky on Mac 13 Tests.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_UsePlusSignForInternationalNumber \
+  DISABLED_UsePlusSignForInternationalNumber
+#else
+#define MAYBE_UsePlusSignForInternationalNumber \
+  UsePlusSignForInternationalNumber
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillTest, MAYBE_UsePlusSignForInternationalNumber) {
   std::vector<FormMap> profiles;
 
   FormMap data1;
@@ -580,7 +593,16 @@ IN_PROC_BROWSER_TEST_F(AutofillTest,
 // Minimum address values needed during aggregation are: address line 1, city,
 // state, and zip code.
 // Profiles are merged when data for address line 1 and city match.
-IN_PROC_BROWSER_TEST_F(AutofillTest, ProfilesNotMergedWhenNoMinAddressData) {
+// TODO(https://crbug.com/418932421): Flaky on Mac 13 Tests.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_ProfilesNotMergedWhenNoMinAddressData \
+  DISABLED_ProfilesNotMergedWhenNoMinAddressData
+#else
+#define MAYBE_ProfilesNotMergedWhenNoMinAddressData \
+  ProfilesNotMergedWhenNoMinAddressData
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillTest,
+                       MAYBE_ProfilesNotMergedWhenNoMinAddressData) {
   AggregateProfilesIntoAutofillPrefs("dataset_no_address.txt");
 
   ASSERT_EQ(
@@ -665,7 +687,7 @@ IN_PROC_BROWSER_TEST_F(AutofillAccessibilityTest,
       embedded_test_server()->GetURL("/autofill/duplicate_profiles_test.html");
   NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   content::AccessibilityNotificationWaiter layout_waiter_one(
-      web_contents(), ui::kAXModeComplete, ax::mojom::Event::kLoadComplete);
+      web_contents(), ax::mojom::Event::kLoadComplete);
   ui_test_utils::NavigateToURL(&params);
   ASSERT_TRUE(layout_waiter_one.WaitForNotification());
 
@@ -706,7 +728,7 @@ IN_PROC_BROWSER_TEST_F(AutofillAccessibilityTest,
 
   // Reload page.
   content::AccessibilityNotificationWaiter layout_waiter_two(
-      web_contents(), ui::kAXModeComplete, ax::mojom::Event::kLoadComplete);
+      web_contents(), ax::mojom::Event::kLoadComplete);
   ui_test_utils::NavigateToURL(&params);
   ASSERT_TRUE(layout_waiter_two.WaitForNotification());
 
@@ -737,7 +759,7 @@ IN_PROC_BROWSER_TEST_F(AutofillAccessibilityTest,
       embedded_test_server()->GetURL("/autofill/duplicate_profiles_test.html");
   NavigateParams params(browser(), url, ui::PAGE_TRANSITION_LINK);
   content::AccessibilityNotificationWaiter layout_waiter_one(
-      web_contents(), ui::kAXModeComplete, ax::mojom::Event::kLoadComplete);
+      web_contents(), ax::mojom::Event::kLoadComplete);
   ui_test_utils::NavigateToURL(&params);
   ASSERT_TRUE(layout_waiter_one.WaitForNotification());
 
@@ -774,7 +796,7 @@ IN_PROC_BROWSER_TEST_F(AutofillAccessibilityTest,
 
   // Reload page.
   content::AccessibilityNotificationWaiter layout_waiter_two(
-      web_contents(), ui::kAXModeComplete, ax::mojom::Event::kLoadComplete);
+      web_contents(), ax::mojom::Event::kLoadComplete);
   ui_test_utils::NavigateToURL(&params);
   ASSERT_TRUE(layout_waiter_two.WaitForNotification());
 

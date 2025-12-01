@@ -33,6 +33,13 @@ class EmptyModuleRecordResolver final : public ModuleRecordResolver {
                                 ExceptionState&) override {
     NOTREACHED();
   }
+
+  v8::Local<v8::WasmModuleObject> ResolveSource(
+      const ModuleRequest& module_request,
+      v8::Local<v8::Module> referrer,
+      ExceptionState&) override {
+    NOTREACHED();
+  }
 };
 
 }  // namespace
@@ -75,6 +82,7 @@ void DummyModulator::FetchTree(const KURL&,
                                const ScriptFetchOptions&,
                                ModuleScriptCustomFetchType,
                                ModuleTreeClient*,
+                               ModuleImportPhase,
                                String referrer) {
   NOTREACHED();
 }
@@ -134,8 +142,9 @@ ModuleType DummyModulator::ModuleTypeFromRequest(
   String module_type_string = module_request.GetModuleTypeString();
   if (module_type_string.IsNull()) {
     // Per https://github.com/whatwg/html/pull/5883, if no type assertion is
-    // provided then the import should be treated as a JavaScript module.
-    return ModuleType::kJavaScript;
+    // provided then the import should be treated as a JavaScript-or-Wasm
+    // module.
+    return ModuleType::kJavaScriptOrWasm;
   } else if (module_type_string == "json") {
     // Per https://github.com/whatwg/html/pull/5658, a "json" type assertion
     // indicates that the import should be treated as a JSON module script.

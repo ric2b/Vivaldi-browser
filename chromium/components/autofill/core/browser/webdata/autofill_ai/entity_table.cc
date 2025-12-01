@@ -54,6 +54,8 @@ constexpr char kGuid[] = "guid";
 constexpr char kEntityType[] = "entity_type";
 constexpr char kNickname[] = "nickname";
 constexpr char kDateModified[] = "date_modified";
+constexpr char kUseCount[] = "use_count";
+constexpr char kUseDate[] = "use_date";
 }  // namespace entities
 
 // If "--autofill-wipe-entities" is present, drops the tables and creates
@@ -106,7 +108,8 @@ void HandleTestSwitchesIfNeeded(sql::Database* db, EntityTable& table) {
          create_attribute(kPassportExpirationDate, u"2035-03-31"),
          create_attribute(kPassportIssueDate, u"1998-10-11")},
         base::Uuid::ParseLowercase("00000000-0000-4000-8000-123000000000"),
-        "My passport", base::Time::Now()));
+        "My passport", /*date_modified=*/base::Time::Now(), /*use_count=*/0,
+        /*use_date=*/base::Time::FromTimeT(0)));
 
     table.AddOrUpdateEntityInstance(EntityInstance(
         EntityType(EntityTypeName::kDriversLicense),
@@ -116,7 +119,8 @@ void HandleTestSwitchesIfNeeded(sql::Database* db, EntityTable& table) {
          create_attribute(kDriversLicenseExpirationDate, u"2069-12-31"),
          create_attribute(kDriversLicenseIssueDate, u"1969-12-24")},
         base::Uuid::ParseLowercase("00000000-0000-4000-8000-456000000000"),
-        "My license", base::Time::Now()));
+        "My license", /*date_modified=*/base::Time::Now(), /*use_count=*/0,
+        /*use_date=*/base::Time::FromTimeT(0)));
 
     table.AddOrUpdateEntityInstance(EntityInstance(
         EntityType(EntityTypeName::kVehicle),
@@ -128,7 +132,8 @@ void HandleTestSwitchesIfNeeded(sql::Database* db, EntityTable& table) {
          create_attribute(kVehiclePlateState, u"California"),
          create_attribute(kVehicleVin, u"3D73Y4CL2AG194665")},
         base::Uuid::ParseLowercase("00000000-0000-4000-8000-789000000000"),
-        "My wroom wroom car", base::Time::Now()));
+        "My wroom wroom car", /*date_modified=*/base::Time::Now(),
+        /*use_count=*/0, /*use_date=*/base::Time::FromTimeT(0)));
   }
 }
 
@@ -167,7 +172,9 @@ bool EntityTable::CreateTablesIfNecessary() {
         {{entities::kGuid, "TEXT NOT NULL PRIMARY KEY"},
          {entities::kEntityType, "TEXT NOT NULL"},
          {entities::kNickname, "TEXT NOT NULL"},
-         {entities::kDateModified, "INTEGER NOT NULL"}});
+         {entities::kDateModified, "INTEGER NOT NULL"},
+         {entities::kUseCount, "INTEGER DEFAULT 0"},
+         {entities::kUseDate, "INTEGER DEFAULT 0"}});
   };
   return create_attributes_table() && create_entities_table();
 }
@@ -212,7 +219,14 @@ bool EntityTable::MigrateToVersion(int version,
                               {"entity_type", "TEXT NOT NULL"},
                               {"nickname", "TEXT NOT NULL"},
                               {"date_modified", "INTEGER NOT NULL"}});
+
       *update_compatible_version = true;
+      break;
+    }
+    case 140: {
+      // In this version use count and use date information was added.
+      AddColumn(db(), "autofill_ai_entities", "use_count", "INTEGER DEFAULT 0");
+      AddColumn(db(), "autofill_ai_entities", "use_date", "INTEGER DEFAULT 0");
       break;
     }
   }
@@ -262,13 +276,17 @@ bool EntityTable::AddEntityInstance(const EntityInstance& entity) {
 
   // Add the entity.
   sql::Statement s;
-  InsertBuilder(db(), s, entities::kTableName,
-                {entities::kGuid, entities::kEntityType, entities::kNickname,
-                 entities::kDateModified});
+  InsertBuilder(
+      db(), s, entities::kTableName,
+      {entities::kGuid, entities::kEntityType, entities::kNickname,
+       entities::kDateModified, entities::kUseCount, entities::kUseDate});
   s.BindString(0, entity.guid().AsLowercaseString());
   s.BindString(1, entity.type().name_as_string());
   s.BindString(2, entity.nickname());
   s.BindInt64(3, entity.date_modified().ToTimeT());
+  s.BindInt64(4, entity.use_count());
+  s.BindTime(5, entity.use_date());
+
   if (!s.Run()) {
     return false;
   }
@@ -377,19 +395,22 @@ std::vector<EntityInstance> EntityTable::GetEntityInstances() const {
   // previous query.
   std::vector<EntityInstance> entities;
   sql::Statement s;
-  SelectBuilder(db(), s, entities::kTableName,
-                {entities::kGuid, entities::kEntityType, entities::kNickname,
-                 entities::kDateModified});
+  SelectBuilder(
+      db(), s, entities::kTableName,
+      {entities::kGuid, entities::kEntityType, entities::kNickname,
+       entities::kDateModified, entities::kUseCount, entities::kUseDate});
   while (s.Step()) {
     base::Uuid guid = base::Uuid::ParseLowercase(s.ColumnStringView(0));
     std::string type_name = s.ColumnString(1);
     std::string nickname = s.ColumnString(2);
     base::Time date_modified = base::Time::FromTimeT(s.ColumnInt64(3));
+    size_t use_count = s.ColumnInt64(4);
+    base::Time use_date = s.ColumnTime(5);
 
     if (auto attributes = attribute_records.extract(guid)) {
-      if (std::optional<EntityInstance> e =
-              ValidateInstance(type_name, std::move(guid), std::move(nickname),
-                               date_modified, std::move(attributes.mapped()))) {
+      if (std::optional<EntityInstance> e = ValidateInstance(
+              type_name, std::move(guid), std::move(nickname), date_modified,
+              use_count, use_date, std::move(attributes.mapped()))) {
         entities.push_back(*std::move(e));
       }
     }
@@ -405,6 +426,8 @@ std::optional<EntityInstance> EntityTable::ValidateInstance(
     base::Uuid guid,
     std::string nickname,
     base::Time date_modified,
+    int use_count,
+    base::Time use_date,
     std::map<std::string, std::vector<AttributeRecord>> attribute_records)
     const {
   std::optional<EntityType> entity_type =
@@ -447,7 +470,8 @@ std::optional<EntityInstance> EntityTable::ValidateInstance(
   }
 
   return EntityInstance(*entity_type, std::move(attributes), std::move(guid),
-                        std::move(nickname), date_modified);
+                        std::move(nickname), date_modified, use_count,
+                        use_date);
 }
 
 }  // namespace autofill

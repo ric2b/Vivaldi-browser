@@ -24,9 +24,9 @@ ci.defaults.set(
     os = os.LINUX_DEFAULT,
     gardener_rotations = gardener_rotations.CHROMIUM_CLANG,
     # Because these run ToT Clang, reclient is not used.
-    # Naturally the runtime will be ~4-8h on average, depending on config.
-    # CFI builds will take even longer - around 11h.
-    execution_timeout = 14 * time.hour,
+    # Naturally the runtime will be ~4-8h on average for basic builds.
+    # Complex (e.g. sanitizer), CFI builds can take much longer.
+    execution_timeout = 16 * time.hour,
     health_spec = health_spec.modified_default({
         "Unhealthy": health_spec.unhealthy_thresholds(
             fail_rate = struct(),
@@ -340,6 +340,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "release_builder",
             "minimal_symbols",
             "strip_debug_info",
@@ -400,6 +401,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder_without_codecs",
+            "android_with_static_analysis",
             "clang_tot",
             "shared",
             "debug",
@@ -442,6 +444,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder_without_codecs",
+            "android_with_static_analysis",
             "clang_tot",
             "shared",
             "release",
@@ -496,6 +499,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder_without_codecs",
+            "android_with_static_analysis",
             "clang_tot",
             "shared",
             "release",
@@ -539,6 +543,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder_without_codecs",
+            "android_with_static_analysis",
             "clang_tot",
             "shared",
             "release",
@@ -583,6 +588,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder_without_codecs",
+            "android_with_static_analysis",
             "clang_tot",
             "release",
             "arm64",
@@ -905,7 +911,6 @@ clang_tot_linux_builder(
     targets = targets.bundle(
         targets = [
             "clang_tot_gtests",
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -944,7 +949,6 @@ clang_tot_linux_builder(
     ),
     targets = targets.bundle(
         targets = [
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -1034,7 +1038,6 @@ clang_tot_linux_builder(
     ),
     targets = targets.bundle(
         targets = [
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -1092,7 +1095,6 @@ clang_tot_linux_builder(
     targets = targets.bundle(
         targets = [
             "clang_tot_gtests",
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -1173,7 +1175,6 @@ clang_tot_linux_builder(
     targets = targets.bundle(
         targets = [
             "clang_tot_gtests",
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -1213,7 +1214,6 @@ clang_tot_linux_builder(
     targets = targets.bundle(
         targets = [
             "clang_tot_gtests",
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -1302,7 +1302,6 @@ ci.builder(
             "clang_tot_gtests",
             # Doesn't run win_specific_isolated_scripts because the mini
             # installer isn't hooked up in 32-bit debug builds.
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",
@@ -1905,7 +1904,6 @@ clang_mac_builder(
     targets = targets.bundle(
         targets = [
             "clang_tot_gtests",
-            "chrome_sizes_suite",
         ],
         additional_compile_targets = [
             "all",

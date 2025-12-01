@@ -34,6 +34,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kGPayAppDynamicUpdate,
     &features::kWebPaymentsExperimentalFeatures,
     &features::kWebPaymentsSingleAppUiSkip,
+    &features::kSecurePaymentConfirmationFallback,
     &kAndroidPaymentIntentsOmitDeprecatedParameters,
     &kGooglePayViaAndroidIntents,
     &kOmitParametersInReadyToPay,
@@ -69,6 +70,6 @@ BASE_FEATURE(kShowReadyToPayDebugInfo,
              base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kUpdatePaymentDetailsIntentFilterInPaymentApp,
              "UpdatePaymentDetailsIntentFilterInPaymentApp",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace payments::android

@@ -15,7 +15,6 @@ class CollaborationService;
 
 class Browser;
 class ShareKitService;
-
 namespace data_sharing {
 
 // IOS implementation of DataSharingUIDelegate.

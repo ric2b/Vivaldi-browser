@@ -159,7 +159,6 @@ if (use_blink) {
       "//components/leveldb_proto:leveldb_proto",
       "//components/offline_pages/task:task",
       "//components/prefs",
-      "//components/reading_list/features:flags",
       "//components/search_engines",
       "//components/signin/public/identity_manager",
       "//components/url_matcher:url_matcher",
@@ -251,7 +250,6 @@ if (use_blink) {
       "//components/leveldb_proto:test_support",
       "//components/offline_pages/core:test_support",
       "//components/prefs:test_support",
-      "//components/reading_list/features:flags",
       "//components/search_engines",
       "//components/search_engines:test_support",
       "//components/signin/public/identity_manager",
@@ -302,7 +300,6 @@ if (is_android) {
   java_cpp_enum("feedv2_enums_java") {
     sources = [
       "enums.h",
-      "public/common_enums.h",
       "public/types.h",
     ]
   }
@@ -312,6 +309,18 @@ if (is_android) {
   # classes define multiple times.
   android_library("feedv2_core_java") {
     srcjar_deps = [ ":feedv2_enums_java" ]
+    deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
+  }
+
+  java_cpp_enum("feedv2_common_enums_java") {
+    sources = [ "public/common_enums.h" ]
+  }
+
+  # Wrap feedv2_common_enums_java in an android_library so that only one
+  # android_library needs to depend on feedv2_common_enums_java. Otherwise, we
+  # will get classes define multiple times.
+  android_library("feedv2_common_core_java") {
+    srcjar_deps = [ ":feedv2_common_enums_java" ]
     deps = [ "//third_party/androidx:androidx_annotation_annotation_java" ]
   }
 }

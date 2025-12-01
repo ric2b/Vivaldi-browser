@@ -104,18 +104,17 @@ std::optional<DataMessageType> ToDataMessageType(dcsctp::PPID ppid) {
   return std::nullopt;
 }
 
-std::optional<cricket::SctpErrorCauseCode> ToErrorCauseCode(
-    dcsctp::ErrorKind error) {
+std::optional<SctpErrorCauseCode> ToErrorCauseCode(dcsctp::ErrorKind error) {
   switch (error) {
     case dcsctp::ErrorKind::kParseFailed:
-      return cricket::SctpErrorCauseCode::kUnrecognizedParameters;
+      return SctpErrorCauseCode::kUnrecognizedParameters;
     case dcsctp::ErrorKind::kPeerReported:
-      return cricket::SctpErrorCauseCode::kUserInitiatedAbort;
+      return SctpErrorCauseCode::kUserInitiatedAbort;
     case dcsctp::ErrorKind::kWrongSequence:
     case dcsctp::ErrorKind::kProtocolViolation:
-      return cricket::SctpErrorCauseCode::kProtocolViolation;
+      return SctpErrorCauseCode::kProtocolViolation;
     case dcsctp::ErrorKind::kResourceExhaustion:
-      return cricket::SctpErrorCauseCode::kOutOfResource;
+      return SctpErrorCauseCode::kOutOfResource;
     case dcsctp::ErrorKind::kTooManyRetries:
     case dcsctp::ErrorKind::kUnsupportedOperation:
     case dcsctp::ErrorKind::kNoError:
@@ -135,7 +134,7 @@ bool IsEmptyPPID(dcsctp::PPID ppid) {
 
 DcSctpTransport::DcSctpTransport(const Environment& env,
                                  Thread* network_thread,
-                                 cricket::DtlsTransportInternal* transport)
+                                 DtlsTransportInternal* transport)
     : DcSctpTransport(env,
                       network_thread,
                       transport,
@@ -144,7 +143,7 @@ DcSctpTransport::DcSctpTransport(const Environment& env,
 DcSctpTransport::DcSctpTransport(
     const Environment& env,
     Thread* network_thread,
-    cricket::DtlsTransportInternal* transport,
+    DtlsTransportInternal* transport,
     std::unique_ptr<dcsctp::DcSctpSocketFactory> socket_factory)
     : network_thread_(network_thread),
       transport_(transport),
@@ -184,8 +183,7 @@ void DcSctpTransport::SetDataChannelSink(DataChannelSink* sink) {
   }
 }
 
-void DcSctpTransport::SetDtlsTransport(
-    cricket::DtlsTransportInternal* transport) {
+void DcSctpTransport::SetDtlsTransport(DtlsTransportInternal* transport) {
   RTC_DCHECK_RUN_ON(network_thread_);
   DisconnectTransportSignals();
   transport_ = transport;
@@ -294,7 +292,7 @@ bool DcSctpTransport::ResetStream(int sid) {
 
 RTCError DcSctpTransport::SendData(int sid,
                                    const SendDataParams& params,
-                                   const rtc::CopyOnWriteBuffer& payload) {
+                                   const CopyOnWriteBuffer& payload) {
   RTC_DCHECK_RUN_ON(network_thread_);
   RTC_DLOG(LS_VERBOSE) << debug_name_ << "->SendData(sid=" << sid
                        << ", type=" << static_cast<int>(params.type)
@@ -432,7 +430,7 @@ void DcSctpTransport::set_debug_name_for_testing(const char* debug_name) {
 }
 
 SendPacketStatus DcSctpTransport::SendPacketWithStatus(
-    rtc::ArrayView<const uint8_t> data) {
+    ArrayView<const uint8_t> data) {
   RTC_DCHECK_RUN_ON(network_thread_);
   RTC_DCHECK(socket_);
 
@@ -454,7 +452,7 @@ SendPacketStatus DcSctpTransport::SendPacketWithStatus(
 
   auto result =
       transport_->SendPacket(reinterpret_cast<const char*>(data.data()),
-                             data.size(), rtc::PacketOptions(), 0);
+                             data.size(), AsyncSocketPacketOptions(), 0);
 
   if (result < 0) {
     RTC_LOG(LS_WARNING) << debug_name_ << "->SendPacket(length=" << data.size()
@@ -582,7 +580,7 @@ void DcSctpTransport::OnConnectionRestarted() {
 }
 
 void DcSctpTransport::OnStreamsResetFailed(
-    rtc::ArrayView<const dcsctp::StreamID> outgoing_streams,
+    ArrayView<const dcsctp::StreamID> outgoing_streams,
     absl::string_view reason) {
   // TODO(orphis): Need a test to check for correct behavior
   for (auto& stream_id : outgoing_streams) {
@@ -594,7 +592,7 @@ void DcSctpTransport::OnStreamsResetFailed(
 }
 
 void DcSctpTransport::OnStreamsResetPerformed(
-    rtc::ArrayView<const dcsctp::StreamID> outgoing_streams) {
+    ArrayView<const dcsctp::StreamID> outgoing_streams) {
   RTC_DCHECK_RUN_ON(network_thread_);
   for (auto& stream_id : outgoing_streams) {
     RTC_LOG(LS_INFO) << debug_name_
@@ -622,7 +620,7 @@ void DcSctpTransport::OnStreamsResetPerformed(
 }
 
 void DcSctpTransport::OnIncomingStreamsReset(
-    rtc::ArrayView<const dcsctp::StreamID> incoming_streams) {
+    ArrayView<const dcsctp::StreamID> incoming_streams) {
   RTC_DCHECK_RUN_ON(network_thread_);
   for (auto& stream_id : incoming_streams) {
     RTC_LOG(LS_INFO) << debug_name_
@@ -666,8 +664,8 @@ void DcSctpTransport::ConnectTransportSignals() {
   transport_->SignalWritableState.connect(
       this, &DcSctpTransport::OnTransportWritableState);
   transport_->RegisterReceivedPacketCallback(
-      this, [&](rtc::PacketTransportInternal* transport,
-                const rtc::ReceivedPacket& packet) {
+      this,
+      [&](PacketTransportInternal* transport, const ReceivedIpPacket& packet) {
         OnTransportReadPacket(transport, packet);
       });
   transport_->SetOnCloseCallback([this]() {
@@ -678,8 +676,7 @@ void DcSctpTransport::ConnectTransportSignals() {
     }
   });
   transport_->SubscribeDtlsTransportState(
-      this, [this](cricket::DtlsTransportInternal* transport,
-                   DtlsTransportState state) {
+      this, [this](DtlsTransportInternal* transport, DtlsTransportState state) {
         OnDtlsTransportState(transport, state);
       });
 }
@@ -696,7 +693,7 @@ void DcSctpTransport::DisconnectTransportSignals() {
 }
 
 void DcSctpTransport::OnTransportWritableState(
-    rtc::PacketTransportInternal* transport) {
+    PacketTransportInternal* transport) {
   RTC_DCHECK_RUN_ON(network_thread_);
   RTC_DCHECK_EQ(transport_, transport);
   RTC_DLOG(LS_VERBOSE) << debug_name_
@@ -708,9 +705,8 @@ void DcSctpTransport::OnTransportWritableState(
   MaybeConnectSocket();
 }
 
-void DcSctpTransport::OnDtlsTransportState(
-    cricket::DtlsTransportInternal* transport,
-    webrtc::DtlsTransportState state) {
+void DcSctpTransport::OnDtlsTransportState(DtlsTransportInternal* transport,
+                                           DtlsTransportState state) {
   if (state == DtlsTransportState::kNew && socket_) {
     // IF DTLS restart (DtlsTransportState::kNew)
     // THEN
@@ -729,10 +725,10 @@ void DcSctpTransport::OnDtlsTransportState(
 }
 
 void DcSctpTransport::OnTransportReadPacket(
-    rtc::PacketTransportInternal* /* transport */,
-    const rtc::ReceivedPacket& packet) {
+    PacketTransportInternal* /* transport */,
+    const ReceivedIpPacket& packet) {
   RTC_DCHECK_RUN_ON(network_thread_);
-  if (packet.decryption_info() != rtc::ReceivedPacket::kDtlsDecrypted) {
+  if (packet.decryption_info() != ReceivedIpPacket::kDtlsDecrypted) {
     // We are only interested in SCTP packets.
     return;
   }

@@ -166,7 +166,7 @@ message AppTransitionProto {
     APP_STATE_IDLE = 0;
     APP_STATE_READY = 1;
     APP_STATE_RUNNING = 2;
-    APP_STATE_TIMEOUT = 3;
+    APP_STATE_TIMEOUT = 3 [deprecated = true];
   }
   optional AppState app_transition_state = 1;
 
@@ -213,7 +213,8 @@ message DisplayContentProto {
   optional bool display_ready = 26;
   optional WindowStateProto input_method_target = 27 [deprecated = true];
   optional WindowStateProto input_method_input_target = 28 [deprecated = true];
-  optional WindowStateProto input_method_control_target = 29 [deprecated = true];
+  optional WindowStateProto input_method_control_target = 29
+      [deprecated = true];
   optional WindowStateProto current_focus = 30 [deprecated = true];
   optional ImeInsetsSourceProviderProto ime_insets_source_provider = 31;
   optional bool can_show_ime = 32 [deprecated = true];
@@ -230,6 +231,7 @@ message DisplayContentProto {
   optional IdentifierProto input_method_input_target_identifier = 41;
   optional IdentifierProto input_method_control_target_identifier = 42;
   optional IdentifierProto current_focus_identifier = 43;
+  optional RemoteInsetsControlTargetProto remote_insets_control_target = 44;
 }
 
 // represents DisplayArea object
@@ -395,6 +397,9 @@ message ActivityRecordProto {
   optional bool should_override_force_resize_app = 44;
   optional bool should_enable_user_aspect_ratio_settings = 45;
   optional bool is_user_fullscreen_override_enabled = 46;
+  optional int64 request_open_in_browser_education_timestamp = 47;
+  optional bool should_allow_simulate_requested_orientation_for_camera_compat =
+      48;
 }
 
 // represents WindowToken
@@ -461,6 +466,13 @@ message WindowStateProto {
   optional RectProto dim_bounds = 49;
   optional int32 prepare_sync_seq_id = 50;
   optional int32 sync_seq_id = 51;
+}
+
+// represents RemoteInsetsControlTarget
+message RemoteInsetsControlTargetProto {
+  optional IdentifierProto identifier = 1;
+  optional int32 requested_visible_types = 2;
+  optional int32 animating_types = 3;
 }
 
 message IdentifierProto {

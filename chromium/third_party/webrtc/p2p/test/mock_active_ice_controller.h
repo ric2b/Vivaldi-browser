@@ -23,64 +23,58 @@
 
 namespace webrtc {
 
-class MockActiveIceController : public cricket::ActiveIceControllerInterface {
+class MockActiveIceController : public ActiveIceControllerInterface {
  public:
   explicit MockActiveIceController(
-      const cricket::ActiveIceControllerFactoryArgs& /* args */) {}
+      const ActiveIceControllerFactoryArgs& /* args */) {}
   ~MockActiveIceController() override = default;
 
   MOCK_METHOD(void, SetIceConfig, (const webrtc::IceConfig&), (override));
-  MOCK_METHOD(void,
-              OnConnectionAdded,
-              (const cricket::Connection*),
-              (override));
+  MOCK_METHOD(void, OnConnectionAdded, (const webrtc::Connection*), (override));
   MOCK_METHOD(void,
               OnConnectionSwitched,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
   MOCK_METHOD(void,
               OnConnectionDestroyed,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
   MOCK_METHOD(void,
               OnConnectionPinged,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
   MOCK_METHOD(void,
               OnConnectionUpdated,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
   MOCK_METHOD(bool,
               GetUseCandidateAttribute,
-              (const cricket::Connection*,
+              (const webrtc::Connection*,
                webrtc::NominationMode,
-               cricket::IceMode),
+               webrtc::IceMode),
               (const, override));
   MOCK_METHOD(void,
               OnSortAndSwitchRequest,
-              (cricket::IceSwitchReason),
+              (webrtc::IceSwitchReason),
               (override));
   MOCK_METHOD(void,
               OnImmediateSortAndSwitchRequest,
-              (cricket::IceSwitchReason),
+              (webrtc::IceSwitchReason),
               (override));
   MOCK_METHOD(bool,
               OnImmediateSwitchRequest,
-              (cricket::IceSwitchReason, const cricket::Connection*),
+              (webrtc::IceSwitchReason, const webrtc::Connection*),
               (override));
-  MOCK_METHOD(const cricket::Connection*,
-              FindNextPingableConnection,
-              (),
-              (override));
+  MOCK_METHOD(const Connection*, FindNextPingableConnection, (), (override));
 };
 
 class MockActiveIceControllerFactory
-    : public cricket::ActiveIceControllerFactoryInterface {
+    : public ActiveIceControllerFactoryInterface {
  public:
   ~MockActiveIceControllerFactory() override = default;
 
-  std::unique_ptr<cricket::ActiveIceControllerInterface> Create(
-      const cricket::ActiveIceControllerFactoryArgs& args) {
+  std::unique_ptr<ActiveIceControllerInterface> Create(
+      const ActiveIceControllerFactoryArgs& args) {
     RecordActiveIceControllerCreated();
     return std::make_unique<MockActiveIceController>(args);
   }
@@ -92,9 +86,11 @@ class MockActiveIceControllerFactory
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::MockActiveIceController;
 using ::webrtc::MockActiveIceControllerFactory;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_MOCK_ACTIVE_ICE_CONTROLLER_H_

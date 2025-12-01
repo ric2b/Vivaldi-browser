@@ -45,7 +45,7 @@ import static org.mockito.Mockito.when;
 
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.DATA_SHARING;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.NAV_BAR_COLOR_MATCHES_TAB_BACKGROUND;
-import static org.chromium.chrome.browser.flags.ChromeFeatureList.TAB_GROUP_PANE_ANDROID;
+import static org.chromium.chrome.browser.flags.ChromeFeatureList.TAB_GROUP_PARITY_BOTTOM_SHEET_ANDROID;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.TAB_GROUP_SYNC_ANDROID;
 import static org.chromium.chrome.browser.ntp.HomeSurfaceTestUtils.createTabStatesAndMetadataFile;
 import static org.chromium.chrome.browser.ntp.HomeSurfaceTestUtils.createThumbnailBitmapAndWriteToFile;
@@ -143,7 +143,9 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
+import org.chromium.chrome.browser.tab_ui.ActionConfirmationManager;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
@@ -180,7 +182,7 @@ import java.util.concurrent.TimeoutException;
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction({Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE})
-@DisableFeatures({NAV_BAR_COLOR_MATCHES_TAB_BACKGROUND})
+@DisableFeatures({NAV_BAR_COLOR_MATCHES_TAB_BACKGROUND, TAB_GROUP_PARITY_BOTTOM_SHEET_ANDROID})
 @EnableFeatures({DATA_SHARING})
 @Batch(Batch.PER_CLASS)
 public class TabGridDialogTest {
@@ -195,7 +197,7 @@ public class TabGridDialogTest {
             ActivityLifecycleMonitorRegistry.getInstance();
 
     private boolean mHasReceivedSourceRect;
-    private TabListEditorTestingRobot mSelectionEditorRobot = new TabListEditorTestingRobot();
+    private final TabListEditorTestingRobot mSelectionEditorRobot = new TabListEditorTestingRobot();
     private ModalDialogManager mModalDialogManager;
     private PrefService mPrefService;
 
@@ -521,7 +523,7 @@ public class TabGridDialogTest {
         Rect sourceRect = new Rect();
         recyclerView.getChildAt(0).getGlobalVisibleRect(sourceRect);
         // TODO(yuezhanggg): Figure out why the sourceRect.left is wrong after setting the margin.
-        float expectedTop = sourceRect.top - parentRect.top + tabGridCardPadding;
+        float expectedTop = sourceRect.top - parentRect.top + tabGridCardPadding + deltaTopMargin;
         float expectedWidth = sourceRect.width() - 2 * tabGridCardPadding;
         float expectedHeight = sourceRect.height() - 2 * tabGridCardPadding;
 
@@ -529,9 +531,9 @@ public class TabGridDialogTest {
         TabGridDialogView.setSourceRectCallbackForTesting(
                 result -> {
                     mHasReceivedSourceRect = true;
-                    assertEquals(expectedTop, result.top, 0.0);
-                    assertEquals(expectedHeight, result.height(), 0.0);
-                    assertEquals(expectedWidth, result.width(), 0.0);
+                    assertEquals("Top mismatch", expectedTop, result.top, 0.0);
+                    assertEquals("Height mismatch", expectedHeight, result.height(), 0.0);
+                    assertEquals("Width mismatch", expectedWidth, result.width(), 0.0);
                 });
 
         TabUiTestHelper.clickFirstCardFromTabSwitcher(cta);
@@ -1109,7 +1111,6 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @RequiresRestart("crbug.com/344674734")
-    @EnableFeatures({TAB_GROUP_SYNC_ANDROID, TAB_GROUP_PANE_ANDROID})
     public void testDialogSelectionEditor_UngroupAll() {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         createTabs(cta, false, 4);
@@ -1143,7 +1144,7 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
-    @EnableFeatures({TAB_GROUP_SYNC_ANDROID, TAB_GROUP_PANE_ANDROID})
+    @EnableFeatures({TAB_GROUP_SYNC_ANDROID})
     @DisableIf.Build(
             sdk_is_less_than = Build.VERSION_CODES.TIRAMISU,
             supported_abis_includes = "x86_64",
@@ -1437,6 +1438,7 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
+    @RequiresRestart("Finishes the activity which can have cascading effects.")
     @DisabledTest(message = "https://crbug.com/1124336")
     public void testDialogInitialShowFromStrip() throws Exception {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
@@ -1665,7 +1667,7 @@ public class TabGridDialogTest {
 
     @Test
     @MediumTest
-    @DisabledTest(message = "TODO(crbug.com/40148943): Fix flakiness.")
+    @DisabledTest(message = "crbug.com/40148943")
     public void testAccessibilityString() throws ExecutionException {
         final ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         createTabs(cta, false, 3);
@@ -1677,14 +1679,24 @@ public class TabGridDialogTest {
         // Verify the initial group card content description.
         RecyclerView recyclerView = cta.findViewById(R.id.tab_list_recycler_view);
         View firstItem = recyclerView.findViewHolderForAdapterPosition(0).itemView;
-        String expandTargetString = "Expand tab group with 3 tabs.";
+        String expandTargetString = "Expand tab group with 3 tabs, color Grey.";
         assertEquals(expandTargetString, firstItem.getContentDescription());
 
         // Back button content description should update with group title.
         String collapseTargetString = "Collapse tab group with 3 tabs.";
         openDialogFromTabSwitcherAndVerify(cta, 3, null);
         verifyDialogBackButtonContentDescription(cta, collapseTargetString);
-        editDialogTitle(cta, CUSTOMIZED_TITLE1);
+
+        // Set title programmatically as doing this through the UI is flaky due to the keyboard
+        // state not being particularly reliable.
+        TabModelSelector selector = cta.getTabModelSelector();
+        TabGroupModelFilter filter =
+                selector.getTabGroupModelFilterProvider().getTabGroupModelFilter(false);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    int rootId = filter.getTabModel().getTabAt(0).getRootId();
+                    filter.setTabGroupTitle(rootId, CUSTOMIZED_TITLE1);
+                });
         collapseTargetString = "Collapse " + CUSTOMIZED_TITLE1 + " tab group with 3 tabs.";
         verifyDialogBackButtonContentDescription(cta, collapseTargetString);
 
@@ -1692,14 +1704,17 @@ public class TabGridDialogTest {
         clickScrimToExitDialog(cta);
         waitForDialogHidingAnimationInTabSwitcher(cta);
         verifyFirstCardTitle(CUSTOMIZED_TITLE1);
-        expandTargetString = "Expand " + CUSTOMIZED_TITLE1 + " tab group with 3 tabs.";
+        expandTargetString = "Expand " + CUSTOMIZED_TITLE1 + " tab group with 3 tabs, color Grey.";
         assertEquals(expandTargetString, firstItem.getContentDescription());
 
-        // Verify the TabSwitcher group card close button content description should update with
+        // Verify the TabSwitcher group card action button content description should update with
         // group title.
-        View closeButton = firstItem.findViewById(R.id.action_button);
-        String closeButtonTargetString = "Close " + CUSTOMIZED_TITLE1 + " group with 3 tabs";
-        assertEquals(closeButtonTargetString, closeButton.getContentDescription());
+        View actionButton = firstItem.findViewById(R.id.action_button);
+        String actionButtonTargetString =
+                "Open the tab group action menu for tab group "
+                        + CUSTOMIZED_TITLE1
+                        + ", color Grey.";
+        assertEquals(actionButtonTargetString, actionButton.getContentDescription());
 
         // Back button content description should update with group count change.
         openDialogFromTabSwitcherAndVerify(cta, 3, CUSTOMIZED_TITLE1);
@@ -1711,17 +1726,16 @@ public class TabGridDialogTest {
         // Group card content description should update with group count change.
         clickScrimToExitDialog(cta);
         waitForDialogHidingAnimationInTabSwitcher(cta);
-        expandTargetString = "Expand " + CUSTOMIZED_TITLE1 + " tab group with 2 tabs.";
+        expandTargetString = "Expand " + CUSTOMIZED_TITLE1 + " tab group with 2 tabs, color Grey.";
         assertEquals(expandTargetString, firstItem.getContentDescription());
-
-        // TabSwitcher group card Close button content description should update with group count
-        // change.
-        closeButtonTargetString = "Close " + CUSTOMIZED_TITLE1 + " group with 2 tabs";
-        assertEquals(closeButtonTargetString, closeButton.getContentDescription());
 
         // Back button content description should restore when the group loses customized title.
         openDialogFromTabSwitcherAndVerify(cta, 2, CUSTOMIZED_TITLE1);
-        editDialogTitle(cta, "");
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    int rootId = filter.getTabModel().getTabAt(0).getRootId();
+                    filter.deleteTabGroupTitle(rootId);
+                });
         verifyShowingDialog(cta, 2, null);
         collapseTargetString = "Collapse tab group with 2 tabs.";
         verifyDialogBackButtonContentDescription(cta, collapseTargetString);
@@ -1735,18 +1749,28 @@ public class TabGridDialogTest {
         // Group card content description should restore when the group becomes a single tab.
         clickScrimToExitDialog(cta);
         waitForDialogHidingAnimationInTabSwitcher(cta);
+        assertEquals("Expand tab group with 1 tab, color Grey.", firstItem.getContentDescription());
+
+        // Programmatically ungroup.
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    Tab tab = filter.getTabModel().getTabAt(0);
+                    filter.getTabUngrouper()
+                            .ungroupTabs(
+                                    List.of(tab), /* trailing= */ true, /* allowDialog= */ false);
+                });
         assertEquals(null, firstItem.getContentDescription());
 
         // TabSwitcher Group card Close button content description should restore when the group
         // becomes a single tab.
-        closeButtonTargetString = "Close New tab tab";
-        assertEquals(closeButtonTargetString, closeButton.getContentDescription());
+        actionButtonTargetString = "Close New tab tab";
+        assertEquals(actionButtonTargetString, actionButton.getContentDescription());
     }
 
     @Test
     @MediumTest
     @DisableIf.Device(DeviceFormFactor.TABLET)
-    @EnableFeatures({TAB_GROUP_SYNC_ANDROID, TAB_GROUP_PANE_ANDROID})
+    @EnableFeatures({TAB_GROUP_SYNC_ANDROID})
     public void testStripDialog_TabListEditorCloseAll_NoCustomHomepage() {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         // Create a tab group with 2 tabs.
@@ -1794,7 +1818,7 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @DisableIf.Device(DeviceFormFactor.TABLET)
-    @EnableFeatures({TAB_GROUP_SYNC_ANDROID, TAB_GROUP_PANE_ANDROID})
+    @EnableFeatures({TAB_GROUP_SYNC_ANDROID})
     public void testStripDialog_TabListEditorCloseAll_CustomHomepage() {
         GURL url =
                 new GURL(
@@ -1802,8 +1826,8 @@ public class TabGridDialogTest {
                                 .getEmbeddedTestServerRule()
                                 .getServer()
                                 .getURL("/chrome/test/data/android/google.html"));
-        when(mHomepagePolicyManager.isHomepageLocationPolicyEnabled()).thenReturn(true);
-        when(mHomepagePolicyManager.getHomepagePreference()).thenReturn(url);
+        when(mHomepagePolicyManager.isHomepageLocationPolicyManaged()).thenReturn(true);
+        when(mHomepagePolicyManager.getHomepageLocationPolicyUrl()).thenReturn(url);
 
         HomepagePolicyManager.setInstanceForTests(mHomepagePolicyManager);
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
@@ -1945,7 +1969,7 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @EnableFeatures({TAB_GROUP_SYNC_ANDROID, TAB_GROUP_PANE_ANDROID})
+    @EnableFeatures({TAB_GROUP_SYNC_ANDROID})
     @RequiresRestart("Group creation modal dialog is sometimes persistent when dismissing")
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     @DisabledTest(message = "crbug.com/362762206, see also crbug.com/360072870")
@@ -1978,6 +2002,7 @@ public class TabGridDialogTest {
     @Test
     @MediumTest
     @EnableAnimations
+    @DisabledTest(message = "crbug.com/412364951")
     public void testCreateIncognitoGroupAndCloseAllTabsInDialogTwice_Bug354745444() {
         ChromeTabbedActivity cta = sActivityTestRule.getActivity();
         boolean incognito = true;
@@ -2067,7 +2092,7 @@ public class TabGridDialogTest {
             return;
         }
 
-        if (!EdgeToEdgeUtils.isEnabled()) {
+        if (!EdgeToEdgeUtils.isChromeEdgeToEdgeFeatureEnabled()) {
             @ColorInt int scrimDefaultColor = cta.getColor(R.color.default_scrim_color);
             @ColorInt int navigationBarColor = SemanticColorUtils.getBottomSystemNavColor(cta);
             @ColorInt

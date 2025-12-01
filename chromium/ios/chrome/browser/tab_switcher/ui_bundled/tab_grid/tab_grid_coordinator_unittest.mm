@@ -109,11 +109,11 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetFactoryWithDelegate(
             std::make_unique<FakeAuthenticationServiceDelegate>()));
+    builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
+                              ios::BookmarkModelFactory::GetDefaultFactory());
     builder.AddTestingFactory(
         tab_groups::TabGroupSyncServiceFactory::GetInstance(),
         tab_groups::TabGroupSyncServiceFactory::GetDefaultFactory());
-    builder.AddTestingFactory(ios::BookmarkModelFactory::GetInstance(),
-                              ios::BookmarkModelFactory::GetDefaultFactory());
     profile_ = std::move(builder).Build();
 
     bookmarks::test::WaitForBookmarkModelToLoad(
@@ -132,15 +132,18 @@ class TabGridCoordinatorTest : public BlockCleanupTest {
 
     incognito_browser_ = std::make_unique<TestBrowser>(
         profile_->GetOffTheRecordProfile(), scene_state_);
+
     AddAgentsToBrowser(incognito_browser_.get());
 
+    id mockApplicationCommandHandler =
+        OCMProtocolMock(@protocol(ApplicationCommands));
     IncognitoReauthSceneAgent* reauth_agent = [[IncognitoReauthSceneAgent alloc]
-        initWithReauthModule:[[ReauthenticationModule alloc] init]];
+              initWithReauthModule:[[ReauthenticationModule alloc] init]
+        applicationCommandsHandler:mockApplicationCommandHandler];
     [scene_state_ addAgent:reauth_agent];
 
     coordinator_ = [[TabGridCoordinator alloc]
-        initWithApplicationCommandEndpoint:OCMProtocolMock(
-                                               @protocol(ApplicationCommands))
+        initWithApplicationCommandEndpoint:mockApplicationCommandHandler
                             regularBrowser:browser_.get()
                            inactiveBrowser:browser_->CreateInactiveBrowser()
                           incognitoBrowser:incognito_browser_.get()];

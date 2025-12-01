@@ -127,7 +127,7 @@ void ChromeExtensionsRendererAPIProvider::PopulateSourceMap(
   source_map->RegisterSource("notifications",
                              IDR_NOTIFICATIONS_CUSTOM_BINDINGS_JS);
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   source_map->RegisterSource("action", IDR_ACTION_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("browserAction",
                              IDR_BROWSER_ACTION_CUSTOM_BINDINGS_JS);
@@ -229,7 +229,7 @@ void ChromeExtensionsRendererAPIProvider::PopulateSourceMap(
   source_map->RegisterSource("chromeWebViewInternal",
                              IDR_CHROME_WEB_VIEW_INTERNAL_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("chromeWebView", IDR_CHROME_WEB_VIEW_JS);
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 }
 
 void ChromeExtensionsRendererAPIProvider::EnableCustomElementAllowlist() const {

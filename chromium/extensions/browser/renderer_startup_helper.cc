@@ -128,14 +128,14 @@ mojom::ExtensionLoadedParamsPtr CreateExtensionLoadedParams(
 
   // TODO(crbug.com/390138269): Optimize by only setting the value for the
   // process(es) that host an extension that can use the userScripts API.
-  const UserScriptManager* user_script_manager =
+  UserScriptManager* user_script_manager =
       ExtensionSystem::Get(browser_context)->user_script_manager();
   if (!user_script_manager) {
     CHECK_IS_TEST();
   }
   bool user_scripts_allowed =
       user_script_manager &&
-      user_script_manager->AreUserScriptsAllowed(extension, browser_context);
+      user_script_manager->AreUserScriptsAllowed(extension);
 
   return mojom::ExtensionLoadedParams::New(
       extension.manifest()->value()->Clone(), extension.location(),
@@ -496,7 +496,7 @@ BrowserContext* RendererStartupHelper::GetRendererBrowserContext() {
 }
 
 void RendererStartupHelper::AddAPIActionToActivityLog(
-    const ExtensionId& extension_id,
+    const std::optional<ExtensionId>& extension_id,
     const std::string& call_name,
     base::Value::List args,
     const std::string& extra) {
@@ -506,11 +506,12 @@ void RendererStartupHelper::AddAPIActionToActivityLog(
   }
 
   ExtensionsBrowserClient::Get()->AddAPIActionToActivityLog(
-      browser_context, extension_id, call_name, std::move(args), extra);
+      browser_context, extension_id.value_or(base::EmptyString()), call_name,
+      std::move(args), extra);
 }
 
 void RendererStartupHelper::AddEventToActivityLog(
-    const ExtensionId& extension_id,
+    const std::optional<ExtensionId>& extension_id,
     const std::string& call_name,
     base::Value::List args,
     const std::string& extra) {
@@ -520,7 +521,8 @@ void RendererStartupHelper::AddEventToActivityLog(
   }
 
   ExtensionsBrowserClient::Get()->AddEventToActivityLog(
-      browser_context, extension_id, call_name, std::move(args), extra);
+      browser_context, extension_id.value_or(base::EmptyString()), call_name,
+      std::move(args), extra);
 }
 
 void RendererStartupHelper::AddDOMActionToActivityLog(
@@ -557,7 +559,6 @@ void RendererStartupHelper::BindForRenderer(
 }
 
 void RendererStartupHelper::FlushAllForTesting() {
-  CHECK_IS_TEST();
   for (auto& it : process_mojo_map_) {
     it.second.FlushForTesting();  // IN-TEST
   }

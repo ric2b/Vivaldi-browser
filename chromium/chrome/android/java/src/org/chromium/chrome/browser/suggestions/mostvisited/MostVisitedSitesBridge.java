@@ -13,6 +13,7 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
+import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
 import org.chromium.chrome.browser.suggestions.tile.Tile;
 import org.chromium.url.GURL;
 
@@ -21,11 +22,6 @@ import java.util.List;
 /** Methods to bridge into native history to provide most recent urls, titles and thumbnails. */
 @NullMarked
 public class MostVisitedSitesBridge implements MostVisitedSites {
-    /**
-     * Maximum number of tiles that is explicitly supported. UMA relies on this value, so even if
-     * the UI supports it, getting more can raise unexpected issues.
-     */
-    public static final int MAX_TILE_COUNT = 12;
 
     private long mNativeMostVisitedSitesBridge;
 
@@ -45,8 +41,13 @@ public class MostVisitedSitesBridge implements MostVisitedSites {
 
     // CustomLinkOperations -> MostVisitedSites implementation.
     @Override
-    public boolean addCustomLink(String name, @Nullable GURL url) {
+    public boolean addCustomLink(String name, @Nullable GURL url, @Nullable Integer pos) {
         if (mNativeMostVisitedSitesBridge == 0 || GURL.isEmptyOrInvalid(url)) return false;
+        if (pos != null) {
+            return MostVisitedSitesBridgeJni.get()
+                    .addCustomLinkTo(mNativeMostVisitedSitesBridge, name, url, pos.intValue());
+        }
+
         return MostVisitedSitesBridgeJni.get()
                 .addCustomLink(mNativeMostVisitedSitesBridge, name, url);
     }
@@ -66,10 +67,16 @@ public class MostVisitedSitesBridge implements MostVisitedSites {
     }
 
     @Override
-    public boolean queryCustomLink(GURL keyUrl) {
+    public boolean hasCustomLink(GURL keyUrl) {
+        if (mNativeMostVisitedSitesBridge == 0) return false;
+        return MostVisitedSitesBridgeJni.get().hasCustomLink(mNativeMostVisitedSitesBridge, keyUrl);
+    }
+
+    @Override
+    public boolean reorderCustomLink(GURL keyUrl, int newPos) {
         if (mNativeMostVisitedSitesBridge == 0) return false;
         return MostVisitedSitesBridgeJni.get()
-                .queryCustomLink(mNativeMostVisitedSitesBridge, keyUrl);
+                .reorderCustomLink(mNativeMostVisitedSitesBridge, keyUrl, newPos);
     }
 
     // MostVisitedSites implementation.
@@ -88,7 +95,7 @@ public class MostVisitedSitesBridge implements MostVisitedSites {
 
     @Override
     public void setObserver(Observer observer, int numSites) {
-        assert numSites <= MAX_TILE_COUNT;
+        assert numSites <= SuggestionsConfig.MAX_TILE_COUNT;
         mWrappedObserver = observer;
 
         MostVisitedSitesBridgeJni.get()
@@ -191,6 +198,12 @@ public class MostVisitedSitesBridge implements MostVisitedSites {
                 @JniType("Profile*") Profile profile,
                 boolean enableCustomLinks);
 
+        boolean addCustomLinkTo(
+                long nativeMostVisitedSitesBridge,
+                @JniType("std::u16string") String caller,
+                @JniType("GURL") GURL url,
+                int pos);
+
         boolean addCustomLink(
                 long nativeMostVisitedSitesBridge,
                 @JniType("std::u16string") String caller,
@@ -204,7 +217,10 @@ public class MostVisitedSitesBridge implements MostVisitedSites {
 
         boolean deleteCustomLink(long nativeMostVisitedSitesBridge, @JniType("GURL") GURL keyUrl);
 
-        boolean queryCustomLink(long nativeMostVisitedSitesBridge, @JniType("GURL") GURL keyUrl);
+        boolean hasCustomLink(long nativeMostVisitedSitesBridge, @JniType("GURL") GURL keyUrl);
+
+        boolean reorderCustomLink(
+                long nativeMostVisitedSitesBridge, @JniType("GURL") GURL keyUrl, int newPos);
 
         void destroy(long nativeMostVisitedSitesBridge, MostVisitedSitesBridge caller);
 

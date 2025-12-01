@@ -405,9 +405,9 @@ class FakeAddressSpaceServer {
       network::mojom::IPAddressSpace space) {
     switch (space) {
       case network::mojom::IPAddressSpace::kLocal:
-        return "local";
+        return "loopback";
       case network::mojom::IPAddressSpace::kPrivate:
-        return "private";
+        return "local";
       case network::mojom::IPAddressSpace::kPublic:
         return "public";
       default:
@@ -4423,6 +4423,50 @@ IN_PROC_BROWSER_TEST_F(PrivateNetworkAccessBrowserTestForNavigations,
   EXPECT_THAT(
       SecureLocalServer().request_observer().RequestMethodsForUrl(target_url),
       IsEmpty());
+}
+
+class LocalNetworkAccessBrowserTest
+    : public PrivateNetworkAccessBrowserTestBase {
+ public:
+  LocalNetworkAccessBrowserTest()
+      : PrivateNetworkAccessBrowserTestBase(
+            {
+                network::features::kLocalNetworkAccessChecks,
+            },
+            {}) {}
+};
+
+IN_PROC_BROWSER_TEST_F(LocalNetworkAccessBrowserTest, CheckSecurityState) {
+  EXPECT_TRUE(NavigateToURL(shell(), SecurePublicURL(kDefaultPath)));
+
+  const network::mojom::ClientSecurityStatePtr security_state =
+      root_frame_host()->BuildClientSecurityState();
+  ASSERT_FALSE(security_state.is_null());
+
+  EXPECT_TRUE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  EXPECT_EQ(security_state->private_network_request_policy,
+            network::mojom::PrivateNetworkRequestPolicy::kPermissionWarn);
+}
+
+IN_PROC_BROWSER_TEST_F(LocalNetworkAccessBrowserTest, CheckBlockInsteadOfWarn) {
+  PolicyTestContentBrowserClient client;
+  client.SetBlockInsteadOfWarn();
+
+  EXPECT_TRUE(NavigateToURL(shell(), SecurePublicURL(kDefaultPath)));
+
+  const network::mojom::ClientSecurityStatePtr security_state =
+      root_frame_host()->BuildClientSecurityState();
+  ASSERT_FALSE(security_state.is_null());
+
+  EXPECT_TRUE(security_state->is_web_secure_context);
+  EXPECT_EQ(network::mojom::IPAddressSpace::kPublic,
+            security_state->ip_address_space);
+
+  EXPECT_EQ(security_state->private_network_request_policy,
+            network::mojom::PrivateNetworkRequestPolicy::kPermissionBlock);
 }
 
 }  // namespace content

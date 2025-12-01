@@ -184,6 +184,10 @@ class OmniboxClient {
   virtual void OnFocusChanged(OmniboxFocusState state,
                               OmniboxFocusChangeReason reason) {}
 
+  // Called to notify clients when keyword mode is entered or exited.
+  virtual void OnKeywordModeChanged(bool entered,
+                                    const std::u16string& keyword) {}
+
   // Called to show HaTS survey if the proper criteria is met.
   virtual void MaybeShowOnFocusHatsSurvey(AutocompleteProviderClient* client) {}
 
@@ -195,9 +199,11 @@ class OmniboxClient {
   // support preloading (currently, prefetching or prerendering) of search
   // results pages should preload only if `should_preload` is true. If the
   // implementation supports fetching of bitmaps for URLs (not all embedders
-  // do), `on_bitmap_fetched` will be called when the bitmap has been fetched.
-  using BitmapFetchedCallback =
-      base::RepeatingCallback<void(int result_index, const SkBitmap& bitmap)>;
+  // do), `on_bitmap_fetched` will be called when the bitmap has been fetched,
+  // with the arguments being the index of the result, the URL of the bitmap,
+  // and the bitmap itself.
+  using BitmapFetchedCallback = base::RepeatingCallback<
+      void(int result_index, const GURL& icon_url, const SkBitmap& bitmap)>;
   virtual void OnResultChanged(const AutocompleteResult& result,
                                bool default_match_changed,
                                bool should_preload,

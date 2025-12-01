@@ -9,21 +9,43 @@ load("//lib/targets.star", "targets")
 
 luci.bucket(
     name = "webrtc",
-    acls = [
-        acl.entry(
-            roles = acl.BUILDBUCKET_READER,
+    constraints = luci.bucket_constraints(
+        pools = ["luci.chromium.webrtc"],
+        service_accounts = [
+            "chromium-ci-builder@chops-service-accounts.iam.gserviceaccount.com",
+            "webrtc-ci-builder@chops-service-accounts.iam.gserviceaccount.com",
+        ],
+    ),
+    bindings = [
+        luci.binding(
+            roles = "role/buildbucket.reader",
             groups = "all",
         ),
-        acl.entry(
-            roles = acl.BUILDBUCKET_TRIGGERER,
-            groups = "project-chromium-ci-schedulers",
+        luci.binding(
+            roles = "role/buildbucket.creator",
+            groups = "project-webrtc-led-users",
         ),
-        acl.entry(
-            roles = acl.BUILDBUCKET_OWNER,
+        luci.binding(
+            roles = "role/buildbucket.triggerer",
+            groups = [
+                "project-chromium-ci-schedulers",
+                "project-webrtc-admins",
+            ],
+        ),
+        luci.binding(
+            roles = "role/buildbucket.owner",
             groups = "project-chromium-admins",
         ),
-        acl.entry(
-            roles = acl.SCHEDULER_OWNER,
+        luci.binding(
+            roles = "role/scheduler.owner",
+            groups = "project-webrtc-admins",
+        ),
+        luci.binding(
+            roles = "role/swarming.poolUser",
+            groups = "project-webrtc-admins",
+        ),
+        luci.binding(
+            roles = "role/swarming.taskTriggerer",
             groups = "project-webrtc-admins",
         ),
     ],
@@ -82,6 +104,7 @@ builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "debug_static_builder",
             "remoteexec",
             "arm64",

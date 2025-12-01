@@ -10,17 +10,28 @@
 
 #include "modules/video_capture/video_capture_impl.h"
 
-#include <stdlib.h>
-#include <string.h>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 
+#include "api/scoped_refptr.h"
+#include "api/sequence_checker.h"
 #include "api/video/i420_buffer.h"
-#include "api/video/video_frame_buffer.h"
+#include "api/video/video_frame.h"
+#include "api/video/video_rotation.h"
+#include "api/video/video_sink_interface.h"
 #include "common_video/libyuv/include/webrtc_libyuv.h"
+#include "modules/video_capture/raw_video_sink_interface.h"
 #include "modules/video_capture/video_capture_config.h"
+#include "modules/video_capture/video_capture_defines.h"
+#include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/race_checker.h"
+#include "rtc_base/synchronization/mutex.h"
 #include "rtc_base/time_utils.h"
 #include "rtc_base/trace_event.h"
-#include "third_party/libyuv/include/libyuv.h"
+#include "third_party/libyuv/include/libyuv/convert.h"
+#include "third_party/libyuv/include/libyuv/rotate.h"
 
 namespace webrtc {
 namespace videocapturemodule {
@@ -73,12 +84,12 @@ int32_t VideoCaptureImpl::RotationInDegrees(VideoRotation rotation,
 }
 
 VideoCaptureImpl::VideoCaptureImpl()
-    : _deviceUniqueId(NULL),
+    : _deviceUniqueId(nullptr),
       _requestedCapability(),
       _lastProcessTimeNanos(TimeNanos()),
       _lastFrameRateCallbackTimeNanos(TimeNanos()),
-      _dataCallBack(NULL),
-      _rawDataCallBack(NULL),
+      _dataCallBack(nullptr),
+      _rawDataCallBack(nullptr),
       _lastProcessFrameTimeNanos(TimeNanos()),
       _rotateFrame(kVideoRotation_0),
       apply_rotation_(false) {
@@ -97,7 +108,7 @@ VideoCaptureImpl::~VideoCaptureImpl() {
 }
 
 void VideoCaptureImpl::RegisterCaptureDataCallback(
-    rtc::VideoSinkInterface<VideoFrame>* dataCallBack) {
+    VideoSinkInterface<VideoFrame>* dataCallBack) {
   MutexLock lock(&api_lock_);
   RTC_DCHECK(!_rawDataCallBack);
   _dataCallBack = dataCallBack;
@@ -112,8 +123,8 @@ void VideoCaptureImpl::RegisterCaptureDataCallback(
 
 void VideoCaptureImpl::DeRegisterCaptureDataCallback() {
   MutexLock lock(&api_lock_);
-  _dataCallBack = NULL;
-  _rawDataCallBack = NULL;
+  _dataCallBack = nullptr;
+  _rawDataCallBack = nullptr;
 }
 int32_t VideoCaptureImpl::DeliverCapturedFrame(VideoFrame& captureFrame) {
   RTC_CHECK_RUNS_SERIALIZED(&capture_checker_);
@@ -186,7 +197,7 @@ int32_t VideoCaptureImpl::IncomingFrame(uint8_t* videoFrame,
   // Setting absolute height (in case it was negative).
   // In Windows, the image starts bottom left, instead of top left.
   // Setting a negative source height, inverts the image (within LibYuv).
-  rtc::scoped_refptr<I420Buffer> buffer = I420Buffer::Create(
+  scoped_refptr<I420Buffer> buffer = I420Buffer::Create(
       target_width, target_height, stride_y, stride_uv, stride_uv);
 
   libyuv::RotationMode rotation_mode = libyuv::kRotate0;

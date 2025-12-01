@@ -1,6 +1,7 @@
 // Copyright (c) 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 
@@ -8,12 +9,8 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import linearMemoryHighlightChipListStylesRaw from './linearMemoryHighlightChipList.css.js';
+import linearMemoryHighlightChipListStyles from './linearMemoryHighlightChipList.css.js';
 import type {HighlightInfo} from './LinearMemoryViewerUtils.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const linearMemoryHighlightChipListStyles = new CSSStyleSheet();
-linearMemoryHighlightChipListStyles.replaceSync(linearMemoryHighlightChipListStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -63,10 +60,6 @@ export class LinearMemoryHighlightChipList extends HTMLElement {
   #highlightedAreas: HighlightInfo[] = [];
   #focusedMemoryHighlight?: HighlightInfo;
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [linearMemoryHighlightChipListStyles];
-  }
-
   set data(data: LinearMemoryHighlightChipListData) {
     this.#highlightedAreas = data.highlightInfos;
     this.#focusedMemoryHighlight = data.focusedMemoryHighlight;
@@ -81,6 +74,7 @@ export class LinearMemoryHighlightChipList extends HTMLElement {
       chips.push(this.#createChip(highlightInfo));
     }
     const result = html`
+            <style>${linearMemoryHighlightChipListStyles}</style>
             <div class="highlight-chip-list">
               ${chips}
             </div>

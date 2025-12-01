@@ -440,10 +440,8 @@ void WidgetDelegate::SetCanResize(bool can_resize) {
   }
 }
 
-// TODO (kylixrd): This will be removed once Widget no longer "owns" the
-// WidgetDelegate.
-void WidgetDelegate::SetOwnedByWidget(bool owned) {
-  owned_by_widget_ = owned;
+void WidgetDelegate::SetOwnedByWidget(OwnedByWidgetPassKey) {
+  owned_by_widget_ = true;
 }
 
 void WidgetDelegate::SetFocusTraversesOut(bool focus_traverses_out) {
@@ -531,16 +529,18 @@ void WidgetDelegate::RegisterWidgetInitializedCallback(
   widget_initialized_callbacks_->emplace_back(std::move(callback));
 }
 
-void WidgetDelegate::RegisterWindowWillCloseCallback(
-    base::OnceClosure callback) {
-  window_will_close_callbacks_.emplace_back(std::move(callback));
-}
-
 void WidgetDelegate::RegisterWindowClosingCallback(base::OnceClosure callback) {
   window_closing_callbacks_.emplace_back(std::move(callback));
 }
 
+void WidgetDelegate::RegisterWindowWillCloseCallback(
+    RegisterWillCloseCallbackPassKey,
+    base::OnceClosure callback) {
+  window_will_close_callbacks_.emplace_back(std::move(callback));
+}
+
 void WidgetDelegate::RegisterDeleteDelegateCallback(
+    RegisterDeleteCallbackPassKey,
     base::OnceClosure callback) {
   delete_delegate_callbacks_.emplace_back(std::move(callback));
 }

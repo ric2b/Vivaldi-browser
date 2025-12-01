@@ -2810,6 +2810,9 @@
   <message name="IDS_KIOSK_APP_ERROR_USER_CANCEL" desc="Error message used when a kiosk app launch is canceled by user.">
     Kiosk application launch canceled.
   </message>
+  <message name="IDS_KIOSK_APP_ERROR_UNABLE_TO_LAUNCH_CHROME_APP" desc="Error message used when a kiosk session fails to launch due to the app being launched is a deprecated Chrome App.">
+    Can't launch unsupported Chrome app. Notify your administrator about this issue.
+  </message>
   <message name="IDS_KIOSK_EXTERNAL_UPDATE_IN_PROGRESS" desc="Message shown on screen when the system is updating kiosk apps from usb stick.">
     Please wait....Kiosk app is in the process of being updated. Do not remove the USB stick.
   </message>
@@ -6393,7 +6396,15 @@ Permissions you've already given to apps may apply to this account. You can cont
   <message name="IDS_BOREALIS_FEEDBACK_PLACEHOLDER" desc="Placeholder text for the Borealis feedback dialog.">
     Share your feedback or describe your issue. If possible, include steps to reproduce your issue.
   </message>
-
+  <message name="IDS_BOREALIS_MOTD_DISMISS_TEXT" desc="Text on dismiss button in Borealis MOTD. Clicking on it will dismiss the dialog.">
+    Dismiss
+  </message>
+  <message name="IDS_BOREALIS_MOTD_PLACEHOLDER_TEXT" desc="Placeholder text for Borealis MOTD. Shown if the message of the day is unable to be retrieved from the Static Content Service.">
+    Unable to retrieve Steam for Chromebook news.
+  </message>
+  <message name="IDS_BOREALIS_MOTD_TITLE_TEXT" desc="Title text for Borealis MOTD. Shown at the top of the dialog.">
+    Steam for Chromebook News
+  </message>
 
   <!-- TPM firmware auto-update notifications -->
   <message name="IDS_TPM_AUTO_UPDATE_PLANNED_NOTIFICATION_TITLE" desc="Title for the notification informing the user that local data will be deleted.">
@@ -6773,29 +6784,6 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
   </message>
   <message name="IDS_SECURITY_TOKEN_SESSION_LOGOUT_MESSAGE_BODY" desc="This is the text of a notification appearing the first time the a user was logged out because they removed their smart card. This only applies to users that authenticate with a smart card and for who this behavior was enabled by a policy.">
     <ph name="DOMAIN">$1<ex>example.com</ex></ph> requires you to keep your smart card inserted.
-  </message>
-
-  <!-- Strings for full restore notifications -->
-  <message name="IDS_RESTORE_NOTIFICATION_RESTORE_BUTTON" desc="The restore button label of the notification for the user to select restore apps and pages on startup.">
-    Restore
-  </message>
-  <message name="IDS_RESTORE_NOTIFICATION_CANCEL_BUTTON" desc="The cancel button label of the notification for the user to select not restore on startup.">
-    No thanks
-  </message>
-  <message name="IDS_RESTORE_NOTIFICATION_SETTINGS_BUTTON" desc="The settings button label of the notification for the user to set the restore setting.">
-    Settings
-  </message>
-  <message name="IDS_RESTORE_NOTIFICATION_TITLE" desc="This is the title of the notification for the user to select restore or not on startup.">
-    Restore apps?
-  </message>
-  <message name="IDS_RESTORE_CRASH_NOTIFICATION_TITLE" desc="This is the title of the notification for the user to select restore or not on startup after crash.">
-    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> restarted unexpectedly
-  </message>
-  <message name="IDS_RESTORE_NOTIFICATION_MESSAGE" desc="This is the text message of the notification for the user to select restore or not on startup if the 'restore_apps' setting is 'Ask every time', and the system is not crashed before reboot.">
-    Continue from where you left off. You can set apps to always restore on startup or turn off restore in Settings.
-  </message>
-  <message name="IDS_RESTORE_CRASH_NOTIFICATION_MESSAGE" desc="This is the text message of the notification for the user to select restore or not on startup after crash.">
-    You can restore your previous apps
   </message>
 
   <!-- Strings for multi-capture -->
@@ -7415,6 +7403,30 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
   </message>
   <message name="IDS_FLOATING_WORKSPACE_PROGRESS_BAR_MESSAGE" desc="Message for floating workspace notification progress bar status.">
     Opening windows from your previous device
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_STARTUP_DIALOG_TITLE" desc="Title for floating workspace startup dialog.">
+    Restoring windows from your previous session...
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_STARTUP_DIALOG_LONG_RESPONSE_TITLE" desc="Title for floating workspace startup dialog when floating workspace is taking too long.">
+    Restoring windows is taking longer than expected
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_STARTUP_DIALOG_BUTTON" desc="Button for floating workspace dialog that closes the dialog without waiting for browser and app windows to be restored.">
+    Don't restore windows
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_NETWORK_DIALOG_TITLE" desc="Title for floating workspace network dialog which is shown when there is no network connection.">
+    Network not available
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_NETWORK_DIALOG_SUBTITLE" desc="Subtitle for floating workspace network dialog which is shown when there is no network connection.">
+    Internet connection is required.
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_ERROR_DIALOG_TITLE" desc="Title for floating dialog error screen which is shown when floating workspace can not restore the session.">
+    Can't restore windows from your previous session
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_ERROR_DIALOG_SUBTITLE" desc="Subtitle for floating dialog error screen which is shown when floating workspace can not restore the session.">
+    An error occured
+  </message>
+  <message name="IDS_FLOATING_WORKSPACE_ERROR_DIALOG_BUTTON" desc="Button for floating workspace error dialog that disables floating workspace and closes the dialog after the error screen is shown.">
+    Continue to new session
   </message>
 
   <!-- Shortcut Accessibility Label-->

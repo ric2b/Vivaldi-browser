@@ -99,7 +99,7 @@ void TestImpl(size_t rank, xnn_unary_operator op) {
   for (int reshape = 0; reshape < 2; ++reshape) {
     std::vector<size_t> shape = random_shape(rng, rank, 1, max_dim);
 
-    Tensor<In> input(shape, {XNN_EXTRA_BYTES});
+    Tensor<In> input(shape, XnnExtraBytes);
     Tensor<Out> output(shape);
 
     DatatypeGenerator<In> gen(domain.min, domain.max, input_quantization);
@@ -147,14 +147,23 @@ void TestImpl(size_t rank, xnn_unary_operator op) {
         }
       } else {
         const float input_i = dequantize(input(i), input_quantization);
-        float expected = op_info->ReferenceImpl(
-            input_i, params);
+        float expected = op_info->ReferenceImpl(input_i, params);
         // Force overflow to infinity if that is what should happen.
         expected = static_cast<float>(static_cast<Out>(expected));
-        ASSERT_NEAR(expected, output(i),
-                    op_info->Tolerance(expected, datatype_out))
-            << "i = " << index_to_string(i) << ", input(i) = " << input_i
-            << " (" << static_cast<float>(input(i)) << ")";
+        if (std::abs(expected) < NumericLimits<Out>::smallest_normal()) {
+          // Flush denormals to 0
+          expected = 0.0f;
+        }
+        if (op_info->IsInSupportedRange(expected)) {
+          if (std::isnan(static_cast<float>(expected))) {
+            ASSERT_TRUE(std::isnan(static_cast<float>(output(i))));
+          } else {
+            ASSERT_NEAR(expected, output(i),
+                        op_info->Tolerance(expected, datatype_out))
+                << "i = " << index_to_string(i) << ", input(i) = " << input_i
+                << " (" << static_cast<float>(input(i)) << ")";
+          }
+        }
       }
     }
   }

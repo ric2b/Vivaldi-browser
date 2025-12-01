@@ -74,10 +74,10 @@ class TestDelegate : public ToolbarController::PinnedActionsDelegate {
   }
   ~TestDelegate() override = default;
 
-  actions::ActionItem* GetActionItemFor(const actions::ActionId& id) override {
+  actions::ActionItem* GetActionItemFor(actions::ActionId id) override {
     return kIdToItemMap_.at(id);
   }
-  bool IsOverflowed(const actions::ActionId& id) override {
+  bool IsOverflowed(actions::ActionId id) override {
     return kIdToOverflowedMap_.at(id);
   }
   views::View* GetContainerView() override { return container_view_; }
@@ -113,7 +113,7 @@ class TestDelegateFromModel : public ToolbarController::PinnedActionsDelegate {
   }
   ~TestDelegateFromModel() override = default;
 
-  actions::ActionItem* GetActionItemFor(const actions::ActionId& id) override {
+  actions::ActionItem* GetActionItemFor(actions::ActionId id) override {
     for (const auto& action_item : action_items_) {
       if (action_item->GetActionId() == id) {
         return action_item.get();
@@ -131,7 +131,7 @@ class TestDelegateFromModel : public ToolbarController::PinnedActionsDelegate {
             .Build());
     return action_items_.back().get();
   }
-  bool IsOverflowed(const actions::ActionId& id) override { return false; }
+  bool IsOverflowed(actions::ActionId id) override { return false; }
   views::View* GetContainerView() override { return &container_view_; }
   bool ShouldAnyButtonsOverflow(gfx::Size available_size) const override {
     return false;
@@ -251,7 +251,7 @@ TEST_F(PopOutHandlerTest, PopOutAndEndPopOut) {
   views::View* view = container_view()->AddChildView(std::move(observed_view));
 
   EXPECT_CALL(toolbar_controller, EndPopOut(kDummyButton));
-  container_view()->RemoveChildView(view);
+  container_view()->RemoveChildViewT<views::View>(view);
 }
 
 constexpr int kElementFlexOrderStart = 1;

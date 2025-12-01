@@ -15,6 +15,7 @@
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
+#include "base/notimplemented.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
@@ -234,8 +235,7 @@ namespace internal {
 bool GetNetworkListUsingGetifaddrs(NetworkInterfaceList* networks,
                                    int policy,
                                    bool use_alternative_getifaddrs) {
-  DCHECK_GE(base::android::android_info::sdk_int(),
-            base::android::android_info::SDK_VERSION_NOUGAT);
+  DCHECK_GE(base::android::android_info::sdk_int(), GETIFADDRS_MIN_API);
   DCHECK(getifaddrs);
   DCHECK(freeifaddrs);
 #else

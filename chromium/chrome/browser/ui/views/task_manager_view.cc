@@ -34,6 +34,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -90,7 +91,7 @@ const auto kTabDefinitions = std::to_array<TaskManagerView::FilterTab>({
     {
         .associated_category = DisplayCategory::kTabsAndExtensions,
         .title_id = IDS_TASK_MANAGER_CATEGORY_TABS_AND_EXTENSIONS_NAME,
-        .icon = &views::kNewTabIcon,
+        .icon = &kNewTabRefreshIcon,
     },
     {
         .associated_category = DisplayCategory::kSystem,
@@ -155,6 +156,13 @@ task_manager::TaskManagerTableModel* TaskManagerView::Show(
   g_task_manager_view->SelectTaskOfActiveTab(browser);
   g_task_manager_view->GetWidget()->Show();
 
+  if (g_task_manager_view->table_config_.layout_refresh &&
+      ui::AXPlatform::GetInstance().IsScreenReaderActive()) {
+    // For a11y: with the refreshed layout, the top-left most item should be
+    // focused by default so screen readers read out the layout ltr (or flipped
+    // for rtl).
+    g_task_manager_view->tabs_->GetSelectedTab()->RequestFocus();
+  }
 #if BUILDFLAG(IS_CHROMEOS)
   aura::Window* window = g_task_manager_view->GetWidget()->GetNativeWindow();
   // An app id for task manager windows, also used to identify the shelf item.
@@ -624,17 +632,17 @@ void TaskManagerView::Init() {
       provider->GetCornerRadiusMetric(views::Emphasis::kHigh);
 
   if (table_config_.header_style) {
-    views::TableHeaderStyle header_style = {
-        .cell_vertical_padding = 14,
-        .cell_horizontal_padding = 12,
-        .resize_bar_vertical_padding = 16,
-        .separator_horizontal_padding = 0,
-        .font_weight = gfx::Font::Weight::MEDIUM,
-        .separator_horizontal_color_id = ui::kColorSysDivider,
-        .separator_vertical_color_id = ui::kColorSysDivider,
-        .background_color_id = kColorTaskManagerTableHeaderBackground,
-        .focus_ring_upper_corner_radius = corner_radius,
-    };
+    views::TableHeaderStyle header_style(
+        /*cell_vertical_padding=*/14, /*cell_horizontal_padding=*/12,
+        /*resize_bar_vertical_padding=*/16,
+        /*separator_horizontal_padding=*/0,
+        /*font_weight=*/gfx::Font::Weight::MEDIUM,
+        /*separator_horizontal_color_id=*/ui::kColorSysDivider,
+        /*separator_vertical_color_id=*/ui::kColorSysDivider,
+        /*background_color_id=*/kColorTaskManagerTableHeaderBackground,
+        /*focus_ring_upper_corner_radius=*/corner_radius,
+        /*header_sort_state=*/
+        base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh));
     tab_table->SetHeaderStyle(header_style);
   }
 
@@ -792,8 +800,14 @@ void TaskManagerView::SaveCategoryToLocalState(DisplayCategory category) {
 void TaskManagerView::EndSelectedProcess() {
   using SelectedIndices = ui::ListSelectionModel::SelectedIndices;
   SelectedIndices selection(tab_table_->selection_model().selected_indices());
+  bool any_task_ended = false;
   for (int index : base::Reversed(selection)) {
-    table_model_->KillTask(index);
+    any_task_ended |= table_model_->KillTask(index);
+  }
+
+  // AX: Announce the result of ending a task group.
+  if (table_config_.layout_refresh) {
+    AnnounceTaskEnded(any_task_ended);
   }
 
   base::TimeTicks current_time = base::TimeTicks::Now();
@@ -802,6 +816,12 @@ void TaskManagerView::EndSelectedProcess() {
                                         ++end_process_count_);
   }
   latest_end_process_time_ = current_time;
+}
+
+void TaskManagerView::AnnounceTaskEnded(bool any_task_ended) {
+  GetViewAccessibility().AnnounceText(l10n_util::GetStringUTF16(
+      any_task_ended ? IDS_TASK_MANAGER_TASK_KILL_SUCCESS_ACCESSIBILITY_MESSAGE
+                     : IDS_TASK_MANAGER_TASK_KILL_FAIL_ACCESSIBILITY_MESSAGE));
 }
 
 bool TaskManagerView::IsEndProcessButtonEnabled() const {

@@ -14,7 +14,6 @@
 
 #include "base/bits.h"
 #include "base/memory/raw_ptr.h"
-#include "base/not_fatal_until.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_sizes.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
@@ -208,7 +207,7 @@ std::unique_ptr<ExternalVkImageBacking> ExternalVkImageBacking::Create(
     VkFormat vk_format = ToVkFormat(format, plane);
 
     auto it = image_usage_cache.find(vk_format);
-    CHECK(it != image_usage_cache.end(), base::NotFatalUntil::M130);
+    CHECK(it != image_usage_cache.end());
     auto vk_tiling_usage = it->second;
 
     // Requested usage flags must be supported.
@@ -350,9 +349,7 @@ ExternalVkImageBacking::CreateWithPixmap(
   }
 
   // Create a handle from pixmap.
-  gfx::GpuMemoryBufferHandle handle;
-  handle.type = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
-  handle.native_pixmap_handle = pixmap->ExportHandle();
+  gfx::GpuMemoryBufferHandle handle(pixmap->ExportHandle());
 
   // Create backing from the handle.
   return CreateFromGMB(std::move(context_state), command_pool, mailbox,
@@ -403,7 +400,7 @@ ExternalVkImageBacking::ExternalVkImageBacking(
                   ->GetSurfaceFactoryOzone()
                   ->CreateNativePixmapFromHandle(
                       kNullSurfaceHandle, size, ToBufferFormat(format),
-                      std::move(handle.native_pixmap_handle));
+                      std::move(handle).native_pixmap_handle());
   }
 #endif  // BUILDFLAG(IS_OZONE)
 }
@@ -676,10 +673,7 @@ scoped_refptr<gfx::NativePixmap> ExternalVkImageBacking::GetNativePixmap() {
 
 gfx::GpuMemoryBufferHandle ExternalVkImageBacking::GetGpuMemoryBufferHandle() {
 #if BUILDFLAG(IS_OZONE)
-  gfx::GpuMemoryBufferHandle handle;
-  handle.type = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
-  handle.native_pixmap_handle = pixmap_->ExportHandle();
-  return handle;
+  return gfx::GpuMemoryBufferHandle(pixmap_->ExportHandle());
 #else
   NOTREACHED() << "Illegal access to GetGpuMemoryBufferHandle for non OZONE "
                   "platforms from this backing.";

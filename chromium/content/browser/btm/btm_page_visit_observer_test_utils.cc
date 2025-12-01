@@ -13,8 +13,7 @@ namespace content {
 std::ostream& operator<<(std::ostream& out, const BtmPageVisitInfo& page) {
   return out << "BtmPageVisitInfo{url=" << page.url
              << ", source_id=" << page.source_id
-             << ", had_qualifying_storage_access="
-             << page.had_qualifying_storage_access
+             << ", had_active_storage_access=" << page.had_active_storage_access
              << ", received_user_activation=" << page.received_user_activation
              << ", had_successful_webauthn_assertion="
              << page.had_successful_web_authn_assertion
@@ -74,9 +73,9 @@ BtmPageVisitRecorder::~BtmPageVisitRecorder() = default;
   return visits_.size() >= n;
 }
 
-void BtmPageVisitRecorder::OnVisit(const BtmPageVisitInfo& prev_page,
-                                   const BtmNavigationInfo& navigation) {
-  visits_.emplace_back(prev_page, navigation);
+void BtmPageVisitRecorder::OnVisit(BtmPageVisitInfo prev_page,
+                                   BtmNavigationInfo navigation) {
+  visits_.emplace_back(std::move(prev_page), std::move(navigation));
 
   if (wait_state_.has_value() && wait_state_->wanted_count <= visits_.size()) {
     wait_state_->run_loop.Quit();

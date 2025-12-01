@@ -7,11 +7,10 @@ package org.chromium.chrome.browser.appearance.settings;
 import android.content.Context;
 import android.os.Bundle;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.bookmarks.bar.BookmarkBarSettingProvider;
 import org.chromium.chrome.browser.bookmarks.bar.BookmarkBarUtils;
@@ -25,6 +24,7 @@ import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 
 /** Fragment to manage appearance settings. */
+@NullMarked
 public class AppearanceSettingsFragment extends ChromeBaseSettingsFragment
         implements CustomDividerFragment {
 
@@ -57,8 +57,8 @@ public class AppearanceSettingsFragment extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
+    public void onStart() {
+        super.onStart();
         updatePreferences();
     }
 
@@ -67,7 +67,7 @@ public class AppearanceSettingsFragment extends ChromeBaseSettingsFragment
         return mPageTitle;
     }
 
-    public static @NonNull String getTitle(@NonNull Context context) {
+    public static String getTitle(Context context) {
         return context.getString(R.string.appearance_settings);
     }
 
@@ -123,7 +123,7 @@ public class AppearanceSettingsFragment extends ChromeBaseSettingsFragment
         // LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/settings/MainSettings.java:InitPrefUiTheme)
     }
 
-    private void removePreference(@NonNull String prefKey) {
+    private void removePreference(String prefKey) {
         getPreferenceScreen().removePreference(findPreference(prefKey));
     }
 
@@ -144,5 +144,10 @@ public class AppearanceSettingsFragment extends ChromeBaseSettingsFragment
                 .setSummary(
                         NightModeUtils.getThemeSettingTitle(
                                 getContext(), NightModeUtils.getThemeSetting()));
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

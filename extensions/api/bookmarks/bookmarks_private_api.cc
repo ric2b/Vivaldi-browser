@@ -119,6 +119,7 @@ void VivaldiBookmarksAPI::BookmarkMetaInfoChanged(const BookmarkNode* node) {
   change_info.thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
   change_info.nickname = vivaldi_bookmark_kit::GetNickname(node);
   change_info.theme_color = vivaldi_bookmark_kit::GetThemeColorForCSS(node);
+  change_info.display_url = vivaldi_bookmark_kit::GetDisplayURL(node);
 
   ::vivaldi::BroadcastEvent(bookmarks_private::OnMetaInfoChanged::kEventName,
                             bookmarks_private::OnMetaInfoChanged::Create(

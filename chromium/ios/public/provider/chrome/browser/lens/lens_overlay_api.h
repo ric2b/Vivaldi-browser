@@ -45,12 +45,22 @@ class GURL;
 // The lens overlay has deferred a gesture.
 - (void)lensOverlayDidDeferGesture:(id<ChromeLensOverlay>)lensOverlay;
 
+@optional
+// The lens overlay failed to detect translatable text.
+- (void)lensOverlayDidFailDetectingTranslatableText:
+    (id<ChromeLensOverlay>)lensOverlay;
+
 @end
 
 // Defines the interface for interacting with a Chrome Lens Overlay.
 @protocol ChromeLensOverlay
 
+// The size of the base image in points.
+@property(nonatomic, readonly) CGSize imageSize;
+
 // Whether the current mode is translate.
+//
+// Note: this method will always return `NO` until the overlay is started.
 @property(nonatomic, readonly) BOOL translateFilterActive;
 
 // The layout guide that demarcates the start of the unobstructed area.
@@ -66,7 +76,7 @@ class GURL;
 // If `clearSelection` is YES, the current visual selection will be cleared.
 - (void)setQueryText:(NSString*)text clearSelection:(BOOL)clearSelection;
 
-// Starts executing requests.
+// Starts executing requests. Subsequent calls after the first one are no-op.
 - (void)start;
 
 // Reloads a previous result in the overlay.
@@ -93,6 +103,12 @@ class GURL;
 
 // Disables flyout menus from displaying.
 - (void)disableFlyoutMenu:(BOOL)disable;
+
+// Sets the rest height of the guidance view.
+//
+// The guidance view represents the short educational message shown in the
+// bottom half of the screen.
+- (void)setGuidanceRestHeight:(CGFloat)height;
 
 // Optional until fully integrated.
 @optional

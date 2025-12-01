@@ -82,12 +82,14 @@ void CXFA_FFLine::GetRectFromHand(CFX_RectF& rect,
 void CXFA_FFLine::RenderWidget(CFGAS_GEGraphics* pGS,
                                const CFX_Matrix& matrix,
                                HighlightOption highlight) {
-  if (!HasVisibleStatus())
+  if (!HasVisibleStatus()) {
     return;
+  }
 
-  CXFA_Value* value = m_pNode->GetFormValueIfExists();
-  if (!value)
+  CXFA_Value* value = node_->GetFormValueIfExists();
+  if (!value) {
     return;
+  }
 
   FX_ARGB lineColor = 0xFF000000;
   float fLineWidth = 1.0f;
@@ -96,8 +98,9 @@ void CXFA_FFLine::RenderWidget(CFGAS_GEGraphics* pGS,
   CXFA_Line* line = value->GetLineIfExists();
   if (line) {
     CXFA_Edge* edge = line->GetEdgeIfExists();
-    if (edge && !edge->IsVisible())
+    if (edge && !edge->IsVisible()) {
       return;
+    }
 
     if (edge) {
       lineColor = edge->GetColor();
@@ -111,7 +114,7 @@ void CXFA_FFLine::RenderWidget(CFGAS_GEGraphics* pGS,
   mtRotate.Concat(matrix);
 
   CFX_RectF rtLine = GetRectWithoutRotate();
-  CXFA_Margin* margin = m_pNode->GetMarginIfExists();
+  CXFA_Margin* margin = node_->GetMarginIfExists();
   XFA_RectWithoutMargin(&rtLine, margin);
 
   GetRectFromHand(rtLine, line ? line->GetHand() : XFA_AttributeValue::Left,

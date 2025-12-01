@@ -162,7 +162,7 @@ class Device final : public DeviceBase {
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
-        OwnedCompilationMessages* compilationMessages) override;
+        std::unique_ptr<OwnedCompilationMessages>* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
@@ -183,7 +183,8 @@ class Device final : public DeviceBase {
 
 class PhysicalDevice : public PhysicalDeviceBase {
   public:
-    PhysicalDevice();
+    static Ref<PhysicalDevice> Create();
+
     ~PhysicalDevice() override;
 
     // PhysicalDeviceBase Implementation
@@ -200,6 +201,8 @@ class PhysicalDevice : public PhysicalDeviceBase {
     using PhysicalDeviceBase::SetSupportedFeaturesForTesting;
 
   private:
+    PhysicalDevice();
+
     MaybeError InitializeImpl() override;
     void InitializeSupportedFeaturesImpl() override;
     MaybeError InitializeSupportedLimitsImpl(CombinedLimits* limits) override;
@@ -321,7 +324,7 @@ class ShaderModule final : public ShaderModuleBase {
     using ShaderModuleBase::ShaderModuleBase;
 
     MaybeError Initialize(ShaderModuleParseResult* parseResult,
-                          OwnedCompilationMessages* compilationMessages);
+                          std::unique_ptr<OwnedCompilationMessages>* compilationMessages);
 };
 
 class SwapChain final : public SwapChainBase {

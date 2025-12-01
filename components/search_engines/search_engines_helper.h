@@ -30,17 +30,16 @@ struct EngineAndTier {
 
 const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
     country_codes::CountryId country_id,
-    const std::string_view application_locale,
-    PrefService& prefs);
+    PrefService& prefs,
+    std::string_view application_locale = "");
 
 ParsedSearchEngines::EnginesListWithDefaults GetPrepopulatedSearchEngines(
     country_codes::CountryId country_id,
-    const std::string_view application_locale,
-    PrefService& prefs);
+    PrefService& prefs,
+    std::string_view application_locale = "");
 
 const PrepopulatedEngine* GetFallbackEngine(
     country_codes::CountryId country_id,
-    const std::string_view application_locale,
     PrefService& prefs,
     SearchType search_type = SearchType::kMain);
 

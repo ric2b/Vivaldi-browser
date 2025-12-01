@@ -21,6 +21,7 @@
 #include "content/browser/private_aggregation/private_aggregation_caller_api.h"
 #include "content/browser/private_aggregation/private_aggregation_host.h"
 #include "content/browser/private_aggregation/private_aggregation_manager_impl.h"
+#include "content/browser/private_aggregation/private_aggregation_pending_contributions.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/test_content_browser_client.h"
@@ -48,6 +49,22 @@ class MockPrivateAggregationBudgeter : public PrivateAggregationBudgeter {
                const PrivateAggregationBudgetKey&,
                int,
                base::OnceCallback<void(RequestResult)>),
+              (override));
+
+  MOCK_METHOD(void,
+              InspectBudgetAndLock,
+              (const std::vector<
+                   blink::mojom::AggregatableReportHistogramContribution>&,
+               const PrivateAggregationBudgetKey&,
+               base::OnceCallback<void(InspectBudgetCallResult)>),
+              (override));
+  MOCK_METHOD(void,
+              ConsumeBudget,
+              (Lock,
+               const std::vector<
+                   blink::mojom::AggregatableReportHistogramContribution>&,
+               const PrivateAggregationBudgetKey&,
+               base::OnceCallback<void(BudgetQueryResult)>),
               (override));
 
   MOCK_METHOD(void,
@@ -183,6 +200,13 @@ bool operator==(const PrivateAggregationBudgetKey::TimeWindow&,
 
 bool operator==(const PrivateAggregationBudgetKey&,
                 const PrivateAggregationBudgetKey&);
+
+// Helper that correctly invokes the pending contributions object (if
+// `kPrivateAggregationApiErrorReporting` is enabled), approving all
+// contributions.
+AggregatableReportRequest GenerateReportRequest(
+    PrivateAggregationHost::ReportRequestGenerator generator,
+    PrivateAggregationPendingContributions::Wrapper contributions);
 
 }  // namespace content
 

@@ -10,6 +10,7 @@
 #include "gpu/command_buffer/service/gl_utils.h"
 
 #include <algorithm>
+#include <array>
 #include <unordered_set>
 
 #include "build/build_config.h"
@@ -47,11 +48,22 @@ typedef struct {
   int blockHeight;
 } ASTCBlockArray;
 
-const ASTCBlockArray kASTCBlockArray[] = {
+const auto kASTCBlockArray = std::to_array<ASTCBlockArray>({
     {4, 4}, /* GL_COMPRESSED_RGBA_ASTC_4x4_KHR */
     {5, 4}, /* and GL_COMPRESSED_SRGB8_ALPHA8_ASTC_4x4_KHR */
-    {5, 5},  {6, 5},  {6, 6},  {8, 5},   {8, 6},   {8, 8},
-    {10, 5}, {10, 6}, {10, 8}, {10, 10}, {12, 10}, {12, 12}};
+    {5, 5},
+    {6, 5},
+    {6, 6},
+    {8, 5},
+    {8, 6},
+    {8, 8},
+    {10, 5},
+    {10, 6},
+    {10, 8},
+    {10, 10},
+    {12, 10},
+    {12, 12},
+});
 
 bool IsValidPVRTCSize(GLint level, GLsizei size) {
   return GLES2Util::IsPOT(size);
@@ -462,9 +474,9 @@ void InitializeGLDebugLogging(bool log_non_errors,
 bool ValidContextLostReason(GLenum reason) {
   switch (reason) {
     case GL_NO_ERROR:
-    case GL_GUILTY_CONTEXT_RESET_ARB:
-    case GL_INNOCENT_CONTEXT_RESET_ARB:
-    case GL_UNKNOWN_CONTEXT_RESET_ARB:
+    case GL_GUILTY_CONTEXT_RESET:
+    case GL_INNOCENT_CONTEXT_RESET:
+    case GL_UNKNOWN_CONTEXT_RESET:
       return true;
     default:
       return false;
@@ -478,11 +490,11 @@ error::ContextLostReason GetContextLostReasonFromResetStatus(
       // TODO(kbr): improve the precision of the error code in this case.
       // Consider delegating to context for error code if MakeCurrent fails.
       return error::kUnknown;
-    case GL_GUILTY_CONTEXT_RESET_ARB:
+    case GL_GUILTY_CONTEXT_RESET:
       return error::kGuilty;
-    case GL_INNOCENT_CONTEXT_RESET_ARB:
+    case GL_INNOCENT_CONTEXT_RESET:
       return error::kInnocent;
-    case GL_UNKNOWN_CONTEXT_RESET_ARB:
+    case GL_UNKNOWN_CONTEXT_RESET:
       return error::kUnknown;
   }
 
@@ -1273,8 +1285,8 @@ GLenum GetTextureBindingQuery(GLenum texture_type) {
       return GL_TEXTURE_BINDING_3D;
     case GL_TEXTURE_EXTERNAL_OES:
       return GL_TEXTURE_BINDING_EXTERNAL_OES;
-    case GL_TEXTURE_RECTANGLE:
-      return GL_TEXTURE_BINDING_RECTANGLE;
+    case GL_TEXTURE_RECTANGLE_ANGLE:
+      return GL_TEXTURE_BINDING_RECTANGLE_ANGLE;
     case GL_TEXTURE_CUBE_MAP:
       return GL_TEXTURE_BINDING_CUBE_MAP;
     default:

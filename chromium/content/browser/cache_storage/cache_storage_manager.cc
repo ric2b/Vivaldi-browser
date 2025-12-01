@@ -25,7 +25,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
@@ -182,9 +181,9 @@ void ValidateAndAddBucketFromPath(
   if (index.has_bucket_id() && index.has_bucket_is_default()) {
     // We'll populate the bucket locator using the information from the index
     // file, but it's not guaranteed that this will be valid.
-    bucket_locator = storage::BucketLocator(
-        storage::BucketId(index.bucket_id()), storage_key,
-        blink::mojom::StorageType::kTemporary, index.bucket_is_default());
+    bucket_locator =
+        storage::BucketLocator(storage::BucketId(index.bucket_id()),
+                               storage_key, index.bucket_is_default());
   } else {
     // If the index file has no bucket information then it's from before we
     // had non-default buckets and third-party storage partitioning
@@ -367,7 +366,6 @@ bool CacheStorageManager::CacheStoragePathIsUnique(const base::FilePath& path) {
 bool CacheStorageManager::ConflictingInstanceExistsInMap(
     storage::mojom::CacheStorageOwner owner,
     const storage::BucketLocator& bucket_locator) {
-  DCHECK(bucket_locator.type == blink::mojom::StorageType::kTemporary);
 
   if (IsMemoryBacked() || !bucket_locator.is_default ||
       !bucket_locator.storage_key.IsFirstPartyContext()) {
@@ -391,7 +389,6 @@ bool CacheStorageManager::ConflictingInstanceExistsInMap(
         key_value.first.first.storage_key != bucket_locator.storage_key) {
       continue;
     }
-    DCHECK(key_value.first.first.type == blink::mojom::StorageType::kTemporary);
 
     // An existing entry has a different bucket ID and/or type, which means
     // these entries will use the same directory path.
@@ -472,7 +469,7 @@ void CacheStorageManager::CacheStorageUnreferenced(
   DCHECK(cache_storage);
   cache_storage->AssertUnreferenced();
   auto it = cache_storage_map_.find({bucket_locator, owner});
-  CHECK(it != cache_storage_map_.end(), base::NotFatalUntil::M130);
+  CHECK(it != cache_storage_map_.end());
   DCHECK(it->second.get() == cache_storage);
 
   // Currently we don't do anything when a CacheStorage instance becomes
@@ -704,7 +701,7 @@ void CacheStorageManager::DeleteBucketDataDidGetExists(
   CacheStorageHandle handle = OpenCacheStorage(bucket_locator, owner);
 
   auto it = cache_storage_map_.find({bucket_locator, owner});
-  CHECK(it != cache_storage_map_.end(), base::NotFatalUntil::M130);
+  CHECK(it != cache_storage_map_.end());
 
   CacheStorage* cache_storage = it->second.release();
   cache_storage->ResetManager();

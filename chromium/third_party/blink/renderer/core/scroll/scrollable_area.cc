@@ -31,6 +31,8 @@
 
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 
+#include <limits>
+
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
 #include "cc/input/main_thread_scrolling_reason.h"
@@ -44,6 +46,7 @@
 #include "third_party/blink/renderer/core/css/properties/longhands.h"
 #include "third_party/blink/renderer/core/dom/scroll_marker_group_pseudo_element.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/markers/document_marker_controller.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -82,14 +85,6 @@ int ScrollableArea::PixelsPerLineStep(LocalFrame* frame) {
     return cc::kPixelsPerLineStep;
   return frame->GetPage()->GetChromeClient().WindowToViewportScalar(
       frame, cc::kPixelsPerLineStep);
-}
-
-float ScrollableArea::MinFractionToStepWhenPaging() {
-  return cc::kMinFractionToStepWhenPaging;
-}
-
-int ScrollableArea::MaxOverlapBetweenPages() const {
-  return GetPageScrollbarTheme().MaxOverlapBetweenPages();
 }
 
 // static
@@ -815,10 +810,10 @@ void ScrollableArea::RecalculateOverlayScrollbarColorScheme() {
     Color background_color = GetLayoutBox()->StyleRef().VisitedDependentColor(
         GetCSSPropertyBackgroundColor());
     if (!background_color.IsFullyTransparent()) {
-      double hue, saturation, lightness;
-      background_color.GetHSL(hue, saturation, lightness);
-      overlay_theme = lightness <= 0.5 ? mojom::blink::ColorScheme::kDark
-                                       : mojom::blink::ColorScheme::kLight;
+      const float lightness =
+          background_color.GetLightness(Color::ColorSpace::kHSL);
+      overlay_theme = lightness <= 0.5f ? mojom::blink::ColorScheme::kDark
+                                        : mojom::blink::ColorScheme::kLight;
     }
   }
 
@@ -1075,20 +1070,19 @@ int ScrollableArea::LineStep(ScrollbarOrientation) const {
   return PixelsPerLineStep(GetLayoutBox()->GetFrame());
 }
 
-int ScrollableArea::PageStep(ScrollbarOrientation orientation) const {
+gfx::Size ScrollableArea::PageSize() const {
   // Paging scroll operations should take scroll-padding into account [1]. So we
   // use the snapport rect to calculate the page step instead of the visible
   // rect.
   // [1] https://drafts.csswg.org/css-scroll-snap/#scroll-padding
-  gfx::Size snapport_size =
-      VisibleScrollSnapportRect(kExcludeScrollbars).PixelSnappedSize();
-  int length = (orientation == kHorizontalScrollbar) ? snapport_size.width()
-                                                     : snapport_size.height();
-  int min_page_step =
-      static_cast<float>(length) * MinFractionToStepWhenPaging();
-  int page_step = std::max(min_page_step, length - MaxOverlapBetweenPages());
+  return VisibleScrollSnapportRect(kExcludeScrollbars).PixelSnappedSize();
+}
 
-  return std::max(page_step, 1);
+int ScrollableArea::PageStep(ScrollbarOrientation orientation) const {
+  gfx::Size page_size = PageSize();
+  return cc::ScrollUtils::CalculatePageStep(orientation == kHorizontalScrollbar
+                                                ? page_size.width()
+                                                : page_size.height());
 }
 
 int ScrollableArea::DocumentStep(ScrollbarOrientation orientation) const {
@@ -1169,6 +1163,9 @@ void ScrollableArea::OnScrollFinished(bool scroll_did_end) {
                     node->GetDocument())) {
           viewport_position_tracker->OnScrollEnd();
         }
+        // TODO(https://crbug.com/41406914): This is temporary. Remove once we
+        // start to migrate to scroll-promises.
+        node->GetDocument().Markers().StartGlicMarkerAnimationIfNeeded();
         if (RuntimeEnabledFeatures::ScrollEndEventsEnabled()) {
           node->GetDocument().EnqueueScrollEndEventForNode(node);
         }
@@ -1210,26 +1207,66 @@ bool ScrollableArea::SnapForEndPosition(const gfx::PointF& end_position,
                          std::move(on_finish));
 }
 
-bool ScrollableArea::SnapForDirection(const ScrollOffset& delta,
-                                      base::ScopedClosureRunner on_finish) {
+bool ScrollableArea::SnapForDirection(ScrollDirectionPhysical direction) {
   DCHECK(IsRootFrameViewport() || !GetLayoutBox()->IsGlobalRootScroller());
+  ScrollOffset delta = ToScrollDelta(direction, 1);
+  delta.Scale(LineStep(kHorizontalScrollbar), LineStep(kVerticalScrollbar));
+
   gfx::PointF current_position = ScrollPosition();
   std::unique_ptr<cc::SnapSelectionStrategy> strategy =
       cc::SnapSelectionStrategy::CreateForDirection(
           current_position, delta,
           RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled());
-  return PerformSnapping(*strategy, mojom::blink::ScrollBehavior::kSmooth,
-                         std::move(on_finish));
+  return PerformSnapping(*strategy, mojom::blink::ScrollBehavior::kSmooth);
 }
 
-bool ScrollableArea::SnapForEndAndDirection(const ScrollOffset& delta) {
+bool ScrollableArea::SnapForPageScroll(ScrollDirectionPhysical direction) {
   DCHECK(IsRootFrameViewport() || !GetLayoutBox()->IsGlobalRootScroller());
-  gfx::PointF current_position = ScrollPosition();
   std::unique_ptr<cc::SnapSelectionStrategy> strategy =
-      cc::SnapSelectionStrategy::CreateForEndAndDirection(
-          current_position, delta,
-          RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled());
+      PageScrollSnapStrategy(direction);
   return PerformSnapping(*strategy);
+}
+
+bool ScrollableArea::SnapForDocumentScroll(ScrollDirectionPhysical direction) {
+  ScrollOffset delta = ToScrollDelta(direction, 1);
+  delta.Scale(DocumentStep(kHorizontalScrollbar),
+              DocumentStep(kVerticalScrollbar));
+  gfx::PointF end_position = ScrollPosition() + delta;
+  bool scrolled_x = direction == kScrollLeft || direction == kScrollRight;
+  bool scrolled_y = direction == kScrollUp || direction == kScrollDown;
+  return SnapForEndPosition(end_position, scrolled_x, scrolled_y);
+}
+
+std::unique_ptr<cc::SnapSelectionStrategy>
+ScrollableArea::PageScrollSnapStrategy(
+    ScrollDirectionPhysical direction) const {
+  gfx::PointF current_position = ScrollPosition();
+  gfx::Size page_size = PageSize();
+  ScrollOffset unit_direction = ToScrollDelta(direction, 1);
+  ScrollOffset delta = unit_direction;
+  delta.Scale(cc::ScrollUtils::CalculatePageStep(page_size.width()),
+              cc::ScrollUtils::CalculatePageStep(page_size.height()));
+
+  // When scrolling by a page, we prefer that we scroll no more than a page,
+  // but at least by a reasonable proportion of that page.
+  ScrollOffset preferred_max_delta = unit_direction;
+  preferred_max_delta.Scale(
+      cc::ScrollUtils::CalculateMaxPageSnap(page_size.width()),
+      cc::ScrollUtils::CalculateMaxPageSnap(page_size.height()));
+  ScrollOffset preferred_min_delta = unit_direction;
+  preferred_min_delta.Scale(
+      cc::ScrollUtils::CalculateMinPageSnap(page_size.width()),
+      cc::ScrollUtils::CalculateMinPageSnap(page_size.height()));
+  if (direction == ScrollDirectionPhysical::kScrollDown ||
+      direction == ScrollDirectionPhysical::kScrollUp) {
+    preferred_max_delta.set_x(std::numeric_limits<float>::max());
+  } else {
+    preferred_max_delta.set_y(std::numeric_limits<float>::max());
+  }
+
+  return cc::SnapSelectionStrategy::CreateForPreferredDisplacement(
+      current_position, delta, preferred_min_delta, preferred_max_delta,
+      RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled());
 }
 
 void ScrollableArea::SnapAfterLayout() {

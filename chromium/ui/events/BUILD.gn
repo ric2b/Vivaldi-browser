@@ -14,6 +14,7 @@ if (is_android) {
 }
 
 if (is_ios) {
+  import("//build/config/apple/mobile_config.gni")
   import("//ios/build/config.gni")
 }
 
@@ -93,6 +94,37 @@ source_set("platform_event") {
   sources = [ "platform_event.h" ]
 
   public_deps = [ "//base" ]
+
+  if (is_android) {
+    public_deps += [ ":platform_event_android" ]
+  }
+}
+
+if (is_android) {
+  source_set("platform_event_android") {
+    sources = [
+      "android/event_flags_android.cc",
+      "android/event_flags_android.h",
+      "android/event_type_android.cc",
+      "android/event_type_android.h",
+      "android/key_event_android.cc",
+      "android/key_event_android.h",
+      "android/platform_event_android.cc",
+      "android/platform_event_android.h",
+
+      # Allow this target to include events_export.h without depending on the
+      # events target (which would be circular).
+      "events_export.h",
+    ]
+
+    deps = [
+      ":event_constants",
+      ":keyevent_jni_headers",
+      ":motionevent_jni_headers",
+      "//base",
+      "//ui/events/types:headers",
+    ]
+  }
 }
 
 component("events_base") {
@@ -160,10 +192,12 @@ component("events_base") {
   }
 
   if (is_ios && use_blink) {
-    sources += [
-      "keycodes/keyboard_code_conversion_ios.h",
-      "keycodes/keyboard_code_conversion_ios.mm",
-    ]
+    if (target_platform == "iphoneos") {
+      sources += [
+        "keycodes/keyboard_code_conversion_ios.h",
+        "keycodes/keyboard_code_conversion_ios.mm",
+      ]
+    }
   }
 
   if (is_fuchsia) {
@@ -216,6 +250,7 @@ component("events") {
     "event_targeter.h",
     "event_utils.h",
     "events_export.h",
+    "features.h",
     "gestures/gesture_recognizer.h",
     "gestures/gesture_types.h",
     "null_event_targeter.h",
@@ -235,6 +270,7 @@ component("events") {
     "event_utils.cc",
     "events_exports.cc",
     "events_stub.cc",
+    "features.cc",
     "gestures/gesture_recognizer.cc",
     "gestures/gesture_types.cc",
     "null_event_targeter.cc",
@@ -352,7 +388,7 @@ component("events") {
     ]
   }
 
-  if (is_win || is_apple || use_ozone) {
+  if (is_win || is_apple || use_ozone || is_android) {
     sources -= [ "events_stub.cc" ]
   }
 
@@ -360,9 +396,9 @@ component("events") {
     public += [
       "android/drag_event_android.h",
       "android/event_handler_android.h",
+      "android/events_android_utils.h",
       "android/gesture_event_android.h",
       "android/gesture_event_type.h",
-      "android/key_event_android.h",
       "android/key_event_utils.h",
       "android/motion_event_android.h",
       "android/motion_event_android_java.h",
@@ -375,8 +411,9 @@ component("events") {
     sources += [
       "android/drag_event_android.cc",
       "android/event_handler_android.cc",
+      "android/events_android.cc",
+      "android/events_android_utils.cc",
       "android/gesture_event_android.cc",
-      "android/key_event_android.cc",
       "android/key_event_utils.cc",
       "android/motion_event_android.cc",
       "android/motion_event_android_java.cc",
@@ -712,7 +749,10 @@ if (use_blink) {
     ]
 
     if (is_android) {
-      sources += [ "android/motion_event_android_unittest.cc" ]
+      sources += [
+        "android/motion_event_android_unittest.cc",
+        "keycodes/keyboard_code_conversion_android_unittest.cc",
+      ]
       deps += [
         ":motionevent_jni_headers",
         "//ui/android:ui_full_java",

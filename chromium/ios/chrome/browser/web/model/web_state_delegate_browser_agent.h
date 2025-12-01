@@ -56,7 +56,6 @@ class WebStateDelegateBrowserAgent
 
  private:
   friend class BrowserUserData<WebStateDelegateBrowserAgent>;
-  BROWSER_USER_DATA_KEY_DECL();
 
   WebStateDelegateBrowserAgent(Browser* browser,
                                TabInsertionBrowserAgent* tab_insertion_agent);
@@ -117,9 +116,6 @@ class WebStateDelegateBrowserAgent
   raw_ptr<TabInsertionBrowserAgent> tab_insertion_agent_ = nullptr;
 
   OverlayJavaScriptDialogPresenter java_script_dialog_presenter_;
-
-  // The browser associated with this agent.
-  raw_ptr<Browser> browser_;
 
   // Scoped observations of Browser, WebStateList and WebStates.
   base::ScopedObservation<Browser, BrowserObserver> browser_observation_{this};

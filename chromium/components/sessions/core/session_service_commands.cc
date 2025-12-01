@@ -338,17 +338,20 @@ static bool TabVisualIndexSortFunction(const std::unique_ptr<SessionTab>& t1,
 }
 
 // Does the following:
-// . Deletes and removes any windows with no tabs. NOTE: constrained windows
-//   that have been dragged out are of type browser. As such, this preserves any
-//   dragged out constrained windows (aka popups that have been dragged out).
+// . Deletes and removes any windows with no tabs and insert them into
+//   `discarded_window_ids`. NOTE: constrained windows that have been dragged
+//   out are of type browser. As such, this preserves any dragged out
+//   constrained windows (aka popups that have been dragged out).
 // . Sorts the tabs in windows with valid tabs based on the tabs;
 //   visual order, and adds the valid windows to |valid_windows|.
 void SortTabsBasedOnVisualOrderAndClear(
     IdToSessionWindow* windows,
-    std::vector<std::unique_ptr<SessionWindow>>* valid_windows) {
+    std::vector<std::unique_ptr<SessionWindow>>* valid_windows,
+    std::set<SessionID>* discarded_window_ids) {
   for (auto& window_pair : *windows) {
     std::unique_ptr<SessionWindow> window = std::move(window_pair.second);
     if (window->tabs.empty() || window->is_constrained) {
+      discarded_window_ids->insert(window->window_id);
       continue;
     } else {
       // Valid window; sort the tabs and add it to the list of valid windows.
@@ -382,11 +385,6 @@ void AddTabsToWindows(IdToSessionTab* tabs,
 
   for (auto& tab_pair : *tabs) {
     std::unique_ptr<SessionTab> tab = std::move(tab_pair.second);
-    // Do not restore the panels.
-#if !BUILDFLAG(IS_IOS)
-    if (::vivaldi::ParseVivPanelId(tab->viv_ext_data))
-      continue;
-#endif
     if (!tab->window_id.id() || tab->navigations.empty())
       continue;
 
@@ -481,7 +479,8 @@ void CreateTabsAndWindows(
     GroupIdToSessionTabGroup* tab_groups,
     IdToSessionWindow* windows,
     SessionID* active_window_id,
-    std::string* platform_session_id) {
+    std::string* platform_session_id,
+    std::set<SessionID>* discarded_window_ids) {
   // If the file is corrupt (command with wrong size, or unknown command), we
   // still return true and attempt to restore what we we can.
   DVLOG(1) << "CreateTabsAndWindows";
@@ -553,11 +552,13 @@ void CreateTabsAndWindows(
           DVLOG(1) << "Failed reading command " << command->id();
           return;
         }
-        if (command->id() == kCommandTabClosed)
-          tabs->erase(SessionID::FromSerializedValue(payload.id));
-        else
-          windows->erase(SessionID::FromSerializedValue(payload.id));
-
+        SessionID id = SessionID::FromSerializedValue(payload.id);
+        if (command->id() == kCommandTabClosed) {
+          tabs->erase(id);
+        } else {
+          windows->erase(id);
+          discarded_window_ids->insert(id);
+        }
         break;
       }
 
@@ -1290,16 +1291,18 @@ void RestoreSessionFromCommands(
     const std::vector<std::unique_ptr<SessionCommand>>& commands,
     std::vector<std::unique_ptr<SessionWindow>>* valid_windows,
     SessionID* active_window_id,
-    std::string* platform_session_id) {
+    std::string* platform_session_id,
+    std::set<SessionID>* discarded_window_ids) {
   IdToSessionTab tabs;
   GroupIdToSessionTabGroup tab_groups;
   IdToSessionWindow windows;
 
   DVLOG(1) << "RestoreSessionFromCommands " << commands.size();
   CreateTabsAndWindows(commands, &tabs, &tab_groups, &windows, active_window_id,
-                       platform_session_id);
+                       platform_session_id, discarded_window_ids);
   AddTabsToWindows(&tabs, &tab_groups, &windows);
-  SortTabsBasedOnVisualOrderAndClear(&windows, valid_windows);
+  SortTabsBasedOnVisualOrderAndClear(&windows, valid_windows,
+                                     discarded_window_ids);
   UpdateSelectedTabIndex(valid_windows);
   // After processing, all windows should have at least one tab, and each
   // tab should have at least one navigation.

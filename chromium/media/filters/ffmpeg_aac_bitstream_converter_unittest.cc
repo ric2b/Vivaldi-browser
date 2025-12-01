@@ -7,12 +7,15 @@
 #pragma allow_unsafe_buffers
 #endif
 
+#include "media/filters/ffmpeg_aac_bitstream_converter.h"
+
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
+
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/ffmpeg/scoped_av_packet.h"
-#include "media/filters/ffmpeg_aac_bitstream_converter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
@@ -38,7 +41,7 @@ class FFmpegAACBitstreamConverterTest : public testing::Test {
     // Set up reasonable aac parameters
     memset(&test_parameters_, 0, sizeof(AVCodecParameters));
     test_parameters_.codec_id = AV_CODEC_ID_AAC;
-    test_parameters_.profile = FF_PROFILE_AAC_MAIN;
+    test_parameters_.profile = AV_PROFILE_AAC_MAIN;
     test_parameters_.ch_layout.nb_channels = 2;
     test_parameters_.extradata = extradata_header_;
     test_parameters_.extradata_size = sizeof(extradata_header_);
@@ -60,16 +63,19 @@ class FFmpegAACBitstreamConverterTest : public testing::Test {
 TEST_F(FFmpegAACBitstreamConverterTest, Conversion_Success) {
   FFmpegAACBitstreamConverter converter(&test_parameters_);
 
-  uint8_t dummy_packet[1000];
+  std::array<uint8_t, 1000> dummy_packet;
   // Fill dummy packet with junk data. aac converter doesn't look into packet
   // data, just header, so can fill with whatever we want for test.
-  for(size_t i = 0; i < sizeof(dummy_packet); i++) {
-    dummy_packet[i] = i & 0xFF; // Repeated sequences of 0-255
+  for (size_t i = 0;
+       i < (dummy_packet.size() * sizeof(decltype(dummy_packet)::value_type));
+       i++) {
+    dummy_packet[i] = i & 0xFF;  // Repeated sequences of 0-255
   }
 
   auto test_packet = ScopedAVPacket::Allocate();
-  CreatePacket(test_packet.get(), dummy_packet,
-               sizeof(dummy_packet));
+  CreatePacket(
+      test_packet.get(), dummy_packet.data(),
+      (dummy_packet.size() * sizeof(decltype(dummy_packet)::value_type)));
 
   // Try out the actual conversion (should be successful and allocate new
   // packet and destroy the old one).
@@ -77,13 +83,16 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_Success) {
 
   // Check that a header was added and that packet data was preserved
   EXPECT_EQ(static_cast<long>(test_packet->size),
-            static_cast<long>(sizeof(dummy_packet) +
+            static_cast<long>((dummy_packet.size() *
+                               sizeof(decltype(dummy_packet)::value_type)) +
                               FFmpegAACBitstreamConverter::kAdtsHeaderSize));
-  EXPECT_EQ(memcmp(
-      reinterpret_cast<void*>(test_packet->data +
-                              FFmpegAACBitstreamConverter::kAdtsHeaderSize),
-      reinterpret_cast<void*>(dummy_packet),
-      sizeof(dummy_packet)), 0);
+  EXPECT_EQ(
+      memcmp(
+          reinterpret_cast<void*>(test_packet->data +
+                                  FFmpegAACBitstreamConverter::kAdtsHeaderSize),
+          reinterpret_cast<void*>(dummy_packet.data()),
+          (dummy_packet.size() * sizeof(decltype(dummy_packet)::value_type))),
+      0);
 }
 
 TEST_F(FFmpegAACBitstreamConverterTest, Conversion_FailureNullParams) {
@@ -96,7 +105,7 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_FailureNullParams) {
   uint8_t dummy_packet[1000] = {};
 
   // Try out the actual conversion with NULL parameter.
-  EXPECT_FALSE(converter.ConvertPacket(NULL));
+  EXPECT_FALSE(converter.ConvertPacket(nullptr));
 
   // Create new packet to test actual conversion.
   auto test_packet = ScopedAVPacket::Allocate();
@@ -122,7 +131,7 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_AudioProfileType) {
 
   EXPECT_EQ(profile, kAacMainProfile);
 
-  test_parameters_.profile = FF_PROFILE_AAC_HE;
+  test_parameters_.profile = AV_PROFILE_AAC_HE;
   FFmpegAACBitstreamConverter converter_he(&test_parameters_);
 
   test_packet = ScopedAVPacket::Allocate();
@@ -134,7 +143,7 @@ TEST_F(FFmpegAACBitstreamConverterTest, Conversion_AudioProfileType) {
 
   EXPECT_EQ(profile, kAacLowComplexityProfile);
 
-  test_parameters_.profile = FF_PROFILE_AAC_ELD;
+  test_parameters_.profile = AV_PROFILE_AAC_ELD;
   FFmpegAACBitstreamConverter converter_eld(&test_parameters_);
 
   test_packet = ScopedAVPacket::Allocate();

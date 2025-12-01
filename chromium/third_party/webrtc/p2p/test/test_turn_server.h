@@ -105,7 +105,7 @@ class TestTurnServer : public TurnAuthInterface {
     RTC_DCHECK(thread_checker_.IsCurrent());
     if (proto == webrtc::PROTO_UDP) {
       server_.AddInternalSocket(
-          rtc::AsyncUDPSocket::Create(socket_factory_, int_addr), proto);
+          AsyncUDPSocket::Create(socket_factory_, int_addr), proto);
     } else if (proto == webrtc::PROTO_TCP || proto == webrtc::PROTO_TLS) {
       // For TCP we need to create a server socket which can listen for incoming
       // new connections.
@@ -117,11 +117,11 @@ class TestTurnServer : public TurnAuthInterface {
         // be configured with a self-signed certificate for testing.
         // Additionally, the client will not present a valid certificate, so we
         // must not fail when checking the peer's identity.
-        std::unique_ptr<rtc::SSLAdapterFactory> ssl_adapter_factory =
-            rtc::SSLAdapterFactory::Create();
+        std::unique_ptr<SSLAdapterFactory> ssl_adapter_factory =
+            SSLAdapterFactory::Create();
         ssl_adapter_factory->SetRole(webrtc::SSL_SERVER);
         ssl_adapter_factory->SetIdentity(
-            rtc::SSLIdentity::Create(common_name, rtc::KeyParams()));
+            SSLIdentity::Create(common_name, KeyParams()));
         ssl_adapter_factory->SetIgnoreBadCert(ignore_bad_cert);
         server_.AddInternalServerSocket(socket, proto,
                                         std::move(ssl_adapter_factory));
@@ -154,8 +154,8 @@ class TestTurnServer : public TurnAuthInterface {
                       absl::string_view realm,
                       std::string* key) {
     RTC_DCHECK(thread_checker_.IsCurrent());
-    return cricket::ComputeStunCredentialHash(
-        std::string(username), std::string(realm), std::string(username), key);
+    return ComputeStunCredentialHash(std::string(username), std::string(realm),
+                                     std::string(username), key);
   }
 
   TurnServer server_;
@@ -167,11 +167,13 @@ class TestTurnServer : public TurnAuthInterface {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::kTestRealm;
 using ::webrtc::kTestSoftware;
 using ::webrtc::TestTurnRedirector;
 using ::webrtc::TestTurnServer;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_TEST_TURN_SERVER_H_

@@ -30,20 +30,14 @@ void MultiCaptureServiceAsh::BindReceiver(
 
 void MultiCaptureServiceAsh::MultiCaptureStarted(const std::string& label,
                                                  const std::string& host) {
-  // TODO(crbug.com/40249909): Origin cannot be used in a crosapi interface as
-  // it is not stable. Currently, only the host of the origin is used. Pass the
-  // complete origin when the `Origin` interface becomes stable.
-  ash::Shell::Get()->multi_capture_service()->NotifyMultiCaptureStarted(
-      label, url::Origin::CreateFromNormalizedTuple(/*scheme=*/"https", host,
-                                                    /*port=*/443));
+  NOTREACHED();
 }
 
 void MultiCaptureServiceAsh::MultiCaptureStartedFromApp(
     const std::string& label,
     const std::string& app_id,
     const std::string& app_name) {
-  ash::Shell::Get()->multi_capture_service()->NotifyMultiCaptureStartedFromApp(
-      label, app_id, app_name);
+  NOTREACHED();
 }
 
 void MultiCaptureServiceAsh::MultiCaptureStopped(const std::string& label) {
@@ -53,7 +47,6 @@ void MultiCaptureServiceAsh::MultiCaptureStopped(const std::string& label) {
 void MultiCaptureServiceAsh::IsMultiCaptureAllowed(
     const GURL& url,
     IsMultiCaptureAllowedCallback callback) {
-  // This function is only called from the primary user on the Lacros side.
   content::BrowserContext* context =
       ash::BrowserContextHelper::Get()->GetBrowserContextByUser(
           user_manager::UserManager::Get()->GetPrimaryUser());

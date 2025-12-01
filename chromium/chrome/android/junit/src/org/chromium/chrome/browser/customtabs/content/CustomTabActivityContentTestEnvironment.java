@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.customtabs.content;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -26,6 +27,7 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.Callback;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.Promise;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.chrome.browser.ActivityTabProvider;
@@ -36,10 +38,16 @@ import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.app.tabmodel.CustomTabsTabModelOrchestrator;
 import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.browserservices.intents.SessionHolder;
+import org.chromium.chrome.browser.browserservices.ui.controller.CurrentPageVerifier;
+import org.chromium.chrome.browser.browserservices.ui.controller.Verifier;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.content.WebContentsFactory;
+import org.chromium.chrome.browser.content.WebContentsFactoryJni;
 import org.chromium.chrome.browser.crypto.CipherFactory;
 import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.customtabs.CloseButtonNavigator;
+import org.chromium.chrome.browser.customtabs.CustomTabAuthUrlHeuristics;
+import org.chromium.chrome.browser.customtabs.CustomTabAuthUrlHeuristicsJni;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory;
 import org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.CustomTabNavigationEventObserver;
@@ -51,12 +59,16 @@ import org.chromium.chrome.browser.customtabs.shadows.ShadowExternalNavigationDe
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
+import org.chromium.chrome.browser.preloading.PreloadingDataBridge;
+import org.chromium.chrome.browser.preloading.PreloadingDataBridgeJni;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelInitializer;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
+import org.chromium.chrome.browser.tabmodel.TabReparentingParams;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.NavigationController;
@@ -72,6 +84,7 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     public static final String INITIAL_URL = JUnitTestGURLs.INITIAL_URL.getSpec();
     public static final String SPECULATED_URL = "https://speculated.com";
     public static final String OTHER_URL = JUnitTestGURLs.EXAMPLE_URL.getSpec();
+    public static final String CONTENT_URI = "content://com.a.b.c/a";
 
     public final Intent mIntent = new Intent();
 
@@ -103,6 +116,14 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
     @Mock public ProfileProvider profileProvider;
     @Mock public CipherFactory cipherFactory;
     @Mock public PowerManager powerManager;
+    @Mock private Profile mProfile;
+    @Mock private Profile mIncognitoProfile;
+    @Mock CustomTabAuthUrlHeuristics.Natives mCustomTabAuthUrlHeuristicsJniMock;
+    @Mock WebContentsFactory.Natives mWebContentsFactoryJni;
+    @Mock public Verifier verifier;
+    @Mock public CurrentPageVerifier currentPageVerifier;
+    @Mock PreloadingDataBridge.Natives mPreloadingDataBridgeMock;
+    @Mock WebAppLaunchHandler.Natives mWebAppLaunchHandlerJniMock;
 
     public final CustomTabActivityTabProvider tabProvider =
             new CustomTabActivityTabProvider(SPECULATED_URL);
@@ -123,6 +144,10 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
         CustomTabsConnection.setInstanceForTesting(connection);
         ChromeBrowserInitializer.setForTesting(browserInitializer);
         WarmupManager.setInstanceForTesting(warmupManager);
+        CustomTabAuthUrlHeuristicsJni.setInstanceForTesting(mCustomTabAuthUrlHeuristicsJniMock);
+        WebContentsFactoryJni.setInstanceForTesting(mWebContentsFactoryJni);
+        PreloadingDataBridgeJni.setInstanceForTesting(mPreloadingDataBridgeMock);
+        WebAppLaunchHandlerJni.setInstanceForTesting(mWebAppLaunchHandlerJniMock);
 
         tabFromFactory = prepareTab();
 
@@ -146,6 +171,15 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
 
         when(activity.getSystemService(Context.POWER_SERVICE)).thenReturn(powerManager);
         when(powerManager.isInteractive()).thenReturn(true);
+
+        when(profileProvider.getOriginalProfile()).thenReturn(mProfile);
+        when(profileProvider.getOffTheRecordProfile(eq(true))).thenReturn(mIncognitoProfile);
+        when(mIncognitoProfile.isOffTheRecord()).thenReturn(true);
+        when(verifier.verify(any())).thenReturn(Promise.fulfilled(true));
+        when(currentPageVerifier.getState())
+                .thenReturn(
+                        new CurrentPageVerifier.VerificationState(
+                                "", "", CurrentPageVerifier.VerificationStatus.SUCCESS));
     }
 
     @Override
@@ -198,7 +232,12 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
                 tabProvider,
                 intentDataProvider,
                 new DefaultCustomTabIntentHandlingStrategy(
-                        tabProvider, navigationController, customTabObserver),
+                        tabProvider,
+                        navigationController,
+                        customTabObserver,
+                        verifier,
+                        currentPageVerifier,
+                        activity),
                 activity,
                 mMinimizationManagerHolder);
     }
@@ -244,6 +283,17 @@ public class CustomTabActivityContentTestEnvironment extends TestWatcher {
         warmUp();
         Tab hiddenTab = prepareTab();
         return hiddenTab;
+    }
+
+    public Tab prepareTransferredTab() {
+        int tabId = 1;
+        Tab tab = prepareTab();
+        when(tab.getId()).thenReturn(tabId);
+        AsyncTabParamsManagerSingleton.getInstance()
+                .add(tabId, new TabReparentingParams(tab, null));
+        IntentHandler.setTabId(mIntent, tabId);
+        IntentUtils.setForceIsTrustedIntentForTesting(true);
+        return tab;
     }
 
     public Tab prepareTab() {

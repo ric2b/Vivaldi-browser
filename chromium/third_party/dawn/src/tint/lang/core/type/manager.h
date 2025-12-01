@@ -39,6 +39,7 @@
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
 #include "src/tint/lang/core/type/external_texture.h"
+#include "src/tint/lang/core/type/input_attachment.h"
 #include "src/tint/lang/core/type/multisampled_texture.h"
 #include "src/tint/lang/core/type/sampler.h"
 #include "src/tint/lang/core/type/struct.h"
@@ -80,7 +81,7 @@ namespace tint::core::type {
 static constexpr inline core::Access DefaultAccessFor(core::AddressSpace space) {
     switch (space) {
         case core::AddressSpace::kIn:
-        case core::AddressSpace::kPushConstant:
+        case core::AddressSpace::kImmediate:
         case core::AddressSpace::kUniform:
         case core::AddressSpace::kHandle:
             return core::Access::kRead;
@@ -619,6 +620,11 @@ class Manager final {
     /// @returns the comparison sampler type
     const core::type::Sampler* comparison_sampler() {
         return Get<core::type::Sampler>(core::type::SamplerKind::kComparisonSampler);
+    }
+
+    /// @returns an input attachment type
+    const core::type::InputAttachment* input_attachment(const core::type::Type* inner) {
+        return Get<core::type::InputAttachment>(inner);
     }
 
     /// A structure member descriptor.

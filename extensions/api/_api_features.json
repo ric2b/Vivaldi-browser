@@ -66,6 +66,11 @@
     "dependencies": [ "permission:directMatch" ],
     "contexts": [ "privileged_extension" ]
   },
+  "dnsOverHttpsPrivate": {
+    "vivaldi": true,
+    "dependencies": [ "permission:dnsOverHttpsPrivate" ],
+    "contexts": [ "privileged_extension" ]
+  },
   "editcommand": {
     "vivaldi": true,
     "dependencies": [ "permission:editcommand" ],
@@ -196,7 +201,8 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
-      "chrome://game/*"
+      "chrome://game/*",
+      "chrome://privacy-report/*"
     ]
   }],
    "translateHistory": {

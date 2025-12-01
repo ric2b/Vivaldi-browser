@@ -40,6 +40,14 @@ chromium-metrics-reviews@google.com.
   <variant name="UserData"/>
 </variants>
 
+<variants name="ProcessMemoryType">
+  <variant name=".Anon" summary="Measures anonymous RSS."/>
+  <variant name=".File" summary="Measures file RSS."/>
+  <variant name=".Shmem" summary="Measures shmem RSS."/>
+  <variant name=".Swap" summary="Measures swap in use."/>
+  <variant name=".Total" summary="Measures total RSS."/>
+</variants>
+
 <histogram name="Platform.Bootlockbox.AvailabilityAtStart"
     enum="BootlockboxAvailability" expires_after="2023-10-24">
   <owner>yich@google.com</owner>
@@ -63,7 +71,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.BootMode.FirmwareWriteProtect.{FirmwareType}"
-    enum="Platform.BootMode.FirmwareWriteProtect" expires_after="2025-09-14">
+    enum="Platform.BootMode.FirmwareWriteProtect" expires_after="2025-11-16">
   <owner>enlightened@chromium.org</owner>
   <owner>chromeos-hardening@google.com</owner>
   <summary>
@@ -81,7 +89,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.BootMode.WriteProtectSwitch"
-    enum="Platform.BootMode.SwitchStatus" expires_after="2025-09-14">
+    enum="Platform.BootMode.SwitchStatus" expires_after="2025-11-16">
   <owner>enlightened@chromium.org</owner>
   <owner>chromeos-hardening@google.com</owner>
   <summary>
@@ -114,7 +122,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Chaps.ReinitializingToken"
-    enum="ChapsReinitializingToken" expires_after="2025-07-27">
+    enum="ChapsReinitializingToken" expires_after="2025-09-28">
   <owner>chenyian@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -123,7 +131,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Chaps.Session.{Operation}" enum="ChapsSessionStatus"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>chenyian@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -147,7 +155,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Chaps.TokenManager.LoadToken"
-    enum="TokenManagerStatus" expires_after="2025-07-27">
+    enum="TokenManagerStatus" expires_after="2025-09-28">
   <owner>chenyian@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -158,7 +166,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Chaps.TokenManager.UnloadToken"
-    enum="TokenManagerStatus" expires_after="2025-09-14">
+    enum="TokenManagerStatus" expires_after="2025-11-16">
   <owner>chenyian@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -169,7 +177,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Chaps.TPMAvailability" enum="ChapsTPMAvailability"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>chenyian@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>Each sample is the TPM Availability status.</summary>
@@ -704,7 +712,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.DiskUsage.NumUserHomeDirectories"
-    units="home directories" expires_after="2025-09-14">
+    units="home directories" expires_after="2025-11-16">
   <owner>achuith@chromium.org</owner>
   <owner>tls@chromium.org</owner>
   <summary>
@@ -733,7 +741,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.DiskUsageChronos" units="KB"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>sarthakkukreti@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -743,7 +751,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Platform.DiskUsageVar" units="KB" expires_after="2025-09-14">
+<histogram name="Platform.DiskUsageVar" units="KB" expires_after="2025-11-16">
   <owner>sarthakkukreti@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -754,7 +762,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.DlcService.InstallResult"
-    enum="DlcService.InstallResult" expires_after="2025-08-10">
+    enum="DlcService.InstallResult" expires_after="2025-10-12">
   <owner>kimjae@chromium.org</owner>
   <owner>chromeos-core-services@google.com</owner>
   <summary>
@@ -785,7 +793,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Emmc.LifeUsed.{Type}" enum="EmmcLifeUsed"
-    expires_after="2025-07-16">
+    expires_after="2025-10-19">
   <owner>gwendal@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -813,7 +821,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FbPreprocessor.Pseudonymization.DumpType"
-    enum="Platform.FbPreprocessor.FirmwareType" expires_after="2025-09-07">
+    enum="Platform.FbPreprocessor.FirmwareType" expires_after="2025-11-09">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -825,7 +833,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Platform.FbPreprocessor.{FirmwareType}.Collection.Allowed"
     enum="Platform.FbPreprocessor.CollectionAllowedStatus"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -837,7 +845,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FbPreprocessor.{FirmwareType}.Output.Number"
-    units="count" expires_after="2025-09-07">
+    units="count" expires_after="2025-11-09">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -851,7 +859,7 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="Platform.FbPreprocessor.{FirmwareType}.Pseudonymization.Result"
     enum="Platform.FbPreprocessor.PseudonymizationResult"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>norvez@chromium.org</owner>
   <owner>cros-network-metrics@google.com</owner>
   <summary>
@@ -873,7 +881,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FileDescriptors.Count" units="count"
-    expires_after="2025-06-26">
+    expires_after="2026-06-26">
   <owner>keiichiw@google.com</owner>
   <owner>uekawa@google.com</owner>
   <summary>
@@ -883,7 +891,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FileSystem.{Partition}.fsckResult" enum="FsckResult"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>gwendal@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -893,7 +901,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FileSystem.{Partition}_ErrorCount" units="errors"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>gwendal@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -904,7 +912,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FileSystem.{Partition}_{MountResult}" enum="Boolean"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>gwendal@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -932,7 +940,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FlexBootMethod" enum="FlexBootMethod"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>justinoue@google.com</owner>
   <owner>chromeos-flex-eng@google.com</owner>
   <summary>
@@ -945,7 +953,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FlexCpuIsaLevel" enum="FlexCpuIsaLevel"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>nicholasbishop@google.com</owner>
   <owner>chromeos-flex-eng@google.com</owner>
   <summary>
@@ -1032,7 +1040,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FlexPageFlipFlakes" units="flakes"
-    expires_after="2025-06-24">
+    expires_after="2025-10-12">
   <owner>andrebraga@google.com</owner>
   <owner>chromeos-flex-eng@google.com</owner>
   <summary>
@@ -1049,7 +1057,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.FlexPartitionSize.{Partition}" units="MiB"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>nicholasbishop@google.com</owner>
   <owner>chromeos-flex-eng@google.com</owner>
   <summary>
@@ -1077,7 +1085,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Fwupd.ActivateStatus" enum="FwupdReturnValue"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>rishbhagr@google.com</owner>
   <owner>chromeos-fwupd@google.com</owner>
   <summary>
@@ -1087,7 +1095,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Fwupd.UpdateDuration" units="seconds"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>rishabhagr@google.com</owner>
   <owner>chromeos-fwupd@google.com</owner>
   <summary>
@@ -1097,7 +1105,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Fwupd.UpdateStatus" enum="FwupdReturnValue"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>rishabhagr@google.com</owner>
   <owner>chromeos-fwupd@google.com</owner>
   <summary>
@@ -1107,7 +1115,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.IntelMaxMicroArchitecture"
-    enum="IntelMaxMicroArchitecture" expires_after="2025-09-14">
+    enum="IntelMaxMicroArchitecture" expires_after="2025-11-16">
   <owner>fbarchard@chromium.org</owner>
   <owner>pwnall@chromium.org</owner>
   <summary>
@@ -1222,7 +1230,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Libhwsec.PinWeaverManager.SyncHashTree.SyncOutcome"
-    enum="HwsecPinWeaverSyncOutcomeEnum" expires_after="2025-07-27">
+    enum="HwsecPinWeaverSyncOutcomeEnum" expires_after="2025-09-28">
   <owner>chensa@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -1263,7 +1271,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Libhwsec.RetryAction{Category}"
-    enum="HwsecRetryActionEnum" expires_after="2025-09-14">
+    enum="HwsecRetryActionEnum" expires_after="2025-11-16">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -1492,71 +1500,85 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Platform.Mem" units="%" expires_after="2022-07-02">
-  <owner>hajimehoshi@chromium.org</owner>
-  <owner>kouhei@chromium.org</owner>
-  <owner>sonnyrao@chromium.org</owner>
-  <owner>chromeos-memory@google.com</owner>
-  <summary>
-    Various memory usage % of total memory on Chrome OS devices (snapshotted
-    every 30s). Warning: this histogram was expired from 2021-07-02 to 2022-01;
-    data may be missing.
-  </summary>
-</histogram>
-
-<histogram name="Platform.Meminfo" units="KB" expires_after="2025-08-24">
+<histogram name="Platform.Meminfo{PlatformMeminfoSize}" units="KB"
+    expires_after="2025-08-24">
   <owner>hajimehoshi@chromium.org</owner>
   <owner>kouhei@chromium.org</owner>
   <owner>sonnyrao@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Various memory usage amount on Chrome OS devices (snapshotted every 30s).
+    {PlatformMeminfoSize}
   </summary>
+  <token key="PlatformMeminfoSize">
+    <variant name=""/>
+    <variant name="FileTotal"
+        summary="Size of file memory (active + inactive)."/>
+    <variant name="MemFreeDerived"
+        summary="Size derived from free+buffers+cached."/>
+    <variant name="MemTotal" summary="Size of total installed memory."/>
+    <variant name="MemUsedDerived"
+        summary="Size of &quot;Total - FreeDerived&quot; memory."/>
+    <variant name="ProcessDataTotal"
+        summary="Size of process data (active + inactive + swap)."/>
+    <variant name="Shmem" summary="Size of shared memory."/>
+    <variant name="Slab" summary="Size of slab memory."/>
+    <variant name="SwapUsed" summary="Size of used swap memory."/>
+    <variant name="Unevictable" summary="Size of unevictable memory."/>
+  </token>
 </histogram>
 
-<histogram name="Platform.Memory.ARC" units="MiB" expires_after="2025-09-14">
-<!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
-
+<histogram name="Platform.Memory.ARC{ProcessMemoryType}" units="MiB"
+    expires_after="2025-11-16">
   <owner>bgeffon@chromium.org</owner>
   <owner>khmel@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of all ARC and ARCVM processes in Chrome OS, reported every 10
-    minutes.
+    minutes. {ProcessMemoryType}
   </summary>
+  <token key="ProcessMemoryType" variants="ProcessMemoryType">
+    <variant name=""/>
+  </token>
 </histogram>
 
-<histogram name="Platform.Memory.Browser" units="MiB"
-    expires_after="2025-09-14">
-<!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
-
+<histogram name="Platform.Memory.Browser{ProcessMemoryType}" units="MiB"
+    expires_after="2025-11-16">
   <owner>bgeffon@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of browser and helper processes (excluding GPU process and
-    renderers) in Chrome OS, reported every 10 minutes.
+    renderers) in Chrome OS, reported every 10 minutes. {ProcessMemoryType}
   </summary>
+  <token key="ProcessMemoryType" variants="ProcessMemoryType">
+    <variant name=""/>
+  </token>
 </histogram>
 
-<histogram name="Platform.Memory.Daemons" units="MiB"
+<histogram name="Platform.Memory.Daemons{ProcessMemoryType}" units="MiB"
     expires_after="2025-08-31">
-<!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
-
   <owner>bgeffon@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of user-level daemons in Chrome OS, reported every 10 minutes.
+    {ProcessMemoryType}
   </summary>
+  <token key="ProcessMemoryType" variants="ProcessMemoryType">
+    <variant name=""/>
+  </token>
 </histogram>
 
-<histogram name="Platform.Memory.Gpu" units="MiB" expires_after="2025-09-14">
-<!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
-
+<histogram name="Platform.Memory.Gpu{ProcessMemoryType}" units="MiB"
+    expires_after="2025-11-16">
   <owner>bgeffon@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of the GPU process in Chrome OS, reported every 10 minutes.
+    {ProcessMemoryType}
   </summary>
+  <token key="ProcessMemoryType" variants="ProcessMemoryType">
+    <variant name=""/>
+  </token>
 </histogram>
 
 <histogram name="Platform.Memory.PsiPolicyError"
@@ -1584,26 +1606,65 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Platform.Memory.Renderers" units="MiB"
+<histogram name="Platform.Memory.Renderers{ProcessMemoryType}" units="MiB"
     expires_after="2023-08-08">
-<!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
-
   <owner>bgeffon@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of renderer processes in Chrome OS, reported every 10 minutes.
+    {ProcessMemoryType}
   </summary>
+  <token key="ProcessMemoryType" variants="ProcessMemoryType">
+    <variant name=""/>
+  </token>
 </histogram>
 
-<histogram name="Platform.Memory.VMs" units="MiB" expires_after="2025-09-14">
-<!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
-
+<histogram name="Platform.Memory.VMs{ProcessMemoryType}" units="MiB"
+    expires_after="2025-09-14">
   <owner>bgeffon@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of VMs (crostini and others, except for ARCVM) in Chrome OS,
-    reported every 10 minutes.
+    reported every 10 minutes. {ProcessMemoryType}
   </summary>
+  <token key="ProcessMemoryType" variants="ProcessMemoryType">
+    <variant name=""/>
+  </token>
+</histogram>
+
+<histogram name="Platform.Mem{PlatformMeminfoPercentage}" units="%"
+    expires_after="2022-07-02">
+  <owner>hajimehoshi@chromium.org</owner>
+  <owner>kouhei@chromium.org</owner>
+  <owner>sonnyrao@chromium.org</owner>
+  <owner>chromeos-memory@google.com</owner>
+  <summary>
+    Various memory usage % of total memory on Chrome OS devices (snapshotted
+    every 30s). Warning: this histogram was expired from 2021-07-02 to 2022-01;
+    data may be missing. {PlatformMeminfoPercentage}
+  </summary>
+  <token key="PlatformMeminfoPercentage">
+    <variant name=""/>
+    <variant name="infoActive" summary="Active memory."/>
+    <variant name="infoActiveAnon"
+        summary="Active anonymous memory (data segments)."/>
+    <variant name="infoActiveFile"
+        summary="Active file-backed memory (executables, ...)."/>
+    <variant name="infoAnonPages"
+        summary="Anonymous memory (executables, ...)."/>
+    <variant name="infoBuffers" summary="Buffer cache (executables, ...)."/>
+    <variant name="infoCached"
+        summary="size of file-backed memory minus swap and buffer cache."/>
+    <variant name="infoInactive" summary="Inactive memory."/>
+    <variant name="infoInactiveAnon"
+        summary="Inactive anonymous memory (data segments)."/>
+    <variant name="infoInactiveFile" summary="Inactive file-backed memory."/>
+    <variant name="infoMapped" summary="Mapped memory."/>
+    <variant name="infoMemFree"
+        summary="Free memory. Logged from ChromeOS; previously logged from
+                 Chromecast from M53 through M97."/>
+    <variant name="infoSwapUsedPercent" summary="Used swap memory."/>
+  </token>
 </histogram>
 
 <histogram name="Platform.MiniDiag.Launch" units="launches"
@@ -1674,7 +1735,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.ClientEnqueueResult"
-    enum="EnterpriseCloudReportingStatusCode" expires_after="2025-09-14">
+    enum="EnterpriseCloudReportingStatusCode" expires_after="2025-11-16">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1709,7 +1770,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.DataLossErrorReason"
-    enum="DataLossErrorReason" expires_after="2025-08-03">
+    enum="DataLossErrorReason" expires_after="2025-10-05">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1735,7 +1796,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.KeyDeliveryResult"
-    enum="EnterpriseCloudReportingStatusCode" expires_after="2025-08-10">
+    enum="EnterpriseCloudReportingStatusCode" expires_after="2025-10-12">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1745,7 +1806,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.MemoryUsage" units="0.1MiB"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1765,7 +1826,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.ResourceExhaustedCase"
-    enum="ResourceExhaustedCase" expires_after="2025-07-27">
+    enum="ResourceExhaustedCase" expires_after="2025-09-28">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1786,7 +1847,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.StorageDegradationAmount" units="KiB"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>lbaraz@google.com</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1795,7 +1856,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.StorageUsage" units="MiB"
-    expires_after="2025-08-17">
+    expires_after="2025-10-19">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1818,7 +1879,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Missive.UnavailableErrorReason"
-    enum="UnavailableErrorReason" expires_after="2025-08-03">
+    enum="UnavailableErrorReason" expires_after="2025-10-05">
   <owner>lbaraz@chromium.org</owner>
   <owner>cros-reporting-team@google.com</owner>
   <summary>
@@ -1852,7 +1913,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Modemfwd.DlcInstallResult"
-    enum="ModemfwdDlcInstallResult" expires_after="2025-09-14">
+    enum="ModemfwdDlcInstallResult" expires_after="2025-11-16">
   <owner>andrewlassalle@google.com</owner>
   <owner>ujjwalpande@google.com</owner>
   <summary>
@@ -1862,7 +1923,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Modemfwd.DlcUninstallResult"
-    enum="ModemfwdDlcUninstallResult" expires_after="2025-09-01">
+    enum="ModemfwdDlcUninstallResult" expires_after="2025-11-09">
   <owner>andrewlassalle@google.com</owner>
   <owner>ujjwalpande@google.com</owner>
   <summary>
@@ -1893,7 +1954,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Modemfwd.FWUpdateLocation"
-    enum="ModemfwdFWUpdateLocation" expires_after="2025-07-13">
+    enum="ModemfwdFWUpdateLocation" expires_after="2025-11-09">
   <owner>andrewlassalle@google.com</owner>
   <owner>cros-device-enablement@google.com</owner>
   <summary>
@@ -1911,7 +1972,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.MountEncrypted.EncryptionKeyStatus"
-    enum="MountEncryptedEncryptionKeyStatus" expires_after="2025-08-03">
+    enum="MountEncryptedEncryptionKeyStatus" expires_after="2025-10-05">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -1922,7 +1983,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.MountEncrypted.SystemKeyStatus"
-    enum="MountEncryptedSystemKeyStatus" expires_after="2025-08-03">
+    enum="MountEncryptedSystemKeyStatus" expires_after="2025-10-05">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2163,7 +2224,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Segmentation.FeatureLevel" units="level number"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>gwendal@chromium.org</owner>
   <owner>iby@chromium.org</owner>
   <owner>chromeos-data-eng@google.com</owner>
@@ -2202,7 +2263,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.StatefulFormat" enum="StatefulFormat"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>sarthakkukreti@chromium.org</owner>
   <owner>gwendal@chromium.org</owner>
   <owner>chromeos-storage@google.com</owner>
@@ -2291,7 +2352,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Storage.Mmc.Internal.{Error}" units="errors"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>korneld@chromium.org</owner>
   <owner>chromeos-devices-team@google.com</owner>
   <summary>
@@ -2308,7 +2369,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Storage.Nvme.PercentageUsed" units="%"
-    expires_after="2025-07-16">
+    expires_after="2025-10-19">
   <owner>asavery@chromium.org</owner>
   <owner>gwendal@chromium.org</owner>
   <owner>chromeos-storage@google.com</owner>
@@ -2338,7 +2399,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.StorageCapabilities"
-    enum="InternalStorageCapabilities" expires_after="2025-09-14">
+    enum="InternalStorageCapabilities" expires_after="2025-11-16">
   <owner>dlunev@chromium.org</owner>
   <owner>chromeos-storage@google.com</owner>
   <summary>
@@ -2347,7 +2408,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Platform.SwapInDaily" units="pages" expires_after="2025-09-14">
+<histogram name="Platform.SwapInDaily" units="pages" expires_after="2025-11-16">
   <owner>asavery@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
@@ -2355,7 +2416,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.SwapOutDaily" units="pages"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>asavery@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <owner>chromeos-storage@google.com</owner>
@@ -2450,7 +2511,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.ApRoVerificationTime" units="ms"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>granaghan@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2459,7 +2520,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.AuthErrorCode" enum="TPMResultCodeEnum"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -2510,7 +2571,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.DictionaryAttackCounter" units="units"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -2520,7 +2581,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.DictionaryAttackResetStatus"
-    enum="CrosTPMDictionaryAttackResetStatusEnum" expires_after="2025-07-27">
+    enum="CrosTPMDictionaryAttackResetStatusEnum" expires_after="2025-09-28">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -2539,7 +2600,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.ErrorCode" enum="TPMResultCodeEnum"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -2567,7 +2628,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.FilesystemInitTime" units="ms"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>granaghan@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2577,7 +2638,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.FilesystemUtilization" units="bytes"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>granaghan@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2603,7 +2664,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.PowerWashResult" enum="TPMPowerWashResult"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>chenyian@google.com</owner>
   <owner>cros-hwsec-userland-eng+uma@google.com</owner>
   <summary>
@@ -2633,7 +2694,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.TimeToTakeOwnership" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2643,7 +2704,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.TpmManagerSecretStatus"
-    enum="TpmManagerSecretStatus" expires_after="2025-09-14">
+    enum="TpmManagerSecretStatus" expires_after="2025-11-16">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2655,7 +2716,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM.VersionFingerprint" enum="TPMVersionFingerprint"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2665,7 +2726,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM1.CommandAndResponse.{Client}"
-    enum="TPM1CommandAndResponse" expires_after="2025-09-14">
+    enum="TPM1CommandAndResponse" expires_after="2025-11-16">
   <owner>chingkang@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2687,7 +2748,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.TPM2.CommandAndResponse.{Client}"
-    enum="TPM2CommandAndResponse" expires_after="2025-09-14">
+    enum="TPM2CommandAndResponse" expires_after="2025-11-16">
   <owner>chingkang@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2739,7 +2800,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Trunks.FirstTimeoutWritingCommand"
-    enum="TPMCommandCode" expires_after="2025-07-27">
+    enum="TPMCommandCode" expires_after="2025-09-28">
   <owner>chingkang@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>Command code of the first timeout writing TPM command</summary>
@@ -2763,7 +2824,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.Trunks.TpmErrorCode" enum="TPMResponseCode"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>yich@google.com</owner>
   <owner>cros-hwsec+uma@google.com</owner>
   <summary>
@@ -2827,7 +2888,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.UnaggregatedUsageTime" units="seconds"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>iby@chromium.org</owner>
   <owner>chromeos-data-eng@google.com</owner>
   <summary>
@@ -2981,7 +3042,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.{GSC}.BoardIdFlags" enum="Cr50BoardIdFlags"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>apronin@chromium.org</owner>
   <owner>vbendeb@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
@@ -2997,7 +3058,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.{GSC}.BoardIdOfRlzMismatch" enum="Cr50CrosRlzCodes"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>vbendeb@chromium.org</owner>
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>
@@ -3046,7 +3107,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Platform.{GSC}.RlzOfBoardIdMismatch" enum="Cr50CrosRlzCodes"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>vbendeb@chromium.org</owner>
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@google.com</owner>

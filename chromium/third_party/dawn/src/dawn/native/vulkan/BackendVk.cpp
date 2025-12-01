@@ -32,7 +32,6 @@
 #include <utility>
 
 #include "dawn/common/Assert.h"
-#include "dawn/common/BitSetIterator.h"
 #include "dawn/common/Log.h"
 #include "dawn/common/SystemUtils.h"
 #include "dawn/native/ChainUtils.h"
@@ -177,9 +176,9 @@ constexpr SkippedMessage kSkippedMessages[] = {
 
     // https://github.com/KhronosGroup/Vulkan-ValidationLayers/issues/9537
     {"VUID-vkCmdCopyBufferToImage-pRegions-00173",
-     "Detected overlap between source and dest regions in memory"},
+     "Detected overlap between src and dst regions in memory"},
     {"VUID-vkCmdCopyImageToBuffer-pRegions-00184",
-     "Detected overlap between source and dest regions in memory"},
+     "Detected overlap between src and dst regions in memory"},
 };
 
 namespace dawn::native::vulkan {
@@ -467,7 +466,7 @@ ResultOrError<VulkanGlobalKnobs> VulkanInstance::CreateVkInstance(const Instance
     usedKnobs.extensions = extensionsToRequest;
 
     std::vector<const char*> extensionNames;
-    for (InstanceExt ext : IterateBitSet(extensionsToRequest)) {
+    for (InstanceExt ext : extensionsToRequest) {
         const InstanceExtInfo& info = GetInstanceExtInfo(ext);
 
         if (info.versionPromoted > mGlobalInfo.apiVersion) {

@@ -99,6 +99,8 @@ TEST_F(AppNetWorkerTest, PostRequest) {
         http_response->AddCustomHeader(
             update_client::NetworkFetcher::kHeaderXCupServerProof,
             "cup-server-proof-xyz");
+        http_response->AddCustomHeader(
+            update_client::NetworkFetcher::kHeaderCookie, "cookie-for-testing");
         http_response->AddCustomHeader("SomeOtherHeader", "foo-bar");
         return http_response;
       }));
@@ -117,14 +119,16 @@ TEST_F(AppNetWorkerTest, PostRequest) {
               }),
           base::BindRepeating([](int64_t current) { EXPECT_LE(current, 12); }),
           base::BindLambdaForTesting(
-              [&](std::unique_ptr<std::string> response_body, int32_t net_error,
+              [&](std::optional<std::string> response_body, int32_t net_error,
                   const std::string& header_etag,
                   const std::string& header_x_cup_server_proof,
+                  const std::string& header_cookie,
                   int64_t xheader_retry_after_sec) {
                 EXPECT_EQ(net_error, 0);
                 EXPECT_EQ(*response_body, "hello world!");
                 EXPECT_EQ(header_etag, "etag-for-test");
                 EXPECT_EQ(header_x_cup_server_proof, "cup-server-proof-xyz");
+                EXPECT_EQ(header_cookie, "cookie-for-testing");
                 run_loop.Quit();
               })));
   run_loop.Run();
@@ -187,9 +191,10 @@ TEST_F(AppNetWorkerTest, ServerNotExist) {
               [](int32_t http_status_code, int64_t content_length) {}),
           base::BindRepeating([](int64_t current) {}),
           base::BindLambdaForTesting(
-              [&](std::unique_ptr<std::string> response_body, int32_t net_error,
+              [&](std::optional<std::string> response_body, int32_t net_error,
                   const std::string& header_etag,
                   const std::string& header_x_cup_server_proof,
+                  const std::string& header_cookie,
                   int64_t xheader_retry_after_sec) {
                 EXPECT_NE(net_error, 0);
                 run_loop.Quit();

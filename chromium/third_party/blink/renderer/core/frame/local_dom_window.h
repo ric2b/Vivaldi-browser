@@ -91,6 +91,7 @@ class ScriptState;
 class ScrollToOptions;
 class SecurityOrigin;
 class SerializedScriptValue;
+class SoftNavigationHeuristics;
 class SourceLocation;
 class StyleMedia;
 class TrustedTypePolicyFactory;
@@ -404,7 +405,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
       MessageEvent* event,
       scoped_refptr<const SecurityOrigin> intended_target_origin,
       std::unique_ptr<SourceLocation> location,
-      const base::UnguessableToken& source_agent_cluster_id);
+      const base::UnguessableToken& source_agent_cluster_id,
+      scheduler::TaskAttributionInfo* parent_task);
 
   void DispatchMessageEventWithOriginCheck(
       const SecurityOrigin* intended_target_origin,
@@ -530,13 +532,27 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
     is_picture_in_picture_window_ = is_picture_in_picture;
   }
 
+  // This enum represents whether or not a call to `SetStorageAccessApiStatus`
+  // needs to also pass the status back up to the browser.
+  enum class StorageAccessApiNotifyEmbedder {
+    // No notification.
+    kNone,
+    // Notify the browser process.
+    kBrowserProcess,
+  };
+
   // Sets the StorageAccessApiStatus. Calls to this method must not downgrade
   // the status.
-  void SetStorageAccessApiStatus(net::StorageAccessApiStatus status);
+  void SetStorageAccessApiStatus(net::StorageAccessApiStatus status,
+                                 StorageAccessApiNotifyEmbedder notify);
 
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#has-been-revealed
   bool HasBeenRevealed() const { return has_been_revealed_; }
   void SetHasBeenRevealed(bool revealed);
+
+  SoftNavigationHeuristics* GetSoftNavigationHeuristics() {
+    return soft_navigation_heuristics_.Get();
+  }
 
  protected:
   // EventTarget overrides.
@@ -663,6 +679,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   Member<Fence> fence_;
 
   Member<CloseWatcher::WatcherStack> closewatcher_stack_;
+
+  Member<SoftNavigationHeuristics> soft_navigation_heuristics_;
 
   // If set, this window is a Document Picture in Picture window.
   // https://wicg.github.io/document-picture-in-picture/

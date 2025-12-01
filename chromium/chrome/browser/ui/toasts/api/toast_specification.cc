@@ -52,6 +52,12 @@ ToastSpecification::Builder& ToastSpecification::Builder::AddGlobalScoped() {
   return *this;
 }
 
+ToastSpecification::Builder&
+ToastSpecification::Builder::SetToastAsActionable() {
+  toast_specification_->SetToastAsActionable();
+  return *this;
+}
+
 std::unique_ptr<ToastSpecification> ToastSpecification::Builder::Build() {
   ValidateSpecification();
   return std::move(toast_specification_);
@@ -68,6 +74,14 @@ void ToastSpecification::Builder::ValidateSpecification() {
   // discuss with UX how to design this in a way that supports both.
   if (toast_specification_->has_menu()) {
     CHECK(!toast_specification_->has_close_button());
+  }
+
+  // Toasts can be manually set as actionable, or have close / menu buttons. Not
+  // both.
+  if (toast_specification_->has_actionable_override()) {
+    CHECK(!toast_specification_->has_close_button() &&
+          !toast_specification_->has_menu())
+        << "Avoid use of SetToastAsActionable() on an already actionable toast";
   }
 }
 
@@ -101,4 +115,8 @@ void ToastSpecification::AddMenu() {
 
 void ToastSpecification::AddGlobalScope() {
   is_global_scope_ = true;
+}
+
+void ToastSpecification::SetToastAsActionable() {
+  actionable_toast_override_ = true;
 }

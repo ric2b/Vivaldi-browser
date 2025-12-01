@@ -463,7 +463,7 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
   PrepopulatedEngineStorage& operator=(PrepopulatedEngineStorage&&) = default;
 
   const TemplateURLPrepopulateData::PrepopulatedEngine MakePrepopulateEngine() {
-    return TemplateURLPrepopulateData::PrepopulatedEngine{
+    return TemplateURLPrepopulateData::PrepopulatedEngine
         {.name = name_ ? name_->c_str() : nullptr,
          .keyword = keyword_ ? keyword_->c_str() : nullptr,
          .favicon_url = favicon_url_ ? favicon_url_->c_str() : nullptr,
@@ -510,7 +510,7 @@ class ParsedSearchEngines::PrepopulatedEngineStorage {
                  : nullptr,
          .id = id_,
          .regulatory_extensions = regulatory_extensions_,
-         .is_partner = is_partner_}};
+         .is_partner = is_partner_};
   }
 
  private:

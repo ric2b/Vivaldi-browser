@@ -41,7 +41,7 @@ class AggregatableNamedBudgetCandidate;
 class AggregatableValues;
 class AggregationKeys;
 class AttributionScopesData;
-class TriggerSpecs;
+class TriggerDataSet;
 }  // namespace attribution_reporting
 
 namespace net {
@@ -118,7 +118,10 @@ class SourceBuilder {
 
   SourceBuilder& SetDebugReporting(bool debug_reporting);
 
-  SourceBuilder& SetTriggerSpecs(attribution_reporting::TriggerSpecs);
+  SourceBuilder& SetTriggerData(attribution_reporting::TriggerDataSet);
+
+  SourceBuilder& SetEventReportWindows(
+      attribution_reporting::EventReportWindows);
 
   SourceBuilder& SetMaxEventLevelReports(int max_event_level_reports);
 
@@ -383,6 +386,8 @@ std::ostream& operator<<(std::ostream& out, const AttributionReport& report);
 std::ostream& operator<<(std::ostream& out, SendResult::Status status);
 
 std::ostream& operator<<(std::ostream& out, const SendResult& info);
+
+std::ostream& operator<<(std::ostream& out, SendResult::Sent);
 
 std::ostream& operator<<(std::ostream& out,
                          StoredSource::AttributionLogic attribution_logic);

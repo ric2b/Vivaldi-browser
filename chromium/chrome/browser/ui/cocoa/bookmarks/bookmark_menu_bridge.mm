@@ -89,22 +89,26 @@ void BookmarkMenuBridge::BookmarkMergedSurfaceServiceLoaded() {
   InvalidateMenu();
 }
 
-void BookmarkMenuBridge::UpdateMenu(NSMenu* menu,
-                                    std::optional<BookmarkParentFolder> folder,
-                                    bool recurse) {
+bool BookmarkMenuBridge::IsMenuRoot(NSMenu* menu) {
   CHECK(menu);
+  return menu == menu_root_;
+}
+
+void BookmarkMenuBridge::UpdateRootMenuIfInvalid() {
+  CHECK(menu_root_);
+  if (!IsMenuValid()) {
+    BuildRootMenu(/*recurse=*/false);
+  }
+}
+
+void BookmarkMenuBridge::UpdateNonRootMenu(NSMenu* menu,
+                                           const BookmarkParentFolder& folder) {
+  CHECK(menu);
+  CHECK(!IsMenuRoot(menu));
   CHECK(controller_);
   CHECK_EQ([menu delegate], controller_);
 
-  if (menu == menu_root_) {
-    if (!IsMenuValid()) {
-      BuildRootMenu(recurse);
-    }
-    return;
-  }
-
-  CHECK(folder);
-  AddChildrenToMenu(folder.value(), menu, recurse);
+  AddChildrenToMenu(folder, menu, /*recurse=*/false);
 
   // Clear the delegate to prevent further refreshes.
   [menu setDelegate:nil];
@@ -210,14 +214,14 @@ void BookmarkMenuBridge::BookmarkNodeMoved(
 void BookmarkMenuBridge::BookmarkNodeChanged(const BookmarkNode* node) {
   NSMenuItem* item = MenuItemForNode(node);
   if (item) {
-    ConfigureMenuItem(node, item, true);
+    ConfigureMenuItem(node, item);
   }
 }
 
 void BookmarkMenuBridge::BookmarkNodeFaviconChanged(const BookmarkNode* node) {
   NSMenuItem* item = MenuItemForNode(node);
   if (item) {
-    ConfigureMenuItem(node, item, false);
+    ConfigureMenuItem(node, item);
   }
 }
 
@@ -300,22 +304,23 @@ void BookmarkMenuBridge::AddSubmenu(NSMenu* menu,
   CHECK(!nodes.empty());
   const BookmarkNode* node = nodes[0];
   NSString* title = MenuTitleForNode(node);
-  NSMenuItem* items = [[NSMenuItem alloc] initWithTitle:title
-                                                 action:nil
-                                          keyEquivalent:@""];
-  [items setImage:image];
+  NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:title
+                                                action:nil
+                                         keyEquivalent:@""];
+  [item setImage:image];
+  ConfigureMenuItem(node, item);
+  bookmark_nodes_[node] = item;
+
   NSMenu* submenu = [[NSMenu alloc] initWithTitle:title];
-  [menu setSubmenu:submenu forItem:items];
+  [menu setSubmenu:submenu forItem:item];
 
   // Set a delegate and a tag on the item so that the submenu can be populated
   // when (and if) Cocoa asks for it.
   if (!recurse) {
     [submenu setDelegate:controller_];
   }
-  [items setTag:node->id()];
-  tag_to_guid_[node->id()] = node->uuid();
 
-  [menu addItem:items];
+  [menu addItem:item];
 
   if (recurse) {
     AddChildrenToMenu(folder, submenu, recurse);
@@ -378,7 +383,7 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node,
                                      action:nil
                               keyEquivalent:@""];
       bookmark_nodes_[node] = item;
-      ConfigureMenuItem(node, item, false);
+      ConfigureMenuItem(node, item);
       [menu addItem:item];
     }
     return;
@@ -393,25 +398,27 @@ void BookmarkMenuBridge::AddNodeToMenu(const BookmarkNode* node,
                                                   action:nil
                                            keyEquivalent:@""];
     bookmark_nodes_[node] = item;
-    tag_to_guid_[node->id()] = node->uuid();
-    ConfigureMenuItem(node, item, false);
+    ConfigureMenuItem(node, item);
     [menu addItem:item];
   }
 }
 
 void BookmarkMenuBridge::ConfigureMenuItem(const BookmarkNode* node,
-                                           NSMenuItem* item,
-                                           bool set_title) {
-  if (set_title) {
-    [item setTitle:MenuTitleForNode(node)];
-  }
-  [item setTarget:controller_];
-  [item setAction:@selector(openBookmarkMenuItem:)];
+                                           NSMenuItem* item) {
+  [item setTitle:MenuTitleForNode(node)];
   [item setTag:node->id()];
   tag_to_guid_[node->id()] = node->uuid();
-  if (node->is_url()) {
-    [item setToolTip:[BookmarkMenuCocoaController tooltipForNode:node]];
+
+  // The following settings only apply to URL items.
+  if (node->is_folder()) {
+    return;
   }
+  CHECK(node->is_url());
+
+  [item setTarget:controller_];
+  [item setAction:@selector(openBookmarkMenuItem:)];
+  [item setToolTip:[BookmarkMenuCocoaController tooltipForNode:node]];
+
   // Check to see if we have a favicon.
   NSImage* favicon = nil;
   BookmarkModel* model = bookmark_service_->bookmark_model();

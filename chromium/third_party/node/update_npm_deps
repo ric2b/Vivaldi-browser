@@ -66,7 +66,9 @@ patch -d node_modules/@types/d3/ -p1 < patches/chromium_d3_types_index.patch
 patch -d node_modules/html-minifier/ -p1 < patches/html_minifier.patch
 patch -p1 < patches/lit_html.patch
 patch -p1 < patches/types_chai.patch
+patch -p1 < patches/types_trusted_types.patch
 patch -p1 < patches/typescript.patch
+patch -p1 < patches/ts_poet.patch
 
 echo 'Step 4: Filtering out unnecessary files...'
 rsync -c --delete -r -q --include-from="npm_include.txt" \

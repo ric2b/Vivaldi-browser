@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
 
@@ -75,6 +71,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/page.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/weak_document_ptr.h"
@@ -1200,7 +1197,9 @@ void ContentSettingMediaStreamBubbleModel::SetRadioGroup() {
             ->GetBrowserContext()
             ->GetPermissionController()
             ->GetPermissionStatusForCurrentDocument(
-                blink::PermissionType::CAMERA_PAN_TILT_ZOOM,
+                content::PermissionDescriptorUtil::
+                    CreatePermissionDescriptorForPermissionType(
+                        blink::PermissionType::CAMERA_PAN_TILT_ZOOM),
                 &GetPage().GetMainDocument()) ==
         blink::mojom::PermissionStatus::GRANTED;
 

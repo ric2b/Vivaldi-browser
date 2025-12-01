@@ -19,7 +19,7 @@
 
 #include "absl/base/nullability.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 // We vendor our own implementation of SHA1 (taken from public domain) to avoid
@@ -192,12 +192,12 @@ static_assert(kShaDigestLength == HASH_LENGTH);
 
 }  // namespace
 
-void SHA1(absl::Nonnull<const uint8_t *> data, size_t len,
-          absl::Nonnull<uint8_t *> out) {
+void SHA1(const uint8_t *absl_nonnull data, size_t len,
+          uint8_t *absl_nonnull out) {
   sha1nfo s;
   sha1_init(&s);
   sha1_write(&s, reinterpret_cast<const char *>(data), len);
   memcpy(out, sha1_result(&s), kShaDigestLength);
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

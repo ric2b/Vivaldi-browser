@@ -45,10 +45,14 @@ if (tint_build_unittests || tint_build_benchmarks) {
 if (tint_build_msl_writer) {
   libtint_source_set("raise") {
     sources = [
+      "argument_buffers.cc",
+      "argument_buffers.h",
       "binary_polyfill.cc",
       "binary_polyfill.h",
       "builtin_polyfill.cc",
       "builtin_polyfill.h",
+      "module_constant.cc",
+      "module_constant.h",
       "module_scope_vars.cc",
       "module_scope_vars.h",
       "packed_vec3.cc",
@@ -66,7 +70,6 @@ if (tint_build_msl_writer) {
       "${dawn_root}/src/utils:utils",
       "${tint_src_dir}/api/common",
       "${tint_src_dir}/lang/core",
-      "${tint_src_dir}/lang/core/common",
       "${tint_src_dir}/lang/core/constant",
       "${tint_src_dir}/lang/core/intrinsic",
       "${tint_src_dir}/lang/core/ir",
@@ -97,8 +100,10 @@ if (tint_build_unittests) {
   if (tint_build_msl_writer) {
     tint_unittests_source_set("unittests") {
       sources = [
+        "argument_buffers_test.cc",
         "binary_polyfill_test.cc",
         "builtin_polyfill_test.cc",
+        "module_constant_test.cc",
         "module_scope_vars_test.cc",
         "packed_vec3_test.cc",
         "shader_io_test.cc",

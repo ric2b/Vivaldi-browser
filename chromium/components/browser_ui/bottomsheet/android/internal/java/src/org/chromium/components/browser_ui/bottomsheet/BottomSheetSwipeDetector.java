@@ -44,14 +44,13 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
     private final SwipeableBottomSheet mSheetDelegate;
 
     /** Track the velocity of the user's scrolls to determine up or down direction. */
-    private VelocityTracker mVelocityTracker;
+    private final VelocityTracker mVelocityTracker;
 
     /** Whether or not the user is scrolling the bottom sheet. */
     private boolean mIsScrolling;
 
     /** Vivaldi **/
     private boolean mSwipeWithToolbar;
-    private float toolbarHeight = 64.0f;
 
     /**
      * An interface for views that are swipable from the bottom of the screen. This interface
@@ -220,6 +219,7 @@ class BottomSheetSwipeDetector extends GestureDetector.SimpleOnGestureListener {
         if (mSwipeWithToolbar) {
             float toolbarYPos = e.getY() /
                     ((View) mSheetDelegate).getResources().getDisplayMetrics().density;
+            float toolbarHeight = 64.0f;
             if (toolbarYPos > toolbarHeight) {
                 return false;
             }

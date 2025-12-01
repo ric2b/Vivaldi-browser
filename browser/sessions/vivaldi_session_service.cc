@@ -18,6 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "browser/sessions/vivaldi_session_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
 #include "chrome/browser/resource_coordinator/lifecycle_unit_state.mojom-shared.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
 #include "chrome/browser/sessions/session_service_factory.h"
@@ -41,7 +42,6 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "components/tabs/tab_helpers.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/extensions/tab_helper.h"
 #endif
 
 using content::NavigationEntry;
@@ -330,14 +330,15 @@ void VivaldiSessionService::BuildCommandsForTab(const SessionID& window_id,
   if (is_pinned) {
     ScheduleCommand(sessions::CreatePinnedStateCommand(session_id, true));
   }
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  extensions::TabHelper* extensions_tab_helper =
-      extensions::TabHelper::FromWebContents(tab);
-  if (extensions_tab_helper->is_app()) {
+
+  // (espen) Modified from using TabHelper with ch138. Right now I am unable to
+  // test as I do not know how to trigger this branch. Add some text to explain
+  // how here.
+  std::string app_id = apps::GetAppIdForWebContents(tab);
+  if (!app_id.empty()) {
     ScheduleCommand(sessions::CreateSetTabExtensionAppIDCommand(
-        session_id, extensions_tab_helper->GetExtensionAppId()));
+        session_id, app_id));
   }
-#endif
 
   if (!tab->GetVivExtData().empty()) {
     ScheduleCommand(sessions::CreateSetVivExtDataCommand(session_id,
@@ -578,9 +579,14 @@ int VivaldiSessionService::Load(const base::FilePath& path,
     // pointer should a kCommandSetPlatformSessionId be encountered while
     // parsing. We currently do not use it.
     std::string platform_session_id;
+    // Starting with ch 138 there is holder for discarded windows. This is for
+    // window removal in Wayland. We do not use it here, but code inside the
+    // call will. Same behavior as in SessionServiceBase::OnGotSessionCommands().
+    std::set<SessionID> discarded_window_ids;
     sessions::RestoreSessionFromCommands(commands, &valid_windows,
                                          &active_window_id,
-                                         &platform_session_id);
+                                         &platform_session_id,
+                                         &discarded_window_ids);
     if (!platform_session_id.empty()) {
       // Since we do not use it, report if it is set.
       DVLOG(1) << "Session Load. Platform id set, but ignored "

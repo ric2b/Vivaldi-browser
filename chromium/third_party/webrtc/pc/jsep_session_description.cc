@@ -10,23 +10,31 @@
 
 #include "api/jsep_session_description.h"
 
+#include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "absl/strings/string_view.h"
+#include "api/candidate.h"
+#include "api/jsep.h"
+#include "api/jsep_ice_candidate.h"
 #include "p2p/base/p2p_constants.h"
-#include "p2p/base/port.h"
 #include "p2p/base/transport_description.h"
 #include "p2p/base/transport_info.h"
 #include "pc/media_session.h"  // IWYU pragma: keep
+#include "pc/session_description.h"
 #include "pc/webrtc_sdp.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/ip_address.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/net_helper.h"
+#include "rtc_base/net_helpers.h"
 #include "rtc_base/socket_address.h"
 
-using cricket::Candidate;
+using webrtc::Candidate;
 using ::webrtc::SessionDescription;
 
 namespace webrtc {
@@ -48,11 +56,11 @@ void UpdateConnectionAddress(
   for (size_t i = 0; i < candidate_collection.count(); ++i) {
     const IceCandidateInterface* jsep_candidate = candidate_collection.at(i);
     if (jsep_candidate->candidate().component() !=
-        cricket::ICE_CANDIDATE_COMPONENT_RTP) {
+        ICE_CANDIDATE_COMPONENT_RTP) {
       continue;
     }
     // Default destination should be UDP only.
-    if (jsep_candidate->candidate().protocol() != cricket::UDP_PROTOCOL_NAME) {
+    if (jsep_candidate->candidate().protocol() != UDP_PROTOCOL_NAME) {
       continue;
     }
     const int preference = jsep_candidate->candidate().type_preference();
@@ -223,7 +231,7 @@ bool JsepSessionDescription::AddCandidate(
     return false;
   const std::string& content_name =
       description_->contents()[mediasection_index].mid();
-  const cricket::TransportInfo* transport_info =
+  const TransportInfo* transport_info =
       description_->GetTransportInfoByName(content_name);
   if (!transport_info) {
     return false;
@@ -279,7 +287,7 @@ size_t JsepSessionDescription::number_of_mediasections() const {
 const IceCandidateCollection* JsepSessionDescription::candidates(
     size_t mediasection_index) const {
   if (mediasection_index >= candidate_collection_.size())
-    return NULL;
+    return nullptr;
   return &candidate_collection_[mediasection_index];
 }
 

@@ -153,6 +153,10 @@ SharedWorker* SharedWorker::CreateImpl(
         /*is_top_level_navigation=*/false);
   }
 
+  if (script_url.ProtocolIs("data")) {
+    context->CountUse(WebFeature::kDataUrlSharedWorker);
+  }
+
   auto options = mojom::blink::WorkerOptions::New();
   // The same_site_cookies setting defaults to kAll for first-party contexts
   // (allowing access to SameSite Lax and String cookies) and kNone in
@@ -161,6 +165,7 @@ SharedWorker* SharedWorker::CreateImpl(
       window->GetStorageKey().IsFirstPartyContext()
           ? mojom::blink::SharedWorkerSameSiteCookies::kAll
           : mojom::blink::SharedWorkerSameSiteCookies::kNone;
+  bool extended_lifetime = false;
   switch (name_or_options->GetContentType()) {
     case V8UnionSharedWorkerOptionsOrString::ContentType::kString:
       options->name = name_or_options->GetAsString();
@@ -201,6 +206,15 @@ SharedWorker* SharedWorker::CreateImpl(
             break;
         }
       }
+      if (worker_options->hasExtendedLifetime()) {
+        extended_lifetime = worker_options->extendedLifetime();
+        UseCounter::Count(
+            window, WebFeature::kSharedWorkerExtendedLifetimeFeatureEnabled);
+        if (extended_lifetime) {
+          UseCounter::Count(window,
+                            WebFeature::kSharedWorkerExtendedLifetimeIsTrue);
+        }
+      }
       break;
     }
   }
@@ -213,7 +227,7 @@ SharedWorker* SharedWorker::CreateImpl(
   SharedWorkerClientHolder::From(*window)->Connect(
       worker, std::move(remote_port), script_url, std::move(blob_url_token),
       std::move(options), same_site_cookies, context->UkmSourceID(),
-      connector_override);
+      connector_override, extended_lifetime);
 
   return worker;
 }

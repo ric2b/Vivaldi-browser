@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.dom_distiller;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -14,6 +15,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+
+import android.util.Pair;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -30,13 +33,16 @@ import org.mockito.junit.MockitoRule;
 import org.chromium.base.UserDataHost;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManager.DistillationResult;
 import org.chromium.chrome.browser.dom_distiller.ReaderModeManager.DistillationStatus;
 import org.chromium.chrome.browser.dom_distiller.TabDistillabilityProvider.DistillabilityObserver;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.components.dom_distiller.core.DomDistillerFeatures;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtilsJni;
 import org.chromium.components.messages.MessageDispatcher;
@@ -129,6 +135,33 @@ public class ReaderModeManagerTest {
         verify(mWebContents).addObserver(mWebContentsObserverCaptor.capture());
         mWebContentsObserver = mWebContentsObserverCaptor.getValue();
         mManager.clearSavedSitesForTesting();
+    }
+
+    @Test
+    @Feature("ReaderMode")
+    public void testMobileFriendlyNotDistillable() {
+        Pair<Boolean, Integer> result =
+                ReaderModeManager.computeDistillationStatus(mTab, true, true, true);
+        assertTrue("Distillability should be fully determined.", result.first);
+        assertEquals(
+                "Page shouldn't be distillable.",
+                ReaderModeManager.DistillationStatus.NOT_POSSIBLE,
+                (int) result.second);
+    }
+
+    @Test
+    @Feature("ReaderMode")
+    @EnableFeatures(
+            DomDistillerFeatures.READER_MODE_IMPROVEMENTS
+                    + ":trigger_on_mobile_friendly_pages/true")
+    public void testMobileFriendlyNotDistillable_exceptWhenFeatureFlagAndParamEnabled() {
+        Pair<Boolean, Integer> result =
+                ReaderModeManager.computeDistillationStatus(mTab, true, true, true);
+        assertTrue("Distillability should be fully determined.", result.first);
+        assertEquals(
+                "Page should be be distillable.",
+                ReaderModeManager.DistillationStatus.POSSIBLE,
+                (int) result.second);
     }
 
     @Test
@@ -296,12 +329,9 @@ public class ReaderModeManagerTest {
                 HistogramWatcher.newBuilder()
                         .expectBooleanRecord(
                                 ReaderModeManager.ACCESSIBILITY_SETTING_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_MOBILE_PAGE_EXCLUDED_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_PAGE_RDS_EXCLUDED_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.PAGE_DISTILLABLE_RESULT_HISTOGRAM, true)
+                        .expectIntRecord(
+                                ReaderModeManager.PAGE_DISTILLATION_RESULT_HISTOGRAM,
+                                DistillationResult.DISTILLABLE)
                         .build();
         mDistillabilityObserver.onIsPageDistillableResult(
                 mTab,
@@ -318,10 +348,7 @@ public class ReaderModeManagerTest {
         HistogramWatcher watcher =
                 HistogramWatcher.newBuilder()
                         .expectNoRecords(ReaderModeManager.ACCESSIBILITY_SETTING_HISTOGRAM)
-                        .expectNoRecords(
-                                ReaderModeManager.DISTILLABLE_MOBILE_PAGE_EXCLUDED_HISTOGRAM)
-                        .expectNoRecords(ReaderModeManager.DISTILLABLE_PAGE_RDS_EXCLUDED_HISTOGRAM)
-                        .expectNoRecords(ReaderModeManager.PAGE_DISTILLABLE_RESULT_HISTOGRAM)
+                        .expectNoRecords(ReaderModeManager.PAGE_DISTILLATION_RESULT_HISTOGRAM)
                         .build();
         mDistillabilityObserver.onIsPageDistillableResult(
                 mTab,
@@ -339,12 +366,9 @@ public class ReaderModeManagerTest {
                 HistogramWatcher.newBuilder()
                         .expectBooleanRecord(
                                 ReaderModeManager.ACCESSIBILITY_SETTING_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_MOBILE_PAGE_EXCLUDED_HISTOGRAM, true)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_PAGE_RDS_EXCLUDED_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.PAGE_DISTILLABLE_RESULT_HISTOGRAM, false)
+                        .expectIntRecord(
+                                ReaderModeManager.PAGE_DISTILLATION_RESULT_HISTOGRAM,
+                                DistillationResult.DISTILLABLE_BUT_EXCLUDED_MOBILE)
                         .build();
         mDistillabilityObserver.onIsPageDistillableResult(
                 mTab, /* isDistillable= */ true, /* isLast= */ true, /* isMobileOptimized= */ true);
@@ -360,12 +384,9 @@ public class ReaderModeManagerTest {
                 HistogramWatcher.newBuilder()
                         .expectBooleanRecord(
                                 ReaderModeManager.ACCESSIBILITY_SETTING_HISTOGRAM, true)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_MOBILE_PAGE_EXCLUDED_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_PAGE_RDS_EXCLUDED_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.PAGE_DISTILLABLE_RESULT_HISTOGRAM, true)
+                        .expectIntRecord(
+                                ReaderModeManager.PAGE_DISTILLATION_RESULT_HISTOGRAM,
+                                DistillationResult.DISTILLABLE)
                         .build();
         mDistillabilityObserver.onIsPageDistillableResult(
                 mTab, /* isDistillable= */ true, /* isLast= */ true, /* isMobileOptimized= */ true);
@@ -374,7 +395,7 @@ public class ReaderModeManagerTest {
 
     @Test
     @Feature("ReaderMode")
-    public void testDistillationMetricsOnDistillabilityResult_requestDestkopSiteExcluded() {
+    public void testDistillationMetricsOnDistillabilityResult_requestDesktopSiteExcluded() {
         when(mTab.isCustomTab()).thenReturn(true);
 
         WebContents mockWebContents = mock(WebContents.class);
@@ -388,12 +409,9 @@ public class ReaderModeManagerTest {
                 HistogramWatcher.newBuilder()
                         .expectBooleanRecord(
                                 ReaderModeManager.ACCESSIBILITY_SETTING_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_MOBILE_PAGE_EXCLUDED_HISTOGRAM, false)
-                        .expectBooleanRecord(
-                                ReaderModeManager.DISTILLABLE_PAGE_RDS_EXCLUDED_HISTOGRAM, true)
-                        .expectBooleanRecord(
-                                ReaderModeManager.PAGE_DISTILLABLE_RESULT_HISTOGRAM, false)
+                        .expectIntRecord(
+                                ReaderModeManager.PAGE_DISTILLATION_RESULT_HISTOGRAM,
+                                DistillationResult.DISTILLABLE_BUT_EXCLUDED_RDS)
                         .build();
         mDistillabilityObserver.onIsPageDistillableResult(
                 mTab,

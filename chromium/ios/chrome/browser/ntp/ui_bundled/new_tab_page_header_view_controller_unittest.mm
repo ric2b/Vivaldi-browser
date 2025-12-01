@@ -28,8 +28,6 @@ using ui::test::uiimage_utils::UIImageWithSizeAndSolidColor;
 class NewTabPageHeaderViewControllerUnitTest : public PlatformTest {
  public:
   void SetUp() override {
-    scoped_feature_list_.InitWithFeatures({kHomeCustomization}, {});
-
     view_controller_ = [[NewTabPageHeaderViewController alloc]
         initWithUseNewBadgeForLensButton:YES
          useNewBadgeForCustomizationMenu:YES];
@@ -37,7 +35,6 @@ class NewTabPageHeaderViewControllerUnitTest : public PlatformTest {
 
  protected:
   web::WebTaskEnvironment task_environment_;
-  base::test::ScopedFeatureList scoped_feature_list_;
   NewTabPageHeaderViewController* view_controller_;
 };
 
@@ -52,10 +49,9 @@ TEST_F(NewTabPageHeaderViewControllerUnitTest, TestSignedOutWithoutAvatar) {
 
   // Checks that the identity disc's title is correctly set without avatar.
   [view_controller_ setSignedOutAccountImage];
-  EXPECT_NSEQ([view_controller_.identityDiscButton
-                  attributedTitleForState:UIControlStateNormal]
-                  .string,
-              l10n_util::GetNSString(IDS_IOS_SIGNIN_BUTTON_TEXT));
+  EXPECT_NSEQ(
+      view_controller_.identityDiscButton.configuration.attributedTitle.string,
+      l10n_util::GetNSString(IDS_IOS_SIGNIN_BUTTON_TEXT));
 
   EXPECT_NSEQ(
       [view_controller_.identityDiscButton imageForState:UIControlStateNormal],

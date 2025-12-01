@@ -433,17 +433,23 @@ const char* AXRoleToAndroidClassName(ax::mojom::Role role, bool has_parent) {
       return kAXListViewClassname;
     case ax::mojom::Role::kDialog:
       return kAXDialogClassname;
+    case ax::mojom::Role::kAlertDialog:
+      return kAXAlertDialogClassname;
     case ax::mojom::Role::kRootWebArea:
       return has_parent ? kAXViewClassname : kAXWebViewClassname;
     case ax::mojom::Role::kMenuItem:
     case ax::mojom::Role::kMenuItemCheckBox:
     case ax::mojom::Role::kMenuItemRadio:
       return kAXMenuItemClassname;
+    case ax::mojom::Role::kNavigation:
+      return kAXNavigationViewClassname;
     case ax::mojom::Role::kStaticText:
       return kAXTextViewClassname;
     case ax::mojom::Role::kDirectoryDeprecated:
     case ax::mojom::Role::kPreDeprecated:
       NOTREACHED();
+    case ax::mojom::Role::kSearch:
+      return kAXSearchViewClassname;
     default:
       return kAXViewClassname;
   }

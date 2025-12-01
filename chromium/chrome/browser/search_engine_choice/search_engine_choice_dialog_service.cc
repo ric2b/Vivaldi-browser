@@ -41,6 +41,8 @@
 #include "components/search_engines/util.h"
 //#include "third_party/search_engines_data/resources/definitions/prepopulated_engines.h"
 
+#include "components/search_engines/prepopulated_engines.h"
+
 namespace {
 bool g_dialog_disabled_for_testing = false;
 
@@ -82,7 +84,7 @@ bool SearchEngineChoiceDialogService::BrowserRegistry::RegisterBrowser(
     // are a cause of multi-prompts.
     SCOPED_CRASH_KEY_BOOL("ChoiceService", "browser_has_open_dialog",
                           HasOpenDialog(browser));
-    NOTREACHED(base::NotFatalUntil::M138);
+    NOTREACHED(base::NotFatalUntil::M141);
     return false;
   }
 
@@ -220,22 +222,15 @@ void SearchEngineChoiceDialogService::NotifyChoiceMade(
     // browser.
     // TODO(crbug.com/400119363): Investigate whether we can more formally
     // handle this.
-    NOTREACHED(base::NotFatalUntil::M138);
+    NOTREACHED(base::NotFatalUntil::M141);
   } else {
-    bool is_guest_mode_propagation_allowed =
-        search_engine_choice_service_
-            ->IsProfileEligibleForDseGuestPropagation();
-    if (profile_->IsGuestSession()) {
-      base::UmaHistogramBoolean("Search.SaveGuestModeEligible",
-                                is_guest_mode_propagation_allowed);
-    }
-    if (is_guest_mode_propagation_allowed) {
+    if (search_engine_choice_service_->IsDsePropagationAllowedForGuest()) {
       base::UmaHistogramBoolean("Search.SaveGuestModeSelection",
                                 save_guest_mode_selection);
-    }
-    if (is_guest_mode_propagation_allowed && save_guest_mode_selection) {
-      search_engine_choice_service_->SetSavedSearchEngineBetweenGuestSessions(
-          prepopulate_id);
+      if (save_guest_mode_selection) {
+        search_engine_choice_service_->SetSavedSearchEngineBetweenGuestSessions(
+            prepopulate_id);
+      }
     }
     template_url_service_->SetUserSelectedDefaultSearchProvider(
         selected_engine, search_engines::ChoiceMadeLocation::kChoiceScreen);

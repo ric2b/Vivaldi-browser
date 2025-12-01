@@ -23,6 +23,7 @@
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/policy/remote_commands/crd/crd_remote_command_utils.h"
 #include "chrome/browser/ash/policy/remote_commands/crd/fake_start_crd_session_job_delegate.h"
+#include "chrome/browser/ash/policy/remote_commands/crd/start_crd_session_job_delegate.h"
 #include "chrome/browser/ash/policy/remote_commands/fake_cros_network_config.h"
 #include "chrome/browser/ash/policy/remote_commands/user_session_type_test_util.h"
 #include "chrome/browser/ash/settings/device_settings_test_helper.h"
@@ -32,6 +33,7 @@
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/ash/services/network_config/in_process_instance.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
+#include "components/policy/policy_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/scoped_user_manager.h"
@@ -48,7 +50,6 @@ using chromeos::network_config::mojom::NetworkType;
 using chromeos::network_config::mojom::OncSource;
 using remoting::features::kAutoApproveEnterpriseSharedSessions;
 using remoting::features::kEnableCrdAdminRemoteAccessV2;
-using remoting::features::kEnableCrdFileTransferForKiosk;
 using remoting::features::kEnableCrdSharedSessionToUnattendedDevice;
 using test::TestSessionType;
 
@@ -585,6 +586,15 @@ TEST_F(DeviceCommandStartCrdSessionJobTest, ShouldPassAdminEmailToDelegate) {
   EXPECT_EQ("email@admin.com", delegate().session_parameters().admin_email);
 }
 
+TEST_F(DeviceCommandStartCrdSessionJobTest, ShouldPassRequestOriginToDelegate) {
+  LogInAsAffiliatedUser();
+  Result result = RunJobAndWaitForResult();
+
+  EXPECT_SUCCESS(result);
+  EXPECT_EQ(StartCrdSessionJobDelegate::RequestOrigin::kEnterpriseAdmin,
+            delegate().session_parameters().request_origin);
+}
+
 TEST_F(DeviceCommandStartCrdSessionJobTest, ShouldCheckNetworkManagedStatus) {
   LogInAsKioskUser();
 
@@ -609,6 +619,24 @@ TEST_F(DeviceCommandStartCrdSessionJobTest, ShouldCheckNetworkManagedStatus) {
   auto callback = std::get<1>(network_check_future.Take());
   // We must invoke the callback to satisfy the Mojom contract
   std::move(callback).Run({});
+}
+
+TEST_F(DeviceCommandStartCrdSessionJobTest,
+       ShouldPassAllowRemoteInputToDelegate) {
+  LogInAsKioskUser();
+
+  EXPECT_SUCCESS(RunJobAndWaitForResult());
+
+  EXPECT_TRUE(delegate().session_parameters().allow_remote_input);
+}
+
+TEST_F(DeviceCommandStartCrdSessionJobTest,
+       ShouldPassAllowClipboardSyncToDelegate) {
+  LogInAsKioskUser();
+
+  EXPECT_SUCCESS(RunJobAndWaitForResult());
+
+  EXPECT_TRUE(delegate().session_parameters().allow_clipboard_sync);
 }
 
 TEST_P(DeviceCommandStartCrdSessionJobTestBoolParameterized,
@@ -871,9 +899,7 @@ TEST_P(DeviceCommandStartCrdSessionJobTestParameterized,
 }
 
 TEST_P(DeviceCommandStartCrdSessionJobTestParameterized,
-       ShouldAllowFileTransferForKioskSessionsWhenFeatureIsEnabled) {
-  EnableFeature(kEnableCrdFileTransferForKiosk);
-
+       ShouldAllowFileTransferForKioskSessions) {
   TestSessionType user_session_type = GetParam();
   SCOPED_TRACE(base::StringPrintf("Testing session type %s",
                                   SessionTypeToString(user_session_type)));
@@ -887,24 +913,6 @@ TEST_P(DeviceCommandStartCrdSessionJobTestParameterized,
 
   EXPECT_EQ(delegate().session_parameters().allow_file_transfer,
             supports_file_transfer);
-}
-
-TEST_P(DeviceCommandStartCrdSessionJobTestParameterized,
-       ShouldNotAllowFileTransferForAnySessionWhenFeatureIsNotEnabled) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(kEnableCrdFileTransferForKiosk);
-
-  TestSessionType user_session_type = GetParam();
-  SCOPED_TRACE(base::StringPrintf("Testing session type %s",
-                                  SessionTypeToString(user_session_type)));
-  if (!SupportsRemoteSupport(user_session_type)) {
-    return;
-  }
-
-  StartSessionOfType(user_session_type);
-  RunJobAndWaitForResult();
-
-  EXPECT_EQ(delegate().session_parameters().allow_file_transfer, false);
 }
 
 TEST_F(DeviceCommandStartCrdSessionJobTest,
@@ -1205,7 +1213,7 @@ TEST_P(DeviceCommandStartCrdSessionJobRemoteAccessTestParameterized,
 }
 
 TEST_P(DeviceCommandStartCrdSessionJobRemoteAccessTestParameterized,
-       ShouldNeverAllowFileTransferForRemoteAccessWhenFeatureIsEnabled) {
+       ShouldNeverAllowFileTransferForRemoteAccess) {
   TestSessionType user_session_type = GetParam();
   SCOPED_TRACE(base::StringPrintf("Testing session type %s",
                                   SessionTypeToString(user_session_type)));
@@ -1213,7 +1221,6 @@ TEST_P(DeviceCommandStartCrdSessionJobRemoteAccessTestParameterized,
     return;
   }
 
-  EnableFeature(kEnableCrdFileTransferForKiosk);
   StartSessionOfType(user_session_type);
   AddActiveManagedNetwork();
   RunJobAndWaitForResult(

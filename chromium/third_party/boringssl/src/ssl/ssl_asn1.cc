@@ -168,9 +168,8 @@ static int SSL_SESSION_to_bytes_full(const SSL_SESSION *in, CBB *cbb,
   // serialized instead.
   if (sk_CRYPTO_BUFFER_num(in->certs.get()) > 0 && !in->peer_sha256_valid) {
     const CRYPTO_BUFFER *buffer = sk_CRYPTO_BUFFER_value(in->certs.get(), 0);
-    if (!CBB_add_asn1(&session, &child, kPeerTag) ||
-        !CBB_add_bytes(&child, CRYPTO_BUFFER_data(buffer),
-                       CRYPTO_BUFFER_len(buffer))) {
+    if (!CBB_add_asn1_element(&session, kPeerTag, CRYPTO_BUFFER_data(buffer),
+                              CRYPTO_BUFFER_len(buffer))) {
       return 0;
     }
   }

@@ -71,7 +71,7 @@ enum MediaStreamRequestResult {
   NOT_SUPPORTED,
   FAILED_DUE_TO_SHUTDOWN,
   KILL_SWITCH_ON,
-  SYSTEM_PERMISSION_DENIED,
+  PERMISSION_DENIED_BY_SYSTEM,
   DEVICE_IN_USE,
   REQUEST_CANCELLED,
   START_TIMEOUT,
@@ -136,6 +136,7 @@ struct StreamControls {
   bool hotword_enabled;
   bool disable_local_echo;
   bool suppress_local_audio_playback;
+  bool restrict_own_audio;
   bool exclude_system_audio;
   bool exclude_self_browser_surface;
   bool request_pan_tilt_zoom_permission;
@@ -329,12 +330,10 @@ interface MediaStreamDispatcherHost {
   // Deliver a wheel event from a capturing app to a captured tab.
   //
   // `session_id` identifies the captured tab.
-  // `action` is the action (mouse event) to be delivered.
-  // `callback` will be invoked with the result.
+  // `action` is the action (wheel event) to be delivered.
   [EnableIfNot=is_android|is_ios]
   SendWheel(mojo_base.mojom.UnguessableToken session_id,
-            CapturedWheelAction action)
-      => (CapturedSurfaceControlResult result);
+            CapturedWheelAction action);
 
   // Updates the zoom level of the captured tab.
   //

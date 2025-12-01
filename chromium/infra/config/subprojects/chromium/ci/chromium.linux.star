@@ -540,8 +540,8 @@ ci.thin_tester(
                 # crbug.com/1473501
                 retry_only_failed_tests = True,
             ),
-            "webdriver_wpt_tests": targets.remove(
-                reason = "https://crbug.com/929689, https://crbug.com/936557",
+            "webdriver_wpt_tests": targets.mixin(
+                ci_only = True,
             ),
         },
     ),
@@ -640,6 +640,12 @@ ci.thin_tester(
                     "--xvfb",
                     "--jobs=1",
                 ],
+            ),
+            "unit_tests": targets.mixin(
+                # The suite runs signficantly slower on linux dbg, so increase shards.
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
             ),
             "webdriver_wpt_tests": targets.mixin(
                 args = [
@@ -751,7 +757,6 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
-    # TODO(crbug.com/401284929): Put common config with "Linux Tests (Wayland)" in shared bundle.
     name = "linux-wayland-mutter-rel-tests",
     # TODO(crbug.com/401284929): Uncomment when enabling gardener_rotations and tree_closing.
     # branch_selector = branches.selector.LINUX_BRANCHES,
@@ -798,12 +803,43 @@ ci.thin_tester(
             "isolate_profile_data",
         ],
         per_test_modifications = {
+            # https://crbug.com/1084469
+            "browser_tests": targets.mixin(
+                args = [
+                    # crbug.com/414750476 PDF extension tests fail with the
+                    # default 1920x1200 resolution used for mutter.
+                    "--mutter-display=1280x800",
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.browser_tests_mutter.filter",
+                ],
+                # Only retry the individual failed tests instead of rerunning
+                # entire shards.
+                # crbug.com/1473501
+                retry_only_failed_tests = True,
+                swarming = targets.swarming(
+                    expiration_sec = 18000,
+                    hard_timeout_sec = 14400,
+                    shards = 10,
+                ),
+            ),
+            "content_browsertests": targets.mixin(
+                # Only retry the individual failed tests instead of rerunning
+                # entire shards.
+                # crbug.com/1473501
+                retry_only_failed_tests = True,
+                swarming = targets.swarming(
+                    expiration_sec = 18000,
+                    hard_timeout_sec = 14400,
+                    shards = 10,
+                ),
+            ),
             "interactive_ui_tests": targets.mixin(
                 # https://crbug.com/1192997
                 args = [
                     "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.interactive_ui_tests_mutter.filter",
                 ],
                 swarming = targets.swarming(
+                    expiration_sec = 18000,
+                    hard_timeout_sec = 14400,
                     shards = 5,
                 ),
             ),

@@ -214,9 +214,6 @@ class CONTENT_EXPORT BackForwardCacheImpl
 
   ~BackForwardCacheImpl() override;
 
-  // Returns whether MediaSession's service is allowed for the BackForwardCache.
-  static bool IsMediaSessionServiceAllowed();
-
   // Returns where back/forward cache is allowed for pages with unload handlers.
   static bool IsUnloadAllowed();
 
@@ -399,7 +396,7 @@ class CONTENT_EXPORT BackForwardCacheImpl
   // BackForwardCache overrides:
   void Flush() override;
   void Flush(NotRestoredReason reason) override;
-  void Prune(size_t limit) override;
+  void Prune(size_t limit, NotRestoredReason reason) override;
   void DisableForTesting(DisableForTestingReason reason) override;
 
   // Evict all entries from the BackForwardCache that match the removal filter.
@@ -519,8 +516,10 @@ class CONTENT_EXPORT BackForwardCacheImpl
   // If it's `kForegroundCacheLimit`, it only considers entries that are
   // associated with a foregrounded process. Otherwise all entries are
   // considered.
-  // If it's `kCacheLimitPruned`, it means the enforcement is triggered by the
-  // `Prune()` method.
+  // If it's
+  // `kCacheLimitPrunedOnModerateMemoryPressure` or
+  // `kCacheLimitPrunedOnCriticalMemoryPressure`, it means the enforcement is
+  // triggered by the `Prune()` method.
   size_t EnforceCacheSizeLimitInternal(
       size_t limit,
       BackForwardCacheMetrics::NotRestoredReason reason);

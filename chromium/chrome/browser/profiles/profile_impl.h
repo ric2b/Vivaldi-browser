@@ -15,7 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -261,7 +261,7 @@ class ProfileImpl : public Profile {
   std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs_;
   std::unique_ptr<sync_preferences::PrefServiceSyncable> dummy_otr_prefs_;
   PrefChangeRegistrar pref_change_registrar_;
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   scoped_refptr<ExtensionSpecialStoragePolicy>
       extension_special_storage_policy_;
 #endif

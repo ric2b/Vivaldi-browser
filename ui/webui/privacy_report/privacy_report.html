@@ -1,0 +1,169 @@
+<!--Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>$i18nRaw{privacy_report_header_title}</title>
+    <link rel="stylesheet" href="css/privacy_report.css">
+    <link rel="icon" href="favicon.ico" type="image/x-icon" />
+    <script type="module" src="js/privacy_report.js"></script>
+</head>
+
+<body style="display: none">
+    <if expr="is_ios or is_android">
+        <nav id="nav">
+            <div>
+                <button onclick="closeActivityFromJS();" id="back">
+                    <picture>
+                        <source srcset="img/chevron-left-darkmode.svg" width="24" height="24" media="(prefers-color-scheme: dark)">
+                        <img src="img/chevron-left.svg" width="24" height="24" alt="" />
+                    </picture>
+                </button>
+                <p>$i18nRaw{privacy_statistics_nav_bar_title}</p>
+            </div>
+            <div>
+                <button onclick="closeActivityFromJS();" id="close">
+                    <picture>
+                        <source srcset="img/close-darkmode.svg" width="24" height="24" media="(prefers-color-scheme: dark)">
+                        <img src="img/close.svg" width="24" height="24" alt="" />
+                    </picture>
+                </button>
+            </div>
+        </nav>
+    </if>
+    <div class="page">
+        <header id="pageHeader" class="">
+            <div>
+                <p>$i18nRaw{privacy_report_title_description}</p>
+            </div>
+            <div> <img id="mainShield" src="img/report_icon_full.svg" width="64" height="64" alt="" /> </div>
+            <div id="notification" class="hidden notification">
+                <p>$i18nRaw{privacy_report_tracker_blocker_disabled_p1}</p>
+                <p>$i18nRaw{privacy_report_tracker_blocker_disabled_p1}</p>
+            </div>
+        </header>
+        <div class="wrap">
+            <main>
+                <select id="timeperiod" name="timeperiod">
+                    <option value="1" selected>$i18nRaw{time_interval_7}</option>
+                    <option value="2">$i18nRaw{time_interval_1_month}</option>
+                    <option value="3">$i18nRaw{time_interval_all_time}</option>
+                </select>
+                <section>
+                    <details open>
+                        <summary>$i18nRaw{privacy_statistics_title}</summary>
+                        <div class="boxes">
+                            <div id="adBox" class="box blue">
+                                <picture>
+                                    <source srcset="img/graphic_blocker_shield_trackers_and_ads_darkmode.svg" width="48" height="48" media="(prefers-color-scheme: dark)">
+                                    <img src="img/graphic_blocker_shield_trackers_and_ads.svg" width="48" height="48" alt="" />
+                                </picture>
+                                <p>$i18nRaw{privacy_statistics_ads_blocked}</p> <span id="adsNumber" class="number">0</span>
+                            </div>
+                            <div id="trackerBox" class="box blue">
+                                <picture>
+                                    <source srcset="img/graphic_blocker_shield_trackers_darkmode.svg" width="48" height="48" media="(prefers-color-scheme: dark)">
+                                    <img src="img/graphic_blocker_shield_trackers.svg" width="48" height="48" alt="" />
+                                </picture>
+                                <p>$i18nRaw{privacy_statistics_trackers_blocked}</p> <span id="trackerNumber" class="number">0</span>
+                            </div>
+                            <div id="bandwidthBox" class="box green">
+                                <picture>
+                                    <source srcset="img/bandwidth_saved_darkmode.svg" width="48" height="48" media="(prefers-color-scheme: dark)">
+                                    <img src="img/bandwidth_saved.svg" width="48" height="48" alt="" />
+                                </picture>
+                                <p>$i18nRaw{privacy_statistics_bandwidth_saved}</p> <span id="bandwidthNumber" class="number">0 MB</span>
+                            </div>
+                            <div id="timeBox" class="box green">
+                                <picture>
+                                    <source srcset="img/time_saved_darkmode.svg" width="48" height="48" media="(prefers-color-scheme: dark)">
+                                    <img src="img/time_saved.svg" width="48" height="48" alt="" />
+                                </picture>
+                                <p>$i18nRaw{privacy_statistics_time_saved}</p> <span id="timeSavedNumber" class="number">0h 00m</span>
+                            </div>
+                        </div>
+                        <p class="pad">$i18nRaw{privacy_statistics_description} <a href="#" onClick="openLinkInNewTab('$i18nRaw{privacy_statistics_link_learn_more}')">$i18nRaw{privacy_statistics_description_link}</a>.</p>
+                    </details>
+                </section>
+                <section>
+                    <details open>
+                        <summary>$i18nRaw{website_details_title}</summary>
+                        <div class="tabs">
+                            <nav role="tablist" aria-labelledby="tablist-1" class="manual">
+                                <div> <button id="tab-1" type="button" role="tab" aria-selected="true" aria-controls="tabpanel-1"><span class="focus">$i18nRaw{website_details_sites_title}</span></button> </div>
+                                <div> <button id="tab-2" type="button" role="tab" aria-selected="false" aria-controls="tabpanel-2" tabindex="-1"><span class="focus">$i18nRaw{website_details_trackers_title}</span></button> </div>
+                            </nav>
+                            <div id="tabpanel-1" role="tabpanel" aria-labelledby="tab-1">
+                                <div class="table websites">
+                                    <div class="th"> <button title="Sort by Address">$i18nRaw{website_details_sites_address}</button> </div>
+                                    <div class="th"> <button title="Sort by Ads">$i18nRaw{website_details_sites_ads}</button> </div>
+                                    <div class="th"> <button title="Sort by Trackers">$i18nRaw{website_details_sites_trackers}</button> </div>
+                                </div>
+                            </div>
+                            <div id="tabpanel-2" role="tabpanel" aria-labelledby="tab-2" class="is-hidden">
+                                <div class="table trackers">
+                                    <div class="th"> <button title="Sort by Address">$i18nRaw{website_details_trackers_address}</button> </div>
+                                    <div class="th"> <button title="Sort by Ads">$i18nRaw{website_details_trackers_ads}</button> </div>
+                                    <div class="th"> <button title="Sort by Trackers">$i18nRaw{website_details_trackers_trackers}</button> </div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </section>
+                <section>
+                    <details open>
+                        <summary>$i18nRaw{article_commitment_title}</summary>
+                        <p class="pad">$i18nRaw{article_commitment_description}</p>
+                        <div class="news">
+                            <div class="glider-contain">
+                                <div class="scrollingcontainer">
+                                    <div class="scrolling-item">
+                                        <a href="#" onClick="openLinkInNewTab('$i18nRaw{privacy_statistics_article_link_1}')" class="card" target="_blank" rel="noopener">
+                                            <img src="img/No-Tracking-Hero_1-960x540.png" width="320" height="180" alt="" />
+                                            <div>
+                                                <h2>$i18nRaw{article_1_title}</h2>
+                                                <p>$i18nRaw{article_1_description}</p>
+                                            </div>
+                                        </a>
+                                    </div>
+                                    <div class="scrolling-item">
+                                        <a href="#" onClick="openLinkInNewTab('$i18nRaw{privacy_statistics_article_link_2}')" class="card" target="_blank" rel="noopener">
+                                            <img src="img/image-27.png" width="320" height="180" alt="" />
+                                            <div>
+                                                <h2>$i18nRaw{article_2_title}</h2>
+                                                <p>$i18nRaw{article_2_description}</p>
+                                            </div>
+                                        </a>
+                                    </div>
+                                    <div class="scrolling-item">
+                                        <a href="#" onClick="openLinkInNewTab('$i18nRaw{privacy_statistics_article_link_3}')" class="card" target="_blank" rel="noopener">
+                                            <img src="img/Topics-980x551-3-640x360.jpeg" width="320" height="180" alt="" />
+                                            <div>
+                                                <h2>$i18nRaw{article_3_title}</h2>
+                                                <p>$i18nRaw{article_3_description}</p>
+                                            </div>
+                                        </a>
+                                    </div>
+                                    <div class="scrolling-item">
+                                        <a href="#" onClick="openLinkInNewTab('$i18nRaw{privacy_statistics_article_link_4}')" class="card" target="_blank" rel="noopener">
+                                            <img src="img/860w_v3-manifest-640x360.png" width="320" height="180" alt="" />
+                                            <div>
+                                                <h2>$i18nRaw{article_4_title}</h2>
+                                                <p>$i18nRaw{article_4_description}</p>
+                                            </div>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </details>
+                </section>
+            </main>
+            <footer></footer>
+        </div>
+    </div>
+    <script src="js/tabs.js"></script>
+</body>
+
+</html>

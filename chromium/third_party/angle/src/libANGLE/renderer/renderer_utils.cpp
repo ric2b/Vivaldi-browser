@@ -1041,17 +1041,39 @@ BufferAndLayout::BufferAndLayout() = default;
 BufferAndLayout::~BufferAndLayout() = default;
 
 template <typename T>
-void UpdateBufferWithLayout(GLsizei count,
-                            uint32_t arrayIndex,
-                            int componentCount,
-                            const T *v,
-                            const sh::BlockMemberInfo &layoutInfo,
-                            angle::MemoryBuffer *uniformData)
+ANGLE_NOINLINE void UpdateBufferWithLayoutStrided(GLsizei count,
+                                                  uint32_t arrayIndex,
+                                                  int componentCount,
+                                                  const T *v,
+                                                  const sh::BlockMemberInfo &layoutInfo,
+                                                  angle::MemoryBuffer *uniformData)
 {
     const int elementSize = sizeof(T) * componentCount;
+    uint8_t *dst          = uniformData->data() + layoutInfo.offset;
+    int maxIndex          = arrayIndex + count;
+    for (int writeIndex = arrayIndex, readIndex = 0; writeIndex < maxIndex;
+         writeIndex++, readIndex++)
+    {
+        const int arrayOffset = writeIndex * layoutInfo.arrayStride;
+        uint8_t *writePtr     = dst + arrayOffset;
+        const T *readPtr      = v + (readIndex * componentCount);
+        ASSERT(writePtr + elementSize <= uniformData->data() + uniformData->size());
+        memcpy(writePtr, readPtr, elementSize);
+    }
+}
 
+template <typename T>
+ANGLE_INLINE void UpdateBufferWithLayout(GLsizei count,
+                                         uint32_t arrayIndex,
+                                         int componentCount,
+                                         const T *v,
+                                         const sh::BlockMemberInfo &layoutInfo,
+                                         angle::MemoryBuffer *uniformData)
+{
+    const int elementSize = sizeof(T) * componentCount;
     uint8_t *dst = uniformData->data() + layoutInfo.offset;
-    if (layoutInfo.arrayStride == 0 || layoutInfo.arrayStride == elementSize)
+    if (ANGLE_LIKELY(layoutInfo.arrayStride == 0) ||
+        ANGLE_LIKELY(layoutInfo.arrayStride == elementSize))
     {
         uint32_t arrayOffset = arrayIndex * layoutInfo.arrayStride;
         uint8_t *writePtr    = dst + arrayOffset;
@@ -1061,16 +1083,8 @@ void UpdateBufferWithLayout(GLsizei count,
     else
     {
         // Have to respect the arrayStride between each element of the array.
-        int maxIndex = arrayIndex + count;
-        for (int writeIndex = arrayIndex, readIndex = 0; writeIndex < maxIndex;
-             writeIndex++, readIndex++)
-        {
-            const int arrayOffset = writeIndex * layoutInfo.arrayStride;
-            uint8_t *writePtr     = dst + arrayOffset;
-            const T *readPtr      = v + (readIndex * componentCount);
-            ASSERT(writePtr + elementSize <= uniformData->data() + uniformData->size());
-            memcpy(writePtr, readPtr, elementSize);
-        }
+        UpdateBufferWithLayoutStrided(count, arrayIndex, componentCount, v, layoutInfo,
+                                      uniformData);
     }
 }
 
@@ -1101,6 +1115,51 @@ void ReadFromBufferWithLayout(int componentCount,
 }
 
 template <typename T>
+ANGLE_NOINLINE void SetUniformAsBool(const gl::ProgramExecutable *executable,
+                                     GLint location,
+                                     GLsizei count,
+                                     const T *v,
+                                     GLenum entryPointType,
+                                     DefaultUniformBlockMap *defaultUniformBlocks,
+                                     gl::ShaderBitSet *defaultUniformBlocksDirty)
+{
+    const gl::VariableLocation &locationInfo = executable->getUniformLocations()[location];
+    const gl::LinkedUniform &linkedUniform   = executable->getUniforms()[locationInfo.index];
+
+    for (const gl::ShaderType shaderType : executable->getLinkedShaderStages())
+    {
+        BufferAndLayout &uniformBlock         = *(*defaultUniformBlocks)[shaderType];
+        const sh::BlockMemberInfo &layoutInfo = uniformBlock.uniformLayout[location];
+
+        // Assume an offset of -1 means the block is unused.
+        if (layoutInfo.offset == -1)
+        {
+            continue;
+        }
+
+        const GLint componentCount = linkedUniform.getElementComponents();
+
+        ASSERT(linkedUniform.getType() == gl::VariableBoolVectorType(entryPointType));
+
+        GLint initialArrayOffset =
+            locationInfo.arrayIndex * layoutInfo.arrayStride + layoutInfo.offset;
+        for (GLint i = 0; i < count; i++)
+        {
+            GLint elementOffset = i * layoutInfo.arrayStride + initialArrayOffset;
+            GLint *dst = reinterpret_cast<GLint *>(uniformBlock.uniformData.data() + elementOffset);
+            const T *source = v + i * componentCount;
+
+            for (int c = 0; c < componentCount; c++)
+            {
+                dst[c] = (source[c] == static_cast<T>(0)) ? GL_FALSE : GL_TRUE;
+            }
+        }
+
+        defaultUniformBlocksDirty->set(shaderType);
+    }
+}
+
+template <typename T>
 void SetUniform(const gl::ProgramExecutable *executable,
                 GLint location,
                 GLsizei count,
@@ -1114,7 +1173,7 @@ void SetUniform(const gl::ProgramExecutable *executable,
 
     ASSERT(!linkedUniform.isSampler());
 
-    if (linkedUniform.getType() == entryPointType)
+    if (ANGLE_LIKELY(linkedUniform.getType() == entryPointType))
     {
         for (const gl::ShaderType shaderType : executable->getLinkedShaderStages())
         {
@@ -1135,38 +1194,8 @@ void SetUniform(const gl::ProgramExecutable *executable,
     }
     else
     {
-        for (const gl::ShaderType shaderType : executable->getLinkedShaderStages())
-        {
-            BufferAndLayout &uniformBlock         = *(*defaultUniformBlocks)[shaderType];
-            const sh::BlockMemberInfo &layoutInfo = uniformBlock.uniformLayout[location];
-
-            // Assume an offset of -1 means the block is unused.
-            if (layoutInfo.offset == -1)
-            {
-                continue;
-            }
-
-            const GLint componentCount = linkedUniform.getElementComponents();
-
-            ASSERT(linkedUniform.getType() == gl::VariableBoolVectorType(entryPointType));
-
-            GLint initialArrayOffset =
-                locationInfo.arrayIndex * layoutInfo.arrayStride + layoutInfo.offset;
-            for (GLint i = 0; i < count; i++)
-            {
-                GLint elementOffset = i * layoutInfo.arrayStride + initialArrayOffset;
-                GLint *dst =
-                    reinterpret_cast<GLint *>(uniformBlock.uniformData.data() + elementOffset);
-                const T *source = v + i * componentCount;
-
-                for (int c = 0; c < componentCount; c++)
-                {
-                    dst[c] = (source[c] == static_cast<T>(0)) ? GL_FALSE : GL_TRUE;
-                }
-            }
-
-            defaultUniformBlocksDirty->set(shaderType);
-        }
+        SetUniformAsBool(executable, location, count, v, entryPointType, defaultUniformBlocks,
+                         defaultUniformBlocksDirty);
     }
 }
 template void SetUniform<GLint>(const gl::ProgramExecutable *executable,
@@ -1301,15 +1330,10 @@ angle::Result ComputeStartVertex(ContextImpl *contextImpl,
                                  GLint baseVertex,
                                  GLint *firstVertexOut)
 {
-    // The entire index range should be within the limits of a 32-bit uint because the largest
-    // GL index type is GL_UNSIGNED_INT.
-    ASSERT(indexRange.start <= std::numeric_limits<uint32_t>::max() &&
-           indexRange.end <= std::numeric_limits<uint32_t>::max());
-
     // The base vertex is only used in DrawElementsIndirect. Given the assertion above and the
     // type of mBaseVertex (GLint), adding them both as 64-bit ints is safe.
     int64_t startVertexInt64 =
-        static_cast<int64_t>(baseVertex) + static_cast<int64_t>(indexRange.start);
+        static_cast<int64_t>(baseVertex) + static_cast<int64_t>(indexRange.start());
 
     // OpenGL ES 3.2 spec section 10.5: "Behavior of DrawElementsOneInstance is undefined if the
     // vertex ID is negative for any element"
@@ -1484,6 +1508,7 @@ void GetSamplePosition(GLsizei sampleCount, size_t index, GLfloat *xy)
 #define MULTI_DRAW_BLOCK(drawType, instanced, bvbi, hasDrawID, hasBaseVertex, hasBaseInstance) \
     do                                                                                         \
     {                                                                                          \
+        bool anyDraw = false;                                                                  \
         for (GLsizei drawID = 0; drawID < drawcount; ++drawID)                                 \
         {                                                                                      \
             if (ANGLE_NOOP_DRAW(instanced))                                                    \
@@ -1497,9 +1522,14 @@ void GetSamplePosition(GLsizei sampleCount, size_t index, GLfloat *xy)
             ANGLE_TRY(DRAW_CALL(drawType, instanced, bvbi));                                   \
             ANGLE_MARK_TRANSFORM_FEEDBACK_USAGE(instanced);                                    \
             gl::MarkShaderStorageUsage(context);                                               \
+            anyDraw = true;                                                                    \
         }                                                                                      \
         /* reset the uniform to zero for non-multi-draw uses of the program */                 \
         ANGLE_SET_DRAW_ID_UNIFORM(hasDrawID)(0);                                               \
+        if (!anyDraw)                                                                          \
+        {                                                                                      \
+            ANGLE_TRY(contextImpl->handleNoopMultiDrawEvent());                                \
+        }                                                                                      \
     } while (0)
 
 angle::Result MultiDrawArraysGeneral(ContextImpl *contextImpl,

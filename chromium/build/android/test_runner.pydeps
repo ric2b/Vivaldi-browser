@@ -50,7 +50,6 @@
 ../../third_party/catapult/devil/devil/android/devil_util.py
 ../../third_party/catapult/devil/devil/android/flag_changer.py
 ../../third_party/catapult/devil/devil/android/forwarder.py
-../../third_party/catapult/devil/devil/android/install_commands.py
 ../../third_party/catapult/devil/devil/android/logcat_monitor.py
 ../../third_party/catapult/devil/devil/android/ndk/__init__.py
 ../../third_party/catapult/devil/devil/android/ndk/abis.py
@@ -79,7 +78,6 @@
 ../../third_party/catapult/devil/devil/utils/__init__.py
 ../../third_party/catapult/devil/devil/utils/cmd_helper.py
 ../../third_party/catapult/devil/devil/utils/file_utils.py
-../../third_party/catapult/devil/devil/utils/host_utils.py
 ../../third_party/catapult/devil/devil/utils/lazy/__init__.py
 ../../third_party/catapult/devil/devil/utils/lazy/weak_constant.py
 ../../third_party/catapult/devil/devil/utils/logging_common.py
@@ -91,7 +89,6 @@
 ../../third_party/catapult/devil/devil/utils/signal_handler.py
 ../../third_party/catapult/devil/devil/utils/timeout_retry.py
 ../../third_party/catapult/devil/devil/utils/watchdog_timer.py
-../../third_party/catapult/devil/devil/utils/zip_utils.py
 ../../third_party/catapult/third_party/six/six.py
 ../../third_party/colorama/src/colorama/__init__.py
 ../../third_party/colorama/src/colorama/ansi.py
@@ -137,6 +134,8 @@
 ../util/lib/__init__.py
 ../util/lib/common/__init__.py
 ../util/lib/common/chrome_test_server_spawner.py
+../util/lib/common/decorators.py
+../util/lib/common/google_storage_helper.py
 ../util/lib/common/unittest_util.py
 ../util/lib/proto/__init__.py
 ../util/lib/proto/average.py
@@ -227,11 +226,9 @@ pylib/symbols/stack_symbolizer.py
 pylib/utils/__init__.py
 pylib/utils/chrome_proxy_utils.py
 pylib/utils/code_coverage_utils.py
-pylib/utils/decorators.py
 pylib/utils/device_dependencies.py
 pylib/utils/dexdump.py
 pylib/utils/gold_utils.py
-pylib/utils/google_storage_helper.py
 pylib/utils/instrumentation_tracing.py
 pylib/utils/local_utils.py
 pylib/utils/logdog_helper.py

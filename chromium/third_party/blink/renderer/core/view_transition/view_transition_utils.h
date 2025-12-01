@@ -7,6 +7,7 @@
 
 #include "base/functional/function_ref.h"
 #include "third_party/blink/renderer/core/core_export.h"
+#include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_request_forward.h"
 #include "third_party/blink/renderer/platform/heap/heap_traits.h"
 
@@ -16,11 +17,26 @@ class DOMViewTransition;
 class Document;
 class Element;
 class LayoutObject;
+class Node;
 class PseudoElement;
 class ViewTransition;
 
 class CORE_EXPORT ViewTransitionUtils {
  public:
+  // Scope class used during getComputedStyle to ensure we don't expose internal
+  // pseudo elements before the start phase on the transition.
+  class GetPropertyCSSValueScope {
+    STACK_ALLOCATED();
+
+   public:
+    GetPropertyCSSValueScope(Document& document, PseudoId pseudo_id);
+    ~GetPropertyCSSValueScope();
+
+   private:
+    Document& document_;
+    PseudoId pseudo_id_;
+  };
+
   using PseudoFunctor = base::FunctionRef<void(PseudoElement*)>;
   using PseudoPredicate = base::FunctionRef<bool(PseudoElement*)>;
 
@@ -33,6 +49,8 @@ class CORE_EXPORT ViewTransitionUtils {
   static ViewTransition* GetTransition(const Document& document);
 
   static ViewTransition* GetTransition(const Element& element);
+
+  static ViewTransition* GetTransition(const Node& node);
 
   // Returns the view transition that the element associated with the specified
   // layout object is participating in, if one exists.
@@ -83,6 +101,10 @@ class CORE_EXPORT ViewTransitionUtils {
   // elements in the ViewTransitionStyleTracker.
   static bool IsViewTransitionParticipantFromSupplement(
       const LayoutObject& object);
+
+  // Called when the lifecycle will update style and layout tree for the given
+  // document. Used to invalidate pseudo styles if necessary.
+  static void WillUpdateStyleAndLayoutTree(Document& document);
 };
 
 }  // namespace blink

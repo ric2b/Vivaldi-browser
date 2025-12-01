@@ -22,7 +22,6 @@
 #import "ios/chrome/browser/metrics/model/constants.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_state.h"
 #import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_constants.h"
-#import "ios/chrome/browser/ntp/ui_bundled/feed_control_delegate.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_actions_delegate.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_feature.h"
 #import "ios/chrome/browser/ntp/ui_bundled/new_tab_page_follow_delegate.h"
@@ -60,7 +59,7 @@ using feed::FeedUserActionType;
 
 // Tracking property to avoid duplicate recordings of the Activity Buckets
 // metric.
-@property(nonatomic, assign) NSDate* activityBucketLastReportedDate;
+@property(nonatomic, strong) NSDate* activityBucketLastReportedDate;
 
 // Tracks whether user has engaged with the latest refreshed content. The term
 // "engaged" is defined by its usage in this file. For example, it may be
@@ -291,35 +290,11 @@ using feed::FeedUserActionType;
       base::UserMetricsAction(kDiscoverFeedUserActionPreviewTapped));
 }
 
-- (void)recordHeaderMenuLearnMoreTapped {
-  [self
-      recordDiscoverFeedUserActionHistogram:FeedUserActionType::kTappedLearnMore
-                              asInteraction:NO];
-  base::RecordAction(
-      base::UserMetricsAction(kDiscoverFeedUserActionLearnMoreTapped));
-}
-
 - (void)recordHeaderMenuManageTapped {
   [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::kTappedManage
                                 asInteraction:NO];
   base::RecordAction(
       base::UserMetricsAction(kDiscoverFeedUserActionManageTapped));
-}
-
-- (void)recordHeaderMenuManageActivityTapped {
-  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
-                                                  kTappedManageActivity
-                                asInteraction:NO];
-  base::RecordAction(
-      base::UserMetricsAction(kDiscoverFeedUserActionManageActivityTapped));
-}
-
-- (void)recordHeaderMenuManageHiddenTapped {
-  [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
-                                                  kTappedManageHidden
-                                asInteraction:NO];
-  base::RecordAction(
-      base::UserMetricsAction(kDiscoverFeedUserActionManageHiddenTapped));
 }
 
 - (void)recordHeaderMenuManageFollowingTapped {
@@ -328,20 +303,6 @@ using feed::FeedUserActionType;
                                 asInteraction:NO];
   base::RecordAction(
       base::UserMetricsAction(kDiscoverFeedUserActionManageFollowingTapped));
-}
-
-- (void)recordDiscoverFeedVisibilityChanged:(BOOL)visible {
-  if (visible) {
-    [self
-        recordDiscoverFeedUserActionHistogram:FeedUserActionType::kTappedTurnOn
-                                asInteraction:NO];
-    base::RecordAction(base::UserMetricsAction(kDiscoverFeedUserActionTurnOn));
-  } else {
-    [self
-        recordDiscoverFeedUserActionHistogram:FeedUserActionType::kTappedTurnOff
-                                asInteraction:NO];
-    base::RecordAction(base::UserMetricsAction(kDiscoverFeedUserActionTurnOff));
-  }
 }
 
 - (void)recordOpenURLInSameTab {

@@ -136,7 +136,6 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
     case Plane::kV:  // and Plane::kATriPlanar:
       switch (format) {
         case PIXEL_FORMAT_I444:
-        case PIXEL_FORMAT_YUV444P9:
         case PIXEL_FORMAT_YUV444P10:
         case PIXEL_FORMAT_YUV444P12:
         case PIXEL_FORMAT_Y16:
@@ -147,7 +146,6 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
           return gfx::Size(1, 1);
 
         case PIXEL_FORMAT_I422:
-        case PIXEL_FORMAT_YUV422P9:
         case PIXEL_FORMAT_YUV422P10:
         case PIXEL_FORMAT_YUV422P12:
         case PIXEL_FORMAT_I422A:
@@ -161,7 +159,6 @@ gfx::Size VideoFrame::SampleSize(VideoPixelFormat format, size_t plane) {
         case PIXEL_FORMAT_I420A:
         case PIXEL_FORMAT_NV12:
         case PIXEL_FORMAT_NV21:
-        case PIXEL_FORMAT_YUV420P9:
         case PIXEL_FORMAT_YUV420P10:
         case PIXEL_FORMAT_YUV420P12:
         case PIXEL_FORMAT_P010LE:
@@ -430,23 +427,25 @@ VideoFrame::CreateFrameForGpuMemoryBufferOrMappableSIInternal(
                                 ? gpu_memory_buffer->CloneHandle()
                                 : shared_image->CloneGpuMemoryBufferHandle();
     if (gmb_handle.is_null() ||
-        gmb_handle.native_pixmap_handle.planes.empty()) {
+        gmb_handle.native_pixmap_handle().planes.empty()) {
       DLOG(ERROR) << "Failed to clone the GpuMemoryBufferHandle";
       return nullptr;
     }
-    if (gmb_handle.native_pixmap_handle.planes.size() != num_planes) {
+    const gfx::NativePixmapHandle& native_pixmap_handle =
+        gmb_handle.native_pixmap_handle();
+    if (native_pixmap_handle.planes.size() != num_planes) {
       DLOG(ERROR) << "Invalid number of planes="
-                  << gmb_handle.native_pixmap_handle.planes.size()
+                  << native_pixmap_handle.planes.size()
                   << ", expected num_planes=" << num_planes;
       return nullptr;
     }
     for (size_t i = 0; i < num_planes; ++i) {
-      const auto& plane = gmb_handle.native_pixmap_handle.planes[i];
+      const auto& plane = native_pixmap_handle.planes[i];
       planes[i].stride = plane.stride;
       planes[i].offset = plane.offset;
       planes[i].size = plane.size;
     }
-    modifier = gmb_handle.native_pixmap_handle.modifier;
+    modifier = native_pixmap_handle.modifier;
   }
 #endif
 
@@ -691,54 +690,6 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvDataWithLayout(
   std::array<base::span<const uint8_t>, 3> data = {y_data, u_data, v_data};
   for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
     frame->data_[plane] = data[plane];
-  }
-  return frame;
-}
-
-// static
-scoped_refptr<VideoFrame> VideoFrame::WrapExternalYuvaData(
-    VideoPixelFormat format,
-    const gfx::Size& coded_size,
-    const gfx::Rect& visible_rect,
-    const gfx::Size& natural_size,
-    size_t y_stride,
-    size_t u_stride,
-    size_t v_stride,
-    size_t a_stride,
-    const uint8_t* y_data,
-    const uint8_t* u_data,
-    const uint8_t* v_data,
-    const uint8_t* a_data,
-    base::TimeDelta timestamp) {
-  const StorageType storage = STORAGE_UNOWNED_MEMORY;
-  if (!IsValidConfig(format, storage, coded_size, visible_rect, natural_size)) {
-    DLOG(ERROR) << __func__ << " Invalid config."
-                << ConfigToString(format, storage, coded_size, visible_rect,
-                                  natural_size);
-    return nullptr;
-  }
-
-  if (NumPlanes(format) != 4) {
-    DLOG(ERROR) << "Expecting Y, U, V and A planes to be present for the video"
-                << " format.";
-    return nullptr;
-  }
-
-  auto layout = VideoFrameLayout::CreateWithStrides(
-      format, coded_size, {y_stride, u_stride, v_stride, a_stride});
-  if (!layout) {
-    DLOG(ERROR) << "Invalid layout";
-    return nullptr;
-  }
-
-  auto frame = base::MakeRefCounted<VideoFrame>(base::PassKey<VideoFrame>(),
-                                                *layout, storage, visible_rect,
-                                                natural_size, timestamp);
-  std::array<const uint8_t*, 4> data = {y_data, u_data, v_data, a_data};
-  for (size_t plane = 0; plane < NumPlanes(format); ++plane) {
-    // TODO(crbug.com/338570700): y_data, u_data, v_data should be spans
-    frame->data_[plane] =
-        UNSAFE_TODO(base::span(data[plane], layout->planes()[plane].size));
   }
   return frame;
 }
@@ -1028,7 +979,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
   // add a destruction callback to unlock the IOSurface.
   kern_return_t lock_result =
       IOSurfaceLock(io_surface.get(), kIOSurfaceLockReadOnly, nullptr);
-  if (lock_result != kIOReturnSuccess) {
+  if (lock_result != KERN_SUCCESS) {
     DLOG(ERROR) << "Failed to lock IOSurface.";
     return nullptr;
   }
@@ -1268,9 +1219,6 @@ int VideoFrame::BytesPerElement(VideoPixelFormat format, size_t plane) {
     case PIXEL_FORMAT_Y16:
     case PIXEL_FORMAT_UYVY:
     case PIXEL_FORMAT_YUY2:
-    case PIXEL_FORMAT_YUV420P9:
-    case PIXEL_FORMAT_YUV422P9:
-    case PIXEL_FORMAT_YUV444P9:
     case PIXEL_FORMAT_YUV420P10:
     case PIXEL_FORMAT_YUV422P10:
     case PIXEL_FORMAT_YUV444P10:

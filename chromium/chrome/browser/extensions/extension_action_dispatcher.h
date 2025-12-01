@@ -12,7 +12,10 @@
 #include "base/scoped_observation.h"
 #include "base/values.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace content {
 class BrowserContext;

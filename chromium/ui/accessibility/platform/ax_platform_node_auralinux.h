@@ -88,9 +88,8 @@ class ImplementedAtkInterfaces {
 
   void Add(Value other) { value_ |= static_cast<int>(other); }
 
-  bool operator!=(const ImplementedAtkInterfaces& other) {
-    return value_ != other.value_;
-  }
+  friend bool operator==(const ImplementedAtkInterfaces&,
+                         const ImplementedAtkInterfaces&) = default;
 
   int value() const { return value_; }
 
@@ -102,7 +101,6 @@ class ImplementedAtkInterfaces {
 class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeAuraLinux
     : public AXPlatformNodeBase {
  public:
-  ~AXPlatformNodeAuraLinux() override;
   AXPlatformNodeAuraLinux(const AXPlatformNodeAuraLinux&) = delete;
   AXPlatformNodeAuraLinux& operator=(const AXPlatformNodeAuraLinux&) = delete;
 
@@ -117,10 +115,6 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeAuraLinux
 
   // Do asynchronous static initialization.
   static void StaticInitialize();
-
-  // Enables AXMode calling AXPlatformNode::NotifyAddAXModeFlags. It's used
-  // when ATK APIs are called.
-  static void EnableAXMode();
 
   // EnsureAtkObjectIsValid will destroy and recreate |atk_object_| if the
   // interface mask is different. This partially relies on looking at the tree's
@@ -289,9 +283,10 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeAuraLinux
 
  protected:
   AXPlatformNodeAuraLinux();
+  ~AXPlatformNodeAuraLinux() override;
 
   // AXPlatformNode overrides.
-  void Init(AXPlatformNodeDelegate* delegate) override;
+  void Init(AXPlatformNodeDelegate& delegate) override;
 
   // Offsets for the AtkText API are calculated in UTF-16 code point offsets,
   // but the ATK APIs want all offsets to be in "characters," which we
@@ -425,7 +420,7 @@ class COMPONENT_EXPORT(AX_PLATFORM) AXPlatformNodeAuraLinux
   bool window_activate_event_postponed_ = false;
 
   friend AXPlatformNode::Pointer AXPlatformNode::Create(
-      AXPlatformNodeDelegate* delegate);
+      AXPlatformNodeDelegate& delegate);
 };
 
 }  // namespace ui

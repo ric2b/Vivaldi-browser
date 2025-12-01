@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_split.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
@@ -38,6 +37,7 @@
 #include "chrome/common/url_constants.h"
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/download_item.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/google/core/common/google_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
@@ -242,21 +242,16 @@ bool DownloadProtectionService::MaybeCheckClientDownload(
   CHECK(!settings.has_value());
 #endif
 
-  if (delegate_->ShouldCheckClientDownload(item)) {
+  if (delegate_->MayCheckClientDownload(item)) {
     CheckClientDownload(item, std::move(callback), /*password=*/std::nullopt);
     return true;
   }
 
 #if !BUILDFLAG(IS_ANDROID)
   if (settings.has_value()) {
-    Profile* profile = Profile::FromBrowserContext(
-        content::DownloadItemUtils::GetBrowserContext(item));
-    bool safe_browsing_enabled =
-        profile && IsSafeBrowsingEnabled(*profile->GetPrefs());
     DCHECK(report_only_scan);
-    DCHECK(!safe_browsing_enabled);
-    // Since this branch implies that Safe Browsing is disabled, the pre-deep
-    // scanning DownloadCheckResult is considered UNKNOWN.
+    // Since this branch implies that CheckClientDownload was not called, the
+    // pre-deep scanning DownloadCheckResult is considered UNKNOWN.
     UploadForDeepScanning(
         std::make_unique<DownloadItemMetadata>(item), std::move(callback),
         DownloadItemWarningData::DeepScanTrigger::TRIGGER_POLICY,
@@ -320,7 +315,8 @@ void DownloadProtectionService::CheckDownloadUrl(
 bool DownloadProtectionService::IsSupportedDownload(
     download::DownloadItem& item,
     const base::FilePath& target_path) const {
-  return delegate_->IsSupportedDownload(item, target_path);
+  return delegate_->IsSupportedDownload(item, target_path) !=
+         MayCheckDownloadResult::kMayNotCheckDownload;
 }
 
 void DownloadProtectionService::CheckPPAPIDownloadRequest(
@@ -354,6 +350,10 @@ void DownloadProtectionService::CheckPPAPIDownloadRequest(
 void DownloadProtectionService::CheckFileSystemAccessWrite(
     std::unique_ptr<content::FileSystemAccessWriteItem> item,
     CheckDownloadCallback callback) {
+  if (!delegate_->MayCheckFileSystemAccessWrite(item.get())) {
+    std::move(callback).Run(DownloadCheckResult::UNKNOWN);
+    return;
+  }
   content::BrowserContext* browser_context = item->browser_context;
   auto request = std::make_unique<CheckFileSystemAccessWriteRequest>(
       std::move(item), std::move(callback), this, database_manager_,
@@ -409,7 +409,7 @@ void DownloadProtectionService::PPAPIDownloadCheckRequestFinished(
     PPAPIDownloadRequest* request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto it = ppapi_download_requests_.find(request);
-  CHECK(it != ppapi_download_requests_.end(), base::NotFatalUntil::M130);
+  CHECK(it != ppapi_download_requests_.end());
   ppapi_download_requests_.erase(it);
 }
 
@@ -570,7 +570,7 @@ void DownloadProtectionService::AddReferrerChainToPPAPIClientDownloadRequest(
 }
 
 void DownloadProtectionService::OnDangerousDownloadOpened(
-    const download::DownloadItem* item,
+    download::DownloadItem* item,
     Profile* profile) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   std::string raw_digest_sha256 = item->GetHash();
@@ -582,6 +582,12 @@ void DownloadProtectionService::OnDangerousDownloadOpened(
   auto* scan_result = static_cast<enterprise_connectors::ScanResult*>(
       item->GetUserData(enterprise_connectors::ScanResult::kKey));
 
+  google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>
+      referrer_chain;
+  if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedFieldsForSecOps)) {
+    referrer_chain =
+        safe_browsing::GetOrIdentifyReferrerChainForEnterprise(*item);
+  }
   // A download with a verdict of "sensitive data warning" can be opened and
   // |item->IsDangerous()| will return |true| for it but the reported event
   // should be a "sensitive file bypass" event rather than a "dangerous file
@@ -599,7 +605,8 @@ void DownloadProtectionService::OnDangerousDownloadOpened(
             metadata.sha256, metadata.mime_type,
             extensions::SafeBrowsingPrivateEventRouter::kTriggerFileDownload,
             metadata.scan_response.request_token(), "",
-            DeepScanAccessPoint::DOWNLOAD, result, metadata.size,
+            DeepScanAccessPoint::DOWNLOAD, referrer_chain, result,
+            metadata.size,
             /*user_justification=*/std::nullopt);
 
         // There won't be multiple DLP verdicts in the same response, so no need
@@ -612,14 +619,14 @@ void DownloadProtectionService::OnDangerousDownloadOpened(
       router->OnDangerousDownloadOpened(
           item->GetURL(), item->GetTabUrl(), metadata.filename, metadata.sha256,
           metadata.mime_type, metadata.scan_response.request_token(),
-          item->GetDangerType(), metadata.size);
+          item->GetDangerType(), metadata.size, referrer_chain);
     }
   } else {
     router->OnDangerousDownloadOpened(
         item->GetURL(), item->GetTabUrl(),
         item->GetTargetFilePath().AsUTF8Unsafe(),
         base::HexEncode(raw_digest_sha256), item->GetMimeType(), /*scan_id*/ "",
-        item->GetDangerType(), item->GetTotalBytes());
+        item->GetDangerType(), item->GetTotalBytes(), referrer_chain);
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }
@@ -824,7 +831,7 @@ int DownloadProtectionService::GetDownloadAttributionUserGestureLimit(
 #if !BUILDFLAG(IS_ANDROID)
 void DownloadProtectionService::RequestFinished(DeepScanningRequest* request) {
   auto it = deep_scanning_requests_.find(request);
-  CHECK(it != deep_scanning_requests_.end(), base::NotFatalUntil::M130);
+  CHECK(it != deep_scanning_requests_.end());
   deep_scanning_requests_.erase(it);
 }
 

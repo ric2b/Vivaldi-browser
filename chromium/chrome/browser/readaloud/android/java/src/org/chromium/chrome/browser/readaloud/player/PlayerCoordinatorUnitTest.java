@@ -40,7 +40,10 @@ import org.chromium.chrome.browser.readaloud.player.expanded.ExpandedPlayerCoord
 import org.chromium.chrome.browser.readaloud.player.mini.MiniPlayerCoordinator;
 import org.chromium.chrome.browser.readaloud.player.mini.MiniPlayerLayout;
 import org.chromium.chrome.browser.readaloud.testing.MockPrefServiceHelper;
+import org.chromium.chrome.modules.readaloud.Feedback.FeedbackType;
 import org.chromium.chrome.modules.readaloud.Playback;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackModeSelectionEnablementStatus;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackVoice;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.Player;
@@ -113,7 +116,12 @@ public class PlayerCoordinatorUnitTest {
                 .when(mDelegate)
                 .getCurrentLanguageVoicesSupplier();
         doReturn(new ObservableSupplierImpl<String>()).when(mDelegate).getVoiceIdSupplier();
-        doReturn(new ObservableSupplierImpl<Boolean>()).when(mDelegate).getPlaybackModeSelectionEnabled();
+        doReturn(new ObservableSupplierImpl<PlaybackModeSelectionEnablementStatus>())
+                .when(mDelegate)
+                .getPlaybackModeSelectionEnabled();
+        doReturn(new ObservableSupplierImpl<FeedbackType>())
+                .when(mDelegate)
+                .getFeedbackTypeSupplier();
         doReturn(mActivity).when(mDelegate).getActivity();
 
         mPlayerCoordinator = new PlayerCoordinator(mDelegate);
@@ -126,18 +134,19 @@ public class PlayerCoordinatorUnitTest {
 
     @Test
     public void testPlayTabRequested() {
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.OVERVIEW);
 
         // Mini player shows in buffering state
         verify(mMediator).setPlayback(eq(null));
         verify(mMediator).setPlaybackState(eq(PlaybackListener.State.BUFFERING));
+        verify(mMediator).setRequestedPlaybackMode(PlaybackMode.OVERVIEW);
         verify(mMiniPlayer).show(eq(true));
     }
 
     @Test
     public void testPlayTabRequested_withExpandedPlayerVisible() {
         doReturn(true).when(mExpandedPlayer).anySheetShowing();
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.UNSPECIFIED);
 
         // Mini player is not shown.
         verify(mMediator).setPlayback(eq(null));
@@ -147,7 +156,7 @@ public class PlayerCoordinatorUnitTest {
 
     @Test
     public void testPlaybackReady() {
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.UNSPECIFIED);
         verify(mMediator).setPlayback(eq(null));
         verify(mMediator).setPlaybackState(eq(PlaybackListener.State.BUFFERING));
         reset(mMediator);
@@ -159,7 +168,7 @@ public class PlayerCoordinatorUnitTest {
 
     @Test
     public void testPlaybackFailed() {
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.UNSPECIFIED);
         verify(mMediator).setPlayback(eq(null));
         verify(mMediator).setPlaybackState(eq(PlaybackListener.State.BUFFERING));
         reset(mMediator);
@@ -192,7 +201,7 @@ public class PlayerCoordinatorUnitTest {
 
     @Test
     public void testDismissPlayers() {
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.UNSPECIFIED);
         verify(mMediator).setPlayback(eq(null));
         verify(mMediator).setPlaybackState(eq(PlaybackListener.State.BUFFERING));
         reset(mMediator);
@@ -206,7 +215,7 @@ public class PlayerCoordinatorUnitTest {
 
     @Test
     public void testDismissPlayers_restorablePlayer() {
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.UNSPECIFIED);
         verify(mMediator).setPlayback(eq(null));
         verify(mMediator).setPlaybackState(eq(PlaybackListener.State.BUFFERING));
         reset(mMediator);
@@ -346,7 +355,7 @@ public class PlayerCoordinatorUnitTest {
     public void testDestroy() {
         mPlayerCoordinator.addObserver(mObserver);
         // Show mini player
-        mPlayerCoordinator.playTabRequested();
+        mPlayerCoordinator.playTabRequested(PlaybackMode.UNSPECIFIED);
         reset(mMediator);
 
         mPlayerCoordinator.destroy();

@@ -13,7 +13,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
@@ -157,7 +156,8 @@ void FilesRequestHandler::ReportWarningBypass(
         paths_[index].AsUTF8Unsafe(), file_info_[index].sha256,
         file_info_[index].mime_type, AccessPointToTriggerString(access_point_),
         content_transfer_method_, access_point_, file_info_[index].size,
-        warning.second, user_justification);
+        content_analysis_info_->referrer_chain(), warning.second,
+        user_justification);
   }
 }
 
@@ -166,7 +166,7 @@ void FilesRequestHandler::FileRequestCallbackForTesting(
     safe_browsing::BinaryUploadService::Result result,
     enterprise_connectors::ContentAnalysisResponse response) {
   auto it = std::ranges::find(paths_, path);
-  CHECK(it != paths_.end(), base::NotFatalUntil::M130);
+  CHECK(it != paths_.end());
   size_t index = std::distance(paths_.begin(), it);
   FileRequestCallback(index, result, response);
 }
@@ -361,7 +361,8 @@ void FilesRequestHandler::FileRequestCallback(
       profile_, url_, url_, source_, destination_, path.AsUTF8Unsafe(),
       file_info_[index].sha256, file_info_[index].mime_type,
       AccessPointToTriggerString(access_point_), content_transfer_method_,
-      access_point_, file_info_[index].size, upload_result, response,
+      access_point_, file_info_[index].size,
+      content_analysis_info_->referrer_chain(), upload_result, response,
       CalculateEventResult(analysis_settings, request_handler_result.complies,
                            result_is_warning));
 

@@ -70,7 +70,6 @@ class SyncServiceAndroidBridge;
 // You should not need to know about SyncServiceImpl directly.
 class SyncServiceImpl : public SyncService,
                         public SyncEngineHost,
-                        public SyncPrefObserver,
                         public DataTypeManagerObserver,
                         public SyncAuthManager::Delegate,
                         public SyncServiceCrypto::Delegate,
@@ -117,7 +116,6 @@ class SyncServiceImpl : public SyncService,
 #if BUILDFLAG(IS_ANDROID)
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
 #endif  // BUILDFLAG(IS_ANDROID)
-  void SetSyncFeatureRequested() override;
   SyncUserSettings* GetUserSettings() override;
   const SyncUserSettings* GetUserSettings() const override;
   DisableReasonSet GetDisableReasons() const override;
@@ -163,7 +161,8 @@ class SyncServiceImpl : public SyncService,
   DataTypeDownloadStatus GetDownloadStatusFor(DataType type) const override;
   void GetTypesWithUnsyncedData(
       DataTypeSet requested_types,
-      base::OnceCallback<void(DataTypeSet)> callback) const override;
+      base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)> callback)
+      const override;
   void GetLocalDataDescriptions(
       DataTypeSet types,
       base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>
@@ -209,6 +208,13 @@ class SyncServiceImpl : public SyncService,
   bool IsCustomPassphraseAllowed() const override;
   SyncPrefs::SyncAccountState GetSyncAccountStateForPrefs() const override;
   CoreAccountInfo GetSyncAccountInfoForPrefs() const override;
+  void OnSyncClientDisabledByPolicyChanged() override;
+  void OnSelectedTypesChanged() override;
+#if BUILDFLAG(IS_CHROMEOS)
+  void OnSyncFeatureDisabledViaDashboardCleared() override;
+#else   // BUILDFLAG(IS_CHROMEOS)
+  void OnInitialSyncFeatureSetupCompleted() override;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // IdentityManager::Observer implementation.
   void OnAccountsCookieDeletedByUserAction() override;
@@ -217,6 +223,8 @@ class SyncServiceImpl : public SyncService,
       const GoogleServiceAuthError& error) override;
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event_details) override;
+  void OnIdentityManagerShutdown(
+      signin::IdentityManager* identity_manager) override;
 
   // Similar to above but with a callback that will be invoked on completion.
   void OnAccountsInCookieUpdatedWithCallback(
@@ -227,14 +235,6 @@ class SyncServiceImpl : public SyncService,
   // accounts from cookie jar.
   bool HasCookieJarMismatch(
       const std::vector<gaia::ListedAccount>& cookie_jar_accounts);
-
-  // SyncPrefObserver implementation.
-  void OnSyncManagedPrefChange(bool is_sync_managed) override;
-#if !BUILDFLAG(IS_CHROMEOS)
-  void OnFirstSetupCompletePrefChange(
-      bool is_initial_sync_feature_setup_complete) override;
-#endif  // !BUILDFLAG(IS_CHROMEOS)
-  void OnSelectedTypesPrefChange() override;
 
   // KeyedService implementation.  This must be called exactly
   // once (before this object is destroyed).
@@ -315,15 +315,13 @@ class SyncServiceImpl : public SyncService,
 
   bool IsEngineAllowedToRun() const;
 
-  // Reconfigures the data type manager with the latest enabled types.
+  // Configures the data type manager with the latest enabled types.
   // Note: Does not initialize the engine if it is not already initialized.
   // If a Sync setup is currently in progress (i.e. a settings UI is open), then
   // the reconfiguration will only happen if `bypass_setup_in_progress_check` is
   // set to true.
-  void ReconfigureDatatypeManager(bool bypass_setup_in_progress_check);
-
-  // Helper to install and configure a data type manager.
-  void ConfigureDataTypeManager(ConfigureReason reason);
+  void ConfigureDataTypeManager(ConfigureReason reason,
+                                bool bypass_setup_in_progress_check);
 
   bool UseTransportOnlyMode() const;
 
@@ -371,8 +369,9 @@ class SyncServiceImpl : public SyncService,
       signin_metrics::AccessPoint access_point,
       signin::ConsentLevel consent_level);
 
-  // True if setup has been completed at least once and is not in progress.
-  bool CanConfigureDataTypes(bool bypass_setup_in_progress_check) const;
+  // Computes the enum value that should be propagated via ConfigureContext.
+  PreviouslySyncingGaiaIdInfoForMetrics
+  DeterminePreviouslySyncingGaiaIdInfoForMetrics() const;
 
   // Called when a SetupInProgressHandle issued by this instance is destroyed.
   void OnSetupInProgressHandleDestroyed();
@@ -412,6 +411,9 @@ class SyncServiceImpl : public SyncService,
   // email address and sign-out upon error.
   // May be null (if local Sync is enabled).
   const raw_ptr<signin::IdentityManager> identity_manager_;
+  base::ScopedObservation<signin::IdentityManager,
+                          signin::IdentityManager::Observer>
+      identity_manager_observation_{this};
 
   // The user-configurable knobs. Non-null between Initialize() and Shutdown().
   std::unique_ptr<SyncUserSettingsImpl> user_settings_;
@@ -516,9 +518,6 @@ class SyncServiceImpl : public SyncService,
   std::unique_ptr<SyncFeatureStatusForMigrationsRecorder> sync_status_recorder_;
 
   std::unique_ptr<LocalDataMigrationItemQueue> local_data_migration_item_queue_;
-
-  base::ScopedObservation<SyncPrefs, SyncPrefObserver> sync_prefs_observation_{
-      this};
 
 #if BUILDFLAG(IS_ANDROID)
   // Manage and fetch the java object that wraps this SyncService on

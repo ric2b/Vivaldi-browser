@@ -76,7 +76,7 @@ namespace
     PROC(UseResource)                                \
     PROC(MemoryBarrier)                              \
     PROC(MemoryBarrierWithResource)                  \
-    PROC(InsertDebugsign)                            \
+    PROC(InsertDebugSignpost)                        \
     PROC(PushDebugGroup)                             \
     PROC(PopDebugGroup)
 
@@ -402,8 +402,8 @@ inline void MemoryBarrierWithResourceCmd(id<MTLRenderCommandEncoder> encoder,
     [resource ANGLE_MTL_RELEASE];
 }
 
-inline void InsertDebugsignCmd(id<MTLRenderCommandEncoder> encoder,
-                               IntermediateCommandStream *stream)
+inline void InsertDebugSignpostCmd(id<MTLRenderCommandEncoder> encoder,
+                                   IntermediateCommandStream *stream)
 {
     NSString *label = stream->fetch<NSString *>();
     [encoder insertDebugSignpost:label];
@@ -950,7 +950,7 @@ void CommandBuffer::restart()
     ASSERT(metalCmdBuffer);
 }
 
-void CommandBuffer::insertDebugSign(const std::string &marker)
+void CommandBuffer::insertDebugSignpost(const std::string &marker)
 {
     mtl::CommandEncoder *currentEncoder = getPendingCommandEncoder();
     if (currentEncoder)
@@ -958,12 +958,12 @@ void CommandBuffer::insertDebugSign(const std::string &marker)
         ANGLE_MTL_OBJC_SCOPE
         {
             NSString *label = cppLabelToObjC(marker);
-            currentEncoder->insertDebugSign(label);
+            currentEncoder->insertDebugSignpost(label);
         }
     }
     else
     {
-        mPendingDebugSigns.push_back(marker);
+        mPendingDebugSignposts.push_back(marker);
     }
 }
 
@@ -1044,15 +1044,15 @@ void CommandBuffer::setActiveCommandEncoder(CommandEncoder *encoder)
         mActiveBlitOrComputeEncoder = encoder;
     }
 
-    for (std::string &marker : mPendingDebugSigns)
+    for (std::string &marker : mPendingDebugSignposts)
     {
         ANGLE_MTL_OBJC_SCOPE
         {
             NSString *label = cppLabelToObjC(marker);
-            encoder->insertDebugSign(label);
+            encoder->insertDebugSignpost(label);
         }
     }
-    mPendingDebugSigns.clear();
+    mPendingDebugSignposts.clear();
 }
 
 void CommandBuffer::invalidateActiveCommandEncoder(CommandEncoder *encoder)
@@ -1234,12 +1234,12 @@ void CommandEncoder::popDebugGroup()
     [get() popDebugGroup];
 }
 
-void CommandEncoder::insertDebugSign(NSString *label)
+void CommandEncoder::insertDebugSignpost(NSString *label)
 {
-    insertDebugSignImpl(label);
+    insertDebugSignpostImpl(label);
 }
 
-void CommandEncoder::insertDebugSignImpl(NSString *label)
+void CommandEncoder::insertDebugSignpostImpl(NSString *label)
 {
     // Default implementation
     [get() insertDebugSignpost:label];
@@ -1945,7 +1945,7 @@ RenderCommandEncoder &RenderCommandEncoder::commonSetBuffer(gl::ShaderType shade
 }
 
 RenderCommandEncoder &RenderCommandEncoder::setBytes(gl::ShaderType shaderType,
-                                                     const uint8_t *bytes,
+                                                     const void *bytes,
                                                      size_t size,
                                                      uint32_t index)
 {
@@ -1960,7 +1960,7 @@ RenderCommandEncoder &RenderCommandEncoder::setBytes(gl::ShaderType shaderType,
 
     mCommands.push(static_cast<CmdType>(mSetBytesCmds[shaderType]))
         .push(size)
-        .push(bytes, size)
+        .push(reinterpret_cast<const uint8_t *>(bytes), size)
         .push(index);
 
     return *this;
@@ -2243,10 +2243,10 @@ RenderCommandEncoder &RenderCommandEncoder::memoryBarrierWithResource(const Buff
     return *this;
 }
 
-void RenderCommandEncoder::insertDebugSignImpl(NSString *label)
+void RenderCommandEncoder::insertDebugSignpostImpl(NSString *label)
 {
     // Defer the insertion until endEncoding()
-    mCommands.push(CmdType::InsertDebugsign).push([label ANGLE_MTL_RETAIN]);
+    mCommands.push(CmdType::InsertDebugSignpost).push([label ANGLE_MTL_RETAIN]);
 }
 
 void RenderCommandEncoder::pushDebugGroup(NSString *label)
@@ -2661,7 +2661,7 @@ ComputeCommandEncoder &ComputeCommandEncoder::setBufferForWrite(const BufferRef 
     return setBuffer(buffer, offset, index);
 }
 
-ComputeCommandEncoder &ComputeCommandEncoder::setBytes(const uint8_t *bytes,
+ComputeCommandEncoder &ComputeCommandEncoder::setBytes(const void *bytes,
                                                        size_t size,
                                                        uint32_t index)
 {

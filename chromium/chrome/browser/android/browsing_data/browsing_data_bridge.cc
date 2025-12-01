@@ -122,6 +122,10 @@ static void JNI_BrowsingDataBridge_ClearBrowsingData(
       case browsing_data::BrowsingDataType::SITE_SETTINGS:
         remove_mask |= chrome_browsing_data_remover::DATA_TYPE_CONTENT_SETTINGS;
         break;
+      case browsing_data::BrowsingDataType::ADS_TRACKER_BLOCKER:  // Vivaldi VAB-11363
+        remove_mask |=
+            chrome_browsing_data_remover::DATA_TYPE_ADS_TRACKER_BLOCKER;
+        break;
       case browsing_data::BrowsingDataType::DOWNLOADS:
       case browsing_data::BrowsingDataType::HOSTED_APPS_DATA:
         // Only implemented on Desktop.

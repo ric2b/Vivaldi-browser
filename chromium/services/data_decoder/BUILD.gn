@@ -23,8 +23,6 @@ source_set("lib") {
     "data_decoder_service.h",
     "gzipper.cc",
     "gzipper.h",
-    "json_parser_impl.cc",
-    "json_parser_impl.h",
     "structured_headers_parser_impl.cc",
     "structured_headers_parser_impl.h",
     "xml_parser.cc",
@@ -42,6 +40,7 @@ source_set("lib") {
 
   deps = [
     "//base",
+    "//build:blink_buildflags",
     "//components/cbor",
     "//components/facilitated_payments/core/mojom:pix_code_validator_mojom",
     "//components/facilitated_payments/core/validation",
@@ -115,6 +114,22 @@ source_set("tests") {
     ]
     data_deps = [ "//tools/v8_context_snapshot" ]
     configs += [ "//v8:external_startup_data" ]
+  }
+}
+
+if (use_blink) {
+  test("json_sanitizer_fuzztests") {
+    sources = [ "public/cpp/json_sanitizer_fuzztests.cc" ]
+
+    fuzztests =
+        [ "JsonSanitizerFuzzTest.SanitizerAndBaseJsonReaderDecoderMatch" ]
+
+    deps = [
+      "//base",
+      "//base/test:test_support",
+      "//services/data_decoder/public/cpp",
+      "//third_party/fuzztest:fuzztest_gtest_main",
+    ]
   }
 }
 

@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "include/sksl/SkSLVersion.h"
 
@@ -159,6 +160,9 @@ public:
 
     static bool UsesColorTransform(const SkRuntimeEffect* effect) {
         return effect->usesColorTransform();
+    }
+    static SkSL::SampleUsage ChildSampleUsage(const SkRuntimeEffect* effect, int child) {
+        return effect->fSampleUsages[child];
     }
 };
 

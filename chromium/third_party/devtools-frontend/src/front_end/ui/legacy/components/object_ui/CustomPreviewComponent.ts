@@ -1,6 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
@@ -165,7 +166,7 @@ export class CustomPreviewSection {
       if (bodyJsonML === null) {
         // Per https://firefox-source-docs.mozilla.org/devtools-user/custom_formatters/index.html#custom-formatter-structure
         // we are supposed to fall back to the default format when the `body()` callback returns `null`.
-        this.defaultBodyTreeOutline = new ObjectPropertiesSectionsTreeOutline({readOnly: true});
+        this.defaultBodyTreeOutline = new ObjectPropertiesSectionsTreeOutline();
         this.defaultBodyTreeOutline.setShowSelectionOnKeyboardFocus(/* show */ true, /* preventTabOrder */ false);
         this.defaultBodyTreeOutline.element.classList.add('custom-expandable-section-default-body');
         void ObjectPropertyTreeElement.populate(this.defaultBodyTreeOutline.rootElement(), this.object, false, false);

@@ -10,6 +10,8 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.FeatureList;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.readaloud.ReadAloudFeatures;
@@ -21,6 +23,7 @@ import java.util.HashMap;
 import org.chromium.build.BuildConfig;
 
 /** A utility class for handling feature flags used by {@link AdaptiveToolbarButtonController}. */
+@NullMarked
 public class AdaptiveToolbarFeatures {
     /** Finch default group for new tab variation. */
     static final String NEW_TAB = "new-tab";
@@ -51,11 +54,11 @@ public class AdaptiveToolbarFeatures {
             "action_chip_with_different_color";
 
     /** For testing only. */
-    private static String sDefaultSegmentForTesting;
+    private static @Nullable String sDefaultSegmentForTesting;
 
-    private static HashMap<Integer, Boolean> sActionChipOverridesForTesting;
-    private static HashMap<Integer, Boolean> sAlternativeColorOverridesForTesting;
-    private static HashMap<Integer, Boolean> sIsDynamicActionOverridesForTesting;
+    private static @Nullable HashMap<Integer, Boolean> sActionChipOverridesForTesting;
+    private static @Nullable HashMap<Integer, Boolean> sAlternativeColorOverridesForTesting;
+    private static @Nullable HashMap<Integer, Boolean> sIsDynamicActionOverridesForTesting;
 
     /**
      * @return Whether the button variant is a dynamic action.

@@ -57,6 +57,7 @@ namespace internal {
   /* Deoptimization entries. */                                             \
   ASM(DeoptimizationEntry_Eager, DeoptimizationEntry)                       \
   ASM(DeoptimizationEntry_Lazy, DeoptimizationEntry)                        \
+  ASM(DeoptimizationEntry_LazyAfterFastCall, DeoptimizationEntry)           \
                                                                             \
   /* GC write barrier. */                                                   \
   TFC(RecordWriteSaveFP, WriteBarrier)                                      \
@@ -66,8 +67,7 @@ namespace internal {
                                                                             \
   /* TODO(ishell): dummy builtin added here just to keep the Tier0 table */ \
   /* size unmodified to avoid unexpected performance implications. */       \
-  /* It should be removed. */                                               \
-  CPP(DummyBuiltin, kDontAdaptArgumentsSentinel)
+  /* It should be removed. */
 
 #ifdef V8_ENABLE_LEAPTIERING
 
@@ -235,11 +235,13 @@ namespace internal {
   /* String helpers */                                                         \
   IF_TSA(TSC, TFC, StringFromCodePointAt, StringAtAsString)                    \
   TFC(StringEqual, StringEqual)                                                \
+  IF_WASM(TFC, WasmJSStringEqual, StringEqual)                                 \
   TFC(StringGreaterThan, CompareNoContext)                                     \
   TFC(StringGreaterThanOrEqual, CompareNoContext)                              \
   TFC(StringLessThan, CompareNoContext)                                        \
   TFC(StringLessThanOrEqual, CompareNoContext)                                 \
   TFC(StringCompare, CompareNoContext)                                         \
+  IF_WASM(TFC, WasmStringCompare, CompareNoContext)                            \
   TFC(StringSubstring, StringSubstring)                                        \
                                                                                \
   /* OrderedHashTable helpers */                                               \
@@ -325,6 +327,7 @@ namespace internal {
   TFC(AllocateInOldGeneration, Allocate)                                       \
   IF_WASM(TFC, WasmAllocateInYoungGeneration, Allocate)                        \
   IF_WASM(TFC, WasmAllocateInOldGeneration, Allocate)                          \
+  IF_WASM(TFC, WasmAllocateInSharedHeap, WasmAllocateShared)                   \
                                                                                \
   TFC(NewHeapNumber, NewHeapNumber)                                            \
                                                                                \
@@ -357,6 +360,7 @@ namespace internal {
   TFC(MathCeilContinuation, SingleParameterOnStack)                            \
   TFC(MathFloorContinuation, SingleParameterOnStack)                           \
   TFC(MathRoundContinuation, SingleParameterOnStack)                           \
+  TFC(MathClz32Continuation, SingleParameterOnStack)                           \
                                                                                \
   /* Handlers */                                                               \
   TFH(KeyedLoadIC_PolymorphicName, LoadWithVector)                             \
@@ -698,9 +702,18 @@ namespace internal {
   ASM(FunctionPrototypeApply, JSTrampoline)                                    \
   CPP(FunctionPrototypeBind, kDontAdaptArgumentsSentinel)                      \
   IF_WASM(CPP, WebAssemblyFunctionPrototypeBind, kDontAdaptArgumentsSentinel)  \
+  IF_WASM(TFJ, WasmConstructorWrapper, kDontAdaptArgumentsSentinel)            \
   ASM(FunctionPrototypeCall, JSTrampoline)                                     \
   /* ES6 #sec-function.prototype.tostring */                                   \
   CPP(FunctionPrototypeToString, kDontAdaptArgumentsSentinel)                  \
+  IF_FUNCTION_ARGUMENTS_CALLER_ARE_ON_PROTOTYPE(                               \
+      CPP, FunctionPrototypeLegacyArgumentsGetter, JSParameterCount(0))        \
+  IF_FUNCTION_ARGUMENTS_CALLER_ARE_ON_PROTOTYPE(                               \
+      CPP, FunctionPrototypeLegacyArgumentsSetter, JSParameterCount(1))        \
+  IF_FUNCTION_ARGUMENTS_CALLER_ARE_ON_PROTOTYPE(                               \
+      CPP, FunctionPrototypeLegacyCallerGetter, JSParameterCount(0))           \
+  IF_FUNCTION_ARGUMENTS_CALLER_ARE_ON_PROTOTYPE(                               \
+      CPP, FunctionPrototypeLegacyCallerSetter, JSParameterCount(1))           \
                                                                                \
   /* Belongs to Objects but is a dependency of GeneratorPrototypeResume */     \
   TFS(CreateIterResultObject, NeedsContext::kYes, kValue, kDone)               \
@@ -777,14 +790,14 @@ namespace internal {
   TFH(DefineKeyedOwnICBaseline, DefineKeyedOwnBaseline)                        \
   TFH(StoreInArrayLiteralIC, StoreWithVector)                                  \
   TFH(StoreInArrayLiteralICBaseline, StoreBaseline)                            \
+  TFH(LookupContextNoCellTrampoline, LookupTrampoline)                         \
   TFH(LookupContextTrampoline, LookupTrampoline)                               \
-  TFH(LookupScriptContextTrampoline, LookupTrampoline)                         \
-  TFH(LookupContextBaseline, LookupBaseline)                                   \
+  TFH(LookupContextNoCellBaseline, LookupBaseline)                             \
   TFH(LookupScriptContextBaseline, LookupBaseline)                             \
+  TFH(LookupContextNoCellInsideTypeofTrampoline, LookupTrampoline)             \
   TFH(LookupContextInsideTypeofTrampoline, LookupTrampoline)                   \
-  TFH(LookupScriptContextInsideTypeofTrampoline, LookupTrampoline)             \
+  TFH(LookupContextNoCellInsideTypeofBaseline, LookupBaseline)                 \
   TFH(LookupContextInsideTypeofBaseline, LookupBaseline)                       \
-  TFH(LookupScriptContextInsideTypeofBaseline, LookupBaseline)                 \
   TFH(LoadGlobalIC, LoadGlobalWithVector)                                      \
   TFH(LoadGlobalICInsideTypeof, LoadGlobalWithVector)                          \
   TFH(LoadGlobalICTrampoline, LoadGlobal)                                      \
@@ -803,6 +816,10 @@ namespace internal {
   TFH(KeyedHasIC, KeyedHasICWithVector)                                        \
   TFH(KeyedHasICBaseline, KeyedHasICBaseline)                                  \
   TFH(KeyedHasIC_Megamorphic, KeyedHasICWithVector)                            \
+  TFH(AddLhsIsStringConstantInternalizeWithVector,                             \
+      AddLhsIsStringConstantInternalizeWithVector)                             \
+  TFH(AddLhsIsStringConstantInternalizeTrampoline,                             \
+      AddLhsIsStringConstantInternalizeTrampoline)                             \
                                                                                \
   /* IterableToList */                                                         \
   /* ES #sec-iterabletolist */                                                 \
@@ -887,6 +904,11 @@ namespace internal {
   TFC(ShiftLeft_WithFeedback, BinaryOp_WithFeedback)                           \
   TFC(ShiftRight_WithFeedback, BinaryOp_WithFeedback)                          \
   TFC(ShiftRightLogical_WithFeedback, BinaryOp_WithFeedback)                   \
+                                                                               \
+  /* Like Add_WithFeedback, but lhs is a known constant and the result is */   \
+  /* used as a property key and thus should be internalized early.        */   \
+  TFC(Add_LhsIsStringConstant_Internalize_WithFeedback, BinaryOp_WithFeedback) \
+  TFC(Add_LhsIsStringConstant_Internalize_Baseline, BinaryOp_Baseline)         \
                                                                                \
   /* Compare ops with feedback collection */                                   \
   TFC(Equal_Baseline, Compare_Baseline)                                        \
@@ -1107,8 +1129,12 @@ namespace internal {
   TFJ(TypedArrayPrototypeMap, kDontAdaptArgumentsSentinel)                     \
   /* proposal-arraybuffer-base64 #sec-uint8array.frombase64 */                 \
   CPP(Uint8ArrayFromBase64, kDontAdaptArgumentsSentinel)                       \
+  /* proposal-arraybuffer-base64 #sec-uint8array.prototype.setfrombase64 */    \
+  CPP(Uint8ArrayPrototypeSetFromBase64, kDontAdaptArgumentsSentinel)           \
   /* proposal-arraybuffer-base64 #sec-uint8array.fromhex */                    \
   CPP(Uint8ArrayFromHex, kDontAdaptArgumentsSentinel)                          \
+  /* proposal-arraybuffer-base64 #sec-uint8array.prototype.setfromhex */       \
+  CPP(Uint8ArrayPrototypeSetFromHex, kDontAdaptArgumentsSentinel)              \
   /* proposal-arraybuffer-base64 #sec-uint8array.prototype.tobase64 */         \
   CPP(Uint8ArrayPrototypeToBase64, kDontAdaptArgumentsSentinel)                \
   /* proposal-arraybuffer-base64 #sec-uint8array.prototype.tohex */            \
@@ -1451,6 +1477,7 @@ namespace internal {
                                                                                \
   /* String helpers */                                                         \
   TFS(StringAdd_CheckNone, NeedsContext::kYes, kLeft, kRight)                  \
+  IF_WASM(TFS, WasmStringAdd_CheckNone, NeedsContext::kYes, kLeft, kRight)     \
   TFS(SubString, NeedsContext::kYes, kString, kFrom, kTo)                      \
                                                                                \
   /* Miscellaneous */                                                          \
@@ -1482,6 +1509,17 @@ namespace internal {
   CPP(CallAsyncModuleFulfilled, JSParameterCount(0))                           \
   CPP(CallAsyncModuleRejected, JSParameterCount(0))                            \
                                                                                \
+  /* "Private" (created but not exposed) Bulitins needed by Temporal */        \
+  TFJ(StringFixedArrayFromIterable, kJSArgcReceiverSlots + 1, kReceiver,       \
+      kIterable)
+
+#define BUILTIN_LIST_BASE(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM) \
+  BUILTIN_LIST_BASE_TIER0(CPP, TFJ, TFC, TFS, TFH, ASM)           \
+  BUILTIN_LIST_BASE_TIER1(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM)
+
+#ifdef V8_TEMPORAL_SUPPORT
+#define BUILTIN_LIST_TEMPORAL(CPP, TFJ)                                        \
+                                                                               \
   /* Temporal */                                                               \
   /* Temporal #sec-temporal.now.timezone */                                    \
   CPP(TemporalNowTimeZone, kDontAdaptArgumentsSentinel)                        \
@@ -1511,8 +1549,6 @@ namespace internal {
   CPP(TemporalPlainDateFrom, kDontAdaptArgumentsSentinel)                      \
   /* Temporal #sec-temporal.plaindate.compare */                               \
   CPP(TemporalPlainDateCompare, kDontAdaptArgumentsSentinel)                   \
-  /* Temporal #sec-get-temporal.plaindate.prototype.calendar */                \
-  CPP(TemporalPlainDatePrototypeCalendar, JSParameterCount(0))                 \
   /* Temporal #sec-get-temporal.plaindate.prototype.year */                    \
   CPP(TemporalPlainDatePrototypeYear, JSParameterCount(0))                     \
   /* Temporal #sec-get-temporal.plaindate.prototype.month */                   \
@@ -1549,8 +1585,6 @@ namespace internal {
   CPP(TemporalPlainDatePrototypeSubtract, kDontAdaptArgumentsSentinel)         \
   /* Temporal #sec-temporal.plaindate.prototype.with */                        \
   CPP(TemporalPlainDatePrototypeWith, kDontAdaptArgumentsSentinel)             \
-  /* Temporal #sec-temporal.plaindate.prototype.withcalendar */                \
-  CPP(TemporalPlainDatePrototypeWithCalendar, kDontAdaptArgumentsSentinel)     \
   /* Temporal #sec-temporal.plaindate.prototype.until */                       \
   CPP(TemporalPlainDatePrototypeUntil, kDontAdaptArgumentsSentinel)            \
   /* Temporal #sec-temporal.plaindate.prototype.since */                       \
@@ -1577,8 +1611,6 @@ namespace internal {
   CPP(TemporalPlainTimeFrom, kDontAdaptArgumentsSentinel)                      \
   /* Temporal #sec-temporal.plaintime.compare */                               \
   CPP(TemporalPlainTimeCompare, kDontAdaptArgumentsSentinel)                   \
-  /* Temporal #sec-get-temporal.plaintime.prototype.calendar */                \
-  CPP(TemporalPlainTimePrototypeCalendar, JSParameterCount(0))                 \
   /* Temporal #sec-get-temporal.plaintime.prototype.hour */                    \
   CPP(TemporalPlainTimePrototypeHour, JSParameterCount(0))                     \
   /* Temporal #sec-get-temporal.plaintime.prototype.minute */                  \
@@ -1627,8 +1659,6 @@ namespace internal {
   CPP(TemporalPlainDateTimeFrom, kDontAdaptArgumentsSentinel)                  \
   /* Temporal #sec-temporal.plaindatetime.compare */                           \
   CPP(TemporalPlainDateTimeCompare, kDontAdaptArgumentsSentinel)               \
-  /* Temporal #sec-get-temporal.plaindatetime.prototype.calendar */            \
-  CPP(TemporalPlainDateTimePrototypeCalendar, JSParameterCount(0))             \
   /* Temporal #sec-get-temporal.plaindatetime.prototype.year */                \
   CPP(TemporalPlainDateTimePrototypeYear, JSParameterCount(0))                 \
   /* Temporal #sec-get-temporal.plaindatetime.prototype.month */               \
@@ -1673,8 +1703,6 @@ namespace internal {
   /* Temporal #sec-temporal.plaindatetime.prototype.withplainDate */           \
   CPP(TemporalPlainDateTimePrototypeWithPlainDate,                             \
       kDontAdaptArgumentsSentinel)                                             \
-  /* Temporal #sec-temporal.plaindatetime.prototype.withcalendar */            \
-  CPP(TemporalPlainDateTimePrototypeWithCalendar, kDontAdaptArgumentsSentinel) \
   /* Temporal #sec-temporal.plaindatetime.prototype.add */                     \
   CPP(TemporalPlainDateTimePrototypeAdd, kDontAdaptArgumentsSentinel)          \
   /* Temporal #sec-temporal.plaindatetime.prototype.subtract */                \
@@ -1719,8 +1747,6 @@ namespace internal {
   CPP(TemporalZonedDateTimeFrom, kDontAdaptArgumentsSentinel)                  \
   /* Temporal #sec-temporal.zoneddatetime.compare */                           \
   CPP(TemporalZonedDateTimeCompare, kDontAdaptArgumentsSentinel)               \
-  /* Temporal #sec-get-temporal.zoneddatetime.prototype.calendar */            \
-  CPP(TemporalZonedDateTimePrototypeCalendar, JSParameterCount(0))             \
   /* Temporal #sec-get-temporal.zoneddatetime.prototype.timezone */            \
   CPP(TemporalZonedDateTimePrototypeTimeZone, JSParameterCount(0))             \
   /* Temporal #sec-get-temporal.zoneddatetime.prototype.year */                \
@@ -1783,8 +1809,6 @@ namespace internal {
       kDontAdaptArgumentsSentinel)                                             \
   /* Temporal #sec-temporal.zoneddatetime.prototype.withtimezone */            \
   CPP(TemporalZonedDateTimePrototypeWithTimeZone, kDontAdaptArgumentsSentinel) \
-  /* Temporal #sec-temporal.zoneddatetime.prototype.withcalendar */            \
-  CPP(TemporalZonedDateTimePrototypeWithCalendar, kDontAdaptArgumentsSentinel) \
   /* Temporal #sec-temporal.zoneddatetime.prototype.add */                     \
   CPP(TemporalZonedDateTimePrototypeAdd, kDontAdaptArgumentsSentinel)          \
   /* Temporal #sec-temporal.zoneddatetime.prototype.subtract */                \
@@ -1883,24 +1907,8 @@ namespace internal {
   /* Temporal.Instant */                                                       \
   /* Temporal #sec-temporal.instant */                                         \
   CPP(TemporalInstantConstructor, kDontAdaptArgumentsSentinel)                 \
-  /* Temporal #sec-temporal.instant.from */                                    \
-  CPP(TemporalInstantFrom, kDontAdaptArgumentsSentinel)                        \
-  /* Temporal #sec-temporal.instant.fromepochseconds */                        \
-  CPP(TemporalInstantFromEpochSeconds, kDontAdaptArgumentsSentinel)            \
-  /* Temporal #sec-temporal.instant.fromepochmilliseconds */                   \
-  CPP(TemporalInstantFromEpochMilliseconds, kDontAdaptArgumentsSentinel)       \
-  /* Temporal #sec-temporal.instant.fromepochmicroseconds */                   \
-  CPP(TemporalInstantFromEpochMicroseconds, kDontAdaptArgumentsSentinel)       \
-  /* Temporal #sec-temporal.instant.fromepochnanoseconds */                    \
-  CPP(TemporalInstantFromEpochNanoseconds, kDontAdaptArgumentsSentinel)        \
-  /* Temporal #sec-temporal.instant.compare */                                 \
-  CPP(TemporalInstantCompare, kDontAdaptArgumentsSentinel)                     \
-  /* Temporal #sec-get-temporal.instant.prototype.epochseconds */              \
-  CPP(TemporalInstantPrototypeEpochSeconds, JSParameterCount(0))               \
   /* Temporal #sec-get-temporal.instant.prototype.epochmilliseconds */         \
   CPP(TemporalInstantPrototypeEpochMilliseconds, JSParameterCount(0))          \
-  /* Temporal #sec-get-temporal.instant.prototype.epochmicroseconds */         \
-  CPP(TemporalInstantPrototypeEpochMicroseconds, JSParameterCount(0))          \
   /* Temporal #sec-get-temporal.instant.prototype.epochnanoseconds */          \
   CPP(TemporalInstantPrototypeEpochNanoseconds, JSParameterCount(0))           \
   /* Temporal #sec-temporal.instant.prototype.add */                           \
@@ -1925,8 +1933,6 @@ namespace internal {
   CPP(TemporalInstantPrototypeValueOf, kDontAdaptArgumentsSentinel)            \
   /* Temporal #sec-temporal.instant.prototype.tozoneddatetime */               \
   CPP(TemporalInstantPrototypeToZonedDateTime, kDontAdaptArgumentsSentinel)    \
-  /* Temporal #sec-temporal.instant.prototype.tozoneddatetimeiso */            \
-  CPP(TemporalInstantPrototypeToZonedDateTimeISO, kDontAdaptArgumentsSentinel) \
                                                                                \
   /* Temporal.PlainYearMonth */                                                \
   /* Temporal #sec-temporal.plainyearmonth */                                  \
@@ -1935,8 +1941,6 @@ namespace internal {
   CPP(TemporalPlainYearMonthFrom, kDontAdaptArgumentsSentinel)                 \
   /* Temporal #sec-temporal.plainyearmonth.compare */                          \
   CPP(TemporalPlainYearMonthCompare, kDontAdaptArgumentsSentinel)              \
-  /* Temporal #sec-get-temporal.plainyearmonth.prototype.calendar */           \
-  CPP(TemporalPlainYearMonthPrototypeCalendar, JSParameterCount(0))            \
   /* Temporal #sec-get-temporal.plainyearmonth.prototype.year */               \
   CPP(TemporalPlainYearMonthPrototypeYear, JSParameterCount(0))                \
   /* Temporal #sec-get-temporal.plainyearmonth.prototype.month */              \
@@ -1985,8 +1989,6 @@ namespace internal {
   CPP(TemporalPlainMonthDayFrom, kDontAdaptArgumentsSentinel)                  \
   /* There are no compare for PlainMonthDay */                                 \
   /* See https://github.com/tc39/proposal-temporal/issues/1547 */              \
-  /* Temporal #sec-get-temporal.plainmonthday.prototype.calendar */            \
-  CPP(TemporalPlainMonthDayPrototypeCalendar, JSParameterCount(0))             \
   /* Temporal #sec-get-temporal.plainmonthday.prototype.monthcode */           \
   CPP(TemporalPlainMonthDayPrototypeMonthCode, JSParameterCount(0))            \
   /* Temporal #sec-get-temporal.plainmonthday.prototype.day */                 \
@@ -2040,70 +2042,39 @@ namespace internal {
   /* Temporal #sec-temporal.timezone.prototype.tojson */                       \
   CPP(TemporalTimeZonePrototypeToJSON, kDontAdaptArgumentsSentinel)            \
                                                                                \
-  /* Temporal.Calendar */                                                      \
-  /* Temporal #sec-temporal.calendar */                                        \
-  CPP(TemporalCalendarConstructor, kDontAdaptArgumentsSentinel)                \
-  /* Temporal #sec-temporal.calendar.from */                                   \
-  CPP(TemporalCalendarFrom, kDontAdaptArgumentsSentinel)                       \
-  /* Temporal #sec-get-temporal.calendar.prototype.id */                       \
-  CPP(TemporalCalendarPrototypeId, JSParameterCount(0))                        \
-  /* Temporal #sec-temporal.calendar.prototype.datefromfields */               \
-  CPP(TemporalCalendarPrototypeDateFromFields, kDontAdaptArgumentsSentinel)    \
-  /* Temporal #sec-temporal.calendar.prototype.yearmonthfromfields */          \
-  CPP(TemporalCalendarPrototypeYearMonthFromFields,                            \
-      kDontAdaptArgumentsSentinel)                                             \
-  /* Temporal #sec-temporal.calendar.prototype.monthdayfromfields */           \
-  CPP(TemporalCalendarPrototypeMonthDayFromFields,                             \
-      kDontAdaptArgumentsSentinel)                                             \
-  /* Temporal #sec-temporal.calendar.prototype.dateadd */                      \
-  CPP(TemporalCalendarPrototypeDateAdd, kDontAdaptArgumentsSentinel)           \
-  /* Temporal #sec-temporal.calendar.prototype.dateuntil */                    \
-  CPP(TemporalCalendarPrototypeDateUntil, kDontAdaptArgumentsSentinel)         \
-  /* Temporal #sec-temporal.calendar.prototype.year */                         \
-  CPP(TemporalCalendarPrototypeYear, kDontAdaptArgumentsSentinel)              \
-  /* Temporal #sec-temporal.calendar.prototype.month */                        \
-  CPP(TemporalCalendarPrototypeMonth, kDontAdaptArgumentsSentinel)             \
-  /* Temporal #sec-temporal.calendar.prototype.monthcode */                    \
-  CPP(TemporalCalendarPrototypeMonthCode, kDontAdaptArgumentsSentinel)         \
-  /* Temporal #sec-temporal.calendar.prototype.day */                          \
-  CPP(TemporalCalendarPrototypeDay, kDontAdaptArgumentsSentinel)               \
-  /* Temporal #sec-temporal.calendar.prototype.dayofweek */                    \
-  CPP(TemporalCalendarPrototypeDayOfWeek, kDontAdaptArgumentsSentinel)         \
-  /* Temporal #sec-temporal.calendar.prototype.dayofyear */                    \
-  CPP(TemporalCalendarPrototypeDayOfYear, kDontAdaptArgumentsSentinel)         \
-  /* Temporal #sec-temporal.calendar.prototype.weekofyear */                   \
-  CPP(TemporalCalendarPrototypeWeekOfYear, kDontAdaptArgumentsSentinel)        \
-  /* Temporal #sec-temporal.calendar.prototype.daysinweek */                   \
-  CPP(TemporalCalendarPrototypeDaysInWeek, kDontAdaptArgumentsSentinel)        \
-  /* Temporal #sec-temporal.calendar.prototype.daysinmonth */                  \
-  CPP(TemporalCalendarPrototypeDaysInMonth, kDontAdaptArgumentsSentinel)       \
-  /* Temporal #sec-temporal.calendar.prototype.daysinyear */                   \
-  CPP(TemporalCalendarPrototypeDaysInYear, kDontAdaptArgumentsSentinel)        \
-  /* Temporal #sec-temporal.calendar.prototype.monthsinyear */                 \
-  CPP(TemporalCalendarPrototypeMonthsInYear, kDontAdaptArgumentsSentinel)      \
-  /* Temporal #sec-temporal.calendar.prototype.inleapyear */                   \
-  CPP(TemporalCalendarPrototypeInLeapYear, kDontAdaptArgumentsSentinel)        \
-  /* Temporal #sec-temporal.calendar.prototype.fields */                       \
-  TFJ(TemporalCalendarPrototypeFields, kJSArgcReceiverSlots + 1, kReceiver,    \
-      kIterable)                                                               \
-  /* Temporal #sec-temporal.calendar.prototype.mergefields */                  \
-  CPP(TemporalCalendarPrototypeMergeFields, kDontAdaptArgumentsSentinel)       \
-  /* Temporal #sec-temporal.calendar.prototype.tostring */                     \
-  CPP(TemporalCalendarPrototypeToString, kDontAdaptArgumentsSentinel)          \
-  /* Temporal #sec-temporal.calendar.prototype.tojson */                       \
-  CPP(TemporalCalendarPrototypeToJSON, kDontAdaptArgumentsSentinel)            \
   /* Temporal #sec-date.prototype.totemporalinstant */                         \
   CPP(DatePrototypeToTemporalInstant, kDontAdaptArgumentsSentinel)             \
                                                                                \
-  /* "Private" (created but not exposed) Bulitins needed by Temporal */        \
-  TFJ(StringFixedArrayFromIterable, kJSArgcReceiverSlots + 1, kReceiver,       \
-      kIterable)                                                               \
   TFJ(TemporalInstantFixedArrayFromIterable, kJSArgcReceiverSlots + 1,         \
-      kReceiver, kIterable)
-
-#define BUILTIN_LIST_BASE(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM) \
-  BUILTIN_LIST_BASE_TIER0(CPP, TFJ, TFC, TFS, TFH, ASM)           \
-  BUILTIN_LIST_BASE_TIER1(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM)
+      kReceiver, kIterable)                                                    \
+                                                                               \
+  /* Intl */ /* Temporal #sec-get-temporal.plaindate.prototype.era */          \
+  CPP(TemporalPlainDatePrototypeEra,                                           \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.plaindate.prototype.erayear */     \
+  CPP(TemporalPlainDatePrototypeEraYear,                                       \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.plaindatetime.prototype.era */     \
+  CPP(TemporalPlainDateTimePrototypeEra,                                       \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.plaindatetime.prototype.erayear */ \
+  CPP(TemporalPlainDateTimePrototypeEraYear,                                   \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.plainyearmonth.prototype.era */    \
+  CPP(TemporalPlainYearMonthPrototypeEra,                                      \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.plainyearmonth.prototype.erayear   \
+               */                                                              \
+  CPP(TemporalPlainYearMonthPrototypeEraYear,                                  \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.zoneddatetime.prototype.era */     \
+  CPP(TemporalZonedDateTimePrototypeEra,                                       \
+      JSParameterCount(                                                        \
+          0)) /* Temporal #sec-get-temporal.zoneddatetime.prototype.erayear */ \
+  CPP(TemporalZonedDateTimePrototypeEraYear, JSParameterCount(0))
+#else  // V8_TEMPORAL_SUPPORT
+#define BUILTIN_LIST_TEMPORAL(CPP, TFJ)
+#endif  // V8_TEMPORAL_SUPPORT
 
 #ifdef V8_INTL_SUPPORT
 #define BUILTIN_LIST_INTL(CPP, TFJ, TFS)                                       \
@@ -2292,28 +2263,7 @@ namespace internal {
   /* ES #sec-string.prototype.touppercase */                                   \
   CPP(StringPrototypeToUpperCaseIntl, kDontAdaptArgumentsSentinel)             \
   TFS(StringToLowerCaseIntl, NeedsContext::kYes, kString)                      \
-                                                                               \
-  /* Temporal */                                                               \
-  /* Temporal #sec-temporal.calendar.prototype.era */                          \
-  CPP(TemporalCalendarPrototypeEra, kDontAdaptArgumentsSentinel)               \
-  /* Temporal #sec-temporal.calendar.prototype.erayear */                      \
-  CPP(TemporalCalendarPrototypeEraYear, kDontAdaptArgumentsSentinel)           \
-  /* Temporal #sec-get-temporal.plaindate.prototype.era */                     \
-  CPP(TemporalPlainDatePrototypeEra, JSParameterCount(0))                      \
-  /* Temporal #sec-get-temporal.plaindate.prototype.erayear */                 \
-  CPP(TemporalPlainDatePrototypeEraYear, JSParameterCount(0))                  \
-  /* Temporal #sec-get-temporal.plaindatetime.prototype.era */                 \
-  CPP(TemporalPlainDateTimePrototypeEra, JSParameterCount(0))                  \
-  /* Temporal #sec-get-temporal.plaindatetime.prototype.erayear */             \
-  CPP(TemporalPlainDateTimePrototypeEraYear, JSParameterCount(0))              \
-  /* Temporal #sec-get-temporal.plainyearmonth.prototype.era */                \
-  CPP(TemporalPlainYearMonthPrototypeEra, JSParameterCount(0))                 \
-  /* Temporal #sec-get-temporal.plainyearmonth.prototype.erayear */            \
-  CPP(TemporalPlainYearMonthPrototypeEraYear, JSParameterCount(0))             \
-  /* Temporal #sec-get-temporal.zoneddatetime.prototype.era */                 \
-  CPP(TemporalZonedDateTimePrototypeEra, JSParameterCount(0))                  \
-  /* Temporal #sec-get-temporal.zoneddatetime.prototype.erayear */             \
-  CPP(TemporalZonedDateTimePrototypeEraYear, JSParameterCount(0))              \
+  IF_WASM(TFS, WasmStringToLowerCaseIntl, NeedsContext::kYes, kString)         \
                                                                                \
   CPP(V8BreakIteratorConstructor, kDontAdaptArgumentsSentinel)                 \
   CPP(V8BreakIteratorInternalAdoptText, JSParameterCount(1))                   \
@@ -2349,6 +2299,7 @@ namespace internal {
   BUILTIN_LIST_BASE(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM)       \
   BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC, TFS, TFH, ASM)          \
   BUILTIN_LIST_INTL(CPP, TFJ, TFS)                                \
+  BUILTIN_LIST_TEMPORAL(CPP, TFJ)                                 \
   BUILTIN_LIST_BYTECODE_HANDLERS(BCH)
 
 // See the comment on top of BUILTIN_LIST_BASE_TIER0 for an explanation of
@@ -2360,6 +2311,7 @@ namespace internal {
   BUILTIN_LIST_BASE_TIER1(CPP, TSJ, TFJ, TFC, TFS, TFH, ASM)       \
   BUILTIN_LIST_FROM_TORQUE(CPP, TFJ, TFC, TFS, TFH, ASM)           \
   BUILTIN_LIST_INTL(CPP, TFJ, TFS)                                 \
+  BUILTIN_LIST_TEMPORAL(CPP, TFJ)                                  \
   BUILTIN_LIST_BYTECODE_HANDLERS(BCH)
 
 // The exception thrown in the following builtins are caught

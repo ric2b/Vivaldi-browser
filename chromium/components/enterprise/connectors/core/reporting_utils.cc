@@ -92,6 +92,14 @@ std::string MaskUsername(const std::u16string& username) {
       {kMaskedUsername, base::UTF16ToUTF8(username.substr(pos))});
 }
 
+::google3_protos::Timestamp ToProtoTimestamp(base::Time time) {
+  int64_t millis = time.InMillisecondsFSinceUnixEpoch();
+  ::google3_protos::Timestamp timestamp;
+  timestamp.set_seconds(millis / 1000);
+  timestamp.set_nanos((millis % 1000) * 1000000);
+  return timestamp;
+}
+
 std::unique_ptr<url_matcher::URLMatcher> CreateURLMatcherForOptInEvent(
     const enterprise_connectors::ReportingSettings& settings,
     const char* event_type) {
@@ -139,8 +147,11 @@ void AddTriggeredRuleInfoToUrlFilteringInterstitialEvent(
     base::Value::Dict triggered_rule;
     triggered_rule.Set(kKeyTriggeredRuleName,
                        threat_info.matched_url_navigation_rule().rule_name());
-    triggered_rule.Set(kKeyTriggeredRuleId,
-                       threat_info.matched_url_navigation_rule().rule_id());
+    int rule_id = 0;
+    if (base::StringToInt(threat_info.matched_url_navigation_rule().rule_id(),
+                          &rule_id)) {
+      triggered_rule.Set(kKeyTriggeredRuleId, rule_id);
+    }
     triggered_rule.Set(
         kKeyUrlCategory,
         threat_info.matched_url_navigation_rule().matched_url_category());
@@ -155,6 +166,7 @@ void AddTriggeredRuleInfoToUrlFilteringInterstitialEvent(
   }
   event.Set(kKeyTriggeredRuleInfo, std::move(triggered_rule_info));
 }
+
 std::optional<proto::PasswordBreachEvent> GetPasswordBreachEvent(
     const std::string& trigger,
     const std::vector<std::pair<GURL, std::u16string>>& identities,
@@ -215,7 +227,9 @@ proto::SafeBrowsingPasswordChangedEvent GetPasswordChangedEvent(
 proto::LoginEvent GetLoginEvent(const GURL& url,
                                 bool is_federated,
                                 const url::SchemeHostPort& federated_origin,
-                                const std::u16string& username) {
+                                const std::u16string& username,
+                                const std::string& profile_identifier,
+                                const std::string& profile_username) {
   proto::LoginEvent event;
   event.set_url(url.spec());
   event.set_is_federated(is_federated);
@@ -223,6 +237,8 @@ proto::LoginEvent GetLoginEvent(const GURL& url,
     event.set_federated_origin(federated_origin.Serialize());
   }
   event.set_login_user_name(MaskUsername(username));
+  event.set_profile_identifier(profile_identifier);
+  event.set_profile_user_name(profile_username);
 
   return event;
 }
@@ -267,6 +283,24 @@ std::vector<std::string> GetLocalIpAddresses() {
     ip_addresses.push_back(network_interface.address.ToString());
   }
   return ip_addresses;
+}
+
+void AddReferrerChainToEvent(
+    const google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>&
+        referrer_chain,
+    base::Value::Dict& event) {
+  base::Value::List referrers;
+  for (const auto& referrer : referrer_chain) {
+    if (!referrer.url().empty() || !referrer.ip_addresses().empty()) {
+      base::Value::Dict referrer_dict;
+      referrer_dict.Set("url", referrer.url());
+      if (referrer.ip_addresses().size() > 0) {
+        referrer_dict.Set("ip", referrer.ip_addresses()[0]);
+      }
+      referrers.Append(std::move(referrer_dict));
+    }
+  }
+  event.Set(kKeyReferrers, std::move(referrers));
 }
 
 }  // namespace enterprise_connectors

@@ -390,8 +390,15 @@ constexpr CGFloat kAppIconPointSize = 80;
   if (params.URLs.count == 1) {
     URLWithTitle* url = params.URLs[0];
     LPLinkMetadata* metadata = [self linkMetadata:url];
+
+#if defined(VIVALDI_BUILD)
+    ShareToData* data = activity_services::ShareToDataForURL(
+        url.URL, url.title, params.additionalText, metadata, self.profile);
+#else
     ShareToData* data = activity_services::ShareToDataForURL(
         url.URL, url.title, params.additionalText, metadata);
+#endif // End Vivaldi
+
     [dataItems addObject:data];
   } else {
     for (URLWithTitle* urlWithTitle in params.URLs) {

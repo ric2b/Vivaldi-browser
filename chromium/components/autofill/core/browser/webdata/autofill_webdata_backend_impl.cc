@@ -6,8 +6,10 @@
 
 #include <memory>
 
+#include "base/check.h"
 #include "base/check_is_test.h"
 #include "base/check_op.h"
+#include "base/debug/alias.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
@@ -127,7 +129,9 @@ enum class Result {
   kRemoveEntityInstance_Failure = 301,
   kRemoveEntityInstancesModifiedBetween_Success = 310,
   kRemoveEntityInstancesModifiedBetween_Failure = 311,
-  kMaxValue = kRemoveEntityInstancesModifiedBetween_Failure,
+  kCleanupForCrbug411681430_Success = 312,
+  kCleanupForCrbug411681430_Failure = 313,
+  kMaxValue = kCleanupForCrbug411681430_Failure,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/autofill/enums.xml:AutofillWebDataBackendImplOperationResult)
 
@@ -192,9 +196,13 @@ WebDatabase* AutofillWebDataBackendImpl::GetDatabase() {
 }
 
 void AutofillWebDataBackendImpl::CommitChanges() {
-  DCHECK(web_database_backend_->database()
-             ->GetSQLConnection()
-             ->HasActiveTransactions());
+  DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
+  // TODO(crbug.com/410101523): Investigate the transaction errors. There should
+  // always be a pending sql transaction.
+  sql::Database* sql = web_database_backend_->database()->GetSQLConnection();
+  base::debug::Alias(&sql);
+  DCHECK(sql->is_open());
+  DCHECK(sql->HasActiveTransactions());
   web_database_backend_->database()->CommitTransaction();
   web_database_backend_->database()->BeginTransaction();
 }
@@ -676,8 +684,8 @@ WebDatabase::State AutofillWebDataBackendImpl::UpdateServerCardMetadata(
     WebDatabase* db) {
   DCHECK(owning_task_runner()->RunsTasksInCurrentSequence());
   DCHECK_NE(CreditCard::RecordType::kLocalCard, card.record_type());
-  if (!PaymentsAutofillTable::FromWebDatabase(db)->UpdateServerCardMetadata(
-          card)) {
+  if (!PaymentsAutofillTable::FromWebDatabase(db)
+           ->AddOrUpdateServerCardMetadata(card.GetMetadata())) {
     ReportResult(Result::kUpdateServerCardMetadata_Failure);
     return WebDatabase::COMMIT_NOT_NEEDED;
   }
@@ -886,6 +894,17 @@ WebDatabase::State AutofillWebDataBackendImpl::ClearLocalCvcs(WebDatabase* db) {
     return WebDatabase::COMMIT_NEEDED;
   }
   ReportResult(Result::kClearLocalCvcs_Failure);
+  return WebDatabase::COMMIT_NOT_NEEDED;
+}
+
+WebDatabase::State AutofillWebDataBackendImpl::CleanupForCrbug411681430(
+    WebDatabase* db) {
+  CHECK(owning_task_runner()->RunsTasksInCurrentSequence());
+  if (PaymentsAutofillTable::FromWebDatabase(db)->CleanupForCrbug411681430()) {
+    ReportResult(Result::kCleanupForCrbug411681430_Success);
+    return WebDatabase::COMMIT_NEEDED;
+  }
+  ReportResult(Result::kCleanupForCrbug411681430_Failure);
   return WebDatabase::COMMIT_NOT_NEEDED;
 }
 

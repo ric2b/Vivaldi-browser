@@ -1,11 +1,109 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kmr">
+<translation id="1063263220330818888">Lêgerîna Taybet</translation>
+<translation id="1097355661841455597">Em ê hez bikin ku ramanên we bibihîzin.</translation>
+<translation id="1137850887415122856">Ji bo ku tu rûgerên xwe yên taybet kilît bikî, Touch ID,Face ID, an borînkodekê saz bike.</translation>
+<translation id="1189137610071296104">Di komkirinê rûgerê de veke</translation>
+<translation id="1310184829257917508">Girêdanên ku ji bo sepanên din tên bi daxwaziyek taybet veke</translation>
+<translation id="1743244221910283364">Guhertinan paşguh bike</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {Rûgerê tevlî komkirinê bike}
+        other {Rûgeran tevlî komkirinê bike}}</translation>
+<translation id="207677936531967364">Rûpelê Tabloya Taybet a Nû</translation>
+<translation id="2099591136582442348">Ev ê komkirinê ji amûrê te mayînde jê bibe.</translation>
+<translation id="2181990701313127304">Rûgera nû di komkirinê de</translation>
+<translation id="2351280151183279120">Komkirinê parve bike</translation>
+<translation id="2353953000228441783">Dîtina malperê ya berdest</translation>
+<translation id="2394192052244849643">Paste û lêgerîn</translation>
 <translation id="2418705169960294134">Rûgera nû ya taybet</translation>
+<translation id="2565593432251168402">Rêxistî bimîne bi afirandina rûgerên komkirî</translation>
+<translation id="2783161812871838616">Malpera Desktop daxwaz bikin</translation>
+<translation id="2806957659107692459">Komkirinê biafrîne</translation>
+<translation id="2899836479226240291">Tu dikarî di Vivaldi de girêdnan xweber vekî bi riya nîşandana wê wekî sepana gerokê ya berdest.</translation>
+<translation id="3365529507898144230">Di wêneyan de hilînin</translation>
+<translation id="3434473769478814796">Pêve bike û biçe</translation>
+<translation id="3463990832590571933">Di tabloya taybet a nû de vekin</translation>
+<translation id="3473652525653758699">Çarçoveya taybet a nû</translation>
+<translation id="3501504415290398157"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> bi kar bîne bo kilîtkirina rûgerên taybet rakî.</translation>
+<translation id="353418192940651934">Komkirinê bihêle</translation>
 <translation id="3607792383367580513">Wergerîne</translation>
+<translation id="3692650606013198282">Bi taybet veke</translation>
+<translation id="3873885181515160073">Bi nav û reng dayînê rûgeran komkirî xwe ya nû biafrîne</translation>
+<translation id="3922395466317605522">Menuyê taybet bike</translation>
+<translation id="3981599532037327317">${url} ê bi taybet veke</translation>
+<translation id="398477389655464998">Girêdana jê bigire bo hilbijartinê</translation>
+<translation id="3993429087389909418">Rûger wê li ser vê amûrê vekirî bimînin lê komkirin wê ji tevahiya amûrên ku tê de hatine tomarkirin were jêbirin
+<ph name="USER_EMAIL" />.</translation>
+<translation id="4026745073321351206">🙄 Pirsgirêkek dît?</translation>
+<translation id="4216644171369573466">Rûgera komkirî,
+<ph name="GROUP_TITLE" />, Menu.</translation>
 <translation id="4304713468139749426">Rêveberiya borînpeyvê</translation>
+<translation id="4569525137269575065">Komkirinê bigire</translation>
+<translation id="473775607612524610">Nûvekirin</translation>
+<translation id="4755216899422789286">URLyan li Vivaldi Vekin</translation>
+<translation id="4772190485302020393">Tevahiya rûger û komkirina bigire</translation>
+<translation id="4802185666270672526">Daxwaza malpera sermaseyê veşêre</translation>
+<translation id="4828571836982833289">Komkirinê rûgerê têk bibe?</translation>
+<translation id="4838250035189612538">Komkirinê bi nav bike</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 komkirinê rûgerê hat girtin û
+tomarkirin}
+            other {{count} komkirinê rûgerê hatin girtin û tomarkirin}}</translation>
+<translation id="5019787757991745254">Rengê rûgerên komkirî
+<ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Komkirinê rûgerê. Hilweşiya.</translation>
+<translation id="5217245356412073535">Tu dikarî di sazkarî &gt; naverok de dîtina malperê berdest bo sermaseyê biguherînî</translation>
 <translation id="5271549068863921519">Borînpeyvê tomar bike</translation>
-<translation id="5317780077021120954">Tomar bike</translation>
-<translation id="7961015016161918242">Ti carî</translation>
+<translation id="5317780077021120954">Tomar Bike</translation>
+<translation id="5385953732213322025">Ev malper dike ku sepanekê veke. Ev ê te ji awaya taybet derxe.</translation>
+<translation id="5431239785743546285">Rûpelên ku we xwendiye</translation>
+<translation id="5521301883748677039">Komkirinê jê bibe?</translation>
+<translation id="5544011153887687593">Rûgera rûgerên komkirî. <ph name="TAB_INDEX_IN_GROUP" /> ji<ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
+<translation id="5614553682702429503">Şîfreya hilînin?</translation>
+<translation id="570209299585559496">Tu dikarî di sazkariyên naverokê de dîtina malperê berdest bo sermaseyê biguherînî</translation>
+<translation id="5719777162751096990">Bilivîne bo komkirinê rûgerê</translation>
+<translation id="5962477178930921574">Paste û lêgerîn</translation>
+<translation id="6163856768888310791">Kom neke</translation>
+<translation id="6168969409902608220">Komkirinê bi nav bike</translation>
+<translation id="6233792867654386826">URLên têketî li Vivaldi vedike.</translation>
+<translation id="6478587527114893588">Komkirinê bigire.</translation>
+<translation id="6527405730445064713">Komkirinê rûger. Fereh bû.</translation>
+<translation id="6532106788206463496">Guhertin hilînin</translation>
+<translation id="6666425778700353369">Ev ê komkirinê ji tevahiya amûrên ku tê de hatine tomarkirin were jêbirin
+<ph name="USER_EMAIL" />.</translation>
+<translation id="6680416467695217368">Menuyê kesane bike</translation>
+<translation id="6695835495840050460">"Rûgerê tevlî komkirinê rûgerê bike" bitikîne</translation>
+<translation id="6708694844902784277">Komkirinê jê bibe</translation>
+<translation id="6827597288286078054">Lêgerîna Taybet</translation>
+<translation id="6851516051005285358">Malpera Desktop daxwaz bikin</translation>
+<translation id="6890907822330704077">Rûgera komkirî,
+<ph name="GROUP_TITLE" />,
+<ph name="TABS_NUMBER" /> rûger.</translation>
+<translation id="7307970171564921489">Kilîtkirina rûgerên taybet rake bi riya <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
+<translation id="7347289093190902150">Bi taybetî veke?</translation>
+<translation id="7363285031331302144">Komkirinê rûgeran biafrîne da ku rûgerên te yên vekirî rêxistî bin</translation>
+<translation id="7395230742578757172">Di komkirinê rûgerê nû de veke</translation>
+<translation id="7424676799308869002">Komkirinê bihêle?</translation>
+<translation id="7498234416455752244">Guhertinê bidomîne</translation>
+<translation id="7549299604720382000">Tabloya Taybet a Nû</translation>
+<translation id="7585610907974664408">Rûgera taybet a nû di komkirinê de</translation>
+<translation id="7661319142491611883">Rûgerên komkirî fereh bike.</translation>
+<translation id="7706213624515206557">Tevahiya rûgeran di rûgerên komkirî de nîşan bide</translation>
+<translation id="7961015016161918242">Qet</translation>
+<translation id="8326104954595890674">Tabloya Taybet a Nû</translation>
+<translation id="8345989863850359861">Rûgerê rake û komkirina jê bibe?</translation>
+<translation id="8407986162266014185">Komkirinê parve bike</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {Rûgerê tevlî komkirinê rûgerê bike}
+        other {Rûgeran tevlî komkirinê rûgerê bike}}</translation>
+<translation id="8465550436083180511">Komkirinê rûgeran hilweşîne.</translation>
+<translation id="8685478989144570078">Komkirina rûgeran</translation>
+<translation id="8756969031206844760">Şîfreya nûve bikin?</translation>
+<translation id="8852861335827546438">Komkirinê rûgerê ya nû</translation>
+<translation id="8951084872625418241">Rûgera nû di komkirinê de</translation>
 <translation id="9042893549633094279">Taybetî û parastin</translation>
+<translation id="9094033019050270033">Şîfreya nûve bikin</translation>
+<translation id="944434461715569989">Komkirinê berde</translation>
+<translation id="959061183386231608">Rûger wê li ser vê amûrê vekirî bimînin lê komkirin wê mayînde were jêbirin.</translation>
 </translationbundle>

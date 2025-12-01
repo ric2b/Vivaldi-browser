@@ -7,12 +7,14 @@
 #import "ios/chrome/browser/settings/ui_bundled/language/language_settings_table_view_controller.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/ui/helpers/helpers_swift.h"
 #import "ios/ui/settings/general/vivaldi_general_settings_mediator.h"
 #import "ios/ui/settings/general/vivaldi_general_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiGeneralSettingsCoordinator () {
+@interface VivaldiGeneralSettingsCoordinator ()<
+    VivaldiHostingControllerPresentationDelegate> {
   // Profile for the browser
   raw_ptr<ProfileIOS> _profile;  // weak
 }
@@ -43,7 +45,8 @@
 - (void)start {
   self.viewProvider = [[VivaldiGeneralSettingsViewProvider alloc] init];
   self.viewController =
-    [VivaldiGeneralSettingsViewProvider makeViewController];
+    [VivaldiGeneralSettingsViewProvider
+        makeViewControllerWithPresentationDelegate:self];
   self.viewController.title =
       l10n_util::GetNSString(IDS_IOS_GENERAL_SETTING_TITLE);
   self.viewController.navigationItem.largeTitleDisplayMode =
@@ -109,6 +112,14 @@
   [self.baseNavigationController
       pushViewController:languageSettingsTableViewController
             animated:YES];
+}
+
+#pragma mark - VivaldiHostingControllerPresentationDelegate
+
+- (void)hostingController:(UIViewController*)hostingController
+                didMoveTo:(UIViewController* _Nullable)parent {
+  DCHECK_EQ(self.viewController, hostingController);
+  [self stop];
 }
 
 @end

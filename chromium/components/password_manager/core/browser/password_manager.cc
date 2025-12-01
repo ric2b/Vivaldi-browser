@@ -469,10 +469,6 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterBooleanPref(
       prefs::kUnenrolledFromGoogleMobileServicesDueToErrors, false);
   registry->RegisterStringPref(prefs::kUPMErrorUIShownTimestamp, "0");
-  registry->RegisterBooleanPref(
-      prefs::kUserAcknowledgedLocalPasswordsMigrationWarning, false);
-  registry->RegisterIntegerPref(
-      prefs::kLocalPasswordMigrationWarningPrefsVersion, 0);
   registry->RegisterIntegerPref(
       prefs::kPasswordGenerationBottomSheetDismissCount, 0);
   registry->RegisterBooleanPref(
@@ -796,39 +792,46 @@ void PasswordManager::OnDynamicFormSubmission(
 void PasswordManager::OnPasswordFormCleared(
     PasswordManagerDriver* driver,
     const autofill::FormData& form_data) {
-  if (auto logger = GetLoggerIfAvailable(client_)) {
+  auto logger = GetLoggerIfAvailable(client_);
+  if (logger) {
     logger->LogMessage(Logger::STRING_ON_PASSWORD_FORM_CLEARED);
   }
   PasswordFormManager* manager =
       GetMatchedManagerForForm(driver, form_data.renderer_id());
-  if (!manager || !IsAutomaticSavePromptAvailable(manager) ||
-      !manager->HasLikelyChangeOrResetFormSubmitted()) {
+  if (!manager || !IsAutomaticSavePromptAvailable(manager)) {
     return;
   }
-  // If a password form was cleared, login is successful.
-  if (!form_data.renderer_id().is_null()) {
-    manager->UpdateSubmissionIndicatorEvent(
-        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
 
+  auto relevant_field_cleared = [&form_data](FieldRendererId field) {
+    // Return immediately if the whole form was cleared.
+    if (!form_data.renderer_id().is_null()) {
+      return true;
+    }
+    auto it = std::ranges::find(form_data.fields(), field,
+                                &autofill::FormFieldData::renderer_id);
+    return it != form_data.fields().end() && it->value().empty();
+  };
+
+  if (manager->HasLikelyChangeOrResetFormSubmitted()) {
+    if (relevant_field_cleared(
+            manager->GetSubmittedForm()->new_password_element_renderer_id)) {
+      manager->UpdateSubmissionIndicatorEvent(
+          SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
 #if BUILDFLAG(IS_ANDROID)
-    SignalFormSubmissionIfEligibleForSaving(manager, client_);
+      SignalFormSubmissionIfEligibleForSaving(manager, client_);
 #endif
-    OnLoginSuccessful();
-    return;
+      OnLoginSuccessful();
+      return;
+    }
   }
-  // If password fields outside the <form> tag were cleared, it should be
-  // verified that fields are relevant.
-  FieldRendererId new_password_field_id =
-      manager->GetSubmittedForm()->new_password_element_renderer_id;
-  auto it = std::ranges::find(form_data.fields(), new_password_field_id,
-                              &autofill::FormFieldData::renderer_id);
-  if (it != form_data.fields().end() && it->value().empty()) {
-    manager->UpdateSubmissionIndicatorEvent(
-        SubmissionIndicatorEvent::CHANGE_PASSWORD_FORM_CLEARED);
-#if BUILDFLAG(IS_ANDROID)
-    SignalFormSubmissionIfEligibleForSaving(manager, client_);
-#endif
-    OnLoginSuccessful();
+
+  // If it's neither change or reset form it must be a sign-in or a sign-up
+  // form. Check if login should be considered failed in this case.
+  if (relevant_field_cleared(
+          manager->GetSubmittedForm()->password_element_renderer_id) &&
+      base::FeatureList::IsEnabled(
+          features::kFailedLoginDetectionBasedOnFormClearEvent)) {
+    OnLoginFailed(logger.get());
   }
 }
 
@@ -916,6 +919,47 @@ bool PasswordManager::HaveFormManagersReceivedData(
     }
   }
   return true;
+}
+
+void PasswordManager::OnResourceLoadingFailed(PasswordManagerDriver* driver,
+                                              const GURL& url) {
+  if (!driver) {
+    return;
+  }
+
+  auto logger = GetLoggerIfAvailable(client_);
+  if (!GetSubmittedManager()) {
+    if (logger) {
+      logger->LogMessage(
+          Logger::STRING_RESOURCE_FAILED_LOADING_NO_SUBMITTED_MANAGER);
+    }
+    return;
+  }
+
+  if (GetSubmittedManager()->GetDriver().get() != driver) {
+    if (logger) {
+      logger->LogMessage(
+          Logger::STRING_RESOURCE_FAILED_LOADING_FOR_WRONG_FRAME);
+    }
+    return;
+  }
+
+  if (!affiliations::IsExtendedPublicSuffixDomainMatch(url, submitted_form_url_,
+                                                       /*psl_extensions*/ {})) {
+    if (logger) {
+      logger->LogMessage(
+          Logger::STRING_RESOURCE_FAILED_LOADING_FOR_WRONG_ORIGIN);
+    }
+    return;
+  }
+  if (logger) {
+    logger->LogMessage(Logger::STRING_RESOURCE_FAILED_LOADING_LOGIN_FAILED);
+  }
+
+  if (base::FeatureList::IsEnabled(
+          features::kFailedLoginDetectionBasedOnResourceLoadingErrors)) {
+    OnLoginFailed(logger.get());
+  }
 }
 
 void PasswordManager::OnPasswordFormsParsed(
@@ -1127,11 +1171,6 @@ void PasswordManager::UpdateStateOnUserInput(
   OnInformAboutUserInput(driver, *observed_form);
 
   // Notify PasswordManager about potential username fields for UFF.
-
-  if (!base::FeatureList::IsEnabled(features::kIosDetectUsernameInUff)) {
-    return;
-  }
-
   // Get the field that corresponds to `field_id`.
   auto it = std::ranges::find(observed_form->fields(), field_id,
                               &autofill::FormFieldData::renderer_id);

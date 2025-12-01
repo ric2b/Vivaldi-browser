@@ -4,11 +4,15 @@
 
 package org.chromium.chrome.browser.language.settings;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import androidx.annotation.IntDef;
 import androidx.core.util.Predicate;
 
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.language.AppLocaleUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileKeyedMap;
@@ -35,6 +39,7 @@ import org.vivaldi.browser.common.VivaldiLocaleUtils;
  *
  *The LanguagesManager is responsible for fetching languages details from native.
  */
+@NullMarked
 public class LanguagesManager {
     /**
      * An observer interface that allows other classes to know when the accept language list is
@@ -136,12 +141,12 @@ public class LanguagesManager {
         int ALWAYS_LANGUAGES = 4;
     }
 
-    private static ProfileKeyedMap<LanguagesManager> sProfileMap;
+    private static @Nullable ProfileKeyedMap<LanguagesManager> sProfileMap;
 
     private final Profile mProfile;
     private final Map<String, LanguageItem> mLanguagesMap;
 
-    private AcceptLanguageObserver mObserver;
+    private @Nullable AcceptLanguageObserver mObserver;
 
     private LanguagesManager(Profile profile) {
         mProfile = profile;
@@ -203,7 +208,7 @@ public class LanguagesManager {
                 return getPotentialAcceptLanguages();
             default:
                 assert false : "No valid LanguageListType";
-                return null;
+                return assumeNonNull(null);
         }
     }
 
@@ -236,6 +241,7 @@ public class LanguagesManager {
         LinkedHashSet<LanguageItem> results = new LinkedHashSet<>();
         LanguageItem currentUiLanguage = getLanguageItem(AppLocaleUtils.getAppLanguagePref());
 
+        assumeNonNull(currentUiLanguage);
         // Add the system default language if an override language is set.
         if (!currentUiLanguage.isSystemDefault()) {
             results.add(LanguageItem.makeFollowSystemLanguageItem());
@@ -348,13 +354,14 @@ public class LanguagesManager {
      * language is checked (e.g. "en" for "en-AU"). If there is still no match null is returned.
      * @return LanguageItem or null if none found
      */
-    public LanguageItem getLanguageItem(String localeCode) {
+    public @Nullable LanguageItem getLanguageItem(@Nullable String localeCode) {
         if (AppLocaleUtils.isFollowSystemLanguage(localeCode)) {
             return LanguageItem.makeFollowSystemLanguageItem();
         }
         LanguageItem result = mLanguagesMap.get(localeCode);
         if (result != null) return result;
 
+        assumeNonNull(localeCode);
         String baseLanguage = LocaleUtils.toBaseLanguage(localeCode);
         return mLanguagesMap.get(baseLanguage);
     }
@@ -364,7 +371,7 @@ public class LanguagesManager {
      *
      * @param code The language code to remove.
      */
-    public void addToAcceptLanguages(String code) {
+    public void addToAcceptLanguages(@Nullable String code) {
         TranslateBridge.updateUserAcceptLanguages(mProfile, code, /* add= */ true);
         notifyAcceptLanguageObserver();
     }
@@ -427,8 +434,10 @@ public class LanguagesManager {
 
     /** Called to release unused resources. */
     public static void recycle() {
-        sProfileMap.destroy();
-        sProfileMap = null;
+        if (sProfileMap != null) {
+            sProfileMap.destroy();
+            sProfileMap = null;
+        }
     }
 
     /** Record language settings page impression. */

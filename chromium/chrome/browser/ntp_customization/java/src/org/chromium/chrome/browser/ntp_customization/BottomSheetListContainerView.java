@@ -12,9 +12,12 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.LinearLayout;
 
+import org.chromium.build.annotations.NullMarked;
+
 import java.util.List;
 
 /** The view holding {@link BottomSheetListItemView} in a bottom sheet. */
+@NullMarked
 public class BottomSheetListContainerView extends LinearLayout {
     protected final Context mContext;
 
@@ -33,7 +36,7 @@ public class BottomSheetListContainerView extends LinearLayout {
         for (int i = 0; i < types.size(); i++) {
             Integer type = types.get(i);
             BottomSheetListItemView listItemView = (BottomSheetListItemView) createListItemView();
-
+            listItemView.setId(delegate.getListItemId(type));
             listItemView.setTitle(delegate.getListItemTitle(type, mContext));
             listItemView.setSubtitle(delegate.getListItemSubtitle(type, mContext));
             listItemView.setBackground(NtpCustomizationUtils.getBackground(types.size(), i));

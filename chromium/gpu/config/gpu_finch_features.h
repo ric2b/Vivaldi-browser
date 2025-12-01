@@ -66,6 +66,9 @@ GPU_EXPORT extern const base::FeatureParam<bool>
     kSkiaGraphiteDawnBackendDebugLabels;
 
 #if BUILDFLAG(IS_WIN)
+GPU_EXPORT extern const base::FeatureParam<bool>
+    kSkiaGraphiteDawnDumpWCOnD3DError;
+
 GPU_EXPORT BASE_DECLARE_FEATURE(kSkiaGraphiteDawnUseD3D12);
 #endif
 
@@ -89,6 +92,8 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUService);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUBlobCache);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseTintIR);
 GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUUseVulkanMemoryModel);
+GPU_EXPORT extern const base::FeatureParam<std::string> kWebGPUDisabledToggles;
+GPU_EXPORT extern const base::FeatureParam<std::string> kWebGPUEnabledToggles;
 GPU_EXPORT extern const base::FeatureParam<std::string> kWebGPUUnsafeFeatures;
 GPU_EXPORT extern const base::FeatureParam<std::string> kWGSLUnsafeFeatures;
 
@@ -134,6 +139,9 @@ GPU_EXPORT BASE_DECLARE_FEATURE(kANGLEPerContextBlobCache);
 GPU_EXPORT BASE_DECLARE_FEATURE(kIOSurfaceMultiThreading);
 #endif
 
+GPU_EXPORT BASE_DECLARE_FEATURE(kWebGPUCompatibilityMode);
+
+GPU_EXPORT bool IsGraphiteContextThreadSafe();
 }  // namespace features
 
 #endif  // GPU_CONFIG_GPU_FINCH_FEATURES_H_

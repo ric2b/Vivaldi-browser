@@ -199,8 +199,8 @@ ss_isqrt(int x) {
   int y, e;
 
   if(x >= (SS_BLOCKSIZE * SS_BLOCKSIZE)) { return SS_BLOCKSIZE; }
-  e = (x & 0xffff0000) ?
-        ((x & 0xff000000) ?
+  e = ((unsigned)x & 0xffff0000) ?
+        (((unsigned)x & 0xff000000) ?
           24 + lg_table[(x >> 24) & 0xff] :
           16 + lg_table[(x >> 16) & 0xff]) :
         ((x & 0x0000ff00) ?
@@ -909,8 +909,8 @@ sssort(const unsigned char *T, const int *PA,
 static INLINE
 int
 tr_ilg(int n) {
-  return (n & 0xffff0000) ?
-          ((n & 0xff000000) ?
+  return ((unsigned)n & 0xffff0000) ?
+          (((unsigned)n & 0xff000000) ?
             24 + lg_table[(n >> 24) & 0xff] :
             16 + lg_table[(n >> 16) & 0xff]) :
           ((n & 0x0000ff00) ?

@@ -75,6 +75,7 @@
 <translation id="1809939268435598390">Apagar pasta</translation>
 <translation id="1813686536470127172">Outra pasta</translation>
 <translation id="1828800626900562968">Toque no ícone "+", em baixo, para criar um novo separador.</translation>
+<translation id="1852679645333476285">Permitir a reprodução de multimédia em segundo plano</translation>
 <translation id="1861262398884155592">Esta pasta está vazia</translation>
 <translation id="1871058849247304245">Nível de ampliação para <ph name="HOST" /></translation>
 <translation id="1921508034244765766">O Vivaldi é lento, crasha ou aquece o equipamento</translation>
@@ -98,6 +99,7 @@
 <translation id="2324160330092901720">Foi enviado um código de verificação para <ph name="EMAIL_ID" /></translation>
 <translation id="2324257568471626606">Um novo motor de busca</translation>
 <translation id="2330644510603114741">Comportamento dos separadores</translation>
+<translation id="233493642829799329">Alterar isto pode recarregar alguns dos seus separadores</translation>
 <translation id="2336309953058658733">Esvaziar o lixo</translation>
 <translation id="2359808026110333948">Continuar</translation>
 <translation id="2386793615875593361">1 selecionada</translation>
@@ -159,6 +161,7 @@ bloqueado</translation>
 <translation id="3087734570205094154">Fundo</translation>
 <translation id="309084557304084991">Não quero favoritos nem Speed Dials pré-carregados</translation>
 <translation id="3091563570137981919">Bloqueio de rastreios e anúncios</translation>
+<translation id="3097968995088564986">Mostrar botão Adicionar</translation>
 <translation id="3134385238404760368">Sem separadores recentes</translation>
 <translation id="3142562627629111859">Novo grupo</translation>
 <translation id="3157931365184549694">Repor</translation>
@@ -173,7 +176,6 @@ bloqueado</translation>
 <translation id="3270930591809084274">Separadores sincronizados</translation>
 <translation id="3285898158753554866">Copiar tradução</translation>
 <translation id="3335772982573114336">Nova nota</translation>
-<translation id="3337207574172839542">Permitir sugestões de pesquisa</translation>
 <translation id="33451081266695216">Ligação limitada pelo servidor.</translation>
 <translation id="3346386541263128307">Os endereços de correio eletrónico têm de ser iguais.</translation>
 <translation id="3363375699928395745">Introduzir título</translation>
@@ -290,6 +292,7 @@ bloqueados</translation>
 <translation id="4563480492836333884">Endereço de correio eletrónico não aceite. Use outro domínio.</translation>
 <translation id="457386861538956877">Mais...</translation>
 <translation id="4591413025758301858">Tradução de <ph name="SOURCE_LANGUAGE" /> para <ph name="DESTINATION_LANGUAGE" /></translation>
+<translation id="4596003875186913086">Abrir definições de ampliação</translation>
 <translation id="460370326897402035">A palavra-passe não é válida.</translation>
 <translation id="4619615317237390068">Separadores de outros equipamentos</translation>
 <translation id="462860218383788109">Data de edição</translation>
@@ -400,8 +403,10 @@ bloqueado</translation>
  Abra as definições para resolver o problema.</translation>
 <translation id="604930981600990598">Tradução copiada!</translation>
 <translation id="6052689967593623141">O Vivaldi pode ganhar uma comissão se fizer uma compra depois de clicar em alguma destas ligações. Isto apoia o desenvolvimento do Vivaldi e a manter a independência do navegador. Obrigado pelo seu apoio!</translation>
+<translation id="6056094614114332761">Sugestões no campo de endereços</translation>
 <translation id="6077943432358741146">Speed Dial</translation>
 <translation id="6079696972035130497">Ilimitado</translation>
+<translation id="6093557041367452381">Mostra o seu histórico de digitação quando o campo de endereços tem o foco na página inicial.</translation>
 <translation id="6110857187283700804">O que escrever é enviado ao seu motor de busca para sugestões. Isto está desligado numa janela privada.</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> items movidos</translation>
 <translation id="6147094071357011481">Separadores fechados recentemente não estão disponíveis</translation>
@@ -413,6 +418,7 @@ bloqueado</translation>
 <translation id="6257488392933423163">Ver como HTML</translation>
 <translation id="6275978505813092431">Inserir a imagem</translation>
 <translation id="6329717714920146925">Websites (apenas visualização)</translation>
+<translation id="6346549829676591152">Ativar histórico de pesquisa</translation>
 <translation id="6365929278691047681">Alemão (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">O aspeto do website é estranho</translation>
 <translation id="6383855939619098095">É difícil personalizar a página inicial do Vivaldi</translation>
@@ -479,9 +485,11 @@ bloqueado</translation>
 <translation id="711946737922560234">Inserir hiperligação</translation>
 <translation id="7120229714826964836">Partilhar página</translation>
 <translation id="713792263829536729">Os serviços de streaming não funcionam corretamente</translation>
+<translation id="7142332680286898952">Mostrar histórico de digitação</translation>
 <translation id="7158507293261405349">Adicionar novo grupo</translation>
 <translation id="7173114856073700355">Abrir definições</translation>
 <translation id="718052827125696482">O ecrã não roda como suposto</translation>
+<translation id="7180865173735832675">Personalizar</translation>
 <translation id="7180919683305939836">Procuro funcionalidades de IA (resumo, conversa, etc)</translation>
 <translation id="7182884564543065232">Alguns websites não abrem</translation>
 <translation id="7192066917392691622">Decrescente</translation>
@@ -503,7 +511,6 @@ bloqueado</translation>
 <translation id="7393145587390257456">O bloqueador de anúncios não funciona bem</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Os motores de busca serão repostos para os valores predefinidos, o que também vai eliminar os seus motores de busca personalizados.</translation>
-<translation id="7418655219500602072">Prioridades do campo de endereço</translation>
 <translation id="7451784507428459503">Problemas a reproduzir vídeos no YouTube</translation>
 <translation id="7454640759045234067">Rastreadores bloqueados</translation>
 <translation id="7461899062138731833">FONTES</translation>
@@ -535,9 +542,11 @@ bloqueado</translation>
 <translation id="7765158879357617694">Mover</translation>
 <translation id="7771452384635174008">Disposição</translation>
 <translation id="7781069478569868053">Página de novo separador</translation>
+<translation id="7791543448312431591">Adicionar</translation>
 <translation id="7801111502975417831">Quero ser capaz de reproduzir vídeos em segundo plano</translation>
 <translation id="7801204999757211519">Já tem uma conta? <ph name="BEGIN_LINK" />Autentique-se ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">Criar um novo grupo?</translation>
+<translation id="7862984977194621600">Ativar sugestões de pesquisa</translation>
 <translation id="7870765213383950011">Primeiro grupo</translation>
 <translation id="7914995060146784406">Editar nota</translation>
 <translation id="7925340978147141704">Mostrar palavra-passe</translation>
@@ -639,6 +648,7 @@ bloqueados</translation>
 <translation id="9195802773917252923">Ativar abreviaturas de favoritos</translation>
 <translation id="9212737146310746733">Persa (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Bloquear rastreadores</translation>
+<translation id="924053859552461110">Personalizar página inicial</translation>
 <translation id="925891113183098411">Tenho problemas a sincronizar os meus dados entre equipamentos</translation>
 <translation id="932327136139879170">Início</translation>
 <translation id="937440209447114831">Não bloqueamos quaisquer anúncios ou rastreios.</translation>

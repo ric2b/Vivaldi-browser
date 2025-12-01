@@ -62,24 +62,23 @@ void CosmeticFilter::ShouldAllowWebRTC(const ::GURL& document_url,
       continue;
     }
 
-    bool is_third_party = IsThirdParty(document_url, document_origin);
+    PartyMatcher party_matcher = GetPartyMatcher(document_url, document_origin);
 
     RulesIndex::ActivationResults activations =
         rules_index->GetActivationsForFrame(
             base::BindRepeating(&IsOriginWanted, rule_service_.get(), group),
             frame, document_url);
 
-    if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
-            flat::Decision_MODIFY) == flat::Decision_PASS) {
+    if (activations.GetDocumentDecision().value_or(flat::Decision_MODIFY) ==
+        flat::Decision_PASS) {
       continue;
     }
 
     std::optional<RulesIndex::RuleAndSource> rule_and_source;
     for (const auto& ice_server : ice_servers) {
       rule_and_source = rules_index->FindMatchingBeforeRequestRule(
-          ice_server, document_origin, flat::ResourceType_WEBRTC,
-          is_third_party,
-          (activations[flat::ActivationType_GENERIC_BLOCK]
+          ice_server, document_origin, flat::ResourceType_WEBRTC, party_matcher,
+          (activations.by_type[flat::ActivationType_GENERIC_BLOCK]
                .GetDecision()
                .value_or(flat::Decision_MODIFY) == flat::Decision_PASS),
           base::BindRepeating(

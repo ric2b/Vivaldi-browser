@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_READER_MODE_MODEL_CONSTANTS_H_
 #define IOS_CHROME_BROWSER_READER_MODE_MODEL_CONSTANTS_H_
 
+#import <Foundation/Foundation.h>
+
 #import "base/time/time.h"
 
 // Recorded for IOS.ReaderMode.Distiller.Result. Entries should not
@@ -69,15 +71,14 @@ extern const char kReaderModeHeuristicResultHistogram[];
 // Histogram name for Reader Mode heuristic latency.
 extern const char kReaderModeHeuristicLatencyHistogram[];
 
-// Histogram name for the classification comparing the Reader Mode
-// heuristic result and the distillation output.
-extern const char kReaderModeHeuristicClassificationHistogram[];
-
 // Histogram name for Reader Mode distillation latency.
 extern const char kReaderModeDistillerLatencyHistogram[];
 
 // Histogram name for comparison between the AMP usage in the web state and
 // the distillation success.
 extern const char kReaderModeAmpClassificationHistogram[];
+
+// Returns the Reader mode symbol name.
+NSString* GetReaderModeSymbolName();
 
 #endif  // IOS_CHROME_BROWSER_READER_MODE_MODEL_CONSTANTS_H_

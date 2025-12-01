@@ -41,7 +41,7 @@ class CommunicationDeviceSelectorPreS extends CommunicationDeviceSelector {
 
     private boolean mHasBluetoothPermission;
 
-    private boolean[] mDeviceExistence = new boolean[Devices.DEVICE_COUNT];
+    private final boolean[] mDeviceExistence = new boolean[Devices.DEVICE_COUNT];
 
     public CommunicationDeviceSelectorPreS(AudioManager audioManager) {
         super(audioManager);
@@ -80,8 +80,17 @@ class CommunicationDeviceSelectorPreS extends CommunicationDeviceSelector {
     }
 
     @Override
-    public boolean isBluetoothMicrophoneOn() {
+    public boolean isBluetoothScoOn() {
         return mAudioManager.isBluetoothScoOn();
+    }
+
+    @Override
+    public void maybeSetBluetoothScoState(boolean state) {
+        if (state) {
+            startBluetoothSco();
+        } else {
+            stopBluetoothSco();
+        }
     }
 
     @Override

@@ -52,6 +52,7 @@
 #include "cc/animation/animation_timeline.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/scroll_snap_data.h"
+#include "cc/input/scroll_utils.h"
 #include "cc/input/snap_selection_strategy.h"
 #include "cc/layers/picture_layer.h"
 #include "third_party/blink/public/common/features.h"
@@ -169,7 +170,7 @@ PaintLayerScrollableArea::PaintLayerScrollableArea(PaintLayer& layer)
     element->SetSavedLayerScrollOffset(ScrollOffset());
   }
 
-  if (RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled()) {
+  if (RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
     if (LocalFrameView* frame_view = GetLayoutBox()->GetFrameView()) {
       frame_view->AddScrollableArea(*this);
     }
@@ -207,6 +208,7 @@ void PaintLayerScrollableArea::DisposeImpl() {
 
   if (LocalFrameView* frame_view = GetLayoutBox()->GetFrameView()) {
     frame_view->RemoveScrollableArea(*this);
+    frame_view->RemovePendingStickyUpdate(this);
     probe::UpdateScrollableFlag(GetLayoutBox()->GetNode(), false);
   }
 
@@ -855,20 +857,6 @@ bool PaintLayerScrollableArea::ShouldPlaceVerticalScrollbarOnLeft() const {
   return GetLayoutBox()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft();
 }
 
-int PaintLayerScrollableArea::PageStep(ScrollbarOrientation orientation) const {
-  // Paging scroll operations should take scroll-padding into account [1]. So we
-  // use the snapport rect to calculate the page step instead of the visible
-  // rect.
-  // [1] https://drafts.csswg.org/css-scroll-snap/#scroll-padding
-  gfx::Size snapport_size = VisibleScrollSnapportRect().PixelSnappedSize();
-  int length = (orientation == kHorizontalScrollbar) ? snapport_size.width()
-                                                     : snapport_size.height();
-  int min_page_step = static_cast<float>(length) *
-                      ScrollableArea::MinFractionToStepWhenPaging();
-  int page_step = max(min_page_step, length - MaxOverlapBetweenPages());
-  return max(page_step, 1);
-}
-
 bool PaintLayerScrollableArea::IsRootFrameLayoutViewport() const {
   LocalFrame* frame = GetLayoutBox()->GetFrame();
   if (!frame || !frame->View())
@@ -902,6 +890,41 @@ LayoutUnit PaintLayerScrollableArea::ScrollWidth() const {
 
 LayoutUnit PaintLayerScrollableArea::ScrollHeight() const {
   return overflow_rect_.Height();
+}
+
+gfx::Transform PaintLayerScrollableArea::InitializeResizeTransform(
+    const gfx::Point& absolute_drag_start_point) {
+  // Here we set up a transform that represents the conversion from a
+  // mouse coordinate to the resulting size of the resized element.  We
+  // want to cache this transform now since size changes to the element
+  // that we're resizing could cause its position to change in arbitrary
+  // ways, but we want the size changes to be predictable results from
+  // the size of a drag (even if the mouse position no longer matches
+  // the position of the drag corner).
+  gfx::Transform resize_transform = GetLayoutBox()->LocalToAbsoluteTransform();
+
+  if (GetLayoutBox()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft()) {
+    // The size is relative to the original right edge of the box,
+    // rather than its original left edge.
+    resize_transform.Translate(PixelSnappedBorderBoxSize().width(), 0);
+    // The size grows rightward rather than growing leftward.
+    resize_transform.Scale(-1.0, 1.0);
+  }
+
+  resize_transform = resize_transform.InverseOrIdentity();
+
+  // We need to account for the distance that the drag start position is away
+  // from the point that represents the border-box size of the box.
+  //
+  // TODO(dbaron): This probably shouldn't round in element space (which
+  // could be multiple pixels in physical space, given transforms).  (Removing
+  // that rounding does require rebaselining some tests.)
+  gfx::Point drag_start_position = ToRoundedPoint(
+      resize_transform.ProjectPoint(gfx::PointF(absolute_drag_start_point)));
+  PhysicalSize current_size = GetLayoutBox()->Size();
+  resize_transform.PostTranslate(current_size.width - drag_start_position.x(),
+                                 current_size.height - drag_start_position.y());
+  return resize_transform;
 }
 
 void PaintLayerScrollableArea::UpdateScrollOrigin() {
@@ -2320,6 +2343,9 @@ void PaintLayerScrollableArea::InvalidatePaintForStickyDescendants() {
 
 gfx::Vector2d PaintLayerScrollableArea::OffsetFromResizeCorner(
     const gfx::Point& absolute_point) const {
+  // TODO(dbaron): Remove this function when the TextareaStableResizing
+  // feature flag is removed (enabled permanently).
+
   // Currently the resize corner is either the bottom right corner or the bottom
   // left corner.
   // FIXME: This assumes the location is 0, 0. Is this guaranteed to always be
@@ -2333,8 +2359,10 @@ gfx::Vector2d PaintLayerScrollableArea::OffsetFromResizeCorner(
                        local_point.y() - element_size.height());
 }
 
-void PaintLayerScrollableArea::Resize(const gfx::Point& pos,
-                                      const gfx::Vector2d& old_offset) {
+void PaintLayerScrollableArea::Resize(
+    const gfx::Point& pos,
+    const gfx::Vector2d& old_offset,
+    const gfx::Transform& position_to_size_transform) {
   // FIXME: This should be possible on generated content but is not right now.
   if (!InResizeMode() || !GetLayoutBox()->CanResize() ||
       !GetLayoutBox()->GetNode())
@@ -2347,26 +2375,47 @@ void PaintLayerScrollableArea::Resize(const gfx::Point& pos,
 
   float zoom_factor = GetLayoutBox()->StyleRef().EffectiveZoom();
 
-  gfx::Vector2d new_offset =
-      OffsetFromResizeCorner(document.View()->ConvertFromRootFrame(pos));
-  new_offset.set_x(new_offset.x() / zoom_factor);
-  new_offset.set_y(new_offset.y() / zoom_factor);
-
   PhysicalSize current_size = GetLayoutBox()->Size();
   current_size.Scale(1 / zoom_factor);
 
-  PhysicalOffset adjusted_old_offset(old_offset);
-  adjusted_old_offset.Scale(1.f / zoom_factor);
-  if (GetLayoutBox()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft()) {
-    new_offset.set_x(-new_offset.x());
-    adjusted_old_offset.left = -adjusted_old_offset.left;
+  PhysicalSize new_size;
+
+  // TODO(dbaron): When removing the TextareaStableResizing feature
+  // flag, also remove the old_offset parameter and the code that caches
+  // it in our callers.
+  if (RuntimeEnabledFeatures::TextareaStableResizingEnabled()) {
+    // TODO(dbaron): We should probably be caching the offset to the
+    // root frame as part of the transform, rather than repositioning
+    // relative to later adjustments to it.
+    gfx::Point frame_point = document.View()->ConvertFromRootFrame(pos);
+
+    gfx::Point local_point = ToRoundedPoint(
+        position_to_size_transform.ProjectPoint(gfx::PointF(frame_point)));
+
+    new_size = PhysicalSize(LayoutUnit(int(local_point.x() / zoom_factor)),
+                            LayoutUnit(int(local_point.y() / zoom_factor)));
+  } else {
+    gfx::Vector2d new_offset =
+        OffsetFromResizeCorner(document.View()->ConvertFromRootFrame(pos));
+    new_offset.set_x(new_offset.x() / zoom_factor);
+    new_offset.set_y(new_offset.y() / zoom_factor);
+
+    PhysicalOffset adjusted_old_offset(old_offset);
+    adjusted_old_offset.Scale(1.f / zoom_factor);
+    if (GetLayoutBox()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft()) {
+      new_offset.set_x(-new_offset.x());
+      adjusted_old_offset.left = -adjusted_old_offset.left;
+    }
+
+    PhysicalOffset offset = PhysicalOffset(new_offset) - adjusted_old_offset;
+    new_size = PhysicalSize(current_size.width + offset.left,
+                            current_size.height + offset.top);
   }
 
-  PhysicalOffset offset = PhysicalOffset(new_offset) - adjusted_old_offset;
-  PhysicalSize new_size(current_size.width + offset.left,
-                        current_size.height + offset.top);
-
   // Ensure the new size is at least as large as the resize corner.
+  //
+  // TODO(dbaron): This should also account for the border and padding around
+  // the resize corner.
   gfx::SizeF corner_rect(CornerRect().size());
   corner_rect.InvScale(zoom_factor);
   new_size.width = std::max(new_size.width, LayoutUnit(corner_rect.width()));
@@ -2566,7 +2615,7 @@ void PaintLayerScrollableArea::UpdateScrollableAreaSet() {
   // (see: BoxPainter::PaintBoxDecorationBackground).
   GetLayoutBox()->SetBackgroundNeedsFullPaintInvalidation();
 
-  if (!RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled()) {
+  if (!RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
     if (scrolls_overflow_) {
       DCHECK(CanHaveOverflowScrollbars(*GetLayoutBox()));
       frame_view->AddUserScrollableArea(*this);
@@ -3194,10 +3243,6 @@ DOMNodeId PaintLayerScrollableArea::ScrollCornerDisplayItemClient::OwnerNodeId()
 
 void PaintLayerScrollableArea::
     UpdateSnappedTargetsAndEnqueueScrollSnapChange() {
-  if (!RuntimeEnabledFeatures::CSSScrollSnapChangeEventEnabled() &&
-      !RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled()) {
-    return;
-  }
   const cc::SnapContainerData* container_data = GetSnapContainerData();
   if (!container_data) {
     return;
@@ -3341,9 +3386,6 @@ PaintLayerScrollableArea::GetSnappedQueryScrollSnapshot() {
 
 void PaintLayerScrollableArea::CreateAndSetSnappedQueryScrollSnapshotIfNeeded(
     cc::TargetSnapAreaElementIds ids) {
-  if (!RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled()) {
-    return;
-  }
   Element* target_x = nullptr;
   if (ids.x) {
     target_x = DynamicTo<Element>(

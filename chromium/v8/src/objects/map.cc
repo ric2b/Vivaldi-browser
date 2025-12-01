@@ -43,7 +43,7 @@ Tagged<Map> Map::GetPrototypeChainRootMap(Isolate* isolate) const {
   if (constructor_function_index != Map::kNoConstructorFunctionIndex) {
     Tagged<Context> native_context = isolate->context()->native_context();
     Tagged<JSFunction> constructor_function =
-        Cast<JSFunction>(native_context->get(constructor_function_index));
+        Cast<JSFunction>(native_context->GetNoCell(constructor_function_index));
     return constructor_function->initial_map();
   }
   return ReadOnlyRoots(isolate).null_value()->map();
@@ -56,7 +56,8 @@ std::optional<Tagged<JSFunction>> Map::GetConstructorFunction(
   if (IsPrimitiveMap(map)) {
     int const constructor_function_index = map->GetConstructorFunctionIndex();
     if (constructor_function_index != kNoConstructorFunctionIndex) {
-      return Cast<JSFunction>(native_context->get(constructor_function_index));
+      return Cast<JSFunction>(
+          native_context->GetNoCell(constructor_function_index));
     }
   }
   return {};
@@ -115,6 +116,7 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case ORDERED_HASH_SET_TYPE:
     case ORDERED_NAME_DICTIONARY_TYPE:
     case NAME_DICTIONARY_TYPE:
+    case SIMPLE_NAME_DICTIONARY_TYPE:
     case GLOBAL_DICTIONARY_TYPE:
     case NUMBER_DICTIONARY_TYPE:
     case SIMPLE_NUMBER_DICTIONARY_TYPE:
@@ -136,6 +138,9 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
 
     case NATIVE_CONTEXT_TYPE:
       return kVisitNativeContext;
+
+    case CONTEXT_CELL_TYPE:
+      return kVisitContextCell;
 
     case EPHEMERON_HASH_TABLE_TYPE:
       return kVisitEphemeronHashTable;
@@ -164,9 +169,6 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case PROPERTY_CELL_TYPE:
       return kVisitPropertyCell;
 
-    case CONTEXT_SIDE_PROPERTY_CELL_TYPE:
-      return kVisitContextSidePropertyCell;
-
     case TRANSITION_ARRAY_TYPE:
       return kVisitTransitionArray;
 
@@ -176,6 +178,9 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
 
     case ACCESSOR_INFO_TYPE:
       return kVisitAccessorInfo;
+
+    case INTERCEPTOR_INFO_TYPE:
+      return kVisitInterceptorInfo;
 
     case FUNCTION_TEMPLATE_INFO_TYPE:
       return kVisitFunctionTemplateInfo;
@@ -212,6 +217,9 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
 
     case JS_TYPED_ARRAY_TYPE:
       return kVisitJSTypedArray;
+
+    case DOUBLE_STRING_CACHE_TYPE:
+      return kVisitDoubleStringCache;
 
     case SMALL_ORDERED_HASH_MAP_TYPE:
       return kVisitSmallOrderedHashMap;
@@ -286,7 +294,7 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case JS_SHARED_STRUCT_TYPE:
     case JS_STRING_ITERATOR_PROTOTYPE_TYPE:
     case JS_STRING_ITERATOR_TYPE:
-    case JS_TEMPORAL_CALENDAR_TYPE:
+#ifdef V8_TEMPORAL_SUPPORT
     case JS_TEMPORAL_DURATION_TYPE:
     case JS_TEMPORAL_INSTANT_TYPE:
     case JS_TEMPORAL_PLAIN_DATE_TYPE:
@@ -296,6 +304,7 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case JS_TEMPORAL_PLAIN_YEAR_MONTH_TYPE:
     case JS_TEMPORAL_TIME_ZONE_TYPE:
     case JS_TEMPORAL_ZONED_DATE_TIME_TYPE:
+#endif  // V8_TEMPORAL_SUPPORT
     case JS_TYPED_ARRAY_PROTOTYPE_TYPE:
     case JS_VALID_ITERATOR_WRAPPER_TYPE:
     case JS_RAW_JSON_TYPE:
@@ -335,6 +344,9 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case JS_GLOBAL_OBJECT_TYPE:
     case JS_SPECIAL_API_OBJECT_TYPE:
       return kVisitJSApiObject;
+
+    case CPP_HEAP_EXTERNAL_OBJECT_TYPE:
+      return kVisitCppHeapExternalObject;
 
     case JS_DATE_TYPE:
       return kVisitJSDate;
@@ -384,7 +396,6 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
     case ENUM_CACHE_TYPE:
     case ERROR_STACK_DATA_TYPE:
     case FUNCTION_TEMPLATE_RARE_DATA_TYPE:
-    case INTERCEPTOR_INFO_TYPE:
     case MODULE_REQUEST_TYPE:
     case PROMISE_CAPABILITY_TYPE:
     case PROMISE_REACTION_TYPE:
@@ -435,8 +446,6 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
 #if V8_ENABLE_WEBASSEMBLY
     case WASM_ARRAY_TYPE:
       return kVisitWasmArray;
-    case WASM_CONTINUATION_OBJECT_TYPE:
-      return kVisitWasmContinuationObject;
     case WASM_MEMORY_MAP_DESCRIPTOR_TYPE:
       return kVisitWasmMemoryMapDescriptor;
     case WASM_FUNC_REF_TYPE:
@@ -453,8 +462,12 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
       return kVisitWasmResumeData;
     case WASM_STRUCT_TYPE:
       return kVisitWasmStruct;
+    case WASM_DESCRIPTOR_OPTIONS_TYPE:
+      return kVisitWasmDescriptorOptions;
     case WASM_SUSPENDER_OBJECT_TYPE:
       return kVisitWasmSuspenderObject;
+    case WASM_CONTINUATION_OBJECT_TYPE:
+      return kVisitWasmContinuationObject;
     case WASM_SUSPENDING_OBJECT_TYPE:
       return kVisitWasmSuspendingObject;
     case WASM_TABLE_OBJECT_TYPE:
@@ -1093,7 +1106,7 @@ DirectHandle<Map> Map::TransitionElementsTo(Isolate* isolate,
     DisallowGarbageCollection no_gc;
     if (native_context->GetInitialJSArrayMap(from_kind) == *map) {
       Tagged<Object> maybe_transitioned_map =
-          native_context->get(Context::ArrayMapIndex(to_kind));
+          native_context->GetNoCell(Context::ArrayMapIndex(to_kind));
       if (IsMap(maybe_transitioned_map)) {
         return direct_handle(Cast<Map>(maybe_transitioned_map), isolate);
       }
@@ -1740,7 +1753,7 @@ DirectHandle<Map> Map::AsLanguageMode(
   // using |strict_function_transition_symbol| as a key.
   if (is_sloppy(shared_info->language_mode())) return initial_map;
 
-  DirectHandle<Map> function_map(Cast<Map>(isolate->native_context()->get(
+  DirectHandle<Map> function_map(Cast<Map>(isolate->native_context()->GetNoCell(
                                      shared_info->function_map_index())),
                                  isolate);
 
@@ -2417,38 +2430,41 @@ void Map::SetShouldBeFastPrototypeMap(DirectHandle<Map> map, bool value,
 
 // static
 Handle<UnionOf<Smi, Cell>> Map::GetOrCreatePrototypeChainValidityCell(
-    DirectHandle<Map> map, Isolate* isolate) {
-  DirectHandle<Object> maybe_prototype;
-  if (IsJSGlobalObjectMap(*map)) {
-    DCHECK(map->is_prototype_map());
-    // Global object is prototype of a global proxy and therefore we can
-    // use its validity cell for guarding global object's prototype change.
-    maybe_prototype = isolate->global_object();
-  } else {
-    maybe_prototype = direct_handle(
-        map->GetPrototypeChainRootMap(isolate)->prototype(), isolate);
+    DirectHandle<Map> map, Isolate* isolate,
+    DirectHandle<PrototypeInfo>* out_prototype_info) {
+  DirectHandle<Map> validity_cell_holder_map;
+  {
+    Tagged<Map> holder_map;
+    if (!TryGetValidityCellHolderMap(*map, isolate, &holder_map)) {
+      // Prototype value is not a JSObject.
+      return handle(Map::kPrototypeChainValidSmi, isolate);
+    }
+    validity_cell_holder_map = direct_handle(holder_map, isolate);
   }
-  if (!IsJSObjectThatCanBeTrackedAsPrototype(*maybe_prototype)) {
-    return handle(Map::kPrototypeChainValidSmi, isolate);
-  }
-  auto prototype = Cast<JSObject>(maybe_prototype);
   // Ensure the prototype is registered with its own prototypes so its cell
   // will be invalidated when necessary.
-  JSObject::LazyRegisterPrototypeUser(direct_handle(prototype->map(), isolate),
-                                      isolate);
+  JSObject::LazyRegisterPrototypeUser(validity_cell_holder_map, isolate);
 
-  Tagged<Object> maybe_cell =
-      prototype->map()->prototype_validity_cell(kRelaxedLoad);
-  // Return existing cell if it's still valid.
-  if (IsCell(maybe_cell)) {
-    Tagged<Cell> cell = Cast<Cell>(maybe_cell);
-    if (cell->value() == Map::kPrototypeChainValidSmi) {
-      return handle(cell, isolate);
+  if (out_prototype_info) {
+    *out_prototype_info =
+        Map::GetOrCreatePrototypeInfo(validity_cell_holder_map, isolate);
+  }
+
+  {
+    Tagged<Object> maybe_cell =
+        validity_cell_holder_map->prototype_validity_cell(kRelaxedLoad);
+
+    // Return existing cell if it's still valid.
+    if (IsCell(maybe_cell)) {
+      Tagged<Cell> cell = Cast<Cell>(maybe_cell);
+      if (cell->value() == Map::kPrototypeChainValidSmi) {
+        return handle(cell, isolate);
+      }
     }
   }
   // Otherwise create a new cell.
   Handle<Cell> cell = isolate->factory()->NewCell(Map::kPrototypeChainValidSmi);
-  prototype->map()->set_prototype_validity_cell(*cell, kRelaxedStore);
+  validity_cell_holder_map->set_prototype_validity_cell(*cell, kRelaxedStore);
   return cell;
 }
 

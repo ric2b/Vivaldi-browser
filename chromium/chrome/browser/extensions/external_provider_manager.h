@@ -13,6 +13,9 @@
 #include "base/memory/weak_ptr.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "extensions/browser/external_provider_interface.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace content {
 class BrowserContext;
@@ -42,7 +45,7 @@ class ExternalProviderManager
   // KeyedService:
   void Shutdown() override;
 
-  // Returns the instance for the given |browser_context|.
+  // Returns the instance for the given `browser_context`.
   static ExternalProviderManager* Get(content::BrowserContext* browser_context);
 
   // ExternalProviderInterface::VisitorInterface:
@@ -96,18 +99,21 @@ class ExternalProviderManager
   // external extensions.
   void OnAllExternalProvidersReady();
 
-  // For the extension in |version_path| with |id|, check to see if it's an
+  // For the extension in `version_path` with `id`, check to see if it's an
   // externally managed extension.  If so, uninstall it.
   void CheckExternalUninstall(const std::string& id);
 
   // Callback for installation finish of an extension from external file, since
   // we need to remove this extension from the pending extension manager in case
   // of installation failure. This is only a need for extensions installed
-  // by file, since extensions installed by URL will be intentinally kept in
+  // by file, since extensions installed by URL will be intentionally kept in
   // the manager and retried later.
   void InstallationFromExternalFileFinished(
       const std::string& extension_id,
       const std::optional<CrxInstallError>& error);
+
+  // Are we expecting a reinstall of the extension due to corruption?
+  bool IsReinstallForCorruptionExpected(const ExtensionId& id) const;
 
   // The BrowserContext with which the manager is associated.
   raw_ptr<content::BrowserContext> context_;

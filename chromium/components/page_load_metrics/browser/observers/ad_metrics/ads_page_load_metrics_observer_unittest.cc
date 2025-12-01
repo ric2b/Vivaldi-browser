@@ -29,6 +29,7 @@
 #include "components/heavy_ad_intervention/heavy_ad_blocklist.h"
 #include "components/heavy_ad_intervention/heavy_ad_features.h"
 #include "components/history/core/test/history_service_test_util.h"
+#include "components/page_load_metrics/browser/features.h"
 #include "components/page_load_metrics/browser/metrics_navigation_throttle.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/page_load_metrics/browser/observers/ad_metrics/frame_tree_data.h"
@@ -171,14 +172,14 @@ void PopulateRequiredTimingFieldsExceptFEtPAndFCP(
 class ResourceLoadingCancellingThrottle
     : public content::TestNavigationThrottle {
  public:
-  static std::unique_ptr<content::NavigationThrottle> Create(
-      content::NavigationHandle* handle) {
-    return std::make_unique<ResourceLoadingCancellingThrottle>(handle);
+  static void Create(content::NavigationThrottleRegistry& registry) {
+    registry.AddThrottle(
+        std::make_unique<ResourceLoadingCancellingThrottle>(registry));
   }
 
   explicit ResourceLoadingCancellingThrottle(
-      content::NavigationHandle* navigation_handle)
-      : content::TestNavigationThrottle(navigation_handle) {
+      content::NavigationThrottleRegistry& registry)
+      : content::TestNavigationThrottle(registry) {
     SetResponse(TestNavigationThrottle::WILL_PROCESS_RESPONSE,
                 TestNavigationThrottle::ASYNCHRONOUS, CANCEL);
   }
@@ -883,12 +884,9 @@ class AdsPageLoadMetricsObserverTest
  private:
   // SubresourceFilterTestHarness::
   void AppendCustomNavigationThrottles(
-      content::NavigationHandle* navigation_handle,
-      std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles)
-      override {
-    if (navigation_handle->IsInMainFrame()) {
-      throttles->push_back(
-          MetricsNavigationThrottle::Create(navigation_handle));
+      content::NavigationThrottleRegistry& registry) override {
+    if (registry.GetNavigationHandle().IsInMainFrame()) {
+      MetricsNavigationThrottle::CreateAndAdd(registry);
     }
   }
 
@@ -3562,7 +3560,7 @@ class AdsMemoryMeasurementTest : public AdsPageLoadMetricsObserverTest {
         {
             {blink::features::kFencedFrames,
              {{"implementation_type", "mparch"}}},
-            {::features::kV8PerFrameMemoryMonitoring, {}},
+            {page_load_metrics::features::kV8PerFrameMemoryMonitoring, {}},
         },
         {});
   }

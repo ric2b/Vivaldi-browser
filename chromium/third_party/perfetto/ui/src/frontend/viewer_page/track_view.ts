@@ -76,6 +76,8 @@ export interface TrackViewAttrs {
   readonly depth: number;
   readonly stickyTop: number;
   readonly collapsible: boolean;
+  onTrackMouseOver(): void;
+  onTrackMouseOut(): void;
 }
 
 /**
@@ -178,10 +180,12 @@ export class TrackView {
             timescale,
           });
           raf.scheduleCanvasRedraw();
+          attrs.onTrackMouseOver();
         },
         onTrackContentMouseOut: () => {
           renderer?.track.onMouseOut?.();
           raf.scheduleCanvasRedraw();
+          attrs.onTrackMouseOut();
         },
         onTrackContentClick: (pos, bounds) => {
           const timescale = this.getTimescaleForBounds(bounds);
@@ -271,14 +275,21 @@ export class TrackView {
       right: trackRect.width,
     });
 
-    const start = performance.now();
+    const maybeNewResolution = calculateResolution(
+      visibleWindow,
+      trackRect.width,
+    );
+    if (!maybeNewResolution.ok) {
+      return;
+    }
 
+    const start = performance.now();
     node.uri &&
       renderer?.render({
         trackUri: node.uri,
         visibleWindow,
         size: trackRect,
-        resolution: calculateResolution(visibleWindow, trackRect.width),
+        resolution: maybeNewResolution.value,
         ctx,
         timescale,
       });
@@ -607,13 +618,7 @@ function copyToWorkspace(trace: Trace, node: TrackNode, ws?: Workspace) {
 }
 
 function renderTrackDetailsMenu(node: TrackNode, descriptor?: Track) {
-  let parent = node.parent;
-  let fullPath: m.ChildArray = [node.title];
-  while (parent && parent instanceof TrackNode) {
-    fullPath = [parent.title, ' \u2023 ', ...fullPath];
-    parent = parent.parent;
-  }
-
+  const fullPath = node.fullPath.join(' \u2023 ');
   const query = descriptor?.track.getDataset?.()?.query();
 
   return m(
@@ -633,6 +638,8 @@ function renderTrackDetailsMenu(node: TrackNode, descriptor?: Track) {
       }),
       m(TreeNode, {left: 'Path', right: fullPath}),
       m(TreeNode, {left: 'Title', right: node.title}),
+      descriptor &&
+        m(TreeNode, {left: 'Description', right: descriptor?.description}),
       m(TreeNode, {
         left: 'Workspace',
         right: node.workspace?.title ?? '[no workspace]',

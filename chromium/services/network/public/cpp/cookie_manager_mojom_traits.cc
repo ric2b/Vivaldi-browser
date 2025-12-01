@@ -548,6 +548,8 @@ EnumTraits<network::mojom::CookieChangeCause, net::CookieChangeCause>::ToMojom(
       return network::mojom::CookieChangeCause::EVICTED;
     case net::CookieChangeCause::EXPIRED_OVERWRITE:
       return network::mojom::CookieChangeCause::EXPIRED_OVERWRITE;
+    case net::CookieChangeCause::INSERTED_NO_CHANGE_OVERWRITE:
+      return network::mojom::CookieChangeCause::INSERTED_NO_CHANGE_OVERWRITE;
     default:
       break;
   }
@@ -578,6 +580,9 @@ bool EnumTraits<network::mojom::CookieChangeCause, net::CookieChangeCause>::
       return true;
     case network::mojom::CookieChangeCause::EXPIRED_OVERWRITE:
       *output = net::CookieChangeCause::EXPIRED_OVERWRITE;
+      return true;
+    case network::mojom::CookieChangeCause::INSERTED_NO_CHANGE_OVERWRITE:
+      *output = net::CookieChangeCause::INSERTED_NO_CHANGE_OVERWRITE;
       return true;
     default:
       break;
@@ -681,7 +686,7 @@ bool StructTraits<network::mojom::CookiePartitionKeyDataView,
           FromMojom(partition_key.ancestor_chain_bit());
 
   if (partition_key.from_script()) {
-    *out = net::CookiePartitionKey::FromScript().value();
+    *out = net::CookiePartitionKey::FromScript();
     return true;
   }
   net::SchemefulSite site;

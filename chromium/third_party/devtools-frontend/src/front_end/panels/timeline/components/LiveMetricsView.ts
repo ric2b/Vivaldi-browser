@@ -1,6 +1,8 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 import './CPUThrottlingSelector.js';
@@ -28,18 +30,10 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as MobileThrottling from '../../mobile_throttling/mobile_throttling.js';
 import {getThrottlingRecommendations, md} from '../utils/Helpers.js';
 
-import liveMetricsViewStylesRaw from './liveMetricsView.css.js';
+import liveMetricsViewStyles from './liveMetricsView.css.js';
 import type {MetricCardData} from './MetricCard.js';
-import metricValueStylesRaw from './metricValueStyles.css.js';
+import metricValueStyles from './metricValueStyles.css.js';
 import {CLS_THRESHOLDS, INP_THRESHOLDS, renderMetricValue} from './Utils.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const liveMetricsViewStyles = new CSSStyleSheet();
-liveMetricsViewStyles.replaceSync(liveMetricsViewStylesRaw.cssText);
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const metricValueStyles = new CSSStyleSheet();
-metricValueStyles.replaceSync(metricValueStylesRaw.cssText);
 
 const {html, nothing} = Lit;
 
@@ -395,8 +389,6 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [liveMetricsViewStyles, metricValueStyles];
-
     const liveMetrics = LiveMetrics.LiveMetrics.instance();
     liveMetrics.addEventListener(LiveMetrics.Events.STATUS, this.#onMetricStatus, this);
 
@@ -948,8 +940,7 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
               <details>
                 <summary>
                   <span class="interaction-type">
-                    ${interaction.interactionType}
-                    ${isInp ?
+                    ${interaction.interactionType} ${isInp ?
                       html`<span class="interaction-inp-chip" title=${i18nString(UIStrings.inpInteraction)}>INP</span>`
                     : nothing}
                   </span>
@@ -1071,6 +1062,8 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
 
   #renderNodeView(): Lit.LitTemplate {
     return html`
+      <style>${liveMetricsViewStyles}</style>
+      <style>${metricValueStyles}</style>
       <div class="node-view">
         <main>
           <h2 class="section-title">${i18nString(UIStrings.nodePerformanceTimeline)}</h2>
@@ -1096,6 +1089,8 @@ export class LiveMetricsView extends LegacyWrapper.LegacyWrapper.WrappableCompon
 
     // clang-format off
     const output = html`
+      <style>${liveMetricsViewStyles}</style>
+      <style>${metricValueStyles}</style>
       <div class="container">
         <div class="live-metrics-view">
           <main class="live-metrics">

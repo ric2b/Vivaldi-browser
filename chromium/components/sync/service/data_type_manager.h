@@ -11,12 +11,14 @@
 #include "base/functional/callback_forward.h"
 #include "base/values.h"
 #include "components/sync/base/data_type.h"
+#include "components/sync/base/sync_mode.h"
 #include "components/sync/base/sync_stop_metadata_fate.h"
 #include "components/sync/engine/configure_reason.h"
 #include "components/sync/model/type_entities_count.h"
 #include "components/sync/service/local_data_description.h"
 #include "components/sync/service/sync_error.h"
 #include "components/sync/service/type_status_map_for_debugging.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 
 namespace syncer {
 
@@ -47,6 +49,7 @@ class DataTypeManager {
   struct ConfigureResult {
     ConfigureStatus status = ABORTED;
     DataTypeSet requested_types;
+    SyncMode sync_mode = SyncMode::kFull;
   };
 
   virtual ~DataTypeManager() = default;
@@ -132,7 +135,8 @@ class DataTypeManager {
   // Note: This includes deletions as well.
   virtual void GetTypesWithUnsyncedData(
       DataTypeSet requested_types,
-      base::OnceCallback<void(DataTypeSet)> callback) const = 0;
+      base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)> callback)
+      const = 0;
 
   // Queries the count and description/preview of existing local data for
   // `types` data types. This is usually an asynchronous operation that returns

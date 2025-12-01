@@ -30,6 +30,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.AccountProperties;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.ButtonData;
 import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.ItemProperties;
+import org.chromium.chrome.browser.ui.android.webid.AccountSelectionProperties.LoginButtonProperties;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.ClientIdMetadata;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityCredentialTokenError;
@@ -125,6 +126,7 @@ public class AccountSelectionJUnitTestBase {
     protected static final float ALPHA_COMPARISON_DELTA = 0.00001f;
 
     @Mock Callback<ButtonData> mAccountCallback;
+    @Mock Callback<ButtonData> mIdpLoginCallback;
     @Mock AccountSelectionComponent.Delegate mMockDelegate;
     @Mock BottomSheetController mMockBottomSheetController;
     @Mock Tab mTab;
@@ -154,6 +156,8 @@ public class AccountSelectionJUnitTestBase {
     Account mFilteredOutAccount;
     Account mFilteredOutAccountWithUseDifferentAccount;
     Account mNicolasAccount;
+    Account mSingleIdentifierAccount;
+    Account mSingleIdentifierAccountFilteredOut;
 
     IdentityCredentialTokenError mTokenError;
     IdentityCredentialTokenError mTokenErrorEmptyUrl;
@@ -387,6 +391,34 @@ public class AccountSelectionJUnitTestBase {
                         /* isFilteredOut= */ false,
                         mIdpData);
 
+        mSingleIdentifierAccount =
+                new Account(
+                        "singleid1",
+                        "",
+                        "username",
+                        "",
+                        /* secondaryDescription= */ null,
+                        /* pictureBitmap= */ null,
+                        /* circledBadgedPictureBitmap= */ null,
+                        /* isSignIn= */ false,
+                        /* isBrowserTrustedSignIn= */ false,
+                        /* isFilteredOut= */ false,
+                        mIdpData);
+
+        mSingleIdentifierAccountFilteredOut =
+                new Account(
+                        "singleid2",
+                        "",
+                        "username2",
+                        "",
+                        /* secondaryDescription= */ null,
+                        /* pictureBitmap= */ null,
+                        /* circledBadgedPictureBitmap= */ null,
+                        /* isSignIn= */ true,
+                        /* isBrowserTrustedSignIn= */ true,
+                        /* isFilteredOut= */ true,
+                        mIdpData);
+
         mNewAccountsSingleReturningAccount = Arrays.asList(mAnaAccount);
         mNewAccountsSingleNewAccount = Arrays.asList(mNewUserAccount);
         mNewAccountsMultipleAccounts = Arrays.asList(mAnaAccount, mBobAccount);
@@ -415,18 +447,7 @@ public class AccountSelectionJUnitTestBase {
                         /* scrollOffsetSupplier= */ null,
                         mRpMode);
         mMockModalDialogManager = new MockModalDialogManager();
-        mMediator =
-                new AccountSelectionMediator(
-                        mTab,
-                        mMockDelegate,
-                        mModel,
-                        mSheetAccountItems,
-                        mMockBottomSheetController,
-                        mBottomSheetContent,
-                        DESIRED_AVATAR_SIZE,
-                        mRpMode,
-                        mContext,
-                        mMockModalDialogManager);
+        resetMediator();
     }
 
     MVCListAdapter.ListItem buildAccountItem(Account account, boolean showIdp) {
@@ -436,6 +457,19 @@ public class AccountSelectionJUnitTestBase {
                         .with(AccountProperties.ACCOUNT, account)
                         .with(AccountProperties.ON_CLICK_LISTENER, mAccountCallback)
                         .with(AccountProperties.SHOW_IDP, showIdp)
+                        .build());
+    }
+
+    MVCListAdapter.ListItem buildIdpLoginItem(IdentityProviderData idpData, boolean showIdp) {
+        LoginButtonProperties.Properties properties = new LoginButtonProperties.Properties();
+        properties.mIdentityProvider = idpData;
+        properties.mOnClickListener = mIdpLoginCallback;
+        properties.mRpMode = mRpMode;
+        properties.mShowIdp = showIdp;
+        return new MVCListAdapter.ListItem(
+                AccountSelectionProperties.ITEM_TYPE_LOGIN,
+                new PropertyModel.Builder(LoginButtonProperties.ALL_KEYS)
+                        .with(LoginButtonProperties.PROPERTIES, properties)
                         .build());
     }
 
@@ -457,5 +491,20 @@ public class AccountSelectionJUnitTestBase {
             return model.get((WritableBooleanPropertyKey) key);
         }
         return model.get((WritableObjectPropertyKey<PropertyModel>) key) != null;
+    }
+
+    void resetMediator() {
+        mMediator =
+                new AccountSelectionMediator(
+                        mTab,
+                        mMockDelegate,
+                        mModel,
+                        mSheetAccountItems,
+                        mMockBottomSheetController,
+                        mBottomSheetContent,
+                        DESIRED_AVATAR_SIZE,
+                        mRpMode,
+                        mContext,
+                        mMockModalDialogManager);
     }
 }

@@ -153,6 +153,7 @@ set(private_headers
     "ValidationUtils.h"
     "VisitableMembers.h"
     "WaitAnySystemEvent.h"
+    "WaitListEvent.h"
     "webgpu_absl_format.h"
 )
 
@@ -213,7 +214,6 @@ set(sources
     "Limits.cpp"
     "ObjectBase.cpp"
     "ObjectContentHasher.cpp"
-    "PassResourceUsage.cpp"
     "PassResourceUsageTracker.cpp"
     "PerStage.cpp"
     "PhysicalDevice.cpp"
@@ -253,6 +253,7 @@ set(sources
     "Toggles.cpp"
     "utils/WGPUHelpers.cpp"
     "ValidationUtils.cpp"
+    "WaitListEvent.cpp"
     "webgpu_absl_format.cpp"
 )
 
@@ -539,11 +540,13 @@ if (DAWN_ENABLE_METAL)
         "Surface_metal.mm"
     )
     if (DAWN_TARGET_MACOS)
-        list(APPEND conditional_private_platform_depends "-framework Cocoa")
+        list(APPEND conditional_private_platform_depends
+            "-framework Cocoa"
+            "-framework IOKit"
+        )
     endif()
     list(APPEND conditional_private_platform_depends
         "-framework Foundation"
-        "-framework IOKit"
         "-framework IOSurface"
         "-framework QuartzCore"
         "-framework Metal"
@@ -559,6 +562,21 @@ if (DAWN_ENABLE_NULL)
     )
     list(APPEND sources
         "null/DeviceNull.cpp"
+    )
+endif()
+
+if (DAWN_ENABLE_WEBGPU_ON_WEBGPU)
+    list(APPEND headers
+        "${DAWN_INCLUDE_DIR}/dawn/native/WebGPUBackend.h"
+    )
+    list(APPEND private_headers
+        "webgpu/BackendWGPU.h"
+        "webgpu/Forward.h"
+        "webgpu/PhysicalDeviceWGPU.h"
+    )
+    list(APPEND sources
+        "webgpu/BackendWGPU.cpp"
+        "webgpu/PhysicalDeviceWGPU.cpp"
     )
 endif()
 
@@ -751,8 +769,8 @@ if (DAWN_ENABLE_VULKAN)
     )
 
     list(APPEND conditional_public_depends
-        Vulkan-Headers
-        VulkanUtilityHeaders
+        Vulkan::Headers
+        Vulkan::UtilityHeaders
     )
 
     if (ANDROID)
@@ -794,6 +812,9 @@ if (DAWN_ENABLE_METAL)
 endif()
 if (DAWN_ENABLE_NULL)
     list(APPEND dawn_component_srcs "null/NullBackend.cpp")
+endif()
+if (DAWN_ENABLE_WEBGPU_ON_WEBGPU)
+    list(APPEND dawn_component_srcs "webgpu/WebGPUBackend.cpp")
 endif()
 if (DAWN_ENABLE_OPENGL)
     list(APPEND dawn_component_srcs "opengl/OpenGLBackend.cpp")

@@ -13,6 +13,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
@@ -58,6 +59,7 @@ import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.DisplayButtonData;
 import org.chromium.chrome.browser.hub.FullButtonData;
@@ -67,11 +69,13 @@ import org.chromium.chrome.browser.hub.HubLayoutAnimationType;
 import org.chromium.chrome.browser.hub.LoadHint;
 import org.chromium.chrome.browser.hub.PaneHubController;
 import org.chromium.chrome.browser.hub.PaneId;
+import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingUtilities;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabArchiveSettings;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
 import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
@@ -80,14 +84,18 @@ import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterObserver;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterObserver.DidRemoveTabGroupReason;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
+import org.chromium.chrome.browser.tasks.tab_management.archived_tabs_auto_delete_promo.ArchivedTabsAutoDeletePromoManager;
+import org.chromium.chrome.browser.tasks.tab_management.archived_tabs_auto_delete_promo.ArchivedTabsAutoDeletePromoSheetContent;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.user_education.IphCommand;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.test.util.browser.tabmodel.MockTabModel;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController.MenuOrKeyboardActionHandler;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
 import org.chromium.components.feature_engagement.FeatureConstants;
+import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
@@ -153,7 +161,10 @@ public class TabSwitcherPaneUnitTest {
     @Mock private Runnable mRunnable;
     @Mock private Tab mTab;
     @Mock private SavedTabGroup mSavedTabGroup;
-    @Mock private TabGroupCreationUiFlow mUiFlow;
+    @Mock private TabGroupCreationUiDelegate mUiFlow;
+    @Mock private Tracker mTracker;
+    @Mock private BottomSheetController mMockBottomSheetController;
+    @Mock private TabArchiveSettings mMockTabArchiveSettings;
 
     @Captor private ArgumentCaptor<ObservableSupplier<Boolean>> mIsAnimatingSupplierCaptor;
 
@@ -169,15 +180,19 @@ public class TabSwitcherPaneUnitTest {
     private final Token mToken = new Token(1L, 2L);
 
     private Context mContext;
-    private ObservableSupplierImpl<Boolean> mHandleBackPressChangeSupplier =
+    private final ObservableSupplierImpl<Boolean> mHandleBackPressChangeSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Boolean> mIsScrollingSupplier = new ObservableSupplierImpl<>();
-    private OneshotSupplierImpl<ObservableSupplier<Boolean>> mIsScrollingSupplierSupplier =
+    private final ObservableSupplierImpl<Boolean> mIsScrollingSupplier =
+            new ObservableSupplierImpl<>();
+    private final OneshotSupplierImpl<ObservableSupplier<Boolean>> mIsScrollingSupplierSupplier =
             new OneshotSupplierImpl<>();
-    private ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeSupplier =
+    private final ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<CompositorViewHolder> mCompositorViewHolderSupplier =
+    private final ObservableSupplierImpl<CompositorViewHolder> mCompositorViewHolderSupplier =
             new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Integer> mMockArchivedTabCountSupplier =
+            new ObservableSupplierImpl<>();
+    private ArchivedTabsAutoDeletePromoManager mMockArchivedTabsAutoDeletePromoManager;
     private TabSwitcherPane mTabSwitcherPane;
     private MockTabModel mTabModel;
     private List<Tab> mTabList;
@@ -192,6 +207,7 @@ public class TabSwitcherPaneUnitTest {
 
         when(mHubContainerView.getContext()).thenReturn(mContext);
         TabGroupSyncServiceFactory.setForTesting(mTabGroupSyncService);
+        TrackerFactory.setTrackerForTests(mTracker);
 
         mActionTester = new UserActionTester();
 
@@ -253,6 +269,14 @@ public class TabSwitcherPaneUnitTest {
         when(mTabSwitcherPaneCoordinator.getIsScrollingSupplier())
                 .thenReturn(mIsScrollingSupplierSupplier);
 
+        mMockArchivedTabsAutoDeletePromoManager =
+                new ArchivedTabsAutoDeletePromoManager(
+                        mContext,
+                        mMockBottomSheetController,
+                        mMockTabArchiveSettings,
+                        mMockArchivedTabCountSupplier,
+                        mTabModel);
+
         mTabSwitcherPane =
                 new TabSwitcherPane(
                         mContext,
@@ -266,7 +290,8 @@ public class TabSwitcherPaneUnitTest {
                         mUserEducationHelper,
                         mEdgeToEdgeSupplier,
                         mCompositorViewHolderSupplier,
-                        mUiFlow);
+                        mUiFlow,
+                        mMockArchivedTabsAutoDeletePromoManager);
         ShadowLooper.runUiThreadTasks();
         verify(mSharedPreferences)
                 .registerOnSharedPreferenceChangeListener(
@@ -1253,6 +1278,154 @@ public class TabSwitcherPaneUnitTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
         verify(mUserEducationHelper, never()).requestShowIph(any());
+    }
+
+    /**
+     * Helper function to set up ChromePreferenceKeys for promo eligibility conditions.
+     *
+     * @param promoChoiceMade Value for {@link
+     *     ChromePreferenceKeys#TAB_DECLUTTER_AUTO_DELETE_DECISION_MADE}.
+     * @param autoDeleteEnabled Value for {@link
+     *     ChromePreferenceKeys#TAB_DECLUTTER_AUTO_DELETE_ENABLED}.
+     * @param archivingFeatureEnabled Value for {@link
+     *     ChromePreferenceKeys#TAB_DECLUTTER_ARCHIVE_ENABLED}.
+     * @param archivedTabCount The number of archived tabs.
+     */
+    private void setupPromoEligibilityConditions(
+            boolean promoChoiceMade,
+            boolean autoDeleteEnabled,
+            boolean archivingFeatureEnabled,
+            int archivedTabCount) {
+        when(mMockTabArchiveSettings.getAutoDeleteDecisionMade()).thenReturn(promoChoiceMade);
+        when(mMockTabArchiveSettings.isAutoDeleteEnabled()).thenReturn(autoDeleteEnabled);
+        when(mMockTabArchiveSettings.getArchiveEnabled()).thenReturn(archivingFeatureEnabled);
+        mMockArchivedTabCountSupplier.set(archivedTabCount);
+    }
+
+    /** Tests that the AutoDeleteDecisionPromo is shown when all conditions are met */
+    @Test
+    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    public void testTryToShowPromo_ConditionsMet_ShowsPromo() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ false,
+                /* autoDeleteEnabled= */ false,
+                /* archivingFeatureEnabled= */ true,
+                /* archivedTabCount= */ 1);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController)
+                .requestShowContent(any(ArchivedTabsAutoDeletePromoSheetContent.class), eq(true));
+    }
+
+    /** Tests that the AutoDeleteDecisionPromo is not shown when the promo flag is off */
+    @Test
+    @DisableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    public void testTryToShowPromo_FlagSetToFalse_DoesNotShow() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ false,
+                /* autoDeleteEnabled= */ false,
+                /* archivingFeatureEnabled= */ true,
+                /* archivedTabCount= */ 1);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController, never())
+                .requestShowContent(
+                        any(ArchivedTabsAutoDeletePromoSheetContent.class), anyBoolean());
+    }
+
+    /** Tests that the AutoDeleteDecisionPromo is not shown when the promo kill switch is off */
+    @Test
+    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    @DisableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE_KILL_SWITCH)
+    public void testTryToShowPromo_KillSwitchSetToFalse_DoesNotShow() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ false,
+                /* autoDeleteEnabled= */ false,
+                /* archivingFeatureEnabled= */ true,
+                /* archivedTabCount= */ 1);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController, never())
+                .requestShowContent(
+                        any(ArchivedTabsAutoDeletePromoSheetContent.class), anyBoolean());
+    }
+
+    /** Tests that the promo is NOT shown if the user has already made a choice. */
+    @Test
+    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    public void testTryToShowPromo_DecisionAlreadyMade_DoesNotShow() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ true,
+                /* autoDeleteEnabled= */ false,
+                /* archivingFeatureEnabled= */ true,
+                /* archivedTabCount= */ 1);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController, never())
+                .requestShowContent(
+                        any(ArchivedTabsAutoDeletePromoSheetContent.class), anyBoolean());
+    }
+
+    /** Tests that the promo is NOT shown if auto-delete is already effectively enabled. */
+    @Test
+    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    public void testTryToShowPromo_AutoDeleteAlreadyEnabled_DoesNotShow() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ false,
+                /* autoDeleteEnabled= */ true,
+                /* archivingFeatureEnabled= */ true,
+                /* archivedTabCount= */ 1);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController, never())
+                .requestShowContent(
+                        any(ArchivedTabsAutoDeletePromoSheetContent.class), anyBoolean());
+    }
+
+    /** Tests that the promo is NOT shown if the main archiving feature is disabled. */
+    @Test
+    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    public void testTryToShowPromo_ArchivingFeatureDisabled_DoesNotShow() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ false,
+                /* autoDeleteEnabled= */ false,
+                /* archivingFeatureEnabled= */ false,
+                /* archivedTabCount= */ 1);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController, never())
+                .requestShowContent(
+                        any(ArchivedTabsAutoDeletePromoSheetContent.class), anyBoolean());
+    }
+
+    /** Tests that the promo is NOT shown if there are no archived tabs. */
+    @Test
+    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_AUTO_DELETE)
+    public void testTryToShowPromo_NoArchivedTabs_DoesNotShow() {
+        setupPromoEligibilityConditions(
+                /* promoChoiceMade= */ false,
+                /* autoDeleteEnabled= */ false,
+                /* archivingFeatureEnabled= */ true,
+                /* archivedTabCount= */ 0);
+
+        mTabSwitcherPane.notifyLoadHint(LoadHint.HOT);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        verify(mMockBottomSheetController, never())
+                .requestShowContent(
+                        any(ArchivedTabsAutoDeletePromoSheetContent.class), anyBoolean());
     }
 
     private void createSelectedTab() {

@@ -105,7 +105,8 @@ MEDIA_EXPORT extern const char kUserGestureRequiredPolicy[];
 
 }  // namespace autoplay
 
-#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+// TODO(crbug.com/414429305): Restrict this flag to USE_V4L2_CODEC.
+#if BUILDFLAG(USE_LINUX_VIDEO_ACCELERATION)
 MEDIA_EXPORT extern const char kHardwareVideoDecodeFrameRate[];
 #endif
 
@@ -124,27 +125,27 @@ MEDIA_EXPORT extern const char kEnablePrimaryNodeAccessForVkmsTesting[];
 // kCastStreamingForceEnableHardwareH264.
 MEDIA_EXPORT extern const char kCastStreamingForceDisableHardwareH264[];
 
-// If enabled, completely disables use of VP8 hardware encoding for Cast
-// Streaming sessions. Takes precedence over
-// kCastStreamingForceEnableHardwareVp8.
-MEDIA_EXPORT extern const char kCastStreamingForceDisableHardwareVp8[];
-
-// If enabled, completely disables use of VP9 hardware encoding for Cast
-// Streaming sessions. Takes precedence over
-// kCastStreamingForceEnableHardwareVp9.
-MEDIA_EXPORT extern const char kCastStreamingForceDisableHardwareVp9[];
-
 // If enabled, allows use of H264 hardware encoding for Cast Streaming sessions,
 // even on platforms where it is disabled due to performance and reliability
 // issues. kCastStreamingForceDisableHardwareH264 must be disabled for this flag
 // to take effect.
 MEDIA_EXPORT extern const char kCastStreamingForceEnableHardwareH264[];
 
+// If enabled, completely disables use of VP8 hardware encoding for Cast
+// Streaming sessions. Takes precedence over
+// kCastStreamingForceEnableHardwareVp8.
+MEDIA_EXPORT extern const char kCastStreamingForceDisableHardwareVp8[];
+
 // If enabled, allows use of VP8 hardware encoding for Cast Streaming sessions,
 // even on platforms where it is disabled due to performance and reliability
 // issues. kCastStreamingForceDisableHardwareVp8 must be disabled for this flag
 // to take effect.
 MEDIA_EXPORT extern const char kCastStreamingForceEnableHardwareVp8[];
+
+// If enabled, completely disables use of VP9 hardware encoding for Cast
+// Streaming sessions. Takes precedence over
+// kCastStreamingForceEnableHardwareVp9.
+MEDIA_EXPORT extern const char kCastStreamingForceDisableHardwareVp9[];
 
 // If enabled, allows use of VP9 hardware encoding for Cast Streaming sessions,
 // even on platforms where it is disabled due to performance and reliability
@@ -194,6 +195,7 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kCameraMicEffects);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastStreamingAv1);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(
     kCastStreamingExponentialVideoBitrateAlgorithm);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastStreamingHardwareHevc);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastStreamingMediaVideoEncoder);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastStreamingPerformanceOverlay);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kCastStreamingVp8);
@@ -210,6 +212,10 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kContextMenuSaveVideoFrameAs);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kContextMenuSearchForVideoFrame);
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kChromeWideEchoCancellation);
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kSystemLoopbackAsAecReference);
+MEDIA_EXPORT extern const base::FeatureParam<int> kAddedProcessingDelay;
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #endif
 #if (BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN))
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kEnforceSystemEchoCancellation);
@@ -302,7 +308,6 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaEngagementHTTPSOnly);
 #if BUILDFLAG(IS_WIN)
 MEDIA_EXPORT extern const base::FeatureParam<std::string>
     kMediaFoundationClearKeyCdmPathForTesting;
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kEnableFaultyGPUForMediaFoundation);
 #endif  // BUILDFLAG(IS_WIN)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaLearningExperiment);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaLearningFramework);
@@ -310,8 +315,10 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaLearningSmoothnessExperiment);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaOptimizer);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaPowerExperiment);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kMemoryPressureBasedSourceBufferGC);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kMultiBufferNeverDefer);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kOverlayFullscreenVideo);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kPauseBackgroundMutedAudio);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kPauseBackgroundTimer);
 #if !BUILDFLAG(IS_ANDROID)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kPictureInPictureOcclusionTracking);
 #endif  // !BUILDFLAG(IS_ANDROID)
@@ -357,16 +364,10 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiIgnoreDriverChecks);
 #endif  // BUILDFLAG(IS_LINUX)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiOnNvidiaGPUs);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiLowPowerEncoderGen9x);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiEnforceVideoMinMaxResolution);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVideoMinResolutionForPerformance);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVP8Encoder);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVP9Encoder);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiAV1Encoder);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kGlobalVaapiLock);
 #if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiH264TemporalLayerHWEncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiH264SWBitrateController);
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVp8TemporalLayerHWEncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiAV1TemporalLayerHWEncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVaapiVp9SModeHWEncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kVSyncMjpegDecoding);
@@ -398,6 +399,7 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseAudioLatencyFromHAL);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseSecurityLevelWhenCheckingMediaDrmVersion);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAllowMediaCodecSoftwareDecoder);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kAllowMediaCodecCallsInSeparateProcess);
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kUseAudioManagerMaxChannelLayout);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(ENABLE_HLS_DEMUXER)
@@ -411,15 +413,9 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kBuiltInHlsPlayer);
 // media containers, including Fragmented and unfragmented MP4, as well as
 // raw AAC bytestreams. It does nothing if kBuiltInHlsPlayer is disabled.
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kBuiltInHlsMP4);
-
-// This feature enables statistics to be collected from MediaPlayer-based HLS
-// playbacks using the builtin HLS manifest parser. It is enabled by default
-// to act as a kill switch in the event of crashes.
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaPlayerHlsStatistics);
 #endif  // BUILDFLAG(ENABLE_HLS_DEMUXER)
 
-#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kChromeOSHWAV1Decoder);
+#if BUILDFLAG(USE_LINUX_VIDEO_ACCELERATION)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kChromeOSHWVBREncoding);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kLimitConcurrentDecoderInstances);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kUSeSequencedTaskRunnerForVEA);
@@ -433,7 +429,7 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kEnableArmHwdrm10bitOverlays);
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kEnableArmHwdrm);
 #endif  // BUILDFLAG(USE_CHROMEOS_PROTECTED_MEDIA)
 #endif  // defined(ARCH_CPU_ARM_FAMILY)
-#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+#endif  // BUILDFLAG(USE_LINUX_VIDEO_ACCELERATION)
 
 #if BUILDFLAG(IS_WIN)
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kDirectShowGetPhotoState);
@@ -538,9 +534,8 @@ MEDIA_EXPORT BASE_DECLARE_FEATURE(kMediaFoundationSharedImageEncode);
 
 MEDIA_EXPORT BASE_DECLARE_FEATURE(kRenderMutedAudio);
 
-// Serves as killswitch for rolling out Mappable SharedImage mojom support.
-// TODO(crbug.com/40263579): Eliminate post safe rollout.
-MEDIA_EXPORT BASE_DECLARE_FEATURE(kSupportMappableSharedImageOverMojo);
+// Enable experimental headless captions.
+MEDIA_EXPORT BASE_DECLARE_FEATURE(kHeadlessLiveCaption);
 
 // Based on a |command_line| and the current platform, returns the effective
 // autoplay policy. In other words, it will take into account the default policy
@@ -551,6 +546,8 @@ MEDIA_EXPORT std::string GetEffectiveAutoplayPolicy(
     const base::CommandLine& command_line);
 
 MEDIA_EXPORT bool IsChromeWideEchoCancellationEnabled();
+MEDIA_EXPORT bool IsSystemLoopbackAsAecReferenceEnabled();
+MEDIA_EXPORT std::optional<base::TimeDelta> GetAecAddedDelay();
 MEDIA_EXPORT bool IsSystemEchoCancellationEnforced();
 MEDIA_EXPORT bool IsSystemEchoCancellationEnforcedAndAllowAgcInTandem();
 MEDIA_EXPORT bool IsSystemEchoCancellationEnforcedAndAllowNsInTandem();

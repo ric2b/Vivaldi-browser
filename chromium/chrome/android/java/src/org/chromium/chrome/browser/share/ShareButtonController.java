@@ -16,8 +16,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.share.ShareDelegate.ShareOrigin;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.optional_button.BaseButtonDataProvider;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
@@ -66,8 +66,7 @@ public class ShareButtonController extends BaseButtonDataProvider {
                 /* supportsTinting= */ true,
                 /* iphCommandBuilder= */ null,
                 AdaptiveToolbarButtonVariant.SHARE,
-                /* tooltipTextResId= */ R.string.adaptive_toolbar_button_preference_share,
-                /* showBackgroundHighlight= */ true);
+                /* tooltipTextResId= */ R.string.adaptive_toolbar_button_preference_share);
 
         mShareDelegateSupplier = shareDelegateSupplier;
         mTrackerSupplier = trackerSupplier;

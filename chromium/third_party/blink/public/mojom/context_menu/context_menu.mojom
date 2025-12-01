@@ -8,6 +8,7 @@ import "mojo/public/mojom/base/string16.mojom";
 import "services/network/public/mojom/referrer_policy.mojom";
 import "third_party/blink/public/mojom/conversions/conversions.mojom";
 import "third_party/blink/public/mojom/forms/form_control_type.mojom";
+import "third_party/blink/public/mojom/annotation/annotation.mojom";
 import "ui/base/mojom/menu_source_type.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/url.mojom";
@@ -196,13 +197,19 @@ struct UntrustworthyContextMenuParams {
   // Start position of the selection text.
   int32 selection_start_offset;
 
-  // Whether the context contains text highlighted by a text fragment.
-  // See TextFragmentAnchor.
-  bool opened_from_highlight;
+  // Only set when the context contains an annotation, and specifies the type
+  // (use case) of that annotation.
+  // Note: There may be multiple annotations of different types in the context,
+  // in which case this set to the type of the "topmost" annotation.
+  AnnotationType? annotation_type;
 
-  // Whether the context menu was opened from an element with the
+  // True when the context menu was opened from an element with the
   // `interesttarget` attribute.
   bool opened_from_interest_target;
+  // If opened_from_interest_target is true, and if the
+  // HTMLInterestTargetContextMenuItemOnly feature is enabled, this will contain
+  // the DOMNodeID of the link that generated the context menu.
+  int32 interest_target_node_id;
 
   // The type of the form control element on which the context menu is invoked,
   // if any.

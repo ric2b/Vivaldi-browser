@@ -45,6 +45,46 @@ chromium-metrics-reviews@google.com.
   <int value="8" label="kXNonStandard"/>
 </enum>
 
+<!-- LINT.IfChange(AndroidAudioDeviceType) -->
+
+<enum name="AndroidAudioDeviceType">
+  <int value="0" label="Unknown"/>
+  <int value="1" label="BuiltinEarpiece"/>
+  <int value="2" label="BuiltinSpeaker"/>
+  <int value="3" label="WiredHeadset"/>
+  <int value="4" label="WiredHeadphones"/>
+  <int value="5" label="LineAnalog"/>
+  <int value="6" label="LineDigital"/>
+  <int value="7" label="BluetoothSco"/>
+  <int value="8" label="BluetoothA2dp"/>
+  <int value="9" label="Hdmi"/>
+  <int value="10" label="HdmiArc"/>
+  <int value="11" label="UsbDevice"/>
+  <int value="12" label="UsbAccessory"/>
+  <int value="13" label="Dock"/>
+  <int value="14" label="Fm"/>
+  <int value="15" label="BuiltinMic"/>
+  <int value="16" label="FmTuner"/>
+  <int value="17" label="TvTuner"/>
+  <int value="18" label="Telephony"/>
+  <int value="19" label="AuxLine"/>
+  <int value="20" label="Ip"/>
+  <int value="21" label="Bus"/>
+  <int value="22" label="UsbHeadset"/>
+  <int value="23" label="HearingAid"/>
+  <int value="24" label="BuiltinSpeakerSafe"/>
+  <int value="25" label="RemoteSubmix"/>
+  <int value="26" label="BleHeadset"/>
+  <int value="27" label="BleSpeaker"/>
+  <int value="28" label="EchoReference"/>
+  <int value="29" label="HdmiEarc"/>
+  <int value="30" label="BleBroadcast"/>
+  <int value="31" label="DockAnalog"/>
+  <int value="32" label="MultichannelGroup"/>
+</enum>
+
+<!-- LINT.ThenChange(//media/audio/android/audio_device_type.h:AudioDeviceType) -->
+
 <enum name="ApplySubCaptureTargetResult">
   <int value="0" label="Ok"/>
   <int value="1" label="TimedOut"/>
@@ -300,6 +340,8 @@ chromium-metrics-reviews@google.com.
   <int value="8" label="MediaFoundationGetCdmFactoryFailed"/>
   <int value="9" label="CreateDummyMediaFoundationCdmFailed"/>
   <int value="10" label="UnexpectedEmptyCapability"/>
+  <int value="11" label="NoMediaDrmSupport"/>
+  <int value="12" label="MediaFoundationGetExtendedDRMTypeSupportFailed"/>
 </enum>
 
 <enum name="CdmHostVerificationStatus">
@@ -1284,6 +1326,13 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="All external links protected"/>
 </enum>
 
+<enum name="MediaPlaybackInterruptionType">
+  <int value="0"
+      label="HTMLMediaElement tried to play audio in a hidden frame"/>
+  <int value="1"
+      label="Frame got hidden while the HTMLMediaElement was playing"/>
+</enum>
+
 <enum name="MediaPlayerExitStatus">
   <int value="0" label="No errors"/>
   <int value="1" label="Has errors"/>
@@ -1525,6 +1574,15 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="kUserSelectedOtherTab"/>
   <int value="5" label="kUserSelectedThisTabAsGenericTab"/>
   <int value="6" label="kUserSelectedThisTab"/>
+</enum>
+
+<enum name="MediaUiGetDisplayMediaTabSharingInfoBarInteraction">
+  <int value="0" label="CapturedToCapturing"/>
+  <int value="1" label="CapturingToCaptured"/>
+  <int value="2" label="OtherToCapturing"/>
+  <int value="3" label="OtherToCaptured"/>
+  <int value="4" label="StopButtonClicked"/>
+  <int value="5" label="ShareThisTabInsteadButtonClicked"/>
 </enum>
 
 <enum name="MicrophoneMuteResult">

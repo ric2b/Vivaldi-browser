@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "third_party/blink/renderer/core/layout/inline/inline_node.h"
 
 #include <algorithm>
@@ -946,6 +941,7 @@ class InlineNodeDataEditor final {
 bool InlineNode::SetTextWithOffset(LayoutText* layout_text,
                                    String new_text,
                                    const TextDiffRange& diff) {
+  TRACE_EVENT0("blink", "InlineNode::SetTextWithOffset");
   if (!layout_text->HasValidInlineItems() ||
       !layout_text->IsInLayoutNGInlineFormattingContext())
     return false;
@@ -1561,8 +1557,7 @@ void InlineNode::ShapeText(InlineItemsData* data,
     text_item_ranges.ReserveInitialCapacity(num_text_items);
     ClearCollectionScope clear_scope(&text_item_ranges);
 
-    const bool has_ligatures =
-        shape_result->NumGlyphs() < shape_result->NumCharacters();
+    const bool has_ligatures = shape_result->HasLigatures();
     if (has_ligatures) {
       shape_result->EnsurePositionData();
     }
@@ -1672,6 +1667,7 @@ void InlineNode::ShapeTextIncludingFirstLine(
     InlineNodeData* data,
     const String* previous_text,
     const InlineItems* previous_items) const {
+  TRACE_EVENT0("blink", "InlineNode::ShapeTextIncludingFirstLine");
   InlineItem::UpdateIndex(data->items);
   ShapeText(data, previous_text, previous_items);
   ShapeTextForFirstLineIfNeeded(data);

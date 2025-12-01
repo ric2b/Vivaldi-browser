@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/sessions/session_restore_delegate.h"
 
 #include <stddef.h>
@@ -14,6 +9,9 @@
 #include <array>
 #include <utility>
 
+#include "base/strings/string_util.h"
+#include "base/metrics/field_trial.h"
+#include "base/compiler_specific.h"
 #include "base/metrics/field_trial.h"
 #include "chrome/browser/performance_manager/public/background_tab_loading_policy.h"
 #include "chrome/browser/sessions/session_restore_stats_collector.h"
@@ -24,6 +22,9 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "content/public/browser/web_contents.h"
+
+#include "app/vivaldi_apptools.h"
+#include "ui/lazy_load_service.h"
 
 namespace {
 
@@ -39,12 +40,11 @@ bool IsInternalPage(const GURL& url) {
       chrome::kChromeUISettingsURL,
       vivaldiInternalURL,
   });
-  // Prefix-match against the table above. Use strncmp to avoid allocating
-  // memory to convert the URL prefix constants into std::strings.
-  for (size_t i = 0; i < std::size(kReloadableUrlPrefixes); ++i) {
-    if (!strncmp(url.spec().c_str(), kReloadableUrlPrefixes[i],
-                 strlen(kReloadableUrlPrefixes[i])))
+  // Prefix-match against the table above.
+  for (const char* prefix : kReloadableUrlPrefixes) {
+    if (base::StartsWith(url.spec(), prefix)) {
       return true;
+    }
   }
   return false;
 }
@@ -124,8 +124,17 @@ void SessionRestoreDelegate::RestoreTabs(
   } else {
     std::vector<content::WebContents*> web_contents_vector;
     web_contents_vector.reserve(tabs.size());
-    for (auto tab : tabs) {
+    for (const auto& tab : tabs) {
       CHECK(tab.contents());
+
+      // Make sure we don't hand over the tab to the backgroundtabloader if it
+      // is a restored tab and lazy loading of restored are enabled.
+      if (vivaldi::IsVivaldiRunning() &&
+          tab.contents()->GetUserData(
+              &vivaldi::LazyLoadService::kLazyLoadIsSafe)) {
+        continue;
+      }
+
       web_contents_vector.push_back(tab.contents());
     }
     performance_manager::policies::ScheduleLoadForRestoredTabs(

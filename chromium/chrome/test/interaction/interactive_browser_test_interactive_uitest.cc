@@ -134,7 +134,6 @@ IN_PROC_BROWSER_TEST_F(InteractiveBrowserTestUiTest,
       // Simulate press of the menu button and ensure the button activates and
       // the menu appears.
       PressButton(kToolbarAppMenuButtonElementId),
-      WaitForActivate(kToolbarAppMenuButtonElementId),
       WaitForShow(AppMenuModel::kMoreToolsMenuItem),
       // Move the mouse to the button and click it. This will hide the menu.
       MoveMouseTo(kToolbarAppMenuButtonElementId, std::move(pos)), ClickMouse(),
@@ -693,6 +692,8 @@ DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(LastHoverEventObserver, kHoverView3State);
 BEGIN_METADATA(HoverDetectionView)
 END_METADATA
 
+}  // namespace
+
 class HoverDetectionBubbleView : public views::FlexLayoutView,
                                  public views::BubbleDialogDelegate {
   METADATA_HEADER(HoverDetectionBubbleView, views::FlexLayoutView)
@@ -700,6 +701,8 @@ class HoverDetectionBubbleView : public views::FlexLayoutView,
  public:
   explicit HoverDetectionBubbleView(views::View* anchor_view)
       : BubbleDialogDelegate(anchor_view, views::BubbleBorder::TOP_RIGHT) {
+    SetOwnedByWidget(OwnedByWidgetPassKey());
+
     auto* view = AddChildView(std::make_unique<HoverDetectionView>());
     view->SetProperty(views::kElementIdentifierKey, kHoverView1Id);
     views_.push_back(view);
@@ -728,8 +731,6 @@ class HoverDetectionBubbleView : public views::FlexLayoutView,
 BEGIN_METADATA(HoverDetectionBubbleView)
 END_METADATA
 
-}  // namespace
-
 class InteractiveBrowserTestHoverUiTest : public InteractiveBrowserTestUiTest {
  public:
   InteractiveBrowserTestHoverUiTest() = default;
@@ -741,7 +742,7 @@ class InteractiveBrowserTestHoverUiTest : public InteractiveBrowserTestUiTest {
     // Move the mouse somewhere completely outside where the dialog will show.
     auto* const browser_view = BrowserView::GetBrowserViewForBrowser(browser());
     mouse_util().PerformGestures(
-        browser_view->GetNativeWindow(),
+        {browser_view->GetNativeWindow(), /*force_async=*/false},
         views::test::InteractionTestUtilMouse::MoveTo(
             browser_view->GetBoundsInScreen().origin() +
             gfx::Vector2d(10, 10)));

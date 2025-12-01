@@ -4,12 +4,9 @@ import json
 from os.path import exists, join, normpath
 from licenses_vivaldi_texts import onlineLicenses
 
-try:
-  f = open(normpath("gen/vivaldi/vivapp/module_list"), mode="r", encoding="utf-8")
-  maindeps = f.read()
-  f.close()
-except:
-  maindeps = ""
+f = open(normpath("gen/vivaldi/vivapp/module_list"), mode="r", encoding="utf-8")
+maindeps = f.read()
+f.close()
 
 modules = {}
 

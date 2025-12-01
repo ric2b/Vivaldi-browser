@@ -30,7 +30,7 @@ namespace {
 
 class FuzzerTestLoader {
  public:
-  explicit FuzzerTestLoader(pdfium::span<const char> span) : m_Span(span) {}
+  explicit FuzzerTestLoader(pdfium::span<const char> span) : span_(span) {}
 
   static int GetBlock(void* param,
                       unsigned long pos,
@@ -39,14 +39,14 @@ class FuzzerTestLoader {
     FuzzerTestLoader* pLoader = static_cast<FuzzerTestLoader*>(param);
     pdfium::CheckedNumeric<size_t> end = pos;
     end += size;
-    CHECK_LE(end.ValueOrDie(), pLoader->m_Span.size());
+    CHECK_LE(end.ValueOrDie(), pLoader->span_.size());
 
-    FXSYS_memcpy(pBuf, &pLoader->m_Span[pos], size);
+    FXSYS_memcpy(pBuf, &pLoader->span_[pos], size);
     return 1;
   }
 
  private:
-  const pdfium::span<const char> m_Span;
+  const pdfium::span<const char> span_;
 };
 
 int ExampleAppAlert(IPDF_JSPLATFORM*,
@@ -131,7 +131,7 @@ void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
   form_callbacks.m_pJsPlatform = &platform_callbacks;
 
   // SAFETY: trusted arguments from fuzzer,
-  FuzzerTestLoader loader(UNSAFE_BUFFERS(pdfium::make_span(data, len)));
+  FuzzerTestLoader loader(UNSAFE_BUFFERS(pdfium::span(data, len)));
   FPDF_FILEACCESS file_access;
   memset(&file_access, '\0', sizeof(file_access));
   file_access.m_FileLen = static_cast<unsigned long>(len);
@@ -156,15 +156,18 @@ void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
   if (FPDFAvail_IsLinearized(pdf_avail.get()) == PDF_LINEARIZED) {
     doc.reset(FPDFAvail_GetDocument(pdf_avail.get(), nullptr));
     if (doc) {
-      while (nRet == PDF_DATA_NOTAVAIL)
+      while (nRet == PDF_DATA_NOTAVAIL) {
         nRet = FPDFAvail_IsDocAvail(pdf_avail.get(), &hints);
+      }
 
-      if (nRet == PDF_DATA_ERROR)
+      if (nRet == PDF_DATA_ERROR) {
         return;
+      }
 
       nRet = FPDFAvail_IsFormAvail(pdf_avail.get(), &hints);
-      if (nRet == PDF_FORM_ERROR || nRet == PDF_FORM_NOTAVAIL)
+      if (nRet == PDF_FORM_ERROR || nRet == PDF_FORM_NOTAVAIL) {
         return;
+      }
 
       bIsLinearized = true;
     }
@@ -172,13 +175,15 @@ void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
     doc.reset(FPDF_LoadCustomDocument(&file_access, nullptr));
   }
 
-  if (!doc)
+  if (!doc) {
     return;
+  }
 
   ScopedFPDFFormHandle form(
       FPDFDOC_InitFormFillEnvironment(doc.get(), &form_callbacks));
-  if (!OnFormFillEnvLoaded(doc.get()))
+  if (!OnFormFillEnvLoaded(doc.get())) {
     return;
+  }
 
   FPDF_SetFormFieldHighlightColor(form.get(), FPDF_FORMFIELD_UNKNOWN, 0xFFE4DD);
   FPDF_SetFormFieldHighlightAlpha(form.get(), 100);
@@ -189,11 +194,13 @@ void PDFiumFuzzerHelper::RenderPdf(const char* data, size_t len) {
   for (int i = 0; i < page_count; ++i) {
     if (bIsLinearized) {
       nRet = PDF_DATA_NOTAVAIL;
-      while (nRet == PDF_DATA_NOTAVAIL)
+      while (nRet == PDF_DATA_NOTAVAIL) {
         nRet = FPDFAvail_IsPageAvail(pdf_avail.get(), i, &hints);
+      }
 
-      if (nRet == PDF_DATA_ERROR)
+      if (nRet == PDF_DATA_ERROR) {
         return;
+      }
     }
     RenderPage(doc.get(), form.get(), i, render_flags, form_flags);
   }
@@ -207,8 +214,9 @@ bool PDFiumFuzzerHelper::RenderPage(FPDF_DOCUMENT doc,
                                     int render_flags,
                                     int form_flags) {
   ScopedFPDFPage page(FPDF_LoadPage(doc, page_index));
-  if (!page)
+  if (!page) {
     return false;
+  }
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
   FORM_OnAfterLoadPage(page.get(), form);

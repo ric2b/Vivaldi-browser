@@ -74,24 +74,24 @@ struct State {
 
     /// Add an offset to the value loaded from @p var.
     /// @param var the variable that contains the builtin value
-    /// @param push_constant_offset the offset in the push constants where the offset is stored
-    void AddOffset(core::ir::Var* var, uint32_t push_constant_offset) {
+    /// @param immediate_data_offset the offset in the immediate data where the offset is stored
+    void AddOffset(core::ir::Var* var, uint32_t immediate_data_offset) {
         // ShaderIO transforms these input builtins such that they are loaded a single time and then
         // converted to u32. We add the offset to the result of the conversion.
         auto* load = GetSingularUse<core::ir::Load>(var);
-        auto* index = load->Result(0)->Type()->Is<core::type::U32>()
+        auto* index = load->Result()->Type()->Is<core::type::U32>()
                           ? load
                           : GetSingularUse<core::ir::Convert>(load);
 
         // Replace users of the original load with the result of the offset calculation.
         auto* offset_index = b.InstructionResult<u32>();
-        index->Result(0)->ReplaceAllUsesWith(offset_index);
+        index->Result()->ReplaceAllUsesWith(offset_index);
 
-        // Load the offset from the push constant structure and add it to the index.
+        // Load the offset from the immediate data structure and add it to the index.
         b.InsertAfter(index, [&] {
-            auto* push_constants = config.push_constant_layout.var;
-            auto idx = u32(config.push_constant_layout.IndexOf(push_constant_offset));
-            auto* offset = b.Load(b.Access<ptr<push_constant, u32>>(push_constants, idx));
+            auto* immediate_data = config.immediate_data_layout.var;
+            auto idx = u32(config.immediate_data_layout.IndexOf(immediate_data_offset));
+            auto* offset = b.Load(b.Access<ptr<immediate, u32>>(immediate_data, idx));
             b.AddWithResult(offset_index, index, offset);
         });
     }
@@ -101,7 +101,7 @@ struct State {
     /// @returns the use
     template <typename T>
     core::ir::Instruction* GetSingularUse(core::ir::Instruction* inst) {
-        auto& usages = inst->Result(0)->UsagesUnsorted();
+        auto& usages = inst->Result()->UsagesUnsorted();
         TINT_ASSERT(usages.Count() == 1);
         auto* index = usages.begin()->instruction->As<T>();
         TINT_ASSERT(index);

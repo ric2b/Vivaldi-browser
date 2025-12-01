@@ -101,6 +101,10 @@ ServiceWorkerProviderContext::TakeController() {
   return std::move(controller_);
 }
 
+bool ServiceWorkerProviderContext::container_is_blob_url_shared_worker() const {
+  return container_is_blob_url_shared_worker_;
+}
+
 int64_t ServiceWorkerProviderContext::GetControllerVersionId() const {
   CHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
   return controller_version_id_;
@@ -310,6 +314,10 @@ ServiceWorkerProviderContext::GetFetchHandlerBypassOption() const {
 
 const blink::WebString ServiceWorkerProviderContext::client_id() const {
   return blink::WebString::FromUTF8(client_id_);
+}
+
+void ServiceWorkerProviderContext::Destroy() const {
+  DestructOnMainThread();
 }
 
 void ServiceWorkerProviderContext::UnregisterWorkerFetchContext(

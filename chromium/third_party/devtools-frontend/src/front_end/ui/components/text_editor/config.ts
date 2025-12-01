@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
@@ -221,7 +222,7 @@ const AutoDetectIndent = CM.StateField.define<string>({
 
 function preservedLength(ch: CM.ChangeDesc): number {
   let len = 0;
-  ch.iterGaps((from, to, l) => {
+  ch.iterGaps((_from, _to, l) => {
     len += l;
   });
   return len;
@@ -289,7 +290,7 @@ export const showWhitespace = new DynamicSetting<string>('show-whitespaces-in-ed
 
 export const allowScrollPastEof = DynamicSetting.bool('allow-scroll-past-eof', CM.scrollPastEnd());
 
-const cachedIndentUnit: {[indent: string]: CM.Extension} = Object.create(null);
+const cachedIndentUnit: Record<string, CM.Extension> = Object.create(null);
 
 function getIndentUnit(indent: string): CM.Extension {
   let value = cachedIndentUnit[indent];
@@ -302,6 +303,8 @@ function getIndentUnit(indent: string): CM.Extension {
 export const indentUnit = new DynamicSetting<string>('text-editor-indent', getIndentUnit);
 
 export const domWordWrap = DynamicSetting.bool('dom-word-wrap', CM.EditorView.lineWrapping);
+
+export const sourcesWordWrap = DynamicSetting.bool('sources.word-wrap', CM.EditorView.lineWrapping);
 
 function detectLineSeparator(text: string): CM.Extension {
   if (/\r\n/.test(text) && !/(^|[^\r])\n/.test(text)) {
@@ -427,10 +430,8 @@ class CompletionHint extends CM.WidgetType {
 }
 
 export const showCompletionHint = CM.ViewPlugin.fromClass(class {
-decorations:
-  CM.DecorationSet = CM.Decoration.none;
-currentHint:
-  string|null = null;
+  decorations: CM.DecorationSet = CM.Decoration.none;
+  currentHint: string|null = null;
 
   update(update: CM.ViewUpdate): void {
     const top = this.currentHint = this.topCompletion(update.state);

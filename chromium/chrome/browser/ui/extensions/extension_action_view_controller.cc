@@ -31,6 +31,7 @@
 #include "chrome/browser/ui/extensions/extensions_container.h"
 #include "chrome/browser/ui/extensions/icon_with_badge_image_source.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
+#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/web_contents.h"
@@ -700,11 +701,11 @@ ExtensionActionViewController::GetIconImageSource(
   bool has_side_panel_action =
       side_panel_service &&
       side_panel_service->HasSidePanelActionForTab(*extension(), tab_id);
-  bool grayscale =
+  bool is_grayscale =
       GetSiteInteraction(web_contents) ==
           extensions::SitePermissionsHelper::SiteInteraction::kNone &&
       !action_is_visible && !has_side_panel_action;
-  image_source->set_grayscale(grayscale);
+  image_source->set_grayscale(is_grayscale);
 
   if (base::FeatureList::IsEnabled(
           extensions_features::kExtensionsMenuAccessControl)) {

@@ -300,6 +300,10 @@ export function metricSavingsForWastedBytes(
  * Returns whether the network request was sent encoded.
  */
 export function isRequestCompressed(request: Types.Events.SyntheticNetworkRequest): boolean {
+  if (!request.args.data.responseHeaders) {
+    return false;
+  }
+
   // FYI: In Lighthouse, older devtools logs (like our test fixtures) seems to be
   // lower case, while modern logs are Cased-Like-This.
   const patterns = [
@@ -387,6 +391,10 @@ export function estimateCompressionRatioForScript(script: Handlers.ModelHandlers
   const request = script.request;
   const contentLength = request.args.data.decodedBodyLength ?? script.content?.length ?? 0;
   const compressedSize = estimateCompressedContentSize(request, contentLength, Protocol.Network.ResourceType.Script);
+  if (contentLength === 0 || compressedSize === 0) {
+    return 1;
+  }
+
   const compressionRatio = compressedSize / contentLength;
   return compressionRatio;
 }

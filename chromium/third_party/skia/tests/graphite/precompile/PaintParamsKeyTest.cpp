@@ -61,6 +61,7 @@
 #include "src/gpu/graphite/ResourceProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
+#include "src/gpu/graphite/TextureInfoPriv.h"
 #include "src/gpu/graphite/UniquePaintParamsID.h"
 #include "src/gpu/graphite/geom/Geometry.h"
 #include "src/gpu/graphite/precompile/PaintOptionsPriv.h"
@@ -85,6 +86,9 @@ constexpr uint32_t kDefaultSeed = 0;
 
 using namespace skgpu::graphite;
 using namespace skiatest::graphite;
+using PrecompileShaders::GradientShaderFlags;
+using PrecompileShaders::ImageShaderFlags;
+using PrecompileShaders::YUVImageShaderFlags;
 
 namespace {
 
@@ -305,7 +309,9 @@ const char* to_str(DrawTypeFlags dt) {
         case DrawTypeFlags::kSDFText_LCD:      return "DrawTypeFlags::kSDFText_LCD";
         case DrawTypeFlags::kDrawVertices:     return "DrawTypeFlags::kDrawVertices";
         case DrawTypeFlags::kCircularArc:      return "DrawTypeFlags::kCircularArc";
-        case DrawTypeFlags::kSimpleShape:      return "DrawTypeFlags::kSimpleShape";
+        case DrawTypeFlags::kAnalyticRRect:    return "DrawTypeFlags::kAnalyticRRect";
+        case DrawTypeFlags::kPerEdgeAAQuad:    return "DrawTypeFlags::kPerEdgeAAQuad";
+        case DrawTypeFlags::kNonAAFillRect:    return "DrawTypeFlags::kNonAAFillRect";
         case DrawTypeFlags::kNonSimpleShape:   return "DrawTypeFlags::kNonSimpleShape";
         default:                               SkASSERT(0); return "DrawTypeFlags::kNone";
     }
@@ -491,18 +497,20 @@ ImageFilterType random_imagefiltertype(SkRandom* rand) {
 }
 
 [[maybe_unused]] DrawTypeFlags random_drawtype(SkRandom* rand) {
-    uint32_t index = rand->nextULessThan(9);
+    uint32_t index = rand->nextULessThan(11);
 
     switch (index) {
-        case 0: return DrawTypeFlags::kBitmapText_Mask;
-        case 1: return DrawTypeFlags::kBitmapText_LCD;
-        case 2: return DrawTypeFlags::kBitmapText_Color;
-        case 3: return DrawTypeFlags::kSDFText;
-        case 4: return DrawTypeFlags::kSDFText_LCD;
-        case 5: return DrawTypeFlags::kDrawVertices;
-        case 6: return DrawTypeFlags::kCircularArc;
-        case 7: return DrawTypeFlags::kSimpleShape;
-        case 8: return DrawTypeFlags::kNonSimpleShape;
+        case 0:  return DrawTypeFlags::kBitmapText_Mask;
+        case 1:  return DrawTypeFlags::kBitmapText_LCD;
+        case 2:  return DrawTypeFlags::kBitmapText_Color;
+        case 3:  return DrawTypeFlags::kSDFText;
+        case 4:  return DrawTypeFlags::kSDFText_LCD;
+        case 5:  return DrawTypeFlags::kDrawVertices;
+        case 6:  return DrawTypeFlags::kCircularArc;
+        case 7:  return DrawTypeFlags::kAnalyticRRect;
+        case 8:  return DrawTypeFlags::kPerEdgeAAQuad;
+        case 9:  return DrawTypeFlags::kNonAAFillRect;
+        case 10: return DrawTypeFlags::kNonSimpleShape;
     }
 
     SkASSERT(0);
@@ -747,20 +755,20 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_gradient_shader(
             s = SkGradientShader::MakeLinear(kPts,
                                              colors, /* colorSpace= */ nullptr, kOffsets, numStops,
                                              tm, interpolation, lmPtr);
-            o = PrecompileShaders::LinearGradient(interpolation);
+            o = PrecompileShaders::LinearGradient(GradientShaderFlags::kAll, interpolation);
             break;
         case SkShaderBase::GradientType::kRadial:
             s = SkGradientShader::MakeRadial(/* center= */ {0, 0}, /* radius= */ 100,
                                              colors, /* colorSpace= */ nullptr, kOffsets, numStops,
                                              tm, interpolation, lmPtr);
-            o = PrecompileShaders::RadialGradient(interpolation);
+            o = PrecompileShaders::RadialGradient(GradientShaderFlags::kAll, interpolation);
             break;
         case SkShaderBase::GradientType::kSweep:
             s = SkGradientShader::MakeSweep(/* cx= */ 0, /* cy= */ 0,
                                             colors, /* colorSpace= */ nullptr, kOffsets, numStops,
                                             tm, /* startAngle= */ 0, /* endAngle= */ 359,
                                             interpolation, lmPtr);
-            o = PrecompileShaders::SweepGradient(interpolation);
+            o = PrecompileShaders::SweepGradient(GradientShaderFlags::kAll, interpolation);
             break;
         case SkShaderBase::GradientType::kConical:
             s = SkGradientShader::MakeTwoPointConical(/* start= */ {100, 100},
@@ -770,7 +778,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_gradient_shader(
                                                       colors,
                                                       /* colorSpace= */ nullptr,
                                                       kOffsets, numStops, tm, interpolation, lmPtr);
-            o = PrecompileShaders::TwoPointConicalGradient(interpolation);
+            o = PrecompileShaders::TwoPointConicalGradient(GradientShaderFlags::kAll,
+                                                           interpolation);
             break;
         case SkShaderBase::GradientType::kNone:
             SkDEBUGFAIL("Gradient shader says its type is none");
@@ -819,7 +828,8 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_image_shader(SkRandom
     SkTileMode tmY = random_tilemode(rand);
 
     std::vector<SkTileMode> precompileTileModes =
-            (tmX == tmY) ? std::vector<SkTileMode>{tmX} : std::vector<SkTileMode>{};
+            (tmX == tmY) ? std::vector<SkTileMode>{ tmX }
+                         : std::vector<SkTileMode>{ SkTileMode::kClamp, SkTileMode::kRepeat };
 
     SkMatrix lmStorage;
     SkMatrix* lmPtr = random_local_matrix(rand, &lmStorage);
@@ -834,24 +844,32 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_image_shader(SkRandom
         case 0: {
             // Non-subset image.
             s = SkShaders::Image(std::move(image), tmX, tmY, SkSamplingOptions(), lmPtr);
-            o = PrecompileShaders::Image({ colorInfo }, precompileTileModes);
+            o = PrecompileShaders::Image(ImageShaderFlags::kAll,
+                                         { colorInfo },
+                                         precompileTileModes);
         } break;
         case 1: {
             // Subset image.
             const SkRect subset = SkRect::MakeWH(image->width() / 2, image->height() / 2);
             s = SkImageShader::MakeSubset(
                     std::move(image), subset, tmX, tmY, SkSamplingOptions(), lmPtr);
-            o = PrecompileShaders::Image({ colorInfo }, precompileTileModes);
+            o = PrecompileShaders::Image(ImageShaderFlags::kAll,
+                                         { colorInfo },
+                                         precompileTileModes);
         } break;
         case 2: {
             // Cubic-sampled image.
             s = SkShaders::Image(std::move(image), tmX, tmY, SkCubicResampler::Mitchell(), lmPtr);
-            o = PrecompileShaders::Image({ colorInfo }, precompileTileModes);
+            o = PrecompileShaders::Image(ImageShaderFlags::kAll,
+                                         { colorInfo },
+                                         precompileTileModes);
         } break;
         default: {
             // Raw image draw.
             s = SkShaders::RawImage(std::move(image), tmX, tmY, SkSamplingOptions(), lmPtr);
-            o = PrecompileShaders::RawImage({ colorInfo }, precompileTileModes);
+            o = PrecompileShaders::RawImage(ImageShaderFlags::kExcludeCubic,
+                                            { colorInfo },
+                                            precompileTileModes);
         } break;
     }
 
@@ -870,11 +888,14 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_yuv_image_shader(SkRa
     sk_sp<PrecompileShader> o;
 
     SkSamplingOptions samplingOptions(SkFilterMode::kLinear);
-    if (rand->nextBool()) {
+    bool useCubic = rand->nextBool();
+    if (useCubic) {
         samplingOptions = SkCubicResampler::Mitchell();
     }
 
     sk_sp<SkImage> yuvImage = make_yuv_image(rand, recorder);
+    SkColorInfo colorInfo = yuvImage->imageInfo().colorInfo();
+
     if (rand->nextBool()) {
         s = SkImageShader::MakeSubset(std::move(yuvImage), SkRect::MakeXYWH(8, 8, 16, 16),
                                       tmX, tmY, samplingOptions, lmPtr);
@@ -882,7 +903,9 @@ std::pair<sk_sp<SkShader>, sk_sp<PrecompileShader>> create_yuv_image_shader(SkRa
         s = SkShaders::Image(std::move(yuvImage), tmX, tmY, samplingOptions, lmPtr);
     }
 
-    o = PrecompileShaders::YUVImage();
+    o = PrecompileShaders::YUVImage(useCubic ? YUVImageShaderFlags::kCubicSampling
+                                             : YUVImageShaderFlags::kExcludeCubic,
+                                    { colorInfo });
 
     return { s, o };
 }
@@ -1564,10 +1587,13 @@ std::pair<SkPaint, PaintOptions> create_paint(SkRandom* rand,
                                               ColorFilterType colorFilterType,
                                               MaskFilterType maskFilterType,
                                               ImageFilterType imageFilterType) {
+    SkColor paintColor = random_color(rand, ColorConstraint::kNone);
+
     SkPaint paint;
-    paint.setColor(random_color(rand, ColorConstraint::kOpaque));
+    paint.setColor(paintColor);
 
     PaintOptions paintOptions;
+    paintOptions.setPaintColorIsOpaque(SkColorGetA(paintColor) == 0xFF);
 
     {
         auto [s, o] = create_shader(rand, recorder, shaderType);
@@ -1688,27 +1714,6 @@ struct DrawData {
     sk_sp<SkVertices> fVertsWithColors;
     sk_sp<SkVertices> fVertsWithOutColors;
 };
-
-void simple_draws(SkCanvas* canvas, const SkPaint& paint) {
-    // TODO: add some drawLine calls
-    canvas->drawRect(SkRect::MakeWH(16, 16), paint);
-    canvas->drawRRect(SkRRect::MakeOval({0, 0, 16, 16}), paint);
-    canvas->drawRRect(SkRRect::MakeRectXY({0, 0, 16, 16}, 4, 4), paint);
-
-    // TODO: add a case that uses the SkCanvas::experimental_DrawEdgeAAImageSet entry point
-    if (!paint.getShader() &&
-        !paint.getColorFilter() &&
-        !paint.getImageFilter() &&
-        paint.asBlendMode().has_value()) {
-        // The SkPaint reconstructed inside the drawEdgeAAQuad call needs to match 'paint' for
-        // the precompilation checks to work.
-        canvas->experimental_DrawEdgeAAQuad(SkRect::MakeWH(16, 16),
-                                            /* clip= */ nullptr,
-                                            SkCanvas::kAll_QuadAAFlags,
-                                            paint.getColor4f(),
-                                            paint.asBlendMode().value());
-    }
-}
 
 void non_simple_draws(SkCanvas* canvas, const SkPaint& paint, const DrawData& drawData) {
     // TODO: add strokeAndFill draws here as well as a stroked non-circular rrect draw
@@ -1834,8 +1839,28 @@ void check_draw(skiatest::Reporter* reporter,
                     canvas->drawArc({0, 0, 16, 16}, 0, 90, /* useCenter= */ true, paint);
                 }
                 break;
-            case DrawTypeFlags::kSimpleShape:
-                simple_draws(canvas, paint);
+            case DrawTypeFlags::kAnalyticRRect:
+                canvas->drawRRect(SkRRect::MakeOval({0, 0, 16, 16}), paint);
+                canvas->drawRRect(SkRRect::MakeRectXY({0, 0, 16, 16}, 4, 4), paint);
+                break;
+            case DrawTypeFlags::kPerEdgeAAQuad:
+                // TODO: add a case that uses the SkCanvas::experimental_DrawEdgeAAImageSet
+                //  entry point
+                if (!paint.getShader() &&
+                    !paint.getColorFilter() &&
+                    !paint.getImageFilter() &&
+                    paint.asBlendMode().has_value()) {
+                    // The SkPaint reconstructed inside the drawEdgeAAQuad call needs to match
+                    // 'paint' for the precompilation checks to work.
+                    canvas->experimental_DrawEdgeAAQuad(SkRect::MakeWH(16, 16),
+                                                        /* clip= */ nullptr,
+                                                        SkCanvas::kAll_QuadAAFlags,
+                                                        paint.getColor4f(),
+                                                        paint.asBlendMode().value());
+                }
+                break;
+            case DrawTypeFlags::kNonAAFillRect:
+                canvas->drawRect(SkRect::MakeWH(16, 16), paint);
                 break;
             case DrawTypeFlags::kNonSimpleShape:
                 non_simple_draws(canvas, paint, kDrawData);
@@ -1934,9 +1959,9 @@ void extract_vs_build_subtest(skiatest::Reporter* reporter,
         Coverage coverage = coverageOptions[rand->nextULessThan(3)];
 
         const SkBlenderBase* blender = as_BB(paint.getBlender());
-        bool dstReadRequired = blender ? IsDstReadRequired(recorder->priv().caps(),
-                                                           blender->asBlendMode(),
-                                                           coverage)
+        bool dstReadRequired = blender ? !CanUseHardwareBlending(recorder->priv().caps(),
+                                                                 blender->asBlendMode(),
+                                                                 coverage)
                                        : false;
 
         // In the normal API this modification happens in SkDevice::clipShader()
@@ -2052,7 +2077,10 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
                                                                  skgpu::Protected::kNo,
                                                                  skgpu::Renderable::kYes);
 
-    TextureInfo msaaTex = caps->getDefaultMSAATextureInfo(textureInfo, Discardable::kYes);
+    const bool msaaSupported =
+            caps->msaaRenderToSingleSampledSupport() ||
+            caps->isSampleCountSupported(TextureInfoPriv::ViewFormat(textureInfo),
+                                         caps->defaultMSAASamplesCount());
 
     bool vello = false;
 #ifdef SK_ENABLE_VELLO_SHADERS
@@ -2061,9 +2089,8 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
 
     // Using Vello skips using MSAA for complex paths. Additionally, Intel Macs avoid MSAA
     // in favor of path rendering.
-    const RenderPassProperties* pathProperties = (msaaTex.numSamples() > 1 && !vello)
-                                                                 ? &kDepth_Stencil_4
-                                                                 : &kDepth_1;
+    const RenderPassProperties* pathProperties = (msaaSupported && !vello) ? &kDepth_Stencil_4
+                                                                           : &kDepth_1;
 
     int before = globalCache->numGraphicsPipelines();
     Precompile(precompileContext, paintOptions, dt,
@@ -2071,7 +2098,7 @@ void precompile_vs_real_draws_subtest(skiatest::Reporter* reporter,
     if (gNeedSKPPaintOption) {
         // The skp draws a rect w/ a default SkPaint and RGBA dst color type
         PaintOptions skpPaintOptions;
-        Precompile(precompileContext, skpPaintOptions, DrawTypeFlags::kSimpleShape,
+        Precompile(precompileContext, skpPaintOptions, DrawTypeFlags::kNonAAFillRect,
                    { { kDepth_1.fDSFlags, kRGBA_8888_SkColorType, kDepth_1.fDstCS,
                        kDepth_1.fRequiresMSAA } });
     }
@@ -2158,14 +2185,14 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTestReduced,
     //----------------------
 #else
     //------------------------
-    uint32_t seed = 1721227069;
-    ShaderType shaderType = ShaderType::kLocalMatrix;
-    BlenderType blenderType = BlenderType::kArithmetic;
-    ColorFilterType colorFilterType = ColorFilterType::kRuntime;
+    uint32_t seed = 0;
+    ShaderType shaderType = ShaderType::kYUVImage;
+    BlenderType blenderType = BlenderType::kPorterDuff;
+    ColorFilterType colorFilterType = ColorFilterType::kNone;
     MaskFilterType maskFilterType = MaskFilterType::kNone;
-    ImageFilterType imageFilterType = ImageFilterType::kDisplacement;
+    ImageFilterType imageFilterType = ImageFilterType::kNone;
     ClipType clipType = ClipType::kNone;
-    DrawTypeFlags drawTypeFlags = DrawTypeFlags::kText;
+    DrawTypeFlags drawTypeFlags = DrawTypeFlags::kBitmapText_Mask;
     //-----------------------
 #endif
 
@@ -2214,6 +2241,7 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ShaderType::kImage,
             ShaderType::kRadialGradient,
             ShaderType::kSolidColor,
+            ShaderType::kYUVImage,
 #if EXPANDED_SET
             ShaderType::kNone,
             ShaderType::kColorFilter,
@@ -2225,7 +2253,6 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             ShaderType::kPicture,
             ShaderType::kRuntime,
             ShaderType::kSweepGradient,
-            ShaderType::kYUVImage,
             ShaderType::kWorkingColorSpace,
 #endif
     };
@@ -2300,7 +2327,9 @@ DEF_CONDITIONAL_GRAPHITE_TEST_FOR_ALL_CONTEXTS(PaintParamsKeyTest,
             DrawTypeFlags::kSDFText_LCD,
             DrawTypeFlags::kDrawVertices,
             DrawTypeFlags::kCircularArc,
-            DrawTypeFlags::kSimpleShape,
+            DrawTypeFlags::kAnalyticRRect,
+            DrawTypeFlags::kPerEdgeAAQuad,
+            DrawTypeFlags::kNonAAFillRect,
             DrawTypeFlags::kNonSimpleShape,
     };
 

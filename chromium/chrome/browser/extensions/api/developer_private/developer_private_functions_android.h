@@ -8,12 +8,6 @@
 #include "chrome/common/extensions/api/developer_private.h"
 #include "extensions/browser/extension_function.h"
 
-DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateAutoUpdateFunction,
-                   "developerPrivate.autoUpdate",
-                   DEVELOPERPRIVATE_AUTOUPDATE);
-DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateGetExtensionSizeFunction,
-                   "developerPrivate.getExtensionSize",
-                   DEVELOPERPRIVATE_GETEXTENSIONSIZE);
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateReloadFunction,
                    "developerPrivate.reload",
                    DEVELOPERPRIVATE_RELOAD);
@@ -26,21 +20,12 @@ DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateInstallDroppedFileFunct
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateNotifyDragInstallInProgressFunction,
                    "developerPrivate.notifyDragInstallInProgress",
                    DEVELOPERPRIVATE_NOTIFYDRAGINSTALLINPROGRESS);
-DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateChoosePathFunction,
-                   "developerPrivate.choosePath",
-                   DEVELOPERPRIVATE_CHOOSEPATH);
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivatePackDirectoryFunction,
                    "developerPrivate.packDirectory",
                    DEVELOPERPRIVATE_PACKDIRECTORY);
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateLoadDirectoryFunction,
                    "developerPrivate.loadDirectory",
                    DEVELOPERPRIVATE_LOADUNPACKEDCROS);
-DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateRequestFileSourceFunction,
-                   "developerPrivate.requestFileSource",
-                   DEVELOPERPRIVATE_REQUESTFILESOURCE);
-DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateOpenDevToolsFunction,
-                   "developerPrivate.openDevTools",
-                   DEVELOPERPRIVATE_OPENDEVTOOLS);
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateRepairExtensionFunction,
                    "developerPrivate.repairExtension",
                    DEVELOPERPRIVATE_REPAIREXTENSION);
@@ -53,9 +38,6 @@ DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateShowPathFunction,
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateSetShortcutHandlingSuspendedFunction,
                    "developerPrivate.setShortcutHandlingSuspended",
                    DEVELOPERPRIVATE_SETSHORTCUTHANDLINGSUSPENDED);
-DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateUpdateExtensionCommandFunction,
-                   "developerPrivate.updateExtensionCommand",
-                   DEVELOPERPRIVATE_UPDATEEXTENSIONCOMMAND);
 DECLARE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateRemoveMultipleExtensionsFunction,
                    "developerPrivate.removeMultipleExtensions",
                    DEVELOPERPRIVATE_REMOVEMULTIPLEEXTENSIONS);

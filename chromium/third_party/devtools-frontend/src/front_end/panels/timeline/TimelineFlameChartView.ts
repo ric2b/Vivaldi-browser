@@ -1,11 +1,11 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Bindings from '../../models/bindings/bindings.js';
 import * as CrUXManager from '../../models/crux-manager/crux-manager.js';
@@ -39,7 +39,8 @@ import {
   selectionFromRangeMilliSeconds,
   selectionIsEvent,
   selectionIsRange,
-  type TimelineSelection,
+  selectionsEqual,
+  type TimelineSelection
 } from './TimelineSelection.js';
 import {AggregatedTimelineTreeView, TimelineTreeView} from './TimelineTreeView.js';
 import type {TimelineMarkerStyle} from './TimelineUIUtils.js';
@@ -178,6 +179,14 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   #treeRowClickDimmer = this.#registerFlameChartDimmer({inclusive: false, outline: false});
   #activeInsightDimmer = this.#registerFlameChartDimmer({inclusive: false, outline: true});
   #thirdPartyCheckboxDimmer = this.#registerFlameChartDimmer({inclusive: true, outline: false});
+  /**
+   * Determines if we respect the user's prefers-reduced-motion setting. We
+   * absolutely should care about this; the only time we don't is in unit tests
+   * when we need to force animations on and don't want the environment to
+   * determine if they are on or not.
+   * It is not expected that this flag is ever disabled in non-test environments.
+   */
+  #checkReducedMotion = true;
 
   constructor(delegate: TimelineModeViewDelegate) {
     super();
@@ -390,10 +399,6 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     });
 
     this.detailsView.addEventListener(TimelineTreeView.Events.TREE_ROW_HOVERED, e => {
-      if (!Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS)) {
-        return;
-      }
-
       if (e.data.events) {
         this.#updateFlameChartDimmerWithEvents(this.#treeRowHoverDimmer, e.data.events);
         return;
@@ -715,17 +720,15 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
       entries.push(...Overlays.Overlays.entriesForOverlay(overlay));
     }
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS)) {
-      // The insight's `relatedEvents` property likely already includes the events associated with
-      // an overlay, but just in case not, include both arrays. Duplicates are fine.
-      let relatedEventsList = this.#activeInsight?.model.relatedEvents;
-      if (!relatedEventsList) {
-        relatedEventsList = [];
-      } else if (relatedEventsList instanceof Map) {
-        relatedEventsList = Array.from(relatedEventsList.keys());
-      }
-      this.#dimInsightRelatedEvents([...entries, ...relatedEventsList]);
+    // The insight's `relatedEvents` property likely already includes the events associated with
+    // an overlay, but just in case not, include both arrays. Duplicates are fine.
+    let relatedEventsList = this.#activeInsight?.model.relatedEvents;
+    if (!relatedEventsList) {
+      relatedEventsList = [];
+    } else if (relatedEventsList instanceof Map) {
+      relatedEventsList = Array.from(relatedEventsList.keys());
     }
+    this.#dimInsightRelatedEvents([...entries, ...relatedEventsList]);
 
     if (options.updateTraceWindow) {
       // We should only expand the entry track when we are updating the trace window
@@ -737,9 +740,10 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
       }
       const overlaysBounds = Overlays.Overlays.traceWindowContainingOverlays(this.#currentInsightOverlays);
       if (overlaysBounds) {
-        // Trace window covering all overlays expanded by 100% so that the overlays cover 50% of the visible window.
+        // Trace window covering all overlays expanded by 50% so that the overlays cover 2/3 (100/150) of the visible window.
+        const percentage = options.updateTraceWindowPercentage ?? 50;
         const expandedBounds =
-            Trace.Helpers.Timing.expandWindowByPercentOrToOneMillisecond(overlaysBounds, traceBounds, 100);
+            Trace.Helpers.Timing.expandWindowByPercentOrToOneMillisecond(overlaysBounds, traceBounds, percentage);
 
         // Set the timeline visible window and ignore the minimap bounds. This
         // allows us to pick a visible window even if the overlays are outside of
@@ -1041,6 +1045,9 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
     this.runBrickBreakerGame();
   }
 
+  forceAnimationsForTest(): void {
+    this.#checkReducedMotion = false;
+  }
   runBrickBreakerGame(): void {
     if (!SHOULD_SHOW_EASTER_EGG) {
       return;
@@ -1064,7 +1071,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
 
     // If the user has set a preference for reduced motion, we disable any animations.
     const userHasReducedMotionSet = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const shouldAnimate = Boolean(event.options.shouldAnimate) && !userHasReducedMotionSet;
+    const shouldAnimate =
+        Boolean(event.options.shouldAnimate) && (this.#checkReducedMotion ? !userHasReducedMotionSet : true);
 
     this.mainFlameChart.setWindowTimes(visibleWindow.min, visibleWindow.max, shouldAnimate);
     this.networkDataProvider.setWindowTimes(visibleWindow.min, visibleWindow.max);
@@ -1284,7 +1292,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
         // This is the first time this group has been created, so register its loggable.
         this.#loggableForGroupByLogContext.set(group.jslogContext, loggable);
         VisualLogging.registerLoggable(
-            loggable, `${VisualLogging.section().context(`timeline.${group.jslogContext}`)}`, this.delegate.element);
+            loggable, `${VisualLogging.section().context(`timeline.${group.jslogContext}`)}`, this.delegate.element,
+            new DOMRect(0, 0, 200, 100));
       }
     }
   }
@@ -1395,6 +1404,10 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
   }
 
   setSelectionAndReveal(selection: TimelineSelection|null): void {
+    if (selection && this.#currentSelection && selectionsEqual(selection, this.#currentSelection)) {
+      return;
+    }
+
     this.#currentSelection = selection;
 
     // Clear any existing entry selection.
@@ -1755,10 +1768,8 @@ export class TimelineFlameChartView extends Common.ObjectWrapper.eventMixin<Even
 
     this.searchableView.updateSearchMatchesCount(this.searchResults.length);
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS)) {
-      this.#updateFlameChartDimmerWithIndices(
-          this.#searchDimmer, mainMatches.map(m => m.index), networkMatches.map(m => m.index));
-    }
+    this.#updateFlameChartDimmerWithIndices(
+        this.#searchDimmer, mainMatches.map(m => m.index), networkMatches.map(m => m.index));
 
     if (!shouldJump || !this.searchResults.length) {
       return;
@@ -1867,7 +1878,7 @@ export class TimelineFlameChartMarker implements PerfUI.FlameChart.FlameChartMar
     return i18nString(UIStrings.sAtS, {PH1: this.style.title, PH2: startTime});
   }
 
-  draw(context: CanvasRenderingContext2D, x: number, height: number, pixelsPerMillisecond: number): void {
+  draw(context: CanvasRenderingContext2D, x: number, _height: number, pixelsPerMillisecond: number): void {
     const lowPriorityVisibilityThresholdInPixelsPerMs = 4;
 
     if (this.style.lowPriority && pixelsPerMillisecond < lowPriorityVisibilityThresholdInPixelsPerMs) {

@@ -85,6 +85,8 @@ static std::string PermissionTypeToString(WebViewPermissionType type) {
       return "microphone_and_camera";
     case WEB_VIEW_PERMISSION_TYPE_MIDI_SYSEX:
       return "midi-sysex";
+    case WEB_VIEW_PERMISSION_TYPE_MULTIPLE_DOWNLOADS:
+      return "multiple_downloads";
     case WEB_VIEW_PERMISSION_TYPE_IDLE_DETECTION:
       return "idle_detection";
     case WEB_VIEW_PERMISSION_TYPE_SENSORS:
@@ -198,8 +200,8 @@ void RecordUserInitiatedUMA(
 WebViewPermissionHelper::WebViewPermissionHelper(WebViewGuest* web_view_guest)
     : next_permission_request_id_(guest_view::kInstanceIDNone),
       web_view_guest_(web_view_guest) {
-  web_view_permission_helper_delegate_.reset(
-      ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(this));
+  web_view_permission_helper_delegate_ =
+      ExtensionsAPIClient::Get()->CreateWebViewPermissionHelperDelegate(this);
 }
 
 WebViewPermissionHelper::~WebViewPermissionHelper() {

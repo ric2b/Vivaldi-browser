@@ -13,7 +13,6 @@ import * as PublicExtensions from '../../models/extensions/extensions.js';
 import type * as Trace from '../../models/trace/trace.js';
 import * as PanelCommon from '../../panels/common/common.js';
 import * as Emulation from '../../panels/emulation/emulation.js';
-import * as Timeline from '../../panels/timeline/timeline.js';
 import * as Tracing from '../../services/tracing/tracing.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import type * as Dialogs from '../../ui/components/dialogs/dialogs.js';
@@ -30,13 +29,10 @@ import * as Converters from './converters/converters.js';
 import * as Extensions from './extensions/extensions.js';
 import * as Models from './models/models.js';
 import * as Actions from './recorder-actions/recorder-actions.js';
-import recorderControllerStylesRaw from './recorderController.css.js';
+import recorderControllerStyles from './recorderController.css.js';
 import * as Events from './RecorderEvents.js';
 
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const recorderControllerStyles = new CSSStyleSheet();
-recorderControllerStyles.replaceSync(recorderControllerStylesRaw.cssText);
-
+// TODO(crbug.com/391381439): Fully migrate off of Constructable Stylesheets.
 const {html, Decorators, LitElement} = Lit;
 const {customElement, state} = Decorators;
 
@@ -73,7 +69,7 @@ const UIStrings = {
   /**
    * @description The title of the button that opens a menu with various options of exporting a recording to file.
    */
-  exportRecording: 'Export',
+  exportRecording: 'Export recording',
   /**
    * @description The title of shortcut for starting and stopping recording.
    */
@@ -138,7 +134,7 @@ const UIStrings = {
    */
   allowImporting: 'allow importing',
   /**
-   *@description Input box placeholder which instructs the user to type 'allow pasing' into the input box.
+   *@description Input box placeholder which instructs the user to type 'allow importing' into the input box.
    *@example {allow importing} PH1
    */
   typeAllowImporting: 'Type \'\'{PH1}\'\'',
@@ -203,8 +199,6 @@ const CONVERTER_ID_TO_METRIC: Record<string, Host.UserMetrics.RecordingExported|
 
 @customElement('devtools-recorder-controller')
 export class RecorderController extends LitElement {
-  static override readonly styles = [recorderControllerStyles];
-
   @state() declare private currentRecordingSession?: Models.RecordingSession.RecordingSession;
   @state() declare private currentRecording: StoredRecording|undefined;
   @state() declare private currentStep?: Models.Schema.Step;
@@ -595,10 +589,10 @@ export class RecorderController extends LitElement {
       this.#replayState.isPlaying = false;
       this.recordingPlayer = undefined;
       await UI.InspectorView.InspectorView.instance().showPanel(event.data?.targetPanel as string);
-      switch (event.data?.targetPanel) {
-        case Components.RecordingView.TargetPanel.PERFORMANCE_PANEL:
-          Timeline.TimelinePanel.TimelinePanel.instance().loadFromEvents(events as Trace.Types.Events.Event[]);
-          break;
+      if (event.data?.targetPanel === Components.RecordingView.TargetPanel.PERFORMANCE_PANEL) {
+        // Note: this is not passing any metadata to the Performance panel.
+        const trace = new SDK.TraceObject.TraceObject(events as Trace.Types.Events.Event[]);
+        void Common.Revealer.reveal(trace);
       }
     }
   }
@@ -1117,26 +1111,30 @@ export class RecorderController extends LitElement {
   }
 
   #getShortcutsInfo(): Dialogs.ShortcutDialog.Shortcut[] {
-    const getBindingForAction = (action: Actions.RecorderActions): string[][] => {
+    const getBindingForAction = (action: Actions.RecorderActions): Dialogs.ShortcutDialog.ShortcutPart[][] => {
       const shortcuts = UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction(action);
-      const shortcutsWithSplitBindings =
-          shortcuts.map(shortcut => shortcut.title().split(/[\s+]+/).map(word => word.trim()));
+      const shortcutsWithSplitBindings = shortcuts.map(shortcut => shortcut.title().split(/[\s+]+/).map(word => {
+        return {key: word.trim()};
+      }));
       return shortcutsWithSplitBindings;
     };
 
     return [
       {
         title: i18nString(UIStrings.startStopRecording),
-        bindings: getBindingForAction(Actions.RecorderActions.START_RECORDING),
+        rows: getBindingForAction(Actions.RecorderActions.START_RECORDING),
       },
       {
         title: i18nString(UIStrings.replayRecording),
-        bindings: getBindingForAction(Actions.RecorderActions.REPLAY_RECORDING),
+        rows: getBindingForAction(Actions.RecorderActions.REPLAY_RECORDING),
       },
-      {title: i18nString(UIStrings.copyShortcut), bindings: Host.Platform.isMac() ? [['⌘', 'C']] : [['Ctrl', 'C']]},
+      {
+        title: i18nString(UIStrings.copyShortcut),
+        rows: Host.Platform.isMac() ? [[{key: '⌘'}, {key: 'C'}]] : [[{key: 'Ctrl'}, {key: 'C'}]]
+      },
       {
         title: i18nString(UIStrings.toggleCode),
-        bindings: getBindingForAction(Actions.RecorderActions.TOGGLE_CODE_VIEW),
+        rows: getBindingForAction(Actions.RecorderActions.TOGGLE_CODE_VIEW),
       },
     ];
   }
@@ -1293,6 +1291,7 @@ export class RecorderController extends LitElement {
     ];
 
     return html`
+        <style>${recorderControllerStyles}</style>
         <div class="wrapper">
           <div class="header" jslog=${VisualLogging.toolbar()}>
             <devtools-button

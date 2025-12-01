@@ -24,8 +24,6 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
 #include "components/webapps/common/web_app_id.h"
-#include "third_party/liburlpattern/options.h"
-#include "third_party/liburlpattern/pattern.h"
 #include "third_party/re2/src/re2/set.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/models/image_model.h"
@@ -174,7 +172,7 @@ class WebAppBrowserController : public AppBrowserController,
   bool is_isolated_web_app_for_testing_ = false;
 
 #if BUILDFLAG(IS_CHROMEOS)
-  raw_ptr<const ash::SystemWebAppDelegate> system_app_ = nullptr;
+  const raw_ptr<const ash::SystemWebAppDelegate> system_app_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   mutable std::optional<ui::ImageModel> app_icon_;
 

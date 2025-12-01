@@ -107,6 +107,9 @@ class Device final : public DeviceBase {
 
     const AHBFunctions* GetOrLoadAHBFunctions();
 
+    const Buffer* GetInternalTextureBuiltinsUniformBuffer() const;
+    const Buffer* GetInternalArrayLengthUniformBuffer() const;
+
   private:
     Device(AdapterBase* adapter,
            const UnpackedPtr<DeviceDescriptor>& descriptor,
@@ -130,7 +133,7 @@ class Device final : public DeviceBase {
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
-        OwnedCompilationMessages* compilationMessages) override;
+        std::unique_ptr<OwnedCompilationMessages>* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
@@ -162,6 +165,13 @@ class Device final : public DeviceBase {
     GLFormatTable mFormatTable;
     std::unique_ptr<ContextEGL> mContext;
     int mMaxTextureMaxAnisotropy = 0;
+
+    // Maintain an internal uniform buffer to store extra information needed by shader emulation for
+    // certain texture builtins.
+    Ref<Buffer> mTextureBuiltinsBuffer;
+
+    // Maintain an internal uniform buffer to store extra array length information if needed.
+    Ref<Buffer> mArrayLengthBuffer;
 
 #if DAWN_PLATFORM_IS(ANDROID)
     std::unique_ptr<AHBFunctions> mAHBFunctions;

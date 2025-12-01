@@ -21,7 +21,6 @@
 
 #include "base/command_line.h"
 #include "base/containers/span.h"
-#include "base/debug/alias.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -47,6 +46,7 @@
 #include "ui/base/buildflags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/data_pack.h"
+#include "ui/base/resource/lottie_resource.h"
 #include "ui/base/resource/resource_scale_factor.h"
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
@@ -71,6 +71,9 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
+#include "base/threading/scoped_blocking_call.h"
 #include "ui/display/win/dpi.h"
 
 // To avoid conflicts with the macro from the Windows SDK...
@@ -91,16 +94,6 @@ const unsigned char kPngDataChunkType[4] = { 'I', 'D', 'A', 'T' };
 
 #if !BUILDFLAG(IS_APPLE)
 const char kPakFileExtension[] = ".pak";
-#endif
-
-#if BUILDFLAG(IS_CHROMEOS)
-// Pointers to the functions |lottie::ParseLottieAsStillImage| and
-// |lottie::ParseLottieAsThemedStillImage|, so that dependencies used by those
-// functions do not need to be included directly in ui/base.
-ResourceBundle::LottieImageParseFunction g_parse_lottie_as_still_image_ =
-    nullptr;
-ResourceBundle::LottieThemedImageParseFunction
-    g_parse_lottie_as_themed_still_image_ = nullptr;
 #endif
 
 ResourceBundle* g_shared_instance_ = nullptr;
@@ -378,16 +371,6 @@ ResourceBundle& ResourceBundle::GetSharedInstance() {
   return *g_shared_instance_;
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
-// static
-void ResourceBundle::SetLottieParsingFunctions(
-    LottieImageParseFunction parse_lottie_as_still_image,
-    LottieThemedImageParseFunction parse_lottie_as_themed_still_image) {
-  g_parse_lottie_as_still_image_ = parse_lottie_as_still_image;
-  g_parse_lottie_as_themed_still_image_ = parse_lottie_as_themed_still_image;
-}
-#endif
-
 void ResourceBundle::LoadSecondaryLocaleDataWithPakFileRegion(
     base::File pak_file,
     const base::MemoryMappedFile::Region& region) {
@@ -401,7 +384,49 @@ void ResourceBundle::LoadSecondaryLocaleDataWithPakFileRegion(
 // static
 bool ResourceBundle::LocaleDataPakExists(const std::string& locale) {
   const auto path = GetLocaleFilePath(locale);
-  return !path.empty() && base::PathExists(path);
+  if (path.empty()) {
+    return false;
+  }
+#if BUILDFLAG(IS_WIN)
+  // https://crbug.com/40688225: Chrome sometimes fails to find standard .pak
+  // files. One theory is that this happens shortly after an update because
+  // scanners (e.g., A/V) are busy checking Chrome's files. If this is
+  // happening, then `base::PathExists` is reporting `false` for files that
+  // exist but can't be opened.
+  DWORD attributes;
+  {
+    base::ScopedBlockingCall scoped_blocking_call(
+        FROM_HERE, base::BlockingType::MAY_BLOCK);
+    attributes = ::GetFileAttributes(path.value().c_str());
+  }
+  if (attributes == FILE_ATTRIBUTE_DIRECTORY) {
+    return false;  // A directory is not a .pak file.
+  }
+  if (attributes != INVALID_FILE_ATTRIBUTES) {
+    return true;  // Attributes were read; the file must exist.
+  }
+  const auto error = ::GetLastError();
+  if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND) {
+    return false;  // `path` does not exist.
+  }
+  // The attributes could not be read yet `path` exists. This is likely a case
+  // of the file being locked by other software. Either the file will be
+  // readable by the time it's needed, or the failure to open it will be handled
+  // at that time.
+
+  // Include the path and the error in subsequent crashes (e.g., in Chrome's
+  // InitResourceBundleAndDetermineLocale).
+  static auto* const busy_path_key = base::debug::AllocateCrashKeyString(
+      "LocaleDataPakExists-busy_path", base::debug::CrashKeySize::Size256);
+  base::debug::SetCrashKeyString(busy_path_key, path.AsUTF8Unsafe());
+  static auto* const busy_error_key = base::debug::AllocateCrashKeyString(
+      "LocaleDataPakExists-busy_error", base::debug::CrashKeySize::Size32);
+  base::debug::SetCrashKeyString(busy_error_key, base::NumberToString(error));
+
+  return true;
+#else
+  return base::PathExists(path);
+#endif
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
@@ -484,42 +509,61 @@ std::string ResourceBundle::LoadLocaleResources(const std::string& pref_locale,
   if (locale_file_path.empty())
     locale_file_path = GetLocaleFilePath(app_locale);
 
-  if (locale_file_path.empty()) { // (jarle@vivaldi) load fallback locale if 'unsupported' locale
+  if (locale_file_path.empty()) {
     if (pref_locale == "nn") {
       locale_file_path = GetLocaleFilePath("nb"); // Bokmål as a fallback for Nynorsk
     } else {
       locale_file_path = GetLocaleFilePath("en-US");
     }
     if (locale_file_path.empty()) {
-    // It's possible that there is no locale.pak.
+    // locale.pak was provided by neither GetOverriddenPakPath() nor
+    // GetLocaleFilePath().
+    if (crash_on_failure) {
+      // Store the locale strings in crash keys in case the caller subsequently
+      // crashes the process; see https://crbug.com/40688225.
+      static auto* const app_locale_key = base::debug::AllocateCrashKeyString(
+          "LoadLocaleResourcesNoPath-app_locale",
+          base::debug::CrashKeySize::Size32);
+      base::debug::SetCrashKeyString(app_locale_key, app_locale);
+      static auto* const pref_locale_key = base::debug::AllocateCrashKeyString(
+          "LoadLocaleResourcesNoPath-pref_locale",
+          base::debug::CrashKeySize::Size32);
+      base::debug::SetCrashKeyString(pref_locale_key, pref_locale);
+    }
     LOG(WARNING) << "locale_file_path.empty() for locale " << app_locale;
     return std::string();
-    }
+    } // End Vivaldi
   }
 
   auto data_pack = std::make_unique<DataPack>(k100Percent);
-  if (!data_pack->LoadFromPath(locale_file_path) && crash_on_failure) {
-    // https://crbug.com/1076423: Chrome can't start when the locale file cannot
-    // be loaded. Crash early and gather some data.
-#if BUILDFLAG(IS_WIN)
-    const auto last_error = ::GetLastError();
-    base::debug::Alias(&last_error);
-    wchar_t path_copy[MAX_PATH];
-    base::wcslcpy(path_copy, locale_file_path.value().c_str(),
-                  std::size(path_copy));
-    base::debug::Alias(path_copy);
-#endif  // BUILDFLAG(IS_WIN)
+  if (auto result = data_pack->LoadFromPathWithError(locale_file_path);
+      !result.has_value() && crash_on_failure) {
+    DataPack::ErrorState& error = result.error();
+    // https://crbug.com/40688225 and https://crbug.com/394631579: Chrome can't
+    // start when the locale file cannot be loaded. Crash early and gather some
+    // data.
 
-    // Collect diagnostic info for https://crbug.com/394631579 .
-#if BUILDFLAG(IS_MAC)
+    // The local contained in prefs; provided by the caller.
     SCOPED_CRASH_KEY_STRING32("LoadLocaleResources", "pref_locale",
                               pref_locale);
+    // The app locale resolved from the pref value.
     SCOPED_CRASH_KEY_STRING32("LoadLocaleResources", "app_locale", app_locale);
-    SCOPED_CRASH_KEY_STRING1024("LoadLocaleResources", "override_filepath",
-                                GetOverriddenPakPath().AsUTF8Unsafe());
+    // The path to the (possibly overridden) file that could not be opened.
     SCOPED_CRASH_KEY_STRING1024("LoadLocaleResources", "locale_filepath",
                                 locale_file_path.AsUTF8Unsafe());
-#endif  // BUILDFLAG(IS_MAC)
+
+    // A ui::DataPack::FailureReason indicating what step during the attempt to
+    // load the file failed.
+    SCOPED_CRASH_KEY_NUMBER("LoadLocaleResources", "reason",
+                            static_cast<int>(error.reason));
+    // A last-error code on Windows; otherwise, errno. Only relevant if `reason`
+    // is `kOpenFile` (0) or `kMapFile` (1).
+    SCOPED_CRASH_KEY_NUMBER("LoadLocaleResources", "error", error.error);
+    // The base::File::Error from opening the file. Only relevant if `reason` is
+    // `kOpenFile` (0). Most likely redundant given `error` above, but reporting
+    // anyway just in case.
+    SCOPED_CRASH_KEY_NUMBER("LoadLocaleResources", "file_error",
+                            error.file_error);
 
     NOTREACHED();
   }
@@ -669,7 +713,6 @@ std::optional<ResourceBundle::LottieData> ResourceBundle::GetLottieData(
   return result;
 }
 
-#if BUILDFLAG(IS_CHROMEOS)
 const ui::ImageModel& ResourceBundle::GetThemedLottieImageNamed(
     int resource_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -685,11 +728,10 @@ const ui::ImageModel& ResourceBundle::GetThemedLottieImageNamed(
   // The bytes string was successfully loaded, so parse it and cache the
   // resulting image.
   auto inserted = image_models_.emplace(
-      resource_id, (*g_parse_lottie_as_themed_still_image_)(std::move(*data)));
+      resource_id, ParseLottieAsThemedStillImage(std::move(*data)));
   DCHECK(inserted.second);
   return inserted.first->second;
 }
-#endif
 
 constexpr uint8_t ResourceBundle::kBrotliConst[];
 
@@ -1008,10 +1050,11 @@ void ResourceBundle::InitSharedInstance(Delegate* delegate) {
   g_shared_instance_ = new ResourceBundle(delegate);
   std::vector<ResourceScaleFactor> supported_scale_factors;
 #if BUILDFLAG(IS_IOS)
-  display::Display display = display::Screen::GetScreen()->GetPrimaryDisplay();
-  if (display.device_scale_factor() > 2.0) {
+  float internal_display_device_scale_factor =
+      display::GetInternalDisplayDeviceScaleFactor();
+  if (internal_display_device_scale_factor > 2.0) {
     supported_scale_factors.push_back(k300Percent);
-  } else if (display.device_scale_factor() > 1.0) {
+  } else if (internal_display_device_scale_factor > 1.0) {
     supported_scale_factors.push_back(k200Percent);
   } else {
     supported_scale_factors.push_back(k100Percent);
@@ -1116,11 +1159,13 @@ void ResourceBundle::InitDefaultFontList() {
 
 gfx::ImageSkia ResourceBundle::CreateImageSkia(int resource_id) {
   DCHECK(!resource_handles_.empty()) << "Missing call to SetResourcesDataDLL?";
-#if BUILDFLAG(IS_CHROMEOS)
+
   std::optional<LottieData> data = GetLottieData(resource_id);
   if (data) {
-    return (*g_parse_lottie_as_still_image_)(std::move(*data));
+    return ParseLottieAsStillImage(std::move(*data));
   }
+
+#if BUILDFLAG(IS_CHROMEOS)
   const ResourceScaleFactor scale_factor_to_load = GetMaxResourceScaleFactor();
 #elif BUILDFLAG(IS_WIN)
   const ResourceScaleFactor scale_factor_to_load =
@@ -1129,6 +1174,7 @@ gfx::ImageSkia ResourceBundle::CreateImageSkia(int resource_id) {
 #else
   const ResourceScaleFactor scale_factor_to_load = ui::k100Percent;
 #endif
+
   // TODO(oshima): Consider reading the image size from png IHDR chunk and
   // skip decoding here and remove #ifdef below.
   // |ResourceBundle::GetSharedInstance()| is destroyed after the
@@ -1298,7 +1344,7 @@ bool ResourceBundle::PNGContainsFallbackMarker(base::span<const uint8_t> buf) {
     if (buf.size() < kPngChunkMetadataSize) {
       break;
     }
-    uint32_t length = base::numerics::U32FromBigEndian(buf.first<4u>());
+    uint32_t length = base::U32FromBigEndian(buf.first<4u>());
     if (buf.size() - kPngChunkMetadataSize < length) {
       break;
     }

@@ -1024,6 +1024,14 @@ HttpHandler::HttpHandler(
               "RunBounceTrackingMitigations",
               base::BindRepeating(&ExecuteRunBounceTrackingMitigations))),
 
+      // Extensions for Protected Audience KAnonymity support:
+      // https://wicg.github.io/turtledove/#kanonymity-automation
+      CommandMapping(
+          kPost, "session/:sessionId/protected_audience/set_k_anonymity",
+          WrapToCommand(
+              "SetProtectedAudienceKAnonymity",
+              base::BindRepeating(&ExecuteSetProtectedAudienceKAnonymity))),
+
       // Extensions for Custom Handlers API:
       // https://html.spec.whatwg.org/multipage/system-state.html#rph-automation
       CommandMapping(
@@ -1065,6 +1073,17 @@ HttpHandler::HttpHandler(
           kDelete, "session/:sessionId/deviceposture",
           WrapToCommand("ClearDevicePosture",
                         base::BindRepeating(&ExecuteClearDevicePosture))),
+
+      // Extensions for Viewport Segments API:
+      // https://drafts.csswg.org/css-viewport-1/#automation-of-the-segments-property
+      CommandMapping(
+          kPost, "session/:sessionId/displayfeatures",
+          WrapToCommand("SetDisplayFeatures",
+                        base::BindRepeating(&ExecuteSetDisplayFeatures))),
+      CommandMapping(
+          kDelete, "session/:sessionId/displayfeatures",
+          WrapToCommand("ClearDisplayFeatures",
+                        base::BindRepeating(&ExecuteClearDisplayFeatures))),
 
       // Extensions for Compute Pressure API:
       // https://w3c.github.io/compute-pressure/#automation

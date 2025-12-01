@@ -71,34 +71,34 @@ std::vector<tab_groups::SavedTabGroupTab> GetRemovedTabs(
       removed_tabs.emplace_back(tab);
 
       // Update user attributions for tab removal since they are still pointing
-      // to the last update.
-      if (source == tab_groups::TriggerSource::LOCAL) {
+      // to the last update. Because ProcessTabGroupUpdates() are called on a
+      // posted task, don't trust the TriggerSource here. Instead, we should
+      // rely on the RemovedTabMetadata to figure out the right attribution.
+      if (auto it = removed_tabs_metadata.find(tab.saved_tab_guid());
+          it != removed_tabs_metadata.end()) {
+        // Copy over metadata for the removed tabs from SavedTabGroup.
+        const tab_groups::SavedTabGroup::RemovedTabMetadata& metadata =
+            it->second;
+        removed_tabs.back().SetUpdatedByAttribution(metadata.removed_by);
+        removed_tabs.back().SetUpdateTime(metadata.removal_time);
+      } else if (source == tab_groups::TriggerSource::LOCAL) {
         // If it's a local tab removal, it must by by the current signed-in
         // user.
         removed_tabs.back().SetUpdatedByAttribution(account_gaia);
-        removed_tabs.back().SetUpdateTimeWindowsEpochMicros(base::Time::Now());
-      } else {
-        // For remote tab removals, find the removed by attributions cached on
-        // the SavedTabGroup.
-        if (auto it = removed_tabs_metadata.find(tab.saved_tab_guid());
-            it != removed_tabs_metadata.end()) {
-          // Copy over metadata for the removed tabs from SavedTabGroup.
-          const tab_groups::SavedTabGroup::RemovedTabMetadata& metadata =
-              it->second;
-          removed_tabs.back().SetUpdatedByAttribution(metadata.removed_by);
-          removed_tabs.back().SetUpdateTimeWindowsEpochMicros(
-              metadata.removal_time);
-        }
+        removed_tabs.back().SetUpdateTime(base::Time::Now());
       }
     }
   }
   return removed_tabs;
 }
 
-std::vector<tab_groups::SavedTabGroupTab> GetUpdatedTabs(
-    const tab_groups::SavedTabGroup& before,
-    const tab_groups::SavedTabGroup& after) {
-  std::vector<tab_groups::SavedTabGroupTab> updated_tabs;
+std::vector<
+    std::pair<tab_groups::SavedTabGroupTab, tab_groups::SavedTabGroupTab>>
+GetUpdatedTabs(const tab_groups::SavedTabGroup& before,
+               const tab_groups::SavedTabGroup& after) {
+  std::vector<
+      std::pair<tab_groups::SavedTabGroupTab, tab_groups::SavedTabGroupTab>>
+      updated_tabs;
   for (const auto& old_tab : before.saved_tabs()) {
     if (!after.ContainsTab(old_tab.saved_tab_guid())) {
       // Skip if the tab has been removed.
@@ -117,7 +117,7 @@ std::vector<tab_groups::SavedTabGroupTab> GetUpdatedTabs(
       // show instant message about which tab has updated.
       tab_groups::SavedTabGroupTab updated_tab(*new_tab);
       updated_tab.SetTitle(old_tab.title());
-      updated_tabs.emplace_back(updated_tab);
+      updated_tabs.emplace_back(std::make_pair<>(old_tab, updated_tab));
     }
   }
   return updated_tabs;
@@ -128,7 +128,9 @@ TabGroupChangeNotifierImpl::TabGroupChangeNotifierImpl(
     tab_groups::TabGroupSyncService* tab_group_sync_service,
     signin::IdentityManager* identity_manager)
     : tab_group_sync_service_(tab_group_sync_service),
-      identity_manager_(identity_manager) {}
+      identity_manager_(identity_manager) {
+  CHECK(tab_group_sync_service_);
+}
 
 TabGroupChangeNotifierImpl::~TabGroupChangeNotifierImpl() = default;
 
@@ -315,6 +317,18 @@ void TabGroupChangeNotifierImpl::OnTabSelected(
   }
 }
 
+void TabGroupChangeNotifierImpl::OnTabLastSeenTimeChanged(
+    const base::Uuid& tab_id,
+    tab_groups::TriggerSource source) {
+  if (!is_initialized_) {
+    return;
+  }
+
+  for (auto& observer : observers_) {
+    observer.OnTabLastSeenTimeChanged(tab_id, source);
+  }
+}
+
 void TabGroupChangeNotifierImpl::OnTabGroupLocalIdChanged(
     const base::Uuid& sync_id,
     const std::optional<tab_groups::LocalTabGroupID>& local_id) {
@@ -480,16 +494,18 @@ void TabGroupChangeNotifierImpl::ProcessTabGroupUpdates(
     }
   }
 
-  std::vector<tab_groups::SavedTabGroupTab> updated_tabs =
-      GetUpdatedTabs(before, after);
-  if (updated_tabs.size() > 0) {
+  std::vector<
+      std::pair<tab_groups::SavedTabGroupTab, tab_groups::SavedTabGroupTab>>
+      updated_tab_pairs = GetUpdatedTabs(before, after);
+  if (updated_tab_pairs.size() > 0) {
     for (auto& observer : observers_) {
-      for (auto& tab : updated_tabs) {
-        bool is_selected = tab.local_tab_id()
-                               ? base::Contains(last_selected_tabs_,
-                                                tab.local_tab_id().value())
-                               : false;
-        observer.OnTabUpdated(tab, source, is_selected);
+      for (auto& [before_tab, after_tab] : updated_tab_pairs) {
+        bool is_selected =
+            after_tab.local_tab_id()
+                ? base::Contains(last_selected_tabs_,
+                                 after_tab.local_tab_id().value())
+                : false;
+        observer.OnTabUpdated(before_tab, after_tab, source, is_selected);
       }
     }
   }

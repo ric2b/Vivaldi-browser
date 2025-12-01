@@ -4,8 +4,8 @@
 
 #include <cstdint>
 
+#include "src/base/numerics/safe_conversions.h"
 #include "src/base/overflowing-math.h"
-#include "src/base/safe_conversions.h"
 #include "src/codegen/assembler-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/wasm/wasm-arguments.h"
@@ -72,7 +72,7 @@ class CWasmEntryArgTester {
     // Check the result.
     ReturnType result = packer.Pop<ReturnType>();
     ReturnType expected = expected_fn_(args...);
-    if (std::is_floating_point<ReturnType>::value) {
+    if (std::is_floating_point_v<ReturnType>) {
       CHECK_DOUBLE_EQ(expected, result);
     } else {
       CHECK_EQ(expected, result);

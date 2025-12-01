@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/core/animation/interpolable_length.h"
 #include "third_party/blink/renderer/core/animation/underlying_length_checker.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
@@ -37,18 +38,32 @@ InterpolationValue CSSCustomListInterpolationType::MaybeConvertNeutral(
 
 InterpolationValue CSSCustomListInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState* state,
-    ConversionCheckers&) const {
+    const StyleResolverState& state,
+    ConversionCheckers& conversion_checkers) const {
   const auto* list = DynamicTo<CSSValueList>(value);
-  if (!list)
+  if (!list) {
     return nullptr;
-
-  ConversionCheckers null_checkers;
+  }
 
   return ListInterpolationFunctions::CreateList(
-      list->length(), [this, list, state, &null_checkers](wtf_size_t index) {
+      list->length(),
+      [this, list, &state, &conversion_checkers](wtf_size_t index) {
         return inner_interpolation_type_->MaybeConvertValue(
-            list->Item(index), state, null_checkers);
+            list->Item(index), state, conversion_checkers);
+      });
+}
+
+InterpolationValue
+CSSCustomListInterpolationType::MaybeConvertCustomPropertyUnderlyingValue(
+    const CSSValue& value) const {
+  const auto* list = DynamicTo<CSSValueList>(value);
+  if (!list) {
+    return nullptr;
+  }
+  return ListInterpolationFunctions::CreateList(
+      list->length(), [this, list](wtf_size_t index) {
+        return inner_interpolation_type_
+            ->MaybeConvertCustomPropertyUnderlyingValue(list->Item(index));
       });
 }
 
@@ -65,12 +80,12 @@ CSSCustomListInterpolationType::PreInterpolationCompositeIfNeeded(
   // TODO(andruud): Make InterpolationType::Composite take an UnderlyingValue
   // rather than an UnderlyingValueOwner.
   UnderlyingValueOwner owner;
-  owner.Set(*this, underlying);
+  owner.Set(this, underlying);
 
   ConversionCheckers null_checkers;
 
   const CSSInterpolationType* interpolation_type =
-      inner_interpolation_type_.get();
+      inner_interpolation_type_.Get();
   auto composite_callback =
       [interpolation_type, composite, &null_checkers](
           UnderlyingValue& underlying_value, double underlying_fraction,
@@ -93,7 +108,7 @@ CSSCustomListInterpolationType::PreInterpolationCompositeIfNeeded(
       };
 
   ListInterpolationFunctions::Composite(
-      owner, 1.0, *this, value,
+      owner, 1.0, this, value,
       ListInterpolationFunctions::LengthMatchingStrategy::kEqual,
       ListInterpolationFunctions::InterpolableValuesKnownCompatible,
       NonInterpolableValuesAreCompatible, composite_callback);
@@ -147,14 +162,14 @@ void CSSCustomListInterpolationType::Composite(
   // TODO(andruud): Make InterpolationType::Composite take an UnderlyingValue
   // rather than an UnderlyingValueOwner.
   const CSSInterpolationType* interpolation_type =
-      inner_interpolation_type_.get();
+      inner_interpolation_type_.Get();
   auto composite_callback =
       [interpolation_type, interpolation_fraction](
           UnderlyingValue& underlying_value, double underlying_fraction,
           const InterpolableValue& interpolable_value,
           const NonInterpolableValue* non_interpolable_value) {
         UnderlyingValueOwner owner;
-        owner.Set(*interpolation_type,
+        owner.Set(interpolation_type,
                   InterpolationValue(
                       underlying_value.MutableInterpolableValue().Clone(),
                       underlying_value.GetNonInterpolableValue()));
@@ -172,7 +187,7 @@ void CSSCustomListInterpolationType::Composite(
       };
 
   ListInterpolationFunctions::Composite(
-      underlying_value_owner, underlying_fraction, *this, value,
+      underlying_value_owner, underlying_fraction, this, value,
       ListInterpolationFunctions::LengthMatchingStrategy::kEqual,
       ListInterpolationFunctions::InterpolableValuesKnownCompatible,
       NonInterpolableValuesAreCompatible, composite_callback);
@@ -182,7 +197,7 @@ PairwiseInterpolationValue CSSCustomListInterpolationType::MaybeMergeSingles(
     InterpolationValue&& start,
     InterpolationValue&& end) const {
   const CSSInterpolationType* interpolation_type =
-      inner_interpolation_type_.get();
+      inner_interpolation_type_.Get();
   return ListInterpolationFunctions::MaybeMergeSingles(
       std::move(start), std::move(end),
       ListInterpolationFunctions::LengthMatchingStrategy::kEqual,

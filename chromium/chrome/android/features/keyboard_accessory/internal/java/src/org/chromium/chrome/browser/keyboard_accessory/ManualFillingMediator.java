@@ -98,8 +98,8 @@ class ManualFillingMediator
     private static final int MINIMAL_AVAILABLE_VERTICAL_SPACE = 128; // in DP.
     private static final int MINIMAL_AVAILABLE_HORIZONTAL_SPACE = 180; // in DP.
 
-    private SparseArray<AccessorySheetTabCoordinator> mSheets = new SparseArray<>();
-    private PropertyModel mModel = ManualFillingProperties.createFillingModel();
+    private final SparseArray<AccessorySheetTabCoordinator> mSheets = new SparseArray<>();
+    private final PropertyModel mModel = ManualFillingProperties.createFillingModel();
     private WindowAndroid mWindowAndroid;
     private ApplicationViewportInsetSupplier mApplicationViewportInsetSupplier;
     private final ObservableSupplierImpl<Integer> mBottomInsetSupplier =
@@ -120,6 +120,8 @@ class ManualFillingMediator
     private final Callback<ViewportInsets> mViewportInsetsObserver = this::onViewportInsetChanged;
     private final ObservableSupplierImpl<Boolean> mBackPressChangedSupplier =
             new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<KeyboardAccessoryVisualStateProvider>
+            mKeyboardAccessoryVisualStateSupplier = new ObservableSupplierImpl<>();
     private final ObservableSupplierImpl<AccessorySheetVisualStateProvider>
             mAccessorySheetVisualStateSupplier = new ObservableSupplierImpl<>();
 
@@ -202,6 +204,7 @@ class ManualFillingMediator
         mModel.set(PORTRAIT_ORIENTATION, hasPortraitOrientation());
         mModel.addObserver(this::onPropertyChanged);
         mAccessorySheet = accessorySheet;
+        mKeyboardAccessoryVisualStateSupplier.set(mKeyboardAccessory);
         mAccessorySheetVisualStateSupplier.set(mAccessorySheet);
         mAccessorySheet.setOnPageChangeListener(mKeyboardAccessory.getOnPageChangeListener());
         mAccessorySheet.setHeight(getIdealSheetHeight());
@@ -703,7 +706,11 @@ class ManualFillingMediator
             }
         }
         if (requiresVisibleSheet(extensionState)) {
-            newControlsHeight += mAccessorySheet.getHeight();
+            newControlsHeight +=
+                    mAccessorySheet.getHeight()
+                            - mActivity
+                                    .getResources()
+                                    .getDimensionPixelSize(R.dimen.toolbar_shadow_height);
             newControlsOffset += mAccessorySheet.getHeight();
         }
 
@@ -985,6 +992,15 @@ class ManualFillingMediator
                                 .getDimensionPixelSize(
                                         R.dimen.keyboard_accessory_suggestion_height);
         return idealHeight + getHeaderHeight();
+    }
+
+    /**
+     * Returns the supplier for a {@link KeyboardAccessoryVisualStateProvider} that can be observed
+     * to be notified of changes to the visual state of the keyboard accessory.
+     */
+    ObservableSupplier<KeyboardAccessoryVisualStateProvider>
+            getKeyboardAccessoryVisualStateProvider() {
+        return mKeyboardAccessoryVisualStateSupplier;
     }
 
     /**

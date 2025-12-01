@@ -22,7 +22,6 @@
 #include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/browser/autofill/autofill_entity_data_manager_factory.h"
-#include "chrome/browser/autofill_ai/autofill_ai_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_ai_util.h"
 #include "chrome/browser/extensions/api/autofill_private/autofill_util.h"
@@ -182,14 +181,6 @@ autofill::AutofillProfile CreateNewAutofillProfile(
       adm.IsEligibleForAddressAccountStorage()
           ? autofill::AutofillProfile::RecordType::kAccount
           : autofill::AutofillProfile::RecordType::kLocalOrSyncable;
-  if (country_code &&
-      !adm.IsCountryEligibleForAccountStorage(country_code.value())) {
-    // Note: addresses from unsupported countries can't be saved in account.
-    // TODO(crbug.com/40263955): remove temporary unsupported countries
-    // filtering.
-    record_type = autofill::AutofillProfile::RecordType::kLocalOrSyncable;
-  }
-
   AddressCountryCode address_country_code =
       country_code.has_value()
           ? AddressCountryCode(std::string(*country_code))
@@ -345,10 +336,8 @@ ExtensionFunction::ResponseAction AutofillPrivateGetCountryListFunction::Run() {
           ArgumentList(api::autofill_private::GetCountryList::Results::Create(
               country_list)));
     }
-    country_list = autofill_util::GenerateCountryListForAccountStorage(*adm);
-  } else {
-    country_list = autofill_util::GenerateCountryListForProfileStorage();
   }
+  country_list = autofill_util::GenerateCountryList();
   return RespondNow(ArgumentList(
       api::autofill_private::GetCountryList::Results::Create(country_list)));
 }
@@ -1097,6 +1086,8 @@ AutofillPrivateGetAllEntityTypesFunction::Run() {
             autofill_ai_util::GetAddEntityTypeStringForI18n(entity_type);
         private_api_entity_type.edit_entity_type_string =
             autofill_ai_util::GetEditEntityTypeStringForI18n(entity_type);
+        private_api_entity_type.delete_entity_type_string =
+            autofill_ai_util::GetDeleteEntityTypeStringForI18n(entity_type);
         return private_api_entity_type;
       });
   return RespondNow(ArgumentList(

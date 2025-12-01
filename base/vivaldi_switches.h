@@ -45,6 +45,9 @@ SWITCHES_EXPORT extern const char kVivaldiUpdateURL[];
 SWITCHES_EXPORT extern const char kCleanShutdown[];
 #endif //IS_WIN
 
+#ifdef VIVALDI_V8_CONTEXT_SNAPSHOT
+SWITCHES_EXPORT extern const char kVivaldiSnapshotProcess[];
+#endif
 }  // namespace switches
 
 #endif  // BASE_VIVALDI_SWITCHES_H_

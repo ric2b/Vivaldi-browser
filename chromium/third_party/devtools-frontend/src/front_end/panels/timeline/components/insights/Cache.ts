@@ -5,7 +5,7 @@
 import './Table.js';
 
 import * as i18n from '../../../../core/i18n/i18n.js';
-import type {UseCacheInsightModel} from '../../../../models/trace/insights/Cache.js';
+import type {CacheInsightModel} from '../../../../models/trace/insights/Cache.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 import type * as Overlays from '../../overlays/overlays.js';
@@ -18,7 +18,7 @@ const {UIStrings, i18nString} = Trace.Insights.Models.Cache;
 
 const {html} = Lit;
 
-export class Cache extends BaseInsightComponent<UseCacheInsightModel> {
+export class Cache extends BaseInsightComponent<CacheInsightModel> {
   static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-cache`;
 
   mapToRow(req: Trace.Insights.Models.Cache.CacheableRequest): TableDataRow {
@@ -43,10 +43,6 @@ export class Cache extends BaseInsightComponent<UseCacheInsightModel> {
     }
 
     return this.model.requests.map(req => this.#createOverlayForRequest(req.request));
-  }
-
-  override getEstimatedSavingsBytes(): number|null {
-    return this.model?.totalWastedBytes ?? null;
   }
 
   override renderContent(): Lit.LitTemplate {

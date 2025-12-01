@@ -29,6 +29,7 @@
 #include "ui/base/interaction/interactive_test_definitions.h"
 #include "ui/base/interaction/interactive_test_internal.h"
 #include "ui/base/metadata/metadata_types.h"
+#include "ui/base/test/ui_controls.h"
 #include "ui/views/interaction/element_tracker_views.h"
 #include "ui/views/interaction/interaction_test_util_mouse.h"
 #include "ui/views/interaction/interactive_views_test_internal.h"
@@ -345,9 +346,13 @@ class InteractiveViewsTestApi : public ui::test::InteractiveTestApi {
   //
   // This verb is only available in interactive test suites; see
   // `RequireInteractiveTest()`.
+  //
+  // The optional `modifier_keys` parameter can be set to any combination of
+  // `ui_controls::AcceleratorState`.
   [[nodiscard]] StepBuilder ClickMouse(
       ui_controls::MouseButton button = ui_controls::LEFT,
-      bool release = true);
+      bool release = true,
+      int modifier_keys = ui_controls::kNoAccelerator);
 
   // Depresses the left mouse button at the current cursor position and drags to
   // the target `position`. The `reference` element will be used based on how
@@ -367,8 +372,12 @@ class InteractiveViewsTestApi : public ui::test::InteractiveTestApi {
   //
   // This verb is only available in interactive test suites; see
   // `RequireInteractiveTest()`.
+  //
+  // The optional `modifier_keys` parameter can be set to any combination of
+  // `ui_controls::AcceleratorState`.
   [[nodiscard]] StepBuilder ReleaseMouse(
-      ui_controls::MouseButton button = ui_controls::LEFT);
+      ui_controls::MouseButton button = ui_controls::LEFT,
+      int modifier_keys = ui_controls::kNoAccelerator);
 
   // As IfElement(), but `condition` takes a single argument that is a const
   // View pointer. If `element` is not a view of type V, then the test will
@@ -410,6 +419,24 @@ class InteractiveViewsTestApi : public ui::test::InteractiveTestApi {
       M&& matcher,
       ThenBlock then_steps,
       ElseBlock else_steps = Else());
+
+  // On some platforms, context menu operations run in an OS message pump that
+  // ignores non-input events, so async Kombucha does not work, as the posted
+  // tasks won't be run.
+  //
+  // Wrap any context menu operation (including the triggering event, if it is a
+  // `ClickMouse(ui_controls::RIGHT)`) up to and including the step that closes
+  // the context menu in this modifier. If your test fails to close the context
+  // menu, it may hang, as there is no single automated way to clean up context
+  // menus in Views.
+  template <typename... Args>
+  [[nodiscard]] static MultiStep MayInvolveNativeContextMenu(Args&&... args) {
+#if BUILDFLAG(IS_MAC)
+    return WithoutDelay(std::forward<Args>(args)...);
+#else
+    return Steps(std::forward<Args>(args)...);
+#endif
+  }
 
   // Sets the context widget. Must be called before RunTestSequence() or any of
   // the mouse functions.

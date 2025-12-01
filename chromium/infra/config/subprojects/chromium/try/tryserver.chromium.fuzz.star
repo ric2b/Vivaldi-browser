@@ -144,11 +144,37 @@ try_.builder(
 )
 
 try_.builder(
+    name = "linux-centipede-high-end-asan-dcheck",
+    mirrors = ["ci/Centipede High End Upload Linux ASan DCheck"],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/Centipede High End Upload Linux ASan DCheck",
+            "no_symbols",
+            "skip_generate_fuzzer_owners",
+        ],
+    ),
+    contact_team_email = "chrome-deet-core@google.com",
+)
+
+try_.builder(
     name = "linux-libfuzzer-high-end-asan-rel",
     mirrors = ["ci/Libfuzzer High End Upload Linux ASan"],
     gn_args = gn_args.config(
         configs = [
             "ci/Libfuzzer High End Upload Linux ASan",
+            "no_symbols",
+            "skip_generate_fuzzer_owners",
+        ],
+    ),
+    contact_team_email = "chrome-deet-core@google.com",
+)
+
+try_.builder(
+    name = "linux-libfuzzer-high-end-asan-dbg",
+    mirrors = ["ci/Libfuzzer High End Upload Linux ASan Debug"],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/Libfuzzer High End Upload Linux ASan Debug",
             "no_symbols",
             "skip_generate_fuzzer_owners",
         ],

@@ -27,6 +27,7 @@
 
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/core/fluent_types.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/bool.h"
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
@@ -231,6 +232,21 @@ TEST_F(SpirvWriterTest, Type_RuntimeArray_ExplicitStride) {
     EXPECT_INST("%_runtimearr_float = OpTypeRuntimeArray %float");
 }
 
+TEST_F(SpirvWriterTest, Type_BindingArray_SampledTexture) {
+    b.Append(b.ir.root_block, [&] {  //
+        auto* sampled_texture = ty.sampled_texture(core::type::TextureDimension::k2d, ty.f32());
+        auto* v = b.Var("v", ty.ptr<handle>(ty.binding_array(sampled_texture, 4_u)));
+        v->SetBindingPoint(0, 0);
+    });
+
+    ASSERT_TRUE(Generate()) << Error() << output_;
+    EXPECT_INST("OpTypeImage %float 2D 0 0 0 1 Unknown");
+    EXPECT_INST("OpTypeInt 32 0");
+    EXPECT_INST("OpConstant %uint 4");
+    EXPECT_INST("OpTypeArray %4 %uint_4");
+    EXPECT_INST("OpTypePointer UniformConstant %_arr_4_uint_4");
+}
+
 TEST_F(SpirvWriterTest, Type_Struct_NoExplicitLayout) {
     auto* str =
         ty.Struct(mod.symbols.New("MyStruct"), {
@@ -402,7 +418,7 @@ using Type_MultisampledTexture = SpirvWriterTestWithParam<TextureCase>;
 TEST_P(Type_MultisampledTexture, Emit) {
     auto params = GetParam();
     b.Append(b.ir.root_block, [&] {
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.Get<core::type::MultisampledTexture>(
+        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.multisampled_texture(
                                  params.dim, MakeScalarType(params.format))));
         v->SetBindingPoint(0, 0);
     });
@@ -421,8 +437,7 @@ using Type_DepthTexture = SpirvWriterTestWithParam<TextureCase>;
 TEST_P(Type_DepthTexture, Emit) {
     auto params = GetParam();
     b.Append(b.ir.root_block, [&] {  //
-        auto* v =
-            b.Var("v", ty.ptr<handle, read_write>(ty.Get<core::type::DepthTexture>(params.dim)));
+        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.depth_texture(params.dim)));
         v->SetBindingPoint(0, 0);
     });
 
@@ -440,8 +455,7 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_F(SpirvWriterTest, Type_DepthTexture_DedupWithSampledTexture) {
     b.Append(b.ir.root_block, [&] {
         auto* v1 = b.Var("v1", ty.ptr<handle, read_write>(ty.sampled_texture(Dim::k2d, ty.f32())));
-        auto* v2 =
-            b.Var("v2", ty.ptr<handle, read_write>(ty.Get<core::type::DepthTexture>(Dim::k2d)));
+        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(ty.depth_texture(Dim::k2d)));
         v1->SetBindingPoint(0, 1);
         v2->SetBindingPoint(0, 2);
     });
@@ -460,8 +474,7 @@ TEST_F(SpirvWriterTest, Type_DepthTexture_DedupWithSampledTexture) {
 
 TEST_F(SpirvWriterTest, Type_DepthMultiSampledTexture) {
     b.Append(b.ir.root_block, [&] {
-        auto* v = b.Var("v", ty.ptr<handle, read_write>(
-                                 ty.Get<core::type::DepthMultisampledTexture>(Dim::k2d)));
+        auto* v = b.Var("v", ty.ptr<handle, read_write>(ty.depth_multisampled_texture(Dim::k2d)));
         v->SetBindingPoint(0, 0);
     });
 
@@ -471,10 +484,9 @@ TEST_F(SpirvWriterTest, Type_DepthMultiSampledTexture) {
 
 TEST_F(SpirvWriterTest, Type_DepthMultisampledTexture_DedupWithMultisampledTexture) {
     b.Append(b.ir.root_block, [&] {
-        auto* v1 = b.Var("v1", ty.ptr<handle, read_write>(
-                                   ty.Get<core::type::MultisampledTexture>(Dim::k2d, ty.f32())));
-        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(
-                                   ty.Get<core::type::DepthMultisampledTexture>(Dim::k2d)));
+        auto* v1 =
+            b.Var("v1", ty.ptr<handle, read_write>(ty.multisampled_texture(Dim::k2d, ty.f32())));
+        auto* v2 = b.Var("v2", ty.ptr<handle, read_write>(ty.depth_multisampled_texture(Dim::k2d)));
         v1->SetBindingPoint(0, 1);
         v2->SetBindingPoint(0, 2);
     });
@@ -572,8 +584,8 @@ TEST_F(SpirvWriterTest, Type_SubgroupMatrix) {
     EXPECT_INST("OpCapability CooperativeMatrixKHR");
     EXPECT_INST("OpExtension \"SPV_KHR_cooperative_matrix\"");
     EXPECT_INST("%3 = OpTypeCooperativeMatrixKHR %float %uint_3 %uint_4 %uint_8 %uint_0");
-    EXPECT_INST("%13 = OpTypeCooperativeMatrixKHR %uint %uint_3 %uint_8 %uint_4 %uint_1");
-    EXPECT_INST("%18 = OpTypeCooperativeMatrixKHR %int %uint_3 %uint_2 %uint_2 %uint_2");
+    EXPECT_INST("%14 = OpTypeCooperativeMatrixKHR %uint %uint_3 %uint_8 %uint_4 %uint_1");
+    EXPECT_INST("%19 = OpTypeCooperativeMatrixKHR %int %uint_3 %uint_2 %uint_2 %uint_2");
 }
 
 // Test that we can emit multiple types.

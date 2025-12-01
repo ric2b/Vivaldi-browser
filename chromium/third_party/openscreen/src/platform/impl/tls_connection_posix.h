@@ -40,6 +40,8 @@ class TlsConnectionPosix : public TlsConnection {
   // automatically by TlsConnectionFactoryPosix after the handshake completes.
   void RegisterConnectionWithDataRouter(PlatformClientPosix* platform_client);
 
+  bool HasPendingWrite() const { return !buffer_.GetReadableRegion().empty(); }
+
   const SocketHandle& socket_handle() const { return socket_->socket_handle(); }
 
  protected:

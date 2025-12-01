@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.password_manager.settings;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID;
 
 import android.content.Context;
@@ -15,6 +16,8 @@ import androidx.preference.PreferenceViewHolder;
 
 import org.chromium.base.DeviceInfo;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.access_loss.PasswordAccessLossWarningType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.LoginDbDeprecationUtilBridge;
@@ -34,9 +37,10 @@ import org.chromium.components.user_prefs.UserPrefs;
  * is used so that the password manager entry point displays custom strings when saving passwords is
  * enabled/disabled by policy.
  */
+@NullMarked
 public class PasswordsPreference extends ChromeBasePreference implements ProfileDependentSetting {
-    private static PrefService sPrefServiceForTesting;
-    private Profile mProfile;
+    private static @Nullable PrefService sPrefServiceForTesting;
+    private @Nullable Profile mProfile;
 
     /** Constructor for inflating from XML. */
     public PasswordsPreference(Context context, AttributeSet attrs) {
@@ -59,6 +63,7 @@ public class PasswordsPreference extends ChromeBasePreference implements Profile
         super.onBindViewHolder(holder);
         // This preference is the only one of its type in the preferences group so it will not
         // be recycled.
+        assumeNonNull(mProfile);
         PrefService prefService =
                 sPrefServiceForTesting != null ? sPrefServiceForTesting : UserPrefs.get(mProfile);
 
@@ -121,6 +126,9 @@ public class PasswordsPreference extends ChromeBasePreference implements Profile
             summaryView.setText(R.string.some_passwords_are_not_accessible_subtitle);
         } else if (!isPasswordManagerAvailable) {
             summaryView.setText(R.string.gpm_stopped_working_subtitle);
+        } else {
+            // No error subtitle also means no error icon, so return before the icon would be set.
+            return;
         }
 
         // ChromeBasePreference sets summary text view to be not visible by default if it's empty.

@@ -351,7 +351,7 @@ Ja disa gjëra që mund të provosh për të filluar.</translation>
 <translation id="2185444992308415167">Kalo nëpër skedat 1 deri në 8</translation>
 <translation id="2195732836444333448">Në maksimumin e kapacitetin për momentin. Kthehu përsëri së shpejti.</translation>
 <translation id="2198625180564913276">Po shton profilin. Kjo mund të zgjasë disa minuta.</translation>
-<translation id="219905428774326614">Launcher, të gjitha aplikacionet</translation>
+<translation id="219905428774326614">"Nisësi", të gjitha aplikacionet</translation>
 <translation id="2201071101391734388">Fotografia e fundit <ph name="INDEX" /> nga <ph name="TOTAL_COUNT" />.</translation>
 <translation id="2201687081523799384">Palos Google Tasks</translation>
 <translation id="2208323208084708176">Modaliteti i desktopit të unifikuar</translation>
@@ -462,6 +462,7 @@ Ja disa gjëra që mund të provosh për të filluar.</translation>
 <translation id="2530896289327917474">Aktivizo ose çaktivizo shfletimin me kursor teksti</translation>
 <translation id="2531025035050312891">pajisje e ngadaltë</translation>
 <translation id="2531107890083353124">Ndërkohë që zvarrit skedën, shtyp <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Zvarrit ose shtyp tastin e hapësirës për të zgjedhur një zonë për të regjistruar</translation>
 <translation id="2545334090614121435">Po përpiqesh të përdorësh tastin "Home"? Përdor</translation>
 <translation id="254900897760075745">Kopjo përmbajtjen e zgjedhur te kujtesa e fragmenteve</translation>
 <translation id="2549711466868162843">Përmirësimi i ndriçimit</translation>
@@ -581,7 +582,6 @@ Në rast të kundërt, blloku i integruar me prekje do të riaktivizohet pas <ph
 <translation id="2949420361496057765">Shtyp <ph name="MODIFIER" /> dhe kliko një lidhje</translation>
 <translation id="2957159466053076448">Mund t'i çaktivizosh këto veçori në çdo kohë te "Cilësimet". <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Audioja e pajisjes</translation>
-<translation id="2960314608273155470">Modaliteti i regjistrimit, parazgjedhja është <ph name="TYPE" /> (<ph name="SOURCE" />). Shtyp skedën për navigimin e tastierës.</translation>
 <translation id="2961963223658824723">Ndodhi një gabim. Provo sërish pas pak sekondash.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Të aktivizohet qasja te mikrofoni?</translation>
@@ -761,6 +761,7 @@ Në rast të kundërt, blloku i integruar me prekje do të riaktivizohet pas <ph
 <translation id="3552189655002856821">Wi-Fi është çaktivizuar</translation>
 <translation id="3554215588514239132">Shfaq ose fshih panelin e "Veglave të zhvilluesit"</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> u gozhdua</translation>
+<translation id="3554928024630051016">Për të shtuar pajisje të tjera USB, provo ta heqësh një dhe më pas lidh një të re</translation>
 <translation id="3558768885091059911">Të aktivizohet qasja te kamera dhe mikrofoni?</translation>
 <translation id="3560174576767922131">Regjistro një video</translation>
 <translation id="3563775809269155755">Aktivizo zonën e qasjes për internet</translation>
@@ -868,6 +869,7 @@ Lidhe pajisjen me një burim të energjisë elektrike.</translation>
 <translation id="3861651314799684201">Shtyp "Enter" për të regjistruar ekranin e plotë</translation>
 <translation id="3870197372373144624">Provo ta fikësh pajisjen tënde.</translation>
 <translation id="3879748587602334249">Menaxheri i shkarkimeve</translation>
+<translation id="3884007280698606545">U arrit kufiri për USB-në</translation>
 <translation id="3886872229787704059">Hapur sot</translation>
 <translation id="3891340733213178823">Shtyp Ctrl+Shift+Q për të dalë nga llogaria.</translation>
 <translation id="3892148308691398805">Kopjo tekstin</translation>
@@ -1440,6 +1442,7 @@ Nuk ka pajisje të lidhura.</translation>
 <translation id="5672890847723042801">Aplikacione utilitare</translation>
 <translation id="5673434351075758678">Nga "<ph name="FROM_LOCALE" />" në "<ph name="TO_LOCALE" />" pas sinkronizimit të cilësimeve të tua.</translation>
 <translation id="5675363643668471212">Artikulli në raft</translation>
+<translation id="5677022547882470786">Zvarrit ose shtyp tastin e hapësirës për të zgjedhur një zonë për të kërkuar</translation>
 <translation id="5677928146339483299">Të bllokuara</translation>
 <translation id="5678564054339031017">Shfaq javën tjetër</translation>
 <translation id="5679050765726761783">Është lidhur një përshtatës me fuqi të ulët</translation>
@@ -1485,6 +1488,7 @@ Nuk ka pajisje të lidhura.</translation>
 <translation id="5788127256798019331">Skedarët e Play</translation>
 <translation id="5788535737706478207">Rihap skedën ose dritaren e fundit që mbylle</translation>
 <translation id="5790085346892983794">Me sukses</translation>
+<translation id="5791926618942305301">Në regjistrimin e ekranit, cakto në <ph name="TYPE" /> <ph name="SOURCE" />. Shtyp "Tab" për të zgjedhur llojin e regjistrimit. Shtyp "Enter" për të regjistruar. Për të zgjedhur zonën e regjistrimit, cakto në pamjen e pjesshme të ekranit. Nëse nuk është aktive tashmë, shtyp tastin e hapësirës për të zgjedhur zonën.</translation>
 <translation id="579415080077680903">Heshtja</translation>
 <translation id="5802516411616338943">Hap "Cilësimet e shpejta"</translation>
 <translation id="5804651031882187592">Çaktivizo cilësimin "Kyç kartën SIM"</translation>
@@ -1641,6 +1645,7 @@ Nuk ka pajisje të lidhura.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> mund të rishtohet më vonë me lejen e prindit.</translation>
 <translation id="6291221004442998378">Nuk po karikohet</translation>
 <translation id="6298183524022479114">Personalizo këtë pajisje në aplikacion</translation>
+<translation id="6304076460080088478">Mbyll ose minimizo dritaret e fshehta për të kërkuar në ekranin tënd me "Lenten e Google"</translation>
 <translation id="6309219492973062892">Kliko ose trokit tek ikonat e raftit 1-8</translation>
 <translation id="6315170314923504164">Voice</translation>
 <translation id="6319058840130157106">Kalo prapa mes këndit të poshtëm djathtas, "Nisësit", shiritit të adresave, shiritit të faqeshënuesve, uebsajtit që është i hapur dhe shkarkimeve</translation>
@@ -1769,6 +1774,7 @@ Instalim i ri</translation>
 <translation id="6700713906295497288">Butoni i menysë IME</translation>
 <translation id="6704073473590541209">Është zgjedhur doreza e skajit të djathtë; përdor tastet e shigjetave për ta zhvendosur</translation>
 <translation id="6706742084323792866">Gozhdo tastierën</translation>
+<translation id="6709719156428404245">Zvarrit ose shtyp tastin e hapësirës për të zgjedhur një zonë për të regjistruar</translation>
 <translation id="6710213216561001401">Prapa</translation>
 <translation id="6723839937902243910">Energjia</translation>
 <translation id="672609503628871915">Shiko ç'të reja ka</translation>
@@ -2254,7 +2260,7 @@ Për ta fikur pajisjen, shtyp dhe mbaj shtypur përsëri butonin e energjisë n�
 <translation id="8341451174107936385"><ph name="UNLOCK_MORE_FEATURES" />  <ph name="GET_STARTED" /></translation>
 <translation id="834414266279889566">Rezultat i keq</translation>
 <translation id="8345019317483336363">U zgjodh dritarja <ph name="WINDOW_TITLE" /></translation>
-<translation id="8349826889576450703">launcher</translation>
+<translation id="8349826889576450703">nisësi</translation>
 <translation id="8349964124165471584">Hape lidhjen në një dritare të re</translation>
 <translation id="8351131234907093545">Krijo një shënim</translation>
 <translation id="8367948981300340152"><ph name="CAPTURE_MEDIUM" /> në përdorim.</translation>

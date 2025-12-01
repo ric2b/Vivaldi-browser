@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_CONTAINER_H_
 
 #include <memory>
+#include <vector>
 
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -105,6 +106,10 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
   virtual void NotifyTabstripBubbleOpened() = 0;
   virtual void NotifyTabstripBubbleClosed() = 0;
 
+  virtual void OnSplitCreated(const std::vector<int>& indices) = 0;
+  virtual void OnSplitRemoved(const std::vector<int>& indices) = 0;
+  virtual void OnSplitContentsChanged(const std::vector<int>& indices) = 0;
+
   virtual std::optional<int> GetModelIndexOf(
       const TabSlotView* slot_view) const = 0;
   virtual Tab* GetTabAtModelIndex(int index) const = 0;
@@ -178,12 +183,6 @@ class TabContainer : public views::View, public BrowserRootView::DropTarget {
   virtual const std::map<tab_groups::TabGroupId,
                          std::unique_ptr<TabGroupViews>>&
   get_group_views_for_testing() const = 0;
-
-  // Returns the current width of the active tab.
-  virtual int GetActiveTabWidth() const = 0;
-
-  // Returns the current width of inactive tabs.
-  virtual int GetInactiveTabWidth() const = 0;
 
   // Returns ideal bounds for the tab at `model_index` in this TabContainer's
   // coordinate space.

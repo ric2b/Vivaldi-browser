@@ -12,24 +12,22 @@ import static androidx.test.espresso.matcher.ViewMatchers.withParent;
 
 import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.instanceOf;
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import static org.chromium.base.test.transit.ViewSpec.viewSpec;
-
 import android.view.View;
-import android.view.ViewGroup;
+
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.hamcrest.Matcher;
 
 import org.chromium.base.test.transit.Condition;
-import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.Transition;
 import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.transit.ViewSpec;
 import org.chromium.base.test.util.ViewActionOnDescendant;
 import org.chromium.chrome.browser.hub.HubToolbarMediator;
-import org.chromium.chrome.browser.hub.HubToolbarView;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -44,19 +42,6 @@ import java.util.List;
 
 /** The base station for Hub tab switcher stations. */
 public abstract class TabSwitcherStation extends HubBaseStation {
-    public static final ViewSpec TAB_LIST_RECYCLER_VIEW =
-            HUB_PANE_HOST.descendant(withId(R.id.tab_list_recycler_view));
-
-    public static final ViewSpec TOOLBAR = viewSpec(instanceOf(HubToolbarView.class));
-    public static final ViewSpec TOOLBAR_NEW_TAB_BUTTON =
-            TOOLBAR.descendant(withId(R.id.toolbar_action_button));
-    public static final ViewSpec SEARCH_BOX = viewSpec(withId(R.id.search_box));
-    public static final ViewSpec SEARCH_LOUPE = TOOLBAR.descendant(withId(R.id.search_loupe));
-    public static final ViewSpec TAB_GROUP_COLOR_ICON_VIEW =
-            viewSpec(
-                    allOf(
-                            withId(R.id.tab_group_color_view_container),
-                            withParent(withId(R.id.card_view))));
     public static final Matcher<View> TAB_CLOSE_BUTTON =
             allOf(
                     withId(R.id.action_button),
@@ -76,33 +61,37 @@ public abstract class TabSwitcherStation extends HubBaseStation {
 
     private final boolean mIsIncognito;
 
-    private ViewElement mRecyclerViewElement;
+    public ViewElement<RecyclerView> recyclerViewElement;
+    public ViewElement<View> searchElement;
+    public ViewElement<View> newTabButtonElement;
 
     public TabSwitcherStation(
             boolean isIncognito, boolean regularTabsExist, boolean incognitoTabsExist) {
-        super(regularTabsExist, incognitoTabsExist);
+        super(regularTabsExist, incognitoTabsExist, /* hasMenuButton= */ true);
         mIsIncognito = isIncognito;
-    }
 
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        super.declareElements(elements);
-
-        elements.declareView(getNewTabButtonViewSpec());
+        newTabButtonElement =
+                declareView(toolbarElement.descendant(withId(R.id.toolbar_action_button)));
         if (OmniboxFeatures.sAndroidHubSearch.isEnabled()) {
-            elements.declareElementFactory(
+            declareElementFactory(
                     mActivityElement,
                     delayedElements -> {
+                        Matcher<View> searchBox = withId(R.id.search_box);
+                        ViewSpec<View> searchLoupe =
+                                toolbarElement.descendant(withId(R.id.search_loupe));
                         if (shouldHubSearchBoxBeVisible()) {
-                            delayedElements.declareNoView(SEARCH_BOX);
-                            delayedElements.declareView(SEARCH_LOUPE);
+                            searchElement = delayedElements.declareView(searchLoupe);
+                            delayedElements.declareNoView(searchBox);
                         } else {
-                            delayedElements.declareNoView(SEARCH_LOUPE);
-                            delayedElements.declareView(SEARCH_BOX);
+                            searchElement = delayedElements.declareView(searchBox);
+                            delayedElements.declareNoView(searchLoupe);
                         }
                     });
         }
-        mRecyclerViewElement = elements.declareView(TAB_LIST_RECYCLER_VIEW);
+        recyclerViewElement =
+                declareView(
+                        paneHostElement.descendant(
+                                RecyclerView.class, withId(R.id.tab_list_recycler_view)));
     }
 
     public boolean isIncognito() {
@@ -118,7 +107,8 @@ public abstract class TabSwitcherStation extends HubBaseStation {
         recheckActiveConditions();
 
         return enterFacilitySync(
-                new TabSwitcherAppMenuFacility(mIsIncognito), HUB_MENU_BUTTON::click);
+                new TabSwitcherAppMenuFacility<>(mIsIncognito),
+                menuButtonElement.getClickTrigger());
     }
 
     /**
@@ -141,7 +131,7 @@ public abstract class TabSwitcherStation extends HubBaseStation {
                 destination,
                 () -> {
                     ViewActionOnDescendant.performOnRecyclerViewNthItemDescendant(
-                            TAB_LIST_RECYCLER_VIEW.getViewMatcher(), index, TAB_THUMBNAIL, click());
+                            is(recyclerViewElement.get()), index, TAB_THUMBNAIL, click());
                 });
     }
 
@@ -188,15 +178,8 @@ public abstract class TabSwitcherStation extends HubBaseStation {
                 Transition.conditionOption(tabCountDecremented),
                 () -> {
                     ViewActionOnDescendant.performOnRecyclerViewNthItemDescendant(
-                            TAB_LIST_RECYCLER_VIEW.getViewMatcher(),
-                            index,
-                            TAB_CLOSE_BUTTON,
-                            click());
+                            is(recyclerViewElement.get()), index, TAB_CLOSE_BUTTON, click());
                 });
-    }
-
-    protected ViewSpec getNewTabButtonViewSpec() {
-        return TOOLBAR_NEW_TAB_BUTTON;
     }
 
     /**
@@ -218,7 +201,7 @@ public abstract class TabSwitcherStation extends HubBaseStation {
 
     /** Expect a tab group card to exist. */
     public TabSwitcherGroupCardFacility expectGroupCard(List<Integer> tabIdsInGroup, String title) {
-        TabModel currentModel = getTabModelSelectorSupplier().get().getCurrentModel();
+        TabModel currentModel = tabModelSelectorElement.get().getCurrentModel();
         int expectedCardIndex = TabBinningUtil.getBinIndex(currentModel, tabIdsInGroup);
         return enterFacilitySync(
                 new TabSwitcherGroupCardFacility(expectedCardIndex, tabIdsInGroup, title),
@@ -227,7 +210,7 @@ public abstract class TabSwitcherStation extends HubBaseStation {
 
     /** Expect a tab card to exist. */
     public TabSwitcherTabCardFacility expectTabCard(int tabId, String title) {
-        TabModel currentModel = getTabModelSelectorSupplier().get().getCurrentModel();
+        TabModel currentModel = tabModelSelectorElement.get().getCurrentModel();
         int expectedCardIndex = TabBinningUtil.getBinIndex(currentModel, tabId);
         return enterFacilitySync(
                 new TabSwitcherTabCardFacility(expectedCardIndex, tabId, title),
@@ -236,18 +219,12 @@ public abstract class TabSwitcherStation extends HubBaseStation {
 
     /** Verify the tab switcher card count. */
     public void verifyTabSwitcherCardCount(int count) {
-        assertEquals(((ViewGroup) mRecyclerViewElement.get()).getChildCount(), count);
-    }
-
-    public ViewElement getRecyclerViewElement() {
-        return mRecyclerViewElement;
+        assertEquals(recyclerViewElement.get().getChildCount(), count);
     }
 
     public TabSwitcherSearchStation openTabSwitcherSearch() {
         TabSwitcherSearchStation searchStation = new TabSwitcherSearchStation(mIsIncognito);
-        travelToSync(
-                searchStation,
-                shouldHubSearchBoxBeVisible() ? SEARCH_LOUPE::click : SEARCH_BOX::click);
+        travelToSync(searchStation, searchElement.getClickTrigger());
         searchStation.focusAndDropSoftKeyboard();
         return searchStation;
     }

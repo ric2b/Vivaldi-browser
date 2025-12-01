@@ -29,13 +29,13 @@ FederatedAuthDisconnectRequest::Create(
     std::unique_ptr<IdpNetworkRequestManager> network_manager,
     FederatedIdentityPermissionContextDelegate* permission_delegate,
     RenderFrameHost* render_frame_host,
-    FedCmMetrics* metrics,
+    std::unique_ptr<FedCmMetrics> fedcm_metrics,
     blink::mojom::IdentityCredentialDisconnectOptionsPtr options) {
   std::unique_ptr<FederatedAuthDisconnectRequest> request =
       base::WrapUnique<FederatedAuthDisconnectRequest>(
           new FederatedAuthDisconnectRequest(
               std::move(network_manager), permission_delegate,
-              render_frame_host, metrics, std::move(options)));
+              render_frame_host, std::move(fedcm_metrics), std::move(options)));
   return request;
 }
 
@@ -47,12 +47,12 @@ FederatedAuthDisconnectRequest::FederatedAuthDisconnectRequest(
     std::unique_ptr<IdpNetworkRequestManager> network_manager,
     FederatedIdentityPermissionContextDelegate* permission_delegate,
     RenderFrameHost* render_frame_host,
-    FedCmMetrics* metrics,
+    std::unique_ptr<FedCmMetrics> fedcm_metrics,
     blink::mojom::IdentityCredentialDisconnectOptionsPtr options)
     : network_manager_(std::move(network_manager)),
       permission_delegate_(permission_delegate),
-      metrics_(metrics),
       render_frame_host_(render_frame_host),
+      fedcm_metrics_(std::move(fedcm_metrics)),
       options_(std::move(options)),
       origin_(render_frame_host->GetLastCommittedOrigin()),
       start_time_(base::TimeTicks::Now()) {
@@ -107,14 +107,14 @@ void FederatedAuthDisconnectRequest::SetCallbackAndStart(
     return;
   }
 
-  provider_fetcher_ = std::make_unique<FederatedProviderFetcher>(
+  config_fetcher_ = std::make_unique<FedCmConfigFetcher>(
       *render_frame_host_, network_manager_.get());
   GURL config_url = options_->config->config_url;
   // TODO(crbug.com/390626180): It seems ok to ignore the well-known checks in
   // all cases here. However, keeping this unchanged for now when the IDP
   // registration API is not enabled since we only really need this for that
   // case.
-  provider_fetcher_->Start(
+  config_fetcher_->Start(
       {{config_url, IsFedCmIdPRegistrationEnabled()}},
       blink::mojom::RpMode::kPassive, /*icon_ideal_size=*/0,
       /*icon_minimum_size=*/0,
@@ -124,20 +124,17 @@ void FederatedAuthDisconnectRequest::SetCallbackAndStart(
 }
 
 void FederatedAuthDisconnectRequest::OnAllConfigAndWellKnownFetched(
-    std::vector<FederatedProviderFetcher::FetchResult> fetch_results) {
-  provider_fetcher_.reset();
-  DCHECK(fetch_results.size() == 1u);
-  const FederatedProviderFetcher::FetchResult& fetch_result = fetch_results[0];
+    std::vector<FedCmConfigFetcher::FetchResult> fetch_results) {
+  config_fetcher_.reset();
+  DCHECK_EQ(fetch_results.size(), 1u);
+  const FedCmConfigFetcher::FetchResult& fetch_result = fetch_results[0];
   if (fetch_result.error) {
-    const FederatedProviderFetcher::FetchError& fetch_error =
-        *fetch_result.error;
+    const FedCmConfigFetcher::FetchError& fetch_error = *fetch_result.error;
     if (fetch_error.additional_console_error_message) {
       render_frame_host_->AddMessageToConsole(
           blink::mojom::ConsoleMessageLevel::kError,
           *fetch_error.additional_console_error_message);
     }
-
-    // TODO (crbug.com/1473134): add devtools issues and console errors.
 
     FedCmDisconnectStatus status;
     switch (fetch_error.result) {
@@ -186,7 +183,7 @@ void FederatedAuthDisconnectRequest::OnAllConfigAndWellKnownFetched(
         break;
       }
       default: {
-        // The FederatedProviderFetcher does not return any other type of
+        // The FedCmConfigFetcher does not return any other type of
         // result.
         NOTREACHED();
       }
@@ -252,11 +249,12 @@ void FederatedAuthDisconnectRequest::Complete(
       disconnect_request_sent_
           ? std::optional<base::TimeDelta>{base::TimeTicks::Now() - start_time_}
           : std::nullopt;
-  metrics_->RecordDisconnectMetrics(
+  fedcm_metrics_->RecordDisconnectMetrics(
       disconnect_status_for_metrics, duration,
       webid::ComputeRequesterFrameType(*render_frame_host_, origin_,
                                        embedding_origin_),
-      options_->config->config_url, webid::GetNewSessionID());
+      options_->config->config_url);
+  fedcm_metrics_.reset();
 
   std::move(callback_).Run(status);
 }

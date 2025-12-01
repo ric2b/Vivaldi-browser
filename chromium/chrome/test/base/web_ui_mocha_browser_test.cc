@@ -37,6 +37,20 @@
 #include "chrome/test/base/ui_test_utils.h"
 #endif
 
+SubTestResult::SubTestResult() = default;
+SubTestResult::SubTestResult(const SubTestResult& other) = default;
+SubTestResult::SubTestResult(SubTestResult&& other)
+    : name(std::move(other.name)),
+      duration(other.duration),
+      failure_reason(std::move(other.failure_reason)) {}
+SubTestResult& SubTestResult::operator=(SubTestResult&& other) {
+  name = std::move(other.name);
+  duration = other.duration;
+  failure_reason = std::move(other.failure_reason);
+  return *this;
+}
+SubTestResult::~SubTestResult() = default;
+
 namespace webui {
 
 void CanonicalizeTestName(std::string* test_name) {
@@ -51,39 +65,36 @@ void CanonicalizeTestName(std::string* test_name) {
       '_');
 }
 
-bool WaitForTestToFinish(content::WebContents* web_contents,
-                         bool is_sub_test_result_reporting_enabled) {
+std::tuple<bool, std::vector<SubTestResult>> ProcessMessagesFromJsTest(
+    content::WebContents* web_contents) {
   content::DOMMessageQueue message_queue(web_contents);
+  std::vector<SubTestResult> results;
   std::string message;
   while (message_queue.WaitForMessage(&message)) {
     if (message == "\"SUCCESS\"") {
-      return true;
+      return std::make_tuple(true, results);
     } else if (message == "\"FAILURE\"") {
-      return false;
+      return std::make_tuple(false, results);
     }
-    // Android can't use XmlUnitTestResultPrinter, so AddSubTestResult is not
-    // supported.
-#if !BUILDFLAG(IS_ANDROID)
-    // Deserialize JSON from JS and record a SubTestResult.
-    if (is_sub_test_result_reporting_enabled) {
-      std::optional<base::Value> msg = base::JSONReader::Read(message);
 
-      std::string* test_name = msg->GetDict().FindString("fullTitle");
-      std::string canonicalized_test_name = *test_name;
-      CanonicalizeTestName(&canonicalized_test_name);
+    std::optional<base::Value> msg = base::JSONReader::Read(message);
 
-      std::optional<int> duration = msg->GetDict().FindInt("duration");
+    SubTestResult sub_test_result;
+    std::string* test_name = msg->GetDict().FindString("fullTitle");
+    CHECK(test_name);
+    sub_test_result.name = *test_name;
+    CanonicalizeTestName(&sub_test_result.name);
 
-      std::string* failure_reason = msg->GetDict().FindString("failureReason");
-      std::optional<std::string> optional_failure_reason;
-      if (failure_reason) {
-        optional_failure_reason.emplace(*failure_reason);
-      }
+    std::optional<int> duration = msg->GetDict().FindInt("duration");
+    CHECK(duration);
+    sub_test_result.duration = *duration;
 
-      base::AddSubTestResult(canonicalized_test_name, *duration,
-                             optional_failure_reason);
+    std::string* failure_reason = msg->GetDict().FindString("failureReason");
+    if (failure_reason) {
+      sub_test_result.failure_reason.emplace(*failure_reason);
     }
-#endif
+
+    results.push_back(std::move(sub_test_result));
   }
   NOTREACHED();
 }
@@ -92,7 +103,15 @@ bool WaitForTestToFinish(content::WebContents* web_contents,
 
 WebUIMochaBrowserTest::WebUIMochaBrowserTest()
     : test_loader_host_(chrome::kChromeUIWebUITestHost),
-      test_loader_scheme_(content::kChromeUIScheme) {}
+      test_loader_scheme_(content::kChromeUIScheme),
+// XmlUnitTestResultPrinter is not supported on Android.
+#if BUILDFLAG(IS_ANDROID)
+      sub_test_reporter_(nullptr)
+#else
+      sub_test_reporter_(std::make_unique<SubTestReporter>())
+#endif
+{
+}
 
 WebUIMochaBrowserTest::~WebUIMochaBrowserTest() = default;
 
@@ -219,8 +238,42 @@ testing::AssertionResult WebUIMochaBrowserTest::RunTestOnWebContents(
   }
 
   // Receive messages from JS.
-  bool success = webui::WaitForTestToFinish(
-      web_contents, is_sub_test_result_reporting_enabled_);
+  auto [success, sub_test_results] =
+      webui::ProcessMessagesFromJsTest(web_contents);
+
+  // Report individual JS test results if reporting is enabled.
+  if (sub_test_reporter_) {
+    // ResultDB limits test identifiers to 512 bytes. However, GTest code isn't
+    // privy to the exact schema used (for that, see TestResultsTracker::
+    // SaveSummaryAsJSON). Here, it is simply assumed that test name length can
+    // be estimated as a sum of the lengths of the GTest fixture name, GTest
+    // test name, and Mocha JS test name, plus a few extra bytes for delimiters.
+    // Retrieve GTest fixture name and GTest test name to build an estimate.
+    const testing::TestInfo* info =
+        testing::UnitTest::GetInstance()->current_test_info();
+    CHECK(info);
+
+    for (const auto& sub_test_result : sub_test_results) {
+      // Estimate the final test identifier length. Allocate 3 bytes for
+      // delimiters.
+      size_t estimate = strlen(info->name()) + strlen(info->test_suite_name()) +
+                        sub_test_result.name.size() + 3ul;
+
+      if (estimate > 512ul) {
+        testing::Message msg;
+        msg << "Test name too long. Test identifier size estimate is "
+            << estimate << ". ResultDB limits test identifiers to 512 bytes. "
+            << "Please reduce total test name length by at least "
+            << (estimate - 512ul) << " bytes.  name=\"" << info->name()
+            << "\", test_suite_name=\"" << info->test_suite_name()
+            << "\", js_test_name=\"" << sub_test_result.name << "\"";
+        return testing::AssertionFailure(msg);
+      }
+
+      sub_test_reporter_->Report(sub_test_result.name, sub_test_result.duration,
+                                 sub_test_result.failure_reason);
+    }
+  }
 
 #if !BUILDFLAG(IS_ANDROID)
   // Report code coverage metrics.
@@ -251,8 +304,12 @@ void WebUIMochaBrowserTest::RunTestWithoutTestLoader(
   RunTest(file, trigger, /*skip_test_loader=*/true);
 }
 
-void WebUIMochaBrowserTest::DisableSubTestResultReporting() {
-  is_sub_test_result_reporting_enabled_ = false;
+void WebUIMochaBrowserTest::SetSubTestResultReportingEnabled(bool enabled) {
+  if (enabled) {
+    sub_test_reporter_ = std::make_unique<SubTestReporter>();
+  } else {
+    sub_test_reporter_.reset();
+  }
 }
 
 testing::AssertionResult WebUIMochaBrowserTest::SimulateTestLoader(
@@ -286,4 +343,11 @@ void WebUIMochaFocusTest::OnWebContentsAvailable(
   // Focus the web contents before running the test, used for tests running as
   // interactive_ui_tests.
   web_contents->Focus();
+}
+
+void SubTestReporter::Report(
+    std::string_view name,
+    testing::TimeInMillis elapsed_time,
+    std::optional<std::string_view> failure_message) const {
+  base::AddSubTestResult(name, elapsed_time, failure_message);
 }

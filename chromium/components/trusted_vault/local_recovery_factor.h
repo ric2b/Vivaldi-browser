@@ -10,15 +10,24 @@
 
 #include "base/functional/callback.h"
 #include "components/signin/public/identity_manager/account_info.h"
-#include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_histograms.h"
+#include "components/trusted_vault/trusted_vault_throttling_connection.h"
 #include "google_apis/gaia/gaia_id.h"
 
 namespace trusted_vault {
 
+// Type of a LocalRecoveryFactor. Overwritten by sub-classes according to how
+// they manage recovery keys locally.
+enum class LocalRecoveryFactorType {
+  kPhysicalDevice,
+#if BUILDFLAG(IS_MAC)
+  kICloudKeychain,
+#endif
+};
+
 // Interface for a local recovery factor.
 // Classes that implement this interface are used by
-// StandaloneTrustedVaultBackend to retrieve keys without user interaction when
+// StandaloneTrustedVaultBackend to recover keys without user interaction when
 // required.
 // StandaloneTrustedVaultBackend also makes sure to register local recovery
 // factors with available keys when possible.
@@ -26,12 +35,19 @@ namespace trusted_vault {
 // sequence as StandaloneTrustedVaultBackend.
 class LocalRecoveryFactor {
  public:
+  enum class RecoveryStatus {
+    // Keys were successfully recovered.
+    kSuccess,
+    // Failed to recover keys.
+    kFailure,
+    // Keys were successfully recovered and verified, but no new keys exist.
+    kNoNewKeys,
+  };
+
   using AttemptRecoveryCallback = base::OnceCallback<void(
-      TrustedVaultDownloadKeysStatus /* status */,
+      RecoveryStatus /* status */,
       const std::vector<std::vector<uint8_t>>& /* new_vault_keys */,
       int /* last_vault_key_version */)>;
-  using AttemptRecoveryFailureCallback = base::OnceCallback<void(
-      std::optional<TrustedVaultDownloadKeysStatusForUMA> /* status */)>;
   using RegisterCallback =
       base::OnceCallback<void(TrustedVaultRegistrationStatus /* status */,
                               int /* key_version */,
@@ -42,30 +58,22 @@ class LocalRecoveryFactor {
   LocalRecoveryFactor& operator=(const LocalRecoveryFactor&) = delete;
   virtual ~LocalRecoveryFactor() = default;
 
-  // Attempts a key recovery.
-  // Note: If `connection_requests_throttled` is true, implementations of this
-  // method are not allowed to make requests to `connection`.
-  virtual void AttemptRecovery(TrustedVaultConnection* connection,
-                               bool connection_requests_throttled,
-                               AttemptRecoveryCallback cb,
-                               AttemptRecoveryFailureCallback failure_cb) = 0;
+  // Returns the type of this local recovery factor.
+  virtual LocalRecoveryFactorType GetRecoveryFactorType() const = 0;
 
+  // Attempts a key recovery.
+  virtual void AttemptRecovery(AttemptRecoveryCallback cb) = 0;
+
+  // Returns whether the recovery factor is marked as registered.
+  virtual bool IsRegistered() = 0;
   // Marks the recovery factor as not registered, which makes it eligible for
   // future registration attempts.
   virtual void MarkAsNotRegistered() = 0;
-  // Clears information about any potential previous registration attempts.
-  // This can be called for accounts other than the account this recovery
-  // factor was created for, thus `gaia_id` is passed in explicitly.
-  virtual void ClearRegistrationAttemptInfo(const GaiaId& gaia_id) = 0;
   // Attempts to register the recovery factor in case it's not yet registered
   // and currently available local data is sufficient to do it. It returns an
   // enum representing the registration state, intended to be used for metric
   // recording.
-  // Note: If `connection_requests_throttled` is true, implementations of this
-  // method are not allowed to make requests to `connection`.
-  virtual TrustedVaultDeviceRegistrationStateForUMA MaybeRegister(
-      TrustedVaultConnection* connection,
-      bool connection_requests_throttled,
+  virtual TrustedVaultRecoveryFactorRegistrationStateForUMA MaybeRegister(
       RegisterCallback cb) = 0;
 };
 

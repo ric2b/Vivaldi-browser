@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "core/fxcrt/fx_safe_types.h"
-#include "core/fxcrt/stl_util.h"
 
 namespace {
 
@@ -23,7 +22,7 @@ struct ArithIntDecodeData {
   int nValue;
 };
 
-constexpr auto kArithIntDecodeData = fxcrt::ToArray<ArithIntDecodeData>({
+constexpr auto kArithIntDecodeData = std::to_array<ArithIntDecodeData>({
     {2, 0},
     {4, 4},
     {6, 20},
@@ -37,21 +36,23 @@ size_t RecursiveDecode(CJBig2_ArithDecoder* decoder,
                        int* prev,
                        size_t depth) {
   static const size_t kDepthEnd = std::size(kArithIntDecodeData) - 1;
-  if (depth == kDepthEnd)
+  if (depth == kDepthEnd) {
     return kDepthEnd;
+  }
 
   JBig2ArithCtx* pCX = &(*context)[*prev];
   int D = decoder->Decode(pCX);
   *prev = ShiftOr(*prev, D);
-  if (!D)
+  if (!D) {
     return depth;
+  }
   return RecursiveDecode(decoder, context, prev, depth + 1);
 }
 
 }  // namespace
 
 CJBig2_ArithIntDecoder::CJBig2_ArithIntDecoder() {
-  m_IAx.resize(512);
+  iax_.resize(512);
 }
 
 CJBig2_ArithIntDecoder::~CJBig2_ArithIntDecoder() = default;
@@ -62,18 +63,19 @@ bool CJBig2_ArithIntDecoder::Decode(CJBig2_ArithDecoder* pArithDecoder,
   // Decoding Procedure" on page 113 of the JBIG2 specification (ISO/IEC FCD
   // 14492).
   int PREV = 1;
-  const int S = pArithDecoder->Decode(&m_IAx[PREV]);
+  const int S = pArithDecoder->Decode(&iax_[PREV]);
   PREV = ShiftOr(PREV, S);
 
   const size_t nDecodeDataIndex =
-      RecursiveDecode(pArithDecoder, &m_IAx, &PREV, 0);
+      RecursiveDecode(pArithDecoder, &iax_, &PREV, 0);
 
   int nTemp = 0;
   for (int i = 0; i < kArithIntDecodeData[nDecodeDataIndex].nNeedBits; ++i) {
-    int D = pArithDecoder->Decode(&m_IAx[PREV]);
+    int D = pArithDecoder->Decode(&iax_[PREV]);
     PREV = ShiftOr(PREV, D);
-    if (PREV >= 256)
+    if (PREV >= 256) {
       PREV = (PREV & 511) | 256;
+    }
     nTemp = ShiftOr(nTemp, D);
   }
   FX_SAFE_INT32 safeValue = kArithIntDecodeData[nDecodeDataIndex].nValue;
@@ -86,8 +88,9 @@ bool CJBig2_ArithIntDecoder::Decode(CJBig2_ArithDecoder* pArithDecoder,
   }
 
   int nValue = safeValue.ValueOrDie();
-  if (S == 1 && nValue > 0)
+  if (S == 1 && nValue > 0) {
     nValue = -nValue;
+  }
 
   *nResult = nValue;
   return S != 1 || nValue != 0;
@@ -95,7 +98,7 @@ bool CJBig2_ArithIntDecoder::Decode(CJBig2_ArithDecoder* pArithDecoder,
 
 CJBig2_ArithIaidDecoder::CJBig2_ArithIaidDecoder(unsigned char SBSYMCODELENA)
     : SBSYMCODELEN(SBSYMCODELENA) {
-  m_IAID.resize(static_cast<size_t>(1) << SBSYMCODELEN);
+  iaid_.resize(static_cast<size_t>(1) << SBSYMCODELEN);
 }
 
 CJBig2_ArithIaidDecoder::~CJBig2_ArithIaidDecoder() = default;
@@ -104,7 +107,7 @@ void CJBig2_ArithIaidDecoder::Decode(CJBig2_ArithDecoder* pArithDecoder,
                                      uint32_t* nResult) {
   int PREV = 1;
   for (unsigned char i = 0; i < SBSYMCODELEN; ++i) {
-    JBig2ArithCtx* pCX = &m_IAID[PREV];
+    JBig2ArithCtx* pCX = &iaid_[PREV];
     int D = pArithDecoder->Decode(pCX);
     PREV = ShiftOr(PREV, D);
   }

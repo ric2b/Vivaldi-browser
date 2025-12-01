@@ -5,18 +5,33 @@
 #include "content/public/test/btm_service_test_utils.h"
 
 #include "base/logging.h"
+#include "content/browser/btm/btm_bounce_detector.h"
 #include "content/public/browser/btm_redirect_info.h"
 
 namespace content {
-DipsRedirectChainObserver::DipsRedirectChainObserver(BtmService* service,
-                                                     GURL final_url)
+void Populate3PcExceptions(BrowserContext* browser_context,
+                           WebContents* web_contents,
+                           const GURL& initial_url,
+                           const GURL& final_url,
+                           base::span<BtmRedirectInfoPtr> redirects) {
+  btm::Populate3PcExceptions(browser_context, web_contents, initial_url,
+                             final_url, redirects);
+}
+
+bool Are3PcsGenerallyEnabled(BrowserContext* browser_context,
+                             WebContents* web_contents) {
+  return btm::Are3PcsGenerallyEnabled(browser_context, web_contents);
+}
+
+BtmRedirectChainObserver::BtmRedirectChainObserver(BtmService* service,
+                                                   GURL final_url)
     : final_url_(std::move(final_url)) {
   observation_.Observe(service);
 }
 
-DipsRedirectChainObserver::~DipsRedirectChainObserver() = default;
+BtmRedirectChainObserver::~BtmRedirectChainObserver() = default;
 
-void DipsRedirectChainObserver::OnChainHandled(
+void BtmRedirectChainObserver::OnChainHandled(
     const std::vector<BtmRedirectInfoPtr>& redirects,
     const BtmRedirectChainInfoPtr& chain) {
   if (chain->final_url.url == final_url_) {
@@ -27,14 +42,14 @@ void DipsRedirectChainObserver::OnChainHandled(
       }
     } else {
       LOG(WARNING)
-          << "DipsRedirectChainObserver: multiple chains handled ending at "
+          << "BtmRedirectChainObserver: multiple chains handled ending at "
           << final_url_;
     }
     run_loop_.Quit();
   }
 }
 
-void DipsRedirectChainObserver::Wait() {
+void BtmRedirectChainObserver::Wait() {
   run_loop_.Run();
 }
 

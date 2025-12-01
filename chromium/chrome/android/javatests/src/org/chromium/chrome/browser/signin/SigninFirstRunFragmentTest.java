@@ -202,8 +202,11 @@ public class SigninFirstRunFragmentTest {
                 () -> {
                     mNativeInitializationPromise = new Promise<>();
                     mNativeInitializationPromise.fulfill(null);
-                    // Use thenAnswer in case mNativeSideIsInitialized is changed in some tests.
+                    // Initially return an unfulfilled promise so that the loading will not be
+                    // skipped.Then use thenAnswer in case mNativeSideIsInitialized is changed in
+                    // some tests.
                     when(mFirstRunPageDelegateMock.getNativeInitializationPromise())
+                            .thenReturn(new Promise<>())
                             .thenAnswer(ignored -> mNativeInitializationPromise);
                 });
 
@@ -1111,13 +1114,6 @@ public class SigninFirstRunFragmentTest {
             sdk_is_greater_than = Build.VERSION_CODES.S_V2,
             message = "Flaky, crbug.com/358148764")
     public void testFragmentSigninWhenAddedAccountIsNotYetAvailable() {
-        final String continueAsText =
-                mActivityTestRule
-                        .getActivity()
-                        .getString(
-                                R.string.sync_promo_continue_as,
-                                TestAccounts.TEST_ACCOUNT_NO_NAME.getEmail());
-
         // This will freeze AccountManagerFacade with the currently available list of accounts.
         // The added account from add account flow later on will not be available.
         try (var ignored =
@@ -1126,15 +1122,19 @@ public class SigninFirstRunFragmentTest {
             onView(withText(R.string.signin_add_account_to_device)).perform(click());
             mSigninTestRule.setAddAccountFlowResult(TestAccounts.TEST_ACCOUNT_NO_NAME);
             onViewWaiting(AccountManagerTestRule.ADD_ACCOUNT_BUTTON_MATCHER).perform(click());
-            checkFragmentWithSelectedAccount(TestAccounts.TEST_ACCOUNT_NO_NAME);
 
-            clickContinueButton(continueAsText);
-
-            // The click on continue button should be a no-op.
-            verify(mFirstRunPageDelegateMock, never()).advanceToNextPage();
-            checkFragmentWithSelectedAccount(TestAccounts.TEST_ACCOUNT_NO_NAME);
+            // The account is not visible and thus add account button is shown.
+            onView(withText(R.string.signin_add_account_to_device)).check(matches(isDisplayed()));
         }
+
         // Allow account list update and the continue button starts sign-in.
+        checkFragmentWithSelectedAccount(TestAccounts.TEST_ACCOUNT_NO_NAME);
+        String continueAsText =
+                mActivityTestRule
+                        .getActivity()
+                        .getString(
+                                R.string.sync_promo_continue_as,
+                                TestAccounts.TEST_ACCOUNT_NO_NAME.getEmail());
         clickContinueButton(continueAsText);
         verify(mFirstRunPageDelegateMock, timeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL))
                 .advanceToNextPage();
@@ -1303,20 +1303,6 @@ public class SigninFirstRunFragmentTest {
                 .check(matches(isDisplayed()));
         onView(allOf(withId(R.id.subtitle), withText(R.string.signin_fre_subtitle)))
                 .check(matches(isDisplayed()));
-    }
-
-    @Test
-    @MediumTest
-    @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO})
-    public void testFragmentWithChildAccount_doesNotApplyFreStringVariation() {
-        mSigninTestRule.addAccount(TestAccounts.CHILD_ACCOUNT);
-        when(mPolicyLoadListenerMock.get()).thenReturn(true);
-
-        launchActivityWithFragment();
-        checkFragmentWithChildAccount(
-                /* hasDisplayableFullName= */ true,
-                /* hasDisplayableEmail= */ true,
-                TestAccounts.CHILD_ACCOUNT);
     }
 
     @Test

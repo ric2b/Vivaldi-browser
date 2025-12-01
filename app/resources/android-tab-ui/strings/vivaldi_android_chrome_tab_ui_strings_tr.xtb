@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="tr">
-<translation id="2277224997687551299">Grup adını düzenle</translation>
+<translation id="1062777154504442433">Yeni sekme yığını</translation>
+<translation id="1625440863545383011">Sekmeyi kaldırın ve yığını bırakın</translation>
 <translation id="2330212241471632770">{TABS_COUNT,plural, =1{Sekmeye yer imi koy}other{Sekmelere yer imi koy}}</translation>
 <translation id="2947471979790858922">Bu özel sekmelerdeki etkinliğiniz bu cihazdan kaldırılacak</translation>
+<translation id="3298614730029636660">Yığını bırak</translation>
+<translation id="354698175756845966">Yığın rengini düzenle</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Kapalı sekmelerinizi Vivaldi ana menüsünün altındaki Son sekmeler bölümünde bulabilirsiniz. Özel sekmeniz kullanılamayacak.}
         other {Kapalı sekmelerinizi Vivaldi ana menüsünün altındaki Son sekmeler bölümünde bulabilirsiniz. # özel sekmeniz kullanılamayacak.}}</translation>
-<translation id="4460014764210899310">Grubu Çöz</translation>
 <translation id="4871187110787939393">Tüm özel sekmeler kapatılsın mı?</translation>
 <translation id="5494920125229734069">Tümünü seç</translation>
-<translation id="6744956528665271406">Grup rengini düzenle</translation>
+<translation id="6807841890213931603">Sekmeyi kaldır ve yığını sil</translation>
+<translation id="750227952939161636">Sekme yığınlarınız oturum açtığınız tüm cihazlarda otomatik olarak kaydedilir ve güncellenir</translation>
+<translation id="7640137753339219124">Yığını sil</translation>
+<translation id="7653857400289671414">Sekme yığınlarınız otomatik olarak kaydedilir</translation>
+<translation id="8440938071054361204">Yığın adını düzenle</translation>
+<translation id="8602902357364871325">Yığını kapat</translation>
+<translation id="8851621822786801079">Yığından kaldır</translation>
 </translationbundle>

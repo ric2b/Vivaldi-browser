@@ -77,6 +77,7 @@ private:
                          const Texture* colorTexture,
                          const Texture* resolveTexture,
                          const Texture* depthStencilTexture,
+                         SkIPoint resolveOffset,
                          SkIRect viewport,
                          const DrawPassList&) override;
     bool onAddComputePass(DispatchGroupSpan) override;
@@ -96,12 +97,7 @@ private:
     void setBlendConstants(float* blendConstants);
 
     void bindUniformBuffer(const BindBufferInfo& info, UniformSlot);
-    void bindDrawBuffers(const BindBufferInfo& vertices,
-                         const BindBufferInfo& instances,
-                         const BindBufferInfo& indices,
-                         const BindBufferInfo& indirect);
-    void bindVertexBuffers(const Buffer* vertexBuffer, size_t vertexOffset,
-                           const Buffer* instanceBuffer, size_t instanceOffset);
+    void bindInputBuffer(const Buffer* buffer, size_t offset, uint32_t bindingIndex);
     void bindIndexBuffer(const Buffer* indexBuffer, size_t offset);
     void bindIndirectBuffer(const Buffer* indirectBuffer, size_t offset);
 

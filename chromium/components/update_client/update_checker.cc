@@ -112,7 +112,7 @@ void UpdateCheckerImpl::CheckForUpdates(
       &UpdateCheckerImpl::CheckForUpdatesHelper, weak_factory_.GetWeakPtr(),
       context, config_->UpdateUrl(), additional_attributes);
 
-  context->crx_cache_->ListHashesByAppId(base::BindOnce(
+  context->config->GetCrxCache()->ListHashesByAppId(base::BindOnce(
       [](base::OnceCallback<void(const std::multimap<std::string, std::string>&,
                                  const UpdaterStateAttributes&,
                                  const std::set<std::string>&)>
@@ -360,7 +360,7 @@ void UpdateCheckerImpl::UpdateCheckFailed(ErrorCategory error_category,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK_NE(0, error);
   config_->GetPersistedData()->SetLastUpdateCheckError(
-      {.category_ = error_category, .code_ = error});
+      {.category = error_category, .code = error});
 
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(std::move(update_check_callback_), std::nullopt,

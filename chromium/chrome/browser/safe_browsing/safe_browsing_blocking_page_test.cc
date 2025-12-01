@@ -108,6 +108,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/unified_consent/pref_names.h"
+#include "components/webui/chrome_urls/pref_names.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/disallow_activation_reason.h"
@@ -402,6 +403,10 @@ class SafeBrowsingBlockingPageBrowserTest
     host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
+    // The tests expect to load chrome://safe-browsing, which is an
+    // internal debugging page.
+    g_browser_process->local_state()->SetBoolean(
+        chrome_urls::kInternalOnlyUisEnabled, true);
   }
 
   SBThreatType GetThreatType() const { return testing::get<0>(GetParam()); }
@@ -1156,6 +1161,8 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   const std::string interaction_histogram =
       "interstitial." + prefix + ".interaction";
   const std::string delay_histogram = "interstitial." + prefix + ".show_delay";
+  const std::string delay_long_range_histogram =
+      "interstitial." + prefix + ".show_delay_long_range";
   const std::string threat_source = ".from_device_v4";
 
   // TODO(nparker): Check for *.from_device as well.
@@ -1174,6 +1181,10 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
       security_interstitials::MetricsHelper::SHOW, 1);
   histograms.ExpectTimeBucketCount(delay_histogram, base::TimeDelta::Min(), 1);
   histograms.ExpectTimeBucketCount(delay_histogram + threat_source,
+                                   base::TimeDelta::Min(), 1);
+  histograms.ExpectTimeBucketCount(delay_long_range_histogram,
+                                   base::TimeDelta::Min(), 1);
+  histograms.ExpectTimeBucketCount(delay_long_range_histogram + threat_source,
                                    base::TimeDelta::Min(), 1);
   histograms.ExpectTotalCount(interaction_histogram, 2);
   histograms.ExpectBucketCount(
@@ -1239,6 +1250,8 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
   const std::string interaction_histogram =
       "interstitial." + prefix + ".interaction";
   const std::string delay_histogram = "interstitial." + prefix + ".show_delay";
+  const std::string delay_long_range_histogram =
+      "interstitial." + prefix + ".show_delay_long_range";
   const std::string threat_source = ".from_device_v4";
 
   // Histograms should start off empty.
@@ -1255,6 +1268,10 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageBrowserTest,
       security_interstitials::MetricsHelper::SHOW, 1);
   histograms.ExpectTimeBucketCount(delay_histogram, base::TimeDelta::Min(), 1);
   histograms.ExpectTimeBucketCount(delay_histogram + threat_source,
+                                   base::TimeDelta::Min(), 1);
+  histograms.ExpectTimeBucketCount(delay_long_range_histogram,
+                                   base::TimeDelta::Min(), 1);
+  histograms.ExpectTimeBucketCount(delay_long_range_histogram + threat_source,
                                    base::TimeDelta::Min(), 1);
   histograms.ExpectTotalCount(interaction_histogram, 2);
   histograms.ExpectBucketCount(
@@ -2737,7 +2754,7 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
 
   // This is needed for tests using BubbleObserver
   content::WebContents* contents =
-      PasswordManagerBrowserTestBase::GetNewTab(browser());
+      browser()->tab_strip_model()->GetActiveWebContents();
 
   // Navigate to the page.
   content::TestNavigationObserver observer1(contents);
@@ -2749,13 +2766,13 @@ IN_PROC_BROWSER_TEST_P(SafeBrowsingBlockingPageDelayedWarningBrowserTest,
 
   // Submit a password.
   PasswordsNavigationObserver observer2(contents);
-  std::unique_ptr<BubbleObserver> prompt_observer(new BubbleObserver(contents));
+  BubbleObserver prompt_observer(contents);
   std::string fill_and_submit =
       "document.getElementById('retry_password_field').value = 'pw';"
       "document.getElementById('retry_submit_button').click()";
   ASSERT_TRUE(content::ExecJs(contents, fill_and_submit));
   ASSERT_TRUE(observer2.Wait());
-  EXPECT_FALSE(prompt_observer->IsSavePromptShownAutomatically());
+  EXPECT_FALSE(prompt_observer.IsSavePromptShownAutomatically());
   PasswordManagerBrowserTestBase::WaitForPasswordStore(browser());
   AssertNoInterstitial(browser());
 
@@ -2980,6 +2997,10 @@ class SafeBrowsingBlockingPageAsyncChecksTestBase
     host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(embedded_test_server());
     ASSERT_TRUE(embedded_test_server()->Start());
+    // The tests expect to load chrome://safe-browsing, which is an
+    // internal debugging page.
+    g_browser_process->local_state()->SetBoolean(
+        chrome_urls::kInternalOnlyUisEnabled, true);
   }
   void CreatedBrowserMainParts(
       content::BrowserMainParts* browser_main_parts) override {

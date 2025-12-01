@@ -7,6 +7,7 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "components/policy/core/common/policy_pref_names.h"
 #import "components/prefs/testing_pref_service.h"
+#import "ios/chrome/browser/download/model/browser_download_service_factory.h"
 #import "ios/chrome/browser/download/model/document_download_tab_helper_metrics.h"
 #import "ios/chrome/browser/download/model/download_manager_tab_helper.h"
 #import "ios/chrome/browser/download/model/download_mimetype_util.h"
@@ -29,6 +30,9 @@ class DocumentDownloadTabHelperTest : public PlatformTest {
   void SetUp() override {
     PlatformTest::SetUp();
     TestProfileIOS::Builder builder;
+    builder.AddTestingFactory(
+        BrowserDownloadServiceFactory::GetInstance(),
+        BrowserDownloadServiceFactory::GetDefaultFactory());
     profile_ = std::move(builder).Build();
 
     download_manager_delegate_ =
@@ -316,6 +320,7 @@ TEST_F(DocumentDownloadTabHelperTest, ConflictLoggingComplete) {
       DownloadManagerTabHelper::FromWebState(&web_state_);
   auto task = std::make_unique<web::FakeDownloadTask>(GURL("https://foo.bar"),
                                                       "text/html");
+  task->SetWebState(&web_state_);
   web::FakeDownloadTask* task_ptr = task.get();
   download_manager->SetCurrentDownload(std::move(task));
 

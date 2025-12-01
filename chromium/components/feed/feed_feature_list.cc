@@ -17,6 +17,10 @@
 
 namespace feed {
 
+const char kFeedHeaderRemovalTreatmentParam[] = "treatment";
+const char kFeedHeaderRemovalTreatmentValue1[] = "label";
+const char kFeedHeaderRemovalTreatmentValue2[] = "none";
+
 // InterestFeedV2 takes precedence over InterestFeedContentSuggestions.
 // InterestFeedV2 is cached in ChromeCachedFlags. If the default value here is
 // changed, please update the cached one's default value in CachedFeatureFlags.
@@ -81,10 +85,6 @@ BASE_FEATURE(kFeedSignedOutViewDemotion,
              "FeedSignedOutViewDemotion",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kFeedDynamicColors,
-             "FeedDynamicColors",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kFeedFollowUiUpdate,
              "FeedFollowUiUpdate",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -107,6 +107,10 @@ BASE_FEATURE(kFeedRecyclerBinderUnmountOnDetach,
 
 BASE_FEATURE(kFeedStreaming,
              "FeedStreaming",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFeedHeaderRemoval,
+             "FeedHeaderRemoval",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsWebFeedEnabledForLocale(const std::string& country) {

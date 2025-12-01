@@ -58,11 +58,26 @@ public class AppHeaderState {
         return mWidestUnoccludedRect.width();
     }
 
-    /** Return the height of the app header region. */
+    /**
+     * Return the height of the app header region. This includes height of the system caption
+     * controls region and its position from the top of the app window.
+     */
     public int getAppHeaderHeight() {
+        assertValid();
+        return getCaptionControlsTopOffset() + getCaptionControlsHeight();
+    }
+
+    /** Return the height of the system caption controls region. */
+    public int getCaptionControlsHeight() {
         assertValid();
         if (mWidestUnoccludedRect.isEmpty()) return 0;
         return mWidestUnoccludedRect.height();
+    }
+
+    /** Return the offset of the system caption controls from the top of the app window. */
+    public int getCaptionControlsTopOffset() {
+        assertValid();
+        return mWidestUnoccludedRect.top - mAppWindowRect.top;
     }
 
     /** Return whether the app header state is used in desktop window mode. */

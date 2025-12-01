@@ -8,10 +8,12 @@ import static androidx.test.espresso.Espresso.onData;
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.contrib.RecyclerViewActions.actionOnItemAtPosition;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.RootMatchers.withDecorView;
 import static androidx.test.espresso.matcher.ViewMatchers.Visibility.GONE;
 import static androidx.test.espresso.matcher.ViewMatchers.Visibility.VISIBLE;
+import static androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withClassName;
 import static androidx.test.espresso.matcher.ViewMatchers.withEffectiveVisibility;
@@ -21,9 +23,11 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anything;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 
 import androidx.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -35,6 +39,11 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseActivityTestRule;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
@@ -50,6 +59,7 @@ import java.util.Arrays;
 /** Unit tests for {@link InstanceSwitcherCoordinator}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+@DisableFeatures(ChromeFeatureList.INSTANCE_SWITCHER_V2)
 public class InstanceSwitcherCoordinatorTest {
     @Rule
     public BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =
@@ -95,9 +105,11 @@ public class InstanceSwitcherCoordinatorTest {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false),
-                    new InstanceInfo(1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false),
-                    new InstanceInfo(2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false)
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false, 0)
                 };
         final CallbackHelper itemClickCallbackHelper = new CallbackHelper();
         final int itemClickCount = itemClickCallbackHelper.getCallCount();
@@ -120,13 +132,99 @@ public class InstanceSwitcherCoordinatorTest {
 
     @Test
     @SmallTest
+    @EnableFeatures(ChromeFeatureList.INSTANCE_SWITCHER_V2)
+    public void testOpenWindow_InstanceSwitcherV2() throws Exception {
+        InstanceInfo[] instances =
+                new InstanceInfo[] {
+                    new InstanceInfo(
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false, 0)
+                };
+        final CallbackHelper itemClickCallbackHelper = new CallbackHelper();
+        final int itemClickCount = itemClickCallbackHelper.getCallCount();
+        Callback<InstanceInfo> openCallback = (item) -> itemClickCallbackHelper.notifyCalled();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    InstanceSwitcherCoordinator.showDialog(
+                            mActivityTestRule.getActivity(),
+                            mModalDialogManager,
+                            mIconBridge,
+                            openCallback,
+                            null,
+                            null,
+                            false,
+                            Arrays.asList(instances));
+                });
+        onView(withId(R.id.active_instance_list))
+                .inRoot(isDialog())
+                .perform(actionOnItemAtPosition(1, click()));
+        itemClickCallbackHelper.waitForCallback(itemClickCount);
+    }
+
+    @Test
+    @SmallTest
+    @EnableFeatures(ChromeFeatureList.INSTANCE_SWITCHER_V2)
+    public void testActiveInactiveTabSwitch_InstanceSwitcherV2() throws Exception {
+        // Initialize instance list with 2 active instances and 1 inactive instance.
+        InstanceInfo[] instances =
+                new InstanceInfo[] {
+                    new InstanceInfo(
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, -1, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false, 0)
+                };
+        final CallbackHelper itemClickCallbackHelper = new CallbackHelper();
+        final int itemClickCount = itemClickCallbackHelper.getCallCount();
+        Callback<InstanceInfo> openCallback = (item) -> itemClickCallbackHelper.notifyCalled();
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    InstanceSwitcherCoordinator.showDialog(
+                            mActivityTestRule.getActivity(),
+                            mModalDialogManager,
+                            mIconBridge,
+                            openCallback,
+                            null,
+                            null,
+                            false,
+                            Arrays.asList(instances));
+                });
+
+        onView(withId(R.id.active_instance_list)).inRoot(isDialog()).check(matches(isDisplayed()));
+        onView(withId(R.id.inactive_instance_list))
+                .inRoot(isDialog())
+                .check(matches(not(isDisplayed())));
+
+        onView(allOf(withText("Inactive (1)"), isDescendantOfA(withId(R.id.tabs))))
+                .perform(click());
+
+        onView(withId(R.id.active_instance_list))
+                .inRoot(isDialog())
+                .check(matches(not(isDisplayed())));
+        onView(withId(R.id.inactive_instance_list))
+                .inRoot(isDialog())
+                .check(matches(isDisplayed()));
+        onView(withId(R.id.inactive_instance_list))
+                .inRoot(isDialog())
+                .perform(actionOnItemAtPosition(0, click()));
+        itemClickCallbackHelper.waitForCallback(itemClickCount);
+    }
+
+    @Test
+    @SmallTest
     public void testNewWindow() throws Exception {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false),
-                    new InstanceInfo(1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false),
-                    new InstanceInfo(2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false)
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false, 0)
                 };
         final CallbackHelper itemClickCallbackHelper = new CallbackHelper();
         final int itemClickCount = itemClickCallbackHelper.getCallCount();
@@ -153,9 +251,11 @@ public class InstanceSwitcherCoordinatorTest {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false),
-                    new InstanceInfo(1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false),
-                    new InstanceInfo(2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 1, 1, false)
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 1, 1, false, 0)
                 };
         final CallbackHelper itemClickCallbackHelper = new CallbackHelper();
         final int itemClickCount = itemClickCallbackHelper.getCallCount();
@@ -199,11 +299,15 @@ public class InstanceSwitcherCoordinatorTest {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false),
-                    new InstanceInfo(1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false),
-                    new InstanceInfo(2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 1, 1, false),
-                    new InstanceInfo(3, 60, InstanceInfo.Type.OTHER, "url3", "title3", 1, 1, false),
-                    new InstanceInfo(4, 61, InstanceInfo.Type.OTHER, "url4", "title4", 1, 1, false)
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 1, 1, false, 0),
+                    new InstanceInfo(
+                            3, 60, InstanceInfo.Type.OTHER, "url3", "title3", 1, 1, false, 0),
+                    new InstanceInfo(
+                            4, 61, InstanceInfo.Type.OTHER, "url4", "title4", 1, 1, false, 0)
                 };
 
         ThreadUtils.runOnUiThreadBlocking(
@@ -234,9 +338,11 @@ public class InstanceSwitcherCoordinatorTest {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false),
-                    new InstanceInfo(1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false),
-                    new InstanceInfo(2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false)
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 0, 0, false, 0)
                 };
         final CallbackHelper closeCallbackHelper = new CallbackHelper();
         int itemClickCount = closeCallbackHelper.getCallCount();
@@ -278,13 +384,15 @@ public class InstanceSwitcherCoordinatorTest {
 
     @Test
     @SmallTest
-    public void testBackOnConfirmDialog() throws Exception {
+    public void testCancelButton() throws Exception {
         InstanceInfo[] instances =
                 new InstanceInfo[] {
                     new InstanceInfo(
-                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false),
-                    new InstanceInfo(1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false),
-                    new InstanceInfo(2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 1, 1, false)
+                            0, 57, InstanceInfo.Type.CURRENT, "url0", "title0", 1, 0, false, 0),
+                    new InstanceInfo(
+                            1, 58, InstanceInfo.Type.OTHER, "ur11", "title1", 2, 0, false, 0),
+                    new InstanceInfo(
+                            2, 59, InstanceInfo.Type.OTHER, "url2", "title2", 1, 1, false, 0)
                 };
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
@@ -310,7 +418,11 @@ public class InstanceSwitcherCoordinatorTest {
         onView(allOf(withText(R.string.instance_switcher_close_confirm_header)))
                 .check(matches(isDisplayed()));
 
-        onView(allOf(withId(R.id.title_icon), withEffectiveVisibility(VISIBLE))).perform(click());
-        onView(allOf(withText(R.string.instance_switcher_header))).check(matches(isDisplayed()));
+        onView(withText(R.string.cancel)).perform(click());
+        // The cancel button closes the instance switcher and opens the last opened window/tab
+        CriteriaHelper.pollUiThread(
+                () -> {
+                    Criteria.checkThat(mModalDialogManager.isShowing(), Matchers.is(false));
+                });
     }
 }

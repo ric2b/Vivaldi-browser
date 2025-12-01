@@ -12,8 +12,7 @@ import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeBottomChinPr
 import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeBottomChinProperties.Y_OFFSET;
 import static org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils.isBottomChinAllowed;
 
-import androidx.annotation.NonNull;
-
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.browser_controls.BottomControlsLayer;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
@@ -27,12 +26,15 @@ import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSupplier;
+import org.chromium.ui.InsetObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 
+@NullMarked
 class EdgeToEdgeBottomChinMediator
         implements LayoutStateProvider.LayoutStateObserver,
                 KeyboardVisibilityDelegate.KeyboardVisibilityListener,
+                InsetObserver.WindowInsetObserver,
                 EdgeToEdgeSupplier.ChangeObserver,
                 FullscreenManager.Observer,
                 BottomControlsLayer {
@@ -61,13 +63,15 @@ class EdgeToEdgeBottomChinMediator
     private @LayerVisibility int mLatestLayerVisibility;
 
     private boolean mIsKeyboardVisible;
+    private int mKeyboardInset;
     private boolean mHasSafeAreaConstraint;
 
-    private final @NonNull KeyboardVisibilityDelegate mKeyboardVisibilityDelegate;
-    private final @NonNull LayoutManager mLayoutManager;
-    private final @NonNull EdgeToEdgeController mEdgeToEdgeController;
-    private final @NonNull BottomControlsStacker mBottomControlsStacker;
-    private final @NonNull FullscreenManager mFullscreenManager;
+    private final KeyboardVisibilityDelegate mKeyboardVisibilityDelegate;
+    private final InsetObserver mInsetObserver;
+    private final LayoutManager mLayoutManager;
+    private final EdgeToEdgeController mEdgeToEdgeController;
+    private final BottomControlsStacker mBottomControlsStacker;
+    private final FullscreenManager mFullscreenManager;
     private final boolean mIsConstraintChinScrollableWhenStacking;
 
     /**
@@ -77,6 +81,7 @@ class EdgeToEdgeBottomChinMediator
      *     bottom chin component.
      * @param keyboardVisibilityDelegate A {@link KeyboardVisibilityDelegate} for watching keyboard
      *     visibility events.
+     * @param insetObserver The {@link InsetObserver} for checking IME insets.
      * @param layoutManager The {@link LayoutManager} for observing active layout type.
      * @param edgeToEdgeController The {@link EdgeToEdgeController} for observing the edge-to-edge
      *     status and window bottom insets.
@@ -86,13 +91,15 @@ class EdgeToEdgeBottomChinMediator
      */
     EdgeToEdgeBottomChinMediator(
             PropertyModel model,
-            @NonNull KeyboardVisibilityDelegate keyboardVisibilityDelegate,
-            @NonNull LayoutManager layoutManager,
-            @NonNull EdgeToEdgeController edgeToEdgeController,
-            @NonNull BottomControlsStacker bottomControlsStacker,
-            @NonNull FullscreenManager fullscreenManager) {
+            KeyboardVisibilityDelegate keyboardVisibilityDelegate,
+            InsetObserver insetObserver,
+            LayoutManager layoutManager,
+            EdgeToEdgeController edgeToEdgeController,
+            BottomControlsStacker bottomControlsStacker,
+            FullscreenManager fullscreenManager) {
         mModel = model;
         mKeyboardVisibilityDelegate = keyboardVisibilityDelegate;
+        mInsetObserver = insetObserver;
         mLayoutManager = layoutManager;
         mEdgeToEdgeController = edgeToEdgeController;
         mBottomControlsStacker = bottomControlsStacker;
@@ -102,6 +109,7 @@ class EdgeToEdgeBottomChinMediator
 
         // Add observers.
         mKeyboardVisibilityDelegate.addKeyboardVisibilityListener(this);
+        mInsetObserver.addObserver(this);
         mLayoutManager.addObserver(this);
         mEdgeToEdgeController.registerObserver(this);
         mBottomControlsStacker.addLayer(this);
@@ -118,12 +126,14 @@ class EdgeToEdgeBottomChinMediator
 
     void destroy() {
         assert mKeyboardVisibilityDelegate != null;
+        assert mInsetObserver != null;
         assert mLayoutManager != null;
         assert mEdgeToEdgeController != null;
         assert mBottomControlsStacker != null;
         assert mFullscreenManager != null;
 
         mKeyboardVisibilityDelegate.removeKeyboardVisibilityListener(this);
+        mInsetObserver.removeObserver(this);
         mLayoutManager.removeObserver(this);
         mEdgeToEdgeController.unregisterObserver(this);
         mBottomControlsStacker.removeLayer(this);
@@ -166,12 +176,13 @@ class EdgeToEdgeBottomChinMediator
      */
     private void updateHeightAndVisibility() {
         int newHeight = mEdgeToEdgeBottomInsetPx;
+        boolean isKeyboardVisible = mIsKeyboardVisible && mKeyboardInset > 0;
         boolean newVisibility =
                 mIsDrawingToEdge
                         && isBottomChinAllowed(
                                 mLayoutManager.getActiveLayoutType(), mEdgeToEdgeBottomInsetDp)
                         && !mFullscreenManager.getPersistentFullscreenMode()
-                        && !mIsKeyboardVisible;
+                        && !isKeyboardVisible;
 
         boolean heightChanged = mModel.get(HEIGHT) != newHeight;
         boolean visibilityChanged = mModel.get(CAN_SHOW) != newVisibility;
@@ -230,6 +241,14 @@ class EdgeToEdgeBottomChinMediator
         updateHeightAndVisibility();
     }
 
+    // Inset
+
+    @Override
+    public void onKeyboardInsetChanged(int inset) {
+        mKeyboardInset = inset;
+        updateHeightAndVisibility();
+    }
+
     // FullscreenManager.Observer
 
     @Override
@@ -265,6 +284,7 @@ class EdgeToEdgeBottomChinMediator
 
     @Override
     public @LayerVisibility int getLayerVisibility() {
+        if (mIsKeyboardVisible && mKeyboardInset > 0) return LayerVisibility.HIDDEN;
         return (mModel.get(CAN_SHOW) && !mIsPagedOptedIntoEdgeToEdge)
                 ? LayerVisibility.VISIBLE
                 : LayerVisibility.VISIBLE_IF_OTHERS_VISIBLE;

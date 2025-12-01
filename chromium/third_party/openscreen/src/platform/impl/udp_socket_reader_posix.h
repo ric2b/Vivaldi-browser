@@ -48,6 +48,9 @@ class UdpSocketReaderPosix : public SocketHandleWaiter::Subscriber {
   // SocketHandleWaiter::Subscriber overrides.
   void ProcessReadyHandle(SocketHandleRef handle, uint32_t flags) override;
 
+  // NOTE: we don't subscribe to write events from the socket handle waiter.
+  bool HasPendingWrite(SocketHandleRef handle) override;
+
   OSP_DISALLOW_COPY_AND_ASSIGN(UdpSocketReaderPosix);
 
  protected:

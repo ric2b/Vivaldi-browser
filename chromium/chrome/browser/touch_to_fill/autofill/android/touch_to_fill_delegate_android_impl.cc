@@ -6,17 +6,22 @@
 
 #include <variant>
 
+#include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/utf_string_conversions.h"
+#include "components/affiliations/core/browser/affiliation_utils.h"
 #include "components/autofill/core/browser/autofill_browser_util.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
+#include "components/autofill/core/browser/data_manager/valuables/valuables_data_manager.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
+#include "components/autofill/core/browser/data_model/valuables/loyalty_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/foundations/autofill_manager.h"
 #include "components/autofill/core/browser/foundations/browser_autofill_manager.h"
-#include "components/autofill/core/browser/integrators/fast_checkout_client.h"
+#include "components/autofill/core/browser/integrators/fast_checkout/fast_checkout_client.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/payments/iban_access_manager.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
@@ -46,23 +51,25 @@ bool IsFieldFocusableAndEmpty(const FormData& received_form,
          SanitizedFieldIsEmpty(form_field->value());
 }
 
-bool IsTriggeredOnIbanField(const FormStructure* form_field,
-                            const FormFieldData& field) {
+bool IsTriggeredOnFieldWithGroup(const FormStructure* form_field,
+                                 const FormFieldData& field,
+                                 FieldTypeGroup field_type_group) {
   if (!form_field) {
     return false;
   }
 
   const autofill::AutofillField* autofill_field =
       form_field->GetFieldById(field.global_id());
-  return autofill_field &&
-         autofill_field->Type().group() == FieldTypeGroup::kIban;
+  return autofill_field && autofill_field->Type().group() == field_type_group;
 }
 
 }  // namespace
 
 TouchToFillDelegateAndroidImpl::DryRunResult::DryRunResult(
     TriggerOutcome outcome,
-    std::variant<std::vector<CreditCard>, std::vector<Iban>> items_to_suggest)
+    std::variant<std::vector<CreditCard>,
+                 std::vector<Iban>,
+                 std::vector<LoyaltyCard>> items_to_suggest)
     : outcome(outcome), items_to_suggest(std::move(items_to_suggest)) {}
 
 TouchToFillDelegateAndroidImpl::DryRunResult::DryRunResult(DryRunResult&&) =
@@ -124,6 +131,8 @@ TouchToFillDelegateAndroidImpl::DryRun(FormGlobalId form_id,
     return DryRunForIban();
   } else if (field->Type().group() == FieldTypeGroup::kCreditCard) {
     return DryRunForCreditCard(*field, *form, received_form);
+  } else if (field->Type().group() == FieldTypeGroup::kLoyaltyCard) {
+    return DryRunForLoyaltyCard();
   }
 
   return {TriggerOutcome::kUnsupportedFieldType, {}};
@@ -171,6 +180,37 @@ TouchToFillDelegateAndroidImpl::DryRunForCreditCard(
                             std::move(cards_to_suggest));
 }
 
+TouchToFillDelegateAndroidImpl::DryRunResult
+TouchToFillDelegateAndroidImpl::DryRunForLoyaltyCard() {
+  ValuablesDataManager* vdm = manager_->client().GetValuablesDataManager();
+  if (!vdm) {
+    return DryRunResult(TriggerOutcome::kNoValidPaymentMethods, {});
+  }
+  base::span<const LoyaltyCard> loyalty_cards = vdm->GetLoyaltyCards();
+  if (loyalty_cards.empty()) {
+    return DryRunResult(TriggerOutcome::kNoValidPaymentMethods, {});
+  }
+  const GURL& current_domain =
+      manager_->client().GetLastCommittedPrimaryMainFrameURL();
+  // Returns whether a loyalty card has a related merchant domain that matches
+  // the `current_domain`.
+  const auto HasMatchingMerchantDomain =
+      [&current_domain](const LoyaltyCard& loyalty_card) {
+        return std::ranges::any_of(
+            loyalty_card.merchant_domains(),
+            [&current_domain](const GURL& merchant_url) {
+              return affiliations::IsExtendedPublicSuffixDomainMatch(
+                  merchant_url, current_domain, {});
+            });
+      };
+  // Only show the TTF surface if any loyalty card have a matching merchant
+  // domain.
+  if (std::ranges::any_of(loyalty_cards, HasMatchingMerchantDomain)) {
+    return DryRunResult(TriggerOutcome::kShown, base::ToVector(loyalty_cards));
+  }
+  return DryRunResult(TriggerOutcome::kNoValidPaymentMethods, {});
+}
+
 // TODO(crbug.com/40282650): Remove received FormData
 bool TouchToFillDelegateAndroidImpl::IntendsToShowTouchToFill(
     FormGlobalId form_id,
@@ -201,10 +241,9 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
         !manager_->client()
              .GetPaymentsAutofillClient()
              ->ShowTouchToFillCreditCard(
-                 GetWeakPtr(), *cards_to_suggest,
-                 GetCreditCardSuggestionsForTouchToFill(
-                     *cards_to_suggest, manager_->client(),
-                     manager_->GetCreditCardFormEventLogger()))) {
+                 GetWeakPtr(), GetCreditCardSuggestionsForTouchToFill(
+                                   *cards_to_suggest, manager_->client(),
+                                   manager_->GetCreditCardFormEventLogger()))) {
       dry_run.outcome = TriggerOutcome::kFailedToDisplayBottomSheet;
     } else if (std::vector<Iban>* ibans_to_suggest =
                    std::get_if<std::vector<Iban>>(&dry_run.items_to_suggest);
@@ -214,13 +253,28 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
                     ->ShowTouchToFillIban(GetWeakPtr(),
                                           std::move(*ibans_to_suggest))) {
       dry_run.outcome = TriggerOutcome::kFailedToDisplayBottomSheet;
+    } else if (std::vector<LoyaltyCard>* loyalty_cards_to_suggest =
+                   std::get_if<std::vector<LoyaltyCard>>(
+                       &dry_run.items_to_suggest);
+               loyalty_cards_to_suggest &&
+               !manager_->client()
+                    .GetPaymentsAutofillClient()
+                    ->ShowTouchToFillLoyaltyCard(
+                        GetWeakPtr(), std::move(*loyalty_cards_to_suggest))) {
+      dry_run.outcome = TriggerOutcome::kFailedToDisplayBottomSheet;
     }
   }
 
   if (dry_run.outcome != TriggerOutcome::kUnsupportedFieldType) {
-    if (IsTriggeredOnIbanField(manager_->FindCachedFormById(form.global_id()),
-                               field)) {
+    if (IsTriggeredOnFieldWithGroup(
+            manager_->FindCachedFormById(form.global_id()), field,
+            FieldTypeGroup::kIban)) {
       base::UmaHistogramEnumeration(kUmaTouchToFillIbanTriggerOutcome,
+                                    dry_run.outcome);
+    } else if (IsTriggeredOnFieldWithGroup(
+                   manager_->FindCachedFormById(form.global_id()), field,
+                   FieldTypeGroup::kLoyaltyCard)) {
+      base::UmaHistogramEnumeration(kUmaTouchToFillLoyaltyCardTriggerOutcome,
                                     dry_run.outcome);
     } else {
       base::UmaHistogramEnumeration(kUmaTouchToFillCreditCardTriggerOutcome,
@@ -244,6 +298,11 @@ bool TouchToFillDelegateAndroidImpl::TryToShowTouchToFill(
     manager_->DidShowSuggestions({Suggestion(SuggestionType::kCreditCardEntry)},
                                  form, field.global_id(),
                                  /*update_suggestions_callback=*/{});
+  } else if (std::get_if<std::vector<LoyaltyCard>>(&dry_run.items_to_suggest)) {
+    manager_->DidShowSuggestions(
+        {Suggestion(SuggestionType::kLoyaltyCardEntry)}, form,
+        field.global_id(),
+        /*update_suggestions_callback=*/{});
   } else {
     manager_->DidShowSuggestions({Suggestion(SuggestionType::kIbanEntry)}, form,
                                  field.global_id(),
@@ -292,9 +351,9 @@ void TouchToFillDelegateAndroidImpl::ScanCreditCard() {
 void TouchToFillDelegateAndroidImpl::OnCreditCardScanned(
     const CreditCard& card) {
   HideTouchToFill();
-  manager_->FillOrPreviewCreditCardForm(
-      mojom::ActionPersistence::kFill, query_form_, query_field_.global_id(),
-      card, AutofillTriggerSource::kScanCreditCard);
+  manager_->FillOrPreviewForm(mojom::ActionPersistence::kFill, query_form_,
+                              query_field_.global_id(), &card,
+                              AutofillTriggerSource::kScanCreditCard);
 }
 
 void TouchToFillDelegateAndroidImpl::ShowPaymentMethodSettings() {
@@ -313,10 +372,11 @@ void TouchToFillDelegateAndroidImpl::CreditCardSuggestionSelected(
   if (!card) {
     return;
   }
-  manager_->FillOrPreviewCreditCardForm(
-      mojom::ActionPersistence::kFill, query_form_, query_field_.global_id(),
-      is_virtual ? CreditCard::CreateVirtualCard(*card) : *card,
-      AutofillTriggerSource::kTouchToFillCreditCard);
+  const CreditCard& card_to_fill =
+      is_virtual ? CreditCard::CreateVirtualCard(*card) : *card;
+  manager_->FillOrPreviewForm(mojom::ActionPersistence::kFill, query_form_,
+                              query_field_.global_id(), &card_to_fill,
+                              AutofillTriggerSource::kTouchToFillCreditCard);
 }
 
 void TouchToFillDelegateAndroidImpl::IbanSuggestionSelected(
@@ -344,6 +404,16 @@ void TouchToFillDelegateAndroidImpl::IbanSuggestionSelected(
                 }
               },
               GetWeakPtr()));
+}
+
+void TouchToFillDelegateAndroidImpl::LoyaltyCardSuggestionSelected(
+    const std::string& loyalty_card_number) {
+  HideTouchToFill();
+
+  manager_->FillOrPreviewField(
+      mojom::ActionPersistence::kFill, mojom::FieldActionType::kReplaceAll,
+      query_form_, query_field_, base::UTF8ToUTF16(loyalty_card_number),
+      SuggestionType::kLoyaltyCardEntry, LOYALTY_MEMBERSHIP_ID);
 }
 
 void TouchToFillDelegateAndroidImpl::OnDismissed(bool dismissed_by_user) {
@@ -383,8 +453,7 @@ bool TouchToFillDelegateAndroidImpl::HasAnyAutofilledFields(
 bool TouchToFillDelegateAndroidImpl::IsFillingPerfect(
     const FormStructure& submitted_form) const {
   return std::ranges::all_of(submitted_form, [](const auto& field) {
-    return field->value(ValueSemantics::kCurrent).empty() ||
-           field->is_autofilled();
+    return field->value().empty() || field->is_autofilled();
   });
 }
 

@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/modules/webaudio/oscillator_handler.h"
 
 #include <algorithm>
+#include <array>
 #include <limits>
 
 #include "base/synchronization/lock.h"
@@ -109,13 +110,13 @@ float DoInterpolation(double virtual_read_index,
     // better estimate than just linear.
     //
     // See 3-point formula in http://dlmf.nist.gov/3.3#ii
-    unsigned read_index[3];
+    std::array<unsigned int, 3> read_index;
 
     for (int k = -1; k <= 1; ++k) {
       read_index[k + 1] = (read_index_0 + k) & read_index_mask;
     }
 
-    double a[3];
+    std::array<double, 3> a;
     double t = virtual_read_index - read_index_0;
 
     a[0] = 0.5 * t * (t - 1);
@@ -132,12 +133,12 @@ float DoInterpolation(double virtual_read_index,
     // quality and speed.
     //
     // See 5-point formula in http://dlmf.nist.gov/3.3#ii
-    unsigned read_index[5];
+    std::array<unsigned int, 5> read_index;
     for (int k = -2; k <= 2; ++k) {
       read_index[k + 2] = (read_index_0 + k) & read_index_mask;
     }
 
-    double a[5];
+    std::array<double, 5> a;
     double t = virtual_read_index - read_index_0;
     double t2 = t * t;
 
@@ -293,7 +294,7 @@ bool OscillatorHandler::CalculateSampleAccuratePhaseIncrements(
 
   bool has_sample_accurate_values = false;
   bool has_frequency_changes = false;
-  float* phase_increments = phase_increments_.Data();
+  base::span<float> phase_increments = phase_increments_.as_span();
 
   float final_scale = periodic_wave_->RateScale();
 
@@ -303,8 +304,8 @@ bool OscillatorHandler::CalculateSampleAccuratePhaseIncrements(
 
     // Get the sample-accurate frequency values and convert to phase increments.
     // They will be converted to phase increments below.
-    frequency_->CalculateSampleAccurateValues(phase_increments,
-                                              frames_to_process);
+    frequency_->CalculateSampleAccurateValues(
+        phase_increments_.as_span().first(frames_to_process));
   } else {
     // Handle ordinary parameter changes if there are no scheduled changes.
     float frequency = frequency_->FinalValue();
@@ -315,13 +316,15 @@ bool OscillatorHandler::CalculateSampleAccuratePhaseIncrements(
     has_sample_accurate_values = true;
 
     // Get the sample-accurate detune values.
-    float* detune_values =
-        has_frequency_changes ? detune_values_.Data() : phase_increments;
-    detune_->CalculateSampleAccurateValues(detune_values, frames_to_process);
+    base::span<float> detune_values =
+        has_frequency_changes
+            ? detune_values_.as_span().first(frames_to_process)
+            : phase_increments;
+    detune_->CalculateSampleAccurateValues(detune_values);
 
     // Convert from cents to rate scalar.
     float k = 1.0 / 1200;
-    vector_math::Vsmul(detune_values, 1, &k, detune_values, 1,
+    vector_math::Vsmul(detune_values.data(), 1, &k, detune_values.data(), 1,
                        frames_to_process);
     for (unsigned i = 0; i < frames_to_process; ++i) {
       detune_values[i] = std::exp2(detune_values[i]);
@@ -329,8 +332,8 @@ bool OscillatorHandler::CalculateSampleAccuratePhaseIncrements(
 
     if (has_frequency_changes) {
       // Multiply frequencies by detune scalings.
-      vector_math::Vmul(detune_values, 1, phase_increments, 1, phase_increments,
-                        1, frames_to_process);
+      vector_math::Vmul(detune_values.data(), 1, phase_increments.data(), 1,
+                        phase_increments.data(), 1, frames_to_process);
     }
   } else {
     // Handle ordinary parameter changes if there are no scheduled
@@ -341,11 +344,11 @@ bool OscillatorHandler::CalculateSampleAccuratePhaseIncrements(
   }
 
   if (has_sample_accurate_values) {
-    ClampFrequency(phase_increments, frames_to_process,
+    ClampFrequency(phase_increments.data(), frames_to_process,
                    Context()->sampleRate() / 2);
     // Convert from frequency to wavetable increment.
-    vector_math::Vsmul(phase_increments, 1, &final_scale, phase_increments, 1,
-                       frames_to_process);
+    vector_math::Vsmul(phase_increments.data(), 1, &final_scale,
+                       phase_increments.data(), 1, frames_to_process);
   }
 
   return has_sample_accurate_values;
@@ -551,16 +554,16 @@ std::tuple<int, double> OscillatorHandler::ProcessARateVector(
   double inv_periodic_wave_size = 1.0 / periodic_wave_size;
   unsigned read_index_mask = periodic_wave_size - 1;
 
-  float* higher_wave_data[4];
-  float* lower_wave_data[4];
-  float table_interpolation_factor[4] __attribute__((aligned(16)));
+  std::array<float*, 4> higher_wave_data;
+  std::array<float*, 4> lower_wave_data;
+  std::array<float, 4> table_interpolation_factor __attribute__((aligned(16)));
 
   int k = 0;
   int n_loops = n / 4;
 
   for (int loop = 0; loop < n_loops; ++loop, k += 4) {
     bool is_big_increment = true;
-    float frequency[4];
+    std::array<float, 4> frequency;
 
     for (int m = 0; m < 4; ++m) {
       float phase_incr = phase_increments[k + m];
@@ -569,9 +572,9 @@ std::tuple<int, double> OscillatorHandler::ProcessARateVector(
       frequency[m] = inv_rate_scale * phase_incr;
     }
 
-    periodic_wave_->WaveDataForFundamentalFrequency(frequency, lower_wave_data,
-                                                    higher_wave_data,
-                                                    table_interpolation_factor);
+    periodic_wave_->WaveDataForFundamentalFrequency(
+        frequency.data(), lower_wave_data.data(), higher_wave_data.data(),
+        table_interpolation_factor.data());
 
     // If all the phase increments are large enough, we can use linear
     // interpolation with a possibly vectorized implementation.  If not, we need
@@ -579,8 +582,8 @@ std::tuple<int, double> OscillatorHandler::ProcessARateVector(
     if (is_big_increment) {
       virtual_read_index = ProcessARateVectorKernel(
           destination + k, virtual_read_index, phase_increments + k,
-          periodic_wave_size, lower_wave_data, higher_wave_data,
-          table_interpolation_factor);
+          periodic_wave_size, lower_wave_data.data(), higher_wave_data.data(),
+          table_interpolation_factor.data());
     } else {
       for (int m = 0; m < 4; ++m) {
         float sample =

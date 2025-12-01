@@ -35,5 +35,5 @@ grit("chrome_track_event_resources") {
     "grit/tracing_proto_resources.h",
     "tracing_proto_resources.pak",
   ]
-  deps = [ ":chrome_track_event" ]
+  deps = [ ":chrome_track_event_gen" ]
 }

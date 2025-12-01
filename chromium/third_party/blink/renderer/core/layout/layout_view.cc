@@ -95,7 +95,7 @@ LayoutView::LayoutView(ContainerNode* document)
 
   SetIntrinsicLogicalWidthsDirty(kMarkOnlyThis);
 
-  SetPositionState(EPosition::kAbsolute);  // to 0,0 :)
+  SetPositionState(kIsOutOfFlowPositioned);
 
   // Update the cached bit here since the Document is made the effective root
   // scroller before we've created the layout tree.
@@ -119,7 +119,8 @@ void LayoutView::Trace(Visitor* visitor) const {
 bool LayoutView::HitTest(const HitTestLocation& location,
                          HitTestResult& result) {
   NOT_DESTROYED();
-  if (has_svg_text_descendants_) {
+  TRACE_EVENT0("blink", "LayoutView::HitTest");
+  if (HasSVGTextDescendants()) {
     // This is necessary because SVG <text> might have obsolete geometry after
     // scale-only changes.  See crbug.com/1296089#c16
     auto it = svg_text_descendants_->find(this);
@@ -610,7 +611,10 @@ void LayoutView::CalculateScrollbarModes(
   // ClipsContent() is false means that the client wants to paint the whole
   // contents of the frame without scrollbars, which is for printing etc.
   if (!frame->ClipsContent()) {
-    bool disable_scrollbars = true;
+    // Don't disable scrollbars in paint preview capture. This will make sure
+    // that page content will not be shifted during the paint preview capture.
+    bool disable_scrollbars =
+        !GetDocument().AreScrollbarsAllowedInPaintPreview();
 #if BUILDFLAG(IS_ANDROID)
     // However, Android WebView has a setting recordFullDocument. When it's set
     // to true, ClipsContent() is false here, while WebView still expects blink
@@ -820,27 +824,6 @@ void LayoutView::LayoutRoot() {
   initial_containing_block_resize_handled_list_ = nullptr;
 }
 
-void LayoutView::UpdateAfterLayout() {
-  NOT_DESTROYED();
-  if (!GetDocument().Printing()) {
-    // Unlike every other layer, the root PaintLayer takes its size from the
-    // layout viewport size. The call to AdjustViewSize() will update the
-    // frame's contents size, which will also update the page's minimum scale
-    // factor. The call to ResizeAfterLayout() will calculate the layout
-    // viewport size based on the page minimum scale factor, and then update the
-    // LocalFrameView with the new size.
-    LocalFrame& frame = GetFrameView()->GetFrame();
-    GetFrameView()->AdjustViewSize();
-    if (frame.IsMainFrame()) {
-      frame.GetChromeClient().ResizeAfterLayout();
-    }
-    if (IsScrollContainer()) {
-      GetScrollableArea()->ClampScrollOffsetAfterOverflowChange();
-    }
-  }
-  LayoutBlockFlow::UpdateAfterLayout();
-}
-
 void LayoutView::UpdateHitTestResult(HitTestResult& result,
                                      const PhysicalOffset& point) const {
   NOT_DESTROYED();
@@ -965,32 +948,30 @@ bool LayoutView::AffectedByResizedInitialContainingBlock(
   return add_result.is_new_entry;
 }
 
-void LayoutView::UpdateCountersAfterStyleChange(LayoutObject* container) {
+void LayoutView::UpdateCountersAfterStyleChange(
+    LayoutObject* interleaving_root) {
   NOT_DESTROYED();
-  if (!needs_marker_counter_update_)
+  if (!needs_marker_counter_update_) {
     return;
-
-  DCHECK(!container ||
-         (container->View() == this && container->IsDescendantOf(this) &&
-          GetDocument().GetStyleEngine().InContainerQueryStyleRecalc()))
-      << "The container parameter is currently only for scoping updates for "
-         "container query style recalcs";
+  }
+  DCHECK(!interleaving_root ||
+         (interleaving_root->View() == this &&
+          interleaving_root->IsDescendantOf(this) &&
+          GetDocument().GetStyleEngine().InInterleavedStyleRecalc()))
+      << "The interleaving_root parameter is currently only for scoped updates "
+         "for "
+         "interleaved style recalcs";
 
   needs_marker_counter_update_ = false;
   if (!HasLayoutCounters() && !HasLayoutListItems()) {
     return;
   }
 
-  // For container queries style recalc, we know the counter styles didn't
-  // change outside the container. Hence, we can start the update traversal from
-  // the container.
-  LayoutObject* start = container ? container : this;
-  // Additionally, if the container contains style, we know list-item counters
-  // inside the container cannot affect list-item counters outside the
-  // container, which means we can limit the traversal to the container subtree.
-  LayoutObject* stay_within =
-      container && container->ShouldApplyStyleContainment() ? container
-                                                            : nullptr;
+  // For interleaved style recalcs, we know the counter styles didn't change
+  // outside the interleaving root. Hence, we can start the update traversal
+  // from the interleaving_root.
+  LayoutObject* start = interleaving_root ? interleaving_root : this;
+  LayoutObject* stay_within = interleaving_root;
 
   for (LayoutObject* layout_object = start; layout_object;
        layout_object = layout_object->NextInPreOrder(stay_within)) {

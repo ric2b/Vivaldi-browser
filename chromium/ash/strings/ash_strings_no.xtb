@@ -462,6 +462,7 @@ Her er noen ting du kan prøve til å begynne med.</translation>
 <translation id="2530896289327917474">Slå markørsurfing på eller av</translation>
 <translation id="2531025035050312891">enhet treg</translation>
 <translation id="2531107890083353124">Trykk på <ph name="KEY_ONE" /> mens du drar fanen</translation>
+<translation id="2532199152994248594">Dra eller trykk på mellomromstasten for å velge området du vil registrere</translation>
 <translation id="2545334090614121435">Prøver du å bruke Home-tasten? Bruk</translation>
 <translation id="254900897760075745">Kopier det merkede innholdet til utklippstavlen</translation>
 <translation id="2549711466868162843">Bedre lys</translation>
@@ -581,7 +582,6 @@ Ellers blir den innebygde styreflaten slått på igjen om <ph name="TIMEOUT_SECO
 <translation id="2949420361496057765">Trykk på <ph name="MODIFIER" /> og klikk på en link</translation>
 <translation id="2957159466053076448">Du kan når som helst slå av disse funksjonene i innstillingene. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Enhetslyd</translation>
-<translation id="2960314608273155470">Opptaksmodus – standard er <ph name="SOURCE" /> <ph name="TYPE" />. Trykk på Tab for å navigere med tastaturet.</translation>
 <translation id="2961963223658824723">Noe gikk galt. Prøv på nytt om noen sekunder.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Vil du slå på mikrofontilgang?</translation>
@@ -761,6 +761,7 @@ Ellers blir den innebygde styreflaten slått på igjen om <ph name="TIMEOUT_SECO
 <translation id="3552189655002856821">Wifi er slått av</translation>
 <translation id="3554215588514239132">Vis eller skjul utviklerverktøy-panelet</translation>
 <translation id="3554637740840164787">Festet <ph name="ITEM_TITLE" /></translation>
+<translation id="3554928024630051016">For å legge til flere USB-enheter, prøv å koble fra en og koble til en ny</translation>
 <translation id="3558768885091059911">Vil du slå på kamera- og mikrofontilgang?</translation>
 <translation id="3560174576767922131">Ta opp video</translation>
 <translation id="3563775809269155755">Slå på wifi-sone</translation>
@@ -868,6 +869,7 @@ Koble enheten til strøm.</translation>
 <translation id="3861651314799684201">Trykk på Enter for å ta opp hele skjermen</translation>
 <translation id="3870197372373144624">Prøv å slå av enheten.</translation>
 <translation id="3879748587602334249">Nedlastingsbehandling</translation>
+<translation id="3884007280698606545">USB-grensen er nådd</translation>
 <translation id="3886872229787704059">Åpnet i dag</translation>
 <translation id="3891340733213178823">Trykk på Control+Shift+Q to ganger for å logge av.</translation>
 <translation id="3892148308691398805">Kopier teksten</translation>
@@ -1440,6 +1442,7 @@ Ingen enheter er tilkoblet.</translation>
 <translation id="5672890847723042801">Systemverktøy</translation>
 <translation id="5673434351075758678">Fra «<ph name="FROM_LOCALE" />» til «<ph name="TO_LOCALE" />» etter at innstillingene dine ble synkronisert.</translation>
 <translation id="5675363643668471212">Hylleelement</translation>
+<translation id="5677022547882470786">Dra eller trykk på mellomromstasten for å velge området du vil søke i</translation>
 <translation id="5677928146339483299">Blokkert</translation>
 <translation id="5678564054339031017">Vis neste uke</translation>
 <translation id="5679050765726761783">En svak strømadapter er koblet til</translation>
@@ -1485,6 +1488,7 @@ Ingen enheter er tilkoblet.</translation>
 <translation id="5788127256798019331">Play-filer</translation>
 <translation id="5788535737706478207">Åpne den siste fanen eller det siste vinduet du lukket, på nytt</translation>
 <translation id="5790085346892983794">Fullført</translation>
+<translation id="5791926618942305301">I skjermbilde angir du <ph name="SOURCE" /> <ph name="TYPE" />. Trykk på Tab for å velge bildetype. Trykk på Enter for å ta bilde. For å velge opptaksområde, angi delvis skjermbilde. Hvis den ikke allerede er aktiv, trykker du på mellomromstasten for å velge region.</translation>
 <translation id="579415080077680903">Demp</translation>
 <translation id="5802516411616338943">Åpne Hurtiginnstillinger</translation>
 <translation id="5804651031882187592">Slå av innstillingen «Lås SIM-kortet»</translation>
@@ -1641,6 +1645,7 @@ Ingen enheter er tilkoblet.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> kan legges til på nytt senere med tillatelse fra en forelder.</translation>
 <translation id="6291221004442998378">Lader ikke</translation>
 <translation id="6298183524022479114">Tilpass denne enheten i appen</translation>
+<translation id="6304076460080088478">Lukk eller minimer inkognitovinduer for å søke på skjermen med Google Lens</translation>
 <translation id="6309219492973062892">Klikk eller trykk på hylleikonene 1–8</translation>
 <translation id="6315170314923504164">Tale</translation>
 <translation id="6319058840130157106">Beveg deg bakover mellom nedre høyre hjørne, Appoversikt, adressefeltet, bokmerkeraden, nettstedet som er åpent, og nedlastingene</translation>
@@ -1769,6 +1774,7 @@ Nylig installert</translation>
 <translation id="6700713906295497288">IME-menyknappen</translation>
 <translation id="6704073473590541209">Du har valgt håndtaket på høyre kant – bruk piltastene for å flytte det</translation>
 <translation id="6706742084323792866">PIN-tastatur</translation>
+<translation id="6709719156428404245">Dra eller trykk på mellomromstasten for å velge området du vil ta opp</translation>
 <translation id="6710213216561001401">Forrige</translation>
 <translation id="6723839937902243910">Strøm</translation>
 <translation id="672609503628871915">Se hva som er nytt</translation>

@@ -74,7 +74,7 @@ class GitMapTest(git_test_utils.GitRepoReadOnlyTestBase):
 
     def testGitMap(self):
         expected = os.linesep.join([
-            '* 6e85e877ea	(tag_O, origin/main, origin/branch_O) 1970-01-30 ~ O',
+            '* 6e85e877ea	(tag_O, origin/main, origin/branch_O, origin/HEAD) 1970-01-30 ~ O',
             '* 4705470871	(tag_N) 1970-01-28 ~ N',
             '* 8761b1a94f	(tag_M) 1970-01-26 ~ M',
             '* 5e7ce08691	(tag_G) 1970-01-24 ~ G',

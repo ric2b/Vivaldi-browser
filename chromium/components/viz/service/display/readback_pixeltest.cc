@@ -485,7 +485,7 @@ class ReadbackPixelTest : public VizPixelTest {
     auto* quad = pass->CreateAndAppendDrawQuad<TileDrawQuad>();
     quad->SetNew(sqs, output_rect, output_rect, /*needs_blending=*/false,
                  mapped_resource_id, gfx::RectF(output_rect), source_size,
-                 /*is_premultiplied=*/true, /*nearest_neighbor=*/true,
+                 /*nearest_neighbor=*/true,
                  /*force_anti_aliasing_off=*/false);
     return pass;
   }
@@ -497,16 +497,10 @@ class ReadbackPixelTest : public VizPixelTest {
                                        base::span<const uint8_t> pixels) {
     scoped_refptr<gpu::ClientSharedImage> client_shared_image =
         CreateSharedImageWithPixels(format, size, gfx::ColorSpace(), pixels);
-    gpu::SyncToken sync_token = child_context_provider_->SharedImageInterface()
-                                    ->GenUnverifiedSyncToken();
 
-    TransferableResource resource =
-        is_software_renderer()
-            ? TransferableResource::MakeSoftwareSharedImage(
-                  client_shared_image, sync_token, size, format)
-            : TransferableResource::MakeGpu(client_shared_image, GL_TEXTURE_2D,
-                                            sync_token, size, format,
-                                            /*is_overlay_candidate=*/false);
+    TransferableResource resource = TransferableResource::Make(
+        client_shared_image, TransferableResource::ResourceSource::kTest,
+        client_shared_image->creation_sync_token());
 
     auto release_callback =
         base::BindOnce(&DeleteSharedImage, child_context_provider_,
@@ -1017,7 +1011,9 @@ TEST_P(ReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
 
   // Create and wait on shared image interface sync token to wait for shared
   // image creation.
-  ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
+  std::unique_ptr<gpu::RasterScopedAccess> ri_access =
+      shared_image->BeginRasterAccess(ri, shared_image->creation_sync_token(),
+                                      /*readonly=*/false);
 
   SkYUVAInfo info =
       SkYUVAInfo({source_size.width(), source_size.height()},
@@ -1028,9 +1024,9 @@ TEST_P(ReadbackPixelTestNV12WithBlit, ExecutesCopyRequestWithBlit) {
   ri->WritePixelsYUV(shared_image->mailbox(), yuv_pixmap);
 
   gpu::Mailbox mailbox = shared_image->mailbox();
-  gpu::SyncToken sync_token;
   // Create and wait on raster interface sync token for write pixels YUV.
-  ri->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+  gpu::SyncToken sync_token =
+      gpu::RasterScopedAccess::EndAccess(std::move(ri_access));
 
   std::unique_ptr<CopyOutputResult> result = IssueCopyOutputRequestAndRender(
       RequestFormat(), RequestDestination(),

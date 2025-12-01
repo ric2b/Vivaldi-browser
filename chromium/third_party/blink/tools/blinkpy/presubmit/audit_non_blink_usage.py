@@ -89,6 +89,7 @@ _CONFIG = [
             'base::GetSystemMemoryInfo',
             'base::HashingLRUCache',
             'base::HashInts',
+            'base::HashMetricName',
             'base::HeapArray',
             'base::Hertz',
             'base::HexStringToUInt64',
@@ -388,7 +389,7 @@ _CONFIG = [
         ],
         'allowed': [
             # For hashing of k-anonymity keys
-            'crypto::SHA256HashString',
+            'crypto::hash::Sha256',
 
             # Types used to compute k-anonymity keys, also many IG fields are
             # origins and URLs.
@@ -592,6 +593,7 @@ _CONFIG = [
             'cc::LayerTreeHost',
             'cc::PictureLayer',
             'cc::SurfaceLayer',
+            'cc::TextureLayer',
             'cc::TextureLayerImpl',
 
             # cc::Layer helper data structs.
@@ -650,6 +652,7 @@ _CONFIG = [
             'cc::kManipulationInfoScrollbar',
             'cc::kManipulationInfoTouch',
             'cc::kManipulationInfoWheel',
+            'cc::kMaxOverlapBetweenPages',
             'cc::kMinFractionToStepWhenPaging',
             'cc::kPixelsPerLineStep',
             'cc::MainThreadScrollingReason',
@@ -832,6 +835,9 @@ _CONFIG = [
             'ui::DomKey',
             'ui::KeycodeConverter',
 
+            # UI MIME types
+            'ui::kMimeType.+',
+
             # Accessibility base types and the non-Blink enums they
             # depend on.
             'ax::mojom::BoolAttribute',
@@ -844,6 +850,7 @@ _CONFIG = [
             'ui::AXMode',
             'ui::AXNodeData',
             'ui::AXRelativeBounds',
+            'ui::AXSerializationErrorFlag',
             'ui::AXTreeChecks',
             'ui::AXTreeData',
             'ui::AXTreeID',
@@ -853,6 +860,7 @@ _CONFIG = [
             'ui::AXTreeUpdate',
             'ui::kAXModeBasic',
             'ui::kAXModeComplete',
+            'ui::kAXModeInspector',
             'ui::kFirstGeneratedRendererNodeID',
             'ui::kInvalidAXNodeID',
             'ui::kLastGeneratedRendererNodeID',
@@ -1327,10 +1335,29 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/public/web/web_document.h',
+        ],
+        'allowed': [
+            # For accessibility tree snapshots.
+            'ui::AXMode',
+            'ui::AXSerializationErrorFlag',
+            'ui::AXTreeUpdate',
+        ],
+    },
+    {
+        'paths': [
             'third_party/blink/public/common/context_menu_data/',
         ],
         'allowed': [
             'ui::mojom::MenuSourceType',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/public/platform/platform.h',
+        ],
+        'allowed': [
+            'viz::RasterContextProvider',
         ],
     },
     {
@@ -1347,6 +1374,14 @@ _CONFIG = [
         ],
         'allowed': [
             'media::EmeInitDataType',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/public/platform/web_policy_container.h',
+        ],
+        'allowed': [
+            'network::IntegrityPolicy',
         ],
     },
     {
@@ -1554,6 +1589,7 @@ _CONFIG = [
             'gpu::Mailbox',
             'gpu::MailboxHolder',
             'gpu::raster::RasterInterface',
+            'gpu::RasterScopedAccess',
             'gpu::SHARED_IMAGE_USAGE_.+',
             'gpu::SharedImageInterface',
             'gpu::SharedImageTexture',
@@ -1748,9 +1784,10 @@ _CONFIG = [
             'rtc::TaskQueue',
             'rtc::scoped_refptr',
             'viz::.+',
+            "webrtc::RefCountedObject",
             'webrtc::Aec3ConfigFromJsonString',
-            'webrtc::AudioProcessingBuilder',
             'webrtc::AudioProcessing',
+            'webrtc::AudioProcessingBuilder',
             'webrtc::AudioProcessorInterface',
             'webrtc::AudioTrackInterface',
             'webrtc::Config',
@@ -1761,8 +1798,10 @@ _CONFIG = [
             'webrtc::MediaStreamTrackInterface',
             'webrtc::ObserverInterface',
             'webrtc::StreamConfig',
+            'webrtc::TaskQueue',
             'webrtc::TypingDetection',
             'webrtc::VideoTrackInterface',
+            'webrtc::scoped_refptr',
         ],
         'inclass_allowed': [
             'base::(SingleThread|Sequenced)TaskRunner::(CurrentDefaultHandle|GetCurrentDefault)'
@@ -1854,6 +1893,7 @@ _CONFIG = [
             'webrtc::AudioTransport',
             'webrtc::kAdmMaxDeviceNameSize',
             'webrtc::kAdmMaxGuidSize',
+            'webrtc::scoped_refptr',
         ]
     },
     {
@@ -1882,6 +1922,18 @@ _CONFIG = [
             # renderer/platform/ violations.
             _DISALLOW_NON_BLINK_MOJOM,
         ]
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/platform/media/',
+        ],
+        'allowed': [
+            # TODO(crbug.com/40760651): migrate to Blink variant.
+            'media::mojom::MediaMetricsProvider',
+            'media::mojom::PlaybackPropertiesPtr',
+            'media::mojom::SecondaryPlaybackPropertiesPtr',
+            'media::mojom::WatchTimeRecorder',
+        ],
     },
     {
         'paths': [
@@ -1925,6 +1977,15 @@ _CONFIG = [
             'third_party/blink/renderer/modules/accessibility/',
         ],
         'allowed': [
+            'base::MakeFixedFlatSet',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/modules/ai/',
+        ],
+        'allowed': [
+            'base::DoNothingWithBoundArgs',
             'base::MakeFixedFlatSet',
         ],
     },
@@ -2189,10 +2250,14 @@ _CONFIG = [
             'third_party/blink/renderer/modules/webgpu',
         ],
         'allowed': [
+            'base::BindOnce',
+            'cc::TextureLayerClient',
+            'viz::ReleaseCallback',
             'viz::SharedImageFormat',
             'viz::SinglePlaneFormat',
             'viz::SkColorTypeToSinglePlaneSharedImageFormat',
             'viz::ToClosestSkColorType',
+            'viz::TransferableResource',
         ],
     },
     {
@@ -2333,6 +2398,8 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/renderer/core/annotation/annotation_agent_impl_test.cc'
+            'third_party/blink/renderer/core/editing/markers/glic_marker.cc',
             'third_party/blink/renderer/core/highlight/highlight_style_utils.cc',
         ],
         'allowed': [
@@ -2372,6 +2439,7 @@ _CONFIG = [
     {
         'paths': [
             'third_party/blink/renderer/modules/ml/webnn/',
+            'third_party/blink/renderer/modules/ml/ml.cc',
             'third_party/blink/renderer/modules/ml/ml_context.cc',
             'third_party/blink/renderer/modules/ml/ml_context.h',
             'third_party/blink/renderer/modules/ml/ml_model_loader_test_util.cc',
@@ -2425,6 +2493,7 @@ _CONFIG = [
     },
     {
         'paths': [
+            'third_party/blink/public/platform/media/',
             'third_party/blink/public/platform/web_media_player_client.h',
         ],
         'allowed': [
@@ -2496,6 +2565,16 @@ _CONFIG = [
             'network::PermissionsPolicy',
         ]
     },
+    {
+        # TODO(crbug.com/418169222): Remove this entry once the device
+        # bound session credentials origin trial is complete.
+        'paths': [
+            'third_party/blink/common/loader/throttling_url_loader.cc',
+        ],
+        'allowed': [
+            'mojom::OriginTrialFeature',
+        ]
+    }
 ]
 
 

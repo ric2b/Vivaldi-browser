@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
-<translation id="2277224997687551299">編輯群組名稱</translation>
+<translation id="1062777154504442433">新增分頁堆疊</translation>
+<translation id="1625440863545383011">移除分頁並離開堆疊</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {將分頁加入書籤}
           other {將分頁加入書籤}
         }</translation>
 <translation id="2947471979790858922">您在這些無痕分頁中的活動將會從此裝置上移除</translation>
+<translation id="3298614730029636660">離開堆疊</translation>
+<translation id="354698175756845966">編輯堆疊顏色</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {您可以在 Vivaldi 主選單的最近分頁中找到您關閉的分頁。您的無痕分頁將不會在此清單中出現。}
         other {您可以在 Vivaldi 主選單的最近分頁中找到您關閉的分頁。您的 # 個無痕分頁將不會在此清單中出現。}}</translation>
-<translation id="4460014764210899310">取消分組</translation>
 <translation id="4871187110787939393">要關閉全部的無痕分頁嗎？</translation>
 <translation id="5494920125229734069">全選</translation>
-<translation id="6744956528665271406">編輯群組顏色</translation>
+<translation id="6807841890213931603">移除分頁並刪除堆疊</translation>
+<translation id="750227952939161636">您的分頁堆疊會自動在您已登入的裝置上儲存和更新</translation>
+<translation id="7640137753339219124">刪除堆疊</translation>
+<translation id="7653857400289671414">您的分頁堆疊會自動儲存</translation>
+<translation id="8440938071054361204">編輯堆疊名稱</translation>
+<translation id="8602902357364871325">關閉堆疊</translation>
+<translation id="8851621822786801079">從堆疊中移除</translation>
 </translationbundle>

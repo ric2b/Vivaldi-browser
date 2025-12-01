@@ -10,6 +10,7 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <map>
 #include <optional>
 #include <string>
@@ -32,6 +33,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/time/time.h"
 #include "base/version.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/updater_branding.h"
 #include "chrome/updater/updater_scope.h"
@@ -40,11 +42,6 @@
 
 namespace updater {
 namespace {
-
-constexpr int kPermissionsMask = base::FILE_PERMISSION_USER_MASK |
-                                 base::FILE_PERMISSION_GROUP_MASK |
-                                 base::FILE_PERMISSION_READ_BY_OTHERS |
-                                 base::FILE_PERMISSION_EXECUTE_BY_OTHERS;
 
 bool RunHDIUtil(const std::vector<std::string>& args,
                 std::string* command_output) {
@@ -133,7 +130,7 @@ bool IsInstallScriptExecutable(const base::FilePath& script_path) {
     return false;
   }
 
-  constexpr int kExecutableMask = base::FILE_PERMISSION_EXECUTE_BY_USER;
+  static constexpr int kExecutableMask = base::FILE_PERMISSION_EXECUTE_BY_USER;
   return (permissions & kExecutableMask) == kExecutableMask;
 }
 
@@ -175,12 +172,17 @@ int RunExecutable(const base::FilePath& existence_checker_path,
     command.AppendArgPath(existence_checker_path);
     command.AppendArg(pv.GetString());
 
+    // Provide a small PATH to provide a predictable execution environment,
+    // including ksadmin on the PATH. If updating this logic, please keep the
+    // install script test in sync with the behavior here.
+    // LINT.IfChange(InstallerEnvPath)
     std::string env_path = "/bin:/usr/bin";
     std::optional<base::FilePath> ksadmin_path =
         GetKSAdminPath(GetUpdaterScope());
     if (ksadmin_path) {
       env_path = base::StrCat({env_path, ":", ksadmin_path->DirName().value()});
     }
+    // LINT.ThenChange(/chrome/installer/mac/keystone_install_test.sh:InstallerEnvPath)
 
     base::ScopedFD read_fd, write_fd;
     {
@@ -228,7 +230,7 @@ int RunExecutable(const base::FilePath& existence_checker_path,
     std::string output;
     base::Time deadline = base::Time::Now() + timeout;
 
-    constexpr size_t kBufferSize = 1024;
+    static constexpr size_t kBufferSize = 1024;
     base::CheckedNumeric<size_t> total_bytes_read = 0;
     ssize_t read_this_pass = 0;
     do {
@@ -260,8 +262,9 @@ int RunExecutable(const base::FilePath& existence_checker_path,
 
     VLOG(1) << "Output from " << executable << ": " << output;
 
-    if (!proc.WaitForExitWithTimeout(deadline - base::Time::Now(),
-                                     &exit_code)) {
+    if (!proc.WaitForExitWithTimeout(
+            std::max(deadline - base::Time::Now(), base::TimeDelta()),
+            &exit_code)) {
       return static_cast<int>(InstallErrors::kExecutableWaitForExitFailed);
     }
     if (exit_code != 0) {
@@ -341,30 +344,15 @@ int InstallFromDMG(const base::FilePath& dmg_file_path,
   return result;
 }
 
-// Unzips the zip using the existing unzip utility in Mac. Path to the zip is
-// specified by the `zip_file_path`. The install executable located at
-// "/.install" in the contents of the zip is executed, and then the zip is
-// deleted. Returns an error code if unzipping the archive or executing the
-// executable failed.
-int InstallFromZip(const base::FilePath& zip_file_path,
+// Installs by running the install scripts in the specified directory.
+int InstallFromDir(const base::FilePath& dir,
                    base::OnceCallback<int(const base::FilePath&)> install) {
-  const base::FilePath dest_path = zip_file_path.DirName();
-
-  if (!UnzipWithExe(zip_file_path, dest_path)) {
-    VLOG(1) << "Failed to unzip zip file.";
-    return static_cast<int>(InstallErrors::kFailedToExpandZip);
-  }
-
-  if (!ConfirmFilePermissions(dest_path, kPermissionsMask)) {
+  // Update permissions on files in the directory.
+  if (!SetFilePermissionsRecursive(dir)) {
     return static_cast<int>(InstallErrors::kCouldNotConfirmAppPermissions);
   }
 
-  const int result = std::move(install).Run(dest_path);
-
-  // Remove the zip file, keep the expanded.
-  base::DeleteFile(zip_file_path);
-
-  return result;
+  return std::move(install).Run(dir);
 }
 
 // Installs with a path to the app specified by the `app_file_path`. The install
@@ -381,7 +369,7 @@ int InstallFromApp(const base::FilePath& app_file_path,
 
   // Need to make sure that the app at the path being installed has the correect
   // permissions.
-  if (!ConfirmFilePermissions(app_file_path, kPermissionsMask)) {
+  if (!SetFilePermissionsRecursive(app_file_path)) {
     return static_cast<int>(InstallErrors::kCouldNotConfirmAppPermissions);
   }
 
@@ -403,8 +391,8 @@ int InstallFromArchive(const base::FilePath& file_path,
                          base::OnceCallback<int(const base::FilePath&)>)>
       handlers = {
           {".dmg", &InstallFromDMG},
-          {".zip", &InstallFromZip},
           {".app", &InstallFromApp},
+          {"", &InstallFromDir},
       };
   auto handler = handlers.find(file_path.Extension());
   if (handler == handlers.end()) {

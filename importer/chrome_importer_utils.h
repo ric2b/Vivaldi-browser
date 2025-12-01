@@ -3,6 +3,6 @@
 #ifndef IMPORTER_CHROME_IMPORTER_UTILS_H_
 #define IMPORTER_CHROME_IMPORTER_UTILS_H_
 
-base::FilePath GetProfileDir(importer::ImporterType importerType);
+base::FilePath GetProfileDir(user_data_importer::ImporterType importerType);
 
 #endif  // IMPORTER_CHROME_IMPORTER_UTILS_H_

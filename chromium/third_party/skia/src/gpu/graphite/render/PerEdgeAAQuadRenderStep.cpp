@@ -27,6 +27,7 @@
 #include "src/gpu/graphite/geom/Transform.h"
 #include "src/gpu/graphite/render/CommonDepthStencilSettings.h"
 
+#include <array>
 #include <cstdint>
 
 // This RenderStep is specialized to draw filled rectangles with per-edge AA.
@@ -132,17 +133,35 @@ static bool is_clockwise(const EdgeAAQuad& quad) {
     return winding >= 0.f;
 }
 
-// Represents the per-vertex attributes used in each instance.
-struct Vertex {
-    SkV2 fNormal;
-};
-
 // Allowed values for the center weight instance value (selected at record time based on style
 // and transform), and are defined such that when (insance-weight > vertex-weight) is true, the
 // vertex should be snapped to the center instead of its regular calculation.
 static constexpr int kCornerVertexCount = 4; // sk_VertexID is divided by this in SkSL
 static constexpr int kVertexCount = 4 * kCornerVertexCount;
 static constexpr int kIndexCount = 29;
+
+// Represents the per-vertex attributes used in each instance.
+struct Vertex {
+    uint32_t fCornerID;
+    SkV2 fNormal;
+};
+
+// This template is repeated 4 times in the vertex buffer, for each of the four corners:  TL -> TR
+// -> BR -> BL. The corner ID is used to lookup per-corner instance properties such as positions.
+template<uint32_t kCornerID>
+constexpr std::array<Vertex, kCornerVertexCount> get_per_corner_vertex_attrs() {
+    constexpr float kHR2 = 0.5f * SK_FloatSqrt2; // "half root 2"
+
+    return {{
+        // Normals for device-space AA outsets from outer curve
+        { kCornerID, {1.0f, 0.0f} },
+        { kCornerID, {kHR2, kHR2} },
+        { kCornerID, {0.0f, 1.0f} },
+
+        // Normal for outer anchor (zero length to signal no local or device-space normal outset)
+        { kCornerID, {0.0f, 0.0f} },
+    }};
+}
 
 static void write_index_buffer(VertexWriter writer) {
     static constexpr uint16_t kTL = 0 * kCornerVertexCount;
@@ -167,42 +186,27 @@ static void write_index_buffer(VertexWriter writer) {
 }
 
 static void write_vertex_buffer(VertexWriter writer) {
-    static constexpr float kHR2 = 0.5f * SK_FloatSqrt2; // "half root 2"
-
-    // This template is repeated 4 times in the vertex buffer, for each of the four corners.
-    // The vertex ID is used to lookup per-corner instance properties such as positions,
-    // but otherwise this vertex data produces a consistent clockwise mesh from
-    // TL -> TR -> BR -> BL.
-    static constexpr Vertex kCornerTemplate[kCornerVertexCount] = {
-        // Normals for device-space AA outsets from outer curve
-        { {1.0f, 0.0f} },
-        { {kHR2, kHR2} },
-        { {0.0f, 1.0f} },
-
-        // Normal for outer anchor (zero length to signal no local or device-space normal outset)
-        { {0.0f, 0.0f} },
-    };
-
     if (writer) {
-        writer << kCornerTemplate  // TL
-               << kCornerTemplate  // TR
-               << kCornerTemplate  // BR
-               << kCornerTemplate; // BL
+        writer << get_per_corner_vertex_attrs<0>()  // TL
+               << get_per_corner_vertex_attrs<1>()  // TR
+               << get_per_corner_vertex_attrs<2>()  // BR
+               << get_per_corner_vertex_attrs<3>(); // BL
     } // otherwise static buffer creation failed, so do nothing; Context initialization will fail.
 }
 
 PerEdgeAAQuadRenderStep::PerEdgeAAQuadRenderStep(StaticBufferManager* bufferManager)
         : RenderStep(RenderStepID::kPerEdgeAAQuad,
                      Flags::kPerformsShading | Flags::kEmitsCoverage | Flags::kOutsetBoundsForAA |
-                     Flags::kUseNonAAInnerFill,
+                     Flags::kUseNonAAInnerFill | Flags::kAppendInstances,
                      /*uniforms=*/{},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGreaterPass,
-                     /*vertexAttrs=*/{
-                            {"normal", VertexAttribType::kFloat2, SkSLType::kFloat2},
+                     /*staticAttrs=*/{
+                             {"cornerID", VertexAttribType::kUInt, SkSLType::kUInt },
+                             {"normal", VertexAttribType::kFloat2, SkSLType::kFloat2},
                      },
-                     /*instanceAttrs=*/
-                            {{"edgeFlags", VertexAttribType::kUByte4_norm, SkSLType::kFloat4},
+                     /*appendAttrs=*/{
+                             {"edgeFlags", VertexAttribType::kUByte4_norm, SkSLType::kFloat4},
                              {"quadXs", VertexAttribType::kFloat4, SkSLType::kFloat4},
                              {"quadYs", VertexAttribType::kFloat4, SkSLType::kFloat4},
 
@@ -221,7 +225,7 @@ PerEdgeAAQuadRenderStep::PerEdgeAAQuadRenderStep(StaticBufferManager* bufferMana
     // Initialize the static buffers we'll use when recording draw calls.
     // NOTE: Each instance of this RenderStep gets its own copy of the data. Since there should only
     // ever be one PerEdgeAAQuadRenderStep at a time, this shouldn't be an issue.
-    write_vertex_buffer(bufferManager->getVertexWriter(sizeof(Vertex) * kVertexCount,
+    write_vertex_buffer(bufferManager->getVertexWriter(kVertexCount, sizeof(Vertex),
                                                        &fVertexBuffer));
     write_index_buffer(bufferManager->getIndexWriter(sizeof(uint16_t) * kIndexCount,
                                                      &fIndexBuffer));
@@ -233,9 +237,9 @@ std::string PerEdgeAAQuadRenderStep::vertexSkSL() const {
     // Returns the body of a vertex function, which must define a float4 devPosition variable and
     // must write to an already-defined float2 stepLocalCoords variable.
     return "float4 devPosition = per_edge_aa_quad_vertex_fn("
-                   // Vertex Attributes
-                   "normal, "
-                   // Instance Attributes
+                   // Static Data Attributes
+                   "cornerID, normal, "
+                   // Append Data Attributes
                    "edgeFlags, quadXs, quadYs, depth, "
                    "float3x3(mat0, mat1, mat2), "
                    // Varyings

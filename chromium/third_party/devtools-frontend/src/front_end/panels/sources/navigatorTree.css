@@ -47,6 +47,7 @@
   color: var(--icon-folder-workspace);
 }
 
+.navigator-automatic-fs-tree-item devtools-icon,
 .navigator-fs-tree-item devtools-icon {
   color: var(--icon-file-authored);
 }
@@ -105,13 +106,22 @@
   color: var(--icon-folder-authored);
 }
 
-.navigator-fs-tree-item:not(.has-mapped-files, .selected) > :not(.selection),
-.navigator-fs-folder-tree-item:not(.has-mapped-files, .selected) > :not(.selection) {
-  color: var(--sys-color-on-surface-subtle);
-  opacity: 40%;
+.navigator-automatic-fs-tree-item {
+  & > devtools-button,
+  & > devtools-spinner {
+    margin-left: var(--sys-size-4);
+  }
+}
 
-  & devtools-icon {
+.navigator-fs-tree-item:not(.has-mapped-files),
+.navigator-fs-tree-item:not(.has-mapped-files) + ol li {
+  & > :not(.selection) {
     color: var(--sys-color-on-surface-subtle);
+    opacity: 40%;
+
+    & devtools-icon {
+      color: var(--sys-color-on-surface-subtle);
+    }
   }
 }
 
@@ -127,7 +137,7 @@
   }
 
   .tree-outline li:hover:not(.selected) .selection,
-  .tree-outline li:hover:not(:has(dt-checkbox)) .selection {
+  .tree-outline li:hover:not(:has(devtools-checkbox)) .selection {
     forced-color-adjust: none;
     background-color: Highlight;
   }

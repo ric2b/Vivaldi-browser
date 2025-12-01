@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -24,6 +25,7 @@ import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
+import androidx.fragment.app.FragmentTransaction;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
@@ -51,6 +53,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetControllerFacto
 import org.chromium.components.browser_ui.bottomsheet.ManagedBottomSheetController;
 import org.chromium.components.browser_ui.modaldialog.AppModalPresenter;
 import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
@@ -65,27 +68,34 @@ import java.lang.ref.WeakReference;
 import java.util.Locale;
 
 // Vivaldi
+import android.content.pm.PackageManager;
 import android.view.WindowManager;
-import androidx.appcompat.widget.SearchView;
-import androidx.preference.PreferenceScreen;
 import android.provider.Settings;
 import android.view.inputmethod.EditorInfo;
-import org.chromium.base.ContextUtils;
-import android.content.pm.PackageManager;
+import androidx.appcompat.widget.SearchView;
+import androidx.preference.PreferenceScreen;
 
 import java.util.ArrayList;
 
+import org.chromium.base.ContextUtils;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.accessibility.settings.ChromeAccessibilitySettingsDelegate;
+import org.chromium.chrome.browser.language.settings.AlwaysTranslateListFragment;
+import org.chromium.chrome.browser.language.settings.NeverTranslateListFragment;
 import org.chromium.chrome.browser.night_mode.NightModeMetrics;
 import org.chromium.chrome.browser.night_mode.settings.ThemeSettingsFragment;
 import org.chromium.chrome.browser.password_manager.ManagePasswordsReferrer;
 import org.chromium.chrome.browser.password_manager.PasswordManagerLauncher;
 import org.chromium.components.browser_ui.accessibility.AccessibilitySettings;
 import org.chromium.components.browser_ui.accessibility.PageZoomUtils;
+import org.chromium.chrome.browser.privacy.settings.IncognitoLockSettings;
+import org.chromium.chrome.browser.incognito.reauth.IncognitoReauthSettingSwitchPreference;
 
+import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.PreferenceSearchManager;
+import org.vivaldi.browser.preferences.VivaldiAddressBarPreferences;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.vivaldi.browser.preferences.VivaldiPreferencesBridge;
 
 /**
  * The Chrome settings activity.
@@ -107,6 +117,8 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  */
 public class SettingsActivity extends ChromeBaseAppCompatActivity
         implements PreferenceFragmentCompat.OnPreferenceStartFragmentCallback, SnackbarManageable {
+    private static final String TAG = "SettingsActivity";
+
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public static final String EXTRA_SHOW_FRAGMENT = "show_fragment";
 
@@ -150,7 +162,11 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     private static final String MAIN_FRAGMENT_TAG = "settings_main";
 
     // Vivaldi - make possible to scroll down search results (ref. VAB-8621)
-    private final int MINIMUM_SEARCH_LENGTH = 2;
+    private static final int MINIMUM_SEARCH_LENGTH = 2;
+
+    // Vivaldi - exit settings when done clicked
+    public static final int REQUEST_EXIT = 19;
+
     private final ArrayList<Preference> mCurrentPrefs = new ArrayList<>();
     private SearchView mSearchView;
 
@@ -199,6 +215,15 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         Toolbar actionBar = findViewById(R.id.action_bar);
         setSupportActionBar(actionBar);
         getSupportActionBar().setDisplayHomeAsUpEnabled(true);
+        if (BuildConfig.IS_VIVALDI) {
+            int padding = getResources()
+                    .getDimensionPixelSize(
+                            R.dimen.toolbar_padding);
+            actionBar.setPadding(actionBar.getContentInsetLeft(),
+                    actionBar.getPaddingTop(),
+                    actionBar.getPaddingRight() + padding,
+                    actionBar.getPaddingBottom());
+        } // End Vivaldi
 
         mIsNewlyCreated = savedInstanceState == null;
 
@@ -206,15 +231,11 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         // recreated and super.onCreate() has already recreated the fragment.
         if (savedInstanceState == null) {
             Fragment fragment = instantiateMainFragment(getIntent());
-            fragmentManager
-                    .beginTransaction()
-                    .replace(R.id.content, fragment, MAIN_FRAGMENT_TAG)
-                    .setCustomAnimations(
-                            R.anim.shared_x_axis_open_enter,
-                            R.anim.shared_x_axis_open_exit,
-                            R.anim.shared_x_axis_close_enter,
-                            R.anim.shared_x_axis_close_exit)
-                    .commit();
+
+            var transaction = fragmentManager.beginTransaction();
+            transaction.replace(R.id.content, fragment, MAIN_FRAGMENT_TAG);
+            setFragmentAnimation(transaction, fragment);
+            transaction.commit();
         }
 
         setStatusBarColor();
@@ -234,7 +255,6 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     @Override
     public void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-
         // This callback is called only when the settings UI is operating in the single activity
         // mode.
         assert ChromeFeatureList.sSettingsSingleActivity.isEnabled();
@@ -302,8 +322,13 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
      */
     public void startSettings(@Nullable String fragmentClass, @Nullable Bundle args) {
         Intent intent = SettingsIntentUtil.createIntent(this, fragmentClass, args);
+        if (BuildConfig.IS_VIVALDI)
+            startActivityForResult(intent, REQUEST_EXIT);
+        else // End Vivaldi
         startActivity(intent);
     }
+
+
 
     @Override
     public void onAttachedToWindow() {
@@ -314,7 +339,6 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     @Override
     protected void onResume() {
         super.onResume();
-
         // Prevent the user from interacting with multiple instances of SettingsActivity at the same
         // time (e.g. in multi-instance mode on a Samsung device), which would cause many fun bugs.
         if (sResumedInstance != null
@@ -322,6 +346,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                 && !mIsNewlyCreated) {
             // This activity was unpaused or recreated while another instance of SettingsActivity
             // was already showing. The existing instance takes precedence.
+
             finish();
         } else {
             // This activity was newly created and takes precedence over sResumedInstance.
@@ -339,17 +364,42 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         if (mPendingNewIntent != null) {
             Fragment fragment = instantiateMainFragment(mPendingNewIntent);
             mPendingNewIntent = null;
-            getSupportFragmentManager()
-                    .beginTransaction()
-                    .setReorderingAllowed(true)
-                    .setCustomAnimations(
-                            R.anim.shared_x_axis_open_enter,
-                            R.anim.shared_x_axis_open_exit,
-                            R.anim.shared_x_axis_close_enter,
-                            R.anim.shared_x_axis_close_exit)
+
+            var transaction = getSupportFragmentManager().beginTransaction();
+            transaction.setReorderingAllowed(true);
+            setFragmentAnimation(transaction, fragment);
+            transaction
                     .replace(R.id.content, fragment, MAIN_FRAGMENT_TAG)
                     .addToBackStack(null)
                     .commit();
+        }
+    }
+
+    private static @SettingsFragment.AnimationType int getAnimationType(
+            @NonNull Fragment fragment) {
+        if (fragment instanceof SettingsFragment settingsFragment) {
+            // The fragment is (being) migrated. Respect the animation type that the fragment says.
+            return settingsFragment.getAnimationType();
+        }
+
+        // The fragment is not yet migrated with auditing. Fallback to the legacy animation type.
+        Log.w(TAG, "Non-migrated Settings fragment is found: " + fragment.getClass().getName());
+        return SettingsFragment.AnimationType.TWEEN;
+    }
+
+    private static void setFragmentAnimation(
+            @NonNull FragmentTransaction transaction, @NonNull Fragment fragment) {
+        switch (getAnimationType(fragment)) {
+            case SettingsFragment.AnimationType.TWEEN -> transaction.setCustomAnimations(
+                    R.anim.shared_x_axis_open_enter,
+                    R.anim.shared_x_axis_open_exit,
+                    R.anim.shared_x_axis_close_enter,
+                    R.anim.shared_x_axis_close_exit);
+            case SettingsFragment.AnimationType.PROPERTY -> transaction.setCustomAnimations(
+                    R.animator.shared_x_axis_open_enter,
+                    R.animator.shared_x_axis_open_exit,
+                    R.animator.shared_x_axis_close_enter,
+                    R.animator.shared_x_axis_close_exit);
         }
     }
 
@@ -480,6 +530,28 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                 }
             });
         }
+        if (BuildConfig.IS_VIVALDI) {
+            Fragment fragment = getMainFragment();
+            if (fragment instanceof PreferenceFragmentCompat
+                    || fragment instanceof AlwaysTranslateListFragment
+                    || fragment instanceof NeverTranslateListFragment) {
+                MenuItem done =
+                        menu.add(Menu.NONE,
+                                R.id.done,
+                                Menu.CATEGORY_SECONDARY,
+                                R.string.done).setIcon(R.drawable.vivaldi_close_mobile_24dp);
+                done.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+                done.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
+                    @Override
+                    public boolean onMenuItemClick(@NonNull MenuItem menuItem) {
+                        setResult(RESULT_OK);
+                        finish();
+                        return true;
+                    }
+
+                });
+            }
+        }
         return super.onCreateOptionsMenu(menu);
     }
 
@@ -513,7 +585,24 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        if (BuildConfig.IS_VIVALDI && requestCode == REQUEST_EXIT) {
+            if (resultCode == RESULT_OK) {
+                setResult(RESULT_OK);
+                finish();
+                return;
+            }
+        }
         mIntentRequestTracker.onActivityResult(requestCode, resultCode, data);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // Finish the current settings when the ESC key is pressed.
+        if (keyCode == KeyEvent.KEYCODE_ESCAPE) {
+            finishCurrentSettings(getMainFragment());
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
     }
 
     private void initBackPressHandler() {
@@ -660,7 +749,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
         private ObservableSupplier<String> mCurrentPageTitle;
 
         @Override
-        public void onFragmentResumed(
+        public void onFragmentStarted(
                 @NonNull FragmentManager fragmentManager, @NonNull Fragment fragment) {
             if (!MAIN_FRAGMENT_TAG.equals(fragment.getTag())) {
                 return;
@@ -673,7 +762,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                 mCurrentPageTitle.removeObserver(mSetTitleCallback);
             }
             mCurrentPageTitle = settingsFragment.getPageTitle();
-            mCurrentPageTitle.addObserver(mSetTitleCallback);
+            mCurrentPageTitle.addSyncObserverAndCallIfNonNull(mSetTitleCallback);
         }
     }
 
@@ -709,12 +798,25 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                     "Settings.FragmentAttached", className.hashCode());
             // Log hashCode to easily add new class names to enums.xml.
             Log.d(
-                    "SettingsActivity",
+                    TAG,
                     String.format(
                             Locale.ENGLISH,
                             "Settings.FragmentAttached: <int value=\"%d\" label=\"%s\"/>",
                             className.hashCode(),
                             className));
+
+            if (!(fragment instanceof SettingsFragment)) {
+                RecordHistogram.recordSparseHistogram(
+                        "Settings.NonSettingsFragmentAttached", className.hashCode());
+                Log.e(
+                        TAG,
+                        String.format(
+                                Locale.ENGLISH,
+                                "%s does not implement SettingsFragment",
+                                className));
+            }
+            assert fragment instanceof SettingsFragment
+                    : className + "does not implement SettingsFragment";
         }
     }
 
@@ -730,6 +832,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                         .getPreferenceManager()
                         .getPreferenceScreen();
         searchResultScreen.removeAll();
+        VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
         for (Preference preference : preferences) {
             if (preference.getParent() != null)
                 preference.getParent().removePreference(preference);
@@ -739,7 +842,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
             String prefStr = preference.getKey();
             if (prefStr != null) {
                 switch (prefStr) {
-                    case "passwords":
+                    case MainSettings.PREF_PASSWORDS:
                         preference.setOnPreferenceClickListener(pref -> {
                             PasswordManagerLauncher.showPasswordSettings(
                                     mSearchView.getContext(),
@@ -750,24 +853,22 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                             return true;
                         });
                         break;
-                    case "ui_theme":
+                    case MainSettings.PREF_UI_THEME:
                         preference.getExtras()
                                 .putInt(
                                         ThemeSettingsFragment.KEY_THEME_SETTINGS_ENTRY,
                                         NightModeMetrics.ThemeSettingsEntry.SETTINGS);
                         break;
                     case AccessibilitySettings.PREF_CAPTIONS:
-                        preference.setOnPreferenceClickListener(
-                                pref -> {
-                                    Intent intent = new Intent(Settings.ACTION_CAPTIONING_SETTINGS);
-
-                                    // Open the activity in a new task because the back button on the caption
-                                    // settings page navigates to the previous settings page instead of Chrome.
-                                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                                    startActivity(intent);
-
-                                    return true;
-                                });
+                        preference.setOnPreferenceClickListener(pref -> {
+                            Intent intent = new Intent(Settings.ACTION_CAPTIONING_SETTINGS);
+                            // Open the activity in a new task because the back button on the
+                            // caption settings page navigates to the previous settings page
+                            // instead of Chrome.
+                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                            return true;
+                        });
                         break;
                     case VivaldiPreferences.RESET_UI_SCALE:
                         preference.setOnPreferenceClickListener(pref -> {
@@ -791,7 +892,7 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                             return true;
                         });
                         break;
-                    case "notifications":
+                    case MainSettings.PREF_NOTIFICATIONS:
                         Intent intent = new Intent();
                         intent.setAction(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
                         intent.putExtra(
@@ -811,10 +912,67 @@ public class SettingsActivity extends ChromeBaseAppCompatActivity
                         break;
                     case AccessibilitySettings.PREF_PAGE_ZOOM_ALWAYS_SHOW:
                         preference.setOnPreferenceChangeListener((pref, newValue) -> {
-                            boolean enabled = (boolean) newValue;
-                            PageZoomUtils.setShouldAlwaysShowZoomMenuItem(enabled);
+                            PageZoomUtils.setShouldAlwaysShowZoomMenuItem((boolean) newValue);
                             return true;
                         });
+                        break;
+                    // Address bar settings
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_ENABLE_BOOKMARKS:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.setAddressBarEnableBookmarks((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_OMNIBOX_BOOKMARKS_BOOSTED:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.SetAddressBarOmniboxBookmarksBoosted((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_OMNIBOX_SHOW_NICKNAMES:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.SetAddressBarOmniboxShowNicknames((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_SEARCH_DIRECT_MATCH:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.SetAddressBarSearchDirectMatchEnabled((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_SEARCH_DIRECT_MATCH_BOOSTED:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.SetAddressBarSearchDirectMatchBoosted((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_ENABLE_SEARCH_HISTORY:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.setAddressBarEnableSearchHistory((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_ENABLE_HISTORY:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.setAddressBarEnableHistory((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_SHOW_TYPED_HISTORY:
+                        preference.setOnPreferenceChangeListener((pref, newValue) -> {
+                            vivaldiPrefs.setAddressBarShowTypedHistory((boolean) newValue);
+                            return true;
+                        });
+                        break;
+                    case VivaldiPreferences.PREF_INCOGNITO_LOCK:
+                        IncognitoLockSettings mIncognitoLockSettings =
+                                new IncognitoLockSettings(
+                                        (IncognitoReauthSettingSwitchPreference)preference,
+                                        mProfile);
+                            mIncognitoLockSettings.setUpIncognitoReauthPreference(this);
+
+                        break;
                 }
             }
             searchResultScreen.addPreference(preference);

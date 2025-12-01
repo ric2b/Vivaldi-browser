@@ -55,6 +55,8 @@ tint_target_add_dependencies(tint_lang_spirv_reader_parser lib
   tint_lang_spirv
   tint_lang_spirv_intrinsic
   tint_lang_spirv_ir
+  tint_lang_spirv_type
+  tint_lang_wgsl
   tint_utils
   tint_utils_containers
   tint_utils_diagnostic
@@ -70,6 +72,12 @@ tint_target_add_dependencies(tint_lang_spirv_reader_parser lib
 tint_target_add_external_dependencies(tint_lang_spirv_reader_parser lib
   "src_utils"
 )
+
+if(TINT_BUILD_SPV_READER)
+  tint_target_add_dependencies(tint_lang_spirv_reader_parser lib
+    tint_lang_spirv_reader_common
+  )
+endif(TINT_BUILD_SPV_READER)
 
 if(TINT_BUILD_SPV_READER OR TINT_BUILD_SPV_WRITER)
   tint_target_add_dependencies(tint_lang_spirv_reader_parser lib
@@ -100,6 +108,7 @@ tint_add_target(tint_lang_spirv_reader_parser_test test
   lang/spirv/reader/parser/convert_test.cc
   lang/spirv/reader/parser/function_test.cc
   lang/spirv/reader/parser/helper_test.h
+  lang/spirv/reader/parser/image_sampler_test.cc
   lang/spirv/reader/parser/import_glsl_std450_test.cc
   lang/spirv/reader/parser/import_test.cc
   lang/spirv/reader/parser/logical_test.cc
@@ -117,6 +126,7 @@ tint_target_add_dependencies(tint_lang_spirv_reader_parser_test test
   tint_lang_core_constant
   tint_lang_core_ir
   tint_lang_core_type
+  tint_lang_wgsl
   tint_utils
   tint_utils_containers
   tint_utils_diagnostic
@@ -136,6 +146,7 @@ tint_target_add_external_dependencies(tint_lang_spirv_reader_parser_test test
 
 if(TINT_BUILD_SPV_READER)
   tint_target_add_dependencies(tint_lang_spirv_reader_parser_test test
+    tint_lang_spirv_reader_common
     tint_lang_spirv_reader_common_test
     tint_lang_spirv_reader_parser
   )

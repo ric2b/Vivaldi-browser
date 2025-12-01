@@ -1,6 +1,7 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -152,12 +153,10 @@ const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined
 
 export class NetworkLogViewColumns {
   private networkLogView: NetworkLogView;
-  private readonly persistentSettings: Common.Settings.Setting<{
-    [x: string]: {
-      visible: boolean,
-      title: string,
-    },
-  }>;
+  private readonly persistentSettings: Common.Settings.Setting<Record<string, {
+    visible: boolean,
+    title: string,
+  }>>;
   private readonly networkLogLargeRowsSetting: Common.Settings.Setting<boolean>;
   private readonly eventDividers: Map<string, number[]>;
   private eventDividersShown: boolean;
@@ -325,9 +324,8 @@ export class NetworkLogViewColumns {
 
     this.switchViewMode(false);
 
-    function handleContextMenu(this: NetworkLogViewColumns, ev: Event): void {
-      const event = (ev as MouseEvent);
-      const node = this.waterfallColumn.getNodeFromPoint(event.offsetX, event.offsetY);
+    function handleContextMenu(this: NetworkLogViewColumns, event: MouseEvent): void {
+      const node = this.waterfallColumn.getNodeFromPoint(event.offsetY);
       if (!node) {
         return;
       }
@@ -341,29 +339,26 @@ export class NetworkLogViewColumns {
     }
   }
 
-  private onMouseWheel(shouldConsume: boolean, ev: Event): void {
+  private onMouseWheel(shouldConsume: boolean, event: WheelEvent): void {
     if (shouldConsume) {
-      ev.consume(true);
+      event.consume(true);
     }
-    const event = (ev as WheelEvent);
     const hasRecentWheel = Date.now() - this.lastWheelTime < 80;
     this.activeScroller.scrollBy({top: event.deltaY, behavior: hasRecentWheel ? 'auto' : 'smooth'});
     this.syncScrollers();
     this.lastWheelTime = Date.now();
   }
 
-  private onTouchStart(ev: Event): void {
-    const event = (ev as TouchEvent);
+  private onTouchStart(event: TouchEvent): void {
     this.hasScrollerTouchStarted = true;
     this.scrollerTouchStartPos = event.changedTouches[0].pageY;
   }
 
-  private onTouchMove(ev: Event): void {
+  private onTouchMove(event: TouchEvent): void {
     if (!this.hasScrollerTouchStarted) {
       return;
     }
 
-    const event = (ev as TouchEvent);
     const currentPos = event.changedTouches[0].pageY;
     const delta = (this.scrollerTouchStartPos as number) - currentPos;
 
@@ -478,6 +473,15 @@ export class NetworkLogViewColumns {
     this.sortHandler();
   }
 
+  filterChanged(): void {
+    // Request an animation frame because when the filter is cleared the
+    // NetworkLogView can be empty until it has been invalidated (see
+    // crbug.com/379762016).
+    window.requestAnimationFrame(() => {
+      this.dataGridInternal.scheduleUpdate();
+    });
+  }
+
   private sortHandler(): void {
     const columnId = this.dataGridInternal.sortColumnId();
     this.networkLogView.removeAllNodeHighlights();
@@ -585,11 +589,8 @@ export class NetworkLogViewColumns {
   }
 
   private saveColumnsSettings(): void {
-    const saveableSettings: {
-      // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      [x: string]: any,
-    } = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const saveableSettings: Record<string, any> = {};
     for (const columnConfig of this.columns) {
       saveableSettings[columnConfig.id] = {visible: columnConfig.visible, title: columnConfig.title};
     }

@@ -64,7 +64,6 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_policy.h"
-#include "third_party/blink/public/common/page/browsing_context_group_info.h"
 #include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
@@ -152,16 +151,16 @@ class MockPageBroadcast : public blink::mojom::PageBroadcast {
        blink::mojom::FrameReplicationStatePtr replication_state,
        bool is_loading,
        const base::UnguessableToken& devtools_frame_token,
+       const std::optional<base::UnguessableToken>& navigation_metrics_token,
        blink::mojom::RemoteFrameInterfacesFromBrowserPtr
            remote_frame_interfaces,
        blink::mojom::RemoteMainFrameInterfacesPtr remote_main_frame_interfaces),
       (override));
 
-  MOCK_METHOD(
-      void,
-      UpdatePageBrowsingContextGroup,
-      (const blink::BrowsingContextGroupInfo& browsing_context_group_info),
-      (override));
+  MOCK_METHOD(void,
+              UpdatePageBrowsingContextGroup,
+              (const base::UnguessableToken& browsing_context_group_token),
+              (override));
 
   MOCK_METHOD(void,
               SetPageAttributionSupport,
@@ -2479,7 +2478,7 @@ TEST_F(NavigationControllerTest, RestoreNavigate) {
   EXPECT_EQ(1, our_controller.GetEntryCount());
   EXPECT_EQ(0, our_controller.GetLastCommittedEntryIndex());
   EXPECT_FALSE(our_controller.GetPendingEntry());
-  if (AreAllSitesIsolatedForTesting()) {
+  if (AreStrictSiteInstancesEnabled()) {
     EXPECT_EQ(
         url,
         our_controller.GetLastCommittedEntry()->site_instance()->GetSiteURL());
@@ -2554,7 +2553,7 @@ TEST_F(NavigationControllerTest, RestoreNavigateAfterFailure) {
   EXPECT_EQ(1, our_controller.GetEntryCount());
   EXPECT_EQ(0, our_controller.GetLastCommittedEntryIndex());
   EXPECT_FALSE(our_controller.GetPendingEntry());
-  if (AreAllSitesIsolatedForTesting()) {
+  if (AreStrictSiteInstancesEnabled()) {
     EXPECT_EQ(
         url,
         our_controller.GetLastCommittedEntry()->site_instance()->GetSiteURL());
@@ -3933,6 +3932,7 @@ TEST_F(NavigationControllerTest, NoURLRewriteForSubframes) {
       false /*is_form_submission*/, std::nullopt,
       blink::mojom::NavigationInitiatorActivationAndAdStatus::
           kDidNotStartWithTransientActivation,
+      base::TimeTicks::Now() /* actual_navigation_start_time */,
       base::TimeTicks::Now() /* navigation_start_time */);
 
   // Clean up the handler.
@@ -3977,6 +3977,7 @@ TEST_F(NavigationControllerTest,
       false /*is_form_submission*/, std::nullopt,
       blink::mojom::NavigationInitiatorActivationAndAdStatus::
           kDidNotStartWithTransientActivation,
+      base::TimeTicks::Now() /* actual_navigation_start_time */,
       base::TimeTicks::Now() /* navigation_start_time */);
   NavigationRequest* request = node->navigation_request();
   ASSERT_TRUE(request);
@@ -4106,7 +4107,8 @@ TEST_F(NavigationControllerTest,
   // NavigateToNavigationApiKey(). No navigation should occur.
   controller.NavigateToNavigationApiKey(
       main_test_rfh(),
-      /*soft_navigation_heuristics_task_id=*/std::nullopt, first_key);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt, first_key,
+      /*actual_navigation_start=*/base::TimeTicks::Now());
   EXPECT_FALSE(controller.GetPendingEntry());
 }
 
@@ -4142,14 +4144,15 @@ TEST_F(NavigationControllerTest, NavigateToNavigationApiKey_KeyForWrongFrame) {
       main_test_rfh()->frame_tree_node()->child_at(0);
   controller_impl().NavigateToNavigationApiKey(
       subframe_node->current_frame_host(),
-      /*soft_navigation_heuristics_task_id=*/std::nullopt, first_main_key);
+      /*soft_navigation_heuristics_task_id=*/std::nullopt, first_main_key,
+      /*actual_navigation_start=*/base::TimeTicks::Now());
   EXPECT_FALSE(controller_impl().GetPendingEntry());
 
   // Call NavigateToNavigationApiKey() on the main frame with the key from the
   // main frame. This time a navigation should begin.
   controller_impl().NavigateToNavigationApiKey(
       main_test_rfh(), /*soft_navigation_heuristics_task_id=*/std::nullopt,
-      first_main_key);
+      first_main_key, /*actual_navigation_start=*/base::TimeTicks::Now());
   EXPECT_TRUE(controller_impl().GetPendingEntry());
 }
 
@@ -4361,6 +4364,7 @@ TEST_F(NavigationControllerFencedFrameTest, NoURLRewriteForFencedFrames) {
       false /*is_form_submission*/, std::nullopt,
       blink::mojom::NavigationInitiatorActivationAndAdStatus::
           kDidNotStartWithTransientActivation,
+      base::TimeTicks::Now() /* actual_navigation_start_time */,
       base::TimeTicks::Now() /* navigation_start_time */);
 
   NavigationRequest* request =

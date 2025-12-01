@@ -127,6 +127,7 @@ TEST_F(TabGroupSyncServiceAndroidTest, SavedTabGroupConversion_NativeToJava) {
   group.SetColor(tab_groups::TabGroupColorId::kRed);
   group.SetCreatorCacheGuid("creator_cache_guid");
   group.SetLastUpdaterCacheGuid("last_updater_cache_guid");
+  group.SetArchivalTime(base::Time::Now());
 
   SavedTabGroupTab tab3(GURL(), kTestTabTitle, group.saved_guid(),
                         /*position=*/std::nullopt,
@@ -405,6 +406,18 @@ TEST_F(TabGroupSyncServiceAndroidTest, OnTabSelected) {
   Java_TabGroupSyncServiceAndroidUnitTest_testOnTabSelected(
       AttachCurrentThread(), j_test_, ScopedJavaLocalRef<jobject>(),
       non_grouped_tab_id, j_tab_title);
+}
+
+TEST_F(TabGroupSyncServiceAndroidTest, UpdateArchivalStatus) {
+  auto* env = AttachCurrentThread();
+
+  base::Uuid uuid = base::Uuid::ParseCaseInsensitive(kTestUuid);
+  auto j_uuid = UuidToJavaString(env, uuid);
+
+  EXPECT_CALL(tab_group_sync_service_, UpdateArchivalStatus(uuid, true))
+      .Times(1);
+  Java_TabGroupSyncServiceAndroidUnitTest_testUpdateArchivalStatus(
+      env, j_test_, j_uuid, true);
 }
 
 }  // namespace tab_groups

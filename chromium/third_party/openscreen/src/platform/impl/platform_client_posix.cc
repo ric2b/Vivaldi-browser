@@ -4,13 +4,17 @@
 
 #include "platform/impl/platform_client_posix.h"
 
+#include <chrono>
 #include <functional>
 #include <utility>
 #include <vector>
 
+#include "platform/base/trivial_clock_traits.h"
 #include "platform/impl/udp_socket_reader_posix.h"
 
 namespace openscreen {
+
+using clock_operators::operator<<;
 
 // static
 PlatformClientPosix* PlatformClientPosix::instance_ = nullptr;
@@ -101,12 +105,41 @@ SocketHandleWaiterPosix* PlatformClientPosix::socket_handle_waiter() {
 }
 
 void PlatformClientPosix::RunNetworkLoopUntilStopped() {
+#if OSP_DCHECK_IS_ON()
+  Clock::time_point last_time = Clock::now();
+  int iterations = 0;
+#endif
   while (networking_loop_running_.load()) {
+#if OSP_DCHECK_IS_ON()
+    ++iterations;
+    const Clock::time_point current_time = Clock::now();
+    const Clock::duration delta = current_time - last_time;
+    if (delta > std::chrono::seconds(1)) {
+      OSP_DCHECK_GT(iterations, 0);
+      OSP_VLOG << "network loop execution time averaged "
+               << (delta / iterations) << " over the last second.";
+      last_time = current_time;
+      iterations = 0;
+    }
+#endif
     if (!waiter_created_.load()) {
       std::this_thread::sleep_for(networking_loop_timeout_);
       continue;
     }
-    socket_handle_waiter()->ProcessHandles(networking_loop_timeout_);
+    const Error process_error =
+        socket_handle_waiter()->ProcessHandles(networking_loop_timeout_);
+
+    // We may receive an "again" error code if there were no sockets to process.
+    if (process_error.code() == Error::Code::kAgain) {
+      std::this_thread::sleep_for(networking_loop_timeout_);
+      continue;
+
+      // If there is a socket error it should be handled elsewhere. Just log
+      // the error here.
+    } else if (!process_error.ok()) {
+      OSP_LOG_ERROR << "error occurred while processing handles. error="
+                    << process_error;
+    }
   }
 }
 

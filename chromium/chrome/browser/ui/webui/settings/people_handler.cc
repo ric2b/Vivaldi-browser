@@ -586,10 +586,6 @@ void PeopleHandler::OnErrorStateOfRefreshTokenUpdatedForAccount(
 }
 
 void PeopleHandler::OnProfileAvatarChanged(const base::FilePath& profile_path) {
-  if (!switches::IsImprovedSettingsUIOnDesktopEnabled()) {
-    return;
-  }
-
   if (profile_path != profile_->GetPath()) {
     return;
   }
@@ -661,6 +657,32 @@ void PeopleHandler::HandleStartSyncingWithEmail(const base::Value::List& args) {
 
   DCHECK(IsChangePrimaryAccountAllowed(profile_, email.GetString()))
       << "Changing the primary account is not allowed!";
+
+  syncer::SyncService* sync_service =
+      SyncServiceFactory::GetForProfile(profile_);
+  // TODO(crbug.com/419203245): Update the UI for this button and the conditions
+  // under which it appears when it triggers the History Sync Optin, instead of
+  // the Sync Consent screen.
+  if (base::FeatureList::IsEnabled(switches::kEnableHistorySyncOptin)) {
+    if (sync_service &&
+        !sync_service->GetUserSettings()->GetSelectedTypes().Has(
+            syncer::UserSelectableType::kHistory)) {
+      const signin::IdentityManager* identity_manager =
+          IdentityManagerFactory::GetForProfile(profile_);
+      CHECK(identity_manager);
+      CHECK(gaia::AreEmailsSame(
+          identity_manager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin)
+              .email,
+          email.GetString()));
+
+      Browser* browser = chrome::FindBrowserWithTab(web_ui()->GetWebContents());
+      if (!browser) {
+        return;
+      }
+      browser->signin_view_controller()->ShowModalHistorySyncOptInDialog();
+    }
+    return;
+  }
 
   AccountInfo maybe_account =
       IdentityManagerFactory::GetForProfile(profile_)
@@ -746,13 +768,12 @@ void PeopleHandler::HandleShowSyncSetupUI(const base::Value::List& args) {
     sync_blocker_ = service->GetSetupInProgressHandle();
   }
 
-  // Mark Sync as requested by the user. It might already be requested, but
-  // it's not if this is either the first time the user is setting up Sync, or
-  // Sync was set up but then was reset via the dashboard. This also pokes the
-  // SyncService to start up immediately, i.e. bypass deferred startup.
+#if BUILDFLAG(IS_CHROMEOS)
+  // Mark Sync as requested by the user, in case it was reset via dashboard.
   if (service) {
-    service->SetSyncFeatureRequested();
+    service->GetUserSettings()->ClearSyncFeatureDisabledViaDashboard();
   }
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   GetLoginUIService()->SetLoginUI(this);
 
@@ -1133,18 +1154,13 @@ base::Value::Dict PeopleHandler::GetSyncStatusDictionary() const {
 
   SyncStatusLabels status_labels;
 
-  // if flag enabled
-  if (switches::IsImprovedSettingsUIOnDesktopEnabled()) {
-    const std::optional<AvatarSyncErrorType> error =
-        GetAvatarSyncErrorType(profile_);
-    if (error.has_value()) {
-      status_labels = GetAvatarSyncErrorLabelsForSettings(error.value());
-    } else {
-      status_labels = GetSyncStatusLabelsForSettings(
-          SyncServiceFactory::GetForProfile(profile_));
-    }
+  const std::optional<AvatarSyncErrorType> error =
+      GetAvatarSyncErrorType(profile_);
+  if (error.has_value()) {
+    status_labels = GetAvatarSyncErrorLabelsForSettings(error.value());
   } else {
-    status_labels = GetSyncStatusLabels(profile_);
+    status_labels = GetSyncStatusLabelsForSettings(
+        SyncServiceFactory::GetForProfile(profile_));
   }
 
   // TODO(crbug.com/40660240): Consider unifying some of the fields below to
@@ -1300,17 +1316,11 @@ void PeopleHandler::MarkFirstSetupComplete() {
     return;
   }
 
+#if BUILDFLAG(IS_CHROMEOS)
   // Sync is usually already requested at this point, but it might not be if
-  // Sync was reset from the dashboard while this page was open. (In most
-  // situations, resetting Sync also signs the user out of Chrome so this
-  // doesn't come up, but on ChromeOS or for managed (enterprise) accounts
-  // signout isn't possible.)
-  // Note that this has to happen *before* checking if first-time setup is
-  // already marked complete, because on some platforms (e.g. ChromeOS) that
-  // gets set automatically.
-  service->SetSyncFeatureRequested();
-
-#if !BUILDFLAG(IS_CHROMEOS)
+  // Sync was reset from the dashboard while this page was open.
+  service->GetUserSettings()->ClearSyncFeatureDisabledViaDashboard();
+#else   // BUILDFLAG(IS_CHROMEOS)
   // If the first-time setup is already complete, there's nothing else to do.
   if (service->GetUserSettings()->IsInitialSyncFeatureSetupComplete()) {
     return;
@@ -1324,7 +1334,7 @@ void PeopleHandler::MarkFirstSetupComplete() {
   service->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::ADVANCED_FLOW_CONFIRM);
   FireWebUIListener("sync-settings-saved");
-#endif  // !BUILDFLAG(IS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 void PeopleHandler::MaybeMarkSyncConfiguring() {

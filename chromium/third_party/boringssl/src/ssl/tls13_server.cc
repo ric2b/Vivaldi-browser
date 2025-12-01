@@ -256,9 +256,9 @@ static bool add_new_session_tickets(SSL_HANDSHAKE *hs, bool *out_sent_tickets) {
   return true;
 }
 
-static bool check_signature_credential(SSL_HANDSHAKE *hs,
-                                       const SSL_CREDENTIAL *cred,
-                                       uint16_t *out_sigalg) {
+bool ssl_check_tls13_credential_ignoring_issuer(SSL_HANDSHAKE *hs,
+                                                const SSL_CREDENTIAL *cred,
+                                                uint16_t *out_sigalg) {
   switch (cred->type) {
     case SSLCredentialType::kX509:
       break;
@@ -279,12 +279,16 @@ static bool check_signature_credential(SSL_HANDSHAKE *hs,
   // If we reach here then the credential requires a signature. If |cred| is a
   // delegated credential, this also checks that the peer supports delegated
   // credentials and matched |dc_cert_verify_algorithm|.
-  if (!tls1_choose_signature_algorithm(hs, cred, out_sigalg)) {
-    return false;
-  }
-  // Use this credential if it either matches a requested issuer,
-  // or does not require issuer matching.
-  return ssl_credential_matches_requested_issuers(hs, cred);
+  return tls1_choose_signature_algorithm(hs, cred, out_sigalg);
+}
+
+static bool check_signature_credential(SSL_HANDSHAKE *hs,
+                                       const SSL_CREDENTIAL *cred,
+                                       uint16_t *out_sigalg) {
+  return ssl_check_tls13_credential_ignoring_issuer(hs, cred, out_sigalg) &&
+         // Use this credential if it either matches a requested issuer,
+         // or does not require issuer matching.
+         ssl_credential_matches_requested_issuers(hs, cred);
 }
 
 static bool check_pake_credential(SSL_HANDSHAKE *hs,

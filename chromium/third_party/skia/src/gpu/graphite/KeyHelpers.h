@@ -23,6 +23,7 @@
 #include "src/core/SkColorSpaceXformSteps.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
 #include "src/gpu/graphite/ReadSwizzle.h"
+#include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/shaders/SkShaderBase.h"
 #include "src/shaders/gradients/SkGradientBaseShader.h"
@@ -144,11 +145,12 @@ struct GradientShaderBlocks {
 struct LocalMatrixShaderBlock {
     struct LMShaderData {
         LMShaderData(const SkMatrix& localMatrix)
-                : fLocalMatrix(localMatrix)
-                , fHasPerspective(localMatrix.hasPerspective()) {}
+                : fLocalMatrix(localMatrix) {}
 
-        const SkM44 fLocalMatrix;
-        const bool  fHasPerspective;
+        // Local matrices are applied to coords.xy01, so a 4x4 matrix can be flattened to a 3x3
+        // for less data upload to the GPU at this point (as there will be no more coordinate
+        // space manipulation that might require the full 4x4).
+        const SkMatrix fLocalMatrix;
     };
 
     static void BeginBlock(const KeyContext&,
@@ -163,16 +165,17 @@ struct ImageShaderBlock {
                   SkTileMode tileModeX,
                   SkTileMode tileModeY,
                   SkISize imgSize,
-                  SkRect subset);
+                  SkRect subset,
+                  ImmutableSamplerInfo immutableSamplerInfo = {});
         SkSamplingOptions fSampling;
         std::pair<SkTileMode, SkTileMode> fTileModes;
         SkISize fImgSize;
         SkRect fSubset;
 
-        // TODO: Currently this is only filled in when we're generating the key from an actual
-        // SkImageShader. In the pre-compile case we will need to create a Graphite promise
-        // image which holds the appropriate data.
+        // When we're generating the key from an actual SkImageShader fTextureProxy will be
+        // non-null. Otherwise, fImmutableSamplerInfo will be filled in.
         sk_sp<TextureProxy> fTextureProxy;
+        ImmutableSamplerInfo fImmutableSamplerInfo;
     };
 
     static void AddBlock(const KeyContext&,
@@ -211,6 +214,20 @@ struct YUVImageShaderBlock {
                          PaintParamsKeyBuilder*,
                          PipelineDataGatherer*,
                          const ImageData&);
+};
+
+struct CoordNormalizeShaderBlock {
+    struct CoordNormalizeData {
+        CoordNormalizeData(SkSize dimensions)
+                : fInvDimensions(
+                          SkSize::Make(1.0f / dimensions.width(), 1.0f / dimensions.height())) {}
+        SkSize fInvDimensions;
+    };
+
+    static void BeginBlock(const KeyContext&,
+                           PaintParamsKeyBuilder*,
+                           PipelineDataGatherer*,
+                           const CoordNormalizeData&);
 };
 
 struct CoordClampShaderBlock {
@@ -441,6 +458,12 @@ struct RuntimeEffectBlock {
                               PaintParamsKeyBuilder*,
                               PipelineDataGatherer*,
                               SkRuntimeEffect*);
+
+    // Add a post-amble for runtime effects that use the toLinearSrgb/fromLinearSrgb intrinsics
+    static void HandleIntrinsics(const KeyContext&,
+                                 PaintParamsKeyBuilder*,
+                                 PipelineDataGatherer*,
+                                 const SkRuntimeEffect*);
 };
 
 void AddToKey(const KeyContext&,

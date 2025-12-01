@@ -87,7 +87,7 @@
 <translation id="3973234410852337861">El sitio <ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075123085690634698">Abrir página en ventana privada nueva (⇧⌘N)</translation>
-<translation id="4075732493274867456">El cliente y el servidor no son compatibles con una versión de protocolo SSL o un conjunto de cifrado comunes.</translation>
+<translation id="4075732493274867456">El cliente y el servidor no admiten una versión común del protocolo SSL ni un conjunto de cifrado compatible.</translation>
 <translation id="4116663294526079822">Permitir siempre en este sitio</translation>
 <translation id="4130226655945681476">Revisar los cables de red, el módem y el router</translation>
 <translation id="4151403195736952345">Usar valor por defecto global (detectar)</translation>

@@ -7,7 +7,6 @@
 
 #include "base/files/file_path.h"
 #include "ui/base/page_transition_types.h"
-#include "url/gurl.h"
 
 namespace supervised_user {
 
@@ -75,9 +74,12 @@ enum class WebFilterType {
   // Used for UMA only. There are multiple web filters on the device.
   kMixed = 3,
 
+  // Web filter is neutralized: it behaves as if there were no filtering.
+  kDisabled = 4,
+
   // Used for UMA. Update kMaxValue to the last value. Add future entries
   // above this comment. Sync with enums.xml.
-  kMaxValue = kMixed,
+  kMaxValue = kDisabled,
 };
 
 // Returns the string equivalent of a Web Filter type. This is a user-visible
@@ -231,6 +233,9 @@ extern const char kClassifyUrlThrottleStatusHistogramName[];
 
 // Histogram name to track the final throttle verdict.
 extern const char kClassifyUrlThrottleFinalStatusHistogramName[];
+
+// Histogram name to track the reason for creating a throttle.
+extern const char kClassifyUrlThrottleUseCaseHistogramName[];
 
 // Histogram name to track the duration of successful local web approval flows,
 // in milliseconds.

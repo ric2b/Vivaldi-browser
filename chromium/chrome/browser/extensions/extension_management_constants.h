@@ -11,7 +11,10 @@
 #include <string_view>
 
 #include "base/containers/fixed_flat_map.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/manifest.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 namespace schema_constants {
@@ -62,7 +65,7 @@ inline constexpr auto kAllowedTypesMap =
         {"chromeos_system_extension", Manifest::TYPE_CHROMEOS_SYSTEM_EXTENSION},
     });
 
-// Helper fuction over |kAllowedTypesMap|, returns Manifest::TYPE_UNKNOWN if
+// Helper function over `kAllowedTypesMap`, returns Manifest::TYPE_UNKNOWN if
 // not found.
 Manifest::Type GetManifestType(const std::string& name);
 

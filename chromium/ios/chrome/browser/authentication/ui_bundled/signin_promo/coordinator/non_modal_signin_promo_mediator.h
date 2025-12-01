@@ -10,25 +10,35 @@
 namespace signin {
 class IdentityManager;
 }
-
 class AuthenticationService;
+namespace feature_engagement {
+class Tracker;
+}
+
+enum class SignInPromoType;
 
 @class NonModalSignInPromoMediator;
 
 // Protocol for mediator to set the delay timer for the promo.
 @protocol NonModalSignInPromoMediatorDelegate <NSObject>
 // Handles mediator timer expiration event.
-- (bool)nonModalSignInPromoMediatorTimerExpired:
+- (void)nonModalSignInPromoMediatorTimerExpired:
+    (NonModalSignInPromoMediator*)mediator;
+// Handles timeout or dismissal events.
+- (void)nonModalSignInPromoMediatorShouldDismiss:
     (NonModalSignInPromoMediator*)mediator;
 @end
 
 // Mediator that handles the business logic for the non-modal sign-in promo.
 @interface NonModalSignInPromoMediator : NSObject
 
-// Init Mediator with auth service and identity manager.
+// Init Mediator with auth service, identity manager, feature engagement tracker
+// and promo type.
 - (instancetype)
     initWithAuthenticationService:(AuthenticationService*)authService
                   identityManager:(signin::IdentityManager*)identityManager
+         featureEngagementTracker:(feature_engagement::Tracker*)tracker
+                        promoType:(SignInPromoType)promoType
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;
@@ -39,11 +49,8 @@ class AuthenticationService;
 // Starts showing the promo based on promoType.
 - (void)startPromoDisplayTimer;
 
-// Stops showing the promo.
-- (void)stopShowingPromo;
-
-// Handles the user tapping the sign-in button.
-- (void)handleSignInButtonTapped;
+// Stops non modal sign-in promo timeout timer.
+- (void)stopTimeOutTimers;
 
 // The delegate that responds to the mediator's actions.
 @property(nonatomic, weak) id<NonModalSignInPromoMediatorDelegate> delegate;

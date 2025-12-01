@@ -35,6 +35,7 @@
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/values.h"
 #include "net/base/features.h"
+#include "net/base/privacy_mode.h"
 #include "net/base/proxy_chain.h"
 #include "net/base/proxy_string_util.h"
 #include "net/base/tracing.h"
@@ -42,6 +43,7 @@
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/ct_policy_status.h"
+#include "net/dns/public/secure_dns_policy.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_util.h"
@@ -757,14 +759,25 @@ bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
     return false;
   }
 
+  // TODO(crbug.com/41392053): CT enforcement is handled in the cert verifier
+  // service, but SpdySession needs this to tell whether pooling between two
+  // hostnames would conflict with CT policies (if the cert fails CT
+  // verification, but a CT policy allowed it to be used for old_hostname, then
+  // it should not be allowed to pool with a new_hostname if new_hostname isn't
+  // also allowed by the CT policy.)
+  // This should be refactored somehow so that the CT policy does not need
+  // to be duplicated in the network service. One potential option would be to
+  // record whether CT policy was used to bypass a CT error (as a separate enum
+  // value in the ct_requirement_status), and then just always disallow pooling
+  // in that case (assuming that doesn't affect perf too much).
   switch (transport_security_state->CheckCTRequirements(
       new_hostname, ssl_info.is_issued_by_known_root,
       ssl_info.public_key_hashes, ssl_info.cert.get(),
       ssl_info.ct_policy_compliance)) {
-    case TransportSecurityState::CT_REQUIREMENTS_NOT_MET:
+    case ct::CTRequirementsStatus::CT_REQUIREMENTS_NOT_MET:
       return false;
-    case TransportSecurityState::CT_REQUIREMENTS_MET:
-    case TransportSecurityState::CT_NOT_REQUIRED:
+    case ct::CTRequirementsStatus::CT_REQUIREMENTS_MET:
+    case ct::CTRequirementsStatus::CT_NOT_REQUIRED:
       // Intentional fallthrough; this case is just here to make sure that all
       // possible values of CheckCTRequirements() are handled.
       break;
@@ -794,7 +807,8 @@ SpdySession::SpdySession(
     TimeFunc time_func,
     NetworkQualityEstimator* network_quality_estimator,
     NetLog* net_log,
-    MultiplexedSessionCreationInitiator session_creation_initiator)
+    MultiplexedSessionCreationInitiator session_creation_initiator,
+    SpdySessionInitiator spdy_session_initiator)
     : spdy_session_key_(spdy_session_key),
       http_server_properties_(http_server_properties),
       transport_security_state_(transport_security_state),
@@ -830,7 +844,8 @@ SpdySession::SpdySession(
       hung_interval_(base::Seconds(kHungIntervalSeconds)),
       time_func_(time_func),
       network_quality_estimator_(network_quality_estimator),
-      session_creation_initiator_(session_creation_initiator) {
+      session_creation_initiator_(session_creation_initiator),
+      spdy_session_initiator_(spdy_session_initiator) {
   net_log_.BeginEvent(NetLogEventType::HTTP2_SESSION, [&] {
     return NetLogSpdySessionParams(host_port_proxy_pair());
   });
@@ -1302,9 +1317,10 @@ void SpdySession::SendStreamWindowUpdate(spdy::SpdyStreamId stream_id,
 }
 
 void SpdySession::CloseSessionOnError(Error err,
-                                      const std::string& description) {
+                                      const std::string& description,
+                                      bool force_send_go_away) {
   DCHECK_LT(err, ERR_IO_PENDING);
-  DoDrainSession(err, description);
+  DoDrainSession(err, description, force_send_go_away);
 }
 
 void SpdySession::MakeUnavailable() {
@@ -1372,6 +1388,11 @@ void SpdySession::MaybeFinishGoingAway() {
 }
 
 base::Value::Dict SpdySession::GetInfoAsValue() const {
+  int pending_create_stream_request_count = 0;
+  for (const auto& queue : pending_create_stream_queues_) {
+    pending_create_stream_request_count += queue.size();
+  }
+
   auto dict =
       base::Value::Dict()
           .Set("source_id", static_cast<int>(net_log_.source().id))
@@ -1380,6 +1401,9 @@ base::Value::Dict SpdySession::GetInfoAsValue() const {
           .Set("network_anonymization_key",
                spdy_session_key_.network_anonymization_key().ToDebugString())
           .Set("active_streams", static_cast<int>(active_streams_.size()))
+          .Set("created_streams", static_cast<int>(created_streams_.size()))
+          .Set("pending_create_stream_request_count",
+               pending_create_stream_request_count)
           .Set("negotiated_protocol",
                NextProtoToString(socket_->GetNegotiatedProtocol()))
           .Set("error", error_on_close_)
@@ -1387,14 +1411,38 @@ base::Value::Dict SpdySession::GetInfoAsValue() const {
                static_cast<int>(max_concurrent_streams_))
           .Set("streams_initiated_count", streams_initiated_count_)
           .Set("streams_abandoned_count", streams_abandoned_count_)
+          .Set("stream_hi_water_mark", static_cast<int>(stream_hi_water_mark_))
           .Set("frames_received", buffered_spdy_framer_.get()
                                       ? buffered_spdy_framer_->frames_received()
                                       : 0)
           .Set("send_window_size", session_send_window_size_)
           .Set("recv_window_size", session_recv_window_size_)
           .Set("unacked_recv_window_bytes", session_unacked_recv_window_bytes_)
+          .Set("support_websocket", support_websocket_)
           .Set("availability_state",
                AvailabilityStateToString(availability_state_));
+
+  // TODO(crbug.com/405934874): Remove once we identify the cause of the bug.
+  {
+    base::Value::Dict key_dict;
+    key_dict.Set("privacy_mode",
+                 PrivacyModeToDebugString(spdy_session_key_.privacy_mode()));
+    key_dict.Set(
+        "secure_dns_policy",
+        SecureDnsPolicyToDebugString(spdy_session_key_.secure_dns_policy()));
+    key_dict.Set("disable_cert_verification_network_fetches",
+                 spdy_session_key_.disable_cert_verification_network_fetches());
+    dict.Set("spdy_session_key", std::move(key_dict));
+  }
+  if (drain_error_.has_value()) {
+    CHECK(!drain_description_.empty());
+    dict.Set("drain_error", *drain_error_);
+    dict.Set("drain_description", drain_description_);
+  }
+  if (go_away_error_.has_value()) {
+    dict.Set("go_away_error", static_cast<int>(*go_away_error_));
+    dict.Set("go_away_debug_data", go_away_debug_data_);
+  }
 
   if (!pooled_aliases_.empty()) {
     base::Value::List alias_list;
@@ -2566,11 +2614,15 @@ void SpdySession::DcheckDraining() const {
   DCHECK(active_streams_.empty());
 }
 
-void SpdySession::DoDrainSession(Error err, const std::string& description) {
+void SpdySession::DoDrainSession(Error err,
+                                 const std::string& description,
+                                 bool force_send_go_away) {
   if (availability_state_ == STATE_DRAINING) {
     return;
   }
   MakeUnavailable();
+  drain_error_ = err;
+  drain_description_ = description;
 
   // Mark host_port_pair requiring HTTP/1.1 for subsequent connections.
   if (err == ERR_HTTP_1_1_REQUIRED) {
@@ -2585,11 +2637,14 @@ void SpdySession::DoDrainSession(Error err, const std::string& description) {
   // unnecessarily wake the radio. We could technically GOAWAY on network errors
   // (we'll probably fail to actually write it, but that's okay), however many
   // unit-tests would need to be updated.
-  if (err != OK &&
-      err != ERR_ABORTED &&  // Used by SpdySessionPool to close idle sessions.
-      err != ERR_NETWORK_CHANGED &&  // Used to deprecate sessions on IP change.
-      err != ERR_SOCKET_NOT_CONNECTED && err != ERR_HTTP_1_1_REQUIRED &&
-      err != ERR_CONNECTION_CLOSED && err != ERR_CONNECTION_RESET) {
+  if (force_send_go_away ||
+      (err != OK &&
+       err != ERR_ABORTED &&  // Used by SpdySessionPool to close idle sessions.
+       err !=
+           ERR_NETWORK_CHANGED &&  // Used to deprecate sessions on IP change.
+       err != ERR_SOCKET_NOT_CONNECTED &&
+       err != ERR_HTTP_1_1_REQUIRED && err != ERR_CONNECTION_CLOSED &&
+       err != ERR_CONNECTION_RESET)) {
     // Enqueue a GOAWAY to inform the peer of why we're closing the connection.
     spdy::SpdyGoAwayIR goaway_ir(/* last_good_stream_id = */ 0,
                                  MapNetErrorToGoAwayStatus(err), description);
@@ -2769,6 +2824,8 @@ void SpdySession::OnGoAway(spdy::SpdyStreamId last_accepted_stream_id,
                           last_accepted_stream_id, active_streams_.size(),
                           error_code, debug_data, capture_mode);
                     });
+  go_away_error_ = error_code;
+  go_away_debug_data_ = std::string(debug_data);
   MakeUnavailable();
   if (error_code == spdy::ERROR_CODE_HTTP_1_1_REQUIRED) {
     // TODO(bnc): Record histogram with number of open streams capped at 50.

@@ -107,7 +107,7 @@ class ASH_EXPORT DemoSessionMetricsRecorder
     kSuccess = 0,               // Demo account request success.
     kResponseParsingError = 1,  // Malformat Http response.
     kInvalidCreds = 2,          // Missing required credential for login.
-    kEmptyReponse = 3,          // Empty Http response.
+    kEmptyResponse = 3,         // Empty Http response.
     kNetworkError = 4,          // Network error.
     kRequestFailed = 5,         // Server side error or out of quota.
     kCloudPolicyNotConnected =
@@ -115,7 +115,11 @@ class ASH_EXPORT DemoSessionMetricsRecorder
             // policy not connected.
     kEmptyDMToken = 7,   // The DM Token on the device is empty.
     kEmptyClientID = 8,  // The Client ID on the device is empty.
-    kMaxValue = kEmptyClientID,
+    kQuotaExhaustedRetriable =
+        9,  // Server quota exhausted, might be max QPS reached.
+    kQuotaExhaustedNotRetriable =
+        10,  // Server quota exhausted, device might be blocked.
+    kMaxValue = kQuotaExhaustedNotRetriable,
   };
 
   // Types of the current demo session.
@@ -160,6 +164,9 @@ class ASH_EXPORT DemoSessionMetricsRecorder
 
   // Get the type of the current demo session.
   static SessionType GetCurrentSessionTypeForTesting();
+
+  // Records cloud policy connections timeout.
+  static void RecordCloudPolicyConnectionTimeout();
 
   // The recorder will create a normal timer by default. Tests should provide a
   // mock timer to control sampling periods.

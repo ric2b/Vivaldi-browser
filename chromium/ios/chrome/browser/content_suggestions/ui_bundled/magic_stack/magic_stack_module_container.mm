@@ -101,11 +101,12 @@ const CGFloat kSeparatorHeight = 0.5;
                                        forAxis:UILayoutConstraintAxisVertical];
 
     _title = [[UILabel alloc] init];
-    _title.font = [self fontForTitle];
+    _title.font = PreferredFontForTextStyle(UIFontTextStyleFootnote,
+                                            UIFontWeightSemibold);
+    _title.adjustsFontForContentSizeCategory = YES;
     _title.textColor = [UIColor colorNamed:kTextPrimaryColor];
     _title.numberOfLines = 1;
     _title.lineBreakMode = NSLineBreakByTruncatingTail;
-    _title.adjustsFontForContentSizeCategory = YES;
     _title.accessibilityTraits |= UIAccessibilityTraitHeader;
     [_title setContentHuggingPriority:UILayoutPriorityDefaultLow
                               forAxis:UILayoutConstraintAxisHorizontal];
@@ -148,9 +149,10 @@ const CGFloat kSeparatorHeight = 0.5;
 
     _subtitle = [[UILabel alloc] init];
     _subtitle.hidden = YES;
-    _subtitle.font = [[UIFontMetrics defaultMetrics]
-        scaledFontForFont:[MagicStackModuleContainer fontForSubtitle]
-         maximumPointSize:kMaxTextSizeForStyleFootnote];
+    _subtitle.font =
+        PreferredFontForTextStyle(UIFontTextStyleFootnote, UIFontWeightRegular,
+                                  kMaxTextSizeForStyleFootnote);
+    _subtitle.adjustsFontForContentSizeCategory = YES;
     _subtitle.textColor = [UIColor colorNamed:kTextSecondaryColor];
     _subtitle.numberOfLines = 0;
     _subtitle.lineBreakMode = NSLineBreakByWordWrapping;
@@ -204,16 +206,6 @@ const CGFloat kSeparatorHeight = 0.5;
     if (@available(iOS 17, *)) {
       NSArray<UITrait>* traits = TraitCollectionSetForTraits(
           @[ UITraitPreferredContentSizeCategory.class ]);
-      __weak __typeof(self) weakSelf = self;
-      UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
-                                       UITraitCollection* previousCollection) {
-        __strong __typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) {
-          return;
-        }
-        [weakSelf updateTitleFont];
-      };
-      [self registerForTraitChanges:traits withHandler:handler];
       [self registerForTraitChanges:traits
                          withAction:@selector(updateCardSizing)];
     }
@@ -274,23 +266,16 @@ const CGFloat kSeparatorHeight = 0.5;
 
 - (void)configureWithConfig:(MagicStackModule*)config {
   [self resetView];
-  // By default, the container is in the magic stack.
-  BOOL inMagicStack = YES;
   // Ensures that the modules conforms to the dynamic MS height. For
   // the MVT when it lives outside of the Magic Stack to stay as close to its
   // intrinsic size as possible, the constraint is configured to be less than
   // or equal to.
   if (config.type == ContentSuggestionsModuleType::kMostVisited) {
-    MostVisitedTilesConfig* mvtConfig =
-        static_cast<MostVisitedTilesConfig*>(config);
-    inMagicStack = mvtConfig.inMagicStack;
-    if (!inMagicStack) {
-      self.backgroundColor = [UIColor colorNamed:kBackgroundColor];
-      self.layer.cornerRadius = kCornerRadius;
-      self.clipsToBounds = YES;
-      _containerHeightAnchor.active = NO;
-      [NSLayoutConstraint activateConstraints:@[ _containerHeightAnchor ]];
-    }
+    self.backgroundColor = [UIColor colorNamed:kBackgroundColor];
+    self.layer.cornerRadius = kCornerRadius;
+    self.clipsToBounds = YES;
+    _containerHeightAnchor.active = NO;
+    [NSLayoutConstraint activateConstraints:@[ _containerHeightAnchor ]];
   }
 
   if (config.type == ContentSuggestionsModuleType::kPlaceholder) {
@@ -308,11 +293,9 @@ const CGFloat kSeparatorHeight = 0.5;
   [[self contextMenuInteractionHandler] configureWithType:_type config:config];
 
   _title.text = [MagicStackModuleContainer titleStringForModule:_type
-                                                   inMagicStack:inMagicStack
                                                          config:config];
   _title.accessibilityIdentifier =
       [MagicStackModuleContainer accessibilityIdentifierForModule:_type
-                                                     inMagicStack:inMagicStack
                                                            config:config];
 
   _seeMoreButton.hidden = !config.shouldShowSeeMore;
@@ -395,17 +378,12 @@ const CGFloat kSeparatorHeight = 0.5;
 
 // Returns the module's title, if any, given the Magic Stack module `type`.
 + (NSString*)titleStringForModule:(ContentSuggestionsModuleType)type
-                     inMagicStack:(BOOL)inMagicStack
                            config:(MagicStackModule*)config {
   switch (type) {
     case ContentSuggestionsModuleType::kShortcuts:
       return l10n_util::GetNSString(
           IDS_IOS_CONTENT_SUGGESTIONS_SHORTCUTS_MODULE_TITLE);
     case ContentSuggestionsModuleType::kMostVisited:
-      if (inMagicStack) {
-        return l10n_util::GetNSString(
-            IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_TITLE);
-      }
       return @"";
     case ContentSuggestionsModuleType::kTabResumption: {
       TabResumptionItem* tabResumptionItem =
@@ -424,8 +402,6 @@ const CGFloat kSeparatorHeight = 0.5;
     case ContentSuggestionsModuleType::kSetUpListSync:
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
-    case ContentSuggestionsModuleType::kSetUpListDocking:
-    case ContentSuggestionsModuleType::kSetUpListAddressBar:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
     case ContentSuggestionsModuleType::kSetUpListAllSet:
     case ContentSuggestionsModuleType::kSetUpListNotifications:
@@ -460,7 +436,6 @@ const CGFloat kSeparatorHeight = 0.5;
 
 // Returns the accessibility identifier given the Magic Stack module `type`.
 + (NSString*)accessibilityIdentifierForModule:(ContentSuggestionsModuleType)type
-                                 inMagicStack:(BOOL)inMagicStack
                                        config:(MagicStackModule*)config {
   switch (type) {
     case ContentSuggestionsModuleType::kTabResumption:
@@ -470,24 +445,8 @@ const CGFloat kSeparatorHeight = 0.5;
       // TODO(crbug.com/40946679): the code should use constants for
       // accessibility identifiers, and not localized strings.
       return [self titleStringForModule:type
-                           inMagicStack:inMagicStack
                                  config:config];
   }
-}
-
-// Returns the font for the module title string.
-- (UIFont*)fontForTitle {
-  return CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold, self);
-}
-
-// Returns the font for the module subtitle string.
-+ (UIFont*)fontForSubtitle {
-  return CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightRegular);
-}
-
-// Updates the title font.
-- (void)updateTitleFont {
-  _title.font = [self fontForTitle];
 }
 
 - (void)setCustomAccessibilityLabelForSeeMoreButton:
@@ -550,7 +509,6 @@ const CGFloat kSeparatorHeight = 0.5;
 
   if (previousTraitCollection.preferredContentSizeCategory !=
       self.traitCollection.preferredContentSizeCategory) {
-    _title.font = [self fontForTitle];
     [self updateCardSizing];
   }
 }
@@ -631,8 +589,6 @@ const CGFloat kSeparatorHeight = 0.5;
     case ContentSuggestionsModuleType::kSetUpListAutofill:
     case ContentSuggestionsModuleType::kSetUpListAllSet:
     case ContentSuggestionsModuleType::kSetUpListNotifications:
-    case ContentSuggestionsModuleType::kSetUpListDocking:
-    case ContentSuggestionsModuleType::kSetUpListAddressBar:
     case ContentSuggestionsModuleType::kSafetyCheck:
     case ContentSuggestionsModuleType::kTips:
       return YES;

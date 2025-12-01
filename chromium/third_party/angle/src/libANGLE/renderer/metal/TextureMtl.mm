@@ -685,7 +685,7 @@ GLenum OverrideSwizzleValue(const gl::Context *context,
     if (format.actualAngleFormat().hasDepthOrStencilBits())
     {
         ASSERT(!format.swizzled);
-        if (context->getState().getClientMajorVersion() >= 3 && glInternalFormat.sized)
+        if (context->getState().getClientVersion() >= gl::ES_3_0 && glInternalFormat.sized)
         {
             // ES 3.1 spec: treat depth and stencil textures as red textures during sampling.
             if (swizzle == GL_GREEN || swizzle == GL_BLUE)
@@ -1096,25 +1096,25 @@ angle::Result TextureMtl::ensureSamplerStateCreated(const gl::Context *context)
     {
         // On devices not supporting filtering for depth textures, we need to convert to nearest
         // here.
-        samplerDesc.setMinFilter(MTLSamplerMinMagFilterNearest);
-        samplerDesc.setMagFilter(MTLSamplerMinMagFilterNearest);
-        if (samplerDesc.getMipFilter() != MTLSamplerMipFilterNotMipmapped)
+        samplerDesc.minFilter = MTLSamplerMinMagFilterNearest;
+        samplerDesc.magFilter = MTLSamplerMinMagFilterNearest;
+        if (samplerDesc.mipFilter != MTLSamplerMipFilterNotMipmapped)
         {
-            samplerDesc.setMipFilter(MTLSamplerMipFilterNearest);
+            samplerDesc.mipFilter = MTLSamplerMipFilterNearest;
         }
 
-        samplerDesc.setMaxAnisotropy(1);
+        samplerDesc.maxAnisotropy = 1;
     }
 
     // OpenGL ES 3.x: The rules for texel selection are modified
     // for cube maps so that texture wrap modes are ignored.
     if ((mState.getType() == gl::TextureType::CubeMap ||
          mState.getType() == gl::TextureType::CubeMapArray) &&
-        context->getState().getClientMajorVersion() >= 3)
+        context->getState().getClientVersion() >= gl::ES_3_0)
     {
-        samplerDesc.setRAddressMode(MTLSamplerAddressModeClampToEdge);
-        samplerDesc.setSAddressMode(MTLSamplerAddressModeClampToEdge);
-        samplerDesc.setTAddressMode(MTLSamplerAddressModeClampToEdge);
+        samplerDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+        samplerDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
+        samplerDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
     }
     mMetalSamplerState = contextMtl->getDisplay()->getStateCache().getSamplerState(
         contextMtl->getMetalDevice(), samplerDesc);
@@ -1949,12 +1949,12 @@ angle::Result TextureMtl::bindToShader(const gl::Context *context,
                 {
                     format = MTLPixelFormatX32_Stencil8;
                 }
-#    if TARGET_OS_OSX || TARGET_OS_MACCATALYST
+#if TARGET_OS_OSX || TARGET_OS_MACCATALYST
                 else if (format == MTLPixelFormatDepth24Unorm_Stencil8)
                 {
                     format = MTLPixelFormatX24_Stencil8;
                 }
-#    endif
+#endif
             }
 
             mSwizzleStencilSamplingView = mNativeTextureStorage->createMipsSwizzleView(
@@ -2389,8 +2389,9 @@ angle::Result TextureMtl::convertAndSetPerSliceSubImage(const gl::Context *conte
         uint32_t offset = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(pixels));
 
         BufferMtl *unpackBufferMtl = mtl::GetImpl(unpackBuffer);
-        if (!mFormat.getCaps().writable || mFormat.hasDepthOrStencilBits() ||
-            mFormat.intendedAngleFormat().isBlock)
+        if (!mFormat.getCaps().isRenderable() || mFormat.hasDepthOrStencilBits() ||
+            mFormat.intendedAngleFormat().isBlock ||
+            !contextMtl->getDisplay()->getUtils().isPixelsUnpackSupported(pixelsAngleFormat))
         {
             // Unsupported format, use CPU path.
             const uint8_t *clientData = unpackBufferMtl->getBufferDataReadOnly(contextMtl);
@@ -2401,27 +2402,33 @@ angle::Result TextureMtl::convertAndSetPerSliceSubImage(const gl::Context *conte
         }
         else
         {
-            // Use compute shader
+            // Use shaders
             mtl::CopyPixelsFromBufferParams params;
             params.buffer            = unpackBufferMtl->getCurrentBuffer();
             params.bufferStartOffset = offset;
             params.bufferRowPitch    = static_cast<uint32_t>(pixelsRowPitch);
             params.bufferDepthPitch  = static_cast<uint32_t>(pixelsDepthPitch);
             params.texture           = image;
-            params.textureArea       = mtl::MTLRegionToGLBox(mtlArea);
+            params.textureArea       = mtl::MTLRegionToGLRect(mtlArea);
 
             // If texture is not array, slice must be zero, if texture is array, mtlArea.origin.z
             // must be zero.
             // This is because this function uses Metal convention: where slice is only used for
             // array textures, and z layer of mtlArea.origin is only used for 3D textures.
-            ASSERT(slice == 0 || params.textureArea.z == 0);
+            ASSERT(slice == 0 || mtlArea.origin.z == 0);
 
             // For mtl::RenderUtils we convert to OpenGL convention: z layer is used as either array
             // texture's slice or 3D texture's layer index.
-            params.textureArea.z += slice;
+            params.textureSliceOrDepth = std::max(slice, static_cast<int>(mtlArea.origin.z));
 
-            ANGLE_TRY(contextMtl->getDisplay()->getUtils().unpackPixelsFromBufferToTexture(
-                contextMtl, pixelsAngleFormat, params));
+            for (uint32_t z = 0; z < static_cast<uint32_t>(mtlArea.size.depth); ++z)
+            {
+                ANGLE_TRY(contextMtl->getDisplay()->getUtils().unpackPixelsWithDraw(
+                    context, pixelsAngleFormat, params));
+
+                params.textureSliceOrDepth++;
+                params.bufferStartOffset += params.bufferDepthPitch;
+            }
         }
     }  // if (unpackBuffer)
     else
@@ -2518,7 +2525,7 @@ angle::Result TextureMtl::convertAndSetPerSliceSubImage(const gl::Context *conte
                 }
             }
         }  // if (mFormat.intendedAngleFormat().isBlock)
-    }      // if (unpackBuffer)
+    }  // if (unpackBuffer)
 
     return angle::Result::Continue;
 }

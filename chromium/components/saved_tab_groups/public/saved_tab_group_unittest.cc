@@ -27,13 +27,6 @@ MATCHER_P(HasTabGuid, guid, "") {
   return arg.saved_tab_guid() == guid;
 }
 
-base::Uuid MakeUniqueGUID() {
-  static uint64_t unique_value = 0;
-  unique_value++;
-  uint64_t kBytes[] = {0, unique_value};
-  return base::Uuid::FormatRandomDataAsV4ForTesting(base::as_byte_span(kBytes));
-}
-
 LocalTabID MakeUniqueTabID() {
   static uint32_t unique_value = 0;
   return unique_value++;
@@ -60,8 +53,8 @@ void AddTabToEndOfGroup(SavedTabGroup& group,
 }  // namespace
 
 TEST(SavedTabGroupTest, GetTabByGUID) {
-  base::Uuid tab_1_saved_guid = MakeUniqueGUID();
-  base::Uuid tab_2_saved_guid = MakeUniqueGUID();
+  base::Uuid tab_1_saved_guid = base::Uuid::GenerateRandomV4();
+  base::Uuid tab_2_saved_guid = base::Uuid::GenerateRandomV4();
 
   // create a group with a couple tabs
   SavedTabGroup group = CreateDefaultEmptySavedTabGroup();
@@ -160,6 +153,25 @@ TEST(SavedTabGroupTest, RemoveTabLocallyReordersPositions) {
     EXPECT_EQ(&group.saved_tabs()[0], second_tab);
     EXPECT_EQ(second_tab->position(), 0u);
   }
+}
+
+TEST(SavedTabGroupTest, RemoveTabLocallyStoresMetadata) {
+  SavedTabGroup group = CreateDefaultEmptySavedTabGroup().CloneAsSharedTabGroup(
+      CollaborationId("collaboration"));
+  SavedTabGroupTab tab_1 = CreateDefaultSavedTabGroupTab(group.saved_guid());
+  SavedTabGroupTab tab_2 = CreateDefaultSavedTabGroupTab(group.saved_guid());
+
+  group.AddTabLocally(tab_1);
+  group.AddTabLocally(tab_2);
+
+  GaiaId removed_by("user_id");
+  group.RemoveTabLocally(tab_2.saved_tab_guid(), removed_by);
+
+  EXPECT_THAT(group.last_removed_tabs_metadata(),
+              UnorderedElementsAre(testing::Key(tab_2.saved_tab_guid())));
+  EXPECT_EQ(
+      group.last_removed_tabs_metadata().at(tab_2.saved_tab_guid()).removed_by,
+      removed_by);
 }
 
 TEST(SavedTabGroupTest, AddTabFromSyncRespectsPositions) {
@@ -338,7 +350,7 @@ TEST(SavedTabGroupTest, UpdateCreatorCacheGuid) {
 }
 
 TEST(SavedTabGroupTest, GetOriginatingTabGroupGuid) {
-  const base::Uuid kOriginatingTabGroupGuid = MakeUniqueGUID();
+  const base::Uuid kOriginatingTabGroupGuid = base::Uuid::GenerateRandomV4();
 
   SavedTabGroup saved_group = CreateDefaultEmptySavedTabGroup();
   saved_group.SetOriginatingTabGroupGuid(
@@ -364,6 +376,26 @@ TEST(SavedTabGroupTest, GetOriginatingTabGroupGuid) {
   // regardless of the group owner.
   EXPECT_EQ(shared_group.GetOriginatingTabGroupGuid(/*for_sync=*/true),
             kOriginatingTabGroupGuid);
+}
+
+TEST(SavedTabGroupTest, MergeRemoteGroupPosition) {
+  std::u16string title = u"title";
+  tab_groups::TabGroupColorId color = tab_groups::TabGroupColorId::kBlue;
+  std::optional<size_t> position = 0;
+
+  // Saved group should merge position.
+  SavedTabGroup saved_group = CreateDefaultEmptySavedTabGroup();
+  saved_group.MergeRemoteGroupMetadata(title, color, position, std::nullopt,
+                                       std::nullopt, base::Time::Now());
+  EXPECT_EQ(position, saved_group.position());
+
+  // Shared group should not merge position.
+  SavedTabGroup shared_group =
+      CreateDefaultEmptySavedTabGroup().CloneAsSharedTabGroup(
+          CollaborationId("collaboration"));
+  shared_group.MergeRemoteGroupMetadata(title, color, position, std::nullopt,
+                                        std::nullopt, base::Time::Now());
+  EXPECT_EQ(std::nullopt, shared_group.position());
 }
 
 }  // namespace tab_groups

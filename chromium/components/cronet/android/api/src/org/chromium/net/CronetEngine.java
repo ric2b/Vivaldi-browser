@@ -377,13 +377,15 @@ public abstract class CronetEngine {
         /**
          * Sets the thread priority of Cronet's internal thread.
          *
+         * @deprecated On modern versions of Cronet, this method does nothing.
          * @param priority the thread priority of Cronet's internal thread. A Linux priority level,
-         *         from
-         * -20 for highest scheduling priority to 19 for lowest scheduling priority. For more
-         * information on values, see {@link android.os.Process#setThreadPriority(int, int)} and
-         * {@link android.os.Process#THREAD_PRIORITY_DEFAULT THREAD_PRIORITY_*} values.
+         *     from -20 for highest scheduling priority to 19 for lowest scheduling priority. For
+         *     more information on values, see {@link android.os.Process#setThreadPriority(int,
+         *     int)} and {@link android.os.Process#THREAD_PRIORITY_DEFAULT THREAD_PRIORITY_*}
+         *     values.
          * @return the builder to facilitate chaining.
          */
+        @Deprecated
         public Builder setThreadPriority(int priority) {
             mBuilderDelegate.setThreadPriority(priority);
             return this;
@@ -786,25 +788,10 @@ public abstract class CronetEngine {
     public abstract void stopNetLog();
 
     /**
-     * Returns differences in metrics collected by Cronet since the last call to this method.
-     *
-     * <p>Cronet collects these metrics globally. This means deltas returned by {@code
-     * getGlobalMetricsDeltas()} will include measurements of requests processed by other {@link
-     * CronetEngine} instances. Since this function returns differences in metrics collected since
-     * the last call, and these metrics are collected globally, a call to any {@code CronetEngine}
-     * instance's {@code getGlobalMetricsDeltas()} method will affect the deltas returned by any
-     * other
-     * {@code CronetEngine} instance's {@code getGlobalMetricsDeltas()}.
-     *
-     * <p>Cronet starts collecting these metrics after the first call to {@code
-     * getGlobalMetricsDeltras()}, so the first call returns no useful data as no metrics have yet
-     * been collected.
-     *
-     * @return differences in metrics collected by Cronet, since the last call to {@code
-     * getGlobalMetricsDeltas()}, serialized as a <a
-     * href=https://developers.google.com/protocol-buffers>protobuf
-     * </a>.
+     * @deprecated In modern versions of Cronet, this will always return an empty array. In older
+     * versions, this used to return a serialized protobuf containing metrics data.
      */
+    @Deprecated
     public abstract byte[] getGlobalMetricsDeltas();
 
     /**

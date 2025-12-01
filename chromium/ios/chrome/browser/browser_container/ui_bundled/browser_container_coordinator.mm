@@ -53,8 +53,6 @@ using vivaldi::IsVivaldiRunning;
 // Redefine property as readwrite.
 @property(nonatomic, strong, readwrite)
     BrowserContainerViewController* viewController;
-// The handler for the edit menu.
-@property(nonatomic, strong) BrowserEditMenuHandler* browserEditMenuHandler;
 
 #if defined(VIVALDI_BUILD)
 // The mediator used for the Copy To Note feature.
@@ -82,6 +80,8 @@ using vivaldi::IsVivaldiRunning;
   LinkToTextMediator* _linkToTextMediator;
   // The mediator used for the Explain With Gemini feature.
   ExplainWithGeminiMediator* _explainWithGeminiMediator;
+  // The handler for the edit menu.
+  BrowserEditMenuHandler* _browserEditMenuHandler;
 }
 
 #pragma mark - ChromeCoordinator
@@ -110,9 +110,9 @@ using vivaldi::IsVivaldiRunning;
   _linkToTextMediator.activityServiceHandler = HandlerForProtocol(
       browser->GetCommandDispatcher(), ActivityServiceCommands);
 
-  self.browserEditMenuHandler = [[BrowserEditMenuHandler alloc] init];
-  self.viewController.browserEditMenuHandler = self.browserEditMenuHandler;
-  self.browserEditMenuHandler.linkToTextDelegate = _linkToTextMediator;
+  _browserEditMenuHandler = [[BrowserEditMenuHandler alloc] init];
+  self.viewController.browserEditMenuHandler = _browserEditMenuHandler;
+  _browserEditMenuHandler.linkToTextDelegate = _linkToTextMediator;
   self.viewController.linkToTextDelegate = _linkToTextMediator;
 
   PrefService* prefService = profile->GetOriginalProfile()->GetPrefs();
@@ -130,8 +130,7 @@ using vivaldi::IsVivaldiRunning;
   id<BrowserCoordinatorCommands> browserCommandsHandler =
       HandlerForProtocol(dispatcher, BrowserCoordinatorCommands);
   _partialTranslateMediator.browserHandler = browserCommandsHandler;
-  self.browserEditMenuHandler.partialTranslateDelegate =
-      _partialTranslateMediator;
+  _browserEditMenuHandler.partialTranslateDelegate = _partialTranslateMediator;
 
   if (IsVivaldiRunning()) {
     _partialTranslateMediator.browser = self.browser;
@@ -148,7 +147,7 @@ using vivaldi::IsVivaldiRunning;
       HandlerForProtocol(dispatcher, ApplicationCommands);
 
   _searchWithMediator.applicationCommandHandler = applicationCommandsHandler;
-  self.browserEditMenuHandler.searchWithDelegate = _searchWithMediator;
+  _browserEditMenuHandler.searchWithDelegate = _searchWithMediator;
 
   if (ExplainGeminiEditMenuPosition() !=
           PositionForExplainGeminiEditMenu::kDisabled &&
@@ -161,7 +160,7 @@ using vivaldi::IsVivaldiRunning;
 
     _explainWithGeminiMediator.applicationCommandHandler =
         applicationCommandsHandler;
-    self.browserEditMenuHandler.explainWithGeminiDelegate =
+    _browserEditMenuHandler.explainWithGeminiDelegate =
         _explainWithGeminiMediator;
   }
 
@@ -186,7 +185,7 @@ using vivaldi::IsVivaldiRunning;
     self.vivaldiCopyToNoteMediator.activityServiceHandler = HandlerForProtocol(
         browser->GetCommandDispatcher(), ActivityServiceCommands);
 
-    self.browserEditMenuHandler.vivaldiCopyToNoteDelegate =
+    _browserEditMenuHandler.vivaldiCopyToNoteDelegate =
         self.vivaldiCopyToNoteMediator;
     self.viewController.vivaldiCopyToNoteDelegate =
         self.vivaldiCopyToNoteMediator;
@@ -219,7 +218,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (id<EditMenuBuilder>)editMenuBuilder {
-  return self.browserEditMenuHandler;
+  return _browserEditMenuHandler;
 }
 
 #pragma mark - EditMenuAlertDelegate

@@ -25,7 +25,6 @@
  * H.261 decoder.
  */
 
-#include "libavutil/avassert.h"
 #include "libavutil/thread.h"
 #include "avcodec.h"
 #include "codec_internal.h"
@@ -88,6 +87,12 @@ static av_cold int h261_decode_init(AVCodecContext *avctx)
     int ret;
 
     avctx->framerate = (AVRational) { 30000, 1001 };
+
+    /* The H.261 analog of intra/key frames is setting the freeze picture release flag,
+     * but this does not guarantee that the frame uses intra-only encoding,
+     * so we still need to allocate dummy frames. So set pict_type to P here
+     * for all frames and override it after having decoded the frame. */
+    s->pict_type = AV_PICTURE_TYPE_P;
 
     s->private_ctx = &h->common;
     // set defaults
@@ -155,6 +160,7 @@ static int h261_decode_gob_header(H261DecContext *h)
         av_log(s->avctx, AV_LOG_ERROR, "qscale has forbidden 0 value\n");
         if (s->avctx->err_recognition & (AV_EF_BITSTREAM | AV_EF_COMPLIANT))
             return -1;
+        s->qscale = 1;
     }
 
     /* For the first transmitted macroblock in a GOB, MBA is the absolute
@@ -262,7 +268,7 @@ static int h261_decode_block(H261DecContext *h, int16_t *block, int n, int coded
          * being coded as 1111 1111. */
         if (level == 255)
             level = 128;
-        block[0] = level * s->y_dc_scale;
+        block[0] = level * 8;
         i        = 1;
     } else if (coded) {
         // Run  Level   Code
@@ -380,8 +386,11 @@ static int h261_decode_mb(H261DecContext *h)
     }
 
     // Read mquant
-    if (IS_QUANT(com->mtype))
-        ff_set_qscale(s, get_bits(&s->gb, 5));
+    if (IS_QUANT(com->mtype)) {
+        s->qscale = get_bits(&s->gb, 5);
+        if (!s->qscale)
+            s->qscale = 1;
+    }
 
     s->mb_intra = IS_INTRA4x4(com->mtype);
 
@@ -454,7 +463,7 @@ intra:
  * Decode the H.261 picture header.
  * @return <0 if no startcode found
  */
-static int h261_decode_picture_header(H261DecContext *h)
+static int h261_decode_picture_header(H261DecContext *h, int *is_key)
 {
     MpegEncContext *const s = &h->s;
     int format, i;
@@ -478,7 +487,7 @@ static int h261_decode_picture_header(H261DecContext *h)
     /* PTYPE starts here */
     skip_bits1(&s->gb); /* split screen off */
     skip_bits1(&s->gb); /* camera  off */
-    skip_bits1(&s->gb); /* freeze picture release off */
+    *is_key = get_bits1(&s->gb); /* freeze picture release off */
 
     format = get_bits1(&s->gb);
 
@@ -498,11 +507,6 @@ static int h261_decode_picture_header(H261DecContext *h)
     if (skip_1stop_8data_bits(&s->gb) < 0)
         return AVERROR_INVALIDDATA;
 
-    /* H.261 has no I-frames, but if we pass AV_PICTURE_TYPE_I for the first
-     * frame, the codec crashes if it does not contain all I-blocks
-     * (e.g. when a packet is lost). */
-    s->pict_type = AV_PICTURE_TYPE_P;
-
     h->gob_number = 0;
     return 0;
 }
@@ -510,8 +514,6 @@ static int h261_decode_picture_header(H261DecContext *h)
 static int h261_decode_gob(H261DecContext *h)
 {
     MpegEncContext *const s = &h->s;
-
-    ff_set_qscale(s, s->qscale);
 
     /* decode mb's */
     while (h->current_mba <= MBA_STUFFING) {
@@ -536,20 +538,6 @@ static int h261_decode_gob(H261DecContext *h)
     return -1;
 }
 
-/**
- * returns the number of bytes consumed for building the current frame
- */
-static int get_consumed_bytes(MpegEncContext *s, int buf_size)
-{
-    int pos = get_bits_count(&s->gb) >> 3;
-    if (pos == 0)
-        pos = 1;      // avoid infinite loops (i doubt that is needed but ...)
-    if (pos + 10 > buf_size)
-        pos = buf_size;               // oops ;)
-
-    return pos;
-}
-
 static int h261_decode_frame(AVCodecContext *avctx, AVFrame *pict,
                              int *got_frame, AVPacket *avpkt)
 {
@@ -557,7 +545,7 @@ static int h261_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     const uint8_t *buf = avpkt->data;
     int buf_size       = avpkt->size;
     MpegEncContext *s  = &h->s;
-    int ret;
+    int ret, is_key;
 
     ff_dlog(avctx, "*****frame %"PRId64" size=%d\n", avctx->frame_num, buf_size);
     ff_dlog(avctx, "bytes=%x %x %x %x\n", buf[0], buf[1], buf[2], buf[3]);
@@ -566,7 +554,7 @@ static int h261_decode_frame(AVCodecContext *avctx, AVFrame *pict,
 
     init_get_bits(&s->gb, buf, buf_size * 8);
 
-    ret = h261_decode_picture_header(h);
+    ret = h261_decode_picture_header(h, &is_key);
 
     /* skip if the header was thrashed */
     if (ret < 0) {
@@ -587,8 +575,7 @@ static int h261_decode_frame(AVCodecContext *avctx, AVFrame *pict,
             return ret;
     }
 
-    if ((avctx->skip_frame >= AVDISCARD_NONREF && s->pict_type == AV_PICTURE_TYPE_B) ||
-        (avctx->skip_frame >= AVDISCARD_NONKEY && s->pict_type != AV_PICTURE_TYPE_I) ||
+    if ((avctx->skip_frame >= AVDISCARD_NONINTRA && !is_key) ||
          avctx->skip_frame >= AVDISCARD_ALL)
         return buf_size;
 
@@ -608,7 +595,10 @@ static int h261_decode_frame(AVCodecContext *avctx, AVFrame *pict,
     }
     ff_mpv_frame_end(s);
 
-    av_assert0(s->pict_type == s->cur_pic.ptr->f->pict_type);
+    if (is_key) {
+        s->cur_pic.ptr->f->pict_type = AV_PICTURE_TYPE_I;
+        s->cur_pic.ptr->f->flags    |= AV_FRAME_FLAG_KEY;
+    }
 
     if ((ret = av_frame_ref(pict, s->cur_pic.ptr->f)) < 0)
         return ret;
@@ -616,7 +606,7 @@ static int h261_decode_frame(AVCodecContext *avctx, AVFrame *pict,
 
     *got_frame = 1;
 
-    return get_consumed_bytes(s, buf_size);
+    return buf_size;
 }
 
 const FFCodec ff_h261_decoder = {
@@ -630,4 +620,5 @@ const FFCodec ff_h261_decoder = {
     .close          = ff_mpv_decode_close,
     .p.capabilities = AV_CODEC_CAP_DR1,
     .p.max_lowres   = 3,
+    .caps_internal  = FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM,
 };

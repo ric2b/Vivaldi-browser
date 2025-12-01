@@ -32,7 +32,6 @@
 #include "third_party/skia/include/core/SkColorSpace.h"
 #include "third_party/skia/include/core/SkColorType.h"
 #include "third_party/skia/include/core/SkImage.h"
-#include "third_party/skia/include/core/SkImageInfo.h"
 #include "third_party/skia/include/core/SkSamplingOptions.h"
 #include "third_party/skia/include/gpu/ganesh/GrBackendSurface.h"
 #include "third_party/skia/include/gpu/ganesh/GrDirectContext.h"
@@ -171,10 +170,10 @@ bool AcceleratedStaticBitmapImage::CopyToTexture(
     GLenum dest_target,
     GLuint dest_texture_id,
     GLint dest_level,
-    bool unpack_premultiply_alpha,
-    bool unpack_flip_y,
+    SkAlphaType dest_alpha_type,
+    GrSurfaceOrigin destination_origin,
     const gfx::Point& dest_point,
-    const gfx::Rect& source_sub_rectangle) {
+    const gfx::Rect& src_rect) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!IsValid())
     return false;
@@ -189,9 +188,21 @@ bool AcceleratedStaticBitmapImage::CopyToTexture(
   auto source_scoped_si_access = source_si_texture->BeginAccess(
       mailbox_ref_->sync_token(), /*readonly=*/true);
   const bool do_alpha_multiply = GetAlphaType() == kUnpremul_SkAlphaType &&
-                                 unpack_premultiply_alpha == true;
+                                 dest_alpha_type == kPremul_SkAlphaType;
   const bool do_alpha_unmultiply = GetAlphaType() == kPremul_SkAlphaType &&
-                                   unpack_premultiply_alpha == false;
+                                   dest_alpha_type == kUnpremul_SkAlphaType;
+
+  // `src_rect` here is always in top-left coordinate space, but
+  // CopySubTextureCHROMIUM source rect is in texture coordinate space, so we
+  // need to adjust.
+  auto source_sub_rectangle = src_rect;
+  if (shared_image_->surface_origin() == kBottomLeft_GrSurfaceOrigin) {
+    source_sub_rectangle.set_y(Size().height() - source_sub_rectangle.bottom());
+  }
+
+  // If source origin doesn't match destination, we need to flip.
+  bool unpack_flip_y = shared_image_->surface_origin() != destination_origin;
+
   dest_gl->CopySubTextureCHROMIUM(
       source_scoped_si_access->texture_id(), 0, dest_target, dest_texture_id,
       dest_level, dest_point.x(), dest_point.y(), source_sub_rectangle.x(),
@@ -320,8 +331,9 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
     DCHECK_EQ(shared_image_texture_id, 0u);
     skia_context_provider_wrapper_ = context_provider_wrapper;
     texture_backing_ = sk_make_sp<MailboxTextureBacking>(
-        shared_image_->mailbox(), mailbox_ref_, GetSize(), GetSkColorType(),
-        GetAlphaType(), GetSkColorSpace(), std::move(context_provider_wrapper));
+        shared_image_->mailbox(), mailbox_ref_, GetSize(),
+        GetSharedImageFormat(), GetAlphaType(), GetColorSpace(),
+        std::move(context_provider_wrapper));
     return;
   }
 
@@ -353,8 +365,7 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
       GrBackendTextures::MakeGL(GetSize().width(), GetSize().height(),
                                 skgpu::Mipmapped::kNo, texture_info);
 
-  GrSurfaceOrigin origin = IsOriginTopLeft() ? kTopLeft_GrSurfaceOrigin
-                                             : kBottomLeft_GrSurfaceOrigin;
+  GrSurfaceOrigin origin = shared_image_->surface_origin();
 
   auto* release_ctx = new ReleaseContext;
   release_ctx->mailbox_ref = mailbox_ref_;
@@ -363,14 +374,15 @@ void AcceleratedStaticBitmapImage::InitializeTextureBacking(
   release_ctx->context_provider_wrapper = context_provider_wrapper;
 
   sk_sp<SkImage> sk_image = SkImages::BorrowTextureFrom(
-      shared_gr_context, backend_texture, origin, GetSkColorType(),
-      GetAlphaType(), GetSkColorSpace(), &ReleaseTexture, release_ctx);
+      shared_gr_context, backend_texture, origin,
+      ToClosestSkColorType(GetSharedImageFormat()), GetAlphaType(),
+      GetColorSpace().ToSkColorSpace(), &ReleaseTexture, release_ctx);
 
   if (sk_image) {
     skia_context_provider_wrapper_ = context_provider_wrapper;
     texture_backing_ = sk_make_sp<MailboxTextureBacking>(
-        std::move(sk_image), mailbox_ref_, GetSize(), GetSkColorType(),
-        GetAlphaType(), GetSkColorSpace(), std::move(context_provider_wrapper));
+        std::move(sk_image), mailbox_ref_, GetSize(), GetSharedImageFormat(),
+        GetAlphaType(), GetColorSpace(), std::move(context_provider_wrapper));
   }
 }
 
@@ -430,9 +442,9 @@ void AcceleratedStaticBitmapImage::Transfer() {
   DETACH_FROM_THREAD(thread_checker_);
 }
 
-bool AcceleratedStaticBitmapImage::CurrentFrameKnownToBeOpaque() {
+bool AcceleratedStaticBitmapImage::IsOpaque() {
   return SkAlphaTypeIsOpaque(GetAlphaType()) ||
-         SkColorTypeIsAlwaysOpaque(GetSkColorType());
+         !GetSharedImageFormat().HasAlpha();
 }
 
 }  // namespace blink

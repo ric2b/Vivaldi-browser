@@ -5,16 +5,17 @@
 #include "chrome/browser/extensions/external_provider_manager_factory.h"
 
 #include "base/check.h"
-#include "chrome/browser/extensions/chrome_extension_system_factory.h"
 #include "chrome/browser/extensions/extension_error_controller_factory.h"
 #include "chrome/browser/extensions/external_install_manager_factory.h"
 #include "chrome/browser/extensions/external_provider_manager.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker_factory.h"
-#include "chrome/browser/extensions/pending_extension_manager_factory.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "extensions/browser/extension_prefs_factory.h"
 #include "extensions/browser/extension_registrar_factory.h"
 #include "extensions/browser/extension_registry_factory.h"
+#include "extensions/browser/extension_system_provider.h"
+#include "extensions/browser/extensions_browser_client.h"
+#include "extensions/browser/pending_extension_manager_factory.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/extensions/install_limiter_factory.h"
@@ -42,8 +43,8 @@ ExternalProviderManagerFactory::ExternalProviderManagerFactory()
           "ExternalProviderManager",
           ProfileSelections::Builder()
               .WithRegular(ProfileSelection::kRedirectedToOriginal)
-              // TODO(crbug.com/40257657): Check if this service is needed in
-              // Guest mode.
+              // TODO(crbug.com/40257657): Audit whether these should be
+              // redirected or should have their own instance.
               .WithGuest(ProfileSelection::kRedirectedToOriginal)
               // TODO(crbug.com/41488885): Check if this service is needed for
               // Ash Internals.
@@ -55,7 +56,7 @@ ExternalProviderManagerFactory::ExternalProviderManagerFactory()
   DependsOn(ExtensionRegistrarFactory::GetInstance());
   DependsOn(ExternalInstallManagerFactory::GetInstance());
   DependsOn(PendingExtensionManagerFactory::GetInstance());
-  DependsOn(ChromeExtensionSystemFactory::GetInstance());
+  DependsOn(ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
   DependsOn(InstallStageTrackerFactory::GetInstance());
 #if BUILDFLAG(IS_CHROMEOS)
   DependsOn(InstallLimiterFactory::GetInstance());

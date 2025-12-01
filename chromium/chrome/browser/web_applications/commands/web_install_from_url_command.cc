@@ -21,6 +21,7 @@
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
+#include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
 #include "chrome/browser/web_applications/web_app_logging.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -32,6 +33,8 @@
 #include "components/webapps/browser/installable/installable_logging.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/installable/installable_params.h"
+#include "components/webapps/browser/installable/ml_install_operation_tracker.h"
+#include "components/webapps/browser/installable/ml_installability_promoter.h"
 #include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
@@ -46,20 +49,24 @@ WebInstallFromUrlCommand::WebInstallFromUrlCommand(
     Profile& profile,
     const GURL& install_url,
     const std::optional<GURL>& manifest_id,
+    base::WeakPtr<content::WebContents> web_contents,
+    WebAppInstallDialogCallback dialog_callback,
     WebInstallFromUrlCommandCallback installed_callback)
     : WebAppCommand<SharedWebContentsLock,
-                    const GURL&,
+                    const webapps::AppId&,
                     webapps::InstallResultCode>(
           "WebInstallFromUrlCommand",
           SharedWebContentsLockDescription(),
           std::move(installed_callback),
           /*args_for_shutdown=*/
-          std::make_tuple(GURL(),
+          std::make_tuple(webapps::AppId(),
                           webapps::InstallResultCode::
                               kCancelledOnWebAppProviderShuttingDown)),
       profile_(profile),
       manifest_id_(manifest_id),
       install_url_(install_url),
+      web_contents_(web_contents),
+      dialog_callback_(std::move(dialog_callback)),
       install_error_log_entry_(/*background_installation=*/false,
                                kInstallSource) {
   if (manifest_id_.has_value()) {
@@ -105,7 +112,7 @@ void WebInstallFromUrlCommand::Abort(webapps::InstallResultCode code) {
   MeasureUserInstalledAppHistogram(code);
   RecordInstallMetrics(InstallCommand::kWebAppInstallFromUrl,
                        WebAppType::kCraftedApp, code, kInstallSource);
-  CompleteAndSelfDestruct(CommandResult::kFailure, GURL(), code);
+  CompleteAndSelfDestruct(CommandResult::kFailure, webapps::AppId(), code);
 }
 
 void WebInstallFromUrlCommand::OnUrlLoadedFetchManifest(
@@ -167,13 +174,19 @@ void WebInstallFromUrlCommand::OnDidPerformInstallableCheck(
   GetMutableDebugValue().Set("start_url", web_app_info_->start_url().spec());
   GetMutableDebugValue().Set("name", web_app_info_->title);
 
-  // If the manifest_id parameter was provided, ensure it matches the resolved
-  // id of the manifest we just fetched.
+  // If navigator.install was invoked with only an `install_url` (1 parameter
+  // version), the manifest must have a developer-specified, or "custom", id.
+  if (!manifest_id_.has_value() && !opt_manifest->has_custom_id) {
+    Abort(webapps::InstallResultCode::kNoCustomManifestId);
+    return;
+  }
+
+  // If navigator.install was invoked with both `install_url` and `manifest_id`
+  // (2 param version), the given `manifest_id` must match the computed id of
+  // the manifest we just fetched.
   if (manifest_id_.has_value() &&
-      web_app_info_->manifest_id() != manifest_id_.value()) {
-    // TODO(crbug.com/333795265): Add custom WebInstallFromUrlCommand error
-    // types for additional granularity.
-    Abort(webapps::InstallResultCode::kNotInstallable);
+      manifest_id_ != web_app_info_->manifest_id()) {
+    Abort(webapps::InstallResultCode::kManifestIdMismatch);
     return;
   }
 
@@ -231,15 +244,26 @@ void WebInstallFromUrlCommand::OnIconsRetrievedShowDialog(
   install_error_log_entry_.LogDownloadedIconsErrors(
       *web_app_info_, result, icons_map, icons_http_results);
 
-  // TODO(crbug.com/333795265): Show install dialog.
-  OnInstallDialogCompleted(/*user_accepted=*/true);
+  // TODO(crbug.com/415825168): Support detailed install dialog for background
+  // installs. For now, pass `nullptr` to the screenshot_fetcher which will
+  // always show the simple dialog.
+  std::move(dialog_callback_)
+      .Run(
+          /*screenshot_fetcher=*/nullptr, web_contents_.get(),
+          std::move(web_app_info_),
+          base::BindOnce(&WebInstallFromUrlCommand::OnInstallDialogCompleted,
+                         weak_ptr_factory_.GetWeakPtr()));
 }
 
-void WebInstallFromUrlCommand::OnInstallDialogCompleted(bool user_accepted) {
+void WebInstallFromUrlCommand::OnInstallDialogCompleted(
+    bool user_accepted,
+    std::unique_ptr<WebAppInstallInfo> web_app_info) {
   if (!user_accepted) {
     Abort(webapps::InstallResultCode::kUserInstallDeclined);
     return;
   }
+
+  web_app_info_ = std::move(web_app_info);
 
   web_app_info_->user_display_mode =
       web_app::mojom::UserDisplayMode::kStandalone;
@@ -298,7 +322,7 @@ void WebInstallFromUrlCommand::OnAppLaunched(base::Value launch_debug_value) {
       shared_web_contents_with_app_lock_->registrar().GetComputedManifestId(
           app_id_);
   CHECK(opt_manifest_->id == manifest_id);
-  CompleteAndSelfDestruct(CommandResult::kSuccess, manifest_id,
+  CompleteAndSelfDestruct(CommandResult::kSuccess, app_id_,
                           install_result_code_);
 }
 

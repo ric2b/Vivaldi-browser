@@ -1,10 +1,7 @@
 {
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "baseUrl": ".",
-
-    "checkJs": false,
-    "allowJs": false
+    "baseUrl": "."
   },
   "references": [
     {
@@ -12,7 +9,6 @@
     },
     {
       "path": "../e2e/tsconfig.json"
-    },
-  ],
-  "extends": "../../config/typescript/tsconfig.base.json"
+    }
+  ]
 }

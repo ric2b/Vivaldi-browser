@@ -7,6 +7,7 @@
 
 import collections
 from collections.abc import Generator
+import dataclasses
 import datetime
 from enum import Enum
 import gzip
@@ -20,22 +21,19 @@ import tempfile
 from typing import Any
 import unittest
 
-import dataclasses  # Built-in, but pylint gives an ordering false positive.
-
 # vpython-provided modules.
 import perfetto.trace_processor as tp  # pylint: disable=import-error
 
+from telemetry.timeline import tracing_config
+from tracing.trace_data import trace_data
+
+import gpu_path_util
 from gpu_tests import common_browser_args as cba
 from gpu_tests import common_typing as ct
 from gpu_tests import gpu_integration_test
 from gpu_tests import overlay_support
 from gpu_tests import trace_test_pages
 from gpu_tests.util import host_information
-
-import gpu_path_util
-
-from telemetry.timeline import tracing_config
-from tracing.trace_data import trace_data
 
 gpu_data_relative_path = gpu_path_util.GPU_DATA_RELATIVE_PATH
 
@@ -589,22 +587,21 @@ class TraceIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       self._RunActualGpuTraceTest(test_path, params)
     elif isinstance(params, _CacheTraceTestArguments):
       # Create a new temporary directory for each cache test that is run.
-      cache_profile_dir = tempfile.TemporaryDirectory()
+      with tempfile.TemporaryDirectory() as cache_profile_dir:
+        # Run the first load page and get the number of expected cache hits.
+        load_params = params.GenerateFirstLoadTest()
+        results =\
+          self._RunActualGpuTraceTest(test_path,
+                                      load_params,
+                                      profile_dir=cache_profile_dir,
+                                      profile_type='exact')
 
-      # Run the first load page and get the number of expected cache hits.
-      load_params = params.GenerateFirstLoadTest()
-      results =\
-        self._RunActualGpuTraceTest(test_path,
-                                    load_params,
-                                    profile_dir=cache_profile_dir.name,
-                                    profile_type='exact')
-
-      # Generate and run the cache hit tests using the seeded cache dir.
-      for (hit_path, trace_params) in params.GenerateCacheHitTests(results):
-        self._RunActualGpuTraceTest(hit_path,
-                                    trace_params,
-                                    profile_dir=cache_profile_dir.name,
-                                    profile_type='clean')
+        # Generate and run the cache hit tests using the seeded cache dir.
+        for (hit_path, trace_params) in params.GenerateCacheHitTests(results):
+          self._RunActualGpuTraceTest(hit_path,
+                                      trace_params,
+                                      profile_dir=cache_profile_dir,
+                                      profile_type='clean')
 
   @classmethod
   def SetUpProcess(cls) -> None:
@@ -778,6 +775,7 @@ WHERE
   AND args.arg_set_id = slices.arg_set_id
 """
     for row in trace_processor.query(swap_event_query):
+      value = None
       if row.key == pixel_format_key:
         value = row.string_value
       elif row.key == zero_copy_key:

@@ -20,6 +20,7 @@
 <translation id="1059913517121127803">Не вдається почати сканування</translation>
 <translation id="1061864016440983342">Використовувати без геоданих</translation>
 <translation id="1062823486781306604"><ph name="NAME" /> (<ph name="INDEX" /> з <ph name="COUNT" />).</translation>
+<translation id="106558928761833284">Красива космічна туманність зі швидким футуристичним космічним кораблем, сині, рожеві й фіолетові відтінки</translation>
 <translation id="1069150558259542054">Клавішу швидкого вставлення не можна використовувати для власних комбінацій клавіш.</translation>
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">виявлено брандмауер</translation>
@@ -27,9 +28,11 @@
 <translation id="1082009148392559545">Завантаження заставки</translation>
 <translation id="1094693127011229778">IP-адреса недоступна</translation>
 <translation id="1100902271996134409">Створення зображень…</translation>
+<translation id="1102946598597843031">Фотографія місяця над озером із падаючими пелюстками вишневого цвіту, 4К</translation>
 <translation id="1107856713690040084">Аудіо на пристрої <ph name="DEVICE_TYPE" /></translation>
 <translation id="1116694919640316211">Про Google Chrome</translation>
 <translation id="1118572504348554005">Ми можемо ділитися з нашими партнерами відгуками, надісланими через цю форму, щоб вирішувати проблеми, про які ви нас повідомляєте. Не вказуйте конфіденційну інформацію, як-от паролі.</translation>
+<translation id="1118596190635569417">Перемістити це меню праворуч</translation>
 <translation id="1119403468619527527">Замало слів, щоб спростити текст</translation>
 <translation id="1119447706177454957">Внутрішня помилка</translation>
 <translation id="1124772482545689468">Користувач</translation>
@@ -66,6 +69,7 @@
 <translation id="1238163879850290856">Скиньте налаштування, щоб інші користувачі не мали доступу до даних. Використовуйте лише надійні методи введення.</translation>
 <translation id="1238612778414822719">Затримка HTTPS</translation>
 <translation id="1252766349417594414">Джойстик</translation>
+<translation id="1261045951892393759">Кіт грає на гітарі Flying V, їдучи верхи на єдинорогу, на фоні блискавки</translation>
 <translation id="1270369111467284986">Вірогідно, є адаптивний портал</translation>
 <translation id="1274654146705270731">апельсини</translation>
 <translation id="1275718070701477396">Вибрано</translation>
@@ -91,8 +95,10 @@
 <translation id="1367951781824006909">Вибрати файл</translation>
 <translation id="1371650399987522809">Відгук про шпалери, створені за допомогою ШІ від Google</translation>
 <translation id="1374385338586507108">Визначення</translation>
+<translation id="1376064675713230088">тиранозавр</translation>
 <translation id="1383876407941801731">Пошук</translation>
 <translation id="1387854245479784695">Це зведені дані для всіх ядер</translation>
+<translation id="1388919980490622894">з кольоровим градієнтом</translation>
 <translation id="1393206549145430405">Замок</translation>
 <translation id="1394661041439318933">Рівень заряду акумулятора чохла – <ph name="BATTERY_PERCENTAGE" />%.</translation>
 <translation id="1397738625398125236">Шлюз можна перевірити</translation>
@@ -125,11 +131,11 @@
 <translation id="1499900233129743732"><ph name="MANAGER" /> керує цим користувачем і може віддалено змінювати налаштування та відстежувати його дії.</translation>
 <translation id="150962533380566081">Недійсний PUK-код.</translation>
 <translation id="1510238584712386396">Панель запуску</translation>
+<translation id="1512872158112631650">драматичні тіні</translation>
 <translation id="1514446283880973949">Пишіть впевненіше, підсумовуйте контент, знаходьте визначення термінів тощо</translation>
 <translation id="1515129336378114413">головна вкладка веб-переглядача</translation>
 <translation id="1526389707933164996">Анімація для заставки</translation>
 <translation id="152892567002884378">Збільшити гучність</translation>
-<translation id="1531038290222364269">Показати вкладки</translation>
 <translation id="1539864135338521185">лазурит</translation>
 <translation id="1548555207631326346">Щоб персоналізувати зображення, створені за допомогою ШІ, виберіть тему й натисніть підкреслені слова.<ph name="LINE_BREAK" />
           <ph name="LINE_BREAK" />
@@ -200,6 +206,7 @@
 <translation id="1758018619400202187">EAP-TLS</translation>
 <translation id="1758459542619182298"><ph name="CONTROL_TYPE" />: <ph name="KEY_LIST" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1762353673362288306">Зараз ви можете використовувати лише Інструменти для уроків</translation>
 <translation id="1762483337755424125">Текстова версія</translation>
 <translation id="1765169783255151332">Швидкий перехід між клавішами</translation>
 <translation id="1768959921651994223">Тип автентифікації</translation>
@@ -229,6 +236,7 @@
 <translation id="1854156910036166007">лінивці</translation>
 <translation id="1856388568474281774">Стрілка вниз</translation>
 <translation id="1858620243986915808">Долучити знімок екрана</translation>
+<translation id="1860654594958086756">3D-відрисовка</translation>
 <translation id="1871413952174074704">APN може містити щонайбільше стільки символів: <ph name="CHAR_LIMIT" /></translation>
 <translation id="1871569928317311284">Вимкнути темну тему</translation>
 <translation id="1874612839560830905">MTU</translation>
@@ -242,10 +250,11 @@
 <translation id="1905710495812624430">Перевищено максимальну кількість дозволених спроб.</translation>
 <translation id="1908234395526491708">Не виконано запити за протоколом UDP</translation>
 <translation id="1908394185991500139">стрілка вліво</translation>
-<translation id="1911678930322867245">Перемістити у верхній правий кут</translation>
 <translation id="1914144885717544695">у п’ятницю</translation>
 <translation id="1915960750806557358">Залиште відгук або опишіть проблему. Не вказуйте особисту, чутливу або конфіденційну інформацію.</translation>
 <translation id="1923388006036088459">Акцентні кольори</translation>
+<translation id="1926611810597212636">єдиноріг</translation>
+<translation id="1944321879609775960">Щоб створити короткий виклад, перезапустіть пристрій <ph name="DEVICE_TYPE" /></translation>
 <translation id="1945403655450283000">Диктофон</translation>
 <translation id="1947737735496445907">Надруковано</translation>
 <translation id="1951012854035635156">Асистент</translation>
@@ -268,6 +277,7 @@
 <translation id="2045814230297767491">столові прибори</translation>
 <translation id="2047316797244836561">Щоб переглянути заставку, підключіться до мережі й оновіть сторінку.</translation>
 <translation id="2056550196601855911">IPv4/IPv6</translation>
+<translation id="2068472557797646626">3D-візуалізація хромованих куль і сферичних форм на тлі хромованих архітектурних елементів. Композиція в стилі сучасного мінімалізму для реклами, брендингу або презентації з місцем для тексту. Велика арка на абстрактному фоні в стилі мінімалізму. Студійне світло. Крупний план.</translation>
 <translation id="2073232437457681324">безкраїй океан</translation>
 <translation id="2080070583977670716">Інші налаштування</translation>
 <translation id="2082932131694554252">Призначена клавіша</translation>
@@ -315,6 +325,7 @@
 <translation id="2230624078793142213">Створити інші</translation>
 <translation id="2236746079896696523">Перемикач підсвічування клавіатури</translation>
 <translation id="2240366984605217732">Перемикач розкладки клавіатури</translation>
+<translation id="224421911978987610">довга витримка</translation>
 <translation id="2244834438220057800">зеленому</translation>
 <translation id="225692081236532131">Статус активації</translation>
 <translation id="2267285889943769271">Додати знімок екрана</translation>
@@ -342,6 +353,7 @@
 <translation id="2380886658946992094">Legal</translation>
 <translation id="2391082728065870591">Надіслати відгук</translation>
 <translation id="2407209115954268704">Статус блокування SIM-карти</translation>
+<translation id="240798792848608143">Перезапустіть пристрій <ph name="DEVICE_TYPE" />, щоб отримати транскрипцію такою мовою: <ph name="LANGUAGE_NAME" /></translation>
 <translation id="241419523391571119">Щоб перевірити клавіатуру, відкрийте кришку</translation>
 <translation id="2414660853550118611">Про фоновий малюнок</translation>
 <translation id="2414886740292270097">Темна</translation>
@@ -351,6 +363,7 @@
 <translation id="2438248248625638801">Створення назв записів</translation>
 <translation id="2446553403094072641">Точність рухомої коми</translation>
 <translation id="2448312741937722512">Тип</translation>
+<translation id="2448857983905133469">Інструменти для уроків</translation>
 <translation id="2468124392950503650">Щоб створити зображення, виберіть запит або перегляньте <ph name="BEGIN_LINK_PROMPTING_GUIDE" />відповідний посібник<ph name="END_LINK_PROMPTING_GUIDE" /></translation>
 <translation id="2472215337771558851">Скористайтеся функцією "Допомога з текстом", щоб створити чернетку або покращити наявний текст завдяки ШІ від Google</translation>
 <translation id="2475982808118771221">Сталася помилка</translation>
@@ -361,6 +374,7 @@
 <translation id="2493126929778606526">Ваші найкращі фото, вибрані автоматично</translation>
 <translation id="249323605434939166"><ph name="QUERY_TEXT" /> · <ph name="SOURCE_LANGUAGE_NAME" /></translation>
 <translation id="2501126912075504550">опалу</translation>
+<translation id="2501278716633472235">Назад</translation>
 <translation id="2505327257735685095">Оновити поточний фоновий малюнок</translation>
 <translation id="2507491234071975894">Колонка</translation>
 <translation id="2512979179176933762">показати вікна</translation>
@@ -420,6 +434,7 @@
 <translation id="2805756323405976993">Додатки</translation>
 <translation id="28232023175184696">Не вдається підключитися до мережі. Натисніть, щоб повторити спробу.</translation>
 <translation id="2855718259207180827">вовни</translation>
+<translation id="2856429654176718363">Величезний космічний корабель пролітає над містом, освітленим численними вогнями. Уся сцена виконана в темних тонах у стилі олійного живопису. Вона створює таємничу атмосферу з елементами футуристичної наукової фантастики. Цю картину створено за допомогою програмного забезпечення C4D і Octane Render, щоб підкреслити високу роздільну здатність і деталізацію. На передньому плані також зображені міські будівлі, які додають ефект глибини різкості. Сцена виконана в стилі олійного живопису в темних тонах і створює таємничу атмосферу з елементами футуристичної наукової фантастики.</translation>
 <translation id="2859243502336719778">Критичне оновлення</translation>
 <translation id="2860473693272905224">Розмістіть на сканері ще одну сторінку</translation>
 <translation id="286265581261662583">Щоб отримати визначення або переклад чи конвертувати одиниці вимірювання, натисніть текст правою кнопкою миші або втримуйте його</translation>
@@ -436,9 +451,11 @@
 <translation id="2895772081848316509">темних</translation>
 <translation id="2915996080311180594">Перезапустити пізніше</translation>
 <translation id="2926057806159140518">Введіть ім’я користувача та пароль або зіскануйте QR-код</translation>
+<translation id="2927007463545347013">Стежка в стилі аніме з видом на океан і падаючими пелюстками вишневого цвіту</translation>
 <translation id="2940811910881150316">Не вдалося перевірити клавіатуру. Відкрийте кришку й повторіть спробу.</translation>
 <translation id="2941112035454246133">Низький</translation>
 <translation id="2956070106555335453">Короткий виклад</translation>
+<translation id="2968959705684615497">Сюрреалістичний білий тигр із золотими очима й золотими смужками, що сидить на білій піщаній дюні</translation>
 <translation id="299385721391037602">рожевого й жовтого</translation>
 <translation id="3008341117444806826">ОНОВИТИ</translation>
 <translation id="3009958530611748826">Виберіть, у якій папці зберегти</translation>
@@ -449,6 +466,7 @@
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> мА</translation>
 <translation id="3056720590588772262">Кінцева точка</translation>
 <translation id="3060579846059757016">Тези</translation>
+<translation id="3060798442805232711">Додаток Інструменти для уроків використовує ваш мікрофон</translation>
 <translation id="3061850252076394168">увімкнути функцію "Читання з екрана"</translation>
 <translation id="3066772729299747758">у вівторок</translation>
 <translation id="3069085583900247081">Перевірку не пройдено</translation>
@@ -458,7 +476,8 @@
 <translation id="3084958266922136097">Деактивувати заставку</translation>
 <translation id="3091839911843451378">Не надруковано – друк зупинено</translation>
 <translation id="3102119246920354026">Кеш</translation>
-<translation id="3112413615003385433">Ваш викладач вилучив контент зі School Tools</translation>
+<translation id="3103783611481501187">сюрреалістичність</translation>
+<translation id="3119672627216736407">Доступний переклад</translation>
 <translation id="3122464029669770682">ЦП</translation>
 <translation id="3122614491980756867">ставки</translation>
 <translation id="3122883569442693641">Докладніше</translation>
@@ -473,6 +492,7 @@
 <translation id="3156846309055100599">Сканування сторінки <ph name="PAGE_NUMBER" />…</translation>
 <translation id="315738237743207937">Виявлено адаптивний портал</translation>
 <translation id="3160172848211257835">Надсилати <ph name="BEGIN_LINK1" />інформацію про систему й додатки<ph name="END_LINK1" />, а також <ph name="BEGIN_LINK2" />показники<ph name="END_LINK2" /></translation>
+<translation id="3161556797767210144">Щоб створити короткий виклад і назву, перезапустіть пристрій <ph name="DEVICE_TYPE" /></translation>
 <translation id="3170673040743561620">Розмістіть документ на сканері</translation>
 <translation id="3174321110679064523">Фоновий малюнок "Від світанку до заходу сонця"</translation>
 <translation id="3178532070248519384">авангард</translation>
@@ -487,6 +507,7 @@
 <translation id="3226405216343213872">Пошук сканерів</translation>
 <translation id="3226657629376379887">Меню дій для макета</translation>
 <translation id="3227186760713762082">Поділіть значення "<ph name="CATEGORY_TEXT" />" на <ph name="CONVERSION_RATE" /></translation>
+<translation id="3242622575335502454">цифрове мистецтво</translation>
 <translation id="3246869037381808805">Завдання друку, старіші за 1 день, буде вилучено</translation>
 <translation id="3248791727258378769">Текстова версія не створюватиметься</translation>
 <translation id="324961752321393509">Ваш адміністратор не дозволяє закрити цей додаток</translation>
@@ -505,6 +526,7 @@
 <translation id="3321030238473337787">Швидкість відтворення</translation>
 <translation id="3327613592010997943">Ви зможете знову використовувати цей пристрій <ph name="DAY" /> о <ph name="TIME" />.</translation>
 <translation id="3328783797891415197">Триває перевірка</translation>
+<translation id="3332683265015995419">Космічний корабель у стилі стимпанк летить крізь піщану бурю</translation>
 <translation id="3340011300870565703">Рівень заряду акумулятора правого навушника – <ph name="BATTERY_PERCENTAGE" />%.</translation>
 <translation id="3340978935015468852">налаштування</translation>
 <translation id="3347558044552027859">Сучасний</translation>
@@ -516,6 +538,7 @@
 <translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">Фоновий малюнок "Поверхня землі"</translation>
 <translation id="33736539805963175"><ph name="LETTERS_COLOR" /> фон із літерою "<ph name="LETTERS_LETTER" />"</translation>
+<translation id="3382806462014639823"><ph name="TEACHER_NAME" /> переглядає ваш екран</translation>
 <translation id="3383623117265110236">Ексклюзивно</translation>
 <translation id="3404249063913988450">Активувати заставку</translation>
 <translation id="3413935475507503304">Щоб оновити, натисніть "Далі".</translation>
@@ -523,6 +546,7 @@
 <translation id="3428551088151258685">просто неба</translation>
 <translation id="3428971106895559033">пастельний</translation>
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
+<translation id="3434988468785284438">відображення</translation>
 <translation id="3435738964857648380">Безпека</translation>
 <translation id="3435896845095436175">Увімкнути</translation>
 <translation id="345256797477978759">Закріпити вікно <ph name="DIRECTION" /> на більшій частині екрана</translation>
@@ -539,7 +563,6 @@
 <translation id="3488065109653206955">Частково активовано</translation>
 <translation id="3492882532495507361"><ph name="OFFICE_STYLE" /> офіс в <ph name="OFFICE_COLOR" /> тонах</translation>
 <translation id="3493187369049186498">Дані про використання трафіку вимірює пристрій Chromebook. Вони можуть відрізнятися від даних постачальника.</translation>
-<translation id="349570724365779960">Студентів підключено до додатка School Tools</translation>
 <translation id="3502426834823382181">переглянути всі додатки</translation>
 <translation id="3510890413042482857">Надсилати <ph name="BEGIN_LINK1" />дані відстеження ефективності<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">Оновлення ОС Chrome</translation>
@@ -547,8 +570,8 @@
 <translation id="353214771040290298">Завершити редагування</translation>
 <translation id="3532980081107202182">Залишилося приблизно <ph name="MIN_REMAINING" /> хв</translation>
 <translation id="3533790840489634638">ставок</translation>
-<translation id="3535802910192338629">Ваш викладач додав новий контент у School Tools</translation>
 <translation id="3547264467365135390">Формула</translation>
+<translation id="3552832331940389362">Ілюстрація з японського мультфільму, де кіт сидить на підвіконні й дивиться на дощ удень</translation>
 <translation id="3557205324756024651">Локальна ідентифікація (необов’язково)</translation>
 <translation id="3565064564551103223">Дозволені IP-адреси</translation>
 <translation id="3569407787324516067">Заставка</translation>
@@ -565,6 +588,7 @@
 <translation id="3604713164406837697">Змінити фоновий малюнок</translation>
 <translation id="360565022852130722">Мережа Wi-Fi захищена ненадійним протоколом WEP 802.1x</translation>
 <translation id="3606583719724308068">Велика затримка для веб-сайтів HTTPS</translation>
+<translation id="3614639364827854748">Перемістити це меню ліворуч</translation>
 <translation id="361575905210396100">Дякуємо за відгук</translation>
 <translation id="3621072146987826699">слони</translation>
 <translation id="3628462041319107639">Завантаження моделі транскрипції…</translation>
@@ -623,11 +647,14 @@
 <translation id="38811596981744338">Порушення законодавства</translation>
 <translation id="3885327323343477505">Змінити заставку</translation>
 <translation id="3889914174935857450">Скинути дату</translation>
+<translation id="3889954687526985291">Футуристичний мотоцикл із чорного паперу з неоновими вогнями на темному фоні</translation>
 <translation id="3897092660631435901">Меню</translation>
 <translation id="3902271751020176019">Мова транскрипції</translation>
+<translation id="390890062090528082">зоряне небо</translation>
 <translation id="391412459402535266">Не вдалося перевірити клавіатуру. Перейдіть у режим ноутбука й повторіть спробу.</translation>
 <translation id="3916998944874125962">зробити знімок екрана</translation>
 <translation id="3923184630988645767">Використання трафіку</translation>
+<translation id="392943705803418306">Ваше заняття в Інструментах для уроків завершилося</translation>
 <translation id="3932043219784172185">Немає підключених пристроїв</translation>
 <translation id="3934185438132762746">Не призначено: <ph name="CONTROL_TYPE" /></translation>
 <translation id="3941014780699102620">не вдалося розпізнати хост</translation>
@@ -714,6 +741,7 @@
           <ph name="LINE_BREAK" />
           <ph name="LINE_BREAK" />
           Генеративний ШІ може припускатися помилок (зокрема щодо людей), тому радимо ретельно перевіряти його відповіді. <ph name="BEGIN_LINK_CREATE_YOUR_OWN_WALLPAPER" />Докладніше<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" /></translation>
+<translation id="4253971074682120908">негативний простір</translation>
 <translation id="4258281355379922695">Затримка HTTP</translation>
 <translation id="4266143281602681663">пряжі</translation>
 <translation id="4269815121975886860">Запуск</translation>
@@ -741,6 +769,7 @@
 <translation id="4378373042927530923">Не виконано</translation>
 <translation id="4378551569595875038">Підключення…</translation>
 <translation id="4382484599443659549">PDF</translation>
+<translation id="4383322413532809099">Щоб створити назву запису, перезапустіть пристрій <ph name="DEVICE_TYPE" /></translation>
 <translation id="4394049700291259645">Вимкнути</translation>
 <translation id="439429847087949098"><ph name="DEVICE_NAME" /> перезапускається</translation>
 <translation id="4395835743215824109">налаштування клавіатури</translation>
@@ -769,6 +798,7 @@
 <translation id="4486524074141928967">Ви вийдете з облікового запису о <ph name="TIME" /></translation>
 <translation id="4500722292849917410">Комбінація клавіш недоступна. Натисніть нову комбінацію з використанням клавіші-модифікатора (Ctrl, Alt, Shift або клавіша <ph name="META_KEY" />).</translation>
 <translation id="4500966230243561393">Колір інтерфейсу</translation>
+<translation id="4501302804999678844">Щоб створити транскрипцію, перезапустіть пристрій <ph name="DEVICE_TYPE" /></translation>
 <translation id="4503223151711056411">Стрілка вліво</translation>
 <translation id="4503441351962730761">сучасне мистецтво</translation>
 <translation id="4507392511610824664">збільшити яскравість</translation>
@@ -791,6 +821,7 @@
 <translation id="4593212453765072419">Потрібна автентифікація проксі-сервера</translation>
 <translation id="4594021849294327751">Створити текстову версію</translation>
 <translation id="4594541568452132351">Виберіть мову транскрипції і завантажте модель</translation>
+<translation id="4600301862817165514">Автомобіль Delorean із неоновими вогнями летить крізь галактику, і повз нього проносяться зірки</translation>
 <translation id="4609350030397390689">Зменшити яскравість клавіатури</translation>
 <translation id="4627232916386272576"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="PRINTED_PAGE_NUMBER" /> з <ph name="TOTAL_PAGE_NUMBER" />. Натисніть Enter, щоб скасувати завдання друку.</translation>
 <translation id="463791356324567266">Сканування скасовується…</translation>
@@ -811,7 +842,10 @@
 <translation id="4691278870498629773">Зупинено – немає лотка</translation>
 <translation id="469379815867856270">Потужність сигналу</translation>
 <translation id="4697260493945012995">Виберіть тип керування</translation>
+<translation id="4712940987669302829">ефект боке</translation>
 <translation id="4731797938093519117">Батьківський доступ</translation>
+<translation id="4733200407105375152">Не в Інструментах для уроків</translation>
+<translation id="4734982181169850310">пастельні кольори</translation>
 <translation id="473775607612524610">Оновити</translation>
 <translation id="4744944742468440486">Інформація, пов'язана з виділеним текстом</translation>
 <translation id="4750394297954878236">Пропозиції</translation>
@@ -819,6 +853,7 @@
 <translation id="4771607256327216405">зробити клавіатуру яскравішою</translation>
 <translation id="4771923071974529837">завтра</translation>
 <translation id="4773299976671772492">Зупинено</translation>
+<translation id="4777310452073659583">Щоб отримати транскрипцію, перезапустіть пристрій <ph name="DEVICE_TYPE" /></translation>
 <translation id="4778082030331381943">аметисту</translation>
 <translation id="4782311465517282004">Щоб дізнатися визначення слова, перекласти його або конвертувати одиницю, натисніть правою кнопкою миші або натисніть і втримуйте потрібний текст</translation>
 <translation id="4791000909649665275"><ph name="NUMBER" /> фото</translation>
@@ -861,14 +896,17 @@
 <translation id="4921665434385737356">Акумулятор зарядився на <ph name="RATE" /> за <ph name="NUM_SECONDS" /> с.</translation>
 <translation id="4930320165497208503">Щоб налаштувати або оновити з’єднання, перейдіть у <ph name="BEGIN_LINK" />Налаштування<ph name="END_LINK" />.</translation>
 <translation id="4932733599132424254">Дата</translation>
+<translation id="493637535592633700">біолюмінесценція</translation>
 <translation id="494102685638938793"><ph name="LINK_TEXT" /> (відкриється в новій вкладці)</translation>
 <translation id="4946927805998996217">Створення підсумку</translation>
 <translation id="4950314376641394653"><ph name="DEVICE_NAME" />: мікропрограму пристрою оновлено до версії <ph name="VERSION" /></translation>
 <translation id="4950893758552030541">тунель із дерев</translation>
+<translation id="4964806321337443935">4K</translation>
 <translation id="4965661459364092269">Безпечні налаштування відновлено</translation>
 <translation id="4965703485264574128">Щоб отримати приблизний результат, помножте значення "<ph name="CATEGORY_TEXT" />" на <ph name="CONVERSION_RATE" /></translation>
 <translation id="4969079779290789265">Розділити</translation>
 <translation id="4972592110715526173">змінити режим</translation>
+<translation id="497421865427891073">Перейти вперед</translation>
 <translation id="4981003703840817201">синього й рожевого</translation>
 <translation id="498186245079027698">Перевірте сканер і повторіть спробу. Переконайтеся, що на пристрої достатньо вільного місця для зберігання відсканованих файлів.</translation>
 <translation id="4982627662315910959">Комбінація клавіш недоступна. Натисніть нову комбінацію з використанням клавіші Shift і ще однієї клавіші-модифікатора (Ctrl, Alt або клавіша <ph name="META_KEY" />).</translation>
@@ -876,6 +914,7 @@
 <translation id="4987769320337599931">Брандмауер</translation>
 <translation id="4988526792673242964">Сторінки</translation>
 <translation id="4989542687859782284">Недоступні</translation>
+<translation id="4999267570108760491">стиль векторної графіки</translation>
 <translation id="4999333166442584738">Сховати звіт</translation>
 <translation id="500920857929044050">Зупинити перевірку</translation>
 <translation id="5017508259293544172">LEAP</translation>
@@ -913,6 +952,7 @@
 <translation id="5170568018924773124">Показати в папці</translation>
 <translation id="517075088756846356">Щоб продовжити оновлення, від’єднайте й знову підключіть кабель живлення пристрою <ph name="DEVICE_NAME" /></translation>
 <translation id="5180108905184566358">баобаби</translation>
+<translation id="5180431943345994173">Викладач вилучив контент у додатку Інструменти для уроків</translation>
 <translation id="5180712487038406644">Емоційна</translation>
 <translation id="5190187232518914472">Пориньте в улюблені спогади. Щоб додати або змінити альбом, перейдіть у <ph name="LINK_BEGIN" />Google Фото<ph name="LINK_END" />.</translation>
 <translation id="5212593641110061691">Таблоїд</translation>
@@ -943,6 +983,7 @@
 <translation id="5300172019534884676">надати або скасувати доступ до камери</translation>
 <translation id="5300814202279832142">Перемістити вікно на робочий стіл</translation>
 <translation id="5302048478445481009">Мова</translation>
+<translation id="5303459213631364445">сяяння</translation>
 <translation id="5303837385540978511">Ексклюзивний фоновий малюнок для <ph name="PRODUCT_NAME" /></translation>
 <translation id="5304899856529773394">Стандарт EvDo</translation>
 <translation id="530883153651464140">Оновити пристрій <ph name="DEVICE_NAME" /> до версії <ph name="VERSION" /></translation>
@@ -980,6 +1021,7 @@
 <translation id="5499762266711462226">Колір підсвічування клавіатури залежить від фонового малюнка</translation>
 <translation id="5502931783115429516">Android не працює</translation>
 <translation id="550600468576850160">лука</translation>
+<translation id="5507504956167780539">Мінімалістичне професійне фото мерехтливих чорних піщаних дюн з ефектними тінями</translation>
 <translation id="551689408806449779">Пристрій відключено. Щоб продовжити тестування, спробуйте підключитися знову.</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="552644173505433109">Докладніше про створення підсумку й назви</translation>
@@ -1006,6 +1048,7 @@
 <translation id="5628106863521633649">Доступні мови</translation>
 <translation id="5630438231335788050">баухаус</translation>
 <translation id="5631759159893697722">автореферат</translation>
+<translation id="5655084389678168978">Викладач додав новий контент у додатку Інструменти для уроків</translation>
 <translation id="5655283760733841251">Збільшити яскравість клавіатури</translation>
 <translation id="5655296450510165335">Реєстрація пристрою</translation>
 <translation id="5655776422854483175">Немає завдань друку</translation>
@@ -1029,7 +1072,6 @@
 <translation id="5760715441271661976">Стан порталу</translation>
 <translation id="5763838252932650682">Перезапуск і оновлення додатка <ph name="APP_NAME" /></translation>
 <translation id="576835345334454681">Збільшити яскравість екрана</translation>
-<translation id="5775340474232476653">Викладач завершив заняття</translation>
 <translation id="5779818640587041940">Не вимикати екран під час запису</translation>
 <translation id="57838592816432529">Вимкнути звук</translation>
 <translation id="5784136236926853061">Велика затримка HTTP</translation>
@@ -1046,16 +1088,17 @@
 <translation id="5859969039821714932">Комбінація клавіш недоступна. Натисніть нову комбінацію без клавіші <ph name="KEY" />.</translation>
 <translation id="5860033963881614850">Вимк.</translation>
 <translation id="5860491529813859533">Увімкнути</translation>
+<translation id="586463370326011345">блискавка</translation>
 <translation id="5875913454160982848">Завантажити модель транскрипції</translation>
 <translation id="5876385649737594562">Увімкніть, щоб вибрати параметри</translation>
 <translation id="5877503382465267833">Призупинити відтворення запису "<ph name="RECORDING_NAME" />"</translation>
 <translation id="588258955323874662">Повноекранний режим</translation>
+<translation id="5889539348012432386">Головна сторінка Інструментів для уроків</translation>
 <translation id="5893975327266416093">Щоб призначити дію, натисніть клавішу клавіатури</translation>
 <translation id="5895138241574237353">Перезапустити</translation>
 <translation id="5896602941605730551">Відтворити</translation>
 <translation id="5901630391730855834">Жовтий</translation>
 <translation id="5903200662178656908">Пристрій – це набір із клавіатури й миші.</translation>
-<translation id="5903822368221507416">Сховати вкладки</translation>
 <translation id="5904994456462260490">Додати нове ім’я точки доступу (APN)</translation>
 <translation id="590746845088109442">коти</translation>
 <translation id="5907649332524363701">колір клавіш</translation>
@@ -1095,10 +1138,12 @@
 <translation id="6058625436358447366">Щоб завершити, введіть старий і новий паролі</translation>
 <translation id="6061772781719867950">невдалі запити HTTPS</translation>
 <translation id="6073292342939316679">зменшити яскравість клавіатури</translation>
+<translation id="6074608334942655098">Не перекладати</translation>
 <translation id="6074752328838739425">Приховати підсумок</translation>
 <translation id="6075872808778243331">Затримка HTTP (Android)</translation>
 <translation id="6078323886959318429">Додати ярлик</translation>
 <translation id="6079693086494835199">Скиньте налаштування, щоб переконатися, що головна сторінка за умовчанням не є фішинговим сайтом. Використовуйте лише надійні вебсайти.</translation>
+<translation id="6090672065638047175">Фотографія сяючого дерева із зірок на тлі прекрасного нічного неба й галактики</translation>
 <translation id="6091080061796993741">жовтого</translation>
 <translation id="6104112872696127344">Сканування скасовано</translation>
 <translation id="6106186594183574873">Щоб завершити, введіть старий пароль</translation>
@@ -1181,6 +1226,7 @@
 <translation id="6417265370957905582">Google Асистент</translation>
 <translation id="6419454453018688975">Надайте доступ до геоданих системи</translation>
 <translation id="6423239382391657905">OpenVPN</translation>
+<translation id="642713342828771202">захід сонця</translation>
 <translation id="6437513277380808188">TXT</translation>
 <translation id="6439505561246192797">Слабкий сигнал (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="6447630859861661624">Перейти до налаштувань облікового запису</translation>
@@ -1283,6 +1329,7 @@
 <translation id="6900701049656042631">У цьому альбомі немає фотографій. Щоб додати фото, перейдіть на сторінку <ph name="LINK" />.</translation>
 <translation id="6902359863093437070">Створити фонове зображення за допомогою ШІ</translation>
 <translation id="6905163627763043954">Спробувати</translation>
+<translation id="6905275015682612674">Фото з довгою витримкою, на якому зображений біолюмінесцентний пляж на заході сонця й зірки в небі, красиві пастельні кольори, 4К</translation>
 <translation id="6905724422583748843">Повернутися на сторінку <ph name="PAGE_NAME" /></translation>
 <translation id="6910312834584889076">Кришка сканера відкрита. Закрийте її та повторіть спробу.</translation>
 <translation id="6910845598686542904">створювати моделі кожного з виявлених голосів у записі;</translation>
@@ -1290,7 +1337,9 @@
 <translation id="6926069762081461162">Назва запису</translation>
 <translation id="6930242544192836755">Тривалість</translation>
 <translation id="6930597342185648547">Про фон</translation>
+<translation id="6931666215260956151">галактика</translation>
 <translation id="6939766318048400022">Кафе</translation>
+<translation id="6940212863873359282">Біла органза розвівається над білою мармуровою аркою на кремовому фоні</translation>
 <translation id="6942253772720771875">Залиште відгук або опишіть проблему</translation>
 <translation id="6943893908656559156">Віддалена ідентифікація (необов’язково)</translation>
 <translation id="694981048020558038">Пошук за назвою запису</translation>
@@ -1366,6 +1415,7 @@
 <translation id="7212547870105584639">Керуйте налаштуваннями APN мережі: за допомогою ідентифікаторів APN установлюється зв’язок між мобільною мережею і Інтернетом. <ph name="BEGIN_LINK_LEARN_MORE" />Докладніше<ph name="END_LINK_LEARN_MORE" /></translation>
 <translation id="7212734716605298123">Оновлення мікропрограми для зовнішніх пристроїв</translation>
 <translation id="7216409898977639127">Постачальник мобільного зв’язку</translation>
+<translation id="7221869452894271364">Перезавантажити цю сторінку</translation>
 <translation id="7223952304612664117">Системні сервіси зможуть використовувати точну геолокацію, щоб визначати ваше місцезнаходження. Для визначення місцеположення пристрою використовується інформація про бездротові сигнали й датчики.</translation>
 <translation id="7233782086689993269">Комбінацію клавіш відновлено</translation>
 <translation id="723419678599947502">Створити назву за допомогою ШІ від Google</translation>
@@ -1376,6 +1426,7 @@
 <translation id="7271040990581020067">Cканер використовується. Повторіть спробу пізніше.</translation>
 <translation id="7271932918253517778">Комбінація з клавішами верхнього рядка має містити клавішу <ph name="META_KEY" />.</translation>
 <translation id="7274587244503383581"><ph name="PRINTED_PAGES_NUMBER" />/<ph name="TOTAL_PAGES_NUMBER" /></translation>
+<translation id="7275707758336796649">Далматинець на рожевому фоні в динамічній позі, знімок із високою роздільною здатністю, гіперреалістичний фон із фотобанку з градацією кольору</translation>
 <translation id="7281657306185710294">Бриз</translation>
 <translation id="7287310195820267359">Колекції фонових малюнків</translation>
 <translation id="7293429513719260019">Вибрати мову</translation>
@@ -1385,6 +1436,7 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Ставте запитання спеціалістам на довідковому форуму Chromebook</translation>
+<translation id="7309823890857024809">Мінімалістичний натюрморт із кількома квітками римського маку в скляній вазі на чорному фоні</translation>
 <translation id="7311368985037279727">колір клавіатури</translation>
 <translation id="7317831949569936035">Реєстрація в закладі освіти</translation>
 <translation id="7319430975418800333">A3</translation>
@@ -1402,6 +1454,7 @@
 <translation id="7353413232959255829">Результат пошуку <ph name="LIST_POSITION" /> з <ph name="LIST_SIZE" />: <ph name="SEARCH_RESULT_TEXT" />. Натисніть Enter, щоб перейти до комбінації клавіш.</translation>
 <translation id="7359657277149375382">Тип файлу</translation>
 <translation id="73631062356239394">Поділитися даними діагностики</translation>
+<translation id="7369648056634183167">Крупний план витонченої, укритої росою водяної лілії під дощем. У фокусі ніжні пелюстки й краплі води, що відбивають світло, у м’яких пастельних кольорах на синьому фоні. Зйомка з позиції на рівні очей в умовах природного освітлення.</translation>
 <translation id="7375053625150546623">EAP</translation>
 <translation id="7378170410161264436">Диктофон може створювати текстові версії записів із мовленням.
 Для цього потрібно завантажити модель транскрипції (до 100 МБ).</translation>
@@ -1409,7 +1462,6 @@
 <translation id="7388345524791662148">Інші опції для запису "<ph name="RECORDING_NAME" />"</translation>
 <translation id="7388959671917308825">Вбудована сенсорна панель</translation>
 <translation id="7397270852490618635">Вимкнути світлу тему</translation>
-<translation id="7400166052988585408">Викладач заблокує ваш екран через <ph name="NUM_SECONDS" /> с</translation>
 <translation id="7401543881546089382">Видалити комбінацію клавіш</translation>
 <translation id="7405493795721832710">Пристрій <ph name="DEVICE_NAME" /> готовий до оновлення</translation>
 <translation id="741244894080940828">конвертація</translation>
@@ -1424,6 +1476,7 @@
 <translation id="7481312909269577407">Уперед</translation>
 <translation id="7487067081878637334">Технології</translation>
 <translation id="7490813197707563893">MAC-адреса</translation>
+<translation id="7494145938791663804">краса</translation>
 <translation id="7497215489070763236">Сертифікат ЦС для сервера</translation>
 <translation id="7500205272584643581">Дозволити Диктофону визначати й позначати мовців?</translation>
 <translation id="7501957181231305652">або</translation>
@@ -1441,7 +1494,6 @@
 <translation id="7544853251252956727">Перемішати</translation>
 <translation id="7550715992156305117">Послідовності дій для діагностики</translation>
 <translation id="7551123448725492271">Це аудіопристрій.</translation>
-<translation id="7553913964854052228">Додаток School Tools використовує ваш мікрофон</translation>
 <translation id="7559239713112547082">Попередній перегляд знімка екрана</translation>
 <translation id="7561454561030345039">Цією дією керує адміністратор</translation>
 <translation id="7561759921596375678">Увімкнути звук</translation>
@@ -1480,6 +1532,7 @@
 <translation id="7760571082554155847">Налаштування головної сторінки</translation>
 <translation id="7762130827864645708">Ваш пароль змінено. Відтепер використовуйте новий.</translation>
 <translation id="7763470514545477072">Збіг із суфіксом домену</translation>
+<translation id="7764171263909999400">об’ємне світло</translation>
 <translation id="7769672763586021400">Ідентифікатор моделі</translation>
 <translation id="7774759755755950354">Назад</translation>
 <translation id="7778717409420828014">Наша команда перегляне ваш відгук. Він допоможе нам покращити роботу Chromebook. Зверніть увагу: через велику кількість повідомлень ми не відповідаємо на них.</translation>
@@ -1533,6 +1586,7 @@
 <translation id="7971535376154084247">Загальні налаштування</translation>
 <translation id="7977800524392185497">Щоб приєднатися до мережі <ph name="NETWORK_NAME" />, перейдіть у налаштування</translation>
 <translation id="7978412674231730200">Секретний ключ</translation>
+<translation id="7979468455552394856">Додаток Інструменти для уроків підключено до пристроїв студентів</translation>
 <translation id="7982789257301363584">Мережа</translation>
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{Додаток <ph name="APP_NAME_1" /> запущено автоматично}one{# додаток запущено автоматично}few{# додатки запущено автоматично}many{# додатків запущено автоматично}other{# додатка запущено автоматично}}</translation>
 <translation id="7994702968232966508">Метод EAP</translation>
@@ -1562,7 +1616,7 @@
 <translation id="8088963492174775412">Натисніть, щоб створити запис</translation>
 <translation id="8094062939584182041">Дозволити Google надсилати вам електронні листи щодо цієї проблеми</translation>
 <translation id="8104083085214006426">Ви використовуєте відкриту та незахищену мережу</translation>
-<translation id="8110942816572072814">Викладач заблокував ваш екран</translation>
+<translation id="8108879170356113798">Ви зможете використовувати лише Інструменти для уроків через <ph name="NUM_SECONDS" /> с</translation>
 <translation id="811820734797650957">Шлюз можна перевірити (Android)</translation>
 <translation id="8129620843620772246"><ph name="TEMPERATURE_C" />° C</translation>
 <translation id="8131740175452115882">Підтвердити</translation>
@@ -1570,6 +1624,7 @@
 <translation id="8135609423982943441">На пристрої Chromebook відновлено безпечні параметри за умовчанням. Ви можете будь-коли змінити їх у налаштуваннях.</translation>
 <translation id="8138405288920084977">LTEAdvanced</translation>
 <translation id="8140591278915222789">Створіть власну</translation>
+<translation id="8142182840415860496">Кілька білих і жовтих квітів крупним планом, кадр із мультфільму, ніжна світло-рожева квітка з довгими пелюстками й зеленим стеблом між двома великими жовтими тюльпанами на тлі блакитного неба, без листя чи рослинності, пастельні тони, кадр із кінофільму з високою роздільною здатністю й відрисовкою деталей, зображення, створене за допомогою системи рендерингу Octane Render, з красивим об’ємним і похмурим світлом.</translation>
 <translation id="8143951647992294073">Вибрати тему "<ph name="TOPIC_SOURCE" />" з описом "<ph name="TOPIC_SOURCE_DESC" />"</translation>
 <translation id="8151185429379586178">Інструменти розробника</translation>
 <translation id="8152370627892825"><ph name="DESCRIPTION" />, <ph name="ACCELERATOR_INFO" />.</translation>
@@ -1603,7 +1658,6 @@
 <translation id="8318753676953949627">Немає зображень</translation>
 <translation id="8319809980370328428">Короткий виклад запису й створення назви</translation>
 <translation id="8320910311642849813">ліс</translation>
-<translation id="8322464149031882595">Натисніть, щоб перейти вперед</translation>
 <translation id="8329018942023753850">додаток Калькулятор</translation>
 <translation id="8336739000755212683">Змінити зображення облікового запису на пристрої</translation>
 <translation id="8339024191194156249">Докладніше про автоматичний запуск</translation>
@@ -1651,12 +1705,14 @@
 <translation id="8503813439785031346">Ім’я користувача</translation>
 <translation id="8503836310948963452">Залишилося кілька хвилин…</translation>
 <translation id="8505011850330200833">Щоб обробляти текстові версії викликів і створювати підсумки, моделі Gemini потрібно 2 ГБ пам’яті</translation>
+<translation id="8506063704538210734">Фото нічного неба з метеоритним дощем і кількома деревами на передньому плані у фіолетових і рожевих відтінках</translation>
+<translation id="8506394543220680287">снігове покриття</translation>
 <translation id="8508640263392900755">Відомості про APN</translation>
 <translation id="8522687886059337719">Тепер ви маєте доступ до нових <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />фонових малюнків<ph name="END_LINK_WALLPAPER_SUBPAGE" /> і <ph name="BEGIN_LINK_SCREENSAVER_SUBPAGE" />заставок<ph name="END_LINK_SCREENSAVER_SUBPAGE" /></translation>
 <translation id="8528615187455571738">Crosvm</translation>
 <translation id="852896705346853285">в стилі чайхани</translation>
+<translation id="8531692079895415839">туман</translation>
 <translation id="8538236298648811558">На основі технології ШІ від Google</translation>
-<translation id="8543574988889671960">Оновити вкладку</translation>
 <translation id="8550364285433943656">Виберіть клавіші для дій, щоб грати за допомогою клавіатури</translation>
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8558521694042102707">Генеративний ШІ може припускатися помилок (зокрема щодо людей), тому радимо ретельно перевіряти його відповіді.</translation>
@@ -1664,7 +1720,6 @@
 <translation id="8576249514688522074">Не ініціалізовано</translation>
 <translation id="8584654835905316966">Щоб завершити оновлення мікропрограми пристрою <ph name="DEVICE_NAME" /> до версії <ph name="VERSION" />, потрібно перезапустити пристрій. Ваш комп’ютер може перезапуститися кілька разів. Це нормально.</translation>
 <translation id="8593058461203131755">призупинити відтворення медіаконтенту</translation>
-<translation id="8619169570378509764">School Tools</translation>
 <translation id="8620617069779373398">Статус роумінгу</translation>
 <translation id="8626489604350149811">Інші дії для точки доступу <ph name="APN_NAME" /></translation>
 <translation id="86356131183441916">Світло-фіолетовий</translation>
@@ -1674,11 +1729,13 @@
 <translation id="8655295600908251630">Канал</translation>
 <translation id="8655828773034788261">Надіслати URL-адресу:</translation>
 <translation id="8660881923941176839">фунт.</translation>
+<translation id="8669187096858652220">Натисніть, щоб відобразити вкладки</translation>
 <translation id="8670574982334489519">праворуч</translation>
 <translation id="8675354002693747642">Спільний ключ</translation>
 <translation id="8677859815076891398">Немає альбомів. Створіть їх у <ph name="LINK_BEGIN" />Google Фото<ph name="LINK_END" />.</translation>
 <translation id="8682949824227998083">рамен</translation>
 <translation id="8689520252402395106">Щоб продовжити оновлення, повторно вставте USB-кабель у пристрій <ph name="DEVICE_NAME" /></translation>
+<translation id="8699053192961439771">Натисніть, щоб автоматично приховувати вкладки</translation>
 <translation id="8709616837707653427"><ph name="DESC_TEXT" /> Щоб керувати цією функцією, натискайте стрілки ліворуч або праворуч.</translation>
 <translation id="8712637175834984815">OK</translation>
 <translation id="871560550817059752">Не надруковано – закінчилося чорнило</translation>
@@ -1708,7 +1765,6 @@
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="8833620912470026819">кактусовий ліс</translation>
 <translation id="8834539327799336565">Підключено</translation>
-<translation id="8842526499753992487">Перемістити у верхній лівий кут</translation>
 <translation id="8845001906332463065">Отримати довідку</translation>
 <translation id="8849799913685544685">Маяк</translation>
 <translation id="8851859208664803097">Зупинено – принтер недоступний</translation>
@@ -1748,15 +1804,16 @@
 <translation id="8961025972867871808">пінгвіни</translation>
 <translation id="8968751544471797276">Швидкість заряджання</translation>
 <translation id="8970109610781093811">Запустити знову</translation>
-<translation id="8972061581514441296">Натисніть, щоб повернутися назад</translation>
 <translation id="8983038754672563810">HSPA</translation>
 <translation id="8987565828374052507">{NUMBER_OF_PAGES,plural, =0{Сканувати}=1{Сканувати сторінку ({NUMBER_OF_PAGES})}one{Сканувати сторінки ({NUMBER_OF_PAGES})}few{Сканувати сторінки ({NUMBER_OF_PAGES})}many{Сканувати сторінки ({NUMBER_OF_PAGES})}other{Сканувати сторінки ({NUMBER_OF_PAGES})}}</translation>
 <translation id="89945434909472341">село</translation>
 <translation id="8997710128084572139">Рівень заряду акумулятора пристрою – <ph name="BATTERY_PERCENTAGE" />%.</translation>
+<translation id="8998002498898621320">реалістична фотографія</translation>
 <translation id="8998289560386111590">Недоступно на вашому пристрої</translation>
 <translation id="9000871120886759611">Скиньте налаштування, щоб переглядати інформацію своєю мовою. Переконайтеся, що використовуються лише потрібні мови.</translation>
 <translation id="9003499805101629690">піца</translation>
 <translation id="9003704114456258138">Частота</translation>
+<translation id="9017411601860840405">неонові вогні</translation>
 <translation id="901834265349196618">електронна адреса</translation>
 <translation id="9022897536196898720">квіти</translation>
 <translation id="9024331582947483881">усього екрана</translation>

@@ -25,9 +25,11 @@
 #include "api/sequence_checker.h"
 #include "api/task_queue/pending_task_safety_flag.h"
 #include "api/task_queue/task_queue_base.h"
+#include "api/transport/stun.h"
 #include "api/units/time_delta.h"
 #include "p2p/base/port_interface.h"
 #include "rtc_base/async_packet_socket.h"
+#include "rtc_base/byte_buffer.h"
 #include "rtc_base/ip_address.h"
 #include "rtc_base/network/received_packet.h"
 #include "rtc_base/socket.h"
@@ -35,15 +37,6 @@
 #include "rtc_base/ssl_adapter.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/thread_annotations.h"
-
-namespace rtc {
-class ByteBufferWriter;
-
-}  // namespace rtc
-namespace cricket {
-class StunMessage;
-class TurnMessage;
-}  // namespace cricket
 
 namespace webrtc {
 
@@ -100,8 +93,8 @@ class TurnServerAllocation final {
 
   std::string ToString() const;
 
-  void HandleTurnMessage(const cricket::TurnMessage* msg);
-  void HandleChannelData(rtc::ArrayView<const uint8_t> payload);
+  void HandleTurnMessage(const TurnMessage* msg);
+  void HandleChannelData(ArrayView<const uint8_t> payload);
 
  private:
   struct Channel {
@@ -118,25 +111,25 @@ class TurnServerAllocation final {
 
   void PostDeleteSelf(TimeDelta delay);
 
-  void HandleAllocateRequest(const cricket::TurnMessage* msg);
-  void HandleRefreshRequest(const cricket::TurnMessage* msg);
-  void HandleSendIndication(const cricket::TurnMessage* msg);
-  void HandleCreatePermissionRequest(const cricket::TurnMessage* msg);
-  void HandleChannelBindRequest(const cricket::TurnMessage* msg);
+  void HandleAllocateRequest(const TurnMessage* msg);
+  void HandleRefreshRequest(const TurnMessage* msg);
+  void HandleSendIndication(const TurnMessage* msg);
+  void HandleCreatePermissionRequest(const TurnMessage* msg);
+  void HandleChannelBindRequest(const TurnMessage* msg);
 
   void OnExternalPacket(AsyncPacketSocket* socket,
-                        const rtc::ReceivedPacket& packet);
+                        const ReceivedIpPacket& packet);
 
-  static TimeDelta ComputeLifetime(const cricket::TurnMessage& msg);
+  static TimeDelta ComputeLifetime(const TurnMessage& msg);
   bool HasPermission(const IPAddress& addr);
   void AddPermission(const IPAddress& addr);
   PermissionList::iterator FindPermission(const IPAddress& addr);
   ChannelList::iterator FindChannel(int channel_id);
   ChannelList::iterator FindChannel(const SocketAddress& addr);
 
-  void SendResponse(cricket::TurnMessage* msg);
-  void SendBadRequestResponse(const cricket::TurnMessage* req);
-  void SendErrorResponse(const cricket::TurnMessage* req,
+  void SendResponse(TurnMessage* msg);
+  void SendBadRequestResponse(const TurnMessage* req);
+  void SendErrorResponse(const TurnMessage* req,
                          int code,
                          absl::string_view reason);
   void SendExternal(const void* data, size_t size, const SocketAddress& peer);
@@ -176,8 +169,8 @@ class TurnRedirectInterface {
 
 class StunMessageObserver {
  public:
-  virtual void ReceivedMessage(const cricket::TurnMessage* msg) = 0;
-  virtual void ReceivedChannelData(rtc::ArrayView<const uint8_t> payload) = 0;
+  virtual void ReceivedMessage(const TurnMessage* msg) = 0;
+  virtual void ReceivedChannelData(ArrayView<const uint8_t> payload) = 0;
   virtual ~StunMessageObserver() {}
 };
 
@@ -258,7 +251,7 @@ class TurnServer : public sigslot::has_slots<> {
   void AddInternalServerSocket(
       Socket* socket,
       ProtocolType proto,
-      std::unique_ptr<rtc::SSLAdapterFactory> ssl_adapter_factory = nullptr);
+      std::unique_ptr<SSLAdapterFactory> ssl_adapter_factory = nullptr);
   // Specifies the factory to use for creating external sockets.
   void SetExternalSocketFactory(PacketSocketFactory* factory,
                                 const SocketAddress& address);
@@ -281,7 +274,7 @@ class TurnServer : public sigslot::has_slots<> {
 
   std::string GenerateNonce(int64_t now) const RTC_RUN_ON(thread_);
   void OnInternalPacket(AsyncPacketSocket* socket,
-                        const rtc::ReceivedPacket& packet) RTC_RUN_ON(thread_);
+                        const ReceivedIpPacket& packet) RTC_RUN_ON(thread_);
 
   void OnNewInternalConnection(Socket* socket);
 
@@ -290,19 +283,16 @@ class TurnServer : public sigslot::has_slots<> {
   void OnInternalSocketClose(AsyncPacketSocket* socket, int err);
 
   void HandleStunMessage(TurnServerConnection* conn,
-                         rtc::ArrayView<const uint8_t> payload)
-      RTC_RUN_ON(thread_);
-  void HandleBindingRequest(TurnServerConnection* conn,
-                            const cricket::StunMessage* msg)
+                         ArrayView<const uint8_t> payload) RTC_RUN_ON(thread_);
+  void HandleBindingRequest(TurnServerConnection* conn, const StunMessage* msg)
       RTC_RUN_ON(thread_);
   void HandleAllocateRequest(TurnServerConnection* conn,
-                             const cricket::TurnMessage* msg,
+                             const TurnMessage* msg,
                              absl::string_view key) RTC_RUN_ON(thread_);
 
-  bool GetKey(const cricket::StunMessage* msg, std::string* key)
-      RTC_RUN_ON(thread_);
+  bool GetKey(const StunMessage* msg, std::string* key) RTC_RUN_ON(thread_);
   bool CheckAuthorization(TurnServerConnection* conn,
-                          cricket::StunMessage* msg,
+                          StunMessage* msg,
                           absl::string_view key) RTC_RUN_ON(thread_);
   bool ValidateNonce(absl::string_view nonce) const RTC_RUN_ON(thread_);
 
@@ -314,23 +304,23 @@ class TurnServer : public sigslot::has_slots<> {
       RTC_RUN_ON(thread_);
 
   void SendErrorResponse(TurnServerConnection* conn,
-                         const cricket::StunMessage* req,
+                         const StunMessage* req,
                          int code,
                          absl::string_view reason);
 
   void SendErrorResponseWithRealmAndNonce(TurnServerConnection* conn,
-                                          const cricket::StunMessage* req,
+                                          const StunMessage* req,
                                           int code,
                                           absl::string_view reason)
       RTC_RUN_ON(thread_);
 
   void SendErrorResponseWithAlternateServer(TurnServerConnection* conn,
-                                            const cricket::StunMessage* req,
+                                            const StunMessage* req,
                                             const SocketAddress& addr)
       RTC_RUN_ON(thread_);
 
-  void SendStun(TurnServerConnection* conn, cricket::StunMessage* msg);
-  void Send(TurnServerConnection* conn, const rtc::ByteBufferWriter& buf);
+  void SendStun(TurnServerConnection* conn, StunMessage* msg);
+  void Send(TurnServerConnection* conn, const ByteBufferWriter& buf);
 
   void DestroyAllocation(TurnServerAllocation* allocation) RTC_RUN_ON(thread_);
   void DestroyInternalSocket(AsyncPacketSocket* socket) RTC_RUN_ON(thread_);
@@ -339,7 +329,7 @@ class TurnServer : public sigslot::has_slots<> {
   struct ServerSocketInfo {
     ProtocolType proto;
     // If non-null, used to wrap accepted sockets.
-    std::unique_ptr<rtc::SSLAdapterFactory> ssl_adapter_factory;
+    std::unique_ptr<SSLAdapterFactory> ssl_adapter_factory;
   };
   typedef std::map<Socket*, ServerSocketInfo> ServerSocketMap;
 
@@ -380,6 +370,7 @@ class TurnServer : public sigslot::has_slots<> {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::kMaxTurnChannelNumber;
 using ::webrtc::kMinTurnChannelNumber;
@@ -391,5 +382,6 @@ using ::webrtc::TurnServer;
 using ::webrtc::TurnServerAllocation;
 using ::webrtc::TurnServerConnection;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_TURN_SERVER_H_

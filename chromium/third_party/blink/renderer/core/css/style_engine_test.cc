@@ -3675,6 +3675,60 @@ TEST_F(StyleEngineTest, FunctionalMediaInvalidationDataClearedOnFullRecalc) {
   EXPECT_EQ(0u, FunctionalMediaQueryResultsSize());
 }
 
+TEST_F(StyleEngineTest, CustomFunctionInUserOrigin) {
+  // @function in the user origin:
+  InjectSheet("user1", WebCssOrigin::kUser, R"CSS(
+    @function --f() {
+      result: 10px;
+    }
+    body {
+      width: --f();
+    }
+  )CSS");
+  UpdateAllLifecyclePhases();
+  ASSERT_TRUE(ComputedValue(GetDocument().body(), "width"));
+  EXPECT_EQ("10px", ComputedValue(GetDocument().body(), "width")->CssText());
+
+  // @function in the author origin (should win over user origin):
+  InjectSheet("author1", WebCssOrigin::kAuthor, R"CSS(
+    @function --f() {
+      result: 20px;
+    }
+    body {
+      width: --f();
+    }
+  )CSS");
+  UpdateAllLifecyclePhases();
+  ASSERT_TRUE(ComputedValue(GetDocument().body(), "width"));
+  EXPECT_EQ("20px", ComputedValue(GetDocument().body(), "width")->CssText());
+
+  // Add a second user origin sheet:
+  InjectSheet("user2", WebCssOrigin::kUser, R"CSS(
+    @function --f() {
+      result: 30px;
+    }
+    body {
+      width: --f();
+    }
+  )CSS");
+  UpdateAllLifecyclePhases();
+  ASSERT_TRUE(ComputedValue(GetDocument().body(), "width"));
+  // Author sheet still wins:
+  EXPECT_EQ("20px", ComputedValue(GetDocument().body(), "width")->CssText());
+
+  GetStyleEngine().RemoveInjectedSheet(AtomicString("author1"),
+                                       WebCssOrigin::kAuthor);
+  UpdateAllLifecyclePhases();
+  ASSERT_TRUE(ComputedValue(GetDocument().body(), "width"));
+  EXPECT_EQ("30px", ComputedValue(GetDocument().body(), "width")->CssText());
+
+  GetStyleEngine().RemoveInjectedSheet(AtomicString("user2"),
+                                       WebCssOrigin::kUser);
+  UpdateAllLifecyclePhases();
+  ASSERT_TRUE(ComputedValue(GetDocument().body(), "width"));
+  EXPECT_EQ("10px", ComputedValue(GetDocument().body(), "width")->CssText());
+}
+
 TEST_F(StyleEngineTest, RevertUseCount) {
   GetDocument().body()->setInnerHTML(
       "<style>div { display: unset; }</style><div></div>");
@@ -4486,7 +4540,8 @@ TEST_F(StyleEngineSimTest, IFramePreferredColorScheme) {
             frame_document->GetStyleEngine().GetPreferredColorScheme());
 }
 
-TEST_F(StyleEngineContainerQueryTest, UpdateStyleAndLayoutTreeForContainer) {
+TEST_F(StyleEngineContainerQueryTest,
+       UpdateStyleAndLayoutTreeForSizeContainer) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
       .container {
@@ -4533,14 +4588,14 @@ TEST_F(StyleEngineContainerQueryTest, UpdateStyleAndLayoutTreeForContainer) {
   ASSERT_TRUE(container2);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+  GetStyleEngine().UpdateStyleAndLayoutTreeForSizeContainer(
       *container1, LogicalSize(200, 100), kLogicalAxesBoth);
 
   // The first span.affected child and #container2
   EXPECT_EQ(2u, GetStyleEngine().StyleForElementCount() - start_count);
 
   start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+  GetStyleEngine().UpdateStyleAndLayoutTreeForSizeContainer(
       *container2, LogicalSize(200, 100), kLogicalAxesBoth);
 
   // Three direct span.affected children, and the two display:none elements.
@@ -4597,7 +4652,7 @@ TEST_F(StyleEngineContainerQueryTest, ContainerQueriesContainmentNotApplying) {
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
 
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+  GetStyleEngine().UpdateStyleAndLayoutTreeForSizeContainer(
       *container, LogicalSize(200, 100), kLogicalAxesBoth);
 
   // Even though none of the inner containers are eligible for containment,
@@ -4633,7 +4688,7 @@ TEST_F(StyleEngineContainerQueryTest, PseudoElementContainerQueryRecalc) {
   ASSERT_TRUE(span);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+  GetStyleEngine().UpdateStyleAndLayoutTreeForSizeContainer(
       *container, LogicalSize(200, 100), kLogicalAxesBoth);
 
   // The two ::before elements + #span.
@@ -4670,12 +4725,12 @@ TEST_F(StyleEngineContainerQueryTest, MarkStyleDirtyFromContainerRecalc) {
   EXPECT_TRUE(old_inner_style);
 
   unsigned start_count = GetStyleEngine().StyleForElementCount();
-  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(
+  GetStyleEngine().UpdateStyleAndLayoutTreeForSizeContainer(
       *container, LogicalSize(200, 100), kLogicalAxesBoth);
 
   // Input elements mark their InnerEditorElement() style-dirty when they are
-  // recalculated. That means the UpdateStyleAndLayoutTreeForContainer() call
-  // above will involve marking ChildNeedsStyleRecalc all the way up to the
+  // recalculated. That means the UpdateStyleAndLayoutTreeForSizeContainer()
+  // call above will involve marking ChildNeedsStyleRecalc all the way up to the
   // documentElement. Check that we don't leave anything dirty.
   EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdate());
   EXPECT_FALSE(GetDocument().documentElement()->ChildNeedsStyleRecalc());
@@ -7381,6 +7436,8 @@ TEST_F(StyleEngineTest, ScrollStateUseCounter) {
 }
 
 TEST_F(StyleEngineTest, CSSVarFallbackCycleCounter) {
+  ScopedCSSShortCircuitVarAttrForTest scoped_feature(false);
+
   // No fallback.
   ClearUseCounter(WebFeature::kCSSVarFallbackCycle);
   GetDocument().body()->setInnerHTML(R"HTML(
@@ -7436,6 +7493,8 @@ TEST_F(StyleEngineTest, CSSVarFallbackCycleCounter) {
 }
 
 TEST_F(StyleEngineTest, CSSAttrFallbackCycleCounter) {
+  ScopedCSSShortCircuitVarAttrForTest scoped_feature(false);
+
   // No fallback.
   ClearUseCounter(WebFeature::kCSSAttrFallbackCycle);
   GetDocument().body()->setInnerHTML(R"HTML(

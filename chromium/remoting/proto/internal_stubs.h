@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "remoting/proto/logging_service.h"
+#include "remoting/proto/remote_support_service.h"
 #include "remoting/proto/session_authz_service.h"
 #include "third_party/protobuf/src/google/protobuf/message_lite.h"
 
@@ -132,6 +133,16 @@ using ReportSessionDisconnectedRequest = DoNothingProto;
 extern std::unique_ptr<ReportSessionDisconnectedRequest>
 GetReportSessionDisconnectedRequest(
     const ReportSessionDisconnectedRequestStruct&);
+
+// ============================
+// RemoteSupportService helpers
+// ============================
+
+using RemoteSupportHost = DoNothingProto;
+extern std::string_view GetCreateRemoteSupportHostRequestPath();
+extern std::unique_ptr<RemoteSupportHost> GetRemoteSupportHost(
+    const RemoteSupportHostStruct& request_struct);
+extern std::string_view GetSupportId(const RemoteSupportHost&);
 
 }  // namespace remoting::internal
 

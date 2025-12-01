@@ -656,10 +656,7 @@ void CodeAssembler::AbortCSADcheck(Node* message) {
 
 void CodeAssembler::DebugBreak() { raw_assembler()->DebugBreak(); }
 
-void CodeAssembler::Unreachable() {
-  DebugBreak();
-  raw_assembler()->Unreachable();
-}
+void CodeAssembler::Unreachable() { raw_assembler()->Unreachable(); }
 
 void CodeAssembler::EmitComment(std::string str) {
   if (!v8_flags.code_comments) return;
@@ -713,6 +710,10 @@ void CodeAssembler::SetStackPointer(TNode<RawPtrT> ptr) {
   raw_assembler()->SetStackPointer(ptr);
 }
 #endif
+
+TNode<Object> CodeAssembler::LoadTaggedFromRootRegister(TNode<IntPtrT> offset) {
+  return BitcastWordToTagged(LoadPointerFromRootRegister(offset));
+}
 
 TNode<RawPtrT> CodeAssembler::LoadPointerFromRootRegister(
     TNode<IntPtrT> offset) {

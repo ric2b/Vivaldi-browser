@@ -87,7 +87,7 @@ SyncAuthManager::SyncAuthManager(signin::IdentityManager* identity_manager,
 
 SyncAuthManager::~SyncAuthManager() {
   if (registered_for_auth_notifications_) {
-    identity_manager_->RemoveObserver(this);
+    identity_manager_observation_.Reset();
   }
 }
 
@@ -95,7 +95,7 @@ void SyncAuthManager::RegisterForAuthNotifications() {
   DCHECK(!registered_for_auth_notifications_);
   DCHECK(sync_account_.account_info.account_id.empty());
 
-  identity_manager_->AddObserver(this);
+  identity_manager_observation_.Observe(identity_manager_);
   registered_for_auth_notifications_ = true;
 
   // Also initialize the sync account here, but *without* notifying the
@@ -390,6 +390,12 @@ void SyncAuthManager::OnRefreshTokensLoaded() {
   }
 }
 
+void SyncAuthManager::OnIdentityManagerShutdown(
+    signin::IdentityManager* identity_manager) {
+  CHECK_EQ(identity_manager, identity_manager_);
+  identity_manager_observation_.Reset();
+}
+
 bool SyncAuthManager::IsRetryingAccessTokenFetchForTest() const {
   return request_access_token_retry_timer_.IsRunning();
 }
@@ -406,7 +412,8 @@ SyncAccountInfo SyncAuthManager::DetermineAccountToUse() const {
 bool SyncAuthManager::UpdateSyncAccountIfNecessary() {
   DCHECK(registered_for_auth_notifications_);
 
-  SyncAccountInfo new_account = DetermineAccountToUse();
+  const SyncAccountInfo new_account = DetermineAccountToUse();
+
   if (new_account.account_info.account_id ==
       sync_account_.account_info.account_id) {
     // We're already using this account (or there was and is no account to use).

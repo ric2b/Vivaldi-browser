@@ -2,11 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja-KS">
 <translation id="1038842779957582377">不明な芸名</translation>
+<translation id="1068672505746868501"><ph name="SOURCE_LANGUAGE" />のページは訳さへん</translation>
 <translation id="1089439967362294234">パスワード変更</translation>
 <translation id="1110994991967754504"><ph name="PERMISSION_NAME" /> の権限どれにするん</translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" />、意外やけど途中で接続切ってきたわ。</translation>
 <translation id="1161325031994447685">Wi-Fiにもっかい接ぐ</translation>
 <translation id="1175364870820465910">刷るわ... (&amp;P)</translation>
+<translation id="1285320974508926690">このサイトは訳さへん</translation>
 <translation id="1375198122581997741">バージョン情報</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" />からデータ送信されへんかったわ。</translation>
 <translation id="1555191101192706055">アクセスしようとしたサイトな、ユーザー騙してブラウジングに影響出る（あんたがホームにしてるページ勝手に変えたり、行く先々のサイトで余計な広告出したり）有害ソフトウェアをインストールしてきよるかもしれへんで。</translation>
@@ -20,6 +22,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断試してみて<ph name="END_LINK" />。</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
+<translation id="2048261947532620704">ページ訳してるで</translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">このサイト、安全に接続できへんわ</translation>
 <translation id="2178904466768126352">アクセスしようとしたサイトな、パスワード、写真、メッセージ、クレジットカード番号盗んだり消したりする有害ソフトウェアをインストールしてきよるかもしれへんで。</translation>
@@ -44,6 +47,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />接続診断ツール使う<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">接続リセットされたわ。</translation>
 <translation id="2826760142808435982"><ph name="CIPHER" /> で接続が暗号化・認証されてて、<ph name="KX" /> が鍵交換メカニズムとして使われてるわ。</translation>
+<translation id="290376772003165898">ページに<ph name="LANGUAGE" />ない？</translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されたわ。</translation>
 <translation id="2948083400971632585">接続用に構成したプロキシー、、設定ページから無効にできるで。</translation>
 <translation id="2954624054936281172">保存した支払方法の表</translation>
@@ -78,6 +82,7 @@
 <translation id="3681007416295224113">証明書情報</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシー、ファイアウォール、DNSの設定確認する<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">プロキシーサーバー使ってるんやったら...</translation>
+<translation id="3861977424605124250">起動時に出す</translation>
 <translation id="3950820424414687140">ログイン</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />、ブロックされとるわ</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
@@ -149,17 +154,21 @@
 <translation id="6328639280570009161">ネットワーク予測、無効にしてみて</translation>
 <translation id="6348220984832452017">アクティブなバリエーション</translation>
 <translation id="6358450015545214790">一人で悩まんと、ヘルプページ来てな</translation>
+<translation id="6404511346730675251">ブックマークいらう</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />で接続拒否されたわ。</translation>
 <translation id="6447842834002726250">Cookie</translation>
 <translation id="6451458296329894277">フォーム再送信の確認</translation>
 <translation id="6569060085658103619">拡張機能のページが表示されてるで</translation>
+<translation id="6653655836861174026">プロファイル使えば、Vivaldiのデータ分けて管理できるで。家族や友人用にプロファイル作ったり、仕事用とプライベート用で使い分けたりできるで。</translation>
 <translation id="6657585470893396449">パスワード</translation>
 <translation id="6711464428925977395">プロキシーサーバーに問題があるか、アドレスが合ってないかも。</translation>
 <translation id="6757797048963528358">あんたのデバイス、さっきまで寝とったで。</translation>
 <translation id="6890956352250146925">Cookieとサイトデータのオプション</translation>
 <translation id="6897140037006041989">ユーザーエージェント</translation>
+<translation id="6935179587384421592"><ph name="SIZE" />。一部のサイトは、次回訪問時に読み込み遅なる可能性あるで。</translation>
 <translation id="6957624206566198865">さらのプライベートタブでページ開く</translation>
 <translation id="7053983685419859001">ブロック</translation>
+<translation id="7066262000446496119">誰がVivaldi使うてんの？</translation>
 <translation id="7096937462164235847">このウェブサイトのID認証されてへんで。</translation>
 <translation id="7108819624672055576">拡張機能で許可されとる</translation>
 <translation id="7111012039238467737">（有効）</translation>
@@ -167,6 +176,7 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
 <translation id="7221855153210829124">通知出す</translation>
+<translation id="7283555985781738399">ゲストモード</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7419106976560586862">プロファイルのパス</translation>
 <translation id="7455133967321480974">グローバルのデフォルト値（つまりブロック）にしとく</translation>
@@ -178,6 +188,7 @@
 <translation id="7714464543167945231">証明書</translation>
 <translation id="7716147886133743102">管理者にブロックされたわ</translation>
 <translation id="7716424297397655342">このサイト、キャッシュから読み込まれへんわ</translation>
+<translation id="773466115871691567"><ph name="SOURCE_LANGUAGE" />のページいつも訳す</translation>
 <translation id="7758069387465995638">ファイアウォールかウイルス対策ソフトウェアが接続ブロックしたかも知れへん。</translation>
 <translation id="7800304661137206267"><ph name="CIPHER" /> で接続が暗号化されてて、メッセージ認証に <ph name="MAC" />、鍵交換メカニズムに <ph name="KX" /> が使われてるわ。</translation>
 <translation id="7834399512844817676"><ph name="SITE" />は普段な、暗号化して情報を保護してるねん。今回Vivaldiから<ph name="SITE" />に接続しよう思った時に、いつものとちゃう誤った認証情報が返ってきてん。悪さしよるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があるわ。データのやり取りが行われる前にVivaldiが接続止めたから、情報は保護されたままやで。</translation>

@@ -19,6 +19,7 @@
 #include "cast/streaming/impl/rtp_packetizer.h"
 #include "cast/streaming/impl/sender_report_builder.h"
 #include "cast/streaming/impl/session_config.h"
+#include "cast/streaming/impl/statistics_dispatcher.h"
 #include "cast/streaming/public/constants.h"
 #include "cast/streaming/public/frame_id.h"
 #include "cast/streaming/rtp_time.h"
@@ -279,7 +280,6 @@ class Sender final : public SenderPacketRouter::Sender,
                            pending_frames_.size()];
   }
 
-  Environment& environment_;
   const SessionConfig config_;
   SenderPacketRouter& packet_router_;
   RtcpSession rtcp_session_;
@@ -288,6 +288,7 @@ class Sender final : public SenderPacketRouter::Sender,
   RtpPacketizer rtp_packetizer_;
   const int rtp_timebase_;
   FrameCrypto crypto_;
+  StatisticsDispatcher statistics_dispatcher_;
 
   // Ring buffer of PendingFrameSlots. The frame having FrameId x will always
   // be slotted at position x % pending_frames_.size(). Use get_slot_for() to

@@ -22,6 +22,7 @@ import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 
 import java.util.Map;
 import java.util.Optional;
@@ -45,7 +46,8 @@ public class TestSurveyUtils {
                         false,
                         psdBitFields,
                         psdStringFields,
-                        Optional.empty()));
+                        Optional.empty(),
+                        SurveyConfig.RequestedBrowserType.REGULAR));
     }
 
     /** Sets the flag that determines if we should forcefully use the testing configuration. */
@@ -143,9 +145,15 @@ public class TestSurveyUtils {
         public SurveyClient createClient(
                 @NonNull SurveyConfig config,
                 @NonNull SurveyUiDelegate uiDelegate,
-                Profile profile) {
+                Profile profile,
+                TabModelSelector tabModelSelector) {
             return new SurveyClientImpl(
-                    config, uiDelegate, mTestController, mCrashUploadPermissionSupplier, profile);
+                    config,
+                    uiDelegate,
+                    mTestController,
+                    mCrashUploadPermissionSupplier,
+                    profile,
+                    tabModelSelector);
         }
 
         @Override
@@ -252,9 +260,9 @@ public class TestSurveyUtils {
         }
 
         private static class SurveyEntry {
-            public String triggerId;
-            public Runnable onSuccessRunnable;
-            public Runnable onFailureRunnable;
+            public final String triggerId;
+            public final Runnable onSuccessRunnable;
+            public final Runnable onFailureRunnable;
 
             public boolean isShown;
             public boolean isExpired;

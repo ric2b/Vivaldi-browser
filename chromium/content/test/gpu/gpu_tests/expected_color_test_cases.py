@@ -5,11 +5,11 @@
 import collections
 from collections.abc import Callable
 
+from telemetry.internal.browser import browser as browser_module
+
 from gpu_tests import common_browser_args as cba
 from gpu_tests import crop_actions as ca
 from gpu_tests import skia_gold_heartbeat_integration_test_base as sghitb
-
-from telemetry.internal.browser import browser as browser_module
 
 coordinate_tuple = collections.namedtuple('coordinate', ['x', 'y'])
 size_tuple = collections.namedtuple('size', ['width', 'height'])
@@ -43,6 +43,10 @@ class ExpectedColorExpectation():
     self.size = size_tuple(*size)
     self.color = rgba_tuple(*color)
     self.tolerance = tolerance
+
+
+def DoNotCaptureFullScreenshot(_) -> bool:
+  return False
 
 
 class ExpectedColorTestCase(sghitb.SkiaGoldHeartbeatTestCase):
@@ -91,7 +95,7 @@ class ExpectedColorTestCase(sghitb.SkiaGoldHeartbeatTestCase):
 
     extra_browser_args = extra_browser_args or []
     if should_capture_full_screenshot_func is None:
-      should_capture_full_screenshot_func = lambda _: False
+      should_capture_full_screenshot_func = DoNotCaptureFullScreenshot
 
     self.url = url
     self.base_tolerance = base_tolerance

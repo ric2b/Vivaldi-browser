@@ -9,9 +9,9 @@
 #include <stdint.h>  // For uintptr_t.
 #include <stdlib.h>  // For abort().
 
+#include <bit>
 #include <iterator>
 #include <limits>
-#include <type_traits>
 
 #include "build/build_config.h"
 #include "core/fxcrt/check_op.h"
@@ -28,18 +28,6 @@
 namespace {
 
 #if DCHECK_IS_ON()
-// TODO(thestig): When C++20 is required, replace with std::has_single_bit().
-// Returns true iff |value| is a power of 2.
-template <typename T, typename = std::enable_if<std::is_integral<T>::value>>
-constexpr inline bool IsPowerOfTwo(T value) {
-  // From "Hacker's Delight": Section 2.1 Manipulating Rightmost Bits.
-  //
-  // Only positive integers with a single bit set are powers of two. If only one
-  // bit is set in x (e.g. 0b00000100000000) then |x-1| will have that bit set
-  // to zero and all bits to its right set to 1 (e.g. 0b00000011111111). Hence
-  // |x & (x-1)| is 0 iff x is a power of two.
-  return value > 0 && (value & (value - 1)) == 0;
-}
 
 #ifdef __has_builtin
 #define SUPPORTS_BUILTIN_IS_ALIGNED (__has_builtin(__builtin_is_aligned))
@@ -52,7 +40,7 @@ inline bool IsAligned(void* val, size_t alignment) {
 #if SUPPORTS_BUILTIN_IS_ALIGNED
   return __builtin_is_aligned(reinterpret_cast<uintptr_t>(val), alignment);
 #else
-  DCHECK(IsPowerOfTwo(alignment));
+  DCHECK(std::has_single_bit(alignment));
   return (reinterpret_cast<uintptr_t>(val) & (alignment - 1)) == 0;
 #endif
 }
@@ -99,7 +87,7 @@ NOINLINE void FX_OutOfMemoryTerminate(size_t size) {
 
 void* FX_AlignedAlloc(size_t size, size_t alignment) {
   DCHECK_GT(size, 0u);
-  DCHECK(IsPowerOfTwo(alignment));
+  DCHECK(std::has_single_bit(alignment));
   DCHECK_EQ(alignment % sizeof(void*), 0u);
   void* ptr = nullptr;
 #if defined(COMPILER_MSVC)
@@ -141,45 +129,51 @@ void* Alloc2D(size_t w, size_t h, size_t member_size) {
 
 void* AllocOrDie(size_t num_members, size_t member_size) {
   void* result = Alloc(num_members, member_size);
-  if (!result)
+  if (!result) {
     FX_OutOfMemoryTerminate(0);  // Never returns.
+  }
 
   return result;
 }
 
 void* AllocOrDie2D(size_t w, size_t h, size_t member_size) {
-  if (w >= std::numeric_limits<size_t>::max() / h)
+  if (w >= std::numeric_limits<size_t>::max() / h) {
     FX_OutOfMemoryTerminate(0);  // Never returns.
+  }
 
   return AllocOrDie(w * h, member_size);
 }
 void* CallocOrDie(size_t num_members, size_t member_size) {
   void* result = Calloc(num_members, member_size);
-  if (!result)
+  if (!result) {
     FX_OutOfMemoryTerminate(0);  // Never returns.
+  }
 
   return result;
 }
 
 void* CallocOrDie2D(size_t w, size_t h, size_t member_size) {
-  if (w >= std::numeric_limits<size_t>::max() / h)
+  if (w >= std::numeric_limits<size_t>::max() / h) {
     FX_OutOfMemoryTerminate(0);  // Never returns.
+  }
 
   return CallocOrDie(w * h, member_size);
 }
 
 void* ReallocOrDie(void* ptr, size_t num_members, size_t member_size) {
   void* result = Realloc(ptr, num_members, member_size);
-  if (!result)
+  if (!result) {
     FX_OutOfMemoryTerminate(0);  // Never returns.
+  }
 
   return result;
 }
 
 void* StringAllocOrDie(size_t num_members, size_t member_size) {
   void* result = StringAlloc(num_members, member_size);
-  if (!result)
+  if (!result) {
     FX_OutOfMemoryTerminate(0);  // Never returns.
+  }
 
   return result;
 }

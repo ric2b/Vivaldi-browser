@@ -14,9 +14,9 @@
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/web_apps/web_app_icon_name_and_origin_view.h"
-#include "chrome/browser/ui/views/web_apps/web_app_info_image_source.h"
 #include "chrome/browser/ui/views/web_apps/web_app_install_dialog_delegate.h"
 #include "chrome/browser/ui/web_applications/web_app_dialogs.h"
+#include "chrome/browser/ui/web_applications/web_app_info_image_source.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/common/chrome_features.h"
@@ -148,8 +148,8 @@ void ShowSimpleInstallDialogForWebApps(
   }
 }
 
-void SetAutoAcceptPWAInstallConfirmationForTesting(bool auto_accept) {
-  g_auto_accept_pwa_for_testing = auto_accept;
+base::AutoReset<bool> SetAutoAcceptPWAInstallConfirmationForTesting() {
+  return base::AutoReset<bool>(&g_auto_accept_pwa_for_testing, true);
 }
 
 base::AutoReset<bool> SetDontCloseOnDeactivateForTesting() {

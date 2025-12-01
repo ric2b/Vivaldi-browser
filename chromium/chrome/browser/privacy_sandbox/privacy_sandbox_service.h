@@ -11,7 +11,6 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/first_party_sets/first_party_sets_policy_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_countries.h"
-#include "chrome/browser/privacy_sandbox/privacy_sandbox_queue_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/prefs/pref_change_registrar.h"
@@ -23,10 +22,14 @@
 #include "content/public/browser/interest_group_manager.h"
 #include "net/base/schemeful_site.h"
 
-class Browser;
+class BrowserWindowInterface;
 
 namespace views {
 class Widget;
+}
+
+namespace privacy_sandbox {
+class PrivacySandboxQueueManager;
 }
 
 // Service which encapsulates logic related to displaying and controlling the
@@ -69,7 +72,7 @@ class PrivacySandboxService : public KeyedService {
     kSignedInCapabilityUnknown = 4,
     kMaxValue = kSignedInCapabilityUnknown,
   };
-  // LINT.ThenChange(//tools/metrics/histograms/enums.xml:PrivacySandboxPrimaryAccountUserGroups)
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/privacy/enums.xml:PrivacySandboxPrimaryAccountUserGroups)
 
   // Suppression reason for a generic prompt.
   // LINT.IfChange(FakeNoticePromptSuppressionReason)
@@ -87,7 +90,7 @@ class PrivacySandboxService : public KeyedService {
     kNoticeShownBefore = 1 << 3,
     kMaxValue = kNoticeShownBefore,
   };
-  // LINT.ThenChange(//tools/metrics/histograms/enums.xml:PrivacySandboxPromptSuppressionReason)
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/privacy/enums.xml:PrivacySandboxPromptSuppressionReason)
 
   // An exhaustive list of actions related to showing & interacting with the
   // prompt. Includes actions which do not impact consent / notice state.
@@ -211,11 +214,6 @@ class PrivacySandboxService : public KeyedService {
     kOpenMeasurementSettings,
   };
 
-  // Returns whether |url| is suitable to display the Privacy Sandbox prompt
-  // over. Only about:blank and certain chrome:// URLs are considered
-  // suitable.
-  static bool IsUrlSuitableForPrompt(const GURL& url);
-
   // Disables the display of the Privacy Sandbox prompt for testing. When
   // |disabled| is true, GetRequiredPromptType() will only ever return that
   // no prompt is required. NOTE: This is set to true in
@@ -246,12 +244,12 @@ class PrivacySandboxService : public KeyedService {
 #if !BUILDFLAG(IS_ANDROID)
   // Informs the service that a Privacy Sandbox prompt has been opened
   // or closed for |browser|.
-  virtual void PromptOpenedForBrowser(Browser* browser,
+  virtual void PromptOpenedForBrowser(BrowserWindowInterface* browser,
                                       views::Widget* widget) = 0;
-  virtual void PromptClosedForBrowser(Browser* browser) = 0;
+  virtual void PromptClosedForBrowser(BrowserWindowInterface* browser) = 0;
 
   // Returns whether a Privacy Sandbox prompt is currently open for |browser|.
-  virtual bool IsPromptOpenForBrowser(Browser* browser) = 0;
+  virtual bool IsPromptOpenForBrowser(BrowserWindowInterface* browser) = 0;
 
   virtual privacy_sandbox::PrivacySandboxQueueManager&
   GetPrivacySandboxNoticeQueueManager() = 0;

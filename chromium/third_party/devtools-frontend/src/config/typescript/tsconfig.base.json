@@ -11,6 +11,7 @@
 
     "strict": true,
     "useUnknownInCatchVariables": false,
+    "noUnusedParameters": false,
     "noUnusedLocals": false,
     "noImplicitReturns": true,
     "noImplicitOverride": true,

@@ -14,16 +14,20 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/file_system_access/chrome_file_system_access_permission_context.h"
 #include "chrome/browser/file_system_access/file_system_access_permission_context_factory.h"
+#include "chrome/browser/ui/actions/chrome_action_id.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_actions.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/file_system_access/file_system_access_ui_helpers.h"
+#include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/file_system_access/file_system_access_views_helpers.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
@@ -34,6 +38,7 @@
 #include "third_party/icu/source/common/unicode/unistr.h"
 #include "third_party/icu/source/common/unicode/utypes.h"
 #include "third_party/icu/source/i18n/unicode/listformatter.h"
+#include "ui/actions/actions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -300,6 +305,19 @@ void FileSystemAccessUsageBubbleView::FilePathListModel::SetObserver(
 FileSystemAccessUsageBubbleView* FileSystemAccessUsageBubbleView::bubble_ =
     nullptr;
 
+void FileSystemAccessUsageBubbleView::UpdateBubbleVisibilityState(
+    bool is_bubble_visible) {
+  Browser* browser = chrome::FindBrowserWithTab(bubble_->web_contents());
+  if (!browser) {
+    return;
+  }
+  auto* action_item = actions::ActionManager::Get().FindAction(
+      kActionShowFileSystemAccess,
+      browser->browser_actions()->root_action_item());
+  CHECK(action_item);
+  action_item->SetIsShowingBubble(is_bubble_visible);
+}
+
 // static
 void FileSystemAccessUsageBubbleView::ShowBubble(
     content::WebContents* web_contents,
@@ -336,17 +354,24 @@ void FileSystemAccessUsageBubbleView::ShowBubble(
       button_provider->GetAnchorView(std::nullopt), web_contents, origin,
       std::move(usage));
 
-  bubble_->SetHighlightedButton(button_provider->GetPageActionIconView(
-      PageActionIconType::kFileSystemAccess));
+  if (IsPageActionMigrated(PageActionIconType::kFileSystemAccess)) {
+    bubble_->SetHighlightedButton(
+        button_provider->GetPageActionView(kActionShowFileSystemAccess));
+  } else {
+    bubble_->SetHighlightedButton(button_provider->GetPageActionIconView(
+        PageActionIconType::kFileSystemAccess));
+  }
   views::BubbleDialogDelegateView::CreateBubble(bubble_);
 
   bubble_->ShowForReason(DisplayReason::USER_GESTURE,
                          /*allow_refocus_alert=*/true);
+  bubble_->UpdateBubbleVisibilityState(/*is_bubble_visible=*/true);
 }
 
 // static
 void FileSystemAccessUsageBubbleView::CloseCurrentBubble() {
   if (bubble_) {
+    bubble_->UpdateBubbleVisibilityState(/*is_bubble_visible=*/false);
     bubble_->CloseBubble();
   }
 }
@@ -399,6 +424,13 @@ std::u16string FileSystemAccessUsageBubbleView::GetAccessibleWindowTitle()
   // Don't crash if the web_contents is destroyed/unloaded.
   if (!browser) {
     return {};
+  }
+
+  if (IsPageActionMigrated(PageActionIconType::kFileSystemAccess)) {
+    return BrowserView::GetBrowserViewForBrowser(browser)
+        ->toolbar_button_provider()
+        ->GetPageActionView(kActionShowFileSystemAccess)
+        ->GetTooltipText();
   }
 
   return BrowserView::GetBrowserViewForBrowser(browser)
@@ -495,6 +527,7 @@ void FileSystemAccessUsageBubbleView::WindowClosing() {
   // |bubble_| can be a new bubble by this point (as Close(); doesn't
   // call this right away). Only set to nullptr when it's this bubble.
   if (bubble_ == this) {
+    UpdateBubbleVisibilityState(/*is_bubble_visible=*/false);
     bubble_ = nullptr;
   }
 }

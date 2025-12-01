@@ -1,4 +1,67 @@
-.default_tag: &default_tag "2024-01-11.1"
+.default_tag: &default_tag "2025-04-30.1"
+
+build_patterns:
+  - name: "autotools shared expat"
+    variables:
+      FC_BUILDSYS: autotools
+      FC_BUILD_TYPE: shared
+      FC_XML_BACKEND: expat
+  - name: "autotools shared libxml2"
+    variables:
+      FC_BUILDSYS: autotools
+      FC_BUILD_TYPE: shared
+      FC_XML_BACKEND: libxml2
+  - name: "autotools static expat"
+    variables:
+      FC_BUILDSYS: autotools
+      FC_BUILD_TYPE: static
+      FC_XML_BACKEND: expat
+  - name: "autotools static libxml2"
+    variables:
+      FC_BUILDSYS: autotools
+      FC_BUILD_TYPE: static
+      FC_XML_BACKEND: libxml2
+  - name: "meson shared expat"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: shared
+      FC_XML_BACKEND: expat
+  - name: "meson shared libxml2"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: shared
+      FC_XML_BACKEND: libxml2
+  - name: "meson static expat"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: static
+      FC_XML_BACKEND: expat
+  - name: "meson static libxml2"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: static
+      FC_XML_BACKEND: libxml2
+  - name: "meson static fontations"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: static
+      FC_BUILD_ENABLED: "fontations"
+
+test_patterns:
+  - name: "subproject-build shared"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: shared
+      FC_BUILD_SUBPROJECT: 1
+  - name: "subproject-build static"
+    variables:
+      FC_BUILDSYS: meson
+      FC_BUILD_TYPE: static
+      FC_BUILD_SUBPROJECT: 1
+  - name: "meson-install-shared"
+    parent: "meson shared libxml2"
+  - name: "meson-install-static"
+    parent: "meson static libxml2"
 
 distributions:
   - name: fedora
@@ -7,87 +70,53 @@ distributions:
     qemu_based: false
     versions:
       - "rawhide"
-      - "39"
-      - "38"
+      - "41"
+      - "40"
     builds:
-      - name: "autotools shared expat"
+      - name: "standard build"
+        upload: "rawhide"
+        doc: "rawhide"
         variables:
-          FC_BUILDSYS: autotools
-          FC_BUILD_TYPE: shared
-          FC_XML_BACKEND: expat
-      - name: "autotools shared libxml2"
-        variables:
-          FC_BUILDSYS: autotools
+          FC_BUILDSYS: meson
           FC_BUILD_TYPE: shared
           FC_XML_BACKEND: libxml2
           FC_BUILD_DISTCHECK: 1
-      - name: "meson shared expat"
+  - name: fedora
+    tag: *default_tag
+    base_type: fedora
+    qemu_based: false
+    versions:
+      - "rawhide"
+    builds:
+      - name: "MinGW"
+        variables:
+          FC_BUILDSYS: meson
+          FC_BUILD_TYPE: static
+          FC_BUILD_PLATFORM: mingw
+          FC_BUILD_ARCH: linux-mingw-w64-64bit
+          FC_BUILD_NO_INSTALL: 1
+      - name: "android aarch64"
         variables:
           FC_BUILDSYS: meson
           FC_BUILD_TYPE: shared
           FC_XML_BACKEND: expat
-      - name: "autotools static expat"
-        build_only: "rawhide"
-        variables:
-          FC_BUILDSYS: autotools
-          FC_BUILD_TYPE: static
-          FC_XML_BACKEND: expat
-      - name: "autotools static libxml2"
-        build_only: "rawhide"
-        variables:
-          FC_BUILDSYS: autotools
-          FC_BUILD_TYPE: static
-          FC_XML_BACKEND: libxml2
-      - name: "meson static expat"
-        build_only: "rawhide"
-        variables:
-          FC_BUILDSYS: meson
-          FC_BUILD_TYPE: static
-          FC_XML_BACKEND: expat
-      - name: "mingw autotools static libxml2"
-        build_only: "rawhide"
-        variables:
-          FC_BUILDSYS: autotools
-          FC_BUILD_TYPE: static
-          FC_XML_BACKEND: libxml2
-          FC_BUILD_PLATFORM: mingw
-          FC_BUILD_ARCH: x86_64-mingw32
-      - name: "mingw meson static expat"
-        build_only: "rawhide"
-        variables:
-          FC_BUILDSYS: meson
-          FC_BUILD_TYPE: static
-          FC_XML_BACKEND: expat
-          FC_BUILD_PLATFORM: mingw
-          FC_BUILD_ARCH: linux-mingw-w64-64bit
+          FC_BUILD_PLATFORM: android
+          FC_BUILD_ARCH: aarch64-linux-android
           FC_BUILD_NO_INSTALL: 1
+          FC_BUILD_DISABLED: nls
+          FC_BUILD_NO_CHECK: 1
   - name: freebsd
     tag: *default_tag
     base_type: freebsd
     qemu_based: true
     versions:
-      - "14.0"
-      - "13.2"
+      - "14.1"
     builds:
-      - name: "autotools shared expat"
-        variables:
-          FC_BUILDSYS: autotools
-          FC_BUILD_TYPE: shared
-          FC_XML_BACKEND: expat
-          MAKE: gmake
-          FC_BUILD_NO_CHECK: 1  # FIXME: There is GNU-specific parameter issue in touch command.
-      - name: "autotools shared libxml2"
-        variables:
-          FC_BUILDSYS: autotools
-          FC_BUILD_TYPE: shared
-          FC_XML_BACKEND: libxml2
-          MAKE: gmake
-          FC_BUILD_NO_CHECK: 1
-      - name: "meson shared expat"
+      - name: "standard build"
         variables:
           FC_BUILDSYS: meson
           FC_BUILD_TYPE: shared
-          FC_XML_BACKEND: expat
+          FC_XML_BACKEND: libxml2
           FC_BUILD_NO_CHECK: 1
 
 packages:
@@ -97,6 +126,9 @@ packages:
         "@buildsys-build",
         "autoconf",
         "automake",
+        "clang-devel",
+        "clang-tools-extra",
+        "curl",
         "libtool",
         "gettext",
         "gettext-devel",
@@ -106,16 +138,21 @@ packages:
         "freetype-devel",
         "json-c-devel",
         "git",
+        "git-clang-format",
         "docbook-utils",
         "docbook-utils-pdf",
         "bubblewrap",
         "ninja-build",
         "wget",
         "python3-pip",
+        "mingw64-expat",
+        "mingw64-gcc",
         "mingw64-gettext",
         "mingw64-freetype",
         "mingw64-libxml2",
-        "wine",
+        "rust",
+        "cargo",
+        "bindgen-cli"
       ]
   freebsd:
     needed:
@@ -134,7 +171,8 @@ packages:
         "ninja",
         "wget",
         "python3",
-        "py39-pip",
+        "py311-pip",
         "pkgconf",
         "gmake",
+        "gettext-runtime",
       ]

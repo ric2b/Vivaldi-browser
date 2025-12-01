@@ -106,8 +106,14 @@ fate-filter-rgbtestsrc-rgba: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 
 FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc-gbrp
 fate-filter-rgbtestsrc-gbrp: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt gbrp
 
+FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc-gbrap
+fate-filter-rgbtestsrc-gbrap: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt gbrap
+
 FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC SCALE) += fate-filter-rgbtestsrc-gbrp12
 fate-filter-rgbtestsrc-gbrp12: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1,format=gbrp12,scale -pix_fmt gbrp12le
+
+FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC SCALE) += fate-filter-rgbtestsrc-gbrap12
+fate-filter-rgbtestsrc-gbrap12: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1,format=gbrap12,scale -pix_fmt gbrap12le
 
 FATE_FILTER-$(call FILTERFRAMECRC, RGBTESTSRC) += fate-filter-rgbtestsrc-x2rgb10le
 fate-filter-rgbtestsrc-x2rgb10le: CMD = framecrc -lavfi rgbtestsrc=rate=5:duration=1 -pix_fmt x2rgb10le
@@ -121,8 +127,20 @@ fate-filter-smptehdbars: CMD = framecrc -lavfi smptehdbars=rate=5:duration=1 -pi
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-yuv444p
 fate-filter-yuvtestsrc-yuv444p: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt yuv444p
 
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-yuva444p
+fate-filter-yuvtestsrc-yuva444p: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt yuva444p
+
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-yuv444p12
 fate-filter-yuvtestsrc-yuv444p12: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1,format=yuv444p12,scale -pix_fmt yuv444p12le
+
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-yuva444p12
+fate-filter-yuvtestsrc-yuva444p12: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1,format=yuva444p12,scale -pix_fmt yuva444p12le
+
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-nv24
+fate-filter-yuvtestsrc-nv24: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt nv24
+
+FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC SCALE) += fate-filter-yuvtestsrc-p410
+fate-filter-yuvtestsrc-p410: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1,format=p410,scale -pix_fmt p410le
 
 FATE_FILTER-$(call FILTERFRAMECRC, YUVTESTSRC) += fate-filter-yuvtestsrc-ayuv
 fate-filter-yuvtestsrc-ayuv: CMD = framecrc -lavfi yuvtestsrc=rate=5:duration=1 -pix_fmt ayuv

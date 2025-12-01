@@ -10,9 +10,12 @@
 #include "base/component_export.h"
 #include "base/containers/flat_map.h"
 #include "base/types/pass_key.h"
+#include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
+#include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
-#include "third_party/blink/public/common/tokens/tokens.h"
+#include "services/webnn/webnn_object_impl.h"
 
 namespace webnn {
 
@@ -21,17 +24,20 @@ class WebNNGraphBuilderImpl;
 class WebNNTensorImpl;
 
 class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
-    : public mojom::WebNNGraph {
+    : public mojom::WebNNGraph,
+      public WebNNObjectImpl<blink::WebNNGraphToken> {
  public:
   // Describes the constraints of a graph's inputs and outputs.
   struct COMPONENT_EXPORT(WEBNN_SERVICE) ComputeResourceInfo {
-    ComputeResourceInfo(base::flat_map<std::string, OperandDescriptor>
-                            input_names_to_descriptors,
-                        base::flat_map<std::string, OperandDescriptor>
-                            output_names_to_descriptors,
-                        base::flat_map<uint64_t, base::flat_set<size_t>>
-                            operand_to_dependent_operations,
-                        base::PassKey<WebNNGraphBuilderImpl> pass_key);
+    ComputeResourceInfo(
+        base::flat_map<std::string, OperandDescriptor>
+            input_names_to_descriptors,
+        base::flat_map<std::string, OperandDescriptor>
+            output_names_to_descriptors,
+        base::flat_map<OperandId, base::flat_set<OperationId>>
+            operand_to_dependent_operations,
+        base::flat_map<OperandId, OperationId> operand_to_producing_operation,
+        base::PassKey<WebNNGraphBuilderImpl> pass_key);
     ~ComputeResourceInfo();
 
     ComputeResourceInfo(const ComputeResourceInfo&) = delete;
@@ -42,14 +48,17 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
 
     base::flat_map<std::string, OperandDescriptor> input_names_to_descriptors;
     base::flat_map<std::string, OperandDescriptor> output_names_to_descriptors;
-    base::flat_map<uint64_t, base::flat_set<size_t>>
+    base::flat_map<OperandId, base::flat_set<OperationId>>
         operand_to_dependent_operations;
+    base::flat_map<OperandId, OperationId> operand_to_producing_operation;
   };
 
   // Constructs a graph where the receiever and implementation is owned by the
   // context.
-  WebNNGraphImpl(WebNNContextImpl* context,
-                 ComputeResourceInfo compute_resource_info);
+  WebNNGraphImpl(mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
+                 WebNNContextImpl* context,
+                 ComputeResourceInfo compute_resource_info,
+                 std::vector<mojom::Device> devices);
 
   WebNNGraphImpl(const WebNNGraphImpl&) = delete;
   WebNNGraphImpl& operator=(const WebNNGraphImpl&) = delete;
@@ -61,13 +70,10 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
 
   WebNNContextImpl* context() const { return context_.get(); }
 
- private:
-  // The validator is to make sure the inputs from a compute call match the
-  // built graph's expected.
-  ComputeResourceInfo compute_resource_info_;
+  const std::vector<mojom::Device>& devices() { return devices_; }
 
-  // WebNNContextImpl owns this object.
-  const raw_ptr<WebNNContextImpl> context_;
+ private:
+  void OnConnectionError();
 
   // mojom::WebNNGraph
   void Dispatch(
@@ -78,9 +84,18 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphImpl
   // Execute the compiled platform graph. The `named_inputs` and `named_outputs`
   // were validated in base class.
   virtual void DispatchImpl(
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
-      const base::flat_map<std::string_view, WebNNTensorImpl*>&
-          named_outputs) = 0;
+      base::flat_map<std::string, WebNNTensorImpl*> named_inputs,
+      base::flat_map<std::string, WebNNTensorImpl*> named_outputs) = 0;
+
+  // The validator is to make sure the inputs from a compute call match the
+  // built graph's expected.
+  ComputeResourceInfo compute_resource_info_;
+
+  // WebNNContextImpl owns this object.
+  const raw_ptr<WebNNContextImpl> context_;
+
+  mojo::AssociatedReceiver<mojom::WebNNGraph> receiver_;
+  const std::vector<mojom::Device> devices_;
 };
 
 }  // namespace webnn

@@ -38,6 +38,7 @@
 #include "base/gtest_prod_util.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/text/character_property.h"
+#include "third_party/blink/renderer/platform/text/east_asian_spacing_type.h"
 #include "third_party/blink/renderer/platform/text/han_kerning_char_type.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -98,6 +99,10 @@ class PLATFORM_EXPORT Character {
            !(U_GET_GC_MASK(c) & (U_GC_M_MASK | U_GC_LM_MASK | U_GC_SK_MASK));
   }
 
+  static bool IsIdeographic(UChar32 c) {
+    return u_hasBinaryProperty(c, UCHAR_IDEOGRAPHIC);
+  }
+
   static bool IsHangul(UChar32 c) {
     // Below U+1100 is likely a common case.
     return c < 0x1100 ? false : IsHangulSlow(c);
@@ -126,6 +131,7 @@ class PLATFORM_EXPORT Character {
   static bool MaybeBidiRtl(const String&);
 
   static HanKerningCharType GetHanKerningCharType(UChar32 character);
+  static EastAsianSpacingType GetEastAsianSpacingType(UChar32 character);
   // Check the `HanKerningCharType` of a character without knowing the font.
   // It depends on fonts, so it may not be `kOpen` or `kClose` even when this
   // function returns `true`. See `HanKerning::GetCharType`.
@@ -143,6 +149,7 @@ class PLATFORM_EXPORT Character {
     return IsInRange(character, kLeftSingleQuotationMarkCharacter, 0x301F) ||
            IsInRange(character, 0xFF08, 0xFF60);
   }
+  static bool MayNeedEastAsianSpacing(UChar32);
 
   // Collapsible white space characters defined in CSS:
   // https://drafts.csswg.org/css-text-3/#collapsible-white-space
@@ -273,6 +280,8 @@ class PLATFORM_EXPORT Character {
 // This function assumes all non-BMP characters may be Bidi.
 inline bool Character::MaybeBidiRtlUtf16(base::StrictNumeric<UChar> ch) {
   return ch >= 0x0590 &&
+         // `InlineItemsBuilder` may emit U+200B Zero Width Space.
+         ch != kZeroWidthSpaceCharacter &&
          // General Punctuation such as curly quotes.
          !IsInRange(ch, 0x2010, 0x2029) &&
          // CJK etc., up to Surrogate Pairs.
@@ -283,6 +292,8 @@ inline bool Character::MaybeBidiRtlUtf16(base::StrictNumeric<UChar> ch) {
 
 inline bool Character::MaybeBidiRtl(UChar32 ch) {
   return ch >= 0x0590 &&
+         // `InlineItemsBuilder` may emit U+200B Zero Width Space.
+         ch != kZeroWidthSpaceCharacter &&
          // General Punctuation such as curly quotes.
          !IsInRange(ch, 0x2010, 0x2029) &&
          // CJK etc., up to Surrogate Pairs.
@@ -309,6 +320,16 @@ inline bool Character::IsEastAsianWidthFullwidth(UChar32 ch) {
   return ch == kIdeographicSpaceCharacter ||
          (IsBlockHalfwidthAndFullwidthForms(ch) &&
           EastAsianWidth(ch) == UEastAsianWidth::U_EA_FULLWIDTH);
+}
+
+inline bool Character::MayNeedEastAsianSpacing(UChar32 ch) {
+  // `EastAsianSpacingType::kWide` may need the spacing. U+02C7 is the minimum
+  // code point of `kWide`.
+  return ch >= 0x02C7 && ch != kObjectReplacementCharacter &&
+         // U+2000-206F General Punctuation has rather popular characters, such
+         // as ZWSP and curly quotation marks. Exclude the largest range of
+         // non-`kWide` that include them.
+         !IsInRange(ch, 0x1200, 0x3004);
 }
 
 }  // namespace blink

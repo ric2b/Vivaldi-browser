@@ -29,7 +29,6 @@
 #include "rtc_base/system/rtc_export.h"
 #include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/thread_annotations.h"
-#include "rtc_base/time_utils.h"
 
 namespace webrtc {
 
@@ -47,17 +46,13 @@ struct PacketTimeUpdateParams {
   int64_t srtp_packet_index = -1;  // Required for Rtp Packet authentication.
 };
 
-}  // namespace webrtc
-
-namespace rtc {
-
 // This structure holds meta information for the packet which is about to send
 // over network.
-struct RTC_EXPORT PacketOptions {
-  PacketOptions();
-  explicit PacketOptions(DiffServCodePoint dscp);
-  PacketOptions(const PacketOptions& other);
-  ~PacketOptions();
+struct RTC_EXPORT AsyncSocketPacketOptions {
+  AsyncSocketPacketOptions();
+  explicit AsyncSocketPacketOptions(DiffServCodePoint dscp);
+  AsyncSocketPacketOptions(const AsyncSocketPacketOptions& other);
+  ~AsyncSocketPacketOptions();
 
   DiffServCodePoint dscp = DSCP_NO_CHANGE;
 
@@ -79,9 +74,6 @@ struct RTC_EXPORT PacketOptions {
   // True if this is the last packet of a batch.
   bool last_packet_in_batch = false;
 };
-}  // namespace rtc
-
-namespace webrtc {
 
 // Provides the ability to receive packets asynchronously. Sends are not
 // buffered since it is acceptable to drop packets under high load.
@@ -111,11 +103,11 @@ class RTC_EXPORT AsyncPacketSocket : public sigslot::has_slots<> {
   // Send a packet.
   virtual int Send(const void* pv,
                    size_t cb,
-                   const rtc::PacketOptions& options) = 0;
+                   const AsyncSocketPacketOptions& options) = 0;
   virtual int SendTo(const void* pv,
                      size_t cb,
                      const SocketAddress& addr,
-                     const rtc::PacketOptions& options) = 0;
+                     const AsyncSocketPacketOptions& options) = 0;
 
   // Close the socket.
   virtual int Close() = 0;
@@ -140,12 +132,12 @@ class RTC_EXPORT AsyncPacketSocket : public sigslot::has_slots<> {
 
   void RegisterReceivedPacketCallback(
       absl::AnyInvocable<void(webrtc::AsyncPacketSocket*,
-                              const rtc::ReceivedPacket&)>
+                              const webrtc::ReceivedIpPacket&)>
           received_packet_callback);
   void DeregisterReceivedPacketCallback();
 
   // Emitted each time a packet is sent.
-  sigslot::signal2<AsyncPacketSocket*, const rtc::SentPacket&> SignalSentPacket;
+  sigslot::signal2<AsyncPacketSocket*, const SentPacketInfo&> SignalSentPacket;
 
   // Emitted when the socket is currently able to send.
   sigslot::signal1<AsyncPacketSocket*> SignalReadyToSend;
@@ -173,7 +165,7 @@ class RTC_EXPORT AsyncPacketSocket : public sigslot::has_slots<> {
     on_close_.Send(this, err);
   }
 
-  void NotifyPacketReceived(const rtc::ReceivedPacket& packet);
+  void NotifyPacketReceived(const ReceivedIpPacket& packet);
 
   RTC_NO_UNIQUE_ADDRESS SequenceChecker network_checker_{
       SequenceChecker::kDetached};
@@ -182,7 +174,7 @@ class RTC_EXPORT AsyncPacketSocket : public sigslot::has_slots<> {
   CallbackList<AsyncPacketSocket*, int> on_close_
       RTC_GUARDED_BY(&network_checker_);
   absl::AnyInvocable<void(webrtc::AsyncPacketSocket*,
-                          const rtc::ReceivedPacket&)>
+                          const webrtc::ReceivedIpPacket&)>
       received_packet_callback_ RTC_GUARDED_BY(&network_checker_);
 };
 
@@ -206,17 +198,20 @@ class RTC_EXPORT AsyncListenSocket : public sigslot::has_slots<> {
 
 void CopySocketInformationToPacketInfo(size_t packet_size_bytes,
                                        const AsyncPacketSocket& socket_from,
-                                       rtc::PacketInfo* info);
+                                       PacketInfo* info);
 
 }  //  namespace webrtc
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::AsyncListenSocket;
 using ::webrtc::AsyncPacketSocket;
 using ::webrtc::CopySocketInformationToPacketInfo;
 using ::webrtc::PacketTimeUpdateParams;
+using PacketOptions = ::webrtc::AsyncSocketPacketOptions;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_ASYNC_PACKET_SOCKET_H_

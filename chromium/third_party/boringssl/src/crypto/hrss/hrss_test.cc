@@ -50,7 +50,7 @@ TEST(HRSS, Poly3Invert) {
 
   p.s.v[0] = 0;
   p.a.v[0] = 1;
-  for (size_t i = 0; i < N - 1; i++) {
+  for (size_t i = 0; i < HRSS_N - 1; i++) {
     SCOPED_TRACE(i);
     poly3 r;
     OPENSSL_memset(&r, 0, sizeof(r));
@@ -485,9 +485,9 @@ TEST(HRSS, ABI) {
     return;
   }
 
-  alignas(16) uint16_t r[N + 3];
-  alignas(16) uint16_t a[N + 3] = {0};
-  alignas(16) uint16_t b[N + 3] = {0};
+  alignas(16) uint16_t r[HRSS_N + 3];
+  alignas(16) uint16_t a[HRSS_N + 3] = {0};
+  alignas(16) uint16_t b[HRSS_N + 3] = {0};
 
   uint8_t kCanary[256];
   static_assert(sizeof(kCanary) % 32 == 0, "needed for alignment");

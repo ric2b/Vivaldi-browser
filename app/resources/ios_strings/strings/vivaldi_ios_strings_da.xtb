@@ -4,48 +4,99 @@
 <translation id="1063263220330818888">Privat søgning</translation>
 <translation id="1097355661841455597">Vi vil meget gerne høre dine tanker.</translation>
 <translation id="1137850887415122856">Lås dine private faner ved at indstille Touch ID, Face ID eller adgangskode.</translation>
+<translation id="1189137610071296104">Åbn i fanestak</translation>
 <translation id="1310184829257917508">Bed om at åbne links fra andre apps privat</translation>
 <translation id="1743244221910283364">Kassér ændringer</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {Føj fane til stak}
+        other {Føj faner til stak}}</translation>
 <translation id="207677936531967364">Ny privat faneside</translation>
+<translation id="2099591136582442348">Dette sletter stakken permanent fra din enhed.</translation>
+<translation id="2181990701313127304">Ny fane i stak</translation>
+<translation id="2351280151183279120">Del stak</translation>
 <translation id="2353953000228441783">Websitets standardvisning</translation>
 <translation id="2394192052244849643">Indsæt og søg</translation>
 <translation id="2418705169960294134">Ny privat fane</translation>
+<translation id="2565593432251168402">Hold orden ved at oprette fanestakke</translation>
 <translation id="2783161812871838616">Anmod om computerside</translation>
+<translation id="2806957659107692459">Opret stak</translation>
 <translation id="2899836479226240291">Du kan åbne links i Vivaldi automatisk ved at gøre det til din standardbrowserapp.</translation>
 <translation id="3365529507898144230">Gem i Fotos</translation>
 <translation id="3434473769478814796">Indsæt og gå til</translation>
 <translation id="3463990832590571933">Åbn i ny privat fane</translation>
 <translation id="3473652525653758699">Nyt privat vindue</translation>
 <translation id="3501504415290398157">Brug <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> for at låse dine private faner op.</translation>
+<translation id="353418192940651934">Behold stak</translation>
 <translation id="3607792383367580513">Oversæt</translation>
 <translation id="3692650606013198282">Åbn privat</translation>
+<translation id="3873885181515160073">Opret din nye fanestak ved at give den et navn og en farve</translation>
 <translation id="3922395466317605522">Tilpas menu</translation>
 <translation id="3981599532037327317">Åbn ${url} privat</translation>
 <translation id="398477389655464998">Kopiér link til fremhævning</translation>
+<translation id="3993429087389909418">Fanerne forbliver åbne på denne enhed, men stakken slettes fra alle enheder, der er logget ind på <ph name="USER_EMAIL" />.</translation>
 <translation id="4026745073321351206">🙄 Opdaget et problem?</translation>
+<translation id="4216644171369573466">Fanestak, <ph name="GROUP_TITLE" />, menu.</translation>
 <translation id="4304713468139749426">Adgangskodeadministrator</translation>
+<translation id="4569525137269575065">Luk stak</translation>
 <translation id="473775607612524610">Opdater</translation>
 <translation id="4755216899422789286">Åbn URL’er i Vivaldi</translation>
+<translation id="4772190485302020393">Luk alle faner og stakke</translation>
 <translation id="4802185666270672526">Skjul Anmod om computerside</translation>
+<translation id="4828571836982833289">Opløs fanestak?</translation>
+<translation id="4838250035189612538">Omdøb stak</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 fanestak lukket og gemt}
+            other {{count} fanestakke lukket og gemt}}</translation>
+<translation id="5019787757991745254">Fanestakfarve <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Fanestak. Minimeret.</translation>
 <translation id="5217245356412073535">Du kan ændre standardvisningen af websites til computer i Indstillinger &gt; Indholdsindstillinger</translation>
 <translation id="5271549068863921519">Gem adgangskode</translation>
 <translation id="5317780077021120954">Gem</translation>
+<translation id="5385953732213322025">Dette website forsøger at åbne en applikation. Det vil deaktivere privat tilstand.</translation>
 <translation id="5431239785743546285">Sider, du har læst</translation>
+<translation id="5521301883748677039">Slet stak?</translation>
+<translation id="5544011153887687593">Fane i fanestak. <ph name="TAB_INDEX_IN_GROUP" /> af <ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Gem adgangskode?</translation>
 <translation id="570209299585559496">Du kan ændre standardvisningen til computer i indstillinger og derefter indholdsindstillinger</translation>
+<translation id="5719777162751096990">Flyt til fanestak</translation>
 <translation id="5962477178930921574">Indsæt og søg</translation>
+<translation id="6163856768888310791">Opløs fanestak</translation>
+<translation id="6168969409902608220">Navngiv stak</translation>
 <translation id="6233792867654386826">Åbner de indtastede URL’er i Vivaldi.</translation>
+<translation id="6478587527114893588">Luk stak.</translation>
+<translation id="6527405730445064713">Fanestak. Udvidet.</translation>
 <translation id="6532106788206463496">Gem ændringer</translation>
+<translation id="6666425778700353369">Dette sletter stakken fra alle enheder, der er logget på <ph name="USER_EMAIL" />.</translation>
 <translation id="6680416467695217368">Tilpas menu</translation>
+<translation id="6695835495840050460">Tryk på “Føj fane til ny stak”</translation>
+<translation id="6708694844902784277">Slet stak</translation>
 <translation id="6827597288286078054">Privat søgning</translation>
 <translation id="6851516051005285358">Anmod om computerside</translation>
+<translation id="6890907822330704077">Fanestak, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> faner.</translation>
 <translation id="7307970171564921489">Lås private faner op med <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Åbn privat?</translation>
+<translation id="7363285031331302144">Opret fanestakke for at organisere dine åbne faner</translation>
+<translation id="7395230742578757172">Åbn i ny fanestak</translation>
+<translation id="7424676799308869002">Behold stak?</translation>
 <translation id="7498234416455752244">Fortsæt redigering</translation>
 <translation id="7549299604720382000">Ny privat fane</translation>
+<translation id="7585610907974664408">Ny privat fane i stak</translation>
+<translation id="7661319142491611883">Udvid fanestak.</translation>
+<translation id="7706213624515206557">Vis alle faner i fanestak</translation>
 <translation id="7961015016161918242">Aldrig</translation>
 <translation id="8326104954595890674">Ny privat fane</translation>
+<translation id="8345989863850359861">Fjern fane og slet stak?</translation>
+<translation id="8407986162266014185">Del stak</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {Føj fane til ny stak}
+        other {Føj faner til ny stak}}</translation>
+<translation id="8465550436083180511">Minimer fanestak.</translation>
+<translation id="8685478989144570078">Fanestakke</translation>
 <translation id="8756969031206844760">Opdater adgangskode?</translation>
+<translation id="8852861335827546438">Ny fanestak</translation>
+<translation id="8951084872625418241">Ny fane i stak</translation>
 <translation id="9042893549633094279">Privatliv og sikkerhed</translation>
 <translation id="9094033019050270033">Opdater adgangskode</translation>
+<translation id="944434461715569989">Forlad stak</translation>
+<translation id="959061183386231608">Fanerne forbliver åbne på denne enhed, men stakken slettes permanent.</translation>
 </translationbundle>

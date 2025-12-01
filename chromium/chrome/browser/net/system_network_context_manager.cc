@@ -44,6 +44,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/google_url_loader_throttle.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/request_header_integrity/buildflags.h"
 #include "components/certificate_transparency/ct_known_logs.h"
 #include "components/embedder_support/user_agent_utils.h"
 #include "components/net_log/net_export_file_writer.h"
@@ -104,6 +105,10 @@
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/net/chrome_mojo_proxy_resolver_win.h"
 #endif  // BUILDFLAG(IS_WIN)
+
+#if BUILDFLAG(ENABLE_REQUEST_HEADER_INTEGRITY)
+#include "chrome/common/request_header_integrity/request_header_integrity_url_loader_throttle.h"  // nogncheck crbug.com/1125897
+#endif
 
 namespace {
 // Enumeration of possible sandbox states. These values are persisted to logs,
@@ -631,6 +636,12 @@ SystemNetworkContextManager::SystemNetworkContextManager(
       base::BindRepeating(
           &SystemNetworkContextManager::UpdateIPv6ReachabilityOverrideEnabled,
           base::Unretained(this)));
+
+  pref_change_registrar_.Add(
+      prefs::kTLS13EarlyDataEnabled,
+      base::BindRepeating(
+          &SystemNetworkContextManager::UpdateTLS13EarlyDataEnabled,
+          base::Unretained(this)));
 }
 
 SystemNetworkContextManager::~SystemNetworkContextManager() {
@@ -692,9 +703,10 @@ void SystemNetworkContextManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kReceivedHttpAuthNegotiateHeader, false);
 #endif  // BUILDFLAG(IS_LINUX)
 
-  registry->RegisterBooleanPref(prefs::kZstdContentEncodingEnabled, true);
-
   registry->RegisterBooleanPref(prefs::kIPv6ReachabilityOverrideEnabled, false);
+
+  // Default value doesn't matter since this pref is only used when managed.
+  registry->RegisterBooleanPref(prefs::kTLS13EarlyDataEnabled, false);
 }
 
 // static
@@ -852,11 +864,14 @@ void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
     network::mojom::NetworkContextParams* network_context_params) {
   variations::UpdateCorsExemptHeaderForVariations(network_context_params);
   GoogleURLLoaderThrottle::UpdateCorsExemptHeader(network_context_params);
+#if BUILDFLAG(ENABLE_REQUEST_HEADER_INTEGRITY)
+  request_header_integrity::RequestHeaderIntegrityURLLoaderThrottle::
+      UpdateCorsExemptHeaders(network_context_params);
+#endif  // BUILDFLAG(ENABLE_REQUEST_HEADER_INTEGRITY)
 
   network_context_params->enable_brotli = true;
 
-  network_context_params->enable_zstd =
-      local_state_->GetBoolean(prefs::kZstdContentEncodingEnabled);
+  network_context_params->enable_zstd = true;
 
   network_context_params->user_agent = embedder_support::GetUserAgent();
 
@@ -1059,6 +1074,16 @@ void SystemNetworkContextManager::UpdateIPv6ReachabilityOverrideEnabled() {
       net::features::kEnableIPv6ReachabilityOverride);
   bool value = is_managed ? pref_value : is_launched;
   content::GetNetworkService()->SetIPv6ReachabilityOverride(value);
+}
+
+void SystemNetworkContextManager::UpdateTLS13EarlyDataEnabled() {
+  bool is_managed =
+      local_state_->IsManagedPreference(prefs::kTLS13EarlyDataEnabled);
+  bool value =
+      is_managed
+          ? local_state_->GetBoolean(prefs::kTLS13EarlyDataEnabled)
+          : base::FeatureList::IsEnabled(net::features::kEnableTLS13EarlyData);
+  content::GetNetworkService()->SetTLS13EarlyDataEnabled(value);
 }
 
 // static

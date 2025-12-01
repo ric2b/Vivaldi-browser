@@ -223,6 +223,7 @@ bool MaglevCompiler::Compile(LocalIsolate* local_isolate,
       //   - Mark
       TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.compile"),
                    "V8.Maglev.NodeProcessing");
+      UnparkedScopeIfOnBackground unparked_scope(local_isolate->heap());
       GraphMultiProcessor<DeadNodeSweepingProcessor,
                           ValueLocationConstraintProcessor,
                           MaxCallDepthProcessor, LiveRangeAndNextUseProcessor,
@@ -291,7 +292,7 @@ std::pair<MaybeHandle<Code>, BailoutReason> MaglevCompiler::GenerateCode(
           ->shared_function_info()
           .object()
           ->set_maglev_compilation_failed(true);
-      return {{}, BailoutReason::kCodeGenerationFailed};
+      return {{}, BailoutReason::kMaglevCodeGenerationFailed};
     }
   }
 

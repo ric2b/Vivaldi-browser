@@ -29,7 +29,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
+#include "base/notreached.h"
 #include "base/numerics/clamped_math.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/bind_post_task.h"
@@ -55,7 +55,6 @@
 #include "components/services/storage/public/mojom/storage_policy_update.mojom.h"
 #include "content/browser/indexed_db/file_path_util.h"
 #include "content/browser/indexed_db/indexed_db_database_error.h"
-#include "content/browser/indexed_db/indexed_db_leveldb_coding.h"
 #include "content/browser/indexed_db/instance/bucket_context.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -221,6 +220,20 @@ void FinishGetAllBucketsDetails(
   std::move(callback).Run(std::move(origins));
 }
 
+std::string GetForceCloseReasonString(storage::mojom::ForceCloseReason reason) {
+  // TODO(crbug.com/410456906): make these messages more meaningful.
+  switch (reason) {
+    case storage::mojom::ForceCloseReason::FORCE_CLOSE_DELETE_ORIGIN:
+      return "Force close delete origin";
+    case storage::mojom::ForceCloseReason::FORCE_CLOSE_BACKING_STORE_FAILURE:
+      return "Force close backing store failure";
+    case storage::mojom::ForceCloseReason::FORCE_CLOSE_INTERNALS_PAGE:
+      return "Unknown";
+    default:
+      NOTREACHED();
+  }
+}
+
 }  // namespace
 
 IndexedDBContextImpl::IndexedDBContextImpl(
@@ -329,7 +342,7 @@ void IndexedDBContextImpl::BindIndexedDBImpl(
   if (bucket) {
     EnsureBucketContext(*bucket, GetDataPath(bucket->ToBucketLocator()));
     auto iter = bucket_contexts_.find(bucket->id);
-    CHECK(iter != bucket_contexts_.end(), base::NotFatalUntil::M130);
+    CHECK(iter != bucket_contexts_.end());
     iter->second.AsyncCall(&BucketContext::AddReceiver)
         .WithArgs(client_info, std::move(client_state_checker_remote),
                   std::move(pending_receiver));
@@ -342,7 +355,6 @@ void IndexedDBContextImpl::BindIndexedDBImpl(
 void IndexedDBContextImpl::DeleteBucketData(const BucketLocator& bucket_locator,
                                             DeleteBucketDataCallback callback) {
   DCHECK(IDBTaskRunner()->RunsTasksInCurrentSequence());
-  DCHECK_EQ(bucket_locator.type, blink::mojom::StorageType::kTemporary);
   DCHECK(!callback.is_null());
   ForceClose(
       bucket_locator.id,
@@ -386,7 +398,7 @@ void IndexedDBContextImpl::ForceClose(storage::BucketId bucket_id,
   auto iter = bucket_contexts_.find(bucket_id);
   if (iter != bucket_contexts_.end()) {
     iter->second.AsyncCall(&BucketContext::ForceClose)
-        .WithArgs(doom)
+        .WithArgs(doom, GetForceCloseReasonString(reason))
         .Then(std::move(closure));
   } else {
     std::move(closure).Run();
@@ -539,7 +551,7 @@ void IndexedDBContextImpl::ApplyPolicyUpdates(
   }
 }
 
-void IndexedDBContextImpl::BindTestInterface(
+void IndexedDBContextImpl::BindTestInterfaceForTesting(
     mojo::PendingReceiver<storage::mojom::IndexedDBControlTest> receiver) {
   DCHECK(IDBTaskRunner()->RunsTasksInCurrentSequence());
   test_receivers_.Add(this, std::move(receiver));
@@ -576,18 +588,6 @@ void IndexedDBContextImpl::ResetCachesForTesting(base::OnceClosure callback) {
   std::move(callback).Run();
 }
 
-void IndexedDBContextImpl::WriteToIndexedDBForTesting(
-    const BucketLocator& bucket_locator,
-    const std::string& key,
-    const std::string& value,
-    base::OnceClosure callback) {
-  DCHECK(BucketContextExists(bucket_locator.id));
-  bucket_contexts_.find(bucket_locator.id)
-      ->second.AsyncCall(&BucketContext::WriteToIndexedDBForTesting)
-      .WithArgs(key, value)
-      .Then(std::move(callback));
-}
-
 void IndexedDBContextImpl::GetPathForBlobForTesting(
     const BucketLocator& bucket_locator,
     int64_t database_id,
@@ -597,11 +597,11 @@ void IndexedDBContextImpl::GetPathForBlobForTesting(
       GetBlobStorePath(bucket_locator), database_id, blob_number));
 }
 
-void IndexedDBContextImpl::CompactBackingStoreForTesting(
+void IndexedDBContextImpl::FlushBackingStoreForTesting(
     const BucketLocator& bucket_locator,
     base::OnceClosure callback) {
   bucket_contexts_.find(bucket_locator.id)
-      ->second.AsyncCall(&BucketContext::CompactBackingStoreForTesting)
+      ->second.AsyncCall(&BucketContext::FlushBackingStoreForTesting)
       .Then(std::move(callback));
 }
 
@@ -634,11 +634,6 @@ void IndexedDBContextImpl::GetSchedulingPriorityForTesting(
 void IndexedDBContextImpl::BindMockFailureSingletonForTesting(
     mojo::PendingReceiver<storage::mojom::MockFailureInjector> receiver) {
   pending_failure_injector_ = std::move(receiver);
-}
-
-void IndexedDBContextImpl::GetDatabaseKeysForTesting(
-    GetDatabaseKeysForTestingCallback callback) {
-  std::move(callback).Run(SchemaVersionKey::Encode(), DataVersionKey::Encode());
 }
 
 std::optional<BucketLocator> IndexedDBContextImpl::LookUpBucket(
@@ -762,7 +757,8 @@ IndexedDBContextImpl::~IndexedDBContextImpl() {
   // `bucket_contexts_` while it's being iterated.
   weak_factory_.InvalidateWeakPtrs();
   for (auto& [bucket_id, context] : bucket_contexts_) {
-    context.AsyncCall(&BucketContext::ForceClose).WithArgs(/*doom=*/false);
+    context.AsyncCall(&BucketContext::ForceClose)
+        .WithArgs(/*doom=*/false, "IndexedDBContext is destructed.");
   }
   bucket_contexts_.clear();
   task_runner_limiters_.clear();
@@ -1172,7 +1168,6 @@ void IndexedDBContextImpl::EnsureBucketContext(
 
 void IndexedDBContextImpl::GetBucketUsage(const BucketLocator& bucket,
                                           GetBucketUsageCallback callback) {
-  DCHECK_EQ(bucket.type, blink::mojom::StorageType::kTemporary);
   if (in_memory()) {
     GetInMemorySize(bucket.id, std::move(callback));
   } else {

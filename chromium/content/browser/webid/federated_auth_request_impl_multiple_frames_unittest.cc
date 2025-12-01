@@ -107,7 +107,8 @@ class TestIdpNetworkRequestManager : public MockIdpNetworkRequestManager {
                                   endpoints, idp_metadata));
   }
 
-  void SendAccountsRequest(const GURL& accounts_url,
+  void SendAccountsRequest(const url::Origin& idp_origin,
+                           const GURL& accounts_url,
                            const std::string& client_id,
                            AccountsRequestCallback callback) override {
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
@@ -161,7 +162,6 @@ class TestDialogController
       content::RelyingPartyData rp_data,
       const std::vector<IdentityProviderDataPtr>& idp_list,
       const std::vector<IdentityRequestAccountPtr>& accounts,
-      IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<IdentityRequestAccountPtr>& new_accounts,
       IdentityRequestDialogController::AccountSelectionCallback on_selected,
@@ -170,7 +170,7 @@ class TestDialogController
       IdentityRequestDialogController::AccountsDisplayedCallback
           accounts_displayed_callback) override {
     state_->did_show_accounts_dialog = true;
-    state_->rp_for_display = rp_data.rp_for_display;
+    state_->rp_for_display = base::UTF16ToUTF8(rp_data.rp_for_display);
     if (accounts_dialog_action_ == AccountsDialogAction::kSelectAccount) {
       std::move(on_selected)
           .Run(GURL(kProviderUrlFull), kAccountId, /*is_sign_in=*/true);
@@ -223,6 +223,8 @@ class FederatedAuthRequestImplMultipleFramesTest
         "Ken R. Example",            // name
         "Ken",                       // given_name
         GURL(),                      // picture
+        "(403) 293-3421",            // phone
+        "@kenr",                     // username
         std::vector<std::string>(),  // login_hints
         std::vector<std::string>(),  // domain_hints
         std::vector<std::string>()   // labels

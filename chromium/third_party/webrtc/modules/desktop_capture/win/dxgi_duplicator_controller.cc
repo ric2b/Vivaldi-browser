@@ -20,8 +20,8 @@
 #include "modules/desktop_capture/win/screen_capture_utils.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
-#include "system_wrappers/include/sleep.h"
 
 namespace webrtc {
 
@@ -67,12 +67,12 @@ std::string DxgiDuplicatorController::ResultName(
 }
 
 // static
-rtc::scoped_refptr<DxgiDuplicatorController>
+webrtc::scoped_refptr<DxgiDuplicatorController>
 DxgiDuplicatorController::Instance() {
   // The static instance won't be deleted to ensure it can be used by other
   // threads even during program exiting.
   static DxgiDuplicatorController* instance = new DxgiDuplicatorController();
-  return rtc::scoped_refptr<DxgiDuplicatorController>(instance);
+  return webrtc::scoped_refptr<DxgiDuplicatorController>(instance);
 }
 
 // static
@@ -504,7 +504,7 @@ bool DxgiDuplicatorController::EnsureFrameCaptured(Context* context,
     shared_frame = fallback_frame.get();
   }
 
-  const int64_t start_ms = rtc::TimeMillis();
+  const int64_t start_ms = webrtc::TimeMillis();
   while (GetNumFramesCaptured(monitor_id) < frames_to_skip) {
     if (monitor_id < 0) {
       if (!DoDuplicateAll(context, shared_frame)) {
@@ -521,7 +521,7 @@ bool DxgiDuplicatorController::EnsureFrameCaptured(Context* context,
       break;
     }
 
-    if (rtc::TimeMillis() - start_ms > timeout_ms) {
+    if (webrtc::TimeMillis() - start_ms > timeout_ms) {
       RTC_LOG(LS_ERROR) << "Failed to capture " << frames_to_skip
                         << " frames "
                            "within "
@@ -531,7 +531,7 @@ bool DxgiDuplicatorController::EnsureFrameCaptured(Context* context,
 
     // Sleep `ms_per_frame` before attempting to capture the next frame to
     // ensure the video adapter has time to update the screen.
-    webrtc::SleepMs(ms_per_frame);
+    Thread::SleepMs(ms_per_frame);
   }
   // When capturing multiple monitors, we need to update the captured region to
   // prevent flickering by re-setting context. See

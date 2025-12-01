@@ -132,13 +132,19 @@ void PixManager::OnPixCodeValidated(
     return;
   }
 
-  if (!payments_data_manager->IsFacilitatedPaymentsPixUserPrefEnabled()) {
-    LogPixFlowExitedReason(PixFlowExitedReason::kUserOptedOut);
+  // If the user has no linked Pix accounts, initialize the Pix account linking
+  // flow.
+  if (!payments_data_manager->HasMaskedBankAccounts()) {
+    LogPixFlowExitedReason(PixFlowExitedReason::kNoLinkedAccount);
+    if (base::FeatureList::IsEnabled(kEnablePixAccountLinking)) {
+      client_->InitPixAccountLinkingFlow();
+    }
     return;
   }
 
-  if (!payments_data_manager->HasMaskedBankAccounts()) {
-    LogPixFlowExitedReason(PixFlowExitedReason::kNoLinkedAccount);
+  // Pix pref is shown only if the user has linked Pix accounts.
+  if (!payments_data_manager->IsFacilitatedPaymentsPixUserPrefEnabled()) {
+    LogPixFlowExitedReason(PixFlowExitedReason::kUserOptedOut);
     return;
   }
 

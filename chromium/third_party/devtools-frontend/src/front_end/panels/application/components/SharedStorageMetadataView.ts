@@ -9,12 +9,8 @@ import type * as Protocol from '../../../generated/protocol.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Lit from '../../../ui/lit/lit.js';
 
-import sharedStorageMetadataViewStylesRaw from './sharedStorageMetadataView.css.js';
+import sharedStorageMetadataViewStyles from './sharedStorageMetadataView.css.js';
 import {StorageMetadataView} from './StorageMetadataView.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const sharedStorageMetadataViewStyles = new CSSStyleSheet();
-sharedStorageMetadataViewStyles.replaceSync(sharedStorageMetadataViewStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -79,10 +75,6 @@ export class SharedStorageMetadataView extends StorageMetadataView {
     await this.render();
   }
 
-  connectedCallback(): void {
-    this.getShadow().adoptedStyleSheets = [sharedStorageMetadataViewStyles];
-  }
-
   override getTitle(): string {
     return i18nString(UIStrings.sharedStorage);
   }
@@ -97,6 +89,7 @@ export class SharedStorageMetadataView extends StorageMetadataView {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     return html`
+      <style>${sharedStorageMetadataViewStyles}</style>
       ${await super.renderReportContent()}
       ${this.key(i18nString(UIStrings.creation))}
       ${this.value(this.#renderDateForCreationTime())}

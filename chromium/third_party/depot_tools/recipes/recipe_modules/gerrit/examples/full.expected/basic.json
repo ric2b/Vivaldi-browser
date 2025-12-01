@@ -14,7 +14,8 @@
       "67ebf73496383c6777035e374d2d664009e2aa5c",
       "--json_file",
       "/path/to/tmp/json",
-      "--allow-existent-branch"
+      "--allow-existent-branch",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -42,7 +43,8 @@
       "--branch",
       "main",
       "--json_file",
-      "/path/to/tmp/json"
+      "/path/to/tmp/json",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -71,7 +73,8 @@
       "--commit",
       "67ebf73496383c6777035e374d2d664009e2aa5c",
       "--json_file",
-      "/path/to/tmp/json"
+      "/path/to/tmp/json",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -103,7 +106,8 @@
       "--body",
       "{\"revision\": \"67ebf73496383c6777035e374d2d664009e2aa5c\"}",
       "--accept_status",
-      "201"
+      "201",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -135,7 +139,8 @@
       "--destination_branch",
       "main",
       "--json_file",
-      "/path/to/tmp/json"
+      "/path/to/tmp/json",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -185,7 +190,8 @@
       "-p",
       "status=NEW",
       "--cc",
-      "foo@example.com"
+      "foo@example.com",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -249,7 +255,8 @@
       "--path",
       "chrome/VERSION",
       "--file",
-      "[CLEANUP]/tmp_tmp_1"
+      "[CLEANUP]/tmp_tmp_1",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -268,7 +275,8 @@
       "--host",
       "https://chromium-review.googlesource.com",
       "--change",
-      "91827"
+      "91827",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -285,7 +293,6 @@
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
-      "--verbose",
       "--host",
       "https://chromium-review.googlesource.com",
       "--json_file",
@@ -297,7 +304,8 @@
       "-o",
       "ALL_REVISIONS",
       "-o",
-      "ALL_COMMITS"
+      "ALL_COMMITS",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -322,7 +330,6 @@
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
-      "--verbose",
       "--host",
       "https://chromium-review.googlesource.com",
       "--json_file",
@@ -334,7 +341,8 @@
       "-o",
       "ALL_REVISIONS",
       "-o",
-      "ALL_COMMITS"
+      "ALL_COMMITS",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -375,7 +383,8 @@
       "--host",
       "https://chromium-review.googlesource.com",
       "--change",
-      "91827"
+      "91827",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -393,7 +402,8 @@
       "--change",
       "91827",
       "--json_file",
-      "/path/to/tmp/json"
+      "/path/to/tmp/json",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -428,7 +438,6 @@
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
-      "--verbose",
       "--host",
       "https://chromium-review.googlesource.com",
       "--json_file",
@@ -442,7 +451,8 @@
       "-p",
       "status=open",
       "-p",
-      "label=Commit-Queue>0"
+      "label=Commit-Queue>0",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -486,7 +496,8 @@
       "--revision",
       "2",
       "--json_file",
-      "/path/to/tmp/json"
+      "/path/to/tmp/json",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -529,7 +540,6 @@
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
-      "--verbose",
       "--host",
       "https://chromium-review.googlesource.com",
       "--json_file",
@@ -539,7 +549,8 @@
       "-p",
       "status=open",
       "-p",
-      "label=Commit-Queue>2"
+      "label=Commit-Queue>2",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -556,7 +567,6 @@
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
-      "--verbose",
       "--host",
       "https://chromium-review.googlesource.com",
       "--json_file",
@@ -568,7 +578,8 @@
       "-o",
       "ALL_REVISIONS",
       "-o",
-      "ALL_COMMITS"
+      "ALL_COMMITS",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -613,7 +624,8 @@
       "/path/to/tmp/json",
       "-l",
       "code-review",
-      "-1"
+      "-1",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -639,7 +651,8 @@
       "/path/to/tmp/json",
       "-l",
       "commit-queue",
-      "1"
+      "1",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -667,7 +680,8 @@
       "This is a non-attention message",
       "--json_file",
       "/path/to/tmp/json",
-      "--no-automatic-attention-set-update"
+      "--no-automatic-attention-set-update",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -693,7 +707,8 @@
       "--message",
       "This is a comment message",
       "--json_file",
-      "/path/to/tmp/json"
+      "/path/to/tmp/json",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -717,7 +732,8 @@
       "--json_file",
       "/path/to/tmp/json",
       "--message",
-      "bad roll"
+      "bad roll",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -761,7 +777,8 @@
       "--json_file",
       "/path/to/tmp/json",
       "--message",
-      "nevermind"
+      "nevermind",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"
@@ -798,7 +815,6 @@
       "vpython3",
       "RECIPE_REPO[depot_tools]/gerrit_client.py",
       "changes",
-      "--verbose",
       "--host",
       "https://chromium-review.googlesource.com",
       "--json_file",
@@ -810,7 +826,8 @@
       "-o",
       "ALL_REVISIONS",
       "-o",
-      "ALL_COMMITS"
+      "ALL_COMMITS",
+      "--verbose"
     ],
     "env": {
       "PATH": "<PATH>:RECIPE_REPO[depot_tools]"

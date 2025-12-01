@@ -29,10 +29,8 @@ enum class SetUpListItemType;
 // Stack.
 @property(nonatomic, assign) BOOL heroCellMagicStackLayout;
 
-// User classification retrieved by the Segmentation Platform. Used to
-// personalize Set Up List item messaging.
-@property(nonatomic, assign)
-    segmentation_platform::DefaultBrowserUserSegment userSegment;
+// YES if price tracking is enabled for the current user.
+@property(nonatomic, assign) BOOL priceTrackingEnabled;
 
 // Initialize a SetUpListItemView with the given `type` and `complete` state.
 - (instancetype)initWithType:(SetUpListItemType)type complete:(BOOL)complete;

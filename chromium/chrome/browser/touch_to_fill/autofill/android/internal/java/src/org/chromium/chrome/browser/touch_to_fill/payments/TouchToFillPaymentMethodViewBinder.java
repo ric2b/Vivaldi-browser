@@ -18,9 +18,13 @@ import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaym
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.FooterProperties.SHOULD_SHOW_SCAN_CREDIT_CARD;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.FooterProperties.SHOW_PAYMENT_METHOD_SETTINGS_CALLBACK;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.HeaderProperties.IMAGE_DRAWABLE_ID;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.HeaderProperties.TITLE_ID;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.IbanProperties.IBAN_NICKNAME;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.IbanProperties.IBAN_VALUE;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.IbanProperties.ON_IBAN_CLICK_ACTION;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.LoyaltyCardProperties.LOYALTY_CARD_NUMBER;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.LoyaltyCardProperties.MERCHANT_NAME;
+import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.LoyaltyCardProperties.ON_LOYALTY_CARD_CLICK_ACTION;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.TermsLabelProperties.CARD_BENEFITS_TERMS_AVAILABLE;
 import static org.chromium.chrome.browser.touch_to_fill.payments.TouchToFillPaymentMethodProperties.VISIBLE;
@@ -58,7 +62,7 @@ class TouchToFillPaymentMethodViewBinder {
      */
     private static class TextViewCollectionInfoAccessibilityDelegate
             extends View.AccessibilityDelegate {
-        private FillableItemCollectionInfo mCollectionInfo;
+        private final FillableItemCollectionInfo mCollectionInfo;
 
         public TextViewCollectionInfoAccessibilityDelegate(
                 @NonNull FillableItemCollectionInfo collectionInfo) {
@@ -134,6 +138,14 @@ class TouchToFillPaymentMethodViewBinder {
                         .inflate(R.layout.touch_to_fill_iban_sheet_item, parent, false);
         AutofillUiUtils.setFilterTouchForSecurity(ibanItem);
         return ibanItem;
+    }
+
+    static View createLoyaltyCardItemView(ViewGroup parent) {
+        View loyaltyCardItem =
+                LayoutInflater.from(parent.getContext())
+                        .inflate(R.layout.touch_to_fill_loyalty_card_sheet_item, parent, false);
+        AutofillUiUtils.setFilterTouchForSecurity(loyaltyCardItem);
+        return loyaltyCardItem;
     }
 
     /** Binds the item view to the model properties. */
@@ -219,8 +231,26 @@ class TouchToFillPaymentMethodViewBinder {
         }
     }
 
+    static void bindLoyaltyCardItemView(PropertyModel model, View view, PropertyKey propertyKey) {
+        if (propertyKey == LOYALTY_CARD_NUMBER) {
+            TextView loyaltyCardNumber = view.findViewById(R.id.loyalty_card_number);
+            loyaltyCardNumber.setText(model.get(LOYALTY_CARD_NUMBER));
+            loyaltyCardNumber.setTextAppearance(R.style.TextAppearance_TextLarge_Primary);
+        } else if (propertyKey == MERCHANT_NAME) {
+            TextView merchantName = view.findViewById(R.id.merchant_name);
+            merchantName.setText(model.get(MERCHANT_NAME));
+            merchantName.setVisibility(View.VISIBLE);
+        } else if (propertyKey == ON_LOYALTY_CARD_CLICK_ACTION) {
+            view.setOnClickListener(unusedView -> model.get(ON_LOYALTY_CARD_CLICK_ACTION).run());
+        } else {
+            assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
     /**
-     * Factory used to create a new header inside the ListView inside the TouchToFillPaymentMethodView.
+     * Factory used to create a new header inside the ListView inside the {@link
+     * TouchToFillPaymentMethodView}.
+     *
      * @param parent The parent {@link ViewGroup} of the new item.
      */
     static View createHeaderItemView(ViewGroup parent) {
@@ -240,6 +270,9 @@ class TouchToFillPaymentMethodViewBinder {
             sheetHeaderImage.setImageDrawable(
                     AppCompatResources.getDrawable(
                             view.getContext(), model.get(IMAGE_DRAWABLE_ID)));
+        } else if (propertyKey == TITLE_ID) {
+            TextView sheetHeaderTitle = view.findViewById(R.id.touch_to_fill_sheet_title);
+            sheetHeaderTitle.setText(view.getContext().getString(model.get(TITLE_ID)));
         } else {
             assert false : "Unhandled update to property:" + propertyKey;
         }
@@ -262,6 +295,10 @@ class TouchToFillPaymentMethodViewBinder {
             view.setOnClickListener(unusedView -> model.get(ON_IBAN_CLICK_ACTION).run());
             TextView buttonTitleText = view.findViewById(R.id.touch_to_fill_button_title);
             buttonTitleText.setText(R.string.autofill_payment_method_continue_button);
+        } else if (propertyKey == ON_LOYALTY_CARD_CLICK_ACTION) {
+            view.setOnClickListener(unusedView -> model.get(ON_LOYALTY_CARD_CLICK_ACTION).run());
+            TextView buttonTitleText = view.findViewById(R.id.touch_to_fill_button_title);
+            buttonTitleText.setText(R.string.autofill_loyalty_card_autofill_button);
         } else if (propertyKey == CARD_IMAGE
                 || propertyKey == MAIN_TEXT
                 || propertyKey == MAIN_TEXT_CONTENT_DESCRIPTION
@@ -271,7 +308,9 @@ class TouchToFillPaymentMethodViewBinder {
                 || propertyKey == IBAN_VALUE
                 || propertyKey == IBAN_NICKNAME
                 || propertyKey == ITEM_COLLECTION_INFO
-                || propertyKey == APPLY_DEACTIVATED_STYLE) {
+                || propertyKey == APPLY_DEACTIVATED_STYLE
+                || propertyKey == LOYALTY_CARD_NUMBER
+                || propertyKey == MERCHANT_NAME) {
             // Skip, because none of these changes affect the button
         } else {
             assert false : "Unhandled update to property:" + propertyKey;

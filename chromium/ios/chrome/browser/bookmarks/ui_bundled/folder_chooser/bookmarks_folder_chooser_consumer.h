@@ -12,6 +12,7 @@
 namespace bookmarks {
 class BookmarkModel; // Vivaldi
 class BookmarkNode;
+struct QueryFields;
 }
 
 // Consumer protocol to receive updates from the model layer.
@@ -29,6 +30,9 @@ class BookmarkNode;
 - (const bookmarks::BookmarkNode*)mobileFolderNode;
 // The list of visible folders to show.
 - (std::vector<const bookmarks::BookmarkNode*>)visibleFolderNodes;
+// The list of visible folders to show, if they are matching `query`.
+- (std::vector<const bookmarks::BookmarkNode*>)visibleFolderNodesForQuery:
+    (const bookmarks::QueryFields&)query;
 
 @end
 

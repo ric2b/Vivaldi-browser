@@ -7,6 +7,7 @@ package org.chromium.components.privacy_sandbox;
 import android.os.Bundle;
 
 import androidx.annotation.VisibleForTesting;
+import androidx.preference.Preference;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -15,21 +16,15 @@ import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
-import org.chromium.components.browser_ui.settings.TextMessagePreference;
-import org.chromium.ui.text.ChromeClickableSpan;
-import org.chromium.ui.text.SpanApplier;
+import org.chromium.components.browser_ui.site_settings.ForwardingManagedPreferenceDelegate;
 
 /** Fragment to manage settings for ip protection. */
 @NullMarked
 public class IpProtectionSettingsFragment extends PrivacySandboxBaseFragment {
     // Must match key in ip_protection_preferences.xml.
     private static final String PREF_IP_PROTECTION_SWITCH = "ip_protection_switch";
-
-    private static final String PREF_IP_PROTECTION_SUMMARY = "ip_protection_summary";
-
-    public static final String LEARN_MORE_URL =
-            "https://support.google.com/chrome/?p=ip_protection";
 
     @VisibleForTesting
     protected static final String IP_PROTECTION_PREF_HISTOGRAM_NAME =
@@ -42,9 +37,43 @@ public class IpProtectionSettingsFragment extends PrivacySandboxBaseFragment {
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         SettingsUtils.addPreferencesFromResource(this, R.xml.ip_protection_preferences);
-        mPageTitle.set(getString(R.string.privacy_sandbox_ip_protection_title));
+        mPageTitle.set(
+                getString(R.string.incognito_tracking_protections_ip_protection_toggle_label));
 
-        setupPreferences();
+        ChromeSwitchPreference ipProtectionSwitch = findPreference(PREF_IP_PROTECTION_SWITCH);
+        if (mDelegate.isIpProtectionDisabledForEnterprise()) {
+            ipProtectionSwitch.setEnabled(false);
+            ipProtectionSwitch.setChecked(false);
+            ipProtectionSwitch.setManagedPreferenceDelegate(
+                    new ForwardingManagedPreferenceDelegate(
+                            mDelegate
+                                    .getSiteSettingsDelegate(getContext())
+                                    .getManagedPreferenceDelegate()) {
+                        @Override
+                        public boolean isPreferenceControlledByPolicy(Preference preference) {
+                            return true;
+                        }
+                    });
+        } else {
+            ipProtectionSwitch.setChecked(mDelegate.isIpProtectionEnabled());
+            ipProtectionSwitch.setManagedPreferenceDelegate(
+                    new ForwardingManagedPreferenceDelegate(
+                            mDelegate
+                                    .getSiteSettingsDelegate(getContext())
+                                    .getManagedPreferenceDelegate()) {
+                        @Override
+                        public boolean isPreferenceControlledByPolicy(Preference preference) {
+                            return mDelegate.isIpProtectionManaged();
+                        }
+                    });
+        }
+        ipProtectionSwitch.setOnPreferenceChangeListener(
+                (preference, newValue) -> {
+                    mDelegate.setIpProtection((boolean) newValue);
+                    RecordHistogram.recordBooleanHistogram(
+                            IP_PROTECTION_PREF_HISTOGRAM_NAME, (boolean) newValue);
+                    return true;
+                });
     }
 
     @Override
@@ -63,30 +92,8 @@ public class IpProtectionSettingsFragment extends PrivacySandboxBaseFragment {
         mDelegate = delegate;
     }
 
-    private void setupPreferences() {
-        ChromeSwitchPreference ipProtectionSwitch = findPreference(PREF_IP_PROTECTION_SWITCH);
-        TextMessagePreference ipProtectionSummary = findPreference(PREF_IP_PROTECTION_SUMMARY);
-
-        ipProtectionSwitch.setChecked(mDelegate.isIpProtectionEnabled());
-        ipProtectionSwitch.setOnPreferenceChangeListener(
-                (preference, newValue) -> {
-                    mDelegate.setIpProtection((boolean) newValue);
-                    RecordHistogram.recordBooleanHistogram(
-                            IP_PROTECTION_PREF_HISTOGRAM_NAME, (boolean) newValue);
-                    return true;
-                });
-
-        ipProtectionSummary.setSummary(
-                SpanApplier.applySpans(
-                        getResources().getString(R.string.privacy_sandbox_ip_protection_summary),
-                        new SpanApplier.SpanInfo(
-                                "<link>",
-                                "</link>",
-                                new ChromeClickableSpan(
-                                        getContext(), (view) -> onLearnMoreClicked()))));
-    }
-
-    private void onLearnMoreClicked() {
-        getCustomTabLauncher().openUrlInCct(getContext(), LEARN_MORE_URL);
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
     }
 }

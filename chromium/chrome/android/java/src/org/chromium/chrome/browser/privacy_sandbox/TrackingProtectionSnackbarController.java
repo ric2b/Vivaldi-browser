@@ -20,6 +20,7 @@ import org.chromium.components.content_settings.CookieBlocking3pcdStatus;
 import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.components.content_settings.CookieControlsObserver;
+import org.chromium.components.content_settings.CookieControlsState;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.content_public.browser.WebContents;
 
@@ -39,7 +40,7 @@ public class TrackingProtectionSnackbarController implements CookieControlsObser
     private final CookieControlsBridge mCookieControlsBridge;
     private final @ActivityType int mActivityType;
     private final ReentrantLock mLock = new ReentrantLock();
-    private SnackbarController mSnackbarController =
+    private final SnackbarController mSnackbarController =
             new SnackbarController() {
                 @Override
                 public void onDismissNoAction(Object actionData) {}
@@ -49,11 +50,10 @@ public class TrackingProtectionSnackbarController implements CookieControlsObser
                     mSnakcbarOnAction.run();
                 }
             };
-    private boolean mTrackingProtectionControlsVisible;
-    private boolean mTrackingProtectionBlocked;
+    private int mControlsState;
     private int mBlockingStatus3pcd;
-    private TrackingProtectionSnackbarLimiter mTrackingProtectionLimiter;
-    private WebContents mWebContents;
+    private final TrackingProtectionSnackbarLimiter mTrackingProtectionLimiter;
+    private final WebContents mWebContents;
 
     /**
      * Creates the {@link TrackingProtectionSnackbarController} object.
@@ -88,7 +88,8 @@ public class TrackingProtectionSnackbarController implements CookieControlsObser
             return;
         }
 
-        if (mTrackingProtectionControlsVisible && !mTrackingProtectionBlocked && shouldHighlight) {
+        // Snackbar is only shown for third-party cookies UI.
+        if (mControlsState == CookieControlsState.ALLOWED3PC && shouldHighlight) {
             showSnackbar();
         }
     }
@@ -100,13 +101,11 @@ public class TrackingProtectionSnackbarController implements CookieControlsObser
 
     @Override
     public void onStatusChanged(
-            boolean controlsVisible,
-            boolean protectionsOn,
+            @CookieControlsState int controlsState,
             @CookieControlsEnforcement int enforcement,
             @CookieBlocking3pcdStatus int blockingStatus,
             long expiration) {
-        mTrackingProtectionControlsVisible = controlsVisible;
-        mTrackingProtectionBlocked = protectionsOn;
+        mControlsState = controlsState;
         mBlockingStatus3pcd = blockingStatus;
     }
 
@@ -131,8 +130,8 @@ public class TrackingProtectionSnackbarController implements CookieControlsObser
 
         if (!forceTriggerEnabled
                 && (!mTrackingProtectionLimiter.shouldAllowRequest(host)
-                        || !mTrackingProtectionControlsVisible
-                        || mTrackingProtectionBlocked)) {
+                        || mControlsState == CookieControlsState.HIDDEN
+                        || mControlsState == CookieControlsState.BLOCKED3PC)) {
             return;
         }
 

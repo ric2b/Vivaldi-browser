@@ -33,8 +33,8 @@ dnl This is the package version number, not the shared library
 dnl version.  This same version number must appear in fontconfig/fontconfig.h
 dnl Yes, it is a pain to synchronize version numbers.  Unfortunately, it's
 dnl not possible to extract the version number here from fontconfig.h
-AC_INIT([fontconfig],[2.15.0],[https://gitlab.freedesktop.org/fontconfig/fontconfig/issues/new])
-AM_INIT_AUTOMAKE([1.11 parallel-tests dist-xz])
+AC_INIT([fontconfig],[2.16.2],[https://gitlab.freedesktop.org/fontconfig/fontconfig/issues/new])
+AM_INIT_AUTOMAKE([1.11 parallel-tests dist-xz foreign])
 m4_ifdef([AM_SILENT_RULES],[AM_SILENT_RULES([yes])])
 
 dnl ==========================================================================
@@ -73,11 +73,11 @@ dnl libtool versioning
 dnl bump revision when fixing bugs
 dnl bump current and age, reset revision to zero when adding APIs
 dnl bump current, leave age, reset revision to zero when changing/removing APIS
-LIBT_CURRENT=13
-LIBT_REVISION=1
+LIBT_CURRENT=16
+LIBT_REVISION=0
 AC_SUBST(LIBT_CURRENT)
 AC_SUBST(LIBT_REVISION)
-LIBT_AGE=12
+LIBT_AGE=15
 
 LIBT_VERSION_INFO="$LIBT_CURRENT:$LIBT_REVISION:$LIBT_AGE"
 AC_SUBST(LIBT_VERSION_INFO)
@@ -179,6 +179,8 @@ AC_TYPE_PID_T
 AC_FUNC_VPRINTF
 AC_FUNC_MMAP
 AC_CHECK_FUNCS([link mkstemp mkostemp _mktemp_s mkdtemp getopt getopt_long getprogname getexecname rand random lrand48 random_r rand_r readlink fstatvfs fstatfs lstat strerror strerror_r])
+
+AC_SEARCH_LIBS([fabs], [m], [], [AC_MSG_ERROR([unable to find the fabs() function])])
 
 dnl AC_CHECK_FUNCS doesn't check for header files.
 dnl posix_fadvise() may be not available in older libc.

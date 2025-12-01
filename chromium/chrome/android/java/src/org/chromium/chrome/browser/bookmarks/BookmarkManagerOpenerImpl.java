@@ -14,8 +14,6 @@ import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.base.ActivityState;
-import org.chromium.base.ApplicationStatus;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordUserAction;
@@ -26,15 +24,15 @@ import org.chromium.chrome.browser.app.bookmarks.BookmarkActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkEditActivity;
 import org.chromium.chrome.browser.app.bookmarks.BookmarkFolderPickerActivity;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileIntentUtils;
+import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.DeviceFormFactor;
-
-import java.util.Objects;
 
 // Vivaldi
 import static org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditFolderActivity.INTENT_IS_ADD_MODE;
@@ -64,6 +62,7 @@ public class BookmarkManagerOpenerImpl implements BookmarkManagerOpener {
             Activity activity, Profile profile, @Nullable BookmarkId folderId) {
         ThreadUtils.assertOnUiThread();
         String url = getFirstUrlToLoad(folderId);
+        boolean isIncognito = profile.isOffTheRecord();
 
         if (BuildConfig.IS_VIVALDI) {
             PanelUtils.showPanel(activity, url, false);
@@ -76,7 +75,7 @@ public class BookmarkManagerOpenerImpl implements BookmarkManagerOpener {
         }
 
         if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity)) {
-            showBookmarkManagerOnTablet(activity, activity.getComponentName(), url);
+            showBookmarkManagerOnTablet(activity, activity.getComponentName(), url, isIncognito);
         } else {
             showBookmarkManagerOnPhone(activity, url, profile);
         }
@@ -102,37 +101,12 @@ public class BookmarkManagerOpenerImpl implements BookmarkManagerOpener {
 
     @Override
     public void startFolderPickerActivity(
-            Context context,
-            Profile profile,
-            Runnable activityFinishedCallback,
-            BookmarkId... bookmarkIds) {
+            Context context, Profile profile, BookmarkId... bookmarkIds) {
         Intent intent = new Intent(context, BookmarkFolderPickerActivity.class);
         intent.putStringArrayListExtra(
                 BookmarkFolderPickerActivity.INTENT_BOOKMARK_IDS,
                 BookmarkUtils.bookmarkIdsToStringList(bookmarkIds));
         ProfileIntentUtils.addProfileToIntent(profile, intent);
-        ApplicationStatus.registerStateListenerForAllActivities(
-                new ApplicationStatus.ActivityStateListener() {
-                    @Nullable BookmarkFolderPickerActivity mActivityInstance;
-
-                    @Override
-                    public void onActivityStateChange(
-                            Activity activity, @ActivityState int newState) {
-                        if (!(activity instanceof BookmarkFolderPickerActivity)) {
-                            return;
-                        }
-
-                        BookmarkFolderPickerActivity activityInstance =
-                                (BookmarkFolderPickerActivity) activity;
-                        if (newState == ActivityState.CREATED && mActivityInstance == null) {
-                            mActivityInstance = activityInstance;
-                        } else if (newState == ActivityState.DESTROYED
-                                && Objects.equals(mActivityInstance, activityInstance)) {
-                            ApplicationStatus.unregisterActivityStateListener(this);
-                            activityFinishedCallback.run();
-                        }
-                    }
-                });
         context.startActivity(intent);
     }
 
@@ -169,11 +143,19 @@ public class BookmarkManagerOpenerImpl implements BookmarkManagerOpener {
     }
 
     private void showBookmarkManagerOnTablet(
-            Context context, @Nullable ComponentName componentName, String url) {
+            Context context, @Nullable ComponentName componentName, String url,
+            boolean isIncognito) {
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         intent.putExtra(
                 Browser.EXTRA_APPLICATION_ID, context.getApplicationContext().getPackageName());
+        IntentHandler.setTabLaunchType(intent, TabLaunchType.FROM_CHROME_UI);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+        if (ChromeFeatureList.sAndroidNativePagesInNewTab.isEnabled()
+                && ChromeFeatureList.sAndroidNativePagesInNewTabBookmarksEnabled.getValue()) {
+            intent.putExtra(Browser.EXTRA_CREATE_NEW_TAB, true);
+            intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, isIncognito);
+        }
 
         if (componentName != null) {
             ActivityUtils.setNonAliasedComponentForMainBrowsingActivity(intent, componentName);

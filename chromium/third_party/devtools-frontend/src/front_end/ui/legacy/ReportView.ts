@@ -1,6 +1,7 @@
 // Copyright (c) 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import './Toolbar.js';
 
@@ -86,7 +87,7 @@ export class ReportView extends VBox {
 
   sortSections(comparator: (arg0: Section, arg1: Section) => number): void {
     const sections = (this.children().slice() as Section[]);
-    const sorted = sections.every((e, i, a) => !i || comparator(a[i - 1], a[i]) <= 0);
+    const sorted = sections.every((_, i, a) => !i || comparator(a[i - 1], a[i]) <= 0);
     if (sorted) {
       return;
     }

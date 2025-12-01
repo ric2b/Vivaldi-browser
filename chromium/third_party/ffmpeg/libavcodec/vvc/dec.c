@@ -671,8 +671,6 @@ static int frame_context_setup(VVCFrameContext *fc, VVCContext *s)
 {
     int ret;
 
-    fc->ref = NULL;
-
     // copy refs from the last frame
     if (s->nb_frames && s->nb_fcs > 1) {
         VVCFrameContext *prev = get_frame_context(s, fc, -1);
@@ -799,23 +797,19 @@ static int export_frame_params(VVCContext *s, const VVCFrameContext *fc)
     AVCodecContext *c = s->avctx;
     const VVCSPS *sps = fc->ps.sps;
     const VVCPPS *pps = fc->ps.pps;
-    int ret;
 
-    // Reset HW config if pix_fmt/w/h change.
-    if (s->pix_fmt != sps->pix_fmt || c->coded_width != pps->width || c->coded_height != pps->height) {
+    // Reset the format if pix_fmt/w/h change.
+    if (c->sw_pix_fmt != sps->pix_fmt || c->coded_width != pps->width || c->coded_height != pps->height) {
         c->coded_width  = pps->width;
         c->coded_height = pps->height;
-        ret = get_format(c, sps);
-        if (ret < 0)
-            return ret;
-
-        c->pix_fmt = ret;
-        s->pix_fmt = sps->pix_fmt;
+        c->sw_pix_fmt   = sps->pix_fmt;
+        c->pix_fmt      = get_format(c, sps);
+        if (c->pix_fmt < 0)
+            return AVERROR_INVALIDDATA;
     }
 
     c->width  = pps->width  - ((pps->r->pps_conf_win_left_offset + pps->r->pps_conf_win_right_offset) << sps->hshift[CHROMA]);
     c->height = pps->height - ((pps->r->pps_conf_win_top_offset + pps->r->pps_conf_win_bottom_offset) << sps->vshift[CHROMA]);
-    c->has_b_frames = sps->r->sps_dpb_params.dpb_max_num_reorder_pics[sps->r->sps_max_sublayers_minus1];
 
     return 0;
 }
@@ -837,7 +831,8 @@ static int frame_setup(VVCFrameContext *fc, VVCContext *s)
     return 0;
 }
 
-static int decode_slice(VVCContext *s, VVCFrameContext *fc, const H2645NAL *nal, const CodedBitstreamUnit *unit)
+static int decode_slice(VVCContext *s, VVCFrameContext *fc, AVBufferRef *buf_ref,
+                        const H2645NAL *nal, const CodedBitstreamUnit *unit)
 {
     int ret;
     SliceContext *sc;
@@ -866,7 +861,7 @@ static int decode_slice(VVCContext *s, VVCFrameContext *fc, const H2645NAL *nal,
 
     if (s->avctx->hwaccel) {
         if (is_first_slice) {
-            ret = FF_HW_CALL(s->avctx, start_frame, NULL, 0);
+            ret = FF_HW_CALL(s->avctx, start_frame, buf_ref, NULL, 0);
             if (ret < 0)
                 return ret;
         }
@@ -882,7 +877,8 @@ static int decode_slice(VVCContext *s, VVCFrameContext *fc, const H2645NAL *nal,
     return 0;
 }
 
-static int decode_nal_unit(VVCContext *s, VVCFrameContext *fc, const H2645NAL *nal, const CodedBitstreamUnit *unit)
+static int decode_nal_unit(VVCContext *s, VVCFrameContext *fc, AVBufferRef *buf_ref,
+                           const H2645NAL *nal, const CodedBitstreamUnit *unit)
 {
     int  ret;
 
@@ -908,7 +904,7 @@ static int decode_nal_unit(VVCContext *s, VVCFrameContext *fc, const H2645NAL *n
     case VVC_IDR_N_LP:
     case VVC_CRA_NUT:
     case VVC_GDR_NUT:
-        ret = decode_slice(s, fc, nal, unit);
+        ret = decode_slice(s, fc, buf_ref, nal, unit);
         if (ret < 0)
             return ret;
         break;
@@ -930,6 +926,7 @@ static int decode_nal_units(VVCContext *s, VVCFrameContext *fc, AVPacket *avpkt)
     int ret = 0;
     s->last_eos = s->eos;
     s->eos = 0;
+    fc->ref = NULL;
 
     ff_cbs_fragment_reset(frame);
     ret = ff_cbs_read_packet(s->cbc, frame, avpkt);
@@ -945,7 +942,7 @@ static int decode_nal_units(VVCContext *s, VVCFrameContext *fc, AVPacket *avpkt)
         if (unit->type == VVC_EOB_NUT || unit->type == VVC_EOS_NUT) {
             s->last_eos = 1;
         } else {
-            ret = decode_nal_unit(s, fc, nal, unit);
+            ret = decode_nal_unit(s, fc, avpkt->buf, nal, unit);
             if (ret < 0) {
                 av_log(s->avctx, AV_LOG_WARNING,
                         "Error parsing NAL unit #%d.\n", i);
@@ -961,19 +958,6 @@ fail:
     return ret;
 }
 
-static int set_output_format(const VVCContext *s, const AVFrame *output)
-{
-    AVCodecContext *c = s->avctx;
-    int ret;
-
-    if (output->width != c->width || output->height != c->height) {
-        if ((ret = ff_set_dimensions(c, output->width, output->height)) < 0)
-            return ret;
-    }
-    c->pix_fmt = output->format;
-    return 0;
-}
-
 static int wait_delayed_frame(VVCContext *s, AVFrame *output, int *got_output)
 {
     VVCFrameContext *delayed = get_frame_context(s, s->fcs, s->nb_frames - s->nb_delayed);
@@ -981,9 +965,7 @@ static int wait_delayed_frame(VVCContext *s, AVFrame *output, int *got_output)
 
     if (!ret && delayed->output_frame->buf[0] && output) {
         av_frame_move_ref(output, delayed->output_frame);
-        ret = set_output_format(s, output);
-        if (!ret)
-            *got_output = 1;
+        *got_output = 1;
     }
     s->nb_delayed--;
 
@@ -1034,11 +1016,7 @@ static int get_decoded_frame(VVCContext *s, AVFrame *output, int *got_output)
         ret = ff_vvc_output_frame(s, last, output, 0, 1);
         if (ret < 0)
             return ret;
-        if (ret) {
-            *got_output = ret;
-            if ((ret = set_output_format(s, output)) < 0)
-                return ret;
-        }
+        *got_output = ret;
     }
     return 0;
 }
@@ -1156,8 +1134,6 @@ static av_cold int vvc_decode_init(AVCodecContext *avctx)
     s->eos = 1;
     GDR_SET_RECOVERED(s);
     ff_thread_once(&init_static_once, init_default_scale_m);
-
-    s->pix_fmt = AV_PIX_FMT_NONE;
 
     return 0;
 }

@@ -7,12 +7,12 @@ import {CrLitElement} from '//resources/lit/v3_0/lit.rollup.js';
 import {BrowserProxy} from './browser_proxy.js';
 import {getCss} from './model_status.css.js';
 import {getHtml} from './model_status.html.js';
-import type {OnDeviceInternalsData} from './on_device_internals_page.mojom-webui.js';
+import type {PageData} from './on_device_internals_page.mojom-webui.js';
 
 export class OnDeviceInternalsModelStatusElement extends CrLitElement {
   constructor() {
     super();
-    this.getOnDeviceInternalsData_();
+    this.getPageData_();
   }
 
   static get is() {
@@ -34,27 +34,28 @@ export class OnDeviceInternalsModelStatusElement extends CrLitElement {
     return getHtml.bind(this)();
   }
 
-  protected pageData_: OnDeviceInternalsData = {
-    baseModelReady: false,
-    modelState: 'NO STATE',
-    registrationCriteria: {},
+  protected accessor pageData_: PageData = {
+    baseModel: {
+      state: 'NO STATE',
+      registrationCriteria: {},
+      info: null,
+    },
     suppModels: [],
     modelCrashCount: 0,
     maxModelCrashCount: 0,
   };
 
-  protected mayRestartBrowser_: boolean = false;
+  protected accessor mayRestartBrowser_: boolean = false;
   private proxy_: BrowserProxy = BrowserProxy.getInstance();
 
   protected async onResetModelCrashCountClick_() {
     await this.proxy_.handler.resetModelCrashCount();
-    await this.getOnDeviceInternalsData_();
+    await this.getPageData_();
     this.mayRestartBrowser_ = true;
   }
 
-  private async getOnDeviceInternalsData_() {
-    this.pageData_ =
-        (await this.proxy_.handler.getOnDeviceInternalsData()).pageData;
+  private async getPageData_() {
+    this.pageData_ = (await this.proxy_.handler.getPageData()).pageData;
   }
 }
 

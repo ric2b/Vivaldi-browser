@@ -10,6 +10,7 @@
 #include "media/base/media_export.h"
 #include "media/base/media_log_type_enforcement.h"
 #include "media/base/media_track.h"
+#include "media/base/picture_in_picture_events_info.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -90,6 +91,11 @@ enum class MediaLogEvent {
 
   // Triggered when the media element starts and finishes fetching media data.
   kHlsSegmentFetch,
+
+  // The media player auto picture in picture information has changed. Triggered
+  // when auto picture in picture is requested, to record why the automatic
+  // enter picture in picture request was accepted/denied.
+  kAutoPictureInPictureInfoChanged,
 };
 
 // Sometimes URLs can have encoded data that can be exteremly large.
@@ -118,6 +124,9 @@ MEDIA_LOG_EVENT_NAMED_DATA(kMediaLogCreated, base::Time, "created");
 MEDIA_LOG_EVENT_NAMED_DATA(kVideoOcclusionState,
                            std::string,
                            "video_occlusion_state");
+MEDIA_LOG_EVENT_NAMED_DATA(kAutoPictureInPictureInfoChanged,
+                           PictureInPictureEventsInfo::AutoPipInfo,
+                           "auto_picture_in_picture_info");
 
 MEDIA_LOG_EVENT_NAMED_DATA_OP(kHlsSegmentFetch,
                               std::string,

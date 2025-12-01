@@ -32,7 +32,6 @@
 #include "chrome/browser/new_tab_page/promos/promo_service_factory.h"
 #include "chrome/browser/new_tab_page/promos/promo_service_observer.h"
 #include "chrome/browser/promos/promos_pref_names.h"
-#include "chrome/browser/search/background/ntp_background_data.h"
 #include "chrome/browser/search/background/ntp_custom_background_service.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_observer.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
@@ -68,6 +67,7 @@
 #include "components/segmentation_platform/public/testing/mock_segmentation_platform_service.h"
 #include "components/sync/test/test_sync_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/themes/ntp_background_data.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_web_contents_factory.h"
@@ -354,8 +354,6 @@ class NewTabPageHandlerTest : public testing::Test {
         &mock_segmentation_platform_service_, web_contents_,
         std::move(mock_feature_promo_helper_ptr_), base::Time::Now(),
         &module_id_details);
-    handler_->SetCustomizeChromeSidePanelControllerForTesting(
-        mock_customize_chrome_tab_helper_.get());
     mock_page_.FlushForTesting();
     EXPECT_EQ(handler_.get(), theme_service_observer_);
     EXPECT_EQ(handler_.get(), ntp_custom_background_service_observer_);
@@ -1216,77 +1214,15 @@ TEST_F(NewTabPageHandlerTest, ModulesVisiblePrefChangeTriggersPageCall) {
   mock_page_.FlushForTesting();
 }
 
-TEST_F(NewTabPageHandlerTest, OpenSidePanel) {
-  SidePanelOpenTrigger trigger;
-  std::optional<CustomizeChromeSection> section;
-  EXPECT_CALL(*mock_customize_chrome_tab_helper_, OpenSidePanel)
-      .Times(1)
-      .WillOnce(testing::DoAll(testing::SaveArg<0>(&trigger),
-                               testing::SaveArg<1>(&section)));
-  EXPECT_CALL(
-      *mock_feature_promo_helper_,
-      RecordPromoFeatureUsageAndClosePromo(
-          testing::Ref(feature_engagement::kIPHDesktopCustomizeChromeFeature),
-          web_contents_.get()))
-      .Times(1);
-  EXPECT_CALL(
-      *mock_feature_promo_helper_,
-      RecordPromoFeatureUsageAndClosePromo(
-          testing::Ref(
-              feature_engagement::kIPHDesktopCustomizeChromeRefreshFeature),
-          web_contents_.get()))
-      .Times(1);
-
-  handler_->SetCustomizeChromeSidePanelVisible(
-      /*visible=*/true,
-      new_tab_page::mojom::CustomizeChromeSection::kAppearance);
-
-  EXPECT_EQ(SidePanelOpenTrigger::kNewTabPage, trigger);
-  EXPECT_EQ(CustomizeChromeSection::kAppearance, section);
-}
-
-TEST_F(NewTabPageHandlerTest, CloseSidePanel) {
-  EXPECT_CALL(*mock_customize_chrome_tab_helper_, CloseSidePanel).Times(1);
-  EXPECT_CALL(*mock_feature_promo_helper_, RecordPromoFeatureUsageAndClosePromo)
-      .Times(0);
-
-  handler_->SetCustomizeChromeSidePanelVisible(
-      /*visible=*/false, new_tab_page::mojom::CustomizeChromeSection::kModules);
-}
-
-TEST_F(NewTabPageHandlerTest, IncrementCustomizeChromeButtonOpenCount) {
-  EXPECT_EQ(profile_->GetPrefs()->GetInteger(
-                prefs::kNtpCustomizeChromeButtonOpenCount),
-            0);
-
-  handler_->IncrementCustomizeChromeButtonOpenCount();
-
-  EXPECT_EQ(profile_->GetPrefs()->GetInteger(
-                prefs::kNtpCustomizeChromeButtonOpenCount),
-            1);
-
-  handler_->IncrementCustomizeChromeButtonOpenCount();
-
-  EXPECT_EQ(profile_->GetPrefs()->GetInteger(
-                prefs::kNtpCustomizeChromeButtonOpenCount),
-            2);
-
-  mock_page_.FlushForTesting();
-}
-
 // TODO (crbug/1521350): Fails when ChromeRefresh2023 is enabled.
 TEST_F(NewTabPageHandlerTest, DISABLED_MaybeShowFeaturePromo_CustomizeChrome) {
   EXPECT_CALL(*mock_feature_promo_helper_, IsSigninModalDialogOpen)
       .WillRepeatedly(testing::Return(false));
-  EXPECT_EQ(profile_->GetPrefs()->GetInteger(
-                prefs::kNtpCustomizeChromeButtonOpenCount),
-            0);
   EXPECT_CALL(*mock_feature_promo_helper_, MaybeShowFeaturePromo).Times(1);
 
   handler_->MaybeShowFeaturePromo(
       new_tab_page::mojom::IphFeature::kCustomizeChrome);
 
-  handler_->IncrementCustomizeChromeButtonOpenCount();
   EXPECT_EQ(profile_->GetPrefs()->GetInteger(
                 prefs::kNtpCustomizeChromeButtonOpenCount),
             1);
@@ -1316,18 +1252,6 @@ TEST_F(NewTabPageHandlerTest, MaybeShowFeaturePromo_CustomizeChromeRefresh) {
   mock_page_.FlushForTesting();
 }
 
-TEST_F(NewTabPageHandlerTest, MaybeShowFeaturePromo_CustomizeModules) {
-  EXPECT_CALL(*mock_feature_promo_helper_, IsSigninModalDialogOpen)
-      .WillRepeatedly(testing::Return(false));
-  EXPECT_CALL(*mock_feature_promo_helper_,
-              MaybeShowFeaturePromo(_, web_contents_.get()))
-      .Times(1);
-
-  handler_->MaybeShowFeaturePromo(
-      new_tab_page::mojom::IphFeature::kCustomizeModules);
-  mock_page_.FlushForTesting();
-}
-
 TEST_F(NewTabPageHandlerTest,
        DontShowCustomizeChromeFeaturePromoWhenModalDialogIsOpen) {
   EXPECT_CALL(*mock_feature_promo_helper_, IsSigninModalDialogOpen)
@@ -1341,18 +1265,6 @@ TEST_F(NewTabPageHandlerTest,
       new_tab_page::mojom::IphFeature::kCustomizeChrome);
 
   mock_page_.FlushForTesting();
-}
-
-TEST_F(NewTabPageHandlerTest, OnModuleUsedRecordFeatureUsageAndClosePromo) {
-  EXPECT_CALL(
-      *mock_feature_promo_helper_,
-      RecordPromoFeatureUsageAndClosePromo(
-          testing::Ref(
-              feature_engagement::kIPHDesktopNewTabPageModulesCustomizeFeature),
-          web_contents_.get()))
-      .Times(1);
-
-  handler_->OnModuleUsed("module_id");
 }
 
 TEST_F(NewTabPageHandlerTest, ShowWebstoreToast) {
@@ -1369,153 +1281,16 @@ TEST_F(NewTabPageHandlerTest, DoNotShowWebstoreToastOnCountExceeded) {
   mock_page_.FlushForTesting();
 }
 
-TEST_F(NewTabPageHandlerTest, IncrementWallpaperSearchButtonShownCount) {
+TEST_F(NewTabPageHandlerTest, IncrementComposeButtonShownCount) {
   EXPECT_EQ(profile_->GetPrefs()->GetInteger(
-                prefs::kNtpWallpaperSearchButtonShownCount),
+                prefs::kNtpComposeButtonShownCountPrefName),
             0);
 
-  handler_->IncrementWallpaperSearchButtonShownCount();
+  handler_->IncrementComposeButtonShownCount();
 
   EXPECT_EQ(profile_->GetPrefs()->GetInteger(
-                prefs::kNtpWallpaperSearchButtonShownCount),
+                prefs::kNtpComposeButtonShownCountPrefName),
             1);
-
-  mock_page_.FlushForTesting();
-}
-
-TEST_F(NewTabPageHandlerTest, GetMobilePromoQrCode) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(ntp_features::kNtpMobilePromo);
-
-  base::RunLoop run_loop;
-  EXPECT_CALL(mock_segmentation_platform_service_,
-              GetClassificationResult(segmentation_platform::kDeviceSwitcherKey,
-                                      _, _, _))
-      .Times(1)
-      .WillOnce(testing::WithArg<3>(testing::Invoke(
-          [](segmentation_platform::ClassificationResultCallback callback) {
-            auto result = segmentation_platform::ClassificationResult(
-                segmentation_platform::PredictionStatus::kSucceeded);
-            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE, base::BindOnce(std::move(callback), result));
-          })));
-
-  std::string encodedQrCode;
-  base::MockCallback<NewTabPageHandler::GetMobilePromoQrCodeCallback> callback;
-  EXPECT_CALL(callback, Run(_))
-      .Times(1)
-      .WillOnce(testing::Invoke(
-          [&encodedQrCode](const std::basic_string<char>& code) {
-            encodedQrCode = std::move(code);
-          }));
-  handler_->GetMobilePromoQrCode(callback.Get().Then(run_loop.QuitClosure()));
-
-  run_loop.Run();
-
-  EXPECT_NE("", encodedQrCode);
-  histogram_tester_.ExpectTotalCount(
-      "NewTabPage.Promos.MobilePromo.SegmentationPlatformQuery.Succeeded."
-      "Duration",
-      1);
-}
-
-TEST_F(NewTabPageHandlerTest,
-       GetMobilePromoQrCode_EmptyWhenSegmentationDataNotSet) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(ntp_features::kNtpMobilePromo);
-
-  base::RunLoop run_loop;
-
-  EXPECT_CALL(mock_segmentation_platform_service_,
-              GetClassificationResult(segmentation_platform::kDeviceSwitcherKey,
-                                      _, _, _))
-      .Times(1)
-      .WillOnce(testing::WithArg<3>(testing::Invoke(
-          [](segmentation_platform::ClassificationResultCallback callback) {
-            auto result = segmentation_platform::ClassificationResult(
-                segmentation_platform::PredictionStatus::kSucceeded);
-            // If the data contains mobile devices, the promo should not be
-            // shown.
-            result.ordered_labels = {
-                segmentation_platform::DeviceSwitcherModel::
-                    kIosPhoneChromeLabel};
-            base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-                FROM_HERE, base::BindOnce(std::move(callback), result));
-          })));
-
-  std::string encodedQrCode;
-  base::MockCallback<NewTabPageHandler::GetMobilePromoQrCodeCallback> callback;
-  EXPECT_CALL(callback, Run(_))
-      .Times(1)
-      .WillOnce(testing::Invoke(
-          [&encodedQrCode](const std::basic_string<char>& code) {
-            encodedQrCode = std::move(code);
-          }));
-  handler_->GetMobilePromoQrCode(callback.Get().Then(run_loop.QuitClosure()));
-
-  run_loop.Run();
-
-  EXPECT_EQ("", encodedQrCode);
-  histogram_tester_.ExpectTotalCount(
-      "NewTabPage.Promos.MobilePromo.SegmentationPlatformQuery.Succeeded."
-      "Duration",
-      1);
-}
-
-TEST_F(NewTabPageHandlerTest, GetMobilePromoQrCode_EmptyWhenNoSync) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(ntp_features::kNtpMobilePromo);
-
-  // If sync is not active, then no promo should be shown.
-  test_sync_service_.SetSignedOut();
-
-  base::RunLoop run_loop;
-
-  EXPECT_CALL(mock_segmentation_platform_service_,
-              GetClassificationResult(segmentation_platform::kDeviceSwitcherKey,
-                                      _, _, _))
-      .Times(0);
-
-  std::string encodedQrCode;
-  base::MockCallback<NewTabPageHandler::GetMobilePromoQrCodeCallback> callback;
-  EXPECT_CALL(callback, Run(_))
-      .Times(1)
-      .WillOnce(testing::Invoke(
-          [&encodedQrCode](const std::basic_string<char>& code) {
-            encodedQrCode = std::move(code);
-          }));
-  handler_->GetMobilePromoQrCode(callback.Get().Then(run_loop.QuitClosure()));
-
-  run_loop.Run();
-
-  EXPECT_EQ("", encodedQrCode);
-}
-
-TEST_F(NewTabPageHandlerTest, OnDismissMobilePromo) {
-  handler_->OnDismissMobilePromo();
-  EXPECT_TRUE(profile_->GetPrefs()->GetBoolean(
-      promos_prefs::kDesktopToiOSNtpPromoDismissed));
-  histogram_tester_.ExpectTotalCount("NewTabPage.Promos.MobilePromo.Dismiss",
-                                     1);
-}
-
-TEST_F(NewTabPageHandlerTest, OnUndoDismissMobilePromo) {
-  profile_->GetPrefs()->SetBoolean(promos_prefs::kDesktopToiOSNtpPromoDismissed,
-                                   true);
-  handler_->OnUndoDismissMobilePromo();
-  EXPECT_FALSE(profile_->GetPrefs()->GetBoolean(
-      promos_prefs::kDesktopToiOSNtpPromoDismissed));
-  histogram_tester_.ExpectTotalCount(
-      "NewTabPage.Promos.MobilePromo.DismissUndone", 1);
-}
-
-TEST_F(NewTabPageHandlerTest, OnMobilePromoShown) {
-  handler_->OnMobilePromoShown();
-  histogram_tester_.ExpectBucketCount("NewTabPage.Promos.MobilePromo.Displayed",
-                                      1, 1);
-  handler_->OnMobilePromoShown();
-  histogram_tester_.ExpectBucketCount("NewTabPage.Promos.MobilePromo.Displayed",
-                                      2, 1);
 }
 
 class NewTabPageHandlerHaTSTest : public NewTabPageHandlerTest {

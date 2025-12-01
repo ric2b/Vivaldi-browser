@@ -21,7 +21,7 @@ inline constexpr std::string_view kRemoteAdmin = "remote_admin_was_present";
 
 void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(
-      ash::prefs::kClassManagementToolsAvailabilitySetting, std::string());
+      ash::prefs::kClassManagementToolsAvailabilitySetting, kDisabled);
   // Fixes a dangling pointer crash associated with this pref not being
   // registered. Need to revisit if this is the best place for this pref to be
   // set.
@@ -35,16 +35,18 @@ void RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(
       ash::prefs::kClassManagementToolsClassroomEligibilitySetting, true);
   registry->RegisterBooleanPref(
-      ash::prefs::kClassManagementToolsSendingContentEligibilitySetting, true);
-  registry->RegisterBooleanPref(
       ash::prefs::kClassManagementToolsViewScreenEligibilitySetting, true);
   registry->RegisterBooleanPref(
-      ash::prefs::kClassManagementToolsNetworkRestrictionSetting, false);
+      ash::prefs::kClassManagementToolsNetworkRestrictionSetting, true);
   registry->RegisterIntegerPref(
       ash::prefs::kClassManagementToolsOOBEAccessCountSetting, 0);
 }
 
 bool IsEnabled(const user_manager::User* user) {
+  if (!ash::features::IsBocaUberEnabled()) {
+    return false;
+  }
+
   if (features::IsBocaEnabled()) {
     return true;
   }

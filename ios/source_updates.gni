@@ -32,7 +32,8 @@ update_template_instance("//ios/chrome/widget_kit_extension:widget_kit_extension
     "search_widget.swift",
     "quick_actions_widget.swift",
     "lockscreen_launcher_widget.swift",
-    "shortcuts_widget.swift"
+    "shortcuts_widget.swift",
+    "dino_game_widget.swift"
   ]
   sources += [
     "//vivaldi/ios/chrome/widget_kit_extension/main.swift",

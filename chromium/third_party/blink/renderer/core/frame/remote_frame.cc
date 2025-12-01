@@ -212,7 +212,8 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
       frame_request.GetResourceRequest(), fetch_client_settings_object, window,
       frame_request.GetFrameType(),
       window->GetFrame() ? window->GetFrame()->GetContentSettingsClient()
-                         : nullptr);
+                         : nullptr,
+      window->GetFrame());
 
   if (NavigationShouldReplaceCurrentHistoryEntry(frame_load_type))
     frame_load_type = WebFrameLoadType::kReplaceCurrentItem;
@@ -264,6 +265,7 @@ void RemoteFrame::Navigate(FrameLoadRequest& frame_request,
       !frame_request.GetRequestorBaseURL().IsEmpty()) {
     params->initiator_base_url = frame_request.GetRequestorBaseURL();
   }
+  params->actual_navigation_start = frame_request.GetCreationTime();
   params->post_body =
       blink::GetRequestBodyForWebURLRequest(WrappedResourceRequest(request));
   DCHECK_EQ(!!params->post_body, request.HttpMethod().Utf8() == "POST");
@@ -1163,7 +1165,8 @@ void RemoteFrame::CreateRemoteChild(
 }
 
 void RemoteFrame::CreateRemoteChildren(
-    Vector<mojom::blink::CreateRemoteChildParamsPtr> params) {
+    Vector<mojom::blink::CreateRemoteChildParamsPtr> params,
+    const std::optional<base::UnguessableToken>& navigation_metrics_token) {
   Client()->CreateRemoteChildren(params);
 }
 

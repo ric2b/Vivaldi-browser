@@ -477,7 +477,7 @@ bool VivaldiDesktopWindowTreeHostWin::GetDwmFrameInsetsInPixels(
 
 bool VivaldiDesktopWindowTreeHostWin::GetClientAreaInsets(
     gfx::Insets* insets,
-    HMONITOR monitor) const {
+    int frame_thickness) const {
   // System window decorations, or maximized windows gets a frame drawn
   // regardless. Do not set any insets.
   if (window_->with_native_frame() ) {
@@ -488,8 +488,6 @@ bool VivaldiDesktopWindowTreeHostWin::GetClientAreaInsets(
   if (GetWidget()->IsFullscreen()) {
     *insets = gfx::Insets();
   } else {
-    const int frame_thickness =
-        GetWidget()->IsMaximized() ? ui::GetFrameThickness(monitor) : 1;
     const int top_frame_thickness =
         GetWidget()->IsMaximized() ? frame_thickness : 0;
     *insets = gfx::Insets::TLBR(top_frame_thickness, frame_thickness,

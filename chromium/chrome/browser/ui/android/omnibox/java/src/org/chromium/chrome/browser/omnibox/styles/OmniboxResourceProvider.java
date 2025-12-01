@@ -17,7 +17,6 @@ import android.util.TypedValue;
 import androidx.annotation.ColorInt;
 import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
-import androidx.annotation.NonNull;
 import androidx.annotation.Px;
 import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
@@ -27,6 +26,8 @@ import androidx.core.content.ContextCompat;
 import com.google.android.material.color.MaterialColors;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.theme.ThemeUtils;
@@ -36,6 +37,7 @@ import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.util.ColorUtils;
 
 /** Provides resources specific to Omnibox. */
+@NullMarked
 public class OmniboxResourceProvider {
     private static final String TAG = "OmniboxResourceProvider";
 
@@ -47,7 +49,7 @@ public class OmniboxResourceProvider {
      * potentially augmented with caching. If caching is enabled, there is a single, unbounded cache
      * of ConstantState shared by all contexts.
      */
-    public static @NonNull Drawable getDrawable(Context context, @DrawableRes int res) {
+    public static Drawable getDrawable(Context context, @DrawableRes int res) {
         ThreadUtils.assertOnUiThread();
         ConstantState constantState = sDrawableCache.get(res, null);
         if (constantState != null) {
@@ -64,12 +66,26 @@ public class OmniboxResourceProvider {
      * with caching. If caching is enabled, there is a single, unbounded string cache shared by all
      * contexts. When dealing with strings with format params, the raw string is cached and
      * formatted on demand using the default locale.
+     *
+     * <p>This function converts cross-platform grit string expansion placeholders to Java
+     * placeholders allowing any single string to be used both from C++ and Java. This requires all
+     * the arguments to be of String type.
+     *
+     * @param context current context used to resolve string res
+     * @param res string res to retrieve, cache, and expand
+     * @param args positional arguments expanded when `res` includes expansion placeholders
+     * @return expanded and formatted string representing
      */
-    public static @NonNull String getString(Context context, @StringRes int res, Object... args) {
+    public static String getString(Context context, @StringRes int res, CharSequence... args) {
         ThreadUtils.assertOnUiThread();
         String string = sStringCache.get(res, null);
         if (string == null) {
             string = context.getString(res);
+
+            // Translate `$1`, `$2`, ... strings (found typically on other platforms)
+            // to `%1$s`, `%2$s` etc, which are appropriate for Chrome.
+            string = string.replaceAll("\\$(\\d+)", "%$1\\$s");
+
             sStringCache.put(res, string);
         }
 
@@ -78,7 +94,7 @@ public class OmniboxResourceProvider {
                 : String.format(
                         context.getResources().getConfiguration().getLocales().get(0),
                         string,
-                        args);
+                        (Object[]) args);
     }
 
     /**
@@ -96,7 +112,7 @@ public class OmniboxResourceProvider {
         sDrawableCache =
                 new SparseArray<>() {
                     @Override
-                    public ConstantState get(int key) {
+                    public @Nullable ConstantState get(int key) {
                         return null;
                     }
 
@@ -108,7 +124,7 @@ public class OmniboxResourceProvider {
         sStringCache =
                 new SparseArray<>() {
                     @Override
-                    public String get(int key) {
+                    public @Nullable String get(int key) {
                         return null;
                     }
 
@@ -454,7 +470,7 @@ public class OmniboxResourceProvider {
     }
 
     /** Gets the margin, in pixels, on either side of an omnibox suggestion list. */
-    public static @Px int getDropdownSideSpacing(@NonNull Context context) {
+    public static @Px int getDropdownSideSpacing(Context context) {
         context = maybeReplaceContextForSmallTabletWindow(context);
         return getSideSpacing(context)
                 + context.getResources()
@@ -462,7 +478,7 @@ public class OmniboxResourceProvider {
     }
 
     /** Gets the margin, in pixels, on either side of an omnibox suggestion. */
-    public static @Px int getSideSpacing(@NonNull Context context) {
+    public static @Px int getSideSpacing(Context context) {
         context = maybeReplaceContextForSmallTabletWindow(context);
         return context.getResources()
                 .getDimensionPixelSize(R.dimen.omnibox_suggestion_side_spacing_smallest);

@@ -107,6 +107,9 @@ source_set("tabs") {
   sources = [
     "tabs/tab_helpers.cc",
     "tabs/tab_helpers.h",
+    "tabs/vivaldi_tab_collection.cc",
+    "tabs/vivaldi_tab_collection.h",
+    "tabs/vivaldi_tab_strip_collection.cc",
   ]
 
   deps = [

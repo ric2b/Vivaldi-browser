@@ -35,6 +35,10 @@ extern const base::FeatureParam<int> kNudgeCapCountPerDomain;
 // before the next nudge can be shown.
 extern const base::FeatureParam<int> kMinPageCountBetweenNudges;
 
+// The minimum time between two consecutive nudges. Prevents excessive nudges
+// during a short burst of navigations.
+extern const base::FeatureParam<base::TimeDelta> kMinTimeBetweenNudges;
+
 // Limit on how many recently visited domains should be kept track of. This is
 // used to implement nudge constraints per-domain per 24 hour period.
 extern const base::FeatureParam<int> kVisitedDomainsLimit;
@@ -45,6 +49,22 @@ extern const base::FeatureParam<base::TimeDelta> kPdfPageCountCaptureDelay;
 // Whether to enable page content extraction which is needed for processing the
 // count of words client signal.
 extern const base::FeatureParam<bool> kEnablePageContentExtraction;
+
+// Whether to enable extraction of inner text for zero state suggestions.
+extern const base::FeatureParam<bool> kExtractInnerTextForZeroStateSuggestions;
+
+// Whether to enable extraction of annotated page content for zero state
+// suggestions.
+extern const base::FeatureParam<bool>
+    kExtractAnnotatedPageContentForZeroStateSuggestions;
+
+// The amount of time to wait for extracting page content for same document
+// navigations.
+extern const base::FeatureParam<base::TimeDelta>
+    kPageContentExtractionDelayForSameDocumentNavigation;
+
+// Always return empty suggestions for same document navigations.
+extern const base::FeatureParam<bool> kReturnEmptyForSameDocumentNavigation;
 
 }  // namespace contextual_cueing
 

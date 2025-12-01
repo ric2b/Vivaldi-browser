@@ -12,5 +12,5 @@ import {sendWebKitMessage} from '//ios/web/public/js_messaging/resources/utils.j
 window.addEventListener('hashchange', () => {
   sendWebKitMessage(
       'NavigationEventMessage',
-      {'command': 'hashchange', 'frame_id': gCrWeb.message.getFrameId()});
+      {'command': 'hashchange', 'frame_id': gCrWeb.getFrameId()});
 });

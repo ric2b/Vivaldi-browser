@@ -1,6 +1,7 @@
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -181,7 +182,6 @@ export class Filters extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
           category.title, undefined,
           categoriesFilterChanged.bind(this, categoryName as Utils.EntryStyles.EventCategory), categoryName);
       checkbox.setChecked(true);
-      checkbox.inputElement.style.backgroundColor = category.color;
       categoryFiltersUI.set(category.name, checkbox);
       toolbar.appendToolbarItem(checkbox);
     }

@@ -10,8 +10,8 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
-import org.chromium.base.LifetimeAssert;
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.lifetime.LifetimeAssert;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 
@@ -63,7 +63,7 @@ public class ComponentLoaderPolicyBridge {
 
         // If mLifetimeAssert is GC'ed before this is called, it will throw an exception
         // with a stack trace showing the stack during LifetimeAssert.create().
-        LifetimeAssert.setSafeToGc(mLifetimeAssert, true);
+        LifetimeAssert.destroy(mLifetimeAssert);
     }
 
     /**
@@ -85,7 +85,7 @@ public class ComponentLoaderPolicyBridge {
 
         // If mLifetimeAssert is GC'ed before this is called, it will throw an exception
         // with a stack trace showing the stack during LifetimeAssert.create().
-        LifetimeAssert.setSafeToGc(mLifetimeAssert, true);
+        LifetimeAssert.destroy(mLifetimeAssert);
     }
 
     /**

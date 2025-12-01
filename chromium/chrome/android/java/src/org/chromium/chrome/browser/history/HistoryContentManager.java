@@ -138,14 +138,14 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
     private final @Nullable Runnable mOpenHistoryItemCallback;
     // TODO(crbug.com/388201374): Remove the nullability once the feature is launched.
     private @Nullable final SigninPromoCoordinator mHistorySyncPromoCoordinator;
-    private HistoryAdapter mHistoryAdapter;
-    private RecyclerView mRecyclerView;
+    private final HistoryAdapter mHistoryAdapter;
+    private final RecyclerView mRecyclerView;
     private LargeIconBridge mLargeIconBridge;
-    private SelectionDelegate<HistoryItem> mSelectionDelegate;
+    private final SelectionDelegate<HistoryItem> mSelectionDelegate;
     private boolean mShouldShowPrivacyDisclaimers;
-    private boolean mLaunchedForApp;
-    private PrefChangeRegistrar mPrefChangeRegistrar;
-    private String mAppId;
+    private final boolean mLaunchedForApp;
+    private final PrefChangeRegistrar mPrefChangeRegistrar;
+    private final String mAppId;
     private AppFilterCoordinator mAppFilterSheet;
     private AppInfo mCurrentApp;
     private long mAppQueryStartMs;
@@ -232,7 +232,7 @@ public class HistoryContentManager implements SignInStateObserver, PrefObserver 
                         };
         mTabSupplier = tabSupplier;
 
-        if (SigninFeatureMap.isEnabled(SigninFeatures.HISTORY_OPT_IN_ENTRY_POINTS)) {
+        if (SigninFeatureMap.isEnabled(SigninFeatures.HISTORY_PAGE_HISTORY_SYNC_PROMO)) {
             mHistorySyncPromoCoordinator =
                     new SigninPromoCoordinator(
                             mActivity,

@@ -39,6 +39,8 @@ class CSSPropertyName;
 class CSSPropertyValueSet;
 class StylePropertyShorthand;
 
+enum class CSSGapDecorationPropertyDirection : int;
+
 class CORE_EXPORT StylePropertySerializer {
   STACK_ALLOCATED();
 
@@ -62,6 +64,13 @@ class CORE_EXPORT StylePropertySerializer {
   String PageBreakPropertyValue(const StylePropertyShorthand&) const;
   String GetShorthandValue(const StylePropertyShorthand&,
                            String separator = " ") const;
+  String GetShorthandValueForRule(const StylePropertyShorthand&,
+                                  const StylePropertyShorthand&) const;
+  String GetShorthandValueForBidirectionalGapRules(
+      const StylePropertyShorthand&) const;
+  String GetShorthandValueForGapDecorationsRule(
+      const StylePropertyShorthand&,
+      CSSGapDecorationPropertyDirection direction) const;
   String GetShorthandValueForColumnRule(const StylePropertyShorthand&) const;
   String GetShorthandValueForColumns(const StylePropertyShorthand&) const;
   // foo || bar || ... || baz

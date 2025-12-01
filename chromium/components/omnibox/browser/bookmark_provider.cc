@@ -121,6 +121,9 @@ void BookmarkProvider::DoAutocomplete(const AutocompleteInput& input) {
       // `transition` appropriately to avoid popping the user out of keyword
       // mode.
 #if defined(VIVALDI_BUILD)
+      if (bookmark_match.node->GetTitledUrlNodeUrl().spec() ==
+          bookmark_separator_placeholder_)
+        continue;
       if (match.allowed_to_be_default_match) {
         const std::string host(base::UTF16ToUTF8(input.text().substr(
             input.parts().host.begin, input.parts().host.len)));

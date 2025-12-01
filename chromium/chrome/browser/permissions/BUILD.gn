@@ -38,8 +38,8 @@ source_set("permissions") {
     "permission_manager_factory.h",
     "permission_revocation_request.cc",
     "permission_revocation_request.h",
-    "permissions_ai_handler.cc",
-    "permissions_ai_handler.h",
+    "permissions_aiv1_handler.cc",
+    "permissions_aiv1_handler.h",
     "prediction_based_permission_ui_selector.cc",
     "prediction_based_permission_ui_selector.h",
     "prediction_model_handler_provider.cc",
@@ -75,6 +75,7 @@ source_set("permissions") {
     "//chrome/browser/profiles:profiles",
     "//chrome/browser/safe_browsing",
     "//chrome/browser/search_engines",
+    "//chrome/browser/serial",
     "//chrome/browser/storage_access_api",
     "//chrome/browser/top_level_storage_access_api:permissions",
     "//chrome/browser/ui/hats",
@@ -181,6 +182,20 @@ proto_library("permissions_proto") {
   sources = [ "crowd_deny.proto" ]
 }
 
+source_set("test_support") {
+  testonly = true
+
+  sources = [
+    "system/mock_platform_handle.cc",
+    "system/mock_platform_handle.h",
+  ]
+
+  deps = [
+    ":permissions",
+    "//testing/gmock",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
@@ -192,18 +207,17 @@ source_set("unit_tests") {
     "crowd_deny_safe_browsing_request_unittest.cc",
     "notifications_engagement_service_unittest.cc",
     "permission_context_base_permissions_policy_unittest.cc",
-    "permission_revocation_request_unittests.cc",
+    "permission_revocation_request_unittest.cc",
     "permission_subscription_unittest.cc",
-    "permissions_ai_handler_unittest.cc",
+    "permissions_aiv1_handler_unittest.cc",
     "prediction_based_permission_ui_selector_unittest.cc",
     "pref_based_quiet_permission_ui_selector_unittest.cc",
-    "system/mock_platform_handle.cc",
-    "system/mock_platform_handle.h",
   ]
 
   deps = [
     ":permissions",
     ":permissions_proto",
+    ":test_support",
     "//chrome/browser/content_settings:content_settings_factory",
     "//chrome/browser/optimization_guide:test_support",
     "//chrome/browser/permissions/system",

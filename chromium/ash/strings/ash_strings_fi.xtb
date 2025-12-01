@@ -462,6 +462,7 @@ Pääset alkuun esimerkiksi näillä tavoilla.</translation>
 <translation id="2530896289327917474">Laita näppäimistöselaaminen päälle tai pois päältä</translation>
 <translation id="2531025035050312891">hidas laite</translation>
 <translation id="2531107890083353124">Vedä välilehteä ja paina samalla <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Valitse kuvakaappauksen alue vetämällä tai painamalla välilyöntiä</translation>
 <translation id="2545334090614121435">Yritätkö käyttää Homea? Käytä yhdistelmää</translation>
 <translation id="254900897760075745">Kopioi valittu sisältö leikepöydälle</translation>
 <translation id="2549711466868162843">Valaistuksen parantaminen</translation>
@@ -581,7 +582,6 @@ Muussa tapauksessa sisäänrakennettu kosketuslevy otetaan käyttöön, kun <ph 
 <translation id="2949420361496057765">Paina <ph name="MODIFIER" /> ja klikkaa linkkiä</translation>
 <translation id="2957159466053076448">Voit laittaa nämä ominaisuudet pois päältä milloin tahansa asetuksista. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Laitteen audio</translation>
-<translation id="2960314608273155470">Tallennustila, oletuksena on <ph name="SOURCE" /> <ph name="TYPE" />. Aloita näppäimistöllä siirtyminen painamalla sarkainta.</translation>
 <translation id="2961963223658824723">Jotain meni pieleen. Yritä uudelleen parin sekunnin kuluttua.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Laitetaanko mikrofonin käyttölupa päälle?</translation>
@@ -761,6 +761,7 @@ Muussa tapauksessa sisäänrakennettu kosketuslevy otetaan käyttöön, kun <ph 
 <translation id="3552189655002856821">Wi-Fi on poissa päältä</translation>
 <translation id="3554215588514239132">Näytä tai piilota Kehittäjätyökalut-paneeli</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> kiinnitettiin</translation>
+<translation id="3554928024630051016">Jos haluat lisätä muita USB-laitteita, yritä poistaa jokin nykyisistä ja kytkeä sitten uusi laite</translation>
 <translation id="3558768885091059911">Sallitaanko kameran ja mikrofonin käyttö?</translation>
 <translation id="3560174576767922131">Kuvaa video</translation>
 <translation id="3563775809269155755">Ota hotspot käyttöön</translation>
@@ -868,6 +869,7 @@ Yhdistä laite virtalähteeseen.</translation>
 <translation id="3861651314799684201">Tallenna koko näytön sisältö painamalla Enter</translation>
 <translation id="3870197372373144624">Kokeile sammuttaa laite.</translation>
 <translation id="3879748587602334249">Latausten hallinta</translation>
+<translation id="3884007280698606545">USB-laitteita on enimmäismäärä</translation>
 <translation id="3886872229787704059">Avattu tänään</translation>
 <translation id="3891340733213178823">Kirjaudu ulos painamalla Ctrl+Shift+Q kahdesti.</translation>
 <translation id="3892148308691398805">Kopioi teksti</translation>
@@ -1440,6 +1442,7 @@ Ei liitettyjä laitteita.</translation>
 <translation id="5672890847723042801">Apusovellukset</translation>
 <translation id="5673434351075758678">Muutos asetusten synkronoinnin yhteydessä: <ph name="FROM_LOCALE" /> – <ph name="TO_LOCALE" /></translation>
 <translation id="5675363643668471212">Hyllyn kohde</translation>
+<translation id="5677022547882470786">Valitse hakualue vetämällä tai painamalla välilyöntiä</translation>
 <translation id="5677928146339483299">Estetty</translation>
 <translation id="5678564054339031017">Näytä seuraava viikko</translation>
 <translation id="5679050765726761783">Pienitehoinen sovitin liitetty</translation>
@@ -1485,6 +1488,7 @@ Ei liitettyjä laitteita.</translation>
 <translation id="5788127256798019331">Play-tiedostot</translation>
 <translation id="5788535737706478207">Avaa viimeisin suljettu välilehti tai ikkuna</translation>
 <translation id="5790085346892983794">Onnistui</translation>
+<translation id="5791926618942305301">Kuvakaappauksessa, <ph name="SOURCE" /> <ph name="TYPE" /> valittu. Valitse tallennustyyppi painamalla välilehteä. Tallenna painamalla Enter. Jos haluat valita kuvan alueen, valitse osittainen kuvakaappaus. Jos alue ei ole vielä aktiivinen, valitse se painamalla välilyöntiä.</translation>
 <translation id="579415080077680903">Hiljennä</translation>
 <translation id="5802516411616338943">Avaa Pika-asetukset</translation>
 <translation id="5804651031882187592">Laita "Lukitse SIM-kortti" ‐asetus pois päältä</translation>
@@ -1641,6 +1645,7 @@ Ei liitettyjä laitteita.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> voidaan lisätä myöhemmin uudelleen vanhemman luvalla.</translation>
 <translation id="6291221004442998378">Ei ladata</translation>
 <translation id="6298183524022479114">Muokkaa laitetta sovelluksessa</translation>
+<translation id="6304076460080088478">Sulje tai pienennä incognito-ikkunat, niin voit hakea näytöltä Google Lensilla</translation>
 <translation id="6309219492973062892">Klikkaa tai napauta hyllyn kuvakkeita 1–8</translation>
 <translation id="6315170314923504164">Ääni</translation>
 <translation id="6319058840130157106">Siirry taaksepäin oikean alakulman, käynnistysohjelman, osoitepalkin, kirjanmerkkipalkin, avoimen verkkosivuston ja latausten välillä</translation>
@@ -1769,6 +1774,7 @@ Uusi asennus</translation>
 <translation id="6700713906295497288">IME-valikkopainike</translation>
 <translation id="6704073473590541209">Valittu oikean reunan kahva, siirry nuolinäppäimillä</translation>
 <translation id="6706742084323792866">Kiinnitä näppäimistö</translation>
+<translation id="6709719156428404245">Valitse tallennettava alue vetämällä tai painamalla välilyöntiä</translation>
 <translation id="6710213216561001401">Edellinen</translation>
 <translation id="6723839937902243910">Virta</translation>
 <translation id="672609503628871915">Uudet ominaisuudet</translation>

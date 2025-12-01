@@ -131,11 +131,10 @@ BookmarkNodesSplitByAccountAndLocal GetMostRecentlyUsedFoldersForDisplay(
 // nodes).
 BookmarkNodesSplitByAccountAndLocal GetPermanentNodesForDisplay(
     const BookmarkModel* model);
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 // Returns true if any local permanent nodes contain bookmarks.
 bool HasLocalOrSyncableBookmarks(const BookmarkModel* model);
-
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
 // Returns the most recently added bookmarks. This does not return folders,
 // only nodes of type url.
@@ -186,8 +185,7 @@ void DeleteBookmarkFolders(BookmarkModel* model,
 // If there are no user bookmarks for url, a bookmark is created.
 const BookmarkNode* AddIfNotBookmarked(BookmarkModel* model,
                                        const GURL& url,
-                                       const std::u16string& title,
-                                       const BookmarkNode* parent = nullptr);
+                                       const std::u16string& title);
 
 // Removes all bookmarks for the given `url`.
 void RemoveAllBookmarks(BookmarkModel* model,

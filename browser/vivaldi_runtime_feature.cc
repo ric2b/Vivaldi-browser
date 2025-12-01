@@ -100,6 +100,10 @@ std::optional<FeatureMap> ParseFeatures(base::Value json) {
       current_os = "win";
 #elif BUILDFLAG(IS_LINUX)
       current_os = "linux";
+#elif BUILDFLAG(IS_ANDROID)
+      current_os = "android";
+#elif BUILDFLAG(IS_IOS)
+      current_os = "ios";
 #else
 #error "Unsupported platform"
 #endif
@@ -228,6 +232,15 @@ void Init() {
 
 const FeatureMap& GetAllFeatures() {
   return GetFeatureMapStorage();
+}
+
+std::optional<Feature> GetFeature(std::string_view feature_name) {
+  if (!g_initialized)
+    return std::nullopt;
+  const FeatureMap& feature_map = GetFeatureMapStorage();
+  auto iter = feature_map.find(feature_name);
+
+  return iter != feature_map.end() ? iter->second : std::optional<Feature>();
 }
 
 const EnabledSet* GetEnabled(content::BrowserContext* browser_context) {

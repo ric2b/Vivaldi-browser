@@ -4,18 +4,22 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.text.TextUtils;
 
 import androidx.annotation.IdRes;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.res.ResourcesCompat;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.build.annotations.RequiresNonNull;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowDisplayPref;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.BookmarkRowSortOrder;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.Observer;
@@ -28,6 +32,7 @@ import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableRecy
 import org.chromium.components.browser_ui.widget.dragreorder.DragReorderableRecyclerViewAdapter.DragListener;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.NavigationButton;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
+import org.chromium.ui.modelutil.PropertyModel;
 
 import java.util.Arrays;
 import java.util.List;
@@ -39,9 +44,10 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
-import org.chromium.ui.modelutil.PropertyModel;
+// End Vivaldi
 
 /** Responsible for the business logic for the BookmarkManagerToolbar. */
+@NullMarked
 class BookmarkToolbarMediator
         implements BookmarkUiObserver,
                 DragListener,
@@ -84,14 +90,13 @@ class BookmarkToolbarMediator
     private final BookmarkUiPrefs mBookmarkUiPrefs;
     private final BookmarkAddNewFolderCoordinator mBookmarkAddNewFolderCoordinator;
     private final Runnable mEndSearchRunnable;
-    private final BookmarkMoveSnackbarManager mBookmarkMoveSnackbarManager;
     private final BooleanSupplier mIncognitoEnabledSupplier;
     private final BookmarkManagerOpener mBookmarkManagerOpener;
 
     // TODO(crbug.com/40255666): Remove reference to BookmarkDelegate if possible.
     private @Nullable BookmarkDelegate mBookmarkDelegate;
 
-    private BookmarkId mCurrentFolder;
+    private @Nullable BookmarkId mCurrentFolder;
     private @BookmarkUiMode int mCurrentUiMode;
 
     BookmarkToolbarMediator(
@@ -106,7 +111,6 @@ class BookmarkToolbarMediator
             BookmarkUiPrefs bookmarkUiPrefs,
             BookmarkAddNewFolderCoordinator bookmarkAddNewFolderCoordinator,
             Runnable endSearchRunnable,
-            BookmarkMoveSnackbarManager bookmarkMoveSnackbarManager,
             BooleanSupplier incognitoEnabledSupplier,
             BookmarkManagerOpener bookmarkManagerOpener) {
         mContext = context;
@@ -123,7 +127,6 @@ class BookmarkToolbarMediator
         mBookmarkUiPrefs.addObserver(mBookmarkUiPrefsObserver);
         mBookmarkAddNewFolderCoordinator = bookmarkAddNewFolderCoordinator;
         mEndSearchRunnable = endSearchRunnable;
-        mBookmarkMoveSnackbarManager = bookmarkMoveSnackbarManager;
         mIncognitoEnabledSupplier = incognitoEnabledSupplier;
         mBookmarkManagerOpener = bookmarkManagerOpener;
 
@@ -152,7 +155,7 @@ class BookmarkToolbarMediator
     boolean onMenuIdClick(@IdRes int id) {
         // Sorting/viewing submenu needs to be caught, but haven't been implemented yet.
         if (id == R.id.create_new_folder_menu_id) {
-            mBookmarkAddNewFolderCoordinator.show(mCurrentFolder);
+            mBookmarkAddNewFolderCoordinator.show(assumeNonNull(mCurrentFolder));
             return true;
         } else if (id == R.id.normal_options_submenu) {
             return true;
@@ -195,7 +198,8 @@ class BookmarkToolbarMediator
             mModel.set(BookmarkToolbarProperties.CHECKED_VIEW_MENU_ID, id);
             return true;
         } else if (id == R.id.edit_menu_id) {
-            mBookmarkManagerOpener.startEditActivity(mContext, mProfile, mCurrentFolder);
+            mBookmarkManagerOpener.startEditActivity(
+                    mContext, mProfile, assumeNonNull(mCurrentFolder));
             return true;
         } else if (id == R.id.close_menu_id) {
             if (BuildConfig.IS_VIVALDI) {
@@ -208,6 +212,7 @@ class BookmarkToolbarMediator
             List<BookmarkId> list = mSelectionDelegate.getSelectedItemsAsList();
             assert list.size() == 1;
             BookmarkItem item = mBookmarkModel.getBookmarkById(list.get(0));
+            assumeNonNull(item);
 
             if (BuildConfig.IS_VIVALDI && item.isFolder())
                 mBookmarkManagerOpener.startVivaldiEditFolderActivity(mContext, mProfile, item.getId());
@@ -224,8 +229,9 @@ class BookmarkToolbarMediator
                             mContext, list.toArray(new BookmarkId[0]));
                     return true;
                 } // End Vivaldi
-                mBookmarkMoveSnackbarManager.startFolderPickerAndObserveResult(
-                        mBookmarkManagerOpener, list.toArray(new BookmarkId[0]));
+
+                mBookmarkManagerOpener.startFolderPickerActivity(
+                        mContext, mProfile, list.toArray(new BookmarkId[0]));
                 RecordUserAction.record("MobileBookmarkManagerMoveToFolderBulk");
             }
             return true;
@@ -261,63 +267,77 @@ class BookmarkToolbarMediator
                 if (bookmark.getType() != BookmarkType.READING_LIST) continue;
 
                 BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmark);
+                assumeNonNull(bookmarkItem);
                 mBookmarkModel.setReadStatusForReadingList(
                         bookmarkItem.getId(), /* read= */ id == R.id.reading_list_mark_as_read_id);
             }
             mSelectionDelegate.clearSelection();
             return true;
-        // Vivaldi
+            // Vivaldi
         } else if (id == R.id.add_page_to_reading_list_menu_id) {
             mBookmarkManagerOpener.vivaldiAddToReadingList(mContext);
             return true;
         } else if (id == R.id.sort_bookmarks_id) {
-            BookmarkDelegate.SortOrder order = mBookmarkDelegate.getSortOrder();
-            if (order == BookmarkDelegate.SortOrder.MANUAL) {
-                mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_manual_id);
-                writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.MANUAL);
-            } else if (order == BookmarkDelegate.SortOrder.TITLE) {
-                mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_title_id);
-                writeBookmarkSortOrderPref( BookmarkDelegate.SortOrder.TITLE);
-            } else if (order == BookmarkDelegate.SortOrder.ADDRESS) {
-                mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_address_id);
-                writeBookmarkSortOrderPref( BookmarkDelegate.SortOrder.ADDRESS);
-            } else if (order == BookmarkDelegate.SortOrder.NICK) {
-                mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_nickname_id);
-                writeBookmarkSortOrderPref( BookmarkDelegate.SortOrder.NICK);
-            } else if (order == BookmarkDelegate.SortOrder.DESCRIPTION) {
-                mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_description_id);
-                writeBookmarkSortOrderPref( BookmarkDelegate.SortOrder.DESCRIPTION);
-            } else if (order == BookmarkDelegate.SortOrder.DATE) {
-                mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_date_id);
-                writeBookmarkSortOrderPref( BookmarkDelegate.SortOrder.DATE);
+            if (mBookmarkDelegate != null) {
+                BookmarkDelegate.SortOrder order = mBookmarkDelegate.getSortOrder();
+                if (order == BookmarkDelegate.SortOrder.MANUAL) {
+                    mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_manual_id);
+                    writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.MANUAL);
+                } else if (order == BookmarkDelegate.SortOrder.TITLE) {
+                    mModel.set(
+                            BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_title_id);
+                    writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.TITLE);
+                } else if (order == BookmarkDelegate.SortOrder.ADDRESS) {
+                    mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID,
+                            R.id.sort_by_address_id);
+                    writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.ADDRESS);
+                } else if (order == BookmarkDelegate.SortOrder.NICK) {
+                    mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID,
+                            R.id.sort_by_nickname_id);
+                    writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.NICK);
+                } else if (order == BookmarkDelegate.SortOrder.DESCRIPTION) {
+                    mModel.set(BookmarkToolbarProperties.CHECKED_SORT_MENU_ID,
+                            R.id.sort_by_description_id);
+                    writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.DESCRIPTION);
+                } else if (order == BookmarkDelegate.SortOrder.DATE) {
+                    mModel.set(
+                            BookmarkToolbarProperties.CHECKED_SORT_MENU_ID, R.id.sort_by_date_id);
+                    writeBookmarkSortOrderPref(BookmarkDelegate.SortOrder.DATE);
+                }
             }
             return true;
         } else if (id == R.id.sort_manual_id) {
+            if (mBookmarkDelegate != null)
             mBookmarkDelegate.setSortOrder(
                     BookmarkDelegate.SortOrder.forNumber(BookmarkDelegate.
                             SortOrder.MANUAL.getNumber()));
             return true;
         } else if (id == R.id.sort_by_title_id) {
+            if (mBookmarkDelegate != null)
             mBookmarkDelegate.setSortOrder(
                     BookmarkDelegate.SortOrder.forNumber(BookmarkDelegate.
                             SortOrder.TITLE.getNumber()));
             return true;
         } else if (id == R.id.sort_by_address_id) {
+            if (mBookmarkDelegate != null)
             mBookmarkDelegate.setSortOrder(
                     BookmarkDelegate.SortOrder.forNumber(BookmarkDelegate.
                             SortOrder.ADDRESS.getNumber()));
             return true;
         } else if (id == R.id.sort_by_nickname_id) {
+            if (mBookmarkDelegate != null)
             mBookmarkDelegate.setSortOrder(
                     BookmarkDelegate.SortOrder.forNumber(BookmarkDelegate.
                             SortOrder.NICK.getNumber()));
             return true;
         } else if (id == R.id.sort_by_description_id) {
+            if (mBookmarkDelegate != null)
             mBookmarkDelegate.setSortOrder(
                     BookmarkDelegate.SortOrder.forNumber(BookmarkDelegate.
                             SortOrder.DESCRIPTION.getNumber()));
             return true;
         } else if (id == R.id.sort_by_date_id) {
+            if (mBookmarkDelegate != null)
             mBookmarkDelegate.setSortOrder(
                     BookmarkDelegate.SortOrder.forNumber(BookmarkDelegate.
                             SortOrder.DATE.getNumber()));
@@ -344,6 +364,7 @@ class BookmarkToolbarMediator
     @Override
     public void onUiModeChanged(@BookmarkUiMode int mode) {
         mCurrentUiMode = mode;
+
         // TODO(https://crbug.com/1439583): Update buttons.
         mModel.set(BookmarkToolbarProperties.BOOKMARK_UI_MODE, mode);
         if (mode == BookmarkUiMode.LOADING) {
@@ -370,14 +391,14 @@ class BookmarkToolbarMediator
     }
 
     @Override
-    public void onFolderStateSet(BookmarkId folder) {
+    public void onFolderStateSet(@Nullable BookmarkId folder) {
         mCurrentFolder = folder;
 
         BookmarkItem folderItem =
                 mCurrentFolder == null ? null : mBookmarkModel.getBookmarkById(mCurrentFolder);
         // Vivaldi
-        boolean isReadingListFolder = mCurrentFolder != null
-                && mCurrentFolder.equals(mBookmarkModel.getDefaultReadingListFolder());
+        boolean isReadingListFolder = mCurrentFolder != null &&
+                mCurrentFolder.equals(mBookmarkModel.getDefaultReadingListFolder());
         boolean enableAddToReadingListMenu =
                 mBookmarkManagerOpener.getAddToReadingListButtonVisibility(mContext);
         if (BuildConfig.IS_VIVALDI) {
@@ -388,29 +409,35 @@ class BookmarkToolbarMediator
             mModel.set(BookmarkToolbarProperties.SORT_BUTTON_VISIBLE, !isReadingListFolder);
             mModel.set(BookmarkToolbarProperties.SEARCH_BUTTON_VISIBLE,
                     folderItem != null && !isReadingListFolder);
-        } // End Vivaldi
+            mModel.set(
+                    BookmarkToolbarProperties.EDIT_BUTTON_VISIBLE,
+                    folderItem != null && folderItem.isEditable() && mCurrentFolder != null
+                    && !mBookmarkModel.isInsideTrashFolder(mCurrentFolder));
+        } else // End Vivaldi
         mModel.set(
                 BookmarkToolbarProperties.EDIT_BUTTON_VISIBLE,
                 folderItem != null && folderItem.isEditable());
         if (folderItem == null) return;
+
+        assumeNonNull(mCurrentFolder);
+
         // Title, navigation buttons.
         String title;
         @NavigationButton int navigationButton;
         Resources res = mContext.getResources();
-        if (folder.equals(mBookmarkModel.getRootFolderId())) {
+        if (mCurrentFolder.equals(mBookmarkModel.getRootFolderId())) {
             title = res.getString(R.string.bookmarks);
             navigationButton = NavigationButton.NONE;
         } else if (mBookmarkModel.getTopLevelFolderIds().contains(folderItem.getParentId())
                 && TextUtils.isEmpty(folderItem.getTitle())) {
             title = res.getString(R.string.bookmarks);
             navigationButton = NavigationButton.NORMAL_VIEW_BACK;
-        } else if (BuildConfig.IS_VIVALDI &&
+        } else if (BuildConfig.IS_VIVALDI && folder != null &&
                 folder.equals(mBookmarkModel.getDefaultReadingListFolder())) {
-            navigationButton = NavigationButton.NONE;
             // Vivaldi Ref. VAB-8796
-            if (mContext instanceof AppCompatActivity activity
-                    && activity.findViewById(R.id.bookmarks_tab_button) != null)
+            if (isPanelOpen()) {
                 navigationButton = NavigationButton.NORMAL_VIEW_BACK;
+            } else navigationButton = NavigationButton.NONE;
             title = res.getString(R.string.menu_reading_list);
         } else {
             title = folderItem.getTitle();
@@ -514,6 +541,7 @@ class BookmarkToolbarMediator
         for (int i = 0; i < selectedBookmarks.size(); i++) {
             BookmarkId bookmark = selectedBookmarks.get(i);
             BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmark);
+            assumeNonNull(bookmarkItem);
             if (bookmark.getType() == BookmarkType.READING_LIST) {
                 numReadingListItems++;
                 if (bookmarkItem.isRead()) numRead++;
@@ -532,6 +560,11 @@ class BookmarkToolbarMediator
                 BookmarkId bookmark = selectedBookmarks.get(i);
                 if (bookmark.getType() == BookmarkType.READING_LIST) {
                     showEdit = false;
+                } else if (mBookmarkModel.isInsideTrashFolder(bookmark)) {
+                    showEdit = false;
+                    showOpenInNewTab = false;
+                    showOpenInIncognito = false;
+                    break;
                 }
             }
         } // End Vivaldi
@@ -576,13 +609,15 @@ class BookmarkToolbarMediator
 
     // Private methods.
 
+    @RequiresNonNull("mBookmarkDelegate")
     private void onNavigateBack() {
         if (mCurrentUiMode == BookmarkUiMode.SEARCHING) {
             mEndSearchRunnable.run();
             return;
         }
 
-        mBookmarkDelegate.openFolder(mBookmarkModel.getBookmarkById(mCurrentFolder).getParentId());
+        mBookmarkDelegate.openFolder(
+                assumeNonNull(mBookmarkModel.getBookmarkById(mCurrentFolder)).getParentId());
     }
 
     // TODO(Chr136) Resolve dependency
@@ -600,4 +635,10 @@ class BookmarkToolbarMediator
                         readString(PREF_BOOKMARKS_SORT_ORDER,
                                 BookmarkDelegate.SortOrder.MANUAL.name()));
     }
+
+    private boolean isPanelOpen() {
+        return mContext instanceof AppCompatActivity activity &&
+                activity.findViewById(R.id.panels_main) != null;
+    }
+    // End Vivaldi
 }

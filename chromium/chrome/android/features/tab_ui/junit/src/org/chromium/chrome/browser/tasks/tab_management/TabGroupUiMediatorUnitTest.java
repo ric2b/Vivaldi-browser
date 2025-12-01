@@ -18,12 +18,13 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -48,6 +49,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 import org.robolectric.annotation.LooperMode;
@@ -142,7 +144,7 @@ public class TabGroupUiMediatorUnitTest {
     @Mock private TabCreatorManager mTabCreatorManager;
     @Mock private TabCreator mTabCreator;
     @Mock private LayoutStateProvider mLayoutManager;
-    @Mock private TabModel mTabModel;
+    @Spy private TabModel mTabModel;
     @Mock private View mView;
     @Mock private TabGroupModelFilterProvider mTabGroupModelFilterProvider;
     @Mock private TabGroupModelFilter mTabGroupModelFilter;
@@ -202,7 +204,7 @@ public class TabGroupUiMediatorUnitTest {
         Tab newTab = prepareTab(TAB4_ID, TAB4_ID);
         List<Tab> tabs = new ArrayList<>(Arrays.asList(newTab));
         doReturn(tabs).when(mTabGroupModelFilter).getRelatedTabList(TAB4_ID);
-        TabModel incognitoTabModel = mock(TabModel.class);
+        TabModel incognitoTabModel = spy(TabModel.class);
         doReturn(newTab).when(incognitoTabModel).getTabAt(POSITION1);
         doReturn(true).when(incognitoTabModel).isIncognito();
         doReturn(1).when(incognitoTabModel).getCount();
@@ -217,6 +219,9 @@ public class TabGroupUiMediatorUnitTest {
 
     private void verifyResetStrip(boolean isVisible, @Nullable List<Tab> tabs) {
         mResetHandlerInOrder.verify(mResetHandler).resetStripWithListOfTabs(tabs);
+        if (mDialogControllerSupplier.hasValue()) {
+            verify(mTabGridDialogController, atLeastOnce()).hideDialog(false);
+        }
         mVisibilityControllerInOrder
                 .verify(mVisibilityController)
                 .setBottomControlsVisible(isVisible);
@@ -393,7 +398,7 @@ public class TabGroupUiMediatorUnitTest {
         mModel = new PropertyModel(TabGroupUiProperties.ALL_KEYS);
     }
 
-    /*********************** Tab group related tests *************************/
+    // *********************** Tab group related tests *************************
 
     @Test
     public void verifyInitialization_NoTab_TabGroup() {
@@ -898,8 +903,10 @@ public class TabGroupUiMediatorUnitTest {
     @Test
     public void layoutStateChange_TabGroup() {
         initAndAssertProperties(mTab2);
+        mDialogControllerSupplier.get();
 
         mLayoutStateObserverCaptor.getValue().onStartedShowing(LayoutType.TAB_SWITCHER);
+        verify(mTabGridDialogController, atLeastOnce()).hideDialog(false);
         verifyResetStrip(false, null);
 
         mLayoutStateObserverCaptor.getValue().onFinishedHiding(LayoutType.TAB_SWITCHER);
@@ -1197,7 +1204,6 @@ public class TabGroupUiMediatorUnitTest {
         doReturn(Color.RED).when(mThemeColorProvider).getThemeColor();
         initAndAssertProperties(mTab1);
         verify(mSharedImageTilesConfigBuilder).setBorderColor(Color.RED);
-        verify(mSharedImageTilesConfigBuilder).setBackgroundColor(Color.RED);
         verify(mSharedImageTilesCoordinator).updateConfig(any());
 
         doReturn(Color.BLUE).when(mThemeColorProvider).getThemeColor();
@@ -1206,7 +1212,6 @@ public class TabGroupUiMediatorUnitTest {
                 .getValue()
                 .onThemeColorChanged(Color.BLUE, /* shouldAnimate= */ false);
         verify(mSharedImageTilesConfigBuilder).setBorderColor(Color.BLUE);
-        verify(mSharedImageTilesConfigBuilder).setBackgroundColor(Color.BLUE);
         verify(mSharedImageTilesCoordinator, times(2)).updateConfig(any());
     }
 

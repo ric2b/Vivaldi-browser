@@ -47,7 +47,6 @@
 <translation id="2042889939382983733">Visualizza la cronologia di Chromium</translation>
 <translation id="2052320862053429062">Chromium confronta periodicamente le tue password con gli elenchi pubblicati online. Durante questa operazione, le tue password e i tuoi nomi utente vengono criptati, quindi non possono essere letti da nessuno, Google compresa.</translation>
 <translation id="2059365270911640413">Completa la configurazione di Chromium</translation>
-<translation id="2147210759439165826">Ricevi aggiornamenti su contenuti e suggerimenti utili per Chromium.</translation>
 <translation id="2168108852149185974">Alcuni componenti aggiuntivi provocano l'arresto anomalo di Chromium. Disinstalla:</translation>
 <translation id="2168593389981132306">Migliora Chromium</translation>
 <translation id="2178608107313874732">Chromium non può utilizzare la videocamera al momento</translation>
@@ -121,6 +120,7 @@ Prova ad attendere qualche minuto prima di cambiare account. Se cambi account or
 <translation id="3833326979834193417">Chromium esegue automaticamente il controllo di sicurezza ogni giorno per proteggerti da violazioni dei dati, siti web non sicuri e altro ancora. Puoi trovare ulteriori informazioni sul controllo di sicurezza nelle Impostazioni.</translation>
 <translation id="3855938650519180865">Novità di Chromium</translation>
 <translation id="3886689467633467988">Accedi a questo sito e a Chromium per trovare i tuoi preferiti e altri dati su tutti i tuoi dispositivi.</translation>
+<translation id="3949514465204582407">Suggerimento di Chromium: recupera le tue password in qualsiasi app</translation>
 <translation id="3983291422281996849">Imposta Chromium come browser predefinito per monitorare facilmente i prezzi e ottenere approfondimenti sul prezzo dei prodotti che vuoi acquistare.</translation>
 <translation id="4005283307739974863">Apre ed esegue il controllo di sicurezza in Chromium.</translation>
 <translation id="4043291146360695975">Le password vengono salvate in Gestore delle password solo su questo dispositivo.</translation>
@@ -156,8 +156,8 @@ Per modificare questa impostazione, <ph name="BEGIN_LINK" />elimina i dati di Ch
 <translation id="4790638144988730920">Continua a usare i dati di Chromium nel tuo Account Google.</translation>
 <translation id="4828317641996116749">Chromium non ha potuto controllare tutte le password. Riprova più tardi.</translation>
 <translation id="4856138222358683580">Azioni di Chromium</translation>
-<translation id="4863800915967098115">L'accesso aggiunge il tuo account a Chromium per la navigazione relativa al lavoro.</translation>
 <translation id="4904452304169763785">Avvisi su eventuali problemi di privacy o di sicurezza rilevati da Chromium.</translation>
+<translation id="4908570938463711775">Scopri le nozioni di base utili su Chromium per iniziare</translation>
 <translation id="4962295957157529683">Finisci ciò che stavi facendo in un'altra finestra aperta di Chromium.</translation>
 <translation id="4985291216379576555">Offline. Chromium non può controllare la disponibilità di aggiornamenti.</translation>
 <translation id="4996471330284142407">Aumenta la tua produttività grazie a Chromium, che ti offre semplicità, sicurezza e velocità senza precedenti.</translation>
@@ -168,7 +168,6 @@ Per modificare questa impostazione, <ph name="BEGIN_LINK" />elimina i dati di Ch
 <translation id="5048795749726991615">Usa la funzionalità Compilazione automatica di Chromium per recuperare facilmente le tue password salvate nelle altre app</translation>
 <translation id="5053429694249468757">Eliminazione dei dati di Chromium in corso…</translation>
 <translation id="5071749685031362629">Chromium per iOS</translation>
-<translation id="5088872414922783602">Accedi più velocemente a Chromium dal dock della schermata Home.</translation>
 <translation id="5124429847818367226">Ora puoi usare Chromium ogni volta che sfogli o tocchi link in messaggi, documenti e altre app.</translation>
 <translation id="5131565040785979529">La tua organizzazione, <ph name="DOMAIN" />, gestisce l'account a cui hai eseguito l'accesso e la modalità di utilizzo di Chromium.</translation>
 <translation id="5134464247000681876">Apri i link da Gmail, Maps, YouTube e altre app in Chromium</translation>
@@ -198,6 +197,7 @@ Per modificare questa impostazione, <ph name="BEGIN_LINK" />elimina i dati di Ch
 <translation id="5688047395118852662">In questa scheda vengono mostrati suggerimenti su come utilizzare al meglio Chromium.</translation>
 <translation id="5700709190537129682">Chromium non può controllare le tue password</translation>
 <translation id="584550191241316896">Accesso a Chromium eseguito</translation>
+<translation id="5862307444128926510">Benvenuto in Chromium</translation>
 <translation id="5889847953983052353">Quando la funzionalità è attiva:
 <ph name="BEGIN_INDENT" /> • Contribuisci a migliorare Chromium per le persone che lo usano come fai tu.<ph name="END_INDENT" />
 
@@ -211,6 +211,7 @@ Aspetti da considerare:
 <translation id="593808800391107017">Ricevi avvisi su eventuali problemi di privacy o di sicurezza rilevati automaticamente da Chromium.</translation>
 <translation id="5951593919357934226">Usa al meglio Chromium.</translation>
 <translation id="5985254578475526217">Per ricevere notifiche da Chromium, attiva le notifiche nelle Impostazioni di iOS.</translation>
+<translation id="6041226255405329731">Accedi a Chromium per partecipare a gruppi di schede, nonché condividerli, e collaborare sulle idee</translation>
 <translation id="6104024151682120539">Apri in Chromium</translation>
 <translation id="61109258320235597">Per usare e salvare i dati di Chromium nel tuo Account Google, inserisci la passphrase.</translation>
 <translation id="6132149203299792222">Accedi con il tuo Account Google per sincronizzare le password, i preferiti e altro.</translation>
@@ -223,6 +224,7 @@ Aspetti da considerare:
 <translation id="6301717043141881464">Scegli Chromium per la compilazione automatica per recuperare facilmente le tue password salvate nelle altre app</translation>
 <translation id="6324041800010509197">Visita la griglia delle schede di Chromium</translation>
 <translation id="6325378625795868881">Utilizza Chromium ogni volta che tocchi i link in messaggi e altre app.</translation>
+<translation id="6387994184698195448">Ricevi aggiornamenti su suggerimenti utili per Chromium e altro ancora.</translation>
 <translation id="6424492062988593837">Chromium è stato migliorato. È disponibile una nuova versione.</translation>
 <translation id="6433172051771630690">Suggerimenti per usare al meglio Chromium.</translation>
 <translation id="65045991564554105">Visualizza i preferiti di Chromium</translation>
@@ -274,6 +276,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="7763454117143368771">Usa Chromium come browser predefinito per proteggerti da siti pericolosi e tenere al sicuro le tue password</translation>
 <translation id="7784950022329154821">Blocca le schede di navigazione in incognito quando chiudi Chromium</translation>
 <translation id="78025249032851484">Chromium non è aggiornato.</translation>
+<translation id="7811371919871579588">Scegli Chromium per la compilazione automatica per recuperare facilmente le tue password salvate nelle altre app.</translation>
 <translation id="7859018312476869945">Quando digiti nella barra degli indirizzi o nella casella di ricerca, Chromium invia ciò che digiti al tuo motore di ricerca predefinito per ricevere suggerimenti migliori. Questa opzione è disattivata nella modalità di navigazione in incognito.</translation>
 <translation id="7890287942691234100">Inizia a usare lo scanner di Chromium</translation>
 <translation id="7905064834449738336">Quando utilizzi una password, Chromium ti avvisa se è stata pubblicata online. Durante questa operazione, le tue password e i tuoi nomi utente vengono criptati, quindi non possono essere letti da nessuno, Google compresa.</translation>
@@ -284,11 +287,9 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="7980860476903281594">Chromium condivide la tua posizione con i siti autorizzati da te.</translation>
 <translation id="7994322153108931467">Per ricevere suggerimenti utili su Chromium, attiva le notifiche nelle impostazioni di iOS.</translation>
 <translation id="7997159823054171568">Imposta Chromium come browser predefinito</translation>
-<translation id="800195749539500647">Usa al meglio Chromium</translation>
 <translation id="800380310260616129">Scarica Chromium qui.</translation>
 <translation id="8013573822802650211">Esegui l'accesso su tutti i dispositivi su cui utilizzi Chromium per visualizzare le tue schede</translation>
 <translation id="8014091604604659473">Chromium è stato disconnesso</translation>
-<translation id="8035379487371146621">Sposta Chromium nel dock</translation>
 <translation id="8104697640054703121">Usa la funzionalità di sicurezza più efficace di Chromium contro siti pericolosi</translation>
 <translation id="8119542592987737574">Accedi più velocemente a Chromium dal dock della schermata Home del tuo iPhone.</translation>
 <translation id="8164086860209325020">Vai alle Impostazioni di Chromium</translation>
@@ -317,6 +318,7 @@ Solo chi conosce la tua passphrase può leggere i tuoi dati criptati. La passphr
 <translation id="8860548555286245440">Apri gli URL in Chromium in incognito</translation>
 <translation id="8880024619507699923">La tua organizzazione richiede l'accesso per usare Chromium. <ph name="BEGIN_LINK" />Scopri di più<ph name="END_LINK" /></translation>
 <translation id="8900052431807804054">Usa la funzionalità di sicurezza più efficace di Chromium</translation>
+<translation id="8925569192291721236">Ricevi aggiornamenti sul monitoraggio dei prezzi e suggerimenti per Chromium.</translation>
 <translation id="8950326149985259075">{THRESHOLD,plural, =1{Questo accade quando Chromium non viene utilizzato per {THRESHOLD} minuto}other{Questo accade quando Chromium non viene utilizzato per {THRESHOLD} minuti}}</translation>
 <translation id="8963279154877372067">Consenti le notifiche di Chromium per ricevere avvisi relativi ai cali di prezzo</translation>
 <translation id="8975812008711371178">Esegui una ricerca vocale in Chromium</translation>
@@ -330,6 +332,7 @@ Prova ad attendere qualche minuto prima di uscire. Se esci ora, questi dati verr
 <translation id="9059693977935746710">Non dovrai ricordare questa password perché verrà salvata in Gestore delle password per <ph name="EMAIL" /></translation>
 <translation id="9089354809943900324">Chromium non è aggiornato</translation>
 <translation id="9152995302810511799">Suggerimento per Chromium: Usa la funzionalità di sicurezza più efficace di Chromium</translation>
+<translation id="9177628952266852500"><ph name="EMAIL" />. Chromium è gestito.</translation>
 <translation id="921174536258924340">Chromium non ha potuto controllare tutte le password. Riprova domani oppure <ph name="BEGIN_LINK" />controlla le password nel tuo Account Google<ph name="END_LINK" />.</translation>
 <translation id="924957577793602335">Personalizza Chromium</translation>
 <translation id="981812233959540767">Gioca a Dino di Chromium</translation>

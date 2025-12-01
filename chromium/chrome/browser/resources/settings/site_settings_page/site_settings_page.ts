@@ -250,7 +250,7 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       route: routes.SITE_SETTINGS_LOCAL_NETWORK_ACCESS,
       id: Id.LOCAL_NETWORK_ACCESS,
       label: 'siteSettingsLocalNetworkAccess',
-      icon: 'settings:devices',
+      icon: 'settings20:router',
       enabledLabel: 'siteSettingsLocalNetworkAccessAsk',
       disabledLabel: 'siteSettingsLocalNetworkAccessBlock',
       shouldShow: () =>
@@ -612,21 +612,21 @@ export class SettingsSiteSettingsPageElement extends
             this.onUnusedSitePermissionListChanged_(sites));
   }
 
-  prefs: Object;
-  focusConfig: FocusConfig;
-  private permissionsExpanded_: boolean;
-  private contentExpanded_: boolean;
-  private noRecentSitePermissions_: boolean;
-  private showUnusedSitePermissions_: boolean;
-  private safetyHubAbusiveNotificationRevocationEnabled_: boolean;
-  private unusedSitePermissionsHeader_: string;
-  private unusedSitePermissionsSubheader_: string;
+  declare prefs: Object;
+  declare focusConfig: FocusConfig;
+  declare private permissionsExpanded_: boolean;
+  declare private contentExpanded_: boolean;
+  declare private noRecentSitePermissions_: boolean;
+  declare private showUnusedSitePermissions_: boolean;
+  declare private safetyHubAbusiveNotificationRevocationEnabled_: boolean;
+  declare private unusedSitePermissionsHeader_: string;
+  declare private unusedSitePermissionsSubheader_: string;
   private safetyHubBrowserProxy_: SafetyHubBrowserProxy =
       SafetyHubBrowserProxyImpl.getInstance();
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
 
-  private lists_: {
+  declare private lists_: {
     all: CategoryListItem[],
     permissionsBasic: CategoryListItem[],
     permissionsAdvanced: CategoryListItem[],

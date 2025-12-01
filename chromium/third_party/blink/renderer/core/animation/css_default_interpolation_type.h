@@ -50,21 +50,21 @@ class CSSDefaultInterpolationType : public InterpolationType {
   }
 
   InterpolationValue MaybeConvertSingle(const PropertySpecificKeyframe&,
-                                        const InterpolationEnvironment&,
+                                        const CSSInterpolationEnvironment&,
                                         const InterpolationValue& underlying,
                                         ConversionCheckers&) const override;
 
   PairwiseInterpolationValue MaybeConvertPairwise(
       const PropertySpecificKeyframe& start_keyframe,
       const PropertySpecificKeyframe& end_keyframe,
-      const InterpolationEnvironment&,
+      const CSSInterpolationEnvironment&,
       const InterpolationValue& underlying,
       ConversionCheckers&) const final {
     return nullptr;
   }
 
   InterpolationValue MaybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const final {
+      const CSSInterpolationEnvironment&) const final {
     return nullptr;
   }
 
@@ -74,16 +74,14 @@ class CSSDefaultInterpolationType : public InterpolationType {
     return nullptr;
   }
 
-  void Composite(UnderlyingValueOwner& underlying_value_owner,
+  void Composite(UnderlyingValueOwner&,
                  double underlying_fraction,
-                 const InterpolationValue& value,
-                 double interpolation_fraction) const final {
-    underlying_value_owner.Set(*this, value);
-  }
+                 const InterpolationValue&,
+                 double interpolation_fraction) const final;
 
   void Apply(const InterpolableValue&,
              const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+             CSSInterpolationEnvironment&) const final;
 };
 
 }  // namespace blink

@@ -15,6 +15,7 @@
 
 #include "base/base64.h"
 #include "base/containers/span.h"
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/checked_math.h"
@@ -28,8 +29,9 @@
 #include "base/threading/scoped_thread_priority.h"
 #include "base/types/expected.h"
 #include "base/types/optional_util.h"
+#include "crypto/features.h"
+#include "crypto/hash.h"
 #include "crypto/random.h"
-#include "crypto/sha2.h"
 #include "crypto/unexportable_key.h"
 #include "crypto/unexportable_key_metrics.h"
 #include "third_party/boringssl/src/include/openssl/bn.h"
@@ -293,7 +295,7 @@ base::expected<std::vector<uint8_t>, SECURITY_STATUS> SignECDSA(
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::WILL_BLOCK);
 
-  std::array<uint8_t, kSHA256Length> digest = SHA256Hash(data);
+  std::array<uint8_t, hash::kSha256Size> digest = hash::Sha256(data);
   // The signature is written as a pair of big-endian field elements for P-256
   // ECDSA.
   std::vector<uint8_t> sig(64);
@@ -327,7 +329,7 @@ base::expected<std::vector<uint8_t>, SECURITY_STATUS> SignRSA(
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::WILL_BLOCK);
 
-  std::array<uint8_t, kSHA256Length> digest = SHA256Hash(data);
+  std::array<uint8_t, hash::kSha256Size> digest = hash::Sha256(data);
   BCRYPT_PKCS1_PADDING_INFO padding_info = {0};
   padding_info.pszAlgId = NCRYPT_SHA256_ALGORITHM;
 
@@ -352,18 +354,18 @@ base::expected<std::vector<uint8_t>, SECURITY_STATUS> SignRSA(
   return sig;
 }
 
-bool LoadWrappedKey(base::span<const uint8_t> wrapped,
-                    ScopedNCryptProvider& provider,
-                    ProviderType provider_type,
-                    ScopedNCryptKey& key) {
+ScopedNCryptKey LoadWrappedKey(base::span<const uint8_t> wrapped,
+                               ProviderType provider_type) {
   SCOPED_MAY_LOAD_LIBRARY_AT_BACKGROUND_PRIORITY();
+  ScopedNCryptProvider provider;
   if (FAILED(NCryptOpenStorageProvider(
           ScopedNCryptProvider::Receiver(provider).get(),
           GetWindowsIdentifierForProvider(provider_type),
           /*flags=*/0))) {
-    return false;
+    return ScopedNCryptKey();
   }
 
+  ScopedNCryptKey key;
   SECURITY_STATUS import_status = -1;
   if (provider_type == ProviderType::kSoftware) {
     // Software keys are labelled with a random identifier. Attempt to obtain a
@@ -385,18 +387,20 @@ bool LoadWrappedKey(base::span<const uint8_t> wrapped,
   if (FAILED(import_status)) {
     LogTPMOperationError(TPMOperation::kWrappedKeyCreation, import_status,
                          std::nullopt);
-    return false;
+    return ScopedNCryptKey();
   }
-  return true;
+  return key;
 }
 
-// ECDSAKey wraps a TPM-stored P-256 ECDSA key.
+// ECDSAKey wraps a P-256 ECDSA key stored in the given provider.
 class ECDSAKey : public UnexportableSigningKey {
  public:
-  ECDSAKey(ScopedNCryptKey key,
+  ECDSAKey(ProviderType provider_type,
+           ScopedNCryptKey key,
            std::vector<uint8_t> key_id,
            std::vector<uint8_t> spki)
-      : key_(std::move(key)),
+      : provider_type_(provider_type),
+        key_(std::move(key)),
         key_id_(std::move(key_id)),
         spki_(std::move(spki)) {}
 
@@ -422,21 +426,28 @@ class ECDSAKey : public UnexportableSigningKey {
     return base::OptionalFromExpected(signature);
   }
 
-  bool IsHardwareBacked() const override { return true; }
+  bool IsHardwareBacked() const override {
+    return base::FeatureList::IsEnabled(features::kIsHardwareBackedFixEnabled)
+               ? provider_type_ == ProviderType::kTPM
+               : true;
+  }
 
  private:
+  const ProviderType provider_type_;
   ScopedNCryptKey key_;
   const std::vector<uint8_t> key_id_;
   const std::vector<uint8_t> spki_;
 };
 
-// RSAKey wraps a TPM-stored RSA key.
+// RSAKey wraps a RSA key stored in the given provider.
 class RSAKey : public UnexportableSigningKey {
  public:
-  RSAKey(ScopedNCryptKey key,
+  RSAKey(ProviderType provider_type,
+         ScopedNCryptKey key,
          std::vector<uint8_t> wrapped,
          std::vector<uint8_t> spki)
-      : key_(std::move(key)),
+      : provider_type_(provider_type),
+        key_(std::move(key)),
         wrapped_(std::move(wrapped)),
         spki_(std::move(spki)) {}
 
@@ -462,9 +473,14 @@ class RSAKey : public UnexportableSigningKey {
     return base::OptionalFromExpected(signature);
   }
 
-  bool IsHardwareBacked() const override { return true; }
+  bool IsHardwareBacked() const override {
+    return base::FeatureList::IsEnabled(features::kIsHardwareBackedFixEnabled)
+               ? provider_type_ == ProviderType::kTPM
+               : true;
+  }
 
  private:
+  const ProviderType provider_type_;
   ScopedNCryptKey key_;
   const std::vector<uint8_t> wrapped_;
   const std::vector<uint8_t> spki_;
@@ -570,14 +586,16 @@ class UnexportableKeyProviderWin : public UnexportableKeyProvider {
         if (!spki) {
           return nullptr;
         }
-        return std::make_unique<ECDSAKey>(std::move(key), std::move(key_id),
+        return std::make_unique<ECDSAKey>(provider_type_, std::move(key),
+                                          std::move(key_id),
                                           std::move(spki.value()));
       case SignatureVerifier::SignatureAlgorithm::RSA_PKCS1_SHA256:
         spki = GetRSASPKI(key.get());
         if (!spki) {
           return nullptr;
         }
-        return std::make_unique<RSAKey>(std::move(key), std::move(key_id),
+        return std::make_unique<RSAKey>(provider_type_, std::move(key),
+                                        std::move(key_id),
                                         std::move(spki.value()));
       default:
         return nullptr;
@@ -589,9 +607,8 @@ class UnexportableKeyProviderWin : public UnexportableKeyProvider {
     base::ScopedBlockingCall scoped_blocking_call(
         FROM_HERE, base::BlockingType::WILL_BLOCK);
 
-    ScopedNCryptProvider provider;
-    ScopedNCryptKey key;
-    if (!LoadWrappedKey(wrapped, provider, provider_type_, key)) {
+    ScopedNCryptKey key = LoadWrappedKey(wrapped, provider_type_);
+    if (!key.is_valid()) {
       return nullptr;
     }
 
@@ -622,7 +639,8 @@ class UnexportableKeyProviderWin : public UnexportableKeyProvider {
         return nullptr;
       }
       return std::make_unique<ECDSAKey>(
-          std::move(key), std::vector<uint8_t>(wrapped.begin(), wrapped.end()),
+          provider_type_, std::move(key),
+          std::vector<uint8_t>(wrapped.begin(), wrapped.end()),
           std::move(spki.value()));
     } else if (algo_bytes == kRSA) {
       spki = GetRSASPKI(key.get());
@@ -630,7 +648,8 @@ class UnexportableKeyProviderWin : public UnexportableKeyProvider {
         return nullptr;
       }
       return std::make_unique<RSAKey>(
-          std::move(key), std::vector<uint8_t>(wrapped.begin(), wrapped.end()),
+          provider_type_, std::move(key),
+          std::vector<uint8_t>(wrapped.begin(), wrapped.end()),
           std::move(spki.value()));
     }
 
@@ -898,10 +917,10 @@ class VirtualUnexportableKeyProviderWin
 
 }  // namespace
 
-bool LoadWrappedTPMKey(base::span<const uint8_t> wrapped,
-                       ScopedNCryptProvider& provider,
-                       ScopedNCryptKey& key) {
-  return LoadWrappedKey(wrapped, provider, ProviderType::kTPM, key);
+ScopedNCryptKey DuplicatePlatformKeyHandle(const UnexportableSigningKey& key) {
+  return LoadWrappedKey(key.GetWrappedKey(), key.IsHardwareBacked()
+                                                 ? ProviderType::kTPM
+                                                 : ProviderType::kSoftware);
 }
 
 std::unique_ptr<UnexportableKeyProvider> GetUnexportableKeyProviderWin() {

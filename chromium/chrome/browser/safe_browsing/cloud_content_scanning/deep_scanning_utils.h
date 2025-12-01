@@ -13,6 +13,7 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/common.h"
+#include "components/safe_browsing/core/browser/referrer_chain_provider.h"
 #include "url/gurl.h"
 
 class Profile;
@@ -32,6 +33,7 @@ namespace safe_browsing {
 //   "SafeBrowsing.DeepScan.<access-point>.Duration"
 //   "SafeBrowsing.DeepScan.<access-point>.<result>.Duration"
 // for the new access point and every possible result.
+// LINT.IfChange(DeepScanAccessPoint)
 enum class DeepScanAccessPoint {
   // A deep scan was initiated from downloading 1+ file(s).
   DOWNLOAD,
@@ -50,7 +52,10 @@ enum class DeepScanAccessPoint {
 
   // A deep scan was initiated from transferring 1+ file(s) within ChromeOS.
   FILE_TRANSFER,
+
+  kMaxValue = FILE_TRANSFER,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/glic/enums.xml:DeepScanAccessPoint)
 std::string DeepScanAccessPointToString(DeepScanAccessPoint access_point);
 
 // Helper function to examine a ContentAnalysisResponse and report the
@@ -70,6 +75,7 @@ void MaybeReportDeepScanningVerdict(
     const std::string& content_transfer_method,
     DeepScanAccessPoint access_point,
     const int64_t content_size,
+    const safe_browsing::ReferrerChain& referrer_chain,
     BinaryUploadService::Result result,
     const enterprise_connectors::ContentAnalysisResponse& response,
     enterprise_connectors::EventResult event_result);
@@ -91,6 +97,7 @@ void ReportAnalysisConnectorWarningBypass(
     const std::string& content_transfer_method,
     DeepScanAccessPoint access_point,
     const int64_t content_size,
+    const safe_browsing::ReferrerChain& referrer_chain,
     const enterprise_connectors::ContentAnalysisResponse& response,
     std::optional<std::u16string> user_justification);
 

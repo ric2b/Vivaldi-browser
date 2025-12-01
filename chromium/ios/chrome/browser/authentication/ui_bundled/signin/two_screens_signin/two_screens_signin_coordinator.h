@@ -7,6 +7,7 @@
 
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
 #import "ios/chrome/browser/first_run/ui_bundled/first_run_screen_delegate.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/animated_coordinator.h"
 
 namespace signin_metrics {
 enum class AccessPoint : int;
@@ -21,15 +22,20 @@ enum class PromoAction : int;
 // `browser` used for authentication. It must not be off the record (incognito).
 // `screenProvider` helps decide which screen to show. `accessPoint` and
 // `promoAction` are used for logging.
+// `contextStyle` is used to customize content on screens.
 - (instancetype)
     initWithBaseViewController:(UIViewController*)viewController
                        browser:(Browser*)browser
+                  contextStyle:(SigninContextStyle)contextStyle
                    accessPoint:(signin_metrics::AccessPoint)accessPoint
                    promoAction:(signin_metrics::PromoAction)promoAction
+          continuationProvider:
+              (const ChangeProfileContinuationProvider&)continuationProvider
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+                              contextStyle:(SigninContextStyle)contextStyle
                                accessPoint:
                                    (signin_metrics::AccessPoint)accessPoint
     NS_UNAVAILABLE;

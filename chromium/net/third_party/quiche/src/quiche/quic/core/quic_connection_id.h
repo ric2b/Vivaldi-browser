@@ -7,10 +7,10 @@
 
 #include <cstdint>
 #include <string>
-#include <vector>
 
+#include "absl/strings/string_view.h"
 #include "absl/types/span.h"
-#include "quiche/quic/platform/api/quic_export.h"
+#include "quiche/common/platform/api/quiche_export.h"
 
 namespace quic {
 
@@ -44,7 +44,8 @@ class QUICHE_EXPORT QuicConnectionId {
 
   // Creates a connection ID from network order bytes.
   QuicConnectionId(const char* data, uint8_t length);
-  QuicConnectionId(const absl::Span<const uint8_t> data);
+  QuicConnectionId(absl::Span<const uint8_t> data);
+  QuicConnectionId(absl::string_view data);
 
   // Creates a connection ID from another connection ID.
   QuicConnectionId(const QuicConnectionId& other);
@@ -88,8 +89,12 @@ class QUICHE_EXPORT QuicConnectionId {
   }
 
   // Generates an ASCII string that represents
-  // the contents of the connection ID, or "0" if it is empty.
+  // the contents of the connection ID in hex, or "0" if it is empty.
   std::string ToString() const;
+  // ToStringView() is not in hex. Returns "" if empty.
+  absl::string_view ToStringView() const {
+    return absl::string_view(data(), length());
+  }
 
   // operator<< allows easily logging connection IDs.
   friend QUICHE_EXPORT std::ostream& operator<<(std::ostream& os,
@@ -107,12 +112,13 @@ class QUICHE_EXPORT QuicConnectionId {
     // first |length_| bytes of |data_short_|.
     // Otherwise it is stored in |data_long_| which is guaranteed to have a size
     // equal to |length_|.
-    // A value of 11 was chosen because our commonly used connection ID length
-    // is 8 and with the length, the class is padded to at least 12 bytes
-    // anyway.
+    // A value of 23 was chosen because it can hold 20 byte IDs that are legal
+    // in currently supported versions, expanded to a 24-byte struct to be 8-
+    // byte aligned. Unknown versions that would trigger version negotiation
+    // packets might have IDs beyond 23 bytes, which are stored in |data_long_|.
     struct {
       uint8_t padding_;  // Match length_ field of the other union member.
-      char data_short_[11];
+      char data_short_[23];
     };
     struct {
       uint8_t length_;  // length of the connection ID, in bytes.

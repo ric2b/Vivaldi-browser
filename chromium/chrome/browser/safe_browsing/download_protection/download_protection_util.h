@@ -111,6 +111,21 @@ enum class DeepScanEvent {
   kIncorrectPassword = 8,
   kMaxValue = kIncorrectPassword,
 };
+
+// Describes whether a given download may send a download ping.
+enum class MayCheckDownloadResult {
+  // The download may not send a ping. This may be due to properties of the
+  // download/file itself (see DownloadCheckResultReason) or due to other logic
+  // applied by DownloadProtection{Service,Delegate}.
+  kMayNotCheckDownload,
+  // The download may send a ping, but only a "light" ping may be sent if the
+  // download is sampled.
+  kMaySendSampledPingOnly,
+  // The download is fully supported for CheckClientDownload and may send a full
+  // download ping.
+  kMayCheckDownload,
+};
+
 void LogDeepScanEvent(download::DownloadItem* item, DeepScanEvent event);
 void LogDeepScanEvent(const DeepScanningMetadata& metadata,
                       DeepScanEvent event);
@@ -180,6 +195,12 @@ std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
     const content::FileSystemAccessWriteItem& item,
     int user_gesture_limit);
 
+// Returns the referrer chain based on download item for enterprise reporting.
+// This function will identify and attach the referrer chain to the
+// `DownloadItem` if it has not been previously identified.
+ReferrerChain GetOrIdentifyReferrerChainForEnterprise(
+    download::DownloadItem& item);
+
 #if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 // Returns true if dangerous download report should be sent.
 bool ShouldSendDangerousDownloadReport(
@@ -192,6 +213,11 @@ bool ShouldSendDangerousDownloadReport(
 // nullopt.
 std::optional<enterprise_connectors::AnalysisSettings>
 ShouldUploadBinaryForDeepScanning(download::DownloadItem* item);
+
+// Returns whether the filetype is eligible for a full download protection ping,
+// based only on the file name extension.
+bool IsFiletypeSupportedForFullDownloadProtection(
+    const base::FilePath& file_name);
 
 }  // namespace safe_browsing
 

@@ -8,8 +8,10 @@
 #ifndef SkImage_GaneshBase_DEFINED
 #define SkImage_GaneshBase_DEFINED
 
+#include "include/core/SkColorSpace.h"
 #include "include/core/SkRefCnt.h"
 #include "include/core/SkSamplingOptions.h"
+#include "include/gpu/ganesh/GrDirectContext.h"
 #include "include/gpu/ganesh/GrRecordingContext.h"
 #include "include/private/chromium/SkImageChromium.h"
 #include "include/private/gpu/ganesh/GrImageContext.h"
@@ -24,14 +26,13 @@ class GrBackendFormat;
 class GrBackendTexture;
 class GrCaps;
 class GrContextThreadSafeProxy;
-class GrDirectContext;
 class GrFragmentProcessor;
 class GrSurfaceProxyView;
 class GrTextureProxy;
 class SkBitmap;
-class SkColorSpace;
 class SkImage;
 class SkMatrix;
+class SkRecorder;
 class SkSurface;
 enum GrSurfaceOrigin : int;
 enum SkAlphaType : int;
@@ -49,16 +50,20 @@ namespace skgpu {
 enum class Mipmapped : bool;
 class RefCntedCallback;
 }  // namespace skgpu
-
+namespace skgpu::ganesh { class SurfaceDrawContext; }
 namespace skgpu { namespace graphite { class Recorder; } }
 
 class SkImage_GaneshBase : public SkImage_Base {
 public:
     // From SkImage.h
     bool isValid(GrRecordingContext*) const final;
+    bool isValid(SkRecorder*) const final;
     sk_sp<SkImage> makeColorTypeAndColorSpace(GrDirectContext* dContext,
                                               SkColorType targetColorType,
-                                              sk_sp<SkColorSpace> targetCS) const final;
+                                              sk_sp<SkColorSpace> targetCS) const final {
+        return makeColorTypeAndColorSpace(dContext->asRecorder(), targetColorType, targetCS, {});
+    }
+
     sk_sp<SkImage> makeSubset(GrDirectContext* direct, const SkIRect& subset) const final;
 
     // From SkImage_Base.h
@@ -69,7 +74,7 @@ public:
 
     sk_sp<SkImage> onMakeSubset(GrDirectContext*, const SkIRect& subset) const final;
 
-    sk_sp<SkSurface> onMakeSurface(skgpu::graphite::Recorder*, const SkImageInfo&) const override;
+    sk_sp<SkSurface> onMakeSurface(SkRecorder*, const SkImageInfo&) const final;
 
     bool onReadPixels(GrDirectContext* dContext,
                       const SkImageInfo& dstInfo,
@@ -106,12 +111,13 @@ public:
                                                                skgpu::Mipmapped,
                                                                GrImageTexGenPolicy) const = 0;
 
-    virtual std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(GrRecordingContext*,
-                                                                     SkSamplingOptions,
-                                                                     const SkTileMode[2],
-                                                                     const SkMatrix&,
-                                                                     const SkRect*,
-                                                                     const SkRect*) const = 0;
+    virtual std::unique_ptr<GrFragmentProcessor> asFragmentProcessor(
+            skgpu::ganesh::SurfaceDrawContext*,
+            SkSamplingOptions,
+            const SkTileMode[2],
+            const SkMatrix&,
+            const SkRect*,
+            const SkRect*) const = 0;
 
     virtual GrSurfaceOrigin origin() const = 0;
 
@@ -122,7 +128,7 @@ protected:
                                 const SkIRect& subset,
                                 RequiredProperties) const final;
     using SkImage_Base::onMakeColorTypeAndColorSpace;
-    sk_sp<SkImage> makeColorTypeAndColorSpace(skgpu::graphite::Recorder*,
+    sk_sp<SkImage> makeColorTypeAndColorSpace(SkRecorder*,
                                               SkColorType,
                                               sk_sp<SkColorSpace>,
                                               RequiredProperties) const final;

@@ -280,6 +280,11 @@ struct BLINK_COMMON_EXPORT
     return data.canvas_noise_token;
   }
 
+  static bool view_source_line_wrap_enabled(
+      const ::blink::RendererPreferences& data) {
+    return data.view_source_line_wrap_enabled;
+  }
+
   /* Vivaldi*/
   static const bool& allow_tab_cycle_from_webpage_into_ui(
       const ::blink::RendererPreferences& data) {

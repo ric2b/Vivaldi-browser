@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -51,7 +52,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_integrity_block_data.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_storage_location.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolation_data.h"
-#include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/proto/web_app.pb.h"
 #include "chrome/browser/web_applications/proto/web_app_isolation_data.pb.h"
@@ -83,6 +83,7 @@
 #include "components/sync/model/string_ordinal.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/isolated_web_apps/update_channel.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/storage_partition.h"
 #include "services/network/public/cpp/permissions_policy/origin_with_possible_wildcards.h"
@@ -140,9 +141,15 @@ class RandomHelper {
 
   // Return an unsigned int between 0 (inclusive) and bound (exclusive).
   uint32_t next_uint(uint32_t bound) {
-    return bound <= 1 ? 0
-                      : std::max(next_uint() % bound,
-                                 static_cast<uint32_t>(non_zero_));
+    if (bound <= 1) {
+      return 0;
+    }
+    uint32_t value = next_uint() % bound;
+    if (value == 0 && non_zero_) {
+      value = 1;
+    }
+    CHECK_LT(value, bound);
+    return value;
   }
 
   bool next_bool() { return non_zero_ || next_uint() & 1u; }
@@ -153,12 +160,14 @@ class RandomHelper {
 
   int64_t next_proto_time() { return syncer::TimeToProtoTime(next_time()); }
 
+  // max is inclusive.
   template <typename T, auto min = T::kMinValue, auto max = T::kMaxValue>
   T next_enum() {
     constexpr uint32_t min_u32 = static_cast<uint32_t>(min);
-    constexpr uint32_t max_u32 = static_cast<uint32_t>(max);
-    static_assert(min_u32 <= max_u32, "min cannot be greater than max");
-    return static_cast<T>(min_u32 + next_uint(max_u32 - min_u32));
+    constexpr uint32_t max_u32_exclusive = static_cast<uint32_t>(max) + 1;
+    static_assert(min_u32 < max_u32_exclusive,
+                  "min cannot be greater than max");
+    return static_cast<T>(min_u32 + next_uint(max_u32_exclusive - min_u32));
   }
 
  private:
@@ -252,7 +261,7 @@ network::ParsedPermissionsPolicy CreateRandomPermissionsPolicy(
   const auto& feature_name_map = blink::GetPermissionsPolicyNameToFeatureMap();
   for (int i = 0; i < num_permissions_policy_declarations; ++i) {
     permissions_policy[i].feature = feature_name_map.begin()->second;
-    for (unsigned int j = 0; j < 5; ++j) {
+    for (unsigned int j = 0; j < random.next_uint(5); ++j) {
       std::string suffix_str =
           base::NumberToString(suffix) + base::NumberToString(j);
 
@@ -260,6 +269,8 @@ network::ParsedPermissionsPolicy CreateRandomPermissionsPolicy(
           url::Origin::Create(GURL("https://app-" + suffix_str + ".com/"));
       permissions_policy[i].allowed_origins.emplace_back(
           *network::OriginWithPossibleWildcards::FromOrigin(origin));
+      permissions_policy[i].matches_all_origins = random.next_bool();
+      permissions_policy[i].matches_opaque_src = random.next_bool();
     }
   }
   return permissions_policy;
@@ -603,10 +614,9 @@ CreateRandomRelatedApplications(RandomHelper& random) {
 
 std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
                                      WebAppManagement::Type source_type) {
-  const webapps::AppId app_id =
-      GenerateAppId(/*manifest_id=*/std::nullopt, start_url);
-
-  auto web_app = std::make_unique<WebApp>(app_id);
+  auto web_app =
+      std::make_unique<WebApp>(GenerateManifestIdFromStartUrlOnly(start_url),
+                               start_url, start_url.GetWithoutFilename());
   web_app->SetStartUrl(start_url);
   web_app->SetScope(start_url.GetWithoutFilename());
   web_app->AddSource(source_type);
@@ -627,6 +637,9 @@ std::unique_ptr<WebApp> CreateWebApp(const GURL& start_url,
 std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   RandomHelper random(params.seed, params.non_zero);
 
+  bool is_iwa = !random.next_bool();
+  GURL base_iwa_url{"isolated-app://foo"};
+
   const std::string seed_str = base::NumberToString(params.seed);
   std::optional<std::string> relative_manifest_id;
   if (random.next_bool()) {
@@ -634,104 +647,94 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     if (random.next_bool()) {
       manifest_id_path += "?query=test";
     }
-    if (random.next_bool()) {
-      manifest_id_path += "#fragment";
-    }
     relative_manifest_id = manifest_id_path;
   }
-  std::string scope_path = "scope" + seed_str + "/";
+  std::string scope_path = "scope" + seed_str;
   if (random.next_bool()) {
-    scope_path += "?query=test";
+    scope_path += "/";
   }
-  if (random.next_bool()) {
-    scope_path += "#fragment";
+  GURL scope;
+  if (is_iwa) {
+    scope = base_iwa_url.Resolve(scope_path);
+  } else {
+    scope = params.base_url.Resolve(scope_path);
   }
-  const GURL scope(params.base_url.Resolve(scope_path));
-  const GURL start_url = scope.Resolve("start" + seed_str);
-  const webapps::AppId app_id = GenerateAppId(relative_manifest_id, start_url);
+  const GURL start_url = GURL(scope.spec() + "start" + seed_str);
+  const webapps::ManifestId manifest_id =
+      relative_manifest_id
+          ? GenerateManifestId(relative_manifest_id.value(), start_url)
+          : GenerateManifestIdFromStartUrlOnly(start_url);
 
   const std::string name = "Name" + seed_str;
   const std::string description = "Description" + seed_str;
-  const std::optional<SkColor> theme_color = random.next_uint();
-  std::optional<SkColor> dark_mode_theme_color;
-  const std::optional<SkColor> background_color = random.next_uint();
-  std::optional<SkColor> dark_mode_background_color;
-  const std::optional<SkColor> synced_theme_color = random.next_uint();
-  auto app = std::make_unique<WebApp>(app_id);
+  auto app = std::make_unique<WebApp>(manifest_id, start_url, scope);
   std::vector<WebAppManagement::Type> management_types;
 
   // Generate all possible permutations of field values in a random way:
-  if (params.allow_system_source && random.next_bool()) {
+  bool is_system_app = params.allow_system_source && !random.next_bool();
+  if (is_system_app) {
     app->AddSource(WebAppManagement::kSystem);
     management_types.push_back(WebAppManagement::kSystem);
   }
-
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kPolicy);
-    management_types.push_back(WebAppManagement::kPolicy);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kWebAppStore);
-    management_types.push_back(WebAppManagement::kWebAppStore);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kSync);
-    management_types.push_back(WebAppManagement::kSync);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kUserInstalled);
-    management_types.push_back(WebAppManagement::kUserInstalled);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kDefault);
-    management_types.push_back(WebAppManagement::kDefault);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kSubApp);
-    management_types.push_back(WebAppManagement::kSubApp);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kKiosk);
-    management_types.push_back(WebAppManagement::kKiosk);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kIwaShimlessRma);
-    management_types.push_back(WebAppManagement::kIwaShimlessRma);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kIwaPolicy);
-    management_types.push_back(WebAppManagement::kIwaPolicy);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kIwaUserInstalled);
-    management_types.push_back(WebAppManagement::kIwaUserInstalled);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kOem);
-    management_types.push_back(WebAppManagement::kOem);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kOneDriveIntegration);
-    management_types.push_back(WebAppManagement::kOneDriveIntegration);
-  }
-  if (random.next_bool()) {
-    app->AddSource(WebAppManagement::kApsDefault);
-    management_types.push_back(WebAppManagement::kApsDefault);
-  }
-
-  // Must always be at least one source.
-  if (!app->HasAnySources()) {
+  // System web apps cannot also have other sources.
+  if (!is_system_app) {
+    if (!params.only_non_external_management_types && random.next_bool()) {
+      app->AddSource(WebAppManagement::kPolicy);
+      management_types.push_back(WebAppManagement::kPolicy);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kWebAppStore);
+      management_types.push_back(WebAppManagement::kWebAppStore);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kSync);
+      management_types.push_back(WebAppManagement::kSync);
+    }
+    if (random.next_bool()) {
       app->AddSource(WebAppManagement::kUserInstalled);
       management_types.push_back(WebAppManagement::kUserInstalled);
+    }
+    if (!params.only_non_external_management_types && random.next_bool()) {
+      app->AddSource(WebAppManagement::kDefault);
+      management_types.push_back(WebAppManagement::kDefault);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kSubApp);
+      management_types.push_back(WebAppManagement::kSubApp);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kKiosk);
+      management_types.push_back(WebAppManagement::kKiosk);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kIwaShimlessRma);
+      management_types.push_back(WebAppManagement::kIwaShimlessRma);
+    }
+    if (!params.only_non_external_management_types && random.next_bool()) {
+      app->AddSource(WebAppManagement::kIwaPolicy);
+      management_types.push_back(WebAppManagement::kIwaPolicy);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kIwaUserInstalled);
+      management_types.push_back(WebAppManagement::kIwaUserInstalled);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kOem);
+      management_types.push_back(WebAppManagement::kOem);
+    }
+    if (random.next_bool()) {
+      app->AddSource(WebAppManagement::kOneDriveIntegration);
+      management_types.push_back(WebAppManagement::kOneDriveIntegration);
+    }
+    if (!params.only_non_external_management_types && random.next_bool()) {
+      app->AddSource(WebAppManagement::kApsDefault);
+      management_types.push_back(WebAppManagement::kApsDefault);
+    }
   }
-
-  if (random.next_bool()) {
-    dark_mode_theme_color = SkColorSetA(random.next_uint(), SK_AlphaOPAQUE);
-  }
-
-  if (random.next_bool()) {
-    dark_mode_background_color =
-        SkColorSetA(random.next_uint(), SK_AlphaOPAQUE);
+  // Must always be at least one source.
+  if (!app->HasAnySources()) {
+    app->AddSource(WebAppManagement::kUserInstalled);
+    management_types.push_back(WebAppManagement::kUserInstalled);
   }
 
   app->SetName(name);
@@ -742,10 +745,21 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   }
   app->SetStartUrl(GURL(start_url));
   app->SetScope(GURL(scope));
-  app->SetThemeColor(theme_color);
-  app->SetDarkModeThemeColor(dark_mode_theme_color);
-  app->SetBackgroundColor(background_color);
-  app->SetDarkModeBackgroundColor(dark_mode_background_color);
+
+  if (random.next_bool()) {
+    app->SetThemeColor(SkColorSetA(random.next_uint(), SK_AlphaOPAQUE));
+  }
+  if (random.next_bool()) {
+    app->SetBackgroundColor(SkColorSetA(random.next_uint(), SK_AlphaOPAQUE));
+  }
+  if (random.next_bool()) {
+    app->SetDarkModeThemeColor(SkColorSetA(random.next_uint(), SK_AlphaOPAQUE));
+  }
+  if (random.next_bool()) {
+    app->SetDarkModeBackgroundColor(
+        SkColorSetA(random.next_uint(), SK_AlphaOPAQUE));
+  }
+
   app->SetInstallState(random.next_enum<proto::InstallState,
                                         /*min=*/proto::InstallState_MIN,
                                         /*max=*/
@@ -759,20 +773,17 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
           sync_pb::WebAppSpecifics_UserDisplayMode_TABBED,
       };
   // Explicitly set a UserDisplayMode for each platform (instead of calling
-  // `SetUserDisplayMode` which sets the current platform's value only) so the
-  // test expectations are consistent across platforms.
+  // `SetUserDisplayMode/SetPlatformSpecificUserDisplayMode` which sets the
+  // current platform's value only) so the test expectations are consistent
+  // across platforms.
   {
     // Copy proto, retaining existing fields (including unknown fields).
     sync_pb::WebAppSpecifics sync_proto = app->sync_proto();
-    if (random.next_bool()) {
-      sync_proto.set_user_display_mode_default(
-          user_display_modes[random.next_uint(3)]);
-    }
-    // Must have at least one platform's UserDisplayMode set.
-    if (!sync_proto.has_user_display_mode_default() || random.next_bool()) {
-      sync_proto.set_user_display_mode_cros(
-          user_display_modes[random.next_uint(3)]);
-    }
+    sync_proto.set_user_display_mode_default(
+        user_display_modes[random.next_uint(3)]);
+    sync_proto.set_user_display_mode_cros(
+        user_display_modes[random.next_uint(3)]);
+    CHECK(HasCurrentPlatformUserDisplayMode(sync_proto));
 
     if (random.next_bool()) {
       sync_proto.set_user_launch_ordinal(
@@ -857,6 +868,11 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   if (random.next_bool()) {
     app->SetShareTarget(CreateRandomShareTarget(random.next_uint()));
   }
+
+  webapps::WebappInstallSource install_source =
+      random.next_enum<webapps::WebappInstallSource, 0>();
+  app->SetLatestInstallSource(install_source);
+
   app->SetProtocolHandlers(CreateRandomProtocolHandlers(random.next_uint()));
   app->SetScopeExtensions(
       CreateRandomScopeExtensions(random.next_uint(), random));
@@ -869,6 +885,9 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
                          return random.next_bool();
                        });
   app->SetValidatedScopeExtensions(validated_scope_extensions);
+
+  app->SetIsDiyApp(random.next_bool());
+  app->SetWasShortcutApp(random.next_bool());
 
   if (random.next_bool()) {
     app->SetLockScreenStartUrl(scope.Resolve(
@@ -927,8 +946,9 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
     // Copy proto, retaining existing fields (including unknown fields).
     sync_pb::WebAppSpecifics sync_proto = app->sync_proto();
     sync_proto.set_name("Sync" + name);
-    if (synced_theme_color.has_value()) {
-      sync_proto.set_theme_color(synced_theme_color.value());
+    if (random.next_bool()) {
+      sync_proto.set_theme_color(
+          SkColorSetA(random.next_uint(), SK_AlphaOPAQUE));
     }
     sync_proto.set_scope(app->scope().spec());
     for (const apps::IconInfo& icon_info : app->manifest_icons()) {
@@ -938,8 +958,12 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   }
 
   if (random.next_bool()) {
-    app->SetLaunchHandler(
-        LaunchHandler{random.next_enum<LaunchHandler::ClientMode>()});
+    if (random.next_bool()) {
+      app->SetLaunchHandler(LaunchHandler(std::nullopt));
+    } else {
+      app->SetLaunchHandler(
+          LaunchHandler{random.next_enum<LaunchHandler::ClientMode>()});
+    }
   }
 
   app->SetManifestUpdateTime(random.next_time());
@@ -951,11 +975,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
   if (random.next_bool()) {
     app->SetPermissionsPolicy(CreateRandomPermissionsPolicy(random));
   }
-
-  uint32_t install_source =
-      random.next_uint(static_cast<int>(webapps::WebappInstallSource::COUNT));
-  app->SetLatestInstallSource(
-      static_cast<webapps::WebappInstallSource>(install_source));
 
   if (IsChromeOsDataMandatory()) {
     // Use a separate random generator for CrOS so the result is deterministic
@@ -1039,12 +1058,17 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
 
   app->SetAlwaysShowToolbarInFullscreen(random.next_bool());
 
+  // Note: Even though OS integration sometimes should be guaranteed to be not
+  // there or there based on the install state or
+  // is_from_sync_and_pending_installation, Because
+  // current_os_integration_states is set in a two-phase-commit style, it is
+  // possible & normal for it to be out of sync with what is desired. So allow
+  // it to be set to any value.
   app->SetCurrentOsIntegrationStates(
       GenerateRandomWebAppOsIntegration(random, *app));
 
-  if (random.next_bool()) {
+  if (is_iwa) {
     bool dev_mode = random.next_bool();
-
     auto get_location_type = [&seed_str, &random,
                               &dev_mode]() -> IsolatedWebAppStorageLocation {
       if (!dev_mode) {
@@ -1118,7 +1142,6 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
       random, proto::LinkCapturingUserPreference, /*skip_zero=*/false));
 
   app->SetLatestInstallTime(random.next_time());
-
   if (random.next_bool()) {
     proto::GeneratedIconFix generated_icon_fix;
     generated_icon_fix.set_source(NEXT_PROTO_ENUM(
@@ -1133,42 +1156,10 @@ std::unique_ptr<WebApp> CreateRandomWebApp(CreateRandomWebAppParams params) {
 
   app->SetSupportedLinksOfferIgnoreCount(random.next_uint());
   app->SetSupportedLinksOfferDismissCount(random.next_uint());
-
-  app->SetIsDiyApp(random.next_bool());
-
-  app->SetWasShortcutApp(random.next_bool());
-
   app->SetRelatedApplications(CreateRandomRelatedApplications(random));
-
   app->SetDiyAppIconsMaskedOnMac(random.next_bool());
 
-  if (random.next_bool()) {
-    app->SetUpdateToken(base::NumberToString(random.next_uint()));
-  }
-
   return app;
-}
-
-void MaybeEnsureShortcutAppsTreatedAsDiy(WebApp& app) {
-  if (!base::FeatureList::IsEnabled(kMigrateShortcutsToDiy)) {
-    return;
-  }
-  bool is_shortcut = app.scope().is_empty() ||
-                     (app.latest_install_source().has_value() &&
-                      app.latest_install_source() ==
-                          webapps::WebappInstallSource::MENU_CREATE_SHORTCUT);
-  if (is_shortcut) {
-    app.SetIsDiyApp(true);
-    // Shortcut apps are separated from other web apps based on the fact that
-    // they have an empty scope. DIY apps do not have that distinction, so
-    // populate the scope from the start_url of the web app.
-    if (!app.scope().is_valid() || app.scope().is_empty()) {
-      CHECK(app.start_url().is_valid());
-      GURL scope(app.start_url().GetWithoutFilename());
-      app.SetScope(scope);
-    }
-    app.SetWasShortcutApp(true);
-  }
 }
 
 void TestAcceptDialogCallback(
@@ -1196,13 +1187,13 @@ void TestDeclineDialogCallback(
 webapps::AppId InstallPwaForCurrentUrl(Browser* browser) {
   // Depending on the installability criteria, different dialogs can be used.
   SetAutoAcceptWebAppDialogForTesting(true, true);
-  SetAutoAcceptPWAInstallConfirmationForTesting(true);
+  auto auto_accept_pwa_install_confirmation =
+      SetAutoAcceptPWAInstallConfirmationForTesting();
   SetAutoAcceptDiyAppsInstallDialogForTesting(true);
   WebAppTestInstallWithOsHooksObserver observer(browser->profile());
   observer.BeginListening();
   CHECK(chrome::ExecuteCommand(browser, IDC_INSTALL_PWA));
   webapps::AppId app_id = observer.Wait();
-  SetAutoAcceptPWAInstallConfirmationForTesting(false);
   SetAutoAcceptWebAppDialogForTesting(false, false);
   SetAutoAcceptDiyAppsInstallDialogForTesting(false);
   return app_id;

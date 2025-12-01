@@ -54,6 +54,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    get_args,
 )
 
 import six
@@ -67,12 +68,16 @@ from blinkpy.common import path_finder
 from blinkpy.common import read_checksum_from_png
 from blinkpy.common.host import Host
 from blinkpy.common.memoized import memoized
-from blinkpy.common.net.web_test_results import BASELINE_EXTENSIONS
+from blinkpy.common.net.web_test_results import (
+    BaselineSuffix,
+    BASELINE_EXTENSIONS,
+)
 from blinkpy.common.system.executive import ScriptError
 from blinkpy.common.system.path import abspath_to_uri
 from blinkpy.w3c.wpt_manifest import (
     FuzzyRange,
     FuzzyParameters,
+    Relation,
     WPTManifest,
     MANIFEST_NAME,
 )
@@ -127,6 +132,58 @@ FONT_FILES = [
     [[CONTENT_SHELL_FONTS_DIR], 'Tinos-BoldItalic.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'Tinos-Italic.ttf', None],
     [[CONTENT_SHELL_FONTS_DIR], 'Tinos-Regular.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-ascii.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-basic-bold.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-basic-bolditalic.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-basic-italic.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-basic-regular.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-fallback.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-familyname-bold.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-familyname-funkyA.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-familyname-funkyB.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-familyname-funkyC.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-familyname.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-verify.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-100.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-1479-w1.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-1479-w4.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-1479-w7.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-1479-w9.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-15-w1.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-15-w5.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-200.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-24-w2.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-24-w4.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-2569-w2.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-2569-w5.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-2569-w6.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-2569-w9.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-258-w2.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-258-w5.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-258-w8.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-300.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-3589-w3.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-3589-w5.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-3589-w8.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-3589-w9.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-400.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-47-w4.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-47-w7.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-500.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-600.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-700.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-800.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-900.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w1.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w2.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w3.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w4.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w5.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w6.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w7.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w8.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights-full-w9.ttf', None],
+    [[CONTENT_SHELL_FONTS_DIR], 'csstest-weights.ttf', None],
 ]
 
 # This is the fingerprint of wpt's certificate found in
@@ -218,7 +275,7 @@ class Port(object):
         ('win11', 'x86_64'),
         ('linux', 'x86_64'),
         ('fuchsia', 'x86_64'),
-        ('ios17-simulator', 'x86_64'),
+        ('ios18-simulator', 'x86_64'),
         ('android', 'x86_64'),
         ('webview', 'x86_64'),
     )
@@ -228,7 +285,7 @@ class Port(object):
             'mac11', 'mac11-arm64', 'mac12', 'mac12-arm64', 'mac13',
             'mac13-arm64', 'mac14', 'mac14-arm64', 'mac15', 'mac15-arm64'
         ],
-        'ios': ['ios17-simulator'],
+        'ios': ['ios18-simulator'],
         'win': ['win10.20h2', 'win11-arm64', 'win11'],
         'linux': ['linux'],
         'fuchsia': ['fuchsia'],
@@ -776,6 +833,23 @@ class Port(object):
 
         return baseline_dict
 
+    def allowed_suffixes(self, test_name: str) -> set[BaselineSuffix]:
+        """Get possible suffixes for the given test."""
+        wpt_type = self.get_wpt_type(test_name)
+        if wpt_type in {'testharness', 'wdspec'}:
+            return {'txt'}
+        elif wpt_type == 'manual':
+            # Some manual tests are run as pixel tests (crbug.com/1114920), so
+            # `png` is allowed in that case.
+            return {'png'}
+        elif wpt_type:
+            return set()
+
+        suffixes = set(get_args(BaselineSuffix))
+        if self.reference_files(test_name):
+            suffixes.discard('png')
+        return suffixes
+
     def output_filename(self, test_name, suffix, extension):
         """Generates the output filename for a test.
 
@@ -1079,8 +1153,10 @@ class Port(object):
                 return True
         return False
 
-    def reference_files(self, test_name):
+    def reference_files(self, test_name: str) -> list[tuple[Relation, str]]:
         """Returns a list of expectation (== or !=) and filename pairs"""
+        if match := self.WPT_REGEX.match(test_name):
+            return self._wpt_references_files(match.group(1), match.group(2))
 
         # Try to find -expected.* or -expected-mismatch.* in the same directory.
         reftest_list = []
@@ -1091,15 +1167,12 @@ class Port(object):
                                               match=(expectation == '=='))
                 if self._filesystem.exists(path):
                     reftest_list.append((expectation, path))
-        if reftest_list:
-            return reftest_list
+        return reftest_list
 
+    def _wpt_references_files(self, wpt_path: str,
+                              path_in_wpt: str) -> list[tuple[Relation, str]]:
         # Try to extract information from MANIFEST.json.
-        match = self.WPT_REGEX.match(test_name)
-        if not match:
-            return []
-        wpt_path = match.group(1)
-        path_in_wpt = match.group(2)
+        reftest_list = []
         for expectation, ref_path_in_wpt in self.wpt_manifest(
                 wpt_path).extract_reference_list(path_in_wpt):
             if ref_path_in_wpt.startswith('about:'):
@@ -1604,6 +1677,16 @@ class Port(object):
             return self._filesystem.isfile(self.abspath_for_test(path))
         return False
 
+    def get_wpt_type(self, test_name: str) -> Optional[str]:
+        """Returns the test type of a web platform test."""
+
+        base_test = self.lookup_virtual_test_base(test_name) or test_name
+        wpt_dir, url_from_wpt_dir = self.split_wpt_dir(base_test)
+        if not wpt_dir:
+            return None  # Not a WPT.
+        manifest = self.wpt_manifest(wpt_dir)
+        return manifest.get_test_type(url_from_wpt_dir)
+
     def is_wpt_crash_test(self, test_name):
         """Returns whether a WPT test is a crashtest.
 
@@ -2001,7 +2084,7 @@ class Port(object):
         """
         suite = self._lookup_virtual_suite(test)
         if suite is not None:
-            return self.operating_system() not in suite.platforms
+            return self.port_name not in suite.platforms
         return False
 
     def virtual_test_skipped_due_to_disabled(self, test):

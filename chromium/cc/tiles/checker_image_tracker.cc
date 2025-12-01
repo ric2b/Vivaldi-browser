@@ -13,7 +13,6 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/trace_event/trace_event.h"
 
@@ -215,7 +214,7 @@ void CheckerImageTracker::ClearTracker(bool can_clear_decode_policy_tracking) {
     // re-decode and checker images that were pending invalidation.
     for (auto image_id : images_pending_invalidation_) {
       auto it = image_async_decode_state_.find(image_id);
-      CHECK(it != image_async_decode_state_.end(), base::NotFatalUntil::M130);
+      CHECK(it != image_async_decode_state_.end());
       DCHECK_EQ(it->second.policy, DecodePolicy::SYNC);
       it->second.policy = DecodePolicy::ASYNC;
     }
@@ -408,7 +407,7 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
     // needed.
     PaintImage::Id image_id = candidate.stable_id();
     auto it = image_async_decode_state_.find(image_id);
-    CHECK(it != image_async_decode_state_.end(), base::NotFatalUntil::M130);
+    CHECK(it != image_async_decode_state_.end());
     if (it->second.policy != DecodePolicy::ASYNC)
       continue;
 
@@ -435,8 +434,10 @@ void CheckerImageTracker::ScheduleNextImageDecode() {
       "cc", "CheckerImageTracker::DeferImageDecode", TRACE_ID_LOCAL(image_id));
   ImageController::ImageDecodeRequestId request_id =
       image_controller_->QueueImageDecode(
-          draw_image, base::BindOnce(&CheckerImageTracker::DidFinishImageDecode,
-                                     weak_factory_.GetWeakPtr(), image_id));
+          draw_image,
+          base::BindOnce(&CheckerImageTracker::DidFinishImageDecode,
+                         weak_factory_.GetWeakPtr(), image_id),
+          /*speculative*/ false);
 
   image_id_to_decode_.emplace(image_id, std::make_unique<ScopedDecodeHolder>(
                                             image_controller_, request_id));

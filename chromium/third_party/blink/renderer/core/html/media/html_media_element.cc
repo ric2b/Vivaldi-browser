@@ -36,7 +36,6 @@
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/to_string.h"
 #include "base/synchronization/lock.h"
 #include "base/time/time.h"
@@ -122,6 +121,7 @@
 #include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/display/screen_info.h"
@@ -185,15 +185,29 @@ enum class ProgressEventTimerState {
   kMaxValue = kStalledEventAlreadyScheduled
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class MediaPlaybackInterruptionType {
+  kPlayAttemptWhileFrameHidden = 0,
+  kFrameHiddenWhilePlaying = 1,
+  kMaxValue = kFrameHiddenWhilePlaying
+};
+
 static const base::TimeDelta kStalledNotificationInterval = base::Seconds(3);
+
+void RecordMediaPlaybackInterruptionType(MediaPlaybackInterruptionType type) {
+  base::UmaHistogramEnumeration(
+      "Media.MediaPlaybackWhileNotVisible.InterruptionType", type);
+}
 
 String UrlForLoggingMedia(const KURL& url) {
   static const unsigned kMaximumURLLengthForLogging = 128;
 
   if (url.GetString().length() < kMaximumURLLengthForLogging)
     return url.GetString();
-  return url.GetString().GetString().Substring(0, kMaximumURLLengthForLogging) +
-         "...";
+  return WTF::StrCat(
+      {url.GetString().GetString().Substring(0, kMaximumURLLengthForLogging),
+       "..."});
 }
 
 DocumentElementSetMap& DocumentToElementSetMap() {
@@ -220,7 +234,7 @@ void RemoveElementFromDocumentMap(HTMLMediaElement* element,
                                   Document* document) {
   DocumentElementSetMap& map = DocumentToElementSetMap();
   auto it = map.find(document);
-  CHECK(it != map.end(), base::NotFatalUntil::M130);
+  CHECK(it != map.end());
   WeakMediaElementSet* set = it->value;
   set->erase(element);
   if (set->empty())
@@ -676,6 +690,19 @@ bool HTMLMediaElement::ShouldReusePlayer(Document& old_document,
   return (old_document.domWindow()->IsPictureInPictureWindow() &&
           old_document.GetFrame()->Opener() == new_document.GetFrame()) &&
          opener_document_ == &new_document;
+}
+
+bool HTMLMediaElement::CanPlayWhileHidden() const {
+  return GetDocument().GetExecutionContext()->IsFeatureEnabled(
+      network::mojom::PermissionsPolicyFeature::kMediaPlaybackWhileNotVisible,
+      ReportOptions::kDoNotReport);
+}
+
+bool HTMLMediaElement::IsFrameHidden() const {
+  auto* view = GetDocument().View();
+  return view && (view->GetFrameVisibility().value_or(
+                      mojom::blink::FrameVisibility::kRenderedInViewport) ==
+                  mojom::blink::FrameVisibility::kNotRendered);
 }
 
 void HTMLMediaElement::AttachToNewFrame() {
@@ -1633,12 +1660,28 @@ void HTMLMediaElement::StartPlayerLoad() {
       FastHasAttribute(html_names::kDisableremoteplaybackAttr));
 
   if (RuntimeEnabledFeatures::
-          MediaPlaybackWhileNotVisiblePermissionPolicyEnabled()) {
+          MediaPlaybackWhileNotVisiblePermissionPolicyEnabled(
+              GetExecutionContext())) {
+    UseCounter::Count(
+        GetDocument(),
+        WebFeature::kMediaPlaybackWhileNotVisiblePermissionPolicy);
     web_media_player_->SetShouldPauseWhenFrameIsHidden(
         !GetDocument().GetExecutionContext()->IsFeatureEnabled(
             network::mojom::PermissionsPolicyFeature::
                 kMediaPlaybackWhileNotVisible,
             ReportOptions::kDoNotReport));
+  }
+
+  if (!CanPlayWhileHidden()) {
+    // The "media-playback-while-not-visible" permission policy default value
+    // was overridden, which means that either this frame or an ancestor frame
+    // changed the permission policy's default value. This should only happen if
+    // the MediaPlaybackWhileNotVisiblePermissionPolicyEnabled runtime flag is
+    // enabled.
+    UseCounter::Count(
+        GetDocument(),
+        WebFeature::kMediaPlaybackWhileNotVisiblePermissionPolicy);
+    web_media_player_->SetShouldPauseWhenFrameIsHidden(true);
   }
 
   bool is_cache_disabled = false;
@@ -2743,8 +2786,8 @@ void HTMLMediaElement::setPlaybackRate(double rate,
     // DOMException and don't update the value.
     exception_state.ThrowDOMException(
         DOMExceptionCode::kNotSupportedError,
-        "The provided playback rate (" + String::Number(rate) +
-            ") is not in the " + "supported playback range.");
+        WTF::StrCat({"The provided playback rate (", String::Number(rate),
+                     ") is not in the supported playback range."}));
 
     // Do not update |playback_rate_|.
     return;
@@ -2893,6 +2936,15 @@ std::optional<DOMExceptionCode> HTMLMediaElement::Play() {
       autoplay_policy_->RequestPlay();
 
   if (exception_code == DOMExceptionCode::kNotAllowedError) {
+    if (IsFrameHidden() && web_media_player_ &&
+        web_media_player_->GetShouldPauseWhenFrameIsHidden()) {
+      // The HTMLMediaElement is not allowed to start because the frame has the
+      // MediaPlaybackWhileNotVisible policy applied and is hidden. Record this
+      // in a histogram.
+      RecordMediaPlaybackInterruptionType(
+          MediaPlaybackInterruptionType::kPlayAttemptWhileFrameHidden);
+    }
+
     // If we're already playing, then this play would do nothing anyway.
     // Call playInternal to handle scheduling the promise resolution.
     if (!paused_) {
@@ -4651,6 +4703,8 @@ void HTMLMediaElement::RejectScheduledPlayPromises() {
       reason =
           " because the media playback is not allowed by the "
           "media-playback-while-not-visible permission policy";
+      RecordMediaPlaybackInterruptionType(
+          MediaPlaybackInterruptionType::kFrameHiddenWhilePlaying);
       break;
     case PlayPromiseError::kPaused_LetAudioDescriptionFinish:
       reason = " because the audio description has not finished yet";
@@ -4700,8 +4754,14 @@ void HTMLMediaElement::AudioSourceProviderImpl::Wrap(
     web_audio_source_provider_->SetClient(nullptr);
 
   web_audio_source_provider_ = std::move(provider);
-  if (web_audio_source_provider_)
+  if (web_audio_source_provider_) {
     web_audio_source_provider_->SetClient(client_.Get());
+    if (connection_to_destination_ready_) {
+      // The destination is already connected, then we need to notify the
+      // provider.
+      web_audio_source_provider_->ConnectToDestinationReady();
+    }
+  }
 }
 
 void HTMLMediaElement::AudioSourceProviderImpl::SetClient(
@@ -4738,6 +4798,16 @@ void HTMLMediaElement::AudioSourceProviderImpl::ProvideInput(
   web_audio_source_provider_->ProvideInput(web_audio_data, frames_to_process);
 }
 
+void HTMLMediaElement::AudioSourceProviderImpl::ConnectToDestinationReady() {
+  base::AutoLock locker(provide_input_lock);
+
+  if (web_audio_source_provider_) {
+    web_audio_source_provider_->ConnectToDestinationReady();
+  } else {
+    connection_to_destination_ready_ = true;
+  }
+}
+
 void HTMLMediaElement::AudioClientImpl::SetFormat(uint32_t number_of_channels,
                                                   float sample_rate) {
   if (client_)
@@ -4760,8 +4830,9 @@ bool HTMLMediaElement::IsAudioElement() {
   return IsHTMLAudioElement();
 }
 
-DisplayType HTMLMediaElement::GetDisplayType() const {
-  return IsFullscreen() ? DisplayType::kFullscreen : DisplayType::kInline;
+WebMediaPlayer::DisplayType HTMLMediaElement::GetDisplayType() const {
+  return IsFullscreen() ? WebMediaPlayer::DisplayType::kFullscreen
+                        : WebMediaPlayer::DisplayType::kInline;
 }
 
 gfx::ColorSpace HTMLMediaElement::TargetColorSpace() {
@@ -4947,6 +5018,15 @@ void HTMLMediaElement::SuspendForFrameClosed() {
     web_media_player_->SuspendForFrameClosed();
 }
 
+void HTMLMediaElement::RecordAutoPictureInPictureInfo(
+    const media::PictureInPictureEventsInfo::AutoPipInfo&
+        auto_picture_in_picture_info) {
+  if (web_media_player_) {
+    web_media_player_->RecordAutoPictureInPictureInfo(
+        auto_picture_in_picture_info);
+  }
+}
+
 bool HTMLMediaElement::MediaShouldBeOpaque() const {
   return !IsMediaDataCorsSameOrigin() && ready_state_ < kHaveMetadata &&
          EffectivePreloadType() != WebMediaPlayer::kPreloadNone;
@@ -5005,6 +5085,15 @@ std::string HTMLMediaElement::GetActivePresentationId() {
 ExecutionContext* HTMLMediaElement::GetExecutionContextForPlayer() const {
   return opener_document_ ? opener_document_->GetExecutionContext()
                           : GetExecutionContext();
+}
+
+void HTMLMediaElement::ConnectToDestinationReady() {
+  if (!audio_source_node_ || is_audio_destination_connected_) {
+    return;
+  }
+
+  is_audio_destination_connected_ = true;
+  GetAudioSourceProvider().ConnectToDestinationReady();
 }
 
 HTMLMediaElement::OpenerContextObserver::OpenerContextObserver(

@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
- *   
- *   Copyright 1996-2012 The NASM Authors - All Rights Reserved
+ *
+ *   Copyright 1996-2022 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
- *     
+ *
  *     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
  *     CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
  *     INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -31,8 +31,11 @@
  *
  * ----------------------------------------------------------------------- */
 
-/* 
+/*
  * disasm.c   where all the _work_ gets done in the Netwide Disassembler
+ *
+ * See x86/bytecode.txt for the definition of the instruction encoding
+ * byte codes.
  */
 
 #include "compiler.h"
@@ -203,6 +206,8 @@ static enum reg_enum whichreg(opflags_t regflags, int regval, int rex)
         return GET_REGISTER(nasm_rd_opmaskreg, regval);
     if (!(BNDREG & ~regflags))
         return GET_REGISTER(nasm_rd_bndreg, regval);
+    if (!(TMMREG & ~regflags))
+        return GET_REGISTER(nasm_rd_tmmreg, regval);
 
 #undef GET_REGISTER
     return 0;
@@ -248,9 +253,9 @@ static uint32_t append_evex_mem_deco(char *buf, uint32_t num, opflags_t type,
 
     if ((evex[2] & EVEX_P2B) && (deco & BRDCAST_MASK)) {
         decoflags_t deco_brsize = deco & BRSIZE_MASK;
-        opflags_t template_opsize = (deco_brsize == BR_BITS32 ? BITS32 : BITS64);
-        uint8_t br_num = (type & SIZE_MASK) / BITS128 *
-                         BITS64 / template_opsize * 2;
+        opflags_t template_opsize = brsize_to_size(deco_brsize);
+        unsigned int br_num = (type & SIZE_MASK) / BITS128 *
+            BITS64 / template_opsize * 2;
 
         num_chars += snprintf(buf + num_chars, num - num_chars,
                               "{1to%d}", br_num);
@@ -504,7 +509,6 @@ static int matches(const struct itemplate *t, uint8_t *data,
         ins->oprs[i].segment = ins->oprs[i].disp_size =
             (segsize == 64 ? SEG_64BIT : segsize == 32 ? SEG_32BIT : 0);
     }
-    ins->condition = -1;
     ins->evex_tuple = 0;
     ins->rex = prefix->rex;
     memset(ins->prefixes, 0, sizeof ins->prefixes);
@@ -676,6 +680,22 @@ static int matches(const struct itemplate *t, uint8_t *data,
             opx->basereg = ((modrm >> 3) & 7) + (ins->rex & REX_R ? 8 : 0);
             if ((ins->rex & REX_EV) && (segsize == 64))
                 opx->basereg += (ins->evex_p[0] & EVEX_P0RP ? 0 : 16);
+            break;
+        }
+
+        case 0171:
+        {
+            uint8_t t = *r++;
+            uint8_t d = *data++;
+            if ((d ^ t) & ~070) {
+                return 0;
+            } else {
+                op2 = (op2 & ~3) | ((t >> 3) & 3);
+                opy = &ins->oprs[op2];
+                opy->basereg = ((d >> 3) & 7) +
+                    (ins->rex & REX_R ? 8 : 0);
+                opy->segment |= SEG_RMREG;
+            }
             break;
         }
 
@@ -939,16 +959,6 @@ static int matches(const struct itemplate *t, uint8_t *data,
             ins->rex |= REX_NH;
             break;
 
-        case 0330:
-        {
-            int t = *r++, d = *data++;
-            if (d < t || d > t + 15)
-                return 0;
-            else
-                ins->condition = d - t;
-            break;
-        }
-
         case 0326:
             if (prefix->rep == 0xF3)
                 return 0;
@@ -1107,12 +1117,6 @@ static int matches(const struct itemplate *t, uint8_t *data,
 
     return data - origdata;
 }
-
-/* Condition names for disassembly, sorted by x86 code */
-static const char * const condition_name[16] = {
-    "o", "no", "c", "nc", "z", "nz", "na", "a",
-    "s", "ns", "pe", "po", "l", "nl", "ng", "g"
-};
 
 int32_t disasm(uint8_t *data, int32_t data_size, char *output, int outbufsize, int segsize,
                int64_t offset, int autosync, iflag_t *prefer)
@@ -1406,12 +1410,8 @@ int32_t disasm(uint8_t *data, int32_t data_size, char *output, int outbufsize, i
     }
 
     i = (*p)->opcode;
-    if (i >= FIRST_COND_OPCODE)
-        slen += snprintf(output + slen, outbufsize - slen, "%s%s",
-                        nasm_insn_names[i], condition_name[ins.condition]);
-    else
-        slen += snprintf(output + slen, outbufsize - slen, "%s",
-                        nasm_insn_names[i]);
+    slen += snprintf(output + slen, outbufsize - slen, "%s",
+                     nasm_insn_names[i]);
 
     colon = false;
     is_evex = !!(ins.rex & REX_EV);
@@ -1522,7 +1522,10 @@ int32_t disasm(uint8_t *data, int32_t data_size, char *output, int outbufsize, i
                     snprintf(output + slen, outbufsize - slen, "tword ");
             if ((ins.evex_p[2] & EVEX_P2B) && (deco & BRDCAST_MASK)) {
                 /* when broadcasting, each element size should be used */
-                if (deco & BR_BITS32)
+                if (deco & BR_BITS16)
+                    slen +=
+                        snprintf(output + slen, outbufsize - slen, "word ");
+                else if (deco & BR_BITS32)
                     slen +=
                         snprintf(output + slen, outbufsize - slen, "dword ");
                 else if (deco & BR_BITS64)

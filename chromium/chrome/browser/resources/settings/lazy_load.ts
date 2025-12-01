@@ -19,7 +19,7 @@ import './clear_browsing_data_dialog/clear_browsing_data_account_indicator.js';
 import './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
 import './clear_browsing_data_dialog/clear_browsing_data_dialog_v2.js';
 import './clear_browsing_data_dialog/clear_browsing_data_time_picker.js';
-import './search_engines_page/search_engines_page.js';
+// import './search_engines_page/search_engines_page.js';
 import './simple_confirmation_dialog.js';
 import './privacy_page/anti_abuse_page.js';
 //import './privacy_page/privacy_guide/privacy_guide_dialog.js';
@@ -28,12 +28,14 @@ import './privacy_page/anti_abuse_page.js';
 //import './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
 //import './privacy_sandbox/privacy_sandbox_interest_item.js';
 //import './privacy_sandbox/privacy_sandbox_page.js';
+//import './privacy_page/incognito_tracking_protections_page.js';
 //import './privacy_sandbox/privacy_sandbox_manage_topics_subpage.js';
 //import './privacy_sandbox/privacy_sandbox_topics_subpage.js';
 import './privacy_page/security_keys_subpage.js';
 import './privacy_page/security_keys_phones_subpage.js';
 import './privacy_page/security_keys_phones_list.js';
 import './privacy_page/security_keys_phones_dialog.js';
+import './privacy_page/security_page_v2.js';
 import './privacy_page/security_page.js';
 import './safety_hub/safety_hub_page.js';
 import './safety_hub/safety_hub_entry_point.js';
@@ -46,7 +48,9 @@ import './site_settings_page/site_settings_page.js';
 import './site_settings/category_setting_exceptions.js';
 import './site_settings/chooser_exception_list.js';
 import './site_settings/site_details_permission_device_entry.js';
+import './site_settings/geolocation_page.js';
 import './site_settings/media_picker.js';
+import './site_settings/notifications_page.js';
 import './site_settings/pdf_documents.js';
 import './site_settings/protocol_handlers.js';
 import './site_settings/settings_category_default_radio_group.js';
@@ -63,12 +67,6 @@ import './people_page/manage_profile.js';
 import './people_page/signout_dialog.js';
 import './people_page/sync_controls.js';
 import './people_page/sync_page.js';
-// <if expr="use_nss_certs">
-import 'chrome://resources/cr_components/certificate_manager/certificate_manager.js';
-// </if>
-// <if expr="chrome_root_store_cert_management_ui">
-import 'chrome://resources/cr_components/certificate_manager/certificate_manager_v2.js';
-// </if>
 // Sections
 import './a11y_page/a11y_page.js';
 import './downloads_page/downloads_page.js';
@@ -148,9 +146,9 @@ export {SettingsVirtualCardUnenrollDialogElement} from './autofill_page/virtual_
 // <if expr="not is_chromeos">
 export {SettingsClearBrowsingDataAccountIndicator} from './clear_browsing_data_dialog/clear_browsing_data_account_indicator.js';
 // </if>
-export {ClearBrowsingDataBrowserProxy, ClearBrowsingDataBrowserProxyImpl, ClearBrowsingDataResult, TimePeriod, UpdateSyncStateEvent} from './clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
+export {BrowsingDataType, ClearBrowsingDataBrowserProxy, ClearBrowsingDataBrowserProxyImpl, ClearBrowsingDataResult, TimePeriod, UpdateSyncStateEvent} from './clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
 export {SettingsClearBrowsingDataDialogElement} from './clear_browsing_data_dialog/clear_browsing_data_dialog.js';
-export {SettingsClearBrowsingDataDialogV2Element} from './clear_browsing_data_dialog/clear_browsing_data_dialog_v2.js';
+export {getDataTypePrefName, SettingsClearBrowsingDataDialogV2Element} from './clear_browsing_data_dialog/clear_browsing_data_dialog_v2.js';
 export {getTimePeriodString, SettingsClearBrowsingDataTimePicker} from './clear_browsing_data_dialog/clear_browsing_data_time_picker.js';
 export {SettingsHistoryDeletionDialogElement} from './clear_browsing_data_dialog/history_deletion_dialog.js';
 export {SettingsPasswordsDeletionDialogElement} from './clear_browsing_data_dialog/passwords_deletion_dialog.js';
@@ -196,6 +194,7 @@ export {SettingsCookiesPageElement} from './privacy_page/cookies_page.js';
 export {CrLottieElement} from './privacy_page/cr_lottie.js';
 export {SettingsDoNotTrackToggleElement} from './privacy_page/do_not_track_toggle.js';
 export {FINGERPRINT_CHECK_DARK_URL, FINGERPRINT_CHECK_LIGHT_URL, FINGERPRINT_SCANNED_ICON_DARK, FINGERPRINT_SCANNED_ICON_LIGHT, FingerprintProgressArcElement, PROGRESS_CIRCLE_BACKGROUND_COLOR_DARK, PROGRESS_CIRCLE_BACKGROUND_COLOR_LIGHT, PROGRESS_CIRCLE_FILL_COLOR_DARK, PROGRESS_CIRCLE_FILL_COLOR_LIGHT} from './privacy_page/fingerprint_progress_arc.js';
+//export {IncognitoTrackingProtectionsPageElement} from './privacy_page/incognito_tracking_protections_page.js';
 export {SettingsPersonalizationOptionsElement} from './privacy_page/personalization_options.js';
 //export {PrivacyGuideStep} from './privacy_page/privacy_guide/constants.js';
 //export {PrivacyGuideAdTopicsFragmentElement} from './privacy_page/privacy_guide/privacy_guide_ad_topics_fragment.js';
@@ -217,6 +216,7 @@ export {ResetDialogPage, SettingsSecurityKeysResetDialogElement} from './privacy
 export {SetPinDialogPage, SettingsSecurityKeysSetPinDialogElement} from './privacy_page/security_keys_set_pin_dialog.js';
 export {SecurityKeysSubpageElement} from './privacy_page/security_keys_subpage.js';
 export {HttpsFirstModeSetting, SafeBrowsingSetting, SettingsSecurityPageElement} from './privacy_page/security_page.js';
+//export {SettingsSecurityPageV2Element} from './privacy_page/security_page_v2.js';
 //export {SettingsPrivacySandboxAdMeasurementSubpageElement} from './privacy_sandbox/privacy_sandbox_ad_measurement_subpage.js';
 //export {SettingsPrivacySandboxFledgeSubpageElement} from './privacy_sandbox/privacy_sandbox_fledge_subpage.js';
 //export {PrivacySandboxInterestItemElement} from './privacy_sandbox/privacy_sandbox_interest_item.js';
@@ -233,11 +233,11 @@ export {SettingsSafetyHubEntryPointElement} from './safety_hub/safety_hub_entry_
 export {SettingsSafetyHubModuleElement, SiteInfo, SiteInfoWithTarget} from './safety_hub/safety_hub_module.js';
 export {SettingsSafetyHubPageElement} from './safety_hub/safety_hub_page.js';
 export {SettingsSafetyHubUnusedSitePermissionsModuleElement} from './safety_hub/unused_site_permissions_module.js';
-export {SettingsOmniboxExtensionEntryElement} from './search_engines_page/omnibox_extension_entry.js';
-export {SettingsSearchEngineEditDialogElement} from './search_engines_page/search_engine_edit_dialog.js';
-export {SettingsSearchEngineEntryElement} from './search_engines_page/search_engine_entry.js';
-export {SettingsSearchEnginesListElement} from './search_engines_page/search_engines_list.js';
-export {SettingsSearchEnginesPageElement} from './search_engines_page/search_engines_page.js';
+// export {SettingsOmniboxExtensionEntryElement} from './search_engines_page/omnibox_extension_entry.js';
+// export {SettingsSearchEngineEditDialogElement} from './search_engines_page/search_engine_edit_dialog.js';
+// export {SettingsSearchEngineEntryElement} from './search_engines_page/search_engine_entry.js';
+// export {SettingsSearchEnginesListElement} from './search_engines_page/search_engines_list.js';
+// export {SettingsSearchEnginesPageElement} from './search_engines_page/search_engines_page.js';
 export {SettingsSimpleConfirmationDialogElement} from './simple_confirmation_dialog.js';
 export {AddSiteDialogElement} from './site_settings/add_site_dialog.js';
 export {AllSitesElement} from './site_settings/all_sites.js';
@@ -250,6 +250,8 @@ export {FileSystemSiteDetailsElement} from './site_settings/file_system_site_det
 export {FileSystemSiteEntryElement} from './site_settings/file_system_site_entry.js';
 export {FileSystemSiteEntryItemElement} from './site_settings/file_system_site_entry_item.js';
 export {FileSystemSiteListElement} from './site_settings/file_system_site_list.js';
+export {GeolocationPageElement} from './site_settings/geolocation_page.js';
+export {NotificationsPageElement} from './site_settings/notifications_page.js';
 export {AppHandlerEntry, AppProtocolEntry, HandlerEntry, ProtocolEntry, ProtocolHandlersElement} from './site_settings/protocol_handlers.js';
 export {SettingsCategoryDefaultRadioGroupElement} from './site_settings/settings_category_default_radio_group.js';
 export {SettingsSiteDataElement} from './site_settings/site_data.js';
@@ -259,8 +261,7 @@ export {SiteDetailsPermissionDeviceEntryElement} from './site_settings/site_deta
 export {SiteEntryElement} from './site_settings/site_entry.js';
 export {SiteListElement} from './site_settings/site_list.js';
 export {SiteListEntryElement} from './site_settings/site_list_entry.js';
-export {ChooserException, DefaultContentSetting, DefaultSettingSource, FileSystemGrant, OriginFileSystemGrants, OriginInfo, RawChooserException, RawSiteException, RecentSitePermissions, SiteException, SiteGroup, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl, SmartCardReaderGrants, StorageAccessEmbeddingException, StorageAccessSiteException, ThirdPartyCookieBlockingSetting, ZoomLevelEntry} from './site_settings/site_settings_prefs_browser_proxy.js';
-export {SmartCardReaderOriginEntryElement} from './site_settings/smart_card_reader_origin_entry.js';
+export {ChooserException, DefaultContentSetting, DefaultSettingSource, FileSystemGrant, OriginFileSystemGrants, OriginInfo, RawChooserException, RawSiteException, RecentSitePermissions, SiteException, SiteGroup, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl, StorageAccessEmbeddingException, StorageAccessSiteException, ThirdPartyCookieBlockingSetting, ZoomLevelEntry} from './site_settings/site_settings_prefs_browser_proxy.js';
 export {SettingsSmartCardReadersPageElement} from './site_settings/smart_card_readers_page.js';
 export {StorageAccessSiteListElement} from './site_settings/storage_access_site_list.js';
 export {StorageAccessSiteListEntryElement} from './site_settings/storage_access_site_list_entry.js';

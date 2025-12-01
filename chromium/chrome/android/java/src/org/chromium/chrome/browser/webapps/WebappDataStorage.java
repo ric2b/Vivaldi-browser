@@ -174,7 +174,7 @@ public class WebappDataStorage {
     public void getSplashScreenImage(final FetchCallback<Bitmap> callback) {
         new AsyncTask<Bitmap>() {
             @Override
-            protected final Bitmap doInBackground() {
+            protected Bitmap doInBackground() {
                 return BitmapHelper.decodeBitmapFromString(
                         mPreferences.getString(KEY_SPLASH_ICON, null));
             }

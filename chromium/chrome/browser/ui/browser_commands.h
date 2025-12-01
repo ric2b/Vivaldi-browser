@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
+#include "components/tabs/public/split_tab_id.h"
 #include "content/public/common/page_zoom.h"
 #include "printing/buildflags/buildflags.h"
 #include "ui/base/window_open_disposition.h"
@@ -31,6 +32,10 @@ namespace content {
 class NavigationHandle;
 class WebContents;
 }  // namespace content
+
+namespace bookmarks {
+class BookmarkModel;
+}  // namespace bookmarks
 
 namespace chrome {
 
@@ -136,14 +141,47 @@ void MoveGroupToNewWindow(Browser* browser, tab_groups::TabGroupId group);
 bool CanCloseTabsToRight(const Browser* browser);
 bool CanCloseOtherTabs(const Browser* browser);
 content::WebContents* DuplicateTabAt(Browser* browser, int index);
+void DuplicateSplit(Browser* browser, split_tabs::SplitTabId split);
 bool CanDuplicateTabAt(const Browser* browser, int index);
 void MoveTabsToExistingWindow(Browser* source,
                               Browser* target,
                               const std::vector<int>& tab_indices);
+void MoveGroupToExistingWindow(Browser* source,
+                               Browser* target,
+                               tab_groups::TabGroupId group);
 void MuteSite(Browser* browser);
 void PinTab(Browser* browser);
 void GroupTab(Browser* browser);
+void NewSplitTab(Browser* browser);
+
+// Tab group commands
+// These values are persisted to logs. Entries should not be renumbered
+// and  numeric values should never be reused.
+//
+// LINT.IfChange(TabGroupShortcut)
+enum class TabGroupShortcut {
+  kCreateNewTabGroup = 0,
+  kCloseTabGroup = 1,
+  kAddNewTabToGroup = 2,
+  kFocusNextTabGroup = 3,
+  kFocusPrevTabGroup = 4,
+  kMaxValue = kFocusPrevTabGroup
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/tab/enums.xml:TabGroupShortcut)
+
+// Creates a new tab at the end of the active tab's group.
+void AddNewTabToGroup(Browser* browser);
+// Creates a new tab group at the end of the tab strip.
 void CreateNewTabGroup(Browser* browser);
+// Closes the entire tab group the active tab is in.
+void CloseTabGroup(Browser* browser);
+// Finds the next tab group that isn't the current one in the tab strip and
+// activates the first tab in the group.
+void FocusNextTabGroup(Browser* browser);
+// Finds the previous tab group that isn't the current one in the tabstrip and
+// activates the first tab in the group.
+void FocusPreviousTabGroup(Browser* browser);
+
 void MuteSiteForKeyboardFocusedTab(Browser* browser);
 bool HasKeyboardFocusedTab(const Browser* browser);
 void PinKeyboardFocusedTab(Browser* browser);
@@ -158,7 +196,9 @@ void Exit();
 void BookmarkCurrentTab(Browser* browser);
 // Bookmarks the current tab in the given folder and does not show the edit
 // dialog.
-void BookmarkCurrentTabInFolder(Browser* browser, int64_t folder_id);
+void BookmarkCurrentTabInFolder(Browser* browser,
+                                bookmarks::BookmarkModel* model,
+                                int64_t folder_id);
 bool CanBookmarkCurrentTab(const Browser* browser);
 void BookmarkAllTabs(Browser* browser);
 bool CanBookmarkAllTabs(const Browser* browser);

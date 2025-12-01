@@ -58,9 +58,7 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   struct AdaptiveRefreshRateInfo {
     bool supports_adaptive_refresh_rate = false;
     // Fields below are valid only if `supports_adaptive_refresh_rate` is true.
-    float suggested_frame_rate_normal = 0.f;
     float suggested_frame_rate_high = 0.f;
-    std::vector<float> supported_frame_rates;
 
     AdaptiveRefreshRateInfo();
     AdaptiveRefreshRateInfo(const AdaptiveRefreshRateInfo& other);
@@ -110,9 +108,6 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
                          const base::android::JavaParamRef<jobject>& obj);
   void OnActivityStarted(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj);
-  void SetVSyncPaused(JNIEnv* env,
-                      const base::android::JavaParamRef<jobject>& obj,
-                      bool paused);
   void OnUpdateRefreshRate(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj,
                            float refresh_rate);
@@ -120,12 +115,9 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jfloatArray>& supported_refresh_rates);
-  void OnAdaptiveRefreshRateInfoChanged(
-      JNIEnv* env,
-      jboolean supports_adaptive_refresh_rate,
-      jfloat suggested_frame_rate_normal,
-      jfloat suggested_frame_rate_high,
-      const base::android::JavaParamRef<jfloatArray>& supported_frame_rates);
+  void OnAdaptiveRefreshRateInfoChanged(JNIEnv* env,
+                                        jboolean supports_adaptive_refresh_rate,
+                                        jfloat suggested_frame_rate_high);
   void OnOverlayTransformUpdated(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -211,7 +203,6 @@ class UI_ANDROID_EXPORT WindowAndroid : public ViewAndroid {
   blink::ContentToVisibleTimeReporter content_to_visible_time_recorder_;
 
   float mouse_wheel_scroll_factor_;
-  bool vsync_paused_ = false;
 
   raw_ptr<TestHooks> test_hooks_ = nullptr;
 

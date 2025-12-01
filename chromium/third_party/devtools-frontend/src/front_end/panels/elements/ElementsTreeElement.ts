@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -42,8 +43,8 @@ import type * as IssuesManager from '../../models/issues_manager/issues_manager.
 import * as TextUtils from '../../models/text_utils/text_utils.js';
 import * as CodeMirror from '../../third_party/codemirror.next/codemirror.next.js';
 import * as Adorners from '../../ui/components/adorners/adorners.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as CodeHighlighter from '../../ui/components/code_highlighter/code_highlighter.js';
-import * as FloatingButton from '../../ui/components/floating_button/floating_button.js';
 import * as Highlighting from '../../ui/components/highlighting/highlighting.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as TextEditor from '../../ui/components/text_editor/text_editor.js';
@@ -213,6 +214,10 @@ const UIStrings = {
    *@description Text of a tooltip to redirect to another element in the Elements panel
    */
   showInterestTarget: 'Show interest target',
+  /**
+   *@description Text of a tooltip to redirect to another element in the Elements panel
+   */
+  showCommandForTarget: 'Show commandfor target',
   /**
    *@description Text of the tooltip for scroll adorner.
    */
@@ -480,11 +485,13 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
   }
 
   #updateNodeElementToIssue(nodeElement: Element, issue: IssuesManager.Issue.Issue): void {
-    if (!this.#nodeElementToIssue.has(nodeElement)) {
-      this.#nodeElementToIssue.set(nodeElement, [issue]);
-      return;
+    let issues = this.#nodeElementToIssue.get(nodeElement);
+    if (!issues) {
+      issues = [];
+      this.#nodeElementToIssue.set(nodeElement, issues);
     }
-    this.#nodeElementToIssue.get(nodeElement)?.push(issue);
+    issues.push(issue);
+    this.treeOutline?.updateNodeElementToIssue(nodeElement, issues);
   }
 
   expandedChildrenLimit(): number {
@@ -547,10 +554,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     const action = UI.ActionRegistry.ActionRegistry.instance().getAction('freestyler.elements-floating-button');
     if (this.contentElement && !this.aiButtonContainer) {
       this.aiButtonContainer = this.contentElement.createChild('span', 'ai-button-container');
-      const floatingButton = new FloatingButton.FloatingButton.FloatingButton({
-        title: action.title(),
-        iconName: 'smart-assistant',
-      });
+      const floatingButton = Buttons.FloatingButton.create('smart-assistant', action.title());
       floatingButton.addEventListener('click', ev => {
         ev.stopPropagation();
         this.select(true, false);
@@ -643,7 +647,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
       return false;
     }
     const startTagTreeElement = this.treeOutline.findTreeElement(this.nodeInternal);
-    startTagTreeElement ? startTagTreeElement.remove() : this.remove();
+    startTagTreeElement ? (void startTagTreeElement.remove()) : (void this.remove());
     return true;
   }
 
@@ -1390,7 +1394,7 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     });
   }
 
-  private textNodeEditingCommitted(textNode: SDK.DOMModel.DOMNode, element: Element, newText: string): void {
+  private textNodeEditingCommitted(textNode: SDK.DOMModel.DOMNode, _element: Element, newText: string): void {
     this.editing = null;
 
     function callback(this: ElementsTreeElement): void {
@@ -1703,6 +1707,13 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
             i18nString(UIStrings.showInterestTarget));
         break;
       }
+      case 'commandfor': {
+        const linkedPart = value ? attrValueElement : attrNameElement;
+        void this.linkifyElementByRelation(
+            linkedPart, Protocol.DOM.GetElementByRelationRequestRelation.CommandFor,
+            i18nString(UIStrings.showCommandForTarget));
+        break;
+      }
     }
 
     if (hasText) {
@@ -1999,7 +2010,11 @@ export class ElementsTreeElement extends UI.TreeOutline.TreeElement {
     return titleDOM;
   }
 
-  remove(): void {
+  async remove(): Promise<void> {
+    if (this.treeOutline?.isToggledToHidden(this.nodeInternal)) {
+      // Unhide the node before removing. This avoids inconsistent state if the node is restored via undo.
+      await this.treeOutline.toggleHideElement(this.nodeInternal);
+    }
     if (this.nodeInternal.pseudoType()) {
       return;
     }

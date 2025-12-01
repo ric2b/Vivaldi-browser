@@ -4,48 +4,99 @@
 <translation id="1063263220330818888">კონფიდენციალური ძებნა</translation>
 <translation id="1097355661841455597">გაგვიხარდება მოსმენა, რას ფიქრობთ ჩვენზე.</translation>
 <translation id="1137850887415122856">ინკოგნიტო ჩანართების დასაბლოკად მოირგეთ Touch ID, Face ID ან საკვანძო ფრაზა.</translation>
+<translation id="1189137610071296104">გახსნა ჩანართების ნაკრებში</translation>
 <translation id="1310184829257917508">კითხვა, გაიხსნას თუ არა ბმულები სხვა აპებიდან კონფიდენციალურად</translation>
 <translation id="1743244221910283364">ცვლილებების გაუქმება</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {ჩანართის ჩამატება ჩანართების ჯგუფში}
+        other {ჩანართების ჩამატება ჩანართების ჯგუფში}}</translation>
 <translation id="207677936531967364">ახალი კონფიდენციალური ჩანართის გვერდი</translation>
+<translation id="2099591136582442348">ეს სამუდამოდ წაშლის ჩანართების ჯგუფს თქვენი მოწყობილობიდან.</translation>
+<translation id="2181990701313127304">ახალი ჩანართი ჯგუფში</translation>
+<translation id="2351280151183279120">ჩანართების ჯგუფის გაზიარება</translation>
 <translation id="2353953000228441783">ნაგულისხმევი საიტის ხედი</translation>
 <translation id="2394192052244849643">ჩასმა და ძებნა</translation>
 <translation id="2418705169960294134">ახალი კონფიდენციალური ჩანართი</translation>
+<translation id="2565593432251168402">დააორგანიზეთ თქვენი ბრაუზერი ჩანართის ჯგუფების შექმნით</translation>
 <translation id="2783161812871838616">კომპიუტერის საიტის მოთხოვნა</translation>
+<translation id="2806957659107692459">ჩანართების ჯგუფის შექმნა</translation>
 <translation id="2899836479226240291">Vivaldi-ში ბმულები ავტომატურად რომ გაიხსნას, აქციეთ ის ბრაუზერის ნაგულისხმევ აპად.</translation>
 <translation id="3365529507898144230">Photos-ში შენახვა</translation>
 <translation id="3434473769478814796">ჩასმა და გადასვლა</translation>
 <translation id="3463990832590571933">გახსნა ახალ კონფიდენციალურ ჩანართში</translation>
 <translation id="3473652525653758699">ახალი პირადი ფანჯარა</translation>
 <translation id="3501504415290398157">გამოიყენეთ <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> თქვენი ინკოგნიტო ჩანართების განბლოკვისთვის.</translation>
+<translation id="353418192940651934">ჩანართების ჯგუფის შენარჩუნება</translation>
 <translation id="3607792383367580513">თარგმნა</translation>
 <translation id="3692650606013198282">ინკოგნიტოში გახსნა</translation>
+<translation id="3873885181515160073">შექმენით თქვენი ახალი ჩანართების ჯგუფი მისთვის სახელის და ფერის მინიჭებით</translation>
 <translation id="3922395466317605522">მენიუს მორგება</translation>
 <translation id="3981599532037327317">${url}-ის გახსნა ინკოგნიტოში</translation>
 <translation id="398477389655464998">ბმულის დაკოპირება გამოკვეთაში</translation>
+<translation id="3993429087389909418">ეს ჩანართები ღია დარჩება ამ მოწყობილობაზე, მაგრამ ჩანართების ჯგუფი წაიშლება ყველა მოწყობილობიდან, რომელზეც <ph name="USER_EMAIL" />-ში ბრძანდებით შესული.</translation>
 <translation id="4026745073321351206">🙄 პრობლემა აღმოაჩინეთ?</translation>
+<translation id="4216644171369573466">ჩანართების ჯგუფი, <ph name="GROUP_TITLE" />, მენიუ.</translation>
 <translation id="4304713468139749426">პაროლების მმართველი</translation>
+<translation id="4569525137269575065">ჯგუდის დახურვა</translation>
 <translation id="473775607612524610">განახლება</translation>
 <translation id="4755216899422789286">ბმულების გახსნა Vivaldi-ში</translation>
+<translation id="4772190485302020393">ყველა ჩანართის და ჯგუდის დახურვა</translation>
 <translation id="4802185666270672526">კომპიუტერის საიტის მოთხოვნის დამალვა</translation>
+<translation id="4828571836982833289">გავაუქმო ჩანართების ჯგუფი?</translation>
+<translation id="4838250035189612538">ჩანართების ჯგუფის სახელის გადარქმევა</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 ჩანართების ჯგუფი დახურული და სენახულია}
+            other {{count} ჩანართების ჯგუფი დახურული და სენახულია}}</translation>
+<translation id="5019787757991745254">ჩანართების ჯგუფის ფერი <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">ჩანართების ჯგუფი. აკეცილი.</translation>
 <translation id="5217245356412073535">ნაგულისხმევი საიტის ხედის კომპიუტერისაზე შეცვლა შეგიძლიათ მენიუში მორგება&gt;შემცველობის მორგება</translation>
 <translation id="5271549068863921519">პაროლის შენახვა</translation>
 <translation id="5317780077021120954">შენახვა</translation>
+<translation id="5385953732213322025">ეს საიტი ცდილობს, აპლიკაცია გახსნას. ეს კონფიდენციალური რეჟიმიდან გაგიყვანთ.</translation>
 <translation id="5431239785743546285">თქვენ მიერ წაკითხული გვერდები</translation>
+<translation id="5521301883748677039">წავშალო ჩანართების ჯგუფი?</translation>
+<translation id="5544011153887687593">ჩანართების ჯგუფის ჩანართი. <ph name="TAB_INDEX_IN_GROUP" /> <ph name="NUMBER_OF_TABS_IN_GROUP" />-დან.</translation>
 <translation id="5614553682702429503">შევინახო პაროლი?</translation>
 <translation id="570209299585559496">ნაგულისხმევი საიტის ხედის შეცვლა შეგიძლიათ მენიუში 'მორგება', შემდეგ 'შემცველობის მორგება'</translation>
+<translation id="5719777162751096990">ჩანართების ჯგუფში გადატანა</translation>
 <translation id="5962477178930921574">ჩასმა და ძებნა</translation>
+<translation id="6163856768888310791">ჩანართების ჯგუფის გაუქმება</translation>
+<translation id="6168969409902608220">ჩანართების ჯგუფის სახელი</translation>
 <translation id="6233792867654386826">შეყვანილი ბმულების გახსნა Vivaldi-ში.</translation>
+<translation id="6478587527114893588">ჯგუფის დახურვა.</translation>
+<translation id="6527405730445064713">ჩანართების ჯგუფი. ჩამოშლილი.</translation>
 <translation id="6532106788206463496">ცვლილებების შენახვა</translation>
+<translation id="6666425778700353369">ეს წაშლის ჩანართების ჯგუფს ყველა მოწყობილობიდან, რომელიც <ph name="USER_EMAIL" />-შია შესული.</translation>
 <translation id="6680416467695217368">მენიუს მორგება</translation>
+<translation id="6695835495840050460">დაარტყაპუნეთ მენიუზე "ახალი ჩანართის ჩამატება ჩანართების ჯგუფში"</translation>
+<translation id="6708694844902784277">ჩანართების ჯგუფის წაშლა</translation>
 <translation id="6827597288286078054">კონფიდენციალური ძებნა</translation>
 <translation id="6851516051005285358">კომპიუტერის საიტის მოთხოვნა</translation>
+<translation id="6890907822330704077">ჩანართების ჯგუფი. <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> ჩანართი.</translation>
 <translation id="7307970171564921489">განბლოკეთ ინკოგნიტო ჩანართები <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />-ით</translation>
 <translation id="7347289093190902150">გავხსნა ინკოგნიტოში?</translation>
+<translation id="7363285031331302144">შექმენით ჩანართების ჯგუფი მათი ორგანიზაციისთვის</translation>
+<translation id="7395230742578757172">გახსნა ახალი ჩანართების ნაკრებში</translation>
+<translation id="7424676799308869002">შევინარჩუნოთ ჩანართების ჯგუფი?</translation>
 <translation id="7498234416455752244">რედაქტირების გაგრძელება</translation>
 <translation id="7549299604720382000">ახალი კონფიდენციალური ჩანართი</translation>
+<translation id="7585610907974664408">ახალი კონფიდენციალური ჩანართი ჯგუფში</translation>
+<translation id="7661319142491611883">ჩანართების ჯგუფის ჩამოშლა.</translation>
+<translation id="7706213624515206557">ყველა ჩანართის ჩვენება ჩანართების ჯგუფში</translation>
 <translation id="7961015016161918242">არასდროს</translation>
 <translation id="8326104954595890674">ახალი კონფიდენციალური ჩანართი</translation>
+<translation id="8345989863850359861">მოვაცილო ჩანართი და წავშალო ჩანართების ჯგუფი?</translation>
+<translation id="8407986162266014185">ჩანართების ჯგუფის გაზიარება</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {ჩანართის ჩამატება ახალი ჩანართების ჯგუფში}
+        other {ჩანართების ჩამატება ახალი ჩანართების ჯგუფში}}</translation>
+<translation id="8465550436083180511">ჩანართების ჯგუფის აკეცვა.</translation>
+<translation id="8685478989144570078">ჩანართების ჯგუფები</translation>
 <translation id="8756969031206844760">გსურთ პაროლის განახლება?</translation>
+<translation id="8852861335827546438">ახალი ჩანართების ჯგუფი</translation>
+<translation id="8951084872625418241">ახალი ჩანართი ჯგუფში</translation>
 <translation id="9042893549633094279">კონფიდენციალობა და უსაფრთხოება</translation>
 <translation id="9094033019050270033">პაროლის განახლება</translation>
+<translation id="944434461715569989">ჯგუფის დატოვება</translation>
+<translation id="959061183386231608">ჩანართების ჯგუფი ღია დარჩება ამ მოწყობილობაზე, მაგრამ ჩანართების ჯგუფი სამუდამოდ წაიშლება.</translation>
 </translationbundle>

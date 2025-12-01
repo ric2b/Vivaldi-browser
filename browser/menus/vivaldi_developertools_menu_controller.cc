@@ -80,9 +80,10 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
     switch (command_id) {
       case IDC_CONTENT_CONTEXT_RELOAD_PACKAGED_APP:
         if (platform_app && platform_app->is_platform_app()) {
-          extensions::ExtensionSystem::Get(browser_->profile())
-              ->extension_service()
-              ->ReloadExtension(platform_app->id());
+          extensions::ExtensionRegistrar* extension_registrar =
+              extensions::ExtensionRegistrar::Get(browser_->profile());
+          DCHECK(extension_registrar);
+          extension_registrar->ReloadExtension(platform_app->id());
         }
         return true;
 

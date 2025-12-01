@@ -21,6 +21,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
+#include "base/types/optional_ref.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_trigger_source.h"
@@ -174,7 +175,11 @@ class AutofillManager
     // Fired when the field types predictions of a form *may* have changed.
     // At the moment, we cannot distinguish whether autocomplete attributes or
     // local heuristics changed.
-    enum class FieldTypeSource { kHeuristicsOrAutocomplete, kAutofillServer };
+    enum class FieldTypeSource {
+      kHeuristicsOrAutocomplete,
+      kAutofillServer,
+      kAutofillAiModel
+    };
     virtual void OnFieldTypesDetermined(AutofillManager& manager,
                                         FormGlobalId form,
                                         FieldTypeSource source) {}
@@ -206,13 +211,6 @@ class AutofillManager
     virtual void OnFormSubmitted(AutofillManager& manager,
                                  const FormData& form) {}
   };
-
-  // TODO(crbug.com/40733066): Move to anonymous namespace once
-  // BrowserAutofillManager::OnLoadedServerPredictions() moves to
-  // AutofillManager.
-  static void LogTypePredictionsAvailable(
-      LogManager* log_manager,
-      const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms);
 
   AutofillManager(const AutofillManager&) = delete;
   AutofillManager& operator=(const AutofillManager&) = delete;
@@ -254,7 +252,8 @@ class AutofillManager
       const FormData& form,
       const FieldGlobalId& field_id,
       const gfx::Rect& caret_bounds,
-      AutofillSuggestionTriggerSource trigger_source);
+      AutofillSuggestionTriggerSource trigger_source,
+      base::optional_ref<const PasswordSuggestionRequest> password_request);
   void OnHidePopup();
   virtual void OnCaretMovedInFormField(const FormData& form,
                                        const FieldGlobalId& field_id,
@@ -385,7 +384,8 @@ class AutofillManager
       const FormData& form,
       const FieldGlobalId& field_id,
       const gfx::Rect& caret_bounds,
-      AutofillSuggestionTriggerSource trigger_source) = 0;
+      AutofillSuggestionTriggerSource trigger_source,
+      base::optional_ref<const PasswordSuggestionRequest> password_request) = 0;
   virtual void OnDidFillAutofillFormDataImpl(
       const FormData& form,
       const base::TimeTicks timestamp) = 0;
@@ -459,6 +459,11 @@ class AutofillManager
   mutable_form_structures() {
     return &form_structures_;
   }
+
+  // Logs the field types of `form` to chrome://autofill-internals and the
+  // autofill-information attribute (if
+  // `features::test::kAutofillShowTypePredictions` is enabled).
+  void LogCurrentFieldTypes(const FormStructure& form);
 
  private:
   friend class AutofillManagerTestApi;

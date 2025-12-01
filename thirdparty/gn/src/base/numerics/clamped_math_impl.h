@@ -315,17 +315,17 @@ struct ClampedMinOp<
 
 // This is just boilerplate that wraps the standard floating point arithmetic.
 // A macro isn't the nicest solution, but it beats rewriting these repeatedly.
-#define BASE_FLOAT_ARITHMETIC_OPS(NAME, OP)                              \
-  template <typename T, typename U>                                      \
-  struct Clamped##NAME##Op<                                              \
-      T, U,                                                              \
-      typename std::enable_if<std::is_floating_point<T>::value ||        \
-                              std::is_floating_point<U>::value>::type> { \
-    using result_type = typename MaxExponentPromotion<T, U>::type;       \
-    template <typename V = result_type>                                  \
-    static constexpr V Do(T x, U y) {                                    \
-      return saturated_cast<V>(x OP y);                                  \
-    }                                                                    \
+#define BASE_FLOAT_ARITHMETIC_OPS(NAME, OP)                                 \
+  template <typename T, typename U>                                         \
+  struct Clamped##NAME##                                                    \
+      Op<T, U,                                                              \
+         typename std::enable_if<std::is_floating_point<T>::value ||        \
+                                 std::is_floating_point<U>::value>::type> { \
+    using result_type = typename MaxExponentPromotion<T, U>::type;          \
+    template <typename V = result_type>                                     \
+    static constexpr V Do(T x, U y) {                                       \
+      return saturated_cast<V>(x OP y);                                     \
+    }                                                                       \
   };
 
 BASE_FLOAT_ARITHMETIC_OPS(Add, +)

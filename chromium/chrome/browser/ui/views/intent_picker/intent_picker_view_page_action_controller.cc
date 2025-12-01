@@ -7,13 +7,14 @@
 #include "base/check_op.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/page_action/page_action_controller.h"
 #include "chrome/browser/web_applications/link_capturing_features.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "ui/base/l10n/l10n_util.h"
 
 IntentPickerViewPageActionController::IntentPickerViewPageActionController(
@@ -45,7 +46,9 @@ void IntentPickerViewPageActionController::UpdatePageActionVisibility(
           kActionShowIntentPicker,
           l10n_util::GetStringUTF16(IDS_INTENT_CHIP_OPEN_IN_APP));
       page_action_controller->Show(kActionShowIntentPicker);
-      page_action_controller->ShowSuggestionChip(kActionShowIntentPicker);
+      page_action_controller->ShowSuggestionChip(kActionShowIntentPicker, {
+        .should_animate = false,
+      });
     } else {
       page_action_controller->Show(kActionShowIntentPicker);
     }

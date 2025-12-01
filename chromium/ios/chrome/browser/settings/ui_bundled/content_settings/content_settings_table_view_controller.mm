@@ -300,8 +300,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
   }
 
+  if (!IsVivaldiRunning()) { // Does not work, hide it.
   [model addItem:[self linkPreviewItem]
       toSectionWithIdentifier:SectionIdentifierSettings];
+  } // End Vivaldi
 
   self.defaultModeItem = [self defaultSiteMode];
   [model addItem:self.defaultModeItem
@@ -570,6 +572,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       break;
     }
     case ItemTypeSettingsWebInspector: {
+      [self.webInspectorStateViewCoordinator stop];
       self.webInspectorStateViewCoordinator =
           [[WebInspectorStateCoordinator alloc]
               initWithBaseNavigationController:self.navigationController
@@ -703,8 +706,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [_linkPreviewEnabled stop];
   _linkPreviewEnabled.observer = nil;
   _linkPreviewEnabled = nil;
+  [_detectAddressesEnabled stop];
+  _detectAddressesEnabled.observer = nil;
+  _detectAddressesEnabled = nil;
+  [_detectUnitsEnabled stop];
+  _detectUnitsEnabled.observer = nil;
+  _detectUnitsEnabled = nil;
   [_webInspectorEnabled stop];
   _webInspectorEnabled.observer = nil;
+  _webInspectorEnabled = nil;
   [self.webInspectorStateViewCoordinator stop];
   self.webInspectorStateViewCoordinator = nil;
   [self.defaultModeViewCoordinator stop];
@@ -716,6 +726,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (IsVivaldiRunning()) {
     [self.vivaldiPageZoomSettingsCoordinator stop];
     self.vivaldiPageZoomSettingsCoordinator = nil;
+    [_preferTranslatePanelEnabled stop];
+    [_preferTranslatePanelEnabled setObserver:nil];
+    _preferTranslatePanelEnabled = nil;
     _prefChangeRegistrar.RemoveAll();
     _prefObserverBridge.reset();
   } // End Vivaldi

@@ -108,15 +108,17 @@ class TestAsyncLoader final : public FX_DOWNLOADHINTS, FX_FILEAVAIL {
   }
 
   int GetBlockImpl(unsigned long pos, unsigned char* pBuf, unsigned long size) {
-    if (!IsDataAvailImpl(pos, size))
+    if (!IsDataAvailImpl(pos, size)) {
       return 0;
+    }
     const unsigned long end = std::min(
         pdfium::checked_cast<unsigned long>(file_contents_.size()), pos + size);
-    if (end <= pos)
+    if (end <= pos) {
       return 0;
+    }
     const unsigned long bytes_to_copy = end - pos;
     fxcrt::Copy(file_contents().subspan(pos, bytes_to_copy),
-                UNSAFE_TODO(pdfium::make_span(pBuf, size)));
+                UNSAFE_TODO(pdfium::span(pBuf, size)));
     SetDataAvailable(pos, bytes_to_copy);
     return static_cast<int>(bytes_to_copy);
   }
@@ -311,7 +313,8 @@ TEST_F(FPDFDataAvailEmbedderTest, LoadInfoAfterReceivingFirstPage) {
   ByteString data(ByteStringView(loader.file_contents()));
   std::optional<size_t> index = data.Find("/Info 27 0 R");
   ASSERT_TRUE(index.has_value());
-  auto span = loader.mutable_file_contents().subspan(index.value()).subspan(7);
+  auto span =
+      loader.mutable_file_contents().subspan(index.value()).subspan<7u>();
   ASSERT_FALSE(span.empty());
   EXPECT_EQ('7', span[0]);
   span[0] = '9';
@@ -339,7 +342,8 @@ TEST_F(FPDFDataAvailEmbedderTest, TryLoadInvalidInfo) {
   ByteString data(ByteStringView(loader.file_contents()));
   std::optional<size_t> index = data.Find("/Info 27 0 R");
   ASSERT_TRUE(index.has_value());
-  auto span = loader.mutable_file_contents().subspan(index.value()).subspan(6);
+  auto span =
+      loader.mutable_file_contents().subspan(index.value()).subspan<6u>();
   ASSERT_GE(span.size(), 2u);
   EXPECT_EQ('2', span[0]);
   EXPECT_EQ('7', span[1]);
@@ -370,7 +374,8 @@ TEST_F(FPDFDataAvailEmbedderTest, TryLoadNonExistsInfo) {
   ByteString data(ByteStringView(loader.file_contents()));
   std::optional<size_t> index = data.Find("/Info 27 0 R");
   ASSERT_TRUE(index.has_value());
-  auto span = loader.mutable_file_contents().subspan(index.value()).subspan(2);
+  auto span =
+      loader.mutable_file_contents().subspan(index.value()).subspan<2u>();
   ASSERT_FALSE(span.empty());
   EXPECT_EQ('n', span[0]);
   span[0] = '_';

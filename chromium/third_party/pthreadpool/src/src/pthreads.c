@@ -253,7 +253,7 @@ static void* thread_main(void* arg) {
   };
 }
 
-struct pthreadpool* pthreadpool_create(size_t threads_count) {
+PTHREADPOOL_WEAK struct pthreadpool* pthreadpool_create(size_t threads_count) {
 #if PTHREADPOOL_USE_CPUINFO
   if (!cpuinfo_initialize()) {
     return NULL;
@@ -322,6 +322,8 @@ struct pthreadpool* pthreadpool_create(size_t threads_count) {
   }
   return threadpool;
 }
+
+PTHREADPOOL_PRIVATE_IMPL(pthreadpool_create)
 
 PTHREADPOOL_INTERNAL void pthreadpool_parallelize(
     struct pthreadpool* threadpool, thread_function_t thread_function,
@@ -439,7 +441,7 @@ PTHREADPOOL_INTERNAL void pthreadpool_parallelize(
   pthread_mutex_unlock(&threadpool->execution_mutex);
 }
 
-void pthreadpool_destroy(struct pthreadpool* threadpool) {
+PTHREADPOOL_WEAK void pthreadpool_destroy(struct pthreadpool* threadpool) {
   if (threadpool != NULL) {
     const size_t threads_count = threadpool->threads_count.value;
     if (threads_count > 1) {
@@ -505,3 +507,5 @@ void pthreadpool_destroy(struct pthreadpool* threadpool) {
     pthreadpool_deallocate(threadpool);
   }
 }
+
+PTHREADPOOL_PRIVATE_IMPL(pthreadpool_destroy)

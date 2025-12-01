@@ -1,95 +1,230 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kmr">
+<translation id="1005988755245269515">Sazkariyên malpera zoom taybetî</translation>
 <translation id="1016495303386450659">Hêman hat rojanekirin</translation>
+<translation id="1033201038396796706">Awaya tarî, rêjeya nûvekirinê, yan pirsgirêkên rûkarê</translation>
+<translation id="1041637248958093184">Lêgerîna li ser rûgera taybet tê vê wateyê ku lêgerîn, malperên ku hatin dîtin, kilor û pelên demkî ji aliyê Vivaldi ve nayên parastin.</translation>
+<translation id="1062373127858055283">Ji kerema xwe URL-ya wêneyê binivîse</translation>
+<translation id="1066692930984703744">Ji bo geraneke bileztir û ewletir astengkirina şopgeran û reklaman çalak bike</translation>
 <translation id="1116694919640316211">Derbar</translation>
 <translation id="1123707809902612118">Şopgeran û reklaman asteng bike</translation>
+<translation id="1134179431044204911">Ez bikaranîna tevger an rêgehê dijwar dibînim</translation>
+<translation id="1151972924205500581">Pêdivî ye ku şîfre</translation>
+<translation id="1166425484559430538">Daneyên te yên hevdemiyê hatin şîfrekirin. Ji bo şîfrekirinê vekî borînpeyva xwe ya şîfrekirinê binivîse.</translation>
+<translation id="1173894706177603556">Ji nû ve nav lê bike</translation>
 <translation id="1181037720776840403">Rake</translation>
 <translation id="1182668946911971500">Darika nîşeyan</translation>
+<translation id="1198271701881992799">Ka em dest pê bikin</translation>
+<translation id="1201402288615127009">Piştî</translation>
 <translation id="1208495925646914304">Sernav</translation>
 <translation id="1254117744268754948">Peldankekê hilbijêre</translation>
+<translation id="1265555169187992603">Ji kerema xwe navekî bikarhêner hilbijêre, bila dirêjahiya wî di navbera 3 û 30 tîpan (a-z) û jimaran (0-9) de be.</translation>
+<translation id="1267954839079880017">Îtalî (<ph name="ORIGIN" />)</translation>
 <translation id="1272729688996227528">Hevdemî çalak e</translation>
+<translation id="1275213816424141989">Belkî paşê</translation>
+<translation id="1288585320003964783">Di dema wergerandina nivîsa hilbijartî de wê li şûna gotûbêjê destgeha wergerê were bikaranîn</translation>
 <translation id="1315107593850379616">E-nameya vegerandinê</translation>
+<translation id="1325473901257014816">Bi riya Vivaldi, tevahiya rûgerên xwe di gerokekê de bihêle û wan li navbera tevahiya amûran hevdem bike.</translation>
 <translation id="132683371494960526">Du caran bitikîne bo peldanka sereke biguherînî.</translation>
+<translation id="1332917497715783196">Gihiştina bilez a malperên taybet rasterast ji darika navnîşanê. Derbarê [Lihevhatina rasterast] bêtir fêr bibe</translation>
+<translation id="1341156196125040601">Hilbijêrin ku hûn tercîh dikin ku qada navnîşan hebe.</translation>
+<translation id="1354002567845495520">Nîşeyên Vivaldiyê hevdem bike (pêvek ne hevdembar in)</translation>
+<translation id="1365181765792690850">Çalakkirina vê sazkariyê dibe ku hinek malper û/yan wêne nexebitin. Ji bo ku bi tevahî bandor bike, pêdiviya bi ji nû ve destpêkirinê heye.</translation>
+<translation id="1379470994139227452">Vivaldi wekî Default</translation>
+<translation id="1381484244248892686">Tu dikarî borînpeyvên ku li ser her kîjan amûr be bi kar bînî. Ew bo rêvebirê borînpeyvê Vivaldi tên tomarkirin ji bo <ph name="EMAIL" /></translation>
+<translation id="1383876407941801731">Lêgerîn</translation>
+<translation id="1397515084080510783">Ne tabloyên hevdeng</translation>
 <translation id="1401336397986481078">Hat tevlîkirin bo</translation>
+<translation id="1410197035576869800">Îkona sepanê</translation>
+<translation id="1430308140197327248">Navnîşanan tevahî nîşan bide</translation>
 <translation id="1430638949087011281">Astengkirin tine ye</translation>
+<translation id="1446108955355168157">Ji bo şîfrekirin û parastina daneya hevdemiyê (borînpeyv, şûnpel, nîşe, û bêtir), ji kerema xwe borînpeyveke şîfrekirî biafirîne. Ev borînpeyv hîç ji me re nayê şandin.</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> hêman</translation>
+<translation id="1463778422663193902">Asta zoom ji bo malperên</translation>
 <translation id="1468415711258933398">Rûgera standart</translation>
+<translation id="1470330357709335121">Vivaldi hêdî an laggy e</translation>
+<translation id="1502492982318476895">Hevdemî têk çû:
+<ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">Navnîşana e-nameya te ya vegerandinê.</translation>
+<translation id="1534183273237573805">Bi hilbijartina yek ji van motorên lêgerînê, tu piştgiriyê didî pêşvebirina Vivaldi.</translation>
+<translation id="1535446875484049224">Awaya tarî baş naxebite an baş xuya nake</translation>
+<translation id="1567659716528258242">Vivaldi cîhaza min germ dike</translation>
+<translation id="156793582229023040">Ez li ser şopandina yan berhevkirina daneyan xembar im</translation>
 <translation id="1573784689611551537">Çavkaniyên astengkirina reklaman bi rê ve bibe</translation>
+<translation id="1577761519530347814">Borînpeyvên malperên tevnê yên tomarkirî hevdem bike</translation>
+<translation id="1620921465699122417">Ji bo wergerandinê nivîsê têxe</translation>
 <translation id="1631998297781042533">Malperên populer</translation>
 <translation id="1644574205037202324">Dîrok</translation>
 <translation id="1655816024544228768">Werziş</translation>
+<translation id="1659112017960130179">Koreyî (<ph name="ORIGIN" />)</translation>
 <translation id="1689333818294560261">Nasnav</translation>
-<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Mercên Bikaranînê➔<ph name="END_LINK" />     <ph name="BEGIN_LINK2" />Politîkaya taybetiyê ➔<ph name="END_LINK2" /></translation>
+<translation id="1700701458278093377">Girêdana nûvekirin</translation>
+<translation id="1711184756728070210"><ph name="BEGIN_LINK" />Mercên
+bikaranînê ➔<ph name="END_LINK" />. . . . .
+<ph name="BEGIN_LINK2" />Politîkaya taybetiyê ➔<ph name="END_LINK2" /></translation>
+<translation id="1717473843091433383">Li ser tevahiya malperan rûkara tarî bi kar bîne</translation>
+<translation id="1721265415699013829">Ji kerema xwe wekî ku mimkun be taybetî be</translation>
 <translation id="173924678149983125">Girêdanê binivîse bo rêzikên astengkeriyê têxî</translation>
 <translation id="1751280147639351837">Astengkera reklam û şopgeran</translation>
+<translation id="1752547299766512813">Şîfreyan hilînin</translation>
+<translation id="1754797958074421486">Mercên bikaranînê</translation>
 <translation id="1755590309862395270">Ji bo pêşniyarên jêbirbar ên xwebertijekirî.</translation>
-<translation id="1763111582687651119">Nasnavê motorên lêgerînê çalak bike</translation>
+<translation id="1763111582687651119">Nasnavên motorên lêgerînê çalak bike</translation>
+<translation id="1771413903824396513">Bi nasnavê</translation>
+<translation id="1771605894228673800">Ez taybetmendiyek xwecihî ya VPN dixwazim</translation>
+<translation id="1800685789463945995">Vivaldi hilweşandin an serbestberdanê digire</translation>
+<translation id="1804522390855853698">Çînî (<ph name="ORIGIN" />)</translation>
+<translation id="1807246157184219062">Ronî</translation>
 <translation id="1809939268435598390">Peldankê jê bibe</translation>
 <translation id="1813686536470127172">Peldankên din</translation>
+<translation id="1828800626900562968">Tap icon plus li jêr binêrin da ku tabloyek nû biafirînin.</translation>
+<translation id="1852679645333476285">Mafê bide lîstina dengê paşrûyê</translation>
+<translation id="1861262398884155592">Ev peldanka vala ye</translation>
+<translation id="1871058849247304245">Asta mezinkirinê ji bo <ph name="HOST" /></translation>
+<translation id="1921508034244765766">Vivaldi hêdî, hilweşîne, an amûrê germkirinê ye</translation>
 <translation id="1929299157575856072">ASTA ASTENGKIRINA BERDEST</translation>
+<translation id="1968240832686794952">Wêneyê di tabloya paşîn de veke</translation>
+<translation id="1986733655397734221">Ne yek jî</translation>
 <translation id="1994506778397655062">Rûgereke nû di paşrûyê de veke</translation>
+<translation id="1996915956617647318">Biguherîne veşêre</translation>
 <translation id="2030706494969937066">Erêkirina pêbawerên te têk çû. Ji kerema xwe dîsa têkeve.</translation>
 <translation id="2034405583989639424">Têkliyên bilez biguherîne</translation>
+<translation id="2048247880942380698">Erebî (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Vegerîne</translation>
 <translation id="2129408066358825297">Temen</translation>
+<translation id="2138901399878617625">Daran biçîne, dema tu lêgerînê dikî</translation>
 <translation id="2148384276939959392">Ên hilbijartî hevdem bike</translation>
+<translation id="2195713384412091023">Ev wê tevahiya daneyên hevdemiyê rake ku li ser rajekarên me hatin tomarkirin, borînpeyva te ya şîfrekirî ji nû ve saz dike û te jê derdixe.</translation>
 <translation id="2228584369802328636">Lîstik</translation>
+<translation id="2240680014596059312">Taybet. Bilez. Kêmtir reklam.</translation>
 <translation id="2243210264130642074">Nîşe hat tomarkirin</translation>
 <translation id="2272338747456392228">Jimar hatiye kilîtkirn</translation>
 <translation id="2273327106802955778">Bêtir menu</translation>
 <translation id="2283599456633275070">Ger</translation>
 <translation id="2324160330092901720">Kodeke piştrastkirinê ji <ph name="EMAIL_ID" /> re hat şandin</translation>
 <translation id="2324257568471626606">Motora lêgerînê ya nû</translation>
+<translation id="2326657631721795616">Tu hîn jî dikarî bi hilbijartina motoreke lêgerînê ya serbixwe û taybetî-balkêş, piştgiriya Vivaldi bikî:</translation>
+<translation id="2330644510603114741">Behreya tab</translation>
+<translation id="233493642829799329">Guhertina vê dibe ku hinek rûgerên te ji nû ve bar bike</translation>
 <translation id="2336309953058658733">Jêbirdankê vala bike</translation>
 <translation id="2359808026110333948">Bidomîne</translation>
 <translation id="2386793615875593361">1 hat hilbijartin</translation>
+<translation id="2387049655823108978">Ji alavên din ve tabloyên vekirî</translation>
+<translation id="2388224692799337242">Carekê hûn dest bi gerokan bikin, dîroka we li vir xuya dike</translation>
+<translation id="2391028308389203648">Tirkî (<ph name="ORIGIN" />)</translation>
 <translation id="2392369802118427583">Çalak bike</translation>
+<translation id="2414886740292270097">Tarî</translation>
 <translation id="2434910957904013691">Tevahiyan hevdem bike</translation>
+<translation id="2448144008809286557"><ph name="BEGIN_LINK" />Navê bikarhêner<ph name="END_LINK" /> an <ph name="BEGIN_LINK" />Borînpeyv<ph name="END_LINK" /> Ji bîr kir?</translation>
+<translation id="2478478121390627077">Rengê heyî ku hatiye hilbijartin</translation>
 <translation id="2496616243169085015">Wênekêşî</translation>
 <translation id="2536780277491102902">AWARTE</translation>
+<translation id="2558801801411970131">Astengkirina şopgeran</translation>
+<translation id="2562040727226360285">Rakirina aciziyê, dikare malperan nexebtîne (<ph name="ORIGIN" />)</translation>
+<translation id="2563886993995570961">Stûnên herî pir</translation>
+<translation id="257674075312929031">Kom</translation>
 <translation id="2577446409661931381">Nîşeya nû</translation>
+<translation id="2578190116190373975">Bikaranîna <ph name="OLD_SEARCH_ENGINE" /> bidomîne</translation>
 <translation id="2590350610957954839">Koma ku herî dawî hatiye serdankirin</translation>
 <translation id="261264557609353020">Rûpela destpêkê</translation>
+<translation id="2619628557366098325">Portekîz (<ph name="ORIGIN" />)</translation>
+<translation id="2620436844016719705">Sîstem</translation>
+<translation id="2653659639078652383">Nermijîn</translation>
 <translation id="2666092431469916601">Jor</translation>
 <translation id="2677862276555105603">Reklam
 hat astengkirin</translation>
+<translation id="2678542925523700624">Estonî (<ph name="ORIGIN" />)</translation>
+<translation id="2697254781659515880">Ji bo piştgirîkirina pêşvebirina Vivaldi, me bi <ph name="NEW_SEARCH_ENGINE" /> re hevkarî kir û ew wekî motora lêgerîna te ya nû ya kesane saz kir.</translation>
+<translation id="2701366016894985129">Reklam di encamên lêgerînê de</translation>
+<translation id="2702801445560668637">Rêzoka xwendinê</translation>
+<translation id="2709516037105925701">Dagirtina xweber</translation>
+<translation id="2712076950889800659">Bi riya bikaranîna Vivaldi, tu <ph name="BEGIN_LINK" />Peymana lîsansê dawî ya bikarhênerên<ph name="END_LINK" /> û <ph name="BEGIN_LINK" />Politîka taybetiyê<ph name="END_LINK" /> ya Vivaldi dipejirînî</translation>
+<translation id="2725892265692641195">Nû <ph name="ITEM_TYPE" /></translation>
 <translation id="2745324713975967671">Borînpeyva şîfrekirinê</translation>
+<translation id="276436995507680929">Rêzokên xwendinê hevdem bike</translation>
 <translation id="2765217105034171413">Biçûk</translation>
 <translation id="2767124759205735526">Dîrok û girêdanên nivîsandî hevdem bike</translation>
 <translation id="2770868136620962117">Wey bavo, em bi bihîstina wê pir kêfxweş in!</translation>
 <translation id="2818665331928314854">Şûnpelan çalak bike</translation>
 <translation id="2825232297853754349">Pêdivî ye ku tu mercan bipejirînî.</translation>
 <translation id="2842985007712546952">Serpeldank</translation>
+<translation id="2843343418360315034">Hûngarî (<ph name="ORIGIN" />)</translation>
 <translation id="2850144663494818309">Hevdemî tê destpêkirin...</translation>
+<translation id="2862504765180635001">Em xemgîn in ku wê bihîst!</translation>
+<translation id="2878511608894704031">Tevahiyan jê bibe</translation>
 <translation id="2884735088411646852">Rêz bike</translation>
 <translation id="2898963176829412617">Peldanka nû…</translation>
+<translation id="2918704853620385162">Tabê nû li ser girtina tabloya paşîn vekin</translation>
+<translation id="2924890236896835588">Navê komê</translation>
+<translation id="294138200684170250">Astengkera reklam û şopgeran, û sazkariyên malperê</translation>
+<translation id="2961573414320947355">Dixwazin hemî girêdanên li Vivaldi vekin? Bawer bin ku me wekî xwerû destnîşan bikin.</translation>
+<translation id="3006429105107822794">Pêdivî tine ye ku tu vê borînpeyvê bi bîr bînî. Ew ê li rêvebirê borînpeyvê Vivaldi werin tomarkirin.</translation>
+<translation id="3018244467214569202">Yûnanî (<ph name="ORIGIN" />)</translation>
 <translation id="3029426144711327484">Têkliyên bilez nîşan bide</translation>
+<translation id="3039671569659952257">Peldankê jê bibe</translation>
 <translation id="3073196329485613487">Têkeve jimara xwe</translation>
+<translation id="3086746722712840547">nîşe</translation>
 <translation id="3087734570205094154">Jêr</translation>
+<translation id="309084557304084991">Ez şûnpel û têkiliyên bilez yên pêşbarkirî naxwazim</translation>
 <translation id="3091563570137981919">Astengkirina şopger û reklaman</translation>
+<translation id="3097968995088564986">Bişkoka Add nîşan bide</translation>
+<translation id="3134385238404760368">Ne tabloyên dawîn</translation>
 <translation id="3142562627629111859">Koma nû</translation>
+<translation id="3157931365184549694">Vegerîne</translation>
 <translation id="3159285901314605198">Wêneya paşrûyê</translation>
 <translation id="3177673846235066154">Rajekarê pêbawerên te nepejirandin.</translation>
 <translation id="3180057018690062250">Wêşandin</translation>
 <translation id="3180358318770512945">Xwedîkirin</translation>
-<translation id="3229182533910980085">Şûnpela xwe ya yekemîn tevlî bike bi riya tikandinê li ser îkona + li jêr</translation>
+<translation id="3214425117040117431">Hemî malperên zoom-ê nûve bikin</translation>
+<translation id="3229182533910980085">Şûnpela xwe ya yekemîn tevlî bike bi riya tikandina îkonê + li jêr</translation>
+<translation id="3236835587712044564">Bi Vivaldi şa yî? Wê bike geroka xwe ya berdest.</translation>
+<translation id="3270894089048358271">Vivaldi wekî Default ya we bicîh bikin</translation>
 <translation id="3270930591809084274">Rûgerên hevdemkirî</translation>
+<translation id="3285898158753554866">A wergerandinî jê bigire</translation>
+<translation id="3288330578370776290">Vekirina rûpelan di gerokê de li şûna sepanên derveyî hilbijêre</translation>
 <translation id="3335772982573114336">Nîşeya nû</translation>
-<translation id="3337207574172839542">Mafê bide pêşniyariyên lêgerînê</translation>
 <translation id="33451081266695216">Girêdan ji aliyê rajekarê ve hatiye hêdîkirin.</translation>
 <translation id="3346386541263128307">Pêdivî ye ku navnîşanên e-nameyê lihevhatî bin.</translation>
+<translation id="3363375699928395745">Sernavê binivîse</translation>
+<translation id="3365991203476235715">Îngilîzî (<ph name="ORIGIN" />)</translation>
+<translation id="3368960138304620657">Litwanî <ph name="ORIGIN" />)</translation>
 <translation id="3377025655491224618">Rûgera taybet</translation>
 <translation id="3394474617110693560">Beş</translation>
+<translation id="3435896845095436175">Çalak bike</translation>
+<translation id="3438160227308459316">Romanî (<ph name="ORIGIN" />)</translation>
 <translation id="3451109402849920193">Bi hêzdariya Lingvanex, ji aliyê Vivaldi ve hatiye pêşkêşkirin.</translation>
+<translation id="3451162533623145500">Jimarekê biafirîne</translation>
+<translation id="3454019142213142426">Astên mezinkirina rûpelê</translation>
+<translation id="3500626002244909877">Spas ji bo ku dema xwe ji bo parvekirina nerînên xwe parve bikin!</translation>
+<translation id="3509379002674019679">Biafrîne, tomar bike, û borînpeyvên xwe bi rê ve bibe da ku tu bi hêsanî têkevî malper û sepanan.</translation>
 <translation id="3513566764071045027">Derkeve</translation>
 <translation id="3527085408025491307">Peldank</translation>
+<translation id="3530991200302302959">Bûlgarî (<ph name="ORIGIN" />)</translation>
+<translation id="3588477659268085586">Translator Vekirî</translation>
+<translation id="3601414719864711130">Bi demê</translation>
 <translation id="3602290021589620013">Pêşdîtin</translation>
+<translation id="3607176258839749451">Tomarbûn ji ber xeletiyek têk çû. Ji kerema xwe paşê dîsa biceribînin.</translation>
+<translation id="3628734956995390149">{count, plural,
+          =1 {Şûnpel hat livandin bo "{title}"}
+          other {{count} şûnpel hatin livandin bo "{title}"}}</translation>
+<translation id="3638687955382971136">Nivîsê mezin bike</translation>
+<translation id="3646647753063635401">Tevahiya daneyan hevdem bike, û xweber hevdemkirina cûreyî daneyên nû çalak bike</translation>
+<translation id="3682791711395736890">Guhertoya Desktop ya Malperê bibînin</translation>
+<translation id="3689125468279190285">Bişkoka malê nîşan bide</translation>
+<translation id="3694122362646626770">Malper</translation>
 <translation id="3699026013955941879">Kod qediya. Ji kerema xwe koda çalakkirinê ya nû bixwaze.</translation>
 <translation id="3700829948786686853">Bi xêr hatî Vivaldi</translation>
 <translation id="3719826155360621982">Rûpela destpêkê</translation>
+<translation id="373855430416507951">Di rûpelê de bibîne</translation>
+<translation id="3745190878148784130">Nivîsa mezinkirinê veşêre</translation>
+<translation id="3766350025418769949">Tu dikarî borînpeyvên ku te bo rêvebirê borînpeyvê Vivaldi tomar kiriye li ser sepanên din li ser iPad a xwe bi kar bînî.</translation>
+<translation id="3782426324365706059"><ph name="NEW_SEARCH_ENGINE" /> bi kar bîne</translation>
+<translation id="3815158430926662417">Ez nikarim têkevim jimara hevdemiyê xwe ya Vivaldi</translation>
+<translation id="3817539520771282781">Bi cûreyê</translation>
 <translation id="383723620494271391">Tiştekî din heye tu dixwazî tevlî bikî?</translation>
+<translation id="3842727926262967527">Hilbijêre ku hûn tercîh dikin ku bar û qada navnîşê ya tabê hebe.</translation>
+<translation id="3845564230651302310">Sepandina sazkariyên astengkera nû...</translation>
 <translation id="3858860766373142691">Nav</translation>
 <translation id="3861379244432690245">Lihevkirina rasterast çalak bike</translation>
 <translation id="3866249974567520381">Danasîn</translation>
@@ -99,161 +234,463 @@ hat astengkirin</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" /> tevlî bike</translation>
 <translation id="3921585859122905677">Cihê darika navnîşanê</translation>
-<translation id="3997823869212225788">Koda 6 Jimarî binivîse</translation>
+<translation id="3925725503020335904">Ji bo piştgirîkirina pêşvebirina Vivaldi, me bi <ph name="NEW_SEARCH_ENGINE_1" /> re hevkarî kir û ew wekî motora lêgerîna te ya nû ya kesane saz kir. <ph name="NEW_SEARCH_ENGINE_2" /> motoreke lêgerîna taybet e ku em jê hez dikin, û em hêvî dikin ku tu yê jî jê hez bikî.</translation>
+<translation id="3934481038955624945">Hemî resen bikin</translation>
+<translation id="3953599441418463312">Japonî (<ph name="ORIGIN" />)</translation>
+<translation id="395506590020066151">Tracker asteng kir</translation>
+<translation id="3958433364221339259">Lêgerîn bi riya <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3960532956440723967">Mezinahiya nivîsê pir piçûk an mezin e</translation>
+<translation id="3972953605944268742">UI tevlihevî an qelebalix e</translation>
+<translation id="3981442865425348629">Girêdanê Rake</translation>
+<translation id="3989040793235713489">Ez bêtir an çêtir vebijêrkên rûkarê dixwazim</translation>
+<translation id="3997823869212225788">Koda 6-jimar têxe</translation>
 <translation id="4002066346123236978">Sernav</translation>
 <translation id="4032606071208172574">(Berdest)</translation>
+<translation id="4048057312173843244">Rûgerên hevdemkirî yên ji amûrên din wê li vir xuya bibin. Ji bo bikaranîna vê rajeyê têkeve hevdemiyê.</translation>
+<translation id="4071269289580887166">Malpera sermaseyê</translation>
+<translation id="4072876042695422377">Dîtina wergerandinê bigire</translation>
+<translation id="4073968054795398875">Rajekara hevdemiyê pirsgirêkan kontrol dike. Di nêz de dê hevdemî dîsa dest pê bike...</translation>
+<translation id="4084682180776658562">Şûnpel</translation>
+<translation id="408984524719804241">Çima ez reklaman dibînim</translation>
+<translation id="4096707694175478403">Destgeh</translation>
+<translation id="4118801221225128605">Nivîsa wergerandin</translation>
+<translation id="4134597009271720826">Rêjeya App</translation>
+<translation id="414098425907666915">Lêgerîna Taybet</translation>
+<translation id="4141861385728508836">Nordîk (<ph name="ORIGIN" />)</translation>
 <translation id="4145489350420416595">Şaşetiyeke nehêvîkirî.</translation>
+<translation id="4151468644762710975">Motorên lêgerîna xwerû sererast bikin</translation>
+<translation id="4152011295694446843">Hûn ê li vir nîşanên xwe bibînin</translation>
 <translation id="4152623049003960417">Hûrgiliyên şopger</translation>
-<translation id="4176463684765177261">Neçalak e</translation>
+<translation id="4176463684765177261">Neçalak bike</translation>
+<translation id="4181792832006033883">Vivaldi ji aliyê bikarhênerên xwe ve tê hêzkirin, ne ji aliyê teknolojiya mezin an veberhêneran ve. Her bexşek rasterast piştgiriyê dide armanca me ji bo înternêtek azad û serbixwe. Bibe beşek ji guhertinê.</translation>
+<translation id="4184746246941929945">Vivaldi bi <ph name="PARTNER_NAME" /> re hevkarî kiriye da ku reklamên li ser vê rûpelê asteng neke. Ev reklam alîkariya fînansekirina pêşvebirina Vivaldi dikin.</translation>
+<translation id="4193549853510262477">Dîtina xweber</translation>
 <translation id="4209092469652827314">Mezin</translation>
+<translation id="4219175188138757774">Çekî û Slovakî (<ph name="ORIGIN" />)</translation>
 <translation id="4222285809803895512">Dema afirandinê</translation>
+<translation id="4274598629843497594">Ji bo ku ev kom li ser rûpela destpêkê were xuyakirin têkiliyên bilez nîşan bide. Tu yê hîn jî bikaribî bi destgehên şûnpelan xwe bigihînî komê.</translation>
+<translation id="4276839458685471670">Bi afirandinê</translation>
+<translation id="4277085371281330061">Şopger
+hatin astengkirin</translation>
+<translation id="4299298331965375737">Vivaldi bike geroka xwe ya kesane?</translation>
 <translation id="4304224509867189079">Têkeve</translation>
+<translation id="4304752732957821175">Layout an bişkokên tevlihevî ne</translation>
+<translation id="4314476537497682637">Malpera sermasê veşêre</translation>
+<translation id="4316955624679873896">Şûnpel hat tomarkirin bo</translation>
+<translation id="432696242656678770">Russian (<ph name="ORIGIN" />)</translation>
+<translation id="4350751486125178847">Spanî (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Bi me raweste ji bo tevneke çêtir</translation>
+<translation id="4376661454588260127">Viyetnamî (<ph name="ORIGIN" />)</translation>
+<translation id="4380745054983890306">Xwezî min bikariba rûpelan wekî PDF tomar bikim</translation>
+<translation id="4394049700291259645">Neçalak bike</translation>
 <translation id="440304190776086038">Pêşiyê bide lihevkirina rasterast</translation>
+<translation id="4413780690230851155">Dîroka gerokê jê bibe</translation>
 <translation id="443008484043213881">Alav</translation>
+<translation id="4452878871193896747">Îndonezî (<ph name="ORIGIN" />)</translation>
+<translation id="445620040230332178">Şêwaza tab</translation>
+<translation id="4461652107878667683">Navîgasyona Pêş</translation>
+<translation id="4474581062946673155">Hûn naha tabloyên ku ji amûrên din re hevrêz in.</translation>
+<translation id="4488900295693536220">Tê sepandin dema ku darika navnîşanê li jêr be, Gihştina pêşniyarian hêsantir dike.</translation>
+<translation id="4497115807425788318">Cih</translation>
+<translation id="4507213865286211606">Pêşeka Mezinahî</translation>
+<translation id="4515084385531683114">Şîfre li ser vê amûrê ji rêveberê şîfreyê têne tomarkirin.</translation>
 <translation id="4518934934246049498">Em pir kêfxweş in ku tu Vivaldi bi kar tînî!</translation>
 <translation id="4525945044609022380">Ev e-name jixwe bi jimêreke din ve girêdayî ye.</translation>
 <translation id="4526803704855831732">Rûgerên taybet</translation>
+<translation id="4542001945479572846">Tiştekî din</translation>
+<translation id="4548278119881373657">Hilbijartinê bipejirîne</translation>
+<translation id="4553717494760925411">Navîgasyona Paş</translation>
 <translation id="4563480492836333884">E-name nayê pejirandin. Ji kerema xwe navpereke cûda bi kar bîne.</translation>
 <translation id="457386861538956877">Bêtir…</translation>
+<translation id="4591413025758301858">Ji
+<ph name="SOURCE_LANGUAGE" />
+wergerîne bo
+<ph name="DESTINATION_LANGUAGE" /></translation>
+<translation id="4596003875186913086">Sazkariyên Nêz Veke</translation>
 <translation id="460370326897402035">Borînpeyv nederbasdar e.</translation>
 <translation id="4619615317237390068">Rûger ji amûrên din</translation>
 <translation id="462860218383788109">Dema guhertinê</translation>
 <translation id="4640946580087069269">Jê bigire bo nîşeyê</translation>
 <translation id="4643117005422448078">Malperên sereke</translation>
+<translation id="4654578955713250802">Reklam û şopgeran asteng bike</translation>
+<translation id="4655510151391078468">Ev kod bi ya ku me ji te ra şandî ra li hev nayê.
+<ph name="ATTEMPTS" /> carên te yên mayî hene.</translation>
+<translation id="466494460776294423">Koda verastkirinê pêdivî ye</translation>
+<translation id="4700341416469973823">Ên hilbijartî jê bibe</translation>
+<translation id="4714431804859029826">Sazkariyên berdest vegerîne</translation>
+<translation id="4727698999970341158">Îzlendî (<ph name="ORIGIN" />)</translation>
+<translation id="473775607612524610">Nûvekirin</translation>
 <translation id="4739712911308055817">Nehat anîn</translation>
+<translation id="4749460556537826127">Ez dixwazim borînêpeyv û şûnpelan têxim an derxim</translation>
+<translation id="4750394297954878236">Pêşniyaz</translation>
 <translation id="4759238208242260848">Daxistin</translation>
+<translation id="4759399863961855552">Fermana rêzkirinê</translation>
+<translation id="4780953868408193639">Şopger
+hat astengkirin</translation>
 <translation id="4807415245238822255">Pêdivî ye ku borînpeyv lihevhatî bin.</translation>
 <translation id="4818836520802586445">Rengê çarçoveyê</translation>
+<translation id="4821701638681626529">Vivaldi dema ku hûn tabloyên taybet bikar tînin dîroka gerokê tomar nake</translation>
+<translation id="4825714975043873206">Malper hêdî tên barkirin an venabin</translation>
 <translation id="4833044618885331665">Ji bo tu bikaribî hevdemiyê bi kar bînî, divê tu Vivaldi bilind bikî.</translation>
+<translation id="484344804915260122">Pêdiviya min bi wergêrek xwecihî heye</translation>
+<translation id="484462545196658690">Xweber</translation>
 <translation id="4852383705713307704">Reklam hat astengkirin</translation>
+<translation id="4899260893220375866">Pêdiviya min bi bêtir kontrol li ser kilor û mafdayînên malperê heye</translation>
+<translation id="4903325570808402486">Sync Vivaldi Mîhengên (ne hemî mîhengan hêj syncable ne)</translation>
+<translation id="4906074979036008980">Sernavê nû binivîse</translation>
+<translation id="4925542198780948858">Kontrolên medyayê wekî ku tê hêvîkirin naxebitin</translation>
+<translation id="4929196061847506605">Erke. Şexsî. Taybet.</translation>
 <translation id="4936675324097895694">Aborî</translation>
 <translation id="4936710149174207991">Nehatiye hevdemkirin</translation>
+<translation id="4943266325467647391">Astengkera şopger û reklaman a Vivaldi te ji bernameyên ne baş û reklaman diparêze.</translation>
+<translation id="4950266778127803750">Ji bo tabloyên paşîn bişkoka X nîşan bide</translation>
+<translation id="495421405224926623">Min mercên bikaranîna û politîka taybetiyê xwendiye û diperjînim</translation>
+<translation id="497942794017668482">Astengkirina şopger û reklaman</translation>
+<translation id="4993477362660748586">Hevdengbûn</translation>
 <translation id="500392125908657603">Vebijêrkên qada navnîşanê</translation>
-<translation id="5037761343305489956">Ji bo nîşeyê hat jêgirtin</translation>
+<translation id="5037761343305489956">Bo nîşeyê hat jêgirtin</translation>
+<translation id="504986598654589766">Lêgerîna li ser rûgera taybet tê vê wateyê ku lêgerîn, malperên ku hatin dîtin, kilor û pelên demkî ji aliyê Vivaldi ve nayên parastin. Ew girêdanên te şîfre nake yan naguherîne.</translation>
 <translation id="5052190740258132773">Pêşiyê bide şûnpelan</translation>
+<translation id="505774819758747674">Pêşdîtin ji bo amûrê bi rengê hilbijartî ve</translation>
+<translation id="5094183365876568934">Hinek malper demsazkirina rengê xwe li gorî daxwazên bikarhêner kesane dikin. Hilbijêre ka kîjan peşsaziya rengê ku tu dixwazî ev malper bi kar bînin hilbijêre.</translation>
 <translation id="5094376253685335202">Hevdemiyê çalak bike</translation>
-<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kodê Dîsa Bişîne<ph name="END_LINK" /></translation>
+<translation id="5116316489033177455">Şûnpel û rûpelên sereke hevdem bike</translation>
+<translation id="5122095890854520072">Lativî (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">%100 bexşên te ji bo fînansekirinê pêşketina demdirêj a Vivaldi û têkoşîna me ji bo toreke çêtir wê werin bikaranîn.</translation>
+<translation id="5153806174841856652">Têketin têk çû</translation>
+<translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kodê dîsa bişîne<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Rûpelên sereke nîşan bide</translation>
+<translation id="5191012692655103305">Rûger û dîrok tîne ...</translation>
 <translation id="5195305454041437917">Ji bo rakirina pêşniyarê X nîşan bide</translation>
 <translation id="5238642303473095117">Daneyan jê bibe</translation>
+<translation id="5245732982828228444">Hûn ê li vir nîşanên xwe bibînin</translation>
 <translation id="5249199221558969362">Ji kerema xwe, jimareke rast a temenê binivîse.</translation>
 <translation id="5271549068863921519">Borînpeyvê tomar bike</translation>
 <translation id="5290452628447338707">Nîşe tine ye</translation>
-<translation id="5317780077021120954">Tomar bike</translation>
+<translation id="5317780077021120954">Tomar Bike</translation>
+<translation id="5349678548463426691">Bi danasînê</translation>
+<translation id="5350737901534958404">Mafê bide reklamên hevkarên me (piştgiriya Vivaldi bike)</translation>
+<translation id="5351912500249789547">Vivaldi.net pêbawerên te nepejirand: Koda şaşetiyê <ph name="ERROR_CODE" /></translation>
+<translation id="535312628536375213">Me bi vê malperê re hevkariyek heye û reklamên di encama lêgerînê de ji aliya berdest ve têne astengkirin. Ku tu bi wan re têkilî dayne ev reklam ji bo Vivaldi dahatê diafirîne.</translation>
 <translation id="5378841821586202982">Peldanka jêbirdankê</translation>
+<translation id="5398772614898833570">Reklam hat astengkirin</translation>
 <translation id="5421638721143596928">Erêkirina pêbawerên te têk çû. Ji kerema xwe dîsa têkeve.</translation>
 <translation id="5439599923922718668">Pir caran serdankirî</translation>
+<translation id="5439835075346716808">Tomarkirin ji bo ev IP bi awayekî demkî hatiye astengkirin. Ji kerema xwe paşê dîsa test bike.</translation>
+<translation id="5475116651001049780">Malpera mobayîlê veşêre</translation>
 <translation id="5486261815000869482">Borînpeyvê bipejirîne</translation>
+<translation id="5493100027274177356">Çavkaniya nivîsê ev e
+<ph name="SOURCE_TEXT" /> û
+Nivîsa wergerandî ev e
+<ph name="TRANSLATED_TEXT" /></translation>
 <translation id="5494016731375030300">Rûgerên vê dawî hatin girtin</translation>
+<translation id="5517833250460609673">Vîdeo an muzîk dê bi rêkûpêk bilîzin</translation>
+<translation id="5519187824830275200">Tevlîkirinê veşêre...</translation>
+<translation id="5521914729572529753">Ez derbarê taybetî û ewlehiyê xembar im</translation>
 <translation id="5564687523685713029">Tenê koman nîşan bide</translation>
+<translation id="5577770221789895760">Dema ku bişkoka malê tê qewirandin kîjan rûpelê hilbijêrin.</translation>
 <translation id="5600792731098584229">Mezinahiya têkiliyên bilez</translation>
+<translation id="5639137028584114536">Rêxistina te ji te daxwaz dike ku tu taybet bigerî. Rûger di awaya taybet de nayên tomarkirin.
+ <ph name="BEGIN_LINK" />Bêtir fêr bibe<ph name="END_LINK" /></translation>
+<translation id="5669616832972782345">Pêşniyarê jê bibe</translation>
 <translation id="5684277895745049190">Rêz</translation>
+<translation id="5710478562694930157">Berjor</translation>
 <translation id="574392208103952083">Navîn</translation>
 <translation id="5756451123057329358">Rûpela destpêkê ji nû ve veke</translation>
 <translation id="5787420647064736989">Navê amûrê</translation>
+<translation id="5801825598531634872">Piştî çend rojan neçalak bike</translation>
 <translation id="5822336771053074270">Nîşe tevlî bike</translation>
+<translation id="5823830882692559950">Vivaldi.net pêbawerên te nepejirand:
+<ph name="SERVER_ERROR" /> (
+<ph name="ERROR_CODE" />)</translation>
 <translation id="5857090052475505287">Peldanka nû</translation>
 <translation id="5859825823508296659">Navperê biguherîne</translation>
+<translation id="5867841422488265304">Navnîşa malperê bigerin an binivîsin</translation>
+<translation id="5869217094746242845">Li ser taybetî &amp; parastinê bêtir tişt fêr bibe</translation>
 <translation id="5871497086027727873">1 hêman hat livandin</translation>
+<translation id="5898502570200301364">Tu dikarî borînpeyvên ku te bo rêvebirê borînpeyvê Vivaldi tomar kiriye li ser sepanên din li ser iPhone ya xwe bi kar bînî.</translation>
 <translation id="5900160494089383343">Ev navê bikarhêner ne pêkan e.</translation>
+<translation id="5907851754429991366">Em ê hez bikin ku nerînên we li ser App Store bibînin.</translation>
+<translation id="5914847543920496660">Ez ji bo zelaliyê nermalava çavkaniya vekirî hildibjêrim</translation>
+<translation id="591684450784861763">Rûpelê tevlî bike bo ...</translation>
 <translation id="5922915428124940994">(Guhertî)</translation>
+<translation id="5939518447894949180">Ji nû ve saz bike</translation>
 <translation id="6005497458542935062">Bilivîne derveyî peldankê</translation>
+<translation id="603230602684548091">Ziman çavkanî hilbijêrin</translation>
+<translation id="6040304352785030331">Ez dixwazim ku pêvekên gerokê bi kar bînim</translation>
+<translation id="6042308850641462728">Bêhtir zanyarî</translation>
+<translation id="6048889899469181614">Hevdemî niha naxebite.
+Sazkariyan veke da ku çareser bikî.</translation>
+<translation id="604930981600990598">Wergerandin kopî kirin!</translation>
+<translation id="6052689967593623141">Dema ku tu piştî tikandina hinek ji van girêdanan kirrînek bikiî, dibe ku Vivaldi komîsyonek hevkariyê qezenc bike. Ev ji baştirkirina Vivaldi re dibe alîkar û serxwebûna gerokê diparêze. Spas ji bo piştgiriya te!</translation>
+<translation id="6056094614114332761">Pêşniyariyên qada navnîşanê</translation>
 <translation id="6077943432358741146">Têkliyên bilez</translation>
-<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> hêm hatin livandin</translation>
+<translation id="6079696972035130497">Bêsînor</translation>
+<translation id="6093557041367452381">Dema ku balkêşiya qada navnîşanê li ser rûpela destpêkê be, dîroka nivîsandî nîşan dide.</translation>
+<translation id="6110857187283700804">Ketana te ji bo pêşniyaran ji peydakarê lêgerîna te re tê şandin. Ev di çarçoveya taybet de neçalak e.</translation>
+<translation id="6119047040189002834">Ji çavdêriyê dûr bimîne û motoreke lêgerînê hilbijêre ku li gorî nirxên te bin:</translation>
+<translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> hêman hatin livandin</translation>
+<translation id="6147094071357011481">Tabloyên girtî yên dawî ne amade ne</translation>
+<translation id="6171727814244883097">Riyeke hêsan bo piştgiriya me</translation>
+<translation id="6177301865411451337">Dibe ku rajeya Vivaldi ya hevdemiyê rastî pirsgirêkan hatiye. Rojanekirinên rajeyê bistîne li ser: <ph name="BEGIN_LINK" />
+VivaldiStatus.com
+<ph name="END_LINK" /></translation>
+<translation id="6180515952840978051">Ez tomarkirina rûpeleke tevnê wekî têkliyên bilez dijwar dibînim</translation>
+<translation id="6193995664633100765">Hindî (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">Niha bexş bike</translation>
+<translation id="6224086034182508647">Vebijarkên xuyangê yên malperê</translation>
+<translation id="6253990869902066991">Vivaldi Rûpelên Webê ji nedîtî ve vedigere</translation>
+<translation id="6257488392933423163">Wekî HTML bibînin</translation>
+<translation id="6275978505813092431">Wêneya ketanê</translation>
+<translation id="6329717714920146925">Malperên (tenê nîşan bide)</translation>
+<translation id="6346549829676591152">Dîroka lêgerînê çalak bike</translation>
+<translation id="6365929278691047681">Elmanî (<ph name="ORIGIN" />)</translation>
+<translation id="638249699236255123">Şêwaza malperê şikestî ye an ecêb xuya dike</translation>
+<translation id="6383855939619098095">Kesanekirina rûpela destpêkê ya Vivaldi dijwar e</translation>
 <translation id="6406506848690869874">Hevdemî</translation>
+<translation id="641394169129472837">Dema ku pêlika tabê ya nû tê qewirandin kîjan rûpelê hilbijêrin.</translation>
 <translation id="6438416544409849235"><ph name="NUMBER_OF_SELECTED_NOTES" /> hatin hilbijartin</translation>
 <translation id="6442584491342758233">Lihevhatina rasterast</translation>
-<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Têxe<ph name="END_LINK" /></translation>
+<translation id="6443682944493983866">Zimanan biperjîne</translation>
+<translation id="6468130661190228905">Bibore, wisa xuya ye ku divê tu hinekî li bendê bimînî, berî ku tu tevlî civaka me bibî. Em bo tevlîbûnê ji endamên xwe dixwazin ku herî kêm 16 salî bin.</translation>
+<translation id="6487150267908786236"><ph name="BEGIN_LINK" />Têxe
+<ph name="END_LINK" /></translation>
 <translation id="6517411226162529295">Kilîta şîfrekirinê tomar bike</translation>
+<translation id="6527303717912515753">Parve bike</translation>
+<translation id="6535988230515403205">Polonî (<ph name="ORIGIN" />)</translation>
+<translation id="6536226749629478563">Ez ewlehiya rêveberiya borînpeyvê çêtir dixwazim</translation>
+<translation id="6544880104552732240">Ziman Destan hilbijêrin</translation>
 <translation id="659351303388691480">Dîroka geranê pak bike ...</translation>
 <translation id="6602272356389933803">Xuyang û rûkar</translation>
+<translation id="6609906162587123522">Girêdanan di sepanên derveyî de veneke</translation>
 <translation id="6614744450826097546">Hûrgiliyên reklamê</translation>
+<translation id="6631760746795162665">Kolombî (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Şopger û reklam têne astengkirin. Dibe ku hinek malper nexebitin.</translation>
 <translation id="6642196070615520677">Daneyên ji dûr ve hevdemkirî jê bibe</translation>
 <translation id="6645228090427373820">Şopger têne astengkirin, lê reklam ne. Dibe ku hinek malper nexebitin.</translation>
 <translation id="6656103420185847513">Peldankê biguherîne</translation>
 <translation id="6657585470893396449">Borînpeyv</translation>
+<translation id="6659376785721135061">Qada têketinê pak dike</translation>
 <translation id="6690955457036363013">Asta astengkirina her malperê bi rê ve bibe</translation>
+<translation id="6700868474099335777">Rûpelê mezin bike</translation>
+<translation id="6703516503311038964">Ez dixwazim nûçenameya Vivaldi bistînim</translation>
 <translation id="6709133671862442373">Nûçe</translation>
 <translation id="6724024423419410528">Reng</translation>
+<translation id="6745857330065678428">Ji rûpelê rengê çarçoveyê bigire</translation>
 <translation id="6756507620369789050">Paşragihandinê parve bike</translation>
+<translation id="6798469570047202628">Şîfreya çewt têk çû</translation>
 <translation id="6807791860691150411">Perwerde</translation>
 <translation id="681368974849482173">Hêman hat afirandin</translation>
+<translation id="6830986331692390764">Daneyên hevdemkirî tên pakkirin. Ji kerema xwe raweste.</translation>
 <translation id="6831043979455480757">Wergerîne</translation>
+<translation id="6838968771741416244">Hûrguliyên din di derbarê nerînên we de peyda dike</translation>
+<translation id="6850275739048136176">Çavkaniyên zimanan û armancê swap bikin</translation>
+<translation id="6875510405870945573">Asta astengkirina xwe ya bijare hilbijêre.</translation>
+<translation id="6878199227380123461">Panel wergerandin</translation>
 <translation id="6887143077297974801">Hevdemî têk çû.</translation>
+<translation id="6896758677409633944">Jê bigire</translation>
+<translation id="691132463664340655">Rûkara gerokê</translation>
+<translation id="6918338082370824763">Rûpela taybetî</translation>
 <translation id="6937750621455385628">Ji bo têketinê divê tu jimêreke Vivaldi bi kar bînî.</translation>
-<translation id="6941852195052765076">Tenderûstî</translation>
+<translation id="6941852195052765076">Tendûrûstî</translation>
 <translation id="6945221475159498467">Hilbijêre</translation>
+<translation id="6946395294519639514">Bi riya destgehan tu dikarî bi hêsanî bigihêjî amûrên girîng di darika kêlekê de ya gerokê.</translation>
 <translation id="6951435330868954105">Sazkariyên berdest bi rê ve bibe</translation>
+<translation id="6951948201878750661">Tap bikin ku vê rengê hilbijêrin</translation>
+<translation id="6967884871145366229">Sazkariyên taybetiyê bi rê ve bibe</translation>
 <translation id="6973630695168034713">Peldank</translation>
+<translation id="7006864796794806241">Şîfreya bistînin</translation>
+<translation id="7029809446516969842">Borînpeyv</translation>
 <translation id="7041964446309059643">Bi destan</translation>
 <translation id="7049134228091523877">Sernavê biguherîne</translation>
 <translation id="7072317570101031415">Pirtûk</translation>
+<translation id="7083011465470143310"><ph name="BEGIN_LINK" />borînpeyv<ph name="END_LINK" /> ji bîr kir?</translation>
+<translation id="7083783675072250424">Tabî ji bo birêvebirin an rêxistin dijwar in</translation>
+<translation id="7088311594489627417">Sazkariyên mezinkirinê yên lamperê peyda nabin</translation>
+<translation id="7096550097771629450">Nivîsa wergerandî jê digire bo jêbirgerhê</translation>
+<translation id="7110758301321962823">Navê bikarhêner bistînin</translation>
+<translation id="711946737922560234">Girêdana ketanê</translation>
+<translation id="7120229714826964836">Rûpelê Parve Bike</translation>
+<translation id="713792263829536729">Karûbarên streaming bi rengek baş kar nakin</translation>
+<translation id="7142332680286898952">Dîroka nivîsandî nîşan bide</translation>
 <translation id="7158507293261405349">Koma nû tevlî bike</translation>
 <translation id="7173114856073700355">Sazkariyan veke</translation>
-<translation id="7229439505896086266">Nîşe biafrîne</translation>
+<translation id="718052827125696482">Dîmender bi rengek baş nabe</translation>
+<translation id="7180865173735832675">Kesane bike</translation>
+<translation id="7180919683305939836">Ez taybetmendiyên AI-hêzdar dixwazim (kurtekirin, chat, hwd.)</translation>
+<translation id="7182884564543065232">Hinek malper nayên vekirin</translation>
+<translation id="7192066917392691622">Berjêr</translation>
+<translation id="7194677467200983873">Hevdemiya dawîn:</translation>
+<translation id="7203411967620588391"><ph name="ITEM_TYPE" /> biguherîne</translation>
+<translation id="7210372243397300116">Peldanka Lêgerînê</translation>
+<translation id="7215420652436283416">Bi navnîşanê</translation>
+<translation id="7229439505896086266">Nîşeyê biafrîne</translation>
+<translation id="7311118006561484338">Bi sernavê</translation>
+<translation id="7325310788570036874">Bi Vivaldi re jîrtir, siviktir û bileztir gerana tevnê bidomîne.</translation>
+<translation id="734110743815267231">Îbranî (<ph name="ORIGIN" />)</translation>
+<translation id="7347289093190902150">Bi taybetî veke?</translation>
+<translation id="735361677607128142">Pêşniyarên lêgerînê ji bo min kar nakin</translation>
+<translation id="7362952245780030555">Di navbera rûgerên tevahiya sermaseyê de hilbijêre, yan guherkera rûgerê ya hêsan.</translation>
 <translation id="736592699917579616">Xwarin</translation>
-<translation id="7388525939184421699">Çavkaniyeke nû tevlî bike</translation>
-<translation id="7418655219500602072">Pêşiyên qada navnîşanê</translation>
+<translation id="7379938540614588640">Holendî (<ph name="ORIGIN" />)</translation>
+<translation id="7386354767119759965">Malpera Mobile</translation>
+<translation id="7388525939184421699">Çavkaniya nû tevlî bike</translation>
+<translation id="7393145587390257456">Bloka reklamê baş naxebite</translation>
+<translation id="7400418766976504921">URL</translation>
+<translation id="7417521636956146248">Motorên lêgerînê wê ji nû ve werin sazkirin bo sazkariyên berdest, di ser de jî motorên lêgerînê te yên kesane jî ji nû ve saz bike.</translation>
+<translation id="7451784507428459503">Vîdyoyên Youtube dê ne lîstin an pirsgirêkan nebin</translation>
+<translation id="7454640759045234067">Trackers asteng kirin</translation>
 <translation id="7461899062138731833">ÇAVKANÎ</translation>
+<translation id="7473891865547856676">Na Spas</translation>
 <translation id="749277285729135008">Bala darika navnîşanê bide ser rûgera nû</translation>
-<translation id="750493650310597496">0 hatin hilbijartin</translation>
+<translation id="7504733216949066481">Werger têkçûn!</translation>
+<translation id="750493650310597496">0 hat hilbijartin</translation>
+<translation id="7525067979554623046">Biafirîne</translation>
 <translation id="753732157349120914">Guherkera rûgerê</translation>
-<translation id="7574321014880720413">Navpereke nû tevlî bike</translation>
+<translation id="7541018845757104937">Vivaldi battera min zû vedike</translation>
+<translation id="755410338177348055">Deng an vîdyo bîrgeha demkî giran dike û dicemidîne</translation>
+<translation id="7562758693157424472">Tu dikarî bilez ramanên xwe yên li ser Vivaldi bi me re parve bikî?</translation>
+<translation id="7573518470897278603">Guhertoya Mobile ya Malperê bibînin</translation>
+<translation id="7574321014880720413">Navpera nû tevlî bike</translation>
 <translation id="7587132259180664054">E-name bi serkeftî hat şandin</translation>
+<translation id="7587287726969638956">Xuyanga Çarçoveyê</translation>
+<translation id="7593546601395782810">Nîşeyan veşêre</translation>
+<translation id="7600840048521751013">Dîroka wergerandinê</translation>
 <translation id="7602336701644200880">Şandina E-nameyê têk çû. Ji kerema xwe dîsa test bike.</translation>
 <translation id="7606108789437688910">Navnîşanên nîşeyê di awayê veşartî de veke</translation>
 <translation id="7616284412875773842">Nexweş</translation>
 <translation id="7622661618259256505">Ji kerema xwe borînpeyvekê hilbijêre ku herî kêm ji 12 peyv pêk bê.</translation>
 <translation id="7658239707568436148">Têk bibe</translation>
+<translation id="767363698559661695">Şêwaza tabê xwe bicîh bikin</translation>
 <translation id="7702907602086592255">Navper</translation>
+<translation id="7703885416803110670">Komên dialên bilez rêyek girîng e ku hûn nîşanên xwe rêxistin bikin.</translation>
+<translation id="7730831244010940855">Li ser iPad-ê vivaldi ya vivaldi veguherînin?</translation>
 <translation id="7732622593814325274">Çavkaniyên astengkirina şopandinê bi rê ve bibe</translation>
 <translation id="7765158879357617694">Bilivîne</translation>
+<translation id="7771452384635174008">Pergal</translation>
+<translation id="7781069478569868053">Rûpela rûgera nû</translation>
+<translation id="7791543448312431591">Tevlî bike</translation>
+<translation id="7801111502975417831">Ez dixwazim bikaribim ku vîdyoyyan di paşrûyê de bidim lîstin</translation>
+<translation id="7801204999757211519">Jixwe jimarê te heye?
+<ph name="BEGIN_LINK" />Têkeve ➔
+<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Na spas</translation>
 <translation id="7850070199083838600">Komeke nû biafrîne?</translation>
+<translation id="7862984977194621600">Pêşniyariyên lêgerînê çalak bike</translation>
 <translation id="7870765213383950011">Koma yekemîn</translation>
 <translation id="7914995060146784406">Nîşeyê biguherîne</translation>
+<translation id="7925340978147141704">Borînpeyvê nîşan bide</translation>
+<translation id="7930665886069596866">Taybetmendiyek rast naxebite</translation>
+<translation id="7931102520806266819">Di taybet de vekirî ye</translation>
+<translation id="7961270736686975887">Zimanên Swap</translation>
 <translation id="7967161908152532036">Navnîşana malperê</translation>
 <translation id="7979036127916589816">Şaşetiya hevdemiyê</translation>
 <translation id="8008214489230610096">E-name ya vegerandinê bipejirîne</translation>
-<translation id="8038592796033755028">Amûra <ph name="USERNAME" /></translation>
-<translation id="804786196054284061">Peymana lîsansê dawî ya bikarhênerên</translation>
+<translation id="8038592796033755028">Amûrên <ph name="USERNAME" /></translation>
+<translation id="8041093619605951337">Şa</translation>
+<translation id="8046542428651654244">Wêneya piçûk rojane bike</translation>
+<translation id="804786196054284061">Peymana lîsansê dawî ya bikarhêneran</translation>
+<translation id="8053851743673939284">Frensî (<ph name="ORIGIN" />)</translation>
 <translation id="8058018971942772071">Wekî kom bi kar bîne</translation>
 <translation id="8066170816074394954">Şaşetiya rajekarê.</translation>
 <translation id="8076492880354921740">Rûger</translation>
+<translation id="8077675488769462025">Rûgerên neçalak</translation>
+<translation id="8112996065264879835">Ev kod bi ya ku me ji te ra şandî ra li hev nayê.
+Tu gihîşt sînorê hewldanên şaş. Ji kerema xwe bi riya bikaranîna vebijêrka ji nû ve şandin a li jêr koda nû bixwaze.</translation>
+<translation id="8131740175452115882">Bipejirîne</translation>
+<translation id="8134672010161840864">Pinch bikin ku wêneyê hilweşînin û pozîsyon bikin</translation>
 <translation id="8142291334394582384">Rêzkirina pêşniyara lêgerînê berevajî bike</translation>
 <translation id="8147118677117542370">Ji kerema xwe temenê xwe binivîse.</translation>
 <translation id="8165573437634525334">Dane bi borînpeyva şîfrekirî parastî ne</translation>
+<translation id="8237090677709100373">Koda rengê ya kesane</translation>
+<translation id="8255101384731542819">Lêgerîna serbixwe, li Fransa hatiye çêkirin</translation>
 <translation id="8257908958623224237">Tevlihevî bi daneyên rajegireke din re pêk hat.</translation>
 <translation id="8261506727792406068">Jê bibe</translation>
+<translation id="8273666073173891138">Nîşe hat tomarkirin bo <ph name="FOLDER_TITLE" /></translation>
 <translation id="8275038454117074363">Têxe</translation>
+<translation id="8284356787013856231">Destûr ji bo vekirina pelê hate înkarkirin</translation>
+<translation id="8289933454364510719">Top an jêrîn</translation>
+<translation id="8304044605002588416">Bişkoka rûpelê destpêkê kesane bike</translation>
+<translation id="8304538706952727936">Ji Big Tech azad bibe</translation>
 <translation id="8323167517179506834">Girêdanê têxe</translation>
+<translation id="8326104954595890674">Tabloya Taybet a Nû</translation>
+<translation id="8329813750766387010">Dîroka rojanekirinê: <ph name="DATE" /></translation>
+<translation id="8339701072035560935">Rûpela vala</translation>
+<translation id="8347535536909603600">Hişyariyên kilorê rake (<ph name="TYPE" />)</translation>
+<translation id="8359194106448244241">Ji bo dîtina tabloyên ji cîhazên din, hûn hewce ne ku sync çalak bikin.</translation>
 <translation id="8366175803122817174">Tevahiya navnîşanên nîşeyê veke</translation>
 <translation id="8372721116225477180">Civak</translation>
 <translation id="8395378633507873708">Darika navnîşanê</translation>
+<translation id="839736845446313156">Tomar bibe</translation>
+<translation id="8404556771547317369">Ji kerema xwe URL binivîse</translation>
 <translation id="8414685983518053656">Nîşe</translation>
 <translation id="8423076545503792640">Daxwaz ji ber şaşetiyekê têk çû. Ji kerema xwe paşê dîsa test bike.</translation>
+<translation id="8428213095426709021">Mîheng</translation>
 <translation id="8458397775385147834">1 hêman hat jêbirin</translation>
+<translation id="846569642435104154">Ev ê ji bo hemî rûpelan asta zoom hilbijartî bicîh bike</translation>
+<translation id="8466547766474747336">Taybetmendiyek ku ez dixwazim kêm e</translation>
 <translation id="8500459200727969761">Rêzên cihgirtî vegerîne</translation>
 <translation id="8503813439785031346">Navê bikarhêner</translation>
 <translation id="8515808232153642813">Şîfrekirinê veke</translation>
-<translation id="8517852590337319813">Ajimêra xwe çalak bike</translation>
-<translation id="8677007239430848917">Nîşeya xwe ya yekemîn tevlî bike bi riya tikandinê li ser îkona + li jêr</translation>
+<translation id="8517852590337319813">Jimarê xwe çalak bike</translation>
+<translation id="8546963963006468833">Bi riya Vivaldi, tu dikarî bêkêmasî girêdanan vekî, ji îkonan bigerî, û borînpeyvan dagirtina xweber pêk bînî di sepanên din de.</translation>
+<translation id="8546995005405883065">Zimanên bijare, ji hêla malperên hevgirtî ve di fermana dayîn de têne pejirandin.</translation>
+<translation id="8562452229998620586">Şîfreyên hatine tomarkirin dê li vir xuya bibin.</translation>
+<translation id="856439694359429369">Tap ji bo vebijarkên bêtir an tap dubare bikin ku vekin.</translation>
+<translation id="8591818185775466306"><ph name="ITEM_TYPE" /> jê bibe</translation>
+<translation id="8605953154325672921">Navê bikarhêner hewce dike</translation>
+<translation id="8675578805254882416">Tîne</translation>
+<translation id="8677007239430848917">Nîşeya xwe ya yekemîn tevlî bike bi riya tikandina îkona + li jêr</translation>
+<translation id="8684294196284714094">Amade yî ku Vivaldi wekî geroka xweya xwerû destnîşan bikî?</translation>
+<translation id="8687583747694652488">Çavkaniyê jê bigire</translation>
+<translation id="8696653005998192569">Wêne an jî vîdyo li ser malperan bar nabin</translation>
 <translation id="8730621377337864115">Qediya</translation>
+<translation id="8733945742171960420">Dema ku tu dest bi gerê bikî, Malperên te yên sereke wê li vir werin nîşandan.</translation>
 <translation id="8740815429790728127"><ph name="NUMBER_OF_SELECTED_NOTES" /> hêman hatin jêbirin</translation>
+<translation id="8763006697839582351">Li vivaldi ya taybet vekin</translation>
+<translation id="8765173886020357878">Maf bide pêşniyazên lêgerînê</translation>
+<translation id="8804164990146287819">Siyaseta taybetîtiyê</translation>
+<translation id="8805346136361295421">Di rûpelê de bibîne veşêre</translation>
 <translation id="8818152010000655963">Wêneya dîwêr</translation>
+<translation id="8819841443522803117">Dem dema ku geroka xweya xwerû vekişîne? Vivaldi hilbijêrin.</translation>
 <translation id="8820817407110198400">Şûnpel</translation>
+<translation id="8828442094222036738">Encamên Google yên taybet, li Ewropa hatiye çêkirin</translation>
 <translation id="8855707633300847215">Darika rewşê nîşan bide</translation>
+<translation id="8861211142470908937">Dirêjahiya borînpeyvê herî kêm divê 12 tîp e</translation>
+<translation id="8892354889971902600">Tabloyên ku hûn di demên dawî de girtî ne dê li vir xuya bibin.</translation>
+<translation id="89390081013973080">Qediya! Dema biryardayînê ye ku kîjan dane di navbera amûran de hevdem bibin.</translation>
+<translation id="8948792607467387336">Wekî Wallpaper hilbijêrin</translation>
+<translation id="8964449607824577665">Bê borînpeyva şîfrekirinê te ya heyî em nikarin daneyên te şîfre bikin. ji nû ve sazkirina vê şîfreyê pêdivî dike ku tevahiya daneyên hevdemiyê heyî yên li rajekarên Vivaldi werin jêbirin.</translation>
 <translation id="8965371804397726192">Dest bi hevdemkirina tevahiya daneyan bike</translation>
+<translation id="8993821994276892302">{count, plural,
+          =1 {Şûnpel hat livandin bo "{title}"}
+          other {Şûnpel hatin livandin bo "{title}"}}</translation>
 <translation id="9028089729841356743">Şaşetiya torê.</translation>
 <translation id="9043882097999887291">Reklam
 hatin astengkirin</translation>
 <translation id="9065203028668620118">Biguherîne</translation>
+<translation id="9077265667054763280">Malper pir hêdî tên barkirin</translation>
+<translation id="9079251484401922158">Fînlendî (<ph name="ORIGIN" />)</translation>
 <translation id="9083392325882095631">1 hêman</translation>
+<translation id="9091665118798175641">Zanyariyên dagirtina xweberî hevdem bike</translation>
+<translation id="9097127519290088802">Borînpeyva şîfreya pêwist e</translation>
 <translation id="9139318394846604261">Danûstandin</translation>
+<translation id="9152984048904392513">Hemî di paşxanê de vekin</translation>
+<translation id="9157459516617966251">Girêdanê biguherîne</translation>
+<translation id="9157539936604258187">Girêdanê veke</translation>
+<translation id="9195659219948942754">Di jimarê xwe ya Vivaldi de daneyên hevdemkirî bi kar bîne</translation>
 <translation id="9195802773917252923">Nasnavê şûnpelan çalak bike</translation>
+<translation id="9212737146310746733">Farisî (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Şopgeran asteng bike</translation>
+<translation id="924053859552461110">Rûpela destpêkê kesane bike</translation>
+<translation id="925891113183098411">Di hevdemkirina daneyên min de li seranserê amûran ez rastî pirsgirêkeke hatim</translation>
 <translation id="932327136139879170">Rûpela destpêkê</translation>
 <translation id="937440209447114831">Em ti reklam an şopgeran asteng nakin.</translation>
+<translation id="941088499334202542">Hûn dikarin zencîreyê biguherînin, wê bavêjin an jî wê di tabloyek nû de vekin.</translation>
+<translation id="958688202859970851">Di van demên dawî de tabloyên serdana li vir xuya dike</translation>
 <translation id="984650419570014454">Koda çalakkirinê divê 6 jimar be.</translation>
-<translation id="987264212798334818">Giştî</translation>
+<translation id="987264212798334818">Gelemperî</translation>
+<translation id="992440609313570947">Tu li Vivaldi nû ye? <ph name="BEGIN_LINK" />Jimarekê biafirîne ➔ <ph name="END_LINK" /></translation>
+<translation id="994333983174240900">Herdûyan jê bigire</translation>
+<translation id="998988732385109770">Bikaranîn an rêvebirina şûnpelan dijwar e</translation>
 </translationbundle>

@@ -48,17 +48,15 @@ enum class Extension : uint8_t {
     kUndefined,
     kChromiumDisableUniformityAnalysis,
     kChromiumExperimentalFramebufferFetch,
+    kChromiumExperimentalImmediate,
     kChromiumExperimentalPixelLocal,
-    kChromiumExperimentalPushConstant,
     kChromiumExperimentalSubgroupMatrix,
     kChromiumInternalGraphite,
     kChromiumInternalInputAttachments,
-    kChromiumInternalRelaxedUniformLayout,
     kClipDistances,
     kDualSourceBlending,
     kF16,
     kSubgroups,
-    kSubgroupsF16,
 };
 
 /// @param value the enum value
@@ -68,7 +66,8 @@ std::string_view ToString(Extension value);
 /// @param out the stream to write to
 /// @param value the Extension
 /// @returns @p out so calls can be chained
-template <typename STREAM, typename = traits::EnableIfIsOStream<STREAM>>
+template <typename STREAM>
+    requires(traits::IsOStream<STREAM>)
 auto& operator<<(STREAM& out, Extension value) {
     return out << ToString(value);
 }
@@ -81,34 +80,30 @@ Extension ParseExtension(std::string_view str);
 constexpr std::string_view kExtensionStrings[] = {
     "chromium_disable_uniformity_analysis",
     "chromium_experimental_framebuffer_fetch",
+    "chromium_experimental_immediate",
     "chromium_experimental_pixel_local",
-    "chromium_experimental_push_constant",
     "chromium_experimental_subgroup_matrix",
     "chromium_internal_graphite",
     "chromium_internal_input_attachments",
-    "chromium_internal_relaxed_uniform_layout",
     "clip_distances",
     "dual_source_blending",
     "f16",
     "subgroups",
-    "subgroups_f16",
 };
 
 /// All extensions
 static constexpr Extension kAllExtensions[] = {
     Extension::kChromiumDisableUniformityAnalysis,
     Extension::kChromiumExperimentalFramebufferFetch,
+    Extension::kChromiumExperimentalImmediate,
     Extension::kChromiumExperimentalPixelLocal,
-    Extension::kChromiumExperimentalPushConstant,
     Extension::kChromiumExperimentalSubgroupMatrix,
     Extension::kChromiumInternalGraphite,
     Extension::kChromiumInternalInputAttachments,
-    Extension::kChromiumInternalRelaxedUniformLayout,
     Extension::kClipDistances,
     Extension::kDualSourceBlending,
     Extension::kF16,
     Extension::kSubgroups,
-    Extension::kSubgroupsF16,
 };
 
 /// A unique vector of extensions

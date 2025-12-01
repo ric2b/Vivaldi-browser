@@ -854,10 +854,6 @@
       "id": 225,
       "merge_method": "none"
     },
-    "vivaldi.startpage.speed_dial.privacy_stats_show": {
-      "id": 226,
-      "merge_method": "none"
-    },
     "vivaldi.startup.has_seen_feature": {
       "id": 227,
       "merge_method": "none"
@@ -1000,14 +996,6 @@
     },
     "vivaldi.tabs.selection.include_active": {
       "id": 262,
-      "merge_method": "none"
-    },
-    "vivaldi.tabs.show_trash_can": {
-      "id": 263,
-      "merge_method": "none"
-    },
-    "vivaldi.tabs.show_synced_tabs_button": {
-      "id": 264,
       "merge_method": "none"
     },
     "vivaldi.tabs.show_close_button": {
@@ -1182,10 +1170,6 @@
       "id": 307,
       "merge_method": "none"
     },
-    "vivaldi.workspaces.button.show_in_tabbar": {
-      "id": 308,
-      "merge_method": "none"
-    },
     "vivaldi.workspaces.button.show_name": {
       "id": 309,
       "merge_method": "none"
@@ -1230,10 +1214,6 @@
       "id": 322,
       "merge_method": "none"
     },
-    "vivaldi.startup.last_seen_search_engine_prompt_version": {
-      "id": 323,
-      "merge_method": "none"
-    },
     "vivaldi.biscuit.rainbow_progress": {
       "id": 324,
       "merge_method": "none"
@@ -1252,6 +1232,10 @@
     },
     "vivaldi.panels.window.inactive_tabs_days": {
       "id": 328,
+      "merge_method": "none"
+    },
+    "vivaldi.startpage.navigation_shorcuts": {
+      "id": 329,
       "merge_method": "none"
     }
   },
@@ -1749,6 +1733,11 @@
           "COMMAND_SHOW_CLEAR_PRIVATE_DATA": {
             "shortcuts": [
               "ctrl+shift+del"
+            ]
+          },
+          "COMMAND_SHOW_TAB_BUTTON_POPOUT": {
+            "shortcuts": [
+              "ctrl+shift+a"
             ]
           },
           "COMMAND_SHOW_DOWNLOADS_PANEL": {
@@ -2581,6 +2570,11 @@
               "ctrl+shift+del"
             ]
           },
+          "COMMAND_SHOW_TAB_BUTTON_POPOUT": {
+            "shortcuts": [
+              "ctrl+shift+a"
+            ]
+          },
           "COMMAND_SHOW_DOWNLOADS_PANEL": {
             "shortcuts": [
               "ctrl+shift+d",
@@ -3395,6 +3389,11 @@
               "alt+meta+t"
             ]
           },
+          "COMMAND_SHOW_TAB_BUTTON_POPOUT": {
+            "shortcuts": [
+              "shift+meta+a"
+            ]
+          },
           "COMMAND_SHOW_DOWNLOADS_PANEL": {
             "shortcuts": [
               "alt+meta+l"
@@ -3898,7 +3897,7 @@
         },
         "show_favicon": {
           "type": "boolean",
-          "default": false
+          "default": true
         },
         "allow_extension_override": {
           "type": "boolean",
@@ -4476,6 +4475,11 @@
             "logs": 2,
             "events": 3
           }
+        },
+        "view_log_enabled": {
+          "description": "Enable view log for calendar",
+          "type": "boolean",
+          "default": false
         }
       },
       "refresh_tokens": {
@@ -4713,6 +4717,13 @@
         "description": "Set tab_to_all based on the operating system configuration",
         "type": "boolean",
         "default": false
+      }
+    },
+    "list": {
+      "selections": {
+        "description": "Saved selection data per list, selected IDs, lead ID and anchor ID",
+        "type": "dictionary",
+        "default": {}
       }
     },
     "mail": {
@@ -5091,6 +5102,11 @@
             "logs": 2
           }
         },
+        "view_log_enabled": {
+          "description": "Enable view log for mail",
+          "type": "boolean",
+          "default": false
+        },
         "selected_account": {
           "type": "string",
           "default": "",
@@ -5199,53 +5215,6 @@
           "burger": 1
         },
         "default": "icon"
-      }
-    },
-    "chat": {
-      "favorites": {
-        "description": "Favorites to chat with",
-        "type": "list",
-        "default": []
-      },
-      "notifications": {
-        "description": "Enable notifications when receiving chat messages",
-        "type": "boolean",
-        "default": true
-      },
-      "debug_output": {
-        "description": "Enable console output for debug purposes",
-        "type": "enum",
-        "enum_values": {
-          "off": 0,
-          "simple": 1,
-          "verbose": 2
-        },
-        "default": "off"
-      },
-      "notifications_sound_on": {
-        "description": "Play sound when receiving chat messages",
-        "type": "boolean",
-        "default": true
-      },
-      "typing_indication": {
-        "description": "Let other people see you're typing a message",
-        "type": "boolean",
-        "default": true
-      },
-      "process_hint_no_store": {
-        "description": "Tell the server not to store the outgoing message",
-        "type": "boolean",
-        "default": false
-      },
-      "conversation_timestamps": {
-        "description": "Store timestamps for conversations locally. Until XEP-0333 is implemented.",
-        "type": "list",
-        "default": []
-      },
-      "tabMode": {
-        "description": "Open conversations in tabs from the panel",
-        "type": "boolean",
-        "default": false
       }
     },
     "mouse_gestures": {
@@ -5460,11 +5429,6 @@
             "resizable": false
           },
           {
-            "id": "PanelChat",
-            "width": -1,
-            "resizable": false
-          },
-          {
             "id": "PanelSession",
             "width": -1,
             "resizable": false
@@ -5564,13 +5528,6 @@
             "id": "contacts",
             "available": true,
             "forMailOnly": true,
-            "width": -1,
-            "resizable": false
-          },
-          {
-            "id": "chat",
-            "available": true,
-            "forMailOnly": false,
             "width": -1,
             "resizable": false
           }
@@ -5996,7 +5953,9 @@
           "HISTORY",
           "EXTENSIONS",
           "PAGE_ACTIONS",
-          "CLOSED_TABS"
+          "CLOSED_TABS",
+          "SYNCED_TABS",
+          "NAMED_TAB_GROUPS"
         ]
       }
     },
@@ -6135,6 +6094,11 @@
         },
         "default": "speed_dial_only"
       },
+      "navigation_shorcuts": {
+        "description": "Controls whether to show links to internal pages on startpage",
+        "type": "boolean",
+        "default": true
+      },
       "speed_dial": {
         "add_button_visible": {
           "type": "boolean",
@@ -6166,6 +6130,11 @@
           "description": "Display search field on Speed Dial page",
           "type": "boolean",
           "default": true
+        },
+        "group_settings": {
+          "description": "Per speed dial group display settings",
+          "type": "dictionary",
+          "default": {}
         },
         "order": {
           "description": "Top Start Page navigation Speed Dial order",
@@ -6235,7 +6204,7 @@
           "default": true
         },
         "privacy_stats_show": {
-          "description": "Display privacy statistics in the SpeedDial",
+          "description": "[DEPRECATED 2025/4] Display privacy statistics in the SpeedDial",
           "type": "boolean",
           "default": false
         }
@@ -6334,6 +6303,11 @@
       },
       "share_vivaldi_last_seen_version": {
         "description": "Most recent browser version number seen when interacted with share Vivaldi button.",
+        "type": "string",
+        "default": ""
+      },
+      "crash_detection_last_seen_version": {
+        "description": "An actual last seen version of the browser (for compatibility reasons, crash detection uses a separate pref to store and update the version, because last_seen_version is updated after the JS UI is displayed).",
         "type": "string",
         "default": ""
       }
@@ -6617,12 +6591,12 @@
         }
       },
       "show_trash_can": {
-        "description": "Show trash can button",
+        "description": "[DEPRECATED 2025/4] Show trash can button",
         "type": "boolean",
         "default": true
       },
       "show_synced_tabs_button": {
-        "description": "Show synced tabs button",
+        "description": "[DEPRECATED 2025/4] Show synced tabs button",
         "type": "boolean",
         "default": true
       },
@@ -6737,6 +6711,28 @@
         "description": "Horizontal scrolling in tab bars",
         "type": "boolean",
         "default": false
+      },
+      "button": {
+        "hide_suggestions": {
+          "description": "Hide suggestion to create stack/workspace in tabs button.",
+          "type": "boolean",
+          "default": false
+        },
+        "hidden_groups": {
+          "description": "A list of groups that the user does not want to see in tabs button.",
+          "type": "list",
+          "default": []
+        },
+        "group_order": {
+          "description": "The order in which the groups are displayed.",
+          "type": "list",
+          "default": []
+        },
+        "show_counters": {
+          "description": "Show the counters in the tab button popup.",
+          "type": "boolean",
+          "default": true
+        }
       }
     },
     "appearance": {
@@ -7510,6 +7506,22 @@
           "MailRenderingMethod"
         ]
       },
+      "tabbar_before": {
+        "type": "list",
+        "default": [
+          "WorkspaceButton"
+        ]
+      },
+      "tabbar_after": {
+        "type": "list",
+        "default": [
+          "NewTab",
+          "FlexibleSpacer",
+          "SyncedTabs",
+          "TabsTrash",
+          "TabButton"
+        ]
+      },
       "mail_composer": {
         "type": "list",
         "default": [
@@ -7840,7 +7852,7 @@
       },
       "button": {
         "show_in_tabbar": {
-          "description": "Display Workspace button in Tab Bar",
+          "description": "[DEPRECATED 2025/4] Display Workspace button in Tab Bar",
           "type": "boolean",
           "default": true
         },
@@ -7868,7 +7880,7 @@
         "default": true
       },
       "widgets": {
-        "description": "An ordered list of widgets and their options.",
+        "description": "An ordered list of widgets and their options. Defaults are added in code.",
         "type": "list",
         "default": [
           {
@@ -7877,7 +7889,7 @@
             "background": "solid",
             "locationId": 0,
             "precipitationUnit": "mm",
-            "size": "double_height",
+            "size": "regular",
             "temperatureUnit": "celsius",
             "view": "WEEK",
             "windspeedUnit": "ms"
@@ -8280,6 +8292,10 @@
       "path": "session.startup_urls",
       "type": "list"
     },
+    "kUnusedSitePermissionsRevocationEnabled": {
+      "path": "safety_hub.unused_site_permissions_revocation.enabled",
+      "type": "boolean"
+    },
     "kWebKitCursiveFontFamily": {
       "path": "webkit.webprefs.fonts.cursive.Zyyy",
       "type": "string"
@@ -8329,6 +8345,14 @@
     "kCertRevocationCheckingEnabled": {
       "path": "ssl.rev_checking.enabled",
       "type": "boolean"
+    },
+    "kDnsOverHttpsMode": {
+      "path": "dns_over_https.mode",
+      "type": "string"
+    },
+    "kDnsOverHttpsTemplates": {
+      "path": "dns_over_https.templates",
+      "type": "string"
     },
     "kConfirmToQuitEnabled": {
       "path": "browser.confirm_to_quit",

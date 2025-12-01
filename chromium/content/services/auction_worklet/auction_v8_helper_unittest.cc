@@ -84,6 +84,7 @@ class DebugConnector : public auction_worklet::mojom::BidderWorklet {
       base::Time auction_start_time,
       const std::optional<blink::AdSize>& requested_ad_size,
       uint16_t multi_bid_limit,
+      uint64_t group_by_origin_id,
       uint64_t trace_id,
       mojo::PendingAssociatedRemote<mojom::GenerateBidClient>
           generate_bid_client,
@@ -107,8 +108,7 @@ class DebugConnector : public auction_worklet::mojom::BidderWorklet {
       const std::optional<std::string>&
           direct_from_seller_auction_signals_header_ad_slot,
       const std::string& seller_signals_json,
-      mojom::KAnonymityBidMode kanon_mode,
-      bool bid_is_kanon,
+      mojom::KAnonymityStatus kanon_status,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
       const std::optional<blink::AdCurrency>& browser_signal_bid_currency,

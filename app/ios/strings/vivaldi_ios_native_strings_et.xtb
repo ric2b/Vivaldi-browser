@@ -46,6 +46,7 @@
 <translation id="1470330357709335121">Vivaldi on aeglane</translation>
 <translation id="1502492982318476895">Sünkimine ebaõnnestus: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">sinu varumeiliaadress.</translation>
+<translation id="1534183273237573805">Neid otsingumootoreid kasutades aitad toetada Vivaldi arendamist.</translation>
 <translation id="1535446875484049224">Tumedas kujunduses on ebakõlasid või see näeb veider välja</translation>
 <translation id="1567659716528258242">Vivaldi ajab mu seadme kuumaks</translation>
 <translation id="156793582229023040">Tunnen muret jälitamise või andmekogumise pärast</translation>
@@ -75,6 +76,7 @@
 <translation id="1809939268435598390">Kustuta kaust</translation>
 <translation id="1813686536470127172">Muu kaust</translation>
 <translation id="1828800626900562968">Uue kaardi avamiseks toksa allpool „+”-nuppu.</translation>
+<translation id="1852679645333476285">Taustal meediasisu mängimise lubamine</translation>
 <translation id="1861262398884155592">See kaust on tühi</translation>
 <translation id="1871058849247304245">Suurendusaste saidil <ph name="HOST" /></translation>
 <translation id="1921508034244765766">Vivaldi on aeglane, jookseb kokku või ajab seadme kuumaks</translation>
@@ -88,16 +90,20 @@
 <translation id="2048247880942380698">Araabia (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Võta tagasi</translation>
 <translation id="2129408066358825297">Vanus</translation>
+<translation id="2138901399878617625">Otsides aitad puid istutada</translation>
 <translation id="2148384276939959392">Valikuline sünkimine</translation>
 <translation id="2195713384412091023">Kui jätkad, eemaldatakse serverist kõik sinu süngitavad andmed, lähtestatakse sinu krüptimisparool ja logitakse sind välja.</translation>
 <translation id="2228584369802328636">Mängud</translation>
+<translation id="2240680014596059312">Privaatne. Kiire. Vähem reklaame.</translation>
 <translation id="2243210264130642074">Märge salvestatud</translation>
 <translation id="2272338747456392228">Konto on lukus</translation>
 <translation id="2273327106802955778">Lisavalikute menüü</translation>
 <translation id="2283599456633275070">Reisimine</translation>
 <translation id="2324160330092901720">Kinnituskood saadeti aadressile <ph name="EMAIL_ID" /></translation>
 <translation id="2324257568471626606">Uus otsingumootor</translation>
+<translation id="2326657631721795616">Saad siiski Vivaldit toetada, kui valid privaatsusele keskendunud sõltumatu otsingumootori:</translation>
 <translation id="2330644510603114741">Kaartide käitumine</translation>
+<translation id="233493642829799329">Selle muutmine võib põhjustada mõnede kaartide uuestilaadimise.</translation>
 <translation id="2336309953058658733">Tühjenda prügikast</translation>
 <translation id="2359808026110333948">Jätka</translation>
 <translation id="2386793615875593361">1 valitud</translation>
@@ -159,6 +165,7 @@ blokeeritud</translation>
 <translation id="3087734570205094154">All</translation>
 <translation id="309084557304084991">Ma ei taha vaikimisi kaasa pandud järjehoidjaid ja kiirvalimisi</translation>
 <translation id="3091563570137981919">Jälitajate ja reklaamide blokeerimine</translation>
+<translation id="3097968995088564986">Lisamisnupp</translation>
 <translation id="3134385238404760368">Viimatisi kaarte pole</translation>
 <translation id="3142562627629111859">Uus kiirvalimisleht</translation>
 <translation id="3157931365184549694">Taasta</translation>
@@ -172,8 +179,8 @@ blokeeritud</translation>
 <translation id="3270894089048358271">Kas soovid Vivaldit oma vaikebrauseriks?</translation>
 <translation id="3270930591809084274">Süngitud kaardid</translation>
 <translation id="3285898158753554866">Kopeeri tõlge</translation>
+<translation id="3288330578370776290">Sisse lülitamise korral eelistatakse veebilehtede avamist brauseris, mitte välistes rakendustes.</translation>
 <translation id="3335772982573114336">Uus märge</translation>
-<translation id="3337207574172839542">Otsingusoovituste lubamine</translation>
 <translation id="33451081266695216">server aeglustas ühendust.</translation>
 <translation id="3346386541263128307">Meiliaadressid peavad kattuma.</translation>
 <translation id="3363375699928395745">Sisesta pealkiri</translation>
@@ -252,6 +259,7 @@ blokeeritud</translation>
 <translation id="4152011295694446843">Lisatavad järjehoidjad ilmuvad siia</translation>
 <translation id="4152623049003960417">Jälitaja üksikasjad</translation>
 <translation id="4176463684765177261">Välja lülitatud</translation>
+<translation id="4181792832006033883">Vivaldit hoiavad töös kasutajad, mitte tehnoloogiahiiud ega investorid. Iga annetus toetab otseselt Vivaldi missiooni seista avatud ja privaatsust hoidva Interneti eest. Ole osa muutusest.</translation>
 <translation id="4184746246941929945"><ph name="PARTNER_NAME" /> on Vivaldi partner, mistõttu sellel lehel reklaame ei blokeerita. Need reklaamid aitavad rahastada Vivaldi arendamist.</translation>
 <translation id="4193549853510262477">Automaatne tuvastamine</translation>
 <translation id="4209092469652827314">Suured kiirvalimised</translation>
@@ -268,6 +276,7 @@ blokeeritud</translation>
 <translation id="4316955624679873896">Järjehoidja salvestatud kausta</translation>
 <translation id="432696242656678770">Vene (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Hispaania (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Seisa koos Vivaldiga parema veebi eest</translation>
 <translation id="4376661454588260127">Vietnami (<ph name="ORIGIN" />)</translation>
 <translation id="4380745054983890306">Tahaksin salvestada veebilehti PDF-ina</translation>
 <translation id="4394049700291259645">Lülita välja</translation>
@@ -286,10 +295,12 @@ blokeeritud</translation>
 <translation id="4525945044609022380">See meiliaadress on juba seotud teise kontoga.</translation>
 <translation id="4526803704855831732">Privaatsed kaardid</translation>
 <translation id="4542001945479572846">Midagi muud</translation>
+<translation id="4548278119881373657">Kinnita valik</translation>
 <translation id="4553717494760925411">Tagasi liikumine</translation>
 <translation id="4563480492836333884">Meilidomeen on mustas nimekirjas.</translation>
 <translation id="457386861538956877">Lisavalikud</translation>
 <translation id="4591413025758301858">Tõlge <ph name="SOURCE_LANGUAGE" /> keelest <ph name="DESTINATION_LANGUAGE" /> keelde</translation>
+<translation id="4596003875186913086">Ava suurendusseaded</translation>
 <translation id="460370326897402035">Parool on vale.</translation>
 <translation id="4619615317237390068">Kaardid teistest seadmetest</translation>
 <translation id="462860218383788109">Muutmisaja järgi</translation>
@@ -339,6 +350,7 @@ blokeeritud</translation>
 <translation id="5094376253685335202">Lülita sünkimine sisse</translation>
 <translation id="5116316489033177455">Süngitakse järjehoidjad ja kiirvalimislehed</translation>
 <translation id="5122095890854520072">Läti (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">100% kasutajate annetustest kasutatakse Vivaldi pikaajalise arendamise ja parema veebi eest võitlemise rahastamiseks.</translation>
 <translation id="5153806174841856652">Sisselogimine nurjus</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Saada kood uuesti<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Lemmiksaidid nähtaval</translation>
@@ -400,19 +412,25 @@ blokeeritud</translation>
 Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="604930981600990598">Tõlge kopeeritud.</translation>
 <translation id="6052689967593623141">Kui klõpsad mõnel neist linkidest ja saidilt midagi ostad, võib Vivaldi saada selle eest komisjonitasu. See aitab toetada Vivaldi arendamist ja sõltumatuna hoidmist. Aitäh toetuse eest!</translation>
+<translation id="6056094614114332761">Aadressivälja soovitused</translation>
 <translation id="6077943432358741146">Kiirvalimine</translation>
 <translation id="6079696972035130497">Piiramata</translation>
+<translation id="6093557041367452381">Näitab käsitsi sisestatud aadresside ajalugu, kui avalehel on fookus aadressiväljal.</translation>
 <translation id="6110857187283700804">Otsingusoovituste saamiseks tuleb otsingumootoriga jagada sisestatavat teksti. Privaatses aknas on soovitused välja lülitatud.</translation>
+<translation id="6119047040189002834">Astu jälgimisest eemale ja vali otsingumootor, mis joondub sinu väärtustega:</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> elementi teisaldatud</translation>
 <translation id="6147094071357011481">Hiljuti suletud kaardid pole saadaval</translation>
+<translation id="6171727814244883097">Lihtsam viis Vivaldi toetamiseks</translation>
 <translation id="6177301865411451337">Vivaldi sünkimisteenusega paistab olevat probleeme. Seisunditeave: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Veebilehti on raske kiirvalimiste hulka lisada</translation>
 <translation id="6193995664633100765">India (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">Anneta</translation>
 <translation id="6224086034182508647">Veebisaitide välimuse valikud</translation>
 <translation id="6253990869902066991">Vivaldi laadib veebilehti ootamatult uuesti</translation>
 <translation id="6257488392933423163">HTML-vaade</translation>
 <translation id="6275978505813092431">Pildi sisestamine</translation>
 <translation id="6329717714920146925">Veebisaidid (ainult vaaterežiimis)</translation>
+<translation id="6346549829676591152">Otsinguajalugu</translation>
 <translation id="6365929278691047681">Saksa (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">Veebisaidi paigutus on katki või imelik</translation>
 <translation id="6383855939619098095">Vivaldi avalehte on raske kohandada</translation>
@@ -430,6 +448,7 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="6544880104552732240">Vali sihtkeel</translation>
 <translation id="659351303388691480">Kustuta sirvimisandmed...</translation>
 <translation id="6602272356389933803">Välimus ja kujundus</translation>
+<translation id="6609906162587123522">Linke ei avata välistes rakendustes</translation>
 <translation id="6614744450826097546">Reklaami üksikasjad</translation>
 <translation id="6631760746795162665">Colombia (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Blokeeritakse jälitajad ja reklaamid. Mõned saidid ei pruugi seetõttu töötada.</translation>
@@ -479,9 +498,11 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="711946737922560234">Lingi sisestamine</translation>
 <translation id="7120229714826964836">Jaga lehte</translation>
 <translation id="713792263829536729">Voogedastusteenused ei tööta korralikult</translation>
+<translation id="7142332680286898952">Käsitsi sisestatud aadresside ajaloo näitamine</translation>
 <translation id="7158507293261405349">Lisa kiirvalimisleht</translation>
 <translation id="7173114856073700355">Ava seaded</translation>
 <translation id="718052827125696482">Ekraani pööramine ei toimi korralikult</translation>
+<translation id="7180865173735832675">Kohanda</translation>
 <translation id="7180919683305939836">Tahan tehisintellektipõhiseid funktsioone (kokkuvõte, tekstivestlus vms)</translation>
 <translation id="7182884564543065232">Teatud veebisaidid ei avane</translation>
 <translation id="7192066917392691622">Kahanevalt</translation>
@@ -503,7 +524,6 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="7393145587390257456">Reklaamide blokeerimine ei toimi hästi</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Taastatakse otsingumootorite algseadistus ja selle käigus lähevad kaotsi ka omamääratud otsingumootorid.</translation>
-<translation id="7418655219500602072">Aadressivälja elemendid</translation>
 <translation id="7451784507428459503">YouTube’i videod ei mängi üldse või teevad seda halvasti</translation>
 <translation id="7454640759045234067">jälitajat blokeeritud</translation>
 <translation id="7461899062138731833">ALLIKAD</translation>
@@ -535,9 +555,12 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="7765158879357617694">Teisalda</translation>
 <translation id="7771452384635174008">Paigutus</translation>
 <translation id="7781069478569868053">Uue kaardi sisu</translation>
+<translation id="7791543448312431591">Lisa</translation>
 <translation id="7801111502975417831">Tahan võimalust videoid taustal edasi mängida</translation>
 <translation id="7801204999757211519">Sul on juba konto? <ph name="BEGIN_LINK" />Logi sisse ➔<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Ei, aitäh</translation>
 <translation id="7850070199083838600">Kas luua uus kiirvalimisleht?</translation>
+<translation id="7862984977194621600">Otsingusoovitused</translation>
 <translation id="7870765213383950011">Esimene kiirvalimisleht</translation>
 <translation id="7914995060146784406">Redigeeri märget</translation>
 <translation id="7925340978147141704">Näita parooli</translation>
@@ -564,6 +587,7 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="8147118677117542370">Palun sisesta oma vanus.</translation>
 <translation id="8165573437634525334">Andmed on kaitstud krüptimisparooliga</translation>
 <translation id="8237090677709100373">Kohandatud värvikood</translation>
+<translation id="8255101384731542819">Sõltumatu otsing, loodud Prantsusmaal</translation>
 <translation id="8257908958623224237">konflikt teise masina andmetega.</translation>
 <translation id="8261506727792406068">Kustuta</translation>
 <translation id="8273666073173891138">Märge salvestatud kausta „<ph name="FOLDER_TITLE" />”</translation>
@@ -571,6 +595,7 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="8284356787013856231">Keelati juurdepääs faili avamiseks</translation>
 <translation id="8289933454364510719">Üleval või all</translation>
 <translation id="8304044605002588416">Avalehe kohandamise nupp</translation>
+<translation id="8304538706952727936">Murra end tehnoloogiahiidudest vabaks</translation>
 <translation id="8323167517179506834">Sisesta URL</translation>
 <translation id="8326104954595890674">Uus privaatne kaart</translation>
 <translation id="8329813750766387010">Uuendatud: <ph name="DATE" /></translation>
@@ -613,7 +638,9 @@ Tõrke kõrvaldamiseks ava seaded.</translation>
 <translation id="8818152010000655963">Taustapilt</translation>
 <translation id="8819841443522803117">Kas soovid paremat vaikebrauserit? Vali Vivaldi.</translation>
 <translation id="8820817407110198400">Järjehoidjad</translation>
+<translation id="8828442094222036738">Privaatseks tehtud Google’i tulemused, loodud Euroopas</translation>
 <translation id="8855707633300847215">Kaardiriba nähtaval</translation>
+<translation id="8861211142470908937">Parool peab olema vähemalt 12 märki pikk</translation>
 <translation id="8892354889971902600">Hiljuti suletud kaardid ilmuksid siia</translation>
 <translation id="89390081013973080">Korras! Nüüd on vaja vaid valida, mis andmeid seadmete vahel sünkida soovid.</translation>
 <translation id="8948792607467387336">Määra taustapildiks</translation>
@@ -639,6 +666,7 @@ blokeeritud</translation>
 <translation id="9195802773917252923">Järjehoidjate hüüdnimede lubamine</translation>
 <translation id="9212737146310746733">Pärsia (<ph name="ORIGIN" />)</translation>
 <translation id="9218693288527810093">Blokeeritakse jälitajad</translation>
+<translation id="924053859552461110">Kohanda avalehte</translation>
 <translation id="925891113183098411">Seadmete vahel andmete sünkimisega on probleeme</translation>
 <translation id="932327136139879170">Avaleht</translation>
 <translation id="937440209447114831">Jälitajaid ega reklaame ei blokeerita.</translation>

@@ -26,12 +26,11 @@
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
 
-BROWSER_USER_DATA_KEY_IMPL(WebStateListMetricsBrowserAgent)
-
 WebStateListMetricsBrowserAgent::WebStateListMetricsBrowserAgent(
     Browser* browser,
     SessionMetrics* session_metrics)
-    : web_state_list_(browser->GetWebStateList()),
+    : BrowserUserData(browser),
+      web_state_list_(browser->GetWebStateList()),
       session_metrics_(session_metrics) {
   DCHECK(web_state_list_);
   DCHECK(session_metrics_);

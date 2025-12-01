@@ -6,10 +6,10 @@
 
 #include "base/files/scoped_temp_file.h"
 #include "base/test/bind.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "mojo/public/cpp/test_support/test_utils.h"
 #include "services/on_device_model/fake/fake_chrome_ml_api.h"
 #include "services/on_device_model/fake/on_device_model_fake.h"
 #include "services/on_device_model/ml/chrome_ml_types.h"
@@ -38,13 +38,15 @@ class ContextClientWaiter : public mojom::ContextClient {
 
   int WaitForCompletion() {
     run_loop_.Run();
-    return tokens_processed_;
+    return *tokens_processed_;
   }
+
+  bool IsComplete() const { return tokens_processed_.has_value(); }
 
  private:
   base::RunLoop run_loop_;
   mojo::Receiver<mojom::ContextClient> receiver_{this};
-  int tokens_processed_ = 0;
+  std::optional<int> tokens_processed_;
 };
 
 class FakeFile {
@@ -90,6 +92,7 @@ class OnDeviceModelServiceTest : public testing::Test {
     params->backend_type = backend_type;
     params->performance_hint = performance_hint;
     params->max_tokens = 8000;
+    params->assets = ModelAssets::FromPath(base::FilePath());
     base::test::TestFuture<mojom::LoadModelResult> future;
     service()->LoadModel(std::move(params), remote.BindNewPipeAndPassReceiver(),
                          future.GetCallback());
@@ -149,7 +152,20 @@ class OnDeviceModelServiceTest : public testing::Test {
     return response.responses();
   }
 
+  std::unique_ptr<ContextClientWaiter> AppendAndFlush(
+      mojo::Remote<mojom::Session>& session,
+      const std::string& input) {
+    auto client = std::make_unique<ContextClientWaiter>();
+    session->Append(MakeInput(input), client->BindRemote());
+    session.FlushForTesting();
+    return client;
+  }
+
   size_t GetNumModels() { return service_impl_.NumModelsForTesting(); }
+
+  void ForceQueueing(bool force) {
+    service_impl_.SetForceQueueingForTesting(force);
+  }
 
   void FlushService() { service_.FlushForTesting(); }
 
@@ -163,9 +179,9 @@ class OnDeviceModelServiceTest : public testing::Test {
 
 TEST_F(OnDeviceModelServiceTest, Responds) {
   auto model = LoadModel();
-  EXPECT_THAT(GetResponses(*model, "bar"), ElementsAre("Context: bar\n"));
+  EXPECT_THAT(GetResponses(*model, "bar"), ElementsAre("bar"));
   // Try another input on  the same model.
-  EXPECT_THAT(GetResponses(*model, "cat"), ElementsAre("Context: cat\n"));
+  EXPECT_THAT(GetResponses(*model, "cat"), ElementsAre("cat"));
 }
 
 TEST_F(OnDeviceModelServiceTest, Append) {
@@ -180,9 +196,7 @@ TEST_F(OnDeviceModelServiceTest, Append) {
   session->Generate(mojom::GenerateOptions::New(), response.BindRemote());
   response.WaitForCompletion();
 
-  EXPECT_THAT(response.responses(),
-              ElementsAre("Context: cheese\n", "Context: more\n",
-                          "Context: cheddar\n"));
+  EXPECT_THAT(response.responses(), ElementsAre("cheese", "more", "cheddar"));
 }
 
 TEST_F(OnDeviceModelServiceTest, PerSessionSamplingParams) {
@@ -205,27 +219,7 @@ TEST_F(OnDeviceModelServiceTest, PerSessionSamplingParams) {
   response.WaitForCompletion();
 
   EXPECT_THAT(response.responses(),
-              ElementsAre("TopK: 2, Temp: 0.5\n", "Context: cheese\n",
-                          "Context: more\n", "Context: cheddar\n"));
-}
-
-TEST_F(OnDeviceModelServiceTest, GenerateWithSamplingParamsIsNotAllowed) {
-  auto model = LoadModel();
-
-  TestResponseHolder response;
-  mojo::Remote<mojom::Session> session;
-  model->StartSession(session.BindNewPipeAndPassReceiver(), nullptr);
-  session->Append(MakeInput("cheese"), {});
-
-  // Sampling params should be passed at session creation, not to Generate().
-  auto generate_options = mojom::GenerateOptions::New();
-  generate_options->top_k = 2;
-  generate_options->temperature = 0.8;
-
-  mojo::test::BadMessageObserver bad_message_observer;
-  session->Generate(std::move(generate_options), response.BindRemote());
-  EXPECT_THAT(bad_message_observer.WaitForBadMessage(),
-              testing::HasSubstr("deprecated"));
+              ElementsAre("TopK: 2, Temp: 0.5", "cheese", "more", "cheddar"));
 }
 
 TEST_F(OnDeviceModelServiceTest, CloneContextAndContinue) {
@@ -243,15 +237,13 @@ TEST_F(OnDeviceModelServiceTest, CloneContextAndContinue) {
     TestResponseHolder response;
     cloned->Generate(mojom::GenerateOptions::New(), response.BindRemote());
     response.WaitForCompletion();
-    EXPECT_THAT(response.responses(),
-                ElementsAre("Context: cheese\n", "Context: more\n"));
+    EXPECT_THAT(response.responses(), ElementsAre("cheese", "more"));
   }
   {
     TestResponseHolder response;
     session->Generate(mojom::GenerateOptions::New(), response.BindRemote());
     response.WaitForCompletion();
-    EXPECT_THAT(response.responses(),
-                ElementsAre("Context: cheese\n", "Context: more\n"));
+    EXPECT_THAT(response.responses(), ElementsAre("cheese", "more"));
   }
 
   session->Append(MakeInput("foo"), {});
@@ -260,17 +252,13 @@ TEST_F(OnDeviceModelServiceTest, CloneContextAndContinue) {
     TestResponseHolder response;
     session->Generate(mojom::GenerateOptions::New(), response.BindRemote());
     response.WaitForCompletion();
-    EXPECT_THAT(
-        response.responses(),
-        ElementsAre("Context: cheese\n", "Context: more\n", "Context: foo\n"));
+    EXPECT_THAT(response.responses(), ElementsAre("cheese", "more", "foo"));
   }
   {
     TestResponseHolder response;
     cloned->Generate(mojom::GenerateOptions::New(), response.BindRemote());
     response.WaitForCompletion();
-    EXPECT_THAT(
-        response.responses(),
-        ElementsAre("Context: cheese\n", "Context: more\n", "Context: bar\n"));
+    EXPECT_THAT(response.responses(), ElementsAre("cheese", "more", "bar"));
   }
 }
 
@@ -313,21 +301,11 @@ TEST_F(OnDeviceModelServiceTest, MultipleSessionsAppend) {
   response4.WaitForCompletion();
   response5.WaitForCompletion();
 
-  EXPECT_THAT(response1.responses(),
-              ElementsAre("Context: cheese\n", "Context: more\n",
-                          "Context: cheddar\n"));
-  EXPECT_THAT(
-      response2.responses(),
-      ElementsAre("Context: apple\n", "Context: banana\n", "Context: candy\n"));
-  EXPECT_THAT(
-      response3.responses(),
-      ElementsAre("Context: apple\n", "Context: banana\n", "Context: chip\n"));
-  EXPECT_THAT(
-      response4.responses(),
-      ElementsAre("Context: cheese\n", "Context: more\n", "Context: choco\n"));
-  EXPECT_THAT(response5.responses(),
-              ElementsAre("Context: apple\n", "Context: banana\n",
-                          "Context: orange\n"));
+  EXPECT_THAT(response1.responses(), ElementsAre("cheese", "more", "cheddar"));
+  EXPECT_THAT(response2.responses(), ElementsAre("apple", "banana", "candy"));
+  EXPECT_THAT(response3.responses(), ElementsAre("apple", "banana", "chip"));
+  EXPECT_THAT(response4.responses(), ElementsAre("cheese", "more", "choco"));
+  EXPECT_THAT(response5.responses(), ElementsAre("apple", "banana", "orange"));
 }
 
 TEST_F(OnDeviceModelServiceTest, CountTokens) {
@@ -364,17 +342,15 @@ TEST_F(OnDeviceModelServiceTest, AppendWithTokenLimits) {
 
   ContextClientWaiter client2;
   auto offset_input = MakeInput("big cheese");
-  offset_input->token_offset = 4;
   session->Append(std::move(offset_input), client2.BindRemote());
-  EXPECT_EQ(client2.WaitForCompletion(), 6);
+  EXPECT_EQ(client2.WaitForCompletion(), 10);
 
   session->Append(MakeInput("cheddar"), {});
   session->Generate(mojom::GenerateOptions::New(), response.BindRemote());
   response.WaitForCompletion();
 
   EXPECT_THAT(response.responses(),
-              ElementsAre("Context: big \n", "Context: cheese\n",
-                          "Context: cheddar\n"));
+              ElementsAre("big ", "big cheese", "cheddar"));
 }
 
 TEST_F(OnDeviceModelServiceTest, MultipleSessionsWaitPreviousSession) {
@@ -396,14 +372,14 @@ TEST_F(OnDeviceModelServiceTest, MultipleSessionsWaitPreviousSession) {
 
   // Response from first session should still work.
   response1.WaitForCompletion();
-  EXPECT_THAT(response1.responses(), ElementsAre("Context: 1\n"));
+  EXPECT_THAT(response1.responses(), ElementsAre("1"));
 
   // Second session still works.
   TestResponseHolder response2;
   session2->Append(MakeInput("2"), {});
   session2->Generate(mojom::GenerateOptions::New(), response2.BindRemote());
   response2.WaitForCompletion();
-  EXPECT_THAT(response2.responses(), ElementsAre("Context: 2\n"));
+  EXPECT_THAT(response2.responses(), ElementsAre("2"));
 }
 
 TEST_F(OnDeviceModelServiceTest, LoadsAdaptation) {
@@ -411,18 +387,18 @@ TEST_F(OnDeviceModelServiceTest, LoadsAdaptation) {
   FakeFile weights2("Adapt2");
   auto model = LoadModel();
   auto adaptation1 = LoadAdaptation(*model, weights1.Open());
-  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("Context: foo\n"));
+  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("foo"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
-              ElementsAre("Adaptation: Adapt1 (0)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt1 (0)", "foo"));
 
   auto adaptation2 = LoadAdaptation(*model, weights2.Open());
-  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("Context: foo\n"));
+  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("foo"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
-              ElementsAre("Adaptation: Adapt1 (0)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt1 (0)", "foo"));
   EXPECT_THAT(GetResponses(*adaptation2, "foo"),
-              ElementsAre("Adaptation: Adapt2 (1)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt2 (1)", "foo"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
-              ElementsAre("Adaptation: Adapt1 (0)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt1 (0)", "foo"));
 }
 
 TEST_F(OnDeviceModelServiceTest, LoadsAdaptationWithPath) {
@@ -430,18 +406,18 @@ TEST_F(OnDeviceModelServiceTest, LoadsAdaptationWithPath) {
   FakeFile weights2("Adapt2");
   auto model = LoadModel(ml::ModelBackendType::kApuBackend);
   auto adaptation1 = LoadAdaptation(*model, weights1.Path());
-  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("Context: foo\n"));
+  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("foo"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
-              ElementsAre("Adaptation: Adapt1 (0)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt1 (0)", "foo"));
 
   auto adaptation2 = LoadAdaptation(*model, weights2.Path());
-  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("Context: foo\n"));
+  EXPECT_THAT(GetResponses(*model, "foo"), ElementsAre("foo"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
-              ElementsAre("Adaptation: Adapt1 (0)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt1 (0)", "foo"));
   EXPECT_THAT(GetResponses(*adaptation2, "foo"),
-              ElementsAre("Adaptation: Adapt2 (1)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt2 (1)", "foo"));
   EXPECT_THAT(GetResponses(*adaptation1, "foo"),
-              ElementsAre("Adaptation: Adapt1 (0)\n", "Context: foo\n"));
+              ElementsAre("Adaptation: Adapt1 (0)", "foo"));
 }
 
 TEST_F(OnDeviceModelServiceTest, LoadingAdaptationDoesNotCancelSession) {
@@ -536,43 +512,8 @@ TEST_F(OnDeviceModelServiceTest, AppendWithTokens) {
   }
   response.WaitForCompletion();
 
-  EXPECT_THAT(response.responses(), ElementsAre("Context: System: hi End.\n",
-                                                "Context: Model: hello End.\n",
-                                                "Context: User: bye\n"));
-}
-
-TEST_F(OnDeviceModelServiceTest, AppendWithImagesAdaptation) {
-  auto model = LoadModel();
-  auto params = mojom::LoadAdaptationParams::New();
-  params->enable_image_input = true;
-  auto adaptation = LoadAdaptationWithParams(*model, std::move(params));
-
-  mojo::Remote<mojom::Session> session;
-  auto session_params = mojom::SessionParams::New();
-  session_params->capabilities.Put(CapabilityFlags::kImageInput);
-  adaptation->StartSession(session.BindNewPipeAndPassReceiver(),
-                           std::move(session_params));
-
-  std::vector<ml::InputPiece> pieces;
-  pieces.push_back("bleu");
-
-  SkBitmap moldy_cheese;
-  moldy_cheese.allocPixels(
-      SkImageInfo::Make(63, 42, kRGBA_8888_SkColorType, kOpaque_SkAlphaType),
-      0);
-  moldy_cheese.eraseColor(SK_ColorBLUE);
-  pieces.push_back(moldy_cheese);
-
-  pieces.push_back("cheese");
-
-  session->Append(MakeInput(std::move(pieces)), {});
-
-  TestResponseHolder response;
-  session->Generate(mojom::GenerateOptions::New(), response.BindRemote());
-  response.WaitForCompletion();
-
   EXPECT_THAT(response.responses(),
-              ElementsAre("Context: bleu[Bitmap of size 63x42]cheese\n"));
+              ElementsAre("System: hi End.", "Model: hello End.", "User: bye"));
 }
 
 TEST_F(OnDeviceModelServiceTest, AppendWithImages) {
@@ -618,8 +559,8 @@ TEST_F(OnDeviceModelServiceTest, AppendWithImages) {
   }
 
   EXPECT_THAT(response.responses(),
-              ElementsAre("Context: cheddar[Bitmap of size 7x21]cheese\n",
-                          "Context: bleu[Bitmap of size 63x42]cheese\n"));
+              ElementsAre("cheddar[Bitmap of size 7x21]cheese",
+                          "bleu[Bitmap of size 63x42]cheese"));
 }
 
 TEST_F(OnDeviceModelServiceTest, ClassifyTextSafety) {
@@ -647,21 +588,48 @@ TEST_F(OnDeviceModelServiceTest, ClassifyTextSafety) {
   EXPECT_THAT(resp2->class_scores, ElementsAre(0.2, 0.2));
 }
 
+TEST_F(OnDeviceModelServiceTest, CloneTextSafety) {
+  FakeFile ts_data("fake_ts_data");
+  FakeFile ts_sp_model("fake_ts_sp_model");
+  TextSafetyLoaderParams params;
+  params.ts_paths.emplace();
+  params.ts_paths->data = ts_data.Path();
+  params.ts_paths->sp_model = ts_sp_model.Path();
+  mojo::Remote<mojom::TextSafetyModel> model;
+  service()->LoadTextSafetyModel(LoadTextSafetyParams(params),
+                                 model.BindNewPipeAndPassReceiver());
+
+  mojo::Remote<mojom::TextSafetySession> session;
+  model->StartSession(session.BindNewPipeAndPassReceiver());
+  {
+    base::test::TestFuture<mojom::SafetyInfoPtr> future;
+    session->ClassifyTextSafety("unsafe text", future.GetCallback());
+    EXPECT_THAT(future.Take()->class_scores, ElementsAre(0.8, 0.8));
+  }
+
+  mojo::Remote<mojom::TextSafetySession> clone;
+  session->Clone(clone.BindNewPipeAndPassReceiver());
+  {
+    base::test::TestFuture<mojom::SafetyInfoPtr> future;
+    clone->ClassifyTextSafety("unsafe text", future.GetCallback());
+    EXPECT_THAT(future.Take()->class_scores, ElementsAre(0.8, 0.8));
+  }
+}
+
 TEST_F(OnDeviceModelServiceTest, PerformanceHint) {
   auto model = LoadModel(ml::ModelBackendType::kGpuBackend,
                          ml::ModelPerformanceHint::kFastestInference);
   EXPECT_THAT(GetResponses(*model, "foo"),
-              ElementsAre("Fastest inference\n", "Context: foo\n"));
+              ElementsAre("Fastest inference", "foo"));
 }
 
 TEST_F(OnDeviceModelServiceTest, Capabilities) {
   auto expect_capabilities = [&](const std::string& data,
                                  const Capabilities& expected) {
     FakeFile file(data);
-    ModelAssets assets;
-    assets.weights = file.Open();
+    ModelFile model_file(file.Open());
     base::test::TestFuture<const Capabilities&> future;
-    service()->GetCapabilities(std::move(assets), future.GetCallback());
+    service()->GetCapabilities(std::move(model_file), future.GetCallback());
     EXPECT_EQ(expected, future.Take());
   };
   expect_capabilities("none", {});
@@ -675,10 +643,9 @@ TEST_F(OnDeviceModelServiceTest, CapabilitiesFromFilePath) {
   auto expect_capabilities = [&](const std::string& data,
                                  const Capabilities& expected) {
     FakeFile file(data);
-    ModelAssets assets;
-    assets.weights_path = file.Path();
+    ModelFile model_file(file.Path());
     base::test::TestFuture<const Capabilities&> future;
-    service()->GetCapabilities(std::move(assets), future.GetCallback());
+    service()->GetCapabilities(std::move(model_file), future.GetCallback());
     EXPECT_EQ(expected, future.Take());
   };
   expect_capabilities("none", {});
@@ -687,6 +654,273 @@ TEST_F(OnDeviceModelServiceTest, CapabilitiesFromFilePath) {
   expect_capabilities("image audio", {CapabilityFlags::kImageInput,
                                       CapabilityFlags::kAudioInput});
 }
+
+TEST_F(OnDeviceModelServiceTest, SetPriority) {
+  auto model = LoadModel();
+
+  mojo::Remote<mojom::Session> background;
+  model->StartSession(background.BindNewPipeAndPassReceiver(), nullptr);
+  background->SetPriority(mojom::Priority::kBackground);
+
+  mojo::Remote<mojom::Session> foreground;
+  model->StartSession(foreground.BindNewPipeAndPassReceiver(), nullptr);
+
+  base::HistogramTester histogram_tester;
+
+  ForceQueueing(true);
+  auto bg_waiter = AppendAndFlush(background, "bg");
+  auto fg_waiter = AppendAndFlush(foreground, "fg");
+
+  constexpr char kForegroundHistogram[] = "OnDeviceModel.QueueTime.Foreground";
+  constexpr char kBackgroundHistogram[] = "OnDeviceModel.QueueTime.Background";
+  histogram_tester.ExpectTotalCount(kForegroundHistogram, 0);
+  histogram_tester.ExpectTotalCount(kBackgroundHistogram, 0);
+  ForceQueueing(false);
+
+  fg_waiter->WaitForCompletion();
+  EXPECT_FALSE(bg_waiter->IsComplete());
+  histogram_tester.ExpectTotalCount(kForegroundHistogram, 1);
+  histogram_tester.ExpectTotalCount(kBackgroundHistogram, 0);
+
+  ForceQueueing(true);
+
+  // Add another call to fg client, should jump ahead of bg again.
+  fg_waiter = AppendAndFlush(foreground, "fg");
+  ForceQueueing(false);
+
+  fg_waiter->WaitForCompletion();
+  EXPECT_FALSE(bg_waiter->IsComplete());
+  histogram_tester.ExpectTotalCount(kForegroundHistogram, 2);
+  histogram_tester.ExpectTotalCount(kBackgroundHistogram, 0);
+
+  bg_waiter->WaitForCompletion();
+  histogram_tester.ExpectTotalCount(kForegroundHistogram, 2);
+  histogram_tester.ExpectTotalCount(kBackgroundHistogram, 1);
+}
+
+TEST_F(OnDeviceModelServiceTest, SetPriorityAfterQueue) {
+  auto model = LoadModel();
+
+  mojo::Remote<mojom::Session> background;
+  model->StartSession(background.BindNewPipeAndPassReceiver(), nullptr);
+
+  mojo::Remote<mojom::Session> foreground;
+  model->StartSession(foreground.BindNewPipeAndPassReceiver(), nullptr);
+
+  ForceQueueing(true);
+  auto bg_waiter = AppendAndFlush(background, "bg");
+  auto fg_waiter = AppendAndFlush(foreground, "fg");
+
+  background->SetPriority(mojom::Priority::kBackground);
+  background.FlushForTesting();
+  ForceQueueing(false);
+
+  fg_waiter->WaitForCompletion();
+  EXPECT_FALSE(bg_waiter->IsComplete());
+  bg_waiter->WaitForCompletion();
+}
+
+TEST_F(OnDeviceModelServiceTest, SetPriorityBackToForeground) {
+  auto model = LoadModel();
+
+  mojo::Remote<mojom::Session> background;
+  model->StartSession(background.BindNewPipeAndPassReceiver(), nullptr);
+  background->SetPriority(mojom::Priority::kBackground);
+
+  mojo::Remote<mojom::Session> foreground;
+  model->StartSession(foreground.BindNewPipeAndPassReceiver(), nullptr);
+
+  ForceQueueing(true);
+
+  auto bg_waiter = AppendAndFlush(background, "bg");
+  auto fg_waiter = AppendAndFlush(foreground, "fg");
+
+  ForceQueueing(false);
+  fg_waiter->WaitForCompletion();
+  EXPECT_FALSE(bg_waiter->IsComplete());
+
+  ForceQueueing(true);
+
+  fg_waiter = AppendAndFlush(foreground, "fg");
+
+  background->SetPriority(mojom::Priority::kForeground);
+  background.FlushForTesting();
+
+  ForceQueueing(false);
+  bg_waiter->WaitForCompletion();
+
+  EXPECT_FALSE(fg_waiter->IsComplete());
+  fg_waiter->WaitForCompletion();
+}
+
+TEST_F(OnDeviceModelServiceTest, SetPriorityMultipleSessions) {
+  auto model = LoadModel();
+
+  mojo::Remote<mojom::Session> background1;
+  model->StartSession(background1.BindNewPipeAndPassReceiver(), nullptr);
+  background1->SetPriority(mojom::Priority::kBackground);
+
+  mojo::Remote<mojom::Session> background2;
+  model->StartSession(background2.BindNewPipeAndPassReceiver(), nullptr);
+  background2->SetPriority(mojom::Priority::kBackground);
+
+  mojo::Remote<mojom::Session> foreground1;
+  model->StartSession(foreground1.BindNewPipeAndPassReceiver(), nullptr);
+
+  mojo::Remote<mojom::Session> foreground2;
+  model->StartSession(foreground2.BindNewPipeAndPassReceiver(), nullptr);
+
+  std::set<ContextClientWaiter*> all;
+  auto append = [&](mojo::Remote<mojom::Session>& session) {
+    std::unique_ptr<ContextClientWaiter> waiter = AppendAndFlush(session, "in");
+    all.insert(waiter.get());
+    return waiter;
+  };
+  ForceQueueing(true);
+  auto bg1_waiter1 = append(background1);
+  auto bg2_waiter1 = append(background2);
+  auto fg1_waiter1 = append(foreground1);
+  auto fg2_waiter1 = append(foreground2);
+  auto fg1_waiter2 = append(foreground1);
+  auto bg2_waiter2 = append(background2);
+  auto fg2_waiter2 = append(foreground2);
+  auto bg1_waiter2 = append(background1);
+  ForceQueueing(false);
+
+  auto wait_for_next = [&](ContextClientWaiter* next) {
+    next->WaitForCompletion();
+    all.erase(next);
+    for (auto* waiter : all) {
+      EXPECT_FALSE(waiter->IsComplete());
+    }
+  };
+  wait_for_next(fg1_waiter1.get());
+
+  // Add another item, should be added at the end of fg items.
+  ForceQueueing(true);
+  fg1_waiter1 = append(foreground1);
+  ForceQueueing(false);
+
+  wait_for_next(fg2_waiter1.get());
+  wait_for_next(fg1_waiter2.get());
+  wait_for_next(fg2_waiter2.get());
+  wait_for_next(fg1_waiter1.get());
+  wait_for_next(bg1_waiter1.get());
+
+  // Add a few fg and bg items, fg should run immediately, bg should run last.
+  ForceQueueing(true);
+  bg1_waiter1 = append(background1);
+  fg1_waiter1 = append(foreground1);
+  fg2_waiter1 = append(foreground2);
+  ForceQueueing(false);
+
+  wait_for_next(fg1_waiter1.get());
+  wait_for_next(fg2_waiter1.get());
+  wait_for_next(bg2_waiter1.get());
+  wait_for_next(bg2_waiter2.get());
+  wait_for_next(bg1_waiter2.get());
+
+  // Add another bg item, but bump priority to fg, should run immediately.
+  ForceQueueing(true);
+  bg2_waiter1 = append(background2);
+  background2->SetPriority(mojom::Priority::kForeground);
+  background2.FlushForTesting();
+  ForceQueueing(false);
+
+  wait_for_next(bg2_waiter1.get());
+  wait_for_next(bg1_waiter1.get());
+}
+
+TEST_F(OnDeviceModelServiceTest, SetPriorityCloneInherits) {
+  auto model = LoadModel();
+
+  mojo::Remote<mojom::Session> background;
+  model->StartSession(background.BindNewPipeAndPassReceiver(), nullptr);
+  background->SetPriority(mojom::Priority::kBackground);
+
+  mojo::Remote<mojom::Session> foreground;
+  model->StartSession(foreground.BindNewPipeAndPassReceiver(), nullptr);
+
+  mojo::Remote<mojom::Session> clone;
+  background->Clone(clone.BindNewPipeAndPassReceiver());
+  background.FlushForTesting();
+
+  ForceQueueing(true);
+  auto bg_waiter = AppendAndFlush(background, "bg");
+  auto clone_waiter = AppendAndFlush(clone, "clone");
+  auto fg_waiter = AppendAndFlush(foreground, "fg");
+  ForceQueueing(false);
+
+  fg_waiter->WaitForCompletion();
+  EXPECT_FALSE(bg_waiter->IsComplete());
+  EXPECT_FALSE(clone_waiter->IsComplete());
+
+  bg_waiter->WaitForCompletion();
+  EXPECT_FALSE(clone_waiter->IsComplete());
+
+  clone_waiter->WaitForCompletion();
+}
+
+#if defined(ENABLE_ON_DEVICE_CONSTRAINTS)
+TEST_F(OnDeviceModelServiceTest, JSONSchemaConstraint) {
+  auto model = LoadModel();
+
+  TestResponseHolder response;
+  mojo::Remote<mojom::Session> session;
+  model->StartSession(session.BindNewPipeAndPassReceiver(), nullptr);
+
+  auto options = mojom::GenerateOptions::New();
+  options->constraint = mojom::ResponseConstraint::NewJsonSchema(R"({
+    "type": "object",
+    "required": ["Rating"],
+    "additionalProperties": false,
+    "properties": {
+      "Rating": {
+        "type": "number",
+        "minimum": 1,
+        "maximum": 5
+      }
+    }
+  })");
+  session->Generate(std::move(options), response.BindRemote());
+  response.WaitForCompletion();
+
+  EXPECT_THAT(response.responses(), ElementsAre(R"({"Rating":1})"));
+}
+
+TEST_F(OnDeviceModelServiceTest, JSONSchemaConstraintInvalid) {
+  auto model = LoadModel();
+
+  TestResponseHolder response;
+  mojo::Remote<mojom::Session> session;
+  model->StartSession(session.BindNewPipeAndPassReceiver(), nullptr);
+  session->Append(MakeInput("hi"), {});
+
+  auto options = mojom::GenerateOptions::New();
+  options->constraint = mojom::ResponseConstraint::NewJsonSchema("blah");
+  session->Generate(std::move(options), response.BindRemote());
+  response.WaitForCompletion();
+
+  // For now invalid schema will cause a disconnect.
+  EXPECT_THAT(response.responses(), ElementsAre());
+  EXPECT_TRUE(response.disconnected());
+}
+
+TEST_F(OnDeviceModelServiceTest, RegexConstraint) {
+  auto model = LoadModel();
+
+  TestResponseHolder response;
+  mojo::Remote<mojom::Session> session;
+  model->StartSession(session.BindNewPipeAndPassReceiver(), nullptr);
+
+  auto options = mojom::GenerateOptions::New();
+  options->constraint = mojom::ResponseConstraint::NewRegex("hello");
+  session->Generate(std::move(options), response.BindRemote());
+  response.WaitForCompletion();
+
+  EXPECT_THAT(response.responses(), ElementsAre("hello"));
+}
+#endif
 
 }  // namespace
 }  // namespace on_device_model

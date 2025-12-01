@@ -79,7 +79,6 @@
 #include "third_party/blink/renderer/core/layout/forms/layout_text_control.h"
 #include "third_party/blink/renderer/core/layout/fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
@@ -118,6 +117,7 @@
 #include "third_party/blink/renderer/platform/geometry/contoured_rect.h"
 #include "third_party/blink/renderer/platform/geometry/float_rounded_rect.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
@@ -150,7 +150,10 @@ static constexpr int kAutoscrollBeltSizeBottom = 20;
 static const unsigned kBackgroundObscurationTestMaxDepth = 4;
 
 struct SameSizeAsLayoutBox : public LayoutBoxModelObject {
-  DeprecatedLayoutPoint frame_location_;
+  union {
+    DeprecatedLayoutPoint a;
+    PhysicalOffset b;
+  } frame_location_;
   PhysicalSize frame_size_;
   PhysicalSize previous_size;
   MinMaxSizes intrinsic_logical_widths;
@@ -234,10 +237,14 @@ LayoutUnit TextAreaIntrinsicBlockSize(const HTMLTextAreaElement& textarea,
   }
 
   const auto* inner_editor = textarea.InnerEditorElement();
+  const auto* reference_box =
+      inner_editor ? inner_editor->GetLayoutBox() : nullptr;
+  if (RuntimeEnabledFeatures::TextareaMultipleIfcsEnabled() && reference_box &&
+      reference_box->FirstChildBox()) {
+    reference_box = reference_box->FirstChildBox();
+  }
   const LayoutUnit line_height =
-      inner_editor && inner_editor->GetLayoutBox()
-          ? inner_editor->GetLayoutBox()->FirstLineHeight()
-          : box.FirstLineHeight();
+      reference_box ? reference_box->FirstLineHeight() : box.FirstLineHeight();
 
   return line_height * textarea.rows() + scrollbar_thickness;
 }
@@ -299,7 +306,7 @@ LogicalSize ThemePartIntrinsicSize(const LayoutBox& box,
   PhysicalSize size(
       WebThemeEngineHelper::GetNativeThemeEngine()->GetSize(part));
   size.Scale(style.EffectiveZoom());
-  return size.ConvertToLogical(style.GetWritingMode());
+  return ToLogicalSize(size, style.GetWritingMode());
 }
 
 LayoutUnit ListBoxDefaultItemHeight(const LayoutBox& box) {
@@ -452,17 +459,6 @@ void RecalcFragmentScrollableOverflow(RecalcScrollableOverflowResult& result,
       RecalcFragmentScrollableOverflow(result, *child.get());
     }
   }
-}
-
-// Returns the logical offset in the LocationContainer() coordination system,
-// and its WritingMode.
-std::tuple<LogicalOffset, WritingMode> LogicalLocation(const LayoutBox& box) {
-  LayoutBox* container = box.LocationContainer();
-  WritingMode writing_mode = container->StyleRef().GetWritingMode();
-  WritingModeConverter converter({writing_mode, TextDirection::kLtr},
-                                 PhysicalSize(container->Size()));
-  return {converter.ToLogical(box.PhysicalLocation(), PhysicalSize(box.Size())),
-          writing_mode};
 }
 
 }  // namespace
@@ -834,18 +830,10 @@ void LayoutBox::UpdateGridPositionAfterStyleChange(
   // GridNG computes static positions for out-of-flow elements at layout time,
   // with alignment offsets baked in. So if alignment changes, we need to
   // schedule a layout.
-  if (is_out_of_flow && AlignmentChanged(old_style, StyleRef())) {
-    LayoutObject* grid_ng_ancestor = nullptr;
-    if (containing_block && containing_block->IsLayoutGrid()) {
-      grid_ng_ancestor = containing_block;
-    } else if (parent && parent->IsLayoutGrid()) {
-      grid_ng_ancestor = parent;
-    }
-
-    if (grid_ng_ancestor) {
-      grid_ng_ancestor->SetNeedsLayout(layout_invalidation_reason::kGridChanged,
-                                       kMarkContainerChain);
-    }
+  if (is_out_of_flow && parent && AlignmentChanged(old_style, StyleRef())) {
+    parent->SetNeedsLayout(
+        layout_invalidation_reason::kOutOfFlowAlignmentChanged,
+        kMarkContainerChain);
   }
 }
 
@@ -894,13 +882,19 @@ void LayoutBox::UpdateScrollSnapMappingAfterStyleChange(
     SnapAreaDidChange();
 }
 
+bool LayoutBox::ShouldBeHandledAsFloating(const ComputedStyle& style) const {
+  NOT_DESTROYED();
+  return style.IsFloating() &&
+         ToPositionedState(style.GetPosition()) != kIsOutOfFlowPositioned &&
+         !style.IsInsideDisplayIgnoringFloatingChildren();
+}
+
 void LayoutBox::UpdateFromStyle() {
   NOT_DESTROYED();
   LayoutBoxModelObject::UpdateFromStyle();
 
   const ComputedStyle& style_to_use = StyleRef();
-  SetFloating(style_to_use.IsFloating() && !IsOutOfFlowPositioned() &&
-              !style_to_use.IsInsideDisplayIgnoringFloatingChildren());
+  SetFloating(ShouldBeHandledAsFloating(style_to_use));
   SetHasTransformRelatedProperty(
       IsSVGChild() ? style_to_use.HasTransformRelatedPropertyForSVG()
                    : style_to_use.HasTransformRelatedProperty());
@@ -1057,6 +1051,22 @@ LayoutUnit LayoutBox::ClientHeightWithTableSpecialBehavior() const {
   return ClientHeight();
 }
 
+LayoutUnit LayoutBox::OffsetWidth() const {
+  NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    return LayoutBoxModelObject::OffsetWidth();
+  }
+  return Size().width;
+}
+
+LayoutUnit LayoutBox::OffsetHeight() const {
+  NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    return LayoutBoxModelObject::OffsetHeight();
+  }
+  return Size().height;
+}
+
 bool LayoutBox::UsesOverlayScrollbars() const {
   NOT_DESTROYED();
   if (StyleRef().HasCustomScrollbarStyle(DynamicTo<Element>(GetNode()))) {
@@ -1153,6 +1163,24 @@ void LayoutBox::QuadsInAncestorInternal(Vector<gfx::QuadF>& quads,
                                         const LayoutBoxModelObject* ancestor,
                                         MapCoordinatesFlags mode) const {
   NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    const PhysicalBoxFragment* first_fragment = nullptr;
+    for (const PhysicalBoxFragment& fragment : PhysicalFragments()) {
+      // Calculate the offset relatively to the first fragment, which in turn
+      // will be mapped correctly to the ancestor.
+      PhysicalOffset offset;
+      if (!first_fragment) {
+        first_fragment = &fragment;
+      } else {
+        offset = fragment.OffsetFromRootFragmentationContext() -
+                 first_fragment->OffsetFromRootFragmentationContext();
+      }
+      PhysicalRect rect(offset, fragment.Size());
+      quads.push_back(LocalRectToAncestorQuad(rect, ancestor, mode));
+    }
+    return;
+  }
+
   if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock()) {
     flow_thread->QuadsInAncestorForDescendant(*this, quads, ancestor, mode);
     return;
@@ -1169,6 +1197,27 @@ gfx::RectF LayoutBox::LocalBoundingBoxRectForAccessibility() const {
 
 void LayoutBox::UpdateAfterLayout() {
   NOT_DESTROYED();
+
+  SetNeedsOverflowRecalc(OverflowRecalcType::kOnlyVisualOverflowRecalc);
+  SetScrollableOverflowFromLayoutResults();
+
+  if (IsLayoutView() && !GetDocument().Printing()) {
+    // Unlike every other layer, the root PaintLayer takes its size from the
+    // layout viewport size. The call to AdjustViewSize() will update the
+    // frame's contents size, which will also update the page's minimum scale
+    // factor. The call to ResizeAfterLayout() will calculate the layout
+    // viewport size based on the page minimum scale factor, and then update the
+    // LocalFrameView with the new size.
+    LocalFrame& frame = GetFrameView()->GetFrame();
+    GetFrameView()->AdjustViewSize();
+    if (frame.IsMainFrame()) {
+      frame.GetChromeClient().ResizeAfterLayout();
+    }
+    if (IsScrollContainer()) {
+      GetScrollableArea()->ClampScrollOffsetAfterOverflowChange();
+    }
+  }
+
   // Transform-origin depends on box size, so we need to update the layer
   // transform after layout.
   if (HasLayer()) {
@@ -1179,6 +1228,35 @@ void LayoutBox::UpdateAfterLayout() {
   GetFrame()->GetInputMethodController().DidUpdateLayout(*this);
   if (IsPositioned())
     GetFrame()->GetInputMethodController().DidLayoutSubtree(*this);
+
+  if (StyleRef().HasColumnRule() && IsFragmentationContextRoot()) {
+    // Issue full invalidation, in case the number of column rules have changed.
+    ClearNeedsLayoutWithFullPaintInvalidation();
+  } else {
+    ClearNeedsLayout();
+  }
+
+  if (auto* block_flow = DynamicTo<LayoutBlockFlow>(this)) {
+    // TODO(crbug.com/371802475): Get rid of this. The special anonymous objects
+    // created (but not really used anymore) for multicol layout are not laid
+    // out, and need to be cleared manually, to avoid DCHECK failures.
+    if (LayoutMultiColumnFlowThread* flow_thread =
+            block_flow->MultiColumnFlowThread()) {
+      for (LayoutBox* column_box = flow_thread->FirstMultiColumnBox();
+           column_box; column_box = column_box->NextSiblingMultiColumnBox()) {
+        column_box->ClearNeedsLayout();
+      }
+      flow_thread->ClearNeedsLayout();
+    }
+  }
+
+  // We should notify the display lock that we've done layout on self, and if
+  // it's not blocked, on children.
+  if (auto* context = GetDisplayLockContext()) {
+    if (!ChildLayoutBlockedByDisplayLock()) {
+      context->DidLayoutChildren();
+    }
+  }
 }
 
 LayoutUnit LayoutBox::OverrideIntrinsicContentInlineSize() const {
@@ -1314,6 +1392,9 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentBlockSize() const {
   }
   if (const auto* select = DynamicTo<HTMLSelectElement>(GetNode())) {
     if (!select->UsesMenuList()) {
+      // TODO(crbug.com/357649033): Consider not doing this when in base
+      // appearance mode by using a presentational style for the size attribute
+      // instead.
       return ListBoxItemBlockSize(*select, *this) * select->ListBoxSize() -
              ComputeLogicalScrollbars().BlockSum();
     } else if (effective_appearance != AppearanceValue::kBaseSelect) {
@@ -1331,22 +1412,10 @@ LayoutUnit LayoutBox::DefaultIntrinsicContentBlockSize() const {
   return kIndefiniteSize;
 }
 
-LayoutUnit LayoutBox::LogicalLeft() const {
+LogicalRect LayoutBox::LogicalRectInContainer() const {
   NOT_DESTROYED();
-  auto [offset, container_writing_mode] = LogicalLocation(*this);
-  return IsParallelWritingMode(container_writing_mode,
-                               StyleRef().GetWritingMode())
-             ? offset.inline_offset
-             : offset.block_offset;
-}
-
-LayoutUnit LayoutBox::LogicalTop() const {
-  NOT_DESTROYED();
-  auto [offset, container_writing_mode] = LogicalLocation(*this);
-  return IsParallelWritingMode(container_writing_mode,
-                               StyleRef().GetWritingMode())
-             ? offset.block_offset
-             : offset.inline_offset;
+  return LocationContainer()->CreateWritingModeConverter().ToLogical(
+      PhysicalRect(PhysicalLocation(), Size()));
 }
 
 gfx::QuadF LayoutBox::AbsoluteContentQuad(MapCoordinatesFlags flags) const {
@@ -2931,6 +3000,58 @@ void LayoutBox::ClearSpannerPlaceholder() {
   rare_data_->spanner_placeholder_ = nullptr;
 }
 
+bool LayoutBox::IsValidColumnSpanner() const {
+  NOT_DESTROYED();
+  // Note that this function may be called in many circumstances, such as before
+  // it is inserted into the tree, and even as part of calculating the
+  // containing block. Be careful.
+  DCHECK_EQ(StyleRef().GetColumnSpan(), EColumnSpan::kAll);
+  if (!RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+    return SpannerPlaceholder();
+  }
+
+  if (!Parent() || !IsInsideMulticol()) {
+    return false;
+  }
+
+  // The spec says that column-span only applies to in-flow block-level
+  // elements.
+  if (ShouldBeHandledAsInline() || ShouldBeHandledAsFloating() ||
+      ToPositionedState() == kIsOutOfFlowPositioned) {
+    return false;
+  }
+
+  // This looks like a spanner, but if we're inside something unbreakable or
+  // something that establishes a new formatting context, it's not to be treated
+  // as one.
+  for (const LayoutBox* ancestor = Parent()->EnclosingBox(); ancestor;
+       ancestor = ancestor->ContainingBlock()) {
+    if (ancestor->IsMulticolContainer()) {
+      return true;
+    }
+    const auto* ancestor_block_flow = DynamicTo<LayoutBlockFlow>(ancestor);
+    if (!ancestor_block_flow) {
+      // Needs to be in a block-flow container, and not e.g. a table.
+      return false;
+    }
+
+    // Make sure that there's nothing about this ancestor that prevents `this`
+    // from becoming a column spanner. We require the ancestor to participate in
+    // the block formatting context established by the multicol container
+    // (i.e. that there are no formatting contexts in-between). Transforms are
+    // also forbidden, since they insist on being in the containing block chain
+    // for everything inside, which will easily conflict with a spanners's need
+    // to have the multicol container as its direct containing block.
+    if (ancestor_block_flow->IsMonolithic() ||
+        ancestor_block_flow->CreatesNewFormattingContext() ||
+        ancestor_block_flow->CanContainFixedPositionObjects()) {
+      return false;
+    }
+    DCHECK(!ancestor->IsColumnSpanAll());
+  }
+  return false;
+}
+
 void LayoutBox::InflateVisualRectForFilterUnderContainer(
     TransformState& transform_state,
     const LayoutObject& container,
@@ -3822,7 +3943,7 @@ PhysicalSize LayoutBox::ComputeSize() const {
     } else {
       DCHECK(previous_break_token);
       size.block_size = fragment_logical_size.block_size +
-                        previous_break_token->ConsumedBlockSizeForLegacy();
+                        previous_break_token->ConsumedBlockSize();
     }
     previous_break_token = physical_fragment.GetBreakToken();
     // Continue in order to update logical height, unless this fragment is
@@ -4294,11 +4415,13 @@ const LayoutObject* LayoutBox::FindTargetAnchor(
     return nullptr;
   }
 
+  AnchorScopedName* anchor_scoped_name = ToAnchorScopedName(anchor_name, *this);
+
   // Go through the already built PhysicalAnchorQuery to avoid tree traversal.
   const LayoutObject* anchor = nullptr;
   auto search_for_anchor = [&](const PhysicalAnchorQuery& anchor_query) {
     if (const LayoutObject* current =
-            anchor_query.AnchorLayoutObject(*this, &anchor_name)) {
+            anchor_query.AnchorLayoutObject(*this, anchor_scoped_name)) {
       if (!anchor ||
           (anchor != current && anchor->IsBeforeInPreOrder(*current))) {
         anchor = current;
@@ -4443,6 +4566,43 @@ WritingModeConverter LayoutBox::CreateWritingModeConverter() const {
   NOT_DESTROYED();
   return WritingModeConverter({Style()->GetWritingMode(), TextDirection::kLtr},
                               Size());
+}
+
+PhysicalOffset LayoutBox::PhysicalLocation(
+    const LayoutBox* location_container) const {
+  NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    return frame_location_.physical_offset;
+  }
+  return DeprecatedPhysicalLocationInternal(
+      location_container ? location_container : LocationContainer());
+}
+
+PhysicalRect LayoutBox::BoundingBoxRelativeToFirstFragment() const {
+  NOT_DESTROYED();
+  PhysicalRect bounding_rect;
+  const PhysicalBoxFragment* first_fragment = nullptr;
+  for (const PhysicalBoxFragment& fragment : PhysicalFragments()) {
+    PhysicalOffset offset;
+    if (!first_fragment) {
+      first_fragment = &fragment;
+    } else {
+      offset = fragment.OffsetFromRootFragmentationContext() -
+               first_fragment->OffsetFromRootFragmentationContext();
+    }
+    PhysicalRect fragment_rect(offset, fragment.Size());
+    bounding_rect.UniteEvenIfEmpty(fragment_rect);
+
+    if (const BlockBreakToken* break_token = fragment.GetBreakToken()) {
+      if (break_token->IsAtBlockEnd()) {
+        // Ignore subsequent fragments that are just there to hold overflowing
+        // children.
+        break;
+      }
+    }
+  }
+
+  return bounding_rect;
 }
 
 bool LayoutBox::IsReadingFlowContainer() const {

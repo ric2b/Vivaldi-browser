@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -38,7 +39,6 @@ import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
-import * as Root from '../../core/root/root.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as Bindings from '../../models/bindings/bindings.js';
@@ -147,7 +147,7 @@ const UIStrings = {
    *@example {Ctrl + R} PH2
    */
   performARequestOrHitSToRecordThe:
-      'Perform a request or reload the page by using the "{PH1}" button or by hitting {PH2}.',
+      'Perform a request or reload the page by using the "{PH1}" button or by pressing {PH2}.',
   /**
    *@description Shown in the Network Log View of the Network panel when the user has not yet
    * recorded any network activity. This is an instruction to the user to start recording in order to
@@ -156,7 +156,7 @@ const UIStrings = {
    * @example {Ctrl + E} PH2
    */
   recordToDisplayNetworkActivity:
-      'Record network log to display network activity by using the "{PH1}" button or by hitting {PH2}.',
+      'Record network log to display network activity by using the "{PH1}" button or by pressing {PH2}.',
   /**
    *@description Label of a button in the Network Log View of the Network panel.
    */
@@ -482,7 +482,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   private readonly networkShowBlockedCookiesOnlySetting: Common.Settings.Setting<boolean>;
   private readonly networkOnlyBlockedRequestsSetting: Common.Settings.Setting<boolean>;
   private readonly networkOnlyThirdPartySetting: Common.Settings.Setting<boolean>;
-  private readonly networkResourceTypeFiltersSetting: Common.Settings.Setting<{[key: string]: boolean}>;
+  private readonly networkResourceTypeFiltersSetting: Common.Settings.Setting<Record<string, boolean>>;
   private readonly networkShowOptionsToGenerateHarWithSensitiveData: Common.Settings.Setting<boolean>;
   private rawRowHeight: number;
   private readonly progressBarContainer: Element;
@@ -595,7 +595,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     filterBar.addFilter(this.textFilterUI);
 
     this.invertFilterUI = new UI.FilterBar.CheckboxFilterUI(
-        'invert-filter', i18nString(UIStrings.invertFilter), true, this.networkInvertFilterSetting, 'invert-filter');
+        i18nString(UIStrings.invertFilter), true, this.networkInvertFilterSetting, 'invert-filter');
     this.invertFilterUI.addEventListener(
         UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
     UI.Tooltip.Tooltip.install(this.invertFilterUI.element(), i18nString(UIStrings.invertsFilter));
@@ -610,67 +610,16 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
                                                                      jslogContext:
                                                                          Platform.StringUtilities.toKebabCase(key),
                                                                    }));
+    this.moreFiltersDropDownUI = new MoreFiltersDropDownUI();
+    this.moreFiltersDropDownUI.addEventListener(UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged, this);
+    filterBar.addFilter(this.moreFiltersDropDownUI);
 
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN)) {
-      this.moreFiltersDropDownUI = new MoreFiltersDropDownUI();
-      this.moreFiltersDropDownUI.addEventListener(UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged, this);
-      filterBar.addFilter(this.moreFiltersDropDownUI);
-
-      this.resourceCategoryFilterUI =
-          new UI.FilterBar.NamedBitSetFilterUI(filterItems, this.networkResourceTypeFiltersSetting);
-      UI.ARIAUtils.setLabel(this.resourceCategoryFilterUI.element(), i18nString(UIStrings.requestTypesToInclude));
-      this.resourceCategoryFilterUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      filterBar.addFilter(this.resourceCategoryFilterUI);
-    } else {
-      this.dataURLFilterUI = new UI.FilterBar.CheckboxFilterUI(
-          'hide-data-url', i18nString(UIStrings.hideDataUrls), true, this.networkHideDataURLSetting, 'hide-data-urls');
-      this.dataURLFilterUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      UI.Tooltip.Tooltip.install(this.dataURLFilterUI.element(), i18nString(UIStrings.hidesDataAndBlobUrls));
-      filterBar.addFilter(this.dataURLFilterUI);
-
-      this.hideChromeExtensionsUI = new UI.FilterBar.CheckboxFilterUI(
-          'chrome-extension', i18nString(UIStrings.chromeExtensions), true, this.networkHideChromeExtensions,
-          'hide-extension-urls');
-      this.hideChromeExtensionsUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      UI.Tooltip.Tooltip.install(this.hideChromeExtensionsUI.element(), i18nString(UIStrings.hideChromeExtension));
-      filterBar.addFilter(this.hideChromeExtensionsUI);
-
-      this.resourceCategoryFilterUI =
-          new UI.FilterBar.NamedBitSetFilterUI(filterItems, this.networkResourceTypeFiltersSetting);
-      UI.ARIAUtils.setLabel(this.resourceCategoryFilterUI.element(), i18nString(UIStrings.requestTypesToInclude));
-      this.resourceCategoryFilterUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      filterBar.addFilter(this.resourceCategoryFilterUI);
-
-      this.onlyBlockedResponseCookiesFilterUI = new UI.FilterBar.CheckboxFilterUI(
-          'only-show-blocked-cookies', i18nString(UIStrings.hasBlockedCookies), true,
-          this.networkShowBlockedCookiesOnlySetting, 'only-show-blocked-cookies');
-      this.onlyBlockedResponseCookiesFilterUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      UI.Tooltip.Tooltip.install(
-          this.onlyBlockedResponseCookiesFilterUI.element(), i18nString(UIStrings.onlyShowRequestsWithBlockedCookies));
-      filterBar.addFilter(this.onlyBlockedResponseCookiesFilterUI);
-
-      this.onlyBlockedRequestsUI = new UI.FilterBar.CheckboxFilterUI(
-          'only-show-blocked-requests', i18nString(UIStrings.blockedRequests), true,
-          this.networkOnlyBlockedRequestsSetting, 'only-show-blocked-requests');
-      this.onlyBlockedRequestsUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      UI.Tooltip.Tooltip.install(this.onlyBlockedRequestsUI.element(), i18nString(UIStrings.onlyShowBlockedRequests));
-      filterBar.addFilter(this.onlyBlockedRequestsUI);
-
-      this.onlyThirdPartyFilterUI = new UI.FilterBar.CheckboxFilterUI(
-          'only-show-third-party', i18nString(UIStrings.thirdParty), true, this.networkOnlyThirdPartySetting,
-          'only-show-third-party');
-      this.onlyThirdPartyFilterUI.addEventListener(
-          UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
-      UI.Tooltip.Tooltip.install(
-          this.onlyThirdPartyFilterUI.element(), i18nString(UIStrings.onlyShowThirdPartyRequests));
-      filterBar.addFilter(this.onlyThirdPartyFilterUI);
-    }
+    this.resourceCategoryFilterUI =
+        new UI.FilterBar.NamedBitSetFilterUI(filterItems, this.networkResourceTypeFiltersSetting);
+    UI.ARIAUtils.setLabel(this.resourceCategoryFilterUI.element(), i18nString(UIStrings.requestTypesToInclude));
+    this.resourceCategoryFilterUI.addEventListener(
+        UI.FilterBar.FilterUIEvents.FILTER_CHANGED, this.filterChanged.bind(this), this);
+    filterBar.addFilter(this.resourceCategoryFilterUI);
 
     this.filterParser = new TextUtils.TextUtils.FilterParser(searchKeys);
     this.suggestionBuilder =
@@ -786,6 +735,10 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
   private static requestResponseHeaderFilter(value: string, request: SDK.NetworkRequest.NetworkRequest): boolean {
     return request.responseHeaderValue(value) !== undefined;
+  }
+
+  private static requestRequestHeaderFilter(headerName: string, request: SDK.NetworkRequest.NetworkRequest): boolean {
+    return request.requestHeaders().some(header => header.name.toLowerCase() === headerName.toLowerCase());
   }
 
   private static requestResponseHeaderSetCookieFilter(value: string, request: SDK.NetworkRequest.NetworkRequest):
@@ -1086,6 +1039,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     this.textFilterSetting.set(this.textFilterUI.value());
     this.moreFiltersDropDownUI?.updateActiveFiltersCount();
     this.moreFiltersDropDownUI?.updateTooltip();
+    this.columnsInternal.filterChanged();
   }
 
   async resetFilter(): Promise<void> {
@@ -1113,8 +1067,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
     this.recordingHint = new UI.EmptyWidget.EmptyWidget(header, shortcutTitle ? description : '');
     this.recordingHint.element.classList.add('network-status-pane');
-    this.recordingHint.appendLink(
-        'https://developer.chrome.com/docs/devtools/network/' as Platform.DevToolsPath.UrlString);
+    this.recordingHint.link = 'https://developer.chrome.com/docs/devtools/network/' as Platform.DevToolsPath.UrlString;
     if (shortcutTitle && action) {
       const button = UI.UIUtils.createTextButton(buttonText, () => action.execute(), {
         jslogContext: actionName,
@@ -1138,6 +1091,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
   private setHidden(value: boolean): void {
     this.columnsInternal.setHidden(value);
+    this.dataGrid.setInert(value);
     UI.ARIAUtils.setHidden(this.summaryToolbarInternal, value);
   }
 
@@ -1617,19 +1571,11 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
   // TODO(crbug.com/1477668)
   setTextFilterValue(filterString: string): void {
     this.textFilterUI.setValue(filterString);
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN)) {
-      this.networkHideDataURLSetting.set(false);
-      this.networkShowBlockedCookiesOnlySetting.set(false);
-      this.networkOnlyBlockedRequestsSetting.set(false);
-      this.networkOnlyThirdPartySetting.set(false);
-      this.networkHideChromeExtensions.set(false);
-    } else {
-      this.dataURLFilterUI?.setChecked(false);
-      this.onlyBlockedResponseCookiesFilterUI?.setChecked(false);
-      this.onlyBlockedRequestsUI?.setChecked(false);
-      this.onlyThirdPartyFilterUI?.setChecked(false);
-      this.hideChromeExtensionsUI?.setChecked(false);
-    }
+    this.networkHideDataURLSetting.set(false);
+    this.networkShowBlockedCookiesOnlySetting.set(false);
+    this.networkOnlyBlockedRequestsSetting.set(false);
+    this.networkOnlyThirdPartySetting.set(false);
+    this.networkHideChromeExtensions.set(false);
     this.resourceCategoryFilterUI.reset();
   }
 
@@ -1707,6 +1653,10 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       if (responseHeader.name === 'Set-Cookie') {
         this.suggestionBuilder.addItem(NetworkForward.UIFilter.FilterType.ResponseHeaderValueSetCookie);
       }
+    }
+
+    for (const header of request.requestHeaders()) {
+      this.suggestionBuilder.addItem(NetworkForward.UIFilter.FilterType.HasRequestHeader, header.name);
     }
 
     for (const cookie of request.responseCookies) {
@@ -2019,22 +1969,13 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
     if (!this.resourceCategoryFilterUI.accept(categoryName)) {
       return false;
     }
-    const [hideDataURL, blockedCookies, blockedRequests, thirdParty, hideExtensionURL] =
-        Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN) ?
-        [
-          this.networkHideDataURLSetting.get(),
-          this.networkShowBlockedCookiesOnlySetting.get(),
-          this.networkOnlyBlockedRequestsSetting.get(),
-          this.networkOnlyThirdPartySetting.get(),
-          this.networkHideChromeExtensions.get(),
-        ] :
-        [
-          this.dataURLFilterUI?.checked(),
-          this.onlyBlockedResponseCookiesFilterUI?.checked(),
-          this.onlyBlockedRequestsUI?.checked(),
-          this.onlyThirdPartyFilterUI?.checked(),
-          this.hideChromeExtensionsUI?.checked(),
-        ];
+    const [hideDataURL, blockedCookies, blockedRequests, thirdParty, hideExtensionURL] = [
+      this.networkHideDataURLSetting.get(),
+      this.networkShowBlockedCookiesOnlySetting.get(),
+      this.networkOnlyBlockedRequestsSetting.get(),
+      this.networkOnlyThirdPartySetting.get(),
+      this.networkHideChromeExtensions.get(),
+    ];
 
     if (hideDataURL && (request.parsedURL.isDataURL() || request.parsedURL.isBlobURL())) {
       return false;
@@ -2108,6 +2049,9 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
       case NetworkForward.UIFilter.FilterType.ResponseHeaderValueSetCookie:
         return NetworkLogView.requestResponseHeaderSetCookieFilter.bind(null, value);
+
+      case NetworkForward.UIFilter.FilterType.HasRequestHeader:
+        return NetworkLogView.requestRequestHeaderFilter.bind(null, value);
 
       case NetworkForward.UIFilter.FilterType.Is:
         if (value.toLowerCase() === NetworkForward.UIFilter.IsFilterType.RUNNING) {
@@ -2324,14 +2268,11 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
 
     const referrer = referrerHeader ? referrerHeader.value : void 0;
 
-    const referrerPolicy = request.referrerPolicy() || void 0;
-
     const requestBody = await request.requestFormData();
 
     const fetchOptions: RequestInit = {
       headers: Object.keys(headers).length ? headers : void 0,
       referrer,
-      referrerPolicy,
       body: requestBody,
       method: request.requestMethod,
       mode: 'cors',
@@ -2349,10 +2290,6 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
       if (referrer) {
         delete fetchOptions.referrer;
         extraHeaders['Referer'] = referrer;
-      }
-      if (referrer) {
-        delete fetchOptions.referrerPolicy;
-        extraHeaders['Referrer-Policy'] = referrerPolicy as string;
       }
       if (Object.keys(extraHeaders).length) {
         fetchOptions.headers = {
@@ -2416,7 +2353,7 @@ export class NetworkLogView extends Common.ObjectWrapper.eventMixin<EventTypes, 
               .replace(/"/g, '\\"')
               .replace(/[^a-zA-Z0-9\s_\-:=+~'\/.',?;()*`]/g, '^$&')
               .replace(/%(?=[a-zA-Z0-9_])/g, '%^')
-              .replace(/\r?\n/g, '^\n\n') +
+              .replace(/\r?\n|\r/g, '^\n\n') +
           encapsChars;
     }
 
@@ -2664,7 +2601,6 @@ export class MoreFiltersDropDownUI extends Common.ObjectWrapper.ObjectWrapper<UI
   private networkShowBlockedCookiesOnlySetting: Common.Settings.Setting<boolean>;
   private networkOnlyBlockedRequestsSetting: Common.Settings.Setting<boolean>;
   private networkOnlyThirdPartySetting: Common.Settings.Setting<boolean>;
-  private contextMenu?: UI.ContextMenu.ContextMenu;
   private activeFiltersCount: HTMLElement;
   private activeFiltersCountAdorner: Adorners.Adorner.Adorner;
 

@@ -2925,10 +2925,6 @@ reconnect:
     return 0;
 
 fail:
-    av_freep(&rt->playpath);
-    av_freep(&rt->tcurl);
-    av_freep(&rt->flashver);
-    av_dict_free(opts);
     rtmp_close(s);
     return ret;
 }
@@ -3053,7 +3049,12 @@ static int rtmp_write(URLContext *s, const uint8_t *buf, int size)
                                              pkttype, ts, pktsize)) < 0)
                 return ret;
 
-            rt->out_pkt.extra = rt->stream_id;
+            // If rt->listen, then we're running as a a server and should
+            // use the ID that we've sent in Stream Begin and in the
+            // _result to createStream.
+            // Otherwise, we're running as a client and should use the ID
+            // that we've received in the createStream from the server.
+            rt->out_pkt.extra = (rt->listen) ? rt->nb_streamid : rt->stream_id;
             rt->flv_data = rt->out_pkt.data;
         }
 

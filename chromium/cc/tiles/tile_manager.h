@@ -301,6 +301,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient,
   void ReduceTileMemoryWhenIdle();
   void TrimPrepaintTiles();
 
+  // True if tile resources are present and freed.
   void FreeResourcesForTile(Tile* tile);
   void FreeResourcesForTileAndNotifyClientIfTileWasReadyToDraw(Tile* tile);
   scoped_refptr<TileTask> CreateRasterTask(
@@ -324,8 +325,6 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient,
   void CheckIfMoreTilesNeedToBePrepared();
   void MarkTilesOutOfMemory(
       std::unique_ptr<RasterTilePriorityQueue> queue) const;
-
-  viz::SharedImageFormat DetermineFormat(const Tile* tile) const;
 
   void DidFinishRunningTileTasksRequiredForActivation();
   void DidFinishRunningTileTasksRequiredForDraw();

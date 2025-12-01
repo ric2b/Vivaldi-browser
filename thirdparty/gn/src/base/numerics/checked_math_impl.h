@@ -417,20 +417,20 @@ struct CheckedMinOp<
 
 // This is just boilerplate that wraps the standard floating point arithmetic.
 // A macro isn't the nicest solution, but it beats rewriting these repeatedly.
-#define BASE_FLOAT_ARITHMETIC_OPS(NAME, OP)                              \
-  template <typename T, typename U>                                      \
-  struct Checked##NAME##Op<                                              \
-      T, U,                                                              \
-      typename std::enable_if<std::is_floating_point<T>::value ||        \
-                              std::is_floating_point<U>::value>::type> { \
-    using result_type = typename MaxExponentPromotion<T, U>::type;       \
-    template <typename V>                                                \
-    static constexpr bool Do(T x, U y, V* result) {                      \
-      using Promotion = typename MaxExponentPromotion<T, U>::type;       \
-      Promotion presult = x OP y;                                        \
-      *result = static_cast<V>(presult);                                 \
-      return IsValueInRangeForNumericType<V>(presult);                   \
-    }                                                                    \
+#define BASE_FLOAT_ARITHMETIC_OPS(NAME, OP)                                 \
+  template <typename T, typename U>                                         \
+  struct Checked##NAME##                                                    \
+      Op<T, U,                                                              \
+         typename std::enable_if<std::is_floating_point<T>::value ||        \
+                                 std::is_floating_point<U>::value>::type> { \
+    using result_type = typename MaxExponentPromotion<T, U>::type;          \
+    template <typename V>                                                   \
+    static constexpr bool Do(T x, U y, V* result) {                         \
+      using Promotion = typename MaxExponentPromotion<T, U>::type;          \
+      Promotion presult = x OP y;                                           \
+      *result = static_cast<V>(presult);                                    \
+      return IsValueInRangeForNumericType<V>(presult);                      \
+    }                                                                       \
   };
 
 BASE_FLOAT_ARITHMETIC_OPS(Add, +)

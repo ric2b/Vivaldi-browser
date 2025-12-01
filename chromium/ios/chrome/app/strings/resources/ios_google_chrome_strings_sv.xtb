@@ -47,6 +47,7 @@ Tänk på detta:
 <translation id="1917964099031477364">Det här kontot och data som inte har sparats tas bort från Chrome och andra Google-appar på den här enheten.</translation>
 <translation id="1919130412786645364">Tillåt inloggning i Chrome</translation>
 <translation id="1965935827552890526">Gör klart det du höll på med i det andra öppna Chrome-fönstret.</translation>
+<translation id="1966638102563776885">Tips för Chrome: Få tillgång till dina lösenord i alla appar</translation>
 <translation id="1973910962341002002">Aktivera Chrome i inställningarna för <ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" /></translation>
 <translation id="1984705450038014246">Synkronisera data i Chrome</translation>
 <translation id="1987779152850321833">Slutför de rekommenderade åtgärderna nedan så att du får ut mesta möjliga av Chrome.</translation>
@@ -114,7 +115,6 @@ Testa att vänta några minuter innan du loggar ut. Om du loggar ut nu raderas d
 <translation id="3655656110921623717">Detta betyder att mobilversionen av webbplatsen begärs varje gång i Chrome.</translation>
 <translation id="3740397331642243698">Öppnar de angivna webbadresserna i Google Chrome i inkognitoläge.</translation>
 <translation id="3741995255368156336">Öppnar läslistan i Chrome.</translation>
-<translation id="3808570423967020928">Kom åt Chrome snabbare från hemskärmens docka.</translation>
 <translation id="3827545470516145620">Du har standardsäkerhetsskydd på den här enheten</translation>
 <translation id="384394811301901750">Google Chrome kan inte använda kameran just nu</translation>
 <translation id="3863841106411295595">Lägger till de angivna webbadresserna i din läslista i Chrome.</translation>
@@ -123,6 +123,7 @@ Testa att vänta några minuter innan du loggar ut. Om du loggar ut nu raderas d
 <translation id="3984746313391923992">Organisationen kräver att du inte loggar in i Chrome.</translation>
 <translation id="3988789688219830639">Google Chrome har inte åtkomst till dina foton eller videor. Aktivera åtkomst i iOS-inställningar &gt; Integritet &gt; Foton.</translation>
 <translation id="4064699917955374540">Verifiera din identitet om du vill använda och spara Chrome-data i ditt Google-konto.</translation>
+<translation id="411154422556990518">Få uppdateringar om prisbevakningar och tips för Chrome.</translation>
 <translation id="417201473131094001">Stöds inte på Chrome Canary</translation>
 <translation id="424864128008805179">Vill du logga ut från Chrome?</translation>
 <translation id="4430797724889237570">Öppna länkar från Gmail, Maps, YouTube och andra appar i Chrome</translation>
@@ -133,9 +134,11 @@ Testa att vänta några minuter innan du loggar ut. Om du loggar ut nu raderas d
 <translation id="4636900170638246267">Logga in på den här webbplatsen och i Chrome.</translation>
 <translation id="4647910807533196601">Öppna min senaste flik i Chrome.</translation>
 <translation id="4693084815234024320">Du använder Chromes inkognitoläge</translation>
+<translation id="4713907610796204963">Lär dig grunderna i Chrome för att komma igång</translation>
 <translation id="4724297637870447613">Använd Chrome överallt</translation>
 <translation id="4738647308035481133">Google Chrome-sida</translation>
 <translation id="4742795653798179840">Data i Chrome har raderats</translation>
+<translation id="4749294594657945639">Välj Chrome för autofyll så att du enkelt får tillgång till dina sparade lösenord i andra appar.</translation>
 <translation id="4761869838909035636">Kör säkerhetskontroll i Chrome</translation>
 <translation id="4798859546468762093">Om du vill få tillgång till anpassning och andra funktioner kan du ta med Chrome i <ph name="FEATURE_NAME_1" /> och <ph name="FEATURE_NAME_2" /></translation>
 <translation id="4819268619367838612">Chrome skickar data om användning och krascher till Google i syfte att förbättra appen. <ph name="BEGIN_LINK" />Hantera<ph name="END_LINK" /></translation>
@@ -228,11 +231,9 @@ Om du vill ändra den här inställningen <ph name="BEGIN_LINK" />raderar du Chr
 Du hittar fler inställningar som använder data för att förbättra Chrome-upplevelsen under <ph name="BEGIN_LINK" />Googles tjänster<ph name="END_LINK" />.</translation>
 <translation id="6922332667202044570">Radera webbinformation i Chrome.</translation>
 <translation id="6924922227983877439">Öppna länkar i Chrome som standard</translation>
-<translation id="6931601805528922498">När du loggar in läggs ditt konto till i Chrome för arbetsrelaterad surfning.</translation>
 <translation id="6975725306479268850">Välj Chrome för Autofyll</translation>
 <translation id="7056826488869329999">Öppnar och kör en säkerhetskontroll i Chrome.</translation>
 <translation id="7061455974939528301">Håll nere Chrome-ikonen och klicka på Ändra hemskärmen</translation>
-<translation id="7065813315247345131">Flytta Chrome till dockan</translation>
 <translation id="7124339256045485976">Håll Chrome uppdaterad</translation>
 <translation id="7145599899567697473">Spara och fyll i lösenord automatiskt i Chrome</translation>
 <translation id="7161390184744336561">Google Chrome-versionen är inaktuell</translation>
@@ -240,7 +241,6 @@ Du hittar fler inställningar som använder data för att förbättra Chrome-upp
 <translation id="7175129790242719365">Tips för Chrome: Logga in i Chrome</translation>
 <translation id="7187993566681480880">Skyddar dig i Chrome och kan användas för förbättrad säkerhet i andra Google-appar där du är inloggad.</translation>
 <translation id="7200524487407690471">Chrome kör automatiskt en säkerhetskontroll varje dag för att skydda dig från dataintrång, osäkra webbplatser med mera. Du hittar mer information om säkerhetskontrollen i inställningarna.</translation>
-<translation id="7203324561587388418">Håll koll på innehåll och användbara tips om Chrome.</translation>
 <translation id="72119412072970160">Du kan använda lösenorden som sparats med Google Lösenordshantering i andra iPad-appar.</translation>
 <translation id="7214019116829172458">Öppna en inkognitoflik i Chrome</translation>
 <translation id="722167379782941918">Chrome rekommenderar utökat skydd</translation>
@@ -253,6 +253,7 @@ Du hittar fler inställningar som använder data för att förbättra Chrome-upp
 <translation id="7299681342915173313">Nu kan du använda Chrome varje gång du trycker på länkar i e-postmeddelanden, dokument och andra appar</translation>
 <translation id="7344094882820374540">Få Chromes starkaste skydd mot farliga webbplatser</translation>
 <translation id="7349129508108954623">Tillåt att Google Maps används i Chrome för att ge dig vägbeskrivningar och lokal information om identifierade adresser.</translation>
+<translation id="7371674917547846460">Få användbara tips för Chrome med mera.</translation>
 <translation id="7394108421562933108">Maps i Chrome</translation>
 <translation id="7400722733683201933">Om Google Chrome</translation>
 <translation id="7466693328838535498">Skriv ”Chrome” i rutan Sökwidgetar</translation>
@@ -263,6 +264,7 @@ Du hittar fler inställningar som använder data för att förbättra Chrome-upp
 <translation id="7581063337314642333">Öppna rutnätet med flikar i Chrome</translation>
 <translation id="7599894504325210080">Utökad vy för Autofyll i Chrome</translation>
 <translation id="7617512710641355143">Chrome hanteras</translation>
+<translation id="7626032353295482388">Välkommen till Chrome</translation>
 <translation id="7642373780953416937">Få varningar om integritets- eller säkerhetsproblem som identifieras automatiskt av Chrome.</translation>
 <translation id="7660356333829433649">Kom tillbaka hit för fler användbara tips på hur du får ut mesta möjliga av Chrome.</translation>
 <translation id="7662994914830945754">Logga in och aktivera synkronisering om du vill ha samma flikar tillgängliga på alla enheter där du använder Chrome</translation>
@@ -276,6 +278,7 @@ Du hittar fler inställningar som använder data för att förbättra Chrome-upp
 <translation id="778855399387580014">Börja söka på en ny Chrome-flik.</translation>
 <translation id="7792140019572081272">Chrome skyddar dina känsliga uppgifter med Face ID.</translation>
 <translation id="7855730255114109580">Google Chrome behöver inte uppdateras</translation>
+<translation id="787226752901403048">Logga in i Chrome för att dela och gå med i flikgrupper och samarbeta</translation>
 <translation id="7897703007638178753">Visa de senaste flikarna i Chrome</translation>
 <translation id="7948283758957877064">Nyheter i Chrome</translation>
 <translation id="8000174216052461231">Tips för Chrome: Få Chromes starkaste skydd</translation>
@@ -314,10 +317,10 @@ Din data krypterades med lösenfrasen den <ph name="TIME" />. Ange den om du vil
 <translation id="8603022514504485810">Google Lösenordshantering kunde inte kontrollera alla lösenord. Försök igen i morgon eller <ph name="BEGIN_LINK" />kontrollera lösenorden i ditt Google-konto<ph name="END_LINK" />.</translation>
 <translation id="8630122478628016441">Aktivera Lås inkognitoflikar när du stänger Chrome.</translation>
 <translation id="8673726683583791503">Köp med Google Lens</translation>
-<translation id="8727043961453758442">Få ut mesta möjliga av Chrome</translation>
 <translation id="8765470054473112089">När du skriver i adressfältet eller sökrutan skickar Chrome det du skriver till standardsökmotorn för att du ska få bättre förslag. Detta är inaktiverat i inkognitoläge.</translation>
 <translation id="8772179140489533211">Visar meddelanden om att logga in i Chrome.</translation>
 <translation id="8788269841521769222">Du behöver inte komma ihåg det här lösenordet. Det sparas med Google Lösenordshantering för <ph name="EMAIL" /></translation>
+<translation id="8796490717897731471"><ph name="EMAIL" />. Chrome hanteras.</translation>
 <translation id="880967149107462122">Öppna inställningarna för Chrome</translation>
 <translation id="8842132678697187091">Du kan öppna Google Lens här.</translation>
 <translation id="8850736900032787670">Logga in i Chrome om du vill få anpassat innehåll utifrån dina intressen.</translation>

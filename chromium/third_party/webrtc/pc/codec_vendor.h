@@ -11,7 +11,7 @@
 #ifndef PC_CODEC_VENDOR_H_
 #define PC_CODEC_VENDOR_H_
 
-#include <string>
+#include <utility>
 #include <vector>
 
 #include "api/field_trials_view.h"
@@ -25,7 +25,7 @@
 #include "pc/session_description.h"
 #include "pc/typed_codec_vendor.h"
 
-namespace cricket {
+namespace webrtc {
 
 // This class contains the functions required to compute the list of codecs
 // for SDP offer/answer. It is exposed to MediaSessionDescriptionFactory
@@ -44,36 +44,30 @@ class CodecVendor {
  public:
   CodecVendor(MediaEngineInterface* media_engine,
               bool rtx_enabled,
-              const webrtc::FieldTrialsView& trials);
+              const FieldTrialsView& trials);
 
  public:
-  webrtc::RTCError GetCodecsForOffer(
-      const std::vector<const webrtc::ContentInfo*>& current_active_contents,
-      CodecList& audio_codecs,
-      CodecList& video_codecs) const;
-  webrtc::RTCError GetCodecsForAnswer(
-      const std::vector<const webrtc::ContentInfo*>& current_active_contents,
-      const webrtc::SessionDescription& remote_offer,
-      CodecList& audio_codecs,
-      CodecList& video_codecs) const;
-
-  webrtc::RTCErrorOr<std::vector<Codec>> GetNegotiatedCodecsForOffer(
+  RTCErrorOr<std::vector<Codec>> GetNegotiatedCodecsForOffer(
       const MediaDescriptionOptions& media_description_options,
       const MediaSessionOptions& session_options,
-      const webrtc::ContentInfo* current_content,
-      webrtc::PayloadTypeSuggester& pt_suggester,
-      const CodecList& codecs);
+      const ContentInfo* current_content,
+      PayloadTypeSuggester& pt_suggester);
 
-  webrtc::RTCErrorOr<Codecs> GetNegotiatedCodecsForAnswer(
+  RTCErrorOr<Codecs> GetNegotiatedCodecsForAnswer(
       const MediaDescriptionOptions& media_description_options,
       const MediaSessionOptions& session_options,
-      webrtc::RtpTransceiverDirection offer_rtd,
-      webrtc::RtpTransceiverDirection answer_rtd,
-      const webrtc::ContentInfo* current_content,
+      RtpTransceiverDirection offer_rtd,
+      RtpTransceiverDirection answer_rtd,
+      const ContentInfo* current_content,
       std::vector<Codec> codecs_from_offer,
-      webrtc::PayloadTypeSuggester& pt_suggester,
-      const CodecList& codecs);
+      PayloadTypeSuggester& pt_suggester);
 
+  // Function exposed for issues.webrtc.org/412904801
+  // Modify the video codecs to return on subsequent GetNegotiated* calls.
+  // The input is a vector of pairs of codecs.
+  // For each pair, the first element is the codec to be replaced,
+  // and the second element is the codec to replace it with.
+  void ModifyVideoCodecs(std::vector<std::pair<Codec, Codec>> changes);
   // Functions exposed for testing
   void set_audio_codecs(const CodecList& send_codecs,
                         const CodecList& recv_codecs);
@@ -98,15 +92,15 @@ class CodecVendor {
 
  private:
   CodecList GetAudioCodecsForOffer(
-      const webrtc::RtpTransceiverDirection& direction) const;
+      const RtpTransceiverDirection& direction) const;
   CodecList GetAudioCodecsForAnswer(
-      const webrtc::RtpTransceiverDirection& offer,
-      const webrtc::RtpTransceiverDirection& answer) const;
+      const RtpTransceiverDirection& offer,
+      const RtpTransceiverDirection& answer) const;
   CodecList GetVideoCodecsForOffer(
-      const webrtc::RtpTransceiverDirection& direction) const;
+      const RtpTransceiverDirection& direction) const;
   CodecList GetVideoCodecsForAnswer(
-      const webrtc::RtpTransceiverDirection& offer,
-      const webrtc::RtpTransceiverDirection& answer) const;
+      const RtpTransceiverDirection& offer,
+      const RtpTransceiverDirection& answer) const;
 
   CodecList all_video_codecs() const;
   CodecList all_audio_codecs() const;
@@ -125,10 +119,22 @@ class CodecVendor {
 class CodecLookupHelper {
  public:
   virtual ~CodecLookupHelper() = default;
-  virtual webrtc::PayloadTypeSuggester* PayloadTypeSuggester() = 0;
-  virtual cricket::CodecVendor* CodecVendor(const std::string& mid) = 0;
+  virtual PayloadTypeSuggester* PayloadTypeSuggester() = 0;
+  // Look up the codec vendor to use, depending on context.
+  // This call may get additional arguments in the future, to aid
+  // in selection of the correct context.
+  virtual CodecVendor* GetCodecVendor() = 0;
 };
 
+}  //  namespace webrtc
+
+// Re-export symbols from the webrtc namespace for backwards compatibility.
+// TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
+namespace cricket {
+using ::webrtc::CodecLookupHelper;
+using ::webrtc::CodecVendor;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // PC_CODEC_VENDOR_H_

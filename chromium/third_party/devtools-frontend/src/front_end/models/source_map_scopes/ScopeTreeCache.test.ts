@@ -27,18 +27,18 @@ describe('ScopeTreeCache', () => {
       const actualScopeTree1 = await scopeTreeForScript(script);
       const actualScopeTree2 = await scopeTreeForScript(script);
 
-      assert.isTrue(javaScriptScopeTreeStub.calledOnce);
+      sinon.assert.calledOnce(javaScriptScopeTreeStub);
       assert.strictEqual(actualScopeTree1, scopeTree);
       assert.strictEqual(actualScopeTree2, scopeTree);
     });
 
     it('requests the scope tree once for a script that fails to parse', async () => {
-      javaScriptScopeTreeStub.returns(null);
+      javaScriptScopeTreeStub.returns(Promise.reject('some error'));
 
       const actualScopeTree1 = await scopeTreeForScript(script);
       const actualScopeTree2 = await scopeTreeForScript(script);
 
-      assert.isTrue(javaScriptScopeTreeStub.calledOnce);
+      sinon.assert.calledOnce(javaScriptScopeTreeStub);
       assert.isNull(actualScopeTree1);
       assert.isNull(actualScopeTree2);
     });
@@ -55,7 +55,7 @@ describe('ScopeTreeCache', () => {
       scopeTreeResolve(scopeTree);
       const [actualScopeTree1, actualScopeTree2] = await Promise.all([scopeTreePromise1, scopeTreePromise2]);
 
-      assert.isTrue(javaScriptScopeTreeStub.calledOnce);
+      sinon.assert.calledOnce(javaScriptScopeTreeStub);
       assert.strictEqual(actualScopeTree1, scopeTree);
       assert.strictEqual(actualScopeTree2, scopeTree);
     });

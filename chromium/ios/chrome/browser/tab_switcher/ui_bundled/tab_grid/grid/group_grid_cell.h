@@ -9,10 +9,10 @@
 
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_theme.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/group_tab_info.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_context_menu/tab_cell.h"
 
 @class GroupGridCell;
+@class TabSnapshotAndFavicon;
 
 // Informs the receiver of actions on the cell.
 @protocol GroupGridCellDelegate
@@ -35,15 +35,14 @@
 // The current state which the cell should display.
 @property(nonatomic, assign) GridCellState state;
 
+// The face pile, to be set externally.
+@property(nonatomic, strong) UIView* facePile;
+
 // Configures every tab of the group with a given snapshot/favicon pairs and
 // passes the total tabs count to the bottomTrailingView.
-- (void)configureWithGroupTabInfos:(NSArray<GroupTabInfo*>*)groupTabInfos
-                    totalTabsCount:(NSInteger)totalTabsCount;
-
-// Configures the `facePileViewController`, adding it to `parentViewController`.
-// The parent must be non-nil if the face pile is non-nil.
-- (void)setFacePileViewController:(UIViewController*)facePileViewController
-             parentViewController:(UIViewController*)parentViewController;
+- (void)configureWithSnapshotsAndFavicons:
+            (NSArray<TabSnapshotAndFavicon*>*)snapshotsAndFavicons
+                           totalTabsCount:(NSInteger)totalTabsCount;
 
 // Returns all tab views that compose this tab group view in the order they're
 // presented.

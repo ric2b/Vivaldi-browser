@@ -29,8 +29,10 @@ import androidx.annotation.Nullable;
 import org.chromium.base.CallbackController;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.bookmarks.PendingRunnable;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.ActionConfirmationManager;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupListCoordinator.RowType;
@@ -52,7 +54,6 @@ import org.chromium.components.tab_group_sync.TabGroupSyncService;
 import org.chromium.components.tab_group_sync.TabGroupSyncService.Observer;
 import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.components.tab_group_sync.TriggerSource;
-import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -78,13 +79,14 @@ public class TabGroupListMediator {
     private final TabGroupUiActionHandler mTabGroupUiActionHandler;
     private final ActionConfirmationManager mActionConfirmationManager;
     private final SyncService mSyncService;
-    private final ModalDialogManager mModalDialogManager;
     private final CallbackController mCallbackController = new CallbackController();
     private final @NonNull MessagingBackendService mMessagingBackendService;
     private final PendingRunnable mPendingRefresh =
             new PendingRunnable(
                     TaskTraits.UI_DEFAULT,
                     mCallbackController.makeCancelable(this::repopulateModelList));
+    private final boolean mEnableContainment;
+    private final DataSharingTabManager mDataSharingTabManager;
 
     private final TabModelObserver mTabModelObserver =
             new TabModelObserver() {
@@ -205,7 +207,8 @@ public class TabGroupListMediator {
      * @param tabGroupUiActionHandler Used to open hidden tab groups.
      * @param actionConfirmationManager Used to show confirmation dialogs.
      * @param syncService Used to query active sync types.
-     * @param modalDialogManager Used to show error dialogs.
+     * @param enableContainment Whether containment is enabled.
+     * @param dataSharingTabManager The {@link} DataSharingTabManager to start collaboration flows.
      */
     public TabGroupListMediator(
             Context context,
@@ -221,7 +224,8 @@ public class TabGroupListMediator {
             TabGroupUiActionHandler tabGroupUiActionHandler,
             ActionConfirmationManager actionConfirmationManager,
             SyncService syncService,
-            ModalDialogManager modalDialogManager) {
+            boolean enableContainment,
+            @NonNull DataSharingTabManager dataSharingTabManager) {
         mContext = context;
         mModelList = modelList;
         mPropertyModel = propertyModel;
@@ -235,7 +239,8 @@ public class TabGroupListMediator {
         mTabGroupUiActionHandler = tabGroupUiActionHandler;
         mActionConfirmationManager = actionConfirmationManager;
         mSyncService = syncService;
-        mModalDialogManager = modalDialogManager;
+        mEnableContainment = enableContainment;
+        mDataSharingTabManager = dataSharingTabManager;
 
         mFilter.addObserver(mTabModelObserver);
         if (mTabGroupSyncService != null) {
@@ -289,10 +294,11 @@ public class TabGroupListMediator {
                             mCollaborationService,
                             mPaneManager,
                             mTabGroupUiActionHandler,
-                            mModalDialogManager,
                             mActionConfirmationManager,
                             mFaviconResolver,
-                            () -> sortUtil.getState(savedTabGroup));
+                            () -> sortUtil.getState(savedTabGroup),
+                            mEnableContainment,
+                            mDataSharingTabManager);
             ListItem listItem = new ListItem(RowType.TAB_GROUP, rowMediator.getModel());
             mModelList.add(listItem);
         }

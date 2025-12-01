@@ -1,6 +1,7 @@
 // Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/legacy/legacy.js';
 
@@ -74,8 +75,8 @@ export class BinaryResourceView extends UI.Widget.VBox {
 
   constructor(
       content: TextUtils.StreamingContentData.StreamingContentData, contentUrl: Platform.DevToolsPath.UrlString,
-      resourceType: Common.ResourceType.ResourceType) {
-    super();
+      resourceType: Common.ResourceType.ResourceType, element?: HTMLElement) {
+    super(undefined, undefined, element);
     this.registerRequiredCSS(binaryResourceViewStyles);
 
     this.binaryResourceViewFactory =

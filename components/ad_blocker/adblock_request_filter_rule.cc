@@ -48,7 +48,10 @@ std::ostream& operator<<(std::ostream& os, const RequestFilterRule& rule) {
   };
 
   os << "\n"
-     << std::setw(kAlignemntPosition) << "Rule text:" << rule.original_rule_text << "\n"
+     << std::setw(kAlignemntPosition) << "Rule text:" << rule.original_rule_text
+     << "\n"
+     << std::setw(kAlignemntPosition) << "Bad filter:" << rule.bad_filter
+     << "\n"
      << std::setw(kAlignemntPosition) << "Decision:" << rule.decision << "\n"
      << std::setw(kAlignemntPosition) << "Modify block:" << rule.modify_block
      << "\n"
@@ -63,7 +66,8 @@ std::ostream& operator<<(std::ostream& os, const RequestFilterRule& rule) {
      << "NGram search string:" << rule.ngram_search_string.value_or("<NULL>")
      << "\n"
      << std::setw(kAlignemntPosition) << "Anchored:" << rule.anchor_type << "\n"
-     << std::setw(kAlignemntPosition) << "Party:" << rule.party << "\n"
+     << std::setw(kAlignemntPosition)
+     << "Party:" << (rule.party.has_value() ? *rule.party : -1) << "\n"
      << std::setw(kAlignemntPosition) << "Resources:" << rule.resource_types
      << "\n"
      << std::setw(kAlignemntPosition)

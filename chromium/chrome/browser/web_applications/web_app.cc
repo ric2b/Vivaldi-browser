@@ -39,6 +39,7 @@
 #include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_proto_utils.h"
 #include "chrome/browser/web_applications/web_app_utils.h"
+#include "chrome/common/url_constants.h"
 #include "components/sync/base/time.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/protocol/web_app_specifics.pb.h"
@@ -343,9 +344,42 @@ WebApp::WebApp(const webapps::AppId& app_id)
                          ? std::make_optional<WebAppChromeOsData>()
                          : std::nullopt) {}
 
-WebApp::~WebApp() = default;
+WebApp::WebApp(const webapps::ManifestId& manifest_id,
+               const GURL& start_url,
+               const GURL& scope,
+               std::optional<webapps::AppId> parent_app_id,
+               std::optional<webapps::ManifestId> parent_manifest_id)
+    : app_id_(GenerateAppIdFromManifestId(manifest_id, parent_manifest_id)),
+      start_url_(start_url),
+      scope_(scope),
+      chromeos_data_(IsChromeOsDataMandatory()
+                         ? std::make_optional<WebAppChromeOsData>()
+                         : std::nullopt),
+      manifest_id_(manifest_id),
+      parent_app_id_(parent_app_id) {
+  CHECK(manifest_id.is_valid());
+  CHECK(start_url.is_valid());
+  CHECK(scope.is_valid());
+  CHECK(url::IsSameOriginWith(manifest_id_, start_url_))
+      << manifest_id_.spec() << " vs " << start_url_.spec();
+  CHECK(url::IsSameOriginWith(start_url_, scope_))
+      << start_url_.spec() << " vs " << scope_.spec();
+  CHECK(!scope_.has_ref() && !scope_.has_query());
+  CHECK(!manifest_id_.has_ref());
+  CHECK(base::StartsWith(start_url_.spec(), scope_.spec(),
+                         base::CompareCase::SENSITIVE))
+      << "Start URL " << start_url_ << " must be nested in scope " << scope_;
+  if (parent_app_id_.has_value()) {
+    CHECK(!parent_app_id_->empty());
+  }
+  CHECK(!!parent_app_id == !!parent_manifest_id);
+  // Ensure sync proto is initialized.
+  SetSyncProto(sync_proto_);
+}
 
+WebApp::~WebApp() = default;
 WebApp::WebApp(const WebApp& web_app) = default;
+WebApp::WebApp(WebApp&& web_app) = default;
 
 WebApp& WebApp::operator=(WebApp&& web_app) = default;
 
@@ -471,8 +505,7 @@ void WebApp::SetStartUrl(const GURL& start_url) {
   if (manifest_id_.is_empty()) {
     manifest_id_ = GenerateManifestIdFromStartUrlOnly(start_url);
   }
-  CHECK(url::Origin::Create(manifest_id())
-            .IsSameOriginWith(url::Origin::Create(start_url)))
+  CHECK(url::IsSameOriginWith(manifest_id(), start_url))
       << manifest_id().spec() << " " << start_url.spec();
   start_url_ = start_url;
 
@@ -480,6 +513,10 @@ void WebApp::SetStartUrl(const GURL& start_url) {
   // `SetSyncProto` will populate an unset `start_url` on the proto.
   sync_proto_.clear_start_url();
   SetSyncProto(sync_proto_);
+  // Ensure that scope is always set.
+  if (scope_.is_empty()) {
+    scope_ = start_url_.GetWithoutFilename();
+  }
 }
 
 void WebApp::SetScope(const GURL& scope) {
@@ -495,6 +532,8 @@ void WebApp::SetScope(const GURL& scope) {
   scope_replacements.ClearRef();
   scope_replacements.ClearQuery();
   scope_ = scope_for_app.ReplaceComponents(scope_replacements);
+  // Post-migration check: Scope should never be empty after setting.
+  CHECK(!scope_.is_empty());
 }
 
 void WebApp::SetThemeColor(std::optional<SkColor> theme_color) {
@@ -653,7 +692,7 @@ void WebApp::SetRunOnOsLoginMode(RunOnOsLoginMode mode) {
 void WebApp::SetSyncProto(sync_pb::WebAppSpecifics sync_proto) {
   // Populate sync_proto's start_url from this WebApp if missing.
   if (!start_url().is_empty()) {
-    CHECK(start_url().is_valid(), base::NotFatalUntil::M126);
+    CHECK(start_url().is_valid());
     // Note: sync data may have a start_url that does not match the `WebApp`
     // start_url, but it does not update the app (matching pre-M125 behaviour).
     if (!sync_proto.has_start_url()) {
@@ -662,11 +701,10 @@ void WebApp::SetSyncProto(sync_pb::WebAppSpecifics sync_proto) {
   }
 
   // Sync data must never be set on an app with mismatching manifest_id.
-  CHECK(manifest_id().is_valid(), base::NotFatalUntil::M126);
+  CHECK(manifest_id().is_valid());
   std::string relative_manifest_id_path = RelativeManifestIdPath(manifest_id());
   if (sync_proto.has_relative_manifest_id()) {
-    CHECK_EQ(sync_proto.relative_manifest_id(), relative_manifest_id_path,
-             base::NotFatalUntil::M127);
+    CHECK_EQ(sync_proto.relative_manifest_id(), relative_manifest_id_path);
   } else {
     sync_proto.set_relative_manifest_id(relative_manifest_id_path);
   }
@@ -702,16 +740,16 @@ void WebApp::SetLaunchQueryParams(
 }
 
 void WebApp::SetManifestUrl(const GURL& manifest_url) {
+  CHECK(manifest_url.is_valid() || manifest_url.is_empty(),
+        base::NotFatalUntil::M138);
   manifest_url_ = manifest_url;
 }
 
 void WebApp::SetManifestId(const webapps::ManifestId& manifest_id) {
   CHECK(manifest_id.is_valid());
-  CHECK(start_url_.is_empty() ||
-        url::Origin::Create(start_url_)
-            .IsSameOriginWith(url::Origin::Create(manifest_id)))
+  CHECK(start_url_.is_empty() || url::IsSameOriginWith(start_url_, manifest_id))
       << start_url_.spec() << " vs " << manifest_id.spec();
-  CHECK(!manifest_id.has_ref(), base::NotFatalUntil::M127);
+  CHECK(!manifest_id.has_ref());
   manifest_id_ = manifest_id;
 
   // Ensure sync proto is initialized and remains consistent. Logic in
@@ -768,6 +806,14 @@ void WebApp::SetCurrentOsIntegrationStates(
 }
 
 void WebApp::SetIsolationData(IsolationData isolation_data) {
+  CHECK(manifest_id_.is_valid() &&
+        manifest_id_.SchemeIs(chrome::kIsolatedAppScheme));
+  if (isolation_data.pending_update_info().has_value()) {
+    DCHECK_EQ(isolation_data.location().dev_mode(),
+              isolation_data.pending_update_info()->location.dev_mode())
+        << "IsolationData dev_mode mismatch between current location and "
+           "pending update location.";
+  }
   isolation_data_ = isolation_data;
 }
 
@@ -799,10 +845,6 @@ void WebApp::SetDiyAppIconsMaskedOnMac(bool diy_app_icons_masked_on_mac) {
 void WebApp::SetRelatedApplications(
     std::vector<blink::Manifest::RelatedApplication> related_applications) {
   related_applications_ = std::move(related_applications);
-}
-
-void WebApp::SetUpdateToken(const std::optional<std::string>& update_token) {
-  update_token_ = update_token;
 }
 
 void WebApp::AddPlaceholderInfoToManagementExternalConfigMap(
@@ -1014,16 +1056,11 @@ bool WebApp::operator==(const WebApp& other) const {
         app.is_diy_app_,
         app.was_shortcut_app_,
         app.related_applications_,
-        app.diy_app_icons_masked_on_mac_,
-        app.update_token_
+        app.diy_app_icons_masked_on_mac_
         // clang-format on
     );
   };
   return AsTuple(*this) == AsTuple(other);
-}
-
-bool WebApp::operator!=(const WebApp& other) const {
-  return !(*this == other);
 }
 
 base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
@@ -1102,7 +1139,7 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
            OptionalToStringValue(latest_install_source_));
 
   base::Value::Dict external_map;
-  for (auto it : management_to_external_config_map_) {
+  for (const auto& it : management_to_external_config_map_) {
     external_map.Set(base::ToString(it.first), it.second.AsDebugValue());
   }
 
@@ -1237,8 +1274,6 @@ base::Value WebApp::AsDebugValueWithOnlyPlatformAgnosticFields() const {
   root.Set("related_applications",
            RelatedApplicationsToDebugValue(related_applications_));
 
-  root.Set("update_token", OptionalToStringValue(update_token_));
-
   return base::Value(std::move(root));
 }
 
@@ -1263,32 +1298,12 @@ std::ostream& operator<<(
   return out << management_config.AsDebugValue().DebugString();
 }
 
-bool operator==(const WebApp::ExternalManagementConfig& management_config1,
-                const WebApp::ExternalManagementConfig& management_config2) {
-  return std::tie(management_config1.install_urls,
-                  management_config1.is_placeholder,
-                  management_config1.additional_policy_ids) ==
-         std::tie(management_config2.install_urls,
-                  management_config2.is_placeholder,
-                  management_config2.additional_policy_ids);
-}
-
-bool operator!=(const WebApp::ExternalManagementConfig& management_config1,
-                const WebApp::ExternalManagementConfig& management_config2) {
-  return !(management_config1 == management_config2);
-}
-
 namespace proto::os_state {
 
 bool operator==(const WebAppOsIntegration& os_integration_state1,
                 const WebAppOsIntegration& os_integration_state2) {
   return os_integration_state1.SerializeAsString() ==
          os_integration_state2.SerializeAsString();
-}
-
-bool operator!=(const WebAppOsIntegration& os_integration_state1,
-                const WebAppOsIntegration& os_integration_state2) {
-  return !(os_integration_state1 == os_integration_state2);
 }
 
 }  // namespace proto::os_state
@@ -1316,11 +1331,6 @@ namespace sync_pb {
 bool operator==(const WebAppSpecifics& sync_proto1,
                 const WebAppSpecifics& sync_proto2) {
   return sync_proto1.SerializeAsString() == sync_proto2.SerializeAsString();
-}
-
-bool operator!=(const WebAppSpecifics& sync_proto1,
-                const WebAppSpecifics& sync_proto2) {
-  return !(sync_proto1 == sync_proto2);
 }
 
 }  // namespace sync_pb

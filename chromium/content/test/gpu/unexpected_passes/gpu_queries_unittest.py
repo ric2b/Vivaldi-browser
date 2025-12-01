@@ -7,13 +7,14 @@
 
 import subprocess
 import unittest
-import unittest.mock as mock
+from unittest import mock
 
-from unexpected_passes import gpu_unittest_utils as gpu_uu
 from unexpected_passes_common import builders
 from unexpected_passes_common import constants
 from unexpected_passes_common import expectations
 from unexpected_passes_common import unittest_utils as uu
+
+from unexpected_passes import gpu_unittest_utils as gpu_uu
 
 
 class QueryBuilderUnittest(unittest.TestCase):

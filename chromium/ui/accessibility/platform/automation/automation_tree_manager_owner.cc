@@ -9,6 +9,7 @@
 
 #include "base/containers/flat_tree.h"
 #include "base/i18n/string_search.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_event.h"
@@ -1061,6 +1062,12 @@ void AutomationTreeManagerOwner::DispatchAccessibilityEvents(
   if (is_new_tree) {
     tree_wrapper = new AutomationAXTreeWrapper(this);
     CacheAutomationTreeWrapperForTreeID(tree_id, tree_wrapper);
+    // A new tree requires at least a root node. This is similar to early
+    // return logic in RenderFrameHostImpl::UpdateAXTreeData() for the case
+    // where needs_ax_root_id_ is true.
+    if (updates.size() == 1 && updates[0].nodes.empty()) {
+      return;
+    }
   }
 
   if (!tree_wrapper->OnAccessibilityEvents(tree_id, updates, events,

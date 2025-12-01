@@ -76,10 +76,11 @@ public interface SiteSettingsDelegate {
     boolean isPermissionSiteSettingsRadioButtonFeatureEnabled();
 
     /**
-     * @return The id of the notification channel associated with the given origin.
+     * Get the id of the notification channel associated with the given origin.
+     *
+     * @param callback Callback to be invoked with the Id of the channel.
      */
-    // TODO(crbug.com/40126121): Remove this once WebLayer supports notifications.
-    String getChannelIdForOrigin(String origin);
+    void getChannelIdForOrigin(String origin, Callback<String> callback);
 
     /**
      * @return The name of the app the settings are associated with.
@@ -175,22 +176,6 @@ public interface SiteSettingsDelegate {
      * @return true if the Tracking Protection UI should be displayed.
      */
     boolean shouldShowTrackingProtectionUi();
-
-    /**
-     * @return true if the IP Protection UI should be displayed in User Bypass.
-     */
-    boolean shouldDisplayIpProtection();
-
-    /***
-     * @return true if the Fingerprinting Protection UI should be displayed in User
-     *         Bypass.
-     */
-    boolean shouldDisplayFingerprintingProtection();
-
-    /**
-     * @return whether the 100% 3PCD Tracking Protection with ACT features UI should be shown.
-     */
-    boolean shouldShowTrackingProtectionActFeaturesUi();
 
     /**
      * @return whether all 3pcs should be blocked in incognito.

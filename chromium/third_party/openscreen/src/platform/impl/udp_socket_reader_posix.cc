@@ -23,17 +23,20 @@ UdpSocketReaderPosix::~UdpSocketReaderPosix() {
 
 void UdpSocketReaderPosix::ProcessReadyHandle(SocketHandleRef handle,
                                               uint32_t flags) {
-  if (flags & SocketHandleWaiter::Flags::kReadable) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    // NOTE: Because sockets_ is expected to remain small, the performance here
-    // is better than using an unordered_set.
-    for (UdpSocketPosix* socket : sockets_) {
-      if (socket->GetHandle() == handle) {
-        socket->ReceiveMessage();
-        break;
-      }
+  OSP_CHECK(flags & SocketHandleWaiter::Flags::kReadable);
+  std::lock_guard<std::mutex> lock(mutex_);
+  // NOTE: Because sockets_ is expected to remain small, the performance here
+  // is better than using an unordered_set.
+  for (UdpSocketPosix* socket : sockets_) {
+    if (socket->GetHandle() == handle) {
+      socket->ReceiveMessage();
+      break;
     }
   }
+}
+
+bool UdpSocketReaderPosix::HasPendingWrite(SocketHandleRef handle) {
+  OSP_NOTREACHED();
 }
 
 void UdpSocketReaderPosix::OnCreate(UdpSocket* socket) {
@@ -42,7 +45,9 @@ void UdpSocketReaderPosix::OnCreate(UdpSocket* socket) {
     std::lock_guard<std::mutex> lock(mutex_);
     sockets_.push_back(read_socket);
   }
-  waiter_.Subscribe(this, std::cref(read_socket->GetHandle()));
+  // We only care about read events.
+  waiter_.Subscribe(this, std::cref(read_socket->GetHandle()),
+                    SocketHandleWaiter::kReadable);
 }
 
 void UdpSocketReaderPosix::OnDestroy(UdpSocket* socket) {

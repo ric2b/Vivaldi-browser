@@ -2,16 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../../ui/components/icon_button/icon_button.js';
+
 import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Root from '../../../core/root/root.js';
 import * as TimelineUtils from '../../../panels/timeline/utils/utils.js';
-import * as PanelUtils from '../../../panels/utils/utils.js';
+import {html, type TemplateResult} from '../../../ui/lit/lit.js';
 import * as Trace from '../../trace/trace.js';
 
 import {
-  AgentType,
   AiAgent,
   type ContextResponse,
   ConversationContext,
@@ -174,14 +175,9 @@ export class CallTreeContext extends ConversationContext<TimelineUtils.AICallTre
     return this.#callTree;
   }
 
-  override getIcon(): HTMLElement {
-    const iconData = {
-      iconName: 'performance',
-      color: 'var(--sys-color-on-surface-subtle)',
-    };
-    const icon = PanelUtils.PanelUtils.createIconElement(iconData, 'Performance');
-    icon.classList.add('icon');
-    return icon;
+  override getIcon(): TemplateResult {
+    return html`<devtools-icon name="performance" title="Performance"
+        style="color: var(--sys-color-on-surface-subtle);"></devtools-icon>`;
   }
 
   override getTitle(): string {
@@ -199,7 +195,6 @@ export class CallTreeContext extends ConversationContext<TimelineUtils.AICallTre
  * instance for a new conversation.
  */
 export class PerformanceAgent extends AiAgent<TimelineUtils.AICallTree.AICallTree> {
-  override readonly type = AgentType.PERFORMANCE;
   readonly preamble = preamble;
 
   // We have to set the type of clientFeature here to be the entire enum

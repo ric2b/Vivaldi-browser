@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 
+#include "ash/boca/spotlight/spotlight_notification_bubble_controller.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ash/policy/remote_commands/crd/public/shared_crd_session.h"
 #include "chrome/browser/ash/policy/remote_commands/crd/public/shared_crd_session_provider.h"
@@ -24,17 +25,19 @@ class SpotlightCrdManagerImpl : public SpotlightCrdManager {
   // Constructor used in unit tests. We use this controller to
   // provide a fake `policy::SharedCrdSession`.
   explicit SpotlightCrdManagerImpl(
-      std::unique_ptr<policy::SharedCrdSession> crd_session);
+      std::unique_ptr<policy::SharedCrdSession> crd_session,
+      std::unique_ptr<SpotlightNotificationBubbleController>
+          persistent_bubble_controller);
   ~SpotlightCrdManagerImpl() override;
 
   // SpotlightCrdManager:
-  void OnSessionStarted(const std::string& teacher_email) override;
   void OnSessionEnded() override;
-  void InitiateSpotlightSession(ConnectionCodeCallback callback) override;
+  void InitiateSpotlightSession(ConnectionCodeCallback callback,
+                                const std::string& requester_email) override;
+  void ShowPersistentNotification(const std::string& teacher_name) override;
+  void HidePersistentNotification() override;
 
  private:
-  std::string teacher_email_;
-
   // Owns the `policy::CrdAdminSessionController` which provides a
   // `policy::StartCrdSessionJobDelegate`. The delegate is what actually
   // interacts with the CRD host and the `policy::SharedCrdSession` calls makes
@@ -44,6 +47,9 @@ class SpotlightCrdManagerImpl : public SpotlightCrdManager {
 
   // The CrdSession handles talking directly with the CRD service.
   std::unique_ptr<policy::SharedCrdSession> crd_session_;
+
+  const std::unique_ptr<ash::SpotlightNotificationBubbleController>
+      persistent_bubble_controller_;
 
   base::WeakPtrFactory<SpotlightCrdManagerImpl> weak_ptr_factory_{this};
 };

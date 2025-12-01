@@ -26,6 +26,12 @@ bundle_data_xcassets("assets") {
     # vivaldi_ntp_speed_dial_domain_text_color
     "Assets.xcassets/vivaldi_ntp_speed_dial_domain_text_color.colorset/Contents.json",
 
+    # vivaldi_ntp_speed_dial_domain_text_color_dark
+    "Assets.xcassets/vivaldi_ntp_speed_dial_domain_text_color_dark.colorset/Contents.json",
+
+    # vivaldi_ntp_speed_dial_domain_text_color_light
+    "Assets.xcassets/vivaldi_ntp_speed_dial_domain_text_color_light.colorset/Contents.json",
+
     # vivaldi_ntp_toolbar_selectionline_color
     "Assets.xcassets/vivaldi_ntp_toolbar_selectionline_color.colorset/Contents.json",
 

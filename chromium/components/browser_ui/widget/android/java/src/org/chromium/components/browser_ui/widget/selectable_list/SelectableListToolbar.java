@@ -44,7 +44,6 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
-import org.chromium.components.browser_ui.util.KeyboardNavigationListener;
 import org.chromium.components.browser_ui.widget.NumberRollView;
 import org.chromium.components.browser_ui.widget.R;
 import org.chromium.components.browser_ui.widget.TintedDrawable;
@@ -56,6 +55,7 @@ import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.UiUtils;
 import org.chromium.ui.text.EmptyTextWatcher;
 import org.chromium.ui.util.ColorUtils;
+import org.chromium.ui.util.KeyboardNavigationListener;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -298,6 +298,7 @@ public class SelectableListToolbar<E> extends Toolbar
                         getContext(),
                         R.drawable.ic_arrow_back_white_24dp,
                         R.color.default_icon_color_tint_list);
+        mNavigationIconDrawable.setAutoMirrored(true);
 
         mShowInfoIcon = true;
         mShowInfoStringId = R.string.show_info;

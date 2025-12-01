@@ -30,6 +30,11 @@ const kMaxWaitTimeMs = loadTimeData.getInteger('maxLoadingTimeMs');
 // the --enable-features=GlicDebugWebview command-line flag.
 const kEnableDebug = loadTimeData.getBoolean('enableDebug');
 
+// Whether additional web client unresponsiveness tracking metrics should be
+// recorded.
+const kEnableUnresponsiveMetrics =
+    loadTimeData.getBoolean('enableWebClientUnresponsiveMetrics');
+
 interface PageElementTypes {
   panelContainer: HTMLElement;
   loadingPanel: HTMLElement;
@@ -41,6 +46,7 @@ interface PageElementTypes {
   webviewHeader: HTMLDivElement;
   webviewContainer: HTMLDivElement;
   signInButton: HTMLButtonElement;
+  unresponsiveOverlay: HTMLElement;
 }
 
 const $: PageElementTypes = new Proxy({}, {
@@ -55,7 +61,24 @@ type PanelId = 'loadingPanel'|'guestPanel'|'offlinePanel'|'errorPanel'|
 interface StateDescriptor {
   onEnter?: () => void;
   onExit?: () => void;
+  // Whether to try to reload the webview on open while in this state.
+  reloadOnOpen?: boolean;
 }
+
+// Web client unresponsiveness state tracking values for metrics reporting.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(WebClientUnresponsiveState)
+export enum WebClientUnresponsiveState {
+  ENTERED_FROM_WEBVIEW_EVENT = 0,
+  ENTERED_FROM_CUSTOM_HEARTBEAT = 1,
+  ALREADY_ON_FROM_WEBVIEW_EVENT = 2,
+  ALREADY_ON_FROM_CUSTOM_HEARTBEAT = 3,
+  EXITED = 4,
+  MAX_VALUE = EXITED,
+}
+// LINT.ThenChange(//tools/metrics/histograms/metadata/glic/enums.xml:WebClientUnresponsiveState)
 
 export class GlicAppController implements PageInterface, WebviewDelegate,
                                           ApiHostEmbedder {
@@ -64,6 +87,11 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
   // This is used to simulate no connection for tests.
   private simulateNoConnection: boolean =
       loadTimeData.getBoolean('simulateNoConnection');
+
+  private guestResizeEnabled: boolean = false;
+
+  // Width for non-resizable panel.
+  private defaultWidth: number = 352;
 
   // Last seen width and height of guest panel.
   private lastWidth: number = 400;
@@ -75,6 +103,8 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
 
   private profileReadyState: ProfileReadyState|undefined = undefined;
   private profileReadyInitialState = Promise.withResolvers<void>();
+
+  private enteredUnresponsiveTimestampMs?: number;
 
   state: WebUiState|undefined;
 
@@ -124,7 +154,42 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
   // WebviewDelegate implementation.
   webviewUnresponsive(): void {
     console.warn('webview unresponsive');
+    this.trackUnresponsiveState(
+        this.state === WebUiState.kUnresponsive ?
+            WebClientUnresponsiveState.ALREADY_ON_FROM_WEBVIEW_EVENT :
+            WebClientUnresponsiveState.ENTERED_FROM_WEBVIEW_EVENT);
     this.setState(WebUiState.kUnresponsive);
+  }
+
+  trackUnresponsiveState(newState: WebClientUnresponsiveState): void {
+    if (!kEnableUnresponsiveMetrics) {
+      return;
+    }
+
+    // Track and record unresponsive state duration.
+    if (newState === WebClientUnresponsiveState.ENTERED_FROM_WEBVIEW_EVENT ||
+        newState === WebClientUnresponsiveState.ENTERED_FROM_CUSTOM_HEARTBEAT) {
+      // Entering an unresponsive state.
+      this.enteredUnresponsiveTimestampMs = Date.now();
+    } else if (newState === WebClientUnresponsiveState.EXITED) {
+      // Existing an unresponsive state.
+      if (this.enteredUnresponsiveTimestampMs !== undefined) {
+        const unresponsiveDuration =
+            Date.now() - this.enteredUnresponsiveTimestampMs;
+        chrome.metricsPrivate.recordMediumTime(
+            'Glic.Host.WebClientUnresponsiveState.Duration',
+            unresponsiveDuration);
+        this.enteredUnresponsiveTimestampMs = undefined;
+      } else {
+        console.error(
+            'Unresponsive state exited without an entering timestamp');
+      }
+    }
+
+    // Record unresponsive state detections and transitions.
+    chrome.metricsPrivate.recordEnumerationValue(
+        'Glic.Host.WebClientUnresponsiveState', newState,
+        WebClientUnresponsiveState.MAX_VALUE + 1);
   }
 
   webviewError(reason: string): void {
@@ -141,9 +206,13 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
         $.guestPanel.classList.toggle('show-header', true);
         this.showPanel('guestPanel');
         break;
+      case 'guestError':
+        this.setState(WebUiState.kGuestError);
+        break;
       case 'regular':
         $.guestPanel.classList.toggle('show-header', false);
-        if (this.state === WebUiState.kReady) {
+        if (this.state === WebUiState.kReady ||
+            this.state === WebUiState.kGuestError) {
           this.setState(WebUiState.kBeginLoad);
         }
         break;
@@ -160,6 +229,12 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
     this.state = newState;
     this.states.get(this.state)!.onEnter?.call(this);
     this.browserProxy.handler.webUiStateChanged(this.state);
+    this.browserProxy.handler.enableDragResize(
+        this.state === WebUiState.kReady && this.guestResizeEnabled);
+  }
+
+  private stateDescriptor(): StateDescriptor|undefined {
+    return this.state !== undefined ? this.states.get(this.state) : undefined;
   }
 
   readonly states: Map<WebUiState, StateDescriptor> = new Map([
@@ -182,10 +257,12 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
     [
       WebUiState.kError,
       {
-        onEnter: () => {
-          this.destroyWebview();
-          this.showPanel('errorPanel');
-        },
+        reloadOnOpen: true,
+        onEnter:
+            () => {
+              this.destroyWebview();
+              this.showPanel('errorPanel');
+            },
       },
     ],
     [
@@ -200,10 +277,12 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
     [
       WebUiState.kUnavailable,
       {
-        onEnter: () => {
-          this.destroyWebview();
-          this.showPanel('unavailablePanel');
-        },
+        reloadOnOpen: true,
+        onEnter:
+            () => {
+              this.destroyWebview();
+              this.showPanel('unavailablePanel');
+            },
       },
     ],
     [
@@ -218,39 +297,43 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
     [
       WebUiState.kUnresponsive,
       {
-        onEnter: () => {
-          // TODO(crbug.com/394162784): Create an unresponsive UI according to
-          // the design spec and remove the placeholder.
-          this.enterUnresponsiveUiPlaceholder();
-        },
-        onExit: this.exitUnresponsiveUiPlaceholder,
+        reloadOnOpen: true,
+        onEnter:
+            () => {
+              $.unresponsiveOverlay.classList.toggle('hidden', false);
+            },
+        onExit:
+            () => {
+              this.trackUnresponsiveState(WebClientUnresponsiveState.EXITED);
+              $.unresponsiveOverlay.classList.toggle('hidden', true);
+            },
       },
     ],
     [
       WebUiState.kSignIn,
       {
-        onEnter: () => {
-          this.destroyWebview();
-          this.showPanel('signInPanel');
-        },
+        reloadOnOpen: true,
+        onEnter:
+            () => {
+              this.destroyWebview();
+              this.showPanel('signInPanel');
+            },
+      },
+    ],
+    [
+      WebUiState.kGuestError,
+      {
+        reloadOnOpen: true,
+        onEnter:
+            () => {
+              this.lastWidth = 400;
+              this.lastHeight = 800;
+              $.guestPanel.classList.toggle('show-header', true);
+              this.showPanel('guestPanel');
+            },
       },
     ],
   ]);
-
-  private enterUnresponsiveUiPlaceholder(): void {
-    if (!this.webview) {
-      return;
-    }
-    this.webview.webview.style.webkitTransition = 'opacity 250ms';
-    this.webview.webview.style.opacity = '0.5';
-  }
-
-  private exitUnresponsiveUiPlaceholder(): void {
-    if (!this.webview) {
-      return;
-    }
-    this.webview.webview.style.opacity = '1';
-  }
 
   private cancelTimeout(): void {
     if (this.loadingTimer) {
@@ -357,9 +440,12 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
       this.browserProxy.handler.resizeWidget(
           {width: this.lastWidth, height: this.lastHeight}, transitionDuration);
     } else {
-      const newRect = $[id].getBoundingClientRect();
       this.browserProxy.handler.resizeWidget(
-          {width: newRect.width, height: newRect.height}, transitionDuration);
+          {
+            width: this.defaultWidth,
+            height: $[id].getBoundingClientRect().height,
+          },
+          transitionDuration);
     }
   }
 
@@ -414,6 +500,14 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
     this.lastHeight = request.height;
   }
 
+  // Called when the web client requests to enable manual drag resize.
+  enableDragResize(enabled: boolean) {
+    this.guestResizeEnabled = enabled;
+    if (this.state === WebUiState.kReady) {
+      this.browserProxy.handler.enableDragResize(this.guestResizeEnabled);
+    }
+  }
+
   // Called when the notifyPanelWillOpen promise resolves to open the panel
   // when triggered from the browser.
   webClientReady(): void {
@@ -439,9 +533,14 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
         this.setState(WebUiState.kReady);
         break;
       case WebClientState.UNRESPONSIVE:
+        this.trackUnresponsiveState(
+            this.state === WebUiState.kUnresponsive ?
+                WebClientUnresponsiveState.ALREADY_ON_FROM_CUSTOM_HEARTBEAT :
+                WebClientUnresponsiveState.ENTERED_FROM_CUSTOM_HEARTBEAT);
         this.setState(WebUiState.kUnresponsive);
         break;
       case WebClientState.ERROR:
+        this.guestResizeEnabled = false;
         this.setState(WebUiState.kError);
         break;
     }
@@ -486,7 +585,7 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
   // Called before the WebUI is shown. If we're in an error state, automatically
   // try to reload.
   intentToShow() {
-    if (this.state === WebUiState.kError) {
+    if (this.stateDescriptor()?.reloadOnOpen) {
       this.reload();
     }
   }
@@ -510,8 +609,7 @@ export class GlicAppController implements PageInterface, WebviewDelegate,
           this.setState(WebUiState.kSignIn);
           break;
         case ProfileReadyState.kReady:
-          if (this.state === WebUiState.kUnavailable ||
-              this.state === WebUiState.kSignIn) {
+          if (this.stateDescriptor()?.reloadOnOpen) {
             this.setState(WebUiState.kBeginLoad);
           }
           break;

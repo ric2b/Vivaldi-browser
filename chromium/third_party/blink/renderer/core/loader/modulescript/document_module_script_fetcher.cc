@@ -31,12 +31,14 @@ void DocumentModuleScriptFetcher::Fetch(
     ModuleType expected_module_type,
     ResourceFetcher* fetch_client_settings_object_fetcher,
     ModuleGraphLevel level,
-    ModuleScriptFetcher::Client* client) {
+    ModuleScriptFetcher::Client* client,
+    ModuleImportPhase import_phase) {
   DCHECK_EQ(fetch_params.GetScriptType(), mojom::blink::ScriptType::kModule);
   DCHECK(fetch_client_settings_object_fetcher);
   DCHECK(!client_);
   client_ = client;
   expected_module_type_ = expected_module_type;
+  import_phase_ = import_phase;
   // Streaming can currently only be triggered from the main thread. This
   // currently happens only for dynamic imports in worker modules.
   ScriptResource::StreamingAllowed streaming_allowed =
@@ -59,10 +61,12 @@ void DocumentModuleScriptFetcher::NotifyFinished(Resource* resource) {
 
   auto* script_resource = To<ScriptResource>(resource);
 
+  std::optional<ResolvedModuleType> resolved_module_type;
   {
     HeapVector<Member<ConsoleMessage>> error_messages;
-    if (!WasModuleLoadSuccessful(script_resource, expected_module_type_,
-                                 &error_messages)) {
+    resolved_module_type = WasModuleLoadSuccessful(
+        script_resource, expected_module_type_, &error_messages);
+    if (!resolved_module_type) {
       client_->NotifyFetchFinishedError(error_messages);
       return;
     }
@@ -101,9 +105,9 @@ void DocumentModuleScriptFetcher::NotifyFinished(Resource* resource) {
 
   client_->NotifyFetchFinishedSuccess(ModuleScriptCreationParams(
       /*source_url=*/url, /*base_url=*/url,
-      ScriptSourceLocationType::kExternalFile, expected_module_type_,
+      ScriptSourceLocationType::kExternalFile, resolved_module_type.value(),
       script_resource->SourceText(), script_resource->CacheHandler(),
-      response_referrer_policy, streamer, not_streamed_reason));
+      response_referrer_policy, streamer, not_streamed_reason, import_phase_));
 }
 
 void DocumentModuleScriptFetcher::Trace(Visitor* visitor) const {

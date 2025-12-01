@@ -31,8 +31,11 @@ def UpdateLinuxConfig(path):
             # doesn't exist.
             (r'#define HAVE_CANONICALIZE_FILE_NAME 1',
              r'/* #undef HAVE_CANONICALIZE_FILE_NAME */ // Controlled by the Chromium build process - see generate_nasm_configs.py'
+             ),
+            (r'#define HAVE_STRLCPY 1',
+             r'/* #undef HAVE_STRLCPY */ // Shouldn\'t work with -std=c11, but configure still detects it.'
              )
-        ])
+       ])
 
 
 def UpdateMacConfig(path):

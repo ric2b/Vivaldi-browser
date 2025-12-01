@@ -215,9 +215,6 @@ std::string DescriptionForNSEvent(NSEvent* event) {
 
     if ([newValueNumber isKindOfClass:[NSNumber class]]) {
       [self voiceOverStateChanged:[newValueNumber boolValue]];
-      content::BrowserAccessibilityState* browser_ax_state =
-          content::BrowserAccessibilityState::GetInstance();
-      browser_ax_state->SetScreenReaderAppActive([newValueNumber boolValue]);
     }
 
     return;
@@ -456,7 +453,9 @@ std::string DescriptionForNSEvent(NSEvent* event) {
     if (!_scoped_accessibility_mode_voiceover) {
       _scoped_accessibility_mode_voiceover =
           content::BrowserAccessibilityState::GetInstance()
-              ->CreateScopedModeForProcess(ui::kAXModeComplete);
+              ->CreateScopedModeForProcess(ui::kAXModeComplete |
+                                           ui::AXMode::kFromPlatform |
+                                           ui::AXMode::kScreenReader);
     }
   } else {
     _scoped_accessibility_mode_voiceover.reset();
@@ -557,7 +556,8 @@ std::string DescriptionForNSEvent(NSEvent* event) {
                                  : ui::kAXModeBasic;
     _scoped_accessibility_mode_general =
         content::BrowserAccessibilityState::GetInstance()
-            ->CreateScopedModeForProcess(target_mode);
+            ->CreateScopedModeForProcess(target_mode |
+                                         ui::AXMode::kFromPlatform);
   }
 
   return [super accessibilityRole];

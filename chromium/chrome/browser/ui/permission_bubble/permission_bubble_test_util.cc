@@ -4,13 +4,14 @@
 
 #include "chrome/browser/ui/permission_bubble/permission_bubble_test_util.h"
 
+#include "components/permissions/permission_request.h"
 #include "url/gurl.h"
 
 TestPermissionBubbleViewDelegate::TestPermissionBubbleViewDelegate() = default;
 
 TestPermissionBubbleViewDelegate::~TestPermissionBubbleViewDelegate() = default;
 
-const std::vector<raw_ptr<permissions::PermissionRequest, VectorExperimental>>&
+const std::vector<std::unique_ptr<permissions::PermissionRequest>>&
 TestPermissionBubbleViewDelegate::Requests() {
   return requests_;
 }

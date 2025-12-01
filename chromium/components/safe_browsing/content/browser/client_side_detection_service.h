@@ -237,15 +237,17 @@ class ClientSideDetectionService
   // on-device model session creation.
   bool IsOnDeviceModelAvailable();
 
+  // Calls the delegate's |LogOnDeviceModelEligibilityReason|.
+  virtual void LogOnDeviceModelEligibilityReason();
+
   // Resets the session that's created by the on-device model. This occurs when
   // there is a new page navigation and at the start and end of
   // |InquireOnDeviceModel|.
-  void ResetOnDeviceSession();
+  void ResetOnDeviceSession(bool inquiry_complete);
 
   // Called from the host class when the proper requirements are met to inquire
   // the on-device model.
   virtual void InquireOnDeviceModel(
-      ClientPhishingRequest* verdict,
       std::string rendered_texts,
       base::OnceCallback<
           void(std::optional<optimization_guide::proto::ScamDetectionResponse>)>
@@ -347,7 +349,6 @@ class ClientSideDetectionService
   void RenderProcessReady(content::RenderProcessHost* rph) override;
 
   void ModelExecutionCallback(
-      ClientPhishingRequest* verdict,
       optimization_guide::OptimizationGuideModelStreamingExecutionResult
           result);
 

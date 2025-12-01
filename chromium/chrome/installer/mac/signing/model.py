@@ -226,9 +226,6 @@ class NotarizeAndStapleLevel(enum.Enum):
 
     `NONE` means no notarization tasks should be performed.
 
-    `NOWAIT` means to submit the signed application and packaging to Apple for
-    notarization, but not to wait for a reply.
-
     `WAIT_NOSTAPLE` means to submit the signed application and packaging to
     Apple for notarization, and wait for a reply, but not to staple the
     resulting notarization ticket.
@@ -238,15 +235,11 @@ class NotarizeAndStapleLevel(enum.Enum):
     ticket.
     """
     NONE = 0
-    NOWAIT = 1
-    WAIT_NOSTAPLE = 2
-    STAPLE = 3
+    WAIT_NOSTAPLE = 1
+    STAPLE = 2
 
     def should_notarize(self):
         return self.value > self.NONE.value
-
-    def should_wait(self):
-        return self.value > self.NOWAIT.value
 
     def should_staple(self):
         return self.value > self.WAIT_NOSTAPLE.value
@@ -281,8 +274,7 @@ class Distribution(object):
                  package_as_dmg=True,
                  package_as_pkg=False,
                  package_as_zip=False,
-                 inflation_kilobytes=0,
-                 use_alternative_dmg_visuals=False):
+                 inflation_kilobytes=0):
         """Creates a new Distribution object. All arguments are optional.
 
         Args:
@@ -316,9 +308,6 @@ class Distribution(object):
                 the product.
             inflation_kilobytes: If non-zero, a blob of this size will be
                 inserted into the DMG. Incompatible with package_as_pkg = True.
-            use_alternative_dmg_visuals: If True, then alternate visuals for
-                crbug.com/393198671 will be used in the .dmg file. Requires
-                package_as_dmg. Mutually exclusive with channel_customize.
         """
         if channel_customize:
             # Side-by-side channels must have a distinct names and creator
@@ -339,14 +328,9 @@ class Distribution(object):
         self.package_as_dmg = package_as_dmg
         self.package_as_pkg = package_as_pkg
         self.inflation_kilobytes = inflation_kilobytes
-        self.use_alternative_dmg_visuals = use_alternative_dmg_visuals
 
         # inflation_kilobytes are only inserted into DMGs
         assert not self.inflation_kilobytes or self.package_as_dmg
-
-        assert not (self.channel_customize and self.use_alternative_dmg_visuals)
-        if self.use_alternative_dmg_visuals:
-            assert self.package_as_dmg
 
     def brandless_copy(self):
         """Derives and returns a copy of this Distribution object, identical

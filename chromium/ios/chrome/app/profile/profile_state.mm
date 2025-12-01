@@ -54,7 +54,7 @@
 @end
 
 @implementation ProfileState {
-  base::WeakPtr<ProfileIOS> _profile;
+  raw_ptr<ProfileIOS> _profile;
 
   // Agents attached to this profile state.
   NSMutableArray<id<ProfileStateAgent>>* _agents;
@@ -110,8 +110,7 @@
 }
 
 - (void)setProfile:(ProfileIOS*)profile {
-  CHECK(profile);
-  _profile = profile->AsWeakPtr();
+  _profile = profile;
 }
 
 - (SceneState*)foregroundActiveScene {
@@ -229,6 +228,7 @@
 }
 
 - (void)sceneStateConnected:(SceneState*)sceneState {
+  _lastSceneConnection = base::TimeTicks::Now();
   [sceneState addObserver:self];
   [_connectedSceneStates addObject:sceneState];
   [_observers profileState:self sceneConnected:sceneState];
@@ -255,6 +255,14 @@
   }
 }
 
+- (void)willBlockProfileInitialisationForUI {
+  DCHECK_GE(_initStage, ProfileInitStage::kPrepareUI);
+  DCHECK_LT(_initStage, ProfileInitStage::kFinal);
+  for (SceneState* sceneState in _connectedSceneStates) {
+    [sceneState.animator cancelAnimation];
+  }
+}
+
 #pragma mark - SceneStateObserver
 
 - (void)sceneState:(SceneState*)sceneState
@@ -266,8 +274,9 @@
       break;
 
     case SceneActivationLevelDisconnected:
-      [_connectedSceneStates removeObject:sceneState];
       [sceneState removeObserver:self];
+      [_connectedSceneStates removeObject:sceneState];
+      [_observers profileState:self sceneDisconnected:sceneState];
       break;
 
     case SceneActivationLevelBackground:

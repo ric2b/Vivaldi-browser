@@ -227,6 +227,9 @@ class NotesModel : public KeyedService {
   // a lock on |url_lock_|.
   bool IsNotesNoLock(const GURL& url);
 
+  // Returns |True| when provided note node's root parent is Trash node.
+  bool IsChildOfTrashNode(const NoteNode* node);
+
   // Returns the set of nodes with the |url|.
   void GetNodesByURL(const GURL& url, std::vector<const NoteNode*>* nodes);
 

@@ -8,7 +8,13 @@ import android.view.View;
 
 import androidx.annotation.IdRes;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.theme.ThemeModuleUtils;
+import org.chromium.ui.util.XrUtils;
+
 /** Feature related utilities for Hub. */
+@NullMarked
 public class HubUtils {
     /**
      * Returns the height of the hub search box's calculated container.
@@ -29,5 +35,14 @@ public class HubUtils {
         int hubToolbarBottom = hubToolbarView.getBottom();
         int searchBoxContainerBottom = searchBoxContainerView.getBottom();
         return hubToolbarBottom - searchBoxContainerBottom;
+    }
+
+    /** Whether enable the grid tab switcher UI update. */
+    public static boolean isGtsUpdateEnabled() {
+        // TODO(crbug.com/419822825): Remove explicit check once XR toolbar crash is resolved.
+        if (XrUtils.isXrDevice()) return false;
+
+        return ChromeFeatureList.sGridTabSwitcherUpdate.isEnabled()
+                || ThemeModuleUtils.isForceEnableDependencies();
     }
 }

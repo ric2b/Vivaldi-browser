@@ -263,11 +263,10 @@ void SaveIndex(std::unique_ptr<flatbuffers::FlatBufferBuilder> index_builder,
                IndexSavedCallback index_saved_callback) {
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
-      base::BindOnce(
-          std::move(index_saved_callback),
-          DoSaveIndex(base::span(index_builder->GetBufferPointer(),
-                                      index_builder->GetSize()),
-                      index_path)));
+      base::BindOnce(std::move(index_saved_callback),
+                     DoSaveIndex(base::span(index_builder->GetBufferPointer(),
+                                            index_builder->GetSize()),
+                                 index_path)));
 }
 
 template <class T>
@@ -432,6 +431,124 @@ size_t BuildFlatContentInjectionRuleTree(
   return root_node_index;
 }
 
+// The goal of this comparator is to provide some sort of order as fast as
+// possible to make inserting into a map or set fast. We don't care about
+// whether the order makes any logical sense. The various parts of the rules are
+// compared in an order that loosely aims to check the items that are more
+// likely to be different first.
+struct RequestFilterRuleCompare {
+  bool operator()(const flat::RequestFilterRule* lhs,
+                  const flat::RequestFilterRule* rhs) const {
+    auto pattern_ordering =
+        FastCompareFlatString(lhs->pattern(), rhs->pattern());
+
+    if (pattern_ordering < 0) {
+      return true;
+    }
+
+    if (pattern_ordering > 0) {
+      return false;
+    }
+
+    auto host_ordering = FastCompareFlatString(lhs->host(), rhs->host());
+
+    if (host_ordering < 0) {
+      return true;
+    }
+
+    if (host_ordering > 0) {
+      return false;
+    }
+
+    if (lhs->anchor_type() < rhs->anchor_type())
+      return true;
+    if (lhs->anchor_type() > rhs->anchor_type())
+      return false;
+
+    auto domains_included_ordering = FastCompareFlatStringVector(
+        lhs->domains_included(), rhs->domains_included());
+
+    if (domains_included_ordering < 0) {
+      return true;
+    }
+
+    if (domains_included_ordering > 0) {
+      return false;
+    }
+
+    auto domains_excluded_ordering = FastCompareFlatStringVector(
+        lhs->domains_excluded(), rhs->domains_excluded());
+
+    if (domains_excluded_ordering < 0) {
+      return true;
+    }
+
+    if (domains_excluded_ordering > 0) {
+      return false;
+    }
+
+    if (lhs->decision() < rhs->decision())
+      return true;
+    if (lhs->decision() > rhs->decision())
+      return false;
+
+    if (lhs->options() < rhs->options())
+      return true;
+    if (lhs->options() > rhs->options())
+      return false;
+
+    if (lhs->party() < rhs->party())
+      return true;
+    if (lhs->party() > rhs->party())
+      return false;
+
+    if (lhs->resource_types() < rhs->resource_types())
+      return true;
+    if (lhs->resource_types() > rhs->resource_types())
+      return false;
+
+    if (lhs->activation_types() < rhs->activation_types())
+      return true;
+    if (lhs->activation_types() > rhs->activation_types())
+      return false;
+
+    if (lhs->pattern_type() < rhs->pattern_type())
+      return true;
+    if (lhs->pattern_type() > rhs->pattern_type())
+      return false;
+
+    if (lhs->modifier() < rhs->modifier())
+      return true;
+    if (lhs->modifier() > rhs->modifier())
+      return false;
+
+    auto modifier_ordering = FastCompareFlatStringVector(
+        lhs->modifier_values(), rhs->modifier_values());
+
+    if (modifier_ordering < 0) {
+      return true;
+    }
+
+    if (modifier_ordering > 0) {
+      return false;
+    }
+
+    auto ad_domains_and_query_triggers_ordering =
+        FastCompareFlatStringVector(lhs->ad_domains_and_query_triggers(),
+                                    rhs->ad_domains_and_query_triggers());
+
+    if (ad_domains_and_query_triggers_ordering < 0) {
+      return true;
+    }
+
+    if (ad_domains_and_query_triggers_ordering > 0) {
+      return false;
+    }
+
+    // The rules are the same
+    return false;
+  }
+};
 }  // namespace
 
 void BuildAndSaveIndex(
@@ -450,6 +567,8 @@ void BuildAndSaveIndex(
   std::unique_ptr<flatbuffers::FlatBufferBuilder> builder =
       std::make_unique<flatbuffers::FlatBufferBuilder>();
 
+  std::set<const flat::RequestFilterRule*, RequestFilterRuleCompare> seen_rules;
+
   // Generic cosmetic block rules that are not cancelled by any other rule on
   // any domain.
   std::map<const flat::CosmeticRule*, RuleId, ContentInjectionRuleBodyCompare>
@@ -460,19 +579,32 @@ void BuildAndSaveIndex(
       cosmetic_allow_selectors;
   ContentInjectionRuleTreeNode content_injection_rules_tree;
 
-  for (const auto& rules_buffer : rules_buffers) {
+  for (const auto& [source_id, rules_buffer] : rules_buffers) {
     source_checksums.push_back(flat::CreateSourceChecksum(
-        *builder, rules_buffer.first,
-        builder->CreateString(rules_buffer.second->checksum())));
+        *builder, source_id, builder->CreateString(rules_buffer->checksum())));
     for (flatbuffers::uoffset_t i = 0;
          i <
-         rules_buffer.second->rules_list()->request_filter_rules_list()->size();
+         rules_buffer->rules_list()->bad_request_filter_rules_list()->size();
          i++) {
-      RuleIdOffset rule_id =
-          flat::CreateRuleId(*builder, rules_buffer.first, i);
-      const auto* rule =
-          rules_buffer.second->rules_list()->request_filter_rules_list()->Get(
-              i);
+      const flat::RequestFilterRule* rule =
+          rules_buffer->rules_list()->bad_request_filter_rules_list()->Get(i);
+      // Just inserting the bad rules here will prevent actual rules from being
+      // indexed, thanks to the deduplication check below.
+      seen_rules.insert(rule);
+    }
+
+    for (flatbuffers::uoffset_t i = 0;
+         i < rules_buffer->rules_list()->request_filter_rules_list()->size();
+         i++) {
+      RuleIdOffset rule_id = flat::CreateRuleId(*builder, source_id, i);
+      const flat::RequestFilterRule* rule =
+          rules_buffer->rules_list()->request_filter_rules_list()->Get(i);
+
+      if (seen_rules.contains(rule)) {
+        continue;
+      }
+
+      seen_rules.insert(rule);
 
       DCHECK((rule->modifier() != flat::Modifier_NO_MODIFIER) ||
              rule->activation_types() != 0 ||
@@ -504,11 +636,10 @@ void BuildAndSaveIndex(
     }
 
     for (flatbuffers::uoffset_t i = 0;
-         i < rules_buffer.second->rules_list()->cosmetic_rules_list()->size();
-         i++) {
-      RuleId rule_id(rules_buffer.first, i);
+         i < rules_buffer->rules_list()->cosmetic_rules_list()->size(); i++) {
+      RuleId rule_id(source_id, i);
       const auto* rule =
-          rules_buffer.second->rules_list()->cosmetic_rules_list()->Get(i);
+          rules_buffer->rules_list()->cosmetic_rules_list()->Get(i);
 
       // Domain exclusions on block rules have the same effect as allow rules.
       if (rule->core()->is_allow_rule() || rule->core()->domains_excluded()) {
@@ -533,14 +664,12 @@ void BuildAndSaveIndex(
     }
 
     for (flatbuffers::uoffset_t i = 0;
-         i < rules_buffer.second->rules_list()
-                 ->scriptlet_injection_rules_list()
-                 ->size();
+         i <
+         rules_buffer->rules_list()->scriptlet_injection_rules_list()->size();
          i++) {
-      RuleId rule_id(rules_buffer.first, i);
-      const auto* rule = rules_buffer.second->rules_list()
-                             ->scriptlet_injection_rules_list()
-                             ->Get(i);
+      RuleId rule_id(source_id, i);
+      const auto* rule =
+          rules_buffer->rules_list()->scriptlet_injection_rules_list()->Get(i);
       AddRuleToContentInjectionRulesTree(rule, rule_id,
                                          content_injection_rules_tree);
     }

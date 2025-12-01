@@ -115,8 +115,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     }
     if (!IsOutputSPIRV(shaderOutput))
     {
-        hasUnsupportedOptions = hasUnsupportedOptions || options.useSpecializationConstant ||
-                                options.addVulkanXfbEmulationSupportCode ||
+        hasUnsupportedOptions = hasUnsupportedOptions || options.addVulkanXfbEmulationSupportCode ||
                                 options.roundOutputAfterDithering ||
                                 options.addAdvancedBlendEquationsEmulation;
     }
@@ -138,6 +137,16 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size)
     options.pls.fragmentSyncType = static_cast<ShFragmentSynchronizationType>(
         static_cast<uint32_t>(options.pls.fragmentSyncType) %
         static_cast<uint32_t>(ShFragmentSynchronizationType::InvalidEnum));
+
+    // Force enable options that are required by the output generators.
+    if (IsOutputSPIRV(shaderOutput))
+    {
+        options.removeInactiveVariables = true;
+    }
+    if (IsOutputMSL(shaderOutput))
+    {
+        options.removeInactiveVariables = true;
+    }
 
     std::vector<uint32_t> validOutputs;
     validOutputs.push_back(SH_ESSL_OUTPUT);

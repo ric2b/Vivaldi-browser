@@ -40,20 +40,20 @@ constexpr uint32_t kRTSize = 1;
 
 class ImmediateDataTests : public DawnTest {
   protected:
-    std::vector<wgpu::FeatureName> GetRequiredFeatures() override {
-        return {wgpu::FeatureName::ChromiumExperimentalImmediateData};
+    wgpu::Limits GetRequiredLimits(const wgpu::Limits&) override {
+        return wgpu::Limits{.maxImmediateSize = kDefaultMaxImmediateDataBytes};
     }
 
     void SetUp() override {
         DawnTest::SetUp();
 
         mShaderModule = utils::CreateShaderModule(device, R"(
-            enable chromium_experimental_push_constant;
-            struct PushConstant {
+            enable chromium_experimental_immediate;
+            struct Immediate {
                 color: vec3<f32>,
                 colorDiff: f32,
             };
-            var<push_constant> constants: PushConstant;
+            var<immediate> constants: Immediate;
             struct VertexOut {
                 @location(0) color : vec3f,
                 @builtin(position) position : vec4f,
@@ -76,7 +76,7 @@ class ImmediateDataTests : public DawnTest {
                 return vec4f(color + vec3f(constants.colorDiff), 1.0);
             }
 
-            var<push_constant> computeConstants: vec4u;
+            var<immediate> computeConstants: vec4u;
             @group(0) @binding(0) var<storage, read_write> output : vec4u;
 
             @compute @workgroup_size(1, 1, 1)
@@ -109,7 +109,7 @@ class ImmediateDataTests : public DawnTest {
         wgpu::PipelineLayoutDescriptor pipelineLayoutDesc;
         pipelineLayoutDesc.bindGroupLayoutCount = 1;
         pipelineLayoutDesc.bindGroupLayouts = &bindGroupLayout;
-        pipelineLayoutDesc.immediateDataRangeByteSize = kMaxImmediateDataBytes;
+        pipelineLayoutDesc.immediateSize = kDefaultMaxImmediateDataBytes;
         return device.CreatePipelineLayout(&pipelineLayoutDesc);
     }
 
@@ -329,8 +329,8 @@ TEST_P(ImmediateDataTests, SetImmediateDataMultipleTimes) {
 // works fine when shaders have user immediate data
 TEST_P(ImmediateDataTests, UsingImmediateDataDontAffectClampFragDepth) {
     wgpu::ShaderModule module = utils::CreateShaderModule(device, R"(
-        enable chromium_experimental_push_constant;
-        var<push_constant> constants: vec4f;
+        enable chromium_experimental_immediate;
+        var<immediate> constants: vec4f;
         @vertex fn vs() -> @builtin(position) vec4f {
             return vec4f(0.0, 0.0, 0.5, 1.0);
         }
@@ -383,11 +383,11 @@ TEST_P(ImmediateDataTests, UsingImmediateDataDontAffectClampFragDepth) {
 // SetImmediateData Multiple times should upload dirtied, latest contents.
 TEST_P(ImmediateDataTests, SetImmediateDataWithPipelineSwitch) {
     wgpu::ShaderModule shaderModuleWithLessImmediateData = utils::CreateShaderModule(device, R"(
-        enable chromium_experimental_push_constant;
-        struct PushConstant {
+        enable chromium_experimental_immediate;
+        struct Immediate {
             color: vec3<f32>,
         };
-        var<push_constant> constants: PushConstant;
+        var<immediate> constants: Immediate;
         struct VertexOut {
             @location(0) color : vec3f,
             @builtin(position) position : vec4f,
@@ -410,7 +410,7 @@ TEST_P(ImmediateDataTests, SetImmediateDataWithPipelineSwitch) {
             return vec4f(color, 1.0);
         }
 
-        var<push_constant> computeConstants: vec3u;
+        var<immediate> computeConstants: vec3u;
         @group(0) @binding(0) var<storage, read_write> output : vec3u;
 
         @compute @workgroup_size(1, 1, 1)

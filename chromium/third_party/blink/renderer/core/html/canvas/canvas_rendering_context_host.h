@@ -61,6 +61,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin,
   virtual void SetOriginTainted() = 0;
   virtual CanvasRenderingContext* RenderingContext() const = 0;
   virtual CanvasResourceDispatcher* GetOrCreateResourceDispatcher() = 0;
+  virtual void DiscardResourceDispatcher() = 0;
 
   virtual ExecutionContext* GetTopExecutionContext() const = 0;
   virtual DispatchEventResult HostDispatchEvent(Event*) = 0;
@@ -99,10 +100,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin,
 
   // Partial CanvasResourceHost implementation
   void InitializeForRecording(cc::PaintCanvas*) const final;
-  CanvasResourceProvider* GetOrCreateCanvasResourceProviderImpl(
-      RasterModeHint hint) final;
-  CanvasResourceProvider* GetOrCreateCanvasResourceProvider(
-      RasterModeHint hint) override;
+  CanvasResourceProvider* GetOrCreateCanvasResourceProvider() override;
   void PageVisibilityChanged() override;
 
   bool IsWebGL() const;
@@ -111,9 +109,7 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin,
   bool IsImageBitmapRenderingContext() const;
 
   SkAlphaType GetRenderingContextAlphaType() const;
-  SkColorType GetRenderingContextSkColorType() const;
   viz::SharedImageFormat GetRenderingContextFormat() const;
-  sk_sp<SkColorSpace> GetRenderingContextSkColorSpace() const;
   gfx::ColorSpace GetRenderingContextColorSpace() const;
   PlainTextPainter& GetPlainTextPainter();
 
@@ -134,15 +130,15 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin,
   // resource provider did not exist at all, it may be created.
   virtual bool EnableAcceleration() = 0;
 
+  bool IsContextLost() const override;
+
  protected:
   ~CanvasRenderingContextHost() override = default;
 
   scoped_refptr<StaticBitmapImage> CreateTransparentImage(
       const gfx::Size&) const;
 
-  void CreateCanvasResourceProvider2D(RasterModeHint hint);
-  void CreateCanvasResourceProviderWebGL();
-  void CreateCanvasResourceProviderWebGPU();
+  CanvasResourceProvider* GetOrCreateCanvasResourceProviderImpl() final;
 
   bool ContextHasOpenLayers(const CanvasRenderingContext*) const;
 
@@ -157,6 +153,12 @@ class CORE_EXPORT CanvasRenderingContextHost : public GarbageCollectedMixin,
   // `did_fail_to_create_resource_provider_` prevents repeated attempts in
   // allocating resources after the first attempt failed.
   bool did_fail_to_create_resource_provider_ = false;
+
+ private:
+  CanvasResourceProvider* CreateCanvasResourceProvider2D();
+  CanvasResourceProvider* CreateCanvasResourceProviderWebGL();
+  CanvasResourceProvider* CreateCanvasResourceProviderWebGPU();
+
   bool did_record_canvas_size_to_uma_ = false;
   HostType host_type_ = HostType::kNone;
 };

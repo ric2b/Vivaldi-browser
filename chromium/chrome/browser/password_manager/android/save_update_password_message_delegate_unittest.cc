@@ -16,10 +16,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/with_feature_override.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/android/resource_mapper.h"
-#include "chrome/browser/flags/android/chrome_feature_list.h"
+#include "chrome/browser/password_edit_dialog/android/password_edit_dialog_bridge_delegate.h"
 #include "chrome/browser/password_manager/android/access_loss/mock_password_access_loss_warning_bridge.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -34,7 +33,6 @@
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/stub_password_manager_client.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -45,8 +43,6 @@
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
 
-using base::test::FeatureRef;
-using base::test::FeatureRefAndParams;
 using password_manager::MockPasswordFormManagerForUI;
 using password_manager::PasswordForm;
 using password_manager::PasswordFormManagerForUI;
@@ -590,10 +586,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest, SaveOnActionClick) {
 // clicks the "Save" button.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        TriggerAccessLossWarning_OnSaveClicked) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
   EXPECT_CALL(*form_manager, Save());
@@ -669,10 +661,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // accepts the password edit dialog.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        TriggerAccessLossWarning_OnSavePasswordDialogAccepted) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
   MockPasswordFormManagerForUI* form_manager_pointer = form_manager.get();
@@ -706,10 +694,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // dismisses the save password message.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        DontTriggerAccessLossWarning_OnSaveMessageDismissed) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
@@ -730,10 +714,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // password message in case when there is no confirmation dialog.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        TriggerAccessLossWarning_OnUpdatePasswordWithSingleForm) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   SetPendingCredentials(kUsername, kPassword);
   std::vector<PasswordForm> single_form_best_matches = {
       CreatePasswordForm(kUsername, kPassword)};
@@ -818,10 +798,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // dismisses the update password message.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        DontTriggerAccessLossWarning_OnUpdatePasswordMessageDismissed) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   SetPendingCredentials(kUsername, kPassword);
   std::vector<PasswordForm> single_form_best_matches = {
       CreatePasswordForm(kUsername, kPassword)};
@@ -845,10 +821,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // password message and the confirmation dialog.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        TriggerAccessLossWarning_OnUpdatePasswordDialogAccepted) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   SetPendingCredentials(kUsername, kPassword);
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), two_forms_best_matches());
@@ -884,10 +856,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // update password message and cancels the confirmation dialog.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        TriggerAccessLossWarning_OnUpdatePasswordDialogCanceled) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   SetPendingCredentials(kUsername, kPassword);
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), two_forms_best_matches());
@@ -969,10 +937,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest, MetricOnAutodismissTimer) {
 // message time out.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        DontTriggerAccessLossWarning_OnSaveMessageAutodismissTimer) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
   EnqueueMessage(std::move(form_manager), /*user_signed_in=*/false,
@@ -993,10 +957,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // update message time out.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        DontTriggerAccessLossWarning_OnUpdateMessageAutodismissTimer) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   SetPendingCredentials(kUsername, kPassword);
   std::vector<PasswordForm> single_form_best_matches = {
       CreatePasswordForm(kUsername, kPassword)};
@@ -1144,11 +1104,6 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest,
 // "Never for this site" menu option in the Save message.
 TEST_F(SaveUpdatePasswordMessageDelegateTest,
        DontTriggerAccessLossWarning_OnNeverSave) {
-  base::test::ScopedFeatureList scoped_feature_state;
-  scoped_feature_state.InitAndEnableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
-
   auto form_manager =
       CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
   MockPasswordFormManagerForUI* form_manager_pointer = form_manager.get();
@@ -1550,5 +1505,54 @@ TEST_F(SaveUpdatePasswordMessageDelegateTest, RecordsPromptShownWhenEnqueuing) {
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.FormSubmissionsVsSavePrompts",
       password_manager::metrics_util::SaveFlowStep::kSavePromptShown, 1);
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+// Tests `IsUsingAccountStorage` returns false if the credential being
+// updated comes from the local storage, despite the user being signed in,
+// if the credential comes from the profile store.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       LocalCredentialNotUsingAccountStorage_DbDeprecationOn) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kLoginDbDeprecationAndroid);
+  profile()->GetPrefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOff));
+  SetPendingCredentials(kUsername, kPassword, /*is_account_store=*/false);
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
+                 /*update_password=*/true);
+  PasswordEditDialogBridgeDelegate* edit_dialog_delegate =
+      get_password_edit_dialog_bridge_delegate();
+
+  EXPECT_FALSE(edit_dialog_delegate->IsUsingAccountStorage(kUsername));
+
+  DismissMessage(messages::DismissReason::UNKNOWN);
+}
+
+// Tests `IsUsingAccountStorage` returns true if the crential comes from
+// the account store.
+TEST_F(SaveUpdatePasswordMessageDelegateTest,
+       CredentialUsingAccountStorage_DbDeprecationOn) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      password_manager::features::kLoginDbDeprecationAndroid);
+  profile()->GetPrefs()->SetInteger(
+      password_manager::prefs::kPasswordsUseUPMLocalAndSeparateStores,
+      static_cast<int>(
+          password_manager::prefs::UseUpmLocalAndSeparateStoresState::kOff));
+  SetPendingCredentials(kUsername, kPassword, /*is_account_store=*/true);
+  auto form_manager =
+      CreateFormManager(GURL(kDefaultUrl), empty_best_matches());
+  EnqueueMessage(std::move(form_manager), /*user_signed_in=*/true,
+                 /*update_password=*/true);
+  PasswordEditDialogBridgeDelegate* edit_dialog_delegate =
+      get_password_edit_dialog_bridge_delegate();
+
+  EXPECT_TRUE(edit_dialog_delegate->IsUsingAccountStorage(kUsername));
+
   DismissMessage(messages::DismissReason::UNKNOWN);
 }

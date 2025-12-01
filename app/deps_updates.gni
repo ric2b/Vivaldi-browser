@@ -78,7 +78,7 @@ if (!is_android) {
     deps += [
       "//vivaldi/app:vivaldi_native_resources",
       "//vivaldi/app:vivaldi_native_strings",
-      "//vivaldi/app:vivaldi_merge_repacks",
+      #"//vivaldi/app:vivaldi_merge_repacks",
     ]
     if (!defined(additional_extra_paks)) {
       additional_extra_paks = []
@@ -113,7 +113,7 @@ if (!is_android) {
     deps += [
       "//vivaldi/app:vivaldi_native_resources",
       "//vivaldi/app:vivaldi_native_strings",
-      "//vivaldi/app:vivaldi_merge_repacks",
+      #"//vivaldi/app:vivaldi_merge_repacks",
     ]
     if (!defined(additional_extra_paks)) {
       additional_extra_paks = []

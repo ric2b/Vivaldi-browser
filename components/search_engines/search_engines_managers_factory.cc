@@ -103,15 +103,16 @@ std::unique_ptr<T> UpdateJsonFileAndParse(
   if (base::PathExists(*update_file)) {
     // The updated prompt file is there.
     std::unique_ptr<T> new_data = LoadFromFile<T>(*update_file);
+    // Prefer server file even if the version is the same.
     if (new_data &&
-        new_data->current_data_version() > old_data->current_data_version()) {
+        new_data->current_data_version() >= old_data->current_data_version()) {
       // Make it a regular file.
       base::Move(*update_file, *regular_file);
       LOG(INFO) << regular_file->BaseName() << " sucessfully updated.";
       return new_data;
     } else {
-      LOG_IF(INFO, new_data)
-          << "Update from: " << *update_file << " is older version than current.";
+      LOG_IF(INFO, new_data) << "Update from: " << *update_file
+                             << " is older version than current.";
       LOG_IF(INFO, !new_data)
           << "Update failed from: " << *update_file << ". Using "
           << regular_file->BaseName() << " instead.";

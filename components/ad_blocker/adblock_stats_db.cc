@@ -3,6 +3,7 @@
 #include "components/ad_blocker/adblock_stats_db.h"
 
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/strings/to_string.h"
 #include "base/time/time.h"
 #include "components/ad_blocker/adblock_stats_data.h"

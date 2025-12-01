@@ -9,6 +9,7 @@
 #include "base/containers/span.h"
 #include "base/containers/to_vector.h"
 #include "net/cert/qwac.h"
+#include "net/cert/two_qwac.h"
 #include "third_party/fuzztest/src/fuzztest/fuzztest.h"
 #include "third_party/googletest/src/googletest/include/gtest/gtest.h"
 
@@ -106,6 +107,17 @@ FUZZ_TEST(QwacFuzzTest, FuzzParseQcTypeInfo)
         base::ToVector(kInvalidStatementOid),
         base::ToVector(kQcTypeInfoMultiple),
     });
+
+void FuzzParseTwoQwacCertBinding(std::string_view jws) {
+  const auto cert_binding = TwoQwacCertBinding::Parse(jws);
+  if (!cert_binding.has_value()) {
+    return;
+  }
+  ASSERT_FALSE(cert_binding->header_string.empty());
+  ASSERT_FALSE(cert_binding->header.sig_alg.empty());
+}
+
+FUZZ_TEST(QwacFuzzTest, FuzzParseTwoQwacCertBinding);
 
 }  // namespace
 

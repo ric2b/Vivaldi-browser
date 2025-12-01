@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_TAB_SEARCH_TAB_SEARCH_PAGE_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_TAB_SEARCH_TAB_SEARCH_PAGE_HANDLER_H_
 
+#include <stdint.h>
+
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/browser_tab_strip_tracker.h"
@@ -16,7 +18,6 @@
 #include "chrome/browser/ui/tabs/organization/tab_organization.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_observer.h"
 #include "chrome/browser/ui/tabs/organization/tab_organization_session.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -26,6 +27,7 @@
 #include "components/optimization_guide/core/model_execution/settings_enabled_observer.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/sessions/core/tab_restore_service.h"
+#include "components/tabs/public/tab_group.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -113,6 +115,7 @@ class TabSearchPageHandler
       GetTabOrganizationSessionCallback callback) override;
   void GetTabOrganizationModelStrategy(
       GetTabOrganizationModelStrategyCallback callback) override;
+  void GetIsSplit(GetIsSplitCallback callback) override;
   void SwitchToTab(
       tab_search::mojom::SwitchToTabInfoPtr switch_to_tab_info) override;
   void OpenRecentlyClosedEntry(int32_t session_id) override;
@@ -121,6 +124,7 @@ class TabSearchPageHandler
                                  int32_t organization_id,
                                  tab_search::mojom::TabPtr tab) override;
   void RejectSession(int32_t session_id) override;
+  void ReplaceActiveSplitTab(int32_t replacement_tab_id) override;
   void RestartSession() override;
   void SaveRecentlyClosedExpandedPref(bool expanded) override;
   void SetOrganizationFeature(
@@ -146,6 +150,7 @@ class TabSearchPageHandler
   void TabChangedAt(content::WebContents* contents,
                     int index,
                     TabChangeType change_type) override;
+  void OnSplitTabChanged(const SplitTabChange& change) override;
 
   // TabDeclutterObserver:
   void OnUnusedTabsProcessed(
@@ -211,8 +216,7 @@ class TabSearchPageHandler
 
   // Encapsulates tab details to facilitate performing an action on a tab.
   struct TabDetails {
-    TabDetails(Browser* browser, tabs::TabInterface* tab)
-        : browser(browser), tab(tab) {}
+    explicit TabDetails(tabs::TabInterface* tab) : tab(tab) {}
 
     int GetIndex() const {
       return tab->GetBrowserWindowInterface()
@@ -220,7 +224,6 @@ class TabSearchPageHandler
           ->GetIndexOfTab(tab);
     }
 
-    raw_ptr<Browser> browser;
     raw_ptr<tabs::TabInterface> tab;
   };
 
@@ -324,6 +327,7 @@ class TabSearchPageHandler
   mojo::Remote<tab_search::mojom::Page> page_;
   const raw_ptr<content::WebUI> web_ui_;
   const raw_ptr<TopChromeWebUIController, DanglingUntriaged> webui_controller_;
+  raw_ptr<Browser> browser_;
   const raw_ptr<MetricsReporter> metrics_reporter_;
   BrowserTabStripTracker browser_tab_strip_tracker_{this, this};
   std::unique_ptr<base::RetainingOneShotTimer> debounce_timer_;

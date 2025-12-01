@@ -12,10 +12,10 @@
 #include "chrome/browser/importer/external_process_importer_host.h"
 #include "chrome/browser/importer/in_process_importer_bridge.h"
 #include "chrome/common/importer/firefox_importer_utils.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/profile_import.mojom.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
 #include "content/public/browser/child_process_host.h"
 #include "content/public/browser/service_process_host.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -24,7 +24,7 @@
 
 ExternalProcessImporterClient::ExternalProcessImporterClient(
     base::WeakPtr<ExternalProcessImporterHost> importer_host,
-    const importer::SourceProfile& source_profile,
+    const user_data_importer::SourceProfile& source_profile,
     uint16_t items,
     InProcessImporterBridge* bridge)
     : total_bookmarks_count_(0),
@@ -132,7 +132,7 @@ void ExternalProcessImporterClient::OnImportFinished(
 }
 
 void ExternalProcessImporterClient::OnImportItemStart(
-    importer::ImportItem import_item) {
+    user_data_importer::ImportItem import_item) {
   if (cancelled_)
     return;
 
@@ -140,7 +140,7 @@ void ExternalProcessImporterClient::OnImportItemStart(
 }
 
 void ExternalProcessImporterClient::OnImportItemFinished(
-    importer::ImportItem import_item) {
+    user_data_importer::ImportItem import_item) {
   if (cancelled_)
     return;
 
@@ -158,7 +158,7 @@ void ExternalProcessImporterClient::OnHistoryImportStart(
 }
 
 void ExternalProcessImporterClient::OnHistoryImportGroup(
-    const std::vector<ImporterURLRow>& history_rows_group,
+    const std::vector<user_data_importer::ImporterURLRow>& history_rows_group,
     int visit_source) {
   if (cancelled_)
     return;
@@ -166,8 +166,9 @@ void ExternalProcessImporterClient::OnHistoryImportGroup(
   history_rows_.insert(history_rows_.end(), history_rows_group.begin(),
                        history_rows_group.end());
   if (history_rows_.size() >= total_history_rows_count_)
-    bridge_->SetHistoryItems(history_rows_,
-                             static_cast<importer::VisitSource>(visit_source));
+    bridge_->SetHistoryItems(
+        history_rows_,
+        static_cast<user_data_importer::VisitSource>(visit_source));
 }
 
 void ExternalProcessImporterClient::OnHomePageImportReady(
@@ -190,7 +191,8 @@ void ExternalProcessImporterClient::OnBookmarksImportStart(
 }
 
 void ExternalProcessImporterClient::OnBookmarksImportGroup(
-    const std::vector<ImportedBookmarkEntry>& bookmarks_group) {
+    const std::vector<user_data_importer::ImportedBookmarkEntry>&
+        bookmarks_group) {
   if (cancelled_)
     return;
 
@@ -223,7 +225,7 @@ void ExternalProcessImporterClient::OnFaviconsImportGroup(
 }
 
 void ExternalProcessImporterClient::OnPasswordFormImportReady(
-    const importer::ImportedPasswordForm& form) {
+    const user_data_importer::ImportedPasswordForm& form) {
   if (cancelled_)
     return;
 
@@ -231,7 +233,7 @@ void ExternalProcessImporterClient::OnPasswordFormImportReady(
 }
 
 void ExternalProcessImporterClient::OnKeywordsImportReady(
-    const std::vector<importer::SearchEngineInfo>& search_engines,
+    const std::vector<user_data_importer::SearchEngineInfo>& search_engines,
     bool unique_on_host_and_path) {
   if (cancelled_)
     return;

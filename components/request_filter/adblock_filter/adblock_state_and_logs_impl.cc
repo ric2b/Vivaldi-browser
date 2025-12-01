@@ -42,8 +42,10 @@ TabStateAndLogs::RuleData MakeRuleData(
   TabStateAndLogs::RuleData rule_data;
   rule_data.rule_source_id = rule_and_source.source_id;
   rule_data.decision = convert_decision(rule_and_source.rule->decision());
-  rule_data.rule_text =
-      rule_and_source.rule->original_rule_text()->string_view();
+  if (rule_and_source.rule->original_rule_text()) {
+    rule_data.rule_text =
+        rule_and_source.rule->original_rule_text()->string_view();
+  }
   return rule_data;
 }
 
@@ -584,7 +586,9 @@ void StateAndLogsImpl::ReportTabActivations(
   };
 
   TabStateAndLogs::TabActivations logged_activations;
-  for (const auto& [activation_type, activation_result] : activations) {
+  logged_activations.document_exception = activations.document_exception;
+
+  for (const auto& [activation_type, activation_result] : activations.by_type) {
     if (activation_type == flat::ActivationType_ATTRIBUTE_ADS &&
         activation_result.GetDecision().value_or(flat::Decision_MODIFY) ==
             flat::Decision_PASS) {
@@ -592,21 +596,13 @@ void StateAndLogsImpl::ReportTabActivations(
     }
 
     TabStateAndLogs::TabActivationState state;
-    state.source = [type = activation_result.type]() {
-      switch (type) {
-        case RulesIndex::ActivationResult::MATCH:
-          return TabStateAndLogs::TabActivationState::kSameFrame;
-        case RulesIndex::ActivationResult::PARENT:
-          return TabStateAndLogs::TabActivationState::kParentFrame;
-        case RulesIndex::ActivationResult::ALWAYS_PASS:
-          return TabStateAndLogs::TabActivationState::kUI;
-      }
-    }();
+    state.from_parent = activation_result.from_parent;
     if (activation_result.rule_and_source) {
       state.rule_data = MakeRuleData(*activation_result.rule_and_source);
     }
 
-    logged_activations.emplace(convert_activation_type(activation_type), state);
+    logged_activations.by_type.emplace(convert_activation_type(activation_type),
+                                       state);
   }
 
   frame_info->tab_helper->LogTabActivations(group,

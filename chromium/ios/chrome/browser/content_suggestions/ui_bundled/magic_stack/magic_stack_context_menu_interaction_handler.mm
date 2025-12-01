@@ -35,8 +35,6 @@ BOOL AllowsLongPressForModuleType(ContentSuggestionsModuleType type) {
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
     case ContentSuggestionsModuleType::kSetUpListNotifications:
-    case ContentSuggestionsModuleType::kSetUpListDocking:
-    case ContentSuggestionsModuleType::kSetUpListAddressBar:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
     case ContentSuggestionsModuleType::kParcelTracking:
     case ContentSuggestionsModuleType::kPriceTrackingPromo:
@@ -137,8 +135,6 @@ NSString* GetContextMenuHideDescriptionForType(
     case ContentSuggestionsModuleType::kSetUpListDefaultBrowser:
     case ContentSuggestionsModuleType::kSetUpListAutofill:
     case ContentSuggestionsModuleType::kSetUpListNotifications:
-    case ContentSuggestionsModuleType::kSetUpListDocking:
-    case ContentSuggestionsModuleType::kSetUpListAddressBar:
     case ContentSuggestionsModuleType::kCompactedSetUpList:
       return l10n_util::GetNSStringF(
           IDS_IOS_SET_UP_LIST_HIDE_MODULE_CONTEXT_MENU_DESCRIPTION,
@@ -189,7 +185,7 @@ NSString* GetContextMenuHideDescriptionForType(
 @property(nonatomic, assign) ContentSuggestionsModuleType type;
 
 // Configuration for the Magic Stack Module.
-@property(nonatomic, assign) MagicStackModule* config;
+@property(nonatomic, strong) MagicStackModule* config;
 
 /// Whether the magic stack module should be hidden when the context menu
 /// finishes presentation.
@@ -222,7 +218,6 @@ NSString* GetContextMenuHideDescriptionForType(
   NSMutableArray<UIAction*>* actions = [[NSMutableArray alloc] init];
 
   BOOL canShowTipsNotificationsOptIn =
-      IsIOSTipsNotificationsEnabled() &&
       (IsSetUpListModuleType(self.type) || IsTipsModuleType(self.type));
 
   BOOL canShowSafetyCheckNotificationsOptIn =

@@ -11,14 +11,32 @@
 #include "video/frame_encode_metadata_writer.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 
+#include "api/make_ref_counted.h"
+#include "api/video/encoded_image.h"
+#include "api/video/video_bitrate_allocation.h"
+#include "api/video/video_codec_type.h"
+#include "api/video/video_content_type.h"
+#include "api/video/video_frame.h"
+#include "api/video/video_frame_type.h"
+#include "api/video/video_timing.h"
+#include "api/video_codecs/video_codec.h"
+#include "api/video_codecs/video_encoder.h"
 #include "common_video/h264/sps_vui_rewriter.h"
 #include "modules/include/module_common_types_public.h"
+#include "modules/video_coding/include/video_codec_interface.h"
 #include "modules/video_coding/include/video_coding_defines.h"
 #include "modules/video_coding/svc/create_scalability_structure.h"
+#include "modules/video_coding/svc/scalable_video_controller.h"
+#include "rtc_base/buffer.h"
+#include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/synchronization/mutex.h"
 #include "rtc_base/time_utils.h"
 
 namespace webrtc {
@@ -28,7 +46,7 @@ const int kThrottleRatio = 100000;
 
 class EncodedImageBufferWrapper : public EncodedImageBufferInterface {
  public:
-  explicit EncodedImageBufferWrapper(rtc::Buffer&& buffer)
+  explicit EncodedImageBufferWrapper(Buffer&& buffer)
       : buffer_(std::move(buffer)) {}
 
   const uint8_t* data() const override { return buffer_.data(); }
@@ -36,7 +54,7 @@ class EncodedImageBufferWrapper : public EncodedImageBufferInterface {
   size_t size() const override { return buffer_.size(); }
 
  private:
-  rtc::Buffer buffer_;
+  Buffer buffer_;
 };
 
 }  // namespace
@@ -183,7 +201,7 @@ void FrameEncodeMetadataWriter::FillMetadataAndTimingInfo(
 
   // If encode start is not available that means that encoder uses internal
   // source. In that case capture timestamp may be from a different clock with a
-  // drift relative to rtc::TimeMillis(). We can't use it for Timing frames,
+  // drift relative to webrtc::TimeMillis(). We can't use it for Timing frames,
   // because to being sent in the network capture time required to be less than
   // all the other timestamps.
   if (encode_start_ms) {
@@ -205,13 +223,11 @@ void FrameEncodeMetadataWriter::UpdateBitstream(
 
   // Make sure that the data is not copied if owned by EncodedImage.
   const EncodedImage& buffer = *encoded_image;
-  rtc::Buffer modified_buffer =
-      SpsVuiRewriter::ParseOutgoingBitstreamAndRewrite(
-          buffer, encoded_image->ColorSpace());
+  Buffer modified_buffer = SpsVuiRewriter::ParseOutgoingBitstreamAndRewrite(
+      buffer, encoded_image->ColorSpace());
 
   encoded_image->SetEncodedData(
-      rtc::make_ref_counted<EncodedImageBufferWrapper>(
-          std::move(modified_buffer)));
+      make_ref_counted<EncodedImageBufferWrapper>(std::move(modified_buffer)));
 }
 
 void FrameEncodeMetadataWriter::Reset() {

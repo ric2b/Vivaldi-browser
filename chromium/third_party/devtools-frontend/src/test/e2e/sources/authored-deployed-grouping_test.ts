@@ -230,7 +230,7 @@ describe('Source Panel grouping', function() {
   const folderMenuText = 'Group by folder';
 
   async function enableGroupByAuthored(noAuthored?: boolean) {
-    await click('[aria-label="More options"]');
+    await click('[title="More options"]');
     await click(`[aria-label="${authoredMenuText}, unchecked"]`);
     await waitForNone('.soft-context-menu');
     await waitFor('.navigator-deployed-tree-item');
@@ -244,7 +244,7 @@ describe('Source Panel grouping', function() {
   }
 
   async function disableGroupByAuthored() {
-    await click('[aria-label="More options"]');
+    await click('[title="More options"]');
     await click(`[aria-label="${authoredMenuText}, checked"]`);
     await waitForNone('.soft-context-menu');
     await waitForNone('.navigator-deployed-tree-item');
@@ -253,7 +253,7 @@ describe('Source Panel grouping', function() {
   }
 
   async function enableGroupByFolder() {
-    await click('[aria-label="More options"]');
+    await click('[title="More options"]');
     await click(`[aria-label="${folderMenuText}, unchecked"]`);
     await waitForNone('.soft-context-menu');
     await waitFor('[aria-label="test/e2e/resources/sources, nw-folder"]');
@@ -261,7 +261,7 @@ describe('Source Panel grouping', function() {
   }
 
   async function disableGroupByFolder() {
-    await click('[aria-label="More options"]');
+    await click('[title="More options"]');
     await click(`[aria-label="${folderMenuText}, checked"]`);
     await waitForNone('.soft-context-menu');
     await waitForNone('[aria-label="test/e2e/resources/sources, nw-folder"]:not(.is-from-source-map)');
@@ -304,8 +304,8 @@ describe('Source Panel grouping', function() {
   });
 
   // The localhost domain is getting renamed, which breaks this test.
-  // TODO(crbug.com/1327683): Enable this once the domain displays correctly.
-  it.skip('[crbug.com/1327683] can load new page with group by authored/deployed', async () => {
+  // TODO(crbug.com/40841343): Enable this once the domain displays correctly.
+  it.skip('[crbug.com/40841343] can load new page with group by authored/deployed', async () => {
     // Have the target load the non-sourcemapped page.
     await goToResource('sources/multi-workers.html');
     await openSourcesPanel();
@@ -325,7 +325,7 @@ describe('Source Panel grouping', function() {
 
   // Flaky on Mac
   it.skipOnPlatforms(
-      ['mac'], '[crbug.com/1481690] can mix group by authored/deployed and group by folder', async () => {
+      ['mac'], '[crbug.com/40281692] can mix group by authored/deployed and group by folder', async () => {
         // Have the target load the page.
         await goToResource(targetPage);
         await openSourcesPanel();

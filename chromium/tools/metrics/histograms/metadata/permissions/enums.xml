@@ -52,6 +52,12 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Prompt"/>
 </enum>
 
+<enum name="BooleanBrowserAlwaysActive">
+  <int value="0"
+      label="The browser changed its activation while a prompt was visible"/>
+  <int value="1" label="The browser was always active"/>
+</enum>
+
 <enum name="CrowdDenyNotificationUxQuality">
   <int value="0" label="Uknown"/>
   <int value="1" label="Accceptable"/>
@@ -170,11 +176,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/permissions/permission_request_enums.h:PermissionPredictionSource) -->
-
-<enum name="PermissionPredictionThresholdSource">
-  <int value="0" label="MODEL_METADATA"/>
-  <int value="1" label="HARDCODED_FALLBACK"/>
-</enum>
 
 <enum name="PermissionPromptDismissMethod">
   <int value="0" label="Unspecified"/>

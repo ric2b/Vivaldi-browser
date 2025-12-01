@@ -69,6 +69,7 @@ export class BookmarksCommandManagerElement extends
       menuIds_: {type: Object},
       menuSource_: {type: Number},
       canPaste_: {type: Boolean},
+      isActiveTabInSplit_: {type: Boolean},
       globalCanEdit_: {type: Boolean},
       showEditDialog_: {type: Boolean},
       showOpenDialog_: {type: Boolean},
@@ -83,6 +84,7 @@ export class BookmarksCommandManagerElement extends
   private accessor menuSource_: MenuSource = MenuSource.NONE;
   private confirmOpenCallback_: (() => void)|null = null;
   private accessor canPaste_: boolean = false;
+  private accessor isActiveTabInSplit_: boolean = false;
   private accessor globalCanEdit_: boolean = false;
   protected accessor menuIds_: Set<string> = new Set<string>();
   protected accessor showEditDialog_: boolean = false;
@@ -227,12 +229,8 @@ export class BookmarksCommandManagerElement extends
       case Command.DESELECT_ALL:
         return true;
       case Command.COPY:
-        return itemIds.size > 0;
       case Command.CUT:
-        return itemIds.size > 0 &&
-            !this.containsMatchingNode_(itemIds, function(node) {
-              return !canEditNode(state, node.id);
-            });
+        return itemIds.size > 0 && this.isCommandEnabled_(command, itemIds);
       case Command.PASTE:
         return state.search.term === '' &&
             canReorderChildren(state, state.selectedFolder);
@@ -257,9 +255,11 @@ export class BookmarksCommandManagerElement extends
         return this.menuSource_ === MenuSource.ITEM && itemIds.size === 1 &&
             this.getState().search.term !== '' &&
             !isRootOrChildOfRoot(this.getState(), Array.from(itemIds)[0]!);
+      case Command.OPEN_INCOGNITO:
+      case Command.OPEN_NEW_GROUP:
       case Command.OPEN_NEW_TAB:
       case Command.OPEN_NEW_WINDOW:
-      case Command.OPEN_INCOGNITO:
+      case Command.OPEN_SPLIT_VIEW:
         return itemIds.size > 0;
       case Command.ADD_BOOKMARK:
       case Command.ADD_FOLDER:
@@ -277,9 +277,11 @@ export class BookmarksCommandManagerElement extends
     switch (command) {
       case Command.EDIT:
       case Command.DELETE:
+      case Command.CUT:
         return !this.containsMatchingNode_(itemIds, function(node) {
           return !canEditNode(state, node.id);
         });
+      case Command.OPEN_NEW_GROUP:
       case Command.OPEN_NEW_TAB:
       case Command.OPEN_NEW_WINDOW:
         return this.expandIds_(itemIds).length > 0;
@@ -287,6 +289,9 @@ export class BookmarksCommandManagerElement extends
         return this.expandIds_(itemIds).length > 0 &&
             state.prefs.incognitoAvailability !==
             IncognitoAvailability.DISABLED;
+      case Command.OPEN_SPLIT_VIEW:
+        return this.expandIds_(itemIds).length === 1 &&
+            !this.isActiveTabInSplit_;
       case Command.SORT:
         return this.canChangeList_() &&
             state.nodes[state.selectedFolder]!.children!.length > 1;
@@ -295,6 +300,10 @@ export class BookmarksCommandManagerElement extends
         return this.canChangeList_();
       case Command.IMPORT:
         return this.globalCanEdit_;
+      case Command.COPY:
+        return !this.containsMatchingNode_(itemIds, function(node) {
+          return isRootNode(node.id);
+        });
       case Command.PASTE:
         return this.canPaste_;
       default:
@@ -393,10 +402,16 @@ export class BookmarksCommandManagerElement extends
       case Command.REDO:
         chrome.bookmarkManagerPrivate.redo();
         break;
+      case Command.OPEN_INCOGNITO:
       case Command.OPEN_NEW_TAB:
       case Command.OPEN_NEW_WINDOW:
-      case Command.OPEN_INCOGNITO:
+      case Command.OPEN_SPLIT_VIEW:
         this.openBookmarkIds_(this.expandIds_(itemIds), command);
+        break;
+      case Command.OPEN_NEW_GROUP:
+        // Do not expand itemsIds because the folder node is needed to associate
+        // with a tab group.
+        this.openBookmarkIds_(Array.from(itemIds), command);
         break;
       case Command.OPEN:
         if (this.isFolder_(itemIds)) {
@@ -515,10 +530,16 @@ export class BookmarksCommandManagerElement extends
     assert(
         command === Command.OPEN || command === Command.OPEN_NEW_TAB ||
         command === Command.OPEN_NEW_WINDOW ||
-        command === Command.OPEN_INCOGNITO);
+        command === Command.OPEN_INCOGNITO ||
+        command === Command.OPEN_SPLIT_VIEW ||
+        command === Command.OPEN_NEW_GROUP);
 
     if (ids.length === 0) {
       return;
+    }
+
+    if (command === Command.OPEN_SPLIT_VIEW) {
+      assert(ids.length === 1);
     }
 
     const openBookmarkIdsCallback = function() {
@@ -526,14 +547,19 @@ export class BookmarksCommandManagerElement extends
       if (command === Command.OPEN_NEW_WINDOW || incognito) {
         BookmarkManagerApiProxyImpl.getInstance().openInNewWindow(
             ids, incognito);
+      } else if (command === Command.OPEN_SPLIT_VIEW) {
+        BookmarkManagerApiProxyImpl.getInstance().openInNewTab(
+            ids.shift()!, {active: false, split: true});
+      } else if (command === Command.OPEN_NEW_GROUP) {
+        BookmarkManagerApiProxyImpl.getInstance().openInNewTabGroup(ids);
       } else {
         if (command === Command.OPEN) {
           BookmarkManagerApiProxyImpl.getInstance().openInNewTab(
-              ids.shift()!, /*active=*/ true);
+              ids.shift()!, {active: true, split: false});
         }
         ids.forEach(function(id) {
           BookmarkManagerApiProxyImpl.getInstance().openInNewTab(
-              id, /*active=*/ false);
+              id, {active: false, split: false});
         });
       }
     };
@@ -645,6 +671,9 @@ export class BookmarksCommandManagerElement extends
       case Command.HELP_CENTER:
         label = 'menuHelpCenter';
         break;
+      case Command.OPEN_SPLIT_VIEW:
+        label = 'menuOpenSplitView';
+        break;
     }
     if (label !== null) {
       return loadTimeData.getString(label);
@@ -664,6 +693,10 @@ export class BookmarksCommandManagerElement extends
         return this.getPluralizedOpenAllString_(
             'menuOpenAllIncognito', 'menuOpenIncognito',
             'menuOpenAllIncognitoWithCount');
+      case Command.OPEN_NEW_GROUP:
+        return this.getPluralizedOpenAllString_(
+            'menuOpenAllNewTabGroup', 'menuOpenNewTabGroup',
+            'menuOpenAllNewTabGroupWithCount');
     }
 
     assertNotReached();
@@ -690,7 +723,7 @@ export class BookmarksCommandManagerElement extends
     switch (this.menuSource_) {
       case MenuSource.ITEM:
       case MenuSource.TREE:
-        return [
+        const commands = [
           Command.EDIT,
           Command.SHOW_IN_FOLDER,
           Command.DELETE,
@@ -699,10 +732,15 @@ export class BookmarksCommandManagerElement extends
           Command.COPY,
           Command.PASTE,
           // <hr>
+          Command.OPEN_INCOGNITO,
+          Command.OPEN_NEW_GROUP,
           Command.OPEN_NEW_TAB,
           Command.OPEN_NEW_WINDOW,
-          Command.OPEN_INCOGNITO,
         ];
+        if (loadTimeData.getBoolean('splitViewEnabled')) {
+          commands.push(Command.OPEN_SPLIT_VIEW);
+        }
+        return commands;
       case MenuSource.TOOLBAR:
         return [
           Command.SORT,
@@ -769,20 +807,16 @@ export class BookmarksCommandManagerElement extends
     getToastManager().showForStringPieces(pieces, /*hideSlotted*/ !canUndo);
   }
 
-  private updateCanPaste_(targetId: string): Promise<void> {
-    return BookmarkManagerApiProxyImpl.getInstance().canPaste(targetId).then(
-        result => {
-          this.canPaste_ = result;
-        });
-  }
-
   ////////////////////////////////////////////////////////////////////////////
   // Event handlers:
 
   private async onOpenCommandMenu_(
       e: CustomEvent<OpenCommandMenuDetail>): Promise<void> {
+    this.isActiveTabInSplit_ =
+        await BookmarkManagerApiProxyImpl.getInstance().isActiveTabInSplit();
     if (e.detail.targetId) {
-      await this.updateCanPaste_(e.detail.targetId);
+      this.canPaste_ = await BookmarkManagerApiProxyImpl.getInstance().canPaste(
+          e.detail.targetId);
     }
     if (e.detail.targetElement) {
       this.openCommandMenuAtElement(e.detail.targetElement, e.detail.source);

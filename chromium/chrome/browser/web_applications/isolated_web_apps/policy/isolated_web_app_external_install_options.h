@@ -5,28 +5,29 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_ISOLATED_WEB_APPS_POLICY_ISOLATED_WEB_APP_EXTERNAL_INSTALL_OPTIONS_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_ISOLATED_WEB_APPS_POLICY_ISOLATED_WEB_APP_EXTERNAL_INSTALL_OPTIONS_H_
 
+#include <optional>
+
+#include "base/values.h"
 #include "base/version.h"
-#include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
+#include "components/webapps/isolated_web_apps/update_channel.h"
 #include "url/gurl.h"
 
-namespace base {
-class Value;
-}
-
 namespace web_app {
-
-class UpdateChannel;
 
 // This class contains all information to install an Isolated Web App via
 // enterprise policy.
 class IsolatedWebAppExternalInstallOptions final {
  public:
-  // Creates an instance of the class from existing `update_manifest_url` and
-  // `web_bundle_id`. Uses the default update channel.
+  // Creates an instance of the class from existing `web_bundle_id`,
+  // `update_manifest_url` and optional version management settings.
   static base::expected<IsolatedWebAppExternalInstallOptions, std::string>
-  Create(const GURL& update_manifest_url,
-         const web_package::SignedWebBundleId& web_bundle_id);
+  Create(
+      const web_package::SignedWebBundleId& web_bundle_id,
+      const GURL& update_manifest_url,
+      const UpdateChannel& update_channel = UpdateChannel::default_channel(),
+      const std::optional<base::Version>& maybe_pinned_version = std::nullopt,
+      bool allow_downgrades = false);
 
   // Creates an instance of the class from the enterprise policy entry.
   // The entry must contain a valid URL of the update manifest and

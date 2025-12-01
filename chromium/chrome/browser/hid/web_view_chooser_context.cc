@@ -9,6 +9,8 @@
 #include "chrome/browser/hid/hid_chooser_context.h"
 #include "extensions/common/extension_features.h"
 
+#include "app/vivaldi_apptools.h"
+
 WebViewChooserContext::WebViewChooserContext(HidChooserContext* chooser_context)
     : chooser_context_(chooser_context) {
   permission_observation_.Observe(chooser_context_);
@@ -20,9 +22,13 @@ void WebViewChooserContext::GrantDevicePermission(
     const url::Origin& origin,
     const url::Origin& embedding_origin,
     const device::mojom::HidDeviceInfo& device) {
+  // These checks will hit in Vivaldi as we use the embedders dialog and has
+  // kEnableWebHidInWebView enabled. VB-112800.
+  if (!vivaldi::IsVivaldiRunning()) {
   CHECK(base::FeatureList::IsEnabled(
       extensions_features::kEnableWebHidInWebView));
   CHECK(chooser_context_->HasDevicePermission(embedding_origin, device));
+  }
 
   device_access_[embedding_origin][device.guid].insert(origin);
   chooser_context_->PermissionForWebViewChanged();

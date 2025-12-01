@@ -20,7 +20,7 @@
 #include "base/containers/span.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
-#include "base/not_fatal_until.h"
+#include "base/numerics/byte_conversions.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -29,6 +29,8 @@
 #include "components/cbor/reader.h"
 #include "components/cbor/writer.h"
 #include "crypto/ec_private_key.h"
+#include "crypto/hash.h"
+#include "crypto/sha2.h"
 #include "device/fido/authenticator_get_assertion_response.h"
 #include "device/fido/authenticator_make_credential_response.h"
 #include "device/fido/authenticator_supported_options.h"
@@ -1112,7 +1114,7 @@ std::optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
   }
 
   // 6. Check for already registered credentials.
-  const auto rp_id_hash = fido_parsing_utils::CreateSHA256Hash(request.rp.id);
+  const auto rp_id_hash = crypto::hash::Sha256(request.rp.id);
   if ((config_.reject_large_allow_and_exclude_lists &&
        request.exclude_list.size() > 1) ||
       (config_.max_credential_count_in_list &&
@@ -1463,7 +1465,7 @@ std::optional<CtapDeviceResponseCode> VirtualCtap2Device::OnGetAssertion(
     return CtapDeviceResponseCode::kCtap2ErrNoCredentials;
   }
 
-  const auto rp_id_hash = fido_parsing_utils::CreateSHA256Hash(request.rp_id);
+  const auto rp_id_hash = crypto::hash::Sha256(request.rp_id);
 
   std::vector<std::pair<base::span<const uint8_t>, RegistrationData*>>
       found_registrations;
@@ -2663,7 +2665,7 @@ CtapDeviceResponseCode VirtualCtap2Device::OnLargeBlobs(
     *response =
         cbor::Writer::Write(cbor::Value(std::move(response_map))).value();
   } else {
-    CHECK(set_it != request_map.end(), base::NotFatalUntil::M130);
+    CHECK(set_it != request_map.end());
     const std::vector<uint8_t>& set = set_it->second.GetBytestring();
     if (set.size() > max_fragment_length) {
       return CtapDeviceResponseCode::kCtap1ErrInvalidLength;
@@ -2714,7 +2716,7 @@ CtapDeviceResponseCode VirtualCtap2Device::OnLargeBlobs(
                            pin::kPinUvAuthTokenSafetyPadding.end());
       pinauth_bytes.insert(pinauth_bytes.end(), kLargeBlobPinPrefix.begin(),
                            kLargeBlobPinPrefix.end());
-      auto offset_vec = fido_parsing_utils::Uint32LittleEndian(offset);
+      auto offset_vec = base::U32ToLittleEndian(offset);
       pinauth_bytes.insert(pinauth_bytes.end(), offset_vec.begin(),
                            offset_vec.end());
       std::array<uint8_t, crypto::kSHA256Length> set_hash =
@@ -2825,8 +2827,7 @@ void VirtualCtap2Device::GetNextRP(cbor::Value::MapValue* response_map) {
                       config_.allow_invalid_utf8_in_credential_entities));
   response_map->emplace(
       static_cast<int>(CredentialManagementResponseKey::kRPIDHash),
-      fido_parsing_utils::CreateSHA256Hash(
-          request_state_.pending_rps.front().id));
+      crypto::hash::Sha256(request_state_.pending_rps.front().id));
   request_state_.pending_rps.pop_front();
 }
 

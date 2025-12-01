@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2019 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2024 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -70,6 +70,7 @@ _type nasm_ ## _name (const char *fmt, ...)				\
 }
 
 nasm_err_helpers(void,       listmsg,  ERR_LISTMSG)
+nasm_err_helpers(void,       note,     ERR_NOTE)
 nasm_err_helpers(void,       debug,    ERR_DEBUG)
 nasm_err_helpers(void,       info,     ERR_INFO)
 nasm_err_helpers(void,       nonfatal, ERR_NONFATAL)
@@ -81,8 +82,11 @@ nasm_err_helpers(fatal_func, panic,    ERR_PANIC)
  * Strongly discourage warnings without level by require flags on warnings.
  * This means nasm_warn() is the equivalent of the -f variants of the
  * other ones.
+ *
+ * This is wrapped in a macro to be able to elide it if the warning is
+ * disabled, hence the extra underscore.
  */
-void nasm_warn(errflags flags, const char *fmt, ...)
+void nasm_warn_(errflags flags, const char *fmt, ...)
 {
 	nasm_do_error(ERR_WARNING, flags);
 }
@@ -129,9 +133,9 @@ void pop_warnings(void)
 	if (!ws->next) {
 		/*!
 		 *!warn-stack-empty [on] warning stack empty
-		 *!  a [WARNING POP] directive was executed when
+		 *!  a \c{[WARNING POP]} directive was executed when
 		 *!  the warning stack is empty. This is treated
-		 *!  as a [WARNING *all] directive.
+		 *!  as a \c{[WARNING *all]} directive.
 		 */
 		nasm_warn(WARN_WARN_STACK_EMPTY, "warning stack empty");
 	} else {
@@ -165,11 +169,11 @@ void reset_warnings(void)
 
 /*
  * This is called when processing a -w or -W option, or a warning directive.
- * Returns on if if the action was successful.
+ * Returns ok if the action was successful.
  *
  * Special pseudo-warnings:
  *
- *!other [on] any warning not specifially mentioned above
+ *!other [on] any warning not specifically mentioned above
  *!  specifies any warning not included in any specific warning class.
  *
  *!all [all] all possible warnings
@@ -277,7 +281,7 @@ bool set_warning_status(const char *value)
 
         if (!ok && value) {
             /*!
-             *!unknown-warning [off] unknown warning in -W/-w or warning directive
+             *!unknown-warning [off] unknown warning in \c{-W}/\c{-w} or warning directive
              *!  warns about a \c{-w} or \c{-W} option or a \c{[WARNING]} directive
              *!  that contains an unknown warning name or is otherwise not possible to process.
              */

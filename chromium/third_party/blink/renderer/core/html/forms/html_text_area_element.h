@@ -56,6 +56,7 @@ class CORE_EXPORT HTMLTextAreaElement final : public TextControlElement {
   String defaultValue() const;
   void setDefaultValue(const String&);
   int textLength() const { return Value().length(); }
+  String InnerEditorValue() const override;
 
   // Sets the suggested value and puts the element into
   // WebAutofillState::kPreviewed state if |value| is non-empty, or

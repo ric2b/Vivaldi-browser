@@ -405,11 +405,13 @@ ServiceWorkerDevToolsAgentHost::CreateNetworkFactoryParamsForDevTools() {
       /*coep_reporter=*/mojo::NullRemote(),
       /*dip_reporter=*/mojo::NullRemote(),
       static_cast<StoragePartitionImpl*>(rph->GetStoragePartition())
-          ->CreateAuthCertObserverForServiceWorker(rph->GetDeprecatedID()),
+          ->CreateURLLoaderNetworkObserverForServiceWorker(
+              rph->GetDeprecatedID(), origin),
       NetworkServiceDevToolsObserver::MakeSelfOwned(GetId()),
       /*client_security_state=*/nullptr,
       /*debug_tag=*/"SWDTAH::CreateNetworkFactoryParamsForDevTools",
-      /*require_cross_site_request_for_cookies=*/false);
+      /*require_cross_site_request_for_cookies=*/false,
+      /*is_for_service_worker_=*/false);
   return {url::Origin::Create(GetURL()), net::SiteForCookies::FromUrl(GetURL()),
           std::move(factory)};
 }

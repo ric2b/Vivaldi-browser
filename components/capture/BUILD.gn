@@ -12,5 +12,6 @@ source_set("capture_page") {
     "//base",
     "//skia:skia",
     "//content/public/browser:browser",
+    "//components/services/paint_preview_compositor/public/mojom",
   ]
 }

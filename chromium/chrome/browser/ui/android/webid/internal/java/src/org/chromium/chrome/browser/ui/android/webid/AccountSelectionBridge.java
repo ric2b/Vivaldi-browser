@@ -104,24 +104,21 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
      * @param rpForDisplay is the formatted RP URL to display in the FedCM prompt.
      * @param accounts is the list of accounts to be shown.
      * @param idpDataList is the list of IDP datas.
-     * @param isAutoReauthn represents whether this is an auto re-authn flow.
      * @param newAccounts represents the newly logged in accounts.
      * @return whether the invocation is successful. If false is returned, the caller must assume
      *     that onDismiss was called and must return early.
      */
     @CalledByNative
     private boolean showAccounts(
-            @JniType("std::string") String rpForDisplay,
+            @JniType("std::u16string") String rpForDisplay,
             Account[] accounts,
             IdentityProviderData[] idpDataList,
-            boolean isAutoReauthn,
             Account[] newAccounts) {
         assert accounts != null && accounts.length > 0;
         return mAccountSelectionComponent.showAccounts(
                 rpForDisplay,
                 Arrays.asList(accounts),
                 Arrays.asList(idpDataList),
-                isAutoReauthn,
                 Arrays.asList(newAccounts));
     }
 
@@ -139,7 +136,7 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
      */
     @CalledByNative
     private boolean showFailureDialog(
-            @JniType("std::string") String rpForDisplay,
+            @JniType("std::u16string") String rpForDisplay,
             @JniType("std::string") String idpForDisplay,
             IdentityProviderMetadata idpMetadata,
             @RpContext.EnumType int rpContext) {
@@ -163,7 +160,7 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
      */
     @CalledByNative
     private boolean showErrorDialog(
-            @JniType("std::string") String rpForDisplay,
+            @JniType("std::u16string") String rpForDisplay,
             @JniType("std::string") String idpForDisplay,
             IdentityProviderMetadata idpMetadata,
             @RpContext.EnumType int rpContext,
@@ -185,10 +182,21 @@ class AccountSelectionBridge implements AccountSelectionComponent.Delegate {
      */
     @CalledByNative
     private boolean showLoadingDialog(
-            @JniType("std::string") String rpForDisplay,
+            @JniType("std::u16string") String rpForDisplay,
             @JniType("std::string") String idpForDisplay,
             @RpContext.EnumType int rpContext) {
         return mAccountSelectionComponent.showLoadingDialog(rpForDisplay, idpForDisplay, rpContext);
+    }
+
+    /**
+     * Shows a verifying dialog with the selected account.
+     *
+     * @param account is the selected account to be shown.
+     * @param isAutoReauthn represents whether this is an auto re-authn flow.
+     */
+    @CalledByNative
+    private boolean showVerifyingDialog(Account account, boolean isAutoReauthn) {
+        return mAccountSelectionComponent.showVerifyingDialog(account, isAutoReauthn);
     }
 
     @CalledByNative

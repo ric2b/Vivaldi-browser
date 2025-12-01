@@ -9,11 +9,12 @@
 
 #import "components/policy/core/browser/signin/profile_separation_policies.h"
 #import "components/signin/public/base/signin_metrics.h"
+#import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow_delegate.h"
 #import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow_performer_delegate.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 #import "ios/chrome/browser/signin/model/constants.h"
 
-@class AuthenticationFlowPerformer;
+@protocol AuthenticationFlowDelegate;
 class Browser;
 @class UIViewController;
 @protocol SystemIdentity;
@@ -23,6 +24,10 @@ class Browser;
 // A new instance of `AuthenticationFlow` should be used each time an identity
 // needs to be signed in.
 @interface AuthenticationFlow : NSObject <AuthenticationFlowPerformerDelegate>
+
+// The object providing the code to execute after the sign-in.
+// It is unset after being used once.
+@property(nonatomic, weak) id<AuthenticationFlowDelegate> delegate;
 
 // Designated initializer.
 // * `browser` is the current browser where the authentication flow is being
@@ -46,12 +51,11 @@ class Browser;
 - (instancetype)init NS_UNAVAILABLE;
 
 // Starts the sign in flow for the identity given in the constructor. Displays
-// the signed inconfirmation dialog allowing the user to sign out or configure
+// the signed in confirmation dialog allowing the user to sign out or configure
 // sync.
 // It is safe to destroy this authentication flow when `completion` is called.
 // `completion` must not be nil.
-- (void)startSignInWithCompletion:
-    (signin_ui::SigninCompletionCallback)completion;
+- (void)startSignIn;
 
 // * Interrupts the current sign-in operation (if any).
 // * Dismiss any UI presented accordingly to `action`.
@@ -60,13 +64,6 @@ class Browser;
 //
 // Does noting if the sign-in flow is already done
 - (void)interrupt;
-
-// Forces the ProfileSeparationDataMigrationSettings value for the next request
-// made to fetch ProfileSeparationPolicies. This function is only for testing
-// purposes.
-+ (void)forcePolicyResponseForNextRequestForTesting:
-    (policy::ProfileSeparationDataMigrationSettings)
-        profileSeparationDataMigrationSettings;
 
 // Identity to sign-in.
 @property(nonatomic, strong, readonly) id<SystemIdentity> identity;

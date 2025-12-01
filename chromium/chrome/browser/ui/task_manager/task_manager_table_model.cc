@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "chrome/browser/ui/task_manager/task_manager_table_model.h"
 
@@ -383,8 +379,12 @@ TableSortDescriptor::TableSortDescriptor(int col_id, bool ascending)
 TaskManagerTableModel::TaskManagerTableModel(
     TableViewDelegate* delegate,
     DisplayCategory initial_display_category)
-    : TaskManagerObserver(base::Milliseconds(kRefreshTimeMS),
-                          REFRESH_TYPE_NONE),
+    : TaskManagerObserver(
+          base::Milliseconds(
+              base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)
+                  ? 2000
+                  : kRefreshTimeMS),
+          REFRESH_TYPE_NONE),
       table_view_delegate_(delegate),
       table_model_observer_(nullptr),
       stringifier_(new TaskManagerValuesStringifier),
@@ -743,16 +743,26 @@ int TaskManagerTableModel::CompareValues(size_t row1,
 }
 
 std::u16string TaskManagerTableModel::GetAXNameForHeader(
-    const std::vector<std::u16string>& visible_column_titles) {
+    const std::vector<std::u16string>& visible_column_titles,
+    const std::vector<std::u16string>& visible_column_sortable) {
   // Gate the header change for task manager behind feature flag. Clean it up
   // once refreshed task manager is launched.
   // TODO(crbug.com/364926055): Chromium Task Manager Refresh Cleanup.
   if (!base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
-    return TableModel::GetAXNameForHeader(visible_column_titles);
+    return TableModel::GetAXNameForHeader(visible_column_titles,
+                                          visible_column_sortable);
   }
+  return FormatListToString(visible_column_sortable);
+}
 
-  CHECK(!visible_column_titles.empty());
-  return FormatListToString(visible_column_titles);
+std::u16string TaskManagerTableModel::GetAXNameForHeaderCell(
+    const std::u16string& visible_column_title,
+    const std::u16string& visible_column_sortable) {
+  if (!base::FeatureList::IsEnabled(features::kTaskManagerDesktopRefresh)) {
+    return TableModel::GetAXNameForHeaderCell(visible_column_title,
+                                              visible_column_sortable);
+  }
+  return visible_column_sortable;
 }
 
 std::u16string TaskManagerTableModel::GetAXNameForRow(
@@ -931,8 +941,8 @@ void TaskManagerTableModel::ActivateTask(size_t row_index) {
   observed_task_manager()->ActivateTask(tasks_[row_index]);
 }
 
-void TaskManagerTableModel::KillTask(size_t row_index) {
-  observed_task_manager()->KillTask(tasks_[row_index]);
+bool TaskManagerTableModel::KillTask(size_t row_index) {
+  return observed_task_manager()->KillTask(tasks_[row_index]);
 }
 
 void TaskManagerTableModel::UpdateRefreshTypes(int column_id, bool visibility) {

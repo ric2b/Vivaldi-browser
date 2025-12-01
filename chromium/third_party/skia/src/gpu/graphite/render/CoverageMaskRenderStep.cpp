@@ -61,12 +61,12 @@ CoverageMaskRenderStep::CoverageMaskRenderStep()
                      // The mask will have AA outsets baked in, but the original bounds for clipping
                      // still require the outset for analytic coverage.
                      Flags::kPerformsShading | Flags::kHasTextures | Flags::kEmitsCoverage |
-                     Flags::kOutsetBoundsForAA,
+                     Flags::kOutsetBoundsForAA | Flags::kAppendInstances,
                      /*uniforms=*/{{"maskToDeviceRemainder", SkSLType::kFloat3x3}},
                      PrimitiveType::kTriangleStrip,
                      kDirectDepthGreaterPass,
-                     /*vertexAttrs=*/{},
-                     /*instanceAttrs=*/
+                     /*staticAttrs=*/ {},
+                     /*appendAttrs=*/
                      // Draw bounds and mask bounds are in normalized relative to the mask texture,
                      // but 'drawBounds' is stored in float since the coords may map outside of
                      // [0,1] for inverse-filled masks. 'drawBounds' is relative to the logical mask
@@ -113,6 +113,8 @@ const char* CoverageMaskRenderStep::fragmentCoverageSkSL() const {
         "half c = sample(pathAtlas, clamp(textureCoords, maskBounds.LT, maskBounds.RB)).r;\n"
         "outputCoverage = half4(mix(c, 1 - c, invert));\n";
 }
+
+bool CoverageMaskRenderStep::usesUniformsInFragmentSkSL() const { return false; }
 
 void CoverageMaskRenderStep::writeVertices(DrawWriter* dw,
                                            const DrawParams& params,

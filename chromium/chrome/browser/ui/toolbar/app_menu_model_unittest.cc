@@ -102,6 +102,13 @@ class AppMenuModelTest : public BrowserWithTestWindowTest,
  public:
   AppMenuModelTest() = default;
 
+  void SetUp() override {
+    BrowserWithTestWindowTest::SetUp();
+    safety_hub_test_util::CreateRevokedPermissionsService(browser()->profile());
+    safety_hub_test_util::CreateNotificationPermissionsReviewService(
+        browser()->profile());
+  }
+
   AppMenuModelTest(const AppMenuModelTest&) = delete;
   AppMenuModelTest& operator=(const AppMenuModelTest&) = delete;
 
@@ -115,16 +122,6 @@ class AppMenuModelTest : public BrowserWithTestWindowTest,
 
  protected:
   base::test::ScopedFeatureList feature_list_;
-};
-
-class ExtensionsMenuModelTest : public AppMenuModelTest {
- public:
-  ExtensionsMenuModelTest() = default;
-
-  ExtensionsMenuModelTest(const ExtensionsMenuModelTest&) = delete;
-  ExtensionsMenuModelTest& operator=(const ExtensionsMenuModelTest&) = delete;
-
-  ~ExtensionsMenuModelTest() override = default;
 };
 
 // Copies parts of MenuModelTest::Delegate and combines them with the
@@ -284,23 +281,6 @@ TEST_F(AppMenuModelTest, DefaultBrowserPrompt) {
 }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
-// Tests that extensions sub menu (when enabled) generates the correct elements
-// or does not generate its elements when disabled.
-TEST_F(ExtensionsMenuModelTest, ExtensionsMenu) {
-  AppMenuModel model(this, browser());
-  model.Init();
-
-  ASSERT_TRUE(model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU));
-  ui::MenuModel* extensions_submenu = model.GetSubmenuModelAt(
-      model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU).value());
-  ASSERT_NE(extensions_submenu, nullptr);
-  ASSERT_EQ(2ul, extensions_submenu->GetItemCount());
-  EXPECT_EQ(IDC_EXTENSIONS_SUBMENU_MANAGE_EXTENSIONS,
-            extensions_submenu->GetCommandIdAt(0));
-  EXPECT_EQ(IDC_EXTENSIONS_SUBMENU_VISIT_CHROME_WEB_STORE,
-            extensions_submenu->GetCommandIdAt(1));
-}
-
 TEST_F(AppMenuModelTest, PerformanceItem) {
   AppMenuModel model(this, browser());
   model.Init();
@@ -328,22 +308,6 @@ TEST_F(AppMenuModelTest, CustomizeChromeLogMetrics) {
   model.Init();
   model.ExecuteCommand(IDC_SHOW_CUSTOMIZE_CHROME_SIDE_PANEL, 0);
   EXPECT_EQ(1, model.log_metrics_count_);
-}
-
-TEST_F(AppMenuModelTest, TabSearchItem) {
-  feature_list_.Reset();
-  feature_list_.InitWithFeaturesAndParameters(
-      /*enabled_features=*/
-      {{features::kTabstripComboButton,
-        {{"tab_search_toolbar_button", "true"}}}},
-      /*disabled_features=*/{});
-
-  AppMenuModel model(this, browser());
-  model.Init();
-  ToolsMenuModel toolModel(&model, browser());
-  size_t tab_search_index =
-      toolModel.GetIndexOfCommandId(IDC_TAB_SEARCH).value();
-  EXPECT_TRUE(toolModel.IsEnabledAt(tab_search_index));
 }
 
 TEST_F(AppMenuModelTest, OrganizeTabsItem) {
@@ -378,7 +342,8 @@ TEST_F(AppMenuModelTest, DeclutterTabsItem) {
 TEST_F(AppMenuModelTest, GlicItem) {
   feature_list_.Reset();
   feature_list_.InitWithFeatures(
-      {features::kGlic, features::kTabstripComboButton}, {});
+      {features::kGlic, features::kTabstripComboButton, features::kGlicRollout},
+      {});
 
   TestLogMetricsAppMenuModel model(this, browser());
   model.Init();
@@ -431,6 +396,57 @@ TEST_F(AppMenuModelTest, ModelHasIcons) {
   };
 
   check_for_icons(u"<Root Menu>", &model);
+}
+
+class ExtensionsMenuModelTest : public AppMenuModelTest,
+                                public testing::WithParamInterface<bool> {
+ public:
+  ExtensionsMenuModelTest() = default;
+  ~ExtensionsMenuModelTest() override = default;
+
+  void SetUp() override {
+    if (GetParam()) {
+      scoped_feature_list_.InitAndEnableFeature(
+          features::kExtensionsCollapseMainMenu);
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kExtensionsCollapseMainMenu);
+    }
+    AppMenuModelTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(,
+                         ExtensionsMenuModelTest,
+                         testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& param) {
+                           return param.param ? "Collapse" : "DoNotCollapse";
+                         });
+
+// Tests that extensions sub menu (when enabled) generates the correct elements
+// or does not generate its elements when disabled.
+TEST_P(ExtensionsMenuModelTest, ExtensionsMenu) {
+  AppMenuModel model(this, browser());
+  model.Init();
+
+  if (GetParam()) {
+    const auto index = model.GetIndexOfCommandId(IDC_FIND_EXTENSIONS);
+    ASSERT_TRUE(index.has_value());
+    EXPECT_EQ(nullptr, model.GetSubmenuModelAt(*index));
+  } else {
+    ASSERT_TRUE(model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU));
+    ui::MenuModel* extensions_submenu = model.GetSubmenuModelAt(
+        model.GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU).value());
+    ASSERT_NE(extensions_submenu, nullptr);
+    ASSERT_EQ(2ul, extensions_submenu->GetItemCount());
+    EXPECT_EQ(IDC_EXTENSIONS_SUBMENU_MANAGE_EXTENSIONS,
+              extensions_submenu->GetCommandIdAt(0));
+    EXPECT_EQ(IDC_EXTENSIONS_SUBMENU_VISIT_CHROME_WEB_STORE,
+              extensions_submenu->GetCommandIdAt(1));
+  }
 }
 
 // Profile row does not show on ChromeOS.
@@ -554,7 +570,8 @@ class TestAppMenuModelSafetyHubTest : public AppMenuModelTest {
 
     // Let PasswordStatusCheckService run until it fetches the latest data.
     PasswordStatusCheckService* password_service =
-        PasswordStatusCheckServiceFactory::GetForProfile(profile());
+        safety_hub_test_util::CreateAndUsePasswordStatusService(profile());
+
     safety_hub_test_util::UpdatePasswordCheckServiceAsync(password_service);
     EXPECT_EQ(password_service->compromised_credential_count(), 0UL);
 
@@ -620,4 +637,31 @@ TEST_F(TestAppMenuModelSafetyHubTest, HaTSControlTrigger) {
       ->GetNotificationToShow();
   AppMenuModel new_model(this, browser());
   new_model.Init();
+}
+
+class TabSearchMenuModelTest : public AppMenuModelTest {
+ public:
+  TabSearchMenuModelTest() = default;
+  ~TabSearchMenuModelTest() override = default;
+
+  void SetUp() override {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        /*enabled_features=*/
+        {{features::kTabstripComboButton,
+          {{"tab_search_toolbar_button", "true"}}}},
+        /*disabled_features=*/{});
+    AppMenuModelTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+TEST_F(TabSearchMenuModelTest, TabSearchItem) {
+  AppMenuModel model(this, browser());
+  model.Init();
+  ToolsMenuModel toolModel(&model, browser());
+  size_t tab_search_index =
+      toolModel.GetIndexOfCommandId(IDC_TAB_SEARCH).value();
+  EXPECT_TRUE(toolModel.IsEnabledAt(tab_search_index));
 }

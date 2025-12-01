@@ -170,6 +170,7 @@
 <translation id="3838085852053358637">Koe tafoeging net lade</translation>
 <translation id="383891835335927981">Der binne gjin websteeën yn- of útzoom</translation>
 <translation id="385051799172605136">Tebek</translation>
+<translation id="3858860766373142691">Namme</translation>
 <translation id="3861977424605124250">By it úteinsetten sjen litte</translation>
 <translation id="3867944738977021751">Sertifikaat fjilden</translation>
 <translation id="3905761538810670789">App reparearje</translation>
@@ -415,6 +416,9 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="8004582292198964060">Sneuper</translation>
 <translation id="8018313076035239964">Haw kontrôle oer hokfoar ynformaasje websteeën brûke kinne en hokfoar ynhâld se sjen litte</translation>
 <translation id="8071432093239591881">As ôfbylding printsje</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# blêdwizer}
+        other {# blêdwizers}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> Kb</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Ynlaad is dwaande} other {Ynladen binne dwaande}}</translation>

@@ -92,17 +92,17 @@ PeerConfigurer* PeerConfigurer::SetVideoDecoderFactory(
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetAudioEncoderFactory(
-    rtc::scoped_refptr<webrtc::AudioEncoderFactory> audio_encoder_factory) {
+    scoped_refptr<AudioEncoderFactory> audio_encoder_factory) {
   components_->pcf_dependencies->audio_encoder_factory = audio_encoder_factory;
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetAudioDecoderFactory(
-    rtc::scoped_refptr<webrtc::AudioDecoderFactory> audio_decoder_factory) {
+    scoped_refptr<AudioDecoderFactory> audio_decoder_factory) {
   components_->pcf_dependencies->audio_decoder_factory = audio_decoder_factory;
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetAsyncDnsResolverFactory(
-    std::unique_ptr<webrtc::AsyncDnsResolverFactoryInterface>
+    std::unique_ptr<AsyncDnsResolverFactoryInterface>
         async_dns_resolver_factory) {
   components_->pc_dependencies->async_dns_resolver_factory =
       std::move(async_dns_resolver_factory);
@@ -114,7 +114,7 @@ PeerConfigurer* PeerConfigurer::SetRTCCertificateGenerator(
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetSSLCertificateVerifier(
-    std::unique_ptr<rtc::SSLCertificateVerifier> tls_cert_verifier) {
+    std::unique_ptr<SSLCertificateVerifier> tls_cert_verifier) {
   components_->pc_dependencies->tls_cert_verifier =
       std::move(tls_cert_verifier);
   return this;
@@ -182,12 +182,12 @@ PeerConfigurer* PeerConfigurer::SetNetEqFactory(
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetAudioProcessing(
-    rtc::scoped_refptr<webrtc::AudioProcessing> audio_processing) {
-  components_->pcf_dependencies->audio_processing = audio_processing;
+    std::unique_ptr<AudioProcessingBuilderInterface> audio_processing) {
+  components_->pcf_dependencies->audio_processing = std::move(audio_processing);
   return this;
 }
 PeerConfigurer* PeerConfigurer::SetAudioMixer(
-    rtc::scoped_refptr<webrtc::AudioMixer> audio_mixer) {
+    scoped_refptr<AudioMixer> audio_mixer) {
   components_->pcf_dependencies->audio_mixer = audio_mixer;
   return this;
 }

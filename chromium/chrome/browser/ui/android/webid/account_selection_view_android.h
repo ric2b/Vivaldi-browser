@@ -30,25 +30,29 @@ class AccountSelectionViewAndroid : public AccountSelectionView {
       const content::RelyingPartyData& rp_data,
       const std::vector<IdentityProviderDataPtr>& idp_list,
       const std::vector<IdentityRequestAccountPtr>& accounts,
-      Account::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<IdentityRequestAccountPtr>& new_accounts) override;
   bool ShowFailureDialog(
-      const std::string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::string& idp_for_display,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
       const content::IdentityProviderMetadata& idp_metadata) override;
-  bool ShowErrorDialog(const std::string& rp_for_display,
+  bool ShowErrorDialog(const content::RelyingPartyData& rp_data,
                        const std::string& idp_for_display,
                        blink::mojom::RpContext rp_context,
                        blink::mojom::RpMode rp_mode,
                        const content::IdentityProviderMetadata& idp_metadata,
                        const std::optional<TokenError>& error) override;
-  bool ShowLoadingDialog(const std::string& rp_for_display,
+  bool ShowLoadingDialog(const content::RelyingPartyData& rp_data,
                          const std::string& idp_for_display,
                          blink::mojom::RpContext rp_context,
                          blink::mojom::RpMode rp_mode) override;
+  bool ShowVerifyingDialog(const content::RelyingPartyData& rp_data,
+                           const IdentityProviderDataPtr& idp_data,
+                           const IdentityRequestAccountPtr& account,
+                           Account::SignInMode sign_in_mode,
+                           blink::mojom::RpMode rp_mode) override;
 
   std::string GetTitle() const override;
   std::optional<std::string> GetSubtitle() const override;

@@ -16,7 +16,26 @@
 #define OPENSSL_HEADER_CRYPTO_FIPSMODULE_SERVICE_INDICATOR_INTERNAL_H
 
 #include <openssl/base.h>
-#include <openssl/service_indicator.h>
+
+
+// FIPS_service_indicator_before_call and |FIPS_service_indicator_after_call|
+// both currently return the same local thread counter which is slowly
+// incremented whenever approved services are called. The
+// |CALL_SERVICE_AND_CHECK_APPROVED| macro is strongly recommended over calling
+// these functions directly.
+//
+// |FIPS_service_indicator_before_call| is intended to be called immediately
+// before an approved service, while |FIPS_service_indicator_after_call| should
+// be called immediately after. If the values returned from these two functions
+// are not equal, this means that the service called inbetween is deemed to be
+// approved. If the values are still the same, this means the counter has not
+// been incremented, and the service called is not approved for FIPS.
+//
+// In non-FIPS builds, |FIPS_service_indicator_before_call| always returns zero
+// and |FIPS_service_indicator_after_call| always returns one. Thus calls always
+// appear to be approved. This is intended to simplify testing.
+OPENSSL_EXPORT uint64_t FIPS_service_indicator_before_call(void);
+OPENSSL_EXPORT uint64_t FIPS_service_indicator_after_call(void);
 
 #if defined(BORINGSSL_FIPS)
 

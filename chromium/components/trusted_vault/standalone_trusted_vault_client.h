@@ -38,22 +38,13 @@ class StandaloneTrustedVaultBackend;
 // Reading of the file is done lazily.
 class StandaloneTrustedVaultClient : public TrustedVaultClient {
  public:
-  // Allows to observe backend state changes for testing. Production code should
-  // use TrustedVaultClient::Observer.
-  class DebugObserver : public base::CheckedObserver {
-   public:
-    DebugObserver() = default;
-    DebugObserver(const DebugObserver&) = delete;
-    DebugObserver& operator=(const DebugObserver&) = delete;
-    ~DebugObserver() override = default;
-
-    virtual void OnBackendStateChanged() = 0;
-  };
-
   // |base_dir| is the directory in which to create snapshot
   // files. |identity_manager| must not be null and must outlive this object.
   // |url_loader_factory| must not be null.
   StandaloneTrustedVaultClient(
+#if BUILDFLAG(IS_MAC)
+      const std::string& icloud_keychain_access_group_prefix,
+#endif
       SecurityDomainId security_domain,
       const base::FilePath& base_dir,
       signin::IdentityManager* identity_manager,
@@ -93,8 +84,6 @@ class StandaloneTrustedVaultClient : public TrustedVaultClient {
   void FetchIsDeviceRegisteredForTesting(
       const GaiaId& gaia_id,
       base::OnceCallback<void(bool)> callback);
-  void AddDebugObserverForTesting(DebugObserver* debug_observer);
-  void RemoveDebugObserverForTesting(DebugObserver* debug_observer);
   // TODO(crbug.com/40178774): This this API and rely exclusively on
   // FakeSecurityDomainsServer.
   void GetLastAddedRecoveryMethodPublicKeyForTesting(
@@ -106,14 +95,12 @@ class StandaloneTrustedVaultClient : public TrustedVaultClient {
  private:
   void NotifyTrustedVaultKeysChanged();
   void NotifyRecoverabilityDegradedChanged();
-  void NotifyBackendStateChanged();
 
   const scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 
   base::ObserverList<Observer> observer_list_;
-  base::ObserverList<DebugObserver> debug_observer_list_;
 
   // Allows access token fetching for primary account on the ui thread. Passed
   // as WeakPtr to TrustedVaultAccessTokenFetcherImpl.

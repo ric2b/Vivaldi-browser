@@ -1166,6 +1166,16 @@ TEST(ByteString, MultiCharReverseIterator) {
   EXPECT_EQ(0, iter - multi_str.rbegin());
 }
 
+TEST(ByteStringView, ConstexprCtors) {
+  static constexpr ByteStringView null_string;
+  static_assert(null_string.GetLength() == 0);
+  static_assert(null_string.IsEmpty());
+
+  static constexpr ByteStringView copied_null_string(null_string);
+  static_assert(copied_null_string.GetLength() == 0);
+  static_assert(copied_null_string.IsEmpty());
+}
+
 TEST(ByteStringView, Null) {
   ByteStringView null_string;
   EXPECT_FALSE(null_string.unterminated_unsigned_str());
@@ -1224,8 +1234,7 @@ TEST(ByteStringView, NotNull) {
   // SAFETY: known fixed-length string.
   auto alternate_string3 = UNSAFE_BUFFERS(ByteStringView("abcdef", 3));
   const char abcd[] = "abcd";
-  ByteStringView span_string4(
-      pdfium::as_bytes(pdfium::make_span(abcd).first(4u)));
+  ByteStringView span_string4(pdfium::as_bytes(pdfium::span(abcd).first(4u)));
   // SAFETY: known fixed-length string.
   auto embedded_nul_string7 = UNSAFE_BUFFERS(ByteStringView("abc\0def", 7));
   // SAFETY: known fixed-length string.
@@ -1541,7 +1550,7 @@ TEST(ByteStringView, OperatorEQ) {
 
   const char kHello[] = "hello";
   pdfium::span<const uint8_t> span5(
-      pdfium::as_bytes(pdfium::make_span(kHello).first(5u)));
+      pdfium::as_bytes(pdfium::span(kHello).first(5u)));
   auto raw_span = byte_string_c.unsigned_span();
   EXPECT_TRUE(
       std::equal(raw_span.begin(), raw_span.end(), span5.begin(), span5.end()));

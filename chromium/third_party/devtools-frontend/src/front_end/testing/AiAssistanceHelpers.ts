@@ -11,19 +11,18 @@ import * as Bindings from '../models/bindings/bindings.js';
 import * as Breakpoints from '../models/breakpoints/breakpoints.js';
 import * as Logs from '../models/logs/logs.js';
 import * as Persistence from '../models/persistence/persistence.js';
+import * as ProjectSettings from '../models/project_settings/project_settings.js';
 import * as Workspace from '../models/workspace/workspace.js';
 import * as WorkspaceDiff from '../models/workspace_diff/workspace_diff.js';
 import * as AiAssistancePanel from '../panels/ai_assistance/ai_assistance.js';
+import * as UI from '../ui/legacy/legacy.js';
 
-import {findMenuItemWithLabel, getMenu} from './ContextMenuHelpers.js';
+import {findMenuItemWithLabel} from './ContextMenuHelpers.js';
+import {renderElementIntoDOM} from './DOMHelpers.js';
 import {
   createTarget,
 } from './EnvironmentHelpers.js';
-import {
-  createContentProviderUISourceCode,
-  createContentProviderUISourceCodes,
-  createFileSystemUISourceCode
-} from './UISourceCodeHelpers.js';
+import {createContentProviderUISourceCodes, createFileSystemUISourceCode} from './UISourceCodeHelpers.js';
 import {createViewFunctionStub} from './ViewFunctionHelpers.js';
 
 function createMockAidaClient(fetch: Host.AidaClient.AidaClient['fetch']): Host.AidaClient.AidaClient {
@@ -186,10 +185,11 @@ export async function createAiAssistancePanel(options?: {
   aidaClient?: Host.AidaClient.AidaClient,
   aidaAvailability?: Host.AidaClient.AidaAccessPreconditions,
   syncInfo?: Host.InspectorFrontendHostAPI.SyncInformation,
+  chatView?: AiAssistancePanel.ChatView,
 }) {
   let aidaAvailabilityForStub = options?.aidaAvailability ?? Host.AidaClient.AidaAccessPreconditions.AVAILABLE;
 
-  const view = createViewFunctionStub(AiAssistancePanel.AiAssistancePanel);
+  const view = createViewFunctionStub(AiAssistancePanel.AiAssistancePanel, {chatView: options?.chatView});
   const aidaClient = options?.aidaClient ?? mockAidaClient();
   const checkAccessPreconditionsStub =
       sinon.stub(Host.AidaClient.AidaClient, 'checkAccessPreconditions').callsFake(() => {
@@ -202,8 +202,9 @@ export async function createAiAssistancePanel(options?: {
   });
   panels.push(panel);
 
-  panel.markAsRoot();
-  panel.show(document.body);
+  // In many of the tests we create other panels to allow the right contexts to
+  // be set for the AI Assistance panel.
+  renderElementIntoDOM(panel, {allowMultipleChildren: true});
   await view.nextInput;
 
   const stubAidaCheckAccessPreconditions = (aidaAvailability: Host.AidaClient.AidaAccessPreconditions) => {
@@ -218,6 +219,27 @@ export async function createAiAssistancePanel(options?: {
     stubAidaCheckAccessPreconditions,
   };
 }
+
+export const setupAutomaticFileSystem = (options: {hasFileSystem: boolean} = {
+  hasFileSystem: false
+}): void => {
+  const root = '/path/to/my-automatic-file-system';
+  const uuid = '549bbf9b-48b2-4af7-aebd-d3ba68993094';
+  const hostConfig = {devToolsAutomaticFileSystems: {enabled: true}};
+  const inspectorFrontendHost = sinon.createStubInstance(Host.InspectorFrontendHost.InspectorFrontendHostStub);
+  inspectorFrontendHost.events = sinon.createStubInstance(Common.ObjectWrapper.ObjectWrapper);
+  const projectSettingsModel = sinon.createStubInstance(ProjectSettings.ProjectSettingsModel.ProjectSettingsModel);
+  sinon.stub(projectSettingsModel, 'availability').value('available');
+  sinon.stub(projectSettingsModel, 'projectSettings').value(options.hasFileSystem ? {workspace: {root, uuid}} : {});
+
+  const manager = Persistence.AutomaticFileSystemManager.AutomaticFileSystemManager.instance({
+    forceNew: true,
+    hostConfig,
+    inspectorFrontendHost,
+    projectSettingsModel,
+  });
+  sinon.stub(manager, 'connectAutomaticFileSystem').resolves(true);
+};
 
 let patchWidgets: AiAssistancePanel.PatchWidget.PatchWidget[] = [];
 /**
@@ -235,7 +257,7 @@ export async function createPatchWidget(options?: {
   patchWidgets.push(widget);
 
   widget.markAsRoot();
-  widget.show(document.body);
+  renderElementIntoDOM(widget);
   await view.nextInput;
 
   return {
@@ -245,11 +267,13 @@ export async function createPatchWidget(options?: {
   };
 }
 
-export async function createPatchWidgetWithDiffView() {
-  const {view, widget, aidaClient} =
-      await createPatchWidget({aidaClient: mockAidaClient([[{explanation: 'patch applied'}]])});
+export async function createPatchWidgetWithDiffView(options?: {
+  aidaClient?: Host.AidaClient.AidaClient,
+}) {
+  const aidaClient = options?.aidaClient ?? mockAidaClient([[{explanation: 'patch applied'}]]);
+  const {view, widget} = await createPatchWidget({aidaClient});
   widget.changeSummary = 'body { background-color: red; }';
-  view.input.onApplyToPageTree();
+  view.input.onApplyToWorkspace();
   assert.strictEqual(
       (await view.nextInput).patchSuggestionState, AiAssistancePanel.PatchWidget.PatchSuggestionState.SUCCESS);
 
@@ -289,35 +313,14 @@ export function openHistoryContextMenu(
     lastUpdate: AiAssistancePanel.ViewInput,
     item: string,
 ) {
-  const contextMenu = getMenu(() => {
-    lastUpdate.onHistoryClick(new MouseEvent('click'));
-  });
+  const contextMenu = new UI.ContextMenu.ContextMenu(new MouseEvent('click'));
+  lastUpdate.populateHistoryMenu(contextMenu);
+
   const freestylerEntry = findMenuItemWithLabel(contextMenu.defaultSection(), item);
   return {
     contextMenu,
     id: freestylerEntry?.id(),
   };
-}
-
-export function createNetworkProject(fileSystemPath: string, files?: Array<{path: string, content: string}>) {
-  const {project, uiSourceCode} = createContentProviderUISourceCode({
-    url: Platform.DevToolsPath.urlString`${fileSystemPath}/index.html`,
-    content: 'content',
-    mimeType: 'text/html',
-    projectType: Workspace.Workspace.projectTypes.Network,
-    metadata: new Workspace.UISourceCode.UISourceCodeMetadata(null, 'content'.length),
-  });
-
-  uiSourceCode.setWorkingCopy('content');
-
-  for (const file of files ?? []) {
-    const uiSourceCode = project.createUISourceCode(
-        Platform.DevToolsPath.urlString`${fileSystemPath}/${file.path}`, Common.ResourceType.resourceTypes.Script);
-    project.addUISourceCode(uiSourceCode);
-    uiSourceCode.setWorkingCopy(file.content);
-  }
-
-  return {project, uiSourceCode};
 }
 
 export function createTestFilesystem(fileSystemPath: string, files?: Array<{

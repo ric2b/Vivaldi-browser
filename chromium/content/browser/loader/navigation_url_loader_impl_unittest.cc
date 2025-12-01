@@ -45,12 +45,15 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/network/cookie_settings.h"
 #include "services/network/public/cpp/cors/origin_access_list.h"
+#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/permissions_policy/permissions_policy.h"
 #include "services/network/public/cpp/single_request_url_loader_factory.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
+#include "services/network/shared_resource_checker.h"
 #include "services/network/test/url_loader_context_for_tests.h"
 #include "services/network/url_loader.h"
 #include "services/network/url_request_context_owner.h"
@@ -73,7 +76,8 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
  public:
   explicit TestNavigationLoaderInterceptor(
       std::optional<network::ResourceRequest>* most_recent_resource_request)
-      : most_recent_resource_request_(most_recent_resource_request) {
+      : most_recent_resource_request_(most_recent_resource_request),
+        shared_resource_checker_(empty_cookie_settings_) {
     net::URLRequestContextBuilder url_request_context_builder;
     url_request_context_builder.set_proxy_resolution_service(
         net::ConfiguredProxyResolutionService::CreateDirect());
@@ -127,14 +131,20 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
         /*trust_token_helper=*/nullptr,
         /*shared_dictionary_manager=*/nullptr,
         /*shared_dictionary_checker=*/nullptr,
-        /*cookie_observer=*/mojo::NullRemote(),
-        /*trust_token_observer=*/mojo::NullRemote(),
-        /*url_loader_network_observer=*/mojo::NullRemote(),
-        /*devtools_observer=*/mojo::NullRemote(),
-        /*device_bound_session_observer=*/mojo::NullRemote(),
+        /*cookie_observer=*/
+        network::ObserverWrapper<network::mojom::CookieAccessObserver>(),
+        /*trust_token_observer=*/
+        network::ObserverWrapper<network::mojom::TrustTokenAccessObserver>(),
+        /*url_loader_network_observer=*/
+        network::ObserverWrapper<
+            network::mojom::URLLoaderNetworkServiceObserver>(),
+        /*devtools_observer=*/
+        network::ObserverWrapper<network::mojom::DevToolsObserver>(),
+        /*device_bound_session_observer=*/
+        network::ObserverWrapper<
+            network::mojom::DeviceBoundSessionAccessObserver>(),
         /*accept_ch_frame_observer=*/mojo::NullRemote(),
-        /*attribution_request_helper=*/nullptr,
-        /*shared_storage_writable=*/false);
+        /*shared_storage_writable=*/false, shared_resource_checker_);
   }
 
   bool MaybeCreateLoaderForResponse(
@@ -162,6 +172,8 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
   std::unique_ptr<net::URLRequestContext> url_request_context_;
   scoped_refptr<network::ResourceSchedulerClient> resource_scheduler_client_;
   std::unique_ptr<network::URLLoader> url_loader_;
+  network::CookieSettings empty_cookie_settings_;
+  network::SharedResourceChecker shared_resource_checker_;
 
   const network::cors::OriginAccessList kEmptyOriginAccessList;
 };

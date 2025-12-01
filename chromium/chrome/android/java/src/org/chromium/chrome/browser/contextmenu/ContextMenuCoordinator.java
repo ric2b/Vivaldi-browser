@@ -4,10 +4,10 @@
 
 package org.chromium.chrome.browser.contextmenu;
 
-import static org.chromium.chrome.browser.contextmenu.ContextMenuItemProperties.ENABLED;
-import static org.chromium.chrome.browser.contextmenu.ContextMenuItemProperties.MENU_ID;
 import static org.chromium.chrome.browser.contextmenu.ContextMenuItemWithIconButtonProperties.BUTTON_CLICK_LISTENER;
 import static org.chromium.chrome.browser.contextmenu.ContextMenuItemWithIconButtonProperties.BUTTON_MENU_ID;
+import static org.chromium.ui.listmenu.ListMenuItemProperties.ENABLED;
+import static org.chromium.ui.listmenu.ListMenuItemProperties.MENU_ITEM_ID;
 
 import android.app.Activity;
 import android.graphics.Rect;
@@ -40,6 +40,7 @@ import org.chromium.content_public.browser.Visibility;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.listmenu.ListMenuItemViewBinder;
 import org.chromium.ui.modelutil.LayoutViewBuilder;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
@@ -61,13 +62,17 @@ public class ContextMenuCoordinator implements ContextMenuUi {
         ListItemType.DIVIDER,
         ListItemType.HEADER,
         ListItemType.CONTEXT_MENU_ITEM,
-        ListItemType.CONTEXT_MENU_ITEM_WITH_ICON_BUTTON
+        ListItemType.CONTEXT_MENU_ITEM_WITH_ICON_BUTTON,
+        ListItemType.CONTEXT_MENU_ITEM_WITH_CHECKBOX,
+        ListItemType.CONTEXT_MENU_ITEM_WITH_RADIO_BUTTON,
     })
     public @interface ListItemType {
         int DIVIDER = 0;
         int HEADER = 1;
         int CONTEXT_MENU_ITEM = 2;
         int CONTEXT_MENU_ITEM_WITH_ICON_BUTTON = 3;
+        int CONTEXT_MENU_ITEM_WITH_CHECKBOX = 4;
+        int CONTEXT_MENU_ITEM_WITH_RADIO_BUTTON = 5;
     }
 
     private static final int INVALID_ITEM_ID = -1;
@@ -78,11 +83,11 @@ public class ContextMenuCoordinator implements ContextMenuUi {
     private ContextMenuHeaderCoordinator mHeaderCoordinator;
 
     private ContextMenuListView mListView;
-    private float mTopContentOffsetPx;
+    private final float mTopContentOffsetPx;
     private ContextMenuDialog mDialog;
     private Runnable mOnMenuClosed;
-    private ContextMenuNativeDelegate mNativeDelegate;
-    private boolean mIsInterestTarget;
+    private final ContextMenuNativeDelegate mNativeDelegate;
+    private boolean mIsInterestTargetWithShiftedMenu;
 
     /**
      * Constructor that also sets the content offset.
@@ -135,11 +140,21 @@ public class ContextMenuCoordinator implements ContextMenuUi {
         Activity activity = window.getActivity().get();
 
         final boolean isDragDropEnabled = ContextMenuUtils.isDragDropEnabled(activity);
-        mIsInterestTarget = params.getOpenedFromInterestTarget();
+        // There are two experimental modes for the interesttarget feature:
+        //  1. the context menu is "shifted", to leave room for the page content, with the available
+        //     space communicated back to the site via env() variables.
+        //  2. the context menu is shown "as usual", but an item is added to the top of the context
+        //     menu, allowing the user to show interest in the link.
+        // If mIsInterestTargetWithShiftedMenu is true, we're in case 1. The
+        // InterestTargetNodeID being set to 0 indicate this, and that'll happen
+        // if the `HTMLInterestTargetContextMenuItemOnly` feature is disabled.
+        mIsInterestTargetWithShiftedMenu =
+                params.getOpenedFromInterestTarget() && params.getInterestTargetNodeID() == 0;
+
         final boolean usePopupWindow =
                 isDragDropEnabled
                         || ContextMenuUtils.isMouseOrHighlightPopup(params)
-                        || mIsInterestTarget;
+                        || mIsInterestTargetWithShiftedMenu;
 
         final View layout =
                 LayoutInflater.from(activity)
@@ -163,7 +178,7 @@ public class ContextMenuCoordinator implements ContextMenuUi {
         //  1. For larger screens, simply provide a rectangular area around the
         //     tapped screen location, and let the context menu position itself
         //     relative to that.
-        if (mIsInterestTarget) {
+        if (mIsInterestTargetWithShiftedMenu) {
             var displayMetrics = activity.getResources().getDisplayMetrics();
             float displayWidth = (float) displayMetrics.widthPixels;
             float displayHeight = (float) displayMetrics.heightPixels;
@@ -266,7 +281,7 @@ public class ContextMenuCoordinator implements ContextMenuUi {
         mDialog.setOnDismissListener(
                 (dialogInterface) -> {
                     mOnMenuClosed.run();
-                    if (mIsInterestTarget) {
+                    if (mIsInterestTargetWithShiftedMenu) {
                         // Remove context menu insets when the menu closes.
                         webContents.setContextMenuInsets(new Rect());
                     }
@@ -307,7 +322,7 @@ public class ContextMenuCoordinator implements ContextMenuUi {
                         if (getItemViewType(position) == ListItemType.CONTEXT_MENU_ITEM
                                 || getItemViewType(position)
                                         == ListItemType.CONTEXT_MENU_ITEM_WITH_ICON_BUTTON) {
-                            return ((ListItem) getItem(position)).model.get(MENU_ID);
+                            return ((ListItem) getItem(position)).model.get(MENU_ITEM_ID);
                         }
                         return INVALID_ITEM_ID;
                     }
@@ -327,11 +342,19 @@ public class ContextMenuCoordinator implements ContextMenuUi {
         adapter.registerType(
                 ListItemType.CONTEXT_MENU_ITEM,
                 new LayoutViewBuilder(R.layout.context_menu_row),
-                ContextMenuItemViewBinder::bind);
+                ListMenuItemViewBinder::binder);
         adapter.registerType(
                 ListItemType.CONTEXT_MENU_ITEM_WITH_ICON_BUTTON,
                 new LayoutViewBuilder(R.layout.context_menu_share_row),
                 ContextMenuItemWithIconButtonViewBinder::bind);
+        adapter.registerType(
+                ListItemType.CONTEXT_MENU_ITEM_WITH_CHECKBOX,
+                new LayoutViewBuilder<>(R.layout.checkbox_layout),
+                ContextMenuItemWithCheckboxViewBinder::bind);
+        adapter.registerType(
+                ListItemType.CONTEXT_MENU_ITEM_WITH_RADIO_BUTTON,
+                new LayoutViewBuilder<>(R.layout.radio_button_layout_element),
+                ContextMenuItemWithRadioButtonViewBinder::bind);
 
         mListView.setOnItemClickListener(
                 (p, v, pos, id) -> {
@@ -493,7 +516,7 @@ public class ContextMenuCoordinator implements ContextMenuUi {
             mChipController.dismissChipIfShowing();
         }
         mDialog.dismiss();
-        if (mIsInterestTarget) {
+        if (mIsInterestTargetWithShiftedMenu) {
             // Remove context menu insets if the menu is dismissed.
             mWebContents.setContextMenuInsets(new Rect());
         }
@@ -574,8 +597,8 @@ public class ContextMenuCoordinator implements ContextMenuUi {
         for (int i = 0; i < getCount(); i++) {
             final ListItem item = getItem(i);
             // If the item is a title/divider, its model does not have MENU_ID as key.
-            if (item.model.getAllSetProperties().contains(MENU_ID)
-                    && item.model.get(MENU_ID) == id) {
+            if (item.model.getAllSetProperties().contains(MENU_ITEM_ID)
+                    && item.model.get(MENU_ITEM_ID) == id) {
                 return item;
             }
         }

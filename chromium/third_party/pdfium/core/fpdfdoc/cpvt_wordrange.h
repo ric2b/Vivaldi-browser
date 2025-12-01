@@ -20,17 +20,17 @@ struct CPVT_WordRange {
     Normalize();
   }
 
-  inline bool IsEmpty() const { return BeginPos == EndPos; }
-  inline bool operator==(const CPVT_WordRange& wr) const {
-    return wr.BeginPos == BeginPos && wr.EndPos == EndPos;
-  }
-  inline bool operator!=(const CPVT_WordRange& wr) const {
-    return !(*this == wr);
+  friend inline bool operator==(const CPVT_WordRange& lhs,
+                                const CPVT_WordRange& rhs) {
+    return lhs.BeginPos == rhs.BeginPos && lhs.EndPos == rhs.EndPos;
   }
 
+  inline bool IsEmpty() const { return BeginPos == EndPos; }
+
   void Normalize() {
-    if (BeginPos > EndPos)
+    if (BeginPos > EndPos) {
       std::swap(BeginPos, EndPos);
+    }
   }
 
   CPVT_WordPlace BeginPos;

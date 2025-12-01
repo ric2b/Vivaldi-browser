@@ -6,10 +6,12 @@
 
 #include <optional>
 
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/features.h"
 #include "base/strings/string_util.h"
 #include "chrome/browser/metrics/variations/google_groups_manager_factory.h"
+#include "chrome/browser/privacy_sandbox/incognito/privacy_sandbox_incognito_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -67,15 +69,7 @@ constexpr char kHatsSurveyTriggerLensOverlayResults[] = "lens-overlay-results";
 constexpr char kHatsSurveyTriggerNtpModules[] = "ntp-modules";
 constexpr char kHatsSurveyTriggerNtpPhotosModuleOptOut[] =
     "ntp-photos-module-opt-out";
-constexpr char kHatsSurveyTriggerPerformanceControlsPerformance[] =
-    "performance-general";
 constexpr char kHatsSurveyTriggerPerformanceControlsPPM[] = "performance-ppm";
-constexpr char kHatsSurveyTriggerPerformanceControlsBatteryPerformance[] =
-    "performance-battery";
-constexpr char kHatsSurveyTriggerPerformanceControlsMemorySaverOptOut[] =
-    "performance-high-efficiency-opt-out";
-constexpr char kHatsSurveyTriggerPerformanceControlsBatterySaverOptOut[] =
-    "performance-battery-saver-opt-out";
 // The permission prompt trigger permits configuring multiple triggers
 // simultaneously. Each trigger increments a counter at the end -->
 // "permission-prompt0", "permission-prompt1", ...
@@ -164,6 +158,8 @@ constexpr char
         "plus-address-filled-plus-address-via-manual-fallback";
 constexpr char kHatsSurveyTriggerPrivacySandboxSentimentSurvey[] =
     "privacy-sandbox-sentiment-survey";
+constexpr char kHatsSurveyTriggerPrivacySandboxActSurvey[] =
+    "privacy-sandbox-act-survey";
 constexpr char kHatsSurveyTriggerMerchantTrustEvaluationControlSurvey[] =
     "merchant-trust-evaluation-control-survey";
 constexpr char kHatsSurveyTriggerMerchantTrustEvaluationExperimentSurvey[] =
@@ -206,7 +202,10 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       kHatsSurveyTriggerPermissionsPrompt,
       /*presupplied_trigger_id=*/std::nullopt,
       std::vector<std::string>{
-          permissions::kPermissionsPromptSurveyHadGestureKey},
+          permissions::kPermissionsPromptSurveyHadGestureKey,
+          permissions::kPermissionPromptSurveyPreviewVisibleKey,
+          permissions::kPermissionPromptSurveyPreviewDropdownInteractedKey,
+          permissions::kPermissionPromptSurveyPreviewWasCombinedKey},
       std::vector<std::string>{
           permissions::kPermissionsPromptSurveyPromptDispositionKey,
           permissions::kPermissionsPromptSurveyPromptDispositionReasonKey,
@@ -217,7 +216,9 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
           permissions::kPermissionPromptSurveyOneTimePromptsDecidedBucketKey,
           permissions::kPermissionPromptSurveyUrlKey,
           permissions::kPermissionPromptSurveyPepcPromptPositionKey,
-          permissions::kPermissionPromptSurveyInitialPermissionStatusKey});
+          permissions::kPermissionPromptSurveyInitialPermissionStatusKey,
+          permissions::kPermissionPromptSurveyPreviewTimeToDecisionKey,
+          permissions::kPermissionPromptSurveyPreviewTimeToVisibleKey});
 
   // Privacy sandbox always on sentiment survey
   survey_configs.emplace_back(
@@ -231,6 +232,20 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
       std::vector<std::string>{"Channel"},
       /*log_responses_to_uma=*/true,
       /*log_responses_to_ukm=*/true);
+
+  // Privacy sandbox ACT survey
+  survey_configs.emplace_back(  //
+      &privacy_sandbox::kPrivacySandboxActSurvey,
+      kHatsSurveyTriggerPrivacySandboxActSurvey,
+      /*presupplied_trigger_id=*/std::nullopt,
+      /*product_specific_bits_data_fields=*/
+      std::vector<std::string>{},
+      /*product_specific_string_data_fields=*/
+      std::vector<std::string>{"Survey Trigger Delay"},
+      /*log_responses_to_uma=*/false,
+      /*log_responses_to_ukm=*/false,
+      /*requested_browser_type=*/
+      hats::SurveyConfig::RequestedBrowserType::kIncognito);
 
 #if !BUILDFLAG(IS_ANDROID)
   // Dev tools surveys.
@@ -479,13 +494,6 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
 
   // Performance Controls surveys.
   survey_configs.emplace_back(
-      &performance_manager::features::kPerformanceControlsPerformanceSurvey,
-      kHatsSurveyTriggerPerformanceControlsPerformance,
-      /*presupplied_trigger_id=*/std::nullopt,
-      std::vector<std::string>{"Memory Saver Mode Enabled",
-                               "Battery Saver Mode Enabled"},
-      std::vector<std::string>{});
-  survey_configs.emplace_back(
       &performance_manager::features::kPerformanceControlsPPMSurvey,
       kHatsSurveyTriggerPerformanceControlsPPM,
       /*presupplied_trigger_id=*/std::nullopt,
@@ -498,22 +506,6 @@ std::vector<hats::SurveyConfig> GetAllSurveyConfigs() {
           "Performance Characteristics (OS and Total Memory)"},
       /*log_responses_to_uma=*/true,
       /*log_responses_to_ukm=*/true);
-  survey_configs.emplace_back(
-      &performance_manager::features::
-          kPerformanceControlsBatteryPerformanceSurvey,
-      kHatsSurveyTriggerPerformanceControlsBatteryPerformance,
-      /*presupplied_trigger_id=*/std::nullopt,
-      std::vector<std::string>{"Memory Saver Mode Enabled",
-                               "Battery Saver Mode Enabled"},
-      std::vector<std::string>{});
-  survey_configs.emplace_back(
-      &performance_manager::features::
-          kPerformanceControlsMemorySaverOptOutSurvey,
-      kHatsSurveyTriggerPerformanceControlsMemorySaverOptOut);
-  survey_configs.emplace_back(
-      &performance_manager::features::
-          kPerformanceControlsBatterySaverOptOutSurvey,
-      kHatsSurveyTriggerPerformanceControlsBatterySaverOptOut);
 
   // Red Warning surveys.
   survey_configs.emplace_back(
@@ -834,10 +826,12 @@ SurveyConfig::SurveyConfig(
     const std::vector<std::string>& product_specific_bits_data_fields,
     const std::vector<std::string>& product_specific_string_data_fields,
     bool log_responses_to_uma,
-    bool log_responses_to_ukm)
+    bool log_responses_to_ukm,
+    RequestedBrowserType requested_browser_type)
     : trigger(trigger),
       product_specific_bits_data_fields(product_specific_bits_data_fields),
       product_specific_string_data_fields(product_specific_string_data_fields),
+      requested_browser_type(requested_browser_type),
       survey_feature(feature) {
   enabled = base::FeatureList::IsEnabled(*feature);
   if (!enabled) {

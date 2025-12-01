@@ -17,8 +17,11 @@
 #include "api/test/mock_video_decoder.h"
 #include "api/units/timestamp.h"
 #include "api/video/encoded_frame.h"
+#include "api/video/video_codec_type.h"
+#include "api/video_codecs/video_decoder.h"
 #include "common_video/test/utilities.h"
-#include "modules/video_coding/decoder_database.h"
+#include "modules/video_coding/include/video_coding_defines.h"
+#include "modules/video_coding/include/video_error_codes.h"
 #include "modules/video_coding/timing/timing.h"
 #include "system_wrappers/include/clock.h"
 #include "test/gmock.h"
@@ -51,7 +54,7 @@ class TestEncodedFrame : public EncodedFrame {
     SetPacketInfos(CreatePacketInfos(3));
   }
 
-  void SetReceivedTime(webrtc::Timestamp received_time) {
+  void SetReceivedTime(Timestamp received_time) {
     received_time_ = received_time;
   }
 
@@ -60,7 +63,7 @@ class TestEncodedFrame : public EncodedFrame {
   int64_t RenderTime() const override { return _renderTimeMs; }
 
  private:
-  webrtc::Timestamp received_time_ = webrtc::Timestamp::Millis(0);
+  Timestamp received_time_ = Timestamp::Millis(0);
 };
 
 class VideoReceiver2Test : public ::testing::Test {

@@ -289,6 +289,7 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Password Saved (deprecated)"/>
   <int value="3" label="Autofill Used"/>
   <int value="4" label="Set Up List"/>
+  <int value="5" label="Tips Notification"/>
 </enum>
 
 <!-- LINT.IfChange(IOSDefaultBrowserBannerPromoPromoSessionEndedReason) -->
@@ -649,6 +650,8 @@ chromium-metrics-reviews@google.com.
   <int value="16" label="Tips (with Product Image)"/>
   <int value="17" label="Tips"/>
   <int value="18" label="Send Tab to Self Promo"/>
+  <int value="19" label="Obsolete - Set Up List Docking"/>
+  <int value="20" label="Obsolete - Set Up List Address Bar"/>
   <int value="21" label="ShopCard"/>
 </enum>
 
@@ -735,6 +738,16 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Pull to Refresh"/>
   <int value="2" label="Close Tab"/>
 </enum>
+
+<!-- LINT.IfChange(IOSOmniboxCopyType) -->
+
+<enum name="IOSOmniboxCopyType">
+  <int value="0" label="Text"/>
+  <int value="1" label="URL edited"/>
+  <int value="2" label="URL pre-edit"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/omnibox/public/omnibox_metrics_helper.h:OmniboxCopyType) -->
 
 <enum name="IOSOpenExtensionOutcome">
   <int value="0" label="Open Extension Success"/>
@@ -905,6 +918,7 @@ chromium-metrics-reviews@google.com.
   <int value="13" label="All Tabs default browser promo"/>
   <int value="14" label="Made for iOS default browser promo"/>
   <int value="15" label="Stay Safe default browser promo"/>
+  <int value="18" label="Welcome Back promo"/>
 </enum>
 
 <enum name="IOSPromosManagerPromoType">
@@ -1084,8 +1098,8 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Follow"/>
   <int value="5" label="All Set"/>
   <int value="6" label="Notifications"/>
-  <int value="7" label="Docking"/>
-  <int value="8" label="Address Bar"/>
+  <int value="7" label="Obsolete in M138 - Docking"/>
+  <int value="8" label="Obsolete in M138 - Address Bar"/>
 </enum>
 
 <enum name="IOSShareExtensionReceivedEntrySource">
@@ -1099,6 +1113,11 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Reading list item"/>
   <int value="3" label="Bookmark item"/>
   <int value="4" label="Open in Chrome item"/>
+  <int value="5" label="Open in Chrome Incognito item"/>
+  <int value="6" label="Image search item"/>
+  <int value="7" label="Text search item"/>
+  <int value="8" label="Incognito image search item"/>
+  <int value="9" label="Incognito text search item"/>
 </enum>
 
 <enum name="IOSSpotlightAction">
@@ -1186,6 +1205,9 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Omnibox Position"/>
   <int value="7" label="Lens"/>
   <int value="8" label="Enhanced Safe Browsing"/>
+  <int value="9" label="Lens Overlay"/>
+  <int value="10" label="CPE"/>
+  <int value="11" label="Incognito Lock"/>
 </enum>
 
 <enum name="IOSTipsNotificationUserType">
@@ -1246,6 +1268,10 @@ chromium-metrics-reviews@google.com.
   <int value="13" label="Search Passwords Widget - Search Passwords"/>
 </enum>
 
+<enum name="IOSWidgetKitDeletedUiCount">
+  <int value="0" label="Deleted account ui displayed"/>
+</enum>
+
 <enum name="IOSWidgetKitExtensionKind">
   <int value="0" label="Dino game widget"/>
   <int value="1" label="Search widget"/>
@@ -1299,6 +1325,17 @@ chromium-metrics-reviews@google.com.
   <int value="9" label="Exceeded allocated time for background task"/>
 </enum>
 
+<!-- LINT.IfChange(NonModalSignInPromoAction) -->
+
+<enum name="NonModalSignInPromoAction">
+  <int value="0" label="Accept"/>
+  <int value="1" label="Appear"/>
+  <int value="2" label="Dismiss"/>
+  <int value="3" label="Timeout"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/authentication/ui_bundled/signin_promo/coordinator/non_modal_signin_promo_metrics_util.h:NonModalSignInPromoAction) -->
+
 <!-- LINT.IfChange(NotificationType) -->
 
 <enum name="NotificationType">
@@ -1313,6 +1350,9 @@ chromium-metrics-reviews@google.com.
   <int value="8" label="Update Chrome [SafetyCheck]"/>
   <int value="9" label="Passwords [SafetyCheck]"/>
   <int value="10" label="Safe Browsing [SafetyCheck]"/>
+  <int value="11" label="Lens Overlay [Tip]"/>
+  <int value="12" label="CPE [Tip]"/>
+  <int value="13" label="Incognito Lock [Tip]"/>
 </enum>
 
 <!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:NotificationType) -->
@@ -1386,10 +1426,32 @@ chromium-metrics-reviews@google.com.
       label="Bottom Sheet couldn't be presented for various reasons"/>
 </enum>
 
+<!-- LINT.IfChange(ProfileNotificationRequestCreationFailureReason) -->
+
+<enum name="ProfileNotificationRequestCreationFailureReason">
+  <int value="0" label="Invalid Profile Name"/>
+  <int value="1" label="Invalid Time Interval"/>
+  <int value="2" label="Invalid Client Identifier"/>
+  <int value="3" label="Invalid Source Content Provided"/>
+  <int value="4" label="Content MutableCopy Failed"/>
+  <int value="5" label="Trigger Creation Failed"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:ProfileNotificationRequestCreationFailureReason) -->
+
 <enum name="PromoWithInstructionsAction">
   <int value="0" label="Close"/>
   <int value="1" label="Open Instructions"/>
 </enum>
+
+<!-- LINT.IfChange(PromoWithTrustedVaultKeyRetrievalAction) -->
+
+<enum name="PromoWithTrustedVaultKeyRetrievalAction">
+  <int value="0" label="Displayed"/>
+  <int value="1" label="Acted upon"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/settings/ui_bundled/password/passwords_table_view_constants.h:PromoWithTrustedVaultKeyRetrievalAction) -->
 
 <!-- LINT.IfChange(PushNotificationClientId) -->
 
@@ -1404,6 +1466,42 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/push_notification_client_id.h:PushNotificationClientId) -->
+
+<!-- LINT.IfChange(PushNotificationClientManagerFailurePoint) -->
+
+<enum name="PushNotificationClientManagerFailurePoint">
+  <int value="0" label="Will Present Notification"/>
+  <int value="1" label="Did Register With APNS"/>
+  <int value="2" label="App Did Enter Foreground"/>
+<!-- DEPRECATED: This failure point is no longer used as the code path
+  that logged it has been removed. -->
+
+  <int value="3" label="Handle Notification Response (Deprecated)"/>
+  <int value="4" label="Will Process Incoming Remote Notification"/>
+  <int value="5" label="GetClientManager: Null Profile Input"/>
+  <int value="6" label="GetClientManager: Missing Profile Service"/>
+  <int value="7" label="GetClientManager: Failed To Get Profile Name"/>
+  <int value="8" label="GetClientManager: Profile Not Found By Name"/>
+  <int value="9" label="GetProfileName: Empty Name Provided"/>
+  <int value="10" label="GetProfileName: Direct Name Not Found In Storage"/>
+  <int value="11" label="Continuation: Missing Client Manager"/>
+  <int value="12" label="HandleInteraction: Invalid Profile Name"/>
+  <int value="13" label="HandleInteraction: Missing Target Scene">
+    Indicates the system had to fall back to the foreground active scene because
+    the notification's specific target scene couldn't be found. Unlike most
+    other entries in this enum, this represents a non-critical fallback scenario
+    recorded for monitoring, rather than a failure preventing interaction
+    handling.
+  </int>
+  <int value="14" label="HandleInteraction: Missing Fallback Scene"/>
+  <int value="15" label="GetTargetScene: Response Scene Nil"/>
+  <int value="16" label="GetProfileName: Missing or Empty Gaia ID"/>
+  <int value="17" label="GetProfileName: Gaia ID Not Mapped"/>
+  <int value="18" label="GetProfileName: Mapped Name Not Found In Storage"/>
+  <int value="19" label="GetClientManager: Profile Load Failed"/>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:PushNotificationClientManagerFailurePoint) -->
 
 <enum name="PushNotificationLifecycleEvent">
   <int value="0" label="Notification received on device"/>
@@ -1445,6 +1543,35 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="Ephemeral"/>
   <int value="5" label="Invalid"/>
 </enum>
+
+<!-- LINT.IfChange(PushNotificationTargetProfileHandlingResult) -->
+
+<enum name="PushNotificationTargetProfileHandlingResult">
+  <summary>
+    Records the outcome of handling a push notification interaction in a
+    multi-profile environment. Tracks whether the correct target Profile handled
+    the interaction, either because it was already active or because a profile
+    switch was initiated. Recorded in
+    IOS.PushNotification.MultiProfile.PushNotificationTargetProfileHandlingResult.
+  </summary>
+  <int value="0" label="CorrectProfileActive">
+    Success: The notification's target Profile was already the active Profile in
+    the target UI scene.
+  </int>
+  <int value="1" label="SwitchEnsuredCorrectProfile">
+    Success: The notification's target Profile was not the active Profile; a
+    profile switch was initiated.
+  </int>
+  <int value="2" label="ProfileUnidentifiable">
+    The originating Profile could not be determined from the notification's
+    metadata.
+  </int>
+  <int value="3" label="FailureSceneUnavailable">
+    Failure: No suitable UI scene could be found to handle the interaction.
+  </int>
+</enum>
+
+<!-- LINT.ThenChange(/ios/chrome/browser/push_notification/model/constants.h:PushNotificationTargetProfileHandlingResult) -->
 
 <!-- LINT.IfChange(ReaderModeAmpClassification) -->
 

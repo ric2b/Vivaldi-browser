@@ -10,12 +10,19 @@ import org.jni_zero.CalledByNative;
 
 import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.externalauth.ExternalAuthUtils;
+
+// Vivaldi
+import org.chromium.base.PackageUtils;
+import org.chromium.build.BuildConfig;
+import com.google.android.gms.common.GooglePlayServicesUtil;
 
 /**
  * Used to check whether Google Play Services version on the device is as
  * expected for BackgroundSync. This check is made at browser startup.
  */
+@NullMarked
 final class GooglePlayServicesChecker {
     private static final String TAG = "PlayServicesChecker";
 
@@ -31,6 +38,12 @@ final class GooglePlayServicesChecker {
     @VisibleForTesting
     static boolean shouldDisableBackgroundSync() {
         boolean isAvailable = true;
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD &&
+                !PackageUtils.isPackageInstalled(
+                        GooglePlayServicesUtil.GOOGLE_PLAY_STORE_PACKAGE)) {
+            isAvailable = false;
+        } else
         if (!ExternalAuthUtils.getInstance().canUseGooglePlayServices()) {
             Log.i(TAG, "Disabling Background Sync because Play Services is not up to date.");
             isAvailable = false;

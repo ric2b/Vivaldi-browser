@@ -109,9 +109,7 @@ std::map<std::string, uint64_t> GetEntries(
 }
 
 void Draw(CanvasResourceHost& host) {
-  CanvasResourceProvider* provider = host.GetOrCreateCanvasResourceProvider(
-      host.GetRasterMode() == RasterMode::kGPU ? RasterModeHint::kPreferGPU
-                                               : RasterModeHint::kPreferCPU);
+  CanvasResourceProvider* provider = host.GetOrCreateCanvasResourceProvider();
   provider->Canvas().drawLine(0, 0, 2, 2, cc::PaintFlags());
   provider->FlushCanvas(FlushReason::kTesting);
 }
@@ -231,7 +229,7 @@ TEST_P(CanvasHibernationHandlerTest, SimpleTest) {
 
   EXPECT_TRUE(host.GetRasterMode() == RasterMode::kGPU);
   EXPECT_FALSE(handler.IsHibernating());
-  EXPECT_TRUE(host.IsResourceValid());
+  EXPECT_TRUE(host.ResourceProvider()->IsValid());
 }
 
 TEST_P(CanvasHibernationHandlerTest, ForegroundTooEarly) {

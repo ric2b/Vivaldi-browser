@@ -66,38 +66,37 @@ class DtlsTransportTest : public ::testing::Test {
 
   void CreateTransport(FakeSSLCertificate* certificate = nullptr) {
     auto cricket_transport = std::make_unique<FakeDtlsTransport>(
-        "audio", cricket::ICE_CANDIDATE_COMPONENT_RTP);
+        "audio", ICE_CANDIDATE_COMPONENT_RTP);
     if (certificate) {
       cricket_transport->SetRemoteSSLCertificate(certificate);
     }
     cricket_transport->SetSslCipherSuite(kNonsenseCipherSuite);
-    transport_ =
-        rtc::make_ref_counted<DtlsTransport>(std::move(cricket_transport));
+    transport_ = make_ref_counted<DtlsTransport>(std::move(cricket_transport));
   }
 
   void CompleteDtlsHandshake() {
     auto fake_dtls1 = static_cast<FakeDtlsTransport*>(transport_->internal());
     auto fake_dtls2 = std::make_unique<FakeDtlsTransport>(
-        "audio", cricket::ICE_CANDIDATE_COMPONENT_RTP);
-    auto cert1 = RTCCertificate::Create(
-        rtc::SSLIdentity::Create("session1", rtc::KT_DEFAULT));
+        "audio", ICE_CANDIDATE_COMPONENT_RTP);
+    auto cert1 =
+        RTCCertificate::Create(SSLIdentity::Create("session1", KT_DEFAULT));
     fake_dtls1->SetLocalCertificate(cert1);
-    auto cert2 = RTCCertificate::Create(
-        rtc::SSLIdentity::Create("session1", rtc::KT_DEFAULT));
+    auto cert2 =
+        RTCCertificate::Create(SSLIdentity::Create("session1", KT_DEFAULT));
     fake_dtls2->SetLocalCertificate(cert2);
     fake_dtls1->SetDestination(fake_dtls2.get());
   }
 
   AutoThread main_thread_;
-  rtc::scoped_refptr<DtlsTransport> transport_;
+  scoped_refptr<DtlsTransport> transport_;
   TestDtlsTransportObserver observer_;
 };
 
 TEST_F(DtlsTransportTest, CreateClearDelete) {
-  auto cricket_transport = std::make_unique<FakeDtlsTransport>(
-      "audio", cricket::ICE_CANDIDATE_COMPONENT_RTP);
+  auto cricket_transport =
+      std::make_unique<FakeDtlsTransport>("audio", ICE_CANDIDATE_COMPONENT_RTP);
   auto webrtc_transport =
-      rtc::make_ref_counted<DtlsTransport>(std::move(cricket_transport));
+      make_ref_counted<DtlsTransport>(std::move(cricket_transport));
   ASSERT_TRUE(webrtc_transport->internal());
   ASSERT_EQ(DtlsTransportState::kNew, webrtc_transport->Information().state());
   webrtc_transport->Clear();

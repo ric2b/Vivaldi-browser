@@ -302,7 +302,8 @@ class HttpStreamFactory::JobController
   void OnPoolPreconnectsComplete(int rv);
 
   // Used to call HttpStreamRequest::OnSwitchesToHttpStreamPool() later.
-  void CallOnSwitchesToHttpStreamPool(HttpStreamPoolRequestInfo request_info);
+  void CallOnSwitchesToHttpStreamPool(HttpStreamPoolRequestInfo request_info,
+                                      base::TimeTicks post_task_time);
 
   const raw_ptr<HttpStreamFactory> factory_;
   const raw_ptr<HttpNetworkSession> session_;
@@ -385,6 +386,9 @@ class HttpStreamFactory::JobController
   // At the point where a Job is irrevocably tied to |request_|, we set this.
   // It will be nulled when the |request_| is finished.
   raw_ptr<Job> bound_job_ = nullptr;
+
+  // Keeps track of the connection keepalive info.
+  std::optional<ConnectionManagementConfig> management_config_;
 
   State next_state_ = STATE_RESOLVE_PROXY;
   std::unique_ptr<ProxyResolutionRequest> proxy_resolve_request_;

@@ -105,8 +105,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 4;
     case DISTANCE_CONTENT_LIST_VERTICAL_MULTI:
       return 8;
-    case DISTANCE_CONTROL_LIST_VERTICAL:
-      return 12;
     case DISTANCE_EXTENSIONS_MENU_WIDTH:
       return kMediumDialogWidth;
     case DISTANCE_EXTENSIONS_MENU_BUTTON_ICON_SIZE:
@@ -120,7 +118,7 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
               GetDistanceMetric(DISTANCE_EXTENSIONS_MENU_BUTTON_ICON_SIZE)) /
              2;
     case DISTANCE_EXTENSIONS_MENU_BUTTON_MARGIN:
-      return GetDistanceMetric(DISTANCE_CONTROL_LIST_VERTICAL);
+      return 12;
     case DISTANCE_EXTENSIONS_MENU_LABEL_ICON_SPACING:
       return 4;
     case DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL:
@@ -141,8 +139,6 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 16;
     case DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE:
       return 16;
-    case DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE:
-      return 20;
     case DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH:
       return kMediumDialogWidth;
     case DISTANCE_BETWEEN_PRIMARY_AND_SECONDARY_LABELS_HORIZONTAL:
@@ -170,7 +166,7 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
     case DISTANCE_RICH_HOVER_BUTTON_ICON_HORIZONTAL:
       return 8;
     case DISTANCE_TASK_MANAGER_SEARCH_BAR_ICON_AND_BUTTON_HORIZONTAL_SPACING:
-      return 12;
+      return 4;
     case DISTANCE_TASK_MANAGER_SEARCH_ICON_SIZE:
       return 20;
     case DISTANCE_TASK_MANAGER_SEARCH_BAR_MIN_WIDTH:
@@ -233,6 +229,14 @@ int ChromeLayoutProvider::GetDistanceMetric(int metric) const {
       return 1;
     case DISTANCE_TEXTFIELD_ACCOUNT_CARD_VERTICAL:
       return 4;
+    case DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_ICON_SIZE:
+      return 16;
+    case DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_PADDING:
+      return 12;
+    case DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_ROUNDED_BORDER_RADIUS:
+      return 12;
+    case DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_VERTICAL:
+      return 1;
   }
   NOTREACHED();
 }

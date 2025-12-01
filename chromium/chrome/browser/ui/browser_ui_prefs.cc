@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/numerics/safe_conversions.h"
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
@@ -24,21 +25,13 @@
 #include "media/media_buildflags.h"
 #include "third_party/blink/public/common/peerconnection/webrtc_ip_handling_policy.h"
 
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chrome/browser/win/installer_downloader/installer_downloader_pref_names.h"
+#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+
 #if !BUILDFLAG(IS_CHROMEOS)
 #include "ui/accessibility/accessibility_features.h"
 #endif
-
-namespace {
-
-uint32_t GetHomeAndForwardButtonAndHomePageIsNewTabPageFlags() {
-#if BUILDFLAG(IS_ANDROID)
-  return PrefRegistry::NO_REGISTRATION_FLAGS;
-#else
-  return user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
-#endif
-}
-
-}  // namespace
 
 void RegisterBrowserPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kAllowFileSelectionDialogs, true);
@@ -51,8 +44,19 @@ void RegisterBrowserPrefs(PrefRegistrySimple* registry) {
           UpgradeDetector::GetDefaultHighAnnoyanceThreshold()
               .InMilliseconds()));
   registry->RegisterDictionaryPref(prefs::kRelaunchWindow);
-  registry->RegisterIntegerPref(prefs::kRelaunchSupersededReleaseAge, 0);
+  registry->RegisterIntegerPref(prefs::kRelaunchFastIfOutdated, 0);
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  registry->RegisterIntegerPref(
+      installer_downloader::prefs::kInstallerDownloaderInfobarShowCount, 0);
+  registry->RegisterBooleanPref(
+      installer_downloader::prefs::kInstallerDownloaderPreventFutureDisplay,
+      false);
+  registry->RegisterBooleanPref(
+      installer_downloader::prefs::kInstallerDownloaderBypassEligibilityCheck,
+      false);
+#endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 #if BUILDFLAG(IS_MAC)
   registry->RegisterIntegerPref(
@@ -72,25 +76,37 @@ void RegisterBrowserPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(prefs::kDefaultBrowserDeclinedCount, 0);
   registry->RegisterTimePref(prefs::kDefaultBrowserFirstShownTime,
                              base::Time());
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  registry->RegisterTimePref(prefs::kPdfInfoBarLastShown, base::Time());
+  registry->RegisterIntegerPref(prefs::kPdfInfoBarTimesShown, 0);
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
   registry->RegisterStringPref(prefs::kEnterpriseCustomLabelForBrowser,
                                std::string());
   registry->RegisterStringPref(prefs::kEnterpriseLogoUrlForBrowser,
                                std::string());
+  registry->RegisterBooleanPref(prefs::kNTPFooterManagementNoticeEnabled, true);
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 }
 
 void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kHomePageIsNewTabPage, true,
-      GetHomeAndForwardButtonAndHomePageIsNewTabPageFlags());
-  registry->RegisterBooleanPref(
-      prefs::kShowHomeButton, false,
-      GetHomeAndForwardButtonAndHomePageIsNewTabPageFlags());
+#if BUILDFLAG(IS_ANDROID)
+  const uint32_t pref_registration_flags = PrefRegistry::NO_REGISTRATION_FLAGS;
+#else
+  const uint32_t pref_registration_flags =
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
+#endif
 
-  registry->RegisterBooleanPref(
-      prefs::kShowForwardButton, true,
-      GetHomeAndForwardButtonAndHomePageIsNewTabPageFlags());
+  registry->RegisterBooleanPref(prefs::kHomePageIsNewTabPage, true,
+                                pref_registration_flags);
+  registry->RegisterBooleanPref(prefs::kShowHomeButton, false,
+                                pref_registration_flags);
+
+  registry->RegisterBooleanPref(prefs::kShowForwardButton, true,
+                                pref_registration_flags);
+
+  registry->RegisterBooleanPref(prefs::kPinSplitTabButton, false,
+                                pref_registration_flags);
 
   registry->RegisterInt64Pref(prefs::kDefaultBrowserLastDeclined, 0);
   registry->RegisterBooleanPref(prefs::kWebAppCreateOnDesktop, true);
@@ -163,6 +179,8 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
 #if !BUILDFLAG(IS_ANDROID)
   registry->RegisterBooleanPref(prefs::kCaretBrowsingEnabled, false);
   registry->RegisterBooleanPref(prefs::kShowCaretBrowsingDialog, true);
+  registry->RegisterBooleanPref(prefs::kNTPFooterExtensionAttributionEnabled,
+                                true);
 #endif
 
 #if !BUILDFLAG(IS_CHROMEOS)

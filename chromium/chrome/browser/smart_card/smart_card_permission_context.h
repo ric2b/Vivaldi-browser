@@ -8,8 +8,6 @@
 #include <cstdint>
 #include <map>
 #include <set>
-#include <string>
-#include <vector>
 
 #include "base/containers/flat_map.h"
 #include "base/memory/raw_ref.h"
@@ -31,6 +29,9 @@ class RenderFrameHost;
 namespace settings {
 class SmartCardReaderPermissionsSiteSettingsHandlerTest;
 }  // namespace settings
+namespace site_settings {
+class SiteSettingsHelperChooserExceptionTest;
+}  // namespace site_settings
 
 class SmartCardPermissionContext
     : public permissions::ObjectPermissionContextBase,
@@ -65,39 +66,26 @@ class SmartCardPermissionContext
 
   void RevokeEphemeralPermissions();
   void RevokeAllPermissions();
-  void RevokePersistentPermission(const std::string& reader_name,
-                                  const url::Origin& origin);
-
-  struct ReaderGrants {
-    ReaderGrants(const std::string& reader_name,
-                 const std::vector<url::Origin>& origins);
-    ~ReaderGrants();
-
-    ReaderGrants(const ReaderGrants& other);
-    bool operator==(const ReaderGrants& other) const;
-
-    std::string reader_name;
-    std::vector<url::Origin> origins;
-  };
-
-  // Returns persistent grants, grouped by reader.
-  std::vector<ReaderGrants> GetPersistentReaderGrants();
 
   // Checks whether |origin|'s value of |guard_content_settings_type_| is both:
   // - set to "allow"
   // - set by policy
-  bool IsAllowlistedByPolicy(const url::Origin& origin);
+  bool IsAllowlistedByPolicy(const url::Origin& origin) const;
 
-  // Overridden to expose a symbolic "All readers" device in case of
-  // allowlisting via policy.
+  bool CanRequestObjectPermission(const url::Origin& origin) const override;
+
+  // The two methods below are overridden to expose a symbolic "All readers"
+  // device in case of allowlisting via policy.
   std::vector<std::unique_ptr<Object>> GetGrantedObjects(
       const url::Origin& origin) override;
+  std::vector<std::unique_ptr<Object>> GetAllGrantedObjects() override;
 
  private:
   friend class SmartCardPermissionContextTest;
   friend class settings::SmartCardReaderPermissionsSiteSettingsHandlerTest;
   friend class PageInfoBubbleViewInteractiveUiTest;
   friend class ChromeOsSmartCardDelegateBrowserTest;
+  friend class site_settings::SiteSettingsHelperChooserExceptionTest;
 
   class OneTimeObserver;
   class PowerSuspendObserver;
@@ -129,8 +117,6 @@ class SmartCardPermissionContext
                                   RequestReaderPermissionCallback callback,
                                   SmartCardPermissionRequest::Result result);
 
-  void OnPermissionDenied(const url::Origin& origin);
-
   SmartCardReaderTracker& GetReaderTracker() const;
 
   void RevokeEphemeralPermissionIfLongTimeoutOccured(
@@ -141,10 +127,6 @@ class SmartCardPermissionContext
   // ephemeral permissions should expire.
   base::flat_map<url::Origin, base::flat_map<std::string, base::Time>>
       ephemeral_grants_with_expiry_;
-
-  // this is for tracking consecutive denials (after 3, guard setting is to be
-  // set to blocked)
-  std::map<url::Origin, uint8_t> consecutive_denials_;
 
   std::unique_ptr<OneTimeObserver> one_time_observer_;
   std::unique_ptr<PowerSuspendObserver> power_suspend_observer_;

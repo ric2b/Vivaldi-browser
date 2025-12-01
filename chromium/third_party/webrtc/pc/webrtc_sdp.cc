@@ -28,7 +28,9 @@
 #include "absl/algorithm/container.h"
 #include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "api/audio/audio_view.h"
 #include "api/candidate.h"
 #include "api/jsep.h"
 #include "api/jsep_ice_candidate.h"
@@ -66,34 +68,6 @@
 #include "rtc_base/ssl_fingerprint.h"
 #include "rtc_base/string_encode.h"
 #include "rtc_base/strings/string_builder.h"
-
-using cricket::Candidate;
-using cricket::ICE_CANDIDATE_COMPONENT_RTCP;
-using cricket::ICE_CANDIDATE_COMPONENT_RTP;
-using cricket::kApplicationSpecificBandwidth;
-using cricket::kCodecParamMaxPTime;
-using cricket::kCodecParamMinPTime;
-using cricket::kCodecParamPTime;
-using cricket::kTransportSpecificBandwidth;
-using cricket::RidDescription;
-using cricket::SimulcastDescription;
-using cricket::SimulcastLayer;
-using cricket::SimulcastLayerList;
-using cricket::SsrcGroup;
-using cricket::StreamParams;
-using cricket::StreamParamsVec;
-using cricket::TransportDescription;
-using cricket::TransportInfo;
-using ::webrtc::AudioContentDescription;
-using ::webrtc::Candidates;
-using ::webrtc::ContentInfo;
-using ::webrtc::MediaContentDescription;
-using ::webrtc::MediaProtocolType;
-using ::webrtc::RtpHeaderExtensions;
-using ::webrtc::SctpDataContentDescription;
-using ::webrtc::SocketAddress;
-using ::webrtc::UnsupportedContentDescription;
-using ::webrtc::VideoContentDescription;
 
 // TODO(deadbeef): Switch to using anonymous namespace rather than declaring
 // everything "static".
@@ -202,9 +176,10 @@ static const char kCandidatePrflx[] = "prflx";
 static const char kCandidateRelay[] = "relay";
 static const char kTcpCandidateType[] = "tcptype";
 
-// rtc::StringBuilder doesn't have a << overload for chars, while rtc::split and
-// rtc::tokenize_first both take a char delimiter. To handle both cases these
-// constants come in pairs of a chars and length-one strings.
+// StringBuilder doesn't have a << overload for chars, while
+// split and tokenize_first both take a char delimiter. To
+// handle both cases these constants come in pairs of a chars and length-one
+// strings.
 static const char kSdpDelimiterEqual[] = "=";
 static const char kSdpDelimiterEqualChar = '=';
 static const char kSdpDelimiterSpace[] = " ";
@@ -252,9 +227,6 @@ static const char kDefaultSctpmapProtocol[] = "webrtc-datachannel";
 // types.
 const int kWildcardPayloadType = -1;
 
-// Maximum number of channels allowed.
-static const size_t kMaxNumberOfChannels = 24;
-
 struct SsrcInfo {
   uint32_t ssrc_id;
   std::string cname;
@@ -266,22 +238,22 @@ using SsrcGroupVec = std::vector<SsrcGroup>;
 
 static void BuildMediaDescription(const ContentInfo* content_info,
                                   const TransportInfo* transport_info,
-                                  const webrtc::MediaType media_type,
+                                  const MediaType media_type,
                                   const std::vector<Candidate>& candidates,
                                   int msid_signaling,
                                   std::string* message);
-static void BuildMediaLine(const webrtc::MediaType media_type,
+static void BuildMediaLine(const MediaType media_type,
                            const ContentInfo* content_info,
                            const MediaContentDescription* media_desc,
                            std::string* message);
 static void BuildRtpContentAttributes(const MediaContentDescription* media_desc,
-                                      const webrtc::MediaType media_type,
+                                      const MediaType media_type,
                                       int msid_signaling,
                                       std::string* message);
 static void BuildRtpHeaderExtensions(const RtpHeaderExtensions& extensions,
                                      std::string* message);
 static void BuildRtpmap(const MediaContentDescription* media_desc,
-                        const webrtc::MediaType media_type,
+                        const MediaType media_type,
                         std::string* message);
 static void BuildCandidate(const std::vector<Candidate>& candidates,
                            bool include_ufrag,
@@ -312,7 +284,7 @@ static bool ParseMediaDescription(
     SdpParseError* error);
 static bool ParseContent(
     absl::string_view message,
-    const webrtc::MediaType media_type,
+    const MediaType media_type,
     int mline_index,
     absl::string_view protocol,
     const std::vector<int>& payload_types,
@@ -335,12 +307,12 @@ static bool ParseSsrcGroupAttribute(absl::string_view line,
                                     SsrcGroupVec* ssrc_groups,
                                     SdpParseError* error);
 static bool ParseRtpmapAttribute(absl::string_view line,
-                                 const webrtc::MediaType media_type,
+                                 const MediaType media_type,
                                  const std::vector<int>& payload_types,
                                  MediaContentDescription* media_desc,
                                  SdpParseError* error);
 static bool ParseFmtpAttributes(absl::string_view line,
-                                const webrtc::MediaType media_type,
+                                const MediaType media_type,
                                 MediaContentDescription* media_desc,
                                 SdpParseError* error);
 static bool ParseFmtpParam(absl::string_view line,
@@ -348,11 +320,11 @@ static bool ParseFmtpParam(absl::string_view line,
                            std::string* value,
                            SdpParseError* error);
 static bool ParsePacketizationAttribute(absl::string_view line,
-                                        const webrtc::MediaType media_type,
+                                        const MediaType media_type,
                                         MediaContentDescription* media_desc,
                                         SdpParseError* error);
 static bool ParseRtcpFbAttribute(absl::string_view line,
-                                 const webrtc::MediaType media_type,
+                                 const MediaType media_type,
                                  MediaContentDescription* media_desc,
                                  SdpParseError* error);
 static bool ParseIceOptions(absl::string_view line,
@@ -363,10 +335,10 @@ static bool ParseExtmap(absl::string_view line,
                         SdpParseError* error);
 static bool ParseFingerprintAttribute(
     absl::string_view line,
-    std::unique_ptr<rtc::SSLFingerprint>* fingerprint,
+    std::unique_ptr<SSLFingerprint>* fingerprint,
     SdpParseError* error);
 static bool ParseDtlsSetup(absl::string_view line,
-                           cricket::ConnectionRole* role,
+                           ConnectionRole* role,
                            SdpParseError* error);
 static bool ParseMsidAttribute(absl::string_view line,
                                std::vector<std::string>* stream_ids,
@@ -612,7 +584,7 @@ static bool GetValue(absl::string_view message,
                      std::string* value,
                      SdpParseError* error) {
   std::string leftpart;
-  if (!rtc::tokenize_first(message, kSdpDelimiterColonChar, &leftpart, value)) {
+  if (!tokenize_first(message, kSdpDelimiterColonChar, &leftpart, value)) {
     return ParseFailedGetValue(message, attribute, error);
   }
   // The left part should end with the expected attribute.
@@ -652,7 +624,7 @@ static bool GetValueFromString(absl::string_view line,
                                absl::string_view s,
                                T* t,
                                SdpParseError* error) {
-  if (!rtc::FromString(s, t)) {
+  if (!FromString(s, t)) {
     StringBuilder description;
     description << "Invalid value: " << s << ".";
     return ParseFailed(line, description.Release(), error);
@@ -665,7 +637,7 @@ static bool GetPayloadTypeFromString(absl::string_view line,
                                      int* payload_type,
                                      SdpParseError* error) {
   return GetValueFromString(line, s, payload_type, error) &&
-         cricket::IsValidRtpPayloadType(*payload_type);
+         IsValidRtpPayloadType(*payload_type);
 }
 
 // Creates a StreamParams track in the case when no SSRC lines are signaled.
@@ -776,7 +748,7 @@ static void GetDefaultDestination(const std::vector<Candidate>& candidates,
       continue;
     }
     // Default destination should be UDP only.
-    if (candidate.protocol() != cricket::UDP_PROTOCOL_NAME) {
+    if (candidate.protocol() != UDP_PROTOCOL_NAME) {
       continue;
     }
     const int preference = candidate.type_preference();
@@ -871,10 +843,10 @@ std::string SdpSerialize(const JsepSessionDescription& jdesc) {
 
   // BUNDLE Groups
   std::vector<const ContentGroup*> groups =
-      desc->GetGroupsByName(cricket::GROUP_TYPE_BUNDLE);
-  for (const cricket::ContentGroup* group : groups) {
+      desc->GetGroupsByName(GROUP_TYPE_BUNDLE);
+  for (const ContentGroup* group : groups) {
     std::string group_line = kAttrGroup;
-    RTC_DCHECK(group != NULL);
+    RTC_DCHECK(group != nullptr);
     for (const std::string& content_name : group->content_names()) {
       group_line.append(" ");
       group_line.append(content_name);
@@ -889,7 +861,7 @@ std::string SdpSerialize(const JsepSessionDescription& jdesc) {
   }
 
   // MediaStream semantics.
-  // TODO(bugs.webrtc.org/10421): Change to & cricket::kMsidSignalingSemantic
+  // TODO(bugs.webrtc.org/10421): Change to & kMsidSignalingSemantic
   // when we think it's safe to do so, so that we gradually fade out this old
   // line that was removed from the specification.
   if (desc->msid_signaling() != kMsidSignalingNotUsed) {
@@ -919,8 +891,8 @@ std::string SdpSerialize(const JsepSessionDescription& jdesc) {
   // TODO(deadbeef): It's weird that we need to iterate TransportInfos for
   // this, when it's a session-level attribute. It really should be moved to a
   // session-level structure like SessionDescription.
-  for (const cricket::TransportInfo& transport : desc->transport_infos()) {
-    if (transport.description.ice_mode == cricket::ICEMODE_LITE) {
+  for (const TransportInfo& transport : desc->transport_infos()) {
+    if (transport.description.ice_mode == ICEMODE_LITE) {
       InitAttrLine(kAttributeIceLite, &os);
       AddLine(os.str(), &message);
       break;
@@ -996,7 +968,7 @@ bool SdpDeserialize(absl::string_view message,
 bool SdpDeserializeCandidate(absl::string_view message,
                              JsepIceCandidate* jcandidate,
                              SdpParseError* error) {
-  RTC_DCHECK(jcandidate != NULL);
+  RTC_DCHECK(jcandidate != nullptr);
   Candidate candidate;
   if (!ParseCandidate(message, &candidate, error, true)) {
     return false;
@@ -1021,7 +993,7 @@ bool ParseCandidate(absl::string_view message,
                     Candidate* candidate,
                     SdpParseError* error,
                     bool is_raw) {
-  RTC_DCHECK(candidate != NULL);
+  RTC_DCHECK(candidate != nullptr);
 
   // Makes sure `message` contains only one line.
   absl::string_view first_line;
@@ -1050,8 +1022,8 @@ bool ParseCandidate(absl::string_view message,
   std::string candidate_value;
 
   // `first_line` must be in the form of "candidate:<value>".
-  if (!rtc::tokenize_first(first_line, kSdpDelimiterColonChar,
-                           &attribute_candidate, &candidate_value) ||
+  if (!tokenize_first(first_line, kSdpDelimiterColonChar, &attribute_candidate,
+                      &candidate_value) ||
       attribute_candidate != kAttributeCandidate) {
     if (is_raw) {
       StringBuilder description;
@@ -1066,7 +1038,7 @@ bool ParseCandidate(absl::string_view message,
   }
 
   std::vector<absl::string_view> fields =
-      rtc::split(candidate_value, kSdpDelimiterSpaceChar);
+      split(candidate_value, kSdpDelimiterSpaceChar);
 
   // RFC 5245
   // a=candidate:<foundation> <component-id> <transport> <priority>
@@ -1099,7 +1071,7 @@ bool ParseCandidate(absl::string_view message,
   }
   SocketAddress address(connection_address, port);
 
-  std::optional<ProtocolType> protocol = cricket::StringToProto(transport);
+  std::optional<ProtocolType> protocol = StringToProto(transport);
   if (!protocol) {
     return ParseFailed(first_line, "Unsupported transport type.", error);
   }
@@ -1161,9 +1133,8 @@ bool ParseCandidate(absl::string_view message,
     tcptype = fields[++current_position];
     ++current_position;
 
-    if (tcptype != cricket::TCPTYPE_ACTIVE_STR &&
-        tcptype != cricket::TCPTYPE_PASSIVE_STR &&
-        tcptype != cricket::TCPTYPE_SIMOPEN_STR) {
+    if (tcptype != TCPTYPE_ACTIVE_STR && tcptype != TCPTYPE_PASSIVE_STR &&
+        tcptype != TCPTYPE_SIMOPEN_STR) {
       return ParseFailed(first_line, "Invalid TCP candidate type.", error);
     }
 
@@ -1174,7 +1145,7 @@ bool ParseCandidate(absl::string_view message,
     // We allow the tcptype to be missing, for backwards compatibility,
     // treating it as a passive candidate.
     // TODO(bugs.webrtc.org/11466): Treat a missing tcptype as an error?
-    tcptype = cricket::TCPTYPE_PASSIVE_STR;
+    tcptype = TCPTYPE_PASSIVE_STR;
   }
 
   // Extension
@@ -1212,8 +1183,8 @@ bool ParseCandidate(absl::string_view message,
     }
   }
 
-  *candidate = Candidate(component_id, cricket::ProtoToString(*protocol),
-                         address, priority, username, password, candidate_type,
+  *candidate = Candidate(component_id, ProtoToString(*protocol), address,
+                         priority, username, password, candidate_type,
                          generation, foundation, network_id, network_cost);
   candidate->set_related_address(related_address);
   candidate->set_tcptype(tcptype);
@@ -1228,7 +1199,7 @@ bool ParseIceOptions(absl::string_view line,
     return false;
   }
   std::vector<absl::string_view> fields =
-      rtc::split(ice_options, kSdpDelimiterSpaceChar);
+      split(ice_options, kSdpDelimiterSpaceChar);
   for (size_t i = 0; i < fields.size(); ++i) {
     transport_options->emplace_back(fields[i]);
   }
@@ -1242,14 +1213,14 @@ bool ParseSctpPort(absl::string_view line,
   // a=sctp-port
   const size_t expected_min_fields = 2;
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterColonChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterColonChar);
   if (fields.size() < expected_min_fields) {
-    fields = rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+    fields = split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   }
   if (fields.size() < expected_min_fields) {
     return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
   }
-  if (!rtc::FromString(fields[1], sctp_port)) {
+  if (!FromString(fields[1], sctp_port)) {
     return ParseFailed(line, "Invalid sctp port value.", error);
   }
   return true;
@@ -1262,11 +1233,11 @@ bool ParseSctpMaxMessageSize(absl::string_view line,
   // a=max-message-size:199999
   const size_t expected_min_fields = 2;
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterColonChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterColonChar);
   if (fields.size() < expected_min_fields) {
     return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
   }
-  if (!rtc::FromString(fields[1], max_message_size)) {
+  if (!FromString(fields[1], max_message_size)) {
     return ParseFailed(line, "Invalid SCTP max message size.", error);
   }
   return true;
@@ -1278,7 +1249,7 @@ bool ParseExtmap(absl::string_view line,
   // RFC 5285
   // a=extmap:<value>["/"<direction>] <URI> <extensionattributes>
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   const size_t expected_min_fields = 2;
   if (fields.size() < expected_min_fields) {
     return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
@@ -1290,7 +1261,7 @@ bool ParseExtmap(absl::string_view line,
     return false;
   }
   std::vector<absl::string_view> sub_fields =
-      rtc::split(value_direction, kSdpDelimiterSlashChar);
+      split(value_direction, kSdpDelimiterSlashChar);
   int value = 0;
   if (!GetValueFromString(line, sub_fields[0], &value, error)) {
     return false;
@@ -1319,16 +1290,21 @@ bool ParseExtmap(absl::string_view line,
 }
 
 static void BuildSctpContentAttributes(
-    std::string* message,
-    const SctpDataContentDescription* data_desc) {
+    const MediaContentDescription* media_desc,
+    std::string* message) {
+  const SctpDataContentDescription* data_desc = media_desc->as_sctp();
+  if (!data_desc) {
+    // Ignore unsupported media types with the SCTP protocol.
+    return;
+  }
+
   StringBuilder os;
   if (data_desc->use_sctpmap()) {
     // draft-ietf-mmusic-sctp-sdp-04
     // a=sctpmap:sctpmap-number  protocol  [streams]
     InitAttrLine(kAttributeSctpmap, &os);
     os << kSdpDelimiterColon << data_desc->port() << kSdpDelimiterSpace
-       << kDefaultSctpmapProtocol << kSdpDelimiterSpace
-       << cricket::kMaxSctpStreams;
+       << kDefaultSctpmapProtocol << kSdpDelimiterSpace << kMaxSctpStreams;
     AddLine(os.str(), message);
   } else {
     // draft-ietf-mmusic-sctp-sdp-23
@@ -1386,12 +1362,11 @@ void BuildDtlsFingerprintSetup(const TransportInfo* transport_info,
   AddLine(os.str(), message);
 
   // Inserting setup attribute.
-  if (transport_info->description.connection_role !=
-      cricket::CONNECTIONROLE_NONE) {
+  if (transport_info->description.connection_role != CONNECTIONROLE_NONE) {
     // Making sure we are not using "passive" mode.
-    cricket::ConnectionRole role = transport_info->description.connection_role;
+    ConnectionRole role = transport_info->description.connection_role;
     std::string dtls_role_str;
-    const bool success = cricket::ConnectionRoleToString(role, &dtls_role_str);
+    const bool success = ConnectionRoleToString(role, &dtls_role_str);
     RTC_DCHECK(success);
     InitAttrLine(kAttributeSetup, &os);
     os << kSdpDelimiterColon << dtls_role_str;
@@ -1399,7 +1374,7 @@ void BuildDtlsFingerprintSetup(const TransportInfo* transport_info,
   }
 }
 
-void BuildMediaLine(const webrtc::MediaType media_type,
+void BuildMediaLine(const MediaType media_type,
                     const ContentInfo* content_info,
                     const MediaContentDescription* media_desc,
                     std::string* message) {
@@ -1410,29 +1385,28 @@ void BuildMediaLine(const webrtc::MediaType media_type,
   // fmt is a list of payload type numbers that MAY be used in the session.
   std::string type;
   std::string fmt;
-  if (media_type == webrtc::MediaType::AUDIO ||
-      media_type == webrtc::MediaType::VIDEO) {
-    type = media_type == webrtc::MediaType::AUDIO ? kSdpMediaTypeAudio
-                                                  : kSdpMediaTypeVideo;
-    for (const cricket::Codec& codec : media_desc->codecs()) {
+  if (media_type == MediaType::AUDIO || media_type == MediaType::VIDEO) {
+    type = media_type == MediaType::AUDIO ? kSdpMediaTypeAudio
+                                          : kSdpMediaTypeVideo;
+    for (const Codec& codec : media_desc->codecs()) {
       fmt.append(" ");
-      fmt.append(rtc::ToString(codec.id));
+      fmt.append(absl::StrCat(codec.id));
     }
-  } else if (media_type == webrtc::MediaType::DATA) {
+  } else if (media_type == MediaType::DATA) {
     type = kSdpMediaTypeData;
     const SctpDataContentDescription* sctp_data_desc = media_desc->as_sctp();
     if (sctp_data_desc) {
       fmt.append(" ");
 
       if (sctp_data_desc->use_sctpmap()) {
-        fmt.append(rtc::ToString(sctp_data_desc->port()));
+        fmt.append(absl::StrCat(sctp_data_desc->port()));
       } else {
         fmt.append(kDefaultSctpmapProtocol);
       }
     } else {
       RTC_DCHECK_NOTREACHED() << "Data description without SCTP";
     }
-  } else if (media_type == webrtc::MediaType::UNSUPPORTED) {
+  } else if (media_type == MediaType::UNSUPPORTED) {
     const UnsupportedContentDescription* unsupported_desc =
         media_desc->as_unsupported();
     type = unsupported_desc->media_type();
@@ -1459,7 +1433,7 @@ void BuildMediaLine(const webrtc::MediaType media_type,
   if (content_info->rejected || content_info->bundle_only) {
     port = kMediaPortRejected;
   } else if (!media_desc->connection_address().IsNil()) {
-    port = rtc::ToString(media_desc->connection_address().port());
+    port = absl::StrCat(media_desc->connection_address().port());
   }
 
   // Add the m and c lines.
@@ -1470,7 +1444,7 @@ void BuildMediaLine(const webrtc::MediaType media_type,
 
 void BuildMediaDescription(const ContentInfo* content_info,
                            const TransportInfo* transport_info,
-                           const webrtc::MediaType media_type,
+                           const MediaType media_type,
                            const std::vector<Candidate>& candidates,
                            int msid_signaling,
                            std::string* message) {
@@ -1522,7 +1496,7 @@ void BuildMediaDescription(const ContentInfo* content_info,
   }
 
   // Add the a=rtcp line.
-  if (cricket::IsRtpProtocol(media_desc->protocol())) {
+  if (IsRtpProtocol(media_desc->protocol())) {
     std::string rtcp_line = GetRtcpLine(candidates);
     if (!rtcp_line.empty()) {
       AddLine(rtcp_line, message);
@@ -1553,16 +1527,15 @@ void BuildMediaDescription(const ContentInfo* content_info,
   os << kSdpDelimiterColon << content_info->mid();
   AddLine(os.str(), message);
 
-  if (cricket::IsDtlsSctp(media_desc->protocol())) {
-    const SctpDataContentDescription* data_desc = media_desc->as_sctp();
-    BuildSctpContentAttributes(message, data_desc);
-  } else if (cricket::IsRtpProtocol(media_desc->protocol())) {
+  if (IsDtlsSctp(media_desc->protocol())) {
+    BuildSctpContentAttributes(media_desc, message);
+  } else if (IsRtpProtocol(media_desc->protocol())) {
     BuildRtpContentAttributes(media_desc, media_type, msid_signaling, message);
   }
 }
 
 void BuildRtpContentAttributes(const MediaContentDescription* media_desc,
-                               const webrtc::MediaType media_type,
+                               const MediaType media_type,
                                int msid_signaling,
                                std::string* message) {
   SimulcastSdpSerializer serializer;
@@ -1671,7 +1644,7 @@ void BuildRtpContentAttributes(const MediaContentDescription* media_desc,
       InitAttrLine(kAttributeSsrcGroup, &os);
       os << kSdpDelimiterColon << ssrc_group.semantics;
       for (uint32_t ssrc : ssrc_group.ssrcs) {
-        os << kSdpDelimiterSpace << rtc::ToString(ssrc);
+        os << kSdpDelimiterSpace << absl::StrCat(ssrc);
       }
       AddLine(os.str(), message);
     }
@@ -1799,7 +1772,7 @@ bool IsFmtpParam(absl::string_view name) {
   return name != kCodecParamPTime && name != kCodecParamMaxPTime;
 }
 
-bool WriteFmtpParameters(const webrtc::CodecParameterMap& parameters,
+bool WriteFmtpParameters(const CodecParameterMap& parameters,
                          StringBuilder* os) {
   bool empty = true;
   const char* delimiter = "";  // No delimiter before first parameter.
@@ -1819,7 +1792,7 @@ bool WriteFmtpParameters(const webrtc::CodecParameterMap& parameters,
   return !empty;
 }
 
-void AddFmtpLine(const cricket::Codec& codec, std::string* message) {
+void AddFmtpLine(const Codec& codec, std::string* message) {
   StringBuilder os;
   WriteFmtpHeader(codec.id, &os);
   os << kSdpDelimiterSpace;
@@ -1830,7 +1803,7 @@ void AddFmtpLine(const cricket::Codec& codec, std::string* message) {
   return;
 }
 
-void AddPacketizationLine(const cricket::Codec& codec, std::string* message) {
+void AddPacketizationLine(const Codec& codec, std::string* message) {
   if (!codec.packetization) {
     return;
   }
@@ -1840,8 +1813,8 @@ void AddPacketizationLine(const cricket::Codec& codec, std::string* message) {
   AddLine(os.str(), message);
 }
 
-void AddRtcpFbLines(const cricket::Codec& codec, std::string* message) {
-  for (const cricket::FeedbackParam& param : codec.feedback_params.params()) {
+void AddRtcpFbLines(const Codec& codec, std::string* message) {
+  for (const FeedbackParam& param : codec.feedback_params.params()) {
     StringBuilder os;
     WriteRtcpFbHeader(codec.id, &os);
     os << " " << param.id();
@@ -1862,44 +1835,44 @@ bool GetMinValue(const std::vector<int>& values, int* value) {
 }
 
 bool GetParameter(const std::string& name,
-                  const webrtc::CodecParameterMap& params,
+                  const CodecParameterMap& params,
                   int* value) {
   std::map<std::string, std::string>::const_iterator found = params.find(name);
   if (found == params.end()) {
     return false;
   }
-  if (!rtc::FromString(found->second, value)) {
+  if (!FromString(found->second, value)) {
     return false;
   }
   return true;
 }
 
 void BuildRtpmap(const MediaContentDescription* media_desc,
-                 const webrtc::MediaType media_type,
+                 const MediaType media_type,
                  std::string* message) {
-  RTC_DCHECK(message != NULL);
-  RTC_DCHECK(media_desc != NULL);
+  RTC_DCHECK(message != nullptr);
+  RTC_DCHECK(media_desc != nullptr);
   StringBuilder os;
-  if (media_type == webrtc::MediaType::VIDEO) {
-    for (const cricket::Codec& codec : media_desc->codecs()) {
+  if (media_type == MediaType::VIDEO) {
+    for (const Codec& codec : media_desc->codecs()) {
       // RFC 4566
       // a=rtpmap:<payload type> <encoding name>/<clock rate>
       // [/<encodingparameters>]
       if (codec.id != kWildcardPayloadType) {
         InitAttrLine(kAttributeRtpmap, &os);
         os << kSdpDelimiterColon << codec.id << " " << codec.name << "/"
-           << cricket::kVideoCodecClockrate;
+           << kVideoCodecClockrate;
         AddLine(os.str(), message);
       }
       AddPacketizationLine(codec, message);
       AddRtcpFbLines(codec, message);
       AddFmtpLine(codec, message);
     }
-  } else if (media_type == webrtc::MediaType::AUDIO) {
+  } else if (media_type == MediaType::AUDIO) {
     std::vector<int> ptimes;
     std::vector<int> maxptimes;
     int max_minptime = 0;
-    for (const cricket::Codec& codec : media_desc->codecs()) {
+    for (const Codec& codec : media_desc->codecs()) {
       RTC_DCHECK(!codec.name.empty());
       // RFC 4566
       // a=rtpmap:<payload type> <encoding name>/<clock rate>
@@ -2000,7 +1973,7 @@ void BuildCandidate(const std::vector<Candidate>& candidates,
     // Note that we allow the tcptype to be missing, for backwards
     // compatibility; the implementation treats this as a passive candidate.
     // TODO(bugs.webrtc.org/11466): Treat a missing tcptype as an error?
-    if (candidate.protocol() == cricket::TCP_PROTOCOL_NAME &&
+    if (candidate.protocol() == TCP_PROTOCOL_NAME &&
         !candidate.tcptype().empty()) {
       os << kTcpCandidateType << " " << candidate.tcptype() << " ";
     }
@@ -2045,13 +2018,12 @@ bool ParseConnectionData(absl::string_view line,
   // RFC 4566
   // c=<nettype> <addrtype> <connection-address>
   // Skip the "c="
-  if (!rtc::tokenize_first(line, kSdpDelimiterEqualChar, &token, &rightpart)) {
+  if (!tokenize_first(line, kSdpDelimiterEqualChar, &token, &rightpart)) {
     return ParseFailed(line, "Failed to parse the network type.", error);
   }
 
   // Extract and verify the <nettype>
-  if (!rtc::tokenize_first(rightpart, kSdpDelimiterSpaceChar, &token,
-                           &rightpart) ||
+  if (!tokenize_first(rightpart, kSdpDelimiterSpaceChar, &token, &rightpart) ||
       token != kConnectionNettype) {
     return ParseFailed(line,
                        "Failed to parse the connection data. The network type "
@@ -2060,8 +2032,7 @@ bool ParseConnectionData(absl::string_view line,
   }
 
   // Extract the "<addrtype>" and "<connection-address>".
-  if (!rtc::tokenize_first(rightpart, kSdpDelimiterSpaceChar, &token,
-                           &rightpart)) {
+  if (!tokenize_first(rightpart, kSdpDelimiterSpaceChar, &token, &rightpart)) {
     return ParseFailed(line, "Failed to parse the address type.", error);
   }
 
@@ -2116,7 +2087,7 @@ bool ParseSessionDescription(absl::string_view message,
                                  error);
   }
   std::vector<absl::string_view> fields =
-      rtc::split(line->substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+      split(line->substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   const size_t expected_fields = 6;
   if (fields.size() != expected_fields) {
     return ParseFailedExpectFieldNum(*line, expected_fields, error);
@@ -2214,7 +2185,7 @@ bool ParseSessionDescription(absl::string_view message,
         return false;
       }
     } else if (HasAttribute(*aline, kAttributeIceLite)) {
-      session_td->ice_mode = cricket::ICEMODE_LITE;
+      session_td->ice_mode = ICEMODE_LITE;
     } else if (HasAttribute(*aline, kAttributeIceOption)) {
       if (!ParseIceOptions(*aline, &(session_td->transport_options), error)) {
         return false;
@@ -2226,7 +2197,7 @@ bool ParseSessionDescription(absl::string_view message,
             "Can't have multiple fingerprint attributes at the same level.",
             error);
       }
-      std::unique_ptr<rtc::SSLFingerprint> fingerprint;
+      std::unique_ptr<SSLFingerprint> fingerprint;
       if (!ParseFingerprintAttribute(*aline, &fingerprint, error)) {
         return false;
       }
@@ -2259,12 +2230,12 @@ bool ParseSessionDescription(absl::string_view message,
 bool ParseGroupAttribute(absl::string_view line,
                          SessionDescription* desc,
                          SdpParseError* error) {
-  RTC_DCHECK(desc != NULL);
+  RTC_DCHECK(desc != nullptr);
 
   // RFC 5888 and draft-holmberg-mmusic-sdp-bundle-negotiation-00
   // a=group:BUNDLE video voice
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   std::string semantics;
   if (!GetValue(fields[0], kAttributeGroup, &semantics, error)) {
     return false;
@@ -2279,10 +2250,10 @@ bool ParseGroupAttribute(absl::string_view line,
 
 static bool ParseFingerprintAttribute(
     absl::string_view line,
-    std::unique_ptr<rtc::SSLFingerprint>* fingerprint,
+    std::unique_ptr<SSLFingerprint>* fingerprint,
     SdpParseError* error) {
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   const size_t expected_fields = 2;
   if (fields.size() != expected_fields) {
     return ParseFailedExpectFieldNum(line, expected_fields, error);
@@ -2299,8 +2270,7 @@ static bool ParseFingerprintAttribute(
   absl::c_transform(algorithm, algorithm.begin(), ::tolower);
 
   // The second field is the digest value. De-hexify it.
-  *fingerprint =
-      rtc::SSLFingerprint::CreateUniqueFromRfc4572(algorithm, fields[1]);
+  *fingerprint = SSLFingerprint::CreateUniqueFromRfc4572(algorithm, fields[1]);
   if (!*fingerprint) {
     return ParseFailed(line, "Failed to create fingerprint from the digest.",
                        error);
@@ -2310,18 +2280,17 @@ static bool ParseFingerprintAttribute(
 }
 
 static bool ParseDtlsSetup(absl::string_view line,
-                           cricket::ConnectionRole* role_ptr,
+                           ConnectionRole* role_ptr,
                            SdpParseError* error) {
   // setup-attr           =  "a=setup:" role
   // role                 =  "active" / "passive" / "actpass" / "holdconn"
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterColonChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterColonChar);
   const size_t expected_fields = 2;
   if (fields.size() != expected_fields) {
     return ParseFailedExpectFieldNum(line, expected_fields, error);
   }
-  if (std::optional<cricket::ConnectionRole> role =
-          cricket::StringToConnectionRole(fields[1]);
+  if (std::optional<ConnectionRole> role = StringToConnectionRole(fields[1]);
       role.has_value()) {
     *role_ptr = *role;
     return true;
@@ -2343,8 +2312,8 @@ static bool ParseMsidAttribute(absl::string_view line,
   // is supported for backward compability reasons only.
   // RFC 8830 section 2 states that duplicate a=msid:stream track is illegal.
   std::vector<std::string> fields;
-  size_t num_fields = rtc::tokenize(line.substr(kLinePrefixLength),
-                                    kSdpDelimiterSpaceChar, &fields);
+  size_t num_fields =
+      tokenize(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar, &fields);
   if (num_fields < 1 || num_fields > 2) {
     return ParseFailed(line, "Expected a stream ID and optionally a track ID",
                        error);
@@ -2466,7 +2435,7 @@ static void RemoveInvalidRidsFromSimulcast(
   for (const SimulcastLayer& send_layer : all_send_layers) {
     if (absl::c_none_of(valid_rids, [&send_layer](const RidDescription& rid) {
           return send_layer.rid == rid.rid &&
-                 rid.direction == cricket::RidDirection::kSend;
+                 rid.direction == RidDirection::kSend;
         })) {
       to_remove.insert(send_layer.rid);
     }
@@ -2474,11 +2443,11 @@ static void RemoveInvalidRidsFromSimulcast(
 
   // Add any rid that is not in the valid list to the remove set.
   for (const SimulcastLayer& receive_layer : all_receive_layers) {
-    if (absl::c_none_of(
-            valid_rids, [&receive_layer](const RidDescription& rid) {
-              return receive_layer.rid == rid.rid &&
-                     rid.direction == cricket::RidDirection::kReceive;
-            })) {
+    if (absl::c_none_of(valid_rids,
+                        [&receive_layer](const RidDescription& rid) {
+                          return receive_layer.rid == rid.rid &&
+                                 rid.direction == RidDirection::kReceive;
+                        })) {
       to_remove.insert(receive_layer.rid);
     }
   }
@@ -2539,45 +2508,45 @@ void MaybeCreateStaticPayloadAudioCodecs(const std::vector<int>& fmts,
       std::string encoding_name = kStaticPayloadAudioCodecs[payload_type].name;
       int clock_rate = kStaticPayloadAudioCodecs[payload_type].clockrate;
       size_t channels = kStaticPayloadAudioCodecs[payload_type].channels;
-      media_desc->AddCodec(cricket::CreateAudioCodec(
-          payload_type, encoding_name, clock_rate, channels));
+      media_desc->AddCodec(
+          CreateAudioCodec(payload_type, encoding_name, clock_rate, channels));
     }
   }
 }
 
-static void BackfillCodecParameters(std::vector<cricket::Codec>& codecs) {
+static void BackfillCodecParameters(std::vector<Codec>& codecs) {
   for (auto& codec : codecs) {
     std::string unused_value;
-    if (absl::EqualsIgnoreCase(cricket::kVp9CodecName, codec.name)) {
+    if (absl::EqualsIgnoreCase(kVp9CodecName, codec.name)) {
       // https://datatracker.ietf.org/doc/html/draft-ietf-payload-vp9#section-6
       // profile-id defaults to "0"
-      if (!codec.GetParam(cricket::kVP9ProfileId, &unused_value)) {
-        codec.SetParam(cricket::kVP9ProfileId, "0");
+      if (!codec.GetParam(kVP9ProfileId, &unused_value)) {
+        codec.SetParam(kVP9ProfileId, "0");
       }
-    } else if (absl::EqualsIgnoreCase(cricket::kH264CodecName, codec.name)) {
+    } else if (absl::EqualsIgnoreCase(kH264CodecName, codec.name)) {
       // https://www.rfc-editor.org/rfc/rfc6184#section-6.2
       // packetization-mode defaults to "0"
-      if (!codec.GetParam(cricket::kH264FmtpPacketizationMode, &unused_value)) {
-        codec.SetParam(cricket::kH264FmtpPacketizationMode, "0");
+      if (!codec.GetParam(kH264FmtpPacketizationMode, &unused_value)) {
+        codec.SetParam(kH264FmtpPacketizationMode, "0");
       }
-    } else if (absl::EqualsIgnoreCase(cricket::kAv1CodecName, codec.name)) {
+    } else if (absl::EqualsIgnoreCase(kAv1CodecName, codec.name)) {
       // https://aomediacodec.github.io/av1-rtp-spec/#72-sdp-parameters
-      if (!codec.GetParam(cricket::kAv1FmtpProfile, &unused_value)) {
-        codec.SetParam(cricket::kAv1FmtpProfile, "0");
+      if (!codec.GetParam(kAv1FmtpProfile, &unused_value)) {
+        codec.SetParam(kAv1FmtpProfile, "0");
       }
-      if (!codec.GetParam(cricket::kAv1FmtpLevelIdx, &unused_value)) {
-        codec.SetParam(cricket::kAv1FmtpLevelIdx, "5");
+      if (!codec.GetParam(kAv1FmtpLevelIdx, &unused_value)) {
+        codec.SetParam(kAv1FmtpLevelIdx, "5");
       }
-      if (!codec.GetParam(cricket::kAv1FmtpTier, &unused_value)) {
-        codec.SetParam(cricket::kAv1FmtpTier, "0");
+      if (!codec.GetParam(kAv1FmtpTier, &unused_value)) {
+        codec.SetParam(kAv1FmtpTier, "0");
       }
-    } else if (absl::EqualsIgnoreCase(cricket::kH265CodecName, codec.name)) {
+    } else if (absl::EqualsIgnoreCase(kH265CodecName, codec.name)) {
       // https://datatracker.ietf.org/doc/html/draft-aboba-avtcore-hevc-webrtc
-      if (!codec.GetParam(cricket::kH265FmtpLevelId, &unused_value)) {
-        codec.SetParam(cricket::kH265FmtpLevelId, "93");
+      if (!codec.GetParam(kH265FmtpLevelId, &unused_value)) {
+        codec.SetParam(kH265FmtpLevelId, "93");
       }
-      if (!codec.GetParam(cricket::kH265FmtpTxMode, &unused_value)) {
-        codec.SetParam(cricket::kH265FmtpTxMode, "SRST");
+      if (!codec.GetParam(kH265FmtpTxMode, &unused_value)) {
+        codec.SetParam(kH265FmtpTxMode, "SRST");
       }
     }
   }
@@ -2585,7 +2554,7 @@ static void BackfillCodecParameters(std::vector<cricket::Codec>& codecs) {
 
 static std::unique_ptr<MediaContentDescription> ParseContentDescription(
     absl::string_view message,
-    const webrtc::MediaType media_type,
+    const MediaType media_type,
     int mline_index,
     absl::string_view protocol,
     const std::vector<int>& payload_types,
@@ -2597,9 +2566,9 @@ static std::unique_ptr<MediaContentDescription> ParseContentDescription(
     std::vector<std::unique_ptr<JsepIceCandidate>>* candidates,
     SdpParseError* error) {
   std::unique_ptr<MediaContentDescription> media_desc;
-  if (media_type == webrtc::MediaType::AUDIO) {
+  if (media_type == MediaType::AUDIO) {
     media_desc = std::make_unique<AudioContentDescription>();
-  } else if (media_type == webrtc::MediaType::VIDEO) {
+  } else if (media_type == MediaType::VIDEO) {
     media_desc = std::make_unique<VideoContentDescription>();
   } else {
     RTC_DCHECK_NOTREACHED();
@@ -2621,11 +2590,11 @@ static std::unique_ptr<MediaContentDescription> ParseContentDescription(
   for (int pt : payload_types) {
     payload_type_preferences[pt] = preference--;
   }
-  std::vector<cricket::Codec> codecs = media_desc->codecs();
-  absl::c_sort(codecs, [&payload_type_preferences](const cricket::Codec& a,
-                                                   const cricket::Codec& b) {
-    return payload_type_preferences[a.id] > payload_type_preferences[b.id];
-  });
+  std::vector<Codec> codecs = media_desc->codecs();
+  absl::c_sort(
+      codecs, [&payload_type_preferences](const Codec& a, const Codec& b) {
+        return payload_type_preferences[a.id] > payload_type_preferences[b.id];
+      });
   // Backfill any default parameters.
   BackfillCodecParameters(codecs);
 
@@ -2635,9 +2604,8 @@ static std::unique_ptr<MediaContentDescription> ParseContentDescription(
 
 bool HasDuplicateMsidLines(SessionDescription* desc) {
   std::set<std::pair<std::string, std::string>> seen_msids;
-  for (const cricket::ContentInfo& content : desc->contents()) {
-    for (const cricket::StreamParams& stream :
-         content.media_description()->streams()) {
+  for (const ContentInfo& content : desc->contents()) {
+    for (const StreamParams& stream : content.media_description()->streams()) {
       auto msid = std::pair(stream.first_stream_id(), stream.id);
       if (seen_msids.find(msid) != seen_msids.end()) {
         return true;
@@ -2657,7 +2625,7 @@ bool ParseMediaDescription(
     SessionDescription* desc,
     std::vector<std::unique_ptr<JsepIceCandidate>>* candidates,
     SdpParseError* error) {
-  RTC_DCHECK(desc != NULL);
+  RTC_DCHECK(desc != nullptr);
   int mline_index = -1;
   int msid_signaling = desc->msid_signaling();
 
@@ -2669,7 +2637,7 @@ bool ParseMediaDescription(
     ++mline_index;
 
     std::vector<absl::string_view> fields =
-        rtc::split(mline->substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+        split(mline->substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
 
     const size_t expected_min_fields = 4;
     if (fields.size() < expected_min_fields) {
@@ -2684,14 +2652,14 @@ bool ParseMediaDescription(
     }
 
     int port = 0;
-    if (!rtc::FromString<int>(fields[1], &port) || !IsValidPort(port)) {
+    if (!FromString<int>(fields[1], &port) || !IsValidPort(port)) {
       return ParseFailed(*mline, "The port number is invalid", error);
     }
     absl::string_view protocol = fields[2];
 
     // <fmt>
     std::vector<int> payload_types;
-    if (cricket::IsRtpProtocol(protocol)) {
+    if (IsRtpProtocol(protocol)) {
       for (size_t j = 3; j < fields.size(); ++j) {
         int pl = 0;
         if (!GetPayloadTypeFromString(*mline, fields[j], &pl, error)) {
@@ -2715,21 +2683,20 @@ bool ParseMediaDescription(
     absl::string_view media_type = fields[0];
     if ((media_type == kSdpMediaTypeVideo ||
          media_type == kSdpMediaTypeAudio) &&
-        !cricket::IsRtpProtocol(protocol)) {
+        !IsRtpProtocol(protocol)) {
       return ParseFailed(*mline, "Unsupported protocol for media type", error);
     }
     if (media_type == kSdpMediaTypeVideo) {
       content = ParseContentDescription(
-          message, webrtc::MediaType::VIDEO, mline_index, protocol,
-          payload_types, pos, &content_name, &bundle_only,
-          &section_msid_signaling, &transport, candidates, error);
+          message, MediaType::VIDEO, mline_index, protocol, payload_types, pos,
+          &content_name, &bundle_only, &section_msid_signaling, &transport,
+          candidates, error);
     } else if (media_type == kSdpMediaTypeAudio) {
       content = ParseContentDescription(
-          message, webrtc::MediaType::AUDIO, mline_index, protocol,
-          payload_types, pos, &content_name, &bundle_only,
-          &section_msid_signaling, &transport, candidates, error);
-    } else if (media_type == kSdpMediaTypeData &&
-               cricket::IsDtlsSctp(protocol)) {
+          message, MediaType::AUDIO, mline_index, protocol, payload_types, pos,
+          &content_name, &bundle_only, &section_msid_signaling, &transport,
+          candidates, error);
+    } else if (media_type == kSdpMediaTypeData && IsDtlsSctp(protocol)) {
       // The draft-03 format is:
       // m=application <port> DTLS/SCTP <sctp-port>...
       // use_sctpmap should be false.
@@ -2741,12 +2708,12 @@ bool ParseMediaDescription(
       // according to draft-ietf-mmusic-sctp-sdp-26
       data_desc->set_max_message_size(kDefaultSctpMaxMessageSize);
       int p;
-      if (rtc::FromString(fields[3], &p)) {
+      if (FromString(fields[3], &p)) {
         data_desc->set_port(p);
       } else if (fields[3] == kDefaultSctpmapProtocol) {
         data_desc->set_use_sctpmap(false);
       }
-      if (!ParseContent(message, webrtc::MediaType::DATA, mline_index, protocol,
+      if (!ParseContent(message, MediaType::DATA, mline_index, protocol,
                         payload_types, pos, &content_name, &bundle_only,
                         &section_msid_signaling, data_desc.get(), &transport,
                         candidates, error)) {
@@ -2758,11 +2725,10 @@ bool ParseMediaDescription(
       RTC_LOG(LS_WARNING) << "Unsupported media type: " << *mline;
       auto unsupported_desc =
           std::make_unique<UnsupportedContentDescription>(media_type);
-      if (!ParseContent(message, webrtc::MediaType::UNSUPPORTED, mline_index,
-                        protocol, payload_types, pos, &content_name,
-                        &bundle_only, &section_msid_signaling,
-                        unsupported_desc.get(), &transport, candidates,
-                        error)) {
+      if (!ParseContent(message, MediaType::UNSUPPORTED, mline_index, protocol,
+                        payload_types, pos, &content_name, &bundle_only,
+                        &section_msid_signaling, unsupported_desc.get(),
+                        &transport, candidates, error)) {
         return false;
       }
       unsupported_desc->set_protocol(protocol);
@@ -2796,7 +2762,7 @@ bool ParseMediaDescription(
 
     if (content->as_unsupported()) {
       content_rejected = true;
-    } else if (cricket::IsRtpProtocol(protocol) && !content->as_sctp()) {
+    } else if (IsRtpProtocol(protocol) && !content->as_sctp()) {
       content->set_protocol(std::string(protocol));
       // Set the extmap.
       if (!session_extmaps.empty() &&
@@ -2826,8 +2792,8 @@ bool ParseMediaDescription(
     content->set_connection_address(address);
 
     desc->AddContent(content_name,
-                     cricket::IsDtlsSctp(protocol) ? MediaProtocolType::kSctp
-                                                   : MediaProtocolType::kRtp,
+                     IsDtlsSctp(protocol) ? MediaProtocolType::kSctp
+                                          : MediaProtocolType::kRtp,
                      content_rejected, bundle_only, std::move(content));
     // Create TransportInfo with the media level "ice-pwd" and "ice-ufrag".
     desc->AddTransportInfo(TransportInfo(content_name, transport));
@@ -2848,8 +2814,7 @@ bool ParseMediaDescription(
   return true;
 }
 
-void AddParameters(const webrtc::CodecParameterMap& parameters,
-                   cricket::Codec* codec) {
+void AddParameters(const CodecParameterMap& parameters, Codec* codec) {
   for (const auto& entry : parameters) {
     const std::string& key = entry.first;
     const std::string& value = entry.second;
@@ -2857,14 +2822,13 @@ void AddParameters(const webrtc::CodecParameterMap& parameters,
   }
 }
 
-void AddFeedbackParameter(const cricket::FeedbackParam& feedback_param,
-                          cricket::Codec* codec) {
+void AddFeedbackParameter(const FeedbackParam& feedback_param, Codec* codec) {
   codec->AddFeedbackParam(feedback_param);
 }
 
-void AddFeedbackParameters(const cricket::FeedbackParams& feedback_params,
-                           cricket::Codec* codec) {
-  for (const cricket::FeedbackParam& param : feedback_params.params()) {
+void AddFeedbackParameters(const FeedbackParams& feedback_params,
+                           Codec* codec) {
+  for (const FeedbackParam& param : feedback_params.params()) {
     codec->AddFeedbackParam(param);
   }
 }
@@ -2872,27 +2836,26 @@ void AddFeedbackParameters(const cricket::FeedbackParams& feedback_params,
 // Gets the current codec setting associated with `payload_type`. If there
 // is no Codec associated with that payload type it returns an empty codec
 // with that payload type.
-cricket::Codec GetCodecWithPayloadType(
-    webrtc::MediaType type,
-    const std::vector<cricket::Codec>& codecs,
-    int payload_type) {
-  const cricket::Codec* codec = FindCodecById(codecs, payload_type);
+Codec GetCodecWithPayloadType(MediaType type,
+                              const std::vector<Codec>& codecs,
+                              int payload_type) {
+  const Codec* codec = FindCodecById(codecs, payload_type);
   if (codec)
     return *codec;
   // Return empty codec with `payload_type`.
-  if (type == webrtc::MediaType::AUDIO) {
-    return cricket::CreateAudioCodec(payload_type, "", 0, 0);
+  if (type == MediaType::AUDIO) {
+    return CreateAudioCodec(payload_type, "", kDefaultAudioClockRateHz, 0);
   } else {
-    return cricket::CreateVideoCodec(payload_type, "");
+    return CreateVideoCodec(payload_type, "");
   }
 }
 
 // Updates or creates a new codec entry in the media description.
 void AddOrReplaceCodec(MediaContentDescription* content_desc,
-                       const cricket::Codec& codec) {
-  std::vector<cricket::Codec> codecs = content_desc->codecs();
+                       const Codec& codec) {
+  std::vector<Codec> codecs = content_desc->codecs();
   bool found = false;
-  for (cricket::Codec& existing_codec : codecs) {
+  for (Codec& existing_codec : codecs) {
     if (codec.id == existing_codec.id) {
       // Overwrite existing codec with the new codec.
       existing_codec = codec;
@@ -2911,9 +2874,9 @@ void AddOrReplaceCodec(MediaContentDescription* content_desc,
 // to `parameters`.
 void UpdateCodec(MediaContentDescription* content_desc,
                  int payload_type,
-                 const webrtc::CodecParameterMap& parameters) {
+                 const CodecParameterMap& parameters) {
   // Codec might already have been populated (from rtpmap).
-  cricket::Codec new_codec = GetCodecWithPayloadType(
+  Codec new_codec = GetCodecWithPayloadType(
       content_desc->type(), content_desc->codecs(), payload_type);
   AddParameters(parameters, &new_codec);
   AddOrReplaceCodec(content_desc, new_codec);
@@ -2923,9 +2886,9 @@ void UpdateCodec(MediaContentDescription* content_desc,
 // to `feedback_param`.
 void UpdateCodec(MediaContentDescription* content_desc,
                  int payload_type,
-                 const cricket::FeedbackParam& feedback_param) {
+                 const FeedbackParam& feedback_param) {
   // Codec might already have been populated (from rtpmap).
-  cricket::Codec new_codec = GetCodecWithPayloadType(
+  Codec new_codec = GetCodecWithPayloadType(
       content_desc->type(), content_desc->codecs(), payload_type);
   AddFeedbackParameter(feedback_param, &new_codec);
   AddOrReplaceCodec(content_desc, new_codec);
@@ -2936,24 +2899,23 @@ void UpdateCodec(MediaContentDescription* content_desc,
 void UpdateVideoCodecPacketization(MediaContentDescription* desc,
                                    int payload_type,
                                    absl::string_view packetization) {
-  if (packetization != cricket::kPacketizationParamRaw) {
+  if (packetization != kPacketizationParamRaw) {
     // Ignore unsupported packetization attribute.
     return;
   }
 
   // Codec might already have been populated (from rtpmap).
-  cricket::Codec codec =
+  Codec codec =
       GetCodecWithPayloadType(desc->type(), desc->codecs(), payload_type);
   codec.packetization = std::string(packetization);
   AddOrReplaceCodec(desc, codec);
 }
 
-std::optional<cricket::Codec> PopWildcardCodec(
-    std::vector<cricket::Codec>* codecs) {
+std::optional<Codec> PopWildcardCodec(std::vector<Codec>* codecs) {
   RTC_DCHECK(codecs);
   for (auto iter = codecs->begin(); iter != codecs->end(); ++iter) {
     if (iter->id == kWildcardPayloadType) {
-      cricket::Codec wildcard_codec = *iter;
+      Codec wildcard_codec = *iter;
       codecs->erase(iter);
       return wildcard_codec;
     }
@@ -2964,7 +2926,7 @@ std::optional<cricket::Codec> PopWildcardCodec(
 void UpdateFromWildcardCodecs(MediaContentDescription* desc) {
   RTC_DCHECK(desc);
   auto codecs = desc->codecs();
-  std::optional<cricket::Codec> wildcard_codec = PopWildcardCodec(&codecs);
+  std::optional<Codec> wildcard_codec = PopWildcardCodec(&codecs);
   if (!wildcard_codec) {
     return;
   }
@@ -2985,15 +2947,15 @@ void AddAudioAttribute(const std::string& name,
   if (value.empty()) {
     return;
   }
-  std::vector<cricket::Codec> codecs = desc->codecs();
-  for (cricket::Codec& codec : codecs) {
+  std::vector<Codec> codecs = desc->codecs();
+  for (Codec& codec : codecs) {
     codec.params[name] = std::string(value);
   }
   desc->set_codecs(codecs);
 }
 
 bool ParseContent(absl::string_view message,
-                  const webrtc::MediaType media_type,
+                  const MediaType media_type,
                   int mline_index,
                   absl::string_view protocol,
                   const std::vector<int>& payload_types,
@@ -3005,11 +2967,11 @@ bool ParseContent(absl::string_view message,
                   TransportDescription* transport,
                   std::vector<std::unique_ptr<JsepIceCandidate>>* candidates,
                   SdpParseError* error) {
-  RTC_DCHECK(media_desc != NULL);
-  RTC_DCHECK(content_name != NULL);
-  RTC_DCHECK(transport != NULL);
+  RTC_DCHECK(media_desc != nullptr);
+  RTC_DCHECK(content_name != nullptr);
+  RTC_DCHECK(transport != nullptr);
 
-  if (media_type == webrtc::MediaType::AUDIO) {
+  if (media_type == MediaType::AUDIO) {
     MaybeCreateStaticPayloadAudioCodecs(payload_types, media_desc);
   }
 
@@ -3045,9 +3007,9 @@ bool ParseContent(absl::string_view message,
     if (IsLineType(*line, kLineTypeSessionBandwidth)) {
       std::string bandwidth;
       std::string bandwidth_type;
-      if (!rtc::tokenize_first(line->substr(kLinePrefixLength),
-                               kSdpDelimiterColonChar, &bandwidth_type,
-                               &bandwidth)) {
+      if (!tokenize_first(line->substr(kLinePrefixLength),
+                          kSdpDelimiterColonChar, &bandwidth_type,
+                          &bandwidth)) {
         return ParseFailed(
             *line,
             "b= syntax error, does not match b=<modifier>:<bandwidth-value>.",
@@ -3144,7 +3106,7 @@ bool ParseContent(absl::string_view message,
         return false;
       }
     } else if (HasAttribute(*line, kAttributeFingerprint)) {
-      std::unique_ptr<rtc::SSLFingerprint> fingerprint;
+      std::unique_ptr<SSLFingerprint> fingerprint;
       if (!ParseFingerprintAttribute(*line, &fingerprint, error)) {
         return false;
       }
@@ -3153,8 +3115,7 @@ bool ParseContent(absl::string_view message,
       if (!ParseDtlsSetup(*line, &(transport->connection_role), error)) {
         return false;
       }
-    } else if (cricket::IsDtlsSctp(protocol) &&
-               media_type == webrtc::MediaType::DATA) {
+    } else if (IsDtlsSctp(protocol) && media_type == MediaType::DATA) {
       //
       // SCTP specific attributes
       //
@@ -3178,7 +3139,7 @@ bool ParseContent(absl::string_view message,
         // Ignore a=sctpmap: from early versions of draft-ietf-mmusic-sctp-sdp
         continue;
       }
-    } else if (cricket::IsRtpProtocol(protocol)) {
+    } else if (IsRtpProtocol(protocol)) {
       //
       // RTP specific attributes
       //
@@ -3356,7 +3317,7 @@ bool ParseContent(absl::string_view message,
   if (!ssrc_infos.empty()) {
     CreateTracksFromSsrcInfos(ssrc_infos, stream_ids, track_id, &tracks,
                               *msid_signaling);
-  } else if (media_type != webrtc::MediaType::DATA &&
+  } else if (media_type != MediaType::DATA &&
              (*msid_signaling & kMsidSignalingMediaSection)) {
     // If the stream_ids/track_id was signaled but SSRCs were unsignaled we
     // still create a track. This isn't done for data media types because
@@ -3391,12 +3352,11 @@ bool ParseContent(absl::string_view message,
   // Codec has not been populated correctly unless the name has been set. This
   // can happen if an SDP has an fmtp or rtcp-fb with a payload type but doesn't
   // have a corresponding "rtpmap" line. This should lead to a parse error.
-  if (!absl::c_all_of(media_desc->codecs(), [](const cricket::Codec codec) {
-        return !codec.name.empty();
-      })) {
+  if (!absl::c_all_of(media_desc->codecs(),
+                      [](const Codec codec) { return !codec.name.empty(); })) {
     return ParseFailed("Failed to parse codecs correctly.", error);
   }
-  if (media_type == webrtc::MediaType::AUDIO) {
+  if (media_type == MediaType::AUDIO) {
     AddAudioAttribute(kCodecParamMaxPTime, maxptime_as_string, media_desc);
     AddAudioAttribute(kCodecParamPTime, ptime_as_string, media_desc);
   }
@@ -3420,13 +3380,13 @@ bool ParseSsrcAttribute(absl::string_view line,
                         SsrcInfoVec* ssrc_infos,
                         int* msid_signaling,
                         SdpParseError* error) {
-  RTC_DCHECK(ssrc_infos != NULL);
+  RTC_DCHECK(ssrc_infos != nullptr);
   // RFC 5576
   // a=ssrc:<ssrc-id> <attribute>
   // a=ssrc:<ssrc-id> <attribute>:<value>
   std::string field1, field2;
-  if (!rtc::tokenize_first(line.substr(kLinePrefixLength),
-                           kSdpDelimiterSpaceChar, &field1, &field2)) {
+  if (!tokenize_first(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar,
+                      &field1, &field2)) {
     const size_t expected_fields = 2;
     return ParseFailedExpectFieldNum(line, expected_fields, error);
   }
@@ -3443,8 +3403,7 @@ bool ParseSsrcAttribute(absl::string_view line,
 
   std::string attribute;
   std::string value;
-  if (!rtc::tokenize_first(field2, kSdpDelimiterColonChar, &attribute,
-                           &value)) {
+  if (!tokenize_first(field2, kSdpDelimiterColonChar, &attribute, &value)) {
     StringBuilder description;
     description << "Failed to get the ssrc attribute value from " << field2
                 << ". Expected format <attribute>:<value>.";
@@ -3474,7 +3433,7 @@ bool ParseSsrcAttribute(absl::string_view line,
     // draft-alvestrand-mmusic-msid-00
     // msid:identifier [appdata]
     std::vector<absl::string_view> fields =
-        rtc::split(value, kSdpDelimiterSpaceChar);
+        split(value, kSdpDelimiterSpaceChar);
     if (fields.size() < 1 || fields.size() > 2) {
       return ParseFailed(
           line, "Expected format \"msid:<identifier>[ <appdata>]\".", error);
@@ -3493,11 +3452,11 @@ bool ParseSsrcAttribute(absl::string_view line,
 bool ParseSsrcGroupAttribute(absl::string_view line,
                              SsrcGroupVec* ssrc_groups,
                              SdpParseError* error) {
-  RTC_DCHECK(ssrc_groups != NULL);
+  RTC_DCHECK(ssrc_groups != nullptr);
   // RFC 5576
   // a=ssrc-group:<semantics> <ssrc-id> ...
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   const size_t expected_min_fields = 2;
   if (fields.size() < expected_min_fields) {
     return ParseFailedExpectMinFieldNum(line, expected_min_fields, error);
@@ -3533,7 +3492,7 @@ void UpdateCodec(int payload_type,
                  MediaContentDescription* desc) {
   // Codec may already be populated with (only) optional parameters
   // (from an fmtp).
-  cricket::Codec codec =
+  Codec codec =
       GetCodecWithPayloadType(desc->type(), desc->codecs(), payload_type);
   codec.name = std::string(name);
   codec.clockrate = clockrate;
@@ -3549,20 +3508,20 @@ void UpdateCodec(int payload_type,
                  MediaContentDescription* desc) {
   // Codec may already be populated with (only) optional parameters
   // (from an fmtp).
-  cricket::Codec codec =
+  Codec codec =
       GetCodecWithPayloadType(desc->type(), desc->codecs(), payload_type);
   codec.name = std::string(name);
   AddOrReplaceCodec(desc, codec);
 }
 
 bool ParseRtpmapAttribute(absl::string_view line,
-                          const webrtc::MediaType media_type,
+                          const MediaType media_type,
                           const std::vector<int>& payload_types,
                           MediaContentDescription* media_desc,
                           SdpParseError* error) {
   static const int kFirstDynamicPayloadTypeLowerRange = 35;
   std::vector<absl::string_view> fields =
-      rtc::split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
+      split(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar);
   // RFC 4566
   // a=rtpmap:<payload type> <encoding name>/<clock rate>[/<encodingparameters>]
   const size_t expected_min_fields = 2;
@@ -3585,7 +3544,7 @@ bool ParseRtpmapAttribute(absl::string_view line,
                         << line;
     return true;
   }
-  std::vector<absl::string_view> codec_params = rtc::split(fields[1], '/');
+  std::vector<absl::string_view> codec_params = split(fields[1], '/');
   // <encoding name>/<clock rate>[/<encodingparameters>]
   // 2 mandatory fields
   if (codec_params.size() < 2 || codec_params.size() > 3) {
@@ -3600,8 +3559,8 @@ bool ParseRtpmapAttribute(absl::string_view line,
     return false;
   }
 
-  if (media_type == webrtc::MediaType::VIDEO) {
-    for (const cricket::Codec& existing_codec : media_desc->codecs()) {
+  if (media_type == MediaType::VIDEO) {
+    for (const Codec& existing_codec : media_desc->codecs()) {
       if (!existing_codec.name.empty() && payload_type == existing_codec.id &&
           (!absl::EqualsIgnoreCase(encoding_name, existing_codec.name) ||
            clock_rate != existing_codec.clockrate)) {
@@ -3616,7 +3575,7 @@ bool ParseRtpmapAttribute(absl::string_view line,
       }
     }
     UpdateCodec(payload_type, encoding_name, media_desc);
-  } else if (media_type == webrtc::MediaType::AUDIO) {
+  } else if (media_type == MediaType::AUDIO) {
     // RFC 4566
     // For audio streams, <encoding parameters> indicates the number
     // of audio channels.  This parameter is OPTIONAL and may be
@@ -3628,11 +3587,14 @@ bool ParseRtpmapAttribute(absl::string_view line,
         return false;
       }
     }
-    if (channels > kMaxNumberOfChannels) {
-      return ParseFailed(line, "At most 24 channels are supported.", error);
+    if (channels > kMaxNumberOfAudioChannels) {
+      StringBuilder description;
+      description << "At most " << kMaxNumberOfAudioChannels
+                  << " channels are supported.";
+      return ParseFailed(line, description.Release(), error);
     }
 
-    for (const cricket::Codec& existing_codec : media_desc->codecs()) {
+    for (const Codec& existing_codec : media_desc->codecs()) {
       // TODO(crbug.com/1338902) re-add checks for clockrate and number of
       // channels.
       if (!existing_codec.name.empty() && payload_type == existing_codec.id &&
@@ -3657,7 +3619,7 @@ bool ParseFmtpParam(absl::string_view line,
                     std::string* parameter,
                     std::string* value,
                     SdpParseError* error) {
-  if (!rtc::tokenize_first(line, kSdpDelimiterEqualChar, parameter, value)) {
+  if (!tokenize_first(line, kSdpDelimiterEqualChar, parameter, value)) {
     // Support for non-key-value lines like RFC 2198 or RFC 4733.
     *parameter = "";
     *value = std::string(line);
@@ -3668,11 +3630,11 @@ bool ParseFmtpParam(absl::string_view line,
 }
 
 bool ParseFmtpParameterSet(absl::string_view line_params,
-                           webrtc::CodecParameterMap& codec_params,
+                           CodecParameterMap& codec_params,
                            SdpParseError* error) {
   // Parse out format specific parameters.
   for (absl::string_view param :
-       rtc::split(line_params, kSdpDelimiterSemicolonChar)) {
+       split(line_params, kSdpDelimiterSemicolonChar)) {
     std::string name;
     std::string value;
     if (!ParseFmtpParam(absl::StripAsciiWhitespace(param), &name, &value,
@@ -3689,11 +3651,10 @@ bool ParseFmtpParameterSet(absl::string_view line_params,
 }
 
 bool ParseFmtpAttributes(absl::string_view line,
-                         const webrtc::MediaType media_type,
+                         const MediaType media_type,
                          MediaContentDescription* media_desc,
                          SdpParseError* error) {
-  if (media_type != webrtc::MediaType::AUDIO &&
-      media_type != webrtc::MediaType::VIDEO) {
+  if (media_type != MediaType::AUDIO && media_type != MediaType::VIDEO) {
     return true;
   }
 
@@ -3704,9 +3665,8 @@ bool ParseFmtpAttributes(absl::string_view line,
   // a=fmtp:<format> <format specific parameters>
   // At least two fields, whereas the second one is any of the optional
   // parameters.
-  if (!rtc::tokenize_first(line.substr(kLinePrefixLength),
-                           kSdpDelimiterSpaceChar, &line_payload,
-                           &line_params)) {
+  if (!tokenize_first(line.substr(kLinePrefixLength), kSdpDelimiterSpaceChar,
+                      &line_payload, &line_params)) {
     ParseFailedExpectMinFieldNum(line, 2, error);
     return false;
   }
@@ -3724,27 +3684,26 @@ bool ParseFmtpAttributes(absl::string_view line,
   }
 
   // Parse out format specific parameters.
-  webrtc::CodecParameterMap codec_params;
+  CodecParameterMap codec_params;
   if (!ParseFmtpParameterSet(line_params, codec_params, error)) {
     return false;
   }
 
-  if (media_type == webrtc::MediaType::AUDIO ||
-      media_type == webrtc::MediaType::VIDEO) {
+  if (media_type == MediaType::AUDIO || media_type == MediaType::VIDEO) {
     UpdateCodec(media_desc, payload_type, codec_params);
   }
   return true;
 }
 
 bool ParsePacketizationAttribute(absl::string_view line,
-                                 const webrtc::MediaType media_type,
+                                 const MediaType media_type,
                                  MediaContentDescription* media_desc,
                                  SdpParseError* error) {
-  if (media_type != webrtc::MediaType::VIDEO) {
+  if (media_type != MediaType::VIDEO) {
     return true;
   }
   std::vector<absl::string_view> packetization_fields =
-      rtc::split(line, kSdpDelimiterSpaceChar);
+      split(line, kSdpDelimiterSpaceChar);
   if (packetization_fields.size() < 2) {
     return ParseFailedGetValue(line, kAttributePacketization, error);
   }
@@ -3764,15 +3723,14 @@ bool ParsePacketizationAttribute(absl::string_view line,
 }
 
 bool ParseRtcpFbAttribute(absl::string_view line,
-                          const webrtc::MediaType media_type,
+                          const MediaType media_type,
                           MediaContentDescription* media_desc,
                           SdpParseError* error) {
-  if (media_type != webrtc::MediaType::AUDIO &&
-      media_type != webrtc::MediaType::VIDEO) {
+  if (media_type != MediaType::AUDIO && media_type != MediaType::VIDEO) {
     return true;
   }
   std::vector<absl::string_view> rtcp_fb_fields =
-      rtc::split(line, kSdpDelimiterSpaceChar);
+      split(line, kSdpDelimiterSpaceChar);
   if (rtcp_fb_fields.size() < 2) {
     return ParseFailedGetValue(line, kAttributeRtcpFb, error);
   }
@@ -3794,10 +3752,9 @@ bool ParseRtcpFbAttribute(absl::string_view line,
        ++iter) {
     param.append(iter->data(), iter->length());
   }
-  const cricket::FeedbackParam feedback_param(id, param);
+  const FeedbackParam feedback_param(id, param);
 
-  if (media_type == webrtc::MediaType::AUDIO ||
-      media_type == webrtc::MediaType::VIDEO) {
+  if (media_type == MediaType::AUDIO || media_type == MediaType::VIDEO) {
     UpdateCodec(media_desc, payload_type, feedback_param);
   }
   return true;

@@ -5,8 +5,8 @@
 package org.chromium.chrome.browser.autofill.iban;
 
 import android.content.Context;
-import android.widget.EditText;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.customtabs.CustomTabActivity;
 import org.chromium.chrome.browser.layouts.LayoutStateProvider;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -21,6 +21,7 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
  *
  * <p>This component shows a bottom sheet to let the user choose to save a IBAN.
  */
+@NullMarked
 public class AutofillSaveIbanBottomSheetCoordinator {
     /** Native callbacks for the IBAN bottom sheet. */
     public interface NativeDelegate {
@@ -42,8 +43,7 @@ public class AutofillSaveIbanBottomSheetCoordinator {
     private final Context mContext;
     private final AutofillSaveIbanBottomSheetMediator mMediator;
     private final AutofillSaveIbanBottomSheetView mView;
-    private PropertyModel mModel;
-    protected EditText mNickname;
+    private final PropertyModel mModel;
 
     /**
      * Creates the coordinator.

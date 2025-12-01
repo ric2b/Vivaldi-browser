@@ -65,6 +65,8 @@ class SavedTabGroupConversionTest : public testing::Test {
                   .last_user_interaction_time_windows_epoch_micros(),
               sp2.local_tab_group_data()
                   .last_user_interaction_time_windows_epoch_micros());
+    EXPECT_EQ(sp1.local_tab_group_data().archival_time_windows_epoch_micros(),
+              sp2.local_tab_group_data().archival_time_windows_epoch_micros());
   }
 
   // Compare SavedTabGroups
@@ -73,10 +75,8 @@ class SavedTabGroupConversionTest : public testing::Test {
     EXPECT_EQ(group1.color(), group2.color());
     EXPECT_EQ(group1.saved_guid(), group2.saved_guid());
     EXPECT_EQ(group1.position(), group2.position());
-    EXPECT_EQ(group1.creation_time_windows_epoch_micros(),
-              group2.creation_time_windows_epoch_micros());
-    EXPECT_EQ(group1.update_time_windows_epoch_micros(),
-              group2.update_time_windows_epoch_micros());
+    EXPECT_EQ(group1.creation_time(), group2.creation_time());
+    EXPECT_EQ(group1.update_time(), group2.update_time());
     EXPECT_EQ(group1.last_user_interaction_time(),
               group2.last_user_interaction_time());
     EXPECT_EQ(group1.creator_cache_guid(), group2.creator_cache_guid());
@@ -84,6 +84,7 @@ class SavedTabGroupConversionTest : public testing::Test {
               group2.last_updater_cache_guid());
     EXPECT_EQ(group1.created_before_syncing_tab_groups(),
               group2.created_before_syncing_tab_groups());
+    EXPECT_EQ(group1.archival_time(), group2.archival_time());
   }
 
   void CompareTabs(const SavedTabGroupTab& tab1, const SavedTabGroupTab& tab2) {
@@ -93,10 +94,8 @@ class SavedTabGroupConversionTest : public testing::Test {
     EXPECT_EQ(tab1.saved_group_guid(), tab2.saved_group_guid());
     EXPECT_EQ(tab1.creator_cache_guid(), tab2.creator_cache_guid());
     EXPECT_EQ(tab1.last_updater_cache_guid(), tab2.last_updater_cache_guid());
-    EXPECT_EQ(tab1.creation_time_windows_epoch_micros(),
-              tab2.creation_time_windows_epoch_micros());
-    EXPECT_EQ(tab1.update_time_windows_epoch_micros(),
-              tab2.update_time_windows_epoch_micros());
+    EXPECT_EQ(tab1.creation_time(), tab2.creation_time());
+    EXPECT_EQ(tab1.update_time(), tab2.update_time());
   }
 
   base::Time time_;
@@ -106,24 +105,26 @@ TEST_F(SavedTabGroupConversionTest, GroupToDataRetainsData) {
   const std::u16string& title = u"Test title";
   const tab_groups::TabGroupColorId& color = tab_groups::TabGroupColorId::kBlue;
   std::optional<base::Uuid> saved_guid = base::Uuid::GenerateRandomV4();
-  std::optional<base::Time> creation_time_windows_epoch_micros = time_;
-  std::optional<base::Time> update_time_windows_epoch_micros = time_;
+  std::optional<base::Time> creation_time = time_;
+  std::optional<base::Time> update_time = time_;
   SavedTabGroup group(
       title, color, {}, 0, saved_guid, test::GenerateRandomTabGroupID(),
       "creator_cache_guid_1",       // creator_cache_guid
       "last_updater_cache_guid_1",  // last_updater_cache_guid
-      /*created_before_syncing_tab_groups=*/true,
-      creation_time_windows_epoch_micros, update_time_windows_epoch_micros);
+      /*created_before_syncing_tab_groups=*/true, creation_time, update_time);
   const base::Uuid kOriginatingSavedTabGroupGuid =
       base::Uuid::GenerateRandomV4();
   group.SetLastUserInteractionTime(time_);
   group.SetOriginatingTabGroupGuid(kOriginatingSavedTabGroupGuid,
                                    /*use_originating_tab_group_guid=*/true);
   group.SetIsHidden(true);
+  group.SetArchivalTime(time_);
 
   proto::SavedTabGroupData proto =
       SavedTabGroupSyncBridge::SavedTabGroupToDataForTest(group);
-  EXPECT_EQ(1, proto.version());
+  EXPECT_EQ(kCurrentSavedTabGroupDataProtoVersion, proto.version());
+  EXPECT_EQ(kCurrentSavedTabGroupSpecificsProtoVersion,
+            proto.specifics().version());
 
   CompareGroups(group,
                 SavedTabGroupSyncBridge::DataToSavedTabGroupForTest(proto));
@@ -137,7 +138,9 @@ TEST_F(SavedTabGroupConversionTest, TabToDataRetainsData) {
 
   proto::SavedTabGroupData proto =
       SavedTabGroupSyncBridge::SavedTabGroupTabToDataForTest(tab);
-  EXPECT_EQ(1, proto.version());
+  EXPECT_EQ(kCurrentSavedTabGroupDataProtoVersion, proto.version());
+  EXPECT_EQ(kCurrentSavedTabGroupSpecificsProtoVersion,
+            proto.specifics().version());
 
   CompareTabs(tab,
               SavedTabGroupSyncBridge::DataToSavedTabGroupTabForTest(proto));
@@ -206,6 +209,7 @@ TEST_F(SavedTabGroupConversionTest, VerifyLocalFieldsOnProtoToGroupConversion) {
   pb_local_group_data->set_last_user_interaction_time_windows_epoch_micros(
       time_in_micros);
   pb_local_group_data->set_is_group_hidden(true);
+  pb_local_group_data->set_archival_time_windows_epoch_micros(time_in_micros);
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
   std::string serialized_local_id = base::Token::CreateRandom().ToString();
@@ -230,16 +234,15 @@ TEST_F(SavedTabGroupConversionTest, MergedGroupHoldsCorrectData) {
   const std::u16string& title = u"Test title";
   const tab_groups::TabGroupColorId& color = tab_groups::TabGroupColorId::kBlue;
   std::optional<base::Uuid> saved_guid = base::Uuid::GenerateRandomV4();
-  std::optional<base::Time> creation_time_windows_epoch_micros = time_;
-  std::optional<base::Time> update_time_windows_epoch_micros = time_;
+  std::optional<base::Time> creation_time = time_;
+  std::optional<base::Time> update_time = time_;
   SavedTabGroup group1(title, color, {}, 0, saved_guid, std::nullopt,
                        "creator_cache_guid", "last_updater_cache_guid",
                        /*created_before_syncing_tab_groups=*/false,
-                       creation_time_windows_epoch_micros,
-                       update_time_windows_epoch_micros);
+                       creation_time, update_time);
 
   // Create a new group with the same data and update it. Calling set functions
-  // should internally update update_time_windows_epoch_micros.
+  // should internally update update_time.
   SavedTabGroup group2(group1);
   group2.SetColor(tab_groups::TabGroupColorId::kGreen);
   group2.SetTitle(u"New Title");
@@ -249,7 +252,7 @@ TEST_F(SavedTabGroupConversionTest, MergedGroupHoldsCorrectData) {
   group1.MergeRemoteGroupMetadata(
       group2.title(), group2.color(), group2.position(),
       group2.creator_cache_guid(), group2.last_updater_cache_guid(),
-      group2.update_time_windows_epoch_micros());
+      group2.update_time());
   CompareGroups(group1, group2);
 }
 
@@ -260,7 +263,7 @@ TEST_F(SavedTabGroupConversionTest, MergedTabHoldsCorrectData) {
                         /*position=*/0);
 
   // Create a new group with the same data and update it. Calling set functions
-  // should internally update update_time_windows_epoch_micros.
+  // should internally update update_time.
   SavedTabGroupTab tab2(tab1);
   tab2.SetURL(GURL("http://xyz.com"));
   tab2.SetTitle(u"New Title");
@@ -281,7 +284,7 @@ TEST_F(SavedTabGroupConversionTest, MergedTabWithUnsupportedURL) {
                         /*position=*/0);
 
   // Create a new tab with the same data and update it. Calling set functions
-  // should internally update update_time_windows_epoch_micros.
+  // should internally update update_time.
   SavedTabGroupTab remote_tab(tab1);
   remote_tab.SetURL(GURL(kChromeSavedTabGroupUnsupportedURL));
   remote_tab.SetTitle(u"New Title");

@@ -44,7 +44,6 @@
 #include "mojo/public/cpp/bindings/remote_set.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/common/page/browsing_context_group_info.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
@@ -130,7 +129,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       scheduler::WebAgentGroupScheduler& agent_group_scheduler,
       const SessionStorageNamespaceId& session_storage_namespace_id,
       std::optional<SkColor> page_base_background_color,
-      const BrowsingContextGroupInfo& browsing_context_group_info,
+      const base::UnguessableToken& browsing_context_group_token,
       const ColorProviderColorMaps* color_provider_colors,
       blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params);
 
@@ -316,11 +315,12 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       mojom::blink::FrameReplicationStatePtr replicated_state,
       bool is_loading,
       const base::UnguessableToken& devtools_frame_token,
+      const std::optional<base::UnguessableToken>& navigation_metrics_token,
       mojom::blink::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces,
       mojom::blink::RemoteMainFrameInterfacesPtr remote_main_frame_interfaces)
       override;
   void UpdatePageBrowsingContextGroup(
-      const BrowsingContextGroupInfo& browsing_context_group_info) override;
+      const base::UnguessableToken& browsing_context_group_token) override;
   void SetPageAttributionSupport(
       network::mojom::AttributionSupport support) override;
   void UpdateColorProviders(
@@ -730,7 +730,7 @@ class CORE_EXPORT WebViewImpl final : public WebView,
       scheduler::WebAgentGroupScheduler& agent_group_scheduler,
       const SessionStorageNamespaceId& session_storage_namespace_id,
       std::optional<SkColor> page_base_background_color,
-      const BrowsingContextGroupInfo& browsing_context_group_info,
+      const base::UnguessableToken& browsing_context_group_token,
       const ColorProviderColorMaps* color_provider_colors,
       blink::mojom::PartitionedPopinParamsPtr partitioned_popin_params);
   ~WebViewImpl() override;

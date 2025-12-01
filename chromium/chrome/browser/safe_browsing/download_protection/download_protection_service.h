@@ -20,7 +20,7 @@
 #include "base/functional/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/supports_user_data.h"
 #include "base/types/optional_ref.h"
@@ -110,7 +110,11 @@ class DownloadProtectionService {
       base::optional_ref<const std::string> password = std::nullopt);
 
   // Checks the user permissions, then calls |CheckClientDownload| if
-  // appropriate. Returns whether we began scanning.
+  // appropriate. Returns whether we may do more asynchronous work to check the
+  // download, such as sending a ping (potentially subject to sampling or other
+  // eligibility checks). If this returns true, the `callback` will be invoked
+  // with the result of a check. If this returns false, the `callback` will not
+  // be run.
   virtual bool MaybeCheckClientDownload(
       download::DownloadItem* item,
       CheckDownloadRepeatingCallback callback);
@@ -134,8 +138,9 @@ class DownloadProtectionService {
   virtual void CheckDownloadUrl(download::DownloadItem* item,
                                 CheckDownloadCallback callback);
 
-  // Returns true iff the download specified by |info| should be scanned by
-  // CheckClientDownload() for malicious content.
+  // Returns true if the download specified by |info| may be scanned by
+  // CheckClientDownload() for malicious content. (Caller may apply further
+  // logic to determine if a scan occurs, such as sampling or other checks.)
   // May modify the DownloadItem with a SupportsUserData::Data.
   virtual bool IsSupportedDownload(download::DownloadItem& item,
                                    const base::FilePath& target_path) const;
@@ -148,11 +153,13 @@ class DownloadProtectionService {
       Profile* profile,
       CheckDownloadCallback callback);
 
-  // Checks whether the given File System Access write operation is likely to be
-  // malicious or not. The result is delivered asynchronously via the given
-  // callback.  This method must be called on the UI thread, and the callback
-  // will also be invoked on the UI thread.  This method must be called once the
-  // write is finished and data has been written to disk.
+  // If download protection is enabled for `item`, checks whether the given File
+  // System Access write operation is likely to be malicious or not. The result
+  // of the check is delivered asynchronously via the given callback, or the
+  // callback will be invoked with a result of UNKNOWN. This method must be
+  // called on the UI thread, and the callback will also be invoked on the UI
+  // thread. This method must be called once the write is finished and data has
+  // been written to disk.
   virtual void CheckFileSystemAccessWrite(
       std::unique_ptr<content::FileSystemAccessWriteItem> item,
       CheckDownloadCallback callback);
@@ -377,7 +384,7 @@ class DownloadProtectionService {
       bool has_user_gesture,
       ClientDownloadRequest* out_request);
 
-  void OnDangerousDownloadOpened(const download::DownloadItem* item,
+  void OnDangerousDownloadOpened(download::DownloadItem* item,
                                  Profile* profile);
 
 #if !BUILDFLAG(IS_ANDROID)

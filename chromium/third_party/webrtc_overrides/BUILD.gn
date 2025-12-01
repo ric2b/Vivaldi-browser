@@ -159,7 +159,6 @@ webrtc_public_deps = [
   "//third_party/webrtc/rtc_base/network:ecn_marking",
   "//third_party/webrtc/rtc_base/network:received_packet",
   "//third_party/webrtc/rtc_base/system:rtc_export",
-  "//third_party/webrtc/rtc_base/third_party/base64",
   "//third_party/webrtc/rtc_base/third_party/sigslot",
   "//third_party/webrtc/rtc_base/third_party/sigslot:sigslot",
   "//third_party/webrtc/stats",
@@ -229,10 +228,10 @@ source_set("init_webrtc") {
   ]
   deps = [
     "//base",
+    "//third_party/webrtc/rtc_base:cpu_info",
     "//third_party/webrtc/rtc_base:event_tracer",
     "//third_party/webrtc/rtc_base:logging",
     "//third_party/webrtc/rtc_base/system:rtc_export",
-    "//third_party/webrtc/system_wrappers",
   ]
 }
 
@@ -301,6 +300,16 @@ source_set("environment") {
     "//third_party/webrtc/api/environment",
     "//third_party/webrtc/api/environment:environment_factory",
     "//third_party/webrtc/rtc_base/system:rtc_export",
+  ]
+}
+
+source_set("logging_test") {
+  testonly = true
+  sources = [ "test/logging_test.cc" ]
+  deps = [
+    ":webrtc_component",
+    "//base/test:test_support",
+    "//testing/gtest:gtest",
   ]
 }
 

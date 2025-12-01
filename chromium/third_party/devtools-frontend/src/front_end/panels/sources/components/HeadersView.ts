@@ -1,6 +1,8 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
@@ -13,11 +15,7 @@ import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import HeadersViewStylesRaw from './HeadersView.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const HeadersViewStyles = new CSSStyleSheet();
-HeadersViewStyles.replaceSync(HeadersViewStylesRaw.cssText);
+import headersViewStyles from './HeadersView.css.js';
 
 const {html} = Lit;
 
@@ -130,7 +128,6 @@ export interface HeadersViewComponentData {
 
 export class HeadersViewComponent extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
   #headerOverrides: Persistence.NetworkPersistenceManager.HeaderOverride[] = [];
   #uiSourceCode: Workspace.UISourceCode.UISourceCode|null = null;
   #parsingError = false;
@@ -148,15 +145,11 @@ export class HeadersViewComponent extends HTMLElement {
     this.addEventListener('contextmenu', this.#onContextMenu.bind(this));
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [HeadersViewStyles];
-  }
-
   set data(data: HeadersViewComponentData) {
     this.#headerOverrides = data.headerOverrides;
     this.#uiSourceCode = data.uiSourceCode;
     this.#parsingError = data.parsingError;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   // 'Enter' key should not create a new line in the contenteditable. Focus
@@ -348,6 +341,7 @@ export class HeadersViewComponent extends HTMLElement {
       const fileName = this.#uiSourceCode?.name() || '.headers';
       // clang-format off
       Lit.render(html`
+        <style>${headersViewStyles}</style>
         <div class="center-wrapper">
           <div class="centered">
             <div class="error-header">${i18nString(UIStrings.errorWhenParsing, {PH1: fileName})}</div>
@@ -361,6 +355,7 @@ export class HeadersViewComponent extends HTMLElement {
 
     // clang-format off
     Lit.render(html`
+      <style>${headersViewStyles}</style>
       ${this.#headerOverrides.map((headerOverride, blockIndex) =>
         html`
           ${this.#renderApplyToRow(headerOverride.applyTo, blockIndex)}

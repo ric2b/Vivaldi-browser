@@ -51,7 +51,7 @@ var (
 	runFlag         = flag.String("run", "", "Name of primitive to run tests for")
 	fetchFlag       = flag.String("fetch", "", "Name of primitive to fetch vectors for")
 	expectedOutFlag = flag.String("expected-out", "", "Name of a file to write the expected results to")
-	wrapperPath     = flag.String("wrapper", "../../../../build/util/fipstools/acvp/modulewrapper/modulewrapper", "Path to the wrapper binary")
+	wrapperPath     = flag.String("wrapper", "../../../../build/modulewrapper", "Path to the wrapper binary")
 )
 
 type Config struct {

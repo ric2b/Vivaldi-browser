@@ -1,6 +1,7 @@
 // Copyright (c) 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -19,13 +20,13 @@ import storageViewStyles from './storageView.css.js';
 
 const UIStrings = {
   /**
-   * @description Text in the Storage View that expresses the amout of used and available storage quota
+   * @description Text in the Storage View that expresses the amount of used and available storage quota
    * @example {1.5 MB} PH1
    * @example {123.1 MB} PH2
    */
   storageQuotaUsed: '{PH1} used out of {PH2} storage quota',
   /**
-   * @description Tooltip in the Storage View that expresses the precise amout of used and available storage quota
+   * @description Tooltip in the Storage View that expresses the precise amount of used and available storage quota
    * @example {200} PH1
    * @example {400} PH2
    */
@@ -56,7 +57,7 @@ const UIStrings = {
    */
   clearSiteData: 'Clear site data',
   /**
-   * @description Annouce message when the "clear site data" task is complete
+   * @description Announce message when the "clear site data" task is complete
    */
   SiteDataCleared: 'Site data cleared',
   /**
@@ -75,10 +76,6 @@ const UIStrings = {
    * @description Checkbox label in the Clear Storage section of the Storage View of the Application panel
    */
   indexDB: 'IndexedDB',
-  /**
-   * @description Checkbox label in the Clear Storage section of the Storage View of the Application panel
-   */
-  webSql: 'Web SQL',
   /**
    * @description Checkbox label in the Clear Storage section of the Storage View of the Application panel
    */
@@ -116,7 +113,7 @@ const UIStrings = {
   /**
    * @description Button text for the "Clear site data" button in the Storage View of the Application panel while the clearing action is pending
    */
-  clearing: 'Clearing...',
+  clearing: 'Clearing…',
   /**
    * @description Quota row title in Clear Storage View of the Application panel
    */
@@ -179,7 +176,6 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
       [Protocol.Storage.StorageType.Indexeddb, 'rgb(155, 127, 230)'],       // purple
       [Protocol.Storage.StorageType.Local_storage, 'rgb(116, 178, 102)'],   // green
       [Protocol.Storage.StorageType.Service_workers, 'rgb(255, 167, 36)'],  // orange
-      [Protocol.Storage.StorageType.Websql, 'rgb(203, 220, 56)'],           // lime
     ]);
 
     // TODO(crbug.com/1156978): Replace UI.ReportView.ReportView with ReportView.ts web component.
@@ -226,7 +222,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     this.quotaOverrideCheckbox.setAttribute(
         'jslog', `${VisualLogging.toggle('simulate-custom-quota').track({change: true})}`);
     quotaOverrideCheckboxRow.appendChild(this.quotaOverrideCheckbox);
-    this.quotaOverrideCheckbox.checkboxElement.addEventListener('click', this.onClickCheckbox.bind(this), false);
+    this.quotaOverrideCheckbox.addEventListener('click', this.onClickCheckbox.bind(this), false);
     this.quotaOverrideControlRow = quota.appendRow();
     this.quotaOverrideEditor = this.quotaOverrideControlRow.createChild('input', 'quota-override-notification-editor');
     this.quotaOverrideEditor.setAttribute(
@@ -268,7 +264,6 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     storage.element.setAttribute('jslog', `${VisualLogging.section('storage')}`);
     this.appendItem(storage, i18nString(UIStrings.localAndSessionStorage), Protocol.Storage.StorageType.Local_storage);
     this.appendItem(storage, i18nString(UIStrings.indexDB), Protocol.Storage.StorageType.Indexeddb);
-    this.appendItem(storage, i18nString(UIStrings.webSql), Protocol.Storage.StorageType.Websql);
     this.appendItem(storage, i18nString(UIStrings.cookies), Protocol.Storage.StorageType.Cookies);
     this.appendItem(storage, i18nString(UIStrings.cacheStorage), Protocol.Storage.StorageType.Cache_storage);
     storage.markFieldListAsGroup();
@@ -342,7 +337,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
 
     if (oldOrigin !== this.securityOrigin) {
       this.quotaOverrideControlRow.classList.add('hidden');
-      this.quotaOverrideCheckbox.checkboxElement.checked = false;
+      this.quotaOverrideCheckbox.checked = false;
       this.quotaOverrideErrorMessage.textContent = '';
     }
     void this.doUpdate();
@@ -356,7 +351,7 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
 
     if (oldStorageKey !== this.storageKey) {
       this.quotaOverrideControlRow.classList.add('hidden');
-      this.quotaOverrideCheckbox.checkboxElement.checked = false;
+      this.quotaOverrideCheckbox.checked = false;
       this.quotaOverrideErrorMessage.textContent = '';
     }
     void this.doUpdate();
@@ -405,12 +400,12 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
   private async onClickCheckbox(): Promise<void> {
     if (this.quotaOverrideControlRow.classList.contains('hidden')) {
       this.quotaOverrideControlRow.classList.remove('hidden');
-      this.quotaOverrideCheckbox.checkboxElement.checked = true;
+      this.quotaOverrideCheckbox.checked = true;
       this.quotaOverrideEditor.value = this.previousOverrideFieldValue;
       this.quotaOverrideEditor.focus();
     } else if (this.target && this.securityOrigin) {
       this.quotaOverrideControlRow.classList.add('hidden');
-      this.quotaOverrideCheckbox.checkboxElement.checked = false;
+      this.quotaOverrideCheckbox.checked = false;
       await this.clearQuotaForOrigin(this.target, this.securityOrigin);
       this.quotaOverrideErrorMessage.textContent = '';
     }
@@ -562,8 +557,6 @@ export class StorageView extends UI.ThrottledWidget.ThrottledWidget {
     switch (type) {
       case Protocol.Storage.StorageType.File_systems:
         return i18nString(UIStrings.fileSystem);
-      case Protocol.Storage.StorageType.Websql:
-        return i18nString(UIStrings.webSql);
       case Protocol.Storage.StorageType.Indexeddb:
         return i18nString(UIStrings.indexDB);
       case Protocol.Storage.StorageType.Cache_storage:
@@ -582,7 +575,6 @@ export const AllStorageTypes = [
   Protocol.Storage.StorageType.Indexeddb,
   Protocol.Storage.StorageType.Local_storage,
   Protocol.Storage.StorageType.Service_workers,
-  Protocol.Storage.StorageType.Websql,
 ];
 
 export class ActionDelegate implements UI.ActionRegistration.ActionDelegate {

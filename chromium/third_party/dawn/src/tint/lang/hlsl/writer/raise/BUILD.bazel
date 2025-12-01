@@ -41,6 +41,7 @@ cc_library(
   srcs = [
     "binary_polyfill.cc",
     "builtin_polyfill.cc",
+    "change_immediate_to_uniform.cc",
     "decompose_storage_access.cc",
     "decompose_uniform_access.cc",
     "localize_struct_array_assignment.cc",
@@ -54,6 +55,7 @@ cc_library(
   hdrs = [
     "binary_polyfill.h",
     "builtin_polyfill.h",
+    "change_immediate_to_uniform.h",
     "decompose_storage_access.h",
     "decompose_uniform_access.h",
     "localize_struct_array_assignment.h",
@@ -67,7 +69,6 @@ cc_library(
   deps = [
     "//src/tint/api/common",
     "//src/tint/lang/core",
-    "//src/tint/lang/core/common",
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/intrinsic",
     "//src/tint/lang/core/ir",
@@ -99,6 +100,7 @@ cc_library(
   srcs = [
     "binary_polyfill_test.cc",
     "builtin_polyfill_test.cc",
+    "change_immediate_to_uniform_test.cc",
     "decompose_storage_access_test.cc",
     "decompose_uniform_access_test.cc",
     "localize_struct_array_assignment_test.cc",
@@ -114,6 +116,7 @@ cc_library(
     "//src/tint/lang/core/constant",
     "//src/tint/lang/core/intrinsic",
     "//src/tint/lang/core/ir",
+    "//src/tint/lang/core/ir/transform",
     "//src/tint/lang/core/ir/transform:test",
     "//src/tint/lang/core/type",
     "//src/tint/lang/hlsl/writer/common",

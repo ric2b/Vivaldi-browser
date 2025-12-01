@@ -34,7 +34,7 @@
 #include "./centipede/environment.h"
 #include "./common/remote_file.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 // A set of statistics about the fuzzing progress.
 // - Each worker thread has its own `std::atomic<Stats>` object and updates it
@@ -575,25 +575,24 @@ class StatsCsvFileAppender : public StatsReporter {
   // pointer to `nullptr`.
   class BufferedRemoteFilePtr {
    public:
-    BufferedRemoteFilePtr(absl::Nullable<BufferedRemoteFile *> file)
+    BufferedRemoteFilePtr(BufferedRemoteFile *absl_nullable file)
         : file_(file) {}
     BufferedRemoteFilePtr(BufferedRemoteFilePtr &&other) noexcept
         : file_(std::exchange(other.file_, nullptr)) {}
-    BufferedRemoteFilePtr &operator=(
-        absl::Nullable<BufferedRemoteFile *> file) {
+    BufferedRemoteFilePtr &operator=(BufferedRemoteFile *absl_nullable file) {
       file_ = file;
       return *this;
     }
-    bool operator==(absl::Nullable<BufferedRemoteFile *> file) const {
+    bool operator==(BufferedRemoteFile *absl_nullable file) const {
       return file_ == file;
     }
-    bool operator!=(absl::Nullable<BufferedRemoteFile *> file) const {
+    bool operator!=(BufferedRemoteFile *absl_nullable file) const {
       return file_ != file;
     }
-    absl::Nullable<BufferedRemoteFile *> operator->() const { return file_; }
+    BufferedRemoteFile *absl_nullable operator->() const { return file_; }
 
    private:
-    absl::Nullable<BufferedRemoteFile *> file_ = nullptr;
+    BufferedRemoteFile *absl_nullable file_ = nullptr;
   };
 
   using BufferedRemoteFilesMap =
@@ -624,6 +623,6 @@ class StatsCsvFileAppender : public StatsReporter {
 void PrintRewardValues(absl::Span<const std::atomic<Stats>> stats_vec,
                        std::ostream &os);
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_STATS_H_

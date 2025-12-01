@@ -11,7 +11,6 @@
 #include "modules/video_coding/generic_decoder.h"
 
 #include <cstdint>
-#include <memory>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -21,14 +20,18 @@
 #include "api/scoped_refptr.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
+#include "api/video/encoded_frame.h"
 #include "api/video/i420_buffer.h"
+#include "api/video/video_codec_type.h"
 #include "api/video/video_content_type.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_frame_type.h"
+#include "api/video/video_timing.h"
 #include "api/video_codecs/video_decoder.h"
 #include "common_video/frame_instrumentation_data.h"
 #include "common_video/include/corruption_score_calculator.h"
 #include "common_video/test/utilities.h"
+#include "modules/video_coding/include/video_coding_defines.h"
 #include "modules/video_coding/timing/timing.h"
 #include "system_wrappers/include/clock.h"
 #include "test/fake_decoder.h"
@@ -67,7 +70,7 @@ class ReceiveCallback : public VCMReceiveCallback {
     return ret;
   }
 
-  rtc::ArrayView<const VideoFrame> GetAllFrames() const { return frames_; }
+  ArrayView<const VideoFrame> GetAllFrames() const { return frames_; }
 
   void OnDroppedFrames(uint32_t frames_dropped) {
     frames_dropped_ += frames_dropped;
@@ -112,7 +115,7 @@ class GenericDecoderTest : public ::testing::Test {
   Clock* const clock_;
   test::ScopedKeyValueConfig field_trials_;
   VCMTiming timing_;
-  webrtc::test::FakeDecoder decoder_;
+  test::FakeDecoder decoder_;
   VCMDecodedFrameCallback vcm_callback_;
   VCMGenericDecoder generic_decoder_;
   ReceiveCallback user_callback_;

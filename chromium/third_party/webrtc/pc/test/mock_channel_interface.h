@@ -27,34 +27,31 @@
 namespace webrtc {
 
 // Mock class for BaseChannel.
-// Use this class in unit tests to avoid dependecy on a specific
+// Use this class in unit tests to avoid dependency on a specific
 // implementation of BaseChannel.
-class MockChannelInterface : public cricket::ChannelInterface {
+class MockChannelInterface : public ChannelInterface {
  public:
-  MOCK_METHOD(webrtc::MediaType, media_type, (), (const, override));
-  MOCK_METHOD(cricket::VideoChannel*, AsVideoChannel, (), (override));
-  MOCK_METHOD(cricket::VoiceChannel*, AsVoiceChannel, (), (override));
-  MOCK_METHOD(cricket::MediaSendChannelInterface*,
-              media_send_channel,
-              (),
-              (override));
-  MOCK_METHOD(cricket::VoiceMediaSendChannelInterface*,
+  MOCK_METHOD(MediaType, media_type, (), (const, override));
+  MOCK_METHOD(VideoChannel*, AsVideoChannel, (), (override));
+  MOCK_METHOD(VoiceChannel*, AsVoiceChannel, (), (override));
+  MOCK_METHOD(MediaSendChannelInterface*, media_send_channel, (), (override));
+  MOCK_METHOD(VoiceMediaSendChannelInterface*,
               voice_media_send_channel,
               (),
               (override));
-  MOCK_METHOD(cricket::VideoMediaSendChannelInterface*,
+  MOCK_METHOD(VideoMediaSendChannelInterface*,
               video_media_send_channel,
               (),
               (override));
-  MOCK_METHOD(cricket::MediaReceiveChannelInterface*,
+  MOCK_METHOD(MediaReceiveChannelInterface*,
               media_receive_channel,
               (),
               (override));
-  MOCK_METHOD(cricket::VoiceMediaReceiveChannelInterface*,
+  MOCK_METHOD(VoiceMediaReceiveChannelInterface*,
               voice_media_receive_channel,
               (),
               (override));
-  MOCK_METHOD(cricket::VideoMediaReceiveChannelInterface*,
+  MOCK_METHOD(VideoMediaReceiveChannelInterface*,
               video_media_receive_channel,
               (),
               (override));
@@ -78,11 +75,11 @@ class MockChannelInterface : public cricket::ChannelInterface {
               (const webrtc::MediaContentDescription*, SdpType, std::string&),
               (override));
   MOCK_METHOD(bool, SetPayloadTypeDemuxingEnabled, (bool), (override));
-  MOCK_METHOD(const std::vector<cricket::StreamParams>&,
+  MOCK_METHOD(const std::vector<StreamParams>&,
               local_streams,
               (),
               (const, override));
-  MOCK_METHOD(const std::vector<cricket::StreamParams>&,
+  MOCK_METHOD(const std::vector<StreamParams>&,
               remote_streams,
               (),
               (const, override));
@@ -93,8 +90,10 @@ class MockChannelInterface : public cricket::ChannelInterface {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::MockChannelInterface;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // PC_TEST_MOCK_CHANNEL_INTERFACE_H_

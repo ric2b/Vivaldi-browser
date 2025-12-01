@@ -5,14 +5,11 @@
 //! Utilities to process `cargo metadata` dependency graph.
 
 use crate::{
-    config::BuildConfig,
-    crates,
-    gn::{target_spec_to_condition, Condition},
-    group::Group,
+    condition::Condition, config::BuildConfig, crates, group::Group,
+    inherit::find_inherited_privilege_group,
 };
 
 use anyhow::{bail, Context, Result};
-pub use cargo_metadata::DependencyKind;
 use guppy::{
     graph::cargo::{CargoOptions, CargoSet},
     graph::feature::{FeatureSet, StandardFeatures},
@@ -26,6 +23,7 @@ use itertools::Itertools;
 pub use semver::Version;
 use std::{
     collections::{HashMap, HashSet},
+    fmt::{self, Display},
     path::PathBuf,
 };
 
@@ -74,6 +72,12 @@ impl Package {
     }
 }
 
+impl Display for Package {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "`{}-{}`", &self.package_name, &self.version)
+    }
+}
+
 #[derive(Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct PackageId {
     name: String,
@@ -106,10 +110,13 @@ impl<'g> From<&PackageMetadata<'g>> for PackageId {
     }
 }
 
-impl From<&cargo_metadata::Package> for PackageId {
-    fn from(p: &cargo_metadata::Package) -> Self {
-        Self { name: p.name.clone(), version: p.version.clone() }
-    }
+/// How a package is depended on.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum DependencyKind {
+    /// A normal (i.e. production) dependency.
+    Normal,
+    /// A build-type dependency: proc macro or build.rs dep.
+    Build,
 }
 
 /// A dependency of a `Package`. Cross-references another `Package` entry in the
@@ -240,13 +247,15 @@ pub fn collect_dependencies(
     extra_config: &BuildConfig,
 ) -> Result<Vec<Package>> {
     // Ask `guppy` to run Cargo feature/dependency resolution.
+    let mut memoization_tables = MemoizationTables::new();
     let cargo_set = {
         let cargo_options = CargoOptions::new();
         let initials = resolve_root_package_set(graph, root_package_name)?
             .to_feature_set(StandardFeatures::Default);
         let no_extra_features = graph.resolve_none().to_feature_set(StandardFeatures::Default);
-        let resolver = PackageResolver { extra_config };
-        CargoSet::with_resolver(initials, no_extra_features, resolver, &cargo_options)?
+        let resolver =
+            PackageResolver { extra_config, memoization_tables: &mut memoization_tables };
+        CargoSet::with_package_resolver(initials, no_extra_features, resolver, &cargo_options)?
     };
     let cargo_set_links = cargo_set
         .build_dep_links()
@@ -257,23 +266,30 @@ pub fn collect_dependencies(
         .collect::<HashSet<_>>();
     let feature_set = cargo_set.target_features().union(cargo_set.host_features());
     let package_set = feature_set.to_package_set();
+    let root_id = cargo_set
+        .initials()
+        .to_package_set()
+        .root_ids(DependencyDirection::Forward)
+        .exactly_one()
+        .map_err(|_| ())
+        .expect("`resolve_root_package_set` should have verified `exactly_one` root");
 
     // Translate the packages into an internal `gnrt` representation.
     let is_toplevel_dep = |package: &PackageMetadata| -> bool {
         package.reverse_direct_links().any(|link| link.from().name() == root_package_name)
     };
-    let get_dependency_condition = |link: &PackageLink, dep_kind: DependencyKind| -> Condition {
-        let key = get_link_key(link);
-        if !cargo_set_links.contains(&key) {
-            return Condition::AlwaysFalse;
-        }
-        let dep_kind = match dep_kind {
-            cargo_metadata::DependencyKind::Normal => guppy::DependencyKind::Normal,
-            cargo_metadata::DependencyKind::Build => guppy::DependencyKind::Build,
-            _ => unreachable!(), // `gnrt` ignores other dependency kinds.
+    let mut get_dependency_condition =
+        |link: &PackageLink, dep_kind: DependencyKind| -> Condition {
+            let key = get_link_key(link);
+            if !cargo_set_links.contains(&key) {
+                return Condition::always_false();
+            }
+            let dep_kind = match dep_kind {
+                DependencyKind::Normal => guppy::DependencyKind::Normal,
+                DependencyKind::Build => guppy::DependencyKind::Build,
+            };
+            memoization_tables.get_link_condition(link, dep_kind)
         };
-        get_link_condition(link, dep_kind)
-    };
     let mut packages = package_set
         .packages(DependencyDirection::Forward)
         .filter(|package| package.name() != root_package_name)
@@ -286,12 +302,11 @@ pub fn collect_dependencies(
                 get_dependency_condition(link, DependencyKind::Build)
             });
             let dependency_kinds =
-                get_reverse_dependency_kinds(&package, &cargo_set, get_dependency_condition);
+                get_reverse_dependency_kinds(&package, &cargo_set, &mut get_dependency_condition);
 
             let BuildTargets { lib_target, bin_targets, build_script } =
                 get_build_targets(&package, extra_config).with_context(err_context)?;
-            let group = get_privilege_group(&package, extra_config, is_toplevel_dep)
-                .with_context(err_context)?;
+            let group = find_inherited_privilege_group(package.id(), root_id, graph, extra_config);
 
             Ok(Package {
                 package_name: package.name().to_string(),
@@ -339,9 +354,10 @@ fn resolve_root_package_set<'g>(
 }
 
 /// Graph traversal resolver that rejects dependency links that would have been
-/// `AlwaysFalse` on Chromium platforms.
+/// `Condition::is_always_false` on Chromium platforms.
 struct PackageResolver<'a> {
     extra_config: &'a BuildConfig,
+    memoization_tables: &'a mut MemoizationTables,
 }
 
 /// Gets the key to use in `cargo_set_links` `HashSet`.
@@ -351,15 +367,52 @@ fn get_link_key(link: &PackageLink) -> (PackageId, PackageId) {
     (from.into(), to.into())
 }
 
-fn get_link_condition(link: &PackageLink, dep_kind: guppy::DependencyKind) -> Condition {
-    let req = link.req_for_kind(dep_kind);
-    if !req.is_present() {
-        Condition::AlwaysFalse
-    } else {
-        Condition::or(
-            get_condition(req.status().required_status()),
-            get_condition(req.status().optional_status()),
-        )
+struct MemoizationTables {
+    package_conditions: HashMap<PackageId, Condition>,
+}
+
+impl MemoizationTables {
+    fn new() -> Self {
+        Self { package_conditions: HashMap::new() }
+    }
+
+    fn get_package_condition(&mut self, package: &PackageMetadata) -> Condition {
+        if let Some(condition) = self.package_conditions.get(&package.into()) {
+            return condition.clone();
+        }
+
+        let condition = package
+            .reverse_direct_links()
+            .flat_map(|link| {
+                [
+                    self.get_link_condition(&link, guppy::DependencyKind::Normal),
+                    self.get_link_condition(&link, guppy::DependencyKind::Build),
+                ]
+            })
+            .reduce(Condition::or)
+            .unwrap_or_else(Condition::always_true);
+        self.package_conditions.insert(package.into(), condition.clone());
+        condition
+    }
+
+    fn get_link_condition(
+        &mut self,
+        link: &PackageLink,
+        dep_kind: guppy::DependencyKind,
+    ) -> Condition {
+        let req = link.req_for_kind(dep_kind);
+        if !req.is_present() {
+            Condition::always_false()
+        } else {
+            let baseline_condition = self.get_package_condition(&link.from());
+            Condition::and(
+                baseline_condition,
+                Condition::or(
+                    get_condition(req.status().required_status()),
+                    get_condition(req.status().optional_status()),
+                ),
+            )
+        }
     }
 }
 
@@ -377,8 +430,9 @@ impl<'g> guppy::graph::PackageResolver<'g> for PackageResolver<'_> {
 
         // Check if the dependency is conditional, and reject the dependency if
         // the condition is never met on Chromium platforms.
-        let normal_condition = get_link_condition(&link, guppy::DependencyKind::Normal);
-        let build_condition = get_link_condition(&link, guppy::DependencyKind::Build);
+        let mut get_condition = |kind| self.memoization_tables.get_link_condition(&link, kind);
+        let normal_condition = get_condition(guppy::DependencyKind::Normal);
+        let build_condition = get_condition(guppy::DependencyKind::Build);
         if normal_condition.is_always_false() && build_condition.is_always_false() {
             return false;
         }
@@ -391,27 +445,19 @@ impl<'g> guppy::graph::PackageResolver<'g> for PackageResolver<'_> {
 fn get_reverse_dependency_kinds(
     package: &PackageMetadata,
     cargo_set: &CargoSet,
-    condition_getter: impl for<'a> Fn(&PackageLink<'a>, DependencyKind) -> Condition,
+    mut condition_getter: impl for<'a> FnMut(&PackageLink<'a>, DependencyKind) -> Condition,
 ) -> HashMap<DependencyKind, PerKindInfo> {
     let get_features = |feature_set: &FeatureSet| -> Vec<String> {
         feature_set
             .features_for(package.id())
             .unwrap()
-            .map(|feature_list| {
-                feature_list
-                    .named_features()
-                    // TODO(lukasza): Stop filtering out the "default" feature.
-                    // (The current behavior doesn't match `cargo`.)
-                    .filter(|&f| f != "default")
-                    .map(|s| s.to_string())
-                    .collect_vec()
-            })
+            .map(|feature_list| feature_list.named_features().map(|s| s.to_string()).collect_vec())
             .unwrap_or_default()
     };
     let mut result = HashMap::new();
     let mut insert_if_present = |link: PackageLink, kind: DependencyKind| {
         let condition = condition_getter(&link, kind);
-        if condition != Condition::AlwaysFalse {
+        if !condition.is_always_false() {
             let features = match kind {
                 // ... => `build.rs` deps only care about host-side features.
                 DependencyKind::Build => get_features(cargo_set.host_features()),
@@ -425,7 +471,6 @@ fn get_reverse_dependency_kinds(
                     .sorted()
                     .dedup()
                     .collect_vec(),
-                _ => unreachable!(),
             };
             let info: &mut PerKindInfo = result
                 .entry(kind)
@@ -445,26 +490,24 @@ fn get_reverse_dependency_kinds(
 fn get_condition(platform_status: PlatformStatus) -> Condition {
     use PlatformStatus::*;
     match platform_status {
-        Never => Condition::AlwaysFalse,
-        Always => Condition::AlwaysTrue,
+        Never => Condition::always_false(),
+        Always => Condition::always_true(),
         PlatformDependent { eval } => eval
             .target_specs()
             .iter()
-            .map(target_spec_to_condition)
-            .fold(Condition::AlwaysFalse, Condition::or),
+            .map(Condition::from_target_spec)
+            .fold(Condition::always_false(), Condition::or),
     }
 }
 
 fn get_package_dependencies(
     package: &PackageMetadata,
-    condition_getter: impl for<'a> Fn(&PackageLink<'a>) -> Condition,
+    mut condition_getter: impl for<'a> FnMut(&PackageLink<'a>) -> Condition,
 ) -> Vec<DepOfDep> {
     package
         .direct_links()
-        .filter_map(|link| match condition_getter(&link) {
-            Condition::AlwaysFalse => None,
-            other_condition => Some((link, other_condition)),
-        })
+        .map(|link| (link, condition_getter(&link)))
+        .filter(|&(_link, ref condition)| !condition.is_always_false())
         .map(|(link, condition)| DepOfDep {
             package_name: link.to().name().to_string(),
             use_name: link.resolved_name().to_string(),
@@ -563,110 +606,6 @@ impl std::fmt::Display for TargetType {
     }
 }
 
-fn get_privilege_group(
-    package: &PackageMetadata,
-    extra_config: &BuildConfig,
-    is_toplevel_dep: impl Fn(&PackageMetadata) -> bool,
-) -> Result<Group> {
-    // If the dependency is a top-level dep of Chromium, then it defaults to this
-    // privilege level.
-    // TODO: Default should be sandbox??
-    const DEFAULT_FOR_TOPLEVEL: Group = Group::Safe;
-
-    let package_name = package.name();
-    let get_group_from_config = |package: &PackageMetadata| -> Option<Group> {
-        extra_config.per_crate_config.get(package.name())?.group
-    };
-
-    // If `package` transitively depends on `Test` `descendant1` and `Safe`
-    // `descendant2`, then it is okay if `package` is just `Test` (but it can't
-    // be higher).  So `**max**_from_descendants = ...descendant-groups...
-    // **min**_by_key`.
-    //
-    // TODO(lukasza): Performance improvement opportunity.  Recomputing
-    // descendants / ancestors information for every `package` is simple and
-    // works, but is also inefficient.  If needed we should try caching this
-    // information somehow.
-    let max_from_descendants = package
-        .graph()
-        .query_forward([package.id()])?
-        .resolve()
-        .packages(DependencyDirection::Forward)
-        .filter_map(|p| get_group_from_config(&p).map(|group| (p.name(), group)))
-        .min_by_key(|(_package_name, group)| *group);
-
-    // If `Test` `ancestor1` and `Safe` `ancestor2` transitively depend on
-    // `package`, then package needs to be `Safe` or better (max of `Test` and
-    // `Safe`).  So `**min**_from_ancestors = ...ancestor-groups...
-    // **max**_by_key`.
-    let min_from_ancestors =
-        package
-            .graph()
-            .query_reverse([package.id()])?
-            .resolve()
-            .packages(DependencyDirection::Reverse)
-            .filter_map(|package| {
-                get_group_from_config(&package)
-                    .or_else(|| {
-                        if is_toplevel_dep(&package) {
-                            Some(DEFAULT_FOR_TOPLEVEL)
-                        } else {
-                            None
-                        }
-                    })
-                    .map(|group| (package.name(), group))
-            })
-            .max_by_key(|(_package_name, group)| *group);
-
-    let configured_group = get_group_from_config(package);
-    match configured_group {
-        None => match (min_from_ancestors, max_from_descendants) {
-            (None, None) => {
-                assert!(is_toplevel_dep(package));
-                Ok(DEFAULT_FOR_TOPLEVEL)
-            }
-            (Some((_, min_from_ancestors)), None) => Ok(min_from_ancestors),
-            (None, Some((_, max_from_descendants))) => Ok(max_from_descendants),
-            (
-                Some((ancestor_example, min_from_ancestors)),
-                Some((descendant_example, max_from_descendants)),
-            ) => {
-                if min_from_ancestors > max_from_descendants {
-                    bail!(
-                        "`{descendant_example}` is configured as `{max_from_descendants}`; \
-                         `{ancestor_example}` is configured as `{min_from_ancestors}`; \
-                         `{min_from_ancestors}` cannot transitively \
-                         depend on `max_from_descendants`."
-                    );
-                }
-                Ok(min_from_ancestors)
-            }
-        },
-        Some(configured_group) => {
-            if let Some((ancestor_example, min_from_ancestors)) = min_from_ancestors {
-                if min_from_ancestors > configured_group {
-                    bail!(
-                        "`{package_name}` is configured as `{configured_group}`; \
-                         `{ancestor_example}` is configured as `{min_from_ancestors}`; \
-                         `{min_from_ancestors}` cannot transitively depend on `configured`."
-                    );
-                }
-            }
-            if let Some((descendant_example, max_from_descendants)) = max_from_descendants {
-                if max_from_descendants < configured_group {
-                    bail!(
-                        "`{package_name}` is configured as `{configured_group}`; \
-                         `{descendant_example}` is configured as `{max_from_descendants}`; \
-                         `{configured_group}` cannot transitively \
-                         depend on `max_from_descendants`."
-                    );
-                }
-            }
-            Ok(configured_group)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::config::CrateConfig;
@@ -737,7 +676,7 @@ mod tests {
                 package_name: "bar".to_string(),
                 use_name: "baz".to_string(),
                 version: Version::new(0, 1, 0),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
         assert_eq!(
@@ -746,7 +685,7 @@ mod tests {
                 package_name: "time".to_string(),
                 use_name: "time".to_string(),
                 version: Version::new(0, 3, 14),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
 
@@ -756,7 +695,7 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(0, 2, 133));
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["std"],
+            &["default", "std"],
         );
 
         i += 1;
@@ -767,7 +706,7 @@ mod tests {
         assert_eq!(dependencies[i].group, Group::Safe);
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["std"]
+            &["default", "std"]
         );
         assert_eq!(dependencies[i].build_dependencies.len(), 1);
         assert_eq!(
@@ -776,7 +715,7 @@ mod tests {
                 package_name: "autocfg".to_string(),
                 use_name: "autocfg".to_string(),
                 version: Version::new(1, 1, 0),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
         assert!(dependencies[i].build_script.as_ref().is_some_and(|path| {
@@ -800,7 +739,7 @@ mod tests {
         assert!(dependencies[i].is_toplevel_dep);
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["alloc", "race", "std"]
+            &["alloc", "default", "race", "std"]
         );
 
         i += 1;
@@ -809,7 +748,7 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(1, 0, 40));
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["proc-macro"]
+            &["default", "proc-macro"]
         );
         assert!(dependencies[i].build_script.as_ref().is_some_and(|path| {
             assert!(path.ends_with("proc-macro2-1.0.40/build.rs"));
@@ -822,7 +761,7 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(1, 0, 20));
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["proc-macro"]
+            &["default", "proc-macro"]
         );
 
         i += 1;
@@ -833,7 +772,7 @@ mod tests {
         assert_eq!(dependencies[i].group, Group::Safe);
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["derive", "serde_derive", "std"]
+            &["default", "derive", "serde_derive", "std"]
         );
         assert_eq!(dependencies[i].dependencies.len(), 1);
         assert_eq!(dependencies[i].build_dependencies.len(), 0);
@@ -843,7 +782,7 @@ mod tests {
                 package_name: "serde_derive".to_string(),
                 use_name: "serde_derive".to_string(),
                 version: Version::new(1, 0, 139),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
 
@@ -853,7 +792,7 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(1, 0, 139));
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            empty_str_slice
+            &["default"],
         );
         assert!(!dependencies[i].is_toplevel_dep);
         assert_eq!(dependencies[i].group, Group::Safe);
@@ -865,7 +804,7 @@ mod tests {
                 package_name: "proc-macro2".to_string(),
                 use_name: "proc_macro2".to_string(),
                 version: Version::new(1, 0, 40),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
         assert_eq!(
@@ -874,7 +813,7 @@ mod tests {
                 package_name: "quote".to_string(),
                 use_name: "quote".to_string(),
                 version: Version::new(1, 0, 20),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
         assert_eq!(
@@ -883,7 +822,7 @@ mod tests {
                 package_name: "syn".to_string(),
                 use_name: "syn".to_string(),
                 version: Version::new(1, 0, 98),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
 
@@ -894,7 +833,7 @@ mod tests {
         assert!(!dependencies[i].is_toplevel_dep);
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["clone-impls", "derive", "parsing", "printing", "proc-macro", "quote"]
+            &["clone-impls", "default", "derive", "parsing", "printing", "proc-macro", "quote"]
         );
         assert_eq!(dependencies[i].dependencies.len(), 3);
         assert_eq!(dependencies[i].build_dependencies.len(), 0);
@@ -904,7 +843,7 @@ mod tests {
                 package_name: "proc-macro2".to_string(),
                 use_name: "proc_macro2".to_string(),
                 version: Version::new(1, 0, 40),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
         assert_eq!(
@@ -913,7 +852,7 @@ mod tests {
                 package_name: "quote".to_string(),
                 use_name: "quote".to_string(),
                 version: Version::new(1, 0, 20),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
         assert_eq!(
@@ -922,7 +861,7 @@ mod tests {
                 package_name: "unicode-ident".to_string(),
                 use_name: "unicode_ident".to_string(),
                 version: Version::new(1, 0, 1),
-                condition: Condition::AlwaysTrue,
+                condition: Condition::always_true(),
             }
         );
 
@@ -937,14 +876,12 @@ mod tests {
         );
         assert_eq!(dependencies[i].dependencies.len(), 1);
         assert_eq!(dependencies[i].build_dependencies.len(), 0);
+        assert_eq!(dependencies[i].dependencies[0].package_name, "winapi-util");
+        assert_eq!(dependencies[i].dependencies[0].use_name, "winapi_util");
+        assert_eq!(dependencies[i].dependencies[0].version, Version::new(0, 1, 5));
         assert_eq!(
-            dependencies[i].dependencies[0],
-            DepOfDep {
-                package_name: "winapi-util".to_string(),
-                use_name: "winapi_util".to_string(),
-                version: Version::new(0, 1, 5),
-                condition: Condition::Expr("is_win".to_string()),
-            }
+            dependencies[i].dependencies[0].condition.to_handlebars_value().unwrap(),
+            Some("is_win".to_string()),
         );
 
         i += 1;
@@ -955,26 +892,20 @@ mod tests {
         assert_eq!(dependencies[i].group, Group::Test);
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["alloc", "std"]
+            &["alloc", "default", "std"]
         );
         assert_eq!(dependencies[i].dependencies.len(), 2);
+        assert_eq!(dependencies[i].dependencies[0].package_name, "libc");
+        assert_eq!(dependencies[i].dependencies[0].version, Version::new(0, 2, 133));
         assert_eq!(
-            dependencies[i].dependencies[0],
-            DepOfDep {
-                package_name: "libc".to_string(),
-                use_name: "libc".to_string(),
-                version: Version::new(0, 2, 133),
-                condition: Condition::Expr("!is_win".to_string()),
-            }
+            dependencies[i].dependencies[0].condition.to_handlebars_value().unwrap(),
+            Some("!is_win".to_string()),
         );
+        assert_eq!(dependencies[i].dependencies[1].package_name, "num_threads");
+        assert_eq!(dependencies[i].dependencies[1].version, Version::new(0, 1, 6));
         assert_eq!(
-            dependencies[i].dependencies[1],
-            DepOfDep {
-                package_name: "num_threads".to_string(),
-                use_name: "num_threads".to_string(),
-                version: Version::new(0, 1, 6),
-                condition: Condition::Expr("!is_win".to_string()),
-            }
+            dependencies[i].dependencies[1].condition.to_handlebars_value().unwrap(),
+            Some("!is_win".to_string()),
         );
 
         i += 1;
@@ -1014,19 +945,16 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(0, 1, 5));
         assert!(dependencies[i].dependency_kinds.get(&DependencyKind::Normal).is_some_and(|d| {
             assert_eq!(d.features, empty_str_slice);
-            assert_eq!(d.condition, Condition::Expr("is_win".to_string()));
+            assert_eq!(d.condition.to_handlebars_value().unwrap(), Some("is_win".to_string()),);
             true
         }));
         assert_eq!(dependencies[i].dependencies.len(), 1);
         assert_eq!(dependencies[i].build_dependencies.len(), 0);
+        assert_eq!(dependencies[i].dependencies[0].package_name, "winapi");
+        assert_eq!(dependencies[i].dependencies[0].version, Version::new(0, 3, 9));
         assert_eq!(
-            dependencies[i].dependencies[0],
-            DepOfDep {
-                package_name: "winapi".to_string(),
-                use_name: "winapi".to_string(),
-                version: Version::new(0, 3, 9),
-                condition: Condition::Expr("is_win".to_string()),
-            }
+            dependencies[i].dependencies[0].condition.to_handlebars_value().unwrap(),
+            Some("is_win".to_string()),
         );
 
         i += 1;
@@ -1052,7 +980,7 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(0, 2, 133));
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["std"]
+            &["default", "std"]
         );
 
         i += 1;
@@ -1066,7 +994,7 @@ mod tests {
         assert_eq!(dependencies[i].version, Version::new(0, 3, 14));
         assert_eq!(
             dependencies[i].dependency_kinds.get(&DependencyKind::Normal).unwrap().features,
-            &["alloc", "std"]
+            &["alloc", "default", "std"]
         );
 
         i += 1;
@@ -1089,7 +1017,6 @@ mod tests {
 
         // Verify that `num_threads` got removed.
         for package in dependencies.iter() {
-            dbg!(&package.package_name);
             assert_ne!(package.package_name, "num_threads");
             assert!(!package
                 .build_dependencies
@@ -1178,4 +1105,28 @@ mod tests {
     // `gnrt/sample_package2` directory.  See the `Cargo.toml` for more
     // information.
     static SAMPLE_CARGO_METADATA2: &str = include_str!("test_metadata2.json");
+
+    #[test]
+    fn collect_dependencies_on_sample_output3() {
+        let config = BuildConfig::default();
+        let metadata = PackageGraph::from_json(SAMPLE_CARGO_METADATA3).unwrap();
+        let dependencies = collect_dependencies(&metadata, "sample_package3", &config).unwrap();
+        let dependencies = dependencies
+            .into_iter()
+            .map(|package| (package.package_name.to_string(), package))
+            .collect::<HashMap<_, _>>();
+        assert!(!dependencies.contains_key("windows_aarch64_gnullvm"));
+        assert!(dependencies.contains_key("windows_aarch64_msvc"));
+        assert!(!dependencies.contains_key("windows_i686_gnu"));
+        assert!(!dependencies.contains_key("windows_i686_gnullvm"));
+        assert!(dependencies.contains_key("windows_i686_msvc"));
+        assert!(!dependencies.contains_key("windows_x86_64_gnu"));
+        assert!(!dependencies.contains_key("windows_x86_64_gnullvm"));
+        assert!(dependencies.contains_key("windows_x86_64_msvc"));
+    }
+
+    // `test_metadata3.json` contains the output of `cargo metadata` run in
+    // `gnrt/sample_package3` directory.  See the `Cargo.toml` for more
+    // information.
+    static SAMPLE_CARGO_METADATA3: &str = include_str!("test_metadata3.json");
 }

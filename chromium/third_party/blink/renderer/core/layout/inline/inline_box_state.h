@@ -250,6 +250,7 @@ class CORE_EXPORT InlineLayoutStateStack {
   // a box tree.
   void CreateBoxFragments(const ConstraintSpace&,
                           LogicalLineItems*,
+                          LayoutUnit line_box_line_height,
                           bool is_opaque);
 
 #if DCHECK_IS_ON()
@@ -321,7 +322,7 @@ class CORE_EXPORT InlineLayoutStateStack {
     unsigned fragment_start;
     unsigned fragment_end;
     // Ruby columns in the above range.
-    Member<HeapVector<Member<LogicalRubyColumn>>> ruby_column_list;
+    Member<GCedHeapVector<Member<LogicalRubyColumn>>> ruby_column_list;
 
     Member<const InlineItem> item;
     LogicalRect rect;
@@ -345,6 +346,7 @@ class CORE_EXPORT InlineLayoutStateStack {
 
     const LayoutResult* CreateBoxFragment(const ConstraintSpace&,
                                           LogicalLineItems*,
+                                          LayoutUnit line_box_line_height,
                                           bool is_opaque = false);
     void Trace(Visitor* visitor) const;
   };

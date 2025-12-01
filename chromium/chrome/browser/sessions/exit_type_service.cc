@@ -215,13 +215,16 @@ ExitTypeService::ExitTypeService(Profile* profile)
       base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
           FROM_HERE,
           base::BindOnce(
-              [](ExitTypeService* service) {
-                if (service && service->profile()) {
-                  service->profile()->GetPrefs()->SetString(
-                      prefs::kSessionExitType, kPrefExitTypeCrashedOnlyOnce);
+              [](base::WeakPtr<Profile> weak_profile) {
+                // NOTE(onrej@vivaldi.com): VB-117683 - profile may disappear
+                // during the delay, using WeakPtr.
+                Profile* p = weak_profile.get();
+                if (p) {
+                  p->GetPrefs()->SetString(prefs::kSessionExitType,
+                                           kPrefExitTypeCrashedOnlyOnce);
                 }
               },
-              base::Unretained(this)),
+              profile->GetWeakPtr()),
           kOutOfCrashLoopTimeout);
     }
   } else {

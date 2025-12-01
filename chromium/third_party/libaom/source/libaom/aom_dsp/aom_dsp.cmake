@@ -181,6 +181,11 @@ if(CONFIG_AV1_ENCODER)
               "${AOM_ROOT}/aom_dsp/variance.c"
               "${AOM_ROOT}/aom_dsp/variance.h")
 
+  if(CONFIG_HIGHWAY)
+    list(APPEND AOM_DSP_ENCODER_SOURCES "${AOM_ROOT}/aom_dsp/reduce_sum_hwy.h"
+                "${AOM_ROOT}/aom_dsp/sad_hwy.h")
+  endif()
+
   # Flow estimation library and grain/noise table/model.
   if(NOT CONFIG_REALTIME_ONLY)
     list(APPEND AOM_DSP_ENCODER_SOURCES
@@ -258,6 +263,13 @@ if(CONFIG_AV1_ENCODER)
               "${AOM_ROOT}/aom_dsp/x86/obmc_variance_avx2.c"
               "${AOM_ROOT}/aom_dsp/x86/blk_sse_sum_avx2.c"
               "${AOM_ROOT}/aom_dsp/x86/sum_squares_avx2.c")
+
+  if(CONFIG_HIGHWAY)
+    list(APPEND AOM_DSP_ENCODER_INTRIN_AVX2
+                "${AOM_ROOT}/aom_dsp/x86/sad_hwy_avx2.cc")
+    list(APPEND AOM_DSP_ENCODER_INTRIN_AVX512
+                "${AOM_ROOT}/aom_dsp/x86/sad_hwy_avx512.cc")
+  endif()
 
   list(APPEND AOM_DSP_ENCODER_INTRIN_AVX
               "${AOM_ROOT}/aom_dsp/x86/aom_quantize_avx.c")
@@ -479,6 +491,12 @@ function(setup_aom_dsp_targets)
       add_intrinsics_object_library("-mavx2" "avx2" "aom_dsp_encoder"
                                     "AOM_DSP_ENCODER_INTRIN_AVX2")
     endif()
+  endif()
+
+  if(HAVE_AVX512 AND CONFIG_AV1_ENCODER AND CONFIG_HIGHWAY)
+    add_intrinsics_object_library("-march=skylake-avx512" "avx512"
+                                  "aom_dsp_encoder"
+                                  "AOM_DSP_ENCODER_INTRIN_AVX512")
   endif()
 
   if(HAVE_NEON)

@@ -57,6 +57,9 @@ struct ToastParams {
   std::unique_ptr<ui::MenuModel> menu_model;
 };
 
+// Manages the toast that is displayed for a particular browser. Only one toast
+// can be displayed at a time. Subsequent calls to MaybeShowToast() will dismiss
+// the current toast and automatically display the requested one.
 class ToastController : public views::WidgetObserver,
                         public FullscreenObserver,
                         public OmniboxTabHelper::Observer,
@@ -95,10 +98,12 @@ class ToastController : public views::WidgetObserver,
   void WebContentsDestroyed() override;
 
   views::Widget* GetToastWidgetForTesting() { return toast_widget_; }
-
   toasts::ToastView* GetToastViewForTesting() { return toast_view_; }
 
   base::OneShotTimer* GetToastCloseTimerForTesting();
+
+  static constexpr base::TimeDelta kToastDefaultTimeout = base::Seconds(4);
+  static constexpr base::TimeDelta kToastWithActionTimeout = base::Seconds(8);
 
  private:
   void OnActiveTabChanged(BrowserWindowInterface* browser_interface);
@@ -118,6 +123,7 @@ class ToastController : public views::WidgetObserver,
 
   const raw_ptr<BrowserWindowInterface> browser_window_interface_;
   const raw_ptr<const ToastRegistry> toast_registry_;
+  // Used to transition between the current toast and the queued one.
   std::optional<ToastParams> next_toast_params_;
   std::optional<ToastId> currently_showing_toast_id_;
   base::OneShotTimer toast_close_timer_;

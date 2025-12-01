@@ -121,26 +121,26 @@ class OnDeviceInternalsToolsElement extends CrLitElement {
   }
 
   private capabilities_: Capabilities = {imageInput: false, audioInput: false};
-  protected contextExpanded_: boolean = false;
-  protected contextLength_: number = 0;
-  protected contextText_: string = '';
-  protected currentResponse_: Response|null = null;
-  protected error_: string = '';
-  protected imageError_: string = '';
+  protected accessor contextExpanded_: boolean = false;
+  protected accessor contextLength_: number = 0;
+  protected accessor contextText_: string = '';
+  protected accessor currentResponse_: Response|null = null;
+  protected accessor error_: string = '';
+  protected accessor imageError_: string = '';
   private loadModelDuration_: number = -1;
-  private loadModelStart_: number = 0;
-  private modelPath_: string = '';
-  protected model_: OnDeviceModelRemote|null = null;
-  protected performanceClassText_: string = 'Loading...';
-  protected responses_: Response[] = [];
-  protected temperature_: number = 0;
-  protected text_: string = '';
-  protected topK_: number = 1;
-  protected imageFile_: File|null = null;
-  protected audioFile_: File|null = null;
-  protected audioError_: string = '';
-  protected performanceHint_: string = 'kHighestQuality';
-  private loadedPerformanceHint_: ModelPerformanceHint|null = null;
+  private accessor loadModelStart_: number = 0;
+  private accessor modelPath_: string = '';
+  protected accessor model_: OnDeviceModelRemote|null = null;
+  protected accessor performanceClassText_: string = 'Loading...';
+  protected accessor responses_: Response[] = [];
+  protected accessor temperature_: number = 0;
+  protected accessor text_: string = '';
+  protected accessor topK_: number = 1;
+  protected accessor imageFile_: File|null = null;
+  protected accessor audioFile_: File|null = null;
+  protected accessor audioError_: string = '';
+  protected accessor performanceHint_: string = 'kHighestQuality';
+  private accessor loadedPerformanceHint_: ModelPerformanceHint|null = null;
 
   private session_: SessionRemote|null = null;
   private proxy_: BrowserProxy = BrowserProxy.getInstance();
@@ -289,7 +289,6 @@ class OnDeviceInternalsToolsElement extends CrLitElement {
     this.session_.append(
         {
           maxTokens: 0,
-          tokenOffset: 0,
           input: {pieces: textToInputPieces(this.contextText_)},
         },
         null);
@@ -407,15 +406,13 @@ class OnDeviceInternalsToolsElement extends CrLitElement {
     clonedSession.append(
         {
           maxTokens: 0,
-          tokenOffset: 0,
           input: {pieces: pieces},
         },
         null);
     clonedSession.generate(
         {
           maxOutputTokens: 0,
-          topK: null,
-          temperature: null,
+          constraint: null,
         },
         this.responseRouter_.$.bindNewPipeAndPassRemote());
     const onResponseId =

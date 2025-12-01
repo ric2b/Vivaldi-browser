@@ -302,10 +302,6 @@ class DenseSet {
       return a.index_ == b.index_;
     }
 
-    friend constexpr bool operator!=(const Iterator& a, const Iterator& b) {
-      return !(a == b);
-    }
-
     constexpr T operator*() const {
       DCHECK(dereferenceable());
       return index_to_value(index_);
@@ -402,7 +398,7 @@ class DenseSet {
   }
 
   // Returns a raw bitmask. Useful for serialization.
-  constexpr base::span<const Word, kNumWords> data() const {
+  constexpr base::span<const Word, kNumWords> data() const LIFETIME_BOUND {
     return bitset_.data();
   }
 

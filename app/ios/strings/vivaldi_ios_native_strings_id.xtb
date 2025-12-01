@@ -46,6 +46,7 @@
 <translation id="1470330357709335121">Vivaldi lambat atau lamban</translation>
 <translation id="1502492982318476895">Sinkronisasi gagal: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">alamat email pemulihan Anda.</translation>
+<translation id="1534183273237573805">Dengan memilih salah satu mesin telusur ini, Anda mendukung pengembangan Vivaldi.</translation>
 <translation id="1535446875484049224">Mode gelap tidak berfungsi atau mengalami gangguan</translation>
 <translation id="1567659716528258242">Vivaldi memanaskan perangkat saya</translation>
 <translation id="156793582229023040">Saya mengkhawatirkan pelacakan atau pengumpulan data</translation>
@@ -75,6 +76,7 @@
 <translation id="1809939268435598390">Hapus Folder</translation>
 <translation id="1813686536470127172">Folder lain</translation>
 <translation id="1828800626900562968">Ketuk ikon plus di bawah ini untuk membuka tab baru.</translation>
+<translation id="1852679645333476285">Izinkan pemutaran media di latar belakang</translation>
 <translation id="1861262398884155592">Folder ini kosong</translation>
 <translation id="1871058849247304245">Tingkat perbesaran untuk <ph name="HOST" /></translation>
 <translation id="1921508034244765766">Vivaldi lambat, macet, atau memanaskan perangkat</translation>
@@ -88,16 +90,20 @@
 <translation id="2048247880942380698">Arab (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Urung</translation>
 <translation id="2129408066358825297">Umur</translation>
+<translation id="2138901399878617625">Tanam pohon saat menelusuri</translation>
 <translation id="2148384276939959392">Sinkronisasi Dipilih</translation>
 <translation id="2195713384412091023">Ini akan menghapus semua data sinkronisasi yang disimpan di server kami, mengatur ulang sandi enkripsi Anda, dan mengeluarkan Anda.</translation>
 <translation id="2228584369802328636">Permainan</translation>
+<translation id="2240680014596059312">Privat. Cepat. Iklan lebih sedikit.</translation>
 <translation id="2243210264130642074">Catatan disimpan</translation>
 <translation id="2272338747456392228">Akun telah dikunci</translation>
 <translation id="2273327106802955778">Menu lebih banyak</translation>
 <translation id="2283599456633275070">Perjalanan</translation>
 <translation id="2324160330092901720">Kode verifikasi telah dikirimkan ke <ph name="EMAIL_ID" /></translation>
 <translation id="2324257568471626606">Mesin Telusur baru</translation>
+<translation id="2326657631721795616">Anda tetap dapat mendukung Vivaldi dengan cukup memilih mesin telusur yang independen dan fokus pada privasi:</translation>
 <translation id="2330644510603114741">Perilaku Tab</translation>
+<translation id="233493642829799329">Jika mengubah ini, Anda mungkin perlu memuat ulang beberapa tab</translation>
 <translation id="2336309953058658733">Kosongkan sampah</translation>
 <translation id="2359808026110333948">Lanjutkan</translation>
 <translation id="2386793615875593361">1 dipilih</translation>
@@ -174,7 +180,6 @@ diblokir</translation>
 <translation id="3270930591809084274">Tab yang Disinkronkan</translation>
 <translation id="3285898158753554866">Salin Hasil Terjemahan</translation>
 <translation id="3335772982573114336">Catatan baru</translation>
-<translation id="3337207574172839542">Izinkan Saran Telusur</translation>
 <translation id="33451081266695216">Koneksi dicekik oleh server.</translation>
 <translation id="3346386541263128307">Alamat email perlu dicocokkan.</translation>
 <translation id="3363375699928395745">Masukkan Judul</translation>
@@ -253,6 +258,7 @@ diblokir</translation>
 <translation id="4152011295694446843">Anda akan menemukan penanda Anda di sini</translation>
 <translation id="4152623049003960417">Rincian pelacak</translation>
 <translation id="4176463684765177261">Dinonaktifkan</translation>
+<translation id="4181792832006033883">Vivaldi ditenagai penggunanya, bukan Raksasa Teknologi atau investor. Setiap donasi langsung mendukung misi kami demi internet terbuka dan pribadi. Jadilah bagian perjuangan.</translation>
 <translation id="4184746246941929945">Vivaldi telah bekerja sama dengan <ph name="PARTNER_NAME" /> untuk tidak memblokir iklan di halaman ini. Iklan-iklan ini dapat membantu pengembangan Vivaldi.</translation>
 <translation id="4193549853510262477">Deteksi Otomatis</translation>
 <translation id="4209092469652827314">Besar</translation>
@@ -269,6 +275,7 @@ diblokir</translation>
 <translation id="4316955624679873896">Ditandai di</translation>
 <translation id="432696242656678770">Rusia (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Spanyol (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Bersama kami demi web yang lebih baik</translation>
 <translation id="4376661454588260127">Vietnam (<ph name="ORIGIN" />)</translation>
 <translation id="4380745054983890306">Saya berharap bisa menyimpan halaman sebagai PDF</translation>
 <translation id="4394049700291259645">Nonaktifkan</translation>
@@ -287,6 +294,7 @@ diblokir</translation>
 <translation id="4525945044609022380">Email ini sudah tersambung dengan akun lainnya.</translation>
 <translation id="4526803704855831732">Tab Pribadi</translation>
 <translation id="4542001945479572846">Hal lainnya</translation>
+<translation id="4548278119881373657">Konfirmasi pilihan</translation>
 <translation id="4553717494760925411">Navigasi Kembali</translation>
 <translation id="4563480492836333884">Email tidak diterima. Harap gunakan domain berbeda.</translation>
 <translation id="457386861538956877">Lebih banyak...</translation>
@@ -341,6 +349,7 @@ diblokir</translation>
 <translation id="5094376253685335202">Aktifkan Sinkronisasi</translation>
 <translation id="5116316489033177455">Sinkronkan penanda dan Panggilan Cepat</translation>
 <translation id="5122095890854520072">Latvia (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">100% donasi Anda akan dipakai untuk mengembangkan Vivaldi dalam jangka panjang dan demi berjuang demi web yang lebih baik.</translation>
 <translation id="5153806174841856652">Gagal Masuk</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Kirim Ulang Kode<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Tampilkan Situs Teratas</translation>
@@ -402,19 +411,25 @@ diblokir</translation>
  Buka pengaturan untuk memperbaikinya.</translation>
 <translation id="604930981600990598">Terjemahan Disalin!</translation>
 <translation id="6052689967593623141">Vivaldi mungkin mendapatkan komisi afiliasi jika Anda membayar setelah mengklik tautan ini. Ini membantu pengembangan Vivaldi dan menjadikannya tetap independen. Terima kasih atas dukungan Anda!</translation>
+<translation id="6056094614114332761">Saran Bidang Alamat</translation>
 <translation id="6077943432358741146">Panggilan Cepat</translation>
 <translation id="6079696972035130497">Tidak Terbatas</translation>
+<translation id="6093557041367452381">Tampilkan riwayat terketik Anda saat Bidang Alamat fokus pada Halaman Awal.</translation>
 <translation id="6110857187283700804">Masukan Anda dikirim ke layanan telusuran Anda sebagai saran. Fitur ini mati di jendela pribadi.</translation>
+<translation id="6119047040189002834">Jauhi pengawasan dan pilih mesin telusur yang cocok dengan nilai Anda:</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> item dipindahkan</translation>
 <translation id="6147094071357011481">Tab yang Baru Saja Ditutup Tidak Tersedia</translation>
+<translation id="6171727814244883097">Cara termudah mendukung kami</translation>
 <translation id="6177301865411451337">Layanan Sinkronisasi Vivaldi mungkin sedang mengalami masalah. Dapatkan kabar layanan di: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Saya kesulitan menyimpan website sebagai Panggil Cepat</translation>
 <translation id="6193995664633100765">India (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">Donasi sekarang</translation>
 <translation id="6224086034182508647">Opsi tampilan situs web</translation>
 <translation id="6253990869902066991">Vivaldi memuat ulang halaman web secara tidak terduga</translation>
 <translation id="6257488392933423163">Lihat sebagai HTML</translation>
 <translation id="6275978505813092431">Masukkan Gambar</translation>
 <translation id="6329717714920146925">Situs Web (Lihat Saja)</translation>
+<translation id="6346549829676591152">Aktifkan Riwayat Telusur</translation>
 <translation id="6365929278691047681">Jerman (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">Tata letak situs web rusak dan terlihat aneh</translation>
 <translation id="6383855939619098095">Susah untuk mengatur Start Page-nya Vivaldi</translation>
@@ -481,6 +496,7 @@ diblokir</translation>
 <translation id="711946737922560234">Masukkan Tautan</translation>
 <translation id="7120229714826964836">Bagikan Halaman</translation>
 <translation id="713792263829536729">Layanan streaming tidak berfungsi dengan baik</translation>
+<translation id="7142332680286898952">Tampilkan Riwayat Terketik</translation>
 <translation id="7158507293261405349">Tambah Grup Baru</translation>
 <translation id="7173114856073700355">Buka Pengaturan</translation>
 <translation id="718052827125696482">Layar tidak berputar dengan baik</translation>
@@ -506,7 +522,6 @@ diblokir</translation>
 <translation id="7393145587390257456">Pemblokir iklan tidak berfungsi dengan baik</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Mesin telusur akan diatur ulang ke pengaturan bawaan, juga akan mengatur ulang mesin telusur khusus Anda.</translation>
-<translation id="7418655219500602072">Prioritas Bidang Alamat</translation>
 <translation id="7451784507428459503">Video YouTube tidak dapat diputar atau memiliki masalah</translation>
 <translation id="7454640759045234067">Pelacak diblokir</translation>
 <translation id="7461899062138731833">SUMBER</translation>
@@ -541,7 +556,9 @@ diblokir</translation>
 <translation id="7791543448312431591">Tambah</translation>
 <translation id="7801111502975417831">Saya ingin bisa memutar video di latar belakang</translation>
 <translation id="7801204999757211519">Sudah punya akun? <ph name="BEGIN_LINK" />Masuk ➔<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Tidak terima kasih</translation>
 <translation id="7850070199083838600">Buat Grup baru?</translation>
+<translation id="7862984977194621600">Aktifkan Saran Telusur</translation>
 <translation id="7870765213383950011">Grup Pertama</translation>
 <translation id="7914995060146784406">Edit Catatan</translation>
 <translation id="7925340978147141704">Tampilkan Sandi</translation>
@@ -568,6 +585,7 @@ diblokir</translation>
 <translation id="8147118677117542370">Silakan masukkan umur Anda.</translation>
 <translation id="8165573437634525334">Data diamankan dengan kata sandi enkripsi</translation>
 <translation id="8237090677709100373">Kode Warna Khusus</translation>
+<translation id="8255101384731542819">Telusur independen, dibangun di Perancis</translation>
 <translation id="8257908958623224237">Konflik dengan data lain.</translation>
 <translation id="8261506727792406068">Hapus</translation>
 <translation id="8273666073173891138">Catatan disimpan ke <ph name="FOLDER_TITLE" /></translation>
@@ -575,6 +593,7 @@ diblokir</translation>
 <translation id="8284356787013856231">Izin untuk membuka berkas ditolak</translation>
 <translation id="8289933454364510719">Atas atau Bawah</translation>
 <translation id="8304044605002588416">Sesuaikan tombol Halaman Awal</translation>
+<translation id="8304538706952727936">Bebaskan diri dari Raksasa Teknologi</translation>
 <translation id="8323167517179506834">Ketik URL</translation>
 <translation id="8326104954595890674">Tab Pribadi Baru</translation>
 <translation id="8329813750766387010">Diperbarui: <ph name="DATE" /></translation>
@@ -617,7 +636,9 @@ diblokir</translation>
 <translation id="8818152010000655963">Wallpaper</translation>
 <translation id="8819841443522803117">Waktunya mengganti peramban standar Anda? Pilih Vivaldi.</translation>
 <translation id="8820817407110198400">Bookmark</translation>
+<translation id="8828442094222036738">Hasil telusur Google pribadi, dibuat di Eropa</translation>
 <translation id="8855707633300847215">Tampilkan Bilah Tab</translation>
+<translation id="8861211142470908937">Minimum panjang sandi harus 12 karakter</translation>
 <translation id="8892354889971902600">Tab yang baru saja ditutup akan tampil di sini.</translation>
 <translation id="89390081013973080">Semua siap! Saatnya memutuskan data apa yang akan disinkronkan antar perangkat.</translation>
 <translation id="8948792607467387336">Pilih Wallpaper</translation>

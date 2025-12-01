@@ -10,11 +10,20 @@
 
 #include "modules/rtp_rtcp/source/video_rtp_depacketizer_vp8.h"
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+
 #include "api/array_view.h"
+#include "api/video/video_codec_type.h"
+#include "api/video/video_frame_type.h"
 #include "modules/rtp_rtcp/source/rtp_format_vp8.h"
 #include "modules/rtp_rtcp/source/rtp_packet_to_send.h"
+#include "modules/rtp_rtcp/source/rtp_video_header.h"
+#include "modules/rtp_rtcp/source/video_rtp_depacketizer.h"
+#include "modules/video_coding/codecs/interface/common_constants.h"
+#include "modules/video_coding/codecs/vp8/include/vp8_globals.h"
 #include "rtc_base/copy_on_write_buffer.h"
-#include "test/gmock.h"
 #include "test/gtest.h"
 
 // VP8 payload descriptor
@@ -223,7 +232,7 @@ TEST(VideoRtpDepacketizerVp8Test, ReferencesInputCopyOnWriteBuffer) {
   packet[1] = 0b1111'0000;  // with all extensions,
   packet[2] = 15;           // and one-byte picture id.
 
-  rtc::CopyOnWriteBuffer rtp_payload(packet);
+  CopyOnWriteBuffer rtp_payload(packet);
   VideoRtpDepacketizerVp8 depacketizer;
   std::optional<VideoRtpDepacketizer::ParsedRtpPayload> parsed =
       depacketizer.Parse(rtp_payload);
@@ -235,7 +244,7 @@ TEST(VideoRtpDepacketizerVp8Test, ReferencesInputCopyOnWriteBuffer) {
 }
 
 TEST(VideoRtpDepacketizerVp8Test, FailsOnEmptyPayload) {
-  rtc::ArrayView<const uint8_t> empty;
+  ArrayView<const uint8_t> empty;
   RTPVideoHeader video_header;
   EXPECT_EQ(VideoRtpDepacketizerVp8::ParseRtpPayload(empty, &video_header), 0);
 }

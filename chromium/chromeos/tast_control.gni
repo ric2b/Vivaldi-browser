@@ -53,9 +53,6 @@ tast_disabled_tests_from_chrome_all = [
   "arc.CheckAndroidVersion",
   "arc.Downloads",
 
-  # b/296913657
-  "secagentd.ProcessEvents@amd64-generic",
-
   # b/293976130, NaCl issues on arm64 boards
   "nacl.Pnacl@jacuzzi",
   "nacl.Pnacl@trogdor",
@@ -96,18 +93,17 @@ tast_disabled_tests_from_chrome_all = [
   #b/400849446
   "network.ARCCreateWifiInShillByCmd.manual_proxy",
 
-  # b/404605466, Failing on reven-vmtest, blocking uprev.
-  "flex.HWIS",
+  # b/408102591
+  "network.ARCEAPWifiProvisioning.eap_wifi_tls",
 
-  # b/404564227, Failing on jacuzzi, blocking uprev.
-  "oobe.SmokeEndToEnd",
+  # b/409064294
+  "apps.SystemWebAppsInstallGuest",
+  "peripherals.LaunchAppFromGuestSession.diagnostics",
+  "health.MonitorKeyboardDiagnosticEvent.tablet_mode_form_factors",
+  "health.MonitorKeyboardDiagnosticEvent.non_tablet_mode_form_factors",
 
-  # b/404950758, Flaky, blocking uprev.
-  "secagentd.AuthenticationEvents",
-
-  # b/405201316, Culprit found, but fix is tricky so disabling temporarily.
-  "terminal.SSH",
-  "arc.Print.vm_t",
+  # b/409349162
+  "inputs.PhysicalKeyboardKoreanTyping@jacuzzi",
 
   # READ COMMENT AT TOP BEFORE ADDING NEW TESTS HERE.
 ]

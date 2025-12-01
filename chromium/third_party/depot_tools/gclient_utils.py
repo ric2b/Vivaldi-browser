@@ -1418,3 +1418,42 @@ def merge_conditions(*conditions):
             continue
         condition = f'({condition}) and ({current_condition})'
     return condition
+
+
+def exponential_backoff_retry(fn,
+                              excs=(Exception, ),
+                              name=None,
+                              count=10,
+                              sleep_time=0.25,
+                              printerr=None):
+    """Executes |fn| up to |count| times, backing off exponentially.
+
+    Args:
+        fn (callable): The function to execute. If this raises a handled
+            exception, the function will retry with exponential backoff.
+        excs (tuple): A tuple of Exception types to handle. If one of these is
+            raised by |fn|, a retry will be attempted. If |fn| raises an
+            Exception that is not in this list, it will immediately pass
+            through. If |excs| is empty, the Exception base class will be used.
+        name (str): Optional operation name to print in the retry string.
+        count (int): The number of times to try before allowing the exception
+            to pass through.
+        sleep_time (float): The initial number of seconds to sleep in between
+            retries. This will be doubled each retry.
+        printerr (callable): Function that will be called with the error string
+            upon failures. If None, |logging.warning| will be used.
+
+    Returns: The return value of the successful fn.
+    """
+    printerr = printerr or logging.warning
+    for i in range(count):
+        try:
+            return fn()
+        except excs as e:
+            if (i + 1) >= count:
+                raise
+
+            printerr('Retrying %s in %.2f second(s) (%d / %d attempts): %s' %
+                     ((name or 'operation'), sleep_time, (i + 1), count, e))
+            time.sleep(sleep_time)
+            sleep_time *= 2

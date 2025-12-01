@@ -9,11 +9,16 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "services/on_device_model/ml/chrome_ml.h"
 #include "services/on_device_model/ml/chrome_ml_api.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 
 namespace fake_ml {
 namespace {
+
+constexpr std::string_view kEos = "<eos>";
+
+ChromeMLConstraintFns g_constraint_fns;
 
 std::string PieceToString(const ml::InputPiece& piece) {
   if (std::holds_alternative<std::string>(piece)) {
@@ -47,6 +52,65 @@ std::string ReadFile(PlatformFile api_file) {
     return std::string();
   }
   return std::string(contents.begin(), contents.end());
+}
+
+std::string GenerateConstraintString(ChromeMLConstraint constraint) {
+  // Prefer tokens in this order to try to keep output as short as possible.
+  const std::vector<char> preferred = {
+      '"', '}', ']', '{', '[', ':', ',',
+  };
+  ChromeMLConstraintMask mask;
+  auto is_valid = [&](int i) {
+    return !isspace(i) &&
+           // SAFETY: Follows a C-API, sample mask will have vocab_size bits,
+           // test-only code.
+           UNSAFE_BUFFERS(mask.sample_mask[i / 32] & (1 << (i % 32)));
+  };
+  std::string result;
+  // Breakk the loop if result is getting too long.
+  while (result.size() < 100) {
+    CHECK(g_constraint_fns.ComputeMask(constraint, mask))
+        << g_constraint_fns.GetError(constraint);
+    if (mask.is_stop) {
+      break;
+    }
+
+    std::optional<uint32_t> token;
+    // Try to grab a preferred token.
+    for (char t : preferred) {
+      if (is_valid(t)) {
+        token = t;
+        break;
+      }
+    }
+    // If no preferred tokens are available, grab first valid token.
+    if (!token) {
+      for (int i = 0; i < 256; ++i) {
+        if (is_valid(i)) {
+          token = i;
+          break;
+        }
+      }
+    }
+    g_constraint_fns.CommitToken(constraint, *token);
+    result += std::string(1, static_cast<char>(*token));
+  }
+  return result;
+}
+
+// Simple tokenize fn for a single byte tokenizer which just passes through the
+// bytes.
+size_t TokenizeBytes(const void* user_data,
+                     const uint8_t* bytes,
+                     size_t bytes_len,
+                     uint32_t* output_tokens,
+                     size_t output_tokens_len) {
+  for (size_t i = 0; i < std::min(bytes_len, output_tokens_len); ++i) {
+    // SAFETY: Follows a C-API, test-only code. Bounds are length checked by the
+    // loop.
+    UNSAFE_BUFFERS(output_tokens[i]) = UNSAFE_BUFFERS(bytes[i]);
+  }
+  return bytes_len;
 }
 
 }  // namespace
@@ -83,6 +147,7 @@ struct FakeModelInstance {
 };
 
 struct FakeSessionInstance {
+  raw_ptr<FakeModelInstance> model_instance;
   std::string adaptation_data;
   std::optional<uint32_t> adaptation_file_id;
   std::vector<std::string> context;
@@ -126,6 +191,7 @@ ChromeMLSession CreateSession(ChromeMLModel model,
                               const ChromeMLAdaptationDescriptor* descriptor) {
   auto* model_instance = reinterpret_cast<FakeModelInstance*>(model);
   auto* instance = new FakeSessionInstance{};
+  instance->model_instance = model_instance;
   if (descriptor) {
     instance->enable_image_input = descriptor->enable_image_input;
     instance->enable_audio_input = descriptor->enable_audio_input;
@@ -150,6 +216,7 @@ ChromeMLSession CreateSession(ChromeMLModel model,
 ChromeMLSession CloneSession(ChromeMLSession session) {
   auto* instance = reinterpret_cast<FakeSessionInstance*>(session);
   return reinterpret_cast<ChromeMLSession>(new FakeSessionInstance{
+      .model_instance = instance->model_instance,
       .adaptation_data = instance->adaptation_data,
       .adaptation_file_id = instance->adaptation_file_id,
       .context = instance->context,
@@ -166,31 +233,19 @@ void DestroySession(ChromeMLSession session) {
   delete instance;
 }
 
-bool SessionExecuteModel(ChromeMLSession session,
-                         ChromeMLModel model,
-                         const ChromeMLExecuteOptions* options,
-                         ChromeMLCancel cancel) {
+bool SessionAppend(ChromeMLSession session,
+                   const ChromeMLAppendOptions* options,
+                   ChromeMLCancel cancel) {
   auto* instance = reinterpret_cast<FakeSessionInstance*>(session);
   std::string text;
   for (size_t i = 0; i < options->input_size; i++) {
     // SAFETY: `options->input_size` describes how big `options->input` is.
     const ml::InputPiece& piece = UNSAFE_BUFFERS(options->input[i]);
-    if (!std::holds_alternative<std::string>(piece) &&
-        !std::holds_alternative<ml::Token>(piece)) {
-      // We could write code to handle token options and non-text inputs being
-      // passed together, but it would only be exercised by unit tests so would
-      // not improve real-world coverage.
-      CHECK(options->token_offset == 0);
-    }
-
     CHECK(!std::holds_alternative<SkBitmap>(piece) ||
           instance->enable_image_input);
     CHECK(!std::holds_alternative<ml::AudioBuffer>(piece) ||
           instance->enable_audio_input);
     text += PieceToString(piece);
-  }
-  if (options->token_offset > 0) {
-    text.erase(text.begin(), text.begin() + options->token_offset);
   }
   if (options->max_tokens < text.size()) {
     text.resize(options->max_tokens);
@@ -202,27 +257,29 @@ bool SessionExecuteModel(ChromeMLSession session,
   if (options->context_saved_fn) {
     (*options->context_saved_fn)(static_cast<int>(text.size()));
   }
+  return true;
+}
 
-  if (!options->execution_output_fn) {
-    return true;
-  }
+bool SessionGenerate(ChromeMLSession session,
+                     const ChromeMLGenerateOptions* options,
+                     ChromeMLCancel cancel) {
+  auto* instance = reinterpret_cast<FakeSessionInstance*>(session);
+  auto OutputChunk = [output_fn =
+                          *options->output_fn](const std::string& chunk) {
+    ChromeMLExecutionOutput output = {};
+    if (chunk.empty()) {
+      output.status = ChromeMLExecutionStatus::kComplete;
+      output_fn(&output);
+      return;
+    }
+    output.status = ChromeMLExecutionStatus::kInProgress;
+    output.text = chunk.c_str();
+    output_fn(&output);
+  };
 
-  auto OutputChunk =
-      [output_fn = *options->execution_output_fn](const std::string& chunk) {
-        ChromeMLExecutionOutput output = {};
-        if (chunk.empty()) {
-          output.status = ChromeMLExecutionStatus::kComplete;
-          output_fn(&output);
-          return;
-        }
-        output.status = ChromeMLExecutionStatus::kInProgress;
-        output.text = chunk.c_str();
-        output_fn(&output);
-      };
-
-  if (reinterpret_cast<FakeModelInstance*>(model)->performance_hint ==
+  if (instance->model_instance->performance_hint ==
       ml::ModelPerformanceHint::kFastestInference) {
-    OutputChunk("Fastest inference\n");
+    OutputChunk("Fastest inference");
   }
   if (!instance->adaptation_data.empty()) {
     std::string adaptation_str = "Adaptation: " + instance->adaptation_data;
@@ -230,23 +287,51 @@ bool SessionExecuteModel(ChromeMLSession session,
       adaptation_str +=
           " (" + base::NumberToString(*instance->adaptation_file_id) + ")";
     }
-    OutputChunk(adaptation_str + "\n");
+    OutputChunk(adaptation_str);
   }
 
   // Only include sampling params if they're not the respective default values.
   if (instance->top_k != 1 || instance->temperature != 0) {
     OutputChunk(base::StrCat(
         {"TopK: ", base::NumberToString(instance->top_k),
-         ", Temp: ", base::NumberToString(instance->temperature), "\n"}));
+         ", Temp: ", base::NumberToString(instance->temperature)}));
   }
 
   if (!instance->context.empty()) {
     for (const std::string& context : instance->context) {
-      OutputChunk("Context: " + context + "\n");
+      OutputChunk(context);
     }
+  }
+  if (options->constraint) {
+    OutputChunk(GenerateConstraintString(options->constraint));
+    g_constraint_fns.Delete(options->constraint);
   }
   OutputChunk("");
   return true;
+}
+
+bool SessionExecuteModel(ChromeMLSession session,
+                         ChromeMLModel model,
+                         const ChromeMLExecuteOptions* options,
+                         ChromeMLCancel cancel) {
+  ChromeMLAppendOptions append_opts{
+      .input = options->input,
+      .input_size = options->input_size,
+      .max_tokens = options->max_tokens,
+      .context_saved_fn = options->context_saved_fn,
+  };
+  if (!SessionAppend(session, &append_opts, cancel)) {
+    return false;
+  }
+  if (!options->execution_output_fn) {
+    return true;
+  }
+  ChromeMLGenerateOptions gen_opts{
+      .max_output_tokens = options->max_output_tokens,
+      .constraint = options->constraint,
+      .output_fn = options->execution_output_fn,
+  };
+  return SessionGenerate(session, &gen_opts, cancel);
 }
 
 void SessionSizeInTokensInputPiece(ChromeMLSession session,
@@ -285,6 +370,32 @@ void DestroyCancel(ChromeMLCancel cancel) {
 void CancelExecuteModel(ChromeMLCancel cancel) {
   auto* instance = reinterpret_cast<FakeCancelInstance*>(cancel);
   instance->cancelled = true;
+}
+
+void SetConstraintFns(const ChromeMLConstraintFns* fns) {
+  g_constraint_fns = *fns;
+}
+
+bool GetTokenizerParams(ChromeMLModel model,
+                        const ChromeMLGetTokenizerParamsFn& fn) {
+  // Create a simple tokenizer mapping each byte to itself.
+  std::string tokens;
+  std::vector<uint32_t> token_lens;
+  for (int i = 0; i < 256; ++i) {
+    tokens += std::string(1, static_cast<char>(i));
+    token_lens.push_back(1);
+  }
+  tokens += kEos;
+  token_lens.push_back(kEos.size());
+  ChromeMLTokenizerParams params{
+      .vocab_size = static_cast<uint32_t>(token_lens.size()),
+      .eos_token_id = static_cast<uint32_t>(token_lens.size() - 1),
+      .token_lens = token_lens.data(),
+      .token_bytes = reinterpret_cast<const uint8_t*>(tokens.data()),
+      .tokenize_fn = &TokenizeBytes,
+  };
+  fn(params);
+  return true;
 }
 
 ChromeMLTSModel CreateTSModel(const ChromeMLTSModelDescriptor* descriptor) {
@@ -327,6 +438,8 @@ const ChromeMLAPI g_api = {
     .SetFatalErrorNonGpuFn = &SetFatalErrorNonGpuFn,
 
     .SessionCreateModel = &SessionCreateModel,
+    .SessionAppend = &SessionAppend,
+    .SessionGenerate = &SessionGenerate,
     .SessionExecuteModel = &SessionExecuteModel,
     .SessionSizeInTokensInputPiece = &SessionSizeInTokensInputPiece,
     .SessionScore = &SessionScore,
@@ -336,6 +449,8 @@ const ChromeMLAPI g_api = {
     .CreateCancel = &CreateCancel,
     .DestroyCancel = &DestroyCancel,
     .CancelExecuteModel = &CancelExecuteModel,
+    .SetConstraintFns = &SetConstraintFns,
+    .GetTokenizerParams = &GetTokenizerParams,
     .ts_api =
         {
             .CreateModel = &CreateTSModel,
@@ -345,6 +460,7 @@ const ChromeMLAPI g_api = {
 };
 
 const ChromeMLAPI* GetFakeMlApi() {
+  g_api.SetConstraintFns(ml::GetConstraintFns());
   return &g_api;
 }
 

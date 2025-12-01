@@ -117,9 +117,8 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
       const KURL&,
       const ResourceLoaderOptions&,
       ReportingDisposition,
-      base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info,
-      FetchParameters::HasPreloadedResponseCandidate
-          has_preloaded_response_candidate) const {
+      base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
+      const {
     return ResourceRequestBlockedReason::kOther;
   }
   // In derived classes, performs *only* a SubresourceFilter check for whether
@@ -171,9 +170,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
   // called.
   virtual void PopulateResourceRequestBeforeCacheAccess(
       const ResourceLoaderOptions& options,
-      ResourceRequest& request,
-      FetchParameters::HasPreloadedResponseCandidate
-          has_preloaded_response_candidate) {}
+      ResourceRequest& request) {}
 
   // Called after csp checks to potentially override the URL of the request.
   virtual void WillSendRequest(ResourceRequest& request) {}
@@ -192,6 +189,7 @@ class PLATFORM_EXPORT FetchContext : public GarbageCollected<FetchContext> {
 
   virtual bool StartSpeculativeImageDecode(Resource* resource,
                                            base::OnceClosure callback);
+  virtual bool SpeculativeDecodeRequestInFlight() const;
 
   // Called when the underlying context is detached. Note that some
   // FetchContexts continue working after detached (e.g., for fetch() operations

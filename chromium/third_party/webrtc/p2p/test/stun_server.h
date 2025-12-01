@@ -36,29 +36,27 @@ class StunServer {
 
  protected:
   // Callback for packets from socket.
-  void OnPacket(AsyncPacketSocket* socket, const rtc::ReceivedPacket& packet);
+  void OnPacket(AsyncPacketSocket* socket, const ReceivedIpPacket& packet);
 
   // Handlers for the different types of STUN/TURN requests:
-  virtual void OnBindingRequest(cricket::StunMessage* msg,
-                                const SocketAddress& addr);
-  void OnAllocateRequest(cricket::StunMessage* msg, const SocketAddress& addr);
-  void OnSharedSecretRequest(cricket::StunMessage* msg,
-                             const SocketAddress& addr);
-  void OnSendRequest(cricket::StunMessage* msg, const SocketAddress& addr);
+  virtual void OnBindingRequest(StunMessage* msg, const SocketAddress& addr);
+  void OnAllocateRequest(StunMessage* msg, const SocketAddress& addr);
+  void OnSharedSecretRequest(StunMessage* msg, const SocketAddress& addr);
+  void OnSendRequest(StunMessage* msg, const SocketAddress& addr);
 
   // Sends an error response to the given message back to the user.
-  void SendErrorResponse(const cricket::StunMessage& msg,
+  void SendErrorResponse(const StunMessage& msg,
                          const SocketAddress& addr,
                          int error_code,
                          absl::string_view error_desc);
 
   // Sends the given message to the appropriate destination.
-  void SendResponse(const cricket::StunMessage& msg, const SocketAddress& addr);
+  void SendResponse(const StunMessage& msg, const SocketAddress& addr);
 
   // A helper method to compose a STUN binding response.
-  void GetStunBindResponse(cricket::StunMessage* message,
+  void GetStunBindResponse(StunMessage* message,
                            const SocketAddress& remote_addr,
-                           cricket::StunMessage* response) const;
+                           StunMessage* response) const;
 
  private:
   SequenceChecker sequence_checker_;
@@ -69,9 +67,11 @@ class StunServer {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::STUN_SERVER_PORT;
 using ::webrtc::StunServer;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_STUN_SERVER_H_

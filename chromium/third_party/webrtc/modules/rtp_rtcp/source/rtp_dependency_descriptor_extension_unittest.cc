@@ -10,10 +10,15 @@
 
 #include "modules/rtp_rtcp/source/rtp_dependency_descriptor_extension.h"
 
+#include <bitset>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+
 #include "api/array_view.h"
 #include "api/transport/rtp/dependency_descriptor.h"
-#include "common_video/generic_frame_descriptor/generic_frame_info.h"
 #include "test/gmock.h"
+#include "test/gtest.h"
 
 namespace webrtc {
 namespace {
@@ -59,7 +64,7 @@ TEST(RtpDependencyDescriptorExtensionTest, WriteZeroInUnusedBits) {
   const uint8_t* unused_bytes = buffer + value_size;
   size_t num_unused_bytes = buffer + sizeof(buffer) - unused_bytes;
   // Check remaining bytes are zeroed.
-  EXPECT_THAT(rtc::MakeArrayView(unused_bytes, num_unused_bytes), Each(0));
+  EXPECT_THAT(MakeArrayView(unused_bytes, num_unused_bytes), Each(0));
 }
 
 // In practice chain diff for inactive chain will grow uboundly because no

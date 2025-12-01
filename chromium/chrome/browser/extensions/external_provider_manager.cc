@@ -12,6 +12,7 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/notimplemented.h"
 #include "base/trace_event/trace_event.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -23,7 +24,6 @@
 #include "chrome/browser/extensions/external_provider_manager_factory.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "chrome/browser/extensions/installed_loader.h"
-#include "chrome/browser/extensions/pending_extension_manager.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
@@ -37,6 +37,7 @@
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/external_install_info.h"
 #include "extensions/browser/management_policy.h"
+#include "extensions/browser/pending_extension_manager.h"
 #include "extensions/browser/updater/extension_cache.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
@@ -304,7 +305,6 @@ bool ExternalProviderManager::OnExternalExtensionFileFound(
   installer->set_expected_id(info.extension_id);
   installer->set_expected_version(info.version,
                                   true /* fail_install_if_unexpected */);
-  installer->set_install_cause(extension_misc::INSTALL_CAUSE_EXTERNAL_FILE);
   installer->set_install_immediately(info.install_immediately);
   installer->set_creation_flags(info.creation_flags);
 
@@ -357,8 +357,7 @@ bool ExternalProviderManager::OnExternalExtensionUpdateUrlFound(
     // priority than |info.download_location|, and we aren't doing a
     // reinstall of a corrupt policy force-installed extension.
     ManifestLocation current = extension->location();
-    if (!CorruptedExtensionReinstaller::Get(context_)
-             ->IsReinstallForCorruptionExpected(info.extension_id) &&
+    if (!IsReinstallForCorruptionExpected(info.extension_id) &&
         current == Manifest::GetHigherPriorityLocation(
                        current, info.download_location)) {
       install_stage_tracker->ReportFailure(
@@ -415,8 +414,7 @@ bool ExternalProviderManager::OnExternalExtensionUpdateUrlFound(
       // set of extensions. If the extension is corrupted, it should be
       // reinstalled, thus it should be added to the pending extensions for
       // installation.
-      if (!CorruptedExtensionReinstaller::Get(context_)
-               ->IsReinstallForCorruptionExpected(info.extension_id)) {
+      if (!IsReinstallForCorruptionExpected(info.extension_id)) {
         return false;
       }
     }
@@ -512,4 +510,11 @@ void ExternalProviderManager::InstallationFromExternalFileFinished(
     pending_extension_manager_->Remove(extension_id);
   }
 }
+
+bool ExternalProviderManager::IsReinstallForCorruptionExpected(
+    const ExtensionId& id) const {
+  auto* reinstaller = CorruptedExtensionReinstaller::Get(context_);
+  return reinstaller->IsReinstallForCorruptionExpected(id);
+}
+
 }  // namespace extensions

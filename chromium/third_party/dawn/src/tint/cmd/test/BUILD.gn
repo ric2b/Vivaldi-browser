@@ -48,9 +48,11 @@ if (tint_build_unittests) {
     output_name = "tint_unittests"
     sources = [ "main_test.cc" ]
     deps = [
+      "${dawn_root}/src/utils/chromium_test_compat:chromium_test_compat",
       "${tint_src_dir}:gmock_and_gtest",
       "${tint_src_dir}/api",
       "${tint_src_dir}/api/common:unittests",
+      "${tint_src_dir}/cmd/fuzz/ir/helpers:unittests",
       "${tint_src_dir}/lang/core:unittests",
       "${tint_src_dir}/lang/core/constant:unittests",
       "${tint_src_dir}/lang/core/intrinsic:unittests",
@@ -71,9 +73,8 @@ if (tint_build_unittests) {
       "${tint_src_dir}/lang/spirv/type:unittests",
       "${tint_src_dir}/lang/wgsl:unittests",
       "${tint_src_dir}/lang/wgsl/ast:unittests",
-      "${tint_src_dir}/lang/wgsl/common:unittests",
-      "${tint_src_dir}/lang/wgsl/helpers:unittests",
       "${tint_src_dir}/lang/wgsl/intrinsic:unittests",
+      "${tint_src_dir}/lang/wgsl/ir:unittests",
       "${tint_src_dir}/lang/wgsl/program:unittests",
       "${tint_src_dir}/lang/wgsl/reader/lower:unittests",
       "${tint_src_dir}/lang/wgsl/resolver:unittests",

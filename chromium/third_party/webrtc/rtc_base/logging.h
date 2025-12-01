@@ -120,7 +120,7 @@ class LogLineRef {
   absl::string_view message() const { return message_; }
   absl::string_view filename() const { return filename_; }
   int line() const { return line_; }
-  std::optional<rtc::PlatformThreadId> thread_id() const { return thread_id_; }
+  std::optional<PlatformThreadId> thread_id() const { return thread_id_; }
   Timestamp timestamp() const { return timestamp_; }
   absl::string_view tag() const { return tag_; }
   LoggingSeverity severity() const { return severity_; }
@@ -136,7 +136,7 @@ class LogLineRef {
   void set_message(std::string message) { message_ = std::move(message); }
   void set_filename(absl::string_view filename) { filename_ = filename; }
   void set_line(int line) { line_ = line; }
-  void set_thread_id(std::optional<rtc::PlatformThreadId> thread_id) {
+  void set_thread_id(std::optional<PlatformThreadId> thread_id) {
     thread_id_ = thread_id;
   }
   void set_timestamp(Timestamp timestamp) { timestamp_ = timestamp; }
@@ -146,7 +146,7 @@ class LogLineRef {
   std::string message_;
   absl::string_view filename_;
   int line_ = 0;
-  std::optional<rtc::PlatformThreadId> thread_id_;
+  std::optional<PlatformThreadId> thread_id_;
   Timestamp timestamp_ = Timestamp::MinusInfinity();
   // The default Android debug output tag.
   absl::string_view tag_ = "libjingle";
@@ -732,6 +732,7 @@ inline const char* AdaptString(const std::string& str) {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::LoggingSeverity;
 using ::webrtc::LogLineRef;
@@ -743,5 +744,6 @@ using ::webrtc::LS_NONE;
 using ::webrtc::LS_VERBOSE;
 using ::webrtc::LS_WARNING;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_LOGGING_H_

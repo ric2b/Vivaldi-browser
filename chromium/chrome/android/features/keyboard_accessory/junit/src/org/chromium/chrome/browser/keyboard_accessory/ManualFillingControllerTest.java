@@ -15,7 +15,6 @@ import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.hamcrest.CoreMatchers.nullValue;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doNothing;
@@ -82,6 +81,7 @@ import org.chromium.chrome.browser.keyboard_accessory.data.PropertyProvider;
 import org.chromium.chrome.browser.keyboard_accessory.data.UserInfoField;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_component.AccessorySheetCoordinator;
 import org.chromium.chrome.browser.keyboard_accessory.sheet_tabs.AccessorySheetTabCoordinator;
+import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
 import org.chromium.chrome.browser.password_manager.ConfirmationDialogHelper;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileJni;
@@ -136,6 +136,7 @@ public class ManualFillingControllerTest {
     @Mock private InsetObserver mInsetObserver;
     @Mock private BackPressManager mMockBackPressManager;
     @Mock private EdgeToEdgeController mMockEdgeToEdgeController;
+    @Mock private MultiWindowModeStateDispatcher mMockMultiWindowModeStateDispatcher;
 
     private final ManualFillingCoordinator mController = new ManualFillingCoordinator();
     private final ManualFillingMediator mMediator = mController.getMediatorForTesting();
@@ -325,7 +326,7 @@ public class ManualFillingControllerTest {
         when(mMockActivity.getTabModelSelector()).thenReturn(mMockTabModelSelector);
         when(mMockActivity.getActivityTabProvider()).thenReturn(mActivityTabProvider);
         BrowserControlsManager browserControlsManager =
-                new BrowserControlsManager(mMockActivity, 0);
+                new BrowserControlsManager(mMockActivity, 0, mMockMultiWindowModeStateDispatcher);
         when(mMockActivity.getBrowserControlsManager()).thenReturn(browserControlsManager);
         when(mMockActivity.getFullscreenManager()).thenReturn(mMockFullscreenManager);
         doNothing().when(mMockFullscreenManager).addObserver(mFullscreenObserverCaptor.capture());
@@ -1072,6 +1073,39 @@ public class ManualFillingControllerTest {
     }
 
     @Test
+    public void testAdjustsOffsetAndHeightExcludesSheetShadowHeight() {
+        final int density = 2;
+        final int accessorySheetHeightDp = 100; // The height of a large keyboard.
+        final int initialWidthDp = 200;
+        final int initialHeightDp = 300;
+        final int shadowHeightDp = 8;
+        when(mMockResources.getDimensionPixelSize(R.dimen.toolbar_shadow_height))
+                .thenReturn(shadowHeightDp * density);
+
+        addBrowserTab(mMediator, 1234, null);
+
+        // Resize the screen to 200x300@2.f.
+        simulateLayoutSizeChange(
+                density,
+                initialWidthDp,
+                initialHeightDp,
+                /* keyboardShown= */ false,
+                VirtualKeyboardMode.RESIZES_VISUAL);
+
+        // Now simulate showing the accessory sheet.
+        when(mMockKeyboardAccessory.empty()).thenReturn(false);
+        when(mMockKeyboardAccessory.isShown()).thenReturn(true);
+        when(mMockKeyboardAccessory.hasActiveTab()).thenReturn(true);
+        when(mMockAccessorySheet.getHeight()).thenReturn(accessorySheetHeightDp * density);
+        mModel.set(SHOW_WHEN_VISIBLE, true);
+        mModel.set(KEYBOARD_EXTENSION_STATE, FLOATING_SHEET);
+
+        assertEquals(
+                accessorySheetHeightDp * density - shadowHeightDp * density,
+                (int) mController.getBottomInsetSupplier().get());
+    }
+
+    @Test
     public void testIsFillingViewShownReturnsTargetValueAheadOfComponentUpdate() {
         // After initialization with one tab, the accessory sheet is closed.
         addBrowserTab(mMediator, 1234, null);
@@ -1525,7 +1559,8 @@ public class ManualFillingControllerTest {
         when(mLastMockWebContents.getHeight()).thenReturn(heightDp);
         when(mLastMockWebContents.getWidth()).thenReturn(widthDp);
         // Return the correct keyboard_accessory_height for the current density:
-        when(mMockResources.getDimensionPixelSize(anyInt())).thenReturn((int) (density * 48));
+        when(mMockResources.getDimensionPixelSize(R.dimen.keyboard_accessory_suggestion_height))
+                .thenReturn((int) (density * 48));
     }
 
     /**

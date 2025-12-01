@@ -39,13 +39,14 @@
   E_CPONLY(kColorAvatarButtonHighlightSigninPaused) \
   E_CPONLY(kColorAvatarButtonHighlightExplicitText) \
   E_CPONLY(kColorAvatarButtonHighlightIncognito) \
+  E_CPONLY(kColorAvatarButtonHighlightManagement) \
   E_CPONLY(kColorAvatarButtonHighlightNormalForeground) \
   E_CPONLY(kColorAvatarButtonHighlightDefaultForeground) \
   E_CPONLY(kColorAvatarButtonHighlightSyncErrorForeground) \
   E_CPONLY(kColorAvatarButtonHighlightIncognitoForeground) \
+  E_CPONLY(kColorAvatarButtonHighlightManagementForeground) \
   E_CPONLY(kColorAvatarButtonIncognitoHover) \
   E_CPONLY(kColorAvatarButtonNormalRipple) \
-  E_CPONLY(kColorAvatarStrokeLight) \
   E_CPONLY(kColorAvatarStroke) \
   E_CPONLY(kColorAvatarFillForContrast) \
   /* Bookmark bar colors. */ \
@@ -81,6 +82,8 @@
   E_CPONLY(kColorBnplIssuerLabelForeground) \
   E_CPONLY(kColorBnplIssuerLabelForegroundDisabled) \
   E_CPONLY(kColorBnplIssuerLinkedIneligibleBackground) \
+  E_CPONLY(kColorBnplIssuerLinkedPillBackground) \
+  E_CPONLY(kColorBnplIssuerLinkedPillForeground) \
   /* Compose colors */ \
   E_CPONLY(kColorComposeDialogBackground) \
   E_CPONLY(kColorComposeDialogDivider) \
@@ -153,6 +156,9 @@
   E_CPONLY(kColorExtensionsMenuContainerBackground) \
   E_CPONLY(kColorExtensionsMenuText) \
   E_CPONLY(kColorExtensionsMenuSecondaryText) \
+  /* Feature first run dialog colors. */ \
+  E_CPONLY(kColorFeatureFirstRunInfoContainerBackground) \
+  E_CPONLY(kColorFeatureFirstRunIconColor) \
   /* Feature Promo bubble colors. */ \
   E_CPONLY(kColorFeaturePromoBubbleBackground) \
   E_CPONLY(kColorFeaturePromoBubbleButtonBorder) \
@@ -196,6 +202,8 @@
   E_CPONLY(kColorIntentPickerItemBackgroundSelected) \
   /* Glic colors */ \
   E_CPONLY(kColorGlicBackground) \
+  E_CPONLY(kColorGlicModalBackground) \
+  E_CPONLY(kColorGlicModalForeground) \
   /* Hover Button colors */ \
   E_CPONLY(kColorHoverButtonBackgroundHovered) \
   /* Lens overlay colors. */ \
@@ -317,6 +325,9 @@
   /* New Tab Page Colors for Doodle Share Button. */ \
   E_CPONLY(kColorNewTabPageDoodleShareButtonBackground) \
   E_CPONLY(kColorNewTabPageDoodleShareButtonIcon) \
+  /* New Tab Footer colors. */ \
+  E_CPONLY(kColorNewTabFooterBackground) \
+  E_CPONLY(kColorNewTabFooterText) \
   /* Omnibox colors. */ \
   E_CPONLY(kColorOmniboxActionIcon) \
   E_CPONLY(kColorOmniboxActionIconHover) \
@@ -460,15 +471,7 @@
   E_CPONLY(kColorProfileMenuIdentityInfoBackground) \
   E_CPONLY(kColorProfileMenuIdentityInfoTitle) \
   E_CPONLY(kColorProfileMenuIdentityInfoSubtitle) \
-  E_CPONLY(kColorProfileMenuHeaderLabel) \
-  E_CPONLY(kColorProfileMenuIconButton) \
-  E_CPONLY(kColorProfileMenuIconButtonBackground) \
-  E_CPONLY(kColorProfileMenuIconButtonBackgroundHovered) \
-  E_CPONLY(kColorProfileMenuSyncErrorIcon) \
-  E_CPONLY(kColorProfileMenuSyncIcon) \
-  E_CPONLY(kColorProfileMenuSyncInfoBackground) \
-  E_CPONLY(kColorProfileMenuSyncOffIcon) \
-  E_CPONLY(kColorProfileMenuSyncPausedIcon) \
+  E_CPONLY(kColorProfileMenuSyncPromoButtonBackground) \
   /* Profiles colors. */ \
   E_CPONLY(kColorProfilesReauthDialogBorder) \
   /* PWA colors. */ \
@@ -664,6 +667,8 @@
   E_CPONLY(kColorSidePanelWallpaperSearchErrorButtonBackground) \
   E_CPONLY(kColorSidePanelWallpaperSearchErrorButtonText) \
   E_CPONLY(kColorSidePanelWallpaperSearchInspirationDescriptors) \
+  /* Split view empty state colors. */ \
+  E_CPONLY(kColorSplitViewBackground) \
   /* Star rating view colors. */ \
   E_CPONLY(kColorStarRatingFullIcon) \
   E_CPONLY(kColorStarRatingEmptyIcon) \

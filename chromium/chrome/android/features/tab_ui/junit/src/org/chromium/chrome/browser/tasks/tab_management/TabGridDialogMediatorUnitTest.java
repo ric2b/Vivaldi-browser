@@ -37,6 +37,7 @@ import static org.mockito.Mockito.when;
 import static org.chromium.chrome.browser.tasks.tab_management.MessageCardViewProperties.DESCRIPTION_TEXT;
 import static org.chromium.chrome.browser.tasks.tab_management.MessageCardViewProperties.MESSAGE_SERVICE_ACTION_PROVIDER;
 import static org.chromium.chrome.browser.tasks.tab_management.MessageCardViewProperties.MESSAGE_SERVICE_DISMISS_ACTION_PROVIDER;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SUPPRESS_ACCESSIBILITY;
 import static org.chromium.components.data_sharing.SharedGroupTestHelper.COLLABORATION_ID1;
 import static org.chromium.components.data_sharing.SharedGroupTestHelper.EMAIL1;
 import static org.chromium.components.data_sharing.SharedGroupTestHelper.EMAIL2;
@@ -47,10 +48,14 @@ import static org.chromium.components.data_sharing.SharedGroupTestHelper.GROUP_M
 
 import android.app.Activity;
 import android.graphics.Rect;
+import android.os.SystemClock;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
+
+import androidx.annotation.IdRes;
 
 import org.junit.Before;
 import org.junit.Rule;
@@ -66,12 +71,16 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.FeatureOverrides;
 import org.chromium.base.Token;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.UserActionTester;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
+import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
 import org.chromium.chrome.browser.collaboration.messaging.MessagingBackendServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
@@ -82,6 +91,7 @@ import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -90,6 +100,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeaturesJni;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
+import org.chromium.chrome.browser.tab_ui.ActionConfirmationManager;
 import org.chromium.chrome.browser.tab_ui.RecyclerViewPosition;
 import org.chromium.chrome.browser.tab_ui.TabUiThemeUtils;
 import org.chromium.chrome.browser.tabmodel.TabClosureParams;
@@ -101,11 +112,17 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabRemover;
 import org.chromium.chrome.browser.tabmodel.TabUiUnitTestUtils;
 import org.chromium.chrome.browser.tasks.tab_management.MessageService.MessageType;
+import org.chromium.chrome.browser.tasks.tab_management.TabGridItemLongPressOrchestrator.CancelLongPressTabItemEventListener;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
+import org.chromium.components.browser_ui.util.motion.MotionEventTestUtils;
+import org.chromium.components.browser_ui.widget.list_view.FakeListViewTouchTracker;
+import org.chromium.components.browser_ui.widget.list_view.ListViewTouchTracker;
 import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.collaboration.ServiceStatus;
 import org.chromium.components.collaboration.messaging.CollaborationEvent;
@@ -125,6 +142,7 @@ import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.IdentityManager;
+import org.chromium.components.tab_group_sync.EitherId.EitherGroupId;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
@@ -144,6 +162,7 @@ import java.util.Optional;
 @SuppressWarnings({"ArraysAsListWithZeroOrOneArgument", "ResultOfMethodCallIgnored"})
 @RunWith(BaseRobolectricTestRunner.class)
 @EnableFeatures(ChromeFeatureList.DATA_SHARING)
+@DisableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_BOTTOM_SHEET_ANDROID)
 public class TabGridDialogMediatorUnitTest {
     private static final String TAB1_TITLE = "Tab1";
     private static final String TAB2_TITLE = "Tab2";
@@ -161,6 +180,8 @@ public class TabGridDialogMediatorUnitTest {
     private static final int POSITION2 = 1;
     private static final Token TAB_GROUP_ID = new Token(1L, 2L);
     private static final LocalTabGroupId LOCAL_TAB_GROUP_ID = new LocalTabGroupId(TAB_GROUP_ID);
+    private static final EitherGroupId EITHER_LOCAL_TAB_GROUP_ID =
+            EitherGroupId.createLocalId(LOCAL_TAB_GROUP_ID);
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -196,6 +217,11 @@ public class TabGridDialogMediatorUnitTest {
     @Mock private BottomSheetController mBottomSheetController;
     @Mock private Tracker mTracker;
     @Mock private HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
+    @Mock private ObservableSupplier<TabBookmarker> mTabBookmarkerSupplier;
+    @Mock private Supplier<ShareDelegate> mShareDelegateSupplier;
+    @Mock private BookmarkModel mBookmarkModel;
+    @Mock private View mCardView;
+    @Mock private TabGridContextMenuCoordinator mTabGridContextMenuCoordinator;
 
     @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserverCaptor;
     @Captor private ArgumentCaptor<TabGroupModelFilterObserver> mTabGroupModelFilterObserverCaptor;
@@ -207,6 +233,8 @@ public class TabGridDialogMediatorUnitTest {
     @Captor
     private ArgumentCaptor<MessagingBackendService.PersistentMessageObserver>
             mPersistentMessageObserverCaptor;
+
+    @Captor private ArgumentCaptor<BottomSheetObserver> mBottomSheetObserverCaptor;
 
     private final ObservableSupplierImpl<TabGroupModelFilter> mCurrentTabGroupModelFilterSupplier =
             new ObservableSupplierImpl<>();
@@ -224,6 +252,7 @@ public class TabGridDialogMediatorUnitTest {
         mActionTester = new UserActionTester();
 
         TabGroupSyncFeaturesJni.setInstanceForTesting(mTabGroupSyncFeaturesJniMock);
+        BookmarkModel.setInstanceForTesting(mBookmarkModel);
         doReturn(true).when(mTabGroupSyncFeaturesJniMock).isTabGroupSyncEnabled(mProfile);
         when(mProfile.getOriginalProfile()).thenReturn(mProfile);
         when(mProfile.isNativeInitialized()).thenReturn(true);
@@ -305,13 +334,11 @@ public class TabGridDialogMediatorUnitTest {
 
         mModel.get(TabGridDialogProperties.SHARE_BUTTON_CLICK_LISTENER).onClick(null);
         verify(mDataSharingTabManager)
-                .createOrManageFlow(
-                        eq(mActivity), eq(null), eq(LOCAL_TAB_GROUP_ID), anyInt(), any());
+                .createOrManageFlow(eq(EITHER_LOCAL_TAB_GROUP_ID), anyInt(), any());
 
         mModel.get(TabGridDialogProperties.SHARE_IMAGE_TILES_CLICK_LISTENER).onClick(null);
         verify(mDataSharingTabManager, times(2))
-                .createOrManageFlow(
-                        eq(mActivity), eq(null), eq(LOCAL_TAB_GROUP_ID), anyInt(), any());
+                .createOrManageFlow(eq(EITHER_LOCAL_TAB_GROUP_ID), anyInt(), any());
 
         mModel.get(TabGridDialogProperties.SEND_FEEDBACK_RUNNABLE).run();
         ArgumentCaptor<String> categoryCaptor = ArgumentCaptor.forClass(String.class);
@@ -348,10 +375,13 @@ public class TabGridDialogMediatorUnitTest {
                 ArgumentCaptor.forClass((Class) List.class);
         mMediator.setCurrentTabIdForTesting(TAB1_ID);
         mMediator.onToolbarMenuItemClick(
-                R.id.select_tabs, TAB_GROUP_ID, /* collaborationId= */ null);
+                R.id.select_tabs,
+                TAB_GROUP_ID,
+                /* collaborationId= */ null,
+                /* listViewTouchTracker= */ null);
         verify(mTabListEditorController).configureToolbarWithMenuItems(captor.capture());
         verify(mRecyclerViewPositionSupplier, times(1)).get();
-        verify(mTabListEditorController).show(any(), eq(null));
+        verify(mTabListEditorController).show(any(), eq(new ArrayList<>()), eq(null));
         List<TabListEditorAction> actions = captor.getValue();
         assertThat(actions.get(0), instanceOf(TabListEditorSelectionAction.class));
         assertThat(actions.get(1), instanceOf(TabListEditorCloseAction.class));
@@ -1423,11 +1453,14 @@ public class TabGridDialogMediatorUnitTest {
         createTabGroup(tabGroup, TAB1_ID, TAB_GROUP_ID);
 
         mMediator.onToolbarMenuItemClick(
-                R.id.select_tabs, TAB_GROUP_ID, /* collaborationId= */ null);
+                R.id.select_tabs,
+                TAB_GROUP_ID,
+                /* collaborationId= */ null,
+                /* listViewTouchTracker= */ null);
 
         assertThat(mModel.get(TabGridDialogProperties.IS_TITLE_TEXT_FOCUSED), equalTo(false));
         verify(mRecyclerViewPositionSupplier, times(1)).get();
-        verify(mTabListEditorController).show(eq(tabGroup), eq(null));
+        verify(mTabListEditorController).show(eq(tabGroup), eq(new ArrayList<>()), eq(null));
         assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.SelectTabs"));
     }
 
@@ -1440,7 +1473,10 @@ public class TabGridDialogMediatorUnitTest {
         createTabGroup(tabGroup, TAB1_ID, TAB_GROUP_ID);
 
         mMediator.onToolbarMenuItemClick(
-                R.id.edit_group_name, TAB_GROUP_ID, /* collaborationId= */ null);
+                R.id.edit_group_name,
+                TAB_GROUP_ID,
+                /* collaborationId= */ null,
+                /* listViewTouchTracker= */ null);
         assertTrue(mModel.get(TabGridDialogProperties.IS_TITLE_TEXT_FOCUSED));
         assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.Rename"));
     }
@@ -1452,69 +1488,160 @@ public class TabGridDialogMediatorUnitTest {
         createTabGroup(tabGroup, TAB1_ID, TAB_GROUP_ID);
 
         mMediator.onToolbarMenuItemClick(
-                R.id.edit_group_color, TAB_GROUP_ID, /* collaborationId= */ null);
+                R.id.edit_group_color,
+                TAB_GROUP_ID,
+                /* collaborationId= */ null,
+                /* listViewTouchTracker= */ null);
         verify(mShowColorPickerPopupRunnable).run();
         assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.EditColor"));
     }
 
     @Test
-    public void testDialogToolbarMenu_CloseGroup() {
-        mMediator.setCurrentTabIdForTesting(TAB1_ID);
-        List<Tab> tabGroup = new ArrayList<>(Arrays.asList(mTab1, mTab2));
-        createTabGroup(tabGroup, TAB1_ID, TAB_GROUP_ID);
-
-        mMediator.onToolbarMenuItemClick(
-                R.id.close_tab_group, TAB_GROUP_ID, /* collaborationId= */ null);
-        verify(mTabRemover)
-                .closeTabs(
-                        eq(
-                                TabClosureParams.forCloseTabGroup(
-                                                mTabGroupModelFilter, TAB_GROUP_ID)
-                                        .allowUndo(true)
-                                        .hideTabGroups(true)
-                                        .build()),
-                        /* allowDialog= */ eq(true),
-                        any());
-
-        assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.Close"));
+    public void testDialogToolbarMenu_CloseGroup_NullListViewTouchTracker() {
+        testDialogToolbarMenu_CloseOrDeleteGroup(
+                R.id.close_tab_group,
+                /* listViewTouchTracker= */ null,
+                /* shouldAllowUndo= */ true,
+                /* shouldHideTabGroups= */ true,
+                /* expectedUserAction= */ "TabGridDialogMenu.Close");
     }
 
     @Test
-    public void testDialogToolbarMenu_DeleteGroup() {
+    public void testDialogToolbarMenu_CloseGroup_ClickWithTouch() {
+        long downMotionTime = SystemClock.uptimeMillis();
+        FakeListViewTouchTracker listViewTouchTracker = new FakeListViewTouchTracker();
+        listViewTouchTracker.setLastSingleTapUpInfo(
+                MotionEventTestUtils.createTouchMotionInfo(
+                        downMotionTime,
+                        /* eventTime= */ downMotionTime + 50,
+                        MotionEvent.ACTION_UP));
+
+        testDialogToolbarMenu_CloseOrDeleteGroup(
+                R.id.close_tab_group,
+                listViewTouchTracker,
+                /* shouldAllowUndo= */ true,
+                /* shouldHideTabGroups= */ true,
+                /* expectedUserAction= */ "TabGridDialogMenu.Close");
+    }
+
+    @Test
+    public void testDialogToolbarMenu_CloseGroup_ClickWithMouse() {
+        long downMotionTime = SystemClock.uptimeMillis();
+        FakeListViewTouchTracker listViewTouchTracker = new FakeListViewTouchTracker();
+        listViewTouchTracker.setLastSingleTapUpInfo(
+                MotionEventTestUtils.createMouseMotionInfo(
+                        downMotionTime,
+                        /* eventTime= */ downMotionTime + 50,
+                        MotionEvent.ACTION_UP));
+
+        testDialogToolbarMenu_CloseOrDeleteGroup(
+                R.id.close_tab_group,
+                listViewTouchTracker,
+                /* shouldAllowUndo= */ false,
+                /* shouldHideTabGroups= */ true,
+                /* expectedUserAction= */ "TabGridDialogMenu.Close");
+    }
+
+    @Test
+    public void testDialogToolbarMenu_DeleteGroup_NullListViewTouchTracker() {
+        testDialogToolbarMenu_CloseOrDeleteGroup(
+                R.id.delete_tab_group,
+                /* listViewTouchTracker= */ null,
+                /* shouldAllowUndo= */ true,
+                /* shouldHideTabGroups= */ false,
+                /* expectedUserAction= */ "TabGridDialogMenu.Delete");
+    }
+
+    @Test
+    public void testDialogToolbarMenu_DeleteGroup_ClickWithTouch() {
+        long downMotionTime = SystemClock.uptimeMillis();
+        FakeListViewTouchTracker listViewTouchTracker = new FakeListViewTouchTracker();
+        listViewTouchTracker.setLastSingleTapUpInfo(
+                MotionEventTestUtils.createTouchMotionInfo(
+                        downMotionTime,
+                        /* eventTime= */ downMotionTime + 50,
+                        MotionEvent.ACTION_UP));
+
+        testDialogToolbarMenu_CloseOrDeleteGroup(
+                R.id.delete_tab_group,
+                listViewTouchTracker,
+                /* shouldAllowUndo= */ true,
+                /* shouldHideTabGroups= */ false,
+                /* expectedUserAction= */ "TabGridDialogMenu.Delete");
+    }
+
+    @Test
+    public void testDialogToolbarMenu_DeleteGroup_ClickWithMouse() {
+        long downMotionTime = SystemClock.uptimeMillis();
+        FakeListViewTouchTracker listViewTouchTracker = new FakeListViewTouchTracker();
+        listViewTouchTracker.setLastSingleTapUpInfo(
+                MotionEventTestUtils.createMouseMotionInfo(
+                        downMotionTime,
+                        /* eventTime= */ downMotionTime + 50,
+                        MotionEvent.ACTION_UP));
+
+        testDialogToolbarMenu_CloseOrDeleteGroup(
+                R.id.delete_tab_group,
+                listViewTouchTracker,
+                /* shouldAllowUndo= */ false,
+                /* shouldHideTabGroups= */ false,
+                /* expectedUserAction= */ "TabGridDialogMenu.Delete");
+    }
+
+    private void testDialogToolbarMenu_CloseOrDeleteGroup(
+            @IdRes int menuId,
+            @Nullable ListViewTouchTracker listViewTouchTracker,
+            boolean shouldAllowUndo,
+            boolean shouldHideTabGroups,
+            String expectedUserAction) {
+        assertTrue(menuId == R.id.close_tab_group || menuId == R.id.delete_tab_group);
+
+        // Setup
         mMediator.setCurrentTabIdForTesting(TAB1_ID);
         List<Tab> tabGroup = new ArrayList<>(Arrays.asList(mTab1, mTab2));
         createTabGroup(tabGroup, TAB1_ID, TAB_GROUP_ID);
 
+        // Act
         mMediator.onToolbarMenuItemClick(
-                R.id.delete_tab_group, TAB_GROUP_ID, /* collaborationId= */ null);
+                menuId, TAB_GROUP_ID, /* collaborationId= */ null, listViewTouchTracker);
+
+        // Assert
         verify(mTabRemover)
                 .closeTabs(
                         eq(
                                 TabClosureParams.forCloseTabGroup(
                                                 mTabGroupModelFilter, TAB_GROUP_ID)
-                                        .allowUndo(true)
-                                        .hideTabGroups(false)
+                                        .allowUndo(shouldAllowUndo)
+                                        .hideTabGroups(shouldHideTabGroups)
                                         .build()),
                         /* allowDialog= */ eq(true),
                         any());
-        assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.Delete"));
+        assertEquals(1, mActionTester.getActionCount(expectedUserAction));
     }
 
     @Test
     public void testDialogToolbarMenu_ManageSharing() {
         resetForDataSharing(/* isShared= */ true, GROUP_MEMBER1);
 
-        mMediator.onToolbarMenuItemClick(R.id.manage_sharing, TAB_GROUP_ID, COLLABORATION_ID1);
+        mMediator.onToolbarMenuItemClick(
+                R.id.manage_sharing,
+                TAB_GROUP_ID,
+                COLLABORATION_ID1,
+                /* listViewTouchTracker= */ null);
         assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.ManageSharing"));
         verify(mDataSharingTabManager)
-                .createOrManageFlow(any(), eq(null), eq(LOCAL_TAB_GROUP_ID), anyInt(), eq(null));
+                .createOrManageFlow(eq(EITHER_LOCAL_TAB_GROUP_ID), anyInt(), eq(null));
     }
 
     @Test
     public void testDialogToolbarMenu_RecentActivity() {
         resetForDataSharing(/* isShared= */ true, GROUP_MEMBER1);
 
-        mMediator.onToolbarMenuItemClick(R.id.recent_activity, TAB_GROUP_ID, COLLABORATION_ID1);
+        mMediator.onToolbarMenuItemClick(
+                R.id.recent_activity,
+                TAB_GROUP_ID,
+                COLLABORATION_ID1,
+                /* listViewTouchTracker= */ null);
         assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.RecentActivity"));
         verify(mDataSharingTabManager).showRecentActivity(mActivity, COLLABORATION_ID1);
         verifyClearDirtyMessagesForGroup();
@@ -1531,9 +1658,12 @@ public class TabGridDialogMediatorUnitTest {
         when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
                 .thenReturn(MemberRole.OWNER);
 
-        mMediator.onToolbarMenuItemClick(R.id.delete_shared_group, TAB_GROUP_ID, COLLABORATION_ID1);
-        verify(mActionConfirmationManager).processDeleteSharedGroupAttempt(eq(GROUP_TITLE), any());
-        assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.DeleteShared"));
+        mMediator.onToolbarMenuItemClick(
+                R.id.delete_shared_group,
+                TAB_GROUP_ID,
+                COLLABORATION_ID1,
+                /* listViewTouchTracker= */ null);
+        verify(mDataSharingTabManager).leaveOrDeleteFlow(eq(EITHER_LOCAL_TAB_GROUP_ID), anyInt());
     }
 
     @Test
@@ -1547,9 +1677,12 @@ public class TabGridDialogMediatorUnitTest {
         when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
                 .thenReturn(MemberRole.MEMBER);
 
-        mMediator.onToolbarMenuItemClick(R.id.leave_group, TAB_GROUP_ID, COLLABORATION_ID1);
-        verify(mActionConfirmationManager).processLeaveGroupAttempt(eq(GROUP_TITLE), any());
-        assertEquals(1, mActionTester.getActionCount("TabGridDialogMenu.LeaveShared"));
+        mMediator.onToolbarMenuItemClick(
+                R.id.leave_group,
+                TAB_GROUP_ID,
+                COLLABORATION_ID1,
+                /* listViewTouchTracker= */ null);
+        verify(mDataSharingTabManager).leaveOrDeleteFlow(eq(EITHER_LOCAL_TAB_GROUP_ID), anyInt());
     }
 
     @Test
@@ -1925,9 +2058,10 @@ public class TabGridDialogMediatorUnitTest {
                         mDataSharingTabManager,
                         /* componentName= */ "",
                         mShowColorPickerPopupRunnable,
-                        mActionConfirmationManager,
                         mModalDialogManager,
-                        mDesktopWindowStateManager);
+                        mDesktopWindowStateManager,
+                        mTabBookmarkerSupplier,
+                        mShareDelegateSupplier);
     }
 
     @Test
@@ -1950,6 +2084,38 @@ public class TabGridDialogMediatorUnitTest {
         mMediator.onAppHeaderStateChanged(state);
 
         assertThat(mModel.get(TabGridDialogProperties.APP_HEADER_HEIGHT), equalTo(10));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_BOTTOM_SHEET_ANDROID)
+    public void onLongPress_tabGroupParityEnabled() {
+        CancelLongPressTabItemEventListener cancelLongPress =
+                mMediator.onLongPressEvent(TAB1_ID, mCardView, mTabGridContextMenuCoordinator);
+        verify(mTabGridContextMenuCoordinator).showMenu(any(), eq(TAB1_ID));
+
+        assertNotNull(cancelLongPress);
+        cancelLongPress.cancelLongPress();
+        verify(mTabGridContextMenuCoordinator).dismiss();
+    }
+
+    @Test
+    public void onLongPress_tabGroupParityDisabled() {
+        CancelLongPressTabItemEventListener cancelLongPress =
+                mMediator.onLongPressEvent(TAB1_ID, mCardView);
+        verify(mTabGridContextMenuCoordinator, never()).showMenu(any(), eq(TAB1_ID));
+        assertNull(cancelLongPress);
+    }
+
+    @Test
+    public void testSuppressAccessibility() {
+        assertFalse(mModel.get(SUPPRESS_ACCESSIBILITY));
+
+        verify(mBottomSheetController).addObserver(mBottomSheetObserverCaptor.capture());
+        mBottomSheetObserverCaptor.getValue().onSheetOpened(StateChangeReason.NONE);
+        assertTrue(mModel.get(SUPPRESS_ACCESSIBILITY));
+
+        mBottomSheetObserverCaptor.getValue().onSheetClosed(StateChangeReason.NONE);
+        assertFalse(mModel.get(SUPPRESS_ACCESSIBILITY));
     }
 
     private void resetForDataSharing(boolean isShared, GroupMember... members) {

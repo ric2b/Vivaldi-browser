@@ -256,7 +256,7 @@ process_version("vivaldi_icon") {
   ]
 }
 
-if(!is_ios) {
+if(!is_ios && !is_android) {
   repack_locales("vivaldi_merge_repacks") {
     if (is_mac) {
       output_dir = "$root_gen_dir/repack"

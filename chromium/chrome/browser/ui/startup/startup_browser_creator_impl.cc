@@ -461,15 +461,16 @@ void StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
     whats_new_enabled = false;
 
     // Override is_post_crash_launch if it's post update run.
-    is_post_crash_launch =
-        is_post_crash_launch &&
-        !vivaldi::version::HasVersionChanged(profile_->GetPrefs());
+    is_post_crash_launch = is_post_crash_launch &&
+                           !vivaldi::version::HasCrashDetectionVersionChanged(
+                               profile_->GetPrefs());
     // Block extensions when recovering from a crash-loop.
-    extensions::ExtensionService* extension_service =
-        extensions::ExtensionSystem::Get(profile_)->extension_service();
-    DCHECK(extension_service);
-    is_post_crash_launch ? extension_service->BlockAllExtensions()
-                         : extension_service->UnblockAllExtensions();
+    extensions::ExtensionRegistrar* extension_registrar =
+        extensions::ExtensionRegistrar::Get(profile_);
+    DCHECK(extension_registrar);
+    is_post_crash_launch ? extension_registrar->BlockAllExtensions()
+                         : extension_registrar->UnblockAllExtensions();
+    vivaldi::version::UpdateCrashDetectionVersion(profile_->GetPrefs());
   }
 
   auto result = DetermineStartupTabs(

@@ -18,6 +18,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
@@ -337,8 +338,7 @@ class TestMediaStreamDispatcherHost
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   void SendWheel(const base::UnguessableToken& device_id,
-                 blink::mojom::CapturedWheelActionPtr action,
-                 SendWheelCallback callback) override {}
+                 blink::mojom::CapturedWheelActionPtr action) override {}
   void UpdateZoomLevel(const base::UnguessableToken& device_id,
                        ZoomLevelAction action,
                        UpdateZoomLevelCallback callback) override {}
@@ -1713,8 +1713,7 @@ class MediaStreamManagerTestForTransfers : public MediaStreamManagerTest {
   const base::UnguessableToken transfer_id_ = base::UnguessableToken::Create();
   blink::MediaStreamDevice original_device_;
   blink::MediaStreamDevice transferred_device_;
-  blink::mojom::MediaStreamRequestResult result_ =
-      blink::mojom::MediaStreamRequestResult::NUM_MEDIA_REQUEST_RESULTS;
+  std::optional<blink::mojom::MediaStreamRequestResult> result_;
 };
 
 TEST_F(MediaStreamManagerTestForTransfers,

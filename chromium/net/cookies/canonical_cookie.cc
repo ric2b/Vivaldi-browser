@@ -102,14 +102,6 @@ CookieSameSiteForMetrics CookieSameSiteToCookieSameSiteForMetrics(
   return static_cast<CookieSameSiteForMetrics>((static_cast<int>(enum_in) + 1));
 }
 
-auto GetAllDataMembersAsTuple(const CanonicalCookie& c) {
-  return std::make_tuple(c.CreationDate(), c.LastAccessDate(), c.ExpiryDate(),
-                         c.SecureAttribute(), c.IsHttpOnly(), c.SameSite(),
-                         c.Priority(), c.PartitionKey(), c.Name(), c.Value(),
-                         c.Domain(), c.Path(), c.LastUpdateDate(),
-                         c.SourceScheme(), c.SourcePort(), c.SourceType());
-}
-
 }  // namespace
 
 CookieAccessParams::CookieAccessParams(CookieAccessSemantics access_semantics,
@@ -638,9 +630,8 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
   url::Component canon_path_component;
   url::CanonicalizePath(cookie_path.data(), path_component, &canon_path,
                         &canon_path_component);
-  std::string encoded_cookie_path =
-      std::string(UNSAFE_TODO(canon_path.data() + canon_path_component.begin),
-                  canon_path_component.len);
+  std::string_view encoded_cookie_path = canon_path.view().substr(
+      canon_path_component.begin, canon_path_component.len);
 
   if (!path.empty()) {
     if (cookie_path != path) {
@@ -691,7 +682,7 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
   auto cc = std::make_unique<CanonicalCookie>(
       base::PassKey<CanonicalCookie>(), name, value,
       std::move(cookie_domain).value_or(std::string()),
-      std::move(encoded_cookie_path), creation_time, expiration_time,
+      std::string(encoded_cookie_path), creation_time, expiration_time,
       last_access_time,
       /*last_update=*/base::Time::Now(), secure, http_only, same_site, priority,
       partition_key, source_scheme, source_port, CookieSourceType::kOther);
@@ -816,9 +807,33 @@ bool CanonicalCookie::IsEquivalentForSecureCookieMatching(
   return equivalent_for_secure_cookie_matching;
 }
 
+bool CanonicalCookie::IsProbablyEquivalentTo(
+    const CanonicalCookie& other) const {
+  // LastUpdateDate is the most likely field to have changed.
+  return LastUpdateDate() == other.LastUpdateDate() &&
+         LastAccessDate() == other.LastAccessDate() &&
+         ExpiryDate() == other.ExpiryDate() &&
+         CreationDate() == other.CreationDate() &&
+         SecureAttribute() == other.SecureAttribute() &&
+         IsHttpOnly() == other.IsHttpOnly() && SameSite() == other.SameSite() &&
+         Priority() == other.Priority() &&
+         PartitionKey() == other.PartitionKey() && Name() == other.Name() &&
+         Domain() == other.Domain() && Path() == other.Path() &&
+         SourceScheme() == other.SourceScheme() &&
+         SourcePort() == other.SourcePort() &&
+         SourceType() == other.SourceType();
+}
+
 bool CanonicalCookie::HasEquivalentDataMembers(
     const CanonicalCookie& other) const {
-  return GetAllDataMembersAsTuple(*this) == GetAllDataMembersAsTuple(other);
+  return IsProbablyEquivalentTo(other) && Value() == other.Value();
+}
+
+bool CanonicalCookie::IsWebEquivalentTo(const CanonicalCookie& other) const {
+  return IsEquivalent(other) && Value() == other.Value() &&
+         IsSecure() == other.IsSecure() && SameSite() == other.SameSite() &&
+         IsHttpOnly() == other.IsHttpOnly() &&
+         ExpiryDate() == other.ExpiryDate();
 }
 
 void CanonicalCookie::PostIncludeForRequestURL(

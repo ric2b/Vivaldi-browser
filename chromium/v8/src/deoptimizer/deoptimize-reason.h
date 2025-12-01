@@ -67,6 +67,7 @@ namespace internal {
   V(NotANumberOrOddball, "not a Number or Oddball")                            \
   V(NotASmi, "not a Smi")                                                      \
   V(NotAString, "not a String")                                                \
+  V(NotASeqOneByteString, "not a sequential one-byte String")                  \
   V(NotAStringOrStringWrapper, "not a String or a string wrapper")             \
   V(NotAStringWrapper, "not a string wrapper")                                 \
   V(NotASymbol, "not a Symbol")                                                \
@@ -115,8 +116,7 @@ enum class DeoptimizeReason : uint8_t {
     "dependent allocation site tenuring changed")                             \
   V(AllocationSiteTransitionChange,                                           \
     "dependent allocation site transition changed")                           \
-  V(ScriptContextSlotPropertyChange,                                          \
-    "dependent script context slot property changed")                         \
+  V(ContextCellChange, "dependent context cell state changed")                \
   V(EmptyContextExtensionChange, "dependent empty context extension changed") \
   V(WeakObjects, "embedded weak objects cleared")                             \
   V(Debugger, "JS debugger attached")                                         \

@@ -44,11 +44,11 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/popup_menu.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/core/loader/navigation_policy.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
@@ -563,8 +563,12 @@ class CORE_EXPORT ChromeClient : public GarbageCollected<ChromeClient> {
 
   virtual void RequestDecode(LocalFrame*,
                              const cc::DrawImage& image,
-                             base::OnceCallback<void(bool)> callback) {
+                             base::OnceCallback<void(bool)> callback,
+                             bool speculative) {
     std::move(callback).Run(false);
+  }
+  virtual bool SpeculativeDecodeRequestInFlight(LocalFrame* frame) const {
+    return false;
   }
 
   // The `callback` will be fired when the corresponding renderer frame for the

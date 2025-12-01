@@ -1111,8 +1111,9 @@ DownloadBlockageStatus ControllerImpl::IsDownloadBlocked(Entry* entry) {
 }
 
 void ControllerImpl::KillTimedOutUploads() {
-  for (const std::string& guid : std::move(pending_uploads_))
+  for (const std::string& guid : pending_uploads_) {
     HandleCompleteDownload(CompletionType::UPLOAD_TIMEOUT, guid);
+  }
 }
 
 void ControllerImpl::NotifyClientsOfStartup(bool state_lost) {
@@ -1184,10 +1185,10 @@ void ControllerImpl::HandleCompleteDownload(CompletionType type,
   uint64_t file_size =
       driver_entry.has_value() ? driver_entry->bytes_downloaded : 0;
   stats::LogDownloadCompletion(entry->client, type, file_size);
-  LOG(WARNING) << "Background download complete, client: "
-               << static_cast<int>(entry->client)
-               << ", completion type: " << static_cast<int>(type)
-               << ", file size:" << file_size;
+  DVLOG(1) << "Background download complete, client: "
+           << static_cast<int>(entry->client)
+           << ", completion type: " << static_cast<int>(type)
+           << ", file size:" << file_size;
 
   if (type == CompletionType::SUCCEED) {
     DCHECK(driver_entry.has_value());

@@ -22,6 +22,7 @@
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/interest_group/ad_auction_currencies.h"
 #include "third_party/blink/public/common/interest_group/ad_display_size.h"
+#include "third_party/blink/public/common/interest_group/interest_group.h"
 #include "third_party/blink/public/common/interest_group/seller_capabilities.h"
 #include "third_party/blink/public/mojom/interest_group/interest_group_types.mojom-shared.h"
 #include "url/gurl.h"
@@ -290,9 +291,12 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
     // Value is opaque JSON data, passed as object to particular buyers.
     MaybePromisePerBuyerSignals per_buyer_signals;
 
-    // Similar as per_buyer_signals, but is not a promise value and can only
-    // used for TKV server for trusted KVv2 bidding signals.
-    base::flat_map<url::Origin, std::string> per_buyer_tkv_signals;
+    // Similar to `per_buyer_signals`, but instead of being a single promise,
+    // allows a promise to be specified for each buyer. Sent to trusted
+    // servers for interest groups owned by the corresponding buyer, when
+    // using trusted key value servers that support the TEE-based version 2 of
+    // the protocol.
+    base::flat_map<url::Origin, MaybePromiseJson> per_buyer_tkv_signals;
 
     // Values restrict the runtime of generateBid() scripts.
     MaybePromiseBuyerTimeouts buyer_timeouts;
@@ -405,6 +409,12 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
     // Optional coordinator for matching encryption public key and indicating
     // which key-value server to send trusted scoring signals to.
     std::optional<url::Origin> trusted_scoring_signals_coordinator;
+
+    // Controls the execution environment for the seller's scoring script,
+    // impacting isolation and state persistence. Options match those of
+    // interest group's execution mode. Defaults to 'compatibility' mode.
+    InterestGroup::ExecutionMode execution_mode =
+        mojom::InterestGroup_ExecutionMode::kCompatibilityMode;
   };
 
   AuctionConfig();
@@ -480,7 +490,7 @@ struct BLINK_COMMON_EXPORT AuctionConfig {
   // will be sent to V1 trusted seller signals server.
   std::optional<bool> send_creative_scanning_metadata;
 
-  static_assert(__LINE__ == 483, R"(
+  static_assert(__LINE__ == 493, R"(
 If modifying AuctionConfig fields, please make sure to also modify:
 
 * third_party/blink/public/mojom/interest_group/interest_group_types.mojom

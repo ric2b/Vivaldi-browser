@@ -46,8 +46,13 @@ vars = {
   'checkout_instrumented_libraries': 'checkout_linux and checkout_configuration == "default"',
 
   # GN CIPD package version.
-  'gn_version': 'git_revision:c97a86a72105f3328a540f5a5ab17d11989ab7dd',
+  'gn_version': 'git_revision:487f8353f15456474437df32bb186187b0940b45',
   'clang_format_revision': '37f6e68a107df43b7d7e044fd36a13cbae3413f2',
+
+  # Chrome version to pull clang update.py script from. This is necessary
+  # because this script does experience breaking changes, such as removing
+  # command line arguments, that need to be handled intentionally by a roll.
+  'chrome_version': 'ddf8f8a465be2779bd826db57f1299ccd2f3aa25',
 
   # 'magic' text to tell depot_tools that git submodules should be accepted
   # but parity with DEPS file is expected.
@@ -66,14 +71,14 @@ deps = {
   # https://chromium.googlesource.com/chromium/src/buildtools/+/refs/heads/main
   'buildtools': {
     'url': Var('chromium_git') + '/chromium/src/buildtools' +
-      '@' + '00459762409cb29cecf398a23cdb0cae918b7515',
+      '@' + '077a66f30fcf281b066fafb6dfc60818c238efb6',
   },
 
   # and here:
   # https://chromium.googlesource.com/chromium/src/build/+/refs/heads/main
   'build': {
     'url': Var('chromium_git') + '/chromium/src/build' +
-      '@' + '043f0ac1c5fc7a29960fda36ce6689a96bdc11ee',
+      '@' + '526c6cbd6a32e5952e0cc09ab35d33ea4d883907',
     'condition': 'not build_with_chromium',
   },
 
@@ -247,6 +252,7 @@ hooks = [
     'pattern': '.',
     'condition': 'not build_with_chromium',
     'action': [ 'python3', 'tools/download-clang-update-script.py',
+                '--revision', Var('chrome_version'),
                 '--output', 'tools/clang/scripts/update.py' ],
     # NOTE: This file appears in .gitignore, as it is not a part of the
     # openscreen repo.

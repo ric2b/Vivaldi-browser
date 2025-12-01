@@ -67,6 +67,10 @@ inline constexpr char kLastClearBrowsingDataTab[] =
 inline constexpr char kMigratedToQuickDeletePrefValues[] =
     "browser.migrated_to_quick_delete_pref_values";
 
+// Vivaldi
+inline constexpr char kAdsTrackerBlocker[] =
+    "browser.clear_data.ads_tracker_blocker";
+
 // Registers the Clear Browsing Data UI prefs.
 void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry);
 

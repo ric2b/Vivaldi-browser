@@ -76,11 +76,9 @@ class FakeInstanceID : public instance_id::InstanceID {
                 base::TimeDelta time_to_live,
                 std::set<Flags> flags,
                 GetTokenCallback callback) override {
-    if (authorized_entity == kSharingSenderID) {
-      std::move(callback).Run(kSenderIdFCMToken, result_);
-    } else {
-      std::move(callback).Run(fcm_token_, result_);
-    }
+    ASSERT_EQ(authorized_entity, kSharingSenderID)
+        << "Unexpected authorized_entity: " << authorized_entity;
+    std::move(callback).Run(kSenderIdFCMToken, result_);
   }
 
   void ValidateToken(const std::string& authorized_entity,
@@ -196,22 +194,16 @@ class SharingDeviceRegistrationImplTest : public testing::Test {
   }
 
   std::set<sync_pb::SharingSpecificFields::EnabledFeatures>
-  GetExpectedEnabledFeatures(bool supports_vapid) {
+  GetExpectedEnabledFeatures() {
     std::set<sync_pb::SharingSpecificFields::EnabledFeatures> features;
 
     // IsClickToCallSupported() involves JNI call which is hard to test.
     if (sharing_device_registration_.IsClickToCallSupported()) {
       features.insert(sync_pb::SharingSpecificFields::CLICK_TO_CALL_V2);
-      if (supports_vapid) {
-        features.insert(sync_pb::SharingSpecificFields::CLICK_TO_CALL_VAPID);
-      }
     }
 
     // Shared clipboard should always be supported.
     features.insert(sync_pb::SharingSpecificFields::SHARED_CLIPBOARD_V2);
-    if (supports_vapid) {
-      features.insert(sync_pb::SharingSpecificFields::SHARED_CLIPBOARD_VAPID);
-    }
 
     if (sharing_device_registration_.IsRemoteCopySupported()) {
       features.insert(sync_pb::SharingSpecificFields::REMOTE_COPY);
@@ -285,7 +277,7 @@ TEST_F(SharingDeviceRegistrationImplTest, RegisterDeviceTest_Success) {
   RegisterDeviceSync();
 
   std::set<sync_pb::SharingSpecificFields::EnabledFeatures> enabled_features =
-      GetExpectedEnabledFeatures(/*supports_vapid=*/false);
+      GetExpectedEnabledFeatures();
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       /*vapid_target_info=*/{},
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
@@ -323,7 +315,7 @@ TEST_F(SharingDeviceRegistrationImplTest, RegisterDeviceTest_SenderIDOnly) {
   RegisterDeviceSync();
 
   std::set<sync_pb::SharingSpecificFields::EnabledFeatures> enabled_features =
-      GetExpectedEnabledFeatures(/*supports_vapid=*/false);
+      GetExpectedEnabledFeatures();
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       syncer::DeviceInfo::SharingTargetInfo(),
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},
@@ -402,7 +394,7 @@ TEST_F(SharingDeviceRegistrationImplTest, UnregisterDeviceTest_Success) {
 
   // Device should be registered with the new FCM token.
   std::set<sync_pb::SharingSpecificFields::EnabledFeatures> enabled_features =
-      GetExpectedEnabledFeatures(/*supports_vapid=*/false);
+      GetExpectedEnabledFeatures();
   syncer::DeviceInfo::SharingInfo expected_sharing_info(
       /*vapid_target_info=*/{},
       {kSenderIdFCMToken, kSenderIdP256dh, kSenderIdAuthSecret},

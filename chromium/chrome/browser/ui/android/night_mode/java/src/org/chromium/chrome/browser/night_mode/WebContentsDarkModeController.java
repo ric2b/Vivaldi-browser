@@ -90,8 +90,9 @@ public class WebContentsDarkModeController {
     /**
      * Return whether web content dark mode is enabled by settings, despite whether the current
      * activity is in night mode.
+     *
      * @param browserContextHandle Current browser context handle.
-     * */
+     */
     public static boolean isGlobalUserSettingsEnabled(BrowserContextHandle browserContextHandle) {
         return WebsitePreferenceBridge.isContentSettingEnabled(
                 browserContextHandle, ContentSettingsType.AUTO_DARK_WEB_CONTENT)
@@ -100,11 +101,12 @@ public class WebContentsDarkModeController {
     }
 
     /**
-     * Whether web contents dark mode feature is enabled for the UI.
-     * Returns true when auto dark global setting is enabled, and context is in night mode.
+     * Whether web contents dark mode feature is enabled for the UI. Returns true when auto dark
+     * global setting is enabled, and context is in night mode.
+     *
      * @param context {@link Context} used to check whether UI is in night mode.
      * @param browserContextHandle Current browser context handle.
-     * */
+     */
     public static boolean isFeatureEnabled(
             Context context, BrowserContextHandle browserContextHandle) {
         if (org.chromium.build.BuildConfig.IS_VIVALDI)

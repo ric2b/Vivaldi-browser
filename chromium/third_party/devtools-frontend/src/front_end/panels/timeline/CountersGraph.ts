@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import '../../ui/legacy/legacy.js';
 
 import * as Common from '../../core/common/common.js';
@@ -434,7 +436,6 @@ export class CounterUI {
     this.setting = Common.Settings.Settings.instance().createSetting('timeline-counters-graph-' + settingsKey, true);
     this.setting.setTitle(title);
     this.filter = new UI.Toolbar.ToolbarSettingCheckbox(this.setting, title);
-    this.filter.inputElement.classList.add('-theme-preserve-input');
     const parsedColor = Common.Color.parse(graphColor);
     if (parsedColor) {
       const colorWithAlpha = parsedColor.setAlpha(0.5).asString(Common.Color.Format.RGBA);
@@ -444,7 +445,7 @@ export class CounterUI {
       }
       htmlElement.style.borderColor = 'transparent';
     }
-    this.filter.inputElement.addEventListener('click', this.toggleCounterGraph.bind(this));
+    this.filter.element.addEventListener('click', this.toggleCounterGraph.bind(this));
     countersPane.toolbar.appendToolbarItem(this.filter);
     this.range = this.filter.element.createChild('span', 'range');
 

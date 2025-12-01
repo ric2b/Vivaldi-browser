@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_GLIC_TEST_SUPPORT_INTERACTIVE_TEST_UTIL_H_
 
 #include "base/scoped_observation_traits.h"
+#include "chrome/browser/glic/fre/glic_fre_controller.h"
 #include "chrome/browser/glic/host/glic.mojom.h"
 #include "chrome/browser/glic/widget/glic_view.h"
 #include "chrome/browser/glic/widget/glic_window_controller.h"
@@ -14,20 +15,15 @@
 #include "ui/base/interaction/polling_state_observer.h"
 
 namespace base {
-// Set up a custom |ScopedObservationTrait| for
-// |GlicWindowController::WebUiStateObserver|.
+// Set up a custom `ScopedObservationTrait` for `Host::Observer`.
 template <>
 struct ScopedObservationTraits<glic::GlicWindowController,
-                               glic::GlicWindowController::WebUiStateObserver> {
-  static void AddObserver(
-      glic::GlicWindowController* controller,
-      glic::GlicWindowController::WebUiStateObserver* observer) {
-    controller->AddWebUiStateObserver(observer);
+                               glic::Host::Observer> {
+  static void AddObserver(glic::Host* host, glic::Host::Observer* observer) {
+    host->AddObserver(observer);
   }
-  static void RemoveObserver(
-      glic::GlicWindowController* controller,
-      glic::GlicWindowController::WebUiStateObserver* observer) {
-    controller->RemoveWebUiStateObserver(observer);
+  static void RemoveObserver(glic::Host* host, glic::Host::Observer* observer) {
+    host->RemoveObserver(observer);
   }
 };
 }  // namespace base
@@ -35,6 +31,17 @@ struct ScopedObservationTraits<glic::GlicWindowController,
 namespace glic::test {
 
 namespace internal {
+
+// Observes FRE showing dialog for changes to state().
+class GlicFreShowingDialogObserver
+    : public ui::test::PollingStateObserver<bool> {
+ public:
+  explicit GlicFreShowingDialogObserver(GlicFreController* controller);
+  ~GlicFreShowingDialogObserver() override;
+};
+
+DECLARE_STATE_IDENTIFIER_VALUE(GlicFreShowingDialogObserver,
+                               kGlicFreShowingDialogState);
 
 // Observes `controller` for changes to state().
 class GlicWindowControllerStateObserver
@@ -49,14 +56,13 @@ DECLARE_STATE_IDENTIFIER_VALUE(GlicWindowControllerStateObserver,
                                kGlicWindowControllerState);
 
 // Observers the glic app internal state.
-class GlicAppStateObserver : public ui::test::ObservationStateObserver<
-                                 mojom::WebUiState,
-                                 GlicWindowController,
-                                 GlicWindowController::WebUiStateObserver> {
+class GlicAppStateObserver
+    : public ui::test::
+          ObservationStateObserver<mojom::WebUiState, Host, Host::Observer> {
  public:
-  explicit GlicAppStateObserver(GlicWindowController* controller);
+  explicit GlicAppStateObserver(Host* host);
   ~GlicAppStateObserver() override;
-  // GlicWindowController::WebUiStateObserver
+  // Host::Observer
   void WebUiStateChanged(mojom::WebUiState state) override;
 };
 
@@ -82,12 +88,36 @@ class WaitingStateObserver : public ui::test::StateObserver<bool> {
 };
 
 DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(WaitingStateObserver, kDelayState);
+
+class WebUiStateObserver : public ui::test::StateObserver<mojom::WebUiState>,
+                           public Host::Observer {
+ public:
+  explicit WebUiStateObserver(Host* host);
+
+  ~WebUiStateObserver() override;
+
+  mojom::WebUiState GetStateObserverInitialState() const override;
+
+  void WebUiStateChanged(mojom::WebUiState state) override;
+
+ private:
+  base::ScopedObservation<Host, Host::Observer> observation_{this};
+  raw_ptr<Host> host_;
+};
+
+DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(WebUiStateObserver, kWebUiState);
+
 }  // namespace internal
 
 // The glic WebUI web contents.
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kGlicHostElementId);
 // The glic webview contents.
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kGlicContentsElementId);
+
+// The glic FRE WebUI web contents.
+DECLARE_ELEMENT_IDENTIFIER_VALUE(kGlicFreHostElementId);
+// The glic FRE webview contents.
+DECLARE_ELEMENT_IDENTIFIER_VALUE(kGlicFreContentsElementId);
 
 }  // namespace glic::test
 

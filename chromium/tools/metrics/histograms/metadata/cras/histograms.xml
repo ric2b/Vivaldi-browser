@@ -123,7 +123,7 @@ This collects each top-level device metric type. For example,
 </variants>
 
 <histogram name="Cras.A2dp100msFailureOverStream" units="units"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>hychao@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -134,7 +134,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.A2dp20msFailureOverStream" units="units"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>hychao@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -155,14 +155,14 @@ This collects each top-level device metric type. For example,
   </summary>
 </histogram>
 
-<histogram name="Cras.ApNcRuntime" units="seconds" expires_after="2025-09-14">
+<histogram name="Cras.ApNcRuntime" units="seconds" expires_after="2025-11-16">
   <owner>hunghsienchen@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>Tracks the runtime of the APM when AP NC is active.</summary>
 </histogram>
 
 <histogram name="Cras.ApNcStartStatus" enum="CrasApNcStartStatus"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>hunghsienchen@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -171,14 +171,14 @@ This collects each top-level device metric type. For example,
   </summary>
 </histogram>
 
-<histogram name="Cras.AstRuntime" units="seconds" expires_after="2025-08-12">
+<histogram name="Cras.AstRuntime" units="seconds" expires_after="2025-10-12">
   <owner>cranelw@google.com</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>Tracks the runtime of the APM when AST is active.</summary>
 </histogram>
 
 <histogram name="Cras.AstStartStatus" enum="CrasEffectStartStatus"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>cranelw@google.com</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -198,9 +198,6 @@ This collects each top-level device metric type. For example,
 
 <histogram name="Cras.Busyloop{Cras_TimePeriod}" units="units"
     expires_after="2025-06-22">
-<!-- Name completed by histogram_suffixes
-     name="Cras.TimePeriod" -->
-
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -289,7 +286,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.DeviceGain{Device}" units="level"
-    expires_after="2025-09-01">
+    expires_after="2025-11-02">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -312,7 +309,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.DeviceOpenStatus.Input{Device}"
-    enum="CrasDeviceOpenStatus" expires_after="2025-08-03">
+    enum="CrasDeviceOpenStatus" expires_after="2025-10-05">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -322,7 +319,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.DeviceOpenStatus.Output{Device}"
-    enum="CrasDeviceOpenStatus" expires_after="2025-08-03">
+    enum="CrasDeviceOpenStatus" expires_after="2025-10-05">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -333,7 +330,7 @@ This collects each top-level device metric type. For example,
 
 <histogram
     name="Cras.DeviceRuntime.Input{Device}{HostCapability}{PeripheralCapability}"
-    units="seconds" expires_after="2025-08-24">
+    units="seconds" expires_after="2025-10-26">
   <owner>jrwu@google.com</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -359,7 +356,7 @@ This collects each top-level device metric type. For example,
 
 <histogram
     name="Cras.DeviceRuntime.Output{Device}{HostCapability}{PeripheralCapability}"
-    units="seconds" expires_after="2025-08-24">
+    units="seconds" expires_after="2025-10-26">
   <owner>jrwu@google.com</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -417,7 +414,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.DeviceTypeInput" enum="CrasDeviceType"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -428,7 +425,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.DeviceTypeOutput" enum="CrasDeviceType"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -459,7 +456,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.DlcManagerStatus.ElapsedTimeHistogramOnFailure.{DlcType}"
-    units="seconds" expires_after="2025-08-10">
+    units="seconds" expires_after="2025-10-12">
   <owner>cranelw@google.com</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -478,7 +475,7 @@ This collects each top-level device metric type. For example,
   <token key="DlcType" variants="CrasDlcType"/>
 </histogram>
 
-<histogram name="Cras.FetchDelayCount" units="count" expires_after="2025-07-27">
+<histogram name="Cras.FetchDelayCount" units="count" expires_after="2025-09-28">
 <!-- Name completed by histogram_suffixes
      name="Cras.ClientType" and
      name="Cras.StreamType" -->
@@ -494,7 +491,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.FetchDelayMilliSeconds" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
 <!-- Name completed by histogram_suffixes
      name="Cras.ClientType" and
      name="Cras.StreamType" -->
@@ -510,7 +507,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.ForceRespectUiGains" enum="BooleanEnabled"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>eddyhsu@chromium.org</owner>
   <owner>chromeos-audio-sw@google.com</owner>
   <summary>
@@ -646,7 +643,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.InputGainChanged" enum="AudioSettingsChangeSource"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>eddyhsu@chromium.org</owner>
   <owner>chromeos-audio-sw@google.com</owner>
   <summary>
@@ -672,7 +669,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.InternalSoundcardStatus{Second}"
-    enum="InternalSoundcardStatus" expires_after="2025-08-17">
+    enum="InternalSoundcardStatus" expires_after="2025-10-19">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -980,7 +977,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.StreamChannelCount{Cras_Direction}" units="channels"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
 <!-- Name completed by histogram_suffixes
      name="Cras.Direction" and
      name="Cras.ClientType" -->
@@ -1066,7 +1063,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.StreamFlags{Cras_Direction}" units="value"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
 <!-- Name completed by histogram_suffixes
      name="Cras.Direction" and
      name="Cras.ClientType" -->
@@ -1154,7 +1151,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.StreamRuntime{Cras_Direction}" units="seconds"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
 <!-- Name completed by histogram_suffixes
      name="Cras.Direction" and
      name="Cras.ClientType" and
@@ -1173,7 +1170,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.StreamSamplingFormat{Cras_Direction}"
-    enum="AlsaSampleFormatType" expires_after="2025-08-24">
+    enum="AlsaSampleFormatType" expires_after="2025-10-26">
 <!-- Name completed by histogram_suffixes
      name="Cras.Direction" and
      name="Cras.ClientType" -->
@@ -1190,7 +1187,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.StreamSamplingRate{Cras_Direction}" units="bps"
-    expires_after="2025-09-01">
+    expires_after="2025-11-02">
 <!-- Name completed by histogram_suffixes
      name="Cras.Direction" and
      name="Cras.ClientType" -->
@@ -1229,7 +1226,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.UnderrunsPerDevice{Device}" units="count"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -1258,7 +1255,7 @@ This collects each top-level device metric type. For example,
   </summary>
 </histogram>
 
-<histogram name="Cras.WakeDelay" units="ms" expires_after="2025-07-27">
+<histogram name="Cras.WakeDelay" units="ms" expires_after="2025-09-28">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>
@@ -1268,7 +1265,7 @@ This collects each top-level device metric type. For example,
 </histogram>
 
 <histogram name="Cras.WakeDelayCountPer10kWakes" units="count"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>yuhsuan@chromium.org</owner>
   <owner>chromeos-audio@google.com</owner>
   <summary>

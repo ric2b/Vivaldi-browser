@@ -1201,6 +1201,12 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
 // Regression test for https://crbug.com/368289857.
 IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotBrowserTest,
                        NavigateWhileHidden_NotCaptured) {
+  // TODO(crbug.com/390571607): Update this test to support default
+  // SiteInstanceGroup in all parameterization modes.
+  if (ShouldUseDefaultSiteInstanceGroup()) {
+    GTEST_SKIP();
+  }
+
   const size_t page_size = GetUncompressedScreenshotSizeInBytes();
   const size_t memory_budget = 10 * page_size;
   auto* manager = GetManagerForTab(web_contents());
@@ -2365,6 +2371,52 @@ IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest,
     }
     HistoryNavigateTabAndWaitForScreenshotCached(web_contents(), controller,
                                                  -1);
+    AssertCacheHitOrMissReasonsAre(
+        controller, {std::nullopt, CacheHitOrMissReason::kCacheHit});
+    AssertOrderedScreenshotsAre(controller, {std::nullopt, SK_ColorGREEN});
+  }
+}
+
+// Ensure that only the necessary screenshots persist when a navigation happens
+// while a gesture is ongoing.
+IN_PROC_BROWSER_TEST_P(NavigationEntryScreenshotCacheHitOrMissReasonBrowserTest,
+                       NavigationDuringGesture) {
+  // One screenshot per Profile (BrowserContext).
+  const size_t page_size = GetUncompressedScreenshotSizeInBytes();
+  auto* manager = GetManagerForTab(web_contents());
+  manager->SetMemoryBudgetForTesting(page_size);
+  auto& controller = web_contents()->GetController();
+  {
+    SCOPED_TRACE("[red*] -> [red&, green*]");
+    NavigateTabAndWaitForScreenshotCached(web_contents(), controller,
+                                          GetNextUrl("/green.html"));
+    AssertCacheHitOrMissReasonsAre(
+        controller, {CacheHitOrMissReason::kCacheHit, std::nullopt});
+    AssertOrderedScreenshotsAre(controller, {SK_ColorRED, std::nullopt});
+  }
+  {
+    SCOPED_TRACE("[red&, green*] -> [red*, green&]");
+    // Simulate initiating a gesture.
+    std::unique_ptr<NavigationEntryScreenshot> screenshot =
+        controller.GetNavigationEntryScreenshotCache()->RemoveScreenshot(
+            controller.GetEntryAtOffset(-1));
+    AssertCacheHitOrMissReasonsAre(controller, {std::nullopt, std::nullopt});
+
+    // A renderer navigation starts.
+    auto* tab = web_contents();
+    TestFrameNavigationObserver nav_observer(tab->GetPrimaryMainFrame());
+    ScopedScreenshotCapturedObserverForTesting screenshot_observer(
+        controller.GetLastCommittedEntryIndex());
+    EXPECT_THAT(EvalJs(tab, "history.back();"), EvalJsResult::IsOk());
+
+    // Wait for screenshot to be pending.
+    screenshot_observer.Wait();
+    // Simulate canceling the gesture.
+    controller.GetNavigationEntryScreenshotCache()->SetScreenshot(
+        nullptr, std::move(screenshot), false);
+
+    // Navigation completes
+    nav_observer.Wait();
     AssertCacheHitOrMissReasonsAre(
         controller, {std::nullopt, CacheHitOrMissReason::kCacheHit});
     AssertOrderedScreenshotsAre(controller, {std::nullopt, SK_ColorGREEN});

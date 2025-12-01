@@ -7,45 +7,36 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.os.Build;
 
 import org.chromium.base.SysUtils;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.ui.util.XrUtils;
 
 import java.util.Locale;
 import java.util.Set;
 
+// Vivaldi
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** A class to handle the state of flags for tab_management. */
+@NullMarked
 public class TabUiFeatureUtilities {
     private static final Set<String> TAB_TEARING_OEM_ALLOWLIST = Set.of("samsung");
 
     /** Returns whether the Grid Tab Switcher UI should use list mode. */
     public static boolean shouldUseListMode() {
+        // Note(david@vivaldi.com): We have a setting which can toggle the list/grid view of the tab
+        // switcher.
+        if (ChromeApplicationImpl.isVivaldi()) {
+            return SysUtils.isLowEndDevice()
+                    || VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                            VivaldiPreferences.SHOW_TAB_SWITCHER_LIST, false);
+        }
+
         if (ChromeFeatureList.sDisableListTabSwitcher.isEnabled()) {
             return false;
         }
         // Low-end forces list mode.
         return SysUtils.isLowEndDevice() || ChromeFeatureList.sForceListTabSwitcher.isEnabled();
-    }
-
-    /**
-     * @return whether tab drag as window is enabled.
-     */
-    public static boolean isTabDragAsWindowEnabled() {
-        return XrUtils.isXrDevice();
-    }
-
-    /** Returns if the tab group pane should be displayed in the hub. */
-    public static boolean isTabGroupPaneEnabled() {
-        if (ChromeApplicationImpl.isVivaldi()) return true; // Vivaldi ref. VAB-10226.
-        return ChromeFeatureList.sTabGroupPaneAndroid.isEnabled();
-    }
-
-    /** Returns whether drag drop from tab strip to create new instance is enabled. */
-    public static boolean isTabDragToCreateInstanceSupported() {
-        // TODO(crbug/328511660): Add OS version check once available.
-        return doesOemSupportDragToCreateInstance() || !isTabDragAsWindowEnabled();
     }
 
     /** Returns whether device OEM is allow-listed for tab tearing */

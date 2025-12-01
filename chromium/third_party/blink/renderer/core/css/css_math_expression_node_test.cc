@@ -610,13 +610,16 @@ TEST(CSSMathExpressionNode, TestInvalidProgressNotation) {
 TEST(CSSMathExpressionNode, TestFunctionsWithNumberReturn) {
   const struct TestCase {
     const String input;
+    const String serialized;
     const CalculationResultCategory category;
     const double output;
   } test_cases[] = {
-      {"10 * sign(10%)", CalculationResultCategory::kCalcNumber, 10.0},
-      {"10px * sign(10%)", CalculationResultCategory::kCalcLength, 10.0},
-      {"10 + 2 * (1 + sign(10%))", CalculationResultCategory::kCalcNumber,
-       14.0},
+      {"10 * sign(10%)", "(10 * sign(10%))",
+       CalculationResultCategory::kCalcNumber, 10.0},
+      {"10px * sign(10%)", "(10px * sign(10%))",
+       CalculationResultCategory::kCalcLength, 10.0},
+      {"10 + 2 * (1 + sign(10%))", "(10 + (2 * (1 + sign(10%))))",
+       CalculationResultCategory::kCalcNumber, 14.0},
   };
 
   for (const auto& test_case : test_cases) {
@@ -627,7 +630,7 @@ TEST(CSSMathExpressionNode, TestFunctionsWithNumberReturn) {
         CSSMathExpressionNode::ParseMathFunction(
             CSSValueID::kCalc, stream, *context, Flags({Flag::AllowPercent}),
             kCSSAnchorQueryTypesNone);
-    EXPECT_EQ(css_node->CustomCSSText(), test_case.input);
+    EXPECT_EQ(css_node->CustomCSSText(), test_case.serialized);
     EXPECT_EQ(css_node->Category(), test_case.category);
     EXPECT_TRUE(css_node->IsOperation());
     scoped_refptr<const CalculationExpressionNode> calc_node =
@@ -636,7 +639,7 @@ TEST(CSSMathExpressionNode, TestFunctionsWithNumberReturn) {
     EXPECT_TRUE(calc_node->IsOperation());
     EXPECT_EQ(calc_node->Evaluate(100.0, {}), test_case.output);
     css_node = CSSMathExpressionNode::Create(*calc_node);
-    EXPECT_EQ(css_node->CustomCSSText(), test_case.input);
+    EXPECT_EQ(css_node->CustomCSSText(), test_case.serialized);
   }
 }
 
@@ -764,6 +767,56 @@ TEST(CSSMathExpressionNode, TestColorChannelExpressionWithoutSubstitution) {
   EXPECT_EQ(To<CalculationExpressionPixelsAndPercentNode>(operands[1].get())
                 ->Pixels(),
             360.f);
+}
+
+TEST(CSSMathExpressionNode, CSSMathTypeSum) {
+  auto check_type_sum = [](const CSSMathType& type1, const CSSMathType& type2,
+                           bool is_valid, CalculationResultCategory type) {
+    CSSMathType sum_type = type1 + type2;
+    CSSMathType reversed_sum_type = type2 + type1;
+    EXPECT_EQ(sum_type.IsValid(), is_valid);
+    EXPECT_EQ(sum_type.Type(), type);
+    EXPECT_EQ(reversed_sum_type.IsValid(), is_valid);
+    EXPECT_EQ(reversed_sum_type.Type(), type);
+  };
+
+  CSSMathType number(kCalcNumber);
+  CSSMathType length(kCalcLength);
+  CSSMathType percent(kCalcPercent);
+
+  check_type_sum(number, length, false, kCalcOther);
+  check_type_sum(number, percent, false, kCalcOther);
+  check_type_sum(percent, length, true, kCalcLength);
+
+  check_type_sum(number, number, true, kCalcNumber);
+  check_type_sum(length, length, true, kCalcLength);
+  check_type_sum(percent, percent, true, kCalcPercent);
+}
+
+TEST(CSSMathExpressionNode, CSSMathTypeProduct) {
+  CSSMathType number(kCalcNumber);
+  CSSMathType length(kCalcLength);
+  CSSMathType percent(kCalcPercent);
+
+  EXPECT_EQ((number * number).Type(), kCalcNumber);
+  EXPECT_EQ((number * number / number).Type(), kCalcNumber);
+  EXPECT_EQ((number * length).Type(), kCalcLength);
+  EXPECT_EQ((length / length).Type(), kCalcNumber);
+  EXPECT_EQ((length * length / length).Type(), kCalcLength);
+  EXPECT_EQ((length * length / length / length).Type(), kCalcNumber);
+  EXPECT_EQ((length * length / (length * length)).Type(), kCalcNumber);
+  EXPECT_EQ((length * (length / length) * number).Type(), kCalcLength);
+
+  EXPECT_EQ((length * length).Type(), kCalcOther);
+  EXPECT_EQ((percent * length).Type(), kCalcOther);
+  EXPECT_EQ((percent * percent).Type(), kCalcOther);
+  EXPECT_EQ((number / length).Type(), kCalcOther);
+}
+
+TEST(CSSMathExpressionNode, CSSMathTypeComplex) {
+  CSSMathType length(kCalcLength);
+
+  EXPECT_EQ(((length + length) / length).Type(), kCalcNumber);
 }
 
 }  // anonymous namespace

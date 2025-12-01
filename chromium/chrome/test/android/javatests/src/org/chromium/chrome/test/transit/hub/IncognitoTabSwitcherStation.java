@@ -6,7 +6,6 @@ package org.chromium.chrome.test.transit.hub;
 
 import static androidx.test.espresso.matcher.ViewMatchers.isSelected;
 
-import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.ViewElementMatchesCondition;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
@@ -17,6 +16,10 @@ public class IncognitoTabSwitcherStation extends TabSwitcherStation {
 
     public IncognitoTabSwitcherStation(boolean regularTabsExist, boolean incognitoTabsExist) {
         super(/* isIncognito= */ true, regularTabsExist, incognitoTabsExist);
+
+        assert incognitoTabsButtonElement != null;
+        declareEnterCondition(
+                new ViewElementMatchesCondition(incognitoTabsButtonElement, isSelected()));
     }
 
     /**
@@ -33,14 +36,6 @@ public class IncognitoTabSwitcherStation extends TabSwitcherStation {
         return PaneId.INCOGNITO_TAB_SWITCHER;
     }
 
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        super.declareElements(elements);
-        assert mIncognitoTabsButton != null;
-        elements.declareEnterCondition(
-                new ViewElementMatchesCondition(mIncognitoTabsButton, isSelected()));
-    }
-
     /** Open a new tab using the New Tab action button. */
     public IncognitoNewTabPageStation openNewTab() {
         recheckActiveConditions();
@@ -51,6 +46,6 @@ public class IncognitoTabSwitcherStation extends TabSwitcherStation {
                         .withIsSelectingTabs(1)
                         .build();
 
-        return travelToSync(page, getNewTabButtonViewSpec()::click);
+        return travelToSync(page, newTabButtonElement.getClickTrigger());
     }
 }

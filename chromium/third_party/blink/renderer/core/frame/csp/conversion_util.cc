@@ -28,6 +28,8 @@ network::mojom::blink::CSPSourceListPtr ConvertSourceList(
       WTF::ToVector(source_list.sources, ConvertSource),
       Vector<String>(source_list.nonces),
       WTF::ToVector(source_list.hashes, ConvertHashSource),
+      WTF::ToVector(source_list.url_hashes, ConvertHashSource),
+      WTF::ToVector(source_list.eval_hashes, ConvertHashSource),
       source_list.allow_self, source_list.allow_star, source_list.allow_inline,
       source_list.allow_inline_speculation_rules, source_list.allow_eval,
       source_list.allow_wasm_eval, source_list.allow_wasm_unsafe_eval,
@@ -60,7 +62,7 @@ network::mojom::blink::ContentSecurityPolicyPtr ConvertToMojoBlink(
           policy_in.header.header_value, policy_in.header.type,
           policy_in.header.source),
       policy_in.use_reporting_api, Vector<String>(policy_in.report_endpoints),
-      policy_in.require_sri_for, policy_in.require_trusted_types_for,
+      policy_in.require_trusted_types_for,
       policy_in.trusted_types
           ? network::mojom::blink::CSPTrustedTypes::New(
                 Vector<String>(policy_in.trusted_types->list),

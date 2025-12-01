@@ -14,9 +14,12 @@
 #include "src/xnnpack/simd/f32-avx.h"
 #include "src/xnnpack/simd/f32-avx512f.h"
 #include "src/xnnpack/simd/f32-fma3.h"
+#include "src/xnnpack/simd/f32-hvx.h"
 #include "src/xnnpack/simd/f32-neon.h"
 #include "src/xnnpack/simd/f32-scalar.h"
 #include "src/xnnpack/simd/f32-sse2.h"
+#include "src/xnnpack/simd/f32-wasmrelaxedsimd.h"
+#include "src/xnnpack/simd/f32-wasmsimd-base.h"
 #include "src/xnnpack/simd/f32-wasmsimd.h"
 #endif  // defined(SIMD_HEADER)
 
@@ -208,15 +211,6 @@ TEST_F(F32SimdTest, ShiftRight) {
   xnn_storeu_f32(output_.data(), res);
   for (size_t k = 0; k < xnn_simd_size_f32; k++) {
     ASSERT_EQ(*(uint32_t *)&output_[k], *(uint32_t *)&inputs_[k] >> 5);
-  }
-}
-
-TEST_F(F32SimdTest, GetExp) {
-  const xnn_simd_f32_t a = xnn_loadu_f32(inputs_.data());
-  const xnn_simd_f32_t res = xnn_getexp_f32(a);
-  xnn_storeu_f32(output_.data(), res);
-  for (size_t k = 0; k < xnn_simd_size_f32; k++) {
-    ASSERT_EQ(output_[k], std::logb(inputs_[k]));
   }
 }
 

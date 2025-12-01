@@ -6776,126 +6776,6 @@ void safe_VkDeviceDeviceMemoryReportCreateInfoEXT::initialize(const safe_VkDevic
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
-safe_VkPhysicalDeviceRobustness2FeaturesEXT::safe_VkPhysicalDeviceRobustness2FeaturesEXT(
-    const VkPhysicalDeviceRobustness2FeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
-    : sType(in_struct->sType),
-      robustBufferAccess2(in_struct->robustBufferAccess2),
-      robustImageAccess2(in_struct->robustImageAccess2),
-      nullDescriptor(in_struct->nullDescriptor) {
-    if (copy_pnext) {
-        pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    }
-}
-
-safe_VkPhysicalDeviceRobustness2FeaturesEXT::safe_VkPhysicalDeviceRobustness2FeaturesEXT()
-    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT),
-      pNext(nullptr),
-      robustBufferAccess2(),
-      robustImageAccess2(),
-      nullDescriptor() {}
-
-safe_VkPhysicalDeviceRobustness2FeaturesEXT::safe_VkPhysicalDeviceRobustness2FeaturesEXT(
-    const safe_VkPhysicalDeviceRobustness2FeaturesEXT& copy_src) {
-    sType = copy_src.sType;
-    robustBufferAccess2 = copy_src.robustBufferAccess2;
-    robustImageAccess2 = copy_src.robustImageAccess2;
-    nullDescriptor = copy_src.nullDescriptor;
-    pNext = SafePnextCopy(copy_src.pNext);
-}
-
-safe_VkPhysicalDeviceRobustness2FeaturesEXT& safe_VkPhysicalDeviceRobustness2FeaturesEXT::operator=(
-    const safe_VkPhysicalDeviceRobustness2FeaturesEXT& copy_src) {
-    if (&copy_src == this) return *this;
-
-    FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    robustBufferAccess2 = copy_src.robustBufferAccess2;
-    robustImageAccess2 = copy_src.robustImageAccess2;
-    nullDescriptor = copy_src.nullDescriptor;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    return *this;
-}
-
-safe_VkPhysicalDeviceRobustness2FeaturesEXT::~safe_VkPhysicalDeviceRobustness2FeaturesEXT() { FreePnextChain(pNext); }
-
-void safe_VkPhysicalDeviceRobustness2FeaturesEXT::initialize(const VkPhysicalDeviceRobustness2FeaturesEXT* in_struct,
-                                                             [[maybe_unused]] PNextCopyState* copy_state) {
-    FreePnextChain(pNext);
-    sType = in_struct->sType;
-    robustBufferAccess2 = in_struct->robustBufferAccess2;
-    robustImageAccess2 = in_struct->robustImageAccess2;
-    nullDescriptor = in_struct->nullDescriptor;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-void safe_VkPhysicalDeviceRobustness2FeaturesEXT::initialize(const safe_VkPhysicalDeviceRobustness2FeaturesEXT* copy_src,
-                                                             [[maybe_unused]] PNextCopyState* copy_state) {
-    sType = copy_src->sType;
-    robustBufferAccess2 = copy_src->robustBufferAccess2;
-    robustImageAccess2 = copy_src->robustImageAccess2;
-    nullDescriptor = copy_src->nullDescriptor;
-    pNext = SafePnextCopy(copy_src->pNext);
-}
-
-safe_VkPhysicalDeviceRobustness2PropertiesEXT::safe_VkPhysicalDeviceRobustness2PropertiesEXT(
-    const VkPhysicalDeviceRobustness2PropertiesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
-    : sType(in_struct->sType),
-      robustStorageBufferAccessSizeAlignment(in_struct->robustStorageBufferAccessSizeAlignment),
-      robustUniformBufferAccessSizeAlignment(in_struct->robustUniformBufferAccessSizeAlignment) {
-    if (copy_pnext) {
-        pNext = SafePnextCopy(in_struct->pNext, copy_state);
-    }
-}
-
-safe_VkPhysicalDeviceRobustness2PropertiesEXT::safe_VkPhysicalDeviceRobustness2PropertiesEXT()
-    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT),
-      pNext(nullptr),
-      robustStorageBufferAccessSizeAlignment(),
-      robustUniformBufferAccessSizeAlignment() {}
-
-safe_VkPhysicalDeviceRobustness2PropertiesEXT::safe_VkPhysicalDeviceRobustness2PropertiesEXT(
-    const safe_VkPhysicalDeviceRobustness2PropertiesEXT& copy_src) {
-    sType = copy_src.sType;
-    robustStorageBufferAccessSizeAlignment = copy_src.robustStorageBufferAccessSizeAlignment;
-    robustUniformBufferAccessSizeAlignment = copy_src.robustUniformBufferAccessSizeAlignment;
-    pNext = SafePnextCopy(copy_src.pNext);
-}
-
-safe_VkPhysicalDeviceRobustness2PropertiesEXT& safe_VkPhysicalDeviceRobustness2PropertiesEXT::operator=(
-    const safe_VkPhysicalDeviceRobustness2PropertiesEXT& copy_src) {
-    if (&copy_src == this) return *this;
-
-    FreePnextChain(pNext);
-
-    sType = copy_src.sType;
-    robustStorageBufferAccessSizeAlignment = copy_src.robustStorageBufferAccessSizeAlignment;
-    robustUniformBufferAccessSizeAlignment = copy_src.robustUniformBufferAccessSizeAlignment;
-    pNext = SafePnextCopy(copy_src.pNext);
-
-    return *this;
-}
-
-safe_VkPhysicalDeviceRobustness2PropertiesEXT::~safe_VkPhysicalDeviceRobustness2PropertiesEXT() { FreePnextChain(pNext); }
-
-void safe_VkPhysicalDeviceRobustness2PropertiesEXT::initialize(const VkPhysicalDeviceRobustness2PropertiesEXT* in_struct,
-                                                               [[maybe_unused]] PNextCopyState* copy_state) {
-    FreePnextChain(pNext);
-    sType = in_struct->sType;
-    robustStorageBufferAccessSizeAlignment = in_struct->robustStorageBufferAccessSizeAlignment;
-    robustUniformBufferAccessSizeAlignment = in_struct->robustUniformBufferAccessSizeAlignment;
-    pNext = SafePnextCopy(in_struct->pNext, copy_state);
-}
-
-void safe_VkPhysicalDeviceRobustness2PropertiesEXT::initialize(const safe_VkPhysicalDeviceRobustness2PropertiesEXT* copy_src,
-                                                               [[maybe_unused]] PNextCopyState* copy_state) {
-    sType = copy_src->sType;
-    robustStorageBufferAccessSizeAlignment = copy_src->robustStorageBufferAccessSizeAlignment;
-    robustUniformBufferAccessSizeAlignment = copy_src->robustUniformBufferAccessSizeAlignment;
-    pNext = SafePnextCopy(copy_src->pNext);
-}
-
 safe_VkSamplerCustomBorderColorCreateInfoEXT::safe_VkSamplerCustomBorderColorCreateInfoEXT(
     const VkSamplerCustomBorderColorCreateInfoEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
     : sType(in_struct->sType), customBorderColor(in_struct->customBorderColor), format(in_struct->format) {
@@ -15934,6 +15814,59 @@ void safe_VkRenderingEndInfoEXT::initialize(const VkRenderingEndInfoEXT* in_stru
 void safe_VkRenderingEndInfoEXT::initialize(const safe_VkRenderingEndInfoEXT* copy_src,
                                             [[maybe_unused]] PNextCopyState* copy_state) {
     sType = copy_src->sType;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT(
+    const VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state,
+    bool copy_pnext)
+    : sType(in_struct->sType), zeroInitializeDeviceMemory(in_struct->zeroInitializeDeviceMemory) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_DEVICE_MEMORY_FEATURES_EXT),
+      pNext(nullptr),
+      zeroInitializeDeviceMemory() {}
+
+safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT(
+    const safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT& copy_src) {
+    sType = copy_src.sType;
+    zeroInitializeDeviceMemory = copy_src.zeroInitializeDeviceMemory;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT& safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::operator=(
+    const safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    zeroInitializeDeviceMemory = copy_src.zeroInitializeDeviceMemory;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::~safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::initialize(
+    const VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    zeroInitializeDeviceMemory = in_struct->zeroInitializeDeviceMemory;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT::initialize(
+    const safe_VkPhysicalDeviceZeroInitializeDeviceMemoryFeaturesEXT* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    zeroInitializeDeviceMemory = copy_src->zeroInitializeDeviceMemory;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 

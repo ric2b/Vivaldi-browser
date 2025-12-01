@@ -36,6 +36,11 @@ const char kIgnoreCertificateErrorsSPKIList[] =
 // user data directory.
 const char kLogNetLog[] = "log-net-log";
 
+// Specifies the duration (in seconds) for network logging. When this flag is
+// provided with a positive integer value X, Chrome will automatically stop
+// collecting NetLog events after X seconds and flush the log to disk.
+const char kLogNetLogDuration[] = "net-log-duration";
+
 // Sets the granularity of events to capture in the network log. The mode can be
 // set to one of the following values:
 //   "Default"
@@ -99,7 +104,7 @@ const char kUseFirstPartySet[] = "use-first-party-set";
 const char kUseRelatedWebsiteSet[] = "use-related-website-set";
 
 // Specifies manual overrides to the IP endpoint -> IP address space mapping.
-// This allows running local tests against "public" and "private" IP addresses.
+// This allows running local tests against "public" and "local" IP addresses.
 //
 // This switch is specified as a comma-separated list of overrides. Each
 // override is given as a colon-separated "<endpoint>:<address space>" pair.
@@ -108,7 +113,7 @@ const char kUseRelatedWebsiteSet[] = "use-related-website-set";
 //   switch := override-list
 //   override-list := override “,” override-list | <nil>
 //   override := ip-endpoint “=” address-space
-//   address-space := “public” | “private” | “local”
+//   address-space := “public” | “private” | “local” | "loopback"
 //   ip-endpoint := ip-address ":" port
 //   ip-address := see `net::ParseURLHostnameToAddress()` for details
 //   port := integer in the [0-65535] range
@@ -120,6 +125,10 @@ const char kUseRelatedWebsiteSet[] = "use-related-website-set";
 //
 // And the Web Platform Test RFC #72 behind it:
 // https://github.com/web-platform-tests/rfcs/blob/master/rfcs/address_space_overrides.md
+//
+// Note that since the doc and the RFC were written, the address space names
+// have changed slightly due to Local Network Access (LNA) replacing Private
+// Network Access (PNA).
 const char kIpAddressSpaceOverrides[] = "ip-address-space-overrides";
 
 // The switch to disable the shared dictionary storage clean up task. Only for

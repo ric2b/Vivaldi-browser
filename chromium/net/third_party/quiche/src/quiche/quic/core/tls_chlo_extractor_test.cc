@@ -123,13 +123,14 @@ class TlsChloExtractorTest : public QuicTestWithParam<ParsedQuicVersion> {
           QuicSocketAddress(TestPeerIPAddress(), kTestPort), *packet);
       std::string detailed_error;
       std::optional<absl::string_view> retry_token;
+      absl::string_view destination_connection_id, source_connection_id;
       const QuicErrorCode error = QuicFramer::ParsePublicHeaderDispatcher(
           *packet, /*expected_destination_connection_id_length=*/0,
           &packet_info.form, &packet_info.long_packet_type,
           &packet_info.version_flag, &packet_info.use_length_prefix,
           &packet_info.version_label, &packet_info.version,
-          &packet_info.destination_connection_id,
-          &packet_info.source_connection_id, &retry_token, &detailed_error);
+          &destination_connection_id, &source_connection_id, &retry_token,
+          &detailed_error);
       ASSERT_THAT(error, IsQuicNoError()) << detailed_error;
       tls_chlo_extractor_->IngestPacket(packet_info.version,
                                         packet_info.packet);
@@ -232,7 +233,7 @@ TEST_P(TlsChloExtractorTest, TlsExtensionInfo_SupportedGroups) {
       // Only one group
       {SSL_GROUP_X25519},
       // Two groups
-      {SSL_GROUP_X25519_KYBER768_DRAFT00, SSL_GROUP_X25519},
+      {SSL_GROUP_X25519_MLKEM768, SSL_GROUP_X25519},
   };
   for (const std::vector<uint16_t>& preferred_groups :
        preferred_groups_to_test) {
@@ -359,13 +360,14 @@ TEST_P(TlsChloExtractorTest, MoveAssignmentBetweenPackets) {
       QuicSocketAddress(TestPeerIPAddress(), kTestPort), *packets_[0]);
   std::string detailed_error;
   std::optional<absl::string_view> retry_token;
+  absl::string_view destination_connection_id, source_connection_id;
   const QuicErrorCode error = QuicFramer::ParsePublicHeaderDispatcher(
       *packets_[0], /*expected_destination_connection_id_length=*/0,
       &packet_info.form, &packet_info.long_packet_type,
       &packet_info.version_flag, &packet_info.use_length_prefix,
       &packet_info.version_label, &packet_info.version,
-      &packet_info.destination_connection_id, &packet_info.source_connection_id,
-      &retry_token, &detailed_error);
+      &destination_connection_id, &source_connection_id, &retry_token,
+      &detailed_error);
   ASSERT_THAT(error, IsQuicNoError()) << detailed_error;
   other_extractor.IngestPacket(packet_info.version, packet_info.packet);
   // Remove the first packet from the list.

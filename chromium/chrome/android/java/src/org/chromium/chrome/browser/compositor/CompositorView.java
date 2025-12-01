@@ -28,7 +28,6 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.LayoutProvider;
 import org.chromium.chrome.browser.compositor.layouts.LayoutRenderHost;
@@ -74,7 +73,6 @@ public class CompositorView extends FrameLayout
     private long mNativeCompositorView;
     private final LayoutRenderHost mRenderHost;
     private int mPreviousWindowTop = -1;
-    private ActivityTabProvider mActivityTabProvider;
 
     // Resource Management
     private ResourceManager mResourceManager;
@@ -197,10 +195,6 @@ public class CompositorView extends FrameLayout
             initializeIfOnUiThread();
         }
         mRootView = view;
-    }
-
-    public void setActivityTabProvider(ActivityTabProvider provider) {
-        mActivityTabProvider = provider;
     }
 
     @Override
@@ -511,11 +505,8 @@ public class CompositorView extends FrameLayout
         if (InputUtils.isTransferInputToVizSupported()
                 && surfaceId != null
                 && browserInputToken != null) {
-
-            InputTransferHandlerDelegate delegate =
-                    new InputTransferHandlerDelegate(mActivityTabProvider);
             InputTransferHandler handler =
-                    new InputTransferHandler(browserInputToken, delegate, mWindowAndroid);
+                    new InputTransferHandler(browserInputToken, mWindowAndroid);
 
             assert mSurfaceId == null;
             mSurfaceId = surfaceId;

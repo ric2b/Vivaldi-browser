@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "ui/events/android/motion_event_android.h"
 
 #include <android/input.h>
@@ -17,7 +12,9 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/numerics/angle_conversions.h"
+#include "event_flags_android.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/events/android/event_flags_android.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
@@ -115,35 +112,8 @@ int FromAndroidButtonState(int button_state) {
 }
 
 int ToEventFlags(int meta_state, int button_state) {
-  int flags = ui::EF_NONE;
-
-  if ((meta_state & AMETA_SHIFT_ON) != 0)
-    flags |= ui::EF_SHIFT_DOWN;
-  if ((meta_state & AMETA_CTRL_ON) != 0)
-    flags |= ui::EF_CONTROL_DOWN;
-  if ((meta_state & AMETA_ALT_ON) != 0)
-    flags |= ui::EF_ALT_DOWN;
-  if ((meta_state & AMETA_META_ON) != 0)
-    flags |= ui::EF_COMMAND_DOWN;
-  if ((meta_state & AMETA_CAPS_LOCK_ON) != 0)
-    flags |= ui::EF_CAPS_LOCK_ON;
-
-  if ((button_state & JNI_MotionEvent::BUTTON_BACK) != 0)
-    flags |= ui::EF_BACK_MOUSE_BUTTON;
-  if ((button_state & JNI_MotionEvent::BUTTON_FORWARD) != 0)
-    flags |= ui::EF_FORWARD_MOUSE_BUTTON;
-  if ((button_state & JNI_MotionEvent::BUTTON_PRIMARY) != 0)
-    flags |= ui::EF_LEFT_MOUSE_BUTTON;
-  if ((button_state & JNI_MotionEvent::BUTTON_SECONDARY) != 0)
-    flags |= ui::EF_RIGHT_MOUSE_BUTTON;
-  if ((button_state & JNI_MotionEvent::BUTTON_TERTIARY) != 0)
-    flags |= ui::EF_MIDDLE_MOUSE_BUTTON;
-  if ((button_state & JNI_MotionEvent::BUTTON_STYLUS_PRIMARY) != 0)
-    flags |= ui::EF_LEFT_MOUSE_BUTTON;
-  if ((button_state & JNI_MotionEvent::BUTTON_STYLUS_SECONDARY) != 0)
-    flags |= ui::EF_RIGHT_MOUSE_BUTTON;
-
-  return flags;
+  return EventFlagsFromAndroidMetaState(meta_state) |
+         EventFlagsFromAndroidButtonState(button_state);
 }
 
 size_t ToValidHistorySize(jint history_size, ui::MotionEvent::Action action) {
@@ -164,6 +134,7 @@ MotionEventAndroid::Pointer::Pointer(jint id,
                                      jfloat pos_y_pixels,
                                      jfloat touch_major_pixels,
                                      jfloat touch_minor_pixels,
+                                     jfloat pressure,
                                      jfloat orientation_rad,
                                      jfloat tilt_rad,
                                      jint tool_type)
@@ -172,10 +143,10 @@ MotionEventAndroid::Pointer::Pointer(jint id,
       pos_y_pixels(pos_y_pixels),
       touch_major_pixels(touch_major_pixels),
       touch_minor_pixels(touch_minor_pixels),
+      pressure(pressure),
       orientation_rad(orientation_rad),
       tilt_rad(tilt_rad),
-      tool_type(tool_type) {
-}
+      tool_type(tool_type) {}
 
 MotionEventAndroid::CachedPointer::CachedPointer() = default;
 
@@ -433,6 +404,9 @@ MotionEventAndroid::CachedPointer MotionEventAndroid::FromAndroidPointer(
       gfx::PointF(ToDips(pointer.pos_x_pixels), ToDips(pointer.pos_y_pixels));
   result.touch_major = ToDips(pointer.touch_major_pixels);
   result.touch_minor = ToDips(pointer.touch_minor_pixels);
+  if (cached_action_ != Action::UP) {
+    result.pressure = pointer.pressure;
+  }
   result.orientation = ToValidFloat(pointer.orientation_rad);
   float tilt_rad = ToValidFloat(pointer.tilt_rad);
   ConvertTiltOrientationToTiltXY(tilt_rad, result.orientation, &result.tilt_x,
@@ -444,15 +418,8 @@ MotionEventAndroid::CachedPointer MotionEventAndroid::FromAndroidPointer(
 MotionEventAndroid::CachedPointer MotionEventAndroid::CreateCachedPointer(
     const CachedPointer& pointer,
     const gfx::PointF& point) const {
-  CachedPointer result;
-  result.id = pointer.id;
+  CachedPointer result = pointer;
   result.position = point;
-  result.touch_major = pointer.touch_major;
-  result.touch_minor = pointer.touch_minor;
-  result.orientation = pointer.orientation;
-  result.tilt_x = pointer.tilt_x;
-  result.tilt_y = pointer.tilt_y;
-  result.tool_type = pointer.tool_type;
   return result;
 }
 

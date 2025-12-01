@@ -58,6 +58,8 @@ struct WebCSPSourceList {
   std::vector<WebCSPSource> sources;
   std::vector<WebString> nonces;
   std::vector<WebCSPHashSource> hashes;
+  std::vector<WebCSPHashSource> url_hashes;
+  std::vector<WebCSPHashSource> eval_hashes;
   bool allow_self;
   bool allow_star;
   bool allow_inline;
@@ -107,7 +109,6 @@ struct WebContentSecurityPolicy {
   WebContentSecurityPolicyHeader header;
   bool use_reporting_api;
   std::vector<WebString> report_endpoints;
-  network::mojom::CSPRequireSRIFor require_sri_for;
   network::mojom::CSPRequireTrustedTypesFor require_trusted_types_for;
   std::optional<WebCSPTrustedTypes> trusted_types;
   std::vector<WebString> parsing_errors;

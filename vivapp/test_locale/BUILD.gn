@@ -34,7 +34,7 @@ system_command("test_locale") {
 
   deps = [
     ":test_locale_app($host_toolchain)",
-    "//vivaldi/vivapp:bundle($default_toolchain)",
+    "//vivaldi/vivapp:translations($default_toolchain)",
   ]
   data_deps = [
     ":test_locale_app($host_toolchain)",

@@ -190,7 +190,7 @@ MATCHER_P(FormDataPointeeEqualTo, form_data, "") {
 class MockPasswordManagerDriver : public StubPasswordManagerDriver {
  public:
   MOCK_METHOD(void,
-              SetPasswordFillData,
+              PropagateFillDataOnParsingCompletion,
               (const PasswordFormFillData&),
               (override));
   MOCK_METHOD(void,
@@ -325,7 +325,6 @@ std::map<FormSignature, FormPredictions> CreatePredictions(
         CalculateFieldSignatureForField(form.fields()[index_prediction.first]);
     FieldType server_type = index_prediction.second;
     predictions.fields.emplace_back(renderer_id, field_signature, server_type,
-                                    /*may_use_prefilled_placeholder=*/false,
                                     is_override);
   }
   FormSignature form_signature = CalculateFormSignature(form);
@@ -345,7 +344,6 @@ FormPredictions MakeSingleUsernamePredictions(
                                  ? autofill::SINGLE_USERNAME
                                  : autofill::NO_SERVER_DATA;
   predictions.fields.emplace_back(renderer_id, field_signature, type,
-                                  /*may_use_prefilled_placeholder=*/false,
                                   /*is_override=*/false);
 
   return predictions;
@@ -591,7 +589,6 @@ class PasswordFormManagerTest : public testing::Test,
     FormPredictions predictions;
     predictions.form_signature = form_signature;
     predictions.fields.emplace_back(field_id, field_signature, predicted_type,
-                                    /*may_use_prefilled_placeholder=*/false,
                                     /*is_override=*/false);
     field_info_manager_->AddFieldInfo(info, predictions);
   }
@@ -708,7 +705,8 @@ TEST_P(PasswordFormManagerTest, Autofill) {
   CreateFormManager(observed_form_);
   EXPECT_CALL(driver_, FormEligibleForGenerationFound(_)).Times(0);
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
   CreateFormManager(observed_form_);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 
@@ -732,19 +730,19 @@ TEST_P(PasswordFormManagerTest, Autofill) {
 
 TEST_P(PasswordFormManagerTest, AutofillNotMoreThan5Times) {
   PasswordFormManager::set_wait_for_server_predictions_for_filling(false);
-  EXPECT_CALL(driver_, SetPasswordFillData);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 
   task_environment_.FastForwardUntilNoTasksRemain();
   Mock::VerifyAndClearExpectations(&driver_);
 
   for (size_t i = 0; i < PasswordFormManager::kMaxTimesAutofill - 1; ++i) {
-    EXPECT_CALL(driver_, SetPasswordFillData);
+    EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion);
     form_manager_->Fill();
     Mock::VerifyAndClearExpectations(&driver_);
   }
 
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   form_manager_->Fill();
 }
 
@@ -759,7 +757,8 @@ TEST_P(PasswordFormManagerTest, AutofillSignUpForm) {
   test_api(observed_form_).field(-1).set_autocomplete_attribute("new-password");
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
 
   PasswordFormGenerationData generation_data;
   EXPECT_CALL(driver_, FormEligibleForGenerationFound(_))
@@ -843,7 +842,8 @@ TEST_P(PasswordFormManagerTest, GenerationOnTextFieldsDueToOverride) {
 
 TEST_P(PasswordFormManagerTest, AutofillWithBlocklistedMatch) {
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
   fetcher_->SetNonFederated({saved_match_});
   fetcher_->SetBestMatches({saved_match_});
   fetcher_->SetBlocklisted(true);
@@ -910,7 +910,7 @@ TEST_P(PasswordFormManagerTest, SetSubmittedMultipleTimes) {
 // server predictions and fills on receiving them.
 TEST_P(PasswordFormManagerTest, ServerPredictionsWithinDelay) {
   // Expects no filling on save matches receiving.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
   Mock::VerifyAndClearExpectations(&driver_);
 
@@ -918,19 +918,19 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsWithinDelay) {
       observed_form_, {std::make_pair(2, autofill::PASSWORD)});
 
   // Expect filling without delay on receiving server predictions.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(1);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(1);
   form_manager_->ProcessServerPredictions(predictions);
   Mock::VerifyAndClearExpectations(&driver_);
 
   // Expect no filling on receiving predictions again.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   form_manager_->ProcessServerPredictions(predictions);
 }
 
 // Tests that PasswordFormManager fills after some delay even without
 // server predictions.
 TEST_P(PasswordFormManagerTest, ServerPredictionsAfterDelay) {
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(1);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(1);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
   // Expect filling after passing filling delay.
 
@@ -943,7 +943,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsAfterDelay) {
 
   // Expect filling on receiving server predictions because it was less than
   // kMaxTimesAutofill attempts to fill.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(1);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(1);
   form_manager_->ProcessServerPredictions(predictions);
   task_environment_.FastForwardUntilNoTasksRemain();
 }
@@ -953,7 +953,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsAfterDelay) {
 TEST_P(PasswordFormManagerTest, ServerPredictionsBeforeFetcher) {
   // Expect no filling after receiving saved matches from |fetcher_|, since
   // |form_manager| is waiting for server-side predictions.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   CreateFormManager(observed_form_);
 
   std::map<FormSignature, FormPredictions> predictions = CreatePredictions(
@@ -962,7 +962,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsBeforeFetcher) {
   Mock::VerifyAndClearExpectations(&driver_);
 
   // Expect filling without delay on receiving server predictions.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(1);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(1);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 }
 
@@ -1752,7 +1752,7 @@ bool ParsingSuccessReported(const ukm::mojom::UkmEntry* entry,
 // Test that an attempt to log to ReadonlyWhenFilling UKM is made when filling.
 TEST_P(PasswordFormManagerTest, RecordReadonlyWhenFilling) {
   ukm::TestAutoSetUkmRecorder test_ukm_recorder;
-  EXPECT_CALL(driver_, SetPasswordFillData);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 
   task_environment_.FastForwardUntilNoTasksRemain();
@@ -2396,7 +2396,7 @@ TEST_P(PasswordFormManagerTest, HasObservedFormChangedCssClasses) {
 
 TEST_P(PasswordFormManagerTest, UpdateFormAndFill) {
   CreateFormManager(observed_form_);
-  EXPECT_CALL(driver_, SetPasswordFillData);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
   task_environment_.FastForwardUntilNoTasksRemain();
   Mock::VerifyAndClearExpectations(&driver_);
@@ -2419,7 +2419,8 @@ TEST_P(PasswordFormManagerTest, UpdateFormAndFill) {
           form.fields()[kPasswordFieldIndex].renderer_id().value() + 1000));
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
   form_manager_->UpdateFormManagerWithFormChanges(form, {});
   form_manager_->Fill();
   task_environment_.FastForwardUntilNoTasksRemain();
@@ -2437,25 +2438,25 @@ TEST_P(PasswordFormManagerTest, UpdateFormAndFill) {
 TEST_P(PasswordFormManagerTest, FillWaitsForServerPredictions) {
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   form_manager_->Fill();
   Mock::VerifyAndClearExpectations(&driver_);
 
   // Check that the changed form is filled after the filling timeout expires.
-  EXPECT_CALL(driver_, SetPasswordFillData);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion);
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions);
 }
 
 TEST_P(PasswordFormManagerTest, RepeatedFillDoesNotResetTimer) {
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   form_manager_->Fill();
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions / 2);
   form_manager_->Fill();
 
   // Check that the fill call is not delayed further.
-  EXPECT_CALL(driver_, SetPasswordFillData);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion);
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions / 2);
 }
 
@@ -2476,7 +2477,7 @@ TEST_P(PasswordFormManagerTest, UpdateFormManagerWithFormChangesResetsTimer) {
 
   // Check that no filling happens until server predictions arrive or the
   // filling timeout expires.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
 
   // Wait half-delay time before updating form.
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions / 2);
@@ -2490,7 +2491,8 @@ TEST_P(PasswordFormManagerTest, UpdateFormManagerWithFormChangesResetsTimer) {
   task_environment_.FastForwardBy(kMaxFillingDelayForAsyncPredictions / 2);
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
 
   // Check that the new fill task triggers form filling.
   task_environment_.FastForwardUntilNoTasksRemain();
@@ -2758,7 +2760,7 @@ TEST_P(PasswordFormManagerTest, SaveHttpAuthNoHttpAuthStored) {
     http_auth_form.scheme = PasswordForm::Scheme::kBasic;
 
     // Check that no filling because no http auth credentials are stored.
-    EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+    EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
     EXPECT_CALL(client_, AutofillHttpAuth(_, _)).Times(0);
 
     CreateFormManagerForNonWebForm(http_auth_form);
@@ -3146,7 +3148,6 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowUsernameInThePasswordForm) {
       kUsernameFieldRendererId,
       CalculateFieldSignatureForField(observed_form_.fields()[1]),
       FieldType::UNKNOWN_TYPE,
-      /*may_use_prefilled_placeholder=*/false,
       /*is_override=*/false);
 
   possible_username_data.form_predictions = predictions;
@@ -3605,7 +3606,8 @@ TEST_P(PasswordFormManagerTest, UsernameFirstFlowFillSingleUsernameForm) {
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
 
   // Provide server predictions for the single username form, which will trigger
   // FillNow().
@@ -3646,7 +3648,6 @@ TEST_P(PasswordFormManagerTest, NegativeUsernameFirstFlowVotes) {
   predictions.form_signature = kUsernameFormSignature;
   predictions.fields.emplace_back(kUsernameFieldRendererId,
                                   kUsernameFieldSignature, SINGLE_USERNAME,
-                                  /*may_use_prefilled_placeholder=*/false,
                                   /*is_override=*/false);
   possible_username_data.form_predictions = std::move(predictions);
   base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>
@@ -3833,11 +3834,9 @@ TEST_P(PasswordFormManagerTest, PossibleUsernameServerPredictions) {
     SCOPED_TRACE(testing::Message("prediction=") << prediction);
 
     FormPredictions form_predictions;
-    form_predictions.fields.emplace_back(
-        possible_username_data.renderer_id, autofill::FieldSignature(123),
-        prediction,
-        /*may_use_prefilled_placeholder=*/false,
-        /*is_override=*/false);
+    form_predictions.fields.emplace_back(possible_username_data.renderer_id,
+                                         autofill::FieldSignature(123),
+                                         prediction, /*is_override=*/false);
 
     possible_username_data.form_predictions = form_predictions;
     base::LRUCache<PossibleUsernameFieldIdentifier, PossibleUsernameData>
@@ -4474,7 +4473,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsIgnoredOnLocalhost) {
   // field cannot be filled without server predictions.
   PasswordForm localhost_match = saved_match_;
   localhost_match.url = GURL(kLocalHostUrl);
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   SetNonFederatedAndNotifyFetchCompleted({saved_match_});
   Mock::VerifyAndClearExpectations(&driver_);
 
@@ -4485,7 +4484,7 @@ TEST_P(PasswordFormManagerTest, ServerPredictionsIgnoredOnLocalhost) {
       kSingleUsernameFieldSignature);
 
   // Expect no filling on receiving predictions.
-  EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
   form_manager_->ProcessServerPredictions({{kFormSignature, predictions}});
 }
 
@@ -4684,7 +4683,8 @@ TEST_P(PasswordFormManagerTest, SetCreditCardFieldsAsBanned) {
       observed_form_, {std::make_pair(3, autofill::CREDIT_CARD_NAME_FULL)});
 
   PasswordFormFillData fill_data;
-  EXPECT_CALL(driver_, SetPasswordFillData).WillOnce(SaveArg<0>(&fill_data));
+  EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion)
+      .WillOnce(SaveArg<0>(&fill_data));
   form_manager_->ProcessServerPredictions(predictions);
 
   // Expect credit card field to be sent to the `PasswordManagerDriver` as a
@@ -5164,7 +5164,7 @@ TEST_F(PasswordFormManagerTestWithMockedSaver, SaveHttpAuthNoHttpAuthStored) {
     PasswordForm http_auth_form = parsed_observed_form_;
     http_auth_form.scheme = PasswordForm::Scheme::kBasic;
     // Check that no filling because no http auth credentials are stored.
-    EXPECT_CALL(driver_, SetPasswordFillData).Times(0);
+    EXPECT_CALL(driver_, PropagateFillDataOnParsingCompletion).Times(0);
     EXPECT_CALL(client_, AutofillHttpAuth(_, _)).Times(0);
     CreateFormManagerForNonWebForm(http_auth_form);
     std::vector<PasswordForm> saved_matches;

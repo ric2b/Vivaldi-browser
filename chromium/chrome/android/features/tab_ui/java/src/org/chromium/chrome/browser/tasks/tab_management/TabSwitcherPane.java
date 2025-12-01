@@ -27,6 +27,7 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
+import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.DelegateButtonData;
 import org.chromium.chrome.browser.hub.HubColorScheme;
@@ -49,6 +50,7 @@ import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterObserver.DidRemov
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
+import org.chromium.chrome.browser.tasks.tab_management.archived_tabs_auto_delete_promo.ArchivedTabsAutoDeletePromoManager;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.user_education.IphCommand;
@@ -105,10 +107,10 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
     private final @NonNull TabSwitcherPaneDrawableCoordinator mTabSwitcherPaneDrawableCoordinator;
     private final ObservableSupplierImpl<Boolean> mHubSearchEnabledStateSupplier =
             new ObservableSupplierImpl<>();
-
     private @Nullable OnSharedPreferenceChangeListener mPriceAnnotationsPrefListener;
     private @Nullable TabGroupSyncService mTabGroupSyncService;
-    private TabSwitcherDrawable mTabSwitcherDrawable;
+    private final TabSwitcherDrawable mTabSwitcherDrawable;
+    private final @Nullable ArchivedTabsAutoDeletePromoManager mArchivedTabsAutoDeletePromoManager;
 
     /**
      * @param context The activity context.
@@ -122,7 +124,8 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
      * @param userEducationHelper Used for showing IPHs.
      * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
      * @param compositorViewHolderSupplier Supplier to the {@link CompositorViewHolder} instance.
-     * @param tabGroupCreationUiFlow Orchestrates the tab group creation UI flow.
+     * @param tabGroupCreationUiDelegate Orchestrates the tab group creation UI flow.
+     * @param archivedTabsAutoDeletePromoManager Manager for Archived Tabs Auto Delete Promo.
      */
     TabSwitcherPane(
             @NonNull Context context,
@@ -136,7 +139,8 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
             @NonNull UserEducationHelper userEducationHelper,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
             @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier,
-            @NonNull TabGroupCreationUiFlow tabGroupCreationUiFlow) {
+            @NonNull TabGroupCreationUiDelegate tabGroupCreationUiDelegate,
+            @Nullable ArchivedTabsAutoDeletePromoManager archivedTabsAutoDeletePromoManager) {
         super(
                 context,
                 factory,
@@ -145,13 +149,14 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
                 userEducationHelper,
                 edgeToEdgeSupplier,
                 compositorViewHolderSupplier,
-                tabGroupCreationUiFlow);
+                tabGroupCreationUiDelegate);
         mSharedPreferences = sharedPreferences;
         mTabGroupModelFilterSupplier = tabGroupModelFilterSupplier;
         mTabSwitcherPaneDrawableCoordinator = tabSwitcherDrawableCoordinator;
 
         mTabSwitcherDrawable = tabSwitcherDrawableCoordinator.getTabSwitcherDrawable();
         mTabSwitcherDrawable.addTabSwitcherDrawableObserver(this);
+        mArchivedTabsAutoDeletePromoManager = archivedTabsAutoDeletePromoManager;
         // Set the TabSwitcherDrawable state on an initial run through.
         onDrawableStateChanged();
 
@@ -264,9 +269,13 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
 
     @Override
     protected void tryToTriggerOnShownIphs() {
-        // The IPH system will ensure we don't show both.
+        // The IPH system will ensure we don't show all three.
         tryToTriggerTabGroupSurfaceIph();
         tryToTriggerRemoteGroupIph();
+        // Attempts to show the Auto Delete Decision Promo
+        if (mArchivedTabsAutoDeletePromoManager != null) {
+            mArchivedTabsAutoDeletePromoManager.tryToShowArchivedTabsAutoDeleteDecisionPromo();
+        }
     }
 
     private void onTabSwitcherPaneCoordinatorChanged(
@@ -292,6 +301,8 @@ public class TabSwitcherPane extends TabSwitcherPaneBase implements TabSwitcherD
     private void onProfileProviderAvailable(@NonNull ProfileProvider profileProvider) {
         Profile profile = profileProvider.getOriginalProfile();
         mTabGroupSyncService = TabGroupSyncServiceFactory.getForProfile(profile);
+
+        mTracker = TrackerFactory.getTrackerForProfile(profileProvider.getOriginalProfile());
 
         if (!PriceTrackingFeatures.isPriceAnnotationsEnabled(profileProvider.getOriginalProfile())
                 && getTabListMode() == TabListMode.GRID) {

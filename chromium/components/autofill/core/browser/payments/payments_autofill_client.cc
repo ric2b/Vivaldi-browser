@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/ui/payments/bnpl_tos_controller.h"
 #include "components/autofill/core/browser/ui/payments/bubble_show_options.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_options.h"
+#include "components/autofill/core/browser/ui/payments/select_bnpl_issuer_dialog_controller.h"
 
 #if !BUILDFLAG(IS_IOS)
 #include "components/webauthn/core/browser/internal_authenticator.h"
@@ -65,12 +66,12 @@ bool PaymentsAutofillClient::HasCreditCardScanFeature() const {
 
 void PaymentsAutofillClient::ScanCreditCard(CreditCardScanCallback callback) {}
 
-void PaymentsAutofillClient::ConfirmSaveCreditCardLocally(
+void PaymentsAutofillClient::ShowSaveCreditCardLocally(
     const CreditCard& card,
     SaveCreditCardOptions options,
     LocalSaveCardPromptCallback callback) {}
 
-void PaymentsAutofillClient::ConfirmSaveCreditCardToCloud(
+void PaymentsAutofillClient::ShowSaveCreditCardToCloud(
     const CreditCard& card,
     const LegalMessageLines& legal_message_lines,
     SaveCreditCardOptions options,
@@ -117,6 +118,7 @@ void PaymentsAutofillClient::CloseAutofillProgressDialog(
     base::OnceClosure no_interactive_authentication_callback) {}
 
 void PaymentsAutofillClient::ShowCardUnmaskOtpInputDialog(
+    CreditCard::RecordType card_type,
     const CardUnmaskChallengeOption& challenge_option,
     base::WeakPtr<OtpUnmaskDelegate> delegate) {}
 
@@ -134,6 +136,11 @@ void PaymentsAutofillClient::OnUnmaskOtpVerificationResult(
 
 PaymentsNetworkInterface*
 PaymentsAutofillClient::GetPaymentsNetworkInterface() {
+  return nullptr;
+}
+
+MultipleRequestPaymentsNetworkInterface*
+PaymentsAutofillClient::GetMultipleRequestPaymentsNetworkInterface() {
   return nullptr;
 }
 
@@ -165,6 +172,10 @@ PaymentsAutofillClient::GetVirtualCardEnrollmentManager() {
 
 CreditCardOtpAuthenticator* PaymentsAutofillClient::GetOtpAuthenticator() {
   return nullptr;
+}
+
+bool PaymentsAutofillClient::IsRiskBasedAuthEffectivelyAvailable() const {
+  return false;
 }
 
 CreditCardRiskBasedAuthenticator*
@@ -211,7 +222,6 @@ const AutofillOfferManager* PaymentsAutofillClient::GetAutofillOfferManager()
 
 bool PaymentsAutofillClient::ShowTouchToFillCreditCard(
     base::WeakPtr<TouchToFillDelegate> delegate,
-    base::span<const CreditCard> cards_to_suggest,
     base::span<const Suggestion> suggestions) {
   return false;
 }
@@ -219,6 +229,12 @@ bool PaymentsAutofillClient::ShowTouchToFillCreditCard(
 bool PaymentsAutofillClient::ShowTouchToFillIban(
     base::WeakPtr<TouchToFillDelegate> delegate,
     base::span<const Iban> ibans_to_suggest) {
+  return false;
+}
+
+bool PaymentsAutofillClient::ShowTouchToFillLoyaltyCard(
+    base::WeakPtr<TouchToFillDelegate> delegate,
+    base::span<const LoyaltyCard> loyalty_cards_to_suggest) {
   return false;
 }
 
@@ -242,10 +258,22 @@ PaymentsAutofillClient::GetOrCreatePaymentsMandatoryReauthManager() {
   return nullptr;
 }
 
-payments::BnplManager* PaymentsAutofillClient::GetPaymentsBnplManager() {
+void PaymentsAutofillClient::ShowCreditCardSaveAndFillDialog() {}
+
+payments::SaveAndFillManager* PaymentsAutofillClient::GetSaveAndFillManager() {
   return nullptr;
 }
 
-void PaymentsAutofillClient::ShowCreditCardSaveAndFillDialog() {}
+void PaymentsAutofillClient::ShowSelectBnplIssuerDialog(
+    std::vector<BnplIssuerContext> bnpl_issuer_context,
+    std::string app_locale,
+    base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
+    base::OnceClosure cancel_callback) {}
+
+void PaymentsAutofillClient::DismissSelectBnplIssuerDialog() {}
+
+bool PaymentsAutofillClient::IsTabModalPopupDeprecated() const {
+  return false;
+}
 
 }  // namespace autofill::payments

@@ -8,7 +8,7 @@ using content::BrowserThread;
 
 namespace settings {
 
-void ImportDataHandler::ImportItemFailed(importer::ImportItem item,
+void ImportDataHandler::ImportItemFailed(user_data_importer::ImportItem item,
                                          const std::string& error) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 

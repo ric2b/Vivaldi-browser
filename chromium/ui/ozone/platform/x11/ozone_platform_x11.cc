@@ -11,7 +11,6 @@
 #include "base/command_line.h"
 #include "base/message_loop/message_pump_type.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -134,11 +133,12 @@ class OzonePlatformX11 : public OzonePlatform,
 
   std::unique_ptr<InputMethod> CreateInputMethod(
       ImeKeyEventDispatcher* ime_key_event_dispatcher,
-      gfx::AcceleratedWidget) override {
+      gfx::AcceleratedWidget widget) override {
 #if BUILDFLAG(IS_CHROMEOS)
     return std::make_unique<ash::InputMethodAsh>(ime_key_event_dispatcher);
 #else
-    return std::make_unique<InputMethodAuraLinux>(ime_key_event_dispatcher);
+    return std::make_unique<InputMethodAuraLinux>(ime_key_event_dispatcher,
+                                                  widget);
 #endif
   }
 
@@ -195,7 +195,6 @@ class OzonePlatformX11 : public OzonePlatform,
       properties->supports_vulkan_swap_chain = true;
       properties->skia_can_fall_back_to_x11 = true;
       properties->platform_shows_drag_image = false;
-      properties->supports_global_application_menus = true;
       properties->app_modal_dialogs_use_event_blocker = true;
       properties->fetch_buffer_formats_for_gmb_on_gpu = true;
 
@@ -219,6 +218,7 @@ class OzonePlatformX11 : public OzonePlatform,
     properties.supports_server_window_menus =
         x11::Connection::Get()->WmSupportsHint(
             x11::GetAtom("_GTK_SHOW_WINDOW_MENU"));
+    properties.supports_global_application_menus = true;
 
     return properties;
   }
@@ -273,6 +273,10 @@ class OzonePlatformX11 : public OzonePlatform,
     x11_utils_ = std::make_unique<X11Utils>();
 
     base::UmaHistogramEnumeration("Linux.WindowManager", GetWindowManagerUMA());
+
+    base::UmaHistogramBoolean(
+        "Linux.X11.XInput2",
+        x11::Connection::Get()->xinput_version().first == 2);
 
     return true;
   }

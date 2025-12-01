@@ -41,6 +41,7 @@
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/protocol/unique_position.pb.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 
 namespace syncer {
 namespace {
@@ -60,10 +61,10 @@ enum class SyncMetadataConsistency {
   kDataTypeIdMismatch = 2,
 
   // The following cases won't result in metadata being cleared.
-  kEmptyPersistedAuthenticatedAccountId = 3,
-  kAuthenticatedAccountIdMismatch = 4,
+  kEmptyPersistedAuthenticatedGaiaId = 3,
+  kAuthenticatedGaiaIdMismatch = 4,
 
-  kMaxValue = kAuthenticatedAccountIdMismatch,
+  kMaxValue = kAuthenticatedGaiaIdMismatch,
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/sync/enums.xml:SyncMetadataConsistency)
 
@@ -87,13 +88,13 @@ SyncMetadataConsistency GetSyncMetadataConsistency(
   // Check for a mismatch in authenticated account id. The id can change after
   // restart (and this does not mean the account has changed, this is checked
   // above by cache_guid mismatch).
-  if (data_type_state.authenticated_account_id().empty()) {
-    return SyncMetadataConsistency::kEmptyPersistedAuthenticatedAccountId;
+  if (data_type_state.authenticated_obfuscated_gaia_id().empty()) {
+    return SyncMetadataConsistency::kEmptyPersistedAuthenticatedGaiaId;
   }
 
-  if (data_type_state.authenticated_account_id() !=
-      activation_request.authenticated_account_id.ToString()) {
-    return SyncMetadataConsistency::kAuthenticatedAccountIdMismatch;
+  if (data_type_state.authenticated_obfuscated_gaia_id() !=
+      activation_request.authenticated_gaia_id.ToString()) {
+    return SyncMetadataConsistency::kAuthenticatedGaiaIdMismatch;
   }
 
   return SyncMetadataConsistency::kMetadataConsistent;
@@ -115,15 +116,9 @@ size_t CountDuplicateClientTags(const EntityMetadataMap& metadata_map) {
 void RecordDataTypeNumUnsyncedEntitiesOnModelReady(
     DataType data_type,
     const ProcessorEntityTracker& entity_tracker) {
-  size_t num_unsynced_entities = 0;
-  for (const auto* entity :
-       entity_tracker.GetAllEntitiesIncludingTombstones()) {
-    if (entity->IsUnsynced()) {
-      num_unsynced_entities++;
-    }
-  }
-  SyncRecordDataTypeNumUnsyncedEntitiesOnModelReady(data_type,
-                                                    num_unsynced_entities);
+  SyncRecordDataTypeNumUnsyncedEntitiesFromDataCounts(
+      UnsyncedDataRecordingEvent::kOnModelReady,
+      {{data_type, entity_tracker.GetUnsyncedDataCount()}});
 }
 
 // Returns true if the unique position for the `target_entity` should be reused.
@@ -219,7 +214,7 @@ void ClientTagBasedDataTypeProcessor::ModelReadyToSync(
     if (IsInitialSyncAtLeastPartiallyDone(
             data_type_state.initial_sync_state())) {
       entity_tracker_ = std::make_unique<ProcessorEntityTracker>(
-          data_type_state, batch->TakeAllMetadata());
+          type_, data_type_state, batch->TakeAllMetadata());
       RecordDataTypeNumUnsyncedEntitiesOnModelReady(type_, *entity_tracker_);
     } else {
       // If initial sync isn't done, there must be no entity metadata (if there
@@ -261,8 +256,8 @@ void ClientTagBasedDataTypeProcessor::ConnectIfReady() {
     data_type_state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromDataType(type_));
     data_type_state.set_cache_guid(activation_request_.cache_guid);
-    data_type_state.set_authenticated_account_id(
-        activation_request_.authenticated_account_id.ToString());
+    data_type_state.set_authenticated_obfuscated_gaia_id(
+        activation_request_.authenticated_gaia_id.ToString());
     // For passwords, the bridge re-downloads all passwords to obtain any
     // potential notes from the sync server that were ignored by earlier
     // versions of the browser that didn't support notes. This should be done
@@ -403,16 +398,17 @@ bool ClientTagBasedDataTypeProcessor::IsTrackingMetadata() const {
   return entity_tracker_ != nullptr;
 }
 
-std::string ClientTagBasedDataTypeProcessor::TrackedAccountId() const {
+GaiaId ClientTagBasedDataTypeProcessor::TrackedGaiaId() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Returning non-empty here despite !IsTrackingMetadata() has weird semantics,
   // e.g. initial updates are being fetched but we haven't received the response
   // (i.e. prior to exercising MergeFullSyncData()). Let's be cautious and hide
   // the account ID.
   if (!IsTrackingMetadata()) {
-    return "";
+    return GaiaId();
   }
-  return entity_tracker_->data_type_state().authenticated_account_id();
+  return GaiaId(
+      entity_tracker_->data_type_state().authenticated_obfuscated_gaia_id());
 }
 
 std::string ClientTagBasedDataTypeProcessor::TrackedCacheGuid() const {
@@ -1063,7 +1059,7 @@ std::optional<ModelError> ClientTagBasedDataTypeProcessor::OnFullUpdateReceived(
 
   if (!entity_tracker_) {
     entity_tracker_ = std::make_unique<ProcessorEntityTracker>(
-        data_type_state, EntityMetadataMap());
+        type_, data_type_state, EntityMetadataMap());
   }
 
   // TODO(crbug.com/40668179): the comment below may be wrong in case where a
@@ -1337,12 +1333,16 @@ void ClientTagBasedDataTypeProcessor::ResetState(
   }
 }
 
-void ClientTagBasedDataTypeProcessor::HasUnsyncedData(
-    base::OnceCallback<void(bool)> callback) {
+void ClientTagBasedDataTypeProcessor::GetUnsyncedDataCount(
+    base::OnceCallback<void(size_t)> callback) {
+  size_t num_unsynced_entities = 0;
+
   // Note that if there's a `model_error_`, there might be unsynced data that
   // remains unsynced indefinitely (at least until the next browser restart).
-  std::move(callback).Run(entity_tracker_ &&
-                          entity_tracker_->HasUnsyncedChanges());
+  if (entity_tracker_) {
+    num_unsynced_entities = entity_tracker_->GetUnsyncedDataCount();
+  }
+  std::move(callback).Run(num_unsynced_entities);
 }
 
 void ClientTagBasedDataTypeProcessor::GetAllNodesForDebugging(
@@ -1482,15 +1482,15 @@ void ClientTagBasedDataTypeProcessor::
   switch (sync_metadata_consistency) {
     case SyncMetadataConsistency::kMetadataConsistent:
       break;
-    case SyncMetadataConsistency::kEmptyPersistedAuthenticatedAccountId:
-    case SyncMetadataConsistency::kAuthenticatedAccountIdMismatch: {
+    case SyncMetadataConsistency::kEmptyPersistedAuthenticatedGaiaId:
+    case SyncMetadataConsistency::kAuthenticatedGaiaIdMismatch: {
       // Fix the field in place.
       // TODO(crbug.com/40897441): This doesn't fit the method name. It's also
       // not clear if this codepath is even required.
       sync_pb::DataTypeState update_data_type_state =
           entity_tracker_->data_type_state();
-      update_data_type_state.set_authenticated_account_id(
-          activation_request_.authenticated_account_id.ToString());
+      update_data_type_state.set_authenticated_obfuscated_gaia_id(
+          activation_request_.authenticated_gaia_id.ToString());
       entity_tracker_->set_data_type_state(update_data_type_state);
       break;
     }

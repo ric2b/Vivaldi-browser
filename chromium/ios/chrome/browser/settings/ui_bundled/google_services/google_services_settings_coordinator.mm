@@ -20,6 +20,7 @@
 #import "ios/chrome/browser/shared/coordinator/alert/action_sheet_coordinator.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -107,6 +108,7 @@ using signin_metrics::PromoAction;
 }
 
 - (void)stop {
+  [self.mediator disconnect];
   _signOutCoordinator = nil;
   [self dismissSignoutCoordinator];
 }
@@ -193,7 +195,7 @@ using signin_metrics::PromoAction;
   [self.signOutCoordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
                                      action:^{
                                        [weakSelf dismissSignoutCoordinator];
-                                       completion(NO);
+                                       completion(NO, nil);
                                      }
                                       style:UIAlertActionStyleCancel];
   [self.signOutCoordinator start];
@@ -204,13 +206,13 @@ using signin_metrics::PromoAction;
   DCHECK(completion);
   [self.googleServicesSettingsViewController preventUserInteraction];
   __weak GoogleServicesSettingsCoordinator* weakSelf = self;
-  signin::MultiProfileSignOut(
-      self.browser,
-      signin_metrics::ProfileSignout::kUserDisabledAllowChromeSignIn,
-      /*force_snackbar_over_toolbar=*/false, nil, ^{
+  signin::ProfileSignoutRequest(
+      signin_metrics::ProfileSignout::kUserDisabledAllowChromeSignIn)
+      .SetCompletionCallback(base::BindOnce(^(SceneState* scene_state) {
         [weakSelf.googleServicesSettingsViewController allowUserInteraction];
-        completion(YES);
-      });
+        completion(YES, scene_state);
+      }))
+      .Run(self.browser);
 }
 
 #pragma mark - GoogleServicesSettingsViewControllerPresentationDelegate

@@ -1210,7 +1210,7 @@ REGISTER_OP("XlaGather")
                               input_shape, start_indices_shape,
                               gather_dim_numbers, slice_sizes));
       std::vector<shape_inference::DimensionHandle> dims;
-      for (int64_t i = 0; i < output_shape.rank(); ++i) {
+      for (int64_t i = 0; i < output_shape.dimensions().size(); ++i) {
         if (output_shape.is_unbounded_dynamic_dimension(i)) {
           dims.push_back(c->UnknownDim());
         } else {
@@ -1416,6 +1416,7 @@ REGISTER_OP("XlaCallModule")
     .Attr("function_list: list(func) = []")
     .Attr("has_token_input_output: bool = false")
     .Attr("disabled_checks: list(string) = []")
+    .Attr("use_shardy_partitioner: bool = false")
     .SetIsStateful()
     .SetShapeFn([](shape_inference::InferenceContext* c) {
       std::vector<shape_inference::ShapeHandle> args_shapes;
@@ -1491,6 +1492,7 @@ disabled_checks: A list of strings describing the safety checks that were
   This list, supplemented with a comma-separate list of directives specified
   using the flag --tf_xla_call_module_disabled_checks,
   is used at module loading time to skip the corresponding checks.
+use_shardy_partitioner: Indicates whether Shardy is used for SPMD partitioning.
 )doc");
 
 }  // namespace

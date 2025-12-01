@@ -411,12 +411,24 @@ DrawPass::DrawPass(sk_sp<TextureProxy> target,
 
 DrawPass::~DrawPass() = default;
 
+namespace {
+bool paint_uses_advanced_blend_equation(std::optional<PaintParams> drawPaintParams) {
+    if (!drawPaintParams.has_value() || !drawPaintParams.value().asFinalBlendMode().has_value()) {
+        return false;
+    }
+
+    return (int)drawPaintParams.value().asFinalBlendMode().value() >
+           (int)SkBlendMode::kLastCoeffMode;
+}
+} // anonymous
+
 std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
                                          std::unique_ptr<DrawList> draws,
                                          sk_sp<TextureProxy> target,
                                          const SkImageInfo& targetInfo,
                                          std::pair<LoadOp, StoreOp> ops,
-                                         std::array<float, 4> clearColor) {
+                                         std::array<float, 4> clearColor,
+                                         const DstReadStrategy dstReadStrategy) {
     // NOTE: This assert is here to ensure SortKey is as tightly packed as possible. Any change to
     // its size should be done with care and good reason. The performance of sorting the keys is
     // heavily tied to the total size.
@@ -531,8 +543,6 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         }
 
         passBounds.join(draw.fDrawParams.clip().drawBounds());
-        drawPass->fDepthStencilFlags |= draw.fRenderer->depthStencilFlags();
-        drawPass->fRequiresMSAA |= draw.fRenderer->requiresMSAA();
     }
 
     if (!gradientBufferTracker.writeData(gatherer.gradientBufferData(), bufferMgr)) {
@@ -549,8 +559,6 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     // TODO: It's not strictly necessary, but would a stable sort be useful or just end up hiding
     // bugs in the DrawOrder determination code?
     std::sort(keys.begin(), keys.end());
-
-    // Used to record vertex/instance data, buffer binds, and draw calls
     DrawWriter drawWriter(&drawPass->fCommandList, bufferMgr);
     GraphicsPipelineCache::Index lastPipeline = GraphicsPipelineCache::kInvalidIndex;
     SkIRect lastScissor = SkIRect::MakeSize(targetInfo.dimensions());
@@ -562,26 +570,26 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
     // All large gradients pack their data into a single buffer throughout the draw pass,
     // therefore the gradient buffer only needs to be bound once.
     gradientBufferTracker.bindIfNeeded(&drawPass->fCommandList);
-
     UniformTracker geometryUniformTracker(useStorageBuffers);
     UniformTracker shadingUniformTracker(useStorageBuffers);
 
-    // Some decisions depend upon the dst read strategy used by backends to read dst texture info.
-    DstReadStrategy dstReadStrategy = caps->getDstReadStrategy(target->textureInfo());
-    const bool drawsReadDstAsInput = dstReadStrategy == DstReadStrategy::kReadFromInput;
     // TODO(b/372953722): Remove this forced binding command behavior once dst copies are always
     // bound separately from the rest of the textures.
     const bool rebindTexturesOnPipelineChange = dstReadStrategy == DstReadStrategy::kTextureCopy;
+    // Keep track of the prior draw's PaintOrder. If the current draw requires barriers and there
+    // is no pipeline or state change, then we must compare the current and prior draw's PaintOrders
+    // to determine if the draws overlap. If they do, we must inject a flush between them such that
+    // the barrier addition and draw commands are ordered correctly.
+    CompressedPaintersOrder priorDrawPaintOrder {};
+
+    // If a draw uses an advanced blend mode and the device supports this via noncoherent blending,
+    // then we must insert the appropriate barrier and ensure that the draws do not overlap.
+    const bool advancedBlendsRequireBarrier =
+            caps->blendEquationSupport() == Caps::BlendEquationSupport::kAdvancedNoncoherent;
 
     for (const SortKey& key : keys) {
         const DrawList::Draw& draw = key.draw();
         const RenderStep& renderStep = key.renderStep();
-
-        // If reading from the dst texture as an input attachment, append a DrawCommand to signal to
-        // backend command buffers to add the appropriate barrier type.
-        if (drawsReadDstAsInput && draw.readsFromDst()) {
-            drawPass->fCommandList.addBarrier(BarrierType::kReadDstFromInput);
-        }
 
         const bool pipelineChange = key.pipelineIndex() != lastPipeline;
 
@@ -604,10 +612,23 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         const SkIRect* newScissor        = draw.fDrawParams.clip().scissor() != lastScissor ?
                 &draw.fDrawParams.clip().scissor() : nullptr;
 
-        // TODO(b/393382700): Check whether a draw uses an advanced noncoherent blend mode. If so,
-        // that draw must not be grouped with draws that read from the dst texture since those
-        // requirements are mutually exclusive. We would also need to issue append an addBarrier
-        // command to the command list with BarrierType::kAdvancedNoncoherentBlend.
+        // Determine + analyze draw properties to inform whether we need to issue barriers before
+        // issuing draw calls.
+        bool drawsOverlap = priorDrawPaintOrder != draw.fDrawParams.order().paintOrder();
+        bool drawUsesAdvancedBlendMode = paint_uses_advanced_blend_equation(draw.fPaintParams);
+
+        std::optional<BarrierType> barrierToAddBeforeDraws = std::nullopt;
+        if (dstReadStrategy == DstReadStrategy::kReadFromInput && draw.readsFromDst()) {
+            barrierToAddBeforeDraws = BarrierType::kReadDstFromInput;
+        }
+        if (drawUsesAdvancedBlendMode &&
+            caps->supportsHardwareAdvancedBlending() &&
+            advancedBlendsRequireBarrier) {
+            // A draw should only read from the dst OR use hardware for advanced blend modes.
+            SkASSERT(!draw.readsFromDst());
+
+            barrierToAddBeforeDraws = BarrierType::kAdvancedNoncoherentBlend;
+        }
 
         const bool stateChange = geomBindingChange ||
                                  shadingBindingChange ||
@@ -618,10 +639,19 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
         // the previous state use the proper state.
         if (pipelineChange) {
             drawWriter.newPipelineState(renderStep.primitiveType(),
-                                        renderStep.vertexStride(),
-                                        renderStep.instanceStride());
+                                        renderStep.staticDataStride(),
+                                        renderStep.appendDataStride(),
+                                        renderStep.getRenderStateFlags(),
+                                        barrierToAddBeforeDraws);
         } else if (stateChange) {
             drawWriter.newDynamicState();
+        } else if (barrierToAddBeforeDraws.has_value() && drawsOverlap) {
+            // Even if there is no pipeline or state change, we must consider whether a
+            // DrawPassCommand to add barriers must be inserted before any draw commands. If so,
+            // then determine if the current and prior draws overlap (ie, their PaintOrders are
+            // unequal). If so, perform a flush() to make sure the draw and add barrier commands are
+            // appended to the command list in the proper order.
+            drawWriter.flush();
         }
 
         // Make state changes before accumulating new draw data
@@ -655,8 +685,11 @@ std::unique_ptr<DrawPass> DrawPass::Make(Recorder* recorder,
             SKGPU_LOG_W("Failed to write necessary vertex/instance data for DrawPass, dropping!");
             return nullptr;
         }
+
+        // Update priorDrawPaintOrder value before iterating to analyze the next draw.
+        priorDrawPaintOrder = draw.fDrawParams.order().paintOrder();
     }
-    // Finish recording draw calls for any collected data at the end of the loop
+    // Finish recording draw calls for any collected data still pending at end of the loop
     drawWriter.flush();
 
     drawPass->fBounds = passBounds.roundOut().asSkIRect();

@@ -32,16 +32,11 @@ viz_component("shared_image_format") {
   deps = [
     "//base",
     "//cc/base",
-    "//gpu/vulkan:buildflags",
     "//skia",
     "//third_party/angle:includes",
-    "//third_party/dawn/include/dawn:cpp_headers",
     "//ui/gfx:buffer_types",
     "//ui/gfx/geometry",
   ]
-  if (enable_vulkan) {
-    deps += [ "//third_party/vulkan-headers/src:vulkan_headers" ]
-  }
 }
 
 always_enable_blending_for_primary = is_castos || is_cast_android
@@ -63,6 +58,8 @@ if (skia_use_metal) {
     defines = [ "VIZ_METAL_CONTEXT_PROVIDER_IMPLEMENTATION" ]
 
     sources = [
+      "//gpu/command_buffer/service/graphite_shared_context.cc",
+      "//gpu/command_buffer/service/graphite_shared_context.h",
       "gpu/metal_context_provider.h",
       "gpu/metal_context_provider.mm",
       "viz_metal_context_provider_export.h",
@@ -112,7 +109,6 @@ if (enable_vulkan) {
       "//base",
       "//gpu/vulkan",
       "//gpu/vulkan:buildflags",
-      "//gpu/vulkan/init:skia",
       "//ui/gfx",
     ]
   }

@@ -12,10 +12,10 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/user_metrics.h"
 #include "base/observer_list.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model_observer.h"
 
@@ -154,6 +154,33 @@ std::optional<size_t> RecentlyUsedFoldersComboModel::GetDefaultIndex() const {
                            Item(parent_node_, Item::TYPE_ALL_BOOKMARKS_NODE));
   }
   return it == items_.end() ? 0 : static_cast<int>(it - items_.begin());
+}
+
+std::optional<ui::ColorId>
+RecentlyUsedFoldersComboModel::GetDropdownForegroundColorIdAt(
+    size_t index) const {
+  switch (items_[index].type) {
+    case Item::TYPE_ACCOUNT_BOOKMARK_HEADING:
+    case Item::TYPE_DEVICE_BOOKMARK_HEADING:
+      return ui::kColorDisabledForeground;
+    case Item::TYPE_NODE:
+    case Item::TYPE_SEPARATOR:
+    case Item::TYPE_ALL_BOOKMARKS_NODE:
+    case Item::TYPE_CHOOSE_ANOTHER_FOLDER:
+      return std::nullopt;
+  }
+  NOTREACHED();
+}
+
+ui::ComboboxModel::ItemCheckmarkConfig
+RecentlyUsedFoldersComboModel::GetCheckmarkConfig() const {
+  if (base::FeatureList::IsEnabled(
+          switches::kSyncEnableBookmarksInTransportMode)) {
+    // Explicitly enable checkmarks for all folder entries to visually
+    // distinguish them from titles.
+    return ItemCheckmarkConfig::kEnabled;
+  }
+  return ItemCheckmarkConfig::kDefault;
 }
 
 void RecentlyUsedFoldersComboModel::BookmarkModelLoaded(bool ids_reassigned) {}

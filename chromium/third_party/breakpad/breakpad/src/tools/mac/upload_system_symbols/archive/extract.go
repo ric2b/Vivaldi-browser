@@ -237,7 +237,7 @@ func (e *ipswExtractor) mountSystemDMG(ipswPath string) (string, error) {
 // at `manifest`.
 func (e *ipswExtractor) getSystemDMGPath(manifest string) (string, error) {
 	print_cmd := "print :BuildIdentities:1:Manifest:Cryptex1,SystemOS:Info:Path"
-	result, err := exec.Command("PlistBuddy", "-c", print_cmd, manifest).Output()
+	result, err := exec.Command("/usr/libexec/PlistBuddy", "-c", print_cmd, manifest).Output()
 	if err != nil {
 		return "", err
 	}
@@ -300,7 +300,7 @@ func (e *installAssistantExtractor) expandInstaller(installerPath string, destin
 // macOS version 13 or higher, and accordingly stores dyld shared caches inside cryptexes.
 func (e *installAssistantExtractor) hasCryptexes(plistPath string) (bool, error) {
 	print_cmd := "print :Assets:0:OSVersion"
-	result, err := exec.Command("PlistBuddy", "-c", print_cmd, plistPath).Output()
+	result, err := exec.Command("/usr/libexec/PlistBuddy", "-c", print_cmd, plistPath).Output()
 	if err != nil {
 		return false, fmt.Errorf("couldn't read OS version from %s: %v", plistPath, err)
 	}
@@ -386,7 +386,9 @@ func (e *installAssistantExtractor) extractCachesFromPayloads(payloadsPath strin
 		payload := path.Join(payloadsPath, f.Name())
 		if e.payloadHasSharedCache(payload) {
 			e.vlog("Extracting %v\n", payload)
-			e.extractPayload(payload, scratchDir)
+			if err := e.extractPayload(payload, scratchDir); err != nil {
+				return err
+			}
 		}
 	}
 	return e.copySharedCaches(scratchDir, destination)

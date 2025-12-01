@@ -140,7 +140,7 @@ public class ImeAdapterImpl
     private @Nullable ShowKeyboardResultReceiver mShowKeyboardResultReceiver;
 
     private final WebContentsImpl mWebContents;
-    private ViewAndroidDelegate mViewDelegate;
+    private final ViewAndroidDelegate mViewDelegate;
 
     // This holds the information necessary for constructing CursorAnchorInfo, and notifies to
     // InputMethodManager on appropriate timing, depending on how IME requested the information
@@ -174,7 +174,7 @@ public class ImeAdapterImpl
     private boolean mRestartInputOnNextStateUpdate;
     // Do not access directly, use getStylusWritingImeCallback() instead.
     private @Nullable StylusWritingImeCallback mStylusWritingImeCallback;
-    private SparseArray<OngoingGesture> mOngoingGestures = new SparseArray<>();
+    private final SparseArray<OngoingGesture> mOngoingGestures = new SparseArray<>();
 
     // True if ImeAdapter is connected to render process.
     private boolean mIsConnected;
@@ -864,6 +864,19 @@ public class ImeAdapterImpl
         }
     }
 
+    /** Resets IME adapter and hides keyboard. Note that this will also unblock input connection. */
+    @Override
+    public void resetAndHideKeyboard() {
+        if (DEBUG_LOGS) Log.i(TAG, "resetAndHideKeyboard");
+        mTextInputType = TextInputType.NONE;
+        mTextInputFlags = 0;
+        mTextInputMode = WebTextInputMode.DEFAULT;
+        mRestartInputOnNextStateUpdate = false;
+        mNodeEditable = false;
+        // This will trigger unblocking if necessary.
+        hideKeyboard();
+    }
+
     private static boolean isTextInputType(int type) {
         return type != TextInputType.NONE && !InputDialogContainer.isDialogInputType(type);
     }
@@ -879,18 +892,6 @@ public class ImeAdapterImpl
         }
         if (mInputConnection != null) return mInputConnection.sendKeyEventOnUiThread(event);
         return sendKeyEvent(event);
-    }
-
-    /** Resets IME adapter and hides keyboard. Note that this will also unblock input connection. */
-    public void resetAndHideKeyboard() {
-        if (DEBUG_LOGS) Log.i(TAG, "resetAndHideKeyboard");
-        mTextInputType = TextInputType.NONE;
-        mTextInputFlags = 0;
-        mTextInputMode = WebTextInputMode.DEFAULT;
-        mRestartInputOnNextStateUpdate = false;
-        mNodeEditable = false;
-        // This will trigger unblocking if necessary.
-        hideKeyboard();
     }
 
     @CalledByNative

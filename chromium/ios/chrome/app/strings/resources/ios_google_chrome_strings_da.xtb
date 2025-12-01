@@ -47,6 +47,7 @@ Vær opmærksom på følgende:
 <translation id="1917964099031477364">Denne konto og data, som ikke er gemt, fjernes fra Chrome og andre Google-apps på denne enhed.</translation>
 <translation id="1919130412786645364">Tillad login i Chrome</translation>
 <translation id="1965935827552890526">Gør det færdigt, du var i gang med i dit andet åbne Chrome-vindue.</translation>
+<translation id="1966638102563776885">Tip til Chrome: Få adgang til dine adgangskoder i enhver app</translation>
 <translation id="1973910962341002002">Aktivér "Chrome" i indstillingerne for "<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />"</translation>
 <translation id="1984705450038014246">Synkroniser dine Chrome-data</translation>
 <translation id="1987779152850321833">Udfør de foreslåede handlinger nedenfor for at få mest muligt ud af Chrome.</translation>
@@ -114,7 +115,6 @@ Prøv at vente et par minutter, før du logger ud. Hvis du logger ud nu, slettes
 <translation id="3655656110921623717">Det betyder, at Chrome anmoder om mobilwebsitet hver gang.</translation>
 <translation id="3740397331642243698">Åbner de angivne webadresser i Google Chrome i inkognito.</translation>
 <translation id="3741995255368156336">Åbner Chrome-læselisten.</translation>
-<translation id="3808570423967020928">Få hurtigere adgang til Chrome via docken på din startskærm.</translation>
 <translation id="3827545470516145620">Du får standardbeskyttelse på denne enhed</translation>
 <translation id="384394811301901750">Google Chrome kan ikke bruge dit kamera lige nu</translation>
 <translation id="3863841106411295595">Føjer de angivne webadresser til din læseliste i Chrome.</translation>
@@ -123,6 +123,7 @@ Prøv at vente et par minutter, før du logger ud. Hvis du logger ud nu, slettes
 <translation id="3984746313391923992">Din organisation kræver, at du forbliver logget ud af Chrome.</translation>
 <translation id="3988789688219830639">Google Chrome har ikke adgang til dine billeder eller videoer. Gå til iOS Indstillinger &gt; Privatliv &gt; Billeder for at få adgang.</translation>
 <translation id="4064699917955374540">Verificer din identitet for at bruge og gemme Chrome-data på din Google-konto.</translation>
+<translation id="411154422556990518">Få Chrome-tips og opdateringer i forbindelse med prissporing.</translation>
 <translation id="417201473131094001">Understøttes ikke i Chrome Canary</translation>
 <translation id="424864128008805179">Vil du logge ud af Chrome?</translation>
 <translation id="4430797724889237570">Åbn links fra Gmail, Maps, YouTube og andre apps i Chrome</translation>
@@ -133,9 +134,11 @@ Prøv at vente et par minutter, før du logger ud. Hvis du logger ud nu, slettes
 <translation id="4636900170638246267">Log ind på dette website og Chrome.</translation>
 <translation id="4647910807533196601">Åbn min seneste fane i Chrome.</translation>
 <translation id="4693084815234024320">Du er i inkognitotilstand i Chrome</translation>
+<translation id="4713907610796204963">Lær det grundlæggende om Chrome for at komme godt i gang</translation>
 <translation id="4724297637870447613">Brug Chrome overalt</translation>
 <translation id="4738647308035481133">Google Chrome-side</translation>
 <translation id="4742795653798179840">Chrome-dataene er slettet</translation>
+<translation id="4749294594657945639">For nemt at tilgå dine gemte adgangskoder i andre apps skal du vælge Chrome til autofyld.</translation>
 <translation id="4761869838909035636">Kør Chrome-sikkerhedstjekket</translation>
 <translation id="4798859546468762093">For at få personlig tilpasning og andre funktioner skal du medtage Chrome i <ph name="FEATURE_NAME_1" /> og <ph name="FEATURE_NAME_2" /></translation>
 <translation id="4819268619367838612">Chrome sender data om brug og nedbrud til Google for at hjælpe med at forbedre appen. <ph name="BEGIN_LINK" />Administrer<ph name="END_LINK" /></translation>
@@ -228,11 +231,9 @@ Du kan ændre denne indstilling ved at <ph name="BEGIN_LINK" />slette Chrome-dat
 Du kan finde flere indstillinger, der bruger data til at forbedre din Chrome-oplevelse, ved at gå til <ph name="BEGIN_LINK" />Google-tjenester<ph name="END_LINK" />.</translation>
 <translation id="6922332667202044570">Slet browserdata i Chrome.</translation>
 <translation id="6924922227983877439">Åbn links i Chrome som standard</translation>
-<translation id="6931601805528922498">Når du logger ind, føjes din konto til Chrome, så du kan bruge den til arbejdsrelateret browsing.</translation>
 <translation id="6975725306479268850">Vælg Chrome for Autofyld</translation>
 <translation id="7056826488869329999">Åbner og kører et sikkerhedstjek i Chrome.</translation>
 <translation id="7061455974939528301">Hold Chrome-ikonet nede, og klik på "Rediger hjemmeskærm"</translation>
-<translation id="7065813315247345131">Flyt Chrome til docken</translation>
 <translation id="7124339256045485976">Sørger for, at Chrome er opdateret</translation>
 <translation id="7145599899567697473">Gem og udfyld automatisk adgangskoder i Chrome</translation>
 <translation id="7161390184744336561">Google Chrome er forældet</translation>
@@ -240,7 +241,6 @@ Du kan finde flere indstillinger, der bruger data til at forbedre din Chrome-opl
 <translation id="7175129790242719365">Tip til Chrome: Log ind i Chrome</translation>
 <translation id="7187993566681480880">Beskytter dig i Chrome og kan bruges til at forbedre din sikkerhed i andre Google-apps, når du er logget ind.</translation>
 <translation id="7200524487407690471">Chrome kører automatisk et sikkerhedstjek hver dag for at beskytte dig mod brud på datasikkerheden, usikre websites og meget mere. Du kan få flere oplysninger om Sikkerhedstjek i Indstillinger.</translation>
-<translation id="7203324561587388418">Hold dig opdateret om indhold og nyttige Chrome-tips.</translation>
 <translation id="72119412072970160">Du kan bruge de adgangskoder, du har gemt i Google Adgangs­kode­admin­istrator, i andre apps på din iPad.</translation>
 <translation id="7214019116829172458">Åbn en inkognitofane i Chrome</translation>
 <translation id="722167379782941918">Chrome anbefaler forbedret beskyttelse</translation>
@@ -253,6 +253,7 @@ Du kan finde flere indstillinger, der bruger data til at forbedre din Chrome-opl
 <translation id="7299681342915173313">Du kan nu bruge Chrome, hver gang du trykker på links i mails, dokumenter og andre apps.</translation>
 <translation id="7344094882820374540">Få Chromes stærkeste beskyttelse mod skadelige websites</translation>
 <translation id="7349129508108954623">Tillad, at Chrome bruger Google Maps til at vise dig rutevejledning og lokale oplysninger om registrerede adresser.</translation>
+<translation id="7371674917547846460">Få nyttige Chrome-tips og meget mere.</translation>
 <translation id="7394108421562933108">Maps i Chrome</translation>
 <translation id="7400722733683201933">Om Google Chrome</translation>
 <translation id="7466693328838535498">Skriv Chrome i feltet Søgewidgets</translation>
@@ -263,6 +264,7 @@ Du kan finde flere indstillinger, der bruger data til at forbedre din Chrome-opl
 <translation id="7581063337314642333">Gå til fanegitteret i Chrome</translation>
 <translation id="7599894504325210080">Udvidet visning af Autofyld i Chrome</translation>
 <translation id="7617512710641355143">Chrome er administreret</translation>
+<translation id="7626032353295482388">Velkommen til Chrome</translation>
 <translation id="7642373780953416937">Modtag underretninger om eventuelle privatlivsrelaterede eller sikkerhedsmæssige problemer, som Chrome automatisk registrerer for dig.</translation>
 <translation id="7660356333829433649">Tjek igen på et andet tidspunkt for at få flere nyttige tips til, hvordan du får mest muligt ud af Chrome.</translation>
 <translation id="7662994914830945754">Log ind, og aktivér synkronisering på alle de enheder, hvor du bruger Chrome, for at se dine faner på dem</translation>
@@ -276,6 +278,7 @@ Du kan finde flere indstillinger, der bruger data til at forbedre din Chrome-opl
 <translation id="778855399387580014">Start en søgning i en ny Chrome-fane.</translation>
 <translation id="7792140019572081272">Chrome beskytter dine følsomme oplysninger med Face ID.</translation>
 <translation id="7855730255114109580">Google Chrome er opdateret</translation>
+<translation id="787226752901403048">Log ind i Chrome for at dele og deltage i fanegrupper og samarbejde om idéer</translation>
 <translation id="7897703007638178753">Se seneste faner i Chrome</translation>
 <translation id="7948283758957877064">Nyheder i Chrome</translation>
 <translation id="8000174216052461231">Tip til Chrome: Få Chromes stærkeste beskyttelse</translation>
@@ -314,10 +317,10 @@ Dine data blev krypteret med din adgangssætning <ph name="TIME" />. Angiv adgan
 <translation id="8603022514504485810">Google Adgangs­kode­admin­istrator kunne ikke tjekke alle adgangskoder. Prøv igen i morgen, eller <ph name="BEGIN_LINK" />tjek adgangskoder på din Google-konto<ph name="END_LINK" />.</translation>
 <translation id="8630122478628016441">Aktivér "Lås inkognitofaner, når du lukker Chrome".</translation>
 <translation id="8673726683583791503">Shop med Google Lens</translation>
-<translation id="8727043961453758442">Få mest muligt ud af Chrome</translation>
 <translation id="8765470054473112089">Når du indtaster noget i adresselinjen eller søgefeltet, sender Chrome det, du skriver, til din standardsøgemaskine for at få bedre forslag. Dette er deaktiveret i inkognitotilstand.</translation>
 <translation id="8772179140489533211">Viser anmodninger om at logge ind i Chrome.</translation>
 <translation id="8788269841521769222">Du behøver ikke at huske denne adgangskode. Den gemmes i Googles Adgangs­kode­admin­istrator for <ph name="EMAIL" /></translation>
+<translation id="8796490717897731471"><ph name="EMAIL" />. Chrome er administreret.</translation>
 <translation id="880967149107462122">Gå til Chrome-indstillinger</translation>
 <translation id="8842132678697187091">Du kan åbne Google Lens her.</translation>
 <translation id="8850736900032787670">Log ind i Chrome for at få personligt tilpasset indhold baseret på dine interesser.</translation>

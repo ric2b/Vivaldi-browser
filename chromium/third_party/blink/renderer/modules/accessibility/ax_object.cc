@@ -114,6 +114,7 @@
 #include "third_party/blink/renderer/core/svg/svg_title_element.h"
 #include "third_party/blink/renderer/modules/accessibility/aria_notification.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_enums.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_object-inl.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #if AX_FAIL_FAST_BUILD()
 #include "third_party/blink/renderer/modules/accessibility/ax_debug_utils.h"
@@ -595,10 +596,11 @@ const AXObject* FindAncestorWithAriaHidden(const AXObject* start) {
 // static
 unsigned AXObject::number_of_live_ax_objects_ = 0;
 
-AXObject::AXObject(AXObjectCacheImpl& ax_object_cache)
+AXObject::AXObject(AXObjectCacheImpl& ax_object_cache, bool is_node_object)
     : id_(0),
       parent_(nullptr),
       role_(ax::mojom::blink::Role::kUnknown),
+      is_node_object_(is_node_object),
       cached_live_region_root_(nullptr),
       ax_object_cache_(&ax_object_cache) {
   ++number_of_live_ax_objects_;
@@ -728,10 +730,6 @@ void AXObject::Init(AXObject* parent) {
   // Set the parent again, this time via SetParent(), so that all related checks
   // and calls occur now that we have the role and updated cached values.
   SetParent(parent_);
-
-#if DCHECK_IS_ON()
-  is_initialized_ = true;
-#endif
 }
 
 void AXObject::Detach() {
@@ -776,10 +774,6 @@ void AXObject::Detach() {
   child_cached_values_need_update_ = false;
   has_dirty_descendants_ = false;
   id_ = 0;
-}
-
-bool AXObject::IsDetached() const {
-  return !ax_object_cache_;
 }
 
 bool AXObject::IsRoot() const {
@@ -948,6 +942,23 @@ Node* AXObject::GetParentNodeForComputeParent(AXObjectCacheImpl& cache,
 
   Node* parent = nullptr;
 
+  // ::scroll-button and ::scroll-marker-group elements have a node parent that
+  // is the originating element. However, they are constructed as siblings of
+  // the originating element. This matches the layout relationship. So, for
+  // these specific elements, use the layout parent's node.
+  if ((node->IsScrollButtonPseudoElement() ||
+       node->IsScrollMarkerGroupPseudoElement()) &&
+      node->GetLayoutObject()) {
+    LayoutObject* parent_object = node->GetLayoutObject()->Parent();
+    // Find the nearest non-anonymous layout object ancestor.
+    while (parent_object && parent_object->IsAnonymous()) {
+      parent_object = parent_object->Parent();
+    }
+    if (parent_object) {
+      parent = parent_object->GetNode();
+    }
+  }
+
   // Use LayoutTreeBuilderTraversal::Parent(), which handles pseudo content.
   // This can return nullptr for a node that is never visited by
   // LayoutTreeBuilderTraversal's child traversal. For example, while an element
@@ -989,6 +1000,18 @@ Node* AXObject::GetParentNodeForComputeParent(AXObjectCacheImpl& cache,
     return AXObject::GetMapForImage(image_element) == map_element
                ? image_element
                : nullptr;
+  }
+
+  if (RuntimeEnabledFeatures::SelectAccessibilityReparentInputEnabled()) {
+    if (auto* input = DynamicTo<HTMLInputElement>(node)) {
+      if (auto* select = input->FirstAncestorSelectElement()) {
+        if (input->IsFirstTextInputInAncestorSelect() && input->IsTextField()) {
+          // The first descendant <input> in a <select> is reparented to be a
+          // direct child of the <select> in the a11y tree.
+          return select;
+        }
+      }
+    }
   }
 
   return CanComputeAsNaturalParent(parent) ? parent : nullptr;
@@ -1211,7 +1234,7 @@ bool AXObject::AriaIntAttribute(const QualifiedName& attribute,
     value_if_less_than_1 = 1;
   } else {
     // For now, try to get the illegal attribute, but catch the error.
-    NOTREACHED(base::NotFatalUntil::M133) << "Not an int attribute.";
+    NOTREACHED() << "Not an int attribute.";
   }
 
   if (out_value) {
@@ -1340,8 +1363,9 @@ void SerializeAriaNotificationAttributes(const AriaNotifications& notifications,
 }  // namespace
 
 void AXObject::Serialize(ui::AXNodeData* node_data,
-                         ui::AXMode accessibility_mode,
-                         bool is_snapshot) const {
+                         ui::AXMode accessibility_mode) const {
+  bool is_snapshot = AXObjectCache().IsForSnapshot();
+
   // Reduce redundant ancestor chain walking for display lock computations.
   auto memoization_scope =
       DisplayLockUtilities::CreateLockCheckMemoizationScope();
@@ -1786,17 +1810,15 @@ void AXObject::SerializeInlineTextBox(ui::AXNodeData* node_data) const {
   DCHECK_EQ(name_from, ax::mojom::blink::NameFrom::kContents);
   node_data->SetNameFrom(ax::mojom::blink::NameFrom::kContents);
 
-  if (::features::IsAccessibilityPruneRedundantInlineTextEnabled()) {
-    DCHECK(parent_);
-    DCHECK(parent_->GetLayoutObject()->IsText());
-    if (IsOnlyChild()) {
-      auto* layout_text = To<LayoutText>(parent_->GetLayoutObject());
-      String visible_text = layout_text->PlainText();
-      if (name == visible_text) {
-        // The text of an only-child inline text box can be inferred directly
-        // from the parent. No need to serialize redundant data.
-        return;
-      }
+  DCHECK(parent_);
+  DCHECK(parent_->GetLayoutObject()->IsText());
+  if (IsOnlyChild()) {
+    auto* layout_text = To<LayoutText>(parent_->GetLayoutObject());
+    String visible_text = layout_text->PlainText();
+    if (name == visible_text) {
+      // The text of an only-child inline text box can be inferred directly
+      // from the parent. No need to serialize redundant data.
+      return;
     }
   }
 
@@ -2553,8 +2575,8 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
       // contenteditables, use AXTreeData.
       //
       // TODO(nektar): Remove kTextSelStart and kTextSelEnd from the renderer.
-      const auto ax_selection =
-          AXSelection::FromCurrentSelection(ToTextControl(*element));
+      const auto ax_selection = AXSelection::FromCurrentSelection(
+          ToTextControl(*element), AXObjectCache());
       int start = ax_selection.Anchor().IsTextPosition()
                       ? ax_selection.Anchor().TextOffset()
                       : ax_selection.Anchor().ChildIndex();
@@ -2589,6 +2611,10 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
       node_data->AddIntListAttribute(
           ax::mojom::blink::IntListAttribute::kControlsIds,
           {static_cast<int32_t>(listbox->AXObjectID())});
+    } else if (AXObject* scroller = GetControlsForOverflowNavigation()) {
+      node_data->AddIntListAttribute(
+          ax::mojom::blink::IntListAttribute::kControlsIds,
+          {static_cast<int32_t>(scroller->AXObjectID())});
     }
   }
 
@@ -2682,6 +2708,17 @@ void AXObject::SerializeComputedDetailsRelation(
         ax::mojom::blink::IntListAttribute::kDetailsIds,
         {static_cast<int32_t>(positioned_obj->AXObjectID())});
     node_data->SetDetailsFrom(ax::mojom::blink::DetailsFrom::kCssAnchor);
+    return;
+  }
+
+  // Add aria-details for a scroll marker pseudo-element.
+  if (AXObject* marker_target = GetScrollMarkerTarget()) {
+    node_data->AddIntListAttribute(
+        ax::mojom::blink::IntListAttribute::kDetailsIds,
+        {static_cast<int32_t>(marker_target->AXObjectID())});
+    node_data->SetDetailsFrom(
+        ax::mojom::blink::DetailsFrom::kCssScrollMarkerPseudoElement);
+    return;
   }
 }
 
@@ -2810,7 +2847,7 @@ AXObject* AXObject::GetInterestTargetForInvoker() const {
     return nullptr;
   }
 
-  Element* popover = GetElement()->interestTargetElement();
+  Element* popover = GetElement()->InterestTargetElement();
   if (ElementTraversal::NextSkippingChildren(*GetElement()) == popover) {
     // The next element is already the popover.
     return nullptr;
@@ -2873,6 +2910,18 @@ AXObject* AXObject::GetPositionedObjectForAnchor(ui::AXNodeData* data) const {
   return positioned_obj;
 }
 
+AXObject* AXObject::GetScrollMarkerTarget() const {
+  if (!GetElement() || !GetElement()->IsScrollMarkerPseudoElement()) {
+    return nullptr;
+  }
+
+  // The parent element of a ::scroll-marker pseudo-element is the originating
+  // element containing or preceeding the details which is scrolled into view
+  // when you interact with the pseudo-element.
+  // https://www.w3.org/TR/css-overflow-5/#scroll-navigation
+  return AXObjectCache().Get(GetElement()->parentElement());
+}
+
 // Try to get an aria-controls for an <input role="combobox">, because it
 // helps identify focusable options in the listbox using activedescendant
 // detection, even though the focus is on the textbox and not on the listbox
@@ -2892,7 +2941,7 @@ AXObject* AXObject::GetControlsListboxForTextfieldCombobox() const {
   // normal purpose because a textfield cannot have children. This code allows
   // the textfield's invalid aria-owns to be remapped to aria-controls.
   DCHECK(GetElement());
-  const HeapVector<Member<Element>>* owned_elements =
+  const GCedHeapVector<Member<Element>>* owned_elements =
       ElementsFromAttributeOrInternals(GetElement(), html_names::kAriaOwnsAttr);
   AXObject* listbox_candidate = nullptr;
   if (owned_elements && owned_elements->size() > 0) {
@@ -2940,6 +2989,22 @@ AXObject* AXObject::GetControlsListboxForTextfieldCombobox() const {
   }
 
   return listbox_candidate;
+}
+
+AXObject* AXObject::GetControlsForOverflowNavigation() const {
+  if (!GetElement()) {
+    return nullptr;
+  }
+  if (!GetElement()->IsScrollButtonPseudoElement() &&
+      !GetElement()->IsScrollMarkerGroupPseudoElement()) {
+    return nullptr;
+  }
+
+  // The parent element of a ::scroll-button(*) or a ::scroll-marker-group
+  // is the originating scrolling container element which is scrolled
+  // (i.e. controlled) when you interact with these pseudo-element controls.
+  // https://www.w3.org/TR/css-overflow-5/#scroll-navigation
+  return AXObjectCache().Get(GetElement()->parentElement());
 }
 
 const AtomicString& AXObject::GetRoleStringForSerialization(
@@ -3513,10 +3578,6 @@ bool AXObject::IsLoaded() const {
 }
 
 bool AXObject::IsMultiSelectable() const {
-  return false;
-}
-
-bool AXObject::ComputeIsOffScreen() const {
   return false;
 }
 
@@ -4697,16 +4758,31 @@ bool AXObject::ComputeCanSetFocusAttribute() {
       << "\n* LayoutObject: " << GetLayoutObject();
 
   // Focusable: an element is focusable if it is either mouse or keyboard
-  // focusable. An element is only mouse focusable if it has negative tabindex.
-  // An element is only keyboard focusable if it a scroller without tabindex and
-  // no focusable child. In the case of a scroll element without tabindex and
+  // focusable. Most elements that are mouse focusable are also keyboard
+  // focusable, but given a negative tabindex it is only mouse focusable.
+  if (elem->IsMouseFocusable(Element::UpdateBehavior::kNoneForAccessibility)) {
+    return true;
+  }
+
+  // Most keyboard focusable elements are also mouse focusable and already
+  // covered by the above mouse focusable check. However, an element can be
+  // only keyboard focusable if it a scroller without tabindex and no focusable
+  // child. In the case of a scroll element without tabindex and
   // with focusable child, this should return false.
   // Calling Element::SupportsFocus() is not enough because scroll elements
   // support focus, but are not always focusable.
-  return elem->IsMouseFocusable(
-             Element::UpdateBehavior::kNoneForAccessibility) ||
-         elem->IsKeyboardFocusableSlow(
-             Element::UpdateBehavior::kNoneForAccessibility);
+  // This is only done for screen readers, which need exact info on the
+  // focusable state, because we only are ensured to have a fully updated
+  // style and layout subtree for the slow traversals in that case.
+  // In the other cases, optimizing for performance is more important.
+  if (AXObjectCache().IsScreenReaderActive()) {
+    if (elem->IsKeyboardFocusableSlow(
+            Element::UpdateBehavior::kNoneForAccessibility)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool AXObject::CanSetSelectedAttribute() const {
@@ -5026,12 +5102,16 @@ bool AXObject::ComputeIsHiddenViaStyle(const ComputedStyle* style) {
             style->Visibility() != EVisibility::kVisible);
   }
 
+  // ---- Rules for AXObjectswith no style ------
+
   Node* node = GetNode();
   if (!node)
     return false;
 
-  // content-visibility:hidden or content-visibility: auto.
-  if (DisplayLockUtilities::IsDisplayLockedPreventingPaint(node)) {
+  // For screen readers, check for situations involving content-visibility.
+  // For non-screen readers, display locked content is already pruned.
+  if (AXObjectCache().IsScreenReaderActive() &&
+      DisplayLockUtilities::IsDisplayLockedPreventingPaint(node)) {
     // Ensure contents of head, style and script are not exposed when
     // display-locked --the only time they are ever exposed is if author
     // explicitly makes them visible.
@@ -5040,9 +5120,12 @@ bool AXObject::ComputeIsHiddenViaStyle(const ComputedStyle* style) {
     DCHECK(!Traversal<HTMLStyleElement>::FirstAncestorOrSelf(*node)) << node;
     DCHECK(!Traversal<HTMLScriptElement>::FirstAncestorOrSelf(*node)) << node;
 
+    // Screen readers:
     // content-visibility: hidden subtrees are always hidden.
     // content-visibility: auto subtrees are treated as visible, as we must
-    // make a guess since computed style is not available.
+    // make a guess since computed style is not available. We need these nodes
+    // so that screen reader commands to find text or navigate to the next
+    // heading still work for all content-visibility: auto content.
     return DisplayLockUtilities::ShouldIgnoreNodeDueToDisplayLock(
         *node, DisplayLockActivationReason::kAccessibility);
   }
@@ -5243,7 +5326,7 @@ String AXObject::AriaTextAlternative(
 
     Element* element = GetElement();
     if (element) {
-      const HeapVector<Member<Element>>* elements_from_attribute =
+      const GCedHeapVector<Member<Element>>* elements_from_attribute =
           ElementsFromAttributeOrInternals(element, attr);
 
       const AtomicString& aria_labelledby = AriaAttribute(attr);
@@ -5348,7 +5431,7 @@ void AXObject::CheckSubtreeIsForLabelOrDescription(const AXObject* obj) const {
 String AXObject::TextFromElements(
     bool in_aria_labelledby_traversal,
     AXObjectSet& visited,
-    const HeapVector<Member<Element>>& elements,
+    base::span<const Member<Element>> elements,
     AXRelatedObjectVector* related_objects) const {
   StringBuilder accumulated_text;
   bool found_valid_element = false;
@@ -5384,37 +5467,13 @@ String AXObject::TextFromElements(
 }
 
 // static
-const HeapVector<Member<Element>>* AXObject::ElementsFromAttributeOrInternals(
-    const Element* from,
-    const QualifiedName& attribute) {
+const GCedHeapVector<Member<Element>>*
+AXObject::ElementsFromAttributeOrInternals(const Element* from,
+                                           const QualifiedName& attribute) {
   if (!from)
     return nullptr;
 
-  const HeapVector<Member<Element>>* attr_associated_elements =
-      from->GetAttrAssociatedElements(attribute,
-                                      /*resolve_reference_target=*/true);
-  if (attr_associated_elements) {
-    if (attr_associated_elements->empty()) {
-      return nullptr;
-    }
-    return attr_associated_elements;
-  }
-
-  const ElementInternals* element_internals = from->GetElementInternals();
-  if (!element_internals) {
-    return nullptr;
-  }
-
-  const FrozenArray<Element>* element_internals_attr_elements =
-      element_internals->GetElementArrayAttribute(attribute);
-
-  if (!element_internals_attr_elements ||
-      element_internals_attr_elements->empty()) {
-    return nullptr;
-  }
-
-  return MakeGarbageCollected<HeapVector<Member<Element>>>(
-      element_internals_attr_elements->AsVector());
+  return from->ElementsFromAttributeOrInternals(attribute);
 }
 
 // static
@@ -5454,13 +5513,13 @@ Element* AXObject::ElementFromAttributeOrInternals(
 // static
 bool AXObject::HasAriaLabelledbyElements(Element* from) {
   // Try both spellings, but prefer aria-labelledby, which is the official spec.
-  const HeapVector<Member<Element>>* aria_labelledby_elements =
+  const GCedHeapVector<Member<Element>>* aria_labelledby_elements =
       ElementsFromAttributeOrInternals(from, html_names::kAriaLabelledbyAttr);
   if (aria_labelledby_elements && aria_labelledby_elements->size() > 0) {
     return true;
   }
 
-  const HeapVector<Member<Element>>* aria_labeledby_elements =
+  const GCedHeapVector<Member<Element>>* aria_labeledby_elements =
       ElementsFromAttributeOrInternals(from, html_names::kAriaLabeledbyAttr);
   return aria_labeledby_elements && aria_labeledby_elements->size() > 0;
 }
@@ -5512,6 +5571,44 @@ bool AXObject::IsDescendantOfLandmarkDisallowedElement() const {
 void AXObject::LoadInlineTextBoxes() {}
 
 void AXObject::LoadInlineTextBoxesHelper() {}
+
+bool AXObject::CanHaveInlineTextBoxChildren(const blink::AXObject* obj) const {
+  if (!ui::CanHaveInlineTextBoxChildren(obj->RoleValue())) {
+    return false;
+  }
+
+  // Requires a layout object for there to be any inline text boxes.
+  if (!obj->GetLayoutObject()) {
+    return false;
+  }
+
+  // Inline text boxes are included if and only if the parent is unignored.
+  // If the parent is ignored but included in tree, the inline textbox is
+  // still withheld.
+  return !obj->IsIgnored();
+}
+
+bool AXObject::ShouldLoadInlineTextBoxes() const {
+  CHECK(!IsDetached());
+
+  if (!CanHaveInlineTextBoxChildren(this)) {
+    return false;
+  }
+
+  if (!AXObjectCache().GetAXMode().has_mode(ui::AXMode::kInlineTextBoxes)) {
+    return false;
+  }
+
+#if defined(REDUCE_AX_INLINE_TEXTBOXES)
+  // On Android, once an object has loaded inline text boxes, it will keep
+  // them refreshed.
+  return always_load_inline_text_boxes_;
+#else
+  // Other platforms keep all inline text boxes in the tree and refreshed,
+  // depending on the AXMode.
+  return true;
+#endif
+}
 
 AXObject* AXObject::NextOnLine() const {
   return nullptr;
@@ -6878,10 +6975,6 @@ void AXObject::ChildrenChangedWithCleanLayout() {
                         << this;
 
   AXObjectCache().MarkAXObjectDirtyWithCleanLayout(this);
-}
-
-Node* AXObject::GetNode() const {
-  return nullptr;
 }
 
 LayoutObject* AXObject::GetLayoutObject() const {
@@ -8441,17 +8534,13 @@ String AXObject::GetNodeString(Node* node) {
 }
 
 String AXObject::ToString(bool verbose) const {
-#if DCHECK_IS_ON()
-  CHECK(is_initialized_) << "Init() must be called before ToString().";
-#endif
-
-  CHECK(!(parent_ == nullptr && role_ == ax::mojom::blink::Role::kUnknown &&
-          id_ == 0))
-      << "Calling ToString() on an AxObject before Init() is not allowed.";
-
   // Build a friendly name for debugging the object.
   // If verbose, build a longer name name in the form of:
   // CheckBox axid#28 <input.someClass#cbox1> name="checkbox"
+  if (role_ == ax::mojom::blink::Role::kUnknown && id_ == 0) {
+    return "Uninitialized object";
+  }
+
 #if !defined(NDEBUG)
   if (IsDetached() && verbose) {
     return "(detached) " + detached_object_debug_info_;

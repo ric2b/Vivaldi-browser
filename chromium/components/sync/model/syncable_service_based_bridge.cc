@@ -320,15 +320,22 @@ SyncableServiceBasedBridge::GetAllDataForDebugging() {
 }
 
 std::string SyncableServiceBasedBridge::GetClientTag(
-    const EntityData& entity_data) {
+    const EntityData& entity_data) const {
   // Not supported as per SupportsGetClientTag().
   NOTREACHED();
 }
 
 std::string SyncableServiceBasedBridge::GetStorageKey(
-    const EntityData& entity_data) {
+    const EntityData& entity_data) const {
   // Not supported as per SupportsGetStorageKey().
   NOTREACHED();
+}
+
+bool SyncableServiceBasedBridge::IsEntityDataValid(
+    const EntityData& entity_data) const {
+  // Implementation is trivial as this bridge is meant to cache locally a copy
+  // of the server-side data in proto format as-is.
+  return true;
 }
 
 bool SyncableServiceBasedBridge::SupportsGetClientTag() const {

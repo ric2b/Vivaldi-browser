@@ -3,13 +3,13 @@
 <translationbundle lang="pt-BR">
 <translation id="1002108253973310084">Foi detectada uma versão incompatível do protocolo. Certifique-se de que você tenha a versão mais recente do software instalada em ambos os computadores e tente novamente.</translation>
 <translation id="1008557486741366299">Não agora</translation>
-<translation id="1201402288615127009">Próxima</translation>
+<translation id="1201402288615127009">Avançar</translation>
 <translation id="1297009705180977556">Erro ao conectar-se a <ph name="HOSTNAME" /></translation>
 <translation id="1450760146488584666">O objeto solicitado não existe.</translation>
 <translation id="1480046233931937785">Créditos</translation>
 <translation id="1520828917794284345">Redimensionar área de trabalho para ajustar</translation>
 <translation id="1546934824884762070">Ocorreu um erro inesperado. Informe este problema aos desenvolvedores.</translation>
-<translation id="1697532407822776718">Pronto.</translation>
+<translation id="1697532407822776718">Tudo pronto!</translation>
 <translation id="1742469581923031760">Conectando...</translation>
 <translation id="177040763384871009">Para permitir que links clicados no dispositivo remoto sejam abertos no navegador do cliente, mude o navegador da Web do sistema para "<ph name="URL_FORWARDER_NAME" />".</translation>
 <translation id="177096447311351977">IP do canal do cliente: <ph name="CLIENT_GAIA_IDENTIFIER" /> ip='<ph name="CLIENT_IP_ADDRESS_AND_PORT" />' ip_host='<ph name="HOST_IP_ADDRESS_AND_PORT" />' canal='<ph name="CHANNEL_TYPE" />' conexão='<ph name="CONNECTION_TYPE" />'.</translation>
@@ -93,6 +93,7 @@ Se a opção "<ph name="SERVICE_SCRIPT_NAME" />" já estiver marcada, desmarque-
 <translation id="4987330545941822761">A Área de trabalho remota do Google Chrome não conseguiu determinar em qual navegador abrir URLs localmente. Selecione uma opção na lista abaixo.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (off-line)</translation>
 <translation id="507204348399810022">Você quer mesmo desativar conexões remotas para <ph name="HOSTNAME" />?</translation>
+<translation id="5095424396646120601">Relatórios de erros</translation>
 <translation id="5170982930780719864">ID de host inválido.</translation>
 <translation id="5204575267916639804">Perguntas frequentes</translation>
 <translation id="5222676887888702881">Sair</translation>

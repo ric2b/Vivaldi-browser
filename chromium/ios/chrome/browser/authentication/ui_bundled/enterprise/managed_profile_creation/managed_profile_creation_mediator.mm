@@ -10,21 +10,18 @@
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "google_apis/gaia/gaia_id.h"
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/managed_profile_creation/managed_profile_creation_consumer.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 
 @interface ManagedProfileCreationMediator () <
-    ChromeAccountManagerServiceObserver,
     IdentityManagerObserverBridgeDelegate> {
+  BOOL _mergeBrowsingDataByDefault;
   BOOL _canShowBrowsingDataMigration;
   BOOL _browsingDataMigrationDisabledByPolicy;
   NSString* _gaiaID;
   // Account manager service to retrieve Chrome identities.
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  // Chrome account manager service observer bridge.
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
 
   raw_ptr<signin::IdentityManager> _identityManager;
   std::unique_ptr<signin::IdentityManagerObserverBridge>
@@ -46,9 +43,6 @@
   self = [super init];
   if (self) {
     _accountManagerService = accountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
     _identityManager = identityManager;
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
@@ -63,7 +57,8 @@
         !skipBrowsingDataMigration &&
         AreSeparateProfilesForManagedAccountsEnabled() &&
         !identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin);
-    _keepBrowsingDataSeparate = !mergeBrowsingDataByDefault;
+    _mergeBrowsingDataByDefault = mergeBrowsingDataByDefault;
+    _browsingDataSeparate = !mergeBrowsingDataByDefault;
     _browsingDataMigrationDisabledByPolicy =
         browsingDataMigrationDisabledByPolicy;
   }
@@ -74,13 +69,12 @@
   _consumer = nil;
   _delegate = nil;
   _accountManagerService = nullptr;
-  _accountManagerServiceObserver.reset();
   _identityManager = nullptr;
   _identityManagerObserver.reset();
 }
 
 - (void)setKeepBrowsingDataSeparate:(BOOL)keepSeparate {
-  _keepBrowsingDataSeparate = keepSeparate;
+  _browsingDataSeparate = keepSeparate;
   [self.consumer setKeepBrowsingDataSeparate:keepSeparate];
 }
 
@@ -89,45 +83,23 @@
     return;
   }
   _consumer = consumer;
+  _consumer.mergeBrowsingDataByDefault = _mergeBrowsingDataByDefault;
   _consumer.canShowBrowsingDataMigration = _canShowBrowsingDataMigration;
   _consumer.browsingDataMigrationDisabledByPolicy =
       _browsingDataMigrationDisabledByPolicy;
-  [_consumer setKeepBrowsingDataSeparate:self.keepBrowsingDataSeparate];
+  [_consumer setKeepBrowsingDataSeparate:self.browsingDataSeparate];
 }
 
 #pragma mark - BrowsingDataMigrationViewControllerDelegate
 
-- (void)updateShouldKeepBrowsingDataSeparate:(BOOL)keepBrowsingDataSeparate {
-  self.keepBrowsingDataSeparate = keepBrowsingDataSeparate;
-  [self.consumer setKeepBrowsingDataSeparate:self.keepBrowsingDataSeparate];
-}
-
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  id<SystemIdentity> identity =
-      _accountManagerService->GetIdentityOnDeviceWithGaiaID(GaiaId(_gaiaID));
-  if (!identity) {
-    [self.delegate identityRemovedFromDevice];
-  }
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  [self disconnect];
+- (void)updateShouldKeepBrowsingDataSeparate:(BOOL)browsingDataSeparate {
+  self.browsingDataSeparate = browsingDataSeparate;
+  [self.consumer setKeepBrowsingDataSeparate:self.browsingDataSeparate];
 }
 
 #pragma mark - IdentityManagerObserverBridgeDelegate
 
 - (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(GaiaId(_gaiaID));
   if (!identity) {

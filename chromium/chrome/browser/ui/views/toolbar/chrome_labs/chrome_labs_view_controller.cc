@@ -51,10 +51,10 @@ enum class ChromeLabsSelectedLab {
   kUnspecifiedSelected = 0,
   // kReadLaterSelected = 1,
   // kTabSearchSelected = 2,
-  kTabScrollingSelected = 3,
+  // kTabScrollingSelected = 3,
   // kSidePanelSelected = 4,
   // kLensRegionSearchSelected = 5,
-  kWebUITabStripSelected = 6,
+  // kWebUITabStripSelected = 6,
   // kTabSearchMediaTabsSelected = 7,
   // kChromeRefresh2023Selected = 8,
   // kTabGroupsSaveSelected = 9,
@@ -82,15 +82,6 @@ void EmitToHistogram(const std::u16string& selected_lab_state,
   };
 
   const auto get_enum = [](const std::string& internal_name) {
-    if (internal_name == flag_descriptions::kScrollableTabStripFlagId) {
-      return ChromeLabsSelectedLab::kTabScrollingSelected;
-    }
-#if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP) && \
-    (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS))
-    if (internal_name == flag_descriptions::kWebUITabStripFlagId)
-      return ChromeLabsSelectedLab::kWebUITabStripSelected;
-#endif
-
     return ChromeLabsSelectedLab::kUnspecifiedSelected;
   };
 
@@ -205,11 +196,6 @@ void ChromeLabsViewController::SetRestartCallback() {
 user_education::DisplayNewBadge ChromeLabsViewController::ShouldLabShowNewBadge(
     Profile* profile,
     const LabInfo& lab) {
-  // This experiment was added before adding the new badge and is not new.
-  if (lab.internal_name == flag_descriptions::kScrollableTabStripFlagId) {
-    return user_education::DisplayNewBadge();
-  }
-
 #if BUILDFLAG(IS_CHROMEOS)
   ScopedDictPrefUpdate update(
       profile->GetPrefs(), chrome_labs_prefs::kChromeLabsNewBadgeDictAshChrome);

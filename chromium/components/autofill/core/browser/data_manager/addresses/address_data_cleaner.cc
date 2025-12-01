@@ -8,6 +8,7 @@
 
 #include "base/containers/to_vector.h"
 #include "base/notreached.h"
+#include "base/version_info/version_info.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
@@ -61,6 +62,8 @@ bool ShouldWaitForSync(syncer::SyncService* sync_service) {
 //   local profiles later in `profiles`, deleting the earlier one.
 // - Deletes local profiles that are subsets of account profiles.
 // Mergability is determined using `comparator`.
+// TODO(crbug.com/357074792): Remove once support for deduplicating account
+// profiles is launched. While both exist please make sure to keep them in sync.
 void DeduplicateProfiles(const AutofillProfileComparator& comparator,
                          std::vector<AutofillProfile> profiles,
                          AddressDataManager& adm) {
@@ -119,6 +122,95 @@ void DeduplicateProfiles(const AutofillProfileComparator& comparator,
   }
   autofill_metrics::LogNumberOfProfilesRemovedDuringDedupe(
       num_profiles_deleted);
+}
+
+// Merges mergeable profiles in the `profiles` and deletes the subsets.
+// Unlike `DeduplicateProfiles()`, this supports both local and account profiles
+// and preserves the `initial_creator_id`.
+// The algorithm proceeds in two steps:
+// 1) Removes all profiles that are subsets of another profile.
+//   For exact duplicates, keeping the account profile is preferred.
+// 2) Merges pairs of mergeable profiles into each other.
+//   To prevent silently introducing new information into the account,
+//   local profiles are never merged into account profiles.
+// H/W profiles are not supported for deduplication.
+// TODO(crbug.com/357074792): Once the feature is launched, remove the
+// `DeduplicateProfiles()` function and rename this function to
+// `DeduplicateProfiles()`.
+void DeduplicateWithAccountProfiles(const AutofillProfileComparator& comparator,
+                                    std::vector<AutofillProfile> profiles,
+                                    AddressDataManager& adm) {
+  // H/W profiles are not supported for deduplication.
+  std::erase_if(profiles, [](const AutofillProfile& p) {
+    switch (p.record_type()) {
+      case AutofillProfile::RecordType::kLocalOrSyncable:
+      case AutofillProfile::RecordType::kAccount:
+        return false;
+      case AutofillProfile::RecordType::kAccountHome:
+      case AutofillProfile::RecordType::kAccountWork:
+        return true;
+    }
+  });
+
+  std::set<std::string> guids_to_delete;
+  for (const AutofillProfile& profile : profiles) {
+    const bool is_subset = std::ranges::any_of(
+        profiles, [&](const AutofillProfile& other_profile) {
+          if (profile.guid() == other_profile.guid() ||
+              guids_to_delete.contains(other_profile.guid())) {
+            return false;
+          }
+          if (!profile.IsSubsetOf(comparator, other_profile)) {
+            return false;
+          }
+          if (!other_profile.IsSubsetOf(comparator, profile)) {
+            // `profile` is a strict subset of `other_profile`.
+            return true;
+          }
+          // `profile` is equal to `other_profile`. Prefer keeping the
+          // account profile and break other ties arbitrarily.
+          if (profile.record_type() != other_profile.record_type()) {
+            return profile.record_type() ==
+                   AutofillProfile::RecordType::kLocalOrSyncable;
+          }
+          return profile.guid() < other_profile.guid();
+        });
+    if (is_subset) {
+      guids_to_delete.insert(profile.guid());
+    }
+  }
+
+  // Move account profiles to the front of the vector.
+  std::ranges::partition(profiles,
+                         std::mem_fn(&AutofillProfile::IsAccountProfile));
+
+  // Deduplicate mergeable profiles. Merging always to the latter profile is
+  // safe because:
+  // 1. If the record type is the same, it doesn't matter.
+  // 2. If the record type is different, the local profile will be latter.
+  for (auto profile_it = profiles.begin(); profile_it != profiles.end();
+       ++profile_it) {
+    if (guids_to_delete.contains(profile_it->guid())) {
+      continue;
+    }
+    // If possible, merge `*profile_it` with another profile and remove it.
+    if (auto merge_candidate = std::find_if(
+            profile_it + 1, profiles.end(),
+            [&](const AutofillProfile& other_profile) {
+              return !guids_to_delete.contains(other_profile.guid()) &&
+                     comparator.AreMergeable(*profile_it, other_profile);
+            });
+        merge_candidate != profiles.end()) {
+      merge_candidate->MergeDataFrom(*profile_it, comparator.app_locale());
+      adm.UpdateProfile(*merge_candidate);
+      guids_to_delete.insert(profile_it->guid());
+    }
+  }
+  for (const std::string& guid : guids_to_delete) {
+    adm.RemoveProfile(guid, /*is_deduplication_initiated=*/true);
+  }
+  autofill_metrics::LogNumberOfProfilesRemovedDuringDedupe(
+      guids_to_delete.size());
 }
 
 template <typename T, typename Proj>
@@ -180,11 +272,22 @@ void AddressDataCleaner::MaybeCleanupAddressData() {
   }
   are_cleanups_pending_ = false;
 
+  int chrome_version_major = version_info::GetMajorVersionNumberAsInt();
   // Ensure that deduplication is only run one per milestone.
   if (pref_service_->GetInteger(prefs::kAutofillLastVersionDeduped) <
-      CHROME_VERSION_MAJOR) {
+      chrome_version_major) {
     pref_service_->SetInteger(prefs::kAutofillLastVersionDeduped,
-                              CHROME_VERSION_MAJOR);
+                              chrome_version_major);
+    // Since the milesone changed the extra deduplication can be run again.
+    pref_service_->ClearPref(
+        prefs::kAutofillRanExtraDeduplication);
+    ApplyDeduplicationRoutine();
+  } else if (base::FeatureList::IsEnabled(
+                 features::kAutofillDeduplicateAccountAddresses) &&
+             !pref_service_->GetBoolean(
+                 prefs::kAutofillRanExtraDeduplication)) {
+    pref_service_->SetBoolean(
+        prefs::kAutofillRanExtraDeduplication, true);
     ApplyDeduplicationRoutine();
   }
 
@@ -203,47 +306,6 @@ AddressDataCleaner::CalculateMinimalIncompatibleProfileWithTypeSets(
       [](const AutofillProfile* other, FieldTypeSet s) {
         return DifferingProfileWithTypeSet(other, s);
       });
-}
-
-// static
-bool AddressDataCleaner::IsTokenLowQualityForDeduplicationPurposes(
-    const AutofillProfile& profile,
-    FieldType type) {
-  // A token is considered low quality for deduplication purposes, if the
-  // majority of its observers are "bad", as defined by the switch below.
-  auto [count_good, count_bad] =
-      CountObservationsByQualityForDeduplicationPurposes(
-          profile.token_quality().GetObservationTypesForFieldType(type));
-  return count_good + count_bad >= 4 && count_bad - count_good >= 2;
-}
-
-// static
-std::pair<size_t, size_t>
-AddressDataCleaner::CountObservationsByQualityForDeduplicationPurposes(
-    base::span<const ProfileTokenQuality::ObservationType> observations) {
-  using ObservationType = ProfileTokenQuality::ObservationType;
-  size_t count_good = 0, count_bad = 0;
-  for (ObservationType observation : observations) {
-    switch (observation) {
-      case ObservationType::kAccepted:
-        count_good++;
-        break;
-      case ObservationType::kEditedToSimilarValue:
-      case ObservationType::kEditedToDifferentTokenOfSameProfile:
-      case ObservationType::kEditedToSameTokenOfOtherProfile:
-      case ObservationType::kEditedToDifferentTokenOfOtherProfile:
-      case ObservationType::kEditedFallback:
-        count_bad++;
-        break;
-      case ObservationType::kUnknown:
-      case ObservationType::kPartiallyAccepted:
-      case ObservationType::kEditedValueCleared:
-        // These observation types are considered neutral. They are irrelevant
-        // for deduplication purposes.
-        break;
-    }
-  }
-  return {count_good, count_bad};
 }
 
 void AddressDataCleaner::ApplyDeduplicationRoutine() {
@@ -274,9 +336,16 @@ void AddressDataCleaner::ApplyDeduplicationRoutine() {
   for (const AutofillProfile* profile : profiles) {
     deduplicated_profiles.push_back(*profile);
   }
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillDeduplicateAccountAddresses)) {
+    DeduplicateWithAccountProfiles(
+        AutofillProfileComparator(address_data_manager_->app_locale()),
+        std::move(deduplicated_profiles), *address_data_manager_);
+  } else {
   DeduplicateProfiles(
       AutofillProfileComparator(address_data_manager_->app_locale()),
       std::move(deduplicated_profiles), *address_data_manager_);
+  }
 }
 
 void AddressDataCleaner::DeleteDisusedAddresses() {

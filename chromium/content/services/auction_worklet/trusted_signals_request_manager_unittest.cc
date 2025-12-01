@@ -32,6 +32,7 @@
 #include "content/services/auction_worklet/auction_v8_helper.h"
 #include "content/services/auction_worklet/public/cpp/auction_worklet_features.h"
 #include "content/services/auction_worklet/public/cpp/cbor_test_util.h"
+#include "content/services/auction_worklet/public/cpp/creative_info.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom-forward.h"
 #include "content/services/auction_worklet/trusted_signals.h"
 #include "content/services/auction_worklet/worklet_test_util.h"
@@ -260,13 +261,13 @@ mojom::TrustedSignalsPublicKeyPtr CreateDefaultPublicKey() {
       kKeyId);
 }
 
-std::set<TrustedSignals::CreativeInfo> ToCreativeInfo(
+std::set<CreativeInfo> ToCreativeInfo(
     const std::vector<std::string>& render_urls) {
   return CreateCreativeInfoSet(render_urls);
 }
 
-TrustedSignals::CreativeInfo ToCreativeInfo(const GURL& url) {
-  TrustedSignals::CreativeInfo ad;
+CreativeInfo ToCreativeInfo(const GURL& url) {
+  CreativeInfo ad;
   ad.ad_descriptor.url = url;
   return ad;
 }
@@ -1446,7 +1447,7 @@ TEST_F(TrustedSignalsRequestManagerTest,
   base::RunLoop run_loop1;
   scoped_refptr<TrustedSignals::Result> signals1;
   std::optional<std::string> error_msg1;
-  auto request1 = scoring_request_manager_.RequestScoringSignals(
+  auto request1 = request_manager.RequestScoringSignals(
       ToCreativeInfo(kRenderUrl1), ToCreativeInfo(kAdComponentRenderUrls1),
       /*max_trusted_scoring_signals_url_length=*/0,
       base::BindOnce(&LoadSignalsCallback, &signals1, &error_msg1,
@@ -1456,7 +1457,7 @@ TEST_F(TrustedSignalsRequestManagerTest,
   base::RunLoop run_loop2;
   scoped_refptr<TrustedSignals::Result> signals2;
   std::optional<std::string> error_msg2;
-  auto request2 = scoring_request_manager_.RequestScoringSignals(
+  auto request2 = request_manager.RequestScoringSignals(
       ToCreativeInfo(kRenderUrl2), ToCreativeInfo(kAdComponentRenderUrls2),
       /*max_trusted_scoring_signals_url_length=*/0,
       base::BindOnce(&LoadSignalsCallback, &signals2, &error_msg2,
@@ -3895,8 +3896,8 @@ class TrustedSignalsRequestManagerCreativeScanTest
   }
 
  protected:
-  std::vector<TrustedSignals::CreativeInfo> ads_;
-  std::vector<TrustedSignals::CreativeInfo> ad_components_;
+  std::vector<CreativeInfo> ads_;
+  std::vector<CreativeInfo> ad_components_;
   url::Origin joining_origin_{url::Origin::Create(GURL(kJoiningOriginA))};
 };
 

@@ -714,6 +714,15 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
         discardable_memory::DiscardableSharedMemoryManager::Get());
   }
 
+
+  {
+    // The process-wide accessibility state must be created before we complete
+    // the initialization of main loop for the extra parts, who use it.
+    TRACE_EVENT0("startup",
+                 "BrowserMainLoop::Subsystem:BrowserAccessibilityStateImpl");
+    browser_accessibility_state_ = BrowserAccessibilityStateImpl::Create();
+  }
+
   if (parts_)
     parts_->PostCreateMainMessageLoop();
 
@@ -761,12 +770,6 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
   // Chrome Remote Desktop needs TransitionalURLLoaderFactoryOwner on ChromeOS.
   network::TransitionalURLLoaderFactoryOwner::DisallowUsageInProcess();
 #endif
-
-  {
-    TRACE_EVENT0("startup",
-                 "BrowserMainLoop::Subsystem:BrowserAccessibilityStateImpl");
-    browser_accessibility_state_ = BrowserAccessibilityStateImpl::Create();
-  }
 }
 
 void BrowserMainLoop::CreateMessageLoopForEarlyShutdown() {
@@ -889,7 +892,7 @@ void BrowserMainLoop::CreateStartupTasks() {
   startup_task_runner_->AddTask(std::move(pre_main_message_loop_run));
 
 // On Android and iOS, the native message loop is already running when the app
-// is entered and startup tasks are run asynchrously from it.
+// is entered and startup tasks are run asynchronously from it.
 // InterceptMainMessageLoopRun() thus needs to be forced instead of happening
 // from MainMessageLoopRun().
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)

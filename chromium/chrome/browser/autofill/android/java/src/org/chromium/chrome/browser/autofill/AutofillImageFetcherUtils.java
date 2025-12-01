@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.autofill;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -14,12 +16,15 @@ import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
 
 import androidx.annotation.Px;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.url.GURL;
 
 /** Helper methods to treat Autofill images. */
+@NullMarked
 public final class AutofillImageFetcherUtils {
     private AutofillImageFetcherUtils() {}
 
@@ -98,7 +103,7 @@ public final class AutofillImageFetcherUtils {
      */
     static Bitmap addBorder(
             Bitmap bitmap, @Px int cornerRadius, @Px int borderThickness, int borderColor) {
-        Bitmap outputBitmap = bitmap.copy(bitmap.getConfig(), /* isMutable= */ true);
+        Bitmap outputBitmap = bitmap.copy(assumeNonNull(bitmap.getConfig()), /* isMutable= */ true);
         Canvas canvas = new Canvas(outputBitmap);
         Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
         paint.setColor(borderColor);
@@ -121,6 +126,7 @@ public final class AutofillImageFetcherUtils {
      * @param url A FIFE URL to fetch the image.
      * @return {@link GURL} formatted with the required image size.
      */
+    @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public static GURL getPixAccountImageUrlWithParams(GURL url) {
         @Px int logoSize = getPixelSize(R.dimen.square_card_icon_side_length);
         StringBuilder output = new StringBuilder(url.getSpec());

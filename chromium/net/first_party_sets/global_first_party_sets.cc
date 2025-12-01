@@ -17,7 +17,6 @@
 #include "base/containers/flat_set.h"
 #include "base/containers/map_util.h"
 #include "base/functional/function_ref.h"
-#include "base/not_fatal_until.h"
 #include "base/types/optional_ref.h"
 #include "net/base/schemeful_site.h"
 #include "net/first_party_sets/addition_overlaps_union_find.h"
@@ -89,7 +88,7 @@ GlobalFirstPartySets::GlobalFirstPartySets(
   CHECK(std::ranges::all_of(aliases_, [&](const auto& pair) {
     return entries_.contains(pair.second);
   }));
-  CHECK(IsValid(), base::NotFatalUntil::M130) << "Sets must be valid";
+  CHECK(IsValid()) << "Sets must be valid";
 }
 
 GlobalFirstPartySets::GlobalFirstPartySets(GlobalFirstPartySets&&) = default;
@@ -181,7 +180,7 @@ void GlobalFirstPartySets::ApplyManuallySpecifiedSet(
 
   manual_config_ = ComputeConfig(local_set_declaration.ComputeMutation());
 
-  CHECK(IsValid(), base::NotFatalUntil::M130) << "Sets must be valid";
+  CHECK(IsValid()) << "Sets must be valid";
 }
 
 void GlobalFirstPartySets::UnsafeSetManualConfig(
@@ -328,8 +327,7 @@ FirstPartySetsContextConfig GlobalFirstPartySets::ComputeConfig(
                 member, FirstPartySetEntry(entry->second.primary(),
                                            member == entry->second.primary()
                                                ? SiteType::kPrimary
-                                               : SiteType::kAssociated,
-                                           std::nullopt));
+                                               : SiteType::kAssociated));
           }
           if (member == set_entry.primary())
             return true;
@@ -390,8 +388,7 @@ FirstPartySetsContextConfig GlobalFirstPartySets::ComputeConfig(
                                           mutation.aliases());
   CHECK(config.has_value());  // This class ensures the invariants that the
                               // config relies on.
-  CHECK(IsValid(config), base::NotFatalUntil::M130)
-      << "Sets must not contain singleton or orphan";
+  CHECK(IsValid(config)) << "Sets must not contain singleton or orphan";
   return std::move(config).value();
 }
 
@@ -436,8 +433,7 @@ GlobalFirstPartySets::NormalizeAdditionSets(
         bool inserted =
             normalized
                 .emplace(child_site_and_entry.first,
-                         FirstPartySetEntry(rep_primary, SiteType::kAssociated,
-                                            std::nullopt))
+                         FirstPartySetEntry(rep_primary, SiteType::kAssociated))
                 .second;
         CHECK(inserted);
       }

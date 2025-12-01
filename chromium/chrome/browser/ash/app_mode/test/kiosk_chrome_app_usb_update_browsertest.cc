@@ -183,7 +183,6 @@ class KioskChromeAppUsbUpdateTest
       public testing::WithParamInterface<TestParam> {
  public:
   KioskChromeAppUsbUpdateTest() = default;
-
   KioskChromeAppUsbUpdateTest(const KioskChromeAppUsbUpdateTest&) = delete;
   KioskChromeAppUsbUpdateTest& operator=(const KioskChromeAppUsbUpdateTest&) =
       delete;

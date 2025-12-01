@@ -1505,14 +1505,29 @@ Status ProcessInputActionSequence(Session* session,
           action_dict.Set("button", button_str);
         }
       } else if (*subtype == "pointerMove" || *subtype == "scroll") {
-        std::optional<int> x = action_item.FindInt("x");
-        if (!x.has_value())
-          return Status(kInvalidArgument, "'x' must be an int");
-        std::optional<int> y = action_item.FindInt("y");
-        if (!y.has_value())
-          return Status(kInvalidArgument, "'y' must be an int");
-        action_dict.Set("x", *x);
-        action_dict.Set("y", *y);
+        if (*subtype == "scroll") {
+          std::optional<int> x = action_item.FindInt("x");
+          if (!x.has_value()) {
+            return Status(kInvalidArgument, "'x' must be an int");
+          }
+          std::optional<int> y = action_item.FindInt("y");
+          if (!y.has_value()) {
+            return Status(kInvalidArgument, "'y' must be an int");
+          }
+          action_dict.Set("x", *x);
+          action_dict.Set("y", *y);
+        } else {
+          std::optional<double> x = action_item.FindDouble("x");
+          if (!x.has_value()) {
+            return Status(kInvalidArgument, "'x' must be a number");
+          }
+          std::optional<double> y = action_item.FindDouble("y");
+          if (!y.has_value()) {
+            return Status(kInvalidArgument, "'y' must be a number");
+          }
+          action_dict.Set("x", *x);
+          action_dict.Set("y", *y);
+        }
 
         const base::Value* origin_val = action_item.Find("origin");
         if (origin_val) {
@@ -2962,5 +2977,61 @@ Status ExecuteClearDevicePosture(Session* session,
                                  std::unique_ptr<base::Value>* value,
                                  Timeout* timeout) {
   return web_view->SendCommand("Emulation.clearDevicePostureOverride",
+                               base::Value::Dict());
+}
+
+Status ExecuteSetDisplayFeatures(Session* session,
+                                 WebView* web_view,
+                                 const base::Value::Dict& params,
+                                 std::unique_ptr<base::Value>* value,
+                                 Timeout* timeout) {
+  bool has_value;
+  const base::Value::List* features_list = nullptr;
+  if (!GetOptionalList(params, "features", &features_list, &has_value)) {
+    return Status(kInvalidArgument, "'features' must be an array");
+  }
+
+  if (!has_value) {
+    return Status(kInvalidArgument, "'features' must have a value");
+  }
+
+  for (const base::Value& feature : *features_list) {
+    if (!feature.is_dict()) {
+      return Status(kInvalidArgument, "a feature must be a dictionary");
+    }
+    const auto& feature_dict = feature.GetDict();
+    std::optional<int> mask = feature_dict.FindInt("maskLength");
+    if (!mask) {
+      return Status(kInvalidArgument,
+                    "a feature must contain the maskLength attribute");
+    } else if (mask.value() < 0) {
+      return Status(kInvalidArgument,
+                    "a feature must have a positive maskLength attribute");
+    }
+
+    std::optional<int> offset = feature_dict.FindInt("offset");
+    if (!offset) {
+      return Status(kInvalidArgument,
+                    "a feature must contain the offset attribute");
+    } else if (offset.value() < 0) {
+      return Status(kInvalidArgument,
+                    "a feature must have a positive offset attribute");
+    }
+
+    const std::string* orientation = feature_dict.FindString("orientation");
+    if (!orientation) {
+      return Status(kInvalidArgument,
+                    "a feature must contain the orientation attribute");
+    }
+  }
+  return web_view->SendCommand("Emulation.setDisplayFeaturesOverride", params);
+}
+
+Status ExecuteClearDisplayFeatures(Session* session,
+                                   WebView* web_view,
+                                   const base::Value::Dict& params,
+                                   std::unique_ptr<base::Value>* value,
+                                   Timeout* timeout) {
+  return web_view->SendCommand("Emulation.clearDisplayFeaturesOverride",
                                base::Value::Dict());
 }

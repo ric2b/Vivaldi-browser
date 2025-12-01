@@ -24,12 +24,7 @@ constexpr char kGroupCleanUpTimeIntervalInSecondsFinchKey[] =
 // is enabled.
 BASE_FEATURE(kTabGroupSyncAndroid,
              "TabGroupSyncAndroid",
-             base::FEATURE_ENABLED_BY_DEFAULT); // Vivaldi
-
-// Feature flag used to enable tab group revisit surface.
-BASE_FEATURE(kTabGroupPaneAndroid,
-             "TabGroupPaneAndroid",
-             base::FEATURE_ENABLED_BY_DEFAULT); // Vivaldi
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Feature flag used to determine whether the network layer is disabled for
 // tab group sync.
@@ -80,12 +75,17 @@ BASE_FEATURE(kForceRemoveClosedTabGroupsOnStartup,
 // Enables checking for URLs before syncing them to remote devices.
 BASE_FEATURE(kEnableUrlRestriction,
              "EnableUrlRestriction",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables clean up of hidden groups.
 BASE_FEATURE(kEnableOriginatingSavedGroupCleanUp,
              "EnableOriginatingSavedGroupCleanUp",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Swaps the click actions for the tab group header.
+BASE_FEATURE(kLeftClickOpensTabGroupBubble,
+             "LeftClickOpensTabGroupBubble",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsTabGroupSyncServiceDesktopMigrationEnabled() {
   return (base::FeatureList::IsEnabled(kTabGroupSyncServiceDesktopMigration) ||
@@ -125,7 +125,8 @@ bool IsTabTitleSanitizationEnabled() {
 }
 
 bool IsUrlRestrictionEnabled() {
-  return base::FeatureList::IsEnabled(kEnableUrlRestriction);
+  return data_sharing::features::IsDataSharingFunctionalityEnabled() &&
+         base::FeatureList::IsEnabled(kEnableUrlRestriction);
 }
 
 bool IsOriginatingSavedGroupCleanUpEnabled() {

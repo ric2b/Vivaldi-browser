@@ -9,6 +9,8 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.Card
 import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_TYPE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType.MESSAGE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType.TAB;
+import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.ModelType.TAB_GROUP;
+import static org.chromium.chrome.browser.tasks.tab_management.TabProperties.TAB_GROUP_SYNC_ID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabProperties.TAB_ID;
 
 import android.util.Pair;
@@ -40,12 +42,13 @@ class TabListModel extends ModelList {
     /** Required properties for each {@link PropertyModel} managed by this {@link ModelList}. */
     static class CardProperties {
         /** Supported Model type within this ModelList. */
-        @IntDef({TAB, MESSAGE})
+        @IntDef({TAB, MESSAGE, TAB_GROUP})
         @Retention(RetentionPolicy.SOURCE)
         @Target(ElementType.TYPE_USE)
         public @interface ModelType {
             int TAB = 0;
             int MESSAGE = 1;
+            int TAB_GROUP = 2;
         }
 
         /** This corresponds to {@link CardProperties.ModelType}*/
@@ -71,6 +74,22 @@ class TabListModel extends ModelList {
     }
 
     /**
+     * Lookup the position of a tab group by its sync ID.
+     *
+     * @param syncId The sync ID to search for.
+     * @return The index within the model list or {@link TabModel.INVALID_TAB_INDEX}.
+     */
+    public int indexFromSyncId(String syncId) {
+        for (int i = 0; i < size(); i++) {
+            PropertyModel model = get(i).model;
+            if (model.get(CARD_TYPE) == TAB_GROUP && model.get(TAB_GROUP_SYNC_ID).equals(syncId)) {
+                return i;
+            }
+        }
+        return TabModel.INVALID_TAB_INDEX;
+    }
+
+    /**
      * Lookup a {@link PropertyModel} for the tab by its ID.
      *
      * @param tabId The tab ID to search for.
@@ -80,6 +99,22 @@ class TabListModel extends ModelList {
         for (int i = 0; i < size(); i++) {
             PropertyModel model = get(i).model;
             if (model.get(CARD_TYPE) == TAB && model.get(TAB_ID) == tabId) return model;
+        }
+        return null;
+    }
+
+    /**
+     * Lookup a {@link PropertyModel} for the tab group by its sync ID.
+     *
+     * @param syncId The sync ID to search for.
+     * @return The property model in the model list or null.
+     */
+    public @Nullable PropertyModel getModelFromSyncId(String syncId) {
+        for (int i = 0; i < size(); i++) {
+            PropertyModel model = get(i).model;
+            if (model.get(CARD_TYPE) == TAB_GROUP && model.get(TAB_GROUP_SYNC_ID).equals(syncId)) {
+                return model;
+            }
         }
         return null;
     }
@@ -123,7 +158,7 @@ class TabListModel extends ModelList {
         int lastTabIndex = TabModel.INVALID_TAB_INDEX;
         for (int i = 0; i < size(); i++) {
             PropertyModel model = get(i).model;
-            if (model.get(CARD_TYPE) == TAB) {
+            if (model.get(CARD_TYPE) == TAB || model.get(CARD_TYPE) == TAB_GROUP) {
                 if (tabCount++ == n) return i;
                 lastTabIndex = i;
             }
@@ -140,6 +175,18 @@ class TabListModel extends ModelList {
         }
 
         return getTabCardCountsBefore(index);
+    }
+
+    /** Get the number of TAB_GROUP cards in the TabListModel. */
+    public int getTabGroupCardCount() {
+        int tabGroupCardCount = 0;
+        for (int i = 0; i < size(); i++) {
+            PropertyModel model = get(i).model;
+            if (model.get(CARD_TYPE) == TAB_GROUP) {
+                tabGroupCardCount++;
+            }
+        }
+        return tabGroupCardCount;
     }
 
     /**
@@ -295,7 +342,7 @@ class TabListModel extends ModelList {
         // Ensure the last tab is last in the model and the first tab is the first.
         assert endIndex - startIndex == tabs.size() - 1;
         for (int i = startIndex; i <= endIndex; i++) {
-            Tab curTab = tabModel.getTabAt(i);
+            Tab curTab = tabModel.getTabAtChecked(i);
             // Group should be contiguous.
             assert tabs.contains(curTab);
             int index = indexFromTabId(curTab.getId());

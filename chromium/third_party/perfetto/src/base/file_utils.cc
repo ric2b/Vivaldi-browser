@@ -106,7 +106,7 @@ bool ReadFileDescriptor(int fd, std::string* out) {
   // Do not override existing data in string.
   size_t i = out->size();
 
-  struct stat buf {};
+  struct stat buf{};
   if (fstat(fd, &buf) != -1) {
     if (buf.st_size > 0)
       out->resize(i + static_cast<size_t>(buf.st_size));
@@ -143,7 +143,7 @@ bool ReadPlatformHandle(PlatformHandle h, std::string* out) {
       out->resize(i);
       const bool is_eof = res && bytes_read == 0;
       auto err = res ? 0 : GetLastError();
-      // The "Broken pipe" error on Windows is slighly different than Unix:
+      // The "Broken pipe" error on Windows is slightly different than Unix:
       // On Unix: a "broken pipe" error can happen only on the writer side. On
       // the reader there is no broken pipe, just a EOF.
       // On windows: the reader also sees a broken pipe error.
@@ -339,25 +339,15 @@ base::Status ListFilesRecursive(const std::string& dir_path,
           strcmp(dirent->d_name, "..") == 0) {
         continue;
       }
-#if PERFETTO_BUILDFLAG(PERFETTO_OS_QNX)
-      struct stat* dirstat;
-      const std::string full_path = cur_dir + dirent->d_name;
-      PERFETTO_CHECK(stat(full_path.c_str(), dirstat) == 0);
-      if (S_ISDIR(dirstat->st_mode)) {
+      struct stat dirstat;
+      std::string full_path = cur_dir + dirent->d_name;
+      PERFETTO_CHECK(stat(full_path.c_str(), &dirstat) == 0);
+      if (S_ISDIR(dirstat.st_mode)) {
         dir_queue.push_back(full_path + '/');
-      } else if (S_ISREG(dirstat->st_mode)) {
+      } else if (S_ISREG(dirstat.st_mode)) {
         PERFETTO_CHECK(full_path.length() > root_dir_path.length());
         output.push_back(full_path.substr(root_dir_path.length()));
       }
-#else
-      if (dirent->d_type == DT_DIR) {
-        dir_queue.push_back(cur_dir + dirent->d_name + '/');
-      } else if (dirent->d_type == DT_REG) {
-        const std::string full_path = cur_dir + dirent->d_name;
-        PERFETTO_CHECK(full_path.length() > root_dir_path.length());
-        output.push_back(full_path.substr(root_dir_path.length()));
-      }
-#endif
     }
 #endif
   }
@@ -445,7 +435,7 @@ std::optional<uint64_t> GetFileSize(PlatformHandle fd) {
   static_assert(sizeof(decltype(file_size.QuadPart)) <= sizeof(uint64_t));
   return static_cast<uint64_t>(file_size.QuadPart);
 #else
-  struct stat buf {};
+  struct stat buf{};
   if (fstat(fd, &buf) == -1) {
     return std::nullopt;
   }

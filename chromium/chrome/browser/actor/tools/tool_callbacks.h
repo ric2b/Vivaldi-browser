@@ -6,13 +6,15 @@
 #define CHROME_BROWSER_ACTOR_TOOLS_TOOL_CALLBACKS_H_
 
 #include "base/functional/callback_forward.h"
+#include "base/time/time.h"
+#include "chrome/common/actor.mojom-forward.h"
 
 namespace actor {
 
 // Helper to post a callback on the current sequence with the given response.
-// TODO(crbug.com/389739308): This will have to be split up or templated when
-// responses become typed rather than the placeholder bool.
-void PostResponseTask(base::OnceCallback<void(bool)> task, bool response);
+void PostResponseTask(base::OnceCallback<void(mojom::ActionResultPtr)> task,
+                      mojom::ActionResultPtr result,
+                      base::TimeDelta delay = base::Seconds(0));
 
 }  // namespace actor
 

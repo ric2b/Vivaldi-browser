@@ -8,9 +8,7 @@
 
 #include "base/path_service.h"
 #include "base/strings/stringprintf.h"
-#include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -22,6 +20,8 @@
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "extensions/browser/browsertest_util.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/test/test_extension_dir.h"
@@ -63,9 +63,8 @@ ExtensionsToolbarUITest::ForceInstallExtension(const std::string& name) {
           .SetLocation(extensions::mojom::ManifestLocation::kExternalPolicy)
           .SetID(crx_file::id_util::GenerateId(name))
           .Build();
-  extensions::ExtensionSystem::Get(browser()->profile())
-      ->extension_service()
-      ->AddExtension(extension.get());
+  extensions::ExtensionRegistrar::Get(browser()->profile())
+      ->AddExtension(extension);
   return extension;
 }
 
@@ -129,10 +128,9 @@ void ExtensionsToolbarUITest::AppendExtension(
 
 void ExtensionsToolbarUITest::DisableExtension(
     const extensions::ExtensionId& extension_id) {
-  extensions::ExtensionSystem::Get(browser()->profile())
-      ->extension_service()
+  extensions::ExtensionRegistrar::Get(browser()->profile())
       ->DisableExtension(extension_id,
-                         extensions::disable_reason::DISABLE_USER_ACTION);
+                         {extensions::disable_reason::DISABLE_USER_ACTION});
 }
 
 void ExtensionsToolbarUITest::SetUpIncognitoBrowser() {

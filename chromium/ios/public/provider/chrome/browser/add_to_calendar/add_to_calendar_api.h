@@ -7,14 +7,11 @@
 
 #import <UIKit/UIKit.h>
 
-#import <memory>
-
-#import "base/memory/weak_ptr.h"
-#import "components/optimization_guide/proto/features/enhanced_calendar.pb.h"
-
 namespace web {
 class WebState;
 }  // namespace web
+
+@class EnhancedCalendarConfiguration;
 
 namespace ios::provider {
 
@@ -25,14 +22,11 @@ enum class AddToCalendarIntegrationProvider {
 };
 
 // Configures and presents the "add to calendar" view using the
-// `presenting_view_controller`. `enhanced_calendar_response` holds all the
-// calendar event data to be processed and passed to the "add to calendar" UI.
-void PresentAddToCalendar(
-    UIViewController* presenting_view_controller,
-    AddToCalendarIntegrationProvider provider,
-    base::WeakPtr<web::WebState> web_state,
-    std::unique_ptr<optimization_guide::proto::EnhancedCalendarResponse>
-        enhanced_calendar_response);
+// `presenting_view_controller`. `config` holds all the calendar event data
+// necessary to create and present the "add to calendar" UI.
+void PresentAddToCalendar(UIViewController* presenting_view_controller,
+                          web::WebState* web_state,
+                          EnhancedCalendarConfiguration* config);
 
 }  // namespace ios::provider
 

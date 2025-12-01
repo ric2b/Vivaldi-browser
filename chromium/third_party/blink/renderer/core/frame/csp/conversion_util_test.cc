@@ -27,7 +27,7 @@ TEST(ContentSecurityPolicyConversionUtilTest, BackAndForthConversion) {
       ContentSecurityPolicyHeader::New(
           "my-csp", network::mojom::blink::ContentSecurityPolicyType::kEnforce,
           network::mojom::blink::ContentSecurityPolicySource::kHTTP),
-      false, Vector<String>(), network::mojom::blink::CSPRequireSRIFor::None,
+      false, Vector<String>(),
       network::mojom::blink::CSPRequireTrustedTypesFor::None, nullptr,
       Vector<String>());
 
@@ -108,7 +108,7 @@ TEST(ContentSecurityPolicyConversionUtilTest,
       network::mojom::blink::ContentSecurityPolicyHeader::New(
           "my-csp", network::mojom::blink::ContentSecurityPolicyType::kEnforce,
           network::mojom::blink::ContentSecurityPolicySource::kHTTP),
-      false, Vector<String>(), network::mojom::blink::CSPRequireSRIFor::None,
+      false, Vector<String>(),
       network::mojom::blink::CSPRequireTrustedTypesFor::None, nullptr,
       Vector<String>());
 
@@ -138,6 +138,20 @@ TEST(ContentSecurityPolicyConversionUtilTest,
             network::mojom::blink::CSPHashSource::New(
                 network::mojom::blink::IntegrityAlgorithm::kSha384,
                 Vector<uint8_t>({'c', 'd', 'e'})));
+      },
+      [](CSPSourceList& source_list) {
+        source_list.hashes.emplace_back(
+            network::mojom::blink::CSPHashSource::New(
+                network::mojom::blink::IntegrityAlgorithm::kSha256,
+                Vector<uint8_t>({'a', 'd'})));
+        source_list.url_hashes.emplace_back(
+            network::mojom::blink::CSPHashSource::New(
+                network::mojom::blink::IntegrityAlgorithm::kSha384,
+                Vector<uint8_t>({'c', 'd', 'e'})));
+        source_list.eval_hashes.emplace_back(
+            network::mojom::blink::CSPHashSource::New(
+                network::mojom::blink::IntegrityAlgorithm::kSha384,
+                Vector<uint8_t>({'f', 'g', 'h'})));
       },
       [](CSPSourceList& source_list) { source_list.allow_self = true; },
       [](CSPSourceList& source_list) { source_list.allow_star = true; },

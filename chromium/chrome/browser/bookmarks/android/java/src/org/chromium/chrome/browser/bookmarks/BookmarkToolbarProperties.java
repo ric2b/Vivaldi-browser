@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import android.view.View;
+
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -18,6 +21,7 @@ import java.util.function.Function;
  * Responsible for hosting properties of BookmarkToolbar views. TODO(crbug.com/40265005) Remove all
  * skipEquality=true usage.
  */
+@NullMarked
 class BookmarkToolbarProperties {
     /** Dependencies */
     static final WritableObjectPropertyKey<SelectionDelegate> SELECTION_DELEGATE =
@@ -73,6 +77,9 @@ class BookmarkToolbarProperties {
     static final WritableObjectPropertyKey<Runnable> NAVIGATE_BACK_RUNNABLE =
             new WritableObjectPropertyKey<>();
 
+    static final WritableObjectPropertyKey<View> NEXT_FOCUSABLE_VIEW =
+            new WritableObjectPropertyKey<>();
+
     // Vivaldi
     static final WritableBooleanPropertyKey SORT_BUTTON_VISIBLE = new WritableBooleanPropertyKey();
     static final WritableBooleanPropertyKey CLOSE_BUTTON_VISIBLE = new WritableBooleanPropertyKey();
@@ -103,7 +110,8 @@ class BookmarkToolbarProperties {
         SELECTION_MODE_SHOW_OPEN_IN_INCOGNITO,
         SELECTION_MODE_SHOW_MOVE,
         SELECTION_MODE_SHOW_MARK_READ,
-        SELECTION_MODE_SHOW_MARK_UNREAD
+        SELECTION_MODE_SHOW_MARK_UNREAD,
+        NEXT_FOCUSABLE_VIEW
 
         // Vivaldi
         , // adding comma here to avoid modifying code above

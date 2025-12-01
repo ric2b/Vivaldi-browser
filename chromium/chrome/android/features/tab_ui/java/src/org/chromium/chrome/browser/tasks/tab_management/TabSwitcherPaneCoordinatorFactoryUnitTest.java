@@ -33,11 +33,13 @@ import org.chromium.base.BaseSwitches;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.back_press.BackPressManager;
+import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
@@ -45,6 +47,7 @@ import org.chromium.chrome.browser.data_sharing.DataSharingServiceFactory;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.LifecycleObserver;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
@@ -66,6 +69,7 @@ import org.chromium.chrome.browser.tabmodel.TabUiUnitTestUtils;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.undo_tab_close_snackbar.UndoBarThrottle;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
 import org.chromium.components.collaboration.CollaborationService;
@@ -76,6 +80,7 @@ import org.chromium.components.collaboration.SyncStatus;
 import org.chromium.components.data_sharing.TestDataSharingService;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
+import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
@@ -130,6 +135,10 @@ public class TabSwitcherPaneCoordinatorFactoryUnitTest {
     @Mock private CollaborationService mCollaborationService;
     @Mock private ShareDelegateSupplier mShareDelegateSupplier;
     @Mock private TabBookmarker mTabBookmarker;
+    @Mock private BookmarkModel mBookmarkModel;
+    @Mock private UndoBarThrottle mUndoBarThrottle;
+    @Mock private Supplier<PaneManager> mPaneManagerSupplier;
+    @Mock private Supplier<TabGroupUiActionHandler> mTabGroupUiActionHandlerSupplier;
 
     @Captor private ArgumentCaptor<TabModelSelectorObserver> mTabModelSelectorObserverCaptor;
     @Captor private ArgumentCaptor<LifecycleObserver> mLifecycleObserverCaptor;
@@ -177,6 +186,7 @@ public class TabSwitcherPaneCoordinatorFactoryUnitTest {
         when(mTabModel.getProfile()).thenReturn(mProfile);
 
         mActivityScenarioRule.getScenario().onActivity(this::onActivityReady);
+        BookmarkModel.setInstanceForTesting(mBookmarkModel);
     }
 
     private void onActivityReady(Activity activity) {
@@ -200,7 +210,10 @@ public class TabSwitcherPaneCoordinatorFactoryUnitTest {
                         /* desktopWindowStateManager= */ null,
                         mEdgeToEdgeSupplier,
                         mShareDelegateSupplier,
-                        mTabBookmarkerSupplier);
+                        mTabBookmarkerSupplier,
+                        mUndoBarThrottle,
+                        mPaneManagerSupplier,
+                        mTabGroupUiActionHandlerSupplier);
     }
 
     @Test

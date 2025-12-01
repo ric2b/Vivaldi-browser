@@ -8,9 +8,11 @@
 
 #include "base/bits.h"
 #include "base/containers/fixed_flat_map.h"
+#include "base/strings/stringprintf.h"
 #include "media/gpu/h265_builder.h"
 #include "media/gpu/windows/d3d12_video_helpers.h"
 #include "media/gpu/windows/format_utils.h"
+#include "media/gpu/windows/mf_video_encoder_util.h"
 
 namespace media {
 
@@ -53,18 +55,16 @@ uint8_t D3D12VideoEncoderLevelsHevcToH265LevelIDC(
 }  // namespace
 
 D3D12VideoEncodeH265ReferenceFrameManager::
-    D3D12VideoEncodeH265ReferenceFrameManager(size_t max_num_ref_frames)
-    : max_num_ref_frames_(max_num_ref_frames) {
-  CHECK_GT(max_num_ref_frames, 0u);
-  CHECK_LE(max_num_ref_frames, kMaxDpbSize);
-}
+    D3D12VideoEncodeH265ReferenceFrameManager() = default;
+
 D3D12VideoEncodeH265ReferenceFrameManager::
     ~D3D12VideoEncodeH265ReferenceFrameManager() = default;
 
 void D3D12VideoEncodeH265ReferenceFrameManager::EndFrame(
     uint32_t pic_order_count,
     uint32_t temporal_layer_id) {
-  if (descriptors_.size() == max_num_ref_frames_) {
+  InsertCurrentFrame(0);
+  if (descriptors_.size() == size()) {
     descriptors_.pop_back();
   }
   descriptors_.insert(descriptors_.begin(),
@@ -164,17 +164,58 @@ bool D3D12VideoEncodeH265Delegate::SupportsRateControlReconfiguration() const {
          D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_RECONFIGURATION_AVAILABLE;
 }
 
+bool D3D12VideoEncodeH265Delegate::ReportsAverageQp() const {
+  return current_rate_control_.GetMode() ==
+         D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP;
+}
+
+bool D3D12VideoEncodeH265Delegate::UpdateRateControl(const Bitrate& bitrate,
+                                                     uint32_t framerate) {
+  if (software_rate_controller_) {
+    if (bitrate.mode() != Bitrate::Mode::kConstant) {
+      return false;
+    }
+
+    if (framerate != rate_controller_settings_.frame_rate_max) {
+      // Frame rate has changed, resetting the rate controller.
+      rate_controller_settings_.frame_rate_max = framerate;
+      CHECK_GT(framerate, 0u);
+      rate_controller_settings_.gop_max_duration =
+          base::Seconds((gop_structure_.GOPLength + framerate - 1) / framerate);
+      H264RateControllerLayerSettings& layer_settings =
+          rate_controller_settings_.layer_settings[0];
+      layer_settings.avg_bitrate = bitrate.target_bps();
+      // Bitrate::Mode::kConstant only has target_bps. Using the target_bps for
+      // peak_bitrate.
+      layer_settings.peak_bitrate = bitrate.target_bps();
+      layer_settings.frame_rate = framerate;
+      software_rate_controller_.emplace(rate_controller_settings_);
+    } else {
+      // Frame rate has not changed, updating the bitrate.
+      software_rate_controller_->temporal_layers(0).SetBufferParameters(
+          rate_controller_settings_.layer_settings[0].hrd_buffer_size,
+          bitrate.target_bps(), bitrate.target_bps(),
+          rate_controller_settings_.ease_hrd_reduction);
+    }
+    return true;
+  }
+
+  return D3D12VideoEncodeDelegate::UpdateRateControl(bitrate, framerate);
+}
+
 EncoderStatus::Or<BitstreamBufferMetadata>
-D3D12VideoEncodeH265Delegate::EncodeImpl(ID3D12Resource* input_frame,
-                                         UINT input_frame_subresource,
-                                         bool force_keyframe) {
+D3D12VideoEncodeH265Delegate::EncodeImpl(
+    ID3D12Resource* input_frame,
+    UINT input_frame_subresource,
+    const VideoEncoder::EncodeOptions& options) {
   // Filling the |input_arguments_| according to
   // https://github.com/microsoft/DirectX-Specs/blob/master/d3d/D3D12VideoEncoding.md#6120-struct-d3d12_video_encoder_input_arguments
 
   if (++pic_params_.PictureOrderCountNumber == gop_structure_.GOPLength) {
     pic_params_.PictureOrderCountNumber = 0;
   }
-  bool is_keyframe = pic_params_.PictureOrderCountNumber == 0 || force_keyframe;
+  bool is_keyframe =
+      pic_params_.PictureOrderCountNumber == 0 || options.key_frame;
   if (is_keyframe) {
     H265VPS vps = ToVPS();
     H265SPS sps = ToSPS(vps);
@@ -192,21 +233,43 @@ D3D12VideoEncodeH265Delegate::EncodeImpl(ID3D12Resource* input_frame,
     pic_params_.List0ReferenceFramesCount = 0;
     pic_params_.pList0ReferenceFrames = nullptr;
   } else {
-    input_arguments_.PictureControlDesc.ReferenceFrames =
-        dpb_->ToD3D12VideoEncodeReferenceFrames();
     pic_params_.FrameType = D3D12_VIDEO_ENCODER_FRAME_TYPE_HEVC_P_FRAME;
     list0_reference_frames_[0] = 0;
     pic_params_.List0ReferenceFramesCount = 1;
     pic_params_.pList0ReferenceFrames = list0_reference_frames_.data();
     reference_frame_manager_
-        ->WriteReferencePictureDescriptorsToPictureParameters(
+        .WriteReferencePictureDescriptorsToPictureParameters(
             &pic_params_, base::span(list0_reference_frames_).first(1u));
+    input_arguments_.PictureControlDesc.ReferenceFrames =
+        reference_frame_manager_.ToD3D12VideoEncodeReferenceFrames();
+    input_arguments_.PictureControlDesc.ReferenceFrames.NumTexture2Ds =
+        pic_params_.ReferenceFramesReconPictureDescriptorsCount;
   }
-  input_arguments_.PictureControlDesc.ReferenceFrames.NumTexture2Ds = std::min(
-      input_arguments_.PictureControlDesc.ReferenceFrames.NumTexture2Ds,
-      pic_params_.ReferenceFramesReconPictureDescriptorsCount);
 
-  if (rate_control_ != current_rate_control_) {
+  // Rate control.
+  int qp = -1;
+  if (software_rate_controller_) {
+    software_rate_controller_->temporal_layers(0).ShrinkHRDBuffer(
+        rate_controller_timestamp_);
+    if (is_keyframe) {
+      software_rate_controller_->EstimateIntraFrameQP(
+          rate_controller_timestamp_);
+    } else {
+      software_rate_controller_->EstimateInterFrameQP(
+          0, rate_controller_timestamp_);
+    }
+    qp = software_rate_controller_->temporal_layers(0).curr_frame_qp();
+  }
+  if (qp != -1) {
+    CHECK_EQ(input_arguments_.SequenceControlDesc.RateControl.Mode,
+             D3D12_VIDEO_ENCODER_RATE_CONTROL_MODE_CQP);
+    current_rate_control_.SetCQP(
+        is_keyframe ? D3D12VideoEncoderRateControl::FrameType::kIntra
+                    : D3D12VideoEncoderRateControl::FrameType::kInterPrev,
+        qp);
+    input_arguments_.SequenceControlDesc.RateControl =
+        current_rate_control_.GetD3D12VideoEncoderRateControl();
+  } else if (rate_control_ != current_rate_control_) {
     if (rate_control_.GetMode() != current_rate_control_.GetMode()) {
       CHECK(SupportsRateControlReconfiguration());
       input_arguments_.SequenceControlDesc.Flags |=
@@ -221,7 +284,8 @@ D3D12VideoEncodeH265Delegate::EncodeImpl(ID3D12Resource* input_frame,
       D3D12_VIDEO_ENCODER_PICTURE_CONTROL_FLAG_USED_AS_REFERENCE_PICTURE;
   input_arguments_.pInputFrame = input_frame;
   input_arguments_.InputFrameSubresource = input_frame_subresource;
-  D3D12PictureBuffer reconstructed_picture = dpb_->GetCurrentFrame();
+  D3D12PictureBuffer reconstructed_picture =
+      reference_frame_manager_.GetCurrentFrame();
   EncoderStatus result = video_encoder_wrapper_->Encode(
       input_arguments_,
       {
@@ -232,19 +296,44 @@ D3D12VideoEncodeH265Delegate::EncodeImpl(ID3D12Resource* input_frame,
     return result;
   }
 
-  dpb_->InsertCurrentFrame(0);
-  reference_frame_manager_->EndFrame(pic_params_.PictureOrderCountNumber,
-                                     pic_params_.TemporalLayerIndex);
+  reference_frame_manager_.EndFrame(pic_params_.PictureOrderCountNumber,
+                                    pic_params_.TemporalLayerIndex);
 
-  BitstreamBufferMetadata metadata;
-  metadata.key_frame = is_keyframe;
-  return metadata;
+  metadata_.key_frame = is_keyframe;
+  metadata_.qp = qp;
+  return metadata_;
 }
 
 EncoderStatus D3D12VideoEncodeH265Delegate::InitializeVideoEncoder(
     const VideoEncodeAccelerator::Config& config) {
   CHECK_EQ(VideoCodecProfileToVideoCodec(config.output_profile),
            VideoCodec::kHEVC);
+
+  if (config.bitrate.mode() == Bitrate::Mode::kConstant) {
+    constexpr uint32_t kDefaultQp = 26;
+    rate_control_ = D3D12VideoEncoderRateControl::CreateCqp(
+        kDefaultQp, kDefaultQp, kDefaultQp);
+    rate_controller_settings_.content_type = config.content_type;
+    rate_controller_settings_.frame_size = config.input_visible_size;
+    rate_controller_settings_.frame_rate_max = config.framerate;
+    rate_controller_settings_.gop_max_duration = base::Seconds(
+        (config.gop_length.value() + config.framerate - 1) / config.framerate);
+    rate_controller_settings_.fixed_delta_qp = false;
+    rate_controller_settings_.ease_hrd_reduction = false;
+    rate_controller_settings_.num_temporal_layers = 1;
+    H264RateControllerLayerSettings layer_settings;
+    layer_settings.avg_bitrate = config.bitrate.target_bps();
+    // Bitrate::Mode::kConstant only has target_bps. Using the target_bps for
+    // peak_bitrate.
+    layer_settings.peak_bitrate = config.bitrate.target_bps();
+    constexpr size_t kHRDBufferSize = 40000;
+    layer_settings.hrd_buffer_size = kHRDBufferSize;
+    layer_settings.min_qp = kH265MinQuantizer;
+    layer_settings.max_qp = kH265MaxQuantizer;
+    layer_settings.frame_rate = config.framerate;
+    rate_controller_settings_.layer_settings.push_back(layer_settings);
+    software_rate_controller_.emplace(rate_controller_settings_);
+  }
 
   D3D12_FEATURE_DATA_VIDEO_ENCODER_CODEC codec{
       .Codec = D3D12_VIDEO_ENCODER_CODEC_HEVC};
@@ -341,13 +430,12 @@ EncoderStatus D3D12VideoEncodeH265Delegate::InitializeVideoEncoder(
 
   h265_level_ = suggested_level;
 
-  dpb_.emplace(max_num_ref_frames_);
-  if (!dpb_->InitializeTextureArray(device_.Get(), config.input_visible_size,
-                                    input_format_)) {
+  if (!reference_frame_manager_.InitializeTextureArray(
+          device_.Get(), config.input_visible_size, input_format_,
+          max_num_ref_frames_)) {
     return {EncoderStatus::Codes::kEncoderInitializationError,
             "Failed to initialize DPB"};
   }
-  reference_frame_manager_.emplace(max_num_ref_frames_);
 
   video_encoder_wrapper_ = video_encoder_wrapper_factory_.Run(
       video_device_.Get(), D3D12_VIDEO_ENCODER_CODEC_HEVC,
@@ -361,6 +449,7 @@ EncoderStatus D3D12VideoEncodeH265Delegate::InitializeVideoEncoder(
     return EncoderStatus::Codes::kEncoderInitializationError;
   }
 
+  rate_controller_timestamp_ = base::TimeDelta();
   current_rate_control_ = rate_control_;
   input_arguments_.SequenceControlDesc.RateControl =
       current_rate_control_.GetD3D12VideoEncoderRateControl();
@@ -378,23 +467,39 @@ EncoderStatus::Or<size_t> D3D12VideoEncodeH265Delegate::ReadbackBitstream(
   packed_header_.Reset();
   bitstream_buffer = bitstream_buffer.subspan(packed_header_size);
 
-  // Adding a 0x00 byte to make sure the first NALU of each frame has 0x00000001
-  // start code.
-  bitstream_buffer[0] = 0x00u;
-  bitstream_buffer = bitstream_buffer.subspan(1u);
-
   auto size_or_error =
       D3D12VideoEncodeDelegate::ReadbackBitstream(bitstream_buffer);
   if (!size_or_error.has_value()) {
     return std::move(size_or_error).error();
   }
 
-  if (bitstream_buffer.first(3u) != base::span_from_cstring("\0\0\1")) {
+  auto slice_size = std::move(size_or_error).value();
+  DCHECK_GE(slice_size, 4u);
+  // Follow the same logic as H.264 encode delegate. Do not mandate start code
+  // of first NALU to be 0x00000001 only, unless we see interop issue.
+  if (bitstream_buffer.first(3u) != base::span_from_cstring("\0\0\1") &&
+      bitstream_buffer.first(4u) != base::span_from_cstring("\0\0\0\1")) {
     return {EncoderStatus::Codes::kBitstreamConversionError,
             "D3D12VideoEncodeH265Delegate: The encoded bitstream does not "
-            "start with 0x000001"};
+            "start with 0x000001 or 0x00000001"};
   }
-  return packed_header_size + 1 + std::move(size_or_error).value();
+  size_t payload_size = packed_header_size + slice_size;
+  if (software_rate_controller_) {
+    // Update the software rate controller here since we do not know the payload
+    // size until now.
+    if (metadata_.key_frame) {
+      software_rate_controller_->FinishIntraFrame(payload_size,
+                                                  rate_controller_timestamp_);
+    } else {
+      software_rate_controller_->FinishInterFrame(0, payload_size,
+                                                  rate_controller_timestamp_);
+    }
+    // The next frame should be decoded at (1 / frame_rate) seconds later.
+    rate_controller_timestamp_ +=
+        base::Seconds(1) /
+        rate_controller_settings_.layer_settings[0].frame_rate;
+  }
+  return payload_size;
 }
 
 H265VPS D3D12VideoEncodeH265Delegate::ToVPS() const {

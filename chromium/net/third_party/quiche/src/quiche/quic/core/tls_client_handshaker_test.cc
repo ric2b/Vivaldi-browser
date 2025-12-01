@@ -222,8 +222,10 @@ class TlsClientHandshakerTest : public QuicTestWithParam<ParsedQuicVersion> {
   }
 
   // Initializes a fake server, and all its associated state, for testing.
-  void InitializeFakeServer() {
+  void InitializeFakeServer(const std::string& trust_anchor_id = "") {
     TestQuicSpdyServerSession* server_session = nullptr;
+    server_crypto_config_ =
+        crypto_test_utils::CryptoServerConfigForTesting(trust_anchor_id);
     CreateServerSessionForTest(
         server_id_, QuicTime::Delta::FromSeconds(100000), supported_versions_,
         &server_helper_, &alarm_factory_, server_crypto_config_.get(),
@@ -301,6 +303,7 @@ TEST_P(TlsClientHandshakerTest, ConnectedAfterHandshake) {
   CompleteCryptoHandshake();
   EXPECT_EQ(PROTOCOL_TLS1_3, stream()->handshake_protocol());
   EXPECT_TRUE(stream()->encryption_established());
+  EXPECT_FALSE(stream()->MatchedTrustAnchorIdForTesting());
   EXPECT_TRUE(stream()->one_rtt_keys_available());
   EXPECT_FALSE(stream()->IsResumption());
 }
@@ -362,6 +365,40 @@ TEST_P(TlsClientHandshakerTest, HandshakeWithAsyncProofVerifier) {
   EXPECT_TRUE(stream()->encryption_established());
   EXPECT_TRUE(stream()->one_rtt_keys_available());
 }
+
+#if defined(BORINGSSL_API_VERSION) && BORINGSSL_API_VERSION >= 36
+TEST_P(TlsClientHandshakerTest, HandshakeWithTrustAnchorIds) {
+  SetQuicReloadableFlag(enable_tls_trust_anchor_ids, true);
+  const std::string kTestTrustAnchorId = {0x03, 0x01, 0x02, 0x03};
+  const std::string kTestServerTrustAnchorId = {0x01, 0x02, 0x03};
+  InitializeFakeServer(kTestServerTrustAnchorId);
+  ssl_config_.emplace();
+  ssl_config_->trust_anchor_ids = kTestTrustAnchorId;
+  CreateConnection();
+  CompleteCryptoHandshake();
+  ASSERT_TRUE(stream()->encryption_established());
+  EXPECT_TRUE(stream()->MatchedTrustAnchorIdForTesting());
+}
+
+// Tests that the client can complete a handshake in which it sends multiple
+// Trust Anchor IDs, one which matches the server's credential and one which
+// doesn't.
+TEST_P(TlsClientHandshakerTest, HandshakeWithMultipleTrustAnchorIds) {
+  SetQuicReloadableFlag(enable_tls_trust_anchor_ids, true);
+  // The client sends two trust anchor IDs, the first of which doesn't match the
+  // server's credential and the second does.
+  const std::string kTestTrustAnchorIds = {0x04, 0x00, 0x01, 0x02, 0x03,
+                                           0x03, 0x01, 0x02, 0x03};
+  const std::string kTestServerTrustAnchorId = {0x01, 0x02, 0x03};
+  InitializeFakeServer(kTestServerTrustAnchorId);
+  ssl_config_.emplace();
+  ssl_config_->trust_anchor_ids = kTestTrustAnchorIds;
+  CreateConnection();
+  CompleteCryptoHandshake();
+  ASSERT_TRUE(stream()->encryption_established());
+  EXPECT_TRUE(stream()->MatchedTrustAnchorIdForTesting());
+}
+#endif
 
 TEST_P(TlsClientHandshakerTest, Resumption) {
   // Disable 0-RTT on the server so that we're only testing 1-RTT resumption:
@@ -867,23 +904,19 @@ TEST_P(TlsClientHandshakerTest, ECHGrease) {
   EXPECT_FALSE(stream()->crypto_negotiated_params().encrypted_client_hello);
 }
 
-#if BORINGSSL_API_VERSION >= 22
-TEST_P(TlsClientHandshakerTest, EnableKyber) {
-  crypto_config_->set_preferred_groups({SSL_GROUP_X25519_KYBER768_DRAFT00});
+TEST_P(TlsClientHandshakerTest, EnableMLKEM) {
+  crypto_config_->set_preferred_groups({SSL_GROUP_X25519_MLKEM768});
   server_crypto_config_->set_preferred_groups(
-      {SSL_GROUP_X25519_KYBER768_DRAFT00, SSL_GROUP_X25519, SSL_GROUP_SECP256R1,
+      {SSL_GROUP_X25519_MLKEM768, SSL_GROUP_X25519, SSL_GROUP_SECP256R1,
        SSL_GROUP_SECP384R1});
   CreateConnection();
 
   CompleteCryptoHandshake();
   EXPECT_TRUE(stream()->encryption_established());
   EXPECT_TRUE(stream()->one_rtt_keys_available());
-  EXPECT_EQ(SSL_GROUP_X25519_KYBER768_DRAFT00,
-            SSL_get_group_id(stream()->GetSsl()));
+  EXPECT_EQ(SSL_GROUP_X25519_MLKEM768, SSL_get_group_id(stream()->GetSsl()));
 }
-#endif  // BORINGSSL_API_VERSION
 
-#if BORINGSSL_API_VERSION >= 27
 TEST_P(TlsClientHandshakerTest, EnableClientAlpsUseNewCodepoint) {
   // The intent of this test is to demonstrate the handshake should complete
   // successfully.
@@ -910,7 +943,6 @@ TEST_P(TlsClientHandshakerTest, EnableClientAlpsUseNewCodepoint) {
   EXPECT_EQ(PROTOCOL_TLS1_3, stream()->handshake_protocol());
   EXPECT_TRUE(callback_ran);
 }
-#endif  // BORINGSSL_API_VERSION
 
 }  // namespace
 }  // namespace test

@@ -51,7 +51,6 @@ BASE_DECLARE_FEATURE(kProductSpecifications);
 BASE_DECLARE_FEATURE(kProductSpecificationsClearMetadataOnNewlySupportedFields);
 BASE_DECLARE_FEATURE(kCompareConfirmationToast);
 BASE_DECLARE_FEATURE(kProductSpecificationsCache);
-BASE_DECLARE_FEATURE(kCompareManagementInterface);
 
 BASE_DECLARE_FEATURE(kShoppingList);
 BASE_DECLARE_FEATURE(kShoppingListRegionLaunched);
@@ -64,6 +63,9 @@ BASE_DECLARE_FEATURE(kShoppingPDPMetricsRegionLaunched);
 BASE_DECLARE_FEATURE(kSubscriptionsApi);
 BASE_DECLARE_FEATURE(kSubscriptionsApiRegionLaunched);
 BASE_DECLARE_FEATURE(kTrackByDefaultOnMobile);
+// Feature flag for showing discounts on checkout autofill.
+BASE_DECLARE_FEATURE(kDiscountAutofill);
+BASE_DECLARE_FEATURE(kDiscountAutofillRegionLaunched);
 
 #if BUILDFLAG(IS_IOS)
 BASE_DECLARE_FEATURE(kPriceInsightsIos);

@@ -34,7 +34,8 @@ export enum RouteState {
   TOP_LEVEL = 'top-level',
 }
 
-let guestTopLevelRoute = routes.SEARCH;
+// let guestTopLevelRoute = routes.SEARCH;
+let guestTopLevelRoute = routes.PRIVACY;
 // <if expr="chromeos_ash">
 guestTopLevelRoute = routes.PRIVACY;
 // </if>

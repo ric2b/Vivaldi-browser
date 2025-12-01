@@ -499,8 +499,8 @@ size_t Isolate::HashIsolateForEmbeddedBlob() {
     static_assert(Code::kConstantPoolOffsetOffsetEnd + 1 ==
                   Code::kCodeCommentsOffsetOffset);
     static_assert(Code::kCodeCommentsOffsetOffsetEnd + 1 ==
-                  Code::kBuiltinJumpTableInfoOffsetOffset);
-    static_assert(Code::kBuiltinJumpTableInfoOffsetOffsetEnd + 1 ==
+                  Code::kJumpTableInfoOffsetOffset);
+    static_assert(Code::kJumpTableInfoOffsetOffsetEnd + 1 ==
                   Code::kParameterCountOffset);
     static_assert(Code::kParameterCountOffsetEnd + 1 == Code::kBuiltinIdOffset);
     static_assert(Code::kBuiltinIdOffsetEnd + 1 == Code::kUnalignedSize);
@@ -634,9 +634,7 @@ void Isolate::Iterate(RootVisitor* v, ThreadLocalTop* thread) {
     if (stack->IsActive()) {
       continue;
     }
-    for (StackFrameIterator it(this, stack.get()); !it.done(); it.Advance()) {
-      it.frame()->Iterate(v);
-    }
+    stack->Iterate(v, this);
   }
   StackFrameIterator it(this, thread, StackFrameIterator::FirstStackOnly{});
 #else
@@ -1175,7 +1173,7 @@ void CaptureAsyncStackTrace(Isolate* isolate, DirectHandle<JSPromise> promise,
       int const index =
           PromiseBuiltins::kPromiseAllResolveElementCapabilitySlot;
       DirectHandle<PromiseCapability> capability(
-          Cast<PromiseCapability>(context->get(index)), isolate);
+          Cast<PromiseCapability>(context->GetNoCell(index)), isolate);
       if (!IsJSPromise(capability->promise())) return;
       promise = direct_handle(Cast<JSPromise>(capability->promise()), isolate);
     } else if (IsBuiltinFunction(
@@ -1200,7 +1198,7 @@ void CaptureAsyncStackTrace(Isolate* isolate, DirectHandle<JSPromise> promise,
       int const index =
           PromiseBuiltins::kPromiseAllResolveElementCapabilitySlot;
       DirectHandle<PromiseCapability> capability(
-          Cast<PromiseCapability>(context->get(index)), isolate);
+          Cast<PromiseCapability>(context->GetNoCell(index)), isolate);
       if (!IsJSPromise(capability->promise())) return;
       promise = direct_handle(Cast<JSPromise>(capability->promise()), isolate);
     } else if (IsBuiltinFunction(isolate, reaction->reject_handler(),
@@ -1223,7 +1221,7 @@ void CaptureAsyncStackTrace(Isolate* isolate, DirectHandle<JSPromise> promise,
       // the concurrent promises resolve.
       int const index = PromiseBuiltins::kPromiseAnyRejectElementCapabilitySlot;
       DirectHandle<PromiseCapability> capability(
-          Cast<PromiseCapability>(context->get(index)), isolate);
+          Cast<PromiseCapability>(context->GetNoCell(index)), isolate);
       if (!IsJSPromise(capability->promise())) return;
       promise = direct_handle(Cast<JSPromise>(capability->promise()), isolate);
     } else if (IsBuiltinFunction(isolate, reaction->fulfill_handler(),
@@ -1232,7 +1230,7 @@ void CaptureAsyncStackTrace(Isolate* isolate, DirectHandle<JSPromise> promise,
           Cast<JSFunction>(reaction->fulfill_handler()), isolate);
       DirectHandle<Context> context(function->context(), isolate);
       promise = direct_handle(
-          Cast<JSPromise>(context->get(PromiseBuiltins::kPromiseSlot)),
+          Cast<JSPromise>(context->GetNoCell(PromiseBuiltins::kPromiseSlot)),
           isolate);
     } else {
       // We have some generic promise chain here, so try to
@@ -2029,7 +2027,7 @@ void ReportBootstrappingException(DirectHandle<Object> exception,
   // builtins, print the actual source here so that line numbers match.
   if (IsString(location->script()->source())) {
     DirectHandle<String> src(Cast<String>(location->script()->source()),
-                             location->script()->GetIsolate());
+                             Isolate::Current());
     PrintF("Failing script:");
     int len = src->length();
     if (len == 0) {
@@ -2090,9 +2088,18 @@ DirectHandle<JSMessageObject> Isolate::CreateMessageOrAbort(
 
 Tagged<Object> Isolate::Throw(Tagged<Object> raw_exception,
                               MessageLocation* location) {
-  DCHECK(!has_exception());
+  if (has_exception()) {
+    // A termination exception may have been thrown while preparing
+    // {raw_exception}, e.g. by the near heap limit callback
+    // (crbug.com/409487530).
+    // In this case ignore the current error and propagate the termination
+    // exception instead. Any other kind of exception is unexpected.
+    DCHECK(IsTerminationException(exception()));
+    return ReadOnlyRoots(heap()).exception();
+  }
   DCHECK_IMPLIES(IsHole(raw_exception),
                  raw_exception == ReadOnlyRoots{this}.termination_exception());
+  CHECK(IsOnCentralStack());
 #if V8_ENABLE_WEBASSEMBLY
   trap_handler::AssertThreadNotInWasm();
 #endif
@@ -2272,26 +2279,29 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
     // intermediate stack switches.
     // This cannot be done during unwinding because the stack switching state
     // must stay consistent with the thread local top (see crbug.com/406053619).
-    Tagged<Object> maybe_continuation = root(RootIndex::kActiveContinuation);
-    if (!IsUndefined(maybe_continuation)) {
-      auto continuation = Cast<WasmContinuationObject>(maybe_continuation);
-      wasm::StackMemory* stack = nullptr;
-      while (continuation != iter.continuation()) {
-        auto parent = Cast<WasmContinuationObject>(continuation->parent());
-        stack = reinterpret_cast<wasm::StackMemory*>(parent->stack());
-        SBXCHECK_EQ(stack->jmpbuf()->state, wasm::JumpBuffer::Inactive);
-        SwitchStacks(continuation, parent);
-        stack->jmpbuf()->state = wasm::JumpBuffer::Active;
-        RetireWasmStack(continuation);
-        continuation = parent;
+    wasm::StackMemory* active_stack = isolate_data_.active_stack();
+    if (active_stack != nullptr) {
+      wasm::StackMemory* parent = nullptr;
+      Tagged<HeapObject> suspender = *roots_table().active_suspender();
+      while (active_stack != iter.wasm_stack()) {
+        parent = active_stack->jmpbuf()->parent;
+        SBXCHECK_EQ(parent->jmpbuf()->state, wasm::JumpBuffer::Inactive);
+        SwitchStacks(active_stack, parent);
+        // Unconditionally update the active suspender as well. This assumes
+        // that suspenders contain exactly one stack each.
+        // Note: this is only needed for --stress-wasm-stack-switching.
+        // Otherwise the exception should have been caught by the JSPI builtin.
+        // TODO(388533754): Revisit this for core stack-switching when the
+        // suspender can encapsulate multiple stacks.
+        suspender = Tagged<WasmSuspenderObject>::cast(suspender)->parent();
+        parent->jmpbuf()->state = wasm::JumpBuffer::Active;
+        RetireWasmStack(active_stack);
+        active_stack = parent;
       }
-      if (stack) {
+      if (parent) {
         // We switched at least once, update the active continuation.
-        roots_table().slot(RootIndex::kActiveContinuation).store(continuation);
-#if USE_SIMULATOR_BOOL && V8_TARGET_ARCH_ARM64
-        Simulator::current(this)->SetStackLimit(
-            reinterpret_cast<uintptr_t>(stack->jmpbuf()->stack_limit));
-#endif
+        isolate_data_.set_active_stack(active_stack);
+        roots_table().slot(RootIndex::kActiveSuspender).store(suspender);
       }
     }
     // The unwinder is running on the central stack. If the target frame is in a
@@ -2300,16 +2310,16 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
         handler_sp != kNullAddress ? handler_sp : handler_fp;
     if (!IsOnCentralStack(stack_address)) {
       thread_local_top()->is_on_central_stack_flag_ = false;
+      iter.wasm_stack()->ShrinkTo(stack_address);
       uintptr_t limit =
           reinterpret_cast<uintptr_t>(iter.wasm_stack()->jslimit());
       stack_guard()->SetStackLimitForStackSwitching(limit);
-      thread_local_top()->secondary_stack_limit_ = 0;
-      thread_local_top()->secondary_stack_sp_ = 0;
-#if USE_SIMULATOR_BOOL && V8_TARGET_ARCH_ARM64
-      Simulator::current(this)->SetStackLimit(limit);
-#endif
       iter.wasm_stack()->clear_stack_switch_info();
     }
+    // Regardless of the stack that the handler belongs to, these fields should
+    // be cleared.
+    thread_local_top()->secondary_stack_limit_ = 0;
+    thread_local_top()->secondary_stack_sp_ = 0;
 #endif
 
     // Return and clear exception. The contract is that:
@@ -2337,9 +2347,8 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
   // Compute handler and stack unwinding information by performing a full walk
   // over the stack and dispatching according to the frame type.
   int visited_frames = 0;
-  for (StackFrameIterator iter(this, thread_local_top(),
-                               StackFrameIterator::NoHandles{});
-       ; iter.Advance(), visited_frames++) {
+  for (StackFrameIterator iter(this, thread_local_top());;
+       iter.Advance(), visited_frames++) {
 #if V8_ENABLE_WEBASSEMBLY
     if (iter.frame()->type() == StackFrame::STACK_SWITCH) {
       if (catchable_by_js && iter.frame()->LookupCode()->builtin_id() !=
@@ -2640,14 +2649,58 @@ Tagged<Object> Isolate::UnwindAndFindHandler() {
         }
       }
 
-      case StackFrame::BUILTIN:
+      case StackFrame::BUILTIN: {
         // For builtin frames we are guaranteed not to find a handler.
         if (catchable_by_js) {
           CHECK_EQ(-1, BuiltinFrame::cast(frame)->LookupExceptionHandlerInTable(
                            nullptr, nullptr));
         }
         break;
+      }
+      case StackFrame::INTERNAL: {
+        auto code = frame->GcSafeLookupCode();
+        if (code->builtin_id() ==
+            Builtin::kDeoptimizationEntry_LazyAfterFastCall) {
+          // Deoptimization Entry builtin does the exception handling for the
+          // fast API if the fast API caller was marked for deoptimization.
+          // Therefore, even though `frame->fp()` says that we are coming from
+          // the Deoptimization Entry builtin, we have to do the stack unwinding
+          // as if we come from the fast call. The return address of the fast
+          // call is still stored in the isolate, so we can just load it from
+          // there.
+          Address fast_call_pc = isolate_data()->fast_c_call_caller_pc();
+          std::optional<Tagged<GcSafeCode>> result =
+              inner_pointer_to_code_cache()->GetCacheEntry(fast_call_pc)->code;
 
+          CHECK(!result->is_null());
+
+          Tagged<GcSafeCode> caller_code = result.value();
+          int caller_offset =
+              caller_code->GetOffsetFromInstructionStart(this, fast_call_pc);
+          // Check if there is actually an exception handler registered at the
+          // return address of the fast call. If so, then we tell the
+          // deoptimizer of the exception and just return the the Deotimization
+          // Entry. Otherwise we iterate the stack further to find a handler.
+          HandlerTable table(caller_code->UnsafeCastToCode());
+          int handler_offset = table.LookupReturn(caller_offset);
+          if (handler_offset < 0) {
+            break;
+          }
+
+          // If the target code is lazy deoptimized, we jump to the original
+          // return address, but we make a note that we are throwing, so
+          // that the deoptimizer can do the right thing.
+          int offset =
+              static_cast<int>(frame->pc() - code->instruction_start());
+          set_deoptimizer_lazy_throw(true);
+
+          return FoundHandler(iter, Context(),
+                              code->InstructionStart(this, frame->pc()), offset,
+                              code->constant_pool(), frame->sp(), frame->fp(),
+                              visited_frames);
+        }
+        break;
+      }
       case StackFrame::JAVASCRIPT_BUILTIN_CONTINUATION_WITH_CATCH: {
         // Builtin continuation frames with catch can handle exceptions.
         if (!catchable_by_js) break;
@@ -3210,7 +3263,7 @@ bool WalkPromiseTreeInternal(
                 int const index =
                     PromiseBuiltins::PromiseFinallyContextSlot::kOnFinallySlot;
                 fulfill_handler = direct_handle(
-                    Cast<JSReceiver>(context->get(index)), isolate);
+                    Cast<JSReceiver>(context->GetNoCell(index)), isolate);
               }
               if (IsJSFunction(*fulfill_handler)) {
                 callback({Cast<JSFunction>(fulfill_handler)->shared(), true});
@@ -3338,32 +3391,37 @@ bool CallsCatchMethod(Isolate* isolate, Handle<BytecodeArray> bytecode_array,
     if (iterator.done()) {
       return false;
     }
-    if (iterator.current_bytecode() == Bytecode::kStaCurrentContextSlot) {
+    if (iterator.current_bytecode() == Bytecode::kStaCurrentContextSlot ||
+        iterator.current_bytecode() == Bytecode::kStaCurrentContextSlotNoCell) {
       // Step over patterns like:
-      //     StaCurrentContextSlot [x]
-      //     LdaImmutableCurrentContextSlot [x]
+      //     StaCurrentContextSlot[NoCell] [x]
+      //     LdaImmutableCurrentContextSlot/LdaCurrentContext[NoCell] [x]
       unsigned int slot = iterator.GetIndexOperand(0);
       iterator.Advance();
       if (!iterator.done() &&
           (iterator.current_bytecode() ==
                Bytecode::kLdaImmutableCurrentContextSlot ||
-           iterator.current_bytecode() == Bytecode::kLdaCurrentContextSlot)) {
+           iterator.current_bytecode() == Bytecode::kLdaCurrentContextSlot ||
+           iterator.current_bytecode() ==
+               Bytecode::kLdaCurrentContextSlotNoCell)) {
         if (iterator.GetIndexOperand(0) != slot) {
           return false;
         }
         iterator.Advance();
       }
-    } else if (iterator.current_bytecode() == Bytecode::kStaContextSlot) {
+    } else if (iterator.current_bytecode() == Bytecode::kStaContextSlot ||
+               iterator.current_bytecode() == Bytecode::kStaContextSlotNoCell) {
       // Step over patterns like:
-      //     StaContextSlot r_x [y] [z]
-      //     LdaContextSlot r_x [y] [z]
+      //     StaContextSlot[NoCell] r_x [y] [z]
+      //     LdaContextSlot[NoCell] r_x [y] [z]
       int context = iterator.GetRegisterOperand(0).index();
       unsigned int slot = iterator.GetIndexOperand(1);
       unsigned int depth = iterator.GetUnsignedImmediateOperand(2);
       iterator.Advance();
       if (!iterator.done() &&
           (iterator.current_bytecode() == Bytecode::kLdaImmutableContextSlot ||
-           iterator.current_bytecode() == Bytecode::kLdaContextSlot)) {
+           iterator.current_bytecode() == Bytecode::kLdaContextSlot ||
+           iterator.current_bytecode() == Bytecode::kLdaContextSlotNoCell)) {
         if (iterator.GetRegisterOperand(0).index() != context ||
             iterator.GetIndexOperand(1) != slot ||
             iterator.GetUnsignedImmediateOperand(2) != depth) {
@@ -3672,6 +3730,8 @@ bool Isolate::IsWasmStringRefEnabled(DirectHandle<NativeContext> context) {
 
 bool Isolate::IsWasmJSPIRequested(DirectHandle<NativeContext> context) {
 #ifdef V8_ENABLE_WEBASSEMBLY
+  if (v8_flags.wasm_jitless) return false;
+
   v8::WasmJSPIEnabledCallback jspi_callback = wasm_jspi_enabled_callback();
   if (jspi_callback) {
     v8::Local<v8::Context> api_context = v8::Utils::ToLocal(context);
@@ -3843,8 +3903,7 @@ void Isolate::AddSharedWasmMemory(
   heap()->set_shared_wasm_memories(*shared_wasm_memories);
 }
 
-void Isolate::SwitchStacks(Tagged<WasmContinuationObject> source_continuation,
-                           Tagged<WasmContinuationObject> target_continuation) {
+void Isolate::SwitchStacks(wasm::StackMemory* from, wasm::StackMemory* to) {
   // Synchronize the stack limit with the active continuation for
   // stack-switching. This can be done before or after changing the stack
   // pointer itself, as long as we update both before the next stack check.
@@ -3854,66 +3913,49 @@ void Isolate::SwitchStacks(Tagged<WasmContinuationObject> source_continuation,
   // preserved and handled at the next stack check.
 
   DisallowGarbageCollection no_gc;
-  wasm::StackMemory* target_stack =
-      reinterpret_cast<wasm::StackMemory*>(target_continuation->stack());
-  wasm::StackMemory* source_stack =
-      reinterpret_cast<wasm::StackMemory*>(source_continuation->stack());
   if (v8_flags.trace_wasm_stack_switching) {
-    if (source_stack->jmpbuf()->state == wasm::JumpBuffer::Suspended) {
-      PrintF("Switch from stack %d to %d (resume/start)\n", source_stack->id(),
-             target_stack->id());
-    } else if (target_stack->jmpbuf()->state == wasm::JumpBuffer::Inactive) {
-      PrintF("Switch from stack %d to %d (suspend/return)\n",
-             source_stack->id(), target_stack->id());
+    if (to->jmpbuf()->state == wasm::JumpBuffer::Suspended) {
+      PrintF("Switch from stack %d to %d (resume/start)\n", from->id(),
+             to->id());
+    } else if (to->jmpbuf()->state == wasm::JumpBuffer::Inactive) {
+      PrintF("Switch from stack %d to %d (suspend/return)\n", from->id(),
+             to->id());
     } else {
       UNREACHABLE();
     }
   }
-#if V8_ENABLE_SANDBOX
-  // The logic below essentially duplicates the WasmContinuationObject linked
-  // list outside of the sandbox as a JumpBuffer linked list, and uses it to
-  // validate the potentially corrupted parent pointer on return/suspend.
-  // TODO(thibaudm): Investigate whether we can deduplicate the linked list by
-  // moving WasmContinuationObjects to trusted space and removing this one, or
-  // by removing the WasmContinuationObjects and only keeping a linked list of
-  // wasm::StackMemories.
-  // TODO(fgm): Adapt the logic to core stack-switching. Returning from a stack
-  // should still return to the immediate parent, but suspension can target an
-  // arbitrary ancestor. We need to validate each link from the source to
-  // the target, and check that we are not skipping central stack frames.
-  if (target_stack->jmpbuf()->state == wasm::JumpBuffer::Suspended) {
-    target_stack->jmpbuf()->caller = source_stack->jmpbuf();
+  if (to->jmpbuf()->state == wasm::JumpBuffer::Suspended) {
+    to->jmpbuf()->parent = from;
   } else {
-    DCHECK_EQ(target_stack->jmpbuf()->state, wasm::JumpBuffer::Inactive);
-    SBXCHECK_EQ(source_stack->jmpbuf()->caller, target_stack->jmpbuf());
+    DCHECK_EQ(to->jmpbuf()->state, wasm::JumpBuffer::Inactive);
+    // TODO(388533754): This check won't hold anymore with core stack-switching.
+    // Instead, we will need to validate all the intermediate stacks and also
+    // check that they don't hold central stack frames.
+    SBXCHECK_EQ(from->jmpbuf()->parent, to);
   }
-#endif
-  uintptr_t limit =
-      reinterpret_cast<uintptr_t>(target_stack->jmpbuf()->stack_limit);
+  uintptr_t limit = reinterpret_cast<uintptr_t>(to->jmpbuf()->stack_limit);
   stack_guard()->SetStackLimitForStackSwitching(limit);
   // Update the central stack info.
-  if (target_stack->jmpbuf()->state == wasm::JumpBuffer::Inactive) {
+  if (to->jmpbuf()->state == wasm::JumpBuffer::Inactive) {
     // When returning/suspending from a stack, the parent must be on
     // the central stack.
     // TODO(388533754): This assumption will not hold anymore with core
     // stack-switching, so we will need to revisit this.
-    DCHECK(IsOnCentralStack(target_stack->jmpbuf()->sp));
+    DCHECK(IsOnCentralStack(to->jmpbuf()->sp));
     thread_local_top()->is_on_central_stack_flag_ = true;
-    thread_local_top()->central_stack_sp_ = target_stack->jmpbuf()->sp;
+    thread_local_top()->central_stack_sp_ = to->jmpbuf()->sp;
     thread_local_top()->central_stack_limit_ =
-        reinterpret_cast<Address>(target_stack->jmpbuf()->stack_limit);
+        reinterpret_cast<Address>(to->jmpbuf()->stack_limit);
   } else {
     // A suspended stack cannot hold central stack frames.
     thread_local_top()->is_on_central_stack_flag_ = false;
-    thread_local_top()->central_stack_sp_ = source_stack->jmpbuf()->sp;
+    thread_local_top()->central_stack_sp_ = from->jmpbuf()->sp;
     thread_local_top()->central_stack_limit_ =
-        reinterpret_cast<Address>(source_stack->jmpbuf()->stack_limit);
+        reinterpret_cast<Address>(from->jmpbuf()->stack_limit);
   }
 }
 
-void Isolate::RetireWasmStack(Tagged<WasmContinuationObject> continuation) {
-  wasm::StackMemory* stack =
-      reinterpret_cast<wasm::StackMemory*>(continuation->stack());
+void Isolate::RetireWasmStack(wasm::StackMemory* stack) {
   stack->jmpbuf()->state = wasm::JumpBuffer::Retired;
   size_t index = stack->index();
   // We can only return from a stack that was still in the global list.
@@ -3929,9 +3971,6 @@ void Isolate::RetireWasmStack(Tagged<WasmContinuationObject> continuation) {
   for (size_t i = 0; i < wasm_stacks().size(); ++i) {
     SLOW_DCHECK(wasm_stacks()[i]->index() == i);
   }
-#if V8_ENABLE_SANDBOX
-  continuation->set_stack(this, kNullAddress);
-#endif
   stack_pool().Add(std::move(stack_ptr));
 }
 
@@ -3973,7 +4012,8 @@ void Isolate::ThreadDataTable::RemoveAllThreads() {
 
 class TracingAccountingAllocator : public AccountingAllocator {
  public:
-  explicit TracingAccountingAllocator(Isolate* isolate) : isolate_(isolate) {}
+  explicit TracingAccountingAllocator(Isolate* isolate)
+      : AccountingAllocator(isolate) {}
   ~TracingAccountingAllocator() = default;
 
  protected:
@@ -4050,8 +4090,8 @@ class TracingAccountingAllocator : public AccountingAllocator {
   void Dump(std::ostringstream& out, bool dump_details) {
     // Note: Neither isolate nor zones are locked, so be careful with accesses
     // as the allocator is potentially used on a concurrent thread.
-    double time = isolate_->time_millis_since_init();
-    out << "{" << "\"isolate\": \"" << reinterpret_cast<void*>(isolate_)
+    double time = isolate()->time_millis_since_init();
+    out << "{" << "\"isolate\": \"" << reinterpret_cast<void*>(isolate())
         << "\", " << "\"time\": " << time << ", ";
     size_t total_segment_bytes_allocated = 0;
     size_t total_zone_allocation_size = 0;
@@ -4092,7 +4132,6 @@ class TracingAccountingAllocator : public AccountingAllocator {
         << "\"freed\": " << total_zone_freed_size << "}";
   }
 
-  Isolate* const isolate_;
   std::atomic<size_t> nesting_depth_{0};
 
   base::Mutex mutex_;
@@ -4133,6 +4172,12 @@ Isolate* Isolate::Allocate(IsolateGroup* group) {
 
 // static
 void Isolate::Delete(Isolate* isolate) {
+  Deinitialize(isolate);
+  Free(isolate);
+}
+
+// static
+void Isolate::Deinitialize(Isolate* isolate) {
   DCHECK_NOT_NULL(isolate);
   // v8::V8::Dispose() must only be called after deleting all isolates.
   DCHECK_NOT_NULL(V8::GetCurrentPlatform());
@@ -4156,11 +4201,16 @@ void Isolate::Delete(Isolate* isolate) {
   isolate->~Isolate();
   // Only release the group once all other Isolate members have been destroyed.
   group->Release();
-  // Free the isolate itself.
-  base::AlignedFree(isolate);
 
   // Restore the previous current isolate.
   SetIsolateThreadLocals(saved_isolate, saved_data);
+}
+
+// static
+void Isolate::Free(Isolate* isolate) {
+  DCHECK_NOT_NULL(isolate);
+  // Free the memory allocated for the Isolate.
+  base::AlignedFree(isolate);
 }
 
 void Isolate::SetUpFromReadOnlyArtifacts(ReadOnlyArtifacts* artifacts) {
@@ -4237,9 +4287,8 @@ Isolate::Isolate(IsolateGroup* isolate_group)
   // we could also just move it to the trap handler, and implement it e.g. with
   // inline assembly. It's not clear if that's worth it.
   if (Isolate::CurrentEmbeddedBlobCodeSize()) {
-    EmbeddedData embedded_data = EmbeddedData::FromBlob();
     Address landing_pad =
-        embedded_data.InstructionStartOf(Builtin::kWasmTrapHandlerLandingPad);
+        Builtins::EmbeddedEntryOf(Builtin::kWasmTrapHandlerLandingPad);
     i::trap_handler::SetLandingPad(landing_pad);
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -4339,6 +4388,10 @@ void Isolate::CheckIsolateLayout() {
       static_cast<int>(OFFSET_OF(
           Isolate, isolate_data_.continuation_preserved_embedder_data_)) ==
       Internals::kContinuationPreservedEmbedderDataOffset);
+
+  static_assert(static_cast<int>(OFFSET_OF(
+                    Isolate, isolate_data_.js_dispatch_table_base_)) ==
+                Internals::kJSDispatchTableOffset);
 
   static_assert(
       static_cast<int>(OFFSET_OF(Isolate, isolate_data_.roots_table_)) ==
@@ -4556,6 +4609,11 @@ void Isolate::Deinit() {
   // updated anymore.
   DumpAndResetStats();
 
+  // Contains zones that should be released to the page pool before the heap is
+  // torn down.
+  delete ast_string_constants_;
+  ast_string_constants_ = nullptr;
+
   heap_.TearDown();
   isolate_group()->RemoveIsolate(this);
 
@@ -4586,9 +4644,6 @@ void Isolate::Deinit() {
   delete interpreter_;
   interpreter_ = nullptr;
 
-  delete ast_string_constants_;
-  ast_string_constants_ = nullptr;
-
   delete logger_;
   logger_ = nullptr;
 
@@ -4618,7 +4673,7 @@ void Isolate::Deinit() {
   external_pointer_table().TearDownSpace(
       heap()->young_external_pointer_space());
   external_pointer_table().TearDownSpace(heap()->old_external_pointer_space());
-  external_pointer_table().DetachSpaceFromReadOnlySegment(
+  external_pointer_table().DetachSpaceFromReadOnlySegments(
       heap()->read_only_external_pointer_space());
   external_pointer_table().TearDownSpace(
       heap()->read_only_external_pointer_space());
@@ -4764,6 +4819,8 @@ Isolate::~Isolate() {
 
   delete allocator_;
   allocator_ = nullptr;
+
+  DCHECK_NULL(builtins_effects_analyzer_);
 
   // Assert that |default_microtask_queue_| is the last MicrotaskQueue instance.
   DCHECK_IMPLIES(default_microtask_queue_,
@@ -5359,8 +5416,7 @@ void Isolate::VerifyStaticRoots() {
   RootIndex idx = RootIndex::kFirstReadOnlyRoot;
   for (Tagged_t cmp_ptr : StaticReadOnlyRootsPointerTable) {
     Address the_root = roots[idx];
-    Address ptr =
-        V8HeapCompressionScheme::DecompressTagged(cage_base(), cmp_ptr);
+    Address ptr = V8HeapCompressionScheme::DecompressTagged(cmp_ptr);
     CHECK_WITH_MSG(the_root == ptr, STATIC_ROOTS_FAILED_MSG);
     ++idx;
   }
@@ -5436,6 +5492,8 @@ void Isolate::VerifyStaticRoots() {
                InstanceTypeChecker::IsOneByteString(map->instance_type()));
       CHECK_EQ(InstanceTypeChecker::IsTwoByteString(map),
                InstanceTypeChecker::IsTwoByteString(map->instance_type()));
+      CHECK_EQ(InstanceTypeChecker::IsSharedString(map),
+               InstanceTypeChecker::IsSharedString(map->instance_type()));
     }
   }
 
@@ -5603,7 +5661,7 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
     external_pointer_table().Initialize();
     external_pointer_table().InitializeSpace(
         heap()->read_only_external_pointer_space());
-    external_pointer_table().AttachSpaceToReadOnlySegment(
+    external_pointer_table().AttachSpaceToReadOnlySegments(
         heap()->read_only_external_pointer_space());
     external_pointer_table().InitializeSpace(
         heap()->young_external_pointer_space());
@@ -5664,13 +5722,12 @@ bool Isolate::Init(SnapshotData* startup_snapshot_data,
     Address last = base + code_cage->size() - kTaggedSize;
     Address upper_bound = base + kPtrComprCageReservationSize - kTaggedSize;
     PtrComprCageBase code_cage_base{code_cage_base_};
-    CHECK_EQ(base, ComprScheme::DecompressTagged(
-                       code_cage_base, ComprScheme::CompressAny(base)));
-    CHECK_EQ(last, ComprScheme::DecompressTagged(
-                       code_cage_base, ComprScheme::CompressAny(last)));
-    CHECK_EQ(upper_bound,
-             ComprScheme::DecompressTagged(
-                 code_cage_base, ComprScheme::CompressAny(upper_bound)));
+    CHECK_EQ(base,
+             ComprScheme::DecompressTagged(ComprScheme::CompressAny(base)));
+    CHECK_EQ(last,
+             ComprScheme::DecompressTagged(ComprScheme::CompressAny(last)));
+    CHECK_EQ(upper_bound, ComprScheme::DecompressTagged(
+                              ComprScheme::CompressAny(upper_bound)));
   }
 #endif  // V8_EXTERNAL_CODE_SPACE
 
@@ -6071,6 +6128,11 @@ void Isolate::DumpAndResetStats() {
     wasm::GetWasmEngine()->DumpAndResetTurboStatistics();
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+  if (v8_flags.trace_number_string_cache) {
+    PrintNumberStringCacheStats("DumpAndResetStats", true);
+  }
+
 #if V8_RUNTIME_CALL_STATS
   if (V8_UNLIKELY(TracingFlags::runtime_stats.load(std::memory_order_relaxed) ==
                   v8::tracing::TracingCategoryObserver::ENABLED_BY_NATIVE)) {
@@ -6231,6 +6293,23 @@ void Isolate::set_date_cache(DateCache* date_cache) {
   date_cache_ = date_cache;
 }
 
+void Isolate::IncreaseDateCacheStampAndInvalidateProtector() {
+  // There's no need to update stamp and invalidate the protector since there
+  // were no JSDate instances created yet and thus such a configuration change
+  // is not observable anyway.
+  if (!isolate_data()->is_date_cache_used_) return;
+
+  if (isolate_data()->date_cache_stamp_ < Smi::kMaxValue) {
+    ++isolate_data()->date_cache_stamp_;
+  } else {
+    isolate_data()->date_cache_stamp_ = 1;
+  }
+
+  if (Protectors::IsNoDateTimeConfigurationChangeIntact(this)) {
+    Protectors::InvalidateNoDateTimeConfigurationChange(this);
+  }
+}
+
 Isolate::KnownPrototype Isolate::IsArrayOrObjectOrStringPrototype(
     Tagged<JSObject> object) {
   Tagged<Map> metamap = object->map(this)->map(this);
@@ -6251,7 +6330,7 @@ bool Isolate::IsInCreationContext(Tagged<JSObject> object, uint32_t index) {
   // Filter out native-context independent objects.
   if (metamap == ReadOnlyRoots(this).meta_map()) return false;
   Tagged<NativeContext> native_context = metamap->native_context();
-  return native_context->get(index) == object;
+  return native_context->GetNoCell(index) == object;
 }
 
 void Isolate::UpdateNoElementsProtectorOnSetElement(
@@ -6272,18 +6351,9 @@ void Isolate::UpdateNoElementsProtectorOnSetElement(
 void Isolate::UpdateProtectorsOnSetPrototype(
     DirectHandle<JSObject> object, DirectHandle<Object> new_prototype) {
   UpdateNoElementsProtectorOnSetPrototype(object);
-  UpdateTypedArrayLengthLookupChainProtectorOnSetPrototype(object);
   UpdateTypedArraySpeciesLookupChainProtectorOnSetPrototype(object);
   UpdateNumberStringNotRegexpLikeProtectorOnSetPrototype(object);
   UpdateStringWrapperToPrimitiveProtectorOnSetPrototype(object, new_prototype);
-}
-
-void Isolate::UpdateTypedArrayLengthLookupChainProtectorOnSetPrototype(
-    DirectHandle<JSObject> object) {
-  if ((IsJSTypedArrayPrototype(*object) || IsJSTypedArray(*object)) &&
-      Protectors::IsTypedArrayLengthLookupChainIntact(this)) {
-    Protectors::InvalidateTypedArrayLengthLookupChain(this);
-  }
 }
 
 void Isolate::UpdateTypedArraySpeciesLookupChainProtectorOnSetPrototype(
@@ -6464,8 +6534,11 @@ void Isolate::FireCallCompletedCallbackInternal(
 
 #ifdef V8_ENABLE_WEBASSEMBLY
 void Isolate::WasmInitJSPIFeature() {
-  if (IsUndefined(root(RootIndex::kActiveContinuation))) {
+  if (v8_flags.wasm_jitless) return;
+
+  if (isolate_data_.active_stack() == nullptr) {
     wasm::StackMemory* stack(wasm::StackMemory::GetCentralStackView(this));
+    stack->jmpbuf()->state = wasm::JumpBuffer::Active;
     this->wasm_stacks().emplace_back(stack);
     stack->set_index(0);
     if (v8_flags.trace_wasm_stack_switching) {
@@ -6473,13 +6546,7 @@ void Isolate::WasmInitJSPIFeature() {
              stack->jslimit(), reinterpret_cast<void*>(stack->base()));
     }
     HandleScope scope(this);
-    DirectHandle<WasmContinuationObject> continuation =
-        WasmContinuationObject::New(this, stack, wasm::JumpBuffer::Active,
-                                    AllocationType::kOld);
-    heap()
-        ->roots_table()
-        .slot(RootIndex::kActiveContinuation)
-        .store(*continuation);
+    isolate_data_.set_active_stack(stack);
   }
 }
 #endif
@@ -6529,10 +6596,23 @@ MaybeDirectHandle<JSPromise> Isolate::RunHostImportModuleDynamicallyCallback(
     MaybeDirectHandle<Object> maybe_import_options_argument) {
   DCHECK(!is_execution_terminating());
   v8::Local<v8::Context> api_context = v8::Utils::ToLocal(native_context());
-  if (host_import_module_dynamically_callback_ == nullptr) {
-    DirectHandle<Object> exception =
-        factory()->NewError(error_function(), MessageTemplate::kUnsupported);
-    return NewRejectedPromise(this, api_context, exception);
+
+  switch (phase) {
+    case ModuleImportPhase::kEvaluation:
+      if (host_import_module_dynamically_callback_ == nullptr &&
+          host_import_module_with_phase_dynamically_callback_ == nullptr) {
+        DirectHandle<Object> exception = factory()->NewError(
+            error_function(), MessageTemplate::kUnsupported);
+        return NewRejectedPromise(this, api_context, exception);
+      }
+      break;
+    case ModuleImportPhase::kSource:
+      if (host_import_module_with_phase_dynamically_callback_ == nullptr) {
+        DirectHandle<Object> exception = factory()->NewError(
+            error_function(), MessageTemplate::kUnsupported);
+        return NewRejectedPromise(this, api_context, exception);
+      }
+      break;
   }
 
   DirectHandle<String> specifier_str;
@@ -6574,14 +6654,25 @@ MaybeDirectHandle<JSPromise> Isolate::RunHostImportModuleDynamicallyCallback(
     case ModuleImportPhase::kEvaluation:
       // TODO(42204365): Deprecate HostImportModuleDynamicallyCallback once
       // HostImportModuleWithPhaseDynamicallyCallback is stable.
-      API_ASSIGN_RETURN_ON_EXCEPTION_VALUE(
-          this, promise,
-          host_import_module_dynamically_callback_(
-              api_context, v8::Utils::ToLocal(host_defined_options),
-              v8::Utils::ToLocal(resource_name),
-              v8::Utils::ToLocal(specifier_str),
-              ToApiHandle<v8::FixedArray>(import_attributes_array)),
-          MaybeDirectHandle<JSPromise>());
+      if (host_import_module_with_phase_dynamically_callback_ != nullptr) {
+        API_ASSIGN_RETURN_ON_EXCEPTION_VALUE(
+            this, promise,
+            host_import_module_with_phase_dynamically_callback_(
+                api_context, v8::Utils::ToLocal(host_defined_options),
+                v8::Utils::ToLocal(resource_name),
+                v8::Utils::ToLocal(specifier_str), phase,
+                ToApiHandle<v8::FixedArray>(import_attributes_array)),
+            MaybeDirectHandle<JSPromise>());
+      } else {
+        API_ASSIGN_RETURN_ON_EXCEPTION_VALUE(
+            this, promise,
+            host_import_module_dynamically_callback_(
+                api_context, v8::Utils::ToLocal(host_defined_options),
+                v8::Utils::ToLocal(resource_name),
+                v8::Utils::ToLocal(specifier_str),
+                ToApiHandle<v8::FixedArray>(import_attributes_array)),
+            MaybeDirectHandle<JSPromise>());
+      }
       break;
     case ModuleImportPhase::kSource:
       CHECK(v8_flags.js_source_phase_imports);
@@ -7578,6 +7669,13 @@ Address Isolate::store_to_stack_count_address(const char* function_name) {
   return reinterpret_cast<Address>(&map[name].second);
 }
 
+void Isolate::LocalsBlockListCacheRehash() {
+  if (IsEphemeronHashTable(heap()->locals_block_list_cache())) {
+    Tagged<EphemeronHashTable> cache =
+        Cast<EphemeronHashTable>(heap()->locals_block_list_cache());
+    cache->Rehash(this);
+  }
+}
 void Isolate::LocalsBlockListCacheSet(
     DirectHandle<ScopeInfo> scope_info,
     DirectHandle<ScopeInfo> outer_scope_info,
@@ -7694,6 +7792,76 @@ void Isolate::InitializeBuiltinJSDispatchTable() {
     }
   }
 #endif
+}
+
+void Isolate::PrintNumberStringCacheStats(const char* comment,
+                                          bool final_summary) {
+#define FETCH_COUNTER(name) \
+  uint32_t name = static_cast<uint32_t>(counters()->name()->Get());
+
+  FETCH_COUNTER(write_barriers)
+  FETCH_COUNTER(number_string_cache_smi_probes)
+  FETCH_COUNTER(number_string_cache_smi_misses)
+  FETCH_COUNTER(number_string_cache_double_probes)
+  FETCH_COUNTER(number_string_cache_double_misses)
+#undef FETCH_COUNTER
+
+  PrintF("=== NumberToString cache usage stats (%s):\n", comment);
+  if (final_summary && write_barriers == 0) {
+    // If write barriers count is zero, then it's most likely because
+    // builtins are compiled without --native-code-counters.
+    PrintF(
+        "=== WARNING: empty stats! Ensure gn args contain: "
+        "`v8_enable_snapshot_native_code_counters = true`\n");
+  }
+  double smi_miss_rate =
+      number_string_cache_smi_probes
+          ? static_cast<double>(number_string_cache_smi_misses) /
+                number_string_cache_smi_probes
+          : 0;
+
+  double double_miss_rate =
+      number_string_cache_double_probes
+          ? static_cast<double>(number_string_cache_double_misses) /
+                number_string_cache_double_probes
+          : 0;
+
+  PrintF("=== SmiStringCache miss rate:    %.6f (%d / %d)\n",  //
+         smi_miss_rate, number_string_cache_smi_misses,
+         number_string_cache_smi_probes);
+  PrintF("=== DoubleStringCache miss rate: %.6f (%d / %d)\n",  //
+         double_miss_rate, number_string_cache_double_misses,
+         number_string_cache_double_probes);
+
+  uint32_t smi_string_cache_capacity =
+      factory()->smi_string_cache()->capacity();
+  uint32_t smi_string_used_entries =
+      factory()->smi_string_cache()->GetUsedEntriesCount();
+
+  uint32_t double_string_cache_capacity =
+      factory()->double_string_cache()->capacity();
+  uint32_t double_string_used_entries =
+      factory()->double_string_cache()->GetUsedEntriesCount();
+
+  double smi_cache_utilization_rate =
+      static_cast<double>(smi_string_used_entries) / smi_string_cache_capacity;
+  double double_cache_utilization_rate =
+      static_cast<double>(double_string_used_entries) /
+      double_string_cache_capacity;
+  PrintF("=== SmiStringCache utilization:    %.6f (%d / %d)\n",  //
+         smi_cache_utilization_rate, smi_string_used_entries,
+         smi_string_cache_capacity);
+  PrintF("=== DoubleStringCache utilization: %.6f (%d / %d)\n",  //
+         double_cache_utilization_rate, double_string_used_entries,
+         double_string_cache_capacity);
+
+  if (final_summary) {
+    PrintF("=== --smi-string-cache-size=%d\n",
+           v8_flags.smi_string_cache_size.value());
+    PrintF("=== --double-string-cache-size=%d\n",
+           v8_flags.double_string_cache_size.value());
+  }
+  PrintF("\n");
 }
 
 }  // namespace internal

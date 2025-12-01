@@ -50,6 +50,11 @@
 // don’t test the whole activation level life cycle.
 - (void)teardownUI;
 
+// Vivaldi
+// Currently active view controller on the current active interface.
+- (UIViewController*)activeViewController;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_SHARED_COORDINATOR_SCENE_SCENE_CONTROLLER_H_

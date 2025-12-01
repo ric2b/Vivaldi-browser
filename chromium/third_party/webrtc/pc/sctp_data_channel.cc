@@ -10,18 +10,36 @@
 
 #include "pc/sctp_data_channel.h"
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
+#include "absl/functional/any_invocable.h"
+#include "api/data_channel_interface.h"
+#include "api/make_ref_counted.h"
 #include "api/priority.h"
+#include "api/rtc_error.h"
+#include "api/scoped_refptr.h"
+#include "api/sequence_checker.h"
+#include "api/task_queue/pending_task_safety_flag.h"
+#include "api/transport/data_channel_transport_interface.h"
 #include "media/sctp/sctp_transport_internal.h"
+#include "pc/data_channel_utils.h"
 #include "pc/proxy.h"
+#include "pc/sctp_utils.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/copy_on_write_buffer.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/ssl_stream_adapter.h"
 #include "rtc_base/system/unused.h"
 #include "rtc_base/thread.h"
+#include "rtc_base/thread_annotations.h"
+#include "rtc_base/weak_ptr.h"
 
 namespace webrtc {
 
@@ -120,7 +138,7 @@ bool InternalDataChannelInit::IsValid() const {
 std::optional<StreamId> SctpSidAllocator::AllocateSid(SSLRole role) {
   RTC_DCHECK_RUN_ON(&sequence_checker_);
   int potential_sid = (role == SSL_CLIENT) ? 0 : 1;
-  while (potential_sid <= static_cast<int>(cricket::kMaxSctpSid)) {
+  while (potential_sid <= static_cast<int>(kMaxSctpSid)) {
     StreamId sid(potential_sid);
     if (used_sids_.insert(sid).second)
       return sid;
@@ -160,7 +178,7 @@ class SctpDataChannel::ObserverAdapter : public DataChannelObserver {
  public:
   explicit ObserverAdapter(
       SctpDataChannel* channel,
-      rtc::scoped_refptr<PendingTaskSafetyFlag> signaling_safety)
+      scoped_refptr<PendingTaskSafetyFlag> signaling_safety)
       : channel_(channel), signaling_safety_(std::move(signaling_safety)) {}
 
   bool IsInsideCallback() const {
@@ -273,12 +291,12 @@ class SctpDataChannel::ObserverAdapter : public DataChannelObserver {
   // `channel_` in the `RTC_DCHECK_RUN_ON` checks on the signaling thread.
   Thread* const signaling_thread_{channel_->signaling_thread_};
   ScopedTaskSafety safety_;
-  rtc::scoped_refptr<PendingTaskSafetyFlag> signaling_safety_;
+  scoped_refptr<PendingTaskSafetyFlag> signaling_safety_;
   CachedGetters* cached_getters_ RTC_GUARDED_BY(signaling_thread()) = nullptr;
 };
 
 // static
-rtc::scoped_refptr<SctpDataChannel> SctpDataChannel::Create(
+scoped_refptr<SctpDataChannel> SctpDataChannel::Create(
     WeakPtr<SctpDataChannelControllerInterface> controller,
     const std::string& label,
     bool connected_to_transport,
@@ -286,15 +304,15 @@ rtc::scoped_refptr<SctpDataChannel> SctpDataChannel::Create(
     Thread* signaling_thread,
     Thread* network_thread) {
   RTC_DCHECK(config.IsValid());
-  return rtc::make_ref_counted<SctpDataChannel>(
-      config, std::move(controller), label, connected_to_transport,
-      signaling_thread, network_thread);
+  return make_ref_counted<SctpDataChannel>(config, std::move(controller), label,
+                                           connected_to_transport,
+                                           signaling_thread, network_thread);
 }
 
 // static
-rtc::scoped_refptr<DataChannelInterface> SctpDataChannel::CreateProxy(
-    rtc::scoped_refptr<SctpDataChannel> channel,
-    rtc::scoped_refptr<PendingTaskSafetyFlag> signaling_safety) {
+scoped_refptr<DataChannelInterface> SctpDataChannel::CreateProxy(
+    scoped_refptr<SctpDataChannel> channel,
+    scoped_refptr<PendingTaskSafetyFlag> signaling_safety) {
   // Copy thread params to local variables before `std::move()`.
   auto* signaling_thread = channel->signaling_thread_;
   auto* network_thread = channel->network_thread_;
@@ -383,7 +401,7 @@ void SctpDataChannel::RegisterObserver(DataChannelObserver* observer) {
   // a reference to ourselves while the task is in flight. We can't use
   // `SafeTask(network_safety_, ...)` for this since we can't assume that we
   // have a transport (network_safety_ represents the transport connection).
-  rtc::scoped_refptr<SctpDataChannel> me(this);
+  scoped_refptr<SctpDataChannel> me(this);
   auto register_observer = [me = std::move(me), observer = observer] {
     RTC_DCHECK_RUN_ON(me->network_thread_);
     me->observer_ = observer;
@@ -670,7 +688,7 @@ DataChannelStats SctpDataChannel::GetStats() const {
 }
 
 void SctpDataChannel::OnDataReceived(DataMessageType type,
-                                     const rtc::CopyOnWriteBuffer& payload) {
+                                     const CopyOnWriteBuffer& payload) {
   RTC_DCHECK_RUN_ON(network_thread_);
   RTC_DCHECK(id_n_.has_value());
 
@@ -772,13 +790,13 @@ void SctpDataChannel::UpdateState() {
     case kConnecting: {
       if (connected_to_transport() && controller_) {
         if (handshake_state_ == kHandshakeShouldSendOpen) {
-          rtc::CopyOnWriteBuffer payload;
+          CopyOnWriteBuffer payload;
           WriteDataChannelOpenMessage(label_, protocol_, priority_, ordered_,
                                       max_retransmits_, max_retransmit_time_,
                                       &payload);
           SendControlMessage(payload);
         } else if (handshake_state_ == kHandshakeShouldSendAck) {
-          rtc::CopyOnWriteBuffer payload;
+          CopyOnWriteBuffer payload;
           WriteDataChannelOpenAckMessage(&payload);
           SendControlMessage(payload);
         }
@@ -941,7 +959,7 @@ RTCError SctpDataChannel::SendDataMessage(const DataBuffer& buffer,
 }
 
 // RTC_RUN_ON(network_thread_).
-bool SctpDataChannel::SendControlMessage(const rtc::CopyOnWriteBuffer& buffer) {
+bool SctpDataChannel::SendControlMessage(const CopyOnWriteBuffer& buffer) {
   RTC_DCHECK(connected_to_transport());
   RTC_DCHECK(id_n_.has_value());
   RTC_DCHECK(controller_);

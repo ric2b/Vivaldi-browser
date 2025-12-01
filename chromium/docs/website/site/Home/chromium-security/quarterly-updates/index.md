@@ -16,6 +16,51 @@ if you're interested in updates, discussion, or feisty rants related to Chromium
 security.
 
 
+## Q1 2025
+
+# Chrome Security **2025 Q1** Update
+
+
+Hello everyone,
+
+To start with some exciting news -- we are hiring! The Product Security team has an open role for a [mid-level Security Engineer](https://www.google.com/about/careers/applications/jobs/results/122499967389442758) in San Francisco and is expanding to Mexico City with four open roles -- one [mid-level/senior Software Engineer](https://www.google.com/about/careers/applications/jobs/results/87080144925008582-senior-security-engineer-chrome-product-security), and three Security Engineers ([junior](https://www.google.com/about/careers/applications/jobs/results/107246493848478406-security-engineer-ii-chrome-product-security), [mid-level](https://www.google.com/about/careers/applications/jobs/results/130115661396353734-security-engineer-iii-chrome-product-security), [mid-level/senior](https://www.google.com/about/careers/applications/jobs/results/87080144925008582-senior-security-engineer-chrome-product-security)). The Fuzzing team is also hiring three Software Engineers ([junior](https://www.google.com/about/careers/applications/jobs/results/113635489042309830-software-engineer-early-career-campus?e=72477625), [mid-level](https://www.google.com/about/careers/applications/jobs/results/138484881913979590?e=72477625), [mid-level/senior](https://www.google.com/about/careers/applications/jobs/results/85944025680356038?e=72477625)) in Mexico City. Finally there's a [mid-level/senior Security Technical Program Manager](https://www.google.com/about/careers/applications/jobs/results/102911361628938950-technical-program-manager-iii-security-chrome-browser?e=72477625) role in Waterloo, Canada. Please apply if you're interested, or tell your friends and colleagues who might be.
+
+Returning to our usual programming, here's an update on what Chrome Security was up to in Q1 of 2025.
+
+The Chrome Root Program published an updated [policy](/Home/chromium-security/root-ca-policy/) to further enhance the agility and resilience of the Web PKI. Additionally, the program team is collaborating within the CA/Browser Forum Server Certificate Working Group, via [Ballot SC-081](https://groups.google.com/a/groups.cabforum.org/d/msgid/servercert-wg/5A9757CF-581F-4671-B71E-15F31708E62A%40apple.com), to reduce the maximum validity period for publicly-trusted TLS server authentication certificates. Several of Chrome's past [initiatives](https://security.googleblog.com/2025/03/new-security-requirements-adopted-by.html) to improve certificate security in the CA/Browser Forum reached enforcement milestones this quarter.
+
+In the next several years, the web has to [transition](https://blog.chromium.org/2024/05/advancing-our-amazing-bet-on-asymmetric.html) to post-quantum HTTPS certificates. Our first building block in this transition is certificate negotiation in the TLS negotiation. Our [proposal](https://www.ietf.org/archive/id/draft-ietf-tls-trust-anchor-ids-00.html) for this building block was adopted by the IETF TLS working group and we landed a prototype implementation in BoringSSL.
+
+To continue transitioning the Certificate Transparency (CT) ecosystem to next-generation logs, we [announced](https://groups.google.com/a/chromium.org/g/ct-policy/c/HBFZHG0TCsY/m/HAaVRK6MAAAJ) an intermediate Chrome CT logging policy that allows production certificates to start using [tiled logs](https://github.com/C2SP/C2SP/blob/main/tlog-tiles.md).
+
+In Q1, the Chrome Security Architecture (CSA) team launched [origin calculation in the browser process](https://crbug.com/40092527) to more securely handle origins (and started a [cleanup effort](https://crbug.com/402272788)), as well as [subframe process reuse thresholds](https://crbug.com/40259123) to greatly improve the stability and performance of out-of-process iframes (OOPIFs). Both [RenderDocument](https://crbug.com/936696) and the first uses of [SiteInstanceGroup](https://crbug.com/1447896) (for data URLs) also rolled out to larger percentages on Stable channel, to improve Chrome's internal abstractions. Meanwhile, we collected experiment data on [Origin Isolation](https://crbug.com/40259221) to determine an appropriate resource threshold, so that the process model can better isolate origins rather than sites on many devices. While exploring other performance optimizations for using Site Isolation on more devices, we also discovered [navigation metrics issues](https://crbug.com/385170155) that led to incorrect conclusions for some past optimizations, and we landed a possible alternative metric (alongside many navigation tracing improvements).
+
+The Platform Security team has continued improvements to App-Bound Encryption. We're experimenting with NCrypt-based key storage instead of DPAPI on Canary & Dev channels, which will close off some cryptographic attacks against DPAPI. We're also continuing our experiments with memory encryption to mitigate the effects of local information theft malware, and are rolling out a mitigation that [prevents the use of the local dev tools debugging API](https://developer.chrome.com/blog/remote-debugging-port) for credential theft. We have also been reducing the attack surface exposed via the CSRSS subsystem on Windows. On macOS, we're strengthening the protections around progressive web app signing, with our main experiment in that area deployed to beta channel recently. On Android we've made small improvements to the existing sandbox, both to enable new platform features and to remove obsolete sandbox permissions.
+
+We're also continuing our work (in partnership with the Chromium Graphics team) to retarget the ANGLE GL translator to the Dawn graphics layer, which will ultimately allow us to move a large amount of complex code inside the renderer sandbox and significantly strengthen our GPU security posture.
+
+Rust in Chrome continues to see adoption by teams external to the Security Team. The Blink team has [nearly finished](https://developer.chrome.com/blog/memory-safety-fonts) replacing Freetype with a Rust implementation, and the Chrome on Android team is [implementing](https://groups.google.com/a/chromium.org/g/rust-fyi/c/lymC3SDvIOo) the ETC1 icon format in Rust. We also simplified the process for bringing in new Rust libraries, with the ultimate goal of ensuring that nothing about the Rust process is harder than the equivalent process for C++.
+
+We are continuing to spanify the Chromium C++ codebase. We also now [publish](https://chromium.googlesource.com/chromium/src/tools/+/HEAD/codeql/README.md) public CodeQL databases for Chromium. While we find that Chromium is a bit too large of a codebase to integrate CodeQL into daily developer workflows, we think that publishing the CodeQL databases should help bug hunters, both internally and externally (via the VRP).
+
+On the V8 side, we focused on strengthening the V8 Sandbox, fixing reports coming in through the [V8 Sandbox VRP](https://bughunters.google.com/about/rules/chrome-friends/5745167867576320/chrome-vulnerability-reward-program-rules#v8-sandbox-bypass-rewards) and performing variant analysis on them. We're also constantly improving our fuzzing, with a focus on WebAssembly coverage.
+
+We're excited to announce the formation of the Chrome Product Security team, responsible for end-to-end vulnerability lifecycle, bug wrangling, and incident response as well as ownership of strategic security workflows and initiatives also supported by the rest of Chrome Security, including Security Reviews, Security Shepherding, and VRP.
+
+On the tooling side of Product Security, the main focus has been improving our ability to identify and map security fixes to their relevant releases. We're also working on changes to Clusterfuzz to reduce shepherding friction - stay tuned! Additionally, we've spent time on less glamorous maintenance work like still chugging through the long tail of fallout from migrating Chromium bugs to the Buganizer bug tracker.
+
+In other areas of Product Security, we are putting together our 2025 plans and strategy as a new team. We also worked on realigning and refocusing our security shepherding efforts and have an established charter for security bug triage and working with other Google and Chrome engineering teams to put together bug handling guidelines for features that will ship in Q2.
+
+On the VRP front, we have been working with Google VRP to further streamline the payments process, encouraging more researchers of specific pools to consider receiving their payments through BugCrowd. We have also started planning our BugSWAT events for 2025. Finally, we have sent out an initial run of Chrome VRP-specific swag, featuring our Chrome VRP mascot, Bug.
+
+The Chrome Fuzzing team has been working on bringing browser fuzztests to Chrome. We've introduced a [system-wide MojoJS fuzzer](https://crrev.com/c/6282148) using DomatoLPM and we've been working on improving the existing WebIDL fuzzer. Additionally, we improved Chrome fuzzing on Android and added support for [Centipede](https://github.com/google/fuzztest/tree/main/centipede)  [corpus minimization](https://github.com/google/clusterfuzz/pull/4707) in ClusterFuzz.
+
+Thank you for reading!
+
+Jasika
+
+On behalf of Chrome Security
+
 ## Q4 2024
 
 # Chrome Security **2024 Q4** Update

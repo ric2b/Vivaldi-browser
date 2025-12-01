@@ -54,6 +54,7 @@ import android.graphics.Rect;
 import android.os.Bundle;
 import android.text.InputType;
 import android.text.TextUtils;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 
@@ -98,6 +99,11 @@ public class AccessibilityNodeInfoUtils {
             builder.append(" hint:\"").append(node.getHintText()).append("\"");
         }
 
+        // Print tooltip text unless it is null or empty.
+        if (node.getTooltipText() != null && !node.getTooltipText().toString().isEmpty()) {
+            builder.append(" tooltipText:\"").append(node.getTooltipText()).append("\"");
+        }
+
         // Text properties - Only print when non-null.
         if (node.getContentDescription() != null) {
             builder.append(" contentDescription:\"")
@@ -120,6 +126,12 @@ public class AccessibilityNodeInfoUtils {
         if (node.getContainerTitle() != null && !node.getContainerTitle().toString().isEmpty()) {
             builder.append(" containerTitle:\"").append(node.getContainerTitle()).append("\"");
         }
+        if (node.getSupplementalDescription() != null
+                && !node.getSupplementalDescription().toString().isEmpty()) {
+            builder.append(" supplementalDescription:\"")
+                    .append(node.getSupplementalDescription())
+                    .append("\"");
+        }
 
         // Boolean properties - Only print when set to true except for enabled and visibleToUser,
         // which are both mostly true, so only print when they are false.
@@ -128,9 +140,6 @@ public class AccessibilityNodeInfoUtils {
         }
         if (node.isCheckable()) {
             builder.append(" checkable");
-        }
-        if (node.isChecked()) {
-            builder.append(" checked");
         }
         if (node.isClickable()) {
             builder.append(" clickable");
@@ -175,6 +184,10 @@ public class AccessibilityNodeInfoUtils {
             builder.append(" required");
         }
 
+        if (node.isHeading()) {
+            builder.append(" heading");
+        }
+
         // Integer properties - Only print when not default values.
         if (node.getInputType() != InputType.TYPE_NULL) {
             builder.append(" inputType:").append(node.getInputType());
@@ -190,6 +203,14 @@ public class AccessibilityNodeInfoUtils {
         }
         if (node.getLiveRegion() != 0) {
             builder.append(" liveRegion:").append(node.getLiveRegion());
+        }
+        if (node.getExpandedState() != AccessibilityNodeInfo.EXPANDED_STATE_UNDEFINED) {
+            builder.append(" expandedState:").append(node.getExpandedState());
+        }
+        if (node.getChecked() == AccessibilityNodeInfo.CHECKED_STATE_TRUE) {
+            builder.append(" checked");
+        } else if (node.getChecked() == AccessibilityNodeInfo.CHECKED_STATE_PARTIAL) {
+            builder.append(" partiallyChecked");
         }
 
         // Child objects - print for non-null cases.
@@ -261,7 +282,14 @@ public class AccessibilityNodeInfoUtils {
         // Only include isHeading and isSelected if true, since both are more often false.
         String prefix = "[";
         if (info.isHeading()) {
-            prefix += "heading, ";
+            // Clank only sets CollectionItemInfo.isHeading to true when the node is a table header.
+            // Name it as "tableHeader" here to differentiate the "heading" string in
+            // AccessibilityNodeInfo level.
+            // Note that in Android, CollectionItemInfo.isHeading API was deprecated and moved to
+            // AccessibilityNodeInfo.isHeading API, but ANI.isHeading will fall back to check
+            // CollectionItemInfo.isHeading. We'll continue logging the CollectionItemInfo.isHeading
+            // information here to differentiate the table header and heading in Clank.
+            prefix += "tableHeader, ";
         }
         if (info.isSelected()) {
             prefix += "selected, ";

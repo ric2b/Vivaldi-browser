@@ -99,10 +99,11 @@ class FailingNetworkFetcher : public update_client::NetworkFetcher {
       PostRequestCompleteCallback post_request_complete_callback) override {
     AssertOnDemandRequest(false, post_data);
     std::move(post_request_complete_callback)
-        .Run(/* response_body= */ std::make_unique<std::string>(""),
+        .Run(/* response_body= */ std::string(""),
              /* network_error= */ -2,
              /* header_etag= */ "",
              /* header_x_cup_server_proof= */ "",
+             /* header_cookie= */ "",
              /* x_header_retry_after_sec= */ 0ll);
   }
 
@@ -140,10 +141,11 @@ class OnDemandNetworkFetcher : public update_client::NetworkFetcher {
       PostRequestCompleteCallback post_request_complete_callback) override {
     AssertOnDemandRequest(true, post_data);
     std::move(post_request_complete_callback)
-        .Run(/* response_body= */ std::make_unique<std::string>(""),
+        .Run(/* response_body= */ std::string(),
              /* network_error= */ -2,
              /* header_etag= */ "",
              /* header_x_cup_server_proof= */ "",
+             /* header_cookie= */ "",
              /* x_header_retry_after_sec= */ 0ll);
   }
 
@@ -196,10 +198,11 @@ class FakeCrxNetworkFetcher : public update_client::NetworkFetcher {
       network_error = -2;
     }
     std::move(post_request_complete_callback)
-        .Run(/* response_body= */ std::make_unique<std::string>(response_body),
+        .Run(/* response_body= */ std::move(response_body),
              /* network_error= */ network_error,
              /* header_etag= */ "",
              /* header_x_cup_server_proof= */ "",
+             /* header_cookie= */ "",
              /* x_header_retry_after_sec= */ 0ll);
   }
 

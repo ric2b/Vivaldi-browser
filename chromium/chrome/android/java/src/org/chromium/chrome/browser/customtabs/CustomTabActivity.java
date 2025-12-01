@@ -31,6 +31,8 @@ import androidx.browser.customtabs.CustomTabsIntent;
 import org.chromium.base.ActivityState;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.Log;
+import org.chromium.base.TimeUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.PostTask;
@@ -39,8 +41,12 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.LaunchIntentDispatcher;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
+import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchController;
+import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchControllerFactory;
+import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchMetrics;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.browserservices.intents.SessionHolder;
+import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController.FinishReason;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.features.CustomTabNavigationBarController;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabHistoryIphController;
@@ -57,17 +63,29 @@ import org.chromium.chrome.browser.page_info.ChromePageInfoHighlight;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
 import org.chromium.chrome.browser.ui.google_bottom_bar.GoogleBottomBarCoordinator;
+import org.chromium.components.browser_ui.util.motion.MotionEventInfo;
 import org.chromium.components.page_info.PageInfoController.OpenedFromSource;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.util.ColorUtils;
 
 // Vivaldi
+import android.app.UiAutomation;
+
+import org.chromium.base.ContextUtils;
 import org.chromium.build.BuildConfig;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.document.ChromeLauncherActivity;
+import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
+
+import org.vivaldi.browser.bookmarks.VivaldiBookmarkAddEditActivity;
 
 /** The activity for custom tabs. It will be launched on top of a client's task. */
 public class CustomTabActivity extends BaseCustomTabActivity {
+    private static final String TAG = "CustomTab";
     private SessionHolder<?> mSession;
 
     private final CustomTabsConnection mConnection = CustomTabsConnection.getInstance();
@@ -80,23 +98,39 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     private CustomTabsOpenTimeRecorder mOpenTimeRecorder;
 
     /**
-     * The last MotionEvent object blocked due to the activity being in paused state.  We're
+     * The last MotionEvent object blocked due to the activity being in paused state. We're
      * interested in MotionEvent#ACTION_DOWN which is likely the very first event received when
-     * multi-window mode is entered. We inject this one after the activity is resumed (or
-     * it regains the focus) in order to recover the corresponding user gesture which otherwise
-     * would have gone missing.
+     * multi-window mode is entered. We inject this one after the activity is resumed (or it regains
+     * the focus) in order to recover the corresponding user gesture which otherwise would have gone
+     * missing.
      */
     private MotionEvent mBlockedEvent;
 
     private static final boolean sBlockTouchesDuringEnterAnimation =
             ChromeFeatureList.sCctBlockTouchesDuringEnterAnimation.isEnabled();
     private boolean mIsEnterAnimationCompleted;
+    private @Nullable AuxiliarySearchController mAuxiliarySearchController;
 
-    private CustomTabActivityTabProvider.Observer mTabChangeObserver =
+    private final CustomTabActivityTabProvider.Observer mTabChangeObserver =
             new CustomTabActivityTabProvider.Observer() {
                 @Override
                 public void onInitialTabCreated(@NonNull Tab tab, int mode) {
                     onTabInitOrSwapped(tab);
+                    if (getIntent().getStringExtra("PrivacyReport") != null) {
+                        View title = findViewById(R.id.location_bar_frame_layout);
+                        View badge = findViewById(R.id.menu_button);
+                        View progressBar = findViewById(R.id.toolbar_progress_bar);
+                        View hairline = findViewById(R.id.toolbar_hairline);
+                        View minimize = findViewById(R.id.custom_tabs_minimize_button);
+                        View dragHandle = findViewById(R.id.drag_handle);
+
+                        if (title != null) title.setVisibility(View.INVISIBLE);
+                        if (badge != null) badge.setVisibility(View.INVISIBLE);
+                        if (progressBar != null) progressBar.setVisibility(View.GONE);
+                        if (hairline != null) hairline.setVisibility(View.GONE);
+                        if (minimize != null) minimize.setVisibility(View.INVISIBLE);
+                        if (dragHandle != null) dragHandle.setVisibility(View.INVISIBLE);
+                    }
                 }
 
                 @Override
@@ -207,7 +241,6 @@ public class CustomTabActivity extends BaseCustomTabActivity {
 
         getCustomTabBottomBarDelegate().showBottomBarIfNecessary();
 
-        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
             if (getIntentDataProvider().isCinemaMode()) {
                 View decorView = getWindow().getDecorView();
                 decorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
@@ -225,8 +258,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                             toolbar.setVisibility(View.GONE);
                     }
                 }
-            }
-        } // End Vivladi
+            }// End Vivladi
     }
 
     @Override
@@ -255,9 +287,61 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     @Override
-    protected void handleFinishAndClose(boolean warmupOnFinish) {
+    protected void handleFinishAndClose(@FinishReason int reason, boolean warmupOnFinish) {
         if (mOpenTimeRecorder != null) mOpenTimeRecorder.updateCloseCause();
-        super.handleFinishAndClose(warmupOnFinish);
+
+        // Vivaldi
+        if (getIntent().getStringExtra("PrivacyReport") != null) {
+            Context context = getBaseContext();
+            Intent intent = context.getPackageManager().getLaunchIntentForPackage(getPackageName());
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            IntentUtils.addTrustedIntentExtras(intent);
+            intent.addCategory(Intent.CATEGORY_LAUNCHER);
+            intent.setAction(Intent.ACTION_MAIN);
+            finish();
+            context.startActivity(intent);
+            return;
+        }
+        // End Vivaldi
+
+        super.handleFinishAndClose(reason, warmupOnFinish);
+    }
+
+    @Override
+    protected void onDeferredStartup() {
+        super.onDeferredStartup();
+
+        if (isActivityFinishingOrDestroyed()) return;
+
+        if (ChromeFeatureList.sAndroidAppIntegrationMultiDataSource.isEnabled()) {
+            // TODO(https://crbug.com/397457989): Removes this log once the feature is launched.
+            Log.i(TAG, "To create AuxiliarySearchController on deferred startup.");
+            AuxiliarySearchControllerFactory.getInstance()
+                    .setIsTablet(DeviceFormFactor.isWindowOnTablet(getWindowAndroid()));
+            mAuxiliarySearchController =
+                    AuxiliarySearchControllerFactory.getInstance()
+                            .createAuxiliarySearchController(
+                                    CustomTabActivity.this,
+                                    mTabModelProfileSupplier.get(),
+                                    null,
+                                    AuxiliarySearchController.AuxiliarySearchHostType.CUSTOM_TAB);
+            if (mAuxiliarySearchController != null) {
+                AuxiliarySearchMetrics.recordTimeToCreateControllerInCustomTab(
+                        TimeUtils.elapsedRealtimeMillis() - getOnCreateTimestampMs());
+            }
+        }
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+
+        if (mAuxiliarySearchController != null) {
+            Tab tab = getCustomTabActivityTabProvider().getTab();
+            if (tab != null) {
+                mAuxiliarySearchController.donateCustomTabs(tab.getUrl(), tab.getTimestampMillis());
+            }
+        }
     }
 
     @Override
@@ -284,7 +368,8 @@ public class CustomTabActivity extends BaseCustomTabActivity {
     }
 
     @Override
-    public boolean onOptionsItemSelected(int itemId, @Nullable Bundle menuItemData) {
+    public boolean onOptionsItemSelected(
+            int itemId, @Nullable Bundle menuItemData, @Nullable MotionEventInfo triggeringMotion) {
         int menuIndex =
                 CustomTabAppMenuPropertiesDelegate.getIndexOfMenuItemFromBundle(menuItemData);
         if (menuIndex >= 0) {
@@ -298,11 +383,12 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             return true;
         }
 
-        return super.onOptionsItemSelected(itemId, menuItemData);
+        return super.onOptionsItemSelected(itemId, menuItemData, triggeringMotion);
     }
 
     @Override
-    public boolean onMenuOrKeyboardAction(int id, boolean fromMenu) {
+    public boolean onMenuOrKeyboardAction(
+            int id, boolean fromMenu, @Nullable MotionEventInfo triggeringMotion) {
         if (id == R.id.bookmark_this_page_id) {
             mTabBookmarkerSupplier.get().addOrEditBookmark(getActivityTab());
             RecordUserAction.record("MobileMenuAddToBookmarks");
@@ -331,6 +417,8 @@ public class CustomTabActivity extends BaseCustomTabActivity {
                             getTabCreator(getCurrentTabModel().isIncognito()))
                     .show(tab, ChromePageInfoHighlight.noHighlight());
             return true;
+        } else if (id == R.id.price_insights_menu_id) {
+            getBaseCustomTabRootUiCoordinator().runPriceInsightsAction();
         } else if (id == R.id.open_history_menu_id) {
             // The menu is visible only when the app-specific history is enabled. Assert that.
             assert HistoryManager.isAppSpecificHistoryEnabled();
@@ -346,7 +434,7 @@ public class CustomTabActivity extends BaseCustomTabActivity {
             }
             return true;
         }
-        return super.onMenuOrKeyboardAction(id, fromMenu);
+        return super.onMenuOrKeyboardAction(id, fromMenu, triggeringMotion);
     }
 
     @Override

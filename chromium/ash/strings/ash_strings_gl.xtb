@@ -462,6 +462,7 @@ Hai <ph name="DEVICECOUNT" /> dispositivos conectados.</translation>
 <translation id="2530896289327917474">Activar ou desactivar a navegación por cursor de texto</translation>
 <translation id="2531025035050312891">dispositivo lento</translation>
 <translation id="2531107890083353124">Mentres arrastras a pestana, preme <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Arrastra ou preme Espazo para seleccionar unha área para buscar</translation>
 <translation id="2545334090614121435">Estás tentando usar a tecla Inicio? Usar</translation>
 <translation id="254900897760075745">Copia o contido seleccionado no portapapeis</translation>
 <translation id="2549711466868162843">Iluminación mellorada</translation>
@@ -581,7 +582,6 @@ Se non o fas, o panel táctil volverá activarse dentro de <ph name="TIMEOUT_SEC
 <translation id="2949420361496057765">Preme <ph name="MODIFIER" /> e fai clic nunha ligazón</translation>
 <translation id="2957159466053076448">Podes desactivar estas funcións cando queiras en Configuración. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Audio do dispositivo</translation>
-<translation id="2960314608273155470">Modo de captura. A configuración predeterminada é <ph name="TYPE" /> <ph name="SOURCE" />. Premer o tabulador para navegar polo teclado.</translation>
 <translation id="2961963223658824723">Produciuse un erro. Téntao de novo nuns segundos.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Queres activar o acceso ao micrófono?</translation>
@@ -761,6 +761,7 @@ Se non o fas, o panel táctil volverá activarse dentro de <ph name="TIMEOUT_SEC
 <translation id="3552189655002856821">A wifi está desactivada</translation>
 <translation id="3554215588514239132">Mostrar ou ocultar panel de ferramentas para programadores</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" />(fixouse)</translation>
+<translation id="3554928024630051016">Para engadir máis dispositivos USB, proba a quitar un e, a continuación, enchufar outro</translation>
 <translation id="3558768885091059911">Queres activar o acceso á cámara e ao micrófono?</translation>
 <translation id="3560174576767922131">Gravar vídeo</translation>
 <translation id="3563775809269155755">Activar zona wifi</translation>
@@ -869,6 +870,7 @@ Todos os usuarios deben pechar sesión para poder continuar.</translation>
 <translation id="3861651314799684201">Premer Introducir para gravar a pantalla completa</translation>
 <translation id="3870197372373144624">Proba a apagar o dispositivo.</translation>
 <translation id="3879748587602334249">Xestor de descargas</translation>
+<translation id="3884007280698606545">Alcanzouse o límite máximo permitido de dispositivos USB</translation>
 <translation id="3886872229787704059">Abriuse hoxe</translation>
 <translation id="3891340733213178823">Preme Ctrl + Maiús + Q dúas veces para pechar sesión.</translation>
 <translation id="3892148308691398805">Copiar texto</translation>
@@ -1441,6 +1443,7 @@ Non hai ningún dispositivo conectado.</translation>
 <translation id="5672890847723042801">Utilidades</translation>
 <translation id="5673434351075758678">De "<ph name="FROM_LOCALE" />" a "<ph name="TO_LOCALE" />" tras sincronizar a configuración.</translation>
 <translation id="5675363643668471212">Elemento do estante</translation>
+<translation id="5677022547882470786">Arrastra ou preme Espazo para seleccionar unha área para buscar</translation>
 <translation id="5677928146339483299">Bloqueada</translation>
 <translation id="5678564054339031017">Mostrar semana seguinte</translation>
 <translation id="5679050765726761783">Conectouse un adaptador de corrente de baixa potencia</translation>
@@ -1486,6 +1489,7 @@ Non hai ningún dispositivo conectado.</translation>
 <translation id="5788127256798019331">Ficheiros de Play</translation>
 <translation id="5788535737706478207">Volver abrir última pestana ou ventá que pechaches</translation>
 <translation id="5790085346892983794">Correcto</translation>
+<translation id="5791926618942305301">En Captura de pantalla, define o seguinte: <ph name="TYPE" /> <ph name="SOURCE" />. Preme Tabulador para elixir o tipo de captura. Preme Introducir para facer a captura. Para seleccionar a área, establece a opción de captura de pantalla parcial. Se aínda non está activa, preme Espazo para seleccionar a rexión.</translation>
 <translation id="579415080077680903">Silenciar</translation>
 <translation id="5802516411616338943">Abrir Configuración rápida</translation>
 <translation id="5804651031882187592">Desactivar a opción Bloquear SIM</translation>
@@ -1642,6 +1646,7 @@ Non hai ningún dispositivo conectado.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> pode engadirse de novo máis adiante co permiso da súa nai ou do seu pai.</translation>
 <translation id="6291221004442998378">Non está cargando</translation>
 <translation id="6298183524022479114">Personaliza este dispositivo na aplicación</translation>
+<translation id="6304076460080088478">Pecha ou minimiza as ventás do modo de incógnito para buscar o contido da túa pantalla con Google Lens</translation>
 <translation id="6309219492973062892">Fai clic nas iconas do 1 ao 8 do andel ou tócaas</translation>
 <translation id="6315170314923504164">Voz</translation>
 <translation id="6319058840130157106">Desprazarse cara atrás entre a esquina inferior dereita, o menú de aplicacións, a barra de enderezos, a barra de marcadores, o sitio web que teñas aberto e as descargas</translation>
@@ -1770,6 +1775,7 @@ Nova instalación</translation>
 <translation id="6700713906295497288">Botón de menú de IME</translation>
 <translation id="6704073473590541209">Controlador do bordo dereito seleccionado; usa as teclas de frecha para movelo</translation>
 <translation id="6706742084323792866">Fixar o teclado</translation>
+<translation id="6709719156428404245">Arrastra ou preme Espazo para seleccionar unha área para gravar</translation>
 <translation id="6710213216561001401">Anterior</translation>
 <translation id="6723839937902243910">A</translation>
 <translation id="672609503628871915">Ver as novidades</translation>

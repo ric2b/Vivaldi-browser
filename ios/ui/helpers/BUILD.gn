@@ -30,6 +30,7 @@ source_set("helpers") {
 
 swift_source_set("helpers_swift") {
   sources = [
+    "vivaldi_hosting_controller.swift",
     "vivaldi_string_extension.swift",
   ]
 

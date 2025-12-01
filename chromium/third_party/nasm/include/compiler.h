@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 2007-2020 The NASM Authors - All Rights Reserved
+ *   Copyright 2007-2023 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -53,6 +53,8 @@
 
 /* On Microsoft platforms we support multibyte character sets in filenames */
 #define _MBCS 1
+
+#include "autoconf/attribute.h"
 
 #ifdef HAVE_CONFIG_H
 # include "config/config.h"
@@ -252,6 +254,13 @@ static inline void *mempcpy(void *dst, const void *src, size_t n)
 }
 #endif
 
+#ifndef HAVE_MEMPSET
+static inline void *mempset(void *dst, int c, size_t n)
+{
+    return (char *)memset(dst, c, n) + n;
+}
+#endif
+
 /*
  * Hack to support external-linkage inline functions
  */
@@ -333,6 +342,8 @@ static inline void *mempcpy(void *dst, const void *src, size_t n)
  */
 #define printf_func(fmt, list)     format_func3(printf,fmt,list)
 #define printf_func_ptr(fmt, list) format_func3_ptr(printf,fmt,list)
+#define vprintf_func(fmt)          format_func3(printf,fmt,0)
+#define vprintf_func_ptr(fmt)      format_func3_ptr(printf,fmt,0)
 
 /* Determine probabilistically if something is a compile-time constant */
 #ifdef HAVE___BUILTIN_CONSTANT_P

@@ -11,9 +11,10 @@
 #include "core/fxcrt/fx_stream.h"
 
 CPDF_Name::CPDF_Name(WeakPtr<ByteStringPool> pPool, const ByteString& str)
-    : m_Name(str) {
-  if (pPool)
-    m_Name = pPool->Intern(m_Name);
+    : name_(str) {
+  if (pPool) {
+    name_ = pPool->Intern(name_);
+  }
 }
 
 CPDF_Name::~CPDF_Name() = default;
@@ -23,15 +24,15 @@ CPDF_Object::Type CPDF_Name::GetType() const {
 }
 
 RetainPtr<CPDF_Object> CPDF_Name::Clone() const {
-  return pdfium::MakeRetain<CPDF_Name>(nullptr, m_Name);
+  return pdfium::MakeRetain<CPDF_Name>(nullptr, name_);
 }
 
 ByteString CPDF_Name::GetString() const {
-  return m_Name;
+  return name_;
 }
 
 void CPDF_Name::SetString(const ByteString& str) {
-  m_Name = str;
+  name_ = str;
 }
 
 CPDF_Name* CPDF_Name::AsMutableName() {
@@ -39,13 +40,14 @@ CPDF_Name* CPDF_Name::AsMutableName() {
 }
 
 WideString CPDF_Name::GetUnicodeText() const {
-  return PDF_DecodeText(m_Name.unsigned_span());
+  return PDF_DecodeText(name_.unsigned_span());
 }
 
 bool CPDF_Name::WriteTo(IFX_ArchiveStream* archive,
                         const CPDF_Encryptor* encryptor) const {
-  if (!archive->WriteString("/"))
+  if (!archive->WriteString("/")) {
     return false;
+  }
 
   const ByteString name = PDF_NameEncode(GetString());
   return name.IsEmpty() || archive->WriteString(name.AsStringView());

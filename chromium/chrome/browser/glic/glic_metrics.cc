@@ -6,6 +6,7 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
+#include "base/time/time.h"
 #include "chrome/browser/background/glic/glic_launcher_configuration.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/fre/glic_fre_controller.h"
@@ -13,6 +14,7 @@
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/host/context/glic_focused_tab_manager.h"
 #include "chrome/browser/glic/widget/glic_window_controller.h"
+#include "chrome/common/chrome_features.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -24,6 +26,35 @@
 namespace glic {
 
 namespace {
+
+bool CheckFreStatus(Profile* profile, prefs::FreStatus status) {
+  return profile->GetPrefs()->GetInteger(prefs::kGlicCompletedFre) ==
+         static_cast<int>(status);
+}
+
+class DelegateImpl : public GlicMetrics::Delegate {
+ public:
+  explicit DelegateImpl(GlicWindowController* window_controller,
+                        GlicFocusedTabManager* focus_tab_manager)
+      : window_controller_(window_controller),
+        focus_tab_manager_(focus_tab_manager) {}
+  gfx::Size GetWindowSize() const override {
+    return window_controller_->GetSize();
+  }
+  bool IsWindowShowing() const override {
+    return window_controller_->IsShowing();
+  }
+  bool IsWindowAttached() const override {
+    return window_controller_->IsAttached();
+  }
+  FocusedTabData GetFocusedTabData() override {
+    return focus_tab_manager_->GetFocusedTabData();
+  }
+
+ private:
+  raw_ptr<GlicWindowController> window_controller_;
+  raw_ptr<GlicFocusedTabManager> focus_tab_manager_;
+};
 
 constexpr char kHistogramGlicPanelPresentationTime[] =
     "Glic.PanelPresentationTime2";
@@ -70,8 +101,6 @@ GlicMetrics::GlicMetrics(Profile* profile, GlicEnabling* enabling)
       FROM_HERE, base::Minutes(15),
       base::BindRepeating(&GlicMetrics::OnImpressionTimerFired,
                           base::Unretained(this)));
-  no_url_source_id_ = ukm::NoURLSourceId();
-  source_id_ = no_url_source_id_;
 
   subscriptions_.push_back(
       enabling_->RegisterAllowedChanged(base::BindRepeating(
@@ -110,7 +139,7 @@ void GlicMetrics::OnResponseStarted() {
     return;
   }
 
-  if (!window_controller_->IsShowing()) {
+  if (!delegate_->IsWindowShowing()) {
     base::UmaHistogramEnumeration("Glic.Metrics.Error",
                                   Error::kResponseStartWhileHidingOrHidden);
     return;
@@ -144,7 +173,7 @@ void GlicMetrics::OnResponseStarted() {
   ++session_responses_;
 
   // More detailed metrics.
-  bool attached = window_controller_->IsAttached();
+  bool attached = delegate_->IsWindowAttached();
   base::UmaHistogramBoolean("Glic.Response.Attached", attached);
   base::UmaHistogramEnumeration("Glic.Response.InvocationSource",
                                 invocation_source_);
@@ -261,6 +290,26 @@ void GlicMetrics::OnGlicWindowResize() {
   base::RecordAction(base::UserMetricsAction("GlicPanelResized"));
 }
 
+void GlicMetrics::OnWidgetUserResizeStarted() {
+  base::RecordAction(base::UserMetricsAction("GlicPanelUserResizeStarted"));
+
+  gfx::Size size_on_user_resize_started = delegate_->GetWindowSize();
+  base::UmaHistogramCounts10000("Glic.PanelWebUi.UserResizeStarted.Width",
+                                size_on_user_resize_started.width());
+  base::UmaHistogramCounts10000("Glic.PanelWebUi.UserResizeStarted.Height",
+                                size_on_user_resize_started.height());
+}
+
+void GlicMetrics::OnWidgetUserResizeEnded() {
+  base::RecordAction(base::UserMetricsAction("GlicPanelUserResizeEnded"));
+
+  gfx::Size size_on_user_resize_ended = delegate_->GetWindowSize();
+  base::UmaHistogramCounts10000("Glic.PanelWebUi.UserResizeEnded.Width",
+                                size_on_user_resize_ended.width());
+  base::UmaHistogramCounts10000("Glic.PanelWebUi.UserResizeEnded.Height",
+                                size_on_user_resize_ended.height());
+}
+
 void GlicMetrics::OnGlicWindowClose() {
   base::RecordAction(base::UserMetricsAction("GlicSessionEnd"));
   base::UmaHistogramCounts1000("Glic.Session.ResponseCount",
@@ -294,22 +343,61 @@ void GlicMetrics::OnGlicWindowClose() {
                               attach_change_count_);
   attach_change_count_ = 0;
 
+  if (base::FeatureList::IsEnabled(features::kGlicScrollTo)) {
+    base::UmaHistogramCounts100("Glic.ScrollTo.SessionCount",
+                                scroll_attempt_count_);
+    scroll_attempt_count_ = 0;
+  }
+
   glic_window_size_timer_.Stop();
   profile_->GetPrefs()->SetTime(prefs::kGlicWindowLastDismissedTime,
                                 base::Time::Now());
 }
 
+void GlicMetrics::OnGlicScrollAttempt() {
+  CHECK(base::FeatureList::IsEnabled(features::kGlicScrollTo));
+  ++scroll_attempt_count_;
+  if (!input_submitted_time_.is_null()) {
+    scroll_input_submitted_time_ = input_submitted_time_;
+    scroll_input_mode_ = input_mode_;
+  }
+}
+
+void GlicMetrics::OnGlicScrollComplete(bool success) {
+  CHECK(base::FeatureList::IsEnabled(features::kGlicScrollTo));
+  if (success && !scroll_input_submitted_time_.is_null()) {
+    base::TimeDelta time_to_scroll =
+        base::TimeTicks::Now() - scroll_input_submitted_time_;
+    switch (scroll_input_mode_) {
+      case mojom::WebClientMode::kAudio:
+        base::UmaHistogramMediumTimes(
+            "Glic.ScrollTo.UserPromptToScrollTime.Audio", time_to_scroll);
+        break;
+      case mojom::WebClientMode::kText:
+        base::UmaHistogramMediumTimes(
+            "Glic.ScrollTo.UserPromptToScrollTime.Text", time_to_scroll);
+        break;
+      case mojom::WebClientMode::kUnknown:
+        break;
+    }
+  }
+  scroll_input_submitted_time_ = base::TimeTicks();
+  scroll_input_mode_ = mojom::WebClientMode::kUnknown;
+}
+
 void GlicMetrics::SetControllers(GlicWindowController* window_controller,
                                  GlicFocusedTabManager* tab_manager) {
-  window_controller_ = window_controller;
-  tab_manager_ = tab_manager;
+  delegate_ = std::make_unique<DelegateImpl>(window_controller, tab_manager);
+}
+
+void GlicMetrics::SetDelegateForTesting(std::unique_ptr<Delegate> delegate) {
+  delegate_ = std::move(delegate);
 }
 
 void GlicMetrics::DidRequestContextFromFocusedTab() {
   did_request_context_ = true;
 
-  content::WebContents* web_contents =
-      tab_manager_->GetFocusedTabData().focus();
+  content::WebContents* web_contents = delegate_->GetFocusedTabData().focus();
   if (web_contents) {
     source_id_ = web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
   } else {
@@ -318,37 +406,50 @@ void GlicMetrics::DidRequestContextFromFocusedTab() {
 }
 
 void GlicMetrics::OnImpressionTimerFired() {
-  if (profile_->GetPrefs()->GetInteger(prefs::kGlicCompletedFre) ==
-      static_cast<int>(prefs::FreStatus::kNotStarted)) {
-    base::UmaHistogramEnumeration("Glic.EntryPoint.Impression",
-                                  EntryPointImpression::kBeforeFre);
-    return;
-  }
-  if (profile_->GetPrefs()->GetInteger(prefs::kGlicCompletedFre) ==
-      static_cast<int>(prefs::FreStatus::kIncomplete)) {
-    base::UmaHistogramEnumeration("Glic.EntryPoint.Impression",
-                                  EntryPointImpression::kIncompleteFre);
-    return;
-  }
   if (!enabling_->IsAllowed()) {
-    base::UmaHistogramEnumeration("Glic.EntryPoint.Impression",
-                                  EntryPointImpression::kNotPermitted);
+    EntryPointStatus impression;
+    if (CheckFreStatus(profile_, prefs::FreStatus::kNotStarted)) {
+      // Profile not eligible, and not started FRE
+      impression = EntryPointStatus::kBeforeFreNotEligible;
+    } else if (CheckFreStatus(profile_, prefs::FreStatus::kIncomplete)) {
+      // Profile not eligible, started but not completed FRE
+      impression = EntryPointStatus::kIncompleteFreNotEligible;
+    } else {
+      // Profile not eligible, completed FRE
+      impression = EntryPointStatus::kAfterFreNotEligible;
+    }
+    base::UmaHistogramEnumeration("Glic.EntryPoint.Status", impression);
     return;
   }
 
-  EntryPointImpression impression;
+  // Profile eligible, has not started FRE
+  if (CheckFreStatus(profile_, prefs::FreStatus::kNotStarted)) {
+    base::UmaHistogramEnumeration("Glic.EntryPoint.Status",
+                                  EntryPointStatus::kBeforeFreAndEligible);
+    return;
+  }
+
+  // Profile eligible, started but not completed FRE
+  if (CheckFreStatus(profile_, prefs::FreStatus::kIncomplete)) {
+    base::UmaHistogramEnumeration("Glic.EntryPoint.Status",
+                                  EntryPointStatus::kIncompleteFreAndEligible);
+    return;
+  }
+
+  // Profile eligible and completed FRE
+  EntryPointStatus impression;
   bool is_os_entrypoint_enabled =
       g_browser_process->local_state()->GetBoolean(prefs::kGlicLauncherEnabled);
   if (is_pinned_ && is_os_entrypoint_enabled) {
-    impression = EntryPointImpression::kAfterFreEnabled;
+    impression = EntryPointStatus::kAfterFreBrowserAndOs;
   } else if (is_pinned_) {
-    impression = EntryPointImpression::kAfterFreBrowserOnly;
+    impression = EntryPointStatus::kAfterFreBrowserOnly;
   } else if (is_os_entrypoint_enabled) {
-    impression = EntryPointImpression::kAfterFreOsOnly;
+    impression = EntryPointStatus::kAfterFreOsOnly;
   } else {
-    impression = EntryPointImpression::kAfterFreDisabled;
+    impression = EntryPointStatus::kAfterFreThreeDotOnly;
   }
-  base::UmaHistogramEnumeration("Glic.EntryPoint.Impression", impression);
+  base::UmaHistogramEnumeration("Glic.EntryPoint.Status", impression);
 
   ui::Accelerator saved_hotkey =
       glic::GlicLauncherConfiguration::GetGlobalHotkey();
@@ -360,7 +461,7 @@ void GlicMetrics::OnGlicWindowSizeTimerFired() {
   // A 4K screen is 3840 or 4096 pixels wide and 2160 tall. Doubling this and
   // rounding up to 10000 should give a reasonable upper bound on DIPs for
   // both directions.
-  gfx::Size currentSize = window_controller_->GetSize();
+  gfx::Size currentSize = delegate_->GetWindowSize();
   base::UmaHistogramCounts10000("Glic.PanelWebUi.Size.Width",
                                 currentSize.width());
   base::UmaHistogramCounts10000("Glic.PanelWebUi.Size.Height",

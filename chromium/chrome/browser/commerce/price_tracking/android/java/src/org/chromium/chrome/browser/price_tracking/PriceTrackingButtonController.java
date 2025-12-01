@@ -19,9 +19,9 @@ import org.chromium.chrome.browser.bookmarks.PowerBookmarkUtils;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
-import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.optional_button.BaseButtonDataProvider;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -71,8 +71,7 @@ public class PriceTrackingButtonController extends BaseButtonDataProvider {
                 /* supportsTinting= */ true,
                 /* iphCommandBuilder= */ null,
                 AdaptiveToolbarButtonVariant.PRICE_TRACKING,
-                /* tooltipTextResId= */ Resources.ID_NULL,
-                /* showBackgroundHighlight= */ false);
+                /* tooltipTextResId= */ Resources.ID_NULL);
         mSnackbarManager = snackbarManager;
         mTabBookmarkerSupplier = tabBookmarkerSupplier;
         mBottomSheetController = bottomSheetController;
@@ -96,8 +95,8 @@ public class PriceTrackingButtonController extends BaseButtonDataProvider {
                         /* buttonVariant= */ AdaptiveToolbarButtonVariant.PRICE_TRACKING,
                         /* actionChipLabelResId= */ Resources.ID_NULL,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showBackgroundHighlight= */ false,
-                        /* hasErrorBadge= */ false);
+                        /* hasErrorBadge= */ false,
+                        /* isChecked= */ true);
 
         mBottomSheetObserver =
                 new EmptyBottomSheetObserver() {

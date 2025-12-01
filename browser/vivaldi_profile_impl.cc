@@ -9,6 +9,7 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
@@ -32,10 +33,10 @@
 #include "components/notes/notes_model.h"
 #include "components/notes/notes_model_loaded_observer.h"
 #include "components/page_actions/page_actions_service_factory.h"
-#include "components/ping_block/ping_block.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
 #include "components/request_filter/request_filter_manager.h"
 #include "components/request_filter/request_filter_manager_factory.h"
+#include "components/search_engines/default_search_engine_observer.h"
 #include "components/translate/core/browser/translate_language_list.h"
 #include "components/translate/core/browser/translate_pref_names.h"
 #include "contact/contact_model_loaded_observer.h"
@@ -169,9 +170,6 @@ void VivaldiInitProfile(Profile* profile) {
     content_injection::ServiceFactory::GetForBrowserContext(profile);
     page_actions::ServiceFactory::GetForBrowserContext(profile);
 
-    RequestFilterManagerFactory::GetForBrowserContext(profile)->AddFilter(
-        std::make_unique<PingBlockerFilter>());
-
     vivaldi::NotesModel* notes_model =
         vivaldi::NotesModelFactory::GetForBrowserContext(profile);
     // `BookmarkModelLoadedObserver` destroys itself eventually, when loading
@@ -195,7 +193,6 @@ void VivaldiInitProfile(Profile* profile) {
 
 #if !BUILDFLAG(IS_ANDROID)
   PrefService* pref_service = profile->GetPrefs();
-
 
   if (vivaldi::IsVivaldiRunning()) {
     // Deals with monitoring up/down state of various components on vivaldi.com
@@ -238,6 +235,8 @@ void VivaldiInitProfile(Profile* profile) {
 
   direct_match::DirectMatchServiceFactory::GetForBrowserContext(profile);
   vivaldi::LazyLoadServiceFactory::GetForProfile(profile);
+  vivaldi::DefaultSearchEngineObserver::Create(
+      TemplateURLServiceFactory::GetForProfile(profile), profile->GetPrefs());
 
   if (pref_service->GetBoolean(vivaldiprefs::kWebpagesSmoothScrollingEnabled) ==
       false) {

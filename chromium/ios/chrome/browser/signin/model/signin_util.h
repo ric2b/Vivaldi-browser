@@ -13,6 +13,7 @@
 #include <string>
 
 #import "base/functional/callback.h"
+#import "base/functional/callback_helpers.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "ios/chrome/browser/signin/model/capabilities_types.h"
 #import "ios/chrome/browser/signin/model/constants.h"
@@ -42,7 +43,9 @@ CGSize GetSizeForIdentityAvatarSize(IdentityAvatarSize avatar_size);
 // Returns whether Chrome has been started after a device restore. This method
 // needs to be called once before IO is disallowed on UI thread (or
 // `LastDeviceRestoreTimestamp()`).
-signin::Tribool IsFirstSessionAfterDeviceRestore();
+// `completion` is called once all sentinel files are created.
+signin::Tribool IsFirstSessionAfterDeviceRestore(
+    base::OnceClosure completion = base::DoNothing());
 
 // Returns the last device restore timestamp. This method needs to be called
 // once before IO is disallowed on UI thread (or
@@ -76,10 +79,6 @@ base::span<const std::string_view> GetAccountCapabilityNamesForPrefetch();
 // Pre-fetches system capabilities for the given identities so that they
 // can be cached for later usage.
 void RunSystemCapabilitiesPrefetch(NSArray<id<SystemIdentity>>* identities);
-
-// Whether a phone backup/restore state should be simulated.
-// This can be triggered either by EG test flag or by Experimental settings.
-bool SimulatePostDeviceRestore();
 
 // Resets the data related to device restore. This is for test only.
 void ResetDeviceRestoreDataForTesting();

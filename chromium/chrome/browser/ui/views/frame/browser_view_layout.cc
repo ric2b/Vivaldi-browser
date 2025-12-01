@@ -40,7 +40,6 @@
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_base_features.h"
-#include "ui/compositor/compositor_switches.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -72,7 +71,7 @@ const int kConstrainedWindowOverlap = 3;
 // hack once the pixel canvas is enabled on all aura platforms.  Note that macOS
 // supports integer scale only, so this isn't necessary on macOS.
 void SetClipPathWithBottomAllowance(views::View* view) {
-  if (!ui::IsPixelCanvasRecordingEnabled()) {
+  if (!features::IsPixelCanvasRecordingEnabled()) {
     constexpr int kBottomPaintAllowance = 2;
     const gfx::Rect local_bounds = view->GetLocalBounds();
     const int extended_height = local_bounds.height() + kBottomPaintAllowance;
@@ -84,6 +83,15 @@ void SetClipPathWithBottomAllowance(views::View* view) {
 }  // namespace
 
 constexpr int BrowserViewLayout::kMainBrowserContentsMinimumWidth;
+
+struct BrowserViewLayout::ContentsContainerLayoutResult {
+  gfx::Rect contents_container_bounds;
+  gfx::Rect side_panel_bounds;
+  bool side_panel_visible;
+  bool side_panel_right_aligned;
+  bool contents_container_after_side_panel;
+  gfx::Rect separator_bounds;
+};
 
 class BrowserViewLayout::WebContentsModalDialogHostViews
     : public WebContentsModalDialogHost,
@@ -112,13 +120,35 @@ class BrowserViewLayout::WebContentsModalDialogHostViews
     observer_list_.Notify(&ModalDialogHostObserver::OnPositionRequiresUpdate);
   }
 
-  gfx::Point GetDialogPosition(const gfx::Size& size) override {
+  gfx::Point GetDialogPosition(const gfx::Size& dialog_size) override {
     // Horizontally places the dialog at the center of the content.
+
     views::View* view = browser_view_layout_->contents_container_;
-    gfx::Rect rect = view->ConvertRectToWidget(view->GetLocalBounds());
-    const int middle_x = rect.x() + rect.width() / 2;
-    const int top = browser_view_layout_->dialog_top_y_;
-    return gfx::Point(middle_x - size.width() / 2, top);
+    // Recalculate bounds of `contents_container_`. It may be stale due to
+    // pending layouts (from switching tabs, for example). The `top` and
+    // `bottom` parameters should not be relevant to the result, since we only
+    // care about the resulting width here.
+    BrowserViewLayout::ContentsContainerLayoutResult layout_result =
+        browser_view_layout_->CalculateContentsContainerLayout(
+            view->bounds().y(), view->bounds().bottom());
+
+    int leading_x;
+    if (base::i18n::IsRTL()) {
+      // Dialog coordinates are not flipped for RTL, but the View's coordinates
+      // are. Calculate the left edge of `contents_container_bounds`.
+      if (layout_result.contents_container_after_side_panel) {
+        leading_x = 0;
+      } else {
+        leading_x = browser_view_layout_->vertical_layout_rect_.width() -
+                    layout_result.contents_container_bounds.width();
+      }
+    } else {
+      leading_x = layout_result.contents_container_bounds.x();
+    }
+    const int middle_x =
+        leading_x + layout_result.contents_container_bounds.width() / 2;
+    return gfx::Point(middle_x - dialog_size.width() / 2,
+                      browser_view_layout_->dialog_top_y_);
   }
 
   bool ShouldActivateDialog() const override {
@@ -226,6 +256,12 @@ BrowserViewLayout::BrowserViewLayout(
 
 BrowserViewLayout::~BrowserViewLayout() = default;
 
+void BrowserViewLayout::SetUseBrowserContentMinimumSize(
+    bool use_browser_content_minimum_size) {
+  use_browser_content_minimum_size_ = use_browser_content_minimum_size;
+  InvalidateLayout();
+}
+
 WebContentsModalDialogHost* BrowserViewLayout::GetWebContentsModalDialogHost() {
   return dialog_host_.get();
 }
@@ -268,13 +304,10 @@ gfx::Size BrowserViewLayout::GetMinimumSize(const views::View* host) const {
   // TODO(pkotwicz): Adjust the minimum height for the find bar.
 
   gfx::Size contents_size(contents_container_->GetMinimumSize());
-  contents_size.SetToMax(
-      (delegate_->BrowserIsTypeNormal() ||
-       (delegate_->BrowserIsTypeApp() && delegate_->BrowserIsWebApp() &&
-        !delegate_->BrowserIsSystemWebApp()))
-          ? gfx::Size(kMainBrowserContentsMinimumWidth,
-                      kMainBrowserContentsMinimumHeight)
-          : kContentsMinimumSize);
+  contents_size.SetToMax(use_browser_content_minimum_size_
+                             ? gfx::Size(kMainBrowserContentsMinimumWidth,
+                                         kMainBrowserContentsMinimumHeight)
+                             : kContentsMinimumSize);
 
   const int min_height =
       delegate_->GetTopInsetInBrowserView() + tabstrip_size.height() +
@@ -292,10 +325,6 @@ void BrowserViewLayout::SetContentBorderBounds(
     const std::optional<gfx::Rect>& region_capture_rect) {
   dynamic_content_border_bounds_ = region_capture_rect;
   LayoutContentBorder();
-}
-
-gfx::NativeView BrowserViewLayout::GetHostView() {
-  return delegate_->GetHostView();
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -570,7 +599,7 @@ int BrowserViewLayout::LayoutBookmarkBar(int top) {
   bookmark_bar_->SetBounds(vertical_layout_rect_.x(), top,
                            vertical_layout_rect_.width(), bookmark_bar_height);
   SetClipPathWithBottomAllowance(bookmark_bar_);
-  if (!ui::IsPixelCanvasRecordingEnabled()) {
+  if (!features::IsPixelCanvasRecordingEnabled()) {
     // Make sure the contents separator is painted last as the background for
     // BookmarkVieBar/ToolbarView may paint over it otherwise.
     // TODO(crbug.com/41344902): Remove once the pixel canvas is enabled on
@@ -604,16 +633,18 @@ int BrowserViewLayout::LayoutInfoBar(int top) {
   int content_top = infobar_top + infobar_container_->height();
   infobar_top += delegate_->GetExtraInfobarOffset();
   SetViewVisibility(infobar_container_, IsInfobarVisible());
-  infobar_container_->SetBounds(
-      vertical_layout_rect_.x(), infobar_top, vertical_layout_rect_.width(),
-      infobar_container_->GetPreferredSize().height());
+  if (infobar_container_->GetVisible()) {
+    infobar_container_->SetBounds(
+        vertical_layout_rect_.x(), infobar_top, vertical_layout_rect_.width(),
+        infobar_container_->GetPreferredSize().height());
+  } else {
+    infobar_container_->SetBounds(vertical_layout_rect_.x(), infobar_top, 0, 0);
+  }
   return content_top;
 }
 
-void BrowserViewLayout::LayoutContentsContainerView(int top, int bottom) {
-  TRACE_EVENT0("ui", "BrowserViewLayout::LayoutContentsContainerView");
-  // |contents_container_| contains web page contents and devtools.
-  // See browser_view.h for details.
+BrowserViewLayout::ContentsContainerLayoutResult
+BrowserViewLayout::CalculateContentsContainerLayout(int top, int bottom) const {
   gfx::Rect contents_container_bounds(vertical_layout_rect_.x(), top,
                                       vertical_layout_rect_.width(),
                                       std::max(0, bottom - top));
@@ -624,47 +655,28 @@ void BrowserViewLayout::LayoutContentsContainerView(int top, int bottom) {
         gfx::Insets().set_bottom(-webui_tab_strip_->size().height()));
   }
 
-  LayoutSidePanelView(unified_side_panel_, contents_container_bounds);
-
-  contents_container_->SetBoundsRect(contents_container_bounds);
-}
-
-void BrowserViewLayout::LayoutSidePanelView(
-    views::View* side_panel,
-    gfx::Rect& contents_container_bounds) {
-  const bool side_panel_visible = side_panel && side_panel->GetVisible();
-  // Update side panel rounded corner visibility to match side panel visibility.
-  SetViewVisibility(side_panel_rounded_corner_, side_panel_visible);
-
-  if (left_aligned_side_panel_separator_) {
-    const bool side_panel_visible_on_left =
-        side_panel_visible &&
-        !views::AsViewClass<SidePanel>(unified_side_panel_)->IsRightAligned();
-    SetViewVisibility(left_aligned_side_panel_separator_,
-                      side_panel_visible_on_left);
+  const bool side_panel_visible =
+      unified_side_panel_ && unified_side_panel_->GetVisible();
+  if (!side_panel_visible) {
+    // The contents container takes all available space, and we're done.
+    return ContentsContainerLayoutResult{contents_container_bounds,
+                                         gfx::Rect(),
+                                         false,
+                                         false,
+                                         false,
+                                         gfx::Rect()};
   }
 
-  if (right_aligned_side_panel_separator_) {
-    const bool side_panel_visible_on_right =
-        side_panel_visible &&
-        views::AsViewClass<SidePanel>(unified_side_panel_)->IsRightAligned();
-    SetViewVisibility(right_aligned_side_panel_separator_,
-                      side_panel_visible_on_right);
-  }
+  SidePanel* side_panel = views::AsViewClass<SidePanel>(unified_side_panel_);
 
-  if (!side_panel || !side_panel->GetVisible()) {
-    return;
-  }
-
-  DCHECK(side_panel == unified_side_panel_);
-  bool is_right_aligned =
-      views::AsViewClass<SidePanel>(side_panel)->IsRightAligned();
-
+  const bool side_panel_right_aligned = side_panel->IsRightAligned();
+  const bool is_in_split_view = delegate_->IsInSplitView();
   views::View* side_panel_separator =
-      is_right_aligned ? right_aligned_side_panel_separator_.get()
-                       : left_aligned_side_panel_separator_.get();
-
-  DCHECK(side_panel_separator);
+      side_panel_right_aligned ? right_aligned_side_panel_separator_.get()
+                               : left_aligned_side_panel_separator_.get();
+  CHECK(side_panel_separator);
+  const int separator_width =
+      is_in_split_view ? 0 : side_panel_separator->GetPreferredSize().width();
 
   // Side panel occupies some of the container's space. The side panel should
   // never occupy more space than is available in the content window, and
@@ -674,16 +686,16 @@ void BrowserViewLayout::LayoutSidePanelView(
 
   // If necessary, cap the side panel width at 2/3rds of the contents container
   // width as long as the side panel remains at or above its minimum width.
-  if (views::AsViewClass<SidePanel>(side_panel)->ShouldRestrictMaxWidth()) {
+  if (side_panel->ShouldRestrictMaxWidth()) {
     side_panel_bounds.set_width(
         std::max(std::min(side_panel->GetPreferredSize().width(),
                           contents_container_bounds.width() * 2 / 3),
                  side_panel->GetMinimumSize().width()));
   } else {
-    side_panel_bounds.set_width(
-        std::min(side_panel->GetPreferredSize().width(),
-                 contents_container_bounds.width() - GetMinWebContentsWidth() -
-                     side_panel_separator->GetPreferredSize().width()));
+    side_panel_bounds.set_width(std::min(side_panel->GetPreferredSize().width(),
+                                         contents_container_bounds.width() -
+                                             GetMinWebContentsWidth() -
+                                             separator_width));
   }
 
   double side_panel_visible_width =
@@ -691,23 +703,21 @@ void BrowserViewLayout::LayoutSidePanelView(
       views::AsViewClass<SidePanel>(unified_side_panel_)->GetAnimationValue();
 
   // Shrink container bounds to fit the side panel.
-  contents_container_bounds.set_width(
-      contents_container_bounds.width() - side_panel_visible_width -
-      side_panel_separator->GetPreferredSize().width());
+  contents_container_bounds.set_width(contents_container_bounds.width() -
+                                      side_panel_visible_width -
+                                      separator_width);
 
   // In LTR, the point (0,0) represents the top left of the browser.
   // In RTL, the point (0,0) represents the top right of the browser.
-  const bool is_container_after_side_panel =
-      (base::i18n::IsRTL() && is_right_aligned) ||
-      (!base::i18n::IsRTL() && !is_right_aligned);
+  const bool contents_container_after_side_panel =
+      (base::i18n::IsRTL() && side_panel_right_aligned) ||
+      (!base::i18n::IsRTL() && !side_panel_right_aligned);
 
-  if (is_container_after_side_panel) {
+  if (contents_container_after_side_panel) {
     // When the side panel should appear before the main content area relative
     // to the ui direction, move `contents_container_bounds` after the side
     // panel. Also leave space for the separator.
-    contents_container_bounds.set_x(
-        side_panel_visible_width +
-        side_panel_separator->GetPreferredSize().width());
+    contents_container_bounds.set_x(side_panel_visible_width + separator_width);
     side_panel_bounds.set_x(side_panel_bounds.x() - (side_panel_bounds.width() -
                                                      side_panel_visible_width));
   } else {
@@ -715,47 +725,92 @@ void BrowserViewLayout::LayoutSidePanelView(
     // the ui direction, move `side_panel_bounds` after the main content area.
     // Also leave space for the separator.
     side_panel_bounds.set_x(contents_container_bounds.right() +
-                            side_panel_separator->GetPreferredSize().width());
+                            separator_width);
   }
-
-  side_panel->SetBoundsRect(side_panel_bounds);
 
   // Adjust the side panel separator bounds based on the side panel bounds
   // calculated above.
-  gfx::Rect side_panel_separator_bounds = side_panel_bounds;
+  gfx::Rect separator_bounds = side_panel_bounds;
   // TODO (https://crbug.com/389972209): Adding 1px to the width as a bandaid
   // fix. This covers a case with subpixeling where a thin line of the
   // background finds its way to the front.
-  side_panel_separator_bounds.set_width(
-      side_panel_separator->GetPreferredSize().width() + 1);
-
+  separator_bounds.set_width(separator_width + 1);
   // If the side panel appears before `contents_container_bounds`, place the
-  // separator immediately after the side panel but before the container bounds.
-  // If the side panel appears after `contents_container_bounds`, place the
-  // separator immediately after the contents bounds but before the side panel.
-  side_panel_separator_bounds.set_x(is_container_after_side_panel
-                                        ? side_panel_bounds.right()
-                                        : contents_container_bounds.right());
+  // separator immediately after the side panel but before the container
+  // bounds. If the side panel appears after `contents_container_bounds`,
+  // place the separator immediately after the contents bounds but before the
+  // side panel.
+  separator_bounds.set_x(contents_container_after_side_panel
+                             ? side_panel_bounds.right()
+                             : contents_container_bounds.right());
 
-  side_panel_separator->SetBoundsRect(side_panel_separator_bounds);
+  return BrowserViewLayout::ContentsContainerLayoutResult{
+      contents_container_bounds,
+      side_panel_bounds,
+      side_panel_visible,
+      side_panel_right_aligned,
+      contents_container_after_side_panel,
+      separator_bounds};
+}
 
-  // Adjust the side panel rounded corner bounds based on the side panel bounds
-  // calculated above.
-  const float corner_radius =
-      side_panel_rounded_corner_->GetLayoutProvider()->GetCornerRadiusMetric(
-          views::ShapeContextTokens::kSidePanelPageContentRadius);
-  if (is_container_after_side_panel) {
-    side_panel_rounded_corner_->SetBounds(
-        side_panel_bounds.right(),
-        side_panel_bounds.y() - views::Separator::kThickness,
-        corner_radius + views::Separator::kThickness,
-        corner_radius + views::Separator::kThickness);
-  } else {
-    side_panel_rounded_corner_->SetBounds(
-        side_panel_bounds.x() - corner_radius - views::Separator::kThickness,
-        side_panel_bounds.y() - views::Separator::kThickness,
-        corner_radius + views::Separator::kThickness,
-        corner_radius + views::Separator::kThickness);
+void BrowserViewLayout::LayoutContentsContainerView(int top, int bottom) {
+  TRACE_EVENT0("ui", "BrowserViewLayout::LayoutContentsContainerView");
+  // |contents_container_| contains web page contents and devtools.
+  // See browser_view.h for details.
+
+  BrowserViewLayout::ContentsContainerLayoutResult layout_result =
+      CalculateContentsContainerLayout(top, bottom);
+  const bool is_in_split_view = delegate_->IsInSplitView();
+
+  contents_container_->SetBoundsRect(layout_result.contents_container_bounds);
+
+  if (unified_side_panel_) {
+    unified_side_panel_->SetBoundsRect(layout_result.side_panel_bounds);
+  }
+  if (right_aligned_side_panel_separator_) {
+    SetViewVisibility(right_aligned_side_panel_separator_,
+                      layout_result.side_panel_visible &&
+                          layout_result.side_panel_right_aligned &&
+                          !is_in_split_view);
+    right_aligned_side_panel_separator_->SetBoundsRect(
+        layout_result.separator_bounds);
+  }
+  if (left_aligned_side_panel_separator_) {
+    SetViewVisibility(left_aligned_side_panel_separator_,
+                      layout_result.side_panel_visible &&
+                          !layout_result.side_panel_right_aligned &&
+                          !is_in_split_view);
+    left_aligned_side_panel_separator_->SetBoundsRect(
+        layout_result.separator_bounds);
+  }
+
+  if (side_panel_rounded_corner_) {
+    SetViewVisibility(side_panel_rounded_corner_,
+                      layout_result.side_panel_visible && !is_in_split_view);
+    if (layout_result.side_panel_visible) {
+      // This can return nullptr when there is no Widget (for context, see
+      // http://crbug.com/40178332). The nullptr dereference does not always
+      // crash due to compiler optimizations, so CHECKing here ensures we crash.
+      CHECK(side_panel_rounded_corner_->GetLayoutProvider());
+      // Adjust the rounded corner bounds based on the side panel bounds.
+      const float corner_radius =
+          side_panel_rounded_corner_->GetLayoutProvider()
+              ->GetCornerRadiusMetric(
+                  views::ShapeContextTokens::kSidePanelPageContentRadius);
+      const float corner_size = corner_radius + views::Separator::kThickness;
+      if (layout_result.contents_container_after_side_panel) {
+        side_panel_rounded_corner_->SetBounds(
+            layout_result.side_panel_bounds.right(),
+            layout_result.side_panel_bounds.y() - views::Separator::kThickness,
+            corner_size, corner_size);
+      } else {
+        side_panel_rounded_corner_->SetBounds(
+            layout_result.side_panel_bounds.x() - corner_radius -
+                views::Separator::kThickness,
+            layout_result.side_panel_bounds.y() - views::Separator::kThickness,
+            corner_size, corner_size);
+      }
+    }
   }
 }
 
@@ -869,5 +924,7 @@ int BrowserViewLayout::GetMinWebContentsWidth() const {
 }
 
 bool BrowserViewLayout::IsInfobarVisible() const {
-  return !infobar_container_->IsEmpty();
+  return !infobar_container_->IsEmpty() &&
+         (!browser_view_->IsFullscreen() ||
+          !infobar_container_->ShouldHideInFullscreen());
 }

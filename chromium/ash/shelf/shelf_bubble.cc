@@ -13,6 +13,7 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 
 namespace {
@@ -66,11 +67,7 @@ ShelfBubble::ShelfBubble(
           anchor,
           arrow_position.value_or(GetArrow(alignment))),
       for_tooltip_(for_tooltip) {
-  set_background_color(SK_ColorTRANSPARENT);
-
-  // Bubbles that use transparent colors should not paint their ClientViews to a
-  // layer as doing so could result in visual artifacts.
-  SetPaintClientToLayer(false);
+  SetBackgroundColor(SK_ColorTRANSPARENT);
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
 
   // Place the bubble in the same display as the anchor.
@@ -91,7 +88,7 @@ void ShelfBubble::CreateBubble() {
   views::BubbleDialogDelegateView::CreateBubble(this);
 
   // Settings that should only be changed just after bubble creation.
-  GetBubbleFrameView()->SetCornerRadius(border_radius_);
+  GetBubbleFrameView()->SetRoundedCorners(gfx::RoundedCornersF(border_radius_));
   GetBubbleFrameView()->SetBackgroundColor(background_color());
 }
 

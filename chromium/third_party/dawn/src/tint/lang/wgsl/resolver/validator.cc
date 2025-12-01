@@ -220,50 +220,6 @@ bool Validator::IsPlain(const core::type::Type* type) const {
                   sem::Array, core::type::Struct, core::type::SubgroupMatrix>();
 }
 
-// https://gpuweb.github.io/gpuweb/wgsl/#fixed-footprint-types
-bool Validator::IsFixedFootprint(const core::type::Type* type) const {
-    return Switch(
-        type,                                             //
-        [&](const core::type::Vector*) { return true; },  //
-        [&](const core::type::Matrix*) { return true; },  //
-        [&](const core::type::Atomic*) { return true; },
-        [&](const core::type::SubgroupMatrix*) { return true; },
-        [&](const sem::Array* arr) {
-            return !arr->Count()->Is<core::type::RuntimeArrayCount>() &&
-                   IsFixedFootprint(arr->ElemType());
-        },
-        [&](const core::type::Struct* str) {
-            for (auto* member : str->Members()) {
-                if (!IsFixedFootprint(member->Type())) {
-                    return false;
-                }
-            }
-            return true;
-        },
-        [&](Default) { return type->Is<core::type::Scalar>(); });
-}
-
-// https://gpuweb.github.io/gpuweb/wgsl.html#host-shareable-types
-bool Validator::IsHostShareable(const core::type::Type* type) const {
-    if (type->IsAnyOf<core::type::I32, core::type::U32, core::type::F32, core::type::F16>()) {
-        return true;
-    }
-    return Switch(
-        type,  //
-        [&](const core::type::Vector* vec) { return IsHostShareable(vec->Type()); },
-        [&](const core::type::Matrix* mat) { return IsHostShareable(mat->Type()); },
-        [&](const sem::Array* arr) { return IsHostShareable(arr->ElemType()); },
-        [&](const core::type::Struct* str) {
-            for (auto* member : str->Members()) {
-                if (!IsHostShareable(member->Type())) {
-                    return false;
-                }
-            }
-            return true;
-        },
-        [&](const core::type::Atomic* atomic) { return IsHostShareable(atomic->Type()); });
-}
-
 // https://gpuweb.github.io/gpuweb/wgsl.html#storable-types
 bool Validator::IsStorable(const core::type::Type* type) const {
     return IsPlain(type) ||
@@ -330,21 +286,6 @@ bool Validator::Enables(VectorRef<const ast::Enable*> enables) const {
         }
     }
 
-    if (enabled_extensions_.Contains(wgsl::Extension::kSubgroupsF16)) {
-        if (!enabled_extensions_.Contains(wgsl::Extension::kSubgroups)) {
-            AddError(source_of(wgsl::Extension::kSubgroupsF16))
-                << "extension " << style::Code("subgroups_f16")
-                << " cannot be used without extension " << style::Code("subgroups");
-            return false;
-        }
-        if (!enabled_extensions_.Contains(wgsl::Extension::kF16)) {
-            AddError(source_of(wgsl::Extension::kSubgroupsF16))
-                << "extension " << style::Code("subgroups_f16")
-                << " cannot be used without extension " << style::Code("f16");
-            return false;
-        }
-    }
-
     return true;
 }
 
@@ -392,15 +333,14 @@ bool Validator::Pointer(const ast::TemplatedIdentifier* a, const core::type::Poi
         return false;
     }
 
-    return CheckTypeAccessAddressSpace(s->StoreType(), s->Access(), s->AddressSpace(), tint::Empty,
-                                       a->source);
+    return CheckTypeAccessAddressSpace(s->StoreType(), s->Access(), s->AddressSpace(), a->source);
 }
 
 bool Validator::StorageTexture(const core::type::StorageTexture* t, const Source& source) const {
     switch (t->Access()) {
         case core::Access::kRead:
-            if (!allowed_features_.features.count(
-                    wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures)) {
+            if (allowed_features_.features.count(
+                    wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures) == 0u) {
                 AddError(source) << "read-only storage textures require the "
                                     "readonly_and_readwrite_storage_textures language feature, "
                                     "which is not allowed in the current environment";
@@ -408,8 +348,8 @@ bool Validator::StorageTexture(const core::type::StorageTexture* t, const Source
             }
             break;
         case core::Access::kReadWrite:
-            if (!allowed_features_.features.count(
-                    wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures)) {
+            if (allowed_features_.features.count(
+                    wgsl::LanguageFeature::kReadonlyAndReadwriteStorageTextures) == 0u) {
                 AddError(source) << "read-write storage textures require the "
                                     "readonly_and_readwrite_storage_textures language feature, "
                                     "which is not allowed in the current environment";
@@ -605,10 +545,10 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
     };
 
     // Among three host-shareable address spaces, f16 is supported in "uniform" and
-    // "storage" address space, but not "push_constant" address space yet.
+    // "storage" address space, but not "immediate" address space yet.
     if (Is<core::type::F16>(store_ty->DeepestElement()) &&
-        address_space == core::AddressSpace::kPushConstant) {
-        AddError(source) << "using " << style::Type("f16") << " in " << style::Enum("push_constant")
+        address_space == core::AddressSpace::kImmediate) {
+        AddError(source) << "using " << style::Type("f16") << " in " << style::Enum("immediate")
                          << " address space is not implemented yet";
         return false;
     }
@@ -627,9 +567,7 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
             }
 
             // Validate that member is at a valid byte offset
-            if (m->Offset() % required_align != 0 &&
-                !enabled_extensions_.Contains(
-                    wgsl::Extension::kChromiumInternalRelaxedUniformLayout)) {
+            if (m->Offset() % required_align != 0) {
                 AddError(m->Declaration()->source)
                     << "the offset of a struct member of type "
                     << style::Type(m->Type()->UnwrapRef()->FriendlyName()) << " in address space "
@@ -656,9 +594,7 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
             auto* const prev_member = (i == 0) ? nullptr : str->Members()[i - 1];
             if (prev_member && is_uniform_struct(prev_member->Type())) {
                 const uint32_t prev_to_curr_offset = m->Offset() - prev_member->Offset();
-                if (prev_to_curr_offset % 16 != 0 &&
-                    !enabled_extensions_.Contains(
-                        wgsl::Extension::kChromiumInternalRelaxedUniformLayout)) {
+                if (prev_to_curr_offset % 16 != 0) {
                     AddError(m->Declaration()->source)
                         << style::Enum("uniform")
                         << " storage requires that the number of bytes between the start of the "
@@ -684,8 +620,7 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
             // alignment requirement of the address space.
             auto* align_attr =
                 ast::GetAttribute<ast::StructMemberAlignAttribute>(m->Declaration()->attributes);
-            if (align_attr && !enabled_extensions_.Contains(
-                                  wgsl::Extension::kChromiumInternalRelaxedUniformLayout)) {
+            if (align_attr != nullptr) {
                 auto align = sem_.GetVal(align_attr->expr)->ConstantValue()->ValueAs<uint32_t>();
                 if (align % required_align != 0) {
                     AddError(align_attr->expr->source)
@@ -708,8 +643,7 @@ bool Validator::AddressSpaceLayout(const core::type::Type* store_ty,
             return false;
         }
 
-        if (address_space == core::AddressSpace::kUniform &&
-            !enabled_extensions_.Contains(wgsl::Extension::kChromiumInternalRelaxedUniformLayout)) {
+        if (address_space == core::AddressSpace::kUniform) {
             // We already validated that this array member is itself aligned to 16 bytes above, so
             // we only need to validate that stride is a multiple of 16 bytes.
             if (arr->Stride() % 16 != 0) {
@@ -751,14 +685,11 @@ bool Validator::LocalVariable(const sem::Variable* local) const {
     return Switch(
         decl,  //
         [&](const ast::Var* var) {
-            if (IsValidationEnabled(var->attributes,
-                                    ast::DisabledValidation::kIgnoreAddressSpace)) {
-                if (!local->Type()->UnwrapRef()->IsConstructible()) {
-                    AddError(var->type ? var->type->source : var->source)
-                        << "function-scope " << style::Keyword("var")
-                        << " must have a constructible type";
-                    return false;
-                }
+            if (!local->Type()->UnwrapRef()->IsConstructible()) {
+                AddError(var->type ? var->type->source : var->source)
+                    << "function-scope " << style::Keyword("var")
+                    << " must have a constructible type";
+                return false;
             }
             return Var(local);
         },                                            //
@@ -906,12 +837,11 @@ bool Validator::Var(const sem::Variable* v) const {
     }
 
     if (!CheckTypeAccessAddressSpace(v->Type()->UnwrapRef(), v->Access(), v->AddressSpace(),
-                                     var->attributes, var->source)) {
+                                     var->source)) {
         return false;
     }
 
-    if (IsValidationEnabled(var->attributes, ast::DisabledValidation::kIgnoreAddressSpace) &&
-        (v->AddressSpace() == core::AddressSpace::kIn ||
+    if ((v->AddressSpace() == core::AddressSpace::kIn ||
          v->AddressSpace() == core::AddressSpace::kOut)) {
         AddError(var->source) << "invalid use of input/output address space";
         return false;
@@ -973,29 +903,27 @@ bool Validator::Parameter(const sem::Variable* var) const {
     }
 
     if (auto* ref = var->Type()->As<core::type::Pointer>()) {
-        if (IsValidationEnabled(decl->attributes, ast::DisabledValidation::kIgnoreAddressSpace)) {
-            bool ok = false;
+        bool ok = false;
 
-            auto sc = ref->AddressSpace();
-            switch (sc) {
-                case core::AddressSpace::kFunction:
-                case core::AddressSpace::kPrivate:
-                    ok = true;
-                    break;
-                case core::AddressSpace::kStorage:
-                case core::AddressSpace::kUniform:
-                case core::AddressSpace::kWorkgroup:
-                    ok = allowed_features_.features.count(
-                             wgsl::LanguageFeature::kUnrestrictedPointerParameters) != 0;
-                    break;
-                default:
-                    break;
-            }
-            if (!ok) {
-                AddError(decl->source) << "function parameter of pointer type cannot be in "
-                                       << style::Enum(sc) << " address space";
-                return false;
-            }
+        auto sc = ref->AddressSpace();
+        switch (sc) {
+            case core::AddressSpace::kFunction:
+            case core::AddressSpace::kPrivate:
+                ok = true;
+                break;
+            case core::AddressSpace::kStorage:
+            case core::AddressSpace::kUniform:
+            case core::AddressSpace::kWorkgroup:
+                ok = allowed_features_.features.count(
+                         wgsl::LanguageFeature::kUnrestrictedPointerParameters) != 0;
+                break;
+            default:
+                break;
+        }
+        if (!ok) {
+            AddError(decl->source) << "function parameter of pointer type cannot be in "
+                                   << style::Enum(sc) << " address space";
+            return false;
         }
     }
 
@@ -1117,6 +1045,28 @@ bool Validator::BuiltinAttribute(const ast::BuiltinAttribute* attr,
                 return false;
             }
             break;
+        case core::BuiltinValue::kSubgroupId:
+            // TODO(crbug.com/416555787): Move this to the `subgroups` extension.
+            if (!enabled_extensions_.Contains(
+                    wgsl::Extension::kChromiumExperimentalSubgroupMatrix)) {
+                AddError(attr->source) << "use of " << style::Attribute("@builtin")
+                                       << style::Code("(", style::Enum(builtin), ")")
+                                       << " attribute requires enabling extension "
+                                       << style::Code("chromium_experimental_subgroup_matrix");
+                return false;
+            }
+            if (!type->Is<core::type::U32>()) {
+                err_builtin_type("u32");
+                return false;
+            }
+            if (stage != ast::PipelineStage::kNone &&
+                !(stage == ast::PipelineStage::kCompute && is_input)) {
+                AddError(attr->source)
+                    << style::Attribute("@builtin") << style::Code("(", style::Enum(builtin), ")")
+                    << " is only valid as a compute shader input";
+                return false;
+            }
+            break;
         case core::BuiltinValue::kSubgroupInvocationId:
         case core::BuiltinValue::kSubgroupSize:
             if (!enabled_extensions_.Contains(wgsl::Extension::kSubgroups)) {
@@ -1149,7 +1099,7 @@ bool Validator::BuiltinAttribute(const ast::BuiltinAttribute* attr,
             }
             auto* arr = type->As<sem::Array>();
             if (!ignore_clip_distances_type_validation &&
-                !(arr && arr->ElemType()->Is<core::type::F32>() &&
+                !((arr != nullptr) && arr->ElemType()->Is<core::type::F32>() &&
                   arr->ConstantCount().has_value() &&
                   *arr->ConstantCount() <= kMaxClipDistancesSize)) {
                 AddError(attr->source)
@@ -1438,92 +1388,88 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
             }
         }
 
-        if (IsValidationEnabled(attrs, ast::DisabledValidation::kEntryPointParameter)) {
-            if (is_struct_member && ty->Is<core::type::Struct>()) {
-                AddError(source) << "nested structures cannot be used for entry point IO";
-                return false;
-            }
+        if (is_struct_member && ty->Is<core::type::Struct>()) {
+            AddError(source) << "nested structures cannot be used for entry point IO";
+            return false;
+        }
 
-            if (!ty->Is<core::type::Struct>() && !pipeline_io_attribute) {
-                auto& err = AddError(source) << "missing entry point IO attribute";
-                if (!is_struct_member) {
-                    err << (param_or_ret == ParamOrRetType::kParameter ? " on parameter"
-                                                                       : " on return type");
-                }
-                return false;
+        if (!ty->Is<core::type::Struct>() && !pipeline_io_attribute) {
+            auto& err = AddError(source) << "missing entry point IO attribute";
+            if (!is_struct_member) {
+                err << (param_or_ret == ParamOrRetType::kParameter ? " on parameter"
+                                                                   : " on return type");
             }
+            return false;
+        }
 
-            if (pipeline_io_attribute && pipeline_io_attribute->Is<ast::LocationAttribute>()) {
-                if (ty->IsIntegerScalarOrVector() && !interpolate_attribute) {
-                    if (decl->PipelineStage() == ast::PipelineStage::kVertex &&
-                        param_or_ret == ParamOrRetType::kReturnType) {
-                        AddError(source)
-                            << "integral user-defined vertex outputs must have a "
-                            << style::Attribute("@interpolate")
-                            << style::Code("(", style::Enum("flat"), ")") << " attribute";
-                        return false;
-                    }
-                    if (decl->PipelineStage() == ast::PipelineStage::kFragment &&
-                        param_or_ret == ParamOrRetType::kParameter) {
-                        AddError(source)
-                            << "integral user-defined fragment inputs must have a "
-                            << style::Attribute("@interpolate")
-                            << style::Code("(", style::Enum("flat"), ")") << " attribute";
-                        return false;
-                    }
-                }
-            }
-
-            if (location_attribute) {
-                std::pair<uint32_t, uint32_t> location_and_blend_src(location.value(),
-                                                                     blend_src.value_or(0));
-                if (!locations_and_blend_srcs.Add(location_and_blend_src)) {
-                    auto& err = AddError(location_attribute->source)
-                                << style::Attribute("@location")
-                                << style::Code("(", style::Literal(location.value()), ")");
-                    if (blend_src_attribute) {
-                        err << style::Attribute(" @blend_src")
-                            << style::Code("(", style::Literal(blend_src.value()), ")");
-                    }
-                    err << " appears multiple times";
+        if (pipeline_io_attribute && pipeline_io_attribute->Is<ast::LocationAttribute>()) {
+            if (ty->IsIntegerScalarOrVector() && !interpolate_attribute) {
+                if (decl->PipelineStage() == ast::PipelineStage::kVertex &&
+                    param_or_ret == ParamOrRetType::kReturnType) {
+                    AddError(source) << "integral user-defined vertex outputs must have a "
+                                     << style::Attribute("@interpolate")
+                                     << style::Code("(", style::Enum("flat"), ")") << " attribute";
                     return false;
                 }
-            }
-
-            if (color_attribute && !colors.Add(color.value())) {
-                AddError(color_attribute->source)
-                    << style::Attribute("@color")
-                    << style::Code("(", style::Literal(color.value()), ")")
-                    << " appears multiple times";
-                return false;
-            }
-
-            if (interpolate_attribute) {
-                if (!pipeline_io_attribute ||
-                    !pipeline_io_attribute->Is<ast::LocationAttribute>()) {
-                    AddError(interpolate_attribute->source)
-                        << style::Attribute("@interpolate") << " can only be used with "
-                        << style::Attribute("@location");
-                    return false;
-                }
-            }
-
-            if (invariant_attribute) {
-                bool has_position = false;
-                if (pipeline_io_attribute) {
-                    if (auto* builtin_attr = pipeline_io_attribute->As<ast::BuiltinAttribute>()) {
-                        has_position = (builtin_attr->builtin == core::BuiltinValue::kPosition);
-                    }
-                }
-                if (!has_position) {
-                    AddError(invariant_attribute->source)
-                        << style::Attribute("@invariant") << " must be applied to a "
-                        << style::Attribute("@builtin")
-                        << style::Code("(", style::Enum("position"), ")");
+                if (decl->PipelineStage() == ast::PipelineStage::kFragment &&
+                    param_or_ret == ParamOrRetType::kParameter) {
+                    AddError(source) << "integral user-defined fragment inputs must have a "
+                                     << style::Attribute("@interpolate")
+                                     << style::Code("(", style::Enum("flat"), ")") << " attribute";
                     return false;
                 }
             }
         }
+
+        if (location_attribute) {
+            std::pair<uint32_t, uint32_t> location_and_blend_src(location.value(),
+                                                                 blend_src.value_or(0));
+            if (!locations_and_blend_srcs.Add(location_and_blend_src)) {
+                auto& err = AddError(location_attribute->source)
+                            << style::Attribute("@location")
+                            << style::Code("(", style::Literal(location.value()), ")");
+                if (blend_src_attribute) {
+                    err << style::Attribute(" @blend_src")
+                        << style::Code("(", style::Literal(blend_src.value()), ")");
+                }
+                err << " appears multiple times";
+                return false;
+            }
+        }
+
+        if (color_attribute && !colors.Add(color.value())) {
+            AddError(color_attribute->source)
+                << style::Attribute("@color")
+                << style::Code("(", style::Literal(color.value()), ")")
+                << " appears multiple times";
+            return false;
+        }
+
+        if (interpolate_attribute) {
+            if (!pipeline_io_attribute || !pipeline_io_attribute->Is<ast::LocationAttribute>()) {
+                AddError(interpolate_attribute->source)
+                    << style::Attribute("@interpolate") << " can only be used with "
+                    << style::Attribute("@location");
+                return false;
+            }
+        }
+
+        if (invariant_attribute) {
+            bool has_position = false;
+            if (pipeline_io_attribute) {
+                if (auto* builtin_attr = pipeline_io_attribute->As<ast::BuiltinAttribute>()) {
+                    has_position = (builtin_attr->builtin == core::BuiltinValue::kPosition);
+                }
+            }
+            if (!has_position) {
+                AddError(invariant_attribute->source)
+                    << style::Attribute("@invariant") << " must be applied to a "
+                    << style::Attribute("@builtin")
+                    << style::Code("(", style::Enum("position"), ")");
+                return false;
+            }
+        }
+
         return true;
     };
 
@@ -1581,22 +1527,9 @@ bool Validator::EntryPoint(const sem::Function* func, ast::PipelineStage stage) 
 
     if (decl->PipelineStage() == ast::PipelineStage::kVertex &&
         !builtins.Contains(core::BuiltinValue::kPosition)) {
-        // Check module-scope variables, as the SPIR-V sanitizer generates these.
-        bool found = false;
-        for (auto* global : func->TransitivelyReferencedGlobals()) {
-            if (auto* builtin_attr =
-                    ast::GetAttribute<ast::BuiltinAttribute>(global->Declaration()->attributes)) {
-                if (builtin_attr->builtin == core::BuiltinValue::kPosition) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (!found) {
-            AddError(decl->source) << "a vertex shader must include the " << style::Enum("position")
-                                   << " builtin in its return type";
-            return false;
-        }
+        AddError(decl->source) << "a vertex shader must include the " << style::Enum("position")
+                               << " builtin in its return type";
+        return false;
     }
 
     if (decl->PipelineStage() == ast::PipelineStage::kCompute) {
@@ -1785,9 +1718,9 @@ bool Validator::Call(const sem::Call* call, sem::Statement* current_statement) c
     }
 
     auto* expr = call->Declaration();
-    bool is_call_stmt =
-        current_statement && Is<ast::CallStatement>(current_statement->Declaration(),
-                                                    [&](auto* stmt) { return stmt->expr == expr; });
+    bool is_call_stmt = (current_statement != nullptr) &&
+                        Is<ast::CallStatement>(current_statement->Declaration(),
+                                               [&](auto* stmt) { return stmt->expr == expr; });
     if (is_call_stmt) {
         // Call target is annotated with @must_use, but was used as a call statement.
         Switch(
@@ -2027,34 +1960,6 @@ bool Validator::TextureBuiltinFn(const sem::Call* call) const {
            check_arg_is_constexpr(core::ParameterUsage::kComponent, 0, 3);
 }
 
-bool Validator::WorkgroupUniformLoad(const sem::Call* call) const {
-    auto* builtin = call->Target()->As<sem::BuiltinFn>();
-    if (!builtin) {
-        return false;
-    }
-
-    TINT_ASSERT(call->Arguments().Length() > 0);
-    auto* arg = call->Arguments()[0];
-    auto* ptr = arg->Type()->As<core::type::Pointer>();
-    TINT_ASSERT(ptr != nullptr);
-    auto* ty = ptr->StoreType();
-
-    if (ty->Is<core::type::Atomic>() || atomic_composite_info_.Contains(ty)) {
-        AddError(arg->Declaration()->source)
-            << "workgroupUniformLoad must not be called with an argument that "
-               "contains an atomic type";
-        return false;
-    }
-
-    if (!ty->IsConstructible()) {
-        AddError(arg->Declaration()->source)
-            << "workgroupUniformLoad must be called with an argument whose type is constructible";
-        return false;
-    }
-
-    return true;
-}
-
 bool Validator::SubgroupBroadcast(const sem::Call* call) const {
     auto* builtin = call->Target()->As<sem::BuiltinFn>();
     if (!builtin) {
@@ -2222,8 +2127,8 @@ bool Validator::FunctionCall(const sem::Call* call, sem::Statement* current_stat
         }
 
         if (param_type->Is<core::type::Pointer>() &&
-            !allowed_features_.features.count(
-                wgsl::LanguageFeature::kUnrestrictedPointerParameters)) {
+            (allowed_features_.features.count(
+                 wgsl::LanguageFeature::kUnrestrictedPointerParameters) == 0u)) {
             // https://gpuweb.github.io/gpuweb/wgsl/#function-restriction
             // Each argument of pointer type to a user-defined function must have the same memory
             // view as its root identifier.
@@ -2240,9 +2145,7 @@ bool Validator::FunctionCall(const sem::Call* call, sem::Statement* current_stat
             } else {
                 root_store_type = root_ref_ty->StoreType();
             }
-            if (root_store_type != arg_store_type &&
-                IsValidationEnabled(param->Declaration()->attributes,
-                                    ast::DisabledValidation::kIgnoreInvalidPointerArgument)) {
+            if (root_store_type != arg_store_type) {
                 AddError(arg_expr->source) << "arguments of pointer type must not point to a "
                                               "subset of the originating variable";
                 return false;
@@ -2530,7 +2433,7 @@ bool Validator::PipelineStages(VectorRef<sem::Function*> entry_points) const {
 bool Validator::ModuleScopeVarUsages(VectorRef<sem::Function*> entry_points) const {
     for (auto* entry_point : entry_points) {
         if (!CheckNoMultipleModuleScopeVarsOfAddressSpace(entry_point,
-                                                          core::AddressSpace::kPushConstant)) {
+                                                          core::AddressSpace::kImmediate)) {
             return false;
         }
         if (!CheckNoMultipleModuleScopeVarsOfAddressSpace(entry_point,
@@ -2551,7 +2454,7 @@ bool Validator::Array(const sem::Array* arr, const Source& el_source) const {
         return false;
     }
 
-    if (!IsFixedFootprint(el_ty)) {
+    if (!el_ty->HasFixedFootprint()) {
         AddError(el_source) << "an array element type cannot contain a runtime-sized array";
         return false;
     }
@@ -2612,7 +2515,7 @@ bool Validator::Structure(const sem::Struct* str, ast::PipelineStage stage) cons
                 RaiseArrayWithOverrideCountError(member->Declaration()->type->source);
                 return false;
             }
-        } else if (!IsFixedFootprint(member->Type())) {
+        } else if (!member->Type()->HasFixedFootprint()) {
             AddError(member->Declaration()->source)
                 << "a struct that contains a runtime array cannot be nested inside another struct";
             return false;
@@ -3172,7 +3075,6 @@ std::string Validator::VectorPretty(uint32_t size, const core::type::Type* eleme
 bool Validator::CheckTypeAccessAddressSpace(const core::type::Type* store_ty,
                                             core::Access access,
                                             core::AddressSpace address_space,
-                                            VectorRef<const tint::ast::Attribute*> attributes,
                                             const Source& source) const {
     if (!AddressSpaceLayout(store_ty, address_space, source)) {
         return false;
@@ -3201,14 +3103,12 @@ bool Validator::CheckTypeAccessAddressSpace(const core::type::Type* store_ty,
                 return false;
             }
             break;
-        case core::AddressSpace::kPushConstant:
+        case core::AddressSpace::kImmediate:
             if (DAWN_UNLIKELY(!enabled_extensions_.Contains(
-                                  wgsl::Extension::kChromiumExperimentalPushConstant) &&
-                              IsValidationEnabled(attributes,
-                                                  ast::DisabledValidation::kIgnoreAddressSpace))) {
-                AddError(source) << "use of variable address space " << style::Enum("push_constant")
+                    wgsl::Extension::kChromiumExperimentalImmediate))) {
+                AddError(source) << "use of variable address space " << style::Enum("immediate")
                                  << " requires enabling extension "
-                                 << style::Code("chromium_experimental_push_constant");
+                                 << style::Code("chromium_experimental_immediate");
                 return false;
             }
             break;
@@ -3270,7 +3170,7 @@ bool Validator::CheckTypeAccessAddressSpace(const core::type::Type* store_ty,
 
 bool Validator::CheckNoMultipleModuleScopeVarsOfAddressSpace(sem::Function* entry_point,
                                                              core::AddressSpace space) const {
-    // State checked and modified by check() so that it remembers previously seen push_constant
+    // State checked and modified by check() so that it remembers previously seen immediate
     // variables for an entry-point.
     const sem::Variable* seen_var = nullptr;
     const sem::Function* seen_func = nullptr;

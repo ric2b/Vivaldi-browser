@@ -760,14 +760,22 @@ static bool rewind(EdgeList* activeEdges, Vertex** current, Vertex* dst, const C
         }
         Edge* leftEdge = v->fLeftEnclosingEdge;
         for (Edge* e = v->fFirstEdgeAbove; e; e = e->fNextEdgeAbove) {
+            if (!e) {
+                return false;
+            }
             if (!activeEdges->insert(e, leftEdge)) {
                 return false;
             }
             leftEdge = e;
             Vertex* top = e->fTop;
+            if (!top ||
+                (top->fLeftEnclosingEdge && !top->fLeftEnclosingEdge->hasTopAndBottom()) ||
+                (top->fRightEnclosingEdge && !top->fRightEnclosingEdge->hasTopAndBottom())) {
+                return false;
+            }
             if (c.sweep_lt(top->fPoint, dst->fPoint) &&
-                ((top->fLeftEnclosingEdge && !top->fLeftEnclosingEdge->isLeftOf(*e->fTop)) ||
-                 (top->fRightEnclosingEdge && !top->fRightEnclosingEdge->isRightOf(*e->fTop)))) {
+                ((top->fLeftEnclosingEdge && !top->fLeftEnclosingEdge->isLeftOf(*top)) ||
+                 (top->fRightEnclosingEdge && !top->fRightEnclosingEdge->isRightOf(*top)))) {
                 dst = top;
             }
         }

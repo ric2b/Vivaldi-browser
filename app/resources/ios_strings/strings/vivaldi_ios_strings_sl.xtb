@@ -4,48 +4,99 @@
 <translation id="1063263220330818888">Zasebno iskanje</translation>
 <translation id="1097355661841455597">Radi bi slišali vaše misli.</translation>
 <translation id="1137850887415122856">Če želite zakleniti zasebne zavihke, nastavite Touch ID, Face ID ali geslo.</translation>
+<translation id="1189137610071296104">Odpri v skladu zavihkov</translation>
 <translation id="1310184829257917508">Vprašaj za zasebno odpiranje povezav iz drugih aplikacij</translation>
 <translation id="1743244221910283364">Zavrzi spremembe</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {Add Tab to Stack}
+        other {Add Tabs to Stack}}</translation>
 <translation id="207677936531967364">Stran z novim zasebnim zavihkom</translation>
+<translation id="2099591136582442348">S tem boste trajno izbrisali sklad iz svoje naprave.</translation>
+<translation id="2181990701313127304">Nov zavihek v skladu</translation>
+<translation id="2351280151183279120">Deli sklad</translation>
 <translation id="2353953000228441783">Privzeti pogled spletnega mesta</translation>
 <translation id="2394192052244849643">Prilepi in poišči</translation>
 <translation id="2418705169960294134">Nov zasebni zavihek</translation>
+<translation id="2565593432251168402">Ostanite organizirani z ustvarjanjem skladov zavihkov</translation>
 <translation id="2783161812871838616">Zahtevaj spletno mesto za namizni računalnik</translation>
+<translation id="2806957659107692459">Ustvari sklad</translation>
 <translation id="2899836479226240291">Povezave v programu Vivaldi lahko samodejno odprete tako, da ga nastavite kot privzeto aplikacijo brskalnika.</translation>
 <translation id="3365529507898144230">Shrani v Fotografije</translation>
 <translation id="3434473769478814796">Prilepi in pojdi</translation>
 <translation id="3463990832590571933">Odpri v novem zasebnem zavihku</translation>
 <translation id="3473652525653758699">Novo zasebno okno</translation>
 <translation id="3501504415290398157">Za odklepanje zasebnih zavihkov uporabite <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
+<translation id="353418192940651934">Ohrani sklad</translation>
 <translation id="3607792383367580513">Prevedi</translation>
 <translation id="3692650606013198282">Odpri zasebno</translation>
+<translation id="3873885181515160073">Ustvarite nov sklad zavihkov tako, da mu daste ime in barvo</translation>
 <translation id="3922395466317605522">Prilagodi meni</translation>
 <translation id="3981599532037327317">Odpri ${url} zasebno</translation>
 <translation id="398477389655464998">Kopiraj povezavo do poudarka</translation>
+<translation id="3993429087389909418">Zavihki bodo ostali odprti v tej napravi, vendar bo sklad izbrisan iz vseh naprav, prijavljenih v <ph name="USER_EMAIL" />.</translation>
 <translation id="4026745073321351206">🙄 Ste opazili težavo?</translation>
+<translation id="4216644171369573466">Sklad zavihkov, <ph name="GROUP_TITLE" />, Meni.</translation>
 <translation id="4304713468139749426">Upravitelj gesel</translation>
+<translation id="4569525137269575065">Zapri sklad</translation>
 <translation id="473775607612524610">Posodobi</translation>
 <translation id="4755216899422789286">Odpri URL-je v Vivaldiju</translation>
+<translation id="4772190485302020393">Zapri vse zavihke in sklade</translation>
 <translation id="4802185666270672526">Skrij zahtevo za namizno spletno mesto</translation>
+<translation id="4828571836982833289">Odstranim sklad zavihkov?</translation>
+<translation id="4838250035189612538">Preimenuj sklad</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 tab stack closed and saved}
+            other {{count} tab stacks closed and saved}}</translation>
+<translation id="5019787757991745254">Barva sklada zavihkov <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Sklad zavihkov. Strnjeno.</translation>
 <translation id="5217245356412073535">Privzeti pogled spletnega mesta lahko spremenite v namizje v Nastavitve &gt; Nastavitve vsebine</translation>
 <translation id="5271549068863921519">Shrani geslo</translation>
 <translation id="5317780077021120954">Shrani</translation>
+<translation id="5385953732213322025">To spletno mesto poskuša odpreti aplikacijo. To vas bo popeljalo iz zasebnega načina.</translation>
 <translation id="5431239785743546285">Strani, ki ste jih prebrali</translation>
+<translation id="5521301883748677039">Izbrišem sklad?</translation>
+<translation id="5544011153887687593">Zavihek sklada zavihkov. <ph name="TAB_INDEX_IN_GROUP" /> od <ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Shranim geslo?</translation>
 <translation id="570209299585559496">Privzeti pogled spletnega mesta lahko spremenite v namizje v nastavitvah in nato v nastavitvah vsebine</translation>
+<translation id="5719777162751096990">Premakni na sklad zavihkov</translation>
 <translation id="5962477178930921574">Prilepi in poišči</translation>
+<translation id="6163856768888310791">Odstrani sklad</translation>
+<translation id="6168969409902608220">Ime sklada</translation>
 <translation id="6233792867654386826">Odpre vnesene URL-je v Vivaldiju.</translation>
+<translation id="6478587527114893588">Zapri sklad.</translation>
+<translation id="6527405730445064713">Sklad zavihkov. Razširjeno.</translation>
 <translation id="6532106788206463496">Shrani spremembe</translation>
+<translation id="6666425778700353369">S tem boste izbrisali sklad iz vseh naprav, prijavljenih v <ph name="USER_EMAIL" />.</translation>
 <translation id="6680416467695217368">Prilagodi meni</translation>
+<translation id="6695835495840050460">Tapnite "Dodaj zavihek v nov sklad"</translation>
+<translation id="6708694844902784277">Izbriši sklad</translation>
 <translation id="6827597288286078054">Zasebno iskanje</translation>
 <translation id="6851516051005285358">Zahtevaj spletno mesto za namizni računalnik</translation>
+<translation id="6890907822330704077">Sklad zavihkov, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> zavihkov.</translation>
 <translation id="7307970171564921489">Odklenite zasebne zavihke z <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Želite odpreti zasebno?</translation>
+<translation id="7363285031331302144">Ustvari sklade zavihkov za organizacijo odprtih zavihkov</translation>
+<translation id="7395230742578757172">Odpri v novem skladu zavihkov</translation>
+<translation id="7424676799308869002">Ohranim sklad?</translation>
 <translation id="7498234416455752244">Nadaljuj urejanje</translation>
 <translation id="7549299604720382000">Nov zasebni zavihek</translation>
+<translation id="7585610907974664408">Nov zasebni zavihek v skladu</translation>
+<translation id="7661319142491611883">Razširi sklad zavihkov.</translation>
+<translation id="7706213624515206557">Prikaži vse zavihke v skladu zavihkov</translation>
 <translation id="7961015016161918242">Nikoli</translation>
 <translation id="8326104954595890674">Nov zasebni zavihek</translation>
+<translation id="8345989863850359861">Odstranim zavihek in izbrišem sklad?</translation>
+<translation id="8407986162266014185">Deli sklad</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {Add Tab to New Stack}
+        other {Add Tabs to New Stack}}</translation>
+<translation id="8465550436083180511">Strni zavihek.</translation>
+<translation id="8685478989144570078">Skladi zavihkov</translation>
 <translation id="8756969031206844760">Posodobim geslo?</translation>
+<translation id="8852861335827546438">Nov sklad zavihkov</translation>
+<translation id="8951084872625418241">Nov zavihek v skladu</translation>
 <translation id="9042893549633094279">Zasebnost in varnost</translation>
 <translation id="9094033019050270033">Posodobi geslo</translation>
+<translation id="944434461715569989">Zapusti sklad</translation>
+<translation id="959061183386231608">Zavihki bodo ostali odprti v tej napravi, vendar bo sklad trajno izbrisan.</translation>
 </translationbundle>

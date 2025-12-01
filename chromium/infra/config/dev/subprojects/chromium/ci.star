@@ -130,6 +130,7 @@ ci_builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "release_builder",
             "remoteexec",
             "minimal_symbols",

@@ -17,7 +17,8 @@
 // 2. Any changes must be reviewed by someone from the crash reporting
 //    or security team. See OWNERS for suggested reviewers.
 //
-// For more information, see https://goo.gl/yMeyUY.
+// For more information, see:
+// https://docs.google.com/document/d/17y4kxuHFrVxAiuCP_FFtFA2HP5sNPsCD10KEx17Hz6M
 //
 // This file contains most of the code that actually runs in a signal handler
 // context. Some additional code is used both inside and outside the signal
@@ -170,12 +171,24 @@ bool TryHandleSignal(int signum, siginfo_t* info, void* context) {
       return false;
     }
 
-    // The simulated ip will be in the second parameter register (%rsi).
+    // The simulated ip will be in the second parameter register.
+#if V8_HOST_ARCH_X64
     auto* simulated_ip_reg = CONTEXT_REG(rsi, RSI);
+#elif V8_HOST_ARCH_ARM64
+    auto* simulated_ip_reg = CONTEXT_REG(x1, 1);
+#else
+#error "Unsupported architecture."
+#endif
     if (!IsFaultAddressCovered(*simulated_ip_reg)) return false;
     TH_DCHECK(gLandingPad != 0);
 
+#if V8_HOST_ARCH_X64
     auto* return_reg = CONTEXT_REG(rax, RAX);
+#elif V8_HOST_ARCH_ARM64
+    auto* return_reg = CONTEXT_REG(x0, 0);
+#else
+#error "Unsupported architecture."
+#endif
     *return_reg = gLandingPad;
     // The fault_address that is set in non-simulator builds here is set in the
     // simulator directly.

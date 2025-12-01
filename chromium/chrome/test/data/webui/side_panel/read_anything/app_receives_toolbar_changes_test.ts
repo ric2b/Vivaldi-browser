@@ -4,13 +4,12 @@
 
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
-import {BrowserProxy} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import {SpeechBrowserProxyImpl, ToolbarEvent, VoiceClientSideStatusCode, WordBoundaryMode} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {BrowserProxy, SpeechBrowserProxyImpl, SpeechController, ToolbarEvent, VoiceLanguageController, WordBoundaries} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertArrayEquals, assertEquals, assertFalse, assertNotEquals, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 import {hasStyle, microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
-import {createApp, emitEvent, mockMetrics, setupBasicSpeech} from './common.js';
+import {createApp, createSpeechSynthesisVoice, emitEvent, mockMetrics, setSimpleAxTreeWithText, setupBasicSpeech} from './common.js';
 import {FakeReadingMode} from './fake_reading_mode.js';
 import {TestColorUpdaterBrowserProxy} from './test_color_updater_browser_proxy.js';
 import type {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
@@ -20,6 +19,8 @@ suite('AppReceivesToolbarChanges', () => {
   let app: AppElement;
   let speech: TestSpeechBrowserProxy;
   let metrics: TestMetricsBrowserProxy;
+  let voiceLanguageController: VoiceLanguageController;
+  let speechController: SpeechController;
 
   function containerLetterSpacing(): number {
     return +window.getComputedStyle(app.$.container)
@@ -74,6 +75,11 @@ suite('AppReceivesToolbarChanges', () => {
     emitEvent(app, ToolbarEvent.THEME);
   }
 
+  function emitPlayPause(): Promise<void> {
+    emitEvent(app, ToolbarEvent.PLAY_PAUSE);
+    return microtasksFinished();
+  }
+
   setup(async () => {
     // Clearing the DOM should always be done first.
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
@@ -83,6 +89,10 @@ suite('AppReceivesToolbarChanges', () => {
     const readingMode = new FakeReadingMode();
     chrome.readingMode = readingMode as unknown as typeof chrome.readingMode;
     metrics = mockMetrics();
+    voiceLanguageController = new VoiceLanguageController();
+    VoiceLanguageController.setInstance(voiceLanguageController);
+    speechController = new SpeechController();
+    SpeechController.setInstance(speechController);
     app = await createApp();
   });
 
@@ -169,80 +179,36 @@ suite('AppReceivesToolbarChanges', () => {
     test('enabled languages are added', () => {
       const firstLanguage = 'en-us';
       emitLanguageToggle(firstLanguage);
-      assertTrue(app.enabledLangs.includes(firstLanguage));
-      assertTrue(chrome.readingMode.getLanguagesEnabledInPref()
-        .includes(firstLanguage));
+      assertTrue(voiceLanguageController.isLangEnabled(firstLanguage));
+      assertTrue(chrome.readingMode.getLanguagesEnabledInPref().includes(
+          firstLanguage));
 
       const secondLanguage = 'fr';
       emitLanguageToggle(secondLanguage);
-      assertTrue(app.enabledLangs.includes(secondLanguage));
-      assertTrue(chrome.readingMode.getLanguagesEnabledInPref()
-        .includes(secondLanguage));
+      assertTrue(voiceLanguageController.isLangEnabled(secondLanguage));
+      assertTrue(chrome.readingMode.getLanguagesEnabledInPref().includes(
+          secondLanguage));
     });
 
     test('disabled languages are removed', () => {
       const firstLanguage = 'en-us';
       emitLanguageToggle(firstLanguage);
-      assertTrue(app.enabledLangs.includes(firstLanguage));
-      assertTrue(chrome.readingMode.getLanguagesEnabledInPref()
-        .includes(firstLanguage));
+      assertTrue(voiceLanguageController.isLangEnabled(firstLanguage));
+      assertTrue(chrome.readingMode.getLanguagesEnabledInPref().includes(
+          firstLanguage));
 
       emitLanguageToggle(firstLanguage);
-      assertFalse(app.enabledLangs.includes(firstLanguage));
-      assertFalse(chrome.readingMode.getLanguagesEnabledInPref()
-        .includes(firstLanguage));
+      assertFalse(voiceLanguageController.isLangEnabled(firstLanguage));
+      assertFalse(chrome.readingMode.getLanguagesEnabledInPref().includes(
+          firstLanguage));
     });
-
-    suite('with language downloading enabled', () => {
-      let sentInstallRequestFor: string;
-
-      setup(() => {
-        sentInstallRequestFor = '';
-        // Monkey patch sendInstallVoicePackRequest() to spy on the method
-        chrome.readingMode.sendInstallVoicePackRequest = (language) => {
-          sentInstallRequestFor = language;
-        };
-      });
-
-      test(
-          'when previous language install failed, directly installs lang ' +
-              'without usual protocol of sending status request first',
-          () => {
-            const lang = 'en-us';
-            app.updateVoicePackStatus(lang, 'kOther');
-            emitLanguageToggle(lang);
-
-            assertEquals(lang, sentInstallRequestFor);
-            assertEquals(
-                app.getVoicePackStatusForTesting(lang).client,
-                VoiceClientSideStatusCode.SENT_INSTALL_REQUEST_ERROR_RETRY);
-          });
-
-      test(
-          'when there is no status for lang, directly sends install request',
-          () => {
-            emitLanguageToggle('en-us');
-
-            assertEquals('en-us', sentInstallRequestFor);
-          });
-
-
-      test(
-          'when language status is uninstalled, does not directly install lang',
-          () => {
-            const lang = 'en-us';
-            app.updateVoicePackStatus(lang, 'kNotInstalled');
-            emitLanguageToggle(lang);
-
-            assertEquals('', sentInstallRequestFor);
-          });
-      });
   });
 
-  test('on speech rate change speech rate updated', () => {
-    setupBasicSpeech(app, speech);
+  test('on speech rate change speech rate updated', async () => {
+    setupBasicSpeech(speech);
+    setSimpleAxTreeWithText('we mean no harm');
     app.updateContent();
-    app.playSpeech();
+    await emitPlayPause();
 
     const speechRate1 = 2;
     chrome.readingMode.speechRate = speechRate1;
@@ -264,13 +230,14 @@ suite('AppReceivesToolbarChanges', () => {
     assertArrayEquals([1, 2, 0.5, 4], speechRates);
   });
 
-  suite('play/pause', () => {
-    let propagatedActiveState: boolean;
+  test('on voice selected, current voice updated', () => {
+    const voice = createSpeechSynthesisVoice({lang: 'es-us', name: 'Poodle'});
+    emitEvent(app, ToolbarEvent.VOICE, {detail: {selectedVoice: voice}});
+    assertEquals(voice, voiceLanguageController.getCurrentVoice());
+  });
 
+  suite('play/pause', () => {
     setup(() => {
-      chrome.readingMode.onSpeechPlayingStateChanged = isSpeechActive => {
-        propagatedActiveState = isSpeechActive;
-      };
       app.updateContent();
       return microtasksFinished();
     });
@@ -280,32 +247,22 @@ suite('AppReceivesToolbarChanges', () => {
       return microtasksFinished();
     }
 
-    test('by default is paused', () => {
-      assertFalse(app.speechPlayingState.isSpeechActive);
-      assertFalse(propagatedActiveState);
-      assertFalse(app.speechPlayingState.hasSpeechBeenTriggered);
-
-      // isSpeechTreeInitialized is set in updateContent
-      assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
-    });
-
-
     test('on first click starts speech', async () => {
+      setSimpleAxTreeWithText('We come in peace');
       await emitPlayPause();
-      assertTrue(app.speechPlayingState.isSpeechActive);
-      assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
-      assertTrue(app.speechPlayingState.hasSpeechBeenTriggered);
-      assertTrue(propagatedActiveState);
+      assertTrue(speechController.isSpeechActive());
+      assertTrue(speechController.isSpeechTreeInitialized());
+      assertTrue(speechController.hasSpeechBeenTriggered());
     });
 
     test('on second click stops speech', async () => {
+      setSimpleAxTreeWithText('Don\'t be alarmed!');
       await emitPlayPause();
       await emitPlayPause();
 
-      assertFalse(app.speechPlayingState.isSpeechActive);
-      assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
-      assertTrue(app.speechPlayingState.hasSpeechBeenTriggered);
-      assertFalse(propagatedActiveState);
+      assertFalse(speechController.isSpeechActive());
+      assertTrue(speechController.isSpeechTreeInitialized());
+      assertTrue(speechController.hasSpeechBeenTriggered());
     });
 
     suite('on keyboard k pressed', () => {
@@ -319,8 +276,7 @@ suite('AppReceivesToolbarChanges', () => {
         app.$.appFlexParent.dispatchEvent(kPress);
         await microtasksFinished();
 
-        assertTrue(app.speechPlayingState.isSpeechActive);
-        assertTrue(propagatedActiveState);
+        assertTrue(speechController.isSpeechActive());
         assertEquals(0, metrics.getCallCount('recordSpeechStopSource'));
       });
 
@@ -329,8 +285,7 @@ suite('AppReceivesToolbarChanges', () => {
         app.$.appFlexParent.dispatchEvent(kPress);
         await microtasksFinished();
 
-        assertFalse(app.speechPlayingState.isSpeechActive);
-        assertFalse(propagatedActiveState);
+        assertFalse(speechController.isSpeechActive());
         assertEquals(
             chrome.readingMode.keyboardShortcutStopSource,
             await metrics.whenCalled('recordSpeechStopSource'));
@@ -356,7 +311,7 @@ suite('AppReceivesToolbarChanges', () => {
     setup(() => {
       emitColorTheme(chrome.readingMode.defaultTheme);
       app.updateContent();
-      app.playSpeech();
+      emitPlayPause();
     });
 
     test('on hide, uses transparent highlight', () => {
@@ -389,65 +344,34 @@ suite('AppReceivesToolbarChanges', () => {
     }
 
     function emitHighlight(granularity: number) {
-      chrome.readingMode.onHighlightGranularityChanged(granularity);
       emitEvent(app, ToolbarEvent.HIGHLIGHT_CHANGE, {
         detail: {data: granularity},
       });
     }
 
-    let highlightedWord: boolean;
-    let highlightedSentence: boolean;
-    let highlightedPhrase: boolean;
-
     setup(() => {
       chrome.readingMode.isPhraseHighlightingEnabled = true;
-      highlightedWord = false;
-      highlightedSentence = false;
-      highlightedPhrase = false;
-      app.highlightCurrentSentence = () => highlightedSentence = true;
-      app.highlightCurrentWord = () => highlightedWord = true;
-      app.highlightCurrentPhrase = () => highlightedPhrase = true;
-      app.wordBoundaryState.mode = WordBoundaryMode.BOUNDARY_DETECTED;
+      WordBoundaries.getInstance().updateBoundary(7);
       app.updateContent();
     });
 
     test('updates highlight', () => {
-      const wordHighlighting = chrome.readingMode.wordHighlighting;
-      emitHighlight(wordHighlighting);
-
-      app.playSpeech();
-
-      assertTrue(highlightedWord);
-      assertFalse(highlightedSentence);
-      assertFalse(highlightedPhrase);
-      assertEquals(wordHighlighting, chrome.readingMode.highlightGranularity);
-    });
-
-    test('multiple changes, uses latest granularity', () => {
-      const phraseHighlighting = chrome.readingMode.phraseHighlighting;
       emitHighlight(chrome.readingMode.wordHighlighting);
-      emitHighlight(phraseHighlighting);
+      emitPlayPause();
 
-      app.playSpeech();
-
-      assertTrue(highlightedWord, 'word');
-      assertFalse(highlightedSentence, 'sentence');
-      assertTrue(highlightedPhrase, 'phrase');
-      assertEquals(phraseHighlighting, chrome.readingMode.highlightGranularity);
-    });
-
-    test('on switch granularity after speech start, updates highlight', () => {
-      emitHighlight(chrome.readingMode.wordHighlighting);
-      const sentenceHighlighting = chrome.readingMode.sentenceHighlighting;
-
-      app.playSpeech();
-      emitHighlight(sentenceHighlighting);
-
-      assertTrue(highlightedWord, 'word');
-      assertTrue(highlightedSentence, 'sentence');
-      assertFalse(highlightedPhrase);
       assertEquals(
-          sentenceHighlighting, chrome.readingMode.highlightGranularity);
+          chrome.readingMode.wordHighlighting,
+          chrome.readingMode.highlightGranularity);
+
+      emitHighlight(chrome.readingMode.phraseHighlighting);
+      assertEquals(
+          chrome.readingMode.phraseHighlighting,
+          chrome.readingMode.highlightGranularity);
+
+      emitHighlight(chrome.readingMode.noHighlighting);
+      assertEquals(
+          chrome.readingMode.noHighlighting,
+          chrome.readingMode.highlightGranularity);
     });
 
     test('new theme uses colored highlight with highlights on', () => {
@@ -468,45 +392,15 @@ suite('AppReceivesToolbarChanges', () => {
       app.updateContent();
     });
 
-    function emitNextGranularity() {
-      emitEvent(app, ToolbarEvent.NEXT_GRANULARITY);
-    }
-
-    function emitPreviousGranularity() {
-      emitEvent(app, ToolbarEvent.PREVIOUS_GRANULARITY);
-    }
-
-    test('next propagates change', () => {
-      let movedToNext = false;
-      chrome.readingMode.movePositionToNextGranularity = () => {
-        movedToNext = true;
-      };
-
-      emitNextGranularity();
-
-      assertTrue(movedToNext);
-    });
-
     test('next highlights text', () => {
-      emitNextGranularity();
+      emitEvent(app, ToolbarEvent.NEXT_GRANULARITY);
       const currentHighlight =
           app.$.container.querySelector('.current-read-highlight');
       assertTrue(!!currentHighlight!.textContent);
     });
 
-    test('previous propagates change', () => {
-      let movedToPrevious: boolean = false;
-      chrome.readingMode.movePositionToPreviousGranularity = () => {
-        movedToPrevious = true;
-      };
-
-      emitPreviousGranularity();
-
-      assertTrue(movedToPrevious);
-    });
-
     test('previous highlights text', () => {
-      emitPreviousGranularity();
+      emitEvent(app, ToolbarEvent.PREVIOUS_GRANULARITY);
       const currentHighlight =
           app.$.container.querySelector('.current-read-highlight');
       assertTrue(!!currentHighlight!.textContent);

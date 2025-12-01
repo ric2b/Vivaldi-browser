@@ -265,7 +265,7 @@ void FontSizeTabHelper::DidFinishNavigation(web::WebState* web_state,
 }
 
 void FontSizeTabHelper::WebStateRealized(web::WebState* web_state) {
-  CHECK(!notification_observer_, base::NotFatalUntil::M125);
+  CHECK(!notification_observer_);
   CreateNotificationObserver();
 }
 
@@ -393,5 +393,3 @@ bool FontSizeTabHelper::IsGoogleCachedAMPPage() const {
 
   return true;
 }
-
-WEB_STATE_USER_DATA_KEY_IMPL(FontSizeTabHelper)

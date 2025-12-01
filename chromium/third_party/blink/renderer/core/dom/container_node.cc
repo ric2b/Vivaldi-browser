@@ -85,6 +85,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 
 namespace blink {
 
@@ -297,9 +298,9 @@ bool ContainerNode::EnsurePreInsertionValidity(
     if (!ChildTypeAllowed(child->getNodeType())) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kHierarchyRequestError,
-          "Nodes of type '" + child->nodeName() +
-              "' may not be inserted inside nodes of type '" + nodeName() +
-              "'.");
+          WTF::StrCat({"Nodes of type '", child->nodeName(),
+                       "' may not be inserted inside nodes of type '",
+                       nodeName(), "'."}));
       return false;
     }
     return true;
@@ -556,7 +557,7 @@ void ContainerNode::InsertBeforeCommon(Node& next_child, Node& new_child) {
     DCHECK(firstChild() == next_child);
     SetFirstChild(&new_child);
   }
-  new_child.SetParentOrShadowHostNode(this);
+  new_child.SetParentNode(this);
   new_child.SetPreviousSibling(prev);
   new_child.SetNextSibling(&next_child);
 }
@@ -567,7 +568,7 @@ void ContainerNode::AppendChildCommon(Node& child) {
 #endif
   DCHECK(ScriptForbiddenScope::IsScriptForbidden());
 
-  child.SetParentOrShadowHostNode(this);
+  child.SetParentNode(this);
   if (last_child_) {
     child.SetPreviousSibling(last_child_);
     last_child_->SetNextSibling(&child);
@@ -919,9 +920,10 @@ static bool ShouldMergeCombinedTextAfterRemoval(const Node& old_child) {
 
   // Request to merge combined texts in anonymous block.
   // See http://crbug.com/1233432
-  if (!previous_sibling->IsAnonymousBlock() ||
-      !next_sibling->IsAnonymousBlock())
+  if (!previous_sibling->IsAnonymousBlockFlow() ||
+      !next_sibling->IsAnonymousBlockFlow()) {
     return false;
+  }
 
   if (IsA<LayoutTextCombine>(previous_sibling->SlowLastChild()) &&
       IsA<LayoutTextCombine>(next_sibling->SlowFirstChild())) [[unlikely]] {
@@ -1029,7 +1031,7 @@ void ContainerNode::RemoveBetween(Node* previous_child,
 
   old_child.SetPreviousSibling(nullptr);
   old_child.SetNextSibling(nullptr);
-  old_child.SetParentOrShadowHostNode(nullptr);
+  old_child.SetParentNode(nullptr);
 
   GetDocument().AdoptIfNeeded(old_child);
 }
@@ -1958,26 +1960,22 @@ void ContainerNode::CheckSoftNavigationHeuristicsTracking(
   if (!document.IsTrackingSoftNavigationHeuristics()) {
     return;
   }
+  if (!inserted_node.isConnected()) {
+    return;
+  }
   LocalDOMWindow* window = document.domWindow();
   if (!window) {
     return;
   }
-  LocalFrame* frame = window->GetFrame();
-  if (!frame || !frame->IsMainFrame()) {
-    return;
-  }
-
   if (SoftNavigationHeuristics* heuristics =
-          SoftNavigationHeuristics::From(*window)) {
+          window->GetSoftNavigationHeuristics()) {
+    // When a child node, which is an HTML-element, is modified within a parent
+    // (added, moved, etc), mark that child as modified by soft navigation.
+    // Otherwise, if the child is not an HTML-element, mark the parent instead.
     // TODO(crbug.com/1521100): This does not filter out updates from isolated
     // worlds. Should it?
-    if (heuristics->ModifiedDOM()) {
-      if (inserted_node.IsHTMLElement()) {
-        inserted_node.SetIsModifiedBySoftNavigation();
-      } else {
-        SetIsModifiedBySoftNavigation();
-      }
-    }
+    Node* updated_node = inserted_node.IsHTMLElement() ? &inserted_node : this;
+    heuristics->ModifiedDOM(updated_node);
   }
 }
 

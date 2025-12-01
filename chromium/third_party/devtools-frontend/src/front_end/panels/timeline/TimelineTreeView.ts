@@ -1,6 +1,7 @@
 // Copyright 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/legacy/legacy.js';
 
@@ -599,10 +600,12 @@ export class TimelineTreeView extends
 
   override wasShown(): void {
     this.dataGrid.addEventListener(DataGrid.DataGrid.Events.SELECTED_NODE, this.#onDataGridSelectionChange, this);
+    this.dataGrid.addEventListener(DataGrid.DataGrid.Events.DESELECTED_NODE, this.#onDataGridDeselection, this);
   }
 
   override childWasDetached(_widget: UI.Widget.Widget): void {
     this.dataGrid.removeEventListener(DataGrid.DataGrid.Events.SELECTED_NODE, this.#onDataGridSelectionChange);
+    this.dataGrid.removeEventListener(DataGrid.DataGrid.Events.DESELECTED_NODE, this.#onDataGridDeselection);
   }
 
   /**
@@ -614,6 +617,17 @@ export class TimelineTreeView extends
       void {
     this.onClick((event.data as GridNode).profileNode);
     this.onHover((event.data as GridNode).profileNode);
+  }
+
+  /**
+   * Called when the user deselects a row.
+   * This can either be because they have selected a new row
+   * (you should expect a SELECTED_NODE event after this one)
+   * or because they have deselected without a new selection.
+   */
+  #onDataGridDeselection(): void {
+    this.onClick(null);
+    this.onHover(null);
   }
 
   onGridNodeOpened(): void {
@@ -1099,7 +1113,7 @@ export class AggregatedTimelineTreeView extends TimelineTreeView {
 
   // This is our groupingFunction that returns the eventId in Domain, Subdomain, and ThirdParty groupBy scenarios.
   // The eventid == the identity of a node that we expect in a bottomUp tree (either without grouping or with the groupBy grouping)
-  // A "top node" (in `ungrouppedTopNodes`) is aggregated by this. (But so are all the other nodes, except the `GroupNode`s)
+  // A "top node" (in `ungroupedTopNodes`) is aggregated by this. (But so are all the other nodes, except the `GroupNode`s)
   private domainByEvent(groupBy: AggregatedTimelineTreeView.GroupBy, event: Trace.Types.Events.Event): string {
     const parsedTrace = this.parsedTrace();
     if (!parsedTrace) {

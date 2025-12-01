@@ -69,18 +69,37 @@ class ChromiumPlugin implements Plugin<Project> {
             androidTestCompileLatest
         }
 
+        def constraintAndroid = {
+            attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                    project.objects.named(TargetJvmEnvironment, TargetJvmEnvironment.ANDROID))
+        }
+        def constraintJvm = {
+            attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
+                    project.objects.named(TargetJvmEnvironment, TargetJvmEnvironment.STANDARD_JVM))
+        }
+
         project.dependencies.attributesSchema {
             attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE) {
                 compatibilityRules.add(TargetJvmEnvironmentCompatibilityRules.class)
             }
         }
 
-        project.configurations.configureEach {
+        // Helps gradle disambiguate between different variants of the same
+        // dependency. We usually want the same thing for all deps, a java
+        // implementation not an API, source files, docs, etc. Sometimes we want
+        // the android variant if available and sometimes the desktop JVM
+        // variant depending on the configuration.
+        project.configurations.configureEach { Configuration config ->
             attributes {
                 attribute(Attribute.of("org.gradle.category", String), "library")
                 attribute(Attribute.of("org.gradle.usage", String), "java-runtime")
-                attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
-                        project.objects.named(TargetJvmEnvironment, TargetJvmEnvironment.ANDROID))
+            }
+            // testCompile config is for host side tests (Robolectric) so we prefer
+            // the non-android versions of deps if available.
+            if (config.name.startsWith('testCompile')) {
+                attributes constraintJvm
+            } else {
+                attributes constraintAndroid
             }
         }
 
@@ -95,18 +114,10 @@ class ChromiumPlugin implements Plugin<Project> {
                 }
             }
         }
+
         project.configurations.each { Configuration configuration ->
             if (configuration.name.endsWith('Latest')) {
                 configuration.resolutionStrategy(latestResolutionStrategy)
-            }
-        }
-
-        // testCompile config is for host side tests (Robolectric) so we prefer
-        // the non-android versions of deps if available.
-        project.configurations.testCompile {
-            attributes {
-                attribute(TargetJvmEnvironment.TARGET_JVM_ENVIRONMENT_ATTRIBUTE,
-                        project.objects.named(TargetJvmEnvironment, TargetJvmEnvironment.STANDARD_JVM))
             }
         }
 

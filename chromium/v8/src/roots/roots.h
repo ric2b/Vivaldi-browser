@@ -110,8 +110,7 @@ class RootVisitor;
   V(Map, coverage_info_map, CoverageInfoMap)                                   \
   V(Map, dictionary_template_info_map, DictionaryTemplateInfoMap)              \
   V(Map, global_dictionary_map, GlobalDictionaryMap)                           \
-  V(Map, global_context_side_property_cell_map,                                \
-    GlobalContextSidePropertyCellMap)                                          \
+  V(Map, context_cell_map, ContextCellMap)                                     \
   V(Map, many_closures_cell_map, ManyClosuresCellMap)                          \
   V(Map, mega_dom_handler_map, MegaDomHandlerMap)                              \
   V(Map, module_info_map, ModuleInfoMap)                                       \
@@ -127,11 +126,14 @@ class RootVisitor;
   V(Map, preparse_data_map, PreparseDataMap)                                   \
   V(Map, property_array_map, PropertyArrayMap)                                 \
   V(Map, accessor_info_map, AccessorInfoMap)                                   \
+  V(Map, interceptor_info_map, InterceptorInfoMap)                             \
   V(Map, regexp_match_info_map, RegExpMatchInfoMap)                            \
   V(Map, regexp_data_map, RegExpDataMap)                                       \
   V(Map, atom_regexp_data_map, AtomRegExpDataMap)                              \
   V(Map, ir_regexp_data_map, IrRegExpDataMap)                                  \
+  V(Map, double_string_cache_map, DoubleStringCacheMap)                        \
   V(Map, simple_number_dictionary_map, SimpleNumberDictionaryMap)              \
+  V(Map, simple_name_dictionary_map, SimpleNameDictionaryMap)                  \
   V(Map, small_ordered_hash_map_map, SmallOrderedHashMapMap)                   \
   V(Map, small_ordered_hash_set_map, SmallOrderedHashSetMap)                   \
   V(Map, small_ordered_name_dictionary_map, SmallOrderedNameDictionaryMap)     \
@@ -140,7 +142,6 @@ class RootVisitor;
   V(Map, synthetic_module_map, SyntheticModuleMap)                             \
   IF_WASM(V, Map, wasm_import_data_map, WasmImportDataMap)                     \
   IF_WASM(V, Map, wasm_capi_function_data_map, WasmCapiFunctionDataMap)        \
-  IF_WASM(V, Map, wasm_continuation_object_map, WasmContinuationObjectMap)     \
   IF_WASM(V, Map, wasm_dispatch_table_map, WasmDispatchTableMap)               \
   IF_WASM(V, Map, wasm_exported_function_data_map,                             \
           WasmExportedFunctionDataMap)                                         \
@@ -150,6 +151,7 @@ class RootVisitor;
   IF_WASM(V, Map, wasm_null_map, WasmNullMap)                                  \
   IF_WASM(V, Map, wasm_resume_data_map, WasmResumeDataMap)                     \
   IF_WASM(V, Map, wasm_suspender_object_map, WasmSuspenderObjectMap)           \
+  IF_WASM(V, Map, wasm_continuation_object_map, WasmContinuationObjectMap)     \
   IF_WASM(V, Map, wasm_trusted_instance_data_map, WasmTrustedInstanceDataMap)  \
   IF_WASM(V, Map, wasm_type_info_map, WasmTypeInfoMap)                         \
   V(Map, weak_fixed_array_map, WeakFixedArrayMap)                              \
@@ -232,8 +234,6 @@ class RootVisitor;
   V(Cell, invalid_prototype_validity_cell, InvalidPrototypeValidityCell)       \
   V(FeedbackCell, many_closures_cell, ManyClosuresCell)                        \
   STRONG_READ_ONLY_HEAP_NUMBER_ROOT_LIST(V)                                    \
-  /* Table of strings of one-byte single characters */                         \
-  V(FixedArray, single_character_string_table, SingleCharacterStringTable)     \
   /* Marker for self-references during code-generation */                      \
   V(Hole, self_reference_marker, SelfReferenceMarker)                          \
   /* Marker for basic-block usage counters array during code-generation */     \
@@ -244,8 +244,11 @@ class RootVisitor;
   V(ScopeInfo, native_scope_info, NativeScopeInfo)                             \
   V(ScopeInfo, shadow_realm_scope_info, ShadowRealmScopeInfo)                  \
   V(RegisteredSymbolTable, empty_symbol_table, EmptySymbolTable)               \
+  V(ContextCell, undefined_context_cell, UndefinedContextCell)                 \
   /* Hash seed */                                                              \
   V(ByteArray, hash_seed, HashSeed)                                            \
+  V(FixedArray, preallocated_number_string_table,                              \
+    PreallocatedNumberStringTable)                                             \
   IF_WASM(V, HeapObject, wasm_null_padding, WasmNullPadding)                   \
   IF_WASM(V, WasmNull, wasm_null, WasmNull)
 
@@ -334,8 +337,9 @@ class RootVisitor;
     NoUndetectableObjectsProtector)                                            \
   V(PropertyCell, is_concat_spreadable_protector, IsConcatSpreadableProtector) \
   V(PropertyCell, array_species_protector, ArraySpeciesProtector)              \
-  V(PropertyCell, typed_array_length_protector, TypedArrayLengthProtector)     \
   V(PropertyCell, typed_array_species_protector, TypedArraySpeciesProtector)   \
+  V(PropertyCell, no_date_time_configuration_change_protector,                 \
+    NoDateTimeConfigurationChangeProtector)                                    \
   V(PropertyCell, promise_species_protector, PromiseSpeciesProtector)          \
   V(PropertyCell, regexp_species_protector, RegExpSpeciesProtector)            \
   V(PropertyCell, string_length_protector, StringLengthProtector)              \
@@ -381,7 +385,8 @@ class RootVisitor;
 // These root references can be updated by the mutator.
 #define STRONG_MUTABLE_MOVABLE_ROOT_LIST(V)                                 \
   /* Caches */                                                              \
-  V(FixedArray, number_string_cache, NumberStringCache)                     \
+  V(SmiStringCache, smi_string_cache, SmiStringCache)                       \
+  V(DoubleStringCache, double_string_cache, DoubleStringCache)              \
   /* Lists and dictionaries */                                              \
   V(RegisteredSymbolTable, public_symbol_table, PublicSymbolTable)          \
   V(RegisteredSymbolTable, api_symbol_table, ApiSymbolTable)                \
@@ -405,7 +410,6 @@ class RootVisitor;
   V(WeakArrayList, shared_wasm_memories, SharedWasmMemories)                \
   /* EphemeronHashTable for debug scopes (local debug evaluate) */          \
   V(HeapObject, locals_block_list_cache, DebugLocalsBlockListCache)         \
-  IF_WASM(V, HeapObject, active_continuation, ActiveContinuation)           \
   IF_WASM(V, HeapObject, active_suspender, ActiveSuspender)                 \
   IF_WASM(V, WeakFixedArray, js_to_wasm_wrappers, JSToWasmWrappers)         \
   IF_WASM(V, WeakFixedArray, wasm_canonical_rtts, WasmCanonicalRtts)        \
@@ -466,20 +470,21 @@ class RootVisitor;
 #define ACCESSOR_INFO_ROOT_LIST(V) \
   ACCESSOR_INFO_LIST_GENERATOR(ACCESSOR_INFO_ROOT_LIST_ADAPTER, V)
 
-#define READ_ONLY_ROOT_LIST(V)      \
-  STRONG_READ_ONLY_ROOT_LIST(V)     \
-  INTERNALIZED_STRING_ROOT_LIST(V)  \
-  PRIVATE_SYMBOL_ROOT_LIST(V)       \
-  PUBLIC_SYMBOL_ROOT_LIST(V)        \
-  WELL_KNOWN_SYMBOL_ROOT_LIST(V)    \
-  STRUCT_MAPS_LIST(V)               \
-  TORQUE_DEFINED_MAP_ROOT_LIST(V)   \
-  ALLOCATION_SITE_MAPS_LIST(V)      \
-  NAME_FOR_PROTECTOR_ROOT_LIST(V)   \
-  DATA_HANDLER_MAPS_LIST(V)         \
-  /* Maps */                        \
-  V(Map, external_map, ExternalMap) \
-  V(Map, message_object_map, JSMessageObjectMap)
+#define READ_ONLY_ROOT_LIST(V)                   \
+  STRONG_READ_ONLY_ROOT_LIST(V)                  \
+  INTERNALIZED_STRING_ROOT_LIST(V)               \
+  PRIVATE_SYMBOL_ROOT_LIST(V)                    \
+  PUBLIC_SYMBOL_ROOT_LIST(V)                     \
+  WELL_KNOWN_SYMBOL_ROOT_LIST(V)                 \
+  STRUCT_MAPS_LIST(V)                            \
+  TORQUE_DEFINED_MAP_ROOT_LIST(V)                \
+  ALLOCATION_SITE_MAPS_LIST(V)                   \
+  NAME_FOR_PROTECTOR_ROOT_LIST(V)                \
+  DATA_HANDLER_MAPS_LIST(V)                      \
+  /* Maps */                                     \
+  V(Map, external_map, ExternalMap)              \
+  V(Map, message_object_map, JSMessageObjectMap) \
+  V(Map, cpp_heap_external_map, CppHeapExternalMap)
 
 #define MUTABLE_ROOT_LIST(V)            \
   STRONG_MUTABLE_IMMOVABLE_ROOT_LIST(V) \
@@ -518,6 +523,12 @@ enum class RootIndex : uint16_t {
   // Heap::CreateLateReadOnlyJSReceiverMaps.
   kFirstJSReceiverMapRoot = kJSSharedArrayMap,
 
+  kSingleCharacterStringRootsCount =
+      SINGLE_CHARACTER_INTERNALIZED_STRING_LIST_GENERATOR(COUNT_ROOT, n/a),
+  kFirstSingleCharacterString = kascii_nul_string,
+  kLastSingleCharacterString =
+      kFirstSingleCharacterString + kSingleCharacterStringRootsCount - 1,
+
   // Use for fast protector update checks
   kFirstNameForProtector = kconstructor_string,
   kNameForProtectorCount = 0 NAME_FOR_PROTECTOR_ROOT_LIST(COUNT_ROOT),
@@ -548,6 +559,11 @@ enum class RootIndex : uint16_t {
 #undef COUNT_ROOT
 };
 // clang-format on
+
+static_assert(RootIndex::kFirstSingleCharacterString ==
+              RootIndex::kascii_nul_string);
+static_assert(RootIndex::kLastSingleCharacterString ==
+              RootIndex::klatin1_ff_string);
 
 static_assert(RootIndex::kFirstNameForProtector <=
               RootIndex::kLastNameForProtector);
@@ -629,11 +645,11 @@ class RootsTable {
 
   static constexpr RootIndex SingleCharacterStringIndex(int c) {
     DCHECK_GE(c, 0);
-    DCHECK_LE(c, static_cast<unsigned>(RootIndex::klatin1_ff_string) -
-                     static_cast<unsigned>(RootIndex::kascii_nul_string));
+    DCHECK_LT(
+        c, static_cast<unsigned>(RootIndex::kSingleCharacterStringRootsCount));
     static_assert(static_cast<int>(RootIndex::kFirstReadOnlyRoot) == 0);
     return static_cast<RootIndex>(
-        static_cast<unsigned>(RootIndex::kascii_nul_string) + c);
+        static_cast<unsigned>(RootIndex::kFirstSingleCharacterString) + c);
   }
 
  private:
@@ -735,6 +751,8 @@ class ReadOnlyRoots {
 #endif
 
   V8_INLINE Tagged<Boolean> boolean_value(bool value) const;
+
+  V8_INLINE Tagged<String> single_character_string(int code) const;
 
   V8_INLINE Address address_at(RootIndex root_index) const;
   V8_INLINE Tagged<Object> object_at(RootIndex root_index) const;

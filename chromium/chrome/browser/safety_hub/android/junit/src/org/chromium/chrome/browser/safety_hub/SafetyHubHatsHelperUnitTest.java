@@ -50,7 +50,8 @@ public class SafetyHubHatsHelperUnitTest {
                         ContentSettingsType.MEDIASTREAM_CAMERA,
                     },
                     0,
-                    0);
+                    0,
+                    PermissionsRevocationType.UNUSED_PERMISSIONS);
     private static final NotificationPermissions NOTIFICATION_PERMISSIONS =
             NotificationPermissions.create(EXAMPLE_URL, "*", 3);
     private static final String HATS_SURVEY_TRIGGER_ID = "safety_hub_android_organic_survey";
@@ -99,7 +100,7 @@ public class SafetyHubHatsHelperUnitTest {
         TestSurveyUtils.setTestSurveyConfigForTrigger(
                 HATS_SURVEY_TRIGGER_ID, new String[0], new String[0]);
         SurveyClientFactory.setInstanceForTesting(mSurveyFactory);
-        doReturn(mSurveyClient).when(mSurveyFactory).createClient(any(), any(), any());
+        doReturn(mSurveyClient).when(mSurveyFactory).createClient(any(), any(), any(), any());
     }
 
     private void mockPasswordCounts(int compromised, int weak, int reused) {

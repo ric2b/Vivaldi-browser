@@ -263,8 +263,6 @@ void AutofillPopupControllerImpl::Show(
   }
 
   if (IsRootPopup()) {
-    shown_time_ = base::TimeTicks::Now();
-
     // We may already be observing from a previous `Show` call.
     // TODO(crbug.com/41486228): Consider not to recycle views or controllers
     // and only permit a single call to `Show`.
@@ -355,12 +353,6 @@ void AutofillPopupControllerImpl::Hide(SuggestionHidingReason reason) {
   // properly opening the popup.
   AutofillMetrics::LogAutofillSuggestionHidingReason(
       suggestions_filling_product_, reason);
-
-  if (IsRootPopup() && shown_time_) {
-    AutofillMetrics::LogAutofillPopupVisibleDuration(
-        suggestions_filling_product_, base::TimeTicks::Now() - *shown_time_);
-    shown_time_.reset();
-  }
 
   HideViewAndDie();
 }
@@ -528,6 +520,7 @@ bool AutofillPopupControllerImpl::RemoveSuggestion(
     case FillingProduct::kCompose:
     case FillingProduct::kPlusAddresses:
     case FillingProduct::kAutofillAi:
+    case FillingProduct::kIdentityCredential:
       break;
   }
 
@@ -640,12 +633,6 @@ void AutofillPopupControllerImpl::FireControlsChangedEvent(bool is_show) {
     return;
   }
 
-  // Retrieve the ax tree id associated with the current web contents.
-  ui::AXTreeID tree_id;
-  if (content::RenderFrameHost* rfh = web_contents_->GetFocusedFrame()) {
-    tree_id = rfh->GetAXTreeID();
-  }
-
   // In order to get the AXPlatformNode for the ax node id, we first need
   // the AXPlatformNode for the web contents.
   ui::AXPlatformNode* root_platform_node =
@@ -654,11 +641,11 @@ void AutofillPopupControllerImpl::FireControlsChangedEvent(bool is_show) {
     return;
   }
 
+  // Retrieve the ax tree id associated with the current web contents.
   ui::AXPlatformNodeDelegate* root_platform_node_delegate =
       root_platform_node->GetDelegate();
-  if (!root_platform_node_delegate) {
-    return;
-  }
+  ui::AXTreeID tree_id =
+      root_platform_node_delegate->GetTreeData().focused_tree_id;
 
   // Now get the target node from its tree ID and node ID.
   ui::AXPlatformNode* target_node =

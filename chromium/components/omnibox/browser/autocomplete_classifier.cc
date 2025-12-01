@@ -62,7 +62,7 @@ int AutocompleteClassifier::DefaultOmniboxProviders(bool is_low_memory_device) {
                .show_recently_closed_tabs
            ? AutocompleteProvider::TYPE_RECENTLY_CLOSED_TABS
            : 0) |
-      (OmniboxFieldTrial::IsStarterPackPageEnabled()
+      (omnibox_feature_configs::ContextualSearch::Get().show_open_lens_action
            ? AutocompleteProvider::TYPE_CONTEXTUAL_SEARCH
            : 0) |
 #else
@@ -74,6 +74,10 @@ int AutocompleteClassifier::DefaultOmniboxProviders(bool is_low_memory_device) {
       AutocompleteProvider::TYPE_VOICE_SUGGEST |
       // Only enabled for hub search.
       AutocompleteProvider::TYPE_OPEN_TAB |
+      // Only enabled for hub search.
+      (base::FeatureList::IsEnabled(omnibox::kAndroidHubSearchTabGroups)
+           ? AutocompleteProvider::TYPE_TAB_GROUP
+           : 0) |
 #endif
 #if !BUILDFLAG(IS_IOS)
       (history_clusters::GetConfig().is_journeys_enabled_no_locale_check &&

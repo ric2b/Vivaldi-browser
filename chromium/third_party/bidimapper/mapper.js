@@ -158,7 +158,6 @@
         BiDiModule["Browser"] = "browser";
         BiDiModule["BrowsingContext"] = "browsingContext";
         BiDiModule["Cdp"] = "goog:cdp";
-        BiDiModule["DeprecatedCdp"] = "cdp";
         BiDiModule["Input"] = "input";
         BiDiModule["Log"] = "log";
         BiDiModule["Network"] = "network";
@@ -217,6 +216,8 @@
     (function (Bluetooth) {
         (function (EventNames) {
             EventNames["RequestDevicePromptUpdated"] = "bluetooth.requestDevicePromptUpdated";
+            EventNames["GattConnectionAttempted"] = "bluetooth.gattConnectionAttempted";
+            EventNames["CharacteristicEventGenerated"] = "bluetooth.characteristicEventGenerated";
         })(Bluetooth.EventNames || (Bluetooth.EventNames = {}));
     })(Bluetooth$2 || (Bluetooth$2 = {}));
     const EVENT_NAMES = new Set([
@@ -384,10 +385,31 @@
         parseSimulateAdvertisementParameters(params) {
             return params;
         }
+        parseSimulateCharacteristicParameters(params) {
+            return params;
+        }
+        parseSimulateCharacteristicResponseParameters(params) {
+            return params;
+        }
+        parseSimulateDescriptorParameters(params) {
+            return params;
+        }
+        parseSimulateGattConnectionResponseParameters(params) {
+            return params;
+        }
+        parseSimulateGattDisconnectionParameters(params) {
+            return params;
+        }
         parseSimulatePreconnectedPeripheralParameters(params) {
             return params;
         }
-        parseRemoveUserContextParams(params) {
+        parseSimulateServiceParameters(params) {
+            return params;
+        }
+        parseCreateUserContextParameters(params) {
+            return params;
+        }
+        parseRemoveUserContextParameters(params) {
             return params;
         }
         parseActivateParams(params) {
@@ -433,6 +455,9 @@
             return params;
         }
         parseSendCommandParams(params) {
+            return params;
+        }
+        parseSetGeolocationOverrideParams(params) {
             return params;
         }
         parseAddPreloadScriptParams(params) {
@@ -532,9 +557,11 @@
         #browserCdpClient;
         #browsingContextStorage;
         #userContextStorage;
-        constructor(browserCdpClient, browsingContextStorage, userContextStorage) {
+        #mapperOptionsStorage;
+        constructor(browserCdpClient, browsingContextStorage, mapperOptionsStorage, userContextStorage) {
             this.#browserCdpClient = browserCdpClient;
             this.#browsingContextStorage = browsingContextStorage;
+            this.#mapperOptionsStorage = mapperOptionsStorage;
             this.#userContextStorage = userContextStorage;
         }
         close() {
@@ -542,14 +569,33 @@
             return {};
         }
         async createUserContext(params) {
-            const request = {
-                proxyServer: params['goog:proxyServer'] ?? undefined,
-            };
-            const proxyBypassList = params['goog:proxyBypassList'] ?? undefined;
-            if (proxyBypassList) {
-                request.proxyBypassList = proxyBypassList.join(',');
+            const w3cParams = params;
+            if (w3cParams.acceptInsecureCerts !== undefined) {
+                if (w3cParams.acceptInsecureCerts === false &&
+                    this.#mapperOptionsStorage.mapperOptions?.acceptInsecureCerts === true)
+                    throw new UnknownErrorException(`Cannot set user context's "acceptInsecureCerts" to false, when a capability "acceptInsecureCerts" is set to true`);
+            }
+            const request = {};
+            if (w3cParams.proxy) {
+                const proxyStr = getProxyStr(w3cParams.proxy);
+                if (proxyStr) {
+                    request.proxyServer = proxyStr;
+                }
+                if (w3cParams.proxy.noProxy) {
+                    request.proxyBypassList = w3cParams.proxy.noProxy.join(',');
+                }
+            }
+            else {
+                if (params['goog:proxyServer'] !== undefined) {
+                    request.proxyServer = params['goog:proxyServer'];
+                }
+                const proxyBypassList = params['goog:proxyBypassList'] ?? undefined;
+                if (proxyBypassList) {
+                    request.proxyBypassList = proxyBypassList.join(',');
+                }
             }
             const context = await this.#browserCdpClient.sendCommand('Target.createBrowserContext', request);
+            this.#userContextStorage.getConfig(context.browserContextId).acceptInsecureCerts = params['acceptInsecureCerts'];
             return {
                 userContext: context.browserContextId,
             };
@@ -604,6 +650,49 @@
             }
             return { clientWindows: uniqueClientWindows };
         }
+    }
+    function getProxyStr(proxyConfig) {
+        if (proxyConfig.proxyType === 'direct' ||
+            proxyConfig.proxyType === 'system') {
+            return undefined;
+        }
+        if (proxyConfig.proxyType === 'pac') {
+            throw new UnsupportedOperationException(`PAC proxy configuration is not supported per user context`);
+        }
+        if (proxyConfig.proxyType === 'autodetect') {
+            throw new UnsupportedOperationException(`Autodetect proxy is not supported per user context`);
+        }
+        if (proxyConfig.proxyType === 'manual') {
+            const servers = [];
+            if (proxyConfig.httpProxy !== undefined) {
+                servers.push(`http=${proxyConfig.httpProxy}`);
+            }
+            if (proxyConfig.ftpProxy !== undefined) {
+                servers.push(`ftp=${proxyConfig.ftpProxy}`);
+            }
+            if (proxyConfig.sslProxy !== undefined) {
+                servers.push(`https=${proxyConfig.sslProxy}`);
+            }
+            if (proxyConfig.socksProxy !== undefined ||
+                proxyConfig.socksVersion !== undefined) {
+                if (proxyConfig.socksProxy === undefined) {
+                    throw new InvalidArgumentException(`'socksVersion' cannot be set without 'socksProxy'`);
+                }
+                if (proxyConfig.socksVersion === undefined ||
+                    typeof proxyConfig.socksVersion !== 'number' ||
+                    !Number.isInteger(proxyConfig.socksVersion) ||
+                    proxyConfig.socksVersion < 0 ||
+                    proxyConfig.socksVersion > 255) {
+                    throw new InvalidArgumentException(`'socksVersion' must be between 0 and 255`);
+                }
+                servers.push(`socks=socks${proxyConfig.socksVersion}://${proxyConfig.socksProxy}`);
+            }
+            if (servers.length === 0) {
+                return undefined;
+            }
+            return servers.join(';');
+        }
+        throw new UnknownErrorException(`Unknown proxy type`);
     }
 
     /**
@@ -875,6 +964,94 @@
                 }, context.id);
             });
             return Promise.resolve();
+        }
+    }
+
+    /**
+     * Copyright 2025 Google LLC.
+     * Copyright (c) Microsoft Corporation.
+     *
+     * Licensed under the Apache License, Version 2.0 (the "License");
+     * you may not use this file except in compliance with the License.
+     * You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an "AS IS" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
+    class EmulationProcessor {
+        #userContextStorage;
+        #browsingContextStorage;
+        constructor(browsingContextStorage, userContextStorage) {
+            this.#userContextStorage = userContextStorage;
+            this.#browsingContextStorage = browsingContextStorage;
+        }
+        async setGeolocationOverride(params) {
+            if ('coordinates' in params && 'error' in params) {
+                throw new InvalidArgumentException('Coordinates and error cannot be set at the same time');
+            }
+            let geolocation = null;
+            if ('coordinates' in params) {
+                if ((params.coordinates?.altitude ?? null) === null &&
+                    (params.coordinates?.altitudeAccuracy ?? null) !== null) {
+                    throw new InvalidArgumentException('Geolocation altitudeAccuracy can be set only with altitude');
+                }
+                geolocation = params.coordinates;
+            }
+            else if ('error' in params) {
+                if (params.error.type !== 'positionUnavailable') {
+                    throw new InvalidArgumentException(`Unknown geolocation error ${params.error.type}`);
+                }
+                geolocation = params.error;
+            }
+            else {
+                throw new InvalidArgumentException(`Coordinates or error should be set`);
+            }
+            const browsingContexts = await this.#getRelatedTopLevelBrowsingContexts(params.contexts, params.userContexts);
+            for (const userContextId of params.userContexts ?? []) {
+                const userContextConfig = this.#userContextStorage.getConfig(userContextId);
+                userContextConfig.geolocation = geolocation;
+            }
+            await Promise.all(browsingContexts.map(async (context) => await context.cdpTarget.setGeolocationOverride(geolocation)));
+            return {};
+        }
+        async #getRelatedTopLevelBrowsingContexts(browsingContextIds, userContextIds) {
+            if (browsingContextIds === undefined && userContextIds === undefined) {
+                throw new InvalidArgumentException('Either user contexts or browsing contexts must be provided');
+            }
+            if (browsingContextIds !== undefined && userContextIds !== undefined) {
+                throw new InvalidArgumentException('User contexts and browsing contexts are mutually exclusive');
+            }
+            const result = [];
+            if (browsingContextIds === undefined) {
+                if (userContextIds.length === 0) {
+                    throw new InvalidArgumentException('user context should be provided');
+                }
+                await this.#userContextStorage.verifyUserContextIdList(userContextIds);
+                for (const userContextId of userContextIds) {
+                    const topLevelBrowsingContexts = this.#browsingContextStorage
+                        .getTopLevelContexts()
+                        .filter((browsingContext) => browsingContext.userContext === userContextId);
+                    result.push(...topLevelBrowsingContexts);
+                }
+            }
+            else {
+                if (browsingContextIds.length === 0) {
+                    throw new InvalidArgumentException('browsing context should be provided');
+                }
+                for (const browsingContextId of browsingContextIds) {
+                    const browsingContext = this.#browsingContextStorage.getContext(browsingContextId);
+                    if (!browsingContext.isTopLevelContext()) {
+                        throw new InvalidArgumentException('The command is only supported on the top-level context');
+                    }
+                    result.push(browsingContext);
+                }
+            }
+            return [...new Set(result).values()];
         }
     }
 
@@ -3947,12 +4124,21 @@
             switch (capabilityValue) {
                 case 'accept':
                 case 'accept and notify':
-                    return { default: "accept"  };
+                    return {
+                        default: "accept" ,
+                        beforeUnload: "accept" ,
+                    };
                 case 'dismiss':
                 case 'dismiss and notify':
-                    return { default: "dismiss"  };
+                    return {
+                        default: "dismiss" ,
+                        beforeUnload: "accept" ,
+                    };
                 case 'ignore':
-                    return { default: "ignore"  };
+                    return {
+                        default: "ignore" ,
+                        beforeUnload: "accept" ,
+                    };
                 default:
                     throw new InvalidArgumentException(`Unexpected 'unhandledPromptBehavior' value: ${capabilityValue}`);
             }
@@ -3979,18 +4165,18 @@
                 },
             };
         }
-        async subscribe(params, channel = {}) {
-            const subscription = await this.#eventManager.subscribe(params.events, params.contexts ?? [], params.userContexts ?? [], channel);
+        async subscribe(params, googChannel = null) {
+            const subscription = await this.#eventManager.subscribe(params.events, params.contexts ?? [], params.userContexts ?? [], googChannel);
             return {
                 subscription,
             };
         }
-        async unsubscribe(params, channel = {}) {
+        async unsubscribe(params, googChannel = null) {
             if ('subscriptions' in params) {
                 await this.#eventManager.unsubscribeByIds(params.subscriptions);
                 return {};
             }
-            await this.#eventManager.unsubscribe(params.events, params.contexts ?? [], channel);
+            await this.#eventManager.unsubscribe(params.events, params.contexts ?? [], googChannel);
             return {};
         }
     }
@@ -4231,33 +4417,33 @@
      */
     class OutgoingMessage {
         #message;
-        #channel;
-        constructor(message, channel) {
+        #googChannel;
+        constructor(message, googChannel = null) {
             this.#message = message;
-            this.#channel = channel;
+            this.#googChannel = googChannel;
         }
-        static createFromPromise(messagePromise, channel) {
+        static createFromPromise(messagePromise, googChannel) {
             return messagePromise.then((message) => {
                 if (message.kind === 'success') {
                     return {
                         kind: 'success',
-                        value: new OutgoingMessage(message.value, channel),
+                        value: new OutgoingMessage(message.value, googChannel),
                     };
                 }
                 return message;
             });
         }
-        static createResolved(message, channel) {
+        static createResolved(message, googChannel = null) {
             return Promise.resolve({
                 kind: 'success',
-                value: new OutgoingMessage(message, channel),
+                value: new OutgoingMessage(message, googChannel),
             });
         }
         get message() {
             return this.#message;
         }
-        get channel() {
-            return this.#channel;
+        get googChannel() {
+            return this.#googChannel;
         }
     }
 
@@ -4282,6 +4468,7 @@
         #browserProcessor;
         #browsingContextProcessor;
         #cdpProcessor;
+        #emulationProcessor;
         #inputProcessor;
         #networkProcessor;
         #permissionsProcessor;
@@ -4291,14 +4478,15 @@
         #webExtensionProcessor;
         #parser;
         #logger;
-        constructor(cdpConnection, browserCdpClient, eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, networkStorage, bluetoothProcessor, userContextStorage, parser = new BidiNoOpParser(), initConnection, logger) {
+        constructor(cdpConnection, browserCdpClient, eventManager, browsingContextStorage, realmStorage, preloadScriptStorage, networkStorage, mapperOptionsStorage, bluetoothProcessor, userContextStorage, parser = new BidiNoOpParser(), initConnection, logger) {
             super();
             this.#parser = parser;
             this.#logger = logger;
             this.#bluetoothProcessor = bluetoothProcessor;
-            this.#browserProcessor = new BrowserProcessor(browserCdpClient, browsingContextStorage, userContextStorage);
+            this.#browserProcessor = new BrowserProcessor(browserCdpClient, browsingContextStorage, mapperOptionsStorage, userContextStorage);
             this.#browsingContextProcessor = new BrowsingContextProcessor(browserCdpClient, browsingContextStorage, userContextStorage, eventManager);
             this.#cdpProcessor = new CdpProcessor(browsingContextStorage, realmStorage, cdpConnection, browserCdpClient);
+            this.#emulationProcessor = new EmulationProcessor(browsingContextStorage, userContextStorage);
             this.#inputProcessor = new InputProcessor(browsingContextStorage);
             this.#networkProcessor = new NetworkProcessor(browsingContextStorage, networkStorage);
             this.#permissionsProcessor = new PermissionsProcessor(browserCdpClient);
@@ -4317,18 +4505,32 @@
                     return await this.#bluetoothProcessor.simulateAdapter(this.#parser.parseSimulateAdapterParameters(command.params));
                 case 'bluetooth.simulateAdvertisement':
                     return await this.#bluetoothProcessor.simulateAdvertisement(this.#parser.parseSimulateAdvertisementParameters(command.params));
+                case 'bluetooth.simulateCharacteristic':
+                    return await this.#bluetoothProcessor.simulateCharacteristic(this.#parser.parseSimulateCharacteristicParameters(command.params));
+                case 'bluetooth.simulateCharacteristicResponse':
+                    return await this.#bluetoothProcessor.simulateCharacteristicResponse(this.#parser.parseSimulateCharacteristicResponseParameters(command.params));
+                case 'bluetooth.simulateDescriptor':
+                    return await this.#bluetoothProcessor.simulateDescriptor(this.#parser.parseSimulateDescriptorParameters(command.params));
+                case 'bluetooth.simulateDescriptorResponse':
+                    throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
+                case 'bluetooth.simulateGattConnectionResponse':
+                    return await this.#bluetoothProcessor.simulateGattConnectionResponse(this.#parser.parseSimulateGattConnectionResponseParameters(command.params));
+                case 'bluetooth.simulateGattDisconnection':
+                    return await this.#bluetoothProcessor.simulateGattDisconnection(this.#parser.parseSimulateGattDisconnectionParameters(command.params));
                 case 'bluetooth.simulatePreconnectedPeripheral':
                     return await this.#bluetoothProcessor.simulatePreconnectedPeripheral(this.#parser.parseSimulatePreconnectedPeripheralParameters(command.params));
+                case 'bluetooth.simulateService':
+                    return await this.#bluetoothProcessor.simulateService(this.#parser.parseSimulateServiceParameters(command.params));
                 case 'browser.close':
                     return this.#browserProcessor.close();
                 case 'browser.createUserContext':
-                    return await this.#browserProcessor.createUserContext(command.params);
+                    return await this.#browserProcessor.createUserContext(this.#parser.parseCreateUserContextParameters(command.params));
                 case 'browser.getClientWindows':
                     return await this.#browserProcessor.getClientWindows();
                 case 'browser.getUserContexts':
                     return await this.#browserProcessor.getUserContexts();
                 case 'browser.removeUserContext':
-                    return await this.#browserProcessor.removeUserContext(this.#parser.parseRemoveUserContextParams(command.params));
+                    return await this.#browserProcessor.removeUserContext(this.#parser.parseRemoveUserContextParameters(command.params));
                 case 'browser.setClientWindowState':
                     throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
                 case 'browsingContext.activate':
@@ -4361,17 +4563,8 @@
                     return this.#cdpProcessor.resolveRealm(this.#parser.parseResolveRealmParams(command.params));
                 case 'goog:cdp.sendCommand':
                     return await this.#cdpProcessor.sendCommand(this.#parser.parseSendCommandParams(command.params));
-                case 'cdp.getSession':
-                    this.#logger?.(LogType.debugWarn, `Legacy '${command.method}' command is deprecated and will not supported soon. Use 'goog:${command.method}' instead.`);
-                    return this.#cdpProcessor.getSession(this.#parser.parseGetSessionParams(command.params));
-                case 'cdp.resolveRealm':
-                    this.#logger?.(LogType.debugWarn, `Legacy '${command.method}' command is deprecated and will not supported soon. Use 'goog:${command.method}' instead.`);
-                    return this.#cdpProcessor.resolveRealm(this.#parser.parseResolveRealmParams(command.params));
-                case 'cdp.sendCommand':
-                    this.#logger?.(LogType.debugWarn, `Legacy '${command.method}' command is deprecated and will not supported soon. Use 'goog:${command.method}' instead.`);
-                    return await this.#cdpProcessor.sendCommand(this.#parser.parseSendCommandParams(command.params));
                 case 'emulation.setGeolocationOverride':
-                    throw new UnknownErrorException(`Method ${command.method} is not implemented.`);
+                    return await this.#emulationProcessor.setGeolocationOverride(this.#parser.parseSetGeolocationOverrideParams(command.params));
                 case 'input.performActions':
                     return await this.#inputProcessor.performActions(this.#parser.parsePerformActionsParams(command.params));
                 case 'input.releaseActions':
@@ -4415,9 +4608,9 @@
                 case 'session.status':
                     return this.#sessionProcessor.status();
                 case 'session.subscribe':
-                    return await this.#sessionProcessor.subscribe(this.#parser.parseSubscribeParams(command.params), command.channel);
+                    return await this.#sessionProcessor.subscribe(this.#parser.parseSubscribeParams(command.params), command['goog:channel']);
                 case 'session.unsubscribe':
-                    return await this.#sessionProcessor.unsubscribe(this.#parser.parseUnsubscribeParams(command.params), command.channel);
+                    return await this.#sessionProcessor.unsubscribe(this.#parser.parseUnsubscribeParams(command.params), command['goog:channel']);
                 case 'storage.deleteCookies':
                     return await this.#storageProcessor.deleteCookies(this.#parser.parseDeleteCookiesParams(command.params));
                 case 'storage.getCookies':
@@ -4451,14 +4644,14 @@
                     result,
                 };
                 this.emit("response" , {
-                    message: OutgoingMessage.createResolved(response, command.channel),
+                    message: OutgoingMessage.createResolved(response, command['goog:channel']),
                     event: command.method,
                 });
             }
             catch (e) {
                 if (e instanceof Exception) {
                     this.emit("response" , {
-                        message: OutgoingMessage.createResolved(e.toErrorResponse(command.id), command.channel),
+                        message: OutgoingMessage.createResolved(e.toErrorResponse(command.id), command['goog:channel']),
                         event: command.method,
                     });
                 }
@@ -4466,12 +4659,33 @@
                     const error = e;
                     this.#logger?.(LogType.bidi, error);
                     this.emit("response" , {
-                        message: OutgoingMessage.createResolved(new UnknownErrorException(error.message, error.stack).toErrorResponse(command.id), command.channel),
+                        message: OutgoingMessage.createResolved(new UnknownErrorException(error.message, error.stack).toErrorResponse(command.id), command['goog:channel']),
                         event: command.method,
                     });
                 }
             }
         }
+    }
+
+    /*
+     *  Copyright 2025 Google LLC.
+     *  Copyright (c) Microsoft Corporation.
+     *
+     *  Licensed under the Apache License, Version 2.0 (the "License");
+     *  you may not use this file except in compliance with the License.
+     *  You may obtain a copy of the License at
+     *
+     *      http://www.apache.org/licenses/LICENSE-2.0
+     *
+     *  Unless required by applicable law or agreed to in writing, software
+     *  distributed under the License is distributed on an "AS IS" BASIS,
+     *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     *  See the License for the specific language governing permissions and
+     *  limitations under the License.
+     *
+     */
+    class MapperOptionsStorage {
+        mapperOptions;
     }
 
     /**
@@ -4490,12 +4704,82 @@
      * See the License for the specific language governing permissions and
      * limitations under the License.
      */
+    class BluetoothGattItem {
+        id;
+        uuid;
+        constructor(id, uuid) {
+            this.id = id;
+            this.uuid = uuid;
+        }
+    }
+    class BluetoothDescriptor extends BluetoothGattItem {
+        characteristic;
+        constructor(id, uuid, characteristic) {
+            super(id, uuid);
+            this.characteristic = characteristic;
+        }
+    }
+    class BluetoothCharacteristic extends BluetoothGattItem {
+        descriptors = new Map();
+        service;
+        constructor(id, uuid, service) {
+            super(id, uuid);
+            this.service = service;
+        }
+    }
+    class BluetoothService extends BluetoothGattItem {
+        characteristics = new Map();
+        device;
+        constructor(id, uuid, device) {
+            super(id, uuid);
+            this.device = device;
+        }
+    }
+    class BluetoothDevice {
+        address;
+        services = new Map();
+        constructor(address) {
+            this.address = address;
+        }
+    }
     class BluetoothProcessor {
         #eventManager;
         #browsingContextStorage;
+        #bluetoothDevices;
+        #bluetoothCharacteristics;
         constructor(eventManager, browsingContextStorage) {
             this.#eventManager = eventManager;
             this.#browsingContextStorage = browsingContextStorage;
+            this.#bluetoothDevices = new Map();
+            this.#bluetoothCharacteristics = new Map();
+        }
+        #getDevice(address) {
+            const device = this.#bluetoothDevices.get(address);
+            if (!device) {
+                throw new InvalidArgumentException(`Bluetooth device with address ${address} does not exist`);
+            }
+            return device;
+        }
+        #getService(device, serviceUuid) {
+            const service = device.services.get(serviceUuid);
+            if (!service) {
+                throw new InvalidArgumentException(`Service with UUID ${serviceUuid} on device ${device.address} does not exist`);
+            }
+            return service;
+        }
+        #getCharacteristic(service, characteristicUuid) {
+            const characteristic = service.characteristics.get(characteristicUuid);
+            if (!characteristic) {
+                throw new InvalidArgumentException(`Characteristic with UUID ${characteristicUuid} does not exist for service ${service.uuid} on device ${service.device.address}`);
+            }
+            return characteristic;
+        }
+        #getDescriptor(characteristic, descriptorUuid) {
+            const descriptor = characteristic.descriptors.get(descriptorUuid);
+            if (!descriptor) {
+                throw new InvalidArgumentException(`Descriptor with UUID ${descriptorUuid} does not exist for characteristic ${characteristic.uuid} on service ${characteristic.service.uuid} on device ${characteristic.service.device.address}`);
+            }
+            return descriptor;
         }
         async simulateAdapter(params) {
             if (params.state === undefined) {
@@ -4503,6 +4787,8 @@
             }
             const context = this.#browsingContextStorage.getContext(params.context);
             await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.disable');
+            this.#bluetoothDevices.clear();
+            this.#bluetoothCharacteristics.clear();
             await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.enable', {
                 state: params.state,
                 leSupported: params.leSupported ?? true,
@@ -4512,9 +4798,14 @@
         async disableSimulation(params) {
             const context = this.#browsingContextStorage.getContext(params.context);
             await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.disable');
+            this.#bluetoothDevices.clear();
+            this.#bluetoothCharacteristics.clear();
             return {};
         }
         async simulatePreconnectedPeripheral(params) {
+            if (this.#bluetoothDevices.has(params.address)) {
+                throw new InvalidArgumentException(`Bluetooth device with address ${params.address} already exists`);
+            }
             const context = this.#browsingContextStorage.getContext(params.context);
             await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.simulatePreconnectedPeripheral', {
                 address: params.address,
@@ -4522,6 +4813,7 @@
                 knownServiceUuids: params.knownServiceUuids,
                 manufacturerData: params.manufacturerData,
             });
+            this.#bluetoothDevices.set(params.address, new BluetoothDevice(params.address));
             return {};
         }
         async simulateAdvertisement(params) {
@@ -4530,6 +4822,131 @@
                 entry: params.scanEntry,
             });
             return {};
+        }
+        async simulateCharacteristic(params) {
+            const device = this.#getDevice(params.address);
+            const service = this.#getService(device, params.serviceUuid);
+            const context = this.#browsingContextStorage.getContext(params.context);
+            switch (params.type) {
+                case 'add': {
+                    if (params.characteristicProperties === undefined) {
+                        throw new InvalidArgumentException(`Parameter "characteristicProperties" is required for adding a Bluetooth characteristic`);
+                    }
+                    if (service.characteristics.has(params.characteristicUuid)) {
+                        throw new InvalidArgumentException(`Characteristic with UUID ${params.characteristicUuid} already exists`);
+                    }
+                    const response = await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.addCharacteristic', {
+                        serviceId: service.id,
+                        characteristicUuid: params.characteristicUuid,
+                        properties: params.characteristicProperties,
+                    });
+                    const characteristic = new BluetoothCharacteristic(response.characteristicId, params.characteristicUuid, service);
+                    service.characteristics.set(params.characteristicUuid, characteristic);
+                    this.#bluetoothCharacteristics.set(characteristic.id, characteristic);
+                    return {};
+                }
+                case 'remove': {
+                    if (params.characteristicProperties !== undefined) {
+                        throw new InvalidArgumentException(`Parameter "characteristicProperties" should not be provided for removing a Bluetooth characteristic`);
+                    }
+                    const characteristic = this.#getCharacteristic(service, params.characteristicUuid);
+                    await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.removeCharacteristic', {
+                        characteristicId: characteristic.id,
+                    });
+                    service.characteristics.delete(params.characteristicUuid);
+                    this.#bluetoothCharacteristics.delete(characteristic.id);
+                    return {};
+                }
+                default:
+                    throw new InvalidArgumentException(`Parameter "type" of ${params.type} is not supported`);
+            }
+        }
+        async simulateCharacteristicResponse(params) {
+            const context = this.#browsingContextStorage.getContext(params.context);
+            const device = this.#getDevice(params.address);
+            const service = this.#getService(device, params.serviceUuid);
+            const characteristic = this.#getCharacteristic(service, params.characteristicUuid);
+            await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.simulateCharacteristicOperationResponse', {
+                characteristicId: characteristic.id,
+                type: params.type,
+                code: params.code,
+                ...(params.data && {
+                    data: btoa(String.fromCharCode(...params.data)),
+                }),
+            });
+            return {};
+        }
+        async simulateDescriptor(params) {
+            const device = this.#getDevice(params.address);
+            const service = this.#getService(device, params.serviceUuid);
+            const characteristic = this.#getCharacteristic(service, params.characteristicUuid);
+            const context = this.#browsingContextStorage.getContext(params.context);
+            switch (params.type) {
+                case 'add': {
+                    if (characteristic.descriptors.has(params.descriptorUuid)) {
+                        throw new InvalidArgumentException(`Descriptor with UUID ${params.descriptorUuid} already exists`);
+                    }
+                    const response = await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.addDescriptor', {
+                        characteristicId: characteristic.id,
+                        descriptorUuid: params.descriptorUuid,
+                    });
+                    characteristic.descriptors.set(params.descriptorUuid, new BluetoothDescriptor(response.descriptorId, params.descriptorUuid, characteristic));
+                    return {};
+                }
+                case 'remove': {
+                    const descriptor = this.#getDescriptor(characteristic, params.descriptorUuid);
+                    await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.removeDescriptor', {
+                        descriptorId: descriptor.id,
+                    });
+                    characteristic.descriptors.delete(params.descriptorUuid);
+                    return {};
+                }
+                default:
+                    throw new InvalidArgumentException(`Parameter "type" of ${params.type} is not supported`);
+            }
+        }
+        async simulateGattConnectionResponse(params) {
+            const context = this.#browsingContextStorage.getContext(params.context);
+            await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.simulateGATTOperationResponse', {
+                address: params.address,
+                type: 'connection',
+                code: params.code,
+            });
+            return {};
+        }
+        async simulateGattDisconnection(params) {
+            const context = this.#browsingContextStorage.getContext(params.context);
+            await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.simulateGATTDisconnection', {
+                address: params.address,
+            });
+            return {};
+        }
+        async simulateService(params) {
+            const device = this.#getDevice(params.address);
+            const context = this.#browsingContextStorage.getContext(params.context);
+            switch (params.type) {
+                case 'add': {
+                    if (device.services.has(params.uuid)) {
+                        throw new InvalidArgumentException(`Service with UUID ${params.uuid} already exists`);
+                    }
+                    const response = await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.addService', {
+                        address: params.address,
+                        serviceUuid: params.uuid,
+                    });
+                    device.services.set(params.uuid, new BluetoothService(response.serviceId, params.uuid, device));
+                    return {};
+                }
+                case 'remove': {
+                    const service = this.#getService(device, params.uuid);
+                    await context.cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.removeService', {
+                        serviceId: service.id,
+                    });
+                    device.services.delete(params.uuid);
+                    return {};
+                }
+                default:
+                    throw new InvalidArgumentException(`Parameter "type" of ${params.type} is not supported`);
+            }
         }
         onCdpTargetCreated(cdpTarget) {
             cdpTarget.cdpClient.on('DeviceAccess.deviceRequestPrompted', (event) => {
@@ -4540,6 +4957,56 @@
                         context: cdpTarget.id,
                         prompt: event.id,
                         devices: event.devices,
+                    },
+                }, cdpTarget.id);
+            });
+            cdpTarget.browserCdpClient.on('BluetoothEmulation.gattOperationReceived', async (event) => {
+                switch (event.type) {
+                    case 'connection':
+                        this.#eventManager.registerEvent({
+                            type: 'event',
+                            method: 'bluetooth.gattConnectionAttempted',
+                            params: {
+                                context: cdpTarget.id,
+                                address: event.address,
+                            },
+                        }, cdpTarget.id);
+                        return;
+                    case 'discovery':
+                        await cdpTarget.browserCdpClient.sendCommand('BluetoothEmulation.simulateGATTOperationResponse', {
+                            address: event.address,
+                            type: 'discovery',
+                            code: 0x0,
+                        });
+                }
+            });
+            cdpTarget.browserCdpClient.on('BluetoothEmulation.characteristicOperationReceived', (event) => {
+                if (!this.#bluetoothCharacteristics.has(event.characteristicId)) {
+                    return;
+                }
+                let type;
+                if (event.type === 'write') {
+                    if (event.writeType === 'write-default-deprecated') {
+                        return;
+                    }
+                    type = event.writeType;
+                }
+                else {
+                    type = event.type;
+                }
+                const characteristic = this.#bluetoothCharacteristics.get(event.characteristicId);
+                this.#eventManager.registerEvent({
+                    type: 'event',
+                    method: 'bluetooth.characteristicEventGenerated',
+                    params: {
+                        context: cdpTarget.id,
+                        address: characteristic.service.device.address,
+                        serviceUuid: characteristic.service.uuid,
+                        characteristicUuid: characteristic.uuid,
+                        type,
+                        ...(event.data && {
+                            data: Array.from(atob(event.data), (c) => c.charCodeAt(0)),
+                        }),
                     },
                 }, cdpTarget.id);
             });
@@ -4579,8 +5046,10 @@
      */
     class UserContextConfig {
         userContextId;
+        acceptInsecureCerts;
         viewport;
         devicePixelRatio;
+        geolocation;
         constructor(userContextId) {
             this.userContextId = userContextId;
         }
@@ -4965,8 +5434,7 @@
         }
         async stringifyObject(cdpRemoteObject) {
             const { result } = await this.cdpClient.sendCommand('Runtime.callFunctionOn', {
-                functionDeclaration: String(
-                (remoteObject) => String(remoteObject)),
+                functionDeclaration: String((remoteObject) => String(remoteObject)),
                 awaitPromise: false,
                 arguments: [cdpRemoteObject],
                 returnByValue: true,
@@ -6010,6 +6478,16 @@
                 });
             });
             this.#cdpTarget.cdpClient.on('Page.javascriptDialogClosed', (params) => {
+                if (params.frameId && this.id !== params.frameId) {
+                    return;
+                }
+                if (!params.frameId &&
+                    this.#parentId &&
+                    this.#cdpTarget.cdpClient !==
+                        this.#browsingContextStorage.getContext(this.#parentId)?.cdpTarget
+                            .cdpClient) {
+                    return;
+                }
                 const accepted = params.result;
                 if (this.#lastUserPromptType === undefined) {
                     this.#logger?.(LogType.debugError, 'Unexpectedly no opening prompt event before closing one');
@@ -6028,6 +6506,16 @@
                 this.#lastUserPromptType = undefined;
             });
             this.#cdpTarget.cdpClient.on('Page.javascriptDialogOpening', (params) => {
+                if (params.frameId && this.id !== params.frameId) {
+                    return;
+                }
+                if (!params.frameId &&
+                    this.#parentId &&
+                    this.#cdpTarget.cdpClient !==
+                        this.#browsingContextStorage.getContext(this.#parentId)?.cdpTarget
+                            .cdpClient) {
+                    return;
+                }
                 const promptType = _a$5.#getPromptType(params.type);
                 this.#lastUserPromptType = promptType;
                 const promptHandler = this.#getPromptHandler(promptType);
@@ -7272,8 +7760,8 @@
                         flatten: true,
                     }),
                     this.#updateWindowId(),
-                    this.#initAndEvaluatePreloadScripts(),
                     this.#setUserContextConfig(),
+                    this.#initAndEvaluatePreloadScripts(),
                     this.#cdpClient.sendCommand('Runtime.runIfWaitingForDebugger'),
                     this.#parentCdpClient.sendCommand('Runtime.runIfWaitingForDebugger'),
                     this.toggleDeviceAccessIfNeeded(),
@@ -7427,15 +7915,6 @@
                         session: this.cdpSessionId,
                     },
                 }, this.id);
-                this.#eventManager.registerEvent({
-                    type: 'event',
-                    method: `cdp.${event}`,
-                    params: {
-                        event,
-                        params,
-                        session: this.cdpSessionId,
-                    },
-                }, this.id);
             });
         }
         async #enableFetch(stages) {
@@ -7548,10 +8027,21 @@
             }
         }
         async #setUserContextConfig() {
+            const promises = [];
             if (this.#userContextConfig.viewport !== undefined ||
                 this.#userContextConfig.devicePixelRatio !== undefined) {
-                await this.setViewport(this.#userContextConfig.viewport, this.#userContextConfig.devicePixelRatio);
+                promises.push(this.setViewport(this.#userContextConfig.viewport, this.#userContextConfig.devicePixelRatio));
             }
+            if (this.#userContextConfig.geolocation !== undefined &&
+                this.#userContextConfig.geolocation !== null) {
+                promises.push(this.setGeolocationOverride(this.#userContextConfig.geolocation));
+            }
+            if (this.#userContextConfig.acceptInsecureCerts !== undefined) {
+                promises.push(this.cdpClient.sendCommand('Security.setIgnoreCertificateErrors', {
+                    ignore: this.#userContextConfig.acceptInsecureCerts,
+                }));
+            }
+            await Promise.all(promises);
         }
         get topLevelId() {
             return (this.#browsingContextStorage.findTopLevelContextId(this.id) ?? this.id);
@@ -7564,6 +8054,31 @@
                 this.#unhandledPromptBehavior?.default ??
                 "ignore" ) ===
                 "ignore" );
+        }
+        async setGeolocationOverride(geolocation) {
+            if (geolocation === null) {
+                await this.cdpClient.sendCommand('Emulation.clearGeolocationOverride');
+            }
+            else if ('type' in geolocation) {
+                if (geolocation.type !== 'positionUnavailable') {
+                    throw new UnknownErrorException(`Unknown geolocation error ${geolocation.type}`);
+                }
+                await this.cdpClient.sendCommand('Emulation.setGeolocationOverride', {});
+            }
+            else if ('latitude' in geolocation) {
+                await this.cdpClient.sendCommand('Emulation.setGeolocationOverride', {
+                    latitude: geolocation.latitude,
+                    longitude: geolocation.longitude,
+                    accuracy: geolocation.accuracy ?? 1,
+                    altitude: geolocation.altitude ?? undefined,
+                    altitudeAccuracy: geolocation.altitudeAccuracy ?? undefined,
+                    heading: geolocation.heading ?? undefined,
+                    speed: geolocation.speed ?? undefined,
+                });
+            }
+            else {
+                throw new UnknownErrorException('Unexpected geolocation coordinates value');
+            }
         }
     }
 
@@ -9019,14 +9534,8 @@
     function isCdpEvent(name) {
         return (name.split('.').at(0)?.startsWith(BiDiModule.Cdp) ?? false);
     }
-    function isDeprecatedCdpEvent(name) {
-        return (name.split('.').at(0)?.startsWith(BiDiModule.DeprecatedCdp) ??
-            false);
-    }
     function assertSupportedEvent(name) {
-        if (!EVENT_NAMES.has(name) &&
-            !isCdpEvent(name) &&
-            !isDeprecatedCdpEvent(name)) {
+        if (!EVENT_NAMES.has(name) && !isCdpEvent(name)) {
             throw new InvalidArgumentException(`Unknown event: ${name}`);
         }
     }
@@ -9087,23 +9596,23 @@
         constructor(browsingContextStorage) {
             this.#browsingContextStorage = browsingContextStorage;
         }
-        getChannelsSubscribedToEvent(eventName, contextId) {
-            const channels = new Map();
+        getGoogChannelsSubscribedToEvent(eventName, contextId) {
+            const googChannels = new Set();
             for (const subscription of this.#subscriptions) {
                 if (this.#isSubscribedTo(subscription, eventName, contextId)) {
-                    channels.set(JSON.stringify(subscription.channel), subscription.channel);
+                    googChannels.add(subscription.googChannel);
                 }
             }
-            return Array.from(channels.values());
+            return Array.from(googChannels);
         }
-        getChannelsSubscribedToEventGlobally(eventName) {
-            const channels = new Map();
+        getGoogChannelsSubscribedToEventGlobally(eventName) {
+            const googChannels = new Set();
             for (const subscription of this.#subscriptions) {
                 if (this.#isSubscribedTo(subscription, eventName)) {
-                    channels.set(JSON.stringify(subscription.channel), subscription.channel);
+                    googChannels.add(subscription.googChannel);
                 }
             }
-            return Array.from(channels.values());
+            return Array.from(googChannels);
         }
         #isSubscribedTo(subscription, moduleOrEvent, browsingContextId) {
             let includesEvent = false;
@@ -9147,7 +9656,7 @@
             }
             return false;
         }
-        subscribe(eventNames, contextIds, userContextIds, channel) {
+        subscribe(eventNames, contextIds, userContextIds, googChannel) {
             const subscription = {
                 id: uuidv4(),
                 eventNames: new Set(unrollEvents(eventNames)),
@@ -9159,13 +9668,13 @@
                     return topLevelContext;
                 })),
                 userContextIds: new Set(userContextIds),
-                channel,
+                googChannel,
             };
             this.#subscriptions.push(subscription);
             this.#knownSubscriptionIds.add(subscription.id);
             return subscription;
         }
-        unsubscribe(inputEventNames, inputContextIds, channel) {
+        unsubscribe(inputEventNames, inputContextIds, googChannel) {
             const eventNames = new Set(unrollEvents(inputEventNames));
             this.#browsingContextStorage.verifyContextsList(inputContextIds);
             const topLevelTraversables = new Set(inputContextIds.map((contextId) => {
@@ -9180,7 +9689,7 @@
             const eventsMatched = new Set();
             const contextsMatched = new Set();
             for (const subscription of this.#subscriptions) {
-                if (JSON.stringify(subscription.channel) !== JSON.stringify(channel)) {
+                if (subscription.googChannel !== googChannel) {
                     newSubscriptions.push(subscription);
                     continue;
                 }
@@ -9239,7 +9748,7 @@
                     for (const [eventName, remainingContextIds] of eventMap) {
                         const partialSubscription = {
                             id: subscription.id,
-                            channel: subscription.channel,
+                            googChannel: subscription.googChannel,
                             eventNames: new Set([eventName]),
                             topLevelTraversableIds: remainingContextIds,
                             userContextIds: new Set(),
@@ -9372,29 +9881,29 @@
         }
         registerPromiseEvent(event, contextId, eventName) {
             const eventWrapper = new EventWrapper(event, contextId);
-            const sortedChannels = this.#subscriptionManager.getChannelsSubscribedToEvent(eventName, contextId);
+            const sortedGoogChannels = this.#subscriptionManager.getGoogChannelsSubscribedToEvent(eventName, contextId);
             this.#bufferEvent(eventWrapper, eventName);
-            for (const channel of sortedChannels) {
+            for (const googChannel of sortedGoogChannels) {
                 this.emit("event" , {
-                    message: OutgoingMessage.createFromPromise(event, channel),
+                    message: OutgoingMessage.createFromPromise(event, googChannel),
                     event: eventName,
                 });
-                this.#markEventSent(eventWrapper, channel, eventName);
+                this.#markEventSent(eventWrapper, googChannel, eventName);
             }
         }
         registerGlobalPromiseEvent(event, eventName) {
             const eventWrapper = new EventWrapper(event, null);
-            const sortedChannels = this.#subscriptionManager.getChannelsSubscribedToEventGlobally(eventName);
+            const sortedGoogChannels = this.#subscriptionManager.getGoogChannelsSubscribedToEventGlobally(eventName);
             this.#bufferEvent(eventWrapper, eventName);
-            for (const channel of sortedChannels) {
+            for (const googChannel of sortedGoogChannels) {
                 this.emit("event" , {
-                    message: OutgoingMessage.createFromPromise(event, channel),
+                    message: OutgoingMessage.createFromPromise(event, googChannel),
                     event: eventName,
                 });
-                this.#markEventSent(eventWrapper, channel, eventName);
+                this.#markEventSent(eventWrapper, googChannel, eventName);
             }
         }
-        async subscribe(eventNames, contextIds, userContextIds, channel) {
+        async subscribe(eventNames, contextIds, userContextIds, googChannel) {
             for (const name of eventNames) {
                 assertSupportedEvent(name);
             }
@@ -9423,15 +9932,15 @@
                 }));
                 subscribeStepEvents.set(eventName, difference(subscriptionNavigableIds, subscribedNavigableIds));
             }
-            const subscription = this.#subscriptionManager.subscribe(eventNames, contextIds, userContextIds, channel);
+            const subscription = this.#subscriptionManager.subscribe(eventNames, contextIds, userContextIds, googChannel);
             for (const eventName of subscription.eventNames) {
                 for (const contextId of subscriptionNavigableIds) {
-                    for (const eventWrapper of this.#getBufferedEvents(eventName, contextId, channel)) {
+                    for (const eventWrapper of this.#getBufferedEvents(eventName, contextId, googChannel)) {
                         this.emit("event" , {
-                            message: OutgoingMessage.createFromPromise(eventWrapper.event, channel),
+                            message: OutgoingMessage.createFromPromise(eventWrapper.event, googChannel),
                             event: eventName,
                         });
-                        this.#markEventSent(eventWrapper, channel, eventName);
+                        this.#markEventSent(eventWrapper, googChannel, eventName);
                     }
                 }
             }
@@ -9443,11 +9952,11 @@
             await this.toggleModulesIfNeeded();
             return subscription.id;
         }
-        async unsubscribe(eventNames, contextIds, channel) {
+        async unsubscribe(eventNames, contextIds, googChannel) {
             for (const name of eventNames) {
                 assertSupportedEvent(name);
             }
-            this.#subscriptionManager.unsubscribe(eventNames, contextIds, channel);
+            this.#subscriptionManager.unsubscribe(eventNames, contextIds, googChannel);
             await this.toggleModulesIfNeeded();
         }
         async unsubscribeByIds(subscriptionIds) {
@@ -9476,25 +9985,23 @@
             this.#eventBuffers.get(bufferMapKey).add(eventWrapper);
             this.#eventToContextsMap.get(eventName).add(eventWrapper.contextId);
         }
-        #markEventSent(eventWrapper, channel, eventName) {
+        #markEventSent(eventWrapper, googChannel, eventName) {
             if (!eventBufferLength.has(eventName)) {
                 return;
             }
             const lastSentMapKey = _a$2.#getMapKey(eventName, eventWrapper.contextId);
-            const lastId = Math.max(this.#lastMessageSent.get(lastSentMapKey)?.get(JSON.stringify(channel)) ??
-                0, eventWrapper.id);
-            const channelMap = this.#lastMessageSent.get(lastSentMapKey);
-            if (channelMap) {
-                channelMap.set(JSON.stringify(channel), lastId);
+            const lastId = Math.max(this.#lastMessageSent.get(lastSentMapKey)?.get(googChannel) ?? 0, eventWrapper.id);
+            const googChannelMap = this.#lastMessageSent.get(lastSentMapKey);
+            if (googChannelMap) {
+                googChannelMap.set(googChannel, lastId);
             }
             else {
-                this.#lastMessageSent.set(lastSentMapKey, new Map([[JSON.stringify(channel), lastId]]));
+                this.#lastMessageSent.set(lastSentMapKey, new Map([[googChannel, lastId]]));
             }
         }
-        #getBufferedEvents(eventName, contextId, channel) {
+        #getBufferedEvents(eventName, contextId, googChannel) {
             const bufferMapKey = _a$2.#getMapKey(eventName, contextId);
-            const lastSentMessageId = this.#lastMessageSent.get(bufferMapKey)?.get(JSON.stringify(channel)) ??
-                -Infinity;
+            const lastSentMessageId = this.#lastMessageSent.get(bufferMapKey)?.get(googChannel) ?? -Infinity;
             const result = this.#eventBuffers
                 .get(bufferMapKey)
                 ?.get()
@@ -9504,7 +10011,7 @@
                     .filter((_contextId) =>
                 _contextId !== null &&
                     this.#browsingContextStorage.hasContext(_contextId))
-                    .map((_contextId) => this.#getBufferedEvents(eventName, _contextId, channel))
+                    .map((_contextId) => this.#getBufferedEvents(eventName, _contextId, googChannel))
                     .forEach((events) => result.push(...events));
             }
             return result.sort((e1, e2) => e1.id - e2.id);
@@ -9544,7 +10051,10 @@
             });
         };
         #processOutgoingMessage = async (messageEntry) => {
-            const message = { ...messageEntry.message, ...messageEntry.channel };
+            const message = messageEntry.message;
+            if (messageEntry.googChannel !== null) {
+                message['goog:channel'] = messageEntry.googChannel;
+            }
             await this.#transport.sendMessage(message);
         };
         constructor(bidiTransport, cdpConnection, browserCdpClient, selfTargetId, defaultUserContextId, parser, logger) {
@@ -9556,8 +10066,10 @@
             const userContextStorage = new UserContextStorage(browserCdpClient);
             this.#eventManager = new EventManager(this.#browsingContextStorage, userContextStorage);
             const networkStorage = new NetworkStorage(this.#eventManager, this.#browsingContextStorage, browserCdpClient, logger);
+            const mapperOptionsStorage = new MapperOptionsStorage();
             this.#bluetoothProcessor = new BluetoothProcessor(this.#eventManager, this.#browsingContextStorage);
-            this.#commandProcessor = new CommandProcessor(cdpConnection, browserCdpClient, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, this.#preloadScriptStorage, networkStorage, this.#bluetoothProcessor, userContextStorage, parser, async (options) => {
+            this.#commandProcessor = new CommandProcessor(cdpConnection, browserCdpClient, this.#eventManager, this.#browsingContextStorage, this.#realmStorage, this.#preloadScriptStorage, networkStorage, mapperOptionsStorage, this.#bluetoothProcessor, userContextStorage, parser, async (options) => {
+                mapperOptionsStorage.mapperOptions = options;
                 await browserCdpClient.sendCommand('Security.setIgnoreCertificateErrors', {
                     ignore: options.acceptInsecureCerts ?? false,
                 });
@@ -10670,14 +11182,15 @@
     const dateRegexSource = `((\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-((0[13578]|1[02])-(0[1-9]|[12]\\d|3[01])|(0[469]|11)-(0[1-9]|[12]\\d|30)|(02)-(0[1-9]|1\\d|2[0-8])))`;
     const dateRegex = new RegExp(`^${dateRegexSource}$`);
     function timeRegexSource(args) {
-        let regex = `([01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d`;
+        let secondsRegexSource = `[0-5]\\d`;
         if (args.precision) {
-            regex = `${regex}\\.\\d{${args.precision}}`;
+            secondsRegexSource = `${secondsRegexSource}\\.\\d{${args.precision}}`;
         }
         else if (args.precision == null) {
-            regex = `${regex}(\\.\\d+)?`;
+            secondsRegexSource = `${secondsRegexSource}(\\.\\d+)?`;
         }
-        return regex;
+        const secondsQuantifier = args.precision ? "+" : "?";
+        return `([01]\\d|2[0-3]):[0-5]\\d(:${secondsRegexSource})${secondsQuantifier}`;
     }
     function timeRegex(args) {
         return new RegExp(`^${timeRegexSource(args)}$`);
@@ -13948,12 +14461,24 @@
      */
     var Bluetooth$1;
     (function (Bluetooth) {
-        Bluetooth.BluetoothServiceUuidSchema = z.lazy(() => z.string());
+        Bluetooth.BluetoothUuidSchema = z.lazy(() => z.string());
     })(Bluetooth$1 || (Bluetooth$1 = {}));
     (function (Bluetooth) {
         Bluetooth.BluetoothManufacturerDataSchema = z.lazy(() => z.object({
             key: z.number().int().nonnegative(),
             data: z.string(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.CharacteristicPropertiesSchema = z.lazy(() => z.object({
+            broadcast: z.boolean().optional(),
+            read: z.boolean().optional(),
+            writeWithoutResponse: z.boolean().optional(),
+            write: z.boolean().optional(),
+            notify: z.boolean().optional(),
+            indicate: z.boolean().optional(),
+            authenticatedSignedWrites: z.boolean().optional(),
+            extendedProperties: z.boolean().optional(),
         }));
     })(Bluetooth$1 || (Bluetooth$1 = {}));
     (function (Bluetooth) {
@@ -13971,7 +14496,7 @@
     (function (Bluetooth) {
         Bluetooth.ScanRecordSchema = z.lazy(() => z.object({
             name: z.string().optional(),
-            uuids: z.array(Bluetooth.BluetoothServiceUuidSchema).optional(),
+            uuids: z.array(Bluetooth.BluetoothUuidSchema).optional(),
             appearance: z.number().optional(),
             manufacturerData: z
                 .array(Bluetooth.BluetoothManufacturerDataSchema)
@@ -13984,6 +14509,13 @@
         Bluetooth$1.DisableSimulationSchema,
         Bluetooth$1.SimulatePreconnectedPeripheralSchema,
         Bluetooth$1.SimulateAdvertisementSchema,
+        Bluetooth$1.SimulateGattConnectionResponseSchema,
+        Bluetooth$1.SimulateGattDisconnectionSchema,
+        Bluetooth$1.SimulateServiceSchema,
+        Bluetooth$1.SimulateCharacteristicSchema,
+        Bluetooth$1.SimulateCharacteristicResponseSchema,
+        Bluetooth$1.SimulateDescriptorSchema,
+        Bluetooth$1.SimulateDescriptorResponseSchema,
         z.object({}),
     ]));
     (function (Bluetooth) {
@@ -14050,7 +14582,7 @@
             address: z.string(),
             name: z.string(),
             manufacturerData: z.array(Bluetooth.BluetoothManufacturerDataSchema),
-            knownServiceUuids: z.array(Bluetooth.BluetoothServiceUuidSchema),
+            knownServiceUuids: z.array(Bluetooth.BluetoothUuidSchema),
         }));
     })(Bluetooth$1 || (Bluetooth$1 = {}));
     (function (Bluetooth) {
@@ -14073,6 +14605,121 @@
         }));
     })(Bluetooth$1 || (Bluetooth$1 = {}));
     (function (Bluetooth) {
+        Bluetooth.SimulateGattConnectionResponseSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateGattConnectionResponse'),
+            params: Bluetooth.SimulateGattConnectionResponseParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateGattConnectionResponseParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            code: z.number().int().nonnegative(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateGattDisconnectionSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateGattDisconnection'),
+            params: Bluetooth.SimulateGattDisconnectionParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateGattDisconnectionParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateServiceSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateService'),
+            params: Bluetooth.SimulateServiceParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateServiceParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            uuid: Bluetooth.BluetoothUuidSchema,
+            type: z.enum(['add', 'remove']),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateCharacteristicSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateCharacteristic'),
+            params: Bluetooth.SimulateCharacteristicParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateCharacteristicParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            serviceUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicProperties: Bluetooth.CharacteristicPropertiesSchema.optional(),
+            type: z.enum(['add', 'remove']),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateCharacteristicResponseSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateCharacteristicResponse'),
+            params: Bluetooth.SimulateCharacteristicResponseParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateCharacteristicResponseParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            serviceUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicUuid: Bluetooth.BluetoothUuidSchema,
+            type: z.enum([
+                'read',
+                'write',
+                'subscribe-to-notifications',
+                'unsubscribe-from-notifications',
+            ]),
+            code: z.number().int().nonnegative(),
+            data: z.array(z.number().int().nonnegative()).optional(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateDescriptorSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateDescriptor'),
+            params: Bluetooth.SimulateDescriptorParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateDescriptorParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            serviceUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicUuid: Bluetooth.BluetoothUuidSchema,
+            descriptorUuid: Bluetooth.BluetoothUuidSchema,
+            type: z.enum(['add', 'remove']),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateDescriptorResponseSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.simulateDescriptorResponse'),
+            params: Bluetooth.SimulateDescriptorResponseParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.SimulateDescriptorResponseParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            serviceUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicUuid: Bluetooth.BluetoothUuidSchema,
+            descriptorUuid: Bluetooth.BluetoothUuidSchema,
+            type: z.enum(['read', 'write']),
+            code: z.number().int().nonnegative(),
+            data: z.array(z.number().int().nonnegative()).optional(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    z.lazy(() => z.union([
+        Bluetooth$1.RequestDevicePromptUpdatedSchema,
+        Bluetooth$1.GattConnectionAttemptedSchema,
+    ]));
+    (function (Bluetooth) {
         Bluetooth.RequestDevicePromptUpdatedSchema = z.lazy(() => z.object({
             method: z.literal('bluetooth.requestDevicePromptUpdated'),
             params: Bluetooth.RequestDevicePromptUpdatedParametersSchema,
@@ -14083,6 +14730,57 @@
             context: z.string(),
             prompt: Bluetooth.RequestDevicePromptSchema,
             devices: z.array(Bluetooth.RequestDeviceInfoSchema),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.GattConnectionAttemptedSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.gattConnectionAttempted'),
+            params: Bluetooth.GattConnectionAttemptedParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.GattConnectionAttemptedParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.CharacteristicEventGeneratedSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.characteristicEventGenerated'),
+            params: Bluetooth.CharacteristicEventGeneratedParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.CharacteristicEventGeneratedParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            serviceUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicUuid: Bluetooth.BluetoothUuidSchema,
+            type: z.enum([
+                'read',
+                'write-with-response',
+                'write-without-response',
+                'subscribe-to-notifications',
+                'unsubscribe-from-notifications',
+            ]),
+            data: z.array(z.number().int().nonnegative()).optional(),
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.DescriptorEventGeneratedSchema = z.lazy(() => z.object({
+            method: z.literal('bluetooth.descriptorEventGenerated'),
+            params: Bluetooth.DescriptorEventGeneratedParametersSchema,
+        }));
+    })(Bluetooth$1 || (Bluetooth$1 = {}));
+    (function (Bluetooth) {
+        Bluetooth.DescriptorEventGeneratedParametersSchema = z.lazy(() => z.object({
+            context: z.string(),
+            address: z.string(),
+            serviceUuid: Bluetooth.BluetoothUuidSchema,
+            characteristicUuid: Bluetooth.BluetoothUuidSchema,
+            descriptorUuid: Bluetooth.BluetoothUuidSchema,
+            type: z.enum(['read', 'write']),
+            data: z.array(z.number().int().nonnegative()).optional(),
         }));
     })(Bluetooth$1 || (Bluetooth$1 = {}));
 
@@ -14484,7 +15182,13 @@
     (function (Browser) {
         Browser.CreateUserContextSchema = z.lazy(() => z.object({
             method: z.literal('browser.createUserContext'),
-            params: EmptyParamsSchema,
+            params: Browser.CreateUserContextParametersSchema,
+        }));
+    })(Browser$1 || (Browser$1 = {}));
+    (function (Browser) {
+        Browser.CreateUserContextParametersSchema = z.lazy(() => z.object({
+            acceptInsecureCerts: z.boolean().optional(),
+            proxy: Session$1.ProxyConfigurationSchema.optional(),
         }));
     })(Browser$1 || (Browser$1 = {}));
     (function (Browser) {
@@ -15037,37 +15741,55 @@
             defaultValue: z.string().optional(),
         }));
     })(BrowsingContext$1 || (BrowsingContext$1 = {}));
-    const EmulationCommandSchema = z.lazy(() => Emulation.SetGeolocationOverrideSchema);
-    var Emulation;
+    const EmulationCommandSchema = z.lazy(() => Emulation$1.SetGeolocationOverrideSchema);
+    var Emulation$1;
     (function (Emulation) {
         Emulation.SetGeolocationOverrideSchema = z.lazy(() => z.object({
             method: z.literal('emulation.setGeolocationOverride'),
             params: Emulation.SetGeolocationOverrideParametersSchema,
         }));
-    })(Emulation || (Emulation = {}));
+    })(Emulation$1 || (Emulation$1 = {}));
     (function (Emulation) {
-        Emulation.SetGeolocationOverrideParametersSchema = z.lazy(() => z.object({
-            coordinates: z.union([Emulation.GeolocationCoordinatesSchema, z.null()]),
+        Emulation.SetGeolocationOverrideParametersSchema = z.lazy(() => z
+            .union([
+            z.object({
+                coordinates: z.union([
+                    Emulation.GeolocationCoordinatesSchema,
+                    z.null(),
+                ]),
+            }),
+            z.object({
+                error: Emulation.GeolocationPositionErrorSchema,
+            }),
+        ])
+            .and(z.object({
             contexts: z
                 .array(BrowsingContext$1.BrowsingContextSchema)
                 .min(1)
                 .optional(),
             userContexts: z.array(Browser$1.UserContextSchema).min(1).optional(),
-        }));
-    })(Emulation || (Emulation = {}));
+        })));
+    })(Emulation$1 || (Emulation$1 = {}));
     (function (Emulation) {
         Emulation.GeolocationCoordinatesSchema = z.lazy(() => z.object({
-            latitude: z.number(),
-            longitude: z.number(),
-            accuracy: z.number().default(1).optional(),
+            latitude: z.number().gte(-90).lte(90),
+            longitude: z.number().gte(-180).lte(180),
+            accuracy: z.number().gte(0).default(1).optional(),
             altitude: z.union([z.number(), z.null().default(null)]).optional(),
             altitudeAccuracy: z
-                .union([z.number(), z.null().default(null)])
+                .union([z.number().gte(0), z.null().default(null)])
                 .optional(),
-            heading: z.union([z.number(), z.null().default(null)]).optional(),
-            speed: z.union([z.number(), z.null().default(null)]).optional(),
+            heading: z
+                .union([z.number().gt(0).lt(360), z.null().default(null)])
+                .optional(),
+            speed: z.union([z.number().gte(0), z.null().default(null)]).optional(),
         }));
-    })(Emulation || (Emulation = {}));
+    })(Emulation$1 || (Emulation$1 = {}));
+    (function (Emulation) {
+        Emulation.GeolocationPositionErrorSchema = z.lazy(() => z.object({
+            type: z.literal('positionUnavailable'),
+        }));
+    })(Emulation$1 || (Emulation$1 = {}));
     const NetworkCommandSchema = z.lazy(() => z.union([
         Network$1.AddInterceptSchema,
         Network$1.ContinueRequestSchema,
@@ -15790,20 +16512,16 @@
         }));
     })(Script$1 || (Script$1 = {}));
     (function (Script) {
-        Script.RegExpRemoteValueSchema = z.lazy(() => z
-            .object({
+        Script.RegExpRemoteValueSchema = z.lazy(() => Script.RegExpLocalValueSchema.and(z.object({
             handle: Script.HandleSchema.optional(),
             internalId: Script.InternalIdSchema.optional(),
-        })
-            .and(Script.RegExpLocalValueSchema));
+        })));
     })(Script$1 || (Script$1 = {}));
     (function (Script) {
-        Script.DateRemoteValueSchema = z.lazy(() => z
-            .object({
+        Script.DateRemoteValueSchema = z.lazy(() => Script.DateLocalValueSchema.and(z.object({
             handle: Script.HandleSchema.optional(),
             internalId: Script.InternalIdSchema.optional(),
-        })
-            .and(Script.DateLocalValueSchema));
+        })));
     })(Script$1 || (Script$1 = {}));
     (function (Script) {
         Script.MapRemoteValueSchema = z.lazy(() => z.object({
@@ -16577,10 +17295,14 @@
     }
     var Browser;
     (function (Browser) {
-        function parseRemoveUserContextParams(params) {
+        function parseCreateUserContextParameters(params) {
+            return parseObject(params, Browser$1.CreateUserContextParametersSchema);
+        }
+        Browser.parseCreateUserContextParameters = parseCreateUserContextParameters;
+        function parseRemoveUserContextParameters(params) {
             return parseObject(params, Browser$1.RemoveUserContextParametersSchema);
         }
-        Browser.parseRemoveUserContextParams = parseRemoveUserContextParams;
+        Browser.parseRemoveUserContextParameters = parseRemoveUserContextParameters;
     })(Browser || (Browser = {}));
     var Network;
     (function (Network) {
@@ -16709,6 +17431,16 @@
         }
         Session.parseUnsubscribeParams = parseUnsubscribeParams;
     })(Session || (Session = {}));
+    var Emulation;
+    (function (Emulation) {
+        function parseSetGeolocationOverrideParams(params) {
+            if ('coordinates' in params && 'error' in params) {
+                throw new InvalidArgumentException('Coordinates and error cannot be set at the same time');
+            }
+            return parseObject(params, Emulation$1.SetGeolocationOverrideParametersSchema);
+        }
+        Emulation.parseSetGeolocationOverrideParams = parseSetGeolocationOverrideParams;
+    })(Emulation || (Emulation = {}));
     var Input;
     (function (Input) {
         function parsePerformActionsParams(params) {
@@ -16794,11 +17526,38 @@
             return parseObject(params, Bluetooth$1.SimulateAdvertisementParametersSchema);
         }
         Bluetooth.parseSimulateAdvertisementParams = parseSimulateAdvertisementParams;
+        function parseSimulateCharacteristicParams(params) {
+            return parseObject(params, Bluetooth$1.SimulateCharacteristicParametersSchema);
+        }
+        Bluetooth.parseSimulateCharacteristicParams = parseSimulateCharacteristicParams;
+        function parseSimulateCharacteristicResponseParams(params) {
+            return parseObject(params, Bluetooth$1
+                .SimulateCharacteristicResponseParametersSchema);
+        }
+        Bluetooth.parseSimulateCharacteristicResponseParams = parseSimulateCharacteristicResponseParams;
+        function parseSimulateDescriptorParams(params) {
+            return parseObject(params, Bluetooth$1.SimulateDescriptorParametersSchema);
+        }
+        Bluetooth.parseSimulateDescriptorParams = parseSimulateDescriptorParams;
+        function parseSimulateGattConnectionResponseParams(params) {
+            return parseObject(params, Bluetooth$1
+                .SimulateGattConnectionResponseParametersSchema);
+        }
+        Bluetooth.parseSimulateGattConnectionResponseParams = parseSimulateGattConnectionResponseParams;
+        function parseSimulateGattDisconnectionParams(params) {
+            return parseObject(params, Bluetooth$1
+                .SimulateGattDisconnectionParametersSchema);
+        }
+        Bluetooth.parseSimulateGattDisconnectionParams = parseSimulateGattDisconnectionParams;
         function parseSimulatePreconnectedPeripheralParams(params) {
             return parseObject(params, Bluetooth$1
                 .SimulatePreconnectedPeripheralParametersSchema);
         }
         Bluetooth.parseSimulatePreconnectedPeripheralParams = parseSimulatePreconnectedPeripheralParams;
+        function parseSimulateServiceParams(params) {
+            return parseObject(params, Bluetooth$1.SimulateServiceParametersSchema);
+        }
+        Bluetooth.parseSimulateServiceParams = parseSimulateServiceParams;
     })(Bluetooth || (Bluetooth = {}));
     var WebModule;
     (function (WebModule) {
@@ -16825,11 +17584,33 @@
         parseSimulateAdvertisementParameters(params) {
             return Bluetooth.parseSimulateAdvertisementParams(params);
         }
+        parseSimulateCharacteristicParameters(params) {
+            return Bluetooth.parseSimulateCharacteristicParams(params);
+        }
+        parseSimulateCharacteristicResponseParameters(params) {
+            return Bluetooth.parseSimulateCharacteristicResponseParams(params);
+        }
+        parseSimulateDescriptorParameters(params) {
+            return Bluetooth.parseSimulateDescriptorParams(params);
+        }
+        parseSimulateGattConnectionResponseParameters(params) {
+            return Bluetooth.parseSimulateGattConnectionResponseParams(params);
+        }
+        parseSimulateGattDisconnectionParameters(params) {
+            return Bluetooth.parseSimulateGattDisconnectionParams(params);
+        }
         parseSimulatePreconnectedPeripheralParameters(params) {
             return Bluetooth.parseSimulatePreconnectedPeripheralParams(params);
         }
-        parseRemoveUserContextParams(params) {
-            return Browser.parseRemoveUserContextParams(params);
+        parseSimulateServiceParameters(params) {
+            return Bluetooth.parseSimulateServiceParams(params);
+        }
+        parseCreateUserContextParameters(params) {
+            Browser.parseCreateUserContextParameters(params);
+            return params;
+        }
+        parseRemoveUserContextParameters(params) {
+            return Browser.parseRemoveUserContextParameters(params);
         }
         parseActivateParams(params) {
             return BrowsingContext.parseActivateParams(params);
@@ -16875,6 +17656,9 @@
         }
         parseSendCommandParams(params) {
             return Cdp.parseSendCommandRequest(params);
+        }
+        parseSetGeolocationOverrideParams(params) {
+            return Emulation.parseSetGeolocationOverrideParams(params);
         }
         parsePerformActionsParams(params) {
             return Input.parsePerformActionsParams(params);
@@ -17018,7 +17802,7 @@
                 }
                 catch (e) {
                     const error = e instanceof Error ? e : new Error(e);
-                    this.#respondWithError(message, "invalid argument" , error, {});
+                    this.#respondWithError(message, "invalid argument" , error, null);
                 }
             };
         }
@@ -17034,12 +17818,17 @@
             this.#onMessage = null;
             window.onBidiMessage = null;
         }
-        #respondWithError(plainCommandData, errorCode, error, channel) {
+        #respondWithError(plainCommandData, errorCode, error, googChannel) {
             const errorResponse = _a.#getErrorResponse(plainCommandData, errorCode, error);
-            this.sendMessage({
-                ...errorResponse,
-                ...(channel ?? {}),
-            });
+            if (googChannel) {
+                this.sendMessage({
+                    ...errorResponse,
+                    'goog:channel': googChannel,
+                });
+            }
+            else {
+                this.sendMessage(errorResponse);
+            }
         }
         static #getJsonType(value) {
             if (value === null) {
@@ -17092,27 +17881,22 @@
             if (paramsType !== 'object') {
                 throw new Error(`Expected object params but got ${paramsType}`);
             }
-            let channel = {};
-            if (command['goog:channel'] !== undefined) {
-                const channelType = _a.#getJsonType(command['goog:channel']);
-                if (channelType !== 'string') {
-                    throw new Error(`Expected string value of 'goog:channel' but got ${channelType}`);
+            let googChannel = command['goog:channel'];
+            if (googChannel !== undefined) {
+                const googChannelType = _a.#getJsonType(googChannel);
+                if (googChannelType !== 'string') {
+                    throw new Error(`Expected string channel but got ${googChannelType}`);
                 }
-                if (command['goog:channel'] !== '') {
-                    channel = { 'goog:channel': command['goog:channel'] };
-                }
-            }
-            else if (command.channel !== undefined) {
-                log(_a.LOGGER_PREFIX_WARN, 'Legacy `channel` parameter is deprecated and will not supported soon. Use `goog:channel` instead.');
-                const channelType = _a.#getJsonType(command.channel);
-                if (channelType !== 'string') {
-                    throw new Error(`Expected string 'channel' but got ${channelType}`);
-                }
-                if (command.channel !== '') {
-                    channel = { channel: command.channel };
+                if (googChannel === '') {
+                    googChannel = undefined;
                 }
             }
-            return { id, method, params, channel };
+            return {
+                id,
+                method,
+                params,
+                'goog:channel': googChannel,
+            };
         }
     }
     _a = WindowBidiTransport;

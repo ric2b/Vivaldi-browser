@@ -17,6 +17,7 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.scene_layer.StaticTabSceneLayer;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.gesturenav.GestureNavigationUtils;
 import org.chromium.chrome.browser.layouts.CompositorModelChangeProcessor;
 import org.chromium.chrome.browser.layouts.EventFilter;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -51,8 +52,8 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
 public class StaticLayout extends Layout {
     public static final String TAG = "StaticLayout";
 
-    private boolean mHandlesTabLifecycles;
-    private boolean mNeedsOffsetTag;
+    private final boolean mHandlesTabLifecycles;
+    private final boolean mNeedsOffsetTag;
 
     private final Context mContext;
     private final LayoutManagerHost mViewHost;
@@ -66,16 +67,16 @@ public class StaticLayout extends Layout {
     private TabModelSelectorTabModelObserver mTabModelSelectorTabModelObserver;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
 
-    private BrowserControlsStateProvider mBrowserControlsStateProvider;
-    private BrowserControlsStateProvider.Observer mBrowserControlsStateProviderObserver;
+    private final BrowserControlsStateProvider mBrowserControlsStateProvider;
+    private final BrowserControlsStateProvider.Observer mBrowserControlsStateProviderObserver;
 
     private final Supplier<TopUiThemeColorProvider> mTopUiThemeColorProvider;
 
-    private boolean mIsActive;
+    private boolean mIsShowing;
 
     private static Integer sToolbarTextBoxBackgroundColorForTesting;
 
-    private float mPxToDp;
+    private final float mPxToDp;
 
     /**
      * Creates an instance of the {@link StaticLayout}.
@@ -155,7 +156,7 @@ public class StaticLayout extends Layout {
                         .with(LayoutTab.Y, 0.0f)
                         .with(LayoutTab.RENDER_X, 0.0f)
                         .with(LayoutTab.RENDER_Y, 0.0f)
-                        .with(LayoutTab.IS_ACTIVE_LAYOUT_SUPPLIER, this::isActive)
+                        .with(LayoutTab.IS_ACTIVE_LAYOUT, false)
                         .build();
 
         mTopUiThemeColorProvider = topUiThemeColorProvider;
@@ -238,7 +239,7 @@ public class StaticLayout extends Layout {
                 new TabModelSelectorTabModelObserver(tabModelSelector) {
                     @Override
                     public void didSelectTab(Tab tab, int type, int lastId) {
-                        if (!mIsActive) return;
+                        if (!mIsShowing) return;
 
                         setStaticTab(tab);
 
@@ -312,7 +313,7 @@ public class StaticLayout extends Layout {
     public void show(long time, boolean animate) {
         super.show(time, animate);
 
-        mIsActive = true;
+        mIsShowing = true;
         Tab tab = mTabModelSelector.getCurrentTab();
         if (tab == null) return;
         setStaticTab(tab);
@@ -337,7 +338,7 @@ public class StaticLayout extends Layout {
 
     @Override
     public void doneHiding() {
-        mIsActive = false;
+        mIsShowing = false;
         mModel.set(LayoutTab.TAB_ID, Tab.INVALID_TAB_ID);
 
         // Call super last because it might re-show this layout. If we do any work after
@@ -347,13 +348,9 @@ public class StaticLayout extends Layout {
     }
 
     private void requestFocus(Tab tab) {
-        // TODO(crbug.com/40249125): Investigating guarded removal of this behavior (requesting
-        // focus on a tab) since it may no longer be relevant.
         // We will restrict avoidance of tab focus request only on tablet devices, since this is
-        // known to cause regressions on phones - see crbug.com/1471887 for details.
-        if (ChromeFeatureList.isEnabled(
-                        ChromeFeatureList.AVOID_SELECTED_TAB_FOCUS_ON_LAYOUT_DONE_SHOWING)
-                && DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)) {
+        // known to cause regressions on phones - see https://crbug.com/40069240 for details.
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext)) {
             return;
         }
 
@@ -361,7 +358,7 @@ public class StaticLayout extends Layout {
             return;
         }
 
-        if (mIsActive && tab.getView() != null) tab.getView().requestFocus();
+        if (mIsShowing && tab.getView() != null) tab.getView().requestFocus();
     }
 
     private void updateVisibleIdsCheckingLiveLayer(int tabId, boolean useLiveTexture) {
@@ -431,8 +428,7 @@ public class StaticLayout extends Layout {
                 tab.isNativePage() || url.getScheme().equals(UrlConstants.CHROME_NATIVE_SCHEME);
         final boolean isBFScreenshotDrawing =
                 isNativePage && tab.isDisplayingBackForwardAnimation();
-        assert !isBFScreenshotDrawing
-                        || ChromeFeatureList.isEnabled(ChromeFeatureList.BACK_FORWARD_TRANSITIONS)
+        assert !isBFScreenshotDrawing || GestureNavigationUtils.areBackForwardTransitionsEnabled()
                 : "Must not draw bf screenshot if back forward transition is disabled";
         return !SadTab.isShowing(tab) && (!isNativePage || isBFScreenshotDrawing);
     }
@@ -477,6 +473,12 @@ public class StaticLayout extends Layout {
     @Override
     public int getLayoutType() {
         return LayoutType.BROWSING;
+    }
+
+    @Override
+    protected void setIsActive(boolean active) {
+        super.setIsActive(active);
+        mModel.set(LayoutTab.IS_ACTIVE_LAYOUT, active);
     }
 
     @Override

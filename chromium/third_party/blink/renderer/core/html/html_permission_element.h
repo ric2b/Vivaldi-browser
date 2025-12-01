@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/core/frame/cached_permission_status.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
+#include "third_party/blink/renderer/core/html/html_permission_icon_element.h"
 #include "third_party/blink/renderer/core/intersection_observer/intersection_observer.h"
 #include "third_party/blink/renderer/core/scroll/scroll_snapshot_client.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
@@ -42,6 +43,8 @@ class CORE_EXPORT HTMLPermissionElement final
   DEFINE_WRAPPERTYPEINFO();
 
  public:
+  static bool isTypeSupported(const AtomicString& type);
+
   explicit HTMLPermissionElement(Document&);
 
   ~HTMLPermissionElement() override;
@@ -84,6 +87,7 @@ class CORE_EXPORT HTMLPermissionElement final
 
   bool HasInvalidStyle() const;
   bool IsOccluded() const;
+  bool IsRenderered() const;
   bool granted() const { return PermissionsGranted(); }
 
   // Given an input type, return permissions list. This method is for testing
@@ -121,6 +125,8 @@ class CORE_EXPORT HTMLPermissionElement final
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            ContainerDivClipPath);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
+                           IntersectionOclluderLogging);
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementIntersectionTest,
                            IntersectionVisibleOverlapsRecentAttachedInterval);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementFencedFrameTest,
                            NotAllowedInFencedFrame);
@@ -132,6 +138,8 @@ class CORE_EXPORT HTMLPermissionElement final
                            FontSizeCanDisableElement);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementSimTest,
                            MovePEPCToAnotherDocument);
+  FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementSimTest,
+                           RegisterAfterBeingVisible);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
                            InvalidatePEPCAfterMove);
   FRIEND_TEST_ALL_PREFIXES(HTMLPermissionElementLayoutChangeTest,
@@ -305,6 +313,9 @@ class CORE_EXPORT HTMLPermissionElement final
   // process.
   bool MaybeRegisterPageEmbeddedPermissionControl();
 
+  // Ensure we reset the PEPC IPC endpoint.
+  void EnsureUnregisterPageEmbeddedPermissionControl();
+
   // blink::Element implements
   void AttributeChanged(const AttributeModificationParams& params) override;
   void DidAddUserAgentShadowRoot(ShadowRoot&) override;
@@ -464,6 +475,17 @@ class CORE_EXPORT HTMLPermissionElement final
   // time of the events to match the recently_attached cooldown time.
   std::optional<base::TimeDelta> GetRecentlyAttachedTimeoutRemaining() const;
 
+  // When the element's type is invalid it enters "fallback" mode where it
+  // starts behaving more or less like a HTMLUnknownElement. Child nodes are no
+  // longer hidden and it no longer handles DOMActivation events to trigger
+  // permission requests. Once fallback mode is entered the element does not
+  // revert back.
+  void EnableFallbackMode();
+
+  // If there's a node covers this element, try to get some useful
+  // information from this node and add to console log.
+  void AddOccluderInfoToConsole();
+
   bool IsClickingDisabledIndefinitely(DisableReason reason) const {
     auto it = clicking_disabled_reasons_.find(reason);
     return it != clicking_disabled_reasons_.end() &&
@@ -505,12 +527,15 @@ class CORE_EXPORT HTMLPermissionElement final
 
   bool is_registered_in_browser_process_ = false;
 
+  bool is_cache_registered_ = false;
+
   // Holds reasons for which clicking is currently disabled (if any). Each
   // entry will have an expiration time associated with it, which can be
   // |base::TimeTicks::Max()| if it's indefinite.
   HashMap<DisableReason, base::TimeTicks> clicking_disabled_reasons_;
 
   Member<HTMLSpanElement> permission_text_span_;
+  Member<HTMLPermissionIconElement> permission_internal_icon_;
   Member<IntersectionObserver> intersection_observer_;
 
   // Keeps track of the time a request was created.
@@ -557,6 +582,9 @@ class CORE_EXPORT HTMLPermissionElement final
   // base::TimeTicks::Max()), which is the timetick of the longest alive
   // temporary disabling reason in `clicking_disabled_reasons_`.
   DisableReasonExpireTimer disable_reason_expire_timer_;
+
+  // Whether the elements has entered fallback mode. See |EnableFallbackMode|.
+  bool fallback_mode_ = false;
 };
 
 // The custom type casting is required for the PermissionElement OT because the

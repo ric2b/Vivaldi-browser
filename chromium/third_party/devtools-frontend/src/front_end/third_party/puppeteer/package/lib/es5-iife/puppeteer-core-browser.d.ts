@@ -353,6 +353,18 @@ export declare abstract class Browser extends EventEmitter<BrowserEvents> {
      */
     deleteCookie(...cookies: Cookie[]): Promise<void>;
     /**
+     * Installs an extension and returns the ID. In Chrome, this is only
+     * available if the browser was created using `pipe: true` and the
+     * `--enable-unsafe-extension-debugging` flag is set.
+     */
+    abstract installExtension(path: string): Promise<string>;
+    /**
+     * Uninstalls an extension. In Chrome, this is only available if the browser
+     * was created using `pipe: true` and the
+     * `--enable-unsafe-extension-debugging` flag is set.
+     */
+    abstract uninstallExtension(id: string): Promise<void>;
+    /**
      * Whether Puppeteer is connected to this {@link Browser | browser}.
      *
      * @deprecated Use {@link Browser | Browser.connected}.
@@ -2497,7 +2509,7 @@ export declare type FlattenHandle<T> = T extends HandleOr<infer U> ? U : never;
  *
  * To understand frames, you can think of frames as `<iframe>` elements. Just
  * like iframes, frames can be nested, and when JavaScript is executed in a
- * frame, the JavaScript does not effect frames inside the ambient frame the
+ * frame, the JavaScript does not affect frames inside the ambient frame the
  * JavaScript executes in.
  *
  * @example
@@ -2530,9 +2542,25 @@ export declare type FlattenHandle<T> = T extends HandleOr<infer U> ? U : never;
  * An example of getting text from an iframe element:
  *
  * ```ts
- * const frame = page.frames().find(frame => frame.name() === 'myframe');
- * const text = await frame.$eval('.selector', element => element.textContent);
- * console.log(text);
+ * const frames = page.frames();
+ * let frame = null;
+ * for (const currentFrame of frames) {
+ *   const frameElement = await currentFrame.frameElement();
+ *   const name = await frameElement.evaluate(el => el.getAttribute('name'));
+ *   if (name === 'myframe') {
+ *     frame = currentFrame;
+ *     break;
+ *   }
+ * }
+ * if (frame) {
+ *   const text = await frame.$eval(
+ *     '.selector',
+ *     element => element.textContent,
+ *   );
+ *   console.log(text);
+ * } else {
+ *   console.error('Frame with name "myframe" not found.');
+ * }
  * ```
  *
  * @remarks
@@ -3530,6 +3558,11 @@ export declare abstract class HTTPResponse {
 /**
  * @public
  */
+export declare type ImageFormat = 'png' | 'jpeg' | 'webp';
+
+/**
+ * @public
+ */
 export declare type InnerParams<T extends unknown[]> = {
     [K in keyof T]: FlattenHandle<T[K]>;
 };
@@ -3953,6 +3986,12 @@ export declare interface LaunchOptions extends ConnectOptions {
      * @defaultValue `false`
      */
     ignoreDefaultArgs?: boolean | string[];
+    /**
+     * If `true`, avoids passing default arguments to the browser that would
+     * prevent extensions from being enabled. Passing a list of strings will
+     * load the provided paths as unpacked extensions.
+     */
+    enableExtensions?: boolean | string[];
     /**
      * Close the browser process on `Ctrl+C`.
      * @defaultValue `true`
@@ -5490,7 +5529,12 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * ```ts
      * const frame = await page.waitForFrame(async frame => {
-     *   return frame.name() === 'Test';
+     *   const frameElement = await frame.frameElement();
+     *   if (!frameElement) {
+     *     return false;
+     *   }
+     *   const name = await frameElement.evaluate(el => el.getAttribute('name'));
+     *   return name === 'test';
      * });
      * ```
      */
@@ -5883,8 +5927,8 @@ export declare abstract class Page extends EventEmitter<PageEvents> {
      *
      * @remarks
      *
-     * All recordings will be {@link https://www.webmproject.org/ | WebM} format using
-     * the {@link https://www.webmproject.org/vp9/ | VP9} video codec. The FPS is 30.
+     * By default, all recordings will be {@link https://www.webmproject.org/ | WebM} format using
+     * the {@link https://www.webmproject.org/vp9/ | VP9} video codec, with a frame rate of 30 FPS.
      *
      * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
      */
@@ -6899,6 +6943,8 @@ declare namespace Puppeteer_2 {
         GeolocationOptions,
         MediaFeature,
         ScreenshotClip,
+        ImageFormat,
+        VideoFormat,
         ScreenshotOptions,
         ScreencastOptions,
         QueryOptions,
@@ -7248,7 +7294,20 @@ export declare interface ScreencastOptions {
     /**
      * File path to save the screencast to.
      */
-    path?: `${string}.webm`;
+    path?: `${string}.${VideoFormat}`;
+    /**
+     * Specifies whether to overwrite output file,
+     * or exit immediately if it already exists.
+     *
+     * @defaultValue `true`
+     */
+    overwrite?: boolean;
+    /**
+     * Specifies the output file format.
+     *
+     * @defaultValue `'webm'`
+     */
+    format?: VideoFormat;
     /**
      * Specifies the region of the viewport to crop.
      */
@@ -7272,9 +7331,48 @@ export declare interface ScreencastOptions {
      */
     speed?: number;
     /**
+     * Specifies the frame rate in frames per second.
+     *
+     * @defaultValue `30` (`20` for GIF)
+     */
+    fps?: number;
+    /**
+     * Specifies the number of times to loop playback, from `0` to `Infinity`.
+     * A value of `0` or `undefined` will disable looping.
+     *
+     * @defaultValue `undefined`
+     */
+    loop?: number;
+    /**
+     * Specifies the delay between iterations of a loop, in ms.
+     * `-1` is a special value to re-use the previous delay.
+     *
+     * @defaultValue `-1`
+     */
+    delay?: number;
+    /**
+     * Specifies the recording
+     * {@link https://trac.ffmpeg.org/wiki/Encode/VP9#constantq | quality}
+     * Constant Rate Factor between `0`–`63`. Lower values mean better quality.
+     *
+     * @defaultValue `30`
+     */
+    quality?: number;
+    /**
+     * Specifies the maximum number of
+     * {@link https://ffmpeg.org/ffmpeg-filters.html#palettegen | palette}
+     * colors to quantize, with GIF limited to `256`.
+     * Restrict the palette to only necessary colors to reduce output file size.
+     *
+     * @defaultValue `256`
+     */
+    colors?: number;
+    /**
      * Path to the {@link https://ffmpeg.org/ | ffmpeg}.
      *
      * Required if `ffmpeg` is not in your PATH.
+     *
+     * @defaultValue `'ffmpeg'`
      */
     ffmpegPath?: string;
 }
@@ -7315,7 +7413,7 @@ export declare interface ScreenshotOptions {
     /**
      * @defaultValue `'png'`
      */
-    type?: 'png' | 'jpeg' | 'webp';
+    type?: ImageFormat;
     /**
      * Quality of the image, between 0-100. Not applicable to `png` images.
      */
@@ -7344,7 +7442,7 @@ export declare interface ScreenshotOptions {
      * relative to current working directory. If no path is provided, the image
      * won't be saved to the disk.
      */
-    path?: string;
+    path?: `${string}.${ImageFormat}`;
     /**
      * Specifies the region of the page/element to clip.
      */
@@ -7733,6 +7831,11 @@ export declare interface TracingOptions {
  */
 export declare class UnsupportedOperation extends PuppeteerError {
 }
+
+/**
+ * @public
+ */
+export declare type VideoFormat = 'webm' | 'gif' | 'mp4';
 
 /**
  * @license

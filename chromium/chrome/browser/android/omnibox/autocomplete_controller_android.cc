@@ -45,6 +45,7 @@
 #include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_controller_emitter.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_grouper_sections.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
@@ -184,10 +185,6 @@ void AutocompleteControllerAndroid::StartPrefetch(
     jint j_page_classification) {
   auto page_classification =
       OmniboxEventProto::PageClassification(j_page_classification);
-  if (!OmniboxFieldTrial::IsZeroSuggestPrefetchingEnabledInContext(
-          page_classification)) {
-    return;
-  }
 
   GURL current_url;
   std::u16string auto_complete_text;
@@ -288,7 +285,9 @@ void AutocompleteControllerAndroid::OnOmniboxFocused(
 }
 
 void AutocompleteControllerAndroid::Stop(JNIEnv* env, bool clear_results) {
-  autocomplete_controller_->Stop(clear_results);
+  autocomplete_controller_->Stop(clear_results
+                                     ? AutocompleteStopReason::kClobbered
+                                     : AutocompleteStopReason::kInteraction);
 }
 
 void AutocompleteControllerAndroid::ResetSession(JNIEnv* env) {
@@ -351,12 +350,7 @@ void AutocompleteControllerAndroid::OnSuggestionSelected(
       base::Milliseconds(elapsed_time_since_first_modified), completed_length,
       now - autocomplete_controller_->last_time_default_match_changed(),
       autocomplete_controller_->result(), match.destination_url,
-      profile_->IsOffTheRecord(),
-      match.zero_prefix_suggestions_shown_in_session,
-      match.zero_prefix_search_suggestions_shown_in_session,
-      match.zero_prefix_url_suggestions_shown_in_session,
-      match.typed_search_suggestions_shown_in_session,
-      match.typed_url_suggestions_shown_in_session);
+      profile_->IsOffTheRecord(), input_.IsZeroSuggest(), match.session);
   autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);

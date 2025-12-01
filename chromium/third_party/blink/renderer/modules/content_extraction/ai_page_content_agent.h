@@ -75,16 +75,28 @@ class MODULES_EXPORT AIPageContentAgent final
     mojom::blink::AIPageContentPtr Build(LocalFrame& frame);
 
    private:
+    class RecursionData {
+      STACK_ALLOCATED();
+
+     public:
+      RecursionData(const ComputedStyle& document_style);
+
+      bool is_aria_disabled = false;
+      const ComputedStyle& document_style;
+      int stack_depth = 0;
+    };
+
     // Returns true if any descendant of `object` has a computed value of
     // visible for `visibility`.
     bool WalkChildren(const LayoutObject& object,
                       mojom::blink::AIPageContentNode& content_node,
-                      const ComputedStyle& document_style);
+                      const RecursionData& recursion_data);
     void ProcessIframe(const LayoutIFrame& object,
-                       mojom::blink::AIPageContentNode& content_node);
+                       mojom::blink::AIPageContentNode& content_node,
+                       const RecursionData& recursion_data);
     mojom::blink::AIPageContentNodePtr MaybeGenerateContentNode(
         const LayoutObject& object,
-        const ComputedStyle& document_style);
+        const RecursionData& recursion_data);
     void AddPageInteractionInfo(const Document& document,
                                 mojom::blink::AIPageContent& page_content);
     void AddFrameData(const LocalFrame& frame,
@@ -93,9 +105,15 @@ class MODULES_EXPORT AIPageContentAgent final
         const LocalFrame& frame,
         mojom::blink::AIPageContentFrameInteractionInfo&
             frame_interaction_info);
+    void AddAriaRole(const LayoutObject& object,
+                     mojom::blink::AIPageContentAttributes& attributes);
     void AddNodeInteractionInfo(
         const LayoutObject& object,
-        mojom::blink::AIPageContentAttributes& attributes) const;
+        mojom::blink::AIPageContentAttributes& attributes,
+        bool is_aria_disabled) const;
+    void AddInteractionInfoForHitTesting(
+        const Node* node,
+        mojom::blink::AIPageContentNodeInteractionInfo& interaction_info) const;
     void AddMetaData(
         const LocalFrame& frame,
         WTF::Vector<mojom::blink::AIPageContentMetaPtr>& meta_data) const;
@@ -105,8 +123,23 @@ class MODULES_EXPORT AIPageContentAgent final
     void AddAnnotatedRoles(const LayoutObject& object,
                            Vector<mojom::blink::AIPageContentAnnotatedRole>&
                                annotated_roles) const;
+    void AddLabel(const LayoutObject& object,
+                  mojom::blink::AIPageContentAttributes& attributes) const;
+    // Adds the control node id if this is a label associated with a form
+    // control. This includes both explicit association using for, or
+    // implicit association when the input node is a descendant of the label
+    // node.
+    void AddForDomNodeId(
+        const LayoutObject& object,
+        mojom::blink::AIPageContentAttributes& attributes) const;
+    bool IsGenericContainer(
+        const LayoutObject& object,
+        const mojom::blink::AIPageContentAttributes& attributes) const;
 
     void AddInteractiveNode(DOMNodeId dom_node_id);
+    void ComputeHitTestableNodesInViewport(
+        const LocalFrame& frame,
+        mojom::blink::AIPageContentFrameData& frame_data);
 
     // The set of nodes which are involved in a user interaction and must
     // produce a ContentNode.
@@ -114,8 +147,7 @@ class MODULES_EXPORT AIPageContentAgent final
 
     const raw_ref<const mojom::blink::AIPageContentOptions> options_;
 
-    // The current depth of the tree being walked.
-    int stack_depth_ = 0;
+    base::flat_map<DOMNodeId, int32_t> dom_node_to_z_order_;
 
     // Whether the stack depth has exceeded the max tree depth.
     bool stack_depth_exceeded_ = false;

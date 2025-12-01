@@ -586,7 +586,7 @@ static void solve_range_convert(uint16_t src_min, uint16_t src_max,
 
 static void init_range_convert_constants(SwsInternal *c)
 {
-    const int bit_depth = c->dstBpc ? c->dstBpc : 8;
+    const int bit_depth = c->dstBpc ? FFMIN(c->dstBpc, 16) : 8;
     const int src_bits = bit_depth <= 14 ? 15 : 19;
     const int src_shift = src_bits - bit_depth;
     const int mult_shift = bit_depth <= 14 ? 14 : 18;
@@ -623,7 +623,7 @@ av_cold void ff_sws_init_range_convert(SwsInternal *c)
 {
     c->lumConvertRange = NULL;
     c->chrConvertRange = NULL;
-    if (c->opts.src_range != c->opts.dst_range && !isAnyRGB(c->opts.dst_format)) {
+    if (c->opts.src_range != c->opts.dst_range && !isAnyRGB(c->opts.dst_format) && c->dstBpc < 32) {
         init_range_convert_constants(c);
         if (c->dstBpc <= 14) {
             if (c->opts.src_range) {
@@ -1442,6 +1442,7 @@ int sws_frame_setup(SwsContext *ctx, const AVFrame *dst, const AVFrame *src)
     for (int field = 0; field < 2; field++) {
         SwsFormat src_fmt = ff_fmt_from_frame(src, field);
         SwsFormat dst_fmt = ff_fmt_from_frame(dst, field);
+        int src_ok, dst_ok;
 
         if ((src->flags ^ dst->flags) & AV_FRAME_FLAG_INTERLACED) {
             err_msg = "Cannot convert interlaced to progressive frames or vice versa.\n";
@@ -1449,14 +1450,10 @@ int sws_frame_setup(SwsContext *ctx, const AVFrame *dst, const AVFrame *src)
             goto fail;
         }
 
-        if (!ff_test_fmt(&src_fmt, 0)) {
-            err_msg = "Unsupported input";
-            ret = AVERROR(ENOTSUP);
-            goto fail;
-        }
-
-        if (!ff_test_fmt(&dst_fmt, 1)) {
-            err_msg = "Unsupported output";
+        src_ok = ff_test_fmt(&src_fmt, 0);
+        dst_ok = ff_test_fmt(&dst_fmt, 1);
+        if ((!src_ok || !dst_ok) && !ff_props_equal(&src_fmt, &dst_fmt)) {
+            err_msg = src_ok ? "Unsupported output" : "Unsupported input";
             ret = AVERROR(ENOTSUP);
             goto fail;
         }

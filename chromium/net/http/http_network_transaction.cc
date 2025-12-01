@@ -4,6 +4,8 @@
 
 #include "net/http/http_network_transaction.h"
 
+#include <deque>
+#include <queue>
 #include <set>
 #include <utility>
 #include <vector>
@@ -22,6 +24,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "net/base/address_family.h"
@@ -76,6 +79,7 @@
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_info.h"
 #include "net/ssl/ssl_private_key.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "url/scheme_host_port.h"
@@ -164,19 +168,155 @@ void RecordWebSocketFallbackResult(int result,
                                        connection_info));
 }
 
-const std::string_view NegotiatedProtocolToHistogramSuffix(
-    NextProto next_proto) {
-  switch (next_proto) {
-    case NextProto::kProtoHTTP11:
-      return "H1";
-    case NextProto::kProtoHTTP2:
-      return "H2";
-    case NextProto::kProtoQUIC:
-      return "H3";
-    case NextProto::kProtoUnknown:
-      return "Unknown";
+// TODO(https://crbug.com/413557424): Remove DuplicateRequestLogger, calling
+// code, feature, and histograms once investigation is complete.
+
+// Tracks all the URLs requested in the last 10 seconds and emit an histogram if
+// any of them are repeated.
+class DuplicateRequestLogger final {
+ public:
+  DuplicateRequestLogger() = default;
+
+  DuplicateRequestLogger(const DuplicateRequestLogger&) = delete;
+  DuplicateRequestLogger& operator=(const DuplicateRequestLogger&) = delete;
+
+  // Adds `url` to the queue of recent requests. If it was already added within
+  // the last 10 seconds, log a histogram.
+  void AddAndMaybeLogRequest(const GURL& url, bool is_main_frame_navigation) {
+    if (!expiry_timer_.IsRunning()) {
+      StartTimer();
+    }
+    auto now = base::TimeTicks::Now();
+    Entry& entry = entry_queue_.emplace(now, url);
+    auto [hash_it, was_inserted] =
+        entry_map_.try_emplace(entry.url.possibly_invalid_spec(), &entry);
+    if (was_inserted) {
+      // No existing match was found.
+      return;
+    }
+
+    // There was a matching URL.
+    auto [_, old_entry_ptr] = *hash_it;
+    auto elapsed = now - old_entry_ptr->added_time;
+    if (elapsed <= kMaximumDetectionInterval) {
+      static constexpr std::string_view kBaseHistogramName =
+          "Net.NetworkTransaction.DuplicateRequestInterval";
+      DVLOG(3) << "Duplicate request for " << url << " after " << elapsed;
+      base::UmaHistogramTimes(kBaseHistogramName, elapsed);
+      if (is_main_frame_navigation) {
+        base::UmaHistogramTimes(
+            base::JoinString({kBaseHistogramName, "MainFrame"}, "."), elapsed);
+      }
+      if (IsGoogleHostWithAlpnH3(url.host_piece())) {
+        base::UmaHistogramTimes(
+            base::JoinString({kBaseHistogramName, "GoogleHost"}, "."), elapsed);
+        if (is_main_frame_navigation) {
+          base::UmaHistogramTimes(
+              base::JoinString({kBaseHistogramName, "GoogleHost", "MainFrame"},
+                               "."),
+              elapsed);
+        }
+      }
+    }
+
+    // Replace the entry. It is not sufficient just to assign it, because we
+    // need to change which string backs the string_view key.
+    entry_map_.erase(hash_it);
+    auto [ignored_it, emplace_succeeded] =
+        entry_map_.emplace(entry.url.possibly_invalid_spec(), &entry);
+    std::ignore = ignored_it;
+    CHECK(emplace_succeeded);
   }
+
+ private:
+  // The maximum length of time between duplicate requests that will allow
+  // them to be logged.
+  static constexpr base::TimeDelta kMaximumDetectionInterval =
+      base::Seconds(10);
+
+  // The maximum time to wait between adding an entry to the queue and
+  // removing it again. By making this larger than kMaximumDetectionPeriod we
+  // can enable entries to be cleaned up in batches for greater efficiency.
+  static constexpr base::TimeDelta kCleanupInterval =
+      kMaximumDetectionInterval * 2;
+
+  struct Entry {
+    base::TimeTicks added_time;
+    GURL url;
+  };
+
+  // Starts `expiry_timer_`, setting up the callback on the first call.
+  void StartTimer() {
+    if (expiry_timer_.user_task().is_null()) {
+      // We need to set the callback on the first call. This use of
+      // base::Unretained() is safe because the callback will not be called
+      // after `expiry_timer_` is destroyed, and it is owned by this object.
+      expiry_timer_.Start(
+          FROM_HERE, kCleanupInterval,
+          base::BindRepeating(&DuplicateRequestLogger::OnExpiryTimer,
+                              base::Unretained(this)));
+    } else {
+      // Avoid calling Bind() again.
+      expiry_timer_.Reset();
+    }
+  }
+
+  // Cleans up old entries in `entry_queue_` and `entry_map_`.
+  void OnExpiryTimer() {
+    base::TimeTicks expiry_threshold =
+        base::TimeTicks::Now() - kMaximumDetectionInterval;
+    while (!entry_queue_.empty() &&
+           entry_queue_.front().added_time < expiry_threshold) {
+      const Entry& entry = entry_queue_.front();
+      auto it = entry_map_.find(entry.url.possibly_invalid_spec());
+      CHECK(it != entry_map_.end());
+      auto [key, entry_ptr] = *it;
+      CHECK(KeyUsesCorrectBackingStore(key, entry_ptr));
+      if (entry_ptr == &entry) {
+        entry_map_.erase(it);
+      }
+      entry_queue_.pop();
+    }
+    if (!entry_queue_.empty()) {
+      expiry_timer_.Reset();
+    }
+  }
+
+  // Keys in `entry_map_` must always be backed by a string owned by the value.
+  // This method checks that invariant.
+  bool KeyUsesCorrectBackingStore(std::string_view key, Entry* value) {
+    return key.data() == value->url.possibly_invalid_spec().data();
+  }
+
+  // `entry_queue_` is a std::deque and not a base::circular_deque because it
+  // requires pointer stability.
+  std::queue<Entry, std::deque<Entry>> entry_queue_;
+
+  // To avoid keeping duplicate strings in memory, the map from URL to Entry
+  // uses a string_view key. The keys in `entry_map_` point to memory owned by
+  // `entry_queue_`, so Entry objects in `entry_queue_` must always be inserted
+  // before `entry_map_` and removed afterwards. The backing storage for the key
+  // must always belong to the Entry pointed to by the value.
+  absl::flat_hash_map<std::string_view, raw_ptr<Entry>> entry_map_;
+
+  // The timer only runs when `entry_queue_` is non-empty.
+  base::RetainingOneShotTimer expiry_timer_;
+};
+
+// If an identical URL to `url` has been requested in the last 10 seconds,
+// record the time passed since it was last seen to the
+// "Net.NetworkTransaction.DuplicateRequestInterval" histogram.
+void LogIfDuplicateRequest(const GURL& url, bool is_main_frame_navigation) {
+  static base::NoDestructor<DuplicateRequestLogger> logger_;
+  logger_->AddAndMaybeLogRequest(url, is_main_frame_navigation);
 }
+
+// When this feature is enabled, GET requests with identical URLs within 10
+// seconds will result in the Net.NetworkTransaction.DuplicateRequestInterval
+// histogram being recorded.
+BASE_FEATURE(kLogDuplicateRequests,
+             "LogDuplicateRequests",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace
 
@@ -219,8 +359,16 @@ HttpNetworkTransaction::~HttpNetworkTransaction() {
 int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
                                   CompletionOnceCallback callback,
                                   const NetLogWithSource& net_log) {
-  if (request_info->load_flags & LOAD_ONLY_FROM_CACHE)
+  TRACE_EVENT("net", "HttpNetworkTransaction::Start",
+              NetLogWithSourceToFlow(net_log), "url", request_info->url);
+
+  if (session_->power_suspended()) {
+    return ERR_NETWORK_IO_SUSPENDED;
+  }
+
+  if (request_info->load_flags & LOAD_ONLY_FROM_CACHE) {
     return ERR_CACHE_MISS;
+  }
 
   DCHECK(request_info->traffic_annotation.is_valid());
   DCHECK(request_info->IsConsistent());
@@ -260,7 +408,7 @@ int HttpNetworkTransaction::Start(const HttpRequestInfo* request_info,
     response_.restricted_prefetch = true;
   }
 
-  next_state_ = STATE_NOTIFY_BEFORE_CREATE_STREAM;
+  next_state_ = STATE_CREATE_STREAM;
   int rv = DoLoop(OK);
   if (rv == ERR_IO_PENDING)
     callback_ = std::move(callback);
@@ -277,6 +425,9 @@ int HttpNetworkTransaction::RestartIgnoringLastError(
   DCHECK(!stream_.get());
   DCHECK(!stream_request_.get());
   DCHECK_EQ(STATE_NONE, next_state_);
+
+  TRACE_EVENT("net", "HttpNetworkTransaction::RestartIgnoringLastError",
+              NetLogWithSourceToFlow(net_log_));
 
   if (!CheckMaxRestarts())
     return ERR_TOO_MANY_RETRIES;
@@ -303,6 +454,9 @@ int HttpNetworkTransaction::RestartWithCertificate(
   DCHECK(!stream_request_.get());
   DCHECK(!stream_.get());
   DCHECK_EQ(STATE_NONE, next_state_);
+
+  TRACE_EVENT("net", "HttpNetworkTransaction::RestartWithCertificate",
+              NetLogWithSourceToFlow(net_log_));
 
   if (!CheckMaxRestarts())
     return ERR_TOO_MANY_RETRIES;
@@ -333,6 +487,9 @@ int HttpNetworkTransaction::RestartWithCertificate(
 
 int HttpNetworkTransaction::RestartWithAuth(const AuthCredentials& credentials,
                                             CompletionOnceCallback callback) {
+  TRACE_EVENT("net", "HttpNetworkTransaction::RestartWithAuth",
+              NetLogWithSourceToFlow(net_log_));
+
   if (!CheckMaxRestarts())
     return ERR_TOO_MANY_RETRIES;
 
@@ -387,6 +544,7 @@ void HttpNetworkTransaction::PrepareForAuthRestart(HttpAuth::Target target) {
 
     session_->http_server_properties()->SetHTTP11Required(
         url::SchemeHostPort(rewritten_url), network_anonymization_key_);
+    stream_->SetHTTP11Required();
   }
 
   bool keep_alive = false;
@@ -428,6 +586,8 @@ void HttpNetworkTransaction::DidDrainBodyForAuthRestart(bool keep_alive) {
       // Close the stream and mark it as not_reusable.  Even in the
       // keep_alive case, we've determined that the stream_ is not
       // reusable if new_stream is NULL.
+      TRACE_EVENT("net", "HttpNetworkTransaction::DidDrainBodyForAuthRestart",
+                  NetLogWithSourceToFlow(net_log_));
       stream_->Close(true);
       next_state_ = STATE_CREATE_STREAM;
     } else {
@@ -530,9 +690,6 @@ LoadState HttpNetworkTransaction::GetLoadState() const {
   }
 }
 
-void HttpNetworkTransaction::SetQuicServerInfo(
-    QuicServerInfo* quic_server_info) {}
-
 bool HttpNetworkTransaction::GetLoadTimingInfo(
     LoadTimingInfo* load_timing_info) const {
   if (!stream_ || !stream_->GetLoadTimingInfo(load_timing_info))
@@ -563,6 +720,18 @@ bool HttpNetworkTransaction::GetLoadTimingInfo(
 
 void HttpNetworkTransaction::PopulateLoadTimingInternalInfo(
     LoadTimingInternalInfo* load_timing_internal_info) const {
+  if (!create_stream_start_time_.is_null() &&
+      !create_stream_end_time_.is_null()) {
+    CHECK_LE(create_stream_start_time_, create_stream_end_time_);
+    load_timing_internal_info->create_stream_delay =
+        create_stream_end_time_ - create_stream_start_time_;
+  }
+  if (!connected_callback_start_time_.is_null() &&
+      !connected_callback_end_time_.is_null()) {
+    CHECK_LE(connected_callback_start_time_, connected_callback_end_time_);
+    load_timing_internal_info->connected_callback_delay =
+        connected_callback_end_time_ - connected_callback_start_time_;
+  }
   if (!initialize_stream_start_time_.is_null() &&
       !initialize_stream_end_time_.is_null()) {
     CHECK_LE(initialize_stream_start_time_, initialize_stream_end_time_);
@@ -602,11 +771,6 @@ void HttpNetworkTransaction::SetWebSocketHandshakeStreamCreateHelper(
   websocket_handshake_stream_base_create_helper_ = create_helper;
 }
 
-void HttpNetworkTransaction::SetBeforeNetworkStartCallback(
-    BeforeNetworkStartCallback callback) {
-  before_network_start_callback_ = std::move(callback);
-}
-
 void HttpNetworkTransaction::SetConnectedCallback(
     const ConnectedCallback& callback) {
   connected_callback_ = callback;
@@ -641,13 +805,16 @@ void HttpNetworkTransaction::SetIsSharedDictionaryReadAllowedCallback(
   NOTREACHED();
 }
 
-int HttpNetworkTransaction::ResumeNetworkStart() {
-  DCHECK_EQ(next_state_, STATE_CREATE_STREAM);
-  return DoLoop(OK);
-}
-
 void HttpNetworkTransaction::ResumeAfterConnected(int result) {
   DCHECK_EQ(next_state_, STATE_CONNECTED_CALLBACK_COMPLETE);
+
+  connected_callback_end_time_ = base::TimeTicks::Now();
+  CHECK(!connected_callback_start_time_.is_null());
+  CHECK_LE(connected_callback_start_time_, connected_callback_end_time_);
+  base::UmaHistogramTimes(
+      "Net.NetworkTransaction.ConnectedCallbackDelay",
+      connected_callback_end_time_ - connected_callback_start_time_);
+
   OnIOComplete(result);
 }
 
@@ -837,10 +1004,6 @@ int HttpNetworkTransaction::DoLoop(int result) {
     State state = next_state_;
     next_state_ = STATE_NONE;
     switch (state) {
-      case STATE_NOTIFY_BEFORE_CREATE_STREAM:
-        DCHECK_EQ(OK, rv);
-        rv = DoNotifyBeforeCreateStream();
-        break;
       case STATE_CREATE_STREAM:
         DCHECK_EQ(OK, rv);
         rv = DoCreateStream();
@@ -848,18 +1011,18 @@ int HttpNetworkTransaction::DoLoop(int result) {
       case STATE_CREATE_STREAM_COMPLETE:
         rv = DoCreateStreamComplete(rv);
         break;
+      case STATE_CONNECTED_CALLBACK:
+        rv = DoConnectedCallback();
+        break;
+      case STATE_CONNECTED_CALLBACK_COMPLETE:
+        rv = DoConnectedCallbackComplete(rv);
+        break;
       case STATE_INIT_STREAM:
         DCHECK_EQ(OK, rv);
         rv = DoInitStream();
         break;
       case STATE_INIT_STREAM_COMPLETE:
         rv = DoInitStreamComplete(rv);
-        break;
-      case STATE_CONNECTED_CALLBACK:
-        rv = DoConnectedCallback();
-        break;
-      case STATE_CONNECTED_CALLBACK_COMPLETE:
-        rv = DoConnectedCallbackComplete(rv);
         break;
       case STATE_GENERATE_PROXY_AUTH_TOKEN:
         DCHECK_EQ(OK, rv);
@@ -938,19 +1101,10 @@ int HttpNetworkTransaction::DoLoop(int result) {
   return rv;
 }
 
-int HttpNetworkTransaction::DoNotifyBeforeCreateStream() {
-  next_state_ = STATE_CREATE_STREAM;
-  bool defer = false;
-  if (!before_network_start_callback_.is_null())
-    std::move(before_network_start_callback_).Run(&defer);
-  if (!defer)
-    return OK;
-  return ERR_IO_PENDING;
-}
-
 int HttpNetworkTransaction::DoCreateStream() {
   TRACE_EVENT("net", "HttpNetworkTransaction::CreateStream",
-              NetLogWithSourceToFlow(net_log_));
+              NetLogWithSourceToFlow(net_log_), "retry_attempts",
+              retry_attempts_, "num_restarts", num_restarts_);
   response_.network_accessed = true;
 
   next_state_ = STATE_CREATE_STREAM_COMPLETE;
@@ -962,6 +1116,10 @@ int HttpNetworkTransaction::DoCreateStream() {
   }
 
   create_stream_start_time_ = base::TimeTicks::Now();
+  // Reset `create_stream_end_time__` to prevent an inconsistent state in
+  // case that `DoCreateStream` is called multiple times.
+  create_stream_end_time_ = base::TimeTicks();
+
   if (ForWebSocketHandshake()) {
     stream_request_ =
         session_->http_stream_factory()->RequestWebSocketHandshakeStream(
@@ -983,17 +1141,19 @@ int HttpNetworkTransaction::DoCreateStreamComplete(int result) {
   RecordStreamRequestResult(result);
   CopyConnectionAttemptsFromStreamRequest();
   if (result == OK) {
+    create_stream_end_time_ = base::TimeTicks::Now();
     next_state_ = STATE_CONNECTED_CALLBACK;
     DCHECK(stream_.get());
     CHECK(!create_stream_start_time_.is_null());
+    CHECK_LE(create_stream_start_time_, create_stream_end_time_);
     base::UmaHistogramTimes(
         base::StrCat(
             {"Net.NetworkTransaction.Create",
              (ForWebSocketHandshake() ? "WebSocketStreamTime."
                                       : "HttpStreamTime."),
-             (IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ""),
+             (IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ""),
              NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
-        base::TimeTicks::Now() - create_stream_start_time_);
+        create_stream_end_time_ - create_stream_start_time_);
     if (!reset_connection_and_request_for_resend_start_time_.is_null()) {
       base::UmaHistogramTimes(
           "Net.NetworkTransaction.ResetConnectionAndResendRequestTime",
@@ -1011,64 +1171,6 @@ int HttpNetworkTransaction::DoCreateStreamComplete(int result) {
 
   // At this point we are done with the stream_request_.
   stream_request_.reset();
-  return result;
-}
-
-int HttpNetworkTransaction::DoInitStream() {
-  DCHECK(stream_.get());
-  TRACE_EVENT("net", "HttpNetworkTransaction::InitStream",
-              NetLogWithSourceToFlow(net_log_));
-  next_state_ = STATE_INIT_STREAM_COMPLETE;
-
-  initialize_stream_start_time_ = base::TimeTicks::Now();
-  int rv = stream_->InitializeStream(can_send_early_data_, priority_, net_log_,
-                                     io_callback_);
-
-  // TODO(crbug.com/359404121): Remove this histogram after the investigation
-  // completes.
-  bool blocked = rv == ERR_IO_PENDING;
-  if (blocked) {
-    blocked_initialize_stream_start_time_ = initialize_stream_start_time_;
-  }
-  base::UmaHistogramBoolean(
-      base::StrCat({"Net.NetworkTransaction.InitializeStreamBlocked",
-                    IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ".",
-                    NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
-      blocked);
-  return rv;
-}
-
-int HttpNetworkTransaction::DoInitStreamComplete(int result) {
-  TRACE_EVENT("net", "HttpNetworkTransaction::InitStreamComplete",
-              NetLogWithSourceToFlow(net_log_), "result", result);
-  initialize_stream_end_time_ = base::TimeTicks::Now();
-
-  // TODO(crbug.com/359404121): Remove this histogram after the investigation
-  // completes.
-  if (!blocked_initialize_stream_start_time_.is_null()) {
-    base::UmaHistogramTimes(
-        base::StrCat(
-            {"Net.NetworkTransaction.InitializeStreamBlockTime",
-             IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ".",
-             NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
-        initialize_stream_end_time_ - blocked_initialize_stream_start_time_);
-  }
-
-  if (result != OK) {
-    if (result < 0)
-      result = HandleIOError(result);
-
-    // The stream initialization failed, so this stream will never be useful.
-    if (stream_) {
-      total_received_bytes_ += stream_->GetTotalReceivedBytes();
-      total_sent_bytes_ += stream_->GetTotalSentBytes();
-    }
-    CacheNetErrorDetailsAndResetStream();
-
-    return result;
-  }
-
-  next_state_ = STATE_GENERATE_PROXY_AUTH_TOKEN;
   return result;
 }
 
@@ -1110,6 +1212,11 @@ int HttpNetworkTransaction::DoConnectedCallback() {
     is_issued_by_known_root = ssl_info.is_issued_by_known_root;
   }
 
+  connected_callback_start_time_ = base::TimeTicks::Now();
+  // Reset `connected_callback_end_time_` to prevent an inconsistent state in
+  // case that `DoConnectedCallback` is called multiple times.
+  connected_callback_end_time_ = base::TimeTicks();
+
   return connected_callback_.Run(
       TransportInfo(type, remote_endpoint_,
                     std::string{stream_->GetAcceptChViaAlps()},
@@ -1135,6 +1242,66 @@ int HttpNetworkTransaction::DoConnectedCallbackComplete(int result) {
   return OK;
 }
 
+int HttpNetworkTransaction::DoInitStream() {
+  DCHECK(stream_.get());
+  TRACE_EVENT("net", "HttpNetworkTransaction::InitStream",
+              NetLogWithSourceToFlow(net_log_));
+  next_state_ = STATE_INIT_STREAM_COMPLETE;
+
+  initialize_stream_start_time_ = base::TimeTicks::Now();
+  int rv = stream_->InitializeStream(can_send_early_data_, priority_, net_log_,
+                                     io_callback_);
+
+  // TODO(crbug.com/359404121): Remove this histogram after the investigation
+  // completes.
+  bool blocked = rv == ERR_IO_PENDING;
+  if (blocked) {
+    blocked_initialize_stream_start_time_ = initialize_stream_start_time_;
+  }
+  base::UmaHistogramBoolean(
+      base::StrCat(
+          {"Net.NetworkTransaction.InitializeStreamBlocked",
+           IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ".",
+           NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
+      blocked);
+  return rv;
+}
+
+int HttpNetworkTransaction::DoInitStreamComplete(int result) {
+  TRACE_EVENT("net", "HttpNetworkTransaction::InitStreamComplete",
+              NetLogWithSourceToFlow(net_log_), "result", result);
+  initialize_stream_end_time_ = base::TimeTicks::Now();
+
+  // TODO(crbug.com/359404121): Remove this histogram after the investigation
+  // completes.
+  if (!blocked_initialize_stream_start_time_.is_null()) {
+    base::UmaHistogramTimes(
+        base::StrCat(
+            {"Net.NetworkTransaction.InitializeStreamBlockTime",
+             IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ".",
+             NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
+        initialize_stream_end_time_ - blocked_initialize_stream_start_time_);
+  }
+
+  if (result != OK) {
+    if (result < 0) {
+      result = HandleIOError(result);
+    }
+
+    // The stream initialization failed, so this stream will never be useful.
+    if (stream_) {
+      total_received_bytes_ += stream_->GetTotalReceivedBytes();
+      total_sent_bytes_ += stream_->GetTotalSentBytes();
+    }
+    CacheNetErrorDetailsAndResetStream();
+
+    return result;
+  }
+
+  next_state_ = STATE_GENERATE_PROXY_AUTH_TOKEN;
+  return result;
+}
+
 int HttpNetworkTransaction::DoGenerateProxyAuthToken() {
   next_state_ = STATE_GENERATE_PROXY_AUTH_TOKEN_COMPLETE;
   if (!ShouldApplyProxyAuth())
@@ -1154,9 +1321,10 @@ int HttpNetworkTransaction::DoGenerateProxyAuthToken() {
     blocked_generate_proxy_auth_token_start_time_ = base::TimeTicks::Now();
   }
   base::UmaHistogramBoolean(
-      base::StrCat({"Net.NetworkTransaction.GenerateProxyAuthTokenBlocked",
-                    IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ".",
-                    NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
+      base::StrCat(
+          {"Net.NetworkTransaction.GenerateProxyAuthTokenBlocked",
+           IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ".",
+           NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
       blocked);
   return rv;
 }
@@ -1169,7 +1337,7 @@ int HttpNetworkTransaction::DoGenerateProxyAuthTokenComplete(int rv) {
     base::UmaHistogramTimes(
         base::StrCat(
             {"Net.NetworkTransaction.GenerateProxyAuthTokenBlockTime",
-             IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ".",
+             IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ".",
              NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
         base::TimeTicks::Now() - blocked_generate_proxy_auth_token_start_time_);
   }
@@ -1200,9 +1368,10 @@ int HttpNetworkTransaction::DoGenerateServerAuthToken() {
     blocked_generate_server_auth_token_start_time_ = base::TimeTicks::Now();
   }
   base::UmaHistogramBoolean(
-      base::StrCat({"Net.NetworkTransaction.GenerateServerAuthTokenBlocked",
-                    IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ".",
-                    NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
+      base::StrCat(
+          {"Net.NetworkTransaction.GenerateServerAuthTokenBlocked",
+           IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ".",
+           NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
       blocked);
   return rv;
 }
@@ -1215,7 +1384,7 @@ int HttpNetworkTransaction::DoGenerateServerAuthTokenComplete(int rv) {
     base::UmaHistogramTimes(
         base::StrCat(
             {"Net.NetworkTransaction.GenerateServerAuthTokenBlockTime",
-             IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : ".",
+             IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : ".",
              NegotiatedProtocolToHistogramSuffix(negotiated_protocol_)}),
         base::TimeTicks::Now() -
             blocked_generate_server_auth_token_start_time_);
@@ -1273,11 +1442,24 @@ int HttpNetworkTransaction::BuildRequestHeaders(
     auth_controllers_[HttpAuth::AUTH_SERVER]->AddAuthorizationHeader(
         &request_headers_);
 
+  bool is_proxied_request =
+      proxy_info_.is_for_ip_protection() && !proxy_info_.is_direct();
   if (features::kIpPrivacyAddHeaderToProxiedRequests.Get() &&
-      proxy_info_.is_for_ip_protection()) {
-    CHECK(!proxy_info_.is_direct() || features::kIpPrivacyDirectOnly.Get());
-    if (!proxy_info_.is_direct()) {
-      request_headers_.SetHeader("IP-Protection", "1");
+      is_proxied_request) {
+    request_headers_.SetHeader("IP-Protection", "1");
+  }
+
+  if (bool is_prt_eligible =
+          features::kEnableProbabilisticRevealTokensForNonProxiedRequests
+              .Get() ||
+          is_proxied_request;
+      features::kProbabilisticRevealTokensAddHeaderToProxiedRequests.Get() &&
+      is_prt_eligible) {
+    if (std::optional<std::string> maybe_prt_header_value =
+            proxy_info_.prt_header_value();
+        maybe_prt_header_value.has_value()) {
+      request_headers_.SetHeader("Sec-Probabilistic-Reveal-Token",
+                                 std::move(maybe_prt_header_value.value()));
     }
   }
 
@@ -1345,6 +1527,11 @@ int HttpNetworkTransaction::DoSendRequest() {
   send_start_time_ = base::TimeTicks::Now();
   next_state_ = STATE_SEND_REQUEST_COMPLETE;
 
+  if (base::FeatureList::IsEnabled(kLogDuplicateRequests) &&
+      request_->method == "GET") {
+    LogIfDuplicateRequest(request_->url, request_->is_main_frame_navigation);
+  }
+
   stream_->SetRequestIdempotency(request_->idempotency);
   return stream_->SendRequest(request_headers_, &response_, io_callback_);
 }
@@ -1374,7 +1561,9 @@ int HttpNetworkTransaction::DoReadHeaders() {
 
 int HttpNetworkTransaction::DoReadHeadersComplete(int result) {
   TRACE_EVENT("net", "HttpNetworkTransaction::ReadHeadersComplete",
-              NetLogWithSourceToFlow(net_log_), "result", result);
+              NetLogWithSourceToFlow(net_log_), "result", result,
+              "response_code",
+              response_.headers ? response_.headers->response_code() : -1);
   // We can get a ERR_SSL_CLIENT_AUTH_CERT_NEEDED here due to SSL renegotiation.
   // Server certificate errors are impossible. Rather than reverify the new
   // server certificate, BoringSSL forbids server certificates from changing.
@@ -2091,12 +2280,16 @@ bool HttpNetworkTransaction::CheckMaxRestarts() {
 
 void HttpNetworkTransaction::ResetConnectionAndRequestForResend(
     RetryReason retry_reason) {
+  TRACE_EVENT("net",
+              "HttpNetworkTransaction::ResetConnectionAndRequestForResend",
+              NetLogWithSourceToFlow(net_log_), "retry_reason", retry_reason);
+
   reset_connection_and_request_for_resend_start_time_ = base::TimeTicks::Now();
 
   // TODO:(crbug.com/1495705): Remove this CHECK after fixing the bug.
   CHECK(request_);
   base::UmaHistogramEnumeration(
-      IsGoogleHostWithAlpnH3(url_.host())
+      IsGoogleHostWithAlpnH3(url_.host_piece())
           ? "Net.NetworkTransactionH3SupportedGoogleHost.RetryReason"
           : "Net.NetworkTransaction.RetryReason",
       retry_reason);
@@ -2261,9 +2454,10 @@ void HttpNetworkTransaction::RecordStreamRequestResult(int result) {
   if (num_restarts_ == 0) {
     base::TimeDelta elapsed = base::TimeTicks::Now() - start_timeticks_;
     base::UmaHistogramTimes(
-        base::StrCat({"Net.NetworkTransaction.StreamRequestCompleteTime.",
-                      IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : "",
-                      result == OK ? "Success" : "Failure"}),
+        base::StrCat(
+            {"Net.NetworkTransaction.StreamRequestCompleteTime.",
+             IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : "",
+             result == OK ? "Success" : "Failure"}),
         elapsed);
   }
 
@@ -2271,7 +2465,7 @@ void HttpNetworkTransaction::RecordStreamRequestResult(int result) {
     base::UmaHistogramEnumeration(
         base::StrCat({
             "Net.NetworkTransaction.NegotiatedProtocol.",
-            IsGoogleHostWithAlpnH3(url_.host()) ? "GoogleHost." : "",
+            IsGoogleHostWithAlpnH3(url_.host_piece()) ? "GoogleHost." : "",
         }),
         negotiated_protocol_);
 
@@ -2279,7 +2473,7 @@ void HttpNetworkTransaction::RecordStreamRequestResult(int result) {
     int get_endpoint_result = stream_->GetRemoteEndpoint(&endpoint);
     if (get_endpoint_result == OK) {
       base::UmaHistogramEnumeration(
-          "NetNetworkTransaction.StreamAddressFamily", endpoint.GetFamily(),
+          "Net.NetworkTransaction.StreamAddressFamily", endpoint.GetFamily(),
           static_cast<AddressFamily>(ADDRESS_FAMILY_LAST + 1));
     }
   } else {

@@ -546,8 +546,7 @@ PhysicalFragment::OofData* PhysicalFragment::OofDataFromBuilder(
       oof_data->OofPositionedDescendants().emplace_back(
           descendant.Node(),
           descendant.static_position.ConvertToPhysical(converter),
-          descendant.requires_content_before_breaking,
-          descendant.is_hidden_for_paint, inline_container);
+          descendant.requires_content_before_breaking, inline_container);
     }
   }
 
@@ -597,8 +596,7 @@ PhysicalFragment::OofData* PhysicalFragment::FragmentedOofDataFromBuilder(
         descendant.Node(),
         descendant.static_position.ConvertToPhysical(
             containing_block_converter),
-        descendant.requires_content_before_breaking,
-        descendant.is_hidden_for_paint, inline_container,
+        descendant.requires_content_before_breaking, inline_container,
         PhysicalContainingBlock(builder, size, containing_block_size,
                                 descendant.containing_block),
         PhysicalContainingBlock(builder, size,
@@ -809,7 +807,7 @@ PhysicalFragment::PostLayoutChildLinkList PhysicalFragment::PostLayoutChildren()
   if (Type() == kFragmentBox) {
     return static_cast<const PhysicalBoxFragment*>(this)->PostLayoutChildren();
   }
-  return PostLayoutChildLinkList(0, nullptr);
+  return PostLayoutChildLinkList(base::span<const PhysicalFragmentLink>());
 }
 
 void PhysicalFragment::SetChildrenInvalid() const {
@@ -983,10 +981,9 @@ void PhysicalFragment::AddOutlineRectsForDescendant(
 
 bool PhysicalFragment::DependsOnPercentageBlockSize(
     const FragmentBuilder& builder) {
-  LayoutInputNode node = builder.node_;
-
-  if (!node || node.IsInline())
+  if (!builder.node_ || builder.node_.IsInline()) {
     return builder.has_descendant_that_depends_on_percentage_block_size_;
+  }
 
   // NOTE: If an element is OOF positioned, and has top/bottom constraints
   // which are percentage based, this function will return false.
@@ -1011,6 +1008,7 @@ bool PhysicalFragment::DependsOnPercentageBlockSize(
   // NOTE(ikilpatrick): For the flex-item case this is potentially too general.
   // We only need to know about if this flex-item has a %-block-size child if
   // the "definiteness" changes, not if the percentage resolution size changes.
+  const BlockNode node = To<BlockNode>(builder.node_);
   if (builder.has_descendant_that_depends_on_percentage_block_size_ &&
       (node.UseParentPercentageResolutionBlockSizeForChildren() ||
        node.IsFlexItem())) {

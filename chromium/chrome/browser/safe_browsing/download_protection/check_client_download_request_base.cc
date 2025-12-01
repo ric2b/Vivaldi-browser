@@ -18,6 +18,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
+#include "chrome/browser/safe_browsing/download_protection/download_request_maker.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/content/common/file_type_policies.h"
@@ -174,7 +175,7 @@ bool CheckClientDownloadRequestBase::IsDownloadManuallyBlocklisted(
   if (service_->IsHashManuallyBlocklisted(request.digests().sha256()))
     return true;
 
-  for (auto bin_itr : request.archived_binary()) {
+  for (const auto& bin_itr : request.archived_binary()) {
     if (service_->IsHashManuallyBlocklisted(bin_itr.digests().sha256()))
       return true;
   }
@@ -201,33 +202,35 @@ void CheckClientDownloadRequestBase::OnUrlAllowlistCheckDone(
   }
 
   DownloadCheckResultReason reason = REASON_MAX;
-  if (!IsSupportedDownload(&reason)) {
-    switch (reason) {
-      case REASON_EMPTY_URL_CHAIN:
-      case REASON_INVALID_URL:
-      case REASON_LOCAL_FILE:
-      case REASON_REMOTE_FILE:
-        FinishRequest(DownloadCheckResult::UNKNOWN, reason);
-        return;
-      case REASON_UNSUPPORTED_URL_SCHEME:
-        FinishRequest(DownloadCheckResult::UNKNOWN, reason);
-        return;
-      case REASON_NOT_BINARY_FILE:
-        if (ShouldSampleUnsupportedFile(target_file_path_)) {
-          // Send a "light ping" and don't use the verdict.
-          sampled_unsupported_file_ = true;
-          break;
-        }
-        RecordFileExtensionType(kDownloadExtensionUmaName, target_file_path_);
-        FinishRequest(DownloadCheckResult::UNKNOWN, reason);
-        return;
+  MayCheckDownloadResult may_check_download_result =
+      IsSupportedDownload(&reason);
 
-      default:
-        // We only expect the reasons explicitly handled above.
-        NOTREACHED();
+  if (may_check_download_result ==
+      MayCheckDownloadResult::kMayNotCheckDownload) {
+    CHECK(reason == REASON_EMPTY_URL_CHAIN || reason == REASON_INVALID_URL ||
+          reason == REASON_LOCAL_FILE || reason == REASON_REMOTE_FILE ||
+          reason == REASON_UNSUPPORTED_URL_SCHEME ||
+          reason == REASON_DOWNLOAD_DESTROYED);
+    FinishRequest(DownloadCheckResult::UNKNOWN, reason);
+    return;
+  }
+
+  RecordFileExtensionType(kDownloadExtensionUmaName, target_file_path_);
+
+  if (may_check_download_result ==
+      MayCheckDownloadResult::kMaySendSampledPingOnly) {
+    CHECK(reason == REASON_NOT_BINARY_FILE);
+    // Send a "light ping" and don't use the verdict.
+    sampled_unsupported_file_ = ShouldSampleUnsupportedFile(target_file_path_);
+    if (!sampled_unsupported_file_) {
+      FinishRequest(DownloadCheckResult::UNKNOWN, reason);
+      return;
     }
   }
-  RecordFileExtensionType(kDownloadExtensionUmaName, target_file_path_);
+
+  CHECK(may_check_download_result ==
+            MayCheckDownloadResult::kMayCheckDownload ||
+        sampled_unsupported_file_);
   download_request_maker_->Start(base::BindOnce(
       &CheckClientDownloadRequestBase::OnRequestBuilt, GetWeakPtr()));
 }
@@ -311,6 +314,7 @@ void CheckClientDownloadRequestBase::GetAdditionalPromptResult(
 }
 
 void CheckClientDownloadRequestBase::OnRequestBuilt(
+    DownloadRequestMaker::RequestCreationDetails details,
     std::unique_ptr<ClientDownloadRequest> request) {
   if (ShouldPromptForIncorrectPassword()) {
     LogLocalDecryptionEvent(safe_browsing::DeepScanEvent::kIncorrectPassword);
@@ -326,6 +330,7 @@ void CheckClientDownloadRequestBase::OnRequestBuilt(
   }
 
   client_download_request_ = std::move(request);
+  request_creation_details_ = details;
   SanitizeRequest();
 
   // If it's an archive with no archives or executables, finish early.
@@ -488,18 +493,12 @@ void CheckClientDownloadRequestBase::SendRequest() {
       std::move(resource_request),
       service_->delegate()->CompleteClientDownloadRequestTrafficAnnotation(
           partial_traffic_annotation));
-  loader_->AttachStringForUpload(client_download_request_data_,
-                                 "application/octet-stream");
+  loader_->AttachStringForUpload(client_download_request_data_);
   loader_->DownloadToStringOfUnboundedSizeUntilCrashAndDie(
       service_->GetURLLoaderFactory(GetBrowserContext()).get(),
       base::BindOnce(&CheckClientDownloadRequestBase::OnURLLoaderComplete,
                      GetWeakPtr()));
   request_start_time_ = base::TimeTicks::Now();
-
-#if !BUILDFLAG(IS_ANDROID)
-  // Add the access token to the proto for display on chrome://safe-browsing
-  client_download_request_->set_access_token(access_token_);
-#endif
 
   // The following is to log this ClientDownloadRequest on any open
   // chrome://safe-browsing pages. If no such page is open, the request is
@@ -618,16 +617,11 @@ void CheckClientDownloadRequestBase::OnURLLoaderComplete(
   // We don't need the loader anymore.
   loader_.reset();
 
-  DownloadFileType::InspectionType inspection_type =
-      FileTypePolicies::GetInstance()
-          ->PolicyForFile(target_file_path_, GURL{}, nullptr)
-          .inspection_type();
   std::string histogram_name = "SBClientDownload.DownloadRequestDuration";
   base::TimeDelta duration = base::TimeTicks::Now() - start_time_;
   base::UmaHistogramTimes("SBClientDownload.DownloadRequestDuration", duration);
 
-  std::string metrics_suffix = "";
-  switch (inspection_type) {
+  switch (request_creation_details_.inspection_type) {
     case DownloadFileType::NONE:
       base::StrAppend(&histogram_name, {".None"});
       break;

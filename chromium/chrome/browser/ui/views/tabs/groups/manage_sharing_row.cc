@@ -7,6 +7,7 @@
 #include "base/uuid.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/tabs/groups/avatar_container_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -59,6 +60,7 @@ ManageSharingRow::ManageSharingRow(
   views::InkDrop::Get(this)->SetBaseColorId(kColorHoverButtonBackgroundHovered);
   views::InkDrop::Get(this)->SetVisibleOpacity(1.0f);
   views::InkDrop::Get(this)->SetHighlightOpacity(1.0f);
+  SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
 
   RebuildChildren();
 }
@@ -71,8 +73,16 @@ void ManageSharingRow::RebuildChildren() {
   ink_drop_container_ = nullptr;
   RemoveAllChildViews();
 
-  GetViewAccessibility().SetName(l10n_util::GetStringUTF16(
-      IDS_TAB_GROUP_HEADER_CXMENU_TAB_GROUP_TITLE_ACCESSIBLE_NAME));
+  size_t member_size =
+      tab_groups::SavedTabGroupUtils::GetMembersOfSharedTabGroup(
+          profile_, collaboration_id_)
+          .size();
+  GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_TAB_GROUP_HEADER_CXMENU_MANAGE_GROUP) +
+      u" " +
+      l10n_util::GetPluralStringFUTF16(
+          IDS_TAB_GROUP_HEADER_CXMENU_TAB_GROUP_FACE_PILE_ACCESSIBLE_NAME,
+          member_size));
 
   manage_group_icon_ = AddChildView(std::make_unique<views::ImageView>(
       ui::ImageModel::FromVectorIcon(kTabGroupSharingIcon)));
@@ -112,6 +122,13 @@ void ManageSharingRow::RebuildChildren() {
       views::kMarginsKey, gfx::Insets::TLBR(0, kImageLabelSpacing, 0, 0));
   avatar_container_->SetPaintToLayer();
   avatar_container_->layer()->SetFillsBoundsOpaquely(false);
+
+  ink_drop_container_ =
+      AddChildView(views::Builder<views::InkDropContainerView>()
+                       .SetAutoMatchParentBounds(true)
+                       .Build());
+  ink_drop_container_->SetVisible(false);
+  ink_drop_container_->SetProperty(views::kViewIgnoredByLayoutKey, true);
 }
 
 void ManageSharingRow::StateChanged(ButtonState old_state) {
@@ -187,6 +204,17 @@ void ManageSharingRow::UpdateBackgroundColor() {
   }
 
   SetBackground(views::CreateSolidBackground(bg_color));
+}
+
+void ManageSharingRow::AddLayerToRegion(ui::Layer* new_layer,
+                                        views::LayerRegion region) {
+  ink_drop_container_->SetVisible(true);
+  ink_drop_container_->AddLayerToRegion(new_layer, region);
+}
+
+void ManageSharingRow::RemoveLayerFromRegions(ui::Layer* old_layer) {
+  ink_drop_container_->RemoveLayerFromRegions(old_layer);
+  ink_drop_container_->SetVisible(false);
 }
 
 BEGIN_METADATA(ManageSharingRow)

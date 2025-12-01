@@ -42,8 +42,8 @@ class StunServerTest : public ::testing::Test {
         absl::WrapUnique(AsyncUDPSocket::Create(ss_.get(), client_addr))));
   }
 
-  void Send(const cricket::StunMessage& msg) {
-    rtc::ByteBufferWriter buf;
+  void Send(const StunMessage& msg) {
+    ByteBufferWriter buf;
     msg.Write(&buf);
     Send(reinterpret_cast<const char*>(buf.Data()),
          static_cast<int>(buf.Length()));
@@ -52,13 +52,13 @@ class StunServerTest : public ::testing::Test {
     client_->SendTo(buf, len, server_addr);
   }
   bool ReceiveFails() { return (client_->CheckNoPacket()); }
-  cricket::StunMessage* Receive() {
-    cricket::StunMessage* msg = NULL;
+  StunMessage* Receive() {
+    StunMessage* msg = nullptr;
     std::unique_ptr<TestClient::Packet> packet =
         client_->NextPacket(TestClient::kTimeoutMs);
     if (packet) {
-      rtc::ByteBufferReader buf(packet->buf);
-      msg = new cricket::StunMessage();
+      ByteBufferReader buf(packet->buf);
+      msg = new StunMessage();
       msg->Read(&buf);
     }
     return msg;
@@ -74,17 +74,17 @@ class StunServerTest : public ::testing::Test {
 TEST_F(StunServerTest, TestGood) {
   // kStunLegacyTransactionIdLength = 16 for legacy RFC 3489 request
   std::string transaction_id = "0123456789abcdef";
-  cricket::StunMessage req(cricket::STUN_BINDING_REQUEST, transaction_id);
+  StunMessage req(STUN_BINDING_REQUEST, transaction_id);
   Send(req);
 
-  cricket::StunMessage* msg = Receive();
-  ASSERT_TRUE(msg != NULL);
-  EXPECT_EQ(cricket::STUN_BINDING_RESPONSE, msg->type());
+  StunMessage* msg = Receive();
+  ASSERT_TRUE(msg != nullptr);
+  EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
   EXPECT_EQ(req.transaction_id(), msg->transaction_id());
 
-  const cricket::StunAddressAttribute* mapped_addr =
-      msg->GetAddress(cricket::STUN_ATTR_MAPPED_ADDRESS);
-  EXPECT_TRUE(mapped_addr != NULL);
+  const StunAddressAttribute* mapped_addr =
+      msg->GetAddress(STUN_ATTR_MAPPED_ADDRESS);
+  EXPECT_TRUE(mapped_addr != nullptr);
   EXPECT_EQ(1, mapped_addr->family());
   EXPECT_EQ(client_addr.port(), mapped_addr->port());
 
@@ -95,17 +95,17 @@ TEST_F(StunServerTest, TestGoodXorMappedAddr) {
   // kStunTransactionIdLength = 12 for RFC 5389 request
   // StunMessage::Write will automatically insert magic cookie (0x2112A442)
   std::string transaction_id = "0123456789ab";
-  cricket::StunMessage req(cricket::STUN_BINDING_REQUEST, transaction_id);
+  StunMessage req(STUN_BINDING_REQUEST, transaction_id);
   Send(req);
 
-  cricket::StunMessage* msg = Receive();
-  ASSERT_TRUE(msg != NULL);
-  EXPECT_EQ(cricket::STUN_BINDING_RESPONSE, msg->type());
+  StunMessage* msg = Receive();
+  ASSERT_TRUE(msg != nullptr);
+  EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
   EXPECT_EQ(req.transaction_id(), msg->transaction_id());
 
-  const cricket::StunAddressAttribute* mapped_addr =
-      msg->GetAddress(cricket::STUN_ATTR_XOR_MAPPED_ADDRESS);
-  EXPECT_TRUE(mapped_addr != NULL);
+  const StunAddressAttribute* mapped_addr =
+      msg->GetAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
+  EXPECT_TRUE(mapped_addr != nullptr);
   EXPECT_EQ(1, mapped_addr->family());
   EXPECT_EQ(client_addr.port(), mapped_addr->port());
 
@@ -116,17 +116,17 @@ TEST_F(StunServerTest, TestGoodXorMappedAddr) {
 TEST_F(StunServerTest, TestNoXorMappedAddr) {
   // kStunLegacyTransactionIdLength = 16 for legacy RFC 3489 request
   std::string transaction_id = "0123456789abcdef";
-  cricket::StunMessage req(cricket::STUN_BINDING_REQUEST, transaction_id);
+  StunMessage req(STUN_BINDING_REQUEST, transaction_id);
   Send(req);
 
-  cricket::StunMessage* msg = Receive();
-  ASSERT_TRUE(msg != NULL);
-  EXPECT_EQ(cricket::STUN_BINDING_RESPONSE, msg->type());
+  StunMessage* msg = Receive();
+  ASSERT_TRUE(msg != nullptr);
+  EXPECT_EQ(STUN_BINDING_RESPONSE, msg->type());
   EXPECT_EQ(req.transaction_id(), msg->transaction_id());
 
-  const cricket::StunAddressAttribute* mapped_addr =
-      msg->GetAddress(cricket::STUN_ATTR_XOR_MAPPED_ADDRESS);
-  EXPECT_TRUE(mapped_addr == NULL);
+  const StunAddressAttribute* mapped_addr =
+      msg->GetAddress(STUN_ATTR_XOR_MAPPED_ADDRESS);
+  EXPECT_TRUE(mapped_addr == nullptr);
 
   delete msg;
 }

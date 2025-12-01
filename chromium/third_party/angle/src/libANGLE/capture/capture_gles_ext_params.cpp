@@ -232,6 +232,52 @@ void CaptureDrawElementsInstancedBaseVertexEXT_indices(const State &glState,
     UNIMPLEMENTED();
 }
 
+void CaptureMultiDrawArraysEXT_first(const State &glState,
+                                     bool isCallValid,
+                                     PrimitiveMode modePacked,
+                                     const GLint *first,
+                                     const GLsizei *count,
+                                     GLsizei primcount,
+                                     angle::ParamCapture *paramCapture)
+{
+    UNIMPLEMENTED();
+}
+
+void CaptureMultiDrawArraysEXT_count(const State &glState,
+                                     bool isCallValid,
+                                     PrimitiveMode modePacked,
+                                     const GLint *first,
+                                     const GLsizei *count,
+                                     GLsizei primcount,
+                                     angle::ParamCapture *paramCapture)
+{
+    UNIMPLEMENTED();
+}
+
+void CaptureMultiDrawElementsEXT_count(const State &glState,
+                                       bool isCallValid,
+                                       PrimitiveMode modePacked,
+                                       const GLsizei *count,
+                                       DrawElementsType typePacked,
+                                       const void *const *indices,
+                                       GLsizei primcount,
+                                       angle::ParamCapture *paramCapture)
+{
+    UNIMPLEMENTED();
+}
+
+void CaptureMultiDrawElementsEXT_indices(const State &glState,
+                                         bool isCallValid,
+                                         PrimitiveMode modePacked,
+                                         const GLsizei *count,
+                                         DrawElementsType typePacked,
+                                         const void *const *indices,
+                                         GLsizei primcount,
+                                         angle::ParamCapture *paramCapture)
+{
+    UNIMPLEMENTED();
+}
+
 void CaptureMultiDrawArraysIndirectEXT_indirect(const State &glState,
                                                 bool isCallValid,
                                                 PrimitiveMode modePacked,
@@ -550,7 +596,7 @@ void CaptureGetFloatvRobustANGLE_length(const State &glState,
                                         GLfloat *params,
                                         ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    paramCapture->readBufferSizeBytes = sizeof(GLsizei);
 }
 
 void CaptureGetFloatvRobustANGLE_params(const State &glState,
@@ -561,7 +607,7 @@ void CaptureGetFloatvRobustANGLE_params(const State &glState,
                                         GLfloat *params,
                                         ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureGetFloatv_data(glState, isCallValid, pname, params, paramCapture);
 }
 
 void CaptureGetFramebufferAttachmentParameterivRobustANGLE_length(const State &glState,
@@ -669,7 +715,7 @@ void CaptureGetShaderivRobustANGLE_length(const State &glState,
                                           GLint *params,
                                           ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    paramCapture->readBufferSizeBytes = sizeof(GLsizei);
 }
 
 void CaptureGetShaderivRobustANGLE_params(const State &glState,
@@ -681,7 +727,7 @@ void CaptureGetShaderivRobustANGLE_params(const State &glState,
                                           GLint *params,
                                           ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureGetShaderiv_params(glState, isCallValid, shader, pname, params, paramCapture);
 }
 
 void CaptureGetTexParameterfvRobustANGLE_length(const State &glState,
@@ -1040,7 +1086,8 @@ void CaptureTexImage3DRobustANGLE_pixels(const State &glState,
                                          const void *pixels,
                                          ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureTexImage3D_pixels(glState, isCallValid, targetPacked, level, internalformat, width,
+                             height, depth, border, format, type, pixels, paramCapture);
 }
 
 void CaptureTexSubImage3DRobustANGLE_pixels(const State &glState,
@@ -1059,7 +1106,8 @@ void CaptureTexSubImage3DRobustANGLE_pixels(const State &glState,
                                             const void *pixels,
                                             ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureTexSubImage3D_pixels(glState, isCallValid, targetPacked, level, xoffset, yoffset,
+                                zoffset, width, height, depth, format, type, pixels, paramCapture);
 }
 
 void CaptureCompressedTexImage2DRobustANGLE_data(const State &glState,
@@ -1111,7 +1159,8 @@ void CaptureCompressedTexImage3DRobustANGLE_data(const State &glState,
                                                  const GLvoid *data,
                                                  ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureCompressedTexImage3D_data(glState, isCallValid, targetPacked, level, internalformat,
+                                     width, height, depth, border, imageSize, data, paramCapture);
 }
 
 void CaptureCompressedTexSubImage3DRobustANGLE_data(const State &glState,
@@ -1130,7 +1179,9 @@ void CaptureCompressedTexSubImage3DRobustANGLE_data(const State &glState,
                                                     const GLvoid *data,
                                                     ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureCompressedTexSubImage3D_data(glState, isCallValid, targetPacked, level, xoffset, yoffset,
+                                        zoffset, width, height, depth, format, imageSize, data,
+                                        paramCapture);
 }
 
 void CaptureGetQueryivRobustANGLE_length(const State &glState,
@@ -1239,7 +1290,7 @@ void CaptureGetInternalformativRobustANGLE_length(const State &glState,
                                                   GLint *params,
                                                   ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    paramCapture->readBufferSizeBytes = sizeof(GLsizei);
 }
 
 void CaptureGetInternalformativRobustANGLE_params(const State &glState,
@@ -1252,7 +1303,8 @@ void CaptureGetInternalformativRobustANGLE_params(const State &glState,
                                                   GLint *params,
                                                   ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureGetInternalformativ_params(glState, isCallValid, target, internalformat, pname, bufSize,
+                                      params, paramCapture);
 }
 
 void CaptureGetVertexAttribIivRobustANGLE_length(const State &glState,
@@ -1361,7 +1413,7 @@ void CaptureGetInteger64vRobustANGLE_length(const State &glState,
                                             GLint64 *data,
                                             ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    paramCapture->readBufferSizeBytes = sizeof(GLsizei);
 }
 
 void CaptureGetInteger64vRobustANGLE_data(const State &glState,
@@ -1372,7 +1424,7 @@ void CaptureGetInteger64vRobustANGLE_data(const State &glState,
                                           GLint64 *data,
                                           ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureGetParameter(glState, pname, sizeof(GLint64), paramCapture);
 }
 
 void CaptureGetInteger64i_vRobustANGLE_length(const State &glState,
@@ -3386,7 +3438,8 @@ void CaptureCompressedTexImage3DOES_data(const State &glState,
                                          const void *data,
                                          ParamCapture *paramCapture)
 {
-    UNIMPLEMENTED();
+    CaptureCompressedTexImage3D_data(glState, isCallValid, targetPacked, level, internalformat,
+                                     width, height, depth, border, imageSize, data, paramCapture);
 }
 
 void CaptureCompressedTexSubImage3DOES_data(const State &glState,

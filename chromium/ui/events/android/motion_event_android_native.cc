@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "ui/events/android/motion_event_android_native.h"
 
 #include <android/input.h>
@@ -82,7 +77,8 @@ MotionEventAndroidNative::MotionEventAndroidNative(
 std::unique_ptr<MotionEventAndroid> MotionEventAndroidNative::Create(
     base::android::ScopedInputEvent input_event,
     float pix_to_dip,
-    float y_offset_pix) {
+    float y_offset_pix,
+    std::optional<EventTimes> event_times) {
   const AInputEvent* event = input_event.a_input_event();
 
   CHECK(event != nullptr);
@@ -91,8 +87,16 @@ std::unique_ptr<MotionEventAndroid> MotionEventAndroidNative::Create(
   const size_t history_size = AMotionEvent_getHistorySize(event);
   // AMotionEvent_getEventTime and AMotionEvent_getHistoricalEventTime returns
   // the time with nanoseconds precision.
-  const base::TimeTicks latest_event_time =
-      base::TimeTicks::FromJavaNanoTime(AMotionEvent_getEventTime(event));
+  if (!event_times) {
+    event_times = EventTimes();
+    event_times->latest =
+        base::TimeTicks::FromJavaNanoTime(AMotionEvent_getEventTime(event));
+    event_times->oldest = (history_size == 0)
+                              ? event_times->latest
+                              : base::TimeTicks::FromJavaNanoTime(
+                                    AMotionEvent_getHistoricalEventTime(
+                                        event, /* history_index= */ 0));
+  }
   const jlong down_time_ms =
       base::TimeTicks::FromJavaNanoTime(AMotionEvent_getDownTime(event))
           .ToUptimeMillis();
@@ -102,34 +106,35 @@ std::unique_ptr<MotionEventAndroid> MotionEventAndroidNative::Create(
   const int masked_action = action & AMOTION_EVENT_ACTION_MASK;
   const int action_index = (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >>
                            AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-  const base::TimeTicks oldest_event_time =
-      (history_size == 0) ? latest_event_time
-                          : base::TimeTicks::FromJavaNanoTime(
-                                AMotionEvent_getHistoricalEventTime(
-                                    event, /* history_index= */ 0));
 
   const size_t pointer_count = AMotionEvent_getPointerCount(event);
 
   const std::unique_ptr<ui::MotionEventAndroid::Pointer> pointer0 =
       std::make_unique<ui::MotionEventAndroid::Pointer>(
-          AMotionEvent_getPointerId(event, 0), AMotionEvent_getX(event, 0),
-          AMotionEvent_getY(event, 0) + y_offset_pix,
-          AMotionEvent_getTouchMajor(event, 0),
-          AMotionEvent_getTouchMinor(event, 0),
-          AMotionEvent_getOrientation(event, 0),
+          /*id=*/AMotionEvent_getPointerId(event, 0),
+          /*pos_x_pixels=*/AMotionEvent_getX(event, 0),
+          /*pos_y_pixels=*/AMotionEvent_getY(event, 0) + y_offset_pix,
+          /*touch_major_pixels=*/AMotionEvent_getTouchMajor(event, 0),
+          /*touch_minor_pixels=*/AMotionEvent_getTouchMinor(event, 0),
+          /*pressure=*/AMotionEvent_getPressure(event, 0),
+          /*orienation_rad=*/AMotionEvent_getOrientation(event, 0),
+          /*tilt_rad=*/
           AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_TILT, 0),
-          AMotionEvent_getToolType(event, 0));
+          /*tool_type=*/AMotionEvent_getToolType(event, 0));
 
   std::unique_ptr<ui::MotionEventAndroid::Pointer> pointer1 = nullptr;
   if (pointer_count > 1) {
     pointer1 = std::make_unique<ui::MotionEventAndroid::Pointer>(
-        AMotionEvent_getPointerId(event, 1), AMotionEvent_getX(event, 1),
-        AMotionEvent_getY(event, 1) + y_offset_pix,
-        AMotionEvent_getTouchMajor(event, 1),
-        AMotionEvent_getTouchMinor(event, 1),
-        AMotionEvent_getOrientation(event, 1),
+        /*id=*/AMotionEvent_getPointerId(event, 1),
+        /*pos_x_pixels=*/AMotionEvent_getX(event, 1),
+        /*pos_y_pixels=*/AMotionEvent_getY(event, 1) + y_offset_pix,
+        /*touch_major_pixels=*/AMotionEvent_getTouchMajor(event, 1),
+        /*touch_minor_pixels=*/AMotionEvent_getTouchMinor(event, 1),
+        /*pressure=*/AMotionEvent_getPressure(event, 1),
+        /*orientation_rad=*/AMotionEvent_getOrientation(event, 1),
+        /*tilt_rad=*/
         AMotionEvent_getAxisValue(event, AMOTION_EVENT_AXIS_TILT, 1),
-        AMotionEvent_getToolType(event, 1));
+        /*tool_type=*/AMotionEvent_getToolType(event, 1));
   }
 
   // TODO(crbug.com/373345667): Move this and other duplicate calculations to
@@ -148,7 +153,7 @@ std::unique_ptr<MotionEventAndroid> MotionEventAndroidNative::Create(
       std::move(input_event), pix_to_dip,
       /* ticks_x= */ 0.f,
       /* ticks_y= */ 0.f,
-      /* tick_multiplier= */ 0.f, oldest_event_time, latest_event_time,
+      /* tick_multiplier= */ 0.f, event_times->oldest, event_times->latest,
       base::TimeTicks::FromUptimeMillis(down_time_ms), masked_action,
       pointer_count, history_size, action_index,
       /* android_action_button= */ 0, gesture_classification,

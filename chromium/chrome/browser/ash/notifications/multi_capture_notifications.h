@@ -65,7 +65,8 @@ class MultiCaptureNotifications : public MultiCaptureService::Observer,
                            const url::Origin& origin) override;
   void MultiCaptureStartedFromApp(const std::string& label,
                                   const std::string& app_id,
-                                  const std::string& app_short_name) override;
+                                  const std::string& app_short_name,
+                                  const url::Origin& app_origin) override;
   void MultiCaptureStopped(const std::string& label) override;
   void MultiCaptureServiceDestroyed() override;
 
@@ -75,7 +76,8 @@ class MultiCaptureNotifications : public MultiCaptureService::Observer,
  private:
   void MultiCaptureStartedInternal(const std::string& label,
                                    const std::string& notification_id,
-                                   const std::string& app_name);
+                                   const std::string& app_name,
+                                   const url::Origin& app_origin);
 
   // Maps the multi capture label (as received in `MultiCaptureStarted` and
   // `MultiCaptureStopped`) to the notification metadata.

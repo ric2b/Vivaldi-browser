@@ -44,7 +44,6 @@ class PolicyWatcherBrowserAgent
 
  private:
   friend class BrowserUserData<PolicyWatcherBrowserAgent>;
-  BROWSER_USER_DATA_KEY_DECL();
 
   explicit PolicyWatcherBrowserAgent(Browser* browser);
 
@@ -67,9 +66,6 @@ class PolicyWatcherBrowserAgent
 
   // AuthenticationServiceObserver implementation.
   void OnPrimaryAccountRestricted() override;
-
-  // The owning Browser.
-  raw_ptr<Browser> browser_ = nullptr;
 
   // The AuthenticationService.
   raw_ptr<AuthenticationService> auth_service_ = nullptr;

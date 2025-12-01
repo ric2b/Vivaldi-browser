@@ -36,6 +36,18 @@
 #include "chrome/browser/ui/startup/chrome_for_testing_infobar_delegate.h"
 #endif
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+#include "base/feature_list.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+#include "chrome/browser/ui/pdf/infobar/pdf_infobar_controller.h"
+#include "chrome/browser/ui/ui_features.h"
+#endif
+
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "chrome/browser/global_features.h"
+#include "chrome/browser/win/installer_downloader/installer_downloader_controller.h"
+#endif
+
 namespace {
 bool ShouldShowBadFlagsSecurityWarnings() {
 #if !BUILDFLAG(IS_CHROMEOS)
@@ -132,50 +144,73 @@ void AddInfoBarsIfNecessary(Browser* browser,
   // These info bars are not shown when the browser is being controlled by
   // automated tests, so that they don't interfere with tests that assume no
   // info bars.
-  if (!startup_command_line.HasSwitch(switches::kTestType) &&
-      !IsAutomationEnabled()) {
-    // The below info bars are only added to the first profile which is
-    // launched. Other profiles might be restoring the browsing sessions
-    // asynchronously, so we cannot add the info bars to the focused tabs here.
-    //
-    // We cannot use `chrome::startup::IsProcessStartup` to determine whether
-    // this is the first profile that launched: The browser may be started
-    // without a startup window (`kNoStartupWindow`), or open the profile
-    // picker, which means that `chrome::startup::IsProcessStartup` will already
-    // be `kNo` when the first browser window is opened.
-    static bool infobars_shown = false;
-    if (infobars_shown) {
-      return;
+  if (startup_command_line.HasSwitch(switches::kTestType) ||
+      IsAutomationEnabled()) {
+    return;
+  }
+
+  // The below info bars are only added to the first profile which is
+  // launched. Other profiles might be restoring the browsing sessions
+  // asynchronously, so we cannot add the info bars to the focused tabs here.
+  //
+  // We cannot use `chrome::startup::IsProcessStartup` to determine whether
+  // this is the first profile that launched: The browser may be started
+  // without a startup window (`kNoStartupWindow`), or open the profile
+  // picker, which means that `chrome::startup::IsProcessStartup` will already
+  // be `kNo` when the first browser window is opened.
+  static bool infobars_shown = false;
+  if (infobars_shown) {
+    return;
+  }
+  infobars_shown = true;
+
+  if (show_bad_flags_security_warnings) {
+    ShowBadFlagsPrompt(web_contents);
+  }
+
+  infobars::ContentInfoBarManager* infobar_manager =
+      infobars::ContentInfoBarManager::FromWebContents(web_contents);
+
+  if (!google_apis::HasAPIKeyConfigured()) {
+    GoogleApiKeysInfoBarDelegate::Create(infobar_manager);
+  }
+
+  if (ObsoleteSystem::IsObsoleteNowOrSoon()) {
+    PrefService* local_state = g_browser_process->local_state();
+    if (!local_state ||
+        !local_state->GetBoolean(prefs::kSuppressUnsupportedOSWarning)) {
+      ObsoleteSystemInfoBarDelegate::Create(infobar_manager);
     }
-    infobars_shown = true;
+  }
 
-    if (show_bad_flags_security_warnings) {
-      ShowBadFlagsPrompt(web_contents);
-    }
-
-    infobars::ContentInfoBarManager* infobar_manager =
-        infobars::ContentInfoBarManager::FromWebContents(web_contents);
-
-    if (!google_apis::HasAPIKeyConfigured()) {
-      GoogleApiKeysInfoBarDelegate::Create(infobar_manager);
-    }
-
-    if (ObsoleteSystem::IsObsoleteNowOrSoon()) {
-      PrefService* local_state = g_browser_process->local_state();
-      if (!local_state ||
-          !local_state->GetBoolean(prefs::kSuppressUnsupportedOSWarning)) {
-        ObsoleteSystemInfoBarDelegate::Create(infobar_manager);
-      }
-    }
-
-#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
-    if (!is_web_app &&
-        !startup_command_line.HasSwitch(switches::kNoDefaultBrowserCheck)) {
-      // The default browser prompt should only be shown after the first run.
-      if (is_first_run == chrome::startup::IsFirstRun::kNo) {
-        ShowDefaultBrowserPrompt(profile);
-      }
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+    if (auto* controller = g_browser_process->GetFeatures()
+                               ->installer_downloader_controller()) {
+      controller->MaybeShowInfoBar();
     }
 #endif
+
+#if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+  if (is_web_app ||
+      startup_command_line.HasSwitch(switches::kNoDefaultBrowserCheck) ||
+      startup_command_line.HasSwitch(switches::kNoFirstRun)) {
+    return;
   }
+
+  base::OnceCallback<void(bool)> default_browser_prompt_shown_callback =
+      base::DoNothing();
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+  if (base::FeatureList::IsEnabled(features::kPdfInfoBar)) {
+    default_browser_prompt_shown_callback =
+        base::BindOnce(&PdfInfoBarController::MaybeShowInfoBarAtStartup,
+                       browser->GetWeakPtr());
+  }
+#endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+
+  // The default browser prompt should only be shown after the first run.
+  if (is_first_run == chrome::startup::IsFirstRun::kNo) {
+    ShowDefaultBrowserPrompt(profile,
+                             std::move(default_browser_prompt_shown_callback));
+  }
+#endif
 }

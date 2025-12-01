@@ -81,7 +81,8 @@
 #endif
 
 #define IDC_OPEN_IN_PWA_WINDOW          34053
-#define IDC_MOVE_TAB_TO_NEW_WINDOW          34054
+#define IDC_MOVE_TAB_TO_NEW_WINDOW      34054
+#define IDC_NEW_SPLIT_TAB               34055
 
 // Web app window commands
 #define IDC_COPY_URL                    34060
@@ -98,6 +99,13 @@
 #define IDC_VISIT_DESKTOP_OF_LRU_USER_NEXT IDC_VISIT_DESKTOP_OF_LRU_USER_2
 #define IDC_VISIT_DESKTOP_OF_LRU_USER_LAST IDC_VISIT_DESKTOP_OF_LRU_USER_5
 #endif
+
+// Tab group Commands
+#define IDC_ADD_NEW_TAB_TO_GROUP      34100
+#define IDC_CREATE_NEW_TAB_GROUP      34101
+#define IDC_FOCUS_NEXT_TAB_GROUP      34102
+#define IDC_FOCUS_PREV_TAB_GROUP      34103
+#define IDC_CLOSE_TAB_GROUP           34104
 
 // Page-related commands
 #define IDC_BOOKMARK_THIS_TAB           35000
@@ -137,9 +145,8 @@
 #define IDC_SHOW_PAYMENT_METHODS        35042
 #define IDC_SHOW_ADDRESSES              35043
 #define IDC_ORGANIZE_TABS               35044
-#define IDC_CREATE_NEW_TAB_GROUP        35045
-#define IDC_DECLUTTER_TABS              35046
-#define IDC_SEND_SHARED_TAB_GROUP_FEEDBACK 35047
+#define IDC_DECLUTTER_TABS              35045
+#define IDC_SEND_SHARED_TAB_GROUP_FEEDBACK 35046
 
 // Page-manipulation commands that target a specified tab, which may not be the
 // active one.
@@ -281,7 +288,8 @@
 #define IDC_ADD_TO_COMPARISON_TABLE_MENU 40291
 #define IDC_CREATE_NEW_COMPARISON_TABLE_WITH_TAB 40292
 #define IDC_SHOW_HISTORY_SIDE_PANEL     40293
-#define IDC_OPEN_GLIC  40294
+#define IDC_OPEN_GLIC                   40294
+#define IDC_FIND_EXTENSIONS  40295
 
 // Spell-check
 // Insert any additional suggestions before _LAST; these have to be consecutive.
@@ -343,6 +351,7 @@
 #define IDC_CONTENT_CONTEXT_OPENLINKINPROFILE 50108
 #define IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP 50109
 #define IDC_CONTENT_CONTEXT_OPENLINKPREVIEW 50110
+#define IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW 50111
 // Image items.
 #define IDC_CONTENT_CONTEXT_SAVEIMAGEAS 50120
 #define IDC_CONTENT_CONTEXT_COPYIMAGELOCATION 50121
@@ -461,6 +470,7 @@
 #define IDC_BOOKMARK_BAR_REMOVE_FROM_BOOKMARKS_BAR 51020
 #define IDC_BOOKMARK_BAR_TOGGLE_SHOW_TAB_GROUPS 51021
 #define IDC_BOOKMARK_BAR_MOVE 51022
+#define IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW 51023
 
 // Context menu items for Sharing
 #define IDC_CONTENT_CONTEXT_SHARING_CLICK_TO_CALL_SINGLE_DEVICE 51030
@@ -569,9 +579,6 @@
 
 // Glic button context menu and tabstrip context menu
 #define IDC_GLIC_TOGGLE_PIN 53320
-
-// Glic focus navigation
-#define IDC_GLIC_TOGGLE_FOCUS 53325
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

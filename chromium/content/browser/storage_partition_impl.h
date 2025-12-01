@@ -190,7 +190,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   storage::QuotaManager* GetQuotaManager() override;
   BackgroundSyncContextImpl* GetBackgroundSyncContext() override;
   storage::FileSystemContext* GetFileSystemContext() override;
-  storage::DatabaseTracker* GetDatabaseTracker() override;
   DOMStorageContextWrapper* GetDOMStorageContext() override;
   storage::mojom::LocalStorageControl* GetLocalStorageControl() override;
   LockManager<storage::BucketId>*
@@ -401,11 +400,16 @@ class CONTENT_EXPORT StoragePartitionImpl
       const std::optional<std::string>& with_lock,
       OnSharedStorageHeaderReceivedCallback callback) override;
   void OnAdAuctionEventRecordHeaderReceived(
-      network::AdAuctionEventRecord event_record) override;
+      network::AdAuctionEventRecord event_record,
+      const std::optional<url::Origin>& top_frame_origin) override;
 
   SharedStorageHeaderObserver* shared_storage_header_observer() {
     return shared_storage_header_observer_.get();
   }
+
+#if BUILDFLAG(IS_MAC)
+  bool IsStorageServiceRemoteValid() const;
+#endif  // BUILDFLAG(IS_MAC)
 
   // Can return nullptr while `this` is being destroyed.
   BrowserContext* browser_context() const;
@@ -479,7 +483,9 @@ class CONTENT_EXPORT StoragePartitionImpl
   CreateSharedDictionaryAccessObserverForServiceWorker();
 
   mojo::PendingRemote<network::mojom::URLLoaderNetworkServiceObserver>
-  CreateAuthCertObserverForServiceWorker(int process_id);
+  CreateURLLoaderNetworkObserverForServiceWorker(
+      int process_id,
+      const url::Origin& worker_origin);
 
   mojo::PendingRemote<network::mojom::DeviceBoundSessionAccessObserver>
   CreateDeviceBoundSessionObserverForServiceWorker();
@@ -623,7 +629,7 @@ class CONTENT_EXPORT StoragePartitionImpl
         GlobalRenderFrameHostId global_render_frame_host_id);
 
     // Used when `type` is `kServiceWorkerContext`.
-    explicit URLLoaderNetworkContext(int process_id);
+    URLLoaderNetworkContext(int process_id, const url::Origin& worker_origin);
 
     // Used when `type` is `kNavigationRequestContext`.
     explicit URLLoaderNetworkContext(NavigationRequest& navigation_request);
@@ -638,6 +644,9 @@ class CONTENT_EXPORT StoragePartitionImpl
     }
 
     int process_id() const { return process_id_; }
+    const std::optional<url::Origin>& worker_origin() const {
+      return worker_origin_;
+    }
 
     // If `type_` is kServiceWorkerContext, returns nullptr. Otherwise returns
     // the WebContents.
@@ -652,6 +661,9 @@ class CONTENT_EXPORT StoragePartitionImpl
 
     // Only valid when `type_` is kServiceWorkerContext.
     int process_id_ = content::ChildProcessHost::kInvalidUniqueID;
+
+    // Only valid and non-nullopt when `type_` is kServiceWorkerContext.
+    std::optional<url::Origin> worker_origin_;
   };
 
   // `relative_partition_path` is the relative path under `profile_path` to the
@@ -759,7 +771,6 @@ class CONTENT_EXPORT StoragePartitionImpl
   scoped_refptr<QuotaContext> quota_context_;
   scoped_refptr<storage::QuotaManager> quota_manager_;
   scoped_refptr<storage::FileSystemContext> filesystem_context_;
-  scoped_refptr<storage::DatabaseTracker> database_tracker_;
   scoped_refptr<DOMStorageContextWrapper> dom_storage_context_;
   std::unique_ptr<LockManager<storage::BucketId>> lock_manager_;
   std::unique_ptr<indexed_db::IndexedDBControlWrapper>

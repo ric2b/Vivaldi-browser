@@ -18,6 +18,8 @@
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/page_content_annotations/page_content_annotations_service_factory.h"
+#include "chrome/browser/page_content_annotations/page_content_extraction_service.h"
+#include "chrome/browser/page_content_annotations/page_content_extraction_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -932,8 +934,15 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceNoHistoryTest,
   EXPECT_FALSE(ModelAnnotationsFieldsAreSetForURL(url));
 }
 
+// Times out on Linux Tests (dbg)(1); see https://crbug.com/40229591.
+#if BUILDFLAG(IS_LINUX) && !defined(NDEBUG)
+#define MAYBE_ModelExecutesAndUsesCachedResult \
+  DISABLED_ModelExecutesAndUsesCachedResult
+#else
+#define MAYBE_ModelExecutesAndUsesCachedResult ModelExecutesAndUsesCachedResult
+#endif
 IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceNoHistoryTest,
-                       ModelExecutesAndUsesCachedResult) {
+                       MAYBE_ModelExecutesAndUsesCachedResult) {
   TestPageContentAnnotator test_annotator;
   test_annotator.UseVisibilityScores(std::nullopt, {{"Test Page", 0.5}});
   service()->OverridePageContentAnnotatorForTesting(&test_annotator);
@@ -1258,8 +1267,15 @@ class PageContentAnnotationsServiceContentExtractionPdfTest
   }
 };
 
+// TODO(crbug.com/410068541): Test is slow for debug/sanitized builds.
+// Reenable once timeouts are fixed.
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || !defined(NDEBUG)
+#define MAYBE_PdfPageCount DISABLED_PdfPageCount
+#else
+#define MAYBE_PdfPageCount PdfPageCount
+#endif
 IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
-                       PdfPageCount) {
+                       MAYBE_PdfPageCount) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::test::TestFuture<void> future;
   ukm_recorder.SetOnAddEntryCallback(
@@ -1279,8 +1295,15 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
                               kPdfPageCountName));
 }
 
+// TODO(crbug.com/410068541): Test is slow for debug/sanitized builds.
+// Reenable once timeouts are fixed.
+#if defined(MEMORY_SANITIZER) || defined(ADDRESS_SANITIZER) || !defined(NDEBUG)
+#define MAYBE_TwoPdfPageLoads DISABLED_TwoPdfPageLoads
+#else
+#define MAYBE_TwoPdfPageLoads TwoPdfPageLoads
+#endif
 IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
-                       TwoPdfPageLoads) {
+                       MAYBE_TwoPdfPageLoads) {
   ukm::TestAutoSetUkmRecorder ukm_recorder;
   base::test::TestFuture<void> future;
   ukm_recorder.SetOnAddEntryCallback(
@@ -1309,5 +1332,46 @@ IN_PROC_BROWSER_TEST_F(PageContentAnnotationsServiceContentExtractionPdfTest,
 }
 
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+
+class PageContentAnnotationsServiceContentExtractionTestNoFeatureFlag
+    : public PageContentAnnotationsServiceContentExtractionTest {
+ public:
+  void InitializeFeaureList() override {}
+};
+
+class FakeExtractionServiceObserver
+    : public PageContentExtractionService::Observer {
+ public:
+  void OnPageContentExtracted(
+      content::Page& page,
+      const optimization_guide::proto::AnnotatedPageContent& page_content)
+      override {
+    page_content_future_.SetValue(page_content);
+  }
+  void Wait() { EXPECT_TRUE(page_content_future_.Wait()); }
+  base::test::TestFuture<optimization_guide::proto::AnnotatedPageContent>
+      page_content_future_;
+};
+
+IN_PROC_BROWSER_TEST_F(
+    PageContentAnnotationsServiceContentExtractionTestNoFeatureFlag,
+    ObserverAddedAfterWebContentsInit) {
+  FakeExtractionServiceObserver observer;
+  auto* service =
+      PageContentExtractionServiceFactory::GetForProfile(browser()->profile());
+  service->AddObserver(&observer);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url(embedded_test_server()->GetURL("a.test",
+                                          "/optimization_guide/hello.html"));
+  content::NavigateToURLBlockUntilNavigationsComplete(web_contents, url, 1);
+
+  observer.Wait();
+  auto& page_content = observer.page_content_future_.Get();
+  EXPECT_TRUE(page_content.IsInitialized());
+
+  service->RemoveObserver(&observer);
+}
 
 }  // namespace page_content_annotations

@@ -1124,16 +1124,13 @@ syncer::DataTypeSet AllowedTypesInStandaloneTransportMode() {
     allowed_types.Put(syncer::READING_LIST);
   }
   if (base::FeatureList::IsEnabled(
-          syncer::kSyncSharedTabGroupDataInTransportMode)) {
-    allowed_types.Put(syncer::COLLABORATION_GROUP);
-    allowed_types.Put(syncer::SHARED_TAB_GROUP_DATA);
-  }
-  if (base::FeatureList::IsEnabled(
           syncer::kReplaceSyncPromosWithSignInPromos)) {
     allowed_types.Put(syncer::HISTORY);
     allowed_types.Put(syncer::SESSIONS);
     allowed_types.Put(syncer::PRODUCT_COMPARISON);
     allowed_types.Put(syncer::SAVED_TAB_GROUP);
+    allowed_types.Put(syncer::COLLABORATION_GROUP);
+    allowed_types.Put(syncer::SHARED_TAB_GROUP_DATA);
   }
   if (base::FeatureList::IsEnabled(syncer::kSyncAutofillLoyaltyCard)) {
     allowed_types.Put(syncer::AUTOFILL_VALUABLE);
@@ -1157,8 +1154,7 @@ syncer::DataTypeSet AllowedTypesInStandaloneTransportMode() {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(syncer::kMoveThemePrefsToSpecifics) &&
-      base::FeatureList::IsEnabled(syncer::kSeparateLocalAndAccountThemes)) {
+  if (base::FeatureList::IsEnabled(syncer::kSeparateLocalAndAccountThemes)) {
     allowed_types.Put(syncer::THEMES);
   }
 

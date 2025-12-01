@@ -93,16 +93,6 @@ interface ContextClient {
 struct LoadAdaptationParams {
   // Assets for an adaptation.
   AdaptationAssets assets;
-
-  // Deprecated: use SessionParams.max_tokens instead.
-  uint32 max_tokens = 0;
-
-  // Deprecated: use SessionParams.capabilities.image_input instead.
-  [MinVersion=1]
-  bool enable_image_input = false;
-  // Deprecated: use SessionParams.capabilities.audio_input instead.
-  [MinVersion=2]
-  bool enable_audio_input = false;
 };
 
 // A set of capabilities that a model can have.
@@ -132,10 +122,12 @@ struct SessionParams {
   // probable.
   // `top_k` should be a value from 1 to the max top K value the model was
   // initialized with.
-  [MinVersion=1] uint32 top_k;
+  [MinVersion=1]
+  uint32 top_k;
   // `temperature` should be a value greater than 0.0. Values above 1.0 may give
   // poor results.
-  [MinVersion=1] float temperature;
+  [MinVersion=1]
+  float temperature;
 };
 
 // The set of tokens that can be added as part of an input.
@@ -162,9 +154,8 @@ union InputPiece {
   // Text to be provided as input.
   string text;
   // Bitmap provided as input. This is not ImageSkia because there is no desire
-  // to support multiple scale factors. The bitmap is supplied by the
-  // browser process.
-  skia.mojom.BitmapMappedFromTrustedProcess bitmap;
+  // to support multiple scale factors.
+  skia.mojom.BitmapWithArbitraryBpp bitmap;
 
   // Used to handle version skew.
   [Default]
@@ -190,10 +181,20 @@ struct AppendOptions {
   // The maximum number of tokens that should be processed. If zero, will
   // process all tokens from this input.
   uint32 max_tokens = 0;
+};
 
-  // After text is tokenized, the offset into that vector to start processing.
-  // If zero, will start at the first token.
-  uint32 token_offset = 0;
+[Stable, Extensible]
+union ResponseConstraint {
+  // A JSON schema defining structured output requirements for the response.
+  // Passed as an opaque JSON blob to llguidance.
+  string json_schema;
+
+  // A regex string specifying the output constraints.
+  string regex;
+
+  // Used to handle version skew.
+  [Default]
+  bool unknown_type;
 };
 
 [Stable]
@@ -203,10 +204,21 @@ struct GenerateOptions {
   // sequence length.
   uint32 max_output_tokens = 0;
 
-  // Deprecated: use SessionParams.top_k instead.
-  uint32? top_k;
-  // Deprecated: use SessionParams.temperature instead.
-  float? temperature;
+  // Specifies any constraints on the output for this Generate() call. Note that
+  // only one of the JSON schema or regex constraints should be provided.
+  [MinVersion=2]
+  ResponseConstraint? constraint;
+};
+
+// Priorities which determine how requests to a session are scheduled.
+[Stable, Extensible]
+enum Priority {
+  // Requests should be treated as high priority, the user may be actively
+  // waiting for a response.
+  [Default] kForeground,
+  // Requests are not urgent and may be queued. Background requests will only
+  // run if there are no active foreground requests.
+  kBackground,
 };
 
 // A session for a model that allows adding context and then executing an input
@@ -236,6 +248,19 @@ interface Session {
   // Clones the current session. The cloned session will have the same context
   // as the current session.
   Clone@4(pending_receiver<Session> session);
+
+  // Gets the probability for a series of tokens on top of the current
+  // context. Capabilities.probabilities_output must be specified to use this.
+  // Note that this is implemented as a blocking method on the service side
+  // and should only be used in debugging/testing.
+  [MinVersion=3]
+  GetProbabilitiesBlocking@8(string text) => (array<float> probabilities);
+
+  // Sets the priority for currently queued requests to this session and future
+  // requests. Any clones made of this session will inherit the current
+  // priority. Priority for new sessions defaults to kForeground.
+  [MinVersion=4]
+  SetPriority@9(Priority priority);
 };
 
 // A loaded model which can be queried. This interface must be controlled by the
@@ -245,7 +270,7 @@ interface OnDeviceModel {
   // Starts a session with this model. Sessions are logically independent,
   // but requests may block progress of other sessions.
   StartSession@0(pending_receiver<Session> session,
-      [MinVersion=1] SessionParams? params);
+                 [MinVersion=1] SessionParams? params);
 
   // DEPRECATED: Does nothing
   ClassifyTextSafety@1(string text) => (SafetyInfo? safety_info);
@@ -271,6 +296,9 @@ interface TextSafetySession {
   // Detects the language of the text using the language classifier. Returns
   // null if there is no classifier available.
   DetectLanguage@2(string text) => (LanguageDetectionResult? result);
+
+  // Clones the session and any configuration.
+  Clone@3(pending_receiver<TextSafetySession> session);
 };
 
 // A loaded text safety model, that can be shared by multiple features.
@@ -306,6 +334,7 @@ enum LoadModelResult {
   kSuccess,
   kGpuBlocked,
   [Default] kFailedToLoadLibrary,
+  [MinVersion=1, EnableIf=is_chromeos] kCrosNeedReboot,
 };
 
 [Stable]

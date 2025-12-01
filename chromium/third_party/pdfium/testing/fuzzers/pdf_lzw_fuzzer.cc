@@ -25,8 +25,9 @@ void LZWFuzz(pdfium::span<const uint8_t> src_buf,
              uint8_t code_exp) {
   std::unique_ptr<LZWDecompressor> decompressor =
       LZWDecompressor::Create(color_exp, code_exp);
-  if (!decompressor)
+  if (!decompressor) {
     return;
+  }
 
   for (uint32_t compressions_ratio = kMinCompressionRatio;
        compressions_ratio <= kMaxCompressionRatio; compressions_ratio++) {
@@ -44,7 +45,7 @@ void LZWFuzz(pdfium::span<const uint8_t> src_buf,
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // SAFETY: required from fuzzer
-  auto data_span = UNSAFE_BUFFERS(pdfium::make_span(data, size));
+  auto data_span = UNSAFE_BUFFERS(pdfium::span(data, size));
 
   // Need at least 3 bytes to do anything.
   if (data_span.size() < 3 || data_span.size() > kMaxFuzzBytes) {
@@ -55,7 +56,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // to assume they are the first two bytes of data provided.
   uint8_t color_exp = data_span[0];
   uint8_t code_exp = data_span[1];
-  pdfium::span<const uint8_t> lzw_data = data_span.subspan(2);
+  pdfium::span<const uint8_t> lzw_data = data_span.subspan<2u>();
   // Check that there isn't going to be an overflow in the destination buffer
   // size.
   if (lzw_data.size() >

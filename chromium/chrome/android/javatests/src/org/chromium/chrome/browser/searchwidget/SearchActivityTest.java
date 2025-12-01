@@ -45,10 +45,12 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.locale.LocaleManagerDelegate;
@@ -79,7 +81,6 @@ import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.Page
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteMatchBuilder;
 import org.chromium.components.omnibox.AutocompleteResult;
-import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.components.omnibox.OmniboxSuggestionType;
 import org.chromium.components.search_engines.TemplateUrl;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -102,6 +103,12 @@ import java.util.concurrent.Callable;
 @Restriction({DeviceRestriction.RESTRICTION_TYPE_NON_AUTO}) // Search widget not supported on auto.
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+// TODO(crbug.com/419289558): Re-enable color surface feature flags
+@Features.DisableFeatures({
+    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE
+})
 @DoNotBatch(reason = "Test start up behaviors.")
 public class SearchActivityTest {
     private static class TestDelegate extends SearchActivityDelegate {
@@ -229,77 +236,6 @@ public class SearchActivityTest {
                         buildSimpleAutocompleteMatch("https://www.google.com"),
                         buildSimpleAutocompleteMatch("https://android.com")),
                 null);
-    }
-
-    @Test
-    @SmallTest
-    public void testOmniboxSuggestionContainerAppears_defaultRetainOmniboxOnFocus()
-            throws Exception {
-        testOmniboxSuggestionContainerAppears();
-    }
-
-    @Test
-    @SmallTest
-    public void testOmniboxSuggestionContainerAppears_shouldNotRetainOmniboxOnFocus()
-            throws Exception {
-        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.FALSE);
-        testOmniboxSuggestionContainerAppears();
-    }
-
-    @Test
-    @SmallTest
-    public void testOmniboxSuggestionContainerAppears_shouldRetainOmniboxOnFocus()
-            throws Exception {
-        OmniboxFeatures.setShouldRetainOmniboxOnFocusForTesting(Boolean.TRUE);
-        testOmniboxSuggestionContainerAppears();
-    }
-
-    private void testOmniboxSuggestionContainerAppears() throws Exception {
-        startSearchActivity();
-
-        // Wait for the Activity to fully load.
-        mTestDelegate.shouldDelayNativeInitializationCallback.waitForCallback(0);
-        mTestDelegate.showSearchEngineDialogIfNeededCallback.waitForCallback(0);
-        mTestDelegate.onFinishDeferredInitializationCallback.waitForCallback(0);
-
-        // Focus empty omnibox.  It should force the suggestions to appear.
-        mOmnibox.requestFocus();
-        verify(mAutocompleteController)
-                .startZeroSuggest(
-                        eq(""),
-                        any(/* DSE URL*/ ),
-                        eq(PageClassification.ANDROID_SEARCH_WIDGET_VALUE),
-                        eq(""));
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () ->
-                        mOnSuggestionsReceivedListener.onSuggestionsReceived(
-                                buildSimpleAutocompleteResult(), true));
-        mOmnibox.checkSuggestionsShown();
-
-        // Type in anything.
-        mOmnibox.typeText("text", /* execute= */ false);
-        mOmnibox.checkText(Matchers.equalTo("text"), null);
-
-        // Clear omnibox focus. This should always clear uncommitted text and hide suggestions.
-        mOmnibox.sendKey(KeyEvent.KEYCODE_ESCAPE);
-        mOmnibox.checkText(Matchers.isEmptyString(), null);
-        mOmnibox.checkSuggestionsShown(false);
-
-        // Refocusing omnibox should once again force the suggestions to appear.
-        mOmnibox.requestFocus();
-        verify(mAutocompleteController, times(2))
-                .startZeroSuggest(
-                        eq(""),
-                        any(/* DSE URL*/ ),
-                        eq(PageClassification.ANDROID_SEARCH_WIDGET_VALUE),
-                        eq(""));
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () ->
-                        mOnSuggestionsReceivedListener.onSuggestionsReceived(
-                                buildSimpleAutocompleteResult(), true));
-        mOmnibox.checkSuggestionsShown();
     }
 
     @Test

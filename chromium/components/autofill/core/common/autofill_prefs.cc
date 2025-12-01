@@ -57,9 +57,12 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterIntegerPref(kAutocompleteLastVersionRetentionPolicy, 0);
   registry->RegisterStringPref(kAutofillUploadEncodingSeed, "");
   registry->RegisterDictionaryPref(kAutofillVoteUploadEvents);
+  registry->RegisterDictionaryPref(
+      kAutofillVoteSecondaryFormSignatureUploadEvents);
   registry->RegisterDictionaryPref(kAutofillMetadataUploadEvents);
   registry->RegisterTimePref(kAutofillUploadEventsLastResetTimestamp, {});
   registry->RegisterDictionaryPref(kAutofillSyncTransportOptIn);
+  registry->RegisterBooleanPref(kAutofillRanExtraDeduplication, false);
 #if BUILDFLAG(IS_ANDROID)
   // Automotive devices require stricter data protection for user privacy, so
   // mandatory reauth for autofill payment methods should always be enabled.

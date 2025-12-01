@@ -6,7 +6,10 @@ import("//build/config/android/rules.gni")
 import("//third_party/jni_zero/jni_zero.gni")
 
 generate_jni("jni_headers") {
-  sources = [ "java/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxBridge.java" ]
+  sources = [
+    "java/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxBridge.java",
+    "java/src/org/chromium/chrome/browser/privacy_sandbox/TrackingProtectionSettingsBridge.java",
+  ]
 }
 
 android_library("java") {
@@ -41,6 +44,7 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsHeaderPreference.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsManageFragment.java",
     "java/src/org/chromium/chrome/browser/privacy_sandbox/TopicsUtils.java",
+    "java/src/org/chromium/chrome/browser/privacy_sandbox/TrackingProtectionSettingsBridge.java",
   ]
   deps = [
     ":java_resources",
@@ -107,6 +111,7 @@ android_library("javatests") {
     "javatests/src/org/chromium/chrome/browser/privacy_sandbox/PrivacySandboxSettingsFragmentTest.java",
     "javatests/src/org/chromium/chrome/browser/privacy_sandbox/TopicsFragmentTest.java",
     "javatests/src/org/chromium/chrome/browser/privacy_sandbox/TopicsManageFragmentTest.java",
+    "javatests/src/org/chromium/chrome/browser/privacy_sandbox/TrackingProtectionSettingsBridgeTest.java",
   ]
   deps = [
     ":java",
@@ -206,9 +211,9 @@ android_library("test_support_java") {
 android_resources("java_resources") {
   sources = [
     "java/res/drawable-night/privacy_sandbox_eea_consent_logo.xml",
-    "java/res/drawable-night/privacy_sandbox_eea_notice_logo.xml",
     "java/res/drawable-night/privacy_sandbox_interests_illustration.xml",
     "java/res/drawable-night/privacy_sandbox_notice_eea_illustration.xml",
+    "java/res/drawable-night/privacy_sandbox_notice_logo.xml",
     "java/res/drawable/fade_bottom.xml",
     "java/res/drawable/ic_arrow_back.xml",
     "java/res/drawable/ic_arrow_down.xml",
@@ -218,16 +223,20 @@ android_resources("java_resources") {
     "java/res/drawable/ic_checklist_24dp.xml",
     "java/res/drawable/ic_database_off_24dp.xml",
     "java/res/drawable/ic_delete_24dp.xml",
+    "java/res/drawable/ic_delete_history_24dp.xml",
     "java/res/drawable/ic_devices_24dp.xml",
     "java/res/drawable/ic_filter_list_24dp.xml",
     "java/res/drawable/ic_interests_24dp.xml",
     "java/res/drawable/ic_privacy_screen_24dp.xml",
+    "java/res/drawable/ic_protection_content_24dp.xml",
+    "java/res/drawable/ic_rule_24dp.xml",
+    "java/res/drawable/ic_smartphone_24dp.xml",
     "java/res/drawable/ic_table_chart_view_24dp.xml",
     "java/res/drawable/ic_web_traffic_24dp.xml",
     "java/res/drawable/privacy_sandbox_eea_consent_logo.xml",
-    "java/res/drawable/privacy_sandbox_eea_notice_logo.xml",
     "java/res/drawable/privacy_sandbox_interests_illustration.xml",
     "java/res/drawable/privacy_sandbox_notice_eea_illustration.xml",
+    "java/res/drawable/privacy_sandbox_notice_logo.xml",
     "java/res/drawable/topic_taxonomy_1_id_1.xml",
     "java/res/drawable/topic_taxonomy_1_id_100.xml",
     "java/res/drawable/topic_taxonomy_1_id_103.xml",
@@ -264,8 +273,11 @@ android_resources("java_resources") {
     "java/res/layout/privacy_sandbox_notice_eea_v2.xml",
     "java/res/layout/privacy_sandbox_notice_eea_v3.xml",
     "java/res/layout/privacy_sandbox_notice_restricted.xml",
+    "java/res/layout/privacy_sandbox_notice_restricted_v3.xml",
     "java/res/layout/privacy_sandbox_notice_row.xml",
     "java/res/layout/privacy_sandbox_notice_row_dropdown.xml",
+    "java/res/layout/privacy_sandbox_notice_row_dropdown_v3.xml",
+    "java/res/layout/privacy_sandbox_notice_row_v3.xml",
     "java/res/layout/topics_explanation_summary.xml",
     "java/res/raw/keep_topic_taxonomy.xml",
     "java/res/values/dimens.xml",

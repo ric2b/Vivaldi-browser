@@ -106,15 +106,15 @@ RenderStep::RenderStepID variant_id(PrimitiveType type, bool hasColor, bool hasT
 
 VerticesRenderStep::VerticesRenderStep(PrimitiveType type, bool hasColor, bool hasTexCoords)
         : RenderStep(variant_id(type, hasColor, hasTexCoords),
-                     hasColor ? Flags::kEmitsPrimitiveColor | Flags::kPerformsShading
-                              : Flags::kPerformsShading,
+                     (hasColor ? Flags::kEmitsPrimitiveColor : Flags::kNone) |
+                     Flags::kPerformsShading | Flags::kAppendVertices,
                      /*uniforms=*/{{"localToDevice", SkSLType::kFloat4x4},
                                    {"depth", SkSLType::kFloat}},
                      type,
                      kDirectDepthGEqualPass,
-                     /*vertexAttrs=*/  kAttributes[2*hasTexCoords + hasColor],
-                     /*instanceAttrs=*/{},
-                     /*varyings=*/     kVaryings[hasColor])
+                     /*staticAttrs=*/ {},
+                     /*appendAttrs=*/kAttributes[2*hasTexCoords + hasColor],
+                     /*varyings=*/   kVaryings[hasColor])
         , fHasColor(hasColor)
         , fHasTexCoords(hasTexCoords) {}
 

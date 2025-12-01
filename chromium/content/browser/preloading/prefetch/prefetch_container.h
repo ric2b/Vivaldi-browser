@@ -123,6 +123,7 @@ class CONTENT_EXPORT PrefetchContainer {
       WebContents& referring_web_contents,
       const GURL& url,
       const PrefetchType& prefetch_type,
+      const std::string& embedder_histogram_suffix,
       const blink::mojom::Referrer& referrer,
       const std::optional<url::Origin>& referring_origin,
       std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
@@ -138,6 +139,7 @@ class CONTENT_EXPORT PrefetchContainer {
       BrowserContext* browser_context,
       const GURL& url,
       const PrefetchType& prefetch_type,
+      const std::string& embedder_histogram_suffix,
       const blink::mojom::Referrer& referrer,
       bool javascript_enabled,
       const std::optional<url::Origin>& referring_origin,
@@ -776,7 +778,7 @@ class CONTENT_EXPORT PrefetchContainer {
   // See also `PrefetchService::AddPrefetchContainerWithoutStartingPrefetch()`.
   void MigrateNewlyAdded(std::unique_ptr<PrefetchContainer> added);
 
-  // DevTools
+  // Handles loader related events. Currently used for DevTools and metrics.
   void NotifyPrefetchRequestWillBeSent(
       const network::mojom::URLResponseHeadPtr* redirect_head);
   void NotifyPrefetchResponseReceived(
@@ -810,6 +812,7 @@ class CONTENT_EXPORT PrefetchContainer {
       const std::optional<size_t>& referring_url_hash,
       const PrefetchContainer::Key& key,
       const PrefetchType& prefetch_type,
+      const std::optional<std::string>& embedder_histogram_suffix,
       const blink::mojom::Referrer& referrer,
       std::optional<SpeculationRulesTags> speculation_rules_tags,
       std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
@@ -869,11 +872,15 @@ class CONTENT_EXPORT PrefetchContainer {
   // be updated to the latest value when this method is called.
   void MaybeRecordPrefetchStatusToUMA(PrefetchStatus prefetch_status);
 
-  // Returns a suffix for UMAs.
-  const char* GetMetricsSuffixTriggerTypeAndEagerness();
-
   // Records `Prefetch.PrefetchContainer.DurationAdded*` UMAs.
   void RecordDurationFromAdded();
+  // Records `Prefetch.PrefetchMatchingBlockedNavigationWithPrefetch.*` UMAs.
+  void RecordPrefetchMatchingBlockedNavigationHistogram(
+      bool blocked_until_head);
+  // Records `Prefetch.BlockUntilHeadDuration.*` UMAs.
+  void RecordBlockUntilHeadDurationHistogram(
+      const std::optional<base::TimeDelta>& blocked_duration,
+      bool served);
 
   // The ID of the RenderFrameHost/Document that triggered the prefetch.
   // This will be empty when browser-initiated prefetch.
@@ -901,6 +908,11 @@ class CONTENT_EXPORT PrefetchContainer {
   // not the preftch proxy is used, and whether or not subresources are
   // prefetched.
   PrefetchType prefetch_type_;
+
+  // The suffix string of embedder triggers used for generating histogram
+  // recorded per trigger. This should be nullopt unless `prefetch_type_`'s
+  // `PreloadingTriggerType` is `PreloadingTriggerType::kEmbedder`.
+  const std::optional<std::string> embedder_histogram_suffix_;
 
   // The referrer to use for the request.
   blink::mojom::Referrer referrer_;
@@ -1096,6 +1108,7 @@ class CONTENT_EXPORT PrefetchContainer {
   std::optional<base::TimeTicks> time_added_to_prefetch_service_;
   std::optional<base::TimeTicks> time_initial_eligibility_got_;
   std::optional<base::TimeTicks> time_prefetch_started_;
+  std::optional<base::TimeTicks> time_url_request_started_;
   std::optional<base::TimeTicks> time_header_determined_successfully_;
   std::optional<base::TimeTicks> time_prefetch_completed_successfully_;
 

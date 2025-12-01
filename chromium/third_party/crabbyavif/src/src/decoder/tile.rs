@@ -65,7 +65,7 @@ impl DecodeSample {
 pub struct DecodeInput {
     pub samples: Vec<DecodeSample>,
     pub all_layers: bool,
-    pub category: Category,
+    pub decoding_item: DecodingItem,
 }
 
 #[derive(Debug, Default)]
@@ -77,12 +77,52 @@ pub struct Overlay {
     pub vertical_offsets: Vec<i32>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum SampleTransformUnaryOp {
+    // Unary operators. L is the operand.
+    Negation, // S = -L
+    Absolute, // S = |L|
+    Not,      // S = ~L
+    BSR,      // S = L<=0 ? 0 : truncate(log2(L)) (Bit Scan Reverse)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum SampleTransformBinaryOp {
+    Sum,        // S = L + R
+    Difference, // S = L - R
+    Product,    // S = L * R
+    Quotient,   // S = R==0 ? L : truncate(L / R)
+    And,        // S = L & R
+    Or,         // S = L | R
+    Xor,        // S = L ^ R
+    Pow,        // S = L==0 ? 0 : truncate(pow(L, R))
+    Min,        // S = L<=R ? L : R
+    Max,        // S = L<=R ? R : L
+}
+
+#[derive(Debug)]
+pub enum SampleTransformToken {
+    Constant(i64),
+    ImageItem(usize), // item_idx in source items
+    UnaryOp(SampleTransformUnaryOp),
+    BinaryOp(SampleTransformBinaryOp),
+}
+
+#[derive(Debug, Default)]
+pub struct SampleTransform {
+    pub bit_depth: u8,
+    pub num_inputs: usize, // Number of input images.
+    pub tokens: Vec<SampleTransformToken>,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct TileInfo {
     pub tile_count: u32,
     pub decoded_tile_count: u32,
     pub grid: Grid,
     pub overlay: Overlay,
+    pub gainmap_metadata: GainMapMetadata,
+    pub sample_transform: SampleTransform,
 }
 
 impl TileInfo {
@@ -92,6 +132,14 @@ impl TileInfo {
 
     pub(crate) fn is_overlay(&self) -> bool {
         !self.overlay.horizontal_offsets.is_empty() && !self.overlay.vertical_offsets.is_empty()
+    }
+
+    pub(crate) fn is_sample_transform(&self) -> bool {
+        !self.sample_transform.tokens.is_empty()
+    }
+
+    pub(crate) fn is_derived_image(&self) -> bool {
+        self.is_grid() || self.is_overlay() || self.is_sample_transform()
     }
 
     pub(crate) fn grid_tile_count(&self) -> AvifResult<u32> {
@@ -271,7 +319,7 @@ impl Tile {
         track: &Track,
         image_count_limit: Option<NonZero<u32>>,
         size_hint: u64,
-        category: Category,
+        decoding_item: DecodingItem,
     ) -> AvifResult<Tile> {
         let properties = track
             .get_properties()
@@ -284,7 +332,7 @@ impl Tile {
             height: track.height,
             operating_point: 0, // No way to set operating point via tracks
             input: DecodeInput {
-                category,
+                decoding_item,
                 ..DecodeInput::default()
             },
             codec_config,

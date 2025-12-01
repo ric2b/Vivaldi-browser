@@ -149,7 +149,7 @@ struct RelayCredentials {
   std::string password;
 };
 
-typedef std::vector<cricket::ProtocolAddress> PortList;
+typedef std::vector<ProtocolAddress> PortList;
 // TODO(deadbeef): Rename to TurnServerConfig.
 struct RTC_EXPORT RelayServerConfig {
   RelayServerConfig();
@@ -182,7 +182,7 @@ struct RTC_EXPORT RelayServerConfig {
   TlsCertPolicy tls_cert_policy = TlsCertPolicy::TLS_CERT_POLICY_SECURE;
   std::vector<std::string> tls_alpn_protocols;
   std::vector<std::string> tls_elliptic_curves;
-  rtc::SSLCertificateVerifier* tls_cert_verifier = nullptr;
+  SSLCertificateVerifier* tls_cert_verifier = nullptr;
   std::string turn_logging_id;
 };
 
@@ -244,7 +244,7 @@ class RTC_EXPORT PortAllocatorSession : public sigslot::has_slots<> {
   // Get candidate-level stats from all candidates on the ready ports and return
   // the stats to the given list.
   virtual void GetCandidateStatsFromReadyPorts(
-      cricket::CandidateStatsList* /* candidate_stats_list */) const {}
+      CandidateStatsList* /* candidate_stats_list */) const {}
   // Set the interval at which STUN candidates will resend STUN binding requests
   // on the underlying ports to keep NAT bindings open.
   // The default value of the interval in implementation is restored if a null
@@ -271,8 +271,7 @@ class RTC_EXPORT PortAllocatorSession : public sigslot::has_slots<> {
       SignalPortsPruned;
   sigslot::signal2<PortAllocatorSession*, const std::vector<Candidate>&>
       SignalCandidatesReady;
-  sigslot::signal2<PortAllocatorSession*,
-                   const cricket::IceCandidateErrorEvent&>
+  sigslot::signal2<PortAllocatorSession*, const IceCandidateErrorEvent&>
       SignalCandidateError;
   // Candidates should be signaled to be removed when the port that generated
   // the candidates is removed.
@@ -360,14 +359,14 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
   //
   // Returns true if the configuration could successfully be changed.
   // Deprecated
-  bool SetConfiguration(const cricket::ServerAddresses& stun_servers,
+  bool SetConfiguration(const ServerAddresses& stun_servers,
                         const std::vector<RelayServerConfig>& turn_servers,
                         int candidate_pool_size,
                         bool prune_turn_ports,
                         TurnCustomizer* turn_customizer = nullptr,
                         const std::optional<int>&
                             stun_candidate_keepalive_interval = std::nullopt);
-  bool SetConfiguration(const cricket::ServerAddresses& stun_servers,
+  bool SetConfiguration(const ServerAddresses& stun_servers,
                         const std::vector<RelayServerConfig>& turn_servers,
                         int candidate_pool_size,
                         PortPrunePolicy turn_port_prune_policy,
@@ -375,7 +374,7 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
                         const std::optional<int>&
                             stun_candidate_keepalive_interval = std::nullopt);
 
-  const cricket::ServerAddresses& stun_servers() const {
+  const ServerAddresses& stun_servers() const {
     CheckRunOnValidThreadIfInitialized();
     return stun_servers_;
   }
@@ -410,8 +409,7 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
 
   // Set list of <ipaddress, mask> that shall be categorized as VPN.
   // Implemented by BasicPortAllocator.
-  virtual void SetVpnList(const std::vector<rtc::NetworkMask>& /* vpn_list */) {
-  }
+  virtual void SetVpnList(const std::vector<NetworkMask>& /* vpn_list */) {}
 
   std::unique_ptr<PortAllocatorSession> CreateSession(
       absl::string_view content_name,
@@ -435,7 +433,7 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
   // Returns the next session that would be returned by TakePooledSession
   // optionally restricting it to sessions with specified ice credentials.
   const PortAllocatorSession* GetPooledSession(
-      const cricket::IceParameters* ice_credentials = nullptr) const;
+      const IceParameters* ice_credentials = nullptr) const;
 
   // Discard any remaining pooled sessions.
   void DiscardCandidatePool();
@@ -569,10 +567,10 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
   // pooled session is taken by P2PTransportChannel, and the
   // candidate stats can be collected from P2PTransportChannel::GetStats.
   virtual void GetCandidateStatsFromPooledSessions(
-      cricket::CandidateStatsList* candidate_stats_list);
+      CandidateStatsList* candidate_stats_list);
 
   // Return IceParameters of the pooled sessions.
-  std::vector<cricket::IceParameters> GetPooledIceCredentials();
+  std::vector<IceParameters> GetPooledIceCredentials();
 
   // Fired when `candidate_filter_` changes.
   sigslot::signal2<uint32_t /* prev_filter */, uint32_t /* cur_filter */>
@@ -617,7 +615,7 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
   VpnPreference vpn_preference_ = VpnPreference::kDefault;
 
  private:
-  cricket::ServerAddresses stun_servers_;
+  ServerAddresses stun_servers_;
   std::vector<RelayServerConfig> turn_servers_;
   int candidate_pool_size_ = 0;  // Last value passed into SetConfiguration.
   std::vector<std::unique_ptr<PortAllocatorSession>> pooled_sessions_;
@@ -637,8 +635,7 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
   // Returns iterator to pooled session with specified ice_credentials or first
   // if ice_credentials is nullptr.
   std::vector<std::unique_ptr<PortAllocatorSession>>::const_iterator
-  FindPooledSession(
-      const cricket::IceParameters* ice_credentials = nullptr) const;
+  FindPooledSession(const IceParameters* ice_credentials = nullptr) const;
 
   // ICE tie breaker.
   uint64_t tiebreaker_;
@@ -648,6 +645,7 @@ class RTC_EXPORT PortAllocator : public sigslot::has_slots<> {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::CF_ALL;
 using ::webrtc::CF_HOST;
@@ -680,5 +678,6 @@ using ::webrtc::RelayCredentials;
 using ::webrtc::RelayServerConfig;
 using ::webrtc::TlsCertPolicy;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_BASE_PORT_ALLOCATOR_H_

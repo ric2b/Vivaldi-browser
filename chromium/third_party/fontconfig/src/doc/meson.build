@@ -1,4 +1,14 @@
 doc_targets = []
+tests = []
+
+if host_machine.system() != 'windows'
+  tests += [
+    'check-missing-doc',
+    #    'check-whitespace-in-args'
+  ]
+  meson.add_dist_script(find_program('check-whitespace-in-args.py'), '@SOURCE_ROOT@/doc')
+endif
+
 
 docbook2man = find_program('docbook2man', required: get_option('doc-man'))
 docbook2txt = find_program('docbook2txt', required: get_option('doc-txt'))
@@ -19,6 +29,7 @@ doc_funcs_fncs = [
   'fcdircache',
   'fcfile',
   'fcfontset',
+  'fcfontations',
   'fcformat',
   'fcfreetype',
   'fcinit',
@@ -52,13 +63,8 @@ endforeach
 edit_sgml = find_program('edit-sgml.py')
 
 # copy into build directory, it includes generated files from build directory
-fontconfig_devel_sgml = configure_file(output: 'fontconfig-devel.sgml',
-  input: 'fontconfig-devel.sgml',
-  copy: true)
-
-fontconfig_user_sgml = configure_file(output: 'fontconfig-user.sgml',
-  input: 'fontconfig-user.sgml',
-  copy: true)
+fontconfig_devel_sgml = fs.copyfile('fontconfig-devel.sgml')
+fontconfig_user_sgml = fs.copyfile('fontconfig-user.sgml')
 
 version_conf = configuration_data()
 version_conf.set('VERSION', meson.project_version())
@@ -93,7 +99,8 @@ if docbook2man.found()
     command: [run_quiet, docbook2man, '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('mandir') / 'man3',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 
   # fonts.conf(5)
   custom_target('fonts-conf-5-man-page',
@@ -102,7 +109,8 @@ if docbook2man.found()
     command: [run_quiet, docbook2man, '@INPUT0@', '--output', '@OUTDIR@'],
     install_dir: get_option('mandir') / 'man5',
     build_by_default: true,
-    install: true)
+    install: true,
+    install_tag: 'docs')
 
   # Generate man pages for tools
   foreach t : tools_man_pages
@@ -112,7 +120,8 @@ if docbook2man.found()
       output: '@0@.1'.format(t),
       command: [run_quiet, docbook2man, '@INPUT@', '--output', '@OUTDIR@'],
       install_dir: get_option('mandir') / 'man1',
-      install: true)
+      install: true,
+      install_tag: 'docs')
   endforeach
 endif
 
@@ -125,15 +134,17 @@ if docbook2pdf.found()
     command: [run_quiet, docbook2pdf, '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('datadir') / 'doc' / 'fontconfig',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 
   custom_target('user-pdf',
-    input: [fontconfig_user_sgml, funcs_sgml],
+                input: [fontconfig_user_sgml, funcs_sgml],
     output: 'fontconfig-user.pdf',
     command: [run_quiet, docbook2pdf, '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('datadir') / 'doc' / 'fontconfig',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 endif
 
 if docbook2txt.found()
@@ -145,7 +156,8 @@ if docbook2txt.found()
     command: [run_quiet, docbook2txt, '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('datadir') / 'doc' / 'fontconfig',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 
   custom_target('user-txt',
     input: [fontconfig_user_sgml, funcs_sgml],
@@ -153,7 +165,8 @@ if docbook2txt.found()
     command: [run_quiet, docbook2txt, '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('datadir') / 'doc' / 'fontconfig',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 endif
 
 if docbook2html.found()
@@ -165,7 +178,8 @@ if docbook2html.found()
     command: [run_quiet, docbook2html, '--nochunks', '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('datadir') / 'doc' / 'fontconfig',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 
   custom_target('user-html',
     input: [fontconfig_user_sgml, funcs_sgml],
@@ -173,5 +187,11 @@ if docbook2html.found()
     command: [run_quiet, docbook2html, '--nochunks', '@INPUT0@', '--output', '@OUTDIR@'],
     build_by_default: true,
     install_dir: get_option('datadir') / 'doc' / 'fontconfig',
-    install: true)
+    install: true,
+    install_tag: 'docs')
 endif
+
+foreach script : tests
+  py = find_program(script)
+  test(script, py)
+endforeach

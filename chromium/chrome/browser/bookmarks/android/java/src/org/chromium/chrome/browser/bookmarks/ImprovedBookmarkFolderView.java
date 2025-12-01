@@ -17,16 +17,18 @@ import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
-import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 
-import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.RoundedCornerOutlineProvider;
 
 /**
  * Draws the image at the start of a bookmark folder row. This may contains elements from the
  * folder's children bookmarks, such as thumbnail or count.
  */
+@NullMarked
 public class ImprovedBookmarkFolderView extends FrameLayout {
     private final RoundedCornerOutlineProvider mPrimaryImageOutline;
     private final RoundedCornerOutlineProvider mSecondaryImageOutline;
@@ -80,10 +82,9 @@ public class ImprovedBookmarkFolderView extends FrameLayout {
         super.onFinishInflate();
 
         final Context context = getContext();
-        final @ColorInt int surface0 =
-                ChromeColors.getSurfaceColor(context, R.dimen.default_elevation_0);
-        final @ColorInt int surface1 =
-                ChromeColors.getSurfaceColor(context, R.dimen.default_elevation_1);
+        final @ColorInt int surfaceColor = SemanticColorUtils.getColorSurface(context);
+        final @ColorInt int colorSurfaceContainerLow =
+                SemanticColorUtils.getColorSurfaceContainerLow(context);
 
         mPrimaryImage = findViewById(R.id.primary_image);
         mPrimaryImage.setOutlineProvider(mPrimaryImageOutline);
@@ -100,30 +101,30 @@ public class ImprovedBookmarkFolderView extends FrameLayout {
         mSecondaryImage.setClipToOutline(true);
 
         mSecondaryImageContainer = findViewById(R.id.secondary_image_container);
-        mSecondaryImageContainer.setBackgroundColor(surface0);
+        mSecondaryImageContainer.setBackgroundColor(surfaceColor);
 
         // Setup the background for the child count view when there's one image present.
         mChildCountBackgroundOneImage = findViewById(R.id.child_count_background_one_image);
         View childCountBackgroundOneImageTop =
                 findViewById(R.id.child_count_background_one_image_top);
-        childCountBackgroundOneImageTop.setBackgroundColor(surface1);
+        childCountBackgroundOneImageTop.setBackgroundColor(colorSurfaceContainerLow);
         childCountBackgroundOneImageTop.setOutlineProvider(mChildTextBackgroundOutlineOneImageTop);
         childCountBackgroundOneImageTop.setClipToOutline(true);
         View childCountBackgroundOneImageBot =
                 findViewById(R.id.child_count_background_one_image_bot);
-        childCountBackgroundOneImageBot.setBackgroundColor(surface1);
+        childCountBackgroundOneImageBot.setBackgroundColor(colorSurfaceContainerLow);
         childCountBackgroundOneImageBot.setOutlineProvider(mChildTextBackgroundOutlineOneImageBot);
         childCountBackgroundOneImageBot.setClipToOutline(true);
 
         // Setup the background for the child count view when there's two images present.
         mChildCountBackgroundTwoImages = findViewById(R.id.child_count_background_two_images);
-        mChildCountBackgroundTwoImages.setBackgroundColor(surface1);
+        mChildCountBackgroundTwoImages.setBackgroundColor(colorSurfaceContainerLow);
         mChildCountBackgroundTwoImages.setOutlineProvider(mChildTextContainerOutlineTwoImages);
         mChildCountBackgroundTwoImages.setClipToOutline(true);
 
         // The container which separates the child text from the images.
         mChildCountContainer = findViewById(R.id.child_count_container);
-        mChildCountContainer.setBackgroundColor(surface0);
+        mChildCountContainer.setBackgroundColor(surfaceColor);
         mChildCountContainer.setClipToOutline(true);
 
         mChildCount = findViewById(R.id.child_count_text);

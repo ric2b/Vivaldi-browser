@@ -13,6 +13,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "base/functional/callback.h"
@@ -31,6 +32,7 @@
 #include "net/base/request_priority.h"
 #include "net/base/tracing.h"
 #include "net/http/http_cache.h"
+#include "net/http/http_cache_util.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
@@ -150,7 +152,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   void DoneReading() override;
   const HttpResponseInfo* GetResponseInfo() const override;
   LoadState GetLoadState() const override;
-  void SetQuicServerInfo(QuicServerInfo* quic_server_info) override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
   void PopulateLoadTimingInternalInfo(
       LoadTimingInternalInfo* load_timing_internal_info) const override;
@@ -159,8 +160,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   void SetPriority(RequestPriority priority) override;
   void SetWebSocketHandshakeStreamCreateHelper(
       WebSocketHandshakeStreamBase::CreateHelper* create_helper) override;
-  void SetBeforeNetworkStartCallback(
-      BeforeNetworkStartCallback callback) override;
   void SetConnectedCallback(const ConnectedCallback& callback) override;
   void SetRequestHeadersCallback(RequestHeadersCallback callback) override;
   void SetResponseHeadersCallback(ResponseHeadersCallback callback) override;
@@ -170,7 +169,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
       base::RepeatingCallback<void(HttpRequestHeaders*)> callback) override;
   void SetIsSharedDictionaryReadAllowedCallback(
       base::RepeatingCallback<bool()> callback) override;
-  int ResumeNetworkStart() override;
   ConnectionAttempts GetConnectionAttempts() const override;
   void CloseConnectionOnDestruction() override;
   bool IsMdlMatchForMetrics() const override;
@@ -199,27 +197,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   void AddDiskCacheWriteTime(base::TimeDelta elapsed);
 
  private:
-  static const size_t kNumValidationHeaders = 2;
-  // Helper struct to pair a header name with its value, for
-  // headers used to validate cache entries.
-  struct ValidationHeaders {
-    ValidationHeaders();
-
-    ValidationHeaders(const ValidationHeaders&) = delete;
-    ValidationHeaders& operator=(const ValidationHeaders&) = delete;
-
-    ~ValidationHeaders();
-
-    std::array<std::string, kNumValidationHeaders> values;
-    void Reset() {
-      initialized = false;
-      for (auto& value : values) {
-        value.clear();
-      }
-    }
-    bool initialized = false;
-  };
-
   struct NetworkTransactionInfo {
     NetworkTransactionInfo();
 
@@ -416,10 +393,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   // Validates the entry headers against the requested range and continues with
   // the validation of the rest of the entry.  Returns a network error code.
   int ValidateEntryHeadersAndContinue();
-
-  // Returns whether the current externally conditionalized request's validation
-  // headers match the current cache entry's headers.
-  bool ExternallyConditionalizedValidationHeadersMatchEntry() const;
 
   // Called to start requests which were given an "if-modified-since" or
   // "if-none-match" validation header by the caller (NOT when the request was
@@ -682,8 +655,8 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   NetLogWithSource net_log_;
   HttpRequestHeaders request_headers_copy_;
   // If extra_headers specified a "if-modified-since" or "if-none-match",
-  // |external_validation_| contains the value of those headers.
-  ValidationHeaders external_validation_;
+  // `external_validation_` contains the value of those headers.
+  std::optional<http_cache_util::ValidationHeaders> external_validation_;
   base::WeakPtr<HttpCache> cache_;
   scoped_refptr<HttpCache::ActiveEntry> entry_;
   // This field is not a raw_ptr<> because it was filtered by the rewriter for:
@@ -757,7 +730,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   base::TimeTicks first_cache_access_since_;
   base::TimeTicks send_request_since_;
   base::TimeTicks read_headers_since_;
-  base::Time open_entry_last_used_;
   base::TimeTicks last_disk_cache_access_start_time_;
   base::TimeDelta total_disk_cache_read_time_;
   base::TimeDelta total_disk_cache_write_time_;
@@ -801,7 +773,6 @@ class NET_EXPORT_PRIVATE HttpCache::Transaction : public HttpTransaction {
   raw_ptr<WebSocketHandshakeStreamBase::CreateHelper>
       websocket_handshake_stream_base_create_helper_ = nullptr;
 
-  BeforeNetworkStartCallback before_network_start_callback_;
   ConnectedCallback connected_callback_;
   RequestHeadersCallback request_headers_callback_;
   ResponseHeadersCallback early_response_headers_callback_;

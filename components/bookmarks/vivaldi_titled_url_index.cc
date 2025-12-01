@@ -19,7 +19,7 @@
 namespace bookmarks {
 
 std::vector<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodesWithQuery(
-    const TitledUrlIndex::NodeVector& nodes,
+    const TitledUrlIndex::TitledUrlNodes& nodes,
     const query_parser::QueryNodeVector& query_nodes,
     const std::vector<std::u16string>& query_terms,
     size_t max_count) {
@@ -29,7 +29,7 @@ std::vector<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodesWithQuery(
   // `HistoryContentsProvider::ConvertResults()` will run backwards to assure
   // higher relevance will be attributed to the best matches.
   std::vector<TitledUrlMatch> matches;
-  for (TitledUrlIndex::FlatNodeSet::const_iterator i = nodes.begin();
+  for (TitledUrlIndex::TitledUrlNodeSet::const_iterator i = nodes.begin();
        i != nodes.end() && matches.size() < max_count; ++i) {
     std::optional<TitledUrlMatch> match =
         MatchNicknameNodeWithQuery(*i, query_nodes, query_terms);
@@ -53,13 +53,13 @@ std::vector<TitledUrlMatch> TitledUrlIndex::GetResultsNicknameMatching(
   // below will filter out nodes that neither match nor ancestor-match every
   // query term.
 
-  TitledUrlIndex::FlatNodeSet matches =
+  TitledUrlIndex::TitledUrlNodeSet matches =
       RetrieveNicknameNodesMatchingAnyTerms(terms);
 
   if (matches.empty())
     return {};
 
-  TitledUrlIndex::NodeVector sorted_nodes;
+  TitledUrlIndex::TitledUrlNodes sorted_nodes;
   SortMatches(matches, &sorted_nodes);
 
   // We use a QueryParser to fill in match positions for us. It's not the most
@@ -161,4 +161,18 @@ std::optional<TitledUrlMatch> TitledUrlIndex::MatchNicknameNodeWithQuery(
   match.node = node;
   return match;
 }
+
+void TitledUrlIndex::UnregisterNicknameNode(const std::u16string& term,
+                                            const TitledUrlNode* node) {
+  auto i = nickname_index_.find(term);
+  if (i == nickname_index_.end()) {
+    // We can get here if the node has the same term more than once. For
+    // example, a node with the title 'foo foo' would end up here.
+    return;
+  }
+  i->second.erase(node);
+  if (i->second.empty())
+    nickname_index_.erase(i);
+}
+
 }  // namespace bookmarks

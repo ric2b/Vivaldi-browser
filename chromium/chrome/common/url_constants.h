@@ -277,6 +277,11 @@ inline constexpr char kRelatedWebsiteSetsLearnMoreURL[] =
     "third-party-cookies%2Callow-related-sites-to-access-your-activity%2Cabout-"
     "embedded-content";
 
+// "Learn more" URL for Incognito tracking protections.
+// TODO(crbug.com/408036586): Update learn more URL when finalized
+inline constexpr char kIncognitoTrackingProtectionsLearnMoreUrl[] =
+    "https://support.google.com/chrome?p=incognito_tracking_protections";
+
 // Url to a blogpost about Flash deprecation.
 inline constexpr char kFlashDeprecationLearnMoreURL[] =
     "https://blog.chromium.org/2017/07/so-long-and-thanks-for-all-flash.html";
@@ -309,6 +314,16 @@ inline constexpr char kGoogleAccountChooserURL[] =
 // URL of the Google Account page showing the known user devices.
 inline constexpr char kGoogleAccountDeviceActivityURL[] =
     "https://myaccount.google.com/device-activity?utm_source=chrome";
+
+// URL of the Google Account home address page.
+inline constexpr char kGoogleAccountHomeAddressURL[] =
+    "https://myaccount.google.com/address/"
+    "home?utm_source=chrome&utm_campaign=manage_addresses";
+
+// URL of the Google Account work address page.
+inline constexpr char kGoogleAccountWorkAddressURL[] =
+    "https://myaccount.google.com/address/"
+    "work?utm_source=chrome&utm_campaign=manage_addresses";
 
 // URL of the two factor authentication setup required intersitial.
 inline constexpr char kGoogleTwoFactorIntersitialURL[] =
@@ -548,6 +563,10 @@ inline constexpr char kSigninOnDesktopLearnMoreURL[] =
     "https://support.google.com/"
     "chrome?p=settings_sign_in#zippy=sign-in-turn-on-sync";
 
+// The URL for the "Learn more" page for adding a new profile to Chrome.
+inline constexpr char kAddNewProfileOnDesktopLearnMoreURL[] =
+    "https://support.google.com/chrome/?p=add_profile";
+
 // The URL for the "Learn more" page for AI settings for managed users.
 inline constexpr char16_t kAiSettingsLearnMorePageManagedUrl[] =
     u"https://support.google.com/chrome/a?p=generative_ai_settings";
@@ -571,11 +590,6 @@ inline constexpr char kHistorySearchLearnMorePageManagedURL[] =
 
 // The URL for the Settings page to enable history search.
 inline constexpr char16_t kHistorySearchSettingURL[] =
-    u"chrome://settings/historySearch";
-
-// The URL for the Settings page to enable history search when
-// AiSettingsPageRefresh flag is enabled.
-inline constexpr char16_t kHistorySearchV2SettingURL[] =
     u"chrome://settings/ai/historySearch";
 
 // The URL for the "Learn more" page for Wallpaper Search.

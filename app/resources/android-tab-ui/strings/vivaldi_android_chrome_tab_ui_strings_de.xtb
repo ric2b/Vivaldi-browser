@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="de">
-<translation id="2277224997687551299">Gruppenname bearbeiten</translation>
+<translation id="1062777154504442433">Neue Tabgruppe</translation>
+<translation id="1625440863545383011">Tab entfernen und Gruppe verlassen</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Tab zu Lesezeichen hinzufügen}
           other {Tabs zu Lesezeichen hinzufügen}
         }</translation>
 <translation id="2947471979790858922">Ihre Aktivitäten auf diesen privaten Tabs werden von diesem Gerät entfernt</translation>
+<translation id="3298614730029636660">Gruppe verlassen</translation>
+<translation id="354698175756845966">Gruppenfarbe bearbeiten</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, Plural,
         =1 {Ihre geschlossenen Tabs finden Sie unter Letzte Tabs im Hauptmenü von Vivaldi. Ihr privater Tab wird nicht verfügbar sein.}
         other {Sie finden Ihre geschlossenen Tabs in den letzten Tabs unter dem Vivaldi-Hauptmenü. Ihre # privaten Tabs werden nicht verfügbar sein.}}</translation>
-<translation id="4460014764210899310">Gruppierung aufheben</translation>
 <translation id="4871187110787939393">Alle privaten Tabs schließen?</translation>
 <translation id="5494920125229734069">Alles auswählen</translation>
-<translation id="6744956528665271406">Gruppenfarbe bearbeiten</translation>
+<translation id="6807841890213931603">Tab entfernen und Gruppe löschen</translation>
+<translation id="750227952939161636">Ihre Tabgruppen werden automatisch auf allen angemeldeten Geräten gespeichert und aktualisiert</translation>
+<translation id="7640137753339219124">Gruppe löschen</translation>
+<translation id="7653857400289671414">Ihre Tabgruppen werden automatisch gespeichert</translation>
+<translation id="8440938071054361204">Gruppenname bearbeiten</translation>
+<translation id="8602902357364871325">Gruppe schließen</translation>
+<translation id="8851621822786801079">Aus Gruppe entfernen</translation>
 </translationbundle>

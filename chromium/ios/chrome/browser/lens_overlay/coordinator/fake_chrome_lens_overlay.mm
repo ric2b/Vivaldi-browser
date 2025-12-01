@@ -80,8 +80,16 @@
   // NO-OP
 }
 
+- (void)setGuidanceRestHeight:(CGFloat)height {
+  // NO-OP
+}
+
 - (CGRect)selectionRect {
   return CGRectZero;
+}
+
+- (CGSize)imageSize {
+  return CGSizeZero;
 }
 
 #pragma mark - Public

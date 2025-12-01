@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac-arm64-rel",
-              "project": "chromium-m136"
+              "project": "chromium-m138"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -37,7 +37,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac11-arm64-rel-tests",
-              "project": "chromium-m136"
+              "project": "chromium-m138"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -58,7 +58,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "mac-arm64-rel",
-                "project": "chromium-m136"
+                "project": "chromium-m138"
               }
             }
           },
@@ -66,7 +66,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac12-arm64-rel-tests",
-              "project": "chromium-m136"
+              "project": "chromium-m138"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -87,7 +87,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "mac-arm64-rel",
-                "project": "chromium-m136"
+                "project": "chromium-m138"
               }
             }
           },
@@ -95,7 +95,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac13-arm64-rel-tests",
-              "project": "chromium-m136"
+              "project": "chromium-m138"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -116,7 +116,7 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "mac-arm64-rel",
-                "project": "chromium-m136"
+                "project": "chromium-m138"
               }
             }
           },
@@ -124,7 +124,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac14-arm64-rel-tests",
-              "project": "chromium-m136"
+              "project": "chromium-m138"
             },
             "builder_spec": {
               "builder_group": "chromium.mac",
@@ -145,7 +145,36 @@
               "parent": {
                 "bucket": "ci",
                 "builder": "mac-arm64-rel",
-                "project": "chromium-m136"
+                "project": "chromium-m138"
+              }
+            }
+          },
+          {
+            "builder_id": {
+              "bucket": "ci",
+              "builder": "mac15-arm64-rel-tests",
+              "project": "chromium-m138"
+            },
+            "builder_spec": {
+              "builder_group": "chromium.mac",
+              "execution_mode": "TEST",
+              "legacy_chromium_config": {
+                "apply_configs": [
+                  "mb"
+                ],
+                "build_config": "Release",
+                "config": "chromium",
+                "target_arch": "arm",
+                "target_bits": 64,
+                "target_platform": "mac"
+              },
+              "legacy_gclient_config": {
+                "config": "chromium"
+              },
+              "parent": {
+                "bucket": "ci",
+                "builder": "mac-arm64-rel",
+                "project": "chromium-m138"
               }
             }
           }
@@ -155,29 +184,34 @@
         {
           "bucket": "ci",
           "builder": "mac-arm64-rel",
-          "project": "chromium-m136"
+          "project": "chromium-m138"
         }
       ],
       "builder_ids_in_scope_for_testing": [
         {
           "bucket": "ci",
           "builder": "mac11-arm64-rel-tests",
-          "project": "chromium-m136"
+          "project": "chromium-m138"
         },
         {
           "bucket": "ci",
           "builder": "mac12-arm64-rel-tests",
-          "project": "chromium-m136"
+          "project": "chromium-m138"
         },
         {
           "bucket": "ci",
           "builder": "mac13-arm64-rel-tests",
-          "project": "chromium-m136"
+          "project": "chromium-m138"
         },
         {
           "bucket": "ci",
           "builder": "mac14-arm64-rel-tests",
-          "project": "chromium-m136"
+          "project": "chromium-m138"
+        },
+        {
+          "bucket": "ci",
+          "builder": "mac15-arm64-rel-tests",
+          "project": "chromium-m138"
         }
       ],
       "mirroring_builder_group_and_names": [
@@ -195,6 +229,10 @@
         },
         {
           "builder": "mac14-arm64-rel",
+          "group": "tryserver.chromium.mac"
+        },
+        {
+          "builder": "mac15-arm64-rel",
           "group": "tryserver.chromium.mac"
         }
       ],

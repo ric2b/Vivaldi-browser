@@ -18,9 +18,6 @@ extern const char kProductSpecificationsDescription[];
 extern const char kCompareConfirmationToastName[];
 extern const char kCompareConfirmationToastDescription[];
 
-extern const char kCompareManagementInterfaceName[];
-extern const char kCompareManagementInterfaceDescription[];
-
 extern const char kShoppingListName[];
 extern const char kShoppingListDescription[];
 
@@ -52,6 +49,9 @@ extern const char kPriceTrackingSubscriptionServiceLocaleKeyDescription[];
 
 extern const char kPriceTrackingSubscriptionServiceProductVersionName[];
 extern const char kPriceTrackingSubscriptionServiceProductVersionDescription[];
+
+extern const char kDiscountAutofillName[];
+extern const char kDiscountAutofillDescription[];
 
 }  // namespace commerce::flag_descriptions
 

@@ -30,6 +30,7 @@
 #include "src/tint/lang/core/ir/core_builtin_call.h"
 #include "src/tint/lang/core/ir/module.h"
 #include "src/tint/lang/core/ir/var.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/pointer.h"
 #include "src/tint/lang/core/type/storage_texture.h"
 #include "src/tint/lang/glsl/writer/printer/printer.h"
@@ -43,19 +44,22 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
         if (ty->Is<core::type::SubgroupMatrix>()) {
             return Failure("subgroup matrices are not supported by the GLSL backend");
         }
+        if (ty->Is<core::type::BindingArray>()) {
+            return Failure("binding_array are not supported by the GLSL backend");
+        }
     }
 
     // Make sure that every texture variable is in the texture_builtins_from_uniform binding list,
     // otherwise TextureBuiltinsFromUniform will fail.
-    // Also make sure there is at most one user-declared push_constant, and make a note of its size.
-    uint32_t user_push_constant_size = 0;
+    // Also make sure there is at most one user-declared immediate, and make a note of its size.
+    uint32_t user_immediate_size = 0;
     for (auto* inst : *ir.root_block) {
         auto* var = inst->As<core::ir::Var>();
 
         if (!var) {
             continue;
         }
-        auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
+        auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
 
         // The pixel_local extension is not supported by the GLSL backend.
         if (ptr->AddressSpace() == core::AddressSpace::kPixelLocal) {
@@ -93,12 +97,12 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
             }
         }
 
-        if (ptr->AddressSpace() == core::AddressSpace::kPushConstant) {
-            if (user_push_constant_size > 0) {
-                // We've already seen a user-declared push constant.
-                return Failure("multiple user-declared push constants");
+        if (ptr->AddressSpace() == core::AddressSpace::kImmediate) {
+            if (user_immediate_size > 0) {
+                // We've already seen a user-declared immediate data.
+                return Failure("multiple user-declared immediate data");
             }
-            user_push_constant_size = tint::RoundUp(4u, ptr->StoreType()->Size());
+            user_immediate_size = tint::RoundUp(4u, ptr->StoreType()->Size());
         }
     }
 
@@ -127,13 +131,15 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
         for (auto* param : func->Params()) {
             if (auto* str = param->Type()->As<core::type::Struct>()) {
                 for (auto* member : str->Members()) {
-                    if (member->Attributes().builtin == core::BuiltinValue::kSubgroupInvocationId ||
+                    if (member->Attributes().builtin == core::BuiltinValue::kSubgroupId ||
+                        member->Attributes().builtin == core::BuiltinValue::kSubgroupInvocationId ||
                         member->Attributes().builtin == core::BuiltinValue::kSubgroupSize) {
                         return Failure("subgroups are not supported by the GLSL backend");
                     }
                 }
             } else {
-                if (param->Builtin() == core::BuiltinValue::kSubgroupInvocationId ||
+                if (param->Builtin() == core::BuiltinValue::kSubgroupId ||
+                    param->Builtin() == core::BuiltinValue::kSubgroupInvocationId ||
                     param->Builtin() == core::BuiltinValue::kSubgroupSize) {
                     return Failure("subgroups are not supported by the GLSL backend");
                 }
@@ -151,8 +157,8 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
     }
 
     static constexpr uint32_t kMaxOffset = 0x1000;
-    Hashset<uint32_t, 4> push_constant_word_offsets;
-    auto check_push_constant_offset = [&](uint32_t offset) {
+    Hashset<uint32_t, 4> immediate_word_offsets;
+    auto check_immediate_offset = [&](uint32_t offset) {
         // Excessive values can cause OOM / timeouts when padding structures in the printer.
         if (offset > kMaxOffset) {
             return false;
@@ -162,36 +168,35 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
             return false;
         }
         // Offset must not have already been used.
-        if (!push_constant_word_offsets.Add(offset >> 2)) {
+        if (!immediate_word_offsets.Add(offset >> 2)) {
             return false;
         }
-        // Offset must be after the user-defined push constants.
-        if (offset < user_push_constant_size) {
+        // Offset must be after the user-defined immediate data.
+        if (offset < user_immediate_size) {
             return false;
         }
         return true;
     };
 
-    if (options.first_instance_offset &&
-        !check_push_constant_offset(*options.first_instance_offset)) {
-        return Failure("invalid offset for first_instance_offset push constant");
+    if (options.first_instance_offset && !check_immediate_offset(*options.first_instance_offset)) {
+        return Failure("invalid offset for first_instance_offset immediate data");
     }
 
-    if (options.first_vertex_offset && !check_push_constant_offset(*options.first_vertex_offset)) {
-        return Failure("invalid offset for first_vertex_offset push constant");
+    if (options.first_vertex_offset && !check_immediate_offset(*options.first_vertex_offset)) {
+        return Failure("invalid offset for first_vertex_offset immediate data");
     }
 
     if (options.depth_range_offsets) {
-        if (!check_push_constant_offset(options.depth_range_offsets->max) ||
-            !check_push_constant_offset(options.depth_range_offsets->min)) {
-            return Failure("invalid offsets for depth range push constants");
+        if (!check_immediate_offset(options.depth_range_offsets->max) ||
+            !check_immediate_offset(options.depth_range_offsets->min)) {
+            return Failure("invalid offsets for depth range immediate data");
         }
     }
 
     return Success;
 }
 
-Result<Output> Generate(core::ir::Module& ir, const Options& options, const std::string&) {
+Result<Output> Generate(core::ir::Module& ir, const Options& options) {
     // Raise from core-dialect to GLSL-dialect.
     if (auto res = Raise(ir, options); res != Success) {
         return res.Failure();

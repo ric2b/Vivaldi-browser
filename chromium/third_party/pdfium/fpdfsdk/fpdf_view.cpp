@@ -6,6 +6,7 @@
 
 #include "public/fpdfview.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -34,9 +35,11 @@
 #include "core/fxcrt/cfx_timer.h"
 #include "core/fxcrt/check_op.h"
 #include "core/fxcrt/compiler_specific.h"
+#include "core/fxcrt/fx_extension.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_safe_types.h"
 #include "core/fxcrt/fx_stream.h"
+#include "core/fxcrt/fx_string.h"
 #include "core/fxcrt/fx_system.h"
 #include "core/fxcrt/numerics/safe_conversions.h"
 #include "core/fxcrt/ptr_util.h"
@@ -151,8 +154,9 @@ void ResetRendererType() {
 
 RetainPtr<const CPDF_Object> GetXFAEntryFromDocument(const CPDF_Document* doc) {
   const CPDF_Dictionary* root = doc->GetRoot();
-  if (!root)
+  if (!root) {
     return nullptr;
+  }
 
   RetainPtr<const CPDF_Dictionary> acro_form = root->GetDictFor("AcroForm");
   return acro_form ? acro_form->GetObjectFor("XFA") : nullptr;
@@ -166,8 +170,9 @@ struct XFAPacket {
 std::vector<XFAPacket> GetXFAPackets(RetainPtr<const CPDF_Object> xfa_object) {
   std::vector<XFAPacket> packets;
 
-  if (!xfa_object)
+  if (!xfa_object) {
     return packets;
+  }
 
   RetainPtr<const CPDF_Stream> xfa_stream = ToStream(xfa_object->GetDirect());
   if (xfa_stream) {
@@ -176,21 +181,25 @@ std::vector<XFAPacket> GetXFAPackets(RetainPtr<const CPDF_Object> xfa_object) {
   }
 
   RetainPtr<const CPDF_Array> xfa_array = ToArray(xfa_object->GetDirect());
-  if (!xfa_array)
+  if (!xfa_array) {
     return packets;
+  }
 
   packets.reserve(1 + (xfa_array->size() / 2));
   for (size_t i = 0; i < xfa_array->size(); i += 2) {
-    if (i + 1 == xfa_array->size())
+    if (i + 1 == xfa_array->size()) {
       break;
+    }
 
     RetainPtr<const CPDF_String> name = xfa_array->GetStringAt(i);
-    if (!name)
+    if (!name) {
       continue;
+    }
 
     RetainPtr<const CPDF_Stream> data = xfa_array->GetStreamAt(i + 1);
-    if (!data)
+    if (!data) {
       continue;
+    }
 
     packets.push_back({name->GetString(), std::move(data)});
   }
@@ -227,8 +236,9 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_InitLibrary() {
 
 FPDF_EXPORT void FPDF_CALLCONV
 FPDF_InitLibraryWithConfig(const FPDF_LIBRARY_CONFIG* config) {
-  if (g_bLibraryInitialized)
+  if (g_bLibraryInitialized) {
     return;
+  }
 
   FX_InitializeMemoryAllocators();
   CFX_Timer::InitializeGlobals();
@@ -248,15 +258,17 @@ FPDF_InitLibraryWithConfig(const FPDF_LIBRARY_CONFIG* config) {
     IJS_Runtime::Initialize(config->m_v8EmbedderSlot, config->m_pIsolate,
                             platform);
 
-    if (config->version >= 4)
+    if (config->version >= 4) {
       SetRendererType(config->m_RendererType);
+    }
   }
   g_bLibraryInitialized = true;
 }
 
 FPDF_EXPORT void FPDF_CALLCONV FPDF_DestroyLibrary() {
-  if (!g_bLibraryInitialized)
+  if (!g_bLibraryInitialized) {
     return;
+  }
 
   // Note: we teardown/destroy things in reverse order.
   ResetRendererType();
@@ -306,20 +318,24 @@ FPDF_LoadDocument(FPDF_STRING file_path, FPDF_BYTESTRING password) {
 
 FPDF_EXPORT int FPDF_CALLCONV FPDF_GetFormType(FPDF_DOCUMENT document) {
   const CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return FORMTYPE_NONE;
+  }
 
   const CPDF_Dictionary* pRoot = pDoc->GetRoot();
-  if (!pRoot)
+  if (!pRoot) {
     return FORMTYPE_NONE;
+  }
 
   RetainPtr<const CPDF_Dictionary> pAcroForm = pRoot->GetDictFor("AcroForm");
-  if (!pAcroForm)
+  if (!pAcroForm) {
     return FORMTYPE_NONE;
+  }
 
   RetainPtr<const CPDF_Object> pXFA = pAcroForm->GetObjectFor("XFA");
-  if (!pXFA)
+  if (!pXFA) {
     return FORMTYPE_ACRO_FORM;
+  }
 
   bool bNeedsRendering = pRoot->GetBooleanFor("NeedsRendering", false);
   return bNeedsRendering ? FORMTYPE_XFA_FULL : FORMTYPE_XFA_FOREGROUND;
@@ -328,12 +344,14 @@ FPDF_EXPORT int FPDF_CALLCONV FPDF_GetFormType(FPDF_DOCUMENT document) {
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_LoadXFA(FPDF_DOCUMENT document) {
 #ifdef PDF_ENABLE_XFA
   auto* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return false;
+  }
 
   auto* pContext = static_cast<CPDFXFA_Context*>(pDoc->GetExtension());
-  if (pContext)
+  if (pContext) {
     return pContext->LoadXFADoc();
+  }
 #endif  // PDF_ENABLE_XFA
   return false;
 }
@@ -344,7 +362,7 @@ FPDF_LoadMemDocument(const void* data_buf, int size, FPDF_BYTESTRING password) {
     return nullptr;
   }
   // SAFETY: required from caller.
-  auto data_span = UNSAFE_BUFFERS(pdfium::make_span(
+  auto data_span = UNSAFE_BUFFERS(pdfium::span(
       static_cast<const uint8_t*>(data_buf), static_cast<size_t>(size)));
   return LoadDocumentImpl(pdfium::MakeRetain<CFX_ReadOnlySpanStream>(data_span),
                           password);
@@ -355,8 +373,8 @@ FPDF_LoadMemDocument64(const void* data_buf,
                        size_t size,
                        FPDF_BYTESTRING password) {
   // SAFETY: required from caller.
-  auto data_span = UNSAFE_BUFFERS(
-      pdfium::make_span(static_cast<const uint8_t*>(data_buf), size));
+  auto data_span =
+      UNSAFE_BUFFERS(pdfium::span(static_cast<const uint8_t*>(data_buf), size));
   return LoadDocumentImpl(pdfium::MakeRetain<CFX_ReadOnlySpanStream>(data_span),
                           password);
 }
@@ -364,27 +382,49 @@ FPDF_LoadMemDocument64(const void* data_buf,
 FPDF_EXPORT FPDF_DOCUMENT FPDF_CALLCONV
 FPDF_LoadCustomDocument(FPDF_FILEACCESS* pFileAccess,
                         FPDF_BYTESTRING password) {
-  if (!pFileAccess)
+  if (!pFileAccess) {
     return nullptr;
+  }
   return LoadDocumentImpl(pdfium::MakeRetain<CPDFSDK_CustomAccess>(pFileAccess),
                           password);
 }
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_GetFileVersion(FPDF_DOCUMENT doc,
                                                         int* fileVersion) {
-  if (!fileVersion)
+  if (!fileVersion) {
     return false;
+  }
 
   *fileVersion = 0;
   CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(doc);
-  if (!pDoc)
+  if (!pDoc) {
     return false;
+  }
 
   const CPDF_Parser* pParser = pDoc->GetParser();
-  if (!pParser)
+  if (!pParser) {
     return false;
+  }
 
   *fileVersion = pParser->GetFileVersion();
+
+  const CPDF_Dictionary* root_dict = pDoc->GetRoot();
+  if (root_dict) {
+    ByteString version = root_dict->GetNameFor("Version");
+    if (!version.IsEmpty()) {
+      // Check for valid PDF version format "X.Y"
+      const bool has_valid_length = version.GetLength() == 3;
+      const bool has_valid_format =
+          has_valid_length && FXSYS_IsDecimalDigit(version[0]) &&
+          version[1] == '.' && FXSYS_IsDecimalDigit(version[2]);
+      if (has_valid_format) {
+        const int major = FXSYS_DecimalCharToInt(version[0]);
+        const int minor = FXSYS_DecimalCharToInt(version[2]);
+        *fileVersion = major * 10 + minor;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -409,8 +449,9 @@ FPDF_GetDocUserPermissions(FPDF_DOCUMENT document) {
 FPDF_EXPORT int FPDF_CALLCONV
 FPDF_GetSecurityHandlerRevision(FPDF_DOCUMENT document) {
   CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc || !pDoc->GetParser())
+  if (!pDoc || !pDoc->GetParser()) {
     return -1;
+  }
 
   RetainPtr<const CPDF_Dictionary> pDict = pDoc->GetParser()->GetEncryptDict();
   return pDict ? pDict->GetIntegerFor("R") : -1;
@@ -418,8 +459,9 @@ FPDF_GetSecurityHandlerRevision(FPDF_DOCUMENT document) {
 
 FPDF_EXPORT int FPDF_CALLCONV FPDF_GetPageCount(FPDF_DOCUMENT document) {
   auto* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return 0;
+  }
 
   auto* pExtension = pDoc->GetExtension();
   return pExtension ? pExtension->GetPageCount() : pDoc->GetPageCount();
@@ -428,11 +470,13 @@ FPDF_EXPORT int FPDF_CALLCONV FPDF_GetPageCount(FPDF_DOCUMENT document) {
 FPDF_EXPORT FPDF_PAGE FPDF_CALLCONV FPDF_LoadPage(FPDF_DOCUMENT document,
                                                   int page_index) {
   auto* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return nullptr;
+  }
 
-  if (page_index < 0 || page_index >= FPDF_GetPageCount(document))
+  if (page_index < 0 || page_index >= FPDF_GetPageCount(document)) {
     return nullptr;
+  }
 
 #ifdef PDF_ENABLE_XFA
   auto* pContext = static_cast<CPDFXFA_Context*>(pDoc->GetExtension());
@@ -443,8 +487,9 @@ FPDF_EXPORT FPDF_PAGE FPDF_CALLCONV FPDF_LoadPage(FPDF_DOCUMENT document,
 #endif  // PDF_ENABLE_XFA
 
   RetainPtr<CPDF_Dictionary> pDict = pDoc->GetMutablePageDictionary(page_index);
-  if (!pDict)
+  if (!pDict) {
     return nullptr;
+  }
 
   auto pPage = pdfium::MakeRetain<CPDF_Page>(pDoc, std::move(pDict));
   pPage->AddPageImageCache();
@@ -473,12 +518,14 @@ FPDF_EXPORT double FPDF_CALLCONV FPDF_GetPageHeight(FPDF_PAGE page) {
 
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_GetPageBoundingBox(FPDF_PAGE page,
                                                             FS_RECTF* rect) {
-  if (!rect)
+  if (!rect) {
     return false;
+  }
 
   CPDF_Page* pPage = CPDFPageFromFPDFPage(page);
-  if (!pPage)
+  if (!pPage) {
     return false;
+  }
 
   *rect = FSRectFFromCFXFloatRect(pPage->GetBBox());
   return true;
@@ -518,17 +565,20 @@ RetainPtr<CFX_DIBitmap> GetMaskBitmap(CPDF_Page* pPage,
                                       RetainPtr<const CFX_DIBitmap> source,
                                       const CFX_FloatRect& mask_box,
                                       FX_RECT* bitmap_area) {
-  if (IsPageTooSmall(pPage))
+  if (IsPageTooSmall(pPage)) {
     return nullptr;
+  }
 
   FX_RECT page_rect(start_x, start_y, start_x + size_x, start_y + size_y);
-  CFX_Matrix matrix = pPage->GetDisplayMatrix(page_rect, rotate);
-  if (IsScalingTooSmall(matrix))
+  CFX_Matrix matrix = pPage->GetDisplayMatrixForRect(page_rect, rotate);
+  if (IsScalingTooSmall(matrix)) {
     return nullptr;
+  }
 
   *bitmap_area = matrix.TransformRect(mask_box).GetOuterRect();
-  if (bitmap_area->IsEmpty())
+  if (bitmap_area->IsEmpty()) {
     return nullptr;
+  }
 
   // Create a new bitmap to transfer part of the page bitmap to.
   RetainPtr<CFX_DIBitmap> pDst = pdfium::MakeRetain<CFX_DIBitmap>();
@@ -547,8 +597,9 @@ void RenderBitmap(CFX_RenderDevice* device,
                   const FX_RECT& mask_area) {
   int size_x_bm = mask_area.Width();
   int size_y_bm = mask_area.Height();
-  if (size_x_bm == 0 || size_y_bm == 0)
+  if (size_x_bm == 0 || size_y_bm == 0) {
     return;
+  }
 
   // Create a new bitmap from the old one
   RetainPtr<CFX_DIBitmap> dest = pdfium::MakeRetain<CFX_DIBitmap>();
@@ -579,8 +630,9 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
                                                     int rotate,
                                                     int flags) {
   CPDF_Page* pPage = CPDFPageFromFPDFPage(page);
-  if (!pPage)
+  if (!pPage) {
     return false;
+  }
 
   auto owned_context = std::make_unique<CPDF_PageRenderContext>();
   CPDF_PageRenderContext* context = owned_context.get();
@@ -600,7 +652,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
   const bool bHasMask = pPage->HasImageMask() && !bNewBitmap;
   auto* render_data = CPDF_DocRenderData::FromDocument(pPage->GetDocument());
   if (!bNewBitmap && !bHasMask) {
-    context->m_pDevice = std::make_unique<CPDF_WindowsRenderDevice>(
+    context->device_ = std::make_unique<CPDF_WindowsRenderDevice>(
         dc, render_data->GetPSFontTracker());
     CPDFSDK_RenderPageWithContext(context, pPage, start_x, start_y, size_x,
                                   size_y, rotate, flags,
@@ -620,10 +672,10 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
 
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
   device->Attach(pBitmap);
-  context->m_pDevice = std::move(device);
+  context->device_ = std::move(device);
   if (bHasMask) {
-    context->m_pOptions = std::make_unique<CPDF_RenderOptions>();
-    context->m_pOptions->GetOptions().bBreakForMasks = true;
+    context->options_ = std::make_unique<CPDF_RenderOptions>();
+    context->options_->GetOptions().bBreakForMasks = true;
   }
 
   CPDFSDK_RenderPageWithContext(context, pPage, start_x, start_y, size_x,
@@ -637,17 +689,18 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
     if (win_dc.GetDeviceType() == DeviceType::kPrinter) {
       auto dest_bitmap = pdfium::MakeRetain<CFX_DIBitmap>();
       if (dest_bitmap->Create(size_x, size_y, FXDIB_Format::kBgrx)) {
-        fxcrt::Fill(dest_bitmap->GetWritableBuffer().first(pBitmap->GetPitch() *
-                                                           size_y),
-                    -1);
+        std::ranges::fill(dest_bitmap->GetWritableBuffer().first(
+                              pBitmap->GetPitch() * size_y),
+                          -1);
         dest_bitmap->CompositeBitmap(0, 0, size_x, size_y, pBitmap, 0, 0,
                                      BlendMode::kNormal, nullptr, false);
         win_dc.StretchDIBits(std::move(dest_bitmap), 0, 0, size_x, size_y);
         bitsStretched = true;
       }
     }
-    if (!bitsStretched)
+    if (!bitsStretched) {
       win_dc.SetDIBits(std::move(pBitmap), 0, 0);
+    }
     return true;
   }
 
@@ -659,7 +712,7 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
   for (size_t i = 0; i < mask_boxes.size(); i++) {
     bitmaps[i] = GetMaskBitmap(pPage, start_x, start_y, size_x, size_y, rotate,
                                pBitmap, mask_boxes[i], &bitmap_areas[i]);
-    context->m_pRenderer->Continue(nullptr);
+    context->renderer_->Continue(nullptr);
   }
 
   // Begin rendering to the printer. Add flag to indicate the renderer should
@@ -668,10 +721,10 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
   owned_context = std::make_unique<CPDF_PageRenderContext>();
   context = owned_context.get();
   pPage->SetRenderContext(std::move(owned_context));
-  context->m_pDevice = std::make_unique<CPDF_WindowsRenderDevice>(
+  context->device_ = std::make_unique<CPDF_WindowsRenderDevice>(
       dc, render_data->GetPSFontTracker());
-  context->m_pOptions = std::make_unique<CPDF_RenderOptions>();
-  context->m_pOptions->GetOptions().bBreakForMasks = true;
+  context->options_ = std::make_unique<CPDF_RenderOptions>();
+  context->options_->GetOptions().bBreakForMasks = true;
 
   CPDFSDK_RenderPageWithContext(context, pPage, start_x, start_y, size_x,
                                 size_y, rotate, flags,
@@ -682,11 +735,11 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_RenderPage(HDC dc,
   for (size_t i = 0; i < mask_boxes.size(); i++) {
     // Render the bitmap for the mask and free the bitmap.
     if (bitmaps[i]) {  // will be null if mask has zero area
-      RenderBitmap(context->m_pDevice.get(), std::move(bitmaps[i]),
+      RenderBitmap(context->device_.get(), std::move(bitmaps[i]),
                    bitmap_areas[i]);
     }
     // Render the next portion of page.
-    context->m_pRenderer->Continue(nullptr);
+    context->renderer_->Continue(nullptr);
   }
 
   return true;
@@ -723,7 +776,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageBitmap(FPDF_BITMAP bitmap,
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
   device->AttachWithRgbByteOrder(std::move(pBitmap),
                                  !!(flags & FPDF_REVERSE_BYTE_ORDER));
-  context->m_pDevice = std::move(device);
+  context->device_ = std::move(device);
 
   CPDFSDK_RenderPageWithContext(context, pPage, start_x, start_y, size_x,
                                 size_y, rotate, flags, /*color_scheme=*/nullptr,
@@ -759,17 +812,18 @@ FPDF_RenderPageBitmapWithMatrix(FPDF_BITMAP bitmap,
   auto device = std::make_unique<CFX_DefaultRenderDevice>();
   device->AttachWithRgbByteOrder(std::move(pBitmap),
                                  !!(flags & FPDF_REVERSE_BYTE_ORDER));
-  context->m_pDevice = std::move(device);
+  context->device_ = std::move(device);
 
   CFX_FloatRect clipping_rect;
-  if (clipping)
+  if (clipping) {
     clipping_rect = CFXFloatRectFromFSRectF(*clipping);
+  }
   FX_RECT clip_rect = clipping_rect.ToFxRect();
 
-  const FX_RECT rect(0, 0, pPage->GetPageWidth(), pPage->GetPageHeight());
-  CFX_Matrix transform_matrix = pPage->GetDisplayMatrix(rect, 0);
-  if (matrix)
+  CFX_Matrix transform_matrix = pPage->GetDisplayMatrix();
+  if (matrix) {
     transform_matrix *= CFXMatrixFromFSMatrix(*matrix);
+  }
   CPDFSDK_RenderPage(context, pPage, transform_matrix, clip_rect, flags,
                      /*color_scheme=*/nullptr);
 }
@@ -798,7 +852,7 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageSkia(FPDF_SKIA_CANVAS canvas,
   if (!device->AttachCanvas(*sk_canvas)) {
     return;
   }
-  context->m_pDevice = std::move(device);
+  context->device_ = std::move(device);
 
   CPDFSDK_RenderPageWithContext(context, cpdf_page, 0, 0, size_x, size_y, 0, 0,
                                 /*color_scheme=*/nullptr,
@@ -807,15 +861,17 @@ FPDF_EXPORT void FPDF_CALLCONV FPDF_RenderPageSkia(FPDF_SKIA_CANVAS canvas,
 #endif  // defined(PDF_USE_SKIA)
 
 FPDF_EXPORT void FPDF_CALLCONV FPDF_ClosePage(FPDF_PAGE page) {
-  if (!page)
+  if (!page) {
     return;
+  }
 
   // Take it back across the API and hold for duration of this function.
   RetainPtr<IPDF_Page> pPage;
   pPage.Unleak(IPDFPageFromFPDFPage(page));
 
-  if (pPage->AsXFAPage())
+  if (pPage->AsXFAPage()) {
     return;
+  }
 
   // This will delete the PageView object corresponding to |pPage|. We must
   // cleanup the PageView before releasing the reference on |pPage| as it will
@@ -842,15 +898,17 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_DeviceToPage(FPDF_PAGE page,
                                                       int device_y,
                                                       double* page_x,
                                                       double* page_y) {
-  if (!page || !page_x || !page_y)
+  if (!page || !page_x || !page_y) {
     return false;
+  }
 
   IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
   const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
   std::optional<CFX_PointF> pos =
       pPage->DeviceToPage(rect, rotate, CFX_PointF(device_x, device_y));
-  if (!pos.has_value())
+  if (!pos.has_value()) {
     return false;
+  }
 
   *page_x = pos->x;
   *page_y = pos->y;
@@ -867,15 +925,17 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDF_PageToDevice(FPDF_PAGE page,
                                                       double page_y,
                                                       int* device_x,
                                                       int* device_y) {
-  if (!page || !device_x || !device_y)
+  if (!page || !device_x || !device_y) {
     return false;
+  }
 
   IPDF_Page* pPage = IPDFPageFromFPDFPage(page);
   const FX_RECT rect(start_x, start_y, start_x + size_x, start_y + size_y);
   CFX_PointF page_point(static_cast<float>(page_x), static_cast<float>(page_y));
   std::optional<CFX_PointF> pos = pPage->PageToDevice(rect, rotate, page_point);
-  if (!pos.has_value())
+  if (!pos.has_value()) {
     return false;
+  }
 
   *device_x = FXSYS_roundf(pos->x);
   *device_y = FXSYS_roundf(pos->y);
@@ -998,8 +1058,9 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBitmap_FillRect(FPDF_BITMAP bitmap,
   if (bpp == 32) {
     for (int row = fill_rect.top; row < row_end; ++row) {
       auto span32 = pBitmap->GetWritableScanlineAs<uint32_t>(row).subspan(
-          fill_rect.left, fill_rect.Width());
-      fxcrt::Fill(span32, static_cast<uint32_t>(color));
+          static_cast<size_t>(fill_rect.left),
+          static_cast<size_t>(fill_rect.Width()));
+      std::ranges::fill(span32, static_cast<uint32_t>(color));
     }
     return true;
   }
@@ -1011,8 +1072,9 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV FPDFBitmap_FillRect(FPDF_BITMAP bitmap,
   for (int row = fill_rect.top; row < row_end; ++row) {
     auto bgr_span =
         pBitmap->GetWritableScanlineAs<FX_BGR_STRUCT<uint8_t>>(row).subspan(
-            fill_rect.left, fill_rect.Width());
-    fxcrt::Fill(bgr_span, bgr);
+            static_cast<size_t>(fill_rect.left),
+            static_cast<size_t>(fill_rect.Width()));
+    std::ranges::fill(bgr_span, bgr);
   }
   return true;
 }
@@ -1046,22 +1108,26 @@ FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDF_GetPageSizeByIndexF(FPDF_DOCUMENT document,
                          int page_index,
                          FS_SIZEF* size) {
-  if (!size)
+  if (!size) {
     return false;
+  }
 
   auto* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return false;
+  }
 
 #ifdef PDF_ENABLE_XFA
-  if (page_index < 0 || page_index >= FPDF_GetPageCount(document))
+  if (page_index < 0 || page_index >= FPDF_GetPageCount(document)) {
     return false;
+  }
 
   auto* pContext = static_cast<CPDFXFA_Context*>(pDoc->GetExtension());
   if (pContext) {
     RetainPtr<CPDFXFA_Page> pPage = pContext->GetOrCreateXFAPage(page_index);
-    if (!pPage)
+    if (!pPage) {
       return false;
+    }
 
     size->width = pPage->GetPageWidth();
     size->height = pPage->GetPageHeight();
@@ -1070,8 +1136,9 @@ FPDF_GetPageSizeByIndexF(FPDF_DOCUMENT document,
 #endif  // PDF_ENABLE_XFA
 
   RetainPtr<CPDF_Dictionary> pDict = pDoc->GetMutablePageDictionary(page_index);
-  if (!pDict)
+  if (!pDict) {
     return false;
+  }
 
   auto page = pdfium::MakeRetain<CPDF_Page>(pDoc, std::move(pDict));
   page->AddPageImageCache();
@@ -1084,12 +1151,14 @@ FPDF_EXPORT int FPDF_CALLCONV FPDF_GetPageSizeByIndex(FPDF_DOCUMENT document,
                                                       int page_index,
                                                       double* width,
                                                       double* height) {
-  if (!width || !height)
+  if (!width || !height) {
     return false;
+  }
 
   FS_SIZEF size;
-  if (!FPDF_GetPageSizeByIndexF(document, page_index, &size))
+  if (!FPDF_GetPageSizeByIndexF(document, page_index, &size)) {
     return false;
+  }
 
   *width = size.width;
   *height = size.height;
@@ -1099,8 +1168,9 @@ FPDF_EXPORT int FPDF_CALLCONV FPDF_GetPageSizeByIndex(FPDF_DOCUMENT document,
 FPDF_EXPORT FPDF_BOOL FPDF_CALLCONV
 FPDF_VIEWERREF_GetPrintScaling(FPDF_DOCUMENT document) {
   const CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return true;
+  }
   CPDF_ViewerPreferences viewRef(pDoc);
   return viewRef.PrintScaling();
 }
@@ -1108,8 +1178,9 @@ FPDF_VIEWERREF_GetPrintScaling(FPDF_DOCUMENT document) {
 FPDF_EXPORT int FPDF_CALLCONV
 FPDF_VIEWERREF_GetNumCopies(FPDF_DOCUMENT document) {
   const CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return 1;
+  }
   CPDF_ViewerPreferences viewRef(pDoc);
   return viewRef.NumCopies();
 }
@@ -1117,8 +1188,9 @@ FPDF_VIEWERREF_GetNumCopies(FPDF_DOCUMENT document) {
 FPDF_EXPORT FPDF_PAGERANGE FPDF_CALLCONV
 FPDF_VIEWERREF_GetPrintPageRange(FPDF_DOCUMENT document) {
   const CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return nullptr;
+  }
   CPDF_ViewerPreferences viewRef(pDoc);
 
   // Unretained reference in public API. NOLINTNEXTLINE
@@ -1135,24 +1207,29 @@ FPDF_EXPORT int FPDF_CALLCONV
 FPDF_VIEWERREF_GetPrintPageRangeElement(FPDF_PAGERANGE pagerange,
                                         size_t index) {
   const CPDF_Array* pArray = CPDFArrayFromFPDFPageRange(pagerange);
-  if (!pArray || index >= pArray->size())
+  if (!pArray || index >= pArray->size()) {
     return -1;
+  }
   return pArray->GetIntegerAt(index);
 }
 
 FPDF_EXPORT FPDF_DUPLEXTYPE FPDF_CALLCONV
 FPDF_VIEWERREF_GetDuplex(FPDF_DOCUMENT document) {
   const CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return DuplexUndefined;
+  }
   CPDF_ViewerPreferences viewRef(pDoc);
   ByteString duplex = viewRef.Duplex();
-  if ("Simplex" == duplex)
+  if ("Simplex" == duplex) {
     return Simplex;
-  if ("DuplexFlipShortEdge" == duplex)
+  }
+  if ("DuplexFlipShortEdge" == duplex) {
     return DuplexFlipShortEdge;
-  if ("DuplexFlipLongEdge" == duplex)
+  }
+  if ("DuplexFlipLongEdge" == duplex) {
     return DuplexFlipLongEdge;
+  }
   return DuplexUndefined;
 }
 
@@ -1162,8 +1239,9 @@ FPDF_VIEWERREF_GetName(FPDF_DOCUMENT document,
                        char* buffer,
                        unsigned long length) {
   const CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return 0;
+  }
 
   CPDF_ViewerPreferences viewRef(pDoc);
   std::optional<ByteString> bsVal = viewRef.GenericName(key);
@@ -1178,29 +1256,34 @@ FPDF_VIEWERREF_GetName(FPDF_DOCUMENT document,
 FPDF_EXPORT FPDF_DWORD FPDF_CALLCONV
 FPDF_CountNamedDests(FPDF_DOCUMENT document) {
   CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return 0;
+  }
 
   const CPDF_Dictionary* pRoot = pDoc->GetRoot();
-  if (!pRoot)
+  if (!pRoot) {
     return 0;
+  }
 
   auto name_tree = CPDF_NameTree::Create(pDoc, "Dests");
   FX_SAFE_UINT32 count = name_tree ? name_tree->GetCount() : 0;
   RetainPtr<const CPDF_Dictionary> pOldStyleDests = pRoot->GetDictFor("Dests");
-  if (pOldStyleDests)
+  if (pOldStyleDests) {
     count += pOldStyleDests->size();
+  }
   return count.ValueOrDefault(0);
 }
 
 FPDF_EXPORT FPDF_DEST FPDF_CALLCONV
 FPDF_GetNamedDestByName(FPDF_DOCUMENT document, FPDF_BYTESTRING name) {
-  if (!name || name[0] == 0)
+  if (!name || name[0] == 0) {
     return nullptr;
+  }
 
   CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return nullptr;
+  }
 
   ByteString dest_name(name);
 
@@ -1228,8 +1311,9 @@ FPDF_EXPORT void* FPDF_CALLCONV FPDF_GetArrayBufferAllocatorSharedInstance() {
 
 #ifdef PDF_ENABLE_XFA
 FPDF_EXPORT FPDF_RESULT FPDF_CALLCONV FPDF_BStr_Init(FPDF_BSTR* bstr) {
-  if (!bstr)
+  if (!bstr) {
     return -1;
+  }
 
   bstr->str = nullptr;
   bstr->len = 0;
@@ -1268,8 +1352,9 @@ FPDF_EXPORT FPDF_RESULT FPDF_CALLCONV FPDF_BStr_Set(FPDF_BSTR* bstr,
 }
 
 FPDF_EXPORT FPDF_RESULT FPDF_CALLCONV FPDF_BStr_Clear(FPDF_BSTR* bstr) {
-  if (!bstr)
+  if (!bstr) {
     return -1;
+  }
 
   if (bstr->str) {
     FX_Free(bstr->str);
@@ -1284,19 +1369,23 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
                                                       int index,
                                                       void* buffer,
                                                       long* buflen) {
-  if (!buffer)
+  if (!buffer) {
     *buflen = 0;
+  }
 
-  if (index < 0)
+  if (index < 0) {
     return nullptr;
+  }
 
   CPDF_Document* pDoc = CPDFDocumentFromFPDFDocument(document);
-  if (!pDoc)
+  if (!pDoc) {
     return nullptr;
+  }
 
   const CPDF_Dictionary* pRoot = pDoc->GetRoot();
-  if (!pRoot)
+  if (!pRoot) {
     return nullptr;
+  }
 
   auto name_tree = CPDF_NameTree::Create(pDoc, "Dests");
   size_t name_tree_count = name_tree ? name_tree->GetCount() : 0;
@@ -1306,13 +1395,15 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
     // If |index| is out of bounds, then try to retrieve the Nth old style named
     // destination. Where N is 0-indexed, with N = index - name_tree_count.
     RetainPtr<const CPDF_Dictionary> pDest = pRoot->GetDictFor("Dests");
-    if (!pDest)
+    if (!pDest) {
       return nullptr;
+    }
 
     FX_SAFE_INT32 checked_count = name_tree_count;
     checked_count += pDest->size();
-    if (!checked_count.IsValid() || index >= checked_count.ValueOrDie())
+    if (!checked_count.IsValid() || index >= checked_count.ValueOrDie()) {
       return nullptr;
+    }
 
     index -= name_tree_count;
     int i = 0;
@@ -1321,23 +1412,27 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
     for (const auto& it : locker) {
       bsName = it.first.AsStringView();
       pDestObj = it.second;
-      if (i == index)
+      if (i == index) {
         break;
+      }
       i++;
     }
     wsName = PDF_DecodeText(bsName.unsigned_span());
   } else {
     pDestObj = name_tree->LookupValueAndName(index, &wsName);
   }
-  if (!pDestObj)
+  if (!pDestObj) {
     return nullptr;
+  }
   if (const CPDF_Dictionary* pDict = pDestObj->AsDictionary()) {
     pDestObj = pDict->GetArrayFor("D");
-    if (!pDestObj)
+    if (!pDestObj) {
       return nullptr;
+    }
   }
-  if (!pDestObj->IsArray())
+  if (!pDestObj->IsArray()) {
     return nullptr;
+  }
 
   ByteString utf16Name = wsName.ToUTF16LE();
   int len = pdfium::checked_cast<int>(utf16Name.GetLength());
@@ -1345,8 +1440,8 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
     *buflen = len;
   } else if (len <= *buflen) {
     // SAFETY: required from caller.
-    auto buffer_span =
-        UNSAFE_BUFFERS(pdfium::make_span(static_cast<char*>(buffer), *buflen));
+    auto buffer_span = UNSAFE_BUFFERS(
+        pdfium::span(static_cast<char*>(buffer), static_cast<size_t>(*buflen)));
     fxcrt::Copy(utf16Name.span(), buffer_span);
     *buflen = len;
   } else {
@@ -1357,8 +1452,9 @@ FPDF_EXPORT FPDF_DEST FPDF_CALLCONV FPDF_GetNamedDest(FPDF_DOCUMENT document,
 
 FPDF_EXPORT int FPDF_CALLCONV FPDF_GetXFAPacketCount(FPDF_DOCUMENT document) {
   CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
-  if (!doc)
+  if (!doc) {
     return -1;
+  }
 
   return fxcrt::CollectionSize<int>(
       GetXFAPackets(GetXFAEntryFromDocument(doc)));
@@ -1370,8 +1466,9 @@ FPDF_GetXFAPacketName(FPDF_DOCUMENT document,
                       void* buffer,
                       unsigned long buflen) {
   CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
-  if (!doc || index < 0)
+  if (!doc || index < 0) {
     return 0;
+  }
 
   std::vector<XFAPacket> xfa_packets =
       GetXFAPackets(GetXFAEntryFromDocument(doc));
@@ -1391,19 +1488,21 @@ FPDF_GetXFAPacketContent(FPDF_DOCUMENT document,
                          unsigned long buflen,
                          unsigned long* out_buflen) {
   CPDF_Document* doc = CPDFDocumentFromFPDFDocument(document);
-  if (!doc || index < 0 || !out_buflen)
+  if (!doc || index < 0 || !out_buflen) {
     return false;
+  }
 
   std::vector<XFAPacket> xfa_packets =
       GetXFAPackets(GetXFAEntryFromDocument(doc));
-  if (static_cast<size_t>(index) >= xfa_packets.size())
+  if (static_cast<size_t>(index) >= xfa_packets.size()) {
     return false;
+  }
 
   // SAFETY: caller ensures `buffer` points to at least `buflen` bytes.
   *out_buflen = DecodeStreamMaybeCopyAndReturnLength(
       xfa_packets[index].data,
-      UNSAFE_BUFFERS(pdfium::make_span(static_cast<uint8_t*>(buffer),
-                                       static_cast<size_t>(buflen))));
+      UNSAFE_BUFFERS(pdfium::span(static_cast<uint8_t*>(buffer),
+                                  static_cast<size_t>(buflen))));
   return true;
 }
 
@@ -1412,8 +1511,9 @@ FPDF_GetTrailerEnds(FPDF_DOCUMENT document,
                     unsigned int* buffer,
                     unsigned long length) {
   auto* doc = CPDFDocumentFromFPDFDocument(document);
-  if (!doc)
+  if (!doc) {
     return 0;
+  }
 
   // Start recording trailer ends.
   auto* parser = doc->GetParser();
@@ -1422,8 +1522,7 @@ FPDF_GetTrailerEnds(FPDF_DOCUMENT document,
       fxcrt::CollectionSize<unsigned long>(trailer_ends);
   if (buffer && length >= trailer_ends_len) {
     // SAFETY: required from caller.
-    fxcrt::Copy(trailer_ends,
-                UNSAFE_BUFFERS(pdfium::make_span(buffer, length)));
+    fxcrt::Copy(trailer_ends, UNSAFE_BUFFERS(pdfium::span(buffer, length)));
   }
 
   return trailer_ends_len;

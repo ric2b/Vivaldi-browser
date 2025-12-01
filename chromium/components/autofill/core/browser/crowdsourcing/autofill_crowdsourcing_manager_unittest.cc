@@ -87,9 +87,9 @@ constexpr int METHOD_POST = 1;
 constexpr int CACHE_MISS = 0;
 constexpr int CACHE_HIT = 1;
 
-std::vector<raw_ptr<FormStructure, VectorExperimental>> ToRawPointerVector(
-    const std::vector<std::unique_ptr<FormStructure>>& list) {
-  std::vector<raw_ptr<FormStructure, VectorExperimental>> result;
+std::vector<raw_ptr<const FormStructure, VectorExperimental>>
+ToRawPointerVector(const std::vector<std::unique_ptr<FormStructure>>& list) {
+  std::vector<raw_ptr<const FormStructure, VectorExperimental>> result;
   for (const auto& item : list) {
     result.push_back(item.get());
   }
@@ -297,7 +297,7 @@ TEST_F(AutofillCrowdsourcingManagerTest, QueryAndUploadTest) {
     SetCorrectFieldHostFormSignatures(*form_structure);
   }
 
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
+  std::optional<RandomizedEncoder> randomized_encoder =
       RandomizedEncoder::Create(client().GetPrefs());
 
   auto crowdsourcing_manager =
@@ -322,29 +322,29 @@ TEST_F(AutofillCrowdsourcingManagerTest, QueryAndUploadTest) {
   EXPECT_EQ(google_apis::test_util::GetAPIKeyFromRequest(request->request),
             "dummykey");
 
+  EncodeUploadRequestOptions options;
+  options.encoder = RandomizedEncoder::Create(client().GetPrefs());
+  options.observed_submission = true;
+
   // Request with id 1.
-  std::vector<AutofillUploadContents> upload_contents_1 = EncodeUploadRequest(
-      *form_structures[0], *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/std::nullopt, /*observed_submission=*/true);
+  std::vector<AutofillUploadContents> upload_contents_1 =
+      EncodeUploadRequest(*form_structures[0], options);
   EXPECT_TRUE(crowdsourcing_manager->StartUploadRequest(
       std::move(upload_contents_1), form_structures[0]->submission_source(),
       /*is_password_manager_upload=*/false));
 
   // Request with id 2.
-  std::vector<AutofillUploadContents> upload_contents_2 = EncodeUploadRequest(
-      *form_structures[1], *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/std::nullopt, /*observed_submission=*/true);
+  std::vector<AutofillUploadContents> upload_contents_2 =
+      EncodeUploadRequest(*form_structures[1], options);
   EXPECT_TRUE(crowdsourcing_manager->StartUploadRequest(
       std::move(upload_contents_2), form_structures[1]->submission_source(),
       /*is_password_manager_upload=*/false));
+
   // Request with id 3. Upload request with a non-empty additional password form
   // signature.
-  std::vector<AutofillUploadContents> upload_contents_3 = EncodeUploadRequest(
-      *form_structures[2], *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/FormSignature(42), /*observed_submission=*/true);
+  options.login_form_signature = FormSignature(42);
+  std::vector<AutofillUploadContents> upload_contents_3 =
+      EncodeUploadRequest(*form_structures[2], options);
   EXPECT_TRUE(crowdsourcing_manager->StartUploadRequest(
       std::move(upload_contents_3), form_structures[1]->submission_source(),
       /*is_password_manager_upload=*/false));
@@ -624,17 +624,16 @@ TEST_F(AutofillCrowdsourcingManagerTest, UploadToAPITest) {
   form_structure.set_submission_source(SubmissionSource::FORM_SUBMISSION);
   SetCorrectFieldHostFormSignatures(form_structure);
 
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
-      RandomizedEncoder::Create(client().GetPrefs());
-
   auto crowdsourcing_manager =
       AutofillCrowdsourcingManagerTestApi::CreateManagerForApiKey(&client(),
                                                                   "dummykey");
 
-  std::vector<AutofillUploadContents> upload_contents = EncodeUploadRequest(
-      form_structure, *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/std::nullopt, /*observed_submission=*/true);
+  EncodeUploadRequestOptions options;
+  options.encoder = RandomizedEncoder::Create(client().GetPrefs());
+  options.observed_submission = true;
+
+  std::vector<AutofillUploadContents> upload_contents =
+      EncodeUploadRequest(form_structure, options);
   EXPECT_TRUE(crowdsourcing_manager->StartUploadRequest(
       std::move(upload_contents), form_structure.submission_source(),
       /*is_password_manager_upload=*/false));
@@ -724,14 +723,13 @@ TEST_F(AutofillCrowdsourcingManagerTest, BackoffLogic_Upload) {
   form_structure.set_submission_source(SubmissionSource::FORM_SUBMISSION);
   SetCorrectFieldHostFormSignatures(form_structure);
 
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
-      RandomizedEncoder::Create(client().GetPrefs());
+  EncodeUploadRequestOptions options;
+  options.encoder = RandomizedEncoder::Create(client().GetPrefs());
+  options.observed_submission = true;
 
   // Request with id 0.
-  std::vector<AutofillUploadContents> upload_contents = EncodeUploadRequest(
-      form_structure, *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/std::nullopt, /*observed_submission=*/true);
+  std::vector<AutofillUploadContents> upload_contents =
+      EncodeUploadRequest(form_structure, options);
   EXPECT_TRUE(crowdsourcing_manager().StartUploadRequest(
       std::move(upload_contents), form_structure.submission_source(),
       /*is_password_manager_upload=*/false));
@@ -755,10 +753,8 @@ TEST_F(AutofillCrowdsourcingManagerTest, BackoffLogic_Upload) {
   // Validate that there is no retry on sending a bad request.
   form_structure.set_submission_source(SubmissionSource::XHR_SUCCEEDED);
   base::HistogramTester histogram;
-  std::vector<AutofillUploadContents> upload_contents_2 = EncodeUploadRequest(
-      form_structure, *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/std::nullopt, /*observed_submission=*/true);
+  std::vector<AutofillUploadContents> upload_contents_2 =
+      EncodeUploadRequest(form_structure, options);
   EXPECT_TRUE(crowdsourcing_manager().StartUploadRequest(
       std::move(upload_contents_2), form_structure.submission_source(),
       /*is_password_manager_upload=*/false));
@@ -830,14 +826,13 @@ TEST_F(AutofillCrowdsourcingManagerTest, RetryLimit_Upload) {
   form_structure.set_submission_source(SubmissionSource::FORM_SUBMISSION);
   SetCorrectFieldHostFormSignatures(form_structure);
 
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
-      RandomizedEncoder::Create(client().GetPrefs());
+  EncodeUploadRequestOptions options;
+  options.encoder = RandomizedEncoder::Create(client().GetPrefs());
+  options.observed_submission = true;
 
   // Request with id 0.
-  std::vector<AutofillUploadContents> upload_contents = EncodeUploadRequest(
-      form_structure, *randomized_encoder, /*format_strings=*/{},
-      /*available_field_types=*/{},
-      /*login_form_signature=*/std::nullopt, /*observed_submission=*/true);
+  std::vector<AutofillUploadContents> upload_contents =
+      EncodeUploadRequest(form_structure, options);
   EXPECT_TRUE(crowdsourcing_manager().StartUploadRequest(
       std::move(upload_contents), form_structure.submission_source(),
       /*is_password_manager_upload=*/false));
@@ -1204,9 +1199,14 @@ class AutofillServerCommunicationTest
     AutofillCrowdsourcingManager crowdsourcing_manager(
         &client(), version_info::Channel::UNKNOWN);
 
-    std::vector<AutofillUploadContents> upload_contents = EncodeUploadRequest(
-        form, randomized_encoder, /*format_strings=*/{}, available_field_types,
-        login_form_signature, observed_submission);
+    EncodeUploadRequestOptions options;
+    options.encoder = RandomizedEncoder::Create(client().GetPrefs());
+    options.available_field_types = available_field_types;
+    options.login_form_signature = login_form_signature;
+    options.observed_submission = observed_submission;
+
+    std::vector<AutofillUploadContents> upload_contents =
+        EncodeUploadRequest(form, options);
     bool succeeded = crowdsourcing_manager.StartUploadRequest(
         std::move(upload_contents), form.submission_source(),
         is_password_manager_upload);
@@ -1265,7 +1265,7 @@ TEST_P(AutofillServerCommunicationTest, Query) {
 TEST_P(AutofillServerCommunicationTest, Upload) {
   AutofillCrowdsourcingManager crowdsourcing_manager(
       &client(), version_info::Channel::UNKNOWN);
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
+  std::optional<RandomizedEncoder> randomized_encoder =
       RandomizedEncoder::Create(client().GetPrefs());
   EXPECT_EQ(GetParam() != DISABLED,
             SendUploadRequest(FormStructure(test::GetFormData(
@@ -1603,7 +1603,7 @@ TEST_P(AutofillUploadTest, RichMetadata) {
     SCOPED_TRACE(testing::Message()
                  << "submission source = " << submission_source);
     form_structure.set_submission_source(submission_source);
-    std::unique_ptr<RandomizedEncoder> randomized_encoder =
+    std::optional<RandomizedEncoder> randomized_encoder =
         RandomizedEncoder::Create(client().GetPrefs());
 
     payloads().clear();
@@ -1680,7 +1680,7 @@ TEST_P(AutofillUploadTest, Throttling) {
     SCOPED_TRACE(testing::Message()
                  << "submission source = " << submission_source);
     form_structure.set_submission_source(submission_source);
-    std::unique_ptr<RandomizedEncoder> randomized_encoder =
+    std::optional<RandomizedEncoder> randomized_encoder =
         RandomizedEncoder::Create(client().GetPrefs());
 
     // The first attempt should succeed.
@@ -1711,6 +1711,60 @@ TEST_P(AutofillUploadTest, Throttling) {
   }
 }
 
+TEST_P(AutofillUploadTest, ThrottlingAlternativeFormSignatures) {
+  ASSERT_NE(DISABLED, GetParam());
+
+  AutofillCrowdsourcingManager crowdsourcing_manager(
+      &client(), version_info::Channel::UNKNOWN);
+
+  const FormSignature kAlternativeFormSignature(42);
+
+  // Create two form structures with different signatures and submission sources
+  // but the same alternative signature.
+  FormStructure form_structure_1(
+      test::GetFormData({.fields = {{.role = NAME_FIRST},
+                                    {.role = NAME_LAST},
+                                    {.role = EMAIL_ADDRESS}}}));
+  const FormSignature kMainFormSignature1(123);
+  form_structure_1.set_form_signature(kMainFormSignature1);
+  form_structure_1.set_alternative_form_signature(kAlternativeFormSignature);
+  form_structure_1.set_submission_source(SubmissionSource::FORM_SUBMISSION);
+
+  FormStructure form_structure_2(form_structure_1.ToFormData());
+  const FormSignature kMainFormSignature2(456);
+  form_structure_2.set_form_signature(kMainFormSignature2);
+  form_structure_2.set_alternative_form_signature(kAlternativeFormSignature);
+  form_structure_2.set_submission_source(SubmissionSource::XHR_SUCCEEDED);
+
+  std::optional<RandomizedEncoder> randomized_encoder =
+      RandomizedEncoder::Create(client().GetPrefs());
+
+  // The first attempt should succeed and include the alternative signature.
+  EXPECT_TRUE(SendUploadRequest(form_structure_1, *randomized_encoder,
+                                /*available_field_types=*/{},
+                                /*login_form_signature=*/std::nullopt,
+                                /*observed_submission=*/true,
+                                /*is_password_manager_upload=*/false));
+  ASSERT_THAT(payloads(), SizeIs(1));
+  AutofillUploadRequest request_1;
+  ASSERT_TRUE(request_1.ParseFromString(payloads()[0]));
+  EXPECT_EQ(request_1.upload().secondary_form_signature(),
+            kAlternativeFormSignature.value());
+
+  // The second attempt should succeed but NOT include the alternative
+  // signature, because it has been throttled.
+  EXPECT_TRUE(SendUploadRequest(form_structure_2, *randomized_encoder,
+                                /*available_field_types=*/{},
+                                /*login_form_signature=*/std::nullopt,
+                                /*observed_submission=*/true,
+                                /*is_password_manager_upload=*/false));
+  ASSERT_THAT(payloads(), SizeIs(2));
+  AutofillUploadRequest request_2;
+  ASSERT_TRUE(request_2.ParseFromString(payloads()[1]));
+  EXPECT_FALSE(request_2.upload().has_secondary_form_signature());
+  payloads().clear();
+}
+
 // Tests that votes are not throttled with
 // `features::test::kAutofillUploadThrottling` disabled, but metadata is
 // throttled regardless of the feature state.
@@ -1727,7 +1781,7 @@ TEST_P(AutofillUploadTest, SuccessfulSubmissionOnDisabledThrottling) {
 
   SubmissionSource submission_source = SubmissionSource::FORM_SUBMISSION;
   form_structure.set_submission_source(submission_source);
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
+  std::optional<RandomizedEncoder> randomized_encoder =
       RandomizedEncoder::Create(client().GetPrefs());
 
   base::HistogramTester histogram_tester;
@@ -1801,7 +1855,7 @@ TEST_P(AutofillUploadTest, PeriodicReset) {
                                     {.role = EMAIL_ADDRESS}}}));
   form_structure.set_submission_source(submission_source);
 
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
+  std::optional<RandomizedEncoder> randomized_encoder =
       RandomizedEncoder::Create(client().GetPrefs());
 
   base::HistogramTester histogram_tester;
@@ -1860,7 +1914,7 @@ TEST_P(AutofillUploadTest, ResetOnClearUploadHistory) {
                                     {.role = EMAIL_ADDRESS}}}));
   form_structure.set_submission_source(submission_source);
 
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
+  std::optional<RandomizedEncoder> randomized_encoder =
       RandomizedEncoder::Create(client().GetPrefs());
 
   base::HistogramTester histogram_tester;
@@ -1899,7 +1953,7 @@ TEST_P(AutofillUploadTest, ThrottleMetadataOnPasswordManagerUploads) {
 
   SubmissionSource submission_source = SubmissionSource::FORM_SUBMISSION;
   form_structure.set_submission_source(submission_source);
-  std::unique_ptr<RandomizedEncoder> randomized_encoder =
+  std::optional<RandomizedEncoder> randomized_encoder =
       RandomizedEncoder::Create(client().GetPrefs());
 
   base::HistogramTester histogram_tester;

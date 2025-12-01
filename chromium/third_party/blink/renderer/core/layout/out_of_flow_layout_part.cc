@@ -9,7 +9,6 @@
 #include <algorithm>
 
 #include "base/memory/values_equivalent.h"
-#include "base/not_fatal_until.h"
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/out_of_flow_data.h"
@@ -191,6 +190,14 @@ class OOFCandidateStyleIterator {
       }
     }
     UpdateStyle(index);
+
+    if (!style_) {
+      // The last successful fallback no longer exists. The rule may have been
+      // deleted. Performing ResizeObserver steps invalidates such last
+      // successful options (and then this won't be an issue), but we may
+      // perform layout before that has happened. Update to base style.
+      UpdateStyle(std::nullopt);
+    }
   }
 
   std::optional<const CSSPropertyValueSet*> TrySetFromFallback(
@@ -328,8 +335,12 @@ class OOFCandidateStyleIterator {
     }
 
     CHECK(element_);
-    element_->GetDocument().GetStyleEngine().UpdateStyleForOutOfFlow(
-        *element_, try_set, try_tactics, &anchor_evaluator_);
+
+    element_->GetDocument()
+        .GetStyleEngine()
+        .UpdateStyleAndLayoutTreeForOutOfFlow(*element_, try_fallback_index,
+                                              try_set, try_tactics,
+                                              &anchor_evaluator_);
     CHECK(element_->GetLayoutObject());
     // Returns LayoutObject ComputedStyle instead of element style for layout
     // purposes. The style may be different, in particular for body -> html
@@ -343,8 +354,9 @@ class OOFCandidateStyleIterator {
   // Otherwise, the base style for generating auto anchor fallbacks.
   const ComputedStyle* style_ = nullptr;
 
-  // This evaluator is passed to StyleEngine::UpdateStyleForOutOfFlow to
-  // evaluate anchor queries on the computed style.
+  // This evaluator is passed to
+  // StyleEngine::UpdateStyleAndLayoutTreeForOutOfFlow to evaluate anchor
+  // queries on the computed style.
   AnchorEvaluatorImpl& anchor_evaluator_;
 
   // If the current style is applying a `position-try-fallbacks` fallback, this
@@ -365,7 +377,9 @@ const Element* GetPositionAnchorElement(
   }
   if (const ScopedCSSName* specifier = style.PositionAnchor()) {
     if (const PhysicalAnchorReference* reference =
-            anchor_query->AnchorReference(*node.GetLayoutBox(), specifier)) {
+            anchor_query->AnchorReference(
+                *node.GetLayoutBox(),
+                ToAnchorScopedName(*specifier, *node.GetLayoutBox()))) {
       DCHECK(!reference->element || reference->GetLayoutObject());
       return reference->element;
     }
@@ -412,12 +426,7 @@ void UpdatePositionVisibilityAfterLayout(
     const OutOfFlowLayoutPart::OffsetInfo& offset_info,
     const BlockNode& node,
     const PhysicalAnchorQuery* anchor_query) {
-  if (!anchor_query) {
-    return;
-  }
-
   // TODO(crbug.com/332933527): Support anchors-valid.
-
   PaintLayer* layer = node.GetLayoutBox()->Layer();
   CHECK(layer);
   bool has_no_overflow_visibility =
@@ -425,6 +434,10 @@ void UpdatePositionVisibilityAfterLayout(
   layer->SetInvisibleForPositionVisibility(
       LayerPositionVisibility::kNoOverflow,
       has_no_overflow_visibility && offset_info.overflows_containing_block);
+
+  if (!anchor_query) {
+    return;
+  }
 
   // TODO(wangxianzhu): We may be anchored in cases where we do not need scroll
   // adjustment, such as when the anchor and anchored have the same containing
@@ -471,7 +484,7 @@ std::optional<LogicalSize> OutOfFlowLayoutPart::InitialContainingBlockFixedSize(
           ? PhysicalSize(frame_view->Size())
           : PhysicalSize(frame_view->LayoutViewport()->ExcludeScrollbars(
                 frame_view->Size()));
-  return size.ConvertToLogical(container.Style().GetWritingMode());
+  return ToLogicalSize(size, container.Style().GetWritingMode());
 }
 
 OutOfFlowLayoutPart::OutOfFlowLayoutPart(BoxFragmentBuilder* container_builder)
@@ -503,6 +516,10 @@ OutOfFlowLayoutPart::OutOfFlowLayoutPart(BoxFragmentBuilder* container_builder)
       container_builder_->Node().IsScrollContainer();
   default_containing_block_info_for_fixed_.is_scroll_container =
       container_builder_->Node().IsScrollContainer();
+  default_containing_block_info_for_absolute_.is_hidden_for_paint =
+      container_builder_->GetConstraintSpace().IsHiddenForPaint();
+  default_containing_block_info_for_fixed_.is_hidden_for_paint =
+      container_builder_->GetConstraintSpace().IsHiddenForPaint();
   if (container_builder_->HasBlockSize()) {
     default_containing_block_info_for_absolute_.rect.size =
         ShrinkLogicalSize(container_builder_->Size(), border_scrollbar);
@@ -576,7 +593,6 @@ void OutOfFlowLayoutPart::Run() {
         LogicalStaticPosition::InlineEdge::kInlineStart,
         LogicalStaticPosition::BlockEdge::kBlockStart,
         LogicalStaticPosition::LogicalAlignmentDirection::kBlock,
-        /*is_hidden_for_paint=*/false,
         /*allow_top_layer_nodes=*/true);
 
     // With one top-layer node added, run through the machinery again. Note that
@@ -693,8 +709,8 @@ OutOfFlowLayoutPart::ApplyPositionAreaOffsets(
                      insets.inline_start);
 
   const LogicalOffset logical_shift =
-      default_anchor_scroll_shift.ConvertToLogical(
-          container_info.writing_direction, PhysicalSize(), PhysicalSize());
+      WritingModeConverter(container_info.writing_direction, PhysicalSize())
+          .ToLogical(default_anchor_scroll_shift, PhysicalSize());
 
   const LogicalBoxSides behaves_as_auto =
       offsets.behaves_as_auto.ToLogical(container_info.writing_direction);
@@ -772,6 +788,8 @@ OutOfFlowLayoutPart::GetContainingBlockInfo(
     const LogicalOofPositionedNode& candidate) {
   const auto* container_object = container_builder_->GetLayoutObject();
   const auto& node_style = candidate.Node().Style();
+  bool is_hidden_for_paint =
+      container_builder_->GetConstraintSpace().IsHiddenForPaint();
 
   auto IsPlacedWithinGridArea = [&](const auto* containing_block) {
     if (!containing_block->IsLayoutGrid()) {
@@ -793,6 +811,7 @@ OutOfFlowLayoutPart::GetContainingBlockInfo(
         MakeGarbageCollected<GridItemData>(candidate.Node(), grid_style);
 
     return {.writing_direction = grid_style.GetWritingDirection(),
+            .is_hidden_for_paint = is_hidden_for_paint,
             .rect = GridLayoutAlgorithm::ComputeOutOfFlowItemContainingRect(
                 containing_grid.CachedPlacementData(), layout_data, grid_style,
                 borders, size, grid_item)};
@@ -801,7 +820,7 @@ OutOfFlowLayoutPart::GetContainingBlockInfo(
   if (candidate.inline_container.container) {
     const auto it =
         containing_blocks_map_.find(candidate.inline_container.container);
-    CHECK(it != containing_blocks_map_.end(), base::NotFatalUntil::M130);
+    CHECK(it != containing_blocks_map_.end());
     return it->value;
   }
 
@@ -825,8 +844,8 @@ OutOfFlowLayoutPart::GetContainingBlockInfo(
 
       const auto writing_direction =
           containing_block->StyleRef().GetWritingDirection();
-      LogicalSize size = containing_block_fragment->Size().ConvertToLogical(
-          writing_direction.GetWritingMode());
+      LogicalSize size = ToLogicalSize(containing_block_fragment->Size(),
+                                       writing_direction.GetWritingMode());
       size.block_size = BoxTotalBlockSize(*To<LayoutBox>(containing_block));
 
       // TODO(1079031): This should eventually include scrollbar and border.
@@ -846,7 +865,9 @@ OutOfFlowLayoutPart::GetContainingBlockInfo(
       container_offset += fragmentainer_descendant.containing_block.Offset();
 
       ContainingBlockInfo containing_block_info{
-          writing_direction, containing_block_fragment->IsScrollContainer(),
+          writing_direction,
+          containing_block_fragment->IsScrollContainer(),
+          containing_block_fragment->IsHiddenForPaint(),
           LogicalRect(container_offset, content_size),
           fragmentainer_descendant.containing_block.RelativeOffset(),
           fragmentainer_descendant.containing_block.Offset()};
@@ -1043,8 +1064,10 @@ void OutOfFlowLayoutPart::AddInlineContainingBlockInfo(
     // Step 1 - determine the start_offset.
     const PhysicalRect& start_rect =
         block_info.value->start_fragment_union_rect;
-    LogicalOffset start_offset = start_rect.offset.ConvertToLogical(
-        container_writing_direction, container_builder_size, start_rect.size);
+    const WritingModeConverter container_converter{container_writing_direction,
+                                                   container_builder_size};
+    LogicalOffset start_offset =
+        container_converter.ToLogical(start_rect.offset, start_rect.size);
 
     // Make sure we add the inline borders, we don't need to do this in the
     // inline direction if the blocks are in opposite directions.
@@ -1054,12 +1077,12 @@ void OutOfFlowLayoutPart::AddInlineContainingBlockInfo(
 
     // Step 2 - determine the end_offset.
     const PhysicalRect& end_rect = block_info.value->end_fragment_union_rect;
-    LogicalOffset end_offset = end_rect.offset.ConvertToLogical(
-        container_writing_direction, container_builder_size, end_rect.size);
+    LogicalOffset end_offset =
+        container_converter.ToLogical(end_rect.offset, end_rect.size);
 
     // Add in the size of the fragment to get the logical end of the fragment.
-    end_offset += end_rect.size.ConvertToLogical(
-        container_writing_direction.GetWritingMode());
+    end_offset += ToLogicalSize(end_rect.size,
+                                container_writing_direction.GetWritingMode());
 
     // Make sure we subtract the inline borders, we don't need to do this in the
     // inline direction if the blocks are in opposite directions.
@@ -1088,12 +1111,13 @@ void OutOfFlowLayoutPart::AddInlineContainingBlockInfo(
       // writing mode of the builder into account.
       PhysicalSize physical_size =
           ToPhysicalSize(inline_cb_size, GetConstraintSpace().GetWritingMode());
+      const PhysicalOffset start_physical_offset =
+          start_offset.ConvertToPhysical(container_writing_direction,
+                                         container_builder_size, physical_size);
       start_offset =
-          start_offset
-              .ConvertToPhysical(container_writing_direction,
-                                 container_builder_size, physical_size)
-              .ConvertToLogical(GetConstraintSpace().GetWritingDirection(),
-                                container_builder_size, physical_size);
+          WritingModeConverter(GetConstraintSpace().GetWritingDirection(),
+                               container_builder_size)
+              .ToLogical(start_physical_offset, physical_size);
     }
 
     // Subtract out the inline relative offset, if set, so that it can be
@@ -1125,6 +1149,7 @@ void OutOfFlowLayoutPart::AddInlineContainingBlockInfo(
         ContainingBlockInfo{
             inline_writing_direction,
             /* is_scroll_container */ false,
+            block_info.value->is_hidden_for_paint,
             LogicalRect(container_offset, inline_cb_size),
             total_relative_offset,
             containing_block_offset - block_info.value->relative_offset});
@@ -1270,8 +1295,8 @@ void OutOfFlowLayoutPart::LayoutOOFsInMulticol(
           multicol_box_fragment->Borders().ConvertToLogical(writing_direction) +
           multicol_box_fragment->Padding().ConvertToLogical(writing_direction);
       LayoutUnit available_inline_size =
-          multicol_box_fragment->Size()
-              .ConvertToLogical(writing_direction.GetWritingMode())
+          ToLogicalSize(multicol_box_fragment->Size(),
+                        writing_direction.GetWritingMode())
               .inline_size -
           border_padding.InlineSum();
       column_inline_progression =
@@ -1663,9 +1688,8 @@ void OutOfFlowLayoutPart::LayoutFragmentainerDescendants(
           if (!column_balancing_info_) {
             fragment = &GetChildFragment(index);
             fragmentainer_consumed_block_size_ +=
-                fragment->Size()
-                    .ConvertToLogical(
-                        container_builder_->Style().GetWritingMode())
+                ToLogicalSize(fragment->Size(),
+                              container_builder_->Style().GetWritingMode())
                     .block_size;
           }
         }
@@ -1830,12 +1854,12 @@ OutOfFlowLayoutPart::NodeInfo OutOfFlowLayoutPart::SetupNodeInfo(
         To<LogicalOofNodeForFragmentation>(oof_node).fixedpos_inline_container;
   }
 
-  return NodeInfo(
-      node, oof_node.static_position, base_container_info,
-      GetConstraintSpace().GetWritingDirection(),
-      /* is_fragmentainer_descendant */ containing_block_fragment,
-      containing_block, fixedpos_containing_block, fixedpos_inline_container,
-      oof_node.requires_content_before_breaking, oof_node.is_hidden_for_paint);
+  return NodeInfo(node, oof_node.static_position, base_container_info,
+                  GetConstraintSpace().GetWritingDirection(),
+                  /* is_fragmentainer_descendant */ containing_block_fragment,
+                  containing_block, fixedpos_containing_block,
+                  fixedpos_inline_container,
+                  oof_node.requires_content_before_breaking);
 }
 
 const LayoutResult* OutOfFlowLayoutPart::LayoutOOFNode(
@@ -2306,9 +2330,7 @@ OutOfFlowLayoutPart::TryCalculateOffset(
                                    /* is_new_fc */ true);
     builder.SetAvailableSize(container_rect.size);
     builder.SetPercentageResolutionSize(container_rect.size);
-    if (node_info.is_hidden_for_paint) {
-      builder.SetIsHiddenForPaint(true);
-    }
+    builder.SetIsHiddenForPaint(container_info.is_hidden_for_paint);
 
     if (container_builder_->IsInitialColumnBalancingPass()) {
       // The |fragmentainer_offset_delta| will not make a difference in the
@@ -2479,8 +2501,8 @@ OutOfFlowLayoutPart::TryCalculateOffset(
 
   offset_info.block_estimate = node_dimensions.size.block_size;
   offset_info.container_content_size =
-      container_physical_content_size.ConvertToLogical(
-          candidate_writing_direction.GetWritingMode());
+      ToLogicalSize(container_physical_content_size,
+                    candidate_writing_direction.GetWritingMode());
 
   // Calculate the offsets.
   const BoxStrut inset =
@@ -2630,7 +2652,7 @@ const LayoutResult* OutOfFlowLayoutPart::GenerateFragment(
   PhysicalSize physical_size =
       ToPhysicalSize(logical_size, style.GetWritingMode());
   LogicalSize available_size =
-      physical_size.ConvertToLogical(GetConstraintSpace().GetWritingMode());
+      ToLogicalSize(physical_size, GetConstraintSpace().GetWritingMode());
   bool is_repeatable = false;
 
   ConstraintSpaceBuilder builder(GetConstraintSpace(),
@@ -2639,7 +2661,8 @@ const LayoutResult* OutOfFlowLayoutPart::GenerateFragment(
   builder.SetAvailableSize(available_size);
   builder.SetPercentageResolutionSize(offset_info.container_content_size);
   builder.SetIsFixedInlineSize(true);
-  builder.SetIsHiddenForPaint(node_info.is_hidden_for_paint);
+  builder.SetIsHiddenForPaint(
+      node_info.base_container_info.is_hidden_for_paint);
 
   // In some cases we will need the fragment size in order to calculate the
   // offset. We may have to lay out to get the fragment size. For block
@@ -2959,6 +2982,12 @@ void OutOfFlowLayoutPart::AddOOFToFragmentainer(
   }
   algorithm->AppendOutOfFlowResult(result);
 
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    // Copying back to the LayoutBox will be done later, when fragmented layout
+    // is complete. Only then can we know the physical offsets.
+    return;
+  }
+
   // Copy the offset of the OOF node back to legacy such that it is relative
   // to its containing block rather than the fragmentainer that it is being
   // added to.
@@ -2996,7 +3025,7 @@ ConstraintSpace OutOfFlowLayoutPart::GetFragmentainerConstraintSpace(
   const WritingMode container_writing_mode =
       container_builder_->Style().GetWritingMode();
   LogicalSize fragmentainer_size =
-      fragment.Size().ConvertToLogical(container_writing_mode);
+      ToLogicalSize(fragment.Size(), container_writing_mode);
   LogicalSize percentage_resolution_size =
       LogicalSize(fragmentainer_size.inline_size,
                   container_builder_->ChildAvailableSize().block_size);
@@ -3051,9 +3080,8 @@ void OutOfFlowLayoutPart::ComputeStartFragmentIndexAndRelativeOffset(
   for (; child_index < ChildCount(); child_index++) {
     const PhysicalBoxFragment& child_fragment = GetChildFragment(child_index);
     if (child_fragment.IsFragmentainerBox()) {
-      fragmentainer_block_size = child_fragment.Size()
-                                     .ConvertToLogical(default_writing_mode)
-                                     .block_size;
+      fragmentainer_block_size =
+          ToLogicalSize(child_fragment.Size(), default_writing_mode).block_size;
       fragmentainer_block_size =
           ClampedToValidFragmentainerCapacity(fragmentainer_block_size);
       current_max_block_size += fragmentainer_block_size;
@@ -3087,25 +3115,19 @@ void OutOfFlowLayoutPart::ComputeStartFragmentIndexAndRelativeOffset(
 
 void OutOfFlowLayoutPart::SaveStaticPositionOnPaintLayer(
     LayoutBox* layout_box,
-    const LogicalStaticPosition& position) const {
+    LogicalStaticPosition position) const {
   const LayoutObject* parent =
       GetLayoutObjectForParentNode<const LayoutObject*>(layout_box);
   const LayoutObject* container = container_builder_->GetLayoutObject();
   if (parent == container ||
       (parent->IsLayoutInline() && parent->ContainingBlock() == container)) {
     DCHECK(layout_box->Layer());
-    layout_box->Layer()->SetStaticPositionFromNG(
-        ToStaticPositionForLegacy(position));
+    if (const auto* break_token = container_builder_->PreviousBreakToken()) {
+      // Include the block contribution from previous columns.
+      position.offset.block_offset += break_token->ConsumedBlockSize();
+    }
+    layout_box->Layer()->SetStaticPositionFromNG(position);
   }
-}
-
-LogicalStaticPosition OutOfFlowLayoutPart::ToStaticPositionForLegacy(
-    LogicalStaticPosition position) const {
-  // Legacy expects the static position to include the block contribution from
-  // previous columns.
-  if (const auto* break_token = container_builder_->PreviousBreakToken())
-    position.offset.block_offset += break_token->ConsumedBlockSizeForLegacy();
-  return position;
 }
 
 const PhysicalBoxFragment& OutOfFlowLayoutPart::GetChildFragment(

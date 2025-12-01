@@ -10,7 +10,6 @@ import android.content.Context;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
-import android.text.method.LinkMovementMethod;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.view.KeyEvent;
@@ -145,8 +144,6 @@ public class ModalDialogView extends BoundedLinearLayout implements View.OnClick
         mFooterContainer = findViewById(R.id.footer);
         mFooterMessageView = findViewById(R.id.footer_message);
         mButtonGroup = findViewById(R.id.button_group);
-        mMessageParagraph1.setMovementMethod(LinkMovementMethod.getInstance());
-        mFooterMessageView.setMovementMethod(LinkMovementMethod.getInstance());
         mFooterContainer.setBackgroundColor(
                 SemanticColorUtils.getColorSurfaceContainerLow(getContext()));
         updateContentVisibility();
@@ -248,13 +245,12 @@ public class ModalDialogView extends BoundedLinearLayout implements View.OnClick
         mTitleView.setMaxLines(maxLines);
     }
 
-    /** @param drawable The icon drawable on the title. */
+    /**
+     * @param drawable The icon drawable on the title.
+     */
     public void setTitleIcon(Drawable drawable) {
         mTitleIcon.setImageDrawable(drawable);
         updateContentVisibility();
-        if (drawable != null) {
-            setupClickableView(mTitleIcon, ButtonType.TITLE_ICON);
-        }
     }
 
     /** @param titleScrollable Whether the title is scrollable with the message. */
@@ -422,9 +418,12 @@ public class ModalDialogView extends BoundedLinearLayout implements View.OnClick
         updateContentVisibility();
     }
 
-    /** @param message The message in the dialog content. */
+    /**
+     * @param message The message in the dialog content.
+     */
     void setMessageParagraph1(CharSequence message) {
         mMessageParagraph1.setText(message);
+        UiUtils.maybeSetLinkMovementMethod(mMessageParagraph1);
         updateContentVisibility();
     }
 
@@ -547,9 +546,12 @@ public class ModalDialogView extends BoundedLinearLayout implements View.OnClick
         getButton(buttonType).setEnabled(enabled);
     }
 
-    /** @param message The message in the dialog footer. */
+    /**
+     * @param message The message in the dialog footer.
+     */
     void setFooterMessage(CharSequence message) {
         mFooterMessageView.setText(message);
+        UiUtils.maybeSetLinkMovementMethod(mFooterMessageView);
         updateContentVisibility();
     }
 

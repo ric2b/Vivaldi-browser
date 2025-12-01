@@ -44,6 +44,11 @@ bool ViewTransitionPseudoElementBase::CanGeneratePseudoElement(
   }
 }
 
+const Vector<AtomicString>&
+ViewTransitionPseudoElementBase::ViewTransitionClassList() const {
+  return style_tracker_->GetViewTransitionClassList(view_transition_name());
+}
+
 const ComputedStyle*
 ViewTransitionPseudoElementBase::CustomStyleForLayoutObject(
     const StyleRecalcContext& style_recalc_context) {
@@ -56,6 +61,10 @@ ViewTransitionPseudoElementBase::CustomStyleForLayoutObject(
   if (GetPseudoId() != kPseudoIdViewTransition) {
     style_request.pseudo_ident_list =
         style_tracker_->GetViewTransitionClassList(view_transition_name());
+  }
+  if (RuntimeEnabledFeatures::CSSNestedPseudoElementsEnabled()) {
+    style_request.pseudo_id = kPseudoIdNone;
+    return StyleForPseudoElement(style_recalc_context, style_request);
   }
   // Use the originating element to get the style for the pseudo element.
   return UltimateOriginatingElement().StyleForPseudoElement(
@@ -70,6 +79,11 @@ void ViewTransitionPseudoElementBase::Trace(Visitor* visitor) const {
 bool ViewTransitionPseudoElementBase::IsBoundTo(
     const blink::ViewTransitionStyleTracker* tracker) const {
   return style_tracker_.Get() == tracker;
+}
+
+const Vector<AtomicString>&
+ViewTransitionPseudoElementBase::GetViewTransitionNames() const {
+  return style_tracker_->GetViewTransitionNames();
 }
 
 }  // namespace blink

@@ -61,16 +61,19 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
   ~SessionImpl() override;
 
   // optimization_guide::OptimizationGuideModelExecutor::Session:
-  on_device_model::mojom::Session& GetSession() override;
   const TokenLimits& GetTokenLimits() const override;
   const proto::Any& GetOnDeviceFeatureMetadata() const override;
-  void SetInput(MultimodalMessage request) override;
+  void SetInput(MultimodalMessage request, SetInputCallback callback) override;
   void AddContext(
       const google::protobuf::MessageLite& request_metadata) override;
   void Score(const std::string& text,
              OptimizationGuideModelScoreCallback callback) override;
   void ExecuteModel(
       const google::protobuf::MessageLite& request_metadata,
+      OptimizationGuideModelExecutionResultStreamingCallback callback) override;
+  void ExecuteModelWithResponseConstraint(
+      const google::protobuf::MessageLite& request_metadata,
+      on_device_model::mojom::ResponseConstraintPtr constraint,
       OptimizationGuideModelExecutionResultStreamingCallback callback) override;
   void GetSizeInTokens(
       const std::string& text,
@@ -84,12 +87,14 @@ class SessionImpl : public OptimizationGuideModelExecutor::Session {
   const SamplingParams GetSamplingParams() const override;
   on_device_model::Capabilities GetCapabilities() const override;
   std::unique_ptr<Session> Clone() override;
+  void SetPriority(on_device_model::mojom::Priority priority) override;
 
   // Returns true if the on-device model should be used.
   bool ShouldUseOnDeviceModel() const;
 
  private:
-  AddContextResult AddContextImpl(MultimodalMessage request);
+  AddContextResult AddContextImpl(MultimodalMessage request,
+                                  SetInputCallback callback);
 
   void DestroyOnDeviceState();
 

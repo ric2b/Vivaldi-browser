@@ -338,7 +338,7 @@ TEST_F(IR_ValidatorTest, Construct_NullResult) {
     auto* f = b.Function("f", ty.void_());
     b.Append(f->Block(), [&] {
         auto* c = b.Construct(str_ty, 1_i, 2_u);
-        c->SetResults(Vector<ir::InstructionResult*, 1>{nullptr});
+        c->SetResult(nullptr);
         b.Return(f);
     });
 
@@ -427,7 +427,7 @@ TEST_F(IR_ValidatorTest, Convert_NullResult) {
     auto* f = b.Function("f", ty.void_());
     b.Append(f->Block(), [&] {
         auto* c = b.Convert(ty.i32(), 1_f);
-        c->SetResults(Vector<InstructionResult*, 1>{nullptr});
+        c->SetResult(nullptr);
         b.Return(f);
     });
 
@@ -728,7 +728,7 @@ TEST_F(IR_ValidatorTest, Convert_PtrToVal) {
     auto* f = b.Function("f", ty.void_());
     b.Append(f->Block(), [&] {
         auto* v = b.Var("v", 0_u);
-        b.Convert(ty.u32(), v->Result(0));
+        b.Convert(ty.u32(), v->Result());
         b.Return(f);
     });
 
@@ -747,7 +747,7 @@ TEST_F(IR_ValidatorTest, Convert_PtrToPtr) {
     auto* f = b.Function("f", ty.void_());
     b.Append(f->Block(), [&] {
         auto* v = b.Var("v", 0_u);
-        b.Convert(v->Result(0)->Type(), v->Result(0));
+        b.Convert(v->Result()->Type(), v->Result());
         b.Return(f);
     });
 
@@ -915,7 +915,7 @@ TEST_F(IR_ValidatorTest, Instruction_NullInstructionResultInstruction) {
     auto* v = sb.Var(ty.ptr<function, f32>());
     sb.Return(f);
 
-    v->Result(0)->SetInstruction(nullptr);
+    v->Result()->SetInstruction(nullptr);
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
@@ -934,7 +934,7 @@ TEST_F(IR_ValidatorTest, Instruction_WrongInstructionResultInstruction) {
     auto* v2 = sb.Var(ty.ptr<function, f32>());
     sb.Return(f);
 
-    v->SetResults(v2->Results());
+    v->SetResult(v2->Result());
 
     auto res = ir::Validate(mod);
     ASSERT_NE(res, Success);
@@ -944,6 +944,23 @@ TEST_F(IR_ValidatorTest, Instruction_WrongInstructionResultInstruction) {
             R"(:4:5 error: var: result instruction does not match instruction (possible double usage)
     %2:ptr<function, f32, read_write> = var undef
     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Instruction_TooManyResultInstruction) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    auto sb = b.Append(f->Block());
+    auto* v = sb.Var(ty.ptr<function, f32>());
+    v->SetResults(Vector{v->Results()[0], v->Results()[0]});
+    sb.Return(f);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr(
+                                          R"(:3:76 error: var: expected exactly 1 results, got 2
+    %2:ptr<function, f32, read_write>, %2:ptr<function, f32, read_write> = var undef
+                                                                           ^^^
 )")) << res.Failure();
 }
 
@@ -1296,7 +1313,7 @@ TEST_F(IR_ValidatorTest, InstructionInRootBlockOnlyUsedInRootBlock) {
     b.Append(mod.root_block, [&] {
         auto* z = b.Override(ty.u32());
         z->SetOverrideId(OverrideId{2});
-        init = b.Add(ty.u32(), z, 2_u)->Result(0);
+        init = b.Add(ty.u32(), z, 2_u)->Result();
         b.Override("a", init);
     });
 
@@ -1322,7 +1339,7 @@ TEST_F(IR_ValidatorTest, OverrideArrayInvalidValue) {
     b.Append(mod.root_block, [&] {
         o = b.Override(ty.u32());
 
-        auto* c1 = ty.Get<core::ir::type::ValueArrayCount>(o->Result(0));
+        auto* c1 = ty.Get<core::ir::type::ValueArrayCount>(o->Result());
         auto* a1 = ty.Get<core::type::Array>(ty.i32(), c1, 4u, 4u, 4u, 4u);
 
         b.Var("a", ty.ptr(workgroup, a1, read_write));

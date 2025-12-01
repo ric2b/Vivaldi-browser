@@ -19,6 +19,8 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.provider.Settings;
 
+import com.google.common.collect.ImmutableMap;
+
 import org.jni_zero.CalledByNative;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
@@ -26,11 +28,17 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils.ThreadChecker;
+import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 // Vivaldi
 import org.chromium.build.BuildConfig;
@@ -39,29 +47,51 @@ import org.chromium.build.BuildConfig;
 @NullMarked
 class AudioManagerAndroid {
     private static final String TAG = "media";
-
+    private static final String MISSING_CHANNEL_MASK_HISTOGRAM_PREFIX =
+            "Media.Audio.Android.MissingChannelMask";
+    private static final String SUPPORTED_CHANNEL_MASK_HISTOGRAM_PREFIX =
+            "Media.Audio.Android.SupportedChannelMask";
     // Set to true to enable debug logs. Avoid in production builds.
     // NOTE: always check in as false.
     private static final boolean DEBUG = false;
+    // The LAYOUT_MASK_TO_CHANNEL_COUNT of supported conversions from Android AudioFormat to C++
+    // media::ChannelLayout, the above is in sync with the values returned by
+    // media::ChannelLayoutToChannelCount().
+    private static final Map<Integer, Integer> LAYOUT_MASK_TO_CHANNEL_COUNT =
+            ImmutableMap.of(
+                    ChannelLayout.LAYOUT_MONO, 1, // CHANNEL_LAYOUT_MONO
+                    ChannelLayout.LAYOUT_STEREO, 2, // CHANNEL_LAYOUT_STEREO
+                    ChannelLayout.LAYOUT_5_1, 6, // CHANNEL_LAYOUT_5_1
+                    ChannelLayout.LAYOUT_7_1, 8, // CHANNEL_LAYOUT_7_1
+                    ChannelLayout.LAYOUT_6_1, 7, // CHANNEL_LAYOUT_6_1
+                    ChannelLayout.LAYOUT_5_1_4_DOWNMIX, 6 // CHANNEL_LAYOUT_5_1_4 (downmixed to 5.1)
+                    );
 
     /** Simple container for device information. */
     public static class AudioDevice {
         private final int mId;
-        private final String mName;
+        private final @Nullable String mName;
+        private final int mType;
 
-        public AudioDevice(int id, String name) {
+        public AudioDevice(int id, @Nullable String name, int type) {
             mId = id;
             mName = name;
+            mType = type;
         }
 
         @CalledByNative("AudioDevice")
-        private String id() {
-            return String.valueOf(mId);
+        private int id() {
+            return mId;
         }
 
         @CalledByNative("AudioDevice")
-        private String name() {
+        private @Nullable String name() {
             return mName;
+        }
+
+        @CalledByNative("AudioDevice")
+        private int type() {
+            return mType;
         }
     }
 
@@ -74,7 +104,7 @@ class AudioManagerAndroid {
 
     private final AudioManager mAudioManager;
     private final long mNativeAudioManagerAndroid;
-
+    private final boolean mIsAutomotive;
     // Enabled during initialization if MODIFY_AUDIO_SETTINGS permission is
     // granted. Required to shift system-wide audio settings.
     private boolean mHasModifyAudioSettingsPermission;
@@ -92,7 +122,7 @@ class AudioManagerAndroid {
     private @Nullable ContentObserver mSettingsObserver;
     private @Nullable HandlerThread mSettingsObserverThread;
 
-    private CommunicationDeviceSelector mCommunicationDeviceSelector;
+    private final CommunicationDeviceSelector mCommunicationDeviceSelector;
 
     /** Construction */
     @CalledByNative
@@ -113,6 +143,10 @@ class AudioManagerAndroid {
         } else {
             mCommunicationDeviceSelector = new CommunicationDeviceSelectorPostS(mAudioManager);
         }
+        mIsAutomotive =
+                ContextUtils.getApplicationContext()
+                        .getPackageManager()
+                        .hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE);
     }
 
     /**
@@ -135,7 +169,6 @@ class AudioManagerAndroid {
         }
 
         mCommunicationDeviceSelector.init();
-
         mIsInitialized = true;
     }
 
@@ -260,11 +293,59 @@ class AudioManagerAndroid {
     }
 
     /**
+     * @param inputs If true, input devices will be returned; otherwise, output devices will be
+     *     returned.
+     * @return The current list of available audio devices. Note that this call does not trigger any
+     *     update of the list of devices, it only copies the current state into the output array.
+     */
+    @CalledByNative
+    private AudioDevice @Nullable [] getDevices(boolean inputs) {
+        if (DEBUG) logd("getDevices");
+
+        AudioDeviceInfo[] deviceInfos =
+                mAudioManager.getDevices(
+                        inputs
+                                ? AudioManager.GET_DEVICES_INPUTS
+                                : AudioManager.GET_DEVICES_OUTPUTS);
+
+        List<AudioDevice> devices = new ArrayList<>();
+        for (int deviceIndex = 0; deviceIndex < deviceInfos.length; deviceIndex++) {
+            AudioDeviceInfo deviceInfo = deviceInfos[deviceIndex];
+
+            int type = deviceInfo.getType();
+            switch (type) {
+                case 28: // AudioDeviceInfo.TYPE_ECHO_REFERENCE
+                case AudioDeviceInfo.TYPE_REMOTE_SUBMIX:
+                case AudioDeviceInfo.TYPE_TELEPHONY:
+                    // Unusable device types.
+                    continue;
+                case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP:
+                case AudioDeviceInfo.TYPE_BLUETOOTH_SCO:
+                    // TODO(crbug.com/405955144): Bluetooth Classic output streams do not work
+                    // correctly, as they do not react to SCO state changes.
+                    if (!inputs) {
+                        continue;
+                    }
+            }
+
+            int id = deviceInfo.getId();
+            String name = deviceInfo.getProductName().toString();
+            if (name.equals(Build.MODEL)) {
+                // Undo the Android framework's substitution of a missing name with
+                // `android.os.Build.MODEL` to facilitate providing a custom fallback name instead.
+                name = null;
+            }
+            devices.add(new AudioDevice(id, name, type));
+        }
+        return devices.toArray(new AudioDevice[0]);
+    }
+
+    /**
      * Required permissions: android.Manifest.permission.MODIFY_AUDIO_SETTINGS and
      * android.Manifest.permission.RECORD_AUDIO.
      *
-     * @return the current list of available communication devices. Note that this call does not
-     *     trigger any update of the list of devices, it only copies the current state in to the
+     * @return The current list of available communication devices. Note that this call does not
+     *     trigger any update of the list of devices, it only copies the current state into the
      *     output array.
      */
     @CalledByNative
@@ -284,9 +365,16 @@ class AudioManagerAndroid {
         return mCommunicationDeviceSelector.getDevices();
     }
 
+    /** Gets whether Bluetooth SCO is currently enabled. */
     @CalledByNative
-    private boolean isBluetoothMicrophoneOn() {
-        return mCommunicationDeviceSelector.isBluetoothMicrophoneOn();
+    private boolean isBluetoothScoOn() {
+        return mCommunicationDeviceSelector.isBluetoothScoOn();
+    }
+
+    /** Requests for Bluetooth SCO to be enabled or disabled. This request may fail. */
+    @CalledByNative
+    private void maybeSetBluetoothScoState(boolean state) {
+        mCommunicationDeviceSelector.maybeSetBluetoothScoState(state);
     }
 
     @CalledByNative
@@ -534,8 +622,8 @@ class AudioManagerAndroid {
     }
 
     /**
-     * Returns a bit mask of Audio Formats (C++ AudioParameters::Format enum)
-     * supported by all of the sink devices.
+     * Returns a bit mask of Audio Formats (C++ AudioParameters::Format enum) supported by all of
+     * the sink devices.
      */
     @CalledByNative
     private static int getAudioEncodingFormatsSupported() {
@@ -580,6 +668,100 @@ class AudioManagerAndroid {
             }
         }
         return intersection_mask;
+    }
+
+    /**
+     * Retrieves the maximum supported channel layout for automotive audio.
+     *
+     * This method identifies the channel layout with the highest number of channels among all
+     * available audio devices of type {@link AudioDeviceInfo#TYPE_BUS}. It's designed specifically
+     * for automotive systems (when {@code mIsAutomotive} is true); otherwise, it returns {@link
+     * ChannelLayout#LAYOUT_UNSUPPORTED}.
+     *
+     * @return The {@link ChannelLayout} with the maximum number of channels supported, or {@link
+     *     ChannelLayout#LAYOUT_UNSUPPORTED} if not in automotive mode or no supported devices are
+     *     found.
+     */
+    @CalledByNative
+    int getLayoutWithMaxChannels() {
+        if (!mIsAutomotive) {
+            return ChannelLayout.LAYOUT_UNSUPPORTED;
+        }
+        // A set is used since different AudioDeviceInfo can have the same channel mask
+        Set<Integer> supportedChannelLayoutSet = new HashSet<>();
+        Set<Integer> unsupportedChannelLayoutSet = new HashSet<>();
+        // The default Channel Layout for Android is Stereo.
+        int maxChannelLayout = ChannelLayout.LAYOUT_STEREO;
+        int maxChannelCount = 2;
+
+        for (AudioDeviceInfo deviceInfo :
+                mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)) {
+            if (deviceInfo.getType() != AudioDeviceInfo.TYPE_BUS) {
+                continue;
+            }
+            int[] channelMasks = deviceInfo.getChannelMasks();
+            for (int index = 0; index < channelMasks.length; index++) {
+                int converted = getChannelLayoutFromChannelMask(channelMasks[index]);
+
+                if (converted != ChannelLayout.LAYOUT_UNSUPPORTED) {
+                    int channelCount = LAYOUT_MASK_TO_CHANNEL_COUNT.getOrDefault(converted, 0);
+                    // The following logic looks at the number of channels.
+                    // For example on system with both 5.1.4 and 7.1, we will choose 7.1
+                    // Chromium downmixes 5.1.4 to 5.1, therefore we must keep 7.1 as the best
+                    // output.
+                    // The logic is tied to the LAYOUT_MASK_TO_CHANNEL_COUNT and C layer.
+                    if (channelCount > maxChannelCount) {
+                        maxChannelLayout = converted;
+                        maxChannelCount = channelCount;
+                    }
+                    supportedChannelLayoutSet.add(channelMasks[index]);
+                } else {
+                    unsupportedChannelLayoutSet.add(channelMasks[index]);
+                }
+            }
+        }
+
+        // Record the supported and unsupported channel layout sets.
+        recordChannelLayout(MISSING_CHANNEL_MASK_HISTOGRAM_PREFIX, unsupportedChannelLayoutSet);
+        recordChannelLayout(SUPPORTED_CHANNEL_MASK_HISTOGRAM_PREFIX, supportedChannelLayoutSet);
+        return maxChannelLayout;
+    }
+
+    /**
+     * Converts an Android AudioFormat channel mask to a Chromium ChannelLayout constant.
+     *
+     * @param mask The input channel mask from AudioFormat.
+     * @return The corresponding ChannelLayout constant, or LAYOUT_UNSUPPORTED if no match is found.
+     */
+    private static int getChannelLayoutFromChannelMask(int mask) {
+        // TODO(crbug.com/415145629): Support 7.1.2 and 7.1.4
+        switch (mask) {
+            case AudioFormat.CHANNEL_OUT_MONO:
+                return ChannelLayout.LAYOUT_MONO;
+
+            case AudioFormat.CHANNEL_OUT_STEREO:
+                return ChannelLayout.LAYOUT_STEREO;
+
+            case AudioFormat.CHANNEL_OUT_5POINT1:
+                return ChannelLayout.LAYOUT_5_1;
+
+            case AudioFormat.CHANNEL_OUT_5POINT1POINT4:
+                return ChannelLayout.LAYOUT_5_1_4_DOWNMIX;
+
+            case AudioFormat.CHANNEL_OUT_6POINT1:
+                return ChannelLayout.LAYOUT_6_1;
+
+            case AudioFormat.CHANNEL_OUT_7POINT1_SURROUND:
+                return ChannelLayout.LAYOUT_7_1;
+        }
+        return ChannelLayout.LAYOUT_UNSUPPORTED;
+    }
+
+    // Utility function to record sparse histogram.
+    private static void recordChannelLayout(String text, Set<Integer> channelLayoutSet) {
+        for (Integer channelLayoutMask : channelLayoutSet) {
+            RecordHistogram.recordSparseHistogram(text, channelLayoutMask);
+        }
     }
 
     @NativeMethods

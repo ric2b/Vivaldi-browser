@@ -27,12 +27,14 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
   SectionIdentifierActivationCode,
   SectionIdentifierSaveButton,
+  SectionIdentifierResendLogoutButtons,
 };
 
 typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeHeader = kItemTypeEnumZero,
   ItemTypeActivationCode,
   ItemTypeSaveButton,
+  ItemTypeResendLogoutButtons,
   ItemTypeError,
 };
 
@@ -41,6 +43,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     UITextViewDelegate>
 
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* activationCodeItem;
+@property(nonatomic, strong) VivaldiTableViewTextSpinnerButtonItem* saveButton;
 @property(nonatomic, copy) NSURLSessionDataTask* task;
 
 @end
@@ -78,6 +81,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierHeader];
   [model addSectionWithIdentifier:SectionIdentifierActivationCode];
   [model addSectionWithIdentifier:SectionIdentifierSaveButton];
+  [model addSectionWithIdentifier:SectionIdentifierResendLogoutButtons];
 
   VivaldiTableViewIllustratedItem* header = [
     [VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeHeader
@@ -103,13 +107,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:header
       toSectionWithIdentifier:SectionIdentifierHeader];
 
+  // Input field
   self.activationCodeItem =
       [[VivaldiTableViewTextEditItem alloc] initWithType:ItemTypeActivationCode];
   self.activationCodeItem.textFieldPlaceholder =
       l10n_util::GetNSString(IDS_VIVALDI_VERIFICATION_CODE_HINT);
   self.activationCodeItem.hideIcon = YES;
   self.activationCodeItem.textFieldEnabled = YES;
-  self.activationCodeItem.textFieldSecureTextEntry = YES;
   self.activationCodeItem.autoCapitalizationType =
       UITextAutocapitalizationTypeNone;
   self.activationCodeItem.identifyingIconAccessibilityLabel =
@@ -117,24 +121,51 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addItem:self.activationCodeItem
       toSectionWithIdentifier:SectionIdentifierActivationCode];
 
-  VivaldiTableViewLinkAndButtonItem* linkAndButton =
-    [[VivaldiTableViewLinkAndButtonItem alloc] initWithType:ItemTypeSaveButton];
-  linkAndButton.buttonText =
+
+  // Activate button
+  self.saveButton =
+      [[VivaldiTableViewTextSpinnerButtonItem alloc]
+          initWithType:ItemTypeSaveButton];
+  self.saveButton.activityInProgress = NO;
+  self.saveButton.buttonText =
       l10n_util::GetNSString(IDS_VIVALDI_ACTIVATE_ACCOUNT_BUTTON);
+  self.saveButton.textAlignment = NSTextAlignmentNatural;
+  self.saveButton.buttonBackgroundColor = [UIColor colorNamed:kBlueColor];
+  self.saveButton.buttonTextColor = [UIColor colorNamed:kSolidButtonTextColor];
+  self.saveButton.cellBackgroundColor = _saveButton.buttonBackgroundColor;
+  self.saveButton.disableButtonIntrinsicWidth = YES;
+  [self.tableViewModel addItem:self.saveButton
+      toSectionWithIdentifier:SectionIdentifierSaveButton];
+
+  // "Resend code" link and "Log out" button
+  VivaldiTableViewLinkAndButtonItem* linkAndButton =
+      [[VivaldiTableViewLinkAndButtonItem alloc]
+          initWithType:ItemTypeResendLogoutButtons];
+  linkAndButton.buttonText =
+      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_OUT);
   linkAndButton.textAlignment = NSTextAlignmentCenter;
+  linkAndButton.buttonTextColor = [UIColor colorNamed:kRedColor];
+  linkAndButton.buttonBackgroundColor = [UIColor clearColor];
 
   NSDictionary* linkAttributes = @{
       NSLinkAttributeName : [NSURL URLWithString:@""],
   };
 
+  NSDictionary* resendCodeTextAttributes = @{
+    NSForegroundColorAttributeName : [UIColor colorNamed:kTextSecondaryColor],
+    NSFontAttributeName :
+        [UIFont preferredFontForTextStyle:UIFontTextStyleBody],
+    NSParagraphStyleAttributeName : paragraphStyle
+  };
+
   auto linkText = AttributedStringFromStringWithLink(
       l10n_util::GetNSString(IDS_VIVALDI_RESEND_CODE),
-      textAttributes, linkAttributes);
+      resendCodeTextAttributes, linkAttributes);
 
   linkAndButton.linkText = linkText;
 
   [self.tableViewModel addItem:linkAndButton
-      toSectionWithIdentifier:SectionIdentifierSaveButton];
+      toSectionWithIdentifier:SectionIdentifierResendLogoutButtons];
 }
 
 #pragma mark - UITableViewDelegate
@@ -158,12 +189,12 @@ heightForHeaderInSection:(NSInteger)section {
   cell.selectionStyle = UITableViewCellSelectionStyleNone;
   ItemType itemType = static_cast<ItemType>(
       [self.tableViewModel itemTypeForIndexPath:indexPath]);
-  if (itemType == ItemTypeSaveButton) {
+  if (itemType == ItemTypeResendLogoutButtons) {
     VivaldiTableViewLinkAndButtonCell* editCell =
         base::apple::ObjCCastStrict<VivaldiTableViewLinkAndButtonCell>(cell);
     [editCell.button
                 addTarget:self
-                  action:@selector(activateButtonPressed:)
+                  action:@selector(logoutButtonPressed:)
         forControlEvents:UIControlEventTouchUpInside];
     editCell.label.delegate = self;
   }
@@ -171,6 +202,16 @@ heightForHeaderInSection:(NSInteger)section {
     VivaldiTableViewTextEditCell* editCell =
         base::apple::ObjCCastStrict<VivaldiTableViewTextEditCell>(cell);
     editCell.textField.delegate = self;
+  }
+  if (itemType == ItemTypeSaveButton) {
+    VivaldiTableViewTextSpinnerButtonCell* editCell =
+        base::apple::ObjCCastStrict<VivaldiTableViewTextSpinnerButtonCell>(cell);
+    [editCell.button
+                addTarget:self
+                  action:@selector(activateButtonPressed:)
+        forControlEvents:UIControlEventTouchUpInside];
+    [editCell
+        setActivityIndicatorEnabled:self.saveButton.activityInProgress];
   }
   return cell;
 }
@@ -184,37 +225,15 @@ heightForHeaderInSection:(NSInteger)section {
 
 #pragma mark - UITextViewDelegate
 
-- (BOOL)textView:(UITextView*)textView
-    shouldInteractWithURL:(NSURL*)URL
-                  inRange:(NSRange)characterRange
-              interaction:(UITextItemInteraction)interaction {
-  std::string username =
-      base::SysNSStringToUTF8([self.delegate getPendingRegistrationUsername]);
-
-  PrefService* pref_service = GetApplicationContext()->GetLocalState();
-  std::string locale =
-    pref_service->HasPrefPath(language::prefs::kApplicationLocale)
-        ? pref_service->GetString(language::prefs::kApplicationLocale)
-        : GetApplicationContext()->GetApplicationLocale();
-
-  base::Value::Dict dict;
-  dict.Set(vParamUsername, username);
-  dict.Set(vParamLanguage, locale);
-
-  NSURL* url = [NSURL URLWithString:vVivaldiSyncReSendActivationCodeUrl];
+- (UIAction*)textView:(UITextView*) textView
+primaryActionForTextItem:(UITextItem*)textItem
+        defaultAction:(UIAction*) defaultAction {
   __weak __typeof__(self) weakSelf = self;
-  sendRequestToServer(std::move(dict), url,
-      ^(NSData* data, NSURLResponse* response,
-                                NSError* error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-          [weakSelf onResendCodeResponse:data
-                              response:response
-                                  error:error];
-        });
-      }, self.task);
-
-  // Returns NO as the app is handling the opening of the URL.
-  return NO;
+  return [UIAction actionWithHandler:^(UIAction* action) {
+    __strong __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) return;
+    [strongSelf resendCode];
+  }];
 }
 
 #pragma mark - Private Methods
@@ -298,8 +317,14 @@ heightForHeaderInSection:(NSInteger)section {
       errorMessage =
           l10n_util::GetNSString(IDS_SYNC_SERVER_OTHER_ERROR);
     }
-    if (errorMessage)
+
+    if (errorMessage) {
       [self showErrorCellWithMessage:errorMessage];
+    }
+
+    self.saveButton.activityInProgress = NO;
+    [self reloadCellsForItems:@[ self.saveButton ]
+            withRowAnimation:UITableViewRowAnimationNone];
   }
 }
 
@@ -320,11 +345,13 @@ heightForHeaderInSection:(NSInteger)section {
     return;
   }
 
+  self.saveButton.activityInProgress = YES;
+  [self reloadSection:SectionIdentifierSaveButton];
+
   std::string username =
       base::SysNSStringToUTF8([self.delegate getPendingRegistrationUsername]);
-  int code;
-  base::StringToInt(
-      base::SysNSStringToUTF8(self.activationCodeItem.textFieldValue), &code);
+  std::string code =
+      base::SysNSStringToUTF8(self.activationCodeItem.textFieldValue);
 
   PrefService* pref_service = GetApplicationContext()->GetLocalState();
   std::string locale =
@@ -344,6 +371,37 @@ heightForHeaderInSection:(NSInteger)section {
                                 NSError* error) {
         dispatch_async(dispatch_get_main_queue(), ^{
           [weakSelf onActivateResponse:data
+                              response:response
+                                  error:error];
+        });
+      }, self.task);
+}
+
+- (void)logoutButtonPressed:(UIButton*)sender {
+  [self.delegate logOutButtonPressed];
+}
+
+- (void)resendCode {
+  std::string username =
+      base::SysNSStringToUTF8([self.delegate getPendingRegistrationUsername]);
+
+  PrefService* pref_service = GetApplicationContext()->GetLocalState();
+  std::string locale =
+    pref_service->HasPrefPath(language::prefs::kApplicationLocale)
+        ? pref_service->GetString(language::prefs::kApplicationLocale)
+        : GetApplicationContext()->GetApplicationLocale();
+
+  base::Value::Dict dict;
+  dict.Set(vParamUsername, username);
+  dict.Set(vParamLanguage, locale);
+
+  NSURL* url = [NSURL URLWithString:vVivaldiSyncReSendActivationCodeUrl];
+  __weak __typeof__(self) weakSelf = self;
+  sendRequestToServer(std::move(dict), url,
+      ^(NSData* data, NSURLResponse* response,
+                                NSError* error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+          [weakSelf onResendCodeResponse:data
                               response:response
                                   error:error];
         });

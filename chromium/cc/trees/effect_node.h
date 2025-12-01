@@ -14,6 +14,7 @@
 #include "components/viz/common/surfaces/subtree_capture_id.h"
 #include "components/viz/common/view_transition_element_resource_id.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
+#include "third_party/skia/include/core/SkPath.h"
 #include "ui/gfx/geometry/mask_filter_info.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rrect_f.h"
@@ -82,7 +83,7 @@ struct CC_EXPORT EffectNode {
 
   FilterOperations filters;
   FilterOperations backdrop_filters;
-  std::optional<gfx::RRectF> backdrop_filter_bounds;
+  std::optional<SkPath> backdrop_filter_bounds;
   float backdrop_filter_quality = 1.f;
 
   // The element id corresponding to the mask to apply to the filtered backdrop
@@ -187,9 +188,9 @@ struct CC_EXPORT EffectNode {
   // True if a backdrop effect may be present on this effect (and therefore
   // any side-effects on ancestors should be taken into account).
   bool may_have_backdrop_effect : 1 = false;
-  // Whether this effect is related to a non-identity 2D scale transform (and no
-  // other transform).
-  bool has_2d_scale_transform : 1 = false;
+  // Whether this effect is triggered by a non-identity 2D scale transform
+  // (and no other transform).
+  bool needs_effect_for_2d_scale_transform : 1 = false;
   // RenderSurfaceReason::kNone if this effect node should not create a render
   // surface, or the reason that this effect node should create one.
   RenderSurfaceReason render_surface_reason = RenderSurfaceReason::kNone;

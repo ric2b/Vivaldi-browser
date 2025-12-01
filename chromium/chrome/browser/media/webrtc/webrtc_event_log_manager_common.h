@@ -30,8 +30,11 @@ namespace webrtc_event_logging {
 
 extern const size_t kWebRtcEventLogManagerUnlimitedFileSize;
 
-extern const size_t kDefaultMaxLocalLogFileSizeBytes;
+extern const size_t kDefaultMaxLocalEventLogFileSizeBytes;
 extern const size_t kMaxNumberLocalWebRtcEventLogFiles;
+
+extern const size_t kDefaultMaxLocalDataChannelFileSizeBytes;
+extern const size_t kMaxNumberLocalWebRtcDataChannelLogFiles;
 
 extern const size_t kMaxRemoteLogFileSizeBytes;
 
@@ -97,7 +100,7 @@ extern const base::TimeDelta kRemoteBoundWebRtcEventLogsMaxRetention;
 
 // These are made globally visible so that unit tests may check for them.
 extern const char kStartRemoteLoggingFailureAlreadyLogging[];
-extern const char kStartRemoteLoggingFailureDeadRenderProcessHost[];
+// extern const char OBSOLETE_kStartRemoteLoggingFailureDeadRenderProcessHost[];
 extern const char kStartRemoteLoggingFailureFeatureDisabled[];
 extern const char kStartRemoteLoggingFailureFileCreationError[];
 extern const char kStartRemoteLoggingFailureFilePathUsedHistory[];
@@ -110,6 +113,7 @@ extern const char kStartRemoteLoggingFailureNoAdditionalActiveLogsAllowed[];
 extern const char kStartRemoteLoggingFailureOutputPeriodMsTooLarge[];
 extern const char kStartRemoteLoggingFailureUnknownOrInactivePeerConnection[];
 extern const char kStartRemoteLoggingFailureUnlimitedSizeDisallowed[];
+extern const char kBrowserContextNotFound[];
 
 // Values for the histogram for the result of the API call to collect
 // a WebRTC event log.
@@ -118,7 +122,7 @@ extern const char kStartRemoteLoggingFailureUnlimitedSizeDisallowed[];
 // numeric values should never be reused.
 enum class WebRtcEventLoggingApiUma {
   kSuccess = 0,                         // Log successfully collected.
-  kDeadRph = 1,                         // Log not collected.
+  kDeadRph_OBSOLETE = 1,                // Log not collected.
   kFeatureDisabled = 2,                 // Log not collected.
   kIncognito = 3,                       // Log not collected.
   kInvalidArguments = 4,                // Log not collected.
@@ -130,7 +134,8 @@ enum class WebRtcEventLoggingApiUma {
   kLogPathNotAvailable = 10,            // Log not collected.
   kHistoryPathNotAvailable = 11,        // Log not collected.
   kFileCreationError = 12,              // Log not collected.
-  kMaxValue = kFileCreationError
+  kBrowserContextNotFound = 13,         // Log not collected.
+  kMaxValue = kBrowserContextNotFound
 };
 
 void UmaRecordWebRtcEventLoggingApi(WebRtcEventLoggingApiUma result);
@@ -270,9 +275,15 @@ struct WebRtcLogFileInfo {
 // the paths which will be used for these logs.
 class WebRtcLocalEventLogsObserver {
  public:
-  virtual void OnLocalLogStarted(WebRtcEventLogPeerConnectionKey key,
-                                 const base::FilePath& file_path) = 0;
-  virtual void OnLocalLogStopped(WebRtcEventLogPeerConnectionKey key) = 0;
+  virtual void OnLocalEventLogStarted(WebRtcEventLogPeerConnectionKey key,
+                                      const base::FilePath& file_path) = 0;
+  virtual void OnLocalEventLogStopped(WebRtcEventLogPeerConnectionKey key) = 0;
+
+  virtual void OnLocalDataChannelLogStarted(
+      WebRtcEventLogPeerConnectionKey key,
+      const base::FilePath& file_path) = 0;
+  virtual void OnLocalDataChannelLogStopped(
+      WebRtcEventLogPeerConnectionKey key) = 0;
 
  protected:
   virtual ~WebRtcLocalEventLogsObserver() = default;

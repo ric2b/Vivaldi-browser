@@ -133,6 +133,10 @@ const char kDriveOAuth2Scope[] = "https://www.googleapis.com/auth/drive";
 const char kExperimentsAndConfigsOAuth2Scope[] =
     "https://www.googleapis.com/auth/experimentsandconfigs";
 
+// OAuth2 scope for access for DriveFS to use client-side notifications.
+const char kClientChannelOAuth2Scope[] =
+    "https://www.googleapis.com/auth/client_channel";
+
 // The scope required for an access token in order to query ItemSuggest.
 const char kDriveReadOnlyOAuth2Scope[] =
     "https://www.googleapis.com/auth/drive.readonly";
@@ -200,6 +204,9 @@ const char kCloudSearchQueryOAuth2Scope[] =
 // OAuth2 scope for Discovery Engine suggestion API.
 const char kDiscoveryEngineCompleteQueryOAuth2Scope[] =
     "https://www.googleapis.com/auth/discoveryengine.complete_query";
+
+// OAuth2 scope for Gemini app.
+const char kGeminiOAuth2Scope[] = "https://www.googleapis.com/auth/gemini";
 
 // OAuth 2 scopes for Google Tasks API.
 const char kTasksReadOnlyOAuth2Scope[] =

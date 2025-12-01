@@ -18,16 +18,16 @@
 
 namespace webrtc {
 
-class FakeVideoTrackRenderer : public cricket::FakeVideoRenderer {
+class FakeVideoTrackRenderer : public FakeVideoRenderer {
  public:
   explicit FakeVideoTrackRenderer(VideoTrackInterface* video_track)
       : video_track_(video_track) {
-    video_track_->AddOrUpdateSink(this, rtc::VideoSinkWants());
+    video_track_->AddOrUpdateSink(this, VideoSinkWants());
   }
   ~FakeVideoTrackRenderer() { video_track_->RemoveSink(this); }
 
  private:
-  rtc::scoped_refptr<VideoTrackInterface> video_track_;
+  scoped_refptr<VideoTrackInterface> video_track_;
 };
 
 }  // namespace webrtc

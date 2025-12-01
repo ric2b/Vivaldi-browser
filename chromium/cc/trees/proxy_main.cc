@@ -21,8 +21,6 @@
 #include "cc/base/completion_event.h"
 #include "cc/base/devtools_instrumentation.h"
 #include "cc/base/features.h"
-#include "cc/benchmarks/benchmark_instrumentation.h"
-#include "cc/debug/rendering_stats_instrumentation.h"
 #include "cc/input/browser_controls_offset_tag_modifications.h"
 #include "cc/paint/paint_worklet_layer_painter.h"
 #include "cc/resources/ui_resource_manager.h"
@@ -64,16 +62,14 @@ ProxyMain::~ProxyMain() {
   DCHECK(!started_);
 }
 
-void ProxyMain::InitializeOnImplThread(
-    CompletionEvent* completion_event,
-    int id,
-    const LayerTreeSettings* settings,
-    RenderingStatsInstrumentation* rendering_stats_instrumentation) {
+void ProxyMain::InitializeOnImplThread(CompletionEvent* completion_event,
+                                       int id,
+                                       const LayerTreeSettings* settings) {
   DCHECK(task_runner_provider_->IsImplThread());
   DCHECK(!proxy_impl_);
-  proxy_impl_ = std::make_unique<ProxyImpl>(
-      weak_factory_.GetWeakPtr(), layer_tree_host_, id, settings,
-      rendering_stats_instrumentation, task_runner_provider_);
+  proxy_impl_ =
+      std::make_unique<ProxyImpl>(weak_factory_.GetWeakPtr(), layer_tree_host_,
+                                  id, settings, task_runner_provider_);
   completion_event->Signal();
 }
 
@@ -531,6 +527,16 @@ void ProxyMain::NotifyImageDecodeRequestFinished(int request_id,
   layer_tree_host_->NotifyImageDecodeFinished(request_id, decode_succeeded);
 }
 
+bool ProxyMain::SpeculativeDecodeRequestInFlight() const {
+  CHECK(proxy_impl_);
+  return proxy_impl_->SpeculativeDecodeRequestInFlight();
+}
+
+void ProxyMain::SetSpeculativeDecodeRequestInFlight(bool value) {
+  CHECK(proxy_impl_);
+  proxy_impl_->SetSpeculativeDecodeRequestInFlight(value);
+}
+
 void ProxyMain::NotifyTransitionRequestFinished(
     uint32_t sequence_id,
     const viz::ViewTransitionElementResourceRects& rects) {
@@ -753,12 +759,10 @@ void ProxyMain::Start() {
     DebugScopedSetMainThreadBlocked main_thread_blocked(task_runner_provider_);
     CompletionEvent completion;
     ImplThreadTaskRunner()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&ProxyMain::InitializeOnImplThread,
-                       base::Unretained(this), &completion,
-                       layer_tree_host_->GetId(),
-                       &layer_tree_host_->GetSettings(),
-                       layer_tree_host_->rendering_stats_instrumentation()));
+        FROM_HERE, base::BindOnce(&ProxyMain::InitializeOnImplThread,
+                                  base::Unretained(this), &completion,
+                                  layer_tree_host_->GetId(),
+                                  &layer_tree_host_->GetSettings()));
     completion.Wait();
   }
 
@@ -797,12 +801,19 @@ void ProxyMain::Stop() {
   started_ = false;
 }
 
-void ProxyMain::QueueImageDecode(int request_id, const DrawImage& image) {
+void ProxyMain::QueueImageDecode(int request_id,
+                                 const DrawImage& image,
+                                 bool speculative) {
+  CHECK(!speculative || !SpeculativeDecodeRequestInFlight());
+  if (speculative) {
+    SetSpeculativeDecodeRequestInFlight(true);
+  }
   TRACE_EVENT1("cc", "ProxyMain::QueueImageDecode", "request_id", request_id);
   ImplThreadTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&ProxyImpl::QueueImageDecodeOnImpl,
-                                base::Unretained(proxy_impl_.get()), request_id,
-                                std::make_unique<DrawImage>(image)));
+      FROM_HERE,
+      base::BindOnce(&ProxyImpl::QueueImageDecodeOnImpl,
+                     base::Unretained(proxy_impl_.get()), request_id,
+                     std::make_unique<DrawImage>(image), speculative));
 }
 
 void ProxyMain::SetMutator(std::unique_ptr<LayerTreeMutator> mutator) {

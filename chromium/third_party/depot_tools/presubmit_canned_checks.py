@@ -775,22 +775,25 @@ def CheckLicense(input_api,
         # The (c) is deprecated, but tolerate it until it's removed from all
         # files. "All rights reserved" is also deprecated, but tolerate it until
         # it's removed from all files.
-        license_re = (r'.*? Copyright (\(c\) )?%(year)s The %(project)s Authors'
-                      r'(\. All rights reserved\.)?\n'
-                      r'.*? %(key_line)s\n'
-                      r'.*? found in the LICENSE file\.(?: \*/)?\n') % {
-                          'year': years_re,
-                          'project': project_name,
-                          'key_line': key_line,
-                      }
+        license_re = (
+            r'(?:.+ )?Copyright (\(c\) )?%(year)s The %(project)s Authors'
+            r'(\. All rights reserved\.)?\n'
+            r'(?:.+ )?%(key_line)s\n'
+            r'(?:.+ )?found in the LICENSE file\.(?: \*/)?\n') % {
+                'year': years_re,
+                'project': project_name,
+                'key_line': key_line,
+            }
+
         # On new files don't tolerate any digression from the ideal.
-        new_license_re = (r'.*? Copyright %(year)s The %(project)s Authors\n'
-                          r'.*? %(key_line)s\n'
-                          r'.*? found in the LICENSE file\.(?: \*/)?\n') % {
-                              'year': years_re,
-                              'project': project_name,
-                              'key_line': key_line,
-                          }
+        new_license_re = (
+            r'(?:.+ )?Copyright %(year)s The %(project)s Authors\n'
+            r'(?:.+ )?%(key_line)s\n'
+            r'(?:.+ )?found in the LICENSE file\.(?: \*/)?\n') % {
+                'year': years_re,
+                'project': project_name,
+                'key_line': key_line,
+            }
 
     license_re = input_api.re.compile(license_re, input_api.re.MULTILINE)
     new_license_re = input_api.re.compile(new_license_re,
@@ -1469,7 +1472,8 @@ def CheckDirMetadataFormat(input_api, output_api, dirmd_bin=None):
     name = 'Validate metadata in OWNERS and DIR_METADATA files'
 
     if dirmd_bin is None:
-        dirmd_bin = 'dirmd.bat' if input_api.is_windows else 'dirmd'
+        dirmd_bin = input_api.os_path.join(
+            _HERE, 'dirmd.bat' if input_api.is_windows else 'dirmd')
 
     # When running git cl presubmit --all this presubmit may be asked to check
     # ~7,500 files, leading to a command line that is about 500,000 characters.
@@ -1873,7 +1877,11 @@ def CheckGNFormatted(input_api, output_api):
         ).endswith('.gni') or x.LocalPath().endswith('.typemap'))
     warnings = []
     for f in affected_files:
-        cmd = ['gn', 'format', '--dry-run', f.AbsoluteLocalPath()]
+        cmd = [
+            input_api.python3_executable,
+            input_api.os_path.join(_HERE, 'gn.py'), 'format', '--dry-run',
+            f.AbsoluteLocalPath()
+        ]
         rc = gn.main(cmd)
         if rc == 2:
             warnings.append(
@@ -2081,13 +2089,12 @@ def CheckForCommitObjects(input_api, output_api):
 
         url = dep if isinstance(dep, str) else dep['url']
         commit_hash = url.split('@')[-1]
-        # Two exceptions were in made in two projects prior to this check
-        # enforcement. We need to address those exceptions, but in the meantime
-        # we can't fail this global presubmit check
-        # https://chromium.googlesource.com/infra/infra/+/refs/heads/main/DEPS#45
-        if dep_path == 'recipes-py' and commit_hash == 'refs/heads/main':
-            continue
 
+        # One exception is made prior to this check enforcement.
+        #
+        # We need to address this exception, but in the meantime we can't fail
+        # this global presubmit check.
+        #
         # https://chromium.googlesource.com/angle/angle/+/refs/heads/main/DEPS#412
         if dep_path == 'third_party/dummy_chromium':
             continue
@@ -2155,7 +2162,8 @@ def CheckForRecursedeps(input_api, output_api):
     if all(f.LocalPath() != 'DEPS' for f in input_api.AffectedFiles()):
         return []
     # Get DEPS file.
-    deps_file = input_api.os_path.join(input_api.PresubmitLocalPath(), 'DEPS')
+    deps_file = input_api.os_path.join(input_api.change.RepositoryRoot(),
+                                       'DEPS')
     if not input_api.os_path.isfile(deps_file):
         # No DEPS file, carry on!
         return []
@@ -2168,7 +2176,44 @@ def CheckForRecursedeps(input_api, output_api):
         # No recursedeps entry, carry on!
         return []
 
-    existing_deps = deps.get('deps', {})
+    existing_deps: set[str] = set()
+    # If git_dependencies is SYNC or SUBMODULES, prefer the submodule data.
+    if deps.get('git_dependencies', 'DEPS') == 'DEPS':
+        existing_deps = set(deps.get('deps', {}))
+    else:
+        existing_deps = input_api.change.AllLocalSubmodules()
+        # existing_deps is 'local paths' i.e. repo-relative. However, if deps is
+        # NOT use_relative_paths, then we need to adjust these to be
+        # client-root-relative.
+        #
+        # Sadly, as of 25Q1, the default is still False.
+        if not deps.get('use_relative_paths', False):
+            # Find the relative path between the gclient root and the repo root.
+            gclient_relpath: str = input_api.os_path.relpath(
+                input_api.change.RepositoryRoot(),
+                start=input_api.gclient_paths.FindGclientRoot(
+                    input_api.change.RepositoryRoot()))
+
+            # relpath will use native os.path.sep, so split and clean it.
+            #
+            # NOTE: relpath can make ./path/to/something, so trim off the '.'
+            gclient_relpath_toks = tuple(
+                gclient_relpath.split(input_api.os_path.sep))
+            if gclient_relpath_toks[0] == '.':
+                gclient_relpath_toks = gclient_relpath_toks[1:]
+
+            # All submodules are relative to the repo root, so join
+            #
+            #   gclient-to-repo ++ repo-to-submodule
+            #
+            # To get path strings which should appear in recursedeps.
+            #
+            # We must join with '/', not os_path.sep, because the paths in
+            # DEPS.recursedeps always use forward slashes.
+            existing_deps = set(
+                '/'.join(gclient_relpath_toks +
+                         (p.replace(input_api.os_path.sep, '/'), ))
+                for p in existing_deps)
 
     errors = []
     for check_dep in deps['recursedeps']:
@@ -2178,6 +2223,7 @@ def CheckForRecursedeps(input_api, output_api):
                     f'Found recuredep entry {check_dep} but it is not found '
                     'in\n deps itself. Remove it from recurcedeps or add '
                     'deps entry.'))
+
     return errors
 
 
@@ -2268,16 +2314,19 @@ def CheckNewDEPSHooksHasRequiredReviewers(input_api, output_api):
 
     if not required_reviewers:
         return []
-    # TODO - crbug/396736534: return error if CL is not approved by the
-    # required reviewers during submission.
+    submitting = input_api.is_committing and not input_api.dry_run
     reviewers = input_api.gerrit.GetChangeReviewers(input_api.change.issue,
-                                                    approving_only=False)
-
+                                                    approving_only=submitting)
     if set(r for r in reviewers if r in required_reviewers):
-        return []  # At least one required reviewer is present.
-    msg = (f'New DEPS {"hook" if len(new_hooks-old_hooks) == 1 else "hooks"} '
-           f'({", ".join(sorted(new_hooks-old_hooks))}) are found. Please add '
-           'one of the following reviewers:')
+        return []  # passing the check
+    added_hooks = new_hooks - old_hooks
+    msg = (f'New DEPS {"hook" if len(added_hooks) == 1 else "hooks"} '
+           f'({", ".join(sorted(new_hooks-old_hooks))}) '
+           f'{"is" if len(added_hooks) == 1 else "are"} found. ')
+    if submitting:
+        msg += 'The CL must be approved by one of the following reviewers:'
+    else:
+        msg += 'Please request review from one of the following reviewers:'
     for r in required_reviewers:
         msg += f'\n * {r}'
     return [output_api.PresubmitError(msg)]
@@ -2610,12 +2659,16 @@ def CheckJsonParses(input_api, output_api, file_filter=None):
         with _io.open(f.AbsoluteLocalPath(), encoding='utf-8') as j:
             try:
                 json.load(j)
-            except ValueError:
+            except json.JSONDecodeError:
                 # Just a warning for now, in case people are using JSON5
                 # somewhere.
                 warnings.append(
                     output_api.PresubmitPromptWarning(
-                        '%s does not appear to be valid JSON.' % f.LocalPath()))
+                        f"{f.LocalPath()} doesn't appear to be valid JSON.",
+                        locations=[
+                            output_api.PresubmitResultLocation(
+                                file_path=f.LocalPath()),
+                        ]))
     return warnings
 
 

@@ -112,7 +112,7 @@ struct TestConfig {
   bool defer_alps = false;
   std::vector<std::pair<std::string, std::string>> application_settings;
   std::optional<std::string> expect_peer_application_settings;
-  bool alps_use_new_codepoint = false;
+  int alps_use_new_codepoint = 1;
   std::vector<uint8_t> quic_transport_params;
   std::vector<uint8_t> expect_quic_transport_params;
   // Set quic_use_legacy_codepoint to 0 or 1 to configure, -1 uses default.

@@ -68,8 +68,7 @@ class EmitterBase : public KernelFusionInterface {
   absl::StatusOr<mlir::OwningOpRef<mlir::ModuleOp>> CreateMLIRModule(
       mlir::MLIRContext& context, const HloFusionInstruction& fusion,
       const std::string& entry_function_name,
-      const BufferAssignment* buffer_assignment,
-      mlir::interpreter::MlirCompilationTrace* trace = nullptr) const;
+      const BufferAssignment* buffer_assignment) const;
 
  protected:
   // Returns the set of instructions that will be isolated in the partitioned,
@@ -117,9 +116,6 @@ class EmitterBase : public KernelFusionInterface {
   absl::Status EmitMlir(mlir::ModuleOp module,
                         mlir::func::FuncOp entry_function,
                         const HloFusionInstruction& fusion) const;
-  absl::Status RunPassPipeline(
-      mlir::ModuleOp module, mlir::PassManager& pm,
-      mlir::interpreter::MlirCompilationTrace* trace) const;
 };
 
 // Adds passes that simplify arithmetic operations and remove dead code.

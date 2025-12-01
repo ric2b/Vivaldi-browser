@@ -28,10 +28,6 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "url/gurl.h"
-// The ASSIGN_OR_RETURN macro is defined in the both the base::expected code and
-// the private-join-and-compute code. We need to undefine the macro here to
-// avoid compiler errors.
-#undef ASSIGN_OR_RETURN
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_crypter.h"
 #include "components/ip_protection/get_probabilistic_reveal_token.pb.h"
 #include "net/base/features.h"
@@ -42,7 +38,6 @@ namespace ip_protection {
 
 namespace {
 
-// TODO(crbug.com/391358219): Add more details.
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation(
         "ip_protection_service_get_probabilistic_reveal_token",
@@ -51,7 +46,12 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
       sender: "IP Protection Service Client"
       description:
         "Request to a Google server to obtain probabilistic reveal tokens "
-        "for IP Protection proxied origins."
+        "(PRTs) for the registered domains. PRTs enable a delayed IP sampling "
+        "mechanism to defend against fraud, and analyze emerging fraudulent "
+        "behavior while still mitigating the ability to track users at scale "
+        "using IP addresses. See explainer "
+        "https://github.com/GoogleChrome/ip-protection/blob/main/prt_explainer.md "
+        "for more details."
       trigger:
         "On incognito profile startup, and periodically during incognito "
         "session."
@@ -66,7 +66,7 @@ constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
       user_data {
         type: NONE
       }
-      last_reviewed: "2025-01-16"
+      last_reviewed: "2025-04-10"
     }
     policy {
       cookies_allowed: NO
@@ -111,6 +111,7 @@ constexpr int32_t kMinNumTokensWithSignal = 0;
 constexpr int32_t kEpochIdSize = 8;
 constexpr base::TimeDelta kMinExpirationTimeDelta = base::Hours(3);
 constexpr base::TimeDelta kMaxExpirationTimeDelta = base::Days(3);
+constexpr base::TimeDelta kFetchTimeout = base::Minutes(1);
 
 network::ResourceRequest CreateFetchRequest(version_info::Channel channel) {
   const std::string& get_prt_server_path =
@@ -205,6 +206,7 @@ void IpProtectionProbabilisticRevealTokenDirectFetcher::Retriever::
              network::SimpleURLLoader::RETRY_ON_NAME_NOT_RESOLVED);
 
   url_loader->AttachStringForUpload(request_body_, kProtobufContentType);
+  url_loader->SetTimeoutDuration(kFetchTimeout);
   // Get pointer to url_loader before moving it.
   auto* url_loader_ptr = url_loader.get();
   url_loader_ptr->DownloadToString(
@@ -288,14 +290,14 @@ void IpProtectionProbabilisticRevealTokenDirectFetcher::
   // TODO(crbug.com/391358904): add success metrics before returning.
   TryGetProbabilisticRevealTokensOutcome outcome;
   for (const auto& t : response_proto.tokens()) {
-    outcome.tokens.emplace_back(t.version(), t.u(), t.e(),
-                                response_proto.epoch_id());
+    outcome.tokens.emplace_back(t.version(), t.u(), t.e());
   }
   outcome.public_key = std::move(response_proto.public_key().y());
   outcome.expiration_time_seconds = response_proto.expiration_time().seconds();
   outcome.next_epoch_start_time_seconds =
       response_proto.next_epoch_start_time().seconds();
   outcome.num_tokens_with_signal = response_proto.num_tokens_with_signal();
+  outcome.epoch_id = std::move(response_proto.epoch_id());
   std::move(callback).Run(
       std::optional<TryGetProbabilisticRevealTokensOutcome>{std::move(outcome)},
       TryGetProbabilisticRevealTokensResult{
@@ -326,9 +328,12 @@ IpProtectionProbabilisticRevealTokenDirectFetcher::
       response.num_tokens_with_signal() > response.tokens_size()) {
     return TryGetProbabilisticRevealTokensStatus::kInvalidNumTokensWithSignal;
   }
-  if (auto crypter = IpProtectionProbabilisticRevealTokenCrypter::Create(
-          response.public_key().y(), {});
-      !crypter.ok()) {
+  if (base::expected<
+          std::unique_ptr<IpProtectionProbabilisticRevealTokenCrypter>,
+          absl::Status> crypter =
+          IpProtectionProbabilisticRevealTokenCrypter::Create(
+              response.public_key().y(), {});
+      !crypter.has_value()) {
     return TryGetProbabilisticRevealTokensStatus::kInvalidPublicKey;
   }
   if (response.epoch_id().size() != kEpochIdSize) {

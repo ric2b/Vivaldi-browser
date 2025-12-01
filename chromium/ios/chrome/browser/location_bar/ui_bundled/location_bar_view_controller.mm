@@ -14,20 +14,24 @@
 #import "components/feature_engagement/public/tracker.h"
 #import "components/lens/lens_overlay_metrics.h"
 #import "components/omnibox/browser/omnibox_field_trial.h"
+#import "components/omnibox/common/omnibox_features.h"
 #import "components/open_from_clipboard/clipboard_recent_content.h"
 #import "components/prefs/pref_service.h"
 #import "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_animator.h"
+#import "ios/chrome/browser/intelligence/features/features.h"
+#import "ios/chrome/browser/intelligence/page_action_menu/ui/page_action_menu_entrypoint_view.h"
 #import "ios/chrome/browser/lens/ui_bundled/lens_entrypoint.h"
 #import "ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h"
+#import "ios/chrome/browser/lens_overlay/model/lens_overlay_presentation_type.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_entrypoint_view.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/badges_container_view.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/fakebox_buttons_snapshot_provider.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_constants.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_metrics.h"
 #import "ios/chrome/browser/location_bar/ui_bundled/location_bar_steady_view.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_constants.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/text_field_view_containing.h"
+#import "ios/chrome/browser/omnibox/public/omnibox_constants.h"
+#import "ios/chrome/browser/omnibox/ui/text_field_view_containing.h"
 #import "ios/chrome/browser/orchestrator/ui_bundled/location_bar_offset_provider.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -39,12 +43,14 @@
 #import "ios/chrome/browser/shared/public/commands/lens_overlay_commands.h"
 #import "ios/chrome/browser/shared/public/commands/load_query_commands.h"
 #import "ios/chrome/browser/shared/public/commands/open_lens_input_selection_command.h"
+#import "ios/chrome/browser/shared/public/commands/page_action_menu_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/public/toolbar_type.h"
+#import "ios/chrome/common/NSString+Chromium.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -124,6 +130,9 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 // edit menu option to do an image search.
 @property(nonatomic, assign) BOOL lensImageEnabled;
 
+// Search provider name (used for placeholder text).
+@property(nonatomic, copy) NSString* searchProviderName;
+
 // Type of the current placeholder view.
 @property(nonatomic, assign) LocationBarPlaceholderType placeholderType;
 
@@ -145,7 +154,11 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   // faded out) and defocus transitions (when it is faded in).
   UIView* _fakeboxButtonsSnapshot;
 
+  // The location bar button to access Lens.
   LensOverlayEntrypointButton* _lensOverlayPlaceholderView;
+
+  // The location bar button to access the page action menu.
+  PageActionMenuEntrypointView* _pageActionMenuEntrypointView;
 }
 
 #pragma mark - public
@@ -176,7 +189,6 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 }
 
 - (void)setPlaceholderType:(LocationBarPlaceholderType)placeholderType {
-  CHECK(IsLensOverlayAvailable(_profilePrefs));
   if (placeholderType == _placeholderType) {
     return;
   }
@@ -277,7 +289,13 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   DCHECK(self.badgeView) << "The badge view must be set at this point";
   [self.locationBarSteadyView setBadgeView:self.badgeView];
 
-  if (IsLensOverlayAvailable(_profilePrefs)) {
+  if (IsPageActionMenuEnabled()) {
+    _pageActionMenuEntrypointView = [[PageActionMenuEntrypointView alloc] init];
+    [_pageActionMenuEntrypointView
+               addTarget:self
+                  action:@selector(handlePageActionMenuEntrypointTapped)
+        forControlEvents:UIControlEventTouchUpInside];
+  } else if (IsLensOverlayAvailable(_profilePrefs)) {
     _lensOverlayPlaceholderView = [[LensOverlayEntrypointButton alloc]
         initWithProfilePrefs:_profilePrefs];
     [self.layoutGuideCenter referenceView:_lensOverlayPlaceholderView
@@ -327,6 +345,9 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
         @[ UITraitHorizontalSizeClass.class, UITraitVerticalSizeClass.class ]);
     [self registerForTraitChanges:traits
                        withAction:@selector(updateTrailingButtonState)];
+
+    [self registerForTraitChanges:@[ UITraitHorizontalSizeClass.class ]
+                       withAction:@selector(sizeClassDidChange)];
   }
 
   // Vivaldi
@@ -403,6 +424,16 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   [self.dispatcher cancelOmniboxEdit];
 }
 
+- (void)setSearchProviderName:(NSString*)searchProviderName {
+  if (_searchProviderName == searchProviderName) {
+    return;
+  }
+  _searchProviderName = searchProviderName;
+  if (_isNTP) {
+    [self updatePlaceholder];
+  }
+}
+
 #pragma mark - LocationBarSteadyViewConsumer
 
 - (void)updateLocationText:(NSString*)string clipTail:(BOOL)clipTail {
@@ -423,17 +454,7 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 - (void)updateForNTP:(BOOL)isNTP {
   _isNTP = isNTP;
   if (isNTP) {
-    // Display a fake "placeholder".
-    NSString* placeholderString =
-        l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
-
-    if (IsVivaldiRunning()) {
-      placeholderString =
-          l10n_util::GetNSString(IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS);
-    } // End Vivaldi
-
-    [self.locationBarSteadyView
-        setLocationLabelPlaceholderText:placeholderString];
+    [self updatePlaceholder];
   }
   [self.locationBarSteadyView setCentered:(!isNTP || self.incognito)];
   self.hideShareButtonWhileOnIncognitoNTP = isNTP;
@@ -482,6 +503,11 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   if (_placeholderType == LocationBarPlaceholderType::kLensOverlay) {
     RecordLensEntrypointAvailable();
   }
+}
+
+- (void)focusSteadyViewForVoiceOver {
+  UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
+                                  self.locationBarSteadyView);
 }
 
 #pragma mark - LocationBarAnimatee
@@ -728,6 +754,8 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
       // padding to balance it.
       UIImage* shareImage =
           DefaultSymbolWithPointSize(kShareSymbol, kSymbolImagePointSize);
+      // TODO(crbug.com/411039614): Replace
+      // UIGraphicsBeginImageContextWithOptions with UIGraphicsImageRenderer.
       UIGraphicsBeginImageContextWithOptions(
           CGSizeMake(shareImage.size.width,
                      shareImage.size.height + kShareIconBalancingHeightPadding),
@@ -841,6 +869,29 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
   NSString* menuTitle = l10n_util::GetNSString(IDS_IOS_LENS_PRODUCT_NAME);
   return [UIMenu menuWithTitle:menuTitle
                       children:@[ lensOverlayAction, viewfinderAction ]];
+}
+
+// Updates placeholder in the steady view.
+- (void)updatePlaceholder {
+  NSString* placeholderString = self.searchOrTypeURLPlaceholderText;
+
+  if (IsVivaldiRunning()) {
+    placeholderString =
+        l10n_util::GetNSString(IDS_IOS_SEARCH_OR_TYPE_WEB_ADDRESS);
+  } // End Vivaldi
+
+  [self.locationBarSteadyView
+      setLocationLabelPlaceholderText:placeholderString];
+}
+
+// Computes correct placeholder text.
+- (NSString*)searchOrTypeURLPlaceholderText {
+  if (base::FeatureList::IsEnabled(omnibox::kOmniboxMobileParityUpdate)) {
+    return l10n_util::GetNSStringF(IDS_OMNIBOX_EMPTY_HINT_WITH_DSE_NAME,
+                                   self.searchProviderName.cr_UTF16String);
+  } else {
+    return l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT);
+  }
 }
 
 #pragma mark - UIContextMenuInteractionDelegate
@@ -1192,7 +1243,16 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
 
 - (void)handleLensEntrypointPressed {
   RecordAction(UserMetricsAction("MobileToolbarLensOverlayTap"));
-  [self openLensOverlay];
+  if (self.lensOverlayVisible) {
+    [self destroyLensOverlay];
+  } else {
+    [self openLensOverlay];
+  }
+}
+
+- (void)handlePageActionMenuEntrypointTapped {
+  // TODO(crbug.com/402827015): Log opens.
+  [self.pageActionMenuHandler showPageActionMenu];
 }
 
 // Creates and shows the LVF input selection UI.
@@ -1218,6 +1278,13 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
                             completion:nil];
 }
 
+// Creates and shows the lens overlay UI.
+- (void)destroyLensOverlay {
+  TriggerHapticFeedbackForSelectionChange();
+  [self.dispatcher destroyLensUI:YES
+                          reason:lens::LensOverlayDismissalSource::kToolbar];
+}
+
 - (void)updatePlaceholderView {
   switch (_placeholderType) {
     case LocationBarPlaceholderType::kNone:
@@ -1226,7 +1293,35 @@ const CGFloat kShareIconBalancingHeightPadding = 1;
     case LocationBarPlaceholderType::kLensOverlay:
       self.locationBarSteadyView.placeholderView = _lensOverlayPlaceholderView;
       break;
+    case LocationBarPlaceholderType::kPageActionMenu:
+      CHECK(IsPageActionMenuEnabled());
+      self.locationBarSteadyView.placeholderView =
+          _pageActionMenuEntrypointView;
+      break;
   }
+}
+
+- (void)sizeClassDidChange {
+  [self updateLensVisibilityIndicationIfNeeded];
+}
+
+- (void)setLensOverlayVisible:(BOOL)lensOverlayVisible {
+  if (lensOverlayVisible == _lensOverlayVisible) {
+    return;
+  }
+
+  _lensOverlayVisible = lensOverlayVisible;
+  [self updateLensVisibilityIndicationIfNeeded];
+}
+
+- (void)updateLensVisibilityIndicationIfNeeded {
+  // Only indicate Lens Overlay in use when the presentation does not cover the
+  // location bar.
+  BOOL shouldIndicateLensInUse =
+      lens::ContainerPresentationFor(self) !=
+      lens::ContainerPresentationType::kFullscreenCover;
+  [_lensOverlayPlaceholderView
+      setLensOverlayActive:shouldIndicateLensInUse && _lensOverlayVisible];
 }
 
 #pragma mark VIVALDI

@@ -135,7 +135,7 @@ class SSLClientSocketImpl : public SSLClientSocket,
   void OnHandshakeIOComplete(int result);
 
   int DoHandshakeLoop(int last_io_result);
-  int DoPayloadRead(IOBuffer* buf, int buf_len);
+  int DoPayloadRead(base::span<uint8_t> buf);
   int DoPayloadWrite();
   void DoPeek();
 
@@ -150,7 +150,6 @@ class SSLClientSocketImpl : public SSLClientSocket,
   static ssl_verify_result_t VerifyCertCallback(SSL* ssl, uint8_t* out_alert);
   ssl_verify_result_t VerifyCert();
   ssl_verify_result_t HandleVerifyResult();
-  int CheckCTRequirements();
 
   // Callback from the SSL layer that indicates the remote server is requesting
   // a certificate for this client.
@@ -170,15 +169,11 @@ class SSLClientSocketImpl : public SSLClientSocket,
   bool IsCachingEnabled() const;
 
   // Callbacks for operations with the private key.
-  ssl_private_key_result_t PrivateKeySignCallback(uint8_t* out,
-                                                  size_t* out_len,
-                                                  size_t max_out,
-                                                  uint16_t algorithm,
-                                                  const uint8_t* in,
-                                                  size_t in_len);
-  ssl_private_key_result_t PrivateKeyCompleteCallback(uint8_t* out,
-                                                      size_t* out_len,
-                                                      size_t max_out);
+  ssl_private_key_result_t PrivateKeySignCallback(
+      uint16_t algorithm,
+      base::span<const uint8_t> input);
+  ssl_private_key_result_t PrivateKeyCompleteCallback(base::span<uint8_t> buf,
+                                                      size_t* out_len);
 
   void OnPrivateKeyComplete(Error error, const std::vector<uint8_t>& signature);
 

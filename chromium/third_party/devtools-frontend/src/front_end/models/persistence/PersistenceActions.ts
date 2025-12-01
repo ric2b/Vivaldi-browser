@@ -19,7 +19,7 @@ const UIStrings = {
   /**
    *@description Text to save content as a specific file type
    */
-  saveAs: 'Save as...',
+  saveAs: 'Save as…',
   /**
    *@description Context menu item for saving an image
    */
@@ -88,6 +88,7 @@ export class ContextMenuProvider implements
     async function saveImage(): Promise<void> {
       const targetObject = contentProvider as SDK.Resource.Resource;
       const content = (await targetObject.requestContent()).content || '';
+      /* eslint-disable-next-line rulesdir/no-imperative-dom-api */
       const link = document.createElement('a');
       link.download = targetObject.displayName;
       link.href = 'data:' + targetObject.mimeType + ';base64,' + content;

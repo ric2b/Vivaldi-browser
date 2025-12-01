@@ -6,7 +6,6 @@
 
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
-#import "base/test/task_environment.h"
 #import "components/keyed_service/core/keyed_service.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/https_upgrades/model/https_upgrade_service_factory.h"
@@ -23,6 +22,7 @@
 #import "ios/web/public/navigation/web_state_policy_decider.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
+#import "ios/web/public/test/web_task_environment.h"
 #import "net/base/apple/url_conversions.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
@@ -147,9 +147,9 @@ class HttpsOnlyModeUpgradeTabHelperTest
   web::FakeWebState web_state_;
 
  private:
-  std::unique_ptr<ProfileIOS> profile_;
-  base::test::TaskEnvironment task_environment_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  web::WebTaskEnvironment task_environment_;
+  std::unique_ptr<ProfileIOS> profile_;
 };
 
 // Tests that ShouldAllowResponse properly upgrades navigations and

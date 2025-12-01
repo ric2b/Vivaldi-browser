@@ -6,7 +6,6 @@
 
 #import <optional>
 
-#import "base/test/task_environment.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/application_delegate/fake_startup_information.h"
 #import "ios/chrome/app/profile/profile_init_stage.h"
@@ -16,6 +15,7 @@
 #import "ios/chrome/browser/shared/coordinator/scene/scene_activation_level.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/gtest_mac.h"
 #import "testing/platform_test.h"
@@ -46,22 +46,6 @@ using ProfileStateTest = PlatformTest;
 // Tests that a newly created ProfileState has no -profile.
 TEST_F(ProfileStateTest, initializer) {
   ProfileState* state = [[ProfileState alloc] initWithAppState:nil];
-  EXPECT_EQ(state.profile, nullptr);
-}
-
-// Tests that -profile uses a weak pointer.
-TEST_F(ProfileStateTest, profile) {
-  base::test::TaskEnvironment task_environment;
-  std::unique_ptr<TestProfileIOS> profile = TestProfileIOS::Builder().Build();
-
-  ProfileState* state = [[ProfileState alloc] initWithAppState:nil];
-  EXPECT_EQ(state.profile, nullptr);
-
-  state.profile = profile.get();
-  EXPECT_EQ(state.profile, profile.get());
-
-  // Destroy the profile and check that the property becomes null.
-  profile.reset();
   EXPECT_EQ(state.profile, nullptr);
 }
 

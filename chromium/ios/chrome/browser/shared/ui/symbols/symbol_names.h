@@ -18,6 +18,7 @@
 #if BUILDFLAG(IOS_USE_BRANDED_SYMBOLS)
 extern NSString* const kChromeDefaultBrowserIllustrationImage;
 extern NSString* const kChromeDefaultBrowserScreenBannerImage;
+extern NSString* const kChromeGuidedTourBannerImage;
 extern NSString* const kChromeNotificationsOptInBannerImage;
 extern NSString* const kChromeNotificationsOptInBannerLandscapeImage;
 extern NSString* const kChromeSearchEngineChoiceIcon;
@@ -42,6 +43,7 @@ extern NSString* const kUSPSCarrierImage;
 #else
 extern NSString* const kChromiumDefaultBrowserIllustrationImage;
 extern NSString* const kChromiumDefaultBrowserScreenBannerImage;
+extern NSString* const kChromiumGuidedTourBannerImage;
 extern NSString* const kChromiumNotificationsOptInBannerImage;
 extern NSString* const kChromiumNotificationsOptInBannerLandscapeImage;
 extern NSString* const kChromiumPasswordManagerWidgetPromoImage;
@@ -96,6 +98,7 @@ extern NSString* const kFamilylinkSymbol;
 extern NSString* const kMyDriveSymbol;
 extern NSString* const kSharedDrivesSymbol;
 extern NSString* const kEllipsisSquareFillSymbol;
+extern NSString* const kMagnifyingglassSparkSymbol;
 
 // Custom symbol names which can be configured with a color palette. iOS 15+
 // only.
@@ -189,6 +192,7 @@ extern NSString* const kCheckmarkSealFillSymbol;
 extern NSString* const kWifiSymbol;
 extern NSString* const kBookmarksSymbol;
 extern NSString* const kSyncErrorSymbol;
+extern NSString* const kSyncPasswordErrorSymbol;
 extern NSString* const kMenuSymbol;
 extern NSString* const kSortSymbol;
 extern NSString* const kExpandSymbol;
@@ -274,6 +278,9 @@ extern NSString* const kRectangleGroupBubble;
 extern NSString* const kHomeSymbol;
 extern NSString* const kWorkSymbol;
 extern NSString* const kShieldedEnvelope;
+extern NSString* const kReaderModeSymbolPreIOS18;
+extern NSString* const kReaderModeSymbolPostIOS18;
+extern NSString* const kCircleBadgeFill;
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

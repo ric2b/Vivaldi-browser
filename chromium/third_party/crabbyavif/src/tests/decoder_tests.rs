@@ -19,12 +19,13 @@ use crabby_avif::image::*;
 use crabby_avif::reformat::rgb;
 use crabby_avif::*;
 
-#[path = "./mod.rs"]
-mod tests;
+mod utils;
+use utils::*;
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use tests::*;
+use test_case::test_case;
+use test_case::test_matrix;
 
 // From avifalphanoispetest.cc
 #[test]
@@ -79,8 +80,8 @@ fn alpha_premultiplied() {
 }
 
 // From avifanimationtest.cc
-#[test_case::test_case("colors-animated-8bpc.avif")]
-#[test_case::test_case("colors-animated-8bpc-audio.avif")]
+#[test_case("colors-animated-8bpc.avif")]
+#[test_case("colors-animated-8bpc-audio.avif")]
 fn animated_image(filename: &str) {
     let mut decoder = get_decoder(filename);
     let res = decoder.parse();
@@ -103,8 +104,8 @@ fn animated_image(filename: &str) {
 }
 
 // From avifanimationtest.cc
-#[test_case::test_case("colors-animated-8bpc.avif")]
-#[test_case::test_case("colors-animated-8bpc-audio.avif")]
+#[test_case("colors-animated-8bpc.avif")]
+#[test_case("colors-animated-8bpc-audio.avif")]
 fn animated_image_with_source_set_to_primary_item(filename: &str) {
     let mut decoder = get_decoder(filename);
     decoder.settings.source = decoder::Source::PrimaryItem;
@@ -253,13 +254,38 @@ fn color_grid_alpha_no_grid() {
     assert!(alpha_plane.unwrap().row_bytes > 0);
 }
 
+#[test_case("paris_icc_exif_xmp.avif")]
+#[test_case("sofa_grid1x5_420.avif")]
+#[test_case("color_grid_alpha_nogrid.avif")]
+#[test_case("seine_sdr_gainmap_srgb.avif")]
+fn image_content_to_decode_none(filename: &str) {
+    let mut decoder = get_decoder(filename);
+    decoder.settings.image_content_to_decode = ImageContentType::None;
+    assert!(decoder.parse().is_ok());
+    assert!(decoder.next_image().is_err());
+}
+
+#[test_case("draw_points_idat.avif")]
+#[test_case("draw_points_idat_metasize0.avif")]
+#[test_case("draw_points_idat_progressive.avif")]
+#[test_case("draw_points_idat_progressive_metasize0.avif")]
+fn idat(filename: &str) {
+    let mut decoder = get_decoder(filename);
+    assert!(decoder.parse().is_ok());
+    if !HAS_DECODER {
+        return;
+    }
+    let res = decoder.next_image();
+    assert_eq!(res, Ok(()));
+}
+
 // From avifprogressivetest.cc
-#[test_case::test_case("progressive_dimension_change.avif", 2, 256, 256; "progressive_dimension_change")]
-#[test_case::test_case("progressive_layered_grid.avif", 2, 512, 256; "progressive_layered_grid")]
-#[test_case::test_case("progressive_quality_change.avif", 2, 256, 256; "progressive_quality_change")]
-#[test_case::test_case("progressive_same_layers.avif", 4, 256, 256; "progressive_same_layers")]
-#[test_case::test_case("tiger_3layer_1res.avif", 3, 1216, 832; "tiger_3layer_1res")]
-#[test_case::test_case("tiger_3layer_3res.avif", 3, 1216, 832; "tiger_3layer_3res")]
+#[test_case("progressive_dimension_change.avif", 2, 256, 256; "progressive_dimension_change")]
+#[test_case("progressive_layered_grid.avif", 2, 512, 256; "progressive_layered_grid")]
+#[test_case("progressive_quality_change.avif", 2, 256, 256; "progressive_quality_change")]
+#[test_case("progressive_same_layers.avif", 4, 256, 256; "progressive_same_layers")]
+#[test_case("tiger_3layer_1res.avif", 3, 1216, 832; "tiger_3layer_1res")]
+#[test_case("tiger_3layer_3res.avif", 3, 1216, 832; "tiger_3layer_3res")]
 fn progressive(filename: &str, layer_count: u32, width: u32, height: u32) {
     let mut filename_with_prefix = String::from("progressive/");
     filename_with_prefix.push_str(filename);
@@ -297,6 +323,25 @@ fn progressive(filename: &str, layer_count: u32, width: u32, height: u32) {
         assert_eq!(image.width, width);
         assert_eq!(image.height, height);
     }
+}
+
+#[test]
+fn decoder_parse_exif_non_zero_tiff_offset() {
+    let mut decoder = get_decoder("paris_exif_non_zero_tiff_offset.avif");
+
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
+    let image = decoder.image().expect("image was none");
+
+    assert_eq!(image.exif.len(), 1129);
+    assert_eq!(image.exif[0], 0);
+    assert_eq!(image.exif[1], 0);
+    assert_eq!(image.exif[2], 0);
+    assert_eq!(image.exif[3], 73);
+    assert_eq!(image.exif[4], 73);
+    assert_eq!(image.exif[5], 42);
+    assert_eq!(image.exif[6], 0);
 }
 
 // From avifmetadatatest.cc
@@ -339,6 +384,34 @@ fn decoder_parse_icc_exif_xmp() {
     assert_eq!(image.xmp[1], 63);
     assert_eq!(image.xmp[2], 120);
     assert_eq!(image.xmp[3], 112);
+}
+
+#[test]
+fn decode_gainmap() {
+    let filename = "tmap_primary_item.avif";
+    let mut decoder = get_decoder(filename);
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    // Gain map found but not decoded.
+    assert!(decoder.gainmap_present());
+    assert!(
+        decoder.gainmap().metadata.base_hdr_headroom.0 != 0
+            || decoder.gainmap().metadata.alternate_hdr_headroom.0 != 0
+    );
+    assert_eq!(decoder.gainmap().image.width, 0);
+
+    // Decode again with image_content_to_decode = ImageContentType::All.
+    decoder = get_decoder(filename);
+    decoder.settings.image_content_to_decode = ImageContentType::All;
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    // Gain map found and decoded.
+    assert!(decoder.gainmap_present());
+    assert!(
+        decoder.gainmap().metadata.base_hdr_headroom.0 != 0
+            || decoder.gainmap().metadata.alternate_hdr_headroom.0 != 0
+    );
+    assert_ne!(decoder.gainmap().image.width, 0);
 }
 
 // From avifgainmaptest.cc
@@ -441,30 +514,36 @@ fn gainmap_oriented() {
     assert_eq!(decoder.gainmap().image.imir_axis, None);
 }
 
-// The two test files should produce the same results:
-// One has an unsupported 'version' field, the other an unsupported
-// 'minimum_version' field, but the behavior of these two files is the same.
 // From avifgainmaptest.cc
-#[test_case::test_case("unsupported_gainmap_version.avif")]
-#[test_case::test_case("unsupported_gainmap_minimum_version.avif")]
+// Tests files with gain maps that should be ignored by the decoder for various
+// reasons.
+// File with unsupported version field.
+#[test_case("unsupported_gainmap_version.avif")]
+// File with unsupported minimum version field.
+#[test_case("unsupported_gainmap_minimum_version.avif")]
+// Missing 'tmap' brand in ftyp box.
+#[test_case("seine_sdr_gainmap_notmapbrand.avif")]
+// Gain map not present before the base image in 'altr' box.
+#[test_case("seine_hdr_gainmap_wrongaltr.avif")]
 fn decode_unsupported_version(filename: &str) {
     // Parse with various settings.
     let mut decoder = get_decoder(filename);
     let res = decoder.parse();
     assert!(res.is_ok());
     assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
-    // Gain map marked as not present because the metadata is not supported.
+    // Gain map marked as not present.
     assert!(!decoder.gainmap_present());
     assert_eq!(decoder.gainmap().image.width, 0);
     assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 0);
     assert_eq!(decoder.gainmap().metadata.alternate_hdr_headroom.0, 0);
 
+    // Decode again with image_content_to_decode = ImageContentType::All.
     decoder = get_decoder(filename);
     decoder.settings.image_content_to_decode = ImageContentType::All;
     let res = decoder.parse();
     assert!(res.is_ok());
     assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
-    // Gainmap not found: its metadata is not supported.
+    // Gain map marked as not present.
     assert!(!decoder.gainmap_present());
     assert_eq!(decoder.gainmap().image.width, 0);
     assert_eq!(decoder.gainmap().metadata.base_hdr_headroom.0, 0);
@@ -546,10 +625,10 @@ fn decode_ignore_color_and_alpha() {
 }
 
 // From avifgainmaptest.cc
-#[test_case::test_case("paris_icc_exif_xmp.avif")]
-#[test_case::test_case("sofa_grid1x5_420.avif")]
-#[test_case::test_case("color_grid_alpha_nogrid.avif")]
-#[test_case::test_case("seine_sdr_gainmap_srgb.avif")]
+#[test_case("paris_icc_exif_xmp.avif")]
+#[test_case("sofa_grid1x5_420.avif")]
+#[test_case("color_grid_alpha_nogrid.avif")]
+#[test_case("seine_sdr_gainmap_srgb.avif")]
 fn decode_ignore_all(filename: &str) {
     let mut decoder = get_decoder(filename);
     // Ignore both the main image and the gain map.
@@ -569,15 +648,15 @@ fn decode_ignore_all(filename: &str) {
 }
 
 // From avifcllitest.cc
-#[test_case::test_case("clli_0_0.avif", 0, 0; "clli_0_0")]
-#[test_case::test_case("clli_0_1.avif", 0, 1; "clli_0_1")]
-#[test_case::test_case("clli_0_65535.avif", 0, 65535; "clli_0_65535")]
-#[test_case::test_case("clli_1_0.avif", 1, 0; "clli_1_0")]
-#[test_case::test_case("clli_1_1.avif", 1, 1; "clli_1_1")]
-#[test_case::test_case("clli_1_65535.avif", 1, 65535; "clli_1_65535")]
-#[test_case::test_case("clli_65535_0.avif", 65535, 0; "clli_65535_0")]
-#[test_case::test_case("clli_65535_1.avif", 65535, 1; "clli_65535_1")]
-#[test_case::test_case("clli_65535_65535.avif", 65535, 65535; "clli_65535_65535")]
+#[test_case("clli_0_0.avif", 0, 0; "clli_0_0")]
+#[test_case("clli_0_1.avif", 0, 1; "clli_0_1")]
+#[test_case("clli_0_65535.avif", 0, 65535; "clli_0_65535")]
+#[test_case("clli_1_0.avif", 1, 0; "clli_1_0")]
+#[test_case("clli_1_1.avif", 1, 1; "clli_1_1")]
+#[test_case("clli_1_65535.avif", 1, 65535; "clli_1_65535")]
+#[test_case("clli_65535_0.avif", 65535, 0; "clli_65535_0")]
+#[test_case("clli_65535_1.avif", 65535, 1; "clli_65535_1")]
+#[test_case("clli_65535_65535.avif", 65535, 65535; "clli_65535_65535")]
 fn clli(filename: &str, max_cll: u16, max_pall: u16) {
     let mut filename_with_prefix = String::from("clli/");
     filename_with_prefix.push_str(filename);
@@ -601,11 +680,11 @@ fn raw_io() {
     let data =
         std::fs::read(get_test_file("colors-animated-8bpc.avif")).expect("Unable to read file");
     let mut decoder = decoder::Decoder::default();
-    let _ = unsafe {
+    unsafe {
         decoder
             .set_io_raw(data.as_ptr(), data.len())
-            .expect("Failed to set IO")
-    };
+            .expect("Failed to set IO");
+    }
     assert!(decoder.parse().is_ok());
     assert_eq!(decoder.compression_format(), CompressionFormat::Avif);
     assert_eq!(decoder.image_count(), 5);
@@ -678,7 +757,7 @@ fn expected_min_decoded_row_count(
     cell_columns: u32,
     available_size: usize,
     size: usize,
-    grid_cell_offsets: &Vec<usize>,
+    grid_cell_offsets: &[usize],
 ) -> u32 {
     if available_size >= size {
         return height;
@@ -709,7 +788,7 @@ fn expected_min_decoded_row_count_computation() {
         expected_min_decoded_row_count(770, cell_height, 1, 1000, 30000, &grid_cell_offsets)
     );
     assert_eq!(
-        1 * cell_height,
+        cell_height,
         expected_min_decoded_row_count(770, cell_height, 1, 4000, 30000, &grid_cell_offsets)
     );
     assert_eq!(
@@ -721,7 +800,7 @@ fn expected_min_decoded_row_count_computation() {
         expected_min_decoded_row_count(770, cell_height, 1, 17846, 30000, &grid_cell_offsets)
     );
     assert_eq!(
-        1 * cell_height,
+        cell_height,
         expected_min_decoded_row_count(462, cell_height, 2, 17846, 30000, &grid_cell_offsets)
     );
     assert_eq!(
@@ -729,7 +808,7 @@ fn expected_min_decoded_row_count_computation() {
         expected_min_decoded_row_count(462, cell_height, 2, 23000, 30000, &grid_cell_offsets)
     );
     assert_eq!(
-        1 * cell_height,
+        cell_height,
         expected_min_decoded_row_count(308, cell_height, 3, 23000, 30000, &grid_cell_offsets)
     );
     assert_eq!(
@@ -770,8 +849,7 @@ fn incremental_decode() {
         {
             let mut available_size = available_size_rc.borrow_mut();
             if *available_size >= len {
-                println!("parse returned waiting on io after full file.");
-                assert!(false);
+                panic!("parse returned waiting on io after full file.");
             }
             *available_size = std::cmp::min(*available_size + step, len);
         }
@@ -794,8 +872,7 @@ fn incremental_decode() {
         {
             let mut available_size = available_size_rc.borrow_mut();
             if *available_size >= len {
-                println!("next_image returned waiting on io after full file.");
-                assert!(false);
+                panic!("next_image returned waiting on io after full file.");
             }
             let decoded_row_count = decoder.decoded_row_count();
             assert!(decoded_row_count >= previous_decoded_row_count);
@@ -817,6 +894,89 @@ fn incremental_decode() {
     assert_eq!(decoder.decoded_row_count(), decoder.image().unwrap().height);
 
     // TODO: check if incremental and non incremental produces same output.
+}
+
+#[test]
+fn progressive_partial_data() -> AvifResult<()> {
+    let data = std::fs::read(get_test_file(
+        "progressive/progressive_dimension_change.avif",
+    ))
+    .expect("Unable to read file");
+    let len = data.len();
+    let available_size_rc = Rc::new(RefCell::new(0usize));
+    let mut decoder = decoder::Decoder::default();
+    decoder.settings.allow_progressive = true;
+    let io = Box::new(CustomIO {
+        available_size_rc: available_size_rc.clone(),
+        data,
+    });
+    decoder.set_io(io);
+
+    // Parse.
+    let mut parse_result = decoder.parse();
+    while parse_result.is_err()
+        && matches!(parse_result.as_ref().err().unwrap(), AvifError::WaitingOnIo)
+    {
+        {
+            let mut available_size = available_size_rc.borrow_mut();
+            if *available_size >= len {
+                panic!("parse returned waiting on io after full file.");
+            }
+            *available_size = std::cmp::min(*available_size + 1, len);
+        }
+        parse_result = decoder.parse();
+    }
+    assert!(parse_result.is_ok());
+    if !HAS_DECODER {
+        return Ok(());
+    }
+
+    assert_eq!(decoder.image_count(), 2);
+    let extent0 = decoder.nth_image_max_extent(0)?;
+    assert_eq!(extent0.offset, 306);
+    assert_eq!(extent0.size, 2250);
+    let extent1 = decoder.nth_image_max_extent(1)?;
+    assert_eq!(extent1.offset, 306);
+    assert_eq!(extent1.size, 3813);
+
+    // Getting the first frame now should fail.
+    assert_eq!(decoder.nth_image(0), Err(AvifError::WaitingOnIo));
+    // Set the available size to 1 byte less than the first frame's extent.
+    *available_size_rc.borrow_mut() = extent0.offset as usize + extent0.size - 1;
+    assert_eq!(decoder.nth_image(0), Err(AvifError::WaitingOnIo));
+    // Set the available size to exactly the first frame's extent.
+    *available_size_rc.borrow_mut() = extent0.offset as usize + extent0.size;
+    assert!(decoder.nth_image(0).is_ok());
+    let image = decoder.image().expect("unable to get image");
+    assert_eq!(image.width, 256);
+    assert_eq!(image.height, 256);
+    assert!(image.has_plane(Plane::Y));
+    assert!(image.has_plane(Plane::U));
+    assert!(image.has_plane(Plane::V));
+    // Set the available size to an offset between the first and second frame's extents.
+    *available_size_rc.borrow_mut() = extent0.offset as usize + extent0.size + 100;
+    assert!(decoder.nth_image(0).is_ok());
+    assert_eq!(decoder.nth_image(1), Err(AvifError::WaitingOnIo));
+    // Set the available size to 1 byte less than the second frame's extent.
+    *available_size_rc.borrow_mut() = extent1.offset as usize + extent1.size - 1;
+    assert!(decoder.nth_image(0).is_ok());
+    assert_eq!(decoder.nth_image(1), Err(AvifError::WaitingOnIo));
+    // Set the available size to 1 byte less than the second frame's extent.
+    *available_size_rc.borrow_mut() = extent1.offset as usize + extent1.size;
+    assert!(decoder.nth_image(1).is_ok());
+    let image = decoder.image().expect("unable to get image");
+    assert_eq!(image.width, 256);
+    assert_eq!(image.height, 256);
+    assert!(image.has_plane(Plane::Y));
+    assert!(image.has_plane(Plane::U));
+    assert!(image.has_plane(Plane::V));
+    // At this point, we should be able to fetch both the frames in any order.
+    assert!(decoder.nth_image(0).is_ok());
+    assert!(decoder.nth_image(1).is_ok());
+    assert!(decoder.nth_image(1).is_ok());
+    assert!(decoder.nth_image(0).is_ok());
+
+    Ok(())
 }
 
 #[test]
@@ -954,6 +1114,21 @@ fn white_1x1_ftyp_size0() -> AvifResult<()> {
 }
 
 #[test]
+fn white_1x1_unknown_top_level_box_size0() -> AvifResult<()> {
+    // Edit the file to insert an unknown top level box with size 0 after ftyp (invalid).
+    let mut file_bytes = std::fs::read(get_test_file("white_1x1.avif")).unwrap();
+    // Insert a top level box after ftyp (box type and size all 0s).
+    for _ in 0..8 {
+        file_bytes.insert(32, 0);
+    }
+
+    let mut decoder = decoder::Decoder::default();
+    decoder.set_io_vec(file_bytes);
+    assert!(decoder.parse().is_err());
+    Ok(())
+}
+
+#[test]
 fn dimg_repetition() {
     let mut decoder = get_decoder("sofa_grid1x5_420_dimg_repeat.avif");
     assert_eq!(
@@ -991,6 +1166,27 @@ fn dimg_ordering() {
     let row1 = image1.row(Plane::Y, 0).expect("row1 was none");
     let row2 = image2.row(Plane::Y, 0).expect("row2 was none");
     assert_ne!(row1, row2);
+}
+
+#[test]
+fn grid_image_icc_associated_with_individual_cells() {
+    let mut decoder = get_decoder("grid_icc_individual_cells.avif");
+    assert!(decoder.parse().is_ok());
+    let image = decoder.image().expect("image was none");
+    assert!(!image.icc.is_empty());
+}
+
+#[test]
+fn grid_image_nclx_associated_with_individual_cells() {
+    let mut decoder = get_decoder("grid_nclx_individual_cells.avif");
+    assert!(decoder.parse().is_ok());
+    let image = decoder.image().expect("image was none");
+    assert_eq!(image.color_primaries, ColorPrimaries::Bt470bg);
+    assert_eq!(
+        image.transfer_characteristics,
+        TransferCharacteristics::Bt470bg
+    );
+    assert_eq!(image.matrix_coefficients, MatrixCoefficients::Bt470bg);
 }
 
 #[test]
@@ -1163,7 +1359,8 @@ macro_rules! pixel_eq {
     };
 }
 
-#[test_case::test_matrix(0usize..4)]
+#[allow(clippy::zero_prefixed_literal)]
+#[test_matrix(0usize..4)]
 fn overlay(index: usize) {
     let info = &EXPECTED_OVERLAY_IMAGE_INFOS[index];
     let mut decoder = get_decoder(info.filename);
@@ -1198,5 +1395,46 @@ fn overlay(index: usize) {
         pixel_eq!(g, expected_pixel.2[1]);
         pixel_eq!(b, expected_pixel.2[2]);
         pixel_eq!(a, expected_pixel.2[3]);
+    }
+}
+
+#[test_case("mismatch_colr_0_0.avif", YuvRange::Limited ; "mismatch case 0")]
+#[test_case("mismatch_colr_0_1.avif", YuvRange::Limited ; "mismatch case 1")]
+#[test_case("mismatch_colr_0_2.avif", YuvRange::Limited ; "mismatch case 2")]
+#[test_case("mismatch_colr_1_0.avif", YuvRange::Full ; "mismatch case 3")]
+#[test_case("mismatch_colr_1_1.avif", YuvRange::Full ; "mismatch case 4")]
+#[test_case("mismatch_colr_1_2.avif", YuvRange::Full ; "mismatch case 5")]
+#[test_case("missing_colr_0_0.avif", YuvRange::Limited ; "missing colr case 0")]
+#[test_case("missing_colr_0_1.avif", YuvRange::Limited ; "missing colr case 1")]
+#[test_case("missing_colr_0_2.avif", YuvRange::Limited ; "missing colr case 2")]
+#[test_case("missing_colr_1_0.avif", YuvRange::Full ; "missing colr case 3")]
+#[test_case("missing_colr_1_1.avif", YuvRange::Full ; "missing colr case 4")]
+#[test_case("missing_colr_1_2.avif", YuvRange::Full ; "missing colr case 5")]
+fn yuv_range(filename: &str, expected_yuv_range: YuvRange) {
+    let mut decoder = get_decoder(filename);
+    let res = decoder.parse();
+    assert!(res.is_ok());
+    let image = decoder.image().expect("image was none");
+    assert_eq!(image.yuv_range, expected_yuv_range);
+}
+
+#[test_case("weld_sato_8plus8bit.avif", false)]
+#[test_case("weld_sato_8plus8bit_alpha.avif", true)]
+#[test_case("weld_sato_12plus4bit.avif", false)]
+fn sato_16bit(filename: &str, has_alpha: bool) {
+    let mut decoder = get_decoder(filename);
+    assert!(decoder.parse().is_ok());
+    assert_eq!(has_alpha, decoder.image().unwrap().alpha_present);
+    if !HAS_DECODER {
+        return;
+    }
+    let res = decoder.next_image();
+    assert_eq!(res, Ok(()));
+    assert_eq!(has_alpha, decoder.image().unwrap().has_alpha());
+    if cfg!(feature = "sample_transform") {
+        assert_eq!(16, decoder.image().unwrap().depth);
+        // TODO: compare with reference weld_16bit.png
+    } else {
+        assert!(decoder.image().unwrap().depth < 16);
     }
 }

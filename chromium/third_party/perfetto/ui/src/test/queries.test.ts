@@ -41,10 +41,10 @@ test('omnibox query', async () => {
 
   await pth.waitForIdleAndScreenshot('query mode.png');
 
-  page.locator('.pf-query-table').getByText('17806091326279').click();
+  page.locator('.pf-data-grid').getByText('17806091326279').click();
   await pth.waitForIdleAndScreenshot('row 1 clicked.png');
 
-  page.locator('.pf-query-table').getByText('17806092405136').click();
+  page.locator('.pf-data-grid').getByText('17806092405136').click();
   await pth.waitForIdleAndScreenshot('row 2 clicked.png');
 
   // Clear the omnibox
@@ -85,7 +85,9 @@ test('query page', async () => {
   );
 
   // Double click on the 2nd one and expect the query is re-ran.
-  page.locator('.query-history .history-item').nth(1).dblclick();
+  page.locator('.query-page .query-history .history-item').nth(1).dblclick();
   await pth.waitForPerfettoIdle();
-  expect(await page.locator('.pf-query-table tbody tr').count()).toEqual(2);
+  expect(
+    await page.locator('.query-page .pf-data-grid tbody tr').count(),
+  ).toEqual(2);
 });

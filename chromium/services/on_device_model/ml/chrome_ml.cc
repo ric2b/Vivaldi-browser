@@ -24,6 +24,7 @@
 #include "third_party/dawn/include/dawn/dawn_proc.h"
 #include "third_party/dawn/include/dawn/native/DawnNative.h"
 #include "third_party/dawn/include/dawn/webgpu_cpp.h"
+#include "third_party/rust/chromium_crates_io/vendor/llguidance-v0_7/llguidance.h"
 
 #if !BUILDFLAG(IS_IOS)
 #include "gpu/config/gpu_info_collector.h"
@@ -48,6 +49,12 @@ enum class GpuErrorReason {
 void FatalGpuErrorFn(const char* msg) {
   SCOPED_CRASH_KEY_STRING1024("ChromeML(GPU)", "error_msg", msg);
   std::string msg_str(msg);
+  std::string msg_continued;
+  // The error message may be long, collect another 1k if needed.
+  if (msg_str.size() > 1024) {
+    msg_continued = msg_str.substr(1024);
+  }
+  SCOPED_CRASH_KEY_STRING1024("ChromeML(GPU)", "error_msg2", msg_continued);
   GpuErrorReason error_reason = GpuErrorReason::kOther;
   if (msg_str.find("DXGI_ERROR_DEVICE_HUNG") != std::string::npos) {
     error_reason = GpuErrorReason::kDxgiErrorDeviceHung;
@@ -89,6 +96,10 @@ void RecordCustomCountsHistogram(const char* name,
   base::UmaHistogramCustomCounts(name, sample, min, exclusive_max, buckets);
 }
 
+void RecordMediumTimesHistogram(const char* name, int64_t milliseconds) {
+  base::UmaHistogramMediumTimes(name, base::Milliseconds(milliseconds));
+}
+
 }  // namespace
 
 ChromeML::ChromeML(const ChromeMLAPI* api) : api_(api) {}
@@ -100,6 +111,43 @@ ChromeML* ChromeML::Get(const std::optional<std::string>& library_name) {
       Create(library_name)};
   return chrome_ml->get();
 }
+
+#if defined(ENABLE_ON_DEVICE_CONSTRAINTS)
+void ConstraintDelete(ChromeMLConstraint constraint) {
+  llg_free_constraint(reinterpret_cast<LlgConstraint*>(constraint));
+}
+
+bool ConstraintComputeMask(ChromeMLConstraint constraint,
+                           ChromeMLConstraintMask& mask) {
+  LlgMaskResult res;
+  if (llg_compute_mask(reinterpret_cast<LlgConstraint*>(constraint), &res) !=
+      0) {
+    return false;
+  }
+  mask.sample_mask = res.sample_mask;
+  mask.is_stop = res.is_stop;
+  return true;
+}
+
+bool ConstraintCommitToken(ChromeMLConstraint constraint, uint32_t token) {
+  LlgCommitResult result;
+  return llg_commit_token(reinterpret_cast<LlgConstraint*>(constraint), token,
+                          &result) >= 0;
+}
+
+bool ConstraintIsStopped(ChromeMLConstraint constraint) {
+  return llg_is_stopped(reinterpret_cast<LlgConstraint*>(constraint));
+}
+
+const char* ConstraintGetError(ChromeMLConstraint constraint) {
+  return llg_get_error(reinterpret_cast<LlgConstraint*>(constraint));
+}
+
+ChromeMLConstraint ConstraintClone(ChromeMLConstraint constraint) {
+  return reinterpret_cast<ChromeMLConstraint>(
+      llg_clone_constraint(reinterpret_cast<LlgConstraint*>(constraint)));
+}
+#endif
 
 // static
 DISABLE_CFI_DLSYM
@@ -130,13 +178,33 @@ std::unique_ptr<ChromeML> ChromeML::Create(
     const ChromeMLMetricsFns metrics_fns{
         .RecordExactLinearHistogram = &RecordExactLinearHistogram,
         .RecordCustomCountsHistogram = &RecordCustomCountsHistogram,
+        .RecordMediumTimesHistogram = &RecordMediumTimesHistogram,
     };
     api.SetMetricsFns(&metrics_fns);
+  }
+  if (api.SetConstraintFns) {
+    api.SetConstraintFns(GetConstraintFns());
   }
   if (api.SetFatalErrorNonGpuFn) {
     api.SetFatalErrorNonGpuFn(&FatalErrorFn);
   }
   return base::WrapUnique(new ChromeML(&api));
+}
+
+const ChromeMLConstraintFns* GetConstraintFns() {
+#if defined(ENABLE_ON_DEVICE_CONSTRAINTS)
+  static constexpr ChromeMLConstraintFns kConstraintFns = {
+      .Delete = &ConstraintDelete,
+      .ComputeMask = &ConstraintComputeMask,
+      .CommitToken = &ConstraintCommitToken,
+      .IsStopped = &ConstraintIsStopped,
+      .GetError = &ConstraintGetError,
+      .Clone = &ConstraintClone,
+  };
+#else
+  static constexpr ChromeMLConstraintFns kConstraintFns = {};
+#endif
+  return &kConstraintFns;
 }
 
 }  // namespace ml

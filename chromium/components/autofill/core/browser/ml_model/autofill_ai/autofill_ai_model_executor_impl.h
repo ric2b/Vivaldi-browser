@@ -7,6 +7,7 @@
 
 #include <memory>
 #include <optional>
+#include <string_view>
 
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
@@ -26,11 +27,34 @@ namespace autofill {
 class AutofillAiModelCache;
 class FormData;
 
+// Enum describing whether an AutofillAI model execution was successful.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class AutofillAiModelExecutionStatus {
+  // One or more field indices returned by the model are out of bounds or
+  // duplicates.
+  kErrorInvalidFieldIndex = 0,
+  // The server returned an error or timed out.
+  kErrorServerError = 1,
+  // The server replied with the wrong response proto type.
+  kErrorWrongResponseType = 2,
+  // The model returned a result, but it was empty.
+  kSuccessEmptyResult = 3,
+  // The model returned a valid, non-empty result.
+  kSuccessNonEmptyResult = 4,
+  kMaxValue = kSuccessNonEmptyResult
+};
+
+inline constexpr std::string_view kUmaAutofillAiModelExecutionStatus =
+    "Autofill.Ai.ModelExecutionStatus";
+
 class AutofillAiModelExecutorImpl : public AutofillAiModelExecutor {
  public:
   AutofillAiModelExecutorImpl(
       AutofillAiModelCache* model_cache,
-      optimization_guide::OptimizationGuideModelExecutor* model_executor);
+      optimization_guide::OptimizationGuideModelExecutor* model_executor,
+      optimization_guide::ModelQualityLogsUploaderService* mqls_uploader);
   ~AutofillAiModelExecutorImpl() override;
 
   // AutofillAiModelExecutor:
@@ -51,11 +75,19 @@ class AutofillAiModelExecutorImpl : public AutofillAiModelExecutor {
           optimization_guide::proto::FormsClassificationsLoggingData>
           logging_data);
 
+  // Uploads a stripped request and the response of a model run to MQLS.
+  void LogModelPredictions(
+      std::unique_ptr<
+          optimization_guide::proto::FormsClassificationsLoggingData>
+          logging_data);
+
   // The cache into which the model responses are written.
   const raw_ref<AutofillAiModelCache> model_cache_;
 
   const raw_ref<optimization_guide::OptimizationGuideModelExecutor>
       model_executor_;
+  const raw_ptr<optimization_guide::ModelQualityLogsUploaderService>
+      mqls_uploader_;
 
   // Form signatures for which a query is currently ongoing. The goal is to
   // avoid multiple queries for the same form at the same time.

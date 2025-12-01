@@ -45,6 +45,7 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/gemini.h"
+#include "chrome/browser/web_applications/preinstalled_web_apps/gmail.h"
 #include "chrome/browser/web_applications/preinstalled_web_apps/preinstalled_web_apps.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -213,7 +214,12 @@ class GeminiAppInteractiveUiTestBase
  public:
   GeminiAppInteractiveUiTestBase(
       std::optional<ash::LoggedInUserMixin::LogInType> login_type)
-      : user_session_mixin_(CreateUserSessionMixin(login_type)) {
+      : user_session_mixin_(CreateUserSessionMixin(login_type)),
+        scoped_preinstall_url_allow_list_(
+            web_app::SetPreinstallUrlAllowListForTesting(
+                {{web_app::GetConfigForGemini(/*device_info=*/std::nullopt)
+                      .install_url,
+                  web_app::GetConfigForGmail().install_url}})) {
     // Enable Gemini app preinstallation.
     scoped_feature_list_.InitAndEnableFeature(
         chromeos::features::kGeminiAppPreinstall);
@@ -283,10 +289,6 @@ class GeminiAppInteractiveUiTestBase
   void SetUpDefaultCommandLine(base::CommandLine* command_line) override {
     InteractiveBrowserTestT<
         MixinBasedInProcessBrowserTest>::SetUpDefaultCommandLine(command_line);
-
-    // Remove the `switches::kDisableDefaultApps` switch to ensure that default
-    // apps are installed. The Gemini app is a default app.
-    command_line->RemoveSwitch(switches::kDisableDefaultApps);
 
     // Disable sync as it would otherwise block updating of shelf pins.
     command_line->AppendSwitch(syncer::kDisableSync);
@@ -362,6 +364,9 @@ class GeminiAppInteractiveUiTestBase
 
   // Used to retrieve expected title/URL for the Gemini app.
   std::unique_ptr<web_app::WebAppInstallInfo> gemini_app_install_info_;
+
+  // Allowlists the specific apps to be preinstalled.
+  web_app::ScopedPreinstallUrlAllowList scoped_preinstall_url_allow_list_;
 };
 
 // GeminiAppInteractiveUiTest --------------------------------------------------
@@ -567,15 +572,12 @@ IN_PROC_BROWSER_TEST_P(GeminiAppInteractiveUiTest, LaunchFromShelf) {
       Check(
           [&]() {
             std::vector<raw_ptr<ash::ShelfAppButton>> apps;
-
             FindDescendantsOfClass(shelf, apps);
-
             const auto gemini_app_index = FindIndex(apps, gemini_app.get());
-            const auto chrome_app_index = FindIndex(apps, chrome_app.get());
             if (IsExistingUser()) {
               return gemini_app_index == 0u;
             }
-
+            const auto chrome_app_index = FindIndex(apps, chrome_app.get());
             return chrome_app_index == 0u && gemini_app_index == 1u;
           },
           "Gemini app is positioned correctly"),

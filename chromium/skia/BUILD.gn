@@ -138,7 +138,6 @@ config("skia_config") {
     }
     if (enable_vulkan) {
       defines += [ "SK_VULKAN=1" ]
-      include_dirs += [ "//third_party/vulkan/include" ]
       configs += [ "//third_party/vulkan-headers/src:vulkan_headers_config" ]
     }
 
@@ -166,6 +165,23 @@ config("skia_library_config") {
   defines = [
     "IS_SKIA_IMPL=1",
     "SKIA_IMPLEMENTATION=1",
+  ]
+
+  # Let Skia know whether to use `libpng`-based or Rust-based PNG decoder and
+  # encoder in internal Skia code (e.g. in implementation of Fontations).
+  #
+  # This currently mimics what is done in `third_party/skia/BUILD.gn`'s
+  # `png_decode_libpng` and `png_encode` targets.
+  #
+  # TODO(https://crbug.com/381900683): When Rust PNG ships, then switch to
+  # using `SK_CODEC_DECODES_PNG_WITH_RUST` and `SK_CODEC_ENCODES_PNG_WITH_RUST`
+  # defines from Skia's `png_encode_rust` and `png_decode_rust` targets.
+  defines += [
+    "SK_CODEC_DECODES_ICO",
+    "SK_CODEC_DECODES_PNG",
+    "SK_CODEC_DECODES_PNG_WITH_LIBPNG",
+    "SK_CODEC_ENCODES_PNG",
+    "SK_CODEC_ENCODES_PNG_WITH_LIBPNG",
   ]
 
   if (use_blink && !use_system_freetype) {
@@ -780,6 +796,8 @@ skia_source_set("skia_opts") {
       }
     }
   } else if (current_cpu == "arm64") {
+    # Conditional and empty body needed to avoid assert() below.
+  } else if (current_cpu == "arm64e") {
     # Conditional and empty body needed to avoid assert() below.
   } else if (current_cpu == "mipsel") {
     cflags += [ "-fomit-frame-pointer" ]

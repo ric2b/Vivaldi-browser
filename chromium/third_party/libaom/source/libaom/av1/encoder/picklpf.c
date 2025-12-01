@@ -102,7 +102,7 @@ static int64_t try_filter_frame(const YV12_BUFFER_CONFIG *sd,
 static int search_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
                                int partial_frame,
                                const int *last_frame_filter_level, int plane,
-                               int dir) {
+                               int dir, int64_t *best_filter_sse) {
   const AV1_COMMON *const cm = &cpi->common;
   const int min_filter_level = 0;
   const int max_filter_level = get_max_filter_level(cpi);
@@ -202,6 +202,8 @@ static int search_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
       filt_mid = filt_best;
     }
   }
+
+  *best_filter_sse = ss_err[filt_best];
 
   return filt_best;
 }
@@ -334,25 +336,35 @@ void av1_pick_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
       aom_internal_error(cm->error, AOM_CODEC_MEM_ERROR,
                          "Failed to allocate last frame buffer");
 
+    int64_t zero_filter_sse[MAX_MB_PLANE] = { 0 };
+    int64_t best_filter_sse[MAX_MB_PLANE] = { 0 };
+
+    if (cpi->sf.lpf_sf.skip_loop_filter_using_filt_error >= 1) {
+      for (int plane = 0; plane < num_planes; plane++) {
+        zero_filter_sse[plane] = aom_get_sse_plane(
+            sd, &cm->cur_frame->buf, plane, cm->seq_params->use_highbitdepth);
+      }
+    }
+
     lf->filter_level[0] = lf->filter_level[1] =
         search_filter_level(sd, cpi, method == LPF_PICK_FROM_SUBIMAGE,
-                            last_frame_filter_level, 0, 2);
+                            last_frame_filter_level, 0, 2, &best_filter_sse[0]);
     if (method != LPF_PICK_FROM_FULL_IMAGE_NON_DUAL) {
-      lf->filter_level[0] =
-          search_filter_level(sd, cpi, method == LPF_PICK_FROM_SUBIMAGE,
-                              last_frame_filter_level, 0, 0);
-      lf->filter_level[1] =
-          search_filter_level(sd, cpi, method == LPF_PICK_FROM_SUBIMAGE,
-                              last_frame_filter_level, 0, 1);
+      lf->filter_level[0] = search_filter_level(
+          sd, cpi, method == LPF_PICK_FROM_SUBIMAGE, last_frame_filter_level, 0,
+          0, &best_filter_sse[0]);
+      lf->filter_level[1] = search_filter_level(
+          sd, cpi, method == LPF_PICK_FROM_SUBIMAGE, last_frame_filter_level, 0,
+          1, &best_filter_sse[0]);
     }
 
     if (num_planes > 1) {
-      lf->filter_level_u =
-          search_filter_level(sd, cpi, method == LPF_PICK_FROM_SUBIMAGE,
-                              last_frame_filter_level, 1, 0);
-      lf->filter_level_v =
-          search_filter_level(sd, cpi, method == LPF_PICK_FROM_SUBIMAGE,
-                              last_frame_filter_level, 2, 0);
+      lf->filter_level_u = search_filter_level(
+          sd, cpi, method == LPF_PICK_FROM_SUBIMAGE, last_frame_filter_level, 1,
+          0, &best_filter_sse[1]);
+      lf->filter_level_v = search_filter_level(
+          sd, cpi, method == LPF_PICK_FROM_SUBIMAGE, last_frame_filter_level, 2,
+          0, &best_filter_sse[2]);
     }
 
     lf->backup_filter_level[0] = lf->filter_level[0];
@@ -398,11 +410,32 @@ void av1_pick_filter_level(const YV12_BUFFER_CONFIG *sd, AV1_COMP *cpi,
           lf->filter_level[1] = 0;
         }
       }
-
-      // Store the current frame's filter levels to be referenced
-      // while determining the minimum filter level from reference frames.
-      cm->cur_frame->filter_level[0] = lf->filter_level[0];
-      cm->cur_frame->filter_level[1] = lf->filter_level[1];
     }
+
+    if (lf->filter_level[0] != 0 && lf->filter_level[1] != 0 &&
+        cpi->sf.lpf_sf.skip_loop_filter_using_filt_error >= 1) {
+      const double pct_improvement_thresh = 2.0;
+      bool reset_filter_level_y = true;
+
+      // Calculate the percentage improvement in SSE for each plane. This
+      // measures the relative reduction in error when applying the filter
+      // compared to no filtering.
+      for (int plane = 0; plane < num_planes; plane++) {
+        const double pct_improvement_sse =
+            ((zero_filter_sse[plane] - best_filter_sse[plane]) * 100.0) /
+            zero_filter_sse[plane];
+        reset_filter_level_y &= pct_improvement_sse < pct_improvement_thresh;
+      }
+
+      if (reset_filter_level_y) {
+        lf->filter_level[0] = 0;
+        lf->filter_level[1] = 0;
+      }
+    }
+
+    // Store the current frame's filter levels to be referenced
+    // while determining the minimum filter level from reference frames.
+    cm->cur_frame->filter_level[0] = lf->filter_level[0];
+    cm->cur_frame->filter_level[1] = lf->filter_level[1];
   }
 }

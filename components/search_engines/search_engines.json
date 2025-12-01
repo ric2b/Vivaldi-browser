@@ -15,7 +15,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000172
+    "kCurrentDataVersion": 10000174
   },
 
   // The following engines are included in country lists and are added to the
@@ -38,7 +38,6 @@
         "https://www.google.com/s?q={searchTerms}"
       ],
       "type": "SEARCH_ENGINE_GOOGLE",
-      // This must be 1 to match the id used by unittests.
       "id": 1
     },
     "yahoo": {
@@ -350,6 +349,15 @@
       "id": 4,
       "is_partner": 1
     },
+    "ecosia_no_prompt": {
+      "name": "Ecosia",
+      "keyword": "e",
+      "favicon_url": "https://cdn-static.ecosia.org/static/icons/favicon.ico",
+      "search_url": "https://www.ecosia.org/search?tt=vivaldi&q={searchTerms}",
+      "suggest_url": "https://ac.ecosia.org/autocomplete?q={searchTerms}&type=list",
+      "type": "SEARCH_ENGINE_ECOSIA",
+      "id": 4
+    },
     "startpage_com": {
       "name": "Startpage",
       "keyword": "s",
@@ -359,6 +367,15 @@
       "type": "VIVALDI_SEARCH_ENGINE_STARTPAGE_COM",
       "id": 5,
       "is_partner": 1
+    },
+    "startpage_com_no_prompt": {
+      "name": "Startpage",
+      "keyword": "s",
+      "favicon_url": "https://www.startpage.com/sp/cdn/favicons/favicon--default.ico",
+      "search_url": "https://www.startpage.com/do/search?q={searchTerms}&segment=startpage.vivaldi",
+      "suggest_url": "https://www.startpage.com/suggestions?q={searchTerms}&segment=startpage.vivaldi&partner=vivaldi&format=opensearch",
+      "type": "VIVALDI_SEARCH_ENGINE_STARTPAGE_COM",
+      "id": 5
     },
     "wikipedia": {
       "name": "Wikipedia",
@@ -927,9 +944,6 @@
       "id": 2
     }
   },
-  "generate_array": {
-    "array_name": "kAllEngines"
-  },
 
   // Lists the prepopulate engines for each locale. For each entry, the default
   // engine is marked  with a * and the private default is marked with a ! . Both a
@@ -959,9 +973,9 @@
     "bg_BG": [
       "*bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_bg",
       "google"
     ],
@@ -969,8 +983,8 @@
       "bing",
       "yahoo",
       "duckduckgo",
-      "ecosia",
-      "*!startpage_com",
+      "ecosia_no_prompt",
+      "*!startpage_com_no_prompt",
       "wikipedia_cs",
       "google"
     ],
@@ -1015,9 +1029,9 @@
     "el_GR": [
       "*bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_el",
       "google"
     ],
@@ -1070,8 +1084,8 @@
       "wikipedia"
     ],
     "en_PH": [
-      "yahoo_ph",
-      "*bing",
+      "*yahoo_ph",
+      "bing",
       "duckduckgo",
       "ecosia",
       "!startpage_com",
@@ -1118,8 +1132,8 @@
       "wikipedia_es"
     ],
     "es_CL": [
-      "yahoo_cl",
-      "*bing",
+      "*yahoo_cl",
+      "bing",
       "duckduckgo",
       "ecosia",
       "!startpage_com",
@@ -1127,8 +1141,8 @@
       "wikipedia_es"
     ],
     "es_CO": [
-      "yahoo_co",
-      "*bing",
+      "*yahoo_co",
+      "bing",
       "duckduckgo",
       "ecosia",
       "!startpage_com",
@@ -1136,8 +1150,8 @@
       "wikipedia_es"
     ],
     "es_PE": [
-      "yahoo_pe",
-      "*bing",
+      "*yahoo_pe",
+      "bing",
       "duckduckgo",
       "ecosia",
       "!startpage_com",
@@ -1154,8 +1168,8 @@
       "wikipedia_es"
     ],
     "es_VE": [
-      "yahoo_ve",
-      "*bing",
+      "*yahoo_ve",
+      "bing",
       "duckduckgo",
       "ecosia",
       "!startpage_com",
@@ -1194,9 +1208,9 @@
     "hr_HR": [
       "*bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_hr",
       "google"
     ],
@@ -1210,11 +1224,11 @@
       "google"
     ],
     "id_ID": [
-      "*bing",
-      "yahoo_id",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "bing",
+      "*yahoo_id",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_id",
       "google"
     ],
@@ -1229,28 +1243,28 @@
       "google"
     ],
     "ja_JP": [
-      "*bing",
+      "bing",
       "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "ecosia_no_prompt",
+      "*!startpage_com",
       "wikipedia_jp",
       "google"
     ],
     "ko_KR": [
-      "*bing",
+      "bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "*!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_ko",
       "google"
     ],
     "lt_LT": [
-      "*bing",
+      "bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "*!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_lt",
       "google"
     ],
@@ -1322,9 +1336,9 @@
     "ro_RO": [
       "*bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_ro",
       "google"
     ],
@@ -1359,18 +1373,18 @@
     "sr_RS": [
       "*bing",
       "yahoo",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_sr",
       "google"
     ],
     "th_TH": [
       "yahoo_th",
-      "*bing",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "bing",
+      "*!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "google",
       "wikipedia_th"
     ],
@@ -1396,38 +1410,38 @@
       "wolfram"
     ],
     "vi_VN": [
-      "*bing",
-      "yahoo_vn",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "bing",
+      "*yahoo_vn",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_vi",
       "google"
     ],
     "zh_CN": [
       "bing",
       "yahoo",
-      "duckduckgo",
-      "*ecosia",
-      "!startpage_com",
+      "*!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_zh",
       "google"
     ],
-    "zn_HK": [
-      "yahoo_hk",
-      "*bing",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+    "zh_HK": [
+      "bing",
+      "*yahoo_hk",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "google",
       "wikipedia_zh"
     ],
     "zh_TW": [
-      "*bing",
-      "yahoo_tw",
-      "duckduckgo",
-      "ecosia",
-      "!startpage_com",
+      "bing",
+      "*yahoo_tw",
+      "!duckduckgo",
+      "ecosia_no_prompt",
+      "startpage_com_no_prompt",
       "wikipedia_zh",
       "google"
     ],
@@ -1500,6 +1514,6 @@
     ["vi", "VN"],
     ["zh*", "CN"],
     ["zh", "TW"],
-    ["zn", "HK"]
+    ["zh", "HK"]
   ]
 }

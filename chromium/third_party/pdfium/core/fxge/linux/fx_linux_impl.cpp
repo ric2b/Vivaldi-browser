@@ -13,7 +13,6 @@
 #include "core/fxcrt/check.h"
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_codepage.h"
-#include "core/fxcrt/stl_util.h"
 #include "core/fxge/cfx_folderfontinfo.h"
 #include "core/fxge/cfx_fontmgr.h"
 #include "core/fxge/cfx_gemodule.h"
@@ -35,7 +34,7 @@ enum JpFontFamilyRowIndex : uint8_t {
 
 constexpr size_t kJpFontFamilyColumnCount = 5;
 using JpFontFamilyRow = std::array<const char*, kJpFontFamilyColumnCount>;
-constexpr auto kJpFontTable = fxcrt::ToArray<const JpFontFamilyRow>({
+constexpr auto kJpFontTable = std::to_array<const JpFontFamilyRow>({
     {{"MS PGothic", "TakaoPGothic", "VL PGothic", "IPAPGothic", "VL Gothic"}},
     {{"MS Gothic", "TakaoGothic", "VL Gothic", "IPAGothic", "Kochi Gothic"}},
     {{"MS PMincho", "TakaoPMincho", "IPAPMincho", "VL Gothic", "Kochi Mincho"}},
@@ -75,8 +74,9 @@ JpFontFamilyRowIndex GetJapanesePreference(const ByteString& face,
     }
     return kJpFontMincho;
   }
-  if (!FontFamilyIsRoman(pitch_family) && weight > 400)
+  if (!FontFamilyIsRoman(pitch_family) && weight > 400) {
     return kJpFontPGothic;
+  }
 
   return kJpFontPMincho;
 }
@@ -102,8 +102,9 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
                                  int pitch_family,
                                  const ByteString& face) {
   void* font = GetSubstFont(face);
-  if (font)
+  if (font) {
     return font;
+  }
 
   bool bCJK = true;
   switch (charset) {
@@ -111,33 +112,37 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
       JpFontFamilyRowIndex index =
           GetJapanesePreference(face, weight, pitch_family);
       for (const char* name : kJpFontTable[index]) {
-        auto it = m_FontList.find(name);
-        if (it != m_FontList.end())
+        auto it = font_list_.find(name);
+        if (it != font_list_.end()) {
           return it->second.get();
+        }
       }
       break;
     }
     case FX_Charset::kChineseSimplified: {
       for (const char* name : kGbFontList) {
-        auto it = m_FontList.find(name);
-        if (it != m_FontList.end())
+        auto it = font_list_.find(name);
+        if (it != font_list_.end()) {
           return it->second.get();
+        }
       }
       break;
     }
     case FX_Charset::kChineseTraditional: {
       for (const char* name : kB5FontList) {
-        auto it = m_FontList.find(name);
-        if (it != m_FontList.end())
+        auto it = font_list_.find(name);
+        if (it != font_list_.end()) {
           return it->second.get();
+        }
       }
       break;
     }
     case FX_Charset::kHangul: {
       for (const char* name : kHGFontList) {
-        auto it = m_FontList.find(name);
-        if (it != m_FontList.end())
+        auto it = font_list_.find(name);
+        if (it != font_list_.end()) {
           return it->second.get();
+        }
       }
       break;
     }
@@ -149,8 +154,9 @@ void* CFX_LinuxFontInfo::MapFont(int weight,
 }
 
 bool CFX_LinuxFontInfo::ParseFontCfg(const char** pUserPaths) {
-  if (!pUserPaths)
+  if (!pUserPaths) {
     return false;
+  }
 
   // SAFETY: nullptr-terminated array required from caller.
   UNSAFE_BUFFERS({

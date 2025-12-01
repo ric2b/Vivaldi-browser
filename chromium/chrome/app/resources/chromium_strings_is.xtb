@@ -31,15 +31,16 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="1356661055722410047">Nýtt! Þú getur þýtt bæði texta og myndir á skjánum þínum</translation>
 <translation id="1383876407941801731">Leita</translation>
 <translation id="1414495520565016063">Þú ert skráð(ur) inn á Chromium!</translation>
+<translation id="141901961143729572">Segðu skoðun þína</translation>
 <translation id="1465192221147974788">Leyfðu skjáupptöku í Chromium í kerfisstillingunum til að deila glugganum þínum.</translation>
 <translation id="1478370723027452770">Fá hjálp með Chrome for Testing</translation>
 <translation id="1497802159252041924">Uppsetningarvilla: <ph name="INSTALL_ERROR" /></translation>
+<translation id="1518627427551567882">Þessi síða er varin</translation>
 <translation id="1524282610922162960">Deila Chromium flipa</translation>
 <translation id="1547469039832541117">Lýkur völdu verkefni.</translation>
 <translation id="1553461853655228091">Chromium þarf leyfi til að nota myndavélina til að búa til þrívíddarkort af umhverfinu</translation>
 <translation id="1555494096857516577">{NUM_EXTENSIONS,plural, =1{Þessi viðbót er ekki lengur studd. Chromium mælir með að þú fjarlægir hana.}one{Þessi viðbót er ekki lengur studd. Chromium mælir með að þú fjarlægir hana.}other{Þessar viðbætur eru ekki lengur studdar. Chromium mælir með að þú fjarlægir þær.}}</translation>
 <translation id="1574377791422810894">Öryggisverkfæri Chromium</translation>
-<translation id="1591808205441691831">Chromium þarf að staðfesta að þetta sért þú svo að þú getir vistað tiltekin gögn á Google-reikningnum þínum og notað þau í öllum tækjunum þínum. Gögnin verða áfram í þessu tæki ef þú skráir þig út.</translation>
 <translation id="1594928384848033697">Chromium vill eyða gögnum Aðgangsorðastjórnunar. Sláðu inn Windows-aðgangsorðið þitt til að leyfa það.</translation>
 <translation id="1607715478322902680">{COUNT,plural, =0{Kerfisstjórinn þinn gerir kröfu um að þú endurræsir Chromium til að setja upp uppfærslu}=1{Kerfisstjórinn þinn gerir kröfu um að þú endurræsir Chromium til að setja upp uppfærslu. Huliðsglugginn enduropnast ekki.}one{Kerfisstjórinn þinn gerir kröfu um að þú endurræsir Chromium til að setja upp uppfærslu. # huliðsgluggi enduropnast ekki.}other{Kerfisstjórinn þinn gerir kröfu um að þú endurræsir Chromium til að setja upp uppfærslu. # huliðsgluggar enduropnast ekki.}}</translation>
 <translation id="1625909126243026060">Farðu yfir helstu öryggis- og persónuverndarstýringar í Chromium</translation>
@@ -81,7 +82,6 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="2049376729098081731">Veldu hvort að Chromium ferill eigi að fylgja með til að fá sérsniðnari upplifun í Google-þjónustum</translation>
 <translation id="2054039611381840095">Til að fá frekari uppfærslur á Chromium þarftu macOS 12 eða nýrri útgáfu. Þessi tölva notar macOS 11.</translation>
 <translation id="2086476982681781442">Chromium lokaði á þetta niðurhal vegna þess að skráin er blekkjandi og gæti gert óvæntar breytingar á tækinu þínu</translation>
-<translation id="2088953378266246249">Upplýsingar um hvernig Chromium stjórnar rótarvottorðum sínum</translation>
 <translation id="2099452623287920103">Lykilorðið þitt og önnur Chromium-gögn sem þú vistaðir á Google-reikningnum þínum verða fjarlægð úr þessu tæki. Til að nota þau aftur í Chromium skaltu skrá þig aftur inn.</translation>
 <translation id="2120965832000301375">{COUNT,plural, =1{Fyrirtækið eyðir vefskoðunargögnum sjálfkrafa þegar Chromium er ekki notað í 1 mínútu. Þetta getur falið í sér feril, sjálfvirka útfyllingu og niðurhal. Flipar verða áfram opnir.}one{Fyrirtækið eyðir vefskoðunargögnum sjálfkrafa þegar Chromium er ekki notað í # mínútu. Þetta getur falið í sér feril, sjálfvirka útfyllingu og niðurhal. Flipar verða áfram opnir.}other{Fyrirtækið eyðir vefskoðunargögnum sjálfkrafa þegar Chromium er ekki notað í # mínútur. Þetta getur falið í sér feril, sjálfvirka útfyllingu og niðurhal. Flipar verða áfram opnir.}}</translation>
 <translation id="2126108037660393668">Ekki tókst að staðfesta skrána sem var sótt.</translation>
@@ -121,7 +121,6 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="2572494885440352020">Hjálparforrit Chromium</translation>
 <translation id="2575822587468774919">Veldu hvað sem er til að leita með myndaleit</translation>
 <translation id="2576118232315942160">Skráðu þig inn á Chromium til að fá aðgang að aðgangsorðum og fleiru í öllum tækjunum þínum</translation>
-<translation id="2583187216237139145">Stjórnandi vinnuprófíla getur fjarlægt öll Chromium gögn sem verða til við notkun þessa prófíls (þ.m.t. bókamerki, feril, aðgangsorð og aðrar stillingar). <ph name="LEARN_MORE" /></translation>
 <translation id="2592940277904433508">Halda áfram að nota Chromium</translation>
 <translation id="259935314519650377">Ekki tókst að vista uppsetningarforrit sem var sótt í skyndiminni. Villa: <ph name="UNPACK_CACHING_ERROR_CODE" />.</translation>
 <translation id="2620436844016719705">Kerfi</translation>
@@ -165,6 +164,7 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="3079753320517721795">{NUM_DEVICES,plural, =0{Ein eða fleiri Chromium-viðbætur fengu aðgang að 1 USB-tæki}=1{Ein eða fleiri Chromium-viðbætur hafa aðgang að 1 USB-tæki}one{Ein eða fleiri Chromium-viðbætur hafa aðgang að # USB-tæki}other{Ein eða fleiri Chromium-viðbætur hafa aðgang að # USB-tækjum}}</translation>
 <translation id="3101560983689755071">Vafraferillinn þinn hefur áhrif á auglýsingarnar sem þú sérð og áhugasviðin sem eru áætluð hér fyrir neðan. Til að gæta persónuverndar þinnar eyðir Chromium áhugamálunum þínum sjálfkrafa mánaðarlega. Áhugasvið verða hugsanlega endurnýjuð nema þú fjarlægir þau.</translation>
 <translation id="3103660991484857065">Uppsetningarforritinu mistókst að afþjappa safnskránni. Sæktu Chromium aftur.</translation>
+<translation id="310459126943037700">Ekki tókst að ljúka verkefni/verkefnum.</translation>
 <translation id="3130323860337406239">Chromium er að nota hljóðnemann þinn.</translation>
 <translation id="3137969841538672700">Dragðu til að leita</translation>
 <translation id="3144188012276422546">Þessi flipi notar aukagögn. Leyfðu Chromium að óvirkja hann til að bæta afköstin.</translation>
@@ -184,6 +184,7 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="3296368748942286671">Halda áfram að keyra bakgrunnsforrit þegar Chromium er lokað</translation>
 <translation id="3313189106987092621">Chromium varar þig við áður en vefsvæði með ótrygga tengingu er hlaðið</translation>
 <translation id="3316771292331273802">Þegar þú lokar öllum Chromium-gluggum skráistu út af flestum vefsvæðum, að undanskildum Google-reikningnum þínum ef þú ert skráð(ur) inn á Chromium. <ph name="SETTINGS_LINK" /> til að leyfa vefsvæðum að muna eftir þér.</translation>
+<translation id="3352986031709923790">efsta horn leitarsvæðis hægra megin: til hægri <ph name="RIGHT" />%, efst <ph name="TOP" />%</translation>
 <translation id="3387527074123400161">ChromiumOS</translation>
 <translation id="3406848076815591792">Skipta yfir í Chromium prófíl sem er til?</translation>
 <translation id="3412460710772753638">Í Aðgangsorðastjórnun í þessu tæki</translation>
@@ -209,7 +210,6 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="3790262771324122253">Kynntu þér hvers vegna Chromium lokar á sumt niðurhal</translation>
 <translation id="379589255253486813">Chromium lætur þig vita ef þú þarft að yfirfara eitthvað</translation>
 <translation id="3802055581630249637">Chromium forhleður síðum sem er líklegt að þú munir skoða svo þær hlaðist fyrr þegar þú opnar þær</translation>
-<translation id="3830894615770080216">ChromiumOS kerfi</translation>
 <translation id="3848258323044014972"><ph name="PAGE_TITLE" /> – Chromium</translation>
 <translation id="3885770153807205175">Tungumálaval</translation>
 <translation id="388648406173476553">Sérsníða og stjórna Chromium. Eitthvað krefst athygli þinnar – smelltu til að sjá nánar.</translation>
@@ -220,12 +220,14 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="3941890832296813527">Uppsetningarvilla: Skráarheiti uppsetningarforrits er ógilt eða ekki stutt.</translation>
 <translation id="3945058413678539331">Chromium er að reyna að afrita aðgangsorð. Sláðu inn Windows-aðgangsorðið þitt til að leyfa það.</translation>
 <translation id="3954172517175569325">Aðgangsorðin þín, greiðslumátar og heimilisföng sem þú vistaðir á Google-reikningnum þínum verða fjarlægð úr þessu tæki. Til að nota þau aftur í Chromium skaltu skrá þig aftur inn.</translation>
+<translation id="395904275706073188">Ekki er hægt að lesa varðar síður. Prófaðu aðra síðu.</translation>
 <translation id="3962647064319009959">Kynntu þér hvernig Chromium gætir að öryggi þínu</translation>
 <translation id="3975724895399328945">Um &amp;Google Chrome for Testing</translation>
 <translation id="3997429360543082038">Um ChromiumOS</translation>
 <translation id="4019629340646866719">ChromiumOS á tilvist sína að þakka öðrum <ph name="BEGIN_LINK_CROS_OSS" />opnum hugbúnaði<ph name="END_LINK_CROS_OSS" /> og það sama á við um <ph name="BEGIN_LINK_LINUX_OSS" />Linux-forritunarumhverfið <ph name="END_LINK_LINUX_OSS" />.</translation>
 <translation id="4022972681110646219">Þýða skjá</translation>
 <translation id="4023601594785368013">Upprunalegt tungumál: <ph name="LANGUAGE" /></translation>
+<translation id="4023845192681161785">Opnaðu tengla úr hvaða forriti sem er í Chromium og festu vafrann þar að auki á forritastikuna þína til að hafa greiðan aðgang að honum</translation>
 <translation id="4036079820698952681">Hjálpa til við að gera Chromium betra með því að tilkynna um <ph name="BEGIN_LINK" />núverandi stillingar<ph name="END_LINK" /></translation>
 <translation id="4050175100176540509">Mikilvægar öryggislagfæringar og nýir eiginleikar eru í boði í nýjustu útgáfunni.</translation>
 <translation id="4055805654398742145">Aðgangsorðastjórnun</translation>
@@ -324,8 +326,10 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="5487574057737591516">Til að gæta persónuverndar þinnar eyðum við áhugasviðunum þínum sem eru eldri en 4 vikna sjálfkrafa. Áhugasvið kann að birtast aftur á listanum þegar þú heldur áfram að vafra. Ef Chromium skjátlast eða ef þú vilt ekki sjá tilteknar auglýsingar geturðu fjarlægt áhugamál.</translation>
 <translation id="549669000822060376">Bíddu á meðan Chromium setur upp nýjustu kerfisuppfærslunar.</translation>
 <translation id="5496810170689441661">Chromium er að reyna að breyta aðgangsorðum. Sláðu inn Windows-aðgangsorðið þitt til að leyfa það.</translation>
+<translation id="5524890928877629608">efsta horn leitarsvæðis vinstra megin: til vinstri <ph name="LEFT" />%, efst <ph name="TOP" />%</translation>
 <translation id="5527463683072221100">Opna PDF-skjöl í Chromium</translation>
 <translation id="5579324208890605088">Villa í ræsingu: keyrðu uppsetningarforritið sem venjulegur notandi, ekki sem kerfisstjóri.</translation>
+<translation id="5580770360767802657">Notaðu Chromium sem sjálfgefinn vafra og festu hann</translation>
 <translation id="5596627076506792578">Fleiri valkostir</translation>
 <translation id="5605834417512968703">Veldu hvað sem er til að leita með myndaleit eða ýttu á „Esc“ til að loka myndaleitinni</translation>
 <translation id="5618818588972826921">Veldu hvaða texta eða mynd sem er til að leita með myndaleit eða ýttu á „Esc“ til að loka myndaleitinni</translation>
@@ -341,6 +345,7 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="5800158606660203929">Sérsníddu og stjórnaðu Chromium. Stilltu Chromium sem sjálfgefinn vafra.</translation>
 <translation id="5809516625706423866">Ekki er hægt að tengjast internetinu. HTTP 403 óheimilt. Kannaðu uppsetningu staðgengilsþjóna.</translation>
 <translation id="5821520528363214608">Til að nota og vista Chromium-gögn á Google-reikningnum þínum skaltu uppfæra Chromium</translation>
+<translation id="5824893331272123205">Ekki tókst að hlaða glugganum, reyndu aftur</translation>
 <translation id="5862307444128926510">Velkomin(n) í Chromium</translation>
 <translation id="5871205389137001634">Smelltu til að loka myndaleit</translation>
 <translation id="5883558403894052917">Chromium komst að því að eftirfarandi atriði innihalda spilliforrit:</translation>
@@ -362,7 +367,6 @@ Sumir eiginleikar kunna að vera óaðgengilegir og breytingar á kjörstillingu
 <translation id="6069027071882229820">Afrita sem mynd</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> hefur verið bætt við Chromium</translation>
 <translation id="6072463441809498330">Láttu Chromium vinna hraðar</translation>
-<translation id="608006075545470555">Bæta vinnusniði við þennan vafra</translation>
 <translation id="6096348254544841612">Sérstilltu og stjórnaðu Chromium. Uppfærsla er í boði.</translation>
 <translation id="6107893135096467929">Kveikt • Chromium getur ekki staðfest hvaðan þessi viðbót kemur</translation>
 <translation id="6119438414301547735">Leyfa viðbót að sýna aðgangsbeiðnir í tækjastiku Chromium</translation>
@@ -437,6 +441,7 @@ Sumir eiginleikar kunna að verða óaðgengilegir. Tilgreindu aðra prófílam�
 <translation id="684888714667046800">Ekki er hægt að tengjast internetinu. Ef þú notar eldvegg skaltu tryggja að <ph name="PRODUCT_EXE_NAME" /> sé á hvíta listanum.</translation>
 <translation id="6857782730669500492">Chromium – <ph name="PAGE_TITLE" /></translation>
 <translation id="6873893289264747459">Chromium komst að því að „<ph name="EXTENSION_NAME" />“ inniheldur spilliforrit</translation>
+<translation id="6877155553248388166">neðsta horn leitarsvæðis hægra megin: til hægri <ph name="RIGHT" />%, neðst <ph name="BOTTOM" />%</translation>
 <translation id="6896758677409633944">Afrita</translation>
 <translation id="6901631050894301805">Stilltu Chromium sem sjálfgefinn vafra og festu hann við forritastikuna</translation>
 <translation id="6929417474050522668">Þegar kveikt er á prufuútgáfum gera auglýsingamælingar vefsvæðum sem þú opnar kleift að biðja Chromium um upplýsingar sem hjálpa vefsvæðinu að mæla afköst auglýsinga þess. Auglýsingamælingar takmarka rakningu á milli vefsvæða með því að flytja eins lítið magn upplýsinga á milli vefsvæða og mögulegt er.</translation>
@@ -473,6 +478,7 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="7339898014177206373">Nýr gluggi</translation>
 <translation id="734373864078049451">Hér er vefefnið þitt, bókamerkin og annað dót úr Chromium.</translation>
 <translation id="7349591376906416160">Kerfisstjórinn hefur stillt Google Chromium á að opna <ph name="ALTERNATIVE_BROWSER_NAME" /> til að fá aðgang að <ph name="TARGET_URL_HOSTNAME" />.</translation>
+<translation id="7352651011704765696">Eitthvað fór úrskeiðis</translation>
 <translation id="7384121030444253939">Þessi viðbót er ekki lengur studd. Chromium mælir með að þú fjarlægir hana þess í stað.</translation>
 <translation id="7449453770951226939"><ph name="PAGE_TITLE" /> - Chromium Dev</translation>
 <translation id="7450541714075000668">Texti afritaður</translation>
@@ -493,6 +499,7 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="7686590090926151193">Chromium er ekki sjálfgefinn vafri</translation>
 <translation id="7689606757190482937">Samstilltu Chromium á milli tækja og gerðu það að þínu</translation>
 <translation id="7699779824407626136">Chromium-uppfærsla</translation>
+<translation id="7716950018788545737">Verkefni/verkefnum lauk.</translation>
 <translation id="77283119132245232">Sér <ph name="BROWSER_NAME" /> fyrir kerfisrakningarþjónustu. Ef slökkt er á þessari þjónustu munu afkastaspor sem búin eru til af vafranum ekki innihalda viðburði úr öllu kerfinu eins og samhengisskipti og tilbúna þráðarviðburði.</translation>
 <translation id="7745317241717453663">Þetta mun eyða vefskoðunargögnunum þínum úr þessu tæki. Skráðu þig inn í Chromium sem <ph name="USER_EMAIL" /> til að endurheimta gögnin síðar.</translation>
 <translation id="7747138024166251722">Uppsetningarforritið gat ekki búið til tímabundna möppu. Athugaðu laust diskpláss og heimildir fyrir uppsetningu hugbúnaðar.</translation>
@@ -546,6 +553,7 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="837460953767177950">Þú þarft að endurræsa Chromium í kjölfarið.</translation>
 <translation id="8397248745433792218">Chromium mælir með að þú fjarlægir hana. <ph name="BEGIN_LINK" />Nánar um studdar viðbætur<ph name="END_LINK" /></translation>
 <translation id="8401454788024434101">Útgefandi þessarar viðbótar afturkallaði hana og hún kann að vera óörugg. Fjarlægðu hana úr Chromium svo hún geti ekki lengur séð og breytt gögnum á vefsvæðum sem þú heimsækir, þ.m.t. persónuupplýsingum þínum.</translation>
+<translation id="8416884904046428725">Chromium þarf að staðfesta að þetta sért þú svo að þú getir vistað tiltekin gögn á Google-reikningnum þínum og notað þau í öllum tækjunum þínum. Ef þú skráir þig út núna verður þessum gögnum eytt.</translation>
 <translation id="8417404458978023919">{0,plural, =1{Endurræstu Chromium innan dags}one{Endurræstu Chromium innan # dags}other{Endurræstu Chromium innan # daga}}</translation>
 <translation id="8438543370129609977">Þegar þú notar myndaleit verða titill síðu, vefslóð og innihald, að meðtöldum PDF-skjölum, send til þjónsins. <ph name="LEARN_MORE" /></translation>
 <translation id="8453117565092476964">Uppsetningarsafnskráin er skemmd eða ógild. Sæktu Chromium aftur.</translation>
@@ -554,7 +562,6 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="8471947159125090285">Staðfestu að þetta sért þú til að nota og vista Chromium-gögn á Google-reikningnum þínum</translation>
 <translation id="8493179195440786826">Chromium er úrelt</translation>
 <translation id="8522801943730206384">Chromium getur athugað aðgangsorðin þín þegar þú vistar þau</translation>
-<translation id="8550334526674375523">Þessi vinnuprófíll er algjörlega aðskilinn þínum eigin prófíl.</translation>
 <translation id="8555465886620020932">Þjónustuvilla: <ph name="SERVICE_ERROR" />.</translation>
 <translation id="8556420416730706394">Þú getur fest myndaleit til að hafa greiðan aðgang að henni: Smelltu á hnappinn „Festa“ efst í hliðarglugganum</translation>
 <translation id="856656450041460113">Leita í lista tungumála</translation>
@@ -568,6 +575,7 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="8697124171261953979">Það stýrir því einnig hvaða síða opnast þegar þú ræsir Chromium eða leitar í veffangastikunni.</translation>
 <translation id="8704119203788522458">Chromium er þitt</translation>
 <translation id="8719993436687031146">Skrá þig inn á Chromium?</translation>
+<translation id="8747073452963259673">neðsta horn leitarsvæðis vinstra megin: til vinstri <ph name="LEFT" />%, neðst <ph name="BOTTOM" />%</translation>
 <translation id="878572486461146056">Uppsetningarvilla: Kerfisstjórinn hefur notað hópreglu sem kemur í veg fyrir uppsetningu: <ph name="INSTALL_ERROR" /></translation>
 <translation id="8796602469536043152">Chromium þarf leyfi til að nota myndavélina og hljóðnemann á þessu vefsvæði</translation>
 <translation id="8818550178040858407">Skrá þig inn í Chromium?</translation>
@@ -582,7 +590,6 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="8931379085695076764">Chromium getur áætlað áhugasvið þín í samræmi við vafraferil síðustu vikna. Þessi gögn eru aðeins geymd í tækinu.</translation>
 <translation id="8941642502866065432">Ekki var hægt að uppfæra Chromium</translation>
 <translation id="897581876605952338">Lógó Chromium Enterprise</translation>
-<translation id="8986207147630327271">Þú ert að bæta vinnusniði við þennan vafra og veita stjórnanda þínum leyfi til að stjórna vinnusniðinu eingöngu.</translation>
 <translation id="8988036198400390003">Stjórna Chromium-prófílum</translation>
 <translation id="9019929317751753759">Til að gera Chromium öruggara höfum við slökkt á eftirfarandi viðbót sem ekki er á skrá hjá <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> og kann að hafa verið bætt við án þinnar vitneskju.</translation>
 <translation id="9022552996538154597">Skráðu þig inn á Chromium</translation>
@@ -595,13 +602,13 @@ Chromium getur ekki endurheimt stillingarnar þínar.</translation>
 <translation id="9106612006984859720">Til að fá frekari uppfærslur á Chromium þarftu Windows 10 eða nýrri útgáfu. Þessi tölva notar Windows 8.1.</translation>
 <translation id="91086099826398415">Opna tengil í nýjum Chromium &amp;flipa</translation>
 <translation id="911206726377975832">Eyða líka vafragögnum?</translation>
+<translation id="9134482777260927479">Aðstoð með heimanám</translation>
 <translation id="9148058034647219655">Hætta</translation>
 <translation id="9158494823179993217">Kerfisstjórinn þinn hefur stillt Chromium á að opna annan vafra fyrir <ph name="TARGET_URL_HOSTNAME" />.</translation>
 <translation id="9185526690718004400">Endurræstu til að uppfæra &amp;Chromium</translation>
 <translation id="9190841055450128916">Chromium (mDNS-inn)</translation>
 <translation id="924957577793602335">Lagaðu Chromium að þínum þörfum</translation>
 <translation id="93478295209880648">Vera kann að Chromium virki ekki sem skyldi vegna þess að vafrinn er ekki lengur studdur á Windows XP eða Windows Vista</translation>
-<translation id="942598560705308788">Vottorð sem Chromium stjórnar</translation>
 <translation id="945522503751344254">Senda ábendingu</translation>
 <translation id="965162752251293939">Hver er að nota Chromium?</translation>
 <translation id="967427899662692980">Njóttu hámarksöryggis Chromium</translation>

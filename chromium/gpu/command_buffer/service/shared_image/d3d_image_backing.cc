@@ -761,8 +761,9 @@ std::unique_ptr<DawnImageRepresentation> D3DImageBacking::ProduceDawn(
         dawn_d3d11_device = dawn::native::d3d11::GetD3D11Device(device.Get());
       }
       if (dawn_d3d11_device == texture_d3d11_device_) {
-        shared_texture_memory =
-            CreateDawnSharedTextureMemory(device, d3d11_texture_);
+        shared_texture_memory = CreateDawnSharedTextureMemory(
+            device, d3d11_texture_, /*requires_dawn_signal_fence=*/
+            use_cross_device_fence_synchronization());
       } else {
         CHECK(dxgi_shared_handle_state_);
         const HANDLE shared_handle =
@@ -867,8 +868,8 @@ wgpu::Texture D3DImageBacking::GetOrCreateDawnTexture(
     wgpu::TextureUsage wgpu_usage,
     wgpu::TextureUsage wgpu_internal_usage,
     const std::vector<wgpu::TextureFormat>& view_formats) {
-  wgpu::Texture texture =
-      dawn_shared_texture_cache_->GetCachedWGPUTexture(device, wgpu_usage);
+  wgpu::Texture texture = dawn_shared_texture_cache_->GetCachedWGPUTexture(
+      device, wgpu_usage, wgpu_internal_usage, view_formats);
   if (!texture) {
     texture = CreateDawnSharedTexture(shared_texture_memory, wgpu_usage,
                                       wgpu_internal_usage, view_formats);
@@ -880,7 +881,8 @@ wgpu::Texture D3DImageBacking::GetOrCreateDawnTexture(
     std::string label = base::StrCat({GetName(), "_", debug_label()});
     texture.SetLabel(label.c_str());
 
-    dawn_shared_texture_cache_->MaybeCacheWGPUTexture(device, texture);
+    dawn_shared_texture_cache_->MaybeCacheWGPUTexture(
+        device, texture, wgpu_usage, wgpu_internal_usage, view_formats);
   }
 
   return texture;
@@ -1204,7 +1206,9 @@ D3DImageBacking::CreateGraphiteTextureHolders(
   // Make sure that the texture is cached inside the dawn_shared_texture_cache_
   DCHECK(texture);
   DCHECK(dawn_shared_texture_cache_
-             ->GetCachedWGPUTexture(device, texture.GetUsage())
+             ->GetCachedWGPUTexture(device, texture.GetUsage(),
+                                    /*internal_usage=*/wgpu::TextureUsage::None,
+                                    /*view_formats=*/{})
              .Get() == texture.Get());
 
   std::vector<scoped_refptr<SkiaImageRepresentation::GraphiteTextureHolder>>

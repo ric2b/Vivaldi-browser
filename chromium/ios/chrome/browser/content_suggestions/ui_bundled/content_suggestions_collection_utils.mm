@@ -39,7 +39,7 @@ const CGFloat kTopSpacingMaterial = 24;
 
 // Top margin for the doodle.
 const CGFloat kDoodleTopMarginRegularXRegular = 162;
-const CGFloat kDoodleTopMarginOther = 65;
+const CGFloat kDoodleTopMarginOther = 45;
 // Size of the doodle top margin which is multiplied by the scaled font factor,
 // and added to `kDoodleTopMarginOther` on non Regular x Regular form factors.
 const CGFloat kDoodleScaledTopMarginOther = 10;
@@ -178,8 +178,6 @@ CGFloat DoodleTopMargin(BOOL logo_is_showing,
       top_inset +
       AlignValueToPixel(kDoodleScaledTopMarginOther *
                         ui_util::SystemSuggestedFontSizeMultiplier());
-  // If Magic Stack is not enabled, this value is zero (e.g. no-op).
-  top_margin -= ReducedNTPTopMarginSpaceForMagicStack();
   top_margin += kDoodleTopMarginOther;
   top_margin += GetDeprecateFeedHeaderParameterValueAsDouble(
       kDeprecateFeedHeaderParameterTopPadding, /*default_value=*/0);
@@ -262,7 +260,7 @@ CGFloat HeightForLogoHeader(BOOL logo_is_showing,
 }
 
 CGFloat HeaderBottomPadding(UITraitCollection* trait_collection) {
-  if (IsHomeCustomizationEnabled() && IsSplitToolbarMode(trait_collection)) {
+  if (IsSplitToolbarMode(trait_collection)) {
     return GetDeprecateFeedHeaderParameterValueAsDouble(
         kDeprecateFeedHeaderParameterHeaderBottomPadding, 0);
   }
@@ -270,11 +268,12 @@ CGFloat HeaderBottomPadding(UITraitCollection* trait_collection) {
 }
 
 void ConfigureSearchHintLabel(UILabel* search_hint_label,
-                              UIView* search_tab_target) {
+                              UIView* search_tab_target,
+                              NSString* placeholder_text) {
   [search_hint_label setTranslatesAutoresizingMaskIntoConstraints:NO];
   [search_tab_target addSubview:search_hint_label];
 
-  [search_hint_label setText:l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)];
+  [search_hint_label setText:placeholder_text];
   if (base::i18n::IsRTL()) {
     [search_hint_label setTextAlignment:NSTextAlignmentRight];
   }
@@ -370,8 +369,7 @@ UIColor* SearchHintLabelColor() {
 }
 
 int SetUpListTitleStringID() {
-  return IsIOSTipsNotificationsEnabled() ? IDS_IOS_SET_UP_LIST_TIPS_TITLE
-                                         : IDS_IOS_SET_UP_LIST_TITLE;
+  return IDS_IOS_SET_UP_LIST_TIPS_TITLE;
 }
 
 NSString* SetUpListTitleString() {

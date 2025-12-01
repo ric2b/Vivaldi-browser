@@ -32,13 +32,21 @@ enum class Channel;
 
 namespace supervised_user {
 
-// This class manages the filtering behavior for URLs, i.e. it tells callers
-// if a URL should be allowed or blocked. It uses information
-// from multiple sources:
-//   * A default setting (allow or block).
-//   * User-specified manual overrides (allow or block) for either sites
-//     (hostnames) or exact URLs, which take precedence over the previous
-//     sources.
+// The URL filter manages the filtering behavior for URLs, i.e. it tells
+// callers if a URL should be allowed or blocked. It uses information from
+// multiple sources:
+//   1) User-specified manual overrides (allow or block) for either sites
+//     (hostnames) or exact URLs,
+//   2) Then, depending on the mode of operation:
+//      a) without asynchronous check request, the default behavior (allow or
+//         block) is used,
+//      b) with asynchronous check request, the url is tested against remote
+//         service.
+//
+// Since the instance of this filter is in 1-1 relation with the supervised
+// user service, it is present all the time. However, when parental controls
+// are off or filtering is not requested, the filter operates in a disabled
+// state which transparently classifies all urls as allowed.
 class SupervisedUserURLFilter {
  public:
   // This enum describes whether the approved list or blocked list is used on
@@ -101,6 +109,10 @@ class SupervisedUserURLFilter {
     bool IsFromDefaultSetting() const {
       return reason == FilteringBehaviorReason::DEFAULT;
     }
+    bool IsAllowedBecauseOfDisabledFilter() const {
+      return reason == FilteringBehaviorReason::FILTER_DISABLED &&
+             behavior == FilteringBehavior::kAllow;
+    }
 
     // True when the result of the classification means that the url is safe.
     // See `::IsClassificationSuccessful` for caveats.
@@ -118,6 +130,17 @@ class SupervisedUserURLFilter {
                  safe_search_api::ClassificationDetails::Reason::
                      kFailedUseDefault;
     }
+  };
+
+  // Encapsulates statistics about this URL filter.
+  struct Statistics {
+    bool operator==(const Statistics& other) const = default;
+    ManagedSiteList GetManagedSiteList() const;
+
+    std::size_t allowed_hosts_count = 0;
+    std::size_t blocked_hosts_count = 0;
+    std::size_t allowed_urls_count = 0;
+    std::size_t blocked_urls_count = 0;
   };
 
   // Provides access to functionality from services on which we don't want
@@ -144,14 +167,8 @@ class SupervisedUserURLFilter {
 
   virtual ~SupervisedUserURLFilter();
 
-  static const char* GetWebFilterTypeHistogramNameForTest();
-  static const char* GetManagedSiteListHistogramNameForTest();
-  static const char* GetApprovedSitesCountHistogramNameForTest();
-  static const char* GetBlockedSitesCountHistogramNameForTest();
   static const char* GetManagedSiteListConflictHistogramNameForTest();
   static const char* GetManagedSiteListConflictTypeHistogramNameForTest();
-
-  static FilteringBehavior BehaviorFromInt(int behavior_value);
 
   // Returns true if the |host| matches the pattern. A pattern is a hostname
   // with one or both of the following modifications:
@@ -201,43 +218,18 @@ class SupervisedUserURLFilter {
       FilteringContext filtering_context = FilteringContext::kDefault,
       std::optional<ui::PageTransition> transition_type = std::nullopt);
 
-  // Sets the filtering behavior for pages not on a list (default is ALLOW).
-  void SetDefaultFilteringBehavior(FilteringBehavior behavior);
+  // Refreshes data structures that hold manually configured url and host
+  // exceptions.
+  void UpdateManualHosts();
+  void UpdateManualUrls();
 
-  FilteringBehavior GetDefaultFilteringBehavior() const;
-
-  // Sets the set of manually allowed or blocked hosts.
-  void SetManualHosts(std::map<std::string, bool> host_map);
-
-  bool IsManualHostsEmpty() const;
-
-  // Sets the set of manually allowed or blocked URLs.
-  void SetManualURLs(std::map<GURL, bool> url_map);
-
-  // Removes all filter entries, clears the async checker if present, and resets
-  // the default behavior to "allow".
-  void Clear();
+  // Returns summary of url filtering settings.
+  Statistics GetFilteringStatistics() const;
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
   WebFilterType GetWebFilterType() const;
-
-  // Emits URL filter metrics based on the parent web filter configuration
-  // applied to the supervised user. Returns true if one or more metrics were
-  // emitted.
-  bool EmitURLFilterMetrics() const;
-
-  // Reports FamilyUser.WebFilterType metrics based on parent web filter type
-  // configuration.
-  void ReportWebFilterTypeMetrics() const;
-
-  // Reports FamilyUser.ManagedSiteList metrics based on parent web filter allow
-  // and blocklist configuration.
-  void ReportManagedSiteListMetrics() const;
-
-  // Set value for `is_filter_initialized_`.
-  void SetFilterInitialized(bool is_filter_initialized);
 
   // Sets safe_search_api::URLCheckerClient for SafeSites classification.
   void SetURLCheckerClient(
@@ -247,9 +239,6 @@ class SupervisedUserURLFilter {
   bool IsHostInBlocklist(const std::string& host) const;
 
  private:
-  friend class SupervisedUserURLFilterTest;
-  friend class SupervisedUserURLFilteringWithConflictsTest;
-
   bool IsExemptedFromGuardianApproval(const GURL& effective_url);
 
   virtual bool RunAsyncChecker(const GURL& url, ResultCallback callback) const;
@@ -271,8 +260,6 @@ class SupervisedUserURLFilter {
 
   base::ObserverList<Observer>::Unchecked observers_;
 
-  FilteringBehavior default_behavior_;
-
   // Maps from a URL to whether it is manually allowed (true) or blocked
   // (false).
   std::map<GURL, bool> url_map_;
@@ -281,6 +268,9 @@ class SupervisedUserURLFilter {
   std::set<std::string> blocked_host_list_;
   std::set<std::string> allowed_host_list_;
 
+  // Statistics about this filter configuration
+  Statistics statistics_;
+
   const raw_ref<PrefService> user_prefs_;
 
   std::unique_ptr<Delegate> delegate_;
@@ -288,8 +278,6 @@ class SupervisedUserURLFilter {
   std::unique_ptr<safe_search_api::URLChecker> async_url_checker_;
 
   SEQUENCE_CHECKER(sequence_checker_);
-
-  bool is_filter_initialized_ = false;
 
   base::WeakPtrFactory<SupervisedUserURLFilter> weak_ptr_factory_{this};
 };

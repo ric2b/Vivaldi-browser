@@ -69,6 +69,7 @@ class TlsDataRouterPosix : public SocketHandleWaiter::Subscriber {
   // SocketHandleWaiter::Subscriber overrides.
   void ProcessReadyHandle(SocketHandleWaiter::SocketHandleRef handle,
                           uint32_t flags) override;
+  bool HasPendingWrite(SocketHandleWaiter::SocketHandleRef handle) override;
 
   OSP_DISALLOW_COPY_AND_ASSIGN(TlsDataRouterPosix);
 

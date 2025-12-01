@@ -22,34 +22,103 @@ GCLIENT = os.path.join(ROOT_DIR, 'gclient')
 # TODO: Should fix these warnings.
 # pylint: disable=line-too-long
 
+def create_deps_content(git_base, path_to_revision_map):
+    """
+    Create a DEPS file content string with the given dependency mappings.
+
+    Args:
+        git_base: The base URL for git repositories
+        path_to_revision_map: Dictionary mapping dependency paths to their revisions
+
+    Returns:
+        String with the complete DEPS file content including standard hooks
+    """
+    dep_lines = []
+    git_base = git_base.replace('\\', '\\\\')
+    for path, revision in path_to_revision_map.items():
+        dep_lines.append(f' "{path}": "file://{git_base}repo_2@{revision}",')
+
+    # Combine all parts with standard hooks.
+    deps_content = [
+        'deps = {',
+        '\n'.join(dep_lines),
+        '}',
+        'hooks = [',
+        '  {"action": ["foo", "--android", "{checkout_android}"]}',
+        ']',
+    ]
+    return '\n'.join(deps_content)
+
 
 class FakeRepos(fake_repos.FakeReposBase):
     NB_GIT_REPOS = 2
 
     def populateGit(self):
-        self._commit_git('repo_2', {
-            'origin': 'git/repo_2@1',
-        })
-        self._commit_git('repo_2', {
-            'origin': 'git/repo_2@2',
-        })
-        self._commit_git('repo_2', {
-            'origin': 'git/repo_2@3',
-        })
+        for x in range(1,4):
+            self._commit_git('repo_2', {'origin': f'git/repo_2@{x}'})
 
+        # repo_2@1 is the default revision.
+        # Anything under 'third_party/not_supported' tests handling unsupported
+        # cases.
+        repo2_revision = self.git_hashes['repo_2'][1][0]
         self._commit_git(
             'repo_1', {
-                'DEPS': '\n'.join([
-                    'deps = {',
-                    ' "src/foo": "%(git_base)srepo_2@%(repo_2_revision)s",',
-                    '}',
-                    'hooks = [',
-                    '  {"action": ["foo", "--android", "{checkout_android}"]}',
-                    ']',
-                ]) % {
-                    'git_base': self.git_base.replace('\\', '\\\\'),
-                    'repo_2_revision': self.git_hashes['repo_2'][1][0],
-                },
+                'DEPS': create_deps_content(self.git_base, {
+                    'src/foo': repo2_revision,
+                    'src/third_party/repo_2/src': repo2_revision,
+                    'src/third_party/repo_2B/src': repo2_revision,
+                    'src/third_party/not_supported/with_divider/src': repo2_revision,
+                    'src/third_party/not_supported/multiple_revisions/src': repo2_revision,
+                    'src/third_party/not_supported/no_revision/src': repo2_revision
+                }),
+                'README.chromium': '\n'.join([
+                    'Name: test repo',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'Revision: abcabc123123',
+                    'License: MIT',
+                ]),
+                'third_party/repo_2/README.chromium': '\n'.join([
+                    'Name: test repo 2',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'Revision: abc1234',
+                    'License: MIT',
+                ]),
+                'third_party/repo_2B/README.chromium': '\n'.join([
+                    'Name: Override DEPS value for revision',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'Revision: DEPS',
+                    'License: MIT',
+                ]),
+                'third_party/not_supported/with_divider/README.chromium': '\n'.join([
+                    'Name: Deps divider not supported',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'Revision: abc1234',
+                    'License: MIT',
+                    '-------------------- DEPENDENCY DIVIDER --------------------',
+                    'Name: So nothing here should change',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'Revision: abc1234',
+                    'License: MIT',
+                ]),
+                'third_party/not_supported/multiple_revisions/README.chromium': '\n'.join([
+                    'Name: Multiple revisions',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'Revision: abc1234',
+                    'License: MIT',
+                    'Revision: abc1235', # This should not happen.
+                ]),
+                'third_party/not_supported/no_revision/README.chromium': '\n'.join([
+                    'Name: No revision',
+                    'URL: https://example.com',
+                    'Version: 1.0',
+                    'License: MIT',
+                ]),
             })
 
 
@@ -70,10 +139,20 @@ class RollDepTest(fake_repos.FakeReposTestBase):
         self.enabled = self.FAKE_REPOS.set_up_git()
         self.src_dir = os.path.join(self.root_dir, 'src')
         self.foo_dir = os.path.join(self.src_dir, 'foo')
+        self.all_repos = [
+            'src/foo',
+            'src/third_party/repo_2/src',
+            'src/third_party/repo_2B/src',
+            'src/third_party/not_supported/with_divider/src',
+            'src/third_party/not_supported/multiple_revisions/src',
+            'src/third_party/not_supported/no_revision/src',
+        ]
         if self.enabled:
-            self.call(
-                [GCLIENT, 'config', self.git_base + 'repo_1', '--name', 'src'],
-                cwd=self.root_dir)
+            self.call([
+                GCLIENT, 'config', 'file://' + self.git_base + 'repo_1',
+                '--name', 'src'
+            ],
+                      cwd=self.root_dir)
             self.call([GCLIENT, 'sync'], cwd=self.root_dir)
 
     def call(self, cmd, cwd=None):
@@ -93,36 +172,75 @@ class RollDepTest(fake_repos.FakeReposTestBase):
                                '\n'), stderr.replace('\r\n',
                                                      '\n'), process.returncode)
 
+    def assert_deps_match(self, expected_path_to_revision_map):
+        # Assume everything is at the default revision and only update the
+        # provided paths.
+        default_revision = self.githash('repo_2', 1)
+        expected_map = {path: default_revision for path in self.all_repos}
+        expected_map.update(expected_path_to_revision_map)
+
+        for path, revision in expected_map.items():
+            with self.subTest(path=path):
+                path_dir = os.path.join(self.root_dir, path)
+                self.assertEqual(self.gitrevparse(path_dir), revision)
+
+        with open(os.path.join(self.src_dir, 'DEPS')) as f:
+            actual_content = f.read()
+        with self.subTest(path='DEPS'):
+            expected_content = create_deps_content(self.git_base,expected_map)
+            self.assertEqual(expected_content, actual_content)
+
+
     def testRollsDep(self):
         if not self.enabled:
             return
-        stdout, stderr, returncode = self.call([ROLL_DEP, 'src/foo'])
-        expected_revision = self.githash('repo_2', 3)
+        stdout, stderr, returncode = self.call([ROLL_DEP]+self.all_repos)
+        latest_revision = self.githash('repo_2', 3)
 
         self.assertEqual(stderr, '')
         self.assertEqual(returncode, 0)
 
-        with open(os.path.join(self.src_dir, 'DEPS')) as f:
-            contents = f.read()
-
-        self.assertEqual(self.gitrevparse(self.foo_dir), expected_revision)
-        self.assertEqual([
-            'deps = {',
-            ' "src/foo": "' + self.git_base.replace('\\', '\\\\') + 'repo_2@' +
-            expected_revision + '",',
-            '}',
-            'hooks = [',
-            '  {"action": ["foo", "--android", "{checkout_android}"]}',
-            ']',
-        ], contents.splitlines())
+        # All deps should be rolled to the latest revision.
+        self.assert_deps_match({p: latest_revision for p in self.all_repos})
 
         commit_message = self.call(['git', 'log', '-n', '1'])[0]
 
         expected_message = 'Roll src/foo/ %s..%s (2 commits)' % (self.githash(
-            'repo_2', 1)[:9], self.githash('repo_2', 3)[:9])
+            'repo_2', 1)[:9], latest_revision[:9])
 
         self.assertIn(expected_message, stdout)
         self.assertIn(expected_message, commit_message)
+
+
+    def testRollsDepWithReadme(self):
+        """Tests roll-dep when updating README.chromium files."""
+        if not self.enabled:
+            return
+        stdout, stderr, returncode = self.call(
+                [ROLL_DEP]+self.all_repos
+        )
+        latest_revision = self.githash('repo_2', 3)
+
+        # All deps should be rolled to the latest revision (3).
+        self.assert_deps_match({p: latest_revision for p in self.all_repos})
+        self.assertEqual(stderr, '')
+        self.assertEqual(returncode, 0)
+        for path in self.all_repos:
+            with self.subTest(path=path):
+                contents = ''
+                readme_path = os.path.join(self.root_dir, path, os.path.pardir, 'README.chromium')
+                if os.path.exists(readme_path):
+                    with open(readme_path, 'r') as f:
+                        contents = f.read()
+                if path == 'src/third_party/not_supported/no_revision/src':
+                    self.assertIn('README.chromium contains 0 Revision: lines', stdout)
+                if 'not_supported' in path:
+                    self.assertNotIn(latest_revision, contents)
+                    continue
+                # Check that the revision was updated.
+                self.assertIn(f'Revision: {latest_revision}', contents)
+                self.assertNotIn('Revision: abcabc123123', contents)
+                self.assertNotIn('No README.chromium found', stdout)
 
     def testRollsDepReviewers(self):
         if not self.enabled:
@@ -143,27 +261,16 @@ class RollDepTest(fake_repos.FakeReposTestBase):
     def testRollsDepToSpecificRevision(self):
         if not self.enabled:
             return
+        specified_revision = self.githash('repo_2', 2)
         stdout, stderr, returncode = self.call(
-            [ROLL_DEP, 'src/foo', '--roll-to',
-             self.githash('repo_2', 2)])
-        expected_revision = self.githash('repo_2', 2)
+            [ROLL_DEP, 'src/foo',  '--roll-to', specified_revision])
 
         self.assertEqual(stderr, '')
         self.assertEqual(returncode, 0)
 
-        with open(os.path.join(self.src_dir, 'DEPS')) as f:
-            contents = f.read()
-
-        self.assertEqual(self.gitrevparse(self.foo_dir), expected_revision)
-        self.assertEqual([
-            'deps = {',
-            ' "src/foo": "' + self.git_base.replace('\\', '\\\\') + 'repo_2@' +
-            expected_revision + '",',
-            '}',
-            'hooks = [',
-            '  {"action": ["foo", "--android", "{checkout_android}"]}',
-            ']',
-        ], contents.splitlines())
+        self.assert_deps_match({
+            'src/foo': specified_revision,
+        })
 
         commit_message = self.call(['git', 'log', '-n', '1'])[0]
 
@@ -178,24 +285,13 @@ class RollDepTest(fake_repos.FakeReposTestBase):
             return
         stdout, stderr, returncode = self.call(
             [ROLL_DEP, 'src/foo', '--log-limit', '1'])
-        expected_revision = self.githash('repo_2', 3)
+        latest_revision = self.githash('repo_2', 3)
 
         self.assertEqual(stderr, '')
         self.assertEqual(returncode, 0)
-
-        with open(os.path.join(self.src_dir, 'DEPS')) as f:
-            contents = f.read()
-
-        self.assertEqual(self.gitrevparse(self.foo_dir), expected_revision)
-        self.assertEqual([
-            'deps = {',
-            ' "src/foo": "' + self.git_base.replace('\\', '\\\\') + 'repo_2@' +
-            expected_revision + '",',
-            '}',
-            'hooks = [',
-            '  {"action": ["foo", "--android", "{checkout_android}"]}',
-            ']',
-        ], contents.splitlines())
+        self.assert_deps_match({
+            'src/foo':latest_revision,
+        })
 
         commit_message = self.call(['git', 'log', '-n', '1'])[0]
 

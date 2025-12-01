@@ -17,7 +17,7 @@ namespace {
 // Maximum time in milliseconds to wait for the Safe Browsing service reputation
 // check. After this amount of time the outstanding check will be aborted, and
 // the resource will be treated as if it were safe.
-const int kCheckUrlTimeoutMs = 5000;
+inline constexpr int kCheckUrlTimeoutMs = 5000;
 }  // namespace
 
 namespace safe_browsing {
@@ -70,6 +70,13 @@ class AbusiveNotificationPermissionsManager {
   void DeletePatternFromRevokedAbusiveNotificationList(
       const ContentSettingsPattern& primary_pattern,
       const ContentSettingsPattern& secondary_pattern);
+
+  // Restores REVOKED_ABUSIVE_NOTIFICATION_PERMISSIONS entry for the
+  // primary_pattern after it was deleted after user
+  // has accepted the revocation (via `ClearRevokedPermissionsList()`).
+  void RestoreDeletedRevokedPermission(
+      const ContentSettingsPattern& primary_pattern,
+      content_settings::ContentSettingConstraints constraints);
 
   // If there's a clock for testing, return that. Otherwise, return an instance
   // of a default clock.

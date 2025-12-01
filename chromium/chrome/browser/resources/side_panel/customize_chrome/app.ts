@@ -29,7 +29,7 @@ import type {AppearanceElement} from './appearance.js';
 import type {CategoriesElement} from './categories.js';
 import {CustomizeChromeImpression, recordCustomizeChromeImpression} from './common.js';
 import type {BackgroundCollection, CustomizeChromePageHandlerInterface} from './customize_chrome.mojom-webui.js';
-import {ChromeWebStoreCategory, ChromeWebStoreCollection, CustomizeChromeSection} from './customize_chrome.mojom-webui.js';
+import {ChromeWebStoreCategory, ChromeWebStoreCollection, CustomizeChromeSection, NewTabPageType} from './customize_chrome.mojom-webui.js';
 import {CustomizeChromeApiProxy} from './customize_chrome_api_proxy.js';
 import type {ThemesElement} from './themes.js';
 
@@ -82,7 +82,7 @@ export class AppElement extends AppElementBase {
       extensionsCardEnabled_: {type: Boolean},
       footerEnabled_: {type: Boolean},
       wallpaperSearchEnabled_: {type: Boolean},
-      isSourceTabFirstPartyNtp_: {type: Boolean},
+      newTabPageType_: {type: NewTabPageType},
       showEditTheme_: {type: Boolean},
     };
   }
@@ -94,19 +94,21 @@ export class AppElement extends AppElementBase {
         ['#appearanceElement', '#editThemeButton']);
   }
 
-  protected page_: CustomizeChromePage = CustomizeChromePage.OVERVIEW;
-  protected modulesEnabled_: boolean =
+  protected accessor page_: CustomizeChromePage = CustomizeChromePage.OVERVIEW;
+  protected accessor modulesEnabled_: boolean =
       loadTimeData.getBoolean('modulesEnabled');
-  protected selectedCollection_: BackgroundCollection|null = null;
-  protected extensionsCardEnabled_: boolean =
+  protected accessor selectedCollection_: BackgroundCollection|null = null;
+  protected accessor extensionsCardEnabled_: boolean =
       loadTimeData.getBoolean('extensionsCardEnabled');
   // TODO(crbug.com/400952431) Footer section is hidden until the first time the
   // user has a 3P NTP or non-default and non-3P themed 1P NTP
-  protected footerEnabled_: boolean = loadTimeData.getBoolean('footerEnabled');
-  protected wallpaperSearchEnabled_: boolean =
+  protected accessor footerEnabled_: boolean =
+      loadTimeData.getBoolean('footerEnabled');
+  protected accessor wallpaperSearchEnabled_: boolean =
       loadTimeData.getBoolean('wallpaperSearchEnabled');
-  protected isSourceTabFirstPartyNtp_: boolean = true;
-  protected showEditTheme_: boolean = true;
+  protected accessor newTabPageType_: NewTabPageType =
+      NewTabPageType.kFirstPartyWebUI;
+  protected accessor showEditTheme_: boolean = true;
   private scrollToSectionListenerId_: number|null = null;
   private attachedTabStateUpdatedId_: number|null = null;
   private setThemeEditableId_: number|null = null;
@@ -141,17 +143,16 @@ export class AppElement extends AppElementBase {
     this.attachedTabStateUpdatedId_ =
         CustomizeChromeApiProxy.getInstance()
             .callbackRouter.attachedTabStateUpdated.addListener(
-                (isSourceTabFirstPartyNtp: boolean) => {
-                  if (this.isSourceTabFirstPartyNtp_ ===
-                      isSourceTabFirstPartyNtp) {
+                (newTabPageType: NewTabPageType) => {
+                  if (this.newTabPageType_ === newTabPageType) {
                     return;
                   }
 
-                  this.isSourceTabFirstPartyNtp_ = isSourceTabFirstPartyNtp;
+                  this.newTabPageType_ = newTabPageType;
 
                   // Since some pages aren't supported in non first party mode,
                   // change the section back to the overview.
-                  if (!this.isSourceTabFirstPartyNtp_ &&
+                  if (!this.isSourceTabFirstPartyNtp_() &&
                       !this.pageSupportedOnNonFirstPartyNtps()) {
                     this.page_ = CustomizeChromePage.OVERVIEW;
                   }
@@ -204,6 +205,14 @@ export class AppElement extends AppElementBase {
     assert(this.setThemeEditableId_);
     CustomizeChromeApiProxy.getInstance().callbackRouter.removeListener(
         this.setThemeEditableId_);
+  }
+
+  protected isSourceTabFirstPartyNtp_(): boolean {
+    return this.newTabPageType_ === NewTabPageType.kFirstPartyWebUI;
+  }
+
+  protected isSourceTabExtension_(): boolean {
+    return this.newTabPageType_ === NewTabPageType.kExtension;
   }
 
   protected async onBackClick_() {

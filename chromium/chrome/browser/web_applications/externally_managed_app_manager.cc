@@ -15,7 +15,6 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
-#include "base/not_fatal_until.h"
 #include "base/stl_util.h"
 #include "base/strings/to_string.h"
 #include "base/task/sequenced_task_runner.h"
@@ -44,6 +43,17 @@
 
 namespace web_app {
 
+namespace {
+
+// TODO(crbug.com/408163317): Do not use, this is an implementation detail and
+// will be removed later.
+bool& DropRequestsForTesting() {
+  static bool drop_requests_for_testing_ = false;
+  return drop_requests_for_testing_;
+}
+
+}  // namespace
+
 ExternallyManagedAppManagerInstallResult::
     ExternallyManagedAppManagerInstallResult() = default;
 
@@ -67,6 +77,17 @@ bool ExternallyManagedAppManagerInstallResult::operator==(
     const ExternallyManagedAppManagerInstallResult& other) const {
   return std::tie(code, app_id, did_uninstall_and_replace) ==
          std::tie(other.code, other.app_id, other.did_uninstall_and_replace);
+}
+
+ExternallyManagedAppManager::ScopedDropRequestsForTesting::
+    ScopedDropRequestsForTesting() {
+  CHECK_IS_TEST();
+  DropRequestsForTesting() = true;  // IN-TEST
+}
+
+ExternallyManagedAppManager::ScopedDropRequestsForTesting::
+    ~ScopedDropRequestsForTesting() {
+  DropRequestsForTesting() = false;  // IN-TEST
 }
 
 ExternallyManagedAppManager::SynchronizeRequest::SynchronizeRequest(
@@ -147,36 +168,6 @@ void ExternallyManagedAppManager::Install(
                                                 std::move(callback)));
 
   PostMaybeStartNext();
-}
-
-void ExternallyManagedAppManager::InstallApps(
-    std::vector<ExternalInstallOptions> install_options_list,
-    const RepeatingInstallCallback& callback) {
-  for (auto& install_options : install_options_list) {
-    pending_installs_metadata_.push_back(
-        std::make_unique<ExternalInstallMetadata>(std::move(install_options),
-                                                  callback));
-  }
-
-  PostMaybeStartNext();
-}
-
-void ExternallyManagedAppManager::UninstallApps(
-    std::vector<GURL> uninstall_urls,
-    ExternalInstallSource install_source,
-    const UninstallCallback& callback) {
-  for (auto& url : uninstall_urls) {
-    provider_->scheduler().RemoveInstallUrlMaybeUninstall(
-        /*app_id=*/std::nullopt,
-        ConvertExternalInstallSourceToSource(install_source), url,
-        ConvertExternalInstallSourceToUninstallSource(install_source),
-        base::BindOnce(
-            [](const UninstallCallback& callback, const GURL& app_url,
-               webapps::UninstallResultCode code) {
-              callback.Run(app_url, code);
-            },
-            callback, url));
-  }
 }
 
 void ExternallyManagedAppManager::SynchronizeInstalledApps(
@@ -298,7 +289,7 @@ void ExternallyManagedAppManager::MaybeStartNextOnLockAcquired(
 
     const ExternalInstallOptions& install_options = front->options;
 
-    CHECK(install_options.install_url.is_valid(), base::NotFatalUntil::M130);
+    CHECK(install_options.install_url.is_valid());
     std::optional<webapps::AppId> app_id =
         lock.registrar().LookupExternalAppId(install_options.install_url);
     debug_value.Set("app_id_from_install_url", app_id.value_or("<none>"));
@@ -513,6 +504,41 @@ bool ExternallyManagedAppManager::IsShuttingDown() {
   return is_in_shutdown_ || profile()->ShutdownStarted();
 }
 
+void ExternallyManagedAppManager::InstallApps(
+    std::vector<ExternalInstallOptions> install_options_list,
+    const RepeatingInstallCallback& callback) {
+  if (DropRequestsForTesting()) {
+    CHECK_IS_TEST();
+    return;
+  }
+
+  for (auto& install_options : install_options_list) {
+    pending_installs_metadata_.push_back(
+        std::make_unique<ExternalInstallMetadata>(std::move(install_options),
+                                                  callback));
+  }
+
+  PostMaybeStartNext();
+}
+
+void ExternallyManagedAppManager::UninstallApps(
+    std::vector<GURL> uninstall_urls,
+    ExternalInstallSource install_source,
+    const UninstallCallback& callback) {
+  for (auto& url : uninstall_urls) {
+    provider_->scheduler().RemoveInstallUrlMaybeUninstall(
+        /*app_id=*/std::nullopt,
+        ConvertExternalInstallSourceToSource(install_source), url,
+        ConvertExternalInstallSourceToUninstallSource(install_source),
+        base::BindOnce(
+            [](const UninstallCallback& callback, const GURL& app_url,
+               webapps::UninstallResultCode code) {
+              callback.Run(app_url, code);
+            },
+            callback, url));
+  }
+}
+
 void ExternallyManagedAppManager::SynchronizeInstalledAppsOnLockAcquired(
     std::vector<ExternalInstallOptions> desired_apps_install_options,
     ExternalInstallSource install_source,
@@ -607,8 +633,7 @@ void ExternallyManagedAppManager::InstallForSynchronizeCallback(
   }
 
   auto source_and_request = synchronize_requests_.find(source);
-  CHECK(source_and_request != synchronize_requests_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(source_and_request != synchronize_requests_.end());
   SynchronizeRequest& request = source_and_request->second;
   request.install_results[install_url] = std::move(result);
   --request.remaining_install_requests;
@@ -622,8 +647,7 @@ void ExternallyManagedAppManager::UninstallForSynchronizeCallback(
     const GURL& install_url,
     webapps::UninstallResultCode code) {
   auto source_and_request = synchronize_requests_.find(source);
-  CHECK(source_and_request != synchronize_requests_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(source_and_request != synchronize_requests_.end());
   SynchronizeRequest& request = source_and_request->second;
   request.uninstall_results[install_url] = code;
   --request.remaining_uninstall_requests;
@@ -635,8 +659,7 @@ void ExternallyManagedAppManager::UninstallForSynchronizeCallback(
 void ExternallyManagedAppManager::ContinueSynchronization(
     ExternalInstallSource source) {
   auto source_and_request = synchronize_requests_.find(source);
-  CHECK(source_and_request != synchronize_requests_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(source_and_request != synchronize_requests_.end());
 
   SynchronizeRequest& request = source_and_request->second;
 
@@ -668,8 +691,7 @@ void ExternallyManagedAppManager::ContinueSynchronization(
 void ExternallyManagedAppManager::CompleteSynchronization(
     ExternalInstallSource source) {
   auto source_and_request = synchronize_requests_.find(source);
-  CHECK(source_and_request != synchronize_requests_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(source_and_request != synchronize_requests_.end());
 
   SynchronizeRequest& request = source_and_request->second;
   CHECK(request.callback);

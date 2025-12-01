@@ -25,8 +25,8 @@
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/notes_specifics.pb.h"
 #include "components/sync_bookmarks/switches.h"
-#include "url/gurl.h"
 #include "sync/notes/note_model_view.h"
+#include "url/gurl.h"
 
 namespace sync_notes {
 
@@ -93,21 +93,6 @@ bool IsForbiddenTitleWithMaybeTrailingSpaces(const std::string& title) {
       base::TrimWhitespaceASCII(title, base::TrimPositions::TRIM_TRAILING));
 }
 
-std::u16string NodeTitleFromSpecifics(
-    const sync_pb::NotesSpecifics& specifics) {
-  if (specifics.has_full_title()) {
-    return base::UTF8ToUTF16(specifics.full_title());
-  }
-  std::string node_title = specifics.legacy_canonicalized_title();
-  if (base::EndsWith(node_title, " ") &&
-      IsForbiddenTitleWithMaybeTrailingSpaces(node_title)) {
-    // Legacy clients added an extra space to the real title, so remove it here.
-    // See also FullTitleToLegacyCanonicalizedTitle().
-    node_title.pop_back();
-  }
-  return base::UTF8ToUTF16(node_title);
-}
-
 std::optional<base::Time> NodeLastModificationTimeFromSpecifics(
     const sync_pb::NotesSpecifics& specifics) {
   if (specifics.has_last_modification_time_us()) {
@@ -162,6 +147,21 @@ std::string FullTitleToLegacyCanonicalizedTitle(const std::string& node_title) {
   return specifics_title;
 }
 
+std::u16string NodeTitleFromSpecifics(
+    const sync_pb::NotesSpecifics& specifics) {
+  if (specifics.has_full_title()) {
+    return base::UTF8ToUTF16(specifics.full_title());
+  }
+  std::string node_title = specifics.legacy_canonicalized_title();
+  if (base::EndsWith(node_title, " ") &&
+      IsForbiddenTitleWithMaybeTrailingSpaces(node_title)) {
+    // Legacy clients added an extra space to the real title, so remove it here.
+    // See also FullTitleToLegacyCanonicalizedTitle().
+    node_title.pop_back();
+  }
+  return base::UTF8ToUTF16(node_title);
+}
+
 bool IsNoteEntityReuploadNeeded(const syncer::EntityData& remote_entity_data) {
   DCHECK(remote_entity_data.server_defined_unique_tag.empty());
   // Do not initiate a reupload for a remote deletion.
@@ -204,8 +204,9 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
   notes_specifics->set_full_title(node_title);
   notes_specifics->set_creation_time_us(
       node->GetCreationTime().ToDeltaSinceWindowsEpoch().InMicroseconds());
-  notes_specifics->set_last_modification_time_us(
-      node->GetLastModificationTime().ToDeltaSinceWindowsEpoch().InMicroseconds());
+  notes_specifics->set_last_modification_time_us(node->GetLastModificationTime()
+                                                     .ToDeltaSinceWindowsEpoch()
+                                                     .InMicroseconds());
   *notes_specifics->mutable_unique_position() = unique_position;
 
   return specifics;

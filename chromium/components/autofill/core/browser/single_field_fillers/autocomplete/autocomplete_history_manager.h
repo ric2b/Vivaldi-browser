@@ -37,7 +37,13 @@ class AutocompleteHistoryManager : public KeyedService {
 
   ~AutocompleteHistoryManager() override;
 
-  // Returns true iff it consumes `on_suggestions_returned`.
+  // May generate autocomplete suggestions for the given `field`. This is
+  // achieved through an async DB query. `client` checks if the requirements for
+  // generating autocomplete suggestions are met (e.g. autocomplete is enabled).
+  // If `OnGetSingleFieldSuggestions` decides to claim the opportunity to fill
+  // `field`, it returns true and calls `on_suggestions_returned`. Claiming the
+  // opportunity is not a promise that suggestions will be available. The
+  // callback may be called with no suggestions.
   [[nodiscard]] virtual bool OnGetSingleFieldSuggestions(
       const FormFieldData& field,
       const AutofillClient& client,
@@ -52,6 +58,7 @@ class AutocompleteHistoryManager : public KeyedService {
       const std::vector<FormFieldData>& fields,
       bool is_autocomplete_enabled);
 
+  // Cancels all outstanding queries and clears out the `pending_queries_` map.
   virtual void CancelPendingQueries();
 
   virtual void OnRemoveCurrentSingleFieldSuggestion(
@@ -102,9 +109,6 @@ class AutocompleteHistoryManager : public KeyedService {
   // autocomplete additions.
   void SendSuggestions(const std::vector<AutocompleteEntry>& entries,
                        QueryHandler query_handler);
-
-  // Cancels all outstanding queries and clears out the |pending_queries_| map.
-  void CancelAllPendingQueries();
 
   // Function handling WebDataService responses of type AUTOFILL_VALUE_RESULT.
   // |current_handle| is the DB query handle, and is used to retrieve the

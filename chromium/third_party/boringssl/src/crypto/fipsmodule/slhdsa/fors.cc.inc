@@ -27,8 +27,8 @@
 static void fors_base_b(
     uint16_t indices[SLHDSA_SHA2_128S_FORS_TREES],
     const uint8_t message[SLHDSA_SHA2_128S_FORS_MSG_BYTES]) {
-  static_assert(SLHDSA_SHA2_128S_FORS_HEIGHT == 12, "");
-  static_assert((SLHDSA_SHA2_128S_FORS_TREES & 1) == 0, "");
+  static_assert(SLHDSA_SHA2_128S_FORS_HEIGHT == 12);
+  static_assert((SLHDSA_SHA2_128S_FORS_TREES & 1) == 0);
 
   const uint8_t *msg = message;
   for (size_t i = 0; i < SLHDSA_SHA2_128S_FORS_TREES; i += 2) {

@@ -1,12 +1,14 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as Root from '../../core/root/root.js';
+import * as AiAssistanceModel from '../../models/ai_assistance/ai_assistance.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import type * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as Input from '../../ui/components/input/input.js';
@@ -16,11 +18,7 @@ import * as UI from '../../ui/legacy/legacy.js';
 import * as Lit from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
-import aiSettingsTabStylesRaw from './aiSettingsTab.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const aiSettingsTabStyles = new CSSStyleSheet();
-aiSettingsTabStyles.replaceSync(aiSettingsTabStylesRaw.cssText);
+import aiSettingsTabStyles from './aiSettingsTab.css.js';
 
 const {html, Directives: {ifDefined, classMap}} = Lit;
 
@@ -75,7 +73,7 @@ const UIStrings = {
    */
   showLess: 'Show less',
   /**
-   *@description Header for a list of feature attributes. 'When (the feature is turned) on, you'll be able to ...'
+   *@description Header for a list of feature attributes. 'When (the feature is turned) on, you'll be able to …'
    */
   whenOn: 'When on',
   /**
@@ -184,22 +182,6 @@ const UIStrings = {
    *@description Label for a toggle to enable the AI assistance feature
    */
   enableAiSuggestedAnnotations: 'Enable AI suggestions for performance panel annotations',
-  /**
-   * @description Message shown to the user if the age check is not successful.
-   */
-  ageRestricted: 'This feature is only available to users who are 18 years of age or older.',
-  /**
-   * @description The error message when the user is not logged in into Chrome.
-   */
-  notLoggedIn: 'This feature is only available when you sign into Chrome with your Google account.',
-  /**
-   * @description Message shown when the user is offline.
-   */
-  offline: 'This feature is only available with an active internet connection.',
-  /**
-   *@description Text informing the user that AI assistance is not available in Incognito mode or Guest mode.
-   */
-  notAvailableInIncognitoMode: 'AI assistance is not available in Incognito mode or Guest mode',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/settings/AISettingsTab.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -228,7 +210,6 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
   #consoleInsightsSetting?: Common.Settings.Setting<boolean>;
   #aiAnnotationsSetting?: Common.Settings.Setting<boolean>;
   #aiAssistanceSetting?: Common.Settings.Setting<boolean>;
-  #aiAssistanceHistorySetting?: Common.Settings.Setting<unknown[]>;
   #aidaAvailability = Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL;
   #boundOnAidaAvailabilityChange: () => Promise<void>;
   // Setting to parameters needed to display it in the UI.
@@ -247,13 +228,6 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
     } catch {
       this.#aiAssistanceSetting = undefined;
     }
-    try {
-      this.#aiAssistanceHistorySetting =
-          // Name needs to match the one in AiHistoryStorage
-          Common.Settings.Settings.instance().moduleSetting('ai-assistance-history-entries');
-    } catch {
-      this.#aiAssistanceHistorySetting = undefined;
-    }
 
     if (Root.Runtime.hostConfig.devToolsAiGeneratedTimelineLabels?.enabled) {
       // Get an existing setting or, if it does not exist, create a new one.
@@ -265,7 +239,6 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [Input.checkboxStyles, aiSettingsTabStyles];
     Host.AidaClient.HostConfigTracker.instance().addEventListener(
         Host.AidaClient.Events.AIDA_AVAILABILITY_CHANGED, this.#boundOnAidaAvailabilityChange);
     void this.#onAidaAvailabilityChange();
@@ -347,7 +320,7 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
                             i18nString(UIStrings.generatedAiAnnotationsSendData)
         }],
         learnMoreLink: {
-          url: 'https://developer.chrome.com/docs/devtools/performance/reference#auto-annotations',
+          url: 'https://developer.chrome.com/docs/devtools/performance/annotations#auto-annotations',
           linkJSLogContext: 'learn-more.auto-annotations'
         },
         settingExpandState: {
@@ -437,11 +410,9 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
             .createSetting('console-insights-skip-reminder', true, Common.Settings.SettingStorageType.SESSION)
             .set(true);
       }
-    } else if (setting.name === 'ai-assistance-enabled') {
-      // If history was create create and the value changes to `false`
-      if (this.#aiAssistanceHistorySetting && !setting.get()) {
-        this.#aiAssistanceHistorySetting.set([]);
-      }
+    } else if (setting.name === 'ai-assistance-enabled' && !setting.get()) {
+      // If the "AI Assistance" is toggled off, we remove all the history entries related to the feature.
+      void AiAssistanceModel.AiHistoryStorage.instance().deleteAll();
     }
     void this.render();
   }
@@ -522,38 +493,12 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
     // clang-format on
   }
 
-  #getDisabledReasons(): string[] {
-    const reasons = [];
-    if (Root.Runtime.hostConfig.isOffTheRecord) {
-      reasons.push(i18nString(UIStrings.notAvailableInIncognitoMode));
-    }
-    switch (this.#aidaAvailability) {
-      case Host.AidaClient.AidaAccessPreconditions.NO_ACCOUNT_EMAIL:
-      case Host.AidaClient.AidaAccessPreconditions.SYNC_IS_PAUSED:
-        reasons.push(i18nString(UIStrings.notLoggedIn));
-        break;
-      // @ts-expect-error
-      case Host.AidaClient.AidaAccessPreconditions.NO_INTERNET:  // fallthrough
-        reasons.push(i18nString(UIStrings.offline));
-      case Host.AidaClient.AidaAccessPreconditions.AVAILABLE: {
-        // No age check if there is no logged in user. Age check would always fail in that case.
-        if (Root.Runtime.hostConfig?.aidaAvailability?.blockedByAge === true) {
-          reasons.push(i18nString(UIStrings.ageRestricted));
-        }
-      }
-    }
-    // `consoleInsightsSetting` and `aiAssistantSetting` are both disabled for the same reasons.
-    const disabledReasons = this.#consoleInsightsSetting?.disabledReasons() || [];
-    reasons.push(...disabledReasons);
-    return reasons;
-  }
-
   #renderSetting(setting: Common.Settings.Setting<boolean>): Lit.LitTemplate {
     const settingData = this.#settingToParams.get(setting);
     if (!settingData) {
       return Lit.nothing;
     }
-    const disabledReasons = this.#getDisabledReasons();
+    const disabledReasons = AiAssistanceModel.getDisabledReasons(this.#aidaAvailability);
     const isDisabled = disabledReasons.length > 0;
     const disabledReasonsJoined = disabledReasons.join('\n') || undefined;
     const detailsClasses = {
@@ -645,11 +590,13 @@ export class AISettingsTab extends LegacyWrapper.LegacyWrapper.WrappableComponen
   }
 
   override async render(): Promise<void> {
-    const disabledReasons = this.#getDisabledReasons();
+    const disabledReasons = AiAssistanceModel.getDisabledReasons(this.#aidaAvailability);
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     Lit.render(html`
+      <style>${Input.checkboxStyles}</style>
+      <style>${aiSettingsTabStyles}</style>
       <div class="settings-container-wrapper" jslog=${VisualLogging.pane('chrome-ai')}>
         ${this.#renderSharedDisclaimer()}
         ${this.#settingToParams.size > 0 ? html`

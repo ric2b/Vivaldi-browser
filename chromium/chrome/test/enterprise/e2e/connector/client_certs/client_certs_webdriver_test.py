@@ -33,18 +33,24 @@ flags.DEFINE_string('results', r'c:\temp\results.json',
                     'Path to write results to.')
 
 
-def wait_for_connectivity(host: str, port: int, timeout: float = 2 * 60):
+# For an unknown reason, the client VM can't connect over TCP for ~5 minutes
+# initially when running this test from a cold start (i.e., without
+# `--nodeploy`). Use a very long default timeout to mitigate this.
+#
+# TODO(crbug.com/327797500): Find a permanent solution after finding the root
+# cause.
+def wait_for_connectivity(host: str, port: int, timeout: float = 10 * 60):
   deadline = time.monotonic() + timeout
   while time.monotonic() < deadline:
     test_socket = socket.socket()
     test_socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    test_socket.settimeout(30)
+    test_socket.settimeout(60)
     try:
       test_socket.connect((host, port))
       return
     except OSError:
       traceback.print_exc()
-      time.sleep(10)
+      time.sleep(5)
     finally:
       test_socket.close()
   # A firewall misconfiguration is likely (either Windows's native firewall
@@ -92,7 +98,7 @@ def main(argv):
     ]:
       try:
         fingerprints[key] = get_fingerprint(driver)
-      except:
+      except Exception:
         traceback.print_exc()
 
     results = {'policies': policies_by_name, 'fingerprints': fingerprints}

@@ -17,8 +17,9 @@ CFPF_SkiaDeviceModule* gs_pPFModule = nullptr;
 }  // namespace
 
 CFPF_SkiaDeviceModule* CFPF_GetSkiaDeviceModule() {
-  if (!gs_pPFModule)
+  if (!gs_pPFModule) {
     gs_pPFModule = new CFPF_SkiaDeviceModule;
+  }
   return gs_pPFModule;
 }
 
@@ -32,11 +33,12 @@ void CFPF_SkiaDeviceModule::Destroy() {
 }
 
 CFPF_SkiaFontMgr* CFPF_SkiaDeviceModule::GetFontMgr() {
-  if (!m_pFontMgr) {
+  if (!font_mgr_) {
     auto pNewMgr = std::make_unique<CFPF_SkiaFontMgr>();
-    if (!pNewMgr->InitFTLibrary())
+    if (!pNewMgr->InitFTLibrary()) {
       return nullptr;
-    m_pFontMgr = std::move(pNewMgr);
+    }
+    font_mgr_ = std::move(pNewMgr);
   }
-  return m_pFontMgr.get();
+  return font_mgr_.get();
 }

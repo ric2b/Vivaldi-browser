@@ -47,29 +47,44 @@ if (DAWN_FETCH_DEPENDENCIES)
     )
 endif ()
 
-################################################################################
-# Start of Emscripten enabled third party directories
-#   To minimize the number of third party targets to make when building with
-#   Emscripten to the minimal set, only subdirectories added within the Start
-#   and End of the Emscripten block are enabled .
-################################################################################
-
+set(ABSL_ROOT_DIR ${DAWN_ABSEIL_DIR})
 if (NOT TARGET absl::strings)
-    # Recommended setting for compability with future abseil releases.
+    # Recommended setting for compatibility with future abseil releases.
     set(ABSL_PROPAGATE_CXX_STD ON CACHE BOOL "" FORCE)
     message(STATUS "Dawn: using Abseil at ${DAWN_ABSEIL_DIR}")
     if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") OR
-        ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
+    ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang"))
         add_compile_options(
-            -Wno-array-parameter
-            -Wno-deprecated-builtins
-            -Wno-unknown-warning-option
+                -Wno-array-parameter
+                -Wno-deprecated-builtins
+                -Wno-unknown-warning-option
+                -Wno-gcc-compat
+                -Wno-unreachable-code-break
+                -Wno-nullability-extension
+                -Wno-shadow
         )
     endif()
 
     add_subdirectory(${DAWN_ABSEIL_DIR} "${CMAKE_CURRENT_BINARY_DIR}/abseil")
 endif()
 
+if (DAWN_BUILD_PROTOBUF AND EXISTS "${DAWN_PROTOBUF_DIR}/cmake")
+    if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang") AND WIN32)
+        set(protobuf_HAVE_BUILTIN_ATOMICS 1)
+    endif()
+endif()
+
+if (DAWN_BUILD_PROTOBUF AND EXISTS "${DAWN_PROTOBUF_DIR}/cmake")
+    # Needs to come before SPIR-V Tools
+    include("protobuf.cmake")
+endif()
+
+################################################################################
+# Start of Emscripten enabled third party directories
+#   To minimize the number of third party targets to make when building with
+#   Emscripten to the minimal set, only subdirectories added within the Start
+#   and End of the Emscripten block are enabled .
+################################################################################
 if ((DAWN_BUILD_TESTS OR TINT_BUILD_TESTS) AND NOT TARGET gmock)
     set(gtest_force_shared_crt ON CACHE BOOL "Controls whether a shared run-time library should be used even when Google Test is built as static library" FORCE)
     if (EMSCRIPTEN)
@@ -85,7 +100,6 @@ if ((DAWN_BUILD_TESTS OR TINT_BUILD_TESTS) AND NOT TARGET gmock)
 
     add_subdirectory(${DAWN_GOOGLETEST_DIR} "${CMAKE_CURRENT_BINARY_DIR}/googletest" EXCLUDE_FROM_ALL)
 endif()
-
 ################################################################################
 # End of Emscripten enabled third party directories
 ################################################################################
@@ -152,16 +166,16 @@ if (DAWN_ENABLE_DESKTOP_GL OR DAWN_ENABLE_OPENGLES)
     target_include_directories(dawn_khronos_platform INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/khronos/EGL-Registry/api")
 endif()
 
-if (NOT TARGET Vulkan-Headers AND DAWN_ENABLE_VULKAN)
-    message(STATUS "Dawn: using Vulkan-Headers at ${DAWN_VULKAN_HEADERS_DIR}")
+if (NOT TARGET Vulkan::Headers AND DAWN_ENABLE_VULKAN)
+    message(STATUS "Dawn: using Vulkan::Headers at ${DAWN_VULKAN_HEADERS_DIR}")
 
     set(VULKAN_HEADERS_ENABLE_MODULE OFF)
-    add_subdirectory(${DAWN_VULKAN_HEADERS_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-headers")
+    add_subdirectory(${DAWN_VULKAN_HEADERS_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-headers/src")
 endif()
 
-if (NOT TARGET VulkanUtilityHeaders AND DAWN_ENABLE_VULKAN)
+if (NOT TARGET Vulkan::UtilityHeaders AND DAWN_ENABLE_VULKAN)
     message(STATUS "Dawn: using VulkanUtilityLibraries at ${DAWN_VULKAN_UTILITY_LIBRARIES_DIR}")
-    add_subdirectory(${DAWN_VULKAN_UTILITY_LIBRARIES_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-utility-libraries")
+    add_subdirectory(${DAWN_VULKAN_UTILITY_LIBRARIES_DIR} "${CMAKE_CURRENT_BINARY_DIR}/vulkan-utility-libraries/src")
 endif()
 
 if (DAWN_ENABLE_SWIFTSHADER AND NOT TARGET vk_swiftshader)
@@ -352,6 +366,8 @@ function(AddSubdirectoryDXC)
             TARGET copy_dxil_dll
             COMMAND ${CMAKE_COMMAND} -E copy_if_different ${DXIL_DLL_PATH} $<TARGET_FILE_DIR:dxcompiler>
             COMMENT "Copying ${DXIL_DLL_PATH} to $<TARGET_FILE_DIR:dxcompiler>")
+        # Ensure folder "$<TARGET_FILE_DIR:dxcompiler>" exists when copying the dll
+        add_dependencies(copy_dxil_dll dxcompiler)
         # Make dxc target depend on copy_dxil_dll
         add_dependencies(dxc copy_dxil_dll)
     endif()

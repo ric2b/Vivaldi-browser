@@ -12,7 +12,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -69,6 +68,7 @@ import org.chromium.chrome.browser.magic_stack.ModuleDelegateHost;
 import org.chromium.chrome.browser.magic_stack.ModuleRegistry;
 import org.chromium.chrome.browser.metrics.StartupMetricsTracker;
 import org.chromium.chrome.browser.native_page.ContextMenuManager;
+import org.chromium.chrome.browser.ntp_customization.NtpCustomizationCoordinator;
 import org.chromium.chrome.browser.omnibox.OmniboxFocusReason;
 import org.chromium.chrome.browser.omnibox.OmniboxStub;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
@@ -139,6 +139,7 @@ public class NewTabPage
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
 
     private final String mTitle;
+    private final Point mLastTouchPosition = new Point(-1, -1);
     private final JankTracker mJankTracker;
     private final Context mContext;
     private final int mBackgroundColor;
@@ -182,7 +183,8 @@ public class NewTabPage
     private ViewGroup mSingleTabCardContainer;
     @Nullable private HomeModulesCoordinator mHomeModulesCoordinator;
     @Nullable private ViewGroup mHomeModulesContainer;
-    private ObservableSupplierImpl<Tab> mMostRecentTabSupplier = new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Tab> mMostRecentTabSupplier =
+            new ObservableSupplierImpl<>();
     @Nullable private Point mContextMenuStartPosition;
 
     private final Activity mActivity;
@@ -194,13 +196,13 @@ public class NewTabPage
     @Nullable private SearchResumptionModuleCoordinator mSearchResumptionModuleCoordinator;
     private NtpSmoothTransitionDelegate mSmoothTransitionDelegate;
 
-    private CallbackController mCallbackController = new CallbackController();
+    private final CallbackController mCallbackController = new CallbackController();
 
     @VisibleForTesting
     public static class NtpSmoothTransitionDelegate implements SmoothTransitionDelegate {
         private static final int SMOOTH_TRANSITION_DURATION_MS = 100;
 
-        private View mView;
+        private final View mView;
         private Animator mAnimator;
         private ObservableSupplier<Integer> mRestoringState;
         private boolean mAnimatorStarted;
@@ -409,6 +411,10 @@ public class NewTabPage
             if (mIsDestroyed) return;
             mIsLoaded = true;
             NewTabPageUma.recordNtpImpression(NewTabPageUma.NTP_IMPRESSION_REGULAR);
+
+            var state = NewTabPageCreationState.from(mTab);
+            if (state != null) state.onNtpLoaded(this);
+
             // If not visible when loading completes, wait until onShown is received.
             if (!mTab.isHidden()) recordNtpShown();
         }
@@ -457,7 +463,7 @@ public class NewTabPage
      * @param lifecycleDispatcher Activity lifecycle dispatcher.
      * @param tabModelSelector {@link TabModelSelector} object.
      * @param isTablet {@code true} if running on a Tablet device.
-     * @param uma {@link NewTabPageUma} object recording user metrics.
+     * @param tabCreationTracker {@link NewTabPageCreationTracker} object recording user metrics.
      * @param isInNightMode {@code true} if the night mode setting is on.
      * @param nativePageHost The host that is showing this new tab page.
      * @param tab The {@link Tab} that contains this new tab page.
@@ -482,7 +488,7 @@ public class NewTabPage
             ActivityLifecycleDispatcher lifecycleDispatcher,
             TabModelSelector tabModelSelector,
             boolean isTablet,
-            NewTabPageUma uma,
+            NewTabPageCreationTracker tabCreationTracker,
             boolean isInNightMode,
             NativePageHost nativePageHost,
             Tab tab,
@@ -606,25 +612,25 @@ public class NewTabPage
                 mCallbackController.makeCancelable(
                         unusedTabModelSelector -> mayCreateSearchResumptionModule(profile)));
 
-        getView()
-                .addOnAttachStateChangeListener(
-                        new View.OnAttachStateChangeListener() {
+        View view = getView();
+        view.addOnAttachStateChangeListener(
+                new View.OnAttachStateChangeListener() {
 
-                            @Override
-                            public void onViewAttachedToWindow(View view) {
-                                updateMargins();
-                                getView().removeOnAttachStateChangeListener(this);
-                            }
+                    @Override
+                    public void onViewAttachedToWindow(View view) {
+                        updateMargins();
+                        view.removeOnAttachStateChangeListener(this);
+                    }
 
-                            @Override
-                            public void onViewDetachedFromWindow(View view) {}
-                        });
+                    @Override
+                    public void onViewDetachedFromWindow(View view) {}
+                });
         mBrowserControlsStateProvider.addObserver(this);
 
         mToolbarHeight =
                 activity.getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow);
 
-        uma.recordContentSuggestionsDisplayStatus(profile);
+        NewTabPageUma.recordContentSuggestionsDisplayStatus(profile);
 
         // TODO(twellington): Move this somewhere it can be shared with NewTabPageView?
         Runnable closeContextMenuCallback = activity::closeContextMenu;
@@ -840,6 +846,7 @@ public class NewTabPage
 
     private void onSearchEngineUpdated() {
         updateSearchProviderHasLogo();
+
         setSearchProviderInfoOnView(
                 mSearchProviderHasLogo, mTemplateUrlService.isDefaultSearchEngineGoogle());
         // TODO(crbug.com/40226731): Remove this call when the Feed position experiment is
@@ -848,8 +855,8 @@ public class NewTabPage
     }
 
     /**
-     * Set the search provider info on the main child view, so that it can change layouts if
-     * needed.
+     * Set the search provider info on the main child view, so that it can change layouts if needed.
+     *
      * @param hasLogo Whether the search provider has a logo.
      * @param isGoogle Whether the search provider is Google.
      */
@@ -895,15 +902,6 @@ public class NewTabPage
      */
     public void setSearchProviderLogoAlpha(float alpha) {
         mNewTabPageLayout.setSearchProviderLogoAlpha(alpha);
-    }
-
-    /**
-     * Set the search box background drawable.
-     *
-     * @param drawable The search box background.
-     */
-    public void setSearchBoxBackground(Drawable drawable) {
-        mNewTabPageLayout.setSearchBoxBackground(drawable);
     }
 
     /**
@@ -955,6 +953,14 @@ public class NewTabPage
             mVoiceRecognitionHandler.addObserver(this);
             mNewTabPageLayout.updateActionButtonVisibility();
         }
+    }
+
+    /**
+     * Returns the last touch position in the view. It will be (-1, -1) if no touches have been
+     * received.
+     */
+    public Point getLastTouchPosition() {
+        return mLastTouchPosition;
     }
 
     @Override
@@ -1166,6 +1172,14 @@ public class NewTabPage
     }
 
     @Override
+    public void sendMotionEventForInputTracking(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+            mLastTouchPosition.x = Math.round(ev.getX());
+            mLastTouchPosition.y = Math.round(ev.getY());
+        }
+    }
+
+    @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         return !(mTab != null && DeviceFormFactor.isWindowOnTablet(mTab.getWindowAndroid()))
                 && (mOmniboxStub != null && mOmniboxStub.isUrlBarFocused());
@@ -1370,7 +1384,16 @@ public class NewTabPage
 
     @Override
     public void customizeSettings() {
-        HomeModulesConfigManager.getInstance().onMenuClick(mContext);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION)) {
+            new NtpCustomizationCoordinator(
+                            mContext,
+                            mBottomSheetController,
+                            mTab::getProfile,
+                            NtpCustomizationCoordinator.BottomSheetType.NTP_CARDS)
+                    .showBottomSheet();
+        } else {
+            HomeModulesConfigManager.getInstance().onMenuClick(mContext);
+        }
     }
 
     @Override

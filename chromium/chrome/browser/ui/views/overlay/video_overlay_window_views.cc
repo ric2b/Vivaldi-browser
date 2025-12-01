@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/ui/views/overlay/constants.h"
 #include "chrome/browser/ui/views/overlay/hang_up_button.h"
 #include "chrome/browser/ui/views/overlay/minimize_button.h"
+#include "chrome/browser/ui/views/overlay/overlay_window_live_caption_dialog.h"
 #include "chrome/browser/ui/views/overlay/playback_image_button.h"
 #include "chrome/browser/ui/views/overlay/resize_handle_button.h"
 #include "chrome/browser/ui/views/overlay/simple_overlay_window_image_button.h"
@@ -35,7 +37,6 @@
 #include "chrome/browser/ui/views/overlay/toggle_camera_button.h"
 #include "chrome/browser/ui/views/overlay/toggle_microphone_button.h"
 #include "chrome/grit/generated_resources.h"
-#include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "components/global_media_controls/public/format_duration.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/picture_in_picture_window_controller.h"
@@ -66,6 +67,7 @@
 #include "ash/public/cpp/rounded_corner_utils.h"
 #include "ash/public/cpp/window_properties.h"  // nogncheck
 #include "chromeos/ui/base/app_types.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
@@ -89,7 +91,7 @@ namespace {
 
 // Lower bound size of the window is a fixed value to allow for minimal sizes
 // on UI affordances, such as buttons.
-constexpr gfx::Size kMinWindowSize(260, 146);
+constexpr gfx::Size kMinWindowSize(284, 160);
 
 constexpr int kOverlayBorderThickness = 10;
 
@@ -344,7 +346,7 @@ class OverlayWindowWidgetDelegate : public views::WidgetDelegate {
     // window switcher.
     SetShowTitle(false);
     SetTitle(IDS_PICTURE_IN_PICTURE_TITLE_TEXT);
-    SetOwnedByWidget(true);
+    SetOwnedByWidget(OwnedByWidgetPassKey());
   }
 
   OverlayWindowWidgetDelegate(const OverlayWindowWidgetDelegate&) = delete;
@@ -933,7 +935,9 @@ bool VideoOverlayWindowViews::ControlsHitTestContainsPoint(
       GetHangUpButtonBounds().Contains(point) ||
       GetPreviousSlideControlsBounds().Contains(point) ||
       GetNextSlideControlsBounds().Contains(point) ||
-      GetProgressViewBounds().Contains(point)) {
+      GetProgressViewBounds().Contains(point) ||
+      GetLiveCaptionButtonBounds().Contains(point) ||
+      GetLiveCaptionDialogBounds().Contains(point)) {
     return true;
   }
 #if defined(VIVALDI_BUILD)
@@ -977,6 +981,8 @@ void VideoOverlayWindowViews::SetUpViews() {
 
   // These controls may be different (or even nonexistent) depending on whether
   // the 2024 updated UI is enabled.
+  std::unique_ptr<views::View> playback_controls_container_view;
+  std::unique_ptr<views::View> vc_controls_container_view;
   std::unique_ptr<views::View> controls_top_scrim_view;
   std::unique_ptr<views::View> controls_bottom_scrim_view;
   std::unique_ptr<views::ImageView> favicon_view;
@@ -997,10 +1003,13 @@ void VideoOverlayWindowViews::SetUpViews() {
   std::unique_ptr<global_media_controls::MediaProgressView> progress_view;
   std::unique_ptr<views::Label> timestamp;
   std::unique_ptr<views::Label> live_status;
+  std::unique_ptr<SimpleOverlayWindowImageButton> live_caption_button;
+  std::unique_ptr<OverlayWindowLiveCaptionDialog> live_caption_dialog;
 
   if (Use2024UI()) {
-    play_pause_controls_view->SetSize(
-        {kPlaybackButtonSize, kPlaybackButtonSize});
+    play_pause_controls_view->SetSize({kCenterButtonSize, kCenterButtonSize});
+    playback_controls_container_view = std::make_unique<views::View>();
+    vc_controls_container_view = std::make_unique<views::View>();
     controls_top_scrim_view = std::make_unique<views::View>();
     controls_top_scrim_view->SetBackground(std::make_unique<GradientBackground>(
         SkColor4f::FromColor(
@@ -1126,6 +1135,41 @@ void VideoOverlayWindowViews::SetUpViews() {
     live_status->SetBackground(
         views::CreateRoundedRectBackground(ui::kColorSysOnTonalContainer, 4));
     live_status->SetVisible(false);
+    live_caption_button = std::make_unique<SimpleOverlayWindowImageButton>(
+        base::BindRepeating(
+            &VideoOverlayWindowViews::OnLiveCaptionButtonPressed,
+            base::Unretained(this)),
+        vector_icons::kLiveCaptionOnIcon,
+        l10n_util::GetStringUTF16(
+            IDS_PICTURE_IN_PICTURE_LIVE_CAPTION_CONTROL_TEXT));
+    live_caption_button->SetSize(kActionButtonSize);
+    live_caption_dialog = std::make_unique<OverlayWindowLiveCaptionDialog>(
+        Profile::FromBrowserContext(
+            controller_->GetWebContents()->GetBrowserContext()));
+    live_caption_dialog->SetVisible(false);
+    toggle_microphone_button =
+        std::make_unique<ToggleMicrophoneButton>(base::BindRepeating(
+            [](VideoOverlayWindowViews* overlay) {
+              overlay->controller_->ToggleMicrophone();
+            },
+            base::Unretained(this)));
+    toggle_microphone_button->SetVisible(false);
+    toggle_microphone_button->SetSize(kActionButtonSize);
+    toggle_camera_button =
+        std::make_unique<ToggleCameraButton>(base::BindRepeating(
+            [](VideoOverlayWindowViews* overlay) {
+              overlay->controller_->ToggleCamera();
+            },
+            base::Unretained(this)));
+    toggle_camera_button->SetVisible(false);
+    toggle_camera_button->SetSize(kActionButtonSize);
+    hang_up_button = std::make_unique<HangUpButton>(base::BindRepeating(
+        [](VideoOverlayWindowViews* overlay) {
+          overlay->controller_->HangUp();
+        },
+        base::Unretained(this)));
+    hang_up_button->SetSize({kCenterButtonSize, kCenterButtonSize});
+    hang_up_button->SetVisible(false);
   } else {
     back_to_tab_label_button =
         std::make_unique<BackToTabLabelButton>(base::BindRepeating(
@@ -1229,6 +1273,17 @@ void VideoOverlayWindowViews::SetUpViews() {
   close_controls_view->layer()->SetName("CloseControlsView");
 
   if (Use2024UI()) {
+    // Contains controls for playback. ----------------------------------------
+    playback_controls_container_view->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
+    playback_controls_container_view->layer()->SetFillsBoundsOpaquely(false);
+    playback_controls_container_view->layer()->SetName(
+        "PlaybackControlsContainerView");
+
+    // Contains controls for video conferencing. ------------------------------
+    vc_controls_container_view->SetPaintToLayer(ui::LAYER_NOT_DRAWN);
+    vc_controls_container_view->layer()->SetFillsBoundsOpaquely(false);
+    vc_controls_container_view->layer()->SetName("VcControlsContainerView");
+
     // The scrim for the top controls. ----------------------------------------
     controls_top_scrim_view->SetPaintToLayer(ui::LAYER_TEXTURED);
     controls_top_scrim_view->layer()->SetFillsBoundsOpaquely(false);
@@ -1303,24 +1358,20 @@ void VideoOverlayWindowViews::SetUpViews() {
     live_status->SetPaintToLayer(ui::LAYER_TEXTURED);
     live_status->layer()->SetFillsBoundsOpaquely(false);
     live_status->layer()->SetName("LiveStatus");
+
+    live_caption_button->SetPaintToLayer(ui::LAYER_TEXTURED);
+    live_caption_button->layer()->SetFillsBoundsOpaquely(false);
+    live_caption_button->layer()->SetName("LiveCaptionButton");
+
+    live_caption_dialog->SetPaintToLayer(ui::LAYER_TEXTURED);
+    live_caption_dialog->layer()->SetFillsBoundsOpaquely(false);
+    live_caption_dialog->layer()->SetName("LiveCaptionDialog");
   } else {
     // views::View that holds the skip-ad label button.
     // -------------------------
     skip_ad_controls_view->SetPaintToLayer(ui::LAYER_TEXTURED);
     skip_ad_controls_view->layer()->SetFillsBoundsOpaquely(true);
     skip_ad_controls_view->layer()->SetName("SkipAdControlsView");
-
-    toggle_microphone_button->SetPaintToLayer(ui::LAYER_TEXTURED);
-    toggle_microphone_button->layer()->SetFillsBoundsOpaquely(false);
-    toggle_microphone_button->layer()->SetName("ToggleMicrophoneButton");
-
-    toggle_camera_button->SetPaintToLayer(ui::LAYER_TEXTURED);
-    toggle_camera_button->layer()->SetFillsBoundsOpaquely(false);
-    toggle_camera_button->layer()->SetName("ToggleCameraButton");
-
-    hang_up_button->SetPaintToLayer(ui::LAYER_TEXTURED);
-    hang_up_button->layer()->SetFillsBoundsOpaquely(false);
-    hang_up_button->layer()->SetName("HangUpButton");
 
     previous_slide_controls_view->SetPaintToLayer(ui::LAYER_TEXTURED);
     previous_slide_controls_view->layer()->SetFillsBoundsOpaquely(false);
@@ -1330,6 +1381,18 @@ void VideoOverlayWindowViews::SetUpViews() {
     next_slide_controls_view->layer()->SetFillsBoundsOpaquely(false);
     next_slide_controls_view->layer()->SetName("NextSlideButton");
   }
+
+  toggle_microphone_button->SetPaintToLayer(ui::LAYER_TEXTURED);
+  toggle_microphone_button->layer()->SetFillsBoundsOpaquely(false);
+  toggle_microphone_button->layer()->SetName("ToggleMicrophoneButton");
+
+  toggle_camera_button->SetPaintToLayer(ui::LAYER_TEXTURED);
+  toggle_camera_button->layer()->SetFillsBoundsOpaquely(false);
+  toggle_camera_button->layer()->SetName("ToggleCameraButton");
+
+  hang_up_button->SetPaintToLayer(ui::LAYER_TEXTURED);
+  hang_up_button->layer()->SetFillsBoundsOpaquely(false);
+  hang_up_button->layer()->SetName("HangUpButton");
 
 #if BUILDFLAG(IS_CHROMEOS)
   // views::View that shows the affordance that the window can be resized. ----
@@ -1350,7 +1413,18 @@ void VideoOverlayWindowViews::SetUpViews() {
         std::move(controls_top_scrim_view));
     controls_bottom_scrim_view_ = controls_container_view->AddChildView(
         std::move(controls_bottom_scrim_view));
+    playback_controls_container_view_ = controls_container_view->AddChildView(
+        std::move(playback_controls_container_view));
+    vc_controls_container_view_ = controls_container_view->AddChildView(
+        std::move(vc_controls_container_view));
   }
+
+  // For the 2024 UI, playback and VC controls are in separate containers.
+  views::View* playback_container =
+      Use2024UI() ? playback_controls_container_view_.get()
+                  : controls_container_view.get();
+  views::View* vc_container = Use2024UI() ? vc_controls_container_view_.get()
+                                          : controls_container_view.get();
 
   close_controls_view_ =
       controls_container_view->AddChildView(std::move(close_controls_view));
@@ -1370,44 +1444,51 @@ void VideoOverlayWindowViews::SetUpViews() {
     back_to_tab_label_button_ = controls_container_view->AddChildView(
         std::move(back_to_tab_label_button));
   }
-  previous_track_controls_view_ = controls_container_view->AddChildView(
-      std::move(previous_track_controls_view));
+  previous_track_controls_view_ =
+      playback_container->AddChildView(std::move(previous_track_controls_view));
   if (!Use2024UI()) {
     previous_slide_controls_view_ = controls_container_view->AddChildView(
         std::move(previous_slide_controls_view));
   }
-  play_pause_controls_view_ = controls_container_view->AddChildView(
-      std::move(play_pause_controls_view));
+  play_pause_controls_view_ =
+      playback_container->AddChildView(std::move(play_pause_controls_view));
 
   if (Use2024UI()) {
-    replay_10_seconds_button_ = controls_container_view->AddChildView(
+    replay_10_seconds_button_ = playback_controls_container_view_->AddChildView(
         std::move(replay_10_seconds_button));
-    forward_10_seconds_button_ = controls_container_view->AddChildView(
-        std::move(forward_10_seconds_button));
+    forward_10_seconds_button_ =
+        playback_controls_container_view_->AddChildView(
+            std::move(forward_10_seconds_button));
 
-    progress_view_ =
-        controls_container_view->AddChildView(std::move(progress_view));
+    progress_view_ = playback_controls_container_view_->AddChildView(
+        std::move(progress_view));
 
-    timestamp_ = controls_container_view->AddChildView(std::move(timestamp));
+    timestamp_ =
+        playback_controls_container_view_->AddChildView(std::move(timestamp));
 
     live_status_ =
-        controls_container_view->AddChildView(std::move(live_status));
+        playback_controls_container_view_->AddChildView(std::move(live_status));
+
+    live_caption_button_ = playback_controls_container_view_->AddChildView(
+        std::move(live_caption_button));
+
+    live_caption_dialog_ =
+        controls_container_view->AddChildView(std::move(live_caption_dialog));
   }
 
-  next_track_controls_view_ = controls_container_view->AddChildView(
-      std::move(next_track_controls_view));
+  next_track_controls_view_ =
+      playback_container->AddChildView(std::move(next_track_controls_view));
   if (!Use2024UI()) {
     next_slide_controls_view_ = controls_container_view->AddChildView(
         std::move(next_slide_controls_view));
     skip_ad_controls_view_ =
         controls_container_view->AddChildView(std::move(skip_ad_controls_view));
-    toggle_microphone_button_ = controls_container_view->AddChildView(
-        std::move(toggle_microphone_button));
-    toggle_camera_button_ =
-        controls_container_view->AddChildView(std::move(toggle_camera_button));
-    hang_up_button_ =
-        controls_container_view->AddChildView(std::move(hang_up_button));
   }
+  toggle_microphone_button_ =
+      vc_container->AddChildView(std::move(toggle_microphone_button));
+  toggle_camera_button_ =
+      vc_container->AddChildView(std::move(toggle_camera_button));
+  hang_up_button_ = vc_container->AddChildView(std::move(hang_up_button));
 #if BUILDFLAG(IS_CHROMEOS)
   resize_handle_view_ =
       controls_container_view->AddChildView(std::move(resize_handle_view));
@@ -1527,7 +1608,7 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     constexpr int kOriginHeight = 24;
     constexpr int kOriginRightMargin = 80;
     constexpr int kProgressBarHeight = 26;
-    constexpr int kPlayPauseButtonMargin = 16;
+    constexpr int kCenterControlMargin = 16;
     constexpr int kControlHorizontalMargin = 8;
     constexpr int kBottomControlsHorizontalMargin = 8;
     constexpr int kBottomControlsVerticalMargin = 4;
@@ -1553,6 +1634,8 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     gfx::Rect middle_controls_bounds = gfx::BoundingRect(
         top_controls_bounds.bottom_left(), bottom_controls_bounds.top_right());
 
+    playback_controls_container_view_->SetSize(bounds.size());
+    vc_controls_container_view_->SetSize(bounds.size());
     controls_top_scrim_view_->SetBoundsRect(
         {top_controls_bounds.x(), top_controls_bounds.y(),
          top_controls_bounds.width(), kTopScrimHeight});
@@ -1577,22 +1660,40 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
     minimize_button_->SetPosition(GetBounds().size(), quadrant);
     back_to_tab_button_->SetPosition(GetBounds().size(), quadrant);
 
-    // The play/pause buttons is at the center of the middle controls area.
-    gfx::Point play_pause_controls_position(
-        middle_controls_bounds.CenterPoint().x() - kPlaybackButtonSize / 2,
-        middle_controls_bounds.CenterPoint().y() - kPlaybackButtonSize / 2);
-    play_pause_controls_view_->SetPosition(play_pause_controls_position);
+    // Positioning of the middle row of controls.
+    const gfx::Point center_control_position(
+        middle_controls_bounds.CenterPoint().x() - kCenterButtonSize / 2,
+        middle_controls_bounds.CenterPoint().y() - kCenterButtonSize / 2);
+    const gfx::Point center_left_control_position(
+        center_control_position.x() - kCenterControlMargin -
+            kActionButtonSize.width(),
+        middle_controls_bounds.CenterPoint().y() -
+            kActionButtonSize.height() / 2);
+    const gfx::Point center_right_control_position(
+        center_control_position.x() + kCenterButtonSize + kCenterControlMargin,
+        middle_controls_bounds.CenterPoint().y() -
+            kActionButtonSize.height() / 2);
 
-    replay_10_seconds_button_->SetPosition(
-        {play_pause_controls_position.x() - kPlayPauseButtonMargin -
-             kActionButtonSize.width(),
-         middle_controls_bounds.CenterPoint().y() -
-             kActionButtonSize.height() / 2});
-    forward_10_seconds_button_->SetPosition(
-        {play_pause_controls_position.x() + kPlaybackButtonSize +
-             kPlayPauseButtonMargin,
-         middle_controls_bounds.CenterPoint().y() -
-             kActionButtonSize.height() / 2});
+    // If any VC control is visible, then we will hide the playback controls
+    // and just show VC controls.
+    hang_up_button_->SetVisible(show_hang_up_button_);
+    toggle_camera_button_->SetVisible(show_toggle_camera_button_);
+    toggle_microphone_button_->SetVisible(show_toggle_microphone_button_);
+    if (show_toggle_camera_button_ || show_toggle_microphone_button_ ||
+        show_hang_up_button_) {
+      hang_up_button_->SetPosition(center_control_position);
+      toggle_camera_button_->SetPosition(center_left_control_position);
+      toggle_microphone_button_->SetPosition(center_right_control_position);
+      vc_controls_container_view_->SetVisible(true);
+      playback_controls_container_view_->SetVisible(false);
+      return;
+    }
+    playback_controls_container_view_->SetVisible(true);
+    vc_controls_container_view_->SetVisible(false);
+
+    play_pause_controls_view_->SetPosition(center_control_position);
+    replay_10_seconds_button_->SetPosition(center_left_control_position);
+    forward_10_seconds_button_->SetPosition(center_right_control_position);
 
     // The previous and next track buttons are placed on the top left/right
     // edges of the bottom controls area.
@@ -1654,6 +1755,19 @@ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
              .width(),
          kTimestampHeight});
     live_status_->SetVisible(is_live_);
+
+    gfx::Rect live_caption_button_bounds(
+        bottom_controls_bounds.right() - kBottomControlsHorizontalMargin -
+            kActionButtonSize.width(),
+        bottom_controls_bounds.bottom() - kBottomControlsVerticalMargin -
+            kActionButtonSize.height(),
+        live_caption_button_->width(), live_caption_button_->height());
+
+    live_caption_button_->SetPosition(live_caption_button_bounds.origin());
+
+    live_caption_dialog_->SetPosition(
+        {live_caption_button_bounds.right() - live_caption_dialog_->width(),
+         live_caption_button_bounds.y() - live_caption_dialog_->height()});
 
     // The play/pause button and replay/forward 10 seconds buttons should not be
     // visible while dragging the progress bar or for live media.
@@ -1971,17 +2085,11 @@ void VideoOverlayWindowViews::SetPreviousTrackButtonVisibility(
 }
 
 void VideoOverlayWindowViews::SetMicrophoneMuted(bool muted) {
-  // The 2024 UI does not yet have a toggle microphone button implemented.
-  if (!Use2024UI()) {
-    toggle_microphone_button_->SetMutedState(muted);
-  }
+  toggle_microphone_button_->SetMutedState(muted);
 }
 
 void VideoOverlayWindowViews::SetCameraState(bool turned_on) {
-  // The 2024 UI does not yet have a toggle camera button implemented.
-  if (!Use2024UI()) {
-    toggle_camera_button_->SetCameraState(turned_on);
-  }
+  toggle_camera_button_->SetCameraState(turned_on);
 }
 
 void VideoOverlayWindowViews::SetToggleMicrophoneButtonVisibility(
@@ -2134,6 +2242,9 @@ void VideoOverlayWindowViews::OnGestureEvent(ui::GestureEvent* event) {
   } else if (GetHangUpButtonBounds().Contains(event->location())) {
     controller_->HangUp();
     event->SetHandled();
+  } else if (GetLiveCaptionButtonBounds().Contains(event->location())) {
+    OnLiveCaptionButtonPressed();
+    event->SetHandled();
   }
 }
 
@@ -2197,26 +2308,14 @@ gfx::Rect VideoOverlayWindowViews::GetPreviousTrackControlsBounds() {
 }
 
 gfx::Rect VideoOverlayWindowViews::GetToggleMicrophoneButtonBounds() {
-  // The 2024 UI does not yet have a toggle microphone button implemented.
-  if (Use2024UI()) {
-    return gfx::Rect();
-  }
   return toggle_microphone_button_->GetMirroredBounds();
 }
 
 gfx::Rect VideoOverlayWindowViews::GetToggleCameraButtonBounds() {
-  // The 2024 UI does not yet have a toggle camera button implemented.
-  if (Use2024UI()) {
-    return gfx::Rect();
-  }
   return toggle_camera_button_->GetMirroredBounds();
 }
 
 gfx::Rect VideoOverlayWindowViews::GetHangUpButtonBounds() {
-  // The 2024 UI does not yet have a hang up button implemented.
-  if (Use2024UI()) {
-    return gfx::Rect();
-  }
   return hang_up_button_->GetMirroredBounds();
 }
 
@@ -2242,6 +2341,20 @@ gfx::Rect VideoOverlayWindowViews::GetProgressViewBounds() {
     return gfx::Rect();
   }
   return progress_view_->GetMirroredBounds();
+}
+
+gfx::Rect VideoOverlayWindowViews::GetLiveCaptionButtonBounds() {
+  if (!Use2024UI()) {
+    return gfx::Rect();
+  }
+  return live_caption_button_->GetMirroredBounds();
+}
+
+gfx::Rect VideoOverlayWindowViews::GetLiveCaptionDialogBounds() {
+  if (!Use2024UI() || !live_caption_dialog_->GetVisible()) {
+    return gfx::Rect();
+  }
+  return live_caption_dialog_->GetMirroredBounds();
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -2342,6 +2455,16 @@ views::Label* VideoOverlayWindowViews::timestamp_for_testing() const {
 
 views::Label* VideoOverlayWindowViews::live_status_for_testing() const {
   return live_status_;
+}
+
+SimpleOverlayWindowImageButton*
+VideoOverlayWindowViews::live_caption_button_for_testing() const {
+  return live_caption_button_;
+}
+
+OverlayWindowLiveCaptionDialog*
+VideoOverlayWindowViews::live_caption_dialog_for_testing() const {
+  return live_caption_dialog_;
 }
 
 views::ImageView* VideoOverlayWindowViews::favicon_view_for_testing() const {
@@ -2457,6 +2580,10 @@ void VideoOverlayWindowViews::UpdateTimestampLabel(base::TimeDelta current_time,
   if (was_live != is_live_) {
     OnUpdateControlsBounds();
   }
+}
+
+void VideoOverlayWindowViews::OnLiveCaptionButtonPressed() {
+  live_caption_dialog_->SetVisible(!live_caption_dialog_->GetVisible());
 }
 
 void VideoOverlayWindowViews::OnFaviconReceived(const SkBitmap& image) {

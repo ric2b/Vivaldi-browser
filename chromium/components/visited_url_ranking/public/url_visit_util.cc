@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 
+#include "base/hash/hash.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_split.h"
@@ -168,8 +169,8 @@ scoped_refptr<InputContext> AsInputContextInternal(
   signal_value_map.emplace(
       "title", ProcessedValue(base::UTF16ToUTF8(
                    *url_visit_aggregate.GetAssociatedTitles().begin())));
-  signal_value_map.emplace(
-      "url", ProcessedValue(*url_visit_aggregate.GetAssociatedURLs().begin()));
+  GURL url = *(*url_visit_aggregate.GetAssociatedURLs().begin());
+  signal_value_map.emplace("url", std::move(url));
   signal_value_map.emplace("url_key",
                            ProcessedValue(url_visit_aggregate.url_key));
 
@@ -330,8 +331,6 @@ scoped_refptr<InputContext> AsInputContextInternal(
         break;
       case kTabParentId:
         if (tab_data) {
-          // TODO(crbug.com/397221723): Add a field for tab ID to trace tab
-          // relationship beyond parent.
           value = ProcessedValue::FromFloat(
               tab_data->last_active_tab.tab_metadata.parent_tab_id == -1
                   ? tab_data->last_active_tab.id
@@ -353,6 +352,43 @@ scoped_refptr<InputContext> AsInputContextInternal(
             tab_data->last_active_tab.tab_metadata.local_tab_group_id) {
           value = ProcessedValue(tab_data->last_active_tab.tab_metadata
                                      .local_tab_group_id->ToString());
+        }
+        break;
+      case kTabId:
+        if (tab_data) {
+          value = ProcessedValue::FromFloat(tab_data->last_active_tab.id);
+        }
+        break;
+      case kTabUrlOriginHash:
+        if (tab_data) {
+          GURL origin =
+              tab_data->last_active_tab.visit.url.DeprecatedGetOriginAsURL();
+          size_t hash = origin.is_empty() ? 0 : base::FastHash(origin.spec());
+          value = ProcessedValue::FromFloat(hash);
+        }
+        break;
+      case kTabUkmSourceId:
+        if (tab_data) {
+          value = ProcessedValue(
+              tab_data->last_active_tab.tab_metadata.ukm_source_id);
+        }
+        break;
+      case kIsTabSelected:
+        if (tab_data) {
+          value = ProcessedValue::FromFloat(
+              tab_data->last_active_tab.tab_metadata.is_currently_active);
+        }
+        break;
+      case kTabIndex:
+        if (tab_data) {
+          value = ProcessedValue::FromFloat(
+              tab_data->last_active_tab.tab_metadata.tab_model_index);
+        }
+        break;
+      case kIsLastTab:
+        if (tab_data) {
+          value = ProcessedValue::FromFloat(
+              tab_data->last_active_tab.tab_metadata.is_last_tab_in_tab_model);
         }
         break;
     }

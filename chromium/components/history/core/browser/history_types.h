@@ -19,7 +19,6 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
 #include "base/time/time.h"
-#include "components/favicon_base/favicon_types.h"
 #include "components/history/core/browser/history_context.h"
 #include "components/history/core/browser/url_row.h"
 #include "components/query_parser/query_parser.h"
@@ -248,10 +247,10 @@ struct VisitedLinkRow {
   // partition key).
   int visit_count = 0;
 
- private:
-  friend bool operator==(const VisitedLinkRow& lhs, const VisitedLinkRow& rhs);
-  friend bool operator!=(const VisitedLinkRow& lhs, const VisitedLinkRow& rhs);
-  friend bool operator<(const VisitedLinkRow& lhs, const VisitedLinkRow& rhs);
+  friend bool operator==(const VisitedLinkRow&,
+                         const VisitedLinkRow&) = default;
+  friend auto operator<=>(const VisitedLinkRow&,
+                          const VisitedLinkRow&) = default;
 };
 using VisitedLinkRows = std::vector<VisitedLinkRow>;
 
@@ -884,8 +883,8 @@ struct VisitContextAnnotations {
   VisitContextAnnotations(const VisitContextAnnotations& other);
   ~VisitContextAnnotations();
 
-  bool operator==(const VisitContextAnnotations& other) const;
-  bool operator!=(const VisitContextAnnotations& other) const;
+  friend bool operator==(const VisitContextAnnotations&,
+                         const VisitContextAnnotations&) = default;
 
   // Values are persisted; do not reorder or reuse, and only add new values at
   // the end.
@@ -915,8 +914,8 @@ struct VisitContextAnnotations {
     // The HTTP response code of the navigation.
     int response_code = 0;
 
-    bool operator==(const OnVisitFields& other) const;
-    bool operator!=(const OnVisitFields& other) const;
+    friend bool operator==(const OnVisitFields&,
+                           const OnVisitFields&) = default;
   };
 
   OnVisitFields on_visit;
@@ -1251,7 +1250,7 @@ struct HistoryAddPageArgs {
   //       GURL(), base::Time(), nullptr, 0, std::nullopt, GURL(),
   //       RedirectList(), ui::PAGE_TRANSITION_LINK,
   //       false, SOURCE_BROWSED, false, true, false,
-  //       std::nullopt, std::nullopt, std::nullopt, std::nullopt,
+  //       std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
   //       std::nullopt, std::nullopt)
   HistoryAddPageArgs();
   HistoryAddPageArgs(const GURL& url,
@@ -1269,6 +1268,7 @@ struct HistoryAddPageArgs {
                      bool is_ephemeral = false,
                      std::optional<std::u16string> title = std::nullopt,
                      std::optional<GURL> top_level_url = std::nullopt,
+                     std::optional<GURL> frame_url = std::nullopt,
                      std::optional<Opener> opener = std::nullopt,
                      std::optional<int64_t> bookmark_id = std::nullopt,
                      std::optional<std::string> app_id = std::nullopt,
@@ -1298,6 +1298,10 @@ struct HistoryAddPageArgs {
   // `top_level_url` is a GURL representing the top-level frame that this
   // navigation originated from.
   std::optional<GURL> top_level_url;
+  // `frame_url` is a GURL representing the frame that this navigation
+  // originated from. This is distinct from referrer because it persists
+  // regardless of referrer policy.
+  std::optional<GURL> frame_url;
   std::optional<Opener> opener;
   std::optional<int64_t> bookmark_id;
   std::optional<std::string> app_id;

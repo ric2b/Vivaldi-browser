@@ -88,7 +88,9 @@
 #include "third_party/blink/renderer/platform/fonts/font_selector.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
 #include "third_party/blink/renderer/platform/geometry/path.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/capitalize.h"
 #include "third_party/blink/renderer/platform/text/character.h"
 #include "third_party/blink/renderer/platform/text/quotes_data.h"
@@ -984,6 +986,22 @@ bool ComputedStyle::DiffNeedsFullLayout(const Document& document,
     return true;
   }
 
+  if (field_diff & kGapDecorations) {
+    bool column_rule_style_changed_from_none =
+        ColumnRuleStyle() ==
+            ComputedStyleInitialValues::InitialColumnRuleStyle() &&
+        other.ColumnRuleStyle() !=
+            ComputedStyleInitialValues::InitialColumnRuleStyle();
+    bool row_rule_style_changed_from_none =
+        RowRuleStyle() == ComputedStyleInitialValues::InitialRowRuleStyle() &&
+        other.RowRuleStyle() !=
+            ComputedStyleInitialValues::InitialRowRuleStyle();
+    if (column_rule_style_changed_from_none ||
+        row_rule_style_changed_from_none) {
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -1600,9 +1618,10 @@ PointAndTangent ComputedStyle::CalculatePointAndTangentOnBasicShape(
     // an offset starting position via offset-position,
     // it uses the specified offset starting position for that argument.
     path = circle_or_ellipse->GetPathFromCenter(
-        starting_point, gfx::RectF(reference_box_size), EffectiveZoom());
+        starting_point, gfx::RectF(reference_box_size), /*path_scale=*/1.f);
   } else {
-    path = shape.GetPath(gfx::RectF(reference_box_size), EffectiveZoom());
+    path = shape.GetPath(gfx::RectF(reference_box_size), EffectiveZoom(),
+                         /*path_scale=*/1.f);
   }
   float shape_length = path.length();
   float path_length = FloatValueForLength(OffsetDistance(), shape_length);
@@ -1684,12 +1703,6 @@ void ComputedStyle::ApplyMotionPathTransform(float origin_x,
         path_position = CalculatePointAndTangentOnPath(path.GetPath());
         break;
       }
-      case BasicShape::kStyleShapeType: {
-        const StyleShape& shape = To<StyleShape>(basic_shape);
-        path_position = CalculatePointAndTangentOnPath(
-            shape.GetPath(bounding_box, EffectiveZoom()));
-        break;
-      }
       case BasicShape::kStyleRayType: {
         const gfx::RectF reference_box = GetReferenceBox(box, coord_box);
         const gfx::PointF offset_from_reference_box =
@@ -1723,7 +1736,8 @@ void ComputedStyle::ApplyMotionPathTransform(float origin_x,
       case BasicShape::kBasicShapeCircleType:
       case BasicShape::kBasicShapeEllipseType:
       case BasicShape::kBasicShapeInsetType:
-      case BasicShape::kBasicShapePolygonType: {
+      case BasicShape::kBasicShapePolygonType:
+      case BasicShape::kStyleShapeType: {
         const gfx::RectF reference_box = GetReferenceBox(box, coord_box);
         const gfx::PointF offset_from_reference_box =
             GetOffsetFromContainingBlock(box) -
@@ -1774,7 +1788,7 @@ void ComputedStyle::ApplyMotionPathTransform(float origin_x,
     Path path;
     if (!target || !target->GetComputedStyle()) {
       // Failure to find a shape should be equivalent to a "m0,0" path.
-      path.MoveTo({0, 0});
+      path = PathBuilder().MoveTo({0, 0}).Finalize();
     } else {
       path = target->AsPath();
     }
@@ -1950,8 +1964,14 @@ String ComputedStyle::ApplyTextTransform(const String& text,
   switch (TextTransform()) {
     case ETextTransform::kNone:
       return text;
-    case ETextTransform::kCapitalize:
+    case ETextTransform::kCapitalize: {
+      if (RuntimeEnabledFeatures::ICUCapitalizationEnabled()) {
+        const LayoutLocale* locale = GetFontDescription().Locale();
+        CaseMap case_map(locale ? locale->CaseMapLocale() : CaseMap::Locale());
+        return case_map.ToTitle(text, offset_map, previous_character);
+      }
       return Capitalize(text, previous_character);
+    }
     case ETextTransform::kUppercase: {
       const LayoutLocale* locale = GetFontDescription().Locale();
       CaseMap case_map(locale ? locale->CaseMapLocale() : CaseMap::Locale());
@@ -2493,6 +2513,46 @@ Color ComputedStyle::VisitedDependentColor(const Longhand& color_property,
                                visited_color.Param2(), unvisited_color.Alpha());
 }
 
+blink::Color ComputedStyle::VisitedDependentGapColor(
+    const StyleColor& gap_color,
+    const ComputedStyle& style,
+    bool is_column_rule) const {
+  CHECK(RuntimeEnabledFeatures::CSSGapDecorationEnabled());
+  blink::Color unvisited_gap_color;
+
+  // `StyleColor::IsCurrentColor()` is used down the pipeline to determine if
+  // `gap_color` is `currentColor`.
+  if (ShouldForceColor(gap_color)) {
+    unvisited_gap_color =
+        GetInternalForcedCurrentColor(/*is_current_color=*/nullptr);
+  } else {
+    unvisited_gap_color = gap_color.Resolve(
+        GetCurrentColor(), UsedColorScheme(), /*is_current_color=*/nullptr);
+  }
+
+  if (InsideLink() != EInsideLink::kInsideVisitedLink) {
+    return unvisited_gap_color;
+  }
+
+  // For `row-rule-color`, :visited styling is not supported.
+  if (!is_column_rule) {
+    return unvisited_gap_color;
+  }
+
+  blink::Color visited_gap_color;
+  if (ShouldForceColor(gap_color)) {
+    visited_gap_color =
+        GetInternalForcedVisitedCurrentColor(/*is_current_color=*/nullptr);
+  } else {
+    visited_gap_color =
+        style.InternalVisitedColumnRuleColor().GetLegacyValue().Resolve(
+            GetInternalVisitedCurrentColor(), UsedColorScheme(),
+            /*is_current_color=*/nullptr);
+  }
+
+  return visited_gap_color;
+}
+
 blink::Color ComputedStyle::VisitedDependentContextFill(
     const SVGPaint& context_paint,
     const ComputedStyle& context_style) const {
@@ -2844,6 +2904,30 @@ bool ComputedStyle::CalculateIsStackingContextWithoutContainment() const {
     return true;
   }
   return false;
+}
+
+bool ComputedStyle::GapRuleColorIsTransparent(
+    const GapDataList<StyleColor>& gap_rule_color) const {
+  const blink::Color& current_color = GetCurrentColor();
+  const mojom::blink::ColorScheme& color_scheme = UsedColorScheme();
+  return std::ranges::all_of(
+      gap_rule_color.GetGapDataList(),
+      [&](const GapData<StyleColor>& gap_data) {
+        // If it’s a simple value, just test it directly.
+        if (!gap_data.IsRepeaterData()) {
+          const StyleColor& v = gap_data.GetValue();
+          return v.Resolve(current_color, color_scheme).IsFullyTransparent();
+        }
+
+        // Otherwise it’s a repeater: walk through its RepeatedValues(), and
+        // only return true if all values are transparent.
+        const auto* rep = gap_data.GetValueRepeater();
+        return std::ranges::all_of(
+            rep->RepeatedValues(), [&](const StyleColor& v) {
+              return v.Resolve(current_color, color_scheme)
+                  .IsFullyTransparent();
+            });
+      });
 }
 
 bool ComputedStyle::IsRenderedInTopLayer(const Element& element) const {

@@ -106,13 +106,13 @@ export class SettingsLanguagesPageElement extends
     };
   }
 
-  languages?: LanguagesModel;
-  languageHelper: LanguageHelper;
-  private detailLanguage_?: LanguageState;
-  private showAddLanguagesDialog_: boolean;
-  private addLanguagesDialogLanguages_:
+  declare languages?: LanguagesModel;
+  declare languageHelper: LanguageHelper;
+  declare private detailLanguage_?: LanguageState;
+  declare private showAddLanguagesDialog_: boolean;
+  declare private addLanguagesDialogLanguages_:
       chrome.languageSettingsPrivate.Language[]|null;
-  private showManagedLanguageDialog_: boolean;
+  declare private showManagedLanguageDialog_: boolean;
   private languageSettingsMetricsProxy_: LanguageSettingsMetricsProxy =
       LanguageSettingsMetricsProxyImpl.getInstance();
 
@@ -126,10 +126,10 @@ export class SettingsLanguagesPageElement extends
    */
   private onAddLanguagesClick_(e: Event) {
     e.preventDefault();
+    assert(this.languages);
     this.languageSettingsMetricsProxy_.recordPageImpressionMetric(
         LanguageSettingsPageImpressionType.ADD_LANGUAGE);
-
-    this.addLanguagesDialogLanguages_ = this.languages!.supported.filter(
+    this.addLanguagesDialogLanguages_ = this.languages.supported.filter(
         language => this.languageHelper.canEnableLanguage(language));
     this.showAddLanguagesDialog_ = true;
   }
@@ -165,7 +165,7 @@ export class SettingsLanguagesPageElement extends
    * @return True if there is at least one available language.
    */
   private canEnableSomeSupportedLanguage_(languages?: LanguagesModel): boolean {
-    return languages === undefined || languages.supported.some(language => {
+    return languages !== undefined && languages.supported.some(language => {
       return this.languageHelper.canEnableLanguage(language);
     });
   }

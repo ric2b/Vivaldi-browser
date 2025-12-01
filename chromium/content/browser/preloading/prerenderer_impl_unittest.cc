@@ -6,6 +6,7 @@
 
 #include <array>
 
+#include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/preloading/preloading_confidence.h"
 #include "content/browser/preloading/prerender/prerender_features.h"
@@ -68,6 +69,7 @@ class PrerendererTest : public RenderViewHostTestHarness {
     candidate->url = url;
     candidate->referrer = blink::mojom::Referrer::New();
     candidate->eagerness = blink::mojom::SpeculationEagerness::kEager;
+    candidate->tags = {std::nullopt};
     return candidate;
   }
 

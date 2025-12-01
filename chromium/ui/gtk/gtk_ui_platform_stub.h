@@ -17,9 +17,7 @@ class GtkUiPlatformStub : public GtkUiPlatform {
   ~GtkUiPlatformStub() override;
 
   // GtkUiPlatform:
-  void OnInitialized(GtkWidget* widget) override;
-  GdkModifierType GetGdkKeyEventState(const ui::KeyEvent& key_event) override;
-  int GetGdkKeyEventGroup(const ui::KeyEvent& key_event) override;
+  void OnInitialized() override;
   GdkWindow* GetGdkWindow(gfx::AcceleratedWidget window_id) override;
   bool SetGtkWidgetTransientFor(GtkWidget* widget,
                                 gfx::AcceleratedWidget parent) override;

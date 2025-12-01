@@ -30,6 +30,7 @@
 #include "content/public/browser/client_hints_controller_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/navigation_throttle_registry.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/site_isolation_policy.h"
@@ -57,6 +58,7 @@
 #include "content/web_test/browser/web_test_fedcm_manager.h"
 #include "content/web_test/browser/web_test_origin_trial_throttle.h"
 #include "content/web_test/browser/web_test_permission_manager.h"
+#include "content/web_test/browser/web_test_privacy_sandbox.h"
 #include "content/web_test/browser/web_test_sensor_provider_manager.h"
 #include "content/web_test/browser/web_test_storage_access_manager.h"
 #include "content/web_test/browser/web_test_tts_platform.h"
@@ -88,7 +90,7 @@
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
-#include "third_party/blink/public/mojom/device_posture/device_posture_provider_automation.mojom.h"
+#include "third_party/blink/public/test/mojom/device_posture/device_posture_provider_automation.test-mojom.h"
 #include "ui/base/ui_base_switches.h"
 #include "url/origin.h"
 #include "url/url_constants.h"
@@ -418,19 +420,14 @@ void WebTestContentBrowserClient::OverrideWebPreferences(
     WebTestControlHost::Get()->OverrideWebPreferences(prefs);
 }
 
-std::vector<std::unique_ptr<content::NavigationThrottle>>
-WebTestContentBrowserClient::CreateThrottlesForNavigation(
-    content::NavigationHandle* navigation_handle) {
-  std::vector<std::unique_ptr<content::NavigationThrottle>> throttles =
-      ShellContentBrowserClient::CreateThrottlesForNavigation(
-          navigation_handle);
-
-  throttles.push_back(std::make_unique<WebTestOriginTrialThrottle>(
-      navigation_handle, navigation_handle->GetWebContents()
-                             ->GetBrowserContext()
-                             ->GetOriginTrialsControllerDelegate()));
-
-  return throttles;
+void WebTestContentBrowserClient::CreateThrottlesForNavigation(
+    content::NavigationThrottleRegistry& registry) {
+  ShellContentBrowserClient::CreateThrottlesForNavigation(registry);
+  content::NavigationHandle& navigation_handle = registry.GetNavigationHandle();
+  registry.AddThrottle(std::make_unique<WebTestOriginTrialThrottle>(
+      &navigation_handle, navigation_handle.GetWebContents()
+                              ->GetBrowserContext()
+                              ->GetOriginTrialsControllerDelegate()));
 }
 
 void WebTestContentBrowserClient::AppendExtraCommandLineSwitches(
@@ -577,6 +574,9 @@ void WebTestContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
   map->Add<blink::test::mojom::WebSensorProviderAutomation>(base::BindRepeating(
       &WebTestContentBrowserClient::BindWebSensorProviderAutomation,
       base::Unretained(this)));
+  map->Add<blink::test::mojom::WebPrivacySandboxAutomation>(base::BindRepeating(
+      &WebTestContentBrowserClient::BindWebPrivacySandboxAutomation,
+      base::Unretained(this)));
 
 #if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
   map->Add<blink::test::mojom::WebPressureManagerAutomation>(
@@ -624,12 +624,14 @@ void WebTestContentBrowserClient::BindCookieManagerAutomation(
     RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<blink::test::mojom::CookieManagerAutomation>
         receiver) {
-  cookie_managers_.Add(std::make_unique<WebTestCookieManager>(
-                           GetWebTestBrowserContext()
-                               ->GetDefaultStoragePartition()
-                               ->GetCookieManagerForBrowserProcess(),
-                           render_frame_host->GetLastCommittedURL()),
-                       std::move(receiver));
+  cookie_managers_.Add(
+      std::make_unique<WebTestCookieManager>(
+          GetWebTestBrowserContext()
+              ->GetDefaultStoragePartition()
+              ->GetCookieManagerForBrowserProcess(),
+          render_frame_host->GetLastCommittedURL(),
+          render_frame_host->GetIsolationInfoForSubresources()),
+      std::move(receiver));
 }
 
 void WebTestContentBrowserClient::BindDevicePostureProviderAutomation(
@@ -663,6 +665,15 @@ void WebTestContentBrowserClient::BindWebSensorProviderAutomation(
 
 void WebTestContentBrowserClient::ResetWebSensorProviderAutomation() {
   sensor_provider_manager_.reset();
+}
+
+void WebTestContentBrowserClient::BindWebPrivacySandboxAutomation(
+    RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::test::mojom::WebPrivacySandboxAutomation>
+        receiver) {
+  WebTestPrivacySandbox::GetOrCreate(
+      WebContents::FromRenderFrameHost(render_frame_host))
+      ->Bind(std::move(receiver));
 }
 
 #if BUILDFLAG(ENABLE_COMPUTE_PRESSURE)

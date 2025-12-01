@@ -166,7 +166,7 @@ $(ZSTD_DYNLIB): $(ZSTD_DYNLIB_OBJ)
 	$(if $(filter -DZSTD_MULTITHREAD,$(CPPFLAGS)),\
     @echo compiling multi-threaded dynamic library $(LIBVER),\
     @echo compiling single-threaded dynamic library $(LIBVER))
-	$(CC) $(FLAGS) $^ $(LDFLAGS) $(SONAME_FLAGS) -o $@
+	$(CC) $(FLAGS) $^ $(SONAME_FLAGS) -o $@
 	@echo creating versioned links
 	ln -sf $@ libzstd.$(SHARED_EXT_MAJOR)
 	ln -sf $@ libzstd.$(SHARED_EXT)
@@ -255,7 +255,7 @@ libzstd-nomt: $(ZSTD_NOMT_FILES)
         echo "Error: Found zstdmt in list."; \
         exit 1; \
     fi
-	$(CC) $(FLAGS) $^ $(LDFLAGS) $(SONAME_FLAGS) -o $@
+	$(CC) $(FLAGS) $^ $(SONAME_FLAGS) -o $@
 
 .PHONY: clean
 clean:

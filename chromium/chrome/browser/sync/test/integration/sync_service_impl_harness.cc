@@ -31,6 +31,7 @@
 #include "components/sync/engine/traffic_logger.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/service/glue/sync_transport_data_prefs.h"
+#include "components/sync/service/local_data_description.h"
 #include "components/sync/service/sync_internals_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
@@ -43,16 +44,12 @@
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "third_party/zlib/google/compression_utils.h"
 
-#if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/sync/test/integration/sync_test_utils_android.h"
-#endif  // BUILDFLAG(IS_ANDROID)
+namespace {
 
 using syncer::SyncCycleSnapshot;
 using syncer::SyncServiceImpl;
 
-const char* kSyncUrlClearServerDataKey = "sync-url-clear-server-data";
-
-namespace {
+constexpr char kSyncUrlClearServerDataKey[] = "sync-url-clear-server-data";
 
 bool HasAuthError(SyncServiceImpl* service) {
   return service->GetAuthError().state() ==
@@ -228,12 +225,8 @@ signin::GaiaIdHash SyncServiceImplHarness::GetGaiaIdHashForPrimaryAccount()
 }
 
 GaiaId SyncServiceImplHarness::GetGaiaIdForDefaultTestAccount() const {
-#if !BUILDFLAG(IS_ANDROID)
+  CHECK_EQ(signin_type_, SigninType::FAKE_SIGNIN);
   return signin::GetTestGaiaIdForEmail(username_);
-#else   // !BUILDFLAG(IS_ANDROID)
-  // TODO(crbug.com/40165479): pass `username_` once supported.
-  return sync_test_utils_android::GetGaiaIdForDefaultTestAccount();
-#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 bool SyncServiceImplHarness::SignInPrimaryAccount(
@@ -251,18 +244,19 @@ bool SyncServiceImplHarness::SignInPrimaryAccount(
 
     case SigninType::FAKE_SIGNIN: {
       signin_delegate_->SigninFake(profile_, username_, consent_level);
-
-      // TODO(b/1523197): The below checks should also be satisfied for the
-      // above case.
-      signin::IdentityManager* identity_manager =
-          IdentityManagerFactory::GetForProfile(profile_);
-      CHECK(identity_manager->HasPrimaryAccount(consent_level));
-      CHECK(identity_manager->HasPrimaryAccountWithRefreshToken(consent_level));
-      CHECK(!service()->GetAccountInfo().IsEmpty());
-
       break;
     }
   }
+
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
+  // Note that `consent_level` is not actually guaranteed at this stage. In
+  // particular, live tests require closing the sync confirmation dialog before
+  // signin::ConsentLevel::kSync is granted.
+  CHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
+  CHECK(identity_manager->HasPrimaryAccountWithRefreshToken(
+      signin::ConsentLevel::kSignin));
+  CHECK(!service()->GetAccountInfo().IsEmpty());
 
   return true;
 }
@@ -331,11 +325,8 @@ bool SyncServiceImplHarness::ExitSignInPendingStateForPrimaryAccount() {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
-bool SyncServiceImplHarness::SetupSync(
-    SetUserSettingsCallback user_settings_callback) {
-  bool result =
-      SetupSyncNoWaitForCompletion(std::move(user_settings_callback)) &&
-      AwaitSyncSetupCompletion();
+bool SyncServiceImplHarness::SetupSync() {
+  bool result = SetupSyncNoWaitForCompletion() && AwaitSyncSetupCompletion();
   if (!result) {
     LOG(ERROR) << profile_debug_name_ << ": SetupSync failed. Syncer status:\n"
                << GetServiceStatus();
@@ -345,7 +336,32 @@ bool SyncServiceImplHarness::SetupSync(
   return result;
 }
 
-bool SyncServiceImplHarness::SetupSyncNoWaitForCompletion(
+bool SyncServiceImplHarness::SetupSyncWithCustomSettings(
+    SetUserSettingsCallback user_settings_callback) {
+  bool result = SetupSyncWithCustomSettingsNoWaitForCompletion(
+                    std::move(user_settings_callback)) &&
+                AwaitSyncSetupCompletion();
+  if (!result) {
+    LOG(ERROR) << profile_debug_name_ << ": SetupSync failed. Syncer status:\n"
+               << GetServiceStatus();
+  } else {
+    DVLOG(1) << profile_debug_name_ << ": SetupSync successful.";
+  }
+  return result;
+}
+
+bool SyncServiceImplHarness::SetupSyncNoWaitForCompletion() {
+  // By default, mimic the user confirming the default settings.
+  return SetupSyncWithCustomSettingsNoWaitForCompletion(
+      base::BindLambdaForTesting([](syncer::SyncUserSettings* user_settings) {
+#if !BUILDFLAG(IS_CHROMEOS)
+        user_settings->SetInitialSyncFeatureSetupComplete(
+            syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
+#endif  // !BUILDFLAG(IS_CHROMEOS)
+      }));
+}
+
+bool SyncServiceImplHarness::SetupSyncWithCustomSettingsNoWaitForCompletion(
     SetUserSettingsCallback user_settings_callback) {
   if (service() == nullptr) {
     LOG(ERROR) << "SetupSync(): service() is null.";
@@ -360,34 +376,45 @@ bool SyncServiceImplHarness::SetupSyncNoWaitForCompletion(
     return false;
   }
 
-  // Now that auth is completed, request that sync actually start.
-  service()->SetSyncFeatureRequested();
+  signin::IdentityManager* identity_manager =
+      IdentityManagerFactory::GetForProfile(profile_);
+  // Note that `ConsentLevel::kSync` is not actually guaranteed at this stage.
+  // Namely, live tests require closing the sync confirmation dialog before
+  // `ConsentLevel::kSync` is granted. This is achieved later below with
+  // `ConfirmSyncUI()`.
+  CHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSignin));
 
   if (!AwaitEngineInitialization()) {
     return false;
   }
 
   // Now give the caller a chance to configure settings (in particular, the
-  // selected data types) before actually starting to sync.
-  if (user_settings_callback) {
-    std::move(user_settings_callback).Run(service()->GetUserSettings());
-  }
+  // selected data types) before actually starting to sync. This callback
+  // usually (but not necessarily) invokes SetInitialSyncFeatureSetupComplete().
+  std::move(user_settings_callback).Run(service()->GetUserSettings());
 
   // Notify SyncServiceImpl that we are done with configuration.
-  FinishSyncSetup();
+  sync_blocker_.reset();
 
-  if (signin_type_ == SigninType::UI_SIGNIN) {
-    return signin_delegate_->ConfirmSyncUI(profile_);
+  if (signin_type_ == SigninType::UI_SIGNIN &&
+      !signin_delegate_->ConfirmSyncUI(profile_)) {
+    return false;
   }
+
+  CHECK(identity_manager->HasPrimaryAccount(signin::ConsentLevel::kSync));
+  CHECK(identity_manager->HasPrimaryAccountWithRefreshToken(
+      signin::ConsentLevel::kSync));
+  CHECK(!service()->GetAccountInfo().IsEmpty());
+
   return true;
 }
 
 void SyncServiceImplHarness::FinishSyncSetup() {
-  sync_blocker_.reset();
 #if !BUILDFLAG(IS_CHROMEOS)
   service()->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 #endif  // !BUILDFLAG(IS_CHROMEOS)
+  sync_blocker_.reset();
 }
 
 bool SyncServiceImplHarness::AwaitMutualSyncCycleCompletion(
@@ -490,9 +517,13 @@ bool SyncServiceImplHarness::EnableSyncForType(
       std::string(syncer::GetUserSelectableTypeName(type)) + ")");
 
   if (!IsSyncEnabledByUser()) {
-    bool result = SetupSync(base::BindLambdaForTesting(
+    bool result = SetupSyncWithCustomSettings(base::BindLambdaForTesting(
         [type](syncer::SyncUserSettings* user_settings) {
           user_settings->SetSelectedTypes(false, {type});
+#if !BUILDFLAG(IS_CHROMEOS)
+          user_settings->SetInitialSyncFeatureSetupComplete(
+              syncer::SyncFirstSetupCompleteSource::ADVANCED_FLOW_CONFIRM);
+#endif  // !BUILDFLAG(IS_CHROMEOS)
         }));
     // If SetupSync() succeeded, then Sync must now be enabled.
     DCHECK(!result || IsSyncEnabledByUser());
@@ -613,12 +644,38 @@ SyncCycleSnapshot SyncServiceImplHarness::GetLastCycleSnapshot() const {
   return SyncCycleSnapshot();
 }
 
-base::test::TestFuture<syncer::DataTypeSet>
-SyncServiceImplHarness::GetTypesWithUnsyncedData(
+absl::flat_hash_map<syncer::DataType, size_t>
+SyncServiceImplHarness::GetTypesWithUnsyncedDataAndWait(
     syncer::DataTypeSet requested_types) const {
-  base::test::TestFuture<syncer::DataTypeSet> future;
+  base::test::TestFuture<absl::flat_hash_map<syncer::DataType, size_t>> future;
   service()->GetTypesWithUnsyncedData(requested_types, future.GetCallback());
-  return future;
+  return future.Get();
+}
+
+syncer::LocalDataDescription
+SyncServiceImplHarness::GetLocalDataDescriptionAndWait(
+    syncer::DataType data_type) {
+  base::test::TestFuture<
+      std::map<syncer::DataType, syncer::LocalDataDescription>>
+      descriptions;
+  service()->GetLocalDataDescriptions({data_type}, descriptions.GetCallback());
+
+  if (descriptions.Get().size() != 1u) {
+    ADD_FAILURE()
+        << "The expected size of local data description map is 1. Found "
+        << descriptions.Get().size() << '.';
+    return syncer::LocalDataDescription();
+  }
+
+  if (descriptions.Get().begin()->first != data_type) {
+    ADD_FAILURE()
+        << DataTypeToDebugString(data_type)
+        << " is the only expected key in the local data description map. Found "
+        << DataTypeToDebugString(descriptions.Get().begin()->first) << '.';
+    return syncer::LocalDataDescription();
+  }
+
+  return descriptions.Get().begin()->second;
 }
 
 std::string SyncServiceImplHarness::GetServiceStatus() {

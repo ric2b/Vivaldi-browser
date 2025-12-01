@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type {BitmapN32} from '//resources/mojo/skia/public/mojom/bitmap.mojom-webui.js';
+
 /**
  * @ fileoverview
  * Types for the ChromeOS Boca App. The same file is consumed by both
@@ -86,6 +88,14 @@ export enum SubmitAccessCodeResult {
   UNKNOWN = 0,
   SUCCESS = 1,
   INVALID_CODE = 2,
+  NETWORK_RESTRICTION = 3,
+}
+
+export enum CreateSessionResult {
+  UNKNOWN = 0,
+  SUCCESS = 1,
+  HTTP_ERROR = 2,
+  NETWORK_RESTRICTION = 3,
 }
 
 export enum StudentStatusDetail {
@@ -106,6 +116,8 @@ export enum StudentStatusDetail {
   NOT_ADDED_CONFIGURED_AS_TEACHER = 7,
 
   NOT_ADDED_NOT_CONFIGURED = 8,
+
+  MULTIPLE_DEVICE_SIGNED_IN = 9,
 }
 
 /**
@@ -174,6 +186,28 @@ export enum AssignmentType {
   ASSIGNMENT = 1,
   SHORT_ANSWER_QUESTION = 2,
   MULTIPLE_CHOICE_QUESTION = 3,
+}
+
+/**
+ * Declare Speech Recognition install state enum type
+ */
+export enum SpeechRecognitionInstallState {
+  UNKNOWN = 0,
+  SYSTEM_LANGUAGE_NOT_SUPPORTED = 1,
+  IN_PROGRESS = 2,
+  FAILED = 3,
+  READY = 4
+}
+
+/**
+ * Declare Speech Recognition install state enum type
+ */
+export enum CrdConnectionState {
+  UNKNOWN = 0,
+  CONNECTING = 1,
+  CONNECTED = 2,
+  DISCONNECTED = 3,
+  FAILED = 4
 }
 
 /**
@@ -286,7 +320,7 @@ export declare interface ClientApiDelegate {
   /**
    * Add students to the current session.
    */
-  addStudents(ids: string[]): Promise<boolean>;
+  addStudents(students: Identity[]): Promise<boolean>;
 
   /**
    * Get list of assignments in a course.
@@ -296,7 +330,7 @@ export declare interface ClientApiDelegate {
   /**
    * Create a new session.
    */
-  createSession(sessionConfig: SessionConfig): Promise<boolean>;
+  createSession(sessionConfig: SessionConfig): Promise<CreateSessionResult>;
 
   /**
    * Remove a student from the current session.
@@ -380,6 +414,23 @@ export declare interface ClientApiDelegate {
    * Refresh the workbook for students.
    */
   refreshWorkbook(): Promise<void>;
+
+  /**
+   * Gets Speech Recognition DLC installation status.
+   */
+  getSpeechRecognitionInstallationStatus():
+      Promise<SpeechRecognitionInstallState>;
+
+  /**
+   * Renotify the student to connect to the session.
+   */
+  renotifyStudent(id: string): Promise<boolean>;
+
+  /**
+   * Notify the client to start the Spotlight session.
+   * @param crdConnectionCode
+   */
+  startSpotlight(crdConnectionCode: string): Promise<void>;
 }
 
 /**
@@ -415,4 +466,26 @@ export declare interface ClientApi {
    * or outside of a session in the teacher case.
    */
   onLocalCaptionDisabled(): void;
+
+  /**
+   * Notify the app that the status for Soda Installation has changed.
+   */
+  onSpeechRecognitionInstallStateUpdated(state: SpeechRecognitionInstallState):
+      void;
+
+  /**
+   * Notify the app that the session captions has been turned off in chrome.
+   * This can be due to an error or because of an event such as device locked.
+   */
+  onSessionCaptionDisabled(isError: boolean): void;
+
+  /**
+   * Notify the app that a frame is available to be displayed for Spotlight.
+   */
+  onFrameDataReceived(frameData: BitmapN32): void;
+
+  /**
+   * Notify the app that the CRD session for Spotlight has ended.
+   */
+  onSpotlightCrdSessionStatusUpdated(state: CrdConnectionState): void;
 }

@@ -29,6 +29,7 @@
 #define SRC_DAWN_NATIVE_VULKAN_DEVICEVK_H_
 
 #include <memory>
+#include <mutex>
 #include <queue>
 #include <string>
 #include <utility>
@@ -132,6 +133,8 @@ class Device final : public DeviceBase {
                                                       wgpu::BufferUsage originalUsage,
                                                       size_t bufferSize) const override;
 
+    QuerySetBase* GetEmptyPassQuerySet();
+
   private:
     Device(AdapterBase* adapter,
            const UnpackedPtr<DeviceDescriptor>& descriptor,
@@ -153,7 +156,7 @@ class Device final : public DeviceBase {
         const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
         const std::vector<tint::wgsl::Extension>& internalExtensions,
         ShaderModuleParseResult* parseResult,
-        OwnedCompilationMessages* compilationMessages) override;
+        std::unique_ptr<OwnedCompilationMessages>* compilationMessages) override;
     ResultOrError<Ref<SwapChainBase>> CreateSwapChainImpl(
         Surface* surface,
         SwapChainBase* previousSwapChain,
@@ -208,7 +211,10 @@ class Device final : public DeviceBase {
     const std::string mDebugPrefix;
     std::vector<std::string> mDebugMessages;
 
+    std::once_flag mMonolithicPipelineCacheFlag;
     Ref<PipelineCache> mMonolithicPipelineCache;
+
+    Ref<QuerySetBase> mEmptyPassQuerySet;
 
     bool mSupportsMappableStorageBuffer = false;
 

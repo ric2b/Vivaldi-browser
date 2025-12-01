@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) IBM Corp. 2009  All rights reserved.
@@ -492,7 +493,7 @@ export class WatchExpression extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     } else {
       const propertyValue =
           ObjectUI.ObjectPropertiesSection.ObjectPropertiesSection.createPropertyValueWithCustomSupport(
-              expressionValue, Boolean(exceptionDetails), false /* showPreview */, titleElement, this.linkifier);
+              expressionValue, Boolean(exceptionDetails), false /* showPreview */, this.linkifier);
       this.valueElement = propertyValue.element;
     }
     const separatorElement = document.createElement('span');

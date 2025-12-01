@@ -18,18 +18,36 @@
  *  transport. No TURN server is configured, so both peers need to be reachable
  *  using STUN only.
  */
-#include <inttypes.h>
 
+#include <algorithm>
 #include <charconv>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <memory>
+#include <string>
+#include <utility>
 
 #include "absl/cleanup/cleanup.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/strings/string_view.h"
+#include "api/data_channel_interface.h"
+#include "api/peer_connection_interface.h"
+#include "api/rtc_error.h"
+#include "api/scoped_refptr.h"
+#include "rtc_base/checks.h"
+#include "rtc_base/copy_on_write_buffer.h"
 #include "rtc_base/event.h"
+#include "rtc_base/logging.h"
 #include "rtc_base/ssl_adapter.h"
+#include "rtc_base/string_encode.h"
+#include "rtc_base/strings/string_builder.h"
 #include "rtc_base/thread.h"
 #include "rtc_tools/data_channel_benchmark/grpc_signaling.h"
 #include "rtc_tools/data_channel_benchmark/peer_connection_client.h"
+#include "rtc_tools/data_channel_benchmark/signaling_interface.h"
+#include "system_wrappers/include/clock.h"
 #include "system_wrappers/include/field_trial.h"
 
 ABSL_FLAG(int, verbose, 0, "verbosity level (0-5)");
@@ -60,7 +78,7 @@ struct SetupMessage {
 
   static SetupMessage FromString(absl::string_view sv) {
     SetupMessage result;
-    auto parameters = rtc::split(sv, ',');
+    auto parameters = webrtc::split(sv, ',');
     std::from_chars(parameters[0].data(),
                     parameters[0].data() + parameters[0].size(),
                     result.packet_size, 10);
@@ -125,7 +143,7 @@ class DataChannelServerObserverImpl : public webrtc::DataChannelObserver {
     RTC_CHECK(remaining_data_) << "Error: no data to send";
     std::string data(std::min(setup_.packet_size, remaining_data_), '0');
     webrtc::DataBuffer* data_buffer =
-        new webrtc::DataBuffer(rtc::CopyOnWriteBuffer(data), true);
+        new webrtc::DataBuffer(webrtc::CopyOnWriteBuffer(data), true);
     total_queued_up_ = data_buffer->size();
     dc_->SendAsync(*data_buffer,
                    [this, data_buffer = data_buffer](webrtc::RTCError err) {
@@ -234,8 +252,9 @@ int RunServer() {
         signaling_thread.get());
 
     auto grpc_server = webrtc::GrpcSignalingServerInterface::Create(
-        [factory = rtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface>(
-             factory),
+        [factory =
+             webrtc::scoped_refptr<webrtc::PeerConnectionFactoryInterface>(
+                 factory),
          signaling_thread =
              signaling_thread.get()](webrtc::SignalingInterface* signaling) {
           webrtc::PeerConnectionClient client(factory.get(), signaling);
@@ -310,10 +329,10 @@ int RunClient() {
     std::unique_ptr<DataChannelClientObserverImpl> observer;
 
     // Set up the callback to receive the data channel from the sender.
-    rtc::scoped_refptr<webrtc::DataChannelInterface> data_channel;
+    webrtc::scoped_refptr<webrtc::DataChannelInterface> data_channel;
     webrtc::Event got_data_channel;
     client.SetOnDataChannel(
-        [&](rtc::scoped_refptr<webrtc::DataChannelInterface> channel) {
+        [&](webrtc::scoped_refptr<webrtc::DataChannelInterface> channel) {
           data_channel = std::move(channel);
           // DataChannel needs an observer to drain the read queue.
           observer = std::make_unique<DataChannelClientObserverImpl>(
@@ -360,15 +379,15 @@ int RunClient() {
 }
 
 int main(int argc, char** argv) {
-  rtc::InitializeSSL();
+  webrtc::InitializeSSL();
   absl::ParseCommandLine(argc, argv);
 
   // Make sure that higher severity number means more logs by reversing the
-  // rtc::LoggingSeverity values.
+  // webrtc::LoggingSeverity values.
   auto logging_severity =
-      std::max(0, rtc::LS_NONE - absl::GetFlag(FLAGS_verbose));
-  rtc::LogMessage::LogToDebug(
-      static_cast<rtc::LoggingSeverity>(logging_severity));
+      std::max(0, webrtc::LS_NONE - absl::GetFlag(FLAGS_verbose));
+  webrtc::LogMessage::LogToDebug(
+      static_cast<webrtc::LoggingSeverity>(logging_severity));
 
   bool is_server = absl::GetFlag(FLAGS_server);
   std::string field_trials = absl::GetFlag(FLAGS_force_fieldtrials);

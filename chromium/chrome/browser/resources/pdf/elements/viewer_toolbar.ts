@@ -84,7 +84,6 @@ export class ViewerToolbarElement extends CrLitElement {
       },
 
       pageNo: {type: Number},
-      pdfCr23Enabled: {type: Boolean},
 
       rotated: {type: Boolean},
       strings: {type: Object},
@@ -98,8 +97,8 @@ export class ViewerToolbarElement extends CrLitElement {
         reflect: true,
       },
 
+      displayAnnotations_: {type: Boolean},
       fittingType_: {type: Number},
-      pdfAnnotationsEnabled_: {type: Boolean},
       printingEnabled_: {type: Boolean},
       viewportZoomPercent_: {type: Number},
 
@@ -112,10 +111,12 @@ export class ViewerToolbarElement extends CrLitElement {
       // </if>
 
       // <if expr="enable_ink">
+      pdfInk1AnnotationsEnabled_: {type: Boolean},
       showAnnotationsModeDialog_: {type: Boolean},
-      // </if> enable_ink
+      // </if>
 
       // <if expr="enable_pdf_ink2">
+      enableUndoRedo: {type: Boolean},
       hasInk2Edits: {type: Boolean},
       pdfInk2Enabled: {type: Boolean},
       canRedoAnnotation_: {type: Boolean},
@@ -125,52 +126,53 @@ export class ViewerToolbarElement extends CrLitElement {
     };
   }
 
-  docTitle: string = '';
-  docLength: number = 0;
-  embeddedViewer: boolean = false;
-  hasEdits: boolean = false;
-  hasEnteredAnnotationMode: boolean = false;
-  formFieldFocus: FormFieldFocusType = FormFieldFocusType.NONE;
-  loadProgress: number = 0;
-  pageNo: number = 0;
-  pdfCr23Enabled: boolean = false;
-  rotated: boolean = false;
-  strings?: LoadTimeDataRaw;
-  viewportZoom: number = 0;
-  zoomBounds: {min: number, max: number} = {min: 0, max: 0};
-  sidenavCollapsed: boolean = false;
-  twoUpViewEnabled: boolean = false;
-  protected displayAnnotations_: boolean = true;
-  private fittingType_: FittingType = FittingType.FIT_TO_PAGE;
-  protected moreMenuOpen_: boolean = false;
-  protected loading_: boolean = true;
-  private pdfAnnotationsEnabled_: boolean = false;
-  protected printingEnabled_: boolean = false;
-  private viewportZoomPercent_: number = 0;
+  accessor docTitle: string = '';
+  accessor docLength: number = 0;
+  accessor embeddedViewer: boolean = false;
+  accessor hasEdits: boolean = false;
+  accessor hasEnteredAnnotationMode: boolean = false;
+  accessor formFieldFocus: FormFieldFocusType = FormFieldFocusType.NONE;
+  accessor loadProgress: number = 0;
+  accessor pageNo: number = 0;
+  accessor rotated: boolean = false;
+  accessor strings: LoadTimeDataRaw|undefined;
+  accessor viewportZoom: number = 0;
+  accessor zoomBounds: {min: number, max: number} = {min: 0, max: 0};
+  accessor sidenavCollapsed: boolean = false;
+  accessor twoUpViewEnabled: boolean = false;
+  protected accessor displayAnnotations_: boolean = true;
+  private accessor fittingType_: FittingType = FittingType.FIT_TO_PAGE;
+  protected accessor moreMenuOpen_: boolean = false;
+  protected accessor loading_: boolean = true;
+  protected accessor printingEnabled_: boolean = false;
+  private accessor viewportZoomPercent_: number = 0;
 
   // <if expr="enable_ink or enable_pdf_ink2">
   // Reactive properties common to ink and ink2
-  annotationAvailable: boolean = false;
-  annotationMode: AnnotationMode = AnnotationMode.NONE;
+  accessor annotationAvailable: boolean = false;
+  accessor annotationMode: AnnotationMode = AnnotationMode.OFF;
   // </if>
 
   // <if expr="enable_ink">
   // Ink reactive properties
-  protected showAnnotationsModeDialog_: boolean = false;
+  private accessor pdfInk1AnnotationsEnabled_: boolean = false;
+  protected accessor showAnnotationsModeDialog_: boolean = false;
   // </if>
 
   // <if expr="enable_pdf_ink2">
   // Ink2 reactive properties
-  hasInk2Edits: boolean = false;
-  pdfInk2Enabled: boolean = false;
-  protected canRedoAnnotation_: boolean = false;
-  protected canUndoAnnotation_: boolean = false;
-  protected pdfTextAnnotationsEnabled_: boolean = false;
+  accessor enableUndoRedo: boolean = true;
+  accessor hasInk2Edits: boolean = false;
+  accessor pdfInk2Enabled: boolean = false;
+  protected accessor canRedoAnnotation_: boolean = false;
+  protected accessor canUndoAnnotation_: boolean = false;
+  protected accessor pdfTextAnnotationsEnabled_: boolean = false;
 
   // Ink2 class members
   private currentStroke: number = 0;
   private mostRecentStroke: number = 0;
   private pluginController_: PluginController = PluginController.getInstance();
+  private strokeInProgress_: boolean = false;
   private tracker_: EventTracker = new EventTracker();
 
   constructor() {
@@ -180,6 +182,10 @@ export class ViewerToolbarElement extends CrLitElement {
         this.pluginController_.getEventTarget(),
         PluginControllerEventType.FINISH_INK_STROKE,
         this.handleFinishInkStroke_.bind(this));
+    this.tracker_.add(
+        this.pluginController_.getEventTarget(),
+        PluginControllerEventType.START_INK_STROKE,
+        this.handleStartInkStroke_.bind(this));
   }
   // </if>
 
@@ -216,8 +222,10 @@ export class ViewerToolbarElement extends CrLitElement {
 
   private updateLoadTimeData_() {
     this.printingEnabled_ = loadTimeData.getBoolean('printingEnabled');
-    this.pdfAnnotationsEnabled_ =
-        loadTimeData.getBoolean('pdfAnnotationsEnabled');
+    // <if expr="enable_ink">
+    this.pdfInk1AnnotationsEnabled_ =
+        loadTimeData.getBoolean('pdfInk1AnnotationsEnabled');
+    // </if>
     // <if expr="enable_pdf_ink2">
     this.pdfTextAnnotationsEnabled_ =
         loadTimeData.getBoolean('pdfTextAnnotationsEnabled');
@@ -229,28 +237,10 @@ export class ViewerToolbarElement extends CrLitElement {
     this.dispatchEvent(new CustomEvent('sidenav-toggle-click'));
   }
 
-  protected iconsetName_(): string {
-    return this.pdfCr23Enabled ? 'pdf-cr23' : 'pdf';
-  }
-
   protected fitToButtonIcon_(): string {
-    return this.iconsetName_() +
+    return 'pdf' +
         (this.fittingType_ === FittingType.FIT_TO_PAGE ? ':fit-to-height' :
                                                          ':fit-to-width');
-  }
-
-  // TODO(crbug.com/360265881): Remove conditional icons after the UI refresh
-  // fully launches.
-  protected menuIcon_(): string {
-    return this.pdfCr23Enabled ? 'pdf-cr23:menu' : 'cr20:menu';
-  }
-
-  protected moreIcon_(): string {
-    return this.pdfCr23Enabled ? 'pdf-cr23:more' : 'cr:more-vert';
-  }
-
-  protected printIcon_(): string {
-    return this.pdfCr23Enabled ? 'pdf-cr23:print' : 'cr:print';
   }
 
   /** @return The appropriate tooltip for the current state. */
@@ -271,19 +261,19 @@ export class ViewerToolbarElement extends CrLitElement {
     }
     // </if> enable_pdf_ink2
 
-    return this.pdfAnnotationsEnabled_;
+    return this.pdfInk1AnnotationsEnabled_;
   }
   // </if> enable_ink
 
   // <if expr="enable_pdf_ink2">
   protected showInk2Buttons_(): boolean {
-    return this.pdfInk2Enabled && this.pdfAnnotationsEnabled_;
+    return this.pdfInk2Enabled;
   }
   // </if>
 
   // <if expr="enable_ink">
   protected showAnnotationsBar_(): boolean {
-    return this.pdfAnnotationsEnabled_ && !this.loading_ &&
+    return this.pdfInk1AnnotationsEnabled_ && !this.loading_ &&
         this.isInInk1AnnotationMode_();
   }
 
@@ -316,7 +306,7 @@ export class ViewerToolbarElement extends CrLitElement {
     // <if expr="enable_ink">
     if (!this.displayAnnotations_ &&
         this.annotationMode === AnnotationMode.DRAW) {
-      this.setAnnotationMode(AnnotationMode.NONE);
+      this.setAnnotationMode(AnnotationMode.OFF);
     }
     // </if>
   }
@@ -442,7 +432,7 @@ export class ViewerToolbarElement extends CrLitElement {
   protected onDialogClose_() {
     // The dialog should only show if we are not in annotation mode and the
     // user wants to transition to drawing annotations.
-    assert(this.annotationMode === AnnotationMode.NONE);
+    assert(this.annotationMode === AnnotationMode.OFF);
     const confirmed =
         this.shadowRoot.querySelector(
                            'viewer-annotations-mode-dialog')!.wasConfirmed();
@@ -462,7 +452,7 @@ export class ViewerToolbarElement extends CrLitElement {
 
   protected onAnnotationClick_() {
     const newAnnotationMode = this.annotationMode === AnnotationMode.DRAW ?
-        AnnotationMode.NONE :
+        AnnotationMode.OFF :
         AnnotationMode.DRAW;
 
     // <if expr="enable_pdf_ink2">
@@ -493,7 +483,7 @@ export class ViewerToolbarElement extends CrLitElement {
     }
     // </if> enable_pdf_ink2
 
-    if (annotationMode !== AnnotationMode.NONE && !this.displayAnnotations_) {
+    if (annotationMode !== AnnotationMode.OFF && !this.displayAnnotations_) {
       this.toggleDisplayAnnotations_();
     }
   }
@@ -502,29 +492,54 @@ export class ViewerToolbarElement extends CrLitElement {
   // <if expr="enable_pdf_ink2">
   protected onTextAnnotationClick_() {
     this.setAnnotationMode(
-        this.annotationMode === AnnotationMode.TEXT ? AnnotationMode.NONE :
+        this.annotationMode === AnnotationMode.TEXT ? AnnotationMode.OFF :
                                                       AnnotationMode.TEXT);
   }
 
   /**
-   * Handles whether the undo and redo buttons should be enabled or disabled
-   * when a new ink stroke is added to the page.
+   * Handles when the user starts a stroke. While the stroke is in progress,
+   * disallow undo/redo operations.
    */
-  private handleFinishInkStroke_() {
-    this.currentStroke++;
-    this.mostRecentStroke = this.currentStroke;
+  private handleStartInkStroke_() {
+    this.strokeInProgress_ = true;
+  }
 
-    // When a new stroke is added, it can always be undone. Since it's the most
-    // recent stroke, the redo action cannot be performed.
-    this.canUndoAnnotation_ = true;
-    this.canRedoAnnotation_ = false;
+  /**
+   * Handles whether the undo and redo buttons should be enabled or disabled
+   * when a new Ink stroke is added to or erased from the page. This event
+   * fires when stroking finishes, but not all strokes (e.g. eraser strokes)
+   * actually modify the page.
+   */
+  private handleFinishInkStroke_(e: CustomEvent<boolean>) {
+    const modified = e.detail;
+    if (modified) {
+      this.currentStroke++;
+      this.mostRecentStroke = this.currentStroke;
+
+      // When a new stroke modification occurs, it can always be undone. Since
+      // it's the most recent modification, the redo action cannot be performed.
+      this.canUndoAnnotation_ = true;
+      this.canRedoAnnotation_ = false;
+    }
+
+    this.strokeInProgress_ = false;
+  }
+
+  protected computeEnableUndo_(): boolean {
+    return this.canUndoAnnotation_ && !this.strokeInProgress_ &&
+        this.enableUndoRedo;
+  }
+
+  protected computeEnableRedo_(): boolean {
+    return this.canRedoAnnotation_ && !this.strokeInProgress_ &&
+        this.enableUndoRedo;
   }
 
   /**
    * Undo an annotation stroke, if possible.
    */
   undo() {
-    if (!this.canUndoAnnotation_) {
+    if (!this.computeEnableUndo_()) {
       return;
     }
 
@@ -545,7 +560,7 @@ export class ViewerToolbarElement extends CrLitElement {
    * Redo an annotation stroke, if possible.
    */
   redo() {
-    if (!this.canRedoAnnotation_) {
+    if (!this.computeEnableRedo_()) {
       return;
     }
 
@@ -598,7 +613,7 @@ export class ViewerToolbarElement extends CrLitElement {
    */
   protected presentationModeAvailable_(): boolean {
     // <if expr="enable_ink">
-    return this.annotationMode === AnnotationMode.NONE && !this.embeddedViewer;
+    return this.annotationMode === AnnotationMode.OFF && !this.embeddedViewer;
     // </if>
     // <if expr="not enable_ink">
     return !this.embeddedViewer;

@@ -35,10 +35,6 @@ namespace content {
 class WebContents;
 }
 
-namespace views {
-class Widget;
-}  // namespace views
-
 namespace webapps {
 class MlInstallOperationTracker;
 enum class WebappUninstallSource;
@@ -65,17 +61,6 @@ void ShowCreateShortcutDialog(
     std::unique_ptr<WebAppInstallInfo> web_app_info,
     std::unique_ptr<webapps::MlInstallOperationTracker> install_tracker,
     AppInstallationAcceptanceCallback callback);
-
-// Creates a dialog that requests the consent from the user to install the
-// requested apps as sub apps to the named parent app. This is triggered by
-// an app calling the Multi App API add() function. The dialog is modal to
-// the browser containing the app calling the API. |sub_apps| contains the
-// information to represent each app to the user.
-views::Widget* CreateSubAppsInstallDialogWidget(
-    const std::u16string parent_app_name,
-    const std::vector<std::unique_ptr<WebAppInstallInfo>>& sub_apps,
-    base::RepeatingClosure settings_page_callback,
-    gfx::NativeWindow window);
 
 // When an app changes its icon or name, that is considered an app identity
 // change which (for some types of apps) needs confirmation from the user.
@@ -142,6 +127,10 @@ enum class PwaInProductHelpState {
   kNotShown
 };
 
+DECLARE_ELEMENT_IDENTIFIER_VALUE(kSimpleInstallDialogAppTitle);
+DECLARE_ELEMENT_IDENTIFIER_VALUE(kSimpleInstallDialogIconView);
+DECLARE_ELEMENT_IDENTIFIER_VALUE(kSimpleInstallDialogOriginLabel);
+
 // Shows the PWA installation confirmation bubble anchored off the PWA install
 // icon in the omnibox.
 //
@@ -180,7 +169,7 @@ void ShowWebAppDetailedInstallDialog(
 
 // Sets whether |ShowSimpleInstallDialogForWebApps| should accept immediately
 // without any user interaction.
-void SetAutoAcceptPWAInstallConfirmationForTesting(bool auto_accept);
+base::AutoReset<bool> SetAutoAcceptPWAInstallConfirmationForTesting();
 
 // Sets whether |ShowDiyInstallDialogForWebApps| should accept immediately
 // without any user interaction.

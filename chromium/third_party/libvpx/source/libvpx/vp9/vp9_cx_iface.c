@@ -670,7 +670,6 @@ static vpx_codec_err_t set_encoder_config(
   }
 
   if (get_level_index(oxcf->target_level) >= 0) config_target_level(oxcf);
-  oxcf->use_simple_encode_api = 0;
   // vp9_dump_encoder_config(oxcf, stderr);
   return VPX_CODEC_OK;
 }
@@ -2293,7 +2292,8 @@ CODEC_INTERFACE(vpx_codec_vp9_cx) = {
       encoder_set_config,          // vpx_codec_enc_config_set_fn_t
       encoder_get_global_headers,  // vpx_codec_get_global_headers_fn_t
       encoder_get_preview,         // vpx_codec_get_preview_frame_fn_t
-      NULL                         // vpx_codec_enc_mr_get_mem_loc_fn_t
+      NULL,                        // vpx_codec_enc_mr_get_mem_loc_fn_t
+      NULL                         // vpx_codec_enc_mr_free_mem_loc_fn_t
   }
 };
 
@@ -2498,7 +2498,6 @@ void vp9_dump_encoder_config(const VP9EncoderConfig *oxcf, FILE *fp) {
   DUMP_STRUCT_VALUE(fp, oxcf, row_mt);
   DUMP_STRUCT_VALUE(fp, oxcf, motion_vector_unit_test);
   DUMP_STRUCT_VALUE(fp, oxcf, delta_q_uv);
-  DUMP_STRUCT_VALUE(fp, oxcf, use_simple_encode_api);
 }
 
 FRAME_INFO vp9_get_frame_info(const VP9EncoderConfig *oxcf) {

@@ -12,6 +12,8 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
+#include "base/test/test_future.h"
+#include "base/test/test_timeouts.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -34,7 +36,6 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 
-using base::test::RunUntil;
 using content::MessageLoopRunner;
 
 // anonymous namespace for signin with UI helper functions.
@@ -87,6 +88,9 @@ class SignInObserver : public signin::IdentityManager::Observer {
 
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event) override {
+    // Note that `kSignin` is used here regardless of the ConsentLevel passed to
+    // `SignInWithUI()`, because ConsentLevel::kSync requires closing the sync
+    // confirmation dialog.
     if (event.GetEventTypeFor(signin::ConsentLevel::kSignin) !=
         signin::PrimaryAccountChangeEvent::Type::kSet) {
       return;
@@ -155,6 +159,20 @@ void RunLoopFor(base::TimeDelta duration) {
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE, run_loop.QuitClosure(), duration);
   run_loop.Run();
+}
+
+bool RunUntil(base::FunctionRef<bool(void)> condition) {
+#if BUILDFLAG(IS_MAC)
+  while (!condition()) {
+    base::test::TestFuture<void> future;
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE, future.GetCallback(), TestTimeouts::tiny_timeout());
+    future.Get();
+  }
+  return true;
+#else
+  return base::test::RunUntil(condition);
+#endif
 }
 
 // Returns the RenderFrameHost where Gaia credentials can be filled in.
@@ -457,6 +475,10 @@ bool SignInWithUI(Browser* browser,
   DCHECK(active_contents);
   content::TestNavigationObserver observer(
       active_contents, 1, content::MessageLoopRunner::QuitMode::DEFERRED);
+  // Note that SignInObserver always uses `ConsentLevel::kSignin` regardless of
+  // the consent level passed to this function. This is because granting
+  // `ConsentLevel::kSync` requires closing the sync confirmation dialog, e.g.
+  // by invoking `ConfirmSyncConfirmationDialog()`.
   observer.Wait();
   DVLOG(1) << "Sign in user: " << username;
   ExecuteJsToSigninInSigninFrame(active_contents, username, password);

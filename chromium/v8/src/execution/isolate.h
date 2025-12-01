@@ -115,6 +115,7 @@ class AddressToIndexHashMap;
 class AstStringConstants;
 class Bootstrapper;
 class BuiltinsConstantsTableBuilder;
+class BuiltinsEffectsAnalyzer;
 class CancelableTaskManager;
 class Logger;
 class CodeTracer;
@@ -528,8 +529,6 @@ using DebugObjectCache = std::vector<Handle<HeapObject>>;
   V(WasmLoadSourceMapCallback, wasm_load_source_map_callback, nullptr)      \
   V(WasmImportedStringsEnabledCallback,                                     \
     wasm_imported_strings_enabled_callback, nullptr)                        \
-  V(JavaScriptCompileHintsMagicEnabledCallback,                             \
-    compile_hints_magic_enabled_callback, nullptr)                          \
   V(WasmJSPIEnabledCallback, wasm_jspi_enabled_callback, nullptr)           \
   V(IsJSApiWrapperNativeErrorCallback,                                      \
     is_js_api_wrapper_native_error_callback, nullptr)                       \
@@ -657,10 +656,16 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   static Isolate* New();
   static Isolate* New(IsolateGroup* isolate_group);
 
-  // Deletes Isolate object. Must be used instead of delete operator.
-  // Destroys the non-default isolates.
-  // Sets default isolate into "has_been_disposed" state rather then destroying,
-  // for legacy API reasons.
+  // Deinitialize Isolate object. Must be used instead of delete operator.
+  // Destroys the non-default isolates. Sets default isolate into
+  // "has_been_disposed" state rather then destroying, for legacy API reasons.
+  // Another Free() call must be done after the isolate is deinitialized.
+  // This gives the embedder a chance to clean up before the address is released
+  // (which maybe reused in the next allocation).
+  static void Deinitialize(Isolate* isolate);
+  // Frees the address of the isolate. Must be called after Deinitialize().
+  static void Free(Isolate* isolate);
+  // A convenience helper that deinitializes and frees the isolate.
   static void Delete(Isolate* isolate);
 
   void SetUpFromReadOnlyArtifacts(ReadOnlyArtifacts* artifacts);
@@ -1441,6 +1446,17 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   RuntimeState* runtime_state() { return &runtime_state_; }
 
   Builtins* builtins() { return &builtins_; }
+  BuiltinsEffectsAnalyzer* builtins_effects_analyzer() {
+    return builtins_effects_analyzer_;
+  }
+  void set_builtins_effects_analyzer(
+      BuiltinsEffectsAnalyzer* builtins_effects_analyzer) {
+    // One of builtins_effects_analyzer_ and builtins_effects_analyzer should be
+    // nullptr, but not both.
+    DCHECK((builtins_effects_analyzer_ == nullptr) ^
+           (builtins_effects_analyzer == nullptr));
+    builtins_effects_analyzer_ = builtins_effects_analyzer;
+  }
 
   RegExpStack* regexp_stack() const { return regexp_stack_; }
 
@@ -1620,6 +1636,22 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
 
   void set_date_cache(DateCache* date_cache);
 
+  // Cache stamp used for invalidating caches in JSDate.
+  // We increment the stamp each time when the timezone information changes.
+  // JSDate objects perform stamp check and invalidate their caches if
+  // their saved stamp is not equal to the current stamp.
+  // See v8::Isolate::DateTimeConfigurationChangeNotification(..).
+  Tagged<Smi> date_cache_stamp() const {
+    return Smi::FromInt(isolate_data()->date_cache_stamp_);
+  }
+  // Returns current date_cache_stamp value and records the fact that the
+  // date cache is used (i.e. there are JSDate instances created).
+  Tagged<Smi> GetDateCacheStampAndRecordUsage() {
+    isolate_data()->is_date_cache_used_ = true;
+    return date_cache_stamp();
+  }
+  void IncreaseDateCacheStampAndInvalidateProtector();
+
 #ifdef V8_INTL_SUPPORT
 
   const std::string& DefaultLocale();
@@ -1665,8 +1697,6 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   void UpdateNoElementsProtectorOnSetPrototype(DirectHandle<JSObject> object) {
     UpdateNoElementsProtectorOnSetElement(object);
   }
-  void UpdateTypedArrayLengthLookupChainProtectorOnSetPrototype(
-      DirectHandle<JSObject> object);
   void UpdateTypedArraySpeciesLookupChainProtectorOnSetPrototype(
       DirectHandle<JSObject> object);
   void UpdateNumberStringNotRegexpLikeProtectorOnSetPrototype(
@@ -2332,17 +2362,15 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
     return wasm_stacks_;
   }
 
-  // Sets the new stack limit, updates the central stack info and checks the
-  // validity of the switch.
-  void SwitchStacks(Tagged<WasmContinuationObject> source_continuation,
-                    Tagged<WasmContinuationObject> target_continuation);
+  // Updates the stack limit, parent pointer and central stack info.
+  void SwitchStacks(wasm::StackMemory* from, wasm::StackMemory* to);
 
   // Retires the stack owned by {continuation}, to be called when returning or
   // throwing from this continuation.
   // This updates the {StackMemory} state, removes it from the global
   // {wasm_stacks_} vector and nulls the EPT entry. This does not update the
   // {ActiveContinuation} root or the stack limit.
-  void RetireWasmStack(Tagged<WasmContinuationObject> continuation);
+  void RetireWasmStack(wasm::StackMemory* stack);
 #else
   bool IsOnCentralStack() { return true; }
 #endif
@@ -2351,6 +2379,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   // allocated variables per ScopeInfo for debug-evaluate.
   // We also store a strong reference to the outer ScopeInfo to keep all
   // blocklists along a scope chain alive.
+  void LocalsBlockListCacheRehash();
   void LocalsBlockListCacheSet(DirectHandle<ScopeInfo> scope_info,
                                DirectHandle<ScopeInfo> outer_scope_info,
                                DirectHandle<StringSet> locals_blocklist);
@@ -2430,6 +2459,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
       ::heap::base::StackVisitor* visitor);
 
   std::shared_ptr<v8::TaskRunner> task_runner() const { return task_runner_; }
+
+  void PrintNumberStringCacheStats(const char* comment, bool final_summary);
 
  private:
   explicit Isolate(IsolateGroup* isolate_group);
@@ -2585,6 +2616,7 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
   bigint::Processor* bigint_processor_ = nullptr;
   RuntimeState runtime_state_;
   Builtins builtins_;
+  BuiltinsEffectsAnalyzer* builtins_effects_analyzer_ = nullptr;
   SetupIsolateDelegate* setup_delegate_ = nullptr;
 #if defined(DEBUG) || defined(VERIFY_HEAP)
   std::atomic<int> num_active_deserializers_;

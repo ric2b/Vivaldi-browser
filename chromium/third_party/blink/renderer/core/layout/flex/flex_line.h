@@ -71,7 +71,7 @@ struct FlexLine {
            LayoutUnit major_baseline,
            LayoutUnit minor_baseline,
            unsigned main_axis_auto_margin_count)
-      : item_indices(item_indices),
+      : item_indices(std::move(item_indices)),
         main_axis_free_space(main_axis_free_space),
         line_cross_size(line_cross_size),
         major_baseline(major_baseline),
@@ -98,6 +98,9 @@ struct FlexLine {
   bool has_seen_all_children = false;
   HeapVector<FlexItemData> line_items_data;
 };
+
+// Flex-layout usually has exactly one line.
+using FlexLineVector = HeapVector<FlexLine, 1>;
 
 }  // namespace blink
 

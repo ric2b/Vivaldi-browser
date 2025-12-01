@@ -17,6 +17,7 @@
 #include "components/sync/protocol/sync_enums.pb.h"
 #include "components/sync/service/sync_token_status.h"
 #include "google_apis/gaia/gaia_id.h"
+#include "google_apis/gaia/google_service_auth_error.h"
 
 namespace syncer {
 
@@ -81,7 +82,7 @@ void TestSyncService::MimicDashboardClear() {
 #if BUILDFLAG(IS_CHROMEOS)
   // Clearing sync from the dashboard results in
   // IsSyncFeatureDisabledViaDashboard() returning true.
-  user_settings_.SetSyncFeatureDisabledViaDashboard(true);
+  user_settings_.SetSyncFeatureDisabledViaDashboard();
 #else
   SetSignedIn(signin::ConsentLevel::kSignin);
 #endif  // BUILDFLAG(IS_CHROMEOS)
@@ -196,12 +197,6 @@ base::android::ScopedJavaLocalRef<jobject> TestSyncService::GetJavaObject() {
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-void TestSyncService::SetSyncFeatureRequested() {
-#if BUILDFLAG(IS_CHROMEOS)
-  user_settings_.SetSyncFeatureDisabledViaDashboard(false);
-#endif  // BUILDFLAG(IS_CHROMEOS)
-}
-
 TestSyncUserSettings* TestSyncService::GetUserSettings() {
   return &user_settings_;
 }
@@ -252,7 +247,11 @@ bool TestSyncService::HasSyncConsent() const {
 }
 
 GoogleServiceAuthError TestSyncService::GetAuthError() const {
-  return GoogleServiceAuthError();
+  return has_persistent_auth_error_
+             ? GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+                   GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+                       CREDENTIALS_REJECTED_BY_SERVER)
+             : GoogleServiceAuthError::AuthErrorNone();
 }
 
 bool TestSyncService::HasCachedPersistentAuthErrorForMetrics() const {
@@ -414,8 +413,12 @@ void TestSyncService::SetTypesWithUnsyncedData(const DataTypeSet& types) {
 
 void TestSyncService::GetTypesWithUnsyncedData(
     DataTypeSet requested_types,
-    base::OnceCallback<void(DataTypeSet)> cb) const {
-  std::move(cb).Run(base::Intersection(requested_types, unsynced_types_));
+    base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)> cb) const {
+  absl::flat_hash_map<DataType, size_t> unsynced_data_counts;
+  for (auto type : base::Intersection(requested_types, unsynced_types_)) {
+    unsynced_data_counts[type] = 1;
+  }
+  std::move(cb).Run(std::move(unsynced_data_counts));
 }
 
 void TestSyncService::SetLocalDataDescriptions(

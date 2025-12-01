@@ -69,9 +69,8 @@ void RecordPotentialSoftNavigationPaint(LocalFrameView* frame_view,
   LocalFrame& frame = frame_view->GetFrame();
   if (LocalDOMWindow* window = frame.DomWindow()) {
     if (SoftNavigationHeuristics* heuristics =
-            SoftNavigationHeuristics::From(*window)) {
-      heuristics->RecordPaint(&frame, rect.size().GetArea(),
-                              node->IsModifiedBySoftNavigation());
+            window->GetSoftNavigationHeuristics()) {
+      heuristics->RecordPaint(&frame, rect, node);
     }
   }
 }
@@ -523,7 +522,7 @@ void ImageRecordsManager::OnImageLoaded(MediaRecordIdHash record_id_hash,
     if (document && document->domWindow()) {
       record->load_time = ImageElementTiming::From(*document->domWindow())
                               .GetBackgroundImageLoadTime(style_image);
-      record->origin_clean = style_image->IsOriginClean();
+      record->origin_clean = style_image->IsFromOriginCleanStyleSheet();
     }
   }
   OnImageLoadedInternal(record, current_frame_index);

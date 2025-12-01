@@ -39,8 +39,10 @@ const char kVersionTag[] = "Version:";
 const char kRewritePrefix[] = "abp-resource:";
 
 enum class OptionType {
+  kBadFilter,
   kAll,
   kThirdParty,
+  kStrictThirdParty,
   kMatchCase,
   kDomain,
   kCSP,
@@ -52,7 +54,7 @@ enum class OptionType {
   // Document can be both an activation and an explicit type
   kDocument,
   kAdQueryTrigger,
-  kAdAttributionTracker
+  kAdAttributionTracker,
 };
 
 struct OptionDefinition {
@@ -64,13 +66,20 @@ struct OptionDefinition {
 
 constexpr auto kOptionMap = base::MakeFixedFlatMap<std::string_view,
                                                    OptionDefinition>(
-    {{"all", {.type = OptionType::kAll}},
+    {{"badfilter", {.type = OptionType::kBadFilter}},
+     {"all", {.type = OptionType::kAll}},
      {"third-party", {.type = OptionType::kThirdParty, .allow_invert = true}},
      {"3p", {.type = OptionType::kThirdParty, .allow_invert = true}},
      {"first-party",
       {.type = OptionType::kThirdParty, .invert = true, .allow_invert = true}},
      {"1p",
       {.type = OptionType::kThirdParty, .invert = true, .allow_invert = true}},
+     {"strict3p",
+      {.type = OptionType::kStrictThirdParty, .allow_invert = false}},
+     {"strict1p",
+      {.type = OptionType::kStrictThirdParty,
+       .invert = true,
+       .allow_invert = false}},
      {"match-case", {.type = OptionType::kMatchCase}},
      {"domain",
       {.type = OptionType::kDomain, .value = OptionDefinition::kRequired}},
@@ -610,6 +619,12 @@ bool RuleParser::ParseCosmeticRule(std::string_view body,
       body.find('}') != std::string_view::npos)
     return false;
 
+  // The easylist uses has-text, even though this is not a valid selector and we
+  // don't yet have an implementation for it in cosmetic rules.
+  if (body.find(":has-text") != std::string_view::npos) {
+    return false;
+  }
+
   CosmeticRule rule;
   rule.selector = std::string(body);
   rule.core = std::move(rule_core);
@@ -1008,7 +1023,6 @@ bool RuleParser::MaybeAddPureHostRule(std::string_view maybe_hostname,
   rule.original_rule_text = original_rule_text;
   rule.anchor_type.set(RequestFilterRule::kAnchorHost);
   rule.host = maybe_hostname;
-  rule.party.set();
   rule.resource_types.set();
   rule.pattern_type = RequestFilterRule::kPlain;
   rule.pattern = maybe_hostname;
@@ -1079,6 +1093,17 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
   }
 
   bool add_implicit_types = true;
+
+  enum class Party {
+    kNone,
+    kFirst,
+    kThird,
+  };
+
+  bool first_party = false;
+  bool third_party = false;
+  Party strict_party = Party::kNone;
+
   std::bitset<RequestFilterRule::kTypeCount> types_set;
   std::bitset<RequestFilterRule::kTypeCount> types_unset;
   std::bitset<RequestFilterRule::kExplicitTypeCount> explicit_types_set;
@@ -1156,6 +1181,9 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
     OptionType option_type = option_definition.type;
 
     switch (option_type) {
+      case OptionType::kBadFilter:
+        rule.bad_filter = true;
+        break;
       case OptionType::kAll:
         add_implicit_types = false;
         types_set.set();
@@ -1185,8 +1213,21 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
         break;
 
       case OptionType::kThirdParty:
-        rule.party.set(parsed_option.invert ? RequestFilterRule::kFirstParty
-                                            : RequestFilterRule::kThirdParty);
+        if (parsed_option.invert) {
+          first_party = true;
+        } else {
+          third_party = true;
+        }
+        break;
+
+      case OptionType::kStrictThirdParty:
+        if (parsed_option.invert) {
+          strict_party =
+              (strict_party == Party::kThird) ? Party::kNone : Party::kFirst;
+        } else {
+          strict_party =
+              (strict_party == Party::kFirst) ? Party::kNone : Party::kThird;
+        }
         break;
 
       case OptionType::kImportant:
@@ -1377,8 +1418,30 @@ RuleParser::Result RuleParser::ParseRequestFilterRuleOptions(
     rule.modify_block = false;
   }
 
-  if (rule.party.none())
-    rule.party.set();
+  switch (strict_party) {
+    case Party::kNone:
+      if (first_party && !third_party) {
+        rule.party = RequestFilterRule::kFirstParty;
+      } else if (third_party && !first_party) {
+        rule.party = RequestFilterRule::kThirdParty;
+      }
+      break;
+
+    case Party::kFirst:
+      if (third_party && !first_party) {
+        // This rule wouldn't match anything
+        return kError;
+      }
+      rule.party = RequestFilterRule::kStrictFirstParty;
+      break;
+
+    case Party::kThird:
+      rule.party = RequestFilterRule::kStrictThirdParty;
+      if (first_party && !third_party) {
+        rule.party = RequestFilterRule::kFirstPartyAndStrictThirdParty;
+      }
+      break;
+  }
 
   return kRequestFilterRule;
 }

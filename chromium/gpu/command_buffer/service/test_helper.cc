@@ -13,6 +13,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <array>
 #include <string>
 
 #include "base/strings/string_number_conversions.h"
@@ -153,7 +154,7 @@ void TestHelper::SetupTextureInitializationExpectations(
     case GL_TEXTURE_EXTERNAL_OES:
       texture_ids = &texture_external_oes_ids[0];
       break;
-    case GL_TEXTURE_RECTANGLE_ARB:
+    case GL_TEXTURE_RECTANGLE_ANGLE:
       texture_ids = &texture_rectangle_arb_ids[0];
       break;
     default:
@@ -172,14 +173,14 @@ void TestHelper::SetupTextureInitializationExpectations(
         .RetiresOnSaturation();
     if (needs_initialization) {
       if (needs_faces) {
-        static GLenum faces[] = {
-          GL_TEXTURE_CUBE_MAP_POSITIVE_X,
-          GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
-          GL_TEXTURE_CUBE_MAP_POSITIVE_Y,
-          GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
-          GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
-          GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
-        };
+        static auto faces = std::to_array<GLenum>({
+            GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+            GL_TEXTURE_CUBE_MAP_NEGATIVE_X,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Y,
+            GL_TEXTURE_CUBE_MAP_NEGATIVE_Y,
+            GL_TEXTURE_CUBE_MAP_POSITIVE_Z,
+            GL_TEXTURE_CUBE_MAP_NEGATIVE_Z,
+        });
         for (size_t face = 0; face < std::size(faces); ++face) {
           EXPECT_CALL(*gl, TexImage2D(faces[face], 0, GL_RGBA, 1, 1, 0, GL_RGBA,
                                       GL_UNSIGNED_BYTE, _))
@@ -242,8 +243,8 @@ void TestHelper::SetupTextureManagerInitExpectations(
         gl, GL_TEXTURE_EXTERNAL_OES, use_default_textures);
   }
   if (angle_texture_rectangle) {
-    SetupTextureInitializationExpectations(
-        gl, GL_TEXTURE_RECTANGLE_ARB, use_default_textures);
+    SetupTextureInitializationExpectations(gl, GL_TEXTURE_RECTANGLE_ANGLE,
+                                           use_default_textures);
   }
 }
 
@@ -271,7 +272,7 @@ void TestHelper::SetupTextureDestructionExpectations(
     case GL_TEXTURE_EXTERNAL_OES:
       texture_id = kServiceDefaultExternalTextureId;
       break;
-    case GL_TEXTURE_RECTANGLE_ARB:
+    case GL_TEXTURE_RECTANGLE_ANGLE:
       texture_id = kServiceDefaultRectangleTextureId;
       break;
     default:
@@ -301,16 +302,16 @@ void TestHelper::SetupTextureManagerDestructionExpectations(
 
   bool ext_image_external =
       gfx::HasExtension(extensions, "GL_OES_EGL_image_external");
-  bool arb_texture_rectangle =
-      gfx::HasExtension(extensions, "GL_ARB_texture_rectangle");
+  bool angle_texture_rectangle =
+      gfx::HasExtension(extensions, "GL_ANGLE_texture_rectangle");
 
   if (ext_image_external) {
     SetupTextureDestructionExpectations(
         gl, GL_TEXTURE_EXTERNAL_OES, use_default_textures);
   }
-  if (arb_texture_rectangle) {
-    SetupTextureDestructionExpectations(
-        gl, GL_TEXTURE_RECTANGLE_ARB, use_default_textures);
+  if (angle_texture_rectangle) {
+    SetupTextureDestructionExpectations(gl, GL_TEXTURE_RECTANGLE_ANGLE,
+                                        use_default_textures);
   }
 
   EXPECT_CALL(*gl, DeleteTextures(TextureManager::kNumDefaultTextures, _))
@@ -360,7 +361,7 @@ void TestHelper::SetupContextGroupInitExpectations(
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, _))
         .WillOnce(SetArgPointee<1>(8))
         .RetiresOnSaturation();
-    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, _))
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_DRAW_BUFFERS, _))
         .WillOnce(SetArgPointee<1>(8))
         .RetiresOnSaturation();
   }
@@ -406,7 +407,7 @@ void TestHelper::SetupContextGroupInitExpectations(
         .RetiresOnSaturation();
   }
   if (gfx::HasExtension(extension_set, "GL_ANGLE_texture_rectangle")) {
-    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_RECTANGLE_TEXTURE_SIZE, _))
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_RECTANGLE_TEXTURE_SIZE_ANGLE, _))
         .WillOnce(SetArgPointee<1>(kMaxRectangleTextureSize))
         .RetiresOnSaturation();
   }
@@ -630,7 +631,7 @@ void TestHelper::SetupFeatureInfoInitExpectationsWithGLVersion(
     EXPECT_CALL(*gl, GetIntegerv(GL_MAX_COLOR_ATTACHMENTS_EXT, _))
         .WillOnce(SetArgPointee<1>(8))
         .RetiresOnSaturation();
-    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_DRAW_BUFFERS_ARB, _))
+    EXPECT_CALL(*gl, GetIntegerv(GL_MAX_DRAW_BUFFERS, _))
         .WillOnce(SetArgPointee<1>(8))
         .RetiresOnSaturation();
   }

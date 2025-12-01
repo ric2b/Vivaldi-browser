@@ -5,7 +5,9 @@
 #include <assert.h>
 
 #include <algorithm>
+#include <array>
 #include <map>
+#include <optional>
 #include <set>
 #include <sstream>
 #include <string>
@@ -53,6 +55,9 @@ const char kBaseSpanIncludePath[] = "base/containers/span.h";
 // Include path that needs to be added to all the files where
 // base::raw_span<...> replaces a raw_ptr<...>.
 const char kBaseRawSpanIncludePath[] = "base/memory/raw_span.h";
+
+const char kBaseAutoSpanificationHelperIncludePath[] =
+    "base/containers/auto_spanification_helper.h";
 
 const char kArrayIncludePath[] = "array";
 
@@ -167,6 +172,84 @@ AST_MATCHER(clang::ArraySubscriptExpr, isSafeArraySubscript) {
   return true;
 }
 
+struct UnsafeFreeFuncToMacro {
+  // The name of an unsafe free function to be rewritten.
+  const std::string_view function_name;
+  // The helper macro name to be rewritten to.
+  const std::string_view macro_name;
+};
+
+std::optional<UnsafeFreeFuncToMacro> FindUnsafeFreeFuncToBeRewrittenToMacro(
+    const clang::FunctionDecl* function_decl) {
+  // The table of unsafe free functions to be rewritten to helper macro calls.
+  // Note that C++20 is not supported in tools/clang/spanify/ and we cannot use
+  // std::to_array.
+  static constexpr UnsafeFreeFuncToMacro unsafe_free_func_table[] = {
+      // https://source.chromium.org/chromium/chromium/src/+/main:third_party/boringssl/src/include/openssl/pool.h;drc=c76e4f83a8c5786b463c3e55c070a21ac751b96b;l=81
+      {"CRYPTO_BUFFER_data", "UNSAFE_CRYPTO_BUFFER_DATA"},
+      // https://source.chromium.org/chromium/chromium/src/+/main:third_party/harfbuzz-ng/src/src/hb-buffer.h;drc=ea6a172f84f2cbcfed803b5ae71064c7afb6b5c2;l=647
+      {"hb_buffer_get_glyph_infos", "UNSAFE_HB_BUFFER_GET_GLYPH_INFOS"},
+      // https://source.chromium.org/chromium/chromium/src/+/main:third_party/harfbuzz-ng/src/src/hb-buffer.h;drc=c76e4f83a8c5786b463c3e55c070a21ac751b96b;l=651
+      {"hb_buffer_get_glyph_positions", "UNSAFE_HB_BUFFER_GET_GLYPH_POSITIONS"},
+      // https://source.chromium.org/chromium/chromium/src/+/main:remoting/host/xsession_chooser_linux.cc;drc=fca90714b3949f0f4c27f26ef002fe8d33f3cb73;l=274
+      {"g_get_system_data_dirs", "UNSAFE_G_GET_SYSTEM_DATA_DIRS"},
+  };
+
+  const std::string& function_name = function_decl->getQualifiedNameAsString();
+
+  for (const auto& entry : unsafe_free_func_table) {
+    if (function_name == entry.function_name) {
+      return entry;
+    }
+  }
+
+  return std::nullopt;
+}
+
+struct UnsafeCxxMethodToMacro {
+  // The qualified class name of an unsafe method to be rewritten.
+  const std::string_view class_name;
+  // The name of an unsafe method to be rewritten.
+  const std::string_view method_name;
+  // The helper macro name to be rewritten to.
+  const std::string_view macro_name;
+};
+
+// Given a clang::CXXMethodDecl, find a corresponding UnsafeCxxMethodToMacro
+// instance if the method matches. Returns nullptr if not found.
+std::optional<UnsafeCxxMethodToMacro> FindUnsafeCxxMethodToBeRewrittenToMacro(
+    const clang::CXXMethodDecl* method_decl) {
+  // The table of unsafe methods to be rewritten to helper macro calls.
+  // Note that C++20 is not supported in tools/clang/spanify/ and we cannot use
+  // std::to_array.
+  static constexpr UnsafeCxxMethodToMacro unsafe_cxx_method_table[] = {
+      {"SkBitmap", "NoArgForTesting", "UNSAFE_SKBITMAP_NOARGFORTESTING"},
+      // https://source.chromium.org/chromium/chromium/src/+/main:third_party/skia/include/core/SkBitmap.h;drc=f72bd467feb15edd9323e46eab1b74ab6025bc5b;l=936
+      {"SkBitmap", "getAddr32", "UNSAFE_SKBITMAP_GETADDR32"},
+  };
+
+  const clang::CXXRecordDecl* class_decl = method_decl->getParent();
+  const std::string& method_name = method_decl->getNameAsString();
+  const std::string& class_name = class_decl->getQualifiedNameAsString();
+
+  for (const auto& entry : unsafe_cxx_method_table) {
+    if (method_name == entry.method_name && class_name == entry.class_name) {
+      return entry;
+    }
+  }
+
+  return std::nullopt;
+}
+
+AST_MATCHER(clang::FunctionDecl, unsafeFunctionToBeRewrittenToMacro) {
+  const clang::FunctionDecl* function_decl = &Node;
+  if (const clang::CXXMethodDecl* method_decl =
+          clang::dyn_cast<clang::CXXMethodDecl>(function_decl)) {
+    return bool(FindUnsafeCxxMethodToBeRewrittenToMacro(method_decl));
+  }
+  return bool(FindUnsafeFreeFuncToBeRewrittenToMacro(function_decl));
+}
+
 // Convert a number to a string with leading zeros. This is useful to ensure
 // that the alphabetical order of the strings is the same as the numerical
 // order.
@@ -221,10 +304,10 @@ std::string HashBase64(const std::string& input, size_t output_size = 4) {
 //                                                    `--- line
 template <bool human_readable = false /* Tweak this to debug*/>
 std::string NodeKeyFromRange(const clang::SourceRange& range,
-                             const clang::SourceManager& sources,
+                             const clang::SourceManager& source_manager,
                              const std::string& optional_seed = "") {
   clang::tooling::Replacement replacement(
-      sources, clang::CharSourceRange::getCharRange(range), "");
+      source_manager, clang::CharSourceRange::getCharRange(range), "");
   llvm::StringRef path = replacement.getFilePath();
   llvm::StringRef file_name = llvm::sys::path::filename(path);
 
@@ -235,20 +318,34 @@ std::string NodeKeyFromRange(const clang::SourceRange& range,
   if constexpr (!human_readable) {
     return llvm::formatv(
         "{0}:{1}", ToStringWithPadding(replacement.getOffset(), 7),
-        HashBase64(NodeKeyFromRange<true>(range, sources, optional_seed), 8));
+        HashBase64(NodeKeyFromRange<true>(range, source_manager, optional_seed),
+                   8));
   }
 
   return llvm::formatv("{0}:{1}:{2}:{3}:{4}:{5}",
                        ToStringWithPadding(replacement.getOffset(), 7),
                        HashBase64(path.str() + optional_seed), file_name,
-                       sources.getSpellingLineNumber(range.getBegin()),
-                       sources.getSpellingColumnNumber(range.getBegin()),
+                       source_manager.getSpellingLineNumber(range.getBegin()),
+                       source_manager.getSpellingColumnNumber(range.getBegin()),
                        replacement.getLength());
 }
 
+// Returns the identifier for the given clang node. The returned identifier is
+// unique to a pair of (node, optional_seed). See also `NodeKeyFromRange` for
+// details.
+//
+// Arguments:
+//   node = A clang node whose identifier is returned.
+//   source_manager = The clang::SourceManager of the clang node `node`.
+//   optional_seed = The given string is used to make a variation of the
+//       identifier of `node`. This argument is useful when `node` alone does
+//       not provide enough fine precision.
 template <typename T>
-std::string NodeKey(const T* t, const clang::SourceManager& sources) {
-  return NodeKeyFromRange(t->getSourceRange(), sources);
+std::string NodeKey(const T* node,
+                    const clang::SourceManager& source_manager,
+                    const std::string& optional_seed = "") {
+  return NodeKeyFromRange(node->getSourceRange(), source_manager,
+                          optional_seed);
 }
 
 std::string GetRHS(const MatchFinder::MatchResult& result);
@@ -270,7 +367,7 @@ void Emit(const std::string& line) {
 // - include-system-header:::<file path>:::-1:::-1:::<include text>
 //
 // It is associated with a "Node", which is a unique identifier.
-void EmitReplacement(const std::string& node, const std::string& replacement) {
+void EmitReplacement(std::string_view node, std::string_view replacement) {
   Emit(llvm::formatv("r {0} {1}\n", node, replacement));
 }
 
@@ -408,7 +505,7 @@ std::string GetTypeAsString(const clang::QualType& qual_type,
   printing_policy.SuppressElaboration = 0;
   printing_policy.SuppressInlineNamespace = 1;
   printing_policy.SuppressDefaultTemplateArgs = 1;
-  printing_policy.PrintCanonicalTypes = 0;
+  printing_policy.PrintAsCanonical = 0;
   return qual_type.getAsString(printing_policy);
 }
 
@@ -766,6 +863,12 @@ static void AdaptBinaryOperation(const MatchFinder::MatchResult& result) {
                llvm::formatv("{0}.subspan({1})", rhs_array_type ? ")" : "",
                              initial_text.substr(1)),
                source_manager));
+
+  // It's possible we emitted a rewrite that creates a temporary but
+  // unnamed `base::span` (issue 408018846). This could end up being
+  // the only reference in the file, and so it has to carry the
+  // `#include` directive itself.
+  EmitReplacement(key, GetIncludeDirective(source_range, source_manager));
 }
 
 static void AdaptBinaryPlusEqOperation(const MatchFinder::MatchResult& result) {
@@ -885,6 +988,44 @@ void AppendDataCall(const MatchFinder::MatchResult& result) {
       GetReplacementDirective(rep_range, replacement_text, source_manager));
 }
 
+// Given that we want to emit `.subspan(expr)`,
+// *  if `expr` is observably unsigned, does nothing.
+// *  if `expr` is a signed int literal, appends `u`.
+// *  otherwise, wraps `expr` with `checked_cast`.
+void RewriteExprForSubspan(const clang::Expr* expr,
+                           const MatchFinder::MatchResult& result,
+                           std::string_view key) {
+  clang::QualType type = expr->getType();
+  const clang::ASTContext& ast_context = *result.Context;
+
+  // This logic isn't perfect: an unsigned type wider than `size_t`
+  // will pop us out of this function, but will fail the `strict_cast`
+  // imposed by `subspan()`.
+  if (type == ast_context.getCorrespondingUnsignedType(type)) {
+    return;
+  }
+
+  const clang::SourceManager& source_manager = *result.SourceManager;
+  const clang::SourceRange range =
+      getExprRange(expr, source_manager, result.Context->getLangOpts());
+
+  if (clang::dyn_cast<clang::IntegerLiteral>(expr)) {
+    EmitReplacement(
+        key, GetReplacementDirective(range.getEnd(), "u", source_manager));
+    return;
+  }
+
+  EmitReplacement(key, GetReplacementDirective(range.getBegin(),
+                                               "base::checked_cast<size_t>(",
+                                               source_manager));
+  EmitReplacement(key,
+                  GetReplacementDirective(range.getEnd(), ")", source_manager));
+  EmitReplacement(key, GetIncludeDirective(range, source_manager,
+                                           "base/numerics/safe_conversions.h"));
+  EmitReplacement(key, GetIncludeDirective(range, source_manager, "cstdint",
+                                           /*is_system_include_path=*/true));
+}
+
 // Handle the case where we match `&container[<offset>]` being used as a buffer.
 void EmitContainerPointerRewrites(const MatchFinder::MatchResult& result,
                                   const std::string& key) {
@@ -930,6 +1071,22 @@ void EmitContainerPointerRewrites(const MatchFinder::MatchResult& result,
     if (const auto* container_subscript =
             result.Nodes.getNodeAs<clang::CXXOperatorCallExpr>(
                 "container_subscript")) {
+      // 1. implicit `this` arg and
+      // 2. the subscript expression.
+      if (container_subscript->getNumArgs() != 2u) {
+        llvm::errs() << "\nError: matched `operator[]`, expected exactly two "
+                        "args, but got "
+                     << container_subscript->getNumArgs() << "!\n";
+        DumpMatchResult(result);
+        assert(false && "apparently bogus `operator[]`");
+      }
+
+      // Call `IgnoreImpCasts()` to see past the implicit promotion to
+      // `...::size_type` and look at the "original" type of the
+      // expression.
+      RewriteExprForSubspan(container_subscript->getArg(1u)->IgnoreImpCasts(),
+                            result, key);
+
       replacement_range = {
           container_subscript->getRParenLoc(),
           container_subscript->getRParenLoc().getLocWithOffset(1)};
@@ -942,6 +1099,10 @@ void EmitContainerPointerRewrites(const MatchFinder::MatchResult& result,
       replacement_range = {
           c_style_array_with_subscript.getEndLoc(),
           c_style_array_with_subscript.getEndLoc().getLocWithOffset(1)};
+      const auto* subscript = GetNodeOrCrash<clang::Expr>(
+          result, "c_style_array_subscript",
+          "expected when `container_subscript` is not bound");
+      RewriteExprForSubspan(subscript, result, key);
     }
     // Close the call to `.subspan()`.
     replacement_text = ")";
@@ -981,13 +1142,153 @@ static void EmitSingleVariableSpan(const std::string& key,
   EmitReplacement(
       key, GetReplacementDirective(
                getExprRange(operand_expr, source_manager, lang_opts).getEnd(),
-               ")", source_manager));
+               ", 1u)", source_manager));
+}
+
+// Rewrites unsafe third-party member function calls to helper macro calls.
+//
+// Example)
+//     SkBitmap sk_bitmap;
+//     uint32_t* image_row = sk_bitmap.getAddr32(x, y);
+// will be rewritten to
+//     base::span<uint32_t> image_row =
+//         UNSAFE_SKBITMAP_GETADDR32(sk_bitmap, x, y);
+// where the receiver expr "sk_bitmap" is moved into the macro call, and the
+// macro performs essentially the following.
+//     uint32_t* tmp_row = sk_bitmap.getAddr32(x, y);
+//     int tmp_width = sk_bitmap.width();
+//     base::span<uint32_t> image_row(tmp_row, tmp_width - x);
+//
+// Tests are in: unsafe-function-to-macro-original.cc and
+// //base/containers/auto_spanification_helper_unittest.cc
+static std::string GetNodeFromUnsafeCxxMethodCall(
+    const clang::Expr* size_expr,
+    const clang::CXXMemberCallExpr* member_call_expr,
+    const MatchFinder::MatchResult& result) {
+  const clang::SourceManager& source_manager = *result.SourceManager;
+
+  const auto* method_decl = GetNodeOrCrash<clang::CXXMethodDecl>(
+      result, "unsafe_function_decl",
+      "`unsafe_function_call_expr` in clang::CXXMemberCallExpr implies "
+      "`unsafe_function_decl` in clang::CXXMethodDecl");
+  // The match with using `unsafeFunctionToBeRewrittenToMacro` guarantees that
+  // there exists an `UnsafeCxxMethodToMacro` instance, so the following
+  // "Find..." always succeeds.
+  const UnsafeCxxMethodToMacro entry =
+      FindUnsafeCxxMethodToBeRewrittenToMacro(method_decl).value();
+
+  // A CXXMemberCallExpr must have a MemberExpr as the callee.
+  const clang::MemberExpr* member_expr =
+      clang::dyn_cast<clang::MemberExpr>(member_call_expr->getCallee());
+  assert(member_expr);
+
+  // `key` is compatible with getNodeFromSizeExpr.
+  const std::string& key = NodeKey(size_expr, source_manager);
+
+  // Rewrite a method call into a macro call in two steps. The total rewrite we
+  // want is the following. Note that the receiver expression moves into the
+  // argument list.
+  //
+  //     "receier.method(args...)" ==> "MACRO(receiver, args...)"
+  //
+  // Step 1) Prepend "MACRO(" to make it a macro call.
+  //         "receiver.method(args...)"
+  //     ==> "MACRO(" + "receiver.method(args...)"
+  //
+  // Step 2) Replace ".method(" with ", " to make a new argument list including
+  //     the receiver expression.
+  //         "receiver" + ".method(" + "args...)"
+  //     ==> "receiver" + ", " + "args...)"
+  //
+  // The open parenthesis of the argument list is moved from the right after
+  // "method" to the right after "MACRO" while the close parenthesis doesn't
+  // change.
+  //
+  // The arrow operator "->" is supported in the same way as the dot operator
+  // ".".
+  EmitReplacement(  // Step 1
+      key, GetReplacementDirective(
+               member_call_expr->getImplicitObjectArgument()->getBeginLoc(),
+               llvm::formatv("{0}(", entry.macro_name), source_manager));
+  const bool has_arg = member_call_expr->getNumArgs() > 0;
+  EmitReplacement(  // Step 2
+      key,
+      GetReplacementDirective(
+          clang::SourceRange(member_expr->getOperatorLoc(),  // "." or "->"
+                             has_arg
+                                 ? member_call_expr->getArg(0)->getBeginLoc()
+                                 : member_call_expr->getRParenLoc()),
+          has_arg ? ", " : "", source_manager));
+
+  EmitReplacement(
+      key, GetIncludeDirective(size_expr->getSourceRange(), source_manager,
+                               kBaseAutoSpanificationHelperIncludePath));
+  EmitSink(key);
+  return key;
+}
+
+// Rewrites unsafe third-party free function calls to helper macro calls.
+//
+// Example)
+//     struct hb_glyph_position_t* positions =
+//         hb_buffer_get_glyph_positions(&buffer, &length);
+// will be rewritten to
+//     base::span<hb_glyph_position_t> positions =
+//         UNSAFE_HB_BUFFER_GET_GLYPH_POSITIONS(&buffer, &length);
+// where the macro performs essentially the following.
+//     hb_glyph_position_t* tmp_pos =
+//         hb_buffer_get_glyph_positions(&buffer, &length);
+//     base::span<hb_glyph_position_t> positions(tmp_pos, length);
+//
+// Tests are in: unsafe-function-to-macro-original.cc and
+// //base/containers/auto_spanification_helper_unittest.cc
+static std::string GetNodeFromUnsafeFreeFuncCall(
+    const clang::Expr* size_expr,
+    const clang::CallExpr* call_expr,
+    const MatchFinder::MatchResult& result) {
+  const clang::SourceManager& source_manager = *result.SourceManager;
+
+  const auto* function_decl = GetNodeOrCrash<clang::FunctionDecl>(
+      result, "unsafe_function_decl",
+      "`unsafe_function_call_expr` implies `unsafe_function_decl`");
+  // The match with using `unsafeFunctionToBeRewrittenToMacro` guarantees that
+  // there exists an `UnsafeFreeFuncToMacro` instance, so the following
+  // "Find..." always succeeds.
+  const UnsafeFreeFuncToMacro entry =
+      FindUnsafeFreeFuncToBeRewrittenToMacro(function_decl).value();
+
+  // `key` is compatible with getNodeFromSizeExpr.
+  const std::string& key = NodeKey(size_expr, source_manager);
+
+  // Replace the function name with the macro name.
+  const clang::SourceLocation& func_loc = call_expr->getCallee()->getBeginLoc();
+  EmitReplacement(
+      key, GetReplacementDirective(
+               clang::SourceRange(func_loc, func_loc.getLocWithOffset(
+                                                entry.function_name.length())),
+               std::string(entry.macro_name), source_manager));
+
+  EmitReplacement(
+      key, GetIncludeDirective(size_expr->getSourceRange(), source_manager,
+                               kBaseAutoSpanificationHelperIncludePath));
+  EmitSink(key);
+  return key;
+}
+
+static std::string GetNodeFromUnsafeFunctionCall(
+    const clang::Expr* size_expr,
+    const clang::CallExpr* call_expr,
+    const MatchFinder::MatchResult& result) {
+  if (const clang::CXXMemberCallExpr* member_call_expr =
+          clang::dyn_cast<clang::CXXMemberCallExpr>(call_expr)) {
+    return GetNodeFromUnsafeCxxMethodCall(size_expr, member_call_expr, result);
+  }
+  return GetNodeFromUnsafeFreeFuncCall(size_expr, call_expr, result);
 }
 
 static std::string getNodeFromSizeExpr(const clang::Expr* size_expr,
                                        const MatchFinder::MatchResult& result) {
   const clang::SourceManager& source_manager = *result.SourceManager;
-  const clang::ASTContext& ast_context = *result.Context;
   const std::string key = NodeKey(size_expr, source_manager);
 
   auto replacement_range =
@@ -1002,8 +1303,7 @@ static std::string getNodeFromSizeExpr(const clang::Expr* size_expr,
         nullptr_expr->getBeginLoc().getLocWithOffset(7)};
     EmitReplacement(
         key, GetReplacementDirective(nullptr_range, "{}", source_manager));
-  } else if (const auto* expr =
-                 result.Nodes.getNodeAs<clang::Expr>("address_expr")) {
+  } else if (result.Nodes.getNodeAs<clang::Expr>("address_expr")) {
     // This case occurs when an address to a variable is used as a buffer:
     //
     //   void UsesBarAsFloatBuffer(size_t size, float* bar);
@@ -1127,9 +1427,7 @@ std::string GenerateClassName(std::string var_name) {
     }
     prev = c;
   }
-  // Now we need to remove the '_'s from the string, recall std::remove moves
-  // everything to the end and then returns the first '_' (or end()). We then
-  // call erase from there to the end to actually remove.
+  // Now we need to remove the '_'s from the string.
   llvm::erase(var_name, '_');
   return var_name;
 }
@@ -1489,6 +1787,14 @@ std::pair<std::string, std::string> RewriteStdArrayWithInitList(
       closing_brackets_replacement_directive);
 }
 
+static bool IsMutable(const clang::DeclaratorDecl* decl) {
+  if (const auto* field_decl =
+          clang::dyn_cast_or_null<clang::FieldDecl>(decl)) {
+    return field_decl->isMutable();
+  }
+  return false;
+}
+
 static bool IsConstexpr(const clang::DeclaratorDecl* decl) {
   if (const auto* var_decl = clang::dyn_cast_or_null<clang::VarDecl>(decl)) {
     return var_decl->isConstexpr();
@@ -1496,9 +1802,18 @@ static bool IsConstexpr(const clang::DeclaratorDecl* decl) {
   return false;
 }
 
-static bool IsStaticLocal(const clang::DeclaratorDecl* decl) {
+static bool IsInlineVarDecl(const clang::DeclaratorDecl* decl) {
   if (const auto* var_decl = clang::dyn_cast_or_null<clang::VarDecl>(decl)) {
-    return var_decl->isStaticLocal();
+    return var_decl->isInlineSpecified();
+  }
+  return false;
+}
+
+static bool IsStaticLocalOrStaticStorageClass(
+    const clang::DeclaratorDecl* decl) {
+  if (const auto* var_decl = clang::dyn_cast_or_null<clang::VarDecl>(decl)) {
+    return var_decl->isStaticLocal() ||
+           var_decl->getStorageClass() == clang::SC_Static;
   }
   return false;
 }
@@ -1568,11 +1883,19 @@ std::string getNodeFromArrayDecl(const clang::TypeLoc* type_loc,
   const clang::QualType& original_element_type = array_type->getElementType();
 
   std::stringstream qualifier_string;
+  if (IsInlineVarDecl(array_decl)) {
+    qualifier_string << "inline ";
+  }
+  if (IsMutable(array_decl)) {
+    // While 'mutable' is a storage class specifier, include it with other
+    // declaration specifiers that precede the type in source code.
+    qualifier_string << "mutable ";
+  }
+  if (IsStaticLocalOrStaticStorageClass(array_decl)) {
+    qualifier_string << "static ";
+  }
   if (IsConstexpr(array_decl)) {
     qualifier_string << "constexpr ";
-  }
-  if (IsStaticLocal(array_decl)) {
-    qualifier_string << "static ";
   }
 
   // Move const qualifier from the element type to the array type.
@@ -1750,6 +2073,148 @@ std::string getArrayNode(bool is_lhs, const MatchFinder::MatchResult& result) {
   assert(false && "Unexpected match in getArrayNode()");
 }
 
+// Spanifies the matched function parameter/return type, and connects relevant
+// function declarations (forward declarations and overridden methods) to each
+// other bidirectionally per the matched function parameter/return type. Note
+// that a function definition is a function declaration by definition.
+// Tests are in: fct-decl-tests-original.cc
+//
+// Example) Given the following C++ code,
+//
+//   void F(short* arg1, long* arg2);         // [1] First declaration
+//   void F(short* arg1, long* arg2) { ... }  // [2] Second declaration
+//   // Only arg1 is connected to a source and sinks.
+//
+// we build the following node graph:
+//
+//   node_arg1_1st <==> replace_arg1_1st
+//         ^|
+//         ||
+//         |v
+//   node_arg1_2nd <==> replace_arg1_2nd <==> a source-to-sink graph
+//
+//   node_arg2_1st <==> replace_arg2_1st
+//         ^|
+//         ||
+//         |v
+//   node_arg2_2nd <==> replace_arg2_2nd
+//
+// where
+//
+//   replace_arg1_1st = `replacement_key` for arg1 at [1]
+//                    = GetRHS(arg1 at [1])
+//   replace_arg1_2nd = `replacement_key` for arg1 at [2]
+//                    = GetRHS(arg1 at [2])
+//   node_arg1_1st = `previous_key`
+//                 = NodeKey(F at [1], source_manager, "1-th parm type")
+//   node_arg1_2nd = `current_key`
+//                 = NodeKey(F at [2], source_manager, "1-th parm type")
+//   and the same for arg2.
+//   (`var` is a local variable name in the implementation.)
+//
+// Then, arg1 will be rewritten while arg2 will not be rewritten because only
+// the arg1 graph is connected to a source-to-sink graph.
+//
+// Q: Why do we create node_arg1_{1st,2nd} in addition to
+// replace_arg1_{1st,2nd}? Does the following graph suffice?
+//
+//   replace_arg1_1st <==> a source-to-sink graph
+//         ^|
+//         ||
+//         |v
+//   replace_arg1_2nd
+//
+// A: Yes, it does suffice. But it's hard to build because GetRHS takes
+// `result` as the argument. When we find a match for arg1 at [2], we no longer
+// have `result` for arg1 at [1]. It's easier to create node_arg1_{1st,2nd] than
+// saving the results of GetRHS somewhere and retrieving it.
+void RewriteFunctionParamAndReturnType(const MatchFinder::MatchResult& result) {
+  const clang::SourceManager& source_manager = *result.SourceManager;
+  const clang::FunctionDecl* fct_decl =
+      result.Nodes.getNodeAs<clang::FunctionDecl>("fct_decl");
+
+  // This node spanifies the matched function parameter/return type.
+  const std::string& replacement_key = GetRHS(result);
+
+  // `parm_or_return_id` (passed in to NodeKey() as `optional_seed` argument) is
+  // used to identify the matched parameter/return type so that the spanifier
+  // tool can partially spanify some of (not necessarily all of) function
+  // parameter types and return type.
+  //
+  // With the example in the function header comment, we'd like to build two
+  // independent graphs for arg1 and arg2.
+  //
+  // Note: It's easier to make a unique node key from `fct_decl` +
+  // `parm_or_return_id` than making a unique node key from the clang::Decl
+  // that matches the function parameter/return type of each forward
+  // declaration or overridden method.
+  std::string parm_or_return_id;
+  if (const clang::ParmVarDecl* parm_var_decl =
+          result.Nodes.getNodeAs<clang::ParmVarDecl>("rhs_begin")) {
+    parm_or_return_id = llvm::formatv("{0}-th parm type",
+                                      parm_var_decl->getFunctionScopeIndex());
+  } else {
+    parm_or_return_id = "return type";
+  }
+
+  // `current_key` (node_arg1_2nd in the example in the function header comment)
+  // is just a helper node to be identical to `replacement_key`, so connect them
+  // bi-directionally to each other.
+  const std::string& current_key =
+      NodeKey(fct_decl, source_manager, parm_or_return_id);
+  EmitEdge(current_key, replacement_key);
+  EmitEdge(replacement_key, current_key);
+
+  // Connect to the previous function decl, which is already connected to the
+  // previous previous function decl.
+  if (const clang::Decl* previous_decl = fct_decl->getPreviousDecl()) {
+    const std::string& previous_key =
+        NodeKey(previous_decl, source_manager, parm_or_return_id);
+    if (raw_ptr_plugin::isNodeInThirdPartyLocation(*previous_decl,
+                                                   source_manager)) {
+      // A declaration in third party codebase is found, so we do not want to
+      // rewrite the parameter/return type in a third party function. This one-
+      // way edge prevents making a flow from a source to a sink, hence the
+      // rewriting will be cancelled.
+      //
+      // Example)
+      //
+      //   node_arg1_1st (No replace_arg1_1st because it's in third_party/)
+      //         ^
+      //         | (one-way edge)
+      //         |
+      //   node_arg1_2nd <==> replace_arg1_2nd <==> a source-to-sink graph
+      //
+      // where node_arg1_1st is not a sink node, so the source node reaches a
+      // non-sink end node. Hence, the rewriting will be cancelled.
+      EmitEdge(current_key, previous_key);
+    } else {
+      EmitEdge(current_key, previous_key);
+      EmitEdge(previous_key, current_key);
+    }
+  }
+
+  // Connect to the overridden methods.
+  if (const clang::CXXMethodDecl* method_decl =
+          clang::dyn_cast<clang::CXXMethodDecl>(fct_decl)) {
+    for (auto* overridden_method_decl : method_decl->overridden_methods()) {
+      const std::string& overridden_method_key =
+          NodeKey(overridden_method_decl, source_manager, parm_or_return_id);
+      if (raw_ptr_plugin::isNodeInThirdPartyLocation(*overridden_method_decl,
+                                                     source_manager)) {
+        // A declaration in third party codebase is found, so we do not want to
+        // rewrite the parameter/return type in a third party function. This
+        // one-way edge prevents making a flow from a source to a sink, hence
+        // the rewriting will be cancelled.
+        EmitEdge(current_key, overridden_method_key);
+      } else {
+        EmitEdge(current_key, overridden_method_key);
+        EmitEdge(overridden_method_key, current_key);
+      }
+    }
+  }
+}
+
 // Extracts the lhs node from the match result.
 std::string GetLHS(const MatchFinder::MatchResult& result) {
   if (auto* type_loc =
@@ -1822,6 +2287,14 @@ std::string GetRHS(const MatchFinder::MatchResult& result) {
 
   if (const clang::Expr* size_expr =
           result.Nodes.getNodeAs<clang::Expr>("size_node")) {
+    // "size_node" assumes that third party functions that return a buffer
+    // provide some way to know the size, however special handling is required
+    // to extract that, thus here we add support for functions returning a
+    // buffer that also have size support.
+    if (const auto* unsafe_call_expr = result.Nodes.getNodeAs<clang::CallExpr>(
+            "unsafe_function_call_expr")) {
+      return GetNodeFromUnsafeFunctionCall(size_expr, unsafe_call_expr, result);
+    }
     return getNodeFromSizeExpr(size_expr, result);
   }
 
@@ -1852,128 +2325,6 @@ void MatchAdjacency(const MatchFinder::MatchResult& result) {
 
   EmitEdge(lhs, rhs);
 }
-
-// Called when the registered Match is found in the AST.
-//
-// The match includes:
-// - A parmVarDecl or RTNode
-// - Corresponding function declaration
-//
-// Using the function declaration, this:
-// 1. Create a unique key for the current function: `current_key`
-// 2. If the function has previous declarations or is overridden:
-//    - Retrieve previous declarations
-//    - Create keys for each previous declaration: `prev_key`
-//    - For each `prev_key`, add the pair (`current_key`, `prev_key`) to
-//      `fct_sig_pairs_`
-//
-// Using the parmVarDecl or RTNode, this:
-// 1. Create a node
-// 2. Insert the node into `fct_sig_nodes_[current_key]`
-//
-// At the end of the tool run for a given translation unit, edges between
-// corresponding nodes of two adjacent function signatures are created.
-class FunctionSignatureNodes : public MatchFinder::MatchCallback {
- public:
-  explicit FunctionSignatureNodes(
-      std::map<std::string, std::set<std::string>>& sig_nodes,
-      std::vector<std::pair<std::string, std::string>>& sig_pairs)
-      : fct_sig_nodes_(sig_nodes), fct_sig_pairs_(sig_pairs) {}
-
-  FunctionSignatureNodes(const FunctionSignatureNodes&) = delete;
-  FunctionSignatureNodes& operator=(const FunctionSignatureNodes&) = delete;
-
- private:
-  std::string getNodeFromMatchResult(const MatchFinder::MatchResult& result) {
-    if (auto* type_loc =
-            result.Nodes.getNodeAs<clang::PointerTypeLoc>("rhs_type_loc")) {
-      return getNodeFromPointerTypeLoc(type_loc, result);
-    }
-
-    if (auto* raw_ptr_type_loc =
-            result.Nodes.getNodeAs<clang::TemplateSpecializationTypeLoc>(
-                "rhs_raw_ptr_type_loc")) {
-      return getNodeFromRawPtrTypeLoc(raw_ptr_type_loc, result);
-    }
-
-    // "rhs_begin" match id could refer to a declaration that has a raw_ptr
-    // type. Those are handled in getNodeFromRawPtrTypeLoc. We
-    // should always check for a "rhs_raw_ptr_type_loc" match id and call
-    // getNodeFromRawPtrTypeLoc first.
-    if (auto* rhs_begin =
-            result.Nodes.getNodeAs<clang::DeclaratorDecl>("rhs_begin")) {
-      return getNodeFromDecl(rhs_begin, result);
-    }
-
-    // Shouldn't get here.
-    llvm::errs() << "\n"
-                    "Error: getNodeFromMatchResult() encountered an unexpected "
-                    "match.\n"
-                    "Expected one of : \n"
-                    "  - rhs_type_loc\n"
-                    "  - rhs_raw_ptr_type_loc\n"
-                    "  - rhs_begin\n"
-                    "\n";
-    assert(false && "Unexpected match in getNodeFromMatchResult()");
-  }
-
-  void run(const MatchFinder::MatchResult& result) override {
-    const clang::SourceManager& source_manager = *result.SourceManager;
-    const clang::FunctionDecl* fct_decl =
-        result.Nodes.getNodeAs<clang::FunctionDecl>("fct_decl");
-    const clang::CXXMethodDecl* method_decl =
-        result.Nodes.getNodeAs<clang::CXXMethodDecl>("fct_decl");
-
-    const std::string current_key = NodeKey(fct_decl, source_manager);
-
-    // Function related by separate declaration and definition:
-    {
-      for (auto* previous_decl = fct_decl->getPreviousDecl(); previous_decl;
-           previous_decl = previous_decl->getPreviousDecl()) {
-        // TODO(356666773): The `previous_decl` might be part of third_party/.
-        // Then it won't be matched by the matcher. So only one of the pair
-        // would have a node.
-        const std::string previous_key = NodeKey(previous_decl, source_manager);
-        fct_sig_pairs_.push_back({
-            current_key,
-            previous_key,
-        });
-      }
-    }
-
-    // Function related by overriding:
-    if (method_decl) {
-      for (auto* m : method_decl->overridden_methods()) {
-        const std::string previous_key = NodeKey(m, source_manager);
-        fct_sig_pairs_.push_back({
-            current_key,
-            previous_key,
-        });
-      }
-    }
-
-    std::string n = getNodeFromMatchResult(result);
-    fct_sig_nodes_[current_key].insert(n);
-  }
-
-  // Map a function signature, which is modeled as a string representing file
-  // location, to its matched graph nodes (RTNode and ParmVarDecl nodes).
-  // Note: `RTNode` represents a function return type node.
-  // In order to avoid relying on the order with which nodes are matched in
-  // the AST, and to guarantee that nodes are stored in the file declaration
-  // order, we use a `std::set<std::string>` which sorts Nodes based on their
-  // keys. Node that keys are properly ordered to reflect the order in the
-  // file. This property is important, because at the end of a tool run on a
-  // translationUnit, for each pair of function signatures, we iterate
-  // concurrently through the two sets of Nodes creating edges between nodes
-  // that appear at the same index.
-  std::map<std::string, std::set<std::string>>& fct_sig_nodes_;
-
-  // Map related function signatures to each other, this is needed for
-  // functions with separate definition and declaration, and for overridden
-  // functions.
-  std::vector<std::pair<std::string, std::string>>& fct_sig_pairs_;
-};
 
 raw_ptr_plugin::FilterFile PathsToExclude() {
   std::vector<std::string> paths_to_exclude_lines;
@@ -2030,18 +2381,19 @@ AST_MATCHER_P(clang::Expr,
 
 class Spanifier {
  public:
-  explicit Spanifier(
-      MatchFinder& finder,
-      std::map<std::string, std::set<std::string>>& sig_nodes,
-      std::vector<std::pair<std::string, std::string>>& sig_pairs)
-      : match_finder_(finder), fct_sig_nodes_(sig_nodes, sig_pairs) {
-    auto exclusions = anyOf(
+  explicit Spanifier(MatchFinder& finder) : match_finder_(finder) {
+    // `raw_ptr` or `span` should not have `.data()` applied.
+    auto frontier_exclusions = anyOf(
         isExpansionInSystemHeader(), raw_ptr_plugin::isInExternCContext(),
         raw_ptr_plugin::isInThirdPartyLocation(),
         raw_ptr_plugin::isInGeneratedLocation(),
         raw_ptr_plugin::ImplicitFieldDeclaration(),
         raw_ptr_plugin::isInMacroLocation(),
-        raw_ptr_plugin::isInLocationListedInFilterFile(&paths_to_exclude_),
+        raw_ptr_plugin::isInLocationListedInFilterFile(&paths_to_exclude_));
+
+    // Standard exclusions include `raw_ptr` and `span`.
+    auto exclusions = anyOf(
+        frontier_exclusions,
         hasAncestor(cxxRecordDecl(anyOf(hasName("raw_ptr"), hasName("span")))));
 
     // Exclude literal strings as these need to become string_view
@@ -2142,7 +2494,7 @@ class Spanifier {
                         declRefExpr(to(varDecl(hasType(arrayType(hasElementType(
                                         qualType().bind("contained_type")))))))
                             .bind("container_decl_ref")),
-                    hasIndex(expr()),
+                    hasIndex(expr().bind("c_style_array_subscript")),
                     optionally(hasIndex(integerLiteral(equals(0u))
                                             .bind("zero_container_offset"))))
                     .bind("c_style_array_with_subscript"))))
@@ -2187,7 +2539,11 @@ class Spanifier {
     //                  which is a subset of size_node.
     auto size_node_matcher = expr(anyOf(
         member_data_call,
-        expr(anyOf(callExpr(callee(functionDecl(
+        expr(anyOf(callExpr(
+                       callee(functionDecl(unsafeFunctionToBeRewrittenToMacro())
+                                  .bind("unsafe_function_decl")))
+                       .bind("unsafe_function_call_expr"),
+                   callExpr(callee(functionDecl(
                        hasReturnTypeLoc(pointerTypeLoc()),
                        anyOf(raw_ptr_plugin::isInThirdPartyLocation(),
                              isExpansionInSystemHeader(),
@@ -2214,7 +2570,7 @@ class Spanifier {
                      binary_plus_or_minus_operation(binaryOperation(
                          hasLHS(rhs_expr), hasOperatorName("+"),
                          unless(raw_ptr_plugin::isInMacroLocation()))),
-                     hasRHS(expr().bind("binary_op_rhs")),
+                     hasRHS(expr(hasType(isInteger())).bind("binary_op_rhs")),
                      unless(hasParent(binaryOperation(
                          anyOf(hasOperatorName("+"), hasOperatorName("-"))))))
                      .bind("binaryOperator"),
@@ -2330,24 +2686,22 @@ class Spanifier {
     // When passing now-span buffers to third_party functions as parameters, we
     // need to add `.data()` to extract the pointer and keep things compiling.
     // See test: 'array-external-call-original.cc'
+    //
+    // TODO(crbug.com/419598098): we had trouble exercising the "add
+    // `.data()` to frontier calls" logic in our test harness. This
+    // might imply that the exclude logic is broken or works differently
+    // from prod. If we could figure this out, we could test it.
     auto buffer_to_external_func = traverse(
         clang::TK_IgnoreUnlessSpelledInSource,
         expr(anyOf(
             callExpr(callee(functionDecl(
-                         anyOf(isExpansionInSystemHeader(),
-                               raw_ptr_plugin::isInExternCContext(),
-                               raw_ptr_plugin::isInThirdPartyLocation(),
-                               hasAttr(clang::attr::UnsafeBufferUsage)),
+                         frontier_exclusions,
                          unless(matchesName(
                              "std::(size|begin|end|empty|swap|ranges::)")))),
                      forEachArgumentWithParam(
                          expr(rhs_exprs_without_size_nodes), parmVarDecl())),
             cxxConstructExpr(
-                hasDeclaration(cxxConstructorDecl(
-                    anyOf(isExpansionInSystemHeader(),
-                          raw_ptr_plugin::isInExternCContext(),
-                          raw_ptr_plugin::isInThirdPartyLocation(),
-                          hasAttr(clang::attr::UnsafeBufferUsage)))),
+                hasDeclaration(cxxConstructorDecl(frontier_exclusions)),
                 forEachArgumentWithParam(expr(rhs_exprs_without_size_nodes),
                                          parmVarDecl())))));
     Match(buffer_to_external_func, AppendDataCall);
@@ -2371,6 +2725,7 @@ class Spanifier {
         expr(ignoringParenCasts(binaryOperation(
             binary_plus_or_minus_operation(
                 binaryOperation(hasLHS(rhs_expr), hasOperatorName("+"),
+                                hasRHS(expr(hasType(isInteger()))),
                                 unless(raw_ptr_plugin::isInMacroLocation()))
                     .bind("binary_operation")),
             hasRHS(expr().bind("binary_op_rhs")),
@@ -2382,12 +2737,12 @@ class Spanifier {
     // expr += offset_expr;
     // which is equivalent to:
     // lhs_expr = rhs_expr + offset_expr (Note: lhs_expr == rhs_expr)
-    auto binary_plus_eq_op =
-        traverse(clang::TK_IgnoreUnlessSpelledInSource,
-                 expr(ignoringParenCasts(binaryOperation(
-                          hasLHS(rhs_expr), hasOperatorName("+="),
-                          hasRHS(expr().bind("binary_op_RHS")))))
-                     .bind("binary_plus_eq_op"));
+    auto binary_plus_eq_op = traverse(
+        clang::TK_IgnoreUnlessSpelledInSource,
+        expr(ignoringParenCasts(binaryOperation(
+                 hasLHS(rhs_expr), hasOperatorName("+="),
+                 hasRHS(expr(hasType(isInteger())).bind("binary_op_RHS")))))
+            .bind("binary_plus_eq_op"));
     Match(binary_plus_eq_op, AdaptBinaryPlusEqOperation);
 
     // Handles assignment:
@@ -2551,14 +2906,14 @@ class Spanifier {
         traverse(clang::TK_IgnoreUnlessSpelledInSource,
                  functionDecl(forEachParmVarDecl(rhs_param), unless(exclusions))
                      .bind("fct_decl"));
-    match_finder_.addMatcher(fct_decls_params, &fct_sig_nodes_);
+    Match(fct_decls_params, RewriteFunctionParamAndReturnType);
 
     auto fct_decls_returns = traverse(
         clang::TK_IgnoreUnlessSpelledInSource,
         functionDecl(hasReturnTypeLoc(pointerTypeLoc().bind("rhs_type_loc")),
                      unless(exclusions))
             .bind("fct_decl"));
-    match_finder_.addMatcher(fct_decls_returns, &fct_sig_nodes_);
+    Match(fct_decls_returns, RewriteFunctionParamAndReturnType);
   }
 
  private:
@@ -2593,7 +2948,6 @@ class Spanifier {
 
   raw_ptr_plugin::FilterFile paths_to_exclude_ = PathsToExclude();
   MatchFinder& match_finder_;
-  FunctionSignatureNodes fct_sig_nodes_;
   std::vector<std::unique_ptr<MatchCallback>> match_callbacks_;
 };
 
@@ -2613,49 +2967,13 @@ int main(int argc, const char* argv[]) {
   clang::tooling::ClangTool tool(options->getCompilations(),
                                  options->getSourcePathList());
 
-  // Map a function signature, which is modeled as a string representing file
-  // location, to it's graph nodes (RTNode and ParmVarDecl nodes).
-  // RTNode represents a function return type.
-  std::map<std::string, std::set<std::string>> fct_sig_nodes;
-  // Map related function signatures to each other, this is needed for functions
-  // with separate definition and declaration, and for overridden functions.
-  std::vector<std::pair<std::string, std::string>> fct_sig_pairs;
   MatchFinder match_finder;
-  Spanifier rewriter(match_finder, fct_sig_nodes, fct_sig_pairs);
+  Spanifier rewriter(match_finder);
 
   // Prepare and run the tool.
   std::unique_ptr<clang::tooling::FrontendActionFactory> factory =
       clang::tooling::newFrontendActionFactory(&match_finder);
   int result = tool.run(factory.get());
-
-  // Establish connections between corresponding parameters of adjacent function
-  // signatures. Two functions are considered adjacent if one overrides the
-  // other or if one is a function declaration while the other is its
-  // corresponding definition.
-  for (auto& [l, r] : fct_sig_pairs) {
-    // By construction, only the left side of the pair is guaranteed to have a
-    // matching set of nodes.
-    assert(fct_sig_nodes.find(l) != fct_sig_nodes.end());
-
-    // TODO(356666773): Handle the case where both side of the pair haven't
-    // been matched. This happens when a function is declared in third_party/,
-    // but implemented in first party.
-    if (fct_sig_nodes.find(r) == fct_sig_nodes.end()) {
-      continue;
-    }
-
-    auto& s1 = fct_sig_nodes[l];
-    auto& s2 = fct_sig_nodes[r];
-    assert(s1.size() == s2.size());
-    auto i1 = s1.begin();
-    auto i2 = s2.begin();
-    while (i1 != s1.end()) {
-      EmitEdge(*i1, *i2);
-      EmitEdge(*i2, *i1);
-      i1++;
-      i2++;
-    }
-  }
 
   return result;
 }

@@ -15,7 +15,7 @@
 
 namespace blink {
 
-class AICreateMonitor;
+class CreateMonitor;
 
 class CreateTranslatorClient
     : public GarbageCollected<CreateTranslatorClient>,
@@ -33,14 +33,17 @@ class CreateTranslatorClient
 
   void Trace(Visitor* visitor) const override;
 
-  void OnResult(mojom::blink::CreateTranslatorResultPtr result) override;
+  void OnResult(
+      mojom::blink::CreateTranslatorResultPtr result,
+      mojom::blink::TranslatorLanguageCodePtr source_language,
+      mojom::blink::TranslatorLanguageCodePtr target_language) override;
 
   void OnGotAvailability(mojom::blink::CanCreateTranslatorResult result);
 
   void ResetReceiver() override;
 
  private:
-  Member<AICreateMonitor> monitor_;
+  Member<CreateMonitor> monitor_;
   String source_language_;
   String target_language_;
 

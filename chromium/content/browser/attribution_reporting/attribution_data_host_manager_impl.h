@@ -98,7 +98,7 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl final
   bool NotifyNavigationRegistrationData(
       const blink::AttributionSrcToken& attribution_src_token,
       const net::HttpResponseHeaders* headers,
-      GURL reporting_url) override;
+      const GURL& reporting_url) override;
   void NotifyNavigationRegistrationCompleted(
       const blink::AttributionSrcToken& attribution_src_token) override;
 
@@ -188,12 +188,11 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl final
   const RegistrationContext* GetReceiverRegistrationContextForSource();
   const RegistrationContext* GetReceiverRegistrationContextForTrigger();
 
-  void OsDataAvailable(
-      std::vector<attribution_reporting::OsRegistrationItem>,
-      bool was_fetched_via_service_worker,
-      const char* data_available_call_metric,
-      const RegistrationContext*,
-      attribution_reporting::mojom::RegistrationType);
+  void OsDataAvailable(std::vector<attribution_reporting::OsRegistrationItem>,
+                       bool was_fetched_via_service_worker,
+                       const char* data_available_call_metric,
+                       const RegistrationContext*,
+                       attribution_reporting::mojom::RegistrationType);
 
   void OnReceiverDisconnected();
 
@@ -214,19 +213,13 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl final
                    HeaderPendingDecode,
                    attribution_reporting::Registrar);
   void HandleNextWebDecode(const Registrations&);
-  void OnWebHeaderParsed(
-      RegistrationsId,
-      data_decoder::DataDecoder::ValueOrError result);
+  void OnWebHeaderParsed(RegistrationsId);
 
   base::expected<void, attribution_reporting::mojom::SourceRegistrationError>
-  HandleParsedWebSource(const Registrations&,
-                        HeaderPendingDecode&,
-                        data_decoder::DataDecoder::ValueOrError);
+  HandleParsedWebSource(const Registrations&, HeaderPendingDecode&);
 
   base::expected<void, attribution_reporting::mojom::TriggerRegistrationError>
-  HandleParsedWebTrigger(const Registrations&,
-                         HeaderPendingDecode&,
-                         data_decoder::DataDecoder::ValueOrError);
+  HandleParsedWebTrigger(const Registrations&, HeaderPendingDecode&);
 
   void HandleNextOsDecode(const Registrations&);
 
@@ -237,8 +230,7 @@ class CONTENT_EXPORT AttributionDataHostManagerImpl final
 
   using OsParseResult =
       base::expected<net::structured_headers::List, std::string>;
-  void OnOsHeaderParsed(RegistrationsId,
-                        OsParseResult);
+  void OnOsHeaderParsed(RegistrationsId, OsParseResult);
 
   void MaybeOnRegistrationsFinished(
       base::flat_set<Registrations>::const_iterator);

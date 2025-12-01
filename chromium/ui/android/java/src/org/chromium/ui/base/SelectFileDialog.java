@@ -866,9 +866,9 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
     }
 
     private class GetCameraIntentTask extends AsyncTask<@Nullable Uri> {
-        private Boolean mDirectToCamera;
-        private WindowAndroid mWindow;
-        private WindowAndroid.IntentCallback mCallback;
+        private final Boolean mDirectToCamera;
+        private final WindowAndroid mWindow;
+        private final WindowAndroid.IntentCallback mCallback;
 
         public GetCameraIntentTask(
                 Boolean directToCamera,
@@ -953,8 +953,7 @@ public class SelectFileDialog implements WindowAndroid.IntentCallback, PhotoPick
 
     public static boolean isContentUriUnderAppDir(Uri uri, Context context) {
         assert !ThreadUtils.runningOnUiThread();
-        try {
-            ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(uri, "r");
+        try (ParcelFileDescriptor pfd = context.getContentResolver().openFileDescriptor(uri, "r")) {
             assumeNonNull(pfd);
             int fd = pfd.getFd();
             // Use the file descriptor to find out the read file path thru symbolic link.

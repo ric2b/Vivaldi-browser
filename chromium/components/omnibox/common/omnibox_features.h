@@ -37,7 +37,6 @@ BASE_DECLARE_FEATURE(kDynamicMaxAutocomplete);
 BASE_DECLARE_FEATURE(kDisambiguateTabMatchingForEntitySuggestions);
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions.
-BASE_DECLARE_FEATURE(kAdjustLocalHistoryZeroSuggestRelevanceScore);
 BASE_DECLARE_FEATURE(kFocusTriggersWebAndSRPZeroSuggest);
 BASE_DECLARE_FEATURE(kHideSuggestionGroupHeaders);
 BASE_DECLARE_FEATURE(kLocalHistoryZeroSuggestBeyondNTP);
@@ -48,18 +47,12 @@ BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnSRP);
 BASE_DECLARE_FEATURE(kZeroSuggestPrefetchingOnWeb);
 // Related, kMaxZeroSuggestMatches.
 
-// Contextual zero-prefix (aka zero-suggest). There are suggestions based on the
-// user's current URL. Fullfillment of these suggestions is delegated to Lens
-// since Lens provides additional logic for contextualizing the results to the
-// current page, by using more than the URL, i.e. the page content.
-BASE_DECLARE_FEATURE(kContextualZeroSuggestLensFulfillment);
-
 // On Device Suggest.
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderIncognito);
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderNonIncognito);
 BASE_DECLARE_FEATURE(kOnDeviceHeadProviderKorean);
 BASE_DECLARE_FEATURE(kOnDeviceTailModel);
-BASE_DECLARE_FEATURE(kDisableOnDeviceTailEnglishModel);
+BASE_DECLARE_FEATURE(kOnDeviceTailEnableEnglishModel);
 
 // Provider-specific - These features change the behavior of specific providers.
 // TODO(crbug.com/40179316): Clean up feature flag used in staged roll-out of
@@ -75,8 +68,7 @@ BASE_DECLARE_FEATURE(kDocumentProviderNoSyncRequirement);
 BASE_DECLARE_FEATURE(kDomainSuggestions);
 
 // Suggestions UI - these affect the UI or function of the suggestions popup.
-BASE_DECLARE_FEATURE(kClipboardSuggestionContentHidden);
-BASE_DECLARE_FEATURE(kSuppressClipboardSuggestionAfterFirstUsed);
+BASE_DECLARE_FEATURE(kShowPopupOnMouseReleased);
 BASE_DECLARE_FEATURE(kMostVisitedTilesHorizontalRenderGroup);
 BASE_DECLARE_FEATURE(kRichAutocompletion);
 BASE_DECLARE_FEATURE(kWebUIOmniboxPopup);
@@ -122,7 +114,6 @@ BASE_DECLARE_FEATURE(kOmniboxTouchDownTriggerForPrefetch);
 // Site search/Keyword mode related features.
 BASE_DECLARE_FEATURE(kStarterPackExpansion);
 BASE_DECLARE_FEATURE(kStarterPackIPH);
-BASE_DECLARE_FEATURE(kStarterPackPage);
 
 // Search and Suggest requests and params.
 BASE_DECLARE_FEATURE(kAblateSearchProviderWarmup);
@@ -130,6 +121,8 @@ BASE_DECLARE_FEATURE(kReportApplicationLanguageInSearchRequest);
 
 BASE_DECLARE_FEATURE(kOmniboxAsyncViewInflation);
 BASE_DECLARE_FEATURE(kUseFusedLocationProvider);
+
+BASE_DECLARE_FEATURE(kOmniboxMobileParityUpdate);
 
 // Omnibox suggestions tuning
 BASE_DECLARE_FEATURE(kNumNtpZpsRecentSearches);
@@ -148,6 +141,7 @@ BASE_DECLARE_FEATURE(kSuppressIntermediateACUpdatesOnLowEndDevices);
 BASE_DECLARE_FEATURE(kAndroidHubSearch);
 // Delay focusTab to prioritize navigation (https://crbug.com/374852568).
 BASE_DECLARE_FEATURE(kPostDelayedTaskFocusTab);
+BASE_DECLARE_FEATURE(kAndroidHubSearchTabGroups);
 #endif  // BUILDFLAG(IS_ANDROID)
 
 // `ShortcutsProvider` features.
@@ -158,6 +152,9 @@ BASE_DECLARE_FEATURE(kEnableSearchAggregatorPolicy);
 
 // Ipad ZPS matches limit increase.
 BASE_DECLARE_FEATURE(kIpadZeroSuggestMatches);
+
+// Site search allow user override feature.
+BASE_DECLARE_FEATURE(kEnableSiteSearchAllowUserOverridePolicy);
 
 }  // namespace omnibox
 

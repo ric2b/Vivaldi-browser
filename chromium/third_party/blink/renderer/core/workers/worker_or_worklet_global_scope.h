@@ -122,15 +122,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope
   // Returns nullptr if this global scope is a WorkletGlobalScope
   virtual WorkerNavigator* navigator() const { return nullptr; }
 
-  // Returns true when we should reject a response without
-  // cross-origin-embedder-policy: require-corp.
-  // TODO(crbug.com/1064920): Remove this now that PlzDedicatedWorker has
-  // shipped.
-  virtual RejectCoepUnsafeNone ShouldRejectCoepUnsafeNoneTopModuleScript()
-      const {
-    return RejectCoepUnsafeNone(false);
-  }
-
   // Returns the resource fetcher for subresources (a.k.a. inside settings
   // resource fetcher). See core/workers/README.md for details.
   ResourceFetcher* Fetcher() override;
@@ -179,10 +170,6 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope
   void SetDefersLoadingForResourceFetchers(LoaderFreezeMode);
 
   virtual int GetOutstandingThrottledLimit() const;
-
-  // TODO(crbug.com/1146824): Remove this once PlzDedicatedWorker and
-  // PlzServiceWorker ship.
-  virtual bool IsInitialized() const = 0;
 
   // TODO(crbug/964467): Currently all workers fetch cached code but only
   // services workers use them. Dedicated / Shared workers don't use the cached

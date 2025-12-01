@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.touch_to_fill;
 
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.CREDENTIAL;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FORMATTED_ORIGIN;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.ON_CLICK_LISTENER;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.SHOW_SUBMIT_BUTTON;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.FooterProperties.MANAGE_BUTTON_TEXT;
@@ -74,7 +73,7 @@ import java.util.List;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class TouchToFillRenderTest {
     @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
+    private static final List<ParameterSet> sClassParams =
             Arrays.asList(
                     new ParameterSet().value(false, false).name("Default"),
                     new ParameterSet().value(false, true).name("RTL"),
@@ -363,7 +362,6 @@ public class TouchToFillRenderTest {
                 new PropertyModel.Builder(TouchToFillProperties.CredentialProperties.ALL_KEYS)
                         .with(CREDENTIAL, credential)
                         .with(ON_CLICK_LISTENER, callback)
-                        .with(FORMATTED_ORIGIN, credential.getDisplayName())
                         .with(SHOW_SUBMIT_BUTTON, showSubmitButton)
                         .build());
     }
@@ -392,7 +390,6 @@ public class TouchToFillRenderTest {
                                         .with(
                                                 ON_CLICK_LISTENER,
                                                 (Credential clickedCredential) -> {})
-                                        .with(FORMATTED_ORIGIN, credential.getDisplayName())
                                         .with(SHOW_SUBMIT_BUTTON, true)
                                         .build()));
     }

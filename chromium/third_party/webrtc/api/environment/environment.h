@@ -93,11 +93,11 @@ class RTC_EXPORT Environment final {
 
  private:
   friend class EnvironmentFactory;
-  Environment(scoped_refptr<const rtc::RefCountedBase> storage,
-              absl::Nonnull<const FieldTrialsView*> field_trials,
-              absl::Nonnull<Clock*> clock,
-              absl::Nonnull<TaskQueueFactory*> task_queue_factory,
-              absl::Nonnull<RtcEventLog*> event_log)
+  Environment(scoped_refptr<const RefCountedBase> storage,
+              const FieldTrialsView* absl_nonnull field_trials,
+              Clock* absl_nonnull clock,
+              TaskQueueFactory* absl_nonnull task_queue_factory,
+              RtcEventLog* absl_nonnull event_log)
       : storage_(std::move(storage)),
         field_trials_(field_trials),
         clock_(clock),
@@ -110,12 +110,12 @@ class RTC_EXPORT Environment final {
   // be copyable. It is up to the `EnvironmentFactory` to provide an object that
   // ensures references to utilties below are valid while object in the
   // `storage_` is alive.
-  scoped_refptr<const rtc::RefCountedBase> storage_;
+  scoped_refptr<const RefCountedBase> storage_;
 
-  absl::Nonnull<const FieldTrialsView*> field_trials_;
-  absl::Nonnull<Clock*> clock_;
-  absl::Nonnull<TaskQueueFactory*> task_queue_factory_;
-  absl::Nonnull<RtcEventLog*> event_log_;
+  const FieldTrialsView* absl_nonnull field_trials_;
+  Clock* absl_nonnull clock_;
+  TaskQueueFactory* absl_nonnull task_queue_factory_;
+  RtcEventLog* absl_nonnull event_log_;
 };
 
 //------------------------------------------------------------------------------

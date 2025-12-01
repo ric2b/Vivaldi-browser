@@ -104,7 +104,8 @@ void ExternalProcessImporterBridge::AddOpenTabs(
   DCHECK_EQ(0, tabs_left);
 }
 
-void ExternalProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,
-                                                     const std::string& error) {
+void ExternalProcessImporterBridge::NotifyItemFailed(
+    user_data_importer::ImportItem item,
+    const std::string& error) {
   observer_->OnImportItemFailed(item, error);
 }

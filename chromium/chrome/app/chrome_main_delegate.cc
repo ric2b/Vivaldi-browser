@@ -165,7 +165,6 @@
 #include "chromeos/ash/experiences/arc/arc_util.h"
 #include "chromeos/dbus/constants/dbus_paths.h"
 #include "content/public/common/content_features.h"
-#include "ui/lottie/resource.h"  // nogncheck
 #endif
 
 #if BUILDFLAG(IS_ANDROID)
@@ -605,11 +604,13 @@ void InitializeUserDataDir(base::CommandLine* command_line) {
   // DISPLAYs, so the profile directory can be specified in the environment to
   // support the virtual desktop use-case.
   if (user_data_dir.empty()) {
-    std::string user_data_dir_string;
     std::unique_ptr<base::Environment> environment(base::Environment::Create());
-    if (environment->GetVar("CHROME_USER_DATA_DIR", &user_data_dir_string) &&
-        base::IsStringUTF8(user_data_dir_string)) {
-      user_data_dir = base::FilePath::FromUTF8Unsafe(user_data_dir_string);
+    std::optional<std::string> user_data_dir_string =
+        environment->GetVar("CHROME_USER_DATA_DIR");
+    if (user_data_dir_string.has_value() &&
+        base::IsStringUTF8(user_data_dir_string.value())) {
+      user_data_dir =
+          base::FilePath::FromUTF8Unsafe(user_data_dir_string.value());
     }
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
@@ -776,7 +777,7 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
   const auto* invoked_in_browser =
       std::get_if<InvokedInBrowserProcess>(&invoked_in);
   if (!invoked_in_browser) {
-    CommonEarlyInitialization(invoked_in);
+    CommonEarlyInitialization();
     return std::nullopt;
   }
 
@@ -876,7 +877,7 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
       ->ChromeProcessSingleton::InitializeFeatures();
 #endif
 
-  CommonEarlyInitialization(invoked_in);
+  CommonEarlyInitialization();
 
   // Initializes the resource bundle and determines the locale.
   std::string actual_locale = LoadLocalState(
@@ -895,15 +896,13 @@ std::optional<int> ChromeMainDelegate::PostEarlyInitialization(
       new net::NetworkChangeNotifierFactoryAndroid());
 #endif
 
-  if (base::FeatureList::IsEnabled(
-          features::kWriteBasicSystemProfileToPersistentHistogramsFile)) {
-    bool record = true;
+  bool record = true;
 #if BUILDFLAG(IS_ANDROID)
-    record =
-        base::FeatureList::IsEnabled(chrome::android::kUmaBackgroundSessions);
+  record =
+      base::FeatureList::IsEnabled(chrome::android::kUmaBackgroundSessions);
 #endif
-    if (record)
-      chrome_content_browser_client_->startup_data()->RecordCoreSystemProfile();
+  if (record) {
+    chrome_content_browser_client_->startup_data()->RecordCoreSystemProfile();
   }
 
 #if BUILDFLAG(IS_ANDROID)
@@ -959,7 +958,7 @@ void ChromeMainDelegate::CreateThreadPool(std::string_view name) {
 #endif
 }
 
-void ChromeMainDelegate::CommonEarlyInitialization(InvokedIn invoked_in) {
+void ChromeMainDelegate::CommonEarlyInitialization() {
   const base::CommandLine* const command_line =
       base::CommandLine::ForCurrentProcess();
   std::string process_type =
@@ -1417,10 +1416,6 @@ void ChromeMainDelegate::PreSandboxStartup() {
       // See comment at ReadAppLocale() for why we do this.
       locale = ash::startup_settings_cache::ReadAppLocale();
     }
-
-    ui::ResourceBundle::SetLottieParsingFunctions(
-        &lottie::ParseLottieAsStillImage,
-        &lottie::ParseLottieAsThemedStillImage);
 #endif
 #if BUILDFLAG(IS_ANDROID)
     // The renderer sandbox prevents us from accessing our .pak files directly.

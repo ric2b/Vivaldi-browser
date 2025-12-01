@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/feature_list.h"
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/unsafe_shared_memory_region.h"
@@ -16,7 +15,6 @@
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "media/base/color_plane_layout.h"
 #include "media/base/format_utils.h"
-#include "media/base/media_switches.h"
 #include "media/mojo/mojom/video_frame_metadata_mojom_traits.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "mojo/public/cpp/system/handle.h"
@@ -32,12 +30,6 @@
 namespace mojo {
 
 namespace {
-
-// Determines whether Mappable SharedImage over mojo is supported.
-bool SupportMappableSI() {
-  return base::FeatureList::IsEnabled(
-      media::kSupportMappableSharedImageOverMojo);
-}
 
 base::ReadOnlySharedMemoryRegion CreateRegion(const media::VideoFrame& frame,
                                               std::vector<uint32_t>& offsets,
@@ -132,15 +124,16 @@ media::mojom::VideoFrameDataPtr MakeVideoFrameData(
     std::optional<gpu::ExportedSharedImage> shared_image;
     gpu::SyncToken sync_token;
     if (input->HasSharedImage()) {
-      bool with_buffer_handle = is_mappable_si_enabled && SupportMappableSI();
-      shared_image = input->shared_image()->Export(with_buffer_handle);
+      shared_image = input->shared_image()->Export(
+          /*with_buffer_handle=*/is_mappable_si_enabled);
       sync_token = input->acquire_sync_token();
 
-      if (with_buffer_handle) {
+      if (is_mappable_si_enabled) {
         return media::mojom::VideoFrameData::NewSharedImageData(
             media::mojom::SharedImageVideoFrameData::New(
                 std::move(shared_image.value()), std::move(sync_token),
-                is_mappable_si_enabled, std::move(input->ycbcr_info())));
+                /*is_mappable_si_enabled=*/true,
+                std::move(input->ycbcr_info())));
       }
     }
 
@@ -411,7 +404,7 @@ bool StructTraits<media::mojom::VideoFrameDataView,
     }
 
     bool is_mappable_si_enabled = shared_image_data.is_mappable_si_enabled();
-    if (is_mappable_si_enabled && SupportMappableSI()) {
+    if (is_mappable_si_enabled) {
       // VideoFrame should have buffer usage if Mappable SharedImage is enabled.
       // NOTE: This isn't exactly correct for software SharedImages can be
       // mappable but do not have buffer usage. But since, such software
@@ -521,12 +514,33 @@ bool StructTraits<media::mojom::VideoFrameDataView,
           media::VideoFrame::Rows(i, format, coded_size.height());
       base::CheckedNumeric<size_t> min_plane_size = base::CheckMul(
           base::strict_cast<size_t>(planes[i].stride), plane_height);
-      const size_t plane_pixel_width =
-          media::VideoFrame::RowBytes(i, format, coded_size.width());
       if (!min_plane_size.IsValid<uint64_t>() ||
-          min_plane_size.ValueOrDie<uint64_t>() > planes[i].size ||
-          base::strict_cast<size_t>(planes[i].stride) < plane_pixel_width) {
-        DLOG(ERROR) << "Invalid plane stride/size at index " << i;
+          min_plane_size.ValueOrDie<uint64_t>() > planes[i].size) {
+        DLOG(ERROR) << "Invalid plane size at index " << i;
+        return false;
+      }
+
+      size_t plane_pixel_width =
+          media::VideoFrame::RowBytes(i, format, coded_size.width());
+      // If this is a tiled, protected 10bpp MTK format, then
+      // VideoFrame::RowBytes() produces the wrong stride. This fixes
+      // |plane_pixel_width| for that picture type.
+      if (metadata.protected_video && metadata.needs_detiling &&
+          format == media::PIXEL_FORMAT_P010LE) {
+        constexpr int kMT2TBppNumerator = 5;
+        constexpr int kMT2TBppDenominator = 4;
+        base::CheckedNumeric<size_t> stride = coded_size.width();
+        stride *= kMT2TBppNumerator;
+        stride /= kMT2TBppDenominator;
+        if (!stride.IsValid()) {
+          DLOG(ERROR) << "Failed to compute MT2T stride at index " << i;
+          return false;
+        }
+        plane_pixel_width = stride.ValueOrDie<size_t>();
+      }
+
+      if (base::strict_cast<size_t>(planes[i].stride) < plane_pixel_width) {
+        DLOG(ERROR) << "Invalid plane stride at index " << i;
         return false;
       }
 

@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/request_link_icon/request_link_icon.js';
 
@@ -14,18 +15,10 @@ import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import type * as TimelineUtils from '../utils/utils.js';
 
-import NetworkRequestDetailsStylesRaw from './networkRequestDetails.css.js';
-import networkRequestTooltipStylesRaw from './networkRequestTooltip.css.js';
+import networkRequestDetailsStyles from './networkRequestDetails.css.js';
+import networkRequestTooltipStyles from './networkRequestTooltip.css.js';
 import {NetworkRequestTooltip} from './NetworkRequestTooltip.js';
 import {colorForNetworkRequest} from './Utils.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const NetworkRequestDetailsStyles = new CSSStyleSheet();
-NetworkRequestDetailsStyles.replaceSync(NetworkRequestDetailsStylesRaw.cssText);
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const networkRequestTooltipStyles = new CSSStyleSheet();
-networkRequestTooltipStyles.replaceSync(networkRequestTooltipStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -129,7 +122,7 @@ export class NetworkRequestDetails extends HTMLElement {
 
   #networkRequest: Trace.Types.Events.SyntheticNetworkRequest|null = null;
   #maybeTarget: SDK.Target.Target|null = null;
-  #requestPreviewElements = new WeakMap<Trace.Types.Events.SyntheticNetworkRequest, HTMLImageElement>();
+  #requestPreviewElements = new WeakMap<Trace.Types.Events.SyntheticNetworkRequest, HTMLElement>();
   #linkifier: LegacyComponents.Linkifier.Linkifier;
   #parsedTrace: Trace.Handlers.Types.ParsedTrace|null = null;
   #entityMapper: TimelineUtils.EntityMapper.EntityMapper|null = null;
@@ -137,10 +130,6 @@ export class NetworkRequestDetails extends HTMLElement {
   constructor(linkifier: LegacyComponents.Linkifier.Linkifier) {
     super();
     this.#linkifier = linkifier;
-  }
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [NetworkRequestDetailsStyles, networkRequestTooltipStyles];
   }
 
   async setData(
@@ -155,7 +144,7 @@ export class NetworkRequestDetails extends HTMLElement {
     this.#entityMapper = entityMapper;
     this.#serverTimings = null;
 
-    for (const header of networkRequest.args.data.responseHeaders) {
+    for (const header of networkRequest.args.data.responseHeaders ?? []) {
       const headerName = header.name.toLocaleLowerCase();
       // Some popular hosting providers like vercel or render get rid of
       // Server-Timing headers added by users, so as a workaround we
@@ -202,13 +191,16 @@ export class NetworkRequestDetails extends HTMLElement {
       <div class="column-divider"></div>
       <div class="network-request-details-col server-timings">
           <div class="server-timing-column-header">${i18nString(UIStrings.serverTiming)}</div>
-          <div class="server-timing-column-header">${i18nString(UIStrings.time)}</div>
           <div class="server-timing-column-header">${i18nString(UIStrings.description)}</div>
-        ${this.#serverTimings.map(timing => html`
-              <div class="value">${timing.metric || '-'}</div>
-              <div class="value">${timing.value || '-'}</div>
-              <div class="value">${timing.description || '-'}</div>
-          `)}
+          <div class="server-timing-column-header">${i18nString(UIStrings.time)}</div>
+        ${this.#serverTimings.map(timing => {
+      const classes = timing.metric.startsWith('(c') ? 'synthetic value' : 'value';
+      return html`
+              <div class=${classes}>${timing.metric || '-'}</div>
+              <div class=${classes}>${timing.description || '-'}</div>
+              <div class=${classes}>${timing.value || '-'}</div>
+          `;
+    })}
       </div>
     `;
   }
@@ -301,7 +293,7 @@ export class NetworkRequestDetails extends HTMLElement {
     let link: HTMLElement|null = null;
     // If we have a stack trace, that is the most reliable way to get the initiator data and display a link to the source.
     if (hasStackTrace) {
-      const topFrame = Trace.Helpers.Trace.getZeroIndexedStackTraceForEvent(this.#networkRequest)?.at(0) ?? null;
+      const topFrame = Trace.Helpers.Trace.getZeroIndexedStackTraceInEventPayload(this.#networkRequest)?.at(0) ?? null;
       if (topFrame) {
         link = this.#linkifier.maybeLinkifyConsoleCallFrame(
             this.#maybeTarget, topFrame, {tabStop: true, inlineFrameIndex: 0, showColumnNumber: true});
@@ -348,27 +340,29 @@ export class NetworkRequestDetails extends HTMLElement {
   }
 
   async #renderPreviewElement(): Promise<Lit.TemplateResult|null> {
-    if (!this.#networkRequest) {
+    if (!this.#networkRequest || !this.#networkRequest.args.data.url || !this.#maybeTarget) {
       return null;
     }
-    if (!this.#requestPreviewElements.get(this.#networkRequest) && this.#networkRequest.args.data.url &&
-        this.#maybeTarget) {
-      const previewElement =
-          (await LegacyComponents.ImagePreview.ImagePreview.build(
-               this.#maybeTarget, this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString, false, {
-                 imageAltText: LegacyComponents.ImagePreview.ImagePreview.defaultAltTextForImageURL(
-                     this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString),
-                 precomputedFeatures: undefined,
-                 align: LegacyComponents.ImagePreview.Align.START,
-                 hideFileData: true,
-               }) as HTMLImageElement);
+    if (!this.#requestPreviewElements.get(this.#networkRequest)) {
+      const previewOpts = {
+        imageAltText: LegacyComponents.ImagePreview.ImagePreview.defaultAltTextForImageURL(
+            this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString),
+        precomputedFeatures: undefined,
+        align: LegacyComponents.ImagePreview.Align.START,
+        hideFileData: true,
+      };
 
-      this.#requestPreviewElements.set(this.#networkRequest, previewElement);
+      const previewElement = await LegacyComponents.ImagePreview.ImagePreview.build(
+          this.#networkRequest.args.data.url as Platform.DevToolsPath.UrlString, false, previewOpts);
+      previewElement && this.#requestPreviewElements.set(this.#networkRequest, previewElement);
     }
 
     const requestPreviewElement = this.#requestPreviewElements.get(this.#networkRequest);
     if (requestPreviewElement) {
-      return html`<div class="network-request-details-item">${requestPreviewElement}</div>`;
+      return html`
+        <div class="network-request-details-col">${requestPreviewElement}</div>
+        <div class="column-divider"></div>
+      `;
     }
     return null;
   }
@@ -379,13 +373,17 @@ export class NetworkRequestDetails extends HTMLElement {
     }
     const networkData = this.#networkRequest.args.data;
 
+    const redirectsHtml = NetworkRequestTooltip.renderRedirects(this.#networkRequest);
+
     // clang-format off
     const output = html`
+      <style>${networkRequestDetailsStyles}</style>
+      <style>${networkRequestTooltipStyles}</style>
       <div class="network-request-details-content">
         ${this.#renderTitle()}
         ${this.#renderURL()}
-        ${await this.#renderPreviewElement()}
         <div class="network-request-details-cols">
+          ${await this.#renderPreviewElement()}
           <div class="network-request-details-col">
             ${this.#renderRow(i18nString(UIStrings.requestMethod), networkData.requestMethod)}
             ${this.#renderRow(i18nString(UIStrings.protocol), networkData.protocol)}
@@ -404,6 +402,12 @@ export class NetworkRequestDetails extends HTMLElement {
             </div>
           </div>
           ${this.#renderServerTimings()}
+          ${redirectsHtml ? html `
+            <div class="column-divider"></div>
+            <div class="network-request-details-col redirect-details">
+              ${redirectsHtml}
+            </div>
+          ` : Lit.nothing}
         </div>
         ${this.#renderInitiatedBy()}
       </div>

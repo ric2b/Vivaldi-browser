@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../../../core/common/common.js';
 import * as Host from '../../../../core/host/host.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
@@ -661,11 +663,16 @@ export class Linkifier extends Common.ObjectWrapper.ObjectWrapper<EventTypes> im
     };
     infoByAnchor.set(link, linkInfo);
     if (!preventClick) {
-      link.addEventListener('click', event => {
+      const handler = (event: MouseEvent|KeyboardEvent): void => {
+        if (event instanceof KeyboardEvent && event.key !== Platform.KeyboardUtilities.ENTER_KEY && event.key !== ' ') {
+          return;
+        }
         if (Linkifier.handleClick(event)) {
           event.consume(true);
         }
-      }, false);
+      };
+      link.onclick = handler;
+      link.onkeydown = handler;
     } else {
       link.classList.add('devtools-link-prevent-click');
     }

@@ -11,16 +11,11 @@
 
 #include "base/containers/span.h"
 
-#include "components/search_engines/search_engine_type.h"
-#include "components/search_engines/regulatory_extension_type.h"
-#include "third_party/search_engines_data/original/search_engines.h"
+#include "third_party/search_engines_data/search_engines.h"
+// Unused include but it limits the chromium side include changes
+#include "third_party/search_engines_data/regional_settings.h"
 
 namespace TemplateURLPrepopulateData {
-
-using RegulatoryExtension = TemplateURLPrepopulateDataOriginal::RegulatoryExtension;
-struct PrepopulatedEngine : public TemplateURLPrepopulateDataOriginal::PrepopulatedEngine {};
-
-extern const PrepopulatedEngine google;
 
 extern base::span<const PrepopulatedEngine* const> kAllEngines;
 }  // namespace TemplateURLPrepopulateData

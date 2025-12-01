@@ -24,7 +24,6 @@ import gclient_utils
 # import git_auth
 import git_cache
 import git_common
-# import newauth
 import scm
 import subprocess2
 
@@ -433,7 +432,7 @@ class GitWrapper(SCMWrapper):
         patch_rev_tokens = patch_rev.split('/')
         change = patch_rev_tokens[-2]
         # Parse the googlesource_url.
-        tokens = re.search('//(.+).googlesource.com/(.+?)(?:\.git)?$',
+        tokens = re.search(r'//(.+).googlesource.com/(.+?)(?:\.git)?$',
                            googlesource_url)
         if not tokens or len(tokens.groups()) != 2:
             # googlesource_url is not in the expected format.
@@ -547,6 +546,11 @@ class GitWrapper(SCMWrapper):
             if scm.GIT.IsValidRevision(self.checkout_path, remote_ref):
                 # refs/remotes may need to be updated to cleanly cherry-pick
                 # changes. See https://crbug.com/1255178.
+                url, _ = gclient_utils.SplitUrlRevision(self.url)
+                mirror = self._GetMirror(url, options, target_rev, remote_ref)
+                if mirror:
+                    self._UpdateMirrorIfNotContains(mirror, options, 'branch',
+                                                    target_rev)
                 self._Capture(['fetch', '--no-tags', self.remote, target_rev])
                 target_rev = remote_ref
         elif not scm.GIT.IsValidRevision(self.checkout_path, target_rev):
@@ -583,8 +587,12 @@ class GitWrapper(SCMWrapper):
                 # diff --cached` expecting to see the patch diff.
                 base_rev = self._Capture(['rev-parse', pr + '~'])
             else:
-                self.Print('Will cherrypick %r .. %r on top of %r.' %
-                           (target_rev, pr, base_rev))
+                target_rev_hash = self._Capture(['rev-parse', target_rev])
+                commit_list = self._Capture(
+                    ['log', '--oneline', target_rev + '..' + pr])
+                self.Print('Will cherrypick %r (%r) .. %r on top of %r:' %
+                           (target_rev_hash, target_rev, pr, base_rev))
+                self.Print(commit_list)
                 try:
                     if scm.GIT.IsAncestor(pr,
                                           target_rev,
@@ -1322,10 +1330,15 @@ class GitWrapper(SCMWrapper):
         return git_cache.Mirror(url, **mirror_kwargs)
 
     def _UpdateMirrorIfNotContains(self, mirror, options, rev_type, revision):
-        """Update a git mirror by fetching the latest commits from the remote,
-    unless mirror already contains revision whose type is sha1 hash.
-    """
-        if rev_type == 'hash' and mirror.contains_revision(revision):
+        """Update a git mirror unless it already contains a hash revision.
+
+        This raises an error if a SHA-1 revision isn't present even after
+        fetching from the remote.
+        """
+        # 'hash' is overloaded and can refer to a SHA-1 hash or refs/changes/*.
+        is_sha = gclient_utils.IsFullGitSha(revision)
+
+        if rev_type == 'hash' and is_sha and mirror.contains_revision(revision):
             if options.verbose:
                 self.Print('skipping mirror update, it has rev=%s already' %
                            revision,
@@ -1336,10 +1349,16 @@ class GitWrapper(SCMWrapper):
             depth = 10000
         else:
             depth = None
-        mirror.populate(verbose=options.verbose,
+        mirror.populate(verbose=False,
                         bootstrap=not getattr(options, 'no_bootstrap', False),
                         depth=depth,
                         lock_timeout=getattr(options, 'lock_timeout', 0))
+
+        # Make sure we've actually fetched the revision we want, but only if it
+        # was specified as an explicit commit hash.
+        if rev_type == 'hash' and is_sha and not mirror.contains_revision(
+                revision):
+            raise gclient_utils.Error(f'Failed to fetch {revision}.')
 
     def _Clone(self, revision, url, options):
         """Clone a git repository from the given URL.
@@ -1366,14 +1385,6 @@ class GitWrapper(SCMWrapper):
         # create it, so we need to do it manually.
         parent_dir = os.path.dirname(self.checkout_path)
         gclient_utils.safe_makedirs(parent_dir)
-
-        # Set up Git authentication configuration that is needed to clone/fetch the repo.
-#        if newauth.Enabled():
-            # We need the host from the URL to determine auth settings.
-            # The url parameter might have been re-written to a local
-            # cache directory, so we need self.url, which contains the
-            # original remote URL.
-#            git_auth.ConfigureGlobal('/', self.url)
 
         if hasattr(options, 'no_history') and options.no_history:
             self._Run(['init', self.checkout_path], options, cwd=self._root_dir)

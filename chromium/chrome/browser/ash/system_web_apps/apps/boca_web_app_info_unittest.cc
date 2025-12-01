@@ -34,19 +34,19 @@ class BocaSystemAppDelegateTest : public testing::Test {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(BocaSystemAppDelegateTest, AppHideFromSearchAndShelfByDefault) {
-  EXPECT_FALSE(delegate()->ShouldShowInSearchAndShelf());
+TEST_F(BocaSystemAppDelegateTest, AppShowFromSearchAndShelfByDefault) {
+  EXPECT_TRUE(delegate()->ShouldShowInSearchAndShelf());
+  EXPECT_FALSE(delegate()->IsAppEnabled());
 }
 
-TEST_F(BocaSystemAppDelegateTest, AppHideFromLauncherByDefault) {
-  EXPECT_FALSE(delegate()->ShouldShowInLauncher());
+TEST_F(BocaSystemAppDelegateTest, AppShowFromLauncherByDefault) {
+  EXPECT_TRUE(delegate()->ShouldShowInLauncher());
+  EXPECT_FALSE(delegate()->IsAppEnabled());
 }
 
-TEST_F(BocaSystemAppDelegateTest,
-       AppShowFromLauncherAndShelfWhenFeatureEnabled) {
+TEST_F(BocaSystemAppDelegateTest, AppEnabledWhenFeatureEnabled) {
   scoped_feature_list()->InitAndEnableFeature(ash::features::kBoca);
-  EXPECT_TRUE(delegate()->ShouldShowInSearchAndShelf());
-  EXPECT_TRUE(delegate()->ShouldShowInSearchAndShelf());
+  EXPECT_TRUE(delegate()->IsAppEnabled());
 }
 
 class BocaSystemAppProviderDelegateTest : public BocaSystemAppDelegateTest {
@@ -115,6 +115,10 @@ TEST_F(BocaSystemAppConsumerDelegateTest, PinHomeTab) {
 
 TEST_F(BocaSystemAppConsumerDelegateTest, HideNewTabButton) {
   EXPECT_TRUE(delegate()->ShouldHideNewTabButton());
+}
+
+TEST_F(BocaSystemAppConsumerDelegateTest, HasMinimalSize) {
+  EXPECT_EQ(gfx::Size(500, 500), delegate()->GetMinimumWindowSize());
 }
 
 TEST_F(BocaSystemAppConsumerDelegateTest, UsesCustomTabMenuModel) {

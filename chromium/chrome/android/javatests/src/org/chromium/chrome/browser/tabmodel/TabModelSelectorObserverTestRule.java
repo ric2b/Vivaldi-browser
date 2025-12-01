@@ -12,7 +12,7 @@ import org.junit.runners.model.Statement;
 import org.chromium.base.CommandLine;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
-import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
@@ -123,6 +123,13 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
                     }
 
                     @Override
+                    public TabGroupModelFilter getFilter(boolean incognito) {
+                        return mSelector
+                                .getTabGroupModelFilterProvider()
+                                .getTabGroupModelFilter(incognito);
+                    }
+
+                    @Override
                     public TabModel getCurrentModel() {
                         return mSelector.getCurrentModel();
                     }
@@ -176,7 +183,7 @@ public class TabModelSelectorObserverTestRule extends ChromeBrowserTestRule {
     /** Test TabModel that exposes the needed capabilities for testing. */
     public static class TabModelSelectorTestTabModel extends TabModelImpl
             implements IncognitoTabModelInternal {
-        private Set<TabModelObserver> mObserverSet = new HashSet<>();
+        private final Set<TabModelObserver> mObserverSet = new HashSet<>();
 
         public TabModelSelectorTestTabModel(
                 Profile profile,

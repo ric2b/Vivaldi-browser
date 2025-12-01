@@ -48,7 +48,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/form_structure_test_api.h"
 #include "components/autofill/core/browser/foundations/test_autofill_client.h"
-#include "components/autofill/core/browser/integrators/mock_autofill_plus_address_delegate.h"
+#include "components/autofill/core/browser/integrators/plus_addresses/mock_autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
 #include "components/autofill/core/browser/payments/test/mock_mandatory_reauth_manager.h"
@@ -536,7 +536,6 @@ class FormDataImporterTest : public testing::Test {
     scoped_feature_list_.InitWithFeatures(
         {features::kAutofillUseFRAddressModel,
          features::kAutofillUseINAddressModel,
-         features::kAutofillUseITAddressModel,
          features::kAutofillUseNLAddressModel},
         {});
 
@@ -3376,144 +3375,6 @@ TEST_F(FormDataImporterTest,
       AutofillMetrics::MASKED_SERVER_CARD_EXPIRATION_DATE_DID_NOT_MATCH, 1);
 }
 
-TEST_F(FormDataImporterTest, SilentlyUpdateExistingProfileByIncompleteProfile) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillSilentProfileUpdateForInsufficientImport);
-
-  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
-  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-
-  // Set the verification status for the first and middle name to parsed.
-  profile.SetRawInfoWithVerificationStatus(NAME_FIRST, u"Marion",
-                                           VerificationStatus::kParsed);
-  profile.SetRawInfoWithVerificationStatus(NAME_MIDDLE, u"Mitchell",
-                                           VerificationStatus::kParsed);
-  profile.SetRawInfoWithVerificationStatus(NAME_LAST, u"Morrison",
-                                           VerificationStatus::kParsed);
-
-  address_data_manager().AddProfile(profile);
-
-  // Simulate a form submission with conflicting info.
-  FormData form;
-  form.set_url(GURL("https://www.foo.com"));
-  form.set_fields(
-      {CreateTestFormField("First name:", "first_name", "Marion",
-                           FormControlType::kInputText),
-       CreateTestFormField("Middle name:", "middle_name", "",
-                           FormControlType::kInputText),
-       CreateTestFormField("Last name:", "last_name", "Mitchell Morrison",
-                           FormControlType::kInputText)});
-  std::unique_ptr<FormStructure> form_structure =
-      ConstructFormStructureFromFormData(form);
-  ExtractAddressProfiles(/*extraction_successful=*/false, *form_structure);
-
-  // Expect that no new profile is saved.
-  const std::vector<const AutofillProfile*>& results =
-      address_data_manager().GetProfiles();
-  ASSERT_EQ(1U, results.size());
-  EXPECT_NE(0, profile.Compare(*results[0]));
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_FULL), u"Marion Mitchell Morrison");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_FIRST), u"Marion");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_MIDDLE), u"");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_LAST), u"Mitchell Morrison");
-}
-
-TEST_F(
-    FormDataImporterTest,
-    SilentlyUpdateExistingProfileByIncompleteProfile_DespiteDisallowedPrompts) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillSilentProfileUpdateForInsufficientImport);
-
-  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
-  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-
-  // Set the verification status for the first and middle name to parsed.
-  profile.SetRawInfoWithVerificationStatus(NAME_FIRST, u"Marion",
-                                           VerificationStatus::kParsed);
-  profile.SetRawInfoWithVerificationStatus(NAME_MIDDLE, u"Mitchell",
-                                           VerificationStatus::kParsed);
-  profile.SetRawInfoWithVerificationStatus(NAME_LAST, u"Morrison",
-                                           VerificationStatus::kParsed);
-
-  address_data_manager().AddProfile(profile);
-
-  // Simulate a form submission with conflicting info.
-  FormData form;
-  form.set_url(GURL("https://www.foo.com"));
-  form.set_fields(
-      {CreateTestFormField("First name:", "first_name", "Marion",
-                           FormControlType::kInputText),
-       CreateTestFormField("Middle name:", "middle_name", "",
-                           FormControlType::kInputText),
-       CreateTestFormField("Last name:", "last_name", "Mitchell Morrison",
-                           FormControlType::kInputText)});
-  std::unique_ptr<FormStructure> form_structure =
-      ConstructFormStructureFromFormData(form);
-  ExtractAddressProfiles(/*extraction_successful=*/false, *form_structure,
-                         /*allow_save_prompts=*/false);
-
-  // Expect that no new profile is saved and the existing profile is updated.
-  const std::vector<const AutofillProfile*>& results =
-      address_data_manager().GetProfiles();
-  ASSERT_EQ(1U, results.size());
-  EXPECT_NE(0, profile.Compare(*results[0]));
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_FULL), u"Marion Mitchell Morrison");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_FIRST), u"Marion");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_MIDDLE), u"");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_LAST), u"Mitchell Morrison");
-}
-
-TEST_F(FormDataImporterTest, UnusableIncompleteProfile) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kAutofillSilentProfileUpdateForInsufficientImport);
-
-  AutofillProfile profile(i18n_model_definition::kLegacyHierarchyCountryCode);
-  test::SetProfileInfo(&profile, "Marion", "Mitchell", "Morrison",
-                       "johnwayne@me.xyz", "Fox", "123 Zoo St.", "unit 5",
-                       "Hollywood", "CA", "91601", "US", "12345678910");
-
-  // Set the verification status for the first and middle name to parsed.
-  profile.SetRawInfoWithVerificationStatus(NAME_FIRST, u"Marion",
-                                           VerificationStatus::kParsed);
-  profile.SetRawInfoWithVerificationStatus(NAME_MIDDLE, u"Mitchell",
-                                           VerificationStatus::kParsed);
-  profile.SetRawInfoWithVerificationStatus(NAME_LAST, u"Morrison",
-                                           VerificationStatus::kParsed);
-
-  address_data_manager().AddProfile(profile);
-
-  // Simulate a form submission with conflicting info.
-  FormData form;
-  form.set_url(GURL("https://www.foo.com"));
-  form.set_fields(
-      {CreateTestFormField("First name:", "first_name", "Marion",
-                           FormControlType::kInputText),
-       CreateTestFormField("Middle name:", "middle_name", "",
-                           FormControlType::kInputText),
-       CreateTestFormField("Last name:", "last_name", "Mitch Morrison",
-                           FormControlType::kInputText)});
-  std::unique_ptr<FormStructure> form_structure =
-      ConstructFormStructureFromFormData(form);
-  ExtractAddressProfiles(/*extraction_successful=*/false, *form_structure);
-
-  // Expect that no new profile is saved.
-  const std::vector<const AutofillProfile*>& results =
-      address_data_manager().GetProfiles();
-  ASSERT_EQ(1U, results.size());
-  EXPECT_THAT(*results[0], ComparesEqual(profile));
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_FULL), u"Marion Mitchell Morrison");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_FIRST), u"Marion");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_MIDDLE), u"Mitchell");
-  EXPECT_EQ(results[0]->GetRawInfo(NAME_LAST), u"Morrison");
-}
-
 // Tests that metrics are correctly recorded when removing setting-inaccessible
 // fields.
 // Note that this function doesn't test the removal functionality itself. This
@@ -4030,6 +3891,64 @@ TEST_F(FormDataImporterTest,
   EXPECT_EQ(observed_field_types.size(), 1u);
 }
 
+class SkipSaveCardInFormDataImporterTest
+    : public FormDataImporterTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  SkipSaveCardInFormDataImporterTest() {
+    feature_list_.InitWithFeatureState(
+        features::kAutofillSkipSaveCardForTabModalPopup,
+        IsSkipSaveCardEnabled());
+  }
+  bool IsSkipSaveCardEnabled() { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         SkipSaveCardInFormDataImporterTest,
+                         ::testing::Bool());
+
+// Test that save card functionality is skipped for tab modal popup only when
+// kAutofillSkipSaveCardForTabModalPopup is enabled; otherwise, the card saving
+// functionality is started.
+TEST_P(SkipSaveCardInFormDataImporterTest,
+       ImportAndProcessFormData_TabModalPopup) {
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructDefaultCreditCardFormStructure();
+  test_api(form_data_importer())
+      .set_credit_card_import_type(
+          FormDataImporter::CreditCardImportType::kServerCard);
+  payments_client().set_is_tab_model_popup(true);
+
+  EXPECT_CALL(credit_card_save_manager(), ProceedWithSavingIfApplicable)
+      .Times(IsSkipSaveCardEnabled() ? 0 : 1);
+
+  test_api(form_data_importer())
+      .ImportAndProcessFormData(
+          *form_structure, /*profile_autofill_enabled=*/true,
+          /*payment_methods_autofill_enabled=*/true, ukm_source_id());
+}
+
+// Test that save card functionality is initiated for non tab modal popups.
+TEST_P(SkipSaveCardInFormDataImporterTest,
+       ImportAndProcessFormData_StartSaveCardFlow) {
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructDefaultCreditCardFormStructure();
+  test_api(form_data_importer())
+      .set_credit_card_import_type(
+          FormDataImporter::CreditCardImportType::kServerCard);
+
+  EXPECT_CALL(credit_card_save_manager(), ProceedWithSavingIfApplicable)
+      .Times(1);
+
+  test_api(form_data_importer())
+      .ImportAndProcessFormData(
+          *form_structure, /*profile_autofill_enabled=*/true,
+          /*payment_methods_autofill_enabled=*/true, ukm_source_id());
+}
+
 // Test case for credit card extraction.
 class FormDataImporterTest_ExtractCreditCardFromForm
     : public FormDataImporterTest {
@@ -4038,15 +3957,21 @@ class FormDataImporterTest_ExtractCreditCardFromForm
 
   void PushField(FieldType field_type,
                  std::u16string value,
-                 Mode mode = Mode::kDefaultValue) {
+                 Mode mode = Mode::kDefaultValue,
+                 size_t offset = 0) {
     AutofillField& f = test_api(form_).PushField();
     f.set_server_predictions({test::CreateFieldPrediction(field_type)});
     f.set_value(std::move(value));
     f.set_is_autofilled(mode == Mode::kAutofilled);
     f.set_is_user_edited(mode == Mode::kUserEdited);
+    f.set_credit_card_number_offset(offset);
   }
 
   FormStructure form_{/*form=*/{}};
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kAutofillFixSplitCreditCardImport};
 };
 
 // Tests that inconsistent values from different priority classes do not prevent
@@ -4138,6 +4063,118 @@ TEST_F(FormDataImporterTest_ExtractCreditCardFromForm, PartialFirstLastNames) {
   EXPECT_EQ(
       r.card.GetInfo(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, kLocale),
       u"12/2020");
+  EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
+}
+
+// Tests that split credit card number extraction works in the same priority
+// class (user-edited fields).
+TEST_F(FormDataImporterTest_ExtractCreditCardFromForm,
+       ExtractSplitCreditCardNumber) {
+  PushField(FieldType::CREDIT_CARD_NAME_FULL, u"Joe Biden", Mode::kAutofilled);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444", Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"3333", Mode::kUserEdited, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"2222", Mode::kUserEdited, 8);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"1111", Mode::kUserEdited, 12);
+  PushField(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, u"01/2021",
+            Mode::kUserEdited);
+  auto r = form_data_importer().ExtractCreditCardFromForm(form_);
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NAME_FULL, kLocale),
+            u"Joe Biden");
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NUMBER, kLocale),
+            u"4444333322221111");
+  EXPECT_EQ(
+      r.card.GetInfo(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, kLocale),
+      u"01/2021");
+  EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
+}
+
+// Tests that card extraction works when there are both split credit card
+// fields and full credit card fields and the card numbers match.
+TEST_F(FormDataImporterTest_ExtractCreditCardFromForm,
+       SplitCardAndFullCardFieldsMatch) {
+  PushField(FieldType::CREDIT_CARD_NAME_FULL, u"Joe Biden", Mode::kAutofilled);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444", Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"3333", Mode::kUserEdited, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"2222", Mode::kUserEdited, 8);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"1111", Mode::kUserEdited, 12);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444333322221111",
+            Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, u"01/2021",
+            Mode::kUserEdited);
+  auto r = form_data_importer().ExtractCreditCardFromForm(form_);
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NUMBER, kLocale),
+            u"4444333322221111");
+  EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
+}
+
+// Tests that split credit card number extraction is blocked when there are both
+// split credit card fields and full credit card fields and the numbers do not
+// match.
+TEST_F(FormDataImporterTest_ExtractCreditCardFromForm,
+       SplitCardAndFullCardFieldsDoNotMatch) {
+  PushField(FieldType::CREDIT_CARD_NAME_FULL, u"Joe Biden", Mode::kAutofilled);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444", Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"3333", Mode::kUserEdited, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"2222", Mode::kUserEdited, 8);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"1111", Mode::kUserEdited, 12);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444333322220000",
+            Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, u"01/2021",
+            Mode::kUserEdited);
+  auto r = form_data_importer().ExtractCreditCardFromForm(form_);
+  EXPECT_TRUE(r.has_duplicate_credit_card_field_type);
+}
+
+// Tests that split credit card number extraction extracts the last value if any
+// of the field is invalid or missing.
+TEST_F(FormDataImporterTest_ExtractCreditCardFromForm,
+       ExtractsLastFieldIfHasInvalidOrMIssingFields) {
+  PushField(FieldType::CREDIT_CARD_NAME_FULL, u"Joe Biden", Mode::kAutofilled);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"", Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"3333", Mode::kUserEdited, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"1", Mode::kUserEdited, 12);
+  PushField(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, u"01/2021",
+            Mode::kUserEdited);
+  auto r = form_data_importer().ExtractCreditCardFromForm(form_);
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NUMBER, kLocale), u"1");
+  EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
+}
+
+// Tests that user edited fields take priority and autofilled fields are ignored
+// when in conflict.
+TEST_F(FormDataImporterTest_ExtractCreditCardFromForm,
+       IgnoreDuplicatedFieldsFromDifferentPriorityClasses) {
+  PushField(FieldType::CREDIT_CARD_NAME_FULL, u"Joe Biden", Mode::kAutofilled);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444", Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"3333", Mode::kUserEdited, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"1234", Mode::kAutofilled, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"2222", Mode::kUserEdited, 8);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"1111", Mode::kUserEdited, 12);
+  PushField(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, u"01/2021",
+            Mode::kUserEdited);
+  auto r = form_data_importer().ExtractCreditCardFromForm(form_);
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NUMBER, kLocale),
+            u"4444333322221111");
+  EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
+}
+
+// Tests split credit card number fields in a lower priority class are ignored.
+TEST_F(FormDataImporterTest_ExtractCreditCardFromForm,
+       IgnoreFieldsFromLowerPriorityClass) {
+  PushField(FieldType::CREDIT_CARD_NAME_FULL, u"Joe Biden", Mode::kAutofilled);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"4444", Mode::kUserEdited, 0);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"3333", Mode::kUserEdited, 4);
+  PushField(FieldType::CREDIT_CARD_NUMBER, u"2222", Mode::kAutofilled, 8);
+  PushField(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, u"01/2021",
+            Mode::kUserEdited);
+  auto r = form_data_importer().ExtractCreditCardFromForm(form_);
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NAME_FULL, kLocale),
+            u"Joe Biden");
+  EXPECT_EQ(r.card.GetInfo(FieldType::CREDIT_CARD_NUMBER, kLocale),
+            u"44443333");
+  EXPECT_EQ(
+      r.card.GetInfo(FieldType::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, kLocale),
+      u"01/2021");
   EXPECT_FALSE(r.has_duplicate_credit_card_field_type);
 }
 

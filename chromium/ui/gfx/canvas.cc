@@ -2,17 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "ui/gfx/canvas.h"
 
 #include <cmath>
 #include <limits>
 #include <string_view>
 
+#include "base/compiler_specific.h"
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
@@ -23,6 +19,7 @@
 #include "third_party/skia/include/core/SkPath.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/rect.h"
@@ -527,7 +524,20 @@ void Canvas::DrawImageIntHelper(const ImageSkiaRep& image_rep,
   shader_scale.setScale(SkFloatToScalar(user_scale_x),
                         SkFloatToScalar(user_scale_y));
   shader_scale.preTranslate(SkIntToScalar(-src_x), SkIntToScalar(-src_y));
-  shader_scale.postTranslate(SkIntToScalar(dest_x), SkIntToScalar(dest_y));
+  // In non pixel-canvas mode, the scaling and rounding is performed in cc side.
+  // In pixel canvas mode, we need to translate so that the position is pixel
+  // aligned at the target space, because drawing at subpixel position can
+  // result in pixelated image. Use floor so that kRepeat will not start at the
+  // end.
+  // TOOD(crbug.com/41344902): Using image_scale_ isn't 100% accurate. It should
+  // use the scale applied to the canvas instead (which isn't available now).
+  if (features::IsPixelCanvasRecordingEnabled()) {
+    shader_scale.postTranslate(
+        SkFloatToScalar(std::floor(dest_x * image_scale_) / image_scale_),
+        SkFloatToScalar(std::floor(dest_y * image_scale_) / image_scale_));
+  } else {
+    shader_scale.postTranslate(SkIntToScalar(dest_x), SkIntToScalar(dest_y));
+  }
 
   cc::PaintFlags flags(original_flags);
   flags.setFilterQuality(filter ? cc::PaintFlags::FilterQuality::kLow
@@ -551,7 +561,7 @@ cc::PaintCanvas* Canvas::CreateOwnedCanvas(const Size& size, bool is_opaque) {
   bitmap_.emplace();
   bitmap_->allocPixels(info);
   // Ensure that the bitmap is zeroed, since the code expects that.
-  memset(bitmap_->getPixels(), 0, bitmap_->computeByteSize());
+  UNSAFE_TODO(memset(bitmap_->getPixels(), 0, bitmap_->computeByteSize()));
 
   owned_canvas_.emplace(bitmap_.value());
   return &owned_canvas_.value();

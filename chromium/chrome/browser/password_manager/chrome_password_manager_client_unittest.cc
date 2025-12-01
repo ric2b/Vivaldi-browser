@@ -27,6 +27,9 @@
 #include "build/build_config.h"
 #include "chrome/browser/autofill/mock_manual_filling_view.h"
 #include "chrome/browser/keyboard_accessory/test_utils/android/mock_address_accessory_controller.h"
+#include "chrome/browser/password_manager/chrome_password_change_service.h"
+#include "chrome/browser/password_manager/password_change_delegate_mock.h"
+#include "chrome/browser/password_manager/password_change_service_factory.h"
 #include "chrome/browser/password_manager/password_manager_settings_service_factory.h"
 #include "chrome/browser/password_manager/profile_password_store_factory.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
@@ -67,6 +70,7 @@
 #include "components/password_manager/core/browser/password_store/password_store_consumer.h"
 #include "components/password_manager/core/browser/split_stores_and_local_upm.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
+#include "components/policy/core/common/policy_pref_names.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/sessions/content/content_record_password_state.h"
@@ -257,7 +261,7 @@ class FakePasswordAutofillAgent
 
  private:
   // autofill::mojom::PasswordAutofillAgent:
-  void SetPasswordFillData(
+  void ApplyFillDataOnParsingCompletion(
       const autofill::PasswordFormFillData& form_data) override {}
 
   void FillPasswordSuggestion(
@@ -289,13 +293,16 @@ class FakePasswordAutofillAgent
       autofill::FieldRendererId field_id,
       const std::u16string& value,
       autofill::AutofillSuggestionTriggerSource suggestion_source) override {}
-  void SubmitChangePasswordForm(
+  void FillChangePasswordForm(
       FieldRendererId password_element_id,
       FieldRendererId new_password_element_id,
       FieldRendererId confirm_password_element_id,
       const std::u16string& old_password,
       const std::u16string& new_password,
-      SubmitChangePasswordFormCallback callback) override {}
+      FillChangePasswordFormCallback callback) override {}
+  void SubmitFormWithEnter(
+      autofill::FieldRendererId field,
+      base::OnceCallback<void(bool)> success_callback) override {}
   void AnnotateFieldsWithParsingResult(
       const autofill::ParsingResult& parsing_result) override {}
   void SetLoggingState(bool active) override {
@@ -348,9 +355,34 @@ class MockPasswordAccessoryControllerImpl
 
 #endif
 
+class MockPasswordChangeService : public ChromePasswordChangeService {
+ public:
+  MockPasswordChangeService()
+      : ChromePasswordChangeService(/*affiliation_service=*/nullptr,
+                                    /*optimization_keyed_service=*/nullptr,
+                                    /*feature_manager=*/nullptr) {}
+
+  MOCK_METHOD(void,
+              OfferPasswordChangeUi,
+              (const GURL&,
+               const std::u16string&,
+               const std::u16string&,
+               content::WebContents*),
+              (override));
+  MOCK_METHOD(PasswordChangeDelegate*,
+              GetPasswordChangeDelegate,
+              (content::WebContents*),
+              (override));
+};
+
 std::unique_ptr<KeyedService> CreateTestSyncService(
     content::BrowserContext* context) {
   return std::make_unique<syncer::TestSyncService>();
+}
+
+std::unique_ptr<KeyedService> CreateMockPasswordChangeService(
+    content::BrowserContext* context) {
+  return std::make_unique<MockPasswordChangeService>();
 }
 
 }  // namespace
@@ -382,8 +414,17 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
         }));
   }
 
+  void SetupMockPasswordChangeService() {
+    PasswordChangeServiceFactory::GetInstance()->SetTestingFactoryAndUse(
+        profile(), base::BindRepeating(&CreateMockPasswordChangeService));
+  }
+
  protected:
   ChromePasswordManagerClient* GetClient();
+
+  std::unique_ptr<password_manager::ContentPasswordManagerDriver>
+  CreateContentPasswordManagerDriver(content::RenderFrameHost* rfh);
+
   password_manager::MockPasswordManagerSettingsService& settings_service() {
     return static_cast<password_manager::MockPasswordManagerSettingsService&>(
         *PasswordManagerSettingsServiceFactory::GetForProfile(profile()));
@@ -392,6 +433,10 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
     return static_cast<syncer::TestSyncService*>(
         SyncServiceFactory::GetInstance()->GetForProfile(profile()));
   }
+  MockPasswordChangeService* password_change_service() {
+    return static_cast<MockPasswordChangeService*>(
+        PasswordChangeServiceFactory::GetInstance()->GetForProfile(profile()));
+  }
 
   // If autofill::mojom::PasswordAutofillAgent::SetLoggingState() got called,
   // copies its argument into `activation_flag` and returns true. Otherwise
@@ -399,6 +444,7 @@ class ChromePasswordManagerClientTest : public ChromeRenderViewHostTestHarness {
   bool WasLoggingActivationMessageSent(bool* activation_flag);
 
   FormData CreateLoginFormData();
+  FormData CreateLoginFormDataForFrame(content::RenderFrameHost* rfh);
 
   FakePasswordAutofillAgent fake_agent_;
   ScopedTestingLocalState local_state_;
@@ -441,6 +487,7 @@ void ChromePasswordManagerClientTest::SetUp() {
   ChromePasswordManagerClient::CreateForWebContents(web_contents());
 
   SetupSettingsServiceFactory();
+  SetupMockPasswordChangeService();
 }
 
 void ChromePasswordManagerClientTest::TearDown() {
@@ -449,6 +496,13 @@ void ChromePasswordManagerClientTest::TearDown() {
 
 ChromePasswordManagerClient* ChromePasswordManagerClientTest::GetClient() {
   return ChromePasswordManagerClient::FromWebContents(web_contents());
+}
+
+std::unique_ptr<password_manager::ContentPasswordManagerDriver>
+ChromePasswordManagerClientTest::CreateContentPasswordManagerDriver(
+    content::RenderFrameHost* rfh) {
+  return std::make_unique<password_manager::ContentPasswordManagerDriver>(
+      rfh, GetClient());
 }
 
 bool ChromePasswordManagerClientTest::WasLoggingActivationMessageSent(
@@ -466,11 +520,16 @@ bool ChromePasswordManagerClientTest::WasLoggingActivationMessageSent(
 }
 
 FormData ChromePasswordManagerClientTest::CreateLoginFormData() {
+  return CreateLoginFormDataForFrame(main_rfh());
+}
+
+FormData ChromePasswordManagerClientTest::CreateLoginFormDataForFrame(
+    content::RenderFrameHost* rfh) {
   FormData form = CreateFormDataForRenderFrameHost(
-      *main_rfh(), {CreateTestFormField("Username", "username", "",
-                                        FormControlType::kInputText),
-                    CreateTestFormField("Password", "password", "",
-                                        FormControlType::kInputPassword)});
+      *rfh, {CreateTestFormField("Username", "username", "",
+                                 FormControlType::kInputText),
+             CreateTestFormField("Password", "password", "",
+                                 FormControlType::kInputPassword)});
   form.set_name(u"login");
   return form;
 }
@@ -600,6 +659,52 @@ TEST_F(ChromePasswordManagerClientTest,
   EXPECT_FALSE(client->IsSavingAndFillingEnabled(kUrlOn));
   EXPECT_FALSE(client->IsFillingEnabled(kUrlOn));
 }
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+// Test for the PasswordManagerBlocklist policy.
+TEST_F(ChromePasswordManagerClientTest, PasswordManagerBlocklistPolicy) {
+  // Make sure saving passwords is enabled.
+  ON_CALL(settings_service(),
+          IsSettingEnabled(PasswordManagerSetting::kOfferToSavePasswords))
+      .WillByDefault(Return(true));
+  // Check that the blocklist is initially empty.
+  EXPECT_TRUE(profile()
+                  ->GetTestingPrefService()
+                  ->GetList(policy::policy_prefs::kPasswordManagerBlocklist)
+                  .empty());
+  // Add a URL to the blocklist.
+  {
+    base::Value::List blocked_list;
+    blocked_list.Append("https://example.com");
+    profile()->GetTestingPrefService()->SetList(
+        policy::policy_prefs::kPasswordManagerBlocklist,
+        std::move(blocked_list));
+  }
+
+  // Verify the URL was added.
+  EXPECT_FALSE(profile()
+                   ->GetTestingPrefService()
+                   ->GetList(policy::policy_prefs::kPasswordManagerBlocklist)
+                   .empty());
+  // Expect the password manager to be disallowed for the URL
+  // and thus saving passwords should be disallowed.
+  EXPECT_FALSE(
+      GetClient()->IsSavingAndFillingEnabled(GURL("https://example.com")));
+  // Clear the blocklist pref.
+  profile()->GetTestingPrefService()->ClearPref(
+      policy::policy_prefs::kPasswordManagerBlocklist);
+  // Verify blocklist is empty.
+  EXPECT_TRUE(profile()
+                  ->GetTestingPrefService()
+                  ->GetList(policy::policy_prefs::kPasswordManagerBlocklist)
+                  .empty());
+  // Password manager and saving passwords should be allowed again
+  EXPECT_TRUE(
+      GetClient()->IsSavingAndFillingEnabled(GURL("https://example.com")));
+}
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(ChromePasswordManagerClientTest, ReceivesAutofillPredictions) {
   constexpr char kUrl[] = "https://www.foo.com/login.html";
@@ -739,6 +844,38 @@ TEST_F(ChromePasswordManagerClientTest,
                   ->GetServerPredictionsForTesting(),
               UnorderedElementsAre(Key(CalculateFormSignature(main_form)),
                                    Key(CalculateFormSignature(child_form))));
+}
+
+TEST_F(ChromePasswordManagerClientTest,
+       GetPasswordManagerDelegateReturnsAutofillManagerForOnlyFrame) {
+  NavigateAndCommit(GURL("https://www.foo.com/login.html"));
+  auto* driver =
+      ContentPasswordManagerDriver::GetForRenderFrameHost(main_rfh());
+  ASSERT_TRUE(driver);
+
+  autofill::FieldGlobalId field_id =
+      CreateLoginFormData().fields()[0].global_id();
+
+  EXPECT_EQ(driver->GetPasswordAutofillManager(),
+            GetClient()->GetAutofillDelegate(field_id));
+}
+
+TEST_F(ChromePasswordManagerClientTest,
+       GetPasswordManagerDelegateReturnsAutofillManagerForSubFrame) {
+  // Create the main frame with decoy data. Should not affect the expectation.
+  NavigateAndCommit(GURL("https://www.foo.com/login.html"));
+  ASSERT_TRUE(ContentPasswordManagerDriver::GetForRenderFrameHost(main_rfh()));
+  CreateLoginFormData();
+
+  content::RenderFrameHost* subframe =
+      content::RenderFrameHostTester::For(main_rfh())->AppendChild("subframe");
+  ContentPasswordManagerDriver* sub_frame_driver =
+      ContentPasswordManagerDriver::GetForRenderFrameHost(subframe);
+  autofill::FieldGlobalId field_id =
+      CreateLoginFormDataForFrame(subframe).fields()[0].global_id();
+
+  EXPECT_EQ(sub_frame_driver->GetPasswordAutofillManager(),
+            GetClient()->GetAutofillDelegate(field_id));
 }
 
 TEST_F(ChromePasswordManagerClientTest, AutoSignInEnabledDeterminedByService) {
@@ -1327,9 +1464,6 @@ TEST_F(ChromePasswordManagerClientTest, MissingUIDelegate) {
 class ChromePasswordManagerClientAndroidTest
     : public ChromePasswordManagerClientTest {
  protected:
-  std::unique_ptr<password_manager::ContentPasswordManagerDriver>
-  CreateContentPasswordManagerDriver(content::RenderFrameHost* rfh);
-
   void SetUp() override;
 
   void CreateManualFillingController(content::WebContents* web_contents);
@@ -1375,13 +1509,6 @@ void ChromePasswordManagerClientAndroidTest::SetUp() {
         return std::make_unique<
             NiceMock<password_manager::MockPasswordManagerSettingsService>>();
       }));
-}
-
-std::unique_ptr<password_manager::ContentPasswordManagerDriver>
-ChromePasswordManagerClientAndroidTest::CreateContentPasswordManagerDriver(
-    content::RenderFrameHost* rfh) {
-  return std::make_unique<password_manager::ContentPasswordManagerDriver>(
-      rfh, GetClient());
 }
 
 void ChromePasswordManagerClientAndroidTest::CreateManualFillingController(
@@ -1902,7 +2029,6 @@ TEST_F(ChromePasswordManagerClientTest, ShowCrossDomainConfirmationPopup) {
   EXPECT_CALL(accepted_callback, Run);
   view->Confirm();
 }
-
 #endif  //  !BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_ANDROID)
@@ -1950,3 +2076,46 @@ TEST_F(ChromePasswordManagerClientTest,
       AcknowledgeGroupedCredentialSheetBridge::DismissReason::kBack);
 }
 #endif  // BUILDFLAG(IS_ANDROID)
+
+TEST_F(ChromePasswordManagerClientTest,
+       PasswordChangeDelegateIsNotifiedAboutOTP) {
+  base::test::ScopedFeatureList features(
+      password_manager::features::kPasswordFormClientsideClassifier);
+
+  PasswordChangeDelegateMock mock;
+  ON_CALL(*password_change_service(), GetPasswordChangeDelegate)
+      .WillByDefault(Return(&mock));
+
+  NavigateAndCommit(GURL("https://www.foo.com/login.html"));
+  ContentAutofillDriver* autofill_driver =
+      ContentAutofillDriver::GetForRenderFrameHost(main_rfh());
+  ASSERT_TRUE(autofill_driver);
+
+  std::vector<FormFieldData> fields = {
+      CreateTestFormField("OTP", "one-time-code", "",
+                          FormControlType::kInputText, "one-time-code")};
+  FormData form =
+      CreateFormDataForRenderFrameHost(*main_rfh(), std::move(fields));
+  {
+    autofill::TestAutofillManagerWaiter waiter(
+        autofill_driver->GetAutofillManager(),
+        {autofill::AutofillManagerEvent::kFormsSeen});
+    autofill_driver->renderer_events().FormsSeen(/*updated_forms=*/{form},
+                                                 /*removed_forms=*/{});
+    ASSERT_TRUE(waiter.Wait(/*num_expected_relevant_events=*/1));
+  }
+
+  EXPECT_CALL(mock, OnOtpFieldDetected(web_contents()));
+
+  // Simulate that the field types have been determined.
+  using Observer = autofill::AutofillManager::Observer;
+  autofill_driver->GetAutofillManager()
+      .FindCachedFormById(form.global_id())
+      ->field(0)
+      ->set_heuristic_type(
+          autofill::HeuristicSource::kPasswordManagerMachineLearning,
+          autofill::FieldType::ONE_TIME_CODE);
+  autofill_driver->GetAutofillManager().NotifyObservers(
+      &Observer::OnFieldTypesDetermined, form.global_id(),
+      Observer::FieldTypeSource::kHeuristicsOrAutocomplete);
+}

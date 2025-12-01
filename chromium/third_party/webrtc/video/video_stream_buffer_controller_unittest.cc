@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 
+#include <cstddef>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -25,9 +26,12 @@
 #include "api/units/frequency.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
+#include "api/video/encoded_frame.h"
 #include "api/video/video_content_type.h"
 #include "api/video/video_timing.h"
+#include "modules/video_coding/timing/timing.h"
 #include "rtc_base/checks.h"
+#include "system_wrappers/include/clock.h"
 #include "test/fake_encoded_frame.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
@@ -193,7 +197,7 @@ class VideoStreamBufferControllerFixture
     }
 
     Timestamp now = clock_->CurrentTime();
-    // TODO(bugs.webrtc.org/13756): Remove this when rtc::Thread uses uses
+    // TODO(bugs.webrtc.org/13756): Remove this when webrtc::Thread uses uses
     // Timestamp instead of an integer milliseconds. This extra wait is needed
     // for some tests that use the metronome. This is due to rounding
     // milliseconds, affecting the precision of simulated time controller uses

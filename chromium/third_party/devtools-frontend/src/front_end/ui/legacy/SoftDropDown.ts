@@ -1,9 +1,11 @@
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as IconButton from '../components/icon_button/icon_button.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
@@ -14,7 +16,6 @@ import {ListControl, type ListDelegate, ListMode} from './ListControl.js';
 import {Events as ListModelEvents, type ItemsReplacedEvent, type ListModel} from './ListModel.js';
 import softDropDownStyles from './softDropDown.css.js';
 import softDropDownButtonStyles from './softDropDownButton.css.js';
-import * as ThemeSupport from './theme_support/theme_support.js';
 import {createShadowRootWithCoreStyles} from './UIUtils.js';
 
 const UIStrings = {
@@ -54,7 +55,7 @@ export class SoftDropDown<T> implements ListDelegate<T> {
       );
     }
     this.element.classList.add('soft-dropdown');
-    ThemeSupport.ThemeSupport.instance().appendStyle(this.element, softDropDownButtonStyles);
+    Platform.DOMUtilities.appendStyle(this.element, softDropDownButtonStyles);
     this.titleElement = this.element.createChild('span', 'title');
     const dropdownArrowIcon = IconButton.Icon.create('triangle-down');
     this.element.appendChild(dropdownArrowIcon);
@@ -143,8 +144,7 @@ export class SoftDropDown<T> implements ListDelegate<T> {
     event.consume(true);
   }
 
-  private onKeyDownButton(ev: Event): void {
-    const event = (ev as KeyboardEvent);
+  private onKeyDownButton(event: KeyboardEvent): void {
     let handled = false;
     switch (event.key) {
       case 'ArrowUp':
@@ -171,8 +171,7 @@ export class SoftDropDown<T> implements ListDelegate<T> {
     }
   }
 
-  private onKeyDownList(ev: Event): void {
-    const event = (ev as KeyboardEvent);
+  private onKeyDownList(event: KeyboardEvent): void {
     let handled = false;
     switch (event.key) {
       case 'ArrowLeft':

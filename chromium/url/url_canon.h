@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <optional>
 #include <string_view>
 
 #include "base/check_op.h"
@@ -344,13 +345,11 @@ bool IDNToASCII(std::u16string_view src, CanonOutputW* output);
 //
 // The 8-bit version requires UTF-8 encoding.
 COMPONENT_EXPORT(URL)
-bool CanonicalizeScheme(const char* spec,
-                        const Component& scheme,
+bool CanonicalizeScheme(std::optional<std::string_view> input,
                         CanonOutput* output,
                         Component* out_scheme);
 COMPONENT_EXPORT(URL)
-bool CanonicalizeScheme(const char16_t* spec,
-                        const Component& scheme,
+bool CanonicalizeScheme(std::optional<std::u16string_view> input,
                         CanonOutput* output,
                         Component* out_scheme);
 
@@ -365,18 +364,14 @@ bool CanonicalizeScheme(const char16_t* spec,
 //
 // The 8-bit version requires UTF-8 encoding.
 COMPONENT_EXPORT(URL)
-bool CanonicalizeUserInfo(const char* username_source,
-                          const Component& username,
-                          const char* password_source,
-                          const Component& password,
+bool CanonicalizeUserInfo(std::optional<std::string_view> username,
+                          std::optional<std::string_view> password,
                           CanonOutput* output,
                           Component* out_username,
                           Component* out_password);
 COMPONENT_EXPORT(URL)
-bool CanonicalizeUserInfo(const char16_t* username_source,
-                          const Component& username,
-                          const char16_t* password_source,
-                          const Component& password,
+bool CanonicalizeUserInfo(std::optional<std::u16string_view> username,
+                          std::optional<std::u16string_view> password,
                           CanonOutput* output,
                           Component* out_username,
                           Component* out_password);
@@ -707,14 +702,12 @@ bool FileCanonicalizePath(const char16_t* spec,
 //
 // The converter can be NULL. In this case, the output encoding will be UTF-8.
 COMPONENT_EXPORT(URL)
-void CanonicalizeQuery(const char* spec,
-                       const Component& query,
+void CanonicalizeQuery(std::optional<std::string_view> input,
                        CharsetConverter* converter,
                        CanonOutput* output,
                        Component* out_query);
 COMPONENT_EXPORT(URL)
-void CanonicalizeQuery(const char16_t* spec,
-                       const Component& query,
+void CanonicalizeQuery(std::optional<std::u16string_view> input,
                        CharsetConverter* converter,
                        CanonOutput* output,
                        Component* out_query);
@@ -726,13 +719,11 @@ void CanonicalizeQuery(const char16_t* spec,
 // This function will not fail. If the input is invalid UTF-8/UTF-16, we'll use
 // the "Unicode replacement character" for the confusing bits and copy the rest.
 COMPONENT_EXPORT(URL)
-void CanonicalizeRef(const char* spec,
-                     const Component& path,
+void CanonicalizeRef(std::optional<std::string_view> spec,
                      CanonOutput* output,
                      Component* out_path);
 COMPONENT_EXPORT(URL)
-void CanonicalizeRef(const char16_t* spec,
-                     const Component& path,
+void CanonicalizeRef(std::optional<std::u16string_view> spec,
                      CanonOutput* output,
                      Component* out_path);
 

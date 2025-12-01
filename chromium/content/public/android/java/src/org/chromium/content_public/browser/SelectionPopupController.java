@@ -30,12 +30,13 @@ public interface SelectionPopupController {
     static final String UMA_MOBILE_ACTION_MODE_SHARE = "MobileActionMode.Share";
 
     /**
-     * @param webContents {@link WebContents} object.
+     * @param webContents A non-destroyed {@link WebContents} object.
      * @return {@link SelectionPopupController} object used for the give WebContents.
-     *         {@code null} if not available.
      */
-    static @Nullable SelectionPopupController fromWebContents(WebContents webContents) {
-        return SelectionPopupControllerImpl.fromWebContents(webContents);
+    static SelectionPopupController fromWebContents(WebContents webContents) {
+        var ret = SelectionPopupControllerImpl.fromWebContents(webContents);
+        assert ret != null;
+        return ret;
     }
 
     /**
@@ -116,7 +117,7 @@ public interface SelectionPopupController {
     void handleTextReplacementAction(String text);
 
     /** Sets the given {@link SelectionClient} in the selection popup controller. */
-    void setSelectionClient(SelectionClient selectionClient);
+    void setSelectionClient(@Nullable SelectionClient selectionClient);
 
     /** Returns the {@link SelectionClient} in the selection popup controller. */
     public @Nullable SelectionClient getSelectionClient();

@@ -30,11 +30,6 @@ bool CanListDevices(syncer::SyncService* sync_service) {
 
 }  // namespace
 
-bool CanSendViaVapid(syncer::SyncService* sync_service) {
-  // Can send using VAPID key in sharing.vapid_key preferences.
-  return sync_service->GetActiveDataTypes().Has(syncer::PREFERENCES);
-}
-
 bool CanSendViaSenderID(syncer::SyncService* sync_service) {
   return sync_service->GetActiveDataTypes().Has(syncer::SHARING_MESSAGE);
 }
@@ -53,7 +48,7 @@ bool IsSyncEnabledForSharing(syncer::SyncService* sync_service) {
     return false;
   }
 
-  if (!CanSendViaVapid(sync_service) && !CanSendViaSenderID(sync_service)) {
+  if (!CanSendViaSenderID(sync_service)) {
     return false;
   }
 
@@ -83,7 +78,7 @@ bool IsSyncDisabledForSharing(syncer::SyncService* sync_service) {
     return true;
   }
 
-  if (!CanSendViaVapid(sync_service) && !CanSendViaSenderID(sync_service)) {
+  if (!CanSendViaSenderID(sync_service)) {
     return true;
   }
 

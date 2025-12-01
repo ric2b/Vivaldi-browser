@@ -303,12 +303,14 @@ class VivaldiBrowserWindow::InterfaceHelper final
 
   // ManagePasswordsIconView overrides
 
-  void SetState(password_manager::ui::State state) override {
+  void SetState(password_manager::ui::State state,
+                bool is_blocklisted) override {
     extensions::VivaldiUtilitiesAPI* utils_api =
         extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
             window_->browser()->profile());
     bool show = state == password_manager::ui::State::PENDING_PASSWORD_STATE;
-    show = state != password_manager::ui::State::INACTIVE_STATE;
+    show =
+        state != password_manager::ui::State::INACTIVE_STATE && !is_blocklisted;
     utils_api->OnPasswordIconStatusChanged(window_->id(), show);
   }
 
@@ -1785,9 +1787,7 @@ DownloadShelf* VivaldiBrowserWindow::GetDownloadShelf() {
 }
 
 views::View* VivaldiBrowserWindow::GetTopContainer() {
-  // TODO: Will implement js-events in VB-111658.
-//  return GetContentsView();
-  return nullptr;
+  return GetContentsView();
 }
 
 views::View* VivaldiBrowserWindow::GetLensOverlayView() {
@@ -2094,6 +2094,10 @@ std::u16string VivaldiBrowserWindow::GetTitle() {
   return title;
 }
 
+bool VivaldiBrowserWindow::IsTabModalPopupDeprecated() const {
+  return false;
+}
+
 void VivaldiBrowserWindow::OnActiveTabChanged(
     content::WebContents* old_contents,
     content::WebContents* new_contents,
@@ -2252,6 +2256,10 @@ bool VivaldiBrowserWindow::IsOnCurrentWorkspace() const {
   }
 #endif
   return true;
+}
+
+bool VivaldiBrowserWindow::IsVisibleOnScreen() const {
+  return widget_->IsVisibleOnScreen();
 }
 
 void VivaldiBrowserWindow::UpdatePageActionIcon(PageActionIconType type) {

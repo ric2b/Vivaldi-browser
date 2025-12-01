@@ -65,8 +65,8 @@ enum class PipelineStageUsage {
 enum StructFlag {
     /// The structure is a block-decorated structure (for SPIR-V or GLSL).
     kBlock,
-    /// The structure requires explicit layout decorations for SPIR-V.
-    kSpirvExplicitLayout,
+    /// The structure requires explicit layout decorations
+    kExplicitLayout,
 };
 
 /// An alias to tint::EnumSet<StructFlag>
@@ -151,17 +151,6 @@ class Struct : public Castable<Struct, Type> {
     /// @param usage the AddressSpace usage type to query
     /// @returns true iff this structure has been used as the given address space
     bool UsedAs(core::AddressSpace usage) const { return address_space_usage_.Contains(usage); }
-
-    /// @returns true iff this structure has been used by address space that's
-    /// host-shareable.
-    bool IsHostShareable() const {
-        for (auto& sc : address_space_usage_) {
-            if (core::IsHostShareable(sc)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     /// Adds the pipeline stage usage to the structure.
     /// @param usage the storage usage
@@ -263,9 +252,18 @@ class StructMember : public Castable<StructMember, Node> {
     /// @returns the optional attributes
     const IOAttributes& Attributes() const { return attributes_; }
 
-    /// Set the attributes of the struct member.
-    /// @param attributes the new attributes
-    void SetAttributes(IOAttributes&& attributes) { attributes_ = std::move(attributes); }
+    /// Sets the interpolation.
+    /// @param interpolation the optional location interpolation settings
+    void SetInterpolation(std::optional<core::Interpolation> interpolation) {
+        attributes_.interpolation = interpolation;
+    }
+
+    /// Sets the location.
+    /// @param loc the optional location value
+    void SetLocation(std::optional<uint32_t> loc) { attributes_.location = loc; }
+
+    /// Resets the attributes to empty
+    void ResetAttributes() { attributes_ = {}; }
 
     /// @param ctx the clone context
     /// @returns a clone of this struct member

@@ -53,20 +53,12 @@ IN_PROC_BROWSER_TEST_F(NewTabPageTest, MiddleSlotPromo) {
   RunTest("new_tab_page/middle_slot_promo_test.js", "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(NewTabPageTest, MobilePromo) {
-  RunTest("new_tab_page/mobile_promo_test.js", "mocha.run()");
-}
-
 IN_PROC_BROWSER_TEST_F(NewTabPageTest, ImageProcessor) {
   RunTest("new_tab_page/image_processor_test.js", "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(NewTabPageTest, Transparency) {
   RunTest("new_tab_page/transparency_test.js", "mocha.run()");
-}
-
-IN_PROC_BROWSER_TEST_F(NewTabPageTest, Footer) {
-  RunTest("new_tab_page/footer_test.js", "mocha.run()");
 }
 
 using NewTabPageModulesTest = NewTabPageBrowserTest;
@@ -89,10 +81,6 @@ IN_PROC_BROWSER_TEST_F(NewTabPageModulesTest, ModuleDescriptor) {
 
 IN_PROC_BROWSER_TEST_F(NewTabPageModulesTest, ModuleRegistry) {
   RunTest("new_tab_page/modules/module_registry_test.js", "mocha.run()");
-}
-
-IN_PROC_BROWSER_TEST_F(NewTabPageModulesTest, ModuleHeader) {
-  RunTest("new_tab_page/modules/module_header_test.js", "mocha.run()");
 }
 
 IN_PROC_BROWSER_TEST_F(NewTabPageModulesTest, InfoDialog) {
@@ -208,6 +196,11 @@ IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, CustomizeChromeSidePanel) {
 IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, LensUploadDialog) {
   RunTest("new_tab_page/app_test.js",
           "runMochaSuite('NewTabPageAppTest LensUploadDialog')");
+}
+
+IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, ComposeEntryPoint) {
+  RunTest("new_tab_page/app_test.js",
+          "runMochaSuite('NewTabPageAppTest ComposeEntryPoint')");
 }
 
 IN_PROC_BROWSER_TEST_F(NewTabPageAppTest, WallpaperSearch) {

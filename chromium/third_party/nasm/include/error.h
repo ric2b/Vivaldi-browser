@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2020 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2024 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -60,7 +60,9 @@ void printf_func(1, 2) nasm_debug(const char *fmt, ...);
 void printf_func(2, 3) nasm_debugf(errflags flags, const char *fmt, ...);
 void printf_func(1, 2) nasm_info(const char *fmt, ...);
 void printf_func(2, 3) nasm_infof(errflags flags, const char *fmt, ...);
-void printf_func(2, 3) nasm_warn(errflags flags, const char *fmt, ...);
+void printf_func(1, 2) nasm_note(const char *fmt, ...);
+void printf_func(2, 3) nasm_notef(errflags flags, const char *fmt, ...);
+void printf_func(2, 3) nasm_warn_(errflags flags, const char *fmt, ...);
 void printf_func(1, 2) nasm_nonfatal(const char *fmt, ...);
 void printf_func(2, 3) nasm_nonfatalf(errflags flags, const char *fmt, ...);
 fatal_func printf_func(1, 2) nasm_fatal(const char *fmt, ...);
@@ -72,33 +74,33 @@ fatal_func printf_func(2, 3) nasm_panicf(errflags flags, const char *fmt, ...);
 fatal_func nasm_panic_from_macro(const char *file, int line);
 #define panic() nasm_panic_from_macro(__FILE__, __LINE__);
 
-void nasm_verror(errflags severity, const char *fmt, va_list ap);
-fatal_func nasm_verror_critical(errflags severity, const char *fmt, va_list ap);
+void vprintf_func(2) nasm_verror(errflags severity, const char *fmt, va_list ap);
+fatal_func vprintf_func(2) nasm_verror_critical(errflags severity, const char *fmt, va_list ap);
 
 /*
  * These are the error severity codes which get passed as the first
  * argument to an efunc.
  */
-#define ERR_LISTMSG		0x00000000      /* for the listing file only */
-#define ERR_DEBUG		0x00000001	/* debugging message */
-#define ERR_INFO		0x00000002	/* information for the list file */
-#define ERR_WARNING		0x00000003	/* warn only: no further action */
-#define ERR_NONFATAL		0x00000004	/* terminate assembly after phase */
-#define ERR_FATAL		0x00000005	/* instantly fatal: exit with error */
-#define ERR_CRITICAL		0x00000006      /* fatal, but minimize code before exit */
-#define ERR_PANIC		0x00000007	/* internal error: panic instantly
+#define ERR_LISTMSG		0x00000000      /* for the listing file only (no prefix) */
+#define ERR_NOTE		0x00000001      /* for the listing file only (with prefix) */
+#define ERR_DEBUG		0x00000002	/* debugging message */
+#define ERR_INFO		0x00000003	/* information for the list file */
+#define ERR_WARNING		0x00000004	/* warn only: no further action */
+#define ERR_NONFATAL		0x00000008	/* terminate assembly after phase */
+#define ERR_FATAL		0x00000009	/* instantly fatal: exit with error */
+#define ERR_CRITICAL		0x0000000e      /* fatal, but minimize code before exit */
+#define ERR_PANIC		0x0000000f	/* internal error: panic instantly
 						 * and dump core for reference */
-#define ERR_MASK		0x00000007	/* mask off the above codes */
-#define ERR_UNDEAD		0x00000008      /* skip if we already have errors */
-#define ERR_NOFILE		0x00000010	/* don't give source file name/line */
-#define ERR_HERE		0x00000020      /* point to a specific source location */
-#define ERR_USAGE		0x00000040	/* print a usage message */
-#define ERR_PASS1		0x00000080	/* message on pass_first */
+#define ERR_MASK		0x0000000f	/* mask off the above codes */
+#define ERR_UNDEAD		0x00000010      /* skip if we already have errors */
+#define ERR_NOFILE		0x00000020	/* don't give source file name/line */
+#define ERR_HERE		0x00000040      /* point to a specific source location */
+#define ERR_USAGE		0x00000080	/* print a usage message */
 #define ERR_PASS2		0x00000100	/* ignore unless on pass_final */
 
 #define ERR_NO_SEVERITY		0x00000200	/* suppress printing severity */
 #define ERR_PP_PRECOND		0x00000400	/* for preprocessor use */
-#define ERR_PP_LISTMACRO	0x00000800	/* from preproc->error_list_macros() */
+#define ERR_PP_LISTMACRO	0x00000800	/* from pp_error_list_macros() */
 #define ERR_HOLD		0x00001000      /* this error/warning can be held */
 
 /*
@@ -145,6 +147,27 @@ void nasm_error_hold_pop(errhold hold, bool issue);
 
 /* Should be included from within error.h only */
 #include "warnings.h"
+
+/* True if a warning is enabled, either as a warning or an error */
+static inline bool warn_active(errflags warn)
+{
+    enum warn_index wa = WARN_IDX(warn);
+    return unlikely(warning_state[wa] & WARN_ST_ENABLED);
+}
+
+#ifdef HAVE_VARIADIC_MACROS
+
+#define nasm_warn(w, ...) \
+    do { \
+        if (unlikely(warn_active(w))) \
+            nasm_warn_(w, __VA_ARGS__); \
+    } while (0)
+
+#else
+
+#define nasm_warn nasm_warn_
+
+#endif
 
 /* By defining MAX_DEBUG, we can compile out messages entirely */
 #ifndef MAX_DEBUG

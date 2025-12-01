@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view, rulesdir/inject-checkbox-styles */
 
 import '../../../../ui/legacy/legacy.js';
 
@@ -14,11 +15,7 @@ import * as Lit from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 import * as EmulationUtils from '../utils/utils.js';
 
-import userAgentClientHintsFormStylesRaw from './userAgentClientHintsForm.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const userAgentClientHintsFormStyles = new CSSStyleSheet();
-userAgentClientHintsFormStyles.replaceSync(userAgentClientHintsFormStylesRaw.cssText);
+import userAgentClientHintsFormStyles from './userAgentClientHintsForm.css.js';
 
 const {html} = Lit;
 
@@ -216,10 +213,6 @@ export class UserAgentClientHintsForm extends HTMLElement {
   #showMobileCheckbox = false;
   #showSubmitButton = false;
   #useragentModifiedAriaMessage = '';
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [Input.checkboxStyles, userAgentClientHintsFormStyles];
-  }
 
   set value(data: UserAgentClientHintsFormData) {
     const {metaData = DEFAULT_METADATA, showMobileCheckbox = false, showSubmitButton = false} = data;
@@ -606,8 +599,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
           />
           <devtools-icon
             .data=${{
-      color:
-        'var(--icon-default)', iconName: 'bin', width: '16px', height: '16px',
+        color: 'var(--icon-default)', iconName: 'bin', width: '16px', height: '16px',
       }
       }
             title=${i18nString(UIStrings.brandUserAgentDelete)}
@@ -637,8 +629,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
         <devtools-icon
           aria-hidden="true"
           .data=${{
-    color:
-      'var(--icon-default)', iconName: 'plus', width: '16px',
+      color: 'var(--icon-default)', iconName: 'plus', width: '16px',
     }
     }
         >
@@ -712,8 +703,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
           />
           <devtools-icon
             .data=${{
-      color:
-        'var(--icon-default)', iconName: 'bin', width: '16px', height: '16px',
+        color: 'var(--icon-default)', iconName: 'bin', width: '16px', height: '16px',
       }
       }
             title=${i18nString(UIStrings.brandFullVersionListDelete)}
@@ -743,8 +733,7 @@ export class UserAgentClientHintsForm extends HTMLElement {
         <devtools-icon
           aria-hidden="true"
           .data=${{
-    color:
-      'var(--icon-default)', iconName: 'plus', width: '16px',
+      color: 'var(--icon-default)', iconName: 'plus', width: '16px',
     }
     }
         >
@@ -779,6 +768,8 @@ export class UserAgentClientHintsForm extends HTMLElement {
 
     // clang-format off
     const output = html`
+      <style>${Input.checkboxStyles}</style>
+      <style>${userAgentClientHintsFormStyles}</style>
       <section class="root">
         <div
           class="tree-title"
@@ -838,8 +829,8 @@ export class UserAgentClientHintsForm extends HTMLElement {
         <div aria-live="polite" aria-label=${this.#useragentModifiedAriaMessage}></div>
       </section>
     `;
-              // clang-format on
-            Lit.render(output, this.#shadow, {host: this});
+    // clang-format on
+    Lit.render(output, this.#shadow, {host: this});
   }
 
   validate = (): UI.ListWidget.ValidatorResult => {

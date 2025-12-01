@@ -28,6 +28,7 @@
 #include "src/heap/heap-write-barrier-inl.h"
 #include "src/heap/read-only-heap-inl.h"
 #include "src/numbers/conversions-inl.h"
+#include "src/objects/allocation-site.h"
 #include "src/objects/casting.h"
 #include "src/objects/deoptimization-data.h"
 #include "src/objects/heap-number-inl.h"
@@ -38,6 +39,7 @@
 #include "src/objects/keys.h"
 #include "src/objects/literal-objects.h"
 #include "src/objects/lookup-inl.h"  // TODO(jkummerow): Drop.
+#include "src/objects/number-string-cache-inl.h"
 #include "src/objects/object-list-macros.h"
 #include "src/objects/oddball-inl.h"
 #include "src/objects/property-details.h"
@@ -197,10 +199,12 @@ bool IsNullOrUndefined(Tagged<HeapObject> obj) {
 bool IsZero(Tagged<Object> obj) { return obj == Smi::zero(); }
 
 bool IsPublicSymbol(Tagged<Object> obj) {
-  return IsSymbol(obj) && !Cast<Symbol>(obj)->is_private();
+  Tagged<Symbol> symbol;
+  return TryCast<Symbol>(obj, &symbol) && !symbol->is_private();
 }
 bool IsPrivateSymbol(Tagged<Object> obj) {
-  return IsSymbol(obj) && Cast<Symbol>(obj)->is_private();
+  Tagged<Symbol> symbol;
+  return TryCast<Symbol>(obj, &symbol) && symbol->is_private();
 }
 
 bool IsNoSharedNameSentinel(Tagged<Object> obj) {
@@ -257,6 +261,14 @@ struct CastTraits<JSAny> {
     return IsPrimitive(value) || IsJSReceiver(value);
   }
 };
+template <>
+struct CastTraits<AllocationSiteWithWeakNext> {
+  template <typename From>
+  static inline bool AllowFrom(Tagged<From> value) {
+    Tagged<AllocationSite> site;
+    return TryCast<AllocationSite>(value, &site) && site->HasWeakNext();
+  }
+};
 
 template <>
 struct CastTraits<FieldType> {
@@ -291,6 +303,8 @@ template <>
 struct CastTraits<FreshlyAllocatedBigInt> : public CastTraits<BigInt> {};
 template <>
 struct CastTraits<JSIteratorResult> : public CastTraits<JSObject> {};
+template <>
+struct CastTraits<JSUint8ArraySetFromResult> : public CastTraits<JSObject> {};
 
 template <>
 struct CastTraits<DeoptimizationFrameTranslation>
@@ -398,16 +412,6 @@ bool IsJSObjectThatCanBeTrackedAsPrototype(Tagged<HeapObject> obj) {
   // threadsafe. Objects in the shared heap have fixed layouts and their maps
   // never change.
   return IsJSObject(obj) && !HeapLayout::InWritableSharedSpace(*obj);
-}
-
-bool IsJSApiWrapperObject(Tagged<Map> map) {
-  const InstanceType instance_type = map->instance_type();
-  return InstanceTypeChecker::IsJSAPIObjectWithEmbedderSlots(instance_type) ||
-         InstanceTypeChecker::IsJSSpecialObject(instance_type);
-}
-
-bool IsJSApiWrapperObject(Tagged<HeapObject> js_obj) {
-  return IsJSApiWrapperObject(js_obj->map());
 }
 
 DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsUniqueName) {
@@ -631,11 +635,15 @@ DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsUndetectable) {
 DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsAccessCheckNeeded) {
   if (IsJSGlobalProxy(obj, cage_base)) {
     const Tagged<JSGlobalProxy> proxy = Cast<JSGlobalProxy>(obj);
-    Tagged<JSGlobalObject> global =
-        proxy->GetIsolate()->context()->global_object();
-    return proxy->IsDetachedFrom(global);
+    Isolate* isolate = Isolate::Current();
+    Tagged<JSGlobalObject> global = isolate->context()->global_object();
+    return proxy->IsDetachedFrom(isolate, global);
   }
   return obj->map(cage_base)->is_access_check_needed();
+}
+
+DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsSmiStringCache) {
+  return IsFixedArray(obj);
 }
 
 #define MAKE_STRUCT_PREDICATE(NAME, Name, name)                             \
@@ -651,6 +659,12 @@ DEF_HEAP_OBJECT_PREDICATE(HeapObject, IsAccessCheckNeeded) {
   }                                                                         \
   bool Is##Name(HeapObject obj, PtrComprCageBase cage_base) {               \
     static_assert(kTaggedCanConvertToRawObjects);                           \
+    return Is##Name(Tagged<HeapObject>(obj), cage_base);                    \
+  }                                                                         \
+  bool Is##Name(const HeapObjectLayout* obj) {                              \
+    return Is##Name(Tagged<HeapObject>(obj));                               \
+  }                                                                         \
+  bool Is##Name(const HeapObjectLayout* obj, PtrComprCageBase cage_base) {  \
     return Is##Name(Tagged<HeapObject>(obj), cage_base);                    \
   }
 // static
@@ -1006,6 +1020,19 @@ void HeapObject::SetupLazilyInitializedExternalPointerField(size_t offset) {
 #endif  // V8_ENABLE_SANDBOX
 }
 
+bool HeapObject::IsLazilyInitializedExternalPointerFieldInitialized(
+    size_t offset) const {
+#ifdef V8_ENABLE_SANDBOX
+  auto location =
+      reinterpret_cast<ExternalPointerHandle*>(field_address(offset));
+  ExternalPointerHandle handle = base::AsAtomic32::Relaxed_Load(location);
+  return handle != kNullExternalPointerHandle;
+#else
+  return ReadMaybeUnalignedValue<Address>(field_address(offset)) !=
+         kNullAddress;
+#endif  // V8_ENABLE_SANDBOX
+}
+
 template <ExternalPointerTag tag>
 void HeapObject::WriteLazilyInitializedExternalPointerField(
     size_t offset, IsolateForSandbox isolate, Address value) {
@@ -1056,7 +1083,9 @@ void HeapObject::InitSelfIndirectPointerField(
     TrustedPointerPublishingScope* opt_publishing_scope) {
   DCHECK(IsExposedTrustedObject(*this));
   InstanceType instance_type = map()->instance_type();
-  IndirectPointerTag tag = IndirectPointerTagFromInstanceType(instance_type);
+  bool shared = HeapLayout::InAnySharedSpace(*this);
+  IndirectPointerTag tag =
+      IndirectPointerTagFromInstanceType(instance_type, shared);
   i::InitSelfIndirectPointerField(field_address(offset), isolate, *this, tag,
                                   opt_publishing_scope);
 }
@@ -1333,6 +1362,11 @@ Tagged<Map> HeapObjectLayout::map() const {
 Tagged<Map> HeapObjectLayout::map(AcquireLoadTag) const {
   // TODO(leszeks): Support MapWord members and access via that instead.
   return Tagged<HeapObject>(this)->map(kAcquireLoad);
+}
+
+MapWord HeapObjectLayout::map_word(RelaxedLoadTag) const {
+  // TODO(leszeks): Support MapWord members and access via that instead.
+  return Tagged<HeapObject>(this)->map_word(kRelaxedLoad);
 }
 
 void HeapObjectLayout::set_map(Isolate* isolate, Tagged<Map> value) {
@@ -1654,29 +1688,55 @@ WriteBarrierMode HeapObject::GetWriteBarrierMode(
 }
 
 // static
-AllocationAlignment HeapObject::RequiredAlignment(Tagged<Map> map) {
+AllocationAlignment HeapObject::RequiredAlignment(AllocationSpace space,
+                                                  Tagged<Map> map) {
+  return RequiredAlignment(
+      IsAnySharedSpace(space) ? kInSharedSpace : kNotInSharedSpace, map);
+}
+
+// static
+AllocationAlignment HeapObject::RequiredAlignment(InSharedSpace in_shared_space,
+                                                  Tagged<Map> map) {
   // TODO(v8:4153): We should think about requiring double alignment
   // in general for ByteArray, since they are used as backing store for typed
   // arrays now.
   // TODO(ishell, v8:8875): Consider using aligned allocations for BigInt.
-  if (USE_ALLOCATION_ALIGNMENT_BOOL) {
+  if (USE_ALLOCATION_ALIGNMENT_HEAP_NUMBER_BOOL) {
     int instance_type = map->instance_type();
 
-    static_assert(!USE_ALLOCATION_ALIGNMENT_BOOL ||
+    static_assert(!USE_ALLOCATION_ALIGNMENT_HEAP_NUMBER_BOOL ||
                   (sizeof(FixedDoubleArray::Header) & kDoubleAlignmentMask) ==
                       kTaggedSize);
     if (instance_type == FIXED_DOUBLE_ARRAY_TYPE) return kDoubleAligned;
 
-    static_assert(!USE_ALLOCATION_ALIGNMENT_BOOL ||
+    static_assert(!USE_ALLOCATION_ALIGNMENT_HEAP_NUMBER_BOOL ||
                   (offsetof(HeapNumber, value_) & kDoubleAlignmentMask) ==
                       kTaggedSize);
     if (instance_type == HEAP_NUMBER_TYPE) return kDoubleUnaligned;
   }
+#if V8_ENABLE_WEBASSEMBLY
+  if (in_shared_space && v8_flags.experimental_wasm_shared) [[unlikely]] {
+    int instance_type = map->instance_type();
+    if (instance_type == WASM_STRUCT_TYPE) {
+      // The map of a shared wasm struct needs to be in the shared space.
+      DCHECK(HeapLayout::InWritableSharedSpace(map));
+      return kDoubleAligned;
+    } else if (instance_type == WASM_ARRAY_TYPE) {
+      // The map of a shared wasm array needs to be in the shared space.
+      DCHECK(HeapLayout::InWritableSharedSpace(map));
+      return kDoubleUnaligned;
+    }
+  }
+#endif
   return kTaggedAligned;
 }
 
 bool HeapObject::CheckRequiredAlignment(PtrComprCageBase cage_base) const {
-  AllocationAlignment alignment = HeapObject::RequiredAlignment(map(cage_base));
+  const InSharedSpace in_shared_space = HeapLayout::InWritableSharedSpace(*this)
+                                            ? kInSharedSpace
+                                            : kNotInSharedSpace;
+  AllocationAlignment alignment =
+      HeapObject::RequiredAlignment(in_shared_space, map(cage_base));
   CHECK_EQ(0, Heap::GetFillToAlign(address(), alignment));
   return true;
 }
@@ -1874,6 +1934,11 @@ bool IsShared(Tagged<Object> obj) {
     case SHARED_UNCACHED_EXTERNAL_ONE_BYTE_STRING_TYPE:
       DCHECK(HeapLayout::InAnySharedSpace(object));
       return true;
+#if V8_ENABLE_WEBASSEMBLY
+    case WASM_STRUCT_TYPE:
+    case WASM_ARRAY_TYPE:
+      return HeapLayout::InAnySharedSpace(object);
+#endif
     case INTERNALIZED_TWO_BYTE_STRING_TYPE:
     case INTERNALIZED_ONE_BYTE_STRING_TYPE:
     case EXTERNAL_INTERNALIZED_TWO_BYTE_STRING_TYPE:
@@ -1910,10 +1975,15 @@ bool Object::CanBeHeldWeakly(Tagged<Object> obj) {
     // TODO(v8:12547) Shared structs and arrays should only be able to point
     // to shared values in weak collections. For now, disallow them as weak
     // collection keys.
-    if (v8_flags.harmony_struct) {
-      return !IsJSSharedStruct(obj) && !IsJSSharedArray(obj);
+#if V8_ENABLE_WEBASSEMBLY
+    if (v8_flags.experimental_wasm_shared &&
+        (IsWasmStruct(obj) || IsWasmArray(obj)) &&
+        HeapLayout::InAnySharedSpace(Cast<HeapObject>(obj))) {
+      return false;
     }
-    return true;
+#endif
+    return (!v8_flags.harmony_struct ||
+            (!IsJSSharedStruct(obj) && !IsJSSharedArray(obj)));
   }
   return IsSymbol(obj) && !Cast<Symbol>(obj)->is_in_public_symbol_table();
 }

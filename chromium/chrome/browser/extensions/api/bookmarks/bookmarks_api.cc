@@ -8,6 +8,7 @@
 
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <string>
 #include <utility>
@@ -29,7 +30,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/common/extensions/api/bookmarks.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_node.h"
@@ -41,6 +41,7 @@
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function_dispatcher.h"
+#include "extensions/buildflags/buildflags.h"
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -48,6 +49,7 @@
 
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
+using bookmarks::BookmarkPermanentNode;
 using bookmarks::ManagedBookmarkService;
 using vivaldi::IsVivaldiApp;
 using vivaldi::kVivaldiReservedApiError;
@@ -104,14 +106,12 @@ void BookmarkEventRouter::BookmarkNodeMoved(const BookmarkNode* old_parent,
   // moved from/to it. Validate this assumption here, as otherwise this method
   // would need to recalculate child indices. This is a debug-only check since
   // it is not constant-time.
-  DCHECK(std::ranges::all_of(old_parent->children(),
-                             [model = model_](const auto& child) {
-                               return model->IsNodeVisible(*child);
-                             }));
-  DCHECK(std::ranges::all_of(new_parent->children(),
-                             [model = model_](const auto& child) {
-                               return model->IsNodeVisible(*child);
-                             }));
+  DCHECK(std::ranges::all_of(old_parent->children(), [](const auto& child) {
+    return child->IsVisible();
+  }));
+  DCHECK(std::ranges::all_of(new_parent->children(), [](const auto& child) {
+    return child->IsVisible();
+  }));
 
   const BookmarkNode* node = new_parent->children()[new_index].get();
   api::bookmarks::OnMoved::MoveInfo move_info;
@@ -130,7 +130,7 @@ void BookmarkEventRouter::BookmarkNodeAdded(const BookmarkNode* parent,
                                             bool added_by_user) {
   const BookmarkNode* node = parent->children()[index].get();
   if (base::FeatureList::IsEnabled(kEnforceBookmarkVisibilityOnExtensionsAPI) &&
-      !model_->IsNodeVisible(*node)) {
+      !node->IsVisible()) {
     return;
   }
 
@@ -148,25 +148,28 @@ void BookmarkEventRouter::BookmarkNodeRemoved(
     const BookmarkNode* node,
     const std::set<GURL>& removed_urls,
     const base::Location& location) {
+  CHECK(parent);
   if (base::FeatureList::IsEnabled(kEnforceBookmarkVisibilityOnExtensionsAPI) &&
-      !model_->IsNodeVisible(*node)) {
+      !node->IsVisible()) {
     return;
   }
 
   api::bookmarks::OnRemoved::RemoveInfo remove_info;
   remove_info.parent_id = base::NumberToString(parent->id());
 
-  // TODO(crbug.com/395071423): Calculate the API index correctly (account for
-  // visibility of subling nodes). This is not trivial, because a single
-  // operation may trigger an update of the visibility of multiple permanent
-  // nodes (and this code therefore can't know what the visibility that was
-  // last reported on the API was).
-  //
-  // This will require some changes to the BookmarkModel implementation.
-  remove_info.index = static_cast<int>(index);
+  // Calculate the API index of this node, prior to it being removed.
+  remove_info.index = bookmarks_helpers::GetAPIIndexOf(*parent, index);
 
-  bookmarks_helpers::PopulateBookmarkTreeNode(model_, managed_, node, true,
-                                              false, &remove_info.node);
+  bookmarks_helpers::PopulateBookmarkTreeNode(
+      model_, managed_, node, /*recurse=*/true,
+      /*only_folders=*/false, /*visible_index=*/std::nullopt,
+      &remove_info.node);
+
+  // The syncing property is not accurately populated for non-permanent nodes,
+  // because the node has already been detached from its parent.
+  if (!node->is_permanent_node()) {
+    remove_info.node.syncing = !model_->IsLocalOnlyNode(*parent);
+  }
 
   DispatchEvent(events::BOOKMARKS_ON_REMOVED,
                 api::bookmarks::OnRemoved::kEventName,
@@ -201,6 +204,7 @@ void BookmarkEventRouter::BookmarkNodeChanged(const BookmarkNode* node) {
   change_info.thumbnail = vivaldi_bookmark_kit::GetThumbnail(node);
   change_info.nickname = vivaldi_bookmark_kit::GetNickname(node);
   change_info.theme_color = vivaldi_bookmark_kit::GetThemeColorForCSS(node);
+  change_info.display_url = vivaldi_bookmark_kit::GetDisplayURL(node);
   // End Vivaldi
 
   DispatchEvent(events::BOOKMARKS_ON_CHANGED,
@@ -224,6 +228,55 @@ void BookmarkEventRouter::BookmarkNodeChildrenReordered(
                 api::bookmarks::OnChildrenReordered::kEventName,
                 api::bookmarks::OnChildrenReordered::Create(
                     base::NumberToString(node->id()), reorder_info));
+}
+
+void BookmarkEventRouter::BookmarkPermanentNodeVisibilityChanged(
+    const BookmarkPermanentNode* node) {
+  if (!base::FeatureList::IsEnabled(
+          kEnforceBookmarkVisibilityOnExtensionsAPI)) {
+    return;
+  }
+
+  // Currently visibility can only change for permanent nodes. The
+  // implementation of this method assumes this for now, as a simplification.
+  CHECK(node->is_permanent_node());
+
+  if (node->IsVisible()) {
+    BookmarkTreeNode tree_node = bookmarks_helpers::GetBookmarkTreeNode(
+        model_, managed_, node, /*recurse=*/false, /*only_folders=*/false);
+
+    // Convert the index to be the index as seen by extensions.
+    tree_node.index = bookmarks_helpers::GetAPIIndexOf(*node);
+
+    DispatchEvent(events::BOOKMARKS_ON_CREATED,
+                  api::bookmarks::OnCreated::kEventName,
+                  api::bookmarks::OnCreated::Create(
+                      base::NumberToString(node->id()), tree_node));
+  } else {
+    // There are currently no scenarios where a node that has children is
+    // hidden.
+    CHECK(node->children().empty());
+
+    // Notify the API user that the node was removed.
+    api::bookmarks::OnRemoved::RemoveInfo remove_info;
+    remove_info.parent_id = base::NumberToString(node->parent()->id());
+    remove_info.index = bookmarks_helpers::GetAPIIndexOf(*node);
+
+    bookmarks_helpers::PopulateBookmarkTreeNode(
+        model_, managed_, node, /*recurse=*/true,
+        /*only_folders=*/false, /*visible_index=*/std::nullopt,
+        &remove_info.node);
+
+    // For consistency with OnRemoved events triggered by an individual node
+    // removal, do not populate the index, or parent_id fields.
+    remove_info.node.index = std::nullopt;
+    remove_info.node.parent_id = std::nullopt;
+
+    DispatchEvent(events::BOOKMARKS_ON_REMOVED,
+                  api::bookmarks::OnRemoved::kEventName,
+                  api::bookmarks::OnRemoved::Create(
+                      base::NumberToString(node->id()), remove_info));
+  }
 }
 
 void BookmarkEventRouter::ExtensiveBookmarkChangesBeginning() {
@@ -539,9 +592,21 @@ const BookmarkNode* BookmarksCreateFunction::CreateBookmarkNode(
   int64_t parent_id;
 
   if (!details.parent_id) {
-    // Optional, default to "other bookmarks".
+    // Optional, default to "other bookmarks" as a parent ID on desktop, "mobile
+    // bookmarks" on desktop Android.
+    // TODO(crbug.com/414844449): Currently, desktop Android still saves
+    // bookmarks to the mobile bookmarks folder and the bookmarks bar/other
+    // bookmarks folder are not visible if they are empty. This behavior is
+    // subject to change.
+#if BUILDFLAG(IS_ANDROID)
+    parent_id = model->account_mobile_node()
+                    ? model->account_mobile_node()->id()
+                    : model->mobile_node()->id();
+#else
     parent_id = model->account_other_node() ? model->account_other_node()->id()
                                             : model->other_node()->id();
+#endif  // BUILDFLAG(IS_ANDROID)
+
   } else if (!base::StringToInt64(*details.parent_id, &parent_id)) {
     *error = bookmarks_errors::kInvalidIdError;
     return nullptr;
@@ -561,8 +626,8 @@ const BookmarkNode* BookmarksCreateFunction::CreateBookmarkNode(
   // Only the root node currently has non-visible children. Validate this
   // assumption here, as otherwise this method would need to recalculate child
   // indices. This is a debug-only check since it is not constant-time.
-  DCHECK(std::ranges::all_of(parent->children(), [&model](const auto& child) {
-    return model->IsNodeVisible(*child);
+  DCHECK(std::ranges::all_of(parent->children(), [](const auto& child) {
+    return child->IsVisible();
   }));
 
   size_t index;
@@ -713,8 +778,8 @@ ExtensionFunction::ResponseValue BookmarksMoveFunction::RunOnReady() {
   // Only the root node currently has non-visible children. Validate this
   // assumption here, as otherwise this method would need to recalculate child
   // indices. This is a debug-only check since it is not constant-time.
-  DCHECK(std::ranges::all_of(parent->children(), [&model](const auto& child) {
-    return model->IsNodeVisible(*child);
+  DCHECK(std::ranges::all_of(parent->children(), [](const auto& child) {
+    return child->IsVisible();
   }));
 
   size_t index;
@@ -793,6 +858,8 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
     return Error(bookmarks_errors::kCannotSetUrlOfFolderError);
   }
 
+  const bool viv_url_changed = url != node->url();
+
   if (params->changes.nickname && !params->changes.nickname->empty() &&
       ::vivaldi_bookmark_kit::DoesNickExists(model, *params->changes.nickname,
                                              node)) {
@@ -839,6 +906,9 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
   }
   if (params->changes.bookmarkbar) {
     vivaldi_meta.SetBookmarkbar(*params->changes.bookmarkbar);
+  }
+  if (viv_url_changed) {
+    vivaldi_meta.SetDisplayUrl(GURL());
   }
   model->SetNodeMetaInfoMap(node, *vivaldi_meta.map());
 

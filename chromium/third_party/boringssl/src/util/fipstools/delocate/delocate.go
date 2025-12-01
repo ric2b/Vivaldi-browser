@@ -627,8 +627,10 @@ func (d *delocation) processAarch64Instruction(statement, instruction *node32) (
 						}
 						return statement, nil
 					} else if parts.pegRule == ruleLow12BitsSymbolRef {
-						if instructionName != "ldr" {
-							panic("Symbol reference outside of ldr instruction")
+						switch instructionName {
+						case "ldr", "ldrh", "ldrb", "ldrsw", "ldrsh", "ldrsb":
+						default:
+							panic("Symbol reference outside of load instruction")
 						}
 
 						// Suppress the offset; adrp loaded the full address. This assumes the

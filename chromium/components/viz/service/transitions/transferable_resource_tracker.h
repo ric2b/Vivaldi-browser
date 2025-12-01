@@ -19,7 +19,6 @@
 #include "components/viz/service/viz_service_export.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/common/sync_token.h"
-#include "ui/gfx/geometry/size.h"
 
 namespace viz {
 
@@ -30,7 +29,6 @@ class VIZ_SERVICE_EXPORT TransferableResourceTracker {
   // This represents a resource that is positioned somewhere on screen.
   struct VIZ_SERVICE_EXPORT PositionedResource {
     TransferableResource resource;
-    SurfaceSavedFrame::RenderPassDrawData draw_data;
   };
 
   // A SurfaceSavedFrame can be converted to a ResourceFrame via

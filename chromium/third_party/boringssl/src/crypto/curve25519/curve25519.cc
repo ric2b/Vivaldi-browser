@@ -762,7 +762,7 @@ static void table_select(ge_precomp *t, const int pos, const signed char b) {
 #if defined(__clang__)  // materialize for vectorization, 6% speedup
   __asm__("" : "+m"(t_bytes) : /*no inputs*/);
 #endif
-  static_assert(sizeof(t_bytes) == sizeof(k25519Precomp[pos][0]), "");
+  static_assert(sizeof(t_bytes) == sizeof(k25519Precomp[pos][0]));
   for (int i = 0; i < 8; i++) {
     constant_time_conditional_memxor(t_bytes, k25519Precomp[pos][i],
                                      sizeof(t_bytes),

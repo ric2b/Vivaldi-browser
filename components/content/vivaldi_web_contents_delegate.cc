@@ -15,6 +15,10 @@ void WebContentsDelegate::SetDownloadInformation(
 void WebContentsDelegate::CanDownload(const GURL& url,
                                       const std::string& request_method,
                                       base::OnceCallback<void(bool)> callback) {
+  if (IsWebApp()) {
+    std::move(callback).Run(true);
+    return;
+  }
 // NOTE(jarle@vivaldi.com): Ref. VAB-11056.
 #if BUILDFLAG(IS_ANDROID)
   std::move(callback).Run(true);

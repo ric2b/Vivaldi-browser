@@ -231,7 +231,18 @@ void FormStructure::DetermineHeuristicTypes(
 
 void FormStructure::RationalizeAndAssignSections(LogManager* log_manager,
                                                  bool legacy_order) {
-  if (!legacy_order) {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillUnifyRationalizationAndSectioningOrder)) {
+    // We call AssignSections() before *and* after rationalization because
+    // - rationalization depends on sections and
+    // - sectioning depends on field types, which rationalization may change.
+    AssignSections(fields_);
+    // TODO(crbug.com/408497919): Merge the two Rationalize*() functions when
+    // kAutofillUnifyRationalizationAndSectioningOrder is launched.
+    RationalizeFormStructure(log_manager);
+    RationalizePhoneNumberFieldsForFilling();
+    AssignSections(fields_);
+  } else if (!legacy_order) {
     AssignSections(fields_);
     RationalizeFormStructure(log_manager);
     RationalizePhoneNumberFieldsForFilling();
@@ -258,58 +269,48 @@ void FormStructure::RationalizeAndAssignSections(LogManager* log_manager,
   }
 }
 
-// static
-std::vector<FormDataPredictions> FormStructure::GetFieldTypePredictions(
-    base::span<const raw_ptr<FormStructure, VectorExperimental>>
-        form_structures) {
-  std::vector<FormDataPredictions> forms;
-  forms.reserve(form_structures.size());
-  for (const FormStructure* form_structure : form_structures) {
-    FormDataPredictions form;
-    form.data = form_structure->ToFormData();
-    form.signature = form_structure->FormSignatureAsStr();
-    form.alternative_signature = base::NumberToString(
-        form_structure->alternative_form_signature().value());
+FormDataPredictions FormStructure::GetFieldTypePredictions() const {
+  CHECK(base::FeatureList::IsEnabled(
+      features::test::kAutofillShowTypePredictions));
+  FormDataPredictions form;
+  form.data = ToFormData();
+  form.signature = FormSignatureAsStr();
+  form.alternative_signature =
+      base::NumberToString(alternative_form_signature().value());
 
-    for (const auto& field : form_structure->fields_) {
-      FormFieldDataPredictions annotated_field;
-      annotated_field.host_form_signature =
-          base::NumberToString(field->host_form_signature().value());
-      annotated_field.signature = field->FieldSignatureAsStr();
-      annotated_field.heuristic_type =
-          FieldTypeToStringView(field->heuristic_type());
-      if (!field->server_predictions().empty()) {
-        annotated_field.server_type =
-            FieldTypeToStringView(field->server_type());
-      }
-      if (std::optional<FieldType> autofill_ai_type =
-              field->GetAutofillAiServerTypePredictions()) {
-        annotated_field.autofill_ai_type =
-            FieldTypeToStringView(*autofill_ai_type);
-      }
-      if (base::optional_ref<const std::u16string> format_string =
-              field->format_string()) {
-        annotated_field.format_string = base::UTF16ToUTF8(*format_string);
-      }
-      annotated_field.html_type = FieldTypeToStringView(field->html_type());
-      annotated_field.overall_type = std::string(field->Type().ToStringView());
-      annotated_field.parseable_name =
-          base::UTF16ToUTF8(field->parseable_name());
-      annotated_field.parseable_label =
-          base::UTF16ToUTF8(field->parseable_label());
-      annotated_field.section = field->section().ToString();
-      annotated_field.rank = field->rank();
-      annotated_field.rank_in_signature_group =
-          field->rank_in_signature_group();
-      annotated_field.rank_in_host_form = field->rank_in_host_form();
-      annotated_field.rank_in_host_form_signature_group =
-          field->rank_in_host_form_signature_group();
-      form.fields.push_back(annotated_field);
+  for (const auto& field : fields_) {
+    FormFieldDataPredictions annotated_field;
+    annotated_field.host_form_signature =
+        base::NumberToString(field->host_form_signature().value());
+    annotated_field.signature = field->FieldSignatureAsStr();
+    annotated_field.heuristic_type =
+        FieldTypeToStringView(field->heuristic_type());
+    if (!field->server_predictions().empty()) {
+      annotated_field.server_type = FieldTypeToStringView(field->server_type());
     }
-
-    forms.push_back(form);
+    if (std::optional<FieldType> autofill_ai_type =
+            field->GetAutofillAiServerTypePredictions()) {
+      annotated_field.autofill_ai_type =
+          FieldTypeToStringView(*autofill_ai_type);
+    }
+    if (base::optional_ref<const std::u16string> format_string =
+            field->format_string()) {
+      annotated_field.format_string = base::UTF16ToUTF8(*format_string);
+    }
+    annotated_field.html_type = FieldTypeToStringView(field->html_type());
+    annotated_field.overall_type = std::string(field->Type().ToStringView());
+    annotated_field.parseable_name = base::UTF16ToUTF8(field->parseable_name());
+    annotated_field.parseable_label =
+        base::UTF16ToUTF8(field->parseable_label());
+    annotated_field.section = field->section().ToString();
+    annotated_field.rank = field->rank();
+    annotated_field.rank_in_signature_group = field->rank_in_signature_group();
+    annotated_field.rank_in_host_form = field->rank_in_host_form();
+    annotated_field.rank_in_host_form_signature_group =
+        field->rank_in_host_form_signature_group();
+    form.fields.push_back(annotated_field);
   }
-  return forms;
+  return form;
 }
 
 // static
@@ -550,74 +551,9 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
       continue;
     }
 
-    // TODO: crbug.com/40227496 - Simplify the `switch` statement once
-    // kAutofillFixValueSemantics is launched.
-    // TODO: crbug.com/40227496 - Remove the IsSelectElement()
-    // checks once kAutofillFixValueSemantics is launched.
-    // TODO: crbug.com/40227496 - Update the comments when the experiments are
-    // launched.
-    switch (reason) {
-      case RetrieveFromCacheReason::kFormCacheUpdateAfterParsing:
-      case RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing:
-        // If kAutofillFixValueSemantics is disabled: During form parsing (as in
-        // "assigning field types to fields") the `value` represents the initial
-        // value found at page load and needs to be preserved.
-        if (!field->IsSelectElement() ||
-            base::FeatureList::IsEnabled(
-                features::kAutofillFixInitialValueOfSelect)) {
-          field->set_initial_value(
-              cached_field->value(ValueSemantics::kInitial), /*pass_key=*/{});
-        }
-        break;
-      case RetrieveFromCacheReason::kFormImport:
-        // TODO: crbug.com/40227496 - Group IsSelectElement() checks.
-        if ((!field->IsSelectElement() ||
-             base::FeatureList::IsEnabled(
-                 features::kAutofillFixInitialValueOfSelect)) &&
-            base::FeatureList::IsEnabled(
-                features::kAutofillFixValueSemantics)) {
-          field->set_initial_value(
-              cached_field->value(ValueSemantics::kInitial), /*pass_key=*/{});
-        }
-        // From the perspective of learning user data, text fields containing
-        // default values are equivalent to empty fields. So if the value of
-        // a submitted form corresponds to the initial value of the field, we
-        // clear that value.
-        // Since a website can prefill country and state values based on
-        // GeoIP, we want to hold on to these values.
-        const bool same_value_as_on_page_load =
-            field->value(ValueSemantics::kCurrent) ==
-            cached_field->value(ValueSemantics::kInitial);
-        const bool had_type =
-            cached_field->Type().GetStorableType() > FieldType::UNKNOWN_TYPE ||
-            !cached_field->possible_types().empty();
-        if (!cached_field->value(ValueSemantics::kInitial).empty() &&
-            (!field->IsSelectElement() ||
-             base::FeatureList::IsEnabled(
-                 features::kAutofillFixInitialValueOfSelect)) &&
-            had_type) {
-          field->set_initial_value_changed(!same_value_as_on_page_load);
-        }
-        // TODO: crbug.com/40137859 - The server type hasn't been set yet (it is
-        // set a few lines further down below), so this is trivially true. Once
-        // kAutofillFixCurrentValueInImport is launched, consider adding this
-        // to AutofillField::value_for_import() and running an experiment for
-        // this.
-        const bool field_is_neither_state_nor_country =
-            field->server_type() != ADDRESS_HOME_COUNTRY &&
-            field->server_type() != ADDRESS_HOME_STATE;
-        if ((!field->IsSelectElement() &&
-             !base::FeatureList::IsEnabled(
-                 features::kAutofillFixCurrentValueInImport)) &&
-            same_value_as_on_page_load && field_is_neither_state_nor_country) {
-          field->set_value(std::u16string());
-        }
-        break;
-    }
-
+    field->set_initial_value(cached_field->initial_value(),
+                             /*pass_key=*/{});
     field->set_server_predictions(cached_field->server_predictions());
-
-    // Preserve state whether the field was autofilled before.
     if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing ||
         reason == RetrieveFromCacheReason::kFormCacheUpdateAfterParsing) {
       field->set_is_autofilled(cached_field->is_autofilled());
@@ -626,8 +562,6 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         cached_field->autofill_source_profile_guid());
     field->set_autofilled_type(cached_field->autofilled_type());
     field->set_filling_product(cached_field->filling_product());
-    field->set_may_use_prefilled_placeholder(
-        cached_field->may_use_prefilled_placeholder());
     field->set_previously_autofilled(cached_field->previously_autofilled());
     field->set_did_trigger_suggestions(cached_field->did_trigger_suggestions());
     field->set_was_focused(cached_field->was_focused());
@@ -657,12 +591,8 @@ void FormStructure::RetrieveFromCache(const FormStructure& cached_form,
         field->set_ml_supported_types(cached_ml_types.value());
       }
       field->SetHtmlType(cached_field->html_type(), cached_field->html_mode());
-      if (reason == RetrieveFromCacheReason::kFormCacheUpdateWithoutParsing) {
-        // TODO: crbug.com/392179445 - Also do this for `kFormImport`, i.e.,
-        // remove the `if` condition.
-        field->set_credit_card_number_offset(
-            cached_field->credit_card_number_offset());
-      }
+      field->set_credit_card_number_offset(
+          cached_field->credit_card_number_offset());
       field->set_section(cached_field->section());
       field->set_only_fill_when_focused(cached_field->only_fill_when_focused());
 
@@ -762,6 +692,11 @@ FieldCandidatesMap FormStructure::ParseFieldTypesWithPatterns(
       FormFieldParser::ParseStandaloneEmailFields(context, fields_,
                                                   field_type_map);
     }
+    // Try parsing standalone loyalty card fields after an attempt has been
+    // made to parse multi-purpose input fields e.g. email or loyalty number
+    // fields.
+    FormFieldParser::ParseStandaloneLoyaltyCardFields(context, fields_,
+                                                      field_type_map);
   }
   return field_type_map;
 }
@@ -1015,8 +950,7 @@ std::ostream& operator<<(std::ostream& buffer, const FormStructure& form) {
         0, std::min(field->label().length(), kMaxLabelSize));
     buffer << "\n  Label: " << truncated_label;
 
-    buffer << "\n  Is empty: "
-           << ToYesOrNo(field->value(ValueSemantics::kCurrent).empty());
+    buffer << "\n  Is empty: " << ToYesOrNo(field->value().empty());
   }
   return buffer;
 }
@@ -1147,8 +1081,7 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
         label.substr(0, std::min(label.length(), kMaxLabelSize));
     buffer << Tr{} << "Label:" << truncated_label;
 
-    buffer << Tr{} << "Is empty:"
-           << ToYesOrNo(field->value(ValueSemantics::kCurrent).empty());
+    buffer << Tr{} << "Is empty:" << ToYesOrNo(field->value().empty());
     buffer << Tr{} << "Is focusable:"
            << (field->IsFocusable() ? "Yes (focusable)" : "No (unfocusable)");
     buffer << Tr{} << "Is visible:"
@@ -1161,13 +1094,6 @@ LogBuffer& operator<<(LogBuffer& buffer, const FormStructure& form) {
                   field->rank(), field->rank_in_signature_group(),
                   field->rank_in_host_form(),
                   field->rank_in_host_form_signature_group());
-    if (field->may_use_prefilled_placeholder().has_value()) {
-      buffer << Tr{} << "Pre-filled value:"
-             << base::StrCat(
-                    {"is classified as ",
-                     (*field->may_use_prefilled_placeholder() ? "a placeholder"
-                                                              : "meaningful")});
-    }
     buffer << CTag{"table"};
     buffer << CTag{"td"};
     buffer << CTag{"tr"};

@@ -40,11 +40,12 @@ TEST_F(CFGASTxtBreakTest, BidiLine) {
   // SAFETY: known fixed-length string.
   WideString input =
       WideString::FromUTF8(UNSAFE_BUFFERS(ByteStringView("\xa\x0\xa\xa", 4)));
-  for (wchar_t ch : input)
+  for (wchar_t ch : input) {
     txt_break->AppendChar(ch);
+  }
 
   std::vector<CFGAS_Char> chars =
-      txt_break->GetCurrentLineForTesting()->m_LineChars;
+      txt_break->GetCurrentLineForTesting()->line_chars_;
   CFGAS_Char::BidiLine(&chars, chars.size());
   EXPECT_EQ(3u, chars.size());
 }

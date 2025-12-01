@@ -31,6 +31,7 @@
 #include <memory>
 
 #include "base/gtest_prod_util.h"
+#include "cc/layers/texture_layer_client.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_value.h"
@@ -71,6 +72,7 @@ class GraphicsContext;
 class HTMLCanvasElement;
 class ImageBitmapOptions;
 class StaticBitmapImageToVideoFrameCopier;
+class SharedContextRateLimiter;
 
 class
     CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext;
@@ -87,6 +89,7 @@ class CORE_EXPORT HTMLCanvasElement final
       public ExecutionContextLifecycleObserver,
       public PageVisibilityObserver,
       public CanvasRenderingContextHost,
+      public cc::TextureLayerClient,
       public WebSurfaceLayerBridgeObserver,
       public OffscreenCanvasPlaceholder {
   DEFINE_WRAPPERTYPEINFO();
@@ -98,12 +101,21 @@ class CORE_EXPORT HTMLCanvasElement final
   explicit HTMLCanvasElement(Document&);
   ~HTMLCanvasElement() override;
 
+  // cc::TextureLayerClient implementation.
+  bool PrepareTransferableResource(
+      viz::TransferableResource* out_resource,
+      viz::ReleaseCallback* out_release_callback) override;
+  bool IsResourceValid();
+
   // Attributes and functions exposed to script
   unsigned width() const { return Size().width(); }
   unsigned height() const { return Size().height(); }
 
   void setWidth(unsigned, ExceptionState&);
   void setHeight(unsigned, ExceptionState&);
+
+  void setLayoutSubtree(bool);
+  bool layoutSubtree() const;
 
   void SetSize(gfx::Size new_size) final;
 
@@ -165,7 +177,23 @@ class CORE_EXPORT HTMLCanvasElement final
 
   CanvasHibernationHandler* GetHibernationHandler() const;
 
+  unsigned IncrementFramesSinceLastCommit() {
+    return ++frames_since_last_commit_;
+  }
+
+  SharedContextRateLimiter* RateLimiter() const;
+  void CreateRateLimiter();
+
+  void SetIsDisplayed(bool);
+  bool IsDisplayed() const { return is_displayed_; }
+
+  cc::TextureLayer* GetOrCreateCcLayerIfNeeded();
+  cc::TextureLayer* GetCcLayerForTesting() { return cc_layer_.get(); }
+  void ClearLayerTexture() override;
+
   Canvas2DLayerBridge* GetOrCreateCanvas2DLayerBridge();
+
+  void SetNeedsPushProperties();
 
   void DiscardResourceProvider() override;
 
@@ -189,6 +217,7 @@ class CORE_EXPORT HTMLCanvasElement final
   void PostFinalizeFrame(FlushReason) override;
 
   CanvasResourceDispatcher* GetOrCreateResourceDispatcher() override;
+  void DiscardResourceDispatcher() override { frame_dispatcher_ = nullptr; }
 
   bool PushFrame(scoped_refptr<CanvasResource>&& image,
                  const SkIRect& damage_rect) override;
@@ -223,8 +252,7 @@ class CORE_EXPORT HTMLCanvasElement final
   size_t GetMemoryUsage() const override;
   bool ShouldAccelerate2dContext() const override;
   bool LowLatencyEnabled() const override;
-  CanvasResourceProvider* GetOrCreateCanvasResourceProvider(
-      RasterModeHint hint) override;
+  CanvasResourceProvider* GetOrCreateCanvasResourceProvider() override;
   bool IsPrinting() const override;
   bool IsHibernating() const override;
   void SetTransferToGPUTextureWasInvoked() override;
@@ -287,10 +315,6 @@ class CORE_EXPORT HTMLCanvasElement final
   }
 
   void UpdateSuspendOffscreenCanvasAnimation();
-
-  bool HasPlacedElements() const final;
-  void PaintPlacedElements() const;
-  void MarkPlacedElementDirty(Element* placedElement);
 
   // Gets the settings of this Html Canvas Element. If there is a frame, it will
   // return the settings from the frame. If it is a frameless element it will
@@ -376,6 +400,7 @@ class CORE_EXPORT HTMLCanvasElement final
   bool AreAuthorShadowsAllowed() const override { return false; }
 
   void Reset();
+  void ResetLayer();
 
   void SetSurfaceSize(gfx::Size);
 
@@ -419,6 +444,13 @@ class CORE_EXPORT HTMLCanvasElement final
   bool ignore_reset_ = false;
   gfx::Rect dirty_rect_;
 
+  scoped_refptr<cc::TextureLayer> cc_layer_;
+
+  bool is_opaque_ = false;
+  bool is_displayed_ = false;
+  unsigned frames_since_last_commit_ = 0;
+  std::unique_ptr<SharedContextRateLimiter> rate_limiter_;
+  gfx::HDRMetadata hdr_metadata_;
   bool origin_clean_;
   bool needs_unbuffered_input_ = false;
   bool style_is_visible_ = false;

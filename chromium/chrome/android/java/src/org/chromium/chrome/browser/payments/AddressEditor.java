@@ -20,7 +20,6 @@ import static org.chromium.chrome.browser.autofill.editors.EditorProperties.Fiel
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.FieldProperties.VALUE;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.ItemType.DROPDOWN;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.ItemType.TEXT_INPUT;
-import static org.chromium.chrome.browser.autofill.editors.EditorProperties.SHOW_REQUIRED_INDICATOR;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.TextFieldProperties.TEXT_ALL_KEYS;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.TextFieldProperties.TEXT_FIELD_TYPE;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.TextFieldProperties.TEXT_FORMATTER;
@@ -170,12 +169,13 @@ public class AddressEditor extends EditorBase<AutofillAddress>
     }
 
     /**
-     * Allows calling |edit| with a single callback used for both 'done' and 'cancel'.
-     * @see #edit(AutofillAddress, Callback, Callback)
+     * Allows calling |showEditPrompt| with a single callback used for both 'done' and 'cancel'.
+     *
+     * @see #showEditPrompt(AutofillAddress, Callback, Callback)
      */
-    public void edit(
+    public void showEditPrompt(
             @Nullable final AutofillAddress toEdit, final Callback<AutofillAddress> callback) {
-        edit(toEdit, callback, callback);
+        showEditPrompt(toEdit, callback, callback);
     }
 
     /**
@@ -190,11 +190,11 @@ public class AddressEditor extends EditorBase<AutofillAddress>
      * [ phone number field  ] <----- phone is always present.
      */
     @Override
-    public void edit(
+    public void showEditPrompt(
             @Nullable final AutofillAddress toEdit,
             final Callback<AutofillAddress> doneCallback,
             final Callback<AutofillAddress> cancelCallback) {
-        super.edit(toEdit, doneCallback, cancelCallback);
+        super.showEditPrompt(toEdit, doneCallback, cancelCallback);
         if (mAutofillProfileBridge == null) mAutofillProfileBridge = new AutofillProfileBridge();
         mDoneCallback = doneCallback;
         mCancelCallback = cancelCallback;
@@ -278,7 +278,6 @@ public class AddressEditor extends EditorBase<AutofillAddress>
         mEditorModel =
                 new PropertyModel.Builder(ALL_KEYS)
                         .with(EDITOR_TITLE, editTitle)
-                        .with(SHOW_REQUIRED_INDICATOR, true)
                         .with(EDITOR_FIELDS, new ListModel())
                         .with(DONE_RUNNABLE, this::onDone)
                         .with(CANCEL_RUNNABLE, this::onCancel)

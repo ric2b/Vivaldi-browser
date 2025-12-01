@@ -4,6 +4,7 @@
 
 #include "ash/shelf/shelf_navigation_widget.h"
 
+#include "ash/accessibility/ui/accessibility_focusable_widget_delegate.h"
 #include "ash/focus/focus_cycler.h"
 #include "ash/public/cpp/metrics_util.h"
 #include "ash/public/cpp/shelf_config.h"
@@ -253,15 +254,17 @@ class ASH_EXPORT NavigationButtonAnimationMetricsReporter {
       weak_ptr_factory_{this};
 };
 
-class ShelfNavigationWidget::Delegate : public views::AccessiblePaneView,
-                                        public views::WidgetDelegate {
+class ShelfNavigationWidgetDelegate
+    : public views::AccessiblePaneView,
+      public AccessibilityFocusableWidgetDelegate {
  public:
-  Delegate(Shelf* shelf, ShelfView* shelf_view);
+  ShelfNavigationWidgetDelegate(Shelf* shelf, ShelfView* shelf_view);
 
-  Delegate(const Delegate&) = delete;
-  Delegate& operator=(const Delegate&) = delete;
+  ShelfNavigationWidgetDelegate(const ShelfNavigationWidgetDelegate&) = delete;
+  ShelfNavigationWidgetDelegate& operator=(
+      const ShelfNavigationWidgetDelegate&) = delete;
 
-  ~Delegate() override;
+  ~ShelfNavigationWidgetDelegate() override;
 
   // views::View:
   FocusTraversable* GetPaneFocusTraversable() override;
@@ -270,7 +273,6 @@ class ShelfNavigationWidget::Delegate : public views::AccessiblePaneView,
   View* GetDefaultFocusableChild() override;
 
   // views::WidgetDelegate:
-  bool CanActivate() const override;
   views::Widget* GetWidget() override { return View::GetWidget(); }
   const views::Widget* GetWidget() const override { return View::GetWidget(); }
 
@@ -293,9 +295,12 @@ class ShelfNavigationWidget::Delegate : public views::AccessiblePaneView,
   raw_ptr<Shelf> shelf_ = nullptr;
 };
 
-ShelfNavigationWidget::Delegate::Delegate(Shelf* shelf, ShelfView* shelf_view)
-    : shelf_(shelf) {
-  SetOwnedByWidget(true);
+ShelfNavigationWidgetDelegate::ShelfNavigationWidgetDelegate(
+    Shelf* shelf,
+    ShelfView* shelf_view)
+    : AccessibilityFocusableWidgetDelegate(/*register_widget=*/false),
+      shelf_(shelf) {
+  SetOwnedByWidget(OwnedByWidgetPassKey());
 
   set_allow_deactivate_on_esc(true);
 
@@ -330,26 +335,20 @@ ShelfNavigationWidget::Delegate::Delegate(Shelf* shelf, ShelfView* shelf_view)
   RefreshAccessibilityWidgetNextPreviousFocus(shelf);
 }
 
-ShelfNavigationWidget::Delegate::~Delegate() = default;
-
-bool ShelfNavigationWidget::Delegate::CanActivate() const {
-  // We don't want mouse clicks to activate us, but we need to allow
-  // activation when the user is using the keyboard (FocusCycler).
-  return Shell::Get()->focus_cycler()->widget_activating() == GetWidget();
-}
+ShelfNavigationWidgetDelegate::~ShelfNavigationWidgetDelegate() = default;
 
 views::FocusTraversable*
-ShelfNavigationWidget::Delegate::GetPaneFocusTraversable() {
+ShelfNavigationWidgetDelegate::GetPaneFocusTraversable() {
   return this;
 }
 
-views::View* ShelfNavigationWidget::Delegate::GetDefaultFocusableChild() {
+views::View* ShelfNavigationWidgetDelegate::GetDefaultFocusableChild() {
   return default_last_focusable_child_ ? GetLastFocusableChild()
                                        : GetFirstFocusableChild();
 }
 
-void ShelfNavigationWidget::Delegate::
-    RefreshAccessibilityWidgetNextPreviousFocus(Shelf* shelf) {
+void ShelfNavigationWidgetDelegate::RefreshAccessibilityWidgetNextPreviousFocus(
+    Shelf* shelf) {
   if (!shelf || !shelf->shelf_widget()) {
     return;
   }
@@ -385,13 +384,14 @@ views::BoundsAnimator* ShelfNavigationWidget::TestApi::GetBoundsAnimator() {
 }
 
 views::View* ShelfNavigationWidget::TestApi::GetWidgetDelegateView() {
-  return static_cast<Delegate*>(navigation_widget_->widget_delegate());
+  return static_cast<ShelfNavigationWidgetDelegate*>(
+      navigation_widget_->widget_delegate());
 }
 
 ShelfNavigationWidget::ShelfNavigationWidget(Shelf* shelf,
                                              ShelfView* shelf_view)
     : shelf_(shelf),
-      delegate_(new ShelfNavigationWidget::Delegate(shelf, shelf_view)),
+      delegate_(new ShelfNavigationWidgetDelegate(shelf, shelf_view)),
       bounds_animator_(
           std::make_unique<views::BoundsAnimator>(delegate_,
                                                   /*use_transforms=*/true)),

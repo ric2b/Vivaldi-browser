@@ -13,8 +13,10 @@
 #include "android_webview/common/crash_reporter/crash_keys.h"
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/android/path_utils.h"
 #include "base/base_paths_posix.h"
 #include "base/memory/raw_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -50,10 +52,30 @@ const char kAuthServerAllowlist[] = "auth.server_allowlist";
 // navigated to any of these urls, browse intent will be sent.
 const char kEnterpriseAuthAppLinkPolicy[] = "enterprise_auth_app_link_policy";
 
+// App is provided with a cache quota by the Android framework.
+// This pref contains the last known value of the cache quota which was queried
+// by WebView. -1 denotes no known value.
+const char kLastKnownAppCacheQuota[] =
+    "android_webview.last_known_app_cache_quota";
+
 }  // namespace prefs
 
 namespace {
 AwBrowserProcess* g_aw_browser_process = nullptr;
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class CacheQuotaFreshness {
+  kInMemory = 0,
+  kInPref = 1,
+  kAbsent = 2,
+  kMaxValue = kAbsent,
+};
+
+void recordCacheQuotaFreshness(CacheQuotaFreshness state) {
+  base::UmaHistogramEnumeration("Android.WebView.CacheQuotaFreshness", state);
+}
+
 }  // namespace
 
 // static
@@ -225,6 +247,12 @@ void AwBrowserProcess::RegisterEnterpriseAuthenticationAppLinkPolicyPref(
   pref_registry->RegisterListPref(prefs::kEnterpriseAuthAppLinkPolicy);
 }
 
+// static
+void AwBrowserProcess::RegisterAppCacheQuotaLocalStatePref(
+    PrefRegistrySimple* pref_registry) {
+  pref_registry->RegisterInt64Pref(prefs::kLastKnownAppCacheQuota, -1);
+}
+
 network::mojom::HttpAuthDynamicParamsPtr
 AwBrowserProcess::CreateHttpAuthDynamicParams() {
   network::mojom::HttpAuthDynamicParamsPtr auth_dynamic_params =
@@ -258,6 +286,39 @@ AwBrowserProcess::GetOriginTrialsSettingsStorage() {
 
 AwContentBrowserClient* AwBrowserProcess::GetBrowserClient() {
   return &*browser_client_;
+}
+
+int64_t AwBrowserProcess::GetHostAppCacheQuota() {
+  {
+    base::AutoLock lock(lock_);
+    if (app_cache_quota_ != -1) {
+      recordCacheQuotaFreshness(CacheQuotaFreshness::kInMemory);
+      return app_cache_quota_;
+    }
+  }
+  int64_t quota = AwBrowserProcess::GetInstance()->local_state()->GetInt64(
+      prefs::kLastKnownAppCacheQuota);
+  if (quota == -1) {
+    recordCacheQuotaFreshness(CacheQuotaFreshness::kAbsent);
+  } else {
+    recordCacheQuotaFreshness(CacheQuotaFreshness::kInPref);
+  }
+  return quota;
+}
+
+void AwBrowserProcess::FetchHostAppCacheQuota() {
+  int64_t cache_quota = base::android::GetCacheQuotaBytes();
+  {
+    base::AutoLock lock(lock_);
+    app_cache_quota_ = cache_quota;
+  }
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(
+                     [](int64_t cache_quota) {
+                       AwBrowserProcess::GetInstance()->local_state()->SetInt64(
+                           prefs::kLastKnownAppCacheQuota, cache_quota);
+                     },
+                     cache_quota));
 }
 
 // static

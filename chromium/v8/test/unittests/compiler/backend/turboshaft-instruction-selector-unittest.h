@@ -366,6 +366,10 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
       return Load(base, index, LoadOp::Kind::RawAligned(), mem_rep,
                   mem_rep.ToRegisterRepresentation());
     }
+    OpIndex Load(MemoryRepresentation mem_rep, RegisterRepresentation reg_rep,
+                 OpIndex base, OpIndex index) {
+      return Load(base, index, LoadOp::Kind::RawAligned(), mem_rep, reg_rep);
+    }
     OpIndex Load(MachineType type, OpIndex base) {
       MemoryRepresentation mem_rep =
           MemoryRepresentation::FromMachineType(type);
@@ -377,6 +381,11 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
       return Load(base, index, LoadOp::Kind::RawAligned().Immutable(), mem_rep);
     }
     using Assembler::Store;
+    void Store(MemoryRepresentation mem_rep, OpIndex base, OpIndex index,
+               OpIndex value, WriteBarrierKind write_barrier) {
+      Store(base, index, value, StoreOp::Kind::RawAligned(), mem_rep,
+            write_barrier);
+    }
     void Store(MachineRepresentation rep, OpIndex base, OpIndex index,
                OpIndex value, WriteBarrierKind write_barrier) {
       MemoryRepresentation mem_rep =
@@ -490,6 +499,10 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
       return instructions_[index];
     }
 
+    const InstructionBlock* BlockAt(size_t index) {
+      return instruction_blocks_->at(index);
+    }
+
     bool IsDouble(const InstructionOperand* operand) const {
       return IsDouble(ToVreg(operand));
     }
@@ -596,6 +609,7 @@ class TurboshaftInstructionSelectorTest : public TestWithNativeContextAndZone {
     ConstantMap constants_;
     ConstantMap immediates_;
     std::deque<Instruction*> instructions_;
+    InstructionBlocks* instruction_blocks_;
     std::set<int> doubles_;
     std::set<int> references_;
     VirtualRegisters virtual_registers_;

@@ -7,7 +7,8 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_id.h"
 #include "ui/compositor/layer.h"
-#include "ui/gfx/canvas.h"
+#include "ui/compositor/layer_type.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 
@@ -25,6 +26,11 @@ ScrimView::ScrimView() {
   // grey scrim which lightens a dark background.
   SetBackground(views::CreateSolidBackground(ui::kColorSysStateScrim));
   SetVisible(false);
+}
+
+void ScrimView::SetRoundedCorners(const gfx::RoundedCornersF& radii) {
+  layer()->SetRoundedCornerRadius(radii);
+  layer()->SetIsFastRoundedCorner(true);
 }
 
 BEGIN_METADATA(ScrimView)

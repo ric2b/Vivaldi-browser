@@ -15,9 +15,11 @@
 #include "third_party/blink/renderer/core/animation/css_position_axis_list_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/interpolable_length.h"
 #include "third_party/blink/renderer/core/animation/interpolable_value.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_path_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
+#include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_shape_value.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
@@ -151,8 +153,12 @@ class ShapeSegmentInterpolationBuilder {
     Write(segment.target_point);
     interpolable_values.push_back(MakeGarbageCollected<InterpolableNumber>(
         segment.angle, CSSPrimitiveValue::UnitType::kDegrees));
-    Write(segment.radius.Width());
-    Write(segment.radius.Height());
+    interpolable_values.push_back(InterpolableLength::MaybeConvertLength(
+        segment.radius.Width(), property_, zoom_, std::nullopt));
+    interpolable_values.push_back(InterpolableLength::MaybeConvertLength(
+        segment.radius.Height(), property_, zoom_, std::nullopt));
+    interpolable_values.push_back(InterpolableLength::MaybeConvertLength(
+        segment.direction_agnostic_radius, property_, zoom_, std::nullopt));
     interpolable_values.push_back(
         MakeGarbageCollected<InterpolableNumber>(segment.large ? 1.f : 0.f));
     interpolable_values.push_back(
@@ -271,6 +277,7 @@ InterpolationValue ConvertPath(const StylePath* style_path,
                 segment.ArcAngle(), CSSPrimitiveValue::UnitType::kDegrees));
         WriteLength(segment.ArcRadiusX());
         WriteLength(segment.ArcRadiusY());
+        WriteLength(0);
         interpolable_segments.push_back(
             MakeGarbageCollected<InterpolableNumber>(
                 segment.LargeArcFlag() ? 1.f : 0.f));
@@ -336,7 +343,7 @@ class UnderlyingShapeConversionChecker final
     visitor->Trace(value_);
   }
 
-  bool IsValid(const InterpolationEnvironment&,
+  bool IsValid(const CSSInterpolationEnvironment&,
                const InterpolationValue& underlying) const final {
     return value_->GetWindRule() ==
                To<ShapeNonInterpolableValue>(*underlying.non_interpolable_value)
@@ -390,12 +397,19 @@ class ShapeInterpolationReader {
     LengthPoint target_point = ReadPoint();
     double angle = To<InterpolableNumber>(*value_list_.Get(index_++))
                        .Value(conversion_data_);
-    LengthSize radius(ReadLength(), ReadLength());
+    Length radius_x = ReadLength();
+    Length radius_y = ReadLength();
+    Length direction_agnostic_radius = ReadLength();
     double arc_large = To<InterpolableNumber>(*value_list_.Get(index_++))
                            .Value(conversion_data_);
     double arc_sweep = To<InterpolableNumber>(*value_list_.Get(index_++))
                            .Value(conversion_data_);
-    return T{{{target_point}, angle, radius, arc_large > 0.f, arc_sweep > 0.f}};
+    return T{{{target_point},
+              angle,
+              LengthSize(radius_x, radius_y),
+              direction_agnostic_radius,
+              arc_large > 0.f,
+              arc_sweep > 0.f}};
   }
 
   Length ReadLength() {
@@ -419,15 +433,29 @@ class ShapeInterpolationReader {
 // If the property's value is not a shape(), returns nullptr.
 const BasicShape* GetShapeOrPath(const CSSProperty& property,
                                  const ComputedStyle& style) {
-  // TODO(crbug.com/389713717) support also offset-path
-  CHECK_EQ(property.PropertyID(), CSSPropertyID::kClipPath);
-  auto* shape = DynamicTo<ShapeClipPathOperation>(style.ClipPath());
-  if (!shape) {
-    return nullptr;
+  const BasicShape* shape = nullptr;
+  switch (property.PropertyID()) {
+    case CSSPropertyID::kClipPath: {
+      auto* operation = DynamicTo<ShapeClipPathOperation>(style.ClipPath());
+      if (!operation) {
+        return nullptr;
+      }
+      shape = operation->GetBasicShape();
+      break;
+    }
+    case CSSPropertyID::kOffsetPath: {
+      auto* operation = DynamicTo<ShapeOffsetPathOperation>(style.OffsetPath());
+      if (!operation) {
+        return nullptr;
+      }
+      shape = &operation->GetBasicShape();
+      break;
+    }
+    default:
+      NOTREACHED();
   }
-  if (IsA<StylePath>(shape->GetBasicShape()) ||
-      IsA<StyleShape>(shape->GetBasicShape())) {
-    return shape->GetBasicShape();
+  if (IsA<StylePath>(shape) || IsA<StyleShape>(shape)) {
+    return shape;
   }
   return nullptr;
 }
@@ -547,16 +575,26 @@ void CSSShapeInterpolationType::ApplyStandardPropertyValue(
     const InterpolableValue& interpolable_value,
     const NonInterpolableValue* non_interpolable_value,
     StyleResolverState& state) const {
-  // TODO(crbug.com/389713717) support also offset-path
-  CHECK_EQ(CssProperty().PropertyID(), CSSPropertyID::kClipPath);
-  auto* shape = CreateShape(interpolable_value, non_interpolable_value,
-                            state.CssToLengthConversionData());
-
-  // TODO(nrosenthal): Handle geometry box.
-  state.StyleBuilder().SetClipPath(
-      shape ? MakeGarbageCollected<ShapeClipPathOperation>(
-                  shape, GeometryBox::kBorderBox)
-            : nullptr);
+  BasicShape* shape = CreateShape(interpolable_value, non_interpolable_value,
+                                  state.CssToLengthConversionData());
+  switch (CssProperty().PropertyID()) {
+    case CSSPropertyID::kClipPath:
+      // TODO(nrosenthal): Handle geometry box.
+      state.StyleBuilder().SetClipPath(
+          shape ? MakeGarbageCollected<ShapeClipPathOperation>(
+                      shape, GeometryBox::kBorderBox)
+                : nullptr);
+      break;
+    case CSSPropertyID::kOffsetPath:
+      // TODO(nrosenthal): Handle coord box.
+      state.StyleBuilder().SetOffsetPath(
+          shape ? MakeGarbageCollected<ShapeOffsetPathOperation>(
+                      shape, CoordBox::kBorderBox)
+                : nullptr);
+      break;
+    default:
+      NOTREACHED();
+  }
 }
 
 void CSSShapeInterpolationType::Composite(
@@ -667,7 +705,7 @@ InterpolationValue CSSShapeInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSShapeInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState*,
+    const StyleResolverState&,
     ConversionCheckers&) const {
   const CSSValue* first_value = &value;
   if (const auto* list = DynamicTo<CSSValueList>(value)) {
@@ -771,7 +809,20 @@ InterpolationValue CSSShapeInterpolationType::MaybeConvertValue(
         WritePair(To<CSSValuePair>(arc.GetEndPoint()));
         interpolable_segments.push_back(
             MakeGarbageCollected<InterpolableNumber>(arc.Angle()));
-        WritePair(arc.Radius());
+        interpolable_segments.push_back(
+            arc.HasDirectionAgnosticRadius()
+                ? InterpolableLength::CreatePixels(0)
+                : InterpolableLength::MaybeConvertCSSValue(
+                      arc.Radius().First()));
+        interpolable_segments.push_back(
+            arc.HasDirectionAgnosticRadius()
+                ? InterpolableLength::CreatePixels(0)
+                : InterpolableLength::MaybeConvertCSSValue(
+                      arc.Radius().Second()));
+        interpolable_segments.push_back(
+            arc.HasDirectionAgnosticRadius()
+                ? InterpolableLength::MaybeConvertCSSValue(arc.Radius().First())
+                : InterpolableLength::CreatePixels(0));
         interpolable_segments.push_back(
             MakeGarbageCollected<InterpolableNumber>(
                 arc.Size() == CSSValueID::kLarge ? 1.f : 0.f));

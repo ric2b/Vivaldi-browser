@@ -29,6 +29,7 @@
 #include "base/test/with_feature_override.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
+#include "base/version_info/version_info.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -47,6 +48,7 @@
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -213,7 +215,8 @@ class ContextMenuBrowserTestBase : public MixinBasedInProcessBrowserTest {
         {media::kContextMenuSaveVideoFrameAs,
          media::kContextMenuSearchForVideoFrame,
          toast_features::kLinkCopiedToast, toast_features::kImageCopiedToast,
-         toast_features::kToastFramework},
+         toast_features::kVideoFrameCopiedToast, features::kSideBySide,
+         features::kSideBySideLinkMenuNewBadge},
         {});
   }
 
@@ -841,17 +844,8 @@ class ContextMenuForSupervisedUsersBrowserTest
 
 IN_PROC_BROWSER_TEST_F(ContextMenuForSupervisedUsersBrowserTest,
                        SaveLinkAsEntryIsDisabledForUrlsNotAccessibleForChild) {
-  // Set up child user profile.
-  Profile* profile = browser()->profile();
-
-  // Block access to http://www.google.com/ in the URL filter.
-  supervised_user::SupervisedUserService* supervised_user_service =
-      SupervisedUserServiceFactory::GetForProfile(profile);
-  supervised_user::SupervisedUserURLFilter* url_filter =
-      supervised_user_service->GetURLFilter();
-  std::map<std::string, bool> hosts;
-  hosts["www.google.com"] = false;
-  url_filter->SetManualHosts(std::move(hosts));
+  supervised_user_test_util::SetManualFilterForHost(
+      browser()->profile(), "www.google.com", /*allowlist=*/false);
 
   base::RunLoop().RunUntilIdle();
 
@@ -993,6 +987,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
       // Content contextual commands.
       IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, IDC_CONTENT_CONTEXT_COPYIMAGE,
       IDC_CONTENT_CONTEXT_COPYIMAGELOCATION, IDC_CONTENT_CONTEXT_INSPECTELEMENT,
+      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
       // Other commands (we only test a subset).
       IDC_VIEW_SOURCE};
   for (int command_id : kCommandsToTest) {
@@ -1025,6 +1020,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
       // Content contextual commands.
       IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, IDC_CONTENT_CONTEXT_COPYIMAGE,
       IDC_CONTENT_CONTEXT_COPYIMAGELOCATION, IDC_CONTENT_CONTEXT_INSPECTELEMENT,
+      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
       // Other commands (we only test a subset).
       IDC_VIEW_SOURCE};
   for (int command_id : kCommandsToTest) {
@@ -1053,6 +1049,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
   // Verify other commands are disabled.
   static constexpr int kCommandsDisabledInLockedFullscreen[] = {
       IDC_VIEW_SOURCE, IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
+      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
       IDC_CONTENT_CONTEXT_INSPECTELEMENT};
   for (int command_id : kCommandsDisabledInLockedFullscreen) {
     EXPECT_FALSE(menu->IsCommandIdEnabled(command_id))
@@ -1074,6 +1071,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
       // Content contextual commands.
       IDC_CONTENT_CONTEXT_OPENLINKNEWTAB, IDC_CONTENT_CONTEXT_COPYIMAGE,
       IDC_CONTENT_CONTEXT_COPYIMAGELOCATION, IDC_CONTENT_CONTEXT_INSPECTELEMENT,
+      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
       // Other commands (we only test a subset).
       IDC_VIEW_SOURCE};
   for (int command_id : kCommandsToTest) {
@@ -1099,6 +1097,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuForLockedFullscreenBrowserTest,
   // Verify other commands are disabled.
   static constexpr int kCommandsDisabledForOnTask[] = {
       IDC_VIEW_SOURCE, IDC_CONTENT_CONTEXT_OPENLINKNEWTAB,
+      IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW,
       IDC_CONTENT_CONTEXT_INSPECTELEMENT};
   for (int command_id : kCommandsDisabledForOnTask) {
     EXPECT_FALSE(menu->IsCommandIdEnabled(command_id))
@@ -1120,6 +1119,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenEntryPresentForNormalURLs) {
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
   ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
@@ -1139,6 +1139,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
   ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
                                           IDC_OPEN_LINK_IN_PROFILE_LAST));
@@ -1155,6 +1156,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -1174,6 +1176,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -1209,6 +1212,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
   ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
@@ -1229,6 +1233,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -1249,6 +1254,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenInAppAbsentForIncognito) {
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -1270,6 +1276,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -1293,6 +1300,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
 
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKBOOKMARKAPP));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
@@ -1308,6 +1316,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenEntryAbsentForFilteredURLs) {
 
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
   ASSERT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKINPROFILE));
   ASSERT_FALSE(menu->IsItemInRangePresent(IDC_OPEN_LINK_IN_PROFILE_FIRST,
@@ -1361,6 +1370,15 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, ShowsToastOnImageCopied) {
 
   auto menu = CreateContextMenuFromParams(params);
   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_COPYIMAGE, /*event_flags=*/0);
+  EXPECT_TRUE(browser()->GetFeatures().toast_controller()->IsShowingToast());
+}
+
+IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, ShowsToastOnVideoFrameCopied) {
+  content::ContextMenuParams params;
+  params.media_type = blink::mojom::ContextMenuDataMediaType::kCanvas;
+
+  auto menu = CreateContextMenuFromParams(params);
+  menu->ExecuteCommand(IDC_CONTENT_CONTEXT_COPYVIDEOFRAME, /*event_flags=*/0);
   EXPECT_TRUE(browser()->GetFeatures().toast_controller()->IsShowingToast());
 }
 
@@ -2072,6 +2090,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
 
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+    ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
     // With only one profile exists, we don't add any items to the context menu
     // for opening links in other profiles.
@@ -2098,6 +2117,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
 
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+    ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
     // With the second profile not yet open and thus not active, an inline entry
     // to open the link with the secondary profile is not displayed.
@@ -2139,6 +2159,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
 
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+    ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
     // With the second profile open, an inline entry to open the link with the
     // secondary profile is displayed.
@@ -2158,6 +2179,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
 
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+    ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
     // With the second profile closed but active, an inline entry to open the
     // link with the secondary profile is displayed.
@@ -2176,6 +2198,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInProfileEntryPresent) {
 
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+    ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
     ASSERT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_COPYLINKLOCATION));
     // With at least two secondary profiles, they are displayed in a submenu.
     raw_ptr<ui::MenuModel> model = nullptr;
@@ -2213,7 +2236,8 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, MAYBE_OpenLinkInProfile) {
 
   // Avoid showing What's New.
   PrefService* pref_service = g_browser_process->local_state();
-  pref_service->SetInteger(prefs::kLastWhatsNewVersion, CHROME_VERSION_MAJOR);
+  pref_service->SetInteger(prefs::kLastWhatsNewVersion,
+                           version_info::GetMajorVersionNumberAsInt());
 
   // Create the profiles.
   ProfileAttributesStorage& storage =
@@ -3457,6 +3481,7 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
 
   EXPECT_FALSE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKNEWTAB));
   EXPECT_FALSE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKNEWWINDOW));
+  ASSERT_FALSE(menu1->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
   EXPECT_FALSE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKOFFTHERECORD));
 }
 
@@ -3470,6 +3495,54 @@ IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest,
           /*url=*/GURL(""));
 
   EXPECT_FALSE(menu1->IsItemEnabled(IDC_CONTENT_CONTEXT_OPENLINKPREVIEW));
+}
+
+IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, DoNotShowSplitTabInWebApp) {
+  const GURL test_url("http://www.example.com/");
+  const AppId app_id = InstallTestWebApp(GURL(kAppUrl1));
+  Browser* const app_window = OpenTestWebApp(app_id);
+  ASSERT_FALSE(app_window->is_type_normal());
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNoneInWebContents(
+          app_window->tab_strip_model()->GetActiveWebContents(), test_url,
+          test_url);
+
+  EXPECT_FALSE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
+}
+
+IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInNewSplitTab) {
+  const GURL test_url("http://www.example.com/");
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(test_url, test_url);
+
+  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
+
+  TabStripModel* const tab_strip_model = browser()->tab_strip_model();
+  ASSERT_EQ(tab_strip_model->count(), 1);
+  menu->ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, 0);
+  ASSERT_EQ(tab_strip_model->count(), 2);
+  EXPECT_EQ(tab_strip_model->active_index(), 1);
+  EXPECT_TRUE(tab_strip_model->GetActiveTab()->IsSplit());
+  EXPECT_TRUE(tab_strip_model->GetTabAtIndex(0)->IsSplit());
+}
+
+IN_PROC_BROWSER_TEST_P(ContextMenuBrowserTest, OpenLinkInExistingSplitTab) {
+  const GURL test_url("http://www.example.com/");
+  TabStripModel* const tab_strip_model = browser()->tab_strip_model();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_url));
+  chrome::NewSplitTab(browser());
+  tab_strip_model->ActivateTabAt(0);
+  ASSERT_NE(tab_strip_model->GetWebContentsAt(1)->GetURL(), test_url);
+
+  std::unique_ptr<TestRenderViewContextMenu> menu =
+      CreateContextMenuMediaTypeNone(test_url, test_url);
+
+  EXPECT_TRUE(menu->IsItemPresent(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW));
+  menu->ExecuteCommand(IDC_CONTENT_CONTEXT_OPENLINKSPLITVIEW, 0);
+  ASSERT_EQ(tab_strip_model->count(), 2);
+  EXPECT_TRUE(tab_strip_model->GetTabAtIndex(0)->IsSplit());
+  EXPECT_EQ(tab_strip_model->GetWebContentsAt(1)->GetURL(), test_url);
 }
 
 }  // namespace

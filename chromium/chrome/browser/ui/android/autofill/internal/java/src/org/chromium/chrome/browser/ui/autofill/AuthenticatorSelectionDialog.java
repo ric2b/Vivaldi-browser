@@ -13,6 +13,8 @@ import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.ui.autofill.data.AuthenticatorOption;
 import org.chromium.chrome.browser.ui.autofill.internal.R;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
@@ -26,6 +28,7 @@ import java.util.List;
  * Dialog that presents {@link AuthenticatorOption}s to the user to choose from for fetching credit
  * card information from the backend.
  */
+@NullMarked
 public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter.ItemClickListener {
     private static final int ANIMATION_DURATION_MS = 250;
 
@@ -69,7 +72,6 @@ public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter
     private View mAuthenticatorSelectionDialogContentsView;
     private RecyclerView mAuthenticationOptionsRecyclerView;
     private AuthenticatorOptionsAdapter mAuthenticatorOptionsAdapter;
-
     private PropertyModel mDialogModel;
     private AuthenticatorOption mSelectedAuthenticatorOption;
 
@@ -114,6 +116,7 @@ public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter
      *
      * @param authenticatorOptions The authenticator options available to the user.
      */
+    @Initializer
     public void show(List<AuthenticatorOption> authenticatorOptions) {
         // By default, the first option will be selected.
         mSelectedAuthenticatorOption = authenticatorOptions.get(0);
@@ -131,10 +134,9 @@ public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter
                 mAuthenticatorSelectionDialogView.findViewById(R.id.title_with_icon_stub);
         title_view_stub.setLayoutResource(R.layout.icon_after_title_view);
         title_view_stub.inflate();
-        TextView titleView = (TextView) mAuthenticatorSelectionDialogView.findViewById(R.id.title);
+        TextView titleView = mAuthenticatorSelectionDialogView.findViewById(R.id.title);
         titleView.setText(title);
-        ImageView iconView =
-                (ImageView) mAuthenticatorSelectionDialogView.findViewById(R.id.title_icon);
+        ImageView iconView = mAuthenticatorSelectionDialogView.findViewById(R.id.title_icon);
         iconView.setImageResource(R.drawable.google_pay);
 
         mAuthenticatorSelectionDialogContentsView =
@@ -145,9 +147,7 @@ public class AuthenticatorSelectionDialog implements AuthenticatorOptionsAdapter
         mProgressBarOverlayView.setVisibility(View.GONE);
         // Set up the recycler view.
         mAuthenticationOptionsRecyclerView =
-                (RecyclerView)
-                        mAuthenticatorSelectionDialogView.findViewById(
-                                R.id.authenticator_options_view);
+                mAuthenticatorSelectionDialogView.findViewById(R.id.authenticator_options_view);
         mAuthenticatorOptionsAdapter =
                 new AuthenticatorOptionsAdapter(mContext, authenticatorOptions, this);
         mAuthenticationOptionsRecyclerView.setAdapter(mAuthenticatorOptionsAdapter);

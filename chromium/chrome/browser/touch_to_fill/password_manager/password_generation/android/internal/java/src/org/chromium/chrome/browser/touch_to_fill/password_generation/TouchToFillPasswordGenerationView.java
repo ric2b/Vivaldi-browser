@@ -13,11 +13,11 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.password_manager.PasswordManagerResourceProviderFactory;
 import org.chromium.chrome.browser.touch_to_fill.common.TouchToFillUtil;
 import org.chromium.chrome.browser.touch_to_fill.password_generation.TouchToFillPasswordGenerationCoordinator.GenerationCallback;
@@ -27,10 +27,11 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
  * This class is responsible for rendering the password generation bottom sheet. It is a View in
  * this Model-View-Controller component and doesn't inherit but holds Android Views.
  */
+@NullMarked
 class TouchToFillPasswordGenerationView implements BottomSheetContent {
     private final View mContent;
     private final Context mContext;
-    private TextView mPasswordView;
+    private final TextView mPasswordView;
 
     // Minimum password length that allows to label the password as strong in
     // the UI. Must stay in sync with kLengthSufficientForStrongLabel in
@@ -109,9 +110,8 @@ class TouchToFillPasswordGenerationView implements BottomSheetContent {
         return mContent;
     }
 
-    @Nullable
     @Override
-    public View getToolbarView() {
+    public @Nullable View getToolbarView() {
         return null;
     }
 
@@ -134,7 +134,7 @@ class TouchToFillPasswordGenerationView implements BottomSheetContent {
     }
 
     @Override
-    public @NonNull String getSheetContentDescription(Context context) {
+    public String getSheetContentDescription(Context context) {
         return context.getString(R.string.password_generation_bottom_sheet_content_description);
     }
 
@@ -163,10 +163,5 @@ class TouchToFillPasswordGenerationView implements BottomSheetContent {
     @Override
     public float getFullHeightRatio() {
         return HeightMode.WRAP_CONTENT;
-    }
-
-    @Override
-    public int getPeekHeight() {
-        return HeightMode.DISABLED;
     }
 }

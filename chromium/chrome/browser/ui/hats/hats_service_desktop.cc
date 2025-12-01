@@ -14,7 +14,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/json/values_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/rand_util.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/values.h"
@@ -32,6 +31,7 @@
 #include "components/metrics_services_manager/metrics_services_manager.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_thread.h"
@@ -99,12 +99,14 @@ constexpr char kAnyLastSurveyWithCooldownOverrideStartedTimePath[] =
 // overridden cool down period) is prompted at T0 and a survey B (with default
 // cool down period) is prompted at T1, then at T2 the elapsed time for the
 // survey A will be T2 - T0 and for the survey B - T2 - T1.
-bool DoesCooldownApply(Profile* profile, const hats::SurveyConfig& config) {
+bool DoesCooldownApply(Profile* profile,
+                       PrefService* prefs,
+                       const hats::SurveyConfig& config) {
   const std::optional<base::TimeDelta> cooldown_override =
       config.GetCooldownPeriodOverride(profile);
   const bool has_cooldown_override = cooldown_override.has_value();
   const base::Value::Dict& pref_data =
-      profile->GetPrefs()->GetDict(prefs::kHatsSurveyMetadata);
+      prefs->GetDict(prefs::kHatsSurveyMetadata);
   const std::optional<base::Time> last_started_time = base::ValueToTime(
       pref_data.Find(has_cooldown_override
                          ? kAnyLastSurveyWithCooldownOverrideStartedTimePath
@@ -172,18 +174,8 @@ void HatsServiceDesktop::DelayedSurveyTask::Launch() {
 
 void HatsServiceDesktop::DelayedSurveyTask::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (navigation_behaviour_ == NavigationBehaviour::ALLOW_ANY ||
-      !navigation_handle || !navigation_handle->IsInPrimaryMainFrame()) {
-    return;
-  }
-
-  if (navigation_behaviour_ == NavigationBehaviour::REQUIRE_SAME_DOCUMENT &&
-      navigation_handle->IsSameDocument()) {
-    return;
-  }
-
-  if (navigation_behaviour_ == NavigationBehaviour::REQUIRE_SAME_ORIGIN &&
-      navigation_handle->HasCommitted() && navigation_handle->IsSameOrigin()) {
+  if (hats_service_->IsNavigationAllowed(navigation_handle,
+                                         navigation_behaviour_)) {
     return;
   }
 
@@ -335,7 +327,7 @@ bool HatsServiceDesktop::LaunchDelayedSurveyForWebContents(
 void HatsServiceDesktop::SetSurveyMetadataForTesting(
     const HatsService::SurveyMetadata& metadata) {
   const std::string& trigger = kHatsSurveyTriggerSettings;
-  ScopedDictPrefUpdate update(profile()->GetPrefs(),
+  ScopedDictPrefUpdate update(GetPrefsForHatsMetadata(),
                               prefs::kHatsSurveyMetadata);
   base::Value::Dict& pref_data = update.Get();
   if (!metadata.last_major_version.has_value() &&
@@ -398,7 +390,7 @@ void HatsServiceDesktop::SetSurveyMetadataForTesting(
 void HatsServiceDesktop::GetSurveyMetadataForTesting(
     HatsService::SurveyMetadata* metadata) const {
   const std::string& trigger = kHatsSurveyTriggerSettings;
-  ScopedDictPrefUpdate update(profile()->GetPrefs(),
+  ScopedDictPrefUpdate update(GetPrefsForHatsMetadata(),
                               prefs::kHatsSurveyMetadata);
   base::Value::Dict& pref_data = update.Get();
 
@@ -479,7 +471,7 @@ bool HatsServiceDesktop::CanShowSurvey(const std::string& trigger) const {
     return false;
   }
 
-  if (DoesCooldownApply(profile(), config)) {
+  if (DoesCooldownApply(profile(), GetPrefsForHatsMetadata(), config)) {
     UMA_HISTOGRAM_ENUMERATION(
         kHatsShouldShowSurveyReasonHistogram,
         HatsServiceDesktop::ShouldShowSurveyReasons::kNoAnyLastSurveyTooRecent);
@@ -494,7 +486,7 @@ bool HatsServiceDesktop::CanShowSurvey(const std::string& trigger) const {
   }
 
   const base::Value::Dict& pref_data =
-      profile()->GetPrefs()->GetDict(prefs::kHatsSurveyMetadata);
+      GetPrefsForHatsMetadata()->GetDict(prefs::kHatsSurveyMetadata);
   std::optional<int> last_major_version =
       pref_data.FindIntByDottedPath(GetMajorVersionPath(trigger));
   if (last_major_version.has_value() &&
@@ -582,7 +574,8 @@ bool HatsServiceDesktop::CanShowAnySurvey(bool user_prompted) const {
   // If the profile is too new, measured as the age of the profile
   // directory, the user is ineligible.
   base::Time now = base::Time::Now();
-  if ((now - profile()->GetCreationTime()) < kMinimumProfileAge) {
+  auto creation_time = profile()->GetOriginalProfile()->GetCreationTime();
+  if ((now - creation_time) < kMinimumProfileAge) {
     UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
                               ShouldShowSurveyReasons::kNoProfileTooNew);
     return false;
@@ -603,14 +596,13 @@ void HatsServiceDesktop::RecordSurveyAsShown(std::string trigger_id) {
                           return pair.second.trigger_id;
                         });
 
-  CHECK(trigger_survey_config != survey_configs_by_triggers_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(trigger_survey_config != survey_configs_by_triggers_.end());
   std::string trigger = trigger_survey_config->first;
 
   UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
                             ShouldShowSurveyReasons::kYes);
 
-  ScopedDictPrefUpdate update(profile()->GetPrefs(),
+  ScopedDictPrefUpdate update(GetPrefsForHatsMetadata(),
                               prefs::kHatsSurveyMetadata);
   base::Value::Dict& pref_data = update.Get();
   pref_data.SetByDottedPath(
@@ -627,6 +619,12 @@ void HatsServiceDesktop::RecordSurveyAsShown(std::string trigger_id) {
 
 void HatsServiceDesktop::HatsNextDialogClosed() {
   hats_next_dialog_exists_ = false;
+}
+
+PrefService* HatsServiceDesktop::GetPrefsForHatsMetadata() const {
+  // Make sure we persist HaTS metadata to the original profile, otherwise HaTS
+  // shown in OTR will not influence HaTS in the original profile.
+  return profile()->GetOriginalProfile()->GetPrefs();
 }
 
 void HatsServiceDesktop::RemoveTask(const DelayedSurveyTask& task) {
@@ -649,6 +647,22 @@ bool HatsServiceDesktop::ShouldShowSurvey(const std::string& trigger) const {
   return should_show_survey;
 }
 
+bool HatsServiceDesktop::IsRightBrowserType(
+    Browser* browser,
+    hats::SurveyConfig::RequestedBrowserType requested_browser_type) const {
+  if (!browser ||
+      (!browser->is_type_normal() && !browser->is_type_devtools())) {
+    return false;
+  }
+
+  switch (requested_browser_type) {
+    case hats::SurveyConfig::RequestedBrowserType::kRegular:
+      return profiles::IsRegularOrGuestSession(browser);
+    case hats::SurveyConfig::RequestedBrowserType::kIncognito:
+      return browser->profile()->IsIncognitoProfile();
+  }
+}
+
 void HatsServiceDesktop::LaunchSurveyForBrowser(
     Browser* browser,
     const std::string& trigger,
@@ -657,17 +671,23 @@ void HatsServiceDesktop::LaunchSurveyForBrowser(
     const SurveyBitsData& product_specific_bits_data,
     const SurveyStringData& product_specific_string_data,
     const std::optional<std::string_view>& supplied_trigger_id) {
-  if (!browser ||
-      (!browser->is_type_normal() && !browser->is_type_devtools()) ||
-      !profiles::IsRegularOrGuestSession(browser)) {
-    // Never show HaTS bubble for Incognito mode.
+  if (!browser || browser->IsAttemptingToCloseBrowser()) {
+    // Don't launch surveys during browser closure.
+    return;
+  }
+
+  CHECK(survey_configs_by_triggers_.find(trigger) !=
+        survey_configs_by_triggers_.end());
+  auto survey_config = survey_configs_by_triggers_[trigger];
+  if (!IsRightBrowserType(browser, survey_config.requested_browser_type)) {
     UMA_HISTOGRAM_ENUMERATION(kHatsShouldShowSurveyReasonHistogram,
-                              ShouldShowSurveyReasons::kNoNotRegularBrowser);
+                              ShouldShowSurveyReasons::kNoWrongBrowserType);
     if (!failure_callback.is_null()) {
       std::move(failure_callback).Run();
     }
     return;
   }
+
   if (IncognitoModePrefs::GetAvailability(profile()->GetPrefs()) ==
       policy::IncognitoModeAvailability::kDisabled) {
     // Incognito mode needs to be enabled to create an off-the-record profile
@@ -679,6 +699,7 @@ void HatsServiceDesktop::LaunchSurveyForBrowser(
     }
     return;
   }
+
   // Checking survey's status could be costly due to a network request, so
   // we check it at the last.
   CheckSurveyStatusAndMaybeShow(
@@ -699,7 +720,7 @@ void HatsServiceDesktop::CheckSurveyStatusAndMaybeShow(
   // We record the survey's over capacity information in user profile to avoid
   // duplicated checks since the survey won't change once it is full.
   const base::Value::Dict& pref_data =
-      profile()->GetPrefs()->GetDict(prefs::kHatsSurveyMetadata);
+      GetPrefsForHatsMetadata()->GetDict(prefs::kHatsSurveyMetadata);
   std::optional<int> is_full =
       pref_data.FindBoolByDottedPath(GetIsSurveyFull(trigger));
   if (is_full.has_value() && is_full) {
@@ -717,7 +738,7 @@ void HatsServiceDesktop::CheckSurveyStatusAndMaybeShow(
   // trigger. If fields are set for a trigger, they must be provided.
   CHECK_EQ(product_specific_bits_data.size(),
            survey_config.product_specific_bits_data_fields.size());
-  for (auto field_value : product_specific_bits_data) {
+  for (const auto& field_value : product_specific_bits_data) {
     CHECK(base::Contains(survey_config.product_specific_bits_data_fields,
                          field_value.first));
   }
@@ -726,14 +747,14 @@ void HatsServiceDesktop::CheckSurveyStatusAndMaybeShow(
   // trigger. If fields are set for a trigger, they must be provided.
   CHECK_EQ(product_specific_string_data.size(),
            survey_config.product_specific_string_data_fields.size());
-  for (auto field_value : product_specific_string_data) {
+  for (const auto& field_value : product_specific_string_data) {
     CHECK(base::Contains(survey_config.product_specific_string_data_fields,
                          field_value.first));
   }
 
   // As soon as the HaTS Next dialog is created it will attempt to contact
   // the HaTS servers to check for a survey.
-  ScopedDictPrefUpdate update(profile()->GetPrefs(),
+  ScopedDictPrefUpdate update(GetPrefsForHatsMetadata(),
                               prefs::kHatsSurveyMetadata);
   update->SetByDottedPath(GetLastSurveyCheckTime(trigger),
                           base::TimeToValue(base::Time::Now()));

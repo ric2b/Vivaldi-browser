@@ -1,6 +1,7 @@
 // Copyright (c) 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 
@@ -9,11 +10,7 @@ import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {findFlexContainerIcon, findGridContainerIcon, type IconInfo} from './CSSPropertyIconResolver.js';
-import stylePropertyEditorStylesRaw from './stylePropertyEditor.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const stylePropertyEditorStyles = new CSSStyleSheet();
-stylePropertyEditorStyles.replaceSync(stylePropertyEditorStylesRaw.cssText);
+import stylePropertyEditorStyles from './stylePropertyEditor.css.js';
 
 const UIStrings = {
   /**
@@ -77,14 +74,6 @@ export class StylePropertyEditor extends HTMLElement {
   #computedProperties = new Map<string, string>();
   protected readonly editableProperties: EditableProperty[] = [];
 
-  constructor() {
-    super();
-  }
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [stylePropertyEditorStyles];
-  }
-
   getEditableProperties(): EditableProperty[] {
     return this.editableProperties;
   }
@@ -99,6 +88,7 @@ export class StylePropertyEditor extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
+      <style>${stylePropertyEditorStyles}</style>
       <div class="container">
         ${this.editableProperties.map(prop => this.#renderProperty(prop))}
       </div>

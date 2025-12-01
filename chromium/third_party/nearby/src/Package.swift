@@ -423,6 +423,7 @@ let package = Package(
         "internal/weave/sockets/BUILD",
         "internal/platform/flags/BUILD",
         "internal/platform/implementation/shared/BUILD",
+        "internal/platform/implementation/apple/Flags/BUILD",
         "internal/platform/implementation/apple/Mediums/BUILD",
         "internal/platform/implementation/apple/Mediums/Ble/Sockets/BUILD",
         "internal/platform/implementation/apple/Tests/BUILD",
@@ -458,6 +459,7 @@ let package = Package(
         "connections/implementation/mediums/advertisements/data_element_test.cc",
         "connections/implementation/mediums/advertisements/dct_advertisement_test.cc",
         "connections/implementation/mediums/advertisements/advertisement_util_test.cc",
+        "connections/implementation/mediums/awdl_test.cc",
         "connections/implementation/mediums/ble_v2_test.cc",
         "connections/implementation/mediums/ble_v2/bloom_filter_test.cc",
         "connections/implementation/mediums/ble_v2/ble_l2cap_packet_test.cc",
@@ -523,6 +525,7 @@ let package = Package(
         "internal/platform/bluetooth_utils_test.cc",
         "internal/platform/credential_storage_impl_test.cc",
         "internal/platform/input_stream_test.cc",
+        "internal/platform/mac_address_test.cc",
         "internal/platform/single_thread_executor_test.cc",
         "internal/platform/scheduled_executor_test.cc",
         "internal/platform/stream_reader_test.cc",
@@ -677,5 +680,5 @@ let package = Package(
     ),
   ],
   cLanguageStandard: .c99,
-  cxxLanguageStandard: .cxx17
+  cxxLanguageStandard: .cxx20
 )

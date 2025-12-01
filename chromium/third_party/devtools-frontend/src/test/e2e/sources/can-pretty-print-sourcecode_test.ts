@@ -32,11 +32,6 @@ const PRETTY_PRINT_BUTTON = '[aria-label="Pretty print"]';
 const PRETTY_PRINTED_TOGGLE = 'devtools-text-editor.pretty-printed';
 
 describe('The Sources Tab', function() {
-  // The tests in this suite are particularly slow, as they perform a lot of actions
-  if (this.timeout() > 0) {
-    this.timeout(10000);
-  }
-
   it('can pretty-print a JavaScript file inline', async () => {
     await openSourceCodeEditorForFile('minified-sourcecode.js', 'minified-sourcecode.html');
 
@@ -160,7 +155,7 @@ describe('The Sources Tab', function() {
   });
 
   it('can add breakpoint for pretty-printed file', async () => {
-    const {target, frontend} = getBrowserAndPages();
+    const {target} = getBrowserAndPages();
 
     await openSourceCodeEditorForFile('minified-sourcecode.js', 'minified-sourcecode.html');
     await click(PRETTY_PRINT_BUTTON);
@@ -168,17 +163,17 @@ describe('The Sources Tab', function() {
 
     // Set a breakpoint in line 6 of the pretty-printed view (which is the
     // line with the label "6" not the 6th line from the top).
-    await addBreakpointForLine(frontend, 6);
+    await addBreakpointForLine(6);
 
     const scriptLocation = await retrieveTopCallFrameScriptLocation('notFormattedFunction();', target);
     assert.deepEqual(scriptLocation, 'minified-sourcecode.js:6');
   });
 
   it('can add breakpoint on minified source and then break correctly on pretty-printed source', async () => {
-    const {target, frontend} = getBrowserAndPages();
+    const {target} = getBrowserAndPages();
 
     await openSourceCodeEditorForFile('minified-sourcecode.js', 'minified-sourcecode.html');
-    await addBreakpointForLine(frontend, 6);
+    await addBreakpointForLine(6);
     await click(PRETTY_PRINT_BUTTON);
     await waitFor(PRETTY_PRINTED_TOGGLE);
 

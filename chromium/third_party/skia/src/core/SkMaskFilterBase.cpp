@@ -29,6 +29,7 @@
 #include <cstdint>
 #include <optional>
 
+class SkPaint;
 class SkRRect;
 
 SkMaskFilterBase::NinePatch::~NinePatch() {
@@ -45,8 +46,9 @@ bool SkMaskFilterBase::asABlur(BlurRec*) const {
     return false;
 }
 
-sk_sp<SkImageFilter> SkMaskFilterBase::asImageFilter(const SkMatrix& ctm) const {
-    return nullptr;
+std::pair<sk_sp<SkImageFilter>, bool> SkMaskFilterBase::asImageFilter(const SkMatrix& ctm,
+                                                                      const SkPaint& paint) const {
+    return std::make_pair(nullptr, false);
 }
 
 static SkMask extract_mask_subset(const SkMask& src, SkIRect bounds, int32_t newX, int32_t newY) {
@@ -208,12 +210,16 @@ static int countNestedRects(const SkPath& path, SkRect rects[2]) {
     return path.isRect(&rects[0]);
 }
 
-bool SkMaskFilterBase::filterRRect(const SkRRect& devRRect, const SkMatrix& matrix,
-                                   const SkRasterClip& clip, SkBlitter* blitter) const {
+bool SkMaskFilterBase::filterRRect(const SkRRect& devRRect,
+                                   const SkMatrix& matrix,
+                                   const SkRasterClip& clip,
+                                   SkBlitter* blitter,
+                                   SkResourceCache* cache) const {
     // Attempt to speed up drawing by creating a nine patch. If a nine patch
     // cannot be used, return false to allow our caller to recover and perform
     // the drawing another way.
-    std::optional<NinePatch> patch = this->filterRRectToNine(devRRect, matrix, clip.getBounds());
+    std::optional<NinePatch> patch =
+            this->filterRRectToNine(devRRect, matrix, clip.getBounds(), cache);
 
     if (!patch.has_value()) {
         return false;
@@ -222,9 +228,12 @@ bool SkMaskFilterBase::filterRRect(const SkRRect& devRRect, const SkMatrix& matr
     return true;
 }
 
-bool SkMaskFilterBase::filterPath(const SkPath& devPath, const SkMatrix& matrix,
-                                  const SkRasterClip& clip, SkBlitter* blitter,
-                                  SkStrokeRec::InitStyle style) const {
+bool SkMaskFilterBase::filterPath(const SkPath& devPath,
+                                  const SkMatrix& matrix,
+                                  const SkRasterClip& clip,
+                                  SkBlitter* blitter,
+                                  SkStrokeRec::InitStyle style,
+                                  SkResourceCache* cache) const {
     SkRect rects[2];
     int rectCount = 0;
     if (SkStrokeRec::kFill_InitStyle == style) {
@@ -234,7 +243,7 @@ bool SkMaskFilterBase::filterPath(const SkPath& devPath, const SkMatrix& matrix,
         std::optional<NinePatch> patch;
 
         switch (this->filterRectsToNine(
-                SkSpan(rects, rectCount), matrix, clip.getBounds(), &patch)) {
+                SkSpan(rects, rectCount), matrix, clip.getBounds(), &patch, cache)) {
             case FilterReturn::kFalse:
                 SkASSERT(!patch.has_value());
                 return false;
@@ -288,15 +297,15 @@ bool SkMaskFilterBase::filterPath(const SkPath& devPath, const SkMatrix& matrix,
 }
 
 std::optional<SkMaskFilterBase::NinePatch> SkMaskFilterBase::filterRRectToNine(
-        const SkRRect&, const SkMatrix&, const SkIRect&) const {
+        const SkRRect&, const SkMatrix&, const SkIRect&, SkResourceCache*) const {
     return std::nullopt;
 }
 
-SkMaskFilterBase::FilterReturn SkMaskFilterBase::filterRectsToNine(
-        SkSpan<const SkRect>,
-        const SkMatrix&,
-        const SkIRect&,
-        std::optional<NinePatch>*) const {
+SkMaskFilterBase::FilterReturn SkMaskFilterBase::filterRectsToNine(SkSpan<const SkRect>,
+                                                                   const SkMatrix&,
+                                                                   const SkIRect&,
+                                                                   std::optional<NinePatch>*,
+                                                                   SkResourceCache*) const {
     return FilterReturn::kUnimplemented;
 }
 

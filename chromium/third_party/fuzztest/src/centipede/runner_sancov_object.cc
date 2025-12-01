@@ -30,9 +30,9 @@
 #include "./centipede/runner_dl_info.h"
 #include "./centipede/runner_utils.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
-void SanCovObjectArray::PCGuardInit(absl::Nullable<PCGuard *> start,
+void SanCovObjectArray::PCGuardInit(PCGuard *absl_nullable start,
                                     PCGuard *stop) {
   RunnerCheck((start != nullptr) == (stop != nullptr),
               "invalid PC guard table");
@@ -69,7 +69,7 @@ void SanCovObjectArray::Inline8BitCountersInit(
   sancov_object.inline_8bit_counters_stop = inline_8bit_counters_stop;
 }
 
-void SanCovObjectArray::PCInfoInit(absl::Nullable<const PCInfo *> pcs_beg,
+void SanCovObjectArray::PCInfoInit(const PCInfo *absl_nullable pcs_beg,
                                    const PCInfo *pcs_end) {
   RunnerCheck((pcs_beg != nullptr) == (pcs_end != nullptr), "invalid PC table");
   if (skipping_no_code_dso_) {
@@ -194,4 +194,4 @@ void SanCovObjectArray::ForEachNonZeroInlineCounter(
   }
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

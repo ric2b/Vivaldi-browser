@@ -4,6 +4,9 @@
 
 package org.chromium.chrome.browser.privacy_guide;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+import static org.chromium.chrome.browser.privacy_guide.PrivacyGuideUtils.getFragmentFocusViewId;
+
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;
@@ -11,12 +14,12 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityEvent;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.tabs.TabLayout;
@@ -26,9 +29,13 @@ import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.ProfileDependentSetting;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.ui.widget.ButtonCompat;
 
@@ -41,8 +48,9 @@ import java.util.List;
 /**
  * Fragment containing the Privacy Guide (a walk-through of the most important privacy settings).
  */
+@NullMarked
 public class PrivacyGuideFragment extends Fragment
-        implements BackPressHandler, ProfileDependentSetting {
+        implements BackPressHandler, ProfileDependentSetting, SettingsFragment {
     /**
      * The types of fragments supported. Each fragment corresponds to a step in the privacy guide.
      */
@@ -92,6 +100,7 @@ public class PrivacyGuideFragment extends Fragment
     private PrivacyGuideMetricsDelegate mPrivacyGuideMetricsDelegate;
     private NavbarVisibilityDelegate mNavbarVisibilityDelegate;
     private Profile mProfile;
+    private ViewPager2.OnPageChangeCallback mOnPageChangeCallback;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -104,10 +113,9 @@ public class PrivacyGuideFragment extends Fragment
         mHandleBackPressChangedSupplier = new ObservableSupplierImpl<>();
     }
 
-    @Nullable
     @Override
-    public View onCreateView(
-            @NonNull LayoutInflater inflater,
+    public @Nullable View onCreateView(
+            LayoutInflater inflater,
             @Nullable ViewGroup container,
             @Nullable Bundle savedInstanceState) {
         modifyAppBar();
@@ -122,11 +130,45 @@ public class PrivacyGuideFragment extends Fragment
         mViewPager.setPageTransformer(new PrivacyGuidePageTransformer());
         mViewPager.setUserInputEnabled(false);
 
+        // Workaround for ViewPager2 bug: https://issuetracker.google.com/issues/284429851.
+        for (int i = 0; i < mViewPager.getChildCount(); i++) {
+            var child = mViewPager.getChildAt(i);
+            if (child instanceof RecyclerView) {
+                child.setFocusable(false);
+            }
+        }
+
+        mOnPageChangeCallback =
+                new ViewPager2.OnPageChangeCallback() {
+                    @Override
+                    public void onPageScrollStateChanged(int state) {
+                        super.onPageScrollStateChanged(state);
+
+                        // We only want to send the accessibility event when the view pager
+                        // transition is complete.
+                        if (state != ViewPager2.SCROLL_STATE_IDLE) {
+                            return;
+                        }
+
+                        View targetView =
+                                mView.findViewById(
+                                        getFragmentFocusViewId(
+                                                mPagerAdapter.getFragmentType(
+                                                        mViewPager.getCurrentItem())));
+                        if (targetView != null) {
+                            targetView.sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_FOCUSED);
+                        }
+                    }
+                };
+        mViewPager.registerOnPageChangeCallback(mOnPageChangeCallback);
+
         mTabLayout = mView.findViewById(R.id.tab_layout);
+        mTabLayout.setFocusable(false);
         new TabLayoutMediator(
                         mTabLayout,
                         mViewPager,
                         (tab, position) -> {
+                            tab.view.setFocusable(false);
                             tab.view.setClickable(false);
                             tab.view.setImportantForAccessibility(
                                     View.IMPORTANT_FOR_ACCESSIBILITY_NO);
@@ -159,16 +201,29 @@ public class PrivacyGuideFragment extends Fragment
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        updateButtonVisibility();
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
-        updateButtonVisibility();
         mHandleBackPressChangedSupplier.set(shouldHandleBackPress());
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mOnPageChangeCallback != null) {
+            mViewPager.unregisterOnPageChangeCallback(mOnPageChangeCallback);
+        }
     }
 
     private void modifyAppBar() {
         AppCompatActivity settingsActivity = (AppCompatActivity) getActivity();
         settingsActivity.setTitle(R.string.privacy_guide_fragment_title);
-        settingsActivity.getSupportActionBar().setDisplayHomeAsUpEnabled(false);
+        assumeNonNull(settingsActivity.getSupportActionBar()).setDisplayHomeAsUpEnabled(false);
     }
 
     private void nextStep() {
@@ -242,7 +297,7 @@ public class PrivacyGuideFragment extends Fragment
     }
 
     @Override
-    public void onAttachFragment(@NonNull Fragment childFragment) {
+    public void onAttachFragment(Fragment childFragment) {
         if (childFragment instanceof ProfileDependentSetting) {
             ((ProfileDependentSetting) childFragment).setProfile(mProfile);
         }
@@ -254,14 +309,14 @@ public class PrivacyGuideFragment extends Fragment
     }
 
     @Override
-    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         super.onCreateOptionsMenu(menu, inflater);
         menu.clear();
         inflater.inflate(R.menu.privacy_guide_toolbar_menu, menu);
     }
 
     @Override
-    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+    public boolean onOptionsItemSelected(MenuItem item) {
         if (item.getItemId() == R.id.close_menu_id) {
             getActivity().finish();
             return true;
@@ -271,7 +326,7 @@ public class PrivacyGuideFragment extends Fragment
     }
 
     @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
+    public void onSaveInstanceState(Bundle outState) {
         mPrivacyGuideMetricsDelegate.saveState(outState);
         super.onSaveInstanceState(outState);
     }
@@ -290,20 +345,27 @@ public class PrivacyGuideFragment extends Fragment
         return mViewPager.getCurrentItem() > 0;
     }
 
+    @Initializer
     public void setBottomSheetControllerSupplier(
             OneshotSupplier<BottomSheetController> bottomSheetControllerSupplier) {
         mBottomSheetControllerSupplier = bottomSheetControllerSupplier;
     }
 
     void setPrivacyGuideMetricsDelegateForTesting(
-            @Nullable PrivacyGuideMetricsDelegate privacyGuideMetricsDelegate) {
+            PrivacyGuideMetricsDelegate privacyGuideMetricsDelegate) {
         var oldValue = mPrivacyGuideMetricsDelegate;
         mPrivacyGuideMetricsDelegate = privacyGuideMetricsDelegate;
         ResettersForTesting.register(() -> mPrivacyGuideMetricsDelegate = oldValue);
     }
 
+    @Initializer
     @Override
     public void setProfile(Profile profile) {
         mProfile = profile;
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

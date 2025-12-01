@@ -13,7 +13,6 @@
 #include <map>
 #include <optional>
 #include <string>
-#include <utility>
 
 #include "absl/strings/string_view.h"
 #include "api/rtp_parameters.h"
@@ -53,7 +52,7 @@ std::optional<AV1Profile> StringToAV1Profile(absl::string_view str) {
 
 std::optional<AV1Profile> ParseSdpForAV1Profile(
     const CodecParameterMap& params) {
-  const auto profile_it = params.find(cricket::kAv1FmtpProfile);
+  const auto profile_it = params.find(kAv1FmtpProfile);
   if (profile_it == params.end())
     return AV1Profile::kProfile0;
   const std::string& profile_str = profile_it->second;

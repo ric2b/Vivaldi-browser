@@ -18,6 +18,7 @@
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -78,6 +79,7 @@ void CombinedSelectorRadioButton::SetChecked(bool checked) {
       }
     }
     delegate_->OnRadioButtonChecked(index_);
+    RequestFocus();
   }
   Checkbox::SetChecked(checked);
 }
@@ -97,6 +99,17 @@ void CombinedSelectorRadioButton::GetRadioButtonsInList(int group,
     return;
   }
   list_view->GetViewsInGroup(group, views);
+}
+
+bool CombinedSelectorRadioButton::SkipDefaultKeyEventProcessing(
+    const ui::KeyEvent& event) {
+  // The radio button would show the ink drop on return key press. Since the
+  // radio buttons in the combined selector are tab focusable
+  // (IsGroupFocusTraversable), this is not required. The return key should not
+  // be handled by the radio button.
+  return event.key_code() == ui::VKEY_RETURN
+             ? false
+             : RadioButton::SkipDefaultKeyEventProcessing(event);
 }
 
 BEGIN_METADATA(CombinedSelectorRadioButton)
@@ -182,6 +195,31 @@ void CombinedSelectorRowView::RequestFocus() {
   if (radio_button_) {
     radio_button_->RequestFocus();
   }
+}
+
+bool CombinedSelectorRowView::OnMousePressed(const ui::MouseEvent& event) {
+  if (radio_button_ && event.IsOnlyLeftMouseButton()) {
+    const gfx::Point center = radio_button_->GetLocalBounds().CenterPoint();
+    ui::MouseEvent synthetic_press_event(
+        ui::EventType::kMousePressed, center, center, event.time_stamp(),
+        event.flags(), event.changed_button_flags());
+    radio_button_->OnMousePressed(synthetic_press_event);
+    return true;
+  }
+  return views::TableLayoutView::OnMousePressed(event);
+}
+
+void CombinedSelectorRowView::OnMouseReleased(const ui::MouseEvent& event) {
+  if (radio_button_ && event.IsOnlyLeftMouseButton()) {
+    const gfx::Point center = radio_button_->GetLocalBounds().CenterPoint();
+    ui::MouseEvent synthetic_release_event(
+        ui::EventType::kMouseReleased, center, center, event.time_stamp(),
+        event.flags(), event.changed_button_flags());
+    radio_button_->OnMouseReleased(synthetic_release_event);
+    RequestFocus();
+    return;
+  }
+  views::TableLayoutView::OnMouseReleased(event);  // Default handling.
 }
 
 BEGIN_METADATA(CombinedSelectorRowView)

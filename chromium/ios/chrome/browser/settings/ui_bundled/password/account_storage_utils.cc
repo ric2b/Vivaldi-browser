@@ -14,10 +14,19 @@
 #import "components/password_manager/core/browser/ui/affiliated_group.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace password_manager {
 
 bool ShouldShowLocalOnlyIcon(const CredentialUIEntry& credential,
                              const syncer::SyncService* sync_service) {
+
+  if (vivaldi::IsVivaldiRunning()) {
+    return false;
+  } // End Vivaldi
+
   if (credential.blocked_by_user) {
     // The account/local concept is harder to grasp for "Never saved" pages, do
     // not distinguish. It's also less important to back those up anyway.

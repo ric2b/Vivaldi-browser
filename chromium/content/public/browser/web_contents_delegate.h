@@ -337,6 +337,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // false.
   virtual bool PreHandleMouseEvent(WebContents* source,
                                    const blink::WebMouseEvent& event);
+  virtual void PreHandleDragUpdate(const DropData& drop_data,
+                                   const gfx::PointF& client_pt) {}
+  virtual void PreHandleDragExit() {}
 
   // Allows delegates to handle keyboard events before sending to the renderer.
   // See enum for description of return values.
@@ -380,6 +383,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   // If an delegate returns true, it can optionally also override
   // CreateCustomWebContents() below to provide their own WebContents.
   virtual bool IsWebContentsCreationOverridden(
+      RenderFrameHost* opener,
       SiteInstance* source_site_instance,
       mojom::WindowContainerType window_container_type,
       const GURL& opener_url,
@@ -679,10 +683,6 @@ class CONTENT_EXPORT WebContentsDelegate {
   // used.
   virtual gfx::Size GetSizeForNewRenderView(WebContents* web_contents);
 
-  // Returns true if the WebContents is never user-visible, thus the renderer
-  // never needs to produce pixels for display.
-  virtual bool IsNeverComposited(WebContents* web_contents);
-
   // Askss |guest_web_contents| to perform the same. If this returns true, the
   // default behavior is suppressed.
   virtual bool GuestSaveFrame(WebContents* guest_web_contents);
@@ -918,6 +918,9 @@ class CONTENT_EXPORT WebContentsDelegate {
   // note(ondrej@vivaldi): VB-114624
   ::vivaldi::VivaldiPostponedCalls * GetVivaldiPostponedCalls();
   void RunVivaldiPostponedCalls();
+
+  // Vivaldi
+  virtual bool IsWebApp() { return false; }
   virtual bool IsVivaldiGuestView() { return false; }
   virtual void VivaldiCanDownload(const GURL& url,
                            const std::string& request_method,

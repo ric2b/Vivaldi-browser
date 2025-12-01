@@ -35,6 +35,7 @@
 #include "mpegvideo.h"
 #include "mpegvideodata.h"
 #include "mpegvideodec.h"
+#include "mpegvideo_unquantize.h"
 #include "mpeg4video.h"
 #include "mpeg4videodata.h"
 #include "mpeg4videodec.h"
@@ -48,6 +49,12 @@
 #include "threadprogress.h"
 #include "xvididct.h"
 #include "unary.h"
+
+#if 0 //3IV1 is quite rare and it slows things down a tiny bit
+#define IS_3IV1 (s->codec_tag == AV_RL32("3IV1"))
+#else
+#define IS_3IV1 0
+#endif
 
 /* The defines below define the number of bits that are read at once for
  * reading vlc values. Changing these may improve speed and data cache needs
@@ -880,6 +887,43 @@ static inline int get_amv(Mpeg4DecContext *ctx, int n)
     return sum;
 }
 
+static inline int mpeg4_get_level_dc(MpegEncContext *s, int n, int pred, int level)
+{
+    int scale = n < 4 ? s->y_dc_scale : s->c_dc_scale;
+    int ret;
+
+    if (IS_3IV1)
+        scale = 8;
+
+    /* we assume pred is positive */
+    pred = FASTDIV((pred + (scale >> 1)), scale);
+
+    level += pred;
+    ret    = level;
+    level *= scale;
+    if (level & (~2047)) {
+        if (s->avctx->err_recognition & (AV_EF_BITSTREAM | AV_EF_AGGRESSIVE)) {
+            if (level < 0) {
+                av_log(s->avctx, AV_LOG_ERROR,
+                       "dc<0 at %dx%d\n", s->mb_x, s->mb_y);
+                return AVERROR_INVALIDDATA;
+            }
+            if (level > 2048 + scale) {
+                av_log(s->avctx, AV_LOG_ERROR,
+                       "dc overflow at %dx%d\n", s->mb_x, s->mb_y);
+                return AVERROR_INVALIDDATA;
+            }
+        }
+        if (level < 0)
+            level = 0;
+        else if (!(s->workaround_bugs & FF_BUG_DC_CLIP))
+            level = 2047;
+    }
+    s->dc_val[0][s->block_index[n]] = level;
+
+    return ret;
+}
+
 /**
  * Decode the dc value.
  * @param n block index (0-3 are luma, 4-5 are chroma)
@@ -888,7 +932,7 @@ static inline int get_amv(Mpeg4DecContext *ctx, int n)
  */
 static inline int mpeg4_decode_dc(MpegEncContext *s, int n, int *dir_ptr)
 {
-    int level, code;
+    int level, code, pred;
 
     if (n < 4)
         code = get_vlc2(&s->gb, dc_lum, DC_VLC_BITS, 1);
@@ -926,7 +970,8 @@ static inline int mpeg4_decode_dc(MpegEncContext *s, int n, int *dir_ptr)
         }
     }
 
-    return ff_mpeg4_pred_dc(s, n, level, dir_ptr, 0);
+    pred = ff_mpeg4_pred_dc(s, n, dir_ptr);
+    return mpeg4_get_level_dc(s, n, pred, level);
 }
 
 /**
@@ -1290,7 +1335,7 @@ static inline int mpeg4_decode_block(Mpeg4DecContext *ctx, int16_t *block,
                                      int use_intra_dc_vlc, int rvlc)
 {
     MpegEncContext *s = &ctx->m;
-    int level, i, last, run, qmul, qadd;
+    int level, i, last, run, qmul, qadd, pred;
     int av_uninit(dc_pred_dir);
     const RLTable *rl;
     const RL_VLC_ELEM *rl_vlc;
@@ -1317,7 +1362,7 @@ static inline int mpeg4_decode_block(Mpeg4DecContext *ctx, int16_t *block,
             i        = 0;
         } else {
             i = -1;
-            ff_mpeg4_pred_dc(s, n, 0, &dc_pred_dir, 0);
+            pred = ff_mpeg4_pred_dc(s, n, &dc_pred_dir);
         }
         if (!coded)
             goto not_coded;
@@ -1540,7 +1585,7 @@ static inline int mpeg4_decode_block(Mpeg4DecContext *ctx, int16_t *block,
 not_coded:
     if (intra) {
         if (!use_intra_dc_vlc) {
-            block[0] = ff_mpeg4_pred_dc(s, n, block[0], &dc_pred_dir, 0);
+            block[0] = mpeg4_get_level_dc(s, n, pred, block[0]);
 
             i -= i >> 31;  // if (i == -1) i = 0;
         }
@@ -3250,6 +3295,12 @@ static int decode_vop_header(Mpeg4DecContext *ctx, GetBitContext *gb,
         } else
             s->alternate_scan = 0;
     }
+    /* Skip at this point when only parsing since the remaining
+     * data is not useful for a parser and requires the
+     * sprite_trajectory VLC to be initialized. */
+    if (parse_only)
+        goto end;
+
     if (s->alternate_scan) {
         ff_init_scantable(s->idsp.idct_permutation, &s->intra_scantable,   ff_alternate_vertical_scan);
         ff_permute_scantable(s->permutated_intra_h_scantable, ff_alternate_vertical_scan,
@@ -3261,12 +3312,6 @@ static int decode_vop_header(Mpeg4DecContext *ctx, GetBitContext *gb,
     }
     ff_permute_scantable(s->permutated_intra_v_scantable, ff_alternate_vertical_scan,
                          s->idsp.idct_permutation);
-
-    /* Skip at this point when only parsing since the remaining
-     * data is not useful for a parser and requires the
-     * sprite_trajectory VLC to be initialized. */
-    if (parse_only)
-        goto end;
 
     if (s->pict_type == AV_PICTURE_TYPE_S) {
         if((ctx->vol_sprite_usage == STATIC_SPRITE ||
@@ -3284,6 +3329,8 @@ static int decode_vop_header(Mpeg4DecContext *ctx, GetBitContext *gb,
         }
     }
 
+    s->f_code = 1;
+    s->b_code = 1;
     if (ctx->shape != BIN_ONLY_SHAPE) {
         s->chroma_qscale = s->qscale = get_bits(gb, ctx->quant_precision);
         if (s->qscale == 0) {
@@ -3300,8 +3347,7 @@ static int decode_vop_header(Mpeg4DecContext *ctx, GetBitContext *gb,
                 s->f_code = 1;
                 return AVERROR_INVALIDDATA;  // makes no sense to continue, as there is nothing left from the image then
             }
-        } else
-            s->f_code = 1;
+        }
 
         if (s->pict_type == AV_PICTURE_TYPE_B) {
             s->b_code = get_bits(gb, 3);
@@ -3311,8 +3357,7 @@ static int decode_vop_header(Mpeg4DecContext *ctx, GetBitContext *gb,
                 s->b_code=1;
                 return AVERROR_INVALIDDATA; // makes no sense to continue, as the MV decoding will break very quickly
             }
-        } else
-            s->b_code = 1;
+        }
 
         if (s->avctx->debug & FF_DEBUG_PICT_INFO) {
             av_log(s->avctx, AV_LOG_DEBUG,
@@ -3345,6 +3390,9 @@ static int decode_vop_header(Mpeg4DecContext *ctx, GetBitContext *gb,
             skip_bits(gb, 2);  // ref_select_code
         }
     }
+
+    s->dct_unquantize_intra = s->mpeg_quant ? ctx->dct_unquantize_mpeg2_intra
+                                            : ctx->dct_unquantize_h263_intra;
 
 end:
     /* detect buggy encoders which don't set the low_delay flag
@@ -3463,8 +3511,8 @@ static int decode_studiovisualobject(Mpeg4DecContext *ctx, GetBitContext *gb)
  *         FRAME_SKIPPED if a not coded VOP is found
  *         0 else
  */
-int ff_mpeg4_decode_picture_header(Mpeg4DecContext *ctx, GetBitContext *gb,
-                                   int header, int parse_only)
+int ff_mpeg4_parse_picture_header(Mpeg4DecContext *ctx, GetBitContext *gb,
+                                  int header, int parse_only)
 {
     MpegEncContext *s = &ctx->m;
     unsigned startcode, v;
@@ -3621,17 +3669,53 @@ end:
         return decode_vop_header(ctx, gb, parse_only);
 }
 
-int ff_mpeg4_frame_end(AVCodecContext *avctx, const uint8_t *buf, int buf_size)
+int ff_mpeg4_decode_picture_header(MpegEncContext *s)
+{
+    Mpeg4DecContext *const ctx = (Mpeg4DecContext*)s;
+
+    if (ctx->bitstream_buffer) {
+        int buf_size = get_bits_left(&s->gb) / 8U;
+        int bitstream_buffer_size = ctx->bitstream_buffer->size;
+        const uint8_t *buf = s->gb.buffer;
+
+        if (s->divx_packed) {
+            for (int i = 0; i < buf_size - 3; i++) {
+                if (buf[i] == 0 && buf[i+1] == 0 && buf[i+2] == 1) {
+                    if (buf[i+3] == 0xB0) {
+                        av_log(s->avctx, AV_LOG_WARNING, "Discarding excessive bitstream in packed xvid\n");
+                        bitstream_buffer_size = 0;
+                    }
+                    break;
+                }
+            }
+        }
+        ctx->bitstream_buffer->size = 0;
+        if (bitstream_buffer_size && (s->divx_packed || buf_size <= MAX_NVOP_SIZE)) {// divx 5.01+/xvid frame reorder
+            int ret = init_get_bits8(&s->gb, ctx->bitstream_buffer->data,
+                                     bitstream_buffer_size);
+            if (ret < 0)
+                return ret;
+        } else
+            av_buffer_unref(&ctx->bitstream_buffer);
+    }
+
+    return ff_mpeg4_parse_picture_header(ctx, &s->gb, 0, 0);
+}
+
+int ff_mpeg4_frame_end(AVCodecContext *avctx, const AVPacket *pkt)
 {
     Mpeg4DecContext *ctx = avctx->priv_data;
     MpegEncContext    *s = &ctx->m;
+    int ret;
+
+    av_assert1(!ctx->bitstream_buffer || !ctx->bitstream_buffer->size);
 
     /* divx 5.01+ bitstream reorder stuff */
-    /* Since this clobbers the input buffer and hwaccel codecs still need the
-     * data during hwaccel->end_frame we should not do this any earlier */
     if (s->divx_packed) {
-        int current_pos     = s->gb.buffer == s->bitstream_buffer ? 0 : (get_bits_count(&s->gb) >> 3);
+        int current_pos     = ctx->bitstream_buffer && s->gb.buffer == ctx->bitstream_buffer->data ? 0 : (get_bits_count(&s->gb) >> 3);
         int startcode_found = 0;
+        uint8_t *buf = pkt->data;
+        int buf_size = pkt->size;
 
         if (buf_size - current_pos > 7) {
 
@@ -3654,16 +3738,12 @@ int ff_mpeg4_frame_end(AVCodecContext *avctx, const uint8_t *buf, int buf_size)
                        "Consider using the mpeg4_unpack_bframes bitstream filter without encoding but stream copy to fix it.\n");
                 ctx->showed_packed_warning = 1;
             }
-            av_fast_padded_malloc(&s->bitstream_buffer,
-                           &s->allocated_bitstream_buffer_size,
-                           buf_size - current_pos);
-            if (!s->bitstream_buffer) {
-                s->bitstream_buffer_size = 0;
-                return AVERROR(ENOMEM);
-            }
-            memcpy(s->bitstream_buffer, buf + current_pos,
-                   buf_size - current_pos);
-            s->bitstream_buffer_size = buf_size - current_pos;
+            ret = av_buffer_replace(&ctx->bitstream_buffer, pkt->buf);
+            if (ret < 0)
+                return ret;
+
+            ctx->bitstream_buffer->data = buf + current_pos;
+            ctx->bitstream_buffer->size = buf_size - current_pos;
         }
     }
 
@@ -3699,6 +3779,7 @@ static int mpeg4_update_thread_context(AVCodecContext *dst,
     s->enhancement_type          = s1->enhancement_type;
     s->scalability               = s1->scalability;
     s->intra_dc_threshold        = s1->intra_dc_threshold;
+    s->m.divx_packed             = s1->m.divx_packed;
     s->divx_version              = s1->divx_version;
     s->divx_build                = s1->divx_build;
     s->xvid_build                = s1->xvid_build;
@@ -3717,7 +3798,7 @@ static int mpeg4_update_thread_context(AVCodecContext *dst,
     if (!init && s1->xvid_build >= 0)
         ff_xvid_idct_init(&s->m.idsp, dst);
 
-    return 0;
+    return av_buffer_replace(&s->bitstream_buffer, s1->bitstream_buffer);
 }
 
 static int mpeg4_update_thread_context_for_user(AVCodecContext *dst,
@@ -3783,6 +3864,7 @@ static av_cold int decode_init(AVCodecContext *avctx)
     static AVOnce init_static_once = AV_ONCE_INIT;
     Mpeg4DecContext *ctx = avctx->priv_data;
     MpegEncContext *s = &ctx->m;
+    MPVUnquantDSPContext unquant_dsp_ctx;
     int ret;
 
     ctx->divx_version =
@@ -3792,6 +3874,15 @@ static av_cold int decode_init(AVCodecContext *avctx)
 
     if ((ret = ff_h263_decode_init(avctx)) < 0)
         return ret;
+
+    ff_mpv_unquantize_init(&unquant_dsp_ctx,
+                           avctx->flags & AV_CODEC_FLAG_BITEXACT, 0);
+
+    ctx->dct_unquantize_h263_intra  = unquant_dsp_ctx.dct_unquantize_h263_intra;
+    ctx->dct_unquantize_mpeg2_intra = unquant_dsp_ctx.dct_unquantize_mpeg2_intra;
+    // dct_unquantize_inter is only used with MPEG-2 quantizers,
+    // so we can already set dct_unquantize_inter here once and for all.
+    s->dct_unquantize_inter = unquant_dsp_ctx.dct_unquantize_mpeg2_inter;
 
     s->h263_pred = 1;
     s->low_delay = 0; /* default, might be overridden in the vol header during header parsing */
@@ -3811,10 +3902,27 @@ static av_cold int decode_init(AVCodecContext *avctx)
         GetBitContext gb;
 
         if (init_get_bits8(&gb, avctx->extradata, avctx->extradata_size) >= 0)
-            ff_mpeg4_decode_picture_header(ctx, &gb, 1, 0);
+            ff_mpeg4_parse_picture_header(ctx, &gb, 1, 0);
     }
 
     return 0;
+}
+
+static av_cold void mpeg4_flush(AVCodecContext *avctx)
+{
+    Mpeg4DecContext *const ctx = avctx->priv_data;
+
+    av_buffer_unref(&ctx->bitstream_buffer);
+    ff_mpeg_flush(avctx);
+}
+
+static av_cold int mpeg4_close(AVCodecContext *avctx)
+{
+    Mpeg4DecContext *const ctx = avctx->priv_data;
+
+    av_buffer_unref(&ctx->bitstream_buffer);
+
+    return ff_mpv_decode_close(avctx);
 }
 
 #define OFFSET(x) offsetof(MpegEncContext, x)
@@ -3840,12 +3948,12 @@ const FFCodec ff_mpeg4_decoder = {
     .priv_data_size        = sizeof(Mpeg4DecContext),
     .init                  = decode_init,
     FF_CODEC_DECODE_CB(ff_h263_decode_frame),
-    .close                 = ff_mpv_decode_close,
+    .close                 = mpeg4_close,
     .p.capabilities        = AV_CODEC_CAP_DRAW_HORIZ_BAND | AV_CODEC_CAP_DR1 |
                              AV_CODEC_CAP_DELAY | AV_CODEC_CAP_FRAME_THREADS,
     .caps_internal         = FF_CODEC_CAP_INIT_CLEANUP |
                              FF_CODEC_CAP_SKIP_FRAME_FILL_PARAM,
-    .flush                 = ff_mpeg_flush,
+    .flush                 = mpeg4_flush,
     .p.max_lowres          = 3,
     .p.profiles            = NULL_IF_CONFIG_SMALL(ff_mpeg4_video_profiles),
     UPDATE_THREAD_CONTEXT(mpeg4_update_thread_context),

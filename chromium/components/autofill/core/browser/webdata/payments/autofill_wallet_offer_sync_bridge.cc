@@ -120,17 +120,28 @@ AutofillWalletOfferSyncBridge::GetAllDataForDebugging() {
 }
 
 std::string AutofillWalletOfferSyncBridge::GetClientTag(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(entity_data.specifics.has_autofill_offer());
   return GetClientTagFromSpecifics(entity_data.specifics.autofill_offer());
 }
 
 std::string AutofillWalletOfferSyncBridge::GetStorageKey(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(entity_data.specifics.has_autofill_offer());
   return GetStorageKeyFromSpecifics(entity_data.specifics.autofill_offer());
+}
+
+bool AutofillWalletOfferSyncBridge::IsEntityDataValid(
+    const syncer::EntityData& entity_data) const {
+  CHECK(entity_data.specifics.has_autofill_offer());
+  // TODO(crbug.com/40677711): Consider using `IsOfferSpecificsValid` in this
+  // check. Currently, `IsOfferSpecificsValid` is used in `MergeRemoteData`
+  // which also logs a metric for the offer data being valid. Recording the
+  // metric here sounds wrong as this is a const method which should has no side
+  // effects and it is not guaranteed to be called exactly once.
+  return true;
 }
 
 bool AutofillWalletOfferSyncBridge::SupportsIncrementalUpdates() const {
@@ -175,7 +186,7 @@ void AutofillWalletOfferSyncBridge::MergeRemoteData(
     const syncer::EntityChangeList& entity_data) {
   std::vector<AutofillOfferData> offer_data;
   for (const std::unique_ptr<syncer::EntityChange>& change : entity_data) {
-    DCHECK(change->data().specifics.has_autofill_offer());
+    CHECK(IsEntityDataValid(change->data()));
     const sync_pb::AutofillOfferSpecifics specifics =
         change->data().specifics.autofill_offer();
     bool offer_valid = IsOfferSpecificsValid(specifics);

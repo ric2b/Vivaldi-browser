@@ -1615,11 +1615,6 @@ void InitializeSpecializationInfo(
         (*specializationEntriesOut)[id].constantID = static_cast<uint32_t>(id);
         switch (id)
         {
-            case sh::vk::SpecializationConstantId::SurfaceRotation:
-                (*specializationEntriesOut)[id].offset =
-                    offsetof(SpecializationConstants, surfaceRotation);
-                (*specializationEntriesOut)[id].size = sizeof(specConsts.surfaceRotation);
-                break;
             case sh::vk::SpecializationConstantId::Dither:
                 (*specializationEntriesOut)[id].offset =
                     offsetof(vk::SpecializationConstants, dither);
@@ -1737,7 +1732,6 @@ enum class PipelineState
     PolygonMode,
     CullMode,
     FrontFace,
-    SurfaceRotation,
     ViewportNegativeOneToOne,
     SampleShadingEnable,
     RasterizationSamples,
@@ -1844,7 +1838,6 @@ using PipelineStateBitSet   = angle::BitSetArray<angle::EnumSize<PipelineState>(
         (*valuesOut)[PipelineState::DepthWrite]              = shaders.bits.depthWrite;
         (*valuesOut)[PipelineState::StencilTest]             = shaders.bits.stencilTest;
         (*valuesOut)[PipelineState::DepthCompareOp]          = shaders.bits.depthCompareOp;
-        (*valuesOut)[PipelineState::SurfaceRotation]         = shaders.bits.surfaceRotation;
         (*valuesOut)[PipelineState::EmulatedDitherControl]   = shaders.emulatedDitherControl;
         (*valuesOut)[PipelineState::StencilOpFailFront]      = shaders.front.fail;
         (*valuesOut)[PipelineState::StencilOpPassFront]      = shaders.front.pass;
@@ -2054,7 +2047,6 @@ PipelineState GetPipelineState(size_t stateIndex, bool *isRangedOut, size_t *sub
         {PipelineState::PolygonMode, "polygon_mode"},
         {PipelineState::CullMode, "cull_mode"},
         {PipelineState::FrontFace, "front_face"},
-        {PipelineState::SurfaceRotation, "rotated_surface"},
         {PipelineState::ViewportNegativeOneToOne, "viewport_depth_[-1,1]"},
         {PipelineState::SampleShadingEnable, "sample_shading"},
         {PipelineState::RasterizationSamples, "rasterization_samples"},
@@ -2112,7 +2104,6 @@ PipelineState GetPipelineState(size_t stateIndex, bool *isRangedOut, size_t *sub
         case PipelineState::RenderPassUnresolveDepth:
         case PipelineState::RenderPassUnresolveStencil:
         case PipelineState::PrimitiveRestartEnable:
-        case PipelineState::SurfaceRotation:
         case PipelineState::ViewportNegativeOneToOne:
         case PipelineState::SampleShadingEnable:
         case PipelineState::AlphaToCoverageEnable:
@@ -2503,7 +2494,6 @@ PipelineState GetPipelineState(size_t stateIndex, bool *isRangedOut, size_t *sub
         {PipelineState::DepthWrite, 0},
         {PipelineState::StencilTest, 0},
         {PipelineState::DepthCompareOp, hasShaders ? VK_COMPARE_OP_LESS : 0},
-        {PipelineState::SurfaceRotation, 0},
         {PipelineState::EmulatedDitherControl, 0},
         {PipelineState::StencilOpFailFront, hasShaders ? VK_STENCIL_OP_KEEP : 0},
         {PipelineState::StencilOpPassFront, hasShaders ? VK_STENCIL_OP_KEEP : 0},
@@ -3386,8 +3376,8 @@ void GraphicsPipelineDesc::initDefaults(const ErrorContext *context,
         mShaders.shaders.bits.depthWrite                        = 0;
         mShaders.shaders.bits.stencilTest                       = 0;
         mShaders.shaders.bits.nonZeroStencilWriteMaskWorkaround = 0;
+        mShaders.shaders.bits.padding                           = 0;
         SetBitField(mShaders.shaders.bits.depthCompareOp, VK_COMPARE_OP_LESS);
-        mShaders.shaders.bits.surfaceRotation  = 0;
         mShaders.shaders.emulatedDitherControl = 0;
         mShaders.shaders.padding               = 0;
         SetBitField(mShaders.shaders.front.fail, VK_STENCIL_OP_KEEP);
@@ -3483,7 +3473,12 @@ VkResult GraphicsPipelineDesc::initializePipeline(ErrorContext *context,
     {
         initializePipelineVertexInputState(context, &vertexInputState, &dynamicStateList);
 
-        createInfo.pVertexInputState   = &vertexInputState.vertexInputState;
+        if (!context->getFeatures().supportsVertexInputDynamicState.enabled)
+        {
+            // Note: If vertex inpute state is dynamic, no need to set pVertexInputState;
+            // vertexInputState is not initialized either.
+            createInfo.pVertexInputState = &vertexInputState.vertexInputState;
+        }
         createInfo.pInputAssemblyState = &vertexInputState.inputAssemblyState;
     }
 
@@ -3765,64 +3760,71 @@ void GraphicsPipelineDesc::initializePipelineVertexInputState(
     // TODO(jmadill): Possibly use different path for ES 3.1 split bindings/attribs.
     uint32_t vertexAttribCount = 0;
 
-    stateOut->divisorState.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
-    stateOut->divisorState.pVertexBindingDivisors = stateOut->divisorDesc.data();
-    for (size_t attribIndexSizeT :
-         gl::AttributesMask(mVertexInput.inputAssembly.bits.programActiveAttributeLocations))
+    if (!context->getFeatures().supportsVertexInputDynamicState.enabled)
     {
-        const uint32_t attribIndex = static_cast<uint32_t>(attribIndexSizeT);
-
-        VkVertexInputBindingDescription &bindingDesc  = stateOut->bindingDescs[vertexAttribCount];
-        VkVertexInputAttributeDescription &attribDesc = stateOut->attributeDescs[vertexAttribCount];
-        const PackedAttribDesc &packedAttrib          = mVertexInput.vertex.attribs[attribIndex];
-
-        bindingDesc.binding = attribIndex;
-        bindingDesc.stride  = static_cast<uint32_t>(mVertexInput.vertex.strides[attribIndex]);
-        if (packedAttrib.divisor != 0)
+        stateOut->divisorState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT;
+        stateOut->divisorState.pVertexBindingDivisors = stateOut->divisorDesc.data();
+        for (size_t attribIndexSizeT :
+             gl::AttributesMask(mVertexInput.inputAssembly.bits.programActiveAttributeLocations))
         {
-            bindingDesc.inputRate = static_cast<VkVertexInputRate>(VK_VERTEX_INPUT_RATE_INSTANCE);
-            stateOut->divisorDesc[stateOut->divisorState.vertexBindingDivisorCount].binding =
-                bindingDesc.binding;
-            stateOut->divisorDesc[stateOut->divisorState.vertexBindingDivisorCount].divisor =
-                packedAttrib.divisor;
-            ++stateOut->divisorState.vertexBindingDivisorCount;
+            const uint32_t attribIndex = static_cast<uint32_t>(attribIndexSizeT);
+
+            VkVertexInputBindingDescription &bindingDesc =
+                stateOut->bindingDescs[vertexAttribCount];
+            VkVertexInputAttributeDescription &attribDesc =
+                stateOut->attributeDescs[vertexAttribCount];
+            const PackedAttribDesc &packedAttrib = mVertexInput.vertex.attribs[attribIndex];
+
+            bindingDesc.binding = attribIndex;
+            bindingDesc.stride  = static_cast<uint32_t>(mVertexInput.vertex.strides[attribIndex]);
+            if (packedAttrib.divisor != 0)
+            {
+                bindingDesc.inputRate =
+                    static_cast<VkVertexInputRate>(VK_VERTEX_INPUT_RATE_INSTANCE);
+                stateOut->divisorDesc[stateOut->divisorState.vertexBindingDivisorCount].binding =
+                    bindingDesc.binding;
+                stateOut->divisorDesc[stateOut->divisorState.vertexBindingDivisorCount].divisor =
+                    packedAttrib.divisor;
+                ++stateOut->divisorState.vertexBindingDivisorCount;
+            }
+            else
+            {
+                bindingDesc.inputRate = static_cast<VkVertexInputRate>(VK_VERTEX_INPUT_RATE_VERTEX);
+            }
+
+            // If using dynamic state for stride, the value for stride is unconditionally 0 here.
+            // |ContextVk::handleDirtyGraphicsVertexBuffers| implements the same fix when setting
+            // stride dynamically.
+            ASSERT(!context->getFeatures().useVertexInputBindingStrideDynamicState.enabled ||
+                   bindingDesc.stride == 0);
+
+            // Get the corresponding VkFormat for the attrib's format.
+            angle::FormatID formatID = static_cast<angle::FormatID>(packedAttrib.format);
+            const gl::ComponentType programAttribType = gl::GetComponentTypeMask(
+                gl::ComponentTypeMask(mVertexInput.vertex.shaderAttribComponentType), attribIndex);
+
+            attribDesc.binding = attribIndex;
+            attribDesc.format  = getPipelineVertexInputStateFormat(
+                context, formatID, packedAttrib.compressed, programAttribType, attribIndex);
+            attribDesc.location = static_cast<uint32_t>(attribIndex);
+            attribDesc.offset   = packedAttrib.offset;
+
+            vertexAttribCount++;
         }
-        else
+
+        // The binding descriptions are filled in at draw time.
+        stateOut->vertexInputState.sType =
+            VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        stateOut->vertexInputState.flags                           = 0;
+        stateOut->vertexInputState.vertexBindingDescriptionCount   = vertexAttribCount;
+        stateOut->vertexInputState.pVertexBindingDescriptions      = stateOut->bindingDescs.data();
+        stateOut->vertexInputState.vertexAttributeDescriptionCount = vertexAttribCount;
+        stateOut->vertexInputState.pVertexAttributeDescriptions = stateOut->attributeDescs.data();
+        if (stateOut->divisorState.vertexBindingDivisorCount)
         {
-            bindingDesc.inputRate = static_cast<VkVertexInputRate>(VK_VERTEX_INPUT_RATE_VERTEX);
+            stateOut->vertexInputState.pNext = &stateOut->divisorState;
         }
-
-        // If using dynamic state for stride, the value for stride is unconditionally 0 here.
-        // |ContextVk::handleDirtyGraphicsVertexBuffers| implements the same fix when setting stride
-        // dynamically.
-        ASSERT(!context->getFeatures().useVertexInputBindingStrideDynamicState.enabled ||
-               bindingDesc.stride == 0);
-
-        // Get the corresponding VkFormat for the attrib's format.
-        angle::FormatID formatID = static_cast<angle::FormatID>(packedAttrib.format);
-        const gl::ComponentType programAttribType = gl::GetComponentTypeMask(
-            gl::ComponentTypeMask(mVertexInput.vertex.shaderAttribComponentType), attribIndex);
-
-        attribDesc.binding = attribIndex;
-        attribDesc.format  = getPipelineVertexInputStateFormat(
-            context, formatID, packedAttrib.compressed, programAttribType, attribIndex);
-        attribDesc.location = static_cast<uint32_t>(attribIndex);
-        attribDesc.offset   = packedAttrib.offset;
-
-        vertexAttribCount++;
-    }
-
-    // The binding descriptions are filled in at draw time.
-    stateOut->vertexInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    stateOut->vertexInputState.flags = 0;
-    stateOut->vertexInputState.vertexBindingDescriptionCount   = vertexAttribCount;
-    stateOut->vertexInputState.pVertexBindingDescriptions      = stateOut->bindingDescs.data();
-    stateOut->vertexInputState.vertexAttributeDescriptionCount = vertexAttribCount;
-    stateOut->vertexInputState.pVertexAttributeDescriptions    = stateOut->attributeDescs.data();
-    if (stateOut->divisorState.vertexBindingDivisorCount)
-    {
-        stateOut->vertexInputState.pNext = &stateOut->divisorState;
     }
 
     const PackedInputAssemblyState &inputAssembly = mVertexInput.inputAssembly;
@@ -4663,13 +4665,6 @@ void GraphicsPipelineDesc::updateDepthClampEnabled(GraphicsPipelineTransitionBit
                                                    bool enabled)
 {
     setDepthClampEnabled(enabled);
-    transition->set(ANGLE_GET_TRANSITION_BIT(mShaders.shaders.bits));
-}
-
-void GraphicsPipelineDesc::updateSurfaceRotation(GraphicsPipelineTransitionBits *transition,
-                                                 bool isRotatedAspectRatio)
-{
-    SetBitField(mShaders.shaders.bits.surfaceRotation, isRotatedAspectRatio);
     transition->set(ANGLE_GET_TRANSITION_BIT(mShaders.shaders.bits));
 }
 
@@ -6552,7 +6547,7 @@ void DescriptorSetDescBuilder::updateOneShaderBuffer(
             commandBufferHelper->bufferRead(context, VK_ACCESS_SHADER_READ_BIT,
                                             block.activeShaders(), &bufferHelper);
         }
-        else if ((bufferHelper.getCurrentWriteAccess() & VK_ACCESS_SHADER_WRITE_BIT) != 0 &&
+        else if (bufferHelper.isLastAccessShaderWriteOnly() &&
                  (memoryBarrierBits & kBufferMemoryBarrierBits) == 0)
         {
             // Buffer is already in shader write access, and this is not from memoryBarrier call,

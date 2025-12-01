@@ -96,7 +96,9 @@ IpProtectionCoreImpl::IpProtectionCoreImpl(
                                                : MdlType::kRegularBrowsing)
                     : MdlType::kIncognito) {
   net::NetworkChangeNotifier::AddNetworkChangeObserver(this);
-  if (ip_protection_incognito && ipp_prt_manager_) {
+  bool should_request_prts = ip_protection_incognito ||
+       !net::features::kProbabilisticRevealTokensOnlyInIncognito.Get();
+  if (ipp_prt_manager_ && should_request_prts) {
     ipp_prt_manager_->RequestTokens();
   }
 }
@@ -179,14 +181,17 @@ std::optional<BlindSignedAuthToken> IpProtectionCoreImpl::GetAuthToken(
   return result;
 }
 
-std::optional<ProbabilisticRevealToken>
-IpProtectionCoreImpl::GetProbabilisticRevealToken(
+std::optional<std::string> IpProtectionCoreImpl::GetProbabilisticRevealToken(
     const std::string& top_level,
     const std::string& third_party) {
   if (!ipp_prt_manager_) {
     return std::nullopt;
   }
   return ipp_prt_manager_->GetToken(top_level, third_party);
+}
+
+bool IpProtectionCoreImpl::IsProbabilisticRevealTokenAvailable() {
+  return (ipp_prt_manager_ && ipp_prt_manager_->IsTokenAvailable());
 }
 
 IpProtectionTokenManager*
@@ -255,8 +260,7 @@ bool IpProtectionCoreImpl::ShouldRequestIncludeProbabilisticRevealToken(
           net::features::kEnableProbabilisticRevealTokens)) {
     return false;
   }
-  if (net::features::kAttachProbabilisticRevealTokensOnAllProxiedRequests
-          .Get()) {
+  if (net::features::kBypassProbabilisticRevealTokenRegistry.Get()) {
     return true;
   }
   return probabilistic_reveal_token_registry_->IsRegistered(request_url);

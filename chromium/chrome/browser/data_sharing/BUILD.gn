@@ -55,7 +55,9 @@ if (is_android) {
       "android/java/res/layout/recent_activity_log_item.xml",
       "android/java/res/layout/shared_image_tiles.xml",
       "android/java/res/layout/shared_image_tiles_icon.xml",
+      "android/java/res/values/colors.xml",
       "android/java/res/values/dimens.xml",
+      "android/java/res/values/ids.xml",
       "android/java/res/values/styles.xml",
     ]
     deps = [ "//components/browser_ui/styles/android:java_resources" ]
@@ -64,6 +66,7 @@ if (is_android) {
   android_library("data_sharing_public_java") {
     resources_package = "org.chromium.chrome.browser.data_sharing"
     sources = [
+      "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingIntentUtils.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingMetrics.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingTabGroupUtils.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingTabGroupsDelegate.java",
@@ -86,7 +89,9 @@ if (is_android) {
       "//chrome/browser/share:java",
       "//chrome/browser/tab:java",
       "//chrome/browser/tab_group_sync:factory_java",
+      "//chrome/browser/tab_group_sync:java",
       "//chrome/browser/tabmodel:java",
+      "//chrome/browser/tabwindow:java",
       "//chrome/browser/ui/android/favicon:java",
       "//chrome/browser/ui/android/strings:ui_strings_grd",
       "//components/browser_ui/bottomsheet/android:java",
@@ -127,9 +132,12 @@ if (is_android) {
       "//base:supplier_java",
       "//chrome/browser/ui/android/strings:ui_strings_grd",
       "//components/browser_ui/bottomsheet/android:java",
+      "//components/browser_ui/bottomsheet/android:java_resources",
+      "//components/browser_ui/widget/android:java",
       "//components/browser_ui/widget/android:java_resources",
       "//components/collaboration/public:messaging_java",
       "//components/data_sharing/public:public_java",
+      "//components/saved_tab_groups/public:java",
       "//components/strings:components_strings_grd",
       "//third_party/androidx:androidx_annotation_annotation_java",
       "//third_party/androidx:androidx_recyclerview_recyclerview_java",
@@ -208,6 +216,7 @@ if (is_android) {
     resources_package = "org.chromium.chrome.browser.data_sharing"
     sources = [
       "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingImplFactory.java",
+      "android/java/src/org/chromium/chrome/browser/data_sharing/FakeDataSharingUIDelegateImpl.java",
       "android/java/src/org/chromium/chrome/browser/data_sharing/NoOpDataSharingSDKDelegateImpl.java",
     ]
 
@@ -247,7 +256,9 @@ if (is_android) {
       "//components/browser_ui/styles/android:java",
       "//components/collaboration/public:core_java",
       "//components/data_sharing/public:public_java",
+      "//components/tab_groups:tab_groups_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
+      "//third_party/androidx:androidx_core_core_java",
       "//ui/android:ui_no_recycler_view_java",
     ]
   }
@@ -373,9 +384,7 @@ if (is_android) {
   android_library("javatests") {
     testonly = true
 
-    sources = [
-      "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingServiceFactoryTest.java",
-    ]
+    sources = [ "android/java/src/org/chromium/chrome/browser/data_sharing/DataSharingServiceFactoryTest.java" ]
     deps = [
       ":factory_java",
       "//base:base_java",

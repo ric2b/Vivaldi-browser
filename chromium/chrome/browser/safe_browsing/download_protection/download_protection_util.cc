@@ -14,6 +14,7 @@
 #include "chrome/browser/safe_browsing/download_protection/download_item_metadata.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
 #include "components/download/public/common/download_danger_type.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/common/file_type_policies.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -33,6 +34,11 @@
 namespace safe_browsing {
 
 namespace {
+
+#if BUILDFLAG(IS_ANDROID)
+// File suffix for APKs.
+const base::FilePath::CharType kApkSuffix[] = FILE_PATH_LITERAL(".apk");
+#endif
 
 // Escapes a certificate attribute so that it can be used in a allowlist
 // entry.  Currently, we only escape slashes, since they are used as a
@@ -392,12 +398,13 @@ std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
   std::unique_ptr<ReferrerChain> referrer_chain =
       std::make_unique<ReferrerChain>();
 
-  SessionID tab_id = sessions::SessionTabHelper::IdForTab(item.web_contents);
+  SessionID tab_id =
+      sessions::SessionTabHelper::IdForTab(item.web_contents.get());
 
   GURL tab_url = item.web_contents->GetVisibleURL();
 
   SafeBrowsingNavigationObserverManager::AttributionResult result =
-      GetNavigationObserverManager(item.web_contents)
+      GetNavigationObserverManager(item.web_contents.get())
           ->IdentifyReferrerChainByHostingPage(
               item.frame_url, tab_url, item.outermost_main_frame_id, tab_id,
               item.has_user_gesture, user_gesture_limit, referrer_chain.get());
@@ -417,13 +424,36 @@ std::unique_ptr<ReferrerChainData> IdentifyReferrerChain(
                                  CountOfRecentNavigationsToAppend(
                                      profile, profile->GetPrefs(), result)
                            : 0u;
-  GetNavigationObserverManager(item.web_contents)
+  GetNavigationObserverManager(item.web_contents.get())
       ->AppendRecentNavigations(recent_navigations_to_collect,
                                 referrer_chain.get());
 
   return std::make_unique<ReferrerChainData>(result, std::move(referrer_chain),
                                              referrer_chain_length,
                                              recent_navigations_to_collect);
+}
+
+ReferrerChain GetOrIdentifyReferrerChainForEnterprise(
+    download::DownloadItem& item) {
+  safe_browsing::ReferrerChainData* referrer_chain_data =
+      static_cast<safe_browsing::ReferrerChainData*>(
+          item.GetUserData(safe_browsing::ReferrerChainData::
+                               kDownloadReferrerChainDataKeyForEnterprise));
+  if (!referrer_chain_data || !referrer_chain_data->GetReferrerChain() ||
+      referrer_chain_data->GetReferrerChain()->empty()) {
+    std::unique_ptr<safe_browsing::ReferrerChainData> new_referrer_chain_data =
+        safe_browsing::IdentifyReferrerChain(
+            item, enterprise_connectors::kReferrerUserGestureLimit);
+    if (!new_referrer_chain_data ||
+        !new_referrer_chain_data->GetReferrerChain()) {
+      return safe_browsing::ReferrerChain();
+    }
+    referrer_chain_data = new_referrer_chain_data.get();
+    item.SetUserData(safe_browsing::ReferrerChainData::
+                         kDownloadReferrerChainDataKeyForEnterprise,
+                     std::move(new_referrer_chain_data));
+  }
+  return *referrer_chain_data->GetReferrerChain();
 }
 
 #if BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
@@ -488,6 +518,20 @@ ShouldUploadBinaryForDeepScanning(download::DownloadItem* item) {
   // Create temporary metadata wrapper on the stack.
   DownloadItemMetadata metadata(item);
   return DeepScanningRequest::ShouldUploadBinary(metadata);
+#endif
+}
+
+bool IsFiletypeSupportedForFullDownloadProtection(
+    const base::FilePath& file_name) {
+  // On Android, do not use FileTypePolicies, which are currently only
+  // applicable to desktop platforms. Instead, hardcode the APK filetype check
+  // for Android here.
+  // TODO(chlily): Refactor/fix FileTypePolicies and then remove this
+  // platform-specific hardcoded behavior.
+#if BUILDFLAG(IS_ANDROID)
+  return file_name.MatchesExtension(kApkSuffix);
+#else
+  return FileTypePolicies::GetInstance()->IsCheckedBinaryFile(file_name);
 #endif
 }
 

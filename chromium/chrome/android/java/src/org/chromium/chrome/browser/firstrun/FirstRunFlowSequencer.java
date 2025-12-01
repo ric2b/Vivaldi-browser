@@ -99,12 +99,11 @@ public abstract class FirstRunFlowSequencer {
                 OneshotSupplier<ProfileProvider> profileSupplier);
     }
 
-
     /**
      * The delegate to be used by the Sequencer. By default, it's an instance of
      * {@link FirstRunFlowSequencerDelegate}, unless it's overridden by {@code sDelegateForTesting}.
      */
-    private FirstRunFlowSequencerDelegate mDelegate;
+    private final FirstRunFlowSequencerDelegate mDelegate;
 
     /** If not null, creates {@code mDelegate} for this object during tests. */
     private static DelegateFactoryForTesting sDelegateFactoryForTesting;
@@ -141,12 +140,12 @@ public abstract class FirstRunFlowSequencer {
      */
     void start() {
         AccountManagerFacadeProvider.getInstance()
-                .getCoreAccountInfos()
+                .getAccounts()
                 .then(
-                        coreAccountInfos -> {
+                        accounts -> {
                             RecordHistogram.recordCount1MHistogram(
                                     "Signin.AndroidDeviceAccountsNumberWhenEnteringFRE",
-                                    Math.min(coreAccountInfos.size(), 2));
+                                    Math.min(accounts.size(), 2));
 
                             assert !mAccountsAvailable;
                             mAccountsAvailable = true;

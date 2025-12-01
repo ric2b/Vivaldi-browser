@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../../ui/legacy/components/data_grid/data_grid.js';
 import '../../../../ui/components/icon_button/icon_button.js';
@@ -125,7 +126,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
       Lit.render(html`
-        <style>${ruleSetGridStyles.cssText}</style>
+        <style>${ruleSetGridStyles}</style>
         <div class="ruleset-container" jslog=${VisualLogging.pane('preloading-rules')}>
           <devtools-data-grid striped @select=${this.#onRowSelected}>
             <table>
@@ -138,7 +139,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
                 </th>
               </tr>
               ${rows.map(({ruleSet, preloadsStatusSummary}) => {
-                const location = PreloadingString.ruleSetLocationShort(ruleSet, pageURL);
+                const location = PreloadingString.ruleSetTagOrLocationShort(ruleSet, pageURL);
                 const revealInElements = ruleSet.backendNodeId !== undefined;
                 const revealInNetwork = ruleSet.url !== undefined && ruleSet.requestId;
                 return html`
@@ -178,8 +179,7 @@ export class RuleSetGrid extends LegacyWrapper.LegacyWrapper.WrappableComponent<
                     ${ruleSet.errorType !== undefined ? html`
                       <span style=${styleMap({color: 'var(--sys-color-error)'})}>
                         ${i18nString(UIStrings.errors, {errorCount: 1})}
-                      </span>` : ''}
-                    ${ruleSet.errorType !== Protocol.Preload.RuleSetErrorType.SourceIsNotJsonObject ? html`
+                      </span>` : ''} ${ruleSet.errorType !== Protocol.Preload.RuleSetErrorType.SourceIsNotJsonObject ? html`
                       <button class="link" role="link"
                         @click=${() => this.#revealAttemptViewWithFilter(ruleSet)}
                         title=${i18nString(UIStrings.buttonRevealPreloadsAssociatedWithRuleSet)}

@@ -96,18 +96,10 @@ class TabDragContext : public TabDragContextBase {
   // Returns true if a tab is being dragged into this tab strip.
   virtual bool IsActiveDropTarget() const = 0;
 
-  // Returns the width of the active tab.
-  virtual int GetActiveTabWidth() const = 0;
-
   // Returns where the drag region begins and ends; tabs dragged beyond these
   // points should detach.
   virtual int TabDragAreaEndX() const = 0;
   virtual int TabDragAreaBeginX() const = 0;
-
-  // Returns the horizontal drag threshold - the amount a tab drag must move to
-  // trigger a reorder. This is dependent on the width of tabs. The smaller the
-  // tabs compared to the standard size, the smaller the threshold.
-  virtual int GetHorizontalDragThreshold() const = 0;
 
   // Returns the index where the dragged WebContents should be inserted into
   // this tabstrip given the DraggedTabView's bounds `dragged_bounds` in
@@ -138,9 +130,7 @@ class TabDragContext : public TabDragContextBase {
   // Invoked when TabDragController detaches a set of tabs.
   virtual void DraggedTabsDetached() = 0;
 
-  // Used by TabDragController when the user stops dragging. `completed` is
-  // true if the drag operation completed successfully, false if it was
-  // reverted.
+  // Used by TabDragController when the user stops dragging.
   virtual void StoppedDragging() = 0;
 
   // Invoked during drag to layout the views being dragged in `views` at

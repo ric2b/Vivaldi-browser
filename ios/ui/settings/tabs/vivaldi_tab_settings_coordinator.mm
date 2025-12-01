@@ -7,12 +7,14 @@
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/tabs/model/inactive_tabs/features.h"
+#import "ios/ui/helpers/helpers_swift.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_mediator.h"
 #import "ios/ui/settings/tabs/vivaldi_tab_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiTabSettingsCoordinator () {
+@interface VivaldiTabSettingsCoordinator ()<
+    VivaldiHostingControllerPresentationDelegate> {
   // Coordinator for the inactive tabs settings.
   InactiveTabsSettingsCoordinator* _inactiveTabsSettingsCoordinator;
 }
@@ -48,7 +50,8 @@
 
   self.viewController =
       [VivaldiTabsSettingsViewProvider
-          makeViewControllerWithOnInactiveTabsSelectionTap:^{
+          makeViewControllerWithPresentationDelegate:self
+          onInactiveTabsSelectionTap:^{
       [self showInactiveTabsSettings];
   }];
 
@@ -100,6 +103,14 @@
   [self stop];
   [self.baseNavigationController dismissViewControllerAnimated:YES
                                                     completion:nil];
+}
+
+#pragma mark - VivaldiHostingControllerPresentationDelegate
+
+- (void)hostingController:(UIViewController*)hostingController
+                didMoveTo:(UIViewController* _Nullable)parent {
+  DCHECK_EQ(self.viewController, hostingController);
+  [self stop];
 }
 
 @end

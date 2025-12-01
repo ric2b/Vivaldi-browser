@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/wtf/thread_safe_ref_counted.h"
 #include "third_party/webrtc/api/frame_transformer_interface.h"
+#include "third_party/webrtc/api/units/timestamp.h"
 
 namespace blink {
 
@@ -29,19 +30,21 @@ class RTCEncodedAudioFrameDelegate
  public:
   explicit RTCEncodedAudioFrameDelegate(
       std::unique_ptr<webrtc::TransformableAudioFrameInterface> webrtc_frame,
-      rtc::ArrayView<const unsigned int> contributing_sources,
+      webrtc::ArrayView<const unsigned int> contributing_sources,
       std::optional<uint16_t> sequence_number);
 
   uint32_t RtpTimestamp() const;
   DOMArrayBuffer* CreateDataBuffer(v8::Isolate* isolate) const;
   void SetData(const DOMArrayBuffer* data);
-  base::expected<void, String> SetRtpTimestamp(uint32_t timestamp);
+  base::expected<void, String> SetWebRtcFrameMetadata(
+      uint32_t rtp_timestamp,
+      std::optional<uint8_t> payload_type,
+      std::optional<webrtc::Timestamp> capture_time);
   std::optional<uint32_t> Ssrc() const;
   std::optional<uint8_t> PayloadType() const;
   std::optional<std::string> MimeType() const;
   std::optional<uint16_t> SequenceNumber() const;
   Vector<uint32_t> ContributingSources() const;
-  std::optional<uint64_t> AbsCaptureTime() const;
   std::optional<base::TimeTicks> ReceiveTime() const;
   std::optional<base::TimeTicks> CaptureTime() const;
   std::optional<base::TimeDelta> SenderCaptureTimeOffset() const;

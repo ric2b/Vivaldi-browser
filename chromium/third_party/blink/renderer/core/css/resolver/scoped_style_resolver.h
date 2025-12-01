@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/css/active_style_sheets.h"
 #include "third_party/blink/renderer/core/css/cascade_layer.h"
 #include "third_party/blink/renderer/core/css/element_rule_collector.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver_utils.h"
 #include "third_party/blink/renderer/core/css/rule_set.h"
 #include "third_party/blink/renderer/core/dom/tree_scope.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
@@ -83,7 +84,22 @@ class CORE_EXPORT ScopedStyleResolver final
     return active_style_sheets_;
   }
 
-  // See InspectorGhostRules.
+  // When the stylesheets are quietly swapped, no invalidation takes
+  // place, but calls to ElementRuleCollector::CollectMatchingRules
+  // will "see" the swapped-in sheets, and return its result accordingly.
+  // This allows the Inspector to query an "alternate reality" which
+  // may be different from what the style engine normally observes
+  // (see InspectorGhostRules).
+  //
+  // This approach has limitations, however: name-defining at-rules
+  // such as @keyframes are generally not applied: if `other` contains
+  // any @keyframes that differ from the original stylesheets,
+  // those changes are effectively ignored.
+  //
+  // Quietly swapping stylesheets does however cause the layer map
+  // (`cascade_layer_map_`) to be rebuilt, because any CascadeLayer
+  // instances within `other` must exist in this map for rule matching
+  // to function (see `CascadeLayerSeeker`).
   void QuietlySwapActiveStyleSheets(ActiveStyleSheetVector& other);
 
   void AppendActiveStyleSheets(unsigned index, const ActiveStyleSheetVector&);
@@ -120,8 +136,6 @@ class CORE_EXPORT ScopedStyleResolver final
   bool KeyframeStyleShouldOverride(
       const StyleRuleKeyframes* new_rule,
       const StyleRuleKeyframes* existing_rule) const;
-  void AddPositionTryRules(const RuleSet&);
-  void AddFunctionRules(const RuleSet&);
 
   CounterStyleMap& EnsureCounterStyleMap();
 
@@ -145,7 +159,6 @@ class CORE_EXPORT ScopedStyleResolver final
       HeapHashMap<AtomicString, Member<StyleRulePositionTry>>;
   PositionTryRuleMap position_try_rule_map_;
 
-  using FunctionRuleMap = HeapHashMap<String, Member<StyleRuleFunction>>;
   FunctionRuleMap function_rule_map_;
 
   // Multiple entries are created pointing to the same

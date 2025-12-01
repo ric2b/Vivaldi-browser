@@ -28,7 +28,6 @@ class VivaldiDocumentLoader : protected content::WebContentsDelegate,
 
   // content::WebContentsDelegate overrides.
   bool ShouldSuppressDialogs(content::WebContents* source) override;
-  bool IsNeverComposited(content::WebContents* web_contents) override;
 
   // content::WebContentsObserver overrides.
   void DidStartNavigation(

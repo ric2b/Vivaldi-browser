@@ -25,6 +25,7 @@ VivaldiDocumentLoader::VivaldiDocumentLoader(
 
   content::WebContents::CreateParams create_params(profile,
                                                    site_instance.get());
+  create_params.is_never_composited = true;
   vivaldi_web_contents_ = content::WebContents::Create(create_params);
 
   extensions::SetViewType(vivaldi_web_contents_.get(),
@@ -75,10 +76,5 @@ void VivaldiDocumentLoader::DidFinishNavigation(
 
 bool VivaldiDocumentLoader::ShouldSuppressDialogs(
     content::WebContents* source) {
-  return true;
-}
-
-bool VivaldiDocumentLoader::IsNeverComposited(
-    content::WebContents* web_contents) {
   return true;
 }

@@ -178,9 +178,7 @@ chromium-metrics-reviews@google.com.
   <int value="20" label="Corresponding source - invalid filter data"/>
   <int value="21" label="Corresponding source - invalid active state"/>
   <int value="22" label="Corresponding source - invalid read only source data"/>
-  <int value="23"
-      label="(Obsolete): Corresponding source - invalid event report windows.
-             Removed in 2024/02."/>
+  <int value="23" label="Corresponding source - invalid event report windows."/>
   <int value="24"
       label="Corresponding source - invalid max event level reports"/>
   <int value="25" label="Corresponding source - invalid event level epsilon"/>
@@ -188,7 +186,7 @@ chromium-metrics-reviews@google.com.
       label="Corresponding source - destination sites query failed"/>
   <int value="27" label="Corresponding source - invalid destination sites"/>
   <int value="28" label="Corresponding source - construction failed"/>
-  <int value="29" label="Corresponding source - invalid trigger specs"/>
+  <int value="29" label="Corresponding source - invalid trigger data"/>
   <int value="30" label="Corresponding source - dedup key query failed"/>
   <int value="31"
       label="Corresponding source - invalid randomized response rate"/>
@@ -299,6 +297,7 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Failed due to error"/>
   <int value="2" label="Dropped due to embedder disabling the API"/>
   <int value="3" label="Failed to assemble"/>
+  <int value="4" label="Expired"/>
 </enum>
 
 <!-- LINT.ThenChange(//content/browser/attribution_reporting/attribution_manager_impl.cc:ConversionReportSendOutcome) -->
@@ -313,16 +312,6 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//content/browser/attribution_reporting/attribution_manager_impl.cc:ConversionReportSendRetryCount) -->
-
-<!-- LINT.IfChange(ConversionReportStatus) -->
-
-<enum name="ConversionReportStatus">
-  <int value="0" label="OK"/>
-  <int value="1" label="Internal network error"/>
-  <int value="2" label="External non-200 HTTP error"/>
-</enum>
-
-<!-- LINT.ThenChange(//content/browser/attribution_reporting/attribution_report_network_sender.cc:Status) -->
 
 <!-- LINT.IfChange(ConversionRequestSupportHeader) -->
 
@@ -371,20 +360,22 @@ chromium-metrics-reviews@google.com.
   <int value="25" label="event_report_windows' start_time value is invalid"/>
   <int value="26" label="event_report_windows' end time value is invalid"/>
   <int value="27" label="trigger_data_matching value is invalid"/>
-  <int value="28" label="trigger_specs has wrong type"/>
-  <int value="29" label="trigger spec's trigger_data missing"/>
-  <int value="30" label="trigger_spec's trigger_data not a valid list"/>
+  <int value="28" label="(Obsolete) trigger_specs has wrong type"/>
+  <int value="29" label="(Obsolete) trigger spec's trigger_data missing"/>
+  <int value="30"
+      label="(Obsolete) trigger_spec's trigger_data not a valid list"/>
   <int value="31" label="trigger_data not a valid list"/>
   <int value="32" label="duplicate trigger data"/>
-  <int value="33" label="trigger_specs duplicate trigger data"/>
+  <int value="33" label="(Obsolete) trigger_specs duplicate trigger data"/>
   <int value="34" label="excessive trigger data"/>
-  <int value="35" label="trigger_specs excessive trigger data"/>
+  <int value="35" label="(Obsolete) trigger_specs excessive trigger data"/>
   <int value="36" label="invalid trigger data for matching mode"/>
   <int value="37"
-      label="top-level trigger_data and specs are mutually exclusive"/>
-  <int value="38" label="summary_operator value is invalid"/>
-  <int value="39" label="summary_buckets not a valid list"/>
-  <int value="40" label="summary_buckets value invalid"/>
+      label="(Obsolete) top-level trigger_data and specs are mutually
+             exclusive"/>
+  <int value="38" label="(Obsolete) summary_operator value is invalid"/>
+  <int value="39" label="(Obsolete) summary_buckets not a valid list"/>
+  <int value="40" label="(Obsolete) summary_buckets value invalid"/>
   <int value="41" label="event_level_epsilon value is invalid"/>
   <int value="42" label="destination_limit_priority is invalid"/>
   <int value="43" label="attribution_scopes' limit value is invalid"/>
@@ -450,6 +441,15 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//content/browser/attribution_reporting/attribution_storage_sql.h:InitStatus) -->
 
+<!-- LINT.IfChange(ConversionTriggerDataMatching) -->
+
+<enum name="ConversionTriggerDataMatching">
+  <int value="0" label="modulus"/>
+  <int value="1" label="exact"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/attribution_reporting/trigger_data_matching.mojom:TriggerDataMatching) -->
+
 <!-- LINT.IfChange(ConversionTriggerRegistrationError) -->
 
 <enum name="ConversionTriggerRegistrationError">
@@ -489,7 +489,7 @@ chromium-metrics-reviews@google.com.
   <int value="28"
       label="trigger_context_id disallowed for
              aggregatable_source_registration_time"/>
-  <int value="29" label="event_trigger_data value field is invalid"/>
+  <int value="29" label="(Obsolete) event_trigger_data value field is invalid"/>
   <int value="30" label="aggregatable_filtering_id_max_bytes field is invalid"/>
   <int value="31"
       label="non-default aggregatable_filtering_id_max_bytes is disallowed

@@ -68,7 +68,8 @@ class MojoBindingsCheckTest(MojomParserTestCase):
     # the attribute check's validation.
     self._testValid(
         "a.mojom", """
-      [JavaConstantsClassName="FakeClass",JavaPackage="org.chromium.Fake"]
+      [JavaConstantsClassName="FakeClass",JavaPackage="org.chromium.Fake",
+      IncludeSendValidation]
       module mojo.test;
       [Stable, Extensible]
       enum Hello { [Default] kValue, kValue2, [MinVersion=2] kValue3 };
@@ -96,6 +97,11 @@ class MojoBindingsCheckTest(MojomParserTestCase):
       interface FooMethodFeatureControlled {
         [RuntimeFeature=test.mojom.FeatureName]
         MethodWithFeature() => (bool c);
+      };
+
+      interface FooMethodValidation {
+        [SendValidation=test.mojom.FeatureName]
+        MethodWithSendValidation(Thingy thing);
       };
     """)
 

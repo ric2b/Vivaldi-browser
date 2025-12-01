@@ -20,6 +20,7 @@
 #import "base/files/file_path.h"
 #import "base/functional/bind.h"
 #import "base/functional/callback.h"
+#import "base/ios/device_util.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/metrics/histogram_macros.h"
 #import "base/metrics/persistent_histogram_allocator.h"
@@ -75,7 +76,6 @@
 #import "ios/chrome/browser/metrics/model/ios_chrome_stability_metrics_provider.h"
 #import "ios/chrome/browser/metrics/model/ios_family_link_user_metrics_provider.h"
 #import "ios/chrome/browser/metrics/model/ios_feed_activity_metrics_provider.h"
-#import "ios/chrome/browser/metrics/model/ios_feed_enabled_metrics_provider.h"
 #import "ios/chrome/browser/metrics/model/ios_profile_session_metrics_provider.h"
 #import "ios/chrome/browser/metrics/model/ios_push_notifications_metrics_provider.h"
 #import "ios/chrome/browser/metrics/model/mobile_session_shutdown_metrics_provider.h"
@@ -372,9 +372,6 @@ void IOSChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<IOSFeedActivityMetricsProvider>());
 
   metrics_service_->RegisterMetricsProvider(
-      std::make_unique<IOSFeedEnabledMetricsProvider>());
-
-  metrics_service_->RegisterMetricsProvider(
       std::make_unique<IOSPushNotificationsMetricsProvider>());
 }
 
@@ -404,14 +401,11 @@ void IOSChromeMetricsServiceClient::RegisterUKMProviders() {
 
 void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  task_vm_info task_info_data;
-  mach_msg_type_number_t count = sizeof(task_vm_info) / sizeof(natural_t);
-  kern_return_t kr =
-      task_info(mach_task_self(), TASK_VM_INFO,
-                reinterpret_cast<task_info_t>(&task_info_data), &count);
-  if (kr == KERN_SUCCESS) {
-    mach_vm_size_t footprint_mb = task_info_data.phys_footprint / 1024 / 1024;
+  auto result = ios::device_util::GetTaskVMInfo();
+  if (result.has_value()) {
+    task_vm_info task_vm_info_data = result.value();
+    mach_vm_size_t footprint_mb =
+        task_vm_info_data.phys_footprint / 1024 / 1024;
     base::UmaHistogramMemoryLargeMB("Memory.Browser.MemoryFootprint",
                                     footprint_mb);
     // The pseudo metric of Memory.Browser.MemoryFootprint. Only used to
@@ -419,7 +413,8 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
     base::UmaHistogramMemoryLargeMB(
         "UMA.Pseudo.Memory.Browser.MemoryFootprint",
         metrics::GetPseudoMetricsSample(
-            static_cast<double>(task_info_data.phys_footprint) / 1024 / 1024));
+            static_cast<double>(task_vm_info_data.phys_footprint) / 1024 /
+            1024));
 
     switch (UIApplication.sharedApplication.applicationState) {
       case UIApplicationStateActive:
@@ -449,7 +444,7 @@ void IOSChromeMetricsServiceClient::CollectFinalHistograms() {
     static crash_reporter::CrashKeyString<4> task_info_kern_return(
         "task-info-kern-return");
     char kr_buf[4];
-    base::strings::SafeSPrintf(kr_buf, "%d", kr);
+    base::strings::SafeSPrintf(kr_buf, "%d", result.error());
     task_info_kern_return.Set(kr_buf);
     base::debug::DumpWithoutCrashing();
   }
@@ -576,6 +571,12 @@ void IOSChromeMetricsServiceClient::OnUkmAllowedStateChanged(
 
   // Signal service manager to enable/disable UKM/DWA based on new states.
   UpdateRunningServices();
+}
+
+void IOSChromeMetricsServiceClient::OnProfileManagerWillBeDestroyed(
+    ProfileManagerIOS* manager) {
+  // Nothing to do, IOSChromeMetricsServiceClient does not keep any profile
+  // alive.
 }
 
 void IOSChromeMetricsServiceClient::OnProfileManagerDestroyed(

@@ -19,8 +19,10 @@
 #include "chrome/common/chrome_paths.h"
 #include "net/base/file_stream.h"
 
-#include "chrome/common/importer/importer_type.h"
+// Vivaldi
+#include "components/user_data_importer/common/importer_type.h"
 #include "importer/chrome_importer_utils.h"
+// End Vivaldi
 
 namespace extensions {
 
@@ -53,7 +55,8 @@ base::FilePath LaunchContext::FindManifest(const std::string& host_name,
 
   if (result.empty()) { // Begin Vivaldi
     // NOTE(bjorgvin@vivaldi.com): add missing path from nativeMessaging API docs
-    base::FilePath path = GetProfileDir(importer::TYPE_CHROME);
+    base::FilePath path =
+        GetProfileDir(user_data_importer::ImporterType::TYPE_CHROME);
     path = path.Append(FILE_PATH_LITERAL("NativeMessagingHosts"));
     path = path.Append(host_name + ".json");
     if (base::PathExists(path)) {

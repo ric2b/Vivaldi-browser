@@ -41,6 +41,8 @@ import org.chromium.chrome.browser.browserservices.SessionDataHolder;
 import org.chromium.chrome.browser.browserservices.intents.SessionHolder;
 import org.chromium.chrome.browser.browserservices.intents.WebappConstants;
 import org.chromium.chrome.browser.customtabs.CustomTabsConnection;
+import org.chromium.chrome.browser.customtabs.EphemeralCustomTabIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.IncognitoCustomTabIntentDataProvider;
 import org.chromium.chrome.browser.document.ChromeLauncherActivity;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
@@ -76,7 +78,6 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -217,8 +218,8 @@ public class IntentHandler {
 
     /**
      * Interested entities within Chrome relying on launching Incognito CCT should set this in their
-     *{@link CustomTabIntent} in order to identify themselves for metric purposes.
-     **/
+     * {@link CustomTabIntent} in order to identify themselves for metric purposes.
+     */
     public static final String EXTRA_INCOGNITO_CCT_CALLER_ID =
             "org.chromium.chrome.browser.customtabs.EXTRA_INCOGNITO_CCT_CALLER_ID";
 
@@ -271,8 +272,11 @@ public class IntentHandler {
     public static final String EXTRA_TAB_GROUP_METADATA =
             "org.chromium.chrome.browser.tab_group_metadata";
 
-    public static final String EXTRA_SKIP_PRECONNECT =
-            "org.chromium.chrome.browser.skip_preconnect";
+    /** Used to measure the duration of the tab group drag drop reparenting process. */
+    public static final String EXTRA_REPARENT_START_TIME =
+            "org.chromium.chrome.browser.reparent_start_time";
+
+    public static final String EXTRA_CCT_EARLY_NAV = "org.chromium.chrome.browser.cct_early_nav";
 
     /** The package name for the Google Search App. */
     public static final String PACKAGE_GSA = GSAUtils.GSA_PACKAGE_NAME;
@@ -291,7 +295,7 @@ public class IntentHandler {
     private static final String PACKAGE_YAHOO_MAIL = "com.yahoo.mobile.client.android.mail";
     private static final String PACKAGE_VIBER = "com.viber.voip";
     private static final String PACKAGE_PIXEL_LAUNCHER = "com.google.android.apps.nexuslauncher";
-    private static final String THIRD_PARTY_LAUNCHER_SUFFIX = "launcher";
+    private static final String PACKAGE_SAMSUNG_LAUNCHER = "com.sec.android.app.launcher";
     private static final String FACEBOOK_REFERRER_URL = "android-app://m.facebook.com";
     private static final String FACEBOOK_INTERNAL_BROWSER_REFERRER = "http://m.facebook.com";
     private static final String TWITTER_LINK_PREFIX = "http://t.co/";
@@ -328,7 +332,8 @@ public class IntentHandler {
         ExternalAppId.YOUTUBE,
         ExternalAppId.CAMERA,
         ExternalAppId.PIXEL_LAUNCHER,
-        ExternalAppId.THIRD_PARTY_LAUNCHER,
+        ExternalAppId.DEPRECATED_THIRD_PARTY_LAUNCHER,
+        ExternalAppId.SAMSUNG_LAUNCHER,
         ExternalAppId.NUM_ENTRIES
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -351,9 +356,10 @@ public class IntentHandler {
         int YOUTUBE = 15;
         int CAMERA = 16;
         int PIXEL_LAUNCHER = 17;
-        int THIRD_PARTY_LAUNCHER = 18;
+        int DEPRECATED_THIRD_PARTY_LAUNCHER = 18;
+        int SAMSUNG_LAUNCHER = 19;
         // Update ClientAppId in enums.xml when adding new items.
-        int NUM_ENTRIES = 19;
+        int NUM_ENTRIES = 20;
     }
 
     /**
@@ -524,8 +530,8 @@ public class IntentHandler {
                     return ExternalAppId.CAMERA;
                 } else if (referrer.endsWith(PACKAGE_PIXEL_LAUNCHER)) {
                     return ExternalAppId.PIXEL_LAUNCHER;
-                } else if (referrer.endsWith(THIRD_PARTY_LAUNCHER_SUFFIX)) {
-                    return ExternalAppId.THIRD_PARTY_LAUNCHER;
+                } else if (referrer.endsWith(PACKAGE_SAMSUNG_LAUNCHER)) {
+                    return ExternalAppId.SAMSUNG_LAUNCHER;
                 }
             }
         }
@@ -919,8 +925,8 @@ public class IntentHandler {
                 }
 
                 // Check url validity and remove invalid urls if needed.
-                LinkedHashMap tabIdsToUrls = tabGroupMetadata.tabIdsToUrls;
-                Iterator<Entry<Integer, String>> iterator = tabIdsToUrls.entrySet().iterator();
+                List<Entry<Integer, String>> tabIdsToUrls = tabGroupMetadata.tabIdsToUrls;
+                Iterator<Entry<Integer, String>> iterator = tabIdsToUrls.iterator();
                 while (iterator.hasNext()) {
                     Map.Entry<Integer, String> entry = iterator.next();
                     String url = entry.getValue();
@@ -1628,6 +1634,17 @@ public class IntentHandler {
                 || IntentUtils.safeGetBoolean(
                         extras, EXTRA_INVOKED_FROM_LAUNCH_NEW_INCOGNITO_TAB, false)
                 || IntentUtils.safeGetBoolean(extras, EXTRA_ENABLE_EPHEMERAL_BROWSING, false);
+    }
+
+    public static boolean willLaunchIncognitoCustomTab(Intent intent) {
+        if (IncognitoCustomTabIntentDataProvider.isValidIncognitoIntent(
+                intent, /* recordMetrics= */ false)) {
+            return true;
+        }
+        if (EphemeralCustomTabIntentDataProvider.isValidEphemeralTabIntent(intent)) {
+            return true;
+        }
+        return false;
     }
 
     @NativeMethods

@@ -26,6 +26,7 @@ import java.util.Formatter;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -234,6 +235,7 @@ public class PaymentManifestVerifier
             PackageInfo packageInfo =
                     mPackageManagerDelegate.getPackageInfoWithSignatures(packageName);
             if (packageInfo == null) {
+                Log.e(TAG, "Unable to get package info with signatures for \"%s\".", packageName);
                 invalidAppsToRemove.add(packageName);
                 continue;
             }
@@ -399,6 +401,7 @@ public class PaymentManifestVerifier
         }
 
         if (webAppManifestUris.length == 0) {
+            Log.e(TAG, "No default_applications value in payment method manfest.");
             if (mIsManifestCacheStaleOrUnusable) mCallback.onFinishedVerification();
             // Cache supported package names and origins as well as possibly "*".
             mCache.addPaymentMethodManifest(
@@ -504,37 +507,55 @@ public class PaymentManifestVerifier
         }
 
         Set<String> packageNames = new HashSet<>();
+        Set<String> errors = new HashSet<>();
         for (int i = 0; i < manifest.length; i++) {
             WebAppManifestSection section = manifest[i];
             AppInfo appInfo = mDefaultApplications.get(section.id);
-            if (appInfo == null) continue;
+            if (appInfo == null) {
+                errors.add(
+                        String.format(Locale.US, "No apps with package name \"%s\".", section.id));
+                continue;
+            }
 
             if (appInfo.version < section.minVersion) {
-                Log.e(
-                        TAG,
-                        "\"%s\" version is %d, but at least %d is required.",
-                        section.id,
-                        appInfo.version,
-                        section.minVersion);
+                errors.add(
+                        String.format(
+                                Locale.US,
+                                "\"%s\" version is %d, but at least %d is required.",
+                                section.id,
+                                appInfo.version,
+                                section.minVersion));
                 continue;
             }
 
             if (appInfo.sha256CertFingerprints == null) {
-                Log.e(TAG, "Unable to determine fingerprints of \"%s\".", section.id);
+                errors.add(
+                        String.format(
+                                Locale.US,
+                                "Unable to determine fingerprints of \"%s\".",
+                                section.id));
                 continue;
             }
 
             if (!appInfo.sha256CertFingerprints.equals(sectionsFingerprints.get(i))) {
-                Log.e(
-                        TAG,
-                        "\"%s\" fingerprints don't match the manifest. Expected %s, but found %s.",
-                        section.id,
-                        setToString(sectionsFingerprints.get(i)),
-                        setToString(appInfo.sha256CertFingerprints));
+                errors.add(
+                        String.format(
+                                Locale.US,
+                                "\"%s\" fingerprints don't match the manifest. Expected %s, but"
+                                        + " found %s.",
+                                section.id,
+                                setToString(sectionsFingerprints.get(i)),
+                                setToString(appInfo.sha256CertFingerprints)));
                 continue;
             }
 
             packageNames.add(section.id);
+        }
+
+        if (packageNames.isEmpty()) {
+            for (String error : errors) {
+                Log.e(TAG, error);
+            }
         }
 
         return packageNames;
@@ -552,6 +573,8 @@ public class PaymentManifestVerifier
 
     @Override
     public void onManifestDownloadFailure(String errorMessage) {
+        Log.e(TAG, "Failed to download manifest: " + errorMessage);
+
         if (mAtLeastOneManifestFailedToDownloadOrParse) return;
         mAtLeastOneManifestFailedToDownloadOrParse = true;
 
@@ -563,6 +586,8 @@ public class PaymentManifestVerifier
 
     @Override
     public void onManifestParseFailure() {
+        Log.e(TAG, "Failed to parse manifest.");
+
         if (mAtLeastOneManifestFailedToDownloadOrParse) return;
         mAtLeastOneManifestFailedToDownloadOrParse = true;
 

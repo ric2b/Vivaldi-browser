@@ -101,6 +101,9 @@ SourceFile::Type GetSourceFileType(const std::string& file) {
   }
 
   // Other cases
+  if (EndsWithExtension(file, "hpp11"))
+    return SourceFile::SOURCE_H;
+
   if (EndsWithExtension(file, "swift"))
     return SourceFile::SOURCE_SWIFT;
 

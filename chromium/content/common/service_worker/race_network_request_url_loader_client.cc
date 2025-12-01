@@ -4,6 +4,7 @@
 
 #include "content/common/service_worker/race_network_request_url_loader_client.h"
 
+#include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
@@ -133,6 +134,16 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::OnReceiveResponse(
       head_->load_timing.receive_headers_end =
           head_->load_timing.receive_headers_start;
       cached_metadata_ = std::move(cached_metadata);
+      // TODO(crbug.com/408309960): Update to call `owner_`'s
+      // DidDispatchFetchEvent() or StartResponse() to handle the response as if
+      // it comes from the fetch event so that every information is propagated
+      // correctly.
+      //
+      // For now, set was_fetched_via_service_worker true here to address
+      // crbug.com/404577046. Since this field is normally set by
+      // blink::ServiceWorkerLoaderHelpers::SaveResponseInfo(). But currently
+      // this is called only when the response is returned from the fetch event.
+      head_->was_fetched_via_service_worker = true;
       if (base::FeatureList::IsEnabled(
               features::
                   kServiceWorkerStaticRouterRaceNetworkRequestPerformanceImprovement) &&
@@ -250,7 +261,6 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::CommitResponse() {
   }
   TransitionState(State::kResponseCommitted);
   owner_->RecordFetchResponseFrom();
-  owner_->CommitResponseHeaders(head_);
   owner_->CommitResponseBody(
       head_,
       write_buffer_manager_for_race_network_request_.ReleaseConsumerHandle(),
@@ -685,7 +695,23 @@ void ServiceWorkerRaceNetworkRequestURLLoaderClient::
 }
 
 void ServiceWorkerRaceNetworkRequestURLLoaderClient::OnCloneCompleted() {
-  OnDataTransferComplete();
+  if (state_ == State::kCompleted) {
+    //  `kCompleted` indicates the network request and data processing to
+    //  `owner_` are finished. With
+    //  `ServiceWorkerStaticRouterRaceNetworkRequestPerformanceImprovement`,
+    //  `state_` might reach `kCompleted` before clone completion in case of
+    //  network errors. This prevents `OnDataTransferComplete()` propagation
+    //  since `owner_->OnComplete()` would have already been called.
+    //
+    // TODO(crbug.com/374606637): The current state machine is designed without
+    // `ServiceWorkerStaticRouterRaceNetworkRequestPerformanceImprovement`. We
+    // need to re-design the state transition after the feature is enabled.
+    CHECK(completion_status_.has_value());
+    CHECK_NE(completion_status_->error_code, net::OK);
+  } else {
+    OnDataTransferComplete();
+  }
+
   // Do clone data again to fulfil the `fetch()` in the fetch-event.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE,

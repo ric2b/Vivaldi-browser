@@ -38,6 +38,7 @@
 #include "rtc_base/copy_on_write_buffer.h"
 #include "rtc_base/ip_address.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/net_helpers.h"
 #include "rtc_base/network.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/synchronization/mutex.h"
@@ -256,7 +257,7 @@ void EmulatedNetworkStatsBuilder::AddEmulatedNetworkStats(
   RTC_DCHECK_RUN_ON(&sequence_checker_);
 
   // Append IPs from other endpoints stats to the builder.
-  for (const rtc::IPAddress& addr : stats.local_addresses) {
+  for (const IPAddress& addr : stats.local_addresses) {
     local_addresses_.push_back(addr);
   }
 
@@ -358,7 +359,7 @@ size_t LinkEmulation::GetPacketSizeForEmulation(
 
 LinkEmulation::LinkEmulation(
     Clock* clock,
-    absl::Nonnull<TaskQueueBase*> task_queue,
+    TaskQueueBase* absl_nonnull task_queue,
     std::unique_ptr<NetworkBehaviorInterface> network_behavior,
     EmulatedNetworkReceiverInterface* receiver,
     EmulatedNetworkStatsGatheringMode stats_gathering_mode,
@@ -463,7 +464,7 @@ void LinkEmulation::UpdateProcessSchedule() {
       });
 }
 
-NetworkRouterNode::NetworkRouterNode(absl::Nonnull<TaskQueueBase*> task_queue)
+NetworkRouterNode::NetworkRouterNode(TaskQueueBase* absl_nonnull task_queue)
     : task_queue_(task_queue) {}
 
 void NetworkRouterNode::OnPacketReceived(EmulatedIpPacket packet) {
@@ -539,7 +540,7 @@ void NetworkRouterNode::SetFilter(
 
 EmulatedNetworkNode::EmulatedNetworkNode(
     Clock* clock,
-    absl::Nonnull<TaskQueueBase*> task_queue,
+    TaskQueueBase* absl_nonnull task_queue,
     std::unique_ptr<NetworkBehaviorInterface> network_behavior,
     EmulatedNetworkStatsGatheringMode stats_gathering_mode,
     bool fake_dtls_handshake_sizes)
@@ -592,11 +593,11 @@ EmulatedEndpointImpl::Options::Options(
           config.allow_receive_packets_with_different_dest_ip),
       log_name(ip.ToString() + " (" + config.name.value_or("") + ")") {}
 
-EmulatedEndpointImpl::EmulatedEndpointImpl(
-    const Options& options,
-    bool is_enabled,
-    absl::Nonnull<TaskQueueBase*> task_queue,
-    Clock* clock)
+EmulatedEndpointImpl::EmulatedEndpointImpl(const Options& options,
+                                           bool is_enabled,
+                                           TaskQueueBase* absl_nonnull
+                                               task_queue,
+                                           Clock* clock)
     : options_(options),
       is_enabled_(is_enabled),
       clock_(clock),
@@ -614,7 +615,7 @@ EmulatedEndpointImpl::EmulatedEndpointImpl(
     prefix_length = kIPv6NetworkPrefixLength;
   }
   IPAddress prefix = TruncateIP(options_.ip, prefix_length);
-  network_ = std::make_unique<rtc::Network>(
+  network_ = std::make_unique<Network>(
       options_.ip.ToString(), "Endpoint id=" + std::to_string(options_.id),
       prefix, prefix_length, options_.type);
   network_->AddIP(options_.ip);
@@ -630,7 +631,7 @@ uint64_t EmulatedEndpointImpl::GetId() const {
 
 void EmulatedEndpointImpl::SendPacket(const SocketAddress& from,
                                       const SocketAddress& to,
-                                      rtc::CopyOnWriteBuffer packet_data,
+                                      CopyOnWriteBuffer packet_data,
                                       uint16_t application_overhead,
                                       EcnMarking ecn) {
   if (!options_.allow_send_packet_with_different_source_ip) {
@@ -819,13 +820,12 @@ bool EndpointsContainer::HasEndpoint(EmulatedEndpointImpl* endpoint) const {
   return false;
 }
 
-std::vector<std::unique_ptr<rtc::Network>>
-EndpointsContainer::GetEnabledNetworks() const {
-  std::vector<std::unique_ptr<rtc::Network>> networks;
+std::vector<std::unique_ptr<Network>> EndpointsContainer::GetEnabledNetworks()
+    const {
+  std::vector<std::unique_ptr<Network>> networks;
   for (auto* endpoint : endpoints_) {
     if (endpoint->Enabled()) {
-      networks.emplace_back(
-          std::make_unique<rtc::Network>(endpoint->network()));
+      networks.emplace_back(std::make_unique<Network>(endpoint->network()));
     }
   }
   return networks;

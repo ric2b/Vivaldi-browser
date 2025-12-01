@@ -27,16 +27,15 @@
 #include "./common/logging.h"
 #include "./common/status_macros.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
-absl::Status RemoteFileAppend(absl::Nonnull<RemoteFile *> f,
+absl::Status RemoteFileAppend(RemoteFile *absl_nonnull f,
                               const std::string &contents) {
   ByteArray contents_ba{contents.cbegin(), contents.cend()};
   return RemoteFileAppend(f, contents_ba);
 }
 
-absl::Status RemoteFileRead(absl::Nonnull<RemoteFile *> f,
-                            std::string &contents) {
+absl::Status RemoteFileRead(RemoteFile *absl_nonnull f, std::string &contents) {
   ByteArray contents_ba;
   RETURN_IF_NOT_OK(RemoteFileRead(f, contents_ba));
   contents.assign(contents_ba.cbegin(), contents_ba.cend());
@@ -87,4 +86,4 @@ absl::Status RemoteFileGetContents(std::string_view path,
   return RemoteFileClose(file);
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

@@ -67,9 +67,7 @@ class BrowserContext;
 class DevToolsAgentHostImpl;
 class FencedFrame;
 class FrameTreeNode;
-class NavigationHandle;
 class NavigationRequest;
-class NavigationThrottle;
 class RenderFrameHostImpl;
 class RenderProcessHost;
 class SharedWorkerHost;
@@ -162,6 +160,9 @@ void OnResetNavigationRequest(NavigationRequest* navigation_request);
 void MaybeAssignResourceRequestId(FrameTreeNode* ftn,
                                   const std::string& id,
                                   network::ResourceRequest& request);
+void MaybeAssignResourceRequestId(FrameTreeNodeId frame_node_id,
+                                  const std::string& id,
+                                  network::ResourceRequest& request);
 void OnNavigationRequestWillBeSent(const NavigationRequest& navigation_request);
 void OnNavigationResponseReceived(
     const NavigationRequest& nav_request,
@@ -218,13 +219,13 @@ bool NeedInterestGroupAuctionEvents(FrameTreeNodeId frame_tree_node_id);
 void OnInterestGroupAuctionEventOccurred(
     FrameTreeNodeId frame_tree_node_id,
     base::Time event_time,
-    content::InterestGroupAuctionEventType type,
+    InterestGroupAuctionEventType type,
     const std::string& unique_auction_id,
     base::optional_ref<const std::string> parent_auction_id,
     const base::Value::Dict& auction_config);
 void OnInterestGroupAuctionNetworkRequestCreated(
     FrameTreeNodeId frame_tree_node_id,
-    content::InterestGroupAuctionFetchType type,
+    InterestGroupAuctionFetchType type,
     const std::string& request_id,
     const std::vector<std::string>& devtools_auction_ids);
 
@@ -326,8 +327,7 @@ void OnSignedExchangeCertificateRequestCompleted(
     const base::UnguessableToken& request_id,
     const network::URLLoaderCompletionStatus& status);
 
-std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
-    NavigationHandle* navigation_handle);
+void CreateAndAddNavigationThrottles(NavigationThrottleRegistry& registry);
 
 // When registering a new ServiceWorker with PlzServiceWorker, the main script
 // fetch happens before starting the worker. This means that we need to give
@@ -346,10 +346,9 @@ void ThrottleServiceWorkerMainScriptFetch(
     const GlobalRenderFrameHostId& requesting_frame_id,
     scoped_refptr<DevToolsThrottleHandle> throttle_handle);
 
-// For PlzDedicatedWorker. When creating a new DedicatedWorker with
-// PlzDedicatedWorker, the worker script fetch happens before starting the
-// worker. This function is called when DedicatedWorkerHost, which is the
-// representation of a worker in the browser process, is created.
+// When creating a new DedicatedWorker, the worker script fetch happens before
+// starting the worker. This function is called when DedicatedWorkerHost, which
+// is the representation of a worker in the browser process, is created.
 // `throttle_handle` controls when the script fetch resumes.
 void ThrottleWorkerMainScriptFetch(
     const base::UnguessableToken& devtools_worker_token,
@@ -359,7 +358,7 @@ void ThrottleWorkerMainScriptFetch(
 bool ShouldWaitForDebuggerInWindowOpen();
 
 void WillStartDragging(FrameTreeNode* main_frame_tree_node,
-                       const content::DropData& drop_data,
+                       const DropData& drop_data,
                        const blink::mojom::DragDataPtr drag_data,
                        blink::DragOperationsMask drag_operations_mask,
                        bool* intercepted);
@@ -369,7 +368,7 @@ void DragEnded(FrameTreeNode& node);
 // Asks any interested agents to handle the given certificate error. Returns
 // |true| if the error was handled, |false| otherwise.
 using CertErrorCallback =
-    base::RepeatingCallback<void(content::CertificateRequestResultType)>;
+    base::RepeatingCallback<void(CertificateRequestResultType)>;
 bool HandleCertificateError(WebContents* web_contents,
                             int cert_error,
                             const GURL& request_url,
@@ -426,14 +425,13 @@ void OnServiceWorkerMainScriptRequestWillBeSent(
     network::ResourceRequest& request);
 
 // Fires `Network.onRequestWillBeSent` event for a dedicated worker and shared
-// worker main script. Used for PlzDedicatedWorker/PlzSharedWorker.
+// worker main script. Used for DedicatedWorker and SharedWorker.
 void OnWorkerMainScriptRequestWillBeSent(
     RenderFrameHostImpl& ancestor_frame_host,
     const base::UnguessableToken& worker_token,
     network::ResourceRequest& request);
 
-// Fires `Network.onLoadingFailed` event for a dedicated worker main script.
-// Used for PlzDedicatedWorker.
+// Fires `Network.onLoadingFailed` event for a DedicatedWorker main script.
 void OnWorkerMainScriptLoadingFailed(
     const GURL& url,
     const base::UnguessableToken& worker_token,
@@ -473,6 +471,17 @@ void WillSendFedCmRequest(RenderFrameHost& render_frame_host,
 void WillShowFedCmDialog(RenderFrameHost& render_frame_host, bool* intercept);
 void DidShowFedCmDialog(RenderFrameHost& render_frame_host);
 void DidCloseFedCmDialog(RenderFrameHost& render_frame_host);
+
+// Fires Network Handler to capture FedCM request and response events.
+void WillSendFedCmNetworkRequest(FrameTreeNodeId frame_tree_node_id,
+                                 const network::ResourceRequest& request);
+void DidReceiveFedCmNetworkResponse(
+    FrameTreeNodeId frame_tree_node_id,
+    const std::string& devtools_request_id,
+    const GURL& url,
+    const network::mojom::URLResponseHead* response_head,
+    const std::string& response_body,
+    const network::URLLoaderCompletionStatus& status);
 
 // Handles dev tools integration for fenced frame reporting beacons. Used in
 // `FencedFrameReporter`.

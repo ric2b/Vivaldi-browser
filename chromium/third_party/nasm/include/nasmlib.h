@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2020 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2023 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -83,9 +83,9 @@ char * safe_alloc end_with_null nasm_strcatn(const char *one, ...);
  * this additional storage.
  */
 char * safe_alloc printf_func(1, 2) nasm_asprintf(const char *fmt, ...);
-char * safe_alloc nasm_vasprintf(const char *fmt, va_list ap);
+char * safe_alloc vprintf_func(1) nasm_vasprintf(const char *fmt, va_list ap);
 void * safe_alloc printf_func(2, 3) nasm_axprintf(size_t extra, const char *fmt, ...);
-void * safe_alloc nasm_vaxprintf(size_t extra, const char *fmt, va_list ap);
+void * safe_alloc vprintf_func(2) nasm_vaxprintf(size_t extra, const char *fmt, va_list ap);
 
 /*
  * nasm_last_string_len() returns the length of the last string allocated
@@ -238,12 +238,43 @@ static inline unsigned int numvalue(unsigned char c)
 int64_t readnum(const char *str, bool *error);
 
 /*
+ * Get the numeric base corresponding to a character
+ */
+static inline unsigned int radix_letter(char c)
+{
+    switch (c) {
+    case 'b': case 'B':
+    case 'y': case 'Y':
+	return 2;		/* Binary */
+    case 'o': case 'O':
+    case 'q': case 'Q':
+	return 8;		/* Octal */
+    case 'h': case 'H':
+    case 'x': case 'X':
+	return 16;		/* Hexadecimal */
+    case 'd': case 'D':
+    case 't': case 'T':
+	return 10;		/* Decimal */
+    default:
+	return 0;		/* Not a known radix letter */
+    }
+}
+
+/*
  * Convert a character constant into a number. Sets
  * `*warn' to true if an overflow occurs, and false otherwise.
  * str points to and length covers the middle of the string,
  * without the quotes.
  */
 int64_t readstrnum(char *str, int length, bool *warn);
+
+/*
+ * Produce an unsigned integer string from a number with a specified
+ * base, digits and signedness
+ */
+#define NUMSTR_MAXBASE 64
+int numstr(char *buf, size_t buflen, uint64_t n,
+           int digits, unsigned int base, bool ucase);
 
 /*
  * seg_alloc: allocate a hitherto unused segment number.
@@ -269,27 +300,32 @@ const char *filename_set_extension(const char *inname, const char *extension);
  *  list_for_each - regular iterator over list
  *  list_for_each_safe - the same but safe against list items removal
  *  list_last - find the last element in a list
+ *  list_reverse - reverse the order of a list
+ *
+ *  Arguments named with _ + single letter should be temp variables
+ *  of the appropriate pointer type.
  */
 #define list_for_each(pos, head)                        \
     for (pos = head; pos; pos = pos->next)
-#define list_for_each_safe(pos, n, head)                \
-    for (pos = head, n = (pos ? pos->next : NULL); pos; \
-        pos = n, n = (n ? n->next : NULL))
+#define list_for_each_safe(pos, _n, head)                \
+    for (pos = head, _n = (pos ? pos->next : NULL); pos; \
+        pos = _n, _n = (_n ? _n->next : NULL))
 #define list_last(pos, head)                            \
     for (pos = head; pos && pos->next; pos = pos->next) \
         ;
-#define list_reverse(head, prev, next)                  \
+#define list_reverse(head)                              \
     do {                                                \
+        void *_p, *_n;                                  \
         if (!head || !head->next)                       \
             break;                                      \
-        prev = NULL;                                    \
+        _p = NULL;                                      \
         while (head) {                                  \
-            next = head->next;                          \
-            head->next = prev;                          \
-            prev = head;                                \
-            head = next;                                \
+            _n = head->next;                            \
+            head->next = _p;                            \
+            _p = head;                                  \
+            head = _n;                                  \
         }                                               \
-        head = prev;                                    \
+        head = _p;                                      \
     } while (0)
 
 /*

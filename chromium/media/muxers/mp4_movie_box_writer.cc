@@ -987,7 +987,7 @@ Mp4MovieVPCodecConfigurationBoxWriter::
 void Mp4MovieVPCodecConfigurationBoxWriter::Write(BoxByteStream& writer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  writer.StartFullBox(mp4::FOURCC_VPCC);
+  writer.StartFullBox(mp4::FOURCC_VPCC, /*flags=*/0, /*version=*/1);
 
   switch (box_->profile) {
     case VP9PROFILE_PROFILE0:
@@ -1045,7 +1045,7 @@ Mp4MovieAV1CodecConfigurationBoxWriter::
 void Mp4MovieAV1CodecConfigurationBoxWriter::Write(BoxByteStream& writer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  writer.StartFullBox(mp4::FOURCC_AV1C);
+  writer.StartBox(mp4::FOURCC_AV1C);
   writer.WriteBytes(box_->av1_decoder_configuration_data.data(),
                     box_->av1_decoder_configuration_data.size());
   writer.EndBox();

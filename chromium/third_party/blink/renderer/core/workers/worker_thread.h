@@ -146,9 +146,7 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
       std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
           outside_settings_object_data,
       WorkerResourceTimingNotifier* outside_resource_timing_notifier,
-      network::mojom::CredentialsMode,
-      RejectCoepUnsafeNone reject_coep_unsafe_none =
-          RejectCoepUnsafeNone(false));
+      network::mojom::CredentialsMode);
 
   // Posts a task to the worker thread to close the global scope and terminate
   // the underlying thread. This task may be blocked by JavaScript execution on
@@ -237,7 +235,9 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   // queued tasks. This function can be called from any threads.
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType type);
 
-  void ChildThreadStartedOnWorkerThread(WorkerThread*);
+  void ChildThreadStartedOnWorkerThreadLegacy(WorkerThread*);
+  // Returns false if the thread is shutting down.
+  bool ChildThreadStartedOnWorkerThread(WorkerThread*);
   void ChildThreadTerminatedOnWorkerThread(WorkerThread*);
 
   // Changes the lifecycle state of the associated execution context for
@@ -259,6 +259,9 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   // Decrements |pause_or_freeze_count_| and if count is zero then
   // it will exit the entered nested run loop. Might be called from any thread.
   void Resume();
+
+  // True if the thread was asked to terminate.
+  bool IsRequestedToTerminate() LOCKS_EXCLUDED(lock_);
 
  protected:
   explicit WorkerThread(WorkerReportingProxy&);
@@ -321,6 +324,13 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
     kTerminationUnnecessary,
   };
 
+  enum class TerminationProgress {
+    kNotRequested,
+    kRequested,
+    kPrepared,
+    kPerforming,
+  };
+
   // Returns true if we should synchronously terminate the script execution so
   // that a shutdown task can be handled by the thread event loop.
   TerminationState ShouldTerminateScriptExecution()
@@ -367,8 +377,7 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
       std::unique_ptr<CrossThreadFetchClientSettingsObjectData>
           outside_settings_object,
       WorkerResourceTimingNotifier* outside_resource_timing_notifier,
-      network::mojom::CredentialsMode,
-      bool reject_coep_unsafe_none);
+      network::mojom::CredentialsMode);
 
   // PrepareForShutdownOnWorkerThread() notifies that the context will be
   // destroyed, discards queued tasks to prevent running further tasks, and
@@ -405,8 +414,6 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   void SetThreadState(ThreadState) EXCLUSIVE_LOCKS_REQUIRED(lock_);
   void SetExitCode(ExitCode) EXCLUSIVE_LOCKS_REQUIRED(lock_);
 
-  bool CheckRequestedToTerminate() LOCKS_EXCLUDED(lock_);
-
   class InterruptData;
   void PauseOrFreeze(mojom::blink::FrameLifecycleState state,
                      bool is_in_back_forward_cache);
@@ -422,8 +429,10 @@ class CORE_EXPORT WorkerThread : public Thread::TaskObserver {
   // A unique identifier among all WorkerThreads.
   const int worker_thread_id_;
 
-  // Set on the parent thread.
-  bool requested_to_terminate_ GUARDED_BY(lock_) = false;
+  // Represents progress after the Terminate() call.
+  TerminationProgress termination_progress_ GUARDED_BY(lock_) =
+      TerminationProgress::kNotRequested;
+  size_t num_child_threads_ GUARDED_BY(lock_) = 0;
 
   ThreadState thread_state_ GUARDED_BY(lock_) = ThreadState::kNotStarted;
   ExitCode exit_code_ GUARDED_BY(lock_) = ExitCode::kNotTerminated;

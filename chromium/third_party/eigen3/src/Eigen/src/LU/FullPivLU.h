@@ -391,8 +391,8 @@ class FullPivLU : public SolverBase<FullPivLU<MatrixType_, PermutationIndex_> > 
 
   MatrixType reconstructedMatrix() const;
 
-  EIGEN_DEVICE_FUNC EIGEN_CONSTEXPR inline Index rows() const EIGEN_NOEXCEPT { return m_lu.rows(); }
-  EIGEN_DEVICE_FUNC EIGEN_CONSTEXPR inline Index cols() const EIGEN_NOEXCEPT { return m_lu.cols(); }
+  EIGEN_DEVICE_FUNC constexpr Index rows() const noexcept { return m_lu.rows(); }
+  EIGEN_DEVICE_FUNC constexpr Index cols() const noexcept { return m_lu.cols(); }
 
 #ifndef EIGEN_PARSED_BY_DOXYGEN
   template <typename RhsType, typename DstType>
@@ -717,7 +717,7 @@ void FullPivLU<MatrixType_, PermutationIndex_>::_solve_impl(const RhsType& rhs, 
 
   // Step 2
   m_lu.topLeftCorner(smalldim, smalldim).template triangularView<UnitLower>().solveInPlace(c.topRows(smalldim));
-  if (rows > cols) c.bottomRows(rows - cols) -= m_lu.bottomRows(rows - cols) * c.topRows(cols);
+  if (rows > cols) c.bottomRows(rows - cols).noalias() -= m_lu.bottomRows(rows - cols) * c.topRows(cols);
 
   // Step 3
   m_lu.topLeftCorner(nonzero_pivots, nonzero_pivots)

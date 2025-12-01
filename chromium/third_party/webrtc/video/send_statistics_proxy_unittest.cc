@@ -11,19 +11,35 @@
 #include "video/send_statistics_proxy.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "api/units/data_rate.h"
+#include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
+#include "api/video/video_adaptation_counters.h"
 #include "api/video/video_adaptation_reason.h"
 #include "api/video/video_bitrate_allocation.h"
 #include "api/video/video_codec_type.h"
 #include "api/video_codecs/scalability_mode.h"
 #include "api/video_codecs/video_codec.h"
+#include "call/video_send_stream.h"
+#include "common_video/frame_counts.h"
+#include "common_video/include/quality_limitation_reason.h"
+#include "modules/rtp_rtcp/include/report_block_data.h"
+#include "modules/rtp_rtcp/include/rtcp_statistics.h"
+#include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "modules/rtp_rtcp/source/rtcp_packet/report_block.h"
+#include "modules/video_coding/codecs/interface/common_constants.h"
+#include "modules/video_coding/include/video_codec_interface.h"
 #include "rtc_base/fake_clock.h"
+#include "system_wrappers/include/clock.h"
 #include "system_wrappers/include/metrics.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
@@ -455,9 +471,10 @@ TEST_F(SendStatisticsProxyTest,
 
   // SendStatisticsProxy uses a RateTracker internally. SendStatisticsProxy uses
   // `fake_clock_` for testing, but the RateTracker relies on a global clock.
-  // This test relies on rtc::ScopedFakeClock to synchronize these two clocks.
+  // This test relies on webrtc::ScopedFakeClock to synchronize these two
+  // clocks.
   // TODO(https://crbug.com/webrtc/10640): When the RateTracker uses a Clock
-  // this test can stop relying on rtc::ScopedFakeClock.
+  // this test can stop relying on webrtc::ScopedFakeClock.
   ScopedFakeClock fake_global_clock;
   fake_global_clock.SetTime(
       Timestamp::Millis(fake_clock_.TimeInMilliseconds()));

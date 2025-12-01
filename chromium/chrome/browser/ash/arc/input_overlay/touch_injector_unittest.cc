@@ -12,9 +12,12 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/arc/input_overlay/actions/action_move.h"
+#include "chrome/browser/ash/arc/input_overlay/arc_input_overlay_metrics.h"
 #include "chrome/browser/ash/arc/input_overlay/db/proto/app_data.pb.h"
 #include "chrome/browser/ash/arc/input_overlay/test/event_capturer.h"
 #include "chrome/browser/ash/arc/input_overlay/test/test_utils.h"
+#include "components/ukm/test_ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/aura_test_base.h"
@@ -228,6 +231,25 @@ void VerifyEventsSize(test::EventCapturer& event_capturer,
   EXPECT_EQ(expected_key_event_size, event_capturer.key_events().size());
   EXPECT_EQ(expected_mouse_event_size, event_capturer.mouse_events().size());
   EXPECT_EQ(expected_touch_event_size, event_capturer.touch_events().size());
+}
+
+void VerifyPlayGameWithGameControlsUkmEvent(
+    const ukm::TestAutoSetUkmRecorder& ukm_recorder,
+    size_t index,
+    std::map<std::string, int64_t> expected_event_values) {
+  const size_t expected_entry_size = expected_event_values.size();
+  const auto ukm_entries = ukm_recorder.GetEntriesByName(
+      BuildGameControlsUkmEventName(kPlayGameWithGameControlsHistogram));
+  EXPECT_EQ(expected_entry_size, ukm_entries.size());
+
+  if (expected_event_values.empty()) {
+    return;
+  }
+  DCHECK_LT(index, expected_entry_size);
+  for (const auto& value_item : expected_event_values) {
+    ukm::TestAutoSetUkmRecorder::ExpectEntryMetric(
+        ukm_entries[index], value_item.first, value_item.second);
+  }
 }
 
 }  // namespace
@@ -1201,6 +1223,72 @@ TEST_F(TouchInjectorTest, TestProtoConversion) {
     EXPECT_EQ(*action_a->current_input(), *action_b->current_input());
     EXPECT_EQ(action_a->current_positions(), action_b->current_positions());
   }
+}
+
+TEST_F(TouchInjectorTest, TestPlayWithGameControlsHistogramHistogramsYes) {
+  auto json_value =
+      base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
+  injector_->ParseActions(json_value->GetDict());
+  EXPECT_EQ(2, (int)injector_->actions().size());
+  injector_->RegisterEventRewriter();
+
+  base::HistogramTester histograms;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  VerifyPlayWithGameControlsHistogram(histograms, std::vector<int>{0, 0});
+  VerifyPlayGameWithGameControlsUkmEvent(ukm_recorder, /*index=*/0, {});
+
+  // Press and release a random key.
+  event_generator_->PressAndReleaseKey(ui::VKEY_X, ui::EF_NONE,
+                                       /*source_device_id=*/1);
+  VerifyPlayWithGameControlsHistogram(histograms, std::vector<int>{0, 0});
+
+  // Press and release key A, it plays with Game Controls.
+  event_generator_->PressAndReleaseKey(ui::VKEY_A, ui::EF_NONE,
+                                       /*source_device_id=*/1);
+  EXPECT_EQ(2, (int)event_capturer_.touch_events().size());
+  VerifyPlayWithGameControlsHistogram(
+      histograms, std::vector<int>{0, /*played_with_game_controls==true*/ 1});
+  VerifyPlayGameWithGameControlsUkmEvent(
+      ukm_recorder, /*index=*/0,
+      {{ukm::builders::GameControls_PlayGameWithGameControls::kPlayedWithName,
+        /*played_with=*/1}});
+
+  // Close the game.
+  injector_.reset();
+  VerifyPlayWithGameControlsHistogram(
+      histograms, std::vector<int>{0, /*played_with_game_controls==true*/ 1});
+  VerifyPlayGameWithGameControlsUkmEvent(
+      ukm_recorder, /*index=*/0,
+      {{ukm::builders::GameControls_PlayGameWithGameControls::kPlayedWithName,
+        /*played_with=*/1}});
+}
+
+TEST_F(TouchInjectorTest, TestPlayWithGameControlsHistogramHistogramsNo) {
+  auto json_value =
+      base::JSONReader::ReadAndReturnValueWithError(kValidJsonActionTapKey);
+  injector_->ParseActions(json_value->GetDict());
+  EXPECT_EQ(2, (int)injector_->actions().size());
+  injector_->RegisterEventRewriter();
+
+  base::HistogramTester histograms;
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  VerifyPlayWithGameControlsHistogram(
+      histograms, std::vector<int>{0, /*played_with_game_controls=*/0});
+  VerifyPlayGameWithGameControlsUkmEvent(ukm_recorder, /*index=*/0, {});
+
+  // Press and release a random key.
+  event_generator_->PressAndReleaseKey(ui::VKEY_X, ui::EF_NONE,
+                                       /*source_device_id=*/1);
+  VerifyPlayWithGameControlsHistogram(histograms, std::vector<int>{0, 0});
+
+  // Close the game.
+  injector_.reset();
+  VerifyPlayWithGameControlsHistogram(
+      histograms, std::vector<int>{/*played_with_game_controls==false*/ 1, 0});
+  VerifyPlayGameWithGameControlsUkmEvent(
+      ukm_recorder, /*index=*/0,
+      {{ukm::builders::GameControls_PlayGameWithGameControls::kPlayedWithName,
+        /*played_with=*/0}});
 }
 
 }  // namespace arc::input_overlay

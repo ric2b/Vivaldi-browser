@@ -48,7 +48,8 @@ ALL_VARIANT_FLAGS = {
         "--maglev", "--stress-maglev", "--maglev-non-eager-inlining",
         "--optimize-on-next-call-optimizes-to-maglev"
     ]],
-    "conservative_pinning": [[
+    "conservative_stack_scanning": [[
+        "--conservative-stack-scanning",
         "--scavenger-conservative-object-pinning",
         "--stress-scavenger-conservative-object-pinning"
     ]],
@@ -142,7 +143,8 @@ INCOMPATIBLE_FLAGS_PER_VARIANT = {
             "--regexp-tier-up",
             "--no-regexp-interpret-all",
             "--interpreted-frames-native-stack",
-            "--script-context-mutable-heap-number",
+            "--additive-safe-int-feedback",
+            "--script-context-cells",
         ],
     "nooptimization": [
         "--turbofan",
@@ -156,8 +158,8 @@ INCOMPATIBLE_FLAGS_PER_VARIANT = {
         "--validate-asm",
         "--track-field-types",
         "--stress-concurrent-inlining",
-        "--script-context-mutable-heap-number",
-        "--experimental-wasm-shared",
+        "--additive-safe-int-feedback",
+        "--script-context-cells",
     ],
     "slow_path": ["--no-force-slow-path"],
     "stress_concurrent_allocation": [

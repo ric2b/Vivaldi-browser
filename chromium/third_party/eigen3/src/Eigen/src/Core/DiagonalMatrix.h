@@ -76,9 +76,9 @@ class DiagonalBase : public EigenBase<Derived> {
   }
 
   /** \returns the number of rows. */
-  EIGEN_DEVICE_FUNC EIGEN_CONSTEXPR inline Index rows() const { return diagonal().size(); }
+  EIGEN_DEVICE_FUNC constexpr Index rows() const { return diagonal().size(); }
   /** \returns the number of columns. */
-  EIGEN_DEVICE_FUNC EIGEN_CONSTEXPR inline Index cols() const { return diagonal().size(); }
+  EIGEN_DEVICE_FUNC constexpr Index cols() const { return diagonal().size(); }
 
   /** \returns the diagonal matrix product of \c *this by the dense matrix, \a matrix */
   template <typename MatrixDerived>

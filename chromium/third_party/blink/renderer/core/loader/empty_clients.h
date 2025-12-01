@@ -354,6 +354,7 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
       network::mojom::CSPDisposition,
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
       base::TimeTicks,
+      base::TimeTicks,
       const String&,
       const std::optional<Impression>&,
       const LocalFrameToken* initiator_frame_token,
@@ -465,12 +466,11 @@ class CORE_EXPORT EmptyLocalFrameClient : public LocalFrameClient {
 
   Frame* FindFrame(const AtomicString& name) const override;
 
-  scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext() override {
+  scoped_refptr<WebWorkerFetchContext> CreateWorkletFetchContext() override {
     return base::MakeRefCounted<EmptyWebWorkerFetchContext>();
   }
 
-  scoped_refptr<WebWorkerFetchContext>
-  CreateWorkerFetchContextForPlzDedicatedWorker(
+  scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext(
       WebDedicatedWorkerHostFactoryClient*) override {
     return base::MakeRefCounted<EmptyWebWorkerFetchContext>();
   }

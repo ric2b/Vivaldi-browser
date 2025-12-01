@@ -4,20 +4,32 @@
 
 #include "chrome/browser/web_applications/web_app_utils.h"
 
+#include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "ash/constants/web_app_id_constants.h"
 #include "base/containers/adapters.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
+#include "base/test/test_future.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/externally_managed_app_manager.h"
+#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
+#include "chrome/browser/web_applications/isolated_web_apps/test/isolated_web_app_builder.h"
+#include "chrome/browser/web_applications/test/fake_web_app_provider.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/browser/web_applications/test/web_app_test_utils.h"
+#include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
+#include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
+#include "services/data_decoder/public/cpp/test_support/in_process_data_decoder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -32,6 +44,7 @@ namespace web_app {
 
 using WebAppUtilsTest = WebAppTest;
 using ::testing::ElementsAre;
+class FakeWebAppProvider;
 
 // Sanity check that iteration order of SortedSizesPx is ascending. The
 // correctness of most usage of SortedSizesPx depends on this.
@@ -50,159 +63,6 @@ TEST(WebAppTest, SortedSizesPxIsAscending) {
   std::vector<SquareSizePx> base_reversed(base::Reversed(sorted).begin(),
                                           base::Reversed(sorted).end());
   ASSERT_THAT(base_reversed, ElementsAre(512, 256, 64, 32, 16));
-}
-
-TEST(WebAppTest, ResolveEffectiveDisplayMode) {
-  // When user_display_mode indicates a user preference for opening in
-  // a browser tab, we open in a browser tab.
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kBrowser, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kMinimalUi, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kStandalone, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kFullscreen, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-
-  // When user_display_mode indicates a user preference for opening in
-  // a standalone window, we open in a minimal-ui window (for app_display_mode
-  // 'browser' or 'minimal-ui') or a standalone window (for app_display_mode
-  // 'standalone' or 'fullscreen').
-  EXPECT_EQ(DisplayMode::kMinimalUi,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kBrowser, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kMinimalUi,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kMinimalUi, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kStandalone, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kFullscreen, std::vector<DisplayMode>(),
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-}
-
-TEST(WebAppTest,
-     ResolveEffectiveDisplayModeWithDisplayOverridesPreferUserMode) {
-  // When user_display_mode indicates a user preference for opening in
-  // a browser tab, we open in a browser tab even if display_overrides
-  // are specified
-  std::vector<DisplayMode> app_display_mode_overrides;
-  app_display_mode_overrides.push_back(DisplayMode::kStandalone);
-
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kBrowser, app_display_mode_overrides,
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kMinimalUi, app_display_mode_overrides,
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kStandalone, app_display_mode_overrides,
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kBrowser,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kFullscreen, app_display_mode_overrides,
-                mojom::UserDisplayMode::kBrowser, /*is_isolated=*/false));
-}
-
-TEST(WebAppTest,
-     ResolveEffectiveDisplayModeWithDisplayOverridesFallbackToDisplayMode) {
-  // When user_display_mode indicates a user preference for opening in
-  // a standalone window, and the only display modes provided for
-  // display_overrides contain only 'fullscreen' or 'browser',  open in a
-  // minimal-ui window (for app_display_mode 'browser' or 'minimal-ui') or a
-  // standalone window (for app_display_mode 'standalone' or 'fullscreen').
-  std::vector<DisplayMode> app_display_mode_overrides;
-  app_display_mode_overrides.push_back(DisplayMode::kFullscreen);
-
-  EXPECT_EQ(DisplayMode::kMinimalUi,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kBrowser, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kMinimalUi,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kMinimalUi, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kStandalone, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kFullscreen, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-}
-
-TEST(WebAppTest, ResolveEffectiveDisplayModeWithDisplayOverrides) {
-  // When user_display_mode indicates a user preference for opening in
-  // a standalone window, and return the first entry that is either
-  // 'standalone' or 'minimal-ui' in display_override
-  std::vector<DisplayMode> app_display_mode_overrides;
-  app_display_mode_overrides.push_back(DisplayMode::kFullscreen);
-  app_display_mode_overrides.push_back(DisplayMode::kBrowser);
-  app_display_mode_overrides.push_back(DisplayMode::kStandalone);
-
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kBrowser, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kMinimalUi, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kStandalone, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                DisplayMode::kFullscreen, app_display_mode_overrides,
-                mojom::UserDisplayMode::kStandalone, /*is_isolated=*/false));
-}
-
-TEST(WebAppTest, ResolveEffectiveDisplayModeWithIsolatedWebApp) {
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                /*app_display_mode=*/DisplayMode::kBrowser,
-                /*app_display_mode_overrides=*/{DisplayMode::kBrowser},
-                /*user_display_mode=*/mojom::UserDisplayMode::kStandalone,
-                /*is_isolated=*/true));
-
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                /*app_display_mode=*/DisplayMode::kMinimalUi,
-                /*app_display_mode_overrides=*/{},
-                /*user_display_mode=*/mojom::UserDisplayMode::kStandalone,
-                /*is_isolated=*/true));
-
-  EXPECT_EQ(DisplayMode::kStandalone,
-            ResolveEffectiveDisplayMode(
-                /*app_display_mode=*/DisplayMode::kFullscreen,
-                /*app_display_mode_overrides=*/{},
-                /*user_display_mode=*/mojom::UserDisplayMode::kStandalone,
-                /*is_isolated=*/true));
-
-  EXPECT_EQ(DisplayMode::kBorderless,
-            ResolveEffectiveDisplayMode(
-                /*app_display_mode=*/DisplayMode::kStandalone,
-                /*app_display_mode_overrides=*/{DisplayMode::kBorderless},
-                /*user_display_mode=*/mojom::UserDisplayMode::kStandalone,
-                /*is_isolated=*/true));
 }
 
 TEST_F(WebAppUtilsTest, AreWebAppsEnabled) {
@@ -389,5 +249,72 @@ TEST_F(WebAppUtilsTest, GeminiAppWillBeSystemWebApp) {
   }
 }
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && BUILDFLAG(IS_CHROMEOS)
+
+class WebAppUtilsPolicyIdsTest : public WebAppTest {
+ public:
+  using InstallResults = std::map<GURL /*install_url*/,
+                                  ExternallyManagedAppManager::InstallResult>;
+  using UninstallResults =
+      std::map<GURL /*install_url*/, webapps::UninstallResultCode>;
+  using SynchronizeFuture =
+      base::test::TestFuture<InstallResults, UninstallResults>;
+
+  void SetUp() override {
+    WebAppTest::SetUp();
+    provider_ = FakeWebAppProvider::Get(profile());
+    provider_->UseRealOsIntegrationManager();
+    test::AwaitStartWebAppProviderAndSubsystems(profile());
+  }
+
+ private:
+  raw_ptr<FakeWebAppProvider, DanglingUntriaged> provider_ = nullptr;
+  data_decoder::test::InProcessDataDecoder in_process_data_decoder_;
+};
+
+TEST_F(WebAppUtilsPolicyIdsTest, GetWebAppPolicyIdsForWebApp) {
+  const GURL kWebAppUrl = GURL("https://example.com/path/index.html");
+  const GURL kInstallUrl = GURL("https://www.example.com/install_url.html");
+  const GURL kManifestUrl = GURL("https://www.example.com/manifest.json");
+
+  webapps::AppId app_id =
+      static_cast<FakeWebContentsManager&>(
+          fake_provider().web_contents_manager())
+          .CreateBasicInstallPageState(kInstallUrl, kManifestUrl, kWebAppUrl);
+
+  ExternalInstallOptions template_options(
+      kInstallUrl, mojom::UserDisplayMode::kStandalone,
+      ExternalInstallSource::kExternalPolicy);
+
+  SynchronizeFuture result;
+  std::vector<ExternalInstallOptions> install_options_list;
+  install_options_list.emplace_back(kInstallUrl,
+                                    /*user_display_mode=*/std::nullopt,
+                                    ExternalInstallSource::kExternalPolicy);
+
+  fake_provider().externally_managed_app_manager().SynchronizeInstalledApps(
+      std::move(install_options_list), ExternalInstallSource::kExternalPolicy,
+      result.GetCallback());
+  ASSERT_TRUE(result.Wait());
+  const WebApp* app = fake_provider().registrar_unsafe().GetAppById(app_id);
+
+  EXPECT_EQ(
+      GetPolicyIds(profile(), *app),
+      std::vector<std::string>({"https://www.example.com/install_url.html"}));
+}
+
+TEST_F(WebAppUtilsPolicyIdsTest, GetWebAppPolicyIdsForIsolatedWebApp) {
+  auto bundle = IsolatedWebAppBuilder(ManifestBuilder().SetVersion("1.0.0"))
+                    .BuildBundle();
+  IsolatedWebAppUrlInfo info =
+      bundle
+          ->InstallWithSource(profile(),
+                              &IsolatedWebAppInstallSource::FromExternalPolicy)
+          .value();
+  const WebApp* app =
+      fake_provider().registrar_unsafe().GetAppById(info.app_id());
+
+  EXPECT_EQ(GetPolicyIds(profile(), *app),
+            std::vector<std::string>({info.web_bundle_id().id()}));
+}
 
 }  // namespace web_app

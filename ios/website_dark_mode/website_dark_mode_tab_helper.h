@@ -31,8 +31,6 @@ class WebsiteDarkModeTabHelper: public web::WebStateObserver,
 
   // The Objective-C AutofillAgent instance.
   __strong WebsiteDarkModeAgent* website_dark_mode_agent_;
-
-  WEB_STATE_USER_DATA_KEY_DECL();
 };
 
 

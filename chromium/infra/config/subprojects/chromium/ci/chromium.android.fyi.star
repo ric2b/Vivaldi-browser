@@ -40,7 +40,8 @@ consoles.console_view(
 )
 
 ci.builder(
-    name = "android-chrome-pie-x86-wpt-fyi-rel",
+    name = "android-15-chrome-wpt-fyi-rel",
+    description_html = "This builder runs upstream web platform tests for reporting results to wpt.fyi.",
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -51,128 +52,10 @@ ci.builder(
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.INTEL,
-            target_bits = 32,
+            target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
-        build_gs_bucket = "chromium-android-archive",
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "android_builder",
-            "release_builder",
-            "remoteexec",
-            "minimal_symbols",
-            "x86",
-            "strip_debug_info",
-            "android_fastbuild",
-            "webview_monochrome",
-            "webview_shell",
-        ],
-    ),
-    targets = targets.bundle(
-        targets = [
-            "chrome_public_wpt_suite",
-        ],
-        mixins = [
-            "has_native_resultdb_integration",
-            "pie-x86-emulator",
-            "emulator-8-cores",
-            "linux-jammy",
-            "x86-64",
-        ],
-        per_test_modifications = {
-            "chrome_public_wpt": targets.mixin(
-                args = [
-                    "--use-upstream-wpt",
-                    "--timeout-multiplier=4",
-                ],
-            ),
-        },
-    ),
-    targets_settings = targets.settings(
-        os_type = targets.os_type.ANDROID,
-    ),
-    console_view_entry = consoles.console_view_entry(
-        category = "wpt|chrome",
-        short_name = "p-x86",
-    ),
-    execution_timeout = 4 * time.hour,
-)
-
-ci.builder(
-    name = "android-chrome-13-x64-wpt-android-specific",
-    description_html = "Run wpt tests on Chrome Android in Android 13 emulators.",
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = ["android"],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "main_builder",
-            apply_configs = ["mb"],
-            build_config = builder_config.build_config.RELEASE,
-            target_arch = builder_config.target_arch.INTEL,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.ANDROID,
-        ),
-        android_config = builder_config.android_config(
-            config = "base_config",
-        ),
-        build_gs_bucket = "chromium-android-archive",
-    ),
-    gn_args = gn_args.config(
-        configs = [
-            "android_builder",
-            "release_builder",
-            "remoteexec",
-            "minimal_symbols",
-            "x64",
-            "strip_debug_info",
-            "android_fastbuild",
-        ],
-    ),
-    targets = targets.bundle(
-        targets = [
-            "wpt_web_tests_android",
-        ],
-        mixins = [
-            "has_native_resultdb_integration",
-            "13-x64-emulator",
-            "emulator-8-cores",
-            "linux-jammy",
-            "x86-64",
-        ],
-    ),
-    targets_settings = targets.settings(
-        os_type = targets.os_type.ANDROID,
-    ),
-    console_view_entry = consoles.console_view_entry(
-        category = "wpt|chrome",
-        short_name = "13-x64",
-    ),
-    contact_team_email = "chrome-blink-engprod@google.com",
-)
-
-ci.builder(
-    name = "android-webview-13-x64-wpt-android-specific",
-    description_html = "Run wpt tests on Android Webview in Android 13 emulators.",
-    builder_spec = builder_config.builder_spec(
-        gclient_config = builder_config.gclient_config(
-            config = "chromium",
-            apply_configs = ["android"],
-        ),
-        chromium_config = builder_config.chromium_config(
-            config = "main_builder",
-            apply_configs = ["mb"],
-            build_config = builder_config.build_config.RELEASE,
-            target_arch = builder_config.target_arch.INTEL,
-            target_bits = 64,
-            target_platform = builder_config.target_platform.ANDROID,
-        ),
-        android_config = builder_config.android_config(
-            config = "base_config",
-        ),
         build_gs_bucket = "chromium-android-archive",
     ),
     gn_args = gn_args.config(
@@ -190,28 +73,38 @@ ci.builder(
     ),
     targets = targets.bundle(
         targets = [
-            "wpt_web_tests_webview",
+            "chrome_public_wpt_suite",
         ],
         mixins = [
-            "has_native_resultdb_integration",
-            "13-x64-emulator",
+            "15-x64-emulator",
             "emulator-8-cores",
+            "has_native_resultdb_integration",
             "linux-jammy",
             "x86-64",
         ],
+        per_test_modifications = {
+            "chrome_public_wpt": targets.mixin(
+                args = [
+                    "--use-upstream-wpt",
+                    "--timeout-multiplier=4",
+                ],
+            ),
+        },
     ),
     targets_settings = targets.settings(
         os_type = targets.os_type.ANDROID,
     ),
     console_view_entry = consoles.console_view_entry(
-        category = "wpt|webview",
-        short_name = "13-x64",
+        category = "wpt|chrome",
+        short_name = "15",
     ),
-    contact_team_email = "chrome-blink-engprod@google.com",
+    contact_team_email = "chrome-product-engprod@google.com",
+    execution_timeout = 4 * time.hour,
 )
 
 ci.builder(
-    name = "android-webview-pie-x86-wpt-fyi-rel",
+    name = "android-15-webview-wpt-fyi-rel",
+    description_html = "This builder runs upstream web platform tests for reporting results to wpt.fyi.",
     builder_spec = builder_config.builder_spec(
         gclient_config = builder_config.gclient_config(
             config = "chromium",
@@ -222,7 +115,7 @@ ci.builder(
             apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.INTEL,
-            target_bits = 32,
+            target_bits = 64,
             target_platform = builder_config.target_platform.ANDROID,
         ),
         android_config = builder_config.android_config(config = "base_config"),
@@ -234,29 +127,32 @@ ci.builder(
             "release_builder",
             "remoteexec",
             "minimal_symbols",
-            "x86",
+            "x64",
             "strip_debug_info",
             "android_fastbuild",
-            "webview_monochrome",
+            "webview_trichrome",
             "webview_shell",
         ],
     ),
     targets = targets.bundle(
         targets = [
-            "system_webview_wpt_suite",
+            "android_webview_wpt_tests",
         ],
         mixins = [
-            "has_native_resultdb_integration",
-            "pie-x86-emulator",
+            "15-x64-emulator",
             "emulator-8-cores",
+            "has_native_resultdb_integration",
             "linux-jammy",
             "x86-64",
         ],
         per_test_modifications = {
-            "system_webview_wpt": targets.mixin(
+            "android_webview_wpt_tests": targets.mixin(
                 args = [
                     "--use-upstream-wpt",
                 ],
+                swarming = targets.swarming(
+                    shards = 36,
+                ),
             ),
         },
     ),
@@ -265,8 +161,9 @@ ci.builder(
     ),
     console_view_entry = consoles.console_view_entry(
         category = "wpt|webview",
-        short_name = "p-x86",
+        short_name = "15",
     ),
+    contact_team_email = "chrome-product-engprod@google.com",
 )
 
 # TODO(crbug.com/1022533#c40): Remove this builder once there are no associated
@@ -524,6 +421,7 @@ ci.builder(
         per_test_modifications = {
             "content_browsertests": targets.mixin(
                 args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator_10.content_browsertests.filter",
                     "--emulator-debug-tags=all",
                 ],
                 swarming = targets.swarming(
@@ -702,6 +600,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "debug_static_builder",
             "remoteexec",
             "x64",
@@ -1156,6 +1055,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "release_builder",
             "remoteexec",
             "minimal_symbols",
@@ -1384,6 +1284,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "release_builder",
             "remoteexec",
             "minimal_symbols",
@@ -1572,6 +1473,7 @@ ci.builder(
     gn_args = gn_args.config(
         configs = [
             "android_builder",
+            "android_with_static_analysis",
             "cronet_android",
             "release_builder",
             "remoteexec",

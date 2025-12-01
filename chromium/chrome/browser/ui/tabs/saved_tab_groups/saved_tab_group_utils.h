@@ -9,12 +9,12 @@
 
 #include "base/uuid.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_keyed_service.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_deletion_dialog_controller.h"
 #include "chrome/browser/ui/views/tabs/recent_activity_bubble_dialog_view.h"
 #include "components/data_sharing/public/group_data.h"
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/saved_tab_groups/public/types.h"
+#include "components/tabs/public/tab_group.h"
 #include "ui/base/interaction/element_tracker.h"
 #include "ui/base/window_open_disposition.h"
 #include "url/gurl.h"
@@ -131,13 +131,6 @@ class SavedTabGroupUtils {
   static std::unordered_set<std::string> GetURLsInSavedTabGroup(
       Profile* profile,
       const base::Uuid& saved_id);
-
-  // Moves an open saved tab group from `source_browser` to `target_browser`.
-  static void MoveGroupToExistingWindow(
-      Browser* source_browser,
-      Browser* target_browser,
-      const tab_groups::TabGroupId& local_group_id,
-      const base::Uuid& saved_group_id);
 
   // Activates the first tab in the saved group. If a tab in the group is
   // already activated, then we focus the window the group belongs to instead.

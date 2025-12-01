@@ -12,6 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/commands/web_app_command.h"
 #include "chrome/browser/web_applications/locks/shared_web_contents_lock.h"
+#include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_logging.h"
 #include "components/webapps/common/web_app_id.h"
 #include "third_party/blink/public/mojom/manifest/manifest.mojom-forward.h"
@@ -36,7 +37,7 @@ class SharedWebContentsWithAppLock;
 class WebAppDataRetriever;
 
 using WebInstallFromUrlCommandCallback =
-    base::OnceCallback<void(const GURL& manifest_id,
+    base::OnceCallback<void(const webapps::AppId& app_id,
                             webapps::InstallResultCode code)>;
 
 using IconUrlSizeSet = base::flat_set<IconUrlWithSize>;
@@ -64,12 +65,14 @@ using DownloadedIconsHttpResults =
 // or if the user rejects the installation.
 class WebInstallFromUrlCommand
     : public WebAppCommand<SharedWebContentsLock,
-                           const GURL&,
+                           const webapps::AppId&,
                            webapps::InstallResultCode> {
  public:
   WebInstallFromUrlCommand(Profile& profile,
                            const GURL& install_url,
                            const std::optional<GURL>& manifest_id,
+                           base::WeakPtr<content::WebContents> web_contents,
+                           WebAppInstallDialogCallback dialog_callback,
                            WebInstallFromUrlCommandCallback installed_callback);
   ~WebInstallFromUrlCommand() override;
 
@@ -90,7 +93,9 @@ class WebInstallFromUrlCommand
       IconsDownloadedResult result,
       IconsMap icons_map,
       DownloadedIconsHttpResults icons_http_results);
-  void OnInstallDialogCompleted(bool user_accepted);
+  void OnInstallDialogCompleted(
+      bool user_accepted,
+      std::unique_ptr<WebAppInstallInfo> web_app_info);
   void InstallApp();
   void OnAppInstalled(const webapps::AppId& app_id,
                       webapps::InstallResultCode code);
@@ -102,6 +107,10 @@ class WebInstallFromUrlCommand
   // Unset if the WebInstall API's 1-parameter signature was called.
   std::optional<GURL> manifest_id_;
   GURL install_url_;
+  // The WebContents that initiated the install. This is used only to show the
+  // install dialog.
+  base::WeakPtr<content::WebContents> web_contents_;
+  WebAppInstallDialogCallback dialog_callback_;
   InstallErrorLogEntry install_error_log_entry_;
 
   std::unique_ptr<SharedWebContentsLock> web_contents_lock_;

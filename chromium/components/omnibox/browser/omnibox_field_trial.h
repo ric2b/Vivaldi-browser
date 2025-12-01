@@ -382,6 +382,9 @@ extern int kDefaultMinimumTimeBetweenSuggestQueriesMs;
 // optionally subdomains) in the steady state.
 extern const char kOmniboxUIUnelideURLOnHoverThresholdMsParam[];
 
+// Parameter names used by MIA experiments.
+extern const char kSuppressPsuggestBackfillWithMIAParam[];
+
 // `FeatureParam`s
 
 // Local history zero-prefix (aka zero-suggest) and prefix suggestions.
@@ -404,9 +407,6 @@ extern const base::FeatureParam<bool> kZeroSuggestPrefetchDebounceFromLastRun;
 
 // Determines the maximum number of entries stored by the in-memory ZPS cache.
 extern const base::FeatureParam<int> kZeroSuggestCacheMaxSize;
-
-// Determines the relevance score for the local history zero-prefix suggestions.
-extern const base::FeatureParam<int> kLocalHistoryZeroSuggestRelevanceScore;
 
 // Returns true if any of the zero-suggest prefetching features are enabled.
 bool IsZeroSuggestPrefetchingEnabled();
@@ -689,12 +689,12 @@ std::vector<std::pair<double, int>> GetPiecewiseMappingBreakPoints(
 constexpr base::FeatureParam<int> kIpadAdditionalTrendingQueries(
     &omnibox::kIpadZeroSuggestMatches,
     "IpadAdditionalTrendingQueries",
-    0);
+    5);
 
 constexpr base::FeatureParam<int> kIpadZPSLimit(
     &omnibox::kIpadZeroSuggestMatches,
     "IpadZPSSuggestionsLimit",
-    10);
+    20);
 
 // <- Ipad suggestions limit
 // ---------------------------------------------------------
@@ -742,9 +742,6 @@ bool IsStarterPackExpansionEnabled();
 // directing users to certain starter pack engines.
 bool IsStarterPackIPHEnabled();
 
-// Whether the starter pack page scope is enabled.
-bool IsStarterPackPageEnabled();
-
 // <- Site Search Starter Pack
 // ---------------------------------------------------------
 // Android Hub Search -->
@@ -790,8 +787,15 @@ constexpr base::FeatureParam<size_t> kOmniboxNumSrpZpsRelatedSearches{
 inline constexpr base::FeatureParam<bool> kAndroidDiagInputConnection{
     &omnibox::kDiagnostics, "omnibox_diag_input_connection", false};
 #endif
-
 // <- Diagnostics
+// ---------------------------------------------------------
+// Mobile Parity update -->
+inline constexpr base::FeatureParam<bool> kMobileParityRetrieveTrueFavicon{
+    &omnibox::kOmniboxMobileParityUpdate, "retrieve_true_favicon", false};
+
+inline constexpr base::FeatureParam<bool> kMobileParityEnableFeedForGoogleOnly{
+    &omnibox::kOmniboxMobileParityUpdate, "enable_feed_for_google_only", true};
+// <-- Mobile Parity update
 
 // New params should be inserted above this comment. They should be ordered
 // consistently with `omnibox_features.h`. They should be formatted as:

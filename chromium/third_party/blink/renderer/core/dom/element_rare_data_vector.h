@@ -7,6 +7,7 @@
 
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/element_rare_data_field.h"
+#include "third_party/blink/renderer/core/dom/explicitly_set_attr_elements_map.h"
 #include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
 #include "third_party/blink/renderer/core/dom/has_invalidation_flags.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
@@ -43,7 +44,7 @@ class ResizeObservation;
 class StyleScopeData;
 class CustomElementDefinition;
 class PopoverData;
-class InterestInvokerData;
+class InvokerData;
 class InterestInvokerTargetData;
 class OutOfFlowData;
 class HTMLElement;
@@ -85,12 +86,13 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
     kRestrictionTargetId = 28,
     kStyleScopeData = 29,
     kOutOfFlowData = 30,
-    kInterestInvokerData = 31,
+    kInvokerData = 31,
     kInterestInvokerTargetData = 32,
     kScrollMarkerGroupData = 33,
     kScrollMarkerGroupContainerData = 34,
+    kExplicitlySetElementsForAttr = 35,
 
-    kNumFields = 35,
+    kNumFields = 36,
   };
 
   ElementRareDataField* GetField(FieldId field_id) const;
@@ -165,6 +167,7 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
       PseudoId,
       const AtomicString& document_transition_tag = g_null_atom) const;
   bool HasViewTransitionGroupPseudoElement() const;
+  bool HasScrollButtonOrMarkerGroupPseudos() const;
   PseudoElementData::PseudoElementVector GetPseudoElements() const;
   void AddColumnPseudoElement(ColumnPseudoElement&);
   const ColumnPseudoElementsVector* GetColumnPseudoElements() const;
@@ -272,9 +275,8 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
   PopoverData& EnsurePopoverData();
   void RemovePopoverData();
 
-  InterestInvokerData* GetInterestInvokerData() const;
-  InterestInvokerData& EnsureInterestInvokerData();
-  void RemoveInterestInvokerData();
+  InvokerData* GetInvokerData() const;
+  InvokerData& EnsureInvokerData();
 
   InterestInvokerTargetData* GetInterestInvokerTargetData() const;
   InterestInvokerTargetData& EnsureInterestInvokerTargetData();
@@ -305,6 +307,9 @@ class CORE_EXPORT ElementRareDataVector final : public NodeRareData {
 
   void SetScrollMarkerGroupContainerData(ScrollMarkerGroupData*);
   ScrollMarkerGroupData* GetScrollMarkerGroupContainerData() const;
+
+  ExplicitlySetAttrElementsMap* GetExplicitlySetElementsForAttr() const;
+  ExplicitlySetAttrElementsMap& EnsureExplicitlySetElementsForAttr();
 
   AnchorPositionScrollData* GetAnchorPositionScrollData() const;
   void RemoveAnchorPositionScrollData();

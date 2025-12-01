@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/browser/search/search.h"
 
 #include <stddef.h>
@@ -24,16 +19,13 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_test_util.h"
-#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_test_util.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/supervised_user/core/browser/supervised_user_preferences.h"
-#include "components/supervised_user/core/browser/supervised_user_service.h"
-#include "components/supervised_user/core/browser/supervised_user_url_filter.h"
 #include "components/supervised_user/core/common/buildflags.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -112,7 +104,7 @@ class SearchTest : public BrowserWithTestWindowTest {
   // Note that we need to define this here because the flags needed to check
   // content::CanSameSiteMainFrameNavigationsChangeSiteInstances() etc might not
   // be set yet if we define this immediately (e.g. outside of the test class).
-  const struct ProcessIsolationTestCase {
+  struct ProcessIsolationTestCase {
     const char* description;
     const char* start_url;
     bool start_in_instant_process;
@@ -121,7 +113,8 @@ class SearchTest : public BrowserWithTestWindowTest {
     bool same_site_instance;
     bool same_rvh;
     bool same_process;
-  } kProcessIsolationTestCases[5] = {
+  };
+  const std::array<ProcessIsolationTestCase, 5> kProcessIsolationTestCases = {{
       {"Remote NTP -> SRP", "https://foo.com/newtab", true,
        "https://foo.com/url", false, false, false, false},
       {"Remote NTP -> Regular", "https://foo.com/newtab", true,
@@ -137,7 +130,7 @@ class SearchTest : public BrowserWithTestWindowTest {
       {"Regular -> SRP", "https://foo.com/other", false, "https://foo.com/url",
        false, !content::CanSameSiteMainFrameNavigationsChangeSiteInstances(),
        !content::CanSameSiteMainFrameNavigationsChangeSiteInstances(), true},
-  };
+  }};
 
   // BrowserWithTestWindowTest:
   TestingProfile::TestingFactories GetTestingFactories() override {
@@ -364,16 +357,11 @@ TEST_F(SearchTest, UseLocalNTPIfNTPURLIsNotSet) {
 }
 
 TEST_F(SearchTest, UseLocalNTPIfNTPURLIsBlockedForSupervisedUser) {
-  // Mark the profile as supervised, otherwise the URL filter won't be checked.
+  // Enable supervision, otherwise the URL filter won't be checked.
   profile()->SetIsSupervisedProfile();
   // Block access to foo.com in the URL filter.
-  supervised_user::SupervisedUserService* supervised_user_service =
-      SupervisedUserServiceFactory::GetForProfile(profile());
-  supervised_user::SupervisedUserURLFilter* url_filter =
-      supervised_user_service->GetURLFilter();
-  std::map<std::string, bool> hosts;
-  hosts["foo.com"] = false;
-  url_filter->SetManualHosts(std::move(hosts));
+  supervised_user_test_util::SetManualFilterForHost(profile(), "foo.com",
+                                                    /*allowlist=*/false);
 
   EXPECT_EQ(chrome::kChromeUINewTabPageThirdPartyURL,
             GetNewTabPageURL(profile()));

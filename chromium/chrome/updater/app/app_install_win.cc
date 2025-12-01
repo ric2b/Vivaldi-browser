@@ -50,6 +50,8 @@
 #include "chrome/updater/app/app_install_progress.h"
 #include "chrome/updater/app/app_install_util_win.h"
 #include "chrome/updater/app/app_install_win_internal.h"
+#include "chrome/updater/branded_constants.h"
+#include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/service_proxy_factory.h"
@@ -934,7 +936,8 @@ DWORD AppInstallControllerImpl::GetUIThreadID() const {
 bool AppInstallControllerImpl::DoLaunchBrowser(const std::string& url) {
   CHECK_EQ(GetUIThreadID(), GetCurrentThreadId());
 
-  return SUCCEEDED(base::win::RunDeElevatedNoWait(base::UTF8ToWide(url), {}));
+  return SUCCEEDED(base::win::RunDeElevatedNoWait(
+      base::UTF8ToWide(url), {}, base::FilePath::kCurrentDirectory));
 }
 
 bool AppInstallControllerImpl::DoRestartBrowser(bool restart_all_browsers,

@@ -46,8 +46,9 @@ void WideTextBuffer::AppendWideString(WideStringView str) {
 
 WideTextBuffer& WideTextBuffer::operator<<(ByteStringView ascii) {
   pdfium::span<wchar_t> new_span = ExpandWideBuf(ascii.GetLength());
-  for (size_t i = 0; i < ascii.GetLength(); ++i)
+  for (size_t i = 0; i < ascii.GetLength(); ++i) {
     new_span[i] = ascii[i];
+  }
   return *this;
 }
 
@@ -77,7 +78,7 @@ pdfium::span<wchar_t> WideTextBuffer::ExpandWideBuf(size_t char_count) {
   safe_bytes *= sizeof(wchar_t);
   size_t bytes = safe_bytes.ValueOrDie();
   ExpandBuf(bytes);
-  m_DataSize += bytes;
+  data_size_ += bytes;
   return GetWideSpan().subspan(original_count);
 }
 

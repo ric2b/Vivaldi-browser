@@ -46,14 +46,11 @@ import java.util.List;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @DoNotBatch(reason = "Test interacts with activity shutdown and thus is incompatible with batching")
-@EnableFeatures({
-    ChromeFeatureList.ANDROID_TAB_DECLUTTER,
-    ChromeFeatureList.ANDROID_TAB_DECLUTTER_RESCUE_KILLSWITCH
-})
+@EnableFeatures({ChromeFeatureList.ANDROID_TAB_DECLUTTER_RESCUE_KILLSWITCH})
 @DisableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER_ARCHIVE_ALL_BUT_ACTIVE)
 public class ArchivedTabsTest {
     private static class FakeDeferredStartupHandler extends DeferredStartupHandler {
-        private List<Runnable> mTasks = new ArrayList<>();
+        private final List<Runnable> mTasks = new ArrayList<>();
 
         @Override
         public void addDeferredTask(Runnable task) {
@@ -137,7 +134,7 @@ public class ArchivedTabsTest {
         runOnUiThreadBlocking(
                 () -> {
                     CloseAllTabsHelper.closeAllTabsHidingTabGroups(
-                            cta.getTabModelSelectorSupplier().get(), mRegularTabCreator);
+                            cta.getTabModelSelectorSupplier().get(), /* allowUndo= */ true);
                 });
         CriteriaHelper.pollUiThread(() -> 0 == mArchivedTabModel.getCount());
 

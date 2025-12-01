@@ -64,4 +64,16 @@ struct SettingAccessEvent {
   int string_value = -1;
 };
 
+struct FunctionCallEvent {
+  int name = -1;
+  int context = -1;
+};
+
+enum SessionTags {
+  kUserSignedIn = 1 << 0,
+  kDevToolsGetAiEnterprisePolicyDisabled = 1 << 1,
+  kDevToolsGetAiEnterprisePolicyAllowWithoutLogging = 1 << 2,
+  kDevToolsRemoteDebuggingDisabled = 1 << 3,
+};
+
 #endif  // CHROME_BROWSER_DEVTOOLS_VISUAL_LOGGING_H_

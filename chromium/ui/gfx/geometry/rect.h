@@ -230,6 +230,9 @@ class COMPONENT_EXPORT(GEOMETRY) Rect {
   // Returns the center of this rectangle.
   Point CenterPoint() const;
 
+  // Becomes a rectangle that has the same center point but with a |size|.
+  void ToCenteredSize(const Size& size);
+
   // Becomes a rectangle that has the same center point but with a size capped
   // at given |size|.
   void ClampToCenteredSize(const Size& size);
@@ -261,6 +264,8 @@ class COMPONENT_EXPORT(GEOMETRY) Rect {
 
   bool ApproximatelyEqual(const Rect& rect, int tolerance) const;
 
+  friend bool operator==(const Rect&, const Rect&) = default;
+
  private:
   // Clamp the width/height to avoid integer overflow in bottom() and right().
   // This returns the clamped width/height given an |x_or_y| and a
@@ -275,14 +280,6 @@ class COMPONENT_EXPORT(GEOMETRY) Rect {
   gfx::Point origin_;
   gfx::Size size_;
 };
-
-inline bool operator==(const Rect& lhs, const Rect& rhs) {
-  return lhs.origin() == rhs.origin() && lhs.size() == rhs.size();
-}
-
-inline bool operator!=(const Rect& lhs, const Rect& rhs) {
-  return !(lhs == rhs);
-}
 
 COMPONENT_EXPORT(GEOMETRY) Rect operator+(const Rect& lhs, const Vector2d& rhs);
 COMPONENT_EXPORT(GEOMETRY) Rect operator-(const Rect& lhs, const Vector2d& rhs);

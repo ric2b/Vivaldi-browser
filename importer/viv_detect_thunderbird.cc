@@ -12,14 +12,16 @@ using base::PathService;
 
 namespace viv_importer {
 
-void DetectThunderbirdProfiles(std::vector<importer::SourceProfile>* profiles) {
-  importer::SourceProfile thunderbird;
+void DetectThunderbirdProfiles(
+    std::vector<user_data_importer::SourceProfile>* profiles) {
+  user_data_importer::SourceProfile thunderbird;
   thunderbird.importer_name =
       l10n_util::GetStringUTF16(IDS_IMPORT_FROM_THUNDERBIRD);
-  thunderbird.importer_type = importer::TYPE_THUNDERBIRD;
+  thunderbird.importer_type = user_data_importer::TYPE_THUNDERBIRD;
   thunderbird.mail_path = GetThunderbirdMailDirectory();
   thunderbird.source_path = GetThunderbirdMailDirectory();
-  thunderbird.services_supported = importer::EMAIL | importer::CONTACTS;
+  thunderbird.services_supported =
+      user_data_importer::EMAIL | user_data_importer::CONTACTS;
 
   profiles->push_back(thunderbird);
 }

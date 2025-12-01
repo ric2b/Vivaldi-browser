@@ -7,8 +7,10 @@ package org.chromium.chrome.browser.suggestions.tile;
 import android.content.Context;
 import android.content.res.Resources;
 import android.util.AttributeSet;
+import android.widget.HorizontalScrollView;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.Px;
 
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
@@ -18,11 +20,13 @@ import org.chromium.ui.base.DeviceFormFactor;
 /** The most visited tiles layout. */
 public class MostVisitedTilesLayout extends TilesLinearLayout {
 
-    private final int mTileViewWidth;
-    private Integer mInitialTileNum;
     private final boolean mIsTablet;
+    private final @Px int mTileViewWidthPx;
+    private Integer mInitialTileCount;
+    private Integer mInitialChildCount;
     private final int mIntervalPaddingsTablet;
     private final int mEdgePaddingsTablet;
+    private @Nullable Integer mTileToMoveInViewIdx;
 
     /** Constructor for inflating from XML. */
     public MostVisitedTilesLayout(Context context, AttributeSet attrs) {
@@ -30,7 +34,7 @@ public class MostVisitedTilesLayout extends TilesLinearLayout {
         mIsTablet = DeviceFormFactor.isNonMultiDisplayContextOnTablet(context);
 
         Resources resources = getResources();
-        mTileViewWidth = resources.getDimensionPixelOffset(R.dimen.tile_view_width);
+        mTileViewWidthPx = resources.getDimensionPixelOffset(R.dimen.tile_view_width);
         mIntervalPaddingsTablet =
                 resources.getDimensionPixelSize(R.dimen.tile_view_padding_interval_tablet);
         mEdgePaddingsTablet =
@@ -56,6 +60,10 @@ public class MostVisitedTilesLayout extends TilesLinearLayout {
         return null;
     }
 
+    public SiteSuggestion getTileViewData(TileView tileView) {
+        return ((SuggestionsTileView) tileView).getData();
+    }
+
     /**
      * Adjusts the edge margin of the tile elements when they are displayed in the center of the NTP
      * on the tablet.
@@ -65,8 +73,9 @@ public class MostVisitedTilesLayout extends TilesLinearLayout {
     void updateEdgeMarginTablet(int totalWidth) {
         boolean isFullFilled =
                 totalWidth
-                                - mTileViewWidth * mInitialTileNum
-                                - mIntervalPaddingsTablet * (mInitialTileNum - 1)
+                                - mTileViewWidthPx * mInitialTileCount
+                                - getNonTileViewsTotalWidthPx()
+                                - mIntervalPaddingsTablet * (mInitialChildCount - 1)
                                 - 2 * mEdgePaddingsTablet
                         >= 0;
         if (!isFullFilled) {
@@ -77,23 +86,73 @@ public class MostVisitedTilesLayout extends TilesLinearLayout {
             return;
         }
 
-        int currentNum = getTileCount();
+        int tileCount = getTileCount();
+        int childCount = getChildCount();
         int edgeMargin =
                 (totalWidth
-                                - mTileViewWidth * currentNum
-                                - mIntervalPaddingsTablet * (currentNum - 1))
+                                - mTileViewWidthPx * tileCount
+                                - getNonTileViewsTotalWidthPx()
+                                - mIntervalPaddingsTablet * (childCount - 1))
                         / 2;
         setEdgeMargins(edgeMargin);
     }
 
+    /**
+     * Tags the {@link TileView} at {@param tileIdx} so that on next Layout, minimal scroll is
+     * performed to ensure it's in-view.
+     */
+    void ensureTileIsInViewOnNextLayout(int tileIdx) {
+        // If a value exists, simply overwrite it since the old value is likely new irrelevant.
+        mTileToMoveInViewIdx = tileIdx;
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        if (mInitialTileNum == null) {
-            mInitialTileNum = getTileCount();
+        if (mInitialTileCount == null) {
+            mInitialTileCount = getTileCount();
+        }
+        if (mInitialChildCount == null) {
+            mInitialChildCount = getChildCount();
         }
         if (mIsTablet) {
             updateEdgeMarginTablet(widthMeasureSpec);
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    @Override
+    public void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        if (mTileToMoveInViewIdx != null) {
+            Integer scrollXPx = getScrollXToMakeTileVisible(mTileToMoveInViewIdx);
+            if (scrollXPx != null) {
+                HorizontalScrollView parent = (HorizontalScrollView) getParent();
+                parent.smoothScrollTo(scrollXPx.intValue(), 0);
+            }
+            mTileToMoveInViewIdx = null;
+        }
+    }
+
+    private @Nullable Integer getScrollXToMakeTileVisible(int tileIdx) {
+        if (tileIdx >= getTileCount()) {
+            return null;
+        }
+        HorizontalScrollView parent = (HorizontalScrollView) getParent();
+        @Px float tileXPx = getTileAt(tileIdx).getX();
+        @Px int scrollXPx = parent.getScrollX();
+        // If scroll position is too high so that the tile is out-of-view / truncated, scroll left
+        // so that the tile appears on the left edge (RTL doesn't matter).
+        @Px int scrollXHiPx = (int) tileXPx;
+        if (scrollXPx > scrollXHiPx) {
+            return scrollXHiPx;
+        }
+        // If scroll position is too low so that the tile is out-of-view / truncated, scroll right
+        // so that the tile appears on the right edge (RTL doesn't matter).
+        @Px int scrollXLoPx = (int) (tileXPx + mTileViewWidthPx - parent.getWidth());
+        if (scrollXPx < scrollXLoPx) {
+            return scrollXLoPx;
+        }
+        // Entire tile is in-view; no scroll is needed.
+        return null;
     }
 }

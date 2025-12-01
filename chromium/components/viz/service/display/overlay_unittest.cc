@@ -736,7 +736,6 @@ class OverlayTest : public testing::Test {
       AggregatedRenderPass* render_pass,
       const gfx::Rect& rect,
       bool needs_blending,
-      bool premultiplied_alpha,
       bool low_latency_rendering,
       gfx::ProtectedVideoType protected_video_type,
       SharedImageFormat format,
@@ -755,11 +754,9 @@ class OverlayTest : public testing::Test {
     auto* overlay_quad =
         render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
     overlay_quad->SetNew(shared_quad_state, rect, rect, needs_blending,
-                         resource_id, premultiplied_alpha, kUVTopLeft,
-                         kUVBottomRight, SkColors::kTransparent,
-                         nearest_neighbor,
+                         resource_id, kUVTopLeft, kUVBottomRight,
+                         SkColors::kTransparent, nearest_neighbor,
                          /*secure_output=*/false, protected_video_type);
-    overlay_quad->set_resource_size_in_pixels(resource_size_in_pixels);
 
     return overlay_quad;
   }
@@ -773,12 +770,11 @@ class OverlayTest : public testing::Test {
       const gfx::Size& resource_size_in_pixels,
       SurfaceId test_surface_id = SurfaceId()) {
     bool needs_blending = false;
-    bool premultiplied_alpha = false;
     bool low_latency_rendering = false;
-    return CreateCandidateQuadAt(
-        shared_quad_state, render_pass, rect, needs_blending,
-        premultiplied_alpha, low_latency_rendering, protected_video_type,
-        format, resource_size_in_pixels, test_surface_id);
+    return CreateCandidateQuadAt(shared_quad_state, render_pass, rect,
+                                 needs_blending, low_latency_rendering,
+                                 protected_video_type, format,
+                                 resource_size_in_pixels, test_surface_id);
   }
 
   TextureDrawQuad* CreateCandidateQuadAt(
@@ -789,13 +785,12 @@ class OverlayTest : public testing::Test {
       SharedImageFormat format,
       SurfaceId test_surface_id = SurfaceId()) {
     bool needs_blending = false;
-    bool premultiplied_alpha = false;
     bool low_latency_rendering = false;
     gfx::Size resource_size_in_pixels = rect.size();
-    return CreateCandidateQuadAt(
-        shared_quad_state, render_pass, rect, needs_blending,
-        premultiplied_alpha, low_latency_rendering, protected_video_type,
-        format, resource_size_in_pixels, test_surface_id);
+    return CreateCandidateQuadAt(shared_quad_state, render_pass, rect,
+                                 needs_blending, low_latency_rendering,
+                                 protected_video_type, format,
+                                 resource_size_in_pixels, test_surface_id);
   }
 
   TextureDrawQuad* CreateCandidateQuadAt(
@@ -814,17 +809,16 @@ class OverlayTest : public testing::Test {
       const gfx::Rect& rect,
       SurfaceId test_surface_id = SurfaceId()) {
     bool needs_blending = false;
-    bool premultiplied_alpha = false;
     bool low_latency_rendering = true;
     gfx::Size resource_size_in_pixels = rect.size();
     gfx::ProtectedVideoType protected_video_type =
         gfx::ProtectedVideoType::kClear;
     SharedImageFormat format = SinglePlaneFormat::kRGBA_8888;
 
-    return CreateCandidateQuadAt(
-        shared_quad_state, render_pass, rect, needs_blending,
-        premultiplied_alpha, low_latency_rendering, protected_video_type,
-        format, resource_size_in_pixels, test_surface_id);
+    return CreateCandidateQuadAt(shared_quad_state, render_pass, rect,
+                                 needs_blending, low_latency_rendering,
+                                 protected_video_type, format,
+                                 resource_size_in_pixels, test_surface_id);
   }
 
   TextureDrawQuad* CreateTransparentCandidateQuadAt(
@@ -832,15 +826,13 @@ class OverlayTest : public testing::Test {
       AggregatedRenderPass* render_pass,
       const gfx::Rect& rect) {
     bool needs_blending = true;
-    bool premultiplied_alpha = false;
     bool low_latency_rendering = false;
     gfx::Size resource_size_in_pixels = rect.size();
 
     return CreateCandidateQuadAt(
         shared_quad_state, render_pass, rect, needs_blending,
-        premultiplied_alpha, low_latency_rendering,
-        gfx::ProtectedVideoType::kClear, SinglePlaneFormat::kRGBA_8888,
-        resource_size_in_pixels);
+        low_latency_rendering, gfx::ProtectedVideoType::kClear,
+        SinglePlaneFormat::kRGBA_8888, resource_size_in_pixels);
   }
 
   TextureDrawQuad* CreateFullscreenCandidateQuad(
@@ -856,15 +848,13 @@ class OverlayTest : public testing::Test {
       const gfx::Rect& rect,
       const RoundedDisplayMasksInfo& rounded_display_masks_info) {
     bool needs_blending = true;
-    bool premultiplied_alpha = true;
     bool low_latency_rendering = false;
     gfx::Size resource_size_in_pixels;
 
     auto* overlay_quad = CreateCandidateQuadAt(
         shared_quad_state, render_pass, rect, needs_blending,
-        premultiplied_alpha, low_latency_rendering,
-        gfx::ProtectedVideoType::kClear, SinglePlaneFormat::kRGBA_8888,
-        resource_size_in_pixels);
+        low_latency_rendering, gfx::ProtectedVideoType::kClear,
+        SinglePlaneFormat::kRGBA_8888, resource_size_in_pixels);
 
     overlay_quad->rounded_display_masks_info = rounded_display_masks_info;
 
@@ -885,7 +875,6 @@ class OverlayTest : public testing::Test {
       AggregatedRenderPass* render_pass,
       const gfx::Rect& rect) {
     bool needs_blending = false;
-    bool premultiplied_alpha = false;
     bool force_anti_aliasing_off = false;
     bool nearest_neighbor = false;
     bool is_overlay_candidate = true;
@@ -900,8 +889,7 @@ class OverlayTest : public testing::Test {
     auto* overlay_quad = render_pass->CreateAndAppendDrawQuad<TileDrawQuad>();
     overlay_quad->SetNew(shared_quad_state, rect, rect, needs_blending,
                          resource_id, gfx::RectF(0, 0, 1, 1), rect.size(),
-                         premultiplied_alpha, nearest_neighbor,
-                         force_anti_aliasing_off);
+                         nearest_neighbor, force_anti_aliasing_off);
 
     return overlay_quad;
   }
@@ -1199,32 +1187,6 @@ TEST_F(FullscreenOverlayTest, AlphaFail) {
   EXPECT_EQ(1U, main_pass->quad_list.size());
   // Check that we have only one overlay.
   EXPECT_EQ(0U, candidate_list.size());
-}
-
-TEST_F(FullscreenOverlayTest, SuccessfulResourceSizeInPixels) {
-  auto pass = CreateRenderPass();
-  TextureDrawQuad* original_quad = CreateFullscreenCandidateQuad(
-      pass->shared_quad_state_list.back(), pass.get());
-  original_quad->set_resource_size_in_pixels(gfx::Size(64, 64));
-
-  // Check for potential candidates.
-  OverlayCandidateList candidate_list;
-  OverlayProcessorInterface::FilterOperationsMap render_pass_filters;
-  OverlayProcessorInterface::FilterOperationsMap render_pass_backdrop_filters;
-  AggregatedRenderPassList pass_list;
-  AggregatedRenderPass* main_pass = pass.get();
-  pass_list.push_back(std::move(pass));
-  SurfaceDamageRectList surface_damage_rect_list;
-
-  overlay_processor_->ProcessForOverlays(
-      resource_provider(), &pass_list, GetIdentityColorMatrix(),
-      render_pass_filters, render_pass_backdrop_filters,
-      std::move(surface_damage_rect_list), nullptr, &candidate_list,
-      &damage_rect_, &content_bounds_);
-  ASSERT_EQ(1U, candidate_list.size());
-
-  // Check that the quad is gone.
-  EXPECT_EQ(0U, main_pass->quad_list.size());
 }
 
 TEST_F(FullscreenOverlayTest, OnTopFail) {
@@ -1867,12 +1829,10 @@ TEST_F(SingleOverlayOnTopTest, StablePrioritizeIntervalFrame) {
     TextureDrawQuad* quad_small =
         pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
     quad_small->SetNew(shared_quad_state_a, kCandidateRectA, kCandidateRectA,
-                       false /*needs_blending*/, resource_id_a,
-                       false /*premultiplied_alpha*/, kUVTopLeft,
+                       false /*needs_blending*/, resource_id_a, kUVTopLeft,
                        kUVBottomRight, SkColors::kTransparent,
                        false /*nearest_neighbor*/, false /*secure_output_only*/,
                        gfx::ProtectedVideoType::kClear);
-    quad_small->set_resource_size_in_pixels(kCandidateRectA.size());
     AddExpectedRectToOverlayProcessor(gfx::RectF(kCandidateRectA));
 
     SharedQuadState* shared_quad_state_b =
@@ -1882,12 +1842,10 @@ TEST_F(SingleOverlayOnTopTest, StablePrioritizeIntervalFrame) {
         pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
 
     quad_big->SetNew(shared_quad_state_b, kCandidateRectB, kCandidateRectB,
-                     false /*needs_blending*/, resource_id_b,
-                     false /*premultiplied_alpha*/, kUVTopLeft, kUVBottomRight,
-                     SkColors::kTransparent, false /*nearest_neighbor*/,
-                     false /*secure_output_only*/,
+                     false /*needs_blending*/, resource_id_b, kUVTopLeft,
+                     kUVBottomRight, SkColors::kTransparent,
+                     false /*nearest_neighbor*/, false /*secure_output_only*/,
                      gfx::ProtectedVideoType::kClear);
-    quad_big->set_resource_size_in_pixels(kCandidateRectB.size());
 
     shared_quad_state_b->overlay_damage_index = 1;
     AddExpectedRectToOverlayProcessor(gfx::RectF(kCandidateRectB));
@@ -3146,11 +3104,9 @@ TEST_F(ChangeSingleOnTopTest, DoNotPromoteIfContentsDontChange) {
         main_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
     original_quad->SetNew(
         pass->shared_quad_state_list.back(), pass->output_rect,
-        pass->output_rect, false /*needs_blending*/, resource_id,
-        false /*premultiplied_alpha*/, kUVTopLeft, kUVBottomRight,
-        SkColors::kTransparent, false /*nearest_neighbor*/,
+        pass->output_rect, false /*needs_blending*/, resource_id, kUVTopLeft,
+        kUVBottomRight, SkColors::kTransparent, false /*nearest_neighbor*/,
         false /*secure_output_only*/, gfx::ProtectedVideoType::kClear);
-    original_quad->set_resource_size_in_pixels(pass->output_rect.size());
 
     // Add something behind it.
     CreateFullscreenOpaqueQuad(pass->shared_quad_state_list.back(), main_pass);
@@ -3240,11 +3196,8 @@ TEST_F(FullThresholdTest, ThresholdTestForPrioritization) {
         nearly_occluded ? nearly_occluding_quad : kOverlayTopLeftRect);
 
     // Create a quad with the resource ID selected above.
-    TextureDrawQuad* quad_candidate = CreateCandidateQuadAt(
-
-        pass->shared_quad_state_list.back(), pass.get(), kOverlayRect);
-
-    quad_candidate->set_resource_size_in_pixels(pass->output_rect.size());
+    CreateCandidateQuadAt(pass->shared_quad_state_list.back(), pass.get(),
+                          kOverlayRect);
 
     // Add something behind it.
     CreateFullscreenOpaqueQuad(pass->shared_quad_state_list.back(), main_pass);
@@ -3350,12 +3303,9 @@ TEST_F(OverlayHysteresisTest, HysteresisResumeWhenCandidateComeBackActive) {
           main_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
       quad_candidate_no_occlusion->SetNew(
           sqs, kOverlayTopLeftRect, kOverlayTopLeftRect,
-          /*needs_blending=*/false, no_occlusion_quad_resource_id,
-          /*premultiplied=*/false, kUVTopLeft, kUVBottomRight,
-          SkColors::kTransparent, /*nearest=*/false,
+          /*needs_blending=*/false, no_occlusion_quad_resource_id, kUVTopLeft,
+          kUVBottomRight, SkColors::kTransparent, /*nearest=*/false,
           /*secure_output=*/false, gfx::ProtectedVideoType::kClear);
-      quad_candidate_no_occlusion->set_resource_size_in_pixels(
-          kOverlayTopLeftRect.size());
       TrackingIdData track_data_top_left{
           quad_candidate_no_occlusion->rect,
           resource_factory_->resource_provider()

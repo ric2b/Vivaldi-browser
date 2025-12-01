@@ -32,8 +32,13 @@ if sys.platform.startswith('win'):
                 None  # hTemplateFile
             ))
 
-    def _close_file(handle):
-        # CloseHandle releases lock too.
+    def _close_file(handle, unlock):
+        if unlock:
+            # Locks are released *before* the CloseHandle function is finished
+            # processing:
+            # - https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-unlockfileex#remarks
+            pass
+
         win32imports.CloseHandle(handle)
 
     def _lock_file(handle):
@@ -60,7 +65,16 @@ else:
         open_flags = (os.O_CREAT | os.O_WRONLY)
         return os.open(lockfile, open_flags, 0o644)
 
-    def _close_file(fd):
+    def _close_file(fd, unlock):
+        # "man 2 fcntl" states that closing any file descriptor referring to
+        # the lock file will release all the process locks on the file, but
+        # there is no guarantee that the locks will be released atomically
+        # before the closure.
+        #
+        # It's necessary to release the lock before the file close to avoid
+        # possible race conditions.
+        if unlock:
+            fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
 
     def _lock_file(fd):
@@ -72,9 +86,9 @@ def _try_lock(lockfile):
     try:
         _lock_file(f)
     except Exception:
-        _close_file(f)
+        _close_file(f, unlock=False)
         raise
-    return lambda: _close_file(f)
+    return lambda: _close_file(f, unlock=True)
 
 
 def _lock(path, timeout=0):

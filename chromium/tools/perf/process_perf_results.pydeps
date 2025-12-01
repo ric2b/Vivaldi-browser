@@ -4,9 +4,11 @@
 ../../build/android/pylib/constants/__init__.py
 ../../build/android/pylib/constants/host_paths.py
 ../../build/android/pylib/utils/__init__.py
-../../build/android/pylib/utils/decorators.py
-../../build/android/pylib/utils/google_storage_helper.py
 ../../build/android/pylib/utils/logdog_helper.py
+../../build/util/lib/__init__.py
+../../build/util/lib/common/__init__.py
+../../build/util/lib/common/decorators.py
+../../build/util/lib/common/google_storage_helper.py
 ../../components/variations/service/generate_ui_string_overrider.py
 ../../third_party/catapult/common/py_trace_event/py_trace_event/__init__.py
 ../../third_party/catapult/common/py_trace_event/py_trace_event/trace_event.py
@@ -79,7 +81,6 @@
 ../../third_party/catapult/devil/devil/android/devil_util.py
 ../../third_party/catapult/devil/devil/android/flag_changer.py
 ../../third_party/catapult/devil/devil/android/forwarder.py
-../../third_party/catapult/devil/devil/android/install_commands.py
 ../../third_party/catapult/devil/devil/android/logcat_monitor.py
 ../../third_party/catapult/devil/devil/android/ndk/__init__.py
 ../../third_party/catapult/devil/devil/android/ndk/abis.py
@@ -113,7 +114,6 @@
 ../../third_party/catapult/devil/devil/utils/__init__.py
 ../../third_party/catapult/devil/devil/utils/cmd_helper.py
 ../../third_party/catapult/devil/devil/utils/geometry.py
-../../third_party/catapult/devil/devil/utils/host_utils.py
 ../../third_party/catapult/devil/devil/utils/lazy/__init__.py
 ../../third_party/catapult/devil/devil/utils/lazy/weak_constant.py
 ../../third_party/catapult/devil/devil/utils/logging_common.py
@@ -124,7 +124,6 @@
 ../../third_party/catapult/devil/devil/utils/run_tests_helper.py
 ../../third_party/catapult/devil/devil/utils/timeout_retry.py
 ../../third_party/catapult/devil/devil/utils/watchdog_timer.py
-../../third_party/catapult/devil/devil/utils/zip_utils.py
 ../../third_party/catapult/systrace/systrace/__init__.py
 ../../third_party/catapult/systrace/systrace/trace_result.py
 ../../third_party/catapult/systrace/systrace/tracing_agents/__init__.py

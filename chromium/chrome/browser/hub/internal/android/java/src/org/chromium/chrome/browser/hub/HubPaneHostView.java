@@ -21,9 +21,10 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 
 import androidx.annotation.ColorInt;
-import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.ui.animation.AnimationHandler;
 
 import java.util.Objects;
@@ -32,6 +33,7 @@ import java.util.Objects;
 import androidx.recyclerview.widget.RecyclerView;
 
 /** Holds the current pane's {@link View}. */
+@NullMarked
 public class HubPaneHostView extends FrameLayout {
     protected RecyclerView mPaneFrame;
     private ImageView mHairline;

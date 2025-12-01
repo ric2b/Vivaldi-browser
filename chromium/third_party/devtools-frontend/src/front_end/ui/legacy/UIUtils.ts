@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2011 Google Inc.  All rights reserved.
@@ -54,15 +55,15 @@ import inlineButtonStyles from './inlineButton.css.js';
 import inspectorCommonStyles from './inspectorCommon.css.js';
 import {KeyboardShortcut, Keys} from './KeyboardShortcut.js';
 import smallBubbleStyles from './smallBubble.css.js';
-import * as ThemeSupport from './theme_support/theme_support.js';
 import type {ToolbarButton} from './Toolbar.js';
 import {Tooltip} from './Tooltip.js';
 import type {TreeOutline} from './Treeoutline.js';
 import {Widget} from './Widget.js';
+import type {XWidget} from './XWidget.js';
 
 declare global {
   interface HTMLElementTagNameMap {
-    'dt-checkbox': CheckboxLabel;
+    'devtools-checkbox': CheckboxLabel;
     'dt-close-button': DevToolsCloseButton;
     'dt-icon-label': DevToolsIconLabel;
     'dt-small-bubble': DevToolsSmallBubble;
@@ -639,7 +640,8 @@ export function addPlatformClass(element: HTMLElement): void {
 }
 
 export function installComponentRootStyles(element: HTMLElement): void {
-  injectCoreStyles(element);
+  Platform.DOMUtilities.appendStyle(element, inspectorCommonStyles);
+  Platform.DOMUtilities.appendStyle(element, Buttons.textButtonStyles);
 
   // Detect overlay scrollbar enable by checking for nonzero scrollbar width.
   if (!Host.Platform.isMac() && measuredScrollbarWidth(element.ownerDocument) === 0) {
@@ -1222,7 +1224,7 @@ export function createLabel(title: string, className?: string, associatedControl
 }
 
 export function createIconLabel(
-    options: {title?: string, iconName: string, color?: string, width?: '14px'|'20px', height?: '14px'|'20px'}):
+    options: {iconName: string, title?: string, color?: string, width?: '14px'|'20px', height?: '14px'|'20px'}):
     DevToolsIconLabel {
   const element = document.createElement('dt-icon-label');
   if (options.title) {
@@ -1303,55 +1305,113 @@ export function setTitle(element: HTMLElement, title: string): void {
 }
 
 export class CheckboxLabel extends HTMLElement {
-  private readonly shadowRootInternal!: DocumentFragment;
-  checkboxElement!: HTMLInputElement;
-  textElement!: HTMLElement;
+  static readonly observedAttributes = ['checked', 'disabled', 'indeterminate', 'name', 'title'];
+
+  readonly #shadowRoot!: DocumentFragment;
+  #checkboxElement!: HTMLInputElement;
+  #textElement!: HTMLElement;
 
   constructor() {
     super();
     CheckboxLabel.lastId = CheckboxLabel.lastId + 1;
     const id = 'ui-checkbox-label' + CheckboxLabel.lastId;
-    this.shadowRootInternal = createShadowRootWithCoreStyles(this, {cssFile: checkboxTextLabelStyles});
-    this.checkboxElement = this.shadowRootInternal.createChild('input');
-    this.checkboxElement.type = 'checkbox';
-    this.checkboxElement.setAttribute('id', id);
-    this.textElement = this.shadowRootInternal.createChild('label', 'dt-checkbox-text');
-    this.textElement.setAttribute('for', id);
-    this.shadowRootInternal.createChild('slot');
+    this.#shadowRoot = createShadowRootWithCoreStyles(this, {cssFile: checkboxTextLabelStyles, delegatesFocus: true});
+    this.#checkboxElement = this.#shadowRoot.createChild('input');
+    this.#checkboxElement.type = 'checkbox';
+    this.#checkboxElement.setAttribute('id', id);
+    // Change event is not composable, so it doesn't bubble up through the shadow root.
+    this.#checkboxElement.addEventListener('change', () => this.dispatchEvent(new Event('change')));
+    this.#textElement = this.#shadowRoot.createChild('label', 'devtools-checkbox-text');
+    this.#textElement.setAttribute('for', id);
+    // Click events are composable, so both label and checkbox bubble up through the shadow root.
+    // However, clicking the label, also triggers the checkbox click, so we stop the label event
+    // propagation here to avoid duplicate events.
+    this.#textElement.addEventListener('click', e => e.stopPropagation());
+    this.#textElement.createChild('slot');
   }
 
   static create(
       title?: Platform.UIString.LocalizedString, checked?: boolean, subtitle?: Platform.UIString.LocalizedString,
       jslogContext?: string, small?: boolean): CheckboxLabel {
-    const element = document.createElement('dt-checkbox');
-    element.checkboxElement.checked = Boolean(checked);
+    const element = document.createElement('devtools-checkbox');
+    element.#checkboxElement.checked = Boolean(checked);
     if (jslogContext) {
-      element.checkboxElement.setAttribute(
+      element.#checkboxElement.setAttribute(
           'jslog', `${VisualLogging.toggle().track({change: true}).context(jslogContext)}`);
     }
     if (title !== undefined) {
-      element.textElement.textContent = title;
-      element.checkboxElement.title = title;
+      element.#textElement.textContent = title;
+      element.#checkboxElement.title = title;
       if (subtitle !== undefined) {
-        element.textElement.createChild('div', 'dt-checkbox-subtitle').textContent = subtitle;
+        element.#textElement.createChild('div', 'devtools-checkbox-subtitle').textContent = subtitle;
       }
     }
-    element.checkboxElement.classList.toggle('small', small);
+    element.#checkboxElement.classList.toggle('small', small);
     return element;
   }
 
+  attributeChangedCallback(name: string, _oldValue: string|null, newValue: string|null): void {
+    if (name === 'checked') {
+      this.#checkboxElement.checked = newValue !== null;
+    } else if (name === 'disabled') {
+      this.#checkboxElement.disabled = newValue !== null;
+    } else if (name === 'indeterminate') {
+      this.#checkboxElement.indeterminate = newValue !== null;
+    } else if (name === 'name') {
+      this.#checkboxElement.name = newValue ?? '';
+    } else if (name === 'title') {
+      this.#checkboxElement.title = newValue ?? '';
+      this.#textElement.title = newValue ?? '';
+    }
+  }
+
+  get checked(): boolean {
+    return this.#checkboxElement.checked;
+  }
+
+  set checked(checked: boolean) {
+    this.toggleAttribute('checked', checked);
+  }
+
+  set disabled(disabled: boolean) {
+    this.toggleAttribute('disabled', disabled);
+  }
+
+  get disabled(): boolean {
+    return this.#checkboxElement.disabled;
+  }
+
+  set indeterminate(indeterminate: boolean) {
+    this.toggleAttribute('indeterminate', indeterminate);
+  }
+
+  get indeterminate(): boolean {
+    return this.#checkboxElement.indeterminate;
+  }
+
+  set name(name: string) {
+    this.setAttribute('name', name);
+  }
+
+  get name(): string {
+    return this.#checkboxElement.name;
+  }
+
+  override click(): void {
+    this.#checkboxElement.click();
+  }
+
   /** Only to be used when the checkbox label is 'generated' (a regex, a className, etc). Most checkboxes should be create()'d with UIStrings */
-  static createWithStringLiteral(
-      title?: string, checked?: boolean, subtitle?: Platform.UIString.LocalizedString, jslogContext?: string,
-      small?: boolean): CheckboxLabel {
+  static createWithStringLiteral(title?: string, checked?: boolean, jslogContext?: string, small?: boolean):
+      CheckboxLabel {
     const stringLiteral = title as Platform.UIString.LocalizedString;
-    return CheckboxLabel.create(stringLiteral, checked, subtitle, jslogContext, small);
+    return CheckboxLabel.create(stringLiteral, checked, undefined, jslogContext, small);
   }
 
   private static lastId = 0;
 }
 
-customElements.define('dt-checkbox', CheckboxLabel);
+customElements.define('devtools-checkbox', CheckboxLabel);
 
 export class DevToolsIconLabel extends HTMLElement {
   readonly #icon: IconButton.Icon.Icon;
@@ -1433,11 +1493,8 @@ export class DevToolsCloseButton extends HTMLElement {
 customElements.define('dt-close-button', DevToolsCloseButton);
 
 export function bindInput(
-    input: HTMLInputElement, apply: (arg0: string) => void, validate: (arg0: string) => {
-      valid: boolean,
-      errorMessage: (string | undefined),
-    },
-    numeric: boolean, modifierMultiplier?: number): (arg0: string) => void {
+    input: HTMLInputElement, apply: (arg0: string) => void, validate: (arg0: string) => boolean, numeric: boolean,
+    modifierMultiplier?: number): (arg0: string) => void {
   input.addEventListener('change', onChange, false);
   input.addEventListener('input', onInput, false);
   input.addEventListener('keydown', onKeyDown, false);
@@ -1448,7 +1505,7 @@ export function bindInput(
   }
 
   function onChange(): void {
-    const {valid} = validate(input.value);
+    const valid = validate(input.value);
     input.classList.toggle('error-input', !valid);
     if (valid) {
       apply(input.value);
@@ -1457,7 +1514,7 @@ export function bindInput(
 
   function onKeyDown(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
-      const {valid} = validate(input.value);
+      const valid = validate(input.value);
       if (valid) {
         apply(input.value);
       }
@@ -1474,7 +1531,7 @@ export function bindInput(
       return;
     }
     const stringValue = String(value);
-    const {valid} = validate(stringValue);
+    const valid = validate(stringValue);
     if (valid) {
       setValue(stringValue);
     }
@@ -1485,7 +1542,7 @@ export function bindInput(
     if (value === input.value) {
       return;
     }
-    const {valid} = validate(value);
+    const valid = validate(value);
     input.classList.toggle('error-input', !valid);
     input.value = value;
   }
@@ -1829,14 +1886,12 @@ function updateWidgetfocusWidgetForNode(node: Node|null): void {
 
 function updateXWidgetfocusWidgetForNode(node: Node|null): void {
   node = node?.parentNodeOrShadowHost() ?? null;
-  const XWidgetCtor = customElements.get('x-widget');
+  const XWidgetConstructor = customElements.get('x-widget') as Platform.Constructor.Constructor<XWidget>| undefined;
   let widget = null;
   while (node) {
-    if (XWidgetCtor && node instanceof XWidgetCtor) {
+    if (XWidgetConstructor && node instanceof XWidgetConstructor) {
       if (widget) {
-        // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (node as any).defaultFocusedElement = widget;
+        node.defaultFocusedElement = widget;
       }
       widget = node;
     }
@@ -1852,11 +1907,6 @@ function focusChanged(event: Event): void {
   updateXWidgetfocusWidgetForNode(element);
 }
 
-export function injectCoreStyles(elementOrShadowRoot: Element|ShadowRoot): void {
-  ThemeSupport.ThemeSupport.instance().appendStyle(elementOrShadowRoot, inspectorCommonStyles);
-  ThemeSupport.ThemeSupport.instance().appendStyle(elementOrShadowRoot, Buttons.textButtonStyles);
-}
-
 /**
  * Creates a new shadow DOM tree with the core styles and an optional list of
  * additional styles, and attaches it to the specified `element`.
@@ -1866,24 +1916,21 @@ export function injectCoreStyles(elementOrShadowRoot: Element|ShadowRoot): void 
  * @returns the newly created `ShadowRoot`.
  * @see https://developer.mozilla.org/en-US/docs/Web/API/Element/attachShadow
  */
-export function createShadowRootWithCoreStyles(
-    element: Element, options: {cssFile?: Array<{cssText: string}>|{cssText: string}, delegatesFocus?: boolean} = {
-      delegatesFocus: undefined,
-      cssFile: undefined,
-    }): ShadowRoot {
-  const {
-    cssFile,
-    delegatesFocus,
-  } = options;
+export function createShadowRootWithCoreStyles(element: Element, options: {
+  cssFile?: CSSInJS[]|CSSInJS,
+  delegatesFocus?: boolean,
+} = {
+  delegatesFocus: undefined,
+  cssFile: undefined,
+}): ShadowRoot {
+  const {cssFile, delegatesFocus} = options;
 
   const shadowRoot = element.attachShadow({mode: 'open', delegatesFocus});
-  injectCoreStyles(shadowRoot);
+  Platform.DOMUtilities.appendStyle(shadowRoot, inspectorCommonStyles, Buttons.textButtonStyles);
   if (Array.isArray(cssFile)) {
-    for (const cf of cssFile) {
-      ThemeSupport.ThemeSupport.instance().appendStyle(shadowRoot, cf);
-    }
+    Platform.DOMUtilities.appendStyle(shadowRoot, ...cssFile);
   } else if (cssFile) {
-    ThemeSupport.ThemeSupport.instance().appendStyle(shadowRoot, cssFile);
+    Platform.DOMUtilities.appendStyle(shadowRoot, cssFile);
   }
   shadowRoot.addEventListener('focus', focusChanged, true);
   return shadowRoot;

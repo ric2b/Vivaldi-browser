@@ -63,6 +63,10 @@ class BookmarkProvider : public AutocompleteProvider {
 
   const raw_ptr<AutocompleteProviderClient> client_;
   const raw_ptr<bookmarks::BookmarkModel> bookmark_model_;
+
+  // Vivaldi
+  static constexpr char bookmark_separator_placeholder_[] =
+      "http://bookmark.placeholder.url/";
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_BOOKMARK_PROVIDER_H_

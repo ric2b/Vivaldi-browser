@@ -16,7 +16,6 @@
 #include "base/containers/adapters.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
-#include "base/not_fatal_until.h"
 #include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -142,8 +141,8 @@ bool TaskManagerImpl::IsTaskKillable(TaskId task_id) {
   return GetTaskByTaskId(task_id)->IsKillable();
 }
 
-void TaskManagerImpl::KillTask(TaskId task_id) {
-  GetTaskByTaskId(task_id)->Kill();
+bool TaskManagerImpl::KillTask(TaskId task_id) {
+  return GetTaskByTaskId(task_id)->Kill();
 }
 
 double TaskManagerImpl::GetPlatformIndependentCPUUsage(TaskId task_id) const {
@@ -706,7 +705,7 @@ Task* TaskManagerImpl::GetTaskByRoute(
 
 TaskGroup* TaskManagerImpl::GetTaskGroupByTaskId(TaskId task_id) const {
   auto it = task_groups_by_task_id_.find(task_id);
-  CHECK(it != task_groups_by_task_id_.end(), base::NotFatalUntil::M130);
+  CHECK(it != task_groups_by_task_id_.end());
   return it->second;
 }
 

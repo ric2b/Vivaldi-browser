@@ -4,8 +4,8 @@
 
 #include <type_traits>
 
+#include "src/base/numerics/safe_conversions.h"
 #include "src/base/overflowing-math.h"
-#include "src/base/safe_conversions.h"
 #include "src/codegen/cpu-features.h"
 #include "src/common/globals.h"
 #include "src/wasm/compilation-environment.h"
@@ -335,7 +335,7 @@ namespace {
 // FloatType comes later so caller can rely on template argument deduction and
 // just pass IntType.
 template <typename IntType, typename FloatType>
-typename std::enable_if<std::is_floating_point<FloatType>::value, bool>::type
+typename std::enable_if_t<std::is_floating_point_v<FloatType>, bool>
 ShouldSkipTestingConstant(FloatType x) {
   return std::isnan(x) || !base::IsValueInRangeForNumericType<IntType>(x) ||
          !PlatformCanRepresent(x);

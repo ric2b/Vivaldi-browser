@@ -38,7 +38,6 @@
 #include "chrome/browser/ash/policy/enrollment/device_cloud_policy_initializer.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ash/policy/external_data/device_policy_cloud_external_data_manager.h"
-#include "chrome/browser/ash/policy/external_data/handlers/crostini_ansible_playbook_external_data_handler.h"
 #include "chrome/browser/ash/policy/external_data/handlers/device_print_servers_external_data_handler.h"
 #include "chrome/browser/ash/policy/external_data/handlers/device_printers_external_data_handler.h"
 #include "chrome/browser/ash/policy/external_data/handlers/device_wallpaper_image_external_data_handler.h"
@@ -211,8 +210,8 @@ BrowserPolicyConnectorAsh::BrowserPolicyConnectorAsh() {
 
   crd_admin_session_controller_ = std::make_unique<CrdAdminSessionController>();
 
-  // DBusThreadManager or DeviceSettingsService may be
-  // uninitialized on unit tests.
+  // DBusThreadManager or DeviceSettingsService may be uninitialized (e.g.
+  // during unit tests).
   if (ash::DBusThreadManager::IsInitialized() &&
       ash::DeviceSettingsService::IsInitialized()) {
     std::unique_ptr<DeviceCloudPolicyStoreAsh> device_cloud_policy_store =
@@ -528,7 +527,7 @@ void BrowserPolicyConnectorAsh::Shutdown() {
 
   device_fm_registration_token_uploaders_.clear();
 
-  // `InvalidationListener` must be destroyed after its dependants
+  // `InvalidationListener` must be destroyed after its dependents
   // (`device_cert_provisioning_scheduler_`,
   // `device_local_account_policy_service_`, `device_cloud_policy_invalidator_`,
   // `device_remote_commands_invalidator_`, and
@@ -706,12 +705,6 @@ void BrowserPolicyConnectorAsh::OnUserManagerCreated(
           cros_settings, device_local_account_policy_service_.get(),
           policy::key::kExternalPrintServers, user_manager,
           std::make_unique<policy::PrintServersExternalDataHandler>()));
-  cloud_external_data_policy_observers_.push_back(
-      std::make_unique<policy::CloudExternalDataPolicyObserver>(
-          cros_settings, device_local_account_policy_service_.get(),
-          policy::key::kCrostiniAnsiblePlaybook, user_manager,
-          std::make_unique<
-              policy::CrostiniAnsiblePlaybookExternalDataHandler>()));
   cloud_external_data_policy_observers_.push_back(
       std::make_unique<policy::CloudExternalDataPolicyObserver>(
           cros_settings, device_local_account_policy_service_.get(),

@@ -17,7 +17,11 @@
 #import "components/sync/service/sync_user_settings.h"
 #import "google_apis/gaia/gaia_constants.h"
 #import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow.h"
+#import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow_delegate.h"
+#import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow_performer.h"
+#import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/test_authentication_flow_delegate.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view.h"
+#import "ios/chrome/browser/authentication/ui_bundled/continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_utils.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
@@ -167,10 +171,34 @@ void SignIn(id<SystemIdentity> identity) {
       presentingViewController:viewController
                     anchorView:nil
                     anchorRect:CGRectNull];
-  [authenticationFlow
-      startSignInWithCompletion:^(SigninCoordinatorResult result) {
-        authenticationFlow = nil;
-      }];
+  // The delegate is retaining itself and the flow.
+  __block TestAuthenticationFlowDelegate* testRequestDelegate = nil;
+  // Unsetting those variables to ensure that they are not retained anymore.
+  // The authentication flow should retain them.
+  void (^unsetVariables)() = ^() {
+    authenticationFlow = nil;
+    testRequestDelegate = nil;
+  };
+  signin_ui::SigninCompletionCallback callback =
+      ^(SigninCoordinatorResult result) {
+        unsetVariables();
+      };
+  ChangeProfileContinuationProvider provider = base::BindRepeating(
+      [](void (^unsetVariables)()) {
+        return base::BindOnce(
+            [](void (^unsetVariables)(), SceneState*,
+               base::OnceClosure closure) {
+              unsetVariables();
+              std::move(closure).Run();
+            },
+            unsetVariables);
+      },
+      unsetVariables);
+  testRequestDelegate = [[TestAuthenticationFlowDelegate alloc]
+       initWithSigninCompletionCallback:callback
+      changeProfileContinuationProvider:provider];
+  authenticationFlow.delegate = testRequestDelegate;
+  [authenticationFlow startSignIn];
 }
 
 void ResetHistorySyncPreferencesForTesting() {
@@ -187,11 +215,19 @@ void ResetSyncAccountSettingsPrefs() {
       ->KeepAccountSettingsPrefsOnlyForUsers({});
 }
 
+void SetUseFakeResponsesForProfileSeparationPolicyRequests() {
+  [AuthenticationFlowPerformer setUseFakePolicyResponsesForTesting:YES];
+}
+
+void ClearUseFakeResponsesForProfileSeparationPolicyRequests() {
+  [AuthenticationFlowPerformer setUseFakePolicyResponsesForTesting:NO];
+}
+
 void SetPolicyResponseForNextProfileSeparationPolicyRequest(
     policy::ProfileSeparationDataMigrationSettings
         profileSeparationDataMigrationSettings) {
-  [AuthenticationFlow forcePolicyResponseForNextRequestForTesting:
-                          profileSeparationDataMigrationSettings];
+  [AuthenticationFlowPerformer forcePolicyResponseForNextRequestForTesting:
+                                   profileSeparationDataMigrationSettings];
 }
 
 }  // namespace chrome_test_util

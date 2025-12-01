@@ -19,6 +19,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/time/time.h"
@@ -115,6 +116,7 @@ const base::FeatureParam<ChildProcessImportance>::Option
     child_process_importance_options[] = {
         {ChildProcessImportance::IMPORTANT, "IMPORTANT"},
         {ChildProcessImportance::MODERATE, "MODERATE"},
+        {ChildProcessImportance::PERCEPTIBLE, "PERCEPTIBLE"},
         {ChildProcessImportance::NORMAL, "NORMAL"}};
 
 // Defines the binding strength for a processes holding cached pages. The value
@@ -203,7 +205,6 @@ WebSchedulerTrackedFeatures GetDisallowedWebSchedulerTrackedFeatures() {
           WebSchedulerTrackedFeature::kUnloadHandler,
           WebSchedulerTrackedFeature::kWebAuthentication,
           WebSchedulerTrackedFeature::kWebBluetooth,
-          WebSchedulerTrackedFeature::kWebDatabase,
           WebSchedulerTrackedFeature::kWebHID,
           WebSchedulerTrackedFeature::kWebLocks,
           WebSchedulerTrackedFeature::kWebOTPService,
@@ -425,6 +426,53 @@ const base::FeatureParam<base::TimeDelta> cache_control_no_store_ttl{
 
 base::TimeDelta GetCacheControlNoStoreTTL() {
   return cache_control_no_store_ttl.Get();
+}
+
+// Describes the behavior of BackForwardCacheImpl when handling the prioritized
+// entry. The prioritized entry is the BFCache entry that will be kept alive
+// even if it is out of the cache limit.
+enum class BackForwardCachePrioritizedEntryExperimentLevel {
+  // No special prioritization logic.
+  kDoNotPrioritize = 0,
+  // Allow one extra prioritized entry to avoid eviction.
+  // If the cache limit enforced is 0 (e.g. due to critical memory pressure),
+  // the prioritized entry will be evicted as well.
+  kPrioritizeUnlessShouldClearAll = 1,
+  // Allow one extra prioritized entry to avoid eviction.
+  // If the cache limit enforced is 0 (e.g. due to critical memory pressure),
+  // and there is no other entry to evict, the prioritized entry will be evicted
+  // as well.
+  kPrioritizeUnlessShouldClearAllAndNoEviction = 2,
+};
+
+const char kBackForwardCachePrioritizedEntryExperimentLevelName[] = "level";
+
+static constexpr base::FeatureParam<
+    BackForwardCachePrioritizedEntryExperimentLevel>::Option
+    prioritized_entry_levels[] = {
+        {BackForwardCachePrioritizedEntryExperimentLevel::kDoNotPrioritize,
+         "do-not-prioritize"},
+        {BackForwardCachePrioritizedEntryExperimentLevel::
+             kPrioritizeUnlessShouldClearAll,
+         "prioritize-unless-should-clear-all"},
+        {BackForwardCachePrioritizedEntryExperimentLevel::
+             kPrioritizeUnlessShouldClearAllAndNoEviction,
+         "prioritize-unless-should-clear-all-and-no-eviction"},
+};
+const base::FeatureParam<BackForwardCachePrioritizedEntryExperimentLevel>
+    prioritized_entry_level{
+        &kBackForwardCachePrioritizedEntry,
+        kBackForwardCachePrioritizedEntryExperimentLevelName,
+        BackForwardCachePrioritizedEntryExperimentLevel::kDoNotPrioritize,
+        &prioritized_entry_levels};
+
+BackForwardCachePrioritizedEntryExperimentLevel
+GetBackForwardCachePrioritizedEntryExperimentLevel() {
+  if (!IsBackForwardCacheEnabled() ||
+      !base::FeatureList::IsEnabled(kBackForwardCachePrioritizedEntry)) {
+    return BackForwardCachePrioritizedEntryExperimentLevel::kDoNotPrioritize;
+  }
+  return prioritized_entry_level.Get();
 }
 
 bool IsSameOriginForTreeResult(RenderFrameHostImpl* rfh,
@@ -959,7 +1007,8 @@ void BackForwardCacheImpl::PopulateReasonsForMainDocument(
                    *browser_context, rfh->GetLastCommittedURL(),
                    rfh->ComputeSiteForCookies(),
                    rfh->ComputeTopFrameOrigin(rfh->GetLastCommittedOrigin()),
-                   rfh->GetCookieSettingOverrides())) {
+                   rfh->GetCookieSettingOverrides(),
+                   rfh->GetStorageKey().ToCookiePartitionKey())) {
         result.No(
             BackForwardCacheMetrics::NotRestoredReason::kCacheControlNoStore);
         result.No(BackForwardCacheMetrics::NotRestoredReason::kCookieDisabled);
@@ -1248,15 +1297,29 @@ void BackForwardCacheImpl::EnforceCacheSizeLimit() {
       GetCacheSize(), BackForwardCacheMetrics::NotRestoredReason::kCacheLimit);
 }
 
-void BackForwardCacheImpl::Prune(size_t limit) {
-  EnforceCacheSizeLimitInternal(
-      limit, BackForwardCacheMetrics::NotRestoredReason::kCacheLimitPruned);
+void BackForwardCacheImpl::Prune(size_t limit, NotRestoredReason reason) {
+  EnforceCacheSizeLimitInternal(limit, reason);
 }
 
 size_t BackForwardCacheImpl::EnforceCacheSizeLimitInternal(
     size_t limit,
     BackForwardCacheMetrics::NotRestoredReason reason) {
+  using NotRestoredReason = BackForwardCacheMetrics::NotRestoredReason;
+  using Level = BackForwardCachePrioritizedEntryExperimentLevel;
+
   size_t count = 0;
+  bool did_evict_any_entry = false;
+  auto prioritized_level = GetBackForwardCachePrioritizedEntryExperimentLevel();
+  // Indicates whether we should skip the initial rounds of eviction (the
+  // for-loop below). Note that even if this boolean value is true, the
+  // prioritized entry may still be evicted if the level is
+  // `kPrioritizeUnlessShouldClearAllAndNoEviction` and there is no other
+  // eviction.
+  bool should_skip_eviction_for_prioritized_entry =
+      (prioritized_level == Level::kPrioritizeUnlessShouldClearAll &&
+       limit > 0) ||
+      prioritized_level == Level::kPrioritizeUnlessShouldClearAllAndNoEviction;
+
   for (auto stored_entry_iter = entries_.begin();
        stored_entry_iter != entries_.end(); stored_entry_iter++) {
     Entry* stored_entry = stored_entry_iter->get();
@@ -1267,8 +1330,7 @@ size_t BackForwardCacheImpl::EnforceCacheSizeLimitInternal(
     }
     // Skip the entry if it doesn't have foregrounded progress and the eviction
     // is against foreground limit.
-    if (reason ==
-            BackForwardCacheMetrics::NotRestoredReason::kForegroundCacheLimit &&
+    if (reason == NotRestoredReason::kForegroundCacheLimit &&
         !HasForegroundedProcess(*stored_entry)) {
       continue;
     }
@@ -1279,20 +1341,21 @@ size_t BackForwardCacheImpl::EnforceCacheSizeLimitInternal(
     // cache limit, for the pruning case, the entry will be counted and might be
     // evicted.
     if (reason !=
-            BackForwardCacheMetrics::NotRestoredReason::kCacheLimitPruned &&
+            NotRestoredReason::kCacheLimitPrunedOnModerateMemoryPressure &&
+        reason !=
+            NotRestoredReason::kCacheLimitPrunedOnCriticalMemoryPressure &&
         !AllRenderViewHostsReceivedAckFromRenderer(*stored_entry)) {
       continue;
     }
+
     if (++count > limit) {
-      if (base::FeatureList::IsEnabled(kBackForwardCachePrioritizedEntry)) {
-        // If it's not a pruning process that will clear all the entries, we
-        // should handle the latest prioritized entry outside the limit
-        // specially and keep it not-evicted.
-        if (limit > 0 &&
-            GetContentClient()->browser()->ShouldPrioritizeForBackForwardCache(
+      if (should_skip_eviction_for_prioritized_entry) {
+        // Handle the latest prioritized entry outside the limit specially and
+        // keep it not-evicted.
+        if (GetContentClient()->browser()->ShouldPrioritizeForBackForwardCache(
                 rfh->GetBrowserContext(), rfh->GetLastCommittedURL())) {
-          // If the prioritized_entry_ is already taken by some other entry, we
-          // have to evict the current one.
+          // If the prioritized_entry_ is already taken by some other entry,
+          // we have to evict the current one.
           if (prioritized_entry_ == entries_.end() ||
               prioritized_entry_ == stored_entry_iter) {
             prioritized_entry_ = stored_entry_iter;
@@ -1300,8 +1363,26 @@ size_t BackForwardCacheImpl::EnforceCacheSizeLimitInternal(
           }
         }
       }
+      did_evict_any_entry = true;
       rfh->EvictFromBackForwardCacheWithReason(reason);
     }
+  }
+
+  // The `prioritized_entry_` should be evicted if
+  if (
+      // the prioritized entry is set
+      prioritized_entry_ != entries_.end() &&
+      // the cache limit is 0 (e.g. due to critical memory pressure)
+      limit == 0 &&
+      // the level is `prioritize-unless-should-clear-all-and-no-eviction`
+      prioritized_level ==
+          Level::kPrioritizeUnlessShouldClearAllAndNoEviction &&
+      // no other entry was evicted
+      !did_evict_any_entry) {
+    prioritized_entry_->get()
+        ->render_frame_host()
+        ->EvictFromBackForwardCacheWithReason(reason);
+    prioritized_entry_ = entries_.end();
   }
   return count;
 }
@@ -1727,11 +1808,6 @@ bool BackForwardCacheImpl::
   return false;
 }
 
-bool BackForwardCacheImpl::IsMediaSessionServiceAllowed() {
-  return base::FeatureList::IsEnabled(
-      features::kBackForwardCacheMediaSessionService);
-}
-
 // Static
 bool BackForwardCacheImpl::IsUnloadAllowed() {
   return base::FeatureList::IsEnabled(kBackForwardCacheUnloadAllowed);
@@ -1768,17 +1844,13 @@ BackForwardCache::DisabledReason::DisabledReason(
 
 BackForwardCache::DisabledReason::DisabledReason(
     const BackForwardCache::DisabledReason& reason) = default;
-bool BackForwardCache::DisabledReason::operator<(
+std::weak_ordering BackForwardCache::DisabledReason::operator<=>(
     const DisabledReason& other) const {
-  return std::tie(source, id) < std::tie(other.source, other.id);
+  return std::tie(source, id) <=> std::tie(other.source, other.id);
 }
 bool BackForwardCache::DisabledReason::operator==(
     const DisabledReason& other) const {
   return std::tie(source, id) == std::tie(other.source, other.id);
-}
-bool BackForwardCache::DisabledReason::operator!=(
-    const DisabledReason& other) const {
-  return !(*this == other);
 }
 
 BackForwardCacheCanStoreTreeResult::BackForwardCacheCanStoreTreeResult(

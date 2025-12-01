@@ -55,6 +55,7 @@ class WebAppProfileDeletionManager;
 
 #if BUILDFLAG(IS_CHROMEOS)
 class WebAppRunOnOsLoginManager;
+class IwaBundleCacheManager;
 #endif
 
 // WebAppProvider is the heart of Chrome web app code.
@@ -175,6 +176,9 @@ class WebAppProvider : public KeyedService {
 #if BUILDFLAG(IS_CHROMEOS)
   // Runs web apps on OS login.
   WebAppRunOnOsLoginManager& run_on_os_login_manager();
+
+  // Isolated Web App bundle cache manager.
+  IwaBundleCacheManager& iwa_cache_manager();
 #endif
 
   IsolatedWebAppPolicyManager& iwa_policy_manager();
@@ -238,6 +242,10 @@ class WebAppProvider : public KeyedService {
   // Returns a nullptr in the default implementation
   virtual FakeWebAppProvider* AsFakeWebAppProviderForTesting();
 
+#if BUILDFLAG(IS_MAC)
+  void DoDelayedPostStartupWork();
+#endif
+
  protected:
   virtual void StartImpl();
 
@@ -270,6 +278,7 @@ class WebAppProvider : public KeyedService {
   std::unique_ptr<IsolatedWebAppPolicyManager> isolated_web_app_policy_manager_;
 #if BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<WebAppRunOnOsLoginManager> web_app_run_on_os_login_manager_;
+  std::unique_ptr<IwaBundleCacheManager> iwa_cache_manager_;
 #endif  // BUILDFLAG(IS_CHROMEOS)
   std::unique_ptr<WebAppUiManager> ui_manager_;
   std::unique_ptr<OsIntegrationManager> os_integration_manager_;

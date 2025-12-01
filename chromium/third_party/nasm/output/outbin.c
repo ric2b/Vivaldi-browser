@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------- *
- *   
+ *
  *   Copyright 1996-2017 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
- *     
+ *
  *     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
  *     CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
  *     INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -31,7 +31,7 @@
  *
  * ----------------------------------------------------------------------- */
 
-/* 
+/*
  * outbin.c output routines for the Netwide Assembler to produce
  *    flat-form binary files
  */
@@ -48,7 +48,7 @@
  *
  * - Sections can be either progbits or nobits type.
  *
- * - You can specify that they be aligned at a certian boundary
+ * - You can specify that they be aligned at a certain boundary
  *   following the previous section ("align="), or positioned at an
  *   arbitrary byte-granular location ("start=").
  *
@@ -335,6 +335,8 @@ static void bin_cleanup(void)
         if (!s)
             nasm_fatal("section %s follows an invalid or"
                   " unknown section (%s)", g->name, g->follows);
+        if (s == g)
+            nasm_fatal("section %s is self following", s->name);
         if (s->next && (s->next->flags & FOLLOWS_DEFINED) &&
             !strcmp(s->name, s->next->follows))
             nasm_fatal("sections %s and %s can't both follow"
@@ -1298,7 +1300,7 @@ bin_directive(enum directive directive, char *args)
     /* The 'map' directive allows the user to generate section
      * and symbol information to stdout, stderr, or to a file. */
 	char *p;
-	
+
         if (!pass_first())
             return DIRR_OK;
         args += strspn(args, " \t");
@@ -1326,13 +1328,13 @@ bin_directive(enum directive directive, char *args)
                 else {          /* Must be a filename. */
                     rf = nasm_open_write(p, NF_TEXT);
                     if (!rf) {
-                        nasm_warn(WARN_OTHER|ERR_PASS1, "unable to open map file `%s'", p);
+                        nasm_warn(WARN_OTHER, "unable to open map file `%s'", p);
                         map_control = 0;
                         return DIRR_OK;
                     }
                 }
             } else
-                nasm_warn(WARN_OTHER|ERR_PASS1, "map file already specified");
+                nasm_warn(WARN_OTHER, "map file already specified");
         }
         if (map_control == 0)
             map_control |= MAP_ORIGIN | MAP_SUMMARY;
@@ -1361,8 +1363,8 @@ static void ith_init(void)
 {
     do_output = do_output_ith;
     binfmt_init();
-}    
-    
+}
+
 static void srec_init(void)
 {
     do_output = do_output_srec;
@@ -1408,7 +1410,7 @@ static void do_output_bin(void)
 
         /* Write the section to the output file. */
 	saa_fpwrite(s->contents, ofile);
-        
+
 	/* Keep track of the current file position */
 	addr = s->start + s->length;
     }

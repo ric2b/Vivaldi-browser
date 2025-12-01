@@ -124,11 +124,7 @@ void DevToolsHost::Trace(Visitor* visitor) const {
 void DevToolsHost::EvaluateScript(const String& expression) {
   if (ScriptForbiddenScope::IsScriptForbidden())
     return;
-  if (RuntimeEnabledFeatures::BlinkLifecycleScriptForbiddenEnabled()) {
-    CHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
-  } else {
-    DCHECK(!ScriptForbiddenScope::WillBeScriptForbidden());
-  }
+
   ClassicScript::CreateUnspecifiedScript(expression,
                                          ScriptSourceLocationType::kInternal)
       ->RunScriptOnScriptState(ToScriptStateForMainWorld(frontend_frame_));
@@ -197,7 +193,7 @@ static std::u16string GetLabel(const Member<ShowContextMenuItem> item) {
   // '&' does not show up in context menus unless replaced by '&&'.
   String label = item->getLabelOr(String()).Replace('&', "&&");
   label.Ensure16Bit();
-  return std::u16string(label.Characters16(), label.length());
+  return std::u16string(label.View16());
 }
 
 static std::vector<MenuItemInfo> PopulateContextMenuItems(

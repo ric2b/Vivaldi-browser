@@ -35,7 +35,8 @@ bool RenderInputRouterSupportAndroid::OnTouchEvent(
     bool emit_histograms) {
   if (emit_histograms) {
     input_helper_->RecordToolTypeForActionDown(event);
-    input_helper_->ComputeEventLatencyOSTouchHistograms(event);
+    input_helper_->ComputeEventLatencyOSTouchHistograms(
+        event, /*processing_time=*/base::TimeTicks::Now());
   }
 
   ui::FilteredGestureProvider::TouchHandlingResult result =
@@ -58,6 +59,10 @@ bool RenderInputRouterSupportAndroid::OnTouchEvent(
 
 bool RenderInputRouterSupportAndroid::ShouldRouteEvents() const {
   return input_helper_->ShouldRouteEvents();
+}
+
+void RenderInputRouterSupportAndroid::ResetGestureDetection() {
+  input_helper_->ResetGestureDetection();
 }
 
 bool RenderInputRouterSupportAndroid::RequiresDoubleTapGestureEvents() const {
@@ -101,12 +106,6 @@ void RenderInputRouterSupportAndroid::ProcessAckedTouchEvent(
   TRACE_EVENT0("input",
                "RenderInputRouterSupportAndroid::ProcessAckedTouchEvent");
   input_helper_->ProcessAckedTouchEvent(touch, ack_result);
-}
-
-void RenderInputRouterSupportAndroid::DidOverscroll(
-    const ui::DidOverscrollParams& params) {
-  // The implementation on Browser side informs SyncCompositor and
-  // OverscrollController, and both of those are unaffected by InputVizard.
 }
 
 FrameSinkId RenderInputRouterSupportAndroid::GetRootFrameSinkId() {

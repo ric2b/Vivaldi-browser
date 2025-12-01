@@ -69,7 +69,8 @@ chromium-metrics-reviews@google.com.
   <int value="6"
       label="Not visible because model execution capability was disabled for
              the user account"/>
-  <int value="7" label="Not visible because the feature is already graduated"/>
+  <int value="7"
+      label="DEPRECATED: Not visible because the feature is already graduated"/>
   <int value="8"
       label="Not visible because the device is unsupported by the feature."/>
 </enum>
@@ -84,6 +85,18 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Fetched Hint"/>
   <int value="4" label="Prediction Model"/>
   <int value="5" label="[Deprecated] Host Model Features"/>
+</enum>
+
+<!-- Use following code to get the hash from the model version.
+import struct
+import hashlib
+version='2025.5.5.2308'
+struct.unpack('>L', hashlib.md5(version.encode('utf-8')).digest()[4:8])[0]
+-->
+
+<enum name="OnDeviceBaseModelVersion">
+  <summary>The versions for the foundational model</summary>
+  <int value="946907700" label="2025.5.5.2308"/>
 </enum>
 
 <enum name="OnDeviceModelAdaptationAvailability">
@@ -752,6 +765,8 @@ chromium-metrics-reviews@google.com.
   <int value="91" label="GLIC_ZERO_STATE_SUGGESTIONS"/>
   <int value="92" label="GLIC_ACTION_PAGE_BLOCK"/>
   <int value="93" label="FEDCM_CLICKTHROUGH_RATE"/>
+  <int value="96" label="GLIC_PAGE_CONTEXT_ELIGIBILITY"/>
+  <int value="97" label="DIGITAL_CREDENTIALS_LOW_FRICTION"/>
 </enum>
 
 <enum name="PageContentAnnotationsStorageStatus">

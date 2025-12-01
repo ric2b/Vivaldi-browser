@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "tensorflow/core/data/name_utils.h"
 #include "tensorflow/core/data/utils.h"
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/metrics.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -99,6 +100,11 @@ class TextLineDatasetOp::Dataset : public DatasetBase {
     explicit Iterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
 
+    absl::Status Initialize(IteratorContext* ctx) override {
+      LogFilenames(dataset()->filenames_);
+      return absl::OkStatus();
+    }
+
     bool SymbolicCheckpointCompatible() const override { return true; }
 
     absl::Status GetNextInternal(IteratorContext* ctx,
@@ -121,7 +127,7 @@ class TextLineDatasetOp::Dataset : public DatasetBase {
             out_tensors->push_back(std::move(line_contents));
             *end_of_sequence = false;
             return absl::OkStatus();
-          } else if (!errors::IsOutOfRange(s)) {
+          } else if (!absl::IsOutOfRange(s)) {
             // Report non-EOF errors to the caller.
             return s;
           }
@@ -282,7 +288,6 @@ void TextLineDatasetOp::MakeDataset(OpKernelContext* ctx,
     filenames.push_back(filenames_tensor->flat<tstring>()(i));
     metrics::RecordTFDataFilename(kDatasetType, filenames[i]);
   }
-  LogFilenames(filenames);
 
   *output = new Dataset(ctx, std::move(filenames), compression_type,
                         zlib_compression_options);

@@ -12,9 +12,8 @@
 #import "ios/web/public/web_state.h"
 #import "url/gurl.h"
 
-BROWSER_USER_DATA_KEY_IMPL(FaviconBrowserAgent)
-
-FaviconBrowserAgent::FaviconBrowserAgent(Browser* browser) : browser_(browser) {
+FaviconBrowserAgent::FaviconBrowserAgent(Browser* browser)
+    : BrowserUserData(browser) {
   // All the BrowserAgent are attached to the Browser during the creation,
   // the WebStateList must be empty at this point.
   DCHECK(browser_->GetWebStateList()->empty())
@@ -26,9 +25,7 @@ FaviconBrowserAgent::FaviconBrowserAgent(Browser* browser) : browser_(browser) {
       SessionRestorationServiceFactory::GetForProfile(profile));
 }
 
-FaviconBrowserAgent::~FaviconBrowserAgent() {
-  browser_ = nullptr;
-}
+FaviconBrowserAgent::~FaviconBrowserAgent() = default;
 
 #pragma mark - SessionRestorationObserver
 

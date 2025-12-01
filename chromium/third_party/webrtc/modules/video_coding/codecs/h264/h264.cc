@@ -63,12 +63,11 @@ SdpVideoFormat CreateH264Format(H264Profile profile,
       scalability_modes.push_back(scalability_mode);
     }
   }
-  return SdpVideoFormat(
-      cricket::kH264CodecName,
-      {{cricket::kH264FmtpProfileLevelId, *profile_string},
-       {cricket::kH264FmtpLevelAsymmetryAllowed, "1"},
-       {cricket::kH264FmtpPacketizationMode, packetization_mode}},
-      scalability_modes);
+  return SdpVideoFormat(kH264CodecName,
+                        {{kH264FmtpProfileLevelId, *profile_string},
+                         {kH264FmtpLevelAsymmetryAllowed, "1"},
+                         {kH264FmtpPacketizationMode, packetization_mode}},
+                        scalability_modes);
 }
 
 void DisableRtcUseH264() {
@@ -122,7 +121,7 @@ std::vector<SdpVideoFormat> SupportedH264DecoderCodecs() {
 }
 
 H264EncoderSettings H264EncoderSettings::Parse(const SdpVideoFormat& format) {
-  if (auto it = format.parameters.find(cricket::kH264FmtpPacketizationMode);
+  if (auto it = format.parameters.find(kH264FmtpPacketizationMode);
       it != format.parameters.end()) {
     if (it->second == "0") {
       return {.packetization_mode = H264PacketizationMode::SingleNalUnit};
@@ -133,7 +132,7 @@ H264EncoderSettings H264EncoderSettings::Parse(const SdpVideoFormat& format) {
   return {};
 }
 
-absl::Nonnull<std::unique_ptr<VideoEncoder>> CreateH264Encoder(
+absl_nonnull std::unique_ptr<VideoEncoder> CreateH264Encoder(
     [[maybe_unused]] const Environment& env,
     [[maybe_unused]] H264EncoderSettings settings) {
 #if defined(WEBRTC_USE_H264)

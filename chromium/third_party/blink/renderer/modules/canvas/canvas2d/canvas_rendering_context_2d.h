@@ -35,7 +35,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "cc/paint/paint_record.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_token.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
+#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_enums.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
@@ -87,7 +87,6 @@ class ImageDataSettings;
 class MemoryManagedPaintRecorder;
 class Path2D;
 class SVGResource;
-class TimerBase;
 enum class FlushReason;
 enum class PredefinedColorSpace;
 
@@ -136,7 +135,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void drawFocusIfNeeded(Path2D*, Element*);
 
   void LoseContext(LostContextMode) override;
-  void RestoreProviderAndContextIfPossible() override;
 
   // TaskObserver implementation
   void DidProcessTask(const base::PendingTask&) final;
@@ -179,9 +177,17 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   sk_sp<PaintFilter> StateGetFilter() final;
 
   void FinalizeFrame(FlushReason) override;
-  void PaintPlacedElements() final;
-  void MarkPlacedElementDirty(Element* placedElement) final;
-  bool HasPlacedElements() const final;
+
+  void drawElement(Element* element,
+                   double x,
+                   double y,
+                   ExceptionState& exceptionState);
+  void drawElement(Element* element,
+                   double x,
+                   double y,
+                   double dwidth,
+                   double dheight,
+                   ExceptionState& exceptionState);
 
   CanvasRenderingContextHost* GetCanvasRenderingContextHost() const override;
   ExecutionContext* GetTopExecutionContext() const override;
@@ -223,6 +229,10 @@ class MODULES_EXPORT CanvasRenderingContext2D final
     return HasTriggerForIntervention();
   }
 
+  CanvasOperationType GetCanvasTriggerOperations() const override {
+    return GetTriggersForIntervention();
+  }
+
  protected:
   HTMLCanvasElement* HostAsHTMLCanvasElement() const final;
   UniqueFontSelector* GetFontSelector() const final;
@@ -232,7 +242,6 @@ class MODULES_EXPORT CanvasRenderingContext2D final
                    size_t row_bytes,
                    int x,
                    int y) override;
-  void TryRestoreContextEvent(TimerBase*) override;
 
   bool WillSetFont() const final;
   bool CurrentFontResolvedAndUpToDate() const final;
@@ -240,15 +249,19 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
  private:
   friend class CanvasRenderingContext2DAutoRestoreSkCanvas;
-  friend class CanvasRenderingContext2DTest;
+  friend class CanvasRenderingContext2DTestBase;
   FRIEND_TEST_ALL_PREFIXES(CanvasRenderingContext2DTestAccelerated,
                            PrepareMailboxWhenContextIsLostWithFailedRestore);
 
+  void DrawElementInternal(Element* element,
+                           double x,
+                           double y,
+                           std::optional<double> dwidth,
+                           std::optional<double> dheight,
+                           ExceptionState& exceptionState);
   // Handles a page visibility change that occurs when the canvas is paintable.
   // TODO(crbug.com/40280152): Fold this method into PageVisibilityChanged().
   void OnPageVisibilityChangeWhenPaintable();
-
-  bool Restore();
 
   void PruneLocalFontCache(size_t target_size);
 

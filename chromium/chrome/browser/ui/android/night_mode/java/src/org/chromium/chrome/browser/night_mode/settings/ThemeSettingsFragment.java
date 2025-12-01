@@ -146,4 +146,9 @@ public class ThemeSettingsFragment extends ChromeBaseSettingsFragment
     public boolean hasDivider() {
         return false;
     }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
+    }
 }

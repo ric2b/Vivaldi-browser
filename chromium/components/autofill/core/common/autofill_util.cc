@@ -177,27 +177,20 @@ GURL StripAuthAndParams(const GURL& gurl) {
 
 bool IsAutofillManuallyTriggered(
     AutofillSuggestionTriggerSource trigger_source) {
-  return IsPasswordsAutofillManuallyTriggered(trigger_source);
+  return IsPasswordsAutofillManuallyTriggered(trigger_source).value();
 }
 
-bool IsPasswordsAutofillManuallyTriggered(
+IsPasswordRequestManuallyTriggered IsPasswordsAutofillManuallyTriggered(
     AutofillSuggestionTriggerSource trigger_source) {
-  return trigger_source ==
-         AutofillSuggestionTriggerSource::kManualFallbackPasswords;
+  return IsPasswordRequestManuallyTriggered(
+      trigger_source ==
+      AutofillSuggestionTriggerSource::kManualFallbackPasswords);
 }
 
 bool IsPlusAddressesManuallyTriggered(
     AutofillSuggestionTriggerSource trigger_source) {
   return trigger_source ==
          AutofillSuggestionTriggerSource::kManualFallbackPlusAddresses;
-}
-
-bool IsAddressFieldSwappingEnabled() {
-#if BUILDFLAG(IS_IOS)
-  return base::FeatureList::IsEnabled(features::kAutofillAddressFieldSwapping);
-#else
-  return true;
-#endif
 }
 
 bool IsPaymentsFieldSwappingEnabled() {

@@ -66,9 +66,9 @@
 // Sets the title of the Select All button to "Select All".
 - (void)configureSelectAllButtonTitle;
 
-// Highlights (put a blue background) the last element of the page control.
-- (void)highlightLastPageControl;
-// Removes the highlight on the last page control, if there is one.
+// Highlights (put a blue background) `page` of the page control.
+- (void)highlightPageControlItem:(TabGridPage)page;
+// Removes the last highlighted page, if there is one.
 - (void)resetLastPageControlHighlight;
 
 // Hides components and uses a black background color for tab grid transition
@@ -85,6 +85,12 @@
 - (void)unfocusSearchBar;
 // Sets the text of the UISearchBar.
 - (void)setSearchBarText:(NSString*)text;
+// Sets the toolbar background offset to match the content scroll view offset.
+- (void)setBackgroundContentOffset:(CGPoint)backgroundContentOffset
+                          animated:(BOOL)animated;
+// Sets whether the incognito toolbar background should be hidden.
+- (void)setIncognitoBackgroundHidden:(BOOL)hidden;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_TAB_SWITCHER_UI_BUNDLED_TAB_GRID_TOOLBARS_TAB_GRID_TOP_TOOLBAR_H_

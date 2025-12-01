@@ -231,7 +231,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
 
         if (supportsS3TC && (supportsTextureSRGB || supportsS3TCSRGB) && supportsRGTC &&
             supportsBPTC) {
-            EnableFeature(dawn::native::Feature::TextureCompressionBC);
+            EnableFeature(Feature::TextureCompressionBC);
         }
     }
 
@@ -311,7 +311,7 @@ ResultOrError<GLint> GetIndexed(const OpenGLFunctions& gl, GLenum pname, GLuint 
 
 MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits) {
     const OpenGLFunctions& gl = mFunctions;
-    GetDefaultLimitsForSupportedFeatureLevel(&limits->v1);
+    GetDefaultLimitsForSupportedFeatureLevel(limits);
 
     DAWN_TRY_ASSIGN(limits->v1.maxTextureDimension2D, Get(gl, GL_MAX_TEXTURE_SIZE));
     limits->v1.maxTextureDimension1D = limits->v1.maxTextureDimension2D;
@@ -480,6 +480,14 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     deviceToggles->Default(Toggle::GLDepthBiasModifier, gl.GetVersion().IsDesktop() ||
                                                             IsANGLEDesktopGL(mName) ||
                                                             IsSwiftShader(mName));
+
+    // (crbug.com/379805731): PowerVR GE8300 GLES 3.1 driver cannot compile .length() on SSBO
+    // dynamic array.
+    // (crbug.com/42240914): Nividia GLES driver returns wrong value for .length() on
+    // SSBO dynamic array.
+    deviceToggles->Default(
+        Toggle::GLUseArrayLengthFromUniform,
+        mVendorId == gpu_info::kVendorID_ImgTec || mVendorId == gpu_info::kVendorID_Nvidia);
 }
 
 ResultOrError<Ref<DeviceBase>> PhysicalDevice::CreateDeviceImpl(

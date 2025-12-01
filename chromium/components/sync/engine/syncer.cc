@@ -15,7 +15,6 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/sync/base/data_type.h"
-#include "components/sync/base/features.h"
 #include "components/sync/engine/active_devices_invalidation_info.h"
 #include "components/sync/engine/cancelation_signal.h"
 #include "components/sync/engine/commit.h"
@@ -26,6 +25,7 @@
 #include "components/sync/engine/get_updates_processor.h"
 #include "components/sync/engine/sync_protocol_error.h"
 #include "components/sync/engine/syncer_error.h"
+#include "components/sync/engine/update_handler.h"
 #include "components/sync/protocol/sync_enums.pb.h"
 #include "net/http/http_status_code.h"
 
@@ -83,15 +83,30 @@ SyncerErrorValueForUma GetSyncerErrorValueForUma(const SyncerError& error) {
   NOTREACHED();
 }
 
+// Returns the NudgedUpdateResult corresponding to the given SyncerError. Not
+// used for `kSuccess`.
+UpdateHandler::NudgedUpdateResult SyncerErrorToNudgedUpdateResult(
+    const SyncerError& error) {
+  switch (error.type()) {
+    case SyncerError::Type::kNetworkError:
+      return UpdateHandler::NudgedUpdateResult::kDownloadRequestNetworkError;
+    case SyncerError::Type::kHttpError:
+    case SyncerError::Type::kProtocolError:
+    case SyncerError::Type::kProtocolViolationError:
+      // Return server error for all non-network errors.
+      return UpdateHandler::NudgedUpdateResult::kDownloadRequestServerError;
+    case SyncerError::Type::kSuccess:
+      NOTREACHED();
+  }
+}
+
 // Returns invalidation info after applying updates. This is used to drop
 // optimization flags if DeviceInfo has been just updated (and new subscriptions
 // might be just received). Without that if a new device with enabled
 // invalidations has been just received, it may be updated only in the next
 // sync cycle due to delay between threads.
 ActiveDevicesInvalidationInfo GetInvalidationInfo(const SyncCycle* cycle) {
-  if (cycle->status_controller().get_updated_types().Has(DEVICE_INFO) &&
-      base::FeatureList::IsEnabled(
-          kSkipInvalidationOptimizationsWhenDeviceInfoUpdated)) {
+  if (cycle->status_controller().get_updated_types().Has(DEVICE_INFO)) {
     return ActiveDevicesInvalidationInfo::CreateUninitialized();
   }
   return cycle->context()->active_devices_invalidation_info();
@@ -207,6 +222,11 @@ bool Syncer::DownloadAndApplyUpdates(DataTypeSet* request_types,
   do {
     download_result =
         get_updates_processor.DownloadUpdates(&download_types, cycle);
+
+    // Exit without applying if we're shutting down.
+    if (ExitRequested()) {
+      return false;
+    }
   } while (get_updates_processor.HasMoreUpdatesToDownload());
 
   DataTypeSet data_types_with_failure = Difference(
@@ -216,9 +236,14 @@ bool Syncer::DownloadAndApplyUpdates(DataTypeSet* request_types,
   // GetUpdatesProcessor::DownloadUpdates().
   *request_types = Union(download_types, requested_commit_only_types);
 
-  // Exit without applying if we're shutting down or an error was detected.
-  if (download_result.type() != SyncerError::Type::kSuccess ||
-      ExitRequested()) {
+  base::UmaHistogramEnumeration("Sync.DownloadUpdatesResult",
+                                GetSyncerErrorValueForUma(download_result));
+
+  // Exit without applying if an error was detected.
+  if (download_result.type() != SyncerError::Type::kSuccess) {
+    get_updates_processor.RecordDownloadFailure(
+        Union(download_types, data_types_with_failure),
+        SyncerErrorToNudgedUpdateResult(download_result));
     return false;
   }
 

@@ -121,14 +121,16 @@ bool OneCopyRasterBufferProvider::RasterBufferImpl::
 }
 
 OneCopyRasterBufferProvider::OneCopyRasterBufferProvider(
+    scoped_refptr<gpu::SharedImageInterface> sii,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
     viz::RasterContextProvider* compositor_context_provider,
     viz::RasterContextProvider* worker_context_provider,
     int max_copy_texture_chromium_size,
     bool use_partial_raster,
     int max_staging_buffer_usage_in_bytes,
-    const RasterCapabilities& raster_caps)
-    : compositor_context_provider_(compositor_context_provider),
+    bool is_overlay_candidate)
+    : sii_(sii),
+      compositor_context_provider_(compositor_context_provider),
       worker_context_provider_(worker_context_provider),
       max_bytes_per_copy_operation_(
           max_copy_texture_chromium_size
@@ -136,16 +138,13 @@ OneCopyRasterBufferProvider::OneCopyRasterBufferProvider(
                          max_copy_texture_chromium_size)
               : kMaxBytesPerCopyOperation),
       use_partial_raster_(use_partial_raster),
-      bytes_scheduled_since_last_flush_(0),
-      tile_format_(raster_caps.tile_format),
-      tile_overlay_candidate_(raster_caps.tile_overlay_candidate),
+      tile_overlay_candidate_(is_overlay_candidate),
       staging_pool_(std::move(task_runner),
                     worker_context_provider,
                     use_partial_raster,
                     max_staging_buffer_usage_in_bytes) {
   DCHECK(compositor_context_provider);
   DCHECK(worker_context_provider);
-  DCHECK(!tile_format_.IsCompressed());
 }
 
 OneCopyRasterBufferProvider::~OneCopyRasterBufferProvider() = default;
@@ -171,16 +170,6 @@ void OneCopyRasterBufferProvider::Flush() {
   // is needed to ensure the work is sent for those queries to get the right
   // answer.
   compositor_context_provider_->ContextSupport()->FlushPendingWork();
-}
-
-viz::SharedImageFormat OneCopyRasterBufferProvider::GetFormat() const {
-  return tile_format_;
-}
-
-bool OneCopyRasterBufferProvider::IsResourcePremultiplied() const {
-  // TODO(ericrk): Handle unpremultiply/dither in one-copy case as well.
-  // https://crbug.com/789153
-  return true;
 }
 
 bool OneCopyRasterBufferProvider::CanPartialRasterIntoProvidedResource() const {
@@ -299,8 +288,7 @@ bool OneCopyRasterBufferProvider::PlaybackToStagingBuffer(
 
   // Allocate mappable SharedImage if necessary.
   if (!staging_buffer->client_shared_image) {
-    auto* sii = worker_context_provider_->SharedImageInterface();
-    staging_buffer->client_shared_image = sii->CreateSharedImage(
+    staging_buffer->client_shared_image = sii_->CreateSharedImage(
         {format, staging_buffer->size, dst_color_space,
          gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY, "OneCopyRasterStaging"},
         gpu::kNullSurfaceHandle, gfx::BufferUsage::GPU_READ_CPU_READ_WRITE);
@@ -337,8 +325,7 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
   const gfx::Size& resource_size = backing->size();
   const viz::SharedImageFormat format = backing->format();
 
-  auto* sii = worker_context_provider_->SharedImageInterface();
-  DCHECK(sii);
+  DCHECK(sii_);
 
   CHECK(staging_buffer->client_shared_image);
 
@@ -352,21 +339,25 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
                                      gpu::SHARED_IMAGE_USAGE_RASTER_WRITE;
     if (mailbox_texture_is_overlay_candidate)
       usage |= gpu::SHARED_IMAGE_USAGE_SCANOUT;
-    backing->CreateSharedImage(sii, usage, "OneCopyRasterTile");
+    backing->CreateSharedImage(sii_.get(), usage, "OneCopyRasterTile");
     // Clear the resource if we're not going to initialize it fully from the
     // copy due to non-exact resource reuse.  See https://crbug.com/1313091
     needs_clear = rect_to_copy.size() != resource_size;
   }
 
-  sii->UpdateSharedImage(staging_buffer->sync_token,
-                         staging_buffer->client_shared_image->mailbox());
+  sii_->UpdateSharedImage(staging_buffer->sync_token,
+                          staging_buffer->client_shared_image->mailbox());
 
   viz::RasterContextProvider::ScopedRasterContextLock scoped_context(
       worker_context_provider_);
   gpu::raster::RasterInterface* ri = scoped_context.RasterInterface();
   DCHECK(ri);
-  ri->WaitSyncTokenCHROMIUM(sync_token.GetConstData());
-  ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
+  std::unique_ptr<gpu::RasterScopedAccess> dst_ri_access =
+      backing->shared_image()->BeginRasterAccess(ri, sync_token,
+                                                 /*readonly=*/false);
+  std::unique_ptr<gpu::RasterScopedAccess> src_ri_access =
+      staging_buffer->client_shared_image->BeginRasterAccess(
+          ri, sii_->GenUnverifiedSyncToken(), /*readonly=*/true);
 
   // Do not use queries unless COMMANDS_COMPLETED queries are supported, or
   // COMMANDS_ISSUED queries are sufficient.
@@ -409,39 +400,9 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
     }
   }
 
-  if (base::FeatureList::IsEnabled(features::kNonBatchedCopySharedImage)) {
-    ri->CopySharedImage(staging_buffer->client_shared_image->mailbox(),
-                        backing->shared_image()->mailbox(), 0, 0, 0, 0,
-                        rect_to_copy.width(), rect_to_copy.height());
-  } else {
-    int bytes_per_row = viz::ResourceSizes::UncheckedWidthInBytes<int>(
-        rect_to_copy.width(), staging_buffer->format);
-    int chunk_size_in_rows =
-        std::max(1, max_bytes_per_copy_operation_ / bytes_per_row);
-    // Align chunk size to 4. Required to support compressed texture formats.
-    chunk_size_in_rows = MathUtil::UncheckedRoundUp(chunk_size_in_rows, 4);
-    int y = 0;
-    int height = rect_to_copy.height();
-    while (y < height) {
-      // Copy at most |chunk_size_in_rows|.
-      int rows_to_copy = std::min(chunk_size_in_rows, height - y);
-      DCHECK_GT(rows_to_copy, 0);
-
-      ri->CopySharedImage(staging_buffer->client_shared_image->mailbox(),
-                          backing->shared_image()->mailbox(), 0, y, 0, y,
-                          rect_to_copy.width(), rows_to_copy);
-      y += rows_to_copy;
-
-      // Increment |bytes_scheduled_since_last_flush_| by the amount of memory
-      // used for this copy operation.
-      bytes_scheduled_since_last_flush_ += rows_to_copy * bytes_per_row;
-
-      if (bytes_scheduled_since_last_flush_ >= max_bytes_per_copy_operation_) {
-        ri->ShallowFlushCHROMIUM();
-        bytes_scheduled_since_last_flush_ = 0;
-      }
-    }
-  }
+  ri->CopySharedImage(staging_buffer->client_shared_image->mailbox(),
+                      backing->shared_image()->mailbox(), 0, 0, 0, 0,
+                      rect_to_copy.width(), rect_to_copy.height());
 
   if (query_target != GL_NONE)
     ri->EndQueryEXT(query_target);
@@ -453,8 +414,9 @@ gpu::SyncToken OneCopyRasterBufferProvider::CopyOnWorkerThread(
   // ordering, but there are some paths (e.g.
   // StagingBufferPool::ReduceMemoryUsage) that may destroy the staging buffer
   // without waiting for the query completion.
+  gpu::RasterScopedAccess::EndAccess(std::move(dst_ri_access));
   gpu::SyncToken out_sync_token =
-      viz::ClientResourceProvider::GenerateSyncTokenHelper(ri);
+      gpu::RasterScopedAccess::EndAccess(std::move(src_ri_access));
   staging_buffer->sync_token = out_sync_token;
   return out_sync_token;
 }

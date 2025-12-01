@@ -60,15 +60,10 @@
 
 using ::blink::StorageKey;
 using ::blink::mojom::QuotaStatusCode;
-using ::blink::mojom::StorageType;
 
 namespace storage {
 
 namespace {
-
-// For shorter names.
-const blink::mojom::StorageType kStorageTemp =
-    blink::mojom::StorageType::kTemporary;
 
 // Values in bytes.
 const int64_t kAvailableSpaceForApp = 13377331U;
@@ -137,10 +132,9 @@ const storage::mojom::BucketTableEntry* FindBucketTableEntry(
   return it->get();
 }
 
-MATCHER_P3(MatchesBucketTableEntry, storage_key, type, use_count, "") {
+MATCHER_P2(MatchesBucketTableEntry, storage_key, use_count, "") {
   return testing::ExplainMatchResult(storage_key, arg->storage_key,
                                      result_listener) &&
-         testing::ExplainMatchResult(type, arg->type, result_listener) &&
          testing::ExplainMatchResult(use_count, arg->use_count,
                                      result_listener);
 }
@@ -2581,11 +2575,10 @@ TEST_F(QuotaManagerImplTest, DumpBucketTable) {
   task_environment_.RunUntilIdle();
 
   const BucketTableEntries& entries = DumpBucketTable();
-  EXPECT_THAT(
-      entries,
-      testing::UnorderedElementsAre(
-          MatchesBucketTableEntry(kStorageKey1.Serialize(), kStorageTemp, 1),
-          MatchesBucketTableEntry(kStorageKey2.Serialize(), kStorageTemp, 2)));
+  EXPECT_THAT(entries,
+              testing::UnorderedElementsAre(
+                  MatchesBucketTableEntry(kStorageKey1.Serialize(), 1),
+                  MatchesBucketTableEntry(kStorageKey2.Serialize(), 2)));
 }
 
 TEST_F(QuotaManagerImplTest, RetrieveBucketsTable) {
@@ -2615,7 +2608,6 @@ TEST_F(QuotaManagerImplTest, RetrieveBucketsTable) {
   auto* entry1 = FindBucketTableEntry(bucket_table_entries, bucket1->id);
   EXPECT_TRUE(entry1);
   EXPECT_EQ(entry1->storage_key, kStorageKey1.Serialize());
-  EXPECT_EQ(entry1->type, kStorageTemp);
   EXPECT_EQ(entry1->name, kDefaultBucketName);
   EXPECT_EQ(entry1->use_count, 1);
   EXPECT_EQ(entry1->last_accessed, kAccessTime);
@@ -2626,7 +2618,6 @@ TEST_F(QuotaManagerImplTest, RetrieveBucketsTable) {
   auto* entry2 = FindBucketTableEntry(bucket_table_entries, bucket2->id);
   EXPECT_TRUE(entry2);
   EXPECT_EQ(entry2->storage_key, kStorageKey2.Serialize());
-  EXPECT_EQ(entry2->type, kStorageTemp);
   EXPECT_EQ(entry2->name, kDefaultBucketName);
   EXPECT_EQ(entry2->use_count, 1);
   EXPECT_EQ(entry2->last_accessed, kAccessTime);
@@ -3108,6 +3099,49 @@ TEST_F(QuotaManagerImplTest, StaticReportedQuota_NonBucket) {
   EXPECT_EQ(result.quota, GetStorageCapacity().available_space + result.usage);
 }
 
+TEST_F(QuotaManagerImplTest, StaticReportedQuota_NonBucket_LowDisk) {
+  scoped_feature_list_.InitAndEnableFeature(
+      storage::features::kStaticStorageQuota);
+
+  static const ClientBucketData kData[] = {
+      {"http://foo.com/", kDefaultBucketName, 80},
+  };
+  MockQuotaClient* fs_client =
+      CreateAndRegisterClient(QuotaClientType::kFileSystem);
+  RegisterClientBucketData(fs_client, kData);
+
+  const int64_t kPoolSize = QuotaManagerImpl::kGBytes - 1;  // Just under 1 GiB.
+  const int64_t kPerStorageKeyQuota = kPoolSize / 5;
+  SetQuotaSettings(kPoolSize, kPerStorageKeyQuota,
+                   kMustRemainAvailableForSystem);
+
+  // Static quota is returned for sites without unlimited storage permissions.
+  auto result = GetUsageAndQuotaWithBreakdown(ToStorageKey("http://foo.com/"));
+  EXPECT_EQ(result.status, QuotaStatusCode::kOk);
+  EXPECT_EQ(result.usage, 80);
+  // Quota == usage + 1 GiB.
+  EXPECT_EQ(result.quota, 80 + QuotaManagerImpl::kGBytes);
+}
+
+TEST_F(QuotaManagerImplTest, StaticReportedQuota_NonBucket_NukeManager) {
+  scoped_feature_list_.InitAndEnableFeature(
+      storage::features::kStaticStorageQuota);
+
+  base::test::TestFuture<QuotaStatusCode, int64_t, int64_t,
+                         blink::mojom::UsageBreakdownPtr>
+      future;
+  quota_manager_impl_->GetUsageAndReportedQuotaWithBreakdown(
+      ToStorageKey("http://foo.com/"), future.GetCallback());
+
+  // Nuke before waiting for callback.
+  set_quota_manager_impl(nullptr);
+
+  auto result = future.Take();
+  EXPECT_EQ(std::get<0>(result), QuotaStatusCode::kUnknown);
+  EXPECT_EQ(std::get<1>(result), 0);
+  EXPECT_EQ(std::get<2>(result), 0);
+}
+
 TEST_F(QuotaManagerImplTest, StaticReportedQuota_Bucket) {
   scoped_feature_list_.InitAndEnableFeature(
       storage::features::kStaticStorageQuota);
@@ -3195,6 +3229,43 @@ TEST_F(QuotaManagerImplTest, StaticReportedQuota_Bucket) {
     EXPECT_EQ(result.usage, 0);
     EXPECT_EQ(result.quota, storage_capacity.available_space);
   }
+}
+
+TEST_F(QuotaManagerImplTest, StaticReportedQuota_Bucket_LowDisk) {
+  scoped_feature_list_.InitAndEnableFeature(
+      storage::features::kStaticStorageQuota);
+
+  const int64_t kPoolSize =
+      3 * QuotaManagerImpl::kGBytes + 1;  // Just over 3 GiB.
+  const int64_t kPerStorageKeyQuota = kPoolSize / 5;
+  SetQuotaSettings(kPoolSize, kPerStorageKeyQuota, 0);
+  StorageKey storage_key = ToStorageKey("http://example.com/");
+  std::string bucket_name = "bucket";
+
+  ASSERT_OK_AND_ASSIGN(auto bucket,
+                       UpdateOrCreateBucket({storage_key, bucket_name}));
+
+  auto result = GetUsageAndQuotaForBucket(bucket);
+  EXPECT_EQ(result.status, QuotaStatusCode::kOk);
+  EXPECT_EQ(result.usage, 0);
+  EXPECT_NE(result.quota, 4 * QuotaManagerImpl::kGBytes);
+}
+
+TEST_F(QuotaManagerImplTest, StaticReportedQuota_Bucket_BucketNotFound) {
+  scoped_feature_list_.InitAndEnableFeature(
+      storage::features::kStaticStorageQuota);
+
+  StorageKey storage_key = ToStorageKey("http://example.com/");
+  std::string bucket_name = "bucket";
+  ASSERT_OK_AND_ASSIGN(auto bucket,
+                       UpdateOrCreateBucket({storage_key, bucket_name}));
+
+  FindAndDeleteBucketData(storage_key, bucket_name);
+
+  auto result = GetUsageAndQuotaForBucket(bucket);
+  EXPECT_NE(result.status, QuotaStatusCode::kOk);
+  EXPECT_EQ(result.usage, 0);
+  EXPECT_EQ(result.quota, 0);
 }
 
 }  // namespace storage

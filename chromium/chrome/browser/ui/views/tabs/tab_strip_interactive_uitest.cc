@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/tabs/test/tab_strip_interactive_test_mixin.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -11,6 +12,7 @@
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
+#include "ui/base/test/ui_controls.h"
 #include "ui/views/interaction/polling_view_observer.h"
 #include "url/gurl.h"
 
@@ -22,7 +24,8 @@ constexpr char kDocumentWithTitle[] = "/title3.html";
 
 }  // namespace
 
-class TabStripInteractiveUiTest : public InteractiveBrowserTest {
+class TabStripInteractiveUiTest
+    : public TabStripInteractiveTestMixin<InteractiveBrowserTest> {
  public:
   ~TabStripInteractiveUiTest() override = default;
 
@@ -39,21 +42,6 @@ class TabStripInteractiveUiTest : public InteractiveBrowserTest {
   void TearDownOnMainThread() override {
     EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
     InteractiveBrowserTest::TearDownOnMainThread();
-  }
-
-  MultiStep FinishTabstripAnimations() {
-    return Steps(WaitForShow(kTabStripElementId),
-                 WithView(kTabStripElementId, [](TabStrip* tab_strip) {
-                   tab_strip->StopAnimating(true);
-                 }));
-  }
-
-  auto HoverTabAt(int index) {
-    const char kTabToHover[] = "Tab to hover";
-    return Steps(
-        FinishTabstripAnimations(),
-        NameDescendantViewByType<Tab>(kTabStripElementId, kTabToHover, index),
-        MoveMouseTo(kTabToHover));
   }
 };
 

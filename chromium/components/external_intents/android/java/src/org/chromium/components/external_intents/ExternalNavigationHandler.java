@@ -190,7 +190,7 @@ public class ExternalNavigationHandler {
         }
     }
 
-    private static class IntentBasedSupplier<T> extends LazySupplier<T> {
+    private static class IntentBasedSupplier<T extends @Nullable Object> extends LazySupplier<T> {
         protected final Intent mIntent;
         private @Nullable Intent mIntentCopy;
 
@@ -362,7 +362,9 @@ public class ExternalNavigationHandler {
         }
     }
 
-    protected static class ResolveActivitySupplier extends IntentBasedSupplier<ResolveInfo> {
+    protected static class ResolveActivitySupplier
+            extends IntentBasedSupplier<@Nullable ResolveInfo> {
+        @SuppressWarnings("NullAway") // https://github.com/uber/NullAway/issues/1209
         public ResolveActivitySupplier(Intent intent) {
             super(
                     intent,
@@ -388,6 +390,7 @@ public class ExternalNavigationHandler {
         OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION,
         OverrideUrlLoadingResultType.NO_OVERRIDE,
         OverrideUrlLoadingResultType.OVERRIDE_CLOSING_AFTER_AUTH,
+        OverrideUrlLoadingResultType.OVERRIDE_WITH_REPARENT_TO_BROWSER,
         OverrideUrlLoadingResultType.NUM_ENTRIES
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -403,8 +406,10 @@ public class ExternalNavigationHandler {
         int NO_OVERRIDE = 3;
 
         int OVERRIDE_CLOSING_AFTER_AUTH = 4;
+        /* We should move the navigation to a browser window. */
+        int OVERRIDE_WITH_REPARENT_TO_BROWSER = 5;
 
-        int NUM_ENTRIES = 5;
+        int NUM_ENTRIES = 6;
     }
 
     // LINT.ThenChange(:printDebugShouldOverrideUrlLoadingResultType)
@@ -519,6 +524,12 @@ public class ExternalNavigationHandler {
         public static OverrideUrlLoadingResult forClosingAfterAuth() {
             return new OverrideUrlLoadingResult(
                     OverrideUrlLoadingResultType.OVERRIDE_CLOSING_AFTER_AUTH);
+        }
+
+        /** Use this result when the navigation should be moved from a PWA to a browser window. */
+        public static OverrideUrlLoadingResult forReparentToBrowser() {
+            return new OverrideUrlLoadingResult(
+                    OverrideUrlLoadingResultType.OVERRIDE_WITH_REPARENT_TO_BROWSER);
         }
     }
 
@@ -665,6 +676,9 @@ public class ExternalNavigationHandler {
                 break;
             case OverrideUrlLoadingResultType.OVERRIDE_CLOSING_AFTER_AUTH:
                 resultString = "OVERRIDE_CLOSING_AFTER_AUTH";
+                break;
+            case OverrideUrlLoadingResultType.OVERRIDE_WITH_REPARENT_TO_BROWSER:
+                resultString = "OVERRIDE_WITH_REPARENT_TO_BROWSER";
                 break;
             case OverrideUrlLoadingResultType.NO_OVERRIDE: // Fall through.
             default:
@@ -1174,8 +1188,17 @@ public class ExternalNavigationHandler {
      * This is the catch-all path for any intent that the app can handle that doesn't have a
      * specialized external app handling it.
      */
-    private OverrideUrlLoadingResult fallBackToHandlingInApp() {
+    private OverrideUrlLoadingResult fallBackToHandlingInApp(ExternalNavigationParams params) {
         if (debug()) Log.i(TAG, "No specialized handler for URL");
+        // The default behavior for Desktop windowing should be to open a browser tab. In case
+        // the navigation starts in a PWA, we should reparent the tab to the browser.
+        if (ExternalIntentsFeatures.REPARENT_TOP_LEVEL_NAVIGATION_FROM_PWA.isEnabled()
+                && params.isInDesktopWindowingMode()
+                && params.isInitialNavigationInFrame()
+                && params.isTabInPWA()) {
+            if (debug()) Log.i(TAG, "No specialized handler found, reparent to browser.");
+            return OverrideUrlLoadingResult.forReparentToBrowser();
+        }
         return OverrideUrlLoadingResult.forNoOverride();
     }
 
@@ -1195,9 +1218,10 @@ public class ExternalNavigationHandler {
         }
         if (!isExternalProtocol) return false;
         if (!resolveInfoContainsSelf(resolvingInfos.get())) return false;
-        if (resolveActivity.get() == null) return false;
+        ResolveInfo intentResolveInfo = resolveActivity.get();
+        if (intentResolveInfo == null) return false;
 
-        ActivityInfo info = resolveActivity.get().activityInfo;
+        ActivityInfo info = intentResolveInfo.activityInfo;
         if (info != null && mDelegate.getContext().getPackageName().equals(info.packageName)) {
             if (debug()) Log.i(TAG, "Navigation to self.");
             return true;
@@ -1205,7 +1229,7 @@ public class ExternalNavigationHandler {
 
         // We don't want the user seeing the chooser and choosing the browser, but resolving to
         // another app is fine.
-        if (resolvesToChooser(resolveActivity.get(), resolvingInfos)) {
+        if (resolvesToChooser(intentResolveInfo, resolvingInfos)) {
             if (debug()) Log.i(TAG, "Navigation to chooser including self.");
             return true;
         }
@@ -1260,11 +1284,12 @@ public class ExternalNavigationHandler {
             }
         }
         if (!matchesBrowser) return false;
-        if (resolveActivity.get().activityInfo == null) return false;
+        ResolveInfo intentResolveInfo = resolveActivity.get();
+        if (intentResolveInfo == null || intentResolveInfo.activityInfo == null) return false;
 
         // If the intent resolves to a non-browser even through a browser is included in
         // queryIntentActivities, it's not really targeting a browser.
-        return browserPackages.contains(resolveActivity.get().activityInfo.packageName);
+        return browserPackages.contains(intentResolveInfo.activityInfo.packageName);
     }
 
     private static Set<String> getInstalledBrowserPackages() {
@@ -1323,8 +1348,6 @@ public class ExternalNavigationHandler {
      * performing a navigation when it's actually a background tab doing the navigation.
      */
     private boolean isHiddenCrossFrameRenavigation(ExternalNavigationParams params) {
-        if (!ExternalIntentsFeatures.BLOCK_FRAME_RENAVIGATIONS.isEnabled()) return false;
-
         if (params.getRedirectHandler().navigationChainPerformedHiddenCrossFrameNavigation()) {
             if (debug()) Log.i(TAG, "Navigation chain used cross-frame re-navigation.");
             return true;
@@ -1548,6 +1571,7 @@ public class ExternalNavigationHandler {
             Intent targetIntent,
             GURL browserFallbackUrl,
             MutableBoolean canLaunchExternalFallbackResult) {
+
         sanitizeQueryIntentActivitiesIntent(targetIntent);
 
         // Any subsequent navigations should cancel the existing dialog.
@@ -1680,7 +1704,7 @@ public class ExternalNavigationHandler {
 
         boolean hasSpecializedHandler = countSpecializedHandlers(resolvingInfos.get()) > 0;
         if (!isExternalProtocol && !hasSpecializedHandler && !intentMatchesNonDefaultWebApk) {
-            return fallBackToHandlingInApp();
+            return fallBackToHandlingInApp(params);
         }
 
         if (shouldStayWithinHost(params, resolvingInfos.get(), isExternalProtocol)) {
@@ -1840,12 +1864,6 @@ public class ExternalNavigationHandler {
         // Intent Selectors allow intents to bypass the intent filter and potentially send apps URIs
         // they were not expecting to handle. https://crbug.com/1254422
         intent.setSelector(null);
-
-        // Intent schemes should be normalized to lower case. https://crbug.com/401823929
-        if (ExternalIntentsFeatures.LOWER_CASE_INTENT_SCHEMES.isEnabled()
-                && intent.getData() != null) {
-            intent.setDataAndType(intent.getData().normalizeScheme(), intent.getType());
-        }
     }
 
     /**

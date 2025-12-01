@@ -6,11 +6,12 @@
 #define CONTENT_BROWSER_RENDERER_HOST_INPUT_INPUT_TRANSFER_HANDLER_ANDROID_H_
 
 #include <memory>
+#include <optional>
 
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/raw_ptr.h"
-#include "content/browser/renderer_host/input/transfer_input_to_viz_result.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/android/transfer_input_to_viz_result.h"
 #include "content/public/browser/render_widget_host.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/events/android/motion_event_android.h"
@@ -22,6 +23,7 @@ class InputTransferHandlerAndroidClient {
   virtual gpu::SurfaceHandle GetRootSurfaceHandle() = 0;
   virtual void SendStateOnTouchTransfer(const ui::MotionEvent& event,
                                         bool browser_would_have_handled) = 0;
+  virtual bool IsMojoRIRDelegateConnectionSetup() = 0;
 };
 
 // The class assumes transfer input to viz is supported, so instantiate only
@@ -37,9 +39,7 @@ class CONTENT_EXPORT InputTransferHandlerAndroid {
   class JniDelegate {
    public:
     virtual ~JniDelegate() = default;
-    // `raw_x` is the point's x coordinate in pixels in coordinate space of the
-    // device display similar to MotionEvent.getRawX.
-    virtual int MaybeTransferInputToViz(int surface_id, float raw_x) = 0;
+    virtual int MaybeTransferInputToViz(int surface_id) = 0;
     virtual int TransferInputToViz(int surface_id) = 0;
   };
 
@@ -48,7 +48,8 @@ class CONTENT_EXPORT InputTransferHandlerAndroid {
   virtual ~InputTransferHandlerAndroid();
 
   // Virtual for testing.
-  virtual bool OnTouchEvent(const ui::MotionEventAndroid& event);
+  virtual bool OnTouchEvent(const ui::MotionEventAndroid& event,
+                            bool is_ignoring_input_events = false);
 
   void set_jni_delegate_for_testing(std::unique_ptr<JniDelegate> delegate) {
     jni_delegate_ = std::move(delegate);
@@ -72,9 +73,17 @@ class CONTENT_EXPORT InputTransferHandlerAndroid {
   }
   bool FilterRedundantDownEvent(const ui::MotionEvent& event);
 
-  void RequestInputBack();
+  enum class RequestInputBackReason {
+    kStartDragAndDropGesture = 0,
+    kStartTouchSelectionDragGesture = 1,
+    kStartOverscrollGestures = 2,
+  };
+  void RequestInputBack(RequestInputBackReason reason);
 
   void OnTouchEnd(base::TimeTicks event_time);
+
+  // Virtual for testing.
+  virtual bool IsTouchSequencePotentiallyActiveOnViz() const;
 
   RenderWidgetHost::InputEventObserver& GetInputObserver() {
     return input_observer_;
@@ -98,6 +107,9 @@ class CONTENT_EXPORT InputTransferHandlerAndroid {
   void OnTouchTransferredSuccessfully(const ui::MotionEventAndroid& event,
                                       bool browser_would_have_handled);
 
+  void EmitTransferResultHistogramAndTraceEvent(
+      TransferInputToVizResult result);
+
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused.
   //
@@ -114,6 +126,7 @@ class CONTENT_EXPORT InputTransferHandlerAndroid {
 
   void DropCurrentSequence(const ui::MotionEventAndroid& event);
   void ConsumeEventsUntilCancel(const ui::MotionEventAndroid& event);
+  void ConsumeSequence(const ui::MotionEventAndroid& event);
 
   friend class MockInputTransferHandler;
   InputTransferHandlerAndroid();
@@ -135,9 +148,13 @@ class CONTENT_EXPORT InputTransferHandlerAndroid {
     // The touch sequence was transferred to Viz and the handler is consuming
     // rest of sequence that might hit Browser.
     kConsumeEventsUntilCancel,
+    // Consume current sequence until an action cancel or action up comes in.
+    kConsumeSequence,
   } handler_state_ = HandlerState::kIdle;
 
   bool requested_input_back_ = false;
+  std::optional<RequestInputBackReason> requested_input_back_reason_ =
+      std::nullopt;
   int touch_moves_seen_after_transfer_ = 0;
   std::unique_ptr<JniDelegate> jni_delegate_ = nullptr;
 

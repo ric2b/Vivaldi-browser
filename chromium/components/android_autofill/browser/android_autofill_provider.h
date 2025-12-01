@@ -64,10 +64,6 @@ class AndroidAutofillProvider : public AutofillProvider,
 
   static constexpr char kPrefillRequestStateUma[] =
       "Autofill.WebView.PrefillRequestState";
-  // The name of the UMA that is emitted when a form similarity check between a
-  // cached form and the interacted form fails.
-  static constexpr char kPrefillRequestBottomsheetNoViewStructureDelayUma[] =
-      "Autofill.WebView.BottomsheetNoViewStructureDelay";
 
   static void CreateForWebContents(content::WebContents* web_contents);
 
@@ -131,6 +127,8 @@ class AndroidAutofillProvider : public AutofillProvider,
                          const gfx::RectF& bounds) override;
   void OnShowBottomSheetResult(bool is_shown,
                                bool provided_autofill_structure) override;
+  bool HasPasskeyRequest() override;
+  void OnTriggerPasskeyRequest() override;
 
   // content::WebContentsObserver:
   void RenderFrameDeleted(content::RenderFrameHost* render_frame_host) override;

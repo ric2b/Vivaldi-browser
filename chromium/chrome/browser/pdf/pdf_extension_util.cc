@@ -32,6 +32,16 @@
 #include "ui/base/webui/web_ui_util.h"
 #include "url/gurl.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_PDF_INK2)
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_PDF_INK2)
+
 namespace pdf_extension_util {
 
 namespace {
@@ -57,10 +67,6 @@ void AddCommonStrings(base::Value::Dict* dict) {
     dict->Set(resource.name, l10n_util::GetStringUTF16(resource.id));
 
   dict->Set("presetZoomFactors", zoom::GetPresetZoomFactorsAsJSON());
-  dict->Set("pdfCr23Enabled",
-            base::FeatureList::IsEnabled(chrome_pdf::features::kPdfCr23)
-                ? "pdfCr23Enabled"
-                : "");
   dict->Set("pdfOopifEnabled",
             chrome_pdf::features::IsOopifPdfEnabled() ? "pdfOopifEnabled" : "");
 }
@@ -197,6 +203,23 @@ void AddPdfViewerStrings(base::Value::Dict* dict) {
       {"ink2BrushColorGreen3", IDS_PDF_INK2_ANNOTATION_COLOR_GREEN_3},
       {"ink2BrushColorBlue3", IDS_PDF_INK2_ANNOTATION_COLOR_BLUE_3},
       {"ink2BrushColorTan3", IDS_PDF_INK2_ANNOTATION_COLOR_TAN_3},
+      {"ink2TextAnnotation", IDS_PDF_INK2_TEXT_ANNOTATION},
+      {"ink2TextFont", IDS_PDF_INK2_TEXT_FONT},
+      {"ink2TextFontSansSerif", IDS_PDF_INK2_TEXT_FONT_SANS_SERIF},
+      {"ink2TextFontSerif", IDS_PDF_INK2_TEXT_FONT_SERIF},
+      {"ink2TextFontMonospace", IDS_PDF_INK2_TEXT_FONT_MONOSPACE},
+      {"ink2TextFontSize", IDS_PDF_INK2_TEXT_FONT_SIZE},
+      {"ink2TextStyles", IDS_PDF_INK2_TEXT_STYLES},
+      {"ink2TextStyleBold", IDS_PDF_INK2_TEXT_STYLE_BOLD},
+      {"ink2TextStyleItalic", IDS_PDF_INK2_TEXT_STYLE_ITALIC},
+      {"ink2TextAlignment", IDS_PDF_INK2_TEXT_ALIGNMENT},
+      {"ink2TextAlignLeft", IDS_PDF_INK2_TEXT_ALIGN_LEFT},
+      {"ink2TextAlignCenter", IDS_PDF_INK2_TEXT_ALIGN_CENTER},
+      {"ink2TextAlignRight", IDS_PDF_INK2_TEXT_ALIGN_RIGHT},
+      {"ink2TextColor", IDS_PDF_INK2_TEXT_COLOR},
+      {"ink2TextColorCyan1", IDS_PDF_INK2_ANNOTATION_COLOR_CYAN_1},
+      {"ink2TextColorCyan2", IDS_PDF_INK2_ANNOTATION_COLOR_CYAN_2},
+      {"ink2TextColorCyan3", IDS_PDF_INK2_ANNOTATION_COLOR_CYAN_3},
 #endif  // BUILDFLAG(ENABLE_PDF_INK2)
   };
   for (const auto& resource : kPdfResources)
@@ -211,6 +234,36 @@ void AddPdfViewerStrings(base::Value::Dict* dict) {
   webui::SetLoadTimeDataDefaults(g_browser_process->GetApplicationLocale(),
                                  dict);
 }
+
+bool IsPrintingEnabled(content::BrowserContext* context) {
+#if BUILDFLAG(IS_CHROMEOS)
+  return ash::IsUserBrowserContext(context);
+#else
+  return true;
+#endif  // BUILDFLAG(IS_CHROMEOS)
+}
+
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_PDF_INK2)
+bool IsPdfAnnotationsEnabledByPolicy(content::BrowserContext* context) {
+  PrefService* prefs =
+      context ? Profile::FromBrowserContext(context)->GetPrefs() : nullptr;
+  return !prefs || !prefs->IsManagedPreference(prefs::kPdfAnnotationsEnabled) ||
+         prefs->GetBoolean(prefs::kPdfAnnotationsEnabled);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_PDF_INK2)
+
+#if BUILDFLAG(IS_CHROMEOS)
+bool IsPdfInk1AnnotationsEnabled(content::BrowserContext* context) {
+  return IsPdfAnnotationsEnabledByPolicy(context);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(ENABLE_PDF_INK2)
+bool IsPdfInk2AnnotationsEnabled(content::BrowserContext* context) {
+  return base::FeatureList::IsEnabled(chrome_pdf::features::kPdfInk2) &&
+         IsPdfAnnotationsEnabledByPolicy(context);
+}
+#endif  // BUILDFLAG(ENABLE_PDF_INK2)
 
 }  // namespace
 
@@ -243,30 +296,24 @@ void AddStrings(PdfViewerContext context, base::Value::Dict* dict) {
   }
 }
 
-void AddAdditionalData(bool enable_printing,
-                       bool enable_annotations,
+void AddAdditionalData(content::BrowserContext* context,
                        base::Value::Dict* dict) {
   // NOTE: This function should not include any data used for $i18n{}
   // replacements. The i18n string resources should be added using AddStrings()
   // above instead.
-  bool printing_enabled = true;
-  bool annotations_enabled = false;
+  dict->Set("printingEnabled", IsPrintingEnabled(context));
+
 #if BUILDFLAG(IS_CHROMEOS)
-  printing_enabled = enable_printing;
-  annotations_enabled = enable_annotations;
-#endif  // BUILDFLAG(IS_CHROMEOS)
+  dict->Set("pdfInk1AnnotationsEnabled", IsPdfInk1AnnotationsEnabled(context));
+#endif
+
 #if BUILDFLAG(ENABLE_PDF_INK2)
-  bool use_ink2 = base::FeatureList::IsEnabled(chrome_pdf::features::kPdfInk2);
-  if (use_ink2) {
-    annotations_enabled = enable_annotations;
-  }
+  const bool use_ink2 = IsPdfInk2AnnotationsEnabled(context);
   dict->Set("pdfInk2Enabled", use_ink2);
-  bool text_annotations_enabled =
-      use_ink2 && chrome_pdf::features::kPdfInk2TextAnnotations.Get();
-  dict->Set("pdfTextAnnotationsEnabled", text_annotations_enabled);
+  dict->Set("pdfTextAnnotationsEnabled",
+            use_ink2 && chrome_pdf::features::kPdfInk2TextAnnotations.Get());
 #endif  // BUILDFLAG(ENABLE_PDF_INK2)
-  dict->Set("printingEnabled", printing_enabled);
-  dict->Set("pdfAnnotationsEnabled", annotations_enabled);
+
   dict->Set("PdfGetSaveDataInBlocks",
             base::FeatureList::IsEnabled(
                 chrome_pdf::features::kPdfGetSaveDataInBlocks));

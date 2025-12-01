@@ -9,6 +9,7 @@ import androidx.collection.ArraySet;
 
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
 import org.chromium.components.omnibox.AnswerTypeProto.AnswerType;
+import org.chromium.components.omnibox.SuggestTemplateInfoProto.SuggestTemplateInfo;
 import org.chromium.components.omnibox.action.OmniboxAction;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
@@ -26,6 +27,7 @@ public class AutocompleteMatchBuilder {
     private @OmniboxSuggestionType int mType;
     private Set<Integer> mSubtypes;
     private boolean mIsSearchType;
+    private int mIconType;
     private String mDisplayText;
     private List<AutocompleteMatch.MatchClassification> mDisplayTextClassifications;
     private String mDescription;
@@ -47,6 +49,7 @@ public class AutocompleteMatchBuilder {
     private boolean mAllowedToBeDefaultMatch;
     private String mInlineAutocompletion;
     private String mAdditionalText;
+    private String mTabGroupUuid;
 
     /**
      * Create a suggestion builder for a search suggestion.
@@ -97,6 +100,7 @@ public class AutocompleteMatchBuilder {
         mAllowedToBeDefaultMatch = false;
         mInlineAutocompletion = null;
         mAdditionalText = null;
+        mTabGroupUuid = null;
 
         mDisplayTextClassifications.add(
                 new AutocompleteMatch.MatchClassification(0, MatchClassificationStyle.NONE));
@@ -115,6 +119,7 @@ public class AutocompleteMatchBuilder {
                 mType,
                 mSubtypes,
                 mIsSearchType,
+                mIconType,
                 mTransition,
                 mDisplayText,
                 mDisplayTextClassifications,
@@ -135,7 +140,8 @@ public class AutocompleteMatchBuilder {
                 mActions,
                 mAllowedToBeDefaultMatch,
                 mInlineAutocompletion,
-                mAdditionalText);
+                mAdditionalText,
+                mTabGroupUuid);
     }
 
     /**
@@ -225,6 +231,15 @@ public class AutocompleteMatchBuilder {
      */
     public AutocompleteMatchBuilder setIsSearch(boolean isSearch) {
         mIsSearchType = isSearch;
+        return this;
+    }
+
+    /**
+     * @param iconType The icon type to apply to newly built suggestion.
+     * @return Omnibox suggestion builder.
+     */
+    public AutocompleteMatchBuilder setIconType(SuggestTemplateInfo.IconType iconType) {
+        mIconType = iconType.getNumber();
         return this;
     }
 
@@ -326,6 +341,15 @@ public class AutocompleteMatchBuilder {
      */
     public AutocompleteMatchBuilder setSerializedAnswerTemplate(byte[] serializedAnswerTemplate) {
         mSerializedAnswerTemplate = serializedAnswerTemplate;
+        return this;
+    }
+
+    /**
+     * @param tabGroupUuid Matching tab group's uuid.
+     * @return Omnibox suggestion builder.
+     */
+    public AutocompleteMatchBuilder setTabGroupUuid(String tabGroupUuid) {
+        mTabGroupUuid = tabGroupUuid;
         return this;
     }
 }

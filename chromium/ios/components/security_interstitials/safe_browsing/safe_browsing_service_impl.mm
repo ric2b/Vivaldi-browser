@@ -178,6 +178,20 @@ SafeBrowsingServiceImpl::CreateUrlChecker(
               /*log_usage_histograms=*/true,
               /*are_background_lookups_allowed=*/false);
 
+  // Decide whether safe browsing database can be checked.
+  // If url_lookup_service_ is null, safe browsing database should be checked by
+  // default.
+  bool can_check_db = can_perform_full_url_lookup
+                          ? url_lookup_service->CanCheckSafeBrowsingDb()
+                          : true;
+  bool can_check_high_confidence_allowlist =
+      can_perform_full_url_lookup
+          ? url_lookup_service->CanCheckSafeBrowsingHighConfidenceAllowlist()
+          : true;
+  std::string url_lookup_service_metric_suffix =
+      can_perform_full_url_lookup ? url_lookup_service->GetMetricSuffix()
+                                  : safe_browsing::kNoRealTimeURLLookupService;
+
   return std::make_unique<safe_browsing::SafeBrowsingUrlCheckerImpl>(
       /*headers=*/net::HttpRequestHeaders(), /*load_flags=*/0,
       /*has_user_gesture=*/false, url_checker_delegate,
@@ -189,9 +203,9 @@ SafeBrowsingServiceImpl::CreateUrlChecker(
       /*render_frame_token=*/std::nullopt,
       /*frame_tree_node_id=*/
       security_interstitials::UnsafeResource::kNoFrameTreeNodeId,
-      /*navigation_id=*/std::nullopt, can_perform_full_url_lookup,
-      /*can_check_db=*/true, /*can_check_high_confidence_allowlist=*/true,
-      /*url_lookup_service_metric_suffix=*/"", web::GetUIThreadTaskRunner({}),
+      /*navigation_id=*/std::nullopt, can_perform_full_url_lookup, can_check_db,
+      can_check_high_confidence_allowlist, url_lookup_service_metric_suffix,
+      web::GetUIThreadTaskRunner({}),
       url_lookup_service ? url_lookup_service->GetWeakPtr() : nullptr,
       hash_real_time_service ? hash_real_time_service->GetWeakPtr() : nullptr,
       hash_real_time_selection,
@@ -224,6 +238,20 @@ SafeBrowsingServiceImpl::CreateAsyncChecker(
               /*log_usage_histograms=*/true,
               /*are_background_lookups_allowed=*/false);
 
+  // Decide whether safe browsing database can be checked.
+  // If url_lookup_service_ is null, safe browsing database should be checked by
+  // default.
+  bool can_check_db = can_perform_full_url_lookup
+                          ? url_lookup_service->CanCheckSafeBrowsingDb()
+                          : true;
+  bool can_check_high_confidence_allowlist =
+      can_perform_full_url_lookup
+          ? url_lookup_service->CanCheckSafeBrowsingHighConfidenceAllowlist()
+          : true;
+  std::string url_lookup_service_metric_suffix =
+      can_perform_full_url_lookup ? url_lookup_service->GetMetricSuffix()
+                                  : safe_browsing::kNoRealTimeURLLookupService;
+
   return std::make_unique<safe_browsing::SafeBrowsingUrlCheckerImpl>(
       /*headers=*/net::HttpRequestHeaders(), /*load_flags=*/0,
       /*has_user_gesture=*/false, url_checker_delegate,
@@ -235,9 +263,9 @@ SafeBrowsingServiceImpl::CreateAsyncChecker(
       /*render_frame_token=*/std::nullopt,
       /*frame_tree_node_id=*/
       security_interstitials::UnsafeResource::kNoFrameTreeNodeId,
-      /*navigation_id=*/std::nullopt, can_perform_full_url_lookup,
-      /*can_check_db=*/true, /*can_check_high_confidence_allowlist=*/true,
-      /*url_lookup_service_metric_suffix=*/"", web::GetUIThreadTaskRunner({}),
+      /*navigation_id=*/std::nullopt, can_perform_full_url_lookup, can_check_db,
+      can_check_high_confidence_allowlist, url_lookup_service_metric_suffix,
+      web::GetUIThreadTaskRunner({}),
       url_lookup_service ? url_lookup_service->GetWeakPtr() : nullptr,
       hash_real_time_service ? hash_real_time_service->GetWeakPtr() : nullptr,
       hash_real_time_selection,
@@ -281,6 +309,10 @@ bool SafeBrowsingServiceImpl::ShouldCreateAsyncChecker(
     web::WebState* web_state,
     SafeBrowsingClient* client) {
   if (!web_state) {
+    return false;
+  }
+
+  if (client->ShouldForceSyncRealTimeUrlChecks()) {
     return false;
   }
 

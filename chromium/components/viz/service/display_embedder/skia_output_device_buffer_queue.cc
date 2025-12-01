@@ -14,7 +14,6 @@
 #include "base/compiler_specific.h"
 #include "base/debug/alias.h"
 #include "base/feature_list.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "components/viz/common/features.h"
@@ -145,7 +144,7 @@ SkiaOutputDeviceBufferQueue::SkiaOutputDeviceBufferQueue(
     const DidSwapBufferCompleteCallback& did_swap_buffer_complete_callback,
     const ReleaseOverlaysCallback& release_overlays_callback)
     : SkiaOutputDevice(deps->GetSharedContextState()->gr_context(),
-                       deps->GetSharedContextState()->graphite_context(),
+                       deps->GetSharedContextState()->graphite_shared_context(),
                        memory_tracker,
                        did_swap_buffer_complete_callback,
                        release_overlays_callback),
@@ -352,7 +351,7 @@ void SkiaOutputDeviceBufferQueue::DoFinishSwapBuffers(
   // have been replaced.
   for (const auto& mailbox : overlay_mailboxes) {
     auto it = overlays_.find(mailbox);
-    CHECK(it != overlays_.end(), base::NotFatalUntil::M130);
+    CHECK(it != overlays_.end());
     it->Unref();
   }
 

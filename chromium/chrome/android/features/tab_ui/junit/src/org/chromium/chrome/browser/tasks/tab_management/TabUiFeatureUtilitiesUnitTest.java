@@ -7,8 +7,6 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-import android.os.Build;
-
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -16,7 +14,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
-import org.robolectric.util.ReflectionHelpers;
 
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.ThreadUtils;
@@ -26,7 +23,9 @@ import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
+import org.chromium.ui.util.XrUtils;
 
 /** Unit Tests for {@link TabUiFeatureUtilities}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -85,14 +84,17 @@ public class TabUiFeatureUtilitiesUnitTest {
     }
 
     @Test
-    public void testTabDragToCreateInstance_withAllowlistedOEM() {
-        ReflectionHelpers.setStaticField(Build.class, "MANUFACTURER", "samsung");
-        assertTrue(TabUiFeatureUtilities.isTabDragToCreateInstanceSupported());
+    @CommandLineFlags.Add({ChromeSwitches.DISABLE_FULLSCREEN})
+    public void testDisableFullScreen_XrDeviceWithFlag_isTrue() {
+        XrUtils.setXrDeviceForTesting(true);
+
+        assertFalse(DeviceClassManager.enableFullscreen());
     }
 
     @Test
-    public void testTabDragToCreateInstance_withNonAllowlistedOEM() {
-        ReflectionHelpers.setStaticField(Build.class, "MANUFACTURER", "other");
-        assertTrue(TabUiFeatureUtilities.isTabDragToCreateInstanceSupported());
+    public void testDisableFullScreen_XrDeviceWithoutFlag_isTrue() {
+        XrUtils.setXrDeviceForTesting(true);
+
+        assertFalse(DeviceClassManager.enableFullscreen());
     }
 }

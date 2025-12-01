@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 import '../../../ui/components/report_view/report_view.js';
@@ -228,7 +229,7 @@ export class PermissionsPolicySection extends HTMLElement {
       // clang-format off
       Lit.render(
         html`
-          <style>${permissionsPolicySectionStyles.cssText}</style>
+          <style>${permissionsPolicySectionStyles}</style>
           <devtools-report-section-header>${i18n.i18n.lockedString('Permissions Policy')}</devtools-report-section-header>
           ${this.#renderAllowed()}
           ${(this.#permissionsPolicySectionData.policies.findIndex(p => p.allowed) > 0 ||

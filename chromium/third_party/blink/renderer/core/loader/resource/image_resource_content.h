@@ -145,9 +145,6 @@ class CORE_EXPORT ImageResourceContent final
   bool IsAccessAllowed() const;
   const ResourceResponse& GetResponse() const;
   std::optional<ResourceError> GetResourceError() const;
-  // DEPRECATED: ImageResourceContents consumers shouldn't need to worry about
-  // whether the underlying Resource is being revalidated.
-  bool IsCacheValidator() const;
 
   // For FrameSerializer.
   bool HasCacheControlNoStoreHeader() const;
@@ -210,11 +207,6 @@ class CORE_EXPORT ImageResourceContent final
     return !observers_.empty() || !finished_observers_.empty();
   }
   bool CanBeSpeculativelyDecoded() const;
-  bool HasNonDegenerateSizeForDecode() const {
-    // If an observer has 0x0 size, we will not consider it for speculative
-    // decode.
-    return !cached_info_.max_size_.IsZero();
-  }
   ImageDecoder::CompressionFormat GetCompressionFormat() const;
 
   // Returns the number of bytes of image data which should be used for entropy
@@ -232,6 +224,10 @@ class CORE_EXPORT ImageResourceContent final
   // Records the decoded image type in a UseCounter if the image is a
   // BitmapImage. |use_counter| may be a null pointer.
   void RecordDecodedImageType(UseCounter* use_counter);
+
+  // Records the presence of a C2PManifest if the image is a BitmapImage.
+  // |use_counter| may be a null pointer.
+  void RecordDecodedImageC2PA(UseCounter* use_counter);
 
  private:
   using CanDeferInvalidation = ImageResourceObserver::CanDeferInvalidation;
@@ -251,6 +247,10 @@ class CORE_EXPORT ImageResourceContent final
   void HandleObserverFinished(ImageResourceObserver*);
   void UpdateToLoadedContentStatus(ResourceStatus);
   void UpdateImageAnimationPolicy();
+  void ApplyPriorityAndSpeculativeDecodeParams(
+      const ResourcePriority& new_priority,
+      const gfx::Size& new_size,
+      InterpolationQuality new_quality);
 
   class ProhibitAddRemoveObserverInScope : public base::AutoReset<bool> {
    public:

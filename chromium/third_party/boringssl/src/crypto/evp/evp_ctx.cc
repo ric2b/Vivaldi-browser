@@ -21,6 +21,7 @@
 #include <openssl/mem.h>
 
 #include "../internal.h"
+#include "../mem_internal.h"
 #include "internal.h"
 
 
@@ -41,30 +42,22 @@ static const EVP_PKEY_METHOD *evp_pkey_meth_find(int type) {
 
 static EVP_PKEY_CTX *evp_pkey_ctx_new(EVP_PKEY *pkey, ENGINE *e,
                                       const EVP_PKEY_METHOD *pmeth) {
-  EVP_PKEY_CTX *ret =
-      reinterpret_cast<EVP_PKEY_CTX *>(OPENSSL_zalloc(sizeof(EVP_PKEY_CTX)));
+  bssl::UniquePtr<EVP_PKEY_CTX> ret = bssl::MakeUnique<EVP_PKEY_CTX>();
   if (!ret) {
-    return NULL;
+    return nullptr;
   }
 
   ret->engine = e;
   ret->pmeth = pmeth;
   ret->operation = EVP_PKEY_OP_UNDEFINED;
+  ret->pkey = bssl::UpRef(pkey);
 
-  if (pkey) {
-    EVP_PKEY_up_ref(pkey);
-    ret->pkey = pkey;
+  if (pmeth->init && pmeth->init(ret.get()) <= 0) {
+    ret->pmeth = nullptr;  // Don't call |pmeth->cleanup|.
+    return nullptr;
   }
 
-  if (pmeth->init) {
-    if (pmeth->init(ret) <= 0) {
-      EVP_PKEY_free(ret->pkey);
-      OPENSSL_free(ret);
-      return NULL;
-    }
-  }
-
-  return ret;
+  return ret.release();
 }
 
 EVP_PKEY_CTX *EVP_PKEY_CTX_new(EVP_PKEY *pkey, ENGINE *e) {
@@ -94,54 +87,39 @@ EVP_PKEY_CTX *EVP_PKEY_CTX_new_id(int id, ENGINE *e) {
   return evp_pkey_ctx_new(NULL, e, pkey_method);
 }
 
-void EVP_PKEY_CTX_free(EVP_PKEY_CTX *ctx) {
-  if (ctx == NULL) {
-    return;
+evp_pkey_ctx_st::~evp_pkey_ctx_st() {
+  if (pmeth && pmeth->cleanup) {
+    pmeth->cleanup(this);
   }
-  if (ctx->pmeth && ctx->pmeth->cleanup) {
-    ctx->pmeth->cleanup(ctx);
-  }
-  EVP_PKEY_free(ctx->pkey);
-  EVP_PKEY_free(ctx->peerkey);
-  OPENSSL_free(ctx);
 }
+
+void EVP_PKEY_CTX_free(EVP_PKEY_CTX *ctx) { bssl::Delete(ctx); }
 
 EVP_PKEY_CTX *EVP_PKEY_CTX_dup(EVP_PKEY_CTX *ctx) {
   if (!ctx->pmeth || !ctx->pmeth->copy) {
-    return NULL;
+    return nullptr;
   }
 
-  EVP_PKEY_CTX *ret =
-      reinterpret_cast<EVP_PKEY_CTX *>(OPENSSL_zalloc(sizeof(EVP_PKEY_CTX)));
+  bssl::UniquePtr<EVP_PKEY_CTX> ret = bssl::MakeUnique<EVP_PKEY_CTX>();
   if (!ret) {
-    return NULL;
+    return nullptr;
   }
 
   ret->pmeth = ctx->pmeth;
   ret->engine = ctx->engine;
   ret->operation = ctx->operation;
-
-  if (ctx->pkey != NULL) {
-    EVP_PKEY_up_ref(ctx->pkey);
-    ret->pkey = ctx->pkey;
-  }
-
-  if (ctx->peerkey != NULL) {
-    EVP_PKEY_up_ref(ctx->peerkey);
-    ret->peerkey = ctx->peerkey;
-  }
-
-  if (ctx->pmeth->copy(ret, ctx) <= 0) {
-    ret->pmeth = NULL;
-    EVP_PKEY_CTX_free(ret);
+  ret->pkey = bssl::UpRef(ctx->pkey);
+  ret->peerkey = bssl::UpRef(ctx->peerkey);
+  if (ctx->pmeth->copy(ret.get(), ctx) <= 0) {
+    ret->pmeth = nullptr;  // Don't call |pmeth->cleanup|.
     OPENSSL_PUT_ERROR(EVP, ERR_LIB_EVP);
-    return NULL;
+    return nullptr;
   }
 
-  return ret;
+  return ret.release();
 }
 
-EVP_PKEY *EVP_PKEY_CTX_get0_pkey(EVP_PKEY_CTX *ctx) { return ctx->pkey; }
+EVP_PKEY *EVP_PKEY_CTX_get0_pkey(EVP_PKEY_CTX *ctx) { return ctx->pkey.get(); }
 
 int EVP_PKEY_CTX_ctrl(EVP_PKEY_CTX *ctx, int keytype, int optype, int cmd,
                       int p1, void *p2) {
@@ -330,22 +308,18 @@ int EVP_PKEY_derive_set_peer(EVP_PKEY_CTX *ctx, EVP_PKEY *peer) {
   // (different key types) is impossible here because it is checked earlier.
   // -2 is OK for us here, as well as 1, so we can check for 0 only.
   if (!EVP_PKEY_missing_parameters(peer) &&
-      !EVP_PKEY_cmp_parameters(ctx->pkey, peer)) {
+      !EVP_PKEY_cmp_parameters(ctx->pkey.get(), peer)) {
     OPENSSL_PUT_ERROR(EVP, EVP_R_DIFFERENT_PARAMETERS);
     return 0;
   }
 
-  EVP_PKEY_free(ctx->peerkey);
-  ctx->peerkey = peer;
-
+  ctx->peerkey = bssl::UpRef(peer);
   ret = ctx->pmeth->ctrl(ctx, EVP_PKEY_CTRL_PEER_KEY, 1, peer);
-
   if (ret <= 0) {
-    ctx->peerkey = NULL;
+    ctx->peerkey = nullptr;
     return 0;
   }
 
-  EVP_PKEY_up_ref(peer);
   return 1;
 }
 

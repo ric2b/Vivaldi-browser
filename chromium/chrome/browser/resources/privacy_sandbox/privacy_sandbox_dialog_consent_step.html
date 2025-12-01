@@ -76,11 +76,11 @@
       </div>
     </template>
     <div class="buttons-container">
-      <cr-button id="declineButton" class$="[[getButtonsClass_()]]"
+      <cr-button id="declineButton" class="tonal-button"
           on-click="onConsentDeclined_">
         $i18n{m1ConsentDeclineButton}
       </cr-button>
-      <cr-button id="confirmButton" class$="[[getButtonsClass_()]]"
+      <cr-button id="confirmButton" class="tonal-button"
           on-click="onConsentAccepted_">
         $i18n{m1ConsentAcceptButton}
       </cr-button>
@@ -94,8 +94,10 @@
     </cr-button>
   </div>
 </div>
-<privacy-sandbox-privacy-policy-dialog
-    id="privacyPolicyDialog"
-    should-show="[[hideConsentNoticePage_]]"
-    on-back-button-clicked="onBackButtonClicked_">
-</privacy-sandbox-privacy-policy-dialog>
+<template is="dom-if" if="[[loadPrivacyPolicy_]]">
+  <privacy-sandbox-privacy-policy-dialog
+      id="privacyPolicyDialog"
+      should-show="[[hideConsentNoticePage_]]"
+      on-back-button-clicked="onBackButtonClicked_">
+  </privacy-sandbox-privacy-policy-dialog>
+</template>

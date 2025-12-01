@@ -21,7 +21,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "net/base/backoff_entry.h"
-#include "net/base/cronet_buildflags.h"
 #include "net/base/features.h"
 #include "net/base/isolation_info.h"
 #include "net/base/network_anonymization_key.h"
@@ -77,7 +76,7 @@ class ReportingDeliveryAgentTest : public ReportingTestBase {
 
     cache()->AddReport(std::nullopt, kNak_, kUrl_, kUserAgent_, kGroup_, kType_,
                        std::move(report_body), /*depth=*/0,
-                       /*queued=*/tick_clock()->NowTicks(), /*attempts=*/0,
+                       /*queued=*/tick_clock()->NowTicks(),
                        ReportingTargetType::kDeveloper);
   }
 
@@ -90,17 +89,16 @@ class ReportingDeliveryAgentTest : public ReportingTestBase {
     cache()->AddReport(reporting_source, network_anonymization_key, url,
                        kUserAgent_, group, kType_, std::move(report_body),
                        /*depth=*/0, /*queued=*/tick_clock()->NowTicks(),
-                       /*attempts=*/0, ReportingTargetType::kDeveloper);
+                       ReportingTargetType::kDeveloper);
   }
 
   void AddEnterpriseReport(const GURL& url, const std::string& group) {
     base::Value::Dict report_body;
     report_body.Set("key", "value");
-    cache()->AddReport(/*reporting_source=*/std::nullopt,
-                       net::NetworkAnonymizationKey(), url, kUserAgent_, group,
-                       kType_, std::move(report_body), /*depth=*/0,
-                       /*queued=*/tick_clock()->NowTicks(), /*attempts=*/0,
-                       ReportingTargetType::kEnterprise);
+    cache()->AddReport(
+        /*reporting_source=*/std::nullopt, net::NetworkAnonymizationKey(), url,
+        kUserAgent_, group, kType_, std::move(report_body), /*depth=*/0,
+        /*queued=*/tick_clock()->NowTicks(), ReportingTargetType::kEnterprise);
   }
 
   // The first report added to the cache is uploaded immediately, and a timer is
@@ -1062,21 +1060,10 @@ TEST_F(ReportingDeliveryAgentTest, SkipUploadForReportWithLargeBody) {
   }));
 
   histograms.ExpectBucketCount("Net.Reporting.ReportsCount", 1, 1);
-  if constexpr (BUILDFLAG(CRONET_BUILD)) {
-    // CRONET_BUILD does not support many tracing features.
-    // DictValue::EstimateMemoryUsage() is one of them, being always reported as
-    // 0. Hence, no reports are ever filtered due to being too big. Check for a
-    // different value, instead of disabling the tests, so that once
-    // CRONET_BUILD will support that, we will need to converge back to the same
-    // value.
-    EXPECT_FALSE(AreReportsProcessed());
-    histograms.ExpectBucketCount("Net.Reporting.FilteredReportsCount", 1, 1);
-  } else {
-    // Verify that the cache is now empty (report should be removed after send,
-    // even if filtered)
-    EXPECT_TRUE(AreReportsProcessed());
-    histograms.ExpectBucketCount("Net.Reporting.FilteredReportsCount", 1, 0);
-  }
+  histograms.ExpectBucketCount("Net.Reporting.FilteredReportsCount", 1, 0);
+  // Verify that the cache is now empty (report should be removed after send,
+  // even if filtered)
+  EXPECT_TRUE(AreReportsProcessed());
 }
 
 TEST_F(ReportingDeliveryAgentTest, ExcludeLargeBodyReports) {
@@ -1111,13 +1098,7 @@ TEST_F(ReportingDeliveryAgentTest, ExcludeLargeBodyReports) {
   EXPECT_TRUE(AreReportsProcessed());
 
   EXPECT_EQ(histograms.GetTotalSum("Net.Reporting.ReportsCount"), 3);
-  // CRONET_BUILD does not support many tracing features.
-  // DictValue::EstimateMemoryUsage() is one of them, being always reported as
-  // 0. Hence, no reports are ever filtered due to being too big. Check for a
-  // different value, instead of disabling the tests, so that once CRONET_BUILD
-  // will support that, we will need to converge back to the same value.
-  EXPECT_EQ(histograms.GetTotalSum("Net.Reporting.FilteredReportsCount"),
-            BUILDFLAG(CRONET_BUILD) ? 3 : 2);
+  EXPECT_EQ(histograms.GetTotalSum("Net.Reporting.FilteredReportsCount"), 2);
 }
 
 }  // namespace net

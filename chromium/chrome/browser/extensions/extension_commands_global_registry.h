@@ -59,7 +59,7 @@ class ExtensionCommandsGlobalRegistry
     registry_for_active_window_ = registry;
   }
 
-  // Returns whether |accelerator| is registered on the registry for the active
+  // Returns whether `accelerator` is registered on the registry for the active
   // window or on the global registry.
   bool IsRegistered(const ui::Accelerator& accelerator);
 
@@ -73,10 +73,10 @@ class ExtensionCommandsGlobalRegistry
   static const bool kServiceRedirectedInIncognito = true;
 
   // Overridden from ExtensionKeybindingRegistry:
-  void AddExtensionKeybindings(const Extension* extension,
-                               const std::string& command_name) override;
-  void RemoveExtensionKeybindingImpl(const ui::Accelerator& accelerator,
-                                     const std::string& command_name) override;
+  bool PopulateCommands(const Extension* extension,
+                        ui::CommandMap* commands) override;
+  bool RegisterAccelerator(const ui::Accelerator& accelerator) override;
+  void UnregisterAccelerator(const ui::Accelerator& accelerator) override;
   void OnShortcutHandlingSuspended(bool suspended) override;
 
   // Called by the GlobalShortcutListener object when a shortcut this class has

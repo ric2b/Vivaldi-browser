@@ -18,6 +18,8 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import androidx.core.view.ViewCompat;
+
 import org.chromium.build.annotations.Initializer;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -215,7 +217,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
      * content fades in.
      */
     private class FirstInfoBarAppearingAnimation extends InfoBarAnimation {
-        private InfoBarUiItem mFrontItem;
+        private final InfoBarUiItem mFrontItem;
 
         private InfoBarWrapper mFrontWrapper;
 
@@ -248,7 +250,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
 
         @Override
         void onAnimationEnd() {
-            announceForAccessibility(mFrontItem.getAccessibilityText());
+            announceAccessibilityText(mFrontItem.getAccessibilityText());
         }
 
         @Override
@@ -263,7 +265,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
      * will be resized simulatenously to the new desired size.
      */
     private class FrontInfoBarAppearingAnimation extends InfoBarAnimation {
-        private InfoBarUiItem mFrontItem;
+        private final InfoBarUiItem mFrontItem;
         private InfoBarWrapper mFrontWrapper;
         private InfoBarWrapper mOldFrontWrapper;
         private View mFrontContents;
@@ -347,7 +349,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
                 mInfoBarWrappers.get(i).setTranslationY(0);
             }
             updateLayoutParams();
-            announceForAccessibility(mFrontItem.getAccessibilityText());
+            announceAccessibilityText(mFrontItem.getAccessibilityText());
         }
 
         @Override
@@ -361,7 +363,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
      * its top edge peeks out just a bit.
      */
     private class BackInfoBarAppearingAnimation extends InfoBarAnimation {
-        private InfoBarWrapper mAppearingWrapper;
+        private final InfoBarWrapper mAppearingWrapper;
 
         BackInfoBarAppearingAnimation(InfoBarUiItem appearingItem) {
             mAppearingWrapper = new InfoBarWrapper(getContext(), appearingItem);
@@ -451,7 +453,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
             for (int i = 0; i < mInfoBarWrappers.size(); i++) {
                 mInfoBarWrappers.get(i).setTranslationY(0);
             }
-            announceForAccessibility(mNewFrontWrapper.getItem().getAccessibilityText());
+            announceAccessibilityText(mNewFrontWrapper.getItem().getAccessibilityText());
         }
 
         @Override
@@ -534,7 +536,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
             mFrontWrapper.removeViewAt(0);
             InfoBarContainerLayout.this.setTranslationY(0f);
             mFrontWrapper.getItem().setControlsEnabled(true);
-            announceForAccessibility(mFrontWrapper.getItem().getAccessibilityText());
+            announceAccessibilityText(mFrontWrapper.getItem().getAccessibilityText());
         }
 
         @Override
@@ -554,7 +556,7 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
      */
     private static class FloatingBehavior {
         /** The InfoBarContainerLayout. */
-        private FrameLayout mLayout;
+        private final FrameLayout mLayout;
 
         /**
          * The max width of the infobars. If the available space is wider than this, the infobars
@@ -682,10 +684,10 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
     /** The current animation, or null if no animation is happening currently. */
     private @Nullable InfoBarAnimation mAnimation;
 
-    private FloatingBehavior mFloatingBehavior;
+    private final FloatingBehavior mFloatingBehavior;
 
     /** The runnable to make infobar container fully visible. */
-    private Runnable mMakeContainerVisibleRunnable;
+    private final Runnable mMakeContainerVisibleRunnable;
 
     /**
      * Determines whether any animations need to run in order to make the visible views match the
@@ -815,17 +817,16 @@ public class InfoBarContainerLayout extends OptimizedFrameLayout {
         }
     }
 
+    private void announceAccessibilityText(CharSequence text) {
+        if (TextUtils.isEmpty(text)) return;
+        ViewCompat.setAccessibilityPaneTitle(this, text);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         widthMeasureSpec = mFloatingBehavior.beforeOnMeasure(widthMeasureSpec);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         mFloatingBehavior.afterOnMeasure(getMeasuredHeight());
-    }
-
-    @Override
-    public void announceForAccessibility(CharSequence text) {
-        if (TextUtils.isEmpty(text)) return;
-        super.announceForAccessibility(text);
     }
 
     @Override

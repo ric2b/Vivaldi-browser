@@ -68,6 +68,7 @@ using data from registry_xml.py and gl.xml.
 | [GL_OES_draw_buffers_indexed](https://khronos.org/registry/OpenGL/extensions/OES/OES_draw_buffers_indexed.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_EXT_draw_elements_base_vertex](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_draw_elements_base_vertex.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_OES_draw_elements_base_vertex](https://khronos.org/registry/OpenGL/extensions/OES/OES_draw_elements_base_vertex.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
+| [GL_EXT_draw_instanced](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_draw_instanced.txt) |  |  |  |  |  |  |  |
 | [GL_OES_EGL_image](https://khronos.org/registry/OpenGL/extensions/OES/OES_EGL_image.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_EXT_EGL_image_array](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_EGL_image_array.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_OES_EGL_image_external](https://khronos.org/registry/OpenGL/extensions/OES/OES_EGL_image_external.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
@@ -99,6 +100,7 @@ using data from registry_xml.py and gl.xml.
 | [GL_EXT_map_buffer_range](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_map_buffer_range.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_EXT_memory_object](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_memory_object.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_EXT_memory_object_fd](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_external_objects_fd.txt) |  |  | &#x2714; | &#x2714; |  | &#x2714; | &#x2714; |
+| [GL_EXT_multi_draw_arrays](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_multi_draw_arrays.txt) |  |  |  |  |  |  |  |
 | [GL_EXT_multi_draw_indirect](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_multi_draw_indirect.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_EXT_multisample_compatibility](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_multisample_compatibility.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_EXT_multisampled_render_to_texture](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_multisampled_render_to_texture.txt) |  |  |  |  |  |  |  |
@@ -155,7 +157,6 @@ using data from registry_xml.py and gl.xml.
 | [GL_EXT_sRGB_write_control](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_sRGB_write_control.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_OES_standard_derivatives](https://khronos.org/registry/OpenGL/extensions/OES/OES_standard_derivatives.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
 | [GL_OES_surfaceless_context](https://khronos.org/registry/OpenGL/extensions/OES/OES_surfaceless_context.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |
-| [GL_ARB_sync](https://khronos.org/registry/OpenGL/extensions/ARB/ARB_sync.txt) |  |  |  |  |  |  |  |
 | [GL_EXT_tessellation_shader](https://khronos.org/registry/OpenGL/extensions/EXT/EXT_tessellation_shader.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; |  |  | &#x2714; |
 | [GL_OES_tessellation_shader](https://khronos.org/registry/OpenGL/extensions/OES/OES_tessellation_shader.txt) |  |  |  |  |  |  |  |
 | [GL_OES_texture_3D](https://khronos.org/registry/OpenGL/extensions/OES/OES_texture_3D.txt) | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; | &#x2714; |

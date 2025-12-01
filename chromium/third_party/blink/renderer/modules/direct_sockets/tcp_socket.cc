@@ -100,16 +100,6 @@ mojom::blink::DirectTCPSocketOptionsPtr CreateTCPSocketOptions(
   return socket_options;
 }
 
-protocol::Network::DirectSocketDnsQueryType MapProbeDnsQueryType(
-    V8SocketDnsQueryType dns_query_type) {
-  switch (dns_query_type.AsEnum()) {
-    case V8SocketDnsQueryType::Enum::kIpv4:
-      return protocol::Network::DirectSocketDnsQueryTypeEnum::Ipv4;
-    case V8SocketDnsQueryType::Enum::kIpv6:
-      return protocol::Network::DirectSocketDnsQueryTypeEnum::Ipv6;
-  }
-}
-
 std::unique_ptr<protocol::Network::DirectTCPSocketOptions> MapProbeTCPOptions(
     const TCPSocketOptions* options) {
   auto probe_options_builder =
@@ -125,12 +115,11 @@ std::unique_ptr<protocol::Network::DirectTCPSocketOptions> MapProbeTCPOptions(
   }
   if (options->hasDnsQueryType()) {
     probe_options_builder.setDnsQueryType(
-        MapProbeDnsQueryType(options->dnsQueryType()));
+        Socket::MapProbeDnsQueryType(options->dnsQueryType()));
   }
 
   return probe_options_builder.setNoDelay(options->noDelay()).build();
 }
-
 }  // namespace
 
 // static
@@ -301,11 +290,11 @@ void TCPSocket::FinishOpenOrAccept(
   readable_stream_wrapper_ = MakeGarbageCollected<TCPReadableStreamWrapper>(
       GetScriptState(),
       WTF::BindOnce(&TCPSocket::OnStreamClosed, WrapWeakPersistent(this)),
-      std::move(receive_stream));
+      std::move(receive_stream), inspector_id_);
   writable_stream_wrapper_ = MakeGarbageCollected<TCPWritableStreamWrapper>(
       GetScriptState(),
       WTF::BindOnce(&TCPSocket::OnStreamClosed, WrapWeakPersistent(this)),
-      std::move(send_stream));
+      std::move(send_stream), inspector_id_);
 
   auto* open_info = TCPSocketOpenInfo::Create();
 

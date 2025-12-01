@@ -71,7 +71,7 @@ public class TabGroupRowViewRenderTest {
     public ChromeRenderTestRule mRenderTestRule =
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(Component.UI_BROWSER_MOBILE_TAB_GROUPS)
-                    .setRevision(2)
+                    .setRevision(4)
                     .build();
 
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
@@ -149,7 +149,7 @@ public class TabGroupRowViewRenderTest {
                             new TabGroupRowViewTitleData(
                                     "Title",
                                     1,
-                                    R.string.tab_group_bottom_sheet_row_accessibility_text));
+                                    R.plurals.tab_group_bottom_sheet_row_accessibility_text));
                     builder.with(
                             TIMESTAMP_EVENT,
                             new TabGroupTimeAgo(
@@ -174,7 +174,7 @@ public class TabGroupRowViewRenderTest {
                             new TabGroupRowViewTitleData(
                                     "VeryLongTitleThatGetsTruncatedOrSplitOverMultipleLines",
                                     1,
-                                    R.string.tab_group_bottom_sheet_row_accessibility_text));
+                                    R.plurals.tab_group_bottom_sheet_row_accessibility_text));
                     builder.with(
                             TIMESTAMP_EVENT,
                             new TabGroupTimeAgo(
@@ -229,7 +229,7 @@ public class TabGroupRowViewRenderTest {
                             new TabGroupRowViewTitleData(
                                     "A generic title",
                                     1,
-                                    R.string.tab_group_bottom_sheet_row_accessibility_text));
+                                    R.plurals.tab_group_bottom_sheet_row_accessibility_text));
                     builder.with(
                             TIMESTAMP_EVENT,
                             new TabGroupTimeAgo(
@@ -240,5 +240,40 @@ public class TabGroupRowViewRenderTest {
                             mPropertyModel, mTabGroupRowView, TabGroupRowViewBinder::bind);
                 });
         mRenderTestRule.render(mTabGroupRowView, "menu_disabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testRenderWithNoSubtitle() throws Exception {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    PropertyModel.Builder builder = new PropertyModel.Builder(ALL_KEYS);
+                    builder.with(CLUSTER_DATA, makeCornerData(JUnitTestGURLs.RED_1));
+                    builder.with(TabGroupRowProperties.COLOR_INDEX, TabGroupColorId.GREY);
+                    builder.with(
+                            TITLE_DATA,
+                            new TabGroupRowViewTitleData(
+                                    "A generic title",
+                                    1,
+                                    R.plurals.tab_group_bottom_sheet_row_accessibility_text));
+                    builder.with(OPEN_RUNNABLE, null);
+                    mPropertyModel = builder.build();
+                    PropertyModelChangeProcessor.create(
+                            mPropertyModel, mTabGroupRowView, TabGroupRowViewBinder::bind);
+                });
+        mRenderTestRule.render(mTabGroupRowView, "subtitle_disabled");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testRenderWithContainment() throws Exception {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mTabGroupRowView.setupForContainment();
+                });
+        remakeWithUrls(JUnitTestGURLs.RED_1);
+        mRenderTestRule.render(mTabGroupRowView, "containment");
     }
 }

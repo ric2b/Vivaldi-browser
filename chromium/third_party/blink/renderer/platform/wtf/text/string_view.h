@@ -146,15 +146,10 @@ class WTF_EXPORT StringView {
         bytes_(chars.data()),
         length_(base::checked_cast<wtf_size_t>(chars.size())) {}
   // NOLINTNEXTLINE(google-explicit-constructor)
-  StringView(const LChar* chars)
+  StringView(const char* chars)
       : impl_(StringImpl::empty_),
         bytes_(chars),
-        length_(chars ? base::checked_cast<unsigned>(
-                            strlen(reinterpret_cast<const char*>(chars)))
-                      : 0) {}
-  // NOLINTNEXTLINE(google-explicit-constructor)
-  StringView(const char* chars)
-      : StringView(reinterpret_cast<const LChar*>(chars)) {}
+        length_(chars ? base::checked_cast<unsigned>(strlen(chars)) : 0) {}
 
   // From a wide literal string or UChar buffer.
   explicit StringView(base::span<const UChar> chars)
@@ -189,14 +184,7 @@ class WTF_EXPORT StringView {
 
   bool IsAtomic() const { return SharedImpl() && SharedImpl()->IsAtomic(); }
 
-  bool IsLowerASCII() const {
-    if (StringImpl* impl = SharedImpl())
-      return impl->IsLowerASCII();
-    if (Is8Bit())
-      return WTF::IsLowerASCII(Characters8(), length());
-    return WTF::IsLowerASCII(Characters16(), length());
-  }
-
+  bool IsLowerASCII() const;
   bool ContainsOnlyASCIIOrEmpty() const;
 
   bool SubstringContainsOnlyWhitespaceOrEmpty(unsigned from, unsigned to) const;
@@ -206,16 +194,18 @@ class WTF_EXPORT StringView {
   UChar operator[](unsigned i) const {
     SECURITY_DCHECK(i < length());
     if (Is8Bit())
-      return Characters8()[i];
-    return Characters16()[i];
+      return static_cast<const LChar*>(bytes_)[i];
+    return static_cast<const UChar*>(bytes_)[i];
   }
 
-  const LChar* Characters8() const {
+  // Use Span16() instead.
+  UNSAFE_BUFFER_USAGE const LChar* Characters8() const {
     DCHECK(Is8Bit());
     return static_cast<const LChar*>(bytes_);
   }
 
-  const UChar* Characters16() const {
+  // Use Span16() instead.
+  UNSAFE_BUFFER_USAGE const UChar* Characters16() const {
     DCHECK(!Is8Bit());
     return static_cast<const UChar*>(bytes_);
   }
@@ -228,6 +218,11 @@ class WTF_EXPORT StringView {
   base::span<const UChar> Span16() const {
     DCHECK(!Is8Bit());
     return {static_cast<const UChar*>(bytes_), length_};
+  }
+
+  base::span<const uint16_t> SpanUint16() const {
+    DCHECK(!Is8Bit());
+    return {static_cast<const uint16_t*>(bytes_), length_};
   }
 
   // Returns the Unicode code point starting at the specified offset of this
@@ -419,26 +414,13 @@ inline wtf_size_t StringView::Find(CharacterMatchFunctionPtr match_function,
                   : WTF::Find(Span16(), match_function, start);
 }
 
-template <bool isSpecialCharacter(UChar), typename CharacterType>
-inline bool IsAllSpecialCharacters(const CharacterType* characters,
-                                   size_t length) {
-  for (size_t i = 0; i < length; ++i) {
-    if (!isSpecialCharacter(characters[i]))
-      return false;
-  }
-  return true;
-}
-
 template <bool isSpecialCharacter(UChar)>
 inline bool StringView::IsAllSpecialCharacters() const {
-  size_t len = length();
-  if (!len)
+  if (empty()) {
     return true;
-
-  return Is8Bit() ? WTF::IsAllSpecialCharacters<isSpecialCharacter, LChar>(
-                        Characters8(), len)
-                  : WTF::IsAllSpecialCharacters<isSpecialCharacter, UChar>(
-                        Characters16(), len);
+  }
+  return Is8Bit() ? std::ranges::all_of(Span8(), isSpecialCharacter)
+                  : std::ranges::all_of(Span16(), isSpecialCharacter);
 }
 
 WTF_EXPORT std::ostream& operator<<(std::ostream&, const StringView&);
@@ -448,6 +430,5 @@ WTF_EXPORT std::ostream& operator<<(std::ostream&, const StringView&);
 using WTF::StringView;
 using WTF::EqualIgnoringASCIICase;
 using WTF::DeprecatedEqualIgnoringCase;
-using WTF::IsAllSpecialCharacters;
 
 #endif  // THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_TEXT_STRING_VIEW_H_

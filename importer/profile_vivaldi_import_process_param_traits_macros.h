@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/values.h"
-#include "chrome/common/importer/importer_data_types.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/common/common_param_traits.h"
 #include "ipc/ipc_message_macros.h"
 
@@ -36,7 +36,7 @@ IPC_STRUCT_TRAITS_BEGIN(ImportedSpeedDialEntry)
   IPC_STRUCT_TRAITS_MEMBER(url)
 IPC_STRUCT_TRAITS_END()
 
-IPC_STRUCT_TRAITS_BEGIN(importer::ChromeProfileInfo)
+IPC_STRUCT_TRAITS_BEGIN(user_data_importer::ChromeProfileInfo)
   IPC_STRUCT_TRAITS_MEMBER(profileName)
   IPC_STRUCT_TRAITS_MEMBER(profileDisplayName)
 IPC_STRUCT_TRAITS_END()

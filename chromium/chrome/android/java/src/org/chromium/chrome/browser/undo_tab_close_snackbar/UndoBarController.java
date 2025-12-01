@@ -6,6 +6,7 @@ package org.chromium.chrome.browser.undo_tab_close_snackbar;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.text.TextUtils;
 import android.util.Pair;
 
 import androidx.annotation.Nullable;
@@ -25,9 +26,13 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarManageable;
+import org.chromium.ui.util.TokenHolder;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
+import java.util.ListIterator;
 import java.util.Set;
 
 // Vivaldi
@@ -50,17 +55,30 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  * TabModelObserver#tabClosureUndone(Tab)} and {@link TabModelObserver#tabClosureCommitted(Tab)} to
  * properly keep it's internal state in sync with the model.
  */
-public class UndoBarController implements SnackbarManager.SnackbarController {
+public class UndoBarController implements SnackbarManager.SnackbarController, UndoBarThrottle {
     private final TabModelSelector mTabModelSelector;
     private final TabModelObserver mTabModelObserver;
     private final SnackbarManager.SnackbarManageable mSnackbarManagable;
     private final Context mContext;
+    private final LinkedList<TabClosureEvent> mEventQueue = new LinkedList<>();
+    private final TokenHolder mThrottle = new TokenHolder(this::maybeProcessEvents);
+
+    private static class TabClosureEvent {
+        public final List<Tab> tabs = new ArrayList<>();
+        public final boolean isAllTabs;
+
+        TabClosureEvent(List<Tab> tabs, boolean isAllTabs) {
+            this.tabs.addAll(tabs);
+            this.isAllTabs = isAllTabs;
+        }
+    }
 
     /**
      * Creates an instance of a {@link UndoBarController}.
+     *
      * @param context The {@link Context} in which snackbar is shown.
      * @param selector The {@link TabModelSelector} that will be used to commit and undo tab
-     *                 closures.
+     *     closures.
      * @param snackbarManageable The holder class to get the manager that helps to show up snackbar.
      * @param dialogVisibilitySupplier The {@link Supplier} to get the visibility of TabGridDialog.
      */
@@ -112,12 +130,13 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                         }
                         else
                         if (disableUndo(true)) return;
-                        showUndoBar(List.of(tab), /* isAllTabs= */ false);
+                        queueUndoBar(new TabClosureEvent(List.of(tab), /* isAllTabs= */ false));
                     }
 
                     @Override
                     public void tabClosureUndone(Tab tab) {
                         if (disableUndo(false)) return;
+                        dropFromQueue(List.of(tab));
                         mSnackbarManagable
                                 .getSnackbarManager()
                                 .dismissSnackbars(UndoBarController.this, tab.getId());
@@ -126,6 +145,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                     @Override
                     public void tabClosureCommitted(Tab tab) {
                         if (disableUndo(false)) return;
+                        dropFromQueue(List.of(tab));
                         mSnackbarManagable
                                 .getSnackbarManager()
                                 .dismissSnackbars(UndoBarController.this, tab.getId());
@@ -134,6 +154,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                     @Override
                     public void onFinishingMultipleTabClosure(List<Tab> tabs, boolean canRestore) {
                         if (disableUndo(false)) return;
+                        dropFromQueue(tabs);
                         mSnackbarManagable
                                 .getSnackbarManager()
                                 .dismissSnackbars(UndoBarController.this, tabs);
@@ -151,12 +172,13 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                         }
                         else
                         if (disableUndo(true)) return;
-                        showUndoBar(tabs, isAllTabs);
+                        queueUndoBar(new TabClosureEvent(tabs, isAllTabs));
                     }
 
                     @Override
                     public void allTabsClosureCommitted(boolean isIncognito) {
                         if (disableUndo(false)) return;
+                        mEventQueue.clear();
                         mSnackbarManagable
                                 .getSnackbarManager()
                                 .dismissSnackbars(UndoBarController.this);
@@ -178,6 +200,43 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
     public void destroy() {
         TabModel model = mTabModelSelector.getModel(false);
         if (model != null) model.removeObserver(mTabModelObserver);
+    }
+
+    @Override
+    public int startThrottling() {
+        return mThrottle.acquireToken();
+    }
+
+    @Override
+    public void stopThrottling(int token) {
+        mThrottle.releaseToken(token);
+    }
+
+    private void queueUndoBar(TabClosureEvent event) {
+        mEventQueue.add(event);
+
+        maybeProcessEvents();
+    }
+
+    private void dropFromQueue(List<Tab> tabs) {
+        ListIterator<TabClosureEvent> iterator = mEventQueue.listIterator();
+        while (iterator.hasNext()) {
+            TabClosureEvent event = iterator.next();
+            event.tabs.removeAll(tabs);
+            if (event.tabs.isEmpty()) {
+                iterator.remove();
+            }
+        }
+    }
+
+    private void maybeProcessEvents() {
+        if (mThrottle.hasTokens()) return;
+
+        TabClosureEvent event = mEventQueue.poll();
+        while (event != null) {
+            showUndoBar(event.tabs, event.isAllTabs);
+            event = mEventQueue.poll();
+        }
     }
 
     /**
@@ -311,7 +370,7 @@ public class UndoBarController implements SnackbarManager.SnackbarController {
                                 .getTabGroupModelFilterProvider()
                                 .getTabGroupModelFilter(false);
                 @Nullable String tabGroupTitle = filter.getTabGroupTitle(rootId);
-                if (tabGroupTitle == null) {
+                if (TextUtils.isEmpty(tabGroupTitle)) {
                     tabGroupTitle =
                             mContext.getResources()
                                     .getQuantityString(

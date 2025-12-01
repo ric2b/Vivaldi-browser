@@ -10,18 +10,19 @@
 #include "core/fxcrt/numerics/safe_conversions.h"
 
 CPDFSDK_CustomAccess::CPDFSDK_CustomAccess(FPDF_FILEACCESS* pFileAccess)
-    : m_FileAccess(*pFileAccess) {}
+    : file_access_(*pFileAccess) {}
 
 CPDFSDK_CustomAccess::~CPDFSDK_CustomAccess() = default;
 
 FX_FILESIZE CPDFSDK_CustomAccess::GetSize() {
-  return m_FileAccess.m_FileLen;
+  return file_access_.m_FileLen;
 }
 
 bool CPDFSDK_CustomAccess::ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
                                              FX_FILESIZE offset) {
-  if (buffer.empty() || offset < 0)
+  if (buffer.empty() || offset < 0) {
     return false;
+  }
 
   if (!pdfium::IsValueInRangeForNumericType<FX_FILESIZE>(buffer.size())) {
     return false;
@@ -30,7 +31,7 @@ bool CPDFSDK_CustomAccess::ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
   FX_SAFE_FILESIZE new_pos = buffer.size();
   new_pos += offset;
   return new_pos.IsValid() && new_pos.ValueOrDie() <= GetSize() &&
-         m_FileAccess.m_GetBlock(
-             m_FileAccess.m_Param, pdfium::checked_cast<unsigned long>(offset),
+         file_access_.m_GetBlock(
+             file_access_.m_Param, pdfium::checked_cast<unsigned long>(offset),
              buffer.data(), pdfium::checked_cast<unsigned long>(buffer.size()));
 }

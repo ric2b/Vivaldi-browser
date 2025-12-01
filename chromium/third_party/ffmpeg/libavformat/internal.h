@@ -110,10 +110,6 @@ typedef struct FFFormatContext {
      */
     AVPacket *pkt;
 
-#if FF_API_AVSTREAM_SIDE_DATA
-    int inject_global_side_data;
-#endif
-
     int avoid_negative_ts_use_pts;
 
     /**
@@ -291,13 +287,6 @@ typedef struct FFStream {
     int64_t last_dts_for_order_check;
     uint8_t dts_ordered;
     uint8_t dts_misordered;
-
-#if FF_API_AVSTREAM_SIDE_DATA
-    /**
-     * Internal data to inject global side data
-     */
-    int inject_global_side_data;
-#endif
 
     /**
      * display aspect ratio (0 if unknown)
@@ -650,5 +639,16 @@ int ff_match_url_ext(const char *url, const char *extensions);
  */
 int ff_get_frame_filename(char *buf, int buf_size, const char *path,
                           int64_t number, int flags);
+
+/**
+ * Set a dictionary value to an ISO-8601 compliant timestamp string.
+ *
+ * @param dict pointer to a pointer to a dictionary struct. If *dict is NULL
+ *             a dictionary struct is allocated and put in *dict.
+ * @param key metadata key
+ * @param timestamp unix timestamp in microseconds
+ * @return <0 on error
+ */
+int ff_dict_set_timestamp(AVDictionary **dict, const char *key, int64_t timestamp);
 
 #endif /* AVFORMAT_INTERNAL_H */

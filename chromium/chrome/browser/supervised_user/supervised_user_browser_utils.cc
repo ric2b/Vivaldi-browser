@@ -49,7 +49,7 @@
 namespace supervised_user {
 
 bool IsSupportedChromeExtensionURL(const GURL& effective_url) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   static const char* const kCrxDownloadUrls[] = {
       "https://clients2.googleusercontent.com/crx/blobs/",
       "https://chrome.google.com/webstore/download/"};
@@ -85,32 +85,25 @@ bool IsSupportedChromeExtensionURL(const GURL& effective_url) {
   return false;
 #else
   return false;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 }
 
 bool SupervisedUserCanSkipExtensionParentApprovals(const Profile* profile) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   return profile->IsChild() &&
-         IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled() &&
          profile->GetPrefs()->GetBoolean(
              prefs::kSkipParentApprovalToInstallExtensions);
 #else
   return false;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 }
 
 bool AreExtensionsPermissionsEnabled(Profile* profile) {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   return profile->IsChild();
 #else
-  return profile->IsChild() &&
-         base::FeatureList::IsEnabled(
-             kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif  // BUILDFLAG(IS_CHROMEOS)
-#else
   return false;
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 }
 
 bool ShouldContentSkipParentAllowlistFiltering(content::WebContents* contents) {

@@ -88,7 +88,7 @@ void SurfaceImpl::setTimestampsEnabled(bool enabled)
     UNREACHABLE();
 }
 
-const angle::Format *SurfaceImpl::getD3DTextureColorFormat() const
+const angle::Format *SurfaceImpl::getClientBufferTextureColorFormat() const
 {
     UNREACHABLE();
     return nullptr;
@@ -187,6 +187,11 @@ EGLint SurfaceImpl::getCompressionRate(const egl::Display *display) const
 {
     UNREACHABLE();
     return EGL_SURFACE_COMPRESSION_FIXED_RATE_NONE_EXT;
+}
+
+bool SurfaceImpl::supportsSingleRenderBuffer() const
+{
+    return false;
 }
 
 }  // namespace rx

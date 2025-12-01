@@ -102,21 +102,22 @@ void av1_make_default_fullpel_ms_params(
   ms_params->mv_limits = x->mv_limits;
   av1_set_mv_search_range(&ms_params->mv_limits, ref_mv);
 
-  if (cpi->oxcf.algo_cfg.sharpness) {
+  if (cpi->oxcf.algo_cfg.sharpness == 3) {
     int top_margin = x->e_mbd.mi_row * MI_SIZE + 8;
     int left_margin = x->e_mbd.mi_col * MI_SIZE + 8;
-    int bottom_margin = cpi->common.cur_frame->height -
-                        mi_size_high[bsize] * MI_SIZE - top_margin + 16;
-    int right_margin = cpi->common.cur_frame->width -
-                       mi_size_wide[bsize] * MI_SIZE - left_margin + 16;
-    if (ms_params->mv_limits.row_min < -top_margin)
-      ms_params->mv_limits.row_min = -top_margin;
-    if (ms_params->mv_limits.row_max > bottom_margin)
-      ms_params->mv_limits.row_max = bottom_margin;
-    if (ms_params->mv_limits.col_min < -left_margin)
-      ms_params->mv_limits.col_min = -left_margin;
-    if (ms_params->mv_limits.col_max > right_margin)
-      ms_params->mv_limits.col_max = right_margin;
+    int bottom_margin =
+        cpi->common.height - mi_size_high[bsize] * MI_SIZE - top_margin + 16;
+    int right_margin =
+        cpi->common.width - mi_size_wide[bsize] * MI_SIZE - left_margin + 16;
+
+    bottom_margin = AOMMAX(bottom_margin, -top_margin);
+    right_margin = AOMMAX(right_margin, -left_margin);
+
+    FullMvLimits *mv_limits = &ms_params->mv_limits;
+    mv_limits->row_min = AOMMAX(mv_limits->row_min, -top_margin);
+    mv_limits->row_max = AOMMIN(mv_limits->row_max, bottom_margin);
+    mv_limits->col_min = AOMMAX(mv_limits->col_min, -left_margin);
+    mv_limits->col_max = AOMMIN(mv_limits->col_max, right_margin);
   }
 
   // Mvcost params
@@ -193,6 +194,26 @@ void av1_make_default_subpel_ms_params(SUBPEL_MOTION_SEARCH_PARAMS *ms_params,
 
   av1_set_subpel_mv_search_range(&ms_params->mv_limits, &x->mv_limits, ref_mv);
 
+  if (cpi->oxcf.algo_cfg.sharpness == 3) {
+    int top_margin = GET_MV_SUBPEL(x->e_mbd.mi_row * MI_SIZE + 8);
+    int left_margin = GET_MV_SUBPEL(x->e_mbd.mi_col * MI_SIZE + 8);
+    int bottom_margin =
+        GET_MV_SUBPEL(cpi->common.height - mi_size_high[bsize] * MI_SIZE -
+                      x->e_mbd.mi_row * MI_SIZE + 8);
+    int right_margin =
+        GET_MV_SUBPEL(cpi->common.width - mi_size_wide[bsize] * MI_SIZE -
+                      x->e_mbd.mi_col * MI_SIZE + 8);
+
+    bottom_margin = AOMMAX(bottom_margin, -top_margin);
+    right_margin = AOMMAX(right_margin, -left_margin);
+
+    SubpelMvLimits *mv_limits = &ms_params->mv_limits;
+    mv_limits->row_min = AOMMAX(mv_limits->row_min, -top_margin);
+    mv_limits->row_max = AOMMIN(mv_limits->row_max, bottom_margin);
+    mv_limits->col_min = AOMMAX(mv_limits->col_min, -left_margin);
+    mv_limits->col_max = AOMMIN(mv_limits->col_max, right_margin);
+  }
+
   // Mvcost params
   init_mv_cost_params(&ms_params->mv_cost_params, x->mv_costs, ref_mv,
                       x->errorperbit, x->sadperbit);
@@ -230,10 +251,10 @@ void av1_set_mv_search_range(FullMvLimits *mv_limits, const MV *mv) {
 
   // Get intersection of UMV window and valid MV window to reduce # of checks
   // in diamond search.
-  if (mv_limits->col_min < col_min) mv_limits->col_min = col_min;
-  if (mv_limits->col_max > col_max) mv_limits->col_max = col_max;
-  if (mv_limits->row_min < row_min) mv_limits->row_min = row_min;
-  if (mv_limits->row_max > row_max) mv_limits->row_max = row_max;
+  mv_limits->col_min = AOMMAX(mv_limits->col_min, col_min);
+  mv_limits->col_max = AOMMIN(mv_limits->col_max, col_max);
+  mv_limits->row_min = AOMMAX(mv_limits->row_min, row_min);
+  mv_limits->row_max = AOMMIN(mv_limits->row_max, row_max);
 
   mv_limits->col_max = AOMMAX(mv_limits->col_min, mv_limits->col_max);
   mv_limits->row_max = AOMMAX(mv_limits->row_min, mv_limits->row_max);
@@ -3359,7 +3380,6 @@ int av1_return_max_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   (void)cm;
   (void)start_mv;
   (void)start_mv_stats;
-  (void)distortion;
   (void)last_mv_search_list;
 
   const int allow_hp = ms_params->allow_hp;
@@ -3373,6 +3393,7 @@ int av1_return_max_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   // In the sub-pel motion search, if hp is not used, then the last bit of mv
   // has to be 0.
   lower_mv_precision(bestmv, allow_hp, 0);
+  *distortion = besterr;
   *sse1 = besterr;
   return besterr;
 }
@@ -3388,7 +3409,6 @@ int av1_return_min_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   (void)cm;
   (void)start_mv;
   (void)start_mv_stats;
-  (void)distortion;
   (void)last_mv_search_list;
 
   const int allow_hp = ms_params->allow_hp;
@@ -3401,6 +3421,7 @@ int av1_return_min_sub_pixel_mv(MACROBLOCKD *xd, const AV1_COMMON *const cm,
   // In the sub-pel motion search, if hp is not used, then the last bit of mv
   // has to be 0.
   lower_mv_precision(bestmv, allow_hp, 0);
+  *distortion = besterr;
   *sse1 = besterr;
   return besterr;
 }

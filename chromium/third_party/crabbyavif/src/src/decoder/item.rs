@@ -39,7 +39,10 @@ pub struct Item {
     pub has_unsupported_essential_property: bool,
     pub progressive: bool,
     pub idat: Vec<u8>,
-    pub derived_item_ids: Vec<u32>,
+    // Item ids of source items of a derived image item, in the same order as
+    // they appear in the `dimg` box. E.g. item ids for the cells of a grid
+    // item, or for the layers of an overlay item.
+    pub source_item_ids: Vec<u32>,
     pub data_buffer: Option<Vec<u8>>,
     pub is_made_up: bool, // Placeholder grid alpha item if true.
 }
@@ -109,106 +112,104 @@ impl Item {
     pub(crate) fn read_and_parse(
         &mut self,
         io: &mut GenericIO,
-        grid: &mut Grid,
-        overlay: &mut Overlay,
+        tile_info: &mut TileInfo,
         size_limit: Option<NonZero<u32>>,
         dimension_limit: Option<NonZero<u32>>,
     ) -> AvifResult<()> {
-        match self.item_type.as_str() {
-            "grid" => {
-                let mut stream = self.stream(io)?;
-                // unsigned int(8) version = 0;
-                let version = stream.read_u8()?;
-                if version != 0 {
-                    return Err(AvifError::InvalidImageGrid(
-                        "unsupported version for grid".into(),
-                    ));
-                }
-                // unsigned int(8) flags;
-                let flags = stream.read_u8()?;
-                // unsigned int(8) rows_minus_one;
-                grid.rows = stream.read_u8()? as u32 + 1;
-                // unsigned int(8) columns_minus_one;
-                grid.columns = stream.read_u8()? as u32 + 1;
-                if (flags & 1) == 1 {
-                    // unsigned int(32) output_width;
-                    grid.width = stream.read_u32()?;
-                    // unsigned int(32) output_height;
-                    grid.height = stream.read_u32()?;
-                } else {
-                    // unsigned int(16) output_width;
-                    grid.width = stream.read_u16()? as u32;
-                    // unsigned int(16) output_height;
-                    grid.height = stream.read_u16()? as u32;
-                }
-                Self::validate_derived_image_dimensions(
-                    grid.width,
-                    grid.height,
-                    size_limit,
-                    dimension_limit,
-                )?;
-                if stream.has_bytes_left()? {
-                    return Err(AvifError::InvalidImageGrid(
-                        "found unknown extra bytes in the grid box".into(),
-                    ));
-                }
-                Ok(())
+        if self.is_grid_item() {
+            let grid = &mut tile_info.grid;
+            let mut stream = self.stream(io)?;
+            // unsigned int(8) version = 0;
+            let version = stream.read_u8()?;
+            if version != 0 {
+                return Err(AvifError::NotImplemented);
             }
-            "iovl" => {
-                let reference_count = self.derived_item_ids.len();
-                let mut stream = self.stream(io)?;
-                // unsigned int(8) version = 0;
-                let version = stream.read_u8()?;
-                if version != 0 {
-                    return Err(AvifError::InvalidImageGrid(format!(
-                        "unsupported version {version} for iovl"
-                    )));
-                }
-                // unsigned int(8) flags;
-                let flags = stream.read_u8()?;
-                for j in 0..4 {
-                    // unsigned int(16) canvas_fill_value;
-                    overlay.canvas_fill_value[j] = stream.read_u16()?;
-                }
-                if (flags & 1) == 1 {
-                    // unsigned int(32) output_width;
-                    overlay.width = stream.read_u32()?;
-                    // unsigned int(32) output_height;
-                    overlay.height = stream.read_u32()?;
-                } else {
-                    // unsigned int(16) output_width;
-                    overlay.width = stream.read_u16()? as u32;
-                    // unsigned int(16) output_height;
-                    overlay.height = stream.read_u16()? as u32;
-                }
-                Self::validate_derived_image_dimensions(
-                    overlay.width,
-                    overlay.height,
-                    size_limit,
-                    dimension_limit,
-                )?;
-                for _ in 0..reference_count {
-                    if (flags & 1) == 1 {
-                        // unsigned int(32) horizontal_offset;
-                        overlay.horizontal_offsets.push(stream.read_i32()?);
-                        // unsigned int(32) vertical_offset;
-                        overlay.vertical_offsets.push(stream.read_i32()?);
-                    } else {
-                        // unsigned int(16) horizontal_offset;
-                        overlay.horizontal_offsets.push(stream.read_i16()? as i32);
-                        // unsigned int(16) vertical_offset;
-                        overlay.vertical_offsets.push(stream.read_i16()? as i32);
-                    }
-                }
-                if stream.has_bytes_left()? {
-                    return Err(AvifError::InvalidImageGrid(
-                        "found unknown extra bytes in the iovl box".into(),
-                    ));
-                }
-                Ok(())
+            // unsigned int(8) flags;
+            let flags = stream.read_u8()?;
+            // unsigned int(8) rows_minus_one;
+            grid.rows = stream.read_u8()? as u32 + 1;
+            // unsigned int(8) columns_minus_one;
+            grid.columns = stream.read_u8()? as u32 + 1;
+            if (flags & 1) == 1 {
+                // unsigned int(32) output_width;
+                grid.width = stream.read_u32()?;
+                // unsigned int(32) output_height;
+                grid.height = stream.read_u32()?;
+            } else {
+                // unsigned int(16) output_width;
+                grid.width = stream.read_u16()? as u32;
+                // unsigned int(16) output_height;
+                grid.height = stream.read_u16()? as u32;
             }
-            _ => Ok(()),
+            Self::validate_derived_image_dimensions(
+                grid.width,
+                grid.height,
+                size_limit,
+                dimension_limit,
+            )?;
+            if stream.has_bytes_left()? {
+                return Err(AvifError::InvalidImageGrid(
+                    "found unknown extra bytes in the grid box".into(),
+                ));
+            }
+        } else if self.is_overlay_item() {
+            let overlay = &mut tile_info.overlay;
+            let reference_count = self.source_item_ids.len();
+            let mut stream = self.stream(io)?;
+            // unsigned int(8) version = 0;
+            let version = stream.read_u8()?;
+            if version != 0 {
+                return Err(AvifError::NotImplemented);
+            }
+            // unsigned int(8) flags;
+            let flags = stream.read_u8()?;
+            for j in 0..4 {
+                // unsigned int(16) canvas_fill_value;
+                overlay.canvas_fill_value[j] = stream.read_u16()?;
+            }
+            if (flags & 1) == 1 {
+                // unsigned int(32) output_width;
+                overlay.width = stream.read_u32()?;
+                // unsigned int(32) output_height;
+                overlay.height = stream.read_u32()?;
+            } else {
+                // unsigned int(16) output_width;
+                overlay.width = stream.read_u16()? as u32;
+                // unsigned int(16) output_height;
+                overlay.height = stream.read_u16()? as u32;
+            }
+            Self::validate_derived_image_dimensions(
+                overlay.width,
+                overlay.height,
+                size_limit,
+                dimension_limit,
+            )?;
+            for _ in 0..reference_count {
+                if (flags & 1) == 1 {
+                    // unsigned int(32) horizontal_offset;
+                    overlay.horizontal_offsets.push(stream.read_i32()?);
+                    // unsigned int(32) vertical_offset;
+                    overlay.vertical_offsets.push(stream.read_i32()?);
+                } else {
+                    // unsigned int(16) horizontal_offset;
+                    overlay.horizontal_offsets.push(stream.read_i16()? as i32);
+                    // unsigned int(16) vertical_offset;
+                    overlay.vertical_offsets.push(stream.read_i16()? as i32);
+                }
+            }
+            if stream.has_bytes_left()? {
+                return Err(AvifError::InvalidImageGrid(
+                    "found unknown extra bytes in the iovl box".into(),
+                ));
+            }
+        } else if self.is_tone_mapped_item() {
+            let mut stream = self.stream(io)?;
+            tile_info.gainmap_metadata = mp4box::parse_tmap(&mut stream)?;
+        } else if self.is_sample_transform_item() {
+            let num_inputs = self.source_item_ids.len();
+            tile_info.sample_transform = mp4box::parse_sato(&mut self.stream(io)?, num_inputs)?;
         }
+        Ok(())
     }
 
     pub(crate) fn operating_point(&self) -> u8 {
@@ -270,26 +271,46 @@ impl Item {
         let codec_config = self
             .codec_config()
             .ok_or(AvifError::BmffParseFailed("missing av1C property".into()))?;
-        if self.item_type == "grid" || self.item_type == "iovl" {
-            for derived_item_id in &self.derived_item_ids {
-                let derived_item = items.get(derived_item_id).unwrap();
-                let derived_codec_config =
-                    derived_item
+        if self.is_derived_image_item() {
+            for derived_item_id in &self.source_item_ids {
+                let source_item = items.get(derived_item_id).unwrap();
+                let source_codec_config =
+                    source_item
                         .codec_config()
                         .ok_or(AvifError::BmffParseFailed(
                             "missing codec config property".into(),
                         ))?;
-                if codec_config != derived_codec_config {
+                // ISO/IEC 23000-22:2019 (MIAF), Section 7.3.11.4.1:
+                // All input image of a grid image item shall use the same coding format, chroma
+                // sampling format, and the same decoder configuration (see 7.3.6.2).
+                // TODO: this is only a requirement for grids, the check for overlays is kept
+                // for now to avoid behavior changes but it should be possible to remove it.
+                if (self.is_grid_item() || self.is_overlay_item())
+                    && codec_config != source_codec_config
+                {
                     return Err(AvifError::BmffParseFailed(
                         "codec config of derived items do not match".into(),
                     ));
+                }
+                if self.is_sample_transform_item()
+                    && (codec_config.pixel_format() != source_codec_config.pixel_format()
+                        || source_item.width != self.width
+                        || source_item.height != self.height)
+                {
+                    return Err(AvifError::BmffParseFailed(
+                            "pixel format or dimensions of input images for sato derived item do not match"
+                                .into(),
+                        ));
                 }
             }
         }
         match self.pixi() {
             Some(pixi) => {
                 for depth in &pixi.plane_depths {
-                    if *depth != codec_config.depth() {
+                    // Check that the depth in pixi matches the codec config.
+                    // For derived image items, the codec config comes from the first source item.
+                    // Sample transform items can have a depth different from their source items.
+                    if *depth != codec_config.depth() && !self.is_sample_transform_item() {
                         return Err(AvifError::BmffParseFailed(
                             "pixi depth does not match codec config depth".into(),
                         ));
@@ -328,6 +349,7 @@ impl Item {
     pub(crate) fn is_auxiliary_alpha(&self) -> bool {
         matches!(find_property!(&self.properties, AuxiliaryType),
                  Some(aux_type) if is_auxiliary_type_alpha(aux_type))
+            && !self.is_sample_transform_item()
     }
 
     pub(crate) fn is_image_codec_item(&self) -> bool {
@@ -339,8 +361,31 @@ impl Item {
         .contains(&self.item_type.as_str())
     }
 
+    pub(crate) fn is_grid_item(&self) -> bool {
+        self.item_type == "grid"
+    }
+
+    pub(crate) fn is_overlay_item(&self) -> bool {
+        self.item_type == "iovl"
+    }
+
+    pub(crate) fn is_tone_mapped_item(&self) -> bool {
+        self.item_type == "tmap"
+    }
+
+    pub(crate) fn is_sample_transform_item(&self) -> bool {
+        cfg!(feature = "sample_transform") && self.item_type == "sato"
+    }
+
+    pub(crate) fn is_derived_image_item(&self) -> bool {
+        self.is_grid_item()
+            || self.is_overlay_item()
+            || self.is_tone_mapped_item()
+            || self.is_sample_transform_item()
+    }
+
     pub(crate) fn is_image_item(&self) -> bool {
-        self.is_image_codec_item() || self.item_type == "grid" || self.item_type == "iovl"
+        self.is_image_codec_item() || self.is_derived_image_item()
     }
 
     pub(crate) fn should_skip(&self) -> bool {
@@ -368,10 +413,6 @@ impl Item {
 
     pub(crate) fn is_xmp(&self, color_id: Option<u32>) -> bool {
         self.is_metadata("mime", color_id) && self.content_type == "application/rdf+xml"
-    }
-
-    pub(crate) fn is_tmap(&self) -> bool {
-        self.is_metadata("tmap", None) && self.thumbnail_for_id == 0
     }
 
     pub(crate) fn max_extent(&self, sample: &DecodeSample) -> AvifResult<Extent> {

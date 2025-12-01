@@ -13,7 +13,6 @@
 #include "chrome/browser/ui/views/tabs/tab_slot_view.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
-#include "ui/gfx/geometry/point.h"
 
 namespace content {
 class WebContents;
@@ -45,13 +44,15 @@ struct TabDragData final {
   ~TabDragData();
   TabDragData(TabDragData&&);
 
-  // The WebContents being dragged.
-  raw_ptr<content::WebContents> contents = nullptr;
-
   // This is the index of the tab in `source_context_` when the drag
   // began. This is used to restore the previous state if the drag is aborted.
   // Nullopt if this is a group header.
-  std::optional<int> source_model_index = std::nullopt;
+  std::optional<int> source_model_index;
+
+  TabSlotView::ViewType view_type;
+
+  // The WebContents being dragged.
+  raw_ptr<content::WebContents> contents = nullptr;
 
   // If attached this is the view in `attached_context_`.
   raw_ptr<TabSlotView> attached_view = nullptr;

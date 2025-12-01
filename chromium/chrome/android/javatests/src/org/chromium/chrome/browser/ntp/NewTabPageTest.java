@@ -22,6 +22,7 @@ import static org.chromium.ui.test.util.ViewUtils.waitForView;
 
 import android.content.ComponentCallbacks2;
 import android.content.res.Resources;
+import android.graphics.Point;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
@@ -61,6 +62,7 @@ import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feed.FeedActionDelegate;
@@ -83,8 +85,9 @@ import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.util.BrowserUiUtils.ModuleTypeOnStartAndNtp;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
@@ -103,6 +106,7 @@ import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
+import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
@@ -129,7 +133,7 @@ import java.util.concurrent.TimeUnit;
 public class NewTabPageTest {
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
 
-    private static final int RENDER_TEST_REVISION = 6;
+    private static final int RENDER_TEST_REVISION = 8;
 
     private static final String HISTOGRAM_NTP_MODULE_CLICK = "NewTabPage.Module.Click";
     private static final String HISTOGRAM_NTP_MODULE_LONGCLICK = "NewTabPage.Module.LongClick";
@@ -137,7 +141,8 @@ public class NewTabPageTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Rule
-    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    public FreshCtaTransitTestRule mActivityTestRule =
+            ChromeTransitTestRules.freshChromeTabbedActivityRule();
 
     @Rule public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
     @Rule public SigninTestRule mSigninTestRule = new SigninTestRule();
@@ -177,7 +182,7 @@ public class NewTabPageTest {
 
     @Before
     public void setUp() throws Exception {
-        mActivityTestRule.startMainActivityWithURL("about:blank");
+        mActivityTestRule.startOnBlankPage();
         TemplateUrlService originalService =
                 ThreadUtils.runOnUiThreadBlocking(
                         () ->
@@ -224,17 +229,44 @@ public class NewTabPageTest {
         scrimManager.disableAnimationForTesting(false);
     }
 
+    /**
+     * If this test fails because of new buttons being added to the new tab page toolbar
+     * (immediately adjacent to the real URL bar), ensure those buttons are manually wired for Tab
+     * key navigation following this crbug.com/394169187.
+     */
+    @Test
+    @MediumTest
+    @Restriction(DeviceFormFactor.PHONE)
+    @Feature({"NewTabPage"})
+    public void testToolBar_Phone() {
+        ViewGroup toolBar = mActivityTestRule.getActivity().findViewById(R.id.toolbar);
+        int[] toolbarContentIds =
+                new int[] {
+                    R.id.home_button,
+                    R.id.home_page_buttons_stub,
+                    R.id.location_bar,
+                    R.id.toolbar_buttons
+                };
+        for (int i = 0; i < toolbarContentIds.length; i++) {
+            assertEquals(toolbarContentIds[i], toolBar.getChildAt(i).getId());
+        }
+
+        ViewGroup toolBarButtons = (ViewGroup) toolBar.getChildAt(toolbarContentIds.length - 1);
+        assertEquals(R.id.optional_toolbar_button_container, toolBarButtons.getChildAt(0).getId());
+    }
+
     @Test
     @MediumTest
     @Feature({"NewTabPage", "FeedNewTabPage", "RenderTest"})
+    @DisableFeatures({"FeedHeaderRemoval", "WebFeedKillSwitch"})
     public void testRender_ArticleSectionHeader() throws Exception {
         // Scroll to the article section header in case it is not visible.
         onView(withId(R.id.feed_stream_recycler_view))
                 .perform(RecyclerViewActions.scrollToPosition(ARTICLE_SECTION_HEADER_POSITION));
         waitForView((ViewGroup) mNtp.getView(), allOf(withId(R.id.header_title), isDisplayed()));
-        View view = mNtp.getCoordinatorForTesting().getSectionHeaderViewForTesting();
+        View view = mNtp.getCoordinatorForTesting().getHeaderViewForTesting();
         // Check header is expanded.
-        mRenderTestRule.render(view, "expandable_header_expanded");
+        mRenderTestRule.render(view, "expandable_header_expanded_v2");
 
         // Toggle header on the current tab.
         onView(withId(R.id.feed_stream_recycler_view))
@@ -242,7 +274,7 @@ public class NewTabPageTest {
         waitForView((ViewGroup) mNtp.getView(), allOf(withId(R.id.header_title), isDisplayed()));
         onView(withId(R.id.header_title)).perform(click());
         // Check header is collapsed.
-        mRenderTestRule.render(view, "expandable_header_collapsed_v2");
+        mRenderTestRule.render(view, "expandable_header_collapsed_v3");
     }
 
     /**
@@ -318,7 +350,7 @@ public class NewTabPageTest {
     public void testOpenMostVisitedItemInNewTab() throws ExecutionException {
         Assert.assertNotNull(mMvTilesLayout);
         ChromeTabUtils.invokeContextMenuAndOpenInANewTab(
-                mActivityTestRule,
+                mActivityTestRule.getActivity(),
                 mMvTilesLayout.getTileAt(0),
                 ContextMenuManager.ContextMenuItemId.OPEN_IN_NEW_TAB,
                 false,
@@ -335,7 +367,7 @@ public class NewTabPageTest {
         HistogramWatcher histogramWatcher = expectMostVisitedTilesRecordForNtpModuleClick();
 
         ChromeTabUtils.invokeContextMenuAndOpenInANewTab(
-                mActivityTestRule,
+                mActivityTestRule.getActivity(),
                 mMvTilesLayout.getTileAt(0),
                 ContextMenuManager.ContextMenuItemId.OPEN_IN_INCOGNITO_TAB,
                 true,
@@ -929,6 +961,27 @@ public class NewTabPageTest {
                 expectedTitleTopMargin,
                 ((MarginLayoutParams) suggestionsTileElement.getTitleView().getLayoutParams())
                         .topMargin);
+    }
+
+    /**
+     * Test whether the last touch position in {@link NewTabPage} is been set correctly. This is
+     * used for {@link
+     * org.chromium.chrome.browser.compositor.layouts.phone.NewBackgroundTabAnimationHostView}.
+     */
+    @Test
+    @SmallTest
+    @Feature({"NewTabPage"})
+    public void testLastTouchPosition() {
+        // TODO(crbug.com/415303495): Update test to assert with exact values.
+        Point ntpPoint = mNtp.getLastTouchPosition();
+        Point defaultPoint = new Point(-1, -1);
+        Assert.assertEquals(defaultPoint, ntpPoint);
+
+        Assert.assertNotNull(mMvTilesLayout);
+        View mvTile = mMvTilesLayout.getTileAt(0);
+
+        TouchCommon.longPressView(mvTile, 0, 0);
+        Assert.assertNotEquals(defaultPoint, ntpPoint);
     }
 
     private void verifyMostVisitedTileMargin() {

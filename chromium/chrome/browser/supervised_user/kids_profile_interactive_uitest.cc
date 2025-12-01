@@ -8,13 +8,12 @@
 
 #include "base/files/file_path.h"
 #include "base/logging.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "chrome/test/supervised_user/browser_user.h"
 #include "chrome/test/supervised_user/family_live_test.h"
 #include "components/signin/public/base/signin_switches.h"
-#include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/test_support/family_link_settings_state_management.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -46,8 +45,13 @@ bool IsYouTubeInterstitialDisplayedInIframe(Browser& browser,
                                             std::u16string_view tab_title,
                                             std::string_view iframe_name) {
   content::WebContents* web_contents = nullptr;
-  for (int i = 0; i < browser.GetTabStripModel()->GetTabCount(); ++i) {
-    if (browser.GetTabStripModel()->GetTitleAt(i) == tab_title) {
+  TabStripModel* const tab_strip_model = browser.tab_strip_model();
+  for (int i = 0; i < tab_strip_model->GetTabCount(); ++i) {
+    const std::u16string wc_title = tab_strip_model->GetTabAtIndex(i)
+                                        ->GetTabFeatures()
+                                        ->tab_ui_helper()
+                                        ->GetTitle();
+    if (wc_title == tab_title) {
       web_contents = browser.GetTabStripModel()->GetWebContentsAt(i);
       break;
     }
@@ -77,12 +81,7 @@ class KidsProfileUiTest
       : InteractiveFamilyLiveTest(
             GetParam(),
             /*extra_enabled_hosts=*/{kYouTubeHostPattern,
-                                     kGoogleVideoHostPattern}) {
-    // Enables UNO & Reauth for youtube.
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{{kForceSupervisedUserReauthenticationForYouTube}},
-        /*disabled_features=*/{});
-  }
+                                     kGoogleVideoHostPattern}) {}
 
   void SetUpOnMainThread() override {
     InteractiveFamilyLiveTest::SetUpOnMainThread();
@@ -100,7 +99,6 @@ class KidsProfileUiTest
   // Serves static page that embeds an arbitrary YouTube widget (actual video is
   // irrelevant).
   net::test_server::EmbeddedTestServer test_server_;
-  base::test::ScopedFeatureList feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_P(KidsProfileUiTest, DisplayInterstitialInPendingState) {

@@ -26,6 +26,7 @@
 #include "base/process/process_handle.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "content/browser/background_sync/background_sync_manager.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
@@ -249,7 +250,7 @@ class CookieRetrieverNetworkService
     for (const auto& url : urls) {
       cookie_manager->GetCookieList(
           url, cookie_options,
-          net::CookiePartitionKeyCollection::FromOptional(
+          net::CookiePartitionKeyCollection(
               net::CookiePartitionKey::FromNetworkIsolationKey(
                   network_isolation_key, site_for_cookies,
                   net::SchemefulSite(url), /*main_frame_navigation=*/false)),
@@ -1445,9 +1446,11 @@ void NetworkHandler::SetRenderer(int render_process_host_id,
     background_sync_restorer_->SetStoragePartition(storage_partition_);
 }
 
-Response NetworkHandler::Enable(std::optional<int> max_total_size,
-                                std::optional<int> max_resource_size,
-                                std::optional<int> max_post_data_size) {
+Response NetworkHandler::Enable(
+    std::optional<int> max_total_size,
+    std::optional<int> max_resource_size,
+    std::optional<int> max_post_data_size,
+    std::optional<bool> report_direct_socket_traffic) {
   enabled_ = true;
   return Response::FallThrough();
 }
@@ -2095,13 +2098,17 @@ String BuildServiceWorkerRouterSourceType(
   switch (type) {
     case network::mojom::ServiceWorkerRouterSourceType::kNetwork:
       return protocol::Network::ServiceWorkerRouterSourceEnum::Network;
-    case network::mojom::ServiceWorkerRouterSourceType::kRace:
+    case network::mojom::ServiceWorkerRouterSourceType::
+        kRaceNetworkAndFetchEvent:
       return protocol::Network::ServiceWorkerRouterSourceEnum::
           RaceNetworkAndFetchHandler;
     case network::mojom::ServiceWorkerRouterSourceType::kFetchEvent:
       return protocol::Network::ServiceWorkerRouterSourceEnum::FetchEvent;
     case network::mojom::ServiceWorkerRouterSourceType::kCache:
       return protocol::Network::ServiceWorkerRouterSourceEnum::Cache;
+    case network::mojom::ServiceWorkerRouterSourceType::kRaceNetworkAndCache:
+      return protocol::Network::ServiceWorkerRouterSourceEnum::
+          RaceNetworkAndCache;
   }
 }
 
@@ -2244,6 +2251,8 @@ String blockedReason(blink::ResourceRequestBlockedReason reason) {
       return protocol::Network::BlockedReasonEnum::Origin;
     case blink::ResourceRequestBlockedReason::kInspector:
       return protocol::Network::BlockedReasonEnum::Inspector;
+    case blink::ResourceRequestBlockedReason::kIntegrity:
+      return protocol::Network::BlockedReasonEnum::Integrity;
     case blink::ResourceRequestBlockedReason::kSubresourceFilter:
       return protocol::Network::BlockedReasonEnum::SubresourceFilter;
     case blink::ResourceRequestBlockedReason::kContentType:
@@ -3292,13 +3301,6 @@ makeCrossOriginOpenerPolicyValue(
     case network::mojom::CrossOriginOpenerPolicyValue::kSameOriginPlusCoep:
       return protocol::Network::CrossOriginOpenerPolicyValueEnum::
           SameOriginPlusCoep;
-    case network::mojom::CrossOriginOpenerPolicyValue::kRestrictProperties:
-      return protocol::Network::CrossOriginOpenerPolicyValueEnum::
-          RestrictProperties;
-    case network::mojom::CrossOriginOpenerPolicyValue::
-        kRestrictPropertiesPlusCoep:
-      return protocol::Network::CrossOriginOpenerPolicyValueEnum::
-          RestrictPropertiesPlusCoep;
     case network::mojom::CrossOriginOpenerPolicyValue::kNoopenerAllowPopups:
       return protocol::Network::CrossOriginOpenerPolicyValueEnum::
           NoopenerAllowPopups;

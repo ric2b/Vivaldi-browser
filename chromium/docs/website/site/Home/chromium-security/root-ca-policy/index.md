@@ -1,4 +1,5 @@
 ---
+redirect: https://googlechrome.github.io/chromerootprogram/
 breadcrumbs:
 - - /Home
   - Chromium

@@ -9,9 +9,12 @@
 #import "base/check.h"
 #import "base/memory/ptr_util.h"
 #import "base/strings/sys_string_conversions.h"
+#import "base/time/time.h"
 #import "components/infobars/core/infobar.h"
 #import "components/infobars/core/infobar_delegate.h"
 #import "components/infobars/core/infobar_manager.h"
+#import "components/prefs/pref_service.h"
+#import "components/sync/base/features.h"
 #import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_service_utils.h"
 #import "ios/chrome/browser/infobars/model/infobar_ios.h"
@@ -19,24 +22,69 @@
 #import "ios/chrome/browser/infobars/model/infobar_utils.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_presenter.h"
 #import "ios/chrome/browser/settings/model/sync/utils/sync_util.h"
+#import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
+
+namespace {
+
+// Whether the sync error notification timeout is still active since the last
+// error dismissal time.
+bool SyncErrorNotificationsPaused(ProfileIOS* profile) {
+  CHECK(profile);
+  base::Time now = base::Time::Now();
+  base::Time last_dismissal = profile->GetPrefs()->GetTime(
+      prefs::kIosSyncInfobarErrorLastDismissedTimestamp);
+
+  // In case pref time is set too far in the future due to a system time
+  // error, the infobar would not be displayed for a long period. To prevent
+  // that, bypass the check if `last_dismissal` is set to more than twice the
+  // timeout time in the future.
+  if (now + 2 * kSyncErrorInfobarTimeout < last_dismissal) {
+    return false;
+  }
+
+  return now < last_dismissal + kSyncErrorInfobarTimeout;
+}
+
+syncer::TrustedVaultUserActionTriggerForUMA
+TrustedVaultTriggerFromInfoBarTrigger(SyncErrorInfoBarTrigger trigger) {
+  switch (trigger) {
+    case SyncErrorInfoBarTrigger::kNewTabOpened:
+      return syncer::TrustedVaultUserActionTriggerForUMA::kNewTabPageInfobar;
+    case SyncErrorInfoBarTrigger::kPasswordFormParsed:
+      return syncer::TrustedVaultUserActionTriggerForUMA::
+          kPasswordManagerErrorMessage;
+  }
+  NOTREACHED();
+}
+
+}  // namespace
 
 // static
 bool SyncErrorInfoBarDelegate::Create(infobars::InfoBarManager* infobar_manager,
                                       ProfileIOS* profile,
-                                      id<SyncPresenter> presenter) {
-  DCHECK(infobar_manager);
+                                      id<SyncPresenter> presenter,
+                                      SyncErrorInfoBarTrigger trigger) {
+  if (base::FeatureList::IsEnabled(
+          syncer::kSyncTrustedVaultInfobarImprovements) &&
+      SyncErrorNotificationsPaused(profile)) {
+    return false;
+  }
+
+  CHECK(infobar_manager);
   std::unique_ptr<SyncErrorInfoBarDelegate> delegate(
-      new SyncErrorInfoBarDelegate(profile, presenter));
+      new SyncErrorInfoBarDelegate(profile, presenter, trigger));
   std::unique_ptr<InfoBarIOS> infobar = std::make_unique<InfoBarIOS>(
       InfobarType::kInfobarTypeSyncError, std::move(delegate));
   return !!infobar_manager->AddInfoBar(std::move(infobar));
 }
 
-SyncErrorInfoBarDelegate::SyncErrorInfoBarDelegate(ProfileIOS* profile,
-                                                   id<SyncPresenter> presenter)
-    : profile_(profile), presenter_(presenter) {
+SyncErrorInfoBarDelegate::SyncErrorInfoBarDelegate(
+    ProfileIOS* profile,
+    id<SyncPresenter> presenter,
+    SyncErrorInfoBarTrigger trigger)
+    : profile_(profile), presenter_(presenter), trigger_(trigger) {
   DCHECK(!profile->IsOffTheRecord());
   syncer::SyncService* sync_service =
       SyncServiceFactory::GetForProfile(profile_);
@@ -101,18 +149,16 @@ bool SyncErrorInfoBarDelegate::Accept() {
         kNeedsTrustedVaultKeyForPasswords:
     case syncer::SyncService::UserActionableError::
         kNeedsTrustedVaultKeyForEverything:
-      [presenter_
-          showTrustedVaultReauthForFetchKeysWithTrigger:
-              syncer::TrustedVaultUserActionTriggerForUMA::kNewTabPageInfobar];
+      [presenter_ showTrustedVaultReauthForFetchKeysWithTrigger:
+                      TrustedVaultTriggerFromInfoBarTrigger(trigger_)];
       break;
 
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForPasswords:
     case syncer::SyncService::UserActionableError::
         kTrustedVaultRecoverabilityDegradedForEverything:
-      [presenter_
-          showTrustedVaultReauthForDegradedRecoverabilityWithTrigger:
-              syncer::TrustedVaultUserActionTriggerForUMA::kNewTabPageInfobar];
+      [presenter_ showTrustedVaultReauthForDegradedRecoverabilityWithTrigger:
+                      TrustedVaultTriggerFromInfoBarTrigger(trigger_)];
       break;
   }
 
@@ -120,6 +166,11 @@ bool SyncErrorInfoBarDelegate::Accept() {
 }
 
 void SyncErrorInfoBarDelegate::InfoBarDismissed() {
+  if (base::FeatureList::IsEnabled(
+          syncer::kSyncTrustedVaultInfobarImprovements)) {
+    profile_->GetPrefs()->SetTime(
+        prefs::kIosSyncInfobarErrorLastDismissedTimestamp, base::Time::Now());
+  }
   LogSyncErrorInfobarDismissed(error_state_);
   ConfirmInfoBarDelegate::InfoBarDismissed();
 }
@@ -144,9 +195,39 @@ void SyncErrorInfoBarDelegate::OnStateChanged(syncer::SyncService* sync) {
     infobars::InfoBarManager* infobar_manager = infobar->owner();
     if (infobar_manager) {
       std::unique_ptr<ConfirmInfoBarDelegate> new_infobar_delegate(
-          new SyncErrorInfoBarDelegate(profile_, presenter_));
+          new SyncErrorInfoBarDelegate(profile_, presenter_, trigger_));
       infobar_manager->ReplaceInfoBar(
           infobar, CreateConfirmInfoBar(std::move(new_infobar_delegate)));
     }
   }
+}
+
+void SyncErrorInfoBarDelegate::InfoBarDismissedByTimeout() const {
+  if (base::FeatureList::IsEnabled(
+          syncer::kSyncTrustedVaultInfobarImprovements)) {
+    profile_->GetPrefs()->SetTime(
+        prefs::kIosSyncInfobarErrorLastDismissedTimestamp, base::Time::Now());
+  }
+}
+
+bool SyncErrorInfoBarDelegate::DisplayPasswordErrorIcon() const {
+  switch (error_state_) {
+    case syncer::SyncService::UserActionableError::
+        kNeedsTrustedVaultKeyForPasswords:
+    case syncer::SyncService::UserActionableError::
+        kTrustedVaultRecoverabilityDegradedForPasswords:
+      return base::FeatureList::IsEnabled(
+                 syncer::kSyncTrustedVaultInfobarImprovements) ||
+             base::FeatureList::IsEnabled(
+                 syncer::kSyncTrustedVaultInfobarMessageImprovements);
+    case syncer::SyncService::UserActionableError::kNone:
+    case syncer::SyncService::UserActionableError::kSignInNeedsUpdate:
+    case syncer::SyncService::UserActionableError::kNeedsPassphrase:
+    case syncer::SyncService::UserActionableError::
+        kNeedsTrustedVaultKeyForEverything:
+    case syncer::SyncService::UserActionableError::
+        kTrustedVaultRecoverabilityDegradedForEverything:
+      return false;
+  }
+  NOTREACHED();
 }

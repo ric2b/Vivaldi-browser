@@ -62,7 +62,7 @@ private:
                 { 0.0f, 0.0f, 0.0f, 0.0f },
                 /* requiresMSAA= */ false,
                 skgpu::Swizzle("a000"),
-                caps->getDstReadStrategy(info));
+                caps->getDstReadStrategy());
 
         PrecompileImageFiltersPriv::CreateBlurImageFilterPipelines(keyContext, gatherer,
                                                                    coverageRenderPassDesc,
@@ -98,7 +98,7 @@ private:
             coverageOptions.priv().buildCombinations(
                     keyContext,
                     gatherer,
-                    static_cast<DrawTypeFlags>(InternalDrawTypeFlags::kAnalyticRRect),
+                    DrawTypeFlags::kAnalyticRRect,
                     /* withPrimitiveBlender= */ false,
                     Coverage::kSingleChannel,
                     coverageRenderPassDesc,

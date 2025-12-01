@@ -92,18 +92,24 @@ ByteString GetWordRenderString(ByteStringView words) {
   return PDF_EncodeString(words) + " Tj\n";
 }
 
+ByteString StringFromFontNameAndSize(const ByteString& font_name,
+                                     float font_size) {
+  fxcrt::ostringstream font_stream;
+  if (font_name.GetLength() > 0 && font_size > 0) {
+    font_stream << "/" << font_name << " ";
+    WriteFloat(font_stream, font_size) << " Tf\n";
+  }
+  return ByteString(font_stream);
+}
+
 ByteString GetFontSetString(IPVT_FontMap* font_map,
                             int32_t font_index,
                             float font_size) {
-  fxcrt::ostringstream font_stream;
-  if (font_map) {
-    ByteString font_alias = font_map->GetPDFFontAlias(font_index);
-    if (font_alias.GetLength() > 0 && font_size > 0) {
-      font_stream << "/" << font_alias << " ";
-      WriteFloat(font_stream, font_size) << " Tf\n";
-    }
+  if (!font_map) {
+    return ByteString();
   }
-  return ByteString(font_stream);
+  return StringFromFontNameAndSize(font_map->GetPDFFontAlias(font_index),
+                                   font_size);
 }
 
 void SetVtFontSize(float font_size, CPVT_VariableText& vt) {
@@ -246,20 +252,6 @@ AnnotationDimensionsAndColor GetAnnotationDimensionsAndColor(
   };
 }
 
-ByteString GetDefaultAppearanceString(CPDF_Dictionary* annot_dict,
-                                      CPDF_Dictionary* form_dict) {
-  ByteString default_appearance_string;
-  RetainPtr<const CPDF_Object> default_appearance_object =
-      CPDF_FormField::GetFieldAttrForDict(annot_dict, "DA");
-  if (default_appearance_object) {
-    default_appearance_string = default_appearance_object->GetString();
-  }
-  if (default_appearance_string.IsEmpty()) {
-    default_appearance_string = form_dict->GetByteStringFor("DA");
-  }
-  return default_appearance_string;
-}
-
 struct DefaultAppearanceInfo {
   ByteString font_name;
   float font_size;
@@ -267,22 +259,17 @@ struct DefaultAppearanceInfo {
 };
 
 std::optional<DefaultAppearanceInfo> GetDefaultAppearanceInfo(
-    const ByteString& default_appearance_string) {
-  if (default_appearance_string.IsEmpty()) {
-    return std::nullopt;
-  }
-
-  CPDF_DefaultAppearance appearance(default_appearance_string);
-
-  float font_size = 0;
-  std::optional<ByteString> font = appearance.GetFont(&font_size);
-  if (!font.has_value()) {
+    const CPDF_Dictionary* annot_dict,
+    const CPDF_Dictionary* acroform_dict) {
+  CPDF_DefaultAppearance appearance(annot_dict, acroform_dict);
+  auto maybe_font_name_and_size = appearance.GetFont();
+  if (!maybe_font_name_and_size.has_value()) {
     return std::nullopt;
   }
 
   return DefaultAppearanceInfo{
-      .font_name = font.value(),
-      .font_size = font_size,
+      .font_name = maybe_font_name_and_size.value().name,
+      .font_size = maybe_font_name_and_size.value().size,
       .text_color = appearance.GetColor().value_or(CFX_Color())};
 }
 
@@ -314,7 +301,7 @@ bool ValidateOrCreateFontResources(CPDF_Document* doc,
     return false;
   }
 
-  if (!font_resource_dict->KeyExist(font_name)) {
+  if (!font_resource_dict->KeyExist(font_name.AsStringView())) {
     font_resource_dict->SetNewFor<CPDF_Reference>(font_name, doc,
                                                   font_dict->GetObjNum());
   }
@@ -639,7 +626,7 @@ RetainPtr<CPDF_Dictionary> GetFontFromDrFontDictOrGenerateFallback(
     CPDF_Dictionary* dr_font_dict,
     const ByteString& font_name) {
   RetainPtr<CPDF_Dictionary> font_dict =
-      dr_font_dict->GetMutableDictFor(font_name);
+      dr_font_dict->GetMutableDictFor(font_name.AsStringView());
   if (font_dict) {
     return font_dict;
   }
@@ -1057,8 +1044,7 @@ bool GenerateFreeTextAP(CPDF_Document* doc, CPDF_Dictionary* annot_dict) {
   }
 
   std::optional<DefaultAppearanceInfo> default_appearance_info =
-      GetDefaultAppearanceInfo(
-          GetDefaultAppearanceString(annot_dict, form_dict));
+      GetDefaultAppearanceInfo(annot_dict, form_dict);
   if (!default_appearance_info.has_value()) {
     return false;
   }
@@ -1394,10 +1380,11 @@ bool GenerateSquigglyAP(CPDF_Document* doc, CPDF_Dictionary* annot_dict) {
       }
 
       float remainder = rect.right - (x - kDelta);
-      if (isUpwards)
+      if (isUpwards) {
         app_stream << rect.right << " " << bottom + remainder << " l ";
-      else
+      } else {
         app_stream << rect.right << " " << top - remainder << " l ";
+      }
 
       app_stream << "S\n";
     }
@@ -1459,8 +1446,7 @@ void CPDF_GenerateAP::GenerateFormAP(CPDF_Document* doc,
   }
 
   std::optional<DefaultAppearanceInfo> default_appearance_info =
-      GetDefaultAppearanceInfo(
-          GetDefaultAppearanceString(annot_dict, form_dict));
+      GetDefaultAppearanceInfo(annot_dict, form_dict);
   if (!default_appearance_info.has_value()) {
     return;
   }
@@ -1620,4 +1606,45 @@ bool CPDF_GenerateAP::GenerateAnnotAP(CPDF_Document* doc,
     default:
       return false;
   }
+}
+
+// static
+bool CPDF_GenerateAP::GenerateDefaultAppearanceWithColor(
+    CPDF_Document* doc,
+    CPDF_Dictionary* annot_dict,
+    const CFX_Color& color) {
+  RetainPtr<CPDF_Dictionary> root_dict = doc->GetMutableRoot();
+  if (!root_dict) {
+    return false;
+  }
+
+  RetainPtr<CPDF_Dictionary> acroform_dict =
+      root_dict->GetMutableDictFor("AcroForm");
+  if (!acroform_dict) {
+    acroform_dict = CPDF_InteractiveForm::InitAcroFormDict(doc);
+    CHECK(acroform_dict);
+  }
+
+  CPDF_DefaultAppearance default_appearance(annot_dict, acroform_dict);
+  auto maybe_font_name_and_size = default_appearance.GetFont();
+  if (!maybe_font_name_and_size.has_value()) {
+    return false;
+  }
+
+  ByteString new_default_appearance_font_name_and_size =
+      StringFromFontNameAndSize(maybe_font_name_and_size.value().name,
+                                maybe_font_name_and_size.value().size);
+  if (new_default_appearance_font_name_and_size.IsEmpty()) {
+    return false;
+  }
+
+  ByteString new_default_appearance_color =
+      GenerateColorAP(color, PaintOperation::kFill);
+  CHECK(!new_default_appearance_color.IsEmpty());
+  annot_dict->SetNewFor<CPDF_String>(
+      "DA",
+      new_default_appearance_font_name_and_size + new_default_appearance_color);
+
+  // TODO(thestig): Call GenerateAnnotAP();
+  return true;
 }

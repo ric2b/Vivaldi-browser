@@ -18,6 +18,7 @@ package sync_pb;
 
 import "components/sync/protocol/unique_position.proto";
 
+// LINT.IfChange(SharedTabGroupDataSpecifics)
 message SharedTabGroupDataSpecifics {
   // Unique identifier for this entity.
   optional string guid = 1;
@@ -28,6 +29,13 @@ message SharedTabGroupDataSpecifics {
   }
 
   optional int64 update_time_windows_epoch_micros = 5;
+
+  // A mechanism to identify the client version that wrote this specifics.
+  // Designed to aid business logic when reading newly added fields that
+  // didn't exist in older clients.
+  // The client version must be incremented whenever a new field is added to the
+  // specifics.
+  optional int32 version = 6;
 
   reserved 2;
 }
@@ -70,3 +78,4 @@ message SharedTab {
   reserved 3;
   reserved "favicon_url";
 }
+// LINT.ThenChange(//components/saved_tab_groups/internal/shared_tab_group_data_sync_bridge.cc:TrimAllSupportedFieldsFromRemoteSpecifics)

@@ -123,8 +123,9 @@ void WriteLine(fxcrt::ostringstream& stream, const CFX_PointF& point) {
 void WriteClosedLoop(fxcrt::ostringstream& stream,
                      pdfium::span<const CFX_PointF> points) {
   WriteMove(stream, points[0]);
-  for (const auto& point : points.subspan(1))
+  for (const auto& point : points.subspan<1u>()) {
     WriteLine(stream, point);
+  }
   WriteLine(stream, points[0]);
 }
 
@@ -591,12 +592,14 @@ ByteString GetRadioButtonAppStream(const CFX_FloatRect& rcBBox,
 ByteString GetFontSetString(IPVT_FontMap* pFontMap,
                             int32_t nFontIndex,
                             float fFontSize) {
-  if (!pFontMap)
+  if (!pFontMap) {
     return ByteString();
+  }
 
   ByteString sFontAlias = pFontMap->GetPDFFontAlias(nFontIndex);
-  if (sFontAlias.GetLength() <= 0 || fFontSize <= 0)
+  if (sFontAlias.GetLength() <= 0 || fFontSize <= 0) {
     return ByteString();
+  }
 
   fxcrt::ostringstream sRet;
   sRet << "/" << sFontAlias << " " << fFontSize << " "
@@ -605,8 +608,9 @@ ByteString GetFontSetString(IPVT_FontMap* pFontMap,
 }
 
 ByteString GetWordRenderString(ByteStringView strWords) {
-  if (strWords.IsEmpty())
+  if (strWords.IsEmpty()) {
     return ByteString();
+  }
   return PDF_EncodeString(strWords) + " " + kShowTextOperator + "\n";
 }
 
@@ -690,8 +694,9 @@ ByteString GetEditAppStream(CPWL_EditImpl* pEdit,
     }
   }
 
-  if (!sWords.IsEmpty())
+  if (!sWords.IsEmpty()) {
     sEditStream << GetWordRenderString(sWords.AsStringView());
+  }
 
   fxcrt::ostringstream sAppStream;
   if (sEditStream.tellp() > 0) {
@@ -703,20 +708,23 @@ ByteString GetEditAppStream(CPWL_EditImpl* pEdit,
 ByteString GenerateIconAppStream(CPDF_IconFit& fit,
                                  RetainPtr<CPDF_Stream> pIconStream,
                                  const CFX_FloatRect& rcIcon) {
-  if (rcIcon.IsEmpty() || !pIconStream)
+  if (rcIcon.IsEmpty() || !pIconStream) {
     return ByteString();
+  }
 
   CPWL_Wnd::CreateParams cp(nullptr, nullptr, nullptr);
   cp.dwFlags = PWS_VISIBLE;
   auto pWnd = std::make_unique<CPWL_Wnd>(cp, nullptr);
   pWnd->Realize();
-  if (!pWnd->Move(rcIcon, false, false))
+  if (!pWnd->Move(rcIcon, false, false)) {
     return ByteString();
+  }
 
   auto pPDFIcon = std::make_unique<CPDF_Icon>(std::move(pIconStream));
   ByteString sAlias = pPDFIcon->GetImageAlias();
-  if (sAlias.GetLength() <= 0)
+  if (sAlias.GetLength() <= 0) {
     return ByteString();
+  }
 
   const CFX_FloatRect rcPlate = pWnd->GetClientRect();
   const CFX_SizeF image_size = pPDFIcon->GetImageSize();
@@ -760,10 +768,11 @@ ByteString GetPushButtonAppStream(const CFX_FloatRect& rcBBox,
   pEdit->SetAlignmentV(1);
   pEdit->SetMultiLine(false);
   pEdit->SetAutoReturn(false);
-  if (FXSYS_IsFloatZero(fFontSize))
+  if (FXSYS_IsFloatZero(fFontSize)) {
     pEdit->SetAutoFontSize(true);
-  else
+  } else {
     pEdit->SetFontSize(fFontSize);
+  }
 
   pEdit->Initialize();
   pEdit->SetText(sLabel);
@@ -921,8 +930,9 @@ ByteString GetPushButtonAppStream(const CFX_FloatRect& rcBBox,
     }
   }
 
-  if (sTemp.tellp() <= 0)
+  if (sTemp.tellp() <= 0) {
     return ByteString();
+  }
 
   fxcrt::ostringstream sAppStream;
   {
@@ -1036,8 +1046,9 @@ ByteString GetBorderAppStreamInternal(const CFX_FloatRect& rect,
 }
 
 ByteString GetDropButtonAppStream(const CFX_FloatRect& rcBBox) {
-  if (rcBBox.IsEmpty())
+  if (rcBBox.IsEmpty()) {
     return ByteString();
+  }
 
   fxcrt::ostringstream sAppStream;
   {
@@ -1089,19 +1100,22 @@ ByteString GetRectFillAppStream(const CFX_FloatRect& rect,
 }
 
 void SetDefaultIconName(CPDF_Stream* pIcon, const char* name) {
-  if (!pIcon)
+  if (!pIcon) {
     return;
+  }
 
   RetainPtr<CPDF_Dictionary> pImageDict = pIcon->GetMutableDict();
-  if (pImageDict->KeyExist("Name"))
+  if (pImageDict->KeyExist("Name")) {
     return;
+  }
 
   pImageDict->SetNewFor<CPDF_String>("Name", name);
 }
 
 std::optional<CheckStyle> CheckStyleFromCaption(const WideString& caption) {
-  if (caption.IsEmpty())
+  if (caption.IsEmpty()) {
     return std::nullopt;
+  }
 
   // Character values are ZapfDingbats encodings of named glyphs.
   switch (caption[0]) {
@@ -1190,38 +1204,41 @@ void CPDFSDK_AppStream::SetAsPushButton() {
   std::optional<CFX_Color> color = da.GetColor();
   CFX_Color crText = color.value_or(CFX_Color(CFX_Color::Type::kGray, 0));
 
-  float fFontSize;
-  ByteString csNameTag;
-  std::optional<ByteString> font = da.GetFont(&fFontSize);
-  if (font.has_value())
-    csNameTag = font.value();
-  else
-    fFontSize = 12.0f;
+  const float font_size =
+      da.GetFont()
+          .value_or(CPDF_DefaultAppearance::FontNameAndSize{.size = 12.0f})
+          .size;
 
   WideString csWCaption;
   WideString csNormalCaption;
   WideString csRolloverCaption;
   WideString csDownCaption;
-  if (pControl->HasMKEntry(pdfium::appearance::kCA))
+  if (pControl->HasMKEntry(pdfium::appearance::kCA)) {
     csNormalCaption = pControl->GetNormalCaption();
+  }
 
-  if (pControl->HasMKEntry(pdfium::appearance::kRC))
+  if (pControl->HasMKEntry(pdfium::appearance::kRC)) {
     csRolloverCaption = pControl->GetRolloverCaption();
+  }
 
-  if (pControl->HasMKEntry(pdfium::appearance::kAC))
+  if (pControl->HasMKEntry(pdfium::appearance::kAC)) {
     csDownCaption = pControl->GetDownCaption();
+  }
 
   RetainPtr<CPDF_Stream> pNormalIcon;
   RetainPtr<CPDF_Stream> pRolloverIcon;
   RetainPtr<CPDF_Stream> pDownIcon;
-  if (pControl->HasMKEntry(pdfium::appearance::kI))
+  if (pControl->HasMKEntry(pdfium::appearance::kI)) {
     pNormalIcon = pControl->GetNormalIcon();
+  }
 
-  if (pControl->HasMKEntry(pdfium::appearance::kRI))
+  if (pControl->HasMKEntry(pdfium::appearance::kRI)) {
     pRolloverIcon = pControl->GetRolloverIcon();
+  }
 
-  if (pControl->HasMKEntry(pdfium::appearance::kIX))
+  if (pControl->HasMKEntry(pdfium::appearance::kIX)) {
     pDownIcon = pControl->GetDownIcon();
+  }
 
   SetDefaultIconName(pNormalIcon.Get(), "ImgA");
   SetDefaultIconName(pRolloverIcon.Get(), "ImgB");
@@ -1237,11 +1254,12 @@ void CPDFSDK_AppStream::SetAsPushButton() {
                                    crRightBottom, nBorderStyle, dsBorder) +
         GetPushButtonAppStream(iconFit.GetFittingBounds() ? rcWindow : rcClient,
                                &font_map, pNormalIcon, iconFit, csNormalCaption,
-                               crText, fFontSize, nLayout);
+                               crText, font_size, nLayout);
 
     Write("N", csAP, ByteString());
-    if (pNormalIcon)
+    if (pNormalIcon) {
       AddImage("N", pNormalIcon.Get());
+    }
 
     CPDF_FormControl::HighlightingMode eHLM = pControl->GetHighlightingMode();
     if (eHLM != CPDF_FormControl::kPush && eHLM != CPDF_FormControl::kToggle) {
@@ -1264,11 +1282,12 @@ void CPDFSDK_AppStream::SetAsPushButton() {
                                    crRightBottom, nBorderStyle, dsBorder) +
         GetPushButtonAppStream(iconFit.GetFittingBounds() ? rcWindow : rcClient,
                                &font_map, pRolloverIcon, iconFit,
-                               csRolloverCaption, crText, fFontSize, nLayout);
+                               csRolloverCaption, crText, font_size, nLayout);
 
     Write("R", csAP, ByteString());
-    if (pRolloverIcon)
+    if (pRolloverIcon) {
       AddImage("R", pRolloverIcon.Get());
+    }
 
     if (csDownCaption.IsEmpty() && !pDownIcon) {
       csDownCaption = csNormalCaption;
@@ -1300,11 +1319,12 @@ void CPDFSDK_AppStream::SetAsPushButton() {
                                    crRightBottom, nBorderStyle, dsBorder) +
         GetPushButtonAppStream(iconFit.GetFittingBounds() ? rcWindow : rcClient,
                                &font_map, pDownIcon, iconFit, csDownCaption,
-                               crText, fFontSize, nLayout);
+                               crText, font_size, nLayout);
 
     Write("D", csAP, ByteString());
-    if (pDownIcon)
+    if (pDownIcon) {
       AddImage("D", pDownIcon.Get());
+    }
   }
 }
 
@@ -1383,8 +1403,9 @@ void CPDFSDK_AppStream::SetAsCheckBox() {
   Write("D", csAP_D_OFF, "Off");
 
   ByteString csAS = widget_->GetAppState();
-  if (csAS.IsEmpty())
+  if (csAS.IsEmpty()) {
     widget_->SetAppStateOff();
+  }
 }
 
 void CPDFSDK_AppStream::SetAsRadioButton() {
@@ -1499,8 +1520,9 @@ void CPDFSDK_AppStream::SetAsRadioButton() {
   Write("D", csAP_D_OFF, "Off");
 
   ByteString csAS = widget_->GetAppState();
-  if (csAS.IsEmpty())
+  if (csAS.IsEmpty()) {
     widget_->SetAppStateOff();
+  }
 }
 
 void CPDFSDK_AppStream::SetAsComboBox(std::optional<WideString> sValue) {
@@ -1529,10 +1551,11 @@ void CPDFSDK_AppStream::SetAsComboBox(std::optional<WideString> sValue) {
   pEdit->SetAlignmentV(1);
 
   float fFontSize = widget_->GetFontSize();
-  if (FXSYS_IsFloatZero(fFontSize))
+  if (FXSYS_IsFloatZero(fFontSize)) {
     pEdit->SetAutoFontSize(true);
-  else
+  } else {
     pEdit->SetFontSize(fFontSize);
+  }
 
   pEdit->Initialize();
   if (sValue.has_value()) {
@@ -1693,8 +1716,9 @@ void CPDFSDK_AppStream::SetAsTextField(std::optional<WideString> sValue) {
   float fFontSize = widget_->GetFontSize();
 
 #ifdef PDF_ENABLE_XFA
-  if (!sValue.has_value() && widget_->GetMixXFAWidget())
+  if (!sValue.has_value() && widget_->GetMixXFAWidget()) {
     sValue = widget_->GetValue();
+  }
 #endif  // PDF_ENABLE_XFA
 
   if (nMaxLen > 0) {
@@ -1705,16 +1729,18 @@ void CPDFSDK_AppStream::SetAsTextField(std::optional<WideString> sValue) {
             font_map.GetPDFFont(0).Get(), rcClient, nMaxLen);
       }
     } else {
-      if (sValue.has_value())
+      if (sValue.has_value()) {
         nMaxLen = pdfium::checked_cast<int>(sValue.value().GetLength());
+      }
       pEdit->SetLimitChar(nMaxLen);
     }
   }
 
-  if (FXSYS_IsFloatZero(fFontSize))
+  if (FXSYS_IsFloatZero(fFontSize)) {
     pEdit->SetAutoFontSize(true);
-  else
+  } else {
     pEdit->SetFontSize(fFontSize);
+  }
 
   pEdit->Initialize();
   pEdit->SetText(sValue.value_or(pField->GetValue()));
@@ -1800,7 +1826,8 @@ void CPDFSDK_AppStream::SetAsTextField(std::optional<WideString> sValue) {
 
 void CPDFSDK_AppStream::AddImage(const ByteString& sAPType,
                                  const CPDF_Stream* pImage) {
-  RetainPtr<CPDF_Stream> pStream = dict_->GetMutableStreamFor(sAPType);
+  RetainPtr<CPDF_Stream> pStream =
+      dict_->GetMutableStreamFor(sAPType.AsStringView());
   RetainPtr<CPDF_Dictionary> pStreamDict = pStream->GetMutableDict();
 
   const ByteString sImageAlias = pImage->GetDict()->GetByteStringFor("Name");
@@ -1813,7 +1840,7 @@ void CPDFSDK_AppStream::AddImage(const ByteString& sAPType,
                                       pImage->GetObjNum());
 }
 
-void CPDFSDK_AppStream::Write(const ByteString& sAPType,
+void CPDFSDK_AppStream::Write(ByteStringView sAPType,
                               const ByteString& sContents,
                               const ByteString& sAPState) {
   RetainPtr<CPDF_Dictionary> parent_dict;
@@ -1828,7 +1855,8 @@ void CPDFSDK_AppStream::Write(const ByteString& sAPType,
 
   // If `stream` is created by CreateModifiedAPStream(), then it is safe to
   // edit, as it is not shared.
-  RetainPtr<CPDF_Stream> stream = parent_dict->GetMutableStreamFor(key);
+  RetainPtr<CPDF_Stream> stream =
+      parent_dict->GetMutableStreamFor(key.AsStringView());
   CPDF_Document* doc = widget_->GetPageView()->GetPDFDocument();
   if (!doc->IsModifiedAPStream(stream.Get())) {
     auto new_stream_dict = doc->New<CPDF_Dictionary>();
@@ -1862,8 +1890,9 @@ void CPDFSDK_AppStream::Remove(ByteStringView sAPType) {
 
 ByteString CPDFSDK_AppStream::GetBackgroundAppStream() const {
   CFX_Color crBackground = widget_->GetFillPWLColor();
-  if (crBackground.nColorType != CFX_Color::Type::kTransparent)
+  if (crBackground.nColorType != CFX_Color::Type::kTransparent) {
     return GetRectFillAppStream(widget_->GetRotatedRect(), crBackground);
+  }
 
   return ByteString();
 }

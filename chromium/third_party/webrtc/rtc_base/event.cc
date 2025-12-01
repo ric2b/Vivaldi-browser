@@ -30,8 +30,6 @@
 
 namespace webrtc {
 
-using ::webrtc::TimeDelta;
-
 Event::Event() : Event(false, false) {}
 
 #if defined(WEBRTC_WIN)
@@ -125,7 +123,7 @@ timespec GetTimespec(TimeDelta duration_from_now) {
   timeval tv;
   gettimeofday(&tv, nullptr);
   ts.tv_sec = tv.tv_sec;
-  ts.tv_nsec = tv.tv_usec * rtc::kNumNanosecsPerMicrosec;
+  ts.tv_nsec = tv.tv_usec * webrtc::kNumNanosecsPerMicrosec;
 #endif
 
   // Add the specified number of milliseconds to it.
@@ -189,7 +187,7 @@ bool Event::Wait(TimeDelta give_up_after, TimeDelta warn_after) {
   } else {
     error = wait(warn_ts);
     if (error == ETIMEDOUT) {
-      webrtc::WarnThatTheCurrentThreadIsProbablyDeadlocked();
+      WarnThatTheCurrentThreadIsProbablyDeadlocked();
       error = wait(give_up_ts);
     }
   }

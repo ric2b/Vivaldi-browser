@@ -303,21 +303,20 @@ void ThemeService::Init() {
       base::BindRepeating(&ThemeService::HandlePolicyColorUpdate,
                           base::Unretained(this)));
   pref_change_registrar_.Add(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorScheme),
+      prefs::kBrowserColorScheme,
       base::BindRepeating(&ThemeService::NotifyThemeChanged,
                           base::Unretained(this)));
   pref_change_registrar_.Add(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorVariant),
+      prefs::kBrowserColorVariant,
       base::BindRepeating(&ThemeService::NotifyThemeChanged,
                           base::Unretained(this)));
   pref_change_registrar_.Add(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kGrayscaleThemeEnabled),
+      prefs::kGrayscaleThemeEnabled,
       base::BindRepeating(&ThemeService::NotifyThemeChanged,
                           base::Unretained(this)));
   pref_change_registrar_.Add(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kUserColor),
-      base::BindRepeating(&ThemeService::NotifyThemeChanged,
-                          base::Unretained(this)));
+      prefs::kUserColor, base::BindRepeating(&ThemeService::NotifyThemeChanged,
+                                             base::Unretained(this)));
 }
 
 void ThemeService::Shutdown() {
@@ -354,13 +353,11 @@ void ThemeService::RevertToExtensionTheme(const std::string& extension_id) {
                               ->disabled_extensions()
                               .GetByID(extension_id);
   if (extension && extension->is_theme()) {
-    DCHECK(!extensions::ExtensionRegistrar::Get(profile_)->IsExtensionEnabled(
-        extension->id()));
+    auto* registrar = extensions::ExtensionRegistrar::Get(profile_);
+    DCHECK(!registrar->IsExtensionEnabled(extension->id()));
     // |extension| is disabled when reverting to the previous theme via an
     // infobar.
-    extensions::ExtensionService* service =
-        extensions::ExtensionSystem::Get(profile_)->extension_service();
-    service->EnableExtension(extension->id());
+    registrar->EnableExtension(extension->id());
     // Enabling the extension will call back to SetTheme().
   }
 }
@@ -459,9 +456,8 @@ void ThemeService::RemoveUnusedThemes() {
     return;
   }
 
-  extensions::ExtensionService* service =
-      extensions::ExtensionSystem::Get(profile_)->extension_service();
-  if (!service) {
+  auto* extension_registrar = extensions::ExtensionRegistrar::Get(profile_);
+  if (!extension_registrar) {
     return;
   }
 
@@ -488,8 +484,8 @@ void ThemeService::RemoveUnusedThemes() {
   // policy provider.
 
   for (const auto& i : remove_list) {
-    service->UninstallExtension(i, extensions::UNINSTALL_REASON_ORPHANED_THEME,
-                                nullptr);
+    extension_registrar->UninstallExtension(
+        i, extensions::UNINSTALL_REASON_ORPHANED_THEME, nullptr);
   }
 }
 
@@ -571,25 +567,23 @@ void ThemeService::SetBrowserColorScheme(
     ThemeService::BrowserColorScheme color_scheme) {
   {
     base::AutoReset<bool> resetter(&should_suppress_theme_updates_, true);
-    profile_->GetPrefs()->SetInteger(
-        GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorScheme),
-        static_cast<int>(color_scheme));
+    profile_->GetPrefs()->SetInteger(prefs::kBrowserColorScheme,
+                                     static_cast<int>(color_scheme));
   }
   NotifyThemeChanged();
 }
 
 ThemeService::BrowserColorScheme ThemeService::GetBrowserColorScheme() const {
-  return static_cast<BrowserColorScheme>(profile_->GetPrefs()->GetInteger(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorScheme)));
+  return static_cast<BrowserColorScheme>(
+      profile_->GetPrefs()->GetInteger(prefs::kBrowserColorScheme));
 }
 
 void ThemeService::SetUserColor(std::optional<SkColor> user_color) {
   {
     base::AutoReset<bool> resetter(&should_suppress_theme_updates_, true);
     ClearThemeData(/*clear_ntp_background=*/false);
-    profile_->GetPrefs()->SetInteger(
-        GetThemePrefNameInMigration(ThemePrefInMigration::kUserColor),
-        user_color.value_or(SK_ColorTRANSPARENT));
+    profile_->GetPrefs()->SetInteger(prefs::kUserColor,
+                                     user_color.value_or(SK_ColorTRANSPARENT));
     profile_->GetPrefs()->SetString(prefs::kCurrentThemeID, kUserColorThemeID);
   }
   NotifyThemeChanged();
@@ -603,17 +597,15 @@ void ThemeService::SetBrowserColorVariant(
     ui::mojom::BrowserColorVariant color_variant) {
   {
     base::AutoReset<bool> resetter(&should_suppress_theme_updates_, true);
-    profile_->GetPrefs()->SetInteger(
-        GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorVariant),
-        static_cast<int>(color_variant));
+    profile_->GetPrefs()->SetInteger(prefs::kBrowserColorVariant,
+                                     static_cast<int>(color_variant));
   }
   NotifyThemeChanged();
 }
 
 ui::mojom::BrowserColorVariant ThemeService::GetBrowserColorVariant() const {
   return static_cast<ui::mojom::BrowserColorVariant>(
-      profile_->GetPrefs()->GetInteger(GetThemePrefNameInMigration(
-          ThemePrefInMigration::kBrowserColorVariant)));
+      profile_->GetPrefs()->GetInteger(prefs::kBrowserColorVariant));
 }
 
 void ThemeService::SetUserColorAndBrowserColorVariant(
@@ -622,13 +614,10 @@ void ThemeService::SetUserColorAndBrowserColorVariant(
   {
     base::AutoReset<bool> resetter(&should_suppress_theme_updates_, true);
     ClearThemeData(/*clear_ntp_background=*/false);
-    profile_->GetPrefs()->SetInteger(
-        GetThemePrefNameInMigration(ThemePrefInMigration::kUserColor),
-        user_color);
+    profile_->GetPrefs()->SetInteger(prefs::kUserColor, user_color);
     profile_->GetPrefs()->SetString(prefs::kCurrentThemeID, kUserColorThemeID);
-    profile_->GetPrefs()->SetInteger(
-        GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorVariant),
-        static_cast<int>(color_variant));
+    profile_->GetPrefs()->SetInteger(prefs::kBrowserColorVariant,
+                                     static_cast<int>(color_variant));
   }
   NotifyThemeChanged();
 }
@@ -637,10 +626,8 @@ void ThemeService::SetIsGrayscale(bool is_grayscale) {
   {
     base::AutoReset<bool> resetter(&should_suppress_theme_updates_, true);
     ClearThemeData(/*clear_ntp_background=*/false);
-    profile_->GetPrefs()->SetBoolean(
-        GetThemePrefNameInMigration(
-            ThemePrefInMigration::kGrayscaleThemeEnabled),
-        is_grayscale);
+    profile_->GetPrefs()->SetBoolean(prefs::kGrayscaleThemeEnabled,
+                                     is_grayscale);
   }
   NotifyThemeChanged();
 }
@@ -975,12 +962,9 @@ void ThemeService::HandlePolicyColorUpdate() {
 void ThemeService::ClearThemePrefs() {
   profile_->GetPrefs()->ClearPref(prefs::kCurrentThemePackFilename);
   profile_->GetPrefs()->ClearPref(prefs::kAutogeneratedThemeColor);
-  profile_->GetPrefs()->ClearPref(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kUserColor));
-  profile_->GetPrefs()->ClearPref(GetThemePrefNameInMigration(
-      ThemePrefInMigration::kGrayscaleThemeEnabled));
-  profile_->GetPrefs()->ClearPref(
-      GetThemePrefNameInMigration(ThemePrefInMigration::kBrowserColorVariant));
+  profile_->GetPrefs()->ClearPref(prefs::kUserColor);
+  profile_->GetPrefs()->ClearPref(prefs::kGrayscaleThemeEnabled);
+  profile_->GetPrefs()->ClearPref(prefs::kBrowserColorVariant);
   profile_->GetPrefs()->SetString(prefs::kCurrentThemeID,
                                   ThemeHelper::kDefaultThemeID);
 }
@@ -1014,22 +998,14 @@ void ThemeService::SetThemePrefsForColor(SkColor color) {
 }
 
 bool ThemeService::DisableExtension(const std::string& extension_id) {
-  extensions::ExtensionService* service =
-      extensions::ExtensionSystem::Get(profile_)->extension_service();
-  if (!service) {
-    return false;
-  }
-
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(profile_);
-
+  auto* registry = extensions::ExtensionRegistry::Get(profile_);
   if (registry->GetInstalledExtension(extension_id)) {
     // Do not disable the previous theme if it is already uninstalled. Sending
     // |ThemeServiceObserver::OnThemeChanged()| causes the previous theme to be
     // uninstalled when the notification causes the remaining infobar to close
     // and does not open any new infobars. See crbug.com/468280.
-    service->DisableExtension(extension_id,
-                              extensions::disable_reason::DISABLE_USER_ACTION);
+    extensions::ExtensionRegistrar::Get(profile_)->DisableExtension(
+        extension_id, {extensions::disable_reason::DISABLE_USER_ACTION});
     return true;
   }
   return false;

@@ -4,8 +4,10 @@
 
 #include "base/types/zip.h"
 
+#include <array>
 #include <iostream>
 #include <iterator>
+#include <ranges>
 #include <vector>
 
 #include "base/test/gtest_util.h"
@@ -36,9 +38,6 @@ class VectorWithCustomIterators {
       Iterator temp = *this;
       ++it_;
       return temp;
-    }
-    bool operator!=(const typename std::vector<T>::iterator& other) const {
-      return it_ != other;
     }
 
     bool operator==(const typename std::vector<T>::iterator& other) const {
@@ -89,9 +88,9 @@ TEST(ZipTest, DifferentBeginEndIterators) {
 }
 
 TEST(ZipTest, WithCommonArrays) {
-  const int a[] = {1, 2, 3};
-  const double b[] = {4.5, 5.5, 6.5};
-  const char* c[] = {"x", "y", "z"};
+  const auto a = std::to_array<int>({1, 2, 3});
+  const auto b = std::to_array<double>({4.5, 5.5, 6.5});
+  auto c = std::to_array<const char*>({"x", "y", "z"});
 
   size_t index = 0;
   for (auto [x, y, z] : zip(a, b, c)) {
@@ -215,6 +214,21 @@ TEST(ZipTest, CheckForIterationPastTheEnd) {
   auto it = ranges.begin();
   std::advance(it, 2);
   EXPECT_CHECK_DEATH(std::advance(it, 1));
+}
+
+// Tests that std::ranges algorithms can be used with zip.
+TEST(ZipTest, ZipAsRange) {
+  std::vector<int> a = {2, 5, 6};
+  auto b = std::array{3, 5};
+  static_assert(std::ranges::range<decltype(zip(a, b))>);
+
+  auto elements_are_equal = [](auto p) {
+    auto [x, y] = p;
+    return x == y;
+  };
+
+  EXPECT_TRUE(std::ranges::any_of(zip(a, b), elements_are_equal));
+  EXPECT_FALSE(std::ranges::all_of(zip(a, b), elements_are_equal));
 }
 
 }  // namespace base

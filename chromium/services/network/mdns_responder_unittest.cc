@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "services/network/mdns_responder.h"
 
+#include <array>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -133,11 +129,9 @@ std::string CreateResponseToMdnsNameGeneratorServiceQueryWithCacheFlush(
       /*validate_records=*/true,
       /*validate_names_as_internet_hostnames=*/false);
   DCHECK(response_cache_flush.io_buffer() != nullptr);
-  buf = base::MakeRefCounted<net::IOBufferWithSize>(
+  base::span<uint8_t> response_bytes = response_cache_flush.io_buffer()->first(
       response_cache_flush.io_buffer_size());
-  memcpy(buf->data(), response_cache_flush.io_buffer()->data(),
-         response_cache_flush.io_buffer_size());
-  return std::string(buf->data(), buf->size());
+  return std::string(base::as_string_view(response_bytes));
 }
 
 // A mock mDNS socket factory to create sockets that can fail sending or
@@ -495,7 +489,7 @@ class MdnsResponderTest : public testing::Test {
   // of time and avoid any actual sleeps.
   NiceMock<net::MockMDnsSocketFactory> socket_factory_;
   NiceMock<MockFailingMdnsSocketFactory> failing_socket_factory_;
-  mojo::Remote<mojom::MdnsResponder> client_[2];
+  std::array<mojo::Remote<mojom::MdnsResponder>, 2> client_;
   std::unique_ptr<MdnsResponderManager> host_manager_;
   std::string last_name_created_;
 };

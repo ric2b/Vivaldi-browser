@@ -75,7 +75,6 @@ class SplashScreenTest
       public testing::WithParamInterface<KioskMixin::Config> {
  public:
   SplashScreenTest() = default;
-
   SplashScreenTest(const SplashScreenTest&) = delete;
   SplashScreenTest& operator=(const SplashScreenTest&) = delete;
 

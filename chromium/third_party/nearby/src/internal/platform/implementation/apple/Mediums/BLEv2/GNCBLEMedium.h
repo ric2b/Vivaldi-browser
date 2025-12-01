@@ -15,10 +15,16 @@
 #import <CoreBluetooth/CoreBluetooth.h>
 #import <Foundation/Foundation.h>
 
+#import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPClient.h"
+#import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPServer.h"
+// #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPStream.h"
+
 @class GNCBLEGATTServer;
 @class GNCBLEGATTClient;
 @class GNCBLEGATTCharacteristic;
+@class GNCBLEL2CAPServer;
 
+@protocol GNCPeripheralManager;
 @protocol GNCPeripheral;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -109,7 +115,7 @@ typedef void (^GNCGATTConnectionCompletionHandler)(GNCBLEGATTClient *_Nullable c
  *
  * @param serviceData A dictionary that contains service-specific advertisement data.
  * @param completionHandler Called on a private queue with @c nil if successfully started
- *                          advertising or an error if one has occured.
+ *                          advertising or an error if one has occurred.
  */
 - (void)startAdvertisingData:(NSDictionary<CBUUID *, NSData *> *)serviceData
            completionHandler:(nullable GNCStartAdvertisingCompletionHandler)completionHandler;
@@ -118,7 +124,7 @@ typedef void (^GNCGATTConnectionCompletionHandler)(GNCBLEGATTClient *_Nullable c
  * Stops advertising all service data.
  *
  * @param completionHandler Called on a private queue with @c nil if successfully stopped
- *                          advertising or an error if one has occured.
+ *                          advertising or an error if one has occurred.
  */
 - (void)stopAdvertisingWithCompletionHandler:
     (nullable GNCStopAdvertisingCompletionHandler)completionHandler;
@@ -129,7 +135,7 @@ typedef void (^GNCGATTConnectionCompletionHandler)(GNCBLEGATTClient *_Nullable c
  * @param serviceUUID The service UUID to scan for.
  * @param advertisementFoundHandler Called on a private queue when a peripheral has been discovered.
  * @param completionHandler Called on a private queue with @c nil if successfully started scanning
- *                          or an error if one has occured.
+ *                          or an error if one has occurred.
  */
 - (void)startScanningForService:(CBUUID *)serviceUUID
       advertisementFoundHandler:(GNCAdvertisementFoundHandler)advertisementFoundHandler
@@ -143,7 +149,7 @@ typedef void (^GNCGATTConnectionCompletionHandler)(GNCBLEGATTClient *_Nullable c
  *                     discovered.
  * @param advertisementFoundHandler Called on a private queue when a peripheral has been discovered.
  * @param completionHandler Called on a private queue with @c nil if successfully started scanning
- *                          or an error if one has occured.
+ *                          or an error if one has occurred.
  */
 - (void)startScanningForMultipleServices:(NSArray<CBUUID *> *)serviceUUIDs
                advertisementFoundHandler:(GNCAdvertisementFoundHandler)advertisementFoundHandler
@@ -154,16 +160,25 @@ typedef void (^GNCGATTConnectionCompletionHandler)(GNCBLEGATTClient *_Nullable c
  * Stops scanning for peripherals.
  *
  * @param completionHandler Called on a private queue with @c nil if successfully stopped
- *                          scanning or an error if one has occured.
+ *                          scanning or an error if one has occurred.
  */
 - (void)stopScanningWithCompletionHandler:
     (nullable GNCStopScanningCompletionHandler)completionHandler;
 
 /**
+ * Resumes scanning for peripherals.
+ *
+ * @param completionHandler Called on a private queue with @c nil if successfully resumed scanning
+ *                          or an error if one has occurred.
+ */
+- (void)resumeMediumScanning:
+    (nullable GNCStartScanningCompletionHandler)completionHandler;
+
+/**
  * Starts a GATT server.
  *
  * @param completionHandler Called on a private queue with the GATT server if successfully started
- *                          or an error if one has occured.
+ *                          or an error if one has occurred.
  */
 - (void)startGATTServerWithCompletionHandler:
     (nullable GNCGATTServerCompletionHandler)completionHandler;
@@ -174,12 +189,41 @@ typedef void (^GNCGATTConnectionCompletionHandler)(GNCBLEGATTClient *_Nullable c
  * @param remotePeripheral The peripheral to which the central is attempting to connect.
  * @param disconnectionHandler Called on a private queue when the peripheral has been disconnected.
  * @param completionHandler Called on a private queue with a GATT client if successfully connected
- *                          or an error if one has occured.
+ *                          or an error if one has occurred.
  */
 - (void)connectToGATTServerForPeripheral:(id<GNCPeripheral>)remotePeripheral
                     disconnectionHandler:(nullable GNCGATTDisconnectionHandler)disconnectionHandler
                        completionHandler:
                            (nullable GNCGATTConnectionCompletionHandler)completionHandler;
+
+/**
+ * Opens a L2CAP server.
+ *
+ * @param psmPublishedCompletionHandler Called on a private queue with @c nil if the PSM has been
+ *                                       published or an error if one has occurred.
+ * @param channelOpenedCompletionHandler Called on a private queue with the opened L2CAP stream if
+ *                                        successfully opened or an error if one has occurred.
+ * @param peripheralManager The peripheral manager to use for the L2CAP server.
+ */
+- (void)openL2CAPServerWithPSMPublishedCompletionHandler:
+            (GNCOpenL2CAPServerPSMPublishedCompletionHandler)psmPublishedCompletionHandler
+                          channelOpenedCompletionHandler:
+                              (GNCOpenL2CAPServerChannelOpendCompletionHandler)
+                                  channelOpenedCompletionHandler
+                                       peripheralManager:
+                                           (nullable id<GNCPeripheralManager>)peripheralManager;
+
+/**
+ * Opens a L2CAP channel with the @c PSM on the remote peripheral.
+ *
+ * @param PSM The PSM to use for opening the L2CAP channel.
+ * @param remotePeripheral The peripheral to which the L2CAP channel is being opened.
+ * @param completionHandler Called on a private queue with the opened L2CAP stream if successfully
+ *                          opened or an error if one has occurred.
+ */
+- (void)openL2CAPChannelWithPSM:(uint16_t)PSM
+                     peripheral:(id<GNCPeripheral>)remotePeripheral
+              completionHandler:(nullable GNCOpenL2CAPStreamCompletionHandler)completionHandler;
 
 @end
 

@@ -1,6 +1,8 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 /*
  * Copyright (C) 2009 Apple Inc.  All rights reserved.
@@ -65,15 +67,13 @@ type ViewFunction = (input: ViewInput, output: object, target: HTMLElement) => v
 type AttributeWithIcon = SDK.Cookie.Attribute.NAME|SDK.Cookie.Attribute.VALUE|SDK.Cookie.Attribute.DOMAIN|
                          SDK.Cookie.Attribute.PATH|SDK.Cookie.Attribute.SECURE|SDK.Cookie.Attribute.SAME_SITE;
 
-type CookieData = {
-  [key in SDK.Cookie.Attribute]?: string;
-}&{
+type CookieData = Partial<Record<SDK.Cookie.Attribute, string>>&{
   name: string,
   value: string,
 }&{
   key?: string,
   flagged?: boolean,
-  icons?: {[key in AttributeWithIcon]?: IconButton.Icon.Icon;},
+  icons?: Partial<Record<AttributeWithIcon, IconButton.Icon.Icon>>,
   priorityValue?: number,
   expiresTooltip?: string,
   dirty?: boolean,

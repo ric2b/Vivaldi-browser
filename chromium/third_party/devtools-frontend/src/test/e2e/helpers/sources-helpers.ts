@@ -8,6 +8,7 @@ import * as path from 'path';
 import type * as puppeteer from 'puppeteer-core';
 
 import {GEN_DIR} from '../../conductor/paths.js';
+import type {DevToolsPage} from '../../e2e_non_hosted/shared/frontend-helper.js';
 import {
   $,
   $$,
@@ -34,6 +35,7 @@ import {
   waitForNone,
   waitForVisible,
 } from '../../shared/helper.js';
+import {getBrowserAndPagesWrappers} from '../../shared/non_hosted_wrappers.js';
 
 import {openSoftContextMenuAndClickOnItem} from './context-menu-helpers.js';
 import {veImpression} from './visual-logging-helpers.js';
@@ -93,16 +95,17 @@ export async function doubleClickSourceTreeItem(selector: string) {
   await click(selector, {clickOptions: {clickCount: 2, offset: {x: 40, y: 10}}});
 }
 
-export async function waitForSourcesPanel(): Promise<void> {
+export async function waitForSourcesPanel(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage):
+    Promise<void> {
   // Wait for the navigation panel to show up
-  await waitFor('.navigator-file-tree-item, .empty-state');
+  await devToolsPage.waitFor('.navigator-file-tree-item, .empty-state');
 }
 
-export async function openSourcesPanel() {
+export async function openSourcesPanel(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
   // Locate the button for switching to the sources tab.
-  await click('#tab-sources');
+  await devToolsPage.click('#tab-sources');
 
-  await waitForSourcesPanel();
+  await waitForSourcesPanel(devToolsPage);
 }
 
 export async function openFileInSourcesPanel(testInput: string) {
@@ -204,9 +207,9 @@ export async function getBreakpointHitLocation() {
   return `${groupHeaderTitle}:${locationText}`;
 }
 
-export async function getOpenSources() {
-  const sourceTabPane = await waitFor('#sources-panel-sources-view .tabbed-pane');
-  const sourceTabs = await waitFor('.tabbed-pane-header-tabs', sourceTabPane);
+export async function getOpenSources(devToolsPage: DevToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  const sourceTabPane = await devToolsPage.waitFor('#sources-panel-sources-view .tabbed-pane');
+  const sourceTabs = await devToolsPage.waitFor('.tabbed-pane-header-tabs', sourceTabPane);
   const openSources =
       await sourceTabs.$$eval('.tabbed-pane-header-tab', nodes => nodes.map(n => n.getAttribute('aria-label')));
   return openSources;
@@ -234,7 +237,7 @@ export async function getToolbarText() {
   return await Promise.all(textNodes.map(node => node.evaluate(node => node.textContent, node)));
 }
 
-export async function addBreakpointForLine(frontend: puppeteer.Page, index: number|string) {
+export async function addBreakpointForLine(index: number|string) {
   const breakpointLine = await getLineNumberElement(index);
   assertNotNullOrUndefined(breakpointLine);
 
@@ -244,7 +247,7 @@ export async function addBreakpointForLine(frontend: puppeteer.Page, index: numb
   await waitForFunction(async () => await isBreakpointSet(index));
 }
 
-export async function removeBreakpointForLine(frontend: puppeteer.Page, index: number|string) {
+export async function removeBreakpointForLine(index: number|string) {
   const breakpointLine = await getLineNumberElement(index);
   assertNotNullOrUndefined(breakpointLine);
 
@@ -820,20 +823,18 @@ export class WasmLocationLabels {
   }
 
   async addBreakpointsForLabelInSource(label: string) {
-    const {frontend} = getBrowserAndPages();
     await openFileInEditor(path.basename(this.#source));
-    await Promise.all(this.#mappings.get(label)!.map(({sourceLine}) => addBreakpointForLine(frontend, sourceLine)));
+    await Promise.all(this.#mappings.get(label)!.map(({sourceLine}) => addBreakpointForLine(sourceLine)));
   }
 
   async addBreakpointsForLabelInWasm(label: string) {
-    const {frontend} = getBrowserAndPages();
     await openFileInEditor(path.basename(this.#wasm));
     const visibleLines = await $$(CODE_LINE_SELECTOR);
     const lineNumbers = await Promise.all(visibleLines.map(line => line.evaluate(node => node.textContent)));
     const lineNumberLabels = new Map(lineNumbers.map(label => [Number(label), label]));
     await Promise.all(this.#mappings.get(label)!.map(
 
-        ({moduleOffset}) => addBreakpointForLine(frontend, lineNumberLabels.get(moduleOffset)!)));
+        ({moduleOffset}) => addBreakpointForLine(lineNumberLabels.get(moduleOffset)!)));
   }
 
   async setBreakpointInSourceAndRun(label: string, script: string) {

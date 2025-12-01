@@ -18,11 +18,13 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <optional>
 #include <string_view>
 #include <utility>
 #include <vector>
 
 #include "base/base_switches.h"
+#include "base/check.h"
 #include "base/command_line.h"
 #include "base/dcheck_is_on.h"
 #include "base/enterprise_util.h"
@@ -35,6 +37,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
+#include "base/notreached.h"
 #include "base/path_service.h"
 #include "base/scoped_native_library.h"
 #include "base/strings/string_number_conversions.h"
@@ -45,6 +48,7 @@
 #include "base/trace_event/base_tracing.h"
 #include "base/types/expected.h"
 #include "base/version.h"
+#include "base/win/elevation_util.h"
 #include "base/win/pe_image.h"
 #include "base/win/win_util.h"
 #include "base/win/wrapped_window_proc.h"
@@ -56,6 +60,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/platform_auth/platform_auth_policy_observer.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/first_run/upgrade_util.h"
+#include "chrome/browser/first_run/upgrade_util_win.h"
 #include "chrome/browser/performance_manager/public/dll_pre_read_policy_win.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
@@ -127,13 +133,13 @@
 #include "ui/gfx/win/crash_id_helper.h"
 #include "ui/strings/grit/app_locale_settings.h"
 
-// Vivaldi: Used for InitOSCrypt call.
-#include "extraparts/vivaldi_keystore_checker.h"
-#include "chromium/chrome/browser/lifetime/application_lifetime.h"
-
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #include "chrome/browser/win/conflicts/third_party_conflicts_manager.h"
 #endif
+
+// Vivaldi: Used for InitOSCrypt call.
+#include "chromium/chrome/browser/lifetime/application_lifetime.h"
+#include "extraparts/vivaldi_keystore_checker.h"
 
 #include "vivaldi/app/grit/vivaldi_installer_strings.h"
 
@@ -471,6 +477,87 @@ void ReportParentProcessName() {
   }
 }
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+// Switch used to install platform_experience_helper
+const char kPlatformExperienceHelperForceInstallSwitch[] = "force-install";
+// Directory under which platform_experience_helper is installed
+const wchar_t kPlatformExperienceHelperDir[] = L"PlatformExperienceHelper";
+// Name of the platform_experience_helper executable
+const wchar_t kPlatformExperienceHelperExe[] =
+    L"platform_experience_helper.exe";
+
+// This function might block.
+// Returns true if the platform_experience_helper is installed.
+// Returns true if it can't determine whether it's installed or not.
+bool PlatformExperienceHelperMightBeInstalled() {
+  // Currently only implemented for user-level installs.
+  CHECK(!install_static::IsSystemInstall());
+
+  base::FilePath user_data_dir;
+  if (!base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
+    return true;
+  }
+
+  base::FilePath peh_exe_path =
+      user_data_dir.Append(kPlatformExperienceHelperDir)
+          .Append(kPlatformExperienceHelperExe);
+  return base::PathExists(peh_exe_path);
+}
+
+// This function might block. Returns nullopt if it can't find an existing path.
+std::optional<base::FilePath> GetPlatformExperienceHelperInstallerPath() {
+  base::FilePath chrome_dir;
+  if (!base::PathService::Get(base::DIR_EXE, &chrome_dir)) {
+    return std::nullopt;
+  }
+
+  const wchar_t kOsUpdateHandlerExe[] = L"os_update_handler.exe";
+  base::FilePath exe_path = chrome_dir.AppendASCII(chrome::kChromeVersion)
+                                .Append(kOsUpdateHandlerExe);
+  if (base::PathExists(exe_path)) {
+    return exe_path;
+  }
+  // In dev builds, the launcher will be in the executable directory.
+  exe_path = chrome_dir.Append(kOsUpdateHandlerExe);
+  if (base::PathExists(exe_path)) {
+    return exe_path;
+  }
+  return std::nullopt;
+}
+
+// This function might block.
+void MaybeInstallPlatformExperienceHelper() {
+  // TODO(crbug.com/393626337): remove this check once we implement PEH
+  // installation for system-level installs.
+  if (install_static::IsSystemInstall()) {
+    return;
+  }
+
+  if (PlatformExperienceHelperMightBeInstalled()) {
+    return;
+  }
+
+  std::optional<base::FilePath> peh_installer_path =
+      GetPlatformExperienceHelperInstallerPath();
+  if (!peh_installer_path.has_value()) {
+    return;
+  }
+  base::CommandLine install_cmd(peh_installer_path.value());
+  install_cmd.AppendSwitch(kPlatformExperienceHelperForceInstallSwitch);
+  InstallUtil::AppendModeAndChannelSwitches(&install_cmd);
+
+  base::LaunchOptions launch_options;
+  launch_options.feedback_cursor_off = true;
+  launch_options.force_breakaway_from_job_ = true;
+  ::SetLastError(ERROR_SUCCESS);
+  base::Process process = base::LaunchProcess(install_cmd, launch_options);
+  if (!process.IsValid()) {
+    PLOG(ERROR) << "Failed to launch \"" << install_cmd.GetCommandLineString()
+                << "\"";
+  }
+}
+#endif  // GOOGLE_CHROME_BRANDING
+
 // This error message is not localized because we failed to load the
 // localization data files.
 const char kMissingLocaleDataTitle[] = "Missing File Error";
@@ -519,6 +606,33 @@ ChromeBrowserMainPartsWin::ChromeBrowserMainPartsWin(bool is_integration_test,
     : ChromeBrowserMainParts(is_integration_test, startup_data) {}
 
 ChromeBrowserMainPartsWin::~ChromeBrowserMainPartsWin() = default;
+
+int ChromeBrowserMainPartsWin::PreEarlyInitialization() {
+  if (const int result = ChromeBrowserMainParts::PreEarlyInitialization();
+      result != content::RESULT_CODE_NORMAL_EXIT) {
+    return result;
+  }
+
+  // If we are running stale binaries then relaunch and exit immediately.
+  if (upgrade_util::IsRunningOldChrome()) {
+    if (!upgrade_util::RelaunchChromeBrowser(
+            *base::CommandLine::ForCurrentProcess())) {
+      // The relaunch failed. Feel free to panic now.
+      DUMP_WILL_BE_NOTREACHED();
+    }
+
+    // Note, cannot return RESULT_CODE_NORMAL_EXIT here as this code needs to
+    // result in browser startup bailing.
+    return CHROME_RESULT_CODE_NORMAL_EXIT_UPGRADE_RELAUNCHED;
+  }
+
+  // Requires FeatureList and may restart the browser.
+  if (auto deelevate_result = MaybeAutoDeElevate()) {
+    return *deelevate_result;
+  }
+
+  return content::RESULT_CODE_NORMAL_EXIT;
+}
 
 void ChromeBrowserMainPartsWin::ToolkitInitialized() {
   DCHECK_NE(base::PlatformThread::CurrentId(), base::kInvalidThreadId);
@@ -721,6 +835,12 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
   g_browser_process->local_state()->SetBoolean(
       prefs::kOsUpdateHandlerEnabled,
       base::FeatureList::IsEnabled(features::kRegisterOsUpdateHandlerWin));
+  if (base::FeatureList::IsEnabled(
+          features::kInstallPlatformExperienceHelperWin)) {
+    base::ThreadPool::PostTask(
+        FROM_HERE, {base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+        base::BindOnce(&MaybeInstallPlatformExperienceHelper));
+  }
 #endif  // GOOGLE_CHROME_BRANDING
 
   // Record the parent process at a low priority.
@@ -961,4 +1081,56 @@ void ChromeBrowserMainPartsWin::SetupModuleDatabase(
 
   *module_watcher = ModuleWatcher::Create(base::BindRepeating(
       &ChromeBrowserMainPartsWin::OnModuleEvent, base::Unretained(this)));
+}
+
+// Check if the browser process is launching elevated, and attempt to
+// automatically de-elevate.
+std::optional<int> ChromeBrowserMainPartsWin::MaybeAutoDeElevate() {
+  // Do not de-elevate in an integration test.
+  if (is_integration_test()) {
+    return std::nullopt;
+  }
+
+  if (!base::FeatureList::IsEnabled(features::kAutoDeElevate)) {
+    return std::nullopt;
+  }
+
+  // Don't bother trying when UAC is disabled because it won't work anyway.
+  if (!base::win::UserAccountIsUnnecessarilyElevated()) {
+    return std::nullopt;
+  }
+
+  const char* const kNoRestartSwitches[] = {
+      // Do not interfere with automation scenarios, which might want to launch
+      // Chrome elevated.
+      switches::kEnableAutomation,
+      // Never attempt to de-elevate a second time.
+      switches::kDoNotDeElevateOnLaunch};
+  if (std::ranges::any_of(
+          kNoRestartSwitches,
+          [command_line = base::CommandLine::ForCurrentProcess()](
+              const char* no_restart_switch) {
+            return command_line->HasSwitch(no_restart_switch);
+          })) {
+    return std::nullopt;
+  }
+
+  base::CommandLine new_command_line(*base::CommandLine::ForCurrentProcess());
+  // Give a fully qualified .exe name
+  base::FilePath full_exe_name;
+  if (base::PathService::Get(base::FILE_EXE, &full_exe_name)) {
+    new_command_line.SetProgram(full_exe_name);
+  }
+  new_command_line.AppendSwitch(switches::kDoNotDeElevateOnLaunch);
+
+  const HRESULT hr = base::win::RunDeElevated(new_command_line).IsValid()
+                         ? S_OK
+                         : HRESULT_FROM_WIN32(::GetLastError());
+  base::UmaHistogramSparse("Windows.AutoDeElevateResult", hr);
+  // If it fails, it doesn't matter why, just proceed with the normal launch.
+  if (SUCCEEDED(hr)) {
+    return CHROME_RESULT_CODE_NORMAL_EXIT_AUTO_DE_ELEVATED;
+  }
+
+  return std::nullopt;
 }

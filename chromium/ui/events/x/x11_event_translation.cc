@@ -61,30 +61,44 @@ Event::Properties GetEventPropertiesFromXEvent(EventType type,
   using Values = std::vector<uint8_t>;
   Event::Properties properties;
   if (type == EventType::kKeyPressed || type == EventType::kKeyReleased) {
-    auto* key = x11_event.As<x11::KeyEvent>();
+    if (auto* key = x11_event.As<x11::KeyEvent>()) {
+      // Keyboard group
+      auto state = static_cast<uint32_t>(key->state);
+      properties.emplace(kPropertyKeyboardState,
+                         Values{
+                             static_cast<uint8_t>(state),
+                             static_cast<uint8_t>(state >> 8),
+                             static_cast<uint8_t>(state >> 16),
+                             static_cast<uint8_t>(state >> 24),
+                         });
 
-    // Keyboard group
-    auto state = static_cast<uint32_t>(key->state);
-    properties.emplace(kPropertyKeyboardState,
-                       Values{
-                           static_cast<uint8_t>(state),
-                           static_cast<uint8_t>(state >> 8),
-                           static_cast<uint8_t>(state >> 16),
-                           static_cast<uint8_t>(state >> 24),
-                       });
+      uint8_t group = XkbGroupForCoreState(state);
+      properties.emplace(kPropertyKeyboardGroup, Values{group});
 
-    uint8_t group = XkbGroupForCoreState(state);
-    properties.emplace(kPropertyKeyboardGroup, Values{group});
+      // Hardware keycode
+      uint8_t hw_keycode = static_cast<uint8_t>(key->detail);
+      properties.emplace(kPropertyKeyboardHwKeyCode, Values{hw_keycode});
 
-    // Hardware keycode
-    uint8_t hw_keycode = static_cast<uint8_t>(key->detail);
-    properties.emplace(kPropertyKeyboardHwKeyCode, Values{hw_keycode});
-
-    // IBus-/fctix-GTK specific flags
-    uint8_t ime_flags = (state >> kPropertyKeyboardImeFlagOffset) &
-                        kPropertyKeyboardImeFlagMask;
-    if (ime_flags) {
-      SetKeyboardImeFlagProperty(&properties, ime_flags);
+      // IBus-/fctix-GTK specific flags
+      uint8_t ime_flags = (state >> kPropertyKeyboardImeFlagOffset) &
+                          kPropertyKeyboardImeFlagMask;
+      if (ime_flags) {
+        SetKeyboardImeFlagProperty(&properties, ime_flags);
+      }
+    } else if (auto* xievent = x11_event.As<x11::Input::DeviceEvent>()) {
+      // Handle case where XI2 is enabled for KeyPress and KeyRelease events.
+      auto state = XkbStateFromXI2Event(*xievent);
+      properties.emplace(kPropertyKeyboardState,
+                         Values{
+                             static_cast<uint8_t>(state),
+                             static_cast<uint8_t>(state >> 8),
+                             static_cast<uint8_t>(state >> 16),
+                             static_cast<uint8_t>(state >> 24),
+                         });
+      properties.emplace(kPropertyKeyboardGroup,
+                         Values{xievent->group.effective});
+      properties.emplace(kPropertyKeyboardHwKeyCode,
+                         Values{static_cast<uint8_t>(xievent->detail)});
     }
   } else if (type == EventType::kMouseExited) {
     // NotifyVirtual events are created for intermediate windows that the

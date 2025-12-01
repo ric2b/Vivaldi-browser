@@ -86,26 +86,34 @@ const char* str(BuiltinFn i) {
             return "image_query_size";
         case BuiltinFn::kImageQuerySizeLod:
             return "image_query_size_lod";
+        case BuiltinFn::kImageQueryLevels:
+            return "image_query_levels";
+        case BuiltinFn::kImageQuerySamples:
+            return "image_query_samples";
         case BuiltinFn::kImageRead:
             return "image_read";
         case BuiltinFn::kImageSampleImplicitLod:
             return "image_sample_implicit_lod";
+        case BuiltinFn::kImageSampleProjImplicitLod:
+            return "image_sample_proj_implicit_lod";
         case BuiltinFn::kImageSampleExplicitLod:
             return "image_sample_explicit_lod";
+        case BuiltinFn::kImageSampleProjExplicitLod:
+            return "image_sample_proj_explicit_lod";
         case BuiltinFn::kImageSampleDrefImplicitLod:
             return "image_sample_dref_implicit_lod";
         case BuiltinFn::kImageSampleDrefExplicitLod:
             return "image_sample_dref_explicit_lod";
         case BuiltinFn::kImageWrite:
             return "image_write";
+        case BuiltinFn::kSampledImage:
+            return "sampled_image";
         case BuiltinFn::kMatrixTimesMatrix:
             return "matrix_times_matrix";
         case BuiltinFn::kMatrixTimesScalar:
             return "matrix_times_scalar";
         case BuiltinFn::kMatrixTimesVector:
             return "matrix_times_vector";
-        case BuiltinFn::kSampledImage:
-            return "sampled_image";
         case BuiltinFn::kSelect:
             return "select";
         case BuiltinFn::kVectorTimesMatrix:
@@ -237,6 +245,8 @@ tint::core::ir::Instruction::Accesses GetSideEffects(BuiltinFn fn) {
         case BuiltinFn::kImageRead:
         case BuiltinFn::kImageSampleImplicitLod:
         case BuiltinFn::kImageSampleExplicitLod:
+        case BuiltinFn::kImageSampleProjImplicitLod:
+        case BuiltinFn::kImageSampleProjExplicitLod:
         case BuiltinFn::kImageSampleDrefImplicitLod:
         case BuiltinFn::kImageSampleDrefExplicitLod:
         case BuiltinFn::kSampledImage:
@@ -270,6 +280,8 @@ tint::core::ir::Instruction::Accesses GetSideEffects(BuiltinFn fn) {
         case BuiltinFn::kDot:
         case BuiltinFn::kImageQuerySize:
         case BuiltinFn::kImageQuerySizeLod:
+        case BuiltinFn::kImageQueryLevels:
+        case BuiltinFn::kImageQuerySamples:
         case BuiltinFn::kMatrixTimesMatrix:
         case BuiltinFn::kMatrixTimesScalar:
         case BuiltinFn::kMatrixTimesVector:

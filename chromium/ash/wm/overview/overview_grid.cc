@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "ash/constants/ash_features.h"
 #include "ash/constants/notifier_catalogs.h"
 #include "ash/metrics/histogram_macros.h"
 #include "ash/public/cpp/desk_template.h"
@@ -511,20 +510,17 @@ bool ShouldAnimateWallpaper(OverviewGrid* grid) {
 
 // Returns true if the birch bar should be shown in current state.
 bool ShouldShowBirchBar(aura::Window* root_window) {
-  // The birch bar should not be shown in tablet mode, partial split view,
-  // the forest feature is disabled, non-primary users, or the birch bars are
-  // disabled by users. We don't need to worry about showing/hiding the bar
-  // dynamically on primary/secondary user switch because we exit overview when
-  // we switch users.
-  return features::IsForestFeatureEnabled() &&
-         Shell::Get()->session_controller()->IsUserPrimary() &&
+  // The birch bar should not be shown in tablet mode, partial split view, for
+  // non-primary users, or the birch bars are disabled by users. We don't need
+  // to worry about showing/hiding the bar dynamically on primary/secondary user
+  // switch because we exit overview when we switch users.
+  return Shell::Get()->session_controller()->IsUserPrimary() &&
          BirchBarController::Get()->GetShowBirchSuggestions() &&
          !SplitViewController::Get(root_window)->InSplitViewMode();
 }
 
 bool ShouldShowInformedRestoreDialog(aura::Window* root_window) {
   return root_window == Shell::GetPrimaryRootWindow() &&
-         features::IsForestFeatureEnabled() &&
          !!Shell::Get()->informed_restore_controller()->contents_data();
 }
 
@@ -659,9 +655,9 @@ void OverviewGrid::Shutdown(OverviewEnterExitType exit_type) {
       SplitViewController::Get(root_window_)->InSplitViewMode();
   SnapGroupController* snap_group_controller = SnapGroupController::Get();
   const bool should_report_split_view_metrics =
-      in_split_view ||
-      (snap_group_controller &&
-       snap_group_controller->GetTopmostVisibleSnapGroup(root_window_));
+      in_split_view || (snap_group_controller &&
+                        snap_group_controller->GetTopmostVisibleSnapGroup(
+                            root_window_, /*topwindow_only=*/true));
   // OverviewGrid in splitscreen does not include the window to be activated.
   if (!item_list_.empty() || should_report_split_view_metrics) {
     const bool minimized_in_tablet =
@@ -749,18 +745,17 @@ void OverviewGrid::PrepareForOverview() {
   OverviewEnterExitType enter_exit_type =
       overview_session_->enter_exit_overview_type();
 
-  if (features::IsForestFeatureEnabled()) {
-    auto animation_type =
-        ScopedOverviewWallpaperClipper::AnimationType::kEnterOverview;
-    if (!should_animate_wallpaper) {
-      animation_type = ScopedOverviewWallpaperClipper::AnimationType::kNone;
-    } else if (enter_exit_type == OverviewEnterExitType::kInformedRestore) {
-      animation_type =
-          ScopedOverviewWallpaperClipper::AnimationType::kEnterInformedRestore;
-    }
-    scoped_overview_wallpaper_clipper_ =
-        std::make_unique<ScopedOverviewWallpaperClipper>(this, animation_type);
+  // Perform clipping on the wallpaper.
+  auto animation_type =
+      ScopedOverviewWallpaperClipper::AnimationType::kEnterOverview;
+  if (!should_animate_wallpaper) {
+    animation_type = ScopedOverviewWallpaperClipper::AnimationType::kNone;
+  } else if (enter_exit_type == OverviewEnterExitType::kInformedRestore) {
+    animation_type =
+        ScopedOverviewWallpaperClipper::AnimationType::kEnterInformedRestore;
   }
+  scoped_overview_wallpaper_clipper_ =
+      std::make_unique<ScopedOverviewWallpaperClipper>(this, animation_type);
 
   // TODO(b/326434696): Currently this will return false if there is no restore
   // data in the pine contents data. Show the zero-state dialog.
@@ -1510,8 +1505,6 @@ void OverviewGrid::CalculateWindowListAnimationStates(
     }
   }
 
-  // TODO(sammiequon): Investigate the bounds used here and if we need to
-  // consider tucked windows.
   gfx::Rect grid_bounds = GetGridEffectiveBounds();
   for (size_t i = 0; i < items.size(); ++i) {
     const bool minimized =
@@ -1763,10 +1756,6 @@ gfx::Rect OverviewGrid::GetGridEffectiveBounds() const {
 }
 
 gfx::Insets OverviewGrid::GetGridHorizontalPaddings() const {
-  if (!features::IsForestFeatureEnabled()) {
-    return gfx::Insets();
-  }
-
   // Use compact paddings for partial overview.
   if (SplitViewController::Get(root_window_)->InSplitViewMode()) {
     return gfx::Insets::VH(0, kCompactPaddingForEffectiveBounds);
@@ -1794,11 +1783,8 @@ gfx::Insets OverviewGrid::GetGridHorizontalPaddings() const {
 }
 
 gfx::Insets OverviewGrid::GetGridVerticalPaddings() const {
-  const bool forest_enabled = features::IsForestFeatureEnabled();
-
   // Use compact paddings for partial overview.
-  if (forest_enabled &&
-      SplitViewController::Get(root_window_)->InSplitViewMode()) {
+  if (SplitViewController::Get(root_window_)->InSplitViewMode()) {
     return gfx::Insets::VH(kCompactPaddingForEffectiveBounds, 0);
   }
 
@@ -1813,14 +1799,8 @@ gfx::Insets OverviewGrid::GetGridVerticalPaddings() const {
   const bool has_desk_bar =
       desks_bar_view_ || desks_util::ShouldDesksBarBeCreated();
 
-  const int no_desk_bar_padding =
-      forest_enabled ? kSpaciousPaddingForEffectiveBounds : 0;
   vertical_paddings.set_top(has_desk_bar ? GetDesksBarHeight()
-                                         : no_desk_bar_padding);
-
-  if (!forest_enabled) {
-    return vertical_paddings;
-  }
+                                         : kSpaciousPaddingForEffectiveBounds);
 
   // Calculate the bottom padding according to the existence of birch bar,
   // shelf, and home launcher.
@@ -1934,17 +1914,6 @@ bool OverviewGrid::MaybeDropItemOnDeskMiniViewOrNewDeskButton(
       DesksCreationRemovalSource::kDragToNewDeskButton);
 
   auto* target_desk = desks_controller->desks().back().get();
-
-  // When creating a new desk by by dragging and dropping a lacros browser
-  // window to new desk button, set the desk's default profile based on the
-  // profile lacros window is logged into.
-  const auto windows = dragged_item->GetWindows();
-  if (chromeos::features::IsDeskProfilesEnabled() && windows.size() == 1) {
-    if (auto lacros_profile_id = windows[0]->GetProperty(kLacrosProfileId);
-        lacros_profile_id != 0) {
-      target_desk->SetLacrosProfileId(lacros_profile_id);
-    }
-  }
 
   return desks_controller->MoveWindowFromActiveDeskTo(
       dragged_item->GetWindow(), target_desk, root_window_,
@@ -2143,8 +2112,6 @@ int OverviewGrid::CalculateWidthAndMaybeSetUnclippedBounds(
 
     // Find the width so that it matches height and matches the aspect ratio of
     // |split_view_bounds|.
-    // TODO(sammiequon): Check to see if we can unify this with the `width`
-    // calculation in the above branch where we do the clamp and the max.
     width = target_aspect_ratio * window_height;
     // The unclipped height is the height which matches |width| but keeps the
     // aspect ratio of |target_bounds|. Clipping takes the overview header into
@@ -2696,7 +2663,8 @@ void OverviewGrid::OnSplitViewStateChanged(
   const bool both_snapped_windows =
       state == SplitViewController::State::kBothSnapped ||
       (snap_group_controller &&
-       snap_group_controller->GetTopmostVisibleSnapGroup(root_window_));
+       snap_group_controller->GetTopmostVisibleSnapGroup(
+           root_window_, /*topwindow_only=*/true));
   if (both_snapped_windows || unsnappable_window_activated ||
       (split_view_controller->InClamshellSplitViewMode() &&
        overview_session_->IsEmpty())) {
@@ -3170,10 +3138,6 @@ bool OverviewGrid::FitWindowRectsInBounds(
 void OverviewGrid::MaybeCenterOverviewItems(
     const base::flat_set<OverviewItemBase*>& ignored_items,
     std::vector<gfx::RectF>& out_window_rects) {
-  if (!features::IsForestFeatureEnabled()) {
-    return;
-  }
-
   if (out_window_rects.empty()) {
     return;
   }

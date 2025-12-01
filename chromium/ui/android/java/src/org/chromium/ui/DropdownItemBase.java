@@ -4,8 +4,6 @@
 
 package org.chromium.ui;
 
-import android.graphics.drawable.Drawable;
-
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.url.GURL;
@@ -37,11 +35,6 @@ public class DropdownItemBase implements DropdownItem {
     }
 
     @Override
-    public @Nullable String getItemTag() {
-        return null;
-    }
-
-    @Override
     public int getIconId() {
         return NO_ICON;
     }
@@ -62,42 +55,7 @@ public class DropdownItemBase implements DropdownItem {
     }
 
     @Override
-    public int getLabelFontSizeResId() {
-        return R.dimen.text_size_large;
-    }
-
-    @Override
-    public int getSublabelFontColorResId() {
-        return R.color.default_text_color_secondary_list_baseline;
-    }
-
-    @Override
-    public int getSublabelFontSizeResId() {
-        return R.dimen.text_size_small;
-    }
-
-    @Override
-    public boolean isIconAtStart() {
-        return false;
-    }
-
-    @Override
-    public int getIconSizeResId() {
-        return 0;
-    }
-
-    @Override
-    public int getIconMarginResId() {
-        return R.dimen.dropdown_icon_margin;
-    }
-
-    @Override
     public @Nullable GURL getCustomIconUrl() {
-        return null;
-    }
-
-    @Override
-    public @Nullable Drawable getIconDrawable() {
         return null;
     }
 }

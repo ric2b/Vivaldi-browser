@@ -43,6 +43,15 @@ void AutofillFormFeaturesJavaScriptFeature::SetAutofillAcrossIframes(
       base::Value::List().Append(enabled));
 }
 
+void AutofillFormFeaturesJavaScriptFeature::SetAutofillDisallowSlashDotLabels(
+    web::WebFrame* frame,
+    bool enabled) {
+  CHECK(frame);
+  frame->CallJavaScriptFunction(
+      "autofill_form_features.setAutofillDisallowSlashDotLabels",
+      base::Value::List().Append(enabled));
+}
+
 void AutofillFormFeaturesJavaScriptFeature::SetAutofillAcrossIframesThrottling(
     web::WebFrame* frame,
     bool enabled) {
@@ -61,21 +70,38 @@ void AutofillFormFeaturesJavaScriptFeature::SetAutofillIsolatedContentWorld(
       base::Value::List().Append(enabled));
 }
 
-void AutofillFormFeaturesJavaScriptFeature::SetAutofillFixPaymentSheetSpam(
-    web::WebFrame* frame,
-    bool enabled) {
-  CHECK(frame);
-  frame->CallJavaScriptFunction(
-      "autofill_form_features.setAutofillFixPaymentSheetSpam",
-      base::Value::List().Append(enabled));
-}
-
 void AutofillFormFeaturesJavaScriptFeature::
     SetAutofillCorrectUserEditedBitInParsedField(web::WebFrame* frame,
                                                  bool enabled) {
   CHECK(frame);
   frame->CallJavaScriptFunction(
       "autofill_form_features.setAutofillCorrectUserEditedBitInParsedField",
+      base::Value::List().Append(enabled));
+}
+
+void AutofillFormFeaturesJavaScriptFeature::
+    SetAutofillAllowDefaultPreventedFormSubmission(web::WebFrame* frame,
+                                                   bool enabled) {
+  CHECK(frame);
+  frame->CallJavaScriptFunction(
+      "autofill_form_features.setAutofillAllowDefaultPreventedSubmission",
+      base::Value::List().Append(enabled));
+}
+
+void AutofillFormFeaturesJavaScriptFeature::SetAutofillDedupeFormSubmission(
+    web::WebFrame* frame,
+    bool enabled) {
+  CHECK(frame);
+  frame->CallJavaScriptFunction(
+      "autofill_form_features.setAutofillDedupeFormSubmission",
+      base::Value::List().Append(enabled));
+}
+
+// Enables/disables reporting form submission errors.
+void AutofillFormFeaturesJavaScriptFeature::
+    SetAutofillReportFormSubmissionErrors(web::WebFrame* frame, bool enabled) {
+  frame->CallJavaScriptFunction(
+      "autofill_form_features.setAutofillReportFormSubmissionErrors",
       base::Value::List().Append(enabled));
 }
 

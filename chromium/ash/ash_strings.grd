@@ -386,6 +386,9 @@ Style notes:
       <message name="IDS_ASH_STATUS_TRAY_SETTINGS" desc="The accessible text for a settings button.">
         Settings
       </message>
+      <message name="IDS_ASH_STATUS_TRAY_SETTINGS_DISABLED" desc="The tooltip text for a settings button when disabled.">
+        This setting is managed by your administrator
+      </message>
       <message name="IDS_ASH_STATUS_TRAY_SPOKEN_FEEDBACK_ENABLED" desc="The message shown on a notification when spoken feedback is enabled">
         Press Ctrl + Alt + Z to disable spoken feedback.
       </message>
@@ -6578,8 +6581,17 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_REGION_VIDEO_RECORD" desc="The capture label message which shows in the middle of the screen when in region video record mode.">
         Drag to select an area to record
       </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_REGION_IMAGE_CAPTURE_KEYBOARD_NAVIGATION" desc="The capture label message which shows in the middle of the screen when in region image capture mode. Includes keyboard navigation instructions.">
+        Drag or press Space to select an area to capture
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_REGION_VIDEO_RECORD_KEYBOARD_NAVIGATION" desc="The capture label message which shows in the middle of the screen when in region video record mode. Includes keyboard navigation instructions.">
+        Drag or press Space to select an area to record
+      </message>
       <message name="IDS_ASH_SUNFISH_CAPTURE_LABEL" desc="The capture label message which shows in the middle of the screen when in sunfish session." translateable="false">
         Drag to select an area to search
+      </message>
+      <message name="IDS_ASH_SUNFISH_CAPTURE_LABEL_KEYBOARD_NAVIGATION" desc="The capture label message which shows in the middle of the screen when in sunfish session. Includes keyboard navigation instructions.">
+        Drag or press Space to select an area to search
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_WINDOW_IMAGE_CAPTURE" desc="The capture label message which shows in the middle of the screen when in window image capture mode in tablet mode.">
         Select a window to capture
@@ -6728,8 +6740,8 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_SETTING_OFF_STATE" desc="Description for a setting toggle off state.">
         off
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_OPEN" desc="Alert spoken by screen readers on entering capture mode.">
-        Capture Mode, default is <ph name="SOURCE">$1<ex>partial</ex></ph> <ph name="TYPE">$2<ex>screenshot</ex></ph>. Press tab for keyboard navigation.
+      <message name="IDS_ASH_SCREEN_CAPTURE_KEYBOARD_NAVIGATION_ALERT_OPEN_REVISED" desc="Alert spoken by screen readers on entering capture mode. Contains details about using keyboard navigation in a session.">
+        In screen capture, set to <ph name="SOURCE">$1<ex>partial</ex></ph> <ph name="TYPE">$2<ex>screenshot</ex></ph>. Press tab to choose capture type. Press enter to capture. To select capture area, set to partial screenshot. If not already active, press space to select region.
       </message>
       <message name="IDS_ASH_SUNFISH_MODE_ALERT_OPEN" desc="Alert spoken by screen readers on entering a mode where users can select a region on their screen to search.">
         Select to search my screen. Press tab then space for keyboard navigation.
@@ -6928,6 +6940,15 @@ Here are some things you can try to get started.
       </message>
       <message name="IDS_ASH_SUNFISH_EDUCATE_TOAST_MESSAGE" desc="The message shown in a toast window to educate the user about the Sunfish feature.">
         Select anything on your screen to search, copy text, and more
+      </message>
+      <message name="IDS_ASH_SUNFISH_RESULTS_LOADING_ACCESSIBLE_NAME" desc="The accessible name of the loading image in the Sunfish search results panel while waiting for the results web contents to load.">
+        Results loading
+      </message>
+      <message name="IDS_ASH_SUNFISH_RESULTS_LOADED_ACCESSIBLE_NAME" desc="Text for the accessible name that is announced when the results for the Sunfish search results panel are loaded.">
+        Results loaded
+      </message>
+      <message name="IDS_ASH_SUNFISH_INCOGNITO_NUDGE_LABEL" desc="The label of the Sunfish nudge that informs users they must close or minimize an Incognito Chrome window before making an image search.">
+        Close or minimize Incognito windows to search your screen with Google Lens
       </message>
 
       <!-- Scanner -->
@@ -8217,6 +8238,14 @@ New install
       </message>
       <message name="IDS_ASH_USB_NOTIFICATION_V2_CABLE_WARNING_SPEED_LIMITED_BODY" desc="Notification body text for when a user connects a device to their Chromebook with a cable that has a lower maximum data rate than the device.">
         Your device supports a higher data rate than your cable. Device performance may be limited.
+      </message>
+
+      <!-- USB device limit notifications -->
+      <message name="IDS_ASH_USB_NOTIFICATION_LIMIT_REACHED_TITLE" desc="Notification title text for when a user has connected the maximum number of USB devices supported by their device.">
+        USB limit reached
+      </message>
+      <message name="IDS_ASH_USB_NOTIFICATION_LIMIT_REACHED_BODY" desc="Notification body text for when a user has connected the maximum number of USB devices supported by their device.">
+        To add any additional USB devices, try removing one and then plug in a new one
       </message>
 
       <!-- Adaptive charging -->

@@ -84,7 +84,7 @@ BitmapImage::BitmapImage(ImageObserver* observer, bool is_multipart)
 
 BitmapImage::~BitmapImage() {}
 
-bool BitmapImage::CurrentFrameHasSingleSecurityOrigin() const {
+bool BitmapImage::HasSingleSecurityOrigin() const {
   return true;
 }
 
@@ -173,6 +173,12 @@ gfx::Size BitmapImage::SizeWithConfig(SizeConfig config) const {
 void BitmapImage::RecordDecodedImageType(UseCounter* use_counter) {
   BitmapImageMetrics::CountDecodedImageType(decoder_->FilenameExtension(),
                                             use_counter);
+}
+
+void BitmapImage::RecordDecodedImageC2PA(UseCounter* use_counter) {
+  if (decoder_->HasC2PAManifest()) {
+    BitmapImageMetrics::CountDecodedImageC2PA(use_counter);
+  }
 }
 
 bool BitmapImage::GetHotSpot(gfx::Point& hot_spot) const {
@@ -298,7 +304,7 @@ void BitmapImage::Draw(cc::PaintCanvas* canvas,
 
   ImageOrientation orientation = ImageOrientationEnum::kDefault;
   if (draw_options.respect_orientation == kRespectImageOrientation)
-    orientation = CurrentFrameOrientation();
+    orientation = Orientation();
 
   PaintCanvasAutoRestore auto_restore(canvas, false);
   gfx::RectF adjusted_dst_rect = dst_rect;
@@ -409,20 +415,20 @@ scoped_refptr<Image> BitmapImage::ImageForDefaultFrame() {
   return Image::ImageForDefaultFrame();
 }
 
-bool BitmapImage::CurrentFrameKnownToBeOpaque() {
+bool BitmapImage::IsOpaque() {
   return decoder_ ? decoder_->AlphaType() == kOpaque_SkAlphaType : false;
 }
 
-bool BitmapImage::CurrentFrameIsComplete() {
+bool BitmapImage::FirstFrameIsComplete() {
   return decoder_ && decoder_->FrameIsReceivedAtIndex(0);
 }
 
-bool BitmapImage::CurrentFrameIsLazyDecoded() {
+bool BitmapImage::IsLazyDecoded() {
   // BitmapImage supports only lazy generated images.
   return true;
 }
 
-ImageOrientation BitmapImage::CurrentFrameOrientation() const {
+ImageOrientation BitmapImage::Orientation() const {
   return decoder_ ? decoder_->OrientationAtIndex(0)
                   : ImageOrientationEnum::kDefault;
 }

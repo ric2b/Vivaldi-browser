@@ -16,7 +16,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/web_applications/pwa_install_page_action.h"
 #include "chrome/browser/ui/web_applications/web_app_dialogs.h"
 #include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
 #include "chrome/browser/web_applications/web_app_command_manager.h"
@@ -272,6 +274,24 @@ bool CreateWebAppFromManifest(content::WebContents* web_contents,
   return true;
 }
 
+void CreateWebAppForBackgroundInstall(
+    content::WebContents* initiating_web_contents,
+    std::unique_ptr<webapps::MlInstallOperationTracker> tracker,
+    const GURL& install_url,
+    const std::optional<GURL>& manifest_id,
+    WebAppInstalledCallback installed_callback) {
+  auto* provider = WebAppProvider::GetForWebContents(initiating_web_contents);
+  CHECK(provider);
+
+  provider->scheduler().InstallAppFromUrl(
+      install_url, manifest_id, initiating_web_contents->GetWeakPtr(),
+      base::BindOnce(&OnWebAppInstallShowInstallDialog,
+                     WebAppInstallFlow::kInstallSite,
+                     webapps::WebappInstallSource::WEB_INSTALL,
+                     PwaInProductHelpState::kNotShown, std::move(tracker)),
+      std::move(installed_callback));
+}
+
 void ShowPwaInstallDialog(Browser* browser) {
   CHECK(browser);
 
@@ -280,6 +300,12 @@ void ShowPwaInstallDialog(Browser* browser) {
   content::WebContents* const web_contents =
       browser->tab_strip_model()->GetActiveWebContents();
   CHECK(web_contents);
+
+  PwaInstallPageActionController* pwa_install_controller =
+      browser->GetActiveTabInterface()
+          ->GetTabFeatures()
+          ->pwa_install_page_action_controller();
+  pwa_install_controller->SetIsExecuting(true);
 
   // Close PWA install IPH if it is showing.
   PwaInProductHelpState iph_state = PwaInProductHelpState::kNotShown;
@@ -301,6 +327,7 @@ void ShowPwaInstallDialog(Browser* browser) {
   CreateWebAppFromManifest(web_contents,
                            webapps::WebappInstallSource::OMNIBOX_INSTALL_ICON,
                            base::DoNothing(), iph_state);
+  pwa_install_controller->SetIsExecuting(false);
 }
 
 void SetInstalledCallbackForTesting(WebAppInstalledCallback callback) {

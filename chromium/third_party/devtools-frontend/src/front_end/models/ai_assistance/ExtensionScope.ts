@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as Common from '../../core/common/common.js';
+import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -20,6 +21,7 @@ import {
 
 interface ElementContext {
   selector: string;
+  simpleSelector?: string;
   sourceLocation?: string;
 }
 
@@ -180,31 +182,40 @@ export class ExtensionScope {
       ): string {
     const selectorIndexes = matchedStyles.getMatchingSelectors(styleRule);
     // TODO: Compute the selector when nested selector is present
-    const selectors = styleRule
-                          .selectors
-                          // Filter out only selector that apply rules
-                          .filter((_, index) => selectorIndexes.includes(index))
-                          // Ignore selector that include AI selector name
-                          .filter(value => !value.text.includes(AI_ASSISTANCE_CSS_CLASS_NAME))
-                          .sort((a, b) => {
-                            if (!a.specificity) {
-                              return -1;
-                            }
+    const selectors =
+        styleRule
+            .selectors
+            // Filter out only selector that apply rules
+            .filter((_, index) => selectorIndexes.includes(index))
+            // Ignore selector that include AI selector name
+            .filter(value => !value.text.includes(AI_ASSISTANCE_CSS_CLASS_NAME))
+            // specific enough this allows having selectors like `div > * > p`
+            .filter(
+                // Disallow star selector ending that targets any arbitrary element
+                value => !value.text.endsWith('*') &&
+                    // Disallow selector that contain star and don't have higher specificity
+                    // Example of disallowed: `div > * > p`
+                    // Example of allowed: `div > * > .header` OR `div > * > #header`
+                    !(value.text.includes('*') && value.specificity?.a === 0 && value.specificity?.b === 0))
+            .sort((a, b) => {
+              if (!a.specificity) {
+                return -1;
+              }
 
-                            if (!b.specificity) {
-                              return 1;
-                            }
+              if (!b.specificity) {
+                return 1;
+              }
 
-                            if (b.specificity.a !== a.specificity.a) {
-                              return b.specificity.a - a.specificity.a;
-                            }
+              if (b.specificity.a !== a.specificity.a) {
+                return b.specificity.a - a.specificity.a;
+              }
 
-                            if (b.specificity.b !== a.specificity.b) {
-                              return b.specificity.b - a.specificity.b;
-                            }
+              if (b.specificity.b !== a.specificity.b) {
+                return b.specificity.b - a.specificity.b;
+              }
 
-                            return b.specificity.b - a.specificity.b;
-                          });
+              return b.specificity.b - a.specificity.b;
+            });
 
     const selector = selectors.at(0);
     if (!selector) {
@@ -219,12 +230,20 @@ export class ExtensionScope {
   }
 
   static getSelectorForNode(node: SDK.DOMModel.DOMNode): string {
-    return node.simpleSelector()
-        .split('.')
-        .filter(chunk => {
-          return !chunk.startsWith(AI_ASSISTANCE_CSS_CLASS_NAME);
-        })
-        .join('.');
+    const simpleSelector = node.simpleSelector()
+                               .split('.')
+                               .filter(chunk => {
+                                 return !chunk.startsWith(AI_ASSISTANCE_CSS_CLASS_NAME);
+                               })
+                               .join('.');
+    // Handle the edge case where the node is DIV and the
+    // only selector is the AI_ASSISTANCE_CSS_CLASS_NAME
+    if (simpleSelector) {
+      return simpleSelector;
+    }
+
+    // Fallback to the HTML tag
+    return node.localName() || node.nodeName().toLowerCase();
   }
 
   static getSourceLocation(styleRule: SDK.CSSRule.CSSStyleRule): string|undefined {
@@ -288,6 +307,7 @@ export class ExtensionScope {
 
       return {
         selector,
+        simpleSelector: ExtensionScope.getSelectorForNode(node),
         sourceLocation: ExtensionScope.getSourceLocation(styleRule),
       };
     } catch {
@@ -322,6 +342,10 @@ export class ExtensionScope {
       ]);
 
       const arg = JSON.parse(args.object.value) as Omit<FreestyleCallbackArgs, 'element'>;
+      // @ts-expect-error RegExp.escape exist on Chrome 136 and after
+      if (!arg.className.match(new RegExp(`${RegExp.escape(AI_ASSISTANCE_CSS_CLASS_NAME)}-\\d`))) {
+        throw new Error('Non AI class name');
+      }
 
       let context: ElementContext = {
         // TODO: Should this a be a *?
@@ -335,14 +359,60 @@ export class ExtensionScope {
         element.object.release();
       }
 
-      const styleChanges = await this.#changeManager.addChange(cssModel, this.frameId, {
-        groupId: this.#agentId,
-        sourceLocation: context.sourceLocation,
-        selector: context.selector,
-        className: arg.className,
-        styles: arg.styles,
-      });
-      await this.#simpleEval(executionContext, `freestyler.respond(${id}, ${JSON.stringify(styleChanges)})`);
+      try {
+        const sanitizedStyles = await this.sanitizedStyleChanges(context.selector, arg.styles);
+        const styleChanges = await this.#changeManager.addChange(cssModel, this.frameId, {
+          groupId: this.#agentId,
+          sourceLocation: context.sourceLocation,
+          selector: context.selector,
+          simpleSelector: context.simpleSelector,
+          className: arg.className,
+          styles: sanitizedStyles,
+        });
+        await this.#simpleEval(executionContext, `freestyler.respond(${id}, ${JSON.stringify(styleChanges)})`);
+      } catch (error) {
+        await this.#simpleEval(executionContext, `freestyler.respond(${id}, new Error("${error?.message}"))`);
+      }
     });
+  }
+
+  async sanitizedStyleChanges(selector: string, styles: Record<string, string>): Promise<Record<string, string>> {
+    const cssStyleValue: string[] = [];
+    const changedStyles: string[] = [];
+    const styleSheet = new CSSStyleSheet({disabled: true});
+    const kebabStyles = Platform.StringUtilities.toKebabCaseKeys(styles);
+    for (const [style, value] of Object.entries(kebabStyles)) {
+      // Build up the CSS style
+      cssStyleValue.push(`${style}: ${value};`);
+      // Keep track of what style changed to query later.
+      changedStyles.push(style);
+    }
+
+    // Build up the CSS stylesheet value.
+    await styleSheet.replace(`${selector} { ${cssStyleValue.join(' ')} }`);
+
+    const sanitizedStyles: Record<string, string> = {};
+    for (const cssRule of styleSheet.cssRules) {
+      if (!(cssRule instanceof CSSStyleRule)) {
+        continue;
+      }
+      for (const style of changedStyles) {
+        // We need to use the style rather then the stylesMap
+        // as the latter expands the styles to each separate part
+        // Example:
+        // padding: 10px 20px -> padding-top: 10px, padding-bottom: 10px, etc.
+        const value = cssRule.style.getPropertyValue(style);
+        if (value) {
+          sanitizedStyles[style] = value;
+        }
+      }
+    }
+
+    if (Object.keys(sanitizedStyles).length === 0) {
+      throw new Error(
+          'None of the suggested CSS properties or their values for selector were considered valid by the browser\'s CSS engine. Please ensure property names are correct and values match the expected format for those properties.');
+    }
+
+    return sanitizedStyles;
   }
 }

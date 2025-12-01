@@ -137,6 +137,11 @@ class OmniboxEditModel {
   // icon.
   ui::ImageModel GetSuperGIcon(int image_size, bool dark_mode) const;
 
+  // Returns the Agentspace icon for chrome builds. Otherwise return an empty
+  // Image. If `dark_mode` is enabled, return the monochrome version of the
+  // icon.
+  gfx::Image GetAgentspaceIcon(bool dark_mode) const;
+
   // Sets the state of user_input_in_progress_, and notifies the observer if
   // that state has changed.
   void SetInputInProgress(bool in_progress);
@@ -390,11 +395,22 @@ class OmniboxEditModel {
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   // Gets the icon for the given `match`.
   gfx::Image GetMatchIcon(const AutocompleteMatch& match,
-                          SkColor vector_icon_color) const;
+                          SkColor vector_icon_color,
+                          bool dark_mode = false) const;
   // Gets the icon for the given `match` if the match was provided by an omnibox
   // API extension, otherwise returns empty image.
   gfx::Image GetMatchIconIfExtension(const AutocompleteMatch& match) const;
 #endif
+
+  // Gets the suggestion group header text associated with the given suggestion
+  // group ID.
+  // In addition to calling `AutocompleteResult::GetHeaderForSuggestionGroup()`,
+  // this function takes into account certain header visibility criteria (e.g.
+  // experiment flags) to determine the proper header text, which will then be
+  // used by the relevant code to conditionally show suggestion group headers
+  // in the Omnibox/Realbox popup.
+  std::u16string GetSuggestionGroupHeaderText(
+      const std::optional<omnibox::GroupId>& suggestion_group_id) const;
 
   // Returns true if the popup exists and is open. Virtual for testing.
   virtual bool PopupIsOpen() const;
@@ -454,24 +470,28 @@ class OmniboxEditModel {
   // Lookup the bitmap for |result_index|. Returns nullptr if not found.
   const SkBitmap* GetPopupRichSuggestionBitmap(int result_index) const;
 
-  // Lookup the bitmap for the first `match` that has `keyword` as its
+  // Lookup the bitmap for the first `match` in
+  // `autocomplete_controller()->result()` that has `keyword` as its
   // `associated_keyword`. Used to fetch bitmap where the `result_index` is
   // unknown.  Returns nullptr if not found.
   const SkBitmap* GetPopupRichSuggestionBitmap(
       const std::u16string& keyword) const;
 
-  // Lookup the bitmap for `match` based on the image URL.  Similar to above,
-  // but Used to fetch bitmap where the `result_index` is unknown and where
+  // Lookup the bitmap based on the image URL.  Similar to above,
+  // but used to fetch bitmap where the `result_index` is unknown and where
   // there are possibly multiple suggestions with the same `keyword` but not the
   // `image_url` being looked up. Returns nullptr if not found.
   const SkBitmap* GetPopupRichSuggestionBitmap(const GURL& image_url) const;
 
+  // Lookup the icon bitmap based on the icon URL. Returns nullptr
+  // if not found.
+  const SkBitmap* GetIconBitmap(const GURL& icon_url) const;
+
   // Stores the image in a local data member and schedules a repaint.
   void SetPopupRichSuggestionBitmap(int result_index, const SkBitmap& bitmap);
 
-  // Updates the popup view when the visibility of a group changes.
-  void SetPopupSuggestionGroupVisibility(size_t match_index,
-                                         bool suggestion_group_hidden);
+  // Stores the icon in a local data member and schedules a repaint.
+  void SetIconBitmap(const GURL& icon_url, const SkBitmap& bitmap);
 
   void SetAutocompleteInput(AutocompleteInput input);
 
@@ -796,8 +816,17 @@ class OmniboxEditModel {
   // |input_| to differ from the one currently stored in AutocompleteController.
   AutocompleteInput input_;
 
-  // Rich suggestion bitmaps for popup.
+  // Rich suggestion bitmaps for popup keyed by `result_index`. These are
+  // cleared when `OmniboxPopupViewViews` is initialized and destroyed, and on
+  // `OnPopupResultChanged()`.
   std::map<int, SkBitmap> rich_suggestion_bitmaps_;
+
+  // Icon bitmaps for popup keyed by `icon_url`. These are cleared when
+  // `OmniboxPopupViewViews` is initialized and destroyed. This differs from
+  // `rich_suggestion_bitmaps_` since they are not cleared on
+  // `OnPopupResultChanged()`, which allows for fetching the icon even when the
+  // popup is closed.
+  std::map<GURL, SkBitmap> icon_bitmaps_;
 
   // The popup view is nullptr when there's no popup, and is non-null when
   // a popup view exists (i.e. between calls to `set_popup_view`).

@@ -4,12 +4,15 @@
 
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 
-namespace  {
+namespace {
 // Constants for layout configurations
 const CGFloat kSpacing = 16.0;
+const CGFloat kSpacingIconLayout = 8.0;
 const CGFloat kBottomSpacing = 100.0;
 const CGFloat kTopInsetForHiddenToolbar = 0;
+const CGFloat kTopInsetIconLayout = 32;
 const CGFloat kMinimumSidePadding = 12.0;
+const CGFloat kMinimumSidePaddingIconLayout = 32.0;
 const CGFloat kListStyleItemHeight = 76.0;
 const CGFloat kMinimumItemWidthDecrease = 1.0;
 
@@ -50,7 +53,7 @@ const CGFloat kListStyleWidthPhonePreview = 260;
 
 // Common
 const CGFloat kMinimumSidePaddingPreview = 2.0;
-}
+}  // namespace
 
 @implementation VivaldiSpeedDialViewContainerViewFlowLayout
 
@@ -59,21 +62,22 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 }
 
 - (CGFloat)minimumWidthForStyle:(VivaldiStartPageLayoutStyle)style {
-  return [self shouldShowTabletLayout] ?
-      [self iPadColumnWidth] : [self iPhoneColumnWidth];
+  return [self shouldShowTabletLayout] ? [self iPadColumnWidth]
+                                       : [self iPhoneColumnWidth];
 }
 
 - (void)prepareLayout {
   [super prepareLayout];
 
-  if (!self.collectionView) return;
+  if (!self.collectionView)
+    return;
 
-  self.minimumInteritemSpacing = kSpacing;
-  self.minimumLineSpacing = kSpacing;
+  self.minimumInteritemSpacing = self.spacing;
+  self.minimumLineSpacing = self.spacing;
 
-  CGFloat availableWidth =  CGRectGetWidth(self.collectionView.bounds) -
-      (self.collectionView.contentInset.left +
-        self.collectionView.contentInset.right);
+  CGFloat availableWidth = CGRectGetWidth(self.collectionView.bounds) -
+                           (self.collectionView.contentInset.left +
+                            self.collectionView.contentInset.right);
   CGFloat styleMinWidth = [self minimumWidthForStyle:self.layoutStyle];
   CGFloat itemWidth = styleMinWidth;
   CGFloat totalWidthNeeded = 0;
@@ -81,42 +85,43 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
   double numberOfColumns = (double)self.numberOfColumns;
 
   do {
-    adjustedNumberOfColumns =
-        MIN(numberOfColumns,
-            floor((availableWidth + kSpacing) / (itemWidth + kSpacing)));
+    adjustedNumberOfColumns = MIN(
+        numberOfColumns,
+        floor((availableWidth + self.spacing) / (itemWidth + self.spacing)));
     totalWidthNeeded = (itemWidth * adjustedNumberOfColumns) +
-        (kSpacing * (adjustedNumberOfColumns - 1));
+                       (self.spacing * (adjustedNumberOfColumns - 1));
     if (totalWidthNeeded > availableWidth) {
       itemWidth -= kMinimumItemWidthDecrease;
     }
   } while (totalWidthNeeded > availableWidth && itemWidth > styleMinWidth);
 
   CGFloat extraSpace = availableWidth - totalWidthNeeded;
-  CGFloat oneColumnWidth = itemWidth + kSpacing;
+  CGFloat oneColumnWidth = itemWidth + self.spacing;
 
   if (extraSpace < oneColumnWidth && adjustedNumberOfColumns >= 1) {
-    self.sectionInset = UIEdgeInsetsMake(
-        [self kTopInset], [self horizontalSpacing],
-        kBottomSpacing, [self horizontalSpacing]);
-    CGFloat remainingWidth =
-        availableWidth - ([self horizontalSpacing] * 2) -
-            (kSpacing * (adjustedNumberOfColumns - 1));
+    self.sectionInset =
+        UIEdgeInsetsMake([self kTopInset], [self horizontalSpacing],
+                         kBottomSpacing, [self horizontalSpacing]);
+    CGFloat remainingWidth = availableWidth - ([self horizontalSpacing] * 2) -
+                             (self.spacing * (adjustedNumberOfColumns - 1));
     itemWidth = remainingWidth / adjustedNumberOfColumns;
   } else {
-    CGFloat edgeInsets = MAX((availableWidth - totalWidthNeeded) / 2, kSpacing);
-    self.sectionInset = UIEdgeInsetsMake(
-        [self kTopInset], edgeInsets, kBottomSpacing, edgeInsets);
+    CGFloat edgeInsets =
+        MAX((availableWidth - totalWidthNeeded) / 2, self.spacing);
+    self.sectionInset = UIEdgeInsetsMake([self kTopInset], edgeInsets,
+                                         kBottomSpacing, edgeInsets);
   }
 
-  CGFloat itemHeight = self.layoutStyle == VivaldiStartPageLayoutStyleList ?
-      kListStyleItemHeight : itemWidth;
+  CGFloat itemHeight = self.layoutStyle == VivaldiStartPageLayoutStyleList
+                           ? kListStyleItemHeight
+                           : itemWidth;
 
   // Add a rounding adjustment for the item width for the cases when calculated
   // column width combined might go above available space due to rounding error.
   CGFloat roundingAdjustment = kMinimumItemWidthDecrease * 2;
 
-  self.itemSize = CGSizeMake((itemWidth-roundingAdjustment),
-                             (itemHeight-roundingAdjustment));
+  self.itemSize = CGSizeMake((itemWidth - roundingAdjustment),
+                             (itemHeight - roundingAdjustment));
 }
 
 /// Returns the minimum height needed to render the items
@@ -136,13 +141,11 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
   NSInteger actualNumberOfRows =
       (numberOfItems + numberOfColumns - 1) / numberOfColumns;
   // Determine the number of rows to use.
-  NSInteger numberOfRowsToUse =
-      MIN(actualNumberOfRows, _maxNumberOfRows);
+  NSInteger numberOfRowsToUse = MIN(actualNumberOfRows, _maxNumberOfRows);
   // Calculate total height
-  CGFloat totalHeight =
-      (itemHeight * numberOfRowsToUse) +
-          (lineSpacing * (numberOfRowsToUse - 1)) +
-              self.sectionInset.top + self.sectionInset.bottom;
+  CGFloat totalHeight = (itemHeight * numberOfRowsToUse) +
+                        (lineSpacing * (numberOfRowsToUse - 1)) +
+                        kSpacing * 2;
 
   return totalHeight;
 }
@@ -160,8 +163,13 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 #pragma mark - Private
 
 - (CGFloat)horizontalSpacing {
-  return self.layoutState == VivaldiStartPageLayoutStateNormal ?
-      kMinimumSidePadding : kMinimumSidePaddingPreview;
+  if (self.layoutStyle == VivaldiStartPageLayoutStyleIcon) {
+    return kMinimumSidePaddingIconLayout;
+  }
+
+  return self.layoutState == VivaldiStartPageLayoutStateNormal
+             ? kMinimumSidePadding
+             : kMinimumSidePaddingPreview;
 }
 
 - (BOOL)isSmallModalPreview {
@@ -170,7 +178,7 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 
 - (BOOL)isPreview {
   return self.layoutState == VivaldiStartPageLayoutStatePreviewModalFull ||
-      [self isSmallModalPreview];
+         [self isSmallModalPreview];
 }
 
 - (BOOL)isTopSites {
@@ -179,9 +187,8 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 
 /// Returns the number of calculate actual columns
 - (NSInteger)numberOfRenderedColumns {
-  CGFloat availableWidth =
-  self.collectionView.bounds.size.width -
-  self.sectionInset.left - self.sectionInset.right;
+  CGFloat availableWidth = self.collectionView.bounds.size.width -
+                           self.sectionInset.left - self.sectionInset.right;
   CGFloat itemWidth = self.itemSize.width + self.minimumInteritemSpacing;
   return MAX((availableWidth + self.minimumInteritemSpacing) / itemWidth, 1);
 }
@@ -194,8 +201,9 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 
   switch (self.layoutStyle) {
     case VivaldiStartPageLayoutStyleSmall:
-      return [self isTopSites] ?
-          kSmallStyleWidthPadTopSites : kSmallStyleWidthPad;
+    case VivaldiStartPageLayoutStyleIcon:
+      return [self isTopSites] ? kSmallStyleWidthPadTopSites
+                               : kSmallStyleWidthPad;
     case VivaldiStartPageLayoutStyleMedium:
       return kMediumStyleWidthPad;
     case VivaldiStartPageLayoutStyleLarge:
@@ -209,14 +217,15 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 - (CGFloat)iPadColumnWidthForPreview {
   switch (self.layoutStyle) {
     case VivaldiStartPageLayoutStyleSmall:
-      return [self isSmallModalPreview] ?
-          kSmallStyleWidthPadPreview : kSmallStyleWidthPadPreviewFull;
+    case VivaldiStartPageLayoutStyleIcon:
+      return [self isSmallModalPreview] ? kSmallStyleWidthPadPreview
+                                        : kSmallStyleWidthPadPreviewFull;
     case VivaldiStartPageLayoutStyleMedium:
-      return [self isSmallModalPreview] ?
-          kMediumStyleWidthPadPreview : kMediumStyleWidthPadPreviewFull;
+      return [self isSmallModalPreview] ? kMediumStyleWidthPadPreview
+                                        : kMediumStyleWidthPadPreviewFull;
     case VivaldiStartPageLayoutStyleLarge:
-      return [self isSmallModalPreview] ?
-          kLargeStyleWidthPadPreview : kLargeStyleWidthPadPreviewFull;
+      return [self isSmallModalPreview] ? kLargeStyleWidthPadPreview
+                                        : kLargeStyleWidthPadPreviewFull;
     case VivaldiStartPageLayoutStyleList:
       return kListStyleWidthPadPreview;
   }
@@ -226,25 +235,37 @@ const CGFloat kMinimumSidePaddingPreview = 2.0;
 - (CGFloat)iPhoneColumnWidth {
   switch (self.layoutStyle) {
     case VivaldiStartPageLayoutStyleSmall:
-      return [self isPreview] ?
-          kSmallStyleWidthPhonePreview :
-            ([self isTopSites] ?
-                kSmallStyleWidthPhoneTopSites : kSmallStyleWidthPhone);
+    case VivaldiStartPageLayoutStyleIcon:
+      return [self isPreview]
+                 ? kSmallStyleWidthPhonePreview
+                 : ([self isTopSites] ? kSmallStyleWidthPhoneTopSites
+                                      : kSmallStyleWidthPhone);
     case VivaldiStartPageLayoutStyleMedium:
-      return [self isPreview] ?
-          kMediumStyleWidthPhonePreview : kMediumStyleWidthPhone;
+      return [self isPreview] ? kMediumStyleWidthPhonePreview
+                              : kMediumStyleWidthPhone;
     case VivaldiStartPageLayoutStyleLarge:
-      return [self isPreview] ?
-          kLargeStyleWidthPhonePreview: kLargeStyleWidthPhone;
+      return [self isPreview] ? kLargeStyleWidthPhonePreview
+                              : kLargeStyleWidthPhone;
     case VivaldiStartPageLayoutStyleList:
-      return [self isPreview] ?
-          kListStyleWidthPhonePreview : kListStyleWidth;
+      return [self isPreview] ? kListStyleWidthPhonePreview : kListStyleWidth;
   }
 }
 
 /// Returns top inset for the Collection View.
 - (CGFloat)kTopInset {
+  if (self.layoutStyle == VivaldiStartPageLayoutStyleIcon) {
+    return kTopInsetIconLayout;
+  }
+
   return self.topToolbarHidden ? kTopInsetForHiddenToolbar : kSpacing;
+}
+
+- (CGFloat)spacing {
+  if (self.layoutStyle == VivaldiStartPageLayoutStyleIcon) {
+    return kSpacingIconLayout;
+  }
+
+  return kSpacing;
 }
 
 @end

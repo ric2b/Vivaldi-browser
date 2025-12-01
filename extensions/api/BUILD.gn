@@ -172,6 +172,11 @@ static_library("apis") {
     ]
     # MediaFoundation is not available on Windows N, so must be delay loaded.
     all_dependent_configs = [ ":delay_load_mf" ]
+
+    # Needed for update version info
+    deps += [
+      "//chrome/updater:version_header",
+    ]
   }
 
   sources = [
@@ -196,10 +201,14 @@ static_library("apis") {
     "devtools/devtools_private_api.h",
     "direct_match/direct_match_api.cc",
     "direct_match/direct_match_api.h",
+    "doh/doh_functions.cc",
+    "doh/doh_functions.h",
     "editcommand/editcommand_api.cc",
     "editcommand/editcommand_api.h",
     "extension_action_utils/extension_action_utils_api.cc",
     "extension_action_utils/extension_action_utils_api.h",
+    "guest_view/vivaldi_guest_view_utils.cpp",
+    "guest_view/vivaldi_guest_view_utils.h",
     "guest_view/web_view_private_api.cpp",
     "guest_view/web_view_private_api.h",
     "history/history_private_api.cc",

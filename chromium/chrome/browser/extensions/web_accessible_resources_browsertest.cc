@@ -7,7 +7,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/extension_platform_browsertest.h"
+#include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/version_info/channel.h"
@@ -29,7 +29,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/extensions/extension_browsertest.h"
+#include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/ui_test_utils.h"
 #endif
@@ -83,12 +83,12 @@ static constexpr char kFetchResourceScriptTemplate[] = R"(
 )";
 
 // Exercise web accessible resources with experimental extension features.
-class WebAccessibleResourcesBrowserTest : public ExtensionPlatformBrowserTest {
+class WebAccessibleResourcesBrowserTest : public ExtensionBrowserTest {
  public:
   WebAccessibleResourcesBrowserTest() = default;
 
   void SetUpOnMainThread() override {
-    ExtensionPlatformBrowserTest::SetUpOnMainThread();
+    ExtensionBrowserTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
     EXPECT_TRUE(embedded_test_server()->Start());
   }
@@ -96,6 +96,11 @@ class WebAccessibleResourcesBrowserTest : public ExtensionPlatformBrowserTest {
  private:
   base::test::ScopedFeatureList feature_list_;
   ScopedCurrentChannel current_channel_{version_info::Channel::CANARY};
+
+#if !BUILDFLAG(IS_ANDROID)
+  // TODO(https://crbug.com/40804030): Remove this when updated to use MV3.
+  extensions::ScopedTestMV2Enabler mv2_enabler_;
+#endif
 };
 
 // If `use_dynamic_url` is set to true in manifest.json, then the associated web

@@ -29,7 +29,6 @@
 #include "src/objects/templates-inl.h"
 
 #if V8_ENABLE_WEBASSEMBLY
-#include "src/wasm/wasm-module.h"
 #include "src/wasm/wasm-objects.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -155,6 +154,12 @@ bool SharedFunctionInfo::HasTrustedData() const {
   return !IsTrustedPointerFieldEmpty(kTrustedFunctionDataOffset);
 }
 
+bool SharedFunctionInfo::HasUnpublishedTrustedData(
+    IsolateForSandbox isolate) const {
+  return IsTrustedPointerFieldUnpublished(kTrustedFunctionDataOffset,
+                                          kUnknownIndirectPointerTag, isolate);
+}
+
 bool SharedFunctionInfo::HasUntrustedData() const { return !HasTrustedData(); }
 
 Tagged<Object> SharedFunctionInfo::GetTrustedData(
@@ -232,6 +237,8 @@ RENAME_PRIMITIVE_TORQUE_ACCESSORS(SharedFunctionInfo, raw_function_token_offset,
                                   function_token_offset, uint16_t)
 
 RELAXED_INT32_ACCESSORS(SharedFunctionInfo, flags, kFlagsOffset)
+RELAXED_INT32_ACCESSORS(SharedFunctionInfo, function_literal_id,
+                        kFunctionLiteralIdOffset)
 int32_t SharedFunctionInfo::relaxed_flags() const {
   return flags(kRelaxedLoad);
 }
@@ -313,7 +320,7 @@ bool SharedFunctionInfo::AreSourcePositionsAvailable(IsolateT* isolate) const {
 
 template <typename IsolateT>
 SharedFunctionInfo::Inlineability SharedFunctionInfo::GetInlineability(
-    IsolateT* isolate) const {
+    CodeKind code_kind, IsolateT* isolate) const {
   if (!IsScript(script())) return kHasNoScript;
 
   if (isolate->is_precise_binary_code_coverage() &&
@@ -345,7 +352,7 @@ SharedFunctionInfo::Inlineability SharedFunctionInfo::GetInlineability(
     }
   }
 
-  if (optimization_disabled()) return kHasOptimizationDisabled;
+  if (optimization_disabled(code_kind)) return kHasOptimizationDisabled;
 
   return kIsInlineable;
 }
@@ -402,8 +409,19 @@ BIT_FIELD_ACCESSORS(SharedFunctionInfo, relaxed_flags,
 BIT_FIELD_ACCESSORS(SharedFunctionInfo, relaxed_flags, live_edited,
                     SharedFunctionInfo::LiveEditedBit)
 
-bool SharedFunctionInfo::optimization_disabled() const {
-  return disabled_optimization_reason() != BailoutReason::kNoReason;
+bool SharedFunctionInfo::optimization_disabled(CodeKind kind) const {
+  switch (kind) {
+    case CodeKind::MAGLEV:
+      return IsTerminalBailoutReasonForMaglev(disabled_optimization_reason());
+    case CodeKind::TURBOFAN_JS:
+      return IsTerminalBailoutReasonForTurbofan(disabled_optimization_reason());
+    default:
+      UNREACHABLE();
+  }
+}
+
+bool SharedFunctionInfo::all_optimization_disabled() const {
+  return IsTerminalBailoutReason(disabled_optimization_reason());
 }
 
 BailoutReason SharedFunctionInfo::disabled_optimization_reason() const {
@@ -526,11 +544,6 @@ void SharedFunctionInfo::DontAdaptArguments() {
     }
   }
   TorqueGeneratedClass::set_formal_parameter_count(kDontAdaptArgumentsSentinel);
-}
-
-bool SharedFunctionInfo::IsDontAdaptArguments() const {
-  return TorqueGeneratedClass::formal_parameter_count() ==
-         kDontAdaptArgumentsSentinel;
 }
 
 DEF_ACQUIRE_GETTER(SharedFunctionInfo, scope_info, Tagged<ScopeInfo>) {
@@ -656,33 +669,85 @@ IsCompiledScope SharedFunctionInfo::is_compiled_scope(IsolateT* isolate) const {
 }
 
 IsCompiledScope::IsCompiledScope(const Tagged<SharedFunctionInfo> shared,
-                                 Isolate* isolate)
-    : is_compiled_(shared->is_compiled()) {
-  if (shared->HasBaselineCode()) {
-    retain_code_ = handle(shared->baseline_code(kAcquireLoad), isolate);
-  } else if (shared->HasBytecodeArray()) {
-    retain_code_ = handle(shared->GetBytecodeArray(isolate), isolate);
+                                 Isolate* isolate) {
+  Tagged<Object> data_obj = shared->GetTrustedData();
+  if (Tagged<HeapObject> data; TryCast<HeapObject>(data_obj, &data)) {
+    if (Tagged<Code> code; TryCast<Code>(data, &code)) {
+      DCHECK_EQ(code->kind(), CodeKind::BASELINE);
+      data = code->bytecode_or_interpreter_data();
+    }
+    // Unlike GetBytecodeArray, we don't bother checking for DebugInfo here. If
+    // there is DebugInfo, then it will hold both the debug and original
+    // BytecodeArray strongly, so it doesn't matter which of those we hold.
+    if (Tagged<BytecodeArray> bytecode;
+        TryCast<BytecodeArray>(data, &bytecode)) {
+      retain_code_ = handle(bytecode, isolate);
+      is_compiled_ = true;
+    } else if (Tagged<InterpreterData> interpreter_data;
+               TryCast<InterpreterData>(data, &interpreter_data)) {
+      retain_code_ = handle(interpreter_data->bytecode_array(), isolate);
+      is_compiled_ = true;
+    } else if (Is<UncompiledData>(data)) {
+      retain_code_ = {};
+      is_compiled_ = false;
+    } else {
+      retain_code_ = {};
+      is_compiled_ = shared->is_compiled();
+    }
   } else {
-    retain_code_ = MaybeHandle<HeapObject>();
+    retain_code_ = {};
+    is_compiled_ = shared->is_compiled();
   }
 
   DCHECK_IMPLIES(!retain_code_.is_null(), is_compiled());
+  DCHECK_EQ(shared->is_compiled(), is_compiled());
 }
 
 IsCompiledScope::IsCompiledScope(const Tagged<SharedFunctionInfo> shared,
-                                 LocalIsolate* isolate)
-    : is_compiled_(shared->is_compiled()) {
-  if (shared->HasBaselineCode()) {
-    retain_code_ = isolate->heap()->NewPersistentHandle(
-        shared->baseline_code(kAcquireLoad));
-  } else if (shared->HasBytecodeArray()) {
-    retain_code_ =
-        isolate->heap()->NewPersistentHandle(shared->GetBytecodeArray(isolate));
+                                 LocalIsolate* isolate) {
+  Tagged<Object> data_obj = shared->GetTrustedData();
+  if (Tagged<HeapObject> data; TryCast<HeapObject>(data_obj, &data)) {
+    if (Tagged<Code> code; TryCast<Code>(data, &code)) {
+      DCHECK(code->kind() == CodeKind::BASELINE);
+      data = code->bytecode_or_interpreter_data();
+    }
+    // Unlike GetBytecodeArray, we don't bother checking for DebugInfo here. If
+    // there is DebugInfo, then it will hold both the debug and original
+    // BytecodeArray strongly, so it doesn't matter which of those we hold.
+    if (Tagged<BytecodeArray> bytecode;
+        TryCast<BytecodeArray>(data, &bytecode)) {
+      retain_code_ = isolate->heap()->NewPersistentHandle(bytecode);
+      is_compiled_ = true;
+    } else if (Tagged<InterpreterData> interpreter_data;
+               TryCast<InterpreterData>(data, &interpreter_data)) {
+      retain_code_ = isolate->heap()->NewPersistentHandle(
+          interpreter_data->bytecode_array());
+      is_compiled_ = true;
+    } else if (Is<UncompiledData>(data)) {
+      retain_code_ = {};
+      is_compiled_ = false;
+    } else {
+      retain_code_ = {};
+      is_compiled_ = shared->is_compiled();
+    }
   } else {
-    retain_code_ = MaybeHandle<HeapObject>();
+    retain_code_ = {};
+    is_compiled_ = shared->is_compiled();
   }
 
   DCHECK_IMPLIES(!retain_code_.is_null(), is_compiled());
+  DCHECK_EQ(shared->is_compiled(), is_compiled());
+}
+
+IsBaselineCompiledScope::IsBaselineCompiledScope(
+    const Tagged<SharedFunctionInfo> shared, Isolate* isolate) {
+  Tagged<Object> data_obj = shared->GetTrustedData();
+  if (IsCode(data_obj)) {
+    Tagged<Code> code = Cast<Code>(data_obj);
+    DCHECK_EQ(code->kind(), CodeKind::BASELINE);
+    retain_code_ = handle(code, isolate);
+    is_compiled_ = true;
+  }
 }
 
 bool SharedFunctionInfo::has_simple_parameters() {

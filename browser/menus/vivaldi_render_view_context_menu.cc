@@ -52,6 +52,7 @@
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_data.h"
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
+#include "third_party/blink/public/mojom/annotation/annotation.mojom.h"
 #include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -260,12 +261,16 @@ void VivaldiRenderViewContextMenu::InitMenu() {
   request.selection = base::UTF16ToUTF8(params_.selection_text);
 
   if (request.selection.length() > 0) {
-    auto input = AutocompleteInput(
-        params_.selection_text, metrics::OmniboxEventProto::OTHER,
-        ChromeAutocompleteSchemeClassifier(GetProfile()));
+    // AutocompleteInput below matches too much as a url (a single word is
+    // accepted) so we require there is at least '.' in the text to examine.
+    if (request.selection.find(".") != std::string::npos) {
+      auto input = AutocompleteInput(
+          params_.selection_text, metrics::OmniboxEventProto::OTHER,
+          ChromeAutocompleteSchemeClassifier(GetProfile()));
 
-    if (input.canonicalized_url().is_valid()) {
-      request.selectionurl = input.canonicalized_url().spec();
+      if (input.canonicalized_url().is_valid()) {
+        request.selectionurl = input.canonicalized_url().spec();
+      }
     }
     base::TrimWhitespace(params_.selection_text, base::TRIM_ALL,
                          &params_.selection_text);
@@ -319,7 +324,8 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN);
   request.support.canvas = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_CANVAS);
-  request.support.highlight = params_.opened_from_highlight;
+  request.support.highlight = params_.annotation_type ==
+                              blink::mojom::AnnotationType::kSharedHighlight;
   request.support.paste =
       request.iseditable &&
       (params_.edit_flags & blink::ContextMenuDataEditFlags::kCanPaste);

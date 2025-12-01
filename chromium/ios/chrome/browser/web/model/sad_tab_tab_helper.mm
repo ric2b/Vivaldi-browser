@@ -134,7 +134,7 @@ void SadTabTabHelper::WebStateDestroyed(web::WebState* web_state) {
 }
 
 void SadTabTabHelper::WebStateRealized(web::WebState* web_state) {
-  CHECK(!background_notification_observer_, base::NotFatalUntil::M125);
+  CHECK(!background_notification_observer_);
   CreateNotificationObserver();
 }
 
@@ -206,5 +206,3 @@ void SadTabTabHelper::OnAppDidBecomeActive() {
   }
   requires_reload_on_becoming_active_ = false;
 }
-
-WEB_STATE_USER_DATA_KEY_IMPL(SadTabTabHelper)

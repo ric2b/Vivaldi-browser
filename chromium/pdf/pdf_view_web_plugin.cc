@@ -232,12 +232,11 @@ class PerProcessInitializer final {
 };
 
 base::Value::Dict DictFromRect(const gfx::Rect& rect) {
-  base::Value::Dict dict;
-  dict.Set("x", rect.x());
-  dict.Set("y", rect.y());
-  dict.Set("width", rect.width());
-  dict.Set("height", rect.height());
-  return dict;
+  return base::Value::Dict()
+      .Set("x", rect.x())
+      .Set("y", rect.y())
+      .Set("width", rect.width())
+      .Set("height", rect.height());
 }
 
 bool IsPrintPreviewUrl(std::string_view url) {
@@ -273,12 +272,11 @@ bool IsSaveDataSizeValid(size_t size) {
 base::Value::Dict CreateSaveDataBlockMessage(
     const std::string& token,
     PdfViewWebPlugin::SaveDataBlock data) {
-  base::Value::Dict message;
-  message.Set("type", "saveDataBlock");
-  message.Set("token", token);
-  message.Set("dataToSave", std::move(data.block));
-  message.Set("totalFileSize", base::checked_cast<int>(data.total_file_size));
-  return message;
+  return base::Value::Dict()
+      .Set("type", "saveDataBlock")
+      .Set("token", token)
+      .Set("dataToSave", std::move(data.block))
+      .Set("totalFileSize", base::checked_cast<int>(data.total_file_size));
 }
 
 }  // namespace
@@ -290,9 +288,17 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
   ~PdfInkModuleClientImpl() override = default;
 
   // PdfInkModuleClient:
+  void ClearSelection() override { plugin_->engine_->ClearTextSelection(); }
+
   void DiscardStroke(int page_index, InkStrokeId id) override {
     plugin_->engine_->DiscardStroke(page_index, id);
   }
+
+  void ExtendSelectionByPoint(const gfx::PointF& point) override {
+    plugin_->engine_->ExtendSelectionByPoint(point);
+  }
+
+  ui::Cursor GetCursor() override { return plugin_->cursor_; }
 
   PageOrientation GetOrientation() const override {
     return plugin_->engine_->GetCurrentOrientation();
@@ -310,6 +316,12 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
       return gfx::SizeF();
     }
     return plugin_->engine_->GetPageSizeInPoints(page_index).value();
+  }
+
+  std::vector<gfx::Rect> GetSelectionRects() override {
+    // Screen coordinates in PDFiumEngine is equivalent to device coordinates in
+    // PdfInkModuleClient.
+    return plugin_->engine_->GetSelectionRects();
   }
 
   gfx::Size GetThumbnailSize(int page_index) override {
@@ -331,6 +343,10 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
 
   bool IsPageVisible(int page_index) override {
     return plugin_->engine_->IsPageVisible(page_index);
+  }
+
+  bool IsSelectableTextOrLinkArea(const gfx::PointF& point) override {
+    return plugin_->engine_->IsSelectableTextOrLinkArea(point);
   }
 
   DocumentV2InkPathShapesMap LoadV2InkPathsFromPdf() override {
@@ -356,6 +372,15 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
     }
   }
 
+  void OnTextOrLinkAreaClick(const gfx::PointF& point,
+                             int click_count) override {
+    plugin_->engine_->OnTextOrLinkAreaClick(point, click_count);
+  }
+
+  int PageIndexFromPoint(const gfx::PointF& point) override {
+    return PageIndexFromPointImpl(point, /*must_be_visible=*/false);
+  }
+
   void PostMessage(base::Value::Dict message) override {
     plugin_->client_->PostMessage(std::move(message));
   }
@@ -376,11 +401,19 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
     plugin_->snapshot_needs_update_for_ink_input_ = true;
   }
 
-  void StrokeFinished() override {
+  void StrokeFinished(bool modified) override {
+    plugin_->client_->PostMessage(base::Value::Dict()
+                                      .Set("type", "finishInkStroke")
+                                      .Set("modified", modified));
+    if (modified) {
+      plugin_->SetPluginCanSave(true);
+    }
+  }
+
+  void StrokeStarted() override {
     base::Value::Dict message;
-    message.Set("type", "finishInkStroke");
+    message.Set("type", "startInkStroke");
     plugin_->client_->PostMessage(std::move(message));
-    plugin_->SetPluginCanSave(true);
   }
 
   void UpdateInkCursor(const ui::Cursor& cursor) override {
@@ -400,8 +433,13 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
   }
 
   int VisiblePageIndexFromPoint(const gfx::PointF& point) override {
+    return PageIndexFromPointImpl(point, /*must_be_visible=*/true);
+  }
+
+ private:
+  int PageIndexFromPointImpl(const gfx::PointF& point, bool must_be_visible) {
     for (int i = 0; i < plugin_->engine_->GetNumberOfPages(); ++i) {
-      if (!IsPageVisible(i)) {
+      if (must_be_visible && !IsPageVisible(i)) {
         continue;
       }
 
@@ -416,7 +454,6 @@ class PdfViewWebPlugin::PdfInkModuleClientImpl : public PdfInkModuleClient {
     return -1;
   }
 
- private:
   const raw_ref<PdfViewWebPlugin> plugin_;
 };
 #endif  // BUILDFLAG(ENABLE_PDF_INK2)
@@ -540,11 +577,11 @@ bool PdfViewWebPlugin::InitializeCommon() {
 }
 
 void PdfViewWebPlugin::SendSetSmoothScrolling() {
-  base::Value::Dict message;
-  message.Set("type", "setSmoothScrolling");
-  message.Set("smoothScrolling",
-              blink::Platform::Current()->IsScrollAnimatorEnabled());
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(
+      base::Value::Dict()
+          .Set("type", "setSmoothScrolling")
+          .Set("smoothScrolling",
+               blink::Platform::Current()->IsScrollAnimatorEnabled()));
 }
 
 void PdfViewWebPlugin::DidOpen(std::unique_ptr<UrlLoader> loader,
@@ -993,16 +1030,17 @@ void PdfViewWebPlugin::ImeFinishComposingTextForPlugin(
 }
 
 void PdfViewWebPlugin::ProposeDocumentLayout(const DocumentLayout& layout) {
-  base::Value::Dict message;
-  message.Set("type", "documentDimensions");
-  message.Set("width", layout.size().width());
-  message.Set("height", layout.size().height());
-  message.Set("layoutOptions", layout.options().ToValue());
   base::Value::List page_dimensions;
-  for (size_t i = 0; i < layout.page_count(); ++i)
+  page_dimensions.reserve(layout.page_count());
+  for (size_t i = 0; i < layout.page_count(); ++i) {
     page_dimensions.Append(DictFromRect(layout.page_rect(i)));
-  message.Set("pageDimensions", std::move(page_dimensions));
-  client_->PostMessage(std::move(message));
+  }
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "documentDimensions")
+                           .Set("width", layout.size().width())
+                           .Set("height", layout.size().height())
+                           .Set("layoutOptions", layout.options().ToValue())
+                           .Set("pageDimensions", std::move(page_dimensions)));
 
   // Reload the accessibility tree on layout changes because the relative page
   // bounds are no longer valid.
@@ -1028,64 +1066,61 @@ void PdfViewWebPlugin::DidScroll(const gfx::Vector2d& offset) {
 void PdfViewWebPlugin::ScrollToX(int x_screen_coords) {
   const float x_scroll_pos = x_screen_coords / device_scale_;
 
-  base::Value::Dict message;
-  message.Set("type", "setScrollPosition");
-  message.Set("x", static_cast<double>(x_scroll_pos));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "setScrollPosition")
+                           .Set("x", static_cast<double>(x_scroll_pos)));
 }
 
 void PdfViewWebPlugin::ScrollToY(int y_screen_coords) {
   const float y_scroll_pos = y_screen_coords / device_scale_;
 
-  base::Value::Dict message;
-  message.Set("type", "setScrollPosition");
-  message.Set("y", static_cast<double>(y_scroll_pos));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "setScrollPosition")
+                           .Set("y", static_cast<double>(y_scroll_pos)));
 }
 
 void PdfViewWebPlugin::ScrollBy(const gfx::Vector2d& delta) {
   const float x_delta = delta.x() / device_scale_;
   const float y_delta = delta.y() / device_scale_;
 
-  base::Value::Dict message;
-  message.Set("type", "scrollBy");
-  message.Set("x", static_cast<double>(x_delta));
-  message.Set("y", static_cast<double>(y_delta));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "scrollBy")
+                           .Set("x", static_cast<double>(x_delta))
+                           .Set("y", static_cast<double>(y_delta)));
 }
 
 void PdfViewWebPlugin::ScrollToPage(int page) {
   if (!engine_ || engine_->GetNumberOfPages() == 0)
     return;
 
-  base::Value::Dict message;
-  message.Set("type", "goToPage");
-  message.Set("page", page);
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(
+      base::Value::Dict().Set("type", "goToPage").Set("page", page));
 }
 
 void PdfViewWebPlugin::NavigateTo(const std::string& url,
                                   WindowOpenDisposition disposition) {
-  base::Value::Dict message;
-  message.Set("type", "navigate");
-  message.Set("url", url);
-  message.Set("disposition", static_cast<int>(disposition));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "navigate")
+                           .Set("url", url)
+                           .Set("disposition", static_cast<int>(disposition)));
 }
 
 void PdfViewWebPlugin::NavigateToDestination(int page,
                                              const float* x,
                                              const float* y,
                                              const float* zoom) {
-  base::Value::Dict message;
-  message.Set("type", "navigateToDestination");
-  message.Set("page", page);
-  if (x)
+  auto message = base::Value::Dict()
+                     .Set("type", "navigateToDestination")
+                     .Set("page", page);
+  if (x) {
     message.Set("x", static_cast<double>(*x));
-  if (y)
+  }
+  if (y) {
     message.Set("y", static_cast<double>(*y));
-  if (zoom)
+  }
+  if (zoom) {
     message.Set("zoom", static_cast<double>(*zoom));
+  }
   client_->PostMessage(std::move(message));
 }
 
@@ -1145,9 +1180,8 @@ void PdfViewWebPlugin::NotifySelectedFindResultChanged(int current_find_index,
 }
 
 void PdfViewWebPlugin::NotifyTouchSelectionOccurred() {
-  base::Value::Dict message;
-  message.Set("type", "touchSelectionOccurred");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(
+      base::Value::Dict().Set("type", "touchSelectionOccurred"));
 }
 
 void PdfViewWebPlugin::CaretChanged(const gfx::Rect& caret_rect) {
@@ -1159,15 +1193,11 @@ void PdfViewWebPlugin::GetDocumentPassword(
   DCHECK(password_callback_.is_null());
   password_callback_ = std::move(callback);
 
-  base::Value::Dict message;
-  message.Set("type", "getPassword");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict().Set("type", "getPassword"));
 }
 
 void PdfViewWebPlugin::Beep() {
-  base::Value::Dict message;
-  message.Set("type", "beep");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict().Set("type", "beep"));
 }
 
 void PdfViewWebPlugin::Alert(const std::string& message) {
@@ -1207,14 +1237,14 @@ void PdfViewWebPlugin::Email(const std::string& to,
                              const std::string& bcc,
                              const std::string& subject,
                              const std::string& body) {
-  base::Value::Dict message;
-  message.Set("type", "email");
-  message.Set("to", base::EscapeUrlEncodedData(to, false));
-  message.Set("cc", base::EscapeUrlEncodedData(cc, false));
-  message.Set("bcc", base::EscapeUrlEncodedData(bcc, false));
-  message.Set("subject", base::EscapeUrlEncodedData(subject, false));
-  message.Set("body", base::EscapeUrlEncodedData(body, false));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(
+      base::Value::Dict()
+          .Set("type", "email")
+          .Set("to", base::EscapeUrlEncodedData(to, false))
+          .Set("cc", base::EscapeUrlEncodedData(cc, false))
+          .Set("bcc", base::EscapeUrlEncodedData(bcc, false))
+          .Set("subject", base::EscapeUrlEncodedData(subject, false))
+          .Set("body", base::EscapeUrlEncodedData(body, false)));
 }
 
 void PdfViewWebPlugin::Print() {
@@ -1350,8 +1380,11 @@ void PdfViewWebPlugin::DocumentLoadComplete() {
 
   // To avoid delaying page load for searchify, start searchify after document
   // load is completed.
+  // Maximum image dimension is asked once and stored for the next usages, so
+  // `BindOnce` is sufficient.
   client_->SetOcrDisconnectedCallback(engine_->GetOcrDisconnectHandler());
   engine_->StartSearchify(
+      base::BindOnce(&Client::GetOcrMaxImageDimension, client_->GetWeakPtr()),
       base::BindRepeating(&Client::PerformOcr, client_->GetWeakPtr()));
 
   if (!full_frame_)
@@ -1412,8 +1445,6 @@ void PdfViewWebPlugin::DocumentLoadProgress(uint32_t available,
 
 void PdfViewWebPlugin::FormFieldFocusChange(
     PDFiumEngineClient::FocusFieldType type) {
-  base::Value::Dict message;
-  message.Set("type", "formFocusChange");
   std::string field_type;
   // LINT.IfChange(FocusFieldTypes)
   switch (type) {
@@ -1428,8 +1459,10 @@ void PdfViewWebPlugin::FormFieldFocusChange(
       break;
   }
   // LINT.ThenChange(//chrome/browser/resources/pdf/constants.ts:FocusFieldTypes)
-  message.Set("focused", field_type);
-  client_->PostMessage(std::move(message));
+
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "formFocusChange")
+                           .Set("focused", std::move(field_type)));
 
   text_input_type_ = type == PDFiumEngineClient::FocusFieldType::kText
                          ? blink::WebTextInputType::kWebTextInputTypeText
@@ -1447,6 +1480,15 @@ SkColor PdfViewWebPlugin::GetBackgroundColor() const {
 
 void PdfViewWebPlugin::SelectionChanged(const gfx::Rect& left,
                                         const gfx::Rect& right) {
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  // Ignore the selected text if `ink_module_` is currently text highlighting.
+  // This prevents `pdf_host_` from showing touch handles for touch text
+  // highlighting.
+  if (ink_module_ && ink_module_->ShouldBlockTextSelectionChanged()) {
+    return;
+  }
+#endif  // BUILDFLAG(ENABLE_PDF_INK2)
+
   gfx::PointF left_point(left.x() + available_area_.x(), left.y());
   gfx::PointF right_point(right.x() + available_area_.x(), right.y());
 
@@ -1465,19 +1507,22 @@ void PdfViewWebPlugin::EnteredEditMode() {
   edit_mode_ = true;
   SetPluginCanSave(true);
 
-  base::Value::Dict message;
-  message.Set("type", "setIsEditing");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict().Set("type", "setIsEditing"));
 }
 
 void PdfViewWebPlugin::DocumentFocusChanged(bool document_has_focus) {
-  base::Value::Dict message;
-  message.Set("type", "documentFocusChanged");
-  message.Set("hasFocus", document_has_focus);
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "documentFocusChanged")
+                           .Set("hasFocus", document_has_focus));
 }
 
 void PdfViewWebPlugin::SetSelectedText(const std::string& selected_text) {
+#if BUILDFLAG(ENABLE_PDF_INK2)
+  // Ignore the selected text if `ink_module_` is currently text highlighting.
+  if (ink_module_ && ink_module_->ShouldBlockTextSelectionChanged()) {
+    return;
+  }
+#endif  // BUILDFLAG(ENABLE_PDF_INK2)
   selected_text_ = blink::WebString::FromUTF8(selected_text);
   client_->TextSelectionChanged(selected_text_, /*offset=*/0,
                                 gfx::Range(0, selected_text_.length()));
@@ -1542,16 +1587,14 @@ void PdfViewWebPlugin::SetShowSearchifyInProgress(bool show) {
     return;
   }
 
-  base::Value::Dict message;
-  message.Set("type", "showSearchifyInProgress");
-  message.Set("show", show);
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "showSearchifyInProgress")
+                           .Set("show", show));
 }
 
 void PdfViewWebPlugin::OnHasSearchifyText() {
-  base::Value::Dict message;
-  message.Set("type", "setHasSearchifyText");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict().Set("type", "setHasSearchifyText"));
+
   pdf_accessibility_data_handler_->OnHasSearchifyText();
   if (chrome_pdf::features::IsPdfSearchifySaveEnabled()) {
     SetPluginCanSave(true);
@@ -1723,8 +1766,6 @@ void PdfViewWebPlugin::HandleGetNamedDestinationMessage(
 void PdfViewWebPlugin::HandleGetPageBoundingBoxMessage(
     const base::Value::Dict& message) {
   const int page_index = message.FindInt("page").value();
-  base::Value::Dict reply = PrepareReplyMessage(message);
-
   PDFiumPage* page = engine_->GetPage(page_index);
   CHECK(page);
   gfx::RectF bounding_box = page->GetBoundingBox();
@@ -1733,12 +1774,12 @@ void PdfViewWebPlugin::HandleGetPageBoundingBoxMessage(
   // Flip the origin from bottom-left to top-left.
   bounding_box.set_y(static_cast<float>(page_bounds.height()) -
                      bounding_box.bottom());
-  reply.Set("x", bounding_box.x());
-  reply.Set("y", bounding_box.y());
-  reply.Set("width", bounding_box.width());
-  reply.Set("height", bounding_box.height());
 
-  client_->PostMessage(std::move(reply));
+  client_->PostMessage(PrepareReplyMessage(message)
+                           .Set("x", bounding_box.x())
+                           .Set("y", bounding_box.y())
+                           .Set("width", bounding_box.width())
+                           .Set("height", bounding_box.height()));
 }
 
 void PdfViewWebPlugin::HandleGetPasswordCompleteMessage(
@@ -1753,9 +1794,8 @@ void PdfViewWebPlugin::HandleGetSelectedTextMessage(
   std::string selected_text;
   base::RemoveChars(engine_->GetSelectedText(), "\r", &selected_text);
 
-  base::Value::Dict reply = PrepareReplyMessage(message);
-  reply.Set("selectedText", selected_text);
-  client_->PostMessage(std::move(reply));
+  client_->PostMessage(PrepareReplyMessage(message).Set(
+      "selectedText", std::move(selected_text)));
 }
 
 void PdfViewWebPlugin::HandleGetSaveDataBlockMessage(
@@ -1773,9 +1813,8 @@ void PdfViewWebPlugin::HandleGetSaveDataBlockMessage(
 
 void PdfViewWebPlugin::HandleGetSuggestedFileName(
     const base::Value::Dict& message) {
-  base::Value::Dict reply = PrepareReplyMessage(message);
-  reply.Set("fileName", GetFileNameForSaveFromUrl(url_));
-  client_->PostMessage(std::move(reply));
+  client_->PostMessage(PrepareReplyMessage(message).Set(
+      "fileName", GetFileNameForSaveFromUrl(url_)));
 }
 
 void PdfViewWebPlugin::HandleGetThumbnailMessage(
@@ -1830,9 +1869,8 @@ void PdfViewWebPlugin::HandleSaveAttachmentMessage(
   base::Value data_to_save(
       IsSaveDataSizeValid(data.size()) ? data : std::vector<uint8_t>());
 
-  base::Value::Dict reply = PrepareReplyMessage(message);
-  reply.Set("dataToSave", std::move(data_to_save));
-  client_->PostMessage(std::move(reply));
+  client_->PostMessage(
+      PrepareReplyMessage(message).Set("dataToSave", std::move(data_to_save)));
 }
 
 void PdfViewWebPlugin::HandleSaveMessage(const base::Value::Dict& message) {
@@ -2047,10 +2085,10 @@ void PdfViewWebPlugin::SaveToBuffer(SaveRequestType request_type,
 
   engine_->KillFormFocus();
 
-  base::Value::Dict message;
-  message.Set("type", "saveData");
-  message.Set("token", token);
-  message.Set("fileName", GetFileNameForSaveFromUrl(url_));
+  auto message = base::Value::Dict()
+                     .Set("type", "saveData")
+                     .Set("token", token)
+                     .Set("fileName", GetFileNameForSaveFromUrl(url_));
 
   // Expose `edit_mode_` state for integration testing.
   message.Set("editModeForTesting", edit_mode_);
@@ -2159,10 +2197,8 @@ PdfViewWebPlugin::SaveDataBlock PdfViewWebPlugin::SaveBlockToBuffer(
 void PdfViewWebPlugin::SaveToFile(const std::string& token) {
   engine_->KillFormFocus();
 
-  base::Value::Dict message;
-  message.Set("type", "consumeSaveToken");
-  message.Set("token", token);
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(
+      base::Value::Dict().Set("type", "consumeSaveToken").Set("token", token));
 
   pdf_host_->SaveUrlAs(GURL(url_), network::mojom::ReferrerPolicy::kDefault);
 }
@@ -2645,6 +2681,7 @@ void PdfViewWebPlugin::SendAttachments() {
     return;
 
   base::Value::List attachments;
+  attachments.reserve(attachment_infos.size());
   for (const DocumentAttachmentInfo& attachment_info : attachment_infos) {
     // Send `size` as -1 to indicate that the attachment is too large to be
     // downloaded.
@@ -2652,41 +2689,36 @@ void PdfViewWebPlugin::SendAttachments() {
                          ? static_cast<int>(attachment_info.size_bytes)
                          : -1;
 
-    base::Value::Dict attachment;
-    attachment.Set("name", attachment_info.name);
-    attachment.Set("size", size);
-    attachment.Set("readable", attachment_info.is_readable);
-    attachments.Append(std::move(attachment));
+    attachments.Append(base::Value::Dict()
+                           .Set("name", attachment_info.name)
+                           .Set("size", size)
+                           .Set("readable", attachment_info.is_readable));
   }
 
-  base::Value::Dict message;
-  message.Set("type", "attachments");
-  message.Set("attachmentsData", std::move(attachments));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "attachments")
+                           .Set("attachmentsData", std::move(attachments)));
 }
 
 void PdfViewWebPlugin::SendBookmarks() {
   base::Value::List bookmarks = engine_->GetBookmarks();
-  if (bookmarks.empty())
+  if (bookmarks.empty()) {
     return;
+  }
 
-  base::Value::Dict message;
-  message.Set("type", "bookmarks");
-  message.Set("bookmarksData", std::move(bookmarks));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "bookmarks")
+                           .Set("bookmarksData", std::move(bookmarks)));
 }
 
 void PdfViewWebPlugin::SendExecutedEditCommand(std::string_view edit_command) {
-  base::Value::Dict message;
-  message.Set("type", "executedEditCommand");
-  message.Set("editCommand", edit_command);
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "executedEditCommand")
+                           .Set("editCommand", edit_command));
 }
 
 void PdfViewWebPlugin::SendStartedFindInPage() {
-  base::Value::Dict message;
-  message.Set("type", "startedFindInPage");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict().Set("type", "startedFindInPage"));
 }
 
 void PdfViewWebPlugin::SendMetadata() {
@@ -2734,20 +2766,18 @@ void PdfViewWebPlugin::SendMetadata() {
   metadata.Set("canSerializeDocument",
                IsSaveDataSizeValid(engine_->GetLoadedByteSize()));
 
-  base::Value::Dict message;
-  message.Set("type", "metadata");
-  message.Set("metadataData", std::move(metadata));
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "metadata")
+                           .Set("metadataData", std::move(metadata)));
 }
 
 void PdfViewWebPlugin::SendLoadingProgress(double percentage) {
   DCHECK(percentage == -1 || (percentage >= 0 && percentage <= 100));
   last_progress_sent_ = percentage;
 
-  base::Value::Dict message;
-  message.Set("type", "loadProgress");
-  message.Set("progress", percentage);
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict()
+                           .Set("type", "loadProgress")
+                           .Set("progress", percentage));
 }
 
 void PdfViewWebPlugin::HandleReleaseSaveInBlockBuffers(
@@ -2895,9 +2925,7 @@ void PdfViewWebPlugin::LoadNextPreviewPage() {
 }
 
 void PdfViewWebPlugin::SendPrintPreviewLoadedNotification() {
-  base::Value::Dict message;
-  message.Set("type", "printPreviewLoaded");
-  client_->PostMessage(std::move(message));
+  client_->PostMessage(base::Value::Dict().Set("type", "printPreviewLoaded"));
 }
 
 void PdfViewWebPlugin::SendThumbnailForTesting(base::Value::Dict reply,

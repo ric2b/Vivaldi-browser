@@ -33,6 +33,8 @@ BASE_DECLARE_FEATURE(kNtpAlphaBackgroundCollections);
 BASE_DECLARE_FEATURE(kNtpBackgroundImageErrorDetection);
 BASE_DECLARE_FEATURE(kNtpCalendarModule);
 BASE_DECLARE_FEATURE(kNtpChromeCartModule);
+BASE_DECLARE_FEATURE(kNtpSearchboxComposebox);
+BASE_DECLARE_FEATURE(kNtpSearchboxComposeEntrypoint);
 BASE_DECLARE_FEATURE(kNtpDriveModule);
 BASE_DECLARE_FEATURE(kNtpDriveModuleNoSyncRequirement);
 BASE_DECLARE_FEATURE(kNtpDriveModuleSegmentation);
@@ -68,8 +70,7 @@ enum class NtpSharepointModuleDataType {
 BASE_DECLARE_FEATURE(kNtpShortcuts);
 BASE_DECLARE_FEATURE(kNtpHandleMostVisitedNavigationExplicitly);
 BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionModule);
-BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionModuleDeviceIcon);
-BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionUseIsKnownToSync);
+BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionAllowFaviconServerFallback);
 BASE_DECLARE_FEATURE(kNtpMostRelevantTabResumptionModuleFallbackToHost);
 BASE_DECLARE_FEATURE(kNtpTabResumptionModuleCategories);
 BASE_DECLARE_FEATURE(kNtpTabResumptionModuleTimeLimit);

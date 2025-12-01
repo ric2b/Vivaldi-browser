@@ -20,7 +20,8 @@ previousrev() {
 nextrev() {
   STEP="next revision" &&
   git -C "${FT_GIT_DIR}" fetch &&
-  FT_NEXT_REV=$(git -C "${FT_GIT_DIR}" rev-parse "${FT_GIT_REF}")
+  FT_NEXT_REV=$1 &&
+  : ${FT_NEXT_REV:=$(git -C "${FT_GIT_DIR}" rev-parse "${FT_GIT_REF}")}
 }
 
 rolldeps() {
@@ -32,8 +33,8 @@ rolldeps() {
 
 rollbazel() {
   STEP="roll-bazel" &&
-  sed -i'' -e "s!commit = \"${FT_PREVIOUS_REV}\",!commit = \"${FT_NEXT_REV}\",!" bazel/deps.bzl &&
-  git add bazel/deps.bzl
+  sed -i'' -e "s!\"${FT_PREVIOUS_REV}\",!\"${FT_NEXT_REV}\",!" bazel/deps.json &&
+  git add bazel/deps.json
 }
 
 rolldepsgen() {
@@ -53,6 +54,17 @@ mergeinclude() {
   git add "${FT_BUILD_DIR}/${SKIA_INCLUDE}"
 }
 
+update_bazel_patch() {
+  STEP="Update Bazel patch" &&
+  python3 tools/generate_patches.py \
+    ${FT_BUILD_DIR}/include/freetype-android/freetype/config/ftmodule.h builds/android-ftmodule.h \
+    ${FT_BUILD_DIR}/include/freetype-android/freetype/config/ftoption.h builds/android-ftoption.h \
+    ${FT_BUILD_DIR}/include/freetype-no-type1/freetype/config/ftmodule.h builds/no-type1-ftmodule.h \
+    ${FT_BUILD_DIR}/include/freetype-no-type1/freetype/config/ftoption.h builds/no-type1-ftoption.h \
+    > bazel/external/freetype/config_files.patch &&
+  git add bazel/external/freetype/config_files.patch
+}
+
 commit() {
   STEP="commit" &&
   FT_PREVIOUS_REV_SHORT=$(echo "${FT_PREVIOUS_REV}" | cut -c 1-8) &&
@@ -67,13 +79,14 @@ Disable: treat-URL-as-trailer"
 
 notshallow &&
 previousrev &&
-nextrev &&
-rolldeps "$@" &&
+nextrev "$1" &&
+rolldeps &&
 rollbazel &&
 rolldepsgen &&
 mergeinclude freetype-android freetype/config/ftoption.h &&
 mergeinclude freetype-android freetype/config/ftmodule.h &&
 mergeinclude freetype-no-type1 freetype/config/ftoption.h &&
 mergeinclude freetype-no-type1 freetype/config/ftmodule.h &&
+update_bazel_patch &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

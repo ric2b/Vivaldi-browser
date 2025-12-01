@@ -916,10 +916,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchPrepareTailCall:
       AssemblePrepareTailCall();
       break;
-    case kArchCallCFunctionWithFrameState:
     case kArchCallCFunction: {
-      int const num_gp_parameters = ParamField::decode(instr->opcode());
-      int const num_fp_parameters = FPParamField::decode(instr->opcode());
+      uint32_t param_counts = i.InputUint32(instr->InputCount() - 1);
+      int const num_gp_parameters = ParamField::decode(param_counts);
+      int const num_fp_parameters = FPParamField::decode(param_counts);
       Label return_location;
       SetIsolateDataSlots set_isolate_data_slots = SetIsolateDataSlots::kYes;
 #if V8_ENABLE_WEBASSEMBLY
@@ -946,9 +946,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       }
       RecordSafepoint(instr->reference_map(), pc_offset);
 
-      bool const needs_frame_state =
-          (arch_opcode == kArchCallCFunctionWithFrameState);
-      if (needs_frame_state) {
+      if (instr->HasCallDescriptorFlag(CallDescriptor::kHasExceptionHandler)) {
+        handlers_.push_back({nullptr, pc_offset});
+      }
+      if (instr->HasCallDescriptorFlag(CallDescriptor::kNeedsFrameState)) {
         RecordDeoptInfo(instr, pc_offset);
       }
 
@@ -998,7 +999,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
                        SourceLocation());
       break;
     case kArchNop:
-    case kArchThrowTerminator:
       // don't emit code for nops.
       break;
     case kArchDeoptimize: {
@@ -1044,6 +1044,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
         __ Move(i.OutputRegister(), fp);
       }
       break;
+    case kArchRootPointer:
+      __ mv(i.OutputRegister(), kRootRegister);
+      break;
     case kArchTruncateDoubleToI:
       __ TruncateDoubleToI(isolate(), zone(), i.OutputRegister(),
                            i.InputDoubleRegister(0), DetermineStubCallMode());
@@ -1069,6 +1072,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kArchAtomicStoreWithWriteBarrier: {
 #ifdef V8_TARGET_ARCH_RISCV64
+      MacroAssembler::BlockTrampolinePoolScope block_trampoline_pool(masm());
       RecordWriteMode mode = RecordWriteModeField::decode(instr->opcode());
       // Indirect pointer writes must use a different opcode.
       DCHECK_NE(mode, RecordWriteMode::kValueIsIndirectPointer);
@@ -1079,7 +1083,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       auto ool = zone()->New<OutOfLineRecordWrite>(
           this, object, Operand(offset), value, mode, DetermineStubCallMode());
       __ AddWord(kScratchReg, object, offset);
-      __ AtomicStoreTaggedField(value, MemOperand(kScratchReg, 0));
+      __ AtomicStoreTaggedField(value, MemOperand(kScratchReg, 0), trapper);
       // Skip the write barrier if the value is a Smi. However, this is only
       // valid if the value isn't an indirect pointer. Otherwise the value will
       // be a pointer table index, which will always look like a Smi (but
@@ -1492,8 +1496,14 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
           !__ IsSingleZeroRegSet()) {
         __ LoadFPRImmediate(kSingleRegZero, 0.0f);
       }
-      // compare result set to kScratchReg
-      __ CompareF32(kScratchReg, cc, left, right);
+      switch (FlagsModeField::decode(instr->opcode())) {
+        case kFlags_set:
+          __ CompareF32(i.OutputRegister(), cc, left, right);
+          break;
+        default:
+          __ CompareF32(kScratchReg, cc, left, right);
+          break;
+      }
     } break;
     case kRiscvAddS:
       // TODO(plind): add special case: combine mult & add.
@@ -1554,8 +1564,14 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
           !__ IsDoubleZeroRegSet()) {
         __ LoadFPRImmediate(kDoubleRegZero, 0.0);
       }
-      // compare result set to kScratchReg
-      __ CompareF64(kScratchReg, cc, left, right);
+      switch (FlagsModeField::decode(instr->opcode())) {
+        case kFlags_set:
+          __ CompareF64(i.OutputRegister(), cc, left, right);
+          break;
+        default:
+          __ CompareF64(kScratchReg, cc, left, right);
+          break;
+      }
     } break;
 #if V8_TARGET_ARCH_RISCV32
     case kRiscvAddPair:
@@ -2486,13 +2502,15 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ StoreIndirectPointerField(i.InputOrZeroRegister(0), mem, trapper);
       break;
     }
-    case kRiscvAtomicLoadDecompressTaggedSigned:
+    case kRiscvAtomicLoadDecompressTaggedSigned: {
       __ AtomicDecompressTaggedSigned(i.OutputRegister(), i.MemoryOperand(),
                                       trapper);
       break;
-    case kRiscvAtomicLoadDecompressTagged:
+    }
+    case kRiscvAtomicLoadDecompressTagged: {
       __ AtomicDecompressTagged(i.OutputRegister(), i.MemoryOperand(), trapper);
       break;
+    }
     case kRiscvAtomicStoreCompressTagged: {
       size_t index = 0;
       MemOperand mem = i.MemoryOperand(&index);
@@ -4298,29 +4316,12 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
     return;
   } else if (instr->arch_opcode() == kRiscvCmpD ||
              instr->arch_opcode() == kRiscvCmpS) {
-    if (instr->arch_opcode() == kRiscvCmpD) {
-      FPURegister left = i.InputOrZeroDoubleRegister(0);
-      FPURegister right = i.InputOrZeroDoubleRegister(1);
-      if ((left == kDoubleRegZero || right == kDoubleRegZero) &&
-          !__ IsDoubleZeroRegSet()) {
-        __ LoadFPRImmediate(kDoubleRegZero, 0.0);
-      }
-    } else {
-      FPURegister left = i.InputOrZeroSingleRegister(0);
-      FPURegister right = i.InputOrZeroSingleRegister(1);
-      if ((left == kSingleRegZero || right == kSingleRegZero) &&
-          !__ IsSingleZeroRegSet()) {
-        __ LoadFPRImmediate(kSingleRegZero, 0.0f);
-      }
-    }
     bool predicate;
     FlagsConditionToConditionCmpFPU(&predicate, condition);
     // RISCV compare returns 0 or 1, do nothing when predicate; otherwise
-    // toggle kScratchReg (i.e., 0 -> 1, 1 -> 0)
-    if (predicate) {
-      __ Move(result, kScratchReg);
-    } else {
-      __ Xor(result, kScratchReg, 1);
+    // toggle result (i.e., 0 -> 1, 1 -> 0)
+    if (!predicate) {
+      __ Xor(result, result, 1);
     }
     return;
   } else {

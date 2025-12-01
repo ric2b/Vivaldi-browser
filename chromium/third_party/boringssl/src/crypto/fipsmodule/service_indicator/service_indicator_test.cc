@@ -32,7 +32,6 @@
 #include <openssl/md5.h>
 #include <openssl/rand.h>  // TODO(bbe): only for RAND_bytes call below, replace with BCM call
 #include <openssl/rsa.h>
-#include <openssl/service_indicator.h>
 
 #include "../../test/abi_test.h"
 #include "../../test/test_util.h"
@@ -40,11 +39,48 @@
 #include "../bn/internal.h"
 #include "../rand/internal.h"
 #include "../tls/internal.h"
+#include "internal.h"
 
 
 namespace {
 
-using bssl::FIPSStatus;
+// CALL_SERVICE_AND_CHECK_APPROVED runs |func| and sets |approved| to one of the
+// |FIPSStatus*| values, above, depending on whether |func| invoked an
+// approved service. The result of |func| becomes the result of this macro.
+#define CALL_SERVICE_AND_CHECK_APPROVED(approved, func)   \
+  [&] {                                                   \
+    FIPSIndicatorHelper fips_indicator_helper(&approved); \
+    return func;                                          \
+  }()
+
+enum class FIPSStatus {
+  NOT_APPROVED = 0,
+  APPROVED = 1,
+};
+
+// FIPSIndicatorHelper records whether the service indicator counter advanced
+// during its lifetime.
+class FIPSIndicatorHelper {
+ public:
+  FIPSIndicatorHelper(FIPSStatus *result)
+      : result_(result), before_(FIPS_service_indicator_before_call()) {
+    *result_ = FIPSStatus::NOT_APPROVED;
+  }
+
+  ~FIPSIndicatorHelper() {
+    uint64_t after = FIPS_service_indicator_after_call();
+    if (after != before_) {
+      *result_ = FIPSStatus::APPROVED;
+    }
+  }
+
+  FIPSIndicatorHelper(const FIPSIndicatorHelper&) = delete;
+  FIPSIndicatorHelper &operator=(const FIPSIndicatorHelper &) = delete;
+
+ private:
+  FIPSStatus *const result_;
+  const uint64_t before_;
+};
 
 static const uint8_t kAESKey[16] = {'A', 'W', 'S', '-', 'L', 'C', 'C', 'r',
                                     'y', 'p', 't', 'o', ' ', 'K', 'e', 'y'};

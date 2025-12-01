@@ -210,8 +210,8 @@ class PartialPivLU : public SolverBase<PartialPivLU<MatrixType_, PermutationInde
 
   MatrixType reconstructedMatrix() const;
 
-  EIGEN_CONSTEXPR inline Index rows() const EIGEN_NOEXCEPT { return m_lu.rows(); }
-  EIGEN_CONSTEXPR inline Index cols() const EIGEN_NOEXCEPT { return m_lu.cols(); }
+  constexpr Index rows() const noexcept { return m_lu.rows(); }
+  constexpr Index cols() const noexcept { return m_lu.cols(); }
 
 #ifndef EIGEN_PARSED_BY_DOXYGEN
   template <typename RhsType, typename DstType>

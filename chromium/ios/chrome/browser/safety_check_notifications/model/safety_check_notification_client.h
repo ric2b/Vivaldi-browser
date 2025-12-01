@@ -9,6 +9,7 @@
 #import <UserNotifications/UserNotifications.h>
 
 #import "base/functional/callback_forward.h"
+#import "base/memory/raw_ptr.h"
 #import "base/memory/scoped_refptr.h"
 #import "base/memory/weak_ptr.h"
 #import "base/sequence_checker.h"
@@ -19,6 +20,7 @@
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_constants.h"
 
 class Browser;
+class ProfileIOS;
 
 // A push notification client for managing Safety Check-related notifications.
 // Observes Safety Check state changes to ensure notifications are accurate, and
@@ -27,11 +29,21 @@ class SafetyCheckNotificationClient
     : public PushNotificationClient,
       public IOSChromeSafetyCheckManagerObserver {
  public:
+  // Constructs a SafetyCheckNotificationClient without specific Profile
+  // context. Use this when multi-Profile push notification handling
+  // (kIOSPushNotificationMultiProfile) is disabled (legacy behavior).
   explicit SafetyCheckNotificationClient(
+      const scoped_refptr<base::SequencedTaskRunner> task_runner);
+  // Constructs a Profile-aware SafetyCheckNotificationClient. Use this when
+  // multi-Profile push notification handling (kIOSPushNotificationMultiProfile)
+  // is enabled, providing the associated `profile`.
+  explicit SafetyCheckNotificationClient(
+      ProfileIOS* profile,
       const scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~SafetyCheckNotificationClient() override;
 
   // `PushNotificationClient` overrides.
+  bool CanHandleNotification(UNNotification* notification) override;
   bool HandleNotificationInteraction(
       UNNotificationResponse* notification_response) override;
   std::optional<UIBackgroundFetchResult> HandleNotificationReception(

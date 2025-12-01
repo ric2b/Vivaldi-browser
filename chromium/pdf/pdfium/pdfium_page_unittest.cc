@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "pdf/accessibility_structs.h"
 #include "pdf/buildflags.h"
+#include "pdf/pdf_features.h"
 #include "pdf/pdfium/pdfium_engine.h"
 #include "pdf/pdfium/pdfium_test_base.h"
 #include "pdf/test/test_client.h"
@@ -79,16 +80,6 @@ void CompareTextRuns(const AccessibilityTextRunInfo& expected_text_run,
   EXPECT_EQ(expected_style.stroke_color, actual_style.stroke_color);
   EXPECT_EQ(expected_style.is_italic, actual_style.is_italic);
   EXPECT_EQ(expected_style.is_bold, actual_style.is_bold);
-}
-
-template <typename T>
-void PopulateTextObjects(const std::vector<gfx::Range>& ranges,
-                         std::vector<T>* text_objects) {
-  text_objects->resize(ranges.size());
-  for (size_t i = 0; i < ranges.size(); ++i) {
-    (*text_objects)[i].start_char_index = ranges[i].start();
-    (*text_objects)[i].char_count = ranges[i].end() - ranges[i].start();
-  }
 }
 
 // Returns the page size for a `PDFiumPage`. The caller must make sure that
@@ -616,10 +607,10 @@ TEST_P(PDFiumPageImageForOcrTest, HighResolutionImage) {
   SkBitmap image_bitmap = engine->GetImageForOcr(
       /*page_index=*/0, page.images_[0].page_object_index);
   EXPECT_FALSE(image_bitmap.drawsNothing());
-  // While the original image is 5000x5000, the returned image is 267x267 as
-  // OCR needs at most 300 DPI.
-  EXPECT_EQ(image_bitmap.width(), 267);
-  EXPECT_EQ(image_bitmap.height(), 267);
+  // While the original image is 5000x5000, the returned image is 2048x2048 as
+  // OCR processes at most 2048x2048 pixel images.
+  EXPECT_EQ(image_bitmap.width(), 2048);
+  EXPECT_EQ(image_bitmap.height(), 2048);
 }
 
 TEST_P(PDFiumPageImageForOcrTest, RotatedPage) {
@@ -634,12 +625,20 @@ TEST_P(PDFiumPageImageForOcrTest, RotatedPage) {
   page.PopulateTextRunTypeAndImageAltText(text_runs);
   ASSERT_EQ(1u, page.images_.size());
 
-  // This page is rotated, therefore the extracted image size is 25x100 while
-  // the stored image is 100x25.
   SkBitmap image_bitmap = engine->GetImageForOcr(
       /*page_index=*/0, page.images_[0].page_object_index);
-  EXPECT_EQ(image_bitmap.width(), 25);
-  EXPECT_EQ(image_bitmap.height(), 100);
+
+  if (base::FeatureList::IsEnabled(chrome_pdf::features::kPdfSearchify)) {
+    // When PDF Searchify is enabled, page rotation does not affect the images
+    // that are sent to OCR.
+    EXPECT_EQ(image_bitmap.width(), 100);
+    EXPECT_EQ(image_bitmap.height(), 25);
+  } else {
+    // This page is rotated, therefore the extracted image size is 25x100 while
+    // the stored image is 100x25.
+    EXPECT_EQ(image_bitmap.width(), 25);
+    EXPECT_EQ(image_bitmap.height(), 100);
+  }
 }
 
 TEST_P(PDFiumPageImageForOcrTest, NonImage) {

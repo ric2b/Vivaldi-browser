@@ -7,10 +7,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
@@ -24,6 +26,7 @@
 #include "content/browser/shared_storage/test_shared_storage_runtime_manager.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/frame_tree_node_id.h"
+#include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/browser_test_utils.h"  // For `ToRenderFrameHost`
 #include "content/public/test/content_browser_test.h"
@@ -69,13 +72,24 @@ class SharedStorageBrowserTestBase : public ContentBrowserTest {
   void ExpectAccessObserved(
       const std::vector<TestSharedStorageObserver::Access>& expected_accesses);
 
+  void ExpectOperationFinishedInfosObserved(
+      const std::vector<TestSharedStorageObserver::OperationFinishedInfo>&
+          expected_infos);
+
+  std::map<int, base::UnguessableToken>& GetCachedWorkletHostDevToolsTokens();
+
+  // Precondition: At least one worklet host has been created.
+  // Returns the DevTools token associated with the first-created worklet host
+  // (which would have ordinal worklet ID 0).
+  base::UnguessableToken GetFirstWorkletHostDevToolsToken();
+
   uint16_t port() { return https_server()->port(); }
 
   double GetRemainingBudget(const url::Origin& origin);
 
   FrameTreeNode* PrimaryFrameTreeNodeRoot();
 
-  FrameTreeNodeId MainFrameId();
+  GlobalRenderFrameHostId MainFrameId();
 
   SharedStorageBudgetMetadata* GetSharedStorageBudgetMetadata(
       const GURL& urn_uuid);
@@ -133,12 +147,19 @@ class SharedStorageBrowserTestBase : public ContentBrowserTest {
 
   TestSharedStorageRuntimeManager& test_runtime_manager();
 
+  const std::vector<GURL>& urn_uuids_observed() const;
+
   ~SharedStorageBrowserTestBase() override;
 
  protected:
   static void WaitForHistogram(const std::string& histogram_name);
   static void WaitForHistograms(
       const std::vector<std::string>& histogram_names);
+  static void WaitForHistogramWithCount(std::string_view histogram_name,
+                                        int count);
+  static void WaitForHistogramsWithCounts(
+      const std::vector<std::tuple<std::string_view, int>>&
+          histogram_names_and_counts);
 
   static constexpr double kBudgetAllowed = 5.0;
   static constexpr int kStalenessThresholdDays = 1;

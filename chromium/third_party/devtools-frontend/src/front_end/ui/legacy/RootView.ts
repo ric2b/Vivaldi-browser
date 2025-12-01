@@ -1,6 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import rootViewStyles from './rootView.css.js';
 import {VBox} from './Widget.js';
@@ -22,7 +23,7 @@ export class RootView extends VBox {
     }
     this.window = document.defaultView;
     this.doResize();
-    this.show((document.body as Element));
+    this.show(document.body);
   }
 
   override doResize(): void {

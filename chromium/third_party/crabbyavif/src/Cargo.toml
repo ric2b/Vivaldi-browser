@@ -21,24 +21,23 @@ dav1d-sys = { version = "0.1.0", path = "sys/dav1d-sys", optional = true }
 libgav1-sys = { version = "0.1.0", path = "sys/libgav1-sys", optional = true }
 libyuv-sys = { version = "0.1.0", path = "sys/libyuv-sys", optional = true }
 aom-sys = { version = "0.1.0", path = "sys/aom-sys", optional = true }
+png = { version = "0.17.16", optional = true }
+image = { version = "0.24.0", features = ["jpeg"], optional = true }
 
 [dev-dependencies]
 test-case = "3.3.1"
 seq-macro = "0.3.5"
 tempfile = "3.8.1"
-exitcode = "1.1.2"
 rand = "0.8.5"
 clap = { version = "4.5.28", features = ["derive"] }
 clap_derive = { version = "4.5.28" }
-png = "0.17.16"
-image = { version = "0.24.0", features = ["jpeg"] }
 
 [build-dependencies]
 bindgen = "0.69.1"
 cbindgen = "0.26.0"
 
 [features]
-default = ["dav1d", "libyuv"]
+default = ["dav1d", "libyuv", "png", "jpeg"]
 capi = []
 dav1d = ["dep:libc", "dep:dav1d-sys"]
 libgav1 = ["dep:libgav1-sys"]
@@ -46,7 +45,11 @@ libyuv = ["dep:libyuv-sys"]
 android_mediacodec = ["dep:ndk-sys"]
 heic = []
 disable_cfi = []
-aom = ["dep:aom-sys"]
+aom = ["dep:aom-sys", "encoder"]
+encoder = []
+png = ["dep:png"]
+jpeg = ["dep:image"]
+sample_transform = []
 
 [package.metadata.capi.header]
 name = "avif"

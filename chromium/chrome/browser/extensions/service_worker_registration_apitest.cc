@@ -7,6 +7,7 @@
 
 #include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/test_future.h"
@@ -15,7 +16,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/crx_installer.h"
-#include "chrome/browser/extensions/delayed_install_manager.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
@@ -29,6 +29,8 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "extensions/browser/background_script_executor.h"
+#include "extensions/browser/delayed_install_manager.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/process_manager.h"
@@ -1237,12 +1239,11 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerRegistrationInstallMetricBrowserTest,
   ServiceWorkerTaskQueueRegistrationObserver register_observer(
       extension()->id());
   task_queue->SetObserverForTest(&register_observer);
-  ExtensionSystem* system = ExtensionSystem::Get(profile());
   const ExtensionId extension_id = extension()->id();
   // Uninstalling frees `extension_` so we must free it here to prevent dangling
   // ptr between the uninstall and until the test is torn down.
   ReleaseExtension();
-  system->extension_service()->UninstallExtension(
+  ExtensionRegistrar::Get(profile())->UninstallExtension(
       extension_id, UNINSTALL_REASON_FOR_TESTING, nullptr);
   {
     SCOPED_TRACE(
@@ -1295,11 +1296,12 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerRegistrationRestartMetricBrowserTest,
   ServiceWorkerTaskQueueRegistrationObserver register_observer(
       extension()->id());
   task_queue->SetObserverForTest(&register_observer);
-  ExtensionSystem* system = ExtensionSystem::Get(profile());
+
+  auto* extension_registrar = ExtensionRegistrar::Get(profile());
 
   // Disable extension and wait for worker to be unregistered.
-  system->extension_service()->DisableExtension(
-      extension()->id(), disable_reason::DISABLE_USER_ACTION);
+  extension_registrar->DisableExtension(extension()->id(),
+                                        {disable_reason::DISABLE_USER_ACTION});
   {
     SCOPED_TRACE(
         "waiting for worker to be unregistered after disabling extension");
@@ -1307,7 +1309,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerRegistrationRestartMetricBrowserTest,
   }
 
   // Enable extension and wait for registration metric should have been emitted.
-  system->extension_service()->EnableExtension(extension()->id());
+  extension_registrar->EnableExtension(extension()->id());
   {
     SCOPED_TRACE(
         "waiting for worker to be registered after enabling extension");

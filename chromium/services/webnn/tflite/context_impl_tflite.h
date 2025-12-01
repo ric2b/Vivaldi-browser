@@ -6,6 +6,7 @@
 #define SERVICES_WEBNN_TFLITE_CONTEXT_IMPL_TFLITE_H_
 
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/webnn_context_impl.h"
 #include "services/webnn/webnn_graph_impl.h"
 
@@ -33,10 +34,12 @@ class ContextImplTflite final : public WebNNContextImpl {
 
  private:
   void CreateGraphImpl(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       mojom::GraphInfoPtr graph_info,
       WebNNGraphImpl::ComputeResourceInfo compute_resource_info,
-      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+      base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
           constant_operands,
+      base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
       CreateGraphImplCallback callback) override;
 
   void CreateTensorImpl(

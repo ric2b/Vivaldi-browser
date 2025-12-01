@@ -51,15 +51,15 @@ void EphemeronHashTable::set_key(int index, Tagged<Object> value,
 #endif
 }
 
-int HashTableBase::NumberOfElements() const {
+uint32_t HashTableBase::NumberOfElements() const {
   return Cast<Smi>(get(kNumberOfElementsIndex)).value();
 }
 
-int HashTableBase::NumberOfDeletedElements() const {
+uint32_t HashTableBase::NumberOfDeletedElements() const {
   return Cast<Smi>(get(kNumberOfDeletedElementsIndex)).value();
 }
 
-int HashTableBase::Capacity() const {
+uint32_t HashTableBase::Capacity() const {
   return Cast<Smi>(get(kCapacityIndex)).value();
 }
 
@@ -82,12 +82,12 @@ void HashTableBase::ElementsRemoved(int n) {
 }
 
 // static
-int HashTableBase::ComputeCapacity(int at_least_space_for) {
+uint32_t HashTableBase::ComputeCapacity(uint32_t at_least_space_for) {
   // Add 50% slack to make slot collisions sufficiently unlikely.
   // See matching computation in HashTable::HasSufficientCapacityToAdd().
   // Must be kept in sync with CodeStubAssembler::HashTableComputeCapacity().
-  int raw_cap = at_least_space_for + (at_least_space_for >> 1);
-  int capacity = base::bits::RoundUpToPowerOfTwo32(raw_cap);
+  uint32_t raw_cap = at_least_space_for + (at_least_space_for >> 1);
+  uint32_t capacity = base::bits::RoundUpToPowerOfTwo32(raw_cap);
   return std::max({capacity, kMinCapacity});
 }
 
@@ -236,7 +236,7 @@ void HashTable<Derived, Shape>::set_key(int index, Tagged<Object> value,
 }
 
 template <typename Derived, typename Shape>
-void HashTable<Derived, Shape>::SetCapacity(int capacity) {
+void HashTable<Derived, Shape>::SetCapacity(uint32_t capacity) {
   // To scale a computed hash code to fit within the hash table, we
   // use bit-wise AND with a mask, so the capacity must be positive
   // and non-zero.
@@ -278,8 +278,8 @@ uint32_t RegisteredSymbolTableShape::HashForObject(ReadOnlyRoots roots,
   return Cast<String>(object)->EnsureHash();
 }
 
-bool NameToIndexShape::IsMatch(DirectHandle<Name> key, Tagged<Object> other) {
-  return *key == other;
+bool NameToIndexShape::IsMatch(Tagged<Name> key, Tagged<Object> other) {
+  return key == other;
 }
 
 uint32_t NameToIndexShape::HashForObject(ReadOnlyRoots roots,
@@ -287,7 +287,7 @@ uint32_t NameToIndexShape::HashForObject(ReadOnlyRoots roots,
   return Cast<Name>(other)->hash();
 }
 
-uint32_t NameToIndexShape::Hash(ReadOnlyRoots roots, DirectHandle<Name> key) {
+uint32_t NameToIndexShape::Hash(ReadOnlyRoots roots, Tagged<Name> key) {
   return key->hash();
 }
 
@@ -307,7 +307,7 @@ Handle<NameToIndexHashTable> NameToIndexHashTable::Add(
     DirectHandle<Name> key, int32_t index) {
   DCHECK_GE(index, 0);
   // Validate that the key is absent.
-  SLOW_DCHECK(table->FindEntry(isolate, key).is_not_found());
+  SLOW_DCHECK(table->FindEntry(isolate, *key).is_not_found());
   // Check whether the dictionary should be extended.
   table = EnsureCapacity(isolate, table);
   DisallowGarbageCollection no_gc;

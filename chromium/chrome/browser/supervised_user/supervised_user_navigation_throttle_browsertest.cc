@@ -326,14 +326,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserNavigationThrottleWithPrerenderingTest,
 IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
                        NoNavigationObserverBlock) {
   Profile* profile = browser()->profile();
-  supervised_user::SupervisedUserSettingsService*
-      supervised_user_settings_service =
-          SupervisedUserSettingsServiceFactory::GetForKey(
-              profile->GetProfileKey());
-  supervised_user_settings_service->SetLocalSetting(
-      supervised_user::kContentPackDefaultFilteringBehavior,
-      base::Value(
-          static_cast<int>(supervised_user::FilteringBehavior::kBlock)));
+  supervised_user_test_util::SetWebFilterType(
+      profile, supervised_user::WebFilterType::kCertainSites);
 
   std::unique_ptr<WebContents> web_contents(
       WebContents::Create(WebContents::CreateParams(profile)));
@@ -346,6 +340,20 @@ IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
   ASSERT_TRUE(entry);
   EXPECT_EQ(content::PAGE_TYPE_NORMAL, entry->GetPageType());
   EXPECT_FALSE(observer.last_navigation_succeeded());
+}
+
+// Tests if the reason for throttling was recorded.
+IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest, RecordsUseCase) {
+  base::HistogramTester histogram_tester;
+  kids_management_api_mock().AllowSubsequentClassifyUrl();
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL(
+                     kExampleHost, "/supervised_user/simple.html")));
+
+  histogram_tester.ExpectUniqueSample(
+      supervised_user::kClassifyUrlThrottleUseCaseHistogramName,
+      supervised_user::ClassifyUrlThrottleUseCase::kFamilyLinkSupervisedUser,
+      1);
 }
 
 IN_PROC_BROWSER_TEST_F(SupervisedUserNavigationThrottleTest,
@@ -991,13 +999,8 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
 
 IN_PROC_BROWSER_TEST_P(SupervisedUserIframeFilterTest,
                        IFramesWithSameDomainAsMainFrameAllowed) {
-  supervised_user::SupervisedUserService* service =
-      SupervisedUserServiceFactory::GetForProfile(browser()->profile());
-  supervised_user::SupervisedUserURLFilter* filter = service->GetURLFilter();
-
-  // Set the default behavior to block.
-  filter->SetDefaultFilteringBehavior(
-      supervised_user::FilteringBehavior::kBlock);
+  supervised_user_test_util::SetWebFilterType(
+      browser()->profile(), supervised_user::WebFilterType::kCertainSites);
 
   base::RunLoop().RunUntilIdle();
 

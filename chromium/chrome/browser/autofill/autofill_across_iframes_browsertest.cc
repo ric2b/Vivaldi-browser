@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "base/command_line.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -132,9 +133,9 @@ void FillCard(content::RenderFrameHost* rfh,
   test::SetCreditCardInfo(&card, kNameFull, kNumber, kExpMonth, kExpYear, "",
                           base::ASCIIToUTF16(std::string_view(kCvc)));
   auto& manager = TestAutofillManager::GetForRenderFrameHost(rfh);
-  manager.FillOrPreviewCreditCardForm(mojom::ActionPersistence::kFill, form,
-                                      triggered_field.global_id(), card,
-                                      AutofillTriggerSource::kPopup);
+  manager.FillOrPreviewForm(mojom::ActionPersistence::kFill, form,
+                            triggered_field.global_id(), &card,
+                            AutofillTriggerSource::kPopup);
 }
 
 // Returns the values of all fields in the  frames of `web_contents`.

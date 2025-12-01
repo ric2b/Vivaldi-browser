@@ -16,6 +16,7 @@
 #include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/scoped_accessibility_mode_override.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -69,8 +70,17 @@ AccessibilityLabelsMenuObserverTest::~AccessibilityLabelsMenuObserverTest() =
 
 // Tests that opening a context menu does not show the menu option if a
 // screen reader is not enabled, regardless of the image labels setting.
+// TODO(https://crbug.com/410751413): Deleting temporary directories using
+// test_file_util is flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_AccessibilityLabelsNotShownWithoutScreenReader \
+  DISABLED_AccessibilityLabelsNotShownWithoutScreenReader
+#else
+#define MAYBE_AccessibilityLabelsNotShownWithoutScreenReader \
+  AccessibilityLabelsNotShownWithoutScreenReader
+#endif
 IN_PROC_BROWSER_TEST_F(AccessibilityLabelsMenuObserverTest,
-                       AccessibilityLabelsNotShownWithoutScreenReader) {
+                       MAYBE_AccessibilityLabelsNotShownWithoutScreenReader) {
   menu()->GetPrefs()->SetBoolean(prefs::kAccessibilityImageLabelsEnabled,
                                  false);
   InitMenu();
@@ -81,11 +91,20 @@ IN_PROC_BROWSER_TEST_F(AccessibilityLabelsMenuObserverTest,
   EXPECT_EQ(0u, menu()->GetMenuSize());
 }
 
+// TODO(https://crbug.com/410751413): Deleting temporary directories using
+// test_file_util is flaky on Windows.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_AccessibilityLabelsShowWithScreenReaderEnabled \
+  DISABLED_AccessibilityLabelsShowWithScreenReaderEnabled
+#else
+#define MAYBE_AccessibilityLabelsShowWithScreenReaderEnabled \
+  AccessibilityLabelsShowWithScreenReaderEnabled
+#endif
 IN_PROC_BROWSER_TEST_F(AccessibilityLabelsMenuObserverTest,
-                       AccessibilityLabelsShowWithScreenReaderEnabled) {
+                       MAYBE_AccessibilityLabelsShowWithScreenReaderEnabled) {
   // Spoof a screen reader.
-  content::BrowserAccessibilityState::GetInstance()->SetScreenReaderAppActive(
-      true);
+  content::ScopedAccessibilityModeOverride screen_reader_mode(
+      ui::AXMode::kScreenReader);
   menu()->GetPrefs()->SetBoolean(prefs::kAccessibilityImageLabelsEnabled,
                                  false);
   InitMenu();

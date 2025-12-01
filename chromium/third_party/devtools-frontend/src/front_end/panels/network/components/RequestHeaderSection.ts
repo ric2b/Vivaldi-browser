@@ -1,6 +1,7 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/legacy.js';
 
@@ -12,11 +13,7 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as NetworkForward from '../forward/forward.js';
 
 import {EditingAllowedStatus, type HeaderDescriptor} from './HeaderSectionRow.js';
-import requestHeaderSectionStylesRaw from './RequestHeaderSection.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const requestHeaderSectionStyles = new CSSStyleSheet();
-requestHeaderSectionStyles.replaceSync(requestHeaderSectionStylesRaw.cssText);
+import requestHeaderSectionStyles from './RequestHeaderSection.css.js';
 
 const {render, html} = Lit;
 
@@ -53,10 +50,6 @@ export class RequestHeaderSection extends HTMLElement {
   #request?: Readonly<SDK.NetworkRequest.NetworkRequest>;
   #headers: HeaderDescriptor[] = [];
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [requestHeaderSectionStyles];
-  }
-
   set data(data: RequestHeaderSectionData) {
     this.#request = data.request;
 
@@ -84,6 +77,7 @@ export class RequestHeaderSection extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
+      <style>${requestHeaderSectionStyles}</style>
       ${this.#maybeRenderProvisionalHeadersWarning()}
       ${this.#headers.map(header => html`
         <devtools-header-section-row

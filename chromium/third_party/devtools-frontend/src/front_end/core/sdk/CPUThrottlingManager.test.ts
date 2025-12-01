@@ -32,8 +32,8 @@ describeWithMockConnection('CPUThrottlingManager', () => {
     const manager = SDK.CPUThrottlingManager.CPUThrottlingManager.instance();
     manager.setHardwareConcurrency(5);
 
-    assert.isTrue(cdpStub.calledOnce);
-    assert.isTrue(cdpStub.calledWithExactly({hardwareConcurrency: 5}));
+    sinon.assert.calledOnce(cdpStub);
+    sinon.assert.calledWithExactly(cdpStub, {hardwareConcurrency: 5});
   });
 
   it('does not set concurrency to 0 or negative numbers', async () => {
@@ -41,9 +41,9 @@ describeWithMockConnection('CPUThrottlingManager', () => {
 
     const manager = SDK.CPUThrottlingManager.CPUThrottlingManager.instance();
     manager.setHardwareConcurrency(0);
-    assert.isFalse(cdpStub.called);
+    sinon.assert.notCalled(cdpStub);
 
     manager.setHardwareConcurrency(-1);
-    assert.isFalse(cdpStub.called);
+    sinon.assert.notCalled(cdpStub);
   });
 });

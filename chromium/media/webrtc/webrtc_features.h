@@ -27,6 +27,11 @@ BASE_DECLARE_FEATURE(kWebRtcAllowWgcScreenZeroHz);
 COMPONENT_EXPORT(MEDIA_WEBRTC)
 BASE_DECLARE_FEATURE(kWebRtcAllowWgcWindowZeroHz);
 
+#if BUILDFLAG(IS_WIN)
+COMPONENT_EXPORT(MEDIA_WEBRTC)
+BASE_DECLARE_FEATURE(kWebRtcWgcRequireBorder);
+#endif
+
 COMPONENT_EXPORT(MEDIA_WEBRTC)
 BASE_DECLARE_FEATURE(kWebRtcAllowInputVolumeAdjustment);
 
@@ -37,9 +42,6 @@ COMPONENT_EXPORT(MEDIA_WEBRTC)
 extern const base::FeatureParam<
     ::webrtc::AudioProcessing::Config::Pipeline::DownmixMethod>
     kWebRtcApmDownmixMethodParam;
-
-COMPONENT_EXPORT(MEDIA_WEBRTC)
-BASE_DECLARE_FEATURE(kWebRtcApmTellsIfPlayoutReferenceIsNeeded);
 
 COMPONENT_EXPORT(MEDIA_WEBRTC)
 BASE_DECLARE_FEATURE(kWebRtcAllowH265Send);

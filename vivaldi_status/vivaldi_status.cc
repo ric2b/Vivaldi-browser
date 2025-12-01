@@ -265,10 +265,8 @@ std::string VivaldiStatus::ServiceToId(Services service) {
 }
 
 bool VivaldiStatus::IdToService(std::string id, Services* service) {
-  size_t size = id.size();
-  for (size_t i = 0; i < size; i++) {
-    char ch = id[i];
-    if (ch < '0' && ch > '9') {
+  for (auto ch: id) {
+    if (!std::isdigit(ch)) {
       return false;
     }
   }

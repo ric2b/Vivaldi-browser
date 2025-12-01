@@ -8,6 +8,7 @@ source_set("search_engine_change_prompt") {
     "vivaldi_search_engine_change_prompt_coordinator.mm",
     "vivaldi_search_engine_change_prompt_mediator.h",
     "vivaldi_search_engine_change_prompt_mediator.mm",
+    "vivaldi_search_engine_change_prompt_type.h",
     "vivaldi_search_engine_change_prompt_view_consumer.h",
   ]
 
@@ -37,13 +38,17 @@ source_set("search_engine_change_prompt") {
 swift_source_set("search_engine_change_prompt_swift") {
   bridge_header = "vivaldi_search_engine_change_prompt_swift_bridge.h"
   sources = [
+    "vivaldi_search_engine_change_prompt_donation_view.swift",
+    "vivaldi_search_engine_change_prompt_multi_choice_view.swift",
+    "vivaldi_search_engine_change_prompt_partner_item.swift",
+    "vivaldi_search_engine_change_prompt_strings.swift",
     "vivaldi_search_engine_change_prompt_view_provider.swift",
-    "vivaldi_search_engine_change_prompt_helper.swift",
     "vivaldi_search_engine_change_prompt_view_state.swift",
     "vivaldi_search_engine_change_prompt_view.swift",
   ]
 
   deps = [
+    "//ios/chrome/common/ui/colors:swift",
     "//vivaldi/app:vivaldi_ios_native_strings",
     "//vivaldi/ios/ui/helpers:helpers_swift",
   ]

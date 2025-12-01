@@ -50,14 +50,14 @@ struct CpuTick {
   }
 };
 
-constexpr char kRestoredAppWindowCountHistogram[] =
+inline constexpr char kRestoredAppWindowCountHistogram[] =
     "Apps.RestoreArcWindowCount";
 
 // The restoration process might be blocked by some issues, e.g. the memory
 // pressure, CPU rate, etc. However we don't want to have the restoration
 // process taking too long to interact the normal usage. So if the restoration
 // has finished in `kAppLaunchDelay` timeframe, we stop the restoration process.
-constexpr base::TimeDelta kStopRestoreDelay = base::Minutes(1);
+inline constexpr base::TimeDelta kStopRestoreDelay = base::Minutes(1);
 
 // The ArcAppQueueRestoreHandler class restores ARC apps during the system
 // startup phase.
@@ -78,7 +78,10 @@ class ArcAppQueueRestoreHandler
     }
   };
 
-  ArcAppQueueRestoreHandler();
+  // `scheduler_configuration_manager` should be non-null and must outlive
+  // `this`. In tests, it may be null.
+  explicit ArcAppQueueRestoreHandler(
+      SchedulerConfigurationManager* scheduler_configuration_manager);
   ArcAppQueueRestoreHandler(const ArcAppQueueRestoreHandler&) = delete;
   ArcAppQueueRestoreHandler& operator=(const ArcAppQueueRestoreHandler&) =
       delete;
@@ -192,8 +195,6 @@ class ArcAppQueueRestoreHandler
   void RecordArcGhostWindowLaunch(bool is_arc_ghost_window);
   void RecordRestoreResult();
 
-  SchedulerConfigurationManager* GetSchedulerConfigurationManager();
-
   raw_ptr<AppLaunchHandler, DanglingUntriaged> handler_ = nullptr;
 
   // The app id list from the restore data. If the app has been added the
@@ -272,6 +273,10 @@ class ArcAppQueueRestoreHandler
 
   base::ScopedObservation<ResourcedClient, ResourcedClient::Observer>
       resourced_client_observer_{this};
+
+  base::ScopedObservation<SchedulerConfigurationManagerBase,
+                          SchedulerConfigurationManagerBase::Observer>
+      scheduler_configuration_manager_observer_{this};
 
   base::WeakPtrFactory<ArcAppQueueRestoreHandler> weak_ptr_factory_{this};
 };

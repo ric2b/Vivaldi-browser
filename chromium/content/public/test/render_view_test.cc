@@ -56,7 +56,6 @@
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom.h"
 #include "third_party/blink/public/mojom/leak_detector/leak_detector.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom.h"
-#include "third_party/blink/public/mojom/page/browsing_context_group_info.mojom.h"
 #include "third_party/blink/public/mojom/widget/record_content_to_visible_time_request.mojom.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
@@ -527,8 +526,7 @@ void RenderViewTest::SetUp() {
   view_params->hidden = false;
   view_params->never_composited = false;
 
-  view_params->browsing_context_group_info =
-      blink::BrowsingContextGroupInfo::CreateUnique();
+  view_params->browsing_context_group_token = base::UnguessableToken::Create();
 
   web_view_ =
       agent_scheduling_group_->CreateWebView(std::move(view_params),
@@ -751,8 +749,10 @@ void RenderViewTest::Reload(const GURL& url) {
       url, /* initiator_origin= */ std::nullopt,
       /* initiator_base_url= */ std::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_LINK, blink::mojom::NavigationType::RELOAD,
-      blink::NavigationDownloadPolicy(), false, GURL(), base::TimeTicks::Now(),
-      "GET", nullptr, network::mojom::SourceLocation::New(),
+      blink::NavigationDownloadPolicy(), false, GURL(),
+      base::TimeTicks::Now() /* actual_navigation_start_time */,
+      base::TimeTicks::Now() /* navigation_start_time */, "GET", nullptr,
+      network::mojom::SourceLocation::New(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
       false /* has_text_fragment_token */,
       network::mojom::CSPDisposition::CHECK, std::vector<int>(), std::string(),
@@ -899,8 +899,10 @@ void RenderViewTest::GoToOffset(int offset,
       /* initiator_base_url= */ std::nullopt, blink::mojom::Referrer::New(),
       ui::PAGE_TRANSITION_FORWARD_BACK,
       blink::mojom::NavigationType::HISTORY_DIFFERENT_DOCUMENT,
-      blink::NavigationDownloadPolicy(), false, GURL(), base::TimeTicks::Now(),
-      "GET", nullptr, network::mojom::SourceLocation::New(),
+      blink::NavigationDownloadPolicy(), false, GURL(),
+      base::TimeTicks::Now() /* actual_navigation_start_time */,
+      base::TimeTicks::Now() /* navigation_start_time */, "GET", nullptr,
+      network::mojom::SourceLocation::New(),
       false /* started_from_context_menu */, false /* has_user_gesture */,
       false /* has_text_fragment_token */,
       network::mojom::CSPDisposition::CHECK, std::vector<int>(), std::string(),

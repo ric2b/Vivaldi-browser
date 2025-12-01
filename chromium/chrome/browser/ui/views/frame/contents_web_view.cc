@@ -7,6 +7,7 @@
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
 #include "chrome/browser/ui/views/status_bubble_views.h"
+#include "components/search/ntp_features.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -38,7 +39,10 @@ ContentsWebView::ContentsWebView(content::BrowserContext* browser_context)
 ContentsWebView::~ContentsWebView() = default;
 
 StatusBubbleViews* ContentsWebView::GetStatusBubble() const {
-  return status_bubble_.get();
+  if (status_bubble_) {
+    return status_bubble_.get();
+  }
+  return nullptr;
 }
 
 WebContentsCloseHandler* ContentsWebView::GetWebContentsCloseHandler() const {
@@ -72,7 +76,9 @@ bool ContentsWebView::GetNeedsNotificationWhenVisibleBoundsChange() const {
 }
 
 void ContentsWebView::OnVisibleBoundsChanged() {
-  status_bubble_->Reposition();
+  if (status_bubble_) {
+    status_bubble_->Reposition();
+  }
 }
 
 void ContentsWebView::OnThemeChanged() {
@@ -83,6 +89,22 @@ void ContentsWebView::OnThemeChanged() {
 void ContentsWebView::OnLetterboxingChanged() {
   if (GetWidget()) {
     UpdateBackgroundColor();
+  }
+}
+
+void ContentsWebView::SetWebContents(content::WebContents* web_contents) {
+  views::WebView::SetWebContents(web_contents);
+  if (web_contents == nullptr) {
+    status_bubble_ = nullptr;
+    // Early exit: Without web contents, views dependent on ContentsWebView's
+    // bounds cannot be properly created or positioned. These views will
+    // initialize later when valid web contents exist.
+    return;
+  }
+
+  if (status_bubble_ == nullptr) {
+    status_bubble_ = std::make_unique<StatusBubbleViews>(this);
+    status_bubble_->Reposition();
   }
 }
 

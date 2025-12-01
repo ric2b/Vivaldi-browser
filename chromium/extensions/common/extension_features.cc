@@ -5,6 +5,8 @@
 #include "extensions/common/extension_features.h"
 
 #include "base/feature_list.h"
+#include "build/branding_buildflags.h"
+#include "build/build_config.h"
 
 namespace extensions_features {
 
@@ -58,8 +60,22 @@ BASE_FEATURE(kAllowWithholdingExtensionPermissionsOnInstall,
              "AllowWithholdingExtensionPermissionsOnInstall",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+#if BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
+BASE_FEATURE(kBlockInstallingExtensionsOnDesktopAndroid,
+             "BlockInstallingExtensionsOnDesktopAndroid",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif  // BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
+
 BASE_FEATURE(kCheckingNoExtensionIdInExtensionIpcs,
              "EMF_NO_EXTENSION_ID_FOR_EXTENSION_SOURCE",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kDeferResetURLLoaderFactories,
+             "DeferResetURLLoaderFactories",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kSkipResetServiceWorkerURLLoaderFactories,
+             "SkipResetServiceWorkerURLLoaderFactories",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableWebHidInWebView,
@@ -98,10 +114,6 @@ const base::FeatureParam<std::string> kExtensionManifestV2ExceptionListParam(
 BASE_FEATURE(kAllowLegacyMV2Extensions,
              "AllowLegacyMV2Extensions",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kExtensionSourceUrlEnforcement,
-             "ExtensionSourceUrlEnforcement",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kExtensionWARForRedirect,
              "ExtensionWARForRedirect",
@@ -197,9 +209,21 @@ BASE_FEATURE(kRemoveCoreSiteInstance,
              "RemoveCoreSiteInstance",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kDisableLoadExtensionCommandLineSwitch,
+             "DisableLoadExtensionCommandLineSwitch",
+// --load-extension is disabled for chrome-branded release builds except on
+// ChromeOS where it is required for testing, and is not a security risk
+// since it cannot be controlled by users.
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+             base::FEATURE_ENABLED_BY_DEFAULT
+#else
+             base::FEATURE_DISABLED_BY_DEFAULT
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING) && !BUILDFLAG(IS_CHROMEOS)
+);
+
 BASE_FEATURE(kUserScriptUserExtensionToggle,
              "UserScriptUserExtensionToggle",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kDebuggerAPIRestrictedToDevMode,
              "DebuggerAPIRestrictedToDevMode",

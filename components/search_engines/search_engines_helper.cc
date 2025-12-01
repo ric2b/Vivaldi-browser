@@ -8,17 +8,20 @@
 #include "components/search_engines/search_engines_manager.h"
 #include "components/search_engines/search_engines_managers_factory.h"
 #include "components/search_engines/template_url_prepopulate_data.h"
+#include "components/search_engines/vivaldi_pref_names.h"
 
 namespace TemplateURLPrepopulateData {
 
 namespace {
 
-std::string LanguageCodeFromApplicationLocale(
-    const std::string_view application_locale) {
-  std::string lang(
-      application_locale.begin(),
-      std::find(application_locale.begin(), application_locale.end(), '-'));
-  return lang;
+std::string GetLangFromPrefs(PrefService& prefs) {
+  if (!prefs.FindPreference(prefs::kLanguageAtInstall))
+    return "";
+
+  // Expecting that the first run language value was set before reaching this,
+  // sine there isn't a practical way to pass it to the search code otherwise.
+  DCHECK(prefs.HasPrefPath(prefs::kLanguageAtInstall));
+  return prefs.GetString(prefs::kLanguageAtInstall);
 }
 
 const std::vector<EngineAndTier> GetSearchEngineDetails(
@@ -33,7 +36,7 @@ const std::vector<EngineAndTier> GetSearchEngineDetails(
   std::vector<EngineAndTier> result;
 
   ParsedSearchEngines::EnginesListWithDefaults prepopulated_engines_list =
-      GetPrepopulatedSearchEngines(country_id, application_locale, prefs);
+      GetPrepopulatedSearchEngines(country_id, prefs, application_locale);
 
   CHECK(!prepopulated_engines_list.list.empty());
   CHECK(prepopulated_engines_list.default_index >= 0 &&
@@ -77,30 +80,32 @@ const std::vector<EngineAndTier> GetSearchEngineDetails(
 
 const std::vector<EngineAndTier> GetPrepopulationSetFromCountryID(
     country_codes::CountryId country_id,
-    const std::string_view application_locale,
-    PrefService& prefs) {
-  return GetSearchEngineDetails(country_id, application_locale, prefs, nullptr,
-                                SearchType::kMain);
+    PrefService& prefs,
+    std::string_view application_locale) {
+  return GetSearchEngineDetails(
+      country_id,
+      application_locale.empty() ? GetLangFromPrefs(prefs) : application_locale,
+      prefs, nullptr, SearchType::kMain);
 }
 
 ParsedSearchEngines::EnginesListWithDefaults GetPrepopulatedSearchEngines(
     country_codes::CountryId country_id,
-    const std::string_view application_locale,
-    PrefService& prefs) {
+    PrefService& prefs,
+    std::string_view application_locale) {
   return SearchEnginesManagersFactory::GetInstance()
       ->GetSearchEnginesManager()
-      ->GetEnginesByCountryId(
-          country_id, LanguageCodeFromApplicationLocale(application_locale),
-          prefs);
+      ->GetEnginesByCountryId(country_id,
+                              application_locale.empty()
+                                  ? GetLangFromPrefs(prefs)
+                                  : std::string(application_locale),
+                              prefs);
 }
 
-const PrepopulatedEngine* GetFallbackEngine(
-    country_codes::CountryId country_id,
-    const std::string_view application_locale,
-    PrefService& prefs,
-    SearchType search_type) {
+const PrepopulatedEngine* GetFallbackEngine(country_codes::CountryId country_id,
+                                            PrefService& prefs,
+                                            SearchType search_type) {
   size_t default_engine_index;
-  return GetSearchEngineDetails(country_id, application_locale, prefs,
+  return GetSearchEngineDetails(country_id, GetLangFromPrefs(prefs), prefs,
                                 &default_engine_index, search_type)
       .at(default_engine_index)
       .search_engine;

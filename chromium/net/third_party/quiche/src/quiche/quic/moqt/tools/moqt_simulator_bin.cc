@@ -47,10 +47,10 @@
 #include "quiche/quic/test_tools/simulator/switch.h"
 #include "quiche/common/platform/api/quiche_command_line_flags.h"
 #include "quiche/common/platform/api/quiche_logging.h"
-#include "quiche/common/platform/api/quiche_mem_slice.h"
 #include "quiche/common/quiche_buffer_allocator.h"
 #include "quiche/common/quiche_data_reader.h"
 #include "quiche/common/quiche_data_writer.h"
+#include "quiche/common/quiche_mem_slice.h"
 #include "quiche/common/simple_buffer_allocator.h"
 
 namespace moqt::test {
@@ -289,7 +289,7 @@ class ObjectReceiver : public SubscribeRemoteTrack::Visitor {
       : clock_(clock), deadline_(deadline) {}
 
   void OnReply(const FullTrackName& full_track_name,
-               std::optional<FullSequence> /*largest_id*/,
+               std::optional<Location> /*largest_id*/,
                std::optional<absl::string_view> error_reason_phrase) override {
     QUICHE_CHECK(full_track_name == TrackName());
     QUICHE_CHECK(!error_reason_phrase.has_value()) << *error_reason_phrase;
@@ -299,8 +299,7 @@ class ObjectReceiver : public SubscribeRemoteTrack::Visitor {
     object_ack_function_ = std::move(ack_function);
   }
 
-  void OnObjectFragment(const FullTrackName& full_track_name,
-                        FullSequence sequence,
+  void OnObjectFragment(const FullTrackName& full_track_name, Location sequence,
                         MoqtPriority /*publisher_priority*/,
                         MoqtObjectStatus status, absl::string_view object,
                         bool end_of_message) override {
@@ -318,7 +317,7 @@ class ObjectReceiver : public SubscribeRemoteTrack::Visitor {
 
   void OnSubscribeDone(FullTrackName /*full_track_name*/) override {}
 
-  void OnFullObject(FullSequence sequence, absl::string_view payload) {
+  void OnFullObject(Location sequence, absl::string_view payload) {
     QUICHE_CHECK_GE(payload.size(), 8u);
     quiche::QuicheDataReader reader(payload);
     uint64_t time_us;
@@ -354,7 +353,7 @@ class ObjectReceiver : public SubscribeRemoteTrack::Visitor {
  private:
   const QuicClock* clock_ = nullptr;
   // TODO: figure out when partial objects should be discarded.
-  absl::flat_hash_map<FullSequence, std::string> partial_objects_;
+  absl::flat_hash_map<Location, std::string> partial_objects_;
   MoqtObjectAckFunction object_ack_function_ = nullptr;
 
   size_t full_objects_received_ = 0;
@@ -443,7 +442,7 @@ class MoqtSimulator {
     //       server does not yet have an active subscription, so the client has
     //       some catching up to do.
     generator_.Start();
-    MoqtSubscribeParameters subscription_parameters;
+    VersionSpecificParameters subscription_parameters;
     if (!parameters_.delivery_timeout.IsInfinite()) {
       subscription_parameters.delivery_timeout = parameters_.delivery_timeout;
     }

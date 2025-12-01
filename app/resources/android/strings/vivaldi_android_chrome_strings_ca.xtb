@@ -12,6 +12,7 @@
 <translation id="1910514478706885609">Obre a una nova pila de pestanyes</translation>
 <translation id="1925021887439448749">Introdueix l'adreça web personalitzada</translation>
 <translation id="2038563949887743358">Activa la petició de vista del lloc d'escriptori</translation>
+<translation id="208033313373016095">Mode de lectura per pàgines web</translation>
 <translation id="2149973817440762519">Edita el marcador</translation>
 <translation id="2306442503286132111">Marcador desat a la carpeta <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aparença</translation>
@@ -29,10 +30,11 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> marcador}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> marcadors}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. Tots els drets reservats.</translation>
+<translation id="3110967157686007724">Pestanya privada</translation>
 <translation id="3232293466644486101">Suprimeix les dades de navegació…</translation>
 <translation id="3234355010754616171">Nova pestanya privada</translation>
 <translation id="3237087289225714896">Precàrrega estàndard:</translation>
-<translation id="3377025655491224618">Pestanya privada</translation>
+<translation id="3478414204555961127">Mode de lectura</translation>
 <translation id="3504699618187058974">Apila les pestanyes</translation>
 <translation id="3518985090088779359">Accepta i continua</translation>
 <translation id="3571177741182643350">Articles no llegits - Disponibles fora de línia:</translation>
@@ -114,11 +116,11 @@ Per ajustar el teu terme de cerca, prem llarg per seleccionar. Per refinar la te
 <translation id="8348430946834215779">Utilitza HTTPS sempre que sigui possible i rep un avís abans de carregar llocs que no ho admeten</translation>
 <translation id="8560602726703398413">Troba la teva llista de lectura als marcadors</translation>
 <translation id="85991616550051997">Ves a la pàgina principal</translation>
+<translation id="8693232767599693749">Veure el mode de lectura?</translation>
 <translation id="8820817407110198400">Marcadors</translation>
 <translation id="9042893549633094279">Privadesa i seguretat</translation>
 <translation id="9063523880881406963">Desactiva la petició de vista del lloc d'escriptori</translation>
 <translation id="9080642952018487277">Entra al mode privat</translation>
 <translation id="930124987204876019">Suprimeix l'historial, les galetes, les dades dels llocs web, la memòria cau…</translation>
 <translation id="961856697154696964">Suprimeix les dades de navegació</translation>
-<translation id="96681097142096641">Veure la pàgina simplificada?</translation>
 </translationbundle>

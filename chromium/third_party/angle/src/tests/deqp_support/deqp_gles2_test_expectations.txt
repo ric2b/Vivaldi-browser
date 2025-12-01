@@ -346,6 +346,8 @@
 
 42265173 UBSAN : dEQP-GLES2.functional.shaders.random.* = SKIP
 
+417757002 : dEQP-GLES2.functional.debug_marker.random = SKIP
+
 // Samsung Galaxy S23
 42266598 GALAXYS23 VULKAN : dEQP-GLES2.functional.fbo.render.color_clear.* = SKIP
 42266598 GALAXYS23 VULKAN : dEQP-GLES2.functional.fbo.render.recreate_colorbuffer.* = SKIP
@@ -424,6 +426,22 @@ b/328156792 PINEAPPLE VULKAN : dEQP-GLES2.functional.uniform_api.value.assigned.
 356399840 WGPU : dEQP-GLES2.functional.rasterization.* = FAIL
 356399840 WGPU : dEQP-GLES2.functional.shaders.* = FAIL
 356399840 WGPU : dEQP-GLES2.functional.state_query.shader.uniform_value_* = FAIL
-356399840 WGPU : dEQP-GLES2.functional.texture.* = FAIL
+// Unfortunately Intel and AMD GPUs on Mac fail texture filtering tests.
+389145696 WGPU MAC INTEL : dEQP-GLES2.functional.texture.filtering.2d.* = FAIL
+389145696 WGPU MAC AMD : dEQP-GLES2.functional.texture.filtering.2d.* = FAIL
+// 2D filtering tests pass but cube textures do not work yet.
+389145696 WGPU : dEQP-GLES2.functional.texture.filtering.cube.* = SKIP
+// Except luminance format doesn't work
+389145696 WGPU : dEQP-GLES2.functional.texture.filtering.2d.*_l8* = FAIL
+389145696 WGPU : dEQP-GLES2.functional.texture.wrap.*_l8* = FAIL
+// Cube textures not yet supported
+389145696 WGPU : dEQP-GLES2.functional.texture.mipmap.cube.* = SKIP
+// Mipmap generation not supported
+389145696 WGPU : dEQP-GLES2.functional.texture.mipmap.2d.generate.* = SKIP
+389145696 WGPU : dEQP-GLES2.functional.texture.format.* = SKIP
+389145696 WGPU : dEQP-GLES2.functional.texture.size.* = SKIP
+389145696 WGPU : dEQP-GLES2.functional.texture.specification.* = SKIP
+389145696 WGPU : dEQP-GLES2.functional.texture.completeness.* = SKIP
+389145696 WGPU : dEQP-GLES2.functional.texture.vertex.* = SKIP
 356399840 WGPU : dEQP-GLES2.functional.uniform_api.* = FAIL
 392542001 WGPU : dEQP-GLES2.functional.vertex_arrays.multiple_attributes* = FAIL

@@ -21,6 +21,7 @@
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/updater/activity.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants.h"
 #include "chrome/updater/lock.h"
@@ -124,9 +125,8 @@ void AppInstall::SendPing(int exit_code, base::OnceClosure callback) {
           base::BindOnce(
               [](base::OnceClosure callback, UpdaterScope scope,
                  int exit_code) {
-                if (exit_code == kErrorOk ||
-                    !UsageStatsProvider::Create()->AnyAppEnablesUsageStats(
-                        scope)) {
+                if (exit_code == kErrorOk || !UsageStatsProvider::Create(scope)
+                                                  ->AnyAppEnablesUsageStats()) {
                   std::move(callback).Run();
                   return;
                 }

@@ -36,6 +36,8 @@ network::mojom::CSPSourceListPtr BuildCSPSourceList(
       base::ToVector(source_list.sources, BuildCSPSource),
       BuildVectorOfStrings(source_list.nonces),
       base::ToVector(source_list.hashes, BuildCSPHashSource),
+      base::ToVector(source_list.url_hashes, BuildCSPHashSource),
+      base::ToVector(source_list.eval_hashes, BuildCSPHashSource),
       source_list.allow_self, source_list.allow_star, source_list.allow_inline,
       source_list.allow_inline_speculation_rules, source_list.allow_eval,
       source_list.allow_wasm_eval, source_list.allow_wasm_unsafe_eval,
@@ -66,20 +68,23 @@ blink::WebCSPHashSource ToWebCSPHashSource(
 
 blink::WebCSPSourceList ToWebCSPSourceList(
     network::mojom::CSPSourceListPtr source_list) {
-  return {base::ToVector(std::move(source_list->sources), ToWebCSPSource),
-          ToVectorOfWebStrings(std::move(source_list->nonces)),
-          base::ToVector(std::move(source_list->hashes), ToWebCSPHashSource),
-          source_list->allow_self,
-          source_list->allow_star,
-          source_list->allow_inline,
-          source_list->allow_inline_speculation_rules,
-          source_list->allow_eval,
-          source_list->allow_wasm_eval,
-          source_list->allow_wasm_unsafe_eval,
-          source_list->allow_dynamic,
-          source_list->allow_unsafe_hashes,
-          source_list->report_sample,
-          source_list->report_hash_algorithm};
+  return {
+      base::ToVector(std::move(source_list->sources), ToWebCSPSource),
+      ToVectorOfWebStrings(std::move(source_list->nonces)),
+      base::ToVector(std::move(source_list->hashes), ToWebCSPHashSource),
+      base::ToVector(std::move(source_list->url_hashes), ToWebCSPHashSource),
+      base::ToVector(std::move(source_list->eval_hashes), ToWebCSPHashSource),
+      source_list->allow_self,
+      source_list->allow_star,
+      source_list->allow_inline,
+      source_list->allow_inline_speculation_rules,
+      source_list->allow_eval,
+      source_list->allow_wasm_eval,
+      source_list->allow_wasm_unsafe_eval,
+      source_list->allow_dynamic,
+      source_list->allow_unsafe_hashes,
+      source_list->report_sample,
+      source_list->report_hash_algorithm};
 }
 
 std::optional<blink::WebCSPTrustedTypes> ToOptionalWebCSPTrustedTypes(
@@ -123,7 +128,7 @@ network::mojom::ContentSecurityPolicyPtr BuildContentSecurityPolicy(
           policy_in.header.source),
       policy_in.use_reporting_api,
       BuildVectorOfStrings(policy_in.report_endpoints),
-      policy_in.require_sri_for, policy_in.require_trusted_types_for,
+      policy_in.require_trusted_types_for,
       policy_in.trusted_types
           ? network::mojom::CSPTrustedTypes::New(
                 BuildVectorOfStrings(policy_in.trusted_types->list),
@@ -157,7 +162,6 @@ blink::WebContentSecurityPolicy ToWebContentSecurityPolicy(
           ToWebContentSecurityPolicyHeader(std::move(policy_in->header)),
           policy_in->use_reporting_api,
           ToVectorOfWebStrings(std::move(policy_in->report_endpoints)),
-          policy_in->require_sri_for,
           policy_in->require_trusted_types_for,
           ToOptionalWebCSPTrustedTypes(std::move(policy_in->trusted_types)),
           ToVectorOfWebStrings(std::move(policy_in->parsing_errors))};

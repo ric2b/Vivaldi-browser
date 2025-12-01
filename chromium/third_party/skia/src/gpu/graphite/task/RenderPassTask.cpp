@@ -7,6 +7,11 @@
 
 #include "src/gpu/graphite/task/RenderPassTask.h"
 
+#include "include/core/SkPoint.h"
+#include "include/core/SkSize.h"
+#include "include/gpu/graphite/Context.h"
+#include "include/gpu/graphite/TextureInfo.h"
+#include "include/private/base/SkAssert.h"
 #include "src/gpu/SkBackingFit.h"
 #include "src/gpu/graphite/Caps.h"
 #include "src/gpu/graphite/CommandBuffer.h"
@@ -14,21 +19,42 @@
 #include "src/gpu/graphite/DrawPass.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/ResourceProvider.h"
+#include "src/gpu/graphite/ResourceTypes.h"
 #include "src/gpu/graphite/ScratchResourceManager.h"
 #include "src/gpu/graphite/Texture.h"
+#include "src/gpu/graphite/TextureFormat.h"
 #include "src/gpu/graphite/TextureProxy.h"
+
+#include <tuple>
+#include <utility>
 
 namespace skgpu::graphite {
 
 namespace {
 
-SkISize get_msaa_size(const SkISize& targetSize, const Caps& caps) {
+// Get the required MSAA size for the render pass.
+// In some scenarios, the MSAA size can be smaller than the target texture. As long as it is big
+// enough to contain the draws' bounds.
+std::pair<SkISize, SkIPoint> get_msaa_size_and_resolve_offset(const SkISize& targetSize,
+                                                              const SkIRect& drawBounds,
+                                                              const Caps& caps,
+                                                              LoadOp loadOp) {
     if (caps.differentResolveAttachmentSizeSupport()) {
-        // Use approx size for better reuse.
-        return GetApproxSize(targetSize);
+        // If possible, use approx size that can fit all draws. This reduces the MSAA texture size
+        // and also reuses the textures better.
+        // Note: we don't do this if loadOp=Clear because it's supposed to update the whole target
+        // texture.
+        auto smallEnoughBounds = drawBounds;
+        if (loadOp != LoadOp::kClear && !smallEnoughBounds.isEmpty() &&
+            smallEnoughBounds.intersect(SkIRect::MakeSize(targetSize))) {
+            SkIPoint resolveOffset = smallEnoughBounds.topLeft();
+            return {GetApproxSize(smallEnoughBounds.size()), resolveOffset};
+        } else {
+            return {GetApproxSize(targetSize), {0, 0}};
+        }
     }
 
-    return targetSize;
+    return {targetSize, {0, 0}};
 }
 
 }  // anonymous namespace
@@ -48,15 +74,31 @@ sk_sp<RenderPassTask> RenderPassTask::Make(DrawPassList passes,
         return nullptr;
     }
 
-    if (desc.fColorAttachment.fTextureInfo.isValid()) {
-        // The color attachment's samples count must ether match the render pass's samples count
-        // or be 1 (when multisampled render to single sampled is used).
-        SkASSERT(desc.fSampleCount == desc.fColorAttachment.fTextureInfo.numSamples() ||
-                 1 == desc.fColorAttachment.fTextureInfo.numSamples());
+    if (desc.fColorResolveAttachment.fFormat != TextureFormat::kUnsupported) {
+        // The resolve attachment must match `target`, since that is what's resolved to.
+        SkASSERT(desc.fColorResolveAttachment.isCompatible(target->textureInfo()));
+        // The resolve attachment should be single sampled and not depth/stencil
+        SkASSERT(desc.fColorResolveAttachment.fSampleCount == 1);
+        SkASSERT(!TextureFormatIsDepthOrStencil(desc.fColorResolveAttachment.fFormat));
+        // If there's a resolve attachment, the color attachment should have the same format and
+        // more samples than the resolve.
+        SkASSERT(desc.fColorAttachment.fFormat == desc.fColorResolveAttachment.fFormat);
+        SkASSERT(desc.fColorAttachment.fSampleCount > 1);
+        // The render pass's sample count must match the color attachment's sample count
+        SkASSERT(desc.fSampleCount == desc.fColorAttachment.fSampleCount);
+    } else {
+        // The color attachment must match `target`, as it will be used to render directly into.
+        SkASSERT(desc.fColorAttachment.isCompatible(target->textureInfo()));
+        // The render pass's sample count must match or the color attachment's must be 1 and
+        // the render pass has a higher sample count for msaa-render-to-single-sampled extensions.
+        SkASSERT(desc.fColorAttachment.fSampleCount == desc.fSampleCount ||
+                 (desc.fColorAttachment.fSampleCount == 1 && desc.fSampleCount > 1));
     }
 
-    if (desc.fDepthStencilAttachment.fTextureInfo.isValid()) {
-        SkASSERT(desc.fSampleCount == desc.fDepthStencilAttachment.fTextureInfo.numSamples());
+    if (desc.fDepthStencilAttachment.fFormat != TextureFormat::kUnsupported) {
+        // The sample count for any depth/stencil buffer must match the color attachment
+        SkASSERT(TextureFormatIsDepthOrStencil(desc.fDepthStencilAttachment.fFormat));
+        SkASSERT(desc.fDepthStencilAttachment.fSampleCount == desc.fColorAttachment.fSampleCount);
     }
 
     return sk_sp<RenderPassTask>(new RenderPassTask(std::move(passes),
@@ -130,23 +172,16 @@ Task::Status RenderPassTask::addCommands(Context* context,
     SkASSERT(fTarget && fTarget->isInstantiated());
     SkASSERT(!fDstCopy || fDstCopy->isInstantiated());
 
-    // Only apply the replay translation and clip if we're drawing to the final replay target.
-    const SkIRect renderTargetBounds = SkIRect::MakeSize(fTarget->dimensions());
-    if (fTarget->texture() == replayData.fTarget) {
-        // The clip set here will intersect with the render target bounds, and then any scissor set
-        // during this render pass. If there is no intersection between the clip and the render
-        // target bounds, we can skip this entire render pass.
-        if (!commandBuffer->setReplayTranslationAndClip(
-                    replayData.fTranslation, replayData.fClip, renderTargetBounds)) {
-            return Status::kSuccess;
-        }
+    // Assuming one draw pass per renderpasstask for now
+    SkASSERT(fDrawPasses.size() == 1);
+    const auto& drawBounds = fDrawPasses[0]->bounds();
 
-    } else {
-        // An empty clip is ignored, and will default to the render target bounds.
-        constexpr SkIVector kNoReplayTranslation = {0, 0};
-        constexpr SkIRect kNoReplayClip = SkIRect::MakeEmpty();
-        commandBuffer->setReplayTranslationAndClip(
-                kNoReplayTranslation, kNoReplayClip, renderTargetBounds);
+    // Only apply the replay translation and clip if we're drawing to the final replay target.
+    SkIVector replayTranslation = {0, 0};
+    SkIRect replayClip = SkIRect::MakeEmpty();
+    if (fTarget->texture() == replayData.fTarget) {
+        replayTranslation = replayData.fTranslation;
+        replayClip = replayData.fClip;
     }
 
     // We don't instantiate the MSAA or DS attachments in prepareResources because we want to use
@@ -154,12 +189,23 @@ Task::Status RenderPassTask::addCommands(Context* context,
     ResourceProvider* resourceProvider = context->priv().resourceProvider();
     sk_sp<Texture> colorAttachment;
     sk_sp<Texture> resolveAttachment;
-    if (fRenderPassDesc.fColorResolveAttachment.fTextureInfo.isValid()) {
-        SkASSERT(fTarget->numSamples() == 1 &&
-                 fRenderPassDesc.fColorAttachment.fTextureInfo.numSamples() > 1);
-        colorAttachment = resourceProvider->findOrCreateDiscardableMSAAAttachment(
-                get_msaa_size(fTarget->dimensions(), *context->priv().caps()),
-                fRenderPassDesc.fColorAttachment.fTextureInfo);
+    SkIPoint resolveOffset = SkIPoint::Make(0, 0);
+    if (fRenderPassDesc.fColorResolveAttachment.fFormat != TextureFormat::kUnsupported) {
+        // We always make color msaa attachments shareable. Between any render pass we discard
+        // the values of the MSAA texture. Thus it is safe to be used by multiple different render
+        // passes without worry of stomping on each other's data. CommandBuffer::addRenderPass is
+        // responsible for loading this attachment with the resolve target's original contents.
+        TextureInfo colorInfo = context->priv().caps()->getDefaultAttachmentTextureInfo(
+                fRenderPassDesc.fColorAttachment, fTarget->isProtected(), Discardable::kYes);
+
+        SkISize msaaSize;
+        std::tie(msaaSize, resolveOffset) =
+                get_msaa_size_and_resolve_offset(fTarget->dimensions(),
+                                                 drawBounds.makeOffset(replayTranslation),
+                                                 *context->priv().caps(),
+                                                 fRenderPassDesc.fColorAttachment.fLoadOp);
+        colorAttachment = resourceProvider->findOrCreateShareableTexture(
+                msaaSize, colorInfo, "DiscardableMSAAAttachment");
         if (!colorAttachment) {
             SKGPU_LOG_W("Could not get Color attachment for RenderPassTask");
             return Status::kFail;
@@ -170,18 +216,33 @@ Task::Status RenderPassTask::addCommands(Context* context,
     }
 
     sk_sp<Texture> depthStencilAttachment;
-    if (fRenderPassDesc.fDepthStencilAttachment.fTextureInfo.isValid()) {
-        // TODO: ensure this is a scratch/recycled texture
-        SkASSERT(fTarget->isInstantiated());
+    if (fRenderPassDesc.fDepthStencilAttachment.fFormat != TextureFormat::kUnsupported) {
+        // We always make depth and stencil attachments shareable. Between any render pass the
+        // values are reset. Thus it is safe to be used by multiple different render passes without
+        // worry of stomping on each other's data.
+        TextureInfo dsInfo = context->priv().caps()->getDefaultAttachmentTextureInfo(
+                fRenderPassDesc.fDepthStencilAttachment, fTarget->isProtected(), Discardable::kYes);
         SkISize dimensions = context->priv().caps()->getDepthAttachmentDimensions(
                 colorAttachment->textureInfo(), colorAttachment->dimensions());
 
-        depthStencilAttachment = resourceProvider->findOrCreateDepthStencilAttachment(
-                dimensions, fRenderPassDesc.fDepthStencilAttachment.fTextureInfo);
+        depthStencilAttachment = resourceProvider->findOrCreateShareableTexture(
+                dimensions, dsInfo, "DepthStencilAttachment");
         if (!depthStencilAttachment) {
             SKGPU_LOG_W("Could not get DepthStencil attachment for RenderPassTask");
             return Status::kFail;
         }
+    }
+
+    // The clip set here will intersect with the render target bounds, and then any scissor set
+    // during this render pass. If there is no intersection between the clip and the render target
+    // bounds, we can skip this entire render pass.
+    // Note: if the MSAA texture is allocated smaller than the target texture, we need to apply an
+    // additional translation (-resolveOffset) so that the draws' bounds' top left corner
+    // will be at (0, 0) on the MSAA texture
+    const SkIRect renderTargetBounds = SkIRect::MakeSize(colorAttachment->dimensions());
+    if (!commandBuffer->setReplayTranslationAndClip(
+                replayTranslation - resolveOffset, replayClip, renderTargetBounds)) {
+        return Status::kSuccess;
     }
 
     // TODO(b/313629288) we always pass in the render target's dimensions as the viewport here.
@@ -193,6 +254,7 @@ Task::Status RenderPassTask::addCommands(Context* context,
                                      std::move(depthStencilAttachment),
                                      fDstCopy ? fDstCopy->texture() : nullptr,
                                      fDstReadBounds,
+                                     resolveOffset,
                                      fTarget->dimensions(),
                                      fDrawPasses)) {
         return Status::kSuccess;

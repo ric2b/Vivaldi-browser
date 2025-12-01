@@ -151,7 +151,11 @@ class SyncActiveWithoutPasswordsChecker
 // define it out to prevent a compile error due to the unused function.
 #if !BUILDFLAG(IS_CHROMEOS)
 content::WebContents* GetNewTab(Browser* browser) {
-  return PasswordManagerBrowserTestBase::GetNewTab(browser);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser, GURL("data:text/html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_TAB);
+  return browser->tab_strip_model()->GetActiveWebContents();
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -862,8 +866,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   SignIn("first@gmail.com", /*explicit_signin=*/false);
   GetSyncService(0)->GetUserSettings()->SetSelectedType(
       syncer::UserSelectableType::kPasswords, true);
-  auto first_gaia_id_hash =
-      signin::GaiaIdHash::FromGaiaId(GetSyncService(0)->GetAccountInfo().gaia);
+  const GaiaId first_gaia_id = GetSyncService(0)->GetAccountInfo().gaia;
   SignOut();
   SignIn("second@gmail.com", /*explicit_signin=*/false);
   GetSyncService(0)->GetUserSettings()->SetSelectedType(
@@ -871,7 +874,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   SignOut();
 
   GetSyncService(0)->GetUserSettings()->KeepAccountSettingsPrefsOnlyForUsers(
-      {first_gaia_id_hash});
+      {first_gaia_id});
 
   SignIn("first@gmail.com", /*explicit_signin=*/false);
   EXPECT_TRUE(password_manager::features_util::IsAccountStorageEnabled(
@@ -888,8 +891,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   SignIn("first@gmail.com");
   GetSyncService(0)->GetUserSettings()->SetSelectedType(
       syncer::UserSelectableType::kPasswords, false);
-  auto first_gaia_id_hash =
-      signin::GaiaIdHash::FromGaiaId(GetSyncService(0)->GetAccountInfo().gaia);
+  const GaiaId first_gaia_id = GetSyncService(0)->GetAccountInfo().gaia;
   SignOut();
   SignIn("second@gmail.com");
   GetSyncService(0)->GetUserSettings()->SetSelectedType(
@@ -897,7 +899,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   SignOut();
 
   GetSyncService(0)->GetUserSettings()->KeepAccountSettingsPrefsOnlyForUsers(
-      {first_gaia_id_hash});
+      {first_gaia_id});
 
   SignIn("first@gmail.com");
   EXPECT_FALSE(password_manager::features_util::IsAccountStorageEnabled(

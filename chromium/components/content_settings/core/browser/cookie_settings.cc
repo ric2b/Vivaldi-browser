@@ -213,16 +213,10 @@ void CookieSettings::ResetCookieSetting(const GURL& primary_url) {
 }
 
 bool CookieSettings::AreThirdPartyCookiesLimited() const {
-  // Checks whether we are in the limited state via Mode B or
-  // `CookieControlsMode`
-  return (tracking_protection_settings_ &&
-          tracking_protection_settings_->IsTrackingProtection3pcdEnabled() &&
-          !tracking_protection_settings_->AreAllThirdPartyCookiesBlocked()) ||
-         (static_cast<CookieControlsMode>(
-              pref_change_registrar_->prefs()->GetInteger(
-                  prefs::kCookieControlsMode)) ==
-              CookieControlsMode::kLimited &&
-          !is_incognito_);
+  // Checks whether we are in the limited state via Mode B.
+  return tracking_protection_settings_ &&
+         tracking_protection_settings_->IsTrackingProtection3pcdEnabled() &&
+         !tracking_protection_settings_->AreAllThirdPartyCookiesBlocked();
 }
 
 // TODO(crbug.com/40247160): Update to take in CookieSettingOverrides.
@@ -484,9 +478,8 @@ void CookieSettings::OnTrackingProtection3pcdChanged() {
 void CookieSettings::OnCookiePreferencesChanged() {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (base::FeatureList::IsEnabled(privacy_sandbox::kAddLimit3pcsSetting) ||
-      (tracking_protection_settings_ &&
-       tracking_protection_settings_->IsTrackingProtection3pcdEnabled())) {
+  if (tracking_protection_settings_ &&
+      tracking_protection_settings_->IsTrackingProtection3pcdEnabled()) {
     OnMitigationsEnabledChanged();
   }
 
@@ -511,13 +504,12 @@ bool CookieSettings::ShouldBlockThirdPartyCookies() const {
 bool CookieSettings::ShouldBlockThirdPartyCookies(
     base::optional_ref<const url::Origin> top_frame_origin,
     net::CookieSettingOverrides overrides) const {
-  if (Are3pcsForceDisabledByOverride(overrides)) {
-    return true;
+  if (std::optional<bool> modifier_decision =
+          MaybeBlockThirdPartyCookiesPerModifiers(top_frame_origin,
+                                                  overrides)) {
+    return modifier_decision.value();
   }
-  if (top_frame_origin &&
-      IsBlockedByTopLevel3pcdOriginTrial(top_frame_origin->GetURL())) {
-    return true;
-  }
+
   base::AutoLock auto_lock(lock_);
   return block_third_party_cookies_;
 }

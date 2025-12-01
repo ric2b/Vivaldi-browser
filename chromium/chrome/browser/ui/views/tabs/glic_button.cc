@@ -10,6 +10,7 @@
 #include "base/functional/callback_forward.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/background/glic/glic_launcher_configuration.h"
 #include "chrome/browser/glic/glic_enums.h"
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -21,6 +22,7 @@
 #include "chrome/common/buildflags.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/event_constants.h"
@@ -31,12 +33,17 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/resources/grit/glic_browser_resources.h"
+#endif
+
 namespace glic {
 
 GlicButton::GlicButton(TabStripController* tab_strip_controller,
                        PressedCallback pressed_callback,
                        PressedCallback close_pressed_callback,
                        base::RepeatingClosure hovered_callback,
+                       base::RepeatingClosure mouse_down_callback,
                        const gfx::VectorIcon& icon,
                        const std::u16string& tooltip)
     : TabStripNudgeButton(tab_strip_controller,
@@ -48,7 +55,8 @@ GlicButton::GlicButton(TabStripController* tab_strip_controller,
                           icon),
       menu_model_(CreateMenuModel()),
       tab_strip_controller_(tab_strip_controller),
-      hovered_callback_(std::move(hovered_callback)) {
+      hovered_callback_(std::move(hovered_callback)),
+      mouse_down_callback_(std::move(mouse_down_callback)) {
   SetProperty(views::kElementIdentifierKey, kGlicButtonElementId);
 
   set_context_menu_controller(this);
@@ -77,21 +85,11 @@ GlicButton::GlicButton(TabStripController* tab_strip_controller,
 
 GlicButton::~GlicButton() = default;
 
-void GlicButton::SetShowState(bool show) {
-  show_state_ = show;
-
-  SetVisible(show_state_);
-
-  PreferredSizeChanged();
-}
-
-void GlicButton::SetIcon(const gfx::VectorIcon& icon) {
-  SetVectorIcon(icon);
-}
 
 void GlicButton::SetIsShowingNudge(bool is_showing) {
   if (is_showing) {
     SetCloseButtonFocusBehavior(FocusBehavior::ALWAYS);
+    AnnounceNudgeShown();
   } else {
     SetCloseButtonFocusBehavior(FocusBehavior::NEVER);
   }
@@ -164,6 +162,14 @@ void GlicButton::ExecuteCommand(int command_id, int event_flags) {
   profile_prefs()->SetBoolean(glic::prefs::kGlicPinnedToTabstrip, false);
 }
 
+bool GlicButton::OnMousePressed(const ui::MouseEvent& event) {
+  if (event.IsOnlyLeftMouseButton() && mouse_down_callback_) {
+    mouse_down_callback_.Run();
+    return true;
+  }
+  return false;
+}
+
 bool GlicButton::IsContextMenuShowingForTest() {
   return menu_runner_ && menu_runner_->IsRunning();
 }
@@ -180,6 +186,17 @@ std::unique_ptr<ui::SimpleMenuModel> GlicButton::CreateMenuModel() {
 void GlicButton::OnMenuClosed() {
   menu_anchor_higlight_.reset();
   menu_runner_.reset();
+}
+
+void GlicButton::AnnounceNudgeShown() {
+#if BUILDFLAG(ENABLE_GLIC)
+  auto announcement = l10n_util::GetStringFUTF16(
+      IDS_GLIC_CONTEXTUAL_CUEING_ANNOUNCEMENT,
+      GlicLauncherConfiguration::GetGlobalHotkey().GetShortcutText());
+  GetViewAccessibility().AnnounceAlert(announcement);
+#else
+  NOTIMPLEMENTED();
+#endif
 }
 
 BEGIN_METADATA(GlicButton)

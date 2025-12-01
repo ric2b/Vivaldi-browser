@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.View.MeasureSpec;
 
 import androidx.annotation.StringRes;
+import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -19,12 +20,16 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 public class CommerceBottomSheetContent implements BottomSheetContent {
 
     private final View mContentView;
+    private final RecyclerView mRecyclerView;
     private final BottomSheetController mBottomSheetController;
+    private boolean mIsHalfHeightDisabled;
 
     public CommerceBottomSheetContent(
             View contentView, BottomSheetController bottomSheetController) {
         mContentView = contentView;
+        mRecyclerView = mContentView.findViewById(R.id.commerce_content_recycler_view);
         mBottomSheetController = bottomSheetController;
+        mIsHalfHeightDisabled = false;
     }
 
     @Override
@@ -39,6 +44,9 @@ public class CommerceBottomSheetContent implements BottomSheetContent {
 
     @Override
     public int getVerticalScrollOffset() {
+        if (mRecyclerView != null) {
+            return mRecyclerView.computeVerticalScrollOffset();
+        }
         return 0;
     }
 
@@ -56,14 +64,9 @@ public class CommerceBottomSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public int getPeekHeight() {
-        return HeightMode.DISABLED;
-    }
-
-    @Override
     public float getHalfHeightRatio() {
         float containerHeight = mBottomSheetController.getContainerHeight();
-        if (containerHeight == 0) {
+        if (containerHeight == 0 || mIsHalfHeightDisabled) {
             return HeightMode.DISABLED;
         }
         float contentRatio = getContentHeight() / containerHeight;
@@ -114,10 +117,15 @@ public class CommerceBottomSheetContent implements BottomSheetContent {
         return true;
     }
 
+    /** Set whether to disable the bottom sheet content half height. */
+    public void setIsHalfHeightDisabled(boolean isHalfHeightDisabled) {
+        mIsHalfHeightDisabled = isHalfHeightDisabled;
+    }
+
     private int getContentHeight() {
         mContentView.measure(
                 MeasureSpec.makeMeasureSpec(
-                        mBottomSheetController.getContainerWidth(), MeasureSpec.EXACTLY),
+                        mBottomSheetController.getMaxSheetWidth(), MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(
                         mBottomSheetController.getContainerHeight(), MeasureSpec.AT_MOST));
         return mContentView.getMeasuredHeight();

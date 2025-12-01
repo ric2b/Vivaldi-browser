@@ -1,0 +1,17 @@
+[package]
+name = "fc-fontations"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+fc-fontations-bindgen = { path = "./fc-fontations-bindgen" }
+libc = "0.2.150"
+read-fonts = { version = "0.28", features = [ "experimental_traverse" ]}
+font-types = { version = "0.8", features = ["bytemuck"]}
+skrifa = "0.30"
+bytemuck = { version = "1.19.0" , features = [ 'derive', 'min_const_generics'] }
+bytemuck_derive = "1"
+
+
+[lib]
+path = "fc-fontations/mod.rs"

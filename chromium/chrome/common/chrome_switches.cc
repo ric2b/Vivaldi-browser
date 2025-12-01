@@ -198,12 +198,6 @@ const char kDisableDefaultApps[] = "disable-default-apps";
 // Disables Domain Reliability Monitoring.
 const char kDisableDomainReliability[] = "disable-domain-reliability";
 
-// Disable extensions.
-const char kDisableExtensions[] = "disable-extensions";
-
-// Disable extensions except those specified in a comma-separated list.
-const char kDisableExtensionsExcept[] = "disable-extensions-except";
-
 // Disables lazy loading of images and frames.
 const char kDisableLazyLoading[] = "disable-lazy-loading";
 
@@ -237,6 +231,10 @@ const char kDiskCacheDir[] = "disk-cache-dir";
 
 // Forces the maximum disk space to be used by the disk cache, in bytes.
 const char kDiskCacheSize[] = "disk-cache-size";
+
+// Do not de-elevate the browser on launch. Used after de-elevating to prevent
+// infinite loops.
+const char kDoNotDeElevateOnLaunch[] = "do-not-de-elevate";
 
 // Requests that a running browser process dump its collected histograms to a
 // given file. The file is overwritten if it exists.
@@ -284,6 +282,10 @@ const char kEnableNetBenchmarking[] = "enable-net-benchmarking";
 const char kEnablePotentiallyAnnoyingSecurityFeatures[] =
     "enable-potentially-annoying-security-features";
 
+// Allows experimental ai extension APIs to be used in stable channel.
+// This disables chrome sign-in if set, regardless of channel.
+const char kExperimentalAiStableChannel[] = "experimental-ai-stable-channel";
+
 // Allows overriding the list of restricted ports by passing a comma-separated
 // list of port numbers.
 const char kExplicitlyAllowedPorts[] = "explicitly-allowed-ports";
@@ -300,6 +302,9 @@ const char kExtensionContentVerification[] = "extension-content-verification";
 const char kExtensionContentVerificationBootstrap[] = "bootstrap";
 const char kExtensionContentVerificationEnforce[] = "enforce";
 const char kExtensionContentVerificationEnforceStrict[] = "enforce_strict";
+
+// Name of the command line flag to allow the experimental actor API.
+const char kExtensionExperimentalActor[] = "enable-extension-actor-api";
 
 // Turns on extension install verification if it would not otherwise have been
 // turned on.
@@ -512,7 +517,7 @@ const char kIgnoreProfileDirectoryIfNotExists[] =
 
 // Like kProfileDirectory, but selects the profile by email address. If the
 // email is not found in any existing profile, this switch has no effect. If
-// both kProfileDirectory and kProfileUserName are specified, kProfileDirectory
+// both kProfileDirectory and kProfileEmail are specified, kProfileDirectory
 // takes priority.
 const char kProfileEmail[] = "profile-email";
 
@@ -534,6 +539,10 @@ const char kProxyServer[] = "proxy-server";
 // Provides a list of addresses to discover DevTools remote debugging targets.
 // The format is <host>:<port>,...,<host>:port.
 const char kRemoteDebuggingTargets[] = "remote-debugging-targets";
+
+// Indicates that all corrupted extensions should be repaired if they are
+// are enabled by policy. This is mainly used after a user data downgrade.
+const char kRepairAllValidExtensions[] = "repair-all-valid-extensions";
 
 // Indicates that Chrome was restarted (e.g., after a flag change). This is used
 // to ignore the launch when recording the Launch.Mode2 metric.
@@ -898,6 +907,7 @@ const char kForceNtpMobilePromo[] = "force-ntp-mobile-promo";
 const char kGlicGuestURL[] = "glic-guest-url";
 const char kGlicAlwaysOpenFre[] = "glic-always-open-fre";
 const char kGlicFreURL[] = "glic-fre-url";
+const char kGlicShortcutsLearnMoreURL[] = "glic-shortcuts-learn-more-url";
 // Use --glic-open-on-startup=attached or --glic-open-on-startup=detached.
 const char kGlicOpenOnStartup[] = "glic-open-on-startup";
 // List of allowed origins in the glic webview, as a space-separated list.

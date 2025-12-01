@@ -36,9 +36,12 @@ ClientSharedImageInterface::ClientSharedImageInterface(
 
 ClientSharedImageInterface::~ClientSharedImageInterface() {
   gpu::SyncToken sync_token;
-  auto mailboxes_to_delete = mailboxes_;
-  for (const auto& mailbox : mailboxes_to_delete)
-    DestroySharedImage(sync_token, mailbox);
+  for (const auto& [mailbox, ref_count] : mailboxes_) {
+    CHECK_GT(ref_count, 0);
+    for (int i = 0; i < ref_count; i++) {
+      proxy_->DestroySharedImage(sync_token, mailbox);
+    }
+  }
 }
 
 void ClientSharedImageInterface::UpdateSharedImage(const SyncToken& sync_token,
@@ -194,6 +197,28 @@ scoped_refptr<ClientSharedImage> ClientSharedImageInterface::CreateSharedImage(
 }
 
 scoped_refptr<ClientSharedImage>
+ClientSharedImageInterface::CreateSharedImageForMLTensor(
+    std::string debug_label,
+    viz::SharedImageFormat format,
+    const gfx::Size& size,
+    gpu::SharedImageUsageSet usage) {
+  CHECK(gpu::IsValidClientUsage(usage)) << uint32_t(usage);
+  CHECK(usage.Has(SHARED_IMAGE_USAGE_WEBNN_SHARED_TENSOR));
+
+  const SharedImageInfo si_info = {format, std::move(size), gfx::ColorSpace(),
+                                   usage, std::move(debug_label)};
+
+  auto mailbox = proxy_->CreateSharedImage(si_info, std::nullopt);
+  if (mailbox.IsZero()) {
+    return nullptr;
+  }
+
+  return base::WrapRefCounted<ClientSharedImage>(new ClientSharedImage(
+      AddMailbox(mailbox), si_info.meta, GenUnverifiedSyncToken(), holder_,
+      gfx::EMPTY_BUFFER));
+}
+
+scoped_refptr<ClientSharedImage>
 ClientSharedImageInterface::CreateSharedImageForSoftwareCompositor(
     const SharedImageInfo& si_info) {
   base::WritableSharedMemoryMapping mapping;
@@ -288,7 +313,11 @@ void ClientSharedImageInterface::DestroySharedImage(const SyncToken& sync_token,
     base::AutoLock lock(lock_);
     auto it = mailboxes_.find(mailbox);
     CHECK(it != mailboxes_.end());
-    mailboxes_.erase(it);
+    int& ref_count = it->second;
+    CHECK_GT(ref_count, 0);
+    if (--ref_count == 0) {
+      mailboxes_.erase(it);
+    }
   }
   proxy_->DestroySharedImage(sync_token, mailbox);
 }
@@ -355,7 +384,8 @@ Mailbox ClientSharedImageInterface::AddMailbox(const gpu::Mailbox& mailbox) {
     return mailbox;
 
   base::AutoLock lock(lock_);
-  mailboxes_.insert(mailbox);
+  CHECK_GE(mailboxes_[mailbox], 0);
+  mailboxes_[mailbox]++;
   return mailbox;
 }
 

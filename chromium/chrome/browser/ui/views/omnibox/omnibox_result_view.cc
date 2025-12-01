@@ -468,15 +468,9 @@ void OmniboxResultView::ApplyThemeAndRefreshIcons(bool force_reapply_styles) {
   //
   // TODO(tommycli): We should finish migrating this logic to live entirely
   // within OmniboxTextView, which should keep track of its own OmniboxPart.
-  const ui::ColorId default_id =
-      selected ? kColorOmniboxResultsTextSelected : kColorOmniboxText;
   bool prefers_contrast =
       GetNativeTheme() && GetNativeTheme()->UserHasContrastPreference();
-  if (match_.answer_type != omnibox::ANSWER_TYPE_UNSPECIFIED ||
-      match_.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY) {
-    suggestion_view_->content()->ApplyTextColor(default_id);
-    suggestion_view_->description()->ApplyTextColor(dimmed_id);
-  } else if (match_.type == AutocompleteMatchType::NULL_RESULT_MESSAGE) {
+  if (match_.type == AutocompleteMatchType::NULL_RESULT_MESSAGE) {
     suggestion_view_->content()->ApplyTextColor(
         match_.IsIPHSuggestion() ? kColorOmniboxResultsTextDimmed
                                  : kColorOmniboxText);
@@ -526,8 +520,7 @@ void OmniboxResultView::OnSelectionStateChanged() {
     // events. Specifically, OmniboxPopupViewViews::ProvideButtonFocusHint()
     // already fires the correct events when the user tabs to an attached button
     // in the current row.
-    if (selection_state == OmniboxPopupSelection::FOCUSED_BUTTON_HEADER ||
-        selection_state == OmniboxPopupSelection::NORMAL) {
+    if (selection_state == OmniboxPopupSelection::NORMAL) {
       popup_view_->FireAXEventsForNewActiveDescendant(this);
     }
   }
@@ -536,10 +529,8 @@ void OmniboxResultView::OnSelectionStateChanged() {
 }
 
 bool OmniboxResultView::GetMatchSelected() const {
-  // The header button being focused means the match itself is NOT focused.
   const auto selection = popup_view_->GetSelection();
-  return selection.line == model_index_ &&
-         selection.state != OmniboxPopupSelection::FOCUSED_BUTTON_HEADER;
+  return selection.line == model_index_;
 }
 
 views::Button* OmniboxResultView::GetActiveAuxiliaryButtonForAccessibility() {
@@ -690,7 +681,8 @@ gfx::Image OmniboxResultView::GetIcon() const {
   // kColorOmniboxResultsUrl[Selected] color which is intended for the URL text
   // in suggestion texts.
   ui::ColorId vector_icon_color_id;
-  if (match_.type == AutocompleteMatchType::STARTER_PACK) {
+  if (match_.type == AutocompleteMatchType::STARTER_PACK ||
+      match_.type == AutocompleteMatchType::FEATURED_ENTERPRISE_SEARCH) {
     vector_icon_color_id = kColorOmniboxResultsStarterPackIcon;
   } else if (match_.type == AutocompleteMatchType::HISTORY_CLUSTER ||
              match_.type == AutocompleteMatchType::PEDAL) {
@@ -780,8 +772,11 @@ void OmniboxResultView::UpdateAccessibleName() {
       label += popup_view_->model()
                    ->MaybeGetPopupAccessibilityLabelForIPHSuggestion();
     } else {
-      label = AutocompleteMatchType::ToAccessibilityLabel(raw_match,
-                                                          raw_match.contents);
+      label = AutocompleteMatchType::ToAccessibilityLabel(
+          raw_match,
+          popup_view_->model()->GetSuggestionGroupHeaderText(
+              raw_match.suggestion_group_id),
+          raw_match.contents);
     }
     GetViewAccessibility().SetName(label);
   }

@@ -179,7 +179,7 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateLatestDeprecatedToCurrent) {
     sql::Database db(sql::test::kTestTag);
     ASSERT_TRUE(db.Open(DbPath()));
 
-    sql::Statement s(db.GetUniqueStatement("SELECT COUNT(*) FROM rate_limits"));
+    sql::Statement s(db.GetUniqueStatement("SELECT COUNT(*) FROM sources"));
 
     ASSERT_TRUE(s.Step());
     ASSERT_EQ(1, s.ColumnInt(0));
@@ -198,7 +198,7 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateLatestDeprecatedToCurrent) {
               NormalizeSchema(db.GetSchema()));
 
     // Verify that data is not preserved across the migration.
-    sql::Statement s(db.GetUniqueStatement("SELECT COUNT(*) FROM rate_limits"));
+    sql::Statement s(db.GetUniqueStatement("SELECT COUNT(*) FROM sources"));
 
     ASSERT_TRUE(s.Step());
     ASSERT_EQ(0, s.ColumnInt(0));
@@ -207,97 +207,6 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateLatestDeprecatedToCurrent) {
   // DB creation histograms should be recorded.
   histograms.ExpectTotalCount("Conversions.Storage.CreationTime", 1);
   histograms.ExpectTotalCount("Conversions.Storage.MigrationTime", 0);
-}
-
-TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion54ToCurrent) {
-  base::HistogramTester histograms;
-  LoadDatabase(GetVersionFilePath(54), DbPath());
-
-  // Verify pre-conditions.
-  {
-    sql::Database db(sql::test::kTestTag);
-    ASSERT_TRUE(db.Open(DbPath()));
-
-    sql::Statement s(
-        db.GetUniqueStatement("SELECT reporting_origin FROM rate_limits"));
-    ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
-  }
-  MigrateDatabase();
-
-  // Verify schema is current.
-  {
-    sql::Database db(sql::test::kTestTag);
-    ASSERT_TRUE(db.Open(DbPath()));
-
-    CheckVersionNumbers(&db);
-
-    // Compare normalized schemas
-    EXPECT_EQ(NormalizeSchema(GetCurrentSchema()),
-              NormalizeSchema(db.GetSchema()));
-
-    // Verify that data is preserved across the migration.
-    sql::Statement s(
-        db.GetUniqueStatement("SELECT reporting_origin,scope FROM "
-                              "rate_limits ORDER BY id"));
-    ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
-    ASSERT_EQ(1, s.ColumnInt(1));
-    ASSERT_TRUE(s.Step());
-    ASSERT_EQ("https://a.r.test", s.ColumnStringView(0));
-    ASSERT_EQ(2, s.ColumnInt(1));
-    ASSERT_FALSE(s.Step());
-  }
-
-  // DB creation histograms should be recorded.
-  histograms.ExpectTotalCount("Conversions.Storage.CreationTime", 0);
-  histograms.ExpectTotalCount("Conversions.Storage.MigrationTime", 1);
-}
-
-TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion55ToCurrent) {
-  base::HistogramTester histograms;
-  LoadDatabase(GetVersionFilePath(55), DbPath());
-
-  // Verify pre-conditions.
-  {
-    sql::Database db(sql::test::kTestTag);
-    ASSERT_TRUE(db.Open(DbPath()));
-    ASSERT_FALSE(db.DoesColumnExist("sources", "read_only_source_data"));
-  }
-  MigrateDatabase();
-
-  // Verify schema is current.
-  {
-    sql::Database db(sql::test::kTestTag);
-    ASSERT_TRUE(db.Open(DbPath()));
-
-    CheckVersionNumbers(&db);
-
-    // Compare normalized schemas
-    EXPECT_EQ(NormalizeSchema(GetCurrentSchema()),
-              NormalizeSchema(db.GetSchema()));
-
-    // Verify that data is preserved across the migration.
-    ASSERT_TRUE(db.DoesColumnExist("sources", "read_only_source_data"));
-    sql::Statement s(
-        db.GetUniqueStatement("SELECT read_only_source_data FROM sources"));
-    ASSERT_TRUE(s.Step());
-    proto::AttributionReadOnlySourceData msg;
-    {
-      base::span<const uint8_t> blob = s.ColumnBlob(0);
-      ASSERT_TRUE(msg.ParseFromArray(blob.data(), blob.size()));
-    }
-    EXPECT_EQ(3, msg.max_event_level_reports());
-    EXPECT_FALSE(msg.has_randomized_response_rate());
-    EXPECT_EQ(0, msg.event_level_report_window_start_time());
-    EXPECT_THAT(msg.event_level_report_window_end_times(),
-                ElementsAre(base::Hours(1).InMicroseconds()));
-    ASSERT_FALSE(s.Step());
-  }
-
-  // DB creation histograms should be recorded.
-  histograms.ExpectTotalCount("Conversions.Storage.CreationTime", 0);
-  histograms.ExpectTotalCount("Conversions.Storage.MigrationTime", 1);
 }
 
 TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion56ToCurrent) {
@@ -690,13 +599,15 @@ TEST_F(AttributionStorageSqlMigrationsTest, MigrateVersion66ToCurrent) {
         "1,2,'https://a.s.test','https://r.test',5,6,7,8,0,0,0,0,13,"
         "'https://s.test',15,16,17,'','',?,21,22,NULL,NULL)"));
 
-    // Calling `mutable_trigger_data()` forces creation of the field, even
-    // when `trigger_specs.empty()` below, so that the presence check in
-    // `DeserializeTriggerSpecs()` doesn't mistakenly use the defaults
+    // Calling `mutable_trigger_data()` forces creation of the field
+    // so that the presence check in
+    // `DeserializeTriggerDataSet()` doesn't mistakenly use the defaults
     // corresponding to the field being absent, as opposed to its inner list
     // being empty.
     proto::AttributionReadOnlySourceData msg_source;
     msg_source.mutable_trigger_data();
+    msg_source.add_event_level_report_window_end_times(
+        base::Hours(1).InMicroseconds());
     msg_source.set_randomized_response_rate(0);
 
     insert_source.BindBlob(0, msg_source.SerializeAsString());

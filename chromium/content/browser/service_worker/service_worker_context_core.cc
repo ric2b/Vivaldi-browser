@@ -19,8 +19,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "components/services/storage/public/cpp/quota_client_callback_wrapper.h"
 #include "content/browser/log_console_message.h"
@@ -49,6 +49,7 @@
 #include "content/public/browser/console_message.h"
 #include "content/public/browser/global_routing_id.h"
 #include "content/public/browser/service_worker_context.h"
+#include "content/public/browser/service_worker_registration_information.h"
 #include "content/public/browser/service_worker_running_info.h"
 #include "content/public/common/url_utils.h"
 #include "ipc/ipc_message.h"
@@ -451,12 +452,14 @@ ServiceWorkerClientOwner::CreateServiceWorkerClientForWindow(
 }
 
 ScopedServiceWorkerClient
-ServiceWorkerClientOwner::CreateServiceWorkerClientForPrefetch() {
+ServiceWorkerClientOwner::CreateServiceWorkerClientForPrefetch(
+    scoped_refptr<network::SharedURLLoaderFactory> network_url_loader_factory) {
   // Currently prefetching is enabled only for top-level navigation.
   const bool are_ancestors_secure = true;
 
   auto client = std::make_unique<ServiceWorkerClient>(
-      context_->AsWeakPtr(), are_ancestors_secure, FrameTreeNodeId());
+      context_->AsWeakPtr(), are_ancestors_secure,
+      std::move(network_url_loader_factory));
   auto weak_client = client->AsWeakPtr();
   auto inserted = service_worker_clients_by_uuid_
                       .emplace(weak_client->client_uuid(), std::move(client))
@@ -491,7 +494,7 @@ void ServiceWorkerClientOwner::UpdateServiceWorkerClientClientID(
     const std::string& current_client_uuid,
     const std::string& new_client_uuid) {
   auto it = service_worker_clients_by_uuid_.find(current_client_uuid);
-  CHECK(it != service_worker_clients_by_uuid_.end(), base::NotFatalUntil::M130);
+  CHECK(it != service_worker_clients_by_uuid_.end());
   std::unique_ptr<ServiceWorkerClient> service_worker_client =
       std::move(it->second);
   service_worker_clients_by_uuid_.erase(it);
@@ -721,7 +724,19 @@ void ServiceWorkerContextCore::NotifyClientIsExecutionReady(
 
 bool ServiceWorkerContextCore::MaybeHasRegistrationForStorageKey(
     const blink::StorageKey& key) {
+  TRACE_EVENT("ServiceWorker",
+              "ServiceWorkerContextCore::MaybeHasRegistrationForStorageKey");
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // The following code implements a performance optimization: it retrieves
+  // `storage_keys` from the `ServiceWorkerStorage` in the thread pool without
+  // waiting for `DidGetRegisteredStorageKeys()` to be called. This can speed up
+  // navigation during the browser startup phase.
+  if (!registrations_initialized_ && wrapper_->storage_shared_buffer()) {
+    if (std::optional<std::vector<blink::StorageKey>> storage_keys =
+            wrapper_->storage_shared_buffer()->TakeRegisteredKeys()) {
+      SetRegisteredStorageKeys(*storage_keys);
+    }
+  }
   if (!registrations_initialized_) {
     return true;
   }
@@ -969,7 +984,7 @@ void ServiceWorkerContextCore::AddLiveVersion(ServiceWorkerVersion* version) {
 void ServiceWorkerContextCore::RemoveLiveVersion(int64_t id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto it = live_versions_.find(id);
-  CHECK(it != live_versions_.end(), base::NotFatalUntil::M130);
+  CHECK(it != live_versions_.end());
   ServiceWorkerVersion* version = it->second;
 
   if (version->running_status() != blink::EmbeddedWorkerStatus::kStopped) {
@@ -1128,15 +1143,45 @@ int ServiceWorkerContextCore::GetVersionFailureCount(int64_t version_id) {
   return it->second.count;
 }
 
-void ServiceWorkerContextCore::NotifyRegistrationStored(
-    int64_t registration_id,
-    const GURL& scope,
-    const blink::StorageKey& key) {
+void ServiceWorkerContextCore::NotifyWillCreateURLLoaderFactory(
+    const GURL& scope) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  for (auto& observer : sync_observer_list_->observers) {
+    observer.OnWillCreateURLLoaderFactory(scope);
+  }
+}
+
+void ServiceWorkerContextCore::NotifyRegistrationStored(
+    const int64_t registration_id,
+    const GURL& scope,
+    const blink::StorageKey& key,
+    uint64_t stored_resources_total_size_bytes) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  scoped_refptr<ServiceWorkerRegistration> registration =
+      GetLiveRegistration(registration_id);
+  ServiceWorkerRegistrationInformation service_worker_info;
+
+  if (registration) {
+    registration->SetStored();
+    registration->set_resources_total_size_bytes(
+        stored_resources_total_size_bytes);
+
+    ServiceWorkerVersion* version = registration->GetNewestVersion();
+    content::ServiceWorkerRegistry::ResourceList resources;
+    if (version) {
+      resources = version->script_cache_map()->GetResources();
+    }
+    for (const auto& resource : resources) {
+      service_worker_info.resources.push_back(resource->url);
+    }
+  }
+
   registered_storage_keys_.insert(key);
+
   observer_list_->Notify(
       FROM_HERE, &ServiceWorkerContextCoreObserver::OnRegistrationStored,
-      registration_id, scope, key);
+      registration_id, scope, key, service_worker_info);
 }
 
 void ServiceWorkerContextCore::NotifyAllRegistrationsDeletedForStorageKey(
@@ -1219,6 +1264,16 @@ void ServiceWorkerContextCore::OnControlleeNavigationCommitted(
       FROM_HERE,
       &ServiceWorkerContextCoreObserver::OnControlleeNavigationCommitted,
       version->version_id(), client_uuid, render_frame_host_id);
+}
+
+void ServiceWorkerContextCore::OnStartWorkerMessageSent(
+    ServiceWorkerVersion* version) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK_EQ(this, version->context().get());
+
+  for (auto& observer : sync_observer_list_->observers) {
+    observer.OnStartWorkerMessageSent(version->version_id(), version->scope());
+  }
 }
 
 void ServiceWorkerContextCore::OnRunningStateChanged(
@@ -1384,14 +1439,18 @@ void ServiceWorkerContextCore::OnRegistrationFinishedForCheckHasServiceWorker(
 void ServiceWorkerContextCore::DidGetRegisteredStorageKeys(
     base::TimeTicks start_time,
     const std::vector<blink::StorageKey>& storage_keys) {
+  TRACE_EVENT("ServiceWorker",
+              "ServiceWorkerContextCore::DidGetRegisteredStorageKeys");
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  for (const blink::StorageKey& storage_key : storage_keys) {
-    registered_storage_keys_.insert(storage_key);
+  if (wrapper_->storage_shared_buffer()) {
+    // Discard RegisteredKeys from storage_shared_buffer.
+    wrapper_->storage_shared_buffer()->TakeRegisteredKeys();
   }
 
-  DCHECK(!registrations_initialized_);
-  registrations_initialized_ = true;
+  if (!registrations_initialized_) {
+    SetRegisteredStorageKeys(storage_keys);
+  }
 
   if (on_registrations_initialized_for_test_) {
     std::move(on_registrations_initialized_for_test_).Run();
@@ -1402,6 +1461,17 @@ void ServiceWorkerContextCore::DidGetRegisteredStorageKeys(
         "ServiceWorker.Storage.RegisteredStorageKeyCacheInitialization.Time",
         base::TimeTicks::Now() - start_time);
   }
+}
+
+void ServiceWorkerContextCore::SetRegisteredStorageKeys(
+    const std::vector<blink::StorageKey>& storage_keys) {
+  TRACE_EVENT("ServiceWorker",
+              "ServiceWorkerContextCore::SetRegisteredStorageKeys");
+  CHECK(!registrations_initialized_);
+  for (const blink::StorageKey& storage_key : storage_keys) {
+    registered_storage_keys_.insert(storage_key);
+  }
+  registrations_initialized_ = true;
 }
 
 ScopedServiceWorkerClient::ScopedServiceWorkerClient(

@@ -10,34 +10,34 @@ vars = {
   'chromium_git': 'https://chromium.googlesource.com',
 
   # Current revision of glslang, the Khronos SPIRV compiler.
-  'glslang_revision': 'e57f993cff981c8c3ffd38967e030f04d13781a9',
+  'glslang_revision': '93231001597dad1149a5d035af30eda50b9e6b6c',
 
   # Current revision of Lunarg VulkanTools
-  'lunarg_vulkantools_revision': '6f355619b1b1bfce2b5fb1dcf2aca0d55f9606de',
+  'lunarg_vulkantools_revision': '640f35dd85d25122371fa99b8788d944b71bc5e8',
 
   # Current revision of spirv-cross, the Khronos SPIRV cross compiler.
   'spirv_cross_revision': 'b8fcf307f1f347089e3c46eb4451d27f32ebc8d3',
 
   # Current revision fo the SPIRV-Headers Vulkan support library.
-  'spirv_headers_revision': '8c88e0c4c94a21de825efccba5f99a862b049825',
+  'spirv_headers_revision': 'c9aad99f9276817f18f72a4696239237c83cb775',
 
   # Current revision of SPIRV-Tools for Vulkan.
-  'spirv_tools_revision': '2e83ad7e6f2cc51f7eaff3ffeb10e34351b3c157',
+  'spirv_tools_revision': '01021466b5e71deaac9054f56082566c782bfd51',
 
   # Current revision of Khronos Vulkan-Headers.
-  'vulkan_headers_revision': '78c359741d855213e8685278eb81bb62599f8e56',
+  'vulkan_headers_revision': '75ad707a587e1469fb53a901b9b68fe9f6fbc11f',
 
   # Current revision of Khronos Vulkan-Loader.
-  'vulkan_loader_revision': '723d6b4aa35853315c6e021ec86388b3a2559fae',
+  'vulkan_loader_revision': 'c913466fdc5004584890f89ff91121bdb2ffd4ba',
 
   # Current revision of Khronos Vulkan-Tools.
-  'vulkan_tools_revision': '289efccc7560f2b970e2b4e0f50349da87669311',
+  'vulkan_tools_revision': '60b640cb931814fcc6dabe4fc61f4738c56579f6',
 
   # Current revision of Khronos Vulkan-Utility-Libraries.
-  'vulkan_utility_libraries_revision': '0d5b49b80f17bca25e7f9321ad4e671a56f70887',
+  'vulkan_utility_libraries_revision': '49ac28931f28bffaa3cd73dc4ad997284d574962',
 
   # Current revision of Khronos Vulkan-ValidationLayers.
-  'vulkan_validation_revision': '73d7d74bc979c8a16c823c4eae4ee881153e000a',
+  'vulkan_validation_revision': 'f7ceb1d01a292846db77ec87786be84d6fd568d9',
 }
 
 deps = {

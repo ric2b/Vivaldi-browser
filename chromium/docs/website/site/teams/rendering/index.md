@@ -105,16 +105,16 @@ subscribed the full historic archives are available.
     Paint, Compositing, and SVG specific list for technical and standards
     discussions. Also see [this site](/teams/paint-team).
 
-### Bi-Weekly Meeting
+### Quarterly Meeting
 
-There is bi-weekly meeting held over video conference every second Tuesday open to all team
+There is a quarterly meeting held over video conference second Tuesday of the quarter, open to all team
 members, the meeting notes of which are available below and sent out to the
 public mailing list. If you're interested in participating please talk to
 [Chris](mailto:chrishtr@chromium.org) and he'll share instructions.
 
 **Current schedule:**
 
-*   Every second Tuesday 10:00 PDT (13:00 EDT, 18:00 BST, 19:00 CEST; Wednesday 02:00
+*   Second Tuesday of the quarter 10:00 PDT (13:00 EDT, 18:00 BST, 19:00 CEST; Wednesday 02:00
             JST, 03:00 AEST).
 
 Meeting notes are public and are sent to *rendering-core-dev*, they're also

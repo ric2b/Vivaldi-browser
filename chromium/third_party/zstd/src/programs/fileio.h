@@ -70,7 +70,7 @@ void FIO_setAdaptiveMode(FIO_prefs_t* const prefs, int adapt);
 void FIO_setAdaptMin(FIO_prefs_t* const prefs, int minCLevel);
 void FIO_setAdaptMax(FIO_prefs_t* const prefs, int maxCLevel);
 void FIO_setUseRowMatchFinder(FIO_prefs_t* const prefs, int useRowMatchFinder);
-void FIO_setBlockSize(FIO_prefs_t* const prefs, int blockSize);
+void FIO_setJobSize(FIO_prefs_t* const prefs, int jobSize);
 void FIO_setChecksumFlag(FIO_prefs_t* const prefs, int checksumFlag);
 void FIO_setDictIDFlag(FIO_prefs_t* const prefs, int dictIDFlag);
 void FIO_setLdmBucketSizeLog(FIO_prefs_t* const prefs, int ldmBucketSizeLog);

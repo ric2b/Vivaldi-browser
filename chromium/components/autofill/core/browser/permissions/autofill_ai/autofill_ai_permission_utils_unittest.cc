@@ -29,10 +29,6 @@ namespace {
 
 using ::testing::Values;
 
-constexpr auto kAutofillPredictionSettingsAllowWithoutLogging =
-    base::to_underlying(
-        optimization_guide::model_execution::prefs::
-            ModelExecutionEnterprisePolicyValue::kAllowWithoutLogging);
 constexpr auto kAutofillPredictionSettingsDisable =
     base::to_underlying(optimization_guide::model_execution::prefs::
                             ModelExecutionEnterprisePolicyValue::kDisable);
@@ -164,50 +160,26 @@ TEST_P(AutofillAiMayPerformActionTest, OptInIphFeatureOff) {
       feature_engagement::kIPHAutofillAiOptInFeature);
 
   SetAutofillAiOptInStatus(client(), false);
-  const bool is_allowed = GetParam() == AutofillAiAction::kOptIn;
+  const bool is_allowed =
+      GetParam() == AutofillAiAction::kOptIn ||
+      GetParam() == AutofillAiAction::kListEntityInstancesInSettings;
   EXPECT_EQ(MayPerformAutofillAiAction(client(), GetParam()), is_allowed);
 }
 
-// Tests that everything but logging is enabled if the AutofillAI enterprise
-// policy allows the feature without logging.
-TEST_P(AutofillAiMayPerformActionTest,
-       ActionsWhenAutofillAiEnterprisePolicyLoggingDisabled) {
-  client().GetPrefs()->SetInteger(
-      optimization_guide::prefs::
-          kAutofillPredictionImprovementsEnterprisePolicyAllowed,
-      kAutofillPredictionSettingsAllowWithoutLogging);
-
-  const bool is_allowed = GetParam() != AutofillAiAction::kIphForOptIn &&
-                          GetParam() != AutofillAiAction::kLogToMqls;
-  EXPECT_EQ(MayPerformAutofillAiAction(client(), GetParam()), is_allowed);
-}
-
-// Tests that no action is permitted if the AutofillAI enterprise policy is
-// disabled and no data is saved in the EntityDataManager.
+// Tests that listing entities is the only action permitted if the
+// AutofillAI enterprise policy is disabled regardless of whether data
+// is saved in the EntityDataManager.
 TEST_P(AutofillAiMayPerformActionTest,
        ActionsWhenAutofillAiEnterprisePolicyDisabled) {
   client().GetPrefs()->SetInteger(
       optimization_guide::prefs::
           kAutofillPredictionImprovementsEnterprisePolicyAllowed,
       kAutofillPredictionSettingsDisable);
-  EXPECT_FALSE(MayPerformAutofillAiAction(client(), GetParam()));
-}
-
-// Tests that listing, editing and removing entities is permitted if the
-// AutofillAI enterprise policy is disabled and there is data is saved in the
-// EntityDataManager.
-TEST_P(AutofillAiMayPerformActionTest,
-       ActionsWhenAutofillAiEnterprisePolicyDisabledWithDataSaved) {
-  AddEntity();
-  client().GetPrefs()->SetInteger(
-      optimization_guide::prefs::
-          kAutofillPredictionImprovementsEnterprisePolicyAllowed,
-      kAutofillPredictionSettingsDisable);
-  const bool is_allowed =
-      (GetParam() ==
-       AutofillAiAction::kEditAndDeleteEntityInstanceInSettings) ||
-      (GetParam() == AutofillAiAction::kListEntityInstancesInSettings);
-  EXPECT_EQ(MayPerformAutofillAiAction(client(), GetParam()), is_allowed);
+  if (GetParam() == AutofillAiAction::kListEntityInstancesInSettings) {
+    EXPECT_TRUE(MayPerformAutofillAiAction(client(), GetParam()));
+  } else {
+    EXPECT_FALSE(MayPerformAutofillAiAction(client(), GetParam()));
+  }
 }
 
 // Tests that no action is permitted if address Autofill is disabled and no data
@@ -230,12 +202,14 @@ TEST_P(AutofillAiMayPerformActionTest,
   EXPECT_EQ(MayPerformAutofillAiAction(client(), GetParam()), is_allowed);
 }
 
-// Verifies that IPH for opt-in is permitted if the user has not opted into
-// AutofillAI.
+// Verifies that IPH, opt-in and list entities are permitted if the user has not
+// opted into AutofillAI.
 TEST_P(AutofillAiMayPerformActionTest, ActionsWhenNotOptedIntoAutofillAi) {
   SetAutofillAiOptInStatus(client(), false);
-  const bool is_allowed = (GetParam() == AutofillAiAction::kOptIn) ||
-                          (GetParam() == AutofillAiAction::kIphForOptIn);
+  const bool is_allowed =
+      (GetParam() == AutofillAiAction::kOptIn) ||
+      (GetParam() == AutofillAiAction::kIphForOptIn) ||
+      (GetParam() == AutofillAiAction::kListEntityInstancesInSettings);
   EXPECT_EQ(MayPerformAutofillAiAction(client(), GetParam()), is_allowed);
 }
 

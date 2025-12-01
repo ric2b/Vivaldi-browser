@@ -170,15 +170,14 @@ OPENSSL_EXPORT int PKCS12_verify_mac(const PKCS12 *p12, const char *password,
 // key. |key_type| must be zero. |pkey| and |cert| may be NULL to omit them.
 //
 // Each of |key_nid|, |cert_nid|, |iterations|, and |mac_iterations| may be zero
-// to use defaults, which are |NID_pbe_WithSHA1And3_Key_TripleDES_CBC|,
-// |NID_pbe_WithSHA1And40BitRC2_CBC|, |PKCS12_DEFAULT_ITER|, and one,
-// respectively.
+// to use defaults, which are |NID_aes_256_cbc|, |NID_aes_256_cbc|,
+// |PKCS12_DEFAULT_ITER|, and |PKCS12_DEFAULT_ITER|, respectively.
 //
 // |key_nid| and |cert_nid| are then interpreted as follows:
 //
 // * If the NID is a cipher that is supported with PBES2, e.g.
 //   |NID_aes_256_cbc|, this function will use it with PBES2 and a default KDF
-//   (currently PBKDF2 with HMAC-SHA1). There is no way to specify the KDF in
+//   (currently PBKDF2 with HMAC-SHA256). There is no way to specify the KDF in
 //   this function.
 //
 // * If the NID is a PBES1 suite, e.g. |NID_pbe_WithSHA1And3_Key_TripleDES_CBC|,

@@ -48,7 +48,8 @@ OperaImporter::OperaImporter()
 
 OperaImporter::~OperaImporter() {}
 
-void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
+void OperaImporter::StartImport(
+    const user_data_importer::SourceProfile& source_profile,
                                 uint16_t items,
                                 ImporterBridge* bridge) {
   bridge_ = bridge;
@@ -97,37 +98,37 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
 
   std::string error;
   bool success;
-  if ((items & importer::FAVORITES) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::FAVORITES);
+  if ((items & user_data_importer::FAVORITES) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::FAVORITES);
     success = ImportBookMarks(&error);
     if (!success) {
-      bridge_->NotifyItemFailed(importer::FAVORITES, error);
+      bridge_->NotifyItemFailed(user_data_importer::FAVORITES, error);
     }
-    bridge_->NotifyItemEnded(importer::FAVORITES);
+    bridge_->NotifyItemEnded(user_data_importer::FAVORITES);
   }
-  if ((items & importer::NOTES) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::NOTES);
+  if ((items & user_data_importer::NOTES) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::NOTES);
     success = ImportNotes(&error);
     if (!success) {
-      bridge_->NotifyItemFailed(importer::NOTES, error);
+      bridge_->NotifyItemFailed(user_data_importer::NOTES, error);
     }
-    bridge_->NotifyItemEnded(importer::NOTES);
+    bridge_->NotifyItemEnded(user_data_importer::NOTES);
   }
-  if ((items & importer::PASSWORDS) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::PASSWORDS);
+  if ((items & user_data_importer::PASSWORDS) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::PASSWORDS);
     success = ImportWand(&error);
     if (!success) {
-      bridge_->NotifyItemFailed(importer::PASSWORDS, error);
+      bridge_->NotifyItemFailed(user_data_importer::PASSWORDS, error);
     }
-    bridge_->NotifyItemEnded(importer::PASSWORDS);
+    bridge_->NotifyItemEnded(user_data_importer::PASSWORDS);
   }
-  if ((items & importer::SPEED_DIAL) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::SPEED_DIAL);
+  if ((items & user_data_importer::SPEED_DIAL) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::SPEED_DIAL);
     success = ImportSpeedDial(&error);
     if (!success) {
-      bridge_->NotifyItemFailed(importer::SPEED_DIAL, error);
+      bridge_->NotifyItemFailed(user_data_importer::SPEED_DIAL, error);
     }
-    bridge_->NotifyItemEnded(importer::SPEED_DIAL);
+    bridge_->NotifyItemEnded(user_data_importer::SPEED_DIAL);
   }
   bridge_->NotifyEnded();
 }

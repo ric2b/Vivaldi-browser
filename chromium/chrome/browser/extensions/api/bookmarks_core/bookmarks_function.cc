@@ -75,7 +75,7 @@ const BookmarkNode* BookmarksFunction::GetBookmarkNodeFromId(
   const BookmarkNode* node = bookmarks::GetBookmarkNodeByID(model, id);
   if (!node || (base::FeatureList::IsEnabled(
                     kEnforceBookmarkVisibilityOnExtensionsAPI) &&
-                !model->IsNodeVisible(*node))) {
+                !node->IsVisible())) {
     *error = bookmarks_errors::kNoNodeError;
     return nullptr;
   }
@@ -90,11 +90,9 @@ bool BookmarksFunction::EditBookmarksEnabled() {
 
 bool BookmarksFunction::CanBeModified(const BookmarkNode* node,
                                       std::string* error) {
-  BookmarkModel* model =
-      BookmarkModelFactory::GetForBrowserContext(GetProfile());
   if (!node || (base::FeatureList::IsEnabled(
                     kEnforceBookmarkVisibilityOnExtensionsAPI) &&
-                !model->IsNodeVisible(*node))) {
+                !node->IsVisible())) {
     *error = bookmarks_errors::kNoParentError;
     return false;
   }

@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/342213636): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "content/public/test/browser_test_utils.h"
 
@@ -90,6 +86,7 @@
 #include "content/public/test/no_renderer_crashes_assertion.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "content/public/test/synchronize_visual_properties_interceptor.h"
+#include "content/public/test/test_devtools_protocol_client.h"
 #include "content/public/test/test_fileapi_operation_waiter.h"
 #include "content/public/test/test_frame_navigation_observer.h"
 #include "content/public/test/test_launcher.h"
@@ -894,6 +891,21 @@ void CrashTab(WebContents* web_contents) {
   EXPECT_TRUE(web_contents->IsCrashed());
 }
 
+void SimulateUnresponsivePrimaryMainFrameAndWaitForExit(
+    WebContents* web_contents) {
+  RenderProcessHost* rph = web_contents->GetPrimaryMainFrame()->GetProcess();
+  RenderProcessHostWatcher watcher(
+      rph, RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
+
+  SimulateUnresponsiveRenderer(
+      web_contents, web_contents->GetPrimaryMainFrame()->GetRenderWidgetHost());
+
+  EXPECT_TRUE(rph->Shutdown(RESULT_CODE_HUNG));
+  watcher.Wait();
+  EXPECT_FALSE(watcher.did_exit_normally());
+  EXPECT_TRUE(web_contents->IsCrashed());
+}
+
 void PwnCommitIPC(WebContents* web_contents,
                   const GURL& target_url,
                   const GURL& new_url,
@@ -1006,6 +1018,14 @@ void NotifyCopyableViewInFrame(RenderFrameHost* render_frame_host,
       rwhi->GetWeakPtr(), std::move(done_callback));
 
   rwhi->InsertVisualStateCallback(std::move(first_frame_done));
+}
+
+void SimulateEndOfPaintHoldingOnPrimaryMainFrame(WebContents* web_contents) {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+  RenderWidgetHostImpl* main_frame_rwh =
+      web_contents_impl->GetPrimaryMainFrame()->GetRenderWidgetHost();
+  main_frame_rwh->ForceFirstFrameAfterNavigationTimeout();
 }
 
 void SimulateMouseClick(WebContents* web_contents,
@@ -1829,6 +1849,14 @@ EvalJsResult EvalJsRunner(
   return EvalJsResult(result_value.Clone(), std::string());
 }
 
+class ScopedTestDevToolsProtocolClient : public TestDevToolsProtocolClient {
+ public:
+  explicit ScopedTestDevToolsProtocolClient(content::RenderFrameHost& rfh) {
+    AttachToFrameTreeHost(&rfh);
+  }
+  ~ScopedTestDevToolsProtocolClient() override { DetachProtocolClient(); }
+};
+
 }  // namespace
 
 ::testing::AssertionResult ExecJs(const ToRenderFrameHost& execution_target,
@@ -2220,8 +2248,7 @@ bool AccessibilityTreeContainsNodeWithName(ui::BrowserAccessibility* node,
 }
 
 void WaitForAccessibilityTreeToChange(WebContents* web_contents) {
-  AccessibilityNotificationWaiter accessibility_waiter(
-      web_contents, ui::AXMode(), ax::mojom::Event::kNone);
+  AccessibilityNotificationWaiter accessibility_waiter(web_contents);
   ASSERT_TRUE(accessibility_waiter.WaitForNotification());
 }
 
@@ -2676,7 +2703,6 @@ DOMMessageQueue::~DOMMessageQueue() = default;
 
 void DOMMessageQueue::PrimaryMainFrameRenderProcessGone(
     base::TerminationStatus status) {
-  VLOG(0) << "DOMMessageQueue::RenderProcessGone " << status;
   switch (status) {
     case base::TERMINATION_STATUS_NORMAL_TERMINATION:
     case base::TERMINATION_STATUS_STILL_RUNNING:
@@ -2784,7 +2810,7 @@ bool RequestFrame(WebContents* web_contents) {
   return RenderWidgetHostImpl::From(web_contents->GetPrimaryMainFrame()
                                         ->GetRenderViewHost()
                                         ->GetWidget())
-      ->RequestRepaintForTesting();
+      ->RequestRepaintOnNewSurface();
 }
 
 RenderFrameSubmissionObserver::RenderFrameSubmissionObserver(
@@ -3851,6 +3877,30 @@ void DevToolsInspectorLogWatcher::DispatchProtocolMessage(
 
   if (notification->find("Media.") != std::string::npos) {
     last_media_notification_ = *notification;
+
+    if (*notification == "Media.playerEventsAdded") {
+      bool last_auto_pip_event_info_set = false;
+      const base::Value::List* events =
+          parsed_message.FindListByDottedPath("params.events");
+      if (events) {
+        for (const base::Value& event : *events) {
+          const auto* dict = event.GetIfDict();
+          if (!dict) {
+            continue;
+          }
+          const std::string* text = dict->FindString("value");
+          if ((text != nullptr) &&
+              ((*text).find("auto_picture_in_picture_info") !=
+               std::string::npos)) {
+            last_auto_picture_in_picture_event_info_ = *text;
+            last_auto_pip_event_info_set = true;
+          }
+        }
+      }
+      if (last_auto_pip_event_info_set) {
+        NotifyLastAutoPipEventInfoSet();
+      }
+    }
   }
 }
 
@@ -3871,6 +3921,12 @@ void DevToolsInspectorLogWatcher::FlushAndStopWatching() {
   }
 
   run_loop_disable_log_.Run();
+}
+
+void DevToolsInspectorLogWatcher::NotifyLastAutoPipEventInfoSet() {
+  for (DevToolsInspectorLogWatcherObserver& obs : observers_) {
+    obs.OnLastAutoPipEventInfoSet();
+  }
 }
 
 namespace {
@@ -4540,5 +4596,45 @@ void SetCapturedSurfaceControllerFactoryForTesting(
       ->SetCapturedSurfaceControllerFactoryForTesting(wrapped_factory);
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
+std::optional<int> GetDOMNodeId(content::RenderFrameHost& rfh,
+                                std::string_view query_selector) {
+  ScopedTestDevToolsProtocolClient devtools_client(rfh);
+
+  // Get the document node.
+  const base::Value::Dict* result =
+      devtools_client.SendCommandSync("DOM.getDocument");
+  CHECK(result);
+
+  std::optional<int> document_id = result->FindIntByDottedPath("root.nodeId");
+  CHECK(document_id.has_value());
+
+  // Find a node matching the selector in the document.
+  auto params = base::Value::Dict()
+                    .Set("nodeId", document_id.value())
+                    .Set("selector", query_selector);
+  result =
+      devtools_client.SendCommandSync("DOM.querySelector", std::move(params));
+  CHECK(result);
+
+  // QuerySelector returns a node_id: 0 when the selector isn't matched.
+  std::optional<int> node_id = result->FindInt("nodeId");
+  if (!node_id || node_id.value() == 0) {
+    return std::nullopt;
+  }
+
+  // Extract the backendNodeId from the matched node. backendNodeId corresponds
+  // to the Blink DOMNodeId
+  params = base::Value::Dict().Set("nodeId", node_id.value());
+  result =
+      devtools_client.SendCommandSync("DOM.describeNode", std::move(params));
+  CHECK(result);
+
+  std::optional<int> dom_node_id =
+      result->FindIntByDottedPath("node.backendNodeId");
+  CHECK(dom_node_id.has_value());
+
+  return dom_node_id;
+}
 
 }  // namespace content

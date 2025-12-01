@@ -31,6 +31,7 @@ TEST(SerializeAuctionConfigTest, SerializeComponents) {
    },
    "componentAuctions": [ "https://example.org", "https://example.com" ],
    "decisionLogicURL": "https://seller.test/foo",
+   "executionMode": "compatibility",
    "deprecatedRenderURLReplacements": {
       "pending": false,
       "value": [ ]
@@ -126,6 +127,7 @@ TEST(SerializeAuctionConfigTest, FullConfig) {
    "expectsDirectFromSellerSignalsHeaderAdSlot": false,
    "maxTrustedScoringSignalsURLLength": 2560,
    "trustedScoringSignalsCoordinator": "https://example.test",
+   "executionMode": "group-by-origin",
    "deprecatedRenderURLReplacements" : {
       "pending": false,
       "value": [ {
@@ -179,7 +181,10 @@ TEST(SerializeAuctionConfigTest, FullConfig) {
       }
    },
    "perBuyerTKVSignals": {
-      "https://buyer.test": "[8]"
+      "https://buyer.test": {
+         "pending": false,
+         "value": "[8]"
+      }
    },
    "perBuyerTimeouts": {
       "pending": false,

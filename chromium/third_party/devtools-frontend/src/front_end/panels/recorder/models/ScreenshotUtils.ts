@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as SDK from '../../../core/sdk/sdk.js';
 
@@ -32,7 +33,7 @@ export async function resizeScreenshot(data: Screenshot): Promise<Screenshot> {
   await promise;
 
   const canvas = document.createElement('canvas');
-  const context = canvas.getContext('2d');
+  const context = canvas.getContext('2d', {willReadFrequently: true});
   if (!context) {
     throw new Error('Could not create context.');
   }

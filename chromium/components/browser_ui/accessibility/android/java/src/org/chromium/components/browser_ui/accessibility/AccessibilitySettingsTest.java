@@ -11,6 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
@@ -103,7 +104,7 @@ public class AccessibilitySettingsTest {
 
         // Enable screen reader to display all settings options.
         ThreadUtils.runOnUiThreadBlocking(
-                () -> AccessibilityState.setIsScreenReaderEnabledForTesting(true));
+                () -> AccessibilityState.setIsKnownScreenReaderEnabledForTesting(true));
         when(mDelegate.shouldShowImageDescriptionsSetting()).thenReturn(true);
 
         mSettingsActivityTestRule.launchPreference(
@@ -119,7 +120,7 @@ public class AccessibilitySettingsTest {
     @After
     public void tearDown() {
         ThreadUtils.runOnUiThreadBlocking(
-                () -> AccessibilityState.setIsScreenReaderEnabledForTesting(false));
+                () -> AccessibilityState.setIsKnownScreenReaderEnabledForTesting(false));
         when(mDelegate.shouldShowImageDescriptionsSetting()).thenReturn(false);
     }
 
@@ -451,6 +452,7 @@ public class AccessibilitySettingsTest {
                 (ChromeSwitchPreference)
                         mAccessibilitySettings.findPreference(
                                 AccessibilitySettings.PREF_READER_FOR_ACCESSIBILITY);
+        assertTrue(readerModePref.isVisible());
         boolean initialValue = readerModePref.isChecked();
 
         HistogramWatcher watcher =

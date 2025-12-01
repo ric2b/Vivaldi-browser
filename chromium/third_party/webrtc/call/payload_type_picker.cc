@@ -41,61 +41,60 @@ static const int kLastDynamicPayloadTypeUpperRange = 127;
 
 // Note: The only fields we need from a Codec are the type (audio/video),
 // the subtype (vp8/h264/....), the clock rate, the channel count, and the
-// fmtp parameters. The use of cricket::Codec, which contains more fields,
+// fmtp parameters. The use of Codec, which contains more fields,
 // is only a temporary measure.
 
 struct MapTableEntry {
-  webrtc::SdpAudioFormat format;
+  SdpAudioFormat format;
   int payload_type;
 };
 
 // Helper function to determine whether a codec should use the [35, 63] range.
 // Should be used when adding new codecs (or variants).
-bool CodecPrefersLowerRange(const cricket::Codec& codec) {
+bool CodecPrefersLowerRange(const Codec& codec) {
   // All audio codecs prefer upper range.
-  if (codec.type == cricket::Codec::Type::kAudio) {
-    return absl::EqualsIgnoreCase(codec.name, cricket::kRedCodecName);
+  if (codec.type == Codec::Type::kAudio) {
+    return absl::EqualsIgnoreCase(codec.name, kRedCodecName);
   }
-  if (absl::EqualsIgnoreCase(codec.name, cricket::kFlexfecCodecName) ||
-      absl::EqualsIgnoreCase(codec.name, cricket::kAv1CodecName) ||
-      absl::EqualsIgnoreCase(codec.name, cricket::kH265CodecName)) {
+  if (absl::EqualsIgnoreCase(codec.name, kFlexfecCodecName) ||
+      absl::EqualsIgnoreCase(codec.name, kAv1CodecName) ||
+      absl::EqualsIgnoreCase(codec.name, kH265CodecName)) {
     return true;
-  } else if (absl::EqualsIgnoreCase(codec.name, cricket::kH264CodecName)) {
+  } else if (absl::EqualsIgnoreCase(codec.name, kH264CodecName)) {
     std::string profile_level_id;
     std::string packetization_mode;
 
-    if (codec.GetParam(cricket::kH264FmtpProfileLevelId, &profile_level_id)) {
+    if (codec.GetParam(kH264FmtpProfileLevelId, &profile_level_id)) {
       if (absl::StartsWithIgnoreCase(profile_level_id, "4d00")) {
-        if (codec.GetParam(cricket::kH264FmtpPacketizationMode,
-                           &packetization_mode)) {
+        if (codec.GetParam(kH264FmtpPacketizationMode, &packetization_mode)) {
           return packetization_mode == "0";
         }
       }
       // H264 with YUV444.
       return absl::StartsWithIgnoreCase(profile_level_id, "f400");
     }
-  } else if (absl::EqualsIgnoreCase(codec.name, cricket::kVp9CodecName)) {
+  } else if (absl::EqualsIgnoreCase(codec.name, kVp9CodecName)) {
     std::string profile_id;
 
-    if (codec.GetParam(cricket::kVP9ProfileId, &profile_id)) {
+    if (codec.GetParam(kVP9ProfileId, &profile_id)) {
       if (profile_id == "1" || profile_id == "3") {
         return true;
       }
     }
-  } else if (absl::EqualsIgnoreCase(codec.name, cricket::kRtxCodecName)) {
+  } else if (absl::EqualsIgnoreCase(codec.name, kRtxCodecName)) {
     // For RTX prefer lower range if the associated codec is in that range.
     std::string associated_pt_str;
     int associated_pt;
-    return codec.GetParam(cricket::kCodecParamAssociatedPayloadType,
+    return codec.GetParam(kCodecParamAssociatedPayloadType,
                           &associated_pt_str) &&
-           rtc::FromString(associated_pt_str, &associated_pt) &&
+           FromString(associated_pt_str, &associated_pt) &&
            associated_pt >= kFirstDynamicPayloadTypeLowerRange &&
            associated_pt <= kLastDynamicPayloadTypeLowerRange;
   }
   return false;
 }
 
-RTCErrorOr<PayloadType> FindFreePayloadType(const cricket::Codec& codec,
+RTCErrorOr<PayloadType> FindFreePayloadType(const Codec& codec,
                                             std::set<PayloadType> seen_pt) {
   // Prefer to use lower range for codecs that can handle it.
   bool prefer_lower_range = CodecPrefersLowerRange(codec);
@@ -139,18 +138,18 @@ PayloadTypePicker::PayloadTypePicker() {
   // Default audio codecs. Duplicates media/engine/payload_type_mapper.cc
   const MapTableEntry default_audio_mappings[] = {
       // Static payload type assignments according to RFC 3551.
-      {{cricket::kPcmuCodecName, 8000, 1}, 0},
+      {{kPcmuCodecName, 8000, 1}, 0},
       {{"GSM", 8000, 1}, 3},
       {{"G723", 8000, 1}, 4},
       {{"DVI4", 8000, 1}, 5},
       {{"DVI4", 16000, 1}, 6},
       {{"LPC", 8000, 1}, 7},
-      {{cricket::kPcmaCodecName, 8000, 1}, 8},
-      {{cricket::kG722CodecName, 8000, 1}, 9},
-      {{cricket::kL16CodecName, 44100, 2}, 10},
-      {{cricket::kL16CodecName, 44100, 1}, 11},
+      {{kPcmaCodecName, 8000, 1}, 8},
+      {{kG722CodecName, 8000, 1}, 9},
+      {{kL16CodecName, 44100, 2}, 10},
+      {{kL16CodecName, 44100, 1}, 11},
       {{"QCELP", 8000, 1}, 12},
-      {{cricket::kCnCodecName, 8000, 1}, 13},
+      {{kCnCodecName, 8000, 1}, 13},
       // RFC 4566 is a bit ambiguous on the contents of the "encoding
       // parameters" field, which, for audio, encodes the number of
       // channels. It is "optional and may be omitted if the number of
@@ -170,36 +169,35 @@ PayloadTypePicker::PayloadTypePicker() {
       // Includes data to reduce collisions (and thus reassignments)
       // TODO(bugs.webrtc.org/400630582): Delete this, it's only for test
       // stability.
-      {{"reserved-do-not-use", 0, 0}, 102},
-      {{cricket::kCnCodecName, 16000, 1}, 105},
-      {{cricket::kCnCodecName, 32000, 1}, 106},
-      {{cricket::kOpusCodecName,
+      {{"reserved-do-not-use", 1, 0}, 102},
+      {{kCnCodecName, 16000, 1}, 105},
+      {{kCnCodecName, 32000, 1}, 106},
+      {{kOpusCodecName,
         48000,
         2,
-        {{cricket::kCodecParamMinPTime, "10"},
-         {cricket::kCodecParamUseInbandFec, cricket::kParamValueTrue}}},
+        {{kCodecParamMinPTime, "10"},
+         {kCodecParamUseInbandFec, kParamValueTrue}}},
        111},
       // RED for opus is assigned in the lower range, starting at the top.
       // Note that the FMTP refers to the opus payload type.
-      {{cricket::kRedCodecName,
+      {{kRedCodecName,
         48000,
         2,
-        {{cricket::kCodecParamNotInNameValueFormat, "111/111"}}},
+        {{kCodecParamNotInNameValueFormat, "111/111"}}},
        63},
       // TODO(solenberg): Remove the hard coded 16k,32k,48k DTMF once we
       // assign payload types dynamically for send side as well.
-      {{cricket::kDtmfCodecName, 48000, 1}, 110},
-      {{cricket::kDtmfCodecName, 32000, 1}, 112},
-      {{cricket::kDtmfCodecName, 16000, 1}, 113},
-      {{cricket::kDtmfCodecName, 8000, 1}, 126}};
+      {{kDtmfCodecName, 48000, 1}, 110},
+      {{kDtmfCodecName, 32000, 1}, 112},
+      {{kDtmfCodecName, 16000, 1}, 113},
+      {{kDtmfCodecName, 8000, 1}, 126}};
   for (const MapTableEntry& entry : default_audio_mappings) {
-    AddMapping(PayloadType(entry.payload_type),
-               cricket::CreateAudioCodec(entry.format));
+    AddMapping(PayloadType(entry.payload_type), CreateAudioCodec(entry.format));
   }
 }
 
 RTCErrorOr<PayloadType> PayloadTypePicker::SuggestMapping(
-    cricket::Codec codec,
+    Codec codec,
     const PayloadTypeRecorder* excluder) {
   // Test compatibility: If the codec contains a PT, and it is free, use it.
   // This saves having to rewrite tests that set the codec ID themselves.
@@ -232,8 +230,7 @@ RTCErrorOr<PayloadType> PayloadTypePicker::SuggestMapping(
   return found_pt;
 }
 
-RTCError PayloadTypePicker::AddMapping(PayloadType payload_type,
-                                       cricket::Codec codec) {
+RTCError PayloadTypePicker::AddMapping(PayloadType payload_type, Codec codec) {
   // Completely duplicate mappings are ignored.
   // Multiple mappings for the same codec and the same PT are legal;
   for (const MapEntry& entry : entries_) {
@@ -248,7 +245,7 @@ RTCError PayloadTypePicker::AddMapping(PayloadType payload_type,
 }
 
 RTCError PayloadTypeRecorder::AddMapping(PayloadType payload_type,
-                                         cricket::Codec codec) {
+                                         Codec codec) {
   auto existing_codec_it = payload_type_to_codec_.find(payload_type);
   if (existing_codec_it != payload_type_to_codec_.end() &&
       !MatchesWithCodecRules(codec, existing_codec_it->second)) {
@@ -286,13 +283,13 @@ RTCError PayloadTypeRecorder::AddMapping(PayloadType payload_type,
   return RTCError::OK();
 }
 
-std::vector<std::pair<PayloadType, cricket::Codec>>
-PayloadTypeRecorder::GetMappings() const {
-  return std::vector<std::pair<PayloadType, cricket::Codec>>{};
+std::vector<std::pair<PayloadType, Codec>> PayloadTypeRecorder::GetMappings()
+    const {
+  return std::vector<std::pair<PayloadType, Codec>>{};
 }
 
 RTCErrorOr<PayloadType> PayloadTypeRecorder::LookupPayloadType(
-    cricket::Codec codec) const {
+    Codec codec) const {
   // Note that having multiple PTs mapping to the same codec is NOT an error.
   // In this case, we return the first found (not deterministic).
   auto result =
@@ -307,7 +304,7 @@ RTCErrorOr<PayloadType> PayloadTypeRecorder::LookupPayloadType(
   return result->first;
 }
 
-RTCErrorOr<cricket::Codec> PayloadTypeRecorder::LookupCodec(
+RTCErrorOr<Codec> PayloadTypeRecorder::LookupCodec(
     PayloadType payload_type) const {
   auto result = payload_type_to_codec_.find(payload_type);
   if (result == payload_type_to_codec_.end()) {

@@ -32,11 +32,8 @@
 namespace blink {
 
 StyleImageSet::StyleImageSet(StyleImage* best_fit_image,
-                             CSSImageSetValue* image_set_value,
-                             bool is_origin_clean)
-    : best_fit_image_(best_fit_image),
-      image_set_value_(image_set_value),
-      is_origin_clean_(is_origin_clean) {
+                             CSSImageSetValue* image_set_value)
+    : best_fit_image_(best_fit_image), image_set_value_(image_set_value) {
   is_image_resource_set_ = true;
 }
 
@@ -91,6 +88,10 @@ bool StyleImageSet::IsAccessAllowed(String& failing_url) const {
   return !best_fit_image_ || best_fit_image_->IsAccessAllowed(failing_url);
 }
 
+bool StyleImageSet::IsFromOriginCleanStyleSheet() const {
+  return !best_fit_image_ || best_fit_image_->IsFromOriginCleanStyleSheet();
+}
+
 NaturalSizingInfo StyleImageSet::GetNaturalSizingInfo(
     float multiplier,
     RespectImageOrientationEnum respect_orientation) const {
@@ -133,13 +134,12 @@ void StyleImageSet::RemoveClient(ImageResourceObserver* observer) {
 
 scoped_refptr<Image> StyleImageSet::GetImage(
     const ImageResourceObserver& image_resource_observer,
-    const Document& document,
+    const Node& node,
     const ComputedStyle& style,
     const gfx::SizeF& target_size) const {
-  return best_fit_image_
-             ? best_fit_image_->GetImage(image_resource_observer, document,
-                                         style, target_size)
-             : nullptr;
+  return best_fit_image_ ? best_fit_image_->GetImage(image_resource_observer,
+                                                     node, style, target_size)
+                         : nullptr;
 }
 
 float StyleImageSet::ImageScaleFactor() const {

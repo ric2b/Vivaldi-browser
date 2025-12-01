@@ -4,45 +4,99 @@
 <translation id="1063263220330818888">Yksityinen haku</translation>
 <translation id="1097355661841455597">Haluaisimme kuulla mietteitäsi.</translation>
 <translation id="1137850887415122856">Yksityisvälilehtien lukitseminen edellyttää Touch ID:n, Face ID:n tai pääsykoodin määritystä.</translation>
+<translation id="1189137610071296104">Avaa välilehtinippuun</translation>
 <translation id="1310184829257917508">Kysy, avataanko linkit muista sovelluksista yksityistilassa</translation>
+<translation id="1743244221910283364">Hylkää muutokset</translation>
+<translation id="2010481384079864967">{count, plural,
+=1 {Lisää välilehti nippuun}
+other {Lisää välilehdet nippuun}}</translation>
 <translation id="207677936531967364">Uusi sivu yksityisvälilehdellä</translation>
+<translation id="2099591136582442348">Tämä poistaa nipun laitteeltasi pysyvästi.</translation>
+<translation id="2181990701313127304">Uusi välilehti nippuun</translation>
+<translation id="2351280151183279120">Jaa nippu</translation>
 <translation id="2353953000228441783">Sivuston oletusnäkymä</translation>
 <translation id="2394192052244849643">Liitä ja etsi</translation>
 <translation id="2418705169960294134">Uusi yksityisvälilehti</translation>
+<translation id="2565593432251168402">Säilytä järjestys niputtamalla välilehtiä</translation>
 <translation id="2783161812871838616">Pyydä työpöytäsivustoa</translation>
+<translation id="2806957659107692459">Luo nippu</translation>
 <translation id="2899836479226240291">Voit avata linkit automaattisesti Vivaldissa määrittämällä sen oletusselaimeksi.</translation>
 <translation id="3365529507898144230">Tallenna Kuviin</translation>
 <translation id="3434473769478814796">Liitä ja siirry</translation>
 <translation id="3463990832590571933">Avaa uuteen yksityisvälilehteen</translation>
 <translation id="3473652525653758699">Uusi yksityisikkuna</translation>
 <translation id="3501504415290398157">Avaa yksityisvälilehtien lukitus <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />.</translation>
+<translation id="353418192940651934">Säilytä nippu</translation>
 <translation id="3607792383367580513">Käännä</translation>
 <translation id="3692650606013198282">Avaa yksityistilassa</translation>
+<translation id="3873885181515160073">Luo uusi välilehtinippu antamalla sille nimi ja väri.</translation>
 <translation id="3922395466317605522">Mukauta valikkoa</translation>
 <translation id="3981599532037327317">Avaa ${url} yksityistilassa</translation>
 <translation id="398477389655464998">Kopioi linkki korostukseen</translation>
+<translation id="3993429087389909418">Välilehdet pysyvät avoinna tällä laitteella, mutta nippu poistetaan kaikilta tunnuksella <ph name="USER_EMAIL" /> kirjautuneilta laitteilta.</translation>
 <translation id="4026745073321351206">🙄 Havaitsitko ongelman?</translation>
+<translation id="4216644171369573466">Välilehtinippu, <ph name="GROUP_TITLE" />, valikko.</translation>
 <translation id="4304713468139749426">Salasanahallinta</translation>
+<translation id="4569525137269575065">Sulje nippu</translation>
 <translation id="473775607612524610">Päivitä</translation>
 <translation id="4755216899422789286">Avaa URL-osoitteet Vivaldissa</translation>
+<translation id="4772190485302020393">Sulje kaikki välilehdet ja niput</translation>
 <translation id="4802185666270672526">Piilota ”Pyydä työpöytäsivustoa”</translation>
+<translation id="4828571836982833289">Irrotetaanko välilehtinipusta?</translation>
+<translation id="4838250035189612538">Nimeä välilehtinippu uudelleen</translation>
+<translation id="4873540827942947151">{count, plural,
+=1 {Välilehtinippu suljettiin ja tallennettiin}
+other {{count} välilehtinippua suljettiin ja tallennettiin}}</translation>
+<translation id="5019787757991745254">Välilehtinipun väri <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Välilehtinippu. Tiivistetty.</translation>
 <translation id="5217245356412073535">Sivuston oletusnäkymän voi vaihtaa työpöytätilaan kohdasta Asetukset &gt; Sisältöasetukset</translation>
 <translation id="5271549068863921519">Tallenna salasana</translation>
 <translation id="5317780077021120954">Tallenna</translation>
+<translation id="5385953732213322025">Sivusto yrittää avata sovellusta. Tämä poistaa sinut yksityisestä tilasta.</translation>
 <translation id="5431239785743546285">Lukemasi sivut</translation>
+<translation id="5521301883748677039">Poistetaanko nippu?</translation>
+<translation id="5544011153887687593">Välilehtinipun välilehti. <ph name="TAB_INDEX_IN_GROUP" />/<ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Tallennetaanko salasana?</translation>
 <translation id="570209299585559496">Sivuston oletusnäkymän voi vaihtaa työpöytätilaan sisältöasetuksista</translation>
+<translation id="5719777162751096990">Siirrä välilehtinippuun</translation>
 <translation id="5962477178930921574">Liitä ja etsi</translation>
+<translation id="6163856768888310791">Irrota nipusta</translation>
+<translation id="6168969409902608220">Nimeä nippu</translation>
 <translation id="6233792867654386826">Avaa syötetyt URL-osoitteet Vivaldissa.</translation>
+<translation id="6478587527114893588">Sule välilehtinippu.</translation>
+<translation id="6527405730445064713">Välilehtinippu. Laajennettu.</translation>
+<translation id="6532106788206463496">Tallenna muutokset</translation>
+<translation id="6666425778700353369">Tämä poistaa välilehtinipun kaikilta tunnuksella <ph name="USER_EMAIL" /> kirjautuneilta laitteilta.</translation>
 <translation id="6680416467695217368">Mukauta valikkoa</translation>
+<translation id="6695835495840050460">Napauta "Lisää välilehti uuteen nippuun"</translation>
+<translation id="6708694844902784277">Poista nippu</translation>
 <translation id="6827597288286078054">Yksityinen haku</translation>
 <translation id="6851516051005285358">Pyydä työpöytäsivustoa</translation>
+<translation id="6890907822330704077">Välilehtinippu, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> välilehteä.</translation>
 <translation id="7307970171564921489">Avaa ykistyisvälilehdet <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Avaataanko yksityistilassa?</translation>
+<translation id="7363285031331302144">Järjestä avoimia välilehtiä niputtamalla niitä.</translation>
+<translation id="7395230742578757172">Avaa uuteen välilehtinippuun</translation>
+<translation id="7424676799308869002">Säilytetäänkö nippu?</translation>
+<translation id="7498234416455752244">Jatka muokkausta</translation>
 <translation id="7549299604720382000">Uusi yksityinen välilehti</translation>
+<translation id="7585610907974664408">Uusi yksityinen välilehti nippuun</translation>
+<translation id="7661319142491611883">Laajenna välilehtinippu.</translation>
+<translation id="7706213624515206557">Näytä kaikki niputetut välilehdet</translation>
 <translation id="7961015016161918242">Ei koskaan</translation>
 <translation id="8326104954595890674">Uusi yksityisvälilehti</translation>
+<translation id="8345989863850359861">Poistetaanko välilehti ja nippu?</translation>
+<translation id="8407986162266014185">Jaa nippu</translation>
+<translation id="8412536526999793719">{count, plural,
+=1 {Lisää välilehti uuteen nippuun}
+other {Lisää välilehdet uuteen nippuun}}</translation>
+<translation id="8465550436083180511">Tiivistä välilehtinippu.</translation>
+<translation id="8685478989144570078">Välilehtiniput</translation>
 <translation id="8756969031206844760">Päivitetäänkö salasana?</translation>
+<translation id="8852861335827546438">Uusi välilehtinippu</translation>
+<translation id="8951084872625418241">Uusi välilehti nippuun</translation>
 <translation id="9042893549633094279">Yksityisyys ja suojaus</translation>
 <translation id="9094033019050270033">Päivitä salasana</translation>
+<translation id="944434461715569989">Jätä nippu</translation>
+<translation id="959061183386231608">Välilehdet pysyvät avoinna tällä laitteella, mutta nippu poistetaan pysyvästi.</translation>
 </translationbundle>

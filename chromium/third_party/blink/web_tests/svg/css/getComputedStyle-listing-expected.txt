@@ -55,8 +55,8 @@ animation-range-end: normal
 animation-range-start: normal
 animation-timeline: auto
 animation-timing-function: ease
-animation-trigger-exit-range-end: normal
-animation-trigger-exit-range-start: normal
+animation-trigger-exit-range-end: auto
+animation-trigger-exit-range-start: auto
 animation-trigger-range-end: normal
 animation-trigger-range-start: normal
 animation-trigger-timeline: auto
@@ -110,7 +110,7 @@ border-left-width: 0px
 border-right-color: rgb(0, 0, 0)
 border-right-style: none
 border-right-width: 0px
-border-spacing: 0px 0px
+border-spacing: 0px
 border-start-end-radius: 0px
 border-start-start-radius: 0px
 border-top-color: rgb(0, 0, 0)
@@ -129,6 +129,7 @@ buffered-rendering: auto
 caption-side: top
 caret-animation: auto
 caret-color: rgb(0, 0, 0)
+caret-shape: auto
 clear: none
 clip: auto
 clip-path: none
@@ -145,7 +146,7 @@ column-rule-style: none
 column-rule-width: 0px
 column-span: none
 column-width: auto
-column-wrap: nowrap
+column-wrap: auto
 contain-intrinsic-block-size: none
 contain-intrinsic-height: none
 contain-intrinsic-inline-size: none
@@ -230,6 +231,7 @@ interest-target-hide-delay: 0.5s
 interest-target-show-delay: 0.5s
 interpolate-size: numeric-only
 isolation: auto
+item-tolerance: normal
 justify-content: normal
 justify-items: normal
 justify-self: auto
@@ -265,7 +267,6 @@ mask-type: luminance
 masonry-auto-tracks: auto
 masonry-direction: column
 masonry-fill: normal
-masonry-slack: normal
 masonry-template-tracks: auto
 masonry-track-end: auto
 masonry-track-start: auto
@@ -390,10 +391,12 @@ text-decoration-style: solid
 text-emphasis-color: rgb(0, 0, 0)
 text-emphasis-position: auto
 text-emphasis-style: none
+text-grow: none
 text-indent: 0px
 text-overflow: clip
 text-rendering: auto
 text-shadow: none
+text-shrink: none
 text-size-adjust: auto
 text-spacing-trim: normal
 text-transform: none

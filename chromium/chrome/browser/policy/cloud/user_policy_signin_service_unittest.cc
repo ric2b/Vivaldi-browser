@@ -27,6 +27,7 @@
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
@@ -137,14 +138,12 @@ class UserPolicySigninServiceTest : public testing::Test {
     UserPolicySigninServiceFactory::SetDeviceManagementServiceForTesting(
         &device_management_service_);
 
-    local_state_ = std::make_unique<TestingPrefServiceSimple>();
-    RegisterLocalState(local_state_->registry());
-    TestingBrowserProcess::GetGlobal()->SetLocalState(local_state_.get());
     TestingBrowserProcess::GetGlobal()->SetSharedURLLoaderFactory(
         test_url_loader_factory_.GetSafeWeakWrapper());
 
     g_browser_process->browser_policy_connector()->Init(
-        local_state_.get(), test_url_loader_factory_.GetSafeWeakWrapper());
+        scoped_testing_local_state_.Get(),
+        test_url_loader_factory_.GetSafeWeakWrapper());
 
     // Create a testing profile with cloud-policy-on-signin enabled, and bring
     // up a UserCloudPolicyManager with a MockUserCloudPolicyStore.
@@ -187,8 +186,6 @@ class UserPolicySigninServiceTest : public testing::Test {
     profile_.reset();
     TestingBrowserProcess* testing_browser_process =
         TestingBrowserProcess::GetGlobal();
-    testing_browser_process->SetLocalState(NULL);
-    local_state_.reset();
     testing_browser_process->ShutdownBrowserPolicyConnector();
     base::RunLoop run_loop;
     run_loop.RunUntilIdle();
@@ -324,7 +321,8 @@ class UserPolicySigninServiceTest : public testing::Test {
   FakeDeviceManagementService device_management_service_{
       &job_creation_handler_};
 
-  std::unique_ptr<TestingPrefServiceSimple> local_state_;
+  ScopedTestingLocalState scoped_testing_local_state_{
+      TestingBrowserProcess::GetGlobal()};
   network::TestURLLoaderFactory test_url_loader_factory_;
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -541,6 +539,8 @@ TEST_F(UserPolicySigninServiceTest, RegisteredClient) {
   auto data = std::make_unique<enterprise_management::PolicyData>();
   data->set_request_token("fake token");
   data->set_device_id("fake client id");
+  data->set_cec_enabled(true);
+  data->set_command_invalidation_topic("fake-topic");
   mock_store_->set_policy_data_for_testing(std::move(data));
 
   // Since there is a signed-in user expect a policy fetch to be started to
@@ -696,6 +696,8 @@ TEST_F(UserPolicySigninServiceTest,
   auto data = std::make_unique<enterprise_management::PolicyData>();
   data->set_request_token("fake token");
   data->set_device_id("fake client id");
+  data->set_cec_enabled(true);
+  data->set_command_invalidation_topic("fake-topic");
   mock_store_->set_policy_data_for_testing(std::move(data));
 
   // Since there is a signed-in user expect a policy fetch to be started to
@@ -901,9 +903,7 @@ TEST_F(UserPolicySigninServiceTest, FetchPolicyForSignedInUser) {
 
   // `FetchPolicyForSignedInUser()` will create a new registered client and
   // fetch policies with it.
-  DeviceManagementService::JobConfiguration::JobType job_type_1 =
-      DeviceManagementService::JobConfiguration::TYPE_INVALID;
-  DeviceManagementService::JobConfiguration::JobType job_type_2 =
+  DeviceManagementService::JobConfiguration::JobType job_type =
       DeviceManagementService::JobConfiguration::TYPE_INVALID;
   em::DeviceManagementRequest policy_fetch_request;
   DeviceManagementService::JobForTesting job;
@@ -913,10 +913,8 @@ TEST_F(UserPolicySigninServiceTest, FetchPolicyForSignedInUser) {
   std::string user_affiliation_id = "user-affiliation_id";
 
   EXPECT_CALL(job_creation_handler_, OnJobCreation)
-      .WillOnce(DoAll(device_management_service_.CaptureJobType(&job_type_1),
-                      SaveArg<0>(&job)))
       .WillOnce(DoAll(
-          device_management_service_.CaptureJobType(&job_type_2),
+          device_management_service_.CaptureJobType(&job_type),
           device_management_service_.CaptureRequest(&policy_fetch_request),
           SaveArg<0>(&job)));
   EXPECT_CALL(device_dm_token_callback,
@@ -940,10 +938,8 @@ TEST_F(UserPolicySigninServiceTest, FetchPolicyForSignedInUser) {
   // Let it execute.
   base::RunLoop().RunUntilIdle();
   Mock::VerifyAndClearExpectations(&job_creation_handler_);
-  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_REMOTE_COMMANDS,
-            job_type_1);
   EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH,
-            job_type_2);
+            job_type);
 
   EXPECT_EQ(
       device_dm_token,

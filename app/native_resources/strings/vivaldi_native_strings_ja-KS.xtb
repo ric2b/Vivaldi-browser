@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">分かったからもうええわ</translation>
 <translation id="1462666970065907900">このウィンドウほんまに閉じんの？</translation>
 <translation id="1480046233931937785">クレジット</translation>
+<translation id="1490502035430975848">ポータルドキュメント検査する</translation>
 <translation id="1521774566618522728">今日アクティブ</translation>
 <translation id="1526344461589023948">ダウンロードした更新ファイル、保存できへんかったわ。コンピューターの空きが十分あるか確認して、もう一回試してみて。</translation>
 <translation id="1635542496948266458">プロファイル切り替え</translation>
@@ -34,6 +35,7 @@
 <translation id="2141974047387702305">更新ファイルのダウンロード中にエラー出たわ。インターネット接続確認して、後でもう一回やってみて。</translation>
 <translation id="2226825946708954262">⚠ データ損失あるけど続行</translation>
 <translation id="2339641773402824483">アップデートあるかな...</translation>
+<translation id="2429571091666452569">リストから：</translation>
 <translation id="2441056087170876076">怪獣２</translation>
 <translation id="2444387452209867610">メモ入れ込む</translation>
 <translation id="2486841023299517366">動物４</translation>
@@ -73,9 +75,11 @@
 <translation id="3521635864657970829">ほんまにこのウィンドウ閉じんの？</translation>
 <translation id="3540597690227428180">動物９</translation>
 <translation id="3542768452570884558">さらのウィンドウで開く (&amp;W)</translation>
+<translation id="3586931643579894722">詳細隠す</translation>
 <translation id="3588820906588687999">さらのタブで画像開く</translation>
 <translation id="3601066750251199488">怪獣３</translation>
 <translation id="3620979700683094848">サイトは自動で動画再生できるで</translation>
+<translation id="3650023731264842343">次のページ読み込み中：</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">新しいVivaldiあるわ！</translation>
 <translation id="3708982624815781692">ダウンロード、キャンセルされたわ。</translation>
@@ -137,9 +141,11 @@
 <translation id="588258955323874662">全画面表示</translation>
 <translation id="5916080360077521750">ごめん、Chrome起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存してChromeのウィンドウ全部閉じてからやってみて。</translation>
 <translation id="6040143037577758943">閉じる</translation>
+<translation id="6140948187512243695">詳細出す</translation>
 <translation id="6229528619562190452">クリックしてVivaldiを更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使う</translation>
 <translation id="6339818817272922368">ローカルアカウント</translation>
+<translation id="6376435169746695498">このページの読み込みは<ph name="BLOCKER_NAME" /> にブロックされたで</translation>
 <translation id="6398710281890660037">プロファイル保護</translation>
 <translation id="6438786710866753178">風景４</translation>
 <translation id="6477028720702061455">インポートするOperaのプロファイルフォルダーどれにするん</translation>
@@ -178,6 +184,7 @@
 <translation id="8331671104904436324">バックグラウンドのタブで開く</translation>
 <translation id="8373293945112511707">風景１</translation>
 <translation id="8388552048012645975">アップデートとってくるわ...</translation>
+<translation id="8392904568172593155">パラメータなし</translation>
 <translation id="8427094907586191051">風景１７</translation>
 <translation id="8439034818057146672">新しいVivaldiのインストール準備OKやで。</translation>
 <translation id="8446668873108041390">AppleScript通したJavaScript実行が無効になってるわ。設定&gt;プライバシー&gt;Apple Eventsに、Apple EventsからのJavaScript実行を許可する設定あるで。</translation>
@@ -193,6 +200,7 @@
 <translation id="8773635261052182196">この通知を見ることはもうないわ。また出したいんやったら、Vivaldiの設定からやっといて。</translation>
 <translation id="8774017153185436870">サイトが自動で動画再生してくる可能性あるで</translation>
 <translation id="8813277370772331957">また後にして</translation>
+<translation id="8837256239226739065">バックグラウンドサービスワーカー検査する</translation>
 <translation id="8894900864683381599">リンク先をウェブパネルに追加する</translation>
 <translation id="8912720443398351457">ほんまにVivaldi終了すんの？</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />にブロックされたわ</translation>

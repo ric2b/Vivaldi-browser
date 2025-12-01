@@ -18,9 +18,10 @@ import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.widget.RoundedCornerOutlineProvider;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListUtils;
 import org.chromium.ui.listmenu.ListMenuButton;
@@ -33,10 +34,12 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 // Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 // End Vivaldi
 
 /** Common logic for improved bookmark and folder rows. */
+@NullMarked
 public class ImprovedBookmarkRow extends ViewLookupCachingFrameLayout
         implements CancelableAnimator {
     /**
@@ -104,7 +107,7 @@ public class ImprovedBookmarkRow extends ViewLookupCachingFrameLayout
     }
 
     /** Constructor for inflating from XML. */
-    public ImprovedBookmarkRow(Context context, AttributeSet attrs) {
+    public ImprovedBookmarkRow(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
     }
 
@@ -269,13 +272,16 @@ public class ImprovedBookmarkRow extends ViewLookupCachingFrameLayout
     }
 
     void setIsLocalBookmark(boolean isLocalBookmark) {
+        if (BuildConfig.IS_VIVALDI)
+            mLocalBookmarkImageView.setVisibility(View.GONE);
+        else // End Vivaldi
         mLocalBookmarkImageView.setVisibility(isLocalBookmark ? View.VISIBLE : View.GONE);
     }
 
     void updateView() {
         mContainer.setBackgroundResource(
                 mIsSelected
-                        ? R.drawable.rounded_rectangle_surface_1
+                        ? R.drawable.rounded_rectangle_surface_container_low
                         : R.drawable.rounded_rectangle_surface_0);
 
         boolean checkVisible = mSelectionEnabled && mIsSelected;

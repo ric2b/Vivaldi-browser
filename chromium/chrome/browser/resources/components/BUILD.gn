@@ -10,12 +10,11 @@ build_webui("build") {
     "components.css",
     "components.html",
   ]
-  non_web_component_files = [
+  ts_files = [
     "component.html.ts",
     "components.ts",
   ]
 
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_definitions = [ "//tools/typescript/definitions/chrome_send.d.ts" ]
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",

@@ -84,13 +84,10 @@ _CET_ENDBR
 
 
 	vpclmulqdq	$0x00,%xmm3,%xmm3,%xmm0
-	vpclmulqdq	$0x01,%xmm3,%xmm3,%xmm1
-	vpclmulqdq	$0x10,%xmm3,%xmm3,%xmm2
-	vpxord	%xmm2,%xmm1,%xmm1
-	vpclmulqdq	$0x01,%xmm0,%xmm5,%xmm2
-	vpshufd	$0x4e,%xmm0,%xmm0
-	vpternlogd	$0x96,%xmm2,%xmm0,%xmm1
 	vpclmulqdq	$0x11,%xmm3,%xmm3,%xmm4
+	vpclmulqdq	$0x01,%xmm0,%xmm5,%xmm1
+	vpshufd	$0x4e,%xmm0,%xmm0
+	vpxor	%xmm0,%xmm1,%xmm1
 	vpclmulqdq	$0x01,%xmm1,%xmm5,%xmm0
 	vpshufd	$0x4e,%xmm1,%xmm1
 	vpternlogd	$0x96,%xmm0,%xmm1,%xmm4

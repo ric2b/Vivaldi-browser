@@ -3367,7 +3367,7 @@ def CMDgitmodules(parser, args):
     # first time.
     set_recursedeps = True
     if os.path.exists(options.output_gitmodules):
-        dot_git_pattern = re.compile('^(\s*)url(\s*)=.*\.git$')
+        dot_git_pattern = re.compile(r'^(\s*)url(\s*)=.*\.git$')
         with open(options.output_gitmodules) as f:
             strip_git_suffix = not any(dot_git_pattern.match(l) for l in f)
             set_recursedeps = any(
@@ -3980,6 +3980,12 @@ def CMDsync(parser, args):
                       dest='experiments',
                       default=[],
                       help='Which experiments should be enabled.')
+    parser.add_option('--ignore-dep-type',
+                      choices=['git', 'cipd', 'gcs'],
+                      action='append',
+                      default=[],
+                      help='Specify to skip processing of a certain type of '
+                      'dep.')
     (options, args) = parser.parse_args(args)
     client = GClient.LoadCurrentConfig(options)
 

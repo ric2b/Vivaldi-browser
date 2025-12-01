@@ -19,7 +19,6 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/profile_waiter.h"
-#include "components/autofill/core/common/autofill_features.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/enterprise/buildflags/buildflags.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -194,7 +193,6 @@ class ProfileKeyedServiceBrowserTest : public InProcessBrowserTest {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
           features::kEnableCertManagementUIV2Write,
 #endif
-          autofill::features::kAutofillAiWithDataSchema,
           network::features::kBrowsingTopics,
           blink::features::kBuiltInAIAPI,
           extensions_features::kForceWebRequestProxyForTest,
@@ -207,6 +205,7 @@ class ProfileKeyedServiceBrowserTest : public InProcessBrowserTest {
           omnibox::kOnDeviceTailModel,
           omnibox::kOnDeviceHeadProviderNonIncognito,
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
+          switches::kSyncEnableBookmarksInTransportMode,
         },
         {});
     // clang-format on
@@ -363,7 +362,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
   std::set<std::string> guest_otr_active_services {
     "AlarmManager",
     "AXMainNodeAnnotatorController",
-    "AutofillEntityDataManager",
     "AutocompleteActionPredictor",
     "AutocompleteClassifier",
     "AutocompleteControllerEmitter",
@@ -385,6 +383,9 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "ExtensionInstallEventRouter",
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
     "ChromeEnterpriseRealTimeUrlLookupService",
+#if BUILDFLAG(IS_CHROMEOS)
+    "ComponentExtensionContentSettingsAllowlist",
+#endif
     "EnterpriseReportingPrivateEventRouter",
     "ExtensionNavigationRegistry",
     "ExtensionSystem",
@@ -538,6 +539,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
                        GuestProfileParent_NeededServices) {
   // clang-format off
   std::set<std::string> guest_active_services {
+    "AccountBookmarkSyncServiceFactory",
     "AccountExtensionTracker",
     "ActivityLog",
     "ActivityLogPrivateAPI",
@@ -566,7 +568,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "AutocompleteScoringModelService",
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
     "AutofillClientProvider",
-    "AutofillEntityDataManager",
     "AutofillImageFetcher",
     "AutofillPrivateEventRouter",
     "AutofillStrikeDatabase",
@@ -595,6 +596,12 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "ChildAccountService",
     "ChromeSigninClient",
     "CommandService",
+#if BUILDFLAG(IS_CHROMEOS)
+    "ComponentExtensionContentSettingsAllowlist",
+#endif
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+    "ComponentLoader",
+#endif
 #if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
     "ConnectorsService",
 #endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
@@ -614,6 +621,7 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "DeviceInfoSyncService",
     "DownloadCoreService",
     "EventRouter",
+    "EnterpriseManagementService",
     "ExtensionActionDispatcher",
     "ExtensionActionManager",
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
@@ -675,7 +683,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "InstallTracker",
     "InstallVerifier",
     "InstanceIDProfileService",
-
 #if !BUILDFLAG(IS_CHROMEOS)
     // TODO(crbug.com/374351946): Investigate if this is necessary on CrOS.
     "InvalidationService",
@@ -686,7 +693,6 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "ListFamilyMembersService",
     "LocalOrSyncableBookmarkSyncServiceFactory",
     "LoginUIServiceFactory",
-
     "MDnsAPI",
     "ManagedBookmarkService",
     "ManagedConfigurationAPI",
@@ -777,19 +783,20 @@ IN_PROC_BROWSER_TEST_F(ProfileKeyedServiceGuestBrowserTest,
     "sessions::TabRestoreService",
     "SettingsOverridesAPI",
     "SettingsPrivateEventRouter",
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+    "SharedModuleService",
+#endif
     "ShoppingService",
     "SidePanelService",
     "SiteDataCacheFacadeFactory",
     "SiteEngagementService",
     "SocketManager",
-
 #if !BUILDFLAG(IS_CHROMEOS)
     // TODO(crbug.com/374351946): Desktop chrome create this via
     // ShoppingService->SyncService->Spellchecker. Investigate if this is
     // expected on desktop chrome.
     "SpellcheckService",
 #endif
-
     "StorageFrontend",
     "StorageNotificationService",
     "SupervisedUserService",

@@ -47,45 +47,6 @@ class ClobberNeeded(Exception):
     pass
 
 
-def exponential_backoff_retry(fn,
-                              excs=(Exception, ),
-                              name=None,
-                              count=10,
-                              sleep_time=0.25,
-                              printerr=None):
-    """Executes |fn| up to |count| times, backing off exponentially.
-
-    Args:
-        fn (callable): The function to execute. If this raises a handled
-            exception, the function will retry with exponential backoff.
-        excs (tuple): A tuple of Exception types to handle. If one of these is
-            raised by |fn|, a retry will be attempted. If |fn| raises an
-            Exception that is not in this list, it will immediately pass
-            through. If |excs| is empty, the Exception base class will be used.
-        name (str): Optional operation name to print in the retry string.
-        count (int): The number of times to try before allowing the exception
-            to pass through.
-        sleep_time (float): The initial number of seconds to sleep in between
-            retries. This will be doubled each retry.
-        printerr (callable): Function that will be called with the error string
-            upon failures. If None, |logging.warning| will be used.
-
-    Returns: The return value of the successful fn.
-    """
-    printerr = printerr or logging.warning
-    for i in range(count):
-        try:
-            return fn()
-        except excs as e:
-            if (i + 1) >= count:
-                raise
-
-            printerr('Retrying %s in %.2f second(s) (%d / %d attempts): %s' %
-                     ((name or 'operation'), sleep_time, (i + 1), count, e))
-            time.sleep(sleep_time)
-            sleep_time *= 2
-
-
 class Mirror(object):
 
     git_exe = 'git.bat' if sys.platform.startswith('win') else 'git'
@@ -239,10 +200,11 @@ class Mirror(object):
         # This is somehow racy on Windows.
         # Catching OSError because WindowsError isn't portable and
         # pylint complains.
-        exponential_backoff_retry(lambda: os.rename(src, dst),
-                                  excs=(OSError, ),
-                                  name='rename [%s] => [%s]' % (src, dst),
-                                  printerr=self.print)
+        gclient_utils.exponential_backoff_retry(lambda: os.rename(src, dst),
+                                                excs=(OSError, ),
+                                                name='rename [%s] => [%s]' %
+                                                (src, dst),
+                                                printerr=self.print)
 
     def RunGit(self, cmd, print_stdout=True, **kwargs):
         """Run git in a subprocess."""
@@ -354,6 +316,14 @@ class Mirror(object):
     def contains_revision(self, revision):
         if not self.exists():
             return False
+
+        # If the cache population is in progress, this will raise LockError().
+        with lockfile.lock(self.mirror_path, timeout=0):
+            # If the sentinent file exists at this point, it indicates that
+            # the bootstrapping process was interrupted, leaving the cache
+            # entries in a bad state.
+            if os.path.isfile(self._init_sentient_file):
+                return False
 
         if sys.platform.startswith('win'):
             # Windows .bat scripts use ^ as escape sequence, which means we have
@@ -485,12 +455,13 @@ class Mirror(object):
                     'repository.' % len(pack_files))
 
     def _set_symbolic_ref(self):
-        remote_info = exponential_backoff_retry(lambda: subprocess.check_output(
-            [
+        remote_info = gclient_utils.exponential_backoff_retry(
+            lambda: subprocess.check_output([
                 self.git_exe, '--git-dir',
                 os.path.abspath(self.mirror_path), 'remote', 'show', self.url
             ],
-            cwd=self.mirror_path).decode('utf-8', 'ignore').strip())
+                                            cwd=self.mirror_path).decode(
+                                                'utf-8', 'ignore').strip())
         default_branch_regexp = re.compile(r'HEAD branch: (.*)')
         m = default_branch_regexp.search(remote_info, re.MULTILINE)
         if m:

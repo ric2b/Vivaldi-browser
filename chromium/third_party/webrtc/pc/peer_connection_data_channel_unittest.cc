@@ -19,7 +19,6 @@
 #include "api/peer_connection_interface.h"
 #include "api/scoped_refptr.h"
 #include "api/sctp_transport_interface.h"
-#include "api/task_queue/default_task_queue_factory.h"
 #include "p2p/base/p2p_constants.h"
 #include "pc/media_session.h"
 #include "pc/peer_connection.h"
@@ -56,7 +55,6 @@ PeerConnectionFactoryDependencies CreatePeerConnectionFactoryDependencies() {
   deps.network_thread = Thread::Current();
   deps.worker_thread = Thread::Current();
   deps.signaling_thread = Thread::Current();
-  deps.task_queue_factory = CreateDefaultTaskQueueFactory();
   EnableFakeMedia(deps);
   deps.sctp_factory = std::make_unique<FakeSctpTransportFactory>();
   return deps;
@@ -117,7 +115,7 @@ class PeerConnectionDataChannelBaseTest : public ::testing::Test {
     auto factory_deps = CreatePeerConnectionFactoryDependencies();
     FakeSctpTransportFactory* fake_sctp_transport_factory =
         static_cast<FakeSctpTransportFactory*>(factory_deps.sctp_factory.get());
-    rtc::scoped_refptr<PeerConnectionFactoryInterface> pc_factory =
+    scoped_refptr<PeerConnectionFactoryInterface> pc_factory =
         CreateModularPeerConnectionFactory(std::move(factory_deps));
     pc_factory->SetOptions(factory_options);
     auto observer = std::make_unique<MockPeerConnectionObserver>();
@@ -183,7 +181,7 @@ TEST_P(PeerConnectionDataChannelTest, InternalSctpTransportDeletedOnTeardown) {
   ASSERT_TRUE(caller->SetLocalDescription(caller->CreateOffer()));
   EXPECT_TRUE(caller->sctp_transport_factory()->last_fake_sctp_transport());
 
-  rtc::scoped_refptr<SctpTransportInterface> sctp_transport =
+  scoped_refptr<SctpTransportInterface> sctp_transport =
       caller->GetInternalPeerConnection()->GetSctpTransport();
 
   caller.reset();
@@ -210,11 +208,9 @@ TEST_P(PeerConnectionDataChannelTest, SctpContentAndTransportNameSetCorrectly) {
 
   auto offer = caller->CreateOffer();
   const auto& offer_contents = offer->description()->contents();
-  ASSERT_EQ(webrtc::MediaType::AUDIO,
-            offer_contents[0].media_description()->type());
+  ASSERT_EQ(MediaType::AUDIO, offer_contents[0].media_description()->type());
   auto audio_mid = offer_contents[0].mid();
-  ASSERT_EQ(webrtc::MediaType::DATA,
-            offer_contents[2].media_description()->type());
+  ASSERT_EQ(MediaType::DATA, offer_contents[2].media_description()->type());
   auto data_mid = offer_contents[2].mid();
 
   ASSERT_TRUE(
@@ -244,8 +240,8 @@ TEST_P(PeerConnectionDataChannelTest,
   auto caller = CreatePeerConnection();
   auto offer = caller->CreateOffer();
 
-  EXPECT_FALSE(offer->description()->GetContentByName(cricket::CN_DATA));
-  EXPECT_FALSE(offer->description()->GetTransportInfoByName(cricket::CN_DATA));
+  EXPECT_FALSE(offer->description()->GetContentByName(CN_DATA));
+  EXPECT_FALSE(offer->description()->GetTransportInfoByName(CN_DATA));
 }
 
 TEST_P(PeerConnectionDataChannelTest,

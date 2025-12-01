@@ -33,8 +33,13 @@ enum AndroidMovementGranularity {
 
 // From android.view.accessibility.AccessibilityEvent in Java:
 enum {
+  ANDROID_ACCESSIBILITY_EVENT_CONTENT_CHANGE_TYPE_UNDEFINED = 0,
+  ANDROID_ACCESSIBILITY_EVENT_CONTENT_CHANGE_TYPE_TEXT = 2,
+  ANDROID_ACCESSIBILITY_EVENT_CONTENT_CHANGE_TYPE_PANE_TITLE = 8,
   ANDROID_ACCESSIBILITY_EVENT_TEXT_CHANGED = 16,
+  ANDROID_ACCESSIBILITY_EVENT_CONTENT_CHANGE_TYPE_STATE_DESCRIPTION = 64,
   ANDROID_ACCESSIBILITY_EVENT_TEXT_SELECTION_CHANGED = 8192,
+  ANDROID_ACCESSIBILITY_EVENT_CONTENT_CHANGE_TYPE_EXPANDED = 16384,
   ANDROID_ACCESSIBILITY_EVENT_TEXT_TRAVERSED_AT_MOVEMENT_GRANULARITY = 131072
 };
 
@@ -71,6 +76,10 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
 
   void set_allow_image_descriptions_for_testing(bool is_allowed) {
     allow_image_descriptions_for_testing_ = is_allowed;
+  }
+
+  const std::unordered_set<int32_t>& nodes_already_cleared_for_test() const {
+    return nodes_already_cleared_;
   }
 
   // By default, the tree is pruned for a better screen reading experience,
@@ -151,12 +160,14 @@ class CONTENT_EXPORT BrowserAccessibilityManagerAndroid
 
  private:
   // AXTreeObserver overrides.
+  void OnAtomicUpdateStarting(
+      ui::AXTree* tree,
+      const std::set<ui::AXNodeID>& deleting_nodes,
+      const std::set<ui::AXNodeID>& reparenting_nodes) override;
   void OnAtomicUpdateFinished(
       ui::AXTree* tree,
       bool root_changed,
       const std::vector<ui::AXTreeObserver::Change>& changes) override;
-
-  void OnNodeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
 
   WebContentsAccessibilityAndroid* GetWebContentsAXFromRootManager();
 

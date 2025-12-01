@@ -28,6 +28,12 @@ inline constexpr char kDefaultSearchProviderGUID[] =
 inline constexpr char kSyncedDefaultSearchProviderGUID[] =
     "default_search_provider.synced_guid";
 
+// Epoch timestamp in seconds of when the user's search engine choice was
+// invalidated. We do this for example when they detect that a choice has
+// been transferred to a different device.
+inline constexpr char kDefaultSearchProviderChoiceInvalidationTimestamp[] =
+    "default_search_provider.choice_invalidation_timestamp";
+
 // Epoch timestamp in seconds of when the user chose a search engine in
 // the choice screen.
 // The timestamp and the version indicate that the user has already made a
@@ -64,10 +70,6 @@ inline constexpr char kDefaultSearchProviderPendingChoiceScreenDisplayState[] =
 // the choice screen elements.
 inline constexpr char kDefaultSearchProviderChoiceScreenRandomShuffleSeed[] =
     "default_search_provider.choice_screen_random_shuffle_seed";
-
-// The Chrome milestone number at which the random seed was last set.
-inline constexpr char kDefaultSearchProviderChoiceScreenShuffleMilestone[] =
-    "default_search_provider.choice_screen_shuffle_milestone";
 
 // Whether a search context menu item is allowed.
 inline constexpr char kDefaultSearchProviderContextMenuAccessAllowed[] =

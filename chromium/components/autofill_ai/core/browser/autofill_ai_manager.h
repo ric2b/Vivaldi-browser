@@ -8,8 +8,9 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
+#include "base/uuid.h"
 #include "components/autofill/core/browser/data_model/autofill_ai/entity_instance.h"
-#include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
+#include "components/autofill/core/browser/integrators/autofill_ai/autofill_ai_delegate.h"
 #include "components/autofill/core/browser/strike_databases/autofill_ai/autofill_ai_save_strike_database_by_attribute.h"
 #include "components/autofill/core/browser/strike_databases/autofill_ai/autofill_ai_save_strike_database_by_host.h"
 #include "components/autofill/core/browser/strike_databases/autofill_ai/autofill_ai_update_strike_database.h"
@@ -53,9 +54,12 @@ class AutofillAiManager : public autofill::AutofillAiDelegate {
                           const autofill::AutofillField& field,
                           ukm::SourceId ukm_source_id) override;
   void OnFormSeen(const autofill::FormStructure& form) override;
-  void OnDidFillSuggestion(const autofill::FormStructure& form,
-                           const autofill::AutofillField& field,
-                           ukm::SourceId ukm_source_id) override;
+  void OnDidFillSuggestion(
+      const base::Uuid& guid,
+      const autofill::FormStructure& form,
+      const autofill::AutofillField& trigger_field,
+      base::span<const autofill::AutofillField* const> filled_fields,
+      ukm::SourceId ukm_source_id) override;
   void OnEditedAutofilledField(const autofill::FormStructure& form,
                                const autofill::AutofillField& field,
                                ukm::SourceId ukm_source_id) override;

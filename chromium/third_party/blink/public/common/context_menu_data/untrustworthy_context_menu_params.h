@@ -15,6 +15,7 @@
 #include "build/build_config.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
 #include "third_party/blink/public/common/navigation/impression.h"
+#include "third_party/blink/public/mojom/annotation/annotation.mojom-forward.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom-forward.h"
 #include "third_party/blink/public/mojom/forms/form_control_type.mojom-shared.h"
 #include "ui/base/mojom/menu_source_type.mojom-forward.h"
@@ -144,13 +145,17 @@ struct BLINK_COMMON_EXPORT UntrustworthyContextMenuParams {
   // Start position of the selection text.
   int selection_start_offset;
 
-  // The context menu was opened by right clicking on an existing
-  // highlight/fragment.
-  bool opened_from_highlight = false;
+  // If set to a value, the context menu was opened by right clicking on an
+  // existing annotation highlight with the corresponding type.
+  std::optional<mojom::AnnotationType> annotation_type;
 
-  // The context menu was opened from an element with the `interesttarget`
-  // attribute.
+  // True when the context menu was opened from an element with the
+  // `interesttarget` attribute.
   bool opened_from_interest_target = false;
+  // If opened_from_interest_target is true, and if the
+  // HTMLInterestTargetContextMenuItemOnly feature is enabled, this will contain
+  // the DOMNodeID of the link that generated the context menu.
+  int interest_target_node_id = 0;
 
   // The type of the form control element on which the context menu is invoked,
   // if any.

@@ -29,6 +29,11 @@ struct assign_op {
   EIGEN_STRONG_INLINE void assignPacket(DstScalar* a, const Packet& b) const {
     pstoret<DstScalar, Packet, Alignment>(a, b);
   }
+
+  template <int Alignment, typename Packet>
+  EIGEN_STRONG_INLINE void assignPacketSegment(DstScalar* a, const Packet& b, Index begin, Index count) const {
+    pstoretSegment<DstScalar, Packet, Alignment>(a, b, begin, count);
+  }
 };
 
 // Empty overload for void type (used by PermutationMatrix)
@@ -59,6 +64,12 @@ struct compound_assign_op {
   EIGEN_STRONG_INLINE void assignPacket(DstScalar* a, const Packet& b) const {
     assign_op<DstScalar, DstScalar>().template assignPacket<Alignment, Packet>(
         a, Func().packetOp(ploadt<Packet, Alignment>(a), b));
+  }
+
+  template <int Alignment, typename Packet>
+  EIGEN_STRONG_INLINE void assignPacketSegment(DstScalar* a, const Packet& b, Index begin, Index count) const {
+    assign_op<DstScalar, DstScalar>().template assignPacketSegment<Alignment, Packet>(
+        a, Func().packetOp(ploadtSegment<Packet, Alignment>(a, begin, count), b), begin, count);
   }
 };
 

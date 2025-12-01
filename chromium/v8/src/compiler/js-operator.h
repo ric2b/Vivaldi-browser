@@ -18,10 +18,6 @@
 #include "src/objects/oddball.h"
 #include "src/runtime/runtime.h"
 
-#if DEBUG && V8_ENABLE_WEBASSEMBLY
-#include "src/wasm/canonical-types.h"
-#endif
-
 namespace v8 {
 namespace internal {
 
@@ -336,8 +332,9 @@ V8_EXPORT_PRIVATE const CallRuntimeParameters& CallRuntimeParametersOf(
     const Operator* op);
 
 // Defines the location of a context slot relative to a specific scope. This is
-// used as a parameter by JSLoadContext and JSStoreContext operators and allows
-// accessing a context-allocated variable without keeping track of the scope.
+// used as a parameter by JSLoadContextNoCell and JSStoreContextNoCell operators
+// and allows accessing a context-allocated variable without keeping track of
+// the scope.
 class ContextAccess final {
  public:
   ContextAccess(size_t depth, size_t index, bool immutable);
@@ -849,16 +846,7 @@ class JSWasmCallParameters {
                                 int function_index,
                                 SharedFunctionInfoRef shared_fct_info,
                                 wasm::NativeModule* native_module,
-                                FeedbackSource const& feedback)
-      : module_(module),
-        signature_(signature),
-        function_index_(function_index),
-        shared_fct_info_(shared_fct_info),
-        native_module_(native_module),
-        feedback_(feedback) {
-    DCHECK_NOT_NULL(module);
-    DCHECK(wasm::GetTypeCanonicalizer()->Contains(signature));
-  }
+                                FeedbackSource const& feedback);
 
   const wasm::WasmModule* module() const { return module_; }
   const wasm::CanonicalSig* signature() const { return signature_; }
@@ -1064,10 +1052,10 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
                               const FeedbackSource& feedback);
 
   const Operator* HasContextExtension(size_t depth);
-  const Operator* LoadContext(size_t depth, size_t index, bool immutable);
-  const Operator* LoadScriptContext(size_t depth, size_t index);
+  const Operator* LoadContextNoCell(size_t depth, size_t index, bool immutable);
+  const Operator* LoadContext(size_t depth, size_t index);
+  const Operator* StoreContextNoCell(size_t depth, size_t index);
   const Operator* StoreContext(size_t depth, size_t index);
-  const Operator* StoreScriptContext(size_t depth, size_t index);
 
   const Operator* LoadModule(int32_t cell_index);
   const Operator* StoreModule(int32_t cell_index);
@@ -1082,6 +1070,8 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
   const Operator* AsyncFunctionReject();
   const Operator* AsyncFunctionResolve();
 
+  const Operator* DetachContextCell(int index);
+
   const Operator* ForInEnumerate();
   const Operator* ForInNext(ForInMode mode, const FeedbackSource& feedback);
   const Operator* ForInPrepare(ForInMode mode, const FeedbackSource& feedback);
@@ -1094,7 +1084,7 @@ class V8_EXPORT_PRIVATE JSOperatorBuilder final
 
   // Used to implement Ignition's SwitchOnGeneratorState bytecode.
   const Operator* GeneratorRestoreContinuation();
-  const Operator* GeneratorRestoreContext();
+  const Operator* GeneratorRestoreContextNoCell();
 
   // Used to implement Ignition's ResumeGenerator bytecode.
   const Operator* GeneratorRestoreRegister(int index);

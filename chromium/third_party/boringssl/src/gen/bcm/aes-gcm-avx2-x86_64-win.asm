@@ -75,14 +75,10 @@ $L$SEH_endprologue_gcm_init_vpclmulqdq_avx2_4:
 
 
 	vpclmulqdq	xmm0,xmm3,xmm3,0x00
-	vpclmulqdq	xmm1,xmm3,xmm3,0x01
-	vpclmulqdq	xmm2,xmm3,xmm3,0x10
-	vpxor	xmm1,xmm1,xmm2
-	vpclmulqdq	xmm2,xmm6,xmm0,0x01
+	vpclmulqdq	xmm5,xmm3,xmm3,0x11
+	vpclmulqdq	xmm1,xmm6,xmm0,0x01
 	vpshufd	xmm0,xmm0,0x4e
 	vpxor	xmm1,xmm1,xmm0
-	vpxor	xmm1,xmm1,xmm2
-	vpclmulqdq	xmm5,xmm3,xmm3,0x11
 	vpclmulqdq	xmm0,xmm6,xmm1,0x01
 	vpshufd	xmm1,xmm1,0x4e
 	vpxor	xmm5,xmm5,xmm1

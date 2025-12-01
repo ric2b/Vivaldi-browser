@@ -12,10 +12,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #include <algorithm>
-#include <array>
 #include <concepts>
 #include <functional>
 #include <initializer_list>
@@ -33,6 +31,7 @@
 #include "base/check.h"
 #include "base/compiler_specific.h"
 #include "base/containers/checked_iterators.h"
+#include "base/containers/span_forward_internal.h"
 #include "base/numerics/integral_constant_like.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/cstring_view.h"
@@ -279,25 +278,12 @@
 
 namespace base {
 
-// [span.syn]: Constants
-inline constexpr size_t dynamic_extent = std::numeric_limits<size_t>::max();
-
 // Provides a compile-time fixed extent to the `count` argument of the span
 // constructor.
 //
 // (Not in `std::`.)
 template <size_t N>
 using fixed_extent = std::integral_constant<size_t, N>;
-
-// [views.span]: class template `span<>`
-template <typename ElementType,
-          size_t Extent = dynamic_extent,
-          // Storage pointer customization. By default this is not a
-          // `raw_ptr<>`, since `span` is mostly used for stack variables. Use
-          // `raw_span` instead for class fields, which sets this to
-          // `raw_ptr<T>`.
-          typename InternalPtrType = ElementType*>
-class span;
 
 }  // namespace base
 
@@ -476,9 +462,8 @@ class GSL_POINTER span {
   // Iterator + count.
   template <typename It>
     requires(internal::CompatibleIter<element_type, It>)
-  // SAFETY: `first` must point to the first of at least `count` contiguous
-  // valid elements, or the span will allow access to invalid elements,
-  // resulting in UB.
+  // PRECONDITIONS: `first` must point to the first of at least `count`
+  // contiguous valid elements.
   UNSAFE_BUFFER_USAGE constexpr explicit span(It first,
                                               StrictNumeric<size_type> count)
       : data_(to_address(first)) {
@@ -494,9 +479,8 @@ class GSL_POINTER span {
     requires(internal::CompatibleIter<element_type, It> &&
              std::sized_sentinel_for<End, It> &&
              !std::is_convertible_v<End, size_t>)
-  // SAFETY: `first` and `last` must be for the same allocation and all elements
-  // in the range [first, last) must be valid, or the span will allow access to
-  // invalid elements, resulting in UB.
+  // PRECONDITIONS: `first` and `last` must be for the same allocation and all
+  // elements in the range [first, last) must be valid.
   UNSAFE_BUFFER_USAGE constexpr explicit span(It first, End last)
       // SAFETY: The caller must guarantee that `first` and `last` point into
       // the same allocation. In this case, the extent will be the number of
@@ -534,7 +518,7 @@ class GSL_POINTER span {
              internal::FixedExtentConstructibleFromExtent<extent, N> &&
              std::ranges::borrowed_range<R>)
   // NOLINTNEXTLINE(google-explicit-constructor)
-  constexpr explicit span(R&& range)
+  constexpr explicit(N != extent) span(R&& range)
       // SAFETY: `std::ranges::size()` returns the number of elements
       // `std::ranges::data()` will point to, so accessing those elements will
       // be safe.
@@ -739,6 +723,7 @@ class GSL_POINTER span {
                          StrictNumeric<size_type> count) const {
     DCHECK(size_type{count} != dynamic_extent)
         << "base does not allow dynamic_extent in two-arg subspan()";
+    // Deliberately combine tests to minimize code size.
     CHECK(size_type{offset} <= size() &&
           size_type{count} <= size() - size_type{offset});
     // SAFETY: `data()` points to at least `extent` elements, so `offset`
@@ -899,7 +884,13 @@ class GSL_POINTER span {
     // extent` is no larger than just past the end of the corresponding
     // allocation, which is a legal pointer to construct and compare to (though
     // not dereference).
-    return UNSAFE_BUFFERS(iterator(data(), data() + extent));
+    //
+    // Use `AssumeValid()` to elide unnecessary precondition `CHECK()`'s in the
+    // iterator constructor: `data() + extent` must not overflow given the above
+    // constraints, so the iterator's requirement that begin <= current <= end
+    // is guaranteed to be true.
+    return UNSAFE_BUFFERS(iterator(
+        typename iterator::AssumeValid(data(), data(), data() + extent)));
   }
   constexpr const_iterator cbegin() const noexcept {
     return const_iterator(begin());
@@ -909,7 +900,13 @@ class GSL_POINTER span {
     // extent` is no larger than just past the end of the corresponding
     // allocation, which is a legal pointer to construct and compare to (though
     // not dereference).
-    return UNSAFE_BUFFERS(iterator(data(), data() + extent, data() + extent));
+    //
+    // Use `AssumeValid()` to elide unnecessary precondition `CHECK()`'s in the
+    // iterator constructor: `data() + extent` must not overflow given the above
+    // constraints, so the iterator's requirement that begin <= current <= end
+    // is guaranteed to be true.
+    return UNSAFE_BUFFERS(iterator(typename iterator::AssumeValid(
+        data(), data() + extent, data() + extent)));
   }
   constexpr const_iterator cend() const noexcept {
     return const_iterator(end());
@@ -960,9 +957,8 @@ class GSL_POINTER span<ElementType, dynamic_extent, InternalPtrType> {
   // Iterator + count.
   template <typename It>
     requires(internal::CompatibleIter<element_type, It>)
-  // SAFETY: `first` must point to the first of at least `count` contiguous
-  // valid elements, or the span will allow access to invalid elements,
-  // resulting in UB.
+  // PRECONDITIONS: `first` must point to the first of at least `count`
+  // contiguous valid elements.
   UNSAFE_BUFFER_USAGE constexpr span(It first, StrictNumeric<size_type> count)
       : data_(to_address(first)), size_(count) {
     // Non-zero `count` implies non-null `data_`. Use `SpanOrSize<T>` to
@@ -975,9 +971,8 @@ class GSL_POINTER span<ElementType, dynamic_extent, InternalPtrType> {
     requires(internal::CompatibleIter<element_type, It> &&
              std::sized_sentinel_for<End, It> &&
              !std::is_convertible_v<End, size_t>)
-  // SAFETY: `first` and `last` must be for the same allocation and all elements
-  // in the range [first, last) must be valid, or the span will allow access to
-  // invalid elements, resulting in UB.
+  // PRECONDITIONS: `first` and `last` must be for the same allocation and all
+  // elements in the range [first, last) must be valid.
   UNSAFE_BUFFER_USAGE constexpr span(It first, End last)
       // SAFETY: The caller must guarantee that `first` and `last` point into
       // the same allocation. In this case, `size_` will be the number of
@@ -1173,6 +1168,7 @@ class GSL_POINTER span<ElementType, dynamic_extent, InternalPtrType> {
                          StrictNumeric<size_type> count) const {
     DCHECK(size_type{count} != dynamic_extent)
         << "base does not allow dynamic_extent in two-arg subspan()";
+    // Deliberately combine tests to minimize code size.
     CHECK(size_type{offset} <= size() &&
           size_type{count} <= size() - size_type{offset});
     // SAFETY: `data()` points to at least `size()` elements, so `offset`
@@ -1340,7 +1336,13 @@ class GSL_POINTER span<ElementType, dynamic_extent, InternalPtrType> {
     // size()` is no larger than just past the end of the corresponding
     // allocation, which is a legal pointer to construct and compare to (though
     // not dereference).
-    return UNSAFE_BUFFERS(iterator(data(), data() + size()));
+    //
+    // Use `AssumeValid()` to elide unnecessary precondition `CHECK()`'s in the
+    // iterator constructor: `data() + size()` must not overflow given the above
+    // constraints, so the iterator's requirement that begin <= current <= end
+    // is guaranteed to be true.
+    return UNSAFE_BUFFERS(iterator(
+        typename iterator::AssumeValid(data(), data(), data() + size())));
   }
   constexpr const_iterator cbegin() const noexcept {
     return const_iterator(begin());
@@ -1350,7 +1352,13 @@ class GSL_POINTER span<ElementType, dynamic_extent, InternalPtrType> {
     // size()` is no larger than just past the end of the corresponding
     // allocation, which is a legal pointer to construct and compare to (though
     // not dereference).
-    return UNSAFE_BUFFERS(iterator(data(), data() + size(), data() + size()));
+    //
+    // Use `AssumeValid()` to elide unnecessary precondition `CHECK()`'s in the
+    // iterator constructor: `data() + size()` must not overflow given the above
+    // constraints, so the iterator's requirement that begin <= current <= end
+    // is guaranteed to be true.
+    return UNSAFE_BUFFERS(iterator(typename iterator::AssumeValid(
+        data(), data() + size(), data() + size())));
   }
   constexpr const_iterator cend() const noexcept {
     return const_iterator(end());

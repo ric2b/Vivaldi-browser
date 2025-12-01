@@ -105,12 +105,7 @@ using credential_provider_promo::IOSCredentialProviderPromoAction;
       feature_engagement::TrackerFactory::GetForProfile(self.profile);
   self.viewController.actionHandler = self;
   self.viewController.presentationController.delegate = self;
-  if (trigger == CredentialProviderPromoTrigger::SetUpList) {
-    // If this is coming from the SetUpList, force to go directly to LearnMore.
-    self.promoContext = CredentialProviderPromoContext::kLearnMore;
-  } else {
-    self.promoContext = CredentialProviderPromoContext::kFirstStep;
-  }
+  self.promoContext = [self promoContextFromTrigger:trigger];
   [self.mediator configureConsumerWithTrigger:trigger
                                       context:self.promoContext];
   self.trigger = trigger;
@@ -122,6 +117,8 @@ using credential_provider_promo::IOSCredentialProviderPromoAction;
                                 completion:nil];
   self.promoSeenInCurrentSession = YES;
 
+  GetApplicationContext()->GetLocalState()->SetTime(
+      prefs::kIosCredentialProviderPromoDisplayTime, base::Time::Now());
   credential_provider_promo::RecordImpression(
       [self.mediator promoOriginalSource],
       self.trigger == CredentialProviderPromoTrigger::RemindMeLater);
@@ -136,14 +133,12 @@ using credential_provider_promo::IOSCredentialProviderPromoAction;
       if (IOSPasskeysM2Enabled()) {
         // Show the prompt to allow the app to be turned on as a credential
         // provider.
+        __weak __typeof(self) weakSelf = self;
         [ASSettingsHelper
             requestToTurnOnCredentialProviderExtensionWithCompletionHandler:^(
                 BOOL appWasEnabledForAutoFill) {
-              // Record the user's decision.
-              RecordTurnOnCredentialProviderExtensionPromptOutcome(
-                  TurnOnCredentialProviderExtensionPromptSource::
-                      kCredentialProviderExtensionPromo,
-                  appWasEnabledForAutoFill);
+              [weakSelf recordTurnOnCredentialProviderExtensionPromptOutcome:
+                            appWasEnabledForAutoFill];
             }];
         [self recordAction:IOSCredentialProviderPromoAction::kTurnOnAutofill];
         return;
@@ -155,7 +150,7 @@ using credential_provider_promo::IOSCredentialProviderPromoAction;
     [self presentLearnMore];
     [self recordAction:IOSCredentialProviderPromoAction::kLearnMore];
   } else {
-    OpenIOSCredentialProviderSettings();
+    [self openIOSCredentialProviderSettings];
     [self recordAction:IOSCredentialProviderPromoAction::kGoToSettings];
     [self promoWasDismissed];
   }
@@ -232,6 +227,45 @@ using credential_provider_promo::IOSCredentialProviderPromoAction;
   GetApplicationContext()->GetLocalState()->SetInteger(
       prefs::kIosCredentialProviderPromoLastActionTaken,
       static_cast<int>(action));
+}
+
+// Records whether the user has accepted the in-app prompt to set the app as a
+// credential provider.
+- (void)recordTurnOnCredentialProviderExtensionPromptOutcome:(BOOL)outcome {
+  RecordTurnOnCredentialProviderExtensionPromptOutcome(
+      TurnOnCredentialProviderExtensionPromptSource::
+          kCredentialProviderExtensionPromo,
+      outcome);
+}
+
+// Opens the iOS credential provider settings. Delegates this task to
+// `settingsOpenerDelegate` when valid.
+- (void)openIOSCredentialProviderSettings {
+  if (self.settingsOpenerDelegate) {
+    [self.settingsOpenerDelegate
+        credentialProviderPromoCoordinatorOpenIOSCredentialProviderSettings:
+            self];
+    return;
+  }
+  OpenIOSCredentialProviderSettings();
+}
+
+// Returns the promo context for the given trigger. For SetUpList the first
+// step is skipped because some context is already provided in the SetUpList
+// item's description. But on iOS 18, the first step allows the user to enable
+// the CPE directly in-app, so this is preferred.
+- (CredentialProviderPromoContext)promoContextFromTrigger:
+    (CredentialProviderPromoTrigger)trigger {
+  if (trigger == CredentialProviderPromoTrigger::SetUpList) {
+    if (@available(iOS 18.0, *)) {
+      if (IOSPasskeysM2Enabled() && IsIOSExpandedTipsEnabled()) {
+        // Go to the first step, which allows enabling CPE in-app.
+        return CredentialProviderPromoContext::kFirstStep;
+      }
+    }
+    return CredentialProviderPromoContext::kLearnMore;
+  }
+  return CredentialProviderPromoContext::kFirstStep;
 }
 
 @end

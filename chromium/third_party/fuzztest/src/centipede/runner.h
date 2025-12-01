@@ -24,7 +24,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <optional>
 
 #include "absl/base/const_init.h"
 #include "absl/base/nullability.h"
@@ -43,7 +42,7 @@
 #include "./centipede/runner_result.h"
 #include "./centipede/runner_sancov_object.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 // Like std::lock_guard, but for pthread_mutex_t.
 class LockGuard {
@@ -67,12 +66,12 @@ struct RunTimeFlags {
   uint64_t use_auto_dictionary : 1;
   std::atomic<uint64_t> timeout_per_input;
   uint64_t timeout_per_batch;
-  uint64_t force_abort_timeout;
   std::atomic<uint64_t> stack_limit_kb;
   std::atomic<uint64_t> rss_limit_mb;
   uint64_t crossover_level;
   uint64_t skip_seen_features : 1;
   uint64_t ignore_timeout_reports : 1;
+  uint64_t max_len;
 };
 
 // One such object is created in runner's TLS.
@@ -174,18 +173,18 @@ struct GlobalRunnerState {
       /*use_auto_dictionary=*/HasFlag(":use_auto_dictionary:"),
       /*timeout_per_input=*/HasIntFlag(":timeout_per_input=", 0),
       /*timeout_per_batch=*/HasIntFlag(":timeout_per_batch=", 0),
-      /*force_abort_timeout=*/HasIntFlag(":force_abort_timeout=", 0),
       /*stack_limit_kb=*/HasIntFlag(":stack_limit_kb=", 0),
       /*rss_limit_mb=*/HasIntFlag(":rss_limit_mb=", 0),
       /*crossover_level=*/HasIntFlag(":crossover_level=", 50),
       /*skip_seen_features=*/HasFlag(":skip_seen_features:"),
       /*ignore_timeout_reports=*/HasFlag(":ignore_timeout_reports:"),
+      /*max_len=*/HasIntFlag(":max_len=", 4000),
   };
 
   // Returns true iff `flag` is present.
   // Typical usage: pass ":some_flag:", i.e. the flag name surrounded with ':'.
   // TODO(ussuri): Refactor `char *` into a `string_view`.
-  bool HasFlag(absl::Nonnull<const char *> flag) const {
+  bool HasFlag(const char *absl_nonnull flag) const {
     if (!centipede_runner_flags) return false;
     return strstr(centipede_runner_flags, flag) != nullptr;
   }
@@ -194,7 +193,7 @@ struct GlobalRunnerState {
   // otherwise returns `default_value`.
   // Typical usage: pass ":some_flag=".
   // TODO(ussuri): Refactor `char *` into a `string_view`.
-  uint64_t HasIntFlag(absl::Nonnull<const char *> flag,
+  uint64_t HasIntFlag(const char *absl_nonnull flag,
                       uint64_t default_value) const {
     if (!centipede_runner_flags) return default_value;
     const char *beg = strstr(centipede_runner_flags, flag);
@@ -207,8 +206,7 @@ struct GlobalRunnerState {
   // it in `this` to avoid a leak.
   // Typical usage: pass ":some_flag=".
   // TODO(ussuri): Refactor `char *` into a `string_view`.
-  absl::Nullable<const char *> GetStringFlag(
-      absl::Nonnull<const char *> flag) const {
+  const char *absl_nullable GetStringFlag(const char *absl_nonnull flag) const {
     if (!centipede_runner_flags) return nullptr;
     // Extract "value" from ":flag=value:" inside centipede_runner_flags.
     const char *beg = strstr(centipede_runner_flags, flag);
@@ -331,11 +329,6 @@ struct GlobalRunnerState {
   // CentipedeRunnerMain() sets this to true.
   bool centipede_runner_main_executed = false;
 
-  // The thread that runs `RunnerMain()` and executes the inputs.
-  std::optional<pthread_t> runner_main_thread;
-  // Guards `runner_main_thread`.
-  pthread_mutex_t runner_main_thread_mu = PTHREAD_MUTEX_INITIALIZER;
-
   // Timeout-related machinery.
 
   // Starts the watchdog thread that terminates the runner if any of the
@@ -350,9 +343,6 @@ struct GlobalRunnerState {
   // Per-batch timer. Initially, zero. ResetInputTimer() sets it to the current
   // time before the first input and never resets it.
   std::atomic<time_t> batch_start_time;
-  // Initially, zero. Watchdog thread sets it based on the provided timeout when
-  // it attempts to abort the runner main thread.
-  std::atomic<time_t> force_abort_deadline;
 
   // The Watchdog thread sets this to true.
   std::atomic<bool> watchdog_thread_started;
@@ -374,6 +364,6 @@ extern __thread ThreadLocalRunnerState tls;
 // Check for stack limit for the stack pointer `sp` in the current thread.
 void CheckStackLimit(uintptr_t sp);
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_RUNNER_H_

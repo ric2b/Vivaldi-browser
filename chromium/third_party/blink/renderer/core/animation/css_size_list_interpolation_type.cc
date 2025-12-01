@@ -145,7 +145,7 @@ InterpolationValue CSSSizeListInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSSizeListInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState*,
+    const StyleResolverState&,
     ConversionCheckers&) const {
   return MaybeConvertCSSSizeList(value);
 }
@@ -173,7 +173,7 @@ void CSSSizeListInterpolationType::Composite(
     const InterpolationValue& value,
     double interpolation_fraction) const {
   ListInterpolationFunctions::Composite(
-      underlying_value_owner, underlying_fraction, *this, value,
+      underlying_value_owner, underlying_fraction, this, value,
       ListInterpolationFunctions::LengthMatchingStrategy::kLowestCommonMultiple,
       ListInterpolationFunctions::InterpolableValuesKnownCompatible,
       SizeInterpolationFunctions::NonInterpolableValuesAreCompatible,

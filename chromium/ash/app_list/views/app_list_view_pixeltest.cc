@@ -24,6 +24,7 @@
 #include "ash/test/view_drawn_waiter.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -267,7 +268,7 @@ TEST_P(AppListViewPixelRTLTest, Basics) {
   UseFixedPlaceholderTextAndHideCursor(
       GetAppListTestHelper()->GetSearchBoxView());
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bubble_launcher_basics", /*revision_number=*/15,
+      "bubble_launcher_basics", /*revision_number=*/16,
       GetAppListTestHelper()->GetBubbleView(),
       GetPrimaryShelf()->navigation_widget()));
 }
@@ -289,7 +290,7 @@ TEST_P(AppListViewPixelRTLTest, GradientZone) {
                                 /*position=*/20);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "bubble_launcher_gradient_zone", /*revision_number=*/15,
+      "bubble_launcher_gradient_zone", /*revision_number=*/16,
       GetAppListTestHelper()->GetBubbleView(),
       GetPrimaryShelf()->navigation_widget()));
 }
@@ -380,7 +381,7 @@ INSTANTIATE_TEST_SUITE_P(RTL,
 // Verifies the default layout for tablet mode launcher.
 TEST_P(AppListViewTabletPixelTest, Basic) {
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "tablet_launcher_basics", /*revision_number=*/16,
+      "tablet_launcher_basics", /*revision_number=*/17,
       GetAppListTestHelper()->GetAppsContainerView()));
 }
 
@@ -401,7 +402,7 @@ TEST_P(AppListViewTabletPixelTest, TopGradientZone) {
   generator->MoveTouchBy(0, -40);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "tablet_launcher_top_gradient_zone", /*revision_number=*/14,
+      "tablet_launcher_top_gradient_zone", /*revision_number=*/15,
       GetAppListTestHelper()->GetAppsContainerView()));
 }
 
@@ -422,7 +423,7 @@ TEST_P(AppListViewTabletPixelTest, BottomGradientZone) {
   generator->MoveTouchBy(0, -90);
 
   EXPECT_TRUE(GetPixelDiffer()->CompareUiComponentsOnPrimaryScreen(
-      "tablet_launcher_bottom_gradient_zone", /*revision_number=*/16,
+      "tablet_launcher_bottom_gradient_zone", /*revision_number=*/17,
       GetAppListTestHelper()->GetAppsContainerView()));
 }
 

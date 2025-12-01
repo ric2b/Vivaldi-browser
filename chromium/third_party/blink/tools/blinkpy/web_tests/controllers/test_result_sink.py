@@ -39,10 +39,6 @@ _result_type_to_sink_status = {
     # timeout is just a special case of a reason to abort a test result.
     ResultType.Timeout:
     'ABORT',
-    # 'Aborted' is a web_tests-specific type given on TestResults with a device
-    # failure.
-    'Aborted':
-    'ABORT',
     ResultType.Crash:
     'CRASH',
     ResultType.Skip:
@@ -112,7 +108,7 @@ class TestResultSink:
             The corresponding enum value.
         """
         status = _result_type_to_sink_status.get(
-            'Aborted' if result.device_failed else result.type)
+            ResultType.Timeout if result.device_failed else result.type)
 
         assert status is not None, 'unsupported result.type %r' % result.type
         return status
@@ -274,6 +270,20 @@ class TestResultSink:
                 },
             },
         }
+
+        test_split = result.test_name.rsplit('/', 1)
+        if test_split:
+            # Source comes from:
+            # infra/go/src/go.chromium.org/luci/resultdb/sink/proto/v1/test_result.proto
+            fine_name = test_split[0] if len(test_split) > 1 else '/'
+            case_name = test_split[1] if len(test_split) > 1 else test_split[0]
+            struct_test_dict = {
+                'coarseName': None,  # Not used for webtests.
+                'fineName': fine_name,
+                'caseNameComponents': [case_name],
+            }
+            r['testIdStructured'] = struct_test_dict
+
         if summaries:
             r['summaryHtml'] = '\n'.join(summaries)
 

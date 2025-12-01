@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "net/nqe/network_quality_estimator.h"
 
@@ -1456,7 +1452,7 @@ void NetworkQualityEstimator::MaybeUpdateCachedEstimateApplied(
   }
 
   cached_estimate_applied_ = true;
-  bool deleted_observation_sources[NETWORK_QUALITY_OBSERVATION_SOURCE_MAX] = {};
+  DeletedObservationSources deleted_observation_sources = {};
   deleted_observation_sources
       [NETWORK_QUALITY_OBSERVATION_SOURCE_DEFAULT_HTTP_FROM_PLATFORM] = true;
   deleted_observation_sources

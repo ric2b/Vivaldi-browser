@@ -11,6 +11,7 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/webui_url_constants.h"
@@ -62,7 +63,8 @@ class GuestUtilBrowserTest : public InProcessBrowserTest {
  public:
   GuestUtilBrowserTest() {
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kGlic, features::kTabstripComboButton},
+        /*enabled_features=*/{features::kGlic, features::kTabstripComboButton,
+                              features::kGlicRollout},
         /*disabled_features=*/{features::kGlicWarming,
                                features::kGlicFreWarming});
   }

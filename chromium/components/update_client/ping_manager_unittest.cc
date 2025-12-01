@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "base/check_deref.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
@@ -100,14 +99,9 @@ base::OnceClosure PingManagerTest::MakePingCallback() {
 }
 
 scoped_refptr<UpdateContext> PingManagerTest::MakeMockUpdateContext() const {
-  base::ScopedTempDir temp_dir;
-  if (!temp_dir.CreateUniqueTempDir()) {
-    return nullptr;
-  }
   return base::MakeRefCounted<UpdateContext>(
-      config_, base::MakeRefCounted<CrxCache>(temp_dir.GetPath()), false, false,
-      std::vector<std::string>(), UpdateClient::CrxStateChangeCallback(),
-      UpdateEngine::Callback(), nullptr,
+      config_, false, false, std::vector<std::string>(),
+      UpdateClient::CrxStateChangeCallback(), UpdateEngine::Callback(), nullptr,
       /*is_update_check_only=*/false);
 }
 
@@ -154,7 +148,7 @@ TEST_P(PingManagerTest, SendPing) {
 
     EXPECT_TRUE(request.contains("@os"));
     EXPECT_EQ("fake_prodid", CHECK_DEREF(request.FindString("@updater")));
-    EXPECT_EQ("crx3,download,puff,run",
+    EXPECT_EQ("crx3,download,puff,run,xz,zucc",
               CHECK_DEREF(request.FindString("acceptformat")));
     EXPECT_TRUE(request.contains("arch"));
     EXPECT_EQ("cr", CHECK_DEREF(request.FindString("dedup")));

@@ -93,11 +93,10 @@ constexpr size_t encoded_public_key_size(int rank) {
   return encoded_vector_size(rank) + /*sizeof(rho)=*/32;
 }
 
-static_assert(encoded_public_key_size(RANK768) == BCM_MLKEM768_PUBLIC_KEY_BYTES,
-              "");
+static_assert(encoded_public_key_size(RANK768) ==
+              BCM_MLKEM768_PUBLIC_KEY_BYTES);
 static_assert(encoded_public_key_size(RANK1024) ==
-                  BCM_MLKEM1024_PUBLIC_KEY_BYTES,
-              "");
+              BCM_MLKEM1024_PUBLIC_KEY_BYTES);
 
 constexpr size_t compressed_vector_size(int rank) {
   // `if constexpr` isn't available in C++17.
@@ -110,8 +109,8 @@ constexpr size_t ciphertext_size(int rank) {
          (rank == RANK768 ? kDV768 : kDV1024) * DEGREE / 8;
 }
 
-static_assert(ciphertext_size(RANK768) == BCM_MLKEM768_CIPHERTEXT_BYTES, "");
-static_assert(ciphertext_size(RANK1024) == BCM_MLKEM1024_CIPHERTEXT_BYTES, "");
+static_assert(ciphertext_size(RANK768) == BCM_MLKEM768_CIPHERTEXT_BYTES);
+static_assert(ciphertext_size(RANK1024) == BCM_MLKEM1024_CIPHERTEXT_BYTES);
 
 typedef struct scalar {
   // On every function entry and exit, 0 <= c < kPrime.
@@ -399,7 +398,7 @@ static void scalar_from_keccak_vartime(scalar *out,
 void scalar_centered_binomial_distribution_eta_2_with_prf(
     scalar *out, const uint8_t input[33]) {
   uint8_t entropy[128];
-  static_assert(sizeof(entropy) == 2 * /*kEta=*/2 * DEGREE / 8, "");
+  static_assert(sizeof(entropy) == 2 * /*kEta=*/2 * DEGREE / 8);
   prf(entropy, sizeof(entropy), input);
 
   for (int i = 0; i < DEGREE; i += 2) {
@@ -795,7 +794,7 @@ void mlkem_decap_no_self_test(
   hash_g(key_and_randomness, decrypted, sizeof(decrypted));
   constexpr size_t ciphertext_len = ciphertext_size(RANK);
   uint8_t expected_ciphertext[BCM_MLKEM1024_CIPHERTEXT_BYTES];
-  static_assert(ciphertext_len <= sizeof(expected_ciphertext), "");
+  static_assert(ciphertext_len <= sizeof(expected_ciphertext));
   encrypt_cpa(expected_ciphertext, &priv->pub, decrypted,
               key_and_randomness + 32);
 
@@ -936,7 +935,7 @@ void mlkem_encap_external_entropy_no_self_test(
   encrypt_cpa(out_ciphertext, pub, entropy, key_and_randomness + 32);
   // The ciphertext is public.
   CONSTTIME_DECLASSIFY(out_ciphertext, mlkem::ciphertext_size(RANK));
-  static_assert(BCM_MLKEM_SHARED_SECRET_BYTES == 32, "");
+  static_assert(BCM_MLKEM_SHARED_SECRET_BYTES == 32);
   memcpy(out_shared_secret, key_and_randomness, 32);
 }
 

@@ -9,6 +9,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
+#include "content/browser/accessibility/web_contents_accessibility_android.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/test/test_content_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -48,6 +49,12 @@ class MockContentClient : public TestContentClient {
   }
 };
 
+class MockWebContentsAccessibilityAndroid
+    : public WebContentsAccessibilityAndroid {
+ public:
+  MockWebContentsAccessibilityAndroid() {}
+};
+
 class BrowserAccessibilityAndroidTest : public ::testing::Test {
  public:
   BrowserAccessibilityAndroidTest();
@@ -63,6 +70,7 @@ class BrowserAccessibilityAndroidTest : public ::testing::Test {
   std::unique_ptr<ui::TestAXPlatformTreeManagerDelegate>
       test_browser_accessibility_delegate_;
   ui::TestAXNodeIdDelegate node_id_delegate_;
+  MockWebContentsAccessibilityAndroid mock_web_contents_accessibility_android_;
 
  private:
   void SetUp() override;
@@ -80,7 +88,8 @@ BrowserAccessibilityAndroidTest::~BrowserAccessibilityAndroidTest() = default;
 void BrowserAccessibilityAndroidTest::SetUp() {
   test_browser_accessibility_delegate_ =
       std::make_unique<ui::TestAXPlatformTreeManagerDelegate>();
-
+  test_browser_accessibility_delegate_->SetWebContentsAccessibility(
+      &mock_web_contents_accessibility_android_);
   SetContentClient(&client_);
 }
 
@@ -521,9 +530,10 @@ TEST_F(BrowserAccessibilityAndroidTest, TestImageInnerText_Eligible) {
           manager->GetBrowserAccessibilityRoot()->PlatformGetChild(1));
 
   EXPECT_EQ(
-      u"image_name, This image isn't labeled. Double tap on the more options "
+      u"This image isn't labeled. Double tap on the more options "
       u"button at the top of the browser to get image descriptions.",
       image_rtl->GetTextContentUTF16());
+  EXPECT_EQ(u"image_name", image_rtl->GetSupplementalDescription());
 }
 
 TEST_F(BrowserAccessibilityAndroidTest,
@@ -638,7 +648,8 @@ TEST_F(BrowserAccessibilityAndroidTest, TestImageInnerText_Ineligible) {
           manager->GetBrowserAccessibilityRoot()->PlatformGetChild(3));
 
   EXPECT_EQ(std::u16string(), image_none->GetTextContentUTF16());
-  EXPECT_EQ(u"image_name", image_scheme->GetTextContentUTF16());
+  EXPECT_EQ(std::u16string(), image_scheme->GetTextContentUTF16());
+  EXPECT_EQ(u"image_name", image_scheme->GetSupplementalDescription());
   EXPECT_EQ(std::u16string(), image_ineligible->GetTextContentUTF16());
   EXPECT_EQ(std::u16string(), image_silent->GetTextContentUTF16());
 }
@@ -683,8 +694,126 @@ TEST_F(BrowserAccessibilityAndroidTest,
           manager->GetBrowserAccessibilityRoot()->PlatformGetChild(1));
 
   EXPECT_EQ(u"test_annotation", image_succeeded->GetTextContentUTF16());
-  EXPECT_EQ(u"image_name, test_annotation",
+  EXPECT_EQ(u"test_annotation",
             image_succeeded_with_name->GetTextContentUTF16());
+  EXPECT_EQ(u"image_name",
+            image_succeeded_with_name->GetSupplementalDescription());
+}
+
+TEST_F(BrowserAccessibilityAndroidTest, TestJavaNodeCache_AttributeChange) {
+  ui::AXTreeUpdate tree;
+  tree.root_id = 1;
+  tree.nodes.resize(2);
+  tree.nodes[0].id = 1;
+  tree.nodes[0].role = ax::mojom::Role::kRootWebArea;
+  tree.nodes[0].child_ids = {2};
+
+  tree.nodes[1].id = 2;
+  tree.nodes[1].role = ax::mojom::Role::kButton;
+
+  std::unique_ptr<ui::BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManagerAndroid::Create(
+          tree, node_id_delegate_, test_browser_accessibility_delegate_.get()));
+
+  BrowserAccessibilityManagerAndroid* android_manager =
+      ToBrowserAccessibilityManagerAndroid(manager.get());
+  const auto& actual = android_manager->nodes_already_cleared_for_test();
+  EXPECT_EQ(2, actual.size());
+  EXPECT_TRUE(actual.contains(1));
+  EXPECT_TRUE(actual.contains(2));
+
+  ui::AXUpdatesAndEvents updates_and_events;
+  updates_and_events.updates.resize(1);
+  updates_and_events.updates[0].nodes.resize(1);
+  updates_and_events.updates[0].nodes[0].id = 2;
+  updates_and_events.updates[0].nodes[0].AddStringAttribute(
+      ax::mojom::StringAttribute::kName, "hello");
+
+  manager->OnAccessibilityEvents(updates_and_events);
+
+  EXPECT_EQ(2, actual.size());
+  EXPECT_TRUE(actual.contains(1));
+  EXPECT_TRUE(actual.contains(2));
+}
+
+TEST_F(BrowserAccessibilityAndroidTest, TestJavaNodeCache_NodeDeleted) {
+  ui::AXTreeUpdate tree;
+  tree.root_id = 1;
+  tree.nodes.resize(2);
+  tree.nodes[0].id = 1;
+  tree.nodes[0].role = ax::mojom::Role::kRootWebArea;
+  tree.nodes[0].child_ids = {2};
+
+  tree.nodes[1].id = 2;
+  tree.nodes[1].role = ax::mojom::Role::kButton;
+
+  std::unique_ptr<ui::BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManagerAndroid::Create(
+          tree, node_id_delegate_, test_browser_accessibility_delegate_.get()));
+
+  BrowserAccessibilityManagerAndroid* android_manager =
+      ToBrowserAccessibilityManagerAndroid(manager.get());
+  const auto& actual = android_manager->nodes_already_cleared_for_test();
+  EXPECT_EQ(2, actual.size());
+  EXPECT_TRUE(actual.contains(1));
+  EXPECT_TRUE(actual.contains(2));
+
+  ui::AXUpdatesAndEvents updates_and_events;
+  updates_and_events.updates.resize(1);
+  updates_and_events.updates[0].nodes.resize(1);
+  updates_and_events.updates[0].nodes[0].id = 1;
+  updates_and_events.updates[0].nodes[0].role = ax::mojom::Role::kRootWebArea;
+
+  manager->OnAccessibilityEvents(updates_and_events);
+
+  EXPECT_EQ(2, actual.size());
+  EXPECT_TRUE(actual.contains(1));
+  EXPECT_TRUE(actual.contains(2));
+}
+
+TEST_F(BrowserAccessibilityAndroidTest, TestJavaNodeCache_NodeUnignored) {
+  ui::AXTreeUpdate tree;
+  tree.root_id = 1;
+  tree.nodes.resize(3);
+  tree.nodes[0].id = 1;
+  tree.nodes[0].role = ax::mojom::Role::kRootWebArea;
+  tree.nodes[0].child_ids = {2};
+
+  tree.nodes[1].id = 2;
+  tree.nodes[1].role = ax::mojom::Role::kButton;
+  tree.nodes[1].AddState(ax::mojom::State::kIgnored);
+  tree.nodes[1].child_ids = {3};
+
+  tree.nodes[2].id = 3;
+  tree.nodes[2].role = ax::mojom::Role::kStaticText;
+
+  std::unique_ptr<ui::BrowserAccessibilityManager> manager(
+      BrowserAccessibilityManagerAndroid::Create(
+          tree, node_id_delegate_, test_browser_accessibility_delegate_.get()));
+
+  BrowserAccessibilityManagerAndroid* android_manager =
+      ToBrowserAccessibilityManagerAndroid(manager.get());
+  const auto& actual = android_manager->nodes_already_cleared_for_test();
+  EXPECT_EQ(3, actual.size());
+  EXPECT_TRUE(actual.contains(1));
+  EXPECT_TRUE(actual.contains(2));
+  EXPECT_TRUE(actual.contains(3));
+
+  ui::AXUpdatesAndEvents updates_and_events;
+  updates_and_events.updates.resize(1);
+  updates_and_events.updates[0].nodes.resize(1);
+  updates_and_events.updates[0].nodes[0].id = 2;
+  updates_and_events.updates[0].nodes[0].role = ax::mojom::Role::kButton;
+
+  manager->OnAccessibilityEvents(updates_and_events);
+
+  EXPECT_EQ(3, actual.size());
+  // From an AXEventGenerator::Event::CHILDREN_CHANGED.
+  EXPECT_TRUE(actual.contains(1));
+  // From an AXTreeObserver::Change; the only actual tree update.
+  EXPECT_TRUE(actual.contains(2));
+  // From an AXEventGenerator::Event::PARENT_CHANGED.
+  EXPECT_TRUE(actual.contains(3));
 }
 
 }  // namespace content

@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.lifetime.Destroyable;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.ReadableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
@@ -18,6 +19,7 @@ import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 import java.util.List;
 
 /** Properties of the {@link TabListEditorAction}. */
+@NullMarked
 public class TabListEditorActionProperties {
     public static final ReadableIntPropertyKey MENU_ITEM_ID = new ReadableIntPropertyKey();
     public static final ReadableIntPropertyKey SHOW_MODE = new ReadableIntPropertyKey();
@@ -44,11 +46,11 @@ public class TabListEditorActionProperties {
     public static final WritableObjectPropertyKey<ColorStateList> ICON_TINT =
             new WritableObjectPropertyKey<>();
 
-    public static final WritableObjectPropertyKey<Runnable> ON_CLICK_LISTENER =
-            new WritableObjectPropertyKey<>();
+    public static final WritableObjectPropertyKey<TabListEditorMenuItem.OnClickRunnable>
+            ON_CLICK_LISTENER = new WritableObjectPropertyKey<>();
     public static final WritableBooleanPropertyKey SHOULD_DISMISS_MENU =
             new WritableBooleanPropertyKey();
-    public static final WritableObjectPropertyKey<Callback<List<Integer>>>
+    public static final WritableObjectPropertyKey<Callback<List<TabListEditorItemSelectionId>>>
             ON_SELECTION_STATE_CHANGE = new WritableObjectPropertyKey<>();
 
     public static final WritableObjectPropertyKey<Destroyable> DESTROYABLE =

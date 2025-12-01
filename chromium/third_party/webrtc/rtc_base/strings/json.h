@@ -11,11 +11,14 @@
 #ifndef RTC_BASE_STRINGS_JSON_H_
 #define RTC_BASE_STRINGS_JSON_H_
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
 #include "absl/strings/string_view.h"
-#include "json/json.h"  // IWYU pragma: export
+#include "json/json.h"    // IWYU pragma: export
+#include "json/reader.h"  // IWYU pragma: export
+#include "json/value.h"   // IWYU pragma: export
 
 namespace webrtc {
 
@@ -82,6 +85,7 @@ std::string JsonValueToString(const Json::Value& json);
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::BoolVectorToJsonArray;
 using ::webrtc::DoubleVectorToJsonArray;
@@ -114,5 +118,6 @@ using ::webrtc::StringVectorToJsonArray;
 using ::webrtc::UIntVectorToJsonArray;
 using ::webrtc::ValueVectorToJsonArray;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_STRINGS_JSON_H_

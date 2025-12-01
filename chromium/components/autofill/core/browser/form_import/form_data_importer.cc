@@ -47,7 +47,7 @@
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
-#include "components/autofill/core/browser/integrators/autofill_plus_address_delegate.h"
+#include "components/autofill/core/browser/integrators/plus_addresses/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/profile_import_metrics.h"
 #include "components/autofill/core/browser/payments/credit_card_save_manager.h"
@@ -216,6 +216,27 @@ bool HasSynthesizedTypes(
   });
 }
 
+bool ShouldProcessExtractedCreditCard(
+    const raw_ref<AutofillClient>& client,
+    FormDataImporter::CreditCardImportType credit_card_import_type) {
+  // Processing should not occur if the current window is a tab modal pop-up, as
+  // no credit card save or feature enrollment should happen in this case.
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillSkipSaveCardForTabModalPopup) &&
+      client->GetPaymentsAutofillClient()->IsTabModalPopupDeprecated()) {
+    return false;
+  }
+
+  // If there is no `credit_card_import_type` from form extraction, the
+  // extracted card is not a viable candidate for processing.
+  if (credit_card_import_type ==
+      FormDataImporter::CreditCardImportType::kNoCard) {
+    return false;
+  }
+
+  return true;
+}
+
 }  // namespace
 
 FormDataImporter::ExtractedFormData::ExtractedFormData() = default;
@@ -276,11 +297,11 @@ void FormDataImporter::ImportAndProcessFormData(
       preliminary_imported_address_profiles);
 
   bool cc_prompt_potentially_shown = false;
-  if (credit_card_import_type_ != CreditCardImportType::kNoCard) {
-    // Only check IsCreditCardUploadEnabled() if payment method autofill is
-    // enabled and a credit card was extracted from the form, in order to
-    // prevent the metrics it logs from being diluted by cases where payment
-    // method autofill is off or there was no credit card to process.
+  if (ShouldProcessExtractedCreditCard(client_, credit_card_import_type_)) {
+    // Only check IsCreditCardUploadEnabled() if conditions that enable
+    // processing of the extracted credit card are true, in order to prevent
+    // the metrics it logs from being diluted by cases where extracted credit
+    // cards should not be processed or there was no credit card to process.
     bool credit_card_upload_enabled =
         credit_card_save_manager_->IsCreditCardUploadEnabled();
     cc_prompt_potentially_shown = ProcessExtractedCreditCard(
@@ -741,15 +762,7 @@ bool FormDataImporter::ExtractAddressProfileFromSection(
       all_fulfilled ? AddressImportRequirement::kOverallRequirementFulfilled
                     : AddressImportRequirement::kOverallRequirementViolated);
 
-  bool candidate_has_structured_data =
-      base::FeatureList::IsEnabled(
-          features::kAutofillSilentProfileUpdateForInsufficientImport) &&
-      candidate_profile.HasStructuredData();
-
-  // If the profile does not fulfill import requirements but contains the
-  // structured address or name information, it is eligible for silently
-  // updating the existing profiles.
-  if (!finalized_import || (!all_fulfilled && !candidate_has_structured_data)) {
+  if (!finalized_import || !all_fulfilled) {
     return false;
   }
 
@@ -1066,6 +1079,18 @@ FormDataImporter::ExtractCreditCardFromForm(const FormStructure& form) {
                 field.Type().GetStorableType());
       result.card.SetInfoForMonthInputType(value);
     } else {
+      // If the credit card number offset is within the range of the old value,
+      // replace the portion of the old value with the value from the current
+      // field. For example:
+      // old value: '1234', offset: 4, new value:'5678', result: '12345678'
+      // old value: '12345678', offset: 4, new value:'0000', result: '12340000'
+      if (field.credit_card_number_offset() > 0 &&
+          field.credit_card_number_offset() <= old_value.size() &&
+          base::FeatureList::IsEnabled(
+              features::kAutofillFixSplitCreditCardImport)) {
+        value = old_value.replace(field.credit_card_number_offset(),
+                                  value.size(), value);
+      }
       bool saved = result.card.SetInfo(field.Type(), value, app_locale);
       if (!saved && field.IsSelectElement()) {
         // Saving with the option text (here `value`) may fail for the
@@ -1079,9 +1104,17 @@ FormDataImporter::ExtractCreditCardFromForm(const FormStructure& form) {
         }
       }
     }
+
     std::u16string new_value = result.card.GetInfo(field.Type(), app_locale);
+    // Skip duplicate field check if the field is a split credit card
+    // number field.
+    bool skip_duplication_check =
+        field.Type().GetStorableType() == FieldType::CREDIT_CARD_NUMBER &&
+        field.credit_card_number_offset() > 0 &&
+        base::FeatureList::IsEnabled(
+            features::kAutofillFixSplitCreditCardImport);
     result.has_duplicate_credit_card_field_type |=
-        !old_value.empty() && old_value != new_value;
+        !skip_duplication_check && !old_value.empty() && old_value != new_value;
   };
 
   // Populates `result` from `fields` that satisfy `pred`, and erases those
@@ -1138,44 +1171,6 @@ Iban FormDataImporter::ExtractIbanFromForm(const FormStructure& form) {
     }
   }
   return candidate_iban;
-}
-
-// TODO(crbug.com/40270301): Move ShouldOfferCreditCardSave to
-// credit_card_save_manger and combine all card and CVC save logic to
-// ProceedWithSavingIfApplicable function.
-bool FormDataImporter::ShouldOfferCreditCardSave(
-    const std::optional<CreditCard>& extracted_credit_card,
-    bool is_credit_card_upstream_enabled) {
-  // If we have an invalid card in the form, a duplicate field type, or we have
-  // entered a virtual card, `extracted_credit_card` is nullptr and thus we do
-  // not want to offer upload save or local card save.
-  if (!extracted_credit_card) {
-    return false;
-  }
-
-  // Check if CVC local or upload save should be offered.
-  if (credit_card_save_manager_->ShouldOfferCvcSave(
-          *extracted_credit_card, credit_card_import_type_,
-          is_credit_card_upstream_enabled)) {
-    return true;
-  }
-
-  // We do not want to offer upload save or local card save for server cards.
-  if (credit_card_import_type_ == CreditCardImportType::kServerCard) {
-    return false;
-  }
-
-  // Credit card upload save is not offered for local cards if upstream is
-  // disabled. Local save is not offered for local cards if the card is already
-  // saved as a local card.
-  if (!is_credit_card_upstream_enabled &&
-      credit_card_import_type_ == CreditCardImportType::kLocalCard) {
-    return false;
-  }
-
-  // We know `extracted_credit_card` is either a new card, or a local
-  // card with upload enabled.
-  return true;
 }
 
 void FormDataImporter::OnAddressDataChanged() {

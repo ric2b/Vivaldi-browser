@@ -21,7 +21,7 @@
 #include "components/autofill/core/common/autofill_features.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
@@ -97,9 +97,8 @@ EditAddressProfileView::EditAddressProfileView(
     : controller_(controller) {
   DCHECK(controller);
 
-  // TODO(crbug.com/338254375): Remove the following two lines once this is the
-  // default state for widgets and the delegates.
-  SetOwnedByWidget(false);
+  // TODO(crbug.com/338254375): Remove the following line once this is the
+  // default state for widgets.
   SetOwnershipOfNewWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
 
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kOk) |

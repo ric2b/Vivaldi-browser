@@ -28,7 +28,7 @@
 #include "libavutil/slicethread.h"
 
 #include "libswscale/swscale.h"
-#include "libswscale/utils.h"
+#include "libswscale/format.h"
 
 #include "cms.h"
 #include "lut3d.h"
@@ -430,6 +430,9 @@ static int add_legacy_sws_pass(SwsGraph *graph, SwsFormat src, SwsFormat dst,
     legacy_chr_pos(graph, &sws->src_v_chr_pos, ctx->src_v_chr_pos, &warned);
     legacy_chr_pos(graph, &sws->dst_h_chr_pos, ctx->dst_h_chr_pos, &warned);
     legacy_chr_pos(graph, &sws->dst_v_chr_pos, ctx->dst_v_chr_pos, &warned);
+
+    sws->scaler_params[0] = ctx->scaler_params[0];
+    sws->scaler_params[1] = ctx->scaler_params[1];
 
     ret = sws_init_context(sws, NULL, NULL);
     if (ret < 0) {

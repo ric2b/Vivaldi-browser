@@ -717,13 +717,11 @@ void MediaStreamDispatcherHost::ApplySubCaptureTarget(
 
 void MediaStreamDispatcherHost::SendWheel(
     const base::UnguessableToken& device_id,
-    blink::mojom::CapturedWheelActionPtr action,
-    SendWheelCallback callback) {
+    blink::mojom::CapturedWheelActionPtr action) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (!base::FeatureList::IsEnabled(
           features::kCapturedSurfaceControlKillswitch)) {
-    std::move(callback).Run(CapturedSurfaceControlResult::kUnknownError);
     return;
   }
 
@@ -731,12 +729,11 @@ void MediaStreamDispatcherHost::SendWheel(
       action->relative_y < 0.0 || action->relative_y >= 1.0) {
     ReceivedBadMessage(render_frame_host_id_.child_id,
                        bad_message::MSDH_SEND_WHEEL_INVALID_ACTION);
-    std::move(callback).Run(CapturedSurfaceControlResult::kUnknownError);
     return;
   }
 
   media_stream_manager_->SendWheel(render_frame_host_id_, device_id,
-                                   std::move(action), std::move(callback));
+                                   std::move(action), base::DoNothing());
 }
 
 void MediaStreamDispatcherHost::UpdateZoomLevel(
@@ -886,6 +883,11 @@ MediaStreamDispatcherHost::ValidateControlsForGenerateStreams(
         controls.preferred_display_surface ==
             blink::mojom::PreferredDisplaySurface::MONITOR) {
       return bad_message::MSDH_EXCLUDE_MONITORS_BUT_PREFERRED_MONITOR_REQUESTED;
+    }
+
+    if (controls.restrict_own_audio &&
+        !base::FeatureList::IsEnabled(blink::features::kRestrictOwnAudio)) {
+      return bad_message::MSDH_DISABLED_FEATURE_IS_SET;
     }
   }
 

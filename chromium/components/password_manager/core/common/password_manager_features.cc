@@ -12,23 +12,12 @@ namespace password_manager::features {
 // NOTE: It is strongly recommended to use UpperCamelCase style for feature
 //       names, e.g. "MyGreatFeature".
 
-// Enables the overwriting of prefilled username fields if the server predicted
-// the field to contain a placeholder value.
-BASE_FEATURE(kEnableOverwritingPlaceholderUsernames,
-             "EnableOverwritingPlaceholderUsernames",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 #if BUILDFLAG(IS_IOS)
 // Enables password bottom sheet to be triggered on autofocus events (on iOS).
 BASE_FEATURE(kIOSPasswordBottomSheetAutofocus,
              "kIOSPasswordBottomSheetAutofocus",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // IS_IOS
-
-// Enables password reuse detection.
-BASE_FEATURE(kPasswordReuseDetectionEnabled,
-             "PasswordReuseDetectionEnabled",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Removes password suggestion filtering by username.
 BASE_FEATURE(kNoPasswordSuggestionFiltering,
@@ -49,28 +38,6 @@ BASE_FEATURE(kShowSuggestionsOnAutofocus,
 BASE_FEATURE(kDelaySuggestionsOnAutofocusWaitingForPasskeys,
              "DelaysSuggestionsOnAutofocusWaitingForPasskeys",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_ANDROID)
-// Enables showing the warning about UPM migrating local passwords.
-// The feature is limited to Canary/Dev/Beta by a check in
-// local_passwords_migration_warning_util::ShouldShowWarning.
-BASE_FEATURE(kUnifiedPasswordManagerLocalPasswordsMigrationWarning,
-             "UnifiedPasswordManagerLocalPasswordsMigrationWarning",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-#if BUILDFLAG(IS_ANDROID)
-
-// The version of the password migration warning prefs. When the version
-// increases, the value of the pref LocalPasswordMigrationWarningPrefsVersion
-// increases and the affected prefs are reset. The affected prefs are:
-// LocalPasswordMigrationWarningShownAtStartup and
-// LocalPasswordsMigrationWarningShownTimestamp.
-extern const base::FeatureParam<int>
-    kLocalPasswordMigrationWarningPrefsVersion = {
-        &kUnifiedPasswordManagerLocalPasswordsMigrationWarning,
-        "pwd_migration_warning_prefs_version", 1};
-#endif
 
 // Field trial identifier for password generation requirements.
 const char kGenerationRequirementsFieldTrial[] =

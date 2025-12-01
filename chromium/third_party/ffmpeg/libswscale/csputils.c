@@ -21,7 +21,7 @@
 #include "libavutil/csp.h"
 
 #include "csputils.h"
-#include "utils.h"
+#include "format.h"
 
 void ff_sws_matrix3x3_mul(SwsMatrix3x3 *a, const SwsMatrix3x3 *b)
 {
@@ -33,19 +33,6 @@ void ff_sws_matrix3x3_mul(SwsMatrix3x3 *a, const SwsMatrix3x3 *b)
         a->m[0][i] = a00 * b->m[0][i] + a01 * b->m[1][i] + a02 * b->m[2][i];
         a->m[1][i] = a10 * b->m[0][i] + a11 * b->m[1][i] + a12 * b->m[2][i];
         a->m[2][i] = a20 * b->m[0][i] + a21 * b->m[1][i] + a22 * b->m[2][i];
-    }
-}
-
-void ff_sws_matrix3x3_rmul(const SwsMatrix3x3 *a, SwsMatrix3x3 *b)
-{
-    float b00 = b->m[0][0], b01 = b->m[0][1], b02 = b->m[0][2],
-          b10 = b->m[1][0], b11 = b->m[1][1], b12 = b->m[1][2],
-          b20 = b->m[2][0], b21 = b->m[2][1], b22 = b->m[2][2];
-
-    for (int i = 0; i < 3; i++) {
-        b->m[i][0] = a->m[i][0] * b00 + a->m[i][1] * b10 + a->m[i][2] * b20;
-        b->m[i][1] = a->m[i][0] * b01 + a->m[i][1] * b11 + a->m[i][2] * b21;
-        b->m[i][2] = a->m[i][0] * b02 + a->m[i][1] * b12 + a->m[i][2] * b22;
     }
 }
 

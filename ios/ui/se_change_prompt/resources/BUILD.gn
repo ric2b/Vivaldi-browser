@@ -24,5 +24,11 @@ bundle_data_xcassets("assets") {
     # logo_se_quant
     "Assets.xcassets/logo_se_quant.imageset/Contents.json",
     "Assets.xcassets/logo_se_quant.imageset/logo_se_quant.svg",
+
+    # donation_prompt_banner
+    "Assets.xcassets/donation_prompt_banner.imageset/Contents.json",
+    "Assets.xcassets/donation_prompt_banner.imageset/donation_prompt_banner@1x.png",
+    "Assets.xcassets/donation_prompt_banner.imageset/donation_prompt_banner@2x.png",
+    "Assets.xcassets/donation_prompt_banner.imageset/donation_prompt_banner@3x.png",
   ]
 }

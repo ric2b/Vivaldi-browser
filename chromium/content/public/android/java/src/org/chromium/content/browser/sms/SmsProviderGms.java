@@ -20,6 +20,11 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.ui.base.WindowAndroid;
 
+// Vivaldi
+import org.chromium.base.PackageUtils;
+import org.chromium.build.BuildConfig;
+import com.google.android.gms.common.GooglePlayServicesUtil;
+
 /**
  * Simple proxy that provides C++ code with a pathway to the GMS OTP code
  * retrieving APIs.
@@ -42,7 +47,7 @@ public class SmsProviderGms {
     private @Nullable SmsUserConsentReceiver mUserConsentReceiver;
     private @Nullable SmsVerificationReceiver mVerificationReceiver;
 
-    private Wrappers.WebOTPServiceContext mContext;
+    private final Wrappers.WebOTPServiceContext mContext;
     private @Nullable WindowAndroid mWindow;
     private Wrappers.@Nullable SmsRetrieverClientWrapper mClient;
 
@@ -92,6 +97,14 @@ public class SmsProviderGms {
     @CalledByNative
     private static SmsProviderGms create(long smsProviderGmsAndroid, @GmsBackend int backend) {
         Log.d(TAG, "Creating SmsProviderGms");
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            boolean isVerificationBackendAvailable = PackageUtils.isPackageInstalled(
+                    GooglePlayServicesUtil.GOOGLE_PLAY_STORE_PACKAGE);
+
+            return new SmsProviderGms(smsProviderGmsAndroid, backend,
+                    isVerificationBackendAvailable);
+        }
         boolean isVerificationBackendAvailable =
                 GoogleApiAvailability.getInstance()
                                 .isGooglePlayServicesAvailable(

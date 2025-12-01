@@ -40,6 +40,7 @@ import org.robolectric.shadows.ShadowSystemClock;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.readaloud.player.InteractionHandler;
 import org.chromium.chrome.browser.readaloud.player.R;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 
@@ -81,6 +82,22 @@ public class MiniPlayerLayoutUnitTest {
         assertEquals(View.VISIBLE, mLayout.findViewById(R.id.buffering_layout).getVisibility());
         assertEquals(View.GONE, mLayout.findViewById(R.id.normal_layout).getVisibility());
         assertEquals(View.GONE, mLayout.findViewById(R.id.error_layout).getVisibility());
+    }
+
+    @Test
+    public void testBufferingStrings() {
+        mLayout.setRequestedPlaybackMode(PlaybackMode.OVERVIEW);
+        mLayout.onPlaybackStateChanged(PlaybackListener.State.BUFFERING);
+
+        assertEquals(View.VISIBLE, mLayout.findViewById(R.id.buffering_layout).getVisibility());
+        assertEquals(
+                mLayout.getContext().getString(R.string.readaloud_mini_player_loading_ai_playback),
+                ((TextView) mLayout.findViewById(R.id.loading_message)).getText());
+
+        mLayout.setRequestedPlaybackMode(PlaybackMode.CLASSIC);
+        assertEquals(
+                mLayout.getContext().getString(R.string.readaloud_playback_loading),
+                ((TextView) mLayout.findViewById(R.id.loading_message)).getText());
     }
 
     @Test
@@ -148,10 +165,11 @@ public class MiniPlayerLayoutUnitTest {
     }
 
     @Test
-    public void testSetPublisher() {
+    public void testSetSubtitle() {
         mLayout.onPlaybackStateChanged(PlaybackListener.State.PLAYING);
-        mLayout.setPublisher("Publisher");
-        assertEquals("Publisher", ((TextView) mLayout.findViewById(R.id.publisher)).getText());
+        mLayout.setPlaybackMode(PlaybackMode.OVERVIEW);
+        assertEquals(
+                "AI audio playback", ((TextView) mLayout.findViewById(R.id.subtitle)).getText());
     }
 
     @Test

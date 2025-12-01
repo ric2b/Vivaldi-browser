@@ -35,6 +35,7 @@
 #include "components/content_settings/browser/page_specific_content_settings.h"
 #include "components/content_settings/core/browser/content_settings_registry.h"
 #include "components/content_settings/core/common/cookie_blocking_3pcd_status.h"
+#include "components/content_settings/core/common/cookie_controls_state.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
@@ -66,9 +67,6 @@
 #endif
 
 namespace {
-
-using Status = ::content_settings::TrackingProtectionBlockingStatus;
-using FeatureType = ::content_settings::TrackingProtectionFeatureType;
 
 constexpr int kTopicsAPITestTaxonomyVersion = 1;
 
@@ -780,19 +778,6 @@ class PageInfoBubbleViewCookiesSubpageBrowserTest
     return time;
   }
 
-  std::vector<content_settings::TrackingProtectionFeature>
-  GetTrackingProtectionFeatures() {
-    if (!protections_on_) {
-      return {
-          {FeatureType::kThirdPartyCookies, enforcement_, Status::kAllowed}};
-    }
-    if (blocking_status_ == CookieBlocking3pcdStatus::kLimited) {
-      return {
-          {FeatureType::kThirdPartyCookies, enforcement_, Status::kLimited}};
-    }
-    return {{FeatureType::kThirdPartyCookies, enforcement_, Status::kBlocked}};
-  }
-
   // DialogBrowserTest:
   void ShowUi(const std::string& name_with_param_suffix) override {
     // Bubble dialogs' bounds may exceed the display's work area.
@@ -802,10 +787,8 @@ class PageInfoBubbleViewCookiesSubpageBrowserTest
     PageInfoUI::CookiesNewInfo cookie_info;
     cookie_info.allowed_sites_count = 9;
     cookie_info.enforcement = enforcement_;
-    cookie_info.protections_on = protections_on_;
-    cookie_info.controls_visible = controls_visible_;
     cookie_info.blocking_status = blocking_status_;
-    cookie_info.features = features_;
+    cookie_info.controls_state = controls_state_;
     // TODO(crbug.com/40854087): Add rws enforcement info when finished
     // implementing it.
     if (rws_enabled_) {
@@ -853,16 +836,11 @@ class PageInfoBubbleViewCookiesSubpageBrowserTest
   }
 
  protected:
-  bool protections_on_ = true;
-  bool controls_visible_ = true;
   CookieControlsEnforcement enforcement_ =
       CookieControlsEnforcement::kNoEnforcement;
   CookieBlocking3pcdStatus blocking_status_ =
       CookieBlocking3pcdStatus::kNotIn3pcd;
-  std::vector<content_settings::TrackingProtectionFeature> features_ = {
-      {FeatureType::kThirdPartyCookies,
-       CookieControlsEnforcement::kNoEnforcement, Status::kAllowed}};
-
+  CookieControlsState controls_state_ = CookieControlsState::kBlocked3pc;
   bool rws_enabled_ = false;
   bool rws_managed_ = false;
   bool is_temporary_exception_ = false;
@@ -879,17 +857,14 @@ class PageInfoBubbleViewCookiesSubpageBrowserTest
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewCookiesSubpageBrowserTest,
                        InvokeUi_CookiesAllowedByTpcdGrant_3pcdLimited) {
   blocking_status_ = CookieBlocking3pcdStatus::kLimited;
-  protections_on_ = false;
-  controls_visible_ = false;
+  controls_state_ = CookieControlsState::kHidden;
   enforcement_ = CookieControlsEnforcement::kEnforcedByTpcdGrant;
-  features_ = GetTrackingProtectionFeatures();
   ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewCookiesSubpageBrowserTest,
                        InvokeUi_RwsOn) {
   rws_enabled_ = true;
-  features_ = GetTrackingProtectionFeatures();
   ShowAndVerifyUi();
 }
 
@@ -897,23 +872,20 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewCookiesSubpageBrowserTest,
                        InvokeUi_ManagedRwsOn) {
   rws_enabled_ = true;
   rws_managed_ = true;
-  features_ = GetTrackingProtectionFeatures();
   ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewCookiesSubpageBrowserTest,
                        InvokeUi_CookiesBlocked) {
   blocking_status_ = GetParam();
-  features_ = GetTrackingProtectionFeatures();
   ShowAndVerifyUi();
 }
 
 IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewCookiesSubpageBrowserTest,
                        InvokeUi_CookiesAllowedByCookieSetting) {
   blocking_status_ = GetParam();
-  protections_on_ = false;
+  controls_state_ = CookieControlsState::kAllowed3pc;
   enforcement_ = CookieControlsEnforcement::kEnforcedByCookieSetting;
-  features_ = GetTrackingProtectionFeatures();
   ShowAndVerifyUi();
 }
 
@@ -921,8 +893,7 @@ IN_PROC_BROWSER_TEST_P(PageInfoBubbleViewCookiesSubpageBrowserTest,
                        InvokeUi_TemporaryException) {
   is_temporary_exception_ = true;
   blocking_status_ = GetParam();
-  protections_on_ = false;
-  features_ = GetTrackingProtectionFeatures();
+  controls_state_ = CookieControlsState::kAllowed3pc;
   ShowAndVerifyUi();
 }
 

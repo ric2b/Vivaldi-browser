@@ -339,14 +339,18 @@ class PLATFORM_EXPORT Color {
   void GetRGBA(float& r, float& g, float& b, float& a) const;
   void GetRGBA(double& r, double& g, double& b, double& a) const;
 
-  // Access the color as though it were created using the hsl() syntax.
-  void GetHSL(double& h, double& s, double& l) const;
-
-  // Access the color as though it were created using the hwb() syntax.
-  void GetHWB(double& h, double& w, double& b) const;
+  // Get the lightness of the color in the specified colorspace. The colorspace
+  // can be any that has a lightness component (Lab, OkLab, Lch, OkLch or HSL).
+  float GetLightness(ColorSpace lightness_colorspace) const;
 
   Color Light() const;
   Color Dark() const;
+
+  Color MakeOpaque() const {
+    Color opaque = *this;
+    opaque.SetAlpha(1.0f);
+    return opaque;
+  }
 
   // This is an implementation of Porter-Duff's "source-over" equation
   // TODO(https://crbug.com/1333988): Implement CSS Color level 4 blending,
@@ -429,7 +433,6 @@ class PLATFORM_EXPORT Color {
   static constexpr int ClampInt255(int x) {
     return x < 0 ? 0 : (x > 255 ? 255 : x);
   }
-  void GetHueMaxMin(double&, double&, double&) const;
 
   std::tuple<float, float, float> ExportAsXYZD50Floats() const;
 
@@ -474,10 +477,10 @@ class PLATFORM_EXPORT Color {
 
   // Whether or not color parameters were specified as none (this only affects
   // interpolation behavior, the parameter values area always valid).
-  unsigned param0_is_none_ : 1;
-  unsigned param1_is_none_ : 1;
-  unsigned param2_is_none_ : 1;
-  unsigned alpha_is_none_ : 1;
+  uint8_t param0_is_none_ : 1;
+  uint8_t param1_is_none_ : 1;
+  uint8_t param2_is_none_ : 1;
+  uint8_t alpha_is_none_ : 1;
 
   // The color parameters.
   float param0_ = 0.f;

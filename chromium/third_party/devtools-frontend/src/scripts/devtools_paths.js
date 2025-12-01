@@ -127,6 +127,18 @@ function nodeModulesPath() {
   return path.join(devtoolsRootPath(), 'node_modules');
 }
 
+function autoninjaPyPath() {
+  return path.join(thirdPartyPath(), 'depot_tools', 'autoninja.py');
+}
+
+function vpython3ExecutablePath() {
+  return path.join(thirdPartyPath(), 'depot_tools', os.platform() === 'win32' ? 'vpython3.bat' : 'vpython3');
+}
+
+function gnPyPath() {
+  return path.join(thirdPartyPath(), 'depot_tools', 'gn.py');
+}
+
 function stylelintExecutablePath() {
   return path.join(nodeModulesPath(), 'stylelint', 'bin', 'stylelint.js');
 }
@@ -145,7 +157,7 @@ function litAnalyzerExecutablePath() {
  * @returns the path to the toplevel `tsconfig.json`.
  */
 function tsconfigJsonPath() {
-  return path.join(devtoolsRootPath(), 'tsconfig.json');
+  return path.join(devtoolsRootPath(), 'front_end', 'tsconfig.json');
 }
 
 function downloadedChromeBinaryPath() {
@@ -164,9 +176,11 @@ function downloadedChromeBinaryPath() {
 }
 
 module.exports = {
+  autoninjaPyPath,
   devtoolsRootPath,
   downloadedChromeBinaryPath,
   isInChromiumDirectory,
+  gnPyPath,
   litAnalyzerExecutablePath,
   mochaExecutablePath,
   nodeModulesPath,
@@ -175,4 +189,5 @@ module.exports = {
   stylelintExecutablePath,
   thirdPartyPath,
   tsconfigJsonPath,
+  vpython3ExecutablePath,
 };

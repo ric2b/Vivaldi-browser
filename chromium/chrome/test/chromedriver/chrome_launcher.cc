@@ -32,6 +32,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
 #include "base/time/time.h"
+#include "base/uuid.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_result_codes.h"
@@ -59,8 +60,8 @@
 #include "chrome/test/chromedriver/net/sync_websocket_factory.h"
 #include "components/crx_file/crx_verifier.h"
 #include "components/embedder_support/switches.h"
-#include "crypto/rsa_private_key.h"
-#include "crypto/sha2.h"
+#include "crypto/hash.h"
+#include "crypto/keypair.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "third_party/zlib/google/zip.h"
 #include "url/gurl.h"
@@ -118,6 +119,8 @@ const char* const kAndroidSwitches[] = {
 const char kEnableCrashReport[] = "enable-crash-reporter-for-testing";
 const base::FilePath::CharType kDevToolsActivePort[] =
     FILE_PATH_LITERAL("DevToolsActivePort");
+
+const char kTempAndroidUserDataDirFormat[] = "/data/data/%s/temp_profile_%s";
 
 enum ChromeType { Remote, Desktop, Android, Replay };
 
@@ -822,12 +825,44 @@ Status LaunchAndroidChrome(network::mojom::URLLoaderFactory* factory,
   }
   for (auto excluded_switch : capabilities.exclude_switches)
     switches.RemoveSwitch(excluded_switch);
+
+  // We intentionally store the paths as string and not as base::FilePath,
+  // in order to make sure the paths are formatted for android, and not for
+  // the host OS.
+  std::string user_data_dir;
+  if (switches.HasSwitch("user-data-dir")) {
+    base::FilePath::StringType user_data_dir_value =
+        switches.GetSwitchValueNative("user-data-dir");
+    if (user_data_dir_value.empty()) {
+      return Status(kInvalidArgument, "user data dir can not be empty");
+    }
+
+#if BUILDFLAG(IS_WIN)
+    user_data_dir = base::WideToUTF8(user_data_dir_value);
+#else
+    user_data_dir = user_data_dir_value;
+#endif
+  } else if (capabilities.prefs.get() || capabilities.local_state.get()) {
+    user_data_dir = base::StringPrintf(
+        kTempAndroidUserDataDirFormat, capabilities.android_package.c_str(),
+        base::Uuid::GenerateRandomV4().AsLowercaseString().c_str());
+    switches.SetSwitch("user-data-dir", user_data_dir);
+  }
+
+  std::string preferences_path =
+      base::StringPrintf("%s/%s/%s", user_data_dir.c_str(),
+                         chrome::kInitialProfile, chrome::kPreferencesFilename);
+  std::string local_state_path = base::StringPrintf(
+      "%s/%s", user_data_dir.c_str(), chrome::kLocalStateFilename);
+
   status = device->SetUp(
       capabilities.android_package, capabilities.android_activity,
       capabilities.android_process, capabilities.android_device_socket,
       capabilities.android_exec_name, switches.ToString(),
       capabilities.android_use_running_app,
-      capabilities.android_keep_app_data_dir, &devtools_port);
+      capabilities.android_keep_app_data_dir, &devtools_port, preferences_path,
+      capabilities.prefs.get(), local_state_path,
+      capabilities.local_state.get());
   if (status.IsError()) {
     device->TearDown();
     return WrapStatusIfNeeded(status, kSessionNotCreated);
@@ -1011,10 +1046,10 @@ void ConvertHexadecimalToIDAlphabet(std::string& id) {
   }
 }
 
-std::string GenerateExtensionId(const std::string& input) {
-  uint8_t hash[16];
-  crypto::SHA256HashString(input, hash, sizeof(hash));
-  std::string output = base::ToLowerASCII(base::HexEncode(hash));
+std::string GenerateExtensionId(std::string_view input) {
+  auto hash = crypto::hash::Sha256(input);
+  auto hash_first16 = base::span<uint8_t>(hash).first<16>();
+  std::string output = base::ToLowerASCII(base::HexEncode(hash_first16));
   ConvertHexadecimalToIDAlphabet(output);
   return output;
 }
@@ -1086,19 +1121,13 @@ Status ProcessExtension(const std::string& extension,
                                        static_cast<int>(result)));
     }
   } else {
-    // Not a CRX file. Generate RSA keypair to get a valid extension id.
-    std::unique_ptr<crypto::RSAPrivateKey> key_pair(
-        crypto::RSAPrivateKey::Create(2048));
-    if (!key_pair)
-      return Status(kUnknownError, "cannot generate RSA key pair");
-    std::vector<uint8_t> public_key_vector;
-    if (!key_pair->ExportPublicKey(&public_key_vector))
-      return Status(kUnknownError, "cannot extract public key");
-    std::string public_key =
-        std::string(reinterpret_cast<char*>(&public_key_vector.front()),
-                    public_key_vector.size());
-    id = GenerateExtensionId(public_key);
-    public_key_base64 = base::Base64Encode(public_key);
+    // Not a CRX file. Generate a fresh RSA key pair and use its public key as
+    // the extension's signing key. Note that the private key is discarded
+    // immediately so this key can never be used to actually sign anything.
+    std::vector<uint8_t> pubkey =
+        crypto::keypair::PrivateKey::GenerateRsa2048().ToSubjectPublicKeyInfo();
+    id = GenerateExtensionId(base::as_string_view(pubkey));
+    public_key_base64 = base::Base64Encode(pubkey);
   }
 
   // Unzip the crx file.

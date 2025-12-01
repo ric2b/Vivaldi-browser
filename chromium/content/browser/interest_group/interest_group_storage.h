@@ -195,7 +195,8 @@ class CONTENT_EXPORT InterestGroupStorage {
 
   // Clear out storage for the matching owning storage key.
   void DeleteInterestGroupData(
-      StoragePartition::StorageKeyMatcherFunction storage_key_matcher);
+      StoragePartition::StorageKeyMatcherFunction storage_key_matcher,
+      bool user_initiated_deletion);
   // Clear out all interest group storage including k-anonymity store.
   void DeleteAllInterestGroupData();
   // Update the interest group priority.
@@ -283,6 +284,34 @@ class CONTENT_EXPORT InterestGroupStorage {
   //
   // NOTE: This just calls EnsureDBInitialized() internally.
   void ResetIdleTimerForTesting();
+
+  // Used when compacting clickiness information. Represents the raw uncompacted
+  // and compacted protobuf events loaded directly from the
+  // view_and_click_events table, for one of either views or clicks.
+  //
+  // Compacted events have a timestamp and count and are older than 1 hour,
+  // whereas uncompacted events only have a timestamp.
+  //
+  // Exposed for use with `ComputeCompactClickinessForTesting()`.
+  struct ClickinessCompactionRawEvents {
+    std::string uncompacted_events;
+    std::string compacted_events;
+  };
+
+  // Computes compacted form of clickiness information stored as protos in
+  // the database, combining older events at lower time resolution.
+  static std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+  ComputeCompactClickinessForTesting(
+      base::Time now,
+      const InterestGroupStorage::ClickinessCompactionRawEvents& raw);
+
+  // Returns whether there is no entry for given
+  // (provider_origin, eligible_origin) in database view/click table.
+  //
+  // Returns nullopt in case of an error.
+  std::optional<bool> CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+      const url::Origin& provider_origin,
+      const url::Origin& eligible_origin);
 
  private:
   // Private constructor that allows changing the idle period, used by

@@ -10,6 +10,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
+#include "components/trusted_vault/standalone_trusted_vault_server_constants.h"
 #include "components/trusted_vault/trusted_vault_access_token_fetcher.h"
 #include "components/trusted_vault/trusted_vault_server_constants.h"
 #include "google_apis/credentials_mode.h"
@@ -186,7 +187,7 @@ void TrustedVaultRequest::OnAccessTokenFetched(
 }
 
 void TrustedVaultRequest::OnURLLoadComplete(
-    std::unique_ptr<std::string> response_body) {
+    std::optional<std::string> response_body) {
   int http_response_code = 0;
 
   if (url_loader_->ResponseInfo() && url_loader_->ResponseInfo()->headers) {
@@ -198,7 +199,11 @@ void TrustedVaultRequest::OnURLLoadComplete(
                                       url_loader_->NetError());
   }
 
-  std::string response_content = response_body ? *response_body : std::string();
+  if (!response_body) {
+    response_body = std::string();
+  }
+  const std::string& response_content = *response_body;
+
   if (http_response_code == 0) {
     backoff_entry_.InformOfRequest(/*succeeded=*/false);
     if (CanRetry()) {

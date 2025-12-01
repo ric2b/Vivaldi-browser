@@ -88,7 +88,9 @@ CalendarDatabase::CalendarDatabase()
            // Set the cache size. The page size, plus a little extra, times this
            // value, tells us how much memory the cache will use maximum.
            // 1000 * 4kB = 4MB
-           .set_cache_size(1000),
+           .set_cache_size(1000)
+           // Prime the cache.
+           .set_preload(true),
           "Calendar") {}
 
 CalendarDatabase::~CalendarDatabase() {}
@@ -111,9 +113,6 @@ sql::InitStatus CalendarDatabase::Init(const base::FilePath& calendar_name) {
   // Exclude the calendar file from backups.
   base::apple::SetBackupExclusion(calendar_name);
 #endif
-
-  // Prime the cache.
-  db_.Preload();
 
   // Create the tables and indices.
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))

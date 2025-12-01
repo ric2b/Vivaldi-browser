@@ -6,8 +6,7 @@ package org.chromium.chrome.browser.readaloud.player.expanded;
 
 import android.content.Context;
 
-import androidx.annotation.NonNull;
-
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.readaloud.player.InteractionHandler;
 import org.chromium.chrome.browser.readaloud.player.PlayerProperties;
 import org.chromium.chrome.browser.readaloud.player.R;
@@ -16,11 +15,12 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** Bottom sheet content for Read Aloud expanded player speed options menu. */
+@NullMarked
 class SpeedMenuSheetContent extends SingleMenuSheetContent {
     private static final String TAG = "ReadAloudSpeed";
     private final Context mContext;
     private final PropertyModel mModel;
-    private float[] mSpeeds = {0.5f, 0.8f, 1.0f, 1.2f, 1.5f, 2.0f, 3.0f, 4.0f};
+    private final float[] mSpeeds = {0.5f, 0.8f, 1.0f, 1.2f, 1.5f, 2.0f, 3.0f, 4.0f};
 
     SpeedMenuSheetContent(
             Context context,
@@ -56,7 +56,7 @@ class SpeedMenuSheetContent extends SingleMenuSheetContent {
 
     // BottomSheetContent
     @Override
-    public @NonNull String getSheetContentDescription(Context context) {
+    public String getSheetContentDescription(Context context) {
         return context.getString(R.string.readaloud_speed_menu_description);
     }
 }

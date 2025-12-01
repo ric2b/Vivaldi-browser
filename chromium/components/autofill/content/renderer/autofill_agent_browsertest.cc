@@ -16,6 +16,7 @@
 
 #include "base/feature_list.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/current_thread.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
@@ -307,11 +308,25 @@ TEST_F(AutofillAgentTestWithFeatures, FormsSeen_UpdatedForm) {
   }
 }
 
+class DetectRemovedFormControls {
+ public:
+  DetectRemovedFormControls()
+      : feature_(features::kAutofillDetectRemovedFormControls) {}
+
+ private:
+  base::test::ScopedFeatureList feature_;
+};
+
+// Inherit from DetectRemovedFormControls to initialize the feature before
+// Autofill agent.
+class AutofillAgentTestWithFeaturesAndRemovedControlsDetection
+    : private DetectRemovedFormControls,
+      public AutofillAgentTestWithFeatures {};
+
 // Tests that when AutofillDetectRemovedFormControls is enabled, Autofill is
 // directly notified of removed form elements.
-TEST_F(AutofillAgentTestWithFeatures, FormsSeen_RemovedInput) {
-  base::test::ScopedFeatureList scoped_feature_list{
-      features::kAutofillDetectRemovedFormControls};
+TEST_F(AutofillAgentTestWithFeaturesAndRemovedControlsDetection,
+       FormsSeen_RemovedInput) {
   {
     EXPECT_CALL(autofill_driver(), FormsSeen(SizeIs(1), SizeIs(0)));
     LoadHTML(R"(<body> <form><input></form> </body>)");
@@ -778,7 +793,7 @@ TEST_F(AutofillAgentTestWithFeatures,
                                &FormFieldData::datalist_options,
                                ElementsAre(SelectOption{.value = u"Strawberry"},
                                            SelectOption{.value = u"Apple"})))),
-                  _, _, _));
+                  _, _, _, Eq(std::nullopt)));
   autofill_agent().TriggerSuggestions(
       GetFieldRendererIdById("ff"),
       AutofillSuggestionTriggerSource::kFormControlElementClicked);
@@ -1554,7 +1569,8 @@ class AutofillAgentTestCaret
             .ShowSuggestions(
                 GetElement().DynamicTo<blink::WebFormControlElement>(),
                 AutofillSuggestionTriggerSource::kFormControlElementClicked,
-                /*form_cache=*/{});
+                /*form_cache=*/{},
+                /*password_request=*/std::nullopt);
         break;
       default:
         NOTREACHED();
@@ -1742,10 +1758,12 @@ TEST_P(AutofillAgentTestClick, MAYBE_AskForValuesToFillOnClick) {
     FieldRendererId field = GetFieldRendererIdById("f");
 
     EXPECT_CALL(checkpoint, Call("click on field"));
-    EXPECT_CALL(autofill_driver(), AskForValuesToFill(_, field, _, _));
+    EXPECT_CALL(autofill_driver(),
+                AskForValuesToFill(_, field, _, _, Eq(std::nullopt)));
 
     EXPECT_CALL(checkpoint, Call("click on field"));
-    EXPECT_CALL(autofill_driver(), AskForValuesToFill(_, field, _, _));
+    EXPECT_CALL(autofill_driver(),
+                AskForValuesToFill(_, field, _, _, Eq(std::nullopt)));
 
     EXPECT_CALL(checkpoint, Call("click outside of field"));
     EXPECT_CALL(autofill_driver(), AskForValuesToFill).Times(0);
@@ -1756,7 +1774,8 @@ TEST_P(AutofillAgentTestClick, MAYBE_AskForValuesToFillOnClick) {
         autofill_driver(),
         AskForValuesToFill(
             _, _, _,
-            AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick))
+            AutofillSuggestionTriggerSource::kTextareaFocusedWithoutClick,
+            Eq(std::nullopt)))
         .Times(AtMost(1));
   }
 

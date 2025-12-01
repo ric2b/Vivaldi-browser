@@ -33,7 +33,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "dawn/common/BitSetIterator.h"
+#include "dawn/common/ityp_bitset.h"
 #include "dawn/native/DawnNative.h"
 
 namespace dawn::native {
@@ -61,10 +61,12 @@ enum class Toggle {
     DisableBaseInstance,
     DisableIndexedDrawBuffers,
     DisableSampleVariables,
+    DisableBindGroupLayoutEntryArraySize,
     UseD3D12SmallShaderVisibleHeapForTesting,
     UseDXC,
     DisableRobustness,
     MetalEnableVertexPulling,
+    DisableTextureViewBindingUsedAsExternalTexture,
     AllowUnsafeAPIs,
     FlushBeforeClientWaitSync,
     UseTempBufferInSmallFormatTextureToTextureCopyFromGreaterToLessMipLevel,
@@ -115,6 +117,7 @@ enum class Toggle {
     UseBlitForFloat32TextureCopy,
     UseBlitForT2B,
     UseBlitForB2T,
+    GLUseArrayLengthFromUniform,
     D3D11DisableCPUUploadBuffers,
     UseT2B2TForSRGBTextureCopy,
     D3D12ReplaceAddWithMinusWhenDstFactorIsZeroAndSrcFactorIsDstAlpha,
@@ -148,6 +151,10 @@ enum class Toggle {
     D3D12RelaxMinSubgroupSizeTo8,
     D3D12RelaxBufferTextureCopyPitchAndOffsetAlignment,
     UseVulkanMemoryModel,
+    VulkanScalarizeClampBuiltin,
+    VulkanDirectVariableAccessTransformHandle,
+    VulkanAddWorkToEmptyResolvePass,
+    EnableIntegerRangeAnalysisInRobustness,
 
     // Unresolved issues.
     NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget,
@@ -159,6 +166,7 @@ enum class Toggle {
 
     D3D11UseUnmonitoredFence,
     D3D11DisableFence,
+    D3D11DelayFlushToGPU,
     IgnoreImportedAHardwareBufferVulkanImageSize,
 
     EnumCount,
@@ -168,13 +176,14 @@ enum class Toggle {
 // A wrapper of the bitset to store if a toggle is present or not. This wrapper provides the
 // convenience to convert the enums of enum class Toggle to the indices of a bitset.
 struct TogglesSet {
-    std::bitset<static_cast<size_t>(Toggle::EnumCount)> bitset;
-    using Iterator = BitSetIterator<static_cast<size_t>(Toggle::EnumCount), uint32_t>;
+    ityp::bitset<uint32_t, static_cast<size_t>(Toggle::EnumCount)> bitset;
+    using Iterator = ityp::bitset<uint32_t, static_cast<size_t>(Toggle::EnumCount)>::Iterator;
 
     void Set(Toggle toggle, bool enabled);
     bool Has(Toggle toggle) const;
     size_t Count() const;
-    Iterator Iterate() const;
+    Iterator begin() const { return bitset.begin(); }
+    Iterator end() const { return bitset.end(); }
 };
 
 namespace stream {

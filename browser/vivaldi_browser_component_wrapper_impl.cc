@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tab_helpers.h"
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
+#include "chrome/browser/ui/tabs/alert/tab_alert.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/eye_dropper/eye_dropper.h"
 #include "chrome/browser/ui/views/tab_dialogs_views.h"
@@ -67,6 +68,7 @@
 
 #include "components/sessions/core/tab_restore_service.h"
 
+#include "components/tabs/public/tab_interface.h"
 #include "components/tabs/tab_helpers.h"
 
 #include "components/translate/core/browser/translate_manager.h"
@@ -474,7 +476,7 @@ VivaldiBrowserComponentWrapperImpl::WebViewGuestOpenUrlFromTab(
               captive_portal::CaptivePortalWindowType::kNone;
       std::unique_ptr<ChromeNavigationUIData> navigation_ui_data =
           ChromeNavigationUIData::CreateForMainFrameNavigation(
-              target_contents.get(), params.disposition,
+              target_contents.get(),
               nav_params.is_using_https_as_default_scheme,
               force_no_https_upgrade);
       navigation_ui_data->set_navigation_initiated_from_sync(
@@ -875,8 +877,10 @@ void VivaldiBrowserComponentWrapperImpl::GetTabPerformanceData(
             ? 0
             : pre_discard_resource_usage->memory_footprint_estimate_kb() * 1024;
   } else {
+    auto* tab = tabs::TabInterface::MaybeGetFromContents(
+        web_contents);
     auto* const resource_tab_helper =
-        TabResourceUsageTabHelper::FromWebContents(web_contents);
+        tab->GetTabFeatures()->resource_usage_helper();
     memory_usage = (resource_tab_helper->GetMemoryUsageInBytes());
   }
 }
@@ -900,7 +904,7 @@ void VivaldiBrowserComponentWrapperImpl::LoadTabContentsIfNecessary(
   web_contents->SetUserData(::vivaldi::kVivaldiStartupTabUserDataKey, nullptr);
 }
 
-std::vector<TabAlertState>
+std::vector<tabs::TabAlert>
 VivaldiBrowserComponentWrapperImpl::GetTabAlertStatesForContents(
     content::WebContents* web_contents) {
   return ::GetTabAlertStatesForContents(web_contents);

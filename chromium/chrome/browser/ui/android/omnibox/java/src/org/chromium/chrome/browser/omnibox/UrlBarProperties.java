@@ -7,10 +7,9 @@ package org.chromium.chrome.browser.omnibox;
 import android.view.ActionMode;
 import android.view.View;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.omnibox.UrlBar.ScrollType;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlBarDelegate;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlBarTextContextMenuDelegate;
@@ -23,6 +22,7 @@ import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 import java.util.Locale;
 
 /** The model properties for the URL bar text component. */
+@NullMarked
 class UrlBarProperties {
     /** Contains the necessary information to update the text shown in the UrlBar. */
     static class UrlBarTextState {
@@ -69,19 +69,19 @@ class UrlBarProperties {
     /** Contains the necessary information to display inline autocomplete text. */
     static class AutocompleteText {
         /** The text preceding the autocomplete text (typically entered by the user). */
-        @NonNull public final String userText;
+        public final String userText;
 
         /** The inline autocomplete text to be appended to the end of the user text. */
-        @Nullable public final String autocompleteText;
+        public final @Nullable String autocompleteText;
 
         /**
          * This string is displayed adjacent to the omnibox if this match is the default. Will
          * usually be URL when autocompleting a title, and empty otherwise.
          */
-        @Nullable public final String additionalText;
+        public final @Nullable String additionalText;
 
         public AutocompleteText(
-                @NonNull String userText,
+                String userText,
                 @Nullable String autocompleteText,
                 @Nullable String additionalText) {
             this.userText = userText;
@@ -152,6 +152,10 @@ class UrlBarProperties {
     /** Specifies the color for url bar text. */
     public static final WritableIntPropertyKey TEXT_COLOR = new WritableIntPropertyKey();
 
+    /** Whether the url bar should use a small text size. */
+    public static final WritableBooleanPropertyKey USE_SMALL_TEXT =
+            new WritableBooleanPropertyKey();
+
     /** Specifies the color for url bar hint text. */
     public static final WritableIntPropertyKey HINT_TEXT_COLOR = new WritableIntPropertyKey();
 
@@ -174,8 +178,9 @@ class UrlBarProperties {
     public static final WritableObjectPropertyKey<View.OnLongClickListener> LONG_CLICK_LISTENER =
             new WritableObjectPropertyKey<>();
 
-    /** Specifies the resource ID for the url bar hint text. */
-    public static final WritableIntPropertyKey HINT_TEXT = new WritableIntPropertyKey();
+    /** Specifies the url bar hint text. */
+    public static final WritableObjectPropertyKey<String> HINT_TEXT =
+            new WritableObjectPropertyKey<>();
 
     public static final PropertyKey[] ALL_KEYS =
             new PropertyKey[] {
@@ -195,6 +200,7 @@ class UrlBarProperties {
                 INCOGNITO_COLORS_ENABLED,
                 HAS_URL_SUGGESTIONS,
                 TEXT_COLOR,
+                USE_SMALL_TEXT,
                 HINT_TEXT_COLOR,
                 SELECT_ALL_ON_FOCUS,
                 LONG_CLICK_LISTENER,

@@ -376,7 +376,6 @@ const char* ProtoEnumToString(sync_pb::SyncEnums::GetUpdatesOrigin origin) {
     ENUM_CASE(sync_pb::SyncEnums, NEW_CLIENT);
     ENUM_CASE(sync_pb::SyncEnums, RECONFIGURATION);
     ENUM_CASE(sync_pb::SyncEnums, GU_TRIGGER);
-    ENUM_CASE(sync_pb::SyncEnums, RETRY);
     ENUM_CASE(sync_pb::SyncEnums, PROGRAMMATIC);
   }
   NOTREACHED();
@@ -605,6 +604,19 @@ const char* ProtoEnumToString(
               RETRIEVAL_UNENROLLED_AND_NOT_ELIGIBLE);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard,
               RETRIEVAL_UNENROLLED_AND_ELIGIBLE);
+  }
+  NOTREACHED();
+}
+
+const char* ProtoEnumToString(
+    sync_pb::WalletMaskedCreditCard::CardBenefitSource card_benefit_source) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, CardBenefitSource, SOURCE_UNKNOWN,
+                     SOURCE_CURINOS);
+  switch (card_benefit_source) {
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, SOURCE_UNKNOWN);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, SOURCE_AMEX);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, SOURCE_BMO);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, SOURCE_CURINOS);
   }
   NOTREACHED();
 }

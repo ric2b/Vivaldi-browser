@@ -162,7 +162,9 @@ struct packet_helper {
 
   template <typename T>
   inline Packet load(const T* from, unsigned long long umask) const {
-    return internal::ploadu<Packet>(from, umask);
+    using UMaskType = typename numext::get_integer_by_size<internal::plain_enum_max(
+        internal::unpacket_traits<Packet>::size / CHAR_BIT, 1)>::unsigned_type;
+    return internal::ploadu<Packet>(from, static_cast<UMaskType>(umask));
   }
 
   template <typename T>
@@ -172,7 +174,9 @@ struct packet_helper {
 
   template <typename T>
   inline void store(T* to, const Packet& x, unsigned long long umask) const {
-    internal::pstoreu(to, x, umask);
+    using UMaskType = typename numext::get_integer_by_size<internal::plain_enum_max(
+        internal::unpacket_traits<Packet>::size / CHAR_BIT, 1)>::unsigned_type;
+    internal::pstoreu(to, x, static_cast<UMaskType>(umask));
   }
 
   template <typename T>

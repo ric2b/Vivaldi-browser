@@ -14,9 +14,11 @@
 
 use crate::codecs::Decoder;
 use crate::codecs::DecoderConfig;
+use crate::decoder::CodecChoice;
+use crate::decoder::GridImageHelper;
 use crate::image::Image;
 use crate::image::YuvRange;
-use crate::internal_utils::pixels::*;
+use crate::utils::pixels::*;
 use crate::*;
 
 use libgav1_sys::bindings::*;
@@ -35,6 +37,10 @@ pub struct Libgav1 {
 // unnecessary cast warnings.
 #[allow(clippy::unnecessary_cast)]
 impl Decoder for Libgav1 {
+    fn codec(&self) -> CodecChoice {
+        CodecChoice::Libgav1
+    }
+
     fn initialize(&mut self, config: &DecoderConfig) -> AvifResult<()> {
         if self.decoder.is_some() {
             return Ok(()); // Already initialized.
@@ -186,6 +192,15 @@ impl Decoder for Libgav1 {
             }
         }
         Ok(())
+    }
+
+    fn get_next_image_grid(
+        &mut self,
+        _payloads: &[Vec<u8>],
+        _spatial_id: u8,
+        _grid_image_helper: &mut GridImageHelper,
+    ) -> AvifResult<()> {
+        Err(AvifError::NotImplemented)
     }
 }
 

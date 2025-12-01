@@ -68,8 +68,10 @@ ContactDatabase::ContactDatabase()
            // Set the cache size. The page size, plus a little extra, times this
            // value, tells us how much memory the cache will use maximum.
            // 1000 * 4kB = 4MB
-           .set_cache_size(1000),
-          "Contact") {}
+           .set_cache_size(1000)
+           // Prime the cache.
+           .set_preload(true),
+           "Contact") {}
 
 ContactDatabase::~ContactDatabase() {}
 
@@ -98,9 +100,6 @@ sql::InitStatus ContactDatabase::Init(const base::FilePath& contact_db_name) {
   // Exclude the contact file from backups.
   base::apple::SetBackupExclusion(contact_db_name);
 #endif
-
-  // Prime the cache.
-  db_.Preload();
 
   // Create the tables and indices.
   // NOTE: If you add something here, also add it to

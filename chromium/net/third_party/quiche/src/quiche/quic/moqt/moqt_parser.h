@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
-#include <string>
 
 #include "absl/strings/string_view.h"
 #include "quiche/quic/core/quic_data_reader.h"
@@ -57,13 +56,12 @@ class QUICHE_EXPORT MoqtControlParserVisitor {
       const MoqtSubscribeAnnouncesError& message) = 0;
   virtual void OnUnsubscribeAnnouncesMessage(
       const MoqtUnsubscribeAnnounces& message) = 0;
-  virtual void OnMaxSubscribeIdMessage(const MoqtMaxSubscribeId& message) = 0;
+  virtual void OnMaxRequestIdMessage(const MoqtMaxRequestId& message) = 0;
   virtual void OnFetchMessage(const MoqtFetch& message) = 0;
   virtual void OnFetchCancelMessage(const MoqtFetchCancel& message) = 0;
   virtual void OnFetchOkMessage(const MoqtFetchOk& message) = 0;
   virtual void OnFetchErrorMessage(const MoqtFetchError& message) = 0;
-  virtual void OnSubscribesBlockedMessage(
-      const MoqtSubscribesBlocked& message) = 0;
+  virtual void OnRequestsBlockedMessage(const MoqtRequestsBlocked& message) = 0;
   virtual void OnObjectAckMessage(const MoqtObjectAck& message) = 0;
 
   virtual void OnParsingError(MoqtError code, absl::string_view reason) = 0;
@@ -86,27 +84,21 @@ class MoqtDataParserVisitor {
 
 class QUICHE_EXPORT MoqtControlParser {
  public:
-  MoqtControlParser(bool uses_web_transport, MoqtControlParserVisitor& visitor)
-      : visitor_(visitor), uses_web_transport_(uses_web_transport) {}
+  MoqtControlParser(bool uses_web_transport, quiche::ReadStream* stream,
+                    MoqtControlParserVisitor& visitor)
+      : visitor_(visitor),
+        stream_(*stream),
+        uses_web_transport_(uses_web_transport) {}
   ~MoqtControlParser() = default;
 
-  // Take a buffer from the transport in |data|. Parse each complete message and
-  // call the appropriate visitor function. If |fin| is true, there
-  // is no more data arriving on the stream, so the parser will deliver any
-  // message encoded as to run to the end of the stream.
-  // All bytes can be freed. Calls OnParsingError() when there is a parsing
-  // error.
-  // Any calls after sending |fin| = true will be ignored.
-  // TODO(martinduke): Figure out what has to happen if the message arrives via
-  // datagram rather than a stream.
-  void ProcessData(absl::string_view data, bool fin);
+  void ReadAndDispatchMessages();
 
  private:
   // The central switch statement to dispatch a message to the correct
   // Process* function. Returns 0 if it could not parse the full messsage
   // (except for object payload). Otherwise, returns the number of bytes
   // processed.
-  size_t ProcessMessage(absl::string_view data);
+  size_t ProcessMessage(absl::string_view data, MoqtMessageType message_type);
 
   // The Process* functions parse the serialized data into the appropriate
   // structs, and call the relevant visitor function for further action. Returns
@@ -132,49 +124,45 @@ class QUICHE_EXPORT MoqtControlParser {
   size_t ProcessSubscribeAnnouncesOk(quic::QuicDataReader& reader);
   size_t ProcessSubscribeAnnouncesError(quic::QuicDataReader& reader);
   size_t ProcessUnsubscribeAnnounces(quic::QuicDataReader& reader);
-  size_t ProcessMaxSubscribeId(quic::QuicDataReader& reader);
+  size_t ProcessMaxRequestId(quic::QuicDataReader& reader);
   size_t ProcessFetch(quic::QuicDataReader& reader);
   size_t ProcessFetchCancel(quic::QuicDataReader& reader);
   size_t ProcessFetchOk(quic::QuicDataReader& reader);
   size_t ProcessFetchError(quic::QuicDataReader& reader);
-  size_t ProcessSubscribesBlocked(quic::QuicDataReader& reader);
+  size_t ProcessRequestsBlocked(quic::QuicDataReader& reader);
   size_t ProcessObjectAck(quic::QuicDataReader& reader);
 
   // If |error| is not provided, assumes kProtocolViolation.
   void ParseError(absl::string_view reason);
   void ParseError(MoqtError error, absl::string_view reason);
 
-  // Reads an integer whose length is specified by a preceding VarInt62 and
-  // returns it in |result|. Returns false if parsing fails.
-  bool ReadVarIntPieceVarInt62(quic::QuicDataReader& reader, uint64_t& result);
-  // Read a parameter and return the value as a string_view. Returns false if
-  // |reader| does not have enough data.
-  bool ReadParameter(quic::QuicDataReader& reader, uint64_t& type,
-                     absl::string_view& value);
-  // Reads MoqtSubscribeParameter from one of the message types that supports
-  // it. The cursor in |reader| should point to the "number of parameters"
-  // field in the message. The cursor will move to the end of the parameters.
-  // Returns false if it could not parse the full message, in which case the
-  // cursor in |reader| should not be used.
-  bool ReadSubscribeParameters(quic::QuicDataReader& reader,
-                               MoqtSubscribeParameters& params);
-  // Convert a string view to a varint. Throws an error and returns false if the
-  // string_view is not exactly the right length.
-  bool StringViewToVarInt(absl::string_view& sv, uint64_t& vi);
-
   // Parses a message that a track namespace but not name. The last element of
   // |full_track_name| will be set to the empty string. Returns false if it
   // could not parse the full namespace field.
   bool ReadTrackNamespace(quic::QuicDataReader& reader,
                           FullTrackName& full_track_name);
+  // Translates raw key/value pairs into semantically meaningful formats.
+  // The spec defines many encoding errors in AUTHORIZATION TOKEN as
+  // request level. This treats them as session-level, unless they are a result
+  // of expiration, incorrect internal structure, or anything else not defined
+  // in the MoQT spec. It is allowed to promote request errors to session errors
+  // in MoQT. See also https://github.com/moq-wg/moq-transport/issues/964.
+  bool KeyValuePairListToVersionSpecificParameters(
+      const KeyValuePairList& parameters, VersionSpecificParameters& out);
+  bool ParseAuthTokenParameter(absl::string_view field,
+                               VersionSpecificParameters& out);
 
   MoqtControlParserVisitor& visitor_;
+  quiche::ReadStream& stream_;
   bool uses_web_transport_;
   bool no_more_data_ = false;  // Fatal error or fin. No more parsing.
   bool parsing_error_ = false;
 
-  std::string buffered_message_;
+  std::optional<uint64_t> message_type_;
+  std::optional<uint16_t> message_size_;
 
+  uint64_t max_auth_token_cache_size_ = 0;
+  uint64_t auth_token_cache_size_ = 0;
   bool processing_ = false;  // True if currently in ProcessData(), to prevent
                              // re-entrancy.
 };
@@ -245,8 +233,6 @@ class QUICHE_EXPORT MoqtDataParser {
 
   void ReadDataUntil(StopCondition stop_condition);
 
-  // Reads a single varint from the underlying stream.
-  std::optional<uint64_t> ReadVarInt62(bool& fin_read);
   // Reads a single varint from the underlying stream. Triggers a parse error if
   // a FIN has been encountered.
   std::optional<uint64_t> ReadVarInt62NoFin();

@@ -12,7 +12,7 @@ build_webui("build") {
     "webrtc_internals.html",
   ]
 
-  non_web_component_files = [
+  ts_files = [
     "candidate_grid.js",
     "data_series.js",
     "dump_creator.js",
@@ -22,6 +22,7 @@ build_webui("build") {
     "stats_rates_calculator.js",
     "stats_table.js",
     "tab_view.js",
+    "sdp_utils.js",
     "timeline_graph_view.js",
     "user_media_table.js",
     "webrtc_internals.js",

@@ -17,10 +17,6 @@
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-#if !defined(__has_feature) || !__has_feature(objc_arc)
-#error "This file requires ARC support."
-#endif
-
 typedef NS_ENUM(NSInteger, SectionIdentifier) {
   SectionIdentifierHeader = kSectionIdentifierEnumZero,
   SectionIdentifierEncryptionPassword,
@@ -44,11 +40,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
     UITextViewDelegate,
     UIDocumentPickerDelegate>
 
-@property(nonatomic, strong) VivaldiTableViewTextEditItem* encryptionPasswordItem;
+@property(nonatomic, strong)
+    VivaldiTableViewTextEditItem* encryptionPasswordItem;
 @property(nonatomic, strong) VivaldiTableViewIllustratedItem* header;
 @property(nonatomic, strong) NSURL* importURL;
 @property(nonatomic, strong) NSURL* resetURL;
-
 
 @end
 
@@ -90,16 +86,15 @@ typedef NS_ENUM(NSInteger, ItemType) {
     NSParagraphStyleAttributeName : paragraphStyle
   };
   _header.subtitle = [[NSAttributedString alloc]
-        initWithString:l10n_util::GetNSString(IDS_VIVALDI_DECRYPTION_TEXT)
-        attributes:textAttributes];
+      initWithString:l10n_util::GetNSString(IDS_VIVALDI_DECRYPTION_TEXT)
+          attributes:textAttributes];
 }
 
 - (void)setupLeftCancelButton {
-  UIBarButtonItem* cancelButton =
-      [[UIBarButtonItem alloc]
-          initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
-                               target:self
-                               action:@selector(dismissView)];
+  UIBarButtonItem* cancelButton = [[UIBarButtonItem alloc]
+      initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                           target:self
+                           action:@selector(dismissView)];
   self.customLeftBarButtonItem = cancelButton;
   self.navigationItem.leftBarButtonItem = self.customLeftBarButtonItem;
 }
@@ -116,16 +111,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [model addSectionWithIdentifier:SectionIdentifierLogOutButton];
   [model addSectionWithIdentifier:SectionIdentifierForgotPassphrase];
 
-  _header = [
-    [VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeHeader
-  ];
+  _header =
+      [[VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeHeader];
   _header.image = [UIImage imageNamed:kVivaldiIcon];
   _header.title =
       l10n_util::GetNSString(IDS_VIVALDI_SYNC_ENCRYPTION_PASSWORD_TITLE);
   [self setHeaderSubtitleText];
 
-  [model addItem:_header
-      toSectionWithIdentifier:SectionIdentifierHeader];
+  [model addItem:_header toSectionWithIdentifier:SectionIdentifierHeader];
 
   self.encryptionPasswordItem =
       [[VivaldiTableViewTextEditItem alloc] initWithType:ItemTypePassword];
@@ -140,21 +133,20 @@ typedef NS_ENUM(NSInteger, ItemType) {
   self.encryptionPasswordItem.autoCapitalizationType =
       UITextAutocapitalizationTypeNone;
   self.encryptionPasswordItem.identifyingIconAccessibilityLabel =
-    l10n_util::GetNSString(IDS_VIVALDI_IOS_SETTINGS_SHOW_PASSWORD_HINT);
+      l10n_util::GetNSString(IDS_VIVALDI_IOS_SETTINGS_SHOW_PASSWORD_HINT);
   [model addItem:self.encryptionPasswordItem
       toSectionWithIdentifier:SectionIdentifierEncryptionPassword];
 
   // Link & button
   VivaldiTableViewLinkAndButtonItem* linkAndButton =
-    [[VivaldiTableViewLinkAndButtonItem alloc]
-        initWithType:ItemTypeDecryptButton];
+      [[VivaldiTableViewLinkAndButtonItem alloc]
+          initWithType:ItemTypeDecryptButton];
   linkAndButton.reverseOrder = YES;
-  linkAndButton.buttonText =
-      l10n_util::GetNSString(IDS_VIVALDI_SYNC_DECRYPT);
+  linkAndButton.buttonText = l10n_util::GetNSString(IDS_VIVALDI_SYNC_DECRYPT);
   linkAndButton.textAlignment = NSTextAlignmentCenter;
 
   NSDictionary* linkAttributes = @{
-      NSLinkAttributeName : _importURL,
+    NSLinkAttributeName : _importURL,
   };
   NSMutableParagraphStyle* paragraphStyle =
       [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
@@ -172,20 +164,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
   linkAndButton.linkText = importText;
 
   [self.tableViewModel addItem:linkAndButton
-      toSectionWithIdentifier:SectionIdentifierDecryptButton];
+       toSectionWithIdentifier:SectionIdentifierDecryptButton];
 
   // Log out button
   VivaldiTableViewLinkAndButtonItem* logOutButton =
       [[VivaldiTableViewLinkAndButtonItem alloc]
           initWithType:ItemTypeLogOutButton];
-  logOutButton.buttonText =
-      l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_OUT);
+  logOutButton.buttonText = l10n_util::GetNSString(IDS_VIVALDI_ACCOUNT_LOG_OUT);
   logOutButton.textAlignment = NSTextAlignmentNatural;
   logOutButton.buttonBackgroundColor = [UIColor colorNamed:kBlueHaloColor];
   logOutButton.buttonTextColor = [UIColor colorNamed:kBlueColor];
 
   [self.tableViewModel addItem:logOutButton
-      toSectionWithIdentifier:SectionIdentifierLogOutButton];
+       toSectionWithIdentifier:SectionIdentifierLogOutButton];
 
   // Forgot passphrase
   [self addForgotPassphraseSection];
@@ -251,8 +242,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
     }
     case ItemTypeForgotPassphrase: {
       VivaldiTableViewAttributedTextViewCell* editCell =
-        base::apple::ObjCCastStrict<VivaldiTableViewAttributedTextViewCell>(
-          cell);
+          base::apple::ObjCCastStrict<VivaldiTableViewAttributedTextViewCell>(
+              cell);
       editCell.textView.delegate = self;
       break;
     }
@@ -265,26 +256,27 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark - UITextViewDelegate
 
-- (BOOL)textView:(UITextView*)textView
-    shouldInteractWithURL:(NSURL*)URL
-                  inRange:(NSRange)characterRange
-              interaction:(UITextItemInteraction)interaction {
-  if ([URL isEqual:_resetURL]) {
-    [self showDeleteDataDialog];
-  }
-  if ([URL isEqual:_importURL]) {
-    UIDocumentPickerViewController* picker =
-      [[UIDocumentPickerViewController alloc]
-       initForOpeningContentTypes:@[[UTType typeWithFilenameExtension:@"txt"]]];
-    picker.directoryURL =
-        [NSURL fileURLWithPath:GetDocumentsFolderPath() isDirectory:YES];
-    picker.delegate = self;
-
-    [self presentViewController:picker animated:YES completion:nil];
-  }
-
-  // Returns NO as the app is handling it.
-  return NO;
+- (UIAction*)textView:(UITextView*) textView
+primaryActionForTextItem:(UITextItem*)textItem
+        defaultAction:(UIAction*) defaultAction {
+  __weak __typeof__(self) weakSelf = self;
+  return [UIAction actionWithHandler:^(UIAction* action) {
+    __strong __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) return;
+    if ([textItem.link isEqual:strongSelf->_resetURL]) {
+      [strongSelf showDeleteDataDialog];
+    }
+    if ([textItem.link isEqual:strongSelf->_importURL]) {
+      UIDocumentPickerViewController* picker =
+          [[UIDocumentPickerViewController alloc]
+              initForOpeningContentTypes:@[
+                  [UTType typeWithFilenameExtension:@"txt"]]];
+      picker.directoryURL =
+          [NSURL fileURLWithPath:GetDocumentsFolderPath() isDirectory:YES];
+      picker.delegate = weakSelf;
+      [strongSelf presentViewController:picker animated:YES completion:nil];
+    }
+  }];
 }
 
 #pragma mark - UITextFieldDelegate
@@ -298,14 +290,14 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)documentPicker:(UIDocumentPickerViewController*)controller
     didPickDocumentsAtURLs:(NSArray<NSURL*>*)urls {
-
   if ([urls count] < 1)
     return;
   NSURL* fileSelected = [urls objectAtIndex:0];
 
   if (![fileSelected startAccessingSecurityScopedResource]) {
-    [self showErrorCellWithMessage:l10n_util::GetNSString(
-      IDS_VIVALDI_SYNC_ENCRYPTION_FILE_PERMISSION_ERROR)
+    [self showErrorCellWithMessage:
+              l10n_util::GetNSString(
+                  IDS_VIVALDI_SYNC_ENCRYPTION_FILE_PERMISSION_ERROR)
                            section:SectionIdentifierEncryptionPassword
                           itemType:ItemTypeError];
     [fileSelected stopAccessingSecurityScopedResource];
@@ -313,16 +305,18 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
 
   __weak __typeof__(self) weakSelf = self;
-  [self.delegate importPasskey:fileSelected
+  [self.delegate
+          importPasskey:fileSelected
       completionHandler:^(NSString* errorMessage) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if ([errorMessage length]) {
-        [weakSelf showErrorCellWithMessage:errorMessage
-                                   section:SectionIdentifierEncryptionPassword
-                                  itemType:ItemTypeError];
-      }
-    });
-  }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+          if ([errorMessage length]) {
+            [weakSelf
+                showErrorCellWithMessage:errorMessage
+                                 section:SectionIdentifierEncryptionPassword
+                                itemType:ItemTypeError];
+          }
+        });
+      }];
   [fileSelected stopAccessingSecurityScopedResource];
 }
 
@@ -330,11 +324,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)showDeleteDataDialog {
   UIAlertController* alertController = [UIAlertController
-      alertControllerWithTitle:l10n_util::GetNSString(
-          IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE)
-        message:l10n_util::GetNSString(
-          IDS_VIVALDI_SYNC_FORGOT_ENCRYPTION_PASSWORD)
-        preferredStyle:UIAlertControllerStyleAlert];
+      alertControllerWithTitle:
+          l10n_util::GetNSString(
+              IDS_VIVALDI_SYNC_CONFIRM_CLEAR_SERVER_DATA_TITLE)
+                       message:l10n_util::GetNSString(
+                                   IDS_VIVALDI_SYNC_FORGOT_ENCRYPTION_PASSWORD)
+                preferredStyle:UIAlertControllerStyleAlert];
   __weak __typeof(self) weakSelf = self;
 
   UIAlertAction* deleteAction = [UIAlertAction
@@ -347,7 +342,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   UIAlertAction* cancelAction = [UIAlertAction
       actionWithTitle:l10n_util::GetNSString(
-          IDS_VIVALDI_SYNC_CANCEL_CLEAR_SERVER_DATA_MESSAGE)
+                          IDS_VIVALDI_SYNC_CANCEL_CLEAR_SERVER_DATA_MESSAGE)
                 style:UIAlertActionStyleCancel
               handler:^(UIAlertAction* action){
               }];
@@ -357,11 +352,11 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)addForgotPassphraseSection {
   VivaldiTableViewAttributedTextViewItem* forgotPassphraseItem =
-    [[VivaldiTableViewAttributedTextViewItem alloc]
-      initWithType:ItemTypeForgotPassphrase];
+      [[VivaldiTableViewAttributedTextViewItem alloc]
+          initWithType:ItemTypeForgotPassphrase];
 
   NSDictionary* linkAttributes = @{
-      NSLinkAttributeName : _resetURL,
+    NSLinkAttributeName : _resetURL,
   };
   NSMutableParagraphStyle* paragraphStyle =
       [[NSParagraphStyle defaultParagraphStyle] mutableCopy];
@@ -378,7 +373,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   forgotPassphraseItem.text = resetText;
   [self.tableViewModel addItem:forgotPassphraseItem
-        toSectionWithIdentifier:SectionIdentifierForgotPassphrase];
+       toSectionWithIdentifier:SectionIdentifierForgotPassphrase];
 }
 
 - (void)logOutButtonPressed:(UIButton*)sender {
@@ -393,32 +388,34 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (void)decryptButtonPressed:(UIButton*)sender {
   if ([self.encryptionPasswordItem.textFieldValue length] == 0) {
-    [self showErrorCellWithMessage:l10n_util::GetNSString(
-        IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED)
+    [self showErrorCellWithMessage:
+              l10n_util::GetNSString(
+                  IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_REQUIRED)
                            section:SectionIdentifierEncryptionPassword
                           itemType:ItemTypeError];
     return;
   } else {
     [self removeErrorCell:SectionIdentifierEncryptionPassword
-                itemType:ItemTypeError];
+                 itemType:ItemTypeError];
   }
 
   __weak __typeof__(self) weakSelf = self;
   [self.delegate decryptButtonPressed:self.encryptionPasswordItem.textFieldValue
-      completionHandler:^(BOOL success) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-      if (!success) {
-        [weakSelf showPasswordWrongMessage];
-      }
-    });
-  }];
+                    completionHandler:^(BOOL success) {
+                      dispatch_async(dispatch_get_main_queue(), ^{
+                        if (!success) {
+                          [weakSelf showPasswordWrongMessage];
+                        }
+                      });
+                    }];
 }
 
 - (void)showPasswordWrongMessage {
-  [self showErrorCellWithMessage:l10n_util::GetNSString(
-      IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG)
-                      section:SectionIdentifierEncryptionPassword
-                    itemType:ItemTypeError];
+  [self showErrorCellWithMessage:
+            l10n_util::GetNSString(
+                IDS_VIVALDI_ACCOUNT_ENCRYPTION_PASSPHRASE_WRONG)
+                         section:SectionIdentifierEncryptionPassword
+                        itemType:ItemTypeError];
 }
 
 - (void)dismissView {

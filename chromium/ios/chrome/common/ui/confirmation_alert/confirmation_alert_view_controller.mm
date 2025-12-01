@@ -112,7 +112,6 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
 
 // References to the UI properties that need to be updated when the trait
 // collection changes.
-@property(nonatomic, strong) UIButton* secondaryActionButton;
 @property(nonatomic, strong) UIButton* tertiaryActionButton;
 @property(nonatomic, strong) UINavigationBar* navigationBar;
 @property(nonatomic, strong) UIImageView* imageView;
@@ -181,8 +180,8 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
   }
 
   if (self.titleString.length) {
-    UILabel* title = [self createTitleLabel];
-    [stackSubviews addObject:title];
+    self.titleLabel = [self createTitleLabel];
+    [stackSubviews addObject:self.titleLabel];
   }
 
   if (self.secondaryTitleString.length) {
@@ -794,7 +793,8 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
   UITextView* subtitle = [self createTextView];
   subtitle.font = [UIFont preferredFontForTextStyle:self.subtitleTextStyle];
   subtitle.text = self.subtitleString;
-  subtitle.textColor = [UIColor colorNamed:kTextSecondaryColor];
+  subtitle.textColor =
+      self.subtitleTextColor ?: [UIColor colorNamed:kTextSecondaryColor];
   subtitle.accessibilityIdentifier =
       kConfirmationAlertSubtitleAccessibilityIdentifier;
   [self customizeSubtitle:subtitle];
@@ -861,7 +861,7 @@ UIImage* DefaultCheckmarkCircleFillSymbol(CGFloat point_size) {
   }
 
   if (self.secondaryActionString) {
-    self.secondaryActionButton = [self createSecondaryActionButton];
+    _secondaryActionButton = [self createSecondaryActionButton];
     [actionStackView addArrangedSubview:self.secondaryActionButton];
   }
   // Tertiary button should show above the primary one.

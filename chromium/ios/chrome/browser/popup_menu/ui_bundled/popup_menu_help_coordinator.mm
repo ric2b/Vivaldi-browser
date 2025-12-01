@@ -15,11 +15,11 @@
 #import "components/send_tab_to_self/features.h"
 #import "components/sync/service/sync_service.h"
 #import "ios/chrome/app/tests_hook.h"
+#import "ios/chrome/browser/bubble/model/utils.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_constants.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
-#import "ios/chrome/browser/iph_for_new_chrome_user/model/utils.h"
 #import "ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/overflow_menu_action_provider.h"
 #import "ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/overflow_menu_constants.h"
@@ -80,6 +80,10 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 @implementation PopupMenuHelpCoordinator {
   raw_ptr<segmentation_platform::DeviceSwitcherResultDispatcher>
       _deviceSwitcherResultDispatcher;
+
+  // Whether the coordinator has been stopped.
+  // TODO(crbug.com/424761561): Remove when crashes stop.
+  BOOL _stopped;
 }
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
@@ -98,9 +102,8 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 #pragma mark - Getters
 
 - (feature_engagement::Tracker*)featureEngagementTracker {
-  if (!self.profile) {
-    return nullptr;
-  }
+  CHECK(!_stopped, base::NotFatalUntil::M147)
+      << "PopupMenuHelpCoordinator used after -stop";
   feature_engagement::Tracker* tracker =
       feature_engagement::TrackerFactory::GetForProfile(self.profile);
   DCHECK(tracker);
@@ -134,6 +137,8 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 }
 
 - (void)stop {
+  _stopped = YES;
+
   SceneState* sceneState = self.browser->GetSceneState();
   [sceneState removeObserver:self];
 }
@@ -260,10 +265,8 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 
 // Returns whether blue dot should be shown.
 - (BOOL)shouldShowBlueDot {
-  // Don't show blue dot if cannot make a decision.
-  if (!self.profile) {
-    return NO;
-  }
+  CHECK(!_stopped, base::NotFatalUntil::M147)
+      << "PopupMenuHelpCoordinator used after -stop";
 
   // As sync error takes precendence on blue dot for settings destination in the
   // overflow menu. In that case don't show blue dot as the full path from
@@ -367,8 +370,7 @@ base::TimeDelta kPromoDisplayDelayForTests = base::Seconds(1);
 }
 
 - (void)showPopupMenuBubbleIfNecessary {
-  if (!iph_for_new_chrome_user::IsUserNewSafariSwitcher(
-          _deviceSwitcherResultDispatcher)) {
+  if (!IsUserNewSafariSwitcher(_deviceSwitcherResultDispatcher)) {
     return;
   }
 

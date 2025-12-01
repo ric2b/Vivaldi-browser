@@ -46,7 +46,7 @@ const CGFloat kMinimumSizeChange = 0.5;
 #pragma mark - Accessors
 
 - (CGRect)bannerFrame {
-  DCHECK(self.bannerPositioner);
+  CHECK(self.bannerPositioner);
   UIWindow* window = self.containerView.window;
   CGRect bannerFrame = CGRectZero;
 
@@ -92,6 +92,9 @@ const CGFloat kMinimumSizeChange = 0.5;
 }
 
 - (void)presentationTransitionWillBegin {
+  if (!self.bannerPositioner) {
+    return;
+  }
   UIView* containerView = self.containerView;
   containerView.frame =
       [containerView.superview convertRect:self.bannerFrame
@@ -99,19 +102,27 @@ const CGFloat kMinimumSizeChange = 0.5;
 }
 
 - (void)containerViewWillLayoutSubviews {
+  if (!self.bannerPositioner) {
+    [super containerViewWillLayoutSubviews];
+    return;
+  }
   CGRect bannerFrame = self.bannerFrame;
   UIView* containerView = self.containerView;
   UIWindow* window = containerView.window;
 
-  UIView* bannerView = self.presentedView;
-  CGRect newFrame = [bannerView.superview convertRect:bannerFrame
-                                             fromView:window];
-  if (std::fabs(newFrame.size.height - bannerView.frame.size.height) >
+  // Only update the container frame
+  CGRect newContainerFrame = [containerView.superview convertRect:bannerFrame
+                                                         fromView:window];
+  if (std::fabs(newContainerFrame.origin.x - containerView.frame.origin.x) >
           kMinimumSizeChange ||
-      std::fabs(newFrame.size.width - bannerView.frame.size.width) >
+      std::fabs(newContainerFrame.origin.y - containerView.frame.origin.y) >
+          kMinimumSizeChange ||
+      std::fabs(newContainerFrame.size.height -
+                containerView.frame.size.height) > kMinimumSizeChange ||
+      std::fabs(newContainerFrame.size.width - containerView.frame.size.width) >
           kMinimumSizeChange) {
-    bannerView.frame = newFrame;
-    containerView.frame = newFrame;
+    // TODO(crbug.com/417966829): Look into never setting the `containerView`.
+    containerView.frame = newContainerFrame;
     self.needsLayout = YES;
   }
 

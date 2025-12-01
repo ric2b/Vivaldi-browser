@@ -25,8 +25,10 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable rulesdir/check-license-header */
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../../../core/common/common.js';
+import * as Host from '../../../../core/host/host.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
@@ -136,17 +138,13 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       ((node: any, columnId: string, valueBeforeEditing: any, newText: any, moveDirection?: string) => void)|undefined;
   deleteCallback: ((arg0: any) => void)|undefined;
   refreshCallback: (() => void)|undefined;
-  private dataTableHeaders: {
-    [x: string]: Element,
-  };
+  private dataTableHeaders: Record<string, Element>;
   scrollContainerInternal: Element;
   private dataContainerInternal: Element;
   private readonly dataTable: Element;
   protected inline: boolean;
   private columnsArray: ColumnDescriptor[];
-  columns: {
-    [x: string]: ColumnDescriptor,
-  };
+  columns: Record<string, ColumnDescriptor>;
   visibleColumnsArray: ColumnDescriptor[];
   cellClass: string|null;
   private dataTableHeadInternal: HTMLTableSectionElement;
@@ -604,12 +602,11 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     }
     const column = this.visibleColumnsArray[cellIndex];
     if (column.dataType === DataType.BOOLEAN) {
-      const checkboxLabel = UI.UIUtils.CheckboxLabel.create(undefined, (node.data[column.id] as boolean));
-      UI.ARIAUtils.setLabel(checkboxLabel, column.title || '');
+      const checkboxElement = UI.UIUtils.CheckboxLabel.create(undefined, (node.data[column.id] as boolean));
+      UI.ARIAUtils.setLabel(checkboxElement, column.title || '');
 
       let hasChanged = false;
-      checkboxLabel.style.height = '100%';
-      const checkboxElement = checkboxLabel.checkboxElement;
+      checkboxElement.style.height = '100%';
       checkboxElement.classList.add('inside-datagrid');
       const initialValue = checkboxElement.checked;
 
@@ -643,7 +640,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       }, false);
 
       element.innerHTML = '';
-      element.appendChild(checkboxLabel);
+      element.appendChild(checkboxElement);
       checkboxElement.focus();
     } else {
       UI.InplaceEditor.InplaceEditor.startEditing(element, this.startEditingConfig(element));
@@ -1011,9 +1008,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (!this.columnWeightsSetting) {
       return;
     }
-    const weights: {
-      [x: string]: any,
-    } = {};
+    const weights: Record<string, any> = {};
     for (let i = 0; i < this.columnsArray.length; ++i) {
       const column = this.columnsArray[i];
       weights[column.id] = column.weight;
@@ -1138,9 +1133,7 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     if (this.creationNode) {
       this.creationNode.isCreationNode = false;
     }
-    const emptyData: {
-      [x: string]: any,
-    } = {};
+    const emptyData: Record<string, any> = {};
     for (const column in this.columns) {
       emptyData[column] = null;
     }
@@ -1306,6 +1299,20 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     return (cellElement && nodeToColumnIdMap.get(cellElement)) || null;
   }
 
+  /**
+   * Mark the data-grid as inert, meaning that it will not capture any user interactions.
+   * Useful in some panels where the empty state is actually an absolutely
+   * positioned div put over the panel, and in that case we need to ensure the
+   * hidden, empty data grid, does not capture any user interaction - in particular if they tab through the UI.
+   */
+  setInert(isInert: boolean): void {
+    if (isInert) {
+      this.element.setAttribute('inert', 'inert');
+    } else {
+      this.element.removeAttribute('inert');
+    }
+  }
+
   private clickInHeaderCell(event: Event): void {
     const cell = UI.UIUtils.enclosingNodeOrSelfWithNodeName((event.target as Node), 'th');
     if (!cell) {
@@ -1374,7 +1381,20 @@ export class DataGridImpl<T> extends Common.ObjectWrapper.ObjectWrapper<EventTyp
       return;
     }
 
-    if ((event as MouseEvent).metaKey) {
+    /**
+     * Support Meta-Click (Cmd/Alt) or Ctrl-Click to toggle; if the row is
+     * selected we will then deselect it. You might think: why do we even gate
+     * this behind an additional key?
+     * Well, we tried to change that, but there are instances where we have
+     * multiple click handlers on a row, and so we cannot rely on select() only
+     * being called once. Sometimes by the time this event listener gets called,
+     * another click() handler has already marked this node as selected, so if
+     * we deselect it here, we are making the user unable to actually select a
+     * node. See crbug.com/409474445 for some cotext
+     */
+    const mouseEvent = event as MouseEvent;
+    const modifier = Host.Platform.platform() === 'mac' ? mouseEvent.metaKey : mouseEvent.ctrlKey;
+    if (modifier) {
       if (gridNode.selected) {
         gridNode.deselect();
       } else {
@@ -1694,9 +1714,7 @@ export const enum ResizeMethod {
   LAST = 'last',
 }
 
-export interface DataGridData {
-  [key: string]: any;
-}
+export type DataGridData = Record<string, any>;
 
 export class DataGridNode<T> {
   elementInternal: HTMLElement|null = null;
@@ -2482,11 +2500,7 @@ export class DataGridNode<T> {
 
 export class CreationDataGridNode<T> extends DataGridNode<T> {
   override isCreationNode: boolean;
-  constructor(
-      data?: {
-        [x: string]: any,
-      }|null,
-      hasChildren?: boolean) {
+  constructor(data?: Record<string, any>|null, hasChildren?: boolean) {
     super(data, hasChildren);
     this.isCreationNode = true;
   }

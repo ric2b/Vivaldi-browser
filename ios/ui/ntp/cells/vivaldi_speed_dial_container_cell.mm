@@ -52,7 +52,8 @@
     frequentlyVisited:(BOOL)frequentlyVisited
     topSitesAvailable:(BOOL)topSitesAvailable
      topToolbarHidden:(BOOL)topToolbarHidden
-    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
+    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass
+            wallpaper:(UIImage*)wallpaper {
   [self.speedDialView configureWith:speedDials
                              parent:parent
                       faviconLoader:faviconLoader
@@ -63,7 +64,8 @@
                   frequentlyVisited:frequentlyVisited
                   topSitesAvailable:topSitesAvailable
                    topToolbarHidden:topToolbarHidden
-                  verticalSizeClass:verticalSizeClass];
+                  verticalSizeClass:verticalSizeClass
+                          wallpaper:wallpaper];
 }
 
 - (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style

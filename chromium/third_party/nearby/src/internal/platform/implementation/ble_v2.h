@@ -17,11 +17,9 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <limits>
-#include <map>
 #include <memory>
-#include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
@@ -30,10 +28,12 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/optional.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/cancellation_flag.h"
 #include "internal/platform/exception.h"
 #include "internal/platform/input_stream.h"
+#include "internal/platform/mac_address.h"
 #include "internal/platform/output_stream.h"
 #include "internal/platform/uuid.h"
 
@@ -87,6 +87,11 @@ struct BleAdvertisementData {
 class BlePeripheral {
  public:
   using UniqueId = std::uint64_t;
+
+  BlePeripheral(UniqueId unique_id, MacAddress address)
+      : unique_id_(unique_id), address_(std::move(address)) {}
+  explicit BlePeripheral(UniqueId unique_id = 0)
+      : unique_id_(unique_id) {}
   virtual ~BlePeripheral() = default;
 
   // https://developer.android.com/reference/android/bluetooth/BluetoothDevice#getAddress()
@@ -94,11 +99,30 @@ class BlePeripheral {
   // Returns the current address.
   //
   // This will always be an empty string on Apple platforms.
-  virtual std::string GetAddress() const = 0;
+  virtual std::string GetAddress() const {
+    if (address_.IsSet()) {
+      return address_.ToString();
+    }
+    return "";
+  }
 
   // Returns an immutable unique identifier. The identifier must not change when
   // the BLE address is rotated.
-  virtual UniqueId GetUniqueId() const = 0;
+  virtual UniqueId GetUniqueId() const { return unique_id_; }
+
+  // Sets platform specific data that can be retrieved by `GetPlatformData()`.
+  void SetPlatformData(void* platform_data) {
+    platform_data_ = platform_data;
+  }
+
+  void* GetPlatformData() const { return platform_data_; }
+
+  bool IsSet() const { return GetUniqueId() != 0 || !GetAddress().empty(); }
+
+ private:
+  UniqueId unique_id_ = 0;
+  MacAddress address_;
+  void* platform_data_ = nullptr;
 };
 
 // https://developer.android.com/reference/android/bluetooth/BluetoothGattCharacteristic
@@ -246,9 +270,6 @@ class GattServer {
  public:
   virtual ~GattServer() = default;
 
-  // Returns the local BlePeripheral.
-  virtual BlePeripheral& GetBlePeripheral() = 0;
-
   // Creates a characteristic and adds it to the GATT server under the given
   // characteristic and service UUIDs. Returns no value upon error.
   //
@@ -319,14 +340,14 @@ struct ServerGattConnectionCallback {
   // `GattServer::UpdateCharacteristic()`, then reading from the characteristic
   // yields that static value. The read callback is not called.
   // Otherwise, the gatt server calls the read callback to get the value.
-  absl::AnyInvocable<void(const BlePeripheral& remote_device,
+  absl::AnyInvocable<void(const BlePeripheral::UniqueId remote_device_id,
                           const GattCharacteristic& characteristic, int offset,
                           ReadValueCallback callback)>
       on_characteristic_read_cb;
 
   // Called when a gatt client is writing to the characteristic.
   // Must call `callback` with the write result.
-  absl::AnyInvocable<void(const BlePeripheral& remote_device,
+  absl::AnyInvocable<void(const BlePeripheral::UniqueId remote_device_id,
                           const GattCharacteristic& characteristic, int offset,
                           absl::string_view data, WriteValueCallback callback)>
       on_characteristic_write_cb;
@@ -354,9 +375,8 @@ class BleSocket {
   // Returns Exception::kIo on error, Exception::kSuccess otherwise.
   virtual Exception Close() = 0;
 
-  // Returns valid BlePeripheral pointer if there is a connection, and
-  // nullptr otherwise.
-  virtual BlePeripheral* GetRemotePeripheral() = 0;
+  // Returns BlePeripheral::UniqueId that is connected to this socket.
+  virtual BlePeripheral::UniqueId GetRemotePeripheralId() = 0;
 };
 
 // A BLE GATT server socket for listening incoming GATT socket.
@@ -403,13 +423,16 @@ class BleL2capSocket {
 
   // Returns valid BlePeripheral pointer if there is a connection, and
   // nullptr otherwise.
-  virtual BlePeripheral* GetRemotePeripheral() = 0;
+  virtual BlePeripheral::UniqueId GetRemotePeripheralId() = 0;
 };
 
 // A BLE L2CAP server socket for listening incoming L2CAP socket.
 class BleL2capServerSocket {
  public:
   virtual ~BleL2capServerSocket() = default;
+
+  // Gets PSM value has been published by the server.
+  virtual int GetPSM() const = 0;
 
   // Blocks until either:
   // - at least one incoming connection request is available, or
@@ -428,7 +451,6 @@ class BleL2capServerSocket {
 // for all BLE and GATT related operations.
 class BleMedium {
  public:
-  using GetRemotePeripheralCallback = absl::AnyInvocable<void(BlePeripheral&)>;
   virtual ~BleMedium() = default;
 
   // https://developer.android.com/reference/android/bluetooth/le/BluetoothLeAdvertiser.html#startAdvertising(android.bluetooth.le.AdvertiseSettings,%20android.bluetooth.le.AdvertiseData,%20android.bluetooth.le.AdvertiseData,%20android.bluetooth.le.AdvertiseCallback)
@@ -473,9 +495,10 @@ class BleMedium {
   // The peripheral is owned by platform implementation and it should outlive
   // for the whole peripheral(device) connection life cycle.
   struct ScanCallback {
-    absl::AnyInvocable<void(BlePeripheral& peripheral,
+    absl::AnyInvocable<void(BlePeripheral::UniqueId peripheral_id,
                             BleAdvertisementData advertisement_data)>
-        advertisement_found_cb = [](BlePeripheral&, BleAdvertisementData) {};
+        advertisement_found_cb =
+            [](BlePeripheral::UniqueId, BleAdvertisementData) {};
   };
 
   // https://developer.android.com/reference/android/bluetooth/le/BluetoothLeScanner.html#startScan(java.util.List%3Candroid.bluetooth.le.ScanFilter%3E,%20android.bluetooth.le.ScanSettings,%20android.bluetooth.le.ScanCallback)
@@ -512,6 +535,10 @@ class BleMedium {
   // Stops scanning.
   virtual bool StopScanning() = 0;
 
+  virtual bool PauseMediumScanning() { return true; }
+
+  virtual bool ResumeMediumScanning() { return true; }
+
   struct ScanningSession {
     absl::AnyInvocable<absl::Status()> stop_scanning;
   };
@@ -519,11 +546,12 @@ class BleMedium {
   struct ScanningCallback {
     absl::AnyInvocable<void(absl::Status)> start_scanning_result =
         [](absl::Status) {};
-    absl::AnyInvocable<void(BlePeripheral& peripheral,
+    absl::AnyInvocable<void(BlePeripheral::UniqueId peripheral_id,
                             BleAdvertisementData advertisement_data)>
-        advertisement_found_cb = [](BlePeripheral&, BleAdvertisementData) {};
-    absl::AnyInvocable<void(BlePeripheral& peripheral)> advertisement_lost_cb =
-        [](BlePeripheral&) {};
+        advertisement_found_cb =
+            [](BlePeripheral::UniqueId, BleAdvertisementData) {};
+    absl::AnyInvocable<void(BlePeripheral::UniqueId peripheral_id)>
+        advertisement_lost_cb = [](BlePeripheral::UniqueId) {};
   };
 
   // Async interface for StartScanning.
@@ -553,7 +581,7 @@ class BleMedium {
   //   LOW:
   //     - Connection interval = ~100ms - 125ms
   virtual std::unique_ptr<GattClient> ConnectToGattServer(
-      BlePeripheral& peripheral, TxPowerLevel tx_power_level,
+      BlePeripheral::UniqueId peripheral_id, TxPowerLevel tx_power_level,
       ClientGattConnectionCallback callback) = 0;
 
   // Opens a BLE server socket based on service ID.
@@ -567,6 +595,7 @@ class BleMedium {
   //
   // On success, returns a new BleL2capServerSocket.
   // On error, returns nullptr.
+  // Platform implementation should override this method if it supports L2CAP.
   virtual std::unique_ptr<BleL2capServerSocket> OpenL2capServerSocket(
       const std::string& service_id) {
     return nullptr;
@@ -578,33 +607,23 @@ class BleMedium {
   // On error, returns nullptr.
   virtual std::unique_ptr<BleSocket> Connect(
       const std::string& service_id, TxPowerLevel tx_power_level,
-      BlePeripheral& peripheral, CancellationFlag* cancellation_flag) = 0;
+      BlePeripheral::UniqueId peripheral_id,
+      CancellationFlag* cancellation_flag) = 0;
 
   // Connects to a BLE peripheral over L2CAP.
   //
   // On success, returns a new BleL2capSocket.
   // On error, returns nullptr.
+  // Platform implementation should override this method if it supports L2CAP.
   virtual std::unique_ptr<BleL2capSocket> ConnectOverL2cap(
-      const std::string& service_id, TxPowerLevel tx_power_level,
-      BlePeripheral& peripheral, CancellationFlag* cancellation_flag) {
+      int psm, const std::string& service_id, TxPowerLevel tx_power_level,
+      BlePeripheral::UniqueId peripheral_id,
+      CancellationFlag* cancellation_flag) {
     return nullptr;
   }
 
   // Requests if support extended advertisement.
   virtual bool IsExtendedAdvertisementsAvailable() = 0;
-
-  // Calls `callback` and returns true if `mac_address` is a valid BLE address.
-  // Otherwise, does not call the callback and returns false.
-  //
-  // This method is not available on Apple platforms and will always return
-  // false, ignoring the callback.
-  virtual bool GetRemotePeripheral(const std::string& mac_address,
-                                   GetRemotePeripheralCallback callback) = 0;
-
-  // Calls `callback` and returns true if `id` refers to a known BLE peripheral.
-  // Otherwise, does not call the callback and returns false.
-  virtual bool GetRemotePeripheral(BlePeripheral::UniqueId id,
-                                   GetRemotePeripheralCallback callback) = 0;
 
   virtual void AddAlternateUuidForService(uint16_t uuid,
                                           const std::string& service_id) {}

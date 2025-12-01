@@ -8,8 +8,11 @@
 #include <optional>
 #include <string>
 
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
 #include "ui/gfx/image/image_skia.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace base {
 class FilePath;
@@ -79,7 +82,7 @@ class InstallObserver {
                                   const Extension* extension,
                                   bool success) {}
 
-  // Called when the app list is reordered. If |extension_id| is set, it
+  // Called when the app list is reordered. If `extension_id` is set, it
   // indicates the extension ID that was re-ordered.
   virtual void OnAppsReordered(content::BrowserContext* context,
                                const std::optional<ExtensionId>& extension_id) {

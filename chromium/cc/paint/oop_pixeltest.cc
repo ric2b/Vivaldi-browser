@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <array>
+
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
 #pragma allow_unsafe_buffers
@@ -216,7 +218,9 @@ class OopPixelTest : public testing::Test,
          options.target_color_params.color_space, flags, "TestLabel"},
         gpu::kNullSurfaceHandle);
     EXPECT_TRUE(client_shared_image->mailbox().Verify());
-    ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
+    std::unique_ptr<gpu::RasterScopedAccess> ri_access =
+        client_shared_image->BeginRasterAccess(
+            ri, client_shared_image->creation_sync_token(), /*readonly=*/false);
 
     // Assume legacy MSAA if sample count is positive.
     gpu::raster::MsaaMode msaa_mode = options.msaa_sample_count > 0
@@ -268,8 +272,8 @@ class OopPixelTest : public testing::Test,
 
     SkBitmap result = ReadbackMailbox(ri, client_shared_image->mailbox(),
                                       options.resource_size);
-    gpu::SyncToken sync_token;
-    ri->GenUnverifiedSyncTokenCHROMIUM(sync_token.GetData());
+    gpu::SyncToken sync_token =
+        gpu::RasterScopedAccess::EndAccess(std::move(ri_access));
     sii->DestroySharedImage(sync_token, std::move(client_shared_image));
     return result;
   }
@@ -304,26 +308,33 @@ class OopPixelTest : public testing::Test,
          "TestLabel"},
         gpu::kNullSurfaceHandle);
     EXPECT_TRUE(client_shared_image->mailbox().Verify());
-    ri->WaitSyncTokenCHROMIUM(sii->GenUnverifiedSyncToken().GetConstData());
 
     return client_shared_image;
   }
 
   void UploadPixels(gpu::raster::RasterInterface* ri,
-                    const gpu::Mailbox& mailbox,
+                    const scoped_refptr<gpu::ClientSharedImage>& shared_image,
                     const SkImageInfo& info,
                     const SkBitmap& bitmap) {
-    ri->WritePixels(mailbox, /*dst_x_offset=*/0, /*dst_y_offset=*/0,
+    auto ri_access = shared_image->BeginRasterAccess(
+        ri, shared_image->creation_sync_token(), /*readonly=*/false);
+    ri->WritePixels(shared_image->mailbox(), /*dst_x_offset=*/0,
+                    /*dst_y_offset=*/0,
                     /*texture_target=*/0,
                     SkPixmap(info, bitmap.getPixels(), info.minRowBytes()));
     EXPECT_EQ(ri->GetError(), static_cast<unsigned>(GL_NO_ERROR));
+    gpu::RasterScopedAccess::EndAccess(std::move(ri_access));
   }
 
-  void UploadPixelsYUV(gpu::raster::RasterInterface* ri,
-                       const gpu::Mailbox& mailbox,
-                       const SkYUVAPixmaps& yuv_pixmap) {
-    ri->WritePixelsYUV(mailbox, yuv_pixmap);
+  void UploadPixelsYUV(
+      gpu::raster::RasterInterface* ri,
+      const scoped_refptr<gpu::ClientSharedImage>& shared_image,
+      const SkYUVAPixmaps& yuv_pixmap) {
+    auto ri_access = shared_image->BeginRasterAccess(
+        ri, shared_image->creation_sync_token(), /*readonly=*/false);
+    ri->WritePixelsYUV(shared_image->mailbox(), yuv_pixmap);
     EXPECT_EQ(ri->GetError(), static_cast<unsigned>(GL_NO_ERROR));
+    gpu::RasterScopedAccess::EndAccess(std::move(ri_access));
   }
 
   // Verifies |actual| matches the expected PNG image.
@@ -863,13 +874,13 @@ TEST_F(OopPixelTest, DrawGainmapImageCubic) {
 
   auto info = SkImageInfo::MakeN32Premul(kSrcSize, kSrcSize,
                                          SkColorSpace::MakeSRGBLinear());
-  sk_sp<FakePaintImageGenerator> generators[2];
-  uint8_t pixel_values[2][2] = {
-      {100, 20},
-      {static_cast<uint8_t>(
-           std::round(255.f * std::log(2.f) / std::log(kRatioMax))),
-       static_cast<uint8_t>(
-           std::round(255.f * std::log(3.f) / std::log(kRatioMax)))}};
+  std::array<sk_sp<FakePaintImageGenerator>, 2> generators;
+  std::array<std::array<uint8_t, 2>, 2> pixel_values = {
+      {{100, 20},
+       {static_cast<uint8_t>(
+            std::round(255.f * std::log(2.f) / std::log(kRatioMax))),
+        static_cast<uint8_t>(
+            std::round(255.f * std::log(3.f) / std::log(kRatioMax)))}}};
   for (int i = 0; i < 2; ++i) {
     generators[i] = sk_make_sp<FakePaintImageGenerator>(info);
     SkPixmap pm = generators[i]->GetPixmap();
@@ -1344,8 +1355,7 @@ TEST_F(OopPixelTest, DrawMailboxBackedImage) {
   scoped_refptr<gpu::ClientSharedImage> src_client_si = CreateClientSharedImage(
       ri, sii, options, viz::SinglePlaneFormat::kRGBA_8888);
 
-  UploadPixels(ri, src_client_si->mailbox(), expected_bitmap.info(),
-               expected_bitmap);
+  UploadPixels(ri, src_client_si, expected_bitmap.info(), expected_bitmap);
 
   auto src_paint_image =
       PaintImageBuilder::WithDefault()
@@ -2239,7 +2249,7 @@ class OopTextBlobPixelTest
       surface = SkSurfaces::RenderTarget(
           context_state->gr_context(), skgpu::Budgeted::kNo, image_info, 0,
           kTopLeft_GrSurfaceOrigin, &surface_props);
-    } else if (context_state->graphite_context()) {
+    } else if (context_state->graphite_shared_context()) {
       surface = SkSurfaces::RenderTarget(
           context_state->gpu_main_graphite_recorder(), image_info,
           skgpu::Mipmapped::kNo, &surface_props);
@@ -2258,9 +2268,9 @@ class OopTextBlobPixelTest
       context_state->gr_context()->flushAndSubmit(surface.get(),
                                                   GrSyncCpu::kNo);
       success = surface->readPixels(expected, 0, 0);
-    } else if (context_state->graphite_context()) {
+    } else if (context_state->graphite_shared_context()) {
       success = gpu::GraphiteReadPixelsSync(
-          context_state->graphite_context(),
+          context_state->graphite_shared_context(),
           context_state->gpu_main_graphite_recorder(), surface.get(),
           image_info, expected.pixmap().writable_addr(),
           expected.pixmap().rowBytes(), 0, 0);
@@ -2660,7 +2670,7 @@ TEST_F(OopPixelTest, WritePixels) {
       SkImageInfo::MakeN32Premul(dest_size.width(), dest_size.height()),
       expected_pixels.data(), dest_size.width() * sizeof(SkColor));
 
-  UploadPixels(ri, dest_client_si->mailbox(), expected.info(), expected);
+  UploadPixels(ri, dest_client_si, expected.info(), expected);
 
   SkBitmap actual =
       ReadbackMailbox(ri, dest_client_si->mailbox(), options.resource_size);
@@ -2793,7 +2803,7 @@ TEST_P(OopYUVToRGBPixelTest, CopyI420SharedImage) {
       SkYUVAPixmaps::FromExternalPixmaps(yuv_info, pixmaps);
 
   // Upload initial Y+U+V planes and convert to RGB.
-  UploadPixelsYUV(ri, yuv_client_si->mailbox(), yuv_pixmap);
+  UploadPixelsYUV(ri, yuv_client_si, yuv_pixmap);
 
   ri->CopySharedImage(yuv_client_si->mailbox(), dest_client_si->mailbox(), 0, 0,
                       0, 0, options.resource_size.width(),
@@ -2874,7 +2884,7 @@ TEST_F(OopPixelTest, CopyNV12SharedImage) {
       SkYUVAPixmaps::FromExternalPixmaps(yuv_info, pixmaps);
 
   // Upload initial Y+UV planes and convert to RGB.
-  UploadPixelsYUV(ri, y_uv_client_si->mailbox(), yuv_pixmap);
+  UploadPixelsYUV(ri, y_uv_client_si, yuv_pixmap);
 
   ri->CopySharedImage(y_uv_client_si->mailbox(), dest_client_si->mailbox(), 0,
                       0, 0, 0, options.resource_size.width(),
@@ -3020,7 +3030,7 @@ TEST_F(OopPixelTest, SkSLCommandShader) {
        {.name = SkString("u_center_color"),
         .value = SkColorToSkV4(SkColors::kGreen)}},
       /*int_uniforms=*/
-      {{.name = SkString("u_nudge"), .value = 2}});
+      {{.name = SkString("u_nudge"), .value = 2}}, nullptr);
   ASSERT_TRUE(shader);
 
   const gfx::Size rect(100, 100);

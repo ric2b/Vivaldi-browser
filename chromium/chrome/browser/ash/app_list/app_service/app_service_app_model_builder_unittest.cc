@@ -41,7 +41,6 @@
 #include "chrome/browser/ash/plugin_vm/plugin_vm_features.h"
 #include "chrome/browser/ash/plugin_vm/plugin_vm_test_helper.h"
 #include "chrome/browser/extensions/chrome_app_icon.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/install_tracker.h"
 #include "chrome/browser/extensions/install_tracker_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -432,16 +431,16 @@ TEST_F(ExtensionAppTest, HideWebStore) {
 }
 
 TEST_F(ExtensionAppTest, DisableAndEnable) {
-  service_->DisableExtension(kHostedAppId,
-                             extensions::disable_reason::DISABLE_USER_ACTION);
+  registrar()->DisableExtension(
+      kHostedAppId, {extensions::disable_reason::DISABLE_USER_ACTION});
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 
-  service_->EnableExtension(kHostedAppId);
+  registrar()->EnableExtension(kHostedAppId);
   EXPECT_EQ(preinstalled_apps_, GetModelContent(model_updater_.get()));
 }
 
 TEST_F(ExtensionAppTest, Uninstall) {
-  service_->UninstallExtension(
+  registrar()->UninstallExtension(
       kPackagedApp2Id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
   EXPECT_EQ((std::vector<std::string>{"Hosted App", "Packaged App 1"}),
             GetModelContent(model_updater_.get()));
@@ -453,9 +452,9 @@ TEST_F(ExtensionAppTest, UninstallTerminatedApp) {
   ASSERT_NE(nullptr, registry()->GetInstalledExtension(kPackagedApp2Id));
 
   // Simulate an app termination.
-  service_->TerminateExtension(kPackagedApp2Id);
+  registrar()->TerminateExtension(kPackagedApp2Id);
 
-  service_->UninstallExtension(
+  registrar()->UninstallExtension(
       kPackagedApp2Id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
   EXPECT_EQ((std::vector<std::string>{"Hosted App", "Packaged App 1"}),
             GetModelContent(model_updater_.get()));

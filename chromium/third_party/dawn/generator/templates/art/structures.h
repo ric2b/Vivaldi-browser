@@ -32,8 +32,8 @@ namespace dawn::kotlin_api {
 class JNIContext;
 
 struct UserData {
-    JNIEnv *env;
     jobject callback;
+    JavaVM *jvm;
 };
 
 // Converts Kotlin objects representing Dawn structures into native structures that can be passed

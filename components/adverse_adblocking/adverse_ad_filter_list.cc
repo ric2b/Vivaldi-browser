@@ -246,13 +246,12 @@ void AdverseAdFilterListService::SettingsUpdated() {
 }
 
 void AdverseAdFilterListService::LoadList(const base::FilePath& json_filename) {
-  auto read_json_file =
-      base::BindOnce(&AdverseAdFilterListService::ReadFileToString,
-                     json_filename);
+  auto read_json_file = base::BindOnce(
+      &AdverseAdFilterListService::ReadFileToString, json_filename);
 
-  auto load_json_data =
-      base::BindOnce(&AdverseAdFilterListService::LoadAndInitializeFromString,
-                     weak_ptr_factory_.GetWeakPtr());
+  auto load_json_data = base::BindOnce(
+      &AdverseAdFilterListService::LoadAndInitializeFromUniqueString,
+      weak_ptr_factory_.GetWeakPtr());
 
   task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
@@ -260,15 +259,14 @@ void AdverseAdFilterListService::LoadList(const base::FilePath& json_filename) {
 
   task_runner_->PostTaskAndReplyWithResult(FROM_HERE, std::move(read_json_file),
                                            std::move(load_json_data));
-
 }
 
 /*static*/
-std::string* AdverseAdFilterListService::ReadFileToString(
+std::unique_ptr<std::string> AdverseAdFilterListService::ReadFileToString(
     const base::FilePath& json_filename) {
-  std::string* json_string = new std::string;
+  std::unique_ptr<std::string> json_string = std::make_unique<std::string>();
 
-  if (!base::ReadFileToString(json_filename, json_string)) {
+  if (!base::ReadFileToString(json_filename, json_string.get())) {
     LOG(INFO) << "Loading '" << GetDefaultFilePath().AsUTF8Unsafe()
               << "' failed";
     return nullptr;
@@ -283,8 +281,8 @@ void AdverseAdFilterListService::ComputeSHA256Sum(const void* data,
       crypto::SHA256HashString(std::string_view((const char*)data, length));
 }
 
-void AdverseAdFilterListService::LoadAndInitializeFromString(
-    const std::string* json_string) {
+void AdverseAdFilterListService::LoadAndInitializeFromUniqueString(
+    std::unique_ptr<std::string> json_string) {
   if (!json_string || json_string->length() == 0) {
     return;
   }
@@ -295,9 +293,14 @@ void AdverseAdFilterListService::LoadAndInitializeFromString(
       base::JSONReader::Read(*json_string);
 
   DLOG_IF(WARNING, loaded_json_list);
+
+  if (!loaded_json_list) {
+    return;
+  }
+
   DLOG_IF(WARNING, loaded_json_list->is_list());
 
-  if (!loaded_json_list || !loaded_json_list->is_list()) {
+  if (!loaded_json_list->is_list()) {
     return;
   }
 

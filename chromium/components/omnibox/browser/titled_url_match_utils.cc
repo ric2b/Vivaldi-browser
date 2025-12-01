@@ -79,6 +79,10 @@ AutocompleteMatch TitledUrlMatchToAutocompleteMatch(
       input.parts().scheme.is_nonempty() || match_in_scheme,
       match_in_subdomain);
   const std::u16string formatted_url = url_formatter::FormatUrl(
+      // NOTE(konrad@vivaldi.com): Match on display_url if it exists.
+      vivaldi::IsVivaldiRunning()
+          ? titled_url_match.node->GetTitledUrlDisplayURL() :
+      // End Vivaldi
       url, format_types, base::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
 
   // Display the URL only if the input matches the URL but not the path.

@@ -1,5 +1,5 @@
 /* ----------------------------------------------------------------------- *
- *   
+ *
  *   Copyright 1996-2016 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
@@ -14,7 +14,7 @@
  *     copyright notice, this list of conditions and the following
  *     disclaimer in the documentation and/or other materials provided
  *     with the distribution.
- *     
+ *
  *     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
  *     CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
  *     INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
@@ -45,26 +45,6 @@
 
 #define lib_isnumchar(c)    (nasm_isalnum(c) || (c) == '$' || (c) == '_')
 
-static int radix_letter(char c)
-{
-    switch (c) {
-    case 'b': case 'B':
-    case 'y': case 'Y':
-	return 2;		/* Binary */
-    case 'o': case 'O':
-    case 'q': case 'Q':
-	return 8;		/* Octal */
-    case 'h': case 'H':
-    case 'x': case 'X':
-	return 16;		/* Hexadecimal */
-    case 'd': case 'D':
-    case 't': case 'T':
-	return 10;		/* Decimal */
-    default:
-	return 0;		/* Not a known radix letter */
-    }
-}
-
 int64_t readnum(const char *str, bool *error)
 {
     const char *r = str, *q;
@@ -75,14 +55,15 @@ int64_t readnum(const char *str, bool *error)
     bool warn = false;
     int sign = 1;
 
-    *error = false;
+    if (error)
+        *error = true;
 
     while (nasm_isspace(*r))
         r++;                    /* find start of number */
 
     /*
      * If the number came from make_tok_num (as a result of an %assign), it
-     * might have a '-' built into it (rather than in a preceeding token).
+     * might have a '-' built into it (rather than in a preceding token).
      */
     if (*r == '-') {
         r++;
@@ -97,8 +78,7 @@ int64_t readnum(const char *str, bool *error)
     len = q-r;
     if (!len) {
 	/* Not numeric */
-	*error = true;
-	return 0;
+        return 0;
     }
 
     /*
@@ -150,8 +130,7 @@ int64_t readnum(const char *str, bool *error)
 	if (*r != '_') {
 	    if (*r < '0' || (*r > '9' && *r < 'A')
 		|| (digit = numvalue(*r)) >= radix) {
-		*error = true;
-		return 0;
+                return 0;
 	    }
 	    if (result > checklimit ||
 		(result == checklimit && digit >= last)) {
@@ -174,5 +153,7 @@ int64_t readnum(const char *str, bool *error)
 		   str);
     }
 
+    if (error)
+        *error = false;
     return result * sign;
 }

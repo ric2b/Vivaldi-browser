@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view, rulesdir/inject-checkbox-styles */
 
 import './OriginMap.js';
 
@@ -14,12 +15,8 @@ import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import fieldSettingsDialogStylesRaw from './fieldSettingsDialog.css.js';
+import fieldSettingsDialogStyles from './fieldSettingsDialog.css.js';
 import type {OriginMap} from './OriginMap.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const fieldSettingsDialogStyles = new CSSStyleSheet();
-fieldSettingsDialogStyles.replaceSync(fieldSettingsDialogStylesRaw.cssText);
 
 const UIStrings = {
   /**
@@ -203,8 +200,6 @@ export class FieldSettingsDialog extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [fieldSettingsDialogStyles, Input.textInputStyles, Input.checkboxStyles];
-
     this.#configSetting.addChangeListener(this.#onSettingsChanged, this);
 
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
@@ -339,6 +334,9 @@ export class FieldSettingsDialog extends HTMLElement {
 
     // clang-format off
     const output = html`
+      <style>${fieldSettingsDialogStyles}</style>
+      <style>${Input.textInputStyles}</style>
+      <style>${Input.checkboxStyles}</style>
       <div class="open-button-section">${this.#renderOpenButton()}</div>
       <devtools-dialog
         @clickoutsidedialog=${this.#closeDialog}

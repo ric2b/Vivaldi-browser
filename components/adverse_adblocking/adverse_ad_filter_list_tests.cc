@@ -68,7 +68,9 @@ class AdverseAdFiltering : public ::testing::Test {
 TEST_F(AdverseAdFiltering, LoadString) {
   filter_list_.reset(new AdverseAdFilterListService(nullptr));
 
-  filter_list_->LoadAndInitializeFromString(&kAdversAdFilterListConfig);
+  std::unique_ptr<std::string> s = std::make_unique<std::string>();
+  *s = kAdversAdFilterListConfig;
+  filter_list_->LoadAndInitializeFromUniqueString(std::move(s));
 
   ASSERT_TRUE(filter_list_->has_sites());
 
@@ -85,10 +87,10 @@ TEST_F(AdverseAdFiltering, LoadFile) {
   filter_list_.reset(new AdverseAdFilterListService(nullptr));
 
   // constructed loading from file
-  std::string* json_string = AdverseAdFilterListService::ReadFileToString(
+  std::unique_ptr<std::string> json_string = AdverseAdFilterListService::ReadFileToString(
       GetAdfilterPath(kAdverseAdFilterJsonFileName));
 
-  filter_list_->LoadAndInitializeFromString(json_string);
+  filter_list_->LoadAndInitializeFromUniqueString(std::move(json_string));
 
   ASSERT_TRUE(filter_list_->has_sites());
 

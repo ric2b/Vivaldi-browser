@@ -12,13 +12,14 @@ import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.view.View;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.NullUnmarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -27,6 +28,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeManager;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.edge_to_edge.SystemBarColorHelper;
+import org.chromium.ui.InsetObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.base.DeviceFormFactor;
 import org.chromium.ui.base.WindowAndroid;
@@ -35,6 +37,7 @@ import org.chromium.ui.base.WindowAndroid;
  * Creates an {@link EdgeToEdgeController} used to control drawing using the Android Edge to Edge
  * Feature. This allows drawing under Android System Bars.
  */
+@NullMarked
 public class EdgeToEdgeControllerFactory {
     private static boolean sHas3ButtonNavBarForTesting;
 
@@ -55,11 +58,12 @@ public class EdgeToEdgeControllerFactory {
      * @return An EdgeToEdgeController to control drawing under System Bars, or {@code null} if this
      *     version of Android does not support the APIs needed.
      */
+    @NullUnmarked // create_stripped_java_factory.py does not support annotations in generics
     public static @Nullable EdgeToEdgeController create(
             Activity activity,
             WindowAndroid windowAndroid,
-            @NonNull ObservableSupplier<Tab> tabObservableSupplier,
-            @NonNull EdgeToEdgeManager edgeToEdgeManager,
+            ObservableSupplier<Tab> tabObservableSupplier,
+            EdgeToEdgeManager edgeToEdgeManager,
             BrowserControlsStateProvider browserControlsStateProvider,
             ObservableSupplier<LayoutManager> layoutManagerSupplier,
             FullscreenManager fullscreenManager) {
@@ -82,6 +86,7 @@ public class EdgeToEdgeControllerFactory {
      * @param androidView The Android view for the bottom chin.
      * @param keyboardVisibilityDelegate A {@link KeyboardVisibilityDelegate} for watching keyboard
      *     visibility events.
+     * @param insetObserver The {@link InsetObserver} for checking IME insets.
      * @param layoutManager The {@link LayoutManager} for adding new scene overlays.
      * @param requestRenderRunnable Runnable that requests a re-render of the scene overlay.
      * @param edgeToEdgeController The {@link EdgeToEdgeController} for observing the edge-to-edge
@@ -93,8 +98,9 @@ public class EdgeToEdgeControllerFactory {
     public static SystemBarColorHelper createBottomChin(
             View androidView,
             KeyboardVisibilityDelegate keyboardVisibilityDelegate,
+            InsetObserver insetObserver,
             LayoutManager layoutManager,
-            @NonNull Runnable requestRenderRunnable,
+            Runnable requestRenderRunnable,
             EdgeToEdgeController edgeToEdgeController,
             BottomControlsStacker bottomControlsStacker,
             FullscreenManager fullscreenManager) {
@@ -102,6 +108,7 @@ public class EdgeToEdgeControllerFactory {
         return new EdgeToEdgeBottomChinCoordinator(
                 androidView,
                 keyboardVisibilityDelegate,
+                insetObserver,
                 layoutManager,
                 requestRenderRunnable,
                 edgeToEdgeController,

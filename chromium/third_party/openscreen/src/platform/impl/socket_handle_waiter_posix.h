@@ -18,6 +18,7 @@ namespace openscreen {
 class SocketHandleWaiterPosix : public SocketHandleWaiter {
  public:
   using SocketHandleRef = SocketHandleWaiter::SocketHandleRef;
+  using HandleWithFlags = SocketHandleWaiter::HandleWithFlags;
 
   explicit SocketHandleWaiterPosix(ClockNowFunctionPtr now_function);
   ~SocketHandleWaiterPosix() override;
@@ -30,10 +31,8 @@ class SocketHandleWaiterPosix : public SocketHandleWaiter {
   void RequestStopSoon();
 
  protected:
-  using SocketHandleWaiter::ReadyHandle;
-
-  ErrorOr<std::vector<ReadyHandle>> AwaitSocketsReadable(
-      const std::vector<SocketHandleRef>& socket_fds,
+  ErrorOr<std::vector<HandleWithFlags>> AwaitSocketsReady(
+      const std::vector<HandleWithFlags>& sockets,
       const Clock::duration& timeout) override;
 
  private:

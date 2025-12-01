@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/dom_distiller/core/distiller_page.h"
 
 #include <stddef.h>
@@ -42,9 +37,9 @@ void DistillerPage::DistillPage(
     const GURL& gurl,
     const dom_distiller::proto::DomDistillerOptions options,
     DistillerPageCallback callback) {
-  CHECK(ready_, base::NotFatalUntil::M126);
-  CHECK(callback, base::NotFatalUntil::M127);
-  CHECK(!distiller_page_callback_, base::NotFatalUntil::M127);
+  CHECK(ready_);
+  CHECK(callback);
+  CHECK(!distiller_page_callback_);
   // It is only possible to distill one page at a time. |ready_| is reset when
   // the callback to OnDistillationDone happens.
   ready_ = false;

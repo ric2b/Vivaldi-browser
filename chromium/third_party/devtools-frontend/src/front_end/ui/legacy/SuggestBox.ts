@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import type * as TextUtils from '../../models/text_utils/text_utils.js';
@@ -76,7 +78,6 @@ export class SuggestBox implements ListDelegate<Suggestion> {
   private readonly maxItemsHeight: number|undefined;
   private rowHeight: number;
   private userEnteredText: string;
-  private readonly defaultSelectionIsDimmed: boolean;
   private onlyCompletion: Suggestion|null;
   private readonly items: ListModel<Suggestion>;
   private readonly list: ListControl<Suggestion>;
@@ -88,7 +89,6 @@ export class SuggestBox implements ListDelegate<Suggestion> {
     this.maxItemsHeight = maxItemsHeight;
     this.rowHeight = 17;
     this.userEnteredText = '';
-    this.defaultSelectionIsDimmed = false;
 
     this.onlyCompletion = null;
 
@@ -155,7 +155,7 @@ export class SuggestBox implements ListDelegate<Suggestion> {
     VisualLogging.setMappedParent(this.element, this.suggestBoxDelegate.ownerElement());
     // TODO(dgozman): take document as a parameter.
     this.glassPane.show(document);
-    const suggestion = ({text: '1', subtitle: '12'} as Suggestion);
+    const suggestion: Suggestion = {text: '1', subtitle: '12'};
     this.rowHeight = measurePreferredSize(this.createElementForItem(suggestion), this.element).height;
     ARIAUtils.setControls(this.suggestBoxDelegate.ownerElement(), this.element);
     ARIAUtils.setExpanded(this.suggestBoxDelegate.ownerElement(), true);
@@ -253,7 +253,7 @@ export class SuggestBox implements ListDelegate<Suggestion> {
     return true;
   }
 
-  selectedItemChanged(from: Suggestion|null, to: Suggestion|null, fromElement: Element|null, toElement: Element|null):
+  selectedItemChanged(_from: Suggestion|null, _to: Suggestion|null, fromElement: Element|null, toElement: Element|null):
       void {
     if (fromElement) {
       fromElement.classList.remove('selected', 'force-white-icons');

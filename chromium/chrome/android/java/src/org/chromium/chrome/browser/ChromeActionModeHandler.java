@@ -291,6 +291,7 @@ public class ChromeActionModeHandler {
                 RecordHistogram.deprecatedRecordMediumTimesHistogram(
                         "ContextMenu.TimeToSelectShare",
                         System.currentTimeMillis() - mContextMenuStartTime);
+                mHelper.dismissMenu();
                 mShareDelegateSupplier
                         .get()
                         .share(

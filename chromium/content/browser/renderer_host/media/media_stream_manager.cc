@@ -19,7 +19,6 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/not_fatal_until.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -302,13 +301,18 @@ const char* RequestResultToString(
       return "FAILED_DUE_TO_SHUTDOWN";
     case blink::mojom::MediaStreamRequestResult::KILL_SWITCH_ON:
       return "KILL_SWITCH_ON";
-    case blink::mojom::MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED:
-      return "SYSTEM_PERMISSION_DENIED";
+    case blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED_BY_SYSTEM:
+      return "PERMISSION_DENIED_BY_SYSTEM";
+    case blink::mojom::MediaStreamRequestResult::DEVICE_IN_USE:
+      return "DEVICE_IN_USE";
+    case blink::mojom::MediaStreamRequestResult::REQUEST_CANCELLED:
+      return "REQUEST_CANCELLED";
+    case blink::mojom::MediaStreamRequestResult::START_TIMEOUT:
+      return "START_TIMEOUT";
     case blink::mojom::MediaStreamRequestResult::NUM_MEDIA_REQUEST_RESULTS:
-      return "NUM_MEDIA_REQUEST_RESULTS";
-    default:
-      NOTREACHED();
+      break;  // Not a valid enum value.
   }
+  NOTREACHED();
 }
 
 std::string GetGenerateStreamsLogString(
@@ -649,6 +653,7 @@ class MediaStreamManager::DeviceRequest {
         captured_surface_control_active_);
     ui_request_->suppress_local_audio_playback =
         stream_controls_.suppress_local_audio_playback;
+    ui_request_->restrict_own_audio = stream_controls_.restrict_own_audio;
     ui_request_->exclude_system_audio = stream_controls_.exclude_system_audio;
     ui_request_->exclude_self_browser_surface =
         stream_controls_.exclude_self_browser_surface;
@@ -805,6 +810,7 @@ class MediaStreamManager::DeviceRequest {
     stream_controls_.hotword_enabled = false;
     stream_controls_.disable_local_echo = false;
     stream_controls_.suppress_local_audio_playback = false;
+    stream_controls_.restrict_own_audio = false;
     stream_controls_.exclude_system_audio = false;
   }
 
@@ -2509,7 +2515,7 @@ void MediaStreamManager::CancelRequest(
 void MediaStreamManager::DeleteRequest(
     DeviceRequests::const_iterator request_it) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
+  CHECK(request_it != requests_.end());
 
   SendLogMessage(base::StringPrintf("DeleteRequest([label=%s])",
                                     request_it->first.c_str()));
@@ -3165,7 +3171,7 @@ void MediaStreamManager::FinalizeRequestFailed(
     DeviceRequests::const_iterator request_it,
     MediaStreamRequestResult result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
+  CHECK(request_it != requests_.end());
 
   DeviceRequest* const request = request_it->second.get();
 
@@ -3227,7 +3233,7 @@ void MediaStreamManager::FinalizeMediaAccessRequest(
     DeviceRequests::const_iterator request_it,
     const blink::mojom::StreamDevicesSet& stream_devices_set) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
+  CHECK(request_it != requests_.end());
   DeviceRequest* const request = request_it->second.get();
 
   request->FinalizeMediaAccessRequest(request_it->first, stream_devices_set);

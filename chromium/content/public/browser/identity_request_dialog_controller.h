@@ -102,6 +102,7 @@ class CONTENT_EXPORT IdentityProviderData
                        const IdentityProviderMetadata& idp_metadata,
                        const ClientMetadata& client_metadata,
                        blink::mojom::RpContext rp_context,
+                       std::optional<blink::mojom::Format> format,
                        const std::vector<IdentityRequestDialogDisclosureField>&
                            disclosure_fields,
                        bool has_login_status_mismatch);
@@ -110,6 +111,7 @@ class CONTENT_EXPORT IdentityProviderData
   IdentityProviderMetadata idp_metadata;
   ClientMetadata client_metadata;
   blink::mojom::RpContext rp_context;
+  std::optional<blink::mojom::Format> format;
   // For which fields should the dialog request permission for (assuming
   // this is for signup).
   std::vector<IdentityRequestDialogDisclosureField> disclosure_fields;
@@ -128,11 +130,15 @@ class CONTENT_EXPORT IdentityProviderData
 // endpoints themselves.
 struct CONTENT_EXPORT RelyingPartyData {
  public:
-  explicit RelyingPartyData(const std::string& rp_for_display);
+  RelyingPartyData(const std::u16string& rp_for_display,
+                   const std::u16string& iframe_for_display);
   RelyingPartyData(const RelyingPartyData& other);
   ~RelyingPartyData();
 
-  std::string rp_for_display;
+  std::u16string rp_for_display;
+  // The formatted iframe origin. Empty if the iframe is same-site with
+  // `rp_for_display`.
+  std::u16string iframe_for_display;
   gfx::Image rp_icon;
 };
 
@@ -205,17 +211,17 @@ class CONTENT_EXPORT IdentityRequestDialogController {
 
   // Shows and accounts selections for the given IDP. The `on_selected` callback
   // is called with the selected account id or empty string otherwise.
-  // `sign_in_mode` represents whether this is an auto re-authn flow.
   // `new_accounts` are the accounts that were just logged in, which should
-  // be prioritized in the UI. Returns true if the method successfully showed
-  // UI. When false, the caller should assume that the API invocation was
+  // be prioritized in the UI. The `accounts_display_callback` is called when
+  // the dialog is successfully shown so that the backend can record the time of
+  // display for metrics purposes. Returns true if the method successfully
+  // showed UI. When false, the caller should assume that the API invocation was
   // terminated and the cleanup methods invoked. `rp_data` may be modified by
   // this method, such as by setting the RP icon.
   virtual bool ShowAccountsDialog(
       RelyingPartyData rp_data,
       const std::vector<scoped_refptr<IdentityProviderData>>& idp_list,
       const std::vector<scoped_refptr<IdentityRequestAccount>>& accounts,
-      IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<scoped_refptr<IdentityRequestAccount>>& new_accounts,
       AccountSelectionCallback on_selected,
@@ -229,7 +235,7 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // Returns true if the method successfully showed UI. When false, the caller
   // should assume that the API invocation was terminated and the cleanup
   // methods invoked.
-  virtual bool ShowFailureDialog(const std::string& rp_for_display,
+  virtual bool ShowFailureDialog(const RelyingPartyData& rp_data,
                                  const std::string& idp_for_display,
                                  blink::mojom::RpContext rp_context,
                                  blink::mojom::RpMode rp_mode,
@@ -241,7 +247,7 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // the method successfully showed UI. When false, the caller should assume
   // that the API invocation was terminated and the cleanup methods invoked.
   virtual bool ShowErrorDialog(
-      const std::string& rp_for_display,
+      const RelyingPartyData& rp_data,
       const std::string& idp_for_display,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
@@ -254,11 +260,25 @@ class CONTENT_EXPORT IdentityRequestDialogController {
   // for their accounts to be fetched. Returns true if the method successfully
   // showed UI. When false, the caller should assume that the API invocation was
   // terminated and the cleanup methods invoked.
-  virtual bool ShowLoadingDialog(const std::string& rp_for_display,
+  virtual bool ShowLoadingDialog(const RelyingPartyData& rp_data,
                                  const std::string& idp_for_display,
                                  blink::mojom::RpContext rp_context,
                                  blink::mojom::RpMode rp_mode,
                                  DismissCallback dismiss_callback);
+
+  // Shows a verifying dialog to the user. This is called after an account is
+  // selected, either by the user in the explicit authentication flow or by the
+  // browser in the auto re-authentication flow. The `accounts_display_callback`
+  // is called when the dialog is successfully shown so that the backend can
+  // record the time of display for metrics purposes. Returns true if it was
+  // possible to show UI.
+  virtual bool ShowVerifyingDialog(
+      const content::RelyingPartyData& rp_data,
+      const scoped_refptr<IdentityProviderData>& idp_data,
+      const scoped_refptr<IdentityRequestAccount>& account,
+      IdentityRequestAccount::SignInMode sign_in_mode,
+      blink::mojom::RpMode rp_mode,
+      AccountsDisplayedCallback accounts_displayed_callback);
 
   // Only to be called after a dialog is shown.
   virtual std::string GetTitle() const;

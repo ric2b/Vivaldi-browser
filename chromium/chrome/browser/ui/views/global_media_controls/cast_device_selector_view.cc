@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/global_media_controls/cast_device_selector_view.h"
 
 #include "base/metrics/histogram_functions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/views/global_media_controls/media_item_ui_helper.h"
 #include "chrome/browser/ui/views/global_media_controls/media_notification_device_entry_ui.h"
@@ -42,6 +43,7 @@ constexpr int kDeviceContainerSeparator = 4;
 constexpr int kDeviceEntrySeparator = 8;
 constexpr int kCloseButtonIconSize = 20;
 constexpr int kDeviceEntryIconSize = 20;
+constexpr int kPermissionRejectedLabelWidth = 400;
 
 constexpr gfx::Insets kBackgroundInsets = gfx::Insets::TLBR(12, 8, 16, 8);
 constexpr gfx::Insets kCastHeaderRowInsets = gfx::Insets::TLBR(0, 8, 0, 4);
@@ -256,6 +258,10 @@ void CastDeviceSelectorView::OnPermissionRejected() {
   permission_rejected_label_->SetDefaultEnabledColorId(
       media_color_theme_.secondary_foreground_color_id);
   permission_rejected_label_->SetText(label_text);
+  gfx::Size preferred_size(kPermissionRejectedLabelWidth,
+                           permission_rejected_label_->GetHeightForWidth(
+                               kPermissionRejectedLabelWidth));
+  permission_rejected_label_->SetPreferredSize(preferred_size);
 
 #if BUILDFLAG(IS_MAC)
   base::RepeatingClosure open_settings_cb = base::BindRepeating([]() {

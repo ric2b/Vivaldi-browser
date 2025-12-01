@@ -4,14 +4,19 @@
 
 #include "chrome/browser/safe_browsing/download_protection/file_system_access_metadata.h"
 
+#include "base/strings/string_util.h"
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "components/download/public/common/download_danger_type.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "net/base/mime_util.h"
 
 namespace safe_browsing {
 
 FileSystemAccessMetadata::FileSystemAccessMetadata(
     std::unique_ptr<content::FileSystemAccessWriteItem> item)
-    : item_(std::move(item)) {
+    : item_(std::move(item)),
+      tab_url_(item_->web_contents ? item_->web_contents->GetLastCommittedURL()
+                                   : GURL()) {
   CHECK(item_);
 }
 
@@ -19,6 +24,17 @@ FileSystemAccessMetadata::~FileSystemAccessMetadata() = default;
 
 content::BrowserContext* FileSystemAccessMetadata::GetBrowserContext() const {
   return item_->browser_context;
+}
+
+safe_browsing::ReferrerChain FileSystemAccessMetadata::GetReferrerChain()
+    const {
+  std::unique_ptr<safe_browsing::ReferrerChainData> referrer_chain_data =
+      safe_browsing::IdentifyReferrerChain(
+          *item_, enterprise_connectors::kReferrerUserGestureLimit);
+  if (referrer_chain_data && referrer_chain_data->GetReferrerChain()) {
+    return *referrer_chain_data->GetReferrerChain();
+  }
+  return safe_browsing::ReferrerChain();
 }
 
 const base::FilePath& FileSystemAccessMetadata::GetFullPath() const {
@@ -49,7 +65,12 @@ std::string FileSystemAccessMetadata::GetMimeType() const {
       ext = ext.substr(1);
     }
 
-    if (net::GetMimeTypeFromExtension(ext, &mime_type)) {
+    // Searches within chrome's built-in list of filetype/extension
+    // associations, as using `GetMimeTypeFromExtension` includes
+    // platform-defined mime type mappings that can potentially block.
+    // TODO(crbug.com/407598185): Add platform MIME types lookup for better
+    // protection.
+    if (net::GetWellKnownMimeTypeFromExtension(ext, &mime_type)) {
       mime_type_ = mime_type;
     } else {
       // Default to octet-stream for unknown MIME type.
@@ -65,7 +86,7 @@ const GURL& FileSystemAccessMetadata::GetURL() const {
 }
 
 const GURL& FileSystemAccessMetadata::GetTabUrl() const {
-  return item_->web_contents->GetLastCommittedURL();
+  return tab_url_;
 }
 
 bool FileSystemAccessMetadata::HasUserGesture() const {

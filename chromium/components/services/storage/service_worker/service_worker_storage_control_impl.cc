@@ -6,7 +6,6 @@
 
 #include "base/containers/contains.h"
 #include "base/debug/alias.h"
-#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/services/storage/service_worker/service_worker_resource_ops.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -87,29 +86,37 @@ class ServiceWorkerLiveVersionRefImpl
 mojo::SelfOwnedReceiverRef<mojom::ServiceWorkerStorageControl>
 ServiceWorkerStorageControlImpl::Create(
     mojo::PendingReceiver<mojom::ServiceWorkerStorageControl> receiver,
-    const base::FilePath& user_data_directory) {
+    const base::FilePath& user_data_directory,
+    scoped_refptr<storage::ServiceWorkerStorage::StorageSharedBuffer>
+        storage_shared_buffer) {
   return mojo::MakeSelfOwnedReceiver(
-      base::WrapUnique(
-          new ServiceWorkerStorageControlImpl(user_data_directory)),
+      base::WrapUnique(new ServiceWorkerStorageControlImpl(
+          user_data_directory, std::move(storage_shared_buffer))),
       std::move(receiver));
 }
 
 ServiceWorkerStorageControlImpl::ServiceWorkerStorageControlImpl(
-    const base::FilePath& user_data_directory)
-    : storage_(ServiceWorkerStorage::Create(user_data_directory)),
+    const base::FilePath& user_data_directory,
+    scoped_refptr<storage::ServiceWorkerStorage::StorageSharedBuffer>
+        storage_shared_buffer)
+    : storage_(ServiceWorkerStorage::Create(user_data_directory,
+                                            std::move(storage_shared_buffer))),
       receiver_(this) {}
 
-ServiceWorkerStorageControlImpl::ServiceWorkerStorageControlImpl(
+ServiceWorkerStorageControlImpl::ServiceWorkerStorageControlImpl(  // IN-TEST
     const base::FilePath& user_data_directory,
+    scoped_refptr<storage::ServiceWorkerStorage::StorageSharedBuffer>
+        storage_shared_buffer,
     mojo::PendingReceiver<mojom::ServiceWorkerStorageControl> receiver)
-    : storage_(ServiceWorkerStorage::Create(user_data_directory)),
+    : storage_(ServiceWorkerStorage::Create(user_data_directory,
+                                            std::move(storage_shared_buffer))),
       receiver_(this, std::move(receiver)) {}
 
 ServiceWorkerStorageControlImpl::~ServiceWorkerStorageControlImpl() = default;
 
 void ServiceWorkerStorageControlImpl::OnNoLiveVersion(int64_t version_id) {
   auto it = live_versions_.find(version_id);
-  CHECK(it != live_versions_.end(), base::NotFatalUntil::M130);
+  CHECK(it != live_versions_.end());
   if (it->second->purgeable_resources().size() > 0) {
     storage_->PurgeResources(it->second->purgeable_resources());
   }

@@ -9,9 +9,10 @@
 <translation id="1598449788754183301">Přepnout normální/soukromé listy</translation>
 <translation id="1644574205037202324">Historie</translation>
 <translation id="1829244130665387512">Najít na stránce</translation>
-<translation id="1910514478706885609">Otevřít v novém seskupení listů</translation>
+<translation id="1910514478706885609">Otevřít v nové skupině listů</translation>
 <translation id="1925021887439448749">Zadejte vlastní webovou adresu</translation>
 <translation id="2038563949887743358">Zapnout funkci Stránky pro počítač</translation>
+<translation id="208033313373016095">Zobrazení pro čtečku webových stránek</translation>
 <translation id="2149973817440762519">Upravit záložku</translation>
 <translation id="2306442503286132111">Záložka uložena do složky <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Vzhled</translation>
@@ -29,11 +30,12 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> záložka}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> záložek}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi spol. s r.o. Všechna práva vyhrazena.</translation>
+<translation id="3110967157686007724">Soukromý list</translation>
 <translation id="3232293466644486101">Vymazat údaje o prohlížení…</translation>
 <translation id="3234355010754616171">Nový soukromý list</translation>
 <translation id="3237087289225714896">Standardní předběžné načítání:</translation>
-<translation id="3377025655491224618">Soukromý list</translation>
-<translation id="3504699618187058974">Seskupit listy</translation>
+<translation id="3478414204555961127">Pohled pro čtení</translation>
+<translation id="3504699618187058974">Skupina listů</translation>
 <translation id="3518985090088779359">Přijmout a pokračovat</translation>
 <translation id="3571177741182643350">Nepřečtené články – dostupné offline:</translation>
 <translation id="3602290021589620013">Náhled</translation>
@@ -68,11 +70,9 @@ Touch to Search je funkce, která je dostupná pouze v případě, že je Google
 <translation id="5118676864324397542">Úložiště aplikace <ph name="APP_NAME" /></translation>
 <translation id="5144385790872094440">Některé stránky, které navštěvujete, se načítají předběžně. Pokud na stránky odkazuje web nebo aplikace Google, mohou se předběžně načíst prostřednictvím serverů Google.</translation>
 <translation id="5186185447130319458">Soukromí</translation>
-<translation id="5206168361184759344">{FILE_COUNT,plural,
-            =1{Stahování souboru…}
-            few{Stahování # souborů…}
-            many{Stahování # souborů…}
-            other{Stahování # souborů…}}</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {Stahování souboru…}
+            other {Stahování  # souborů…}}</translation>
 <translation id="5233638681132016545">Nový list</translation>
 <translation id="5375131951310889874">Získejte informace o tématech na webových stránkách, aniž byste opustili stránku. Touch to Search je funkce, která je dostupná pouze v případě, že je Google nastaven jako výchozí vyhledávač ve Vivaldi. Odešle slovo a jeho okolní kontext do Vyhledávání Google a vrátí definice, obrázky, výsledky vyhledávání a další podrobnosti.
 
@@ -118,11 +118,11 @@ Chcete-li upravit hledaný výraz, vyberte jej dlouhým stisknutím. Chcete-li v
 <translation id="8348430946834215779">Používejte HTTPS, kdykoli je to možné, a nechte se upozornit, než načtete web, který tento protokol nepodporuje</translation>
 <translation id="8560602726703398413">Seznam četby naleznete v záložkách</translation>
 <translation id="85991616550051997">Přejít na domovskou stránku</translation>
+<translation id="8693232767599693749">Zobrazit režim čtení?</translation>
 <translation id="8820817407110198400">Záložky</translation>
 <translation id="9042893549633094279">Soukromí a bezpečí</translation>
 <translation id="9063523880881406963">Vypnout funkci Stránky pro počítač</translation>
 <translation id="9080642952018487277">Zahájit soukromé prohlížení</translation>
 <translation id="930124987204876019">Vymazat historii, soubory cookie, data webů, mezipaměť…</translation>
 <translation id="961856697154696964">Vymazat údaje o prohlížení</translation>
-<translation id="96681097142096641">Zobrazit zjednodušenou stránku?</translation>
 </translationbundle>

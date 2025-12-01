@@ -9,16 +9,13 @@
 
 #import "components/policy/core/browser/signin/profile_separation_policies.h"
 #import "components/sync/base/user_selectable_type.h"
+#import "google_apis/gaia/core_account_id.h"
 #import "ios/testing/earl_grey/base_eg_test_helper_impl.h"
 
 @class ExpectedSigninHistograms;
 
 @protocol GREYMatcher;
 @class FakeSystemIdentity;
-
-namespace signin {
-enum class ConsentLevel;
-}
 
 namespace signin_metrics {
 enum class AccessPoint : int;
@@ -68,6 +65,9 @@ class GURL;
 // Returns YES if the identity was added to the fake identity service.
 - (BOOL)isIdentityAdded:(FakeSystemIdentity*)fakeIdentity;
 
+// Simulates a persistent authentication error for an account.
+- (void)setPersistentAuthErrorForAccount:(const CoreAccountId&)accountId;
+
 // Returns the gaia ID of the signed-in account.
 // If there is no signed-in account returns an empty string.
 - (NSString*)primaryAccountGaiaID;
@@ -82,34 +82,38 @@ class GURL;
 // app fails to sign out.
 - (void)signOut;
 
-// Signs in with the fake identity and access point Settings.
+// Signs in with the fake identity and, if `waitForSync` is true, waits for the
+// Sync machinery to become active.
 // Adds the fake-identity to the identity manager if necessary.
 // Only intended for tests requiring sign-in but not covering the sign-in UI
 // behavior to speed up and simplify those tests.
 // Will bypass the usual verifications before signin and other
 // entry-point-implemented behavior (e.g. history & tabs sync will be disabled,
-// no check for management status, sign-in related
-// metrics will not be sent)
+// no check for management status, sign-in related metrics will not be sent).
+- (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity
+    waitForSyncTransportActive:(BOOL)waitForSync;
+
+// Same as `signinWithFakeIdentity:identity waitForSyncTransportActive:YES`.
 - (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity;
 
-// Signs in with the fake identity and access point Settings.
+// Signs in with the fake identity and, if `waitForSync` is true, waits for the
+// Sync machinery to become active.
 // Adds the fake-identity to the identity manager if necessary.
-// Converts the personal profile into a managed one.
+// If separate profiles for managed accounts are enabled, converts the personal
+// profile into a managed one.
 // Only intended for tests requiring sign-in but not covering the sign-in UI
 // behavior to speed up and simplify those tests.
 // Will bypass the usual verifications before signin and other
 // entry-point-implemented behavior (e.g. history & tabs sync will be disabled,
-// no check for management status, sign-in related
-// metrics will not be sent)
+// no check for management status, sign-in related metrics will not be sent).
+- (void)signinWithFakeManagedIdentityInPersonalProfile:
+            (FakeSystemIdentity*)identity
+                            waitForSyncTransportActive:(BOOL)waitForSync;
+
+// Same as `signinWithFakeManagedIdentityInPersonalProfile:identity
+// waitForSyncTransportActive:YES`.
 - (void)signinWithFakeManagedIdentityInPersonalProfile:
     (FakeSystemIdentity*)identity;
-
-// Calls `[self signinWithFakeIdentity:identity]` and then waits for sync
-// transport state to become active.
-- (void)signinAndWaitForSyncTransportStateActive:(FakeSystemIdentity*)identity;
-
-// Signs in with `identity` without history sync consent.
-- (void)signInWithoutHistorySyncWithFakeIdentity:(FakeSystemIdentity*)identity;
 
 // Triggers the web sign-in consistency dialog. This is done by calling
 // directly the current SceneController.
@@ -127,8 +131,7 @@ class GURL;
 - (void)verifySignedInWithFakeIdentity:(FakeSystemIdentity*)fakeIdentity;
 
 // Induces a GREYAssert if the user is not signed in with `expectedEmail`.
-- (void)verifyPrimaryAccountWithEmail:(NSString*)expectedEmail
-                              consent:(signin::ConsentLevel)consent;
+- (void)verifyPrimaryAccountWithEmail:(NSString*)expectedEmail;
 
 // Induces a GREYAssert if an identity is signed in.
 - (void)verifySignedOut;
@@ -142,17 +145,36 @@ class GURL;
 // number of time indicated in the property for `accessPoint`.
 - (void)assertExpectedSigninHistograms:(ExpectedSigninHistograms*)expecteds;
 
+// Set/clear a global flag to return fake default responses for all profile
+// separation policy fetch requests (unless a specific response is set for the
+// next request, see `setPolicyResponseForNextProfileSeparationPolicyRequest:`).
+// If a test sets this (typically in `setUpForTestCase`), it must also unset it
+// again (in `tearDown`).
+- (void)setUseFakeResponsesForProfileSeparationPolicyRequests;
+- (void)clearUseFakeResponsesForProfileSeparationPolicyRequests;
+
 // Stores a policy that will be returned for the next fetch profile separation
 // policy request.
 - (void)setPolicyResponseForNextProfileSeparationPolicyRequest:
     (policy::ProfileSeparationDataMigrationSettings)
         profileSeparationDataMigrationSettings;
 
+// Closes the managed account sign-in confirmation dialog when necessary, if
+// `fakeIdentity` is a managed account. That dialog may be shown on signing in
+// if User Policy is enabled.
+- (void)closeManagedAccountSignInDialogIfAny:(FakeSystemIdentity*)fakeIdentity;
+
 // Returns whether the feature to put each managed account into its own separate
 // profile is enabled. This depends on the `kSeparateProfilesForManagedAccounts`
 // feature flag, plus some additional conditions which can't be directly checked
 // in the test app.
 - (BOOL)areSeparateProfilesForManagedAccountsEnabled;
+
+// Returns whether the account particle disc on the NTP should open the account
+// menu. This depends on the `kSeparateProfilesForManagedAccounts` and
+// `kIdentityDiscAccountMenu` feature flags, plus some additional conditions
+// which can't be directly checked in the test app.
+- (BOOL)isIdentityDiscAccountMenuEnabled;
 
 @end
 

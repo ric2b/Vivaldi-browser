@@ -59,8 +59,8 @@ std::unique_ptr<UpdaterState::StateReader> UpdaterState::StateReader::Create(
         if (!global_prefs_dir)
           return nullptr;
         std::string contents;
-        constexpr char kUpdaterPrefsFilename[] = "prefs.json";
-        constexpr int kMaxPrefsFileSize = 0x20000;  // 128KiB.
+        static constexpr char kUpdaterPrefsFilename[] = "prefs.json";
+        static constexpr int kMaxPrefsFileSize = 0x20000;  // 128KiB.
         if (!base::ReadFileToStringWithMaxSize(
                 global_prefs_dir->AppendASCII(kUpdaterPrefsFilename), &contents,
                 kMaxPrefsFileSize)) {
@@ -130,14 +130,14 @@ int UpdaterState::StateReaderChromiumUpdater::GetUpdatePolicy() const {
 update_client::CategorizedError
 UpdaterState::StateReaderChromiumUpdater::GetLastUpdateCheckError() const {
   return {
-      .category_ = static_cast<update_client::ErrorCategory>(
+      .category = static_cast<update_client::ErrorCategory>(
           parsed_json_
               .FindInt(update_client::kLastUpdateCheckErrorCategoryPreference)
               .value_or(0)),
-      .code_ =
+      .code =
           parsed_json_.FindInt(update_client::kLastUpdateCheckErrorPreference)
               .value_or(0),
-      .extra_ =
+      .extra =
           parsed_json_
               .FindInt(update_client::kLastUpdateCheckErrorExtraCode1Preference)
               .value_or(0)};
@@ -208,11 +208,11 @@ UpdaterState::Attributes UpdaterState::Serialize() const {
 
     attributes["updatepolicy"] = base::NumberToString(state_->update_policy);
     attributes["lastupdatecheckerrorcode"] =
-        state_->last_update_check_error.code_;
+        state_->last_update_check_error.code;
     attributes["lastupdatecheckerrorcat"] =
-        static_cast<int>(state_->last_update_check_error.category_);
+        static_cast<int>(state_->last_update_check_error.category);
     attributes["lastupdatecheckextracode1"] =
-        state_->last_update_check_error.extra_;
+        state_->last_update_check_error.extra;
   }
 
   return attributes;

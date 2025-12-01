@@ -15,6 +15,7 @@
 
 #include "platform/base/tls_credentials.h"
 #include "util/crypto/certificate_utils.h"
+#include "util/crypto/openssl_util.h"
 #include "util/osp_logging.h"
 
 namespace openscreen::cast {
@@ -132,6 +133,46 @@ bssl::UniquePtr<X509> GenerateRootCert(const EVP_PKEY& root_key) {
   OSP_CHECK(root_cert_or_error);
   return std::move(root_cert_or_error.value());
 }
+
+ErrorOr<GeneratedCredentials> GenerateCredentialsInternal(
+    const std::string& device_certificate_id,
+    const std::string& private_key_path,
+    const std::string& server_certificate_path) {
+  if (private_key_path.empty() || server_certificate_path.empty()) {
+    return Error(Error::Code::kParameterInvalid,
+                 "Missing either private key or server certificate");
+  }
+
+  FileUniquePtr key_file(fopen(private_key_path.c_str(), "r"), &fclose);
+  if (!key_file) {
+    return Error(Error::Code::kParameterInvalid,
+                 "Missing private key file path");
+  }
+
+  bssl::UniquePtr<EVP_PKEY> root_key =
+      bssl::UniquePtr<EVP_PKEY>(PEM_read_PrivateKey(
+          key_file.get(), nullptr /* x */, nullptr /* cb */, nullptr /* u */));
+  if (!root_key) {
+    return Error(Error::Code::kParseError, "Failed to parse private key file");
+  }
+
+  FileUniquePtr cert_file(fopen(server_certificate_path.c_str(), "r"), &fclose);
+  if (!cert_file) {
+    return Error(Error::Code::kParameterInvalid,
+                 "Missing server certificate file path");
+  }
+
+  bssl::UniquePtr<X509> root_cert = bssl::UniquePtr<X509>(PEM_read_X509(
+      cert_file.get(), nullptr /* x */, nullptr /* cb */, nullptr /* u */));
+  if (!root_cert) {
+    return Error(Error::Code::kParseError,
+                 "Failed to parse server certificate");
+  }
+
+  return GenerateCredentials(device_certificate_id, root_key.get(),
+                             root_cert.get());
+}
+
 }  // namespace
 
 StaticCredentialsProvider::StaticCredentialsProvider() = default;
@@ -181,30 +222,12 @@ ErrorOr<GeneratedCredentials> GenerateCredentials(
     const std::string& device_certificate_id,
     const std::string& private_key_path,
     const std::string& server_certificate_path) {
-  if (private_key_path.empty() || server_certificate_path.empty()) {
-    return Error(Error::Code::kParameterInvalid,
-                 "Missing either private key or server certificate");
+  ErrorOr<GeneratedCredentials> creds = GenerateCredentialsInternal(
+      device_certificate_id, private_key_path, server_certificate_path);
+  if (!creds) {
+    ClearOpenSSLERRStack(CURRENT_LOCATION);
   }
-
-  FileUniquePtr key_file(fopen(private_key_path.c_str(), "r"), &fclose);
-  if (!key_file) {
-    return Error(Error::Code::kParameterInvalid,
-                 "Missing private key file path");
-  }
-  bssl::UniquePtr<EVP_PKEY> root_key =
-      bssl::UniquePtr<EVP_PKEY>(PEM_read_PrivateKey(
-          key_file.get(), nullptr /* x */, nullptr /* cb */, nullptr /* u */));
-
-  FileUniquePtr cert_file(fopen(server_certificate_path.c_str(), "r"), &fclose);
-  if (!cert_file) {
-    return Error(Error::Code::kParameterInvalid,
-                 "Missing server certificate file path");
-  }
-  bssl::UniquePtr<X509> root_cert = bssl::UniquePtr<X509>(PEM_read_X509(
-      cert_file.get(), nullptr /* x */, nullptr /* cb */, nullptr /* u */));
-
-  return GenerateCredentials(device_certificate_id, root_key.get(),
-                             root_cert.get());
+  return creds;
 }
 
 }  // namespace openscreen::cast

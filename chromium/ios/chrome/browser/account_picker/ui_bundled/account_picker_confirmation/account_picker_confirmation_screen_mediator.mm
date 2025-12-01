@@ -15,21 +15,18 @@
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
+#import "ios/chrome/browser/signin/model/system_identity_util.h"
 
 @interface AccountPickerConfirmationScreenMediator () <
-    ChromeAccountManagerServiceObserver,
     IdentityManagerObserverBridgeDelegate> {
 }
 
 @end
 
 @implementation AccountPickerConfirmationScreenMediator {
-  // Account manager service with observer.
+  // Account manager service.
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
   // Identity manager.
   raw_ptr<signin::IdentityManager> _identityManager;
   std::unique_ptr<signin::IdentityManagerObserverBridge>
@@ -49,9 +46,6 @@
     CHECK(accountManagerService);
     CHECK(identityManager);
     _accountManagerService = accountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
     _identityManager = identityManager;
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(
@@ -70,7 +64,6 @@
   _identityManager = nullptr;
   _identityManagerObserver.reset();
   _accountManagerService = nullptr;
-  _accountManagerServiceObserver.reset();
 }
 
 #pragma mark - Properties
@@ -97,16 +90,13 @@
     return;
   }
 
-  id<SystemIdentity> identity = signin::GetDefaultIdentityOnDevice(
-      _identityManager, _accountManagerService);
-
-  // If the user is signed-in, present the signed-in account.
-  if (_identityManager->HasPrimaryAccount(signin::ConsentLevel::kSignin)) {
-    const CoreAccountInfo primaryAccountInfo =
-        _identityManager->GetPrimaryAccountInfo(signin::ConsentLevel::kSignin);
-    id<SystemIdentity> primaryAccount =
-        _accountManagerService->GetIdentityWithGaiaID(primaryAccountInfo.gaia);
-    identity = primaryAccount;
+  // If the user is signed-in, present the signed-in account, otherwise the
+  // default account on the device.
+  id<SystemIdentity> identity = GetPrimarySystemIdentity(
+      signin::ConsentLevel::kSignin, _identityManager, _accountManagerService);
+  if (!identity) {
+    identity = signin::GetDefaultIdentityOnDevice(_identityManager,
+                                                  _accountManagerService);
   }
 
   // Here, default identity may be nil.
@@ -130,10 +120,6 @@
                                      avatar:avatar
                                     managed:[self isIdentityKnownToBeManaged:
                                                       selectedIdentity]];
-}
-
-- (void)handleIdentityListChanged {
-  [self selectSelectedIdentity];
 }
 
 - (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
@@ -163,45 +149,13 @@
   return NO;
 }
 
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
-}
-
 #pragma mark -  IdentityManagerObserver
 
 - (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
+  [self selectSelectedIdentity];
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
   [self handleIdentityUpdated:identity];

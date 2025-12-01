@@ -104,9 +104,13 @@ void HeadlessProtocolBrowserTest::RunDevTooledTest() {
   }
 
   // Expose DevTools protocol to the target.
-  browser_devtools_client_.SendCommand("Target.exposeDevToolsProtocol",
-                                       Param("targetId", agent_host->GetId()));
+  browser_devtools_client_.SendCommand(
+      "Target.exposeDevToolsProtocol", Param("targetId", agent_host->GetId()),
+      base::BindOnce(&HeadlessProtocolBrowserTest::OnceSetUp,
+                     base::Unretained(this)));
+}
 
+void HeadlessProtocolBrowserTest::OnceSetUp(base::Value::Dict) {
   // Navigate to test harness page
   GURL page_url = embedded_test_server()->GetURL(
       "harness.test", "/protocol/inspector-protocol-test.html");
@@ -286,12 +290,24 @@ HEADLESS_PROTOCOL_TEST(VirtualTimeHistoryNavigationSameDoc,
                        "emulation/virtual-time-history-navigation-same-doc.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeSVG, "emulation/virtual-time-svg.js")
 
-HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerBasic,
+// Flaky on Mac. TODO(crbug.com/352304682): Re-enable.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_VirtualTimeWorkerBasic DISABLED_VirtualTimeWorkerBasic
+#else
+#define MAYBE_VirtualTimeWorkerBasic VirtualTimeWorkerBasic
+#endif
+HEADLESS_PROTOCOL_TEST(MAYBE_VirtualTimeWorkerBasic,
                        "emulation/virtual-time-worker-basic.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerLockstep,
                        "emulation/virtual-time-worker-lockstep.js")
 
-HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerFetch,
+// Flaky on Mac. TODO(crbug.com/352304682): Re-enable.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_VirtualTimeWorkerFetch DISABLED_VirtualTimeWorkerFetch
+#else
+#define MAYBE_VirtualTimeWorkerFetch VirtualTimeWorkerFetch
+#endif
+HEADLESS_PROTOCOL_TEST(MAYBE_VirtualTimeWorkerFetch,
                        "emulation/virtual-time-worker-fetch.js")
 HEADLESS_PROTOCOL_TEST(VirtualTimeWorkerTerminate,
                        "emulation/virtual-time-worker-terminate.js")
@@ -360,6 +376,12 @@ HEADLESS_PROTOCOL_TEST(ShowFilePickerInterception,
 // cover `window.*` JS APIs.
 HEADLESS_PROTOCOL_TEST(ChangeWindowSize, "sanity/change-window-size.js")
 HEADLESS_PROTOCOL_TEST(ChangeWindowState, "sanity/change-window-state.js")
+HEADLESS_PROTOCOL_TEST(HiddenTargetCreate, "sanity/hidden-target-create.js")
+HEADLESS_PROTOCOL_TEST(HiddenTargetClose, "sanity/hidden-target-close.js")
+HEADLESS_PROTOCOL_TEST(HiddenTargetCreateInvalidParams,
+                       "sanity/hidden-target-create-invalid-params.js")
+HEADLESS_PROTOCOL_TEST(HiddenTargetPageEnable,
+                       "sanity/hidden-target-page-enable.js")
 HEADLESS_PROTOCOL_TEST(WindowOuterSize, "sanity/window-outer-size.js")
 HEADLESS_PROTOCOL_TEST(WindowResizeTo, "sanity/window-resize-to.js")
 
@@ -641,6 +663,8 @@ HEADLESS_PROTOCOL_TEST_P(HeadlessProtocolBrowserTestSitePerProcess,
                          SitePerProcess,
                          "sanity/site-per-process.js")
 
+HEADLESS_PROTOCOL_TEST(DataURIIframe, "sanity/data-uri-iframe.js")
+
 // The test brlow requires beginFrameControl which is currently not supported
 // on Mac.
 #if BUILDFLAG(IS_MAC)
@@ -751,5 +775,15 @@ HEADLESS_PROTOCOL_TEST_WITH_COMMAND_LINE_EXTRAS(
     MultipleScreenDetails,
     "sanity/multiple-screen-details.js",
     "--screen-info={label='#1'}{600x800 label='#2'}")
+
+HEADLESS_PROTOCOL_TEST_WITH_COMMAND_LINE_EXTRAS(
+    WindowOpenPopupPlacement,
+    "sanity/window-open-popup-placement.js",
+    "--screen-info={1600x1200}")
+
+HEADLESS_PROTOCOL_TEST_WITH_COMMAND_LINE_EXTRAS(
+    WindowSizeSwitchHandling,
+    "sanity/window-size-switch-handling.js",
+    "--screen-info={1600x1200} --window-size=700,500")
 
 }  // namespace headless

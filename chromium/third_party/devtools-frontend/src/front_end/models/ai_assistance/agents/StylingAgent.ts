@@ -9,7 +9,7 @@ import * as Root from '../../../core/root/root.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as ElementsPanel from '../../../panels/elements/elements.js';
 import * as UI from '../../../ui/legacy/legacy.js';
-import * as Lit from '../../../ui/lit/lit.js';
+import {html, type TemplateResult} from '../../../ui/lit/lit.js';
 import {ChangeManager} from '../ChangeManager.js';
 import {debugLog} from '../debug.js';
 import {EvaluateAction, formatError, SideEffectError} from '../EvaluateAction.js';
@@ -18,11 +18,12 @@ import {AI_ASSISTANCE_CSS_CLASS_NAME, FREESTYLER_WORLD_NAME} from '../injected.j
 
 import {
   type AgentOptions as BaseAgentOptions,
-  AgentType,
   AiAgent,
   type ContextResponse,
   ConversationContext,
+  type ConversationSuggestion,
   type FunctionCallHandlerResult,
+  MultimodalInputType,
   type ParsedAnswer,
   type ParsedResponse,
   type RequestOptions,
@@ -66,6 +67,7 @@ The user selected a DOM element in the browser's DevTools and sends a query abou
 * When answering, always consider MULTIPLE possible solutions.
 * You're also capable of executing the fix for the issue user mentioned. Reflect this in your suggestions.
 * Use \`window.getComputedStyle\` to gather **rendered** styles and make sure that you take the distinction between authored styles and computed styles into account.
+* **CRITICAL** When answering questions about positioning or layout, ALWAYS inspect \`position\`, \`display\` and ALL related properties.
 * **CRITICAL** Call \`window.getComputedStyle\` only once per element and store results into a local variable. Never try to return all the styles of the element in \`data\`. Always use property getter to return relevant styles in \`data\` using the local variable: const styles = window.getComputedStyle($0); const data = { elementColor: styles['color']}.
 * **CRITICAL** Never assume a selector for the elements unless you verified your knowledge.
 * **CRITICAL** Consider that \`data\` variable from the previous ACTION blocks are not available in a different ACTION block.
@@ -90,7 +92,12 @@ When answering, remember to consider CSS concepts such as the CSS cascade, expli
 When answering, always consider MULTIPLE possible solutions.
 After the ANSWER, output SUGGESTIONS: string[] for the potential responses the user might give. Make sure that the array and the \`SUGGESTIONS: \` text is in the same line.
 
-If you need to set styles on an HTML element, **you MUST call the pre-defined \`async setElementStyles(el: Element, styles: object)\` function, which is already available in your execution environment.  Do NOT attempt to define this function yourself.** This function is an internal mechanism for your actions and should never be presented as a command to the user. Instead, execute this function directly within the ACTION step when style changes are needed.
+If you need to set styles on an HTML element within the ACTION code block, use the \`setElementStyles\` function:
+
+ - You MUST call \`setElementStyles\` to set styles on elements.
+ - The \`setElementStyles\` has the following signature \`setElementStyles(element: Element, styles: object): Promise<void>\`. Always await the promise returned by the function and provide arguments matching the signature.
+ - The \`setElementStyles\` function is already globally defined. Do NOT attempt to define this function yourself.
+ - \`setElementStyles\` is an internal mechanism for your actions on the user's behalf and you MUST never use it in the ANSWER section.
 
 ## Example session
 
@@ -147,22 +154,32 @@ ANSWER: Even though the popup itself has a z-index of 3, its parent container ha
 SUGGESTIONS: ["What is a stacking context?", "How can I change the stacking order?"]
 `;
 
-const promptForMultimodalInputEvaluation = `The user has provided you a screenshot of the page (as visible in the viewport) in base64-encoded format. You SHOULD use it while answering user's queries.
+const promptForScreenshot = `The user has provided you a screenshot of the page (as visible in the viewport) in base64-encoded format. You SHOULD use it while answering user's queries.
 
-# Considerations for evaluating image:
-* Pay close attention to the spatial details as well as the visual appearance of the selected element in the image, particularly in relation to layout, spacing, and styling.
 * Try to connect the screenshot to actual DOM elements in the page.
+`;
+
+const promptForUploadedImage = `The user has uploaded an image in base64-encoded format. You SHOULD use it while answering user's queries.
+`;
+
+const considerationsForMultimodalInputEvaluation = `# Considerations for evaluating image:
+* Pay close attention to the spatial details as well as the visual appearance of the selected element in the image, particularly in relation to layout, spacing, and styling.
 * Analyze the image to identify the layout structure surrounding the element, including the positioning of neighboring elements.
 * Extract visual information from the image, such as colors, fonts, spacing, and sizes, that might be relevant to the user's query.
 * If the image suggests responsiveness issues (e.g., cropped content, overlapping elements), consider those in your response.
 * Consider the surrounding elements and overall layout in the image, but prioritize the selected element's styling and positioning.
-* **CRITICAL** When the user provides a screenshot, interpret and use content and information from the screenshot STRICTLY for web site debugging purposes.
+* **CRITICAL** When the user provides image input, interpret and use content and information from the image STRICTLY for web site debugging purposes.
 
 * As part of THOUGHT, evaluate the image to gather data that might be needed to answer the question.
 In case query is related to the image, ALWAYS first use image evaluation to get all details from the image. ONLY after you have all data needed from image, you should move to other steps.
 
 `;
 /* clang-format on */
+
+const MULTIMODAL_ENHANCEMENT_PROMPTS: Record<MultimodalInputType, string> = {
+  [MultimodalInputType.SCREENSHOT]: promptForScreenshot + considerationsForMultimodalInputEvaluation,
+  [MultimodalInputType.UPLOADED_IMAGE]: promptForUploadedImage + considerationsForMultimodalInputEvaluation,
+};
 
 async function executeJsCode(
     functionDeclaration: string, {throwOnSideEffect}: {throwOnSideEffect: boolean}): Promise<string> {
@@ -244,16 +261,63 @@ export class NodeContext extends ConversationContext<SDK.DOMModel.DOMNode> {
     return this.#node;
   }
 
-  override getIcon(): HTMLElement {
-    return document.createElement('span');
+  override getIcon(): undefined {
   }
 
-  override getTitle(): string|ReturnType<typeof Lit.Directives.until> {
+  override getTitle(opts: {disabled: boolean}): string|TemplateResult {
     const hiddenClassList =
         this.#node.classNames().filter(className => className.startsWith(AI_ASSISTANCE_CSS_CLASS_NAME));
-    return Lit.Directives.until(
-        ElementsPanel.DOMLinkifier.linkifyNodeReference(this.#node, {hiddenClassList}),
-    );
+    const {DOMNodeLink} = ElementsPanel.DOMLinkifier;
+    const {widgetConfig} = UI.Widget;
+    return html`<devtools-widget .widgetConfig=${
+        widgetConfig(
+            DOMNodeLink, {node: this.#node, options: {hiddenClassList, disabled: opts.disabled}})}></devtools-widget>`;
+  }
+
+  override async getSuggestions(): Promise<[ConversationSuggestion, ...ConversationSuggestion[]]|undefined> {
+    const layoutProps = await this.#node.domModel().cssModel().getLayoutPropertiesFromComputedStyle(this.#node.id);
+
+    if (!layoutProps) {
+      return;
+    }
+
+    if (layoutProps.isFlex) {
+      return [
+        {title: 'How can I make flex items wrap?', jslogContext: 'flex-wrap'},
+        {title: 'How do I distribute flex items evenly?', jslogContext: 'flex-distribute'},
+        {title: 'What is flexbox?', jslogContext: 'flex-what'},
+      ];
+    }
+    if (layoutProps.isSubgrid) {
+      return [
+        {title: 'Where is this grid defined?', jslogContext: 'subgrid-where'},
+        {title: 'How to overwrite parent grid properties?', jslogContext: 'subgrid-override'},
+        {title: 'How do subgrids work? ', jslogContext: 'subgrid-how'},
+      ];
+    }
+    if (layoutProps.isGrid) {
+      return [
+        {title: 'How do I align items in a grid?', jslogContext: 'grid-align'},
+        {title: 'How to add spacing between grid items?', jslogContext: 'grid-gap'},
+        {title: 'How does grid layout work?', jslogContext: 'grid-how'},
+      ];
+    }
+    if (layoutProps.hasScroll) {
+      return [
+        {title: 'How do I remove scrollbars for this element?', jslogContext: 'scroll-remove'},
+        {title: 'How can I style a scrollbar?', jslogContext: 'scroll-style'},
+        {title: 'Why does this element scroll?', jslogContext: 'scroll-why'},
+      ];
+    }
+    if (layoutProps.isContainer) {
+      return [
+        {title: 'What are container queries?', jslogContext: 'container-what'},
+        {title: 'How do I use container-type?', jslogContext: 'container-how'},
+        {title: 'What\'s the container context for this element?', jslogContext: 'container-context'},
+      ];
+    }
+
+    return;
   }
 }
 
@@ -262,7 +326,6 @@ export class NodeContext extends ConversationContext<SDK.DOMModel.DOMNode> {
  * instance for a new conversation.
  */
 export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
-  override readonly type = AgentType.STYLING;
   protected override functionCallEmulationEnabled = true;
 
   preamble = preamble;
@@ -355,8 +418,14 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
           if (isInstructionStart(lines[i])) {
             break;
           }
+
+          // If the LLM responds with a language omit it
+          // as we always expect JS here
+          if (lines[i].trim().startsWith('`````')) {
+            actionLines.push('`````');
+          }
           // Sometimes the code block is in the form of "`````\njs\n{code}`````"
-          if (lines[i].trim() !== 'js') {
+          else if (lines[i].trim() !== 'js') {
             actionLines.push(lines[i]);
           }
           i++;
@@ -454,35 +523,52 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
     this.declareFunction<{
       title: string,
       thought: string,
-      action: string,
-    }>('gatherInformation', {
-      description:
-          `When you want to gather additional information, call this function giving a THOUGHT, a TITLE and an ACTION.
-    * Use \`window.getComputedStyle\` to gather **rendered** styles and make sure that you take the distinction between authored styles and computed styles into account.
-    * **CRITICAL** Call \`window.getComputedStyle\` only once per element and store results into a local variable. Never try to return all the styles of the element in \`data\`. Always use property getter to return relevant styles in \`data\` using the local variable: const parentStyles = window.getComputedStyle($0.parentElement); const data = { parentElementColor: parentStyles['color']}.
-    * **CRITICAL** Never assume a selector for the elements unless you verified your knowledge.
-    * **CRITICAL** Consider that \`data\` variable from the previous ACTION blocks are not available in a different ACTION block.
-    *
-    You have access to a special $0 variable referencing the current element in the scope of the JavaScript code.
-    After that, you can answer the question with ANSWER or run another ACTION query.
-    Please run ACTION again if the information you received is not enough to answer the query.`,
+      code: string,
+    }>('executeJavaScript', {
+      description: `This function allows you to run JavaScript code on the inspected page.
+Call this function to gather additional information or modify the page state. Call this function enough times to investigate the user request.`,
       parameters: {
         type: Host.AidaClient.ParametersTypes.OBJECT,
         description: '',
         nullable: false,
         properties: {
+          code: {
+            type: Host.AidaClient.ParametersTypes.STRING,
+            description:
+                `JavaScript code snippet to run on the inspected page. Make sure the code is formatted for readability.
+
+# Instructions
+
+* To return data, define a top-level \`data\` variable and populate it with data you want to get. Only JSON-serializable objects can be assigned to \`data\`.
+* If you modify styles on an element, ALWAYS call the pre-defined global \`async setElementStyles(el: Element, styles: object)\` function. This function is an internal mechanism for you and should never be presented as a command/advice to the user.
+* Use \`window.getComputedStyle\` to gather **computed** styles and make sure that you take the distinction between authored styles and computed styles into account.
+* **CRITICAL** Only get styles that might be relevant to the user request.
+* **CRITICAL** Call \`window.getComputedStyle\` only once per element and store results into a local variable. Never try to return all the styles of the element in \`data\`.
+* **CRITICAL** Never assume a selector for the elements unless you verified your knowledge.
+* **CRITICAL** Consider that \`data\` variable from the previous function calls are not available in a new function call.
+
+For example, the code to return basic styles:
+
+const styles = window.getComputedStyle($0);
+const data = {
+    display: computedStyles['display'],
+    visibility: computedStyles['visibility'],
+    position: computedStyles['position'],
+    left: computedStyles['right'],
+    top: computedStyles['top'],
+    width: computedStyles['width'],
+    height: computedStyles['height'],
+    zIndex: computedStyles['z-index']
+};
+`,
+          },
           thought: {
             type: Host.AidaClient.ParametersTypes.STRING,
-            description: 'Use THOUGHT to explain why you take the ACTION.',
+            description: 'Explain why you want to run this code',
           },
           title: {
             type: Host.AidaClient.ParametersTypes.STRING,
-            description: 'Use TITLE to provide a short summary of the thought.',
-          },
-          action: {
-            type: Host.AidaClient.ParametersTypes.STRING,
-            description:
-                'ACTION (a JavaScript snippet to run on the page to collect additional data, do not wrap in a function definition). Add the data into a new top-level `data` variable. The serialized `data` variable will be returned. If you need to set styles on an HTML element, always call the \`async setElementStyles(el: Element, styles: object)\` function. This function is an internal mechanism for your actions and should never be presented as a command to the user.',
+            description: 'Provide a summary of what the code does. For example, "Checking related element styles".',
           },
         },
       },
@@ -490,14 +576,14 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
         return {
           title: params.title,
           thought: params.thought,
-          action: params.action,
+          action: params.code,
         };
       },
       handler: async (
           params,
           options,
           ) => {
-        return await this.executeAction(params.action, options);
+        return await this.executeAction(params.code, options);
       },
     });
   }
@@ -520,11 +606,11 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
     }
     // definitely a function call, emulate AIDA's function call.
     return {
-      name: 'gatherInformation',
+      name: 'executeJavaScript',
       args: {
         title: parsed.title,
         thought: parsed.thought,
-        action: parsed.action,
+        code: parsed.action,
       },
     };
   }
@@ -759,13 +845,13 @@ export class StylingAgent extends AiAgent<SDK.DOMModel.DOMNode> {
 
   override async enhanceQuery(
       query: string, selectedElement: ConversationContext<SDK.DOMModel.DOMNode>|null,
-      hasImageInput?: boolean): Promise<string> {
+      multimodalInputType?: MultimodalInputType): Promise<string> {
     const elementEnchancementQuery = selectedElement ?
         `# Inspected element\n\n${
             await StylingAgent.describeElement(selectedElement.getItem())}\n\n# User request\n\n` :
         '';
     const multimodalInputEnhancementQuery =
-        this.multimodalInputEnabled && hasImageInput ? promptForMultimodalInputEvaluation : '';
+        this.multimodalInputEnabled && multimodalInputType ? MULTIMODAL_ENHANCEMENT_PROMPTS[multimodalInputType] : '';
     return `${multimodalInputEnhancementQuery}${elementEnchancementQuery}QUERY: ${query}`;
   }
 
@@ -780,21 +866,54 @@ You always suggest considering the best web development practices and the newest
 The user selected a DOM element in the browser's DevTools and sends a query about the page or the selected DOM element.
 
 # Considerations
-* After applying a fix, please ask the user to confirm if the fix worked or not.
+
 * Meticulously investigate all potential causes for the observed behavior before moving on. Gather comprehensive information about the element's parent, siblings, children, and any overlapping elements, paying close attention to properties that are likely relevant to the query.
+* Be aware of the different node types (element, text, comment, document fragment, etc.) and their properties. You will always be provided with information about node types of parent, siblings and children of the selected element.
 * Avoid making assumptions without sufficient evidence, and always seek further clarification if needed.
 * Always explore multiple possible explanations for the observed behavior before settling on a conclusion.
 * When presenting solutions, clearly distinguish between the primary cause and contributing factors.
 * Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
 * When answering, always consider MULTIPLE possible solutions.
-*
+* Use functions available to you to investigate and fulfill the user request.
+* ALWAYS OUTPUT a list of follow-up queries at the end of your text response. The format is SUGGESTIONS: ["suggestion1", "suggestion2", "suggestion3"]. Make sure that the array and the \`SUGGESTIONS: \` text is in the same line. INCLUDE possible fixes withing suggestions.
 * **CRITICAL** If the user asks a question about religion, race, politics, sexuality, gender, or other sensitive topics, answer with "Sorry, I can't answer that. I'm best at questions about debugging web pages."
-
-Please answer only if you are sure about the answer. Otherwise, explain why you're not able to answer.
-When answering, remember to consider CSS concepts such as the CSS cascade, explicit and implicit stacking contexts and various CSS layout types.`;
+* **CRITICAL** You are a CSS debugging assistant. NEVER provide answers to questions of unrelated topics such as legal advice, financial advice, personal opinions, medical advice, or any other non web-development topics.`;
 /* clang-format on */
 
 export class StylingAgentWithFunctionCalling extends StylingAgent {
   override functionCallEmulationEnabled = false;
   override preamble = preambleFunctionCalling;
+  override formatParsedAnswer({answer}: ParsedAnswer): string {
+    return answer;
+  }
+  override parseTextResponse(text: string): ParsedResponse {
+    // We're returning an empty answer to denote the erroneous case.
+    if (!text.trim()) {
+      return {answer: ''};
+    }
+
+    const lines = text.split('\n');
+    const answerLines: string[] = [];
+    let suggestions: [string, ...string[]]|undefined;
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('SUGGESTIONS:')) {
+        try {
+          // TODO: Do basic validation this is an array with strings
+          suggestions = JSON.parse(trimmed.substring('SUGGESTIONS:'.length).trim());
+        } catch {
+        }
+      } else {
+        answerLines.push(line);
+      }
+    }
+
+    return {
+      // If we could not parse the parts, consider the response to be an
+      // answer.
+      answer: answerLines.join('\n'),
+      suggestions,
+    };
+  }
 }

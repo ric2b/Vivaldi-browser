@@ -254,7 +254,12 @@ struct Decoder {
         }
         fn_out->SetReturnType(Type(fn_in.return_type()));
         if (fn_in.has_pipeline_stage()) {
-            fn_out->SetStage(PipelineStage(fn_in.pipeline_stage()));
+            if (PipelineStage_IsValid(fn_in.pipeline_stage())) {
+                fn_out->SetStage(PipelineStage(fn_in.pipeline_stage()));
+            } else {
+                err_ << "invalid pipe line state, " << std::to_string(fn_in.pipeline_stage())
+                     << "\n";
+            }
         }
         if (fn_in.has_workgroup_size()) {
             auto& wg_size_in = fn_in.workgroup_size();
@@ -482,6 +487,11 @@ struct Decoder {
     }
 
     ir::CoreBinary* CreateInstructionBinary(const pb::InstructionBinary& binary_in) {
+        if (!BinaryOp_IsValid(binary_in.op())) {
+            err_ << "invalid binary op, " << std::to_string(binary_in.op()) << "\n";
+            return nullptr;
+        }
+
         auto* binary_out = mod_out_.CreateInstruction<ir::CoreBinary>();
         binary_out->SetOp(BinaryOp(binary_in.op()));
         return binary_out;
@@ -630,6 +640,10 @@ struct Decoder {
     }
 
     ir::CoreUnary* CreateInstructionUnary(const pb::InstructionUnary& unary_in) {
+        if (!UnaryOp_IsValid(unary_in.op())) {
+            err_ << "invalid unary op, " << std::to_string(unary_in.op()) << "\n";
+            return nullptr;
+        }
         auto* unary_out = mod_out_.CreateInstruction<ir::CoreUnary>();
         unary_out->SetOp(UnaryOp(unary_in.op()));
         return unary_out;
@@ -710,19 +724,24 @@ struct Decoder {
     }
 
     const type::Type* CreateTypeBasic(pb::TypeBasic basic_in) {
+        if (!TypeBasic_IsValid(basic_in)) {
+            err_ << "invalid basic type, " << std::to_string(basic_in) << "\n";
+            return mod_out_.Types().invalid();
+        }
+
         switch (basic_in) {
             case pb::TypeBasic::void_:
-                return mod_out_.Types().Get<void>();
+                return mod_out_.Types().void_();
             case pb::TypeBasic::bool_:
-                return mod_out_.Types().Get<bool>();
+                return mod_out_.Types().bool_();
             case pb::TypeBasic::i32:
-                return mod_out_.Types().Get<i32>();
+                return mod_out_.Types().i32();
             case pb::TypeBasic::u32:
-                return mod_out_.Types().Get<u32>();
+                return mod_out_.Types().u32();
             case pb::TypeBasic::f32:
-                return mod_out_.Types().Get<f32>();
+                return mod_out_.Types().f32();
             case pb::TypeBasic::f16:
-                return mod_out_.Types().Get<f16>();
+                return mod_out_.Types().f16();
 
             case pb::TypeBasic::TypeBasic_INT_MIN_SENTINEL_DO_NOT_USE_:
             case pb::TypeBasic::TypeBasic_INT_MAX_SENTINEL_DO_NOT_USE_:
@@ -876,20 +895,20 @@ struct Decoder {
             err_ << "invalid DepthTexture dimension\n";
             return mod_out_.Types().invalid();
         }
-        return mod_out_.Types().Get<type::DepthTexture>(dimension);
+        return mod_out_.Types().depth_texture(dimension);
     }
 
     const type::SampledTexture* CreateTypeSampledTexture(const pb::TypeSampledTexture& texture_in) {
         auto dimension = TextureDimension(texture_in.dimension());
         auto sub_type = Type(texture_in.sub_type());
-        return mod_out_.Types().Get<type::SampledTexture>(dimension, sub_type);
+        return mod_out_.Types().sampled_texture(dimension, sub_type);
     }
 
     const type::MultisampledTexture* CreateTypeMultisampledTexture(
         const pb::TypeMultisampledTexture& texture_in) {
         auto dimension = TextureDimension(texture_in.dimension());
         auto sub_type = Type(texture_in.sub_type());
-        return mod_out_.Types().Get<type::MultisampledTexture>(dimension, sub_type);
+        return mod_out_.Types().multisampled_texture(dimension, sub_type);
     }
 
     const type::Type* CreateTypeDepthMultisampledTexture(
@@ -899,23 +918,25 @@ struct Decoder {
             err_ << "invalid DepthMultisampledTexture dimension\n";
             return mod_out_.Types().invalid();
         }
-        return mod_out_.Types().Get<type::DepthMultisampledTexture>(dimension);
+        return mod_out_.Types().depth_multisampled_texture(dimension);
     }
 
     const type::StorageTexture* CreateTypeStorageTexture(const pb::TypeStorageTexture& texture_in) {
         auto dimension = TextureDimension(texture_in.dimension());
         auto texel_format = TexelFormat(texture_in.texel_format());
         auto access = AccessControl(texture_in.access());
-        return mod_out_.Types().Get<type::StorageTexture>(
-            dimension, texel_format, access,
-            type::StorageTexture::SubtypeFor(texel_format, b.ir.Types()));
+        return mod_out_.Types().storage_texture(dimension, texel_format, access);
     }
 
     const type::ExternalTexture* CreateTypeExternalTexture(const pb::TypeExternalTexture&) {
-        return mod_out_.Types().Get<type::ExternalTexture>();
+        return mod_out_.Types().external_texture();
     }
 
     const type::Sampler* CreateTypeSampler(const pb::TypeSampler& sampler_in) {
+        if (!SamplerKind_IsValid(sampler_in.kind())) {
+            err_ << "invalid sampler kind, " << std::to_string(sampler_in.kind()) << "\n";
+            return nullptr;
+        }
         auto kind = SamplerKind(sampler_in.kind());
         return mod_out_.Types().Get<type::Sampler>(kind);
     }
@@ -923,18 +944,22 @@ struct Decoder {
     const type::InputAttachment* CreateTypeInputAttachment(
         const pb::TypeInputAttachment& input_in) {
         auto sub_type = Type(input_in.sub_type());
-        return mod_out_.Types().Get<type::InputAttachment>(sub_type);
+        return mod_out_.Types().input_attachment(sub_type);
     }
 
     const type::SubgroupMatrix* CreateTypeSubgroupMatrix(
         SubgroupMatrixKind kind,
         const pb::TypeSubgroupMatrix& subgroup_matrix) {
-        return mod_out_.Types().Get<type::SubgroupMatrix>(kind, Type(subgroup_matrix.sub_type()),
-                                                          subgroup_matrix.columns(),
-                                                          subgroup_matrix.rows());
+        return mod_out_.Types().subgroup_matrix(kind, Type(subgroup_matrix.sub_type()),
+                                                subgroup_matrix.columns(), subgroup_matrix.rows());
     }
 
     const type::Type* CreateTypeBuiltinStruct(pb::TypeBuiltinStruct builtin_struct_in) {
+        if (!TypeBuiltinStruct_IsValid(builtin_struct_in)) {
+            err_ << "invalid builtin struct type, " << std::to_string(builtin_struct_in) << "\n";
+            return mod_out_.Types().invalid();
+        }
+
         auto& ty = mod_out_.Types();
         switch (builtin_struct_in) {
             case pb::TypeBuiltinStruct::AtomicCompareExchangeResultI32:
@@ -1226,6 +1251,11 @@ struct Decoder {
     // Enums
     ////////////////////////////////////////////////////////////////////////////
     core::AddressSpace AddressSpace(pb::AddressSpace in) {
+        if (!AddressSpace_IsValid(in)) {
+            err_ << "invalid address space, " << std::to_string(in) << "\n";
+            return core::AddressSpace::kUndefined;
+        }
+
         switch (in) {
             case pb::AddressSpace::function:
                 return core::AddressSpace::kFunction;
@@ -1235,8 +1265,8 @@ struct Decoder {
                 return core::AddressSpace::kPixelLocal;
             case pb::AddressSpace::private_:
                 return core::AddressSpace::kPrivate;
-            case pb::AddressSpace::push_constant:
-                return core::AddressSpace::kPushConstant;
+            case pb::AddressSpace::immediate:
+                return core::AddressSpace::kImmediate;
             case pb::AddressSpace::storage:
                 return core::AddressSpace::kStorage;
             case pb::AddressSpace::uniform:
@@ -1252,6 +1282,11 @@ struct Decoder {
     }
 
     core::Access AccessControl(pb::AccessControl in) {
+        if (!AccessControl_IsValid(in)) {
+            err_ << "invalid access control, " << std::to_string(in) << "\n";
+            return core::Access::kUndefined;
+        }
+
         switch (in) {
             case pb::AccessControl::read:
                 return core::Access::kRead;
@@ -1334,6 +1369,11 @@ struct Decoder {
     }
 
     core::type::TextureDimension TextureDimension(pb::TextureDimension in) {
+        if (!TextureDimension_IsValid(in)) {
+            err_ << "invalid texture dimension, " << std::to_string(in) << "\n";
+            return core::type::TextureDimension::kNone;
+        }
+
         switch (in) {
             case pb::TextureDimension::_1d:
                 return core::type::TextureDimension::k1d;
@@ -1357,6 +1397,11 @@ struct Decoder {
     }
 
     core::TexelFormat TexelFormat(pb::TexelFormat in) {
+        if (!TexelFormat_IsValid(in)) {
+            err_ << "invalid texel format, " << std::to_string(in) << "\n";
+            return core::TexelFormat::kUndefined;
+        }
+
         switch (in) {
             case pb::TexelFormat::bgra8_unorm:
                 return core::TexelFormat::kBgra8Unorm;
@@ -1419,6 +1464,11 @@ struct Decoder {
     }
 
     core::InterpolationType InterpolationType(pb::InterpolationType in) {
+        if (!InterpolationType_IsValid(in)) {
+            err_ << "invalid interpolation type, " << std::to_string(in) << "\n";
+            return core::InterpolationType::kUndefined;
+        }
+
         switch (in) {
             case pb::InterpolationType::flat:
                 return core::InterpolationType::kFlat;
@@ -1435,6 +1485,11 @@ struct Decoder {
     }
 
     core::InterpolationSampling InterpolationSampling(pb::InterpolationSampling in) {
+        if (!InterpolationSampling_IsValid(in)) {
+            err_ << "invalid interpolation sampling, " << std::to_string(in) << "\n";
+            return core::InterpolationSampling::kUndefined;
+        }
+
         switch (in) {
             case pb::InterpolationSampling::center:
                 return core::InterpolationSampling::kCenter;
@@ -1455,6 +1510,11 @@ struct Decoder {
     }
 
     core::BuiltinValue BuiltinValue(pb::BuiltinValue in) {
+        if (!BuiltinValue_IsValid(in)) {
+            err_ << "invalid builtin value, " << std::to_string(in) << "\n";
+            return core::BuiltinValue::kUndefined;
+        }
+
         switch (in) {
             case pb::BuiltinValue::point_size:
                 return core::BuiltinValue::kPointSize;
@@ -1480,6 +1540,8 @@ struct Decoder {
                 return core::BuiltinValue::kSampleIndex;
             case pb::BuiltinValue::sample_mask:
                 return core::BuiltinValue::kSampleMask;
+            case pb::BuiltinValue::subgroup_id:
+                return core::BuiltinValue::kSubgroupId;
             case pb::BuiltinValue::subgroup_invocation_id:
                 return core::BuiltinValue::kSubgroupInvocationId;
             case pb::BuiltinValue::subgroup_size:
@@ -1498,6 +1560,11 @@ struct Decoder {
     }
 
     core::BuiltinFn BuiltinFn(pb::BuiltinFn in) {
+        if (!BuiltinFn_IsValid(in)) {
+            err_ << "invalid builtin function, " << std::to_string(in) << "\n";
+            return core::BuiltinFn::kNone;
+        }
+
         switch (in) {
             case pb::BuiltinFn::abs:
                 return core::BuiltinFn::kAbs;

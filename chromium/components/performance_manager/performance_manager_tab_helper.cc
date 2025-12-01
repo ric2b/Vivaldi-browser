@@ -12,7 +12,6 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/memory/weak_ptr.h"
-#include "base/not_fatal_until.h"
 #include "base/observer_list.h"
 #include "base/supports_user_data.h"
 #include "components/guest_view/buildflags/buildflags.h"
@@ -26,6 +25,7 @@
 #include "components/performance_manager/render_process_user_data.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
@@ -255,7 +255,7 @@ void PerformanceManagerTabHelper::RenderFrameCreated(
 void PerformanceManagerTabHelper::RenderFrameDeleted(
     content::RenderFrameHost* render_frame_host) {
   auto it = frames_.find(render_frame_host);
-  CHECK(it != frames_.end(), base::NotFatalUntil::M130);
+  CHECK(it != frames_.end());
 
   std::unique_ptr<FrameNodeImpl> frame_node = std::move(it->second);
 
@@ -503,7 +503,9 @@ std::optional<blink::mojom::PermissionStatus> PerformanceManagerTabHelper::
 
   // Return current status.
   return permission_controller->GetPermissionStatusForCurrentDocument(
-      blink::PermissionType::NOTIFICATIONS,
+      content::PermissionDescriptorUtil::
+          CreatePermissionDescriptorForPermissionType(
+              blink::PermissionType::NOTIFICATIONS),
       web_contents()->GetPrimaryMainFrame());
 #endif  // BUILDFLAG(IS_ANDROID)
 }
@@ -618,7 +620,7 @@ void PerformanceManagerTabHelper::BindDocumentCoordinationUnit(
     content::RenderFrameHost* render_frame_host,
     mojo::PendingReceiver<mojom::DocumentCoordinationUnit> receiver) {
   auto it = frames_.find(render_frame_host);
-  CHECK(it != frames_.end(), base::NotFatalUntil::M130);
+  CHECK(it != frames_.end());
 
   auto* frame_node = it->second.get();
   frame_node->Bind(std::move(receiver));

@@ -10,6 +10,7 @@
 #include "net/dns/record_rdata.h"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -35,21 +36,23 @@ TEST(RecordRdataTest, ParseSrvRecord) {
   // These are just the rdata portions of the DNS records, rather than complete
   // records, but it works well enough for this test.
 
-  const uint8_t
-      record[] =
+  const auto record =
+      std::to_array<uint8_t>(
           {
               0x00, 0x01, 0x00, 0x02, 0x00, 0x50, 0x03, 'w',  'w',
               'w',  0x06, 'g',  'o',  'o',  'g',  'l',  'e',  0x03,
               'c',  'o',  'm',  0x00, 0x01, 0x01, 0x01, 0x02, 0x01,
               0x03, 0x04, 'w',  'w',  'w',  '2',  0xc0, 0x0a,  // Pointer to
                                                                // "google.com"
-          };
+          });
 
   DnsRecordParser parser(record, 0, /*num_records=*/0);
   const unsigned first_record_len = 22;
-  base::span<const uint8_t> record1_span(record, first_record_len);
-  base::span<const uint8_t> record2_span(record + first_record_len,
-                                         sizeof(record) - first_record_len);
+  base::span<const uint8_t> record1_span(record.data(), first_record_len);
+  base::span<const uint8_t> record2_span(
+      base::span<const uint8_t>(record).subspan(first_record_len).data(),
+      (record.size() * sizeof(decltype(record)::value_type)) -
+          first_record_len);
   std::unique_ptr<SrvRecordRdata> record1_obj =
       SrvRecordRdata::Create(record1_span, parser);
   ASSERT_TRUE(record1_obj != nullptr);
@@ -168,6 +171,14 @@ TEST(RecordRdataTest, ParseTxtRecord) {
   ASSERT_EQ(expected, record_obj->texts());
 
   ASSERT_TRUE(record_obj->IsEqual(record_obj.get()));
+}
+
+TEST(RecordRdataTest, EmptyTxtRecordIsInvalid) {
+  // Create a record parser for an empty packet. Good enough for this test since
+  // the TXT record parser doesn't make use of `parser`.
+  DnsRecordParser parser(/*packet=*/{}, /*offset=*/0, /*num_records=*/0);
+
+  EXPECT_FALSE(TxtRecordRdata::Create(/*data=*/{}, parser));
 }
 
 TEST(RecordRdataTest, ParseNsecRecord) {

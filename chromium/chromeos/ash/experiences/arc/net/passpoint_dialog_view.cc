@@ -14,6 +14,7 @@
 #include "ash/style/ash_color_provider.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/network/network_event_log.h"
 #include "chromeos/ash/experiences/arc/compat_mode/overlay_dialog.h"
@@ -95,7 +96,7 @@ PasspointDialogView::PasspointDialogView(
   auto border = std::make_unique<views::BubbleBorder>(
       views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW);
   border->SetColor(ash::kColorAshDialogBackgroundColor);
-  border->SetCornerRadius(kCornerRadius);
+  border->set_rounded_corners(gfx::RoundedCornersF(kCornerRadius));
   SetBackground(std::make_unique<views::BubbleBackground>(border.get()));
   SetBorder(std::move(border));
 

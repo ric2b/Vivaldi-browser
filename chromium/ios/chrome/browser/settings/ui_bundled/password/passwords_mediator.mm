@@ -21,6 +21,7 @@
 #import "ios/chrome/browser/passwords/model/password_manager_util_ios.h"
 #import "ios/chrome/browser/passwords/model/save_passwords_consumer.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/account_storage_utils.h"
+#import "ios/chrome/browser/settings/ui_bundled/password/password_manager_ui_features.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_consumer.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_mediator+Testing.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/passwords_table_view_constants.h"
@@ -139,6 +140,7 @@ struct PasswordManagerActiveWidgetPromoData
   }
   _consumer = consumer;
 
+  [self displayOrHideTrustedVaultPasswordManagerWidgetPromo];
   [self providePasswordsToConsumer];
 
   _currentState = _passwordCheckManager->GetPasswordCheckState();
@@ -407,6 +409,21 @@ struct PasswordManagerActiveWidgetPromoData
   }
 }
 
+// LINT.IfChange(IsTrustedVaultKeyRequiredForPreferredDataTypes)
+// Decides whether the Trusted Vault widget promo should be displayed and asks
+// consumer to do so. This code should be in sync with the code that decides
+// whether the error badge should be displayed for the GPM icon in the overflow
+// menu.
+- (void)displayOrHideTrustedVaultPasswordManagerWidgetPromo {
+  if (password_manager::features::
+          IsPasswordManagerTrustedVaultWidgetEnabled()) {
+    [self.consumer setShouldShowTrustedVaultWidgetPromo:
+                       _syncService->GetUserSettings()
+                           ->IsTrustedVaultKeyRequiredForPreferredDataTypes()];
+  }
+}
+// LINT.ThenChange(/ios/chrome/browser/popup_menu/ui_bundled/overflow_menu/overflow_menu_mediator.mm:IsTrustedVaultKeyRequiredForPreferredDataTypes)
+
 #pragma mark - SavedPasswordsPresenterObserver
 
 - (void)savedPasswordsDidChange {
@@ -442,6 +459,7 @@ struct PasswordManagerActiveWidgetPromoData
       setSavingPasswordsToAccount:
           password_manager::sync_util::GetPasswordSyncState(_syncService) !=
           password_manager::sync_util::SyncState::kNotActive];
+  [self displayOrHideTrustedVaultPasswordManagerWidgetPromo];
 }
 
 @end

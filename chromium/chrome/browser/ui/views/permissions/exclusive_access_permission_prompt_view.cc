@@ -55,6 +55,20 @@ void AddElementIdentifierToLabel(views::Label& label, size_t index) {
   label.SetProperty(views::kElementIdentifierKey, id);
 }
 
+std::string GetPermissionActionString(
+    ExclusiveAccessPermissionPromptView::ButtonType button) {
+  switch (button) {
+    case ExclusiveAccessPermissionPromptView::ButtonType::kAlwaysAllow:
+      return "Accepted";
+    case ExclusiveAccessPermissionPromptView::ButtonType::kAllowThisTime:
+      return "AcceptedOnce";
+    case ExclusiveAccessPermissionPromptView::ButtonType::kNeverAllow:
+      return "Denied";
+    default:
+      NOTREACHED();
+  }
+}
+
 }  // namespace
 
 ExclusiveAccessPermissionPromptView::ExclusiveAccessPermissionPromptView(
@@ -99,6 +113,9 @@ void ExclusiveAccessPermissionPromptView::RunButtonCallback(int button_id) {
     return;
   }
   ButtonType button = GetButtonType(button_id);
+  permissions::PermissionUmaUtil::RecordActionBrowserAlwaysActive(
+      request_type(), GetPermissionActionString(button),
+      record_browser_always_active_value());
   if (button == ButtonType::kAllowThisTime) {
     delegate_->AcceptThisTime();
   } else if (button == ButtonType::kAlwaysAllow) {
@@ -178,7 +195,7 @@ void ExclusiveAccessPermissionPromptView::Init() {
                      base::Unretained(this)));
 
   int index = 0;
-  for (permissions::PermissionRequest* request : delegate_->Requests()) {
+  for (const auto& request : delegate_->Requests()) {
     AddRequestLine(&permissions::GetIconId(request->request_type()),
                    request->GetMessageTextFragment(), index++);
   }
@@ -194,13 +211,9 @@ void ExclusiveAccessPermissionPromptView::InitButtons() {
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       kButtonVerticalDistance));
 
-  if (permissions::feature_params::kShowAllowAlwaysAsFirstButton.Get()) {
-    AddAlwaysAllowButton(*buttons_container);
-    AddAllowThisTimeButton(*buttons_container);
-  } else {
-    AddAllowThisTimeButton(*buttons_container);
-    AddAlwaysAllowButton(*buttons_container);
-  }
+  AddAlwaysAllowButton(*buttons_container);
+  AddAllowThisTimeButton(*buttons_container);
+
   AddButton(*buttons_container,
             l10n_util::GetStringUTF16(IDS_PERMISSION_NEVER_ALLOW),
             ButtonType::kNeverAllow, ui::ButtonStyle::kTonal, kNeverAllowId);
@@ -283,6 +296,8 @@ void ExclusiveAccessPermissionPromptView::AddAllowThisTimeButton(
 
 void ExclusiveAccessPermissionPromptView::ClosingPermission() {
   if (delegate_) {
+    permissions::PermissionUmaUtil::RecordActionBrowserAlwaysActive(
+        request_type(), "Dismissed", record_browser_always_active_value());
     delegate_->Dismiss();
   }
 }

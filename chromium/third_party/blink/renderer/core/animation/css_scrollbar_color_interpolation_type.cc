@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "third_party/blink/renderer/core/animation/interpolable_scrollbar_color.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
@@ -147,7 +148,7 @@ InterpolationValue CSSScrollbarColorInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSScrollbarColorInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState* state,
+    const StyleResolverState& state,
     ConversionCheckers& conversion_checkers) const {
   // https://drafts.csswg.org/css-scrollbars/#scrollbar-color
   // scrollbar-color: auto | <color>{2}
@@ -211,7 +212,7 @@ void CSSScrollbarColorInterpolationType::Composite(
            *underlying_value_owner.Value().non_interpolable_value)
            .IsCompatibleWith(To<CSSScrollbarColorNonInterpolableValue>(
                *value.non_interpolable_value))) {
-    underlying_value_owner.Set(*this, value);
+    underlying_value_owner.Set(this, value);
   }
 
   auto& underlying = To<InterpolableScrollbarColor>(

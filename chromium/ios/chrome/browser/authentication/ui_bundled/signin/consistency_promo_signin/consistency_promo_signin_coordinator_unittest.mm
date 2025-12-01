@@ -7,11 +7,17 @@
 #import <UIKit/UIKit.h>
 
 #import "components/signin/core/browser/account_reconcilor.h"
+#import "ios/chrome/app/profile/profile_state.h"
+#import "ios/chrome/browser/authentication/ui_bundled/authentication_test_util.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_default_account/consistency_default_account_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_promo_signin_mediator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_sheet/consistency_sheet_navigation_controller.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_in_progress.h"
+#import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/public/commands/application_commands.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
@@ -22,13 +28,22 @@ namespace {
 class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
  public:
   ConsistencyPromoSigninCoordinatorTest() {
+    // The profile state will receive UI blocker request. They are not tested
+    // here, so it’s a non-strict mock.
+    profile_state_ = OCMClassMock([ProfileState class]);
+    scene_state_ = [[SceneState alloc] initWithAppState:nil];
+    scene_state_.profileState = profile_state_;
     profile_ = TestProfileIOS::Builder().Build();
-    browser_ = std::make_unique<TestBrowser>(profile_.get());
+    browser_ = std::make_unique<TestBrowser>(profile_.get(), scene_state_);
     base_view_controller_mock_ = OCMStrictClassMock([UIViewController class]);
+
     coordinator_ = [[ConsistencyPromoSigninCoordinator alloc]
         initWithBaseViewController:base_view_controller_mock_
                            browser:browser_.get()
-                       accessPoint:access_point_];
+                      contextStyle:SigninContextStyle::kDefault
+                       accessPoint:access_point_
+              prepareChangeProfile:nil
+              continuationProvider:NotReachedContinuationProvider()];
     mediator_mock_ = OCMStrictClassMock([ConsistencyPromoSigninMediator class]);
     consistency_default_account_coordinator_mock_ =
         OCMStrictClassMock([ConsistencyDefaultAccountCoordinator class]);
@@ -41,6 +56,7 @@ class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
     EXPECT_OCMOCK_VERIFY((id)base_view_controller_mock_);
     EXPECT_OCMOCK_VERIFY((id)consistency_default_account_coordinator_mock_);
     EXPECT_OCMOCK_VERIFY((id)consistency_sheet_navigation_controller_mock_);
+    EXPECT_OCMOCK_VERIFY((id)profile_state_);
     PlatformTest::TearDown();
   }
 
@@ -73,6 +89,7 @@ class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
                   initWithBaseViewController:
                       consistency_sheet_navigation_controller_mock_
                                      browser:browser_.get()
+                                contextStyle:SigninContextStyle::kDefault
                                  accessPoint:access_point_])
         .andReturn(consistency_default_account_coordinator_mock_);
     OCMExpect([consistency_default_account_coordinator_mock_
@@ -100,6 +117,7 @@ class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
                           userPrefService:reinterpret_cast<PrefService*>(
                                               [OCMArg anyPointer])
                               accessPoint:access_point_])
+        .ignoringNonObjectArgs()
         .andReturn(mediator_mock_);
     OCMExpect([base_view_controller_mock_ presentViewController:[OCMArg any]
                                                        animated:YES
@@ -132,11 +150,14 @@ class ConsistencyPromoSigninCoordinatorTest : public PlatformTest {
       consistency_default_account_coordinator_mock_ = nil;
   ConsistencySheetNavigationController*
       consistency_sheet_navigation_controller_mock_ = nil;
+  SceneState* scene_state_;
 
  private:
   web::WebTaskEnvironment task_environment_;
   std::unique_ptr<TestProfileIOS> profile_;
   std::unique_ptr<TestBrowser> browser_;
+  // Required for UI blocker.
+  ProfileState* profile_state_;
 };
 
 // Tests that all coordinators are stopped and delegates are set to nil when
@@ -154,15 +175,8 @@ TEST_F(ConsistencyPromoSigninCoordinatorTest, StartAndCancel) {
       };
   StartCoordinator();
   // Simulate cancel from the user.
-  // Expect the view to be dismissed.
-  __block ProceduralBlock dissmiss_completion = nil;
-  OCMExpect([base_view_controller_mock_
-      dismissViewControllerAnimated:YES
-                         completion:[OCMArg checkWithBlock:^(
-                                                ProceduralBlock completion) {
-                           dissmiss_completion = completion;
-                           return YES;
-                         }]]);
+  OCMExpect([base_view_controller_mock_ dismissViewControllerAnimated:YES
+                                                           completion:nil]);
   // Expect the navigation controller delegates to be reset.
   OCMExpect([consistency_sheet_navigation_controller_mock_ setDelegate:nil]);
   OCMExpect([consistency_sheet_navigation_controller_mock_
@@ -180,14 +194,14 @@ TEST_F(ConsistencyPromoSigninCoordinatorTest, StartAndCancel) {
   [GetConsistencyDefaultAccountCoordinatorDelegate()
       consistencyDefaultAccountCoordinatorSkip:
           consistency_default_account_coordinator_mock_];
-  // Call the view controller dismiss completion block.
-  EXPECT_NE(nil, dissmiss_completion);
-  dissmiss_completion();
   // Expect the sign-in completion block called.
   EXPECT_TRUE(signin_completion_called);
   EXPECT_EQ(SigninCoordinatorResultCanceledByUser, coordinator_result);
   EXPECT_EQ(nil, signed_in_identity);
+  EXPECT_TRUE(scene_state_.signinInProgress);
   [coordinator_ stop];
+  coordinator_ = nil;
+  EXPECT_FALSE(scene_state_.signinInProgress);
 }
 
 }  // namespace

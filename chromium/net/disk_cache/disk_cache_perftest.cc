@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "net/disk_cache/disk_cache.h"
 
@@ -319,7 +315,8 @@ class ReadHandler {
 
   int pending_result_ = net::OK;
 
-  scoped_refptr<net::IOBuffer> read_buffers_[kMaxParallelOperations];
+  std::array<scoped_refptr<net::IOBuffer>, kMaxParallelOperations>
+      read_buffers_;
 };
 
 void ReadHandler::Run() {

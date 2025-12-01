@@ -22,6 +22,7 @@
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_folder_list_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_folder_regular_cell.h"
+#import "ios/ui/ntp/cells/vivaldi_speed_dial_icon_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_list_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
@@ -42,6 +43,7 @@ NSString* cellIdFolderRegular = @"cellIdFolderRegular";
 NSString* cellIdFolderList = @"cellIdFolderList";
 NSString* cellIdRegular = @"cellIdRegular";
 NSString* cellIdSmall = @"cellIdSmall";
+NSString* cellIdIcon = @"cellIdIcon";
 NSString* cellIdList = @"cellIdList";
 
 NSString* syncedStoreURLKey = @"synced-store";
@@ -78,6 +80,8 @@ const CGFloat commonPadding = 20;
 @property(strong,nonatomic) VivaldiSpeedDialItem* parent;
 // Array to store the children to populate on the collection view
 @property(strong,nonatomic) NSMutableArray *speedDialItems;
+// Custom wallpaper set by users
+@property(strong,nonatomic) UIImage* wallpaper;
 // Currently selected layout
 @property(nonatomic,assign) VivaldiStartPageLayoutStyle selectedLayout;
 // Currently selected maximum columns
@@ -137,6 +141,8 @@ const CGFloat commonPadding = 20;
       forCellWithReuseIdentifier:cellIdRegular];
   [collectionView registerClass:[VivaldiSpeedDialSmallCell class]
       forCellWithReuseIdentifier:cellIdSmall];
+  [collectionView registerClass:[VivaldiSpeedDialIconCell class]
+      forCellWithReuseIdentifier:cellIdIcon];
   [collectionView registerClass:[VivaldiSpeedDialListCell class]
       forCellWithReuseIdentifier:cellIdList];
   [_collectionView registerClass:[VivaldiSpeedDialFolderRegularCell class]
@@ -196,7 +202,8 @@ const CGFloat commonPadding = 20;
     frequentlyVisited:(BOOL)frequentlyVisited
     topSitesAvailable:(BOOL)topSitesAvailable
      topToolbarHidden:(BOOL)topToolbarHidden
-    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass {
+    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass
+            wallpaper:(UIImage*)wallpaper {
   self.parent = parent;
   self.isTopSitesResultsAvailable = topSitesAvailable;
   self.showingFrequentlyVisited = frequentlyVisited;
@@ -206,6 +213,7 @@ const CGFloat commonPadding = 20;
       self, directMatchService));
   self.selectedLayout = style;
   self.selectedColumn = column;
+  self.wallpaper = wallpaper;
   self.layout.layoutStyle = style;
   self.layout.shouldShowTabletLayout = [self showTabletLayout];
   self.layout.numberOfColumns = column;
@@ -272,6 +280,16 @@ const CGFloat commonPadding = 20;
                                  layoutStyle:self.selectedLayout];
         return folderRegularCell;
       }
+      case VivaldiStartPageLayoutStyleIcon: {
+        VivaldiSpeedDialIconCell *iconCell =
+          [collectionView dequeueReusableCellWithReuseIdentifier:cellIdIcon
+                                                    forIndexPath:indexPath];
+        [iconCell configureCellWith:item
+                            isTablet:self.showTabletLayout
+                            isFolder:YES
+                          wallpaper:self.wallpaper];
+        return iconCell;
+      }
       case VivaldiStartPageLayoutStyleList: {
         VivaldiSpeedDialFolderListCell *folderListCell =
             [collectionView
@@ -305,6 +323,18 @@ const CGFloat commonPadding = 20;
                          forCell:smallCell];
         return smallCell;
       }
+      case VivaldiStartPageLayoutStyleIcon: {
+        VivaldiSpeedDialIconCell *iconCell =
+          [collectionView dequeueReusableCellWithReuseIdentifier:cellIdIcon
+                                                    forIndexPath:indexPath];
+        [iconCell configureCellWith:item
+                            isTablet:self.showTabletLayout
+                            isFolder:NO
+                          wallpaper:self.wallpaper];
+        [self loadFaviconForItem:item
+                         forCell:iconCell];
+        return iconCell;
+      }
       case VivaldiStartPageLayoutStyleList: {
           VivaldiSpeedDialListCell *listCell =
             [collectionView dequeueReusableCellWithReuseIdentifier:cellIdList
@@ -332,6 +362,7 @@ const CGFloat commonPadding = 20;
       desiredFaviconSizeInPoints = kDesiredSmallFaviconSizePt;
       break;
     case VivaldiStartPageLayoutStyleSmall:
+    case VivaldiStartPageLayoutStyleIcon:
     case VivaldiStartPageLayoutStyleList:
       desiredFaviconSizeInPoints = kDesiredMediumFaviconSizePt;
       break;
@@ -379,6 +410,11 @@ const CGFloat commonPadding = 20;
         VivaldiSpeedDialSmallCell* smallCell =
             (VivaldiSpeedDialSmallCell*)cell;
         [smallCell configureCellWithAttributes:attributes item:item];
+        break;
+      }
+      case VivaldiStartPageLayoutStyleIcon: {
+        VivaldiSpeedDialIconCell* iconCell = (VivaldiSpeedDialIconCell*)cell;
+        [iconCell configureCellWithAttributes:attributes item:item];
         break;
       }
       case VivaldiStartPageLayoutStyleList: {

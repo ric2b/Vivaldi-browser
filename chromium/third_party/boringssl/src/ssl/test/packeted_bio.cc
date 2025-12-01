@@ -24,14 +24,13 @@
 #include <utility>
 #include <vector>
 
+#include <openssl/bio.h>
 #include <openssl/mem.h>
 
 #include "../../crypto/internal.h"
 
 
 namespace {
-
-extern const BIO_METHOD g_packeted_bio_method;
 
 constexpr uint8_t kOpcodePacket = 'P';
 constexpr uint8_t kOpcodeTimeout = 'T';
@@ -59,11 +58,20 @@ struct PacketedBio {
   std::function<bool(uint32_t)> set_mtu;
 };
 
+static int PacketedBioMethodType() {
+  static int type = [] {
+    int idx = BIO_get_new_index();
+    BSSL_CHECK(idx > 0);
+    return idx | BIO_TYPE_FILTER;
+  }();
+  return type;
+}
+
 PacketedBio *GetData(BIO *bio) {
-  if (bio->method != &g_packeted_bio_method) {
+  if (BIO_method_type(bio) != PacketedBioMethodType()) {
     return NULL;
   }
-  return (PacketedBio *)bio->ptr;
+  return static_cast<PacketedBio *>(BIO_get_data(bio));
 }
 
 // ReadAll reads |len| bytes from |bio| into |out|. It returns 1 on success and
@@ -85,8 +93,9 @@ static int ReadAll(BIO *bio, uint8_t *out, size_t len) {
 }
 
 static int PacketedWrite(BIO *bio, const char *in, int inl) {
-  if (bio->next_bio == NULL) {
-    return 0;
+  BIO *next = BIO_next(bio);
+  if (next == nullptr) {
+    return -1;
   }
 
   BIO_clear_retry_flags(bio);
@@ -98,14 +107,14 @@ static int PacketedWrite(BIO *bio, const char *in, int inl) {
   header[2] = (inl >> 16) & 0xff;
   header[3] = (inl >> 8) & 0xff;
   header[4] = inl & 0xff;
-  int ret = BIO_write(bio->next_bio, header, sizeof(header));
+  int ret = BIO_write(next, header, sizeof(header));
   if (ret <= 0) {
     BIO_copy_next_retry(bio);
     return ret;
   }
 
   // Write the buffer.
-  ret = BIO_write(bio->next_bio, in, inl);
+  ret = BIO_write(next, in, inl);
   if (ret < 0 || (inl > 0 && ret == 0)) {
     BIO_copy_next_retry(bio);
     return ret;
@@ -116,8 +125,9 @@ static int PacketedWrite(BIO *bio, const char *in, int inl) {
 
 static int PacketedRead(BIO *bio, char *out, int outl) {
   PacketedBio *data = GetData(bio);
-  if (bio->next_bio == NULL) {
-    return 0;
+  BIO *next = BIO_next(bio);
+  if (next == nullptr) {
+    return -1;
   }
 
   BIO_clear_retry_flags(bio);
@@ -125,7 +135,7 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
   for (;;) {
     // Read the opcode.
     uint8_t opcode;
-    int ret = ReadAll(bio->next_bio, &opcode, sizeof(opcode));
+    int ret = ReadAll(next, &opcode, sizeof(opcode));
     if (ret <= 0) {
       BIO_copy_next_retry(bio);
       return ret;
@@ -141,7 +151,7 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
 
       // Process the timeout.
       uint8_t buf[8];
-      ret = ReadAll(bio->next_bio, buf, sizeof(buf));
+      ret = ReadAll(next, buf, sizeof(buf));
       if (ret <= 0) {
         BIO_copy_next_retry(bio);
         return ret;
@@ -153,7 +163,7 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
       data->timeout.tv_sec = timeout / 1000000;
 
       // Send an ACK to the peer.
-      ret = BIO_write(bio->next_bio, &kOpcodeTimeoutAck, 1);
+      ret = BIO_write(next, &kOpcodeTimeoutAck, 1);
       if (ret <= 0) {
         return ret;
       }
@@ -166,7 +176,7 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
 
     if (opcode == kOpcodeMTU) {
       uint8_t buf[4];
-      ret = ReadAll(bio->next_bio, buf, sizeof(buf));
+      ret = ReadAll(next, buf, sizeof(buf));
       if (ret <= 0) {
         BIO_copy_next_retry(bio);
         return ret;
@@ -182,7 +192,7 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
 
     if (opcode == kOpcodeExpectNextTimeout) {
       uint8_t buf[8];
-      ret = ReadAll(bio->next_bio, buf, sizeof(buf));
+      ret = ReadAll(next, buf, sizeof(buf));
       if (ret <= 0) {
         BIO_copy_next_retry(bio);
         return ret;
@@ -231,14 +241,14 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
 
     // Read the length prefix.
     uint8_t len_bytes[4];
-    ret = ReadAll(bio->next_bio, len_bytes, sizeof(len_bytes));
+    ret = ReadAll(next, len_bytes, sizeof(len_bytes));
     if (ret <= 0) {
       BIO_copy_next_retry(bio);
       return ret;
     }
 
     std::vector<uint8_t> buf(CRYPTO_load_u32_be(len_bytes), 0);
-    ret = ReadAll(bio->next_bio, buf.data(), buf.size());
+    ret = ReadAll(next, buf.data(), buf.size());
     if (ret <= 0) {
       fprintf(stderr, "Packeted BIO was truncated\n");
       return -1;
@@ -253,61 +263,65 @@ static int PacketedRead(BIO *bio, char *out, int outl) {
 }
 
 static long PacketedCtrl(BIO *bio, int cmd, long num, void *ptr) {
-  if (bio->next_bio == NULL) {
+  BIO *next = BIO_next(bio);
+  if (next == nullptr) {
     return 0;
   }
 
   BIO_clear_retry_flags(bio);
-  long ret = BIO_ctrl(bio->next_bio, cmd, num, ptr);
+  long ret = BIO_ctrl(next, cmd, num, ptr);
   BIO_copy_next_retry(bio);
   return ret;
 }
 
 static int PacketedNew(BIO *bio) {
-  bio->init = 1;
+  BIO_set_init(bio, 1);
   return 1;
 }
 
 static int PacketedFree(BIO *bio) {
-  if (bio == NULL) {
+  if (bio == nullptr) {
     return 0;
   }
 
   delete GetData(bio);
-  bio->init = 0;
   return 1;
 }
 
-static long PacketedCallbackCtrl(BIO *bio, int cmd, bio_info_cb fp) {
-  if (bio->next_bio == NULL) {
+static long PacketedCallbackCtrl(BIO *bio, int cmd, BIO_info_cb *fp) {
+  BIO *next = BIO_next(bio);
+  if (next == nullptr) {
     return 0;
   }
-  return BIO_callback_ctrl(bio->next_bio, cmd, fp);
+  return BIO_callback_ctrl(next, cmd, fp);
 }
 
-const BIO_METHOD g_packeted_bio_method = {
-  BIO_TYPE_FILTER,
-  "packeted bio",
-  PacketedWrite,
-  PacketedRead,
-  NULL /* puts */,
-  NULL /* gets */,
-  PacketedCtrl,
-  PacketedNew,
-  PacketedFree,
-  PacketedCallbackCtrl,
-};
+static const BIO_METHOD *PacketedBioMethod() {
+  static const BIO_METHOD *method = [] {
+    BIO_METHOD *ret = BIO_meth_new(PacketedBioMethodType(), "packeted bio");
+    BSSL_CHECK(ret);
+    BSSL_CHECK(BIO_meth_set_write(ret, PacketedWrite));
+    BSSL_CHECK(BIO_meth_set_read(ret, PacketedRead));
+    BSSL_CHECK(BIO_meth_set_ctrl(ret, PacketedCtrl));
+    BSSL_CHECK(BIO_meth_set_create(ret, PacketedNew));
+    BSSL_CHECK(BIO_meth_set_destroy(ret, PacketedFree));
+    BSSL_CHECK(BIO_meth_set_callback_ctrl(ret, PacketedCallbackCtrl));
+    return ret;
+  }();
+  return method;
+}
 
 }  // namespace
 
 bssl::UniquePtr<BIO> PacketedBioCreate(
     timeval *clock, std::function<bool(timeval *)> get_timeout,
     std::function<bool(uint32_t)> set_mtu) {
-  bssl::UniquePtr<BIO> bio(BIO_new(&g_packeted_bio_method));
+  bssl::UniquePtr<BIO> bio(BIO_new(PacketedBioMethod()));
   if (!bio) {
     return nullptr;
   }
-  bio->ptr = new PacketedBio(clock, std::move(get_timeout), std::move(set_mtu));
+  BIO_set_data(bio.get(), new PacketedBio(clock, std::move(get_timeout),
+                                          std::move(set_mtu)));
   return bio;
 }
 

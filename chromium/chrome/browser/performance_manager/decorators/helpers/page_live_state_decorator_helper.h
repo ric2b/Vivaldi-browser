@@ -36,6 +36,8 @@ class PageLiveStateDecoratorHelper
                                  bool is_capturing_audio) override;
   void OnIsBeingMirroredChanged(content::WebContents* contents,
                                 bool is_being_mirrored) override;
+  void OnIsCapturingTabChanged(content::WebContents* contents,
+                               bool is_capturing_tab) override;
   void OnIsCapturingWindowChanged(content::WebContents* contents,
                                   bool is_capturing_window) override;
   void OnIsCapturingDisplayChanged(content::WebContents* contents,
@@ -61,9 +63,7 @@ class PageLiveStateDecoratorHelper
   // destructor of PageLiveStateDecoratorHelper is invoked are destroyed.
   raw_ptr<WebContentsObserver> first_web_contents_observer_ = nullptr;
 
-#if !BUILDFLAG(IS_ANDROID)
   std::unique_ptr<ActiveTabObserver> active_tab_observer_;
-#endif  // !BUILDFLAG(IS_ANDROID)
 
   SEQUENCE_CHECKER(sequence_checker_);
 };

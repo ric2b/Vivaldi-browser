@@ -46,6 +46,7 @@
 <translation id="1470330357709335121">Vivaldi је спор или застајкује</translation>
 <translation id="1502492982318476895">Синхронизација није успела: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">ваша адреса е-поште за опоравак.</translation>
+<translation id="1534183273237573805">Избором једног од ових претраживача, подржавате развој Vivaldi прегледача.</translation>
 <translation id="1535446875484049224">Тамни режим не ради или не изгледа како треба</translation>
 <translation id="1567659716528258242">Vivaldi ми загрева уређај</translation>
 <translation id="156793582229023040">Забринут сам због праћења или прикупљања података</translation>
@@ -75,6 +76,7 @@
 <translation id="1809939268435598390">Избриши фасциклу</translation>
 <translation id="1813686536470127172">Друга фасцикла</translation>
 <translation id="1828800626900562968">Додирните иконицу плус испод за креирање нове картице.</translation>
+<translation id="1852679645333476285">Дозволи репродукцију медија у позадини</translation>
 <translation id="1861262398884155592">Ова фасцикла је празна</translation>
 <translation id="1871058849247304245">Ниво зумирања за <ph name="HOST" /></translation>
 <translation id="1921508034244765766">Vivaldi је спор, руши се или загрева уређај</translation>
@@ -88,16 +90,20 @@
 <translation id="2048247880942380698">Арапски (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Опозови</translation>
 <translation id="2129408066358825297">Старост</translation>
+<translation id="2138901399878617625">Садите дрвеће док претражујете</translation>
 <translation id="2148384276939959392">Синхронизуј изабрано</translation>
 <translation id="2195713384412091023">Ово ће уклонити све синхронизоване податке ускладиштене на нашем серверу, поништити вашу лозинку за шифровање и одјавити вас.</translation>
 <translation id="2228584369802328636">Игре</translation>
+<translation id="2240680014596059312">Приватно. Брзо. Са мање реклама.</translation>
 <translation id="2243210264130642074">Белешка је сачувана</translation>
 <translation id="2272338747456392228">Налог је закључан</translation>
 <translation id="2273327106802955778">Више опција</translation>
 <translation id="2283599456633275070">Путовање</translation>
 <translation id="2324160330092901720">Верификациони код је послат на <ph name="EMAIL_ID" /></translation>
 <translation id="2324257568471626606">Нови претраживач</translation>
+<translation id="2326657631721795616">И даље можете подржати Vivaldi једноставним избором независног претраживача, усмереног на приватност:</translation>
 <translation id="2330644510603114741">Понашање картица</translation>
+<translation id="233493642829799329">Може довести до поновног учитавања неких картица</translation>
 <translation id="2336309953058658733">Испразни отпад</translation>
 <translation id="2359808026110333948">Настави</translation>
 <translation id="2386793615875593361">1 изабрана</translation>
@@ -173,8 +179,8 @@
 <translation id="3270894089048358271">Постави Vivaldi као подразумевани</translation>
 <translation id="3270930591809084274">Синхронизоване картице</translation>
 <translation id="3285898158753554866">Копирај преведено</translation>
+<translation id="3288330578370776290">Предност отварању страница у прегледачу уместо у спољним апликацијама</translation>
 <translation id="3335772982573114336">Нова белешка</translation>
-<translation id="3337207574172839542">Дозволи предлоге претраге</translation>
 <translation id="33451081266695216">Сервер је ограничио везу.</translation>
 <translation id="3346386541263128307">Адресе е-поште се морају подударати.</translation>
 <translation id="3363375699928395745">Унесите наслов</translation>
@@ -253,6 +259,7 @@
 <translation id="4152011295694446843">Овде ћете пронаћи своје обележиваче</translation>
 <translation id="4152623049003960417">Детаљи о праћењима</translation>
 <translation id="4176463684765177261">Онемогућено</translation>
+<translation id="4181792832006033883">Vivaldi покрећу наши корисници, а не ИТ гиганти или инвеститори. Свака донација директно подржава нашу мисију за отворени, приватни интернет. Будите део промена.</translation>
 <translation id="4184746246941929945">Vivaldi се удружио са <ph name="PARTNER_NAME" />-ом да не блокира рекламе на овој страници. Ове рекламе помажу у финансирању развоја Vivaldi прегледача.</translation>
 <translation id="4193549853510262477">Аутоматски откривено</translation>
 <translation id="4209092469652827314">Велико</translation>
@@ -269,6 +276,7 @@
 <translation id="4316955624679873896">Обележивач додат у</translation>
 <translation id="432696242656678770">Руски (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Шпански (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Будите уз нас за бољи веб</translation>
 <translation id="4376661454588260127">Вијетнамски (<ph name="ORIGIN" />)</translation>
 <translation id="4380745054983890306">Волео бих да могу да сачувам странице као PDF</translation>
 <translation id="4394049700291259645">Онемогући</translation>
@@ -287,6 +295,7 @@
 <translation id="4525945044609022380">Ова е-пошта је већ повезана са другим налогом.</translation>
 <translation id="4526803704855831732">Приватне картице</translation>
 <translation id="4542001945479572846">Нешто друго</translation>
+<translation id="4548278119881373657">Потврди избор</translation>
 <translation id="4553717494760925411">Навигација назад</translation>
 <translation id="4563480492836333884">Е-пошта није прихваћена. Користите други домен.</translation>
 <translation id="457386861538956877">Више...</translation>
@@ -341,6 +350,7 @@
 <translation id="5094376253685335202">Омогући синхронизацију</translation>
 <translation id="5116316489033177455">Синхронизација обележивача и брзих бирања</translation>
 <translation id="5122095890854520072">Летонски (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">100% ваших донација ће бити искоришћено за финансирање дугорочног развоја Vivaldi прегледача и наше борбе за бољи веб.</translation>
 <translation id="5153806174841856652">Пријављивање није успело</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Поново пошаљи код<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Прикажи најпосећеније сајтове</translation>
@@ -359,7 +369,7 @@
 <translation id="5378841821586202982">Отпад</translation>
 <translation id="5398772614898833570">Блокиране рекламе</translation>
 <translation id="5421638721143596928">Није успело дешифровање ваших података за пријављивање. Пријавите се поново.</translation>
-<translation id="5439599923922718668">Често посећено</translation>
+<translation id="5439599923922718668">Често посећени</translation>
 <translation id="5439835075346716808">Регистрација је привремено блокирана за ову IP адресу. Покушајте поново касније.</translation>
 <translation id="5475116651001049780">Сакриј мобилну верзију сајта</translation>
 <translation id="5486261815000869482">Потврдите лозинку</translation>
@@ -402,19 +412,25 @@
  Отворите подешавања да бисте је поправили.</translation>
 <translation id="604930981600990598">Превод је копиран!</translation>
 <translation id="6052689967593623141">Vivaldi може зарадити партнерску провизију ако обавите куповину након што кликнете на неке од ових веза. Ово помаже у подршци развоја Vivaldi прегледача и одржава га независним. Хвала вам на подршци!</translation>
+<translation id="6056094614114332761">Предлози адресног поља</translation>
 <translation id="6077943432358741146">Брзо бирање</translation>
 <translation id="6079696972035130497">Неограничено</translation>
+<translation id="6093557041367452381">Приказује вашу историју уноса када је адресно поље фокусирано на почетној страници.</translation>
 <translation id="6110857187283700804">Ваш унос се шаље вашем добављачу претраге за предлоге. Ово је искључено у приватном прозору.</translation>
+<translation id="6119047040189002834">Одмакните се од надзора и изаберите претраживач који је у складу са вашим вредностима:</translation>
 <translation id="614539368862754027">Премештено ставки: <ph name="NUMBER_OF_SELECTED_NOTES" /></translation>
 <translation id="6147094071357011481">Недавно затворене картице су недоступне</translation>
+<translation id="6171727814244883097">Лакши начин да нас подржите</translation>
 <translation id="6177301865411451337">Услуга Vivaldi синхронизације можда има проблеме. Добијајте ажурирања услуга на: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Тешко ми је да сачувам веб сајт као брзо бирање</translation>
 <translation id="6193995664633100765">Индијски (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">Донирајте сада</translation>
 <translation id="6224086034182508647">Опције изгледа веб сајтова</translation>
 <translation id="6253990869902066991">Vivaldi неочекивано поново учитава веб странице</translation>
 <translation id="6257488392933423163">Прикажи као HTML</translation>
 <translation id="6275978505813092431">Унос слике</translation>
 <translation id="6329717714920146925">Веб сајтови (само приказ)</translation>
+<translation id="6346549829676591152">Омогући историју претраге</translation>
 <translation id="6365929278691047681">Немачки (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">Изглд веб сајт је неисправан или изгледа чудно</translation>
 <translation id="6383855939619098095">Тешко је прилагодити почетну страницу Vivaldi прегледача</translation>
@@ -432,6 +448,7 @@
 <translation id="6544880104552732240">Изаберите одредишни језик</translation>
 <translation id="659351303388691480">Брисање података прегледања...</translation>
 <translation id="6602272356389933803">Изглед и тема</translation>
+<translation id="6609906162587123522">Не отварај везе у спољним апликацијама</translation>
 <translation id="6614744450826097546">Детаљи о рекламама</translation>
 <translation id="6631760746795162665">Колумбијски (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Праћења и рекламе су блокирани. Неки сајтови се могу покварити.</translation>
@@ -481,6 +498,7 @@
 <translation id="711946737922560234">Унос везе</translation>
 <translation id="7120229714826964836">Подели страницу</translation>
 <translation id="713792263829536729">Услуге стримовања не раде како треба</translation>
+<translation id="7142332680286898952">Прикажи историју уноса</translation>
 <translation id="7158507293261405349">Додај нову групу</translation>
 <translation id="7173114856073700355">Отвори подешавања</translation>
 <translation id="718052827125696482">Екран се не ротира како треба</translation>
@@ -506,7 +524,6 @@
 <translation id="7393145587390257456">Блокатор реклама не ради добро</translation>
 <translation id="7400418766976504921">URL адреса</translation>
 <translation id="7417521636956146248">Претраживачи ће бити враћени на подразумевана подешавања, што ће такође уклонити ваше прилагођене претраживаче.</translation>
-<translation id="7418655219500602072">Приоритети адресног поља</translation>
 <translation id="7451784507428459503">Видео записи на YouTube-у се не репродукују или имају проблема</translation>
 <translation id="7454640759045234067">Блокирана праћења</translation>
 <translation id="7461899062138731833">ИЗВОРИ</translation>
@@ -541,7 +558,9 @@
 <translation id="7791543448312431591">Додај</translation>
 <translation id="7801111502975417831">Желим могућност репродукције видео записа у позадини</translation>
 <translation id="7801204999757211519">Већ имате налог? <ph name="BEGIN_LINK" />Пријавите се ➔<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Не, хвала</translation>
 <translation id="7850070199083838600">Креирати нову групу?</translation>
+<translation id="7862984977194621600">Омогући предлоге претраге</translation>
 <translation id="7870765213383950011">Првом групом</translation>
 <translation id="7914995060146784406">Уреди белешку</translation>
 <translation id="7925340978147141704">Прикажи лозинку</translation>
@@ -568,6 +587,7 @@
 <translation id="8147118677117542370">Наведите своје године.</translation>
 <translation id="8165573437634525334">Подаци су заштићени лозинком за шифровање</translation>
 <translation id="8237090677709100373">Кôд прилагођене боје</translation>
+<translation id="8255101384731542819">Независна претрага, направљена у Француској</translation>
 <translation id="8257908958623224237">Конфликт са подацима другог клијента.</translation>
 <translation id="8261506727792406068">Избриши</translation>
 <translation id="8273666073173891138">Белешка је сачувана у <ph name="FOLDER_TITLE" /></translation>
@@ -575,6 +595,7 @@
 <translation id="8284356787013856231">Дозвола за отварање датотеке је одбијена</translation>
 <translation id="8289933454364510719">Врх или дно</translation>
 <translation id="8304044605002588416">Дугме ’Прилагоди почетну страницу’</translation>
+<translation id="8304538706952727936">Ослободите се ИТ гиганата</translation>
 <translation id="8323167517179506834">Унесите URL адресу</translation>
 <translation id="8326104954595890674">Нова приватна картица</translation>
 <translation id="8329813750766387010">Ажурирано: <ph name="DATE" /></translation>
@@ -617,7 +638,9 @@
 <translation id="8818152010000655963">Тапет</translation>
 <translation id="8819841443522803117">Време је да промените подразумевани прегледач? Изаберите Vivaldi.</translation>
 <translation id="8820817407110198400">Обележивачи</translation>
+<translation id="8828442094222036738">Приватни Google резултати, направљено у Европи</translation>
 <translation id="8855707633300847215">Прикажи траку картица</translation>
+<translation id="8861211142470908937">Неопходна је минимална дужина лозинке од 12 знакова</translation>
 <translation id="8892354889971902600">Картице које сте недавно затворили ће се појавити овде.</translation>
 <translation id="89390081013973080">Све је спремно! Време је да одлучите које податке синхронизовати између уређаја.</translation>
 <translation id="8948792607467387336">Изабери као тапет</translation>

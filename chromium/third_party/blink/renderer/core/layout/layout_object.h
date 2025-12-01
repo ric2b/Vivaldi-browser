@@ -27,6 +27,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_OBJECT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_OBJECT_H_
 
+#include <concepts>
 #include <utility>
 
 #include "base/check_op.h"
@@ -65,6 +66,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/graphics/subtree_paint_property_update_reason.h"
 #include "third_party/blink/renderer/platform/graphics/visual_rect_flags.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/gfx/geometry/transform.h"
@@ -466,8 +468,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // one. This function follows the containing block chain.
   LayoutFlowThread* FlowThreadContainingBlock() const {
     NOT_DESTROYED();
-    if (!IsInsideFlowThread())
+    DCHECK(!RuntimeEnabledFeatures::FlowThreadLessEnabled());
+    if (!IsInsideMulticol()) {
       return nullptr;
+    }
     return LocateFlowThreadContainingBlock();
   }
 
@@ -755,13 +759,23 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     parent_ = parent;
 
-    // Only update if our flow thread state is different from our new parent and
-    // if we're not a LayoutFlowThread.
-    // A LayoutFlowThread is always considered to be inside itself, so it never
-    // has to change its state in response to parent changes.
-    bool inside_flow_thread = parent && parent->IsInsideFlowThread();
-    if (inside_flow_thread != IsInsideFlowThread() && !IsLayoutFlowThread())
-      SetIsInsideFlowThreadIncludingDescendants(inside_flow_thread);
+    if (!RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+      // Only update if our flow thread state is different from our new parent
+      // and if we're not a LayoutFlowThread.  A LayoutFlowThread is always
+      // considered to be inside itself, so it never has to change its state in
+      // response to parent changes.
+      bool inside_multicol = parent && parent->IsInsideMulticol();
+      if (inside_multicol != IsInsideMulticol() && !IsLayoutFlowThread()) {
+        SetIsInsideMulticolIncludingDescendants(inside_multicol);
+      }
+      return;
+    }
+
+    bool inside_multicol =
+        parent && (parent->IsInsideMulticol() || parent->IsMulticolContainer());
+    if (inside_multicol != IsInsideMulticol()) {
+      SetIsInsideMulticolIncludingDescendants(inside_multicol);
+    }
   }
 
   //////////////////////////////////////////
@@ -993,6 +1007,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return false;
   }
+  virtual bool IsTextControlInnerEditor() const {
+    NOT_DESTROYED();
+    return false;
+  }
   virtual bool IsTextField() const {
     NOT_DESTROYED();
     return false;
@@ -1067,7 +1085,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   inline bool IsCheckContent() const;
   inline bool IsBeforeContent() const;
   inline bool IsAfterContent() const;
-  inline bool IsPickerIconContent() const;
   inline bool IsMarkerContent() const;
   inline bool IsScrollButtonContent() const;
   inline bool IsScrollMarkerContent() const;
@@ -1075,9 +1092,6 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   inline bool IsBeforeOrAfterContent() const;
   static inline bool IsAfterContent(const LayoutObject* obj) {
     return obj && obj->IsAfterContent();
-  }
-  static inline bool IsPickerIconContent(const LayoutObject* obj) {
-    return obj && obj->IsPickerIconContent();
   }
 
   // Returns true if the text is generated (from, e.g., list marker,
@@ -1147,15 +1161,20 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
         always_create_line_boxes);
   }
 
-  void SetIsInsideFlowThreadIncludingDescendants(bool);
+  void SetIsInsideMulticolIncludingDescendants(bool);
 
-  bool IsInsideFlowThread() const {
+  // Return true if there's a multicol container in the ancestry. Note that this
+  // doesn't have to mean that this object actually participates in the
+  // fragmentation context established by the multicol container, since this
+  // object may be inside an out-of-flow positioned subtree that's not contained
+  // by the multicol container, or even inside a monolithic subtree.
+  bool IsInsideMulticol() const {
     NOT_DESTROYED();
-    return bitfields_.IsInsideFlowThread();
+    return bitfields_.IsInsideMulticol();
   }
-  void SetIsInsideFlowThread(bool inside_flow_thread) {
+  void SetIsInsideMulticol(bool b) {
     NOT_DESTROYED();
-    bitfields_.SetIsInsideFlowThread(inside_flow_thread);
+    bitfields_.SetIsInsideMulticol(b);
   }
 
   // Remove this object and all descendants from the containing
@@ -1166,8 +1185,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // false if it's definitely *not* inside one.
   bool MightBeInsideFragmentationContext() const {
     NOT_DESTROYED();
-    return IsInsideFlowThread() ||
-           (GetDocument().Printing() && !IsLayoutView());
+    return IsInsideMulticol() || (GetDocument().Printing() && !IsLayoutView());
   }
 
   // FIXME: Until all SVG layoutObjects can be subclasses of
@@ -1329,8 +1347,13 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return bitfields_.IsAnonymous();
   }
-  bool IsAnonymousBlock() const {
+  bool IsAnonymousBlockFlow() const {
     NOT_DESTROYED();
+    if (RuntimeEnabledFeatures::LayoutIsAnonymousBlockFixEnabled()) {
+      return IsAnonymous() && IsLayoutBlockFlow() &&
+             StyleRef().Display() == EDisplay::kBlock &&
+             !IsLayoutFlowThread() && !IsLayoutMultiColumnSet();
+    }
     // This function is kept in sync with anonymous block creation conditions in
     // LayoutBlock::createAnonymousBlock(). This includes creating an anonymous
     // LayoutBlock having a BLOCK or BOX display. Other classes such as
@@ -1731,10 +1754,22 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     NOT_DESTROYED();
     return nullptr;
   }
+
+  // Return true if this box is to be treated as a column spanner. This function
+  // assumes that `column-span` is `all`, but there are additional requirements
+  // for it to actually become a spanner. For one, it needs to be a block-level
+  // box that's inside a multicol container, and it also needs to be in the
+  // block formatting context established by the columns.
+  virtual bool IsValidColumnSpanner() const {
+    NOT_DESTROYED();
+    return false;
+  }
+
   bool IsColumnSpanAll() const {
     NOT_DESTROYED();
-    return StyleRef().GetColumnSpan() == EColumnSpan::kAll &&
-           SpannerPlaceholder();
+    // May be called before style is set.
+    return Style() && Style()->GetColumnSpan() == EColumnSpan::kAll &&
+           IsValidColumnSpanner();
   }
 
   // We include LayoutButton in this check, because buttons are
@@ -1824,6 +1859,8 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   LayoutObject* ContainerForAbsolutePosition(AncestorSkipInfo* = nullptr) const;
   // Finds the container as if this object is fixed-position.
   LayoutObject* ContainerForFixedPosition(AncestorSkipInfo* = nullptr) const;
+  // Finds the container as if this object is a column spanner.
+  LayoutObject* ContainerForColumnSpanner(AncestorSkipInfo* = nullptr) const;
 
   bool CanContainOutOfFlowPositionedElement(EPosition position) const {
     NOT_DESTROYED();
@@ -1913,7 +1950,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // which is already marked for subtree recalc.
   void InvalidateSubtreePositionTry(bool mark_style_dirty);
 
- private:
+ protected:
   enum PositionedState {
     kIsStaticallyPositioned = 0,
     kIsRelativelyPositioned = 1,
@@ -1922,7 +1959,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   };
 
  public:
-  void SetPositionState(EPosition position) {
+  PositionedState ToPositionedState(EPosition position) const {
     NOT_DESTROYED();
     DCHECK(
         (position != EPosition::kAbsolute && position != EPosition::kFixed) ||
@@ -1931,21 +1968,26 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     // IsOutOfFlowPositioned, saving one bit.
     switch (position) {
       case EPosition::kStatic:
-        positioned_state_ = kIsStaticallyPositioned;
-        break;
+        return kIsStaticallyPositioned;
       case EPosition::kRelative:
-        positioned_state_ = kIsRelativelyPositioned;
-        break;
+        return kIsRelativelyPositioned;
       case EPosition::kAbsolute:
       case EPosition::kFixed:
-        positioned_state_ = kIsOutOfFlowPositioned;
-        break;
+        return kIsOutOfFlowPositioned;
       case EPosition::kSticky:
-        positioned_state_ = kIsStickyPositioned;
-        break;
+        return kIsStickyPositioned;
       default:
         NOTREACHED();
     }
+  }
+  PositionedState ToPositionedState() const {
+    NOT_DESTROYED();
+    return ToPositionedState(StyleRef().GetPosition());
+  }
+
+  void SetPositionState(PositionedState position) {
+    NOT_DESTROYED();
+    positioned_state_ = position;
   }
   void ClearPositionedState() {
     NOT_DESTROYED();
@@ -2552,6 +2594,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   // to a point in the containing coordinate space.
   virtual PhysicalOffset ColumnOffset(const PhysicalOffset&) const {
     NOT_DESTROYED();
+    DCHECK(!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled());
     return PhysicalOffset();
   }
 
@@ -2652,7 +2695,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   void NotifyImageFullyRemoved(ImageResourceContent*) override;
   bool WillRenderImage() final;
   bool GetImageAnimationPolicy(mojom::blink::ImageAnimationPolicy&) final;
-  InterpolationQuality GetSpeculativeDecodeQuality() const final;
+  InterpolationQuality ComputeSpeculativeDecodeQuality() const override;
 
   void Remove() {
     NOT_DESTROYED();
@@ -3361,6 +3404,33 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     bitfields_.SetScrollableAreaSizeChanged(b);
   }
 
+  bool MayBeNonContiguousIfc() const {
+    NOT_DESTROYED();
+    return bitfields_.MayBeNonContiguousIfc();
+  }
+  void SetMayBeNonContiguousIfc(bool b) {
+    NOT_DESTROYED();
+    bitfields_.SetMayBeNonContiguousIfc(b);
+  }
+
+  bool HasSVGTextDescendants() const {
+    NOT_DESTROYED();
+    return bitfields_.HasSVGTextDescendants();
+  }
+  void SetHasSVGTextDescendants(bool b) {
+    NOT_DESTROYED();
+    bitfields_.SetHasSVGTextDescendants(b);
+  }
+
+  bool IsMulticolContainer() const {
+    NOT_DESTROYED();
+    return bitfields_.IsMulticolContainer();
+  }
+  void SetIsMulticolContainer(bool b) {
+    NOT_DESTROYED();
+    bitfields_.SetIsMulticolContainer(b);
+  }
+
   // Returns true if this layout object is created for an element which will be
   // changing behaviour for overflow: visible.
   // See
@@ -3718,7 +3788,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
           can_contain_absolute_position_objects_(false),
           can_contain_fixed_position_objects_(false),
           ever_had_layout_(false),
-          is_inside_flow_thread_(false),
+          is_inside_multicol_(false),
           subtree_change_listener_registered_(false),
           notified_of_subtree_change_(false),
           consumes_subtree_change_notification_(false),
@@ -3760,7 +3830,10 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
           needs_devtools_info_(false),
           may_have_anchor_query_(false),
           has_broken_spine_(false),
-          has_valid_cached_geometry_(false) {}
+          has_valid_cached_geometry_(false),
+          may_be_non_contiguous_ifc_(false),
+          has_svg_text_descendants_(false),
+          is_multicol_container_(false) {}
 
     // Typically indicates that this object has had its style changed, and
     // requires a "full" layout.
@@ -3899,7 +3972,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 
     ADD_BOOLEAN_BITFIELD(ever_had_layout_, EverHadLayout);
 
-    ADD_BOOLEAN_BITFIELD(is_inside_flow_thread_, IsInsideFlowThread);
+    ADD_BOOLEAN_BITFIELD(is_inside_multicol_, IsInsideMulticol);
 
     ADD_BOOLEAN_BITFIELD(subtree_change_listener_registered_,
                          SubtreeChangeListenerRegistered);
@@ -4087,6 +4160,22 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
     // its scrollable area.
     ADD_BOOLEAN_BITFIELD(scrollable_area_size_changed_,
                          ScrollableAreaSizeChanged);
+
+    // For LayoutBlockFlow - if this is an inline formatting context root, this
+    // flag is set if the inline formatting context *may* (false positives are
+    // okay) be non-contiguous. Sometimes an inline formatting context may
+    // start in some fragmentainer, then skip one or more fragmentainers, and
+    // then resume again. This may happen for instance if a culled inline is
+    // preceded by a tall float that's pushed after (due to size/breaking
+    // restrictions) the contents of the culled inline.
+    ADD_BOOLEAN_BITFIELD(may_be_non_contiguous_ifc_, MayBeNonContiguousIfc);
+
+    // For LayoutBlock - true if this block has *any* SVG text descendants.
+    // Used for invalidation on transform changes.
+    ADD_BOOLEAN_BITFIELD(has_svg_text_descendants_, HasSVGTextDescendants);
+
+    // True if this is a LayoutBlockFlow that establishes a multicol container.
+    ADD_BOOLEAN_BITFIELD(is_multicol_container_, IsMulticolContainer);
   };
 
 #undef ADD_BOOLEAN_BITFIELD
@@ -4116,8 +4205,7 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
   friend class LineLayoutItem;
   friend class LocalFrameView;
 
-  subtle::UncompressedMember<const ComputedStyle> style_;
-
+  Member<const ComputedStyle> style_;
   Member<Node> node_;
 
   Member<LayoutObject> parent_;
@@ -4135,7 +4223,8 @@ class CORE_EXPORT LayoutObject : public GarbageCollected<LayoutObject>,
 };
 
 template <typename T>
-struct ThreadingTrait<T, std::enable_if_t<std::is_base_of_v<LayoutObject, T>>> {
+  requires(std::derived_from<T, LayoutObject>)
+struct ThreadingTrait<T> {
   static constexpr ThreadAffinity kAffinity = kMainThreadOnly;
 };
 
@@ -4173,11 +4262,6 @@ inline bool LayoutObject::IsBeforeContent() const {
 inline bool LayoutObject::IsAfterContent() const {
   NOT_DESTROYED();
   return IsPseudoElementContent(kPseudoIdAfter);
-}
-
-inline bool LayoutObject::IsPickerIconContent() const {
-  NOT_DESTROYED();
-  return IsPseudoElementContent(kPseudoIdPickerIcon);
 }
 
 inline bool LayoutObject::IsMarkerContent() const {

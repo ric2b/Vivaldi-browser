@@ -74,12 +74,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
   // Determines the country for for the newly created address profile.
   std::string GetDefaultCountryCodeForNewAddress(JNIEnv* env) const;
 
-  // Users based in unsupported countries and profiles with a country value set
-  // to an unsupported country are not eligible for account storage. This
-  // function determines if the `country_code` is eligible.
-  bool IsCountryEligibleForAccountStorage(JNIEnv* env,
-                                          std::string& country_code) const;
-
   // Adds or modifies a profile.  If `guid` is an empty string, we are creating
   // a new profile.  Else we are updating an existing profile.  Always returns
   // the GUID for this profile; the GUID it may have just been created.
@@ -193,10 +187,6 @@ class PersonalDataManagerAndroid : public PersonalDataManagerObserver {
 
   // Checks whether FIDO authentication is available.
   jboolean IsFidoAuthenticationAvailable(JNIEnv* env);
-
-  // Get Java AutofillImageFetcher.
-  base::android::ScopedJavaLocalRef<jobject> GetOrCreateJavaImageFetcher(
-      JNIEnv* env);
 
   static base::android::ScopedJavaLocalRef<jobject> CreateJavaIbanFromNative(
       JNIEnv* env,

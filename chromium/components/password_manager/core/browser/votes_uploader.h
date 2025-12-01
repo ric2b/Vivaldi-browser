@@ -13,6 +13,7 @@
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_field.h"
+#include "components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_encoding.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/proto/server.pb.h"
@@ -194,7 +195,8 @@ class VotesUploader {
   // field in |form_structure|.
   void SetInitialHashValueOfUsernameField(
       autofill::FieldRendererId username_element_renderer_id,
-      autofill::FormStructure* form_structure);
+      const autofill::FormStructure& form_structure,
+      autofill::EncodeUploadRequestOptions& options);
 
   // Sends single username vote if |single_username_vote_data_| or
   // |forgot_password_vote_data_| is set.
@@ -289,7 +291,8 @@ class VotesUploader {
   };
 
   // Adds a vote on password generation usage to |form_structure|.
-  void AddGeneratedVote(autofill::FormStructure* form_structure);
+  void AddGeneratedVote(autofill::FormStructure& form_structure,
+                        autofill::EncodeUploadRequestOptions& options);
 
   // Sets the known-value flag for each field, indicating that the field
   // contained a previously stored credential on submission.
@@ -307,8 +310,7 @@ class VotesUploader {
   // information that needs to be sent to the Autofill server.
   std::vector<autofill::AutofillUploadContents> EncodeUploadRequest(
       autofill::FormStructure& form,
-      const autofill::FieldTypeSet& available_field_types,
-      std::optional<autofill::FormSignature> login_form_signature,
+      const autofill::EncodeUploadRequestOptions& options,
       std::optional<PasswordAttributesMetadata> password_attributes,
       bool should_set_passwords_were_revealed);
 
@@ -316,8 +318,7 @@ class VotesUploader {
   // `true` if the vote is sent, `false` otherwise.
   bool SendUploadRequest(
       autofill::FormStructure& form_to_upload,
-      const autofill::FieldTypeSet& available_field_types,
-      std::optional<autofill::FormSignature> login_form_signature,
+      const autofill::EncodeUploadRequestOptions& options,
       std::optional<PasswordAttributesMetadata> password_attributes,
       bool should_set_passwords_were_revealed);
 
@@ -329,7 +330,7 @@ class VotesUploader {
   bool SetSingleUsernameVoteOnUsernameForm(
       autofill::AutofillField* field,
       const SingleUsernameVoteData& single_username,
-      autofill::FieldTypeSet* available_field_types,
+      autofill::EncodeUploadRequestOptions& options,
       autofill::FormSignature form_signature,
       autofill::IsMostRecentSingleUsernameCandidate
           is_most_recent_single_username_candidate,

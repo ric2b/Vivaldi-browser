@@ -51,7 +51,7 @@
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/service/sync_service.h"
 #include "components/sync/service/sync_user_settings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
@@ -148,7 +148,7 @@ SearchTabHelper::SearchTabHelper(content::WebContents* web_contents)
     instant_service_->AddObserver(this);
   }
 
-  OmniboxTabHelper::CreateForWebContents(web_contents);
+  OmniboxTabHelper::CreateForWebContents(web_contents, profile());
   OmniboxTabHelper::FromWebContents(web_contents)->AddObserver(this);
 }
 

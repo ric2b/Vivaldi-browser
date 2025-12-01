@@ -1275,6 +1275,7 @@ export namespace Audits {
     TypeNotMatching = 'TypeNotMatching',
     UiDismissedNoEmbargo = 'UiDismissedNoEmbargo',
     CorsError = 'CorsError',
+    SuppressedBySegmentationPlatform = 'SuppressedBySegmentationPlatform',
   }
 
   export interface FederatedAuthUserInfoRequestIssueDetails {
@@ -1401,6 +1402,23 @@ export namespace Audits {
     propertyValue?: string;
   }
 
+  export const enum UserReidentificationIssueType {
+    BlockedFrameNavigation = 'BlockedFrameNavigation',
+    BlockedSubresource = 'BlockedSubresource',
+  }
+
+  /**
+   * This issue warns about uses of APIs that may be considered misuse to
+   * re-identify users.
+   */
+  export interface UserReidentificationIssueDetails {
+    type: UserReidentificationIssueType;
+    /**
+     * Applies to BlockedFrameNavigation and BlockedSubresource issue types.
+     */
+    request?: AffectedRequest;
+  }
+
   /**
    * A unique identifier for the type of issue. Each type may use one of the
    * optional fields in InspectorIssueDetails to convey more specific
@@ -1431,6 +1449,7 @@ export namespace Audits {
     SharedDictionaryIssue = 'SharedDictionaryIssue',
     SelectElementAccessibilityIssue = 'SelectElementAccessibilityIssue',
     SRIMessageSignatureIssue = 'SRIMessageSignatureIssue',
+    UserReidentificationIssue = 'UserReidentificationIssue',
   }
 
   /**
@@ -1463,6 +1482,7 @@ export namespace Audits {
     sharedDictionaryIssueDetails?: SharedDictionaryIssueDetails;
     selectElementAccessibilityIssueDetails?: SelectElementAccessibilityIssueDetails;
     sriMessageSignatureIssueDetails?: SRIMessageSignatureIssueDetails;
+    userReidentificationIssueDetails?: UserReidentificationIssueDetails;
   }
 
   /**
@@ -2010,6 +2030,7 @@ export namespace Browser {
   export const enum BrowserCommandId {
     OpenTabSearch = 'openTabSearch',
     CloseTabSearch = 'closeTabSearch',
+    OpenGlic = 'openGlic',
   }
 
   /**
@@ -4914,6 +4935,7 @@ export namespace DOM {
   export const enum GetElementByRelationRequestRelation {
     PopoverTarget = 'PopoverTarget',
     InterestTarget = 'InterestTarget',
+    CommandFor = 'CommandFor',
   }
 
   export interface GetElementByRelationRequest {
@@ -6628,6 +6650,22 @@ export namespace Emulation {
      * Mock accuracy
      */
     accuracy?: number;
+    /**
+     * Mock altitude
+     */
+    altitude?: number;
+    /**
+     * Mock altitudeAccuracy
+     */
+    altitudeAccuracy?: number;
+    /**
+     * Mock heading
+     */
+    heading?: number;
+    /**
+     * Mock speed
+     */
+    speed?: number;
   }
 
   export interface GetOverriddenSensorInformationRequest {
@@ -6658,6 +6696,12 @@ export namespace Emulation {
   export interface SetPressureStateOverrideRequest {
     source: PressureSource;
     state: PressureState;
+  }
+
+  export interface SetPressureDataOverrideRequest {
+    source: PressureSource;
+    state: PressureState;
+    ownContributionEstimate?: number;
   }
 
   export interface SetIdleOverrideRequest {
@@ -6794,6 +6838,14 @@ export namespace Emulation {
      * Whether the override should be enabled.
      */
     enabled: boolean;
+  }
+
+  export interface SetSmallViewportHeightDifferenceOverrideRequest {
+    /**
+     * This will cause an element of size 100svh to be `difference` pixels smaller than an element
+     * of size 100lvh.
+     */
+    difference: integer;
   }
 }
 
@@ -8438,6 +8490,7 @@ export namespace Network {
     Ping = 'Ping',
     CSPViolationReport = 'CSPViolationReport',
     Preflight = 'Preflight',
+    FedCM = 'FedCM',
     Other = 'Other',
   }
 
@@ -8847,6 +8900,7 @@ export namespace Network {
     MixedContent = 'mixed-content',
     Origin = 'origin',
     Inspector = 'inspector',
+    Integrity = 'integrity',
     SubresourceFilter = 'subresource-filter',
     ContentType = 'content-type',
     CoepFrameResourceNeedsCoepHeader = 'coep-frame-resource-needs-coep-header',
@@ -8967,6 +9021,7 @@ export namespace Network {
     Cache = 'cache',
     FetchEvent = 'fetch-event',
     RaceNetworkAndFetchHandler = 'race-network-and-fetch-handler',
+    RaceNetworkAndCache = 'race-network-and-cache',
   }
 
   export interface ServiceWorkerRouterInfo {
@@ -9750,6 +9805,41 @@ export namespace Network {
     dnsQueryType?: DirectSocketDnsQueryType;
   }
 
+  export interface DirectUDPSocketOptions {
+    remoteAddr?: string;
+    /**
+     * Unsigned int 16.
+     */
+    remotePort?: integer;
+    localAddr?: string;
+    /**
+     * Unsigned int 16.
+     */
+    localPort?: integer;
+    dnsQueryType?: DirectSocketDnsQueryType;
+    /**
+     * Expected to be unsigned integer.
+     */
+    sendBufferSize?: number;
+    /**
+     * Expected to be unsigned integer.
+     */
+    receiveBufferSize?: number;
+  }
+
+  export interface DirectUDPMessage {
+    data: binary;
+    /**
+     * Null for connected mode.
+     */
+    remoteAddr?: string;
+    /**
+     * Null for connected mode.
+     * Expected to be unsigned integer.
+     */
+    remotePort?: integer;
+  }
+
   export const enum PrivateNetworkRequestPolicy {
     Allow = 'Allow',
     BlockFromInsecureToMorePrivate = 'BlockFromInsecureToMorePrivate',
@@ -10054,6 +10144,10 @@ export namespace Network {
      * Longest post body size (in bytes) that would be included in requestWillBeSent notification
      */
     maxPostDataSize?: integer;
+    /**
+     * Whether DirectSocket chunk send/receive events should be reported.
+     */
+    reportDirectSocketTraffic?: boolean;
   }
 
   export interface GetAllCookiesResponse extends ProtocolResponseWithError {
@@ -10907,6 +11001,87 @@ export namespace Network {
    */
   export interface DirectTCPSocketClosedEvent {
     identifier: RequestId;
+    timestamp: MonotonicTime;
+  }
+
+  /**
+   * Fired when data is sent to tcp direct socket stream.
+   */
+  export interface DirectTCPSocketChunkSentEvent {
+    identifier: RequestId;
+    data: binary;
+    timestamp: MonotonicTime;
+  }
+
+  /**
+   * Fired when data is received from tcp direct socket stream.
+   */
+  export interface DirectTCPSocketChunkReceivedEvent {
+    identifier: RequestId;
+    data: binary;
+    timestamp: MonotonicTime;
+  }
+
+  /**
+   * Fired upon direct_socket.UDPSocket creation.
+   */
+  export interface DirectUDPSocketCreatedEvent {
+    identifier: RequestId;
+    options: DirectUDPSocketOptions;
+    timestamp: MonotonicTime;
+    initiator?: Initiator;
+  }
+
+  /**
+   * Fired when direct_socket.UDPSocket connection is opened.
+   */
+  export interface DirectUDPSocketOpenedEvent {
+    identifier: RequestId;
+    localAddr: string;
+    /**
+     * Expected to be unsigned integer.
+     */
+    localPort: integer;
+    timestamp: MonotonicTime;
+    remoteAddr?: string;
+    /**
+     * Expected to be unsigned integer.
+     */
+    remotePort?: integer;
+  }
+
+  /**
+   * Fired when direct_socket.UDPSocket is aborted.
+   */
+  export interface DirectUDPSocketAbortedEvent {
+    identifier: RequestId;
+    errorMessage: string;
+    timestamp: MonotonicTime;
+  }
+
+  /**
+   * Fired when direct_socket.UDPSocket is closed.
+   */
+  export interface DirectUDPSocketClosedEvent {
+    identifier: RequestId;
+    timestamp: MonotonicTime;
+  }
+
+  /**
+   * Fired when message is sent to udp direct socket stream.
+   */
+  export interface DirectUDPSocketChunkSentEvent {
+    identifier: RequestId;
+    message: DirectUDPMessage;
+    timestamp: MonotonicTime;
+  }
+
+  /**
+   * Fired when message is received from udp direct socket stream.
+   */
+  export interface DirectUDPSocketChunkReceivedEvent {
+    identifier: RequestId;
+    message: DirectUDPMessage;
     timestamp: MonotonicTime;
   }
 
@@ -11987,6 +12162,7 @@ export namespace Page {
   /**
    * All Permissions Policy features. This enum should match the one defined
    * in services/network/public/cpp/permissions_policy/permissions_policy_features.json5.
+   * LINT_SKIP.IfChange(PermissionsPolicyFeature)
    */
   export const enum PermissionsPolicyFeature {
     Accelerometer = 'accelerometer',
@@ -12029,6 +12205,7 @@ export namespace Page {
     CrossOriginIsolated = 'cross-origin-isolated',
     DeferredFetch = 'deferred-fetch',
     DeferredFetchMinimal = 'deferred-fetch-minimal',
+    DeviceAttributes = 'device-attributes',
     DigitalCredentialsGet = 'digital-credentials-get',
     DirectSockets = 'direct-sockets',
     DirectSocketsPrivate = 'direct-sockets-private',
@@ -12052,10 +12229,12 @@ export namespace Page {
     KeyboardMap = 'keyboard-map',
     LanguageDetector = 'language-detector',
     LocalFonts = 'local-fonts',
+    LocalNetworkAccess = 'local-network-access',
     Magnetometer = 'magnetometer',
     MediaPlaybackWhileNotVisible = 'media-playback-while-not-visible',
     Microphone = 'microphone',
     Midi = 'midi',
+    OnDeviceSpeechRecognition = 'on-device-speech-recognition',
     OtpCredentials = 'otp-credentials',
     Payment = 'payment',
     PictureInPicture = 'picture-in-picture',
@@ -12065,6 +12244,7 @@ export namespace Page {
     PrivateStateTokenRedemption = 'private-state-token-redemption',
     PublickeyCredentialsCreate = 'publickey-credentials-create',
     PublickeyCredentialsGet = 'publickey-credentials-get',
+    RecordAdAuctionEvents = 'record-ad-auction-events',
     Rewriter = 'rewriter',
     RunAdAuction = 'run-ad-auction',
     ScreenWakeLock = 'screen-wake-lock',
@@ -12958,7 +13138,8 @@ export namespace Page {
     RequestedByWebViewClient = 'RequestedByWebViewClient',
     PostMessageByWebViewClient = 'PostMessageByWebViewClient',
     CacheControlNoStoreDeviceBoundSessionTerminated = 'CacheControlNoStoreDeviceBoundSessionTerminated',
-    CacheLimitPruned = 'CacheLimitPruned',
+    CacheLimitPrunedOnModerateMemoryPressure = 'CacheLimitPrunedOnModerateMemoryPressure',
+    CacheLimitPrunedOnCriticalMemoryPressure = 'CacheLimitPrunedOnCriticalMemoryPressure',
   }
 
   /**
@@ -13200,16 +13381,18 @@ export namespace Page {
     recommendedId?: string;
   }
 
-  export interface GetAdScriptIdRequest {
+  export interface GetAdScriptAncestryIdsRequest {
     frameId: FrameId;
   }
 
-  export interface GetAdScriptIdResponse extends ProtocolResponseWithError {
+  export interface GetAdScriptAncestryIdsResponse extends ProtocolResponseWithError {
     /**
-     * Identifies the bottom-most script which caused the frame to be labelled
-     * as an ad. Only sent if frame is labelled as an ad and id is available.
+     * The ancestry chain of ad script identifiers leading to this frame's
+     * creation, ordered from the most immediate script (in the frame creation
+     * stack) to more distant ancestors (that created the immediately preceding
+     * script). Only sent if frame is labelled as an ad and ids are available.
      */
-    adScriptId?: AdScriptId;
+    adScriptAncestryIds: AdScriptId[];
   }
 
   export interface GetFrameTreeResponse extends ProtocolResponseWithError {
@@ -14043,6 +14226,10 @@ export namespace Page {
    */
   export interface JavascriptDialogClosedEvent {
     /**
+     * Frame id.
+     */
+    frameId: FrameId;
+    /**
      * Whether dialog was confirmed.
      */
     result: boolean;
@@ -14061,6 +14248,10 @@ export namespace Page {
      * Frame url.
      */
     url: string;
+    /**
+     * Frame id.
+     */
+    frameId: FrameId;
     /**
      * Message that will be displayed by the dialog.
      */
@@ -14951,6 +15142,29 @@ export namespace Storage {
   }
 
   /**
+   * Represents a dictionary object passed in as privateAggregationConfig to
+   * run or selectURL.
+   */
+  export interface SharedStoragePrivateAggregationConfig {
+    /**
+     * The chosen aggregation service deployment.
+     */
+    aggregationCoordinatorOrigin?: string;
+    /**
+     * The context ID provided.
+     */
+    contextId?: string;
+    /**
+     * Configures the maximum size allowed for filtering IDs.
+     */
+    filteringIdMaxBytes: integer;
+    /**
+     * The limit on the number of contributions in the final report.
+     */
+    maxContributions?: integer;
+  }
+
+  /**
    * Pair of reporting metadata details for a candidate URL for `selectURL()`.
    */
   export interface SharedStorageReportingMetadata {
@@ -14979,57 +15193,107 @@ export namespace Storage {
   export interface SharedStorageAccessParams {
     /**
      * Spec of the module script URL.
-     * Present only for SharedStorageAccessType.documentAddModule.
+     * Present only for SharedStorageAccessMethods: addModule and
+     * createWorklet.
      */
     scriptSourceUrl?: string;
     /**
+     * String denoting "context-origin", "script-origin", or a custom
+     * origin to be used as the worklet's data origin.
+     * Present only for SharedStorageAccessMethod: createWorklet.
+     */
+    dataOrigin?: string;
+    /**
      * Name of the registered operation to be run.
-     * Present only for SharedStorageAccessType.documentRun and
-     * SharedStorageAccessType.documentSelectURL.
+     * Present only for SharedStorageAccessMethods: run and selectURL.
      */
     operationName?: string;
     /**
+     * ID of the operation call.
+     * Present only for SharedStorageAccessMethods: run and selectURL.
+     */
+    operationId?: string;
+    /**
+     * Whether or not to keep the worket alive for future run or selectURL
+     * calls.
+     * Present only for SharedStorageAccessMethods: run and selectURL.
+     */
+    keepAlive?: boolean;
+    /**
+     * Configures the private aggregation options.
+     * Present only for SharedStorageAccessMethods: run and selectURL.
+     */
+    privateAggregationConfig?: SharedStoragePrivateAggregationConfig;
+    /**
      * The operation's serialized data in bytes (converted to a string).
-     * Present only for SharedStorageAccessType.documentRun and
-     * SharedStorageAccessType.documentSelectURL.
+     * Present only for SharedStorageAccessMethods: run and selectURL.
+     * TODO(crbug.com/401011862): Consider updating this parameter to binary.
      */
     serializedData?: string;
     /**
      * Array of candidate URLs' specs, along with any associated metadata.
-     * Present only for SharedStorageAccessType.documentSelectURL.
+     * Present only for SharedStorageAccessMethod: selectURL.
      */
     urlsWithMetadata?: SharedStorageUrlWithMetadata[];
     /**
+     * Spec of the URN:UUID generated for a selectURL call.
+     * Present only for SharedStorageAccessMethod: selectURL.
+     */
+    urnUuid?: string;
+    /**
      * Key for a specific entry in an origin's shared storage.
-     * Present only for SharedStorageAccessType.documentSet,
-     * SharedStorageAccessType.documentAppend,
-     * SharedStorageAccessType.documentDelete,
-     * SharedStorageAccessType.workletSet,
-     * SharedStorageAccessType.workletAppend,
-     * SharedStorageAccessType.workletDelete,
-     * SharedStorageAccessType.workletGet,
-     * SharedStorageAccessType.headerSet,
-     * SharedStorageAccessType.headerAppend, and
-     * SharedStorageAccessType.headerDelete.
+     * Present only for SharedStorageAccessMethods: set, append, delete, and
+     * get.
      */
     key?: string;
     /**
      * Value for a specific entry in an origin's shared storage.
-     * Present only for SharedStorageAccessType.documentSet,
-     * SharedStorageAccessType.documentAppend,
-     * SharedStorageAccessType.workletSet,
-     * SharedStorageAccessType.workletAppend,
-     * SharedStorageAccessType.headerSet, and
-     * SharedStorageAccessType.headerAppend.
+     * Present only for SharedStorageAccessMethods: set and append.
      */
     value?: string;
     /**
      * Whether or not to set an entry for a key if that key is already present.
-     * Present only for SharedStorageAccessType.documentSet,
-     * SharedStorageAccessType.workletSet, and
-     * SharedStorageAccessType.headerSet.
+     * Present only for SharedStorageAccessMethod: set.
      */
     ignoreIfPresent?: boolean;
+    /**
+     * If the method is called on a shared storage worklet, or as part of
+     * a shared storage worklet script, it will have a number for the
+     * associated worklet, denoting the (0-indexed) order of the worklet's
+     * creation relative to all other shared storage worklets created by
+     * documents using the current storage partition.
+     * Present only for SharedStorageAccessMethods: addModule, createWorklet,
+     * run, selectURL, and any other SharedStorageAccessMethod when the
+     * SharedStorageAccessScope is sharedStorageWorklet.
+     * TODO(crbug.com/401011862): Pass this only for addModule & createWorklet.
+     */
+    workletOrdinal?: integer;
+    /**
+     * Hex representation of the DevTools token used as the TargetID for the
+     * associated shared storage worklet.
+     * Present only for SharedStorageAccessMethods: addModule, createWorklet,
+     * run, selectURL, and any other SharedStorageAccessMethod when the
+     * SharedStorageAccessScope is sharedStorageWorklet.
+     */
+    workletTargetId?: Target.TargetID;
+    /**
+     * Name of the lock to be acquired, if present.
+     * Optionally present only for SharedStorageAccessMethods: batchUpdate,
+     * set, append, delete, and clear.
+     */
+    withLock?: string;
+    /**
+     * If the method has been called as part of a batchUpdate, then this
+     * number identifies the batch to which it belongs.
+     * Optionally present only for SharedStorageAccessMethods:
+     * batchUpdate (required), set, append, delete, and clear.
+     */
+    batchUpdateId?: string;
+    /**
+     * Number of modifier methods sent in batch.
+     * Present only for SharedStorageAccessMethod: batchUpdate.
+     */
+    batchSize?: integer;
   }
 
   export const enum StorageBucketsDurability {
@@ -15102,15 +15366,6 @@ export namespace Storage {
     ends: integer[];
   }
 
-  export interface AttributionReportingTriggerSpec {
-    /**
-     * number instead of integer because not all uint32 can be represented by
-     * int
-     */
-    triggerData: number[];
-    eventReportWindows: AttributionReportingEventReportWindows;
-  }
-
   export const enum AttributionReportingTriggerDataMatching {
     Exact = 'exact',
     Modulus = 'modulus',
@@ -15147,13 +15402,23 @@ export namespace Storage {
     maxEventStates: number;
   }
 
+  export interface AttributionReportingNamedBudgetDef {
+    name: string;
+    budget: integer;
+  }
+
   export interface AttributionReportingSourceRegistration {
     time: Network.TimeSinceEpoch;
     /**
      * duration in seconds
      */
     expiry: integer;
-    triggerSpecs: AttributionReportingTriggerSpec[];
+    /**
+     * number instead of integer because not all uint32 can be represented by
+     * int
+     */
+    triggerData: number[];
+    eventReportWindows: AttributionReportingEventReportWindows;
     /**
      * duration in seconds
      */
@@ -15172,6 +15437,9 @@ export namespace Storage {
     aggregatableDebugReportingConfig: AttributionReportingAggregatableDebugReportingConfig;
     scopesData?: AttributionScopesData;
     maxEventLevelReports: integer;
+    namedBudgets: AttributionReportingNamedBudgetDef[];
+    debugReporting: boolean;
+    eventLevelEpsilon: number;
   }
 
   export const enum AttributionReportingSourceRegistrationResult {
@@ -15231,6 +15499,11 @@ export namespace Storage {
     filters: AttributionReportingFilterPair;
   }
 
+  export interface AttributionReportingNamedBudgetCandidate {
+    name?: string;
+    filters: AttributionReportingFilterPair;
+  }
+
   export interface AttributionReportingTriggerRegistration {
     filters: AttributionReportingFilterPair;
     debugKey?: UnsignedInt64AsBase10;
@@ -15245,6 +15518,7 @@ export namespace Storage {
     triggerContextId?: string;
     aggregatableDebugReportingConfig: AttributionReportingAggregatableDebugReportingConfig;
     scopes: string[];
+    namedBudgets: AttributionReportingNamedBudgetCandidate[];
   }
 
   export const enum AttributionReportingEventLevelResult {
@@ -15285,6 +15559,13 @@ export namespace Storage {
     Deduplicated = 'deduplicated',
     ReportWindowPassed = 'reportWindowPassed',
     ExcessiveReports = 'excessiveReports',
+  }
+
+  export const enum AttributionReportingReportResult {
+    Sent = 'sent',
+    Prohibited = 'prohibited',
+    FailedToAssemble = 'failedToAssemble',
+    Expired = 'expired',
   }
 
   /**
@@ -15602,6 +15883,12 @@ export namespace Storage {
     matchedUrls: string[];
   }
 
+  export interface SetProtectedAudienceKAnonymityRequest {
+    owner: string;
+    name: string;
+    hashes: binary[];
+  }
+
   /**
    * A cache's contents have been modified.
    */
@@ -15782,6 +16069,43 @@ export namespace Storage {
     params: SharedStorageAccessParams;
   }
 
+  /**
+   * A shared storage run or selectURL operation finished its execution.
+   * The following parameters are included in all events.
+   */
+  export interface SharedStorageWorkletOperationExecutionFinishedEvent {
+    /**
+     * Time that the operation finished.
+     */
+    finishedTime: Network.TimeSinceEpoch;
+    /**
+     * Time, in microseconds, from start of shared storage JS API call until
+     * end of operation execution in the worklet.
+     */
+    executionTime: integer;
+    /**
+     * Enum value indicating the Shared Storage API method invoked.
+     */
+    method: SharedStorageAccessMethod;
+    /**
+     * ID of the operation call.
+     */
+    operationId: string;
+    /**
+     * Hex representation of the DevTools token used as the TargetID for the
+     * associated shared storage worklet.
+     */
+    workletTargetId: Target.TargetID;
+    /**
+     * DevTools Frame Token for the primary frame tree's root.
+     */
+    mainFrameId: Page.FrameId;
+    /**
+     * Serialization of the origin owning the Shared Storage data.
+     */
+    ownerOrigin: string;
+  }
+
   export interface StorageBucketCreatedOrUpdatedEvent {
     bucketInfo: StorageBucketInfo;
   }
@@ -15799,6 +16123,18 @@ export namespace Storage {
     registration: AttributionReportingTriggerRegistration;
     eventLevel: AttributionReportingEventLevelResult;
     aggregatable: AttributionReportingAggregatableResult;
+  }
+
+  export interface AttributionReportingReportSentEvent {
+    url: string;
+    body: any;
+    result: AttributionReportingReportResult;
+    /**
+     * If result is `sent`, populated with net/HTTP status.
+     */
+    netError?: integer;
+    netErrorName?: string;
+    httpStatusCode?: integer;
   }
 }
 
@@ -16248,6 +16584,12 @@ export namespace Target {
      * Whether to create the target of type "tab".
      */
     forTab?: boolean;
+    /**
+     * Whether to create a hidden target. The hidden target is observable via protocol, but not
+     * present in the tab UI strip. Cannot be created with `forTab: true`, `newWindow: true` or
+     * `background: false`. The life-time of the tab is limited to the life-time of the session.
+     */
+    hidden?: boolean;
   }
 
   export interface CreateTargetResponse extends ProtocolResponseWithError {
@@ -17877,7 +18219,6 @@ export namespace Preload {
     InvalidSchemeRedirect = 'InvalidSchemeRedirect',
     InvalidSchemeNavigation = 'InvalidSchemeNavigation',
     NavigationRequestBlockedByCsp = 'NavigationRequestBlockedByCsp',
-    MainFrameNavigation = 'MainFrameNavigation',
     MojoBinderPolicy = 'MojoBinderPolicy',
     RendererProcessCrashed = 'RendererProcessCrashed',
     RendererProcessKilled = 'RendererProcessKilled',
@@ -18315,6 +18656,33 @@ export namespace BluetoothEmulation {
   }
 
   /**
+   * Indicates the various types of characteristic write.
+   */
+  export const enum CharacteristicWriteType {
+    WriteDefaultDeprecated = 'write-default-deprecated',
+    WriteWithResponse = 'write-with-response',
+    WriteWithoutResponse = 'write-without-response',
+  }
+
+  /**
+   * Indicates the various types of characteristic operation.
+   */
+  export const enum CharacteristicOperationType {
+    Read = 'read',
+    Write = 'write',
+    SubscribeToNotifications = 'subscribe-to-notifications',
+    UnsubscribeFromNotifications = 'unsubscribe-from-notifications',
+  }
+
+  /**
+   * Indicates the various types of descriptor operation.
+   */
+  export const enum DescriptorOperationType {
+    Read = 'read',
+    Write = 'write',
+  }
+
+  /**
    * Stores the manufacturer data
    */
   export interface ManufacturerData {
@@ -18410,6 +18778,20 @@ export namespace BluetoothEmulation {
     code: integer;
   }
 
+  export interface SimulateCharacteristicOperationResponseRequest {
+    characteristicId: string;
+    type: CharacteristicOperationType;
+    code: integer;
+    data?: binary;
+  }
+
+  export interface SimulateDescriptorOperationResponseRequest {
+    descriptorId: string;
+    type: DescriptorOperationType;
+    code: integer;
+    data?: binary;
+  }
+
   export interface AddServiceRequest {
     address: string;
     serviceUuid: string;
@@ -18423,12 +18805,10 @@ export namespace BluetoothEmulation {
   }
 
   export interface RemoveServiceRequest {
-    address: string;
     serviceId: string;
   }
 
   export interface AddCharacteristicRequest {
-    address: string;
     serviceId: string;
     characteristicUuid: string;
     properties: CharacteristicProperties;
@@ -18442,9 +18822,27 @@ export namespace BluetoothEmulation {
   }
 
   export interface RemoveCharacteristicRequest {
-    address: string;
-    serviceId: string;
     characteristicId: string;
+  }
+
+  export interface AddDescriptorRequest {
+    characteristicId: string;
+    descriptorUuid: string;
+  }
+
+  export interface AddDescriptorResponse extends ProtocolResponseWithError {
+    /**
+     * An identifier that uniquely represents this descriptor.
+     */
+    descriptorId: string;
+  }
+
+  export interface RemoveDescriptorRequest {
+    descriptorId: string;
+  }
+
+  export interface SimulateGATTDisconnectionRequest {
+    address: string;
   }
 
   /**
@@ -18454,6 +18852,29 @@ export namespace BluetoothEmulation {
   export interface GattOperationReceivedEvent {
     address: string;
     type: GATTOperationType;
+  }
+
+  /**
+   * Event for when a characteristic operation of |type| to the characteristic
+   * respresented by |characteristicId| happened. |data| and |writeType| is
+   * expected to exist when |type| is write.
+   */
+  export interface CharacteristicOperationReceivedEvent {
+    characteristicId: string;
+    type: CharacteristicOperationType;
+    data?: binary;
+    writeType?: CharacteristicWriteType;
+  }
+
+  /**
+   * Event for when a descriptor operation of |type| to the descriptor
+   * respresented by |descriptorId| happened. |data| is expected to exist when
+   * |type| is write.
+   */
+  export interface DescriptorOperationReceivedEvent {
+    descriptorId: string;
+    type: DescriptorOperationType;
+    data?: binary;
   }
 }
 
@@ -19310,7 +19731,7 @@ export namespace Debugger {
      */
     hash: string;
     /**
-     * For Wasm modules, the content of the `build_id` custom section.
+     * For Wasm modules, the content of the `build_id` custom section. For JavaScript the `debugId` magic comment.
      */
     buildId: string;
     /**
@@ -19389,7 +19810,7 @@ export namespace Debugger {
      */
     hash: string;
     /**
-     * For Wasm modules, the content of the `build_id` custom section.
+     * For Wasm modules, the content of the `build_id` custom section. For JavaScript the `debugId` magic comment.
      */
     buildId: string;
     /**

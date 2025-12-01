@@ -71,15 +71,16 @@ ContentInjectionProvider::GetInjectionsForFrame(
             base::BindRepeating(&IsOriginWanted, rule_service_, group), frame,
             url);
 
-    if (activations[flat::ActivationType_DOCUMENT].GetDecision().value_or(
-            flat::Decision_MODIFY) == flat::Decision_PASS ||
-        activations[flat::ActivationType_ELEMENT_HIDE].GetDecision().value_or(
-            flat::Decision_MODIFY) == flat::Decision_PASS) {
+    if (activations.GetDocumentDecision().value_or(flat::Decision_MODIFY) ==
+            flat::Decision_PASS ||
+        activations.by_type[flat::ActivationType_ELEMENT_HIDE]
+                .GetDecision()
+                .value_or(flat::Decision_MODIFY) == flat::Decision_PASS) {
       continue;
     }
 
     RulesIndex::InjectionData injection_data;
-    if (activations[flat::ActivationType_GENERIC_HIDE].GetDecision().value_or(
+    if (activations.by_type[flat::ActivationType_GENERIC_HIDE].GetDecision().value_or(
             flat::Decision_MODIFY) == flat::Decision_PASS) {
       injection_data =
           rule_index->GetInjectionDataForOrigin(document_origin, true);

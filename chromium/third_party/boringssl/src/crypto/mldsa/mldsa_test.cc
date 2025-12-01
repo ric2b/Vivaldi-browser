@@ -143,66 +143,6 @@ TEST(MLDSATest, Basic65) {
                  BCM_mldsa65_marshal_private_key>();
 }
 
-// These are the wrapper functions needed for `MLDSABasicTest`. ML-DSA-87 isn't
-// publicly exposed yet, so they are included here. It's good to exercise the
-// ML-DSA-65 wrapper functions so that they aren't untested (even if they are
-// quite trivial) thus `MLDSABasicTest` is done this way around.
-
-struct MLDSA87_private_key {
-  BCM_mldsa87_private_key priv;
-};
-
-struct MLDSA87_public_key {
-  BCM_mldsa87_public_key pub;
-};
-
-static int MLDSA87_generate_key(
-    uint8_t out_encoded_public_key[BCM_MLDSA87_PUBLIC_KEY_BYTES],
-    uint8_t out_seed[MLDSA_SEED_BYTES],
-    struct MLDSA87_private_key *out_private_key) {
-  return bcm_success(BCM_mldsa87_generate_key(
-      out_encoded_public_key, out_seed,
-      reinterpret_cast<BCM_mldsa87_private_key *>(out_private_key)));
-}
-
-static int MLDSA87_private_key_from_seed(
-    struct MLDSA87_private_key *out_private_key, const uint8_t *seed,
-    size_t seed_len) {
-  if (seed_len != BCM_MLDSA_SEED_BYTES) {
-    return 0;
-  }
-  return bcm_success(BCM_mldsa87_private_key_from_seed(
-      reinterpret_cast<BCM_mldsa87_private_key *>(out_private_key), seed));
-}
-
-static int MLDSA87_sign(
-    uint8_t out_encoded_signature[BCM_MLDSA87_SIGNATURE_BYTES],
-    const struct MLDSA87_private_key *private_key, const uint8_t *msg,
-    size_t msg_len, const uint8_t *context, size_t context_len) {
-  return bcm_success(BCM_mldsa87_sign(
-      out_encoded_signature,
-      reinterpret_cast<const BCM_mldsa87_private_key *>(private_key), msg,
-      msg_len, context, context_len));
-}
-
-static int MLDSA87_verify(const struct MLDSA87_public_key *public_key,
-                          const uint8_t *signature, size_t signature_len,
-                          const uint8_t *msg, size_t msg_len,
-                          const uint8_t *context, size_t context_len) {
-  if (context_len > 255 || signature_len != BCM_MLDSA87_SIGNATURE_BYTES) {
-    return 0;
-  }
-  return bcm_success(BCM_mldsa87_verify(
-      reinterpret_cast<const BCM_mldsa87_public_key *>(public_key), signature,
-      msg, msg_len, context, context_len));
-}
-
-static int MLDSA87_parse_public_key(struct MLDSA87_public_key *public_key,
-                                    CBS *in) {
-  return bcm_success(BCM_mldsa87_parse_public_key(
-      reinterpret_cast<BCM_mldsa87_public_key *>(public_key), in));
-}
-
 TEST(MLDSATest, Basic87) {
   MLDSABasicTest<MLDSA87_private_key, MLDSA87_public_key,
                  BCM_MLDSA87_PUBLIC_KEY_BYTES, BCM_MLDSA87_SIGNATURE_BYTES,

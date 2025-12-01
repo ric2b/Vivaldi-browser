@@ -9,6 +9,7 @@ import android.view.View;
 
 import androidx.annotation.StringRes;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -22,6 +23,7 @@ import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.build.BuildConfig;
 
 /** Controller to manage when an IPH bubble for PageInfo is shown. */
+@NullMarked
 public class PageInfoIphController {
     private final UserEducationHelper mUserEducationHelper;
     private final View mStatusView;

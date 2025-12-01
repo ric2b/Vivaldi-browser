@@ -16,6 +16,7 @@ limitations under the License.
 
 #include "tensorflow/core/data/name_utils.h"
 #include "tensorflow/core/data/utils.h"
+#include "tensorflow/core/framework/dataset.h"
 #include "tensorflow/core/framework/metrics.h"
 #include "tensorflow/core/framework/partial_tensor_shape.h"
 #include "tensorflow/core/framework/tensor.h"
@@ -130,6 +131,11 @@ class FixedLengthRecordDatasetOp::Dataset : public DatasetBase {
    public:
     explicit UncompressedIterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
+
+    absl::Status Initialize(IteratorContext* ctx) override {
+      LogFilenames(dataset()->filenames_);
+      return absl::OkStatus();
+    }
 
     absl::Status GetNextInternal(IteratorContext* ctx,
                                  std::vector<Tensor>* out_tensors,
@@ -257,6 +263,11 @@ class FixedLengthRecordDatasetOp::Dataset : public DatasetBase {
     explicit CompressedIterator(const Params& params)
         : DatasetIterator<Dataset>(params) {}
 
+    absl::Status Initialize(IteratorContext* ctx) override {
+      LogFilenames(dataset()->filenames_);
+      return absl::OkStatus();
+    }
+
     absl::Status GetNextInternal(IteratorContext* ctx,
                                  std::vector<Tensor>* out_tensors,
                                  bool* end_of_sequence) override {
@@ -301,7 +312,7 @@ class FixedLengthRecordDatasetOp::Dataset : public DatasetBase {
               *end_of_sequence = false;
               return absl::OkStatus();
             }
-            if (errors::IsOutOfRange(s) && !record.empty()) {
+            if (absl::IsOutOfRange(s) && !record.empty()) {
               uint64 body_size =
                   current_pos + record.size() -
                   (dataset()->header_bytes_ + dataset()->footer_bytes_);
@@ -479,7 +490,6 @@ void FixedLengthRecordDatasetOp::MakeDataset(OpKernelContext* ctx,
     filenames.push_back(filenames_tensor->flat<tstring>()(i));
     metrics::RecordTFDataFilename(kDatasetType, filenames[i]);
   }
-  LogFilenames(filenames);
 
   int64_t header_bytes = -1;
   OP_REQUIRES_OK(

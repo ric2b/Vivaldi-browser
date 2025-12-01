@@ -33,8 +33,8 @@ import * as UI from '../../ui/legacy/legacy.js';
 import {Directives as LitDirectives, html, nothing, render} from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
-import type * as ApplicationComponents from './components/components.js';
-import {StorageItemsView} from './StorageItemsView.js';
+import * as ApplicationComponents from './components/components.js';
+import {StorageItemsToolbar} from './StorageItemsToolbar.js';
 
 const {ARIAUtils} = UI;
 const {EmptyWidget} = UI.EmptyWidget;
@@ -85,14 +85,18 @@ export interface ViewInput {
   onDelete: (event: CustomEvent<HTMLElement>) => void;
 }
 
+interface ViewOutput {
+  toolbar: StorageItemsToolbar;
+}
+
 const MAX_VALUE_LENGTH = 4096;
 
-export type View = (input: ViewInput, output: object, target: HTMLElement) => void;
+export type View = (input: ViewInput, output: ViewOutput, target: HTMLElement) => void;
 /**
  * A helper typically used in the Application panel. Renders a split view
  * between a DataGrid displaying key-value pairs and a preview Widget.
  */
-export abstract class KeyValueStorageItemsView extends StorageItemsView {
+export abstract class KeyValueStorageItemsView extends UI.Widget.VBox {
   #preview: Widget;
   #previewValue: string|null;
 
@@ -101,14 +105,22 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
   #view: View;
   #isSortOrderAscending = true;
   #editable: boolean;
+  #toolbar: StorageItemsToolbar|undefined;
+  readonly metadataView: ApplicationComponents.StorageMetadataView.StorageMetadataView;
 
   constructor(
       title: string, id: string, editable: boolean, view?: View,
       metadataView?: ApplicationComponents.StorageMetadataView.StorageMetadataView) {
+    metadataView ??= new ApplicationComponents.StorageMetadataView.StorageMetadataView();
     if (!view) {
-      view = (input: ViewInput, _, target: HTMLElement) => {
+      view = (input: ViewInput, output: ViewOutput, target: HTMLElement) => {
         // clang-format off
         render(html `
+            <devtools-widget
+              .widgetConfig=${widgetConfig(StorageItemsToolbar, {metadataView})}
+              class=flex-none
+              ${UI.Widget.widgetRef(StorageItemsToolbar, view => {output.toolbar = view;})}
+            ></devtools-widget>
             <devtools-split-view sidebar-position="second" name="${id}-split-view-state">
                <devtools-widget
                   slot="main"
@@ -154,7 +166,8 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
             target, {host: input});
       };
     }
-    super(title, id, metadataView);
+    super(false);
+    this.metadataView = metadataView;
     this.#editable = editable;
     this.#view = view;
     this.performUpdate();
@@ -166,14 +179,30 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
     this.showPreview(null, null);
   }
 
+  override wasShown(): void {
+    this.refreshItems();
+  }
+
   override performUpdate(): void {
+    const that = this;
+    const viewOutput = {
+      set toolbar(toolbar: StorageItemsToolbar) {
+        that.#toolbar?.removeEventListener(StorageItemsToolbar.Events.DELETE_SELECTED, that.deleteSelectedItem, that);
+        that.#toolbar?.removeEventListener(StorageItemsToolbar.Events.DELETE_ALL, that.deleteAllItems, that);
+        that.#toolbar?.removeEventListener(StorageItemsToolbar.Events.REFRESH, that.refreshItems, that);
+        that.#toolbar = toolbar;
+        that.#toolbar.addEventListener(StorageItemsToolbar.Events.DELETE_SELECTED, that.deleteSelectedItem, that);
+        that.#toolbar.addEventListener(StorageItemsToolbar.Events.DELETE_ALL, that.deleteAllItems, that);
+        that.#toolbar.addEventListener(StorageItemsToolbar.Events.REFRESH, that.refreshItems, that);
+      }
+    };
     const viewInput = {
       items: this.#items,
       selectedKey: this.#selectedKey,
       editable: this.#editable,
       preview: this.#preview,
       onSelect: (event: CustomEvent<HTMLElement|null>) => {
-        this.setCanDeleteSelected(Boolean(event.detail));
+        this.#toolbar?.setCanDeleteSelected(Boolean(event.detail));
         if (!event.detail) {
           void this.#previewEntry(null);
         } else {
@@ -198,13 +227,23 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
         this.refreshItems();
       },
     };
-    this.#view(viewInput, {}, this.contentElement);
+    this.#view(viewInput, viewOutput, this.contentElement);
+  }
+
+  protected get toolbar(): StorageItemsToolbar|undefined {
+    return this.#toolbar;
+  }
+
+  refreshItems(): void {
+  }
+
+  deleteAllItems(): void {
   }
 
   itemsCleared(): void {
     this.#items = [];
     this.performUpdate();
-    this.setCanDeleteSelected(false);
+    this.#toolbar?.setCanDeleteSelected(false);
   }
 
   itemRemoved(key: string): void {
@@ -214,7 +253,7 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
     }
     this.#items.splice(index, 1);
     this.performUpdate();
-    this.setCanDeleteSelected(this.#items.length > 1);
+    this.#toolbar?.setCanDeleteSelected(this.#items.length > 1);
   }
 
   itemAdded(key: string, value: string): void {
@@ -241,7 +280,7 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
     if (this.#previewValue !== value) {
       void this.#previewEntry({key, value});
     }
-    this.setCanDeleteSelected(true);
+    this.#toolbar?.setCanDeleteSelected(true);
   }
 
   showItems(items: Array<{key: string, value: string}>): void {
@@ -254,11 +293,11 @@ export abstract class KeyValueStorageItemsView extends StorageItemsView {
       void this.#previewEntry(selectedItem);
     }
     this.performUpdate();
-    this.setCanDeleteSelected(Boolean(this.#selectedKey));
+    this.#toolbar?.setCanDeleteSelected(Boolean(this.#selectedKey));
     ARIAUtils.alert(i18nString(UIStrings.numberEntries, {PH1: this.#items.length}));
   }
 
-  override deleteSelectedItem(): void {
+  deleteSelectedItem(): void {
     if (!this.#selectedKey) {
       return;
     }

@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../icon_button/icon_button.js';
 
@@ -201,7 +202,7 @@ export class IssueCounter extends HTMLElement {
     };
     render(
         html`
-        <style>${issueCounterStyles.cssText}</style>
+        <style>${issueCounterStyles}</style>
         <icon-button .data=${data} .accessibleName=${this.#accessibleName}></icon-button>
         `,
         this.#shadow, {host: this});

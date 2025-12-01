@@ -9,8 +9,20 @@
 
 class ProfileIOS;
 
+@class VivaldiSearchEngineSettingsViewController;
+
 @protocol VivaldiSearchEngineSettingsViewControllerDelegate
 - (void)searchEngineNicknameEnabled:(BOOL)enabled;
+@end
+
+// Delegate for presentation events related to
+// VivaldiSearchEngineSettingsViewController.
+@protocol VivaldiSearchEngineSettingsViewControllerPresentationDelegate
+
+// Called when the view controller is removed from its parent.
+- (void)searchEngineSettingsViewControllerWasRemoved:
+      (VivaldiSearchEngineSettingsViewController*)controller;
+
 @end
 
 // This class is the table view for the Search Engine settings.
@@ -25,6 +37,10 @@ class ProfileIOS;
 
 @property(nonatomic, weak)
     id<VivaldiSearchEngineSettingsViewControllerDelegate> delegate;
+
+@property(nonatomic, weak)
+    id<VivaldiSearchEngineSettingsViewControllerPresentationDelegate>
+        presentationDelegate;
 
 @end
 

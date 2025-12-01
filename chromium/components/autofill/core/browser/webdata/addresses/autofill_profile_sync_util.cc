@@ -66,12 +66,12 @@ ConvertProfileToSpecificsVerificationStatus(VerificationStatus profile_status) {
   }
 }
 
+}  // namespace
+
 bool IsAutofillProfileSpecificsValid(
     const AutofillProfileSpecifics& specifics) {
   return base::Uuid::ParseCaseInsensitive(specifics.guid()).is_valid();
 }
-
-}  // namespace
 
 std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
     const AutofillProfile& entry) {
@@ -99,8 +99,9 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
   // syncing functionality, all profiles are explicitly synced as verified.
   specifics->set_deprecated_origin(kSettingsOrigin);
 
-  if (!entry.profile_label().empty())
+  if (!entry.profile_label().empty()) {
     specifics->set_profile_label(entry.profile_label());
+  }
 
   specifics->set_use_count(entry.usage_history().use_count());
   specifics->set_use_date(entry.usage_history().use_date().ToTimeT());
@@ -326,11 +327,10 @@ std::unique_ptr<EntityData> CreateEntityDataFromAutofillProfile(
   return entity_data;
 }
 
-std::optional<AutofillProfile> CreateAutofillProfileFromSpecifics(
+AutofillProfile CreateAutofillProfileFromValidSpecifics(
     const AutofillProfileSpecifics& specifics) {
-  if (!IsAutofillProfileSpecificsValid(specifics)) {
-    return std::nullopt;
-  }
+  CHECK(IsAutofillProfileSpecificsValid(specifics));
+
   // Update the country field, which can contain either a country code (if set
   // by a newer version of Chrome), or a country name (if set by an older
   // version of Chrome).
@@ -642,7 +642,7 @@ std::optional<AutofillProfile> CreateAutofillProfileFromSpecifics(
   // When adding field types, ensure that they don't need to be added here and
   // update the last checked value.
   // TODO(crbug.com/359768803): Handle alternative names here.
-  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 187,
+  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 190,
                 "New field type needs to be reviewed for inclusion in sync");
 
   // The profile may be in a legacy state. By calling |FinalizeAfterImport()|

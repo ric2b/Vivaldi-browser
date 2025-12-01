@@ -744,8 +744,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
     return jsval;
   }
 
-  void BuildJSToWasmWrapper(Node* frame_state = nullptr,
-                            bool set_in_wasm_flag = true) {
+  void BuildJSToWasmWrapper(Node* frame_state, bool set_in_wasm_flag) {
     const int wasm_param_count =
         static_cast<int>(wrapper_sig_->parameter_count());
 
@@ -787,14 +786,16 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
     // Prepare Param() nodes. Param() nodes can only be created once,
     // so we need to use the same nodes along all possible transformation paths.
     base::SmallVector<Node*, 16> params(args_count);
-    for (int i = 0; i < wasm_param_count; ++i) params[i + 1] = Param(i + 1);
+    for (int i = 0; i < wasm_param_count; ++i) {
+      params[i] = Param(i + 1);  // Skip the receiver.
+    }
 
     auto done = gasm_->MakeLabel(MachineRepresentation::kTagged);
     // Convert JS parameters to wasm numbers using the default transformation
     // and build the call.
     base::SmallVector<Node*, 16> args(args_count);
     for (int i = 0; i < wasm_param_count; ++i) {
-      Node* wasm_param = params[i + 1];
+      Node* wasm_param = params[i];
 
       // For Float32 parameters
       // we set UseInfo::CheckedNumberOrOddballAsFloat64 in
@@ -847,6 +848,66 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
                         global_proxy);
   }
 
+  template <typename... Args>
+  Node* BuildCCall(MachineSignature* sig, Node* function, Args... args) {
+    DCHECK_LE(sig->return_count(), 1);
+    DCHECK_EQ(sizeof...(args), sig->parameter_count());
+    Node* call_args[] = {function, args..., effect(), control()};
+
+    auto call_descriptor =
+        Linkage::GetSimplifiedCDescriptor(mcgraph()->zone(), sig);
+
+    return gasm_->Call(call_descriptor, arraysize(call_args), call_args);
+  }
+
+  Node* BuildSwitchToTheCentralStack() {
+    Node* do_switch = gasm_->ExternalConstant(
+        ExternalReference::wasm_switch_to_the_central_stack_for_js());
+    MachineType reps[] = {MachineType::Pointer(), MachineType::Pointer(),
+                          MachineType::Pointer()};
+    MachineSignature sig(1, 2, reps);
+
+    Node* central_stack_sp = BuildCCall(
+        &sig, do_switch,
+        gasm_->ExternalConstant(ExternalReference::isolate_address()),
+        gasm_->LoadFramePointer());
+    Node* old_sp = gasm_->LoadStackPointer();
+    // Temporarily disallow sp-relative offsets.
+    gasm_->SetStackPointer(central_stack_sp);
+    return old_sp;
+  }
+
+  void BuildSwitchBackFromCentralStack(Node* old_sp) {
+    auto skip = gasm_->MakeLabel();
+    gasm_->GotoIf(gasm_->IntPtrEqual(old_sp, gasm_->IntPtrConstant(0)), &skip);
+    Node* do_switch = gasm_->ExternalConstant(
+        ExternalReference::wasm_switch_from_the_central_stack_for_js());
+    MachineType reps[] = {MachineType::Pointer()};
+    MachineSignature sig(0, 1, reps);
+    BuildCCall(&sig, do_switch,
+               gasm_->ExternalConstant(ExternalReference::isolate_address()));
+    gasm_->SetStackPointer(old_sp);
+    gasm_->Goto(&skip);
+    gasm_->Bind(&skip);
+  }
+
+  Node* BuildSwitchToTheCentralStackIfNeeded() {
+    // If the current stack is a secondary stack, switch to the central stack.
+    auto end = gasm_->MakeLabel(MachineType::PointerRepresentation());
+    Node* isolate_root = BuildLoadIsolateRoot();
+    Node* is_on_central_stack_flag =
+        gasm_->Load(MachineType::Uint8(), isolate_root,
+                    IsolateData::is_on_central_stack_flag_offset());
+    gasm_->GotoIf(is_on_central_stack_flag, &end, BranchHint::kTrue,
+                  gasm_->IntPtrConstant(0));
+
+    Node* old_sp = BuildSwitchToTheCentralStack();
+    gasm_->Goto(&end, old_sp);
+
+    gasm_->Bind(&end);
+    return end.PhiAt(0);
+  }
+
   void BuildJSFastApiCallWrapper(DirectHandle<JSReceiver> callable) {
     // Here 'callable_node' must be equal to 'callable' but we cannot pass a
     // HeapConstant(callable) because WasmCode::Validate() fails with
@@ -872,7 +933,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
     DirectHandle<JSFunction> target;
     Node* target_node;
     Node* receiver_node;
-    Isolate* isolate = callable->GetIsolate();
+    Isolate* isolate = Isolate::Current();
     if (IsJSBoundFunction(*callable)) {
       target = direct_handle(
           Cast<JSFunction>(
@@ -897,13 +958,13 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
     Tagged<FunctionTemplateInfo> api_func_data = shared->api_func_data();
     const Address c_address = api_func_data->GetCFunction(isolate, 0);
     const v8::CFunctionInfo* c_signature =
-        api_func_data->GetCSignature(target->GetIsolate(), 0);
+        api_func_data->GetCSignature(isolate, 0);
 
 #ifdef V8_USE_SIMULATOR_WITH_GENERIC_C_CALLS
     Address c_functions[] = {c_address};
     const v8::CFunctionInfo* const c_signatures[] = {c_signature};
-    target->GetIsolate()->simulator_data()->RegisterFunctionsAndSignatures(
-        c_functions, c_signatures, 1);
+    isolate->simulator_data()->RegisterFunctionsAndSignatures(c_functions,
+                                                              c_signatures, 1);
 #endif  //  V8_USE_SIMULATOR_WITH_GENERIC_C_CALLS
 
     Node* shared_function_info = gasm_->LoadSharedFunctionInfo(target_node);
@@ -917,9 +978,9 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
                         FunctionTemplateInfo::kCallbackDataOffset));
 
     FastApiCallFunction c_function{c_address, c_signature};
+    Node* old_sp = BuildSwitchToTheCentralStackIfNeeded();
     Node* call = fast_api_call::BuildFastApiCall(
-        target->GetIsolate(), graph(), gasm_.get(), c_function,
-        api_data_argument,
+        isolate, graph(), gasm_.get(), c_function, api_data_argument,
         // Load and convert parameters passed to C function
         [this, c_signature, receiver_node](
             int param_index,
@@ -945,6 +1006,7 @@ class WasmWrapperGraphBuilder : public WasmGraphBuilder {
           // is not used.
           UNREACHABLE();
         });
+    BuildSwitchBackFromCentralStack(old_sp);
 
     BuildModifyThreadInWasmFlag(true);
 
@@ -1056,10 +1118,14 @@ void BuildInlinedJSToWasmWrapper(Zone* zone, MachineGraph* mcgraph,
 }
 
 std::unique_ptr<OptimizedCompilationJob> NewJSToWasmCompilationJob(
-    Isolate* isolate, const wasm::CanonicalSig* sig) {
+    Isolate* isolate, const wasm::CanonicalSig* sig,
+    bool receiver_is_first_param) {
+  wasm::WrapperCompilationInfo info{
+      .code_kind = CodeKind::JS_TO_WASM_FUNCTION,
+      .receiver_is_first_param = receiver_is_first_param};
   return Pipeline::NewWasmTurboshaftWrapperCompilationJob(
-      isolate, sig, wasm::WrapperCompilationInfo{CodeKind::JS_TO_WASM_FUNCTION},
-      WasmExportedFunction::GetDebugName(sig), WasmAssemblerOptions());
+      isolate, sig, info, WasmExportedFunction::GetDebugName(sig),
+      WasmAssemblerOptions());
 }
 
 namespace {
@@ -1077,7 +1143,7 @@ MachineGraph* CreateCommonMachineGraph(Zone* zone) {
 
 wasm::WasmCompilationResult CompileWasmImportCallWrapper(
     wasm::ImportCallKind kind, const wasm::CanonicalSig* sig,
-    bool source_positions, int expected_arity, wasm::Suspend suspend) {
+    int expected_arity, wasm::Suspend suspend) {
   DCHECK_NE(wasm::ImportCallKind::kLinkError, kind);
   DCHECK_NE(wasm::ImportCallKind::kWasmToWasm, kind);
   DCHECK_NE(wasm::ImportCallKind::kWasmToJSFastApi, kind);

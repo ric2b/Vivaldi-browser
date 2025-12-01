@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "base/barrier_closure.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/test_future.h"
 #include "build/build_config.h"
@@ -34,8 +35,8 @@
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "base/command_line.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
@@ -197,10 +198,9 @@ class ChromeUsbTestHelper {
     extensions::TestExtensionSystem* extension_system =
         static_cast<extensions::TestExtensionSystem*>(
             extensions::ExtensionSystem::Get(profile_));
-    extensions::ExtensionService* extension_service =
-        extension_system->CreateExtensionService(
-            base::CommandLine::ForCurrentProcess(), base::FilePath(), false);
-    extension_service->AddExtension(extension.get());
+    extension_system->CreateExtensionService(
+        base::CommandLine::ForCurrentProcess(), base::FilePath(), false);
+    extensions::ExtensionRegistrar::Get(profile_)->AddExtension(extension);
     return extension->GetResourceURL("index.html");
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)

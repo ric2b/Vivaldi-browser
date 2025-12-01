@@ -51,7 +51,7 @@ void SharedFunctionInfo::Init(ReadOnlyRoots ro_roots, int unique_id) {
   set_raw_outer_scope_info_or_feedback_metadata(ro_roots.the_hole_value(),
                                                 SKIP_WRITE_BARRIER);
   set_script(ro_roots.undefined_value(), kReleaseStore, SKIP_WRITE_BARRIER);
-  set_function_literal_id(kInvalidInfoId);
+  set_function_literal_id(kInvalidInfoId, kRelaxedStore);
   set_unique_id(unique_id);
 
   // Set integer fields (smi or int, depending on the architecture).
@@ -250,7 +250,8 @@ void SharedFunctionInfo::CopyFrom(Tagged<SharedFunctionInfo> other,
   set_expected_nof_properties(other->expected_nof_properties());
   set_flags2(other->flags2());
   set_flags(other->flags(kRelaxedLoad), kRelaxedStore);
-  set_function_literal_id(other->function_literal_id());
+  set_function_literal_id(other->function_literal_id(kRelaxedLoad),
+                          kRelaxedStore);
   set_unique_id(other->unique_id());
   set_age(0);
 
@@ -280,7 +281,8 @@ bool SharedFunctionInfo::HasDebugInfo(Isolate* isolate) const {
 int SharedFunctionInfo::UniqueIdInScript() const {
   // Script scopes start "before" the script to avoid clashing with a scope that
   // starts on character 0.
-  if (function_literal_id() == kFunctionLiteralIdTopLevel) return -2;
+  if (function_literal_id(kRelaxedLoad) == kFunctionLiteralIdTopLevel)
+    return -2;
   // Wrapped functions start before the function body, but after the script
   // start, to avoid clashing with a scope starting on character 0.
   if (syntax_kind() == FunctionSyntaxKind::kWrapped) return -1;
@@ -545,7 +547,8 @@ void SharedFunctionInfo::InitFromFunctionLiteral(IsolateT* isolate,
   {
     DisallowGarbageCollection no_gc;
     Tagged<SharedFunctionInfo> raw_sfi = *lit->shared_function_info();
-    DCHECK_EQ(raw_sfi->function_literal_id(), lit->function_literal_id());
+    DCHECK_EQ(raw_sfi->function_literal_id(kRelaxedLoad),
+              lit->function_literal_id());
     // When adding fields here, make sure DeclarationScope::AnalyzePartially is
     // updated accordingly.
     raw_sfi->set_internal_formal_parameter_count(
@@ -773,8 +776,10 @@ void SharedFunctionInfo::UpdateFromFunctionLiteralForLiveEdit(
     // Updating the ScopeInfo is safe since they are identical modulo
     // source positions.
     Tagged<ScopeInfo> new_scope_info = *lit->scope()->scope_info();
-    DCHECK(new_scope_info->Equals(Cast<ScopeInfo>(maybe_scope_info), true));
-    SetScopeInfo(new_scope_info);
+    Tagged<ScopeInfo> old_scope_info = Cast<ScopeInfo>(maybe_scope_info);
+    DCHECK(new_scope_info->Equals(old_scope_info, true));
+    old_scope_info->SetPositionInfo(new_scope_info->position_info_start(),
+                                    new_scope_info->position_info_end());
   } else if (!is_compiled()) {
     CHECK(HasUncompiledData());
     if (HasUncompiledDataWithPreparseData()) {
@@ -891,5 +896,39 @@ bool SharedFunctionInfo::UniqueIdsAreUnique(Isolate* isolate) {
   return true;
 }
 #endif  // DEBUG
+
+std::ostream& operator<<(std::ostream& os,
+                         SharedFunctionInfo::Inlineability i) {
+  switch (i) {
+    case SharedFunctionInfo::Inlineability::kHasNoScript:
+      os << "has no script";
+      break;
+    case SharedFunctionInfo::Inlineability::kNeedsBinaryCoverage:
+      os << "needs binary coverage";
+      break;
+    case SharedFunctionInfo::Inlineability::kIsBuiltin:
+      os << "is builtin";
+      break;
+    case SharedFunctionInfo::Inlineability::kIsNotUserCode:
+      os << "is not user code";
+      break;
+    case SharedFunctionInfo::Inlineability::kHasNoBytecode:
+      os << "has no bytecode";
+      break;
+    case SharedFunctionInfo::Inlineability::kExceedsBytecodeLimit:
+      os << "exceeds bytecode limit";
+      break;
+    case SharedFunctionInfo::Inlineability::kMayContainBreakPoints:
+      os << "may contain breakpoints";
+      break;
+    case SharedFunctionInfo::Inlineability::kHasOptimizationDisabled:
+      os << "has optimization disabled";
+      break;
+    case SharedFunctionInfo::Inlineability::kIsInlineable:
+      os << "is inlineable (!)";
+      break;
+  }
+  return os;
+}
 
 }  // namespace v8::internal

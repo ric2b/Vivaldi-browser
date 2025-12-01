@@ -549,7 +549,7 @@ def Update(args=None, force=False, no_download=False, options=None):
 
     toolchain_hash = None
     if options and options.toolchain_hash:
-      toolchain_hash = [options.toolchain_hash]
+      toolchain_hash = ["--no-junction", options.toolchain_hash]
       if options.toolchain_url:
         os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN_BASE_URL"] = \
                   options.toolchain_url

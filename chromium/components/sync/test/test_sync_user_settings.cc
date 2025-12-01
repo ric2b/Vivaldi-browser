@@ -89,7 +89,7 @@ void TestSyncUserSettings::ResetSelectedType(UserSelectableType type) {
 }
 
 void TestSyncUserSettings::KeepAccountSettingsPrefsOnlyForUsers(
-    const std::vector<signin::GaiaIdHash>& available_gaia_ids) {}
+    const std::vector<GaiaId>& available_gaia_ids) {}
 
 UserSelectableTypeSet TestSyncUserSettings::GetSelectedTypes() const {
   if (service_->GetAccountInfo().IsEmpty()) {
@@ -138,9 +138,12 @@ bool TestSyncUserSettings::IsSyncFeatureDisabledViaDashboard() const {
   return sync_feature_disabled_via_dashboard_;
 }
 
-void TestSyncUserSettings::SetSyncFeatureDisabledViaDashboard(
-    bool disabled_via_dashboard) {
-  sync_feature_disabled_via_dashboard_ = disabled_via_dashboard;
+void TestSyncUserSettings::ClearSyncFeatureDisabledViaDashboard() {
+  sync_feature_disabled_via_dashboard_ = false;
+}
+
+void TestSyncUserSettings::SetSyncFeatureDisabledViaDashboard() {
+  sync_feature_disabled_via_dashboard_ = true;
 }
 
 bool TestSyncUserSettings::IsSyncAllOsTypesEnabled() const {

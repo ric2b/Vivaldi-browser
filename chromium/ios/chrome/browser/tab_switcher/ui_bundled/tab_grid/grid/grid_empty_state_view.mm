@@ -465,6 +465,14 @@ const CGFloat buttonContentsPadding = 20;
                             topLabel:topLabel
                          bottomLabel:bottomLabel
                     buttonsContainer:_buttonsContainer];
+
+    if (@available(iOS 17, *)) {
+      NSArray<UITrait>* traits = TraitCollectionSetForTraits(@[
+        UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class
+      ]);
+      [self registerForTraitChanges:traits
+                         withAction:@selector(updateImageViewConstraint)];
+    }
   } else {
 
   [NSLayoutConstraint activateConstraints:@[
@@ -506,10 +514,16 @@ const CGFloat buttonContentsPadding = 20;
 #pragma mark - VIVALDI
 
 #pragma mark - Trait Collection
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
+  if (@available(iOS 17, *)) {
+    return;
+  }
   [self updateImageViewConstraint];
 }
+#endif
+
 
 - (void)setUpConstraintsForVivaldi:(UIScrollView*)scrollView
                          container:(UIView*)container

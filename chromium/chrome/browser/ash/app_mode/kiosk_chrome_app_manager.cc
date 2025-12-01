@@ -54,11 +54,10 @@
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/chrome_paths.h"
+#include "chromeos/ash/components/policy/device_local_account/device_local_account_type.h"
 #include "chromeos/ash/components/settings/cros_settings.h"
 #include "chromeos/ash/components/settings/cros_settings_names.h"
-#include "chromeos/crosapi/mojom/chrome_app_kiosk_service.mojom.h"
 #include "components/account_id/account_id.h"
-#include "components/policy/core/common/device_local_account_type.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -331,13 +330,13 @@ KioskChromeAppManager::App KioskChromeAppManager::ConstructApp(
   return app;
 }
 
-bool KioskChromeAppManager::GetApp(const std::string& app_id, App* app) const {
+std::optional<KioskChromeAppManager::App> KioskChromeAppManager::GetApp(
+    const std::string& app_id) const {
   const KioskAppData* data = GetAppData(app_id);
   if (!data) {
-    return false;
+    return std::nullopt;
   }
-  *app = ConstructApp(*data);
-  return true;
+  return ConstructApp(*data);
 }
 
 void KioskChromeAppManager::ClearAppData(const std::string& app_id) {

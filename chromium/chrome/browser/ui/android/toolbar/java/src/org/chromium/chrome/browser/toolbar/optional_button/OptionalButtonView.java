@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.toolbar.optional_button;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
@@ -19,7 +21,6 @@ import android.transition.Transition.TransitionListener;
 import android.transition.TransitionManager;
 import android.transition.TransitionSet;
 import android.util.AttributeSet;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -30,9 +31,8 @@ import android.widget.ImageView.ScaleType;
 import android.widget.TextView;
 
 import androidx.annotation.DimenRes;
+import androidx.annotation.DrawableRes;
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.TooltipCompat;
 import androidx.core.view.ViewCompat;
@@ -42,12 +42,17 @@ import com.google.android.material.color.MaterialColors;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
-import org.chromium.chrome.browser.toolbar.ButtonData;
-import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
+import org.chromium.build.annotations.MonotonicNonNull;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.theme.ThemeModuleUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonConstants.TransitionType;
+import org.chromium.ui.interpolators.Interpolators;
 import org.chromium.ui.listmenu.ListMenuButton;
 
 import java.lang.annotation.Retention;
@@ -55,30 +60,32 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.function.BooleanSupplier;
 
 /** Toolbar button that performs animated transitions between icons. */
+@NullMarked
 class OptionalButtonView extends FrameLayout implements TransitionListener {
     private static final int SWAP_TRANSITION_DURATION_MS = 300;
     private static final int HIDE_TRANSITION_DURATION_MS = 225;
 
-    private final int mCollapsedStateWidthPx;
     private final int mExpandedStatePaddingPx;
 
+    private int mCollapsedStateWidthPx;
     private TextView mActionChipLabel;
     private ImageView mBackground;
     private ListMenuButton mButton;
     private ImageView mAnimationImage;
 
-    private Drawable mIconDrawable;
+    private @Nullable Drawable mIconDrawable;
 
-    private ViewGroup mTransitionRoot;
-    private String mContentDescription;
-    private String mActionChipLabelString;
+    private @MonotonicNonNull ViewGroup mTransitionRoot;
+    private @Nullable String mContentDescription;
+    private @Nullable String mActionChipLabelString;
     private boolean mCurrentButtonSupportsTinting;
-    private ColorStateList mForegroundColorTint;
+    private boolean mIsIncognitoBranded;
+    private @Nullable ColorStateList mForegroundColorTint;
     private int mBackgroundColorFilter;
-    private Runnable mOnBeforeHideTransitionCallback;
-    private Callback<Transition> mFakeBeginTransitionForTesting;
-    private Handler mHandler;
-    private Handler mHandlerForTesting;
+    private @Nullable Runnable mOnBeforeHideTransitionCallback;
+    private @Nullable Callback<Transition> mFakeBeginTransitionForTesting;
+    private @Nullable Handler mHandler;
+    private @Nullable Handler mHandlerForTesting;
 
     private @State int mState;
 
@@ -88,15 +95,16 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
     private @ButtonType int mCurrentButtonType;
     private @ButtonType int mNextButtonType;
 
-    private OnClickListener mClickListener;
-    private OnLongClickListener mLongClickListener;
-    private Callback<Integer> mTransitionStartedCallback;
-    private Callback<Integer> mTransitionFinishedCallback;
-    private BooleanSupplier mIsAnimationAllowedPredicate;
+    private @Nullable OnClickListener mClickListener;
+    private @Nullable OnLongClickListener mLongClickListener;
+    private @Nullable Callback<Integer> mTransitionStartedCallback;
+    private @Nullable Callback<Integer> mTransitionFinishedCallback;
+    private @Nullable BooleanSupplier mIsAnimationAllowedPredicate;
     private final Runnable mCollapseActionChipRunnable =
             new Runnable() {
                 @Override
                 public void run() {
+                    assumeNonNull(mIsAnimationAllowedPredicate);
                     if (mIsAnimationAllowedPredicate.getAsBoolean()) {
                         animateActionChipCollapse();
                     } else {
@@ -154,6 +162,38 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         setPaddingRelative(paddingStart, getPaddingTop(), getPaddingEnd(), getPaddingBottom());
     }
 
+    public void setIsIncognitoBranded(boolean isIncognitoBranded) {
+        mIsIncognitoBranded = isIncognitoBranded;
+        if (isCpaSpecUpdateEnabled()) {
+            // When isCpaSpecUpdateEnabled, logic for setting the background resource is in
+            // #updateButtonWithAnimation.
+            return;
+        }
+        @DrawableRes int backgroundDrawableRes = R.drawable.optional_button_background;
+        if (isIncognitoBranded) {
+            backgroundDrawableRes = R.drawable.optional_button_background_baseline;
+        }
+        mButton.setBackgroundResource(backgroundDrawableRes);
+    }
+
+    private void setBackgroundResourceHelper(boolean isCpaCheckedState) {
+        @DrawableRes
+        int backgroundDrawableRes =
+                isCpaCheckedState
+                        ? R.drawable.optional_button_background_square
+                        : R.drawable.optional_button_background;
+
+        // Currently incognito mode doesn't support CPA, so we always set the baseline drawable.
+        if (mIsIncognitoBranded) {
+            backgroundDrawableRes = R.drawable.optional_button_background_baseline;
+        }
+        mButton.setBackgroundResource(backgroundDrawableRes);
+    }
+
+    void setCollapsedStateWidth(int width) {
+        mCollapsedStateWidthPx = width;
+    }
+
     public void cancelTransition() {
         if (isRunningTransition()) {
             TransitionManager.endTransitions(mTransitionRoot);
@@ -165,8 +205,9 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
      * animation. The animation that runs depends on the current state of this view (Whether is
      * hidden or showing another icon) and the attributes of the new icon (Whether it contains an
      * action chip description).
+     *
      * @param buttonData object containing the new button's icon, handlers, description and other
-     *         attributes. If null then this view starts a hide transition.
+     *     attributes. If null then this view starts a hide transition.
      */
     void updateButtonWithAnimation(@Nullable ButtonData buttonData) {
         // If we receive the same button with the same visibility then there's no need to update.
@@ -220,6 +261,23 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mCurrentButtonSupportsTinting = buttonSpec.getSupportsTinting();
 
         mIconDrawable = buttonSpec.getDrawable();
+
+        boolean isCpaCheckedState = buttonData.getButtonSpec().isChecked();
+
+        if (isCpaSpecUpdateEnabled()) {
+            // Change the CPA background to a square if the button data instance is owned by
+            // PriceTrackingButtonController and is a "checked" state.
+            @DrawableRes
+            int resId =
+                    isCpaCheckedState
+                            ? R.drawable
+                                    .modern_toolbar_text_box_background_with_primary_color_square
+                            : R.drawable.modern_toolbar_text_box_background_with_primary_color;
+
+            mBackground.setImageDrawable(AppCompatResources.getDrawable(getContext(), resId));
+            setBackgroundResourceHelper(isCpaCheckedState);
+        }
+
         mNextButtonType = buttonSpec.isDynamicAction() ? ButtonType.DYNAMIC : ButtonType.STATIC;
         if (buttonSpec.getActionChipLabelResId() == Resources.ID_NULL) {
             mActionChipLabelString = null;
@@ -247,20 +305,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mClickListener = buttonSpec.getOnClickListener();
         mLongClickListener = buttonSpec.getOnLongClickListener();
         mButton.setEnabled(buttonData.isEnabled());
-
-        // Set circular highlight for optional button when button variant is profile, share, voice
-        // search and new tab. Set box highlight for the rest of button variants.
-        int resId = buttonData.getBackgroundResource();
-        if (buttonData.getButtonSpec().shouldShowBackgroundHighlight()
-                && resId != Resources.ID_NULL) {
-            mButton.setBackgroundResource(resId);
-        } else {
-            TypedValue themeRes = new TypedValue();
-            getContext()
-                    .getTheme()
-                    .resolveAttribute(R.attr.selectableItemBackground, themeRes, true);
-            mButton.setBackgroundResource(themeRes.resourceId);
-        }
+        mActionChipLabel.setEnabled(buttonData.isEnabled());
 
         // Set hover state tooltip text for optional toolbar buttons(e.g. share, voice search, new
         // tab and profile).
@@ -353,7 +398,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
     }
 
     /** Constructor for inflating from XML. */
-    public OptionalButtonView(@NonNull Context context, @Nullable AttributeSet attrs) {
+    public OptionalButtonView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
 
         mState = State.HIDDEN;
@@ -363,6 +408,14 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mExpandedStatePaddingPx =
                 getDimensionPixelSize(
                         R.dimen.toolbar_phone_optional_button_expanded_state_extra_width);
+    }
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        super.setEnabled(enabled);
+
+        mButton.setEnabled(enabled);
+        mActionChipLabel.setEnabled(enabled);
     }
 
     /**
@@ -391,6 +444,7 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
         mAnimationImage = findViewById(R.id.swappable_icon_animation_image);
         mActionChipLabel = findViewById(R.id.action_chip_label);
 
+        // If isCpaSpecUpdateEnabled, overriding the background in #updateButtonWithAnimation.
         mBackground.setImageDrawable(
                 AppCompatResources.getDrawable(
                         getContext(),
@@ -420,10 +474,11 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
     /**
      * Listens to all transition ends. This is called even if the transition is cancelled or if all
      * animations are disabled. Implementation of {@link TransitionListener}.
+     *
      * @param transition Transition that ended, not used.
      */
     @Override
-    public void onTransitionEnd(Transition transition) {
+    public void onTransitionEnd(@Nullable Transition transition) {
         if (mTransitionFinishedCallback != null
                 && getCurrentTransitionType() != TransitionType.NONE) {
             mTransitionFinishedCallback.onResult(getCurrentTransitionType());
@@ -487,6 +542,9 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
 
         transition.addTransition(slide).addTransition(shrink).addTransition(fade);
         transition.setDuration(SWAP_TRANSITION_DURATION_MS);
+        if (isCpaSpecUpdateEnabled()) {
+            transition.setInterpolator(Interpolators.DEFAULT_SPATIAL);
+        }
         transition.addListener(this);
 
         return transition;
@@ -517,6 +575,9 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
                 .addTransition(changeBounds);
 
         transition.setDuration(HIDE_TRANSITION_DURATION_MS);
+        if (isCpaSpecUpdateEnabled()) {
+            transition.setInterpolator(Interpolators.DEFAULT_SPATIAL);
+        }
         transition.addListener(this);
 
         return transition;
@@ -540,6 +601,9 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
                 .addTransition(shrinkTransition);
 
         transitionSet.setDuration(SWAP_TRANSITION_DURATION_MS);
+        if (isCpaSpecUpdateEnabled()) {
+            transitionSet.setInterpolator(Interpolators.DEFAULT_SPATIAL);
+        }
         transitionSet.addListener(this);
 
         return transitionSet;
@@ -824,5 +888,13 @@ class OptionalButtonView extends FrameLayout implements TransitionListener {
 
     private int getDimensionPixelSize(@DimenRes int dimenId) {
         return getResources().getDimensionPixelSize(dimenId);
+    }
+
+    // ============================================================================================
+    // Flags
+    // ============================================================================================
+    public static boolean isCpaSpecUpdateEnabled() {
+        return ChromeFeatureList.sCpaSpecUpdate.isEnabled()
+                || ThemeModuleUtils.isForceEnableDependencies();
     }
 }

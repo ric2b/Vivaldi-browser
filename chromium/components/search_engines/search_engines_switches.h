@@ -27,7 +27,10 @@ COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 extern const char kForceSearchEngineChoiceScreen[];
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-BASE_DECLARE_FEATURE(kSearchEngineChoiceGuestExperience);
+BASE_DECLARE_FEATURE(kInvalidateSearchEngineChoiceOnDeviceRestoreDetection);
+
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+extern const base::FeatureParam<bool> kInvalidateChoiceOnRestoreIsRetroactive;
 
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 BASE_DECLARE_FEATURE(kSearchEngineChoiceTrigger);
@@ -63,10 +66,6 @@ extern const base::FeatureParam<std::string>
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 extern const base::FeatureParam<int> kSearchEngineChoiceMaximumSkipCount;
 
-// Feature flag to prompt for the search engine choice in EEA countries after
-// device restore.
-COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-BASE_DECLARE_FEATURE(kIOSPromptSearchEngineChoiceAfterDeviceRestore);
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

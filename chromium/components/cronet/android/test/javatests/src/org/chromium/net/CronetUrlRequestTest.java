@@ -34,6 +34,7 @@ import org.chromium.base.ApkInfo;
 import org.chromium.base.DeviceInfo;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.build.BuildConfig;
 import org.chromium.net.CronetTestRule.BoolFlag;
 import org.chromium.net.CronetTestRule.CronetImplementation;
 import org.chromium.net.CronetTestRule.Flags;
@@ -213,7 +214,10 @@ public class CronetUrlRequestTest {
         testSimpleGet();
         mTestLogger.waitForLogCronetTrafficInfo();
         assertThat(mTestLogger.getLastCronetTrafficInfo().getCronetSource())
-                .isEqualTo(CronetSource.CRONET_SOURCE_STATICALLY_LINKED);
+                .isEqualTo(
+                        BuildConfig.CRONET_FOR_AOSP_BUILD
+                                ? CronetSource.CRONET_SOURCE_PLATFORM
+                                : CronetSource.CRONET_SOURCE_STATICALLY_LINKED);
     }
 
     @Test
@@ -236,10 +240,8 @@ public class CronetUrlRequestTest {
                         name = CronetLibraryLoader.INITIALIZE_BUILD_INFO_ON_STARTUP,
                         value = false)
             })
-    public void testSimpleRequestMustNotCreateApkInfoOrDeviceInfoWhenFlagDisabled()
-            throws Exception {
+    public void testSimpleRequestMustNotCreateDeviceInfoWhenFlagDisabled() throws Exception {
         testBindToDefaultNetworkSucceeds();
-        assertThat(ApkInfo.isInitializedForTesting()).isFalse();
         assertThat(DeviceInfo.isInitializedForTesting()).isFalse();
     }
 
@@ -647,7 +649,7 @@ public class CronetUrlRequestTest {
         var oldMessage = "Invalid header header:name=headervalue";
         var newMessage = "Invalid header with headername: header:name";
         if (mTestRule.implementationUnderTest() == CronetImplementation.AOSP_PLATFORM
-                && !mTestRule.isRunningInAOSP()) {
+                && !BuildConfig.CRONET_FOR_AOSP_BUILD) {
             // We may be running against an HttpEngine backed by an old version of Cronet, so accept
             // both the old and new variants of the message.
             assertThat(e).hasMessageThat().isAnyOf(oldMessage, newMessage);
@@ -690,7 +692,7 @@ public class CronetUrlRequestTest {
         var oldMessage = "Invalid header headername=bad header\r\nvalue";
         var newMessage = "Invalid header with headername: headername";
         if (mTestRule.implementationUnderTest() == CronetImplementation.AOSP_PLATFORM
-                && !mTestRule.isRunningInAOSP()) {
+                && !BuildConfig.CRONET_FOR_AOSP_BUILD) {
             // We may be running against an HttpEngine backed by an old version of Cronet, so accept
             // both the old and new variants of the message.
             assertThat(e).hasMessageThat().isAnyOf(oldMessage, newMessage);
@@ -757,6 +759,35 @@ public class CronetUrlRequestTest {
         TestUrlRequestCallback callback = new TestUrlRequestCallback();
         String refererName = "Referer";
         String refererValue = "http://example.com/";
+        UrlRequest.Builder builder =
+                mTestRule
+                        .getTestFramework()
+                        .getEngine()
+                        .newUrlRequestBuilder(
+                                NativeTestServer.getEchoHeaderURL(refererName),
+                                callback,
+                                callback.getExecutor());
+        builder.addHeader(refererName, refererValue);
+        builder.build().start();
+        callback.blockForDone();
+        assertThat(callback.getResponseInfoWithChecks()).hasHttpStatusCodeThat().isEqualTo(200);
+        assertThat(callback.mResponseAsString).isEqualTo(refererValue);
+    }
+
+    @Test
+    @SmallTest
+    // Regression test for https://crbug.com/415825189.
+    @IgnoreFor(
+            implementations = {CronetImplementation.AOSP_PLATFORM},
+            reason = "Emulators do not contain an up-to-date version of HttpEngine")
+    public void testHttpsRefererToHttpDestitation_notDropped() throws Exception {
+        TestUrlRequestCallback callback = new TestUrlRequestCallback();
+        String refererName = "Referer";
+        String refererValue = "https://example.com/";
+        String url = NativeTestServer.getEchoHeaderURL(refererName);
+        // This tests is explicitly testing referrer to HTTPS while destination is HTTP. Make sure
+        // that changes to NativeTestServer don't break this assumption.
+        assertThat(url).startsWith("http://");
         UrlRequest.Builder builder =
                 mTestRule
                         .getTestFramework()
@@ -2603,7 +2634,7 @@ public class CronetUrlRequestTest {
         class HangingUploadDataProvider extends UploadDataProvider {
             UploadDataSink mUploadDataSink;
             ByteBuffer mByteBuffer;
-            ConditionVariable mReadCalled = new ConditionVariable(false);
+            final ConditionVariable mReadCalled = new ConditionVariable(false);
 
             @Override
             public long getLength() {

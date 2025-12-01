@@ -8,7 +8,6 @@
 #include <optional>
 #include <utility>
 
-#include "base/android/build_info.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/check.h"
@@ -17,6 +16,7 @@
 #include "base/notreached.h"
 #include "cc/layers/layer.h"
 #include "cc/slim/layer.h"
+#include "components/input/features.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
 #include "content/browser/android/content_ui_event_handler.h"
 #include "content/browser/android/drop_data_android.h"
@@ -75,9 +75,9 @@ int DragMovementThresholdDip() {
 // compositor event queue.
 bool ShouldRequestUnbufferedDispatch() {
   static bool should_request_unbuffered_dispatch =
-      base::android::BuildInfo::GetInstance()->sdk_int() >=
-          base::android::SDK_VERSION_LOLLIPOP &&
-      !GetContentClient()->UsingSynchronousCompositing();
+      !GetContentClient()->UsingSynchronousCompositing() &&
+      !base::FeatureList::IsEnabled(
+          input::features::kUseAndroidBufferedInputDispatch);
   return should_request_unbuffered_dispatch;
 }
 
@@ -469,9 +469,9 @@ bool WebContentsViewAndroid::OnDragEvent(const ui::DragEventAndroid& event) {
     case JNI_DragEvent::ACTION_DRAG_ENTERED: {
       drag_metadata_.clear();
       for (const std::u16string& mime_type : event.mime_types()) {
-        if (mime_type == base::ASCIIToUTF16(ui::kMimeTypeText) ||
-            mime_type == base::ASCIIToUTF16(ui::kMimeTypeHTML) ||
-            mime_type == base::ASCIIToUTF16(ui::kMimeTypeMozillaURL)) {
+        if (mime_type == ui::kMimeTypePlainText16 ||
+            mime_type == ui::kMimeTypeHtml16 ||
+            mime_type == ui::kMimeTypeMozillaUrl16) {
           drag_metadata_.push_back(DropData::Metadata::CreateForMimeType(
               DropData::Kind::STRING, mime_type));
         } else {
@@ -914,6 +914,13 @@ void WebContentsViewAndroid::NotifyContextMenuInsetsObservers(
   auto* rwhv = GetRenderWidgetHostViewAndroid();
   if (rwhv) {
     rwhv->NotifyContextMenuInsetsObservers(safe_area);
+  }
+}
+
+void WebContentsViewAndroid::ShowInterestInElement(int nodeID) {
+  auto* rwhv = GetRenderWidgetHostViewAndroid();
+  if (rwhv) {
+    rwhv->ShowInterestInElement(nodeID);
   }
 }
 

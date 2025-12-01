@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_UI_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_SETTINGS_UI_H_
 
+#include "base/callback_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/buildflags.h"
@@ -71,9 +72,6 @@ class SettingsUI
 
   ~SettingsUI() override;
 
-  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(
-      kAutofillPredictionImprovementsHeaderElementId);
-
 #if BUILDFLAG(IS_CHROMEOS)
   // Initializes the WebUI message handlers for CrOS-specific settings that are
   // still shown in the browser settings UI.
@@ -106,6 +104,13 @@ class SettingsUI
 
   // Makes a request to show a HaTS survey.
   void TryShowHatsSurveyWithTimeout();
+
+#if BUILDFLAG(ENABLE_GLIC)
+  // Updates, based on account and profile state, the loadTimeData values that
+  // control whether the glic settings page should be shown. Returns the enabled
+  // value.
+  void UpdateShowGlicState();
+#endif
 
 #if !BUILDFLAG(IS_CHROMEOS)
   // theme_color_picker::mojom::ThemeColorPickerHandlerFactory:
@@ -143,6 +148,10 @@ class SettingsUI
   mojo::Receiver<customize_color_scheme_mode::mojom::
                      CustomizeColorSchemeModeHandlerFactory>
       customize_color_scheme_mode_handler_factory_receiver_{this};
+
+#if BUILDFLAG(ENABLE_GLIC)
+  base::CallbackListSubscription glic_settings_state_subscription_;
+#endif
 
   WEB_UI_CONTROLLER_TYPE_DECL();
 };

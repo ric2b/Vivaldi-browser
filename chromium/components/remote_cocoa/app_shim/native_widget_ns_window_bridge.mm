@@ -548,6 +548,16 @@ void NativeWidgetNSWindowBridge::InitWindow(
              name:NSSystemColorsDidChangeNotification
            object:nil];
 
+  [NSWorkspace.sharedWorkspace.notificationCenter
+      addObserver:window_delegate_
+         selector:@selector(onActiveSpaceChanged:)
+             name:NSWorkspaceActiveSpaceDidChangeNotification
+           object:nil];
+
+  // Force update on initialization because the notification won't send
+  // until the active space changes.
+  OnSpaceActivationMayHaveChanged();
+
   // Validate the window's initial state, otherwise the bridge's initial
   // tracking state will be incorrect.
   DCHECK(![window_ isVisible]);
@@ -1204,6 +1214,8 @@ void NativeWidgetNSWindowBridge::OnWindowWillClose() {
     parent_ = nullptr;
   }
   [[NSNotificationCenter defaultCenter] removeObserver:window_delegate_];
+  [NSWorkspace.sharedWorkspace.notificationCenter
+      removeObserver:window_delegate_];
 
   [show_animation_ stopAnimation];  // If set, calls OnShowAnimationComplete().
   CHECK(!show_animation_);
@@ -1270,6 +1282,15 @@ void NativeWidgetNSWindowBridge::OnVisibilityChanged() {
 
   NotifyVisibilityChangeDown();
   host_->OnVisibilityChanged(window_visible_);
+}
+
+void NativeWidgetNSWindowBridge::OnSpaceActivationMayHaveChanged() {
+  const bool window_on_active_space = window_.onActiveSpace;
+  if (window_on_active_space_ == window_on_active_space) {
+    return;
+  }
+  window_on_active_space_ = window_on_active_space;
+  host_->OnSpaceActivationChanged(window_on_active_space);
 }
 
 void NativeWidgetNSWindowBridge::OnSystemColorsChanged() {

@@ -25,13 +25,13 @@
 #import "base/scoped_multi_source_observation.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
-#include "base/types/expected_macros.h"
+#import "base/types/expected_macros.h"
 #import "base/values.h"
 #import "components/autofill/core/browser/filling/filling_product.h"
 #import "components/autofill/core/browser/form_structure.h"
 #import "components/autofill/core/browser/suggestions/suggestion_type.h"
 #import "components/autofill/core/common/autofill_features.h"
-#include "components/autofill/core/common/field_data_manager.h"
+#import "components/autofill/core/common/field_data_manager.h"
 #import "components/autofill/core/common/form_data.h"
 #import "components/autofill/core/common/password_form_fill_data.h"
 #import "components/autofill/core/common/password_form_generation_data.h"
@@ -557,8 +557,8 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
                        }];
 
   if (self.isPasswordGenerated &&
-      ([formQuery.type isEqual:@"input"] ||
-       [formQuery.type isEqual:@"keyup"]) &&
+      ([formQuery.type isEqualToString:@"input"] ||
+       [formQuery.type isEqualToString:@"keyup"]) &&
       formQuery.fieldRendererID == self.passwordGeneratedIdentifier) {
     // On other platforms, when the user clicks on generation field, we show
     // password in clear text. And the user has the possibility to edit it. On
@@ -587,8 +587,8 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
     _lastTypedfieldIdentifier = formQuery.fieldRendererID;
     _lastTypedValue = formQuery.typedValue;
 
-    if ([formQuery.type isEqual:@"input"] ||
-        [formQuery.type isEqual:@"keyup"]) {
+    if ([formQuery.type isEqualToString:@"input"] ||
+        [formQuery.type isEqualToString:@"keyup"]) {
       [self.formHelper updateFieldDataOnUserInput:formQuery.fieldRendererID
                                           inFrame:frame
                                        inputValue:formQuery.typedValue];
@@ -909,7 +909,7 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
           /*log_debug_data*/ true)) {
     return NO;
   }
-  if (![fieldType isEqual:kObfuscatedFieldType]) {
+  if (![fieldType isEqualToString:kObfuscatedFieldType]) {
     return NO;
   }
   const PasswordFormGenerationData* generationData =
@@ -1176,6 +1176,7 @@ NSString* const kPasswordFormSuggestionSuffix = @" ••••••••";
       base::ToVector(form.fields(), &autofill::FormFieldData::global_id);
   switch (source) {
     case AutofillManager::Observer::FieldTypeSource::kAutofillServer:
+    case AutofillManager::Observer::FieldTypeSource::kAutofillAiModel:
       _passwordManager->ProcessAutofillPredictions(
           driver, form,
           manager.GetServerPredictionsForForm(globalFormId, field_ids));

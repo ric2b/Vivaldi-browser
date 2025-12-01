@@ -43,6 +43,9 @@ namespace {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr char kBrowserDisplayName[] = "google-chrome";
 #define PRODUCT_STRING "Google Chrome"
+#elif defined(VIVALDI_BUILD)
+constexpr char kBrowserDisplayName[] = "vivaldi";
+#define PRODUCT_STRING "Vivaldi"
 #else
 constexpr char kBrowserDisplayName[] = "chromium-browser";
 #define PRODUCT_STRING "Chromium"

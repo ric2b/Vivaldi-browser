@@ -48,8 +48,7 @@ T FPRound(int64_t sign, int64_t exponent, uint64_t mantissa,
                 "destination type T not large enough");
   static_assert(sizeof(T) <= sizeof(uint64_t),
                 "maximum size of destination type T is 64 bits");
-  static_assert(std::is_unsigned<T>::value,
-                "destination type T must be unsigned");
+  static_assert(std::is_unsigned_v<T>, "destination type T must be unsigned");
 
   DCHECK((sign == 0) || (sign == 1));
 
@@ -698,9 +697,6 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
     }
 
     explicit CallArgument(float argument) {
-      // TODO(all): CallArgument(float) is untested, remove this check once
-      //            tested.
-      UNIMPLEMENTED();
       // Make the D register a NaN to try to trap errors if the callee expects a
       // double. If it expects a float, the callee should ignore the top word.
       DCHECK(sizeof(kFP64SignallingNaN) == sizeof(bits_));
@@ -2373,7 +2369,7 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
   static size_t UsableStackSize() { return v8_flags.sim_stack_size * KB; }
   uintptr_t stack_limit_;
   // Added in Simulator::StackLimit()
-  static const int kAdditionalStackMargin = 4 * KB;
+  static const int kAdditionalStackMargin = 20 * KB;
 
   Decoder<DispatchingDecoderVisitor>* decoder_;
   Decoder<DispatchingDecoderVisitor>* disassembler_decoder_;
@@ -2522,14 +2518,14 @@ class Simulator : public DecoderVisitor, public SimulatorBase {
   // Read floating point return values.
   template <typename T>
   T ReadReturn()
-    requires std::is_floating_point<T>::value
+    requires std::is_floating_point_v<T>
   {
     return static_cast<T>(dreg(0));
   }
   // Read non-float return values.
   template <typename T>
   T ReadReturn()
-    requires(!std::is_floating_point<T>::value)
+    requires(!std::is_floating_point_v<T>)
   {
     return ConvertReturn<T>(xreg(0));
   }

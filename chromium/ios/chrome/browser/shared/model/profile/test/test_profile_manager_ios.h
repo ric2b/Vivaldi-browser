@@ -31,6 +31,7 @@ class TestProfileManagerIOS : public ProfileManagerIOS {
   ~TestProfileManagerIOS() override;
 
   // ProfileManagerIOS:
+  void PrepareForDestruction() override;
   void AddObserver(ProfileManagerObserverIOS* observer) override;
   void RemoveObserver(ProfileManagerObserverIOS* observer) override;
   ProfileIOS* GetProfileWithName(std::string_view name) override;
@@ -45,10 +46,6 @@ class TestProfileManagerIOS : public ProfileManagerIOS {
   bool CreateProfileAsync(std::string_view name,
                           ProfileLoadedCallback initialized_callback,
                           ProfileLoadedCallback created_callback) override;
-  ProfileIOS* LoadProfile(std::string_view name) override;
-  ProfileIOS* CreateProfile(std::string_view name) override;
-  void UnloadProfile(std::string_view name) override;
-  void UnloadAllProfiles() override;
   void MarkProfileForDeletion(std::string_view name) override;
   bool IsProfileMarkedForDeletion(std::string_view name) const override;
   void PurgeProfilesMarkedForDeletion(base::OnceClosure callback) override;
@@ -59,6 +56,9 @@ class TestProfileManagerIOS : public ProfileManagerIOS {
   TestProfileIOS* AddProfileWithBuilder(TestProfileIOS::Builder builder);
 
  private:
+  // Returns a ScopedProfileKeepAliveIOS for `profile`.
+  ScopedProfileKeepAliveIOS CreateScopedProfileKeepAlive(ProfileIOS* profile);
+
   // Storage for the TestProfileIOS.
   using ProfileMap =
       std::map<std::string, std::unique_ptr<TestProfileIOS>, std::less<>>;

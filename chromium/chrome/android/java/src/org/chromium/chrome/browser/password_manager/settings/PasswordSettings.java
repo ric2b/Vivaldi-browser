@@ -19,7 +19,6 @@ import android.view.MenuItem;
 import android.view.View;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.widget.Toolbar;
 import androidx.fragment.app.FragmentManager;
@@ -31,6 +30,7 @@ import org.chromium.base.BuildInfo;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.access_loss.PasswordAccessLossWarningType;
 import org.chromium.chrome.browser.password_check.PasswordCheck;
@@ -60,6 +60,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.Locale;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 
 /**
@@ -138,14 +140,14 @@ public class PasswordSettings extends ChromeBaseSettingsFragment
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     /** For controlling the UX flow of exporting passwords. */
-    private ExportFlow mExportFlow = new ExportFlow(PasswordAccessLossWarningType.NONE);
+    private final ExportFlow mExportFlow = new ExportFlow(PasswordAccessLossWarningType.NONE);
 
     public ExportFlow getExportFlowForTesting() {
         return mExportFlow;
     }
 
     @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         mExportFlow.onCreate(
                 savedInstanceState,
                 new ExportFlow.Delegate() {
@@ -222,7 +224,7 @@ public class PasswordSettings extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onViewCreated(View view, Bundle savedInstanceState) {
+    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
         // Disable animations of preference changes.
@@ -231,6 +233,7 @@ public class PasswordSettings extends ChromeBaseSettingsFragment
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        if (!BuildConfig.IS_VIVALDI)
         menu.clear();
         mMenu = menu;
         inflater.inflate(R.menu.save_password_preferences_action_bar_menu, menu);
@@ -483,10 +486,15 @@ public class PasswordSettings extends ChromeBaseSettingsFragment
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        rebuildPasswordLists();
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         mExportFlow.onResume();
-        rebuildPasswordLists();
     }
 
     @Override
@@ -754,5 +762,10 @@ public class PasswordSettings extends ChromeBaseSettingsFragment
 
     Toolbar getToolbarForTesting() {
         return getActivity().findViewById(R.id.action_bar);
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

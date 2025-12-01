@@ -27,6 +27,7 @@
 #include "content/browser/interest_group/auction_process_manager.h"
 #include "content/browser/interest_group/bidding_and_auction_serializer.h"
 #include "content/browser/interest_group/bidding_and_auction_server_key_fetcher.h"
+#include "content/browser/interest_group/data_decoder_manager.h"
 #include "content/browser/interest_group/for_debugging_only_report_util.h"
 #include "content/browser/interest_group/interest_group_caching_storage.h"
 #include "content/browser/interest_group/interest_group_k_anonymity_manager.h"
@@ -59,7 +60,9 @@ class FilePath;
 namespace content {
 
 class AdAuctionPageData;
+class BrowserContext;
 class InterestGroupStorage;
+class NavigationOrDocumentHandle;
 class TrustedSignalsCacheImpl;
 struct DebugReportLockoutAndCooldowns;
 
@@ -217,18 +220,10 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
       const url::Origin& owner,
       std::set<std::string> interest_groups_to_keep,
       url::Origin main_frame_origin);
-  // Loads all interest groups owned by `owner`, then updates their
+  // Loads all interest groups owned by `owners`, then updates their
   // definitions by fetching their `updateURL`. Interest group updates
   // that fail to load or validate are skipped, but other updates will
   // proceed.
-  void UpdateInterestGroupsOfOwner(
-      const url::Origin& owner,
-      network::mojom::ClientSecurityStatePtr client_security_state,
-      std::optional<std::string> user_agent_override,
-      AreReportingOriginsAttestedCallback callback);
-  // Like UpdateInterestGroupsOfOwner(), but handles multiple interest group
-  // owners.
-  //
   // The list is shuffled in-place to ensure fairness.
   void UpdateInterestGroupsOfOwners(
       std::vector<url::Origin> owners,
@@ -285,7 +280,27 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
 
   // Records a view or a click event. Aggregate time bucketed view and click
   // information is provided to bidder's browsing signals in generateBid().
-  void RecordViewClick(network::AdAuctionEventRecord event_record);
+  //
+  // `navigation_or_document_handle` may be null -- in that case, the top-frame
+  // origin for the IsInterestGroupAPIAllowed() check is an opaque origin.
+  void RecordViewClick(
+      BrowserContext& browser_context,
+      const NavigationOrDocumentHandle* navigation_or_document_handle,
+      const std::optional<url::Origin>& maybe_top_frame_origin,
+      network::AdAuctionEventRecord event_record);
+
+  // Test-only variant; this lacks permission & attestation checks (so tests
+  // don't need to set up things they need to operate).
+  void RecordViewClickForTesting(network::AdAuctionEventRecord event_record);
+
+  // Invokes `callback` with whether the database has a record of view/click
+  // events for given combination of provider & eligible origins.
+  //
+  // nullopt will be passed in case of some sort of database error.
+  void CheckViewClickInfoInDbForTesting(
+      url::Origin provider_origin,
+      url::Origin eligible_origin,
+      base::OnceCallback<void(std::optional<bool>)> callback);
 
   // Reports the ad keys to the k-anonymity service. Should be called when
   // FLEDGE selects an ad.
@@ -342,6 +357,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // empty then apply to all storage keys.
   void DeleteInterestGroupData(
       StoragePartition::StorageKeyMatcherFunction storage_key_matcher,
+      bool user_initiated_deletion,
       base::OnceClosure completion_callback);
 
   // Completely delete all interest group data, including k-anonymity data that
@@ -404,6 +420,8 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   AuctionProcessManager& auction_process_manager() {
     return *auction_process_manager_;
   }
+
+  DataDecoderManager& data_decoder_manager() { return data_decoder_manager_; }
 
   void AddInterestGroupObserver(InterestGroupObserver* observer) {
     observers_.AddObserver(observer);
@@ -486,7 +504,7 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   void UpdateKAnonymity(const blink::InterestGroupKey& interest_group_key,
                         const std::vector<std::string>& positive_hashed_keys,
                         const base::Time update_time,
-                        bool initial_update);
+                        bool replace_existing_values);
 
   // Gets lockout and cooldowns of `origins` for sending forDebuggingOnly
   // reports.
@@ -555,6 +573,10 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // features have not been enabled.
   TrustedSignalsCacheImpl* trusted_signals_cache() {
     return trusted_signals_cache_.get();
+  }
+
+  InterestGroupCachingStorage* GetCachingStorageForTesting() {
+    return &caching_storage_;
   }
 
  private:
@@ -736,6 +758,9 @@ class CONTENT_EXPORT InterestGroupManagerImpl : public InterestGroupManager {
   // InterestGroupStorage. Returns cached values for GetInterestGroupsForOwner
   // when available.
   InterestGroupCachingStorage caching_storage_;
+
+  // This must be above the `trusted_signals_cache_`, which depends on it.
+  DataDecoderManager data_decoder_manager_;
 
   // Cache for trusted browser signals version 2. Only populated if
   // kFledgeTrustedSignalsKVv2Support and kFledgeUseKvv2SignalsCache features

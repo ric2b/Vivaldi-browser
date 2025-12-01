@@ -8,8 +8,10 @@
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_test.h"
@@ -56,7 +58,10 @@ enum StreamType {
   kAudioWithSpatialRendering,
   kVideoWithHdrMetadata,
   kVideoWithoutHdrMetadata,
-  kVideoWithHdrMetadataAndKeySystem
+  kVideoWithHdrMetadataAndKeySystem,
+  kVideoWithDolbyVisionAndKeySystem,
+  kAudioWithKeySystem,
+  kAudioAndVideo
 };
 
 enum ConfigType { kFile, kMediaSource, kWebRtc };
@@ -75,6 +80,8 @@ class MediaCapabilitiesTest : public ContentBrowserTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
                                     "MediaCapabilitiesSpatialAudio");
+    scoped_feature_list_.InitWithFeatures({media::kExternalClearKeyForTesting},
+                                          {});
   }
 
   std::string CanDecodeAudio(std::string_view config_type,
@@ -122,6 +129,29 @@ class MediaCapabilitiesTest : public ContentBrowserTest {
                      color_gamut, transfer_function, key_system);
   }
 
+  std::string CanDecodeVideoWithKeySystem(std::string_view config_type,
+                                          std::string_view content_type,
+                                          std::string_view key_system) {
+    return CanDecode(config_type, content_type,
+                     StreamType::kVideoWithDolbyVisionAndKeySystem,
+                     /* spatialRendering */ false, "", "", "", key_system);
+  }
+
+  std::string CanDecodeAudioWithKeySystem(std::string_view config_type,
+                                          std::string_view content_type,
+                                          std::string_view key_system) {
+    return CanDecode(config_type, content_type, StreamType::kAudioWithKeySystem,
+                     /* spatialRendering */ false, "", "", "", key_system);
+  }
+
+  std::string CanDecodeAudioAndVideo(std::string_view config_type,
+                                     std::string_view video_content_type,
+                                     std::string_view audio_content_type) {
+    return CanDecode(
+        config_type, video_content_type, StreamType::kAudioAndVideo,
+        /* spatialRendering */ false, "", "", "", "", audio_content_type);
+  }
+
   std::string CanDecode(std::string_view config_type,
                         std::string_view content_type,
                         StreamType stream_type,
@@ -129,7 +159,8 @@ class MediaCapabilitiesTest : public ContentBrowserTest {
                         std::string_view hdr_metadata_type = "",
                         std::string_view color_gamut = "",
                         std::string_view transfer_function = "",
-                        std::string_view key_system = "") {
+                        std::string_view key_system = "",
+                        std::string_view specified_audio_content_type = "") {
     std::string command;
     if (stream_type == StreamType::kAudio) {
       base::StringAppendF(&command, "testAudioConfig(");
@@ -139,14 +170,14 @@ class MediaCapabilitiesTest : public ContentBrowserTest {
     } else if (stream_type == StreamType::kVideoWithHdrMetadata) {
       command.append("testVideoConfigWithHdrMetadata(");
       for (auto x : {hdr_metadata_type, color_gamut, transfer_function}) {
-        DCHECK(!x.empty());
+        CHECK(!x.empty());
         base::StringAppendF(&command, "\"%.*s\",", static_cast<int>(x.size()),
                             x.data());
       }
     } else if (stream_type == StreamType::kVideoWithoutHdrMetadata) {
       command.append("testVideoConfigWithoutHdrMetadata(");
       for (auto x : {color_gamut, transfer_function}) {
-        DCHECK(!x.empty());
+        CHECK(!x.empty());
         base::StringAppendF(&command, "\"%.*s\",", static_cast<int>(x.size()),
                             x.data());
       }
@@ -154,8 +185,29 @@ class MediaCapabilitiesTest : public ContentBrowserTest {
       command.append("testVideoConfigWithHdrMetadataAndKeySystem(");
       for (auto x :
            {hdr_metadata_type, color_gamut, transfer_function, key_system}) {
-        DCHECK(!x.empty());
+        CHECK(!x.empty());
         base::StringAppendF(&command, "\"%.*s\",", static_cast<int>(x.size()),
+                            x.data());
+      }
+    } else if (stream_type == StreamType::kVideoWithDolbyVisionAndKeySystem) {
+      command.append("testVideoConfigWithKeySystem(");
+      for (auto x : {key_system}) {
+        CHECK(!x.empty());
+        base::StringAppendF(&command, "\"%.*s\",", static_cast<int>(x.size()),
+                            x.data());
+      }
+    } else if (stream_type == StreamType::kAudioWithKeySystem) {
+      command.append("testAudioConfigWithKeySystem(");
+      for (auto x : {key_system}) {
+        CHECK(!x.empty());
+        base::StringAppendF(&command, "\"%.*s\",", static_cast<int>(x.size()),
+                            x.data());
+      }
+    } else if (stream_type == StreamType::kAudioAndVideo) {
+      command.append("testAudioAndVideoConfig(");
+      for (auto x : {specified_audio_content_type}) {
+        CHECK(!x.empty());
+        base::StringAppendF(&command, "%.*s,", static_cast<int>(x.size()),
                             x.data());
       }
     } else {
@@ -177,6 +229,8 @@ class MediaCapabilitiesTest : public ContentBrowserTest {
     title_watcher.AlsoWaitForTitle(std::u16string(kError16));
     return base::UTF16ToASCII(title_watcher.WaitAndGetTitle());
   }
+
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Adds param for query type (file vs media-source) to
@@ -253,6 +307,34 @@ IN_PROC_BROWSER_TEST_P(MediaCapabilitiesTestWithConfigType,
   EXPECT_EQ(kUnsupported,
             CanDecodeVideo(config_type, "'video/mp4; codecs=\"vp9\"'"));
 }
+
+#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+// Cover Dolby Vision codec support of content types where the answer of support
+// (or not) should be common to both "media-source" and "file" query types.
+IN_PROC_BROWSER_TEST_P(MediaCapabilitiesTestWithConfigType,
+                       DolbyVisionVideoDecodeTypes) {
+  if (GetParam() == kWebRtc) {
+    GTEST_SKIP() << "The keySystemConfiguration object cannot be set for "
+                    "webrtc MediaDecodingType.";
+  }
+
+  base::FilePath file_path =
+      media::GetTestDataFilePath(std::string(kDecodeTestFile));
+
+  const auto config_type = GetTypeString();
+
+  EXPECT_TRUE(
+      NavigateToURL(shell(), content::GetFileUrlWithQuery(file_path, "")));
+
+  EXPECT_EQ(kSupported, CanDecodeVideoWithKeySystem(
+                            config_type, "'video/mp4; codecs=\"dvh1.05.06\"'",
+                            media::kExternalClearKeyKeySystem));
+
+  EXPECT_EQ(kSupported, CanDecodeVideoWithKeySystem(
+                            config_type, "'video/mp4; codecs=\"dvhe.08.07\"'",
+                            media::kExternalClearKeyKeySystem));
+}
+#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
 
 // Cover basic codec support. See media_canplaytype_browsertest.cc for more
 // exhaustive codec string testing.
@@ -502,6 +584,98 @@ IN_PROC_BROWSER_TEST_P(MediaCapabilitiesTestWithConfigType,
             CanDecodeVideoWithHdrMetadataAndKeySystem(
                 config_type, "'video/webm; codecs=\"vp8\"'", kRec2020, kPq,
                 kSmpteSt2094_10, media::kClearKeyKeySystem));
+}
+
+IN_PROC_BROWSER_TEST_P(MediaCapabilitiesTestWithConfigType,
+                       AudioOnlyWithKeySystem) {
+  if (GetParam() == kWebRtc) {
+    GTEST_SKIP() << "The keySystemConfiguration object cannot be set for "
+                    "webrtc MediaDecodingType.";
+  }
+
+  base::FilePath file_path =
+      media::GetTestDataFilePath(std::string(kDecodeTestFile));
+
+  const auto config_type = GetTypeString();
+
+  EXPECT_TRUE(
+      NavigateToURL(shell(), content::GetFileUrlWithQuery(file_path, "")));
+
+  // Test that valid codec and key system combinations work.
+  EXPECT_EQ(kSupported, CanDecodeAudioWithKeySystem(
+                            config_type, "'audio/webm; codecs=\"vorbis\"'",
+                            media::kClearKeyKeySystem));
+  EXPECT_EQ(kSupported, CanDecodeAudioWithKeySystem(
+                            config_type, "'audio/mp4; codecs=\"flac\"'",
+                            media::kClearKeyKeySystem));
+
+  // Test that proprietary audio codec and key system combination work.
+  EXPECT_EQ(kPropSupported,
+            CanDecodeAudioWithKeySystem(config_type,
+                                        "'audio/mp4; codecs=\"mp4a.40.2\"'",
+                                        media::kClearKeyKeySystem));
+
+  // Test unsupported audio-only configs with key system specified.
+  EXPECT_EQ(kUnsupported,
+            CanDecodeAudioWithKeySystem(config_type,
+                                        "'audio/mp4; codecs=\"nonexistent\"'",
+                                        media::kClearKeyKeySystem));
+
+  EXPECT_EQ(kUnsupported, CanDecodeAudioWithKeySystem(
+                              config_type, "'audio/mp4; codecs=\"mp4a.40.2\"'",
+                              "com.invalid.keySystem"));
+}
+
+IN_PROC_BROWSER_TEST_P(MediaCapabilitiesTestWithConfigType,
+                       CombinedAudioAndVideoDecodeTypes) {
+  base::FilePath file_path =
+      media::GetTestDataFilePath(std::string(kDecodeTestFile));
+
+  const auto config_type = GetTypeString();
+
+  // WebRtc not supported.
+  const std::string_view type_supported =
+      GetParam() != kWebRtc ? kSupported : kUnsupported;
+  const std::string_view prop_type_supported =
+      GetParam() != kWebRtc ? kPropSupported : kUnsupported;
+
+  EXPECT_TRUE(
+      NavigateToURL(shell(), content::GetFileUrlWithQuery(file_path, "")));
+
+  EXPECT_EQ(type_supported,
+            CanDecodeAudioAndVideo(config_type, "'video/webm; codecs=\"vp8\"'",
+                                   "'audio/webm; codecs=\"opus\"'"));
+  EXPECT_EQ(type_supported,
+            CanDecodeAudioAndVideo(config_type,
+                                   "'video/webm; codecs=\"vp09.00.10.08\"'",
+                                   "'audio/webm; codecs=\"vorbis\"'"));
+
+  // Test with proprietary codecs
+  EXPECT_EQ(
+      prop_type_supported,
+      CanDecodeAudioAndVideo(config_type, "'video/mp4; codecs=\"avc1.42E01E\"'",
+                             "'audio/mp4; codecs=\"mp4a.40.02\"'"));
+
+  // The browser reports mixed containers as supported, and this is expected.
+  EXPECT_EQ(prop_type_supported,
+            CanDecodeAudioAndVideo(config_type, "'video/webm; codecs=\"vp8\"'",
+                                   "'audio/mp4; codecs=\"mp4a.40.02\"'"));
+
+  //  Test with invalid audio codec.
+  EXPECT_EQ(kUnsupported,
+            CanDecodeAudioAndVideo(config_type,
+                                   "'video/webm; codecs=\"vp09.00.10.08\"'",
+                                   "'audio/webm; codecs=\"invalid\"'"));
+
+  // Test with invalid video codec.
+  EXPECT_EQ(kUnsupported, CanDecodeAudioAndVideo(
+                              config_type, "'video/webm; codecs=\"invalid\"'",
+                              "'audio/webm; codecs=\"vorbis\"'"));
+
+  // Test with invalid video codec and invalid audio codec.
+  EXPECT_EQ(kUnsupported, CanDecodeAudioAndVideo(
+                              config_type, "'video/webm; codecs=\"invalid\"'",
+                              "'audio/webm; codecs=\"invalid\"'"));
 }
 
 INSTANTIATE_TEST_SUITE_P(File,

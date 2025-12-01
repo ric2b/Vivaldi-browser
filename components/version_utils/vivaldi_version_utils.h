@@ -15,17 +15,23 @@ namespace version {
 
 // Compare Vivaldi major versions. Returns -1, 0, 1 for <, ==, >.
 // Both versions MUST be valid.
-int CompareVivaldiMajorVersions(base::Version lhs, base::Version rhs);
+int CompareVivaldiMajorVersions(const base::Version& lhs,
+                                const base::Version& rhs);
 
 // Compare the Vivaldi major version (major + minor revision) to the static
-// version string. This function must be called before pref version update to
-// return a valid result.
-bool HasMajorVersionChanged(PrefService* prefs);
+// version string.
+// Version MUST be valid.
+bool HasMajorVersionChanged(const base::Version& version);
 
-// Compare the version stored in prefs, to the static version string.
-// This function must be called before pref version update to return a valid
-// result.
-bool HasVersionChanged(PrefService* prefs);
+// Compare the version, to the static version string.
+// Version MUST be valid.
+bool HasVersionChanged(const base::Version& version);
+
+// Compare the static version to crash loop detection version pref.
+// Returns true, if the reporting version changed.
+bool HasCrashDetectionVersionChanged(PrefService* prefs);
+// Save the static version to crash loop detection version pref.
+void UpdateCrashDetectionVersion(PrefService* prefs);
 
 }  // namespace version
 

@@ -688,9 +688,6 @@ void GpuMemoryBufferVideoFramePool::PoolImpl::CreateHardwareFrame(
     case PIXEL_FORMAT_XRGB:
     case PIXEL_FORMAT_RGB24:
     case PIXEL_FORMAT_MJPEG:
-    case PIXEL_FORMAT_YUV422P9:
-    case PIXEL_FORMAT_YUV420P9:
-    case PIXEL_FORMAT_YUV444P9:
     case PIXEL_FORMAT_YUV422P10:
     case PIXEL_FORMAT_YUV444P10:
     case PIXEL_FORMAT_YUV420P12:
@@ -1059,7 +1056,8 @@ scoped_refptr<VideoFrame> GpuMemoryBufferVideoFramePool::PoolImpl::
 
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   is_webgpu_compatible =
-      handle.native_pixmap_handle.supports_zero_copy_webgpu_import;
+      handle.type == gfx::NATIVE_PIXMAP &&
+      handle.native_pixmap_handle().supports_zero_copy_webgpu_import;
 #endif
 
   // Bind the texture and create or rebind the image. This image may be read

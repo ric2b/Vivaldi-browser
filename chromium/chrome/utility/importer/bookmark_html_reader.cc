@@ -16,10 +16,10 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/utility/importer/favicon_reencode.h"
 #include "components/search_engines/search_terms_data.h"
 #include "components/search_engines/template_url.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
 #include "net/base/data_url.h"
 #include "url/gurl.h"
 #include "url/url_constants.h"
@@ -113,8 +113,8 @@ void ImportBookmarksFile(
     base::RepeatingCallback<bool(void)> cancellation_callback,
     base::RepeatingCallback<bool(const GURL&)> valid_url_callback,
     const base::FilePath& file_path,
-    std::vector<ImportedBookmarkEntry>* bookmarks,
-    std::vector<importer::SearchEngineInfo>* search_engines,
+    std::vector<user_data_importer::ImportedBookmarkEntry>* bookmarks,
+    std::vector<user_data_importer::SearchEngineInfo>* search_engines,
     favicon_base::FaviconUsageDataList* favicons) {
   std::string content;
   base::ReadFileToString(file_path, &content);
@@ -192,7 +192,7 @@ void ImportBookmarksFile(
     if (is_bookmark && post_data.empty() &&
         CanImportURLAsSearchEngine(url, &search_engine_url) &&
             !shortcut.empty()) {
-      importer::SearchEngineInfo search_engine_info;
+      user_data_importer::SearchEngineInfo search_engine_info;
       search_engine_info.url.assign(base::UTF8ToUTF16(search_engine_url));
       search_engine_info.keyword = shortcut;
       search_engine_info.display_name = title;
@@ -210,7 +210,7 @@ void ImportBookmarksFile(
         NOTREACHED();  // error in parsing.
       }
 
-      ImportedBookmarkEntry entry;
+      user_data_importer::ImportedBookmarkEntry entry;
       entry.creation_time = add_date;
       entry.url = url;
       entry.title = title;
@@ -266,8 +266,10 @@ void ImportBookmarksFile(
 
       if (last_folder_is_empty) {
         // Empty folder should be added explicitly.
-        ImportedBookmarkEntry entry;
-        entry.speeddial = last_folder_speeddial;
+        user_data_importer::ImportedBookmarkEntry entry;
+
+        entry.speeddial = last_folder_speeddial; // Vivaldi
+
         entry.is_folder = true;
         entry.creation_time = last_folder_add_date;
         entry.title = folder_title;

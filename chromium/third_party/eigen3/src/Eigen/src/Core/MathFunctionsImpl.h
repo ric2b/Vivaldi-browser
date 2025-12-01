@@ -76,7 +76,7 @@ struct generic_rsqrt_newton_step {
   static_assert(Steps > 0, "Steps must be at least 1.");
   using Scalar = typename unpacket_traits<Packet>::type;
   EIGEN_DEVICE_FUNC static EIGEN_STRONG_INLINE Packet run(const Packet& a, const Packet& approx_rsqrt) {
-    constexpr Scalar kMinusHalf = Scalar(-1) / Scalar(2);
+    const Scalar kMinusHalf = Scalar(-1) / Scalar(2);
     const Packet cst_minus_half = pset1<Packet>(kMinusHalf);
     const Packet cst_minus_one = pset1<Packet>(Scalar(-1));
 
@@ -255,6 +255,48 @@ EIGEN_DEVICE_FUNC ComplexT complex_log(const ComplexT& z) {
   T b = atan2(z.imag(), z.real());
   return ComplexT(numext::log(a), b);
 }
+
+// For generic scalars, use ternary select.
+template <typename Mask>
+struct scalar_select_mask<Mask, /*is_built_in_float*/ false> {
+  static EIGEN_DEVICE_FUNC inline bool run(const Mask& mask) { return numext::is_exactly_zero(mask); }
+};
+
+// For built-in float mask, bitcast the mask to its integer counterpart and use ternary select.
+template <typename Mask>
+struct scalar_select_mask<Mask, /*is_built_in_float*/ true> {
+  using IntegerType = typename numext::get_integer_by_size<sizeof(Mask)>::unsigned_type;
+  static EIGEN_DEVICE_FUNC inline bool run(const Mask& mask) {
+    return numext::is_exactly_zero(numext::bit_cast<IntegerType>(std::abs(mask)));
+  }
+};
+
+template <int Size = sizeof(long double)>
+struct ldbl_select_mask {
+  static constexpr int MantissaDigits = std::numeric_limits<long double>::digits;
+  static constexpr int NumBytes = (MantissaDigits == 64 ? 80 : 128) / CHAR_BIT;
+  static EIGEN_DEVICE_FUNC inline bool run(const long double& mask) {
+    const uint8_t* mask_bytes = reinterpret_cast<const uint8_t*>(&mask);
+    for (Index i = 0; i < NumBytes; i++) {
+      if (mask_bytes[i] != 0) return false;
+    }
+    return true;
+  }
+};
+
+template <>
+struct ldbl_select_mask<sizeof(double)> : scalar_select_mask<double> {};
+
+template <>
+struct scalar_select_mask<long double, true> : ldbl_select_mask<> {};
+
+template <typename RealMask>
+struct scalar_select_mask<std::complex<RealMask>, false> {
+  using impl = scalar_select_mask<RealMask>;
+  static EIGEN_DEVICE_FUNC inline bool run(const std::complex<RealMask>& mask) {
+    return impl::run(numext::real(mask)) && impl::run(numext::imag(mask));
+  }
+};
 
 }  // end namespace internal
 

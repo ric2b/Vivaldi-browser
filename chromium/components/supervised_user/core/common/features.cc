@@ -10,6 +10,7 @@
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "build/android_buildflags.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 
@@ -48,7 +49,7 @@ const base::FeatureParam<int> kLocalWebApprovalBottomSheetLoadTimeoutMs{
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 BASE_FEATURE(kEnableLocalWebApprovalErrorDialog,
              "EnableLocalWebApprovalErrorDialog",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
 
 BASE_FEATURE(kLocalWebApprovalsWidgetSupportsUrlPayload,
@@ -88,47 +89,6 @@ bool IsLocalWebApprovalsEnabledForSubframes() {
   return base::FeatureList::IsEnabled(kAllowSubframeLocalWebApprovals);
 }
 
-BASE_FEATURE(kEnableSupervisedUserSkipParentApprovalToInstallExtensions,
-             "EnableSupervisedUserSkipParentApprovalToInstallExtensions",
-             base::FEATURE_ENABLED_BY_DEFAULT
-);
-
-BASE_FEATURE(kUpdatedSupervisedUserExtensionApprovalStrings,
-             "UpdatedSupervisedUserExtensionApprovalStrings",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-BASE_FEATURE(kEnableExtensionsPermissionsForSupervisedUsersOnDesktop,
-             "EnableExtensionsPermissionsForSupervisedUsersOnDesktop",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-BASE_FEATURE(kExposedParentalControlNeededForExtensionInstallation,
-             "ExposedParentalControlNeededForExtensionInstallation",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled() {
-#if BUILDFLAG(IS_CHROMEOS)
-  return base::FeatureList::IsEnabled(
-      kEnableSupervisedUserSkipParentApprovalToInstallExtensions);
-#elif BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-  bool skipParentApprovalEnabled = base::FeatureList::IsEnabled(
-      kEnableSupervisedUserSkipParentApprovalToInstallExtensions);
-  bool permissionExtensionsForSupervisedUsersEnabled =
-      base::FeatureList::IsEnabled(
-          kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-  if (skipParentApprovalEnabled) {
-    DCHECK(permissionExtensionsForSupervisedUsersEnabled);
-  }
-  return skipParentApprovalEnabled &&
-         permissionExtensionsForSupervisedUsersEnabled;
-#else
-  NOTREACHED();
-#endif  // BUILDFLAG(IS_CHROMEOS)
-}
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 BASE_FEATURE(kCustomProfileStringsForSupervisedUsers,
              "CustomProfileStringsForSupervisedUsers",
@@ -150,16 +110,6 @@ BASE_FEATURE(kForceSafeSearchForUnauthenticatedSupervisedUsers,
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 BASE_FEATURE(kEnableSupervisedUserVersionSignOutDialog,
              "EnableSupervisedUserVersionSignOutDialog",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kForceSupervisedUserReauthenticationForYouTube,
-             "ForceSupervisedUserReauthenticationForYouTube",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// TODO(crbug.com/378636321): Clean-up this flag once
-// `ForceSupervisedUserReauthenticationForYouTube` is enabled.
-BASE_FEATURE(kExemptYouTubeInfrastructureFromBlocking,
-             "ExemptYouTubeInfrastructureFromBlocking",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
@@ -190,5 +140,12 @@ BASE_FEATURE(kWaitUntilAccessTokenAvailableForClassifyUrl,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+BASE_FEATURE(kAlignSafeSitesValueWithBrowserDefault,
+             "AlignSafeSitesValueWithBrowserDefault",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kDecoupleSafeSitesFromMainSwitch,
+             "DecoupleSafeSitesFromMainSwitch",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace supervised_user

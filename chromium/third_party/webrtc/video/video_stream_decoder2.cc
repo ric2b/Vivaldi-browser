@@ -15,6 +15,7 @@
 
 #include "api/units/time_delta.h"
 #include "api/video/video_frame.h"
+#include "api/video/video_sink_interface.h"
 #include "api/video_codecs/video_decoder.h"
 #include "modules/video_coding/video_receiver2.h"
 #include "rtc_base/checks.h"
@@ -26,7 +27,7 @@ namespace internal {
 VideoStreamDecoder::VideoStreamDecoder(
     VideoReceiver2* video_receiver,
     ReceiveStatisticsProxy* receive_statistics_proxy,
-    rtc::VideoSinkInterface<VideoFrame>* incoming_video_stream)
+    VideoSinkInterface<VideoFrame>* incoming_video_stream)
     : video_receiver_(video_receiver),
       receive_stats_callback_(receive_statistics_proxy),
       incoming_video_stream_(incoming_video_stream) {

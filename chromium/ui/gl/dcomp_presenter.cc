@@ -36,6 +36,7 @@ DCompPresenter::DCompPresenter(const Settings& settings)
           settings.disable_vp_auto_hdr,
           settings.disable_vp_scaling,
           settings.disable_vp_super_resolution,
+          settings.disable_dc_letterbox_video_optimization,
           settings.force_dcomp_triple_buffer_video_swap_chain,
           settings.no_downscaled_overlay_promotion)),
       use_gpu_vsync_(features::UseGpuVsync()) {
@@ -166,17 +167,18 @@ DCompPresenter::GetWindowTaskRunnerForTesting() {
 }
 
 Microsoft::WRL::ComPtr<IDXGISwapChain1>
-DCompPresenter::GetLayerSwapChainForTesting(size_t index) const {
-  return layer_tree_->GetLayerSwapChainForTesting(index);  // IN-TEST
+DCompPresenter::GetLayerSwapChainForTesting(
+    const gfx::OverlayLayerId& layer_id) const {
+  return layer_tree_->GetLayerSwapChainForTesting(layer_id);  // IN-TEST
 }
 
 void DCompPresenter::GetSwapChainVisualInfoForTesting(
-    size_t index,
-    gfx::Transform* transform,
-    gfx::Point* offset,
-    gfx::Rect* clip_rect) const {
+    const gfx::OverlayLayerId& layer_id,
+    gfx::Transform* out_transform,
+    gfx::Point* out_offset,
+    gfx::Rect* out_clip_rect) const {
   layer_tree_->GetSwapChainVisualInfoForTesting(  // IN-TEST
-      index, transform, offset, clip_rect);
+      layer_id, out_transform, out_offset, out_clip_rect);
 }
 
 void DCompPresenter::HandleVSyncOnMainThread(base::TimeTicks vsync_time,

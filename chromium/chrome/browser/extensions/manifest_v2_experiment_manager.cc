@@ -12,7 +12,6 @@
 #include "base/types/pass_key.h"
 #include "chrome/browser/extensions/chrome_extension_system_factory.h"
 #include "chrome/browser/extensions/extension_management.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/mv2_experiment_stage.h"
 #include "chrome/browser/extensions/profile_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,6 +20,7 @@
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_prefs_factory.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_factory.h"
 #include "extensions/browser/extension_system.h"
@@ -496,11 +496,11 @@ void ManifestV2ExperimentManager::DisableAffectedExtensions() {
     extensions_to_disable.insert(extension);
   }
 
-  ExtensionService* extension_service =
-      ExtensionSystem::Get(browser_context_)->extension_service();
+  auto* registrar = ExtensionRegistrar::Get(browser_context_);
   for (const auto& extension : extensions_to_disable) {
-    extension_service->DisableExtension(
-        extension->id(), disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION);
+    registrar->DisableExtension(
+        extension->id(),
+        {disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION});
     extension_prefs()->SetBooleanPref(extension->id(),
                                       kMV2DeprecationDidDisablePref, true);
   }
@@ -538,16 +538,15 @@ void ManifestV2ExperimentManager::MaybeReEnableExtension(
     return;
   }
 
-  ExtensionService* extension_service =
-      ExtensionSystem::Get(browser_context_)->extension_service();
   // Remove the bit that the extension was disabled by the MV2 deprecation,
   // since it no longer is. This also ensures we don't count it as user-
   // re-enabled, if it gets re-enabled below.
   extension_prefs()->SetBooleanPref(extension.id(),
                                     kMV2DeprecationDidDisablePref, false);
   // Remove the disable reason (possibly re-enabling the extension).
-  extension_service->RemoveDisableReasonAndMaybeEnable(
-      extension.id(), disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION);
+  ExtensionRegistrar::Get(browser_context_)
+      ->RemoveDisableReasonAndMaybeEnable(
+          extension.id(), disable_reason::DISABLE_UNSUPPORTED_MANIFEST_VERSION);
 }
 
 bool ManifestV2ExperimentManager::DidUserReEnableExtension(

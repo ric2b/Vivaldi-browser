@@ -5,6 +5,7 @@
 #ifndef ASH_ACCESSIBILITY_ACCESSIBILITY_CONTROLLER_H_
 #define ASH_ACCESSIBILITY_ACCESSIBILITY_CONTROLLER_H_
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -763,6 +764,10 @@ class ASH_EXPORT AccessibilityController
   // and Autoclick.
   void EnableDragEventRewriter(bool enabled);
 
+  // Will show a confirmation dialog asking if the user wants to turn off
+  // FaceGaze.
+  void RequestDisableFaceGaze();
+
  private:
   // Populate |features_| with the feature of the correct type.
   void CreateAccessibilityFeatures();
@@ -838,9 +843,9 @@ class ASH_EXPORT AccessibilityController
                                      const std::string& behavior_pref,
                                      bool dialog_accepted);
 
-  // Will set kAccessibilityFaceGazeEnabledSentinel to false, which will show a
-  // confirmation dialog asking if the user wants to turn off FaceGaze.
-  void RequestDisableFaceGaze();
+  // Callback that is run when the user interacts with the disable FaceGaze
+  // dialog.
+  void OnRequestDisableFaceGazeAction(bool dialog_accepted);
 
   void RecordSelectToSpeakSpeechDuration(SelectToSpeakState old_state,
                                          SelectToSpeakState new_state);
@@ -855,7 +860,7 @@ class ASH_EXPORT AccessibilityController
   raw_ptr<AccessibilityControllerClient> client_ = nullptr;
 
   // Features are indexed by A11yFeatureType cast to int.
-  std::unique_ptr<Feature> features_[kA11yFeatureTypeCount];
+  std::array<std::unique_ptr<Feature>, kA11yFeatureTypeCount> features_;
 
   base::TimeDelta autoclick_delay_;
   int large_cursor_size_in_dip_ = kDefaultLargeCursorSize;

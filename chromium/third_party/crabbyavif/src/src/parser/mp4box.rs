@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::decoder::gainmap::GainMapMetadata;
+use crate::decoder::tile::SampleTransform;
+#[cfg(feature = "sample_transform")]
+use crate::decoder::tile::*;
 use crate::decoder::track::*;
 use crate::decoder::Extent;
 use crate::decoder::GenericIO;
+use crate::gainmap::GainMapMetadata;
 use crate::image::YuvRange;
 use crate::image::MAX_PLANE_COUNT;
 use crate::internal_utils::stream::*;
@@ -155,6 +158,7 @@ pub struct Av1CodecConfiguration {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct HevcCodecConfiguration {
     pub bitdepth: u8,
+    pub pixel_format: PixelFormat,
     pub nal_length_size: u8,
     pub vps: Vec<u8>,
     pub sps: Vec<u8>,
@@ -188,13 +192,7 @@ impl CodecConfiguration {
                     PixelFormat::Yuv444
                 }
             }
-            Self::Hevc(_) => {
-                // It is okay to always return Yuv420 here since that is the only format that
-                // android_mediacodec returns.
-                // TODO: b/370549923 - Identify the correct YUV subsampling type from the codec
-                // configuration data.
-                PixelFormat::Yuv420
-            }
+            Self::Hevc(config) => config.pixel_format,
         }
     }
 
@@ -332,6 +330,12 @@ pub struct ItemReference {
     pub index: u32, // 0-based index of the reference within the iref type.
 }
 
+#[derive(Debug)]
+pub struct EntityGroup {
+    pub grouping_type: String,
+    pub entity_ids: Vec<u32>,
+}
+
 #[derive(Debug, Default)]
 pub struct MetaBox {
     pub iinf: Vec<ItemInfo>,
@@ -340,6 +344,7 @@ pub struct MetaBox {
     pub iprp: ItemPropertyBox,
     pub iref: Vec<ItemReference>,
     pub idat: Vec<u8>,
+    pub grpl: Vec<EntityGroup>,
 }
 
 #[derive(Debug)]
@@ -610,6 +615,9 @@ fn parse_pixi(stream: &mut IStream) -> AvifResult<ItemProperty> {
             return Err(AvifError::UnsupportedDepth);
         }
     }
+    if !Image::is_supported_depth(*pixi.plane_depths.last().unwrap()) {
+        return Err(AvifError::UnsupportedDepth);
+    }
     Ok(ItemProperty::PixelInformation(pixi))
 }
 
@@ -716,9 +724,18 @@ fn parse_hvcC(stream: &mut IStream) -> AvifResult<ItemProperty> {
     // bit(6) reserved = '111111'b;
     // unsigned int(2) parallelismType;
     // bit(6) reserved = '111111'b;
+    bits.skip(2 + 1 + 5 + 32 + 48 + 8 + 4 + 12 + 6 + 2 + 6)?;
     // unsigned int(2) chroma_format_idc;
+    let pixel_format = match bits.read(2)? {
+        // Defined in ISO/IEC 23008-2 Section 6.2.
+        0 => PixelFormat::Yuv400,
+        1 => PixelFormat::Yuv420,
+        2 => PixelFormat::Yuv422,
+        // The only other possible value is 3 since we are reading only 2 bits.
+        _ => PixelFormat::Yuv444,
+    };
     // bit(5) reserved = '11111'b;
-    bits.skip(2 + 1 + 5 + 32 + 48 + 8 + 4 + 12 + 6 + 2 + 6 + 2 + 5)?;
+    bits.skip(5)?;
     // unsigned int(3) bit_depth_luma_minus8;
     let bitdepth = bits.read(3)? as u8 + 8;
     // bit(5) reserved = '11111'b;
@@ -760,6 +777,7 @@ fn parse_hvcC(stream: &mut IStream) -> AvifResult<ItemProperty> {
     Ok(ItemProperty::CodecConfiguration(CodecConfiguration::Hevc(
         HevcCodecConfiguration {
             bitdepth,
+            pixel_format,
             nal_length_size,
             vps,
             pps,
@@ -983,10 +1001,6 @@ fn parse_ipma(stream: &mut IStream) -> AvifResult<Vec<ItemPropertyAssociation>> 
     let mut ipma: Vec<ItemPropertyAssociation> = create_vec_exact(usize_from_u32(entry_count)?)?;
     for _i in 0..entry_count {
         let mut entry = ItemPropertyAssociation::default();
-        // ISO/IEC 23008-12, First edition, 2017-12, Section 9.3.1:
-        //   Each ItemPropertyAssociation box shall be ordered by increasing item_ID, and there
-        //   shall be at most one association box for each item_ID, in any
-        //   ItemPropertyAssociation box.
         if version < 1 {
             // unsigned int(16) item_ID;
             entry.item_id = stream.read_u16()? as u32;
@@ -1001,6 +1015,10 @@ fn parse_ipma(stream: &mut IStream) -> AvifResult<Vec<ItemPropertyAssociation>> 
             )));
         }
         if !ipma.is_empty() {
+            // ISO/IEC 23008-12, First edition, 2017-12, Section 9.3.1:
+            //   Each ItemPropertyAssociation box shall be ordered by increasing item_ID, and there
+            //   shall be at most one association box for each item_ID, in any
+            //   ItemPropertyAssociation box.
             let previous_item_id = ipma.last().unwrap().item_id;
             if entry.item_id <= previous_item_id {
                 return Err(AvifError::BmffParseFailed(
@@ -1109,12 +1127,6 @@ fn parse_infe(stream: &mut IStream) -> AvifResult<ItemInfo> {
 fn parse_iinf(stream: &mut IStream) -> AvifResult<Vec<ItemInfo>> {
     // Section 8.11.6.2 of ISO/IEC 14496-12.
     let (version, _flags) = stream.read_version_and_flags()?;
-    if version > 1 {
-        return Err(AvifError::BmffParseFailed(format!(
-            "Unsupported version {} in iinf box",
-            version
-        )));
-    }
     let entry_count: u32 = if version == 0 {
         // unsigned int(16) entry_count;
         stream.read_u16()? as u32
@@ -1194,6 +1206,27 @@ fn parse_idat(stream: &mut IStream) -> AvifResult<Vec<u8>> {
     Ok(idat)
 }
 
+fn parse_grpl(stream: &mut IStream) -> AvifResult<Vec<EntityGroup>> {
+    let mut grpl: Vec<EntityGroup> = Vec::new();
+    while stream.has_bytes_left()? {
+        let header = parse_header(stream, /*top_level=*/ false)?;
+        let (_version, _flags) = stream.read_version_and_flags()?;
+        // unsigned int(32) group_id;
+        stream.skip_u32()?;
+        let num_entities_in_group = stream.read_u32()?;
+        let mut entity_ids: Vec<u32> = create_vec_exact(usize_from_u32(num_entities_in_group)?)?;
+        for _ in 0..num_entities_in_group {
+            let entity_id = stream.read_u32()?;
+            entity_ids.push(entity_id);
+        }
+        grpl.push(EntityGroup {
+            grouping_type: header.box_type.clone(),
+            entity_ids,
+        })
+    }
+    Ok(grpl)
+}
+
 fn parse_meta(stream: &mut IStream) -> AvifResult<MetaBox> {
     // Section 8.11.1.2 of ISO/IEC 14496-12.
     let (_version, _flags) = stream.read_and_enforce_version_and_flags(0)?;
@@ -1225,7 +1258,7 @@ fn parse_meta(stream: &mut IStream) -> AvifResult<MetaBox> {
     while stream.has_bytes_left()? {
         let header = parse_header(stream, /*top_level=*/ false)?;
         match header.box_type.as_str() {
-            "hdlr" | "iloc" | "pitm" | "iprp" | "iinf" | "iref" | "idat" => {
+            "hdlr" | "iloc" | "pitm" | "iprp" | "iinf" | "iref" | "idat" | "grpl" => {
                 if boxes_seen.contains(&header.box_type) {
                     return Err(AvifError::BmffParseFailed(format!(
                         "duplicate {} box in meta.",
@@ -1244,6 +1277,7 @@ fn parse_meta(stream: &mut IStream) -> AvifResult<MetaBox> {
             "iinf" => meta.iinf = parse_iinf(&mut sub_stream)?,
             "iref" => meta.iref = parse_iref(&mut sub_stream)?,
             "idat" => meta.idat = parse_idat(&mut sub_stream)?,
+            "grpl" => meta.grpl = parse_grpl(&mut sub_stream)?,
             _ => {}
         }
     }
@@ -1940,19 +1974,19 @@ pub(crate) fn peek_compatible_file_type(data: &[u8]) -> AvifResult<bool> {
     Ok(ftyp.is_avif())
 }
 
-pub(crate) fn parse_tmap(stream: &mut IStream) -> AvifResult<Option<GainMapMetadata>> {
+pub(crate) fn parse_tmap(stream: &mut IStream) -> AvifResult<GainMapMetadata> {
     // Experimental, not yet specified.
 
     // unsigned int(8) version = 0;
     let version = stream.read_u8()?;
     if version != 0 {
-        return Ok(None); // Unsupported version.
+        return Err(AvifError::NotImplemented);
     }
     // unsigned int(16) minimum_version;
     let minimum_version = stream.read_u16()?;
     let supported_version = 0;
     if minimum_version > supported_version {
-        return Ok(None); // Unsupported version.
+        return Err(AvifError::NotImplemented);
     }
     // unsigned int(16) writer_version;
     let writer_version = stream.read_u16()?;
@@ -2005,7 +2039,79 @@ pub(crate) fn parse_tmap(stream: &mut IStream) -> AvifResult<Option<GainMapMetad
         ));
     }
     metadata.is_valid()?;
-    Ok(Some(metadata))
+    Ok(metadata)
+}
+
+#[cfg(feature = "sample_transform")]
+pub(crate) fn parse_sato(stream: &mut IStream, num_inputs: usize) -> AvifResult<SampleTransform> {
+    let mut bits = stream.sub_bit_stream(1)?;
+    // unsigned int(2) version = 0;
+    let version = bits.read(2)?;
+    if version != 0 {
+        return Err(AvifError::NotImplemented);
+    }
+    // unsigned int(4) flags;
+    let _reserved = bits.read(4)?;
+    // unsigned int(2) bit_depth; // Enum signaling signed 8, 16, 32 or 64-bit.
+    let bit_depth = 1 << (bits.read(2)? + 3);
+    let bytes = bit_depth / 8;
+
+    // unsigned int(8) token_count;
+    let token_count = stream.read_u8()?;
+    let mut tokens = create_vec_exact(usize_from_u8(token_count)?)?;
+    for _i in 0..token_count {
+        let token = stream.read_u8()?;
+        let sato_token = match token {
+            0 => {
+                let constant = match bytes {
+                    1 => stream.read_i8()? as i64,
+                    2 => stream.read_i16()? as i64,
+                    4 => stream.read_i32()? as i64,
+                    8 => stream.read_i64()?,
+                    _ => unreachable!(),
+                };
+                SampleTransformToken::Constant(constant)
+            }
+            1..=32 => {
+                let source_item_idx = usize_from_u8(token - 1)?;
+                if source_item_idx >= num_inputs {
+                    return Err(AvifError::InvalidImageGrid(
+                        "invalid item reference in sato".into(),
+                    ));
+                }
+                SampleTransformToken::ImageItem(source_item_idx)
+            }
+            64 => SampleTransformToken::UnaryOp(SampleTransformUnaryOp::Negation),
+            65 => SampleTransformToken::UnaryOp(SampleTransformUnaryOp::Absolute),
+            66 => SampleTransformToken::UnaryOp(SampleTransformUnaryOp::Not),
+            67 => SampleTransformToken::UnaryOp(SampleTransformUnaryOp::BSR),
+            128 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Sum),
+            129 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Difference),
+            130 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Product),
+            131 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Quotient),
+            132 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::And),
+            133 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Or),
+            134 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Xor),
+            135 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Pow),
+            136 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Min),
+            137 => SampleTransformToken::BinaryOp(SampleTransformBinaryOp::Max),
+            _ => return Err(AvifError::InvalidImageGrid("invalid token in sato".into())),
+        };
+        tokens.push(sato_token);
+    }
+
+    if stream.has_bytes_left()? {
+        return Err(AvifError::InvalidImageGrid(
+            "found unknown extra bytes in the sato box".into(),
+        ));
+    }
+
+    SampleTransform::create_from(bit_depth, num_inputs, tokens)
+}
+
+#[cfg(not(feature = "sample_transform"))]
+pub(crate) fn parse_sato(_stream: &mut IStream, _num_inputs: usize) -> AvifResult<SampleTransform> {
+    Ok(SampleTransform::default())
 }
 
 #[cfg(test)]

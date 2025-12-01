@@ -35,10 +35,16 @@ GoogleServiceAuthError ToGoogleServiceAuthError(
 syncer::SyncAccountInfo ToSyncAccountInfo(
     VivaldiAccountManager::AccountInfo account_info) {
   CoreAccountInfo chromium_account_info;
-  // Email is the closest thing to a username that the chromium account info
-  // takes. It isn't really used for anything else than disply purposes anyway.
-  chromium_account_info.email = account_info.username + kEmailSuffix;
-  chromium_account_info.gaia = GaiaId(account_info.username);
+  std::string username = account_info.username;
+  auto domain_position = username.find_first_of("@");
+  if (domain_position == std::string::npos) {
+    chromium_account_info.email = username + kEmailSuffix;
+  } else {
+    chromium_account_info.email = username;
+    username = username.substr(0, domain_position);
+  }
+
+  chromium_account_info.gaia = GaiaId(username);
   chromium_account_info.account_id =
       CoreAccountId::FromString(account_info.account_id);
 

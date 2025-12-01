@@ -231,7 +231,7 @@ cc_library(
         "//xla/python/ifrt",
         "//xla/python/ifrt_proxy/common:ifrt_service_proto_cc",
         "@com_google_absl//absl/status",
-        "@com_google_googletest//:gtest",
+        "@com_google_googletest//:gtest_for_library",
     ],
 )
 
@@ -266,6 +266,7 @@ cc_library(
         "//xla/python/pjrt_ifrt:xla_host_callback_proto_cc",
         "//xla/tsl/concurrency:ref_count",
         "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/functional:bind_front",
         "@com_google_absl//absl/status",

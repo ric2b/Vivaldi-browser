@@ -1164,8 +1164,7 @@ ExtensionFunction::ResponseAction CalendarUpdateFunction::Run() {
 
 void CalendarUpdateFunction::UpdateCalendarComplete(calendar::StatusCB cb) {
   if (!cb.success) {
-    Respond(ErrorWithArguments(
-        vivaldi::calendar::Update::Results::Create(false), cb.message));
+    Respond(Error(cb.message));
   } else {
     Respond(ArgumentList(vivaldi::calendar::Update::Results::Create(true)));
   }

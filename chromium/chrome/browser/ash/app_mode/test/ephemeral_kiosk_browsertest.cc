@@ -143,10 +143,10 @@ std::string ParamName(const testing::TestParamInfo<TestParam>& info) {
 class EphemeralKioskTest : public MixinBasedInProcessBrowserTest,
                            public testing::WithParamInterface<TestParam> {
  public:
+  EphemeralKioskTest() = default;
   EphemeralKioskTest(const EphemeralKioskTest&) = delete;
   EphemeralKioskTest& operator=(const EphemeralKioskTest&) = delete;
-
-  EphemeralKioskTest() = default;
+  ~EphemeralKioskTest() override = default;
 
   DeviceEphemeralUsersPolicy DeviceEphemeralUsersParam() const {
     return std::get<DeviceEphemeralUsersPolicy>(GetParam());

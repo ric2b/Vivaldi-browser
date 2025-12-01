@@ -301,7 +301,7 @@ class MockVideoEncoder : public VideoEncoder {
     image._encodedWidth = width;
     image._encodedHeight = height;
     CodecSpecificInfo codec_specific_info;
-    codec_specific_info.codecType = webrtc::kVideoCodecVP8;
+    codec_specific_info.codecType = kVideoCodecVP8;
     callback_->OnEncodedImage(image, &codec_specific_info);
   }
 
@@ -617,7 +617,7 @@ class TestSimulcastEncoderAdapterFake : public ::testing::Test,
     InitRefCodec(0, &ref_codec);
     ref_codec.qpMax = 45;
     ref_codec.SetVideoEncoderComplexity(
-        webrtc::VideoCodecComplexity::kComplexityHigher);
+        VideoCodecComplexity::kComplexityHigher);
     ref_codec.VP8()->denoisingOn = false;
     ref_codec.startBitrate = 100;  // Should equal to the target bitrate.
     VerifyCodec(ref_codec, 0);
@@ -744,7 +744,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, ReusesEncodersInOrder) {
               codec_.simulcastStream[2].minBitrate);
 
   // Input data.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1131,7 +1131,7 @@ class FakeNativeBufferI420 : public VideoFrameBuffer {
   int width() const override { return width_; }
   int height() const override { return height_; }
 
-  rtc::scoped_refptr<I420BufferInterface> ToI420() override {
+  scoped_refptr<I420BufferInterface> ToI420() override {
     if (allow_to_i420_) {
       return I420Buffer::Create(width_, height_);
     } else {
@@ -1162,9 +1162,9 @@ TEST_F(TestSimulcastEncoderAdapterFake,
   EXPECT_EQ(0, adapter_->InitEncode(&codec_, kSettings));
   EXPECT_TRUE(adapter_->GetEncoderInfo().supports_native_handle);
 
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(
-      rtc::make_ref_counted<FakeNativeBufferI420>(1280, 720,
-                                                  /*allow_to_i420=*/false));
+  scoped_refptr<VideoFrameBuffer> buffer(
+      make_ref_counted<FakeNativeBufferI420>(1280, 720,
+                                             /*allow_to_i420=*/false));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1199,9 +1199,9 @@ TEST_F(TestSimulcastEncoderAdapterFake, NativeHandleForwardingOnlyIfSupported) {
   EXPECT_EQ(0, adapter_->InitEncode(&codec_, kSettings));
   EXPECT_TRUE(adapter_->GetEncoderInfo().supports_native_handle);
 
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(
-      rtc::make_ref_counted<FakeNativeBufferI420>(1280, 720,
-                                                  /*allow_to_i420=*/true));
+  scoped_refptr<VideoFrameBuffer> buffer(
+      make_ref_counted<FakeNativeBufferI420>(1280, 720,
+                                             /*allow_to_i420=*/true));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1234,7 +1234,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, GeneratesKeyFramesOnRequestedLayers) {
   adapter_->RegisterEncodeCompleteCallback(this);
 
   // Input data.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
 
   // Encode with three streams.
   codec_.startBitrate = 3000;
@@ -1321,7 +1321,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, TestFailureReturnCodesFromEncodeCalls) {
       .WillOnce(Return(WEBRTC_VIDEO_CODEC_FALLBACK_SOFTWARE));
 
   // Send a fake frame and assert the return is software fallback.
-  rtc::scoped_refptr<I420Buffer> input_buffer =
+  scoped_refptr<I420Buffer> input_buffer =
       I420Buffer::Create(kDefaultWidth, kDefaultHeight);
   input_buffer->InitializeData();
   VideoFrame input_frame = VideoFrame::Builder()
@@ -1366,8 +1366,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, DoesNotAlterMaxQpForScreenshare) {
   VideoCodec ref_codec;
   InitRefCodec(0, &ref_codec);
   ref_codec.qpMax = kHighMaxQp;
-  ref_codec.SetVideoEncoderComplexity(
-      webrtc::VideoCodecComplexity::kComplexityHigher);
+  ref_codec.SetVideoEncoderComplexity(VideoCodecComplexity::kComplexityHigher);
   ref_codec.VP8()->denoisingOn = false;
   ref_codec.startBitrate = 100;  // Should equal to the target bitrate.
   VerifyCodec(ref_codec, 0);
@@ -1400,8 +1399,7 @@ TEST_F(TestSimulcastEncoderAdapterFake,
   VideoCodec ref_codec;
   InitRefCodec(2, &ref_codec, true /* reverse_layer_order */);
   ref_codec.qpMax = kHighMaxQp;
-  ref_codec.SetVideoEncoderComplexity(
-      webrtc::VideoCodecComplexity::kComplexityHigher);
+  ref_codec.SetVideoEncoderComplexity(VideoCodecComplexity::kComplexityHigher);
   ref_codec.VP8()->denoisingOn = false;
   ref_codec.startBitrate = 100;  // Should equal to the target bitrate.
   VerifyCodec(ref_codec, 2);
@@ -1428,7 +1426,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, ActivatesCorrectStreamsInInitEncode) {
                         codec_.simulcastStream[1].minBitrate - 1;
 
   // Input data.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1466,7 +1464,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, TrustedRateControl) {
                         codec_.simulcastStream[1].minBitrate - 1;
 
   // Input data.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1773,7 +1771,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, SupportsSimulcast) {
   // Only one encoder should have been produced.
   ASSERT_EQ(1u, helper_->factory()->encoders().size());
 
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1824,7 +1822,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, SupportsFallback) {
   ASSERT_EQ(3u, fallback_encoders.size());
 
   // Create frame to test with.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1919,7 +1917,7 @@ TEST_F(TestSimulcastEncoderAdapterFake,
   ASSERT_EQ(3u, fallback_encoders.size());
 
   // Create frame to test with.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -1970,7 +1968,7 @@ TEST_F(TestSimulcastEncoderAdapterFake, SupportsHardwareSimulcast) {
   ASSERT_EQ(1u, fallback_encoders.size());
 
   // Create frame to test with.
-  rtc::scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
   VideoFrame input_frame = VideoFrame::Builder()
                                .set_video_frame_buffer(buffer)
                                .set_rtp_timestamp(100)
@@ -2124,6 +2122,59 @@ TEST_F(TestSimulcastEncoderAdapterFake, PopulatesScalabilityModeOfSubcodecs) {
             ScalabilityMode::kL1T2);
   EXPECT_EQ(helper_->factory()->encoders()[2]->codec().GetScalabilityMode(),
             ScalabilityMode::kL1T3);
+}
+
+TEST_F(TestSimulcastEncoderAdapterFake,
+       EncodeDropsFrameIfResolutionIsNotAlignedByDefault) {
+  test::ScopedKeyValueConfig field_trials(
+      field_trials_,
+      "WebRTC-SimulcastEncoderAdapter-GetEncoderInfoOverride/"
+      "requested_resolution_alignment:8,"
+      "apply_alignment_to_all_simulcast_layers/");
+  SetUp();
+  SimulcastTestFixtureImpl::DefaultSettings(
+      &codec_, static_cast<const int*>(kTestTemporalLayerProfile),
+      kVideoCodecVP8);
+  SetupCodec();
+  EXPECT_EQ(0, adapter_->InitEncode(&codec_, kSettings));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  VideoFrame input_frame = VideoFrame::Builder()
+                               .set_video_frame_buffer(buffer)
+                               .set_rtp_timestamp(0)
+                               .set_timestamp_ms(0)
+                               .build();
+  std::vector<VideoFrameType> frame_types;
+  frame_types.resize(codec_.numberOfSimulcastStreams,
+                     VideoFrameType::kVideoFrameKey);
+  EXPECT_EQ(WEBRTC_VIDEO_CODEC_NO_OUTPUT,
+            adapter_->Encode(input_frame, &frame_types));
+}
+
+TEST_F(TestSimulcastEncoderAdapterFake,
+       EncodeReturnsErrorIfResolutionIsNotAlignedAndDroppingIsDisabled) {
+  test::ScopedKeyValueConfig field_trials(
+      field_trials_,
+      "WebRTC-SimulcastEncoderAdapter-DropUnalignedResolution/Disabled/"
+      "WebRTC-SimulcastEncoderAdapter-GetEncoderInfoOverride/"
+      "requested_resolution_alignment:8,"
+      "apply_alignment_to_all_simulcast_layers/");
+  SetUp();
+  SimulcastTestFixtureImpl::DefaultSettings(
+      &codec_, static_cast<const int*>(kTestTemporalLayerProfile),
+      kVideoCodecVP8);
+  SetupCodec();
+  EXPECT_EQ(0, adapter_->InitEncode(&codec_, kSettings));
+  scoped_refptr<VideoFrameBuffer> buffer(I420Buffer::Create(1280, 720));
+  VideoFrame input_frame = VideoFrame::Builder()
+                               .set_video_frame_buffer(buffer)
+                               .set_rtp_timestamp(0)
+                               .set_timestamp_ms(0)
+                               .build();
+  std::vector<VideoFrameType> frame_types;
+  frame_types.resize(codec_.numberOfSimulcastStreams,
+                     VideoFrameType::kVideoFrameKey);
+  EXPECT_EQ(WEBRTC_VIDEO_CODEC_ERROR,
+            adapter_->Encode(input_frame, &frame_types));
 }
 
 }  // namespace test

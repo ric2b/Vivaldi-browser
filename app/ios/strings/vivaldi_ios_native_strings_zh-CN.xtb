@@ -46,6 +46,7 @@
 <translation id="1470330357709335121">Vivaldi 迟缓或卡顿</translation>
 <translation id="1502492982318476895">同步失败： <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">您的辅助邮箱地址。</translation>
+<translation id="1534183273237573805">通过选择其中一种搜索引擎，您可以支持Vivaldi的开发。</translation>
 <translation id="1535446875484049224">深色模式有问题或看起来不正确</translation>
 <translation id="1567659716528258242">Vivaldi 导致设备发热严重</translation>
 <translation id="156793582229023040">我担心跟踪或数据收集</translation>
@@ -75,6 +76,7 @@
 <translation id="1809939268435598390">删除文件夹</translation>
 <translation id="1813686536470127172">其他文件夹</translation>
 <translation id="1828800626900562968">点下面的 + 号图标新建标签页。</translation>
+<translation id="1852679645333476285">允许媒体后台播放</translation>
 <translation id="1861262398884155592">此文件夹为空</translation>
 <translation id="1871058849247304245">缩放级别为 <ph name="HOST" /></translation>
 <translation id="1921508034244765766">Vivaldi 运行缓慢、崩溃或设备发热</translation>
@@ -88,16 +90,20 @@
 <translation id="2048247880942380698">阿拉伯文(<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">撤销</translation>
 <translation id="2129408066358825297">年龄</translation>
+<translation id="2138901399878617625">通过搜索帮助植树</translation>
 <translation id="2148384276939959392">同步所选</translation>
 <translation id="2195713384412091023">此操作将删除存储在远程服务器上的所有同步数据、重新设置你的加密密钥，并退出登录。</translation>
 <translation id="2228584369802328636">游戏</translation>
+<translation id="2240680014596059312">私密、快速、极少广告。</translation>
 <translation id="2243210264130642074">笔记已保存</translation>
 <translation id="2272338747456392228">账号已锁定</translation>
 <translation id="2273327106802955778">更多菜单</translation>
 <translation id="2283599456633275070">旅游</translation>
 <translation id="2324160330092901720">验证码已发送至 <ph name="EMAIL_ID" /></translation>
 <translation id="2324257568471626606">新搜索引擎</translation>
+<translation id="2326657631721795616">您仍然可以通过选择以隐私为中心的独立搜索引擎来支持Vivaldi：</translation>
 <translation id="2330644510603114741">标签页行为</translation>
+<translation id="233493642829799329">更改此功能可能会重新加载您的一些标签</translation>
 <translation id="2336309953058658733">清空回收站</translation>
 <translation id="2359808026110333948">继续</translation>
 <translation id="2386793615875593361">已选择 1 项</translation>
@@ -173,8 +179,8 @@
 <translation id="3270894089048358271">将 Vivaldi 设为您的默认浏览器</translation>
 <translation id="3270930591809084274">已同步的标签页</translation>
 <translation id="3285898158753554866">复制译文</translation>
+<translation id="3288330578370776290">偏好在浏览器而不是外部应用程序中打开页面</translation>
 <translation id="3335772982573114336">新笔记</translation>
-<translation id="3337207574172839542">开启搜索建议</translation>
 <translation id="33451081266695216">服务器限制连接。</translation>
 <translation id="3346386541263128307">电子邮件不匹配。</translation>
 <translation id="3363375699928395745">输入标题</translation>
@@ -253,6 +259,7 @@
 <translation id="4152011295694446843">你会在这里找到你的书签</translation>
 <translation id="4152623049003960417">跟踪器详情</translation>
 <translation id="4176463684765177261">已禁用</translation>
+<translation id="4181792832006033883">Vivaldi是由我们的用户提供的，而不是大型技术或投资者的支持。每笔捐款都直接支持我们的开放式私人互联网的使命。成为变化的一部分。</translation>
 <translation id="4184746246941929945">不阻止此页面上 Vivaldi 合作伙伴 <ph name="PARTNER_NAME" /> 的广告 。这些广告有助于资助 Vivaldi 的发展。</translation>
 <translation id="4193549853510262477">自动检测</translation>
 <translation id="4209092469652827314">大</translation>
@@ -269,6 +276,7 @@
 <translation id="4316955624679873896">书签已添加至</translation>
 <translation id="432696242656678770">俄语 (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">西班牙语 (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">与我们一起寻求更好的网络</translation>
 <translation id="4376661454588260127">越南语（ <ph name="ORIGIN" />）</translation>
 <translation id="4380745054983890306">我希望可以将页面另存为 PDF</translation>
 <translation id="4394049700291259645">禁用</translation>
@@ -287,6 +295,7 @@
 <translation id="4525945044609022380">该电子邮件地址已经绑定了其他账号。</translation>
 <translation id="4526803704855831732">隐身标签页</translation>
 <translation id="4542001945479572846">其他的东西</translation>
+<translation id="4548278119881373657">确认选择</translation>
 <translation id="4553717494760925411">导航返回</translation>
 <translation id="4563480492836333884">不接受该地址，请使用其他域名。</translation>
 <translation id="457386861538956877">更多...</translation>
@@ -341,6 +350,7 @@
 <translation id="5094376253685335202">启用同步</translation>
 <translation id="5116316489033177455">同步书签和快速拨号</translation>
 <translation id="5122095890854520072">拉脱维亚语 (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">您的捐款将100％用于资助Vivaldi的长期发展和我们争取更好的网络的斗争。</translation>
 <translation id="5153806174841856652">登录失败</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />重新发送<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">显示热门网站</translation>
@@ -402,19 +412,25 @@
  打开设置以修复它。</translation>
 <translation id="604930981600990598">翻译已复制！</translation>
 <translation id="6052689967593623141">如果您点击其中一些链接并购物，Vivaldi可能会获得关联收益。这有助于支持Vivaldi的开发，并保持浏览器独立。谢谢您的支持！</translation>
+<translation id="6056094614114332761">地址字段建议</translation>
 <translation id="6077943432358741146">快速拨号</translation>
 <translation id="6079696972035130497">无限制</translation>
+<translation id="6093557041367452381">开始页面聚焦于地址字段时显示输入历史记录。</translation>
 <translation id="6110857187283700804">您的输入发送给您的搜索提供商以寻求建议。这在隐身窗口中是被禁用的。</translation>
+<translation id="6119047040189002834">远离监视并选择与您的价值观保持一致的搜索引擎：</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> 个项目已移动</translation>
 <translation id="6147094071357011481">最近关闭的标签页不可用</translation>
+<translation id="6171727814244883097">支持我们的一种更简单的方法</translation>
 <translation id="6177301865411451337">Vivaldi 同步服务可能遇到问题。在此更新状态： <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">我发现将网站另存为快速拨号很困难</translation>
 <translation id="6193995664633100765">印地语 (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">立即捐赠</translation>
 <translation id="6224086034182508647">网站外观选项</translation>
 <translation id="6253990869902066991">Vivaldi 意外重新加载网页</translation>
 <translation id="6257488392933423163">以HTML格式查看</translation>
 <translation id="6275978505813092431">插入图片</translation>
 <translation id="6329717714920146925">网站（仅查看）</translation>
+<translation id="6346549829676591152">启用搜索历史</translation>
 <translation id="6365929278691047681">德语 (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">网站布局损坏或看起来很奇怪</translation>
 <translation id="6383855939619098095">Vivaldi 的开始页很难自定义</translation>
@@ -432,6 +448,7 @@
 <translation id="6544880104552732240">选择目标语言</translation>
 <translation id="659351303388691480">清除浏览数据...</translation>
 <translation id="6602272356389933803">外观与主题</translation>
+<translation id="6609906162587123522">不要在外部应用中打开链接</translation>
 <translation id="6614744450826097546">广告详情</translation>
 <translation id="6631760746795162665">哥伦比亚(<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">跟踪器和广告被拦截。 有些网站可能会崩溃。</translation>
@@ -481,6 +498,7 @@
 <translation id="711946737922560234">插入链接</translation>
 <translation id="7120229714826964836">分享页面</translation>
 <translation id="713792263829536729">流媒体服务无法正常工作</translation>
+<translation id="7142332680286898952">显示输入历史</translation>
 <translation id="7158507293261405349">添加新组</translation>
 <translation id="7173114856073700355">打开设置</translation>
 <translation id="718052827125696482">屏幕无法正常旋转</translation>
@@ -506,7 +524,6 @@
 <translation id="7393145587390257456">广告拦截器效果不好</translation>
 <translation id="7400418766976504921">网址</translation>
 <translation id="7417521636956146248">搜索引擎将重置为默认设置，这也将重置您的自定义搜索引擎。</translation>
-<translation id="7418655219500602072">地址字段优先级</translation>
 <translation id="7451784507428459503">YouTube 视频无法播放或出现问题</translation>
 <translation id="7454640759045234067">个跟踪器被拦截</translation>
 <translation id="7461899062138731833">订阅源</translation>
@@ -541,7 +558,9 @@
 <translation id="7791543448312431591">添加</translation>
 <translation id="7801111502975417831">我希望能够在后台播放视频</translation>
 <translation id="7801204999757211519">已有账号了？<ph name="BEGIN_LINK" />登录 ➔<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">不，谢谢</translation>
 <translation id="7850070199083838600">创建新组吗？</translation>
+<translation id="7862984977194621600">启用搜索建议</translation>
 <translation id="7870765213383950011">第一个群组</translation>
 <translation id="7914995060146784406">编辑笔记</translation>
 <translation id="7925340978147141704">显示密码</translation>
@@ -559,7 +578,7 @@
 <translation id="8058018971942772071">作为组使用</translation>
 <translation id="8066170816074394954">服务器错误。</translation>
 <translation id="8076492880354921740">标签</translation>
-<translation id="8077675488769462025">非活动标签页</translation>
+<translation id="8077675488769462025">不活动标签页</translation>
 <translation id="8112996065264879835">此代码与我们发送的代码不符。
         您已达到最多错误尝试次数限制。请使用下方的“重新发送”选项申请新代码。</translation>
 <translation id="8131740175452115882">确认</translation>
@@ -568,6 +587,7 @@
 <translation id="8147118677117542370">请提供您的年龄。</translation>
 <translation id="8165573437634525334">数据已被加密密钥保护</translation>
 <translation id="8237090677709100373">自定义颜色代码</translation>
+<translation id="8255101384731542819">独立搜索，法国出品</translation>
 <translation id="8257908958623224237">与其他客户端的数据冲突。</translation>
 <translation id="8261506727792406068">删除</translation>
 <translation id="8273666073173891138">笔记已保存至<ph name="FOLDER_TITLE" /></translation>
@@ -575,6 +595,7 @@
 <translation id="8284356787013856231">打开文件的权限被拒绝</translation>
 <translation id="8289933454364510719">顶部或底部</translation>
 <translation id="8304044605002588416">自定义起始页按钮</translation>
+<translation id="8304538706952727936">摆脱大型技术公司</translation>
 <translation id="8323167517179506834">输入网址</translation>
 <translation id="8326104954595890674">新隐身标签</translation>
 <translation id="8329813750766387010">更新于：<ph name="DATE" /></translation>
@@ -617,7 +638,9 @@
 <translation id="8818152010000655963">壁纸</translation>
 <translation id="8819841443522803117">是时候切换您的默认浏览器了吧？就选 Vivaldi。</translation>
 <translation id="8820817407110198400">书签</translation>
+<translation id="8828442094222036738">私密的Google搜索结果，欧洲制造</translation>
 <translation id="8855707633300847215">显示标签栏</translation>
+<translation id="8861211142470908937">密码长度需要至少12个字符</translation>
 <translation id="8892354889971902600">您最近关闭的标签页会出现在这里。</translation>
 <translation id="89390081013973080">完成了！现在确定您希望在设备之间同步的数据。</translation>
 <translation id="8948792607467387336">选用为壁纸</translation>

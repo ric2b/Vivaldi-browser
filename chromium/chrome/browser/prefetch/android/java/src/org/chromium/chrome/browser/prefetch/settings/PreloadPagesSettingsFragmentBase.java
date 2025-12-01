@@ -18,6 +18,10 @@ import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.util.TraceEventVectorDrawableCompat;
 
+// Vivaldi
+import android.app.Activity;
+import org.chromium.build.BuildConfig;
+
 /** The base fragment class for Preload Pages settings fragments. */
 @NullMarked
 public abstract class PreloadPagesSettingsFragmentBase extends ChromeBaseSettingsFragment {
@@ -40,6 +44,7 @@ public abstract class PreloadPagesSettingsFragmentBase extends ChromeBaseSetting
 
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
+        if (!BuildConfig.IS_VIVALDI)
         menu.clear();
         MenuItem help =
                 menu.add(Menu.NONE, R.id.menu_id_targeted_help, Menu.NONE, R.string.menu_help);

@@ -97,7 +97,6 @@ class FakeTabSlotController : public TabSlotController {
   void ShiftGroupLeft(const tab_groups::TabGroupId& group) override {}
   void ShiftGroupRight(const tab_groups::TabGroupId& group) override {}
   const Browser* GetBrowser() const override;
-  int GetInactiveTabWidth() const override;
   bool IsFrameCondensed() const override;
   TabGroup* GetTabGroup(const tab_groups::TabGroupId& group_id) const override;
 
@@ -114,8 +113,6 @@ class FakeTabSlotController : public TabSlotController {
     tab_fg_color_inactive_ = fg_color_inactive;
   }
 
-  void SetInactiveTabWidth(int width) { inactive_tab_width_ = width; }
-
  private:
   raw_ptr<TabStripController> tab_strip_controller_;
   raw_ptr<TabContainer, DanglingUntriaged> tab_container_;
@@ -128,8 +125,6 @@ class FakeTabSlotController : public TabSlotController {
 
   SkColor tab_fg_color_active_ = gfx::kPlaceholderColor;
   SkColor tab_fg_color_inactive_ = gfx::kPlaceholderColor;
-
-  int inactive_tab_width_ = 0;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_TABS_FAKE_TAB_SLOT_CONTROLLER_H_

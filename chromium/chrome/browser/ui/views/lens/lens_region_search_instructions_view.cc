@@ -75,7 +75,7 @@ void LensRegionSearchInstructionsView::Init() {
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_close_on_deactivate(false);
   set_corner_radius(kCornerRadius);
-  set_background_color(kColorFeatureLensPromoBubbleBackground);
+  SetBackgroundColor(kColorFeatureLensPromoBubbleBackground);
 
   // Add the leading drag selection icon.
   auto selection_icon_view =
@@ -83,7 +83,7 @@ void LensRegionSearchInstructionsView::Init() {
           views::kDragGeneralSelectionIcon,
           kColorFeatureLensPromoBubbleForeground,
           layout_provider->GetDistanceMetric(
-              DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE)));
+              views::DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE)));
   AddChildView(std::move(selection_icon_view));
 
   gfx::Font default_font;

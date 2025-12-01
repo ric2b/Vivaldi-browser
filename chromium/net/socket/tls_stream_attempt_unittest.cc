@@ -14,6 +14,7 @@
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
+#include "net/base/tracing.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/http/http_network_session.h"
 #include "net/http/transport_security_state.h"
@@ -50,7 +51,7 @@ void ValidateConnectTiming(
   EXPECT_LE(connect_timing.ssl_end, connect_timing.connect_end);
 }
 
-class TlsStreamAttemptHelper : public TlsStreamAttempt::SSLConfigProvider {
+class TlsStreamAttemptHelper : public TlsStreamAttempt::Delegate {
  public:
   // Pass std::nullopt to `ssl_config` to make SSLConfig not immediately
   // available.
@@ -60,6 +61,7 @@ class TlsStreamAttemptHelper : public TlsStreamAttempt::SSLConfigProvider {
       : attempt_(std::make_unique<TlsStreamAttempt>(
             params,
             IPEndPoint(IPAddress(192, 0, 2, 1), 443),
+            perfetto::Track(),
             HostPortPair("a.test", 443),
             this)),
         ssl_config_(std::move(ssl_config)) {}
@@ -105,7 +107,10 @@ class TlsStreamAttemptHelper : public TlsStreamAttempt::SSLConfigProvider {
 
   std::optional<int> result() const { return result_; }
 
-  // TlsStreamAttempt::SSLConfigProvider implementation:
+  // TlsStreamAttempt::Delegate implementation:
+
+  void OnTcpHandshakeComplete() override {}
+
   int WaitForSSLConfigReady(CompletionOnceCallback callback) override {
     if (ssl_config_.has_value()) {
       return OK;

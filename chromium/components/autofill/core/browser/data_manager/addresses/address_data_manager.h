@@ -155,11 +155,6 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   // Autofill address profiles to their account.
   virtual bool IsEligibleForAddressAccountStorage() const;
 
-  // Users based in unsupported countries and profiles with a country value set
-  // to an unsupported country are not eligible for account storage. This
-  // function determines if the `country_code` is eligible.
-  bool IsCountryEligibleForAccountStorage(std::string_view country_code) const;
-
   // Migrates a given kLocalOrSyncable `profile` to kAccount. This has multiple
   // side-effects for the profile:
   // - It is stored in a different backend.
@@ -170,7 +165,7 @@ class AddressDataManager : public AutofillWebDataServiceObserverOnUISequence {
   void MigrateProfileToAccount(const AutofillProfile& profile);
 
   // Asynchronously loads all `AutofillProfile`s (from all record types) into
-  // the class's state. See `synced_local_profiles_` and `account_profiles_`.
+  // `profiles_`.
   virtual void LoadProfiles();
 
   // Updates the `profile`'s use count and use date in the database.

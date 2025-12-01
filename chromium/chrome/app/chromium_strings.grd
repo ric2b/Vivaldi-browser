@@ -361,6 +361,12 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
       <message name="IDS_TASK_MANAGER_KILL_ACCESSIBILITY_NAME" desc="The accessibility description for the End Task button in the Task Manager window">
         Ends the highlighted task.
       </message>
+      <message name="IDS_TASK_MANAGER_TASK_KILL_SUCCESS_ACCESSIBILITY_MESSAGE" desc="The text announced after a process and some of its tasks are killed.">
+        Task(s) ended.
+      </message>
+      <message name="IDS_TASK_MANAGER_TASK_KILL_FAIL_ACCESSIBILITY_MESSAGE" desc="The text announced when all tasks in the process could not be killed.">
+        Failed to end task(s).
+      </message>
       <message name="IDS_TASK_MANAGER_CATEGORY_TABS_AND_EXTENSIONS_NAME" desc="The title of the 'Tabs and Extensions' filter category.">
         Tabs &amp; extensions
       </message>
@@ -697,10 +703,10 @@ Chromium is unable to recover your settings.
       </if>
         <message name="IDS_DEFAULT_BROWSER_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the current default browser.">
           Chromium isn't your default browser
-      </message>
-      <message name="IDS_DEFAULT_BROWSER_PIN_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the current default browser and can be pinned to the taskbar.">
-        Set Chromium as your default browser and pin it to your taskbar
-      </message>
+        </message>
+        <message name="IDS_DEFAULT_BROWSER_PIN_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the current default browser and can be pinned to the taskbar.">
+          Set Chromium as your default browser and pin it to your taskbar
+        </message>
       <if expr="is_win or is_macosx">
         <message name="IDS_PDF_INFOBAR_TEXT" desc="Text to show in an infobar when Chromium is not the default PDF viewer.">
           Set Chromium as your default PDF viewer
@@ -1021,18 +1027,6 @@ Chromium is unable to recover your settings.
         <message name="IDS_ENTERPRISE_SIGNIN_EXPLANATION_WITH_PROFILE_CREATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. Additionally notifies the user that they can create a new profile instead. This message is followed by a 'Learn more' link.">
           You are signing in with a managed account and giving its administrator control over your Chromium profile. Your Chromium data, such as your apps, bookmarks, history, passwords, and other settings will become permanently tied to <ph name="USER_NAME">$1<ex>pat@example.com</ex></ph>. You will be able to delete this data via the Google Accounts Dashboard, but you will not be able to associate this data with another account. You can optionally create a new profile to keep your existing Chromium data separate. <ph name="LEARN_MORE">$2<ex>Learn more</ex></ph>
         </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_TITLE" desc="The title of the dialog to confirm adding a new work profile with the signed-in enterprise account">
-          Add Work Profile to this browser
-        </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_CREATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
-          You are adding a work profile to this browser and giving your administrator control over just the work profile.
-        </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_ISOLATION_NOTICE" desc="Notice that work profiles are separated from any personal profile">
-          This work profile is completely separate from your personal profile.
-        </message>
-        <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_EXPLANATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
-          Any Chromium data that is generated during the use of this profile (such as the creation of bookmarks, history, passwords, and other settings) can be removed by the work profile administrator. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
-        </message>
         <message name="IDS_ENTERPRISE_VALUE_PROPOSITION_PROFILE_REQUIRED_BY_ORG_KNOWN_DOMAIN_TITLE" desc="Title of the screen in the profile creation flow where the user is asked whether they want to confirm signing in to Chromium with their enterprise account when it is mandatory to sign in to Chromium with the enterprise account.">
           Your organization, <ph name="MANAGER">$1<ex>manager.com</ex></ph>, requires you to sign into Chromium
         </message>
@@ -1176,8 +1170,8 @@ Chromium is unable to recover your settings.
         <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_NO_UNSYNCED_DATA_BODY" desc="This is the subtitle of a confirmation dialog that asks the user to confirm that they want to sign out of Chromium. It appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. This subtitle is after the 'Sign out of Chromium?' string. The tone should be calm, because we want to explain to the user that their data is saved; however, we want to set expectations by clarifying that the data will be removed from the device. This string provides a path to resolution because it explains how the user can see their data again (by signing back in).">
           Your passwords and other Chromium data that you saved in your Google Account will be removed from this device. To use them again in Chromium, sign back in.
         </message>
-        <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_VERIFY_BODY" desc="This is the subtitle of an error message dialog that appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. The error message appears when the user has saved some data (like a password or payment method) to Chromium, but Chromium wasn't able to save the data to the user's Google Account due to a sign-in error; but, the data has been saved locally to Chromium. This subtitle is after the 'Some data isn’t saved yet' string. The tone should be cautionary, because we want to explain to the user that their data is not saved to their Google Account. This string provides a path to resolution because it explains how the user can properly save their data before they sign out of Chromium.">
-          Chromium needs to verify it’s you before some data can be saved in your Google Account and used on all your devices. If you sign out, this data will stay on this device.
+        <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_VERIFY_BODY" desc="This is the subtitle of an error message dialog that appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. The error message appears when the user has saved some data (like a password or payment method) to Chromium, but Chromium wasn't able to save the data to the user's Google Account due to a sign-in error; we want to set expectations by clarifying that the data will be removed from the device. This subtitle is after the 'Some data isn’t saved yet' string. The tone should be cautionary, because we want to explain to the user that their data is not saved and will be deleted if they sign out. This string provides a path to resolution because it explains how the user can properly save their data before they sign out of Chromium.">
+          Chromium needs to verify it’s you before some data can be saved in your Google Account and used on all your devices. If you sign out now, this data will be deleted.
         </message>
         <message name="IDS_CHROME_SIGNOUT_CONFIRMATION_PROMPT_UNSYNCED_BODY"  desc="This is the subtitle of an error message dialog that appears when the user opens the Chromium Profile Menu and chooses 'Sign out of Chromium'. The error message appears when the user tries to sign out immediately after having saved saved some data (like a password or payment method) to Chromium and Chromium hasn't had time to save that data to the user's Google Account yet. This subtitle is after the 'Some data isn't saved yet' string. The tone should be cautionary, because we want to explain to the user that their data is not saved to their Google Account. This string asks the user to wait a few minutes before trying to sign out again.">
           Some of your Chromium data hasn't been saved in your Google Account yet. Try waiting a few minutes before signing out. If you sign out now, this data will be deleted.
@@ -1709,6 +1703,14 @@ Chromium is unable to recover your settings.
           desc="Notification shown in the Lens Overlay when the user has copied the selected image to the clipboard.">
           Image copied
         </message>
+        <message name="IDS_LENS_OVERLAY_FEEDBACK_TOAST_MESSAGE"
+          desc="The message on the toast prompting the user to share their thoughts by sending feedback.">
+          Share your thoughts
+        </message>
+        <message name="IDS_LENS_OVERLAY_SEND_FEEDBACK_BUTTON_LABEL"
+          desc="The label for the button that on click opens a feedback form for the user to send feedback about the feature.">
+          Send feedback
+        </message>
         <message name="IDS_LENS_OVERLAY_MORE_OPTIONS_BUTTON_LABEL"
           desc="Text that is shown in the tooltip of the more options button in the Lens Overlay.">
           More options
@@ -1854,6 +1856,26 @@ Chromium is unable to recover your settings.
           desc="Accessibility label for the button that opens a searchbox on the language picker so the user can search through the defined languages to find one that matches the text they enter into the searchbox.">
           Search language list
         </message>
+        <message name="IDS_LENS_OVERLAY_TOP_LEFT_CORNER_SLIDER_ACCESSIBILITY_LABEL"
+          is_accessibility_with_no_ui="true"
+          desc="Accessibility label for the slider controlling the top left corner of the search area. Includes the coordinates of the left and top edges of the search area expressed as percentages of the image area.">
+          top left corner of search area: left <ph name="LEFT"><ex>15</ex>$1</ph>%, top <ph name="TOP"><ex>65</ex>$2</ph>%
+        </message>
+        <message name="IDS_LENS_OVERLAY_TOP_RIGHT_CORNER_SLIDER_ACCESSIBILITY_LABEL"
+          is_accessibility_with_no_ui="true"
+          desc="Accessibility label for the slider controlling the top right corner of the search area. Includes the coordinates of the right and top edges of the search area expressed as percentages of the image area.">
+          top right corner of search area: right <ph name="RIGHT"><ex>15</ex>$1</ph>%, top <ph name="TOP"><ex>65</ex>$2</ph>%
+        </message>
+        <message name="IDS_LENS_OVERLAY_BOTTOM_RIGHT_CORNER_SLIDER_ACCESSIBILITY_LABEL"
+          is_accessibility_with_no_ui="true"
+          desc="Accessibility label for the slider controlling the bottom right corner of the search area. Includes the coordinates of the right and bottom edges of the search area expressed as percentages of the image area.">
+          bottom right corner of search area: right <ph name="RIGHT"><ex>15</ex>$1</ph>%, bottom <ph name="BOTTOM"><ex>65</ex>$2</ph>%
+        </message>
+        <message name="IDS_LENS_OVERLAY_BOTTOM_LEFT_CORNER_SLIDER_ACCESSIBILITY_LABEL"
+          is_accessibility_with_no_ui="true"
+          desc="Accessibility label for the slider controlling the bottom left corner of the search area. Includes the coordinates of the left and bottom edges of the search area expressed as percentages of the image area.">
+          bottom left corner of search area: left <ph name="LEFT"><ex>15</ex>$1</ph>%, bottom <ph name="BOTTOM"><ex>65</ex>$2</ph>%
+        </message>
 
         <!-- IPH Strings -->
         <message name="IDS_LENS_OVERLAY_TRANSLATE_BUTTON_IPH"
@@ -1874,9 +1896,31 @@ Chromium is unable to recover your settings.
           desc="The label of the Lens overlay entrypoint in the omnibox">
           Image Search
         </message>
+        <message name="IDS_CONTENT_LENS_OVERLAY_HOMEWORK_ENTRYPOINT_LABEL"
+          desc="The label of the Lens overlay entrypoint in the omnibox offering homework help">
+          Homework help
+        </message>
         <message name="IDS_SIDE_PANEL_LENS_OVERLAY_TOOLBAR_TOOLTIP"
           desc="The tooltip for the Lens overlay toolbar button.">
           Search with Image Search
+        </message>
+
+        <!-- Lens Side Panel Error Page -->
+        <message name="IDS_SIDE_PANEL_LENS_OVERLAY_GENERIC_ERROR_PAGE_FIRST_LINE"
+            desc="Text shown on the side panel for the Lens feature when there is a network or other server error. The texts informs the user that an error has occured.">
+          Something went wrong
+        </message>
+        <message name="IDS_SIDE_PANEL_LENS_OVERLAY_GENERIC_ERROR_PAGE_SECOND_LINE"
+            desc="Text shown on the side panel for the Lens feature when there is a network or other server error. The texts informs the user the panel can not be loaded.">
+          Couldn't load this panel, try again
+        </message>
+        <message name="IDS_SIDE_PANEL_LENS_OVERLAY_PROTECTED_PAGE_ERROR_FIRST_LINE"
+            desc="Text shown on the side panel for the Lens feature when there is are no results being loaded due to the page being protected. The texts informs the user the panel can not be loaded.">
+          This page is protected
+        </message>
+        <message name="IDS_SIDE_PANEL_LENS_OVERLAY_PROTECTED_PAGE_ERROR_SECOND_LINE"
+            desc="Text shown on the side panel for the Lens feature when there is are no results being loaded due to the page being protected. The text suggests the user try a different page since the current one can not be read.">
+          Protected pages can't be read. Try a different page.
         </message>
 
         <!-- Lens Permission Bubble Dialog-->
@@ -2112,8 +2156,14 @@ Chromium is unable to recover your settings.
         <message name="IDS_FRE_DEFAULT_BROWSER_TITLE" desc="Title for the page that prompts user to set Chromium as their default browser in the first run experience.">
           Set Chromium as your default browser
         </message>
+        <message name="IDS_FRE_DEFAULT_BROWSER_AND_PINNING_TITLE" desc="Title for the page that prompts user to set Chromium as their default browser and pin to taskbar in the first run experience.">
+          Use Chromium by default and get it pinned
+        </message>
         <message name="IDS_FRE_DEFAULT_BROWSER_SUBTITLE_NEW" desc="Subtitle for the page that prompts user to set Chromium as their default browser in the first run experience.">
           Use Chromium anytime you click links in messages, documents, and other apps
+        </message>
+        <message name="IDS_FRE_DEFAULT_BROWSER_AND_PINNING_SUBTITLE" desc="Subtitle for the page that prompts user to set Chromium as their default browser and pin to taskbar in the first run experience.">
+          Open links in Chromium from any app. Plus for easy access, it gets pinned to your taskbar.
         </message>
         <message name="IDS_FRE_DEFAULT_BROWSER_ILLUSTRATION_ALT_TEXT" desc="Alt text for the illustration in the page that prompts user to set Chromium as their default browser.">
           Chromium logo inside a computer screen.
@@ -2145,13 +2195,6 @@ Chromium is unable to recover your settings.
         </message>
         <message name="IDS_SIGNOUT_DICE_WEB_INTERCEPT_BUBBLE_CHROME_SIGNOUT_IPH_TEXT_SCREENREADER" desc="Text announced by screenreaders related to the confirmation message is intended to help users to understand that signing out of a Google service (like Gmail) will not sign them out of Chromium. It appears in a blue in-product help bubble, which points to the Chromium Profile Menu; it appears after the user signs out of a Google service (like Gmail). The user can open the Profile Menu and sign out of Chromium, if they wish to do so.">
           To remove your Google Account from Chromium, sign out of Chromium in the Settings page
-        </message>
-      </if>
-
-      <!-- Strings for full restore notifications -->
-      <if expr="is_chromeos">
-        <message name="IDS_RESTORE_NOTIFICATION_DISPLAY_SOURCE" desc="This is the string shown as the display source of the notification for the user to select restore or not on startup.">
-          ChromiumOS system
         </message>
       </if>
 

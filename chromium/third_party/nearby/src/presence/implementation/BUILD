@@ -431,6 +431,7 @@ cc_test(
         ":internal_test",
         "//internal/platform:base",
         "//internal/platform:comm",
+        "//internal/platform:mac_address",
         "//internal/platform:test_util",
         "//internal/platform:types",
         "//internal/platform/implementation:comm",

@@ -39,6 +39,7 @@
 #include "ash/constants/ash_features.h"
 #include "chrome/browser/ash/app_list/app_list_syncable_service_factory.h"
 #include "chrome/browser/ash/arc/arc_util.h"
+#include "chrome/browser/ash/floating_sso/floating_sso_service_factory.h"
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #include "chromeos/ash/components/dbus/shill/shill_clients.h"
 #include "chromeos/ash/components/dbus/shill/shill_manager_client.h"
@@ -52,6 +53,10 @@ class SyncServiceFactoryTest : public testing::Test {
   void SetUp() override {
 #if BUILDFLAG(IS_CHROMEOS)
     app_list::AppListSyncableServiceFactory::SetUseInTesting(true);
+    // Cookie sync is only enabled for the primary profile, but for these tests
+    // there is no real benefit in setting up a fully logged in ChromeOS user.
+    ash::floating_sso::FloatingSsoServiceFactory::GetInstance()
+        ->AllowNonPrimaryProfileForTests();
 #endif  // BUILDFLAG(IS_CHROMEOS)
     TestingProfile::Builder builder;
     builder.AddTestingFactory(FaviconServiceFactory::GetInstance(),
@@ -196,6 +201,10 @@ class SyncServiceFactoryTest : public testing::Test {
             data_sharing::features::kDataSharingFeature)) {
       datatypes.Put(syncer::COLLABORATION_GROUP);
       datatypes.Put(syncer::SHARED_TAB_GROUP_DATA);
+      if (base::FeatureList::IsEnabled(
+              syncer::kSyncSharedTabGroupAccountData)) {
+        datatypes.Put(syncer::SHARED_TAB_GROUP_ACCOUNT_DATA);
+      }
     }
 #if BUILDFLAG(IS_ANDROID)
     if (base::FeatureList::IsEnabled(syncer::kWebApkBackupAndRestoreBackend)) {
@@ -209,10 +218,6 @@ class SyncServiceFactoryTest : public testing::Test {
 
     if (base::FeatureList::IsEnabled(syncer::kSyncAutofillLoyaltyCard)) {
       datatypes.Put(syncer::AUTOFILL_VALUABLE);
-    }
-
-    if (base::FeatureList::IsEnabled(syncer::kSyncSharedTabGroupAccountData)) {
-      datatypes.Put(syncer::SHARED_TAB_GROUP_ACCOUNT_DATA);
     }
 
     return datatypes;

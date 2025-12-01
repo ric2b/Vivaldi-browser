@@ -12,6 +12,7 @@ source_set("browser_tests") {
   sources = [
     "ephemeral_kiosk_browsertest.cc",
     "kiosk_accessibility_extension_browsertest.cc",
+    "kiosk_arcvm_app_manager_browsertest.cc",
     "kiosk_auto_login_bailout_browsertest.cc",
     "kiosk_browsertest.cc",
     "kiosk_chrome_app_browsertest.cc",
@@ -24,6 +25,7 @@ source_set("browser_tests") {
     "kiosk_iwa_browsertest.cc",
     "kiosk_iwa_device_attributes_browsertest.cc",
     "kiosk_iwa_permissions_browsertest.cc",
+    "kiosk_iwa_version_management_browsertest.cc",
     "kiosk_misconfigured_user_browsertest.cc",
     "kiosk_multi_chrome_app_browsertest.cc",
     "kiosk_self_hosted_chrome_app_browsertest.cc",
@@ -38,8 +40,11 @@ source_set("browser_tests") {
   ]
   deps = [
     ":test_support",
+    "//ash/constants",
     "//chrome/browser",
     "//chrome/browser/apps/app_service:app_service",
+    "//chrome/browser/ash/app_mode/arcvm_app",
+    "//chrome/browser/ash/app_mode/isolated_web_app",
     "//chrome/browser/ash/app_mode/web_app",
     "//chrome/browser/ash/login/app_mode/test:test_support",
     "//chrome/browser/ash/policy/core:test_support",
@@ -50,10 +55,13 @@ source_set("browser_tests") {
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//chromeos/ash/components/disks:test_support",
+    "//chromeos/ash/components/policy/device_local_account",
     "//chromeos/ash/components/system",
+    "//chromeos/ash/experiences/arc:arc_test_support",
     "//components/services/app_service/public/cpp:app_types",
     "//components/web_package",
     "//components/web_package/test_support",
+    "//components/webapps/isolated_web_apps:isolated_web_apps",
     "//content/test:test_support",
     "//extensions/components/native_app_window",
     "//testing/gtest",
@@ -90,6 +98,7 @@ static_library("test_support") {
     "//chrome/browser/chromeos/app_mode",
     "//chrome/test:test_support_ui",
     "//chromeos/ash/components/network:test_support",
+    "//chromeos/ash/components/policy/device_local_account",
     "//components/web_package",
   ]
 }

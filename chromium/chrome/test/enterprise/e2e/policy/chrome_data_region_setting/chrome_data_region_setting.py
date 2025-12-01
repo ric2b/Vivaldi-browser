@@ -81,12 +81,13 @@ class ChromeDataRegionSettingTest(ChromeEnterpriseTestCase):
     self.assertIn('scope=Machine', output)
     self.assertIn('status=OK', output)
 
-  # TODO(crbug.com/403340476): Reenable with `@test` once fixed.
+  @test
   def test_cloudUser_ChromeDataRegionSettingNoPreference(self):
-    # Domain: chromepizzatest.com / OrgUnit: CBCM-DRZ > No Preference
+    # Domain: chromepizzatest.com
+    # OrgUnit: CBCM testing > Policy Testing > Automated2
     # User belongs to an OU with ChromeDataRegionSetting set to No Preference (0)
-    account = "drz-nopref@chromepizzatest.com"
-    path = f"gs://{self.gsbucket}/secrets/ChromeDataRegionSettingNoPref-password"
+    account = "account2@chromepizzatest.com"
+    path = f"gs://{self.gsbucket}/secrets/account2-password"
     cmd = r"gsutil cat " + path
     password = self.RunCommand(self.win_config["dc"], cmd).strip().decode()
 
@@ -103,12 +104,13 @@ class ChromeDataRegionSettingTest(ChromeEnterpriseTestCase):
     self.assertIn("scope=Current user", output)
     self.assertIn("status=OK", output)
 
-  # TODO(crbug.com/403340476): Reenable with `@test` once fixed.
+  @test
   def test_cloudUser_ChromeDataRegionSettingEurope(self):
-    # Domain: chromepizzatest.com / OrgUnit: CBCM-DRZ > Europe
+    # Domain: chromepizzatest.com
+    # OrgUnit: CBCM testing > Policy Testing > Automated1
     # User belongs to an OU with ChromeDataRegionSetting set to Europe (2)
-    account = "drz-europe@chromepizzatest.com"
-    path = f"gs://{self.gsbucket}/secrets/ChromeDataRegionSettingEurope-password"
+    account = "account1@chromepizzatest.com"
+    path = f"gs://{self.gsbucket}/secrets/account1-password"
     cmd = r"gsutil cat " + path
     password = self.RunCommand(self.win_config["dc"], cmd).strip().decode()
 

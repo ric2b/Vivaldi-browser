@@ -11,6 +11,8 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "base/values.h"
 #include "net/base/load_states.h"
 #include "net/base/network_anonymization_key.h"
 #include "net/base/request_priority.h"
@@ -88,6 +90,8 @@ class HttpStreamPool::JobController : public HttpStreamPool::Job::Delegate,
   int RestartTunnelWithProxyAuth() override;
   void SetPriority(RequestPriority priority) override;
 
+  base::Value::Dict GetInfoAsValue() const;
+
  private:
   // Represents an alternative endpoint for the request.
   struct Alternative {
@@ -134,6 +138,9 @@ class HttpStreamPool::JobController : public HttpStreamPool::Job::Delegate,
   // Calls the request's client auth callback.
   void CallOnNeedsClientAuth(SSLCertRequestInfo* cert_info);
 
+  // Resets `job` and invokes the preconnect callback.
+  void ResetJobAndInvokePreconnectCallback(Job* job, int status);
+
   // Sets the result of `job`.
   void SetJobResult(Job* job, int status);
 
@@ -168,6 +175,8 @@ class HttpStreamPool::JobController : public HttpStreamPool::Job::Delegate,
   const std::optional<Alternative> alternative_;
 
   const NetLogWithSource net_log_;
+
+  const base::TimeTicks created_time_;
 
   // Fields specific to stream request.
   raw_ptr<HttpStreamRequest::Delegate> delegate_;

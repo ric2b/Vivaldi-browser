@@ -28,6 +28,7 @@ found in the LICENSE file.
 
     <!-- Sync UI constants -->
     <item type="id" name="passphrase_type_list" />
+    <item type="id" name="history_and_tabs_toggle"/>
 
     <!-- Keyboard shortcuts -->
     <item type="id" name="print_id" />
@@ -39,6 +40,8 @@ found in the LICENSE file.
     <item type="id" name="switch_keyboard_focus_row" />
     <item type="id" name="focus_bookmarks" />
     <item type="id" name="dev_tools" />
+    <item type="id" name="task_manager" />
+    <item type="id" name="esc_key" />
 
     <!-- Editor dialog -->
     <item type="id" name="editor_dialog_done_button" />
@@ -51,6 +54,7 @@ found in the LICENSE file.
     <item type="id" name="contextmenu_save_page" />
     <item type="id" name="contextmenu_share_page" />
     <item type="id" name="contextmenu_print_page" />
+    <item type="id" name="contextmenu_inspect_element" />
 
     <!-- Custom Tab Group -->
     <item type="id" name="contextmenu_open_in_new_chrome_tab" />
@@ -68,6 +72,7 @@ found in the LICENSE file.
     <item type="id" name="contextmenu_share_link" />
     <item type="id" name="contextmenu_direct_share_link" />
     <item type="id" name="contextmenu_read_later" />
+    <item type="id" name="contextmenu_show_interest_in_element" />
 
     <!--Image Group -->
     <item type="id" name="contextmenu_load_original_image" />
@@ -116,4 +121,12 @@ found in the LICENSE file.
     <!-- Custom Tabs -->
     <item type="id" name="view_id_tag_key" />
     <item type="id" name="custom_tabs_toolbar_tintable" />
+    <item type="id" name="custom_tabs_app_menu_item_id_0" />
+    <item type="id" name="custom_tabs_app_menu_item_id_1" />
+    <item type="id" name="custom_tabs_app_menu_item_id_2" />
+    <item type="id" name="custom_tabs_app_menu_item_id_3" />
+    <item type="id" name="custom_tabs_app_menu_item_id_4" />
+    <item type="id" name="custom_tabs_app_menu_item_id_5" />
+    <item type="id" name="custom_tabs_app_menu_item_id_6" />
+
 </resources>

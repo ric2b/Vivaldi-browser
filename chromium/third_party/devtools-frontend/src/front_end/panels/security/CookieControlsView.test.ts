@@ -31,7 +31,7 @@ describeWithMockConnection('CookieControlsView', () => {
 
     view.inputChanged(false, testSetting);
     assert.isFalse(testSetting.get());
-    assert.isTrue(reloadRequiredInfobarSpy.calledOnce);
+    sinon.assert.calledOnce(reloadRequiredInfobarSpy);
   });
 
   it('should invoke getAffectedUrlsForThirdPartyCookieMetadata upon construction', async () => {
@@ -41,7 +41,7 @@ describeWithMockConnection('CookieControlsView', () => {
     const getAffectedUrlsSpy = sinon.spy(target.storageAgent(), 'invoke_getAffectedUrlsForThirdPartyCookieMetadata');
     new Security.CookieControlsView.CookieControlsView(undefined, mockView);
 
-    assert.isTrue(getAffectedUrlsSpy.calledOnce);
+    sinon.assert.calledOnce(getAffectedUrlsSpy);
   });
 
   it('should invoke getAffectedUrlsForThirdPartyCookieMetadata when a resource is added', async () => {
@@ -60,6 +60,6 @@ describeWithMockConnection('CookieControlsView', () => {
         null);
     model.dispatchEventToListeners(SDK.ResourceTreeModel.Events.ResourceAdded, r);
 
-    assert.isTrue(getAffectedUrlsSpy.calledOnceWithExactly({firstPartyUrl: '', thirdPartyUrls: [resourceSite]}));
+    sinon.assert.calledOnceWithExactly(getAffectedUrlsSpy, {firstPartyUrl: '', thirdPartyUrls: [resourceSite]});
   });
 });

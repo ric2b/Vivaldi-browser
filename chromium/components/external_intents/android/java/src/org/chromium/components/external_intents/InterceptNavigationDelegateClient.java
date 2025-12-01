@@ -7,6 +7,7 @@ package org.chromium.components.external_intents;
 import android.app.Activity;
 
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 
@@ -21,7 +22,7 @@ public interface InterceptNavigationDelegateClient {
     WebContents getWebContents();
 
     /* Creates an ExternalNavigationHandler instance that is configured for this client. */
-    ExternalNavigationHandler createExternalNavigationHandler();
+    @Nullable ExternalNavigationHandler createExternalNavigationHandler();
 
     /* Gets a RedirectHandler instance that is associated with this client, creating it if
      * necessary. */
@@ -50,4 +51,20 @@ public interface InterceptNavigationDelegateClient {
      * @param loadUrlParams parameters of the URL to be loaded
      */
     void loadUrlIfPossible(LoadUrlParams loadUrlParams);
+
+    /* Returns true if the client hosting this tab is a PWA (WebAPK or TWA). */
+    boolean isTabInPWA();
+
+    /* Returns true if the client hosting this tab is a Browser. */
+    boolean isTabInBrowser();
+
+    /** Returns whether this Activity is currently in Android desktop windowing mode. */
+    boolean isInDesktopWindowingMode();
+
+    /**
+     * Starts the repareting process for this Tab. Reparenting is an async task that "moves" an
+     * existing tab into a separate Activity. Currently, only reparenting towards Chrome browser is
+     * supported.
+     */
+    void startReparentingTask();
 }

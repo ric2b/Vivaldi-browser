@@ -49,7 +49,6 @@ constexpr char kOpenid4vp10Protocol[] = "openid4vp1.0";
 constexpr char kPreviewProtocol[] = "preview";
 
 constexpr char kMdlDocumentType[] = "org.iso.18013.5.1.mDL";
-constexpr char kMdlNamespace[] = "org.iso.18013.5.1";
 
 constexpr char kOpenid4vpPathRegex[] =
     R"(\$\['org\.iso\.18013\.5\.1'\]\['([^\)]*)'\])";
@@ -74,7 +73,7 @@ const Value::Dict* FindSingleElementListEntry(const Value::Dict& dict,
   return list->front().GetIfDict();
 }
 
-// Returns whether an intertitial should be shown for a request which solely
+// Returns whether an interstitial should be shown for a request which solely
 // requests the passed-in mdoc data element.
 bool CanMdocDataElementBypassInterstitial(const std::string& data_element) {
   if (re2::RE2::FullMatch(data_element,
@@ -160,12 +159,11 @@ bool CanRequestCredentialBypassInterstitialForOpenid4vpProtocolWithDCQL(
       if (!claim_dict) {
         return std::nullopt;
       }
-      const std::string* namespace_str = claim_dict->FindString("namespace");
-      if (!namespace_str || *namespace_str != kMdlNamespace) {
+      const Value::List* paths = claim_dict->FindList("path");
+      if (!paths) {
         return std::nullopt;
       }
-
-      const std::string* claim_name = claim_dict->FindString("claim_name");
+      const std::string* claim_name = paths->back().GetIfString();
       if (!claim_name) {
         return std::nullopt;
       }
@@ -300,7 +298,7 @@ DigitalIdentityRequestImpl::CreateInstance(
 // static
 std::optional<InterstitialType>
 DigitalIdentityRequestImpl::ComputeInterstitialType(
-    const url::Origin& rp_origin,
+    RenderFrameHost& render_frame_host,
     const DigitalIdentityProvider* provider,
     const std::vector<ProtocolAndParsedRequest>& parsed_requests) {
   std::string dialog_param_value = base::GetFieldTrialParamValueByFeature(
@@ -317,7 +315,7 @@ DigitalIdentityRequestImpl::ComputeInterstitialType(
     return InterstitialType::kLowRisk;
   }
 
-  if (provider->IsLowRiskOrigin(rp_origin)) {
+  if (provider->IsLowRiskOrigin(render_frame_host)) {
     return std::nullopt;
   }
   return std::ranges::all_of(
@@ -395,7 +393,7 @@ void DigitalIdentityRequestImpl::CompleteRequestWithStatus(
 // is malformed, specifically if the request is using a mix between the legacy
 // and modern request formats.
 std::optional<Value> BuildGetRequest(
-    const std::vector<blink::mojom::DigitalCredentialRequestPtr>&
+    const std::vector<blink::mojom::DigitalCredentialGetRequestPtr>&
         digital_credential_requests,
     GetRequestFormat format) {
   const std::string request_key =
@@ -420,15 +418,22 @@ std::optional<Value> BuildGetRequest(
   return Value(std::move(out));
 }
 
-Value BuildCreateRequest(blink::mojom::DigitalCredentialRequestPtr request) {
-  auto result = Value::Dict();
-  result.Set("protocol", request->protocol);
-  result.Set("data", request->data->get_str());
-  return Value(std::move(result));
+Value BuildCreateRequest(
+    std::vector<blink::mojom::DigitalCredentialCreateRequestPtr>
+        digital_credential_requests) {
+  auto requests = Value::List();
+  for (const auto& request : digital_credential_requests) {
+    auto result = Value::Dict();
+    result.Set("protocol", request->protocol);
+    result.Set("data", std::move(request->data));
+    requests.Append(std::move(result));
+  }
+  Value::Dict out = Value::Dict().Set("requests", std::move(requests));
+  return Value(std::move(out));
 }
 
 void DigitalIdentityRequestImpl::Get(
-    std::vector<blink::mojom::DigitalCredentialRequestPtr>
+    std::vector<blink::mojom::DigitalCredentialGetRequestPtr>
         digital_credential_requests,
     GetRequestFormat format,
     GetCallback callback) {
@@ -514,7 +519,8 @@ void DigitalIdentityRequestImpl::Get(
 }
 
 void DigitalIdentityRequestImpl::Create(
-    blink::mojom::DigitalCredentialRequestPtr digital_credential_request,
+    std::vector<blink::mojom::DigitalCredentialCreateRequestPtr>
+        digital_credential_requests,
     CreateCallback callback) {
   if (!IsWebIdentityDigitalCredentialsCreationEnabled()) {
     std::move(callback).Run(RequestDigitalIdentityStatus::kError,
@@ -544,7 +550,7 @@ void DigitalIdentityRequestImpl::Create(
     return;
   }
 
-  if (digital_credential_request.is_null()) {
+  if (digital_credential_requests.empty()) {
     CompleteRequestWithError(RequestStatusForMetrics::kErrorNoRequests);
     return;
   }
@@ -556,22 +562,46 @@ void DigitalIdentityRequestImpl::Create(
     return;
   }
 
-  std::string protocol = digital_credential_request->protocol;
-  std::string request_json_string =
-      digital_credential_request->data->is_str()
-          ? digital_credential_request->data->get_str()
-          : "";
+  // Store the protocol to return it in tests when no digital wallet is
+  // available. Pick the first one arbitrarily since it covers most of the tests
+  // that send only one request.
+  std::string protocol = digital_credential_requests[0]->protocol;
 
   Value request_to_send =
-      BuildCreateRequest(std::move(digital_credential_request));
+      BuildCreateRequest(std::move(digital_credential_requests));
 
-  // TODO(crbug.com/378330032): consider using Value over mojo instead of string
-  // since the param is already a JSON object.
-  data_decoder::DataDecoder::ParseJsonIsolated(
-      std::move(request_json_string),
-      base::BindOnce(&DigitalIdentityRequestImpl::OnCreateRequestJsonParsed,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(protocol),
-                     std::move(request_to_send)));
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kUseFakeUIForDigitalIdentity)) {
+    // Post delayed task to enable testing abort+.
+    GetUIThreadTaskRunner()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DigitalIdentityRequestImpl::CompleteRequest,
+                       weak_ptr_factory_.GetWeakPtr(), protocol,
+                       DigitalIdentityProvider::DigitalCredential(
+                           protocol, Value(Value::Dict().Set(
+                                         "token", "fake_test_token")))),
+        base::Milliseconds(1));
+    return;
+  }
+
+  provider_ = GetContentClient()->browser()->CreateDigitalIdentityProvider();
+  if (!provider_) {
+    CompleteRequestWithError(RequestStatusForMetrics::kErrorOther);
+    return;
+  }
+
+  if (!render_frame_host().IsActive() ||
+      render_frame_host().GetVisibilityState() !=
+          content::PageVisibilityState::kVisible) {
+    CompleteRequestWithError(RequestStatusForMetrics::kErrorOther);
+    return;
+  }
+  // TODO(crbug.com/378330032): Instead of passing the protocol here, it should
+  // be read from the wallet response.
+  provider_->Create(WebContents::FromRenderFrameHost(&render_frame_host()),
+                    origin(), request_to_send,
+                    base::BindOnce(&DigitalIdentityRequestImpl::CompleteRequest,
+                                   weak_ptr_factory_.GetWeakPtr(), protocol));
 }
 
 void DigitalIdentityRequestImpl::Abort() {
@@ -622,8 +652,7 @@ void DigitalIdentityRequestImpl::OnGetRequestJsonParsed(
   }
 
   std::optional<InterstitialType> interstitial_type = ComputeInterstitialType(
-      render_frame_host().GetMainFrame()->GetLastCommittedOrigin(),
-      provider_.get(), parsed_requests);
+      render_frame_host(), provider_.get(), parsed_requests);
 
   if (!interstitial_type) {
     OnInterstitialDone(std::move(protocol), std::move(request_to_send),
@@ -640,48 +669,6 @@ void DigitalIdentityRequestImpl::OnGetRequestJsonParsed(
                          std::move(request_to_send)));
 }
 
-void DigitalIdentityRequestImpl::OnCreateRequestJsonParsed(
-    std::string protocol,
-    Value request_to_send,
-    data_decoder::DataDecoder::ValueOrError parsed_result) {
-  if (!parsed_result.has_value()) {
-    CompleteRequestWithError(RequestStatusForMetrics::kErrorInvalidJson);
-    return;
-  }
-
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseFakeUIForDigitalIdentity)) {
-    // Post delayed task to enable testing abort+.
-    GetUIThreadTaskRunner()->PostDelayedTask(
-        FROM_HERE,
-        base::BindOnce(&DigitalIdentityRequestImpl::CompleteRequest,
-                       weak_ptr_factory_.GetWeakPtr(), protocol,
-                       DigitalIdentityProvider::DigitalCredential(
-                           protocol, Value(Value::Dict().Set(
-                                         "token", "fake_test_token")))),
-        base::Milliseconds(1));
-    return;
-  }
-
-  provider_ = GetContentClient()->browser()->CreateDigitalIdentityProvider();
-  if (!provider_) {
-    CompleteRequestWithError(RequestStatusForMetrics::kErrorOther);
-    return;
-  }
-
-  if (!render_frame_host().IsActive() ||
-      render_frame_host().GetVisibilityState() !=
-          content::PageVisibilityState::kVisible) {
-    CompleteRequestWithError(RequestStatusForMetrics::kErrorOther);
-    return;
-  }
-
-  provider_->Create(
-      WebContents::FromRenderFrameHost(&render_frame_host()), origin(),
-      request_to_send,
-      base::BindOnce(&DigitalIdentityRequestImpl::CompleteRequest,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(protocol)));
-}
 
 void DigitalIdentityRequestImpl::OnInterstitialDone(
     std::optional<std::string> protocol,

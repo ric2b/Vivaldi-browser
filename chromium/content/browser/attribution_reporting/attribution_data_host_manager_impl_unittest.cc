@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "content/browser/attribution_reporting/attribution_data_host_manager_impl.h"
 
 #include <stddef.h>
@@ -562,11 +557,9 @@ TEST_F(AttributionDataHostManagerImplTest,
   // Non-whole-day expiry is invalid for `SourceType::kEvent`.
   source_data.expiry = base::Days(1) + base::Microseconds(1);
   source_data.aggregatable_report_window = source_data.expiry;
-  source_data.trigger_specs = attribution_reporting::TriggerSpecs(
-      SourceType::kEvent,
+  source_data.event_report_windows =
       *attribution_reporting::EventReportWindows::FromDefaults(
-          source_data.expiry, SourceType::kEvent),
-      attribution_reporting::MaxEventLevelReports());
+          source_data.expiry, SourceType::kEvent);
 
   {
     mojo::test::BadMessageObserver bad_message_observer;
@@ -814,8 +807,8 @@ TEST_F(AttributionDataHostManagerImplTest,
 
   source_data.destination_set = *DestinationSet::Create(
       {net::SchemefulSite::Deserialize("https://trigger2.example")});
-  data_host_remote->SourceDataAvailable(
-      reporting_origin, std::move(source_data), kViaServiceWorker);
+  data_host_remote->SourceDataAvailable(reporting_origin, source_data,
+                                        kViaServiceWorker);
 
   data_host_remote.reset();
 
@@ -828,8 +821,8 @@ TEST_F(AttributionDataHostManagerImplTest,
 
   source_data.destination_set = *DestinationSet::Create(
       {net::SchemefulSite::Deserialize("https://trigger3.example")});
-  data_host_remote->SourceDataAvailable(
-      reporting_origin, std::move(source_data), kViaServiceWorker);
+  data_host_remote->SourceDataAvailable(reporting_origin, source_data,
+                                        kViaServiceWorker);
 
   data_host_remote.reset();
 

@@ -135,9 +135,9 @@ bool AddVivaldiToPins(std::vector<std::string>* pins) {
 bool GnomeLaunchBar::IsGnomeRunning() {
   auto env = base::Environment::Create();
 
-  std::string var;
-  if (env->GetVar("XDG_CURRENT_DESKTOP", &var)) {
-    return var == "GNOME";
+  auto var = env->GetVar("XDG_CURRENT_DESKTOP");
+  if (var.has_value()) {
+    return var.value() == "GNOME";
   }
 
   return false;

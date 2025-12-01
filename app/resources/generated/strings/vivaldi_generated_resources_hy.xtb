@@ -416,6 +416,9 @@
 <translation id="8004582292198964060">Բրաուզեր</translation>
 <translation id="8018313076035239964">Կառավարեք՝ ինչ տեղեկույթ կարող են վեբ կայքերն օգտագործել և ինչ բովանդակություն կարող են Ձեզ ցույց տալ</translation>
 <translation id="8071432093239591881">Տպել որպես պատկեր</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# էջանիշ}
+        other {# էջանիշ}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> ԿԲ</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Ընթանում է ներբեռնում} other {Ընթանում են ներբեռնումներ}}</translation>

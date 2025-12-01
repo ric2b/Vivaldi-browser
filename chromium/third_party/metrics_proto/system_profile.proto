@@ -636,8 +636,8 @@ message SystemProfileProto {
   // Next tag: 32
   message Stability {
     // Deprecated Jan 2025.
-    reserved 1, 23;
-    reserved "incremental_uptime_sec", "uptime_sec";
+    reserved 23;
+    reserved "uptime_sec";
 
     // Logged on Android only as of late Q2 2022. Used by only Android WebView.
     // Other platforms should use Stability.Counts2.
@@ -1168,6 +1168,7 @@ message SystemProfileProto {
     MASKED_DOMAIN_LIST = 65;
     AMOUNT_EXTRACTION_HEURISTIC_REGEXES = 66;
     FINGERPRINTING_PROTECTION_FILTER_RULES = 67;
+    TRANSLATE_KIT = 68;
   }
 
   // Information about what Chrome components are registered and at which
@@ -1444,13 +1445,13 @@ message SystemProfileProto {
       // text boxes for a specific node on-demand, asynchronously.
       INLINE_TEXT_BOXES = 2;
 
-      // The accessibility tree will contain extra accessibility
-      // attributes typically only needed by screen readers and other
-      // assistive technology for blind users. Examples include text style
-      // attributes, table cell information, live region properties, range
-      // values, and relationship attributes. Note that the HTML tag, ID, class,
-      // and display attributes will also be included.
-      SCREEN_READER = 3;
+      // The accessibility tree will contain extra accessibility attributes
+      // typically only needed by advanced assistive technologies. Examples
+      // include text style attributes, table cell information, live region
+      // properties, range values, and relationship attributes. Some HTML
+      // properties, including HTML tag, ID, class, and display attributes will
+      // also be included.
+      EXTENDED_PROPERTIES = 3;
 
       // The accessibility tree will contain all the HTML attributes for all
       // accessibility nodes that come from web content. This effectively dumps
@@ -1478,6 +1479,13 @@ message SystemProfileProto {
 
       // The accessibility tree will have the main node annotated.
       ANNOTATE_MAIN_NODE = 9;
+
+      // From platform is is filtered out and is never present.
+      // FROM_PLATFORM = 10;
+
+      // The accessibility tree will contain additional properties needed only
+      // by screen readers.
+      SCREEN_READER = 11;
     }
     // Indicates which accessibility mode flags are set.
     repeated AXMode enabled_modes = 1 [packed = true];

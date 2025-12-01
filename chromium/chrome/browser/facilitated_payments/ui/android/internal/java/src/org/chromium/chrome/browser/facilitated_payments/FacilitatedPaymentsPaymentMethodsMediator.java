@@ -28,10 +28,14 @@ import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymen
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.BANK_ACCOUNT;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.CONTINUE_BUTTON;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.ItemType.EWALLET;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.PixAccountLinkingPromptProperties.ACCEPT_BUTTON_CALLBACK;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.PixAccountLinkingPromptProperties.DECLINE_BUTTON_CALLBACK;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SCREEN;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SCREEN_VIEW_MODEL;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SURVIVES_NAVIGATION;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SequenceScreen.ERROR_SCREEN;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SequenceScreen.FOP_SELECTOR;
+import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SequenceScreen.PIX_ACCOUNT_LINKING_PROMPT;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SequenceScreen.PROGRESS_SCREEN;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.SequenceScreen.UNINITIALIZED;
 import static org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.VISIBLE_STATE;
@@ -46,9 +50,11 @@ import android.graphics.Bitmap;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.autofill.AutofillImageFetcherFactory;
-import org.chromium.chrome.browser.autofill.AutofillUiUtils;
-import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
+import org.chromium.chrome.browser.autofill.AutofillUiUtils.IconSpecs;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsComponent.Delegate;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.AdditionalInfoProperties;
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.BankAccountProperties;
@@ -57,6 +63,7 @@ import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPayme
 import org.chromium.chrome.browser.facilitated_payments.FacilitatedPaymentsPaymentMethodsProperties.HeaderProperties;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.components.autofill.ImageSize;
+import org.chromium.components.autofill.ImageType;
 import org.chromium.components.autofill.payments.AccountType;
 import org.chromium.components.autofill.payments.BankAccount;
 import org.chromium.components.autofill.payments.Ewallet;
@@ -74,6 +81,7 @@ import java.util.Optional;
  * Contains the logic for the facilitated payments component. It sets the state of the model and
  * reacts to events like clicks.
  */
+@NullMarked
 class FacilitatedPaymentsPaymentMethodsMediator {
     static final String PIX_BANK_ACCOUNT_TRANSACTION_LIMIT = "500";
 
@@ -95,6 +103,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
     private Profile mProfile;
     private InputProtector mInputProtector = new InputProtector();
 
+    @Initializer
     void initialize(Context context, PropertyModel model, Delegate delegate, Profile profile) {
         mContext = context;
         mModel = model;
@@ -130,6 +139,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         screenItems.add(0, buildPixHeader(mContext));
         screenItems.add(buildPixFooter());
 
+        mModel.set(SURVIVES_NAVIGATION, false);
         mModel.set(VISIBLE_STATE, SHOWN);
         mInputProtector.markShowTime();
     }
@@ -157,6 +167,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         screenItems.add(0, buildEwalletHeader(mContext, ewallets));
         screenItems.add(buildEwalletFooter(ewallets));
 
+        mModel.set(SURVIVES_NAVIGATION, false);
         mModel.set(VISIBLE_STATE, SHOWN);
         mInputProtector.markShowTime();
     }
@@ -173,6 +184,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         // again.
         mModel.set(VISIBLE_STATE, SWAPPING_SCREEN);
         mModel.set(SCREEN, PROGRESS_SCREEN);
+        mModel.set(SURVIVES_NAVIGATION, false);
         mModel.set(VISIBLE_STATE, SHOWN);
     }
 
@@ -183,6 +195,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         mModel.set(SCREEN, ERROR_SCREEN);
         // Set error screen properties and show the screen.
         mModel.get(SCREEN_VIEW_MODEL).set(PRIMARY_BUTTON_CALLBACK, v -> dismiss());
+        mModel.set(SURVIVES_NAVIGATION, false);
         mModel.set(VISIBLE_STATE, SHOWN);
     }
 
@@ -193,6 +206,22 @@ class FacilitatedPaymentsPaymentMethodsMediator {
 
     public void onUiEvent(@UiEvent int uiEvent) {
         mDelegate.onUiEvent(uiEvent);
+    }
+
+    void showPixAccountLinkingPrompt() {
+        // Set {@link VISIBLE_STATE} to the placeholder state which is a no-op, and then update the
+        // screen to the Pix account linking prompt. Finally update {@link VISIBLE_STATE} to show
+        // the new screen.
+        mModel.set(VISIBLE_STATE, SWAPPING_SCREEN);
+        mModel.set(SCREEN, PIX_ACCOUNT_LINKING_PROMPT);
+        // Set Pix account linking prompt properties and show the prompt.
+        mModel.get(SCREEN_VIEW_MODEL)
+                .set(ACCEPT_BUTTON_CALLBACK, v -> mDelegate.onPixAccountLinkingPromptAccepted());
+        mModel.get(SCREEN_VIEW_MODEL)
+                .set(DECLINE_BUTTON_CALLBACK, v -> mDelegate.onPixAccountLinkingPromptDeclined());
+        // Prevent the bottom sheet from closing during page navigations.
+        mModel.set(SURVIVES_NAVIGATION, true);
+        mModel.set(VISIBLE_STATE, SHOWN);
     }
 
     @VisibleForTesting
@@ -335,7 +364,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
                 .with(
                         BANK_ACCOUNT_PAYMENT_RAIL,
                         context.getString(R.string.settings_manage_other_financial_accounts_pix)
-                                + "  •")
+                                + "  •  ")
                 .with(
                         BANK_ACCOUNT_TYPE,
                         getBankAccountTypeString(context, bankAccount.getAccountType()))
@@ -359,10 +388,13 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         Optional<Bitmap> ewalletIconOptional = Optional.empty();
         if (ewallet.getDisplayIconUrl() != null && ewallet.getDisplayIconUrl().isValid()) {
             ewalletIconOptional =
-                    PersonalDataManagerFactory.getForProfile(mProfile)
-                            .getCustomImageForAutofillSuggestionIfAvailable(
+                    AutofillImageFetcherFactory.getForProfile(mProfile)
+                            .getImageIfAvailable(
                                     ewallet.getDisplayIconUrl(),
-                                    AutofillUiUtils.CardIconSpecs.create(context, ImageSize.LARGE));
+                                    IconSpecs.create(
+                                            context,
+                                            ImageType.CREDIT_CARD_ART_IMAGE,
+                                            ImageSize.LARGE));
         }
         if (ewalletIconOptional.isPresent()) {
             ewalletModelBuilder.with(EWALLET_ICON_BITMAP, ewalletIconOptional.get());
@@ -434,7 +466,7 @@ class FacilitatedPaymentsPaymentMethodsMediator {
         }
     }
 
-    private static ListItem findOnlyItemOfType(ModelList screenItems, int targetType) {
+    private static @Nullable ListItem findOnlyItemOfType(ModelList screenItems, int targetType) {
         // Look for exactly one match.
         ListItem foundItem = null;
         for (ListItem item : screenItems) {

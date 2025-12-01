@@ -24,10 +24,10 @@
 #include "test/gmock.h"
 #include "test/gtest.h"
 
-using rtc::VideoBroadcaster;
-using rtc::VideoSinkWants;
 using ::webrtc::FakeVideoRenderer;
-using FrameSize = rtc::VideoSinkWants::FrameSize;
+using ::webrtc::VideoBroadcaster;
+using ::webrtc::VideoSinkWants;
+using FrameSize = webrtc::VideoSinkWants::FrameSize;
 
 using ::testing::AllOf;
 using ::testing::Eq;
@@ -35,7 +35,7 @@ using ::testing::Field;
 using ::testing::Mock;
 using ::testing::Optional;
 
-class MockSink : public rtc::VideoSinkInterface<webrtc::VideoFrame> {
+class MockSink : public webrtc::VideoSinkInterface<webrtc::VideoFrame> {
  public:
   void OnFrame(const webrtc::VideoFrame&) override {}
 
@@ -50,7 +50,7 @@ TEST(VideoBroadcasterTest, frame_wanted) {
   EXPECT_FALSE(broadcaster.frame_wanted());
 
   FakeVideoRenderer sink;
-  broadcaster.AddOrUpdateSink(&sink, rtc::VideoSinkWants());
+  broadcaster.AddOrUpdateSink(&sink, webrtc::VideoSinkWants());
   EXPECT_TRUE(broadcaster.frame_wanted());
 
   broadcaster.RemoveSink(&sink);
@@ -62,12 +62,12 @@ TEST(VideoBroadcasterTest, OnFrame) {
 
   FakeVideoRenderer sink1;
   FakeVideoRenderer sink2;
-  broadcaster.AddOrUpdateSink(&sink1, rtc::VideoSinkWants());
-  broadcaster.AddOrUpdateSink(&sink2, rtc::VideoSinkWants());
+  broadcaster.AddOrUpdateSink(&sink1, webrtc::VideoSinkWants());
+  broadcaster.AddOrUpdateSink(&sink2, webrtc::VideoSinkWants());
   static int kWidth = 100;
   static int kHeight = 50;
 
-  rtc::scoped_refptr<webrtc::I420Buffer> buffer(
+  webrtc::scoped_refptr<webrtc::I420Buffer> buffer(
       webrtc::I420Buffer::Create(kWidth, kHeight));
   // Initialize, to avoid warnings on use of initialized values.
   webrtc::I420Buffer::SetBlack(buffer.get());
@@ -87,7 +87,7 @@ TEST(VideoBroadcasterTest, OnFrame) {
   EXPECT_EQ(1, sink1.num_rendered_frames());
   EXPECT_EQ(2, sink2.num_rendered_frames());
 
-  broadcaster.AddOrUpdateSink(&sink1, rtc::VideoSinkWants());
+  broadcaster.AddOrUpdateSink(&sink1, webrtc::VideoSinkWants());
   broadcaster.OnFrame(frame);
   EXPECT_EQ(2, sink1.num_rendered_frames());
   EXPECT_EQ(3, sink2.num_rendered_frames());
@@ -221,7 +221,7 @@ TEST(VideoBroadcasterTest, SinkWantsBlackFrames) {
   wants2.black_frames = false;
   broadcaster.AddOrUpdateSink(&sink2, wants2);
 
-  rtc::scoped_refptr<webrtc::I420Buffer> buffer(
+  webrtc::scoped_refptr<webrtc::I420Buffer> buffer(
       webrtc::I420Buffer::Create(100, 200));
   // Makes it not all black.
   buffer->InitializeData();

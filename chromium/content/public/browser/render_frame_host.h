@@ -27,6 +27,7 @@
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "net/cookies/cookie_setting_override.h"
+#include "net/storage_access_api/status.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/cross_origin_embedder_policy.h"
 #include "services/network/public/cpp/permissions_policy/permissions_policy_declaration.h"
@@ -1048,6 +1049,11 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   virtual void EnableWebRtcEventLogOutput(int lid, int output_period_ms) = 0;
   virtual void DisableWebRtcEventLogOutput(int lid) = 0;
 
+  // Start/stop data channel output from WebRTC on this RFH for the peer
+  // connection identified locally within the RFH using the ID `lid`.
+  virtual void EnableWebRtcDataChannelLogOutput(int lid) = 0;
+  virtual void DisableWebRtcDataChannelLogOutput(int lid) = 0;
+
   // Return true if onload has been executed in the renderer in the main frame.
   virtual bool IsDocumentOnLoadCompletedInMainFrame() = 0;
 
@@ -1158,6 +1164,17 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // partitioning).
   // See https://explainers-by-googlers.github.io/partitioned-popins/
   virtual bool ShouldPartitionAsPopin() const = 0;
+
+  // Returns true if this RenderFrameHost has access to unpartitioned storage
+  // and cookies.
+  virtual bool DoesDocumentHaveStorageAccess() = 0;
+
+  // Sets the Storage Access API status for this RenderFrameHost.
+  //
+  // Note: this is not trusted by the browser. This input alone does not grant
+  // access to unpartitioned cookies/storage.
+  virtual void SetStorageAccessApiStatus(
+      net::StorageAccessApiStatus status) = 0;
 
  private:
   // This interface should only be implemented inside content.

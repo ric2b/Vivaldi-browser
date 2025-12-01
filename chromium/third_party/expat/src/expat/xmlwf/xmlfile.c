@@ -15,6 +15,7 @@
    Copyright (c) 2017      Rhodri James <rhodri@wildebeest.org.uk>
    Copyright (c) 2019      David Loffredo <loffredo@steptools.com>
    Copyright (c) 2021      Donghee Na <donghee.na@python.org>
+   Copyright (c) 2024      Hanno Böck <hanno@gentoo.org>
    Licensed under the MIT license:
 
    Permission is  hereby granted,  free of charge,  to any  person obtaining
@@ -55,12 +56,19 @@
 #include "xmltchar.h"
 #include "filemap.h"
 
+/* Function "read": */
 #if defined(_MSC_VER)
 #  include <io.h>
-#endif
-
-#ifdef HAVE_UNISTD_H
+/* https://msdn.microsoft.com/en-us/library/wyssk1bs(v=vs.100).aspx */
+#  define EXPAT_read _read
+#  define EXPAT_read_count_t int
+#  define EXPAT_read_req_t unsigned int
+#else /* POSIX */
 #  include <unistd.h>
+/* https://pubs.opengroup.org/onlinepubs/009695399/functions/read.html */
+#  define EXPAT_read read
+#  define EXPAT_read_count_t ssize_t
+#  define EXPAT_read_req_t size_t
 #endif
 
 #ifndef O_BINARY
@@ -91,7 +99,8 @@ reportError(XML_Parser parser, const XML_Char *filename) {
              filename, XML_GetErrorLineNumber(parser),
              XML_GetErrorColumnNumber(parser), message);
   else
-    ftprintf(stderr, T("%s: (unknown message %d)\n"), filename, code);
+    ftprintf(stderr, T("%s: (unknown message %u)\n"), filename,
+             (unsigned int)code);
 }
 
 /* This implementation will give problems on files larger than INT_MAX. */
@@ -190,7 +199,7 @@ processStream(const XML_Char *filename, XML_Parser parser) {
     }
   }
   for (;;) {
-    int nread;
+    EXPAT_read_count_t nread;
     char *buf = (char *)XML_GetBuffer(parser, g_read_size_bytes);
     if (! buf) {
       if (filename != NULL)
@@ -199,14 +208,14 @@ processStream(const XML_Char *filename, XML_Parser parser) {
                filename != NULL ? filename : T("xmlwf"));
       return 0;
     }
-    nread = read(fd, buf, g_read_size_bytes);
+    nread = EXPAT_read(fd, buf, (EXPAT_read_req_t)g_read_size_bytes);
     if (nread < 0) {
       tperror(filename != NULL ? filename : T("STDIN"));
       if (filename != NULL)
         close(fd);
       return 0;
     }
-    if (XML_ParseBuffer(parser, nread, nread == 0) == XML_STATUS_ERROR) {
+    if (XML_ParseBuffer(parser, (int)nread, nread == 0) == XML_STATUS_ERROR) {
       reportError(parser, filename != NULL ? filename : T("STDIN"));
       if (filename != NULL)
         close(fd);

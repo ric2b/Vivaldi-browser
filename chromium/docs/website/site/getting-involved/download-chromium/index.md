@@ -9,8 +9,9 @@ title: Download Chromium
 You can test Chrome builds or Chromium builds. Chrome builds have the most
 infrastructure for analyzing crashes and reporting bugs. They also auto-update as new
 releases occur, which makes them a good choice for most uses.
-[Chrome Canary](https://tools.google.com/dlpage/chromesxs) is available for Windows
-and Mac and autoupdates daily. [Other channels](/getting-involved/dev-channel/) (Dev
+[Chrome Canary](https://www.google.com/chrome/canary) is available for Windows
+and Mac and autoupdates daily.
+[Other channels](/getting-involved/chrome-release-channels/) (Dev
 and Beta) are available.
 
 [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing/) builds and

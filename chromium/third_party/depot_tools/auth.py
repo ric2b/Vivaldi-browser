@@ -189,16 +189,6 @@ class Authenticator(object):
 
     ## Private methods.
 
-    def _run_luci_auth_login(self):
-        """Run luci-auth login.
-
-        Returns:
-            AccessToken with credentials.
-        """
-        logging.debug('Running luci-auth login')
-        subprocess2.check_call(['luci-auth', 'login', '-scopes', self._scopes])
-        return self._get_luci_auth_token()
-
     def _get_luci_auth_token(self, use_id_token=False):
         logging.debug('Running luci-auth token')
         if use_id_token:

@@ -13,15 +13,11 @@
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
 
 @interface ConsistencyAccountChooserMediator () <
-    ChromeAccountManagerServiceObserver,
     IdentityManagerObserverBridgeDelegate> {
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
   raw_ptr<signin::IdentityManager> _identityManager;
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
@@ -48,9 +44,6 @@
 
     CHECK(accountManagerService);
     _accountManagerService = accountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
 
     _selectedIdentity = selectedIdentity;
 
@@ -67,7 +60,6 @@
 - (void)disconnect {
   _identityManagerObserver.reset();
   _identityManager = nullptr;
-  _accountManagerServiceObserver.reset();
   _accountManagerService = nullptr;
 }
 
@@ -154,50 +146,14 @@
   [self.consumer reloadIdentityForIdentityItemConfigurator:configurator];
 }
 
-- (void)handleIdentityListChanged {
+#pragma mark -  IdentityManagerObserver
+
+- (void)onAccountsOnDeviceChanged {
   [self loadIdentityItemConfigurators];
   [self.consumer reloadAllIdentities];
 }
 
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
-}
-
-#pragma mark -  IdentityManagerObserver
-
-- (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
   [self handleIdentityUpdated:identity];

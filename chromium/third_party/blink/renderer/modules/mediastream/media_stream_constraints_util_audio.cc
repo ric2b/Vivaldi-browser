@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/mediastream/media_stream_constraints_util_audio.h"
 
 #include <algorithm>
@@ -56,12 +51,6 @@ using VoiceIsolationTypeSet =
     blink::media_constraints::DiscreteSet<VoiceIsolationType>;
 using IntRangeSet = blink::media_constraints::NumericRangeSet<int>;
 using StringSet = blink::media_constraints::DiscreteSet<std::string>;
-
-// The presence of a MediaStreamAudioSource object indicates whether the source
-// in question is currently in use, or not. This convenience enum helps
-// identifying whether a source is available and, if so, whether it has audio
-// processing enabled or disabled.
-enum class SourceType { kNone, kUnprocessed, kNoApmProcessed, kApmProcessed };
 
 // The sample size is set to 16 due to the Signed-16 format representation.
 int32_t GetSampleSize() {
@@ -125,35 +114,44 @@ struct Score {
   std::tuple<double, bool, EcModeScore, int> score;
 };
 
-// This class represents the output of DeviceContainer::InfoFromSource and is
-// used to obtain information regarding an active source, if that exists.
+// Information regarding an active source, if that exists.
 class SourceInfo {
  public:
-  SourceInfo(SourceType type,
-             const AudioProcessingProperties& properties,
-             std::optional<int> channels,
-             std::optional<int> sample_rate,
-             std::optional<double> latency)
-      : type_(type),
-        properties_(properties),
+  static std::optional<SourceInfo> FromSource(
+      blink::MediaStreamAudioSource* source) {
+    if (!source) {
+      return std::nullopt;
+    }
+
+    media::AudioParameters source_parameters = source->GetAudioParameters();
+    std::optional<AudioProcessingProperties> properties =
+        source->GetAudioProcessingProperties();
+    CHECK(properties);
+
+    return SourceInfo(*properties, source_parameters.channels(),
+                      source_parameters.sample_rate(),
+                      source_parameters.GetBufferDuration().InSecondsF());
+  }
+
+  const AudioProcessingProperties& properties() const { return properties_; }
+  int channels() const { return channels_; }
+  int sample_rate() const { return sample_rate_; }
+  double latency() const { return latency_; }
+
+ private:
+  SourceInfo(const AudioProcessingProperties& properties,
+             int channels,
+             int sample_rate,
+             double latency)
+      : properties_(properties),
         channels_(std::move(channels)),
         sample_rate_(std::move(sample_rate)),
         latency_(latency) {}
 
-  bool HasActiveSource() { return type_ != SourceType::kNone; }
-
-  SourceType type() { return type_; }
-  const AudioProcessingProperties& properties() { return properties_; }
-  const std::optional<int>& channels() { return channels_; }
-  const std::optional<int>& sample_rate() { return sample_rate_; }
-  const std::optional<double>& latency() { return latency_; }
-
- private:
-  const SourceType type_;
   const AudioProcessingProperties properties_;
-  const std::optional<int> channels_;
-  const std::optional<int> sample_rate_;
-  const std::optional<double> latency_;
+  const int channels_;
+  const int sample_rate_;
+  const double latency_;
 };
 
 // Container for each independent boolean constrainable property.
@@ -316,12 +314,11 @@ class NumericDiscreteSetContainer {
 
   const char* ApplyConstraintSet(const C& constraint) {
     auto constraint_set = NumericRangeSet<T>::FromConstraint(constraint);
-    for (auto it = allowed_values_.begin(); it != allowed_values_.end();) {
-      if (!constraint_set.Contains(*it))
-        it = allowed_values_.erase(it);
-      else
-        ++it;
-    }
+    auto to_remove = std::ranges::remove_if(
+        allowed_values_, [&constraint_set](const auto& t) {
+          return !constraint_set.Contains(t);
+        });
+    allowed_values_.erase(to_remove.begin(), to_remove.end());
 
     return IsEmpty() ? constraint.GetName() : nullptr;
   }
@@ -400,17 +397,17 @@ class EchoCancellationContainer {
         is_device_capture_(true) {}
 
   EchoCancellationContainer(Vector<EchoCancellationType> allowed_values,
-                            bool has_active_source,
+                            std::optional<SourceInfo> source_info,
                             bool is_device_capture,
                             media::AudioParameters device_parameters,
-                            AudioProcessingProperties properties,
                             bool is_reconfiguration_allowed)
       : ec_mode_allowed_values_(
             EchoCancellationTypeSet(std::move(allowed_values))),
         device_parameters_(device_parameters),
         is_device_capture_(is_device_capture) {
-    if (!has_active_source)
+    if (!source_info) {
       return;
+    }
 
     // If HW echo cancellation is used, reconfiguration is not always supported
     // and only the current values are allowed. Otherwise, allow all possible
@@ -427,17 +424,17 @@ class EchoCancellationContainer {
         // Allowing it when the system echo cancellation is enforced via flag,
         // for evaluation purposes.
         media::IsSystemEchoCancellationEnforced() ||
-        properties.echo_cancellation_type !=
+        source_info->properties().echo_cancellation_type !=
             EchoCancellationType::kEchoCancellationSystem;
 #endif
     if (is_reconfiguration_allowed && is_aec_reconfiguration_supported) {
       return;
     }
 
-    ec_mode_allowed_values_ =
-        EchoCancellationTypeSet({properties.echo_cancellation_type});
+    ec_mode_allowed_values_ = EchoCancellationTypeSet(
+        {source_info->properties().echo_cancellation_type});
     ec_allowed_values_ =
-        BoolSet({properties.echo_cancellation_type !=
+        BoolSet({source_info->properties().echo_cancellation_type !=
                  EchoCancellationType::kEchoCancellationDisabled});
   }
 
@@ -729,7 +726,7 @@ class ProcessingBasedContainer {
   // related |parameters.effects()|, and (b) any combination of processing
   // properties settings.
   static ProcessingBasedContainer CreateApmProcessedContainer(
-      const SourceInfo& source_info,
+      std::optional<SourceInfo> source_info,
       mojom::blink::MediaStreamType stream_type,
       bool is_device_capture,
       const media::AudioParameters& device_parameters,
@@ -754,7 +751,7 @@ class ProcessingBasedContainer {
   // allowed by the |parameters.effects()|, or none, while (b) all other
   // processing properties settings cannot be enabled.
   static ProcessingBasedContainer CreateNoApmProcessedContainer(
-      const SourceInfo& source_info,
+      std::optional<SourceInfo> source_info,
       bool is_device_capture,
       const media::AudioParameters& device_parameters,
       bool is_reconfiguration_allowed) {
@@ -777,7 +774,7 @@ class ProcessingBasedContainer {
   // allowed by the |parameters.effects()|, or none, while (c) all processing
   // properties settings cannot be enabled.
   static ProcessingBasedContainer CreateUnprocessedContainer(
-      const SourceInfo& source_info,
+      std::optional<SourceInfo> source_info,
       bool is_device_capture,
       const media::AudioParameters& device_parameters,
       bool is_reconfiguration_allowed) {
@@ -848,7 +845,6 @@ class ProcessingBasedContainer {
              std::optional<int> /* requested_buffer_size */,
              int /* num_channels */>
   SelectSettingsAndScore(const ConstraintSet& constraint_set,
-                         bool should_disable_hardware_noise_suppression,
                          const media::AudioParameters& parameters) const {
     DCHECK(!IsEmpty());
 
@@ -952,7 +948,7 @@ class ProcessingBasedContainer {
                            IntRangeSet sample_size_range,
                            Vector<int> channels_set,
                            IntRangeSet sample_rate_range,
-                           SourceInfo source_info,
+                           std::optional<SourceInfo> source_info,
                            bool is_device_capture,
                            media::AudioParameters device_parameters,
                            bool is_reconfiguration_allowed)
@@ -969,9 +965,8 @@ class ProcessingBasedContainer {
           EchoCancellationType::kEchoCancellationSystem);
     }
     echo_cancellation_container_ = EchoCancellationContainer(
-        std::move(echo_cancellation_types), source_info.HasActiveSource(),
-        is_device_capture, device_parameters, source_info.properties(),
-        is_reconfiguration_allowed);
+        std::move(echo_cancellation_types), source_info, is_device_capture,
+        device_parameters, is_reconfiguration_allowed);
 
     auto_gain_control_container_ =
         AutoGainControlContainer(auto_gain_control_set);
@@ -983,9 +978,8 @@ class ProcessingBasedContainer {
     // Allow the full set of supported values when the device is not open or
     // when the candidate settings would open the device using an unprocessed
     // source.
-    if (!source_info.HasActiveSource() ||
-        (is_reconfiguration_allowed &&
-         processing_type_ == ProcessingType::kUnprocessed)) {
+    if (!source_info || (is_reconfiguration_allowed &&
+                         processing_type_ == ProcessingType::kUnprocessed)) {
       return;
     }
 
@@ -994,19 +988,16 @@ class ProcessingBasedContainer {
     // for this is that opening multiple instances of the APM is costly.
     // TODO(crbug.com/1147928): Consider removing this restriction.
     auto_gain_control_container_ = AutoGainControlContainer(
-        BoolSet({source_info.properties().auto_gain_control}));
+        BoolSet({source_info->properties().auto_gain_control}));
 
-    noise_suppression_container_ =
-        BooleanContainer(BoolSet({source_info.properties().noise_suppression}));
+    noise_suppression_container_ = BooleanContainer(
+        BoolSet({source_info->properties().noise_suppression}));
 
-    DCHECK(source_info.channels());
-    channels_container_ = IntegerDiscreteContainer({*source_info.channels()});
-    DCHECK(source_info.sample_rate() != std::nullopt);
+    channels_container_ = IntegerDiscreteContainer({source_info->channels()});
     sample_rate_container_ = IntegerRangeContainer(
-        IntRangeSet::FromValue(*source_info.sample_rate()));
-    DCHECK(source_info.latency() != std::nullopt);
+        IntRangeSet::FromValue(source_info->sample_rate()));
     latency_container_ =
-        DoubleRangeContainer(DoubleRangeSet::FromValue(*source_info.latency()));
+        DoubleRangeContainer(DoubleRangeSet::FromValue(source_info->latency()));
   }
 
   // The allowed latency is expressed in a range latencies in seconds.
@@ -1084,8 +1075,8 @@ class DeviceContainer {
     // must be initialized such that their only supported values correspond to
     // the source settings. Otherwise, the containers are initialized to contain
     // all possible values.
-    SourceInfo source_info =
-        InfoFromSource(capability.source(), device_parameters_.effects());
+    std::optional<SourceInfo> source_info =
+        SourceInfo::FromSource(capability.source());
 
     // Three variations of the processing-based container. Each variant is
     // associated to a different type of audio processing configuration, namely
@@ -1104,8 +1095,9 @@ class DeviceContainer {
               is_reconfiguration_allowed));
       DCHECK_EQ(processing_based_containers_.size(), 3u);
 
-    if (source_info.type() == SourceType::kNone)
-      return;
+      if (!source_info) {
+        return;
+      }
 
     blink::MediaStreamAudioSource* source = capability.source();
     boolean_containers_[kDisableLocalEcho] =
@@ -1133,8 +1125,7 @@ class DeviceContainer {
     if (failed_constraint_name)
       return failed_constraint_name;
 
-    for (size_t i = 0; i < kNumBooleanContainerIds; ++i) {
-      auto& info = kBooleanPropertyContainerInfoMap[i];
+    for (const auto& info : kBooleanPropertyContainerInfoMap) {
       failed_constraint_name =
           boolean_containers_[info.index].ApplyConstraintSet(
               constraint_set.*(info.constraint_member));
@@ -1144,15 +1135,15 @@ class DeviceContainer {
 
     // For each processing based container, apply the constraints and only fail
     // if all of them failed.
-    for (auto it = processing_based_containers_.begin();
-         it != processing_based_containers_.end();) {
-      DCHECK(!it->IsEmpty());
-      failed_constraint_name = it->ApplyConstraintSet(constraint_set);
-      if (failed_constraint_name)
-        it = processing_based_containers_.erase(it);
-      else
-        ++it;
-    }
+    auto to_remove = std::ranges::remove_if(
+        processing_based_containers_,
+        [&constraint_set, &failed_constraint_name](auto& t) {
+          DCHECK(!t.IsEmpty());
+          failed_constraint_name = t.ApplyConstraintSet(constraint_set);
+          return !!failed_constraint_name;
+        });
+    processing_based_containers_.erase(to_remove.begin(), to_remove.end());
+
     if (processing_based_containers_.empty()) {
       DCHECK_NE(failed_constraint_name, nullptr);
       return failed_constraint_name;
@@ -1164,7 +1155,6 @@ class DeviceContainer {
   std::tuple<Score, AudioCaptureSettings> SelectSettingsAndScore(
       const ConstraintSet& constraint_set,
       bool is_destkop_source,
-      bool should_disable_hardware_noise_suppression,
       std::string default_device_id) const {
     DCHECK(!IsEmpty());
     Score score(0.0);
@@ -1205,9 +1195,7 @@ class DeviceContainer {
 
       auto [container_score, container_properties, requested_buffer_size,
             num_channels] =
-          container.SelectSettingsAndScore(
-              constraint_set, should_disable_hardware_noise_suppression,
-              device_parameters_);
+          container.SelectSettingsAndScore(constraint_set, device_parameters_);
       if (container_score > best_score) {
         best_score = container_score;
         best_properties = container_properties;
@@ -1219,13 +1207,6 @@ class DeviceContainer {
 
     DCHECK_NE(best_container, nullptr);
     score += best_score;
-
-    // Update |properties.disable_hw_noise_suppression| depending on a related
-    // experiment that can force-disable HW noise suppression.
-    best_properties.disable_hw_noise_suppression =
-        should_disable_hardware_noise_suppression &&
-        best_properties.echo_cancellation_type ==
-            EchoCancellationType::kEchoCancellationDisabled;
 
     // The score at this point can be considered complete only when the settings
     // are compared against the default device id, which is used as arbitrator
@@ -1269,48 +1250,6 @@ class DeviceContainer {
           {kDisableLocalEcho, &ConstraintSet::disable_local_echo},
           {kRenderToAssociatedSink, &ConstraintSet::render_to_associated_sink}};
 
-  // Utility function to determine which version of this class should be
-  // allocated depending on the |source| provided.
-  static SourceInfo InfoFromSource(blink::MediaStreamAudioSource* source,
-                                   int effects) {
-    SourceType source_type;
-    AudioProcessingProperties properties;
-    auto* processed_source = ProcessedLocalAudioSource::From(source);
-    std::optional<int> channels;
-    std::optional<int> sample_rate;
-    std::optional<double> latency;
-
-    if (!source) {
-      source_type = SourceType::kNone;
-    } else {
-      media::AudioParameters source_parameters = source->GetAudioParameters();
-      channels = source_parameters.channels();
-      sample_rate = source_parameters.sample_rate();
-      latency = source_parameters.GetBufferDuration().InSecondsF();
-      properties = *(source->GetAudioProcessingProperties());
-
-      if (!processed_source) {
-        source_type = SourceType::kUnprocessed;
-        properties.DisableDefaultProperties();
-
-        // It is possible, however, that the HW echo canceller is enabled. In
-        // such case the property for echo cancellation type should be updated
-        // accordingly.
-        if (effects & media::AudioParameters::ECHO_CANCELLER) {
-          properties.echo_cancellation_type =
-              EchoCancellationType::kEchoCancellationSystem;
-        }
-      } else {
-        source_type = properties.EchoCancellationIsWebRtcProvided()
-                          ? SourceType::kApmProcessed
-                          : SourceType::kNoApmProcessed;
-        properties = processed_source->audio_processing_properties();
-      }
-    }
-
-    return SourceInfo(source_type, properties, channels, sample_rate, latency);
-  }
-
   media::AudioParameters device_parameters_;
   StringContainer device_id_container_;
   StringContainer group_id_container_;
@@ -1350,23 +1289,23 @@ class CandidatesContainer {
 
   const char* ApplyConstraintSet(const ConstraintSet& constraint_set) {
     const char* latest_failed_constraint_name = nullptr;
-    for (auto it = devices_.begin(); it != devices_.end();) {
-      DCHECK(!it->IsEmpty());
-      auto* failed_constraint_name = it->ApplyConstraintSet(constraint_set);
-      if (failed_constraint_name) {
-        latest_failed_constraint_name = failed_constraint_name;
-        it = devices_.erase(it);
-      } else {
-        ++it;
-      }
-    }
+    auto to_remove = std::ranges::remove_if(
+        devices_, [&constraint_set, &latest_failed_constraint_name](auto& t) {
+          DCHECK(!t.IsEmpty());
+          const auto* failed_constraint_name =
+              t.ApplyConstraintSet(constraint_set);
+          if (failed_constraint_name) {
+            latest_failed_constraint_name = failed_constraint_name;
+          }
+          return !!failed_constraint_name;
+        });
+    devices_.erase(to_remove.begin(), to_remove.end());
     return IsEmpty() ? latest_failed_constraint_name : nullptr;
   }
 
   std::tuple<Score, AudioCaptureSettings> SelectSettingsAndScore(
       const ConstraintSet& constraint_set,
-      bool is_desktop_source,
-      bool should_disable_hardware_noise_suppression) const {
+      bool is_desktop_source) const {
     DCHECK(!IsEmpty());
     // Make a copy of the settings initially provided, to track the default
     // settings.
@@ -1374,8 +1313,7 @@ class CandidatesContainer {
     Score best_score(-1.0);
     for (const auto& candidate : devices_) {
       auto [score, settings] = candidate.SelectSettingsAndScore(
-          constraint_set, is_desktop_source,
-          should_disable_hardware_noise_suppression, default_device_id_);
+          constraint_set, is_desktop_source, default_device_id_);
 
       score += default_device_id_ == settings.device_id();
       if (score > best_score) {
@@ -1450,7 +1388,6 @@ AudioCaptureSettings SelectSettingsAudioCapture(
     const AudioDeviceCaptureCapabilities& capabilities,
     const MediaConstraints& constraints,
     mojom::blink::MediaStreamType stream_type,
-    bool should_disable_hardware_noise_suppression,
     bool is_reconfiguration_allowed) {
   if (capabilities.empty())
     return AudioCaptureSettings();
@@ -1482,8 +1419,7 @@ AudioCaptureSettings SelectSettingsAudioCapture(
   AudioCaptureSettings settings;
   std::tie(std::ignore, settings) = candidates.SelectSettingsAndScore(
       constraints.Basic(),
-      media_stream_source == blink::kMediaStreamSourceDesktop,
-      should_disable_hardware_noise_suppression);
+      media_stream_source == blink::kMediaStreamSourceDesktop);
 
   return settings;
 }
@@ -1527,13 +1463,10 @@ AudioCaptureSettings SelectSettingsAudioCapture(
 
   AudioDeviceCaptureCapabilities capabilities = {
       AudioDeviceCaptureCapability(source)};
-  bool should_disable_hardware_noise_suppression =
-      !(source->device().input.effects() &
-        media::AudioParameters::NOISE_SUPPRESSION);
 
   return SelectSettingsAudioCapture(capabilities, constraints,
                                     source->device().type,
-                                    should_disable_hardware_noise_suppression);
+                                    /*is_reconfiguration_allowed=*/false);
 }
 
 MODULES_EXPORT base::expected<Vector<blink::AudioCaptureSettings>, std::string>
@@ -1541,14 +1474,12 @@ SelectEligibleSettingsAudioCapture(
     const AudioDeviceCaptureCapabilities& capabilities,
     const MediaConstraints& constraints,
     mojom::blink::MediaStreamType stream_type,
-    bool should_disable_hardware_noise_suppression,
     bool is_reconfiguration_allowed) {
   Vector<AudioCaptureSettings> settings;
   std::string failed_constraint_name;
   for (const auto& device : capabilities) {
     const auto device_settings = SelectSettingsAudioCapture(
-        {device}, constraints, stream_type,
-        should_disable_hardware_noise_suppression, is_reconfiguration_allowed);
+        {device}, constraints, stream_type, is_reconfiguration_allowed);
     if (device_settings.HasValue()) {
       settings.push_back(device_settings);
     } else {

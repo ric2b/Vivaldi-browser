@@ -20,7 +20,7 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/language_detection/core/constants.h"
 #include "components/prefs/pref_value_map.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/translate/core/browser/translate_manager.h"
 #include "content/public/browser/tts_controller.h"
 #include "content/public/test/test_web_ui.h"
@@ -746,6 +746,19 @@ TEST_F(ReadAnythingUntrustedPageHandlerTest,
   OnLanguageDetermined(language_detection::kUnknownLanguageCode);
 
   EXPECT_CALL(page_, SetLanguageCode("")).Times(1);
+}
+
+TEST_F(ReadAnythingUntrustedPageHandlerTest,
+       OnLanguageDetermined_UnknownLanguageSendsEmptyEveryTime) {
+  handler_ = std::make_unique<TestReadAnythingUntrustedPageHandler>(
+      page_.BindAndGetRemote(), test_web_ui_.get());
+  EXPECT_CALL(page_, SetLanguageCode).Times(1);
+
+  OnLanguageDetermined(language_detection::kUnknownLanguageCode);
+  OnLanguageDetermined(language_detection::kUnknownLanguageCode);
+  OnLanguageDetermined(language_detection::kUnknownLanguageCode);
+
+  EXPECT_CALL(page_, SetLanguageCode("")).Times(3);
 }
 
 TEST_F(ReadAnythingUntrustedPageHandlerTest, AccessibilityEventReceived) {

@@ -2303,6 +2303,44 @@ TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInStaticLibrary) {
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }
 
+TEST_F(NinjaCBinaryTargetWriterTest, ModuleMapInSourceSet) {
+  TestWithScope setup;
+  Err err;
+
+  TestTarget target(setup, "//foo:bar", Target::SOURCE_SET);
+  target.sources().push_back(SourceFile("//foo/bar.cc"));
+  target.sources().push_back(SourceFile("//foo/bar.modulemap"));
+  target.source_types_used().Set(SourceFile::SOURCE_CPP);
+  target.source_types_used().Set(SourceFile::SOURCE_MODULEMAP);
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaCBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "cflags =\n"
+      "cflags_cc =\n"
+      "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = bar\n"
+      "\n"
+      "build obj/foo/bar.bar.o: cxx ../../foo/bar.cc | "
+      "obj/foo/bar.bar.pcm\n"
+      "  source_file_part = bar.cc\n"
+      "  source_name_part = bar\n"
+      "build obj/foo/bar.bar.pcm: cxx_module ../../foo/bar.modulemap\n"
+      "  source_file_part = bar.modulemap\n"
+      "  source_name_part = bar\n"
+      "\n"
+      "build phony/foo/bar: phony obj/foo/bar.bar.o\n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
 // Test linking of targets containing Swift modules.
 TEST_F(NinjaCBinaryTargetWriterTest, SwiftModule) {
   Err err;
@@ -2805,6 +2843,54 @@ TEST_F(NinjaCBinaryTargetWriterTest, Pool) {
       "  output_extension =\n"
       "  output_dir =\n"
       "  pool = foo_pool\n";
+  std::string out_str = out.str();
+  EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
+}
+
+TEST_F(NinjaCBinaryTargetWriterTest, AsyncNonLinkableDeps) {
+  Err err;
+  TestWithScope setup;
+  BuildSettings* settings = setup.build_settings();
+  settings->set_async_non_linkable_deps(true);
+
+  Target datadep(setup.settings(), Label(SourceDir("//foo/"), "datadep"));
+  datadep.set_output_type(Target::ACTION);
+  datadep.visibility().SetPublic();
+  datadep.SetToolchain(setup.toolchain());
+  ASSERT_TRUE(datadep.OnResolved(&err));
+
+  Target target(setup.settings(), Label(SourceDir("//foo/"), "bar"));
+  target.sources().push_back(SourceFile("//foo/source.cc"));
+  target.set_output_type(Target::EXECUTABLE);
+  target.visibility().SetPublic();
+  target.SetToolchain(setup.toolchain());
+  target.data_deps().push_back(LabelTargetPair(&datadep));
+  ASSERT_TRUE(target.OnResolved(&err));
+
+  std::ostringstream out;
+  NinjaBinaryTargetWriter writer(&target, out);
+  writer.Run();
+
+  const char expected[] =
+      "defines =\n"
+      "include_dirs =\n"
+      "root_out_dir = .\n"
+      "target_gen_dir = gen/foo\n"
+      "target_out_dir = obj/foo\n"
+      "target_output_name = bar\n"
+      "\n"
+      "build obj/foo/bar.source.o: cxx ../../foo/source.cc\n"
+      "  source_file_part = source.cc\n"
+      "  source_name_part = source\n"
+      "\n"
+      "build ./bar: link obj/foo/bar.source.o |@ phony/foo/datadep\n"
+      "  ldflags =\n"
+      "  libs =\n"
+      "  frameworks =\n"
+      "  swiftmodules =\n"
+      "  output_extension =\n"
+      "  output_dir =\n";
+
   std::string out_str = out.str();
   EXPECT_EQ(expected, out_str) << expected << "\n" << out_str;
 }

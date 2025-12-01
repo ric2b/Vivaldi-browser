@@ -991,12 +991,11 @@ static av_cold int ffwmf_close_decoder(AVCodecContext* avctx) {
 }
 
 static int ffwmf_decode_frame(AVCodecContext* avctx,
-                              void* data,
+                              AVFrame* frame,
                               int* got_frame_ptr,
                               AVPacket* avpkt) {
   int status = 0;
   WMFDecodeContext* wmf = avctx->priv_data;
-  AVFrame* frame = data;
   bool consumed_packet = false;
 
   wmf->decode_frame_calls++;
@@ -1093,7 +1092,7 @@ const FFCodec ffwmf_aac_decoder = {
     .priv_data_size = sizeof(WMFDecodeContext),
     .init = ffwmf_init_decoder,
     .close = ffwmf_close_decoder,
-    .cb.decode = ffwmf_decode_frame,
+    FF_CODEC_DECODE_CB(ffwmf_decode_frame),
     .p.sample_fmts =
         (const enum AVSampleFormat[]){AV_SAMPLE_FMT_S32, AV_SAMPLE_FMT_S16,
                                       AV_SAMPLE_FMT_NONE},

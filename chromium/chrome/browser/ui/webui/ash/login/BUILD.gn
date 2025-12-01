@@ -187,6 +187,8 @@ static_library("login") {
   public_deps = [
     "//ash/public/cpp",
     "//ash/webui/common:chrome_os_webui_config",
+    "//ash/webui/common/backend",
+    "//ash/webui/common/mojom:webui_syslog_emitter",
     "//base",
     "//chrome/browser:browser_public_dependencies",
     "//chrome/browser/ash/accessibility",
@@ -273,6 +275,7 @@ static_library("login") {
     "//chrome/browser/resources/chromeos/login:resources",
     "//chrome/browser/resources/gaia_auth_host:resources",
     "//chrome/browser/ui/ash/login",
+    "//chrome/browser/ui/webui/about",
     "//chrome/browser/ui/webui/ash/cellular_setup",
     "//chrome/browser/ui/webui/ash/internet",
     "//chrome/browser/ui/webui/ash/login/debug",

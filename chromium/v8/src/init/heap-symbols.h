@@ -165,7 +165,8 @@
   V(_, enumerable_string, "enumerable")                    \
   V(_, configurable_string, "configurable")                \
   V(_, value_string, "value")                              \
-  V(_, writable_string, "writable")
+  V(_, writable_string, "writable")                        \
+  V(_, length_string, "length")
 
 // Generated with the following Python script:
 // ```
@@ -786,6 +787,7 @@
   V(_, RangeError_string, "RangeError")                                       \
   V(_, raw_json_string, "rawJSON")                                            \
   V(_, raw_string, "raw")                                                     \
+  V(_, read_string, "read")                                                   \
   V(_, ReferenceError_string, "ReferenceError")                               \
   V(_, ReflectGet_string, "Reflect.get")                                      \
   V(_, ReflectHas_string, "Reflect.has")                                      \
@@ -871,6 +873,7 @@
   V(_, weekOfYear_string, "weekOfYear")                                       \
   V(_, with_string, "with")                                                   \
   V(_, word_string, "word")                                                   \
+  V(_, written_string, "written")                                             \
   V(_, yearMonthFromFields_string, "yearMonthFromFields")                     \
   V(_, year_string, "year")                                                   \
   V(_, years_string, "years")
@@ -947,7 +950,6 @@
 // These Names have to be allocated consecutively for fast checks,
 #define INTERNALIZED_STRING_FOR_PROTECTOR_LIST_GENERATOR(V, _) \
   V(_, constructor_string, "constructor")                      \
-  V(_, length_string, "length")                                \
   V(_, next_string, "next")                                    \
   V(_, resolve_string, "resolve")                              \
   V(_, then_string, "then")                                    \
@@ -1040,6 +1042,7 @@
   F(SCAVENGER_SCAVENGE_UPDATE_REFS)                     \
   F(SCAVENGER_SCAVENGE_WEAK)                            \
   F(SCAVENGER_SCAVENGE_FINALIZE)                        \
+  F(SCAVENGER_SCAVENGE_RESTORE_AND_QUARANTINE_PINNED)   \
   F(SCAVENGER_SWEEP_ARRAY_BUFFERS)                      \
   F(SCAVENGER_TRACED_HANDLES_COMPUTE_WEAKNESS_PARALLEL) \
   F(SCAVENGER_TRACED_HANDLES_RESET_PARALLEL)
@@ -1153,6 +1156,7 @@
   F(MINOR_MS_BACKGROUND_SWEEPING)                       \
   F(MINOR_MS_BACKGROUND_MARKING_CLOSURE)                \
   F(SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL)             \
+  F(SCAVENGER_BACKGROUND_QUARANTINED_PAGE_SWEEPING)     \
   F(SCAVENGER_BACKGROUND_TRACED_HANDLES_RESET_PARALLEL) \
   /* LAST_BACKGROUND_SCOPE = */                         \
   F(SCAVENGER_BACKGROUND_TRACED_HANDLES_COMPUTE_WEAKNESS_PARALLEL)
@@ -1167,6 +1171,7 @@
   F(MINOR_MS_BACKGROUND_MARKING_CLOSURE)                \
   SCAVENGER_MAIN_THREAD_SCOPES(F)                       \
   F(SCAVENGER_BACKGROUND_SCAVENGE_PARALLEL)             \
+  F(SCAVENGER_BACKGROUND_QUARANTINED_PAGE_SWEEPING)     \
   F(SCAVENGER_BACKGROUND_TRACED_HANDLES_RESET_PARALLEL) \
   F(SCAVENGER_BACKGROUND_TRACED_HANDLES_COMPUTE_WEAKNESS_PARALLEL)
 

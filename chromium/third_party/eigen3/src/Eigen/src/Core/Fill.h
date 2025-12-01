@@ -92,7 +92,8 @@ struct eigen_fill_impl<Xpr, /*use_fill*/ true> {
 
 template <typename Xpr>
 struct eigen_memset_helper {
-  static constexpr bool value = std::is_trivial<typename Xpr::Scalar>::value && eigen_fill_helper<Xpr>::value;
+  static constexpr bool value =
+      std::is_trivially_copyable<typename Xpr::Scalar>::value && eigen_fill_helper<Xpr>::value;
 };
 
 template <typename Xpr>

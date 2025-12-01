@@ -41,18 +41,18 @@ class Profile;
 namespace arc {
 
 // The file exists only when ARC container is in use.
-constexpr const char kGeneratedBuildPropertyFilePath[] =
+inline constexpr char kGeneratedBuildPropertyFilePath[] =
     "/run/arc/host_generated/build.prop";
 
 // The file exists only when ARCVM is in use.
-constexpr const char kGeneratedCombinedPropertyFilePathVm[] =
+inline constexpr char kGeneratedCombinedPropertyFilePathVm[] =
     "/run/arcvm/host_generated/combined.prop";
 
 // Maximum number of auto-resumes for ARCVM /data migration. When this number of
 // auto-resumes have been already attempted but the migration has not finished,
 // ARC is blocked and the user needs to manually trigger the resume by clicking
 // a notification.
-constexpr int kArcVmDataMigrationMaxAutoResumeCount = 3;
+inline constexpr int kArcVmDataMigrationMaxAutoResumeCount = 3;
 
 class ArcDataRemover;
 class ArcFastAppReinstallStarter;

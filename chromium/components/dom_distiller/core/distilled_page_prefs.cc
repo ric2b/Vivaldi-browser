@@ -40,8 +40,9 @@ void DistilledPagePrefs::RegisterProfilePrefs(
       prefs::kFont, static_cast<int32_t>(mojom::FontFamily::kSansSerif),
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
   registry->RegisterDoublePref(prefs::kFontScale, kDefaultFontScale);
+  // Vivaldi VAB-11242
   registry->RegisterBooleanPref(
-      prefs::kReaderForAccessibility, false,
+      prefs::kReaderForAccessibility, true,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
 }
 

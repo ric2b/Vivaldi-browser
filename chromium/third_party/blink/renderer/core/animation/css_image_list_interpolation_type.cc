@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/animation/css_image_interpolation_type.h"
 #include "third_party/blink/renderer/core/animation/image_list_property_functions.h"
 #include "third_party/blink/renderer/core/animation/list_interpolation_functions.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
@@ -114,7 +115,7 @@ InterpolationValue CSSImageListInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSImageListInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState*,
+    const StyleResolverState&,
     ConversionCheckers&) const {
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value && identifier_value->GetValueID() == CSSValueID::kNone)
@@ -169,7 +170,7 @@ void CSSImageListInterpolationType::Composite(
     double underlying_fraction,
     const InterpolationValue& value,
     double interpolation_fraction) const {
-  underlying_value_owner.Set(*this, value);
+  underlying_value_owner.Set(this, value);
 }
 
 void CSSImageListInterpolationType::ApplyStandardPropertyValue(

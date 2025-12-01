@@ -76,6 +76,8 @@
 #import "app/vivaldi_apptools.h"
 #import "ios/chrome/browser/settings/ui_bundled/bandwidth/dataplan_usage_table_view_controller.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
+#import "prefs/vivaldi_pref_names.h"
+#import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -94,6 +96,7 @@ typedef NS_ENUM(NSInteger, SectionIdentifier) {
 
   // Vivaldi
   SectionIdentifierPreloadWebpage,
+  SectionIdentifierBlockExternalApps,
   // End Vivaldi
 
 };
@@ -117,6 +120,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   // Vivaldi
   ItemTypePreloadWebpage,
   ItemTypePreloadWebpageFooter,
+  ItemTypeBlockExternalApps,
   // End Vivaldi
 
 };
@@ -159,6 +163,7 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   // Vivaldi
   // Updatable Items.
   TableViewDetailIconItem* _preloadWebpagesDetailItem;
+  TableViewDetailIconItem* _blockExternalAppsDetailItem;
   // End Vivaldi
 }
 
@@ -185,6 +190,13 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 
 // The item related to the Incognito interstitial setting.
 @property(nonatomic, strong) TableViewSwitchItem* incognitoInterstitialItem;
+
+// Vivaldi
+// Accessor for the Block External Apps pref.
+@property(nonatomic, strong) PrefBackedBoolean* blockExternalAppsPref;
+// The item related to the Block External Apps Opening setting.
+@property(nonatomic, strong) TableViewSwitchItem* blockExternalAppsItem;
+// End Vivaldi
 
 @end
 
@@ -248,6 +260,12 @@ const char kSyncSettingsURL[] = "settings://open_sync";
       _prefObserverBridge->ObserveChangesForPreference(
           prefs::kNetworkPredictionSetting,
           &_prefChangeRegistrar);
+
+      // Initialize the Block External Apps preference
+      _blockExternalAppsPref = [[PrefBackedBoolean alloc]
+          initWithPrefService:prefService
+                     prefName:vivaldiprefs::kVivaldiBlockExternalApps];
+      [_blockExternalAppsPref setObserver:self];
     } // End Vivaldi
 
   }
@@ -352,6 +370,11 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   // Note:(prio@vivaldi.com) Skip Google Service Footer and add other Vivaldi
   // specific settings if needed.
   if (IsVivaldiRunning()) {
+    // Block External Apps item
+    [model addSectionWithIdentifier:SectionIdentifierBlockExternalApps];
+    [model addItem:self.blockExternalAppsItem
+        toSectionWithIdentifier:SectionIdentifierBlockExternalApps];
+    // Preload Webpages item
     [model addSectionWithIdentifier:SectionIdentifierPreloadWebpage];
     [model addItem:[self preloadWebpagesItem]
         toSectionWithIdentifier:SectionIdentifierPreloadWebpage];
@@ -600,6 +623,12 @@ const char kSyncSettingsURL[] = "settings://open_sync";
   _incognitoInterstitialPref.observer = nil;
   _incognitoInterstitialPref = nil;
 
+  if (IsVivaldiRunning()) {
+    [_blockExternalAppsPref stop];
+    _blockExternalAppsPref.observer = nil;
+    _blockExternalAppsPref = nil;
+  } // End Vivaldi
+
   // Remove pref changes registrations.
   _prefChangeRegistrar.RemoveAll();
   _localStateChangeRegistrar.Reset();
@@ -721,6 +750,15 @@ const char kSyncSettingsURL[] = "settings://open_sync";
                   action:@selector(didTapIncognitoLockDisabledInfoButton:)
         forControlEvents:UIControlEventTouchUpInside];
   }
+  // Vivaldi
+  else if (itemType == ItemTypeBlockExternalApps) {
+    TableViewSwitchCell* switchCell =
+        base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+    [switchCell.switchView
+               addTarget:self
+                  action:@selector(blockExternalAppsSwitchTapped:)
+        forControlEvents:UIControlEventTouchUpInside];
+  } // End Vivaldi
   return cell;
 }
 
@@ -788,6 +826,12 @@ const char kSyncSettingsURL[] = "settings://open_sync";
 
   self.incognitoInterstitialItem.on = self.incognitoInterstitialPref.value;
   [self reconfigureCellsForItems:@[ self.incognitoInterstitialItem ]];
+
+  if (IsVivaldiRunning() && self.blockExternalAppsPref) {
+    self.blockExternalAppsItem.on = self.blockExternalAppsPref.value;
+    [self reconfigureCellsForItems:@[ self.blockExternalAppsItem ]];
+  } // End Vivaldi
+
 }
 
 #pragma mark - TableViewLinkHeaderFooterItemDelegate
@@ -1050,6 +1094,25 @@ const char kSyncSettingsURL[] = "settings://open_sync";
         settingPref:prefs::kNetworkPredictionSetting
               title:preloadTitle];
   [self.navigationController pushViewController:controller animated:YES];
+}
+
+- (TableViewSwitchItem*)blockExternalAppsItem {
+  if (!_blockExternalAppsItem) {
+    _blockExternalAppsItem = [[TableViewSwitchItem alloc]
+        initWithType:ItemTypeBlockExternalApps];
+    _blockExternalAppsItem.text =
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_BLOCK_EXTERNAL_APP);
+    _blockExternalAppsItem.detailText =
+      l10n_util::GetNSString(IDS_IOS_PRIVACY_BLOCK_EXTERNAL_APP_DETAIL);
+    _blockExternalAppsItem.on = self.blockExternalAppsPref.value;
+    _blockExternalAppsItem.enabled = YES;
+    _blockExternalAppsItem.accessibilityTraits |= UIAccessibilityTraitButton;
+  }
+  return _blockExternalAppsItem;
+}
+
+- (void)blockExternalAppsSwitchTapped:(UISwitch*)switchView {
+  self.blockExternalAppsPref.value = switchView.on;
 }
 // End Vivaldi
 

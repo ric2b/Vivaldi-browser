@@ -12,8 +12,8 @@
 #include "base/time/time.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "importer/viv_importer.h"
 #include "importer/viv_importer_utils.h"
 
@@ -401,7 +401,7 @@ struct wand_field_entry {
 bool OperaImporter::ImportWand_ReadEntryHTML(
     std::string::iterator* buffer,
     const std::string::iterator& buffer_end,
-    std::vector<importer::ImportedPasswordForm>* passwords,
+    std::vector<user_data_importer::ImportedPasswordForm>* passwords,
     bool ignore_entry) {
   std::u16string guid;
   std::u16string date_used;
@@ -464,9 +464,9 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
   rep.ClearUsername();
   rep.ClearPassword();
 
-  importer::ImportedPasswordForm password;
+  user_data_importer::ImportedPasswordForm password;
 
-  password.scheme = importer::ImportedPasswordForm::Scheme::kHtml;
+  password.scheme = user_data_importer::ImportedPasswordForm::Scheme::kHtml;
 
   password.url = GURL(url).ReplaceComponents(rep);
   if (!password.url.is_valid())
@@ -493,7 +493,7 @@ bool OperaImporter::ImportWand_ReadEntryHTML(
 bool OperaImporter::ImportWand_ReadEntryAuth(
     std::string::iterator* buffer,
     const std::string::iterator& buffer_end,
-    std::vector<importer::ImportedPasswordForm>* passwords,
+    std::vector<user_data_importer::ImportedPasswordForm>* passwords,
     bool ignore_entry) {
   std::u16string guid;
   std::u16string date_used;
@@ -550,11 +550,11 @@ bool OperaImporter::ImportWand_ReadEntryAuth(
   rep.ClearUsername();
   rep.ClearPassword();
 
-  importer::ImportedPasswordForm password;
+  user_data_importer::ImportedPasswordForm password;
 
-  password.scheme = importer::ImportedPasswordForm::Scheme::kHtml;
+  password.scheme = user_data_importer::ImportedPasswordForm::Scheme::kHtml;
   if (http_auth || mail_url)
-    password.scheme = importer::ImportedPasswordForm::Scheme::kBasic;
+    password.scheme = user_data_importer::ImportedPasswordForm::Scheme::kBasic;
 
   password.url = GURL(url8).ReplaceComponents(rep);
   password.signon_realm = password.url.DeprecatedGetOriginAsURL().spec();
@@ -700,7 +700,7 @@ bool OperaImporter::ImportWand(std::string* error) {
   if (wand_version_ < 5 || wand_version_ > 6)
     return WandFormatError(error);
 
-  std::vector<importer::ImportedPasswordForm> passwords;
+  std::vector<user_data_importer::ImportedPasswordForm> passwords;
 
   uint32_t masterpass_used = 0;
   if (!WandReadUint32(&wand_buffer, wand_buffer_end, &masterpass_used))
@@ -772,7 +772,7 @@ bool OperaImporter::ImportWand(std::string* error) {
   }
 
   if (!cancelled()) {
-    for (std::vector<importer::ImportedPasswordForm>::iterator it =
+    for (std::vector<user_data_importer::ImportedPasswordForm>::iterator it =
              passwords.begin();
          it < passwords.end(); it++)
       bridge_->SetPasswordForm(*it);

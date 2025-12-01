@@ -188,6 +188,16 @@ const CFunctionInfo* FunctionTemplateInfo::GetCSignature(Isolate* isolate,
 }
 
 // static
+void ObjectTemplateInfo::SealAndPrepareForPromotionToReadOnly(
+    Isolate* isolate, DirectHandle<ObjectTemplateInfo> info) {
+  if (info->should_promote_to_read_only()) return;
+  CHECK(!HeapLayout::InReadOnlySpace(*info));
+
+  info->EnsureHasSerialNumber(isolate);
+  info->set_should_promote_to_read_only(true);
+}
+
+// static
 DirectHandle<DictionaryTemplateInfo> DictionaryTemplateInfo::Create(
     Isolate* isolate, const v8::MemorySpan<const std::string_view>& names) {
   DirectHandle<FixedArray> property_names = isolate->factory()->NewFixedArray(
@@ -237,7 +247,7 @@ DirectHandle<JSObject> DictionaryTemplateInfo::NewInstance(
     DirectHandle<NativeContext> context,
     DirectHandle<DictionaryTemplateInfo> self,
     const MemorySpan<MaybeLocal<Value>>& property_values) {
-  Isolate* isolate = context->GetIsolate();
+  Isolate* isolate = Isolate::Current();
   DirectHandle<FixedArray> property_names(self->property_names(), isolate);
 
   const int property_names_len = property_names->length();

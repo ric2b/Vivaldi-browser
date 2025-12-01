@@ -89,9 +89,50 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "ui/gfx/android/android_surface_control_compat.h"
 #endif
+
 namespace viz {
 
 namespace {
+
+#if !BUILDFLAG(IS_APPLE)
+DBG_FLAG_FBOOL("delegated.fd.usage", usage_every_frame)
+
+void RecordFDUsageUMA() {
+  static uint64_t sReportUsageFrameCounter = 0;
+  sReportUsageFrameCounter++;
+  constexpr uint32_t kReportEveryNFrames = 60 * 60 * 5;
+  if (((sReportUsageFrameCounter % kReportEveryNFrames) != 0) &&
+      !usage_every_frame()) {
+    return;
+  }
+
+  base::TimeDelta delta_time_taken;
+  int fd_max;
+  int active_fd_count;
+  int rlim_cur;
+
+  if (!GatherFDStats(&delta_time_taken, &fd_max, &active_fd_count, &rlim_cur)) {
+    return;
+  }
+
+  static constexpr base::TimeDelta kHistogramMinTime = base::Microseconds(5);
+  static constexpr base::TimeDelta kHistogramMaxTime = base::Milliseconds(10);
+  static constexpr int kHistogramTimeBuckets = 50;
+  int percentage_usage_int = (active_fd_count * 100) / fd_max;
+  UMA_HISTOGRAM_PERCENTAGE("Viz.FileDescriptorTracking.PercentageUsed",
+                           percentage_usage_int);
+  UMA_HISTOGRAM_COUNTS_100000("Viz.FileDescriptorTracking.NumActive",
+                              active_fd_count);
+  UMA_HISTOGRAM_COUNTS_100000("Viz.FileDescriptorTracking.NumSoftMax",
+                              rlim_cur);
+  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
+      "Viz.FileDescriptorTracking.TimeToCompute", delta_time_taken,
+      kHistogramMinTime, kHistogramMaxTime, kHistogramTimeBuckets);
+
+  DBG_LOG("delegated.fd.usage", "FD usage: %d / %d - time us: %f",
+          active_fd_count, fd_max, delta_time_taken.InMicrosecondsF());
+}
+#endif
 
 #if !BUILDFLAG(IS_MAC)
 constexpr base::TimeDelta kAllowedDeltaFromFuture = base::Milliseconds(16);
@@ -504,11 +545,10 @@ void Display::InitializeRenderer() {
   }
 #if BUILDFLAG(IS_WIN)
   const bool prevent_merging_surfaces_to_root_pass =
-      features::IsDelegatedCompositingEnabled() &&
+      IsDelegatedCompositingSupportedAndEnabled(
+          output_surface_->capabilities().dc_support_level) &&
       features::kDelegatedCompositingModeParam.Get() ==
-          features::DelegatedCompositingMode::kLimitToUi &&
-      output_surface_->capabilities().dc_support_level >=
-          OutputSurface::DCSupportLevel::kDCompTexture;
+          features::DelegatedCompositingMode::kLimitToUi;
 #else
   const bool prevent_merging_surfaces_to_root_pass = false;
 #endif
@@ -817,6 +857,10 @@ OverdrawTracker::OverdrawTimeSeries Display::StopTrackingOverdraw() {
 bool Display::DrawAndSwap(const DrawAndSwapParams& params) {
   TRACE_EVENT0("viz", "Display::DrawAndSwap");
   VIZ_HIT_PATH("DrawAndSwap");
+#if !BUILDFLAG(IS_APPLE)
+  RecordFDUsageUMA();
+#endif
+
   if (debug_settings_->show_aggregated_damage !=
       aggregator_->HasFrameAnnotator()) {
     if (debug_settings_->show_aggregated_damage) {
@@ -1447,7 +1491,9 @@ void Display::SetNeedsOneBeginFrame() {
 void Display::SetPreferredFrameInterval(base::TimeDelta interval) {
 #if BUILDFLAG(IS_ANDROID)
   if (OutputSurfaceSupportsSetFrameRate()) {
-    SetFrameIntervalOnOutputSurface(interval);
+    float interval_s = interval.InSecondsF();
+    float frame_rate = interval_s == 0 ? 0 : (1 / interval_s);
+    SetFrameIntervalOnOutputSurface({.frame_rate = frame_rate});
     return;
   }
 #endif
@@ -1481,10 +1527,9 @@ bool Display::OutputSurfaceSupportsSetFrameRate() {
          gfx::SurfaceControl::SupportsSetFrameRate();
 }
 
-void Display::SetFrameIntervalOnOutputSurface(base::TimeDelta interval) {
-  float interval_s = interval.InSecondsF();
-  float frame_rate = interval_s == 0 ? 0 : (1 / interval_s);
-  output_surface_->SetFrameRate({.frame_rate = frame_rate});
+void Display::SetFrameIntervalOnOutputSurface(
+    gfx::SurfaceControlFrameRate frame_rate) {
+  output_surface_->SetFrameRate(frame_rate);
 }
 
 base::ScopedClosureRunner Display::GetCacheBackBufferCb() {

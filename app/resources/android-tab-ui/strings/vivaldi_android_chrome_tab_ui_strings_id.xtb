@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="id">
-<translation id="2277224997687551299">Edit nama grup</translation>
+<translation id="1062777154504442433">Tab susun baru</translation>
+<translation id="1625440863545383011">Hapus tap dan tinggalkan susunan</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Tandai tab}
           other {Tandai tab}
         }</translation>
 <translation id="2947471979790858922">Aktivitas Anda di tab pribadi ini akan dihapus dari perangkat</translation>
+<translation id="3298614730029636660">Tinggalkan susunan</translation>
+<translation id="354698175756845966">Edit warna susunan</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Anda dapat menemukan tab tertutup di tab Terkini di bawah menu utama Vivaldi. Tab pribadi Anda tidak akan tersedia..}
         other {Anda dapat menemukan tab tertutup di tab Terkini di bawah menu utama Vivaldi. # tab pribadi Anda tidak akan tersedia.}}</translation>
-<translation id="4460014764210899310">Lepas grup</translation>
 <translation id="4871187110787939393">Tutup semua tab pribadi?</translation>
 <translation id="5494920125229734069">Pilih semua</translation>
-<translation id="6744956528665271406">Edit warna grup</translation>
+<translation id="6807841890213931603">Hapus tab dan hapus susunan</translation>
+<translation id="750227952939161636">Tab susun Anda secara otomatis disimpan dan diperbarui pada semua perangkat</translation>
+<translation id="7640137753339219124">Hapus susunan</translation>
+<translation id="7653857400289671414">Tapi susun Anda disimpan secara otomatis</translation>
+<translation id="8440938071054361204">Edit nama susunan</translation>
+<translation id="8602902357364871325">Tutup susunan</translation>
+<translation id="8851621822786801079">Hapus dari susunan</translation>
 </translationbundle>

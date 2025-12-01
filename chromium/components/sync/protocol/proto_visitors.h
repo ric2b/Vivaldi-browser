@@ -507,7 +507,6 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientCommand& proto) {
   VISIT(max_commit_batch_size);
   VISIT(throttle_delay_seconds);
   VISIT(client_invalidation_hint_buffer_size);
-  VISIT(gu_retry_delay_seconds);
   VISIT_REP(custom_nudge_delays);
   VISIT(extension_types_max_tokens);
   VISIT(extension_types_refill_interval_seconds);
@@ -888,7 +887,7 @@ VISIT_PROTO_FIELDS(const sync_pb::DataTypeState& proto) {
   VISIT(encryption_key_name);
   VISIT_ENUM(initial_sync_state);
   VISIT(cache_guid);
-  VISIT(authenticated_account_id);
+  VISIT(authenticated_obfuscated_gaia_id);
   VISIT_REP(invalidations);
   VISIT(notes_enabled_before_initial_sync_for_passwords);
 }
@@ -984,8 +983,10 @@ VISIT_PROTO_FIELDS(const sync_pb::WebauthnCredentialSpecifics& proto) {
   VISIT(third_party_payments_support);
   VISIT(last_used_time_windows_epoch_micros);
   VISIT(key_version);
+  VISIT(device_authorization_key_version);
   VISIT_SECRET(private_key);
   VISIT_SECRET(encrypted);
+  VISIT_SECRET(security_domain_encrypted);
   VISIT(edited_by_user);
   VISIT(hidden);
   VISIT(hidden_time);
@@ -1637,7 +1638,7 @@ VISIT_PROTO_FIELDS(const sync_pb::UniquePosition& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::UserConsentSpecifics& proto) {
   VISIT(locale);
   VISIT(client_consent_time_usec);
-  VISIT(account_id);
+  VISIT(obfuscated_gaia_id);
   VISIT(sync_consent);
   VISIT(arc_backup_and_restore_consent);
   VISIT(arc_location_service_consent);
@@ -1798,6 +1799,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {
   VISIT_REP(card_benefit);
   VISIT(product_terms_url);
   VISIT_ENUM(card_info_retrieval_enrollment_state);
+  VISIT_ENUM(card_benefit_source);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMetadataSpecifics& proto) {
@@ -2012,7 +2014,7 @@ VISIT_PROTO_FIELDS(
   VISIT(merchant_name);
   VISIT(program_name);
   VISIT(program_logo);
-  VISIT(loyalty_card_suffix);
+  VISIT(loyalty_card_number);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::SharedTabDetails& proto) {
@@ -2020,10 +2022,16 @@ VISIT_PROTO_FIELDS(const sync_pb::SharedTabDetails& proto) {
   VISIT(last_seen_timestamp_windows_epoch);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::SharedTabGroupDetails& proto) {
+  VISIT(pinned_position);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::SharedTabGroupAccountDataSpecifics& proto) {
   VISIT(guid);
   VISIT(collaboration_id);
   VISIT(shared_tab_details);
+  VISIT(shared_tab_group_details);
+  VISIT(update_time_windows_epoch_micros);
 }
 
 // Vivaldi specific

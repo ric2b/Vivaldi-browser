@@ -5,6 +5,8 @@
 #include "components/autofill/core/browser/ui/payments/select_bnpl_issuer_dialog_controller_impl.h"
 
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
+#include "components/autofill/core/browser/metrics/payments/bnpl_metrics.h"
 #include "components/autofill/core/browser/payments/constants.h"
 #include "components/autofill/core/browser/ui/payments/select_bnpl_issuer_view.h"
 #include "components/payments/core/currency_formatter.h"
@@ -13,56 +15,49 @@
 
 namespace autofill::payments {
 
+using IssuerId = autofill::BnplIssuer::IssuerId;
+using ::autofill::autofill_metrics::LogBnplIssuerSelection;
+using ::autofill::autofill_metrics::LogSelectBnplIssuerDialogResult;
+using ::autofill::autofill_metrics::SelectBnplIssuerDialogResult;
 using l10n_util::GetStringFUTF16;
 using l10n_util::GetStringUTF16;
 using std::u16string;
 
-BnplIssuerContext::BnplIssuerContext() = default;
-
-BnplIssuerContext::BnplIssuerContext(BnplIssuer issuer,
-                                     BnplIssuerEligibilityForPage eligibility)
-    : issuer(std::move(issuer)), eligibility(std::move(eligibility)) {}
-
-BnplIssuerContext::BnplIssuerContext(const BnplIssuerContext& other) = default;
-
-BnplIssuerContext::BnplIssuerContext(BnplIssuerContext&&) = default;
-
-BnplIssuerContext& BnplIssuerContext::operator=(
-    const BnplIssuerContext& other) = default;
-
-BnplIssuerContext& BnplIssuerContext::operator=(BnplIssuerContext&&) = default;
-
-BnplIssuerContext::~BnplIssuerContext() = default;
-
-bool BnplIssuerContext::operator==(const BnplIssuerContext&) const = default;
-
-SelectBnplIssuerDialogControllerImpl::SelectBnplIssuerDialogControllerImpl(
-    std::vector<BnplIssuerContext> issuer_contexts,
-    std::string app_locale,
-    base::OnceCallback<void(const std::string&)> selected_issuer_callback,
-    base::OnceClosure cancel_callback)
-    : issuer_contexts_(std::move(issuer_contexts)),
-      app_locale_(std::move(app_locale)),
-      selected_issuer_callback_(std::move(selected_issuer_callback)),
-      cancel_callback_(std::move(cancel_callback)) {}
+SelectBnplIssuerDialogControllerImpl::SelectBnplIssuerDialogControllerImpl() =
+    default;
 
 SelectBnplIssuerDialogControllerImpl::~SelectBnplIssuerDialogControllerImpl() =
     default;
 
 void SelectBnplIssuerDialogControllerImpl::ShowDialog(
     base::OnceCallback<std::unique_ptr<SelectBnplIssuerView>()>
-        create_and_show_dialog_callback) {
+        create_and_show_dialog_callback,
+    std::vector<BnplIssuerContext> issuer_contexts,
+    std::string app_locale,
+    base::OnceCallback<void(BnplIssuer)> selected_issuer_callback,
+    base::OnceClosure cancel_callback) {
+  issuer_contexts_ = std::move(issuer_contexts);
+  app_locale_ = std::move(app_locale);
+  selected_issuer_callback_ = std::move(selected_issuer_callback);
+  cancel_callback_ = std::move(cancel_callback);
+
   dialog_view_ = std::move(create_and_show_dialog_callback).Run();
+  autofill_metrics::LogBnplSelectionDialogShown();
 }
 
-void SelectBnplIssuerDialogControllerImpl::OnIssuerSelected(
-    const std::string& issuer_id) {
+void SelectBnplIssuerDialogControllerImpl::OnIssuerSelected(BnplIssuer issuer) {
+  LogSelectBnplIssuerDialogResult(
+      SelectBnplIssuerDialogResult::kIssuerSelected);
+  LogBnplIssuerSelection(issuer.issuer_id());
+
   if (selected_issuer_callback_) {
-    std::move(selected_issuer_callback_).Run(issuer_id);
+    std::move(selected_issuer_callback_).Run(std::move(issuer));
   }
 }
 
 void SelectBnplIssuerDialogControllerImpl::OnUserCancelled() {
+  LogSelectBnplIssuerDialogResult(
+      SelectBnplIssuerDialogResult::kCancelButtonClicked);
   Dismiss();
   std::move(cancel_callback_).Run();
 }
@@ -85,7 +80,7 @@ u16string SelectBnplIssuerDialogControllerImpl::GetTitle() const {
 }
 
 u16string SelectBnplIssuerDialogControllerImpl::GetSelectionOptionText(
-    std::string_view issuer_id) const {
+    IssuerId issuer_id) const {
   // TODO(crbug.com/403361321): Add a util function that returns all supported
   // locales.
   CHECK_EQ(GetAppLocale(), "en-US");
@@ -112,11 +107,16 @@ u16string SelectBnplIssuerDialogControllerImpl::GetSelectionOptionText(
     case BnplIssuerEligibilityForPage::kUndefined:
       NOTREACHED();
     case BnplIssuerEligibilityForPage::kIsEligible:
-      return issuer_id == kBnplZipIssuerId
-                 ? GetStringUTF16(
-                       IDS_AUTOFILL_CARD_BNPL_SELECT_PROVIDER_PAYMENT_OPTION_ZIP)
-                 : GetStringUTF16(
-                       IDS_AUTOFILL_CARD_BNPL_SELECT_PROVIDER_PAYMENT_OPTION_AFFIRM_AND_AFTERPAY);
+      switch (issuer_id) {
+        case IssuerId::kBnplAffirm:
+        case IssuerId::kBnplAfterpay:
+          return GetStringUTF16(
+              IDS_AUTOFILL_CARD_BNPL_SELECT_PROVIDER_PAYMENT_OPTION_AFFIRM_AND_AFTERPAY);
+        case IssuerId::kBnplZip:
+          return GetStringUTF16(
+              IDS_AUTOFILL_CARD_BNPL_SELECT_PROVIDER_PAYMENT_OPTION_ZIP);
+      }
+      NOTREACHED();
     case BnplIssuerEligibilityForPage::kNotEligibleIssuerDoesNotSupportMerchant:
       return GetStringUTF16(
           IDS_AUTOFILL_CARD_BNPL_SELECT_PROVIDER_PAYMENT_OPTION_NOT_SUPPORTED_BY_MERCHANT);

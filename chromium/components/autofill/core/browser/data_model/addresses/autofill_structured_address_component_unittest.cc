@@ -295,8 +295,9 @@ TEST_F(AutofillStructuredAddressAddressComponent,
   TestCompoundNameAddressComponent compound_name;
   EXPECT_TRUE(compound_name.SetValueForType(NAME_FIRST, u"First1-First2",
                                             VerificationStatus::kObserved));
-  EXPECT_TRUE(compound_name.SetValueForTypeAndResetSubstructure(
-      NAME_MIDDLE, u"Middle", VerificationStatus::kObserved));
+  EXPECT_TRUE(compound_name.SetValueForType(NAME_MIDDLE, u"Middle",
+                                            VerificationStatus::kObserved,
+                                            /*invalidate_child_nodes=*/true));
   EXPECT_TRUE(compound_name.SetValueForType(NAME_LAST, u"LAST",
                                             VerificationStatus::kObserved));
   EXPECT_TRUE(compound_name.CompleteFullTree());
@@ -1012,6 +1013,33 @@ TEST_F(AutofillStructuredAddressAddressComponent,
   EXPECT_EQ(compound_component.GetValueForType(NAME_LAST), last_name);
 }
 
+// Tests the fallback method to parse a value into its components, if there are
+// less space-separated tokens than components.
+TEST_F(AutofillStructuredAddressAddressComponent,
+       ParseValueAndAssignSubcomponentsByFallbackMethod_DisallowedCountry) {
+  std::u16string full_street_address = u"Block B, ABC STREET";
+
+  AddressComponentsStore store =
+      i18n_model_definition::CreateAddressComponentModel(
+          AddressCountryCode("IN"));
+  AddressComponent* root = store.Root();
+  root->SetValueForType(ADDRESS_HOME_STREET_ADDRESS, full_street_address,
+                        VerificationStatus::kUserVerified);
+  root->SetValueForType(ADDRESS_HOME_COUNTRY, u"IN",
+                          VerificationStatus::kUserVerified);
+
+  // Parse the full name into its components by using the fallback method
+  test_api(*root)
+      .GetNodeForType(ADDRESS_HOME_STREET_ADDRESS)
+      ->ParseValueAndAssignSubcomponents();
+  EXPECT_EQ(root->GetValueForType(ADDRESS_HOME_STREET_ADDRESS),
+            full_street_address);
+
+  EXPECT_TRUE(root->GetValueForType(ADDRESS_HOME_STREET_LOCATION).empty());
+  EXPECT_TRUE(root->GetValueForType(ADDRESS_HOME_DEPENDENT_LOCALITY).empty());
+  EXPECT_TRUE(root->GetValueForType(ADDRESS_HOME_LANDMARK).empty());
+}
+
 // Tests that a tree is regarded completable if and only if there if the
 // maximum number of assigned nodes on a path from the root node to a leaf is
 // exactly one.
@@ -1179,8 +1207,9 @@ TEST_F(AutofillStructuredAddressAddressComponent,
   EXPECT_EQ(compound_component.GetValueForType(NAME_LAST), last_name);
 
   // Change the value of FULL_NAME and invalidate all child and ancestor nodes.
-  compound_component.SetValueForTypeAndResetSubstructure(
-      NAME_FULL, u"Oh' Brian", VerificationStatus::kObserved);
+  compound_component.SetValueForType(NAME_FULL, u"Oh' Brian",
+                                     VerificationStatus::kObserved,
+                                     /*invalidate_child_nodes=*/true);
   EXPECT_EQ(compound_component.GetValueForType(CREDIT_CARD_NAME_FULL),
             full_name);
   EXPECT_EQ(compound_component.GetValueForType(NAME_FIRST), std::u16string());

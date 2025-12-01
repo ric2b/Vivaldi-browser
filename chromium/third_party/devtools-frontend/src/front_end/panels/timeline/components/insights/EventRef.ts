@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
@@ -9,11 +10,7 @@ import * as ComponentHelpers from '../../../../ui/components/helpers/helpers.js'
 import * as Lit from '../../../../ui/lit/lit.js';
 import * as Utils from '../../utils/utils.js';
 
-import baseInsightComponentStylesRaw from './baseInsightComponent.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const baseInsightComponentStyles = new CSSStyleSheet();
-baseInsightComponentStyles.replaceSync(baseInsightComponentStylesRaw.cssText);
+import baseInsightComponentStyles from './baseInsightComponent.css.js';
 
 const {html} = Lit;
 
@@ -27,23 +24,17 @@ export class EventReferenceClick extends Event {
 
 class EventRef extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
-
   #text: string|null = null;
   #event: Trace.Types.Events.Event|null = null;
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [baseInsightComponentStyles];
-  }
-
   set text(text: string) {
     this.#text = text;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   set event(event: Trace.Types.Events.Event) {
     this.#event = event;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #render(): void {
@@ -53,6 +44,7 @@ class EventRef extends HTMLElement {
 
     // clang-format off
     Lit.render(html`
+      <style>${baseInsightComponentStyles}</style>
       <button type="button" class="timeline-link" @click=${(e: Event) => {
         e.stopPropagation();
         if (this.#event) {
@@ -87,17 +79,12 @@ export function eventRef(
 
 class ImageRef extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
 
   #request?: Trace.Types.Events.SyntheticNetworkRequest;
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [baseInsightComponentStyles];
-  }
-
   set request(request: Trace.Types.Events.SyntheticNetworkRequest) {
     this.#request = request;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #render(): void {
@@ -107,6 +94,7 @@ class ImageRef extends HTMLElement {
 
     // clang-format off
     Lit.render(html`
+      <style>${baseInsightComponentStyles}</style>
       <div class="image-ref">
         ${this.#request.args.data.mimeType.includes('image') ? html`
           <img

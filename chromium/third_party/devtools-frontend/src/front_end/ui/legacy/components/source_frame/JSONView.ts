@@ -27,6 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
@@ -228,7 +229,7 @@ export class JSONView extends UI.Widget.VBox implements UI.SearchableView.Search
     this.updateSearchIndex(0);
   }
 
-  performSearch(searchConfig: UI.SearchableView.SearchConfig, shouldJump: boolean, jumpBackwards?: boolean): void {
+  performSearch(searchConfig: UI.SearchableView.SearchConfig, _shouldJump: boolean, jumpBackwards?: boolean): void {
     let newIndex: number = this.currentSearchFocusIndex;
     const previousSearchFocusElement = this.currentSearchTreeElements[newIndex];
     this.onSearchCanceled();

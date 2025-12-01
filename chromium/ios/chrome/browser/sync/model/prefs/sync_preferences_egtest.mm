@@ -95,7 +95,7 @@ void WaitForPreferenceValue(int pref_value) {
 
   // Sign in and sign out.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey signinAndWaitForSyncTransportStateActive:fakeIdentity];
+  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
   // Pref is not committed to the server.
   WaitForTestPreferenceOnFakeServer(false);
   [SigninEarlGrey signOut];
@@ -147,7 +147,7 @@ void WaitForPreferenceValue(int pref_value) {
 - (void)testAccountPrefValueRemovedOnSignout {
   // Set a pref value of `kTestPrefValue2` in account.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
-  [SigninEarlGrey signinAndWaitForSyncTransportStateActive:fakeIdentity];
+  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
 
   [ChromeEarlGrey setIntegerValue:kTestPrefValue2
                       forUserPref:kTestSyncablePref];
@@ -227,7 +227,7 @@ void WaitForPreferenceValue(int pref_value) {
 - (void)setTestSyncablePrefValueTo:(int)pref_value
                    forFakeIdentity:(FakeSystemIdentity*)fakeIdentity {
   // Sign in and set the pref value.
-  [SigninEarlGrey signinAndWaitForSyncTransportStateActive:fakeIdentity];
+  [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
   [ChromeEarlGrey setIntegerValue:pref_value forUserPref:kTestSyncablePref];
   WaitForTestPreferenceOnFakeServer(true);
   [SigninEarlGrey signOut];
@@ -358,8 +358,9 @@ void WaitForPreferenceValue(int pref_value) {
 
   // Restart with MigrateAccountPrefs flag enabled.
   [self restartWithMigrateAccountPrefsEnabled:fakeIdentity];
-  GREYAssertEqual([ChromeEarlGrey userIntegerPref:kTestSyncablePref],
-                  kTestPrefValue1, @"Incorrect local pref value.");
+  // The account values are loaded upon sync initialization, thus wait for the
+  // pref value to be set.
+  WaitForPreferenceValue(kTestPrefValue1);
 
   // Sign out and validate that the pref is not set locally.
   [SigninEarlGrey signOut];

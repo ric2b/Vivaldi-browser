@@ -32,6 +32,12 @@ P2pPointToPointPcpHandler::P2pPointToPointPcpHandler(
 std::vector<location::nearby::proto::connections::Medium>
 P2pPointToPointPcpHandler::GetConnectionMediumsByPriority() {
   std::vector<location::nearby::proto::connections::Medium> mediums;
+  if (NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_connections_feature::kEnableAwdl)) {
+    if (mediums_->GetAwdl().IsAvailable()) {
+      mediums.push_back(location::nearby::proto::connections::AWDL);
+    }
+  }
   if (mediums_->GetWifiLan().IsAvailable()) {
     mediums.push_back(location::nearby::proto::connections::WIFI_LAN);
   }

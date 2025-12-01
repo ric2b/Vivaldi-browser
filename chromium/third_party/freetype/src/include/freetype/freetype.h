@@ -811,7 +811,7 @@ FT_BEGIN_HEADER
    *   FT_ENCODING_MS_SYMBOL ::
    *     Microsoft Symbol encoding, used to encode mathematical symbols and
    *     wingdings.  For more information, see
-   *     'https://www.microsoft.com/typography/otspec/recom.htm#non-standard-symbol-fonts',
+   *     'https://learn.microsoft.com/typography/opentype/spec/recom#non-standard-symbol-fonts',
    *     'http://www.kostis.net/charsets/symbol.htm', and
    *     'http://www.kostis.net/charsets/wingding.htm'.
    *
@@ -3078,7 +3078,7 @@ FT_BEGIN_HEADER
    *   is dependent entirely on how the size is defined in the source face.
    *   The font designer chooses the final size of each glyph relative to
    *   this size.  For more information refer to
-   *   'https://www.freetype.org/freetype2/docs/glyphs/glyphs-2.html'.
+   *   'https://freetype.org/freetype2/docs/glyphs/glyphs-2.html'.
    *
    *   Contrary to @FT_Set_Char_Size, this function doesn't have special code
    *   to normalize zero-valued widths, heights, or resolutions, which are
@@ -3441,8 +3441,10 @@ FT_BEGIN_HEADER
    *     blending of the color glyph layers associated with the glyph index,
    *     using the same bitmap format as embedded color bitmap images.  This
    *     is mainly for convenience and works only for glyphs in 'COLR' v0
-   *     tables (or glyphs in 'COLR' v1 tables that exclusively use v0
-   *     features).  For full control of color layers use
+   *     tables.  **There is no rendering support for 'COLR' v1** (with the
+   *     exception of v1 tables that exclusively use v0 features)!  You need
+   *     a graphics library like Skia or Cairo to interpret the graphics
+   *     commands stored in v1 tables.  For full control of color layers use
    *     @FT_Get_Color_Glyph_Layer and FreeType's color functions like
    *     @FT_Palette_Select instead of setting @FT_LOAD_COLOR for rendering
    *     so that the client application can handle blending by itself.
@@ -3895,8 +3897,10 @@ FT_BEGIN_HEADER
    *
    *   This process can cost performance.  There is an approximation that
    *   does not need to know about the background color; see
-   *   https://bel.fi/alankila/lcd/ and
-   *   https://bel.fi/alankila/lcd/alpcor.html for details.
+   *   https://web.archive.org/web/20211019204945/https://bel.fi/alankila/lcd/
+   *   and
+   *   https://web.archive.org/web/20210211002939/https://bel.fi/alankila/lcd/alpcor.html
+   *   for details.
    *
    *   **ATTENTION**: Linear blending is even more important when dealing
    *   with subpixel-rendered glyphs to prevent color-fringing!  A
@@ -4530,7 +4534,7 @@ FT_BEGIN_HEADER
    *   table description in the OpenType specification for the meaning of the
    *   various flags (which get synthesized for non-OpenType subglyphs).
    *
-   *     https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#composite-glyph-description
+   *     https://learn.microsoft.com/typography/opentype/spec/glyf#composite-glyph-description
    *
    * @values:
    *   FT_SUBGLYPH_FLAG_ARGS_ARE_WORDS ::
@@ -4593,7 +4597,7 @@ FT_BEGIN_HEADER
    *   interpreted depending on the flags returned in `*p_flags`.  See the
    *   OpenType specification for details.
    *
-   *     https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#composite-glyph-description
+   *     https://learn.microsoft.com/typography/opentype/spec/glyf#composite-glyph-description
    *
    */
   FT_EXPORT( FT_Error )
@@ -4619,7 +4623,7 @@ FT_BEGIN_HEADER
    *   associated with a font.
    *
    *   See
-   *   https://www.adobe.com/content/dam/Adobe/en/devnet/acrobat/pdfs/FontPolicies.pdf
+   *   https://adobe-type-tools.github.io/font-tech-notes/pdfs/AcrobatDC_FontPolicies.pdf
    *   for more details.
    *
    * @values:

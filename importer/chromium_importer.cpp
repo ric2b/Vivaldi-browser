@@ -22,16 +22,16 @@
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
 #include "chrome/grit/branded_strings.h"
-#include "chromium/components/sessions/core/session_types.h"
+#include "components/sessions/core/session_types.h"
 #include "components/os_crypt/sync/key_storage_config_linux.h"
 #include "components/os_crypt/sync/os_crypt.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_switches.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "importer/chrome_importer_utils.h"
 #include "importer/imported_tab_entry.h"
 #include "sql/statement.h"
@@ -45,7 +45,7 @@ ChromiumImporter::ChromiumImporter() {}
 ChromiumImporter::~ChromiumImporter() {}
 
 void ChromiumImporter::StartImport(
-    const importer::SourceProfile& source_profile,
+    const user_data_importer::SourceProfile& source_profile,
     uint16_t items,
     ImporterBridge* bridge) {
   bridge_ = bridge;
@@ -54,44 +54,44 @@ void ChromiumImporter::StartImport(
 
   bridge_->NotifyStarted();
 
-  if ((items & importer::HISTORY) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::HISTORY);
+  if ((items & user_data_importer::HISTORY) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::HISTORY);
     ImportHistory();
-    bridge_->NotifyItemEnded(importer::HISTORY);
+    bridge_->NotifyItemEnded(user_data_importer::HISTORY);
   }
 
-  if ((items & importer::FAVORITES) && !cancelled()) {
+  if ((items & user_data_importer::FAVORITES) && !cancelled()) {
     base::FilePath bookmarkFilePath = profile_dir_.AppendASCII("Bookmarks");
 
     bookmarkfilename_ = bookmarkFilePath.value();
     if (!base::PathExists(bookmarkFilePath)) {
       // Just notify about start and end if the file doesn't exist, otherwise
       // the end of import detection won't work.
-      bridge_->NotifyItemStarted(importer::FAVORITES);
-      bridge_->NotifyItemEnded(importer::FAVORITES);
+      bridge_->NotifyItemStarted(user_data_importer::FAVORITES);
+      bridge_->NotifyItemEnded(user_data_importer::FAVORITES);
     } else {
-      bridge_->NotifyItemStarted(importer::FAVORITES);
+      bridge_->NotifyItemStarted(user_data_importer::FAVORITES);
       ImportBookMarks();
-      bridge_->NotifyItemEnded(importer::FAVORITES);
+      bridge_->NotifyItemEnded(user_data_importer::FAVORITES);
     }
   }
 
-  if ((items & importer::PASSWORDS) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::PASSWORDS);
+  if ((items & user_data_importer::PASSWORDS) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::PASSWORDS);
     ImportPasswords(source_profile.importer_type);
-    bridge_->NotifyItemEnded(importer::PASSWORDS);
+    bridge_->NotifyItemEnded(user_data_importer::PASSWORDS);
   }
 
-  if ((items & importer::TABS) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::TABS);
+  if ((items & user_data_importer::TABS) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::TABS);
     ImportTabs(source_profile.importer_type);
-    bridge_->NotifyItemEnded(importer::TABS);
+    bridge_->NotifyItemEnded(user_data_importer::TABS);
   }
 
-  if ((items & importer::EXTENSIONS) && !cancelled()) {
-    bridge_->NotifyItemStarted(importer::EXTENSIONS);
+  if ((items & user_data_importer::EXTENSIONS) && !cancelled()) {
+    bridge_->NotifyItemStarted(user_data_importer::EXTENSIONS);
     ImportExtensions();
-    bridge_->NotifyItemEnded(importer::EXTENSIONS);
+    bridge_->NotifyItemEnded(user_data_importer::EXTENSIONS);
   }
   bridge_->NotifyEnded();
 }
@@ -99,10 +99,11 @@ void ChromiumImporter::StartImport(
 #if BUILDFLAG(IS_WIN)
 std::string import_encryption_key;
 #endif  // IS_WIN
-void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
+void ChromiumImporter::ImportPasswords(
+    user_data_importer::ImporterType importer_type) {
   // Initializes Chrome decryptor
 
-  std::vector<importer::ImportedPasswordForm> forms;
+  std::vector<user_data_importer::ImportedPasswordForm> forms;
   base::FilePath source_path = profile_dir_;
 
 #if BUILDFLAG(IS_WIN)
@@ -180,8 +181,8 @@ void ChromiumImporter::ImportPasswords(importer::ImporterType importer_type) {
 
 bool ChromiumImporter::ReadAndParseSignons(
     const base::FilePath& sqlite_file,
-    std::vector<importer::ImportedPasswordForm>* forms,
-    importer::ImporterType importer_type) {
+    std::vector<user_data_importer::ImportedPasswordForm>* forms,
+    user_data_importer::ImporterType importer_type) {
   sql::Database db("Importer");
   if (!db.Open(sqlite_file))
     return false;
@@ -196,7 +197,7 @@ bool ChromiumImporter::ReadAndParseSignons(
     return false;
 
   while (s2.Step()) {
-    importer::ImportedPasswordForm form;
+    user_data_importer::ImportedPasswordForm form;
     form.url = GURL(s2.ColumnString(0));
     form.action = GURL(s2.ColumnString(1));
     form.username_element = base::UTF8ToUTF16(s2.ColumnString(2));
@@ -208,35 +209,35 @@ bool ChromiumImporter::ReadAndParseSignons(
 #if BUILDFLAG(IS_MAC)
     std::string service_name = "Chrome Safe Storage";
     std::string account_name = "Chrome";
-    if (importer_type == importer::TYPE_BRAVE) {
+    if (importer_type == user_data_importer::TYPE_BRAVE) {
       service_name = "Brave Safe Storage";
       account_name = "Brave";
     }
-    if (importer_type == importer::TYPE_EDGE_CHROMIUM) {
+    if (importer_type == user_data_importer::TYPE_EDGE_CHROMIUM) {
       service_name = "Microsoft Edge Safe Storage";
       account_name = "Microsoft Edge";
     }
-    if (importer_type == importer::TYPE_OPERA_OPIUM) {
+    if (importer_type == user_data_importer::TYPE_OPERA_OPIUM) {
       service_name = "Opera Safe Storage";
       account_name = "Opera";
     }
-    if (importer_type == importer::TYPE_VIVALDI) {
+    if (importer_type == user_data_importer::TYPE_VIVALDI) {
       service_name = "Vivaldi Safe Storage";
       account_name = "Vivaldi";
     }
-    if (importer_type == importer::TYPE_YANDEX) {
+    if (importer_type == user_data_importer::TYPE_YANDEX) {
       service_name = "Yandex Safe Storage";
       account_name = "Yandex";
     }
-    if (importer_type == importer::TYPE_CHROMIUM) {
+    if (importer_type == user_data_importer::TYPE_CHROMIUM) {
       service_name = "Chromium Safe Storage";
       account_name = "Chromium";
     }
-    if (importer_type == importer::TYPE_ARC) {
+    if (importer_type == user_data_importer::TYPE_ARC) {
       service_name = "Arc Safe Storage";
       account_name = "Arc";
     }
-    if (importer_type == importer::TYPE_OPERA_GX) {
+    if (importer_type == user_data_importer::TYPE_OPERA_GX) {
       service_name = "Opera GX Safe Storage";
       account_name = "Opera GX";
     }
@@ -276,7 +277,7 @@ bool ChromiumImporter::ReadAndParseSignons(
 }
 
 void ChromiumImporter::ImportHistory() {
-  std::vector<ImporterURLRow> historyRows;
+  std::vector<user_data_importer::ImporterURLRow> historyRows;
   base::FilePath source_path = profile_dir_;
 
   base::FilePath file = source_path.AppendASCII("History");
@@ -285,12 +286,11 @@ void ChromiumImporter::ImportHistory() {
   }
 
   if (!historyRows.empty() && !cancelled())
-    bridge_->SetHistoryItems(historyRows,
-                             importer::VISIT_SOURCE_CHROMIUM_IMPORTED);
+    bridge_->SetHistoryItems(historyRows, user_data_importer::VISIT_SOURCE_CHROMIUM_IMPORTED);
 }
 
 bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
-                                           std::vector<ImporterURLRow>* forms) {
+    std::vector<user_data_importer::ImporterURLRow>* forms) {
   sql::Database db("Importer");
   if (!db.Open(sqlite_file))
     return false;
@@ -305,7 +305,7 @@ bool ChromiumImporter::ReadAndParseHistory(const base::FilePath& sqlite_file,
     return false;
 
   while (s2.Step()) {
-    ImporterURLRow row(GURL(s2.ColumnString(0)));
+    user_data_importer::ImporterURLRow row(GURL(s2.ColumnString(0)));
     row.title = s2.ColumnString16(1);
     row.visit_count = s2.ColumnInt(2);
     row.hidden = s2.ColumnInt(3) == 1;
@@ -327,7 +327,8 @@ void ChromiumImporter::ImportExtensions() {
   }
 }
 
-void ChromiumImporter::ImportTabs(importer::ImporterType importer_type) {
+void ChromiumImporter::ImportTabs(
+    user_data_importer::ImporterType importer_type) {
   const auto tabs =
       session_importer::ChromiumSessionImporter::GetOpenTabs(
           profile_dir_, importer_type);

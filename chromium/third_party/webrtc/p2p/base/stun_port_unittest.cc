@@ -20,6 +20,7 @@
 
 #include "absl/functional/any_invocable.h"
 #include "api/candidate.h"
+#include "api/environment/environment_factory.h"
 #include "api/field_trials_view.h"
 #include "api/packet_socket_factory.h"
 #include "api/test/mock_async_dns_resolver.h"
@@ -60,7 +61,6 @@
 
 namespace {
 
-using cricket::ServerAddresses;
 using ::testing::_;
 using ::testing::DoAll;
 using ::testing::Eq;
@@ -68,7 +68,9 @@ using ::testing::IsTrue;
 using ::testing::Return;
 using ::testing::ReturnPointee;
 using ::testing::SetArgPointee;
-using webrtc::IceCandidateType;
+using ::webrtc::CreateEnvironment;
+using ::webrtc::IceCandidateType;
+using ::webrtc::ServerAddresses;
 using ::webrtc::SocketAddress;
 
 static const SocketAddress kPrivateIP("192.168.1.12", 0);
@@ -90,9 +92,9 @@ static const SocketAddress kBadAddr("0.0.0.1", 5000);
 static const SocketAddress kIPv6BadAddr("::ffff:0:1", 5000);
 static const SocketAddress kValidHostnameAddr("valid-hostname", 5000);
 static const SocketAddress kBadHostnameAddr("not-a-real-hostname", 5000);
-// STUN timeout (with all retries) is cricket::STUN_TOTAL_TIMEOUT.
+// STUN timeout (with all retries) is webrtc::STUN_TOTAL_TIMEOUT.
 // Add some margin of error for slow bots.
-static const int kTimeoutMs = cricket::STUN_TOTAL_TIMEOUT;
+static const int kTimeoutMs = webrtc::STUN_TOTAL_TIMEOUT;
 // stun prio = 100 (srflx) << 24 | 30 (IPv4) << 8 | 256 - 1 (component)
 static const uint32_t kStunCandidatePriority =
     (100 << 24) | (30 << 8) | (256 - 1);
@@ -115,7 +117,7 @@ class FakeMdnsResponder : public webrtc::MdnsResponderInterface {
                             NameRemovedCallback callback) override {}
 };
 
-class FakeMdnsResponderProvider : public rtc::MdnsResponderProvider {
+class FakeMdnsResponderProvider : public webrtc::MdnsResponderProvider {
  public:
   FakeMdnsResponderProvider() : mdns_responder_(new FakeMdnsResponder()) {}
 
@@ -128,7 +130,7 @@ class FakeMdnsResponderProvider : public rtc::MdnsResponderProvider {
 };
 
 // Base class for tests connecting a StunPort to a fake STUN server
-// (cricket::StunServer).
+// (webrtc::StunServer).
 class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
  public:
   StunPortTestBase()
@@ -169,7 +171,7 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
   }
 
   webrtc::SocketServer* ss() const { return ss_.get(); }
-  cricket::UDPPort* port() const { return stun_port_.get(); }
+  webrtc::UDPPort* port() const { return stun_port_.get(); }
   webrtc::AsyncPacketSocket* socket() const { return socket_.get(); }
   bool done() const { return done_; }
   bool error() const { return error_; }
@@ -178,7 +180,7 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
     return stun_port_->request_manager().HasRequestForTest(msg_type);
   }
 
-  void SetNetworkType(rtc::AdapterType adapter_type) {
+  void SetNetworkType(webrtc::AdapterType adapter_type) {
     network_->set_type(adapter_type);
   }
 
@@ -191,13 +193,13 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
 
   void CreateStunPort(const ServerAddresses& stun_servers,
                       const webrtc::FieldTrialsView* field_trials = nullptr) {
-    stun_port_ = cricket::StunPort::Create(
-        {.network_thread = &thread_,
+    stun_port_ = webrtc::StunPort::Create(
+        {.env = CreateEnvironment(field_trials),
+         .network_thread = &thread_,
          .socket_factory = socket_factory(),
          .network = network_,
          .ice_username_fragment = webrtc::CreateRandomString(16),
-         .ice_password = webrtc::CreateRandomString(22),
-         .field_trials = field_trials},
+         .ice_password = webrtc::CreateRandomString(22)},
         0, 0, stun_servers, std::nullopt);
     stun_port_->SetIceTiebreaker(kTiebreakerDefault);
     stun_port_->set_stun_keepalive_delay(stun_keepalive_delay_);
@@ -223,23 +225,24 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
       socket_.reset(socket_factory()->CreateUdpSocket(
           webrtc::SocketAddress(kPrivateIP.ipaddr(), 0), 0, 0));
     }
-    ASSERT_TRUE(socket_ != NULL);
+    ASSERT_TRUE(socket_ != nullptr);
     socket_->RegisterReceivedPacketCallback(
-        [&](rtc::AsyncPacketSocket* socket, const rtc::ReceivedPacket& packet) {
+        [&](webrtc::AsyncPacketSocket* socket,
+            const webrtc::ReceivedIpPacket& packet) {
           OnReadPacket(socket, packet);
         });
     ServerAddresses stun_servers;
     stun_servers.insert(server_addr);
-    stun_port_ = cricket::UDPPort::Create(
-        {.network_thread = &thread_,
+    stun_port_ = webrtc::UDPPort::Create(
+        {.env = CreateEnvironment(field_trials),
+         .network_thread = &thread_,
          .socket_factory = socket_factory(),
          .network = network_,
          .ice_username_fragment = webrtc::CreateRandomString(16),
-         .ice_password = webrtc::CreateRandomString(22),
-         .field_trials = field_trials},
+         .ice_password = webrtc::CreateRandomString(22)},
         socket_.get(), false, std::nullopt);
     stun_port_->set_server_addresses(stun_servers);
-    ASSERT_TRUE(stun_port_ != NULL);
+    ASSERT_TRUE(stun_port_ != nullptr);
     stun_port_->SetIceTiebreaker(kTiebreakerDefault);
     stun_port_->SignalPortComplete.connect(this,
                                            &StunPortTestBase::OnPortComplete);
@@ -249,13 +252,13 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
   void PrepareAddress() { stun_port_->PrepareAddress(); }
 
   void OnReadPacket(webrtc::AsyncPacketSocket* socket,
-                    const rtc::ReceivedPacket& packet) {
+                    const webrtc::ReceivedIpPacket& packet) {
     stun_port_->HandleIncomingPacket(socket, packet);
   }
 
   void SendData(const char* data, size_t len) {
     stun_port_->HandleIncomingPacket(
-        socket_.get(), rtc::ReceivedPacket::CreateFromLegacy(
+        socket_.get(), webrtc::ReceivedIpPacket::CreateFromLegacy(
                            data, len, /* packet_time_us */ -1,
                            webrtc::SocketAddress("22.22.22.22", 0)));
   }
@@ -267,20 +270,20 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
  protected:
   static void SetUpTestSuite() {
     // Ensure the RNG is inited.
-    webrtc::InitRandom(NULL, 0);
+    webrtc::InitRandom(nullptr, 0);
   }
 
-  void OnPortComplete(cricket::Port* /* port */) {
+  void OnPortComplete(webrtc::Port* /* port */) {
     ASSERT_FALSE(done_);
     done_ = true;
     error_ = false;
   }
-  void OnPortError(cricket::Port* /* port */) {
+  void OnPortError(webrtc::Port* /* port */) {
     done_ = true;
     error_ = true;
   }
-  void OnCandidateError(cricket::Port* /* port */,
-                        const cricket::IceCandidateErrorEvent& event) {
+  void OnCandidateError(webrtc::Port* /* port */,
+                        const webrtc::IceCandidateErrorEvent& event) {
     error_event_ = event;
   }
   void SetKeepaliveDelay(int delay) { stun_keepalive_delay_ = delay; }
@@ -289,7 +292,7 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
     stun_keepalive_lifetime_ = lifetime;
   }
 
-  rtc::Network* MakeNetwork(const webrtc::IPAddress& addr) {
+  webrtc::Network* MakeNetwork(const webrtc::IPAddress& addr) {
     networks_.emplace_back("unittest", "unittest", addr, 32);
     networks_.back().AddIP(addr);
     return &networks_.back();
@@ -302,17 +305,17 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
   webrtc::SocketFactory* nat_factory() { return &nat_factory_; }
 
  private:
-  std::vector<rtc::Network> networks_;
-  rtc::Network* network_;
+  std::vector<webrtc::Network> networks_;
+  webrtc::Network* network_;
 
   std::unique_ptr<webrtc::VirtualSocketServer> ss_;
   webrtc::AutoSocketServerThread thread_;
   webrtc::NATSocketFactory nat_factory_;
   webrtc::BasicPacketSocketFactory nat_socket_factory_;
-  std::unique_ptr<cricket::UDPPort> stun_port_;
+  std::unique_ptr<webrtc::UDPPort> stun_port_;
   std::vector<webrtc::TestStunServer::StunServerPtr> stun_servers_;
   std::unique_ptr<webrtc::AsyncPacketSocket> socket_;
-  std::unique_ptr<rtc::MdnsResponderProvider> mdns_responder_provider_;
+  std::unique_ptr<webrtc::MdnsResponderProvider> mdns_responder_provider_;
   std::unique_ptr<webrtc::NATServer> nat_server_;
   bool done_;
   bool error_;
@@ -320,7 +323,7 @@ class StunPortTestBase : public ::testing::Test, public sigslot::has_slots<> {
   int stun_keepalive_lifetime_;
 
  protected:
-  cricket::IceCandidateErrorEvent error_event_;
+  webrtc::IceCandidateErrorEvent error_event_;
 };
 
 class StunPortTestWithRealClock : public StunPortTestBase {};
@@ -374,7 +377,7 @@ TEST_F(StunPortTest, TestPrepareAddressFail) {
   EXPECT_EQ(0U, port()->Candidates().size());
   EXPECT_THAT(
       webrtc::WaitUntil([&] { return error_event_.error_code; },
-                        Eq(cricket::STUN_ERROR_SERVER_NOT_REACHABLE),
+                        Eq(webrtc::STUN_ERROR_SERVER_NOT_REACHABLE),
                         {.timeout = webrtc::TimeDelta::Millis(kTimeoutMs),
                          .clock = &fake_clock}),
       webrtc::IsRtcOk());
@@ -488,7 +491,7 @@ TEST_F(StunPortTestWithRealClock, TestPrepareAddressHostnameFail) {
   EXPECT_EQ(0U, port()->Candidates().size());
   EXPECT_THAT(
       webrtc::WaitUntil([&] { return error_event_.error_code; },
-                        Eq(cricket::STUN_ERROR_SERVER_NOT_REACHABLE),
+                        Eq(webrtc::STUN_ERROR_SERVER_NOT_REACHABLE),
                         {.timeout = webrtc::TimeDelta::Millis(kTimeoutMs)}),
       webrtc::IsRtcOk());
 }
@@ -542,7 +545,7 @@ TEST_F(StunPortTestWithRealClock,
 
   // Send data to port after it's ready. This is to make sure, UDP port can
   // handle data with unresolved stun server address.
-  std::string data = "some random data, sending to cricket::Port.";
+  std::string data = "some random data, sending to webrtc::Port.";
   SendData(data.c_str(), data.length());
   // No crash is success.
 }
@@ -650,12 +653,12 @@ TEST_F(StunPortTest, TestStunPortGetStunKeepaliveLifetime) {
   CreateStunPort(kStunServerAddr1);
   EXPECT_EQ(kInfiniteLifetime, port()->stun_keepalive_lifetime());
   // Lifetime for the cellular network is `kHighCostPortKeepaliveLifetimeMs`
-  SetNetworkType(rtc::ADAPTER_TYPE_CELLULAR);
+  SetNetworkType(webrtc::ADAPTER_TYPE_CELLULAR);
   EXPECT_EQ(kHighCostPortKeepaliveLifetimeMs,
             port()->stun_keepalive_lifetime());
 
   // Lifetime for the wifi network is `kInfiniteLifetime`.
-  SetNetworkType(rtc::ADAPTER_TYPE_WIFI);
+  SetNetworkType(webrtc::ADAPTER_TYPE_WIFI);
   CreateStunPort(kStunServerAddr2);
   EXPECT_EQ(kInfiniteLifetime, port()->stun_keepalive_lifetime());
 }
@@ -668,12 +671,12 @@ TEST_F(StunPortTest, TestUdpPortGetStunKeepaliveLifetime) {
   CreateSharedUdpPort(kStunServerAddr1, nullptr);
   EXPECT_EQ(kInfiniteLifetime, port()->stun_keepalive_lifetime());
   // Lifetime for the cellular network is `kHighCostPortKeepaliveLifetimeMs`.
-  SetNetworkType(rtc::ADAPTER_TYPE_CELLULAR);
+  SetNetworkType(webrtc::ADAPTER_TYPE_CELLULAR);
   EXPECT_EQ(kHighCostPortKeepaliveLifetimeMs,
             port()->stun_keepalive_lifetime());
 
   // Lifetime for the wifi network type is `kInfiniteLifetime`.
-  SetNetworkType(rtc::ADAPTER_TYPE_WIFI);
+  SetNetworkType(webrtc::ADAPTER_TYPE_WIFI);
   CreateSharedUdpPort(kStunServerAddr2, nullptr);
   EXPECT_EQ(kInfiniteLifetime, port()->stun_keepalive_lifetime());
 }
@@ -692,7 +695,7 @@ TEST_F(StunPortTest, TestStunBindingRequestShortLifetime) {
       webrtc::IsRtcOk());
   EXPECT_THAT(
       webrtc::WaitUntil(
-          [&] { return !HasPendingRequest(cricket::STUN_BINDING_REQUEST); },
+          [&] { return !HasPendingRequest(webrtc::STUN_BINDING_REQUEST); },
           IsTrue(), {.clock = &fake_clock}),
       webrtc::IsRtcOk());
 }
@@ -709,7 +712,7 @@ TEST_F(StunPortTest, TestStunBindingRequestLongLifetime) {
       webrtc::IsRtcOk());
   EXPECT_THAT(
       webrtc::WaitUntil(
-          [&] { return HasPendingRequest(cricket::STUN_BINDING_REQUEST); },
+          [&] { return HasPendingRequest(webrtc::STUN_BINDING_REQUEST); },
           IsTrue(), {.clock = &fake_clock}),
       webrtc::IsRtcOk());
 }
@@ -722,7 +725,9 @@ class MockAsyncPacketSocket : public webrtc::AsyncPacketSocket {
   MOCK_METHOD(SocketAddress, GetRemoteAddress, (), (const, override));
   MOCK_METHOD(int,
               Send,
-              (const void* pv, size_t cb, const rtc::PacketOptions& options),
+              (const void* pv,
+               size_t cb,
+               const webrtc::AsyncSocketPacketOptions& options),
               (override));
 
   MOCK_METHOD(int,
@@ -730,7 +735,7 @@ class MockAsyncPacketSocket : public webrtc::AsyncPacketSocket {
               (const void* pv,
                size_t cb,
                const SocketAddress& addr,
-               const rtc::PacketOptions& options),
+               const webrtc::AsyncSocketPacketOptions& options),
               (override));
   MOCK_METHOD(int, Close, (), (override));
   MOCK_METHOD(State, GetState, (), (const, override));
@@ -756,17 +761,19 @@ TEST_F(StunPortTest, TestStunPacketsHaveDscpPacketOption) {
   EXPECT_CALL(*socket, SetOption(_, _)).WillRepeatedly(Return(0));
 
   // If DSCP is not set on the socket, stun packets should have no value.
-  EXPECT_CALL(*socket, SendTo(_, _, _,
-                              ::testing::Field(&rtc::PacketOptions::dscp,
-                                               Eq(rtc::DSCP_NO_CHANGE))))
+  EXPECT_CALL(*socket,
+              SendTo(_, _, _,
+                     ::testing::Field(&webrtc::AsyncSocketPacketOptions::dscp,
+                                      Eq(webrtc::DSCP_NO_CHANGE))))
       .WillOnce(Return(100));
   PrepareAddress();
 
   // Once it is set transport wide, they should inherit that value.
-  port()->SetOption(webrtc::Socket::OPT_DSCP, rtc::DSCP_AF41);
-  EXPECT_CALL(*socket, SendTo(_, _, _,
-                              ::testing::Field(&rtc::PacketOptions::dscp,
-                                               Eq(rtc::DSCP_AF41))))
+  port()->SetOption(webrtc::Socket::OPT_DSCP, webrtc::DSCP_AF41);
+  EXPECT_CALL(*socket,
+              SendTo(_, _, _,
+                     ::testing::Field(&webrtc::AsyncSocketPacketOptions::dscp,
+                                      Eq(webrtc::DSCP_AF41))))
       .WillRepeatedly(Return(100));
   EXPECT_THAT(
       webrtc::WaitUntil([&] { return done(); }, IsTrue(),
@@ -815,7 +822,7 @@ TEST_F(StunIPv6PortTest, TestPrepareAddressFail) {
   EXPECT_EQ(0U, port()->Candidates().size());
   EXPECT_THAT(
       webrtc::WaitUntil([&] { return error_event_.error_code; },
-                        Eq(cricket::STUN_ERROR_SERVER_NOT_REACHABLE),
+                        Eq(webrtc::STUN_ERROR_SERVER_NOT_REACHABLE),
                         {.timeout = webrtc::TimeDelta::Millis(kTimeoutMs),
                          .clock = &fake_clock}),
       webrtc::IsRtcOk());
@@ -853,7 +860,7 @@ TEST_F(StunIPv6PortTestWithRealClock, TestPrepareAddressHostnameFail) {
   EXPECT_EQ(0U, port()->Candidates().size());
   EXPECT_THAT(
       webrtc::WaitUntil([&] { return error_event_.error_code; },
-                        Eq(cricket::STUN_ERROR_SERVER_NOT_REACHABLE),
+                        Eq(webrtc::STUN_ERROR_SERVER_NOT_REACHABLE),
                         {.timeout = webrtc::TimeDelta::Millis(kTimeoutMs)}),
       webrtc::IsRtcOk());
 }

@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/atomic_flag.h"
 #include "base/threading/thread_checker.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/history_match.h"
 #include "components/omnibox/browser/history_provider.h"
@@ -109,7 +110,9 @@ struct HistoryURLProviderParams {
                            const TemplateURL* default_search_provider,
                            const SearchTermsData* search_terms_data,
                            bool allow_deleting_browser_history,
-                           const TemplateURL* starter_pack_engine);
+                           const TemplateURL* starter_pack_engine,
+                           bool autocomplete_enabled = false,
+                           bool show_browser_history = false);
   ~HistoryURLProviderParams();
   HistoryURLProviderParams(const HistoryURLProviderParams&) = delete;
   HistoryURLProviderParams& operator=(const HistoryURLProviderParams&) = delete;
@@ -190,6 +193,10 @@ struct HistoryURLProviderParams {
   const bool allow_deleting_browser_history;
 
   raw_ptr<const TemplateURL> starter_pack_engine;
+
+  // NOTE(ondrej@vivaldi.com): VB-116850
+  bool autocomplete_enabled;
+  bool show_browser_history;
 };
 
 // This class is an autocomplete provider and is also a pseudo-internal
@@ -211,7 +218,7 @@ class HistoryURLProvider : public HistoryProvider {
 
   // HistoryProvider:
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
-  void Stop(bool clear_cached_results, bool due_to_user_inactivity) override;
+  void Stop(AutocompleteStopReason stop_reason) override;
 
   // Estimates dynamic memory usage.
   // See base/trace_event/memory_usage_estimator.h for more info.

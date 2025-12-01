@@ -80,7 +80,7 @@ class TRIVIAL_ABI GSL_POINTER UnownedPtr {
   // NOLINTNEXTLINE(runtime/explicit)
   constexpr UnownedPtr(std::nullptr_t ptr) {}
 
-  explicit constexpr UnownedPtr(T* pObj) noexcept : m_pObj(pObj) {}
+  explicit constexpr UnownedPtr(T* pObj) noexcept : obj_(pObj) {}
 
   // Copy-construct an UnownedPtr.
   // Required in addition to copy conversion constructor below.
@@ -89,30 +89,27 @@ class TRIVIAL_ABI GSL_POINTER UnownedPtr {
   // Move-construct an UnownedPtr. After construction, |that| will be NULL.
   // Required in addition to move conversion constructor below.
   constexpr UnownedPtr(UnownedPtr&& that) noexcept
-      : m_pObj(that.ExtractAsDangling()) {}
+      : obj_(that.ExtractAsDangling()) {}
 
   // Copy-conversion constructor.
-  template <class U,
-            typename = typename std::enable_if<
-                std::is_convertible<U*, T*>::value>::type>
-  UnownedPtr(const UnownedPtr<U>& that) : m_pObj(static_cast<U*>(that)) {}
+  template <class U>
+    requires(std::is_convertible_v<U*, T*>)
+  UnownedPtr(const UnownedPtr<U>& that) : obj_(static_cast<U*>(that)) {}
 
   // Move-conversion constructor.
-  template <class U,
-            typename = typename std::enable_if<
-                std::is_convertible<U*, T*>::value>::type>
-  UnownedPtr(UnownedPtr<U>&& that) noexcept
-      : m_pObj(that.ExtractAsDangling()) {}
+  template <class U>
+    requires(std::is_convertible_v<U*, T*>)
+  UnownedPtr(UnownedPtr<U>&& that) noexcept : obj_(that.ExtractAsDangling()) {}
 
   // Assign an UnownedPtr from nullptr.
   UnownedPtr& operator=(std::nullptr_t) noexcept {
-    m_pObj = nullptr;
+    obj_ = nullptr;
     return *this;
   }
 
   // Assign an UnownedPtr from a raw ptr.
   UnownedPtr& operator=(T* that) noexcept {
-    m_pObj = that;
+    obj_ = that;
     return *this;
   }
 
@@ -124,57 +121,55 @@ class TRIVIAL_ABI GSL_POINTER UnownedPtr {
   // Required in addition to move conversion assignment below.
   UnownedPtr& operator=(UnownedPtr&& that) noexcept {
     if (*this != that) {
-      m_pObj = that.ExtractAsDangling();
+      obj_ = that.ExtractAsDangling();
     }
     return *this;
   }
 
   // Copy-convert assignment.
-  template <class U,
-            typename = typename std::enable_if<
-                std::is_convertible<U*, T*>::value>::type>
+  template <class U>
+    requires(std::is_convertible_v<U*, T*>)
   UnownedPtr& operator=(const UnownedPtr<U>& that) noexcept {
     if (*this != that) {
-      m_pObj = static_cast<U*>(that);
+      obj_ = static_cast<U*>(that);
     }
     return *this;
   }
 
   // Move-convert assignment. After assignment, |that| will be NULL.
-  template <class U,
-            typename = typename std::enable_if<
-                std::is_convertible<U*, T*>::value>::type>
+  template <class U>
+    requires(std::is_convertible_v<U*, T*>)
   UnownedPtr& operator=(UnownedPtr<U>&& that) noexcept {
     if (*this != that) {
-      m_pObj = that.ExtractAsDangling();
+      obj_ = that.ExtractAsDangling();
     }
     return *this;
   }
 
-  ~UnownedPtr() {
-    m_pObj = nullptr;
-  }
+  ~UnownedPtr() { obj_ = nullptr; }
 
-  bool operator==(std::nullptr_t ptr) const { return m_pObj == nullptr; }
-  bool operator==(const UnownedPtr& that) const {
-    return m_pObj == static_cast<T*>(that);
+  friend inline bool operator==(const UnownedPtr& lhs, std::nullptr_t rhs) {
+    return lhs.obj_ == nullptr;
+  }
+  friend inline bool operator==(const UnownedPtr& lhs, const UnownedPtr& rhs) {
+    return lhs.obj_ == rhs.obj_;
   }
   bool operator<(const UnownedPtr& that) const {
-    return std::less<T*>()(m_pObj, static_cast<T*>(that));
+    return std::less<T*>()(obj_, static_cast<T*>(that));
   }
 
-  operator T*() const noexcept { return m_pObj; }
-  T* get() const noexcept { return m_pObj; }
+  operator T*() const noexcept { return obj_; }
+  T* get() const noexcept { return obj_; }
 
-  T* ExtractAsDangling() { return std::exchange(m_pObj, nullptr); }
-  void ClearAndDelete() { delete std::exchange(m_pObj, nullptr); }
+  T* ExtractAsDangling() { return std::exchange(obj_, nullptr); }
+  void ClearAndDelete() { delete std::exchange(obj_, nullptr); }
 
-  explicit operator bool() const { return !!m_pObj; }
-  T& operator*() const { return *m_pObj; }
-  T* operator->() const { return m_pObj; }
+  explicit operator bool() const { return !!obj_; }
+  T& operator*() const { return *obj_; }
+  T* operator->() const { return obj_; }
 
  private:
-  UNOWNED_PTR_EXCLUSION T* m_pObj = nullptr;
+  UNOWNED_PTR_EXCLUSION T* obj_ = nullptr;
 };
 
 }  // namespace fxcrt

@@ -191,19 +191,12 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, LanguageChanged) {
                    "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceSelection) {
-  RunSidePanelTest("side_panel/read_anything/voice_selection_test.js",
+#if BUILDFLAG(IS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, DownloadNotification) {
+  RunSidePanelTest("side_panel/read_anything/download_notification_test.js",
                    "mocha.run()");
 }
-
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Prefs) {
-  RunSidePanelTest("side_panel/read_anything/prefs_test.js", "mocha.run()");
-}
-
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, UpdateVoicePack) {
-  RunSidePanelTest("side_panel/read_anything/update_voice_pack_test.js",
-                   "mocha.run()");
-}
+#endif
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, ToolbarOverflow) {
   RunSidePanelTest("side_panel/read_anything/toolbar_overflow_test.js",
@@ -241,8 +234,18 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, ReadAloudHighlight) {
                    "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, WordBoundariesUsedForSpeech) {
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, NodeStore) {
+  RunSidePanelTest("side_panel/read_anything/node_store_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, WordBoundaries) {
   RunSidePanelTest("side_panel/read_anything/word_boundaries_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, WordBoundariesUsedForSpeech) {
+  RunSidePanelTest("side_panel/read_anything/word_boundaries_speech_test.js",
                    "mocha.run()");
 }
 
@@ -268,6 +271,31 @@ IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, WordHighlighting) {
 
 IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, HighlightToggle) {
   RunSidePanelTest("side_panel/read_anything/highlight_toggle_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, Highlighter) {
+  RunSidePanelTest("side_panel/read_anything/highlighter_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceLanguageController) {
+  RunSidePanelTest("side_panel/read_anything/voice_language_controller_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, VoiceLanguageModel) {
+  RunSidePanelTest("side_panel/read_anything/voice_language_model_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, SpeechController) {
+  RunSidePanelTest("side_panel/read_anything/speech_controller_test.js",
+                   "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(ReadAnythingMochaTest, SpeechModel) {
+  RunSidePanelTest("side_panel/read_anything/speech_model_test.js",
                    "mocha.run()");
 }
 

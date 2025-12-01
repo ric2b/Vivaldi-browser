@@ -71,8 +71,10 @@ static inline __m128i LoadAndCollapseHighBytes(const LChar* ptr) {
 }
 
 template <class CharType>
-ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
-                                                        const CharType* end) {
+ALWAYS_INLINE static size_t FindLengthOfDeclarationList(
+    const base::span<CharType> chars) {
+  const CharType* begin = chars.data();
+  const CharType* end = base::to_address(chars.end());
   // If the previous block ended with quote status (see below),
   // the lowest byte of this will be all-ones.
   __m128i prev_quoted = _mm_setzero_si128();
@@ -149,7 +151,11 @@ ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
     // Unescaped newlines within quotes are not allowed; they terminate
     // the string. We don't want to complicate our handling beyond
     // detecting it, so we treat it as an error and abort.
-    const __m128i eq_newline = _mm_cmpeq_epi8(x, _mm_set1_epi8('\n'));
+    // \r, \n and \f all count as newlines in this regard
+    // (see IsCSSNewLine()).
+    const __m128i eq_newline = _mm_cmpeq_epi8(x, _mm_set1_epi8('\n')) |
+                               _mm_cmpeq_epi8(x, _mm_set1_epi8('\r')) |
+                               _mm_cmpeq_epi8(x, _mm_set1_epi8('\f'));
     const __m128i quoted_newline = is_quoted & eq_newline;
 
     // Now we have a mask of bytes that are inside quotes
@@ -351,7 +357,9 @@ __attribute__((target("avx2"))) ALWAYS_INLINE static __m256i MaskToAVX2(
 
 template <class CharType>
 __attribute__((target("avx2,pclmul"))) ALWAYS_INLINE static size_t
-FindLengthOfDeclarationListAVX2(const CharType* begin, const CharType* end) {
+FindLengthOfDeclarationListAVX2(base::span<const CharType> chars) {
+  const CharType* begin = chars.data();
+  const CharType* end = base::to_address(chars.end());
   uint64_t prev_single_quote = 0;
   uint64_t prev_double_quote = 0;
   __m256i prev_parens = _mm256_setzero_si256();
@@ -383,7 +391,18 @@ FindLengthOfDeclarationListAVX2(const CharType* begin, const CharType* end) {
     // parens within quotes.
     __m256i quoted_mask = MaskToAVX2(prefix_single_quote | prefix_double_quote);
 
-    const __m256i eq_newline = _mm256_cmpeq_epi8(x, _mm256_set1_epi8('\n'));
+    // Since we have PSHUFB, and the values we're looking for (0x0a, 0x0c, 0x0d)
+    // all share a nibble (the upper nibble is always zero), we can use a
+    // shuffle plus compare instead of three compares and ORs. Basically this is
+    // the test `x == table[x & 0x0f]` (modulo some PSHUFB behavior with the top
+    // bit of x, that we don't need to worry about here), where we engineer
+    // table[] so that this only holds true for the three values of x we care
+    // about.
+    const __m256i eq_newline_table =
+        _mm256_setr_epi64x(0x0000000000000001, 0x00000d0c000a0000,
+                           0x0000000000000000, 0x0000000000000000);
+    const __m256i eq_newline =
+        _mm256_cmpeq_epi8(x, _mm256_shuffle_epi8(eq_newline_table, x));
     const __m256i quoted_newline = quoted_mask & eq_newline;
 
     const __m256i comment_start =
@@ -445,11 +464,9 @@ FindLengthOfDeclarationListAVX2(const CharType* begin, const CharType* end) {
 __attribute__((target("avx2,pclmul"))) inline size_t
 FindLengthOfDeclarationListAVX2(StringView str) {
   if (str.Is8Bit()) {
-    return FindLengthOfDeclarationListAVX2(
-        str.Characters8(), UNSAFE_TODO(str.Characters8() + str.length()));
+    return FindLengthOfDeclarationListAVX2(str.Span8());
   } else {
-    return FindLengthOfDeclarationListAVX2(
-        str.Characters16(), UNSAFE_TODO(str.Characters16() + str.length()));
+    return FindLengthOfDeclarationListAVX2(str.Span16());
   }
 }
 
@@ -480,8 +497,10 @@ static inline uint8x16_t LoadAndCollapseHighBytes(const LChar* ptr) {
 // equivalent of PCLMULQDQ), but it's supposedly slow, so we use
 // the same XOR-shift cascade.
 template <class CharType>
-ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
-                                                        const CharType* end) {
+ALWAYS_INLINE static size_t FindLengthOfDeclarationList(
+    base::span<const CharType> chars) {
+  const CharType* begin = chars.data();
+  const CharType* end = base::to_address(chars.end());
   // Since NEON doesn't have a natural way of moving the last element
   // to the first slot (shift right by 15 _bytes_), but _does_ have
   // fairly cheap broadcasting (unlike SSE2 without SSSE3), we use
@@ -523,7 +542,18 @@ ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
     const uint8x16_t mixed_quote = quoted == static_cast<char>('\'' ^ '"');
 
     const uint8x16_t is_quoted = quoted > vdupq_n_u8(0);
-    const uint8x16_t eq_newline = x == '\n';
+    // The VTBL instruction returns zero for indexes outside [0,16), so we
+    // don't need to be clever at all here, unlike with AVX2.
+#ifdef ARCH_CPU_ARM64
+    const uint8x16_t eq_newline = vqtbl1q_u8(
+        uint8x16_t{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0, 0xff, 0xff, 0, 0}, x);
+#else
+    const uint8x8x2_t eq_newline_table{0, 0, 0,    0, 0,    0,    0, 0,
+                                       0, 0, 0xff, 0, 0xff, 0xff, 0, 0};
+    const uint8x16_t eq_newline =
+        vcombine_s8(vtbl2_u8(eq_newline_table, vget_low_s8(x)),
+                    vtbl2_u8(eq_newline_table, vget_high_s8(x)));
+#endif
     const uint8x16_t quoted_newline = is_quoted & eq_newline;
 
     x &= ~is_quoted;
@@ -597,8 +627,8 @@ ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
 // If we have neither SSE2 nor NEON, we simply return 0 immediately.
 // We will then never use lazy parsing.
 template <class CharType>
-ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
-                                                        const CharType* end) {
+ALWAYS_INLINE static size_t FindLengthOfDeclarationList(
+    base::span<const CharType> chars) {
   return 0;
 }
 
@@ -606,11 +636,9 @@ ALWAYS_INLINE static size_t FindLengthOfDeclarationList(const CharType* begin,
 
 ALWAYS_INLINE static size_t FindLengthOfDeclarationList(StringView str) {
   if (str.Is8Bit()) {
-    return FindLengthOfDeclarationList(
-        str.Characters8(), UNSAFE_TODO(str.Characters8() + str.length()));
+    return FindLengthOfDeclarationList(str.Span8());
   } else {
-    return FindLengthOfDeclarationList(
-        str.Characters16(), UNSAFE_TODO(str.Characters16() + str.length()));
+    return FindLengthOfDeclarationList(str.Span16());
   }
 }
 

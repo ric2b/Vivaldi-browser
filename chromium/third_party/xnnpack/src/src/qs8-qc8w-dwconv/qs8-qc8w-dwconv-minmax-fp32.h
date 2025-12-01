@@ -8,18 +8,10 @@
 // Arguments are:
 // XNN_UKERNEL(arch, name, c_block, pipelined, cr, kr, datatype, weights_type,params_type, init_fn)
 
-#if XNN_ARCH_ARM
-XNN_UKERNEL(xnn_arch_arm_neon_v8, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p8c__asm_aarch32_neonv8_mla8_cortex_a35, 8, false, 8, 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params)
-#endif  // XNN_ARCH_ARM
-
 #if XNN_ARCH_ARM || XNN_ARCH_ARM64
 XNN_UKERNEL(xnn_arch_arm_neon, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p8c__neon_mla8_ld64, 8, false, 8, 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params)
 XNN_UKERNEL(xnn_arch_arm_neon_v8, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p8c__neonv8_mla8_ld64, 8, false, 8, 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params)
 #endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
-
-#if XNN_ARCH_ARM
-XNN_UKERNEL(xnn_arch_arm_neon_v8, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p16c__asm_aarch32_neonv8_mla8_cortex_a35, 16, false, 16, 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_neonv8_params)
-#endif  // XNN_ARCH_ARM
 
 #if XNN_ARCH_ARM || XNN_ARCH_ARM64
 XNN_UKERNEL(xnn_arch_arm_neon, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p16c__neon_mla8_ld64, 16, false, 16, 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_neon_params)
@@ -141,16 +133,6 @@ XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_25p8c__wasmsimd_mul16_add
 XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_25p16c__wasmsimd_mul16, 16, false, 16, 25, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
 XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_25p16c__wasmsimd_mul16_add16, 16, false, 16, 25, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
 #endif  // XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
-
-#if XNN_ARCH_WASM || XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p2c__wasm_fmagic, 2, false, 2, 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_9p1c__wasm_fmagic, 1, false, 1, 9, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_9p2c__wasm_fmagic, 2, false, 2, 9, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_9p4c__wasm_fmagic, 4, false, 4, 9, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_25p1c__wasm_fmagic, 1, false, 1, 25, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_25p2c__wasm_fmagic, 2, false, 2, 25, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_25p4c__wasm_fmagic, 4, false, 4, 25, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)
-#endif  // XNN_ARCH_WASM || XNN_ARCH_WASMSIMD || XNN_ARCH_WASMRELAXEDSIMD
 
 #if XNN_ARCH_RISCV && XNN_ENABLE_RISCV_VECTOR
 XNN_UKERNEL(0, xnn_qs8_qc8w_dwconv_minmax_fp32_ukernel_3p8vc__rvv, 8, false, 8 * (xnn_init_hardware_config()->vlenb / sizeof(int32_t)), 3, int8_t, void, union xnn_qs8_qc8w_conv_minmax_params, xnn_init_qs8_qc8w_conv_minmax_fp32_scalar_params)

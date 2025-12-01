@@ -10,6 +10,8 @@ import android.view.View;
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.cc.input.OffsetTag;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.EventFilter;
@@ -34,15 +36,16 @@ import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
  * scrolling.
  */
 @JNINamespace("android")
+@NullMarked
 public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements SceneOverlay {
     /** Handle to the native side of this class. */
     private long mNativePtr;
 
     /** The resource ID used to reference the view bitmap in native. */
-    private int mResourceId;
+    private final int mResourceId;
 
     /** The height of the view's top shadow. */
-    private int mTopShadowHeightPx;
+    private final int mTopShadowHeightPx;
 
     /** The current Y offset of the bottom view in px. */
     private int mCurrentYOffsetPx;
@@ -54,13 +57,13 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     private boolean mIsVisible;
 
     /** The OffsetTag indicating that this layer will be moved by viz. */
-    private OffsetTag mOffsetTag;
+    private @Nullable OffsetTag mOffsetTag;
 
     /** The {@link ViewResourceFrameLayout} that this scene layer represents. */
-    private ViewResourceFrameLayout mBottomView;
+    private final ViewResourceFrameLayout mBottomView;
 
     /** Vivaldi */
-    private BrowserControlsSizer mBrowserControlsManager;
+    private @Nullable BrowserControlsSizer mBrowserControlsManager;
 
     /**
      * Build a composited bottom view layer.
@@ -149,7 +152,8 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
                 mCurrentYOffsetPx += mBottomView.getHeight();
             // After the scene gets visible again we need to reset the yoffset but only when
             // controls are completely shown. Fix for VAB-4178.
-        } else if (mBrowserControlsManager.getBrowserControlHiddenRatio() == 0)
+        } else if (mBrowserControlsManager != null
+                && mBrowserControlsManager.getBrowserControlHiddenRatio() == 0)
             mCurrentYOffsetPx = 0;
 
         ScrollingBottomViewSceneLayerJni.get()
@@ -178,7 +182,7 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
     }
 
     @Override
-    public EventFilter getEventFilter() {
+    public @Nullable EventFilter getEventFilter() {
         return null;
     }
 
@@ -232,6 +236,6 @@ public class ScrollingBottomViewSceneLayer extends SceneOverlayLayer implements 
                 float xOffset,
                 float yOffset,
                 boolean showShadow,
-                OffsetTag offsetTag);
+                @Nullable OffsetTag offsetTag);
     }
 }

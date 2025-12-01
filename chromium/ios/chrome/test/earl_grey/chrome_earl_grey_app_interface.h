@@ -499,6 +499,12 @@ enum class TipsNotificationType;
 // otherwise returns object representing execution result.
 + (JavaScriptExecutionResult*)executeJavaScript:(NSString*)javaScript;
 
+// Same as -executeJavaScript but executes the script in the isolated world
+// instead of the page content world. This allows interacting with the gcrweb
+// objects that are injected there.
++ (JavaScriptExecutionResult*)executeJavaScriptInIsolatedWorld:
+    (NSString*)javaScript;
+
 // Returns the user agent that should be used for the mobile version.
 + (NSString*)mobileUserAgentString;
 
@@ -553,9 +559,6 @@ enum class TipsNotificationType;
 // Returns whether the UseLensToSearchForImage feature is enabled.
 + (BOOL)isUseLensToSearchForImageEnabled;
 
-// Returns whether the Web Channels feature is enabled.
-+ (BOOL)isWebChannelsEnabled;
-
 // Returns whether Tab Group Sync is enabled.
 + (BOOL)isTabGroupSyncEnabled;
 
@@ -600,6 +603,10 @@ enum class TipsNotificationType;
 // base::Value encoded as a JSON string. If the pref was not registered,
 // returns a Value of type NONE.
 + (NSString*)localStatePrefValue:(NSString*)prefName;
+
+// Gets the time value for the local state pref with `prefName`. Local State
+// contains the preferences that are shared between all profiles.
++ (base::Time)localStateTimePref:(NSString*)prefName;
 
 // Sets the integer value for the local state pref with `prefName`. `value`
 // can be either a casted enum or any other numerical value. Local State
@@ -697,6 +704,12 @@ enum class TipsNotificationType;
 // Copies `text` into the clipboard from the app's perspective.
 + (void)copyTextToPasteboard:(NSString*)text;
 
+// Copies `link` into pasteboard as a NSURL.
++ (void)copyLinkAsURLToPasteBoard:(NSString*)link;
+
+// Copies png `data` as image into pasteboard.
++ (void)copyImageToPasteboard:(NSData*)imageData;
+
 #pragma mark - Watcher utilities
 
 // Starts monitoring for buttons (based on traits) with the given
@@ -742,6 +755,11 @@ enum class TipsNotificationType;
 
 // Forces an override of the variations stored permanent country.
 + (void)overrideVariationsServiceStoredPermanentCountry:(NSString*)country;
+
+#pragma mark - Shared Tab Groups Utilities
+
+// Waits for the MessagingBackendService to be initialized.
++ (NSError*)waitForMessagingBackendServiceInitialized;
 
 @end
 

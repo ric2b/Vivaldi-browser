@@ -7,13 +7,16 @@
 
 #include <stddef.h>
 
+#include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "build/build_config.h"
-#include "chrome/browser/web_applications/mojom/user_display_mode.mojom.h"
+#include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
@@ -22,6 +25,9 @@
 
 class GURL;
 class Profile;
+#if BUILDFLAG(IS_CHROMEOS)
+enum class SystemWebAppType;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace apps {
 enum class LaunchContainer;
@@ -38,19 +44,6 @@ class BrowserContext;
 }
 
 namespace web_app {
-
-namespace error_page {
-// |alternative_error_page_params| dictionary key values in the
-// |AlternativeErrorPageOverrideInfo| mojom struct.
-const char kMessage[] = "web_app_error_page_message";
-const char kAppShortName[] = "app_short_name";
-const char kIconUrl[] = "icon_url";
-const char kSupplementaryIcon[] = "supplementary_icon";
-
-// This must match the HTML element id of the svg to show as a supplementary
-// icon on the default offline error page.
-const char16_t kOfflineIconId[] = u"offlineIcon";
-}  // namespace error_page
 
 // These functions return true if the WebAppProvider is allowed
 // for a given profile. This does not consider 'original' profiles. Returns
@@ -146,6 +139,48 @@ bool CanUserUninstallWebApp(const webapps::AppId& app_id,
 // Extracts app_id from chrome://app-settings/<app-id> URL path.
 webapps::AppId GetAppIdFromAppSettingsUrl(const GURL& url);
 
+// Checks whether |policy_id| specifies a Chrome App.
+bool IsChromeAppPolicyId(std::string_view policy_id);
+
+#if BUILDFLAG(IS_CHROMEOS)
+// Checks whether |policy_id| specifies an Arc App.
+bool IsArcAppPolicyId(std::string_view policy_id);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+// Checks whether |policy_id| specifies a Web App.
+bool IsWebAppPolicyId(std::string_view policy_id);
+
+// TODO(https://crbug.com/411013748) Move WebApp utils to WebAppPolicyManager
+#if BUILDFLAG(IS_CHROMEOS)
+// Checks whether |policy_id| specifies a System Web App.
+bool IsSystemWebAppPolicyId(std::string_view policy_id);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+// Checks whether |policy_id| specifies a Preinstalled Web App.
+bool IsPreinstalledWebAppPolicyId(std::string_view policy_id);
+
+// Checks whether |policy_id| specifies an Isolated Web App.
+bool IsIsolatedWebAppPolicyId(std::string_view policy_id);
+
+std::vector<std::string> GetPolicyIds(Profile* profile, const WebApp& web_app);
+
+#if BUILDFLAG(IS_CHROMEOS)
+// Maps `SystemWebAppType` to a policy id. Returns the associated policy id.
+// Returns std::nullopt for apps not included in official builds.
+std::optional<std::string_view> GetPolicyIdForSystemWebAppType(
+    ash::SystemWebAppType swa_type);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+// Returns the policy ID for a given preinstalled web app ID. Note that not all
+// preinstalled web apps are supposed to have a policy ID (currently we only
+// support EDU apps) - in all other cases this will return std::nullopt.
+std::optional<std::string_view> GetPolicyIdForPreinstalledWebApp(
+    std::string_view preinstalled_web_app_id);
+
+void SetPreinstalledWebAppsMappingForTesting(
+    std::optional<base::flat_map<std::string_view, std::string_view>>
+        preinstalled_web_apps_mapping_for_testing);
+
 // Returns whether `url` is in scope `scope`. False if scope is invalid.
 bool IsInScope(const GURL& url, const GURL& scope);
 
@@ -169,21 +204,6 @@ enum class AppSettingsPageEntryPoint {
   kMaxValue = kSiteDataDialog,
 };
 
-// When user_display_mode indicates a user preference for opening in
-// a browser tab, we open in a browser tab. If the developer has specified
-// the app should utilize more advanced display modes and/or fallback chain,
-// attempt honor those preferences. Otherwise, we open in a standalone
-// window (for app_display_mode 'standalone' or 'fullscreen'), or a minimal-ui
-// window (for app_display_mode 'browser' or 'minimal-ui').
-//
-// |is_isolated| overrides browser display mode for Isolated Web Apps because
-// they can't be open as a tab.
-DisplayMode ResolveEffectiveDisplayMode(
-    DisplayMode app_display_mode,
-    const std::vector<DisplayMode>& app_display_mode_overrides,
-    mojom::UserDisplayMode user_display_mode,
-    bool is_isolated);
-
 apps::LaunchContainer ConvertDisplayModeToAppLaunchContainer(
     DisplayMode display_mode);
 
@@ -201,6 +221,10 @@ content::mojom::AlternativeErrorPageOverrideInfoPtr ConstructWebAppErrorPage(
     std::u16string supplementary_icon);
 
 bool IsValidScopeForLinkCapturing(const GURL& scope);
+
+// Resets all content settings for the given `app_scope` to their default
+// values.
+void ResetAllContentSettingsForWebApp(Profile* profile, const GURL& app_scope);
 
 // TODO(http://b/331208955): Remove after migration.
 // Returns whether |app_id| will soon refer to a system web app given |sources|.

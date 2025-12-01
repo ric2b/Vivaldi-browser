@@ -450,6 +450,7 @@ void Generate_JSEntryVariant(MacroAssembler* masm, StackFrame::Type type,
   ExternalReference context_address = ExternalReference::Create(
       IsolateAddressId::kContextAddress, masm->isolate());
   __ Load(kScratchRegister, context_address);
+
   static constexpr int kOffsetToContextSlot = -2 * kSystemPointerSize;
   __ movq(Operand(rbp, kOffsetToContextSlot), kScratchRegister);
 
@@ -618,6 +619,10 @@ static void Generate_JSEntryTrampolineHelper(MacroAssembler* masm,
     ExternalReference context_address = ExternalReference::Create(
         IsolateAddressId::kContextAddress, masm->isolate());
     __ movq(rsi, masm->ExternalReferenceAsOperand(context_address));
+#ifdef DEBUG
+    __ Move(__ ExternalReferenceAsOperand(context_address),
+            Context::kNoContext);
+#endif  // DEBUG
 
     // Push the function onto the stack.
     __ Push(rdi);
@@ -3420,70 +3425,51 @@ void Builtins::Generate_WasmDebugBreak(MacroAssembler* masm) {
 namespace {
 // Check that the stack was in the old state (if generated code assertions are
 // enabled), and switch to the new state.
-void SwitchStackState(MacroAssembler* masm, Register jmpbuf,
+void SwitchStackState(MacroAssembler* masm, Register stack,
                       wasm::JumpBuffer::StackState old_state,
                       wasm::JumpBuffer::StackState new_state) {
 #if V8_ENABLE_SANDBOX
-  __ cmpl(MemOperand(jmpbuf, wasm::kJmpBufStateOffset), Immediate(old_state));
+  __ cmpl(MemOperand(stack, wasm::kStackStateOffset), Immediate(old_state));
   Label ok;
   __ j(equal, &ok, Label::kNear);
   __ Trap();
   __ bind(&ok);
 #endif
-  __ movl(MemOperand(jmpbuf, wasm::kJmpBufStateOffset), Immediate(new_state));
+  __ movl(MemOperand(stack, wasm::kStackStateOffset), Immediate(new_state));
 }
 
-void FillJumpBuffer(MacroAssembler* masm, Register jmpbuf, Label* pc) {
-  __ movq(MemOperand(jmpbuf, wasm::kJmpBufSpOffset), rsp);
-  __ movq(MemOperand(jmpbuf, wasm::kJmpBufFpOffset), rbp);
+void FillJumpBuffer(MacroAssembler* masm, Register stack, Label* pc) {
+  __ movq(MemOperand(stack, wasm::kStackSpOffset), rsp);
+  __ movq(MemOperand(stack, wasm::kStackFpOffset), rbp);
   __ movq(kScratchRegister,
           __ StackLimitAsOperand(StackLimitKind::kRealStackLimit));
-  __ movq(MemOperand(jmpbuf, wasm::kJmpBufStackLimitOffset), kScratchRegister);
+  __ movq(MemOperand(stack, wasm::kStackLimitOffset), kScratchRegister);
   __ leaq(kScratchRegister, MemOperand(pc, 0));
-  __ movq(MemOperand(jmpbuf, wasm::kJmpBufPcOffset), kScratchRegister);
+  __ movq(MemOperand(stack, wasm::kStackPcOffset), kScratchRegister);
 }
 
-void LoadJumpBuffer(MacroAssembler* masm, Register jmpbuf, bool load_pc,
+void LoadJumpBuffer(MacroAssembler* masm, Register stack, bool load_pc,
                     wasm::JumpBuffer::StackState expected_state) {
-  __ movq(rsp, MemOperand(jmpbuf, wasm::kJmpBufSpOffset));
-  __ movq(rbp, MemOperand(jmpbuf, wasm::kJmpBufFpOffset));
-  SwitchStackState(masm, jmpbuf, expected_state, wasm::JumpBuffer::Active);
+  __ movq(rsp, MemOperand(stack, wasm::kStackSpOffset));
+  __ movq(rbp, MemOperand(stack, wasm::kStackFpOffset));
+  SwitchStackState(masm, stack, expected_state, wasm::JumpBuffer::Active);
   if (load_pc) {
-    __ jmp(MemOperand(jmpbuf, wasm::kJmpBufPcOffset));
+    __ jmp(MemOperand(stack, wasm::kStackPcOffset));
   }
   // The stack limit is set separately under the ExecutionAccess lock.
 }
 
-void SaveState(MacroAssembler* masm, Register active_continuation, Register tmp,
-               Label* suspend) {
-  Register jmpbuf = tmp;
-  __ LoadExternalPointerField(
-      jmpbuf,
-      FieldOperand(active_continuation, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, kScratchRegister);
-  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
-  FillJumpBuffer(masm, jmpbuf, suspend);
-}
-
-void LoadTargetJumpBuffer(MacroAssembler* masm, Register target_continuation,
+void LoadTargetJumpBuffer(MacroAssembler* masm, Register target_stack,
                           wasm::JumpBuffer::StackState expected_state) {
-  Register target_jmpbuf = target_continuation;
-  __ LoadExternalPointerField(
-      target_jmpbuf,
-      FieldOperand(target_continuation, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, kScratchRegister);
-  __ leaq(target_jmpbuf,
-          Operand(target_jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   MemOperand GCScanSlotPlace =
       MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset);
   __ Move(GCScanSlotPlace, 0);
   // Switch stack!
-  LoadJumpBuffer(masm, target_jmpbuf, false, expected_state);
+  LoadJumpBuffer(masm, target_stack, false, expected_state);
 }
 
 // Updates the stack limit and central stack info, and validates the switch.
-void SwitchStacks(MacroAssembler* masm, Register old_continuation,
-                  bool return_switch,
+void SwitchStacks(MacroAssembler* masm, Register old_stack, bool return_switch,
                   const std::initializer_list<Register> keep) {
   using ER = ExternalReference;
   for (auto reg : keep) {
@@ -3491,8 +3477,9 @@ void SwitchStacks(MacroAssembler* masm, Register old_continuation,
   }
   {
     FrameScope scope(masm, StackFrame::MANUAL);
+    // Move {old_stack} first in case it aliases kCArgRegs[0].
+    __ Move(kCArgRegs[1], old_stack);
     __ Move(kCArgRegs[0], ExternalReference::isolate_address());
-    __ Move(kCArgRegs[1], old_continuation);
     __ PrepareCallCFunction(2);
     __ CallCFunction(
         return_switch ? ER::wasm_return_switch() : ER::wasm_switch_stacks(), 2);
@@ -3502,40 +3489,23 @@ void SwitchStacks(MacroAssembler* masm, Register old_continuation,
   }
 }
 
-void ReloadParentContinuation(MacroAssembler* masm, Register promise,
-                              Register return_value, Register context,
-                              Register tmp1, Register tmp2) {
-  Register active_continuation = tmp1;
-  __ LoadRoot(active_continuation, RootIndex::kActiveContinuation);
+void ReloadParentStack(MacroAssembler* masm, Register promise,
+                       Register return_value, Register context, Register tmp1,
+                       Register tmp2) {
+  Register active_stack = tmp1;
+  __ LoadRootRelative(active_stack, IsolateData::active_stack_offset());
 
   // We don't need to save the full register state since we are switching out of
   // this stack for the last time. Mark the stack as retired.
-  Register jmpbuf = kScratchRegister;
-  __ LoadExternalPointerField(
-      jmpbuf,
-      FieldOperand(active_continuation, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, tmp2);
-  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
-  SwitchStackState(masm, jmpbuf, wasm::JumpBuffer::Active,
+  SwitchStackState(masm, active_stack, wasm::JumpBuffer::Active,
                    wasm::JumpBuffer::Retired);
-
   Register parent = tmp2;
-  __ LoadTaggedField(
-      parent,
-      FieldOperand(active_continuation, WasmContinuationObject::kParentOffset));
-
-  // Update active continuation root.
-  __ movq(masm->RootAsOperand(RootIndex::kActiveContinuation), parent);
-  jmpbuf = parent;
-  __ LoadExternalPointerField(
-      jmpbuf, FieldOperand(parent, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, kScratchRegister);
-  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
-
+  __ Move(parent, MemOperand(active_stack, wasm::kStackParentOffset));
+  __ StoreRootRelative(IsolateData::active_stack_offset(), parent);
   // Switch stack!
-  SwitchStacks(masm, active_continuation, true,
-               {promise, return_value, context, jmpbuf});
-  LoadJumpBuffer(masm, jmpbuf, false, wasm::JumpBuffer::Inactive);
+  SwitchStacks(masm, active_stack, true,
+               {promise, return_value, context, parent});
+  LoadJumpBuffer(masm, parent, false, wasm::JumpBuffer::Inactive);
 }
 
 // Loads the context field of the WasmTrustedInstanceData or WasmImportData
@@ -3556,8 +3526,7 @@ void GetContextFromImplicitArg(MacroAssembler* masm, Register data) {
   __ bind(&end);
 }
 
-void RestoreParentSuspender(MacroAssembler* masm, Register tmp1,
-                            Register tmp2) {
+void RestoreParentSuspender(MacroAssembler* masm, Register tmp1) {
   Register suspender = tmp1;
   __ LoadRoot(suspender, RootIndex::kActiveSuspender);
   __ LoadTaggedField(
@@ -3579,21 +3548,19 @@ void SwitchToAllocatedStack(MacroAssembler* masm, Register wasm_instance,
                             Register new_wrapper_buffer, Register scratch,
                             Label* suspend) {
   ResetStackSwitchFrameStackSlots(masm);
-  Register parent_continuation = new_wrapper_buffer;
-  __ LoadRoot(parent_continuation, RootIndex::kActiveContinuation);
-  __ LoadTaggedField(
-      parent_continuation,
-      FieldOperand(parent_continuation, WasmContinuationObject::kParentOffset));
-  SaveState(masm, parent_continuation, scratch, suspend);
-  SwitchStacks(masm, parent_continuation, false,
+  Register parent_stack = new_wrapper_buffer;
+  __ LoadRootRelative(parent_stack, IsolateData::active_stack_offset());
+  __ Move(parent_stack, MemOperand(parent_stack, wasm::kStackParentOffset));
+  FillJumpBuffer(masm, parent_stack, suspend);
+  SwitchStacks(masm, parent_stack, false,
                {kWasmImplicitArgRegister, wrapper_buffer});
-  parent_continuation = no_reg;
-  Register target_continuation = scratch;
-  __ LoadRoot(target_continuation, RootIndex::kActiveContinuation);
+  parent_stack = no_reg;
+  Register target_stack = scratch;
+  __ LoadRootRelative(target_stack, IsolateData::active_stack_offset());
   // Save the old stack's rbp in r9, and use it to access the parameters in
   // the parent frame.
   __ movq(original_fp, rbp);
-  LoadTargetJumpBuffer(masm, target_continuation, wasm::JumpBuffer::Suspended);
+  LoadTargetJumpBuffer(masm, target_stack, wasm::JumpBuffer::Suspended);
   // Return address slot. The builtin itself returns by switching to the parent
   // jump buffer and does not actually use this slot, but it is read by the
   // profiler.
@@ -3650,9 +3617,8 @@ void SwitchBackAndReturnPromise(MacroAssembler* masm, Register tmp1,
   __ movq(kContextRegister,
           MemOperand(rbp, StackSwitchFrameConstants::kImplicitArgOffset));
   GetContextFromImplicitArg(masm, kContextRegister);
-  ReloadParentContinuation(masm, promise, return_value, kContextRegister, tmp1,
-                           tmp2);
-  RestoreParentSuspender(masm, tmp1, tmp2);
+  ReloadParentStack(masm, promise, return_value, kContextRegister, tmp1, tmp2);
+  RestoreParentSuspender(masm, tmp1);
 
   if (mode == wasm::kPromise) {
     __ Move(MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset),
@@ -3696,8 +3662,8 @@ void GenerateExceptionHandlingLandingPad(MacroAssembler* masm,
           MemOperand(rbp, StackSwitchFrameConstants::kImplicitArgOffset));
   GetContextFromImplicitArg(masm, kContextRegister);
 
-  ReloadParentContinuation(masm, promise, reason, kContextRegister, r8, rdi);
-  RestoreParentSuspender(masm, r8, rdi);
+  ReloadParentStack(masm, promise, reason, kContextRegister, r8, rdi);
+  RestoreParentSuspender(masm, r8);
 
   __ Move(MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset),
           1);
@@ -3975,31 +3941,26 @@ void Builtins::Generate_WasmSuspend(MacroAssembler* masm) {
   // Save current state in active jump buffer.
   // -------------------------------------------
   Label resume;
-  Register continuation = rbx;
-  __ LoadRoot(continuation, RootIndex::kActiveContinuation);
-  Register jmpbuf = rdx;
-  __ LoadExternalPointerField(
-      jmpbuf, FieldOperand(continuation, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, r8);
-  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
-  FillJumpBuffer(masm, jmpbuf, &resume);
-  SwitchStackState(masm, jmpbuf, wasm::JumpBuffer::Active,
+  Register stack = rbx;
+  __ LoadRootRelative(stack, IsolateData::active_stack_offset());
+  FillJumpBuffer(masm, stack, &resume);
+  SwitchStackState(masm, stack, wasm::JumpBuffer::Active,
                    wasm::JumpBuffer::Suspended);
-  jmpbuf = no_reg;
-  // live: [rax, rbx, rcx]
+  // live: [rax, rbx]
 
-  Register suspender_continuation = rdx;
-  __ LoadTaggedField(
-      suspender_continuation,
-      FieldOperand(suspender, WasmSuspenderObject::kContinuationOffset));
+  Register suspender_stack = rdx;
+  __ LoadExternalPointerField(
+      suspender_stack,
+      FieldOperand(suspender, WasmSuspenderObject::kStackOffset),
+      kWasmStackMemoryTag, kScratchRegister);
 #ifdef DEBUG
   // -------------------------------------------
-  // Check that the suspender's continuation is the active continuation.
+  // Check that the suspender's stack is the active stack.
   // -------------------------------------------
   // TODO(thibaudm): Once we add core stack-switching instructions, this check
-  // will not hold anymore: it's possible that the active continuation changed
+  // will not hold anymore: it's possible that the active stack changed
   // (due to an internal switch), so we have to update the suspender.
-  __ cmpq(suspender_continuation, continuation);
+  __ cmpq(suspender_stack, stack);
   Label ok;
   __ j(equal, &ok);
   __ Trap();
@@ -4010,35 +3971,26 @@ void Builtins::Generate_WasmSuspend(MacroAssembler* masm) {
   // Update roots.
   // -------------------------------------------
   Register caller = rcx;
-  __ LoadTaggedField(caller,
-                     FieldOperand(suspender_continuation,
-                                  WasmContinuationObject::kParentOffset));
-  __ movq(masm->RootAsOperand(RootIndex::kActiveContinuation), caller);
+  __ Move(caller, MemOperand(suspender_stack, wasm::kStackParentOffset));
+  __ StoreRootRelative(IsolateData::active_stack_offset(), caller);
   Register parent = rdx;
   __ LoadTaggedField(
       parent, FieldOperand(suspender, WasmSuspenderObject::kParentOffset));
   __ movq(masm->RootAsOperand(RootIndex::kActiveSuspender), parent);
   parent = no_reg;
-  // live: [rax, rbx, rcx]
+  // live: [suspender:rax, stack:rbx, caller:rcx]
 
   // -------------------------------------------
   // Load jump buffer.
   // -------------------------------------------
-  SwitchStacks(masm, continuation, false, {caller, suspender});
-  continuation = no_reg;
-  jmpbuf = caller;
-  __ LoadExternalPointerField(
-      jmpbuf, FieldOperand(caller, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, r8);
-  __ leaq(jmpbuf, Operand(jmpbuf, wasm::StackMemory::jmpbuf_offset()));
-  caller = no_reg;
+  SwitchStacks(masm, stack, false, {caller, suspender});
   __ LoadTaggedField(
       kReturnRegister0,
       FieldOperand(suspender, WasmSuspenderObject::kPromiseOffset));
   MemOperand GCScanSlotPlace =
       MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset);
   __ Move(GCScanSlotPlace, 0);
-  LoadJumpBuffer(masm, jmpbuf, true, wasm::JumpBuffer::Inactive);
+  LoadJumpBuffer(masm, caller, true, wasm::JumpBuffer::Inactive);
   __ Trap();
   __ bind(&resume);
   __ endbr64();
@@ -4090,22 +4042,14 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
   // Save current state.
   // -------------------------------------------
   Label suspend;
-  Register active_continuation = r9;
-  __ LoadRoot(active_continuation, RootIndex::kActiveContinuation);
-  Register current_jmpbuf = rax;
-  __ LoadExternalPointerField(
-      current_jmpbuf,
-      FieldOperand(active_continuation, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, rdx);
-  __ leaq(current_jmpbuf,
-          Operand(current_jmpbuf, wasm::StackMemory::jmpbuf_offset()));
-  FillJumpBuffer(masm, current_jmpbuf, &suspend);
-  SwitchStackState(masm, current_jmpbuf, wasm::JumpBuffer::Active,
+  Register active_stack = r9;
+  __ LoadRootRelative(active_stack, IsolateData::active_stack_offset());
+  FillJumpBuffer(masm, active_stack, &suspend);
+  SwitchStackState(masm, active_stack, wasm::JumpBuffer::Active,
                    wasm::JumpBuffer::Inactive);
-  current_jmpbuf = no_reg;
 
   // -------------------------------------------
-  // Set the suspender and continuation parents and update the roots
+  // Set the suspender and stack parents and update the roots
   // -------------------------------------------
   Register active_suspender = rcx;
   Register slot_address = WriteBarrierDescriptor::SlotAddressRegister();
@@ -4119,42 +4063,25 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
                       active_suspender, slot_address, SaveFPRegsMode::kIgnore);
   __ movq(masm->RootAsOperand(RootIndex::kActiveSuspender), suspender);
 
-  Register target_continuation = suspender;
-  __ LoadTaggedField(
-      target_continuation,
-      FieldOperand(suspender, WasmSuspenderObject::kContinuationOffset));
+  Register target_stack = suspender;
+  __ LoadExternalPointerField(
+      target_stack, FieldOperand(suspender, WasmSuspenderObject::kStackOffset),
+      kWasmStackMemoryTag, kScratchRegister);
   suspender = no_reg;
-  __ StoreTaggedField(
-      FieldOperand(target_continuation, WasmContinuationObject::kParentOffset),
-      active_continuation);
-  Register old_continuation = r11;
-  __ movq(old_continuation, active_continuation);
-  __ RecordWriteField(
-      target_continuation, WasmContinuationObject::kParentOffset,
-      active_continuation, slot_address, SaveFPRegsMode::kIgnore);
-  active_continuation = no_reg;
-  __ movq(masm->RootAsOperand(RootIndex::kActiveContinuation),
-          target_continuation);
+  __ StoreRootRelative(IsolateData::active_stack_offset(), target_stack);
 
-  SwitchStacks(masm, old_continuation, false, {target_continuation});
+  SwitchStacks(masm, active_stack, false, {target_stack});
 
   // -------------------------------------------
   // Load state from target jmpbuf (longjmp).
   // -------------------------------------------
-  Register target_jmpbuf = rdi;
-  __ LoadExternalPointerField(
-      target_jmpbuf,
-      FieldOperand(target_continuation, WasmContinuationObject::kStackOffset),
-      kWasmStackMemoryTag, rax);
-  __ leaq(target_jmpbuf,
-          Operand(target_jmpbuf, wasm::StackMemory::jmpbuf_offset()));
   // Move resolved value to return register.
   __ movq(kReturnRegister0, Operand(rbp, 3 * kSystemPointerSize));
   __ Move(MemOperand(rbp, StackSwitchFrameConstants::kGCScanSlotCountOffset),
           0);
   if (on_resume == wasm::OnResume::kThrow) {
-    // Switch to the continuation's stack without restoring the PC.
-    LoadJumpBuffer(masm, target_jmpbuf, false, wasm::JumpBuffer::Suspended);
+    // Switch to the target stack without restoring the PC.
+    LoadJumpBuffer(masm, target_stack, false, wasm::JumpBuffer::Suspended);
     // Pop this frame now. The unwinder expects that the first STACK_SWITCH
     // frame is the outermost one.
     __ LeaveFrame(StackFrame::STACK_SWITCH);
@@ -4163,8 +4090,8 @@ void Generate_WasmResumeHelper(MacroAssembler* masm, wasm::OnResume on_resume) {
     __ Move(kContextRegister, Smi::zero());
     __ CallRuntime(Runtime::kThrow);
   } else {
-    // Resume the continuation normally.
-    LoadJumpBuffer(masm, target_jmpbuf, true, wasm::JumpBuffer::Suspended);
+    // Resume the stack normally.
+    LoadJumpBuffer(masm, target_stack, true, wasm::JumpBuffer::Suspended);
   }
   __ Trap();
   __ bind(&suspend);
@@ -5156,6 +5083,56 @@ void Builtins::Generate_DeoptimizationEntry_Eager(MacroAssembler* masm) {
 
 void Builtins::Generate_DeoptimizationEntry_Lazy(MacroAssembler* masm) {
   Generate_DeoptimizationEntry(masm, DeoptimizeKind::kLazy);
+}
+
+void Builtins::Generate_DeoptimizationEntry_LazyAfterFastCall(
+    MacroAssembler* masm) {
+  // The deoptimizer may have been triggered right after the return of a fast
+  // API call. In that case, exception handling and possible stack unwinding
+  // did not happen yet.
+  // We check here if a there is a pending exception by comparing the
+  // exception stored in the isolate with the no-exception sentinel
+  // (the_hole_value). If there is an exception, we call PropagateException to
+  // trigger stack unwinding.
+  Label no_exception;
+  __ movq(rax, __ ExternalReferenceAsOperand(ExternalReference::Create(
+                   IsolateAddressId::kExceptionAddress, __ isolate())));
+  __ CompareRoot(rax, RootIndex::kTheHoleValue);
+
+  __ j(equal, &no_exception);
+
+  __ EnterFrame(StackFrame::INTERNAL);
+  const RegList kCalleeSaveRegisters = {C_CALL_CALLEE_SAVE_REGISTERS};
+  const DoubleRegList kCalleeSaveFPRegisters = {
+      C_CALL_CALLEE_SAVE_FP_REGISTERS};
+  __ PushAll(kCalleeSaveFPRegisters);
+  __ PushAll(kCalleeSaveRegisters);
+  __ Move(kContextRegister, Context::kNoContext);
+  // We have to reset IsolateData::fast_c_call_caller_fp(), because otherwise
+  // the  stack unwinder thinks that we are still within the fast C call.
+  if (v8_flags.debug_code) {
+    __ movq(rax,
+            __ ExternalReferenceAsOperand(IsolateFieldId::kFastCCallCallerFP));
+    __ testq(rax, rax);
+    __ Assert(not_equal, AbortReason::kFastCallFallbackInvalid);
+  }
+  __ movq(__ ExternalReferenceAsOperand(IsolateFieldId::kFastCCallCallerFP),
+          Immediate(0));
+  __ CallRuntime(Runtime::FunctionId::kPropagateException);
+  __ PopAll(kCalleeSaveRegisters);
+  __ PopAll(kCalleeSaveFPRegisters);
+  __ LeaveFrame(StackFrame::INTERNAL);
+
+  __ bind(&no_exception);
+  // LINT.IfChange(DeoptAfterFastCallSetReturnValue)
+  // Deoptimization expects that the return value of the API call is in the
+  // return register. As we only allow deoptimization if the return type is
+  // void, the return value is always `undefined`.
+  // TODO(crbug.com/418936518): Handle the return value in an actual
+  // deoptimization continuation.
+  __ LoadRoot(kReturnRegister0, RootIndex::kUndefinedValue);
+  // LINT.ThenChange()
+  __ TailCallBuiltin(Builtin::kDeoptimizationEntry_Lazy);
 }
 
 // If there is baseline code on the shared function info, converts an

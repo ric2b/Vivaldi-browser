@@ -23,32 +23,32 @@ CFWL_ListBoxTP::~CFWL_ListBoxTP() = default;
 void CFWL_ListBoxTP::DrawBackground(const CFWL_ThemeBackground& pParams) {
   switch (pParams.GetPart()) {
     case CFWL_ThemePart::Part::kBorder: {
-      DrawBorder(pParams.GetGraphics(), pParams.m_PartRect, pParams.m_matrix);
+      DrawBorder(pParams.GetGraphics(), pParams.part_rect_, pParams.matrix_);
       break;
     }
     case CFWL_ThemePart::Part::kBackground: {
       FillSolidRect(pParams.GetGraphics(), ArgbEncode(255, 255, 255, 255),
-                    pParams.m_PartRect, pParams.m_matrix);
-      if (pParams.m_pRtData) {
+                    pParams.part_rect_, pParams.matrix_);
+      if (pParams.data_rect_) {
         FillSolidRect(pParams.GetGraphics(), FWLTHEME_COLOR_Background,
-                      *pParams.m_pRtData, pParams.m_matrix);
+                      *pParams.data_rect_, pParams.matrix_);
       }
       break;
     }
     case CFWL_ThemePart::Part::kListItem: {
-      DrawListBoxItem(pParams.GetGraphics(), pParams.m_dwStates,
-                      pParams.m_PartRect, pParams.m_pRtData, pParams.m_matrix);
+      DrawListBoxItem(pParams.GetGraphics(), pParams.states_,
+                      pParams.part_rect_, pParams.data_rect_, pParams.matrix_);
       break;
     }
     case CFWL_ThemePart::Part::kCheck: {
       uint32_t color = 0xFF000000;
-      if (pParams.m_dwStates == CFWL_PartState::kChecked) {
+      if (pParams.states_ == CFWL_PartState::kChecked) {
         color = 0xFFFF0000;
-      } else if (pParams.m_dwStates == CFWL_PartState::kNormal) {
+      } else if (pParams.states_ == CFWL_PartState::kNormal) {
         color = 0xFF0000FF;
       }
-      FillSolidRect(pParams.GetGraphics(), color, pParams.m_PartRect,
-                    pParams.m_matrix);
+      FillSolidRect(pParams.GetGraphics(), color, pParams.part_rect_,
+                    pParams.matrix_);
       break;
     }
     default:
@@ -74,8 +74,9 @@ void CFWL_ListBoxTP::DrawListBoxItem(CFGAS_GEGraphics* pGraphics,
     pGraphics->FillPath(path, CFX_FillRenderOptions::FillType::kWinding,
                         matrix);
   }
-  if ((dwStates & CFWL_PartState::kFocused) && pData)
+  if ((dwStates & CFWL_PartState::kFocused) && pData) {
     DrawFocus(pGraphics, *pData, matrix);
+  }
 }
 
 }  // namespace pdfium

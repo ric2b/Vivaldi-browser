@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_popup_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/history_sync/history_sync_utils.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_context_style.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/menu/ui_bundled/action_factory.h"
@@ -185,7 +186,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)stop {
-  [_historySyncPopupCoordinator interruptAnimated:NO];
+  [_historySyncPopupCoordinator stop];
   _historySyncPopupCoordinator = nil;
   [self.recentTabsTableViewController dismissModals];
   self.recentTabsTableViewController.imageDataSource = nil;
@@ -266,6 +267,7 @@ using vivaldi::IsVivaldiRunning;
                      showUserEmail:!dedicatedSignInDone
                  signOutIfDeclined:dedicatedSignInDone
                         isOptional:NO
+                      contextStyle:SigninContextStyle::kDefault
                        accessPoint:signin_metrics::AccessPoint::kRecentTabs];
     _historySyncPopupCoordinator.delegate = self;
     [_historySyncPopupCoordinator start];
@@ -303,7 +305,7 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - HistorySyncPopupCoordinatorDelegate
 
 - (void)historySyncPopupCoordinator:(HistorySyncPopupCoordinator*)coordinator
-                didFinishWithResult:(SigninCoordinatorResult)result {
+                didFinishWithResult:(HistorySyncResult)result {
   [self stopHistorySyncPopupCoordinator];
   [self.mediator refreshSessionsView];
 }

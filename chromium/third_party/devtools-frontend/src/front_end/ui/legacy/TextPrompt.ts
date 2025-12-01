@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2008 Apple Inc.  All rights reserved.
@@ -39,7 +40,6 @@ import * as VisualLogging from '../visual_logging/visual_logging.js';
 import * as ARIAUtils from './ARIAUtils.js';
 import {SuggestBox, type SuggestBoxDelegate, type Suggestion} from './SuggestBox.js';
 import textPromptStyles from './textPrompt.css.js';
-import * as ThemeSupport from './theme_support/theme_support.js';
 import {Tooltip} from './Tooltip.js';
 import {ElementFocusRestorer} from './UIUtils.js';
 
@@ -58,7 +58,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
   private completionStopCharacters!: string;
   private usesSuggestionBuilder!: boolean;
   private elementInternal?: Element;
-  private boundOnKeyDown?: ((ev: Event) => void);
+  private boundOnKeyDown?: ((ev: KeyboardEvent) => void);
   private boundOnInput?: ((ev: Event) => void);
   private boundOnMouseWheel?: ((event: Event) => void);
   private boundClearAutocomplete?: (() => void);
@@ -71,7 +71,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
   private oldTabIndex?: number;
   private completeTimeout?: number;
   private disableDefaultSuggestionForEmptyInputInternal?: boolean;
-  private changed: boolean;
   jslogContext: string|undefined = undefined;
 
   constructor() {
@@ -87,7 +86,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.ghostTextElement.classList.add('auto-complete-text');
     this.ghostTextElement.setAttribute('contenteditable', 'false');
     this.leftParenthesesIndices = [];
-    this.changed = false;
     ARIAUtils.setHidden(this.ghostTextElement, true);
   }
 
@@ -139,7 +137,7 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.boundClearAutocomplete = this.clearAutocomplete.bind(this);
     this.boundOnBlur = this.onBlur.bind(this);
     this.proxyElement = element.ownerDocument.createElement('span');
-    ThemeSupport.ThemeSupport.instance().appendStyle(this.proxyElement, textPromptStyles);
+    Platform.DOMUtilities.appendStyle(this.proxyElement, textPromptStyles);
     this.contentElement = this.proxyElement.createChild('div', 'text-prompt-root');
     this.proxyElement.style.display = this.proxyElementDisplay;
     if (element.parentElement) {
@@ -339,9 +337,8 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     // Subclasses can implement.
   }
 
-  onKeyDown(ev: Event): void {
+  onKeyDown(event: KeyboardEvent): void {
     let handled = false;
-    const event = (ev as KeyboardEvent);
     if (this.isSuggestBoxVisible() && this.suggestBox?.keyPressed(event)) {
       void VisualLogging.logKeyDown(this.suggestBox.element, event);
       event.consume(true);
@@ -441,7 +438,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.refreshGhostText();
     this.previousText = text;
     this.dispatchEventToListeners(Events.TEXT_CHANGED);
-    this.changed = true;
 
     this.autoCompleteSoon();
   }
@@ -473,7 +469,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
 
     if (beforeText !== this.textWithCurrentSuggestion()) {
       this.dispatchEventToListeners(Events.TEXT_CHANGED);
-      this.changed = true;
     }
   }
 
@@ -621,7 +616,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
     this.refreshGhostText();
     if (isIntermediateSuggestion) {
       this.dispatchEventToListeners(Events.TEXT_CHANGED);
-      this.changed = true;
     }
   }
 
@@ -644,7 +638,6 @@ export class TextPrompt extends Common.ObjectWrapper.ObjectWrapper<EventTypes> i
 
     this.clearAutocomplete();
     this.dispatchEventToListeners(Events.TEXT_CHANGED);
-    this.changed = true;
 
     return true;
   }

@@ -113,7 +113,11 @@ the last one takes effect.
     Because the compressor's behavior highly depends on the content to compress, there's no guarantee of a smooth progression from one level to another.
 * `--ultra`:
     unlocks high compression levels 20+ (maximum 22), using a lot more memory.
-    Note that decompression will also require more memory when using these levels.
+    Decompression will also need more memory when using these levels.
+* `--max`:
+    set advanced parameters to reach maximum compression.
+    warning: this setting is very slow and uses a lot of resources.
+    It's inappropriate for 32-bit mode and therefore disabled in this mode.
 * `--fast[=#]`:
     switch to ultra-fast compression levels.
     If `=#` is not present, it defaults to `1`.
@@ -451,6 +455,17 @@ The list of available _options_:
     Value 0 is special and means "default": _ovlog_ is automatically determined by `zstd`.
     In which case, _ovlog_ will range from 6 to 9, depending on selected _strat_.
 
+- `ldmHashRateLog`=_lhrlog_, `lhrlog`=_lhrlog_:
+    Specify the frequency of inserting entries into the long distance matching
+    hash table.
+
+    This option is ignored unless long distance matching is enabled.
+
+    Larger values will improve compression speed. Deviating far from the
+    default value will likely result in a decrease in compression ratio.
+
+    The default value varies between 4 and 7, depending on `strategy`.
+
 - `ldmHashLog`=_lhlog_, `lhlog`=_lhlog_:
     Specify the maximum size for a hash table used for long distance matching.
 
@@ -459,7 +474,7 @@ The list of available _options_:
     Bigger hash tables usually improve compression ratio at the expense of more
     memory during compression and a decrease in compression speed.
 
-    The minimum _lhlog_ is 6 and the maximum is 30 (default: 20).
+    The minimum _lhlog_ is 6 and the maximum is 30 (default: `windowLog - ldmHashRateLog`).
 
 - `ldmMinMatch`=_lmml_, `lmml`=_lmml_:
     Specify the minimum searched length of a match for long distance matching.
@@ -468,7 +483,7 @@ The list of available _options_:
 
     Larger/very small values usually decrease compression ratio.
 
-    The minimum _lmml_ is 4 and the maximum is 4096 (default: 64).
+    The minimum _lmml_ is 4 and the maximum is 4096 (default: 32 to 64, depending on `strategy`).
 
 - `ldmBucketSizeLog`=_lblog_, `lblog`=_lblog_:
     Specify the size of each bucket for the hash table used for long distance
@@ -479,18 +494,8 @@ The list of available _options_:
     Larger bucket sizes improve collision resolution but decrease compression
     speed.
 
-    The minimum _lblog_ is 1 and the maximum is 8 (default: 3).
+    The minimum _lblog_ is 1 and the maximum is 8 (default: 4 to 8, depending on `strategy`).
 
-- `ldmHashRateLog`=_lhrlog_, `lhrlog`=_lhrlog_:
-    Specify the frequency of inserting entries into the long distance matching
-    hash table.
-
-    This option is ignored unless long distance matching is enabled.
-
-    Larger values will improve compression speed. Deviating far from the
-    default value will likely result in a decrease in compression ratio.
-
-    The default value is `wlog - lhlog`.
 
 ### Example
 The following parameters sets advanced compression options to something
@@ -498,12 +503,12 @@ similar to predefined level 19 for files bigger than 256 KB:
 
 `--zstd`=wlog=23,clog=23,hlog=22,slog=6,mml=3,tlen=48,strat=6
 
-### -B#:
+### --jobsize=#:
 Specify the size of each compression job.
-This parameter is only available when multi-threading is enabled.
-Each compression job is run in parallel, so this value indirectly impacts the nb of active threads.
+This parameter is only meaningful when multi-threading is enabled.
+Each compression job is run in parallel, so this value can indirectly impact the nb of active threads.
 Default job size varies depending on compression level (generally  `4 * windowSize`).
-`-B#` makes it possible to manually select a custom size.
+`--jobsize=#` makes it possible to manually select a custom size.
 Note that job size must respect a minimum value which is enforced transparently.
 This minimum is either 512 KB, or `overlapSize`, whichever is largest.
 Different job sizes will lead to non-identical compressed frames.
@@ -549,8 +554,8 @@ Compression of small files similar to the sample set will be greatly improved.
     Use `#` compression level during training (optional).
     Will generate statistics more tuned for selected compression level,
     resulting in a _small_ compression ratio improvement for this level.
-* `-B#`:
-    Split input files into blocks of size # (default: no split)
+* `--split=#`:
+    Split input files into independent chunks of size # (default: no split)
 * `-M#`, `--memory=#`:
     Limit the amount of sample data loaded for training (default: 2 GB).
     Note that the default (2 GB) is also the maximum.
@@ -678,8 +683,8 @@ Benchmarking will employ `max(1, min(4, nbCores/4))` worker threads by default i
     benchmark decompression speed only (requires providing a zstd-compressed content)
 * `-i#`:
     minimum evaluation time, in seconds (default: 3s), benchmark mode only
-* `-B#`, `--block-size=#`:
-    cut file(s) into independent chunks of size # (default: no chunking)
+* `--split=#`:
+    split input file(s) into independent chunks of size # (default: no chunking)
 * `-S`:
     output one benchmark result per input file (default: consolidated result)
 * `-D dictionary`

@@ -54,6 +54,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "compare_value";
         case ParameterUsage::kComponent:
             return "component";
+        case ParameterUsage::kConstOffset:
+            return "const_offset";
         case ParameterUsage::kCoords:
             return "coords";
         case ParameterUsage::kCount:
@@ -68,6 +70,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "depth";
         case ParameterUsage::kDepthRef:
             return "depth_ref";
+        case ParameterUsage::kDref:
+            return "dref";
         case ParameterUsage::kE:
             return "e";
         case ParameterUsage::kElements:
@@ -80,6 +84,10 @@ std::string_view ToString(ParameterUsage usage) {
             return "i";
         case ParameterUsage::kId:
             return "id";
+        case ParameterUsage::kImage:
+            return "image";
+        case ParameterUsage::kImageOperands:
+            return "image_operands";
         case ParameterUsage::kInputAttachment:
             return "input_attachment";
         case ParameterUsage::kInsert:
@@ -88,6 +96,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "level";
         case ParameterUsage::kLocation:
             return "location";
+        case ParameterUsage::kLod:
+            return "lod";
         case ParameterUsage::kMask:
             return "mask";
         case ParameterUsage::kNumLevels:
@@ -100,6 +110,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "refz";
         case ParameterUsage::kResult:
             return "result";
+        case ParameterUsage::kSample:
+            return "sample";
         case ParameterUsage::kSampleIndex:
             return "sample_index";
         case ParameterUsage::kSampler:
@@ -108,6 +120,8 @@ std::string_view ToString(ParameterUsage usage) {
             return "samples";
         case ParameterUsage::kSourceLaneIndex:
             return "sourceLaneIndex";
+        case ParameterUsage::kTexel:
+            return "texel";
         case ParameterUsage::kTexture:
             return "texture";
         case ParameterUsage::kValue:

@@ -42,8 +42,9 @@ CBC_PDF417I::CBC_PDF417I()
 CBC_PDF417I::~CBC_PDF417I() = default;
 
 bool CBC_PDF417I::Encode(WideStringView contents) {
-  if (contents.GetLength() > kMaxPDF417InputLengthBytes)
+  if (contents.GetLength() > kMaxPDF417InputLengthBytes) {
     return false;
+  }
 
   auto* pWriter = GetPDF417Writer();
   CBC_PDF417Writer::EncodeResult result = pWriter->Encode(contents);
@@ -61,5 +62,5 @@ BC_TYPE CBC_PDF417I::GetType() {
 }
 
 CBC_PDF417Writer* CBC_PDF417I::GetPDF417Writer() {
-  return static_cast<CBC_PDF417Writer*>(m_pBCWriter.get());
+  return static_cast<CBC_PDF417Writer*>(bc_writer_.get());
 }

@@ -28,7 +28,8 @@ void InProcessImporterBridge::AddOpenTabs(
   writer_->AddOpenTabs(tabs);
 }
 
-void InProcessImporterBridge::NotifyItemFailed(importer::ImportItem item,
-                                               const std::string& error) {
+void InProcessImporterBridge::NotifyItemFailed(
+    user_data_importer::ImportItem item,
+    const std::string& error) {
   host_->NotifyImportItemFailed(item, error);
 }

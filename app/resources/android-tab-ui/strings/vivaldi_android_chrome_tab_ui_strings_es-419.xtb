@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="es-419">
-<translation id="2277224997687551299">Editar nombre del grupo</translation>
+<translation id="1062777154504442433">Nueva pila de pestañas</translation>
+<translation id="1625440863545383011">Suprimir pestaña y abandonar pila</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Agregar la pestaña a marcadores}
           other {Agregar las pestañas a marcadores}
         }</translation>
 <translation id="2947471979790858922">Tu actividad en estas pestañas privadas se eliminará de este dispositivo</translation>
+<translation id="3298614730029636660">Abandonar pila</translation>
+<translation id="354698175756845966">Editar el color de la pila</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
                     =1 {Encuentra tus pestañas cerradas en pestañas recientes en el menú principal de Vivaldi. Tu pestaña privada no estará disponible.}
                     other {Encuentra tus pestañas cerradas en pestañas recientes en el menú principal de Vivaldi. Tus # pestañas privadas no estarán disponibles.}}</translation>
-<translation id="4460014764210899310">Desagrupar</translation>
 <translation id="4871187110787939393">¿Quieres cerrar todas las pestañas privadas?</translation>
 <translation id="5494920125229734069">Seleccionar todo</translation>
-<translation id="6744956528665271406">Editar el color del grupo</translation>
+<translation id="6807841890213931603">Suprimir pestaña y borrar pila</translation>
+<translation id="750227952939161636">Tus conjuntos de pestañas se guardan y actualizan en todos tus dispositivos con sesión iniciada</translation>
+<translation id="7640137753339219124">Borrar pila</translation>
+<translation id="7653857400289671414">Tus conjuntos de pestañas se guardan automáticamente</translation>
+<translation id="8440938071054361204">Editar el nombre de la pila</translation>
+<translation id="8602902357364871325">Cerrar pila</translation>
+<translation id="8851621822786801079">Sacar de la pila</translation>
 </translationbundle>

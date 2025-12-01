@@ -105,16 +105,16 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
   virtual bool IsBitmapImage() const { return false; }
   virtual bool IsStaticBitmapImage() const { return false; }
 
-  virtual bool CurrentFrameKnownToBeOpaque() = 0;
+  virtual bool IsOpaque() = 0;
 
-  virtual bool CurrentFrameIsComplete() { return false; }
-  virtual bool CurrentFrameIsLazyDecoded() { return false; }
+  virtual bool FirstFrameIsComplete() { return false; }
+  virtual bool IsLazyDecoded() { return false; }
   virtual size_t FrameCount() { return 0; }
   virtual bool IsTextureBacked() const { return false; }
 
-  // Derived classes should override this if they can assure that the current
-  // image frame contains only resources from its own security origin.
-  virtual bool CurrentFrameHasSingleSecurityOrigin() const { return false; }
+  // Derived classes should override this if they can assure that the image
+  // contains only resources from its own security origin.
+  virtual bool HasSingleSecurityOrigin() const { return false; }
 
   static Image* NullImage();
   bool IsNull() const { return this == NullImage(); }
@@ -284,11 +284,11 @@ class PLATFORM_EXPORT Image : public ThreadSafeRefCounted<Image> {
 
   // Most image types have the default orientation. Only bitmap derived image
   // types need to override this method.
-  virtual ImageOrientation CurrentFrameOrientation() const {
+  virtual ImageOrientation Orientation() const {
     return ImageOrientationEnum::kDefault;
   }
   bool HasDefaultOrientation() const {
-    return CurrentFrameOrientation() == ImageOrientationEnum::kDefault;
+    return Orientation() == ImageOrientationEnum::kDefault;
   }
 
   // Correct the src rect (rotate and maybe translate it) to account for a

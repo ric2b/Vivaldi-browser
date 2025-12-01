@@ -4,48 +4,99 @@
 <translation id="1063263220330818888">私密搜尋</translation>
 <translation id="1097355661841455597">我們很樂意聽聽您的想法。</translation>
 <translation id="1137850887415122856">要鎖定您的無痕分頁，請設定 Touch ID、Face ID 或密碼。</translation>
+<translation id="1189137610071296104">在分頁堆疊中開啟</translation>
 <translation id="1310184829257917508">要求在無痕模式下開啟其它應用程式的連結</translation>
 <translation id="1743244221910283364">捨棄變更</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {將分頁加入至堆疊}
+        other {將分頁加入至堆疊}}</translation>
 <translation id="207677936531967364">新的無痕分頁頁面</translation>
+<translation id="2099591136582442348">這將會永久從您的裝置中刪除該堆疊。</translation>
+<translation id="2181990701313127304">在堆疊中開啟新分頁</translation>
+<translation id="2351280151183279120">分享堆疊</translation>
 <translation id="2353953000228441783">預設網站檢視</translation>
 <translation id="2394192052244849643">貼上並搜尋</translation>
 <translation id="2418705169960294134">新增無痕分頁</translation>
+<translation id="2565593432251168402">透過建立分頁堆疊來保持條理</translation>
 <translation id="2783161812871838616">切換為電腦版網站</translation>
+<translation id="2806957659107692459">建立堆疊</translation>
 <translation id="2899836479226240291">只要將 Vivaldi 設為預設瀏覽器應用程式，即可自動在 Vivaldi 中開啟連結。</translation>
 <translation id="3365529507898144230">儲存在相簿中</translation>
 <translation id="3434473769478814796">貼上並前往</translation>
 <translation id="3463990832590571933">在新無痕分頁中開啟</translation>
 <translation id="3473652525653758699">新增無痕視窗</translation>
 <translation id="3501504415290398157">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 以解鎖您的無痕分頁。</translation>
+<translation id="353418192940651934">保留堆疊</translation>
 <translation id="3607792383367580513">翻譯</translation>
 <translation id="3692650606013198282">在無痕模式中開啟</translation>
-<translation id="3922395466317605522">自定義選單</translation>
+<translation id="3873885181515160073">建立您的新分頁堆疊，並為其命名與設定顏色</translation>
+<translation id="3922395466317605522">客製化選單</translation>
 <translation id="3981599532037327317">以無痕模式開啟 ${url}</translation>
 <translation id="398477389655464998">複製圈選文字的連結</translation>
+<translation id="3993429087389909418">這些分頁將會保留在此裝置上，但該堆疊將會從所有登入了 <ph name="USER_EMAIL" /> 帳號的裝置中刪除。</translation>
 <translation id="4026745073321351206">🙄發現問題了嗎？</translation>
+<translation id="4216644171369573466">分頁堆疊，<ph name="GROUP_TITLE" />，選單。</translation>
 <translation id="4304713468139749426">密碼管理工具</translation>
+<translation id="4569525137269575065">關閉堆疊</translation>
 <translation id="473775607612524610">更新</translation>
 <translation id="4755216899422789286">在 Vivaldi 中開啟網址</translation>
+<translation id="4772190485302020393">關閉全部分頁和堆疊</translation>
 <translation id="4802185666270672526">隱藏切換為電腦版網站</translation>
+<translation id="4828571836982833289">要取消分頁堆疊嗎？</translation>
+<translation id="4838250035189612538">重新命名堆疊</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {已關閉並儲存 1 個分頁堆疊}
+            other {已關閉並儲存 {count} 個分頁堆疊}}</translation>
+<translation id="5019787757991745254">分頁堆疊顏色 <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">分頁堆疊。已折疊。</translation>
 <translation id="5217245356412073535">您可以在「設定」&gt;「內容設定」中將預設的網站檢視變更成電腦版</translation>
 <translation id="5271549068863921519">儲存密碼</translation>
 <translation id="5317780077021120954">儲存</translation>
+<translation id="5385953732213322025">此網站正在嘗試開啟應用程式。這會讓您離開無痕模式。</translation>
 <translation id="5431239785743546285">您已讀的頁面</translation>
+<translation id="5521301883748677039">要刪除堆疊嗎？</translation>
+<translation id="5544011153887687593">分頁堆疊中的分頁。第 <ph name="TAB_INDEX_IN_GROUP" /> 個，共 <ph name="NUMBER_OF_TABS_IN_GROUP" /> 個。</translation>
 <translation id="5614553682702429503">要儲存密碼嗎？</translation>
 <translation id="570209299585559496">您可以到設定中的內容設定將網站預設檢視變更成電腦版</translation>
+<translation id="5719777162751096990">移至分頁堆疊</translation>
 <translation id="5962477178930921574">貼上並搜尋</translation>
+<translation id="6163856768888310791">取消堆疊</translation>
+<translation id="6168969409902608220">命名堆疊</translation>
 <translation id="6233792867654386826">在 Vivaldi 中開啟輸入的網址。</translation>
+<translation id="6478587527114893588">關閉堆疊。</translation>
+<translation id="6527405730445064713">分頁堆疊。已展開。</translation>
 <translation id="6532106788206463496">儲存變更</translation>
-<translation id="6680416467695217368">自定義選單</translation>
+<translation id="6666425778700353369">這將會從所有登入 <ph name="USER_EMAIL" /> 的裝置中刪除該堆疊。</translation>
+<translation id="6680416467695217368">客製化選單</translation>
+<translation id="6695835495840050460">點擊「將分頁加入新堆疊」</translation>
+<translation id="6708694844902784277">刪除堆疊</translation>
 <translation id="6827597288286078054">私密搜尋</translation>
 <translation id="6851516051005285358">切換為電腦版網站</translation>
+<translation id="6890907822330704077">分頁堆疊，<ph name="GROUP_TITLE" />，<ph name="TABS_NUMBER" /> 個分頁。</translation>
 <translation id="7307970171564921489">使用 <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> 解鎖無痕分頁</translation>
 <translation id="7347289093190902150">要在無痕模式中開啟連結嗎？</translation>
+<translation id="7363285031331302144">建立分頁堆疊以整理您開啟的分頁</translation>
+<translation id="7395230742578757172">在新分頁堆疊中開啟</translation>
+<translation id="7424676799308869002">要保留堆疊嗎？</translation>
 <translation id="7498234416455752244">繼續編輯</translation>
 <translation id="7549299604720382000">新增無痕分頁</translation>
+<translation id="7585610907974664408">在堆疊中開啟新無痕分頁</translation>
+<translation id="7661319142491611883">展開分頁堆疊。</translation>
+<translation id="7706213624515206557">顯示分頁堆疊中的全部分頁</translation>
 <translation id="7961015016161918242">一律不要</translation>
 <translation id="8326104954595890674">新增無痕分頁</translation>
+<translation id="8345989863850359861">要移除分頁和刪除堆疊嗎？</translation>
+<translation id="8407986162266014185">分享堆疊</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {將分頁加入至新堆疊}
+        other {將分頁加入至新堆疊}}</translation>
+<translation id="8465550436083180511">折疊分頁堆疊。</translation>
+<translation id="8685478989144570078">分頁堆疊</translation>
 <translation id="8756969031206844760">要更新密碼嗎？</translation>
+<translation id="8852861335827546438">新增分頁堆疊</translation>
+<translation id="8951084872625418241">在堆疊中開啟新分頁</translation>
 <translation id="9042893549633094279">隱私和安全性</translation>
 <translation id="9094033019050270033">更新密碼</translation>
+<translation id="944434461715569989">離開堆疊</translation>
+<translation id="959061183386231608">這些分頁將會保留在此裝置上，但該堆疊將會被永久刪除。</translation>
 </translationbundle>

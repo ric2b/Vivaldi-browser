@@ -14,6 +14,7 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
+#include "base/power_monitor/power_monitor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -100,8 +101,6 @@ HttpNetworkSessionParams::HttpNetworkSessionParams()
       time_func(&base::TimeTicks::Now) {
   enable_early_data =
       base::FeatureList::IsEnabled(features::kEnableTLS13EarlyData);
-  use_dns_https_svcb_alpn =
-      base::FeatureList::IsEnabled(features::kUseDnsHttpsSvcbAlpn);
 }
 
 HttpNetworkSessionParams::HttpNetworkSessionParams(
@@ -239,10 +238,16 @@ HttpNetworkSession::HttpNetworkSession(const HttpNetworkSessionParams& params,
   http_stream_pool_ = std::make_unique<HttpStreamPool>(
       this,
       /*cleanup_on_ip_address_change=*/!params.ignore_ip_address_changes);
+#if BUILDFLAG(IS_WIN)
+  base::PowerMonitor::GetInstance()->AddPowerSuspendObserver(this);
+#endif
 }
 
 HttpNetworkSession::~HttpNetworkSession() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+#if BUILDFLAG(IS_WIN)
+  base::PowerMonitor::GetInstance()->RemovePowerSuspendObserver(this);
+#endif
   if (http_stream_pool_) {
     http_stream_pool_->OnShuttingDown();
   }
@@ -376,6 +381,10 @@ void HttpNetworkSession::CloseIdleConnections(const char* net_log_reason_utf8) {
   spdy_session_pool_.CloseCurrentIdleSessions(net_log_reason_utf8);
 }
 
+void HttpNetworkSession::SetTLS13EarlyDataEnabled(bool enabled) {
+  params_.enable_early_data = enabled;
+}
+
 bool HttpNetworkSession::IsQuicEnabled() const {
   return params_.enable_quic;
 }
@@ -464,6 +473,15 @@ void HttpNetworkSession::OnMemoryPressure(
       CloseIdleConnections("Low memory");
       break;
   }
+}
+
+void HttpNetworkSession::OnSuspend() {
+  power_suspended_ = true;
+  CloseIdleConnections("Entering suspend mode");
+}
+
+void HttpNetworkSession::OnResume() {
+  power_suspended_ = false;
 }
 
 }  // namespace net

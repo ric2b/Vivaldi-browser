@@ -12,21 +12,18 @@
 #define PC_CONNECTION_CONTEXT_H_
 
 #include <memory>
-#include <string>
 
 #include "api/environment/environment.h"
-#include "api/media_stream_interface.h"
+#include "api/packet_socket_factory.h"
 #include "api/peer_connection_interface.h"
 #include "api/ref_counted_base.h"
 #include "api/scoped_refptr.h"
 #include "api/sequence_checker.h"
 #include "api/transport/sctp_transport_factory_interface.h"
 #include "media/base/media_engine.h"
-#include "p2p/base/basic_packet_socket_factory.h"
-#include "rtc_base/checks.h"
+#include "rtc_base/memory/always_valid_pointer.h"
 #include "rtc_base/network.h"
 #include "rtc_base/network_monitor_factory.h"
-#include "rtc_base/rtc_certificate_generator.h"
 #include "rtc_base/socket_factory.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
@@ -45,7 +42,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   // Creates a ConnectionContext. May return null if initialization fails.
   // The Dependencies class allows simple management of all new dependencies
   // being added to the ConnectionContext.
-  static rtc::scoped_refptr<ConnectionContext> Create(
+  static scoped_refptr<ConnectionContext> Create(
       const Environment& env,
       PeerConnectionFactoryDependencies* dependencies);
 
@@ -58,9 +55,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
     return sctp_factory_.get();
   }
 
-  cricket::MediaEngineInterface* media_engine() const {
-    return media_engine_.get();
-  }
+  MediaEngineInterface* media_engine() const { return media_engine_.get(); }
 
   Thread* signaling_thread() { return signaling_thread_; }
   const Thread* signaling_thread() const { return signaling_thread_; }
@@ -75,7 +70,7 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
   const Environment& env() const { return env_; }
 
   // Accessors only used from the PeerConnectionFactory class
-  rtc::NetworkManager* default_network_manager() {
+  NetworkManager* default_network_manager() {
     RTC_DCHECK_RUN_ON(signaling_thread_);
     return default_network_manager_.get();
   }
@@ -119,16 +114,16 @@ class ConnectionContext final : public RefCountedNonVirtual<ConnectionContext> {
 
   // This object is const over the lifetime of the ConnectionContext, and is
   // only altered in the destructor.
-  std::unique_ptr<cricket::MediaEngineInterface> media_engine_;
+  std::unique_ptr<MediaEngineInterface> media_engine_;
 
   // This object should be used to generate any SSRC that is not explicitly
   // specified by the user (or by the remote party).
   // TODO(bugs.webrtc.org/12666): This variable is used from both the signaling
   // and worker threads. See if we can't restrict usage to a single thread.
   UniqueRandomIdGenerator ssrc_generator_;
-  std::unique_ptr<rtc::NetworkMonitorFactory> const network_monitor_factory_
+  std::unique_ptr<NetworkMonitorFactory> const network_monitor_factory_
       RTC_GUARDED_BY(signaling_thread_);
-  std::unique_ptr<rtc::NetworkManager> default_network_manager_
+  std::unique_ptr<NetworkManager> default_network_manager_
       RTC_GUARDED_BY(signaling_thread_);
   std::unique_ptr<MediaFactory> const call_factory_
       RTC_GUARDED_BY(worker_thread());

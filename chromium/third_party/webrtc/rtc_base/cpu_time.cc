@@ -10,6 +10,8 @@
 
 #include "rtc_base/cpu_time.h"
 
+#include <cstdint>
+
 #include "rtc_base/logging.h"
 #include "rtc_base/time_utils.h"
 
@@ -39,7 +41,7 @@ const int64_t kNanosecsPerFiletime = 100;
 }  // namespace
 #endif
 
-namespace rtc {
+namespace webrtc {
 
 int64_t GetProcessCpuTimeNanos() {
 #if defined(WEBRTC_FUCHSIA)
@@ -56,7 +58,7 @@ int64_t GetProcessCpuTimeNanos() {
 #elif defined(WEBRTC_LINUX)
   struct timespec ts;
   if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) == 0) {
-    return ts.tv_sec * webrtc::kNumNanosecsPerSec + ts.tv_nsec;
+    return ts.tv_sec * kNumNanosecsPerSec + ts.tv_nsec;
   } else {
     RTC_LOG_ERR(LS_ERROR) << "clock_gettime() failed.";
   }
@@ -104,7 +106,7 @@ int64_t GetThreadCpuTimeNanos() {
 #elif defined(WEBRTC_LINUX)
   struct timespec ts;
   if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) == 0) {
-    return ts.tv_sec * webrtc::kNumNanosecsPerSec + ts.tv_nsec;
+    return ts.tv_sec * kNumNanosecsPerSec + ts.tv_nsec;
   } else {
     RTC_LOG_ERR(LS_ERROR) << "clock_gettime() failed.";
   }
@@ -142,4 +144,4 @@ int64_t GetThreadCpuTimeNanos() {
   return -1;
 }
 
-}  // namespace rtc
+}  // namespace webrtc

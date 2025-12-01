@@ -6,6 +6,10 @@
 
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 @implementation TableViewNavigationController
 
 #pragma mark - Public Interface
@@ -18,6 +22,11 @@
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+
+  if (vivaldi::IsVivaldiRunning()) {
+    self.toolbar.translucent = NO;
+    self.navigationBar.translucent = NO;
+  } // End Vivaldi
 
   self.navigationBar.prefersLargeTitles = YES;
 

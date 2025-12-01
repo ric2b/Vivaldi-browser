@@ -16,7 +16,7 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
+#include "base/notimplemented.h"
 #include "base/rand_util.h"
 #include "base/time/clock.h"
 #include "base/time/default_clock.h"
@@ -573,7 +573,7 @@ class NetworkErrorLoggingServiceImpl : public NetworkErrorLoggingService {
     DCHECK(initialized_);
     if (PoliciesArePersisted()) {
       // TODO(chlily): Add a DeleteAllNelPolicies command to PersistentNelStore.
-      for (auto origin_and_policy : policies_) {
+      for (const auto& origin_and_policy : policies_) {
         store_->DeleteNelPolicy(origin_and_policy.second);
       }
       store_->Flush();
@@ -719,7 +719,7 @@ class NetworkErrorLoggingServiceImpl : public NetworkErrorLoggingService {
   // Removes the policy pointed to by |policy_it|. Invalidates |policy_it|.
   // Returns the iterator to the next element.
   PolicyMap::iterator RemovePolicy(PolicyMap::iterator policy_it) {
-    CHECK(policy_it != policies_.end(), base::NotFatalUntil::M130);
+    CHECK(policy_it != policies_.end());
     NelPolicy* policy = &policy_it->second;
     MaybeRemoveWildcardPolicy(policy);
 
@@ -740,7 +740,7 @@ class NetworkErrorLoggingServiceImpl : public NetworkErrorLoggingService {
 
     auto wildcard_it =
         wildcard_policies_.find(WildcardNelPolicyKey(origin_key));
-    CHECK(wildcard_it != wildcard_policies_.end(), base::NotFatalUntil::M130);
+    CHECK(wildcard_it != wildcard_policies_.end());
 
     size_t erased = wildcard_it->second.erase(policy);
     DCHECK_EQ(1u, erased);
@@ -773,7 +773,7 @@ class NetworkErrorLoggingServiceImpl : public NetworkErrorLoggingService {
 
     // This should only be called if we have hit the max policy limit, so there
     // should be at least one policy.
-    CHECK(stalest_it != policies_.end(), base::NotFatalUntil::M130);
+    CHECK(stalest_it != policies_.end());
 
     RemovePolicy(stalest_it);
   }

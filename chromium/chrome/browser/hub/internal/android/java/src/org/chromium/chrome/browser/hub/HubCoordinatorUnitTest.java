@@ -7,9 +7,7 @@ package org.chromium.chrome.browser.hub;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -19,7 +17,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
@@ -29,8 +26,6 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
@@ -43,16 +38,15 @@ import org.chromium.base.supplier.LazyOneshotSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRule;
-import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.base.test.util.Features;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.searchactivityutils.SearchActivityClient;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
 import org.chromium.components.browser_ui.widget.gesture.BackPressHandler.BackPressResult;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.ui.base.TestActivity;
@@ -63,6 +57,12 @@ import java.util.Collection;
 
 /** Tests for {@link HubCoordinator}. */
 @RunWith(ParameterizedRobolectricTestRunner.class)
+// TODO(crbug.com/419289558): Re-enable color surface feature flags
+@Features.DisableFeatures({
+    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE
+})
 public class HubCoordinatorUnitTest {
     // All the tests in this file will run twice, once for isXrDevice=true and once for
     // isXrDevice=false. Expect all the tests with the same results on XR devices too.
@@ -94,30 +94,28 @@ public class HubCoordinatorUnitTest {
     @Mock private MenuButtonCoordinator mMenuButtonCoordinator;
     @Mock private DisplayButtonData mReferenceButtonData;
     @Mock private ProfileProvider mProfileProvider;
+    @Mock private Profile mProfile;
     @Mock private Tracker mTracker;
     @Mock private SearchActivityClient mSearchActivityClient;
-    @Mock private EdgeToEdgeController mEdgeToEdgeController;
     @Mock private HubColorMixer mHubColorMixer;
-    @Captor private ArgumentCaptor<EdgeToEdgePadAdjuster> mEdgeToEdgePadAdjusterArgumentCaptor;
-    private final ObservableSupplierImpl<Integer> mColorOverviewSupplier =
+    private final ObservableSupplierImpl<Boolean> mHubVisibilitySupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Boolean> mHubVisibilitySupplier = new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Boolean> mTabSwitcherBackPressSupplier =
+    private final ObservableSupplierImpl<Boolean> mTabSwitcherBackPressSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Boolean> mIncognitoTabSwitcherBackPressSupplier =
+    private final ObservableSupplierImpl<Boolean> mIncognitoTabSwitcherBackPressSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Tab> mTabSupplier = new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Integer> mPreviousLayoutTypeSupplier =
+    private final ObservableSupplierImpl<Tab> mTabSupplier = new ObservableSupplierImpl<>();
+    private final ObservableSupplierImpl<Integer> mPreviousLayoutTypeSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<DisplayButtonData> mReferenceButtonDataSupplier =
+    private final ObservableSupplierImpl<DisplayButtonData> mReferenceButtonDataSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Boolean> mRegularHubSearchEnabledStateSupplier =
+    private final ObservableSupplierImpl<Boolean> mRegularHubSearchEnabledStateSupplier =
             new ObservableSupplierImpl<>();
-    private ObservableSupplierImpl<Boolean> mIncognitoHubSearchEnabledStateSupplier =
+    private final ObservableSupplierImpl<Boolean> mIncognitoHubSearchEnabledStateSupplier =
             new ObservableSupplierImpl<>();
-    private OneshotSupplierImpl<ProfileProvider> mProfileProviderSupplier =
+    private final OneshotSupplierImpl<ProfileProvider> mProfileProviderSupplier =
             new OneshotSupplierImpl<>();
-    private ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeSupplier =
+    private final ObservableSupplierImpl<EdgeToEdgeController> mEdgeToEdgeSupplier =
             new ObservableSupplierImpl<>();
     private PaneManager mPaneManager;
     private FrameLayout mRootView;
@@ -129,6 +127,7 @@ public class HubCoordinatorUnitTest {
 
         TrackerFactory.setTrackerForTests(mTracker);
         mReferenceButtonDataSupplier.set(mReferenceButtonData);
+        when(mProfileProvider.getOriginalProfile()).thenReturn(mProfile);
         mProfileProviderSupplier.set(mProfileProvider);
         when(mTabSwitcherPane.getPaneId()).thenReturn(PaneId.TAB_SWITCHER);
         when(mTabSwitcherPane.getColorScheme()).thenReturn(HubColorScheme.DEFAULT);
@@ -156,6 +155,8 @@ public class HubCoordinatorUnitTest {
         when(mIncognitoTab.isIncognito()).thenReturn(true);
         when(mHubLayoutController.getPreviousLayoutTypeSupplier())
                 .thenReturn(mPreviousLayoutTypeSupplier);
+        when(mHubLayoutController.getIsAnimatingSupplier())
+                .thenReturn(new ObservableSupplierImpl<>());
 
         PaneListBuilder builder =
                 new PaneListBuilder(new DefaultPaneOrderController())
@@ -201,7 +202,6 @@ public class HubCoordinatorUnitTest {
         assertFalse(mPreviousLayoutTypeSupplier.hasObservers());
         assertFalse(mIncognitoTabSwitcherBackPressSupplier.hasObservers());
         assertFalse(mTabSupplier.hasObservers());
-        XrUtils.resetXrDeviceForTesting();
     }
 
     @Test
@@ -274,6 +274,19 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
+    public void testBackNavigationBetweenPanesOnEscapeKeyPressNotTriggered() {
+        assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+
+        assertTrue(mPaneManager.focusPane(PaneId.INCOGNITO_TAB_SWITCHER));
+        assertEquals(mIncognitoTabSwitcherPane, mPaneManager.getFocusedPaneSupplier().get());
+        assertTrue(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+
+        assertEquals(Boolean.FALSE, mHubCoordinator.handleEscPress());
+        assertEquals(mIncognitoTabSwitcherPane, mPaneManager.getFocusedPaneSupplier().get());
+        assertTrue(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+    }
+
+    @Test
     public void testBackNavigationWithNullTab() {
         assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
         assertEquals(BackPressResult.FAILURE, mHubCoordinator.handleBackPress());
@@ -283,6 +296,19 @@ public class HubCoordinatorUnitTest {
         mTabSupplier.set(null);
 
         assertEquals(BackPressResult.FAILURE, mHubCoordinator.handleBackPress());
+        verify(mHubLayoutController, never()).selectTabAndHideHubLayout(anyInt());
+    }
+
+    @Test
+    public void testBackNavigationWithNullTabOnEscapeKeyPress() {
+        assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+        assertEquals(Boolean.FALSE, mHubCoordinator.handleEscPress());
+
+        mTabSupplier.set(mTab);
+        assertTrue(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+        mTabSupplier.set(null);
+
+        assertEquals(Boolean.FALSE, mHubCoordinator.handleEscPress());
         verify(mHubLayoutController, never()).selectTabAndHideHubLayout(anyInt());
     }
 
@@ -299,6 +325,18 @@ public class HubCoordinatorUnitTest {
     }
 
     @Test
+    public void testBackNavigationWithTabOnEscapeKeyPress() {
+        assertFalse(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+        assertEquals(Boolean.FALSE, mHubCoordinator.handleEscPress());
+
+        mTabSupplier.set(mTab);
+        assertTrue(mHubCoordinator.getHandleBackPressChangedSupplier().get());
+
+        assertEquals(Boolean.TRUE, mHubCoordinator.handleEscPress());
+        verify(mHubLayoutController).selectTabAndHideHubLayout(eq(TAB_ID));
+    }
+
+    @Test
     public void testFocusPane() {
         reset(mPaneManager);
         mHubCoordinator.focusPane(PaneId.TAB_SWITCHER);
@@ -310,44 +348,5 @@ public class HubCoordinatorUnitTest {
         int tabId = 5;
         mHubCoordinator.selectTabAndHideHub(tabId);
         verify(mHubLayoutController).selectTabAndHideHubLayout(tabId);
-    }
-
-    @Test
-    @EnableFeatures({
-        ChromeFeatureList.FLOATING_SNACKBAR,
-        ChromeFeatureList.DRAW_KEY_NATIVE_EDGE_TO_EDGE,
-        ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN
-    })
-    public void testEdgeToEdgePadAdjuster() {
-        // Register the pad adjuster with the mock controller.
-        mEdgeToEdgeSupplier.set(mEdgeToEdgeController);
-        // Verify that the pad adjuster was registered and capture it.
-        verify(mEdgeToEdgeController)
-                .registerAdjuster(mEdgeToEdgePadAdjusterArgumentCaptor.capture());
-        // Get the value of the pad adjuster from the argument captor.
-        EdgeToEdgePadAdjuster padAdjuster = mEdgeToEdgePadAdjusterArgumentCaptor.getValue();
-        assertNotNull("Pad adjuster should be created when feature enabled.", padAdjuster);
-        ViewGroup snackbarContainer = mHubCoordinator.getSnackbarContainer();
-
-        int bottomInset = 63;
-        padAdjuster.overrideBottomInset(bottomInset);
-        assertEquals(bottomInset, snackbarContainer.getPaddingBottom());
-        assertTrue("clipToPadding should not change.", snackbarContainer.getClipToPadding());
-
-        padAdjuster.overrideBottomInset(0);
-        assertEquals(0, snackbarContainer.getPaddingBottom());
-        assertTrue("clipToPadding should not change.", snackbarContainer.getClipToPadding());
-    }
-
-    @Test
-    @DisableFeatures({
-        ChromeFeatureList.FLOATING_SNACKBAR,
-        ChromeFeatureList.DRAW_KEY_NATIVE_EDGE_TO_EDGE,
-        ChromeFeatureList.EDGE_TO_EDGE_BOTTOM_CHIN
-    })
-    public void testEdgeToEdgePadAdjuster_FeatureDisabled() {
-        mEdgeToEdgeSupplier.set(mEdgeToEdgeController);
-        // Verify that the pad adjuster was never registered.
-        verify(mEdgeToEdgeController, never()).registerAdjuster(any());
     }
 }

@@ -22,13 +22,18 @@ def RunSteps(api):
                                          project,
                                          branch,
                                          commit,
-                                         allow_existent_branch=True)
+                                         allow_existent_branch=True,
+                                         verbose=True)
   assert data == 'refs/heads/test'
 
-  data = api.gerrit.get_gerrit_branch(host, project, 'main')
+  data = api.gerrit.get_gerrit_branch(host, project, 'main', verbose=True)
   assert data == '67ebf73496383c6777035e374d2d664009e2aa5c'
 
-  data = api.gerrit.create_gerrit_tag(host, project, '1.0', commit)
+  data = api.gerrit.create_gerrit_tag(host,
+                                      project,
+                                      '1.0',
+                                      commit,
+                                      verbose=True)
   assert data == 'refs/tags/1.0'
 
   tag_body = {
@@ -39,10 +44,11 @@ def RunSteps(api):
                                       method='PUT',
                                       body=tag_body,
                                       accept_statuses=[201],
-                                      name='raw_create_tag')
+                                      name='raw_create_tag',
+                                      verbose=True)
   assert json_data['ref'] == 'refs/tags/1.0'
 
-  api.gerrit.move_changes(host, project, 'master', 'main')
+  api.gerrit.move_changes(host, project, 'master', 'main', verbose=True)
 
   change_info = api.gerrit.update_files(host,
                                         project,
@@ -50,7 +56,8 @@ def RunSteps(api):
                                         {'chrome/VERSION': '99.99.99.99'},
                                         'Dummy CL.',
                                         submit=True,
-                                        cc_list=['foo@example.com'])
+                                        cc_list=['foo@example.com'],
+                                        verbose=True)
   assert int(change_info['_number']) == 91827, change_info
   assert change_info['status'] == 'MERGED'
 
@@ -58,50 +65,54 @@ def RunSteps(api):
   api.gerrit.get_changes(
       host,
       query_params=[
-        ('project', 'chromium/src'),
-        ('status', 'open'),
-        ('label', 'Commit-Queue>0'),
+          ('project', 'chromium/src'),
+          ('status', 'open'),
+          ('label', 'Commit-Queue>0'),
       ],
       start=1,
       limit=1,
+      verbose=True,
   )
   related_changes = api.gerrit.get_related_changes(host,
                                                    change='58478',
-                                                   revision='2')
+                                                   revision='2',
+                                                   verbose=True)
   assert len(related_changes["changes"]) == 1
 
   # Query which returns no changes is still successful query.
   empty_list = api.gerrit.get_changes(
       host,
       query_params=[
-        ('project', 'chromium/src'),
-        ('status', 'open'),
-        ('label', 'Commit-Queue>2'),
+          ('project', 'chromium/src'),
+          ('status', 'open'),
+          ('label', 'Commit-Queue>2'),
       ],
       name='changes empty query',
+      verbose=True,
   )
   assert len(empty_list) == 0
 
-  api.gerrit.get_change_description(
-      host, change=123, patchset=1)
+  api.gerrit.get_change_description(host, change=123, patchset=1, verbose=True)
 
-  api.gerrit.set_change_label(host, 123, 'code-review', -1)
-  api.gerrit.set_change_label(host, 123, 'commit-queue', 1)
+  api.gerrit.set_change_label(host, 123, 'code-review', -1, verbose=True)
+  api.gerrit.set_change_label(host, 123, 'commit-queue', 1, verbose=True)
 
   api.gerrit.add_message(host,
                          123,
                          'This is a non-attention message',
-                         automatic_attention_set_update=False)
-  api.gerrit.add_message(host, 123, 'This is a comment message')
+                         automatic_attention_set_update=False,
+                         verbose=True)
+  api.gerrit.add_message(host, 123, 'This is a comment message', verbose=True)
 
-  api.gerrit.abandon_change(host, 123, 'bad roll')
-  api.gerrit.restore_change(host, 123, 'nevermind')
+  api.gerrit.abandon_change(host, 123, 'bad roll', verbose=True)
+  api.gerrit.restore_change(host, 123, 'nevermind', verbose=True)
 
   api.gerrit.get_change_description(
       host,
       change=122,
       patchset=3,
-      step_test_data=api.gerrit.test_api.get_empty_changes_response_data)
+      step_test_data=api.gerrit.test_api.get_empty_changes_response_data,
+      verbose=True)
 
 
 def GenTests(api):

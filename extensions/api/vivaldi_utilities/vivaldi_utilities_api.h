@@ -209,6 +209,17 @@ class UtilitiesPrintFunction : public ExtensionFunction {
   ~UtilitiesPrintFunction() override = default;
 };
 
+class UtilitiesClearCacheFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("utilities.clearCache", UTILITIES_CLEAR_CACHE)
+  UtilitiesClearCacheFunction() = default;
+
+  ResponseAction Run() override;
+
+ private:
+  ~UtilitiesClearCacheFunction() override = default;
+};
+
 class UtilitiesClearAllRecentlyClosedSessionsFunction
     : public ExtensionFunction {
  public:

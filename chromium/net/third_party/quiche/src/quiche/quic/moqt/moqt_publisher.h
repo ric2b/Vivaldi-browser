@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <variant>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -15,8 +16,8 @@
 #include "quiche/quic/core/quic_time.h"
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_priority.h"
-#include "quiche/common/platform/api/quiche_mem_slice.h"
 #include "quiche/common/quiche_callbacks.h"
+#include "quiche/common/quiche_mem_slice.h"
 #include "quiche/web_transport/web_transport.h"
 
 namespace moqt {
@@ -24,7 +25,7 @@ namespace moqt {
 // PublishedObject is a description of an object that is sufficient to publish
 // it on a given track.
 struct PublishedObject {
-  FullSequence sequence;
+  Location sequence;
   MoqtObjectStatus status;
   MoqtPriority publisher_priority;
   quiche::QuicheMemSlice payload;
@@ -51,15 +52,15 @@ class MoqtObjectListener {
   // Notifies that an object with the given sequence number has become
   // available.  The object payload itself may be retrieved via GetCachedObject
   // method of the associated track publisher.
-  virtual void OnNewObjectAvailable(FullSequence sequence) = 0;
+  virtual void OnNewObjectAvailable(Location sequence) = 0;
   // Notifies that a pure FIN has arrived following |sequence|. Should not be
   // called unless all objects have already been delivered. If not delivered,
   // instead set the fin_after_this flag in the PublishedObject.
-  virtual void OnNewFinAvailable(FullSequence sequence) = 0;
+  virtual void OnNewFinAvailable(Location sequence) = 0;
   // Notifies that the a stream is being abandoned (via RESET_STREAM) before
   // all objects are delivered.
   virtual void OnSubgroupAbandoned(
-      FullSequence sequence, webtransport::StreamErrorCode error_code) = 0;
+      Location sequence, webtransport::StreamErrorCode error_code) = 0;
 
   // No further object will be published for the given group, usually due to a
   // timeout. The owner of the Listener may want to reset the relevant streams.
@@ -75,6 +76,10 @@ class MoqtObjectListener {
 class MoqtFetchTask {
  public:
   using ObjectsAvailableCallback = quiche::MultiUseCallback<void()>;
+  // If the fields are not correct (e.g. end_of_track is less than start) it
+  // will result in QUICHE_BUG. The request_id field will be ignored.
+  using FetchResponseCallback = quiche::SingleUseCallback<void(
+      std::variant<MoqtFetchOk, MoqtFetchError>)>;
 
   virtual ~MoqtFetchTask() = default;
 
@@ -91,7 +96,8 @@ class MoqtFetchTask {
     kError,
   };
 
-  // Returns the next object received via the fetch, if available.
+  // Returns the next object received via the fetch, if available. MUST NOT
+  // return an object with status kObjectDoesNotExist.
   virtual GetNextObjectResult GetNextObject(PublishedObject& output) = 0;
 
   // Sets the callback that is called when GetNextObject() has previously
@@ -99,15 +105,18 @@ class MoqtFetchTask {
   // end-of-fetch) is available. The application is responsible for calling
   // GetNextObject() until it gets kPending; no further callback will occur
   // until then.
+  // If an object is available immediately, the callback will be called
+  // immediately.
   virtual void SetObjectAvailableCallback(
       ObjectsAvailableCallback callback) = 0;
+  // One of these callbacks is called as soon as the data publisher has enough
+  // information for either FETCH_OK or FETCH_ERROR.
+  // If the appropriate response is already available, the callback will be
+  // called immediately.
+  virtual void SetFetchResponseCallback(FetchResponseCallback callback) = 0;
 
   // Returns the error if fetch has completely failed, and OK otherwise.
   virtual absl::Status GetStatus() = 0;
-
-  // Returns the highest sequence number that will be delivered by the fetch.
-  // It is the minimum of the end of the fetch range and the live edge.
-  virtual FullSequence GetLargestId() const = 0;
 };
 
 // MoqtTrackPublisher is an application-side API for an MoQT publisher
@@ -136,12 +145,12 @@ class MoqtTrackPublisher {
   // otherwise, the corresponding QUIC streams will be stuck waiting for objects
   // that will never arrive.
   virtual std::optional<PublishedObject> GetCachedObject(
-      FullSequence sequence) const = 0;
+      Location sequence) const = 0;
 
   // Returns a full list of objects available in the cache, to be used for
   // SUBSCRIBEs with a backfill. Returned in order of worsening priority.
-  virtual std::vector<FullSequence> GetCachedObjectsInRange(
-      FullSequence start, FullSequence end) const = 0;
+  virtual std::vector<Location> GetCachedObjectsInRange(Location start,
+                                                        Location end) const = 0;
 
   // TODO: add an API to fetch past objects that are out of cache and might
   // require an upstream request to fill the relevant cache again. This is
@@ -157,10 +166,10 @@ class MoqtTrackPublisher {
 
   virtual absl::StatusOr<MoqtTrackStatusCode> GetTrackStatus() const = 0;
 
-  // Returns the largest sequence pair that has been published so far.
+  // Returns the largest (group, object) pair that has been published so far.
   // This method may only be called if
   // DoesTrackStatusImplyHavingData(GetTrackStatus()) is true.
-  virtual FullSequence GetLargestSequence() const = 0;
+  virtual Location GetLargestLocation() const = 0;
 
   // Returns the forwarding preference of the track.
   // This method may only be called if
@@ -175,8 +184,8 @@ class MoqtTrackPublisher {
 
   // Performs a fetch for the specified range of objects.
   virtual std::unique_ptr<MoqtFetchTask> Fetch(
-      FullSequence start, uint64_t end_group,
-      std::optional<uint64_t> end_object, MoqtDeliveryOrder order) = 0;
+      Location start, uint64_t end_group, std::optional<uint64_t> end_object,
+      MoqtDeliveryOrder order) = 0;
 };
 
 // MoqtPublisher is an interface to a publisher that allows it to publish

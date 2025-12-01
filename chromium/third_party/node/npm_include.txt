@@ -43,6 +43,8 @@
 @types/offscreencanvas/index.d.ts
 @types/trusted-types
 @types/trusted-types/*.d.ts
+@types/trusted-types/lib
+@types/trusted-types/lib/index.d.ts
 @types/w3c-image-capture
 @types/w3c-image-capture/*.d.ts
 @types/webrtc
@@ -53,10 +55,13 @@
 /chai/chai.js
 /chai/LICENSE
 /chai/package.json
+/messageformat/**/**.js
+/messageformat/**/**.d.ts
 /mocha/LICENSE
 /mocha/mocha.js
 /mocha/package.json
 /svgo/.svgo.yml
+/@bufbuild/**/*.d.ts
 /typescript/lib/lib.d.ts
 /typescript/lib/lib.*.d.ts
 /typescript/lib/tsc.js

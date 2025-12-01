@@ -41,8 +41,6 @@
 #include "chrome/browser/extensions/standard_management_policy_provider.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/themes/theme_service.h"
-#include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -62,6 +60,11 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/url_pattern.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/themes/theme_service.h"
+#include "chrome/browser/themes/theme_service_factory.h"
+#endif
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -308,11 +311,13 @@ bool ExtensionManagement::IsOffstoreInstallAllowed(
 bool ExtensionManagement::IsAllowedManifestType(
     Manifest::Type manifest_type,
     const std::string& extension_id) const {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // If a managed theme has been set for the current profile, theme extension
   // installations are not allowed.
   if (manifest_type == Manifest::Type::TYPE_THEME &&
       ThemeServiceFactory::GetForProfile(profile_)->UsingPolicyTheme())
     return false;
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   if (!global_settings_->allowed_types.has_value())
     return true;
@@ -759,10 +764,10 @@ void ExtensionManagement::Refresh() {
       const base::Value::Dict* subdict = iter.second.GetIfDict();
       if (!subdict)
         continue;
-      if (base::StartsWith(iter.first, schema_constants::kUpdateUrlPrefix,
-                           base::CompareCase::SENSITIVE)) {
-        const std::string& update_url =
-            iter.first.substr(strlen(schema_constants::kUpdateUrlPrefix));
+      std::optional<std::string_view> remainder =
+          base::RemovePrefix(iter.first, schema_constants::kUpdateUrlPrefix);
+      if (remainder) {
+        const std::string update_url(*remainder);
         if (!GURL(update_url).is_valid()) {
           LOG(WARNING) << "Invalid update URL: " << update_url << ".";
           continue;
@@ -1048,8 +1053,8 @@ ExtensionManagementFactory::ExtensionManagementFactory()
           "ExtensionManagement",
           ProfileSelections::Builder()
               .WithRegular(ProfileSelection::kRedirectedToOriginal)
-              // TODO(crbug.com/40257657): Check if this service is needed in
-              // Guest mode.
+              // TODO(crbug.com/40257657): Audit whether these should be
+              // redirected or should have their own instance.
               .WithGuest(ProfileSelection::kRedirectedToOriginal)
               // TODO(crbug.com/41488885): Check if this service is needed for
               // Ash Internals.

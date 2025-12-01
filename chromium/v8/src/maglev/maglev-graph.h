@@ -37,6 +37,7 @@ class Graph final : public ZoneObject {
         tagged_index_(zone),
         int32_(zone),
         uint32_(zone),
+        intptr_(zone),
         float_(zone),
         external_references_(zone),
         parameters_(zone),
@@ -143,6 +144,7 @@ class Graph final : public ZoneObject {
   ZoneMap<int, TaggedIndexConstant*>& tagged_index() { return tagged_index_; }
   ZoneMap<int32_t, Int32Constant*>& int32() { return int32_; }
   ZoneMap<uint32_t, Uint32Constant*>& uint32() { return uint32_; }
+  ZoneMap<intptr_t, IntPtrConstant*>& intptr() { return intptr_; }
   ZoneMap<uint64_t, Float64Constant*>& float64() { return float_; }
   ZoneMap<Address, ExternalConstant*>& external_references() {
     return external_references_;
@@ -231,12 +233,13 @@ class Graph final : public ZoneObject {
     if (auto context_const = context->TryCast<Constant>()) {
       res = context_const->object().AsContext().scope_info(broker);
       DCHECK(res->HasContext());
-    } else if (auto load = context->TryCast<LoadTaggedFieldForContextSlot>()) {
+    } else if (auto load =
+                   context->TryCast<LoadTaggedFieldForContextSlotNoCells>()) {
       compiler::OptionalScopeInfoRef cur = TryGetScopeInfoForContextLoad(
           load->input(0).node(), load->offset(), broker);
       if (cur.has_value()) res = cur;
     } else if (auto load_script =
-                   context->TryCast<LoadTaggedFieldForScriptContextSlot>()) {
+                   context->TryCast<LoadTaggedFieldForContextSlot>()) {
       compiler::OptionalScopeInfoRef cur = TryGetScopeInfoForContextLoad(
           load_script->input(0).node(), load_script->offset(), broker);
       if (cur.has_value()) res = cur;
@@ -278,6 +281,7 @@ class Graph final : public ZoneObject {
   ZoneMap<int, TaggedIndexConstant*> tagged_index_;
   ZoneMap<int32_t, Int32Constant*> int32_;
   ZoneMap<uint32_t, Uint32Constant*> uint32_;
+  ZoneMap<intptr_t, IntPtrConstant*> intptr_;
   // Use the bits of the float as the key.
   ZoneMap<uint64_t, Float64Constant*> float_;
   ZoneMap<Address, ExternalConstant*> external_references_;

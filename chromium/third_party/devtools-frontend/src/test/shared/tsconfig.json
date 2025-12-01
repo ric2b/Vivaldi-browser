@@ -1,19 +1,14 @@
 {
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "module": "commonjs",
-    "baseUrl": ".",
-    "composite": true,
-
-    "checkJs": false,
-    "allowJs": false
+    "baseUrl": "."
   },
   "references": [
     {
-      "path": "../conductor"
+      "path": "../conductor/tsconfig.json"
     },
     {
-      "path": "../e2e_non_hosted"
+      "path": "../e2e_non_hosted/tsconfig.json"
     }
-  ],
-  "extends": "../../config/typescript/tsconfig.base.json"
+  ]
 }

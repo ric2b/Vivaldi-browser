@@ -15,19 +15,25 @@
 #include <string.h>
 #include <time.h>
 
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
 #include "absl/strings/string_view.h"
+#include "api/array_view.h"
 #include "rtc_base/checks.h"
 #ifdef OPENSSL_IS_BORINGSSL
 #include "rtc_base/boringssl_identity.h"
 #else
 #include "rtc_base/openssl_identity.h"
 #endif
-#include "rtc_base/ssl_certificate.h"
+#include "rtc_base/base64.h"
 #include "rtc_base/strings/string_builder.h"
-#include "rtc_base/third_party/base64/base64.h"
 #include "rtc_base/time_utils.h"
 
-namespace rtc {
+namespace webrtc {
 
 //////////////////////////////////////////////////////////////////////
 // Helper Functions
@@ -102,7 +108,7 @@ int64_t ASN1TimeToSec(const unsigned char* s, size_t length, bool long_format) {
   if (bytes_left != 1) {
     return -1;
   }
-  return webrtc::TmToSeconds(tm);
+  return TmToSeconds(tm);
 }
 
 //////////////////////////////////////////////////////////////////////
@@ -185,20 +191,23 @@ bool SSLIdentity::PemToDer(absl::string_view pem_type,
     return false;
   }
   std::string inner(pem_string.substr(body + 1, trailer - (body + 1)));
-  *der = webrtc::Base64::Decode(inner, webrtc::Base64::DO_PARSE_WHITE |
-                                           webrtc::Base64::DO_PAD_ANY |
-                                           webrtc::Base64::DO_TERM_BUFFER);
+  std::optional<std::string> decoded =
+      Base64Decode(inner, Base64DecodeOptions::kForgiving);
+  if (!decoded.has_value()) {
+    return false;
+  }
+  *der = std::move(*decoded);
   return true;
 }
 
 std::string SSLIdentity::DerToPem(absl::string_view pem_type,
                                   const unsigned char* data,
                                   size_t length) {
-  webrtc::StringBuilder result;
+  StringBuilder result;
   result << "-----BEGIN " << pem_type << "-----\n";
 
-  std::string b64_encoded;
-  webrtc::Base64::EncodeFromArray(data, length, &b64_encoded);
+  ArrayView<const uint8_t> data_view(data, length);
+  std::string b64_encoded = Base64Encode(data_view);
   // Divide the Base-64 encoded data into 64-character chunks, as per 4.3.2.4
   // of RFC 1421.
   static const size_t kChunkSize = 64;
@@ -287,4 +296,4 @@ bool operator!=(const SSLIdentity& a, const SSLIdentity& b) {
   return !(a == b);
 }
 
-}  // namespace rtc
+}  // namespace webrtc

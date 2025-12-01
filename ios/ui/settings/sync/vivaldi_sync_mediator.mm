@@ -13,12 +13,12 @@
 #import "components/language/core/browser/pref_names.h"
 #import "components/os_crypt/sync/os_crypt.h"
 #import "components/prefs/pref_service.h"
+#import "components/sync_device_info/local_device_info_util.h"
 #import "components/sync/base/command_line_switches.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_service_observer.h"
+#import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_user_settings.h"
-#import "components/sync_device_info/local_device_info_util.h"
 #import "ios/chrome/browser/net/model/crurl.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_text_item.h"
@@ -32,8 +32,9 @@
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_status_item.h"
 #import "ios/ui/settings/sync/cells/vivaldi_table_view_sync_user_info_item.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_simplified_state.h"
-#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager_consumer.h"
+#import "ios/ui/settings/sync/manager/vivaldi_account_sync_manager.h"
+#import "ios/ui/settings/sync/manager/vivaldi_donation_badge_tier.h"
 #import "ios/ui/settings/sync/manager/vivaldi_sync_simplified_state.h"
 #import "ios/ui/settings/sync/vivaldi_create_account_ui_helper.h"
 #import "ios/ui/settings/sync/vivaldi_sync_settings_constants.h"
@@ -45,9 +46,9 @@
 #import "sync/vivaldi_sync_service_impl.h"
 #import "sync/vivaldi_sync_ui_helpers.h"
 #import "ui/base/l10n/l10n_util.h"
+#import "vivaldi_account/vivaldi_account_manager.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 #import "vivaldi/prefs/vivaldi_gen_prefs.h"
-#import "vivaldi_account/vivaldi_account_manager.h"
 
 using base::SysNSStringToUTF8;
 using base::SysUTF8ToNSString;
@@ -62,17 +63,8 @@ using vivaldi::sync_ui_helpers::CycleStatus;
 using vivaldi::sync_ui_helpers::EngineData;
 using vivaldi::sync_ui_helpers::EngineState;
 
-// Donation Support Tiers
-typedef enum {
-  BadgeTierNone = 0,
-  BadgeTierSupporter,
-  BadgeTierPatron,
-  BadgeTierAdvocate
-} BadgeTier;
-
 struct PendingRegistration {
   std::string username;
-  int age;
   std::string recoveryEmailAddress;
   std::string password;
 };
@@ -259,7 +251,6 @@ struct PendingRegistration {
 - (void)clearPendingRegistration {
   _prefService->ClearPref(vivaldiprefs::kVivaldiAccountPendingRegistration);
   pendingRegistration.username = "";
-  pendingRegistration.age = 0;
   pendingRegistration.recoveryEmailAddress = "";
   pendingRegistration.password = "";
 }
@@ -277,7 +268,6 @@ struct PendingRegistration {
       l10n_util::GetNSString(IDS_SYNC_DEFAULT_RECOVERY_EMAIL_ADDRESS));
   [self setSessionName:deviceName];
   _vivaldiAccountManager->Login(username, password, save_password);
-  _syncService->SetSyncFeatureRequested();
 }
 
 - (BOOL)setEncryptionPassword:(std::string)password {
@@ -329,10 +319,8 @@ struct PendingRegistration {
 }
 
 - (void)storeUsername:(NSString*)username
-                  age:(int)age
                 email:(NSString*)recoveryEmailAddress {
   pendingRegistration.username = SysNSStringToUTF8(username);
-  pendingRegistration.age = age;
   pendingRegistration.recoveryEmailAddress =
       SysNSStringToUTF8(recoveryEmailAddress);
 }
@@ -761,12 +749,9 @@ struct PendingRegistration {
       initWithType:ItemTypeSyncUserInfo];
 
   // Checking & Setting Donation Badges
-  NSString* donationTierString = SysUTF8ToNSString(account_info.donation_tier);
-  if (donationTierString != nil && ![donationTierString isEqualToString:@""]) {
-    NSUInteger badgeTier = [donationTierString integerValue];
-    [self setBadgeWithTier:(BadgeTier)badgeTier];
+  if (_syncManager) {
+    [self setBadgeWithTier: [_syncManager donationBadgeTier]];
   }
-
   // Add a default avatar image
   self.userInfoItem.userAvatar =
       [UIImage systemImageNamed:@"person.circle.fill"];
@@ -1149,7 +1134,6 @@ struct PendingRegistration {
   dict.Set(vParamUsername, pendingRegistration.username);
   dict.Set(vParamPassword, pendingRegistration.password);
   dict.Set(vParamEmailAddress, pendingRegistration.recoveryEmailAddress);
-  dict.Set(vParamAge, pendingRegistration.age);
   dict.Set(vParamLanguage, locale);
   dict.Set(vParamDisableNonce, vDisableNonceValue);
   dict.Set(vParamSubscribeNewletter, wantsNewsletter);
@@ -1173,12 +1157,7 @@ struct PendingRegistration {
   if (!error && dict.FindString(vSuccessKey)) {
     [self setPendingRegistration];
     [self setSessionName:deviceName];
-    // NOTE(tomas@vivaldi.com): The login request fails since the account is
-    // not verified yet. This will trigger the activation process
-    // and be handled accordingly
-    _vivaldiAccountManager->Login(pendingRegistration.username,
-                                  pendingRegistration.password, false);
-    _syncService->SetSyncFeatureRequested();
+    [self.commandHandler showActivateAccountView];
   } else {
     const std::string* err = dict.FindString(vErrorKey);
     [self.commandHandler createAccountFailed:SysUTF8ToNSString(*err)];
@@ -1315,23 +1294,19 @@ struct PendingRegistration {
 
 #pragma mark Private - Donation Tier Methods
 
-- (void)setBadgeWithTier:(BadgeTier)tier {
+- (void)setBadgeWithTier:(VivaldiDonationBadgeTier)tier {
   UIImage* badgeImage = nil;
   switch (tier) {
-    case BadgeTierNone:
-      badgeImage = nil;
-      break;
-    case BadgeTierSupporter:
+    case VivaldiDonationBadgeTierSupporter:
       badgeImage = [UIImage imageNamed:kVivaldiSupporterBadge];
       break;
-    case BadgeTierPatron:
+    case VivaldiDonationBadgeTierPatron:
       badgeImage = [UIImage imageNamed:kVivaldiPatronBadge];
       break;
-    case BadgeTierAdvocate:
+    case VivaldiDonationBadgeTierAdvocate:
       badgeImage = [UIImage imageNamed:kVivaldiAdvocateBadge];
       break;
     default:
-      badgeImage = nil;
       break;
   }
   // Set donation support Badge to header model

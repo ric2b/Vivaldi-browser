@@ -80,6 +80,8 @@ static_library("test_support") {
   sources = [
     "command_buffer/client/client_test_helper.cc",
     "command_buffer/client/client_test_helper.h",
+    "command_buffer/client/fake_gpu_memory_buffer.cc",
+    "command_buffer/client/fake_gpu_memory_buffer.h",
     "command_buffer/client/gles2_interface_stub.cc",
     "command_buffer/client/gles2_interface_stub.h",
     "command_buffer/client/gles2_interface_stub_autogen.h",
@@ -131,6 +133,7 @@ static_library("test_support") {
     "//gpu/ipc/common",
     "//gpu/ipc/service",
     "//gpu/skia_bindings:skia_bindings",
+    "//media",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx:test_support",
@@ -466,6 +469,7 @@ test("gpu_unittests") {
     "command_buffer/service/gpu_tracer_unittest.cc",
     "command_buffer/service/gr_cache_controller_unittest.cc",
     "command_buffer/service/gr_shader_cache_unittest.cc",
+    "command_buffer/service/graphite_shared_context_unittest.cc",
     "command_buffer/service/id_manager_unittest.cc",
     "command_buffer/service/indexed_buffer_binding_host_unittest.cc",
     "command_buffer/service/memory_program_cache_unittest.cc",
@@ -579,10 +583,6 @@ test("gpu_unittests") {
 
   if (is_linux || is_chromeos || is_android) {
     sources += [ "command_buffer/service/gpu_fence_manager_unittest.cc" ]
-  }
-
-  if (is_mac) {
-    sources += [ "ipc/service/built_in_shader_cache_unittest.cc" ]
   }
 
   # On official builds angle doesn't build null backend that is required for

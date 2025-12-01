@@ -85,8 +85,9 @@ class BrowserViewLayout : public views::LayoutManager {
   void set_contents_border_widget(views::Widget* contents_border_widget) {
     contents_border_widget_ = contents_border_widget;
   }
-
   views::Widget* contents_border_widget() { return contents_border_widget_; }
+
+  void SetUseBrowserContentMinimumSize(bool use_browser_content_minimum_size);
 
   // Sets the bounds for the contents border.
   // * If nullopt, no specific bounds are set, and the border will be drawn
@@ -99,9 +100,6 @@ class BrowserViewLayout : public views::LayoutManager {
       const std::optional<gfx::Rect>& region_capture_rect);
 
   web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost();
-
-  // Returns the view against which the dialog is positioned and parented.
-  gfx::NativeView GetHostView();
 
   // views::LayoutManager overrides:
   void Layout(views::View* host) override;
@@ -135,15 +133,17 @@ class BrowserViewLayout : public views::LayoutManager {
   int LayoutBookmarkBar(int top);
   int LayoutInfoBar(int top);
 
+  // Helper struct and function for LayoutContentsContainerView that calculates
+  // bounds for |contents_container_| and |unified_side_panel_|.
+  struct ContentsContainerLayoutResult;
+  ContentsContainerLayoutResult CalculateContentsContainerLayout(
+      int top,
+      int bottom) const;
+
   // Layout the |contents_container_| view between the coordinates |top| and
   // |bottom|. See browser_view.h for details of the relationship between
-  // |contents_container_| and other views.
+  // |contents_container_| and other views. Also lays out |unified_side_panel_|.
   void LayoutContentsContainerView(int top, int bottom);
-
-  // Layout the `side_panel`. This updates the passed in
-  // `contents_container_bounds` to accommodate the side panel.
-  void LayoutSidePanelView(views::View* side_panel,
-                           gfx::Rect& contents_container_bounds);
 
   // Updates |top_container_|'s bounds. The new bounds depend on the size of
   // the bookmark bar and the toolbar.
@@ -221,6 +221,9 @@ class BrowserViewLayout : public views::LayoutManager {
   // The distance the web contents modal dialog is from the top of the dialog
   // host widget.
   int dialog_top_y_ = -1;
+
+  // Whether or not to use the browser based content minimum size.
+  bool use_browser_content_minimum_size_ = false;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_VIEW_LAYOUT_H_

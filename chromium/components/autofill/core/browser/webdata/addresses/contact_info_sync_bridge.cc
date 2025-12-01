@@ -121,10 +121,6 @@ ContactInfoSyncBridge::ApplyIncrementalSyncChanges(
         // Since the specifics are guaranteed to be valid by
         // `IsEntityDataValid()`, the conversion will succeed.
         DCHECK(remote);
-        if (!EnsureUniquenessOfHomeAndWork(*remote)) {
-          return syncer::ModelError(FROM_HERE,
-                                    "Failed to ensure uniqueness of H/W.");
-        }
         // Since the distinction between adds and updates is not always clear,
         // we check the existence of the profile manually and act accordingly.
         // TODO(crbug.com/40100455): Consider adding an AddOrUpdate() function
@@ -188,12 +184,12 @@ bool ContactInfoSyncBridge::IsEntityDataValid(
 }
 
 std::string ContactInfoSyncBridge::GetClientTag(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   return GetStorageKey(entity_data);
 }
 
 std::string ContactInfoSyncBridge::GetStorageKey(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   DCHECK(IsEntityDataValid(entity_data));
   return entity_data.specifics.contact_info().guid();
 }
@@ -201,8 +197,18 @@ std::string ContactInfoSyncBridge::GetStorageKey(
 void ContactInfoSyncBridge::AutofillProfileChanged(
     const AutofillProfileChange& change) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!change.data_model().IsAccountProfile()) {
-    return;
+  // Determine if the profile change should be uploaded to CONTACT_INFO.
+  switch (change.data_model().record_type()) {
+    case AutofillProfile::RecordType::kAccount:
+      break;
+    case AutofillProfile::RecordType::kAccountHome:
+    case AutofillProfile::RecordType::kAccountWork:
+      // Home and work record types are read-only on the client side. Changes
+      // are only persisted locally, but not uploaded.
+      return;
+    case AutofillProfile::RecordType::kLocalOrSyncable:
+      // kLocalOrSyncable addresses are synced through AUTOFILL_PROFILE.
+      return;
   }
   if (!change_processor()->IsTrackingMetadata()) {
     pending_account_profile_changes_.push(change);
@@ -371,22 +377,6 @@ void ContactInfoSyncBridge::LoadMetadata() {
     batch = std::make_unique<syncer::MetadataBatch>();
   }
   change_processor()->ModelReadyToSync(std::move(batch));
-}
-
-bool ContactInfoSyncBridge::EnsureUniquenessOfHomeAndWork(
-    const AutofillProfile& profile) {
-  if (profile.record_type() != AutofillProfile::RecordType::kAccountHome &&
-      profile.record_type() != AutofillProfile::RecordType::kAccountWork) {
-    return true;
-  }
-  std::vector<AutofillProfile> existing_profiles;
-  AddressAutofillTable& table = *GetAutofillTable();
-  return table.GetAutofillProfiles({profile.record_type()},
-                                   existing_profiles) &&
-         std::ranges::all_of(existing_profiles, [&](const AutofillProfile& p) {
-           return p.guid() == profile.guid() ||
-                  table.UpdateAutofillProfile(p.DowngradeToAccountProfile());
-         });
 }
 
 void ContactInfoSyncBridge::FlushPendingAccountProfileChanges() {

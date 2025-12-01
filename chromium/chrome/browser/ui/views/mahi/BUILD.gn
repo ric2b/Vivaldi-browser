@@ -29,6 +29,7 @@ source_set("mahi") {
     "//chromeos/constants:constants",
     "//chromeos/strings:strings_grit",
     "//chromeos/ui/vector_icons",
+    "//components/application_locale_storage",
     "//ui/accessibility:ax_base",
     "//ui/color",
     "//ui/display",

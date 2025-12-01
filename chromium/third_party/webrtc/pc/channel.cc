@@ -52,13 +52,8 @@
 #include "rtc_base/trace_event.h"
 #include "rtc_base/unique_id_generator.h"
 
-namespace cricket {
+namespace webrtc {
 namespace {
-
-using ::rtc::StringFormat;
-using ::rtc::UniqueRandomIdGenerator;
-using ::webrtc::PendingTaskSafetyFlag;
-using ::webrtc::SdpType;
 
 // Finds a stream based on target's Primary SSRC or RIDs.
 // This struct is used in BaseChannel::UpdateLocalStreams_w.
@@ -96,12 +91,12 @@ struct StreamFinder {
 }  // namespace
 
 void MediaChannelParametersFromMediaDescription(
-    const webrtc::MediaContentDescription* desc,
+    const MediaContentDescription* desc,
     const RtpHeaderExtensions& extensions,
     bool is_stream_active,
     MediaChannelParameters* params) {
-  RTC_DCHECK(desc->type() == webrtc::MediaType::AUDIO ||
-             desc->type() == webrtc::MediaType::VIDEO);
+  RTC_DCHECK(desc->type() == MediaType::AUDIO ||
+             desc->type() == MediaType::VIDEO);
   params->is_stream_active = is_stream_active;
   params->codecs = desc->codecs();
   // TODO(bugs.webrtc.org/11513): See if we really need
@@ -114,14 +109,13 @@ void MediaChannelParametersFromMediaDescription(
 }
 
 void RtpSendParametersFromMediaDescription(
-    const webrtc::MediaContentDescription* desc,
-    webrtc::RtpExtension::Filter extensions_filter,
+    const MediaContentDescription* desc,
+    RtpExtension::Filter extensions_filter,
     SenderParameters* send_params) {
-  RtpHeaderExtensions extensions =
-      webrtc::RtpExtension::DeduplicateHeaderExtensions(
-          desc->rtp_header_extensions(), extensions_filter);
+  RtpHeaderExtensions extensions = RtpExtension::DeduplicateHeaderExtensions(
+      desc->rtp_header_extensions(), extensions_filter);
   const bool is_stream_active =
-      webrtc::RtpTransceiverDirectionHasRecv(desc->direction());
+      RtpTransceiverDirectionHasRecv(desc->direction());
   MediaChannelParametersFromMediaDescription(desc, extensions, is_stream_active,
                                              send_params);
   send_params->max_bandwidth_bps = desc->bandwidth();
@@ -129,15 +123,15 @@ void RtpSendParametersFromMediaDescription(
 }
 
 BaseChannel::BaseChannel(
-    webrtc::TaskQueueBase* worker_thread,
-    webrtc::Thread* network_thread,
-    webrtc::TaskQueueBase* signaling_thread,
+    TaskQueueBase* worker_thread,
+    Thread* network_thread,
+    TaskQueueBase* signaling_thread,
     std::unique_ptr<MediaSendChannelInterface> send_media_channel_impl,
     std::unique_ptr<MediaReceiveChannelInterface> receive_media_channel_impl,
     absl::string_view mid,
     bool srtp_required,
-    webrtc::CryptoOptions crypto_options,
-    rtc::UniqueRandomIdGenerator* ssrc_generator)
+    CryptoOptions crypto_options,
+    UniqueRandomIdGenerator* ssrc_generator)
     : media_send_channel_(std::move(send_media_channel_impl)),
       media_receive_channel_(std::move(receive_media_channel_impl)),
       worker_thread_(worker_thread),
@@ -147,8 +141,8 @@ BaseChannel::BaseChannel(
       srtp_required_(srtp_required),
       extensions_filter_(
           crypto_options.srtp.enable_encrypted_rtp_header_extensions
-              ? webrtc::RtpExtension::kPreferEncryptedExtension
-              : webrtc::RtpExtension::kDiscardEncryptedExtension),
+              ? RtpExtension::kPreferEncryptedExtension
+              : RtpExtension::kDiscardEncryptedExtension),
       demuxer_criteria_(mid),
       ssrc_generator_(ssrc_generator) {
   RTC_DCHECK_RUN_ON(worker_thread_);
@@ -170,7 +164,7 @@ BaseChannel::~BaseChannel() {
 }
 
 std::string BaseChannel::ToString() const {
-  return webrtc::StringFormat(
+  return StringFormat(
       "{mid: %s, media_type: %s}", mid().c_str(),
       MediaTypeToString(media_send_channel_->media_type()).c_str());
 }
@@ -187,14 +181,14 @@ bool BaseChannel::ConnectToRtpTransport_n() {
   rtp_transport_->SubscribeReadyToSend(
       this, [this](bool ready) { OnTransportReadyToSend(ready); });
   rtp_transport_->SubscribeNetworkRouteChanged(
-      this, [this](std::optional<rtc::NetworkRoute> route) {
+      this, [this](std::optional<NetworkRoute> route) {
         OnNetworkRouteChanged(route);
       });
   rtp_transport_->SubscribeWritableState(
       this, [this](bool state) { OnWritableState(state); });
   rtp_transport_->SubscribeSentPacket(
       this,
-      [this](const rtc::SentPacket& packet) { SignalSentPacket_n(packet); });
+      [this](const SentPacketInfo& packet) { SignalSentPacket_n(packet); });
   return true;
 }
 
@@ -211,7 +205,7 @@ void BaseChannel::DisconnectFromRtpTransport_n() {
   media_receive_channel()->SetInterface(nullptr);
 }
 
-bool BaseChannel::SetRtpTransport(webrtc::RtpTransportInternal* rtp_transport) {
+bool BaseChannel::SetRtpTransport(RtpTransportInternal* rtp_transport) {
   TRACE_EVENT0("webrtc", "BaseChannel::SetRtpTransport");
   RTC_DCHECK_RUN_ON(network_thread());
   if (rtp_transport == rtp_transport_) {
@@ -275,19 +269,17 @@ void BaseChannel::Enable(bool enable) {
   }));
 }
 
-bool BaseChannel::SetLocalContent(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool BaseChannel::SetLocalContent(const MediaContentDescription* content,
+                                  SdpType type,
+                                  std::string& error_desc) {
   RTC_DCHECK_RUN_ON(worker_thread());
   TRACE_EVENT0("webrtc", "BaseChannel::SetLocalContent");
   return SetLocalContent_w(content, type, error_desc);
 }
 
-bool BaseChannel::SetRemoteContent(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool BaseChannel::SetRemoteContent(const MediaContentDescription* content,
+                                   SdpType type,
+                                   std::string& error_desc) {
   RTC_DCHECK_RUN_ON(worker_thread());
   TRACE_EVENT0("webrtc", "BaseChannel::SetRemoteContent");
   return SetRemoteContent_w(content, type, error_desc);
@@ -309,35 +301,32 @@ bool BaseChannel::IsReadyToSendMedia_w() const {
   // Send outgoing data if we are enabled, have local and remote content,
   // and we have had some form of connectivity.
   return enabled_ &&
-         webrtc::RtpTransceiverDirectionHasRecv(remote_content_direction_) &&
-         webrtc::RtpTransceiverDirectionHasSend(local_content_direction_) &&
+         RtpTransceiverDirectionHasRecv(remote_content_direction_) &&
+         RtpTransceiverDirectionHasSend(local_content_direction_) &&
          was_ever_writable_;
 }
 
-bool BaseChannel::SendPacket(rtc::CopyOnWriteBuffer* packet,
-                             const rtc::PacketOptions& options) {
+bool BaseChannel::SendPacket(CopyOnWriteBuffer* packet,
+                             const AsyncSocketPacketOptions& options) {
   return SendPacket(false, packet, options);
 }
 
-bool BaseChannel::SendRtcp(rtc::CopyOnWriteBuffer* packet,
-                           const rtc::PacketOptions& options) {
+bool BaseChannel::SendRtcp(CopyOnWriteBuffer* packet,
+                           const AsyncSocketPacketOptions& options) {
   return SendPacket(true, packet, options);
 }
 
-int BaseChannel::SetOption(SocketType type,
-                           webrtc::Socket::Option opt,
-                           int value) {
+int BaseChannel::SetOption(SocketType type, Socket::Option opt, int value) {
   RTC_DCHECK_RUN_ON(network_thread());
   RTC_DCHECK(network_initialized());
   RTC_DCHECK(rtp_transport_);
   switch (type) {
     case ST_RTP:
-      socket_options_.push_back(
-          std::pair<webrtc::Socket::Option, int>(opt, value));
+      socket_options_.push_back(std::pair<Socket::Option, int>(opt, value));
       return rtp_transport_->SetRtpOption(opt, value);
     case ST_RTCP:
       rtcp_socket_options_.push_back(
-          std::pair<webrtc::Socket::Option, int>(opt, value));
+          std::pair<Socket::Option, int>(opt, value));
       return rtp_transport_->SetRtcpOption(opt, value);
   }
   return -1;
@@ -354,13 +343,13 @@ void BaseChannel::OnWritableState(bool writable) {
 }
 
 void BaseChannel::OnNetworkRouteChanged(
-    std::optional<rtc::NetworkRoute> network_route) {
+    std::optional<NetworkRoute> network_route) {
   RTC_DCHECK_RUN_ON(network_thread());
   RTC_DCHECK(network_initialized());
 
   RTC_LOG(LS_INFO) << "Network route changed for " << ToString();
 
-  rtc::NetworkRoute new_route;
+  NetworkRoute new_route;
   if (network_route) {
     new_route = *(network_route);
   }
@@ -399,8 +388,8 @@ void BaseChannel::OnTransportReadyToSend(bool ready) {
 }
 
 bool BaseChannel::SendPacket(bool rtcp,
-                             rtc::CopyOnWriteBuffer* packet,
-                             const rtc::PacketOptions& options) {
+                             CopyOnWriteBuffer* packet,
+                             const AsyncSocketPacketOptions& options) {
   RTC_DCHECK_RUN_ON(network_thread());
   RTC_DCHECK(network_initialized());
   TRACE_EVENT0("webrtc", "BaseChannel::SendPacket");
@@ -449,7 +438,7 @@ bool BaseChannel::SendPacket(bool rtcp,
               : rtp_transport_->SendRtpPacket(packet, options, PF_SRTP_BYPASS);
 }
 
-void BaseChannel::OnRtpPacket(const webrtc::RtpPacketReceived& parsed_packet) {
+void BaseChannel::OnRtpPacket(const RtpPacketReceived& parsed_packet) {
   RTC_DCHECK_RUN_ON(network_thread());
   RTC_DCHECK(network_initialized());
 
@@ -510,9 +499,9 @@ bool BaseChannel::MaybeUpdateDemuxerAndRtpExtensions_w(
       return true;
 
     if (!rtp_transport_->RegisterRtpDemuxerSink(demuxer_criteria_, this)) {
-      error_desc = webrtc::StringFormat(
-          "Failed to apply demuxer criteria for '%s': '%s'.", mid().c_str(),
-          demuxer_criteria_.ToString().c_str());
+      error_desc =
+          StringFormat("Failed to apply demuxer criteria for '%s': '%s'.",
+                       mid().c_str(), demuxer_criteria_.ToString().c_str());
       return false;
     }
     return true;
@@ -668,7 +657,7 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
       continue;
     }
     if (!media_send_channel()->RemoveSendStream(old_stream.first_ssrc())) {
-      error_desc = webrtc::StringFormat(
+      error_desc = StringFormat(
           "Failed to remove send stream with ssrc %u from m-section with "
           "mid='%s'.",
           old_stream.first_ssrc(), mid().c_str());
@@ -694,7 +683,7 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
 
     RTC_DCHECK(new_stream.has_ssrcs() || new_stream.has_rids());
     if (new_stream.has_ssrcs() && new_stream.has_rids()) {
-      error_desc = webrtc::StringFormat(
+      error_desc = StringFormat(
           "Failed to add send stream: %u into m-section with mid='%s'. Stream "
           "has both SSRCs and RIDs.",
           new_stream.first_ssrc(), mid().c_str());
@@ -714,7 +703,7 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
       RTC_LOG(LS_INFO) << "Add send stream ssrc: " << new_stream.ssrcs[0]
                        << " into " << ToString();
     } else {
-      error_desc = webrtc::StringFormat(
+      error_desc = StringFormat(
           "Failed to add send stream ssrc: %u into m-section with mid='%s'",
           new_stream.first_ssrc(), mid().c_str());
       ret = false;
@@ -724,13 +713,12 @@ bool BaseChannel::UpdateLocalStreams_w(const std::vector<StreamParams>& streams,
   return ret;
 }
 
-bool BaseChannel::UpdateRemoteStreams_w(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool BaseChannel::UpdateRemoteStreams_w(const MediaContentDescription* content,
+                                        SdpType type,
+                                        std::string& error_desc) {
   RTC_LOG_THREAD_BLOCK_COUNT();
   bool needs_re_registration = false;
-  if (!webrtc::RtpTransceiverDirectionHasSend(content->direction())) {
+  if (!RtpTransceiverDirectionHasSend(content->direction())) {
     RTC_DLOG(LS_VERBOSE) << "UpdateRemoteStreams_w: remote side will not send "
                             "- disable payload type demuxing for "
                          << ToString();
@@ -757,7 +745,7 @@ bool BaseChannel::UpdateRemoteStreams_w(
         RTC_LOG(LS_INFO) << "Remove remote ssrc: " << old_stream.first_ssrc()
                          << " from " << ToString() << ".";
       } else {
-        error_desc = webrtc::StringFormat(
+        error_desc = StringFormat(
             "Failed to remove remote stream with ssrc %u from m-section with "
             "mid='%s'.",
             old_stream.first_ssrc(), mid().c_str());
@@ -767,7 +755,7 @@ bool BaseChannel::UpdateRemoteStreams_w(
   }
 
   // Check for new streams.
-  webrtc::flat_set<uint32_t> ssrcs;
+  flat_set<uint32_t> ssrcs;
   for (const StreamParams& new_stream : streams) {
     // We allow a StreamParams with an empty list of SSRCs, in which case the
     // MediaChannel will cache the parameters and use them for any unsignaled
@@ -781,12 +769,12 @@ bool BaseChannel::UpdateRemoteStreams_w(
                                  : "unsignaled")
                          << " to " << ToString();
       } else {
-        error_desc = webrtc::StringFormat(
-            "Failed to add remote stream ssrc: %s to %s",
-            new_stream.has_ssrcs()
-                ? std::to_string(new_stream.first_ssrc()).c_str()
-                : "unsignaled",
-            ToString().c_str());
+        error_desc =
+            StringFormat("Failed to add remote stream ssrc: %s to %s",
+                         new_stream.has_ssrcs()
+                             ? std::to_string(new_stream.first_ssrc()).c_str()
+                             : "unsignaled",
+                         ToString().c_str());
         return false;
       }
     }
@@ -803,8 +791,8 @@ bool BaseChannel::UpdateRemoteStreams_w(
 
   // Re-register the sink to update after changing the demuxer criteria.
   if (needs_re_registration && !RegisterRtpDemuxerSink_w()) {
-    error_desc = webrtc::StringFormat(
-        "Failed to set up audio demuxing for mid='%s'.", mid().c_str());
+    error_desc = StringFormat("Failed to set up audio demuxing for mid='%s'.",
+                              mid().c_str());
     return false;
   }
 
@@ -820,8 +808,8 @@ bool BaseChannel::UpdateRemoteStreams_w(
 
 RtpHeaderExtensions BaseChannel::GetDeduplicatedRtpHeaderExtensions(
     const RtpHeaderExtensions& extensions) {
-  return webrtc::RtpExtension::DeduplicateHeaderExtensions(extensions,
-                                                           extensions_filter_);
+  return RtpExtension::DeduplicateHeaderExtensions(extensions,
+                                                   extensions_filter_);
 }
 
 bool BaseChannel::MaybeAddHandledPayloadType(int payload_type) {
@@ -844,22 +832,22 @@ bool BaseChannel::ClearHandledPayloadTypes() {
   return !was_empty;
 }
 
-void BaseChannel::SignalSentPacket_n(const rtc::SentPacket& sent_packet) {
+void BaseChannel::SignalSentPacket_n(const SentPacketInfo& sent_packet) {
   RTC_DCHECK_RUN_ON(network_thread());
   RTC_DCHECK(network_initialized());
   media_send_channel()->OnPacketSent(sent_packet);
 }
 
 VoiceChannel::VoiceChannel(
-    webrtc::TaskQueueBase* worker_thread,
-    webrtc::Thread* network_thread,
-    webrtc::TaskQueueBase* signaling_thread,
+    TaskQueueBase* worker_thread,
+    Thread* network_thread,
+    TaskQueueBase* signaling_thread,
     std::unique_ptr<VoiceMediaSendChannelInterface> media_send_channel,
     std::unique_ptr<VoiceMediaReceiveChannelInterface> media_receive_channel,
     absl::string_view mid,
     bool srtp_required,
-    webrtc::CryptoOptions crypto_options,
-    rtc::UniqueRandomIdGenerator* ssrc_generator)
+    CryptoOptions crypto_options,
+    UniqueRandomIdGenerator* ssrc_generator)
     : BaseChannel(worker_thread,
                   network_thread,
                   signaling_thread,
@@ -879,8 +867,8 @@ VoiceChannel::~VoiceChannel() {
 void VoiceChannel::UpdateMediaSendRecvState_w() {
   // Render incoming data if we're the active call, and we have the local
   // content. We receive data on the default channel and multiplexed streams.
-  bool receive = enabled() && webrtc::RtpTransceiverDirectionHasRecv(
-                                  local_content_direction());
+  bool receive =
+      enabled() && RtpTransceiverDirectionHasRecv(local_content_direction());
   media_receive_channel()->SetPlayout(receive);
 
   // Send outgoing data if we're the active call, we have the remote content,
@@ -892,10 +880,9 @@ void VoiceChannel::UpdateMediaSendRecvState_w() {
                    << " send=" << send << " for " << ToString();
 }
 
-bool VoiceChannel::SetLocalContent_w(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool VoiceChannel::SetLocalContent_w(const MediaContentDescription* content,
+                                     SdpType type,
+                                     std::string& error_desc) {
   TRACE_EVENT0("webrtc", "VoiceChannel::SetLocalContent_w");
   RTC_DLOG(LS_INFO) << "Setting local voice description for " << ToString();
 
@@ -909,12 +896,11 @@ bool VoiceChannel::SetLocalContent_w(
   AudioReceiverParameters recv_params = last_recv_params_;
   MediaChannelParametersFromMediaDescription(
       content, header_extensions,
-      webrtc::RtpTransceiverDirectionHasRecv(content->direction()),
-      &recv_params);
+      RtpTransceiverDirectionHasRecv(content->direction()), &recv_params);
   recv_params.mid = mid();
 
   if (!media_receive_channel()->SetReceiverParameters(recv_params)) {
-    error_desc = webrtc::StringFormat(
+    error_desc = StringFormat(
         "Failed to set local audio description recv parameters for m-section "
         "with mid='%s'.",
         mid().c_str());
@@ -922,7 +908,7 @@ bool VoiceChannel::SetLocalContent_w(
   }
 
   bool criteria_modified = false;
-  if (webrtc::RtpTransceiverDirectionHasRecv(content->direction())) {
+  if (RtpTransceiverDirectionHasRecv(content->direction())) {
     for (const Codec& codec : content->codecs()) {
       if (MaybeAddHandledPayloadType(codec.id)) {
         criteria_modified = true;
@@ -956,10 +942,9 @@ bool VoiceChannel::SetLocalContent_w(
   return success;
 }
 
-bool VoiceChannel::SetRemoteContent_w(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool VoiceChannel::SetRemoteContent_w(const MediaContentDescription* content,
+                                      SdpType type,
+                                      std::string& error_desc) {
   TRACE_EVENT0("webrtc", "VoiceChannel::SetRemoteContent_w");
   RTC_LOG(LS_INFO) << "Setting remote voice description for " << ToString();
 
@@ -971,7 +956,7 @@ bool VoiceChannel::SetRemoteContent_w(
   bool parameters_applied =
       media_send_channel()->SetSenderParameters(send_params);
   if (!parameters_applied) {
-    error_desc = webrtc::StringFormat(
+    error_desc = StringFormat(
         "Failed to set remote audio description send parameters for m-section "
         "with mid='%s'.",
         mid().c_str());
@@ -981,8 +966,8 @@ bool VoiceChannel::SetRemoteContent_w(
   // should use the reduced size mode if a peer has requested it through the
   // remote content.
   media_receive_channel()->SetRtcpMode(content->rtcp_reduced_size()
-                                           ? webrtc::RtcpMode::kReducedSize
-                                           : webrtc::RtcpMode::kCompound);
+                                           ? RtcpMode::kReducedSize
+                                           : RtcpMode::kCompound);
   // Update Receive channel based on Send channel's codec information.
   // TODO(bugs.webrtc.org/14911): This is silly. Stop doing it.
   media_receive_channel()->SetReceiveNackEnabled(
@@ -995,15 +980,15 @@ bool VoiceChannel::SetRemoteContent_w(
 }
 
 VideoChannel::VideoChannel(
-    webrtc::TaskQueueBase* worker_thread,
-    webrtc::Thread* network_thread,
-    webrtc::TaskQueueBase* signaling_thread,
+    TaskQueueBase* worker_thread,
+    Thread* network_thread,
+    TaskQueueBase* signaling_thread,
     std::unique_ptr<VideoMediaSendChannelInterface> media_send_channel,
     std::unique_ptr<VideoMediaReceiveChannelInterface> media_receive_channel,
     absl::string_view mid,
     bool srtp_required,
-    webrtc::CryptoOptions crypto_options,
-    rtc::UniqueRandomIdGenerator* ssrc_generator)
+    CryptoOptions crypto_options,
+    UniqueRandomIdGenerator* ssrc_generator)
     : BaseChannel(worker_thread,
                   network_thread,
                   signaling_thread,
@@ -1033,8 +1018,8 @@ VideoChannel::~VideoChannel() {
 void VideoChannel::UpdateMediaSendRecvState_w() {
   // Send outgoing data if we're the active call, we have the remote content,
   // and we have had some form of connectivity.
-  bool receive = enabled() && webrtc::RtpTransceiverDirectionHasRecv(
-                                  local_content_direction());
+  bool receive =
+      enabled() && RtpTransceiverDirectionHasRecv(local_content_direction());
   media_receive_channel()->SetReceive(receive);
 
   bool send = IsReadyToSendMedia_w();
@@ -1043,10 +1028,9 @@ void VideoChannel::UpdateMediaSendRecvState_w() {
                    << " send=" << send << " for " << ToString();
 }
 
-bool VideoChannel::SetLocalContent_w(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool VideoChannel::SetLocalContent_w(const MediaContentDescription* content,
+                                     SdpType type,
+                                     std::string& error_desc) {
   TRACE_EVENT0("webrtc", "VideoChannel::SetLocalContent_w");
   RTC_DLOG(LS_INFO) << "Setting local video description for " << ToString();
 
@@ -1061,8 +1045,7 @@ bool VideoChannel::SetLocalContent_w(
 
   MediaChannelParametersFromMediaDescription(
       content, header_extensions,
-      webrtc::RtpTransceiverDirectionHasRecv(content->direction()),
-      &recv_params);
+      RtpTransceiverDirectionHasRecv(content->direction()), &recv_params);
 
   VideoSenderParameters send_params = last_send_params_;
 
@@ -1073,7 +1056,7 @@ bool VideoChannel::SetLocalContent_w(
   // instead.
   bool needs_send_params_update = false;
   if (type == SdpType::kAnswer || type == SdpType::kPrAnswer) {
-    webrtc::flat_set<const Codec*> matched_codecs;
+    flat_set<const Codec*> matched_codecs;
     for (Codec& send_codec : send_params.codecs) {
       if (absl::c_any_of(matched_codecs, [&](const Codec* c) {
             return send_codec.Matches(*c);
@@ -1103,7 +1086,7 @@ bool VideoChannel::SetLocalContent_w(
         send_codec.packetization = std::nullopt;
         needs_send_params_update = true;
       } else if (!has_matching_packetization) {
-        error_desc = webrtc::StringFormat(
+        error_desc = StringFormat(
             "Failed to set local answer due to incompatible codec "
             "packetization for pt='%d' specified in m-section with mid='%s'.",
             send_codec.id, mid().c_str());
@@ -1117,7 +1100,7 @@ bool VideoChannel::SetLocalContent_w(
   }
 
   if (!media_receive_channel()->SetReceiverParameters(recv_params)) {
-    error_desc = webrtc::StringFormat(
+    error_desc = StringFormat(
         "Failed to set local video description recv parameters for m-section "
         "with mid='%s'.",
         mid().c_str());
@@ -1125,7 +1108,7 @@ bool VideoChannel::SetLocalContent_w(
   }
 
   bool criteria_modified = false;
-  if (webrtc::RtpTransceiverDirectionHasRecv(content->direction())) {
+  if (RtpTransceiverDirectionHasRecv(content->direction())) {
     for (const Codec& codec : content->codecs()) {
       if (MaybeAddHandledPayloadType(codec.id))
         criteria_modified = true;
@@ -1136,7 +1119,7 @@ bool VideoChannel::SetLocalContent_w(
 
   if (needs_send_params_update) {
     if (!media_send_channel()->SetSenderParameters(send_params)) {
-      error_desc = webrtc::StringFormat(
+      error_desc = StringFormat(
           "Failed to set send parameters for m-section with mid='%s'.",
           mid().c_str());
       return false;
@@ -1166,10 +1149,9 @@ bool VideoChannel::SetLocalContent_w(
   return success;
 }
 
-bool VideoChannel::SetRemoteContent_w(
-    const webrtc::MediaContentDescription* content,
-    SdpType type,
-    std::string& error_desc) {
+bool VideoChannel::SetRemoteContent_w(const MediaContentDescription* content,
+                                      SdpType type,
+                                      std::string& error_desc) {
   TRACE_EVENT0("webrtc", "VideoChannel::SetRemoteContent_w");
   RTC_LOG(LS_INFO) << "Setting remote video description for " << ToString();
 
@@ -1188,7 +1170,7 @@ bool VideoChannel::SetRemoteContent_w(
   // instead.
   bool needs_recv_params_update = false;
   if (type == SdpType::kAnswer || type == SdpType::kPrAnswer) {
-    webrtc::flat_set<const Codec*> matched_codecs;
+    flat_set<const Codec*> matched_codecs;
     for (Codec& recv_codec : recv_params.codecs) {
       if (absl::c_any_of(matched_codecs, [&](const Codec* c) {
             return recv_codec.Matches(*c);
@@ -1218,7 +1200,7 @@ bool VideoChannel::SetRemoteContent_w(
         recv_codec.packetization = std::nullopt;
         needs_recv_params_update = true;
       } else if (!has_matching_packetization) {
-        error_desc = webrtc::StringFormat(
+        error_desc = StringFormat(
             "Failed to set remote answer due to incompatible codec "
             "packetization for pt='%d' specified in m-section with mid='%s'.",
             recv_codec.id, mid().c_str());
@@ -1232,7 +1214,7 @@ bool VideoChannel::SetRemoteContent_w(
   }
 
   if (!media_send_channel()->SetSenderParameters(send_params)) {
-    error_desc = webrtc::StringFormat(
+    error_desc = StringFormat(
         "Failed to set remote video description send parameters for m-section "
         "with mid='%s'.",
         mid().c_str());
@@ -1248,7 +1230,7 @@ bool VideoChannel::SetRemoteContent_w(
 
   if (needs_recv_params_update) {
     if (!media_receive_channel()->SetReceiverParameters(recv_params)) {
-      error_desc = webrtc::StringFormat(
+      error_desc = StringFormat(
           "Failed to set recv parameters for m-section with mid='%s'.",
           mid().c_str());
       return false;
@@ -1259,4 +1241,4 @@ bool VideoChannel::SetRemoteContent_w(
   return UpdateRemoteStreams_w(content, type, error_desc);
 }
 
-}  // namespace cricket
+}  // namespace webrtc

@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_theme.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/incognito/incognito_grid_mediator.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/incognito/incognito_grid_view_controller.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/incognito_grid_commands.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/tab_group_grid_view_controller.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_context_menu/tab_context_menu_helper.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
@@ -29,7 +30,7 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_group_coordinator.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_group_view_controller.h"
 
-@interface IncognitoGridCoordinator ()
+@interface IncognitoGridCoordinator () <IncognitoGridCommands>
 
 // Redefined as readwrite.
 @property(nonatomic, readwrite, strong)
@@ -180,6 +181,12 @@
   }
 }
 
+#pragma mark - IncognitoGridCommands
+
+- (void)dismissIncognitoGridModals {
+  [self stopChildCoordinators];
+}
+
 #pragma mark - IncognitoGridMediatorDelegate
 
 - (void)shouldDisableIncognito:(BOOL)disable {
@@ -225,6 +232,8 @@
   gridViewController.mutator = _mediator;
   gridViewController.gridProvider = _mediator;
   gridViewController.gridHandler = _mediator;
+  gridViewController.snapshotAndfaviconDataSource = _mediator;
+  gridViewController.incognitoGridHandler = self;
   // TODO(crbug.com/40273478): Move the following lines to the grid itself when
   // specific grid file will be created.
   gridViewController.view.accessibilityIdentifier = kIncognitoTabGridIdentifier;

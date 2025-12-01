@@ -176,7 +176,8 @@ class OzonePlatformWayland : public OzonePlatform,
   std::unique_ptr<InputMethod> CreateInputMethod(
       ImeKeyEventDispatcher* ime_key_event_dispatcher,
       gfx::AcceleratedWidget widget) override {
-    return std::make_unique<InputMethodAuraLinux>(ime_key_event_dispatcher);
+    return std::make_unique<InputMethodAuraLinux>(ime_key_event_dispatcher,
+                                                  widget);
   }
 
   PlatformMenuUtils* GetPlatformMenuUtils() override {
@@ -415,6 +416,9 @@ class OzonePlatformWayland : public OzonePlatform,
         properties.supports_native_pixmaps =
             surface_factory_->SupportsNativePixmaps();
       }
+
+      properties.supports_global_application_menus =
+          connection_->org_kde_kwin_appmenu_manager() != nullptr;
     } else if (buffer_manager_) {
       DCHECK(has_initialized_gpu());
       // These properties are set when the GetPlatformRuntimeProperties is

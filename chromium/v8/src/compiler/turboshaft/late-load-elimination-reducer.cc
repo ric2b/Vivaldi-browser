@@ -34,7 +34,7 @@ std::ostream& operator<<(std::ostream& os, const MemoryAddress& mem) {
 
 void LateLoadEliminationAnalyzer::Run() {
   TRACE("LateLoadElimination: Starting analysis");
-  LoopFinder loop_finder(phase_zone_, &graph_);
+  LoopFinder loop_finder(phase_zone_, &graph_, LoopFinder::Config{});
   AnalyzerIterator iterator(phase_zone_, graph_, loop_finder);
 
   bool compute_start_snapshot = true;
@@ -234,11 +234,14 @@ void LateLoadEliminationAnalyzer::ProcessBlock(const Block& block,
         DCHECK(op.IsBlockTerminator() && SuccessorBlocks(op).empty());
         break;
 
+      case Opcode::kAtomicRMW:
+        ProcessAtomicRMW(op_idx, op.Cast<AtomicRMWOp>());
+        break;
+
       case Opcode::kCatchBlockBegin:
       case Opcode::kRetain:
       case Opcode::kDidntThrow:
       case Opcode::kCheckException:
-      case Opcode::kAtomicRMW:
       case Opcode::kAtomicWord32Pair:
       case Opcode::kMemoryBarrier:
       case Opcode::kParameter:
@@ -409,13 +412,33 @@ void LateLoadEliminationAnalyzer::ProcessStore(OpIndex op_idx,
     non_aliasing_objects_.Set(value, false);
   }
 
-  // If we just stored a map, invalidate the maps for this base.
+  // If we just stored a map, invalidate all object_maps_.
   if (store.offset == HeapObject::kMapOffset && !store.index().valid()) {
-    if (object_maps_.HasKeyFor(store.base())) {
-      TRACE(">> Wiping map\n");
-      object_maps_.Set(store.base(), MapMaskAndOr{});
+    // TODO(dmercadier): can we only do this for objects that are potentially
+    // aliasing with the `base` (based on their maps and the maps of `base`)?
+    // Also, it might be worth to record a new map if this is actually a map
+    // store.
+    // TODO(dmercadier): do this only if `value` is a Constant with kind
+    // kHeapObject, since all map stores should store a known constant maps.
+    TRACE(">> Wiping all maps\n");
+    for (auto it : object_maps_) {
+      object_maps_.Set(it.second, MapMaskAndOr{});
     }
   }
+}
+
+void LateLoadEliminationAnalyzer::ProcessAtomicRMW(OpIndex op_idx,
+                                                   const AtomicRMWOp& store) {
+#if V8_ENABLE_WEBASSEMBLY
+  TRACE("> ProcessAtomicRMW(" << op_idx << ")");
+  // With shared-everything-treads atomic rmw operations are also used for heap
+  // operations. TODO(mliedtke): We might want to add the information whether
+  // such an operation is on-heap or off-heap?
+  // This would also allow us to get rid of the BitcastTaggedToWordPtr.
+  if (!v8_flags.experimental_wasm_shared) return;
+  TRACE(">> Invalidating whole maybe-aliasing memory");
+  memory_.InvalidateMaybeAliasing();
+#endif
 }
 
 // Since we only loosely keep track of what can or can't alias, we assume that
@@ -441,13 +464,6 @@ void LateLoadEliminationAnalyzer::ProcessCall(OpIndex op_idx,
   // invalidate the state, and record the non-alias if any.
   if (!op.Effects().can_write()) {
     TRACE(">> Call doesn't write, skipping");
-    return;
-  }
-  // Note: This does not detect wasm stack checks, but those are detected by the
-  // check just above.
-  if (op.IsStackCheck(graph_, broker_, StackCheckKind::kJSIterationBody)) {
-    // This is a stack check that cannot write heap memory.
-    TRACE(">> Call is loop stack check, skipping");
     return;
   }
 

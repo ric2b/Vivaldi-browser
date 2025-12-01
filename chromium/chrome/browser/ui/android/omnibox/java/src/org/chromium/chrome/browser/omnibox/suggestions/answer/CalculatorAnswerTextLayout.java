@@ -10,6 +10,8 @@ import android.text.SpannableStringBuilder;
 import android.text.style.MetricAffectingSpan;
 import android.text.style.TextAppearanceSpan;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.components.omnibox.AnswerTypeProto.AnswerType;
 import org.chromium.components.omnibox.AutocompleteMatch;
@@ -19,7 +21,10 @@ import org.chromium.components.omnibox.OmniboxSuggestionType;
  * CalculatorAnswerTextLayout builds Omnibox styled calculator answer suggestion texts for revamped
  * answer layouts.
  */
+@NullMarked
 class CalculatorAnswerTextLayout implements AnswerText {
+    private static final int MAX_LINES = 1;
+
     final Context mContext;
     private final boolean mIsAnswer;
     private final AnswerType mAnswerType;
@@ -27,8 +32,7 @@ class CalculatorAnswerTextLayout implements AnswerText {
     /** Content of the line of text in omnibox suggestion. */
     private final SpannableStringBuilder mText = new SpannableStringBuilder();
 
-    private String mAccessibilityDescription;
-    private int mMaxLines = 1;
+    private @Nullable String mAccessibilityDescription;
 
     // AnswerText implementation.
     @Override
@@ -37,13 +41,13 @@ class CalculatorAnswerTextLayout implements AnswerText {
     }
 
     @Override
-    public String getAccessibilityDescription() {
+    public @Nullable String getAccessibilityDescription() {
         return mAccessibilityDescription;
     }
 
     @Override
     public int getMaxLines() {
-        return mMaxLines;
+        return MAX_LINES;
     }
 
     /**

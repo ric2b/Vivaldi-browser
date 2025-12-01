@@ -47,6 +47,7 @@
 <translation id="1917964099031477364">Цей обліковий запис і всі незбережені дані буде вилучено з Chrome та інших додатків Google на цьому пристрої.</translation>
 <translation id="1919130412786645364">Дозволити вхід у Chrome</translation>
 <translation id="1965935827552890526">Завершіть те, що ви робили в іншому відкритому вікні Chrome.</translation>
+<translation id="1966638102563776885">Порада щодо Chrome: використовуйте свої паролі в будь-якому додатку</translation>
 <translation id="1973910962341002002">У розділі "<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />" увімкніть перемикач "Chrome"</translation>
 <translation id="1984705450038014246">Синхронізуйте дані Chrome</translation>
 <translation id="1987779152850321833">Щоб користуватися всіма можливостями Chrome, виконайте дії нижче.</translation>
@@ -114,7 +115,6 @@
 <translation id="3655656110921623717">Це означає, що Chrome щоразу буде запитувати мобільний сайт.</translation>
 <translation id="3740397331642243698">Відкриває введені URL-адреси в Google Chrome в анонімному режимі.</translation>
 <translation id="3741995255368156336">Відкриває список читання в Chrome.</translation>
-<translation id="3808570423967020928">Відкривайте Chrome швидше з панелі Dock головного екрана.</translation>
 <translation id="3827545470516145620">Ви ввімкнули стандартний режим безпеки на цьому пристрої</translation>
 <translation id="384394811301901750">Зараз Google Chrome не може використовувати камеру</translation>
 <translation id="3863841106411295595">Додає введені URL-адреси до списку читання в Chrome.</translation>
@@ -123,6 +123,7 @@
 <translation id="3984746313391923992">Адміністратор вашої організації вимагає, щоб ви не входили в обліковий запис у Chrome.</translation>
 <translation id="3988789688219830639">Google Chrome не має доступу до ваших фото чи відео. Надайте доступ у меню iOS "Параметри &gt; Конфіденційність &gt; Фото".</translation>
 <translation id="4064699917955374540">Щоб зберігати й використовувати дані Chrome в обліковому записі Google, підтвердьте свою особу.</translation>
+<translation id="411154422556990518">Отримуйте оновлення про відстежувані ціни й поради щодо Chrome.</translation>
 <translation id="417201473131094001">Не підтримується в Chrome Canary</translation>
 <translation id="424864128008805179">Вийти з Chrome?</translation>
 <translation id="4430797724889237570">Відкривайте посилання з Gmail, Карт, YouTube і інших додатків у Chrome</translation>
@@ -133,9 +134,11 @@
 <translation id="4636900170638246267">Увійдіть в облікові записи цього сайту та Chrome.</translation>
 <translation id="4647910807533196601">Відкриває останню вкладку в Chrome.</translation>
 <translation id="4693084815234024320">Ви в анонімному режимі Chrome</translation>
+<translation id="4713907610796204963">Дізнайтеся про основні функції Chrome, щоб почати роботу</translation>
 <translation id="4724297637870447613">Використовуйте Chrome на всіх пристроях</translation>
 <translation id="4738647308035481133">Сторінка Google Chrome</translation>
 <translation id="4742795653798179840">Дані Chrome видалено</translation>
+<translation id="4749294594657945639">Щоб легко вводити збережені паролі в інших додатках, увімкніть автозаповнення в Chrome.</translation>
 <translation id="4761869838909035636">Виконати перевірку безпеки Chrome</translation>
 <translation id="4798859546468762093">Щоб користуватися персоналізацією і іншими можливостями, включіть Chrome у такі функції: <ph name="FEATURE_NAME_1" /> і <ph name="FEATURE_NAME_2" /></translation>
 <translation id="4819268619367838612">Щоб покращити додаток, Chrome надсилає в Google дані про використання та збої. <ph name="BEGIN_LINK" />Керувати<ph name="END_LINK" /></translation>
@@ -228,11 +231,9 @@
 Щоб дізнатися про інші налаштування, які використовують дані для покращення роботи Chrome, перейдіть на <ph name="BEGIN_LINK" />сторінку сервісів Google<ph name="END_LINK" />.</translation>
 <translation id="6922332667202044570">Ви можете видалити дані вебперегляду в Chrome.</translation>
 <translation id="6924922227983877439">Відкривайте посилання в Chrome за умовчанням</translation>
-<translation id="6931601805528922498">Якщо ви ввійдете за допомогою свого облікового запису, його буде додано в Chrome для перегляду вебсторінок, пов’язаних із роботою.</translation>
 <translation id="6975725306479268850">Виберіть значення Chrome для параметра "Автозаповнення"</translation>
 <translation id="7056826488869329999">Відкриває і запускає перевірку безпеки в Chrome.</translation>
 <translation id="7061455974939528301">Утримуйте значок Chrome і натисніть "Редагувати головний екран"</translation>
-<translation id="7065813315247345131">Перемістіть Chrome на панель Dock</translation>
 <translation id="7124339256045485976">Користуйтеся найновішою версією Chrome</translation>
 <translation id="7145599899567697473">Зберігайте паролі й автоматично заповнюйте їх у Chrome</translation>
 <translation id="7161390184744336561">Версія Google Chrome застаріла</translation>
@@ -240,7 +241,6 @@
 <translation id="7175129790242719365">Порада щодо Chrome: увійдіть у Chrome</translation>
 <translation id="7187993566681480880">Захищає вас у Chrome і може покращувати безпеку в інших додатках Google після входу в обліковий запис.</translation>
 <translation id="7200524487407690471">Chrome щодня автоматично виконує перевірку, щоб захистити вас від порушень безпеки даних, ненадійних веб-сайтів тощо. Докладніше про перевірку безпеки можна дізнатися в налаштуваннях.</translation>
-<translation id="7203324561587388418">Стежте за контентом і корисними порадами щодо Chrome.</translation>
 <translation id="72119412072970160">Ви можете використовувати паролі, збережені в Менеджері паролів Google, в інших додатках на iPad.</translation>
 <translation id="7214019116829172458">Відкрити анонімну вкладку в Chrome</translation>
 <translation id="722167379782941918">Chrome рекомендує покращений захист</translation>
@@ -253,6 +253,7 @@
 <translation id="7299681342915173313">Тепер ви можете відкривати в Chrome посилання з листів, документів і інших додатків.</translation>
 <translation id="7344094882820374540">Отримайте найвищий рівень захисту від небезпечних сайтів у Chrome</translation>
 <translation id="7349129508108954623">Дозвольте Chrome використовувати Карти Google, щоб прокладати для вас маршрути й надавати місцеву інформацію про виявлені адреси.</translation>
+<translation id="7371674917547846460">Отримуйте поради щодо Chrome і іншу корисну інформацію.</translation>
 <translation id="7394108421562933108">Карти в Chrome</translation>
 <translation id="7400722733683201933">Про Google Chrome</translation>
 <translation id="7466693328838535498">У вікні "Віджети Пошуку" введіть Chrome</translation>
@@ -263,6 +264,7 @@
 <translation id="7581063337314642333">Відкрити сітку вкладок у Chrome</translation>
 <translation id="7599894504325210080">Розгорнуте вікно автозаповнення в Chrome</translation>
 <translation id="7617512710641355143">Вебпереглядачем Chrome керує адміністратор</translation>
+<translation id="7626032353295482388">Вітаємо у Chrome!</translation>
 <translation id="7642373780953416937">Отримуйте сповіщення про будь-які проблеми з конфіденційністю чи безпекою, які автоматично виявляє Chrome.</translation>
 <translation id="7660356333829433649">Тут показуватимуться інші корисні поради щодо використання Chrome.</translation>
 <translation id="7662994914830945754">Щоб переглядати свої вкладки Chrome на будь-якому пристрої, увійдіть в обліковий запис і ввімкніть синхронізацію</translation>
@@ -276,6 +278,7 @@
 <translation id="778855399387580014">Пошук у новій вкладці Chrome.</translation>
 <translation id="7792140019572081272">Chrome захищає ваші конфіденційні дані за допомогою функції Face ID.</translation>
 <translation id="7855730255114109580">У вас остання версія Google Chrome</translation>
+<translation id="787226752901403048">Увійдіть у Chrome, щоб ділитися групами вкладок, приєднуватися до них і втілювати ідеї в життя разом з іншими користувачами</translation>
 <translation id="7897703007638178753">Переглянути останні вкладки в Chrome</translation>
 <translation id="7948283758957877064">Що нового в Chrome</translation>
 <translation id="8000174216052461231">Порада щодо Chrome: отримайте найвищий рівень безпеки в Chrome</translation>
@@ -314,10 +317,10 @@
 <translation id="8603022514504485810">Google Менеджеру паролів не вдалося перевірити всі паролі. Спробуйте завтра або <ph name="BEGIN_LINK" />перевірте паролі в обліковому записі Google<ph name="END_LINK" />.</translation>
 <translation id="8630122478628016441">Увімкніть опцію "Блокувати анонімні вкладки після закриття Chrome".</translation>
 <translation id="8673726683583791503">Робіть покупки за допомогою Google Об’єктива</translation>
-<translation id="8727043961453758442">Користуйтеся всіма можливостями Chrome</translation>
 <translation id="8765470054473112089">Коли ви вводите текст в адресному рядку або полі пошуку, Chrome надсилає цей запит у пошукову систему за умовчанням, щоб надати вам кращі підказки. В анонімному режимі цю функцію вимкнено.</translation>
 <translation id="8772179140489533211">Показувати сповіщення для входу в Chrome.</translation>
 <translation id="8788269841521769222">Пароль не потрібно запам’ятовувати. Його буде збережено в Менеджері паролів Google облікового запису <ph name="EMAIL" />.</translation>
+<translation id="8796490717897731471"><ph name="EMAIL" />. Вебпереглядачем Chrome керує адміністратор.</translation>
 <translation id="880967149107462122">Перейдіть у налаштування Chrome</translation>
 <translation id="8842132678697187091">Тут можна відкрити Google Об’єктив.</translation>
 <translation id="8850736900032787670">Щоб отримувати персоналізований контент на основі своїх інтересів, увійдіть в обліковий запис Chrome.</translation>

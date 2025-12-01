@@ -96,9 +96,6 @@ static const char* kInterstitialDetails = "Details";
       config.features_enabled_and_params.push_back(
           {supervised_user::kSupervisedUserBlockInterstitialV3, {}});
   }
-
-  // Makes sure the MVT is the top ranking magic stack module.
-  config.additional_args.push_back("--test-ios-module-ranker=mvt");
   return config;
 }
 
@@ -199,14 +196,8 @@ static const char* kInterstitialDetails = "Details";
       performAction:grey_tap()];
 }
 
-#if !TARGET_IPHONE_SIMULATOR
-#define MAYBE_testSupervisedUserSignin DISABLED_testSupervisedUserSignin
-#else
-#define MAYBE_testSupervisedUserSignin testSupervisedUserSignin
-#endif
-// TODO(crbug.com/331644931): Re-enable on device when fixed.
 // Tests that the user is signed in.
-- (void)MAYBE_testSupervisedUserSignin {
+- (void)testSupervisedUserSignin {
   [self signInSupervisedUser];
 
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
@@ -227,20 +218,11 @@ static const char* kInterstitialDetails = "Details";
       assertWithMatcher:grey_not(grey_sufficientlyVisible())];
 }
 
-#if !TARGET_IPHONE_SIMULATOR
-#define MAYBE_testSupervisedUserURLFilteringReloadsOnlyRealizedExistingWebStates \
-  DISABLED_testSupervisedUserURLFilteringReloadsOnlyRealizedExistingWebStates
-#else
-#define MAYBE_testSupervisedUserURLFilteringReloadsOnlyRealizedExistingWebStates \
-  testSupervisedUserURLFilteringReloadsOnlyRealizedExistingWebStates
-#endif
-// TODO(crbug.com/331644931): Re-enable on device when fixed.
 // Tests that only realized existing web states will display the interstitial
 // when a filtering for them is triggered. Also tests that the filtering logic
 // on existing tabs does not force-realize unrealized states. This is a
 // regression test for bug: 1486459.
-- (void)
-    MAYBE_testSupervisedUserURLFilteringReloadsOnlyRealizedExistingWebStates {
+- (void)testSupervisedUserURLFilteringReloadsOnlyRealizedExistingWebStates {
   // Signing in the user and allow all sites.
   [self signInSupervisedUser];
   [SupervisedUserSettingsAppInterface setFilteringToAllowAllSites];
@@ -300,17 +282,9 @@ static const char* kInterstitialDetails = "Details";
   }
 }
 
-#if !TARGET_IPHONE_SIMULATOR
-#define MAYBE_testSupervisedUserSignedOutOnPolicyChange \
-  DISABLED_testSupervisedUserSignedOutOnPolicyChange
-#else
-#define MAYBE_testSupervisedUserSignedOutOnPolicyChange \
-  testSupervisedUserSignedOutOnPolicyChange
-#endif
-// TODO(crbug.com/331644931): Re-enable on device when fixed.
 // Tests that the user is correctly signed out after signin is disabled via
 // policy.
-- (void)MAYBE_testSupervisedUserSignedOutOnPolicyChange {
+- (void)testSupervisedUserSignedOutOnPolicyChange {
   [self signInSupervisedUser];
 
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeIdentity1];
@@ -755,16 +729,22 @@ static const char* kInterstitialDetails = "Details";
   [ChromeEarlGrey loadURL:blockedURL];
   [self checkInterstitalIsShown];
 
-  // Verify the Zoom Text button is available and clickable.
   [ChromeEarlGreyUI openToolsMenu];
-  [[[EarlGrey
-      selectElementWithMatcher:grey_allOf(
-                                   grey_accessibilityID(kToolsMenuTextZoom),
-                                   grey_sufficientlyVisible(), nil)]
+
+  // Verify the Zoom Text button is available and has the correct enabled state.
+  UIAccessibilityTraits trait = [ChromeEarlGrey isIPadIdiom]
+                                    ? UIAccessibilityTraitNotEnabled
+                                    : UIAccessibilityTraitButton;
+  id<GREYMatcher> zoomActionMatcher = grey_allOf(
+      grey_accessibilityID(kToolsMenuTextZoom), grey_accessibilityTrait(trait),
+      grey_sufficientlyVisible(), nil);
+  id<GREYMatcher> tableViewMatcher =
+      [ChromeEarlGrey isNewOverflowMenuEnabled]
+          ? grey_accessibilityID(kPopupMenuToolsMenuActionListId)
+          : grey_accessibilityID(kPopupMenuToolsMenuTableViewId);
+  [[[EarlGrey selectElementWithMatcher:zoomActionMatcher]
          usingSearchAction:grey_scrollInDirection(kGREYDirectionDown, 200)
-      onElementWithMatcher:chrome_test_util::ToolsMenuView()]
-      assertWithMatcher:grey_not(grey_accessibilityTrait(
-                            UIAccessibilityTraitNotEnabled))];
+      onElementWithMatcher:tableViewMatcher] assertWithMatcher:grey_notNil()];
 }
 
 // Tests that users can initiate the local web approval flow.
@@ -798,10 +778,22 @@ static const char* kInterstitialDetails = "Details";
       waitForUIElementToDisappearWithMatcher:
           grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
 
+  // Reopen the local web approval bottom sheet.
+  [ChromeEarlGrey tapWebStateElementWithID:@"local-approvals-button"];
+  [ChromeEarlGrey
+      waitForSufficientlyVisibleElementWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
+  // Close the bottom sheet by keyboard.
+  [ChromeEarlGrey simulatePhysicalKeyboardEvent:@"escape" flags:0];
+  [ChromeEarlGrey
+      waitForUIElementToDisappearWithMatcher:
+          grey_accessibilityID(kParentAccessViewAccessibilityIdentifier)];
+
   // Verify that metrics are recorded on bottom sheet dismissal.
   GREYAssertNil(
       [MetricsAppInterface
-          expectUniqueSampleWithCount:1
+          expectUniqueSampleWithCount:2
                             forBucket:static_cast<int>(
                                           supervised_user::LocalApprovalResult::
                                               kCanceled)
@@ -809,7 +801,7 @@ static const char* kInterstitialDetails = "Details";
       @"Unexpected value for local web approval result histogram.");
   GREYAssertNil(
       [MetricsAppInterface
-          expectTotalCount:1
+          expectTotalCount:2
               forHistogram:@"FamilyLinkUser.LocalWebApprovalResult"],
       @"Unexpected total count for local web approval result histogram.");
   GREYAssertNil(

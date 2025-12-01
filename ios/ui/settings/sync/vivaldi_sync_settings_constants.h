@@ -29,8 +29,6 @@ extern NSString* const kVivaldiPatronBadge;
 extern NSString* const kVivaldiAdvocateBadge;
 
 // Vivaldi.net account creation validation
-extern const int vUserMinimumValidAge;
-extern const int vUserMaximumValidAge;
 extern const unsigned long vUserMinimumPasswordLength;
 extern const unsigned long vActivationCodeLength;
 
@@ -58,7 +56,6 @@ extern NSString* const vErrorCodeOther;
 extern const char vParamUsername[];
 extern const char vParamPassword[];
 extern const char vParamEmailAddress[];
-extern const char vParamAge[];
 extern const char vParamLanguage[];
 extern const char vParamDisableNonce[];
 extern const char vParamSubscribeNewletter[];

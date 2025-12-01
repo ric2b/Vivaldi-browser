@@ -19,11 +19,12 @@ import androidx.core.app.ActivityCompat;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.IntentUtils;
+import org.chromium.base.Log;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
 import org.chromium.chrome.browser.notifications.NotificationWrapperBuilderFactory;
 import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
@@ -53,6 +54,7 @@ import java.util.TreeMap;
 
 /** Service that creates/destroys the WebRTC notification when media capture starts/stops. */
 public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificationService.Impl {
+    private static final String TAG = "MediaCapture";
     private static final String ACTION_MEDIA_CAPTURE_UPDATE =
             "org.chromium.chrome.browser.media.SCREEN_CAPTURE_UPDATE";
     private static final String ACTION_SCREEN_CAPTURE_STOP =
@@ -173,7 +175,7 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
      */
     private void destroyNotification(int notificationId, @MediaType int mediaType) {
         if (doesNotificationExist(notificationId)) {
-            if (mNotificationsType.get(notificationId) == MediaType.SCREEN_CAPTURE) {
+            if (MediaCaptureNotificationUtil.isCapture(mNotificationsType.get(notificationId))) {
                 final int tabId = getTabIdFromNotificationId(notificationId);
                 final Tab tab = TabWindowManagerSingleton.getInstance().getTabById(tabId);
                 if (tab != null) {
@@ -185,9 +187,7 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
                     }
                 }
             }
-            // TODO(crbug.com/352186941): For now, only tab sharing is supported which does not
-            // require a foreground service.
-            if (BuildConfig.IS_DESKTOP_ANDROID && mediaType != MediaType.SCREEN_CAPTURE) {
+            if (BuildConfig.IS_DESKTOP_ANDROID) {
                 if (mNotifications.size() > 1 && mNotifications.firstKey() == notificationId) {
                     // For large screen device, we use the previous notification to update
                     // foreground
@@ -195,7 +195,9 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
                     Map.Entry<Integer, NotificationWrapper> previousNotification =
                             mNotifications.higherEntry(notificationId);
                     startOrUpdateForegroundService(
-                            previousNotification.getKey(), previousNotification.getValue());
+                            previousNotification.getKey(),
+                            previousNotification.getValue(),
+                            mediaType);
                 }
             }
             mNotificationManager.cancel(NOTIFICATION_NAMESPACE, notificationId);
@@ -210,7 +212,7 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
     private void createNotification(
             int notificationId, @MediaType int mediaType, String url, boolean isIncognito) {
         final String channelId =
-                mediaType == MediaType.SCREEN_CAPTURE
+                MediaCaptureNotificationUtil.isCapture(mediaType)
                         ? ChromeChannelDefinitions.ChannelId.SCREEN_CAPTURE
                         : ChromeChannelDefinitions.ChannelId.WEBRTC_CAM_AND_MIC;
 
@@ -234,7 +236,7 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
         // Add a "Stop" button to the screen capture notification and turn the notification
         // into a high priority one.
         PendingIntent stopIntent =
-                mediaType == MediaType.SCREEN_CAPTURE
+                MediaCaptureNotificationUtil.isCapture(mediaType)
                         ? buildStopCapturePendingIntent(notificationId)
                         : null;
         NotificationWrapper notification =
@@ -245,12 +247,10 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
                         appContext.getString(R.string.app_name),
                         contentIntent,
                         stopIntent);
-        // TODO(crbug.com/352186941): For now, only tab sharing is supported which does not require
-        // a foreground service.
-        if (BuildConfig.IS_DESKTOP_ANDROID && mediaType != MediaType.SCREEN_CAPTURE) {
+        if (BuildConfig.IS_DESKTOP_ANDROID) {
             // For large screen device, we use the latest notification to start or update
             // the foreground service.
-            startOrUpdateForegroundService(notificationId, notification);
+            startOrUpdateForegroundService(notificationId, notification, mediaType);
         } else {
             mNotificationManager.notify(notification);
         }
@@ -264,7 +264,7 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
                         NotificationUmaTracker.SystemNotificationType.MEDIA_CAPTURE,
                         notification.getNotification());
 
-        if (mediaType == MediaType.SCREEN_CAPTURE) {
+        if (MediaCaptureNotificationUtil.isCapture(mediaType)) {
             final int tabId = getTabIdFromNotificationId(notificationId);
             final Tab tab = TabWindowManagerSingleton.getInstance().getTabById(tabId);
             if (tab != null) {
@@ -279,7 +279,7 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
     }
 
     private void startOrUpdateForegroundService(
-            int notificationId, NotificationWrapper notification) {
+            int notificationId, NotificationWrapper notification, @MediaType int mediaType) {
         int foregroundServiceType = 0;
         if (ActivityCompat.checkSelfPermission(getService(), Manifest.permission.CAMERA)
                 == PackageManager.PERMISSION_GRANTED) {
@@ -288,6 +288,12 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
         if (ActivityCompat.checkSelfPermission(getService(), Manifest.permission.RECORD_AUDIO)
                 == PackageManager.PERMISSION_GRANTED) {
             foregroundServiceType |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        }
+        if (MediaCaptureNotificationUtil.isCapture(mediaType)) {
+            foregroundServiceType |=
+                    mediaType == MediaType.TAB_CAPTURE
+                            ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                            : ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION;
         }
         ForegroundServiceUtils.getInstance()
                 .startForeground(
@@ -351,6 +357,14 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
             return MediaType.NO_MEDIA;
         }
 
+        if (MediaCaptureDevicesDispatcherAndroid.isCapturingTab(webContents)) {
+            return MediaType.TAB_CAPTURE;
+        }
+
+        if (MediaCaptureDevicesDispatcherAndroid.isCapturingWindow(webContents)) {
+            return MediaType.WINDOW_CAPTURE;
+        }
+
         if (MediaCaptureDevicesDispatcherAndroid.isCapturingScreen(webContents)) {
             return MediaType.SCREEN_CAPTURE;
         }
@@ -405,7 +419,11 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
                     NOTIFICATION_MEDIA_IS_INCOGNITO,
                     TabWindowManagerSingleton.getInstance().getTabById(tabId).isIncognito());
         }
-        context.startService(intent);
+        try {
+            context.startService(intent);
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Unable to start service for update: " + e);
+        }
     }
 
     /** Clear any previous media notifications. */
@@ -417,7 +435,11 @@ public class MediaCaptureNotificationServiceImpl extends MediaCaptureNotificatio
         if (notificationIds == null || notificationIds.isEmpty()) return;
 
         Context context = ContextUtils.getApplicationContext();
-        context.startService(new Intent(context, MediaCaptureNotificationService.class));
+        try {
+            context.startService(new Intent(context, MediaCaptureNotificationService.class));
+        } catch (IllegalStateException e) {
+            Log.e(TAG, "Unable to start service for clear: " + e);
+        }
     }
 
     /** Build PendingIntent for the actions of screen capture notification. */

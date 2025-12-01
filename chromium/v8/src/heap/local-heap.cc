@@ -465,6 +465,13 @@ void LocalHeap::RemoveGCEpilogueCallback(GCEpilogueCallback* callback,
   gc_epilogue_callbacks_.Remove(callback, data);
 }
 
+void LocalHeap::Iterate(RootVisitor* visitor) {
+  handles_->Iterate(visitor);
+  for (GCRootsProvider* provider : roots_providers_) {
+    provider->Iterate(visitor);
+  }
+}
+
 void LocalHeap::InvokeGCEpilogueCallbacksInSafepoint(
     GCCallbacksInSafepoint::GCType gc_type) {
   gc_epilogue_callbacks_.Invoke(gc_type);

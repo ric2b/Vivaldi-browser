@@ -12,8 +12,15 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ui/base/device_form_factor.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 // Returns whether the lens overlay is allowed by policy.
 bool IsLensOverlayAllowedByPolicy(const PrefService* prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   CHECK(prefs, kLensOverlayNotFatalUntil);
   int policyRawValue = prefs->GetInteger(lens::prefs::kLensOverlaySettings);
   return policyRawValue ==
@@ -23,6 +30,9 @@ bool IsLensOverlayAllowedByPolicy(const PrefService* prefs) {
 
 // Returns whether the lens overlay is enabled.
 bool IsLensOverlayAvailable(const PrefService* prefs) {
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   bool featureEnabled = base::FeatureList::IsEnabled(kEnableLensOverlay);
   bool forceIPadEnabled =
       base::FeatureList::IsEnabled(kLensOverlayEnableIPadCompatibility);
@@ -32,7 +42,8 @@ bool IsLensOverlayAvailable(const PrefService* prefs) {
 }
 
 bool IsLensOverlaySameTabNavigationEnabled(const PrefService* prefs) {
-  return IsLensOverlayAvailable(prefs) &&
+  bool isIPhone = ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_PHONE;
+  return isIPhone && IsLensOverlayAvailable(prefs) &&
          base::FeatureList::IsEnabled(kLensOverlayEnableSameTabNavigation);
 }
 
@@ -47,6 +58,10 @@ bool IsLensOverlayLandscapeOrientationEnabled(const PrefService* prefs) {
 }
 
 bool IsLVFEscapeHatchEnabled(const PrefService* prefs) {
+  BOOL isTablet = ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET;
+  if (isTablet) {
+    return NO;
+  }
   return IsLensOverlayAvailable(prefs) &&
          base::FeatureList::IsEnabled(kLensOverlayEnableLVFEscapeHatch);
 }

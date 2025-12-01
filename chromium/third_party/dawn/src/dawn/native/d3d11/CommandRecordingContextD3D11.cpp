@@ -115,6 +115,21 @@ HRESULT ScopedCommandRecordingContext::Wait(ID3D11Fence* pFence, UINT64 Value) c
     return Get()->mD3D11DeviceContext4->Wait(pFence, Value);
 }
 
+HRESULT ScopedCommandRecordingContext::GetData(ID3D11Query* pQuery,
+                                               void* pResult,
+                                               UINT size,
+                                               UINT flags) const {
+    return Get()->mD3D11DeviceContext3->GetData(pQuery, pResult, size, flags);
+}
+
+void ScopedCommandRecordingContext::End(ID3D11Query* pQuery) const {
+    Get()->mD3D11DeviceContext3->End(pQuery);
+}
+
+void ScopedCommandRecordingContext::Flush() const {
+    return Get()->mD3D11DeviceContext3->Flush();
+}
+
 void ScopedCommandRecordingContext::Flush1(D3D11_CONTEXT_TYPE ContextType, HANDLE hEvent) const {
     return Get()->mD3D11DeviceContext3->Flush1(ContextType, hEvent);
 }
@@ -162,18 +177,13 @@ MaybeError ScopedCommandRecordingContext::FlushBuffersForSyncingWithCPU() const 
 
 ScopedSwapStateCommandRecordingContext::ScopedSwapStateCommandRecordingContext(
     CommandRecordingContextGuard&& guard)
-    : ScopedCommandRecordingContext(std::move(guard)),
-      mSwapContextState(ToBackend(Get()->mDevice->GetPhysicalDevice())->IsSharedD3D11Device()) {
-    if (mSwapContextState) {
-        Get()->mD3D11DeviceContext3->SwapDeviceContextState(Get()->mD3D11DeviceContextState.Get(),
-                                                            &mPreviousState);
-    }
+    : ScopedCommandRecordingContext(std::move(guard)) {
+    Get()->mD3D11DeviceContext3->SwapDeviceContextState(Get()->mD3D11DeviceContextState.Get(),
+                                                        &mPreviousState);
 }
 
 ScopedSwapStateCommandRecordingContext::~ScopedSwapStateCommandRecordingContext() {
-    if (mSwapContextState) {
-        Get()->mD3D11DeviceContext3->SwapDeviceContextState(mPreviousState.Get(), nullptr);
-    }
+    Get()->mD3D11DeviceContext3->SwapDeviceContextState(mPreviousState.Get(), nullptr);
 }
 
 ID3D11Device* ScopedSwapStateCommandRecordingContext::GetD3D11Device() const {
@@ -189,8 +199,24 @@ ID3DUserDefinedAnnotation* ScopedSwapStateCommandRecordingContext::GetD3DUserDef
     return Get()->mD3DUserDefinedAnnotation.Get();
 }
 
-Buffer* ScopedSwapStateCommandRecordingContext::GetUniformBuffer() const {
+Buffer* ScopedSwapStateCommandRecordingContext::GetInternalUniformBuffer() const {
     return Get()->mUniformBuffer.Get();
+}
+
+MaybeError ScopedSwapStateCommandRecordingContext::SetInternalUniformBuffer(
+    Ref<BufferBase> uniformBuffer) {
+    Get()->mUniformBuffer = ToGPUUsableBuffer(std::move(uniformBuffer));
+
+    // Always bind the uniform buffer to the reserved slot for all pipelines.
+    // This buffer will be updated with the correct values before each draw or dispatch call.
+    ID3D11Buffer* bufferPtr;
+    DAWN_TRY_ASSIGN(bufferPtr, Get()->mUniformBuffer->GetD3D11ConstantBuffer(nullptr));
+    Get()->mD3D11DeviceContext3->VSSetConstantBuffers(PipelineLayout::kReservedConstantBufferSlot,
+                                                      1, &bufferPtr);
+    Get()->mD3D11DeviceContext3->CSSetConstantBuffers(PipelineLayout::kReservedConstantBufferSlot,
+                                                      1, &bufferPtr);
+
+    return {};
 }
 
 MaybeError CommandRecordingContext::Initialize(Device* device) {
@@ -200,7 +226,7 @@ MaybeError CommandRecordingContext::Initialize(Device* device) {
 
     ID3D11Device3* d3d11Device = device->GetD3D11Device3();
 
-    if (ToBackend(device->GetPhysicalDevice())->IsSharedD3D11Device()) {
+    {
         const D3D_FEATURE_LEVEL featureLevels[] = {D3D_FEATURE_LEVEL_11_1, D3D_FEATURE_LEVEL_11_0};
 
         HRESULT hr = S_OK;
@@ -293,21 +319,6 @@ ResultOrError<Ref<BufferBase>> CommandRecordingContext::CreateInternalUniformBuf
     // Lock the device to protect the clearing of the built-in uniform buffer.
     auto deviceLock(device->GetScopedLock());
     return device->CreateBuffer(&descriptor);
-}
-
-MaybeError CommandRecordingContext::SetInternalUniformBuffer(Ref<BufferBase> uniformBuffer) {
-    mUniformBuffer = ToGPUUsableBuffer(std::move(uniformBuffer));
-
-    // Always bind the uniform buffer to the reserved slot for all pipelines.
-    // This buffer will be updated with the correct values before each draw or dispatch call.
-    ID3D11Buffer* bufferPtr;
-    DAWN_TRY_ASSIGN(bufferPtr, mUniformBuffer->GetD3D11ConstantBuffer(nullptr));
-    mD3D11DeviceContext3->VSSetConstantBuffers(PipelineLayout::kReservedConstantBufferSlot, 1,
-                                               &bufferPtr);
-    mD3D11DeviceContext3->CSSetConstantBuffers(PipelineLayout::kReservedConstantBufferSlot, 1,
-                                               &bufferPtr);
-
-    return {};
 }
 
 void CommandRecordingContext::ReleaseKeyedMutexes() {

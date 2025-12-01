@@ -98,7 +98,11 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   [super setUp];
 
   // Some tests change the value of this pref, so reset.
-  [ChromeEarlGrey clearUserPrefWithName:prefs::kSigninAllowed];
+  [ChromeEarlGrey resetDataForLocalStatePref:prefs::kSigninAllowedOnDevice];
+  GREYAssertEqual(
+      [ChromeEarlGrey userBooleanPref:prefs::kSigninAllowed],
+      [ChromeEarlGrey localStateBooleanPref:prefs::kSigninAllowedOnDevice],
+      @"Signin allowed policy not synchronized");
   [BookmarkEarlGrey waitForBookmarkModelLoaded];
   [BookmarkEarlGrey clearBookmarks];
 }
@@ -106,7 +110,11 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
 - (void)tearDownHelper {
   [super tearDownHelper];
   // Some tests change the value of this pref, so reset.
-  [ChromeEarlGrey clearUserPrefWithName:prefs::kSigninAllowed];
+  [ChromeEarlGrey resetDataForLocalStatePref:prefs::kSigninAllowedOnDevice];
+  GREYAssertEqual(
+      [ChromeEarlGrey userBooleanPref:prefs::kSigninAllowed],
+      [ChromeEarlGrey localStateBooleanPref:prefs::kSigninAllowedOnDevice],
+      @"Signin allowed policy not synchronized");
   [BookmarkEarlGrey clearBookmarks];
   [BookmarkEarlGrey clearBookmarksPositionCache];
 }
@@ -228,12 +236,8 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
   // Sign in with a managed identity.
   FakeSystemIdentity* fakeManagedIdentity =
       [FakeSystemIdentity fakeManagedIdentity];
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
-    [SigninEarlGrey
-        signinWithFakeManagedIdentityInPersonalProfile:fakeManagedIdentity];
-  } else {
-    [SigninEarlGrey signinWithFakeIdentity:fakeManagedIdentity];
-  }
+  [SigninEarlGrey
+      signinWithFakeManagedIdentityInPersonalProfile:fakeManagedIdentity];
   [SigninEarlGrey verifySignedInWithFakeIdentity:fakeManagedIdentity];
 
   // Turn off "Allow Chrome Sign-in" feature, which prompts the user with a
@@ -256,7 +260,7 @@ void SetSigninEnterprisePolicyValue(BrowserSigninMode signinMode) {
                                    IDS_IOS_SIGNOUT_DIALOG_SIGN_OUT_BUTTON)]
       performAction:grey_tap()];
 
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (![SigninEarlGrey areSeparateProfilesForManagedAccountsEnabled]) {
     WaitForSettingDoneButton();
 
     // Verify that sign-in is disabled.

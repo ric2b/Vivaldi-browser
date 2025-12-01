@@ -11,10 +11,13 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/system/toast_data.h"
+#include "ash/webui/boca_ui/url_constants.h"
 #include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/callback.h"
 #include "base/sequence_checker.h"
 #include "base/task/current_thread.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chromeos/ash/components/boca/on_task/activity/active_tab_tracker.h"
 #include "chromeos/ash/components/boca/on_task/notification_constants.h"
@@ -57,7 +60,7 @@ class OnTaskSystemWebAppManagerMock : public OnTaskSystemWebAppManager {
 
   MOCK_METHOD(void,
               LaunchSystemWebAppAsync,
-              (base::OnceCallback<void(bool)>),
+              (base::OnceCallback<void(bool)>, const GURL& url),
               (override));
   MOCK_METHOD(void, CloseSystemWebAppWindow, (SessionID window_id), (override));
   MOCK_METHOD(SessionID, GetActiveSystemWebAppWindowID, (), (override));
@@ -106,6 +109,16 @@ class OnTaskExtensionsManagerMock : public OnTaskExtensionsManager {
   MOCK_METHOD(void, ReEnableExtensions, (), (override));
 };
 
+class MockActiveTabTracker : public ActiveTabTracker {
+ public:
+  MockActiveTabTracker() = default;
+  ~MockActiveTabTracker() override = default;
+  MOCK_METHOD(void,
+              OnActiveTabChanged,
+              (const std::u16string& tab_title),
+              (override));
+};
+
 // Fake delegate implementation for the `OnTaskNotificationsManager` to minimize
 // dependency on Ash UI.
 class FakeOnTaskNotificationsManagerDelegate
@@ -145,14 +158,24 @@ class OnTaskSessionManagerTest : public ::testing::Test {
     session_manager_ = std::make_unique<OnTaskSessionManager>(
         std::move(system_web_app_manager), std::move(extensions_manager));
 
+    auto active_tab_tracker =
+        std::make_unique<NiceMock<MockActiveTabTracker>>();
+    active_tab_tracker_ = active_tab_tracker.get();
     // Override notification manager implementation to minimize dependency on
     // Ash UI.
     auto fake_notifications_delegate =
         std::make_unique<FakeOnTaskNotificationsManagerDelegate>();
     fake_notifications_delegate_ptr_ = fake_notifications_delegate.get();
-    session_manager_->notifications_manager_ =
+    session_manager_->SetNotificationManagerForTesting(
         OnTaskNotificationsManager::CreateForTest(
-            std::move(fake_notifications_delegate));
+            std::move(fake_notifications_delegate)));
+    session_manager_->SetActiveTabTrackerForTesting(
+        std::move(active_tab_tracker));
+  }
+
+  base::flat_set<GURL>* provider_url_set() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(session_manager_->sequence_checker_);
+    return &session_manager_->provider_url_set_;
   }
 
   base::flat_map<GURL, std::set<SessionID>>* provider_url_tab_ids_map() {
@@ -179,6 +202,7 @@ class OnTaskSessionManagerTest : public ::testing::Test {
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<OnTaskSessionManager> session_manager_;
+  raw_ptr<NiceMock<MockActiveTabTracker>> active_tab_tracker_;
   raw_ptr<NiceMock<OnTaskSystemWebAppManagerMock>> system_web_app_manager_ptr_;
   raw_ptr<NiceMock<OnTaskExtensionsManagerMock>> extensions_manager_ptr_;
   raw_ptr<FakeOnTaskNotificationsManagerDelegate>
@@ -188,11 +212,16 @@ class OnTaskSessionManagerTest : public ::testing::Test {
 TEST_F(OnTaskSessionManagerTest, ShouldLaunchBocaSWAOnSessionStart) {
   EXPECT_CALL(*system_web_app_manager_ptr_, GetActiveSystemWebAppWindowID())
       .WillRepeatedly(Return(SessionID::InvalidValue()));
-  EXPECT_CALL(*system_web_app_manager_ptr_, LaunchSystemWebAppAsync(_))
-      .WillOnce([](base::OnceCallback<void(bool)> callback) {
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              LaunchSystemWebAppAsync(_, GURL(kChromeBocaAppUntrustedIndexURL)))
+      .WillOnce([](base::OnceCallback<void(bool)> callback, const GURL& url) {
         std::move(callback).Run(true);
       });
+  EXPECT_CALL(*active_tab_tracker_,
+              OnActiveTabChanged(::testing::Eq(std::u16string(u""))))
+      .Times(1);
   session_manager_->OnSessionStarted("test_session_id", ::boca::UserIdentity());
+  testing::Mock::VerifyAndClearExpectations(active_tab_tracker_.get());
 }
 
 TEST_F(OnTaskSessionManagerTest, ShouldPrepareBocaSWAOnLaunch) {
@@ -208,11 +237,17 @@ TEST_F(OnTaskSessionManagerTest, ShouldPrepareBocaSWAOnLaunch) {
       *system_web_app_manager_ptr_,
       SetWindowTrackerForSystemWebAppWindow(kWindowId, kWindowObservers))
       .Times(1);
-  EXPECT_CALL(*system_web_app_manager_ptr_, LaunchSystemWebAppAsync(_))
-      .WillOnce([](base::OnceCallback<void(bool)> callback) {
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              LaunchSystemWebAppAsync(_, GURL(kChromeBocaAppUntrustedIndexURL)))
+      .WillOnce([](base::OnceCallback<void(bool)> callback, const GURL& url) {
         std::move(callback).Run(true);
       });
+  EXPECT_CALL(*active_tab_tracker_,
+              OnActiveTabChanged(::testing::Eq(std::u16string(u""))))
+      .Times(1);
+
   session_manager_->OnSessionStarted("test_session_id", ::boca::UserIdentity());
+  testing::Mock::VerifyAndClearExpectations(active_tab_tracker_.get());
 }
 
 TEST_F(OnTaskSessionManagerTest,
@@ -234,15 +269,51 @@ TEST_F(OnTaskSessionManagerTest,
       SetWindowTrackerForSystemWebAppWindow(kWindowId, kWindowObservers))
       .Times(1)
       .InSequence(s);
+  EXPECT_CALL(*active_tab_tracker_,
+              OnActiveTabChanged(::testing::Eq(std::u16string(u""))))
+      .Times(1);
+
   session_manager_->OnSessionStarted("test_session_id", ::boca::UserIdentity());
+  testing::Mock::VerifyAndClearExpectations(active_tab_tracker_.get());
 }
 
 TEST_F(OnTaskSessionManagerTest, ShouldCloseBocaSWAOnSessionEnd) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{},
+      /*disabled_features=*/{ash::features::kBocaKeepSWAOpenOnSessionEnded});
   const SessionID kWindowId = SessionID::NewUnique();
+  Sequence s;
   EXPECT_CALL(*system_web_app_manager_ptr_, GetActiveSystemWebAppWindowID())
-      .WillOnce(Return(kWindowId));
+      .WillRepeatedly(Return(kWindowId));
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              SetPinStateForSystemWebAppWindow(false, kWindowId))
+      .Times(1)
+      .InSequence(s);
   EXPECT_CALL(*system_web_app_manager_ptr_, CloseSystemWebAppWindow(kWindowId))
-      .Times(1);
+      .Times(1)
+      .InSequence(s);
+  session_manager_->OnSessionEnded("test_session_id");
+
+  // Verify session end notification was shown and window lock state was reset.
+  task_environment_.FastForwardBy(kOnTaskNotificationCountdownInterval);
+  EXPECT_TRUE(fake_notifications_delegate_ptr_->WasNotificationShown(
+      kOnTaskSessionEndNotificationId));
+  EXPECT_FALSE(*should_lock_window());
+}
+
+TEST_F(OnTaskSessionManagerTest, ShouldKeepBocaSWAOpenOnSessionEnd) {
+  const SessionID kWindowId = SessionID::NewUnique();
+  Sequence s;
+  EXPECT_CALL(*system_web_app_manager_ptr_, GetActiveSystemWebAppWindowID())
+      .WillRepeatedly(Return(kWindowId));
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              SetPinStateForSystemWebAppWindow(false, kWindowId))
+      .Times(1)
+      .InSequence(s);
+  EXPECT_CALL(*system_web_app_manager_ptr_, CloseSystemWebAppWindow(kWindowId))
+      .Times(0)
+      .InSequence(s);
   session_manager_->OnSessionEnded("test_session_id");
 
   // Verify session end notification was shown and window lock state was reset.
@@ -256,7 +327,7 @@ TEST_F(OnTaskSessionManagerTest, ShouldReEnableExtensionsOnSessionEnd) {
   const SessionID kWindowId = SessionID::NewUnique();
   EXPECT_CALL(*system_web_app_manager_ptr_, GetActiveSystemWebAppWindowID())
       .WillRepeatedly(Return(kWindowId));
-  EXPECT_CALL(*extensions_manager_ptr_, ReEnableExtensions).Times(1);
+  EXPECT_CALL(*extensions_manager_ptr_, ReEnableExtensions).Times(AtLeast(1));
   session_manager_->OnSessionEnded("test_session_id");
 
   // Verify session end notification was shown.
@@ -312,9 +383,10 @@ TEST_F(OnTaskSessionManagerTest,
       .WillOnce(Return(
           SessionID::InvalidValue()))  // Initial check before spawning SWA
       .WillRepeatedly(Return(kWindowId));
-  EXPECT_CALL(*system_web_app_manager_ptr_, LaunchSystemWebAppAsync(_))
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              LaunchSystemWebAppAsync(_, GURL(kChromeBocaAppUntrustedIndexURL)))
       .InSequence(s)
-      .WillOnce([](base::OnceCallback<void(bool)> callback) {
+      .WillOnce([](base::OnceCallback<void(bool)> callback, const GURL& url) {
         std::move(callback).Run(true);
       });
   EXPECT_CALL(*system_web_app_manager_ptr_,
@@ -460,9 +532,10 @@ TEST_F(OnTaskSessionManagerTest,
       .WillOnce(Return(
           SessionID::InvalidValue()))  // Initial check before spawning SWA
       .WillRepeatedly(Return(kWindowId));
-  EXPECT_CALL(*system_web_app_manager_ptr_, LaunchSystemWebAppAsync(_))
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              LaunchSystemWebAppAsync(_, GURL(kChromeBocaAppUntrustedIndexURL)))
       .InSequence(s)
-      .WillOnce([](base::OnceCallback<void(bool)> callback) {
+      .WillOnce([](base::OnceCallback<void(bool)> callback, const GURL& url) {
         std::move(callback).Run(true);
       });
   EXPECT_CALL(*extensions_manager_ptr_, DisableExtensions)
@@ -597,9 +670,10 @@ TEST_F(OnTaskSessionManagerTest,
       .WillOnce(
           Return(SessionID::InvalidValue()))  // No window found initially.
       .WillRepeatedly(Return(kWindowId));
-  EXPECT_CALL(*system_web_app_manager_ptr_, LaunchSystemWebAppAsync(_))
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              LaunchSystemWebAppAsync(_, GURL(kChromeBocaAppUntrustedIndexURL)))
       .InSequence(s1, s2)
-      .WillOnce([](base::OnceCallback<void(bool)> callback) {
+      .WillOnce([](base::OnceCallback<void(bool)> callback, const GURL& url) {
         std::move(callback).Run(true);
       });
   EXPECT_CALL(*system_web_app_manager_ptr_,
@@ -730,6 +804,8 @@ TEST_F(OnTaskSessionManagerTest, RestoreTabsOnAppReload) {
   // there is no nav restriction being tracked.
   const SessionID kOldTabId1 = SessionID::NewUnique();
   const SessionID kOldTabId2 = SessionID::NewUnique();
+  (*provider_url_set()).insert(GURL(kTestUrl1));
+  (*provider_url_set()).insert(GURL(kTestUrl2));
   (*provider_url_tab_ids_map())[GURL(kTestUrl1)].insert(kOldTabId1);
   (*provider_url_restriction_level_map())[GURL(kTestUrl1)] =
       ::boca::LockedNavigationOptions::BLOCK_NAVIGATION;
@@ -833,8 +909,9 @@ TEST_F(OnTaskSessionManagerTest,
   EXPECT_CALL(*system_web_app_manager_ptr_, GetActiveSystemWebAppWindowID())
       .WillOnce(Return(SessionID::InvalidValue()))  // Session init check.
       .WillRepeatedly(Return(kWindowId));
-  EXPECT_CALL(*system_web_app_manager_ptr_, LaunchSystemWebAppAsync(_))
-      .WillOnce([](base::OnceCallback<void(bool)> callback) {
+  EXPECT_CALL(*system_web_app_manager_ptr_,
+              LaunchSystemWebAppAsync(_, GURL(kChromeBocaAppUntrustedIndexURL)))
+      .WillOnce([](base::OnceCallback<void(bool)> callback, const GURL& url) {
         std::move(callback).Run(true);
       });
   EXPECT_CALL(*system_web_app_manager_ptr_,

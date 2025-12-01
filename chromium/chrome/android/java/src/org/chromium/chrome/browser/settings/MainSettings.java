@@ -18,18 +18,19 @@ import android.text.style.SuperscriptSpan;
 import android.view.View;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.lifecycle.Lifecycle;
 import androidx.preference.Preference;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.appearance.settings.AppearanceSettingsFragment;
 import org.chromium.chrome.browser.autofill.options.AutofillOptionsFragment;
@@ -62,7 +63,6 @@ import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.sync.settings.SignInPreference;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
-import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncFeatures;
 import org.chromium.chrome.browser.toolbar.ToolbarPositionController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarStatePredictor;
 import org.chromium.chrome.browser.toolbar.settings.AddressBarSettingsFragment;
@@ -99,18 +99,16 @@ import androidx.appcompat.content.res.AppCompatResources;
 import org.chromium.build.BuildConfig;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
-import org.chromium.ui.base.DeviceFormFactor;
 
 import org.vivaldi.browser.common.VivaldiBookmarkUtils;
 import org.vivaldi.browser.common.VivaldiDefaultBrowserUtils;
 import org.vivaldi.browser.common.VivaldiRelaunchUtils;
 import org.vivaldi.browser.common.VivaldiUtils;
+import org.vivaldi.browser.preferences.VivaldiAddressBarPreferences;
 import org.vivaldi.browser.preferences.PreferenceSearchManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.preferences.VivaldiPreferencesBridge;
-import org.vivaldi.browser.preferences.VivaldiSyncPreference;
 import org.vivaldi.browser.rating.RateVivaldiUtils;
-import org.vivaldi.browser.speeddial.SpeedDialTopLevelManager;
 
 /** The main settings screen, shown when the user first opens Settings. */
 public class MainSettings extends ChromeBaseSettingsFragment
@@ -148,19 +146,9 @@ public class MainSettings extends ChromeBaseSettingsFragment
     @VisibleForTesting static final int NEW_LABEL_MAX_VIEW_COUNT = 6;
 
     public static final String PREF_VIVALDI_SYNC = "vivaldi_sync";
-    public static final String PREF_VIVALDI_GAME = "vivaldi_game";
     public static final String PREF_STATUS_BAR_VISIBILITY = "status_bar_visibility";
     public static final String PREF_DOUBLE_TAP_BACK_TO_EXIT = "double_tap_back_to_exit";
     public static final String PREF_ALLOW_BACKGROUND_MEDIA = "allow_background_media";
-    public static final String PREF_ADDRESS_BAR_OMNIBOX_SHOW_NICKNAMES = "address_bar_omnibox_show_nicknames";
-    public static final String PREF_ADDRESS_BAR_OMNIBOX_BOOKMARKS_BOOSTED = "address_bar_omnibox_bookmarks_boosted";
-    public static final String PREF_ADDRESS_BAR_SEARCH_DIRECT_MATCH = "address_bar_search_direct_match";
-    public static final String PREF_ADDRESS_BAR_SEARCH_DIRECT_MATCH_BOOSTED = "address_bar_search_direct_match_boosted";
-    public static final String PREF_ADDRESS_BAR_DELETE_DIRECT_MATCH = "address_bar_delete_direct_match";
-    public static final String PREF_ADDRESS_BAR_ENABLE_BOOKMARKS = "address_bar_enable_bookmarks";
-    public static final String PREF_ADDRESS_BAR_ENABLE_HISTORY = "address_bar_enable_history";
-    public static final String PREF_ADDRESS_BAR_SHOW_TYPED_HISTORY = "address_bar_show_typed_history";
-    public static final String PREF_ADDRESS_BAR_ENABLE_SEARCH_HISTORY = "address_bar_enable_search_history";
 
     private final Map<String, Preference> mAllPreferences = new HashMap<>();
 
@@ -182,7 +170,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         createPreferences();
     }
 
@@ -204,7 +192,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onViewCreated(View view, Bundle savedInstanceState) {
+    public void onViewCreated(View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
         // Disable animations of preference changes.
@@ -235,11 +223,13 @@ public class MainSettings extends ChromeBaseSettingsFragment
             mShouldShowSnackbar = false;
             PostTask.postTask(TaskTraits.UI_DEFAULT, this::showSignoutSnackbar);
         }
+        updatePreferences();
 
+        // Vivaldi
         ContextUtils.getAppSharedPreferences().registerOnSharedPreferenceChangeListener(
                 mPrefsListener);
-        // Vivaldi
         setDivider(AppCompatResources.getDrawable(getContext(), R.drawable.settings_divider));
+        // End Vivaldi
     }
 
     @Override
@@ -248,14 +238,6 @@ public class MainSettings extends ChromeBaseSettingsFragment
         SyncService syncService = SyncServiceFactory.getForProfile(getProfile());
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
-        }
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (!ChromeApplicationImpl.isVivaldi()) {
-            updatePreferences();
         }
     }
 
@@ -445,7 +427,8 @@ public class MainSettings extends ChromeBaseSettingsFragment
             }
 
             // Handle Omnibox Bookmark Nicknames Toggle
-            ChromeSwitchPreference omniboxNicknames = findPreference(PREF_ADDRESS_BAR_OMNIBOX_SHOW_NICKNAMES);
+            ChromeSwitchPreference omniboxNicknames = findPreference(
+                    VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_OMNIBOX_SHOW_NICKNAMES);
             if (omniboxNicknames != null) {
                 omniboxNicknames.setOnPreferenceChangeListener((preference, newValue) -> {
                     VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
@@ -455,12 +438,14 @@ public class MainSettings extends ChromeBaseSettingsFragment
             }
 
             // Handle Omnibox Prioritize Bookmarks Toggle
-            ChromeSwitchPreference omniboxBookmarksBoosted = findPreference(PREF_ADDRESS_BAR_OMNIBOX_BOOKMARKS_BOOSTED);
+            ChromeSwitchPreference omniboxBookmarksBoosted = findPreference(
+                    VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_OMNIBOX_BOOKMARKS_BOOSTED);
             if (omniboxBookmarksBoosted != null) {
                 if (BuildConfig.IS_VIVALDI) {
                     getPreferenceScreen().removePreference(omniboxBookmarksBoosted);
                 } else {
-                    omniboxBookmarksBoosted.setOnPreferenceChangeListener((preference, newValue) -> {
+                    omniboxBookmarksBoosted.setOnPreferenceChangeListener(
+                            (preference, newValue) -> {
                         VivaldiPreferencesBridge vivaldiPrefs = new VivaldiPreferencesBridge();
                         vivaldiPrefs.SetAddressBarOmniboxBookmarksBoosted((boolean) newValue);
                         return true;
@@ -469,7 +454,8 @@ public class MainSettings extends ChromeBaseSettingsFragment
             }
 
             // Handle Omnibox Direct Match Toggle
-            ChromeSwitchPreference omniboxDirectMatch = findPreference(PREF_ADDRESS_BAR_SEARCH_DIRECT_MATCH);
+            ChromeSwitchPreference omniboxDirectMatch = findPreference(
+                    VivaldiAddressBarPreferences.PREF_ADDRESS_BAR_SEARCH_DIRECT_MATCH);
             if (omniboxDirectMatch != null) {
                 if (BuildConfig.IS_VIVALDI) {
                     getPreferenceScreen().removePreference(omniboxDirectMatch);
@@ -569,22 +555,14 @@ public class MainSettings extends ChromeBaseSettingsFragment
         updatePlusAddressesPreference();
         updateAddressBarPreference();
         updateAppearancePreference();
-
-        boolean isTabGroupSyncAutoOpenConfigurable =
-                TabGroupSyncFeatures.isTabGroupSyncEnabled(getProfile())
-                        && ChromeFeatureList.isEnabled(
-                                ChromeFeatureList.TAB_GROUP_SYNC_AUTO_OPEN_KILL_SWITCH);
-        if (isTabGroupSyncAutoOpenConfigurable
-                || ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_TAB_DECLUTTER)) {
-            addPreferenceIfAbsent(PREF_TABS);
-        } else {
-            removePreferenceIfPresent(PREF_TABS);
-        }
+        if (!ChromeApplicationImpl.isVivaldi()) {
+        addPreferenceIfAbsent(PREF_TABS);
 
         Preference homepagePref = addPreferenceIfAbsent(PREF_HOMEPAGE);
         setOnOffSummary(homepagePref, HomepageManager.getInstance().isHomepageEnabled());
-
-        if (HomeModulesConfigManager.getInstance().hasModuleShownInSettings()
+        }
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION)
+                && HomeModulesConfigManager.getInstance().hasModuleShownInSettings()
                 && !ChromeApplicationImpl.isVivaldi()) {
             addPreferenceIfAbsent(PREF_HOME_MODULES_CONFIG);
         } else {
@@ -679,7 +657,9 @@ public class MainSettings extends ChromeBaseSettingsFragment
         if (dseTemplateUrl != null) defaultSearchEngineName = dseTemplateUrl.getShortName();
 
         Preference searchEnginePreference = findPreference(PREF_SEARCH_ENGINE);
+        if (BuildConfig.IS_VIVALDI && searchEnginePreference != null) // Vivaldi VAB-11377 Crash Fix
         searchEnginePreference.setEnabled(true);
+        if(!BuildConfig.IS_VIVALDI)
         searchEnginePreference.setSummary(defaultSearchEngineName);
     }
 
@@ -731,32 +711,25 @@ public class MainSettings extends ChromeBaseSettingsFragment
                     return true;
                 });
 
-        if (ChromeFeatureList.isEnabled(
-                ChromeFeatureList
-                        .UNIFIED_PASSWORD_MANAGER_LOCAL_PASSWORDS_ANDROID_ACCESS_LOSS_WARNING)) {
-            // This is temporary code needed for migrating people to UPM. With UPM there is no
-            // longer passwords setting page in Chrome, so we need to ask users to export their
-            // passwords here, in main settings.
-            boolean startPasswordsExportFlow =
-                    getArguments() != null
-                            && getArguments()
-                                    .containsKey(PasswordExportLauncher.START_PASSWORDS_EXPORT)
-                            && getArguments()
-                                    .getBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT);
-            if (startPasswordsExportFlow) {
-                if (ChromeFeatureList.isEnabled(ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID)) {
-                    assert mSettingsCustomTabLauncher != null
-                            : "The CSV download flow dialog requires a non-null"
-                                    + " SettingsCustomTabLauncher.";
-                    PasswordManagerHelper.getForProfile(getProfile())
-                            .launchDownloadPasswordsCsvFlow(
-                                    getContext(), mSettingsCustomTabLauncher);
-                } else {
-                    PasswordAccessLossDialogHelper.launchExportFlow(
-                            getContext(), getProfile(), mModalDialogManagerSupplier);
-                }
-                getArguments().putBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT, false);
+        // This is temporary code needed for migrating people to UPM. With UPM there is no
+        // longer passwords setting page in Chrome, so we need to ask users to export their
+        // passwords here, in main settings.
+        boolean startPasswordsExportFlow =
+                getArguments() != null
+                        && getArguments().containsKey(PasswordExportLauncher.START_PASSWORDS_EXPORT)
+                        && getArguments().getBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT);
+        if (startPasswordsExportFlow) {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.LOGIN_DB_DEPRECATION_ANDROID)) {
+                assert mSettingsCustomTabLauncher != null
+                        : "The CSV download flow dialog requires a non-null"
+                                + " SettingsCustomTabLauncher.";
+                PasswordManagerHelper.getForProfile(getProfile())
+                        .launchDownloadPasswordsCsvFlow(getContext(), mSettingsCustomTabLauncher);
+            } else {
+                PasswordAccessLossDialogHelper.launchExportFlow(
+                        getContext(), getProfile(), mModalDialogManagerSupplier);
             }
+            getArguments().putBoolean(PasswordExportLauncher.START_PASSWORDS_EXPORT, false);
         }
     }
 
@@ -789,6 +762,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
         // - showing on Foldables in unfolded (open) state.
         boolean showSetting =
                 ChromeFeatureList.sAndroidBottomToolbar.isEnabled()
+                        && !DeviceInfo.isAutomotive()
                         && (BuildInfo.getInstance().isFoldable
                                 || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
                                         getContext()));
@@ -802,6 +776,7 @@ public class MainSettings extends ChromeBaseSettingsFragment
                     ChromePreferenceKeys.ADDRESS_BAR_SETTINGS_CLICKED,
                     ChromePreferenceKeys.ADDRESS_BAR_SETTINGS_VIEW_COUNT);
         } else {
+            if (!ChromeApplicationImpl.isVivaldi())
             removePreferenceIfPresent(PREF_ADDRESS_BAR);
         }
     }
@@ -958,5 +933,10 @@ public class MainSettings extends ChromeBaseSettingsFragment
     private boolean useLegacySettingsOrder() {
         return !ChromeFeatureList.isEnabled(
                 AutofillFeatures.AUTOFILL_VIRTUAL_VIEW_STRUCTURE_ANDROID);
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

@@ -940,6 +940,17 @@ void MaglevAssembler::JumpIfByte(Condition cc, Register value, int32_t byte,
   b(cc, target);
 }
 
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+void MaglevAssembler::JumpIfNotUndefinedNan(DoubleRegister value,
+                                            Register scratch, Label* target,
+                                            Label::Distance distance) {
+  JumpIfNotNan(value, target, distance);
+  VmovHigh(scratch, value);
+  CompareInt32AndJumpIf(scratch, kUndefinedNanUpper32, kNotEqual, target,
+                        distance);
+}
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+
 void MaglevAssembler::JumpIfHoleNan(DoubleRegister value, Register scratch,
                                     Label* target, Label::Distance distance) {
   // TODO(leszeks): Right now this only accepts Zone-allocated target labels.
@@ -957,6 +968,10 @@ void MaglevAssembler::JumpIfHoleNan(DoubleRegister value, Register scratch,
                masm->VmovHigh(scratch, value);
                masm->CompareInt32AndJumpIf(scratch, kHoleNanUpper32, kEqual,
                                            *is_hole);
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+               masm->CompareInt32AndJumpIf(scratch, kUndefinedNanUpper32,
+                                           kEqual, *is_hole);
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
                masm->Jump(*is_not_hole);
              },
              value, scratch, is_hole, is_not_hole));
@@ -1178,19 +1193,36 @@ inline void MaglevAssembler::TestUint8AndJumpIfAllClear(
   TestInt32AndJumpIfAllClear(value, mask, target);
 }
 
+inline void MaglevAssembler::LoadContextCellState(Register state,
+                                                  Register cell) {
+  ldr(state, FieldMemOperand(cell, offsetof(ContextCell, state_)));
+}
+
+inline void MaglevAssembler::LoadContextCellInt32Value(Register value,
+                                                       Register cell) {
+  AssertContextCellState(cell, ContextCell::kInt32);
+  ldr(value, FieldMemOperand(cell, offsetof(ContextCell, double_value_)));
+}
+
+inline void MaglevAssembler::LoadContextCellFloat64Value(DoubleRegister value,
+                                                         Register cell) {
+  AssertContextCellState(cell, ContextCell::kFloat64);
+  vldr(value, FieldMemOperand(cell, offsetof(ContextCell, double_value_)));
+}
+
+inline void MaglevAssembler::StoreContextCellInt32Value(Register cell,
+                                                        Register value) {
+  str(value, FieldMemOperand(cell, offsetof(ContextCell, double_value_)));
+}
+
+inline void MaglevAssembler::StoreContextCellFloat64Value(
+    Register cell, DoubleRegister value) {
+  vstr(value, FieldMemOperand(cell, offsetof(ContextCell, double_value_)));
+}
+
 inline void MaglevAssembler::LoadHeapNumberValue(DoubleRegister result,
                                                  Register heap_number) {
   vldr(result, FieldMemOperand(heap_number, offsetof(HeapNumber, value_)));
-}
-
-inline void MaglevAssembler::LoadHeapInt32Value(Register result,
-                                                Register heap_number) {
-  ldr(result, FieldMemOperand(heap_number, offsetof(HeapNumber, value_)));
-}
-
-inline void MaglevAssembler::StoreHeapInt32Value(Register value,
-                                                 Register heap_number) {
-  str(value, (FieldMemOperand(heap_number, offsetof(HeapNumber, value_))));
 }
 
 inline void MaglevAssembler::Int32ToDouble(DoubleRegister result,

@@ -77,6 +77,16 @@ class BuildSettings {
     no_stamp_files_ = no_stamp_files;
   }
 
+  // The 'async_non_linkable_deps' boolean flag can be set to generate Ninja
+  // files that build non-linkable deps asynchronously using Ninja validations
+  // instead of order-only dependencies.
+  // This speeds up build by increasing the parallerism of the build graph.
+  // This requires Ninja 1.11 for the `validations` feature.
+  bool async_non_linkable_deps() const { return async_non_linkable_deps_; }
+  void set_async_non_linkable_deps(bool async_non_linkable_deps) {
+    async_non_linkable_deps_ = async_non_linkable_deps;
+  }
+
   const SourceFile& build_config_file() const { return build_config_file_; }
   void set_build_config_file(const SourceFile& f) { build_config_file_ = f; }
 
@@ -164,6 +174,7 @@ class BuildSettings {
   // See 40045b9 for the reason behind using 1.7.2 as the default version.
   Version ninja_required_version_{1, 7, 2};
   bool no_stamp_files_ = true;
+  bool async_non_linkable_deps_ = false;
 
   SourceFile build_config_file_;
   SourceFile arg_file_template_path_;

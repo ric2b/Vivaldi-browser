@@ -274,7 +274,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
   // Called when display configuration has changed. The new display
   // configurations is passed as a vector of Display object, which contains each
   // display's new information.
-  void OnNativeDisplaysChanged(
+  bool OnNativeDisplaysChanged(
       const std::vector<ManagedDisplayInfo>& display_info_list);
 
   // Updates current displays using current |display_info_|.
@@ -477,6 +477,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Sets multi display mode.
   void SetMultiDisplayMode(MultiDisplayMode mode);
+  MultiDisplayMode multi_display_mode() const { return multi_display_mode_; }
 
   // Reconfigure display configuration using the same physical display.
   // TODO(oshima): Refactor and move this impl to |SetDefaultMultiDisplayMode|.
@@ -487,7 +488,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Creates mirror window asynchronously if the software mirror mode is
   // enabled.
-  void CreateMirrorWindowAsyncIfAny();
+  bool CreateMirrorWindowAsyncIfAny();
 
   // A unit test may change the internal display id (which never happens on a
   // real device). This will update the mode list for internal display for this
@@ -589,7 +590,7 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   // Updates the internal display data using `updated_display_info_list` and
   // notifies observers about the changes.
-  void UpdateDisplaysWith(
+  bool UpdateDisplaysWith(
       const std::vector<ManagedDisplayInfo>& updated_display_info_list);
 
   // Creates software mirroring display related information. The display used to

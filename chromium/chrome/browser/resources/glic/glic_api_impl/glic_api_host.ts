@@ -18,7 +18,7 @@ import type {BrowserProxy} from '../browser_proxy.js';
 import {ContentSettingsType} from '../content_settings_types.mojom-webui.js';
 import type {FocusedTabData as FocusedTabDataMojo, GetTabContextOptionsMojoType as TabContextOptionsMojo, OpenPanelInfo as OpenPanelInfoMojo, OpenSettingsOptions as OpenSettingsOptionsMojo, PanelOpeningData as PanelOpeningDataMojo, PanelState as PanelStateMojo, ScrollToSelector as ScrollToSelectorMojo, TabContextMojoType as TabContextMojo, TabData as TabDataMojo, WebClientHandlerInterface, WebClientInterface} from '../glic.mojom-webui.js';
 import {SettingsPageField as SettingsPageFieldMojo, WebClientHandlerRemote, WebClientMode, WebClientReceiver, WebClientSizingMode} from '../glic.mojom-webui.js';
-import type {ActInFocusedTabParams, DraggableArea, OpenSettingsOptions, PageMetadata, PanelOpeningData, PanelState, Screenshot, ScrollToParams, TabContextOptions, WebPageData} from '../glic_api/glic_api.js';
+import type {ActInFocusedTabParams, DraggableArea, OpenSettingsOptions, PageMetadata, PanelOpeningData, PanelState, Screenshot, ScrollToParams, TabContextOptions, WebPageData, ZeroStateSuggestions} from '../glic_api/glic_api.js';
 import {ActInFocusedTabErrorReason, CaptureScreenshotErrorReason, DEFAULT_INNER_TEXT_BYTES_LIMIT, DEFAULT_PDF_SIZE_LIMIT, ScrollToErrorReason} from '../glic_api/glic_api.js';
 import {ObservableValue} from '../observable.js';
 import type {ObservableValueReadOnly} from '../observable.js';
@@ -34,13 +34,32 @@ export enum WebClientState {
   UNINITIALIZED,
   RESPONSIVE,
   UNRESPONSIVE,
-  ERROR,
+  ERROR,  // Final state
 }
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(DetailedWebClientState)
+export enum DetailedWebClientState {
+  BOOTSTRAP_PENDING = 0,
+  WEB_CLIENT_NOT_CREATED = 1,
+  WEB_CLIENT_INITIALIZE_FAILED = 2,
+  WEB_CLIENT_NOT_INITIALIZED = 3,
+  TEMPORARY_UNRESPONSIVE = 4,
+  PERMANENT_UNRESPONSIVE = 5,
+  RESPONSIVE = 6,
+  MAX_VALUE = RESPONSIVE,
+}
+// LINT.ThenChange(//tools/metrics/histograms/metadata/glic/enums.xml:GlicDetailedWebClientState)
 
 // Implemented by the embedder of GlicApiHost.
 export interface ApiHostEmbedder {
   // Called when the guest requests resize.
   onGuestResizeRequest(size: {width: number, height: number}): void;
+
+  // Called when the guest requests to enable manual drag resize.
+  enableDragResize(enabled: boolean): void;
 
   // Called when the notifyPanelWillOpen promise resolves to open the panel
   // when triggered from the browser.
@@ -145,6 +164,13 @@ class WebClientImpl implements WebClientInterface {
         });
   }
 
+  notifyClosedCaptioningSettingChanged(enabled: boolean): void {
+    this.sender.requestNoResponse(
+        'glicWebClientNotifyClosedCaptioningSettingChanged', {
+          enabled: enabled,
+        });
+  }
+
   notifyFocusedTabChanged(focusedTabData: (FocusedTabDataMojo)): void {
     const extras = new ResponseExtras();
     this.sender.requestNoResponse(
@@ -196,6 +222,8 @@ class HostMessageHandler implements HostMessageHandlerInterface {
     if (this.receiver) {
       throw new Error('web client already created');
     }
+    this.host.detailedWebClientState =
+        DetailedWebClientState.WEB_CLIENT_NOT_INITIALIZED;
     this.receiver = new WebClientReceiver(
         new WebClientImpl(this.sender, this.host, this.embedder));
     const {initialState} = await this.handler.webClientCreated(
@@ -213,12 +241,8 @@ class HostMessageHandler implements HostMessageHandlerInterface {
           build: chromeVersion[2] || 0,
           patch: chromeVersion[3] || 0,
         },
-        scrollToEnabled: loadTimeData.getBoolean('enableScrollTo'),
-        actInFocusedTabEnabled:
-            loadTimeData.getBoolean('enableActInFocusedTab'),
         loggingEnabled: loadTimeData.getBoolean('loggingEnabled'),
         fitWindow: initialState.sizingMode === WebClientSizingMode.kFitWindow,
-        dragResizeEnabled: loadTimeData.getBoolean('enableDragToResizePanel'),
       }),
     };
   }
@@ -280,6 +304,10 @@ class HostMessageHandler implements HostMessageHandlerInterface {
     return this.handler.closePanel();
   }
 
+  glicBrowserClosePanelAndShutdown(): void {
+    this.handler.closePanelAndShutdown();
+  }
+
   glicBrowserAttachPanel(): void {
     this.handler.attachPanel();
   }
@@ -335,6 +363,30 @@ class HostMessageHandler implements HostMessageHandlerInterface {
     };
   }
 
+  glicBrowserStopActorTask(request: {taskId: number}): void {
+    this.handler.stopActorTask(request.taskId);
+  }
+
+  glicBrowserPauseActorTask(request: {taskId: number}): void {
+    this.handler.pauseActorTask(request.taskId);
+  }
+
+  async glicBrowserResumeActorTask(
+      request: {taskId: number, tabContextOptions: TabContextOptions},
+      extras: ResponseExtras):
+      Promise<{tabContextResult: TabContextResultPrivate}> {
+    const {result: {errorReason, tabContext}} =
+        await this.handler.resumeActorTask(
+            request.taskId,
+            tabContextOptionsFromClient(request.tabContextOptions));
+    if (!tabContext) {
+      throw new Error(`resumeActorTask failed: ${errorReason}`);
+    }
+    return {
+      tabContextResult: tabContextToClient(tabContext, extras),
+    };
+  }
+
   async glicBrowserResizeWindow(request: {
     size: {width: number, height: number},
     options?: {durationMs?: number},
@@ -345,7 +397,7 @@ class HostMessageHandler implements HostMessageHandlerInterface {
   }
 
   glicBrowserEnableDragResize(request: {enabled: boolean}) {
-    return this.handler.enableDragResize(request.enabled);
+    return this.embedder.enableDragResize(request.enabled);
   }
 
   async glicBrowserCaptureScreenshot(_request: void, extras: ResponseExtras):
@@ -392,6 +444,10 @@ class HostMessageHandler implements HostMessageHandlerInterface {
 
   glicBrowserSetTabContextPermissionState(request: {enabled: boolean}) {
     return this.handler.setTabContextPermissionState(request.enabled);
+  }
+
+  glicBrowserSetClosedCaptioningSetting(request: {enabled: boolean}) {
+    return this.handler.setClosedCaptioningSetting(request.enabled);
   }
 
   async glicBrowserGetUserProfileInfo(_request: void, extras: ResponseExtras) {
@@ -449,17 +505,45 @@ class HostMessageHandler implements HostMessageHandlerInterface {
     function getMojoSelector(): ScrollToSelectorMojo {
       const {selector} = params;
       if (selector.exactText !== undefined) {
+        if (selector.exactText.searchRangeStartNodeId !== undefined &&
+            params.documentId === undefined) {
+          throw new ErrorWithReasonImpl(
+              'scrollTo', ScrollToErrorReason.NOT_SUPPORTED,
+              'searchRangeStartNodeId without documentId');
+        }
         return {
           exactTextSelector: {
             text: selector.exactText.text,
+            searchRangeStartNodeId:
+                selector.exactText.searchRangeStartNodeId ?? null,
           },
         };
       }
       if (selector.textFragment !== undefined) {
+        if (selector.textFragment.searchRangeStartNodeId !== undefined &&
+            params.documentId === undefined) {
+          throw new ErrorWithReasonImpl(
+              'scrollTo', ScrollToErrorReason.NOT_SUPPORTED,
+              'searchRangeStartNodeId without documentId');
+        }
         return {
           textFragmentSelector: {
             textStart: selector.textFragment.textStart,
             textEnd: selector.textFragment.textEnd,
+            searchRangeStartNodeId:
+                selector.textFragment.searchRangeStartNodeId ?? null,
+          },
+        };
+      }
+      if (selector.node !== undefined) {
+        if (params.documentId === undefined) {
+          throw new ErrorWithReasonImpl(
+              'scrollTo', ScrollToErrorReason.NOT_SUPPORTED,
+              'nodeId without documentId');
+        }
+        return {
+          nodeSelector: {
+            nodeId: selector.node.nodeId,
           },
         };
       }
@@ -505,6 +589,30 @@ class HostMessageHandler implements HostMessageHandlerInterface {
   glicBrowserGetOsMicrophonePermissionStatus(): Promise<{enabled: boolean}> {
     return this.handler.getOsMicrophonePermissionStatus();
   }
+
+  async glicBrowserGetZeroStateSuggestionsForFocusedTab(request: {
+    isFirstRun?: boolean,
+  }): Promise<{suggestions?: ZeroStateSuggestions}> {
+    const zeroStateResult =
+        await this.handler.getZeroStateSuggestionsForFocusedTab(
+            optionalFromClient(request.isFirstRun));
+    const zeroStateData = zeroStateResult.suggestions;
+    if (!zeroStateData) {
+      return {};
+    } else {
+      return {
+        suggestions: {
+          tabId: tabIdToClient(zeroStateData.tabId),
+          url: urlToClient(zeroStateData.tabUrl),
+          suggestions: zeroStateData.suggestions,
+        },
+      };
+    }
+  }
+
+  glicBrowserDropScrollToHighlight(): void {
+    this.handler.dropScrollToHighlight();
+  }
 }
 
 export class GlicApiHost implements PostMessageRequestHandler {
@@ -514,11 +622,11 @@ export class GlicApiHost implements PostMessageRequestHandler {
   private sender: PostMessageRequestSender;
   private handler: WebClientHandlerRemote;
   private bootstrapPingIntervalId: number|undefined;
-  private webClientResponsivenessCheckInternalId: number|undefined;
-  private webClientUnresponsiveUiTimer: OneShotTimer;
+  private webClientErrorTimer: OneShotTimer;
   private webClientState =
       ObservableValue.withValue<WebClientState>(WebClientState.UNINITIALIZED);
   private waitingOnPanelWillOpenValue = false;
+  detailedWebClientState = DetailedWebClientState.BOOTSTRAP_PENDING;
 
   constructor(
       private browserProxy: BrowserProxy, private windowProxy: WindowProxy,
@@ -535,7 +643,7 @@ export class GlicApiHost implements PostMessageRequestHandler {
         this.handler.$.bindNewPipeAndPassReceiver());
     this.messageHandler =
         new HostMessageHandler(this.handler, this.sender, embedder, this);
-    this.webClientUnresponsiveUiTimer = new OneShotTimer(
+    this.webClientErrorTimer = new OneShotTimer(
         loadTimeData.getInteger('clientUnresponsiveUiMaxTimeMs'));
 
     this.bootstrapPingIntervalId =
@@ -544,11 +652,10 @@ export class GlicApiHost implements PostMessageRequestHandler {
   }
 
   destroy() {
-    this.webClientState =
-        ObservableValue.withValue<WebClientState>(WebClientState.UNINITIALIZED);
+    this.webClientState = ObservableValue.withValue<WebClientState>(
+        WebClientState.ERROR);  // Final state
     window.clearInterval(this.bootstrapPingIntervalId);
-    this.stopWebClientResponsivenessCheck();
-    this.stopUnresponsiveUiTimer();
+    this.webClientErrorTimer.reset();
     this.postMessageReceiver.destroy();
     this.messageHandler.destroy();
     this.sender.destroy();
@@ -572,11 +679,14 @@ export class GlicApiHost implements PostMessageRequestHandler {
 
   // Called when the web client is initialized.
   webClientInitialized() {
+    this.detailedWebClientState = DetailedWebClientState.RESPONSIVE;
     this.setWebClientState(WebClientState.RESPONSIVE);
-    this.startWebClientResponsivenessCheck();
+    this.responsiveCheckLoop();
   }
 
   webClientInitializeFailed() {
+    this.detailedWebClientState =
+        DetailedWebClientState.WEB_CLIENT_INITIALIZE_FAILED;
     this.setWebClientState(WebClientState.ERROR);
   }
 
@@ -586,6 +696,10 @@ export class GlicApiHost implements PostMessageRequestHandler {
 
   getWebClientState(): ObservableValueReadOnly<WebClientState> {
     return this.webClientState;
+  }
+
+  getDetailedWebClientState(): DetailedWebClientState {
+    return this.detailedWebClientState;
   }
 
   // Sends a message to the webview which is required to initialize the client.
@@ -612,64 +726,63 @@ export class GlicApiHost implements PostMessageRequestHandler {
     }
   }
 
-  startWebClientResponsivenessCheck() {
+  async responsiveCheckLoop() {
     if (!loadTimeData.getBoolean('isClientResponsivenessCheckEnabled')) {
       return;
     }
 
-    this.webClientResponsivenessCheckInternalId =
-        window.setInterval(async () => {
-          const responsePromise = this.sender.requestWithResponse(
-              'glicWebClientCheckResponsive', undefined);
+    // Timeout duration for waiting for a response. Increased in dev mode.
+    const timeoutMs: number =
+        loadTimeData.getInteger('clientResponsivenessCheckTimeoutMs') *
+        (loadTimeData.getBoolean('devMode') ? 1000 : 1);
+    // Interval in between the consecutive checks.
+    const checkIntervalMs: number =
+        loadTimeData.getInteger('clientResponsivenessCheckIntervalMs');
 
-          let timeoutId: number|undefined;
-          let timeoutMs =
-              loadTimeData.getInteger('clientResponsivenessCheckTimeoutMs');
-          if (loadTimeData.getBoolean('devMode')) {
-            timeoutMs = timeoutMs * 1000;
-          }
-          const timeoutPromise = new Promise((_, reject) => {
-            timeoutId = setTimeout(
-                () => reject(
-                    new Error('No response received from Glic web client.')),
-                timeoutMs);
-          });
+    while (this.webClientState.getCurrentValue() !== WebClientState.ERROR) {
+      let gotResponse = false;
+      const responsePromise =
+          this.sender
+              .requestWithResponse('glicWebClientCheckResponsive', undefined)
+              .then(() => {
+                gotResponse = true;
+              });
+      const responseTimeout = sleep(timeoutMs);
 
-          try {
-            await Promise.race([responsePromise, timeoutPromise]);
-            clearTimeout(timeoutId);
-            if (this.webClientState.getCurrentValue() !==
-                WebClientState.RESPONSIVE) {
-              this.setWebClientState(WebClientState.RESPONSIVE);
-              this.stopUnresponsiveUiTimer();
-            }
-          } catch (e) {
-            console.warn(e);
-            if (this.webClientState.getCurrentValue() !==
-                WebClientState.UNRESPONSIVE) {
-              this.setWebClientState(WebClientState.UNRESPONSIVE);
-              this.startUnresponsiveUiTimer();
-            }
-          }
-        }, loadTimeData.getInteger('clientResponsivenessCheckIntervalMs'));
-  }
+      await Promise.race([responsePromise, responseTimeout]);
+      if (this.webClientState.getCurrentValue() === WebClientState.ERROR) {
+        return;  // ERROR state is final.
+      }
 
-  stopWebClientResponsivenessCheck() {
-    if (this.webClientResponsivenessCheckInternalId !== undefined) {
-      clearInterval(this.webClientResponsivenessCheckInternalId);
-      this.webClientResponsivenessCheckInternalId = undefined;
+      if (gotResponse) {  // Success
+        this.webClientErrorTimer.reset();
+        this.setWebClientState(WebClientState.RESPONSIVE);
+        this.detailedWebClientState = DetailedWebClientState.RESPONSIVE;
+
+        await sleep(checkIntervalMs);
+        continue;
+      }
+
+      // Failed, not responsive.
+      if (this.webClientState.getCurrentValue() === WebClientState.RESPONSIVE) {
+        this.detailedWebClientState =
+            DetailedWebClientState.TEMPORARY_UNRESPONSIVE;
+        this.setWebClientState(WebClientState.UNRESPONSIVE);
+        this.startWebClientErrorTimer();
+      }
+
+      // Crucial: Wait for the original (late) response promise to settle before
+      // the next check cycle starts.
+      await responsePromise;
     }
   }
 
-  startUnresponsiveUiTimer() {
-    this.webClientUnresponsiveUiTimer.start(() => {
+  startWebClientErrorTimer() {
+    this.webClientErrorTimer.start(() => {
+      this.detailedWebClientState =
+          DetailedWebClientState.PERMANENT_UNRESPONSIVE;
       this.setWebClientState(WebClientState.ERROR);
-      this.stopWebClientResponsivenessCheck();
     });
-  }
-
-  stopUnresponsiveUiTimer() {
-    this.webClientUnresponsiveUiTimer.reset();
   }
 
   async openLinkInNewTab(url: string) {
@@ -694,6 +807,11 @@ export class GlicApiHost implements PostMessageRequestHandler {
       return;
     }
 
+    if (this.detailedWebClientState ===
+        DetailedWebClientState.BOOTSTRAP_PENDING) {
+      this.detailedWebClientState =
+          DetailedWebClientState.WEB_CLIENT_NOT_CREATED;
+    }
     this.stopBootstrapPing();
 
     const response =
@@ -707,7 +825,11 @@ export class GlicApiHost implements PostMessageRequestHandler {
 
 
   onRequestReceived(type: string): void {
-    this.reportRequestCountEvent(type, GlicRequestEvent.REQUEST_RECIEVED);
+    this.reportRequestCountEvent(type, GlicRequestEvent.REQUEST_RECEIVED);
+    if (document.visibilityState === 'hidden') {
+      this.reportRequestCountEvent(
+          type, GlicRequestEvent.REQUEST_RECEIVED_WHILE_HIDDEN);
+    }
   }
 
   onRequestHandlerException(type: string): void {
@@ -730,14 +852,20 @@ export class GlicApiHost implements PostMessageRequestHandler {
   }
 }
 
-// Must match tools/metrics/histograms/metadata/glic/enums.xml.
+// LINT.IfChange(GlicRequestEvent)
 enum GlicRequestEvent {
-  REQUEST_RECIEVED = 0,
+  REQUEST_RECEIVED = 0,
   RESPONSE_SENT = 1,
   REQUEST_HANDLER_EXCEPTION = 2,
-  MAX_VALUE = REQUEST_HANDLER_EXCEPTION,
+  REQUEST_RECEIVED_WHILE_HIDDEN = 3,
+  MAX_VALUE = REQUEST_RECEIVED_WHILE_HIDDEN,
 }
+// LINT.ThenChange(//tools/metrics/histograms/metadata/glic/enums.xml:GlicRequestEvent)
 
+// Returns a Promise resolving after 'ms' milliseconds
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 // Utility functions for converting from mojom types to message types.
 // Summary of changes:
@@ -775,6 +903,13 @@ function optionalWindowIdFromClient(windowId: string|undefined): number|null {
 function optionalToClient<T>(value: T|null) {
   if (value === null) {
     return undefined;
+  }
+  return value;
+}
+
+function optionalFromClient<T>(value: T|undefined) {
+  if (value === undefined) {
+    return null;
   }
   return value;
 }

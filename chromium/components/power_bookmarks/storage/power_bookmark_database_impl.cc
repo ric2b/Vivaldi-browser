@@ -6,6 +6,7 @@
 
 #include "base/check.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/notreached.h"
 #include "base/strings/pattern.h"
 #include "base/strings/strcat.h"
@@ -154,7 +155,7 @@ bool SqliteDatabaseTransaction::Commit() {
 
 PowerBookmarkDatabaseImpl::PowerBookmarkDatabaseImpl(
     const base::FilePath& database_dir)
-    : db_(sql::DatabaseOptions().set_page_size(4096).set_cache_size(128),
+    : db_(sql::DatabaseOptions().set_cache_size(128),
           /*tag=*/"PowerBookmarks"),
       database_path_(database_dir.Append(kDatabaseName)) {
   sync_db_ =

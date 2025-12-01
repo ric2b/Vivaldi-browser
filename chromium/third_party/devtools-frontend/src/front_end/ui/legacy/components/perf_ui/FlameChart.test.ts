@@ -5,11 +5,14 @@
 import type * as Common from '../../../../core/common/common.js';
 import type * as Platform from '../../../../core/platform/platform.js';
 import * as Trace from '../../../../models/trace/trace.js';
-import {renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
+import * as Extensions from '../../../../panels/timeline/extensions/extensions.js';
+import {assertScreenshot, renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../../../testing/EnvironmentHelpers.js';
 import {
   FakeFlameChartProvider,
   MockFlameChartDelegate,
+  renderFlameChartIntoDOM,
+  renderFlameChartWithFakeProvider,
 } from '../../../../testing/TraceHelpers.js';
 
 import * as PerfUI from './perf_ui.js';
@@ -79,7 +82,7 @@ describeWithEnvironment('FlameChart', () => {
     chartInstance = new PerfUI.FlameChart.FlameChart(provider, delegate);
     renderChart(chartInstance);
     chartInstance.windowChanged(0, 5, false);
-    assert.isTrue(windowChangedSpy.calledWith(0, 5, false));
+    sinon.assert.calledWith(windowChangedSpy, 0, 5, false);
   });
 
   it('notifies the delegate when the range selection has changed', async () => {
@@ -89,7 +92,7 @@ describeWithEnvironment('FlameChart', () => {
     chartInstance = new PerfUI.FlameChart.FlameChart(provider, delegate);
     renderChart(chartInstance);
     chartInstance.updateRangeSelection(0, 5);
-    assert.isTrue(updateRangeSpy.calledWith(0, 5));
+    sinon.assert.calledWith(updateRangeSpy, 0, 5);
   });
 
   describe('setSelectedEntry', () => {
@@ -123,7 +126,7 @@ describeWithEnvironment('FlameChart', () => {
       renderChart(chartInstance);
       // Pick the first event which is only 50ms long and therefore should be in view already.
       chartInstance.setSelectedEntry(0);
-      assert.strictEqual(windowChangedSpy.callCount, 0);
+      sinon.assert.callCount(windowChangedSpy, 0);
     });
 
     it('will change the window time to reveal the selected entry when the entry is off the right of the screen',
@@ -138,7 +141,7 @@ describeWithEnvironment('FlameChart', () => {
          chartInstance.setWindowTimes(0, 100);
          renderChart(chartInstance);
          chartInstance.setSelectedEntry(3);
-         assert.isTrue(windowChangedSpy.calledOnceWithExactly(300, 400, true));
+         sinon.assert.calledOnceWithExactly(windowChangedSpy, 300, 400, true);
        });
 
     it('will change the window time to reveal the selected entry when the entry is off the left of the screen',
@@ -153,7 +156,7 @@ describeWithEnvironment('FlameChart', () => {
          chartInstance.setWindowTimes(250, 600);
          renderChart(chartInstance);
          chartInstance.setSelectedEntry(0);
-         assert.isTrue(windowChangedSpy.calledOnceWithExactly(5, 355, true));
+         sinon.assert.calledOnceWithExactly(windowChangedSpy, 5, 355, true);
        });
   });
 
@@ -184,7 +187,7 @@ describeWithEnvironment('FlameChart', () => {
       assert.isFalse(chartInstance.highlightElement.classList.contains('hidden'));
 
       // Ensure that the event listener was called with the right index
-      assert.strictEqual(highlightedEventListener.callCount, 1);
+      sinon.assert.callCount(highlightedEventListener, 1);
       const event = highlightedEventListener.args[0][0] as Common.EventTarget.EventTargetEvent<number>;
       assert.strictEqual(event.data, entryIndexToHighlight);
     });
@@ -202,7 +205,7 @@ describeWithEnvironment('FlameChart', () => {
       // Ensure that there is only one event listener called, despite the
       // highlightEntry method being called twice, because it was called with
       // the same ID.
-      assert.strictEqual(highlightedEventListener.callCount, 1);
+      sinon.assert.callCount(highlightedEventListener, 1);
     });
 
     it('does nothing if the DataProvider entryColor() method returns a falsey value', async () => {
@@ -220,7 +223,7 @@ describeWithEnvironment('FlameChart', () => {
       chartInstance.addEventListener(PerfUI.FlameChart.Events.ENTRY_HOVERED, highlightedEventListener);
       chartInstance.highlightEntry(2);
       // No calls because entryColor returned a false value.
-      assert.strictEqual(highlightedEventListener.callCount, 0);
+      sinon.assert.callCount(highlightedEventListener, 0);
     });
 
     it('dispatches the highlight event with an ID of -1 when the highlight is hidden', async () => {
@@ -538,24 +541,6 @@ describeWithEnvironment('FlameChart', () => {
             // For index 0, it is in level 0, so vertically there are only the ruler(17) and the
             // header of Group 0 (17) and beyond it.
             {x: initialXPosition + canvasOffsetX, y: 34 + canvasOffsetY + chartInstance.getScrollOffset()});
-
-        // Emulate two scrolls to force a change in coordinates.
-        // For index 3, it is in level 1, so vertically there are the ruler(17) and the header of Group 0 (17), the
-        // level 0 (17), the padding of Group 1 (4) and the header of Group 1 (17) beyond it.
-        // When select it, it will scroll the level offset(17 + 17 + 17 + 4 + 17 = 72) and its height(17), which means
-        // |chartInstance.getScrollOffset()| returns 89.
-        chartInstance.setSelectedEntry(3);
-        assert.deepEqual(
-            chartInstance.entryIndexToCoordinates(entryIndex),
-            // For index 0, so we need to minus the scroll offset(68) and |chartInstance.getScrollOffset()|, so it is
-            // 34 - 89 - 89 = -144.
-            {x: initialXPosition + canvasOffsetX, y: -144 + canvasOffsetY + chartInstance.getScrollOffset()});
-        chartInstance.setWindowTimes(250, 600);
-        const finalXPosition = chartInstance.computePosition(timelineData.entryStartTimes[entryIndex]);
-        // For this case, there is no vertical scroll, so it is still -144.
-        assert.deepEqual(
-            chartInstance.entryIndexToCoordinates(entryIndex),
-            {x: finalXPosition + canvasOffsetX, y: -144 + canvasOffsetY + chartInstance.getScrollOffset()});
       });
 
       it('returns the correct coordinates after re-order', () => {
@@ -1019,5 +1004,290 @@ describeWithEnvironment('FlameChart', () => {
       groupNode2.startLevel = 3;
       assert.deepEqual(root, expectedGroupNodeRoot);
     });
+  });
+
+  describe('rendering tracks', () => {
+    it('renders the main thread correctly', async function() {
+      await renderFlameChartIntoDOM(this, {
+        traceFile: 'one-second-interaction.json.gz',
+        filterTracks(trackName) {
+          return trackName.startsWith('Main');
+        },
+        expandTracks() {
+          return true;
+        },
+      });
+      await assertScreenshot('timeline/render_main_thread.png');
+    });
+
+    it('renders iframe main threads correctly', async function() {
+      await renderFlameChartIntoDOM(this, {
+        traceFile: 'multiple-navigations-with-iframes.json.gz',
+        filterTracks(trackName) {
+          return trackName.startsWith('Frame');
+        },
+        expandTracks() {
+          return true;
+        },
+      });
+      await assertScreenshot('timeline/render_iframe_main_thread.png');
+    });
+
+    it('renders the rasterizer tracks, nested correctly', async function() {
+      await renderFlameChartIntoDOM(this, {
+        traceFile: 'web-dev.json.gz',
+        filterTracks(trackName) {
+          return trackName.startsWith('Raster');
+        },
+        expandTracks() {
+          return true;
+        },
+      });
+      await assertScreenshot('timeline/render_rasterizer_track.png');
+    });
+
+    it('renders tracks for workers', async function() {
+      await renderFlameChartIntoDOM(this, {
+        traceFile: 'two-workers.json.gz',
+        filterTracks(trackName) {
+          return trackName.startsWith('Worker');
+        },
+        expandTracks(_trackName, trackIndex) {
+          // We render two worker tracks: leave the first closed and expand the second.
+          return trackIndex === 1;
+        },
+        // Zoom in on the part of the trace with activity to make the screenshot better.
+        customStartTime: 107351290.697 as Trace.Types.Timing.Milli,
+        customEndTime: 107351401.004 as Trace.Types.Timing.Milli,
+      });
+      await assertScreenshot('timeline/worker_tracks.png');
+    });
+
+    it('renders threadpool groups correctly', async function() {
+      await renderFlameChartIntoDOM(this, {
+        traceFile: 'web-dev.json.gz',
+        filterTracks(trackName) {
+          return trackName.startsWith('Thread');
+        },
+        expandTracks() {
+          return true;
+        },
+        // Zoom in on the part of the trace with activity to make the screenshot better.
+        customStartTime: 1020034891.352 as Trace.Types.Timing.Milli,
+        customEndTime: 1020035181.509 as Trace.Types.Timing.Milli,
+      });
+      await assertScreenshot('timeline/threadpool_tracks.png');
+    });
+  });
+
+  it('renders the interactions track correctly', async function() {
+    await renderFlameChartIntoDOM(this, {
+      traceFile: 'slow-interaction-button-click.json.gz',
+      filterTracks(trackName) {
+        return trackName.startsWith('Interactions');
+      },
+      expandTracks() {
+        return true;
+      },
+      customStartTime: 337944700 as Trace.Types.Timing.Milli,
+      customEndTime: 337945100 as Trace.Types.Timing.Milli,
+    });
+    await assertScreenshot('timeline/interactions_track.png');
+  });
+
+  it('candy stripes long interactions', async function() {
+    await renderFlameChartIntoDOM(this, {
+      traceFile: 'one-second-interaction.json.gz',
+      filterTracks(trackName) {
+        return trackName.startsWith('Interactions');
+      },
+      expandTracks() {
+        return true;
+      },
+      customStartTime: 141251500 as Trace.Types.Timing.Milli,
+      customEndTime: 141253000 as Trace.Types.Timing.Milli,
+    });
+    await assertScreenshot('timeline/interactions_track_candystripe.png');
+  });
+
+  it('renders all the decoration types onto events', async () => {
+    class FakeProviderWithDecorations extends FakeFlameChartProvider {
+      override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
+        return PerfUI.FlameChart.FlameChartTimelineData.create({
+          entryLevels: [0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 2],
+          entryStartTimes: [5, 55, 70, 5, 30, 55, 75, 5, 10, 15, 20, 25],
+          entryTotalTimes: [45, 10, 20, 20, 20, 5, 15, 4, 4, 4, 4, 1],
+          entryDecorations: [
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+                startAtTime: Trace.Types.Timing.Micro(25_000),
+              },
+              {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+            ],
+            [{type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE}],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+              {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+            ],
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+                startAtTime: Trace.Types.Timing.Micro(15_000),
+              },
+            ],
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+                startAtTime: Trace.Types.Timing.Micro(10_000),
+              },
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+                startAtTime: Trace.Types.Timing.Micro(10_000),
+              },
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+              {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+            ],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+              {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+            ],
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+                startAtTime: Trace.Types.Timing.Micro(1_000),
+              },
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.CANDY,
+                startAtTime: Trace.Types.Timing.Micro(1_000),
+              },
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+              {type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE},
+            ],
+            [
+              {
+                type: PerfUI.FlameChart.FlameChartDecorationType.WARNING_TRIANGLE,
+                // This triangle should start 1/4 of the event, and end at 3/4 of the event.
+                customStartTime: Trace.Types.Timing.Micro(25_250),
+                customEndTime: Trace.Types.Timing.Micro(25_750),
+              },
+            ],
+          ],
+          groups: [{
+            name: 'Testing decorations' as Platform.UIString.LocalizedString,
+            startLevel: 0,
+            style: defaultGroupStyle,
+          }],
+        });
+      }
+    }
+
+    await renderFlameChartWithFakeProvider(
+        new FakeProviderWithDecorations(),
+    );
+    await assertScreenshot('timeline/flamechart_all_decoration_types.png');
+  });
+
+  it('renders initiators correctly', async () => {
+    class FakeProviderWithInitiators extends FakeFlameChartProvider {
+      override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
+        return PerfUI.FlameChart.FlameChartTimelineData.create({
+          entryLevels: [0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 0, 1, 2, 3],
+          entryStartTimes: [5, 5, 5, 15, 15, 15, 40, 40, 40, 55.4, 55.4, 55.4, 80, 80, 80, 17],
+          entryTotalTimes: [6, 6, 6, 5, 5, 20, 15, 15, 15, 2, 2, 2, 10, 10, 10, 10],
+          entryDecorations: [
+            [],
+            [],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [],
+            [],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+            [
+              {type: PerfUI.FlameChart.FlameChartDecorationType.HIDDEN_DESCENDANTS_ARROW},
+            ],
+          ],
+          initiatorsData: [
+            {initiatorIndex: 2, eventIndex: 3, isInitiatorHidden: true},
+            {initiatorIndex: 1, eventIndex: 13},
+            {initiatorIndex: 3, eventIndex: 6},
+            {initiatorIndex: 3, eventIndex: 8, isEntryHidden: true},
+            {initiatorIndex: 6, eventIndex: 11},
+            {initiatorIndex: 11, eventIndex: 12, isInitiatorHidden: true, isEntryHidden: true},
+            {initiatorIndex: 5, eventIndex: 15},
+          ],
+          groups: [{
+            name: 'Testing initiators' as Platform.UIString.LocalizedString,
+            startLevel: 0,
+            style: defaultGroupStyle,
+          }],
+        });
+      }
+
+      override maxStackDepth(): number {
+        return 4;
+      }
+    }
+
+    await renderFlameChartWithFakeProvider(
+        new FakeProviderWithInitiators(),
+    );
+    await assertScreenshot('timeline/flamechart_initiators.png');
+  });
+
+  it('renders extension tracks with the right colours', async () => {
+    const colorPalette = Trace.Types.Extensions.extensionPalette;
+    const paletteLength = colorPalette.length;
+
+    class FakeProviderWithExtensionColors extends FakeFlameChartProvider {
+      override entryColor(entryIndex: number): string {
+        const color = colorPalette[entryIndex % paletteLength];
+        return Extensions.ExtensionUI.extensionEntryColor(
+            {args: {color}} as Trace.Types.Extensions.SyntheticExtensionEntry);
+      }
+      override maxStackDepth(): number {
+        return paletteLength + 1;
+      }
+      override timelineData(): PerfUI.FlameChart.FlameChartTimelineData|null {
+        return PerfUI.FlameChart.FlameChartTimelineData.create({
+          entryLevels: colorPalette.map((_, i) => i),
+          entryStartTimes: colorPalette.map(() => 0),
+          entryTotalTimes: colorPalette.map(() => 100),
+          groups: [{
+            name: 'Testing extension palette' as Platform.UIString.LocalizedString,
+            startLevel: 0,
+            style: defaultGroupStyle,
+          }],
+        });
+      }
+    }
+
+    await renderFlameChartWithFakeProvider(
+        new FakeProviderWithExtensionColors(),
+    );
+    await assertScreenshot('timeline/flamechart_extension_track_colors.png');
   });
 });

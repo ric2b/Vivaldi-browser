@@ -36,6 +36,7 @@ using chrome_test_util::AddTabToNewGroupButton;
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::CloseGroupButton;
+using chrome_test_util::CloseTabGroupButton;
 using chrome_test_util::ContextMenuItemWithAccessibilityLabel;
 using chrome_test_util::ContextMenuItemWithAccessibilityLabelId;
 using chrome_test_util::CreateTabGroupCancelButton;
@@ -58,7 +59,6 @@ using chrome_test_util::TabGridSearchBar;
 using chrome_test_util::TabGridSearchTabsButton;
 using chrome_test_util::TabGridSelectTabsMenuButton;
 using chrome_test_util::TabGridUndoCloseAllButton;
-using chrome_test_util::TabGroupBackButton;
 using chrome_test_util::TabGroupCreationView;
 using chrome_test_util::TabGroupOverflowMenuButton;
 using chrome_test_util::TabGroupSnackBar;
@@ -82,6 +82,11 @@ NSString* const kGroup2Name = @"2group";
 // Displays the tab cell context menu by long pressing at the tab cell at
 // `tab_cell_index`.
 void DisplayContextMenuForTabCellAtIndex(int tab_cell_index) {
+  // It happens that on certain bots, the grey_longPress action doesn't return
+  // an error for EarlGrey, but the context menu doesn't open accordingly.
+  // Waiting has been seen as fixing this.
+  base::PlatformThread::Sleep(base::Seconds(1));
+
   [[EarlGrey selectElementWithMatcher:TabGridCellAtIndex(tab_cell_index)]
       performAction:grey_longPress()];
 }
@@ -89,6 +94,11 @@ void DisplayContextMenuForTabCellAtIndex(int tab_cell_index) {
 // Displays the group cell context menu by long pressing at the group cell at
 // `group_cell_index`.
 void DisplayContextMenuForGroupCellAtIndex(int group_cell_index) {
+  // It happens that on certain bots, the grey_longPress action doesn't return
+  // an error for EarlGrey, but the context menu doesn't open accordingly.
+  // Waiting has been seen as fixing this.
+  base::PlatformThread::Sleep(base::Seconds(1));
+
   [[EarlGrey selectElementWithMatcher:TabGridGroupCellAtIndex(group_cell_index)]
       performAction:grey_longPress()];
 }
@@ -266,7 +276,6 @@ UIViewController* TopPresentedViewController() {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  config.features_enabled.push_back(kTabGroupsIPad);
   config.features_enabled.push_back(kTabGroupIndicator);
   if ([self isRunningTest:@selector(testCloseFromSelectionSyncDisabled)]) {
     config.features_disabled.push_back(kTabGroupSync);
@@ -440,7 +449,7 @@ UIViewController* TopPresentedViewController() {
   [[EarlGrey selectElementWithMatcher:TabWithTitle(kTab1Title)]
       assertWithMatcher:grey_notNil()];
 
-  [[EarlGrey selectElementWithMatcher:NavigationBarBackButton()]
+  [[EarlGrey selectElementWithMatcher:CloseTabGroupButton()]
       performAction:grey_tap()];
 
   // Create a tab cell with `Tab 2` as its title.
@@ -757,15 +766,7 @@ UIViewController* TopPresentedViewController() {
   [self testMovingBetweenGroupsUsingGridContextMenuInGrid:/*incognito*/ NO];
 }
 
-// TODO(crbug.com/377475535): Deflake and re-enable.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testMovingBetweenGroupsUsingGridContextMenuInIncognitoGrid \
-  DISABLED_testMovingBetweenGroupsUsingGridContextMenuInIncognitoGrid
-#else
-#define MAYBE_testMovingBetweenGroupsUsingGridContextMenuInIncognitoGrid \
-  testMovingBetweenGroupsUsingGridContextMenuInIncognitoGrid
-#endif
-- (void)MAYBE_testMovingBetweenGroupsUsingGridContextMenuInIncognitoGrid {
+- (void)testMovingBetweenGroupsUsingGridContextMenuInIncognitoGrid {
   if (@available(iOS 17, *)) {
   } else if ([ChromeEarlGrey isIPadIdiom]) {
     EARL_GREY_TEST_SKIPPED(@"Only available on iOS 17+ on iPad.");
@@ -996,7 +997,7 @@ UIViewController* TopPresentedViewController() {
       assertWithMatcher:grey_notNil()];
 
   // Go back to the tab grid.
-  [[EarlGrey selectElementWithMatcher:TabGroupBackButton()]
+  [[EarlGrey selectElementWithMatcher:CloseTabGroupButton()]
       performAction:grey_tap()];
   // Check that the group still exists.
   [[EarlGrey selectElementWithMatcher:TabGridGroupCellWithName(
@@ -1612,7 +1613,7 @@ UIViewController* TopPresentedViewController() {
       assertWithMatcher:grey_nil()];
 
   // Go back to the tab grid.
-  [[EarlGrey selectElementWithMatcher:TabGroupBackButton()]
+  [[EarlGrey selectElementWithMatcher:CloseTabGroupButton()]
       performAction:grey_tap()];
   [ChromeEarlGrey
       waitForUIElementToAppearWithMatcher:TabGridGroupCellAtIndex(0)];

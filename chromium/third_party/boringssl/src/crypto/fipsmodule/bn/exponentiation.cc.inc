@@ -413,7 +413,6 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
                               const BIGNUM *m, BN_CTX *ctx,
                               const BN_MONT_CTX *mont) {
   int i, ret = 0, wvalue;
-  BN_MONT_CTX *new_mont = NULL;
 
   void *powerbuf_free = NULL;
   size_t powerbuf_len = 0;
@@ -449,12 +448,13 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
 
   // Allocate a montgomery context if it was not supplied by the caller.
   int top, num_powers, window;
-  if (mont == NULL) {
-    new_mont = BN_MONT_CTX_new_consttime(m, ctx);
-    if (new_mont == NULL) {
+  bssl::UniquePtr<BN_MONT_CTX> new_mont;
+  if (mont == nullptr) {
+    new_mont.reset(BN_MONT_CTX_new_consttime(m, ctx));
+    if (new_mont == nullptr) {
       goto err;
     }
-    mont = new_mont;
+    mont = new_mont.get();
   }
 
   // Use the width in |mont->N|, rather than the copy in |m|. The assembly
@@ -731,7 +731,6 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
   ret = 1;
 
 err:
-  BN_MONT_CTX_free(new_mont);
   if (powerbuf != NULL && powerbuf_free == NULL) {
     OPENSSL_cleanse(powerbuf, powerbuf_len);
   }

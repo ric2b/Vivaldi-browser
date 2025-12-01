@@ -21,7 +21,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -748,8 +747,7 @@ const FormFieldData* FindUsernameFieldBaseHeuristics(
     FormDataParser::Mode mode,
     Interactability best_interactability,
     bool is_fallback) {
-  CHECK(first_relevant_password != processed_fields.end(),
-        base::NotFatalUntil::M130);
+  CHECK(first_relevant_password != processed_fields.end());
 
   // For saving filter out empty fields and fields with values which are not
   // username.
@@ -873,8 +871,7 @@ void ParseUsingBaseHeuristics(
       }
     }
   }
-  CHECK(first_relevant_password != processed_fields.end(),
-        base::NotFatalUntil::M130);
+  CHECK(first_relevant_password != processed_fields.end());
 
   if (found_fields->username) {
     return;
@@ -1118,25 +1115,6 @@ std::vector<ProcessedField> ProcessFields(
   return result;
 }
 
-// Return true if |significant_fields| has an username field and
-// |form_predictions| has |may_use_prefilled_placeholder| == true for the
-// username field.
-bool GetMayUsePrefilledPlaceholder(
-    const std::optional<FormPredictions>& form_predictions,
-    const SignificantFields& significant_fields) {
-  if (!form_predictions || !significant_fields.username) {
-    return false;
-  }
-
-  FieldRendererId username_id = significant_fields.username->renderer_id();
-  for (const PasswordFieldPrediction& prediction : form_predictions->fields) {
-    if (prediction.renderer_id == username_id) {
-      return prediction.may_use_prefilled_placeholder;
-    }
-  }
-  return false;
-}
-
 // Puts together a PasswordForm, the result of the parsing, based on the
 // |form_data| description of the form metadata (e.g., action), the already
 // parsed information about what are the |significant_fields|, the list
@@ -1168,9 +1146,6 @@ std::unique_ptr<PasswordForm> AssemblePasswordForm(
   result->scheme = PasswordForm::Scheme::kHtml;
   result->blocked_by_user = false;
   result->type = PasswordForm::Type::kFormSubmission;
-  result->server_side_classification_successful = form_predictions.has_value();
-  result->username_may_use_prefilled_placeholder =
-      GetMayUsePrefilledPlaceholder(form_predictions, significant_fields);
   result->only_for_fallback = significant_fields.is_fallback;
   result->submission_event = form_data.submission_event();
   result->accepts_webauthn_credentials =

@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/350788890): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #ifndef URL_URL_CANON_INTERNAL_H_
 #define URL_URL_CANON_INTERNAL_H_
 
@@ -15,8 +10,14 @@
 // template bloat because everything is inlined when anybody calls any of our
 // functions.
 
+#ifdef UNSAFE_BUFFERS_BUILD
+// TODO(crbug.com/350788890): Remove this and spanify to fix the errors.
+#pragma allow_unsafe_buffers
+#endif
+
 #include <stddef.h>
 
+#include <array>
 #include <string>
 
 #include "base/component_export.h"
@@ -64,7 +65,7 @@ enum SharedCharTypes {
 // Using an unsigned char type has a small but measurable performance benefit
 // over using a 32-bit number.
 // clang-format off
-inline constexpr uint8_t kSharedCharTypeTable[0x100] = {
+inline constexpr std::array<uint8_t, 0x100> kSharedCharTypeTable = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 0x00 - 0x0f
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  // 0x10 - 0x1f
     0,                           // 0x20  ' ' (escape spaces in queries)
@@ -193,12 +194,10 @@ constexpr bool IsComponentChar(unsigned char c) {
 
 // Appends the given string to the output, escaping characters that do not
 // match the given |type| in SharedCharTypes.
-void AppendStringOfType(const char* source,
-                        size_t length,
+void AppendStringOfType(std::string_view source,
                         SharedCharTypes type,
                         CanonOutput* output);
-void AppendStringOfType(const char16_t* source,
-                        size_t length,
+void AppendStringOfType(std::u16string_view source,
                         SharedCharTypes type,
                         CanonOutput* output);
 
@@ -478,13 +477,9 @@ void AppendInvalidNarrowString(const char16_t* spec,
 // return false in the failure case, and the caller should not continue as
 // normal.
 COMPONENT_EXPORT(URL)
-bool ConvertUTF16ToUTF8(const char16_t* input,
-                        size_t input_len,
-                        CanonOutput* output);
+bool ConvertUTF16ToUTF8(std::u16string_view input, CanonOutput* output);
 COMPONENT_EXPORT(URL)
-bool ConvertUTF8ToUTF16(const char* input,
-                        size_t input_len,
-                        CanonOutputT<char16_t>* output);
+bool ConvertUTF8ToUTF16(std::string_view input, CanonOutputT<char16_t>* output);
 
 // Converts from UTF-16 to 8-bit using the character set converter. If the
 // converter is NULL, this will use UTF-8.

@@ -13,6 +13,7 @@
 #include "base/functional/bind.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/browser_delegate/browser_delegate.h"
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
@@ -121,20 +122,18 @@ OfficeFilesSourceVolume VolumeTypeToSourceVolume(
   }
 }
 
-SourceType GetSourceType(Profile* profile,
-                         const storage::FileSystemURL& source_url) {
+std::optional<SourceType> GetSourceType(
+    Profile* profile,
+    const storage::FileSystemURL& source_url) {
   file_manager::VolumeManager* volume_manager =
       file_manager::VolumeManager::Get(profile);
   base::WeakPtr<file_manager::Volume> source_volume =
       volume_manager->FindVolumeFromPath(source_url.path());
-  DCHECK(source_volume)
-      << "Unable to find source volume (source path filesystem_id: "
-      << source_url.filesystem_id() << ")";
   // Local by default.
   if (!source_volume) {
     LOG(ERROR) << "Unable to find source volume (source path filesystem_id: "
                << source_url.filesystem_id() << ")";
-    return SourceType::LOCAL;
+    return std::nullopt;
   }
   // First, look at whether the filesystem is read-only.
   if (source_volume->is_read_only()) {
@@ -162,16 +161,14 @@ SourceType GetSourceType(Profile* profile,
                    : SourceType::LOCAL;
       }
     }
-    // Local if unable to find the provided file system.
-    return SourceType::LOCAL;
+    LOG(ERROR) << "Unable to find the provided file system";
+    return std::nullopt;
   }
   // Local by default.
   return SourceType::LOCAL;
 }
 
-UploadType GetUploadType(Profile* profile,
-                         const storage::FileSystemURL& source_url) {
-  SourceType source_type = GetSourceType(profile, source_url);
+UploadType SourceTypeToUploadType(SourceType source_type) {
   return source_type == SourceType::LOCAL ? UploadType::kMove
                                           : UploadType::kCopy;
 }
@@ -381,13 +378,13 @@ std::optional<base::File::Error> GetFirstTaskError(
 }
 
 std::optional<gfx::Rect> CalculateAuthWindowBounds(Profile* profile) {
-  Browser* browser =
-      FindSystemWebAppBrowser(profile, ash::SystemWebAppType::FILE_MANAGER);
+  BrowserDelegate* browser = FindSystemWebAppBrowser(
+      profile, ash::SystemWebAppType::FILE_MANAGER, ash::BrowserType::kApp);
   if (!browser) {
     return std::nullopt;
   }
 
-  gfx::Rect files_app_bounds = browser->window()->GetBounds();
+  gfx::Rect files_app_bounds = browser->GetBounds();
   // These are the min sizes needed for the oauth dialog to look subjectively
   // "good".
   const int kMinWidth = 615;

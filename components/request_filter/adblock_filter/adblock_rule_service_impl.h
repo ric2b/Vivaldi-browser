@@ -104,6 +104,7 @@ class RuleServiceImpl : public RuleServiceContent,
   void OnRulesIndexLoaded(RuleGroup group);
 
   void OnEnableDocumentBlockingChanged();
+  void OnPingBlockingChanged();
 
   void AddRequestFilter(RuleGroup group);
 

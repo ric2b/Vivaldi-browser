@@ -23,6 +23,10 @@
 #import "ios/chrome/browser/safety_check/model/ios_chrome_safety_check_manager_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 namespace {
 
 NSString* const kAlternateDiscoverFeedServerURL =
@@ -66,6 +70,7 @@ NSString* const kTipsMagicStackStateOverride = @"TipsMagicStackStateOverride";
 NSString* const kInactiveTabsDemoMode = @"InactiveTabsDemoMode";
 NSString* const kInactiveTabsTestMode = @"InactiveTabsTestMode";
 NSString* const kAsyncStartupOverrideResponse = @"AsyncStartupOverrideResponse";
+NSString* const kLensResultPanelGwsURL = @"LensResultPanelGwsURL";
 }  // namespace
 
 namespace experimental_flags {
@@ -351,8 +356,16 @@ bool AlwaysShowTheFirstPartyIncognitoUI() {
 }
 
 bool EnableAIPrototypingMenu() {
+  if (vivaldi::IsVivaldiRunning())
+    return false; // End Vivaldi
+
   return [[NSUserDefaults standardUserDefaults]
       boolForKey:@"EnableAIPrototypingMenu"];
+}
+
+NSString* GetLensResultPanelGwsURL() {
+  return [[NSUserDefaults standardUserDefaults]
+      stringForKey:kLensResultPanelGwsURL];
 }
 
 }  // namespace experimental_flags

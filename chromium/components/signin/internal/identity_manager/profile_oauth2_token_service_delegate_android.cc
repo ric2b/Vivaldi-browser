@@ -179,6 +179,12 @@ bool ProfileOAuth2TokenServiceDelegateAndroid::RefreshTokenIsAvailable(
   DVLOG(1)
       << "ProfileOAuth2TokenServiceDelegateAndroid::RefreshTokenIsAvailable"
       << " account= " << account_id;
+  if (base::FeatureList::IsEnabled(
+          switches::kMakeAccountsAvailableInIdentityManager)) {
+    std::vector<CoreAccountId> accounts = GetValidAccounts();
+    return base::Contains(accounts, account_id);
+  }
+
   std::string account_name = MapAccountIdToAccountName(account_id);
   if (account_name.empty()) {
     // This corresponds to the case when the account with id |account_id| is not
@@ -203,7 +209,7 @@ ProfileOAuth2TokenServiceDelegateAndroid::GetAccounts() const {
 }
 
 std::vector<CoreAccountId>
-ProfileOAuth2TokenServiceDelegateAndroid::GetValidAccounts() {
+ProfileOAuth2TokenServiceDelegateAndroid::GetValidAccounts() const {
   std::vector<CoreAccountId> ids;
   for (const CoreAccountId& id : GetAccounts()) {
     if (ValidateAccountId(id)) {
@@ -321,7 +327,9 @@ bool ProfileOAuth2TokenServiceDelegateAndroid::UpdateAccountList(
     std::vector<CoreAccountId>* refreshed_ids,
     std::vector<CoreAccountId>* revoked_ids) {
   bool keep_accounts =
-      signed_in_id.has_value() && base::Contains(curr_ids, *signed_in_id);
+      base::FeatureList::IsEnabled(
+          switches::kMakeAccountsAvailableInIdentityManager) ||
+      (signed_in_id.has_value() && base::Contains(curr_ids, *signed_in_id));
   if (keep_accounts) {
     // Revoke token for ids that have been removed from the device.
     for (const CoreAccountId& prev_id : prev_ids) {
@@ -447,7 +455,7 @@ void JNI_ProfileOAuth2TokenServiceDelegate_OnOAuth2TokenFetched(
     JNIEnv* env,
     const JavaParamRef<jstring>& authToken,
     const jlong expiration_time_secs,
-    jboolean isTransientError,
+    GoogleServiceAuthError& authError,
     jlong nativeCallback) {
   std::string token;
   if (authToken) {
@@ -455,18 +463,9 @@ void JNI_ProfileOAuth2TokenServiceDelegate_OnOAuth2TokenFetched(
   }
   std::unique_ptr<FetchOAuth2TokenCallback> heap_callback(
       reinterpret_cast<FetchOAuth2TokenCallback*>(nativeCallback));
-  GoogleServiceAuthError err = GoogleServiceAuthError::AuthErrorNone();
-  if (!authToken) {
-    err =
-        isTransientError
-            ? GoogleServiceAuthError(GoogleServiceAuthError::CONNECTION_FAILED)
-            : GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
-                  GoogleServiceAuthError::InvalidGaiaCredentialsReason::
-                      CREDENTIALS_REJECTED_BY_SERVER);
-  }
 
   std::move(*heap_callback)
-      .Run(err, token,
+      .Run(authError, token,
            base::Time::FromSecondsSinceUnixEpoch(expiration_time_secs));
 }
 }  // namespace signin

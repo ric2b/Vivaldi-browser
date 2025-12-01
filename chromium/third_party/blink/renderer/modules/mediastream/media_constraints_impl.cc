@@ -28,11 +28,6 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "third_party/blink/renderer/modules/mediastream/media_constraints_impl.h"
 
 #include "build/build_config.h"
@@ -309,10 +304,18 @@ void CopyDoubleConstraint(const V8ConstrainDouble* blink_union_form,
 void CopyBooleanOrDoubleConstraint(
     const V8UnionBooleanOrConstrainDouble* blink_union_form,
     NakedValueDisposition naked_treatment,
-    DoubleConstraint& web_form) {
+    DoubleOrBooleanConstraint& web_form) {
   switch (blink_union_form->GetContentType()) {
     case V8UnionBooleanOrConstrainDouble::ContentType::kBoolean:
-      web_form.SetIsPresent(blink_union_form->GetAsBoolean());
+      web_form.SetIsPresent(true);
+      switch (naked_treatment) {
+        case NakedValueDisposition::kTreatAsIdeal:
+          web_form.SetIdealBoolean(blink_union_form->GetAsBoolean());
+          break;
+        case NakedValueDisposition::kTreatAsExact:
+          web_form.SetExactBoolean(blink_union_form->GetAsBoolean());
+          break;
+      }
       break;
     case V8UnionBooleanOrConstrainDouble::ContentType::kConstrainDoubleRange:
     case V8UnionBooleanOrConstrainDouble::ContentType::kDouble:
@@ -672,7 +675,28 @@ bool ValidateAndCopyConstraintSet(
                           naked_treatment,
                           constraint_buffer.suppress_local_audio_playback);
   }
+
+  if (constraints_in->hasRestrictOwnAudio()) {
+    CopyBooleanConstraint(constraints_in->restrictOwnAudio(), naked_treatment,
+                          constraint_buffer.restrict_own_audio);
+  }
+
   return true;
+}
+
+template <class T>
+bool UseNakedBooleanNotNumeric(const T& input, NakedValueDisposition which) {
+  if (input.HasExact() || input.HasIdeal() || input.HasMin() ||
+      input.HasMax()) {
+    return false;
+  }
+  switch (which) {
+    case NakedValueDisposition::kTreatAsIdeal:
+      return input.HasIdealBoolean();
+    case NakedValueDisposition::kTreatAsExact:
+      return input.HasExactBoolean();
+  }
+  NOTREACHED();
 }
 
 template <class T>
@@ -699,6 +723,17 @@ bool UseNakedNonNumeric(const T& input, NakedValueDisposition which) {
     case NakedValueDisposition::kTreatAsExact:
       return input.HasExact() && !input.HasIdeal();
       break;
+  }
+  NOTREACHED();
+}
+
+template <class T>
+bool GetNakedBoolean(const T& input, NakedValueDisposition which) {
+  switch (which) {
+    case NakedValueDisposition::kTreatAsIdeal:
+      return input.IdealBoolean();
+    case NakedValueDisposition::kTreatAsExact:
+      return input.ExactBoolean();
   }
   NOTREACHED();
 }
@@ -757,11 +792,14 @@ V8ConstrainDouble* ConvertDouble(const DoubleConstraint& input,
 }
 
 V8UnionBooleanOrConstrainDouble* ConvertBooleanOrDouble(
-    const DoubleConstraint& input,
+    const DoubleOrBooleanConstraint& input,
     NakedValueDisposition naked_treatment) {
   if (UseNakedNumeric(input, naked_treatment)) {
     return MakeGarbageCollected<V8UnionBooleanOrConstrainDouble>(
         GetNakedValue<double>(input, naked_treatment));
+  } else if (UseNakedBooleanNotNumeric(input, naked_treatment)) {
+    return MakeGarbageCollected<V8UnionBooleanOrConstrainDouble>(
+        GetNakedBoolean(input, naked_treatment));
   } else if (!input.IsUnconstrained()) {
     ConstrainDoubleRange* output = ConstrainDoubleRange::Create();
     if (input.HasExact())
@@ -927,6 +965,10 @@ void ConvertConstraintSet(const MediaTrackConstraintSetPlatform& input,
   if (!input.suppress_local_audio_playback.IsUnconstrained()) {
     output->setSuppressLocalAudioPlayback(
         ConvertBoolean(input.suppress_local_audio_playback, naked_treatment));
+  }
+  if (!input.restrict_own_audio.IsUnconstrained()) {
+    output->setRestrictOwnAudio(
+        ConvertBoolean(input.restrict_own_audio, naked_treatment));
   }
   // TODO(hta): Decide the future of the nonstandard constraints.
   // If they go forward, they need to be added here.

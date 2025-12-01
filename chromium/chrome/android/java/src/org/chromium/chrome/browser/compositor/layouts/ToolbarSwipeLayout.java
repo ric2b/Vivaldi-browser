@@ -20,6 +20,7 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.BlackHoleEventFilter;
@@ -77,13 +78,13 @@ public class ToolbarSwipeLayout extends Layout {
     private TopToolbarOverlayCoordinator mLeftToolbarOverlay;
     private TopToolbarOverlayCoordinator mRightToolbarOverlay;
 
-    private ObservableSupplierImpl<Tab> mLeftTabSupplier;
-    private ObservableSupplierImpl<Tab> mRightTabSupplier;
+    private final ObservableSupplierImpl<Tab> mLeftTabSupplier;
+    private final ObservableSupplierImpl<Tab> mRightTabSupplier;
 
     private final ViewGroup mContentContainer;
 
     // Whether or not to show the toolbar.
-    private boolean mMoveToolbar;
+    private boolean mMoveToolbar; // Vivaldi
 
     // Offsets are in pixels [0, width].
     private float mOffsetStart;
@@ -152,6 +153,7 @@ public class ToolbarSwipeLayout extends Layout {
                             () -> mRenderHost.getResourceManager(),
                             topUiColorProvider,
                             bottomControlsOffsetSupplier,
+                            new ObservableSupplierImpl<>(false),
                             LayoutType.TOOLBAR_SWIPE,
                             true);
             mLeftToolbarOverlay.setManualVisibility(true);
@@ -167,6 +169,7 @@ public class ToolbarSwipeLayout extends Layout {
                             () -> mRenderHost.getResourceManager(),
                             topUiColorProvider,
                             bottomControlsOffsetSupplier,
+                            new ObservableSupplierImpl<>(false),
                             LayoutType.TOOLBAR_SWIPE,
                             true);
             mRightToolbarOverlay.setManualVisibility(true);

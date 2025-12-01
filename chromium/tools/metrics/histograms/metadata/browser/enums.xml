@@ -190,6 +190,8 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="User opened survey"/>
 </enum>
 
+<!-- LINT.IfChange(InfoBarIdentifier) -->
+
 <enum name="InfoBarIdentifier">
   <int value="1" label="APP_BANNER_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="2" label="APP_BANNER_INFOBAR_DELEGATE_DESKTOP (Obsolete)"/>
@@ -255,7 +257,8 @@ chromium-metrics-reviews@google.com.
   <int value="58" label="SYNC_ERROR_INFOBAR_DELEGATE_IOS"/>
   <int value="59" label="UPGRADE_INFOBAR_DELEGATE"/>
   <int value="60" label="WINDOW_ERROR_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="61" label="DANGEROUS_DOWNLOAD_INFOBAR_DELEGATE_ANDROID"/>
+  <int value="61"
+      label="DANGEROUS_DOWNLOAD_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
   <int value="62" label="WINDOWS_DESKTOP_SEARCH_INFOBAR_DELEGATE (Obsolete)"/>
   <int value="63" label="UPDATE_PASSWORD_INFOBAR_DELEGATE_MOBILE"/>
   <int value="64" label="DATA_REDUCTION_PROMO_INFOBAR_DELEGATE_ANDROID"/>
@@ -278,7 +281,7 @@ chromium-metrics-reviews@google.com.
   <int value="79" label="NEAR_OOM_INFOBAR_ANDROID"/>
   <int value="80" label="INSTALLABLE_AMBIENT_BADGE_INFOBAR_DELEGATE"/>
   <int value="81" label="PAGE_LOAD_CAPPING_INFOBAR_DELEGATE (Obsolete)"/>
-  <int value="82" label="DOWNLOAD_PROGRESS_INFOBAR_ANDROID"/>
+  <int value="82" label="DOWNLOAD_PROGRESS_INFOBAR_ANDROID (Obsolete)"/>
   <int value="83" label="AR_CORE_UPGRADE_ANDROID"/>
   <int value="84" label="BLOATED_RENDERER_INFOBAR_DELEGATE"/>
   <int value="85"
@@ -295,7 +298,8 @@ chromium-metrics-reviews@google.com.
   <int value="95" label="SMS_RECEIVER_INFOBAR_DELEGATE"/>
   <int value="96" label="KNOWN_INTERCEPTION_DISCLOSURE_INFOBAR_DELEGATE"/>
   <int value="97" label="SYNC_ERROR_INFOBAR_DELEGATE_ANDROID"/>
-  <int value="98" label="MIXED_CONTENT_DOWNLOAD_INFOBAR_DELEGATE_ANDROID"/>
+  <int value="98"
+      label="MIXED_CONTENT_DOWNLOAD_INFOBAR_DELEGATE_ANDROID (Obsolete)"/>
   <int value="99" label="CONDITIONAL_TAB_STRIP_INFOBAR_ANDROID"/>
   <int value="100" label="LITE_MODE_HTTPS_IMAGE_COMPRESSION_INFOBAR_ANDROID"/>
   <int value="101" label="SYSTEM_INFOBAR_DELEGATE_MAC (Obsolete)"/>
@@ -323,7 +327,11 @@ chromium-metrics-reviews@google.com.
   <int value="120" label="DEV_TOOLS_SHARED_PROCESS_DELEGATE"/>
   <int value="121" label="ENHANCED_SAFE_BROWSING_INFOBAR_DELEGATE"/>
   <int value="122" label="CREDENTIAL_PROVIDER_INFOBAR_DELEGATE_IOS"/>
+  <int value="123" label="PDF_INFOBAR_DELEGATE"/>
+  <int value="124" label="INSTALLER_DOWNLOADER_INFOBAR_DELEGATE"/>
 </enum>
+
+<!-- LINT.ThenChange(//components/infobars/core/infobar_delegate.h:InfoBarIdentifier) -->
 
 <!-- LINT.IfChange(NoSpareRendererReason) -->
 
@@ -338,6 +346,7 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="kProcessHostDestroyed"/>
   <int value="8" label="kNotYetCreatedFirstLaunch"/>
   <int value="9" label="kNotYetCreatedAfterWarmup"/>
+  <int value="10" label="kOnceBackgrounded"/>
 </enum>
 
 <!-- LINT.ThenChange(//tools/metrics/histograms/metadata/browser/histograms.xml:NoSpareRendererReason) -->
@@ -469,6 +478,8 @@ chromium-metrics-reviews@google.com.
     https://crbug.com/840409).
   </int>
   <int value="6" label="RefusedForPdfContent"/>
+  <int value="7" label="RefusedForJitMismatch"/>
+  <int value="8" label="RefusedForV8OptimizationMismatch"/>
 </enum>
 
 <!-- LINT.ThenChange(//content/browser/renderer_host/render_process_host_impl.h:SpareProcessMaybeTakeAction) -->
@@ -499,6 +510,7 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="kProcessExited"/>
   <int value="6" label="kProcessHostDestroyed"/>
   <int value="7" label="kMemoryPressure"/>
+  <int value="8" label="kKillAfterBackgrounded"/>
 </enum>
 
 <!-- LINT.ThenChange(//content/browser/renderer_host/spare_render_process_host_manager_impl.h:SpareRendererDispatchResult) -->

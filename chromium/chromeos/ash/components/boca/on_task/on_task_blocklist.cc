@@ -15,6 +15,8 @@
 #include "base/values.h"
 #include "components/google/core/common/google_util.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "components/url_matcher/url_matcher.h"
+#include "components/url_matcher/url_util.h"
 #include "content/public/browser/web_contents.h"
 
 namespace {
@@ -69,6 +71,16 @@ OnTaskBlocklist::~OnTaskBlocklist() {
   CleanupBlocklist();
 }
 
+// static
+bool OnTaskBlocklist::IsURLInDomain(const GURL& url, const GURL& domain_url) {
+  base::Value::List domain_level_traffic_filter =
+      GetDomainLevelTrafficFilter(domain_url);
+  url_matcher::URLMatcher url_matcher;
+  url_matcher::util::AddAllowFiltersWithLimit(&url_matcher,
+                                              domain_level_traffic_filter);
+  return !url_matcher.MatchURL(url).empty();
+}
+
 policy::URLBlocklist::URLBlocklistState OnTaskBlocklist::GetURLBlocklistState(
     const GURL& url) const {
   if (current_page_restriction_level_ ==
@@ -76,13 +88,12 @@ policy::URLBlocklist::URLBlocklistState OnTaskBlocklist::GetURLBlocklistState(
     return policy::URLBlocklist::URLBlocklistState::URL_IN_ALLOWLIST;
   }
 
-  // Only allow users to navigate within Google domain URLs (except Google
-  // search) if the nav restriction is set to `WORKSPACE_NAVIGATION`.
+  // Only allow users to navigate within Google domain URLs if the nav
+  // restriction is set to `WORKSPACE_NAVIGATION`.
   if (current_page_restriction_level_ ==
       LockedNavigationOptions::WORKSPACE_NAVIGATION) {
     if (google_util::IsGoogleDomainUrl(url, google_util::ALLOW_SUBDOMAIN,
-                                       google_util::ALLOW_NON_STANDARD_PORTS) &&
-        !google_util::HasGoogleSearchQueryParam(url.query_piece())) {
+                                       google_util::ALLOW_NON_STANDARD_PORTS)) {
       return policy::URLBlocklist::URLBlocklistState::URL_IN_ALLOWLIST;
     }
     return policy::URLBlocklist::URLBlocklistState::URL_IN_BLOCKLIST;
@@ -194,7 +205,7 @@ void OnTaskBlocklist::RefreshForUrlBlocklist(content::WebContents* tab) {
     } else if (current_page_restriction_level_ ==
                LockedNavigationOptions::
                    SAME_DOMAIN_OPEN_OTHER_DOMAIN_LIMITED_NAVIGATION) {
-      if (!url.DomainIs(previous_url_.GetWithEmptyPath().GetContentPiece())) {
+      if (!IsURLInDomain(url, previous_url_)) {
         blocklist_source = std::make_unique<OnTaskBlocklistSource>(
             url, LockedNavigationOptions::DOMAIN_NAVIGATION);
         current_page_restriction_level_ =
@@ -255,7 +266,7 @@ bool OnTaskBlocklist::CanPerformOneLevelNavigation(content::WebContents* tab) {
 
     // Same domain + 1LD navigation restriction.
     return last_committed_url.is_valid() &&
-           last_committed_url.DomainIs(one_level_deep_original_url.host());
+           IsURLInDomain(last_committed_url, one_level_deep_original_url);
   }
   return true;
 }

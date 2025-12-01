@@ -17,7 +17,6 @@
 #include "base/functional/callback.h"
 #include "base/functional/overloaded.h"
 #include "base/memory/weak_ptr.h"
-#include "base/not_fatal_until.h"
 #include "components/attribution_reporting/features.h"
 #include "components/browsing_data/content/browsing_data_quota_helper.h"
 #include "components/browsing_data/content/shared_worker_info.h"
@@ -752,15 +751,10 @@ bool BrowsingDataModel::Iterator::operator==(const Iterator& other) const {
          inner_iterator_ == other.inner_iterator_;
 }
 
-bool BrowsingDataModel::Iterator::operator!=(const Iterator& other) const {
-  return !operator==(other);
-}
-
 BrowsingDataModel::BrowsingDataEntryView
 BrowsingDataModel::Iterator::operator*() const {
   DCHECK(outer_iterator_ != outer_end_iterator_);
-  CHECK(inner_iterator_ != outer_iterator_->second.end(),
-        base::NotFatalUntil::M130);
+  CHECK(inner_iterator_ != outer_iterator_->second.end());
   return BrowsingDataEntryView(outer_iterator_->first, inner_iterator_->first,
                                inner_iterator_->second);
 }

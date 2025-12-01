@@ -8,6 +8,7 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.cc.input.OffsetTag;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -17,6 +18,7 @@ import org.chromium.ui.modelutil.PropertyModel;
  * {@link LayoutTab} is used to keep track of a thumbnail's bitmap and position and to draw itself
  * onto the GL canvas at the desired Y Offset.
  */
+@NullMarked
 public class LayoutTab extends PropertyModel {
     // TODO(crbug.com/40126260): Make the following properties be part of the PropertyModel.
     // Begin section --------------
@@ -107,8 +109,8 @@ public class LayoutTab extends PropertyModel {
     public static final PropertyModel.WritableFloatPropertyKey CONTENT_OFFSET =
             new PropertyModel.WritableFloatPropertyKey();
 
-    public static final PropertyModel.WritableObjectPropertyKey<IsActiveLayoutSupplier>
-            IS_ACTIVE_LAYOUT_SUPPLIER = new WritableObjectPropertyKey<>();
+    public static final PropertyModel.WritableBooleanPropertyKey IS_ACTIVE_LAYOUT =
+            new WritableBooleanPropertyKey();
 
     /** The tag indicating that this layer should be moved by viz. */
     public static final PropertyModel.WritableObjectPropertyKey<OffsetTag> CONTENT_OFFSET_TAG =
@@ -141,7 +143,7 @@ public class LayoutTab extends PropertyModel {
                 TOOLBAR_BACKGROUND_COLOR,
                 TEXT_BOX_BACKGROUND_COLOR,
                 CONTENT_OFFSET,
-                IS_ACTIVE_LAYOUT_SUPPLIER,
+                IS_ACTIVE_LAYOUT,
                 CONTENT_OFFSET_TAG
             };
 

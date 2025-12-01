@@ -1,8 +1,15 @@
 project('fontconfig', 'c',
-  version: '2.15.0',
-  meson_version : '>= 0.60.0',
-  default_options: [ 'buildtype=debugoptimized'],
+  version: '2.16.2',
+  meson_version : '>= 1.6.1',
+  default_options: [
+    'c_std=c11,c99',
+    'buildtype=debugoptimized',
+    'rust_std=2021',
+  ]
 )
+
+
+fs = import('fs')
 
 fc_version = meson.project_version()
 version_arr = fc_version.split('.')
@@ -23,7 +30,9 @@ freetype_req = '>= 21.0.15'
 freetype_req_cmake = '>= 2.8.1'
 
 cc = meson.get_compiler('c')
+math_dep = cc.find_library('m', required: false)
 
+conf = configuration_data()
 
 freetype_dep = dependency('freetype2', method: 'pkg-config', version: freetype_req, required: false)
 
@@ -33,30 +42,72 @@ if not freetype_dep.found()
     fallback: ['freetype2', 'freetype_dep'], default_options: 'werror=false')
 endif
 
-# Linking expat should not be so difficult... see: https://github.com/mesonbuild/meson/issues/10516
-expat_dep = dependency('expat', required: false)
-if not expat_dep.found()
-  expat_dep = cc.find_library('expat', required : false)
-  if not expat_dep.found()
-    expat_dep = dependency('expat', method: 'system', fallback: ['expat', 'expat_dep'])
+if freetype_dep.type_name() == 'internal'
+  conf.set('FREETYPE_PCF_LONG_FAMILY_NAMES', false)
+else
+  if cc.compiles(files('meson-cc-tests/freetype-pcf-long-family-names.c'),
+		         dependencies: freetype_dep)
+    conf.set('FREETYPE_PCF_LONG_FAMILY_NAMES', true)
+  else
+    conf.set('FREETYPE_PCF_LONG_FAMILY_NAMES', false)
   endif
 endif
 
-i18n = import('i18n')
+jsonc_dep = dependency('json-c', required: false)
+
+xml_dep = dependency('', required: false)
+xmlbackend = get_option('xml-backend')
+xmltype = ''
+if xmlbackend == 'auto' or xmlbackend == 'expat'
+  # Linking expat should not be so difficult... see: https://github.com/mesonbuild/meson/issues/10516
+  xml_dep = dependency('expat', required: false)
+  if not xml_dep.found()
+    xml_dep = cc.find_library('expat', required : false)
+    if not xml_dep.found() and xmlbackend == 'expat'
+      xml_dep = dependency('expat', method: 'system', required: true, fallback: ['expat', 'expat_dep'])
+    else
+      xmltype = 'expat'
+    endif
+  endif
+endif
+if (xmlbackend == 'auto' and not xml_dep.found()) or xmlbackend == 'libxml2'
+  xml_dep = dependency('libxml-2.0', required: true)
+  conf.set('ENABLE_LIBXML2', 1)
+endif
+if xmltype == ''
+  xmltype = xml_dep.name()
+endif
+
+fontations = get_option('fontations')
+if (fontations.enabled())
+  conf.set('ENABLE_FONTATIONS', 1)
+  add_languages(['rust'], native: false, required : true)
+endif
+
 pkgmod = import('pkgconfig')
 python3 = import('python').find_installation()
+pytest = find_program('pytest', required: false)
 
 check_headers = [
   ['dirent.h'],
+  ['dlfcn.h'],
   ['fcntl.h'],
+  ['inttypes.h'],
+  ['stdint.h'],
+  ['stdio.h'],
   ['stdlib.h'],
+  ['strings.h'],
   ['string.h'],
   ['unistd.h'],
   ['sys/statvfs.h'],
   ['sys/vfs.h'],
   ['sys/statfs.h'],
+  ['sys/stat.h'],
+  ['sys/types.h'],
   ['sys/param.h'],
   ['sys/mount.h'],
+  ['time.h'],
+  ['wchar.h'],
 ]
 
 check_funcs = [
@@ -78,8 +129,17 @@ check_funcs = [
   ['fstatvfs'],
   ['fstatfs'],
   ['lstat'],
+  ['strerror'],
+  ['strerror_r'],
   ['mmap'],
   ['vprintf'],
+  ['vsnprintf'],
+  ['vsprintf'],
+  ['getpagesize'],
+  ['getpid'],
+  ['dcgettext'],
+  ['gettext'],
+  ['localtime_r'],
 ]
 
 check_freetype_funcs = [
@@ -96,9 +156,10 @@ check_header_symbols = [
 
 check_struct_members = [
   ['struct statvfs', 'f_basetype', ['sys/statvfs.h']],
-  ['struct statvfs', 'f_fstypename', ['sys/statvfs.']],
-  ['struct statfs', 'f_flags', []],
-  ['struct statfs', 'f_fstypename', []],
+  ['struct statvfs', 'f_fstypename', ['sys/statvfs.h']],
+  ['struct statfs', 'f_flags', ['sys/vfs.h', 'sys/statfs.h', 'sys/param.h', 'sys/mount.h']],
+  ['struct statfs', 'f_fstypename', ['sys/vfs.h', 'sys/statfs.h', 'sys/param.h', 'sys/mount.h']],
+  ['struct stat', 'st_mtim', ['sys/stat.h']],
   ['struct dirent', 'd_type', ['sys/types.h', 'dirent.h']],
 ]
 
@@ -115,9 +176,54 @@ add_project_arguments('-DHAVE_CONFIG_H', language: 'c')
 
 c_args = []
 
-conf = configuration_data()
-deps = [freetype_dep, expat_dep]
+deps = [freetype_dep, xml_dep]
 incbase = include_directories('.')
+
+# For compatibility to autoconf (regardless of the usage in fontconfig)
+conf.set_quoted('PACKAGE_NAME', meson.project_name())
+conf.set_quoted('PACKAGE_TARNAME', meson.project_name())
+conf.set_quoted('PACKAGE_VERSION', meson.project_version())
+conf.set_quoted('PACKAGE_STRING', '@0@ @1@'.format(meson.project_name(), meson.project_version()))
+conf.set_quoted('PACKAGE_BUGREPORT', 'https://gitlab.freedesktop.org/fontconfig/fontconfig/issues/new')
+conf.set_quoted('PACKAGE_URL', '')
+conf.set('WORDS_BIGENDIAN', (host_machine.endian() == 'big').to_int())
+
+if host_machine.system() == 'windows'
+  conf.set('EXEEXT', '.exe')
+else
+  conf.set('EXEEXT', '')
+endif
+
+i18n = import('i18n')
+gettext_args = [ '--msgid-bugs-address=@0@'.format(conf.get('PACKAGE_BUGREPORT')) ]
+
+# Check for libintl.h
+opt_nls = get_option('nls')
+libintl_dep = dependency('intl', required: opt_nls, fallback: ['libintl', 'libintl_dep'])
+if libintl_dep.found()
+  conf.set('ENABLE_NLS', opt_nls.allowed().to_int())
+  deps += [libintl_dep]
+else
+  opt_nls = opt_nls.require(false)
+endif
+
+# Check iconv support
+iconv = get_option('iconv')
+iconv_dep = dependency('', required: false)
+found_iconv = 0
+if iconv.allowed()
+  iconv_dep = cc.find_library('iconv', required: false)
+  if cc.has_header_symbol('iconv.h', 'libiconv_open', dependencies: libintl_dep)
+    conf.set('LIBICONV_PLUG', 1)
+    found_iconv = 1
+  elif cc.has_header('iconv.h') and cc.has_function('iconv_open', dependencies: iconv_dep)
+    found_iconv = 1
+  else
+    iconv.require(false)
+  endif
+endif
+conf.set('USE_ICONV', found_iconv)
+deps += [iconv_dep]
 
 # We cannot try compiling against an internal dependency
 if freetype_dep.type_name() == 'internal'
@@ -191,9 +297,13 @@ foreach check : check_alignofs
 endforeach
 
 if cc.compiles(files('meson-cc-tests/flexible-array-member-test.c'))
-  conf.set('FLEXIBLE_ARRAY_MEMBER', true)
+  conf.set('FLEXIBLE_ARRAY_MEMBER', '/**/')
 else
   conf.set('FLEXIBLE_ARRAY_MEMBER', 1)
+endif
+
+if cc.compiles(files('meson-cc-tests/pthread-prio-inherit-test.c'))
+  conf.set('HAVE_PTHREAD_PRIO_INHERIT', 1)
 endif
 
 if cc.links(files('meson-cc-tests/stdatomic-primitives-test.c'), name: 'stdatomic.h atomics')
@@ -209,20 +319,6 @@ if cc.links(files('meson-cc-tests/solaris-atomic-operations.c'), name: 'Solaris 
 endif
 
 
-# Check iconv support
-iconv_dep = []
-found_iconv = 0
-if host_machine.system() != 'windows'
-  iconv_dep = dependency('iconv', required: get_option('iconv'))
-  found_iconv = iconv_dep.found().to_int()
-else
-  if get_option('iconv').enabled()
-    warning('-Diconv was set but this is not functional on Windows.')
-  endif
-endif
-conf.set('USE_ICONV', found_iconv)
-deps += [iconv_dep]
-
 prefix = get_option('prefix')
 
 fonts_conf = configuration_data()
@@ -233,6 +329,8 @@ if default_fonts_dirs == ['yes']
     fc_fonts_paths = ['WINDOWSFONTDIR', 'WINDOWSUSERFONTDIR']
   elif host_machine.system() == 'darwin'
     fc_fonts_paths = ['/System/Library/Fonts', '/Library/Fonts', '~/Library/Fonts', '/System/Library/Assets/com_apple_MobileAsset_Font3', '/System/Library/Assets/com_apple_MobileAsset_Font4']
+  elif host_machine.system() == 'android'
+    fc_fonts_paths = ['/system/fonts/', '/product/fonts/']
   else
     fc_fonts_paths = ['/usr/share/fonts', '/usr/local/share/fonts']
   endif
@@ -291,8 +389,10 @@ endif
 
 if host_machine.system() != 'windows'
   thread_dep = dependency('threads')
-  conf.set('HAVE_PTHREAD', 1)
-  deps += [thread_dep]
+  if thread_dep.found() and cc.has_header('pthread.h')
+    conf.set('HAVE_PTHREAD', 1)
+    deps += [thread_dep]
+  endif
 endif
 
 fc_templatedir = get_option('template-dir')
@@ -332,7 +432,7 @@ endif
 gperf = find_program('gperf', required: false)
 gperf_len_type = ''
 
-if gperf.found()
+if gperf.found() and get_option('wrap_mode') != 'forcefallback'
   gperf_test_format = '''
   #include <string.h>
   const char * in_word_set(const char *, @0@);
@@ -376,16 +476,21 @@ foreach t : ['uint64_t', 'int32_t', 'uintptr_t', 'intptr_t']
   endif
 endforeach
 
-fcstdint_h = configure_file(
-  input: 'src/fcstdint.h.in',
-  output: 'fcstdint.h',
-  copy: true)
+fcstdint_h = fs.copyfile('src/fcstdint.h.in', 'fcstdint.h')
 
 makealias = files('src/makealias.py')[0]
 
+
+
+
+alias_input_headers = ['fontconfig/fontconfig.h', 'src/fcdeprecate.h', 'fontconfig/fcprivate.h']
+if get_option('fontations').enabled()
+  alias_input_headers += ['fontconfig/fcfontations.h']
+endif
+
 alias_headers = custom_target('alias_headers',
                               output: ['fcalias.h', 'fcaliastail.h'],
-                              input: ['fontconfig/fontconfig.h', 'src/fcdeprecate.h', 'fontconfig/fcprivate.h'],
+                              input: alias_input_headers,
                               command: [python3, makealias, join_paths(meson.current_source_dir(), 'src'), '@OUTPUT@', '@INPUT@'],
                              )
 
@@ -397,10 +502,54 @@ ft_alias_headers = custom_target('ft_alias_headers',
 
 tools_man_pages = []
 
+
 # Do not reorder
 subdir('fc-case')
 subdir('fc-lang')
 subdir('src')
+
+if get_option('fontations').enabled()
+  subdir('fc-fontations')
+  lib_fontconfig_kwargs = lib_fontconfig_kwargs + {
+    'link_with' : lib_fontconfig_kwargs['link_with'] + [fc_fontations, fontations_query_lib]}
+endif
+
+libfontconfig = library('fontconfig',
+  lib_fontconfig_sources,
+  c_shared_args: win_export_args,
+  soversion: soversion,
+  version: libversion,
+  darwin_versions: osxversion,
+  install: true,
+  kwargs: lib_fontconfig_kwargs)
+
+if get_option('default_library') == 'both'
+  libfontconfig_internal = libfontconfig.get_static_lib()
+elif get_option('default_library') == 'static'
+  libfontconfig_internal = libfontconfig
+else
+  libfontconfig_internal = static_library('fontconfig',
+    lib_fontconfig_sources,
+    kwargs: lib_fontconfig_kwargs)
+endif
+
+fontconfig_dep = declare_dependency(link_with: libfontconfig,
+  include_directories: incbase,
+  dependencies: deps,
+)
+
+pkgmod.generate(libfontconfig,
+  description: 'Font configuration and customization library',
+  filebase: 'fontconfig',
+  name: 'Fontconfig',
+  requires_private: ['freetype2 ' + freetype_req],
+  version: fc_version,
+  variables: [
+    'sysconfdir=@0@'.format(join_paths(prefix, get_option('sysconfdir'))),
+    'localstatedir=@0@'.format(join_paths(prefix, get_option('localstatedir'))),
+    'confdir=@0@'.format(fc_baseconfigdir),
+    'cachedir=@0@'.format(fc_cachedir),
+  ])
 
 if not get_option('tools').disabled()
   subdir('fc-cache')
@@ -422,7 +571,7 @@ subdir('conf.d')
 subdir('its')
 
 # xgettext is optional (on Windows for instance)
-if find_program('xgettext', required : get_option('nls')).found()
+if find_program('xgettext', required : opt_nls).found()
   subdir('po')
   subdir('po-conf')
 endif
@@ -431,17 +580,19 @@ if not get_option('doc').disabled()
   subdir('doc')
 endif
 
-configure_file(output: 'config.h', configuration: conf)
+configure_file(output: 'meson-config.h', configuration: conf)
+configure_file(input: 'meson-config.h.in', output: 'config.h', copy: true)
 
 configure_file(output: 'fonts.conf',
                input: 'fonts.conf.in',
                configuration: fonts_conf,
                install_dir: fc_baseconfigdir,
-               install: true)
+               install: true,
+               install_tag: 'runtime')
 
 install_data('fonts.dtd',
-             install_dir: join_paths(get_option('prefix'), get_option('datadir'), 'xml/fontconfig')
-            )
+             install_dir: join_paths(get_option('prefix'), get_option('datadir'), 'xml/fontconfig'),
+             install_tag: 'runtime')
 
 fc_headers = [
   'fontconfig/fontconfig.h',
@@ -451,15 +602,28 @@ fc_headers = [
 
 install_headers(fc_headers, subdir: meson.project_name())
 
+if not meson.is_subproject()
+  meson.add_dist_script('build-aux/meson-dist-docs.py')
+  meson.add_dist_script('build-aux/meson-dist-autotools.py')
+endif
+
+if host_machine.system() != 'windows'
+  install_emptydir(fc_cachedir,
+                   install_tag: 'runtime')
+endif
+
 # Summary
 doc_targets = get_variable('doc_targets', [])
 
 summary({
   'Documentation': (doc_targets.length() > 0 ? doc_targets : false),
-  'NLS': not get_option('nls').disabled(),
+  'NLS': not opt_nls.disabled(),
   'Tests': not get_option('tests').disabled(),
+  'Pytest': pytest.found(),
   'Tools': not get_option('tools').disabled(),
   'iconv': found_iconv == 1,
+  'XML backend': xmltype,
+  'Fontations support' : fontations
 }, section: 'General', bool_yn: true, list_sep: ', ')
 summary({
   'Hinting': preferred_hinting,

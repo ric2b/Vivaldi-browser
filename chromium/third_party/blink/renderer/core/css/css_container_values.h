@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "third_party/blink/renderer/core/css/container_state.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/media_values_dynamic.h"
 
@@ -14,15 +15,19 @@ namespace blink {
 
 class CORE_EXPORT CSSContainerValues : public MediaValuesDynamic {
  public:
-  explicit CSSContainerValues(Document& document,
-                              Element& container,
-                              std::optional<double> width,
-                              std::optional<double> height,
-                              ContainerStuckPhysical stuck_horizontal,
-                              ContainerStuckPhysical stuck_vertical,
-                              ContainerSnappedFlags snapped,
-                              ContainerScrollableFlags scrollable_horizontal,
-                              ContainerScrollableFlags scrollable_vertical);
+  explicit CSSContainerValues(
+      Document& document,
+      Element& container,
+      std::optional<double> width,
+      std::optional<double> height,
+      ContainerStuckPhysical stuck_horizontal,
+      ContainerStuckPhysical stuck_vertical,
+      ContainerSnappedFlags snapped,
+      ContainerScrollableFlags scrollable_horizontal,
+      ContainerScrollableFlags scrollable_vertical,
+      ContainerScrollDirection scroll_direction_horizontal,
+      ContainerScrollDirection scroll_direction_vertical,
+      int anchored_fallback);
 
   // Returns std::nullopt if queries on the relevant axis is not
   // supported.
@@ -70,6 +75,16 @@ class CORE_EXPORT CSSContainerValues : public MediaValuesDynamic {
   }
   ContainerScrollableFlags ScrollableInline() const override;
   ContainerScrollableFlags ScrollableBlock() const override;
+  ContainerScrollDirection ScrollDirectionHorizontal() const override {
+    return scroll_direction_horizontal_;
+  }
+  ContainerScrollDirection ScrollDirectionVertical() const override {
+    return scroll_direction_vertical_;
+  }
+  ContainerScrollDirection ScrollDirectionInline() const override;
+  ContainerScrollDirection ScrollDirectionBlock() const override;
+
+  int AnchoredFallback() const override { return anchored_fallback_; }
 
  private:
   // The current computed style for the container.
@@ -95,6 +110,13 @@ class CORE_EXPORT CSSContainerValues : public MediaValuesDynamic {
   // Whether a scroll-state container has vertically scrollable overflow.
   ContainerScrollableFlags scrollable_vertical_ =
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kNone);
+  ContainerScrollDirection scroll_direction_horizontal_ =
+      ContainerScrollDirection::kNone;
+  ContainerScrollDirection scroll_direction_vertical_ =
+      ContainerScrollDirection::kNone;
+  // A 1-based index into position-try-fallbacks applied to an anchored()
+  // container. 0 if no position-try-fallbacks are applied.
+  int anchored_fallback_ = 0;
   // Container font sizes for resolving relative lengths.
   CSSToLengthConversionData::FontSizes font_sizes_;
   // LineHeightSize of the container element.

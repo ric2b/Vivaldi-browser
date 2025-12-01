@@ -10,6 +10,7 @@
 #import "base/ios/block_types.h"
 #import "base/memory/raw_ptr.h"
 #import "base/scoped_observation.h"
+#import "base/timer/timer.h"
 #import "components/feature_engagement/public/event_constants.h"
 #import "components/feature_engagement/public/tracker.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/scoped_fullscreen_disabler.h"
@@ -30,6 +31,13 @@
 #import "app/vivaldi_apptools.h"
 // End Vivaldi
 
+namespace {
+
+// The timeout used for updating snapshots following a side-swipe gesture.
+constexpr base::TimeDelta kUpdateSnapshotTimeout = base::Milliseconds(100);
+
+}  // namespace
+
 @interface SideSwipeMediator () <CRWWebStateObserver,
                                  UIGestureRecognizerDelegate,
                                  WebStateListObserving> {
@@ -45,6 +53,10 @@
 
   // The webStateList owned by the current browser.
   raw_ptr<WebStateList> _webStateList;
+
+  // Timer to ensure that snapshot updates that take longer than a maximum
+  // delay will release their callback even if the update is incomplete.
+  base::OneShotTimer _snapshotTimer;
 }
 
 // The current active WebState.
@@ -217,9 +229,40 @@
   return _webStateList->active_index();
 }
 
-- (void)updateActiveTabSnapshot {
-  SnapshotTabHelper::FromWebState(self.activeWebState)
-      ->UpdateSnapshotWithCallback(nil);
+- (void)updateActiveTabSnapshot:(ProceduralBlock)callback {
+  if (!self.activeWebState) {
+    [self runSnapshotCallback:callback];
+    return;
+  }
+  SnapshotTabHelper* snapshotTabHelper =
+      SnapshotTabHelper::FromWebState(self.activeWebState);
+  if (!snapshotTabHelper) {
+    [self runSnapshotCallback:callback];
+    return;
+  }
+  __weak __typeof(self) weakSelf = self;
+  _snapshotTimer.Start(FROM_HERE, kUpdateSnapshotTimeout, base::BindOnce(^{
+                         [weakSelf runSnapshotCallback:callback];
+                       }));
+  snapshotTabHelper->UpdateSnapshotWithCallback(^(UIImage* image) {
+    [weakSelf onSnapshotUpdated:callback];
+  });
+}
+
+- (void)runSnapshotCallback:(ProceduralBlock)callback {
+  if (callback) {
+    callback();
+  }
+}
+
+- (void)onSnapshotUpdated:(ProceduralBlock)callback {
+  if (!_snapshotTimer.IsRunning()) {
+    // If the timer is not running, then the callback was already called.
+    return;
+  }
+  // Otherwise, timer should be stopped and callback should be called.
+  _snapshotTimer.Stop();
+  [self runSnapshotCallback:callback];
 }
 
 - (int)tabCount {

@@ -16,7 +16,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/android/android_theme_resources.h"
 #include "chrome/browser/android/resource_mapper.h"
-#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/password_manager/android/access_loss/password_access_loss_warning_bridge_impl.h"
 #include "chrome/browser/password_manager/android/password_manager_android_util.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
@@ -33,7 +32,6 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_ui_utils.h"
 #include "components/password_manager/core/browser/split_stores_and_local_upm.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/web_contents.h"
@@ -55,20 +53,16 @@ constexpr base::TimeDelta kUpdateGMSCoreMessageDisplayDelay =
 
 void TryToShowAccessLossWarning(content::WebContents* web_contents,
                                 PasswordAccessLossWarningBridge* bridge) {
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::
-              kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning)) {
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    PrefService* prefs = profile->GetPrefs();
-    if (profile && bridge->ShouldShowAccessLossNoticeSheet(
-                       prefs, /*called_at_startup=*/false)) {
-      bridge->MaybeShowAccessLossNoticeSheet(
-          prefs, web_contents->GetTopLevelNativeWindow(), profile,
-          /*called_at_startup=*/false,
-          password_manager_android_util::PasswordAccessLossWarningTriggers::
-              kPasswordSaveUpdateMessage);
-    }
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
+  if (profile && bridge->ShouldShowAccessLossNoticeSheet(
+                     prefs, /*called_at_startup=*/false)) {
+    bridge->MaybeShowAccessLossNoticeSheet(
+        prefs, web_contents->GetTopLevelNativeWindow(), profile,
+        /*called_at_startup=*/false,
+        password_manager_android_util::PasswordAccessLossWarningTriggers::
+            kPasswordSaveUpdateMessage);
   }
 }
 
@@ -460,15 +454,22 @@ bool SaveUpdatePasswordMessageDelegate::IsUsingAccountStorage(
     return false;
   }
 
-  // Pre-UPM the profile storage was used in fact as the account store (when
-  // sync is on). So this is the cut-off for the users who are not using UPM
-  // (this evaluates to using account store when the user is syncing and using
-  // profile store when they are not syncing).
   Profile* profile =
       Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-  if (!UsesSplitStoresAndUPMForLocal(profile->GetPrefs())) {
+
+  // Pre-UPM there was a single storage, which would either store account
+  // storage credentials (when sync was on for passwords) or local passwords.
+  // After login db deprecation, pre-UPM clients can no longer save passwords,
+  // so this code is only reached for clients that have access to split stores.
+  if (!base::FeatureList::IsEnabled(
+          password_manager::features::kLoginDbDeprecationAndroid) &&
+      !UsesSplitStoresAndUPMForLocal(profile->GetPrefs())) {
     return account_email_.has_value();
   }
+
+  // After UPM, an updated credential can be saved either to the local or
+  // account storage, so the credential itself needs to be checked to determine
+  // whether account storage messaging needs to be displayed.
 
   // Copy the pending password form here and assign the new username.
   password_manager::PasswordForm updated_credentials =

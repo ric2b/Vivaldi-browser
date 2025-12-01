@@ -25,7 +25,7 @@ for more details.
 
 ## Channels
 
-CrOS, [like Chrome](/getting-involved/dev-channel/), operates 5 channels:
+CrOS, [like Chrome](/getting-involved/chrome-release-channels/), operates 5 channels:
 
 *   Stable: Most users should be on this.  Only the most stable is here!
 *   Beta: A good balance between stability & new features for users.

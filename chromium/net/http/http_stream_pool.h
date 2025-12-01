@@ -52,8 +52,8 @@ class NET_EXPORT_PRIVATE HttpStreamPool
     kIgnore,
   };
 
-  // Specify when to start the stream attempt delay timer.
-  enum class StreamAttemptDelayBehavior {
+  // Specify when to start the TCP based attempt delay timer.
+  enum class TcpBasedAttemptDelayBehavior {
     // Starts the stream attempt delay timer on the first service endpoint
     // update.
     kStartTimerOnFirstEndpointUpdate,
@@ -124,29 +124,30 @@ class NET_EXPORT_PRIVATE HttpStreamPool
       "max_stream_per_group";
   static constexpr std::string_view kConnectionAttemptDelayParamName =
       "connection_attempt_delay";
-  static constexpr std::string_view kStreamAttemptDelayBehaviorParamName =
-      "stream_attempt_delay_behavior";
+  static constexpr std::string_view kTcpBasedAttemptDelayBehaviorParamName =
+      "tcp_based_attempt_delay_behavior";
   static constexpr std::string_view kVerboseNetLogParamName = "verbose_netlog";
   static constexpr std::string_view kConsistencyCheckParamName =
       "consistency_check";
 
-  static constexpr inline auto kStreamAttemptDelayBehaviorOptions =
-      std::to_array<base::FeatureParam<StreamAttemptDelayBehavior>::Option>(
-          {{StreamAttemptDelayBehavior::kStartTimerOnFirstEndpointUpdate,
+  static constexpr inline auto kTcpBasedAttemptDelayBehaviorOptions =
+      std::to_array<base::FeatureParam<TcpBasedAttemptDelayBehavior>::Option>(
+          {{TcpBasedAttemptDelayBehavior::kStartTimerOnFirstEndpointUpdate,
             "first_endpoint_update"},
-           {StreamAttemptDelayBehavior::kStartTimerOnFirstQuicAttempt,
+           {TcpBasedAttemptDelayBehavior::kStartTimerOnFirstQuicAttempt,
             "first_quic_attempt"}});
 
   class NET_EXPORT_PRIVATE Job;
   class NET_EXPORT_PRIVATE JobController;
   class NET_EXPORT_PRIVATE Group;
   class NET_EXPORT_PRIVATE AttemptManager;
+  class NET_EXPORT_PRIVATE IPEndPointStateTracker;
 
   // The time to wait between connection attempts.
   static base::TimeDelta GetConnectionAttemptDelay();
 
   // Returns when to start the stream attempt delay timer.
-  static StreamAttemptDelayBehavior GetStreamAttemptDelayBehavior();
+  static TcpBasedAttemptDelayBehavior GetTcpBasedAttemptDelayBehavior();
 
   explicit HttpStreamPool(HttpNetworkSession* http_network_session,
                           bool cleanup_on_ip_address_change = true);

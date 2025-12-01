@@ -484,7 +484,7 @@ class SplitDedupDataOp : public XlaOpKernel {
     absl::StatusOr<xla::Shape> tuple_shape = builder->GetShape(input_tuple);
     OP_REQUIRES_OK(ctx, tuple_shape.status());
 
-    const int num_tuple_elements = tuple_shape->tuple_shapes_size();
+    const int num_tuple_elements = tuple_shape->tuple_shapes().size();
     OP_REQUIRES(
         ctx,
         tuple_mask_tensor_.tensor_shape().dim(0).size() == num_tuple_elements,
@@ -687,19 +687,20 @@ class MergeDedupDataOp : public XlaOpKernel {
     absl::StatusOr<xla::Shape> integer_tensor_shape =
         ctx->builder()->GetShape(integer_tensor);
     OP_REQUIRES_OK(ctx, integer_tensor_shape.status());
-    OP_REQUIRES(ctx, integer_tensor_shape->rank() == 1,
+    OP_REQUIRES(ctx, integer_tensor_shape->dimensions().size() == 1,
                 errors::InvalidArgument(
                     "Expected rank of integer_vals is 1, but gets, ",
-                    integer_tensor_shape->rank()));
+                    integer_tensor_shape->dimensions().size()));
     const int64_t num_integers = integer_tensor_shape->dimensions(0);
 
     // `float_tensor` should be a 1-D tensor.
     absl::StatusOr<xla::Shape> float_tensor_shape =
         ctx->builder()->GetShape(float_tensor);
     OP_REQUIRES_OK(ctx, float_tensor_shape.status());
-    OP_REQUIRES(ctx, float_tensor_shape->rank() == 1,
-                errors::InvalidArgument("Expects rank of value is 1, but gets ",
-                                        float_tensor_shape->rank()));
+    OP_REQUIRES(
+        ctx, float_tensor_shape->dimensions().size() == 1,
+        errors::InvalidArgument("Expects rank of value is 1, but gets ",
+                                float_tensor_shape->dimensions().size()));
     const int64_t num_floats = float_tensor_shape->dimensions(0);
 
     // Get total number of elements in deduplication data tuple.

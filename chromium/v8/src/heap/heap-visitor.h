@@ -53,10 +53,11 @@ class MaybeObjectSize final {
   V(Cell)                             \
   V(CodeWrapper)                      \
   V(ConsString)                       \
-  V(ContextSidePropertyCell)          \
+  V(ContextCell)                      \
   V(CoverageInfo)                     \
   V(DataHandler)                      \
   V(DebugInfo)                        \
+  V(DoubleStringCache)                \
   V(EmbedderDataArray)                \
   V(EphemeronHashTable)               \
   V(ExternalString)                   \
@@ -65,6 +66,7 @@ class MaybeObjectSize final {
   V(Foreign)                          \
   V(FunctionTemplateInfo)             \
   V(HeapNumber)                       \
+  V(InterceptorInfo)                  \
   V(Hole)                             \
   V(Map)                              \
   V(NativeContext)                    \
@@ -91,13 +93,13 @@ class MaybeObjectSize final {
   V(TransitionArray)                  \
   V(WeakCell)                         \
   IF_WASM(V, WasmArray)               \
-  IF_WASM(V, WasmContinuationObject)  \
   IF_WASM(V, WasmFuncRef)             \
   IF_WASM(V, WasmMemoryMapDescriptor) \
   IF_WASM(V, WasmNull)                \
   IF_WASM(V, WasmResumeData)          \
   IF_WASM(V, WasmStruct)              \
   IF_WASM(V, WasmSuspenderObject)     \
+  IF_WASM(V, WasmContinuationObject)  \
   IF_WASM(V, WasmTypeInfo)            \
   SIMPLE_HEAP_OBJECT_LIST1(V)
 
@@ -120,6 +122,7 @@ class MaybeObjectSize final {
   IF_WASM(V, WasmGlobalObject)              \
   IF_WASM(V, WasmInstanceObject)            \
   IF_WASM(V, WasmMemoryObject)              \
+  IF_WASM(V, WasmDescriptorOptions)         \
   IF_WASM(V, WasmSuspendingObject)          \
   IF_WASM(V, WasmTableObject)               \
   IF_WASM(V, WasmTagObject)
@@ -152,6 +155,7 @@ class MaybeObjectSize final {
   V(FunctionTemplateInfo)                                 \
   V(FreeSpace)                                            \
   V(HeapNumber)                                           \
+  V(InterceptorInfo)                                      \
   V(PreparseData)                                         \
   V(PropertyArray)                                        \
   V(PropertyCell)                                         \
@@ -265,6 +269,9 @@ class HeapVisitor : public ObjectVisitorWithCageBases {
                                      MaybeObjectSize maybe_object_size);
   V8_INLINE size_t VisitJSApiObject(Tagged<Map> map, Tagged<JSObject> object,
                                     MaybeObjectSize maybe_object_size);
+  V8_INLINE size_t VisitCppHeapExternalObject(
+      Tagged<Map> map, Tagged<CppHeapExternalObject> object,
+      MaybeObjectSize maybe_object_size);
   V8_INLINE size_t VisitStruct(Tagged<Map> map, Tagged<HeapObject> object,
                                MaybeObjectSize maybe_object_size);
   V8_INLINE size_t VisitFiller(Tagged<Map> map, Tagged<HeapObject> object,

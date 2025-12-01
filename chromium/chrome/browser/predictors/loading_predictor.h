@@ -92,13 +92,12 @@ class LoadingPredictor : public KeyedService,
 
   // KeyedService:
   void Shutdown() override;
+  bool WasShutdown() { return shutdown_; }
 
   // OnNavigationStarted is invoked when navigation |navigation_id| with
-  // |main_frame_url| has started navigating. It returns whether any actions
-  // were taken, such as preconnecting to known resource hosts, at that time.
-  bool OnNavigationStarted(NavigationId navigation_id,
+  // |main_frame_url| has started navigating.
+  void OnNavigationStarted(NavigationId navigation_id,
                            ukm::SourceId ukm_source_id,
-                           const std::optional<url::Origin>& initiator_origin,
                            const GURL& main_frame_url,
                            base::TimeTicks creation_time);
   void OnNavigationFinished(NavigationId navigation_id,
@@ -133,7 +132,8 @@ class LoadingPredictor : public KeyedService,
   // perform preresolve and preconnect actions. When `traffic_annotation` is
   // set, it will use the value over the default
   // `kLoadingPredictorPreconnectTrafficAnnotation`, later passed on to //net.
-  void PreconnectURLIfAllowed(
+  // Virtual for testing.
+  virtual void PreconnectURLIfAllowed(
       const GURL& url,
       bool allow_credentials,
       const net::NetworkAnonymizationKey& network_anonymization_key,
@@ -144,6 +144,8 @@ class LoadingPredictor : public KeyedService,
 
   void MaybePrewarmResources(const std::optional<url::Origin>& initiator_origin,
                              const GURL& top_frame_main_resource_url);
+
+  bool IsLCPPTestingEnabled() const { return is_lcpp_testing_enabled_; }
 
  private:
   // Stores the information necessary to keep track of the active navigations.
@@ -199,6 +201,9 @@ class LoadingPredictor : public KeyedService,
     loading_data_collector_ = std::move(loading_data_collector);
   }
 
+  // For LCPP testing.
+  void EnableLCPPTesting() { is_lcpp_testing_enabled_ = true; }
+
   LoadingPredictorConfig config_;
   raw_ptr<Profile, DanglingUntriaged> profile_;
   std::unique_ptr<ResourcePrefetchPredictor> resource_prefetch_predictor_;
@@ -219,10 +224,13 @@ class LoadingPredictor : public KeyedService,
 
   PreconnectData new_tab_page_preconnect_data_;
 
+  bool is_lcpp_testing_enabled_ = false;
+
   friend class LoadingPredictorTest;
   friend class LoadingPredictorPreconnectTest;
   friend class LoadingPredictorTabHelperTest;
   friend class LoadingPredictorTabHelperTestCollectorTest;
+  friend class LCPPTimingPredictorTestBase;
   FRIEND_TEST_ALL_PREFIXES(LoadingPredictorTest,
                            TestMainFrameResponseCancelsHint);
   FRIEND_TEST_ALL_PREFIXES(LoadingPredictorTest,

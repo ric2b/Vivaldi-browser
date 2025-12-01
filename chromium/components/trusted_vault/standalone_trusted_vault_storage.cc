@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "components/trusted_vault/proto_string_bytes_conversion.h"
+#include "components/trusted_vault/standalone_trusted_vault_server_constants.h"
 #include "components/trusted_vault/trusted_vault_histograms.h"
 #include "components/trusted_vault/trusted_vault_server_constants.h"
 
@@ -25,7 +26,7 @@ constexpr base::FilePath::CharType kChromeSyncTrustedVaultFilename[] =
 constexpr base::FilePath::CharType kPasskeysTrustedVaultFilename[] =
     FILE_PATH_LITERAL("passkeys_trusted_vault.pb");
 
-constexpr int kCurrentLocalTrustedVaultVersion = 3;
+constexpr int kCurrentLocalTrustedVaultVersion = 4;
 
 base::FilePath GetBackendFilePath(const base::FilePath& base_dir,
                                   SecurityDomainId security_domain) {
@@ -140,8 +141,28 @@ void UpgradeToVersion3(
       per_user_vault.mutable_local_device_registration_info()
           ->set_device_registered(false);
     }
-    local_trusted_vault->set_data_version(3);
   }
+  local_trusted_vault->set_data_version(3);
+}
+
+// Version 3 had the `last_registration_returned_local_data_obsolete` field in
+// `LocalDeviceRegistrationInfo` message. That was migrated to the
+// `LocalTrustedVaultPerUser` message in version 4.
+void UpgradeToVersion4(
+    trusted_vault_pb::LocalTrustedVault* local_trusted_vault) {
+  CHECK(local_trusted_vault);
+  CHECK_EQ(local_trusted_vault->data_version(), 3);
+
+  for (trusted_vault_pb::LocalTrustedVaultPerUser& per_user_vault :
+       *local_trusted_vault->mutable_user()) {
+    if (per_user_vault.local_device_registration_info()
+            .has_deprecated_last_registration_returned_local_data_obsolete()) {
+      per_user_vault.set_last_registration_returned_local_data_obsolete(
+          per_user_vault.local_device_registration_info()
+              .deprecated_last_registration_returned_local_data_obsolete());
+    }
+  }
+  local_trusted_vault->set_data_version(4);
 }
 
 void WriteDataToDiskImpl(const trusted_vault_pb::LocalTrustedVault& data,
@@ -194,6 +215,11 @@ class DefaultFileAccess : public StandaloneTrustedVaultStorage::FileAccess {
 
     if (data.data_version() == 2) {
       UpgradeToVersion3(&data);
+      WriteToDisk(data);
+    }
+
+    if (data.data_version() == 3) {
+      UpgradeToVersion4(&data);
       WriteToDisk(data);
     }
 

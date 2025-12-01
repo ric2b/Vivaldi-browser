@@ -44,7 +44,6 @@ import androidx.test.ext.junit.rules.ActivityScenarioRule;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.tabs.TabLayout;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -62,9 +61,12 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRule;
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubToolbarProperties.PaneButtonLookup;
+import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.omnibox.OmniboxFeatureList;
 import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -78,6 +80,12 @@ import java.util.List;
 
 /** Unit tests for {@link HubPaneHostView}. */
 @RunWith(ParameterizedRobolectricTestRunner.class)
+// TODO(crbug.com/419289558): Re-enable color surface feature flags
+@Features.DisableFeatures({
+    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE
+})
 public class HubToolbarViewUnitTest {
     // All the tests in this file will run twice, once for isXrDevice=true and once for
     // isXrDevice=false. Expect all the tests with the same results on XR devices too.
@@ -121,11 +129,6 @@ public class HubToolbarViewUnitTest {
         XrUtils.setXrDeviceForTesting(mIsXrDevice);
 
         mActivityScenarioRule.getScenario().onActivity(this::onActivity);
-    }
-
-    @After
-    public void tearDown() {
-        XrUtils.resetXrDeviceForTesting();
     }
 
     private void onActivity(TestActivity activity) {
@@ -326,7 +329,8 @@ public class HubToolbarViewUnitTest {
         GradientDrawable backgroundDrawable = (GradientDrawable) mSearchBox.getBackground();
         assertEquals(
                 ColorStateList.valueOf(
-                        ContextCompat.getColor(mActivity, R.color.baseline_neutral_20)),
+                        ContextCompat.getColor(
+                                mActivity, R.color.gm3_baseline_surface_container_highest_dark)),
                 backgroundDrawable.getColor());
 
         forceSetColorScheme(HubColorScheme.DEFAULT);
@@ -334,8 +338,7 @@ public class HubToolbarViewUnitTest {
                 MaterialColors.getColor(mActivity, R.attr.colorOnSurfaceVariant, "Test"),
                 mSearchBoxText.getCurrentHintTextColor());
         assertEquals(
-                ColorStateList.valueOf(
-                        ContextCompat.getColor(mActivity, R.color.color_primary_with_alpha_10)),
+                ColorStateList.valueOf(SemanticColorUtils.getColorSurfaceContainerHigh(mActivity)),
                 backgroundDrawable.getColor());
     }
 

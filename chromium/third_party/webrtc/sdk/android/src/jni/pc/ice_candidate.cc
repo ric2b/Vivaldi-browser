@@ -164,17 +164,16 @@ JavaToNativeCandidateNetworkPolicy(
   return PeerConnectionInterface::kCandidateNetworkPolicyAll;
 }
 
-rtc::KeyType JavaToNativeKeyType(JNIEnv* jni,
-                                 const JavaRef<jobject>& j_key_type) {
+KeyType JavaToNativeKeyType(JNIEnv* jni, const JavaRef<jobject>& j_key_type) {
   std::string enum_name = GetJavaEnumName(jni, j_key_type);
 
   if (enum_name == "RSA")
-    return rtc::KT_RSA;
+    return KT_RSA;
   if (enum_name == "ECDSA")
-    return rtc::KT_ECDSA;
+    return KT_ECDSA;
 
   RTC_CHECK(false) << "Unexpected KeyType enum_name " << enum_name;
-  return rtc::KT_ECDSA;
+  return KT_ECDSA;
 }
 
 PeerConnectionInterface::ContinualGatheringPolicy
@@ -193,23 +192,23 @@ JavaToNativeContinualGatheringPolicy(
   return PeerConnectionInterface::GATHER_ONCE;
 }
 
-webrtc::PortPrunePolicy JavaToNativePortPrunePolicy(
+PortPrunePolicy JavaToNativePortPrunePolicy(
     JNIEnv* jni,
     const JavaRef<jobject>& j_port_prune_policy) {
   std::string enum_name = GetJavaEnumName(jni, j_port_prune_policy);
   if (enum_name == "NO_PRUNE") {
-    return webrtc::NO_PRUNE;
+    return NO_PRUNE;
   }
   if (enum_name == "PRUNE_BASED_ON_PRIORITY") {
-    return webrtc::PRUNE_BASED_ON_PRIORITY;
+    return PRUNE_BASED_ON_PRIORITY;
   }
   if (enum_name == "KEEP_FIRST_READY") {
-    return webrtc::KEEP_FIRST_READY;
+    return KEEP_FIRST_READY;
   }
 
   RTC_CHECK(false) << " Unexpected PortPrunePolicy enum name " << enum_name;
 
-  return webrtc::NO_PRUNE;
+  return NO_PRUNE;
 }
 
 PeerConnectionInterface::TlsCertPolicy JavaToNativeTlsCertPolicy(

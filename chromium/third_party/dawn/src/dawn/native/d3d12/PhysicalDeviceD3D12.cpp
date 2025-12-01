@@ -175,11 +175,9 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
 
     // ShaderF16 features require DXC version being 1.4 or higher, shader model supporting 6.2 or
     // higher, and native supporting F16 shader ops.
-    bool shaderF16Enabled = false;
     if (GetBackend()->IsDXCAvailableAndVersionAtLeast(1, 4, 1, 4) &&
         mDeviceInfo.highestSupportedShaderModel >= 62 && mDeviceInfo.supportsNative16BitShaderOps) {
         EnableFeature(Feature::ShaderF16);
-        shaderF16Enabled = true;
     }
 
     // The function subgroupBroadcast(f16) fails for some edge cases on intel gen-9 devices.
@@ -188,11 +186,6 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
     // Subgroups feature requires SM >= 6.0 and capabilities flags.
     if (!kForceDisableSubgroups && GetBackend()->IsDXCAvailable() && mDeviceInfo.supportsWaveOps) {
         EnableFeature(Feature::Subgroups);
-        // D3D12 devices that support both native f16 and wave ops can support subgroups-f16.
-        // TODO(crbug.com/380244620): Remove when 'subgroups_f16' has been fully deprecated.
-        if (shaderF16Enabled) {
-            EnableFeature(Feature::SubgroupsF16);
-        }
     }
 
     D3D12_FEATURE_DATA_FORMAT_SUPPORT bgra8unormFormatInfo = {};
@@ -204,10 +197,7 @@ void PhysicalDevice::InitializeSupportedFeaturesImpl() {
         EnableFeature(Feature::BGRA8UnormStorage);
     }
 
-    D3D12_FEATURE_DATA_EXISTING_HEAPS existingHeapInfo = {};
-    hr = mD3d12Device->CheckFeatureSupport(D3D12_FEATURE_EXISTING_HEAPS, &existingHeapInfo,
-                                           sizeof(existingHeapInfo));
-    if (SUCCEEDED(hr) && existingHeapInfo.Supported) {
+    if (GetDeviceInfo().supportsExistingHeap) {
         EnableFeature(Feature::HostMappedPointer);
     }
 
@@ -243,7 +233,7 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
             "devices.");
     }
 
-    GetDefaultLimitsForSupportedFeatureLevel(&limits->v1);
+    GetDefaultLimitsForSupportedFeatureLevel(limits);
 
     // https://docs.microsoft.com/en-us/windows/win32/direct3d12/hardware-feature-levels
 
@@ -391,17 +381,16 @@ MaybeError PhysicalDevice::InitializeSupportedLimitsImpl(CombinedLimits* limits)
     // See the discussions in https://github.com/gpuweb/gpuweb/issues/1962 for more details.
     limits->v1.maxInterStageShaderVariables = D3D12_PS_INPUT_REGISTER_COUNT - 2;
 
+    if (mDeviceInfo.supportsExistingHeap) {
+        // The alignment of host mapped pointer and host mapped buffer size is same as the one of
+        // D3D12_HEAP_DESC.alignment.
+        limits->hostMappedPointerLimits.hostMappedPointerAlignment =
+            D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
+    }
+
     // Using base limits for:
     // TODO(crbug.com/dawn/685):
     // - maxVertexBufferArrayStride
-
-    // Experimental limits for subgroups
-    // TODO(crbug.com/354751907) Move this to AdapterInfo
-    limits->experimentalSubgroupLimits.minSubgroupSize = mDeviceInfo.waveLaneCountMin;
-    // Currently the WaveLaneCountMax queried from D3D12 API is not reliable and the meaning is
-    // unclear. Use 128 instead, which is the largest possible size. Reference:
-    // https://github.com/Microsoft/DirectXShaderCompiler/wiki/Wave-Intrinsics#:~:text=UINT%20WaveLaneCountMax
-    limits->experimentalSubgroupLimits.maxSubgroupSize = 128u;
 
     if (gpu_info::IsQualcomm_ACPI(GetVendorId())) {
         // Due to a driver and hardware limitation, Raw Buffers can only address 2^27 WORDS instead
@@ -426,7 +415,6 @@ FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
         switch (feature) {
             case wgpu::FeatureName::ShaderF16:
             case wgpu::FeatureName::Subgroups:
-            case wgpu::FeatureName::SubgroupsF16:
                 return FeatureValidationResult(
                     absl::StrFormat("Feature %s requires DXC for D3D12.", feature));
             default:
@@ -435,9 +423,8 @@ FeatureValidationResult PhysicalDevice::ValidateFeatureSupportedWithTogglesImpl(
     }
     // Validate applied shader version.
     switch (feature) {
-        // The feature `shader-f16` and `subgroups-f16` requires using shader model 6.2 or higher.
-        case wgpu::FeatureName::ShaderF16:
-        case wgpu::FeatureName::SubgroupsF16: {
+        // The feature `shader-f16` requires using shader model 6.2 or higher.
+        case wgpu::FeatureName::ShaderF16: {
             if (!(GetAppliedShaderModelUnderToggles(toggles) >= 62)) {
                 return FeatureValidationResult(absl::StrFormat(
                     "Feature %s requires shader model 6.2 or higher for D3D12.", feature));
@@ -587,8 +574,8 @@ void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platfo
     // information.
     if (gpu_info::IsIntelGen12HP(vendorId, deviceId) ||
         gpu_info::IsIntelGen12LP(vendorId, deviceId)) {
-        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  {32, 0, 101, 5762}) == -1) {
+        const gpu_info::IntelWindowsDriverVersion kFixedDriverVersion = {32, 0, 101, 5762};
+        if (gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) < kFixedDriverVersion) {
             adapterToggles->Default(Toggle::D3D12DontUseShaderModel66OrHigher, true);
         }
     }
@@ -597,10 +584,9 @@ void PhysicalDevice::SetupBackendAdapterToggles(dawn::platform::Platform* platfo
     // D3D driver > 27.20.100.8935 and < 27.20.100.9684 on Intel Gen9 and Gen9.5 GPUs.
     // See https://crbug.com/dawn/2448 for more information.
     if (gpu_info::IsIntelGen9(vendorId, deviceId)) {
-        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  {27, 20, 100, 8935}) == 1 &&
-            gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  {27, 20, 100, 9684}) == -1) {
+        gpu_info::IntelWindowsDriverVersion intelDriverVersion(GetDriverVersion());
+        if (intelDriverVersion > gpu_info::IntelWindowsDriverVersion({27, 20, 100, 8935}) &&
+            intelDriverVersion < gpu_info::IntelWindowsDriverVersion({27, 20, 100, 9684})) {
             adapterToggles->ForceSet(Toggle::D3D12DontUseShaderModel66OrHigher, true);
         }
     }
@@ -701,9 +687,8 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // Currently this workaround is only needed on Intel Gen9, Gen9.5 and Gen11 GPUs.
     // See http://crbug.com/1161355 for more information.
     if (gpu_info::IsIntelGen9(vendorId, deviceId) || gpu_info::IsIntelGen11(vendorId, deviceId)) {
-        const gpu_info::DriverVersion kFixedDriverVersion = {31, 0, 101, 2114};
-        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  kFixedDriverVersion) < 0) {
+        const gpu_info::IntelWindowsDriverVersion kFixedDriverVersion = {31, 0, 101, 2114};
+        if (gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) < kFixedDriverVersion) {
             deviceToggles->Default(
                 Toggle::UseTempBufferInSmallFormatTextureToTextureCopyFromGreaterToLessMipLevel,
                 true);
@@ -729,9 +714,8 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // This workaround is only needed on Intel Gen12LP with driver prior to 30.0.101.1692.
     // See http://crbug.com/dawn/949 for more information.
     if (gpu_info::IsIntelGen12LP(vendorId, deviceId)) {
-        const gpu_info::DriverVersion kFixedDriverVersion = {30, 0, 101, 1692};
-        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  kFixedDriverVersion) == -1) {
+        const gpu_info::IntelWindowsDriverVersion kFixedDriverVersion = {30, 0, 101, 1692};
+        if (gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) < kFixedDriverVersion) {
             deviceToggles->Default(Toggle::D3D12AllocateExtraMemoryFor2DArrayColorTexture, true);
         }
     }
@@ -740,11 +724,13 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // with driver >= 31.0.101.4091. See http://crbug.com/dawn/1083 for more information.
     bool useBlitForT2T = false;
     if (gpu_info::IsIntelGen9(vendorId, deviceId)) {
-        useBlitForT2T = gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                              {31, 0, 101, 2121}) != -1;
+        const gpu_info::IntelWindowsDriverVersion kFirstBuggyDriverVersion = {31, 0, 101, 2121};
+        useBlitForT2T =
+            gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) >= kFirstBuggyDriverVersion;
     } else if (gpu_info::IsIntelGen12LP(vendorId, deviceId)) {
-        useBlitForT2T = gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                              {31, 0, 101, 4091}) != -1;
+        const gpu_info::IntelWindowsDriverVersion kFirstBuggyDriverVersion = {31, 0, 101, 4091};
+        useBlitForT2T =
+            gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) >= kFirstBuggyDriverVersion;
     }
     if (useBlitForT2T) {
         deviceToggles->Default(Toggle::UseBlitForDepthTextureToTextureCopyToNonzeroSubresource,
@@ -756,9 +742,8 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // TODO(crbug.com/dawn/1546): Remove the workaround when the bug is fixed in D3D driver.
     if (gpu_info::IsIntelGen12LP(vendorId, deviceId) ||
         gpu_info::IsIntelGen12HP(vendorId, deviceId)) {
-        const gpu_info::DriverVersion kDriverVersion = {30, 0, 101, 3413};
-        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(), kDriverVersion) !=
-            -1) {
+        const gpu_info::IntelWindowsDriverVersion kFirstBuggyDriverVersion = {30, 0, 101, 3413};
+        if (gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) >= kFirstBuggyDriverVersion) {
             deviceToggles->Default(Toggle::ClearBufferBeforeResolveQueries, true);
         }
     }
@@ -787,9 +772,8 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // Currently this toggle is only needed on Intel Gen9 and Gen9.5 GPUs.
     // See http://crbug.com/dawn/1579 for more information.
     if (gpu_info::IsIntelGen9(vendorId, deviceId)) {
-        const gpu_info::DriverVersion kFixedDriverVersion = {31, 0, 101, 2121};
-        if (gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  kFixedDriverVersion) < 0) {
+        const gpu_info::IntelWindowsDriverVersion kFixedDriverVersion = {31, 0, 101, 2121};
+        if (gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) < kFixedDriverVersion) {
             // We can add workaround when the blending operation is "Add", DstFactor is "Zero" and
             // SrcFactor is "DstAlpha".
             deviceToggles->ForceSet(
@@ -823,11 +807,12 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     // See http://crbug.com/dawn/2308 for more information.
     if (gpu_info::IsIntel(vendorId)) {
         constexpr uint64_t kAffectedMinimumWindowsBuildNumber = 25957u;
-        const gpu_info::DriverVersion kAffectedMaximumDriverVersion = {27, 20, 100, 9664};
+        const gpu_info::IntelWindowsDriverVersion kAffectedMaximumDriverVersion = {27, 20, 100,
+                                                                                   9664};
         if (GetBackend()->GetFunctions()->GetWindowsBuildNumber() >=
                 kAffectedMinimumWindowsBuildNumber &&
-            gpu_info::CompareWindowsDriverVersion(vendorId, GetDriverVersion(),
-                                                  kAffectedMaximumDriverVersion) <= 0) {
+            gpu_info::IntelWindowsDriverVersion(GetDriverVersion()) <=
+                kAffectedMaximumDriverVersion) {
             deviceToggles->Default(Toggle::DisableResourceSuballocation, true);
         }
     }
@@ -835,6 +820,14 @@ void PhysicalDevice::SetupBackendDeviceToggles(dawn::platform::Platform* platfor
     if (gpu_info::IsNvidia(vendorId)) {
         deviceToggles->Default(Toggle::D3D12ForceStencilComponentReplicateSwizzle, true);
         deviceToggles->Default(Toggle::D3D12ExpandShaderResourceStateTransitionsToCopySource, true);
+    }
+
+    // Use packed DXGI_FORMAT_D24_UNORM_S8_UINT format on Qualcomm devices to workaround texture
+    // loading/sampling issues for depth24plus-stencil8 texture. Note that Qualcomm D3D12 drivers
+    // only report ACPI ids.
+    // See https://crbug.com/411268750 for more information.
+    if (gpu_info::IsQualcomm_ACPI(vendorId)) {
+        deviceToggles->Default(Toggle::UsePackedDepth24UnormStencil8Format, true);
     }
 
     // Use the Tint IR backend by default if the corresponding platform feature is enabled.

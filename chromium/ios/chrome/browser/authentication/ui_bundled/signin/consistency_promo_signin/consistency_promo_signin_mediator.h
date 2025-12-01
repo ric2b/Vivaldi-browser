@@ -13,6 +13,7 @@
 #import "base/functional/callback_forward.h"
 #import "base/ios/block_types.h"
 #import "components/signin/public/browser/web_signin_tracker.h"
+#import "ios/chrome/app/change_profile_continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
 
 class AccountReconcilor;
@@ -37,6 +38,8 @@ typedef NS_ENUM(NSInteger, ConsistencyPromoSigninMediatorError) {
   ConsistencyPromoSigninMediatorErrorTimeout,
   // Generic error.
   ConsistencyPromoSigninMediatorErrorGeneric,
+  // Auth error.
+  ConsistencyPromoSigninMediatorErrorAuth,
 };
 
 // Delegate for ConsistencyPromoSigninMediator.
@@ -66,7 +69,8 @@ typedef NS_ENUM(NSInteger, ConsistencyPromoSigninMediatorError) {
 // Called if there is sign-in error.
 - (void)consistencyPromoSigninMediator:(ConsistencyPromoSigninMediator*)mediator
                         errorDidHappen:
-                            (ConsistencyPromoSigninMediatorError)error;
+                            (ConsistencyPromoSigninMediatorError)error
+                          withIdentity:(id<SystemIdentity>)identity;
 
 // Called to create a WebSigninTracker object during the web sign-in flow.
 - (std::unique_ptr<signin::WebSigninTracker>)
@@ -78,6 +82,9 @@ typedef NS_ENUM(NSInteger, ConsistencyPromoSigninMediatorError) {
                                   signin::WebSigninTracker::Result)>*)callback
                           withTimeout:
                               (const std::optional<base::TimeDelta>&)timeout;
+
+// Returns a ChangeProfileContinuation.
+- (ChangeProfileContinuation)changeProfileContinuation;
 
 @end
 

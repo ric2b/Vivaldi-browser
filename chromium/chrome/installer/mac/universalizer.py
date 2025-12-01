@@ -221,6 +221,7 @@ def _universalize(input_paths, output_path, root):
             if (not filecmp.cmp(input_paths[0], input_paths[index]) and
                 input_paths[index].find('.pak') == -1 and
                 input_paths[index].find('/Sparkle.framework/') == -1 and
+                input_paths[index].find('vivaldi_v8_context_snapshot') == -1 and
                 input_paths[index].find('/Resources/vivaldi/') == -1):
                 identical = False
                 if (os.path.basename(output_path) == 'Info.plist' or

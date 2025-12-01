@@ -133,9 +133,12 @@ public class SafetyHubMagicStackMediatorTest {
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
                 mContext.getString(R.string.safety_hub_magic_stack_safe_browsing_button_text));
         assertEquals(
+                mModel.get(SafetyHubMagicStackViewProperties.BUTTON_CONTENT_DESCRIPTION),
+                mContext.getString(R.string.safety_hub_magic_stack_safe_browsing_button_text));
+        assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
-                R.drawable.ic_gshield_24);
+                R.drawable.secured_by_brand_shield_24);
         verify(mSafetyHubHatsHelper, times(1))
                 .triggerProactiveHatsSurveyWhenCardShown(
                         mTabModelSelector, MagicStackEntry.ModuleType.SAFE_BROWSING);
@@ -168,6 +171,10 @@ public class SafetyHubMagicStackMediatorTest {
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
                 mContext.getString(R.string.safety_hub_magic_stack_safe_state_button_text));
+        assertEquals(
+                mModel.get(SafetyHubMagicStackViewProperties.BUTTON_CONTENT_DESCRIPTION),
+                mContext.getString(
+                        R.string.safety_hub_magic_stack_safe_state_button_content_description));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
@@ -204,6 +211,10 @@ public class SafetyHubMagicStackMediatorTest {
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
                 mContext.getString(R.string.safety_hub_magic_stack_safe_state_button_text));
+        assertEquals(
+                mModel.get(SafetyHubMagicStackViewProperties.BUTTON_CONTENT_DESCRIPTION),
+                mContext.getString(
+                        R.string.safety_hub_magic_stack_safe_state_button_content_description));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
@@ -244,6 +255,9 @@ public class SafetyHubMagicStackMediatorTest {
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
                 mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
         assertEquals(
+                mModel.get(SafetyHubMagicStackViewProperties.BUTTON_CONTENT_DESCRIPTION),
+                mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
+        assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))
                         .getCreatedFromResId(),
                 R.drawable.ic_password_manager_key);
@@ -282,6 +296,9 @@ public class SafetyHubMagicStackMediatorTest {
         assertEquals(DESCRIPTION, mModel.get(SafetyHubMagicStackViewProperties.SUMMARY));
         assertEquals(
                 mModel.get(SafetyHubMagicStackViewProperties.BUTTON_TEXT),
+                mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
+        assertEquals(
+                mModel.get(SafetyHubMagicStackViewProperties.BUTTON_CONTENT_DESCRIPTION),
                 mContext.getString(R.string.safety_hub_magic_stack_compromised_passwords_title));
         assertEquals(
                 shadowOf(mModel.get(SafetyHubMagicStackViewProperties.ICON_DRAWABLE))

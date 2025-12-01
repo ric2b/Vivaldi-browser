@@ -16,10 +16,10 @@
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/importer/importer_unittest_utils.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "content/public/test/browser_test.h"
 #include "importer/imported_notes_entry.h"
 
@@ -135,7 +135,8 @@ const OperaNotesInfo OperaNotes[] = {
      L"Photos\n\nShare your photos with friends and family"},
 };
 
-void TestImportedBookmarks(const ImportedBookmarkEntry& imported,
+void TestImportedBookmarks(
+    const user_data_importer::ImportedBookmarkEntry& imported,
                            const OperaBookmarkInfo& expected) {
   EXPECT_EQ(base::WideToUTF16(expected.title), imported.title);
   EXPECT_EQ(expected.is_folder, imported.is_folder) << imported.title;
@@ -177,8 +178,8 @@ class OperaImportObserver : public ProfileWriter,
         password_count(0) {}
 
   void ImportStarted() override {}
-  void ImportItemStarted(importer::ImportItem item) override {}
-  void ImportItemEnded(importer::ImportItem item) override {}
+  void ImportItemStarted(user_data_importer::ImportItem item) override {}
+  void ImportItemEnded(user_data_importer::ImportItem item) override {}
   void ImportEnded() override {
     loop->Quit();
     EXPECT_EQ(std::size(OperaBookmarks), bookmark_count);
@@ -203,8 +204,10 @@ class OperaImportObserver : public ProfileWriter,
     EXPECT_EQ(p.blocked_by_user, form.blocked_by_user);
     ++password_count;
   }
-  void AddBookmarks(const std::vector<ImportedBookmarkEntry>& bookmarks,
-                    const std::u16string& top_level_folder_name) override {
+
+  void AddBookmarks(
+      const std::vector<user_data_importer::ImportedBookmarkEntry>& bookmarks,
+      const std::u16string& top_level_folder_name) override {
     ASSERT_LE(bookmark_count + bookmarks.size(), std::size(OperaBookmarks));
 
     for (size_t i = 0; i < bookmarks.size(); i++) {
@@ -214,6 +217,7 @@ class OperaImportObserver : public ProfileWriter,
       ++bookmark_count;
     }
   }
+
   void AddNotes(const std::vector<ImportedNotesEntry>& notes,
                 const std::u16string& top_level_folder_name) override {
     ASSERT_LE(notes_count + notes.size(), std::size(OperaNotes));
@@ -262,16 +266,17 @@ class OperaProfileImporterBrowserTest : public InProcessBrowserTest {
     data_dir = data_dir.AppendASCII(profile_subdir);
     ASSERT_TRUE(base::CopyDirectory(data_dir, profile_dir, true));
 
-    importer::SourceProfile import_profile;
-    import_profile.importer_type = importer::TYPE_OPERA;
+    user_data_importer::SourceProfile import_profile;
+    import_profile.importer_type = user_data_importer::TYPE_OPERA;
     import_profile.source_path = profile_dir;
     import_profile.locale = "en-US";
     if (use_master_password) {
       import_profile.master_password = base::WideToUTF8(kTestMasterPassword);
     }
 
-    uint16_t imported_items =
-        importer::PASSWORDS | importer::NOTES | importer::FAVORITES;
+    uint16_t imported_items = user_data_importer::PASSWORDS |
+                              user_data_importer::NOTES |
+                              user_data_importer::FAVORITES;
 
     // Deletes itself
     ExternalProcessImporterHost* host = new ExternalProcessImporterHost;

@@ -9,6 +9,7 @@
 
 #include "base/time/time.h"
 #include "base/token.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 
 namespace visited_url_ranking {
 
@@ -42,11 +43,21 @@ struct TabMetadata {
   // Nullopt if its not part of a group.
   std::optional<base::Token> local_tab_group_id;
 
+  // The UKM source ID of the current WebContents of the tab.
+  ukm::SourceId ukm_source_id = ukm::kInvalidSourceId;
+
   // Android only: the int value TabLaunchType of the tab.
   int tab_android_launch_type = -1;
 
   // Android only: The package name of the app that created the tab.
   std::optional<std::string> launch_package_name;
+
+  // Android only: Index of the tab in the current tab model.
+  int tab_model_index = -1;
+
+  // Android only: Boolean indicating whether this tab is at the last position
+  // in the tab model.
+  bool is_last_tab_in_tab_model{false};
 };
 
 }  // namespace visited_url_ranking

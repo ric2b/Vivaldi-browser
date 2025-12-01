@@ -16,6 +16,7 @@
 #include "content/browser/shared_storage/shared_storage_lock_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/frame_tree_node_id.h"
+#include "content/public/browser/global_routing_id.h"
 #include "third_party/blink/public/common/shared_storage/shared_storage_utils.h"
 #include "third_party/blink/public/mojom/origin_trials/origin_trial_feature.mojom-shared.h"
 #include "third_party/blink/public/mojom/shared_storage/shared_storage.mojom.h"
@@ -59,18 +60,34 @@ class CONTENT_EXPORT SharedStorageRuntimeManager {
       kRemainingBudget,
     };
 
+    virtual GlobalRenderFrameHostId AssociatedFrameHostId() const = 0;
+
+    virtual bool ShouldReceiveAllSharedStorageReports() const = 0;
+
     virtual void OnSharedStorageAccessed(
-        const base::Time& access_time,
+        base::Time access_time,
         AccessScope scope,
         AccessMethod method,
-        FrameTreeNodeId main_frame_id,
+        GlobalRenderFrameHostId main_frame_id,
         const std::string& owner_origin,
         const SharedStorageEventParams& params) = 0;
 
-    virtual void OnUrnUuidGenerated(const GURL& urn_uuid) = 0;
+    virtual void OnSharedStorageSelectUrlUrnUuidGenerated(
+        const GURL& urn_uuid) = 0;
 
-    virtual void OnConfigPopulated(
+    virtual void OnSharedStorageSelectUrlConfigPopulated(
         const std::optional<FencedFrameConfig>& config) = 0;
+
+    // TODO(crbug.com/401011862): Remove `worklet_ordinal_id` parameter.
+    virtual void OnSharedStorageWorkletOperationExecutionFinished(
+        base::Time finished_time,
+        base::TimeDelta execution_time,
+        AccessMethod method,
+        int operation_id,
+        int worklet_ordinal_id,
+        const base::UnguessableToken& worklet_devtools_token,
+        GlobalRenderFrameHostId main_frame_id,
+        const std::string& owner_origin) = 0;
   };
 
   void OnDocumentServiceDestroyed(
@@ -102,9 +119,19 @@ class CONTENT_EXPORT SharedStorageRuntimeManager {
   void NotifySharedStorageAccessed(
       AccessScope scope,
       SharedStorageObserverInterface::AccessMethod method,
-      FrameTreeNodeId main_frame_id,
+      GlobalRenderFrameHostId main_frame_id,
       const std::string& owner_origin,
       const SharedStorageEventParams& params);
+
+  // TODO(crbug.com/401011862): Remove `worklet_ordinal_id` parameter.
+  void NotifyWorkletOperationExecutionFinished(
+      base::TimeDelta execution_time,
+      SharedStorageObserverInterface::AccessMethod method,
+      int operation_id,
+      int worklet_ordinal_id,
+      const base::UnguessableToken& worklet_devtools_token,
+      GlobalRenderFrameHostId main_frame_id,
+      const std::string& owner_origin);
 
   std::map<SharedStorageDocumentServiceImpl*, WorkletHosts>&
   GetAttachedWorkletHostsForTesting() {
@@ -135,7 +162,7 @@ class CONTENT_EXPORT SharedStorageRuntimeManager {
       const GURL& script_source_url,
       network::mojom::CredentialsMode credentials_mode,
       blink::mojom::SharedStorageWorkletCreationMethod creation_method,
-      int worklet_id,
+      int worklet_ordinal_id,
       const std::vector<blink::mojom::OriginTrialFeature>&
           origin_trial_features,
       mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
@@ -167,7 +194,7 @@ class CONTENT_EXPORT SharedStorageRuntimeManager {
   // This ID is assigned during construction of the SharedStorageWorkletHost.
   // TODO(crbug.com/401011862): Use the worklet IDs generated in DevTools
   // reporting.
-  int next_worklet_id_ = 0;
+  int next_worklet_ordinal_id_ = 0;
 };
 
 }  // namespace content

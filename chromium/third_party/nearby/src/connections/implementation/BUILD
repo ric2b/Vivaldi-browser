@@ -52,6 +52,8 @@ cc_library(
 cc_library(
     name = "internal",
     srcs = [
+        "awdl_bwu_handler.cc",
+        "awdl_endpoint_channel.cc",
         "base_bwu_handler.cc",
         "base_endpoint_channel.cc",
         "base_pcp_handler.cc",
@@ -92,6 +94,8 @@ cc_library(
         "wifi_lan_service_info.cc",
     ],
     hdrs = [
+        "awdl_bwu_handler.h",
+        "awdl_endpoint_channel.h",
         "base_bwu_handler.h",
         "base_endpoint_channel.h",
         "base_pcp_handler.h",
@@ -293,7 +297,6 @@ cc_test(
     ],
     shard_count = 8,
     deps = [
-        ":ble_advertisement",
         ":internal",
         ":internal_test",
         ":types",

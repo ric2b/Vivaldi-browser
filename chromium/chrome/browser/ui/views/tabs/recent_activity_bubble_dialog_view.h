@@ -29,10 +29,16 @@ DECLARE_ELEMENT_IDENTIFIER_VALUE(kRecentActivityBubbleDialogId);
 
 // The bubble dialog view housing the Shared Tab Group Recent Activity.
 // Shows at most kMaxNumberRows of the activity_log parameter.
-class RecentActivityBubbleDialogView : public LocationBarBubbleDelegateView {
+class RecentActivityBubbleDialogView : public LocationBarBubbleDelegateView,
+                                       public ui::SimpleMenuModel::Delegate {
   METADATA_HEADER(RecentActivityBubbleDialogView, LocationBarBubbleDelegateView)
 
  public:
+  enum OptionsMenuItem { SEE_ALL_ACTIVITY };
+
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kCloseButtonId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kSeeAllActivityId);
+
   RecentActivityBubbleDialogView(
       View* anchor_view,
       content::WebContents* web_contents,
@@ -40,6 +46,9 @@ class RecentActivityBubbleDialogView : public LocationBarBubbleDelegateView {
       std::vector<ActivityLogItem> group_activity_log,
       Profile* profile);
   ~RecentActivityBubbleDialogView() override;
+
+  // ui::SimpleMenuModel::Delegate:
+  void ExecuteCommand(int command_id, int event_flags) override;
 
   // The maximum number of rows that can be displayed in this dialog.
   static constexpr int kMaxNumberRows = 5;
@@ -53,6 +62,10 @@ class RecentActivityBubbleDialogView : public LocationBarBubbleDelegateView {
   // Creates a view containing the most recent activity for the group.
   void CreateGroupActivity();
 
+  // Returns the title view container including the title, the menu button, and
+  // the close button.
+  std::u16string GetTitleForTesting();
+
   // Returns the row's view at the given index. This will look in both
   // the tab activity container and the group activity container.
   RecentActivityRowView* GetRowForTesting(int n);
@@ -65,8 +78,31 @@ class RecentActivityBubbleDialogView : public LocationBarBubbleDelegateView {
   }
 
  private:
+  // View IDs used for selecting views in tests.
+  enum RecentActivityViewID {
+    TITLE_VIEW_ID,
+    TITLE_ID,
+  };
+
   // Close this bubble.
   void Close();
+
+  // Creates a button view for the close button.
+  std::unique_ptr<views::Button> CreateCloseButton();
+
+  // Creates a button view for the 3-dot menu button.
+  std::unique_ptr<views::Button> CreateOptionsMenuButton();
+
+  // Creates the top row of the dialog, including the title of the dialog, the
+  // 3-dot menu button, and the close button.
+  void CreateTitleView();
+
+  // Displays a context menu anchored to |source|, allowing users to access
+  // additional actions like "See All Activity".
+  void ShowOptionsMenu(views::Button* source);
+
+  std::unique_ptr<ui::SimpleMenuModel> options_menu_model_;
+  std::unique_ptr<views::MenuRunner> options_menu_runner_;
 
   // Containers will always be non-null. Visibility is toggled based on
   // whether rows are added to each container.
@@ -95,8 +131,6 @@ class RecentActivityRowView : public HoverButton {
   void ButtonPressed();
 
   RecentActivityRowImageView* image_view() const { return image_view_; }
-  const std::u16string& activity_text() const { return activity_text_; }
-  const std::u16string& metadata_text() const { return metadata_text_; }
 
   // RecentActivityAction handlers.
   // Focuses the open tab in the tab strip.
@@ -109,8 +143,6 @@ class RecentActivityRowView : public HoverButton {
   void ManageSharing();
 
  private:
-  std::u16string activity_text_;
-  std::u16string metadata_text_;
   raw_ptr<RecentActivityRowImageView> image_view_ = nullptr;
   ActivityLogItem item_;
   const raw_ptr<Profile> profile_ = nullptr;

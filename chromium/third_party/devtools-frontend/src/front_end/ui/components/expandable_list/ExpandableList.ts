@@ -1,15 +1,12 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Lit from '../../lit/lit.js';
 import * as VisualLogging from '../../visual_logging/visual_logging.js';
 
-import expandableListStylesRaw from './expandableList.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const expandableListStyles = new CSSStyleSheet();
-expandableListStyles.replaceSync(expandableListStylesRaw.cssText);
+import expandableListStyles from './expandableList.css.js';
 
 const {html, Directives: {ifDefined}} = Lit;
 
@@ -36,10 +33,6 @@ export class ExpandableList extends HTMLElement {
     this.#render();
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [expandableListStyles];
-  }
-
   #render(): void {
     if (this.#rows.length < 1) {
       return;
@@ -49,6 +42,7 @@ export class ExpandableList extends HTMLElement {
     // clang-format off
     Lit.render(
         html`
+      <style>${expandableListStyles}</style>
       <div class="expandable-list-container">
         <div>
           ${this.#rows.length > 1 ?

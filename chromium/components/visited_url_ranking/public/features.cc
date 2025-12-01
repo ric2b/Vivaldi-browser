@@ -30,6 +30,11 @@ constexpr base::FeatureParam<std::string> kVisitedURLRankingResultTypesParam{
     /*name=*/"visited_url_ranking_url_types",
     /*default_value=*/""};
 
+constexpr base::FeatureParam<bool> kVisitedURLRankingRecordActions{
+    &kVisitedURLRankingService,
+    /*name=*/"visited_url_ranking_record_actions",
+    /*default_value=*/false};
+
 const char kVisitedURLRankingFetchDurationInHoursParam[] =
     "VisitedURLRankingFetchDurationInHoursParam";
 
@@ -88,7 +93,7 @@ constexpr base::FeatureParam<std::string>
     kVisitedURLRankingDeduplicationExcludedPrefixes{
         &kVisitedURLRankingDeduplication,
         /*name=*/"url_deduplication_excluded_prefixes",
-        /*default_value=*/"www."};
+        /*default_value=*/"www.; login.corp.; myaccount.; accounts.;"};
 
 BASE_FEATURE(kVisitedURLRankingDecorations,
              "VisitedURLRankingDecorations",
@@ -149,7 +154,7 @@ BASE_FEATURE(kGroupSuggestionService,
 constexpr base::FeatureParam<bool> kGroupSuggestionEnableRecentlyOpened{
     &kGroupSuggestionService,
     /*name=*/"group_suggestion_enable_recently_opened",
-    /*default_value=*/true};
+    /*default_value=*/false};
 
 constexpr base::FeatureParam<bool> kGroupSuggestionEnableSwitchBetween{
     &kGroupSuggestionService,
@@ -161,4 +166,28 @@ constexpr base::FeatureParam<bool> kGroupSuggestionEnableSimilarSource{
     /*name=*/"group_suggestion_enable_similar_source",
     /*default_value=*/true};
 
+constexpr base::FeatureParam<bool> kGroupSuggestionEnableSameOrigin{
+    &kGroupSuggestionService,
+    /*name=*/"group_suggestion_enable_same_origin",
+    /*default_value=*/false};
+
+constexpr base::FeatureParam<bool> kGroupSuggestionEnableTabSwitcherOnly{
+    &kGroupSuggestionService,
+    /*name=*/"group_suggestion_enable_tab_switcher_only",
+    /*default_value=*/false};
+
+constexpr base::FeatureParam<bool> kGroupSuggestionEnableVisibilityCheck{
+    &kGroupSuggestionService,
+    /*name=*/"group_suggestion_enable_visibility_check",
+    /*default_value=*/true};
+
+constexpr base::FeatureParam<bool> kGroupSuggestionTriggerCalculationOnPageLoad{
+    &kGroupSuggestionService,
+    /*name=*/"group_suggestion_trigger_calculation_on_page_load",
+    /*default_value=*/true};
+
+constexpr base::FeatureParam<base::TimeDelta> kGroupSuggestionThrottleAgeLimit{
+    &kGroupSuggestionService,
+    /*name=*/"group_suggestion_throttle_age_limit",
+    /*default_value=*/base::Days(1)};
 }  // namespace visited_url_ranking::features

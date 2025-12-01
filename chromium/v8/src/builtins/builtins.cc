@@ -352,6 +352,11 @@ Address Builtins::CppEntryOf(Builtin builtin) {
   return builtin_metadata[ToInt(builtin)].data.cpp_entry;
 }
 
+Address Builtins::EmbeddedEntryOf(Builtin builtin) {
+  static_assert(Builtins::kAllBuiltinsAreIsolateIndependent);
+  return EmbeddedData::FromBlob().InstructionStartOf(builtin);
+}
+
 // static
 bool Builtins::IsBuiltin(const Tagged<Code> code) {
   return Builtins::IsBuiltinId(code->builtin_id());
@@ -458,7 +463,7 @@ DirectHandle<Code> Builtins::CreateInterpreterEntryTrampolineForProfiling(
   desc.handler_table_offset = instruction_size;
   desc.constant_pool_offset = instruction_size;
   desc.code_comments_offset = instruction_size;
-  desc.builtin_jump_table_info_offset = instruction_size;
+  desc.jump_table_info_offset = instruction_size;
 
   CodeDesc::Verify(&desc);
 

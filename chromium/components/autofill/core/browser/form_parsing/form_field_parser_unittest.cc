@@ -72,6 +72,15 @@ class FormFieldParserTest : public FormFieldParserTestBase,
     return field_candidates_map_.size();
   }
 
+  int ParseStandaloneLoyaltyCardFields() {
+    ParsingContext context(GeoIpCountryCode(""), LanguageCode(""),
+                           GetActivePatternFile().value(),
+                           GetActiveRegexFeatures());
+    FormFieldParser::ParseStandaloneLoyaltyCardFields(context, fields_,
+                                                      field_candidates_map_);
+    return field_candidates_map_.size();
+  }
+
   // FormFieldParserTestBase:
   // This function is unused in these unit tests, because FormFieldParser is not
   // a parser itself, but the infrastructure combining them.
@@ -246,19 +255,40 @@ TEST_F(FormFieldParserTest, ParseFormFieldsFieldsLoyaltyCard) {
 // Test that `ParseSingleFields` parses a single loyalty card field.
 // LOYALTY_MEMBERSHIP_ID is allowlisted to be produced by the field
 // classification even if the form does not have >= 3 recognized field types.
-TEST_F(FormFieldParserTest, ParseSingleFieldsLoyaltyCard) {
-  base::test::ScopedFeatureList scoped_feature_list_{
-      features::kAutofillEnableLoyaltyCardsFilling};
+TEST_F(FormFieldParserTest, ParseStandaloneLoyaltyCardFields) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableLoyaltyCardsFilling,
+       features::kAutofillEnableEmailOrLoyaltyCardsFilling},
+      {});
+
   // Parse single field loyalty card.
   AddTextFormFieldData("", "frequent-flyer", LOYALTY_MEMBERSHIP_ID);
-  EXPECT_EQ(1, ParseSingleFields());
+  EXPECT_EQ(1, ParseStandaloneLoyaltyCardFields());
   TestClassificationExpectations();
 
   // Don't parse other fields.
   // UNKNOWN_TYPE is used as the expected type, which prevents it from being
   // part of the expectations in `TestClassificationExpectations()`.
   AddTextFormFieldData("", "Address line 1", UNKNOWN_TYPE);
-  EXPECT_EQ(1, ParseSingleFields());
+  EXPECT_EQ(1, ParseStandaloneLoyaltyCardFields());
+  TestClassificationExpectations();
+}
+
+// Tests that email or loyalty cards fields are parsed as
+// `EMAIL_OR_LOYALTY_MEMBERSHIP_ID`.
+TEST_F(FormFieldParserTest, ParseFormFieldsFieldsEmailOrLoyaltyCard) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {features::kAutofillEnableLoyaltyCardsFilling,
+       features::kAutofillEnableEmailOrLoyaltyCardsFilling},
+      {});
+  AddTextFormFieldData("", "Email Or Loyalty Card",
+                       EMAIL_OR_LOYALTY_MEMBERSHIP_ID);
+  AddTextFormFieldData("", "Password", UNKNOWN_TYPE);
+
+  // `ParseFormFields` should detect the email or loyalty card field.
+  EXPECT_EQ(1, ParseFormFields());
   TestClassificationExpectations();
 }
 

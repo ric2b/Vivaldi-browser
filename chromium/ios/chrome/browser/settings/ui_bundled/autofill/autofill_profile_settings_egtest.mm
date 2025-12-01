@@ -69,6 +69,7 @@ const DisplayStringIDToExpectedResult kExpectedFields[] = {
     {IDS_IOS_AUTOFILL_EMAIL, @"johndoe@hades.com"}};
 
 NSString* const kProfileLabel = @"John H. Doe, 666 Erebus St.";
+NSString* const kHomeProfileLabel = @"John H. Doe, 666 Erebus St., Home";
 
 // Expectation of how user-typed country names should be canonicalized.
 struct UserTypedCountryExpectedResultPair {
@@ -165,6 +166,12 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
     config.features_enabled.push_back(kAddAddressManually);
     config.features_enabled.push_back(
         kAutofillDynamicallyLoadsFieldsForAddressInput);
+  }
+  if ([self isRunningTest:@selector
+            (testSwipeToDeleteBlockedForHomeWorkProfile)] ||
+      [self isRunningTest:@selector(testHomeWorkProfileEditPage)]) {
+    config.features_enabled.push_back(
+        autofill::features::kAutofillEnableSupportForHomeAndWork);
   }
 
   return config;
@@ -304,6 +311,24 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
       performAction:grey_tap()];
 
   [self exitSettingsMenu];
+}
+
+// Test that the edit mode for Home and Work profiles is not accessible.
+- (void)testHomeWorkProfileEditPage {
+  [SigninEarlGrey signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
+  [AutofillAppInterface saveExampleHomeWorkAccountProfile];
+  [self openEditProfile:kHomeProfileLabel];
+
+  // Switch on edit mode.
+  [[EarlGrey selectElementWithMatcher:NavigationBarEditButton()]
+      performAction:grey_tap()];
+
+  // Assert that the edit page is no longer displayed.
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
+                                          kAutofillProfileEditTableViewId)]
+      assertWithMatcher:grey_nil()];
+
+  [SigninEarlGrey signOut];
 }
 
 // Checks that the Autofill profiles list view is in edit mode and the Autofill
@@ -490,6 +515,26 @@ id<GREYMatcher> SettingsToolbarDoneButton() {
       selectElementWithMatcher:grey_accessibilityLabel(
                                    [AutofillAppInterface exampleProfileName])]
       assertWithMatcher:grey_notVisible()];
+}
+
+// Checks that no action is possible when a Home and Work account profile
+// is swiped to be deleted.
+- (void)testSwipeToDeleteBlockedForHomeWorkProfile {
+  [AutofillAppInterface saveExampleHomeWorkAccountProfile];
+  [self openAutofillProfilesSettings];
+
+  // Swipe until the "Delete" button is revealed.
+  [[EarlGrey
+      selectElementWithMatcher:grey_accessibilityLabel(
+                                   [AutofillAppInterface exampleProfileName])]
+      performAction:chrome_test_util::SwipeToShowDeleteButton()];
+
+  [ChromeEarlGreyUI waitForAppToIdle];
+
+  // Assert that "Delete" button is not displayed.
+  [[EarlGrey selectElementWithMatcher:grey_kindOfClassName(
+                                          @"UISwipeActionStandardButton")]
+      assertWithMatcher:grey_nil()];
 }
 
 // Checks that the country field is a selection field in the edit mode and the

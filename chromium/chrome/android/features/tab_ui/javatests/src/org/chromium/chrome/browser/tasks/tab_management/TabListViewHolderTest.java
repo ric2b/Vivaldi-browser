@@ -30,10 +30,13 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.VectorDrawable;
+import android.os.SystemClock;
 import android.util.Size;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewStub;
+import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -41,6 +44,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.IdRes;
+import androidx.annotation.Nullable;
 import androidx.core.widget.ImageViewCompat;
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.filters.MediumTest;
@@ -91,6 +95,8 @@ import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActio
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.components.browser_ui.util.motion.MotionEventInfo;
+import org.chromium.components.browser_ui.util.motion.MotionEventTestUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.components.commerce.PriceTracking.BuyableProduct;
 import org.chromium.components.commerce.PriceTracking.PriceTrackingData;
@@ -100,6 +106,8 @@ import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.embedder_support.util.UrlUtilitiesJni;
 import org.chromium.components.payments.ui.CurrencyFormatter;
 import org.chromium.components.payments.ui.CurrencyFormatterJni;
+import org.chromium.components.tab_group_sync.EitherId.EitherGroupId;
+import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.content_public.browser.BrowserContextHandle;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -184,7 +192,7 @@ public class TabListViewHolderTest {
     @Mock private OptimizationGuideBridgeFactory.Natives mOptimizationGuideBridgeFactoryJniMock;
     @Mock private OptimizationGuideBridge mOptimizationGuideBridge;
 
-    private ThumbnailFetcher mMockThumbnailFetcher =
+    private final ThumbnailFetcher mMockThumbnailFetcher =
             new ThumbnailFetcher(
                     new ThumbnailProvider() {
                         @Override
@@ -203,40 +211,52 @@ public class TabListViewHolderTest {
                         }
                     },
                     Tab.INVALID_TAB_ID);
-    private AtomicInteger mThumbnailFetchedCount = new AtomicInteger();
+    private final AtomicInteger mThumbnailFetchedCount = new AtomicInteger();
 
-    private TabListMediator.TabActionListener mMockCloseListener =
+    private final TabListMediator.TabActionListener mMockCloseListener =
             new TabListMediator.TabActionListener() {
                 @Override
-                public void run(View view, int tabId) {
+                public void run(View view, int tabId, @Nullable MotionEventInfo triggeringMotion) {
                     mCloseClicked.set(true);
                     mCloseTabId.set(tabId);
                 }
-            };
-    private AtomicBoolean mCloseClicked = new AtomicBoolean();
-    private AtomicInteger mCloseTabId = new AtomicInteger();
 
-    private TabListMediator.TabActionListener mMockSelectedListener =
+                @Override
+                public void run(
+                        View view, String syncId, @Nullable MotionEventInfo triggeringMotion) {}
+            };
+    private final AtomicBoolean mCloseClicked = new AtomicBoolean();
+    private final AtomicInteger mCloseTabId = new AtomicInteger();
+
+    private final TabListMediator.TabActionListener mMockSelectedListener =
             new TabListMediator.TabActionListener() {
                 @Override
-                public void run(View view, int tabId) {
+                public void run(View view, int tabId, @Nullable MotionEventInfo triggeringMotion) {
                     mSelectClicked.set(true);
                     mSelectTabId.set(tabId);
                 }
-            };
-    private AtomicBoolean mSelectClicked = new AtomicBoolean();
-    private AtomicInteger mSelectTabId = new AtomicInteger();
 
-    private TabListMediator.TabActionListener mMockCreateGroupButtonListener =
+                @Override
+                public void run(
+                        View view, String syncId, @Nullable MotionEventInfo triggeringMotion) {}
+            };
+    private final AtomicBoolean mSelectClicked = new AtomicBoolean();
+    private final AtomicInteger mSelectTabId = new AtomicInteger();
+
+    private final TabListMediator.TabActionListener mMockCreateGroupButtonListener =
             new TabListMediator.TabActionListener() {
                 @Override
-                public void run(View view, int tabId) {
+                public void run(View view, int tabId, @Nullable MotionEventInfo triggeringMotion) {
                     mCreateGroupButtonClicked.set(true);
                     mCreateGroupTabId.set(tabId);
                 }
+
+                @Override
+                public void run(
+                        View view, String syncId, @Nullable MotionEventInfo triggeringMotion) {}
             };
-    private AtomicBoolean mCreateGroupButtonClicked = new AtomicBoolean();
-    private AtomicInteger mCreateGroupTabId = new AtomicInteger();
+    private final AtomicBoolean mCreateGroupButtonClicked = new AtomicBoolean();
+    private final AtomicInteger mCreateGroupTabId = new AtomicInteger();
     private boolean mShouldReturnBitmap;
 
     @BeforeClass
@@ -628,6 +648,58 @@ public class TabListViewHolderTest {
         mGridModel.set(TabProperties.THUMBNAIL_FETCHER, mMockThumbnailFetcher);
         assertThat(thumbnail.getDrawable(), instanceOf(BitmapDrawable.class));
         Assert.assertEquals(2, mThumbnailFetchedCount.get());
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    public void testCloseButtonClick() {
+        ImageView gridActionButton = mTabGridView.findViewById(R.id.action_button);
+        Assert.assertFalse(mCloseClicked.get());
+
+        gridActionButton.performClick();
+
+        Assert.assertTrue(mCloseClicked.get());
+        Assert.assertEquals(TAB1_ID, mCloseTabId.get());
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    public void testCloseButtonPeripheralClick() {
+        // Setup
+        ImageView gridActionButton = mTabGridView.findViewById(R.id.action_button);
+        Assert.assertFalse(mCloseClicked.get());
+
+        // Act: peripheral click is intercepted by an OnTouchListener, so we should dispatch
+        // MotionEvents to simulate a click.
+        long motionDownTime = SystemClock.uptimeMillis();
+        gridActionButton.dispatchTouchEvent(
+                MotionEventTestUtils.createMouseMotionEvent(
+                        motionDownTime, /* eventTime= */ motionDownTime, MotionEvent.ACTION_DOWN));
+        gridActionButton.dispatchTouchEvent(
+                MotionEventTestUtils.createMouseMotionEvent(
+                        motionDownTime,
+                        /* eventTime= */ motionDownTime + 200,
+                        MotionEvent.ACTION_UP));
+
+        // Assert
+        Assert.assertTrue(mCloseClicked.get());
+        Assert.assertEquals(TAB1_ID, mCloseTabId.get());
+    }
+
+    @Test
+    @MediumTest
+    @UiThreadTest
+    public void testCloseButtonA11yClick() {
+        ImageView gridActionButton = mTabGridView.findViewById(R.id.action_button);
+        Assert.assertFalse(mCloseClicked.get());
+
+        gridActionButton.performAccessibilityAction(
+                AccessibilityNodeInfo.ACTION_CLICK, /* arguments= */ null);
+
+        Assert.assertTrue(mCloseClicked.get());
+        Assert.assertEquals(TAB1_ID, mCloseTabId.get());
     }
 
     @Test
@@ -1069,7 +1141,7 @@ public class TabListViewHolderTest {
         TabGroupColorViewProvider provider =
                 new TabGroupColorViewProvider(
                         sActivity,
-                        new Token(1L, 2L),
+                        EitherGroupId.createLocalId(new LocalTabGroupId(new Token(1L, 2L))),
                         /* isIncognito= */ false,
                         TabGroupColorId.BLUE,
                         /* tabGroupSyncService= */ null,
@@ -1110,7 +1182,7 @@ public class TabListViewHolderTest {
         TabGroupColorViewProvider provider =
                 new TabGroupColorViewProvider(
                         sActivity,
-                        new Token(1L, 2L),
+                        EitherGroupId.createLocalId(new LocalTabGroupId(new Token(1L, 2L))),
                         /* isIncognito= */ false,
                         TabGroupColorId.BLUE,
                         /* tabGroupSyncService= */ null,

@@ -5,19 +5,19 @@
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
+import * as Root from '../../../core/root/root.js';
 import * as TimelineUtils from '../../../panels/timeline/utils/utils.js';
-import * as PanelUtils from '../../../panels/utils/utils.js';
-import type * as Lit from '../../../ui/lit/lit.js';
+import {html, type TemplateResult} from '../../../ui/lit/lit.js';
 import {PerformanceInsightFormatter, TraceEventFormatter} from '../data_formatters/PerformanceInsightFormatter.js';
 import {debugLog} from '../debug.js';
 
 import {
   type AgentOptions as BaseAgentOptions,
-  AgentType,
   AiAgent,
   type ContextDetail,
   type ContextResponse,
   ConversationContext,
+  type ConversationSuggestion,
   type ParsedResponse,
   type RequestOptions,
   type ResponseData,
@@ -53,21 +53,23 @@ You will be told the following information about the Insight:
 
 You will be provided with a list of relevant URLs containing up-to-date information regarding web performance optimization. Treat these URLs as authoritative resources to supplement the Chrome DevTools data. Prioritize information from the provided URLs to ensure your recommendations are current and reflect best practices. Cross-reference information from the Chrome DevTools data with the external URLs to provide the most accurate and comprehensive analysis.
 
+Additionally, you may also be asked basic questions such as "What is LCP?". Ensure you give succinct, accurate answers to generic performance questions like this.
+
 *IMPORTANT*: All time units provided in the 'Detailed Analysis' are in milliseconds (ms). Ensure your response reflects this unit of measurement.
 
 ## Step-by-step instructions
 
 - Utilize the provided functions (e.g., \`getMainThreadActivity\`, \`getNetworkActivitySummary\`) to retrieve detailed performance data. Prioritize function calls that provide context relevant to the Insight being analyzed.
+- Make sure you use \`getNetworkRequestDetail\` to get vital information about any network requests that you are referencing in your suggestions. Use this information to verify your assumptions.
 - Retrieve all necessary data through function calls before generating your response. Do not rely on assumptions or incomplete information.
 - Provide clear, actionable recommendations. Avoid technical jargon unless necessary, and explain any technical terms used.
+- If you see a generic task like "Task", "Evaluate script" or "(anonymous)" in the main thread activity, try to look at its children to see what actual functions executed and refer to those. When referencing main thread activity, be as specific as you can. Ensure you identify to the user relevant functions and which script they were defined in. Avoid referencing "Task", "Evaluate script" and "(anonymous)" nodes if possible and instead focus on their children.
 - Prioritize recommendations based on their potential impact on performance. Focus on the most significant bottlenecks.
 - Structure your response using markdown headings and bullet points for improved readability.
 - Your answer should contain the following sections:
-    1. **Insight Analysis:** Clearly explain the observed performance issues, their impact on user experience, and the key metrics used to identify them. Include relevant timestamps and durations from the provided data.
-    2. **Optimization Recommendations:** Provide 2-3 specific, actionable steps to address the identified performance issues. Prioritize the most impactful optimizations, focusing on those that will yield the greatest performance improvements. Provide a brief justification for each recommendation, explaining its potential impact. Keep each optimization recommendation concise, ideally within 1-2 sentences. Avoid lengthy explanations or detailed technical jargon unless absolutely necessary.
-    3. **Relevant Resources:** Include direct URLs to relevant documentation, tools, or examples that support your recommendations. Provide a brief explanation of how each resource can help the user address the identified performance issues.
-- Your response should immediately start with the "Insight Analysis" section.
-- Whenever possible, include direct URLs to relevant documentation, tools, or examples to support your recommendations. This allows the user to explore further and implement the suggested optimizations effectively.
+    1. **Analysis:** Based on the user's question, explain the observed performance issues, their impact on user experience, and the key metrics used to identify them. Include relevant timestamps and durations from the provided data. Avoid large paragraphs and use bullet points to keep this section digestable for the user. Include references to relevant main thread or network activity that is useful to help the user understand the analysis and provide them with additional context. Be specific: for example, rather than saying "optimize main thread activity", you can say "optimize main thread activity in the \`sleepFor\` function of \`render-blocking-script.js\`."
+    2. **Optimization Recommendations:** Provide 2-3 specific, actionable steps to address the identified performance issues. Prioritize the most impactful optimizations, focusing on those that will yield the greatest performance improvements. Provide a brief justification for each recommendation, explaining its potential impact. Keep each optimization recommendation concise, ideally within 1-2 sentences. Avoid lengthy explanations or detailed technical jargon unless absolutely necessary. Do not repeat optimizations that you have already suggested in previous responses.
+- Your response should immediately start with the "Analysis" section.
 - Be direct and to the point. Avoid unnecessary introductory phrases or filler content. Focus on delivering actionable advice efficiently.
 
 ## Strict Constraints
@@ -76,8 +78,18 @@ You will be provided with a list of relevant URLs containing up-to-date informat
     - Execute \`getMainThreadActivity\` only once *per Insight context*. If the Insight changes, you may call this function again.
     - Execute \`getNetworkActivitySummary\` only once *per Insight context*. If the Insight changes, you may call this function again.
     - Ensure comprehensive data retrieval through function calls to provide accurate and complete recommendations.
+    - Before suggesting changing the format of an image, consider what format it is already in. For example, if the mime type is image/webp, do not suggest to the user that the image is converted to WebP, as the image is already in that format.
     - Do not mention function names (e.g., \`getMainThreadActivity\`, \`getNetworkActivitySummary\`) in your output. These are internal implementation details.
     - Do not mention that you are an AI, or refer to yourself in the third person. You are simulating a performance expert.
+    - If asked about sensitive topics (religion, race, politics, sexuality, gender, etc.), respond with: "My expertise is limited to website performance analysis. I cannot provide information on that topic.".
+    - Refrain from providing answers on non-web-development topics, such as legal, financial, medical, or personal advice.
+
+## Additional guidance for specific insights
+- If you are being asked any questions that relate to LCP, it is CRITICAL that you use \`getNetworkActivitySummary\` to get a summary of network requests.
+- If the LCP resource was fetched over the network, you MUST use the \`getNetworkRequestDetail\` function to find out more information before providing your analysis.
+- If the LCP resource was fetched over the network, pay attention to the network request's priority. Important resources for LCP should have a high priority. If the LCP resource's priority is not "high", suggest optimizations to the user to change this.
+- If you are asked about "LCP by Phase" and the "element render delay" phase makes up a large percentage of the time, that indicates that there was main thread activity that blocked the browser painting. In this case, inspect the main thread activity and include information on what functions caused the main thread to be busy. Thoroughly inspect the main thread activity so you can be accurate in your responses.
+- Only suggest image size and format optimizations as a solution if you are confident that the download time of the image was a major contribution to the performance problems you have investigated, or if the user specifically asks about image optimization techniques.
 `;
 /* clang-format on */
 
@@ -90,26 +102,31 @@ export class InsightContext extends ConversationContext<TimelineUtils.InsightAIC
   }
 
   getOrigin(): string {
-    // TODO: probably use the origin of the navigation the insight is
-    // associated with? We can put that into the context.
-    return '';
+    /**
+     * We want to force a new conversation when the user imports / records a
+     * new trace. There is no concept of a "trace ID" in the trace events, and
+     * we can't use something like the main frame ID or main process ID as those
+     * can be the same if you record the same site / in the same session. We
+     * also can't use something like a URL, as people might record once, fix
+     * something, and re-record the same domain. So, we take the min & max time
+     * bounds and use that. It's not perfect but the chances of someone
+     * recording two traces with the exact same microsec start & end time are
+     * pretty small...
+     */
+    const {min, max} = this.#insight.parsedTrace.Meta.traceBounds;
+    return `trace-${min}-${max}`;
   }
 
   getItem(): TimelineUtils.InsightAIContext.ActiveInsight {
     return this.#insight;
   }
 
-  override getIcon(): HTMLElement {
-    const iconData = {
-      iconName: 'performance',
-      color: 'var(--sys-color-on-surface-subtle)',
-    };
-    const icon = PanelUtils.PanelUtils.createIconElement(iconData, 'Performance');
-    icon.classList.add('icon');
-    return icon;
+  override getIcon(): TemplateResult {
+    return html`<devtools-icon name="performance" title="Performance"
+        style="color: var(--sys-color-on-surface-subtle);"></devtools-icon>`;
   }
 
-  override getTitle(): string|ReturnType<typeof Lit.Directives.until> {
+  override getTitle(): string {
     return `Insight: ${this.#insight.title()}`;
   }
 
@@ -117,73 +134,99 @@ export class InsightContext extends ConversationContext<TimelineUtils.InsightAIC
    * Presents the default suggestions that are shown when the user first clicks
    * "Ask AI" on an Insight.
    */
-  override getSuggestions(): [string, ...string[]] {
+  override async getSuggestions(): Promise<[ConversationSuggestion, ...ConversationSuggestion[]]> {
     switch (this.#insight.insight.insightKey) {
       case 'CLSCulprits':
         return [
-          'How can I improve my CLS score',
-          'How can I prevent layout shifts on this page?',
+          {title: 'Help me optimize my CLS score'},
+          {title: 'How can I prevent layout shifts on this page?'},
         ];
       case 'DocumentLatency':
         return [
-          'How do I decrease the initial loading time of my page?',
-          'Did anything slow down the request for this document?',
+          {title: 'How do I decrease the initial loading time of my page?'},
+          {title: 'Did anything slow down the request for this document?'},
 
         ];
       case 'DOMSize':
-        return ['How can I reduce the size of my DOM?'];
+        return [{title: 'How can I reduce the size of my DOM?'}];
       case 'DuplicatedJavaScript':
-        return ['How do I deduplicate the identified scripts in my bundle?'];
+        return [{title: 'How do I deduplicate the identified scripts in my bundle?'}];
       case 'FontDisplay':
-        return ['How can I update my CSS to avoid layout shifts caused by incorrect `font-display` properties?'];
+        return [
+          {title: 'How can I update my CSS to avoid layout shifts caused by incorrect `font-display` properties?'}
+        ];
       case 'ForcedReflow':
-        return ['How can I avoid layout thrashing?', 'What is forced reflow and why is it problematic?'];
+        return [
+          {title: 'How can I avoid layout thrashing?'}, {title: 'What is forced reflow and why is it problematic?'}
+        ];
       case 'ImageDelivery':
-        return ['What should I do to improve and optimize the time taken to fetch and display images on the page?'];
+        return [
+          {title: 'What should I do to improve and optimize the time taken to fetch and display images on the page?'}
+        ];
       case 'InteractionToNextPaint':
         return [
-          'Help me optimize my INP score', 'Help me understand why a large INP score is problematic',
-          'What was the biggest contributor to my longest interaction duration time?'
+          {title: 'Suggest fixes for my longest interaction'}, {title: 'Why is a large INP score problematic?'},
+          {title: 'What\'s the biggest contributor to my longest interaction?'}
         ];
       case 'LCPDiscovery':
         return [
-          'Help me optimize my LCP score', 'What can I do to reduce my LCP discovery time?',
-          'Why is LCP discovery time important?'
+          {title: 'Suggest fixes to reduce my LCP'}, {title: 'What can I do to reduce my LCP discovery time?'},
+          {title: 'Why is LCP discovery time important?'}
         ];
       case 'LCPPhases':
         return [
-          'Help me optimize my LCP score', 'Which LCP phase was most problematic?',
-          'What can I do to reduce the LCP time for this page load?'
+          {title: 'Help me optimize my LCP score'}, {title: 'Which LCP phase was most problematic?'},
+          {title: 'What can I do to reduce the LCP time for this page load?'}
         ];
       case 'NetworkDependencyTree':
-        return ['How do I optimize my network dependency tree?'];
+        return [{title: 'How do I optimize my network dependency tree?'}];
       case 'RenderBlocking':
         return [
-          'Show me the render blocking requests, listed by impact',
-          'How can I reduce the number of render blocking requests?'
+          {title: 'Show me the most impactful render blocking requests that I should focus on'},
+          {title: 'How can I reduce the number of render blocking requests?'}
         ];
       case 'SlowCSSSelector':
-        return ['How can I optimize my CSS to increase the performance of CSS selectors?'];
+        return [{title: 'How can I optimize my CSS to increase the performance of CSS selectors?'}];
       case 'ThirdParties':
-        return ['Which third parties are having the largest impact on my page performance?'];
+        return [{title: 'Which third parties are having the largest impact on my page performance?'}];
       case 'Cache':
-        return ['What caching strategies can I apply to improve my page performance?'];
+        return [{title: 'What caching strategies can I apply to improve my page performance?'}];
       case 'Viewport':
-        return ['How do I make sure my page is optimized for mobile viewing?'];
+        return [{title: 'How do I make sure my page is optimized for mobile viewing?'}];
       case 'ModernHTTP':
-        return ['Is my site being served using the recommended HTTP best practices?'];
+        return [{title: 'Is my site being served using the recommended HTTP best practices?'}];
       case 'LegacyJavaScript':
-        return ['Is my site polyfilling modern JavaScript features?'];
+        return [{title: 'Is my site polyfilling modern JavaScript features?'}];
       default:
         Platform.assertNever(this.#insight.insight.insightKey, 'Unknown insight key');
     }
   }
 }
 
+// 16k Tokens * ~4 char per token.
+const MAX_FUNCTION_RESULT_BYTE_LENGTH = 16384 * 4;
+
 export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAIContext.ActiveInsight> {
   #insight: ConversationContext<TimelineUtils.InsightAIContext.ActiveInsight>|undefined;
 
   #lastContextForEnhancedQuery: ConversationContext<TimelineUtils.InsightAIContext.ActiveInsight>|undefined;
+
+  /**
+   * Store results (as facts) for the functions that are pure and return the
+   * same data for the same insight.
+   * This fact is then passed into the request on all future
+   * queries for the conversation. This means that the LLM is far less likely to
+   * call the function again, because we have provided the same data as a
+   * fact. We cache based on the active insight to ensure that if the user
+   * changes which insight they are focusing we will call the function again.
+   * It's important that we store it as a Fact in the cache, because the AI
+   * Agent stores facts in a set, and we need to pass the same object through to
+   * make sure it isn't mistakenly duplicated in the request.
+   */
+  #functionCallCache = new Map<TimelineUtils.InsightAIContext.ActiveInsight, {
+    getNetworkActivitySummary?: Host.AidaClient.RequestFact,
+    getMainThreadActivity?: Host.AidaClient.RequestFact,
+  }>();
 
   override async *
       handleContextDetails(activeContext: ConversationContext<TimelineUtils.InsightAIContext.ActiveInsight>|null):
@@ -206,18 +249,24 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
     yield {type: ResponseType.CONTEXT, title, details: [titleDetail]};
   }
 
-  override readonly type = AgentType.PERFORMANCE_INSIGHT;
   readonly preamble = preamble;
   readonly clientFeature = Host.AidaClient.ClientFeature.CHROME_PERFORMANCE_INSIGHTS_AGENT;
 
+  // Note: for both userTier and options we purposefully reuse the flags from
+  // the Performance Agent, rather than define new ones as we didn't think that
+  // was necessary.
+
   get userTier(): string|undefined {
-    return 'TESTERS';
+    return Root.Runtime.hostConfig.devToolsAiAssistancePerformanceAgent?.userTier;
   }
 
   get options(): RequestOptions {
+    const temperature = Root.Runtime.hostConfig.devToolsAiAssistancePerformanceAgent?.temperature;
+    const modelId = Root.Runtime.hostConfig.devToolsAiAssistancePerformanceAgent?.modelId;
+
     return {
-      temperature: undefined,
-      modelId: undefined,
+      temperature,
+      modelId,
     };
   }
 
@@ -253,6 +302,25 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
         );
         const formatted =
             requests.map(r => TraceEventFormatter.networkRequest(r, activeInsight.parsedTrace, {verbose: false}));
+
+        const byteCount = Platform.StringUtilities.countWtf8Bytes(formatted.join('\n'));
+        Host.userMetrics.performanceAINetworkSummaryResponseSize(byteCount);
+
+        if (this.#isFunctionResponseTooLarge(formatted.join('\n'))) {
+          return {
+            error: 'getNetworkActivitySummary response is too large. Try investigating using other functions',
+          };
+        }
+        const summaryFact: Host.AidaClient.RequestFact = {
+          text:
+              `This is the network summary for this insight. You can use this and not call getNetworkActivitySummary again:\n${
+                  formatted.join('\n')}`,
+          metadata: {source: 'getNetworkActivitySummary()'}
+        };
+        const cacheForInsight = this.#functionCallCache.get(activeInsight) ?? {};
+        cacheForInsight.getNetworkActivitySummary = summaryFact;
+        this.#functionCallCache.set(activeInsight, cacheForInsight);
+
         return {result: {requests: formatted}};
       },
     });
@@ -260,7 +328,8 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
     this.declareFunction<Record<'url', string>, {
       request: string,
     }>('getNetworkRequestDetail', {
-      description: 'Returns detailed debugging information about a specific network request',
+      description:
+          'Returns detailed debugging information about a specific network request. Use this eagerly to gather information about a network request to improve your diagnosis and optimization recommendations',
       parameters: {
         type: Host.AidaClient.ParametersTypes.OBJECT,
         description: '',
@@ -290,6 +359,11 @@ export class PerformanceInsightsAgent extends AiAgent<TimelineUtils.InsightAICon
           return {error: 'Request not found'};
         }
         const formatted = TraceEventFormatter.networkRequest(request, activeInsight.parsedTrace, {verbose: true});
+        if (this.#isFunctionResponseTooLarge(formatted)) {
+          return {
+            error: 'getNetworkRequestDetail response is too large. Try investigating using other functions',
+          };
+        }
         return {result: {request: formatted}};
       },
     });
@@ -339,10 +413,30 @@ The fields are:
         if (!tree) {
           return {error: 'No main thread activity found'};
         }
-        return {result: {activity: tree.serialize()}};
+        const activity = tree.serialize();
+        if (this.#isFunctionResponseTooLarge(activity)) {
+          return {
+            error: 'getMainThreadActivity response is too large. Try investigating using other functions',
+          };
+        }
+        const activityFact: Host.AidaClient.RequestFact = {
+          text:
+              `This is the main thread activity for this insight. You can use this and not call getMainThreadActivity again:\n${
+                  activity}`,
+          metadata: {source: 'getMainThreadActivity()'},
+        };
+        const cacheForInsight = this.#functionCallCache.get(activeInsight) ?? {};
+        cacheForInsight.getMainThreadActivity = activityFact;
+        this.#functionCallCache.set(activeInsight, cacheForInsight);
+
+        return {result: {activity}};
       },
 
     });
+  }
+
+  #isFunctionResponseTooLarge(response: string): boolean {
+    return response.length > MAX_FUNCTION_RESULT_BYTE_LENGTH;
   }
 
   override parseTextResponse(response: string): ParsedResponse {
@@ -376,7 +470,8 @@ The fields are:
     // User clicks Insight B. We now need to send info on Insight B with the prompt.
     // User clicks Insight A. We should resend the Insight info with the prompt.
     const includeInsightInfo = selectedInsight !== this.#lastContextForEnhancedQuery;
-    const extraQuery = `${includeInsightInfo ? formatter.formatInsight() + '\n\n' : ''}# User request:\n`;
+    const extraQuery =
+        `${includeInsightInfo ? formatter.formatInsight() + '\n\n' : ''}# User question for you to answer:\n`;
 
     const finalQuery = `${extraQuery}${query}`;
     this.#lastContextForEnhancedQuery = selectedInsight;
@@ -384,9 +479,19 @@ The fields are:
   }
 
   override async * run(initialQuery: string, options: {
-    signal?: AbortSignal, selected: ConversationContext<TimelineUtils.InsightAIContext.ActiveInsight>|null,
+    selected: ConversationContext<TimelineUtils.InsightAIContext.ActiveInsight>|null,
+    signal?: AbortSignal,
   }): AsyncGenerator<ResponseData, void, void> {
     this.#insight = options.selected ?? undefined;
+
+    // Clear any previous facts in case the user changed the active context.
+    this.clearFacts();
+    const cachedFunctionCalls = this.#insight ? this.#functionCallCache.get(this.#insight.getItem()) : null;
+    if (cachedFunctionCalls) {
+      for (const fact of Object.values(cachedFunctionCalls)) {
+        this.addFact(fact);
+      }
+    }
 
     return yield* super.run(initialQuery, options);
   }

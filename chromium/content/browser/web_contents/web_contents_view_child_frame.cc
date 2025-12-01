@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/notimplemented.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
@@ -177,18 +178,18 @@ void WebContentsViewChildFrame::DestroyBackForwardTransitionAnimationManager() {
 }
 
 void WebContentsViewChildFrame::RestoreFocus() {
-  NOTREACHED();
+  NOTIMPLEMENTED();
 }
 
 void WebContentsViewChildFrame::Focus() {
   // VB-108626. To be examined (hard to reproduce)
   if (!vivaldi::IsVivaldiRunning()) {
-  NOTREACHED();
+  NOTIMPLEMENTED();
   } // End Vivaldi
 }
 
 void WebContentsViewChildFrame::StoreFocus() {
-  NOTREACHED();
+  NOTIMPLEMENTED();
 }
 
 void WebContentsViewChildFrame::FocusThroughTabTraversal(bool reverse) {

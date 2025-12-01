@@ -1,6 +1,8 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../../ui/components/menus/menus.js';
 
@@ -14,11 +16,7 @@ import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 
-import ignoreListSettingStylesRaw from './ignoreListSetting.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const ignoreListSettingStyles = new CSSStyleSheet();
-ignoreListSettingStyles.replaceSync(ignoreListSettingStylesRaw.cssText);
+import ignoreListSettingStyles from './ignoreListSetting.css.js';
 
 const {html} = Lit;
 
@@ -62,7 +60,6 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class IgnoreListSetting extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #renderBound = this.#render.bind(this);
   readonly #ignoreListEnabled: Common.Settings.Setting<boolean> =
       Common.Settings.Settings.instance().moduleSetting('enable-ignore-listing');
   readonly #regexPatterns = this.#getSkipStackFramesPatternSetting().getAsArray();
@@ -89,7 +86,6 @@ export class IgnoreListSetting extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [ignoreListSettingStyles];
     this.#scheduleRender();
 
     // Prevent the event making its way to the TimelinePanel element which will
@@ -100,7 +96,7 @@ export class IgnoreListSetting extends HTMLElement {
   }
 
   #scheduleRender(): void {
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #getSkipStackFramesPatternSetting(): Common.Settings.RegExpSetting {
@@ -135,7 +131,7 @@ export class IgnoreListSetting extends HTMLElement {
   }
 
   #resetInput(): void {
-    this.#newRegexCheckbox.checkboxElement.checked = false;
+    this.#newRegexCheckbox.checked = false;
     this.#newRegexInput.value = '';
   }
 
@@ -226,7 +222,7 @@ export class IgnoreListSetting extends HTMLElement {
    * not deal with enabling/disabling the new regex.
    */
   #onExistingRegexEnableToggle(regex: Common.Settings.RegExpSettingItem, checkbox: UI.UIUtils.CheckboxLabel): void {
-    regex.disabled = !checkbox.checkboxElement.checked;
+    regex.disabled = !checkbox.checked;
     // Technically we don't need to call the set function, because the regex is a reference, so it changed the setting
     // value directly.
     // But we need to call the set function to trigger the setting change event. which is needed by view update of flame
@@ -245,11 +241,11 @@ export class IgnoreListSetting extends HTMLElement {
 
   #renderItem(regex: Common.Settings.RegExpSettingItem, index: number): Lit.TemplateResult {
     const checkboxWithLabel = UI.UIUtils.CheckboxLabel.createWithStringLiteral(
-        regex.pattern, !regex.disabled, /* subtitle*/ undefined, /* jslogContext*/ 'timeline.ignore-list-pattern');
+        regex.pattern, !regex.disabled, /* jslogContext*/ 'timeline.ignore-list-pattern');
     const helpText = i18nString(UIStrings.ignoreScriptsWhoseNamesMatchS, {regex: regex.pattern});
     UI.Tooltip.Tooltip.install(checkboxWithLabel, helpText);
-    checkboxWithLabel.checkboxElement.ariaLabel = helpText;
-    checkboxWithLabel.checkboxElement.addEventListener(
+    checkboxWithLabel.ariaLabel = helpText;
+    checkboxWithLabel.addEventListener(
         'change', this.#onExistingRegexEnableToggle.bind(this, regex, checkboxWithLabel), false);
     // clang-format off
     return html`
@@ -274,6 +270,7 @@ export class IgnoreListSetting extends HTMLElement {
     }
     // clang-format off
     const output = html`
+      <style>${ignoreListSettingStyles}</style>
       <devtools-button-dialog .data=${{
           openOnRender: false,
           jslogContext: 'timeline.ignore-list',

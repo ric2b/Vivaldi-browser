@@ -139,7 +139,9 @@ public interface TabGroupModelFilter extends SupportsTabModelObserver {
      *
      * @param tabId The tab id of the tab to create the group for.
      */
-    void createSingleTabGroup(@TabId int tabId);
+    default void createSingleTabGroup(@TabId int tabId) {
+        createSingleTabGroup(getTabModel().getTabByIdChecked(tabId));
+    }
 
     /** Same as {@link #createSingleTabGroup(int)}, but with a {@link Tab} object. */
     void createSingleTabGroup(Tab tab);
@@ -165,7 +167,9 @@ public interface TabGroupModelFilter extends SupportsTabModelObserver {
      * @param sourceTabId The id of the {@link Tab} to get the source group.
      * @param destinationTabId The id of a {@link Tab} to get the destination group.
      */
-    void mergeTabsToGroup(@TabId int sourceTabId, @TabId int destinationTabId);
+    default void mergeTabsToGroup(@TabId int sourceTabId, @TabId int destinationTabId) {
+        mergeTabsToGroup(sourceTabId, destinationTabId, /* skipUpdateTabModel= */ false);
+    }
 
     /**
      * This method merges the source group that contains the {@code sourceTabId} to the destination
@@ -249,14 +253,14 @@ public interface TabGroupModelFilter extends SupportsTabModelObserver {
     @Nullable String getTabGroupTitle(@TabId int rootId);
 
     /** Stores the given title for the tab group. */
-    void setTabGroupTitle(@TabId int rootId, String title);
+    void setTabGroupTitle(@TabId int rootId, @Nullable String title);
 
     /** Deletes the stored title for the tab group, defaulting it back to "N tabs." */
     void deleteTabGroupTitle(@TabId int rootId);
 
     /**
      * This method fetches tab group colors id for the specified tab group. It will be a {@link
-     * TabGroupColorId} if found, otherwise a {@link TabGroupTitleUtils.INVALID_COLOR_ID} if there
+     * TabGroupColorId} if found, otherwise a {@link TabGroupColorUtils.INVALID_COLOR_ID} if there
      * is no color entry for the group.
      */
     int getTabGroupColor(@TabId int rootId);
@@ -282,7 +286,12 @@ public interface TabGroupModelFilter extends SupportsTabModelObserver {
     boolean getTabGroupCollapsed(@TabId int rootId);
 
     /** Sets whether the tab group is expanded or collapsed. */
-    void setTabGroupCollapsed(@TabId int rootId, boolean isCollapsed);
+    default void setTabGroupCollapsed(@TabId int rootId, boolean isCollapsed) {
+        setTabGroupCollapsed(rootId, isCollapsed, /* animate= */ false);
+    }
+
+    /** Sets whether the tab group is expanded or collapsed, with optional animation. */
+    void setTabGroupCollapsed(@TabId int rootId, boolean isCollapsed, boolean animate);
 
     /** Deletes the record that the group is collapsed, setting it to expanded. */
     void deleteTabGroupCollapsed(@TabId int rootId);

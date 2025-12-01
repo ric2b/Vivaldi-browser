@@ -602,15 +602,14 @@ class TLSFuzzer {
     b->protocol = protocol_;
     CBS_init(&b->cbs, in, len);
 
-    bssl::UniquePtr<BIO> bio(BIO_new(&kBIOMethod));
-    bio->init = 1;
-    bio->ptr = b;
+    bssl::UniquePtr<BIO> bio(BIO_new(BIOMethod()));
+    BIO_set_init(bio.get(), 1);
+    BIO_set_data(bio.get(), b);
     return bio;
   }
 
   static int BIORead(BIO *bio, char *out, int len) {
-    assert(bio->method == &kBIOMethod);
-    BIOData *b = reinterpret_cast<BIOData *>(bio->ptr);
+    BIOData *b = reinterpret_cast<BIOData *>(BIO_get_data(bio));
     if (b->protocol == kTLS) {
       len = std::min(static_cast<size_t>(len), CBS_len(&b->cbs));
       memcpy(out, CBS_data(&b->cbs), len);
@@ -629,32 +628,27 @@ class TLSFuzzer {
   }
 
   static int BIODestroy(BIO *bio) {
-    assert(bio->method == &kBIOMethod);
-    BIOData *b = reinterpret_cast<BIOData *>(bio->ptr);
+    BIOData *b = reinterpret_cast<BIOData *>(BIO_get_data(bio));
     delete b;
     return 1;
   }
 
-  static const BIO_METHOD kBIOMethod;
+  static const BIO_METHOD *BIOMethod() {
+    static const BIO_METHOD *method = [] {
+      BIO_METHOD *ret = BIO_meth_new(0, nullptr);
+      BSSL_CHECK(ret);
+      BSSL_CHECK(BIO_meth_set_read(ret, BIORead));
+      BSSL_CHECK(BIO_meth_set_destroy(ret, BIODestroy));
+      return ret;
+    }();
+    return method;
+  }
 
   bool debug_;
   Protocol protocol_;
   Role role_;
   bssl::UniquePtr<SSL_CTX> ctx_;
   std::vector<uint8_t> handoff_, handback_;
-};
-
-const BIO_METHOD TLSFuzzer::kBIOMethod = {
-    0,        // type
-    nullptr,  // name
-    nullptr,  // bwrite
-    TLSFuzzer::BIORead,
-    nullptr,  // bputs
-    nullptr,  // bgets
-    nullptr,  // ctrl
-    nullptr,  // create
-    TLSFuzzer::BIODestroy,
-    nullptr,  // callback_ctrl
 };
 
 }  // namespace

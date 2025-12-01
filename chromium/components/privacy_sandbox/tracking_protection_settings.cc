@@ -12,12 +12,14 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/content_settings/core/common/pref_names.h"
+#include "components/policy/core/common/management/platform_management_service.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/privacy_sandbox/privacy_sandbox_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_prefs.h"
 #include "components/privacy_sandbox/tracking_protection_settings_observer.h"
+#include "net/base/features.h"
 #include "url/gurl.h"
 
 namespace privacy_sandbox {
@@ -25,9 +27,11 @@ namespace privacy_sandbox {
 TrackingProtectionSettings::TrackingProtectionSettings(
     PrefService* pref_service,
     HostContentSettingsMap* host_content_settings_map,
+    policy::ManagementService* management_service,
     bool is_incognito)
     : pref_service_(pref_service),
       host_content_settings_map_(host_content_settings_map),
+      management_service_(management_service),
       is_incognito_(is_incognito) {
   CHECK(pref_service_);
   CHECK(host_content_settings_map_);
@@ -72,21 +76,6 @@ TrackingProtectionSettings::TrackingProtectionSettings(
 
   // It's possible enterprise status changed while profile was shut down.
   OnEnterpriseControlForPrefsChanged();
-
-  // If feature status changed then we need to migrate content settings.
-  if (base::FeatureList::IsEnabled(kTrackingProtectionContentSettingFor3pcb) &&
-      !pref_service_->GetBoolean(prefs::kUserBypass3pcExceptionsMigrated)) {
-    MigrateUserBypassExceptions(ContentSettingsType::COOKIES,
-                                ContentSettingsType::TRACKING_PROTECTION);
-    pref_service_->SetBoolean(prefs::kUserBypass3pcExceptionsMigrated, true);
-  } else if (!base::FeatureList::IsEnabled(
-                 kTrackingProtectionContentSettingFor3pcb) &&
-             pref_service_->GetBoolean(
-                 prefs::kUserBypass3pcExceptionsMigrated)) {
-    MigrateUserBypassExceptions(ContentSettingsType::TRACKING_PROTECTION,
-                                ContentSettingsType::COOKIES);
-    pref_service_->SetBoolean(prefs::kUserBypass3pcExceptionsMigrated, false);
-  }
 }
 
 TrackingProtectionSettings::~TrackingProtectionSettings() = default;
@@ -94,6 +83,7 @@ TrackingProtectionSettings::~TrackingProtectionSettings() = default;
 void TrackingProtectionSettings::Shutdown() {
   observers_.Clear();
   host_content_settings_map_ = nullptr;
+  management_service_ = nullptr;
   pref_change_registrar_.Reset();
   pref_service_ = nullptr;
 }
@@ -118,8 +108,8 @@ bool TrackingProtectionSettings::IsIpProtectionEnabled() const {
 
 bool TrackingProtectionSettings::IsFpProtectionEnabled() const {
   return pref_service_->GetBoolean(prefs::kFingerprintingProtectionEnabled) &&
-         base::FeatureList::IsEnabled(kFingerprintingProtectionUx) &&
-         is_incognito_;
+         is_incognito_ &&
+         base::FeatureList::IsEnabled(kFingerprintingProtectionUx);
 }
 
 bool TrackingProtectionSettings::IsDoNotTrackEnabled() const {
@@ -159,6 +149,19 @@ bool TrackingProtectionSettings::HasTrackingProtectionException(
              info) == CONTENT_SETTING_ALLOW;
 }
 
+bool TrackingProtectionSettings::IsIpProtectionDisabledForEnterprise() {
+  if (pref_service_->IsManagedPreference(prefs::kIpProtectionEnabled)) {
+    return !pref_service_->GetBoolean(prefs::kIpProtectionEnabled);
+  }
+  if (net::features::kIpPrivacyDisableForEnterpriseByDefault.Get()) {
+    // Disable IP Protection for managed profiles and managed devices when the
+    // admins haven't explicitly opted in to it via enterprise policy.
+    return management_service_->IsManaged() ||
+           policy::PlatformManagementService::GetInstance()->IsManaged();
+  }
+  return false;
+}
+
 // TODO(https://b/333527273): Delete with Mode B cleanup
 void TrackingProtectionSettings::OnEnterpriseControlForPrefsChanged() {
   if (!IsTrackingProtection3pcdEnabled()) {
@@ -169,36 +172,6 @@ void TrackingProtectionSettings::OnEnterpriseControlForPrefsChanged() {
       pref_service_->IsManagedPreference(
           prefs::kPrivacySandboxRelatedWebsiteSetsEnabled)) {
     pref_service_->SetBoolean(prefs::kTrackingProtection3pcdEnabled, false);
-  }
-}
-
-void TrackingProtectionSettings::MigrateUserBypassExceptions(
-    ContentSettingsType from,
-    ContentSettingsType to) {
-  // Gives us a bit of padding and there's no need to migrate an exception
-  // expiring within the next 5 minutes.
-  const base::Time now = base::Time::Now() + base::Minutes(5);
-  ContentSettingsForOneType existing_exceptions =
-      host_content_settings_map_->GetSettingsForOneType(from);
-  for (auto exception : existing_exceptions) {
-    // Ensure the exception comes from user bypass.
-    if (exception.metadata.expiration() <= now ||
-        !exception.primary_pattern.MatchesAllHosts() ||
-        exception.secondary_pattern.MatchesAllHosts() ||
-        exception.setting_value != CONTENT_SETTING_ALLOW) {
-      continue;
-    }
-    // Add an exception for the type we're migrating to.
-    content_settings::ContentSettingConstraints constraints;
-    constraints.set_lifetime(exception.metadata.expiration() -
-                             base::Time::Now());
-    host_content_settings_map_->SetContentSettingCustomScope(
-        ContentSettingsPattern::Wildcard(), exception.secondary_pattern, to,
-        CONTENT_SETTING_ALLOW, constraints);
-    // Remove the exception for the type we're migrating from.
-    host_content_settings_map_->SetContentSettingCustomScope(
-        ContentSettingsPattern::Wildcard(), exception.secondary_pattern, from,
-        CONTENT_SETTING_DEFAULT);
   }
 }
 

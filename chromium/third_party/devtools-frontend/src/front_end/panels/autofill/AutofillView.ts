@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../ui/components/adorners/adorners.js';
 import '../../ui/legacy/components/data_grid/data_grid.js';
@@ -12,23 +13,12 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as Protocol from '../../generated/protocol.js';
 import * as AutofillManager from '../../models/autofill_manager/autofill_manager.js';
 import * as ComponentHelpers from '../../ui/components/helpers/helpers.js';
-import * as Input from '../../ui/components/input/input.js';
 import * as LegacyWrapper from '../../ui/components/legacy_wrapper/legacy_wrapper.js';
-// inspectorCommonStyles is imported for the empty state styling that is used for the start view
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStylesRaw from '../../ui/legacy/inspectorCommon.css.js';
+import * as UI from '../../ui/legacy/legacy.js';
 import * as Lit from '../../ui/lit/lit.js';
 import * as VisualLogging from '../../ui/visual_logging/visual_logging.js';
 
-import autofillViewStylesRaw from './autofillView.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const autofillViewStyles = new CSSStyleSheet();
-autofillViewStyles.replaceSync(autofillViewStylesRaw.cssText);
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const inspectorCommonStyles = new CSSStyleSheet();
-inspectorCommonStyles.replaceSync(inspectorCommonStylesRaw.cssText);
+import autofillViewStyles from './autofillView.css.js';
 
 const {html, render, Directives: {styleMap}} = Lit;
 const {FillingStrategy} = Protocol.Autofill;
@@ -117,7 +107,6 @@ export const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #renderBound = this.#render.bind(this);
   #autoOpenViewSetting: Common.Settings.Setting<boolean>;
   #showTestAddressesInAutofillMenuSetting: Common.Settings.Setting<boolean>;
   #address = '';
@@ -134,7 +123,6 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [Input.checkboxStyles, autofillViewStyles, inspectorCommonStyles];
     const autofillManager = AutofillManager.AutofillManager.AutofillManager.instance();
     const formFilledEvent = autofillManager.getLastFilledAddressForm();
     if (formFilledEvent) {
@@ -151,7 +139,7 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
         SDK.ResourceTreeModel.ResourceTreeModel, SDK.ResourceTreeModel.Events.PrimaryPageChanged,
         this.#onPrimaryPageChanged, this);
 
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #onPrimaryPageChanged(): void {
@@ -159,7 +147,7 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
     this.#filledFields = [];
     this.#matches = [];
     this.#highlightedMatches = [];
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #onAddressFormFilled(
@@ -170,7 +158,7 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
       matches: this.#matches,
     } = data);
     this.#highlightedMatches = [];
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   async #render(): Promise<void> {
@@ -182,24 +170,24 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
       render(html`
+        <style>${autofillViewStyles}</style>
+        <style>${UI.inspectorCommonStyles}</style>
         <main>
           <div class="top-left-corner">
-            <label class="checkbox-label" title=${i18nString(UIStrings.showTestAddressesInAutofillMenu)}>
-              <input
-                type="checkbox"
+            <devtools-checkbox
                 ?checked=${this.#showTestAddressesInAutofillMenuSetting.get()}
+                title=${i18nString(UIStrings.showTestAddressesInAutofillMenu)}
                 @change=${this.#onShowTestAddressesInAutofillMenuChanged.bind(this)}
                 jslog=${VisualLogging.toggle(this.#showTestAddressesInAutofillMenuSetting.name).track({ change: true })}>
-              <span>${i18nString(UIStrings.showTestAddressesInAutofillMenu)}</span>
-            </label>
-            <label class="checkbox-label" title=${i18nString(UIStrings.autoShowTooltip)}>
-            <input
-              type="checkbox"
-              ?checked=${this.#autoOpenViewSetting.get()}
-              @change=${this.#onAutoOpenCheckboxChanged.bind(this)}
-              jslog=${VisualLogging.toggle(this.#autoOpenViewSetting.name).track({ change: true })}>
-            <span>${i18nString(UIStrings.autoShow)}</span>
-            </label>
+              ${i18nString(UIStrings.showTestAddressesInAutofillMenu)}
+            </devtools-checkbox>
+            <devtools-checkbox
+                title=${i18nString(UIStrings.autoShowTooltip)}
+                ?checked=${this.#autoOpenViewSetting.get()}
+                @change=${this.#onAutoOpenCheckboxChanged.bind(this)}
+                jslog=${VisualLogging.toggle(this.#autoOpenViewSetting.name).track({ change: true })}>
+              ${i18nString(UIStrings.autoShow)}
+            </devtools-checkbox>
             <x-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslog=${VisualLogging.link('feedback').track({click: true})}>${i18nString(UIStrings.sendFeedback)}</x-link>
           </div>
           <div class="placeholder-container" jslog=${VisualLogging.pane('autofill-empty')}>
@@ -220,31 +208,29 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
+      <style>${autofillViewStyles}</style>
+      <style>${UI.inspectorCommonStyles}</style>
       <main>
         <div class="content-container" jslog=${VisualLogging.pane('autofill')}>
           <div class="right-to-left" role="region" aria-label=${i18nString(UIStrings.addressPreview)}>
             <div class="header">
               <div class="label-container">
-                <label class="checkbox-label" title=${i18nString(UIStrings.showTestAddressesInAutofillMenu)}>
-                  <input
-                    type="checkbox"
+                <devtools-checkbox
+                    title=${i18nString(UIStrings.showTestAddressesInAutofillMenu)}
                     ?checked=${this.#showTestAddressesInAutofillMenuSetting.get()}
                     @change=${this.#onShowTestAddressesInAutofillMenuChanged.bind(this)}
                     jslog=${VisualLogging.toggle(this.#showTestAddressesInAutofillMenuSetting.name).track({ change: true })}
-                  >
-                  <span>${i18nString(UIStrings.showTestAddressesInAutofillMenu)}</span>
-                </label>
+                  >${i18nString(UIStrings.showTestAddressesInAutofillMenu)}
+                </devtools-checkbox>
               </div>
               <div class="label-container">
-                <label class="checkbox-label" title=${i18nString(UIStrings.autoShowTooltip)}>
-                  <input
-                    type="checkbox"
+                <devtools-checkbox
+                    title=${i18nString(UIStrings.autoShowTooltip)}
                     ?checked=${this.#autoOpenViewSetting.get()}
                     @change=${this.#onAutoOpenCheckboxChanged.bind(this)}
                     jslog=${VisualLogging.toggle(this.#autoOpenViewSetting.name).track({ change: true })}
-                  >
-                  <span>${i18nString(UIStrings.autoShow)}</span>
-                </label>
+                  >${i18nString(UIStrings.autoShow)}
+                </devtools-checkbox>
               </div>
               <x-link href=${AUTOFILL_FEEDBACK_URL} class="feedback link" jslog=${VisualLogging.link('feedback').track({click: true})}>${i18nString(UIStrings.sendFeedback)}</x-link>
             </div>
@@ -325,12 +311,12 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
   #onSpanMouseEnter(startIndex: number): void {
     this.#highlightedMatches =
         this.#matches.filter(match => match.startIndex <= startIndex && match.endIndex > startIndex);
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #onSpanMouseLeave(): void {
     this.#highlightedMatches = [];
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #renderFilledFields(): Lit.LitTemplate {
@@ -387,7 +373,7 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
 
   #onGridRowMouseEnter(rowIndex: number): void {
     this.#highlightedMatches = this.#matches.filter(match => match.filledFieldIndex === rowIndex);
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
 
     const backendNodeId = this.#filledFields[rowIndex].fieldId;
     const target = SDK.FrameManager.FrameManager.instance()
@@ -405,7 +391,7 @@ export class AutofillView extends LegacyWrapper.LegacyWrapper.WrappableComponent
 
   #onGridRowMouseLeave(): void {
     this.#highlightedMatches = [];
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
     SDK.OverlayModel.OverlayModel.hideDOMNodeHighlight();
   }
 }

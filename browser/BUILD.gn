@@ -1,3 +1,4 @@
+import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/version.gni")
 import("//chrome/version.gni")
 import("//extensions/buildflags/buildflags.gni")
@@ -10,13 +11,18 @@ static_library("browser") {
     "//vivaldi/prefs:prefs_files_generator",
     "//vivaldi/ui",
   ]
-  if (!is_android) {
+  if (!is_android && !is_ios) {
     public_deps += [
       "//vivaldi/extensions",
       "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/schema",
       "//vivaldi/vivapp",
     ]
+    if (vivaldi_v8_context_snapshot) {
+      public_deps += [
+        "//vivaldi/vivapp:generate_custom_v8_snapshot",
+      ]
+    }
   }
   deps = [
     ":default_bookmarks",
@@ -79,8 +85,6 @@ static_library("browser") {
   sources = [
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.cc",
     "../components/adverse_adblocking/adverse_ad_filter_list_factory.h",
-    "../components/ping_block/ping_block.cc",
-    "../components/ping_block/ping_block.h",
     "translate/vivaldi_translate_language_list.cc",
     "translate/vivaldi_translate_language_list.h",
     "translate/vivaldi_translate_server_request.cc",

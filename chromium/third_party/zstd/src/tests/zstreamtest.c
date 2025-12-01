@@ -1896,7 +1896,7 @@ static int basicUnitTests(U32 seed, double compressibility, int bigTests)
         CHECK_Z(ZSTD_CCtx_setParameter(zc, ZSTD_c_checksumFlag, 1));
         /* Write a bunch of 6 byte blocks */
         while (remainingInput > 0) {
-          char testBuffer[6] = "\xAA\xAA\xAA\xAA\xAA\xAA";
+          char testBuffer[6] = { 0x66, 0x66, 0x66, 0x66, 0x66, 0x66 };
           const size_t kSmallBlockSize = sizeof(testBuffer);
           ZSTD_inBuffer in = {testBuffer, kSmallBlockSize, 0};
 

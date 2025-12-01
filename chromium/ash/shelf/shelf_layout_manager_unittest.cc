@@ -69,6 +69,7 @@
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/splitview/split_view_types.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller_test_api.h"
+#include "ash/wm/window_pin_util.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
@@ -80,12 +81,15 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/ui/base/window_properties.h"
 #include "components/prefs/pref_service.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/drag_drop_client.h"
 #include "ui/aura/client/window_parenting_client.h"
@@ -765,7 +769,7 @@ TEST_F(ShelfLayoutManagerTest, VisibleWhenStatusOrShelfFocused) {
 
   // Focus the shelf. Have to go through the focus cycler as normal focus
   // requests to it do nothing.
-  GetShelfWidget()->GetFocusCycler()->RotateFocus(FocusCycler::FORWARD);
+  Shell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 
   widget->Activate();
@@ -775,8 +779,7 @@ TEST_F(ShelfLayoutManagerTest, VisibleWhenStatusOrShelfFocused) {
   // it when the user is using the keyboard (i.e. through FocusCycler).
   GetShelfWidget()->status_area_widget()->Activate();
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
-
-  GetShelfWidget()->GetFocusCycler()->RotateFocus(FocusCycler::FORWARD);
+  Shell::Get()->focus_cycler()->RotateFocus(FocusCycler::FORWARD);
   EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
 }
 
@@ -2964,14 +2967,10 @@ class ShelfLayoutManagerDragDropTest
 
   // Drags a view vertically by `dy` pixels. Assumes the drag has been started.
   void MoveDragBy(int dy) {
-    auto move_fn =
-        base::BindRepeating(GetParam() == DragEventType::kMouse
-                                ? &ui::test::EventGenerator::MoveMouseBy
-                                : &ui::test::EventGenerator::MoveTouchBy,
-                            base::Unretained(generator_));
-    const int step = dy / abs(dy);
-    for (int i = 0; i < abs(dy); ++i) {
-      move_fn.Run(0, step);
+    if (GetParam() == DragEventType::kMouse) {
+      generator_->MoveMouseBy(0, dy, /*count=*/abs(dy));
+    } else {
+      generator_->MoveTouchBy(0, dy, /*count=*/abs(dy));
     }
   }
 
@@ -5123,5 +5122,35 @@ TEST_F(ShelfLayoutManagerWithEcheTest, AutoHideShelfWithEcheHidden) {
 
   EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
 }
+
+class LockedFullscreenShelfLayoutManagerTest
+    : public ShelfLayoutManagerTestBase,
+      public testing::WithParamInterface<bool> {
+ protected:
+  bool IsLocked() const { return GetParam(); }
+};
+
+TEST_P(LockedFullscreenShelfLayoutManagerTest,
+       HotseatVisibilityWithPinnedWindow) {
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  // Create test window.
+  const std::unique_ptr<aura::Window> window = AshTestBase::CreateTestWindow();
+  wm::ActivateWindow(window.get());
+
+  // Access hotseat before pinning the window.
+  SwipeUpOnShelf();
+  ASSERT_EQ(GetShelfLayoutManager()->hotseat_state(), HotseatState::kExtended);
+
+  // Verify hotseat visibility after the window is pinned.
+  PinWindow(window.get(), /*trusted=*/IsLocked());
+  const HotseatState expected_hotseat_state =
+      IsLocked() ? HotseatState::kHidden : HotseatState::kExtended;
+  EXPECT_EQ(GetShelfLayoutManager()->hotseat_state(), expected_hotseat_state);
+}
+
+INSTANTIATE_TEST_SUITE_P(LockedFullscreenShelfLayoutManagerTests,
+                         LockedFullscreenShelfLayoutManagerTest,
+                         testing::Bool());
 
 }  // namespace ash

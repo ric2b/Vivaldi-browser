@@ -13,6 +13,7 @@
 #include "content/public/browser/prefetch_request_status_listener.h"
 #include "net/http/http_no_vary_search_data.h"
 #include "net/http/http_request_headers.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "url/gurl.h"
 
 namespace android_webview {
@@ -32,6 +33,11 @@ inline constexpr int32_t ABSOLUTE_MAX_PREFETCHES = 20;
 // request was unsuccessful (i.e. there is no key for the prefetch).
 inline constexpr int NO_PREFETCH_KEY = -1;
 
+// The suffix used for generating `//content` prefetch internal histogram names
+// recorded per trigger.
+// TODO(crbug.com/379140429): Merge this with prerender one.
+inline constexpr char AW_PREFETCH_METRICS_SUFFIX[] = "WebView";
+
 // Manages prefetch operations for this Profile.
 // Lifetime: Profile
 class AwPrefetchManager {
@@ -42,6 +48,25 @@ class AwPrefetchManager {
   AwPrefetchManager& operator=(const AwPrefetchManager&) = delete;
 
   ~AwPrefetchManager();
+
+  // Returns `true` if the `resource_request` is also a prefetch request.
+  // NOTE: A prefetch request can also be a prerender request i.e.
+  // this method & `IsPrerenderRequest` can both return `true` for it,
+  // however this is not always the case.
+  static bool IsPrefetchRequest(
+      const network::ResourceRequest& resource_request);
+
+  // Returns `true` if the `resource_request` is also a prerender request.
+  // NOTE: A prerender request will always be a prefetch request i.e.
+  // this method & `IsPrefetchRequest` will always return `true` for it
+  // as prefetching a always required for prerendering.
+  static bool IsPrerenderRequest(
+      const network::ResourceRequest& resource_request);
+
+  // Returns `true` if the `blink::kSecPurposeHeaderName` header is associated
+  // with a prefetch request.
+  static bool IsSecPurposeForPrefetch(
+      std::optional<std::string> sec_purpose_header_value);
 
   // Returns the key associated with the outgoing prefetch request
   // and thus the prefetch handle inside of `all_prefetches_map_` (if
@@ -77,21 +102,7 @@ class AwPrefetchManager {
       std::unique_ptr<content::PrefetchHandle> prefetch_handle) {
     CHECK(prefetch_handle);
     CHECK(max_prefetches_ > 0u);
-
-    // Make room for the new prefetch request by evicting the older ones.
-    if (all_prefetches_map_.size() >= max_prefetches_) {
-      int num_prefetches_to_evict =
-          all_prefetches_map_.size() - max_prefetches_ + 1;
-      auto it = all_prefetches_map_.begin();
-
-      while (num_prefetches_to_evict > 0 && it != all_prefetches_map_.end()) {
-        // Because the keys should be sequential based on when the prefetch
-        // associated with it was added, a standard iteration should always
-        // prioritize removing the oldest entry.
-        it = all_prefetches_map_.erase(it);
-        num_prefetches_to_evict--;
-      }
-    }
+    CHECK(all_prefetches_map_.size() < max_prefetches_);
 
     const int32_t new_prefetch_key = GetNextPrefetchKey();
     all_prefetches_map_[new_prefetch_key] = std::move(prefetch_handle);
@@ -99,13 +110,13 @@ class AwPrefetchManager {
     return new_prefetch_key;
   }
 
-  std::vector<content::PrefetchHandle*> GetAllPrefetchesForTesting() const {
-    std::vector<content::PrefetchHandle*> raw_prefetches;
-    raw_prefetches.reserve(all_prefetches_map_.size());
+  std::vector<int32_t> GetAllPrefetchKeysForTesting() const {
+    std::vector<int32_t> prefetch_keys;
+    prefetch_keys.reserve(all_prefetches_map_.size());
     for (const auto& prefetch_pair : all_prefetches_map_) {
-      raw_prefetches.push_back(prefetch_pair.second.get());
+      prefetch_keys.push_back(prefetch_pair.first);
     }
-    return raw_prefetches;
+    return prefetch_keys;
   }
 
   int GetLastPrefetchKeyForTesting() const { return last_prefetch_key_; }

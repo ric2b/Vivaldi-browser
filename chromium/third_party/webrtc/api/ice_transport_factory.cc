@@ -53,18 +53,17 @@ class IceTransportWithTransportChannel : public IceTransportInterface {
 
 }  // namespace
 
-rtc::scoped_refptr<IceTransportInterface> CreateIceTransport(
+scoped_refptr<IceTransportInterface> CreateIceTransport(
     PortAllocator* port_allocator) {
   IceTransportInit init;
   init.set_port_allocator(port_allocator);
   return CreateIceTransport(std::move(init));
 }
 
-rtc::scoped_refptr<IceTransportInterface> CreateIceTransport(
-    IceTransportInit init) {
-  return rtc::make_ref_counted<IceTransportWithTransportChannel>(
-      cricket::P2PTransportChannel::Create(
-          "", cricket::ICE_CANDIDATE_COMPONENT_RTP, std::move(init)));
+scoped_refptr<IceTransportInterface> CreateIceTransport(IceTransportInit init) {
+  return make_ref_counted<IceTransportWithTransportChannel>(
+      P2PTransportChannel::Create("", ICE_CANDIDATE_COMPONENT_RTP,
+                                  std::move(init)));
 }
 
 }  // namespace webrtc

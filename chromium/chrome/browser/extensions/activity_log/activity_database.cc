@@ -40,10 +40,8 @@ static const int kSizeThresholdForFlush = 200;
 ActivityDatabase::ActivityDatabase(ActivityDatabase::Delegate* delegate)
     : delegate_(delegate),
       db_(sql::DatabaseOptions()
-              .set_page_size(4096)
               .set_cache_size(32)
-              .set_preload(base::FeatureList::IsEnabled(
-                  sql::features::kPreOpenPreloadDatabase))
+              .set_preload(true)
               // TODO(pwnall): Add a meta table and remove this option.
               .set_mmap_alt_status_discouraged(true)
               .set_enable_views_discouraged(
@@ -97,12 +95,6 @@ void ActivityDatabase::Init(const base::FilePath& db_name) {
   sql::InitStatus stat = committer.Commit() ? sql::INIT_OK : sql::INIT_FAILURE;
   if (stat != sql::INIT_OK)
     return LogInitFailure();
-
-  // Pre-loads the first <cache-size> pages into the cache.
-  // Doesn't do anything if the database is new.
-  if (!base::FeatureList::IsEnabled(sql::features::kPreOpenPreloadDatabase)) {
-    db_.Preload();
-  }
 
   valid_db_ = true;
   timer_.Start(FROM_HERE,

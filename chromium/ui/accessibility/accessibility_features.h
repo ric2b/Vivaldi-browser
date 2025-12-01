@@ -52,9 +52,6 @@ AX_BASE_EXPORT bool IsAccessibilityPdfOcrForSelectToSpeakEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityBlockFlowIterator);
 AX_BASE_EXPORT bool IsAccessibilityBlockFlowIteratorEnabled();
 
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityPruneRedundantInlineText);
-AX_BASE_EXPORT bool IsAccessibilityPruneRedundantInlineTextEnabled();
-
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(
     kAccessibilityPruneRedundantInlineConnectivity);
 AX_BASE_EXPORT bool IsAccessibilityPruneRedundantInlineConnectivityEnabled();
@@ -71,6 +68,22 @@ AX_BASE_EXPORT bool IsAccessibilityTreeForViewsEnabled();
 // Serialize Views' accessibility data as soon as it changes.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kViewsAccessibilitySerializeOnDataChange);
 AX_BASE_EXPORT bool IsViewsAccessibilitySerializeOnDataChangeEnabled();
+
+// Experiment to measure the performance impact of various accessibility
+// changes.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kAccessibilityPerformanceMeasurementExperiment);
+AX_BASE_EXPORT bool IsAccessibilityPerformanceMeasurementExperimentEnabled();
+
+enum class AccessibilityPerformanceMeasurementExperimentGroup {
+  kAXModeComplete,
+  kWebContentsOnly,
+  kAXModeCompleteNoInlineTextBoxes,
+  kRendererSerializationOnly,
+};
+
+AX_BASE_EXPORT AccessibilityPerformanceMeasurementExperimentGroup
+GetAccessibilityPerformanceMeasurementExperimentGroup();
 
 // Use Alternative mechanism for acquiring image descriptions.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kImageDescriptionsAlternateRouting);
@@ -126,16 +139,19 @@ AX_BASE_EXPORT bool IsUseAXPositionForDocumentMarkersEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAXRandomizedStressTests);
 AX_BASE_EXPORT bool IsAXRandomizedStressTestsEnabled();
 
+// Enable the experimental on-screen AXMode .
+// TODO(accessibility): Only turn on the experimental On-Screen mode for when
+// screen readers are not running. This is an experimental mode for now, so this
+// is fine for now.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityOnScreenMode);
+
+// Returns true if the on screen AXMode is enabled.
+AX_BASE_EXPORT bool IsAccessibilityOnScreenAXModeEnabled();
+
 #if BUILDFLAG(IS_WIN)
 // Use Chrome-specific accessibility COM API.
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kIChromeAccessible);
 AX_BASE_EXPORT bool IsIChromeAccessibleEnabled();
-
-// Selectively enable accessibility depending on the
-// UIA APIs that are called. (Note: This will make it possible for
-// non-screenreader services to enable less of the accessibility system)
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kSelectiveUIAEnablement);
-AX_BASE_EXPORT bool IsSelectiveUIAEnablementEnabled();
 
 // Use the browser's UIA provider when requested by
 // an accessibility client.
@@ -213,6 +229,10 @@ AX_BASE_EXPORT bool IsAccessibilityBounceKeysEnabled();
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilitySlowKeys);
 AX_BASE_EXPORT bool IsAccessibilitySlowKeysEnabled();
 
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(
+    kAccessibilityManifestV3AccessibilityCommon);
+AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForAccessibilityCommon();
+
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityManifestV3BrailleIme);
 AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForBrailleIme();
 
@@ -221,6 +241,9 @@ AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForChromeVox();
 
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityManifestV3EnhancedNetworkTts);
 AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForEnhancedNetworkTts();
+
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityManifestV3EspeakNGTts);
+AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForEspeakNGTts();
 
 AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityManifestV3SelectToSpeak);
 AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForSelectToSpeak();
@@ -231,12 +254,12 @@ AX_BASE_EXPORT bool IsAccessibilityManifestV3EnabledForSwitchAccess();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_ANDROID)
-// Enable on screen AXMode based on running services. If disabled,
-// then on screen AXMode will not be available to be set.
-AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityOnScreenMode);
 
-// Returns true if the on screen AXMode is enabled.
-AX_BASE_EXPORT bool IsAccessibilityOnScreenAXModeEnabled();
+// When populating the AccessibilityNodeInfo on Android, Clank will insert Line
+// Separator U+2028 characters in the text to denote soft line breaks.
+AX_BASE_EXPORT BASE_DECLARE_FEATURE(kAccessibilityInlineLineSeparators);
+AX_BASE_EXPORT bool IsAccessibilityInlineLineSeparatorsEnabled();
+
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)

@@ -4,16 +4,20 @@
 
 #include "components/permissions/permission_util.h"
 
+#include <memory>
+
 #include "base/check.h"
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
+#include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permissions_client.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_result.h"
@@ -71,6 +75,25 @@ PermissionDelegationMode GetPermissionDelegationMode(
 constexpr const char* kIsFileURLHistogram =
     "Permissions.GetLastCommittedOriginAsURL.IsFileURL";
 #endif
+
+RequestTypeForUma GetUmaValueForRequests(const RequestType first_request) {
+  if (
+#if !BUILDFLAG(IS_ANDROID)
+      first_request == RequestType::kCameraPanTiltZoom ||
+#endif
+      first_request == RequestType::kCameraStream ||
+      first_request == RequestType::kMicStream) {
+    return RequestTypeForUma::MULTIPLE_AUDIO_AND_VIDEO_CAPTURE;
+  }
+#if !BUILDFLAG(IS_ANDROID)
+  if (first_request == RequestType::kKeyboardLock ||
+      first_request == RequestType::kPointerLock) {
+    return RequestTypeForUma::MULTIPLE_KEYBOARD_AND_POINTER_LOCK;
+  }
+#endif
+  return RequestTypeForUma::UNKNOWN;
+}
+
 }  // namespace
 
 // The returned strings must match any Field Trial configs for the Permissions
@@ -82,6 +105,114 @@ std::string PermissionUtil::GetPermissionString(
   DCHECK(success);
 
   return blink::GetPermissionString(permission);
+}
+
+RequestTypeForUma PermissionUtil::GetUmaValueForRequests(
+    const std::vector<std::unique_ptr<PermissionRequest>>& requests) {
+  CHECK(!requests.empty());
+  const RequestType request_type = requests[0]->request_type();
+  if (requests.size() == 1) {
+    return GetUmaValueForRequestType(request_type);
+  }
+  return permissions::GetUmaValueForRequests(request_type);
+}
+
+RequestTypeForUma PermissionUtil::GetUmaValueForRequests(
+    const std::vector<base::WeakPtr<PermissionRequest>>& requests) {
+  CHECK(!requests.empty());
+  const RequestType request_type = requests[0]->request_type();
+  if (requests.size() == 1) {
+    return GetUmaValueForRequestType(request_type);
+  }
+  return permissions::GetUmaValueForRequests(request_type);
+}
+
+RequestTypeForUma PermissionUtil::GetUmaValueForRequestType(
+    RequestType request_type) {
+  switch (request_type) {
+    case RequestType::kArSession:
+      return RequestTypeForUma::PERMISSION_AR;
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kCameraPanTiltZoom:
+      return RequestTypeForUma::PERMISSION_CAMERA_PAN_TILT_ZOOM;
+#endif
+    case RequestType::kCameraStream:
+      return RequestTypeForUma::PERMISSION_MEDIASTREAM_CAMERA;
+    case RequestType::kClipboard:
+      return RequestTypeForUma::PERMISSION_CLIPBOARD_READ_WRITE;
+    case RequestType::kDiskQuota:
+      return RequestTypeForUma::QUOTA;
+#if !BUILDFLAG(IS_ANDROID)
+    // TODO(crbug.com/40214907): Enable on Android
+    case RequestType::kLocalFonts:
+      return RequestTypeForUma::PERMISSION_LOCAL_FONTS;
+    // TODO(crbug.com/400455013): Enable on Android.
+    case RequestType::kLocalNetworkAccess:
+      return RequestTypeForUma::PERMISSION_LOCAL_NETWORK_ACCESS;
+#endif
+    case RequestType::kGeolocation:
+      return RequestTypeForUma::PERMISSION_GEOLOCATION;
+    case RequestType::kHandTracking:
+      return RequestTypeForUma::PERMISSION_HAND_TRACKING;
+    case RequestType::kIdleDetection:
+      return RequestTypeForUma::PERMISSION_IDLE_DETECTION;
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kKeyboardLock:
+      return RequestTypeForUma::PERMISSION_KEYBOARD_LOCK;
+#endif
+    case RequestType::kMicStream:
+      return RequestTypeForUma::PERMISSION_MEDIASTREAM_MIC;
+    case RequestType::kMidiSysex:
+      return RequestTypeForUma::PERMISSION_MIDI_SYSEX;
+    case RequestType::kMultipleDownloads:
+      return RequestTypeForUma::DOWNLOAD;
+#if BUILDFLAG(IS_ANDROID)
+    case RequestType::kNfcDevice:
+      return RequestTypeForUma::PERMISSION_NFC;
+#endif
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kPointerLock:
+      return RequestTypeForUma::PERMISSION_POINTER_LOCK;
+#endif
+    case RequestType::kNotifications:
+      return RequestTypeForUma::PERMISSION_NOTIFICATIONS;
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
+    case RequestType::kProtectedMediaIdentifier:
+      return RequestTypeForUma::PERMISSION_PROTECTED_MEDIA_IDENTIFIER;
+#endif
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kRegisterProtocolHandler:
+      return RequestTypeForUma::REGISTER_PROTOCOL_HANDLER;
+#endif
+#if BUILDFLAG(IS_CHROMEOS)
+    case RequestType::kSmartCard:
+      return RequestTypeForUma::PERMISSION_SMART_CARD;
+#endif
+    case RequestType::kStorageAccess:
+      return RequestTypeForUma::PERMISSION_STORAGE_ACCESS;
+    case RequestType::kVrSession:
+      return RequestTypeForUma::PERMISSION_VR;
+#if BUILDFLAG(IS_CHROMEOS) && BUILDFLAG(USE_CUPS)
+    case RequestType::kWebPrinting:
+      return RequestTypeForUma::PERMISSION_WEB_PRINTING;
+#endif
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kWindowManagement:
+      return RequestTypeForUma::PERMISSION_WINDOW_MANAGEMENT;
+#endif
+    case RequestType::kTopLevelStorageAccess:
+      return RequestTypeForUma::PERMISSION_TOP_LEVEL_STORAGE_ACCESS;
+    case RequestType::kFileSystemAccess:
+      return RequestTypeForUma::PERMISSION_FILE_SYSTEM_ACCESS;
+#if !BUILDFLAG(IS_ANDROID)
+    case RequestType::kCapturedSurfaceControl:
+      return RequestTypeForUma::CAPTURED_SURFACE_CONTROL;
+    case RequestType::kWebAppInstallation:
+      return RequestTypeForUma::PERMISSION_WEB_APP_INSTALLATION;
+#endif
+    case RequestType::kIdentityProvider:
+      return RequestTypeForUma::PERMISSION_IDENTITY_PROVIDER;
+  }
 }
 
 PermissionRequestGestureType PermissionUtil::GetGestureType(bool user_gesture) {
@@ -240,10 +371,10 @@ bool PermissionUtil::ShouldCurrentRequestUsePermissionElementSecondaryUI(
     return false;
   }
 
-  std::vector<raw_ptr<permissions::PermissionRequest, VectorExperimental>>
-      requests = delegate->Requests();
+  const std::vector<std::unique_ptr<PermissionRequest>>& requests =
+      delegate->Requests();
   return std::ranges::all_of(
-      requests, [](permissions::PermissionRequest* request) {
+      requests, [](const std::unique_ptr<PermissionRequest>& request) {
         return (request->request_type() ==
                     permissions::RequestType::kCameraStream ||
                 request->request_type() ==
@@ -498,21 +629,18 @@ GURL PermissionUtil::GetCanonicalOrigin(ContentSettingsType permission,
 }
 
 bool PermissionUtil::HasUserGesture(PermissionPrompt::Delegate* delegate) {
-  const std::vector<
-      raw_ptr<permissions::PermissionRequest, VectorExperimental>>& requests =
+  const std::vector<std::unique_ptr<permissions::PermissionRequest>>& requests =
       delegate->Requests();
-  return std::any_of(
-      requests.begin(), requests.end(),
-      [](permissions::PermissionRequest* request) {
-        return request->GetGestureType() ==
-               permissions::PermissionRequestGestureType::GESTURE;
-      });
+  return std::any_of(requests.begin(), requests.end(), [](const auto& request) {
+    return request->GetGestureType() ==
+           permissions::PermissionRequestGestureType::GESTURE;
+  });
 }
 
 bool PermissionUtil::CanPermissionRequestIgnoreStatus(
-    const PermissionRequestData& request,
+    const std::unique_ptr<PermissionRequestData>& request,
     content::PermissionStatusSource source) {
-  if (!request.embedded_permission_element_initiated) {
+  if (!request->embedded_permission_element_initiated) {
     return false;
   }
 

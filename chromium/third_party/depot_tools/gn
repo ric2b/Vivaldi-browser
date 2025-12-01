@@ -11,4 +11,4 @@ if [ "$(expr "$(uname -s)" : "^MINGW64_NT")" == "10" ]; then
     exit
 fi
 
-PYTHONDONTWRITEBYTECODE=1 exec python3 "$base_dir/gn.py" "$@"
+PYTHONDONTWRITEBYTECODE=1 "$base_dir/python-bin/python3" "$base_dir/gn.py" "$@"

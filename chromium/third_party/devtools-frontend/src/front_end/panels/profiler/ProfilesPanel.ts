@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2008 Apple Inc. All Rights Reserved.
@@ -99,9 +100,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
     profile: ProfileHeader,
     view: UI.Widget.Widget,
   }>;
-  typeIdToSidebarSection: {
-    [x: string]: ProfileTypeSidebarSection,
-  };
+  typeIdToSidebarSection: Record<string, ProfileTypeSidebarSection>;
   fileSelectorElement!: HTMLInputElement;
   selectedProfileType?: ProfileType;
   constructor(name: string, profileTypes: ProfileType[], recordingActionId: string) {
@@ -181,8 +180,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
         SDK.HeapProfilerModel.HeapProfilerModel, this.updateProfileTypeSpecificUI, this);
   }
 
-  onKeyDown(ev: Event): void {
-    const event = (ev as KeyboardEvent);
+  onKeyDown(event: KeyboardEvent): void {
     let handled = false;
     if (event.key === 'ArrowDown' && !event.altKey) {
       handled = this.sidebarTree.selectNext();
@@ -477,9 +475,7 @@ export class ProfilesPanel extends UI.Panel.PanelWithSidebar implements DataDisp
 export class ProfileTypeSidebarSection extends UI.TreeOutline.TreeElement {
   dataDisplayDelegate: DataDisplayDelegate;
   readonly profileTreeElements: ProfileSidebarTreeElement[];
-  profileGroups: {
-    [x: string]: ProfileGroup,
-  };
+  profileGroups: Record<string, ProfileGroup>;
 
   constructor(dataDisplayDelegate: DataDisplayDelegate, profileType: ProfileType) {
     super(profileType.treeItemTitle, true);

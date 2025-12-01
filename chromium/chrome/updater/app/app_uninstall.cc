@@ -22,10 +22,13 @@
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/threading/platform_thread.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/enterprise_companion/installer_paths.h"
 #include "chrome/updater/app/app.h"
 #include "chrome/updater/app/app_utils.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/configurator.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants.h"
@@ -112,6 +115,18 @@ namespace {
   }
   VLOG(1) << __func__ << ": Ran: " << command_line.GetCommandLineString()
           << ": " << output << ": " << exit_code;
+
+  // Wait until the enterprise companion install is completely removed. For
+  // instance, enterprise companion spawns a separate cmd script on Windows to
+  // complete the uninstall.
+  for (const auto deadline = base::TimeTicks::Now() + base::Seconds(20);
+       enterprise_companion::FindExistingInstall() &&
+       (base::TimeTicks::Now() < deadline);
+       base::PlatformThread::Sleep(base::Milliseconds(100))) {
+  }
+  VLOG(1) << __func__ << ": !enterprise_companion::FindExistingInstall(): "
+          << !enterprise_companion::FindExistingInstall();
+
   return exit_code == 0 ? kErrorOk : kErrorFailedToUninstallCompanionApp;
 }
 
@@ -136,6 +151,15 @@ namespace {
               << ": " << output << ": " << exit_code;
       if (exit_code != 0) {
         has_error = true;
+      } else {
+        // Wait until the install is completely removed, for instance, wait for
+        // the completion of the separate cmd script on Windows to complete the
+        // uninstall.
+        for (const auto deadline = base::TimeTicks::Now() + base::Seconds(20);
+             base::PathExists(command_line.GetProgram()) &&
+             (base::TimeTicks::Now() < deadline);
+             base::PlatformThread::Sleep(base::Milliseconds(100))) {
+        }
       }
     } else {
       VLOG(1) << "Failed to run the command to uninstall other versions.";
@@ -198,8 +222,8 @@ int AppUninstall::Initialize() {
       CreateScopedLock(kSetupMutex, updater_scope(), kWaitForSetupLock);
   global_prefs_ = CreateGlobalPrefs(updater_scope());
   if (global_prefs_) {
-    config_ = base::MakeRefCounted<Configurator>(global_prefs_,
-                                                 CreateExternalConstants());
+    config_ = base::MakeRefCounted<Configurator>(
+        global_prefs_, CreateExternalConstants(), updater_scope());
   }
   return kErrorOk;
 }

@@ -4,11 +4,11 @@
 
 package org.chromium.chrome.browser.tabmodel;
 
-import androidx.annotation.Nullable;
-
 import com.google.errorprone.annotations.DoNotMock;
 
 import org.chromium.base.Token;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tab.Tab;
 
 import java.util.Arrays;
@@ -18,6 +18,7 @@ import java.util.Objects;
 /** Parameters to control closing tabs from the {@link TabModel}. */
 // TODO(crbug.com/376710475): Consider prefixing the static methods with for.
 @DoNotMock("Create a real instance instead.")
+@NullMarked
 public class TabClosureParams {
     /**
      * Returns a new {@link TabClosureParams.CloseTabBuilder} to instantiate {@link
@@ -41,8 +42,8 @@ public class TabClosureParams {
      * @param rootId The root ID of the tab group.
      * @return A TabClosureParams for the tab group or null if the group is not found.
      */
-    public static @Nullable TabClosureParams.CloseTabsBuilder forCloseTabGroup(
-            TabGroupModelFilter filter, Token tabGroupId) {
+    public static TabClosureParams.@Nullable CloseTabsBuilder forCloseTabGroup(
+            TabGroupModelFilter filter, @Nullable Token tabGroupId) {
         List<Tab> relatedTabs = filter.getTabsInGroup(tabGroupId);
         if (relatedTabs.isEmpty()) return null;
 
@@ -176,12 +177,10 @@ public class TabClosureParams {
         }
     }
 
-    /**
-     * Builder to configure params for closing all tabs. Closing all tabs always allows for undo if
-     * permitted by the tab model.
-     */
+    /** Builder to configure params for closing all tabs. */
     public static class CloseAllTabsBuilder {
         private boolean mUponExit;
+        private boolean mAllowUndo = true;
         private boolean mHideTabGroups;
         private @Nullable Runnable mUndoRunnable;
 
@@ -190,6 +189,12 @@ public class TabClosureParams {
         /** Sets whether the tab closure completing would exit the app. Default is false. */
         public CloseAllTabsBuilder uponExit(boolean uponExit) {
             mUponExit = uponExit;
+            return this;
+        }
+
+        /** Set whether to allow undo. Default is true. */
+        public CloseAllTabsBuilder allowUndo(boolean allowUndo) {
+            mAllowUndo = allowUndo;
             return this;
         }
 
@@ -212,7 +217,7 @@ public class TabClosureParams {
                     /* isAllTabs= */ true,
                     /* recommendedNextTab= */ null,
                     mUponExit,
-                    /* allowUndo= */ true,
+                    mAllowUndo,
                     mHideTabGroups,
                     /* saveToTabRestoreService= */ true,
                     TabCloseType.ALL,

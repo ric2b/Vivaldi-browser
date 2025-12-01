@@ -16,7 +16,7 @@
 #include "components/optimization_guide/core/model_execution/on_device_model_execution_proto_value_utils.h"
 #include "components/optimization_guide/core/model_execution/redactor.h"
 #include "components/optimization_guide/core/model_execution/response_parser.h"
-#include "components/optimization_guide/core/model_execution/response_parser_registry.h"
+#include "components/optimization_guide/core/model_execution/response_parser_factory.h"
 #include "components/optimization_guide/core/model_execution/simple_response_parser.h"
 #include "components/optimization_guide/core/optimization_guide_constants.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -26,11 +26,13 @@
 namespace optimization_guide {
 
 OnDeviceModelFeatureAdapter::OnDeviceModelFeatureAdapter(
-    proto::OnDeviceModelExecutionFeatureConfig config)
+    proto::OnDeviceModelExecutionFeatureConfig config,
+    ResponseParserFactory response_parser_factory)
     : config_(std::move(config)),
       redactor_(Redactor::FromProto(config_.output_config().redact_rules())),
-      parser_(
-          ResponseParserRegistry::Get().CreateParser(config_.output_config())) {
+      parser_(response_parser_factory
+                  ? response_parser_factory.Run(config_.output_config())
+                  : CreateResponseParser(config_.output_config())) {
   // Set limits values in `token_limits_`.
   auto& input_config = config_.input_config();
   auto& output_config = config_.output_config();
@@ -183,6 +185,22 @@ const proto::Any& OnDeviceModelFeatureAdapter::GetFeatureMetadata() const {
 
 const TokenLimits& OnDeviceModelFeatureAdapter::GetTokenLimits() const {
   return token_limits_;
+}
+
+on_device_model::mojom::ResponseConstraintPtr
+OnDeviceModelFeatureAdapter::GetResponseConstraint() const {
+  const auto& constraint = config_.output_config().response_constraint();
+  switch (constraint.format_case()) {
+    case proto::ResponseConstraint::kJsonSchema:
+      return on_device_model::mojom::ResponseConstraint::NewJsonSchema(
+          constraint.json_schema());
+    case proto::ResponseConstraint::kRegex:
+      return on_device_model::mojom::ResponseConstraint::NewRegex(
+          constraint.regex());
+    default:
+      // Not configured, or not supported configuration.
+      return nullptr;
+  }
 }
 
 }  // namespace optimization_guide

@@ -11,6 +11,7 @@
 #include "chrome/browser/actor/actor_test_util.h"
 #include "chrome/browser/ui/tabs/test/mock_tab_interface.h"
 #include "chrome/common/actor.mojom.h"
+#include "chrome/common/actor/action_result.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/webui_url_constants.h"
@@ -66,7 +67,7 @@ class FakeChromeRenderFrame : public chrome::mojom::ChromeRenderFrame {
 
   void InvokeTool(actor::mojom::ToolInvocationPtr request,
                   InvokeToolCallback callback) override {
-    std::move(callback).Run(true);
+    std::move(callback).Run(MakeOkResult());
   }
 
  private:
@@ -107,10 +108,11 @@ class ActorCoordinatorTest : public ChromeRenderViewHostTestHarness {
     FakeChromeRenderFrame fake_chrome_render_frame;
     fake_chrome_render_frame.OverrideBinder(main_rfh());
 
-    base::test::TestFuture<bool> success;
-    ActorCoordinator coordinator;
-    coordinator.Act(*GetTab(), action, success.GetCallback());
-    return success.Get();
+    base::test::TestFuture<mojom::ActionResultPtr> success;
+    ActorCoordinator coordinator(profile());
+    coordinator.StartTaskForTesting(GetTab());
+    coordinator.Act(action, success.GetCallback());
+    return IsOk(*success.Get());
   }
 
   tabs::MockTabInterface* GetTab() {
@@ -136,32 +138,34 @@ class ActorCoordinatorTest : public ChromeRenderViewHostTestHarness {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(ActorCoordinatorTest, Basic) {
-  EXPECT_TRUE(Act(GURL("http://localhost/"), MakeClick(kFakeContentNodeId)));
+TEST_F(ActorCoordinatorTest, ActSucceedsOnSupportedUrl) {
+  EXPECT_TRUE(Act(GURL("http://localhost/"),
+                  MakeClick(*main_rfh(), kFakeContentNodeId)));
 }
 
-TEST_F(ActorCoordinatorTest, CannotActOnUrl) {
-  EXPECT_FALSE(
-      Act(GURL(chrome::kChromeUIVersionURL), MakeClick(kFakeContentNodeId)));
+TEST_F(ActorCoordinatorTest, ActFailsOnUnsupportedUrl) {
+  EXPECT_FALSE(Act(GURL(chrome::kChromeUIVersionURL),
+                   MakeClick(*main_rfh(), kFakeContentNodeId)));
 }
 
-TEST_F(ActorCoordinatorTest, TabDestroyed) {
+TEST_F(ActorCoordinatorTest, ActFailsWhenTabDestroyed) {
   content::NavigationSimulator::NavigateAndCommitFromBrowser(
       web_contents(), GURL("http://localhost/"));
 
-  base::test::TestFuture<bool> success;
-  ActorCoordinator coordinator;
+  base::test::TestFuture<mojom::ActionResultPtr> result;
+  ActorCoordinator coordinator(profile());
+  coordinator.StartTaskForTesting(GetTab());
 
   FakeChromeRenderFrame fake_chrome_render_frame;
   fake_chrome_render_frame.OverrideBinder(main_rfh());
 
-  coordinator.Act(*GetTab(), MakeClick(kFakeContentNodeId),
-                  success.GetCallback());
+  coordinator.Act(MakeClick(*main_rfh(), kFakeContentNodeId),
+                  result.GetCallback());
 
   ClearTabInterface();
   DeleteContents();
 
-  EXPECT_FALSE(success.Get());
+  ExpectErrorResult(result, mojom::ActionResultCode::kTabWentAway);
 }
 
 TEST_F(ActorCoordinatorTest, CrossOriginNavigationBeforeAction) {
@@ -171,19 +175,20 @@ TEST_F(ActorCoordinatorTest, CrossOriginNavigationBeforeAction) {
   FakeChromeRenderFrame fake_chrome_render_frame;
   fake_chrome_render_frame.OverrideBinder(main_rfh());
 
-  base::test::TestFuture<bool> success;
-  ActorCoordinator coordinator;
-  coordinator.Act(*GetTab(), MakeClick(kFakeContentNodeId),
-                  success.GetCallback());
+  base::test::TestFuture<mojom::ActionResultPtr> result;
+  ActorCoordinator coordinator(profile());
+  coordinator.StartTaskForTesting(GetTab());
+  coordinator.Act(MakeClick(*main_rfh(), kFakeContentNodeId),
+                  result.GetCallback());
 
   // Before the action happens, commit a cross-origin navigation.
-  ASSERT_FALSE(success.IsReady());
+  ASSERT_FALSE(result.IsReady());
   content::NavigationSimulator::NavigateAndCommitFromBrowser(
       web_contents(), GURL("http://localhost:8000/"));
 
   // TODO(mcnee): We currently just fail, but this should do something more
   // graceful.
-  EXPECT_FALSE(success.Get());
+  ExpectErrorResult(result, mojom::ActionResultCode::kCrossOriginNavigation);
 }
 
 }  // namespace

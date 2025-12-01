@@ -1293,10 +1293,7 @@ TEST_F(WindowTreeHostManagerTest, SetPrimaryWithThreeDisplays) {
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   display::DisplayIdList non_primary_ids =
       display_manager()->GetConnectedDisplayIdList();
-  auto itr =
-      std::remove(non_primary_ids.begin(), non_primary_ids.end(), primary_id);
-  ASSERT_TRUE(itr != non_primary_ids.end());
-  non_primary_ids.erase(itr, non_primary_ids.end());
+  ASSERT_GT(std::erase(non_primary_ids, primary_id), 0u);
   ASSERT_EQ(2u, non_primary_ids.size());
 
   // Build the following layout:
@@ -1413,10 +1410,7 @@ TEST_F(WindowTreeHostManagerTest, SetPrimaryWithFourDisplays) {
   int64_t primary_id = display::Screen::GetScreen()->GetPrimaryDisplay().id();
   display::DisplayIdList non_primary_ids =
       display_manager()->GetConnectedDisplayIdList();
-  auto itr =
-      std::remove(non_primary_ids.begin(), non_primary_ids.end(), primary_id);
-  ASSERT_TRUE(itr != non_primary_ids.end());
-  non_primary_ids.erase(itr, non_primary_ids.end());
+  ASSERT_GT(std::erase(non_primary_ids, primary_id), 0u);
   ASSERT_EQ(3u, non_primary_ids.size());
 
   // Build the following layout:
@@ -1518,8 +1512,6 @@ TEST_F(WindowTreeHostManagerTest, SetPrimaryWithFourDisplays) {
 }
 
 TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
-  WindowTreeHostManager* window_tree_host_manager =
-      Shell::Get()->window_tree_host_manager();
   TestEventHandler event_handler;
   Shell::Get()->AddPreTargetHandler(&event_handler);
 
@@ -1527,8 +1519,8 @@ TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
   display::Display display1 = display::Screen::GetScreen()->GetPrimaryDisplay();
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
 
-  window_tree_host_manager->SetOverscanInsets(
-      display1.id(), gfx::Insets::TLBR(10, 15, 20, 25));
+  display_manager()->SetOverscanInsets(display1.id(),
+                                       gfx::Insets::TLBR(10, 15, 20, 25));
   display::test::DisplayManagerTestApi display_manager_test(display_manager());
   EXPECT_EQ(gfx::Rect(0, 0, 80, 170), root_windows[0]->bounds());
   EXPECT_EQ(gfx::Size(150, 200), root_windows[1]->bounds().size());
@@ -1539,7 +1531,7 @@ TEST_F(WindowTreeHostManagerTest, OverscanInsets) {
   generator.MoveMouseToInHost(20, 25);
   EXPECT_EQ(gfx::Point(5, 15), event_handler.GetLocationAndReset());
 
-  window_tree_host_manager->SetOverscanInsets(display1.id(), gfx::Insets());
+  display_manager()->SetOverscanInsets(display1.id(), gfx::Insets());
   EXPECT_EQ(gfx::Rect(0, 0, 120, 200), root_windows[0]->bounds());
   EXPECT_EQ(gfx::Rect(120, 0, 150, 200),
             display_manager_test.GetSecondaryDisplay().bounds());

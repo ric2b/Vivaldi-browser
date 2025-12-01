@@ -1,6 +1,7 @@
 // Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Protocol from '../../generated/protocol.js';
@@ -89,7 +90,7 @@ export class ContextDetailBuilder {
 
 export class ContextSummaryBuilder {
   private readonly fragment: DocumentFragment;
-  constructor(contextId: string, contextRealtimeData: Protocol.WebAudio.ContextRealtimeData) {
+  constructor(contextRealtimeData: Protocol.WebAudio.ContextRealtimeData) {
     const time = contextRealtimeData.currentTime.toFixed(3);
     const mean = (contextRealtimeData.callbackIntervalMean * 1000).toFixed(3);
     const stddev = (Math.sqrt(contextRealtimeData.callbackIntervalVariance) * 1000).toFixed(3);

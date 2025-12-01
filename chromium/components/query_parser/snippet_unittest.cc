@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "components/query_parser/snippet.h"
 
@@ -234,7 +230,7 @@ TEST(Snippets, ExtractMatchPositions) {
   struct TestData {
     const std::string offsets_string;
     const size_t expected_match_count;
-    const size_t expected_matches[10];
+    const std::array<size_t, 10> expected_matches;
   };
   auto data = std::to_array<TestData>({
       {"0 0 1 2 0 0 4 1 0 0 1 5", 1, {1, 6}},

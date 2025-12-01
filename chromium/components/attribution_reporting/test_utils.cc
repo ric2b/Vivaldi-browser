@@ -27,7 +27,6 @@
 #include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/event_trigger_data.h"
 #include "components/attribution_reporting/filters.h"
-#include "components/attribution_reporting/max_event_level_reports.h"
 #include "components/attribution_reporting/os_registration.h"
 #include "components/attribution_reporting/parsing_utils.h"
 #include "components/attribution_reporting/privacy_math.h"
@@ -35,7 +34,6 @@
 #include "components/attribution_reporting/source_type.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "components/attribution_reporting/suitable_origin.h"
-#include "components/attribution_reporting/summary_buckets.h"
 #include "components/attribution_reporting/trigger_config.h"
 #include "components/attribution_reporting/trigger_registration.h"
 #include "net/base/schemeful_site.h"
@@ -55,46 +53,22 @@ FiltersDisjunction FiltersForSourceType(
       lookback_window)};
 }
 
-TriggerSpecs SpecsFromWindowList(const std::vector<int>& windows_per_type,
-                                 bool collapse_into_single_spec,
-                                 MaxEventLevelReports max_event_level_reports) {
-  if (windows_per_type.empty()) {
-    return TriggerSpecs();
+EventReportWindows EventReportWindowsWithCount(int num_report_windows) {
+  std::vector<base::TimeDelta> deltas;
+  deltas.reserve(num_report_windows);
+  for (int i = 0; i < num_report_windows; i++) {
+    deltas.emplace_back(base::Days(1) + base::Days(i));
+  }
+  return *EventReportWindows::Create(base::Days(0), std::move(deltas));
+}
+
+TriggerDataSet TriggerDataSetWithCardinality(int cardinality) {
+  TriggerDataSet::TriggerData trigger_data;
+  for (int i = 0; i < cardinality; ++i) {
+    trigger_data.insert(i);
   }
 
-  attribution_reporting::TriggerSpecs::TriggerDataIndices indices;
-  std::vector<attribution_reporting::TriggerSpec> raw_specs;
-
-  bool supportable_by_single_spec = std::ranges::all_of(
-      windows_per_type, [&](int w) { return w == windows_per_type[0]; });
-
-  if (collapse_into_single_spec && supportable_by_single_spec) {
-    std::vector<base::TimeDelta> deltas;
-    deltas.reserve(windows_per_type[0]);
-    for (int i = 0; i < windows_per_type[0]; i++) {
-      deltas.emplace_back(base::Days(1) + base::Days(i));
-    }
-    for (int i = 0; i < static_cast<int>(windows_per_type.size()); ++i) {
-      indices[i] = 0;
-    }
-    raw_specs.emplace_back(*attribution_reporting::EventReportWindows::Create(
-        base::Days(0), std::move(deltas)));
-  } else {
-    for (int index = 0; int windows : windows_per_type) {
-      std::vector<base::TimeDelta> deltas;
-      deltas.reserve(windows_per_type[0]);
-      for (int i = 0; i < windows; i++) {
-        deltas.emplace_back(base::Days(1) + base::Days(i));
-      }
-      raw_specs.emplace_back(*attribution_reporting::EventReportWindows::Create(
-          base::Days(0), std::move(deltas)));
-      indices[index] = index;
-      index++;
-    }
-  }
-
-  return *attribution_reporting::TriggerSpecs::Create(
-      std::move(indices), std::move(raw_specs), max_event_level_reports);
+  return *TriggerDataSet::Create(std::move(trigger_data));
 }
 
 std::ostream& operator<<(std::ostream& out,
@@ -184,26 +158,8 @@ std::ostream& operator<<(std::ostream& out, const OsRegistrationItem& item) {
              << ", debug_reporting=" << item.debug_reporting << "}";
 }
 
-std::ostream& operator<<(std::ostream& out, const SummaryBuckets& buckets) {
-  base::Value::Dict dict;
-  buckets.Serialize(dict);
-  return out << dict;
-}
-
-std::ostream& operator<<(std::ostream& out, const TriggerSpec& spec) {
-  return out << spec.ToJson();
-}
-
-std::ostream& operator<<(std::ostream& out, const TriggerSpecs& specs) {
-  return out << specs.ToJson();
-}
-
-std::ostream& operator<<(std::ostream& out,
-                         const TriggerSpecs::const_iterator& it) {
-  if (!it) {
-    return out << "(end)";
-  }
-  return out << "{" << (*it).first << ", " << (*it).second << "}";
+std::ostream& operator<<(std::ostream& out, const TriggerDataSet& set) {
+  return out << set.ToJson();
 }
 
 std::ostream& operator<<(

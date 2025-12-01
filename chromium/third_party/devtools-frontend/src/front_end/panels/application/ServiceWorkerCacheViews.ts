@@ -1,6 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/legacy/legacy.js';
 
@@ -84,7 +85,7 @@ const str_ = i18n.i18n.registerUIStrings('panels/application/ServiceWorkerCacheV
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class ServiceWorkerCacheView extends UI.View.SimpleView {
   private model: SDK.ServiceWorkerCacheModel.ServiceWorkerCacheModel;
-  private entriesForTest: Protocol.CacheStorage.DataEntry[]|null;
+  protected entriesForTest: Protocol.CacheStorage.DataEntry[]|null;
   private readonly splitWidget: UI.SplitWidget.SplitWidget;
   private readonly previewPanel: UI.Widget.VBox;
   private preview: UI.Widget.Widget|null;
@@ -314,9 +315,7 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
     }
   }
 
-  private updateDataCallback(
-      this: ServiceWorkerCacheView, skipCount: number, entries: Protocol.CacheStorage.DataEntry[],
-      returnCount: number): void {
+  private updateDataCallback(entries: Protocol.CacheStorage.DataEntry[], returnCount: number): void {
     if (!this.dataGrid) {
       return;
     }
@@ -376,7 +375,7 @@ export class ServiceWorkerCacheView extends UI.View.SimpleView {
     });
 
     const {entries, returnCount} = await this.loadingPromise;
-    this.updateDataCallback(0, entries, returnCount);
+    this.updateDataCallback(entries, returnCount);
     this.loadingPromise = null;
     return;
   }

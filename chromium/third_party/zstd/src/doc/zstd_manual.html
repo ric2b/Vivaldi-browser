@@ -110,6 +110,7 @@ unsigned long long ZSTD_getFrameContentSize(const void *src, size_t srcSize);
            - ZSTD_CONTENTSIZE_UNKNOWN if the size cannot be determined
            - ZSTD_CONTENTSIZE_ERROR if an error occurred (e.g. invalid magic number, srcSize too small)
   note 1 : a 0 return value means the frame is valid but "empty".
+           When invoking this method on a skippable frame, it will return 0.
   note 2 : decompressed size is an optional field, it may not be present (typically in streaming mode).
            When `return==ZSTD_CONTENTSIZE_UNKNOWN`, data to decompress could be any size.
            In which case, it's necessary to use streaming mode to decompress data.
@@ -128,9 +129,8 @@ unsigned long long ZSTD_getFrameContentSize(const void *src, size_t srcSize);
 </p></pre><BR>
 
 <pre><b>ZSTD_DEPRECATED("Replaced by ZSTD_getFrameContentSize")
-ZSTDLIB_API
 unsigned long long ZSTD_getDecompressedSize(const void* src, size_t srcSize);
-</b><p>  NOTE: This function is now obsolete, in favor of ZSTD_getFrameContentSize().
+</b><p>  This function is now obsolete, in favor of ZSTD_getFrameContentSize().
   Both functions work the same way, but ZSTD_getDecompressedSize() blends
   "empty", "unknown" and "error" results to the same return value (0),
   while ZSTD_getFrameContentSize() gives them separate return values.
@@ -142,7 +142,12 @@ unsigned long long ZSTD_getDecompressedSize(const void* src, size_t srcSize);
  `srcSize` must be >= first frame size
  @return : the compressed size of the first frame starting at `src`,
            suitable to pass as `srcSize` to `ZSTD_decompress` or similar,
-        or an error code if input is invalid 
+           or an error code if input is invalid
+  Note 1: this method is called _find*() because it's not enough to read the header,
+          it may have to scan through the frame's content, to reach its end.
+  Note 2: this method also works with Skippable Frames. In which case,
+          it returns the size of the complete skippable frame,
+          which is always equal to its content size + 8 bytes for headers. 
 </p></pre><BR>
 
 <h3>Compression helper functions</h3><pre></pre><b><pre></pre></b><BR>
@@ -166,8 +171,7 @@ size_t ZSTD_compressBound(size_t srcSize); </b>/*!< maximum compressed size in w
  
 </p></pre><BR>
 
-<h3>Error helper functions</h3><pre></pre><b><pre>#include "zstd_errors.h" </b>/* list of errors */<b>
-</b>/* ZSTD_isError() :<b>
+<h3>Error helper functions</h3><pre></pre><b><pre></b>/* ZSTD_isError() :<b>
  * Most ZSTD_* functions returning a size_t value can be tested for error,
  * using ZSTD_isError().
  * @return 1 if error, 0 otherwise
@@ -1239,7 +1243,7 @@ size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
 </p></pre><BR>
 
 <pre><b>ZSTDLIB_STATIC_API size_t ZSTD_frameHeaderSize(const void* src, size_t srcSize);
-</b><p>  srcSize must be >= ZSTD_FRAMEHEADERSIZE_PREFIX.
+</b><p>  srcSize must be large enough, aka >= ZSTD_FRAMEHEADERSIZE_PREFIX.
  @return : size of the Frame Header,
            or an error code (if srcSize is too small) 
 </p></pre><BR>
@@ -1252,20 +1256,20 @@ size_t ZSTD_sizeof_DDict(const ZSTD_DDict* ddict);
     unsigned blockSizeMax;
     ZSTD_FrameType_e frameType;          </b>/* if == ZSTD_skippableFrame, frameContentSize is the size of skippable content */<b>
     unsigned headerSize;
-    unsigned dictID;
+    unsigned dictID;                     </b>/* for ZSTD_skippableFrame, contains the skippable magic variant [0-15] */<b>
     unsigned checksumFlag;
     unsigned _reserved1;
     unsigned _reserved2;
-} ZSTD_frameHeader;
+} ZSTD_FrameHeader;
 </b></pre><BR>
-<pre><b>ZSTDLIB_STATIC_API size_t ZSTD_getFrameHeader(ZSTD_FrameHeader* zfhPtr, const void* src, size_t srcSize);   </b>/**< doesn't consume input */<b>
+<pre><b>ZSTDLIB_STATIC_API size_t ZSTD_getFrameHeader(ZSTD_FrameHeader* zfhPtr, const void* src, size_t srcSize);
 </b>/*! ZSTD_getFrameHeader_advanced() :<b>
  *  same as ZSTD_getFrameHeader(),
  *  with added capability to select a format (like ZSTD_f_zstd1_magicless) */
 ZSTDLIB_STATIC_API size_t ZSTD_getFrameHeader_advanced(ZSTD_FrameHeader* zfhPtr, const void* src, size_t srcSize, ZSTD_format_e format);
-</b><p>  decode Frame Header, or requires larger `srcSize`.
- @return : 0, `zfhPtr` is correctly filled,
-          >0, `srcSize` is too small, value is wanted `srcSize` amount,
+</b><p>  decode Frame Header into `zfhPtr`, or requires larger `srcSize`.
+ @return : 0 => header is complete, `zfhPtr` is correctly filled,
+          >0 => `srcSize` is too small, @return value is the wanted `srcSize` amount, `zfhPtr` is not filled,
            or an error code, which can be tested using ZSTD_isError() 
 </p></pre><BR>
 
@@ -1421,7 +1425,7 @@ ZSTD_compressSequences(ZSTD_CCtx* cctx,
 ZSTD_compressSequencesAndLiterals(ZSTD_CCtx* cctx,
                       void* dst, size_t dstCapacity,
                 const ZSTD_Sequence* inSeqs, size_t nbSequences,
-                const void* literals, size_t litSize, size_t litCapacity,
+                const void* literals, size_t litSize, size_t litBufCapacity,
                 size_t decompressedSize);
 </b><p> This is a variant of ZSTD_compressSequences() which,
  instead of receiving (src,srcSize) as input parameter, receives (literals,litSize),
@@ -1435,20 +1439,22 @@ ZSTD_compressSequencesAndLiterals(ZSTD_CCtx* cctx,
  - Not compatible with frame checksum, which must be disabled
  - If any block is incompressible, will fail and return an error
  - @litSize must be == sum of all @.litLength fields in @inSeqs. Any discrepancy will generate an error.
- - the buffer @literals must have a size @litCapacity which is larger than @litSize by at least 8 bytes.
+ - @litBufCapacity is the size of the underlying buffer into which literals are written, starting at address @literals.
+   @litBufCapacity must be at least 8 bytes larger than @litSize.
  - @decompressedSize must be correct, and correspond to the sum of all Sequences. Any discrepancy will generate an error.
  @return : final compressed size, or a ZSTD error code.
  
 </p></pre><BR>
 
 <pre><b>ZSTDLIB_STATIC_API size_t ZSTD_writeSkippableFrame(void* dst, size_t dstCapacity,
-                                const void* src, size_t srcSize, unsigned magicVariant);
+                                 const void* src, size_t srcSize,
+                                       unsigned magicVariant);
 </b><p> Generates a zstd skippable frame containing data given by src, and writes it to dst buffer.
 
  Skippable frames begin with a 4-byte magic number. There are 16 possible choices of magic number,
  ranging from ZSTD_MAGIC_SKIPPABLE_START to ZSTD_MAGIC_SKIPPABLE_START+15.
- As such, the parameter magicVariant controls the exact skippable frame magic number variant used, so
- the magic number used will be ZSTD_MAGIC_SKIPPABLE_START + magicVariant.
+ As such, the parameter magicVariant controls the exact skippable frame magic number variant used,
+ so the magic number used will be ZSTD_MAGIC_SKIPPABLE_START + magicVariant.
 
  Returns an error if destination buffer is not large enough, if the source size is not representable
  with a 4-byte unsigned int, or if the parameter magicVariant is greater than 15 (and therefore invalid).
@@ -1457,13 +1463,14 @@ ZSTD_compressSequencesAndLiterals(ZSTD_CCtx* cctx,
  
 </p></pre><BR>
 
-<pre><b>size_t ZSTD_readSkippableFrame(void* dst, size_t dstCapacity, unsigned* magicVariant,
-                                const void* src, size_t srcSize);
-</b><p> Retrieves a zstd skippable frame containing data given by src, and writes it to dst buffer.
+<pre><b>ZSTDLIB_STATIC_API size_t ZSTD_readSkippableFrame(void* dst, size_t dstCapacity,
+                                      unsigned* magicVariant,
+                                      const void* src, size_t srcSize);
+</b><p> Retrieves the content of a zstd skippable frame starting at @src, and writes it to @dst buffer.
 
- The parameter magicVariant will receive the magicVariant that was supplied when the frame was written,
- i.e. magicNumber - ZSTD_MAGIC_SKIPPABLE_START.  This can be NULL if the caller is not interested
- in the magicVariant.
+ The parameter @magicVariant will receive the magicVariant that was supplied when the frame was written,
+ i.e. magicNumber - ZSTD_MAGIC_SKIPPABLE_START.
+ This can be NULL if the caller is not interested in the magicVariant.
 
  Returns an error if destination buffer is not large enough, or if the frame is not skippable.
 
@@ -1471,7 +1478,7 @@ ZSTD_compressSequencesAndLiterals(ZSTD_CCtx* cctx,
  
 </p></pre><BR>
 
-<pre><b>unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
+<pre><b>ZSTDLIB_STATIC_API unsigned ZSTD_isSkippableFrame(const void* buffer, size_t size);
 </b><p>  Tells if the content of `buffer` starts with a valid Frame Identifier for a skippable frame.
  
 </p></pre><BR>

@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
-<translation id="2277224997687551299">Editar nome do grupo</translation>
+<translation id="1062777154504442433">Novo grupo de separadores</translation>
+<translation id="1625440863545383011">Remover separador e manter o grupo</translation>
 <translation id="2330212241471632770">{TABS_COUNT,plural,
-            =1{Adic. separ. aos favoritos}
-            other{Adic. separ. aos favoritos}
+            =1{Adic. separ. aos marcadores}
+            other{Adic. separ. aos marcadores}
           }</translation>
 <translation id="2947471979790858922">A sua atividade nestes separadores privados será removida deste equipamento</translation>
+<translation id="3298614730029636660">Deixar grupo</translation>
+<translation id="354698175756845966">Editar cor do grupo</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Pode encontrar os separadores que fechar nos Separadores recentes, no menu principal do Vivaldi. O seu separador privado não estará disponível.}
         other {Pode encontrar os separadores que fechar nos Separadores recentes, no menu principal do Vivaldi. Os seus # separadores privados não estarão disponíveis.}}</translation>
-<translation id="4460014764210899310">Desagrupar</translation>
 <translation id="4871187110787939393">Fechar todos os separadores privados?</translation>
 <translation id="5494920125229734069">Selecionar tudo</translation>
-<translation id="6744956528665271406">Editar cor do grupo</translation>
+<translation id="6807841890213931603">Remover separador e eliminar grupo</translation>
+<translation id="750227952939161636">Os seus grupos de separadores são guardados automaticamente e atualizam-se em todos os equipamentos onde esteja autenticado/a</translation>
+<translation id="7640137753339219124">Eliminar grupo</translation>
+<translation id="7653857400289671414">Os seus grupos de separadores são guardados automaticamente</translation>
+<translation id="8440938071054361204">Editar nome do grupo</translation>
+<translation id="8602902357364871325">Fechar grupo</translation>
+<translation id="8851621822786801079">Remover do grupo</translation>
 </translationbundle>

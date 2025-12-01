@@ -38,6 +38,11 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   // pass Wasm modules unmodified to this fuzzer).
   v8_flags.liftoff = size & 1;
 
+  // Disable wasm deoptimizations. Deoptimizations only make sense with both
+  // Liftoff and Turbofan enabled while this fuzzer only tests for either one of
+  // them,
+  v8_flags.wasm_deopt = false;
+
   Isolate* i_isolate = reinterpret_cast<Isolate*>(isolate);
 
   v8::Isolate::Scope isolate_scope(isolate);
@@ -74,18 +79,18 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
     GenerateTestCase(i_isolate, wire_bytes, compiles);
   }
 
-  // Return `-1` for invalid modules. We generate enough of them via mutation,
-  // no need to add them to the corpus.
-  int fuzzer_return_value =
-      compiles ? ExecuteAgainstReference(i_isolate, module_object,
-                                         kDefaultMaxFuzzerExecutedInstructions)
-               : -1;
+  if (compiles) {
+    USE(ExecuteAgainstReference(i_isolate, module_object,
+                                kDefaultMaxFuzzerExecutedInstructions));
+  }
 
   // Pump the message loop and run micro tasks, e.g. GC finalization tasks.
   support->PumpMessageLoop(v8::platform::MessageLoopBehavior::kDoNotWait);
   isolate->PerformMicrotaskCheckpoint();
 
-  return fuzzer_return_value;
+  // Differently to fuzzers generating "always valid" wasm modules, also mark
+  // invalid modules as interesting to have coverage-guidance for invalid cases.
+  return 0;
 }
 
 }  // namespace v8::internal::wasm::fuzzing

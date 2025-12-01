@@ -57,11 +57,14 @@ public class LoadingFullscreenCoordinatorUnitTest {
         LoadingFullscreenCoordinator loadingCoordinator =
                 new LoadingFullscreenCoordinator(mActivity, mScrimManager, layout);
 
+        boolean animate = false;
         loadingCoordinator.startLoading(
                 () -> {
                     loadingCoordinator.closeLoadingScreen();
-                });
-        verify(mScrimManager).showScrim(mPropertyModelArgumentCaptor.capture());
+                },
+                animate);
+        verify(mScrimManager).showScrim(mPropertyModelArgumentCaptor.capture(), eq(animate));
+
         PropertyModel propertyModel = mPropertyModelArgumentCaptor.getValue();
         cancelButton.performClick();
 

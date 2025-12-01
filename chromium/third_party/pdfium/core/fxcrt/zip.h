@@ -45,10 +45,11 @@ template <typename T, typename U>
 class ZipView2 {
  public:
   struct Iter {
-    bool operator==(const Iter& that) const { return first == that.first; }
+    friend inline bool operator==(const Iter& lhs, const Iter& rhs) {
+      return lhs.first == rhs.first;
+    }
 
-    bool operator!=(const Iter& that) const { return first != that.first; }
-
+    // PRECONDITIONS: Iter must not have reached end().
     UNSAFE_BUFFER_USAGE Iter& operator++() {
       // SAFETY: required from caller, enforced by UNSAFE_BUFFER_USAGE.
       UNSAFE_BUFFERS(++first);
@@ -81,10 +82,11 @@ template <typename T, typename U, typename V>
 class ZipView3 {
  public:
   struct Iter {
-    bool operator==(const Iter& that) const { return first == that.first; }
+    inline friend bool operator==(const Iter& lhs, const Iter& rhs) {
+      return lhs.first == rhs.first;
+    }
 
-    bool operator!=(const Iter& that) const { return first != that.first; }
-
+    // PRECONDITIONS: Iter must not have reached end().
     UNSAFE_BUFFER_USAGE Iter& operator++() {
       // SAFETY: required from caller, enforced by UNSAFE_BUFFER_USAGE.
       UNSAFE_BUFFERS(++first);

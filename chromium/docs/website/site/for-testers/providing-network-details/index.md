@@ -81,6 +81,11 @@ the following will limit the max log size to 100 MB:
 
 *   --net-log-max-size-mb=100
 
+(As of M137) Automatically stop logging after a fixed duration. You can stop logging
+after *N* seconds and flush the NetLog file to disk by supplying:
+
+*   --net-log-duration=&lt;seconds&gt;
+
 For info about adding command line options, see
 [command-line-flags](/developers/how-tos/run-chromium-with-flags).
 

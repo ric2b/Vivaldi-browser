@@ -44,56 +44,56 @@ enum ImporterTypeMetrics {
 }  // namespace
 
 void LogImporterUseToMetrics(const std::string& metric_postfix,
-                             ImporterType type) {
+                             user_data_importer::ImporterType type) {
   ImporterTypeMetrics metrics_type = IMPORTER_METRICS_UNKNOWN;
   switch (type) {
-    case TYPE_UNKNOWN:
+    case user_data_importer::TYPE_UNKNOWN:
       metrics_type = IMPORTER_METRICS_UNKNOWN;
       break;
 #if BUILDFLAG(IS_WIN)
-    case TYPE_IE:
+    case user_data_importer::TYPE_IE:
       metrics_type = IMPORTER_METRICS_IE;
       break;
-    case TYPE_EDGE:
+    case user_data_importer::TYPE_EDGE:
       metrics_type = IMPORTER_METRICS_EDGE;
       break;
 #endif
-    case TYPE_FIREFOX:
+    case user_data_importer::TYPE_FIREFOX:
       metrics_type = IMPORTER_METRICS_FIREFOX3;
       break;
 #if BUILDFLAG(IS_MAC)
-    case TYPE_SAFARI:
+    case user_data_importer::TYPE_SAFARI:
       metrics_type = IMPORTER_METRICS_SAFARI;
       break;
 #endif
-    case TYPE_BOOKMARKS_FILE:
+    case user_data_importer::TYPE_BOOKMARKS_FILE:
       metrics_type = IMPORTER_METRICS_BOOKMARKS_FILE;
       break;
-    case TYPE_OPERA:
+    case user_data_importer::TYPE_OPERA:
       metrics_type = IMPORTER_METRICS_OPERA;
       break;
-    case TYPE_CHROME:
-    case TYPE_CHROMIUM:
+    case user_data_importer::TYPE_CHROME:
+    case user_data_importer::TYPE_CHROMIUM:
       metrics_type = IMPORTER_METRICS_CHROME;
       break;
-    case TYPE_VIVALDI:
+    case user_data_importer::TYPE_VIVALDI:
       metrics_type = IMPORTER_METRICS_VIVALDI;
       break;
-    case TYPE_BRAVE:
+    case user_data_importer::TYPE_BRAVE:
       metrics_type = IMPORTER_METRICS_BRAVE;
       break;
-    case TYPE_EDGE_CHROMIUM:
+    case user_data_importer::TYPE_EDGE_CHROMIUM:
       metrics_type = IMPORTER_METRICS_EDGE_CHROMIUM;
       break;
-    case TYPE_YANDEX:
+    case user_data_importer::TYPE_YANDEX:
       metrics_type = IMPORTER_METRICS_YANDEX;
       break;
-    case TYPE_OPERA_OPIUM:
-    case TYPE_OPERA_OPIUM_BETA:
-    case TYPE_OPERA_OPIUM_DEV:
+    case user_data_importer::TYPE_OPERA_OPIUM:
+    case user_data_importer::TYPE_OPERA_OPIUM_BETA:
+    case user_data_importer::TYPE_OPERA_OPIUM_DEV:
       metrics_type = IMPORTER_METRICS_OPERA_OPIUM;
       break;
-    case TYPE_THUNDERBIRD:
+    case user_data_importer::TYPE_THUNDERBIRD:
       metrics_type = IMPORTER_METRICS_THUNDERBIRD;
       break;
       // Vivaldi doesn't care about metrics

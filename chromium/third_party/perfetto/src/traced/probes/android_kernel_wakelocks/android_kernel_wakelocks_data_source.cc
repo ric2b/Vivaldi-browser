@@ -29,6 +29,7 @@
 #include "perfetto/tracing/core/data_source_config.h"
 #include "src/android_internal/lazy_library_loader.h"
 #include "src/android_internal/suspend_control_service.h"
+#include "src/kernel_utils/kernel_wakelock_errors.h"
 
 #include "protos/perfetto/common/android_energy_consumer_descriptor.pbzero.h"
 #include "protos/perfetto/config/android/kernel_wakelocks_config.pbzero.h"
@@ -99,6 +100,11 @@ AndroidKernelWakelocksDataSource::AndroidKernelWakelocksDataSource(
                   poll_interval_ms_, kMinPollIntervalMs);
     poll_interval_ms_ = kMinPollIntervalMs;
   }
+
+  // Really it shouldn't be more than poll_interval_ms_ but allow for
+  // some clock skew; the implausible values we receive seem to be very large
+  // in practice.
+  max_plausible_diff_ms_ = 10 * poll_interval_ms_;
 }
 
 AndroidKernelWakelocksDataSource::~AndroidKernelWakelocksDataSource() = default;
@@ -140,6 +146,7 @@ void AndroidKernelWakelocksDataSource::WriteKernelWakelocks() {
   base::FlatHashMap<std::string, uint64_t> totals;
 
   auto* proto = packet->set_kernel_wakelock_data();
+  uint64_t error_flags = 0;
 
   std::vector<android_internal::KernelWakelock> wakelocks =
       lib_->GetKernelWakelocks();
@@ -167,18 +174,36 @@ void AndroidKernelWakelocksDataSource::WriteKernelWakelocks() {
 
   for (auto it = totals.GetIterator(); it; ++it) {
     KernelWakelockInfo* info = wakelocks_.Find(it.key());
-
     uint64_t total = it.value();
-    if (it.value() != info->last_value) {
-      uint64_t last_value = info->last_value;
+    uint64_t last_value = info->last_value;
+
+    if (total == 0) {
+      error_flags |= kKernelWakelockErrorZeroValue;
+      continue;
+    } else if (total < last_value) {
+      error_flags |= kKernelWakelockErrorNonMonotonicValue;
+      continue;
+    }
+    if (total != last_value) {
+      uint64_t diff = total - last_value;
+      // From observation, if SuspendControlService gives us a very large
+      // value it's a one-off, so don't let it define the new normal.
+      if (last_value > 0 && diff > max_plausible_diff_ms_) {
+        error_flags |= kKernelWakelockErrorImplausiblyLargeValue;
+        continue;
+      }
       info->last_value = total;
       wakelock_id.Append(info->id);
-      time_held_millis.Append(total - last_value);
+      time_held_millis.Append(diff);
     }
   }
 
   proto->set_wakelock_id(wakelock_id);
   proto->set_time_held_millis(time_held_millis);
+
+  if (error_flags != 0) {
+    proto->set_error_flags(error_flags);
+  }
 }
 
 void AndroidKernelWakelocksDataSource::Flush(FlushRequestID,

@@ -56,6 +56,7 @@ class BrowserDesktopWindowTreeHostWin
   DesktopWindowTreeHost* AsDesktopWindowTreeHost() override;
   int GetMinimizeButtonOffset() const override;
   bool UsesNativeSystemMenu() const override;
+  void ClientDestroyedWidget() override;
 
   // Overridden from DesktopWindowTreeHostWin:
   void Init(const views::Widget::InitParams& params) override;
@@ -64,7 +65,7 @@ class BrowserDesktopWindowTreeHostWin
   std::string GetWorkspace() const override;
   int GetInitialShowState() const override;
   bool GetClientAreaInsets(gfx::Insets* insets,
-                           HMONITOR monitor) const override;
+                           int frame_thickness) const override;
   bool GetDwmFrameInsetsInPixels(gfx::Insets* insets) const override;
   void HandleCreate() override;
   void HandleDestroying() override;

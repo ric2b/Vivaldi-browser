@@ -38,13 +38,8 @@ struct COLOR_SPACE_EXPORT HdrMetadataCta861_3 {
   bool IsValid() const {
     return max_content_light_level > 0 || max_frame_average_light_level > 0;
   }
-  bool operator==(const HdrMetadataCta861_3& rhs) const {
-    return max_content_light_level == rhs.max_content_light_level &&
-           max_frame_average_light_level == rhs.max_frame_average_light_level;
-  }
-  bool operator!=(const HdrMetadataCta861_3& rhs) const {
-    return !(*this == rhs);
-  }
+  friend bool operator==(const HdrMetadataCta861_3&,
+                         const HdrMetadataCta861_3&) = default;
 };
 
 // SMPTE ST 2086 color volume metadata.
@@ -70,14 +65,8 @@ struct COLOR_SPACE_EXPORT HdrMetadataSmpteSt2086 {
            luminance_min != 0.f;
   }
 
-  bool operator==(const HdrMetadataSmpteSt2086& rhs) const {
-    return (primaries == rhs.primaries && luminance_max == rhs.luminance_max &&
-            luminance_min == rhs.luminance_min);
-  }
-
-  bool operator!=(const HdrMetadataSmpteSt2086& rhs) const {
-    return !(*this == rhs);
-  }
+  friend bool operator==(const HdrMetadataSmpteSt2086&,
+                         const HdrMetadataSmpteSt2086&) = default;
 };
 
 // Nominal diffuse white level (NDWL) metadata.
@@ -91,9 +80,8 @@ struct COLOR_SPACE_EXPORT HdrMetadataNdwl {
 
   std::string ToString() const;
 
-  bool operator==(const HdrMetadataNdwl& rhs) const { return nits == rhs.nits; }
-
-  bool operator!=(const HdrMetadataNdwl& rhs) const { return !(*this == rhs); }
+  friend bool operator==(const HdrMetadataNdwl&,
+                         const HdrMetadataNdwl&) = default;
 };
 
 // HDR metadata for extended range color spaces.
@@ -118,14 +106,8 @@ struct COLOR_SPACE_EXPORT HdrMetadataExtendedRange {
 
   std::string ToString() const;
 
-  bool operator==(const HdrMetadataExtendedRange& rhs) const {
-    return (current_headroom == rhs.current_headroom &&
-            desired_headroom == rhs.desired_headroom);
-  }
-
-  bool operator!=(const HdrMetadataExtendedRange& rhs) const {
-    return !(*this == rhs);
-  }
+  friend bool operator==(const HdrMetadataExtendedRange&,
+                         const HdrMetadataExtendedRange&) = default;
 };
 
 struct COLOR_SPACE_EXPORT HdrMetadataAgtm {
@@ -136,10 +118,11 @@ struct COLOR_SPACE_EXPORT HdrMetadataAgtm {
   HdrMetadataAgtm& operator=(const HdrMetadataAgtm& other);
   ~HdrMetadataAgtm();
 
+  // Return whether or not use of AGTM metadata is enabled by default or not.
+  static bool IsEnabled();
   std::string ToString() const;
 
   bool operator==(const HdrMetadataAgtm& rhs) const;
-  bool operator!=(const HdrMetadataAgtm& rhs) const { return !(*this == rhs); }
 
   // The raw encoded AGTM metadata payload.
   sk_sp<SkData> payload;
@@ -176,6 +159,19 @@ struct COLOR_SPACE_EXPORT HDRMetadata {
            (smpte_st_2086 && smpte_st_2086->IsValid()) || extended_range;
   }
 
+  // Compute the maximum luminance for the specified HDR metadata. This will
+  // - return the CTA 861.3 max content light level metadata, if present
+  // - return the SMPTE ST 2086 luminance max metadata, if present
+  // - otherwise return 1,000 nits
+  static float GetContentMaxLuminance(
+      const std::optional<gfx::HDRMetadata>& metadata);
+
+  // Compute the reference white luminance. This will:
+  // - return the NDWL value, if present
+  // - otherwise return 203 nits
+  static float GetReferenceWhiteLuminance(
+      const std::optional<gfx::HDRMetadata>& metadata);
+
   // Return a copy of `hdr_metadata` with its `smpte_st_2086` fully
   // populated. Any unspecified values are set to default values (in particular,
   // the gamut is set to rec2020, minimum luminance to 0 nits, and maximum
@@ -187,13 +183,7 @@ struct COLOR_SPACE_EXPORT HDRMetadata {
 
   std::string ToString() const;
 
-  bool operator==(const HDRMetadata& rhs) const {
-    return cta_861_3 == rhs.cta_861_3 && smpte_st_2086 == rhs.smpte_st_2086 &&
-           ndwl == rhs.ndwl && extended_range == rhs.extended_range &&
-           agtm == rhs.agtm;
-  }
-
-  bool operator!=(const HDRMetadata& rhs) const { return !(*this == rhs); }
+  friend bool operator==(const HDRMetadata&, const HDRMetadata&) = default;
 };
 
 // HDR metadata types as described in

@@ -187,7 +187,8 @@ struct Scalar {
 /// @param out the stream to write to
 /// @param s the Scalar
 /// @returns @p out so calls can be chained
-template <typename STREAM, typename = traits::EnableIfIsOStream<STREAM>>
+template <typename STREAM>
+    requires(traits::IsOStream<STREAM>)
 STREAM& operator<<(STREAM& out, const Scalar& s) {
     std::visit([&](auto&& v) { out << v; }, s.value);
     return out;
@@ -599,7 +600,7 @@ struct DataType<alias<T, ID>> {
     /// @param args the value nested elements will be initialized with
     /// @return a new AST expression of the alias type
     template <bool IS_COMPOSITE = is_composite>
-    static inline tint::traits::EnableIf<!IS_COMPOSITE, const ast::Expression*> Expr(
+    static inline std::enable_if_t<!IS_COMPOSITE, const ast::Expression*> Expr(
         ProgramBuilder& b,
         VectorRef<Scalar> args) {
         // Cast
@@ -610,7 +611,7 @@ struct DataType<alias<T, ID>> {
     /// @param args the value nested elements will be initialized with
     /// @return a new AST expression of the alias type
     template <bool IS_COMPOSITE = is_composite>
-    static inline tint::traits::EnableIf<IS_COMPOSITE, const ast::Expression*> Expr(
+    static inline std::enable_if_t<IS_COMPOSITE, const ast::Expression*> Expr(
         ProgramBuilder& b,
         VectorRef<Scalar> args) {
         // Construct

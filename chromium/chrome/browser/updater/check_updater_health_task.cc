@@ -5,6 +5,7 @@
 #include "chrome/browser/updater/check_updater_health_task.h"
 
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include "base/functional/bind.h"
@@ -12,7 +13,10 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/sequence_checker.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/bind_post_task.h"
+#include "base/task/thread_pool.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/updater/browser_updater_client.h"
@@ -36,8 +40,6 @@ CheckUpdaterHealthTask::~CheckUpdaterHealthTask() = default;
 
 void CheckUpdaterHealthTask::CheckAndRecordUpdaterHealth(
     const base::Version& version) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
   base::UmaHistogramBoolean("GoogleUpdate.UpdaterHealth.UpdaterValid",
                             version.IsValid());
   if (!version.IsValid()) {
@@ -45,8 +47,31 @@ void CheckUpdaterHealthTask::CheckAndRecordUpdaterHealth(
   }
 
 #if BUILDFLAG(IS_WIN)
+  // System service metrics.
+  if (IsSystemInstall(scope_)) {
+    for (const bool is_internal_service : {false, true}) {
+      const std::wstring service_name =
+          GetServiceName(is_internal_service, version);
+      const std::string_view uma_suffix =
+          is_internal_service ? "Internal" : "SxS";
+      base::UmaHistogramBoolean(
+          base::StrCat(
+              {"GoogleUpdate.UpdaterHealth.ServicePresent.", uma_suffix}),
+          IsServicePresent(service_name));
+      base::UmaHistogramBoolean(
+          base::StrCat(
+              {"GoogleUpdate.UpdaterHealth.ServiceEnabled.", uma_suffix}),
+          IsServiceEnabled(service_name));
+    }
+  }
+
+  // Scheduled task metrics.
   scoped_refptr<TaskScheduler> task_scheduler =
       TaskScheduler::CreateInstance(scope_);
+  if (!task_scheduler) {
+    // Cannot get metrics without a TaskScheduler instance.
+    return;
+  }
   const std::wstring task_name =
       task_scheduler->FindFirstTaskName(GetTaskNamePrefix(scope_, version));
 
@@ -71,7 +96,10 @@ void CheckUpdaterHealthTask::Run(base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   BrowserUpdaterClient::Create(scope_)->GetUpdaterVersion(
-      base::BindOnce(&CheckUpdaterHealthTask::CheckAndRecordUpdaterHealth, this)
+      base::BindPostTask(
+          base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()}),
+          base::BindOnce(&CheckUpdaterHealthTask::CheckAndRecordUpdaterHealth,
+                         this))
           .Then(std::move(callback)));
 }
 

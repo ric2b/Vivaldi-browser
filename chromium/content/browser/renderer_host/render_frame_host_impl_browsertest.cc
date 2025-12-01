@@ -105,6 +105,7 @@
 #include "services/network/public/cpp/network_switches.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "services/network/public/mojom/connection_change_observer_client.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -375,6 +376,61 @@ BackForwardCacheBlockingDetails CreateBlockingDetails(
   }
   return feature_vector;
 }
+
+// This is for the test cases where the beforeunload handlers are handled in a
+// legacy way. See the comment about `for_legacy` on
+// `RenderFrameHostImpl::SendBeforeUnload()`.
+class RenderFrameHostImplWithLegacyBeforeUnloadBrowserTest
+    : public RenderFrameHostImplBrowserTest {
+ public:
+  RenderFrameHostImplWithLegacyBeforeUnloadBrowserTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        features::kAvoidUnnecessaryBeforeUnloadCheckSync);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// This is a parameterized test that covers the beforeunload handlers are
+// handled in both legacy and non-legacy ways. See the comment about
+// `for_legacy` on `RenderFrameHostImpl::SendBeforeUnload()`.
+class RenderFrameHostImplWithOrWithoutLegacyBeforeUnloadBrowserTest
+    : public RenderFrameHostImplBrowserTest,
+      public testing::WithParamInterface<bool> {
+ public:
+  RenderFrameHostImplWithOrWithoutLegacyBeforeUnloadBrowserTest() {
+    if (UseLegacyPostTaskForBeforeUnload()) {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kAvoidUnnecessaryBeforeUnloadCheckSync);
+    } else {
+      scoped_feature_list_.InitWithFeaturesAndParameters(
+          /*enabled_features=*/
+          {{features::kAvoidUnnecessaryBeforeUnloadCheckSync,
+            {{features::kAvoidUnnecessaryBeforeUnloadCheckSyncMode.name,
+              "WithoutSendBeforeUnload"}}}},
+          /*disabled_features=*/{});
+    }
+  }
+
+  bool UseLegacyPostTaskForBeforeUnload() const { return GetParam(); }
+
+  // Provides meaningful param names instead of /0, /1, ...
+  static std::string DescribeParams(
+      const testing::TestParamInfo<ParamType>& info) {
+    return info.param ? "WithLegacyBeforeUnload" : "WithoutLegacyBeforeUnload";
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    RenderFrameHostImplWithOrWithoutLegacyBeforeUnloadBrowserTest,
+    testing::Bool(),
+    RenderFrameHostImplWithOrWithoutLegacyBeforeUnloadBrowserTest::
+        DescribeParams);
 
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                        ExecuteJavaScriptMethodWorksWithArguments) {
@@ -654,7 +710,8 @@ class RenderFrameHostImplForBeforeUnloadInterceptor
 
   void SendBeforeUnload(bool is_reload,
                         base::WeakPtr<RenderFrameHostImpl> rfh,
-                        bool for_legacy) override {
+                        bool for_legacy,
+                        const bool is_renderer_initiated_navigation) override {
     rfh->GetAssociatedLocalFrame()->BeforeUnload(is_reload, base::DoNothing());
   }
 
@@ -762,6 +819,26 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
     histogram_tester.ExpectUniqueSample(
         "Navigation.StartAdjustment.MainFrameOnly",
         NavigationStartAdjustmentType::kNone, 1);
+
+    // Check for timeline metrics, which should include main frame only
+    // versions.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.MainFrameOnly.Duration",
+        1);
+    // This navigation has no start adjustment, but the
+    //`actual_navigation_start` is now recorded at an earlier time (closer to
+    // the start of the navigation) than the web-facing `navigation_start_time`
+    // in NavigateWithoutEntry, so this triggers IgnoredIncorrectly metrics.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Percentage", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Percentage", 1);
   }
   // Disable the hang monitor, otherwise there will be a race between the
   // beforeunload dialog and the beforeunload hang timer.
@@ -811,6 +888,27 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
         "Navigation.StartAdjustment.BeforeUnloadDialog", 1);
     histogram_tester.ExpectTotalCount(
         "Navigation.StartAdjustment.BeforeUnloadDialog.Percentage", 1);
+
+    // Check for timeline metrics, which should include main frame only
+    // versions.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.MainFrameOnly.Duration",
+        1);
+    // The beforeunload dialog will cause an adjustment that includes both
+    // IgnoredCorrectly and IgnoredIncorrectly durations. (Only the latter
+    // metric has a main frame only version).
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredCorrectly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Percentage", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Percentage", 1);
   }
 
   // The reload should have cleared the user gesture bit, so upon leaving again
@@ -825,8 +923,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
 // display dialogs, even during renderer-initiated navigations in a process that
 // does not have a beforeunload handler. Also verifies that the correct metrics
 // are recorded.
-IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
-                       BeforeUnloadDialogInOOPIF) {
+IN_PROC_BROWSER_TEST_P(
+    RenderFrameHostImplWithOrWithoutLegacyBeforeUnloadBrowserTest,
+    BeforeUnloadDialogInOOPIF) {
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
   TestJavaScriptDialogManager dialog_manager;
   web_contents()->SetDelegate(&dialog_manager);
@@ -846,6 +945,25 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                                       0);
     histogram_tester.ExpectTotalCount(
         "Navigation.StartAdjustment.MainFrameOnly", 0);
+
+    // Check for timeline metrics, which should not include main frame only
+    // versions, since those are limited to cross-document navigations.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.MainFrameOnly.Duration",
+        0);
+    // This navigation has no start adjustment but it does ignore initial work
+    // in the renderer process, so there are (non-main frame) IgnoredIncorrectly
+    // metrics.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration", 0);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Percentage", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Percentage", 0);
   }
 
   // Create an out-of-process iframe.
@@ -868,6 +986,25 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
     // This does not contribute to MainFrameOnly counts.
     histogram_tester.ExpectTotalCount(
         "Navigation.StartAdjustment.MainFrameOnly", 0);
+
+    // Check for timeline metrics, which should not include main frame only
+    // versions.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.TotalExcludingBeforeUnload.MainFrameOnly.Duration",
+        0);
+    // This navigation has no start adjustment but it does ignore initial work
+    // in the renderer process, so there are (non-main frame) IgnoredIncorrectly
+    // metrics.
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration", 0);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Percentage", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Percentage", 0);
   }
   ASSERT_EQ(1u, root->child_count());
   FrameTreeNode* child = root->child_at(0u);
@@ -893,18 +1030,52 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
     nav_observer.Wait();
     EXPECT_TRUE(child->current_frame_host()->GetSuddenTerminationDisablerState(
         blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler));
-    // A legacy PostTask is used when a renderer-initiated navigation targets a
-    // remote frame that has no beforeunload handler.
-    histogram_tester.ExpectUniqueSample(
-        "Navigation.StartAdjustment.AllFrames",
-        NavigationStartAdjustmentType::kLegacyPostTask, 1);
-    // This does not contribute to MainFrameOnly counts.
+    if (UseLegacyPostTaskForBeforeUnload()) {
+      // A legacy PostTask is used when a renderer-initiated navigation targets
+      // a remote frame that has no beforeunload handler.
+      histogram_tester.ExpectUniqueSample(
+          "Navigation.StartAdjustment.AllFrames",
+          NavigationStartAdjustmentType::kLegacyPostTask, 1);
+      // This does not contribute to MainFrameOnly counts.
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.MainFrameOnly", 0);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask", 1);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask.Percentage", 1);
+    } else {
+      // No adjustment to the navigation start time was made when a
+      // renderer-initiated navigation targets a remote frame that has no
+      // beforeunload handler.
+      histogram_tester.ExpectUniqueSample(
+          "Navigation.StartAdjustment.AllFrames",
+          NavigationStartAdjustmentType::kNone, 1);
+      // This does not contribute to MainFrameOnly counts.
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.MainFrameOnly", 0);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask", 0);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask.Percentage", 0);
+    }
+
+    // Check for timeline metrics, which should not include main frame only
+    // versions.
     histogram_tester.ExpectTotalCount(
-        "Navigation.StartAdjustment.MainFrameOnly", 0);
+        "Navigation.Timeline.TotalExcludingBeforeUnload.Duration", 1);
     histogram_tester.ExpectTotalCount(
-        "Navigation.StartAdjustment.LegacyPostTask", 1);
+        "Navigation.Timeline.TotalExcludingBeforeUnload.MainFrameOnly.Duration",
+        0);
+    // The beforeunload dialog will cause an adjustment that includes some
+    // (non-main-frame) IgnoredIncorrectly durations.
     histogram_tester.ExpectTotalCount(
-        "Navigation.StartAdjustment.LegacyPostTask.Percentage", 1);
+        "Navigation.Timeline.IgnoredIncorrectly.Duration", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration", 0);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrectly.Percentage", 1);
+    histogram_tester.ExpectTotalCount(
+        "Navigation.Timeline.IgnoredIncorrecttly.MainFrameOnly.Percentage", 0);
   }
   EXPECT_NE(root->current_frame_host()->GetProcess(),
             child->current_frame_host()->GetProcess());
@@ -1701,14 +1872,14 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
   EXPECT_EQ(main_frame, child->GetBeforeUnloadInitiator());
   EXPECT_EQ(main_frame, main_frame->GetBeforeUnloadInitiator());
 
-  // When in a strict SiteInstances mode, LoadURL() should trigger two
-  // beforeunload IPCs for subframe and the main frame: the subframe has a
-  // beforeunload handler, and while the main frame does not, we always send the
-  // IPC to navigating frames, regardless of whether or not they have a handler.
+  // With full site isolation, LoadURL() should trigger two beforeunload IPCs
+  // for subframe and the main frame: the subframe has a beforeunload handler,
+  // and while the main frame does not, we always send the IPC to navigating
+  // frames, regardless of whether or not they have a handler.
   //
-  // Without strict SiteInstances, only one beforeunload IPC should be sent to
+  // Without full site isolation, only one beforeunload IPC should be sent to
   // the main frame, which will handle both (same-process) frames.
-  EXPECT_EQ(AreStrictSiteInstancesEnabled() ? 2u : 1u,
+  EXPECT_EQ(AreAllSitesIsolatedForTesting() ? 2u : 1u,
             main_frame->beforeunload_pending_replies_.size());
 
   // Wait for the beforeunload dialog to be shown from the subframe.
@@ -1721,12 +1892,12 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
   EXPECT_TRUE(main_frame->is_waiting_for_beforeunload_completion());
   EXPECT_FALSE(child->is_waiting_for_beforeunload_completion());
 
-  // In a strict SiteInstances mode, the beforeunload completion callback should
-  // happen on the child RFH.  Without strict SiteInstances, it will come from
-  // the main frame RFH, which processes beforeunload for both main frame and
-  // child frame, since they are in the same process and SiteInstance.
+  // With full site isolation, the beforeunload completion callback should
+  // happen on the child RFH. Without full site isolation, it will come from the
+  // main frame RFH, which processes beforeunload for both main frame and child
+  // frame, since they are in the same process and SiteInstance.
   RenderFrameHostImpl* frame_that_sent_beforeunload_ipc =
-      AreStrictSiteInstancesEnabled() ? child : main_frame;
+      AreAllSitesIsolatedForTesting() ? child : main_frame;
   EXPECT_TRUE(main_frame->beforeunload_pending_replies_.count(
       frame_that_sent_beforeunload_ipc));
 
@@ -2277,7 +2448,9 @@ void PostRequestMonitor(int* post_counter,
 }  // namespace
 
 // Verifies form submits and resubmits work.
-IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, POSTNavigation) {
+IN_PROC_BROWSER_TEST_P(
+    RenderFrameHostImplWithOrWithoutLegacyBeforeUnloadBrowserTest,
+    POSTNavigation) {
   net::EmbeddedTestServer http_server;
   http_server.AddDefaultHandlers(GetTestDataFilePath());
   int post_counter = 0;
@@ -2314,18 +2487,32 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, POSTNavigation) {
     web_contents()->GetController().Reload(ReloadType::NORMAL, false);
     EXPECT_TRUE(WaitForLoadStop(web_contents()));
 
-    // This browser-initiated reload adjusts navigation start time for a legacy
-    // PostTask, without any beforeunload handlers present.
-    histogram_tester.ExpectUniqueSample(
-        "Navigation.StartAdjustment.AllFrames",
-        NavigationStartAdjustmentType::kLegacyPostTask, 1);
-    histogram_tester.ExpectUniqueSample(
-        "Navigation.StartAdjustment.MainFrameOnly",
-        NavigationStartAdjustmentType::kLegacyPostTask, 1);
-    histogram_tester.ExpectTotalCount(
-        "Navigation.StartAdjustment.LegacyPostTask", 1);
-    histogram_tester.ExpectTotalCount(
-        "Navigation.StartAdjustment.LegacyPostTask.Percentage", 1);
+    if (UseLegacyPostTaskForBeforeUnload()) {
+      // This browser-initiated reload adjusts navigation start time for a
+      // legacy PostTask, without any beforeunload handlers present.
+      histogram_tester.ExpectUniqueSample(
+          "Navigation.StartAdjustment.AllFrames",
+          NavigationStartAdjustmentType::kLegacyPostTask, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Navigation.StartAdjustment.MainFrameOnly",
+          NavigationStartAdjustmentType::kLegacyPostTask, 1);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask", 1);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask.Percentage", 1);
+    } else {
+      // This browser-initiated reload does not adjust navigation start.
+      histogram_tester.ExpectUniqueSample(
+          "Navigation.StartAdjustment.AllFrames",
+          NavigationStartAdjustmentType::kNone, 1);
+      histogram_tester.ExpectUniqueSample(
+          "Navigation.StartAdjustment.MainFrameOnly",
+          NavigationStartAdjustmentType::kNone, 1);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask", 0);
+      histogram_tester.ExpectTotalCount(
+          "Navigation.StartAdjustment.LegacyPostTask.Percentage", 0);
+    }
   }
   EXPECT_EQ("text=&select=a", base::UTF16ToASCII(web_contents()->GetTitle()));
   CHECK_EQ(2, post_counter);
@@ -2336,7 +2523,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, POSTNavigation) {
 // adjustment to the start time, because a posted task from the first navigation
 // updates the start time of the second navigation (after the first is
 // canceled). See https://crbug.com/385170155.
-IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, BackToBackReloads) {
+IN_PROC_BROWSER_TEST_F(RenderFrameHostImplWithLegacyBeforeUnloadBrowserTest,
+                       BackToBackReloads) {
   EXPECT_TRUE(
       NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
 
@@ -2360,6 +2548,79 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, BackToBackReloads) {
                                     0);
   histogram_tester.ExpectTotalCount(
       "Navigation.StartAdjustment.LegacyPostTask.Percentage", 0);
+}
+
+class AvoidUnnecessaryBeforeUnloadCheckSyncBrowserTest
+    : public RenderFrameHostImplBrowserTest,
+      public testing::WithParamInterface<std::string> {
+ public:
+  AvoidUnnecessaryBeforeUnloadCheckSyncBrowserTest() {
+    scoped_feature_list_.InitWithFeaturesAndParameters(
+        /*enabled_features=*/
+        {{features::kAvoidUnnecessaryBeforeUnloadCheckSync,
+          {{features::kAvoidUnnecessaryBeforeUnloadCheckSyncMode.name,
+            GetMode()}}}},
+        /*disabled_features=*/{});
+  }
+
+  const std::string& GetMode() { return GetParam(); }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    AvoidUnnecessaryBeforeUnloadCheckSyncBrowserTest,
+    ::testing::Values("DumpWithoutCrashing",
+                      "WithSendBeforeUnload",
+                      "WithoutSendBeforeUnload"),
+    [](const testing::TestParamInfo<
+        AvoidUnnecessaryBeforeUnloadCheckSyncBrowserTest::ParamType>& info) {
+      return info.param;
+    });
+
+// Regression test for https://crbug.com/411855273.
+// Confirms that the back navigation in the following scenario must not report
+// DumpWithoutCrashing and must not crash with the navigation re-entrancy issue.
+IN_PROC_BROWSER_TEST_P(AvoidUnnecessaryBeforeUnloadCheckSyncBrowserTest,
+                       PotentialReentrancyOnFailedSubframeBackNavigation) {
+  const base::HistogramTester histogram_tester;
+
+  // Load a page with a CSP policy that causes all subframe loads to fail.
+  EXPECT_TRUE(NavigateToURL(shell(),
+                            GURL("data:text/html,"
+                                 "<html><head>"
+                                 "<meta http-equiv=\"Content-Security-Policy\" "
+                                 "content=\"frame-src 'none'\">"
+                                 "</head><body></body></html>")));
+
+  // Create an iframe, and navigate to title1.html in iframe. This subframe load
+  // fails the CSP policy above and ends up in OnRequestFailedInternal.
+  TestNavigationObserver test_navigation_observer1(web_contents());
+  EXPECT_TRUE(
+      ExecJs(root_frame_host(),
+             JsReplace("const frame = document.createElement('iframe');"
+                       "frame.src = $1;"
+                       "document.body.appendChild(frame);",
+                       embedded_test_server()->GetURL("/title1.html"))));
+  test_navigation_observer1.Wait();
+
+  // Navigate to title2.html in iframe. This subframe load fails the CSP policy
+  // above and ends up in OnRequestFailedInternal.
+  TestNavigationObserver test_navigation_observer2(web_contents());
+  EXPECT_TRUE(
+      ExecJs(root_frame_host(),
+             JsReplace("document.getElementsByTagName('iframe')[0].src = $1;",
+                       embedded_test_server()->GetURL("/title2.html"))));
+  test_navigation_observer2.Wait();
+
+  // The following back navigation used to trigger https://crbug.com/411855273,
+  // but it is fixed now.
+  TestNavigationObserver test_navigation_observer3(web_contents());
+  web_contents()->GetController().GoBack();
+  test_navigation_observer3.Wait();
+  histogram_tester.ExpectTotalCount("Stability.DumpWithoutCrashingStatus", 0);
 }
 
 namespace {
@@ -4161,17 +4422,6 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   main_frame->DidChangeBackForwardCacheDisablingFeatures(
       CreateBlockingDetails({}));
 }
-
-class RenderFrameHostImplSchemefulEnabledBrowserTest
-    : public RenderFrameHostImplBrowserTest {
- public:
-  RenderFrameHostImplSchemefulEnabledBrowserTest() {
-    scope_feature_list_.InitAndEnableFeature(net::features::kSchemefulSameSite);
-  }
-
- protected:
-  base::test::ScopedFeatureList scope_feature_list_;
-};
 
 class RenderFrameHostImplNoStrictSiteIsolationOnAndroidBrowserTest
     : public RenderFrameHostImplBrowserTest {
@@ -7493,7 +7743,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplCredentiallessIframeNikBrowserTest,
                             main_rfh->GetIsolationInfoForSubresources()
                                 .network_anonymization_key(),
                             net::MutableNetworkTrafficAnnotationTag(
-                                TRAFFIC_ANNOTATION_FOR_TESTS));
+                                TRAFFIC_ANNOTATION_FOR_TESTS),
+                            std::nullopt, mojo::NullRemote());
 
     connection_tracker_->WaitForAcceptedConnections(1);
     EXPECT_EQ(1u, connection_tracker_->GetAcceptedSocketCount());
@@ -8355,7 +8606,9 @@ IN_PROC_BROWSER_TEST_F(
                                         ->RequiresDedicatedProcess();
 
   // `shell()` and `second_shell` opened different sites.
-  if (requires_dedicated_process) {
+  // TODO(crbug.com/419469455): Make sure metrics are updated correctly with the
+  // introduction of default SiteInstanceGroup.
+  if (requires_dedicated_process || ShouldUseDefaultSiteInstanceGroup()) {
     EXPECT_THAT(histogram.GetAllSamples(
                     "SiteIsolation."
                     "NewProcessUsedForNavigationWhenSameSiteProcessExists"),
@@ -8369,7 +8622,7 @@ IN_PROC_BROWSER_TEST_F(
 
   ASSERT_TRUE(NavigateToURL(second_shell, url));
   // Now `shell()` and `second_shell` opened the same site.
-  if (requires_dedicated_process) {
+  if (requires_dedicated_process || ShouldUseDefaultSiteInstanceGroup()) {
     EXPECT_THAT(
         histogram.GetAllSamples(
             "SiteIsolation."
@@ -8471,8 +8724,8 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   TestNavigationThrottleInserter throttle_inserter(
       shell()->web_contents(),
       base::BindLambdaForTesting(
-          [&](NavigationHandle* handle) -> std::unique_ptr<NavigationThrottle> {
-            auto throttle = std::make_unique<TestNavigationThrottle>(handle);
+          [&](NavigationThrottleRegistry& registry) -> void {
+            auto throttle = std::make_unique<TestNavigationThrottle>(registry);
             throttle->SetCallback(
                 TestNavigationThrottle::WILL_PROCESS_RESPONSE,
                 base::BindLambdaForTesting([&]() {
@@ -8501,7 +8754,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                         EXPECT_FALSE(root->navigation_request());
                       }));
                 }));
-            return throttle;
+            registry.AddThrottle(std::move(throttle));
           }));
 
   // Navigate to another page, which will be cancelled by the shutdown
@@ -8877,8 +9130,6 @@ class RenderFrameHostImplBrowserTestWithBFCacheAndViewTransition
     std::vector<base::test::FeatureRefAndParams> enabled_features =
         GetDefaultEnabledBackForwardCacheFeaturesForTesting(
             /*ignore_outstanding_network_request=*/false);
-    enabled_features.push_back(
-        {blink::features::kViewTransitionOnNavigation, {{}}});
     enabled_features.push_back({blink::features::kPageSwapEvent, {{}}});
     scoped_feature_list_.InitWithFeaturesAndParameters(
         enabled_features,

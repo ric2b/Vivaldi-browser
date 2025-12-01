@@ -15,6 +15,7 @@ licenses(["notice"])
 
 package(default_visibility = [
     "//connections:__subpackages__",
+    "//googlemac/iPhone/Nearby:__subpackages__",
     "//internal/platform/implementation/apple:__subpackages__",
     "//location/nearby:__subpackages__",
     "//sharing:__subpackages__",
@@ -53,6 +54,7 @@ objc_library(
         ":Platform_cc",
         ":Shared",
         ":ble_v2",
+        ":network_utils",
         # Required Reason API File: third_party/nearby/internal/platform/implementation/apple/preferences_manager.mm
         "//releasetools/apple/privacy/privacymanifests/requiredreasonsapi:user_defaults-user_defaults-read_write_app_data_ca92_1",
         "@com_google_absl//absl/base:core_headers",
@@ -87,6 +89,10 @@ objc_library(
         "ble_gatt_client.mm",
         "ble_gatt_server.h",
         "ble_gatt_server.mm",
+        "ble_l2cap_server_socket.h",
+        "ble_l2cap_server_socket.mm",
+        "ble_l2cap_socket.h",
+        "ble_l2cap_socket.mm",
         "ble_medium.h",
         "ble_medium.mm",
         "ble_peripheral.h",
@@ -112,6 +118,7 @@ objc_library(
         "//internal/platform:cancellation_flag",
         "//internal/platform:uuid",
         "//internal/platform/implementation:comm",
+        "//internal/platform/implementation/apple/Flags",
         "//internal/platform/implementation/apple/Mediums",
         "//internal/platform/implementation/apple/Mediums/Ble/Sockets:Central",
         "//internal/platform/implementation/apple/Mediums/Ble/Sockets:Peripheral",
@@ -135,6 +142,24 @@ objc_library(
     deps = [
         "//third_party/apple_frameworks:Foundation",
         "@aappleby_smhasher//:libmurmur3",
+    ],
+)
+
+objc_library(
+    name = "network_utils",
+    srcs = [
+        "network_utils.mm",
+    ],
+    hdrs = [
+        "network_utils.h",
+    ],
+    deps = [
+        "//internal/platform:base",
+        "//internal/platform:cancellation_flag",
+        "//internal/platform/implementation:comm",
+        "//internal/platform/implementation/apple/Mediums",
+        "//third_party/objective_c/google_toolbox_for_mac:GTM_Logger",
+        "@com_google_absl//absl/functional:any_invocable",
     ],
 )
 

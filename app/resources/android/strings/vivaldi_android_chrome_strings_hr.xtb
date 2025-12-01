@@ -2,12 +2,14 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="hr">
 <translation id="1397811292916898096">Pretraživanje pomoću usluge <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Automatsko otvaranje PDF-ova</translation>
 <translation id="1598449788754183301">Prebacivanje između normalnih/privatnih kartica</translation>
 <translation id="1644574205037202324">Povijest</translation>
 <translation id="1829244130665387512">Traži na stranici</translation>
 <translation id="2038563949887743358">Uključivanje zahtjeva za prikaz klasične web-lokacije</translation>
 <translation id="2433507940547922241">Izgled</translation>
 <translation id="2633278372998075009">Privatne kartice</translation>
+<translation id="2951071800649516099">Dodajte stranice na popis za čitanje za poslije</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> oznaka}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> oznake}}</translation>
@@ -15,7 +17,9 @@
 <translation id="3234355010754616171">Nova privatna kartica</translation>
 <translation id="3518985090088779359">Prihvati i nastavi</translation>
 <translation id="3700829948786686853">Dobrodošli u Vivaldi</translation>
+<translation id="385051799172605136">Natrag</translation>
 <translation id="4243710787042215766">Otvori u privatnoj kartici</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Uključite zaključavanje zaslona u postavkama Androida<ph name="END_LINK" /></translation>
 <translation id="4526803704855831732">Privatne kartice</translation>
 <translation id="4759238208242260848">Preuzimanja</translation>
 <translation id="4883379392681899581">Izađite iz privatnog načina rada</translation>
@@ -25,11 +29,17 @@
 <translation id="5233638681132016545">Nova kartica</translation>
 <translation id="572328651809341494">Nedavne kartice</translation>
 <translation id="6336451774241870485">Nova privatna kartica</translation>
+<translation id="6341580099087024258">Pitaj gdje spremiti datoteke</translation>
 <translation id="6593061639179217415">Klasični prikaz</translation>
 <translation id="6610147964972079463">Zatvorite privatne kartice</translation>
+<translation id="6865313869410766144">Podaci iz obrazaca za automatsko popunjavanje</translation>
 <translation id="706339621163631076">Pravila o privatnosti preglednika</translation>
+<translation id="7359002509206457351">Pristup načinima plaćanja</translation>
+<translation id="7419565702166471774">Uvijek upotrebljavaj sigurne veze</translation>
 <translation id="7427132068601343474">O Vivaldi pregledniku</translation>
 <translation id="7465104139234185284">Zatvorite sve privatne kartice</translation>
+<translation id="7764225426217299476">Dodaj adresu</translation>
+<translation id="7968014550143838305">Dodano na popis za čitanje</translation>
 <translation id="804786196054284061">Uvjeti pružanja usluge</translation>
 <translation id="8820817407110198400">Oznake</translation>
 <translation id="9063523880881406963">Isključivanje zahtjeva za prikaz klasične web-lokacije</translation>

@@ -35,6 +35,7 @@
 #include "src/tint/lang/hlsl/writer/helpers/generate_bindings.h"
 #include "src/tint/lang/hlsl/writer/writer.h"
 #include "src/tint/utils/command/command.h"
+
 namespace tint::hlsl::writer {
 namespace {
 
@@ -42,6 +43,7 @@ namespace {
 struct FuzzedOptions {
     bool strip_all_names;
     bool disable_robustness;
+    bool enable_integer_range_analysis;
     bool disable_workgroup_init;
     bool polyfill_reflect_vec2_f32;
     bool polyfill_dot_4x8_packed;
@@ -53,6 +55,7 @@ struct FuzzedOptions {
     TINT_REFLECT(FuzzedOptions,
                  strip_all_names,
                  disable_robustness,
+                 enable_integer_range_analysis,
                  disable_workgroup_init,
                  polyfill_reflect_vec2_f32,
                  polyfill_dot_4x8_packed,
@@ -67,6 +70,7 @@ Result<SuccessType> IRFuzzer(core::ir::Module& module,
     Options options;
     options.strip_all_names = fuzzed_options.strip_all_names;
     options.disable_robustness = fuzzed_options.disable_robustness;
+    options.enable_integer_range_analysis = fuzzed_options.enable_integer_range_analysis;
     options.disable_workgroup_init = fuzzed_options.disable_workgroup_init;
     options.polyfill_reflect_vec2_f32 = fuzzed_options.polyfill_reflect_vec2_f32;
     options.polyfill_dot_4x8_packed = fuzzed_options.polyfill_dot_4x8_packed;
@@ -81,7 +85,7 @@ Result<SuccessType> IRFuzzer(core::ir::Module& module,
     std::unordered_set<tint::BindingPoint> storage_bindings;
     for (auto* inst : *module.root_block) {
         auto* var = inst->As<core::ir::Var>();
-        if (!var->Result(0)->Type()->UnwrapPtr()->HasFixedFootprint()) {
+        if (!var->Result()->Type()->UnwrapPtr()->HasFixedFootprint()) {
             if (auto bp = var->BindingPoint()) {
                 if (storage_bindings.insert(bp.value()).second) {
                     options.array_length_from_uniform.bindpoint_to_size_index.emplace(
@@ -97,6 +101,10 @@ Result<SuccessType> IRFuzzer(core::ir::Module& module,
     }
 
     auto output = Generate(module, options);
+    if (output != Success) {
+        TINT_ICE() << "Generate() failed after CanGenerate() succeeded: "
+                   << output.Failure().reason;
+    }
 
     if (output == Success && context.options.dump) {
         std::cout << "Dumping generated HLSL:\n" << output->hlsl << "\n";

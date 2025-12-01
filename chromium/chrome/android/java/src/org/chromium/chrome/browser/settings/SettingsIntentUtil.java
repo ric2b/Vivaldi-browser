@@ -15,6 +15,11 @@ import androidx.annotation.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;
 
+// Vivaldi
+import org.chromium.chrome.browser.ChromeApplicationImpl;
+import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
+import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
+
 public class SettingsIntentUtil {
     private SettingsIntentUtil() {}
 
@@ -44,6 +49,10 @@ public class SettingsIntentUtil {
         }
         if (!(context instanceof Activity)) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (!ChromeApplicationImpl.isVivaldi() &&
+                    (fragmentArgs.get(SingleCategorySettings.EXTRA_CATEGORY) != null
+                            && fragmentArgs.get(SingleCategorySettings.EXTRA_CATEGORY)
+                            != SiteSettingsCategory.preferenceKey(SiteSettingsCategory.Type.ZOOM)))
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         }
         if (fragmentName != null) {

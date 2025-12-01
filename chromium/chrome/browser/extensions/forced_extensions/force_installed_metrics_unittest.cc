@@ -33,6 +33,7 @@
 #include "extensions/browser/updater/safe_manifest_parser.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/switches.h"
 #include "net/base/net_errors.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -158,10 +159,13 @@ constexpr char kCrxHeaderInvalidFailureIsCWS[] =
     "Extensions.ForceInstalledFailureWithCrxHeaderInvalidIsCWS";
 constexpr char kCrxHeaderInvalidFailureFromCache[] =
     "Extensions.ForceInstalledFailureWithCrxHeaderInvalidIsFromCache";
+// TODO(crbug.com/394876083): Need investigation once ExtensionService is fully
+// implemented for Android for Desktop.
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 constexpr char kStuckInCreatedStageAreExtensionsEnabled[] =
     "Extensions."
     "ForceInstalledFailureStuckInInitialCreationStageAreExtensionsEnabled";
-
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 }  // namespace
 
 namespace extensions {
@@ -201,7 +205,7 @@ class ForceInstalledMetricsTest : public ForceInstalledTestBase {
   void CreateExtensionService(bool extensions_enabled) {
     base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
     if (!extensions_enabled) {
-      command_line.AppendSwitch(::switches::kDisableExtensions);
+      command_line.AppendSwitch(switches::kDisableExtensions);
     }
     extensions::TestExtensionSystem* test_ext_system =
         static_cast<extensions::TestExtensionSystem*>(
@@ -496,6 +500,9 @@ TEST_F(ForceInstalledMetricsTest,
       kDisableReason, disable_reason::DisableReason::DISABLE_NONE, 1);
 }
 
+// TODO(crbug.com/394876083): Need investigation once ExtensionService is fully
+// implemented for Android for Desktop.
+#if BUILDFLAG(ENABLE_EXTENSIONS)
 // Verifies if the metrics related to whether the extensions are enabled or not
 // are recorded correctly for extensions stuck in
 // NOTIFIED_FROM_MANAGEMENT_INITIAL_CREATION_FORCED stage.
@@ -526,6 +533,7 @@ TEST_F(ForceInstalledMetricsTest,
   histogram_tester_.ExpectUniqueSample(kStuckInCreatedStageAreExtensionsEnabled,
                                        false, 1);
 }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 TEST_F(ForceInstalledMetricsTest, ExtensionForceInstalledAndBlocklisted) {
   SetupForceList(ExtensionOrigin::kWebStore);

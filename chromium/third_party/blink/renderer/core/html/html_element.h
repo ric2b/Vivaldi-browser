@@ -270,7 +270,8 @@ class CORE_EXPORT HTMLElement : public Element {
   // response to clicking a button with popovershowtarget.
   virtual void ShowPopoverInternal(Element* invoker,
                                    ExceptionState* exception_state);
-  virtual void HidePopoverInternal(HidePopoverFocusBehavior focus_behavior,
+  virtual void HidePopoverInternal(Element* invoker,
+                                   HidePopoverFocusBehavior focus_behavior,
                                    HidePopoverTransitionBehavior event_firing,
                                    ExceptionState* exception_state);
   void PopoverHideFinishIfNeeded(bool immediate);
@@ -399,6 +400,8 @@ class CORE_EXPORT HTMLElement : public Element {
 
   void HandleKeypressEvent(KeyboardEvent&);
 
+  void SetPopoverInvoker(Element* invoker);
+
   static void CloseEntirePopoverStack(
       HeapVector<Member<HTMLElement>>& stack,
       HidePopoverFocusBehavior focus_behavior,
@@ -413,6 +416,7 @@ class CORE_EXPORT HTMLElement : public Element {
   void OnNonceAttrChanged(const AttributeModificationParams&);
   void OnPopoverChanged(const AttributeModificationParams&);
   void OnContainerTimingAttrChanged(const AttributeModificationParams&);
+  void OnRoleAttrChanged(const AttributeModificationParams&);
 
   int AdjustedOffsetForZoom(LayoutUnit);
   int OffsetTopOrLeft(bool top);

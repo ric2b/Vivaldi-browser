@@ -30,10 +30,17 @@ set(GTEST_MAIN_LIBRARIES "${CARGO_ROOT_DIR}/external/googletest/build/lib/libgte
 set(CRABBY_AVIF_INCLUDE_DIR "${CARGO_ROOT_DIR}/include")
 set(CRABBY_AVIF_LIBRARIES "${CARGO_ROOT_DIR}/target/release/libcrabby_avif.so")
 
+add_library(testutil OBJECT testutil.cc)
+target_include_directories(testutil PRIVATE ${GTEST_INCLUDE_DIR})
+target_include_directories(testutil PRIVATE ${CRABBY_AVIF_INCLUDE_DIR})
+target_link_libraries(testutil PRIVATE ${GTEST_LIBRARIES})
+target_link_libraries(testutil PRIVATE ${CRABBY_AVIF_LIBRARIES})
+
 macro(add_avif_gtest TEST_NAME)
     add_executable(${TEST_NAME} ${TEST_NAME}.cc)
     target_include_directories(${TEST_NAME} PRIVATE ${GTEST_INCLUDE_DIR})
     target_include_directories(${TEST_NAME} PRIVATE ${CRABBY_AVIF_INCLUDE_DIR})
+    target_link_libraries(${TEST_NAME} PRIVATE testutil)
     target_link_libraries(${TEST_NAME} PRIVATE ${GTEST_LIBRARIES})
     target_link_libraries(${TEST_NAME} PRIVATE ${GTEST_MAIN_LIBRARIES})
     target_link_libraries(${TEST_NAME} PRIVATE ${CRABBY_AVIF_LIBRARIES})
@@ -41,6 +48,7 @@ macro(add_avif_gtest TEST_NAME)
 endmacro()
 
 add_avif_gtest(decoder_tests)
+add_avif_gtest(encoder_tests)
 add_avif_gtest(incremental_tests)
 add_avif_gtest(reformat_tests)
 

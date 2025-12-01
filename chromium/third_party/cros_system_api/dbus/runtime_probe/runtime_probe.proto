@@ -136,6 +136,8 @@ message Battery {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 // Things about storage.
@@ -220,6 +222,8 @@ message Storage {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 // Things about VPD (Vital Product Data) , cached version.
@@ -290,6 +294,8 @@ message Network {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 enum UsbRemovable {
@@ -339,6 +345,8 @@ message Camera {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 // Things about input_device.
@@ -376,6 +384,8 @@ message InputDevice {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 // Things about memory.
@@ -394,6 +404,8 @@ message Memory {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 message Edid {
@@ -556,6 +568,8 @@ message Edid {
   Fields values = 2;
   // Component probe info.
   Information information = 3;
+  // Component position.
+  string position = 4;
 }
 
 message ApI2c {
@@ -684,4 +698,21 @@ message ProbeSsfcComponentsResponse {
   repeated InputDevice touchscreen = 14;
   repeated Camera camera = 15;
   repeated Edid display_panel = 16;
+}
+
+// Defines the order of Runtime HWID components.
+message RuntimeHwidComponent {
+  uint32 feature_level = 1;
+  uint32 scope_level = 2;
+  repeated Battery battery = 3;
+  repeated Camera camera = 4;
+  repeated Edid display_panel = 5;
+  repeated InputDevice stylus = 6;
+  repeated InputDevice touchpad = 7;
+  repeated InputDevice touchscreen = 8;
+  repeated Memory dram = 9;
+  repeated Network cellular = 10;
+  repeated Network ethernet = 11;
+  repeated Network wireless = 12;
+  repeated Storage storage = 13;
 }

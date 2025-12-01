@@ -10,6 +10,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_manager.h"
@@ -30,10 +31,8 @@ class PasswordReuseManagerImpl : public PasswordReuseManager,
 
   // Immediately called after |Init()| to retrieve password hash data for
   // reuse detection.
-  // TODO(crbug.com/40925300): This might need to be called from all platforms,
-  // including ios.
   void PreparePasswordHashData(
-      metrics_util::SignInState sign_in_state_for_metrics);
+      std::optional<metrics_util::SignInState> sign_in_state_for_metrics);
 
   // Implements KeyedService interface.
   void Shutdown() override;
@@ -125,10 +124,19 @@ class PasswordReuseManagerImpl : public PasswordReuseManager,
   raw_ptr<PrefService> prefs_ = nullptr;
 
   scoped_refptr<PasswordStoreInterface> profile_store_;
+  base::ScopedObservation<PasswordStoreInterface,
+                          PasswordStoreInterface::Observer>
+      profile_store_observation_{this};
 
   scoped_refptr<PasswordStoreInterface> account_store_;
+  base::ScopedObservation<PasswordStoreInterface,
+                          PasswordStoreInterface::Observer>
+      account_store_observation_{this};
 
   raw_ptr<signin::IdentityManager> identity_manager_ = nullptr;
+  base::ScopedObservation<signin::IdentityManager,
+                          signin::IdentityManager::Observer>
+      identity_manager_observation_{this};
 
   std::unique_ptr<SharedPreferencesDelegate> shared_pref_delegate_;
 

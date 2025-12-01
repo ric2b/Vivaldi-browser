@@ -195,6 +195,7 @@ enum SdpMungingType {
   kPayloadTypes = 26,
   kSsrcs = 27,
   kIceOptionsRenomination = 28,
+  kDirection = 29,
   // RTP header extension munging.
   kRtpHeaderExtensionRemoved = 40,
   kRtpHeaderExtensionAdded = 41,
@@ -221,7 +222,18 @@ enum SdpMungingType {
   kVideoCodecsFmtpH264SpsPpsIdrInKeyframe = 84,
   kVideoCodecsFmtp = 85,
   kVideoCodecsRtcpFb = 86,
+  kVideoCodecsAddedWithRawPacketization = 87,
+  kVideoCodecsModifiedWithRawPacketization = 88,
   kMaxValue,
+};
+
+// The outcome of setting the local description, whether SDP munging is detected
+// and if the should be accepted or rejected. Keep in sync with
+// SdpMungingOutcome from tools/metrics/histograms/metadata/web_rtc/enums.xml
+enum class SdpMungingOutcome {
+  kAccepted = 0,
+  kRejected = 1,
+  kMaxValue = kRejected,
 };
 
 // When adding new metrics please consider using the style described in

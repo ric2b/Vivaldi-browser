@@ -32,19 +32,22 @@ IdentityProviderData::IdentityProviderData(
     const IdentityProviderMetadata& idp_metadata,
     const ClientMetadata& client_metadata,
     blink::mojom::RpContext rp_context,
+    std::optional<blink::mojom::Format> format,
     const std::vector<IdentityRequestDialogDisclosureField>& disclosure_fields,
     bool has_login_status_mismatch)
     : idp_for_display{idp_for_display},
       idp_metadata{idp_metadata},
       client_metadata{client_metadata},
       rp_context(rp_context),
+      format(format),
       disclosure_fields(disclosure_fields),
       has_login_status_mismatch(has_login_status_mismatch) {}
 
 IdentityProviderData::~IdentityProviderData() = default;
 
-RelyingPartyData::RelyingPartyData(const std::string& rp_for_display)
-    : rp_for_display(rp_for_display) {}
+RelyingPartyData::RelyingPartyData(const std::u16string& rp_for_display,
+                                   const std::u16string& iframe_for_display)
+    : rp_for_display(rp_for_display), iframe_for_display(iframe_for_display) {}
 RelyingPartyData::RelyingPartyData(const RelyingPartyData& other) = default;
 RelyingPartyData::~RelyingPartyData() = default;
 
@@ -66,7 +69,6 @@ bool IdentityRequestDialogController::ShowAccountsDialog(
     content::RelyingPartyData rp_data,
     const std::vector<scoped_refptr<content::IdentityProviderData>>& idp_list,
     const std::vector<scoped_refptr<content::IdentityRequestAccount>>& accounts,
-    content::IdentityRequestAccount::SignInMode sign_in_mode,
     blink::mojom::RpMode rp_mode,
     const std::vector<scoped_refptr<content::IdentityRequestAccount>>&
         new_accounts,
@@ -82,7 +84,7 @@ bool IdentityRequestDialogController::ShowAccountsDialog(
 }
 
 bool IdentityRequestDialogController::ShowFailureDialog(
-    const std::string& rp_for_display,
+    const RelyingPartyData& rp_data,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -97,7 +99,7 @@ bool IdentityRequestDialogController::ShowFailureDialog(
 }
 
 bool IdentityRequestDialogController::ShowErrorDialog(
-    const std::string& rp_for_display,
+    const RelyingPartyData& rp_data,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
@@ -113,13 +115,26 @@ bool IdentityRequestDialogController::ShowErrorDialog(
 }
 
 bool IdentityRequestDialogController::ShowLoadingDialog(
-    const std::string& rp_for_display,
+    const RelyingPartyData& rp_data,
     const std::string& idp_for_display,
     blink::mojom::RpContext rp_context,
     blink::mojom::RpMode rp_mode,
     DismissCallback dismiss_callback) {
   if (!is_interception_enabled_) {
     std::move(dismiss_callback).Run(DismissReason::kOther);
+    return false;
+  }
+  return true;
+}
+
+bool IdentityRequestDialogController::ShowVerifyingDialog(
+    const content::RelyingPartyData& rp_data,
+    const scoped_refptr<IdentityProviderData>& idp_data,
+    const scoped_refptr<content::IdentityRequestAccount>& account,
+    content::IdentityRequestAccount::SignInMode sign_in_mode,
+    blink::mojom::RpMode rp_mode,
+    AccountsDisplayedCallback accounts_displayed_callback) {
+  if (!is_interception_enabled_) {
     return false;
   }
   return true;

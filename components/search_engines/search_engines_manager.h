@@ -5,14 +5,8 @@
 
 #include <memory>
 #include <string>
-#include <unordered_map>
-#include <vector>
-
-#include "base/files/file_path.h"
-#include "base/values.h"
 
 #include "components/search_engines/parsed_search_engines.h"
-#include "components/search_engines/prepopulated_engines.h"
 
 class PrefService;
 
@@ -26,14 +20,11 @@ class SearchEnginesManager {
 
   ParsedSearchEngines::EnginesListWithDefaults GetEnginesByCountryId(
       country_codes::CountryId country_id,
-      const std::string& language,
+      const std::string& application_locale,
       PrefService& prefs) const;
 
-  /*  const std::vector<const PrepopulatedEngine*>& GetAllEngines() const;*/
   const PrepopulatedEngine* GetEngine(const std::string& name) const;
 
-  // Google is necessary for some chromium code to work.
-  //  const PrepopulatedEngine* GetGoogleEngine() const;
   // This returns our main default engine. It will never return a nullptr.
   const PrepopulatedEngine* GetMainDefaultEngine(PrefService* prefs = nullptr) const;
 

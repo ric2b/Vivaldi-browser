@@ -19,7 +19,7 @@
 
 namespace blink {
 
-GCedHeapVector<Member<const MLOperator>>* GetOperatorsInTopologicalOrder(
+HeapVector<Member<MLOperator>> GetOperatorsInTopologicalOrder(
     const MLNamedOperands& named_outputs) {
   // A WebNN graph is represented by a directed acyclic graph (DAG) that has
   // operators as vertices and operand as edges. The topological sorting is
@@ -32,12 +32,11 @@ GCedHeapVector<Member<const MLOperator>>* GetOperatorsInTopologicalOrder(
   // https://en.wikipedia.org/wiki/Depth-first_search
 
   // The topologically sorted operators.
-  auto* toposorted_operators =
-      MakeGarbageCollected<HeapVector<Member<const MLOperator>>>();
+  HeapVector<Member<MLOperator>> toposorted_operators;
 
   // The to-visit stack and visited set for DFS graph traversal.
-  HeapDeque<Member<const MLOperator>> operators_to_visit;
-  HeapHashSet<Member<const MLOperator>> visited_operators;
+  HeapDeque<Member<MLOperator>> operators_to_visit;
+  HeapHashSet<Member<MLOperator>> visited_operators;
   // Enumerate output operands and initialize the to-visit stack with their
   // dependent operators.
   for (const auto& output : named_outputs) {
@@ -46,14 +45,14 @@ GCedHeapVector<Member<const MLOperator>>* GetOperatorsInTopologicalOrder(
   }
   while (operators_to_visit.size() > 0) {
     // Get the current operator from the top of the to-visit stack.
-    const auto& current_operator = operators_to_visit.back();
+    auto& current_operator = operators_to_visit.back();
     if (!visited_operators.Contains(current_operator.Get())) {
       // The current operator is not visited, check whether its dependent
       // operators are visited or not.
       bool skip_visit = false;
       for (const auto& operand : current_operator->Inputs()) {
         if (operand->Kind() == webnn::mojom::blink::Operand::Kind::kOutput) {
-          const auto* dependent_operator = operand->Operator();
+          auto* dependent_operator = operand->Operator();
           CHECK(dependent_operator);
           if (!visited_operators.Contains(dependent_operator)) {
             // As there is an dependent operator is not visited, skip visiting
@@ -67,7 +66,7 @@ GCedHeapVector<Member<const MLOperator>>* GetOperatorsInTopologicalOrder(
       if (!skip_visit) {
         // When all dependent operators have been visited, visit the current
         // operator and add it into the visited set.
-        toposorted_operators->push_back(current_operator);
+        toposorted_operators.push_back(current_operator);
         visited_operators.insert(current_operator);
         // Pop the current operator from the to-visit stack.
         operators_to_visit.pop_back();

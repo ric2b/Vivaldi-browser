@@ -32,6 +32,7 @@
 <translation id="1186712907912748007">U tijeku je povlačenje i ispuštanje. <ph name="GESTURE" /> da biste završili. Drugi pokreti privremeno nisu dostupni.</translation>
 <translation id="1188858454923323853">dopunski</translation>
 <translation id="1189258430971676908">Područje za vježbu: padajući popisi</translation>
+<translation id="1193484659698721586">.input {$$COUNT :number} .match $$COUNT 1{{}} *{{ugniježđena razina {$$COUNT}}}</translation>
 <translation id="1195238899008218998">Pogovor</translation>
 <translation id="1197088940767939838">Narančasta</translation>
 <translation id="1198865190323699001">Pokreti dodira</translation>
@@ -54,6 +55,7 @@
 <translation id="1237866625126425153">gmbgr</translation>
 <translation id="1243477406442346359">Različak plava</translation>
 <translation id="1246424317317450637">Podebljano</translation>
+<translation id="1250181918001045969">Pokušaj povezivanja s kamerom. Upravljanje licem isključit će se za <ph name="SECONDS" /> s.</translation>
 <translation id="1251750620252348585">Sljedeći naslov razine 6</translation>
 <translation id="1264956950255940376">Škiljenje na lijevo oko</translation>
 <translation id="1268366246392928616">Nema prethodnog matematičkog izraza</translation>
@@ -99,6 +101,7 @@
 <translation id="1506187449813838456">Povećanje visine tona</translation>
 <translation id="151784044608172266">Sljedeća rečenica</translation>
 <translation id="1524531499102321782">Sljedeći redak brajice</translation>
+<translation id="1534255288158532891">.input {$$COUNT :number} .match $$COUNT 1{{tilda}} *{{tilde ({$$COUNT})}}</translation>
 <translation id="1542513807034338907">Pomicanje na prethodnu stranicu</translation>
 <translation id="1546370775711804143">Kliznik</translation>
 <translation id="1551572888042734032">Ljeto</translation>
@@ -116,7 +119,6 @@
 <translation id="1616111909442424068">Boja pšenice</translation>
 <translation id="1618597272655350600">Najavljuje potpun opis trenutačnog položaja</translation>
 <translation id="1627222324347828322">Plavobijela</translation>
-<translation id="1639634871799530612">{COUNT,plural, =1{znak "veće od"}one{# znak "veće od"}few{# znaka "veće od"}other{# znakova "veće od"}}</translation>
 <translation id="1653266918374749391">Prethodni naslov razine 3</translation>
 <translation id="1657616855184033958">Prikaži filtre streama događaja</translation>
 <translation id="1659072772017912254">Nije označen</translation>
@@ -135,7 +137,9 @@
 <translation id="1756785467854861272">Tamna magenta</translation>
 <translation id="1758693804775271377">Prelazite jednim prstom ulijevo ili udesno da biste pregledavali lekcije za ovu temu</translation>
 <translation id="1765245556747822181">Prelazak jednim prstom prema gore</translation>
+<translation id="1766900865718394987">.input {$$COUNT :number} .match $$COUNT 1{{funta}} *{{{$$COUNT} znak(ov)a funte}}</translation>
 <translation id="1771761307086386028">Pomicanje udesno</translation>
+<translation id="1776454891300234201">.input {$$COUNT :number} .match $$COUNT 1{{kvadratna grafička oznaka}} *{{kvadratne grafičke oznake ({$$COUNT})}}</translation>
 <translation id="1781173782405573156">Tipka za izravni pristup</translation>
 <translation id="1787176709638001873">Tekst uređivanja zaporke</translation>
 <translation id="1795438342141780114">Vraćanje pokazivača na sredinu</translation>
@@ -152,6 +156,7 @@
 <translation id="1902396333223336119">Ćelija</translation>
 <translation id="1903683160884433981">Srednja proljetnozelena</translation>
 <translation id="1905379170753160525">Prikaz popisa naslova</translation>
+<translation id="1909599030163690992">.input {$$COUNT :number} .match $$COUNT 1{{ampersand}} *{{{$$COUNT} ampersand(a)}}</translation>
 <translation id="1913761808037590218">#ed</translation>
 <translation id="1914424852593176649">Veličina: <ph name="FONT_SIZE" /></translation>
 <translation id="1914635379910604678">Akord <ph name="DOT" /></translation>
@@ -159,20 +164,22 @@
 <translation id="1926147969119007125">Pauzirajte upravljanje licem</translation>
 <translation id="1928932365747995741">Nema prethodnog tekstualnog polja koje je moguće urediti</translation>
 <translation id="1964135212174907577">Sljedeći objekt</translation>
+<translation id="1969502304370936079">.input {$$COUNT :number} .match $$COUNT 1{{znak jednakosti}} *{{{$$COUNT} znaka jednakosti}}</translation>
 <translation id="1973886230221301399">ChromeVox</translation>
 <translation id="1988733631391393183">Prikaži brajične naredbe na izbornicima ChromeVoxa</translation>
-<translation id="2007545860310005685">{COUNT,plural, =1{lijeva zagrada}one{# lijeva zagrada}few{# lijeve zgrade}other{# lijevih zagrada}}</translation>
 <translation id="2009187674653301682">Nije eksponent</translation>
 <translation id="2010555995361223825">Izbornici ChromeVoxa</translation>
 <translation id="203030071582665758">Nema prethodnog naslova 4. razine</translation>
 <translation id="2045055672832940894">Nema prethodne kontrole</translation>
 <translation id="2045606329038304310">Kontrola polja obrasca</translation>
+<translation id="2061553293808239752">.input {$$COUNT :number} .match $$COUNT 1{{minuta}} *{{minute}}</translation>
 <translation id="2063539687800151747">Epigraf</translation>
 <translation id="2086961585857038472">Sljedeća riječ</translation>
 <translation id="2087981446621639008">dscrplst dtl</translation>
 <translation id="2089387485033699258">hr</translation>
 <translation id="2091933974477985526">Prethodno područje s mogućnošću uređivanja</translation>
 <translation id="2100350898815792233">Sva interpunkcija</translation>
+<translation id="2109693710509473741">.input {$$COUNT :number} .match $$COUNT 1{{zarez}} *{{{$$COUNT} zarez(a)}}</translation>
 <translation id="2110480898214777136">Prelazak od početka do kraja ili od kraja do početka na stranici, u dijaloškom okviru ili nekom drugom spremniku</translation>
 <translation id="2119965627982867824">okgmb</translation>
 <translation id="2121067395472282800">pristupna tipka: <ph name="KEY" /></translation>
@@ -184,7 +191,6 @@
 <translation id="2169714232367507776">Klik na trenutačnu stavku</translation>
 <translation id="2179452035581866348">ChromeVox upotrebljava zvukove da bi vam pružio bitne i dodatne informacije. Saznajte značenje tih zvukova da biste se kretali brže. Kada se naučite snalaziti, možete isključiti tekstne opise u govoru i koristiti ih za bitne informacije o stranici. Evo kompletnog popisa zvukova i njihovih značenja.</translation>
 <translation id="2183409941723714159">Kretanje pomoću tipke Tab</translation>
-<translation id="2188751878842439466">{COUNT,plural, =1{zatvoreni navodnik}one{# zatvoreni navodnik}few{# zatvorena navodnika}other{# zatvorenih navodnika}}</translation>
 <translation id="2197863150503783129">Tamnosmeđa</translation>
 <translation id="2199994615414171367">Prethodni matematički izraz</translation>
 <translation id="2203046366315513658">Smanjivanje vrijednosti</translation>
@@ -213,6 +219,7 @@
 <translation id="2371402123699727805">Diktiranje je aktivno. <ph name="GESTURE" /> da biste ga zaustavili. Drugi pokreti privremeno nisu dostupni.</translation>
 <translation id="2381733276052567791">Uključivanje ili isključivanje govora</translation>
 <translation id="2390264819538553347">Za prelazak na sljedeću stranicu pritisnite Enter, a za povratak pritisnite Backspace.</translation>
+<translation id="2397408693730730860">.input {$$COUNT :number} .match $$COUNT 1{{zvjezdica}} *{{zvjezdice ({$$COUNT})}}</translation>
 <translation id="2398579267367951220">Unesite za pretraživanje stranice. Pritisnite tipku Enter za prelazak na rezultat, strelice prema gore ili dolje za pretraživanje rezultata, nastavite upisivati kako biste izmijenili pretraživanje ili pritisnite tipku Escape za poništavanje.</translation>
 <translation id="240709722712693803">Plavoljubičasta</translation>
 <translation id="2416512023405990736">Prazan potvrdni okvir</translation>
@@ -230,7 +237,6 @@
 <translation id="2462626033734746142">Grupa izbornog gumba</translation>
 <translation id="2467741090055146971">poništi odabir</translation>
 <translation id="2471138580042810658">Naslov 6</translation>
-<translation id="248982282205370495">{COUNT,plural, =1{zvjezdica}one{# zvjezdica}few{# zvjezdice}other{# zvjezdica}}</translation>
 <translation id="2490721194269245365">Ružičastosmeđa</translation>
 <translation id="249330843868392562">Otvori postavke pretvaranja teksta u govor</translation>
 <translation id="2497706219848005458">Zelenožuta</translation>
@@ -265,12 +271,12 @@
 <translation id="2692503699962701720">Promijeni visinu glasa prilikom izgovaranja vrsta elemenata i formatiranog teksta.</translation>
 <translation id="2697408785920771974">autougr</translation>
 <translation id="2697786971245905543">Kandidat za konverziju teksta</translation>
-<translation id="2704429362613743330">{COUNT,plural, =1{otvoreni navodnik}one{# otvoreni navodnik}few{# otvorena navodnika}other{# otvorenih navodnika}}</translation>
 <translation id="270523456882008230">Savjet: dvaput dodirnite jednim prstom da biste aktivirali trenutačnu stavku.</translation>
 <translation id="2705875883745373140">Nije pritisnut</translation>
 <translation id="2708078563826046398">Peach Puff</translation>
 <translation id="2713444072780614174">Bijela</translation>
 <translation id="2717271541250958000">plkart</translation>
+<translation id="2720806141886412599">.input {$$COUNT :number} .match $$COUNT 1{{obrnuta kosa crta}} *{{obrnute kose crte ({$$COUNT})}}</translation>
 <translation id="2723001399770238859">zvuk</translation>
 <translation id="2737898226590637227">Nema sljedećeg ARIA orijentira</translation>
 <translation id="2749275490991666823">Označen</translation>
@@ -279,7 +285,6 @@
 <translation id="2756452585631602151">Unesite prilagođenu oznakU</translation>
 <translation id="2766299274563946262">S lijeve strane nema ćelije</translation>
 <translation id="2770947749427257887">Otvorite način pomicanja</translation>
-<translation id="2783001728278437613">{COUNT,plural, =1{+#}one{+#}few{+#}other{+#}}</translation>
 <translation id="2792200646155001340">Za pomicanje na prethodnu stavku također možete prijeći jednim prstom zdesna ulijevo. Isprobajte odmah.</translation>
 <translation id="280499067616661124">Traženje na stranici uz ChromeVox</translation>
 <translation id="2811204574343810641">Redak</translation>
@@ -298,9 +303,7 @@
 <translation id="2876760662374103627">Upravljanje licem je aktivno</translation>
 <translation id="2879867157561757640">Prelazak trima prstima prema dolje</translation>
 <translation id="288178314850623291">Za prelazak na određene vrste elemenata koristite skočne naredbe. Za pomicanje unaprijed po naslovima pritišćite tipku za pretraživanje i H, a za preskakanje unatrag pritisnite tipku za pretraživanje + Shift + H.</translation>
-<translation id="2885764457467528513">{COUNT,plural, =1{min}one{min}few{min}other{min}}</translation>
 <translation id="2894654529758326923">Informacije</translation>
-<translation id="2899328121302785497">{COUNT,plural, =1{lijeva vitičasta zagrada}one{# lijeva vitičasta zagrada}few{# lijeve vitičaste zagrade}other{# lijevih vitičasta zagrada}}</translation>
 <translation id="2909584066358367921">Nema sljedećeg gumba</translation>
 <translation id="2911433807131383493">Otvaranje vodiča za ChromeVox</translation>
 <translation id="2912405967290226587">Prelazak trima prstima udesno</translation>
@@ -310,7 +313,6 @@
 <translation id="2943596527105977722">Tamna zlatnosmeđa</translation>
 <translation id="2964026537669811554">Skupina naslova</translation>
 <translation id="2968634799764242930">Morskozelena</translation>
-<translation id="296951647852255825">{COUNT,plural, =1{tabulator}one{# tabulator}few{# tabulatora}other{# tabulatora}}</translation>
 <translation id="2972205263822847197">Opis</translation>
 <translation id="2976476721782829799">Možete se kretati i povlačenjem jednim prstom uokolo po zaslonu. To se naziva istraživanje dodirom. Pokušajte povlačiti prstom uokolo da biste pročitali ostatak ove lekcije.</translation>
 <translation id="297825089465017871">Prelazak dvama prstima ulijevo</translation>
@@ -321,7 +323,6 @@
 <translation id="3014130421870723208">@ur 8toč</translation>
 <translation id="3018210433491759145">ChromeVox se učitava</translation>
 <translation id="3030432017085518523">Izborni gumb stavke izbornika</translation>
-<translation id="3037392361165431467">{COUNT,plural, =1{izostavnik}one{# izostavnik}few{# izostavnika}other{# izostavnika}}</translation>
 <translation id="3040901448410802366">Pokazivač napretka</translation>
 <translation id="3046838483509668188">Opcije ChromeVoxa</translation>
 <translation id="3060756054951570867">otvoren je izbornik <ph name="TITLE" /></translation>
@@ -338,6 +339,7 @@
 <translation id="3090227230165225418">Najavi obavijesti o preuzimanju</translation>
 <translation id="3090532668523289635">grp</translation>
 <translation id="3093176084511590672">Sljedeći orijentir</translation>
+<translation id="3096276106587041702">.input {$$COUNT :number} .match $$COUNT 1{{sekunda}} *{{sekunde}}</translation>
 <translation id="3096671415663099226">kmbokv</translation>
 <translation id="309749186376891736">Pomicanje pokazivača</translation>
 <translation id="3103579948980282461">Srednja ljubičastocrvena</translation>
@@ -357,7 +359,6 @@
 <translation id="3159493096109238499">Bež</translation>
 <translation id="316542773973815724">Navigacija</translation>
 <translation id="3167446923957429259">Pomaknite usta ulijevo</translation>
-<translation id="3172700825913348768">{COUNT,plural, =1{razmak}one{# razmak}few{# razmaka}other{# razmaka}}</translation>
 <translation id="3179119189286472195">Nije veza</translation>
 <translation id="3180990259147710757">Pomicanje čeljusti ulijevo</translation>
 <translation id="320041337977930740">Promijeni stil prikaza na ispreplitanje</translation>
@@ -372,10 +373,12 @@
 <translation id="3241052487511142956">Prethodna posjećena veza</translation>
 <translation id="3241638166094654466">Ćelije u svakom retku:</translation>
 <translation id="3244209481693235975"><ph name="LANGUAGE" />: <ph name="CONTENT" /></translation>
+<translation id="3255999844137387283">Kamera nije dostupna. Provjerite jeste li prijavljeni i je li kamera uključena.</translation>
 <translation id="3260949043575829030">Prethodna slična stavka</translation>
 <translation id="3270069636408109001">Nema sljedeće tablice</translation>
 <translation id="3273791280096244679">Spremi oznaku</translation>
 <translation id="3283583562490372694">nije odabrano</translation>
+<translation id="3284124496287403323">.input {$$COUNT :number} .match $$COUNT 1{{s {$$COUNT} stavkom}} * {{sa stavkama ({$$COUNT})}}</translation>
 <translation id="3286372614333682499">portret</translation>
 <translation id="3286390186030710347">Klizač</translation>
 <translation id="3300733168898541351">poništi</translation>
@@ -393,7 +396,6 @@
 <translation id="3359142382821736686">seprtr</translation>
 <translation id="3363015957057974366">Možete upotrijebiti i tipku Tab da biste prešli na sljedeću interaktivnu stavku na zaslonu. Pronađite tipku Tab. Nalazi se neposredno iznad tipke za pretraživanje. Da biste nastavili, pritisnite tipku Tab.</translation>
 <translation id="3366946046494222386">Vodič <ph name="TOPIC" />, <ph name="LESSONS" /> lekcija</translation>
-<translation id="3374537878095184207">{COUNT,plural, =1{plus}one{# plus}few{# plusa}other{# plusova}}</translation>
 <translation id="338583716107319301">Separator</translation>
 <translation id="3389259863310851658">Prethodno polje obrasca</translation>
 <translation id="3390740059150071453">Pogled ulijevo</translation>
@@ -412,12 +414,9 @@
 <translation id="3469413619751135069">Svijetlozelena</translation>
 <translation id="3473744269398144689">Započnite diktirati</translation>
 <translation id="3490765818161916458">Rešetka popisa</translation>
-<translation id="3492609944033322585">{COUNT,plural, =1{desna zagrada}one{# desna zagrada}few{# desne zagrade}other{# desnih zagrada}}</translation>
 <translation id="3494946239022273294">stizb</translation>
-<translation id="3497063866483065785">{COUNT,plural, =1{upitnik}one{# upitnik}few{# upitnika}other{# upitnika}}</translation>
+<translation id="3501911317648720697">.input {$$COUNT :number} .match $$COUNT 1{{dvotočka}} *{{dvotočke ({$$COUNT})}}</translation>
 <translation id="3505359110822747654">Sažimanje izbornika ChromeVoxa</translation>
-<translation id="3514822174137761109">{COUNT,plural, =1{znak za umetanje}one{# znak za umetanje}few{# znaka za umetanje}other{# znakova za umetanje}}</translation>
-<translation id="3518600448524470129">{COUNT,plural, =1{bijela grafička oznaka}one{# bijela grafička oznaka}few{# bijele grafičke oznake}other{# bijelih grafičkih oznaka}}</translation>
 <translation id="352577523970648069">Tekstualno polje koje se može urediti</translation>
 <translation id="3538907380453898475">dscrplst</translation>
 <translation id="3549141990712742152">Izreži <ph name="TEXT" />.</translation>
@@ -434,9 +433,7 @@
 <translation id="3616016838842055984">Ako dođete do stavke koju želite kliknuti, pritisnite tipku za pretraživanje i razmaknicu. Isprobajte odmah da biste nastavili.</translation>
 <translation id="3616113530831147358">Audio</translation>
 <translation id="3622350485154495700">Dvostruki dodir jednim prstom</translation>
-<translation id="3646890046000188562">{COUNT,plural, =1{zatvoreni jednostruki navodnik}one{# zatvoreni jednostruki navodnik}few{# zatvorena jednostruka navodnika}other{# zatvorenih jednostrukih navodnika}}</translation>
 <translation id="3650317109285159359">ptvrdstizb</translation>
-<translation id="3655855170848725876">{COUNT,plural, =1{znak dolara}one{# znak dolara}few{# znaka dolara}other{# znakova dolara}}</translation>
 <translation id="3659787053479271466">upoz</translation>
 <translation id="366419593095697301">Savjet: pritisnite Escape ako želite napustiti ovaj vodič.</translation>
 <translation id="3676062394766691318">Nakon postavljanja uređaja možete se vratiti i pregledati više vodiča tako što ćete pritisnuti tipku za pretraživanje i O, a zatim T.</translation>
@@ -455,6 +452,7 @@
 <translation id="3783640748446814672">alt</translation>
 <translation id="3783725005098956899">Prikaži datoteku zapisnika</translation>
 <translation id="3801735343383419236">Popis automatskog dovršavanja</translation>
+<translation id="3805994235248464699">.input {$$COUNT :number} .match $$COUNT 1{{znak postotka}} *{{{$$COUNT} znak(ov)a postotka}}</translation>
 <translation id="3806327402890551732">Pomicanje na sljedeću ili prethodnu stavku</translation>
 <translation id="3810838688059735925">Video</translation>
 <translation id="3813387282697781382">Svijetlokoraljna</translation>
@@ -465,6 +463,7 @@
 <translation id="3856075812838139784">Samo za čitanje</translation>
 <translation id="3857141338659865495">Srednjetirkizna</translation>
 <translation id="3870295413168340326">Nema prethodnog naslova 3. razine</translation>
+<translation id="3882892620695970398">.input {$$COUNT :number} .match $$COUNT 1{{znak pri}} *{{{$$COUNT} znak(ov)a pri}}</translation>
 <translation id="3887399638190992181">Ključne tipke</translation>
 <translation id="3887576927692165210">ed</translation>
 <translation id="3896762831164962772">Upravljanje licem je pauzirano. <ph name="GESTURE" /> da biste nastavili. Drugi pokreti privremeno nisu dostupni.</translation>
@@ -495,16 +494,16 @@
 <translation id="4054936709456751127">stat</translation>
 <translation id="4058278702844053247">Učitavanje stranice u tijeku</translation>
 <translation id="4065205963140826639">Sada pokušajte pritisnuti tipku za pretraživanje i desnu strelicu da biste pronašli gumb Sljedeća, a zatim pritisnite tipku za pretraživanje i razmaknicu da biste ga kliknuli.</translation>
-<translation id="4081085052247739398">{COUNT,plural, =1{TILDA}one{# tilda}few{# tilde}other{# tildi}}</translation>
+<translation id="4079553331137067698">.input {$$COUNT :number} .match $$COUNT 1{{kursor}} *{{({$$COUNT})kursor(a)}}</translation>
 <translation id="409334809956508737">Prethodni objekt</translation>
+<translation id="4096952912560611353">.input {$$COUNT :number} .match $$COUNT 1{{plus}} *{{{$$COUNT} znak(ov)a plus}}</translation>
 <translation id="4099274309791143834">s podizbornikom</translation>
 <translation id="4101527861445851766">Potvrdni okvir s kvačicom</translation>
 <translation id="410225014223200513">Oblikovanje kruga usnama</translation>
+<translation id="411038122342629251">.input {$$COUNT :number} .match $$COUNT 1{{točka}} 3{{elipse}} *{{točke ({$$COUNT})}}</translation>
 <translation id="4115378294792113321">Magenta</translation>
 <translation id="4116415223832267137">Upozorenje</translation>
-<translation id="4148180433151187540">{COUNT,plural, =1{desna vitičasta zagrada}one{# desna vitičasta zagrada}few{# desne vitičaste zagrade}other{# desnih vitičastih zagrada}}</translation>
 <translation id="4159784952369912983">Ljubičasto</translation>
-<translation id="4161104397932142764">{COUNT,plural, =1{s}one{s}few{s}other{s}}</translation>
 <translation id="4161663686871496107">Spremne su govorne povratne informacije ChromeVox</translation>
 <translation id="4176463684765177261">Onemogućeno</translation>
 <translation id="4187322598335821254">Prijeđite prema gore ili prema dolje da biste se pomicali redak po redak</translation>
@@ -516,7 +515,6 @@
 <translation id="4204864733111726379">Cvjetnobijela</translation>
 <translation id="42164919740161077">Sivkastoplava</translation>
 <translation id="4217571870635786043">Diktat</translation>
-<translation id="4218529045364428769">{COUNT,plural, =1{crtica}one{# crtica}few{# crtice}other{# crtica}}</translation>
 <translation id="4220024144662591089">odaberi od <ph name="START_PHRASE" /> do <ph name="END_PHRASE" /></translation>
 <translation id="4221012616705981690">Nema prethodnog popisa</translation>
 <translation id="4225355998815256469">Kontrole obrasca</translation>
@@ -536,9 +534,9 @@
 <translation id="4289540628985791613">Pregled</translation>
 <translation id="4294967782363273192">Poredano uzlazno</translation>
 <translation id="4300318234632215983">Izgovaranje URL-a veze</translation>
+<translation id="4306112273432859778">.input {$$COUNT :number} .match $$COUNT 1{{veće od}} *{{{$$COUNT} znak(ov)a veće od}}</translation>
 <translation id="4321179778687042513">ctrl</translation>
 <translation id="4322625298640984693">Oker</translation>
-<translation id="4342180618051828363">{COUNT,plural, =1{točka}=3{trotočka}one{# točka}few{# točke}other{# točaka}}</translation>
 <translation id="4352022650330571548">unesi <ph name="PHRASE" /></translation>
 <translation id="4360738659108163902">Kliknite desnom tipkom miša</translation>
 <translation id="4372435075475052704">min:<ph name="X" /></translation>
@@ -567,17 +565,18 @@
 <translation id="4511186779140817916">Boja blanširanog badema</translation>
 <translation id="451510441928265982">Nema prethodnog naslova 2. razine</translation>
 <translation id="4517854969512651305">Povećavanje vrijednosti</translation>
-<translation id="4532633738839459153">{COUNT,plural, =1{kosa crta}one{# kosa crta}few{# kose crte}other{# kosih crta}}</translation>
 <translation id="4537277403911487429">Sljedeća slična stavka</translation>
 <translation id="4547556996012970016">Sljedeći naslov razine 5</translation>
 <translation id="4562381607973973258">Zaglavlje</translation>
 <translation id="4597532268155981612">obrazac</translation>
+<translation id="4601047876198186470">.input {$$COUNT :number} .match $$COUNT 1{{znak manje od}} *{{{$$COUNT} znak(ov)a manje od}}</translation>
 <translation id="4601367666219428522">tbl <ph name="TABLENAME" /> <ph name="TABLEROWS" /> x <ph name="TABLECOLS" /></translation>
 <translation id="4606933160360542263">Prilagođena kombinacija tipki: <ph name="KEY_COMBINATION" /></translation>
 <translation id="4615592953348396470">Zanemarivanje pritiska na sljedeću tipku</translation>
 <translation id="4617384941327705512">Pametan ljepljivi način isključen</translation>
 <translation id="4623097797855662355">Kolofon</translation>
 <translation id="4624970070706497034">TalkBack više ne pruža prilagodbu za Chromebookove. I dalje možete upotrebljavati TalkBack, no koristite njegove zadane tipkovne prečace. Pritisnite Search + A, a zatim K da biste vidjeli dostupne prečace. Ako i dalje želite upotrebljavati TalkBack, ponovo pritisnite tu naredbu.</translation>
+<translation id="4636816104159717853">.input {$$COUNT :number} .match $$COUNT 1{{grafička oznaka}} *{{grafičke oznake ({$$COUNT})}}</translation>
 <translation id="4649220074413114917">Trenutačni govor možete zaustaviti dodirivanjem zaslona dvama prstima. To je korisno ako ne želite da ChromeVox nešto pročita. Da biste nastavili, dodirnite zaslon dvama prstima.</translation>
 <translation id="4661075872484491155">stablo</translation>
 <translation id="4668929960204016307">,</translation>
@@ -612,6 +611,7 @@
 <translation id="4854380505292502090">Nema widgeta za prethodni medij</translation>
 <translation id="4855927945655956315">Ključne tipke: Control</translation>
 <translation id="485806788160414322">Reproduciranje ili pauziranje medija</translation>
+<translation id="4861593489403902434">.input {$$COUNT :number} .match $$COUNT 1{{desna zagrada}} *{{desne zagrade ({$$COUNT})}}</translation>
 <translation id="4862744964787595316">Nepodebljano</translation>
 <translation id="4865995900839719272">prijeđi na prethodni redak</translation>
 <translation id="4866956062845190338">rdstizb</translation>
@@ -637,6 +637,7 @@
 <translation id="4993152509206108683">Stopa <ph name="PERCENT" /> posto</translation>
 <translation id="4994420463726586413">Izgovori trenutačni status baterije</translation>
 <translation id="4997282455736854877"><ph name="NAME" />, izborni gumb odabran</translation>
+<translation id="500303467799629809">.input {$$COUNT :number} .match $$COUNT 1{{upitnik}} *{{{$$COUNT} upitnik(a)}}</translation>
 <translation id="5012724933919010465">Izborni gumb stavke izbornika <ph name="NAME" /> je odabran</translation>
 <translation id="5014131807708055994">Nije moguće: <ph name="COMMAND" />, <ph name="REASON" /></translation>
 <translation id="5020651427400641814">Omogućite glasovnu prijavu</translation>
@@ -676,7 +677,6 @@
 <translation id="5310788376443009632">uklonjeno:</translation>
 <translation id="5316825363044614340">prijeđi na sljedeći redak</translation>
 <translation id="5320727453979144100">Ljepljiv način omogućen</translation>
-<translation id="5321085947096604457">{COUNT,plural, =1{zarez}one{# zarez}few{# zareza}other{# zareza}}</translation>
 <translation id="532485153932049746">Oblikovanje teksta
     <ph name="FONT_SIZE_STRING" />
     <ph name="COLOR_STRING" />
@@ -695,10 +695,8 @@
 <translation id="5402367795255837559">Brajica</translation>
 <translation id="5402791055281059602">Modalno upozorenje</translation>
 <translation id="5406272775687194041">Pokrenite povlačenje i ispuštanje</translation>
-<translation id="5407530583102765689">{COUNT,plural, =1{točka sa zarezom}one{# točka sa zarezom}few{# točke sa zarezom}other{# točaka sa zarezom}}</translation>
 <translation id="5420259671171615858">Pretražite izbornike</translation>
 <translation id="5435274640623994081">Omogući zapisnik zvučnih ikona</translation>
-<translation id="5436105723448703439">{COUNT,plural, =1{znak "manje od"}one{# znak "manje od"}few{# znaka "manje od"}other{# znakova "manje od"}}</translation>
 <translation id="5444587279251314700">(aktivno)</translation>
 <translation id="5451268436205074266">točkice <ph name="DOT" /></translation>
 <translation id="5452267669091857717">Nema sljedećeg naslova 1. razine</translation>
@@ -724,7 +722,6 @@
 <translation id="5597170376237141345">Sljedeći potvrdni okvir</translation>
 <translation id="5598905979683743333"><ph name="NAME" />, izborni gumb nije odabran</translation>
 <translation id="5601172225407283979">Izvršavanje zadane radnje</translation>
-<translation id="5604302400025591178">{COUNT,plural, =1{kvadratna grafička oznaka}one{# kvadratna grafička oznaka}few{# kvadratne grafičke oznake}other{# kvadratnih grafičkih oznaka}}</translation>
 <translation id="5608798115546226984">Automatsko dovršavanje retka</translation>
 <translation id="5616029807486814372">Sljedeća lekcija</translation>
 <translation id="561939826962581046">vrijeme</translation>
@@ -741,6 +738,7 @@
 <translation id="5669637233317991674">Pritisnite tipku za pretraživanje i strelicu desno ili tipku za pretraživanje i strelicu lijevo da biste se kretali ovom lekcijom</translation>
 <translation id="5677240841070992068">Trenutačna lokacija</translation>
 <translation id="5678161956734658133">mled</translation>
+<translation id="5678971933640285754">.input {$$COUNT :number} .match $$COUNT 1{{desna vitičasta zagrada}} *{{desne vitičaste zagrade ({$$COUNT})}}</translation>
 <translation id="5681643281275621376">def</translation>
 <translation id="5682113568322255809">Orijentir</translation>
 <translation id="5683155931978483559">Prethodni potvrdni okvir</translation>
@@ -763,6 +761,7 @@
 <translation id="5824976764713185207">Automatski pročitaj stranicu kad se učita</translation>
 <translation id="5826479389509458994"><ph name="ROW" />. redak <ph name="COL" />. stupac</translation>
 <translation id="5833044594931167190">Nema ARIA orijentira</translation>
+<translation id="5836800981500311517">Nije moguće pristupiti kameri. Uključite kameru i provjerite je li blokirana.</translation>
 <translation id="584044465500042213">Napustite način pomicanja</translation>
 <translation id="5842625257683688671">Nema sljedeće slike</translation>
 <translation id="5847883414085148048">Posveta</translation>
@@ -780,24 +779,22 @@
 <translation id="5899860758576822363">Smanji glasnoću reprodukcije kad ChromeVox govori</translation>
 <translation id="5901630391730855834">Žuta</translation>
 <translation id="5906974869830879618">Unesite PIN</translation>
+<translation id="5911156080308275026">.input {$$COUNT :number} .match $$COUNT 1{{točka sa zarezom}} *{{točke sa zarezom ({$$COUNT})}}</translation>
 <translation id="5921587111466148855">Poglavlje</translation>
 <translation id="5923780477617566089">Trenutačni datum</translation>
 <translation id="5926889058434275234">Cijeli popis pokreta potražite u centru za pomoć.</translation>
-<translation id="5937336320314038555">{COUNT,plural, =1{znak jednakosti}one{# znak jednakosti}few{# znaka jednakosti}other{# znakova jednakosti}}</translation>
 <translation id="5947651424015173580">Dvostruki klik mišem</translation>
 <translation id="5948123859135882163">Uključuje/isključuje strukturnu ili semantičku interpretaciju matematičkih izraza</translation>
 <translation id="5955304353782037793">apl</translation>
 <translation id="5956928062748260866">Dijaloški okvir</translation>
 <translation id="5963413905009737549">Odjeljak</translation>
 <translation id="5968607524793740041">Prikaz kontekstnog izbornika</translation>
-<translation id="597121107011153418">{COUNT,plural, =1{s # stavkom}one{s # stavkom}few{s # stavke}other{s # stavki}}</translation>
 <translation id="5981446804259161541">Svijetlocijan</translation>
 <translation id="5983179082906765664">Povećanje razine pojedinosti navigacije</translation>
 <translation id="5988563937187882754">Pogled udesno</translation>
 <translation id="5992285135956208197">Grafički dokument</translation>
 <translation id="5999630716831179808">Glasovi</translation>
 <translation id="6006050241733874051">Obrazac</translation>
-<translation id="6006064078185310784">{COUNT,plural, =1{kosa crta ulijevo}one{# kosa crta ulijevo}few{# kose crte ulijevo}other{# kosih crta ulijevo}}</translation>
 <translation id="6010616110396250088">Poredano silazno</translation>
 <translation id="6017514345406065928">Zelena</translation>
 <translation id="602001110135236999">Pomicanje ulijevo</translation>
@@ -823,6 +820,7 @@
 <translation id="6197361807490522975">Tamnoplava</translation>
 <translation id="6218813441317556731">zamijeni izraz <ph name="DELETE_PHRASE" /> izrazom <ph name="INSERT_PHRASE" /></translation>
 <translation id="6236061028292614533">Sljedeći naslov</translation>
+<translation id="625349470169752824">.input {$$COUNT :number} .match $$COUNT 1{{cijev}} *{{vertikalne cijevi ({$$COUNT})}}</translation>
 <translation id="6254901459154107917">Sljedeće tekstualno područje s mogućnošću uređivanja</translation>
 <translation id="6259464875943891919">Napustili ste <ph name="TYPE" />.</translation>
 <translation id="6280088282605782512">Dodirnite dvaput</translation>
@@ -837,7 +835,6 @@
 <translation id="6325241889020214828">Kopiraj <ph name="TEXT" />.</translation>
 <translation id="6348657800373377022">Kombinirani okvir</translation>
 <translation id="6348869651006731065">Zagasita siva</translation>
-<translation id="6350358010104919766">{COUNT,plural, =1{znak uspravnog nabrajanja}one{# znak uspravnog nabrajanja}few{# znaka uspravnog nabrajanja}other{# znakova uspravnog nabrajanja}}</translation>
 <translation id="6357433033180746873">S desne strane nema ćelije</translation>
 <translation id="6364795331201459219">h6</translation>
 <translation id="6368143427468974988">Prethodni naslov</translation>
@@ -849,7 +846,6 @@
 <translation id="6406989068857078334">Brzina miša smanjena, <ph name="GESTURE" /> ponovo za klik</translation>
 <translation id="6411569524720229058">Jesen</translation>
 <translation id="6417265370957905582">Google asistent</translation>
-<translation id="641759969622533235">{COUNT,plural, =1{dvotočka}one{# dvotočka}few{# dvotočke}other{# dvotočaka}}</translation>
 <translation id="6444046323172968959">Dijaloški okvir upozorenja</translation>
 <translation id="6452403590345320472">Sadržaj</translation>
 <translation id="6468049171101508116">Sljedeći gumb</translation>
@@ -857,6 +853,7 @@
 <translation id="6493991254603208962">smanjivanje svjetline</translation>
 <translation id="6501595918865591267">Tirkizna</translation>
 <translation id="6508059270146105198">Premještanje brajičnog prikaza na dno stranice</translation>
+<translation id="6511611327412641506">.input {$$COUNT :number} .match $$COUNT 1{{otvorena zagrada}} *{{otvorene zagrade ({$$COUNT})}}</translation>
 <translation id="6521550811716689390">Tamnoljubičasta</translation>
 <translation id="6536157907112457272">Lan</translation>
 <translation id="6540201937398578274">U ChromeVoxu tipka za pretraživanje ujedno služi kao modifikatorska tipka. Za većinu prečaca ChromeVoxa prvo trebate pritisnuti tipku za pretraživanje, a za kretanje koristite tipke strelica.</translation>
@@ -878,7 +875,6 @@
 <translation id="669617842401078250">Pauzirano je preuzimanje datoteke <ph name="FILE_NAME" /></translation>
 <translation id="6696967141280706829">Predgovor</translation>
 <translation id="6697092096875747123">Prethodni kombinirani okvir</translation>
-<translation id="6702609185760332517">{COUNT,plural, =1{uskličnik}one{# uskličnik}few{# uskličnika}other{# uskličnika}}</translation>
 <translation id="670717715607710284">Isključi zaslon</translation>
 <translation id="6714813999819678458">Prethodni naslov razine 2</translation>
 <translation id="6730312624811567147">Koristite tipku za pretraživanje i lijevu ili desnu strelicu za tipke Home ili End, tipku za pretraživanje, tipku Control i lijevu ili desnu strelicu za kombinaciju tipki Control Home ili Control End, tipku za pretraživanje i strelicu prema gore ili dolje za tipku Page Up ili Page Down</translation>
@@ -898,6 +894,7 @@
 <translation id="6859876496651143278">Prelazak jednim prstom ulijevo</translation>
 <translation id="6865519907510167493">Pravopisna pogreška</translation>
 <translation id="6873188295213080042">Savjet: zadržite tipku za pretraživanje i pritišćite tipke sa strelicama da biste se kretali.</translation>
+<translation id="6889949222685321250">.input {$$COUNT :number} .match $$COUNT 1{{+{$$COUNT}}} *{{+{$$COUNT}}}</translation>
 <translation id="6894148351896207544">Izgovara trenutačno vrijeme i datum</translation>
 <translation id="6896758677409633944">Kopiraj</translation>
 <translation id="6897341342232909480">Pomakni lijevo</translation>
@@ -911,6 +908,7 @@
 <translation id="6951482098621102657">Nema sljedećeg naslova 5. razine</translation>
 <translation id="6955705049214951590">Maglenoružičasta</translation>
 <translation id="696356426651109308">Skoči na početak</translation>
+<translation id="6978319636763404384">.input {$$COUNT :number} .match $$COUNT 1{{sat}} *{{sati}}</translation>
 <translation id="6994042831499278539">Referenca iz pojmovnika</translation>
 <translation id="6996566555547746822">Sljedeći kombinirani okvir</translation>
 <translation id="6997224546856374593">Prilikom čitanja velikih slova:</translation>
@@ -919,6 +917,7 @@
 <translation id="7005146664810010831">Nije pronađen nijedan URL</translation>
 <translation id="7026338066939101231">Pomak unatrag</translation>
 <translation id="7031651751836475482">stvk pops</translation>
+<translation id="7032910411301673020">.input {$$COUNT :number} .match $$COUNT 1{{bijela grafička oznaka}} *{{bijele grafičke oznake ({$$COUNT})}}</translation>
 <translation id="7037042857287298941">Prethodni popis</translation>
 <translation id="7039555289296502784">Sivomaslinasta</translation>
 <translation id="7041173719775863268">Kraj odabira</translation>
@@ -928,6 +927,7 @@
 <translation id="7086377898680121060">povećavanje svjetline</translation>
 <translation id="7088743565397416204">Dvaput dodirnite da biste aktivirali ono što je u fokusu</translation>
 <translation id="7088960765736518739">Navigacija prekidačima</translation>
+<translation id="7089749381037113497">.input {$$COUNT :number} .match $$COUNT 1{{podvlaka}} *{{podvlake ({$$COUNT})}}</translation>
 <translation id="7090715360595433170">To može biti učinkovitije od prelaženja jednim prstom ulijevo i udesno.</translation>
 <translation id="7091296112653361280">Navajo bijela</translation>
 <translation id="7095834689119144465">Samo numeričko uređivanje teksta</translation>
@@ -938,6 +938,7 @@
 <translation id="712735679809149106">odjek riječi</translation>
 <translation id="7137397390322864165">Boja lososa</translation>
 <translation id="7140168702531682811">Eksponent</translation>
+<translation id="7141256465543825898">.input {$$COUNT :number} .match $$COUNT 1{{kartica}} *{{kartice ({$$COUNT})}}</translation>
 <translation id="7143034430156387447">Prebacivanje između brajice sa 6 i 8 točkica</translation>
 <translation id="7143207342074048698">Povezivanje</translation>
 <translation id="7153618581592392745">Lavanda</translation>
@@ -967,6 +968,7 @@
 <translation id="7289186959554153431">Naslov 3</translation>
 <translation id="7292195267473691167"><ph name="LOCALE" /> (<ph name="VARIANT" />)</translation>
 <translation id="7297440685387139507">Prekinite povlačenje i ispuštanje</translation>
+<translation id="7307364818959876261">.input {$$COUNT :number} .match $$COUNT 1{{razmak}} *{{{$$COUNT} razmak(a)}}</translation>
 <translation id="7308519659008003150">Nema prethodnog polja obrasca</translation>
 <translation id="731121099745151312">stvkstab</translation>
 <translation id="7313717760367325059">pomoć</translation>
@@ -975,7 +977,6 @@
 <translation id="7344012264516629579">Dodatne naredbe za preskakanje među ostalim uključuju preskakanje među vezama, gumbima i potvrdnim okvirima. Popis svih naredbi za preskakanje možete pronaći u ChromeVoxovim izbornicima, koje možete otvoriti tako da pritisnete tipku za pretraživanje i točku.</translation>
 <translation id="7356165926712028380">Prijeđi na 8-točkastu brajicu</translation>
 <translation id="7356610683936413584">Pojedinost popisa opisa</translation>
-<translation id="7370432716629432284">{COUNT,plural, =1{znak &amp;}one{# znak &amp;}few{# znaka &amp;}other{# znakova &amp;}}</translation>
 <translation id="737396357417333429">klk</translation>
 <translation id="738899727977260036">Sivoplava</translation>
 <translation id="7393979322571982935">Zvukovi i postavke</translation>
@@ -998,6 +999,7 @@
 <translation id="7543255924852002459">Odbaci oznaku</translation>
 <translation id="7552432549459840808">Korisni prečaci Chromea</translation>
 <translation id="7553679324939294712">umetni <ph name="INSERT_PHRASE" /> ispred <ph name="BEFORE_PHRASE" /></translation>
+<translation id="7564773684901619629">.input {$$COUNT :number} .match $$COUNT 1{{apostrof}} *{{{$$COUNT} apostrof(a)}}</translation>
 <translation id="7569983096843329377">Crna</translation>
 <translation id="7579911500627256166">točkica <ph name="DOT" /></translation>
 <translation id="7592060599656252486">Neki</translation>
@@ -1014,7 +1016,7 @@
 <translation id="7637342083105831460">Pritisnite tipku za pretraživanje i desnu strelicu da biste pronašli područje za vježbu ili gumb Sljedeća lekcija. Zatim pritisnite tipku za pretraživanje i razmaknicu da biste aktivirali odabranu opciju.</translation>
 <translation id="7639968568612851608">Tamnosiva</translation>
 <translation id="7663318257180412551">Naslov 2</translation>
-<translation id="7668307052366682650">{COUNT,plural, =1{h}one{h}few{h}other{h}}</translation>
+<translation id="7673144236430784711">.input {$$COUNT :number} .match $$COUNT 1{{dolar}} *{{{$$COUNT} znak(ov)a dolara}}</translation>
 <translation id="7674576868851035240">Sljedeća veza</translation>
 <translation id="7674768236845044097">oznaka</translation>
 <translation id="7676847077928500578">Vraćanje postavki pretvaranja teksta u govor na zadano</translation>
@@ -1024,9 +1026,11 @@
 <translation id="7696631298608145306">prijeđi na sljedeću riječ</translation>
 <translation id="7701040980221191251">Nema ih</translation>
 <translation id="7701196182766842984">autopop</translation>
+<translation id="7708242671340939466">.input {$$COUNT :number} .match $$COUNT 1{{crtica}} *{{crtice({$$COUNT})}}</translation>
 <translation id="7714340021005120797">Nema sljedećeg kombiniranog okvira</translation>
 <translation id="7715455358521357192">Škiljenje na desno oko</translation>
 <translation id="7724603315864178912">Izreži</translation>
+<translation id="7731002461127710752">.input {$$COUNT :number} .match $$COUNT 1{{zatvoreni jednostruki navodnik}} *{{zatvoreni jednostruki navodnici ({$$COUNT})}}</translation>
 <translation id="7731785449856576010">Nema sljedećeg widgeta medija</translation>
 <translation id="7735498529470878067">Istraživanje dodirom može vam pomoći da brzo dobijete uvid u to što se nalazi na zaslonu.</translation>
 <translation id="773906353055481349">Za kretanje od ćelije do ćelije pritisnite tipku za pretraživanje + Ctrl + Alt i strelice</translation>
@@ -1043,14 +1047,15 @@
 <translation id="7839679365527550018">Prethodna riječ</translation>
 <translation id="7846634333498149051">Tipkovnica</translation>
 <translation id="7851816175263618915">Neki interpunkcijski znakovi</translation>
+<translation id="7861676488745595432">.input {$$COUNT :number} .match $$COUNT 1{{lijeva zagrada}} *{{lijeve zagrade ({$$COUNT})}}</translation>
 <translation id="7871691770940645922">Virtualni brajev redak</translation>
 <translation id="7882421473871500483">Smeđa</translation>
 <translation id="78826985582142166">klz</translation>
+<translation id="7889376040363236522">.input {$$COUNT :number} .match $$COUNT 1{{navodnik}} *{{navodnici ({$$COUNT})}}</translation>
 <translation id="7913106023953875143">Nema sljedećeg naslova 2. razine</translation>
 <translation id="7927711904086083099">Nije odabran</translation>
 <translation id="7935627501098484003">Kontrola vremena</translation>
 <translation id="7939428177581522200">dodano u odabir</translation>
-<translation id="794091007957014205">{COUNT,plural, =1{znak @}one{# znak @}few{# znaka @}other{# znakova @}}</translation>
 <translation id="7942349550061667556">Crvena</translation>
 <translation id="7948364528129376623">Nema sljedeće posjećene veze</translation>
 <translation id="7952460583030260752">Reference za naredbe</translation>
@@ -1061,7 +1066,6 @@
 <translation id="8004507136466386272">Riječi</translation>
 <translation id="8004512796067398576">Pomak unaprijed</translation>
 <translation id="8007540374018858731">h3</translation>
-<translation id="8009786657110126785">{COUNT,plural, =1{navodnik}one{# navodnik}few{# navodnika}other{# navodnika}}</translation>
 <translation id="8017588669690167134">Govor je isključen</translation>
 <translation id="801990297710781303">Fusnota</translation>
 <translation id="8028833145828956995">Možete upotrebljavati ChromeVox uz pomoć dodirnog zaslona</translation>
@@ -1087,10 +1091,10 @@
 <translation id="8132248161074464367">Prethodna nevažeća stavka</translation>
 <translation id="8138880386467279117">Dodir</translation>
 <translation id="8146613869421949343">U sljedećem koraku saznat ćete više o tipki za pretraživanje. Tipka za pretraživanje koristi se u kombinaciji s drugim tipkama za ChromeVoxove naredbe. Tipka za pretraživanje nalazi se neposredno iznad lijeve tipke Shift. Da biste nastavili, pritisnite tipku za pretraživanje.</translation>
+<translation id="8153361283127969411">.input {$$COUNT :number} .match $$COUNT 1{{desna zagrada}} *{{desne zagrade ({$$COUNT})}}</translation>
 <translation id="8158033275290782295">odaberi sve</translation>
 <translation id="816818801578874684">Ovo je prvi naslov. Pritisnite tipku za pretraživanje i H da biste prešli na sljedeći naslov.</translation>
 <translation id="8173092779156526980">Prijeđite s četiri prsta ulijevo</translation>
-<translation id="817440585505441544">{COUNT,plural, =1{donja crta}one{# donja crta}few{# donje crte}other{# donjih crta}}</translation>
 <translation id="817529114347680055">Uključi zaslon</translation>
 <translation id="8179976553408161302">Enter</translation>
 <translation id="8184828902145951186">redak</translation>
@@ -1115,7 +1119,6 @@
 <translation id="8313653172105209786">dirkt</translation>
 <translation id="8316881042119029234">Boja stare čipke</translation>
 <translation id="8326783648485765113">Zelena kao trava</translation>
-<translation id="8345569862449483843">{COUNT,plural, =1{znak funte}one{# znak funte}few{# znaka funte}other{# znakova funte}}</translation>
 <translation id="8351821207686449674">Uključivanje/isključivanje titlova</translation>
 <translation id="8378855320830505539">Regija</translation>
 <translation id="8382679411218029383">Automatsko dovršavanje retka i popisa</translation>
@@ -1158,10 +1161,8 @@
 <translation id="8659501358298941449">Padajući popisi</translation>
 <translation id="8666733765751421568"><ph name="TYPE" /> – kraj</translation>
 <translation id="867187640362843212">Naslov 5</translation>
-<translation id="8690400660839620419">{COUNT,plural, =1{}one{ugniježđena razina #}few{ugniježđena razina #}other{ugniježđena razina #}}</translation>
 <translation id="8693391540059827073">Moje omiljeno godišnje doba</translation>
 <translation id="8696284982970258155">Medna rosa</translation>
-<translation id="8697111817566059991">{COUNT,plural, =1{okomita crta}one{# okomita crta}few{# okomite crte}other{# okomitih crta}}</translation>
 <translation id="8741370088760768424">Savjet: pritisnite tipku za pretraživanje i razmaknicu da biste aktivirali trenutačnu stavku.</translation>
 <translation id="8743786158317878347">unos strukturiranog sadržaja, na primjer, tablica</translation>
 <translation id="8746846427395705317">prijeđi na prethodnu riječ</translation>
@@ -1183,6 +1184,7 @@
 <translation id="8897030325301866860">Font <ph name="FONT_FAMILY" /></translation>
 <translation id="8898516272131543774">Kružna izmjena odjeka interpunkcije</translation>
 <translation id="8908714597367957477">zglvljstpc</translation>
+<translation id="8909819899961392044">.input {$$COUNT :number} .match $$COUNT 1{{lijeva vitičasta zagrada}} *{{lijeve vitičaste zagrade ({$$COUNT})}}</translation>
 <translation id="8910180774920883033">Dostupne su radnje. Pritisnite Pretraživanje + Ctrl + A da biste ih pregledali</translation>
 <translation id="8937112856099038376">intveza</translation>
 <translation id="8940925288729953902">Modifikatorske tipke</translation>
@@ -1211,14 +1213,15 @@
 <translation id="9099429023611373837">izreži</translation>
 <translation id="9108370397979208512">mat</translation>
 <translation id="9108589040018540527">klzč</translation>
-<translation id="911476240645808512">{COUNT,plural, =1{znak postotka}one{# znak postotka}few{# znaka postotka}other{# znakova postotka}}</translation>
 <translation id="9128414153595658330">dij</translation>
+<translation id="9132815018758550541">.input {$$COUNT :number} .match $$COUNT 1{{uskličnik}} *{{{$$COUNT} uskličnik(a)}}</translation>
 <translation id="9133928141873682933">Oker</translation>
 <translation id="9149560530563164529">odjljk</translation>
 <translation id="9150735707954472829">Kartica</translation>
 <translation id="9151249085738989067">Automatski prebaci ChromeVoxov glas na temelju jezika</translation>
 <translation id="9153606228985488238">Visina glasa: <ph name="PERCENT" /> posto</translation>
 <translation id="9160096769946561184">Prelazak na kraj trenutačnog stupca</translation>
+<translation id="916022049788356777">.input {$$COUNT :number} .match $$COUNT 1{{kosa crta}} *{{kose crte ({$$COUNT})}}</translation>
 <translation id="9173115498289768110">Glasnoća <ph name="PERCENT" /> posto</translation>
 <translation id="9185200690645120087">Vodič za ChromeVoxovo upravljanje dodirom</translation>
 <translation id="9192904702577636854">Pomični tekst</translation>

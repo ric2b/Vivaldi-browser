@@ -289,6 +289,7 @@ source_set("browser_sources") {
     "navigation_handle_user_data.h",
     "navigation_throttle.cc",
     "navigation_throttle.h",
+    "navigation_throttle_registry.h",
     "navigation_ui_data.h",
     "network_context_client_base.h",
     "network_quality_observer_factory.h",
@@ -317,6 +318,7 @@ source_set("browser_sources") {
     "permission_controller.h",
     "permission_controller_delegate.cc",
     "permission_controller_delegate.h",
+    "permission_descriptor_util.h",
     "permission_overrides.cc",
     "permission_overrides.h",
     "permission_request_description.cc",
@@ -412,6 +414,8 @@ source_set("browser_sources") {
     "service_worker_context_observer.h",
     "service_worker_external_request_result.h",
     "service_worker_external_request_timeout_type.h",
+    "service_worker_registration_information.cc",
+    "service_worker_registration_information.h",
     "service_worker_running_info.cc",
     "service_worker_running_info.h",
     "service_worker_version_base_info.cc",
@@ -466,6 +470,8 @@ source_set("browser_sources") {
     "tts_controller.h",
     "tts_platform.h",
     "tts_utterance.h",
+    "unowned_inner_web_contents_client.cc",
+    "unowned_inner_web_contents_client.h",
     "url_data_source.cc",
     "url_data_source.h",
     "url_loader_request_interceptor.cc",
@@ -768,6 +774,9 @@ if (is_android) {
       "digital_identity_interstitial_type.h",
       "digital_identity_provider.h",
     ]
+  }
+  java_cpp_enum("transfer_input_to_viz_result_enum") {
+    sources = [ "android/transfer_input_to_viz_result.h" ]
   }
 }
 

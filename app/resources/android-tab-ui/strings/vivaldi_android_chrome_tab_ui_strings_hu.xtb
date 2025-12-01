@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hu">
-<translation id="2277224997687551299">Csoportnév szerkesztése</translation>
+<translation id="1062777154504442433">Új lapcsoport</translation>
+<translation id="1625440863545383011">Lap eltávolítása és csoport elhagyása</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Könyvjelző lap}
           other {Könyvjelző lap}
         }</translation>
 <translation id="2947471979790858922">A privát lapokon végzett tevékenységeid eltávolításra kerülnek erről az eszközről</translation>
+<translation id="3298614730029636660">Csoport elhagyása</translation>
+<translation id="354698175756845966">Csoportszín szerkesztése</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {A bezárt lapokat a Nemrég megnyitott lapok alatt találod, a Vivaldi főmenün belül. A privát lapod nem lesz elérhető.}
         other {A bezárt lapokat a Nemrég megnyitott lapok alatt találod, a Vivaldi főmenün belül. A(z) # privát lapod nem lesz elérhető.}}</translation>
-<translation id="4460014764210899310">Csoportosítás megszüntetése</translation>
 <translation id="4871187110787939393">Minden privát lap bezárása?</translation>
 <translation id="5494920125229734069">Minden kijelölése</translation>
-<translation id="6744956528665271406">Csoport színének szerkesztése</translation>
+<translation id="6807841890213931603">Lap eltávolítása és csoport törlése</translation>
+<translation id="750227952939161636">A lapcsoportok automatikusan mentésre kerülnek és frissülnek az összes bejelentkezett eszközön</translation>
+<translation id="7640137753339219124">Csoport törlése</translation>
+<translation id="7653857400289671414">A lapcsoportok automatikusan mentésre kerülnek</translation>
+<translation id="8440938071054361204">Csoportnév szerkesztése</translation>
+<translation id="8602902357364871325">Csoport bezárása</translation>
+<translation id="8851621822786801079">Eltávolítás a csoportból</translation>
 </translationbundle>

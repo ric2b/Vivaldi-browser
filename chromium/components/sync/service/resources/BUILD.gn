@@ -17,7 +17,7 @@ build_webui("build") {
     "traffic_log.css",
   ]
 
-  non_web_component_files = [
+  ts_files = [
     "about.ts",
     "chrome_sync.ts",
     "data.ts",
@@ -31,7 +31,6 @@ build_webui("build") {
     "user_events.ts",
   ]
 
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_composite = true
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",

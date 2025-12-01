@@ -77,6 +77,8 @@ def to_output(value: Value) -> str | None:
 
 
 _MAGIC_ARG_MAPPING = {
+    '$$MAGIC_SUBSTITUTION_AndroidDesktopTelemetryRemote':
+    'ANDROID_DESKTOP_TELEMETRY_REMOTE',
     '$$MAGIC_SUBSTITUTION_ChromeOSTelemetryRemote': 'CROS_TELEMETRY_REMOTE',
     '$$MAGIC_SUBSTITUTION_ChromeOSGtestFilterFile': 'CROS_GTEST_FILTER_FILE',
     '$$MAGIC_SUBSTITUTION_GPUExpectedVendorId': 'GPU_EXPECTED_VENDOR_ID',
@@ -177,7 +179,7 @@ def convert_skylab(skylab: dict[str, typing.Any]) -> Value:
 
   for key, value in skylab.items():
     match key:
-      case 'cros_cbx' | 'shards' | 'timeout_sec':
+      case 'shards' | 'timeout_sec':
         value_builder[key] = convert_direct(value)
 
       case _:

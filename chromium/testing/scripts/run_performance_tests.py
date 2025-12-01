@@ -31,7 +31,7 @@ could be histogram or graph json), and test_results.json.
 TESTING:
 To test changes to this script, please run unit tests:
 $ cd testing/scripts
-$ python3 -m unittest run_performance_tests_unittest.py
+$ vpython3 run_performance_tests_unittest.py
 
 Run end-to-end tests:
 $ cd tools/perf
@@ -39,7 +39,7 @@ $ ./run_tests ScriptsSmokeTest.testRunPerformanceTests
 """
 
 import argparse
-from collections import OrderedDict
+from collections import deque, OrderedDict
 import datetime
 import json
 import os
@@ -94,7 +94,8 @@ else:
 
 SHARD_MAPS_DIR = CHROMIUM_SRC_DIR / 'tools/perf/core/shard_maps'
 CROSSBENCH_TOOL = CHROMIUM_SRC_DIR / 'third_party/crossbench/cb.py'
-ADB_TOOL = THIRD_PARTY_DIR / 'catapult/devil/bin/deps/linux2/x86_64/bin/adb'
+ADB_TOOL = THIRD_PARTY_DIR / 'android_sdk/public/platform-tools/adb'
+BUNDLETOOL = THIRD_PARTY_DIR / 'android_build_tools/bundletool/cipd/bundletool.jar'  # pylint: disable=line-too-long
 GSUTIL_DIR = THIRD_PARTY_DIR / 'catapult/third_party/gsutil'
 PAGE_SETS_DATA = CHROMIUM_SRC_DIR / 'tools/perf/page_sets/data'
 PERF_TOOLS = ['benchmarks', 'executables', 'crossbench']
@@ -726,19 +727,31 @@ class CrossbenchTest(object):
   EXECUTABLE = 'cb.py'
   OUTDIR = '--out-dir=%s/output'
   CHROME_BROWSER = '--browser=%s'
-  ANDROID_HJSON = '{browser:"%s", driver:{type:"Android", adb_bin:"%s"}}'
+  ANDROID_HJSON = ('{browser:"%s", driver:{type:"Android", '
+                   f'adb_bin:"{ADB_TOOL}", '
+                   f'bundletool:"{BUNDLETOOL}'
+                   '"}}')
   STORY_LABEL = 'default'
   BENCHMARK_FILESERVERS = {
       'speedometer_3.1': 'third_party/speedometer/v3.1',
       'speedometer_3.0': 'third_party/speedometer/v3.0',
+      'speedometer_3': 'third_party/speedometer/v3.1',
       'speedometer_2.1': 'third_party/speedometer/v2.1',
-      'speedometer_2.0': 'third_party/speedometer/v2.0'
+      'speedometer_2.0': 'third_party/speedometer/v2.0',
+      'speedometer_2': 'third_party/speedometer/v2.1',
+      'jetstream_2.2': 'third_party/jetstream/v2.2',
+      'jetstream_2': 'third_party/jetstream/v2.2',
+      'motionmark_1.3': 'third_party/blink/perf_tests/MotionMark'
   }
 
   def __init__(self, options, isolated_out_dir):
     self.options = options
+    self._parse_arguments()
     self.isolated_out_dir = isolated_out_dir
     self.network = self._get_network_arg(options.passthrough_args)
+    self.is_chrome = (not self.cb_options.official_browser
+                      or self.cb_options.official_browser.startswith('chrome'))
+    self.env = self._create_env_arg()
     if self.options.luci_chromium:
       # In luci.chromium the Chrome and driver are in the user path.
       self.browser = '--browser=%s' % get_abs_user_path('chrome')
@@ -749,7 +762,15 @@ class CrossbenchTest(object):
       browser_arg = _get_browser_arg(options.passthrough_args)
       self.is_android = _is_android(browser_arg)
       self._find_browser(browser_arg)
-      self.driver_path_arg = self._find_chromedriver(browser_arg)
+
+  def _parse_arguments(self):
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--official-browser',
+                        type=str,
+                        required=False,
+                        help='Use official build of the browser')
+    self.cb_options, self.options.passthrough_args = parser.parse_known_args(
+        self.options.passthrough_args)
 
   def _get_network_arg(self, args):
     if _arg := _get_arg(args, '--network='):
@@ -758,11 +779,23 @@ class CrossbenchTest(object):
       return self._create_fileserver_network(_arg)
     if _get_arg(args, '--wpr'):
       return self._create_wpr_network(args)
-    if self.options.benchmarks in self.BENCHMARK_FILESERVERS:
+    if self.options.benchmarks.startswith('motionmark'):
+      # TODO(crbug.com/413452730): Enable local file server in all platforms.
+      return []
+    if ((self.options.benchmarks in self.BENCHMARK_FILESERVERS)
+        and not (self.options.benchmarks.startswith('speedometer')
+                 and sys.platform == 'darwin')):
       # Use file server when it is available.
       arg = '--fileserver'
       args.append(arg)
       return self._create_fileserver_network(arg)
+    return []
+
+  def _create_env_arg(self):
+    if (self.options.benchmarks.startswith('motionmark')
+        and sys.platform == 'darwin'):
+      # Set screen refresh rate to 60Hz on Mac due to crbug.com/415318275.
+      return ['--env={screen_refresh_rate:60}']
     return []
 
   def _create_fileserver_network(self, arg):
@@ -796,12 +829,30 @@ class CrossbenchTest(object):
       self.options.passthrough_args.remove(wpr_arg)
     return [_create_network_json('wpr', path=archive, wpr_go_bin=wpr_go)]
 
+  def _check_for_embedder_arg(self):
+    embedder_arg = _get_arg(self.options.passthrough_args, '--embedder=')
+    if embedder_arg:
+      embedder_package_name = embedder_arg.split('=', 1)[1]
+      # This will affect browser arg, but is not to be passed by itself
+      self.options.passthrough_args.remove(embedder_arg)
+      return embedder_package_name
+    return None
+
   def _find_browser(self, browser_arg):
     # Replacing --browser with the generated self.browser.
     self.options.passthrough_args = [
         arg for arg in self.options.passthrough_args
         if not arg.startswith('--browser=')
     ]
+    if self.cb_options.official_browser:
+      if self.is_android:
+        android_json = self.ANDROID_HJSON % self.cb_options.official_browser
+        self.browser = self.CHROME_BROWSER % android_json
+      else:
+        self.browser = self.CHROME_BROWSER % self.cb_options.official_browser
+      self.driver_path_arg = []
+      return
+    self.driver_path_arg = self._find_chromedriver()
     if '/' in browser_arg or '\\' in browser_arg:
       # The --browser arg looks like a path. Use it as-is.
       self.browser = self.CHROME_BROWSER % browser_arg
@@ -814,22 +865,17 @@ class CrossbenchTest(object):
     if not possible_browser:
       raise ValueError(f'Unable to find Chrome browser of type: {browser_arg}')
     if self.is_android:
-      browser_app = possible_browser.settings.package
-      android_json = self.ANDROID_HJSON % (browser_app, ADB_TOOL)
+      # Check for an arg with embedder package name to override browser (WV)
+      browser_app = (self._check_for_embedder_arg()
+                     or possible_browser.settings.package)
+      android_json = self.ANDROID_HJSON % browser_app
       self.browser = self.CHROME_BROWSER % android_json
     else:
       assert hasattr(possible_browser, 'local_executable')
       self.browser = self.CHROME_BROWSER % possible_browser.local_executable
 
-  def _find_chromedriver(self, browser_arg):
-    browser_arg = browser_arg.lower()
-    if browser_arg == 'release_x64':
-      path = '../Release_x64'
-    elif self.is_android:
-      path = 'clang_x64'
-    else:
-      path = '.'
-
+  def _find_chromedriver(self):
+    path = 'clang_x64' if self.is_android else '.'
     abspath = pathlib.Path(path).absolute()
     if ((driver_path := (abspath / 'chromedriver')).exists()
         or (driver_path := (abspath / 'chromedriver.exe')).exists()):
@@ -838,12 +884,11 @@ class CrossbenchTest(object):
     return []
 
   def _get_default_args(self):
-    default_args = [
-        '--no-symlinks',
-        # Required until crbug/41491492 and crbug/346323630 are fixed.
-        '--enable-features=DisablePrivacySandboxPrompts',
-    ]
-    if not self.is_android:
+    default_args = ['--no-symlinks']
+    if self.is_chrome:
+      # Required until crbug.com/41491492 and crbug.com/346323630 are fixed.
+      default_args.append('--enable-features=DisablePrivacySandboxPrompts')
+    if self.is_chrome and not self.is_android:
       # See http://shortn/_xGSaVM9P5g
       default_args.append('--enable-field-trial-config')
     if self.options.luci_chromium:
@@ -851,10 +896,10 @@ class CrossbenchTest(object):
     return default_args
 
   def _generate_command_list(self, benchmark, benchmark_args, working_dir):
-    return (['vpython3'] + [self.options.executable] + [benchmark] +
+    return (['vpython3', '-Xutf8'] + [self.options.executable] + [benchmark] +
             ['--env-validation=throw'] + [self.OUTDIR % working_dir] +
             [self.browser] + benchmark_args + self.driver_path_arg +
-            self.network + self._get_default_args())
+            self.network + self.env + self._get_default_args())
 
   def execute_benchmark(self,
                         benchmark,
@@ -865,7 +910,7 @@ class CrossbenchTest(object):
 
     env = os.environ.copy()
     env['CHROME_HEADLESS'] = '1'
-    env['PATH'] = f'{GSUTIL_DIR}:' + env['PATH']
+    env['PATH'] = f"{GSUTIL_DIR}{';' if IsWindows() else ':'}{env['PATH']}"
 
     return_code = 1
     output_paths = OutputFilePaths(self.isolated_out_dir, display_name).SetUp()
@@ -891,6 +936,17 @@ class CrossbenchTest(object):
             pathlib.Path(output_paths.benchmark_path) / 'output',
             pathlib.Path(output_paths.perf_results), display_name,
             self.STORY_LABEL, self.options.results_label)
+      elif os.path.exists(output_paths.logs):
+        # To avoid printing too large log file, we print the last 100 lines.
+        bottom_of_log = deque(maxlen=100)
+        with open(output_paths.logs, 'r') as handle:
+          for line in handle:
+            if line.strip():
+              bottom_of_log.append(line.replace('\n', ''))
+        print(f'The last 100 lines of {output_paths.logs}:')
+        while bottom_of_log:
+          print(f'    {bottom_of_log.popleft()}')
+        print('See the complete logs in the CAS Outputs')
     except Exception:  # pylint: disable=broad-except
       print('The following exception may have prevented the code from '
             'outputing structured test results and perf results output:')

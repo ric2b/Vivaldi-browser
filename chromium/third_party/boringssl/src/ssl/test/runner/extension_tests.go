@@ -499,7 +499,12 @@ func addExtensionTests() {
 			if ver.version >= VersionTLS13 {
 				// Test basic client with different ALPS codepoint.
 				for _, alpsCodePoint := range []ALPSUseCodepoint{ALPSUseCodepointNew, ALPSUseCodepointOld} {
-					flags := []string{}
+					useAlpsCodepointFlag := "0"
+					if alpsCodePoint == ALPSUseCodepointNew {
+						useAlpsCodepointFlag = "1"
+					}
+
+					flags := []string{"-alps-use-new-codepoint", useAlpsCodepointFlag}
 					expectations := connectionExpectations{
 						peerApplicationSettingsOld: []byte("shim1"),
 					}
@@ -508,7 +513,6 @@ func addExtensionTests() {
 					}
 
 					if alpsCodePoint == ALPSUseCodepointNew {
-						flags = append(flags, "-alps-use-new-codepoint")
 						expectations = connectionExpectations{
 							peerApplicationSettings: []byte("shim1"),
 						}
@@ -551,7 +555,7 @@ func addExtensionTests() {
 					})
 
 					// Test basic server with different ALPS codepoint.
-					flags = []string{}
+					flags = []string{"-alps-use-new-codepoint", useAlpsCodepointFlag}
 					expectations = connectionExpectations{
 						peerApplicationSettingsOld: []byte("shim1"),
 					}
@@ -560,7 +564,6 @@ func addExtensionTests() {
 					}
 
 					if alpsCodePoint == ALPSUseCodepointNew {
-						flags = append(flags, "-alps-use-new-codepoint")
 						expectations = connectionExpectations{
 							peerApplicationSettings: []byte("shim1"),
 						}
@@ -602,7 +605,7 @@ func addExtensionTests() {
 					})
 
 					// Try different ALPS codepoint for all the existing tests.
-					alpsFlags := []string{}
+					alpsFlags := []string{"-alps-use-new-codepoint", useAlpsCodepointFlag}
 					expectations = connectionExpectations{
 						peerApplicationSettingsOld: []byte("shim1"),
 					}
@@ -610,7 +613,6 @@ func addExtensionTests() {
 						peerApplicationSettingsOld: []byte("shim2"),
 					}
 					if alpsCodePoint == ALPSUseCodepointNew {
-						alpsFlags = append(alpsFlags, "-alps-use-new-codepoint")
 						expectations = connectionExpectations{
 							peerApplicationSettings: []byte("shim1"),
 						}
@@ -1212,16 +1214,21 @@ func addExtensionTests() {
 				// Test the client rejects the ALPS extension if the server
 				// negotiated TLS 1.2 or below.
 				for _, alpsCodePoint := range []ALPSUseCodepoint{ALPSUseCodepointNew, ALPSUseCodepointOld} {
+					useAlpsCodepointFlag := "0"
+					if alpsCodePoint == ALPSUseCodepointNew {
+						useAlpsCodepointFlag = "1"
+					}
+
 					flags := []string{
 						"-advertise-alpn", "\x03foo",
 						"-expect-alpn", "foo",
 						"-application-settings", "foo,shim",
+						"-alps-use-new-codepoint", useAlpsCodepointFlag,
 					}
 					bugs := ProtocolBugs{
 						AlwaysNegotiateApplicationSettingsOld: true,
 					}
 					if alpsCodePoint == ALPSUseCodepointNew {
-						flags = append(flags, "-alps-use-new-codepoint")
 						bugs = ProtocolBugs{
 							AlwaysNegotiateApplicationSettingsNew: true,
 						}
@@ -1247,12 +1254,12 @@ func addExtensionTests() {
 						"-on-resume-advertise-alpn", "\x03foo",
 						"-on-resume-expect-alpn", "foo",
 						"-on-resume-application-settings", "foo,shim",
+						"-alps-use-new-codepoint", useAlpsCodepointFlag,
 					}
 					bugs = ProtocolBugs{
 						AlwaysNegotiateApplicationSettingsOld: true,
 					}
 					if alpsCodePoint == ALPSUseCodepointNew {
-						flags = append(flags, "-alps-use-new-codepoint")
 						bugs = ProtocolBugs{
 							AlwaysNegotiateApplicationSettingsNew: true,
 						}
@@ -1282,10 +1289,9 @@ func addExtensionTests() {
 					flags = []string{
 						"-select-alpn", "foo",
 						"-application-settings", "foo,shim",
+						"-alps-use-new-codepoint", useAlpsCodepointFlag,
 					}
-					if alpsCodePoint == ALPSUseCodepointNew {
-						flags = append(flags, "-alps-use-new-codepoint")
-					}
+
 					testCases = append(testCases, testCase{
 						protocol: protocol,
 						testType: serverTest,
@@ -1908,7 +1914,7 @@ func addExtensionTests() {
 					test.config.ApplicationSettings = map[string][]byte{"proto": []byte("runner")}
 					test.flags = append(test.flags,
 						"-application-settings", "proto,shim",
-						"-alps-use-new-codepoint",
+						"-alps-use-new-codepoint", "1",
 						"-expect-peer-application-settings", "runner")
 					test.expectations.peerApplicationSettings = []byte("shim")
 				}

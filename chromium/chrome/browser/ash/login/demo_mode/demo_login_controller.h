@@ -46,7 +46,7 @@ class DemoLoginController
     kLoginToMGS = 5,
   };
 
-  using FailedRequestCallback = base::OnceCallback<void()>;
+  using RequestCallback = base::OnceCallback<void()>;
 
   using ResultCode = DemoSessionMetricsRecorder::DemoAccountRequestResultCode;
 
@@ -60,8 +60,8 @@ class DemoLoginController
   // Trigger Demo account login flow.
   void TriggerDemoAccountLoginFlow();
 
-  void SetSetupFailedCallbackForTest(FailedRequestCallback callback);
-  void SetCleanUpFailedCallbackForTest(FailedRequestCallback callback);
+  void SetSetupRequestCallbackForTesting(RequestCallback callback);
+  void SetCleanupRequestCallbackForTesting(RequestCallback callback);
   void SetDeviceCloudPolicyManagerForTesting(
       policy::CloudPolicyManager* policy_manager);
 
@@ -111,6 +111,9 @@ class DemoLoginController
   // auto login.
   void MaybeTriggerAutoLogin();
 
+  // Called on 5th second for waiting policy manager connection.
+  void OnPolicyManagerConnectionTimeOut();
+
   // We only allow 1 demo account request at a time.
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
 
@@ -124,8 +127,11 @@ class DemoLoginController
   bool is_policy_manager_connected_ = false;
   bool is_feature_eligiblity_loaded_ = false;
 
-  FailedRequestCallback setup_failed_callback_for_testing_;
-  FailedRequestCallback clean_up_failed_callback_for_testing_;
+  // If true, the cloud policy connection is not available. Fallback to MGS.
+  bool is_loading_policy_manager_timeout_ = false;
+
+  RequestCallback setup_request_callback_for_testing_;
+  RequestCallback cleanup_request_callback_for_testing_;
 
   raw_ptr<policy::CloudPolicyManager> policy_manager_for_testing_ = nullptr;
 

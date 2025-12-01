@@ -15,11 +15,11 @@ TaskAttributionInfoImpl::TaskAttributionInfoImpl(
     : id_(id), soft_navigation_context_(soft_navigation_context) {}
 
 void TaskAttributionInfoImpl::Trace(Visitor* visitor) const {
+  WrappableTaskState::Trace(visitor);
   visitor->Trace(soft_navigation_context_);
 }
 
-SchedulerTaskContext* TaskAttributionInfoImpl::GetSchedulerTaskContextFor(
-    const ExecutionContext&) {
+SchedulerTaskContext* TaskAttributionInfoImpl::GetSchedulerTaskContext() {
   return nullptr;
 }
 

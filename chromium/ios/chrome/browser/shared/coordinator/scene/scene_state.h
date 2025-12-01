@@ -19,6 +19,19 @@
 @class ProfileState;
 @class SceneController;
 @class SceneState;
+class SigninInProgress;
+
+// During profile switching, it is possible that an animation is displayed
+// over the SceneState until the transition is complete. In that case the
+// object responsible should implement this protocol to allow cancellation
+// of the animation if the Profile initialisation needs to present wait for
+// the user to interact with some mandatory interactive step.
+@protocol SceneStateAnimator
+
+// Cancel any in progress animation.
+- (void)cancelAnimation;
+
+@end
 
 // Scene agents are objects owned by a scene state and providing some
 // scene-scoped function. They can be driven by SceneStateObserver events.
@@ -41,6 +54,9 @@
 
 // The profile state for profile that owns this scene.
 @property(nonatomic, weak) ProfileState* profileState;
+
+// The SceneStateAnimator instance.
+@property(nonatomic, weak) id<SceneStateAnimator> animator;
 
 // The current activation level.
 @property(nonatomic, assign) SceneActivationLevel activationLevel;
@@ -103,13 +119,13 @@
 
 // YES if sign-in is in progress which covers the authentication flow and the
 // sign-in prompt UI.
-@property(nonatomic, assign) BOOL signinInProgress;
+@property(nonatomic, readonly) BOOL signinInProgress;
 
 // Accessibility identifier of the window.
-@property(nonatomic, assign, readonly) NSString* windowAccessibilityIdentifier;
+@property(nonatomic, copy, readonly) NSString* windowAccessibilityIdentifier;
 
 // Root view controller's view.
-@property(nonatomic, assign, readonly) UIView* rootView;
+@property(nonatomic, strong, readonly) UIView* rootView;
 
 // Adds an observer to this scene state. The observers will be notified about
 // scene state changes per SceneStateObserver protocol.
@@ -144,6 +160,10 @@
 // Sets the User Interface Style of the window.
 - (void)setWindowUserInterfaceStyle:
     (UIUserInterfaceStyle)windowUserInterfaceStyle;
+
+// Records that an extra sign-in process started. When the returned value is
+// destructed, the sign-in ended.
+- (std::unique_ptr<SigninInProgress>)createSigninInProgress;
 
 @end
 

@@ -27,6 +27,7 @@ namespace {
 // (e.g. content/, components/, etc).
 const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewBackForwardCache,
+    &features::kWebViewDrainPrefetchQueueDuringInit,
     &features::kWebViewFileSystemAccess,
     &features::kWebViewInvokeZoomPickerOnGSU,
     &features::kWebViewLazyFetchHandWritingIcon,
@@ -37,10 +38,10 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebViewXRequestedWithHeaderControl,
     &metrics::kAndroidMetricsAsyncMetricLogging,
     &safe_browsing::kHashPrefixRealTimeLookups,
-    &features::kWebViewSupervisedUserSiteBlock,
     &base::features::kCollectAndroidFrameTimelineMetrics,
     &features::kWebViewMediaIntegrityApiBlinkExtension,
     &features::kWebViewSeparateResourceContext,
+    &features::kWebViewSkipInterceptsForPrefetch,
     &features::kWebViewMuteAudio,
     &features::kWebViewUseInitialNetworkStateAtStartup,
     &features::kWebViewReduceUAAndroidVersionDeviceModel,
@@ -57,6 +58,9 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &::features::kPrefetchBrowserInitiatedTriggers,
     &features::kWebViewShortCircuitShouldInterceptRequest,
     &features::kWebViewUseStartupTasksLogic,
+    &features::kWebViewRecordAppCacheHistograms,
+    &features::kWebViewQuicConnectionTimeout,
+    &features::kWebViewCacheSizeLimitDerivedFromAppCacheQuota,
 };
 
 // static

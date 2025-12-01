@@ -75,7 +75,6 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   // 'Save-Data: on'.
   bool data_saver_enabled = false;
   bool local_storage_enabled = false;
-  bool databases_enabled = false;
   bool tabs_to_links = true;
   bool disable_ipc_flooding_protection = false;
   bool hyperlink_auditing_enabled = true;
@@ -139,6 +138,8 @@ struct BLINK_COMMON_EXPORT WebPreferences {
   bool target_blank_implies_no_opener_enabled_will_be_removed = true;
   // TODO(https://crbug.com/1172495): Remove once Chrome Apps are deprecated.
   bool allow_non_empty_navigator_plugins = false;
+  // TODO(https://crbug.com/404106817): Remove once Chrome Apps are deprecated.
+  bool ignore_permission_for_device_changed_event = false;
   int number_of_cpu_cores = 1;
   blink::mojom::EditingBehavior editing_behavior =
 #if BUILDFLAG(IS_APPLE)
@@ -418,11 +419,11 @@ struct BLINK_COMMON_EXPORT WebPreferences {
 
   // Whether touch input can trigger HTML drag-and-drop operations. The
   // default value depends on the platform.
-  bool touch_drag_drop_enabled;  // Set in web_preferences.cc
+  bool touch_drag_drop_enabled = false;
 
   // Whether the end of a drag fires a contextmenu event and possibly shows a
-  // context-menu (depends on how the event is handled).  Currently touch-drags
-  // cannot show context menus, see crbug.com/1096189.
+  // context-menu (depends on how the event is handled). Follows
+  // `touch_drag_drop_enabled` in Windows.
   bool touch_dragend_context_menu = false;
 
   // By default, WebXR's immersive-ar session creation is allowed, but this can

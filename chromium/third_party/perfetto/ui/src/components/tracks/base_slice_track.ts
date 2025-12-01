@@ -12,29 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+import m from 'mithril';
+import {drawIncompleteSlice} from '../../base/canvas_utils';
+import {colorCompare} from '../../base/color';
+import {AsyncDisposableStack} from '../../base/disposable_stack';
+import {VerticalBounds} from '../../base/geom';
 import {assertExists} from '../../base/logging';
 import {clamp, floatEqual} from '../../base/math_utils';
+import {cropText} from '../../base/string_utils';
 import {Time, time} from '../../base/time';
 import {exists} from '../../base/utils';
-import {
-  drawIncompleteSlice,
-  drawTrackHoverTooltip,
-} from '../../base/canvas_utils';
-import {cropText} from '../../base/string_utils';
-import {colorCompare} from '../../base/color';
-import {UNEXPECTED_PINK} from '../colorizer';
+import {uuidv4Sql} from '../../base/uuid';
 import {featureFlags} from '../../core/feature_flags';
 import {raf} from '../../core/raf_scheduler';
-import {TrackRenderer} from '../../public/track';
-import {Slice} from '../../public/track';
+import {Trace} from '../../public/trace';
+import {
+  Slice,
+  TrackMouseEvent,
+  TrackRenderContext,
+  TrackRenderer,
+} from '../../public/track';
 import {LONG, NUM} from '../../trace_processor/query_result';
 import {checkerboardExcept} from '../checkerboard';
+import {UNEXPECTED_PINK} from '../colorizer';
 import {BUCKETS_PER_PIXEL, CacheKey} from './timeline_cache';
-import {uuidv4Sql} from '../../base/uuid';
-import {AsyncDisposableStack} from '../../base/disposable_stack';
-import {TrackMouseEvent, TrackRenderContext} from '../../public/track';
-import {Point2D, VerticalBounds} from '../../base/geom';
-import {Trace} from '../../public/trace';
 
 // The common class that underpins all tracks drawing slices.
 
@@ -201,9 +202,8 @@ export abstract class BaseSliceTrack<
   private extraSqlColumns: string[];
 
   private charWidth = -1;
-  private hoverPos?: Point2D;
   protected hoveredSlice?: SliceT;
-  private hoverTooltip: string[] = [];
+
   private maxDataDepth = 0;
 
   // Computed layout.
@@ -230,24 +230,11 @@ export abstract class BaseSliceTrack<
   // `select id, ts, dur, 0 as depth from foo where bar = 'baz'`
   abstract getSqlSource(): string;
 
-  // This should return a fast sql select statement or table name with slightly
-  // relaxed constraints compared to getSqlSource(). It's the query used to join
-  // the results of the mipmap table in order to fetch the real `ts` and `dur`
-  // from the quantized slices.
-  //
-  // This query only needs to provide `ts`, `dur` and `id` columns (no depth
-  // required), and it doesn't even need to be filtered (because it's just used
-  // in the join), it just needs to be fast! This means that most of the time
-  // this can just be the root table of wherever this track comes from (e.g. the
-  // slice table).
-  //
-  // If in doubt, this can just return the same query as getSqlSource(), which
-  // is perfectly valid, however you may be leaving some performance on the
-  // table.
-  //
-  // TODO(stevegolton): If we merge BST with DST, this abstraction can be
-  // avoided.
-  abstract getJoinSqlSource(): string;
+  // Override me if you want to define what is rendered on the tooltip. Called
+  // every DOM render cycle. The raw slice data is passed to this function
+  protected renderTooltipForSlice(_: SliceT): m.Children {
+    return undefined;
+  }
 
   onSliceOver(_args: OnSliceOverArgs<SliceT>): void {}
   onSliceOut(_args: OnSliceOutArgs<SliceT>): void {}
@@ -327,6 +314,20 @@ export abstract class BaseSliceTrack<
     const result = await this.onInit();
     result && this.trash.use(result);
 
+    // Calc the number of rows based on the depth col.
+    const rowCount = assertExists(
+      // `ORDER BY .. LIMIT 1` is faster than `MAX(depth)`
+      (
+        await this.engine.query(`
+          SELECT
+            ifnull(depth, 0) + 1 AS rowCount
+          FROM (${this.getSqlSource()})
+          ORDER BY depth DESC
+          LIMIT 1
+        `)
+      ).maybeFirstRow({rowCount: NUM})?.rowCount,
+    );
+
     // TODO(hjd): Consider case below:
     // raw:
     // 0123456789
@@ -377,10 +378,11 @@ export abstract class BaseSliceTrack<
     this.onUpdatedSlices(incomplete);
     this.incomplete = incomplete;
 
+    // Multiply the layer parameter by the rowCount
     await this.engine.query(`
       create virtual table ${this.getTableName()}
       using __intrinsic_slice_mipmap((
-        select id, ts, dur, depth
+        select id, ts, dur, ((layer * ${rowCount}) + depth) as depth
         from (${this.getSqlSource()})
         where dur != -1
       ));
@@ -650,24 +652,18 @@ export abstract class BaseSliceTrack<
     // have some abstraction for that arrow (ideally the same we'd use for
     // flows).
     this.drawSchedLatencyArrow(ctx, this.selectedSlice);
-
-    // If a slice is hovered, draw the tooltip.
-    const tooltip = this.hoverTooltip;
-    if (
-      this.hoveredSlice !== undefined &&
-      tooltip.length > 0 &&
-      this.hoverPos !== undefined
-    ) {
-      if (tooltip.length === 1) {
-        drawTrackHoverTooltip(ctx, this.hoverPos, size, tooltip[0]);
-      } else {
-        drawTrackHoverTooltip(ctx, this.hoverPos, size, tooltip[0], tooltip[1]);
-      }
-    } // if (hoveredSlice)
   }
 
   async onDestroy(): Promise<void> {
     await this.trash.asyncDispose();
+  }
+
+  renderTooltip() {
+    const hoveredSlice = this.hoveredSlice;
+    if (hoveredSlice) {
+      return this.renderTooltipForSlice(hoveredSlice);
+    }
+    return undefined;
   }
 
   // This method figures out if the visible window is outside the bounds of
@@ -701,14 +697,14 @@ export abstract class BaseSliceTrack<
         s.ts as ts,
         s.dur as dur,
         s.id,
-        z.depth
+        s.depth
         ${extraCols ? ',' + extraCols : ''}
       FROM ${this.getTableName()}(
         ${slicesKey.start},
         ${slicesKey.end},
         ${resolution}
       ) z
-      CROSS JOIN (${this.getJoinSqlSource()}) s using (id)
+      CROSS JOIN (${this.getSqlSource()}) s using (id)
     `);
 
     const it = queryRes.iter(this.rowSpec);
@@ -826,15 +822,9 @@ export abstract class BaseSliceTrack<
   }
 
   onMouseMove(event: TrackMouseEvent): void {
-    const {x, y} = event;
-    this.hoverPos = {x, y};
     this.updateHoveredSlice(this.findSlice(event));
 
-    // We need to do a full redraw in order to update the hovered slice properly
-    // due to the way this system is plumbed together right now, despite the
-    // fact that changing the hovered slice SHOULD only require a canvas redraw.
-    //
-    // TODO(stevegolton): Fix this.
+    // Maybe do this in the caller?
     this.trace.raf.scheduleFullRedraw();
   }
 
@@ -852,13 +842,10 @@ export abstract class BaseSliceTrack<
     if (this.hoveredSlice === undefined) {
       this.trace.timeline.highlightedSliceId = undefined;
       this.onSliceOut({slice: assertExists(lastHoveredSlice)});
-      this.hoverTooltip = [];
-      this.hoverPos = undefined;
     } else {
       const args: OnSliceOverArgs<SliceT> = {slice: this.hoveredSlice};
       this.trace.timeline.highlightedSliceId = this.hoveredSlice.id;
       this.onSliceOver(args);
-      this.hoverTooltip = args.tooltip || [];
     }
   }
 

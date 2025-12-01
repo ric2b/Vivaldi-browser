@@ -17,21 +17,17 @@
 #include "../fipsmodule/bcm_interface.h"
 
 
-static_assert(sizeof(BCM_mlkem768_private_key) <= sizeof(MLKEM768_private_key),
-              "");
+static_assert(sizeof(BCM_mlkem768_private_key) <= sizeof(MLKEM768_private_key));
 static_assert(alignof(BCM_mlkem768_private_key) <=
-                  alignof(MLKEM768_private_key),
-              "");
-static_assert(sizeof(BCM_mlkem768_public_key) <= sizeof(MLKEM768_public_key),
-              "");
-static_assert(alignof(BCM_mlkem768_public_key) <= alignof(MLKEM768_public_key),
-              "");
-static_assert(MLKEM768_PUBLIC_KEY_BYTES == BCM_MLKEM768_PUBLIC_KEY_BYTES, "");
-static_assert(MLKEM_SEED_BYTES == BCM_MLKEM_SEED_BYTES, "");
-static_assert(MLKEM768_CIPHERTEXT_BYTES == BCM_MLKEM768_CIPHERTEXT_BYTES, "");
-static_assert(MLKEM_SHARED_SECRET_BYTES == BCM_MLKEM_SHARED_SECRET_BYTES, "");
-static_assert(MLKEM1024_PUBLIC_KEY_BYTES == BCM_MLKEM1024_PUBLIC_KEY_BYTES, "");
-static_assert(MLKEM1024_CIPHERTEXT_BYTES == BCM_MLKEM1024_CIPHERTEXT_BYTES, "");
+              alignof(MLKEM768_private_key));
+static_assert(sizeof(BCM_mlkem768_public_key) <= sizeof(MLKEM768_public_key));
+static_assert(alignof(BCM_mlkem768_public_key) <= alignof(MLKEM768_public_key));
+static_assert(MLKEM768_PUBLIC_KEY_BYTES == BCM_MLKEM768_PUBLIC_KEY_BYTES);
+static_assert(MLKEM_SEED_BYTES == BCM_MLKEM_SEED_BYTES);
+static_assert(MLKEM768_CIPHERTEXT_BYTES == BCM_MLKEM768_CIPHERTEXT_BYTES);
+static_assert(MLKEM_SHARED_SECRET_BYTES == BCM_MLKEM_SHARED_SECRET_BYTES);
+static_assert(MLKEM1024_PUBLIC_KEY_BYTES == BCM_MLKEM1024_PUBLIC_KEY_BYTES);
+static_assert(MLKEM1024_CIPHERTEXT_BYTES == BCM_MLKEM1024_CIPHERTEXT_BYTES);
 
 void MLKEM768_generate_key(
     uint8_t out_encoded_public_key[MLKEM768_PUBLIC_KEY_BYTES],
@@ -87,16 +83,12 @@ int MLKEM768_parse_public_key(struct MLKEM768_public_key *out_public_key,
 
 
 static_assert(sizeof(BCM_mlkem1024_private_key) <=
-                  sizeof(MLKEM1024_private_key),
-              "");
+              sizeof(MLKEM1024_private_key));
 static_assert(alignof(BCM_mlkem1024_private_key) <=
-                  alignof(MLKEM1024_private_key),
-              "");
-static_assert(sizeof(BCM_mlkem1024_public_key) <= sizeof(MLKEM1024_public_key),
-              "");
+              alignof(MLKEM1024_private_key));
+static_assert(sizeof(BCM_mlkem1024_public_key) <= sizeof(MLKEM1024_public_key));
 static_assert(alignof(BCM_mlkem1024_public_key) <=
-                  alignof(MLKEM1024_public_key),
-              "");
+              alignof(MLKEM1024_public_key));
 
 void MLKEM1024_generate_key(
     uint8_t out_encoded_public_key[MLKEM1024_PUBLIC_KEY_BYTES],

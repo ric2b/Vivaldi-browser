@@ -17,6 +17,7 @@
 #include "components/autofill/core/browser/data_model/autofill_ai/entity_type.h"
 #include "components/autofill/core/browser/data_model/data_model_utils.h"
 #include "components/autofill/core/browser/data_quality/autofill_data_util.h"
+#include "components/autofill/core/browser/field_type_utils.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/geo/autofill_country.h"
 #include "components/autofill/core/browser/geo/country_names.h"
@@ -178,12 +179,10 @@ void AttributeInstance::SetRawInfo(FieldType type,
 FieldTypeSet AttributeInstance::GetSupportedTypes() const {
   return std::visit(
       base::Overloaded{
-          [&](const CountryInfo&) {
-            return FieldTypeSet{ADDRESS_HOME_COUNTRY};
-          },
+          [&](const CountryInfo&) { return FieldTypeSet{type_.field_type()}; },
           [&](const DateInfo&) { return FieldTypeSet{type_.field_type()}; },
           [&](const NameInfo& name) { return name.GetSupportedTypes(); },
-          [&](const StateInfo&) { return FieldTypeSet{ADDRESS_HOME_STATE}; },
+          [&](const StateInfo&) { return FieldTypeSet{type_.field_type()}; },
           [&](const std::u16string&) {
             return FieldTypeSet{type_.field_type()};
           }},
@@ -193,12 +192,10 @@ FieldTypeSet AttributeInstance::GetSupportedTypes() const {
 FieldTypeSet AttributeInstance::GetDatabaseStoredTypes() const {
   return std::visit(
       base::Overloaded{
-          [&](const CountryInfo&) {
-            return FieldTypeSet{ADDRESS_HOME_COUNTRY};
-          },
+          [&](const CountryInfo&) { return FieldTypeSet{type_.field_type()}; },
           [&](const DateInfo&) { return FieldTypeSet{type_.field_type()}; },
           [&](const NameInfo&) { return NameInfo::kDatabaseStoredTypes; },
-          [&](const StateInfo&) { return FieldTypeSet{ADDRESS_HOME_STATE}; },
+          [&](const StateInfo&) { return FieldTypeSet{type_.field_type()}; },
           [&](const std::u16string&) {
             return FieldTypeSet{type_.field_type()};
           }},
@@ -217,17 +214,20 @@ FieldType AttributeInstance::GetNormalizedType(FieldType info_type) const {
     // that case, we assume the type is the top-level type of the attribute.
     return std::visit(
         base::Overloaded{
-            [&](const CountryInfo&) { return ADDRESS_HOME_COUNTRY; },
+            [&](const CountryInfo&) { return type().field_type(); },
             [&](const DateInfo&) { return type().field_type(); },
             [&](const NameInfo&) { return NAME_FULL; },
-            [&](const StateInfo&) { return ADDRESS_HOME_STATE; },
+            [&](const StateInfo&) { return type().field_type(); },
             [&](const std::u16string&) { return type().field_type(); }},
         info_);
   }
   // In case the field classification is totally unrelated to the
-  // attribute type classification, we return UKNOWN_TYPE to inform callers of
-  // that.
-  return UNKNOWN_TYPE;
+  // attribute type classification, we return UKNOWN_TYPE if the attribute is
+  // structured because we don't have information on how to break down the
+  // attribute with the given type. If the type is not structured we just return
+  // the corresponding field type of the attribute, just like we would do
+  // regardless of the type passed.
+  return IsTagType(type().field_type()) ? UNKNOWN_TYPE : type().field_type();
 }
 
 void AttributeInstance::FinalizeInfo() {
@@ -244,12 +244,16 @@ EntityInstance::EntityInstance(
         attributes,
     base::Uuid guid,
     std::string nickname,
-    base::Time date_modified)
+    base::Time date_modified,
+    size_t use_count,
+    base::Time use_date)
     : type_(type),
       attributes_(std::move(attributes)),
       guid_(std::move(guid)),
       nickname_(std::move(nickname)),
-      date_modified_(date_modified) {
+      date_modified_(date_modified),
+      use_count_(use_count),
+      use_date_(use_date) {
   DCHECK(!attributes_.empty());
   DCHECK(std::ranges::all_of(attributes_, [this](const AttributeInstance& a) {
     return type_ == a.type().entity_type();
@@ -309,6 +313,11 @@ EntityInstance::EntityMergeability::operator=(
     EntityInstance::EntityMergeability&&) = default;
 
 EntityInstance::EntityMergeability::~EntityMergeability() = default;
+
+void EntityInstance::RecordEntityUsed(base::Time date) {
+  use_date_ = date;
+  ++use_count_;
+}
 
 EntityInstance::EntityMergeability EntityInstance::GetEntityMergeability(
     const EntityInstance& newer) const {
@@ -433,6 +442,33 @@ EntityInstance::EntityMergeability EntityInstance::GetEntityMergeability(
   }
 
   return {std::move(mergeable_attributes), is_subset};
+}
+
+EntityInstance::RankingOrder::RankingOrder(base::Time now) : now_(now) {}
+
+bool EntityInstance::RankingOrder::operator()(const EntityInstance& lhs,
+                                              const EntityInstance& rhs) const {
+  // At days_since_last_use = 0, use_count = 0, the score is -1.
+  // As days_since_last_use increases, the score becomes more negative.
+  // As use_count increases, the score approaches 0.
+  auto get_ranking_score = [&](const EntityInstance& entity) {
+    int days_since_last_use = std::max(0, (now_ - entity.use_date()).InDays());
+    // The numerator punishes old usages, since as days_since_last_use
+    // grows, the score becomes smaller (note the negative sign). The
+    // denominator softens this penalty by making it smaller the more often a
+    // user has used an entity.
+    return -log(static_cast<double>(days_since_last_use) + 2) /
+           log(entity.use_count() + 2);
+  };
+
+  const double lhs_score = get_ranking_score(lhs);
+  const double rhs_score = get_ranking_score(rhs);
+
+  const double kEpsilon = 0.00001;
+  if (std::fabs(lhs_score - rhs_score) > kEpsilon) {
+    return lhs_score > rhs_score;
+  }
+  return lhs.use_date() > rhs.use_date();
 }
 
 }  // namespace autofill

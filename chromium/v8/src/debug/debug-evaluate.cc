@@ -179,7 +179,7 @@ MaybeDirectHandle<Object> DebugEvaluate::Evaluate(
   DirectHandle<JSFunction> eval_fun;
   ASSIGN_RETURN_ON_EXCEPTION(
       isolate, eval_fun,
-      Compiler::GetFunctionFromEval(source, outer_info, context,
+      Compiler::GetFunctionFromEval(isolate, source, outer_info, context,
                                     LanguageMode::kSloppy, NO_PARSE_RESTRICTION,
                                     kNoSourcePosition, kNoSourcePosition,
                                     ParsingWhileDebugging::kYes));
@@ -478,6 +478,7 @@ bool BytecodeHasNoSideEffect(interpreter::Bytecode bytecode) {
     case Bytecode::kCreateBlockContext:
     case Bytecode::kCreateCatchContext:
     case Bytecode::kCreateFunctionContext:
+    case Bytecode::kCreateFunctionContextWithCells:
     case Bytecode::kCreateEvalContext:
     case Bytecode::kCreateWithContext:
     // Literals.
@@ -652,7 +653,7 @@ DebugInfo::SideEffectState BuiltinGetSideEffectState(Builtin id) {
     case Builtin::kDataViewPrototypeGetFloat64:
     case Builtin::kDataViewPrototypeGetBigInt64:
     case Builtin::kDataViewPrototypeGetBigUint64:
-    // Boolean bulitins.
+    // Boolean builtins.
     case Builtin::kBooleanConstructor:
     case Builtin::kBooleanPrototypeToString:
     case Builtin::kBooleanPrototypeValueOf:
@@ -867,6 +868,12 @@ DebugInfo::SideEffectState BuiltinGetSideEffectState(Builtin id) {
     case Builtin::kFastFunctionPrototypeBind:
     case Builtin::kFunctionPrototypeCall:
     case Builtin::kFunctionPrototypeApply:
+#ifndef V8_FUNCTION_ARGUMENTS_CALLER_ARE_OWN_PROPS
+    case Builtin::kFunctionPrototypeLegacyArgumentsGetter:
+    case Builtin::kFunctionPrototypeLegacyArgumentsSetter:
+    case Builtin::kFunctionPrototypeLegacyCallerGetter:
+    case Builtin::kFunctionPrototypeLegacyCallerSetter:
+#endif  // !V8_FUNCTION_ARGUMENTS_CALLER_ARE_OWN_PROPS
     // Error builtins.
     case Builtin::kErrorConstructor:
     // RegExp builtins.
@@ -1067,7 +1074,7 @@ bool BytecodeRequiresRuntimeCheck(interpreter::Bytecode bytecode) {
     case Bytecode::kSetKeyedProperty:
     case Bytecode::kStaInArrayLiteral:
     case Bytecode::kDefineKeyedOwnPropertyInLiteral:
-    case Bytecode::kStaCurrentContextSlot:
+    case Bytecode::kStaCurrentContextSlotNoCell:
       return true;
     default:
       return interpreter::Bytecodes::IsCallRuntime(bytecode);

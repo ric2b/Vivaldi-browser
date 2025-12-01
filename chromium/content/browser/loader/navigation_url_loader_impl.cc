@@ -21,6 +21,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "components/download/public/common/download_stats.h"
@@ -680,7 +681,7 @@ void NavigationURLLoaderImpl::CreateInterceptors() {
     // The interceptor may not be created in certain cases (e.g., the origin
     // is not secure).
     if (service_worker_interceptor) {
-      if (base::FeatureList::IsEnabled(features::kPrefetchServiceWorker)) {
+      if (features::IsPrefetchServiceWorkerEnabled(browser_context_)) {
         // Set up an interceptor for ServiceWorker-controlled prefetches. This
         // is needed before the ServiceWorkerMainResourceLoaderInterceptor which
         // would also intercept the request for ServiceWorker-controlled URLs.
@@ -733,6 +734,9 @@ void NavigationURLLoaderImpl::CreateInterceptors() {
 }
 
 void NavigationURLLoaderImpl::Restart() {
+  TRACE_EVENT_WITH_FLOW0("navigation", "NavigationURLLoaderImpl::Restart",
+                         TRACE_ID_LOCAL(this),
+                         TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
   // Cancel all inflight early hints preloads except for same origin redirects.
   if (!IsSameOriginRedirect(resource_request_->navigation_redirect_chain)) {
     early_hints_manager_.reset();
@@ -1034,7 +1038,10 @@ void NavigationURLLoaderImpl::CreateThrottlingLoaderAndStart(
       std::move(factory), std::move(throttles), global_request_id_.request_id,
       options, resource_request_.get(), /*client=*/this,
       kNavigationUrlLoaderTrafficAnnotation,
-      GetUIThreadTaskRunner({BrowserTaskType::kNavigationNetworkResponse}));
+      GetUIThreadTaskRunner({BrowserTaskType::kNavigationNetworkResponse}),
+      /*cors_exempt_header_list=*/std::nullopt,
+      /*client_receiver_delegate=*/nullptr,
+      &request_info_->common_params->initiator_origin_trial_features);
 }
 
 void NavigationURLLoaderImpl::OnReceiveEarlyHints(
@@ -1330,6 +1337,31 @@ void NavigationURLLoaderImpl::OnComplete(
                                 weak_factory_.GetWeakPtr(), status));
 }
 
+namespace {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+// LINT.IfChange(OnAcceptCHFrameReceivedReturnLocation)
+enum class OnAcceptCHFrameReceivedReturnLocation {
+  kUnknown = 0,
+  kNotEnabled = 1,
+  kNoClientHintDelegate = 2,
+  kNoCriticalHintsMissing = 3,
+  kNoRestart = 4,
+  kTooManyRestart = 5,
+  kSendingErrorAborted = 6,
+  kMaxValue = kSendingErrorAborted,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/navigation/enums.xml:OnAcceptCHFrameReceivedReturnLocation)
+
+void RecordOnAcceptCHFrameReceivedReturnLocation(
+    OnAcceptCHFrameReceivedReturnLocation location) {
+  base::UmaHistogramEnumeration(
+      "Navigation.URLLoader.OnAcceptCHFrameReceived.ReturnLocation", location);
+}
+
+}  // namespace
+
 void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
     const url::Origin& origin,
     const std::vector<network::mojom::WebClientHintsType>& accept_ch_frame,
@@ -1339,9 +1371,12 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
   base::ScopedUmaHistogramTimer timer(
       "Navigation.URLLoader.OnAcceptCHFrameReceived.ExecutionTime",
       base::ScopedUmaHistogramTimer::ScopedHistogramTiming::kMicrosecondTimes);
+  TRACE_EVENT("navigation", "NavigationURLLoaderImpl::OnAcceptCHFrameReceived");
   received_accept_ch_frame_ = true;
   if (!base::FeatureList::IsEnabled(network::features::kAcceptCHFrame)) {
     std::move(callback).Run(net::OK);
+    RecordOnAcceptCHFrameReceivedReturnLocation(
+        OnAcceptCHFrameReceivedReturnLocation::kNotEnabled);
     return;
   }
 
@@ -1366,6 +1401,8 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
 
   if (!client_hint_delegate) {
     std::move(callback).Run(net::OK);
+    RecordOnAcceptCHFrameReceivedReturnLocation(
+        OnAcceptCHFrameReceivedReturnLocation::kNoClientHintDelegate);
     return;
   }
 
@@ -1380,6 +1417,8 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
   if (!AreCriticalHintsMissing(origin, frame_tree_node, client_hint_delegate,
                                filtered_hints)) {
     std::move(callback).Run(net::OK);
+    RecordOnAcceptCHFrameReceivedReturnLocation(
+        OnAcceptCHFrameReceivedReturnLocation::kNoCriticalHintsMissing);
     return;
   }
 
@@ -1411,6 +1450,8 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
 
   if (!restart) {
     std::move(callback).Run(net::OK);
+    RecordOnAcceptCHFrameReceivedReturnLocation(
+        OnAcceptCHFrameReceivedReturnLocation::kNoRestart);
     return;
   }
 
@@ -1422,10 +1463,14 @@ void NavigationURLLoaderImpl::OnAcceptCHFrameReceived(
     OnComplete(network::URLLoaderCompletionStatus(
         net::ERR_TOO_MANY_ACCEPT_CH_RESTARTS));
     std::move(callback).Run(net::ERR_TOO_MANY_ACCEPT_CH_RESTARTS);
+    RecordOnAcceptCHFrameReceivedReturnLocation(
+        OnAcceptCHFrameReceivedReturnLocation::kTooManyRestart);
     return;
   }
 
   std::move(callback).Run(net::ERR_ABORTED);
+  RecordOnAcceptCHFrameReceivedReturnLocation(
+      OnAcceptCHFrameReceivedReturnLocation::kSendingErrorAborted);
 
   // If the request is restarted, all of the client hints should be replaced
   // the "original"/non-edited values.

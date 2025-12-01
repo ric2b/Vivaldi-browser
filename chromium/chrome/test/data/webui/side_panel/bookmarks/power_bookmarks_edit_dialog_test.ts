@@ -4,6 +4,7 @@
 
 import 'chrome://bookmarks-side-panel.top-chrome/power_bookmarks_edit_dialog.js';
 
+import type {BookmarksTreeNode} from 'chrome://bookmarks-side-panel.top-chrome/bookmarks.mojom-webui.js';
 import {BookmarksApiProxyImpl} from 'chrome://bookmarks-side-panel.top-chrome/bookmarks_api_proxy.js';
 import type {PowerBookmarksEditDialogElement} from 'chrome://bookmarks-side-panel.top-chrome/power_bookmarks_edit_dialog.js';
 import {PowerBookmarksService} from 'chrome://bookmarks-side-panel.top-chrome/power_bookmarks_service.js';
@@ -21,47 +22,71 @@ suite('SidePanelPowerBookmarksEditDialogTest', () => {
   let bookmarksApi: TestBookmarksApiProxy;
   let delegate: TestPowerBookmarksDelegate;
   let service: PowerBookmarksService;
-
-  const folders: chrome.bookmarks.BookmarkTreeNode[] = [
+  const allBookmarks: BookmarksTreeNode[] = [
     {
-      id: '2',
-      parentId: '0',
+      id: 'SIDE_PANEL_OTHER_BOOKMARKS_ID',
+      parentId: 'SIDE_PANEL_ROOT_BOOKMARK_ID',
+      index: 0,
       title: 'Other Bookmarks',
+      url: null,
+      dateAdded: null,
+      dateLastUsed: null,
+      unmodifiable: false,
       children: [
         {
           id: '3',
-          parentId: '2',
+          parentId: 'SIDE_PANEL_OTHER_BOOKMARKS_ID',
+          index: 0,
           title: 'First child bookmark',
           url: 'http://child/bookmark/1/',
           dateAdded: 1,
+          dateLastUsed: null,
+          unmodifiable: false,
+          children: null,
         },
         {
           id: '4',
-          parentId: '2',
+          parentId: 'SIDE_PANEL_OTHER_BOOKMARKS_ID',
+          index: 1,
           title: 'Second child bookmark',
           url: 'http://child/bookmark/2/',
           dateAdded: 3,
+          dateLastUsed: null,
+          unmodifiable: false,
+          children: null,
         },
         {
           id: '5',
-          parentId: '2',
+          parentId: 'SIDE_PANEL_OTHER_BOOKMARKS_ID',
+          index: 2,
           title: 'Child folder',
+          url: null,
           dateAdded: 2,
+          dateLastUsed: null,
+          unmodifiable: false,
           children: [
             {
               id: '6',
               parentId: '5',
+              index: 0,
               title: 'Nested bookmark',
               url: 'http://nested/bookmark/',
               dateAdded: 4,
+              dateLastUsed: null,
+              unmodifiable: false,
+              children: null,
             },
           ],
         },
         {
-          id: '6',
-          parentId: '2',
+          id: '7',
+          parentId: 'SIDE_PANEL_OTHER_BOOKMARKS_ID',
+          index: 3,
           title: 'Child folder 2',
+          url: null,
           dateAdded: 1,
+          dateLastUsed: null,
+          unmodifiable: false,
           children: [],
         },
       ],
@@ -72,7 +97,7 @@ suite('SidePanelPowerBookmarksEditDialogTest', () => {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     bookmarksApi = new TestBookmarksApiProxy();
-    bookmarksApi.setFolders(structuredClone(folders));
+    bookmarksApi.setAllBookmarks(allBookmarks);
     BookmarksApiProxyImpl.setInstance(bookmarksApi);
 
     delegate = new TestPowerBookmarksDelegate();

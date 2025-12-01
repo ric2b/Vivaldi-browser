@@ -20,7 +20,6 @@
 #include "content/browser/renderer_host/input/synthetic_gesture_target_ios.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/browser/renderer_host/render_widget_host_view_ios_uiview.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_switches_internal.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -32,6 +31,13 @@
 #include "ui/display/screen.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/native_widget_types.h"
+
+#if BUILDFLAG(IS_IOS_TVOS)
+#include "content/browser/renderer_host/render_widget_host_view_tvos_uiview.h"
+#else
+#include "content/browser/renderer_host/render_widget_host_view_ios_uiview.h"
+#endif
 
 @interface UIApplication (Testing)
 - (BOOL)isRunningTests;
@@ -159,17 +165,18 @@ void RenderWidgetHostViewIOS::CopyFromSurface(
 void RenderWidgetHostViewIOS::InitAsChild(gfx::NativeView parent_view) {}
 void RenderWidgetHostViewIOS::SetSize(const gfx::Size& size) {}
 void RenderWidgetHostViewIOS::SetBounds(const gfx::Rect& rect) {}
+
 gfx::NativeView RenderWidgetHostViewIOS::GetNativeView() {
   return gfx::NativeView(ui_view_->view_);
 }
 
 gfx::NativeViewAccessible RenderWidgetHostViewIOS::GetNativeViewAccessible() {
-  return ui_view_->view_;
+  return gfx::NativeViewAccessible(ui_view_->view_);
 }
 
 gfx::NativeViewAccessible
 RenderWidgetHostViewIOS::AccessibilityGetNativeViewAccessible() {
-  return ui_view_->view_;
+  return gfx::NativeViewAccessible(ui_view_->view_);
 }
 
 void RenderWidgetHostViewIOS::Focus() {
@@ -259,15 +266,6 @@ void RenderWidgetHostViewIOS::RenderProcessGone() {
 void RenderWidgetHostViewIOS::ShowWithVisibility(
     PageVisibilityState page_visibility) {
   if (IsTesting() && !is_visible_) {
-    // There is some circularity in how UpdateScreenInfo works. The base class
-    // sets up some state needed by the browser compositor. The base class also
-    // depends on an update from the browser compositor. In practice this is a
-    // non issue because the function is called many times and values converge,
-    // but this is not necessarily the case in tests. This could be resolved
-    // by rewriting UpdateScreenInfo to interleave the work (see the mac
-    // implementation, eg), but for now we will simply may another call to the
-    // base class.
-    RenderWidgetHostViewBase::UpdateScreenInfo();
     UpdateScreenInfo();
   }
   is_visible_ = true;
@@ -412,12 +410,32 @@ RenderWidgetHostViewIOS::CollectSurfaceIdsForEviction() {
 }
 
 void RenderWidgetHostViewIOS::UpdateScreenInfo() {
-  if (!IsTesting()) {
-    browser_compositor_->UpdateSurfaceFromUIView(
-        gfx::Rect([ui_view_->view_ bounds]).size());
+  if (host()->delegate()) {
+    host()->delegate()->SendScreenRects();
   }
-  RenderWidgetHostViewBase::UpdateScreenInfo();
+
+  auto* display_screen = display::Screen::GetScreen();
+  display::ScreenInfos new_screen_infos =
+      display_screen->GetScreenInfosNearestDisplay(
+          display_screen->GetPrimaryDisplay().id());
+
+  gfx::Rect view_bounds_dips([ui_view_->view_ bounds]);
+  const bool screen_info_changed = screen_infos_ != new_screen_infos;
+  const bool size_changed =
+      view_bounds_dips.size() != browser_compositor_->GetRendererSize();
+  screen_infos_ = std::move(new_screen_infos);
+
+  if (!IsTesting() && (size_changed || screen_info_changed)) {
+    browser_compositor_->UpdateSurfaceFromUIView(view_bounds_dips.size());
+  }
   ComputeDisplayFeature();
+
+  // Notify the associated RenderWidgetHostImpl when screen info has changed.
+  // That will synchronize visual properties needed for frame tree rendering
+  // and for web platform APIs that expose screen and window info and events.
+  if (size_changed || screen_info_changed) {
+    host()->NotifyScreenInfoChanged();
+  }
 }
 
 void RenderWidgetHostViewIOS::OnSynchronizedDisplayPropertiesChanged(
@@ -497,7 +515,7 @@ void RenderWidgetHostViewIOS::ResetFallbackToFirstNavigationSurface() {
       ->ResetFallbackToFirstNavigationSurface();
 }
 
-bool RenderWidgetHostViewIOS::RequestRepaintForTesting() {
+bool RenderWidgetHostViewIOS::RequestRepaintOnNewSurface() {
   return browser_compositor_->ForceNewSurfaceId();
 }
 
@@ -740,6 +758,7 @@ void RenderWidgetHostViewIOS::OnUpdateTextInputStateCalled(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view,
     bool did_update_state) {
+#if !BUILDFLAG(IS_IOS_TVOS)
   if (text_input_manager->GetActiveWidget()) {
     [ui_view_->view_
         onUpdateTextInputState:*text_input_manager->GetTextInputState()
@@ -750,11 +769,13 @@ void RenderWidgetHostViewIOS::OnUpdateTextInputStateCalled(
     [ui_view_->view_ onUpdateTextInputState:ui::mojom::TextInputState()
                                  withBounds:[ui_view_->view_ bounds]];
   }
+#endif
 }
 
 void RenderWidgetHostViewIOS::OnTextSelectionChanged(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view) {
+#if !BUILDFLAG(IS_IOS_TVOS)
   DCHECK_EQ(GetTextInputManager(), text_input_manager);
   const TextInputManager::TextSelection* selection =
       text_input_manager->GetTextSelection(updated_view);
@@ -785,12 +806,16 @@ void RenderWidgetHostViewIOS::OnTextSelectionChanged(
     [[ui_view_->view_ textInteraction] textSelectionDisplayInteraction]
         .activated = NO;
   }
+#endif
 }
+
 void RenderWidgetHostViewIOS::OnSelectionBoundsChanged(
     TextInputManager* text_input_manager,
     RenderWidgetHostViewBase* updated_view) {
+#if !BUILDFLAG(IS_IOS_TVOS)
   [[ui_view_->view_ textInteraction]
           .textSelectionDisplayInteraction setNeedsSelectionUpdate];
+#endif
 }
 
 ui::Compositor* RenderWidgetHostViewIOS::GetCompositor() {

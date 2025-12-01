@@ -13,12 +13,12 @@ import android.content.Context;
 import android.view.View;
 import android.widget.ScrollView;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.recent_tabs.RestoreTabsMetricsHelper.RestoreTabsOnFREBackPressType;
 import org.chromium.chrome.browser.recent_tabs.RestoreTabsMetricsHelper.RestoreTabsOnFRERestoredTabsResult;
 import org.chromium.chrome.browser.recent_tabs.RestoreTabsMetricsHelper.RestoreTabsOnFREResultAction;
@@ -29,6 +29,7 @@ import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** The bottom sheet content for the Restore Tabs promo. */
+@NullMarked
 public class RestoreTabsPromoSheetContent implements BottomSheetContent {
     private final View mContentView;
     private final PropertyModel mModel;
@@ -110,11 +111,6 @@ public class RestoreTabsPromoSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public int getPeekHeight() {
-        return BottomSheetContent.HeightMode.DISABLED;
-    }
-
-    @Override
     public float getFullHeightRatio() {
         return BottomSheetContent.HeightMode.WRAP_CONTENT;
     }
@@ -141,7 +137,7 @@ public class RestoreTabsPromoSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public @NonNull String getSheetContentDescription(Context context) {
+    public String getSheetContentDescription(Context context) {
         return context.getString(R.string.restore_tabs_content_description);
     }
 

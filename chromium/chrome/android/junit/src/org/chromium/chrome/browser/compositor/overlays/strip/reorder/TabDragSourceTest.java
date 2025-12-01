@@ -92,11 +92,13 @@ import org.chromium.chrome.browser.tabmodel.TabGroupModelFilterProvider;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.desktop_windowing.AppHeaderUtils;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
+import org.chromium.chrome.browser.ui.favicon.FaviconHelperJni;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.dragdrop.DragAndDropDelegate;
 import org.chromium.ui.dragdrop.DragDropGlobalState;
-import org.chromium.ui.dragdrop.DragDropMetricUtils.DragDropTabResult;
+import org.chromium.ui.dragdrop.DragDropMetricUtils.DragDropResult;
 import org.chromium.ui.dragdrop.DragDropMetricUtils.DragDropType;
 import org.chromium.ui.dragdrop.DropDataAndroid;
 import org.chromium.ui.util.XrUtils;
@@ -138,6 +140,7 @@ public class TabDragSourceTest {
     @Mock private MultiWindowUtils mMultiWindowUtils;
     @Mock private ObservableSupplier<Integer> mTabStripHeightSupplier;
     @Mock private DesktopWindowStateManager mDesktopWindowStateManager;
+    @Mock private FaviconHelper.Natives mFaviconHelperJniMock;
 
     // Instances that differ for source and destination for invocations and verifications.
     @Mock private StripLayoutHelper mSourceStripLayoutHelper;
@@ -155,7 +158,7 @@ public class TabDragSourceTest {
     private Tab mTabBeingDragged;
     private Tab mGroupedTab1;
     private Tab mGroupedTab2;
-    private ArrayList<Tab> mTabGroupBeingDragged = new ArrayList();
+    private final ArrayList<Tab> mTabGroupBeingDragged = new ArrayList();
     private TabGroupMetadata mTabGroupMetadata;
     private static final PointF DRAG_START_POINT = new PointF(250, 0);
     private static final float TAB_POSITION_X = 200f;
@@ -199,11 +202,19 @@ public class TabDragSourceTest {
         when(mMultiWindowUtils.isInMultiWindowMode(mActivity)).thenReturn(true);
         MultiWindowUtils.setInstanceForTesting(mMultiWindowUtils);
         MultiWindowTestUtils.enableMultiInstance();
-        when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
 
         when(mTabStripHeightSupplier.get()).thenReturn(mTabStripHeight);
+
+        when(mFaviconHelperJniMock.init()).thenReturn(1L);
+        FaviconHelperJni.setInstanceForTesting(mFaviconHelperJniMock);
+
+        when(mTabModel.getProfile()).thenReturn(mProfile);
+        when(mTabModelSelector.getCurrentModel()).thenReturn(mTabModel);
+        when(mTabModelSelector.getModel(anyBoolean())).thenReturn(mTabModel);
         when(mTabModelSelector.getTabGroupModelFilterProvider())
                 .thenReturn(mTabGroupModelFilterProvider);
+        when(mTabGroupModelFilterProvider.getTabGroupModelFilter(anyBoolean()))
+                .thenReturn(mTabGroupModelFilter);
         when(mTabGroupModelFilterProvider.getCurrentTabGroupModelFilterSupplier())
                 .thenReturn(mTabGroupModelFilterSupplier);
         when(mTabGroupModelFilterSupplier.get()).thenReturn(mTabGroupModelFilter);
@@ -254,10 +265,9 @@ public class TabDragSourceTest {
         ShadowToast.reset();
         ToastManager.resetForTesting();
         mSharedPreferencesManager.removeKey(
-                ChromePreferenceKeys.TAB_TEARING_MAX_INSTANCES_FAILURE_START_TIME_MS);
+                ChromePreferenceKeys.TAB_OR_GROUP_TEARING_MAX_INSTANCES_FAILURE_START_TIME_MS);
         mSharedPreferencesManager.removeKey(
-                ChromePreferenceKeys.TAB_TEARING_MAX_INSTANCES_FAILURE_COUNT);
-        XrUtils.resetXrDeviceForTesting();
+                ChromePreferenceKeys.TAB_OR_GROUP_TEARING_MAX_INSTANCES_FAILURE_COUNT);
     }
 
     @Test
@@ -346,13 +356,27 @@ public class TabDragSourceTest {
 
     @Test
     public void test_startTabDragAction_withHasOneTabWithHomepage_ReturnsFalse() {
-        XrUtils.setXrDeviceForTesting(true);
         when(mMultiWindowUtils.hasAtMostOneTabWithHomepageEnabled(any())).thenReturn(true);
         assertFalse(
                 "Should not startTabDragAction since last tab with homepage enabled.",
                 mSourceInstance.startTabDragAction(
                         mTabsToolbarView,
                         mTabBeingDragged,
+                        DRAG_START_POINT,
+                        TAB_POSITION_X,
+                        VIEW_WIDTH));
+    }
+
+    @Test
+    public void test_startGroupDragAction_withHasOneTabGroupWithHomepage_ReturnsFalse() {
+        when(mMultiWindowUtils.hasAtMostOneTabGroupWithHomepageEnabled(any(), any()))
+                .thenReturn(true);
+        assertFalse(
+                "Should not startGroupDragAction since last tab group with homepage enabled.",
+                mSourceInstance.startGroupDragAction(
+                        mTabsToolbarView,
+                        TAB_GROUP_ID,
+                        /* isGroupShared= */ false,
                         DRAG_START_POINT,
                         TAB_POSITION_X,
                         VIEW_WIDTH));
@@ -525,9 +549,8 @@ public class TabDragSourceTest {
      * <pre>
      * A] drop in tab strip - source instance (ie: reorder within strip).
      * B] drop in toolbar container (but outside of tab strip) - source instance.
-     * C] drop outside of toolbar container with sub flows:
-     *  C.1] With drag as tab FF - no-op.
-     *  C.2] With drag as window FF - open new window.
+     * C] drop outside of toolbar container - not implemented. Should be handled by
+     *  {@link ChromeDragAndDropBrowserDelegateUnitTest}.
      * D] Test (A) for drop in destination instance with sub flows:
      *  D.1] drop in current model (i.e. drop incognito tab on incognito strip).
      *  D.2] drop in different model (i.e.: drop standard tab on incognito strip).
@@ -549,18 +572,7 @@ public class TabDragSourceTest {
     /** Test for tab drag {@link #ONDRAG_TEST_CASES} - Scenario A */
     @Test
     public void test_onDrag_dropInStrip_source() {
-        HistogramWatcher histogramExpectation =
-                HistogramWatcher.newBuilder()
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.FromStrip.Result", DragDropTabResult.SUCCESS)
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.Type")
-                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectBooleanRecord("Android.DragDrop.Tab.ReorderStripWithDragDrop", false)
-                        .expectNoRecords("Android.DragDrop.Tab.Duration.WithinDestStrip")
-                        .build();
         doTestOnDragDropInStripSource(/* isGroupDrag= */ false);
-        histogramExpectation.assertExpected();
     }
 
     /** Test for tab group drag {@link #ONDRAG_TEST_CASES} - Scenario A */
@@ -572,97 +584,13 @@ public class TabDragSourceTest {
     /** Test for tab drag {@link #ONDRAG_TEST_CASES} - Scenario B */
     @Test
     public void test_onDrag_dropInToolbarContainer_source() {
-        HistogramWatcher histogramExpectation =
-                HistogramWatcher.newBuilder()
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.FromStrip.Result",
-                                DragDropTabResult.IGNORED_TOOLBAR)
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.Type")
-                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
-                        .expectNoRecords("Android.DragDrop.Tab.Duration.WithinDestStrip")
-                        .build();
         doTestOnDragDropInToolbarContainerSource(/* isGroupDrag= */ false);
-        histogramExpectation.assertExpected();
     }
 
     /** Test for tab group drag {@link #ONDRAG_TEST_CASES} - Scenario B */
     @Test
     public void test_onDrag_dropInToolbarContainer_source_tabGroup() {
         doTestOnDragDropInToolbarContainerSource(/* isGroupDrag= */ true);
-    }
-
-    /**
-     * Test for tab drag {@link #ONDRAG_TEST_CASES} - Scenario C.1 - XR-specific flow that we
-     * currently does not support moving tab groups.
-     */
-    @Test
-    public void test_onDrag_dropOutsideToolbarContainer() {
-        XrUtils.setXrDeviceForTesting(true);
-        HistogramWatcher histogramExpectation =
-                HistogramWatcher.newBuilder()
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result")
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.Type")
-                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
-                        .expectNoRecords("Android.DragDrop.Tab.Duration.WithinDestStrip")
-                        .build();
-        new DragEventInvoker(/* isGroupDrag= */ false, /* isGroupShared= */ false)
-                .dragExit(mSourceInstance)
-                .verifyShadowVisibility(true)
-                .end(false);
-
-        // Verify appropriate events are generated.
-        // Strip prepares for drop on drag enter.
-        verify(mSourceStripLayoutHelper, times(1))
-                .handleDragEnter(anyFloat(), anyFloat(), anyBoolean(), anyBoolean());
-        // Strip clears state for drop on drag exit.
-        verify(mSourceStripLayoutHelper, times(1)).handleDragExit(anyBoolean(), anyBoolean());
-        // Verify moveTabToNewWindow is called since drop is outside strip.
-        verify(mSourceMultiInstanceManager, times(1)).moveTabToNewWindow(mTabBeingDragged);
-        // Verify tab is not moved since drop is outside strip.
-        verify(mSourceMultiInstanceManager, times(0)).moveTabToWindow(any(), any(), anyInt());
-        // Verify tab cleared.
-        verify(mSourceStripLayoutHelper, times(1)).stopReorderMode();
-        // Verify destination strip not invoked.
-        verifyNoInteractions(mDestStripLayoutHelper);
-        histogramExpectation.assertExpected();
-    }
-
-    /**
-     * Test for {@link #ONDRAG_TEST_CASES} - Scenario C.2 - XR-specific flow that we currently does
-     * not support moving tab groups.
-     */
-    @Test
-    public void test_onDrag_dropOutsideToolbarContainer_dragAsWindow() {
-        XrUtils.setXrDeviceForTesting(true);
-        // Verify tab is successfully dropped as a window.
-        verifyDropOutsideToolbarContainerAsWindow();
-
-        // Verify the user action `TabRemovedFromGroup` is not recorded.
-        assertEquals(
-                "TabRemovedFromGroup should not be recorded as the tab being dragged is not in a"
-                        + " tab group",
-                0,
-                mUserActionTest.getActionCount("MobileToolbarReorderTab.TabRemovedFromGroup"));
-    }
-
-    @Test
-    public void test_dragAsWindow_recordTabRemovedFromGroup() {
-        XrUtils.setXrDeviceForTesting(true);
-        // The tab being dragged is in a tab group.
-        when(mTabGroupModelFilter.isTabInTabGroup(mTabBeingDragged)).thenReturn(true);
-
-        // Verify tab is successfully dropped as a window.
-        verifyDropOutsideToolbarContainerAsWindow();
-
-        // Verify the user action`TabRemovedFromGroup` is recorded.
-        assertEquals(
-                "TabRemovedFromGroup should be recorded",
-                1,
-                mUserActionTest.getActionCount("MobileToolbarReorderTab.TabRemovedFromGroup"));
     }
 
     @Test
@@ -684,21 +612,45 @@ public class TabDragSourceTest {
     }
 
     @Test
+    public void test_onDrag_unhandledDropOutside_maxChromeInstances_tabGroup_desktopWindow() {
+        doTestUnhandledDropOutsideWithMaxInstances(
+                /* isInDesktopWindow= */ true, /* isGroupDrag= */ true);
+    }
+
+    @Test
     public void test_onDrag_multipleUnhandledDropsOutside_maxChromeInstances() {
         MultiWindowUtils.setInstanceCountForTesting(5);
         MultiWindowUtils.setMaxInstancesForTesting(5);
 
         // Simulate failures on day 1.
-        doTriggerUnhandledDrop(4);
+        doTriggerUnhandledDrop(4, /* isGroupDrag= */ false);
 
         // Force update the count start time saved in SharedPreferences for day 1 to restart count
         // for next day.
         mSharedPreferencesManager.writeLong(
-                ChromePreferenceKeys.TAB_TEARING_MAX_INSTANCES_FAILURE_START_TIME_MS,
+                ChromePreferenceKeys.TAB_OR_GROUP_TEARING_MAX_INSTANCES_FAILURE_START_TIME_MS,
                 System.currentTimeMillis() - DateUtils.DAY_IN_MILLIS - 1);
 
         // Simulate a failure on day 2.
-        doTriggerUnhandledDrop(1);
+        doTriggerUnhandledDrop(1, /* isGroupDrag= */ false);
+    }
+
+    @Test
+    public void test_onDrag_multipleUnhandledDropsOutside_maxChromeInstances_tabGroup() {
+        MultiWindowUtils.setInstanceCountForTesting(5);
+        MultiWindowUtils.setMaxInstancesForTesting(5);
+
+        // Simulate failures on day 1.
+        doTriggerUnhandledDrop(4, /* isGroupDrag= */ true);
+
+        // Force update the count start time saved in SharedPreferences for day 1 to restart count
+        // for next day.
+        mSharedPreferencesManager.writeLong(
+                ChromePreferenceKeys.TAB_OR_GROUP_TEARING_MAX_INSTANCES_FAILURE_START_TIME_MS,
+                System.currentTimeMillis() - DateUtils.DAY_IN_MILLIS - 1);
+
+        // Simulate a failure on day 2.
+        doTriggerUnhandledDrop(1, /* isGroupDrag= */ true);
     }
 
     /** Test for Tab Drag {@link #ONDRAG_TEST_CASES} - Scenario D.1 */
@@ -715,7 +667,7 @@ public class TabDragSourceTest {
     @Test
     public void test_onDrag_dropInStrip_destination_tabGroup() {
         doTestDropInStripDestination(
-                /* isInDesktopWindow= */ true,
+                /* isInDesktopWindow= */ false,
                 /* isGroupDrag= */ true,
                 /* isGroupShared= */ false,
                 /* mhtmlTabTitle= */ null);
@@ -735,6 +687,12 @@ public class TabDragSourceTest {
     /** Test for Tab Group Drag {@link #ONDRAG_TEST_CASES} - Scenario D.1 */
     @Test
     public void test_onDrag_dropInStrip_hasMhtmlTab_destination_tabGroup() {
+        HistogramWatcher.Builder builder =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(
+                                "Android.DragDrop.TabGroup.FromStrip.Result",
+                                DragDropResult.IGNORED_MHTML_TAB);
+        HistogramWatcher histogramExpectation = builder.build();
         String url = "file:///example.mhtml";
         Uri uri = Uri.parse(url);
         GURL gurl = new GURL(uri.toString());
@@ -752,6 +710,8 @@ public class TabDragSourceTest {
                 /* isGroupDrag= */ true,
                 /* isGroupShared= */ false,
                 /* mhtmlTabTitle= */ mhtmlTabTitle);
+        // Verify histogram recorded for ignored mhtml tab group .
+        histogramExpectation.assertExpected();
     }
 
     /** Test for Desktop Window {@link #ONDRAG_TEST_CASES} - Scenario D.1 */
@@ -764,22 +724,20 @@ public class TabDragSourceTest {
                 /* mhtmlTabTitle= */ null);
     }
 
+    /** Test for Tab Group Drag in Desktop Window {@link #ONDRAG_TEST_CASES} - Scenario D.1 */
+    @Test
+    public void test_onDrag_dropInStrip_destination_tabGroup_desktopWindow() {
+        doTestDropInStripDestination(
+                /* isInDesktopWindow= */ true,
+                /* isGroupDrag= */ true,
+                /* isGroupShared= */ false,
+                /* mhtmlTabTitle= */ null);
+    }
+
     /** Test for Tab Drag {@link #ONDRAG_TEST_CASES} - Scenario D.2 */
     @Test
     public void test_onDrag_dropInStrip_differentModel_destination() {
-        HistogramWatcher histogramExpectation =
-                HistogramWatcher.newBuilder()
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.FromStrip.Result", DragDropTabResult.SUCCESS)
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.Type", DragDropType.TAB_STRIP_TO_TAB_STRIP)
-                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
-                        .expectAnyRecord("Android.DragDrop.Tab.Duration.WithinDestStrip")
-                        .build();
         doTestDropInDestinationDifferentModel(/* isGroupDrag= */ false);
-        histogramExpectation.assertExpected();
     }
 
     /** Test for Tab Group Drag {@link #ONDRAG_TEST_CASES} - Scenario D.2 */
@@ -789,8 +747,8 @@ public class TabDragSourceTest {
     }
 
     /**
-     * Test for {@link #ONDRAG_TEST_CASES} - Scenario D.3 - XR-specific flow that we currently does
-     * not support moving tab groups.
+     * Test for {@link #ONDRAG_TEST_CASES} - Scenario D.3 - XR-specific flow currently does not
+     * support moving tab groups.
      */
     @Test
     public void test_onDrag_dropInStrip_withDragAsWindowFF_destination() {
@@ -807,19 +765,7 @@ public class TabDragSourceTest {
     /** Test for Tab Drag {@link #ONDRAG_TEST_CASES} - Scenario E */
     @Test
     public void test_onDrag_dropInToolbarContainer_destination() {
-        HistogramWatcher histogramExpectation =
-                HistogramWatcher.newBuilder()
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.FromStrip.Result",
-                                DragDropTabResult.IGNORED_TOOLBAR)
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.Type")
-                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
-                        .expectAnyRecord("Android.DragDrop.Tab.Duration.WithinDestStrip")
-                        .build();
         doTestDropInDestinationToolbarContainer(/* isGroupDrag= */ false);
-        histogramExpectation.assertExpected();
     }
 
     /** Test for Tab Group Drag {@link #ONDRAG_TEST_CASES} - Scenario E */
@@ -831,18 +777,7 @@ public class TabDragSourceTest {
     /** Test for Tab Drag {@link #ONDRAG_TEST_CASES} - Scenario F */
     @Test
     public void test_onDrag_exitIntoToolbarAndRenterStripAndDrop_source() {
-        HistogramWatcher histogramExpectation =
-                HistogramWatcher.newBuilder()
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.FromStrip.Result", DragDropTabResult.SUCCESS)
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.Type")
-                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectBooleanRecord("Android.DragDrop.Tab.ReorderStripWithDragDrop", true)
-                        .expectNoRecords("Android.DragDrop.Tab.Duration.WithinDestStrip")
-                        .build();
         doTestExitIntoSourceToolbarAndRenterStripAndDrop(/* isGroupDrag= */ false);
-        histogramExpectation.assertExpected();
     }
 
     /** Test for Tab Group Drag {@link #ONDRAG_TEST_CASES} - Scenario F */
@@ -1021,6 +956,25 @@ public class TabDragSourceTest {
     }
 
     private void doTestOnDragDropInStripSource(boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+        String reorderHistogram =
+                String.format(
+                        "Android.DragDrop.%s.ReorderStripWithDragDrop",
+                        isGroupDrag ? "TabGroup" : "Tab");
+        HistogramWatcher histogramExpectation =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(resultHistogram, DragDropResult.SUCCESS)
+                        .expectBooleanRecord(reorderHistogram, false)
+                        .expectNoRecords("Android.DragDrop.TabGroup.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.Type")
+                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
+                        .build();
+
         new DragEventInvoker(isGroupDrag, /* isGroupShared= */ false)
                 .drop(mSourceInstance)
                 .end(true);
@@ -1035,9 +989,26 @@ public class TabDragSourceTest {
         verifyViewNotMovedToWindow(isGroupDrag);
         // Verify destination strip not invoked.
         verifyNoInteractions(mDestStripLayoutHelper);
+        // Verify histograms.
+        histogramExpectation.assertExpected();
     }
 
     private void doTestOnDragDropInToolbarContainerSource(boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+        HistogramWatcher histogramExpectation =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(resultHistogram, DragDropResult.IGNORED_TOOLBAR)
+                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.Type")
+                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
+                        .expectNoRecords("Android.DragDrop.TabGroup.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.ReorderStripWithDragDrop")
+                        .build();
         new DragEventInvoker(isGroupDrag, /* isGroupShared= */ false)
                 // Drag our of strip but within toolbar container.
                 .dragLocationY(mSourceInstance, 3 * DRAG_MOVE_DISTANCE)
@@ -1058,48 +1029,31 @@ public class TabDragSourceTest {
         verify(mSourceStripLayoutHelper, times(1)).stopReorderMode();
         // Verify destination strip not invoked.
         verifyNoInteractions(mDestStripLayoutHelper);
-    }
-
-    private void verifyDropOutsideToolbarContainerAsWindow() {
-        new DragEventInvoker(/* isGroupDrag= */ false, /* isGroupShared= */ false)
-                .dragExit(mSourceInstance)
-                .verifyShadowVisibility(true)
-                .end(false);
-
-        // Verify appropriate events are generated.
-        // Strip prepares for drop on drag enter.
-        verify(mSourceStripLayoutHelper, times(1))
-                .handleDragEnter(anyFloat(), anyFloat(), anyBoolean(), anyBoolean());
-        // Strip clears state for drop on drag exit.
-        verify(mSourceStripLayoutHelper, times(1)).handleDragExit(anyBoolean(), anyBoolean());
-        // Verify Since the drop is outside the TabToolbar area the tab will be move to a new
-        // Chrome Window.
-        verify(mSourceMultiInstanceManager, times(1)).moveTabToNewWindow(mTabBeingDragged);
-        // Verify tab cleared.
-        verify(mSourceStripLayoutHelper, times(1)).stopReorderMode();
-        // Verify destination strip not invoked.
-        verifyNoInteractions(mDestStripLayoutHelper);
+        // Verify histograms.
+        histogramExpectation.assertExpected();
     }
 
     private void doTestUnhandledDropOutsideWithMaxInstances(
             boolean isInDesktopWindow, boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+
         HistogramWatcher.Builder builder =
                 HistogramWatcher.newBuilder()
                         .expectIntRecord(
                                 "Android.DragDrop.Tab.FromStrip.Result",
-                                DragDropTabResult.IGNORED_MAX_INSTANCES)
+                                DragDropResult.IGNORED_MAX_INSTANCES)
                         .expectNoRecords("Android.DragDrop.Tab.Type")
                         .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
-                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
-                        .expectNoRecords("Android.DragDrop.Tab.Duration.WithinDestStrip");
+                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop");
 
         if (isInDesktopWindow) {
             AppHeaderUtils.setAppInDesktopWindowForTesting(true);
             builder.expectIntRecord(
-                    "Android.DragDrop.Tab.FromStrip.Result.DesktopWindow",
-                    DragDropTabResult.IGNORED_MAX_INSTANCES);
+                    resultHistogram + ".DesktopWindow", DragDropResult.IGNORED_MAX_INSTANCES);
         } else {
-            builder.expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow");
+            builder.expectNoRecords(resultHistogram + ".DesktopWindow");
         }
         HistogramWatcher histogramExpectation = builder.build();
 
@@ -1116,37 +1070,38 @@ public class TabDragSourceTest {
         }
     }
 
-    private void doTriggerUnhandledDrop(int failureCount) {
+    private void doTriggerUnhandledDrop(int failureCount, boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+        String failureHistogram = "Android.DragDrop.TabOrGroup.MaxInstanceFailureCount";
         var histogramBuilder =
                 HistogramWatcher.newBuilder()
                         .expectIntRecordTimes(
-                                "Android.DragDrop.Tab.FromStrip.Result",
-                                DragDropTabResult.IGNORED_MAX_INSTANCES,
-                                failureCount)
-                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow");
+                                resultHistogram, DragDropResult.IGNORED_MAX_INSTANCES, failureCount)
+                        .expectNoRecords(resultHistogram + ".DesktopWindow");
 
         // Set histogram expectation.
         for (int i = 0; i < failureCount; i++) {
-            histogramBuilder =
-                    histogramBuilder.expectIntRecord(
-                            "Android.DragDrop.Tab.MaxInstanceFailureCount", i + 1);
+            histogramBuilder = histogramBuilder.expectIntRecord(failureHistogram, i + 1);
         }
         var histogramExpectation = histogramBuilder.build();
 
         // Simulate unhandled tab drops |failureCount| number of times.
         for (int i = 0; i < failureCount; i++) {
-            new DragEventInvoker(/* isGroupDrag= */ false, /* isGroupShared= */ false)
+            new DragEventInvoker(isGroupDrag, /* isGroupShared= */ false)
                     .dragExit(mSourceInstance)
                     .end(false);
         }
 
         // Verify that the count is correctly updated in SharedPreferences and the histogram is
         // emitted as expected.
+        String maxInstanceFailureKey =
+                ChromePreferenceKeys.TAB_OR_GROUP_TEARING_MAX_INSTANCES_FAILURE_COUNT;
         assertEquals(
                 "Tab drag max-instance failure count saved in shared prefs is incorrect.",
                 failureCount,
-                mSharedPreferencesManager.readInt(
-                        ChromePreferenceKeys.TAB_TEARING_MAX_INSTANCES_FAILURE_COUNT));
+                mSharedPreferencesManager.readInt(maxInstanceFailureKey));
         histogramExpectation.assertExpected();
     }
 
@@ -1155,30 +1110,31 @@ public class TabDragSourceTest {
             boolean isGroupDrag,
             boolean isGroupShared,
             String mhtmlTabTitle) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+        String typeHistogram =
+                String.format("Android.DragDrop.%s.Type", isGroupDrag ? "TabGroup" : "Tab");
         HistogramWatcher.Builder builder =
                 HistogramWatcher.newBuilder()
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.FromStrip.Result", DragDropTabResult.SUCCESS)
-                        .expectIntRecord(
-                                "Android.DragDrop.Tab.Type", DragDropType.TAB_STRIP_TO_TAB_STRIP)
+                        .expectIntRecord(resultHistogram, DragDropResult.SUCCESS)
+                        .expectIntRecord(typeHistogram, DragDropType.TAB_STRIP_TO_TAB_STRIP)
                         .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
-                        .expectAnyRecord("Android.DragDrop.Tab.Duration.WithinDestStrip");
+                        .expectNoRecords("Android.DragDrop.TabGroup.ReorderStripWithDragDrop");
 
         if (isInDesktopWindow) {
             AppHeaderUtils.setAppInDesktopWindowForTesting(true);
-            builder.expectIntRecord(
-                            "Android.DragDrop.Tab.FromStrip.Result.DesktopWindow",
-                            DragDropTabResult.SUCCESS)
+            builder.expectIntRecord(resultHistogram + ".DesktopWindow", DragDropResult.SUCCESS)
                     .expectIntRecord(
-                            "Android.DragDrop.Tab.Type.DesktopWindow",
-                            DragDropType.TAB_STRIP_TO_TAB_STRIP);
+                            typeHistogram + ".DesktopWindow", DragDropType.TAB_STRIP_TO_TAB_STRIP);
         }
         HistogramWatcher histogramExpectation = builder.build();
 
         when(mDestStripLayoutHelper.getTabIndexForTabDrop(anyFloat())).thenReturn(TAB_INDEX);
 
         // Invoke drop.
-        invokeDropInDestinationStrip(/* dragEndRes= */ true, isGroupDrag, isGroupShared);
+        invokeDropInDestinationStrip(
+                /* dragEndRes= */ mhtmlTabTitle == null, isGroupDrag, isGroupShared);
 
         // Verify - drop failed and toast is shown for group that has mhtml tab.
         if (mhtmlTabTitle != null) {
@@ -1200,15 +1156,31 @@ public class TabDragSourceTest {
         verify(mDestStripLayoutHelper).stopReorderMode();
 
         assertNull(ShadowToast.getLatestToast());
-        if (!isGroupDrag) {
-            histogramExpectation.assertExpected();
-        }
+        histogramExpectation.assertExpected();
     }
 
     private void doTestDropInDestinationDifferentModel(boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+        String typeHistogram =
+                String.format("Android.DragDrop.%s.Type", isGroupDrag ? "TabGroup" : "Tab");
+        HistogramWatcher histogramExpectation =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(resultHistogram, DragDropResult.SUCCESS)
+                        .expectIntRecord(typeHistogram, DragDropType.TAB_STRIP_TO_TAB_STRIP)
+                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
+                        .expectNoRecords("Android.DragDrop.TabGroup.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.ReorderStripWithDragDrop")
+                        .build();
+
         // Destination tab model is incognito.
         when(mTabModel.isIncognitoBranded()).thenReturn(true);
         TabModel standardModelDestination = mock(TabModel.class);
+        when(standardModelDestination.getProfile()).thenReturn(mProfile);
         when(mTabModelSelector.getModel(false)).thenReturn(standardModelDestination);
         when(standardModelDestination.getCount()).thenReturn(5);
 
@@ -1222,9 +1194,28 @@ public class TabDragSourceTest {
                 ContextUtils.getApplicationContext()
                         .getString(R.string.tab_dropped_different_model));
         assertNotNull(ShadowToast.getLatestToast());
+
+        // Verify histograms.
+        histogramExpectation.assertExpected();
     }
 
     private void doTestDropInDestinationToolbarContainer(boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+
+        HistogramWatcher histogramExpectation =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(resultHistogram, DragDropResult.IGNORED_TOOLBAR)
+                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.Type")
+                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.ReorderStripWithDragDrop")
+                        .expectNoRecords("Android.DragDrop.TabGroup.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.ReorderStripWithDragDrop")
+                        .build();
         new DragEventInvoker(isGroupDrag, /* isGroupShared= */ false)
                 .dragExit(mSourceInstance)
                 .verifyShadowVisibility(true)
@@ -1252,9 +1243,31 @@ public class TabDragSourceTest {
 
         // Verify tab cleared.
         verify(mSourceStripLayoutHelper, times(1)).stopReorderMode();
+
+        // Verify histograms.
+        histogramExpectation.assertExpected();
     }
 
     private void doTestExitIntoSourceToolbarAndRenterStripAndDrop(boolean isGroupDrag) {
+        String resultHistogram =
+                String.format(
+                        "Android.DragDrop.%s.FromStrip.Result", isGroupDrag ? "TabGroup" : "Tab");
+        String reorderHistogram =
+                String.format(
+                        "Android.DragDrop.%s.ReorderStripWithDragDrop",
+                        isGroupDrag ? "TabGroup" : "Tab");
+        HistogramWatcher histogramExpectation =
+                HistogramWatcher.newBuilder()
+                        .expectIntRecord(resultHistogram, DragDropResult.SUCCESS)
+                        .expectBooleanRecord(reorderHistogram, true)
+                        .expectNoRecords("Android.DragDrop.TabGroup.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type")
+                        .expectNoRecords("Android.DragDrop.TabGroup.Type.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.FromStrip.Result.DesktopWindow")
+                        .expectNoRecords("Android.DragDrop.Tab.Type")
+                        .expectNoRecords("Android.DragDrop.Tab.Type.DesktopWindow")
+                        .build();
+
         new DragEventInvoker(isGroupDrag, /* isGroupShared= */ false)
                 .dragLocationY(mSourceInstance, 3 * DRAG_MOVE_DISTANCE) // move to toolbar
                 .verifyShadowVisibility(true)
@@ -1275,6 +1288,9 @@ public class TabDragSourceTest {
 
         // Verify destination strip not invoked.
         verifyNoInteractions(mDestStripLayoutHelper);
+
+        // Verify histograms.
+        histogramExpectation.assertExpected();
     }
 
     private void doTestOnDragInvalidClipData(boolean isGroupDrag) {
@@ -1299,7 +1315,7 @@ public class TabDragSourceTest {
 
             // Verify - Move to new window not invoked.
             verify(mDestMultiInstanceManager, times(0))
-                    .moveTabGroupToWindow(any(), any(), anyInt(), any());
+                    .moveTabGroupToWindow(any(), any(), anyInt());
         } else {
             event =
                     mockDragEvent(
@@ -1429,7 +1445,7 @@ public class TabDragSourceTest {
 
     class DragEventInvoker {
 
-        private boolean mIsGroupDrag;
+        private final boolean mIsGroupDrag;
 
         DragEventInvoker(boolean isGroupDrag, boolean isGroupShared) {
             mIsGroupDrag = isGroupDrag;
@@ -1490,8 +1506,8 @@ public class TabDragSourceTest {
         }
 
         public DragEventInvoker end(boolean res) {
-            mSourceInstance.onDrag(mTabsToolbarView, mockDragEndEvent(res, mIsGroupDrag));
             mDestInstance.onDrag(mTabsToolbarView, mockDragEndEvent(res, mIsGroupDrag));
+            mSourceInstance.onDrag(mTabsToolbarView, mockDragEndEvent(res, mIsGroupDrag));
             assertFalse(
                     "Global state should be cleared on all drag end",
                     DragDropGlobalState.hasValue());
@@ -1533,8 +1549,9 @@ public class TabDragSourceTest {
             TabGroupMetadata tabGroupMetadata,
             boolean isGroupDrag) {
         DragEvent event = mock(DragEvent.class);
+        ChromeDropDataAndroid dropData;
         if (isGroupDrag) {
-            ChromeDropDataAndroid dropData =
+            dropData =
                     new ChromeTabGroupDropDataAndroid.Builder()
                             .withTabGroupMetadata(tabGroupMetadata)
                             .build();
@@ -1543,18 +1560,17 @@ public class TabDragSourceTest {
                             new ClipData(
                                     null,
                                     SUPPORTED_GROUP_MIME_TYPES,
-                                    new Item(dropData.buildTabClipDataText(), null)));
+                                    new Item(dropData.buildTabClipDataText(mContext), null)));
             when(event.getClipDescription())
                     .thenReturn(new ClipDescription("", SUPPORTED_GROUP_MIME_TYPES));
         } else {
-            ChromeDropDataAndroid dropData =
-                    new ChromeTabDropDataAndroid.Builder().withTab(tab).build();
+            dropData = new ChromeTabDropDataAndroid.Builder().withTab(tab).build();
             when(event.getClipData())
                     .thenReturn(
                             new ClipData(
                                     null,
                                     SUPPORTED_TAB_MIME_TYPES,
-                                    new Item(dropData.buildTabClipDataText(), null)));
+                                    new Item(dropData.buildTabClipDataText(mContext), null)));
             when(event.getClipDescription())
                     .thenReturn(new ClipDescription("", SUPPORTED_TAB_MIME_TYPES));
         }
@@ -1631,10 +1647,9 @@ public class TabDragSourceTest {
         if (isGroupDrag) {
             // Verify tab group is not moved.
             verify(mSourceMultiInstanceManager, times(0))
-                    .moveTabGroupToWindow(any(), eq(mTabGroupMetadata), anyInt(), any());
+                    .moveTabGroupToWindow(any(), eq(mTabGroupMetadata), anyInt());
         } else {
             // Verify tab is not moved.
-            verify(mSourceMultiInstanceManager, times(0)).moveTabToNewWindow(mTabBeingDragged);
             verify(mSourceMultiInstanceManager, times(0)).moveTabToWindow(any(), any(), anyInt());
         }
     }
@@ -1643,7 +1658,7 @@ public class TabDragSourceTest {
         if (isGroupDrag) {
             // Verify tab group is moved.
             verify(mDestMultiInstanceManager, times(1))
-                    .moveTabGroupToWindow(any(), eq(mTabGroupMetadata), eq(index), any());
+                    .moveTabGroupToWindow(any(), eq(mTabGroupMetadata), eq(index));
         } else {
             // Verify tab is moved.
             verify(mDestMultiInstanceManager, times(1)).moveTabToWindow(any(), any(), eq(index));

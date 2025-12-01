@@ -24,19 +24,16 @@
 #include "base/types/expected.h"
 #include "base/version_info/channel.h"
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_fetcher.h"
+#include "components/ip_protection/common/probabilistic_reveal_token_test_issuer.h"
 #include "components/ip_protection/get_probabilistic_reveal_token.pb.h"
 #include "net/base/features.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_request_headers.h"
+#include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
+#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-// The ASSIGN_OR_RETURN macro is defined in the both the base::expected code and
-// the private-join-and-compute code. We need to undefine the macro here to
-// avoid compiler errors.
-#undef ASSIGN_OR_RETURN
-#include "services/network/public/cpp/resource_request.h"
-#include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "services/network/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -58,15 +55,6 @@ using ::testing::StartsWith;
 constexpr size_t kGetProbabilisticRevealTokenResponseMaxBodySize = 40 * 1024;
 constexpr char kIssuerServerUrl[] =
     "https://aaftokenissuer.pa.googleapis.com/v1/issueprts";
-
-absl::StatusOr<std::string> GetTestPublicKeyBytes(uint64_t private_key) {
-  Context context;
-  ASSIGN_OR_RETURN(ECGroup group,
-                   ECGroup::Create(NID_X9_62_prime256v1, &context));
-  ASSIGN_OR_RETURN(ECPoint g, group.GetFixedGenerator());
-  ASSIGN_OR_RETURN(ECPoint y, g.Mul(context.CreateBigNum(private_key)));
-  return y.ToBytesCompressed();
-}
 
 }  // namespace
 
@@ -104,9 +92,10 @@ class FetcherTestBase : public testing::Test {
   }
 
   // Response should be in scope until the interceptor is finished.
-  void SetResponse(const std::string& response) {
+  void SetResponse(const std::string& response,
+                   base::TimeDelta response_delay = base::Seconds(0)) {
     test_url_loader_factory_.SetInterceptor(base::BindLambdaForTesting(
-        [&](const network::ResourceRequest& request) {
+        [&, response_delay](const network::ResourceRequest& request) {
           EXPECT_TRUE(request.url.is_valid());
           EXPECT_EQ(request.url, token_server_get_prt_url_);
           EXPECT_EQ(request.method, net::HttpRequestHeaders::kPostMethod);
@@ -125,6 +114,7 @@ class FetcherTestBase : public testing::Test {
           ASSERT_TRUE(request_proto.has_service_type());
           EXPECT_EQ(request_proto.service_type(),
                     GetProbabilisticRevealTokenRequest_ServiceType_CHROME);
+          task_environment_.FastForwardBy(response_delay);
           auto head = network::mojom::URLResponseHead::New();
           test_url_loader_factory_.AddResponse(
               token_server_get_prt_url_, std::move(head), response,
@@ -167,6 +157,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
       result_future;
   // Call RetrieveProbabilisticRevealTokens() to trigger interceptor callback.
   retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
   base::expected<std::optional<std::string>, int> result = result_future.Get();
   ASSERT_TRUE(result.has_value());
   ASSERT_TRUE(result.value().has_value());
@@ -180,6 +171,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
   base::test::TestFuture<base::expected<std::optional<std::string>, int>>
       result_future;
   retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
   base::expected<std::optional<std::string>, int> result = result_future.Get();
   ASSERT_TRUE(result.has_value());
   ASSERT_TRUE(result.value().has_value());
@@ -193,6 +185,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
   base::test::TestFuture<base::expected<std::optional<std::string>, int>>
       result_future;
   retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
   base::expected<std::optional<std::string>, int> result = result_future.Get();
   ASSERT_TRUE(result.has_value());
   ASSERT_TRUE(result.value().has_value());
@@ -207,6 +200,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
   base::test::TestFuture<base::expected<std::optional<std::string>, int>>
       result_future;
   retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
   base::expected<std::optional<std::string>, int> result = result_future.Get();
   ASSERT_TRUE(result.has_value());
   ASSERT_TRUE(result.value().has_value());
@@ -221,6 +215,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
   base::test::TestFuture<base::expected<std::optional<std::string>, int>>
       result_future;
   retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
   base::expected<std::optional<std::string>, int> result = result_future.Get();
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), net::ERR_INSUFFICIENT_RESOURCES);
@@ -239,9 +234,23 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
   base::test::TestFuture<base::expected<std::optional<std::string>, int>>
       result_future;
   retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
   base::expected<std::optional<std::string>, int> result = result_future.Get();
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error(), net::ERR_OUT_OF_MEMORY);
+}
+
+TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherRetrieverTest,
+       RequestTimeout) {
+  const std::string response_str = "some response";
+  SetResponse(response_str, /*response_delay=*/base::Seconds(61));
+  base::test::TestFuture<base::expected<std::optional<std::string>, int>>
+      result_future;
+  retriever_->RetrieveProbabilisticRevealTokens(result_future.GetCallback());
+  ASSERT_TRUE(result_future.Wait());
+  base::expected<std::optional<std::string>, int> result = result_future.Get();
+  ASSERT_FALSE(result.has_value());
+  EXPECT_EQ(result.error(), net::ERR_TIMED_OUT);
 }
 
 class IpProtectionProbabilisticRevealTokenDirectFetcherTest
@@ -255,10 +264,14 @@ class IpProtectionProbabilisticRevealTokenDirectFetcherTest
             test_url_loader_factory_.GetSafeWeakWrapper()->Clone(),
             version_info::Channel::DEFAULT);
 
-    absl::StatusOr<std::string> maybe_public_key_bytes =
-        GetTestPublicKeyBytes(/*private_key=*/1);
-    ASSERT_TRUE(maybe_public_key_bytes.ok());
-    public_key_bytes_ = maybe_public_key_bytes.value();
+    base::expected<std::unique_ptr<ProbabilisticRevealTokenTestIssuer>,
+                   absl::Status>
+        maybe_issuer =
+            ProbabilisticRevealTokenTestIssuer::Create(/*private_key=*/1);
+    ASSERT_TRUE(maybe_issuer.has_value())
+        << "creating test issuer failed with error: " << maybe_issuer.error();
+    auto issuer = std::move(maybe_issuer).value();
+    public_key_bytes_ = issuer->GetSerializedPublicKey();
   }
 
   GetProbabilisticRevealTokenResponse BuildProbabilisticRevealTokenResponse(
@@ -317,16 +330,15 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherTest,
   EXPECT_EQ(tokens[0].version, 1);
   EXPECT_THAT(tokens[0].u, StartsWith("token0-u"));
   EXPECT_THAT(tokens[0].e, StartsWith("token0-e"));
-  EXPECT_THAT(tokens[0].epoch_id, std::string(8, '0'));
   EXPECT_EQ(tokens[1].version, 1);
   EXPECT_THAT(tokens[1].u, StartsWith("token1-u"));
   EXPECT_THAT(tokens[1].e, StartsWith("token1-e"));
-  EXPECT_THAT(tokens[1].epoch_id, std::string(8, '0'));
 
   EXPECT_EQ(outcome.public_key, public_key_bytes_);
   EXPECT_EQ(outcome.expiration_time_seconds, expiration_time_);
   EXPECT_EQ(outcome.next_epoch_start_time_seconds, next_epoch_start_time_);
   EXPECT_EQ(outcome.num_tokens_with_signal, 10);
+  EXPECT_EQ(outcome.epoch_id, std::string(8, '0'));
 
   const auto& result = future.Get<1>();
   EXPECT_EQ(result.status, TryGetProbabilisticRevealTokensStatus::kSuccess);
@@ -586,6 +598,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenDirectFetcherTest,
                          TryGetProbabilisticRevealTokensResult>
       future;
   fetcher_->TryGetProbabilisticRevealTokens(future.GetCallback());
+  ASSERT_TRUE(future.Wait());
   EXPECT_FALSE(future.Get<0>());
 
   // The default response will parse successfully, but will fail the first

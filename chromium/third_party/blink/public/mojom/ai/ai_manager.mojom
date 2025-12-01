@@ -6,6 +6,7 @@ module blink.mojom;
 
 import "third_party/blink/public/mojom/ai/ai_common.mojom";
 import "third_party/blink/public/mojom/ai/ai_language_model.mojom";
+import "third_party/blink/public/mojom/ai/ai_proofreader.mojom";
 import "third_party/blink/public/mojom/ai/ai_rewriter.mojom";
 import "third_party/blink/public/mojom/ai/ai_summarizer.mojom";
 import "third_party/blink/public/mojom/ai/ai_writer.mojom";
@@ -66,6 +67,9 @@ enum ModelAvailabilityCheckResult {
   kUnavailableInsufficientDiskSpace = 18,
   // The on-device translation is not available for the given pair of languages.
   kUnavailableTranslationNotEligible = 19,
+  // The on-device model is not available because the enterprise policy
+  // disables the feature.
+  kUnavailableEnterprisePolicyDisabled = 20,
 
   // Append new line here
 };
@@ -78,7 +82,8 @@ interface AIManagerCreateWriterClient {
   OnResult(pending_remote<blink.mojom.AIWriter> writer);
 
   // Called when the manager cannot create an AIWriter.
-  OnError(AIManagerCreateClientError error);
+  // `quota_error_info` may provide additional info for kInitialInputTooLarge.
+  OnError(AIManagerCreateClientError error, QuotaErrorInfo? quota_error_info);
 };
 
 // The client interface that receives an AIRewriter from an AIManager.
@@ -88,7 +93,8 @@ interface AIManagerCreateRewriterClient {
   OnResult(pending_remote<blink.mojom.AIRewriter> rewriter);
 
   // Called when the manager cannot create an AIRewriter.
-  OnError(AIManagerCreateClientError error);
+  // `quota_error_info` may provide additional info for kInitialInputTooLarge.
+  OnError(AIManagerCreateClientError error, QuotaErrorInfo? quota_error_info);
 };
 
 // The client interface that receives an AISummarizer from an AIManager.
@@ -98,7 +104,19 @@ interface AIManagerCreateSummarizerClient {
   OnResult(pending_remote<blink.mojom.AISummarizer> summarizer);
 
   // Called when the manager cannot create an AISummarizer.
-  OnError(AIManagerCreateClientError error);
+  // `quota_error_info` may provide additional info for kInitialInputTooLarge.
+  OnError(AIManagerCreateClientError error, QuotaErrorInfo? quota_error_info);
+};
+
+// The client interface that receives an AIProofreader from an AIManager.
+interface AIManagerCreateProofreaderClient {
+  // Called with a created proofreader's mojo interface as a result for the
+  // CreateProofreader() method of the AIManager.
+  OnResult(pending_remote<blink.mojom.AIProofreader> proofreader);
+
+  // Called when the manager cannot create an AIProofreader.
+  // `quota_error_info` may provide additional info for kInitialInputTooLarge.
+  OnError(AIManagerCreateClientError error, QuotaErrorInfo? quota_error_info);
 };
 
 // The manager that could create a new session for the model.

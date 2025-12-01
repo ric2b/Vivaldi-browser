@@ -334,13 +334,13 @@ void Device::drawEdgeAAImage(const SkImage* image,
     const SkRect* domain = coordsAllInsideSrcRect ? &src : nullptr;
     SkTileMode tileModes[] = {tm, tm};
     std::unique_ptr<GrFragmentProcessor> fp = skgpu::ganesh::AsFragmentProcessor(
-            rContext, image, sampling, tileModes, textureMatrix, subset, domain);
+            sdc, image, sampling, tileModes, textureMatrix, subset, domain);
     fp = GrColorSpaceXformEffect::Make(
             std::move(fp), image->imageInfo().colorInfo(), sdc->colorInfo());
     if (image->isAlphaOnly()) {
         if (const auto* shader = as_SB(paint.getShader())) {
             auto shaderFP = GrFragmentProcessors::Make(shader,
-                                                       GrFPArgs(rContext,
+                                                       GrFPArgs(sdc,
                                                                 &sdc->colorInfo(),
                                                                 sdc->surfaceProps(),
                                                                 GrFPArgs::Scope::kDefault),
@@ -357,13 +357,7 @@ void Device::drawEdgeAAImage(const SkImage* image,
     }
 
     GrPaint grPaint;
-    if (!SkPaintToGrPaintReplaceShader(rContext,
-                                       sdc->colorInfo(),
-                                       paint,
-                                       localToDevice,
-                                       std::move(fp),
-                                       sdc->surfaceProps(),
-                                       &grPaint)) {
+    if (!SkPaintToGrPaintReplaceShader(sdc, paint, localToDevice, std::move(fp), &grPaint)) {
         return;
     }
 
@@ -453,6 +447,70 @@ void Device::drawSpecial(SkSpecialImage* special,
                           constraint,
                           srcToDst,
                           SkTileMode::kClamp);
+}
+
+void Device::drawCoverageMask(const SkSpecialImage* mask,
+                              const SkMatrix& maskToDevice,
+                              const SkSamplingOptions& sampling,
+                              const SkPaint& paint) {
+    // Use the active local-to-device transform for this since it determines the
+    // local coords for evaluating the skpaint, whereas the provided 'maskToDevice'
+    // just places the coverage mask.
+    SkMatrix localToDevice = this->localToDevice();
+    SkMatrix deviceToLocal;
+    if (!localToDevice.invert(&deviceToLocal)) {
+        return;
+    }
+
+    GrSurfaceProxyView view = SkSpecialImages::AsView(this->recordingContext(), mask);
+    if (!view) {
+        // This shouldn't happen since we shouldn't be mixing SkSpecialImage subclasses but
+        // returning early should avoid problems in release builds.
+        SkASSERT(false);
+        return;
+    }
+
+    SkTileMode tileModes[] = {SkTileMode::kDecal, SkTileMode::kDecal};
+
+    SkMatrix deviceToMask;
+    if (!maskToDevice.invert(&deviceToMask)) {
+        return;
+    }
+    // 'textureMaskSpace' needs to map from local coords -> mask coords -> texture coords.
+    SkMatrix textureMaskSpace = localToDevice;
+    textureMaskSpace.postConcat(deviceToMask);
+    textureMaskSpace.postTranslate(mask->subset().fLeft, mask->subset().fTop);
+
+    SkRect maskSubset = SkRect::Make(mask->subset());
+    std::unique_ptr<GrFragmentProcessor> coverageFP = skgpu::ganesh::MakeFragmentProcessorFromView(
+        this->recordingContext(), std::move(view), mask->alphaType(), sampling, tileModes,
+        textureMaskSpace, &maskSubset, &maskSubset);
+    coverageFP = GrFragmentProcessor::SwizzleOutput(std::move(coverageFP), skgpu::Swizzle("aaaa"));
+
+
+    SurfaceDrawContext* sdc = fSurfaceDrawContext.get();
+    GrPaint grPaint;
+    // Any shading is done in local space which we want to draw to the device.
+    SkPaintToGrPaint(sdc, paint, localToDevice, &grPaint);
+    grPaint.setCoverageFragmentProcessor(std::move(coverageFP));
+
+    GrAA aa = fSurfaceDrawContext->chooseAA(paint);
+    SkCanvas::QuadAAFlags aaFlags = (aa == GrAA::kYes) ? SkCanvas::kAll_QuadAAFlags
+                                                       : SkCanvas::kNone_QuadAAFlags;
+
+    SkMatrix maskToLocal = SkMatrix::Concat(deviceToLocal, maskToDevice);
+    SkRect maskRect = SkRect::MakeWH(mask->width(), mask->height());
+    // 'local' are mask points transformed to get local space. 'localToDevice' may
+    // have a perspective transform that 'maskToDevice' doesn't so this is necessary.
+    SkPoint local[4];
+    maskToLocal.mapRectToQuad(local, maskRect);
+
+    sdc->fillQuadWithEdgeAA(this->clip(),
+                            std::move(grPaint),
+                            SkToGrQuadAAFlags(aaFlags),
+                            localToDevice,
+                            local,
+                            nullptr);
 }
 
 void Device::drawImageQuadDirect(const SkImage* image,

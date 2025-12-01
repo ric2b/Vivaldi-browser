@@ -9,7 +9,7 @@ assert((!is_android && !is_ios) || is_desktop_android)
 build_webui("build") {
   grd_prefix = "cr_components_managed_footnote"
 
-  non_web_component_files = [
+  ts_files = [
     "managed_footnote.html.ts",
     "managed_footnote.ts",
   ]
@@ -19,7 +19,6 @@ build_webui("build") {
       "$root_gen_dir/ui/webui/resources/tsc/cr_components/managed_footnote"
   ts_definitions = [ "//tools/typescript/definitions/chrome_send.d.ts" ]
   ts_composite = true
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",
     "//ui/webui/resources/cr_elements:build_ts",

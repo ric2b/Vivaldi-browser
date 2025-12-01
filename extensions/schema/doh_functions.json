@@ -1,0 +1,74 @@
+// Copyright 2025 Vivaldi Technologies AS. All rights reserved.
+
+[
+  {
+    "namespace": "dnsOverHttpsPrivate",
+    "description": "Function(s) to handle DNS over HTTPS data.",
+    "compiler_options": {
+      "implemented_in": "extensions/api/doh/doh_functions.h"
+    },
+    "types": [
+      {
+        "id": "DohEntry",
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "optional": false,
+            "description": ""
+          },
+          "value": {
+            "type": "string",
+            "optional": false,
+            "description": ""
+          },
+          "policy": {
+            "type": "string",
+            "optional": false,
+            "description": ""
+          }
+        }
+      }
+    ],
+    "functions": [
+      {
+        "name": "dataFetcher",
+        "type": "function",
+        "description": "",
+        "parameters": [],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "results",
+              "type": "array",
+              "items": { "$ref": "DohEntry" }
+            }
+          ]
+        }
+      },
+      {
+        "name": "configTest",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "name": "config",
+            "type": "string"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "result",
+              "type": "boolean"
+            }
+          ]
+        }
+      }
+
+    ]
+
+  }
+]

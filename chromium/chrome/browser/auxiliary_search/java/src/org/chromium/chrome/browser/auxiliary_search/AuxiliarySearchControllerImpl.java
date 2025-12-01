@@ -4,19 +4,19 @@
 
 package org.chromium.chrome.browser.auxiliary_search;
 
-import static org.chromium.chrome.browser.flags.ChromeFeatureList.sAndroidAppIntegrationMultiDataSourceHistoryContentTtlHours;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.sAndroidAppIntegrationWithFaviconScheduleDelayTimeMs;
 import static org.chromium.chrome.browser.flags.ChromeFeatureList.sAndroidAppIntegrationWithFaviconZeroStateFaviconNumber;
 
 import android.content.Context;
 import android.graphics.Bitmap;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.TimeUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchMetrics.RequestStatus;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -26,36 +26,34 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.url.GURL;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 /** The Controller to handle the communication between Chrome and {@link AuxiliarySearchDonor}. */
+@NullMarked
 public class AuxiliarySearchControllerImpl
         implements AuxiliarySearchController,
-                AuxiliarySearchConfigManager.ShareTabsWithOsStateListener,
-                AuxiliarySearchProvider.Observer {
-    private static final String TAG = "AuxiliarySearch";
+                AuxiliarySearchConfigManager.ShareTabsWithOsStateListener {
+    // 3 minutes in milliseconds.
+    @VisibleForTesting static final long TIME_RANGE_MS = 3 * TimeUtils.MILLISECONDS_PER_MINUTE;
+
+    protected final @AuxiliarySearchHostType int mHostType;
+    protected final AuxiliarySearchProvider mAuxiliarySearchProvider;
+    protected final Profile mProfile;
+
     private final Context mContext;
-    private final Profile mProfile;
     private final FaviconHelper mFaviconHelper;
-    private final AuxiliarySearchProvider mAuxiliarySearchProvider;
     private final AuxiliarySearchDonor mDonor;
     private final boolean mIsFaviconEnabled;
-    private final boolean mSupportMultiDataSource;
     private final int mZeroStateFaviconNumber;
     private final int mDefaultFaviconSize;
-    private final long mHistoryTtlMillis;
 
-    private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
+    protected CallbackController mCallbackController = new CallbackController();
+
+    private @Nullable ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private boolean mHasDeletingTask;
     private int mTaskFinishedCount;
-    private boolean mIsObserving;
-    private CallbackController mCallbackController = new CallbackController();
-    private long mTopSiteLastFetchTimestamp;
-    @Nullable private List<AuxiliarySearchDataEntry> mCurrentSiteSuggestionEntries;
 
     @VisibleForTesting
     public AuxiliarySearchControllerImpl(
@@ -63,22 +61,19 @@ public class AuxiliarySearchControllerImpl
             Profile profile,
             AuxiliarySearchProvider auxiliarySearchProvider,
             AuxiliarySearchDonor auxiliarySearchDonor,
-            FaviconHelper faviconHelper) {
+            FaviconHelper faviconHelper,
+            @AuxiliarySearchHostType int hostType) {
         mContext = context;
         mProfile = profile;
         mAuxiliarySearchProvider = auxiliarySearchProvider;
         mDonor = auxiliarySearchDonor;
         mFaviconHelper = faviconHelper;
         mIsFaviconEnabled = ChromeFeatureList.sAndroidAppIntegrationWithFavicon.isEnabled();
-        mSupportMultiDataSource =
-                AuxiliarySearchControllerFactory.getInstance().isMultiDataTypeEnabledOnDevice();
+        mHostType = hostType;
 
         mZeroStateFaviconNumber =
                 sAndroidAppIntegrationWithFaviconZeroStateFaviconNumber.getValue();
         mDefaultFaviconSize = AuxiliarySearchUtils.getFaviconSize(mContext.getResources());
-        mHistoryTtlMillis =
-                TimeUnit.HOURS.toMillis(
-                        sAndroidAppIntegrationMultiDataSourceHistoryContentTtlHours.getValue());
 
         AuxiliarySearchConfigManager.getInstance().addListener(this);
     }
@@ -87,19 +82,23 @@ public class AuxiliarySearchControllerImpl
      * @param context The application context.
      * @param profile The profile in use.
      * @param tabModelSelector The instance of {@link TabModelSelector}.
+     * @param hostType The type of host who creates and owns the controller instance.
      */
     public AuxiliarySearchControllerImpl(
-            Context context, Profile profile, @Nullable TabModelSelector tabModelSelector) {
+            Context context,
+            Profile profile,
+            @Nullable TabModelSelector tabModelSelector,
+            @AuxiliarySearchHostType int hostType) {
         this(
                 context,
                 profile,
-                new AuxiliarySearchProvider(context, profile, tabModelSelector),
+                new AuxiliarySearchProvider(context, profile, tabModelSelector, hostType),
                 AuxiliarySearchDonor.getInstance(),
-                new FaviconHelper());
+                new FaviconHelper(),
+                hostType);
     }
 
     // AuxiliarySearchController implementations.
-
     @Override
     public void register(ActivityLifecycleDispatcher lifecycleDispatcher) {
         if (lifecycleDispatcher == null) return;
@@ -118,16 +117,13 @@ public class AuxiliarySearchControllerImpl
     }
 
     @Override
-    public void destroy() {
+    @SuppressWarnings("NullAway")
+    public void destroy(@Nullable ActivityLifecycleDispatcher lifecycleDispatcher) {
         if (mCallbackController == null) return;
 
         mCallbackController.destroy();
         mCallbackController = null;
         AuxiliarySearchConfigManager.getInstance().removeListener(this);
-        if (mIsObserving) {
-            mAuxiliarySearchProvider.setObserver(null);
-            mIsObserving = false;
-        }
 
         if (mActivityLifecycleDispatcher != null) {
             mActivityLifecycleDispatcher.unregister(this);
@@ -157,11 +153,15 @@ public class AuxiliarySearchControllerImpl
     }
 
     @Override
-    public void onDeferredStartup() {
-        if (mSupportMultiDataSource && !mIsObserving) {
-            mIsObserving = true;
-            mAuxiliarySearchProvider.setObserver(this);
-        }
+    public void donateCustomTabs(GURL url, long beginTime) {
+        long startTime = TimeUtils.uptimeMillis();
+        mAuxiliarySearchProvider.getCustomTabsAsync(
+                // A backward time adjustment is required due to the history visit's timestamp being
+                // earlier than that of the TabImpl's last visit timestamp.
+                url,
+                beginTime - TIME_RANGE_MS,
+                mCallbackController.makeCancelable(
+                        (entries) -> onNonSensitiveCustomTabsAvailable(entries, startTime)));
     }
 
     // AuxiliarySearchConfigManager.ShareTabsWithOsStateListener implementations.
@@ -175,15 +175,13 @@ public class AuxiliarySearchControllerImpl
         if (mHasDeletingTask || !mDonor.canDonate()) return;
 
         long startTime = TimeUtils.uptimeMillis();
-        if (mSupportMultiDataSource) {
-            mAuxiliarySearchProvider.getHistorySearchableDataProtoAsync(
-                    mCallbackController.makeCancelable(
-                            (entries) -> onNonSensitiveHistoryDataAvailable(entries, startTime)));
-        } else {
-            mAuxiliarySearchProvider.getTabsSearchableDataProtoAsync(
-                    mCallbackController.makeCancelable(
-                            (tabs) -> onNonSensitiveTabsAvailable(tabs, startTime)));
-        }
+        tryDonateTabsImpl(startTime);
+    }
+
+    protected void tryDonateTabsImpl(long startTime) {
+        mAuxiliarySearchProvider.getTabsSearchableDataProtoAsync(
+                mCallbackController.makeCancelable(
+                        (tabs) -> onNonSensitiveTabsAvailable(tabs, startTime)));
     }
 
     /**
@@ -202,18 +200,38 @@ public class AuxiliarySearchControllerImpl
             tabs.sort(AuxiliarySearchProvider.sComparator);
         }
 
-        onNonSensitiveDataAvailable(tabs, startTimeMs);
+        onNonSensitiveDataAvailable(tabs, startTimeMs, /* onDonationCompleteRunnable= */ null);
     }
 
     @VisibleForTesting
-    <T> void onNonSensitiveDataAvailable(List<T> entries, long startTimeMs) {
+    <T> void onNonSensitiveCustomTabsAvailable(@Nullable List<T> entries, long startTimeMs) {
+        AuxiliarySearchMetrics.recordQueryCustomTabTime(TimeUtils.uptimeMillis() - startTimeMs);
+
+        if (entries == null || entries.isEmpty()) {
+            AuxiliarySearchMetrics.recordCustomTabFetchResultsCount(0);
+            return;
+        }
+
+        AuxiliarySearchMetrics.recordCustomTabFetchResultsCount(entries.size());
+        onNonSensitiveDataAvailable(entries, startTimeMs, /* onDonationCompleteRunnable= */ null);
+    }
+
+    @VisibleForTesting
+    <T> void onNonSensitiveDataAvailable(
+            List<T> entries, long startTimeMs, @Nullable Runnable onDonationCompleteRunnable) {
         int[] counts = new int[AuxiliarySearchEntryType.MAX_VALUE + 1];
         Callback<Boolean> onDonationCompleteCallback =
                 (success) -> {
+                    // Only records total donate counts when all data's meta data are donated.
                     AuxiliarySearchMetrics.recordDonationCount(counts);
-                    AuxiliarySearchMetrics.recordDonateTime(TimeUtils.uptimeMillis() - startTimeMs);
-                    AuxiliarySearchMetrics.recordDonationRequestStatus(
-                            success ? RequestStatus.SUCCESSFUL : RequestStatus.UNSUCCESSFUL);
+                    recordDonationTimeAndResults(startTimeMs, success);
+                    if (onDonationCompleteRunnable != null) {
+                        onDonationCompleteRunnable.run();
+                    }
+                };
+        Callback<Boolean> onFaviconDonationCompleteCallback =
+                (success) -> {
+                    recordDonationTimeAndResults(startTimeMs, success);
                 };
 
         // Donates the list of entries without favicons.
@@ -260,7 +278,8 @@ public class AuxiliarySearchControllerImpl
                                     TimeUtils.uptimeMillis() - faviconStartTimeMs);
 
                             if (!entryToFaviconMap.isEmpty()) {
-                                mDonor.donateEntries(entryToFaviconMap, onDonationCompleteCallback);
+                                mDonor.donateEntries(
+                                        entryToFaviconMap, onFaviconDonationCompleteCallback);
                             }
                         }
                     });
@@ -284,59 +303,10 @@ public class AuxiliarySearchControllerImpl
         }
     }
 
-    /**
-     * Called when a list of up to 100 non sensitive entries is available.
-     *
-     * @param entries A list of non sensitive entries.
-     * @param startTimeMs The starting time to query the data.
-     */
-    @VisibleForTesting
-    public void onNonSensitiveHistoryDataAvailable(
-            @Nullable List<AuxiliarySearchDataEntry> entries, long startTimeMs) {
-        AuxiliarySearchMetrics.recordQueryHistoryDataTime(TimeUtils.uptimeMillis() - startTimeMs);
-
-        List<AuxiliarySearchDataEntry> donationList = getMergedList(entries);
-        if (donationList == null || donationList.isEmpty()) return;
-
-        onNonSensitiveDataAvailable(donationList, startTimeMs);
-    }
-
-    /** Merges the fetched list of Tabs and CCTs with list of the most visited sites together. */
-    @VisibleForTesting
-    @Nullable
-    List<AuxiliarySearchDataEntry> getMergedList(
-            @Nullable List<AuxiliarySearchDataEntry> historyEntryList) {
-        if (historyEntryList == null && mCurrentSiteSuggestionEntries == null) return null;
-
-        if (mCurrentSiteSuggestionEntries == null || mCurrentSiteSuggestionEntries.isEmpty()) {
-            return historyEntryList;
-        }
-
-        // Don't donate most visited sites if they were calculated 24 hours ago.
-        long topSiteExpirationDuration =
-                TimeUtils.uptimeMillis() - mTopSiteLastFetchTimestamp - mHistoryTtlMillis;
-        if (topSiteExpirationDuration > 0) {
-            AuxiliarySearchMetrics.recordTopSiteExpirationDuration(topSiteExpirationDuration);
-            return historyEntryList;
-        }
-
-        List<AuxiliarySearchDataEntry> donationList = new ArrayList<>();
-        if (historyEntryList == null || historyEntryList.isEmpty()) {
-            donationList.addAll(mCurrentSiteSuggestionEntries);
-            return donationList;
-        }
-
-        // Adds the most visited site suggestion with the highest score as the first one in
-        // tht list to donate. This allows to include at least one most visited site
-        // suggestion in the first five entries to fetch icons.
-        donationList.add(mCurrentSiteSuggestionEntries.get(0));
-        // Adds the Tabs and Custom Tabs.
-        donationList.addAll(historyEntryList);
-        // Adds the remaining most visited sites suggestions.
-        for (int i = 1; i < mCurrentSiteSuggestionEntries.size(); i++) {
-            donationList.add(mCurrentSiteSuggestionEntries.get(i));
-        }
-        return donationList;
+    private void recordDonationTimeAndResults(long startTimeMs, boolean success) {
+        AuxiliarySearchMetrics.recordDonateTime(TimeUtils.uptimeMillis() - startTimeMs);
+        AuxiliarySearchMetrics.recordDonationRequestStatus(
+                success ? RequestStatus.SUCCESSFUL : RequestStatus.UNSUCCESSFUL);
     }
 
     private void deleteAllTabs() {
@@ -363,14 +333,4 @@ public class AuxiliarySearchControllerImpl
     public boolean getHasDeletingTaskForTesting() {
         return mHasDeletingTask;
     }
-
-    // AuxiliarySearchProvider.Observer implementations.
-    @Override
-    public void onSiteSuggestionsAvailable(@Nullable List<AuxiliarySearchDataEntry> entries) {
-        mCurrentSiteSuggestionEntries = entries;
-        mTopSiteLastFetchTimestamp = TimeUtils.uptimeMillis();
-    }
-
-    @Override
-    public void onIconMadeAvailable(GURL siteUrl) {}
 }

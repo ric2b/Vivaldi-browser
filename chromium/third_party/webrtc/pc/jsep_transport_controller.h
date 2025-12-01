@@ -47,7 +47,6 @@
 #include "p2p/base/port_allocator.h"
 #include "p2p/base/transport_description.h"
 #include "p2p/base/transport_info.h"
-#include "p2p/dtls/dtls_transport.h"
 #include "p2p/dtls/dtls_transport_factory.h"
 #include "p2p/dtls/dtls_transport_internal.h"
 #include "pc/dtls_srtp_transport.h"
@@ -68,11 +67,6 @@
 #include "rtc_base/third_party/sigslot/sigslot.h"
 #include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
-
-namespace rtc {
-
-class PacketTransportInternal;
-}  // namespace rtc
 
 namespace webrtc {
 
@@ -102,7 +96,7 @@ class JsepTransportController : public PayloadTypeSuggester,
     virtual bool OnTransportChanged(
         const std::string& mid,
         RtpTransportInternal* rtp_transport,
-        rtc::scoped_refptr<DtlsTransport> dtls_transport,
+        scoped_refptr<DtlsTransport> dtls_transport,
         DataChannelTransportInterface* data_channel_transport) = 0;
   };
 
@@ -123,11 +117,11 @@ class JsepTransportController : public PayloadTypeSuggester,
     bool enable_external_auth = false;
     // Used to inject the ICE/DTLS transports created externally.
     IceTransportFactory* ice_transport_factory = nullptr;
-    cricket::DtlsTransportFactory* dtls_transport_factory = nullptr;
+    DtlsTransportFactory* dtls_transport_factory = nullptr;
     Observer* transport_observer = nullptr;
     // Must be provided and valid for the lifetime of the
     // JsepTransportController instance.
-    absl::AnyInvocable<void(const rtc::CopyOnWriteBuffer& packet,
+    absl::AnyInvocable<void(const webrtc::CopyOnWriteBuffer& packet,
                             int64_t packet_time_us) const>
         rtcp_handler;
     absl::AnyInvocable<void(const RtpPacketReceived& parsed_packet) const>
@@ -184,14 +178,12 @@ class JsepTransportController : public PayloadTypeSuggester,
   // Get transports to be used for the provided `mid`. If bundling is enabled,
   // calling GetRtpTransport for multiple MIDs may yield the same object.
   RtpTransportInternal* GetRtpTransport(absl::string_view mid) const;
-  cricket::DtlsTransportInternal* GetDtlsTransport(const std::string& mid);
-  const cricket::DtlsTransportInternal* GetRtcpDtlsTransport(
+  DtlsTransportInternal* GetDtlsTransport(const std::string& mid);
+  const DtlsTransportInternal* GetRtcpDtlsTransport(
       const std::string& mid) const;
   // Gets the externally sharable version of the DtlsTransport.
-  rtc::scoped_refptr<DtlsTransport> LookupDtlsTransportByMid(
-      const std::string& mid);
-  rtc::scoped_refptr<SctpTransport> GetSctpTransport(
-      const std::string& mid) const;
+  scoped_refptr<DtlsTransport> LookupDtlsTransportByMid(const std::string& mid);
+  scoped_refptr<SctpTransport> GetSctpTransport(const std::string& mid) const;
 
   DataChannelTransportInterface* GetDataChannelTransport(
       const std::string& mid) const;
@@ -223,13 +215,12 @@ class JsepTransportController : public PayloadTypeSuggester,
    *********************/
   // Specifies the identity to use in this session.
   // Can only be called once.
-  bool SetLocalCertificate(
-      const rtc::scoped_refptr<RTCCertificate>& certificate);
-  rtc::scoped_refptr<RTCCertificate> GetLocalCertificate(
+  bool SetLocalCertificate(const scoped_refptr<RTCCertificate>& certificate);
+  scoped_refptr<RTCCertificate> GetLocalCertificate(
       const std::string& mid) const;
   // Caller owns returned certificate chain. This method mainly exists for
   // stats reporting.
-  std::unique_ptr<rtc::SSLCertChain> GetRemoteSSLCertChain(
+  std::unique_ptr<SSLCertChain> GetRemoteSSLCertChain(
       const std::string& mid) const;
   // Get negotiated role, if one has been negotiated.
   std::optional<SSLRole> GetDtlsRole(const std::string& mid) const;
@@ -239,15 +230,15 @@ class JsepTransportController : public PayloadTypeSuggester,
   // The function will either return a PT already in use on the connection
   // or a newly suggested one.
   RTCErrorOr<PayloadType> SuggestPayloadType(const std::string& mid,
-                                             cricket::Codec codec) override;
+                                             Codec codec) override;
   RTCError AddLocalMapping(const std::string& mid,
                            PayloadType payload_type,
-                           const cricket::Codec& codec) override;
+                           const Codec& codec) override;
   const PayloadTypePicker& PayloadTypePickerForTesting() const {
     return payload_type_picker_;
   }
 
-  bool GetStats(const std::string& mid, cricket::TransportStats* stats) const;
+  bool GetStats(const std::string& mid, TransportStats* stats) const;
 
   bool initial_offerer() const { return initial_offerer_ && *initial_offerer_; }
 
@@ -255,14 +246,14 @@ class JsepTransportController : public PayloadTypeSuggester,
 
   RTCError RollbackTransports();
 
-  // F: void(const std::string&, const std::vector<cricket::Candidate>&)
+  // F: void(const std::string&, const std::vector<webrtc::Candidate>&)
   template <typename F>
   void SubscribeIceCandidateGathered(F&& callback) {
     RTC_DCHECK_RUN_ON(network_thread_);
     signal_ice_candidates_gathered_.AddReceiver(std::forward<F>(callback));
   }
 
-  // F: void(cricket::IceConnectionState)
+  // F: void(webrtc::IceConnectionState)
   template <typename F>
   void SubscribeIceConnectionState(F&& callback) {
     RTC_DCHECK_RUN_ON(network_thread_);
@@ -284,28 +275,28 @@ class JsepTransportController : public PayloadTypeSuggester,
         std::forward<F>(callback));
   }
 
-  // F: void(cricket::IceGatheringState)
+  // F: void(webrtc::IceGatheringState)
   template <typename F>
   void SubscribeIceGatheringState(F&& callback) {
     RTC_DCHECK_RUN_ON(network_thread_);
     signal_ice_gathering_state_.AddReceiver(std::forward<F>(callback));
   }
 
-  // F: void(const cricket::IceCandidateErrorEvent&)
+  // F: void(const webrtc::IceCandidateErrorEvent&)
   template <typename F>
   void SubscribeIceCandidateError(F&& callback) {
     RTC_DCHECK_RUN_ON(network_thread_);
     signal_ice_candidate_error_.AddReceiver(std::forward<F>(callback));
   }
 
-  // F: void(const std::vector<cricket::Candidate>&)
+  // F: void(const std::vector<webrtc::Candidate>&)
   template <typename F>
   void SubscribeIceCandidatesRemoved(F&& callback) {
     RTC_DCHECK_RUN_ON(network_thread_);
     signal_ice_candidates_removed_.AddReceiver(std::forward<F>(callback));
   }
 
-  // F: void(const cricket::CandidatePairChangeEvent&)
+  // F: void(const webrtc::CandidatePairChangeEvent&)
   template <typename F>
   void SubscribeIceCandidatePairChanged(F&& callback) {
     RTC_DCHECK_RUN_ON(network_thread_);
@@ -319,7 +310,7 @@ class JsepTransportController : public PayloadTypeSuggester,
   // Else if all completed => completed,
   // Else if all connected => connected,
   // Else => connecting
-  CallbackList<cricket::IceConnectionState> signal_ice_connection_state_
+  CallbackList<IceConnectionState> signal_ice_connection_state_
       RTC_GUARDED_BY(network_thread_);
 
   CallbackList<PeerConnectionInterface::PeerConnectionState>
@@ -338,13 +329,13 @@ class JsepTransportController : public PayloadTypeSuggester,
   CallbackList<const std::string&, const std::vector<Candidate>&>
       signal_ice_candidates_gathered_ RTC_GUARDED_BY(network_thread_);
 
-  CallbackList<const cricket::IceCandidateErrorEvent&>
-      signal_ice_candidate_error_ RTC_GUARDED_BY(network_thread_);
+  CallbackList<const IceCandidateErrorEvent&> signal_ice_candidate_error_
+      RTC_GUARDED_BY(network_thread_);
 
   CallbackList<const std::vector<Candidate>&> signal_ice_candidates_removed_
       RTC_GUARDED_BY(network_thread_);
 
-  CallbackList<const cricket::CandidatePairChangeEvent&>
+  CallbackList<const CandidatePairChangeEvent&>
       signal_ice_candidate_pair_changed_ RTC_GUARDED_BY(network_thread_);
 
   // Called from SetLocalDescription and SetRemoteDescription.
@@ -371,9 +362,9 @@ class JsepTransportController : public PayloadTypeSuggester,
                             const ContentGroup& bundle_group)
       RTC_RUN_ON(network_thread_);
 
-  cricket::JsepTransportDescription CreateJsepTransportDescription(
+  JsepTransportDescription CreateJsepTransportDescription(
       const ContentInfo& content_info,
-      const cricket::TransportInfo& transport_info,
+      const TransportInfo& transport_info,
       const std::vector<int>& encrypted_extension_ids,
       int rtp_abs_sendtime_extn_id);
 
@@ -389,21 +380,21 @@ class JsepTransportController : public PayloadTypeSuggester,
   // destroyed because of BUNDLE, it would return the transport which other
   // transports are bundled on (In current implementation, it is the first
   // content in the BUNDLE group).
-  const cricket::JsepTransport* GetJsepTransportForMid(
-      const std::string& mid) const RTC_RUN_ON(network_thread_);
-  cricket::JsepTransport* GetJsepTransportForMid(const std::string& mid)
+  const JsepTransport* GetJsepTransportForMid(const std::string& mid) const
       RTC_RUN_ON(network_thread_);
-  const cricket::JsepTransport* GetJsepTransportForMid(
-      absl::string_view mid) const RTC_RUN_ON(network_thread_);
-  cricket::JsepTransport* GetJsepTransportForMid(absl::string_view mid)
+  JsepTransport* GetJsepTransportForMid(const std::string& mid)
+      RTC_RUN_ON(network_thread_);
+  const JsepTransport* GetJsepTransportForMid(absl::string_view mid) const
+      RTC_RUN_ON(network_thread_);
+  JsepTransport* GetJsepTransportForMid(absl::string_view mid)
       RTC_RUN_ON(network_thread_);
 
   // Get the JsepTransport without considering the BUNDLE group. Return nullptr
   // if the JsepTransport is destroyed.
-  const cricket::JsepTransport* GetJsepTransportByName(
+  const JsepTransport* GetJsepTransportByName(
       const std::string& transport_name) const RTC_RUN_ON(network_thread_);
-  cricket::JsepTransport* GetJsepTransportByName(
-      const std::string& transport_name) RTC_RUN_ON(network_thread_);
+  JsepTransport* GetJsepTransportByName(const std::string& transport_name)
+      RTC_RUN_ON(network_thread_);
 
   // Creates jsep transport. Noop if transport is already created.
   // Transport is created either during SetLocalDescription (`local` == true) or
@@ -416,47 +407,46 @@ class JsepTransportController : public PayloadTypeSuggester,
 
   void DestroyAllJsepTransports_n() RTC_RUN_ON(network_thread_);
 
-  void SetIceRole_n(cricket::IceRole ice_role) RTC_RUN_ON(network_thread_);
+  void SetIceRole_n(IceRole ice_role) RTC_RUN_ON(network_thread_);
 
-  cricket::IceRole DetermineIceRole(
-      cricket::JsepTransport* jsep_transport,
-      const cricket::TransportInfo& transport_info,
-      SdpType type,
-      bool local);
+  IceRole DetermineIceRole(JsepTransport* jsep_transport,
+                           const TransportInfo& transport_info,
+                           SdpType type,
+                           bool local);
 
-  std::unique_ptr<cricket::DtlsTransportInternal> CreateDtlsTransport(
+  std::unique_ptr<DtlsTransportInternal> CreateDtlsTransport(
       const ContentInfo& content_info,
       IceTransportInternal* ice);
-  rtc::scoped_refptr<IceTransportInterface> CreateIceTransport(
+  scoped_refptr<IceTransportInterface> CreateIceTransport(
       const std::string& transport_name,
       bool rtcp);
 
   std::unique_ptr<RtpTransport> CreateUnencryptedRtpTransport(
       const std::string& transport_name,
-      rtc::PacketTransportInternal* rtp_packet_transport,
-      rtc::PacketTransportInternal* rtcp_packet_transport);
+      PacketTransportInternal* rtp_packet_transport,
+      PacketTransportInternal* rtcp_packet_transport);
   std::unique_ptr<SrtpTransport> CreateSdesTransport(
       const std::string& transport_name,
-      cricket::DtlsTransportInternal* rtp_dtls_transport,
-      cricket::DtlsTransportInternal* rtcp_dtls_transport);
+      DtlsTransportInternal* rtp_dtls_transport,
+      DtlsTransportInternal* rtcp_dtls_transport);
   std::unique_ptr<DtlsSrtpTransport> CreateDtlsSrtpTransport(
       const std::string& transport_name,
-      cricket::DtlsTransportInternal* rtp_dtls_transport,
-      cricket::DtlsTransportInternal* rtcp_dtls_transport);
+      DtlsTransportInternal* rtp_dtls_transport,
+      DtlsTransportInternal* rtcp_dtls_transport);
 
   // Collect all the DtlsTransports, including RTP and RTCP, from the
   // JsepTransports, including those not mapped to a MID because they are being
   // kept alive in case of rollback.
-  std::vector<cricket::DtlsTransportInternal*> GetDtlsTransports();
+  std::vector<DtlsTransportInternal*> GetDtlsTransports();
   // Same as the above, but doesn't include rollback transports.
   // JsepTransportController can iterate all the DtlsTransports and update the
   // aggregate states.
-  std::vector<cricket::DtlsTransportInternal*> GetActiveDtlsTransports();
+  std::vector<DtlsTransportInternal*> GetActiveDtlsTransports();
 
   // Handlers for signals from Transport.
-  void OnTransportWritableState_n(rtc::PacketTransportInternal* transport)
+  void OnTransportWritableState_n(PacketTransportInternal* transport)
       RTC_RUN_ON(network_thread_);
-  void OnTransportReceivingState_n(rtc::PacketTransportInternal* transport)
+  void OnTransportReceivingState_n(PacketTransportInternal* transport)
       RTC_RUN_ON(network_thread_);
   void OnTransportGatheringState_n(IceTransportInternal* transport)
       RTC_RUN_ON(network_thread_);
@@ -464,30 +454,27 @@ class JsepTransportController : public PayloadTypeSuggester,
                                       const Candidate& candidate)
       RTC_RUN_ON(network_thread_);
   void OnTransportCandidateError_n(IceTransportInternal* transport,
-                                   const cricket::IceCandidateErrorEvent& event)
+                                   const IceCandidateErrorEvent& event)
       RTC_RUN_ON(network_thread_);
   void OnTransportCandidatesRemoved_n(IceTransportInternal* transport,
-                                      const cricket::Candidates& candidates)
+                                      const Candidates& candidates)
       RTC_RUN_ON(network_thread_);
   void OnTransportRoleConflict_n(IceTransportInternal* transport)
       RTC_RUN_ON(network_thread_);
   void OnTransportStateChanged_n(IceTransportInternal* transport)
       RTC_RUN_ON(network_thread_);
-  void OnTransportCandidatePairChanged_n(
-      const cricket::CandidatePairChangeEvent& event)
+  void OnTransportCandidatePairChanged_n(const CandidatePairChangeEvent& event)
       RTC_RUN_ON(network_thread_);
   void UpdateAggregateStates_n() RTC_RUN_ON(network_thread_);
 
-  void OnRtcpPacketReceived_n(rtc::CopyOnWriteBuffer* packet,
-                              int64_t packet_time_us)
+  void OnRtcpPacketReceived_n(CopyOnWriteBuffer* packet, int64_t packet_time_us)
       RTC_RUN_ON(network_thread_);
   void OnUnDemuxableRtpPacketReceived_n(const RtpPacketReceived& packet)
       RTC_RUN_ON(network_thread_);
 
   void OnDtlsHandshakeError(SSLHandshakeError error);
 
-  bool OnTransportChanged(const std::string& mid,
-                          cricket::JsepTransport* transport);
+  bool OnTransportChanged(const std::string& mid, JsepTransport* transport);
 
   const Environment env_;
   Thread* const network_thread_ = nullptr;
@@ -498,8 +485,7 @@ class JsepTransportController : public PayloadTypeSuggester,
   // Aggregate states for Transports.
   // standardized_ice_connection_state_ is intended to replace
   // ice_connection_state, see bugs.webrtc.org/9308
-  cricket::IceConnectionState ice_connection_state_ =
-      cricket::kIceConnectionConnecting;
+  IceConnectionState ice_connection_state_ = kIceConnectionConnecting;
   PeerConnectionInterface::IceConnectionState
       standardized_ice_connection_state_ =
           PeerConnectionInterface::kIceConnectionNew;
@@ -513,8 +499,8 @@ class JsepTransportController : public PayloadTypeSuggester,
   std::optional<bool> initial_offerer_;
 
   IceConfig ice_config_;
-  cricket::IceRole ice_role_ = cricket::ICEROLE_CONTROLLING;
-  rtc::scoped_refptr<RTCCertificate> certificate_;
+  IceRole ice_role_ = ICEROLE_CONTROLLING;
+  scoped_refptr<RTCCertificate> certificate_;
 
   BundleManager bundles_;
   // Reference to the SdpOfferAnswerHandler's payload type picker.

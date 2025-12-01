@@ -9,6 +9,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -94,6 +95,7 @@ class RenderWidgetHostBrowserTest : public ContentBrowserTest {
     EXPECT_TRUE(NavigateToURL(
         shell(), GURL("data:text/html,<!doctype html>"
                       "<body style='background-color: magenta;'></body>")));
+    SimulateEndOfPaintHoldingOnPrimaryMainFrame(shell()->web_contents());
   }
 
   WebContents* web_contents() const { return shell()->web_contents(); }
@@ -188,6 +190,7 @@ class RenderWidgetHostTouchEmulatorBrowserTest : public ContentBrowserTest {
     EXPECT_TRUE(NavigateToURL(
         shell(), GURL("data:text/html,<!doctype html>"
                       "<body style='background-color: red;'></body>")));
+    SimulateEndOfPaintHoldingOnPrimaryMainFrame(shell()->web_contents());
   }
 
   base::TimeTicks GetNextSimulatedEventTime() {
@@ -605,6 +608,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/site_isolation/page-with-select.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  SimulateEndOfPaintHoldingOnPrimaryMainFrame(shell()->web_contents());
 
   auto* contents = static_cast<WebContentsImpl*>(shell()->web_contents());
   FrameTreeNode* root = contents->GetPrimaryFrameTree().root();
@@ -798,6 +802,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostSitePerProcessTest,
   GURL main_url(embedded_test_server()->GetURL(
       "a.com", "/site_isolation/page-with-select.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
+  SimulateEndOfPaintHoldingOnPrimaryMainFrame(shell()->web_contents());
 
   auto* contents = static_cast<WebContentsImpl*>(web_contents());
   FrameTreeNode* root = contents->GetPrimaryFrameTree().root();
@@ -1052,67 +1057,81 @@ class RenderWidgetHostDelegatedInkMetadataTest
     : public RenderWidgetHostTouchEmulatorBrowserTest {
  public:
   RenderWidgetHostDelegatedInkMetadataTest() = default;
+  void SetUpOnMainThread() override {
+    ContentBrowserTest::SetUpOnMainThread();
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    ContentBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "DelegatedInkTrails");
+    LoadStopObserver load_stop_observer(shell()->web_contents());
+    EXPECT_TRUE(
+        NavigateToURL(shell(), GURL(R"HTML(data:text/html,<!DOCTYPE html>
+      <body> <canvas id="board" width="400" height="400"></canvas> </body>
+    )HTML")));
+    load_stop_observer.Wait();
+    SimulateEndOfPaintHoldingOnPrimaryMainFrame(shell()->web_contents());
   }
+
+ protected:
+  void WaitForDelegatedInkMetadata(
+      RenderFrameSubmissionObserver& frame_observer) {
+    // The mouse event is not necessarily routed in the first frame that is
+    // generated. Generate frames until the mouse event and canvas paint is
+    // routed to the compositor.
+    do {
+      frame_observer.WaitForMetadataChange();
+    } while (!frame_observer.LastRenderFrameMetadata()
+                  .delegated_ink_metadata.has_value() &&
+             frame_observer.render_frame_count() <= kMaxFrames);
+    frame_observer.ResetCounter();
+  }
+
+ private:
+  static constexpr int kMaxFrames = 3;
 };
 
 // Confirm that using the |updateInkTrailStartPoint| JS API results in the
 // |request_points_for_delegated_ink_| flag being set on the RWHVB.
-// TODO(crbug.com/40852704). Flaky on Linux.
-// TODO(crbug.com/40929902): Failing on ChromesOS MSan.
-#if BUILDFLAG(IS_LINUX) || (BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER))
-#define MAYBE_FlagGetsSetFromRenderFrameMetadata \
-  DISABLED_FlagGetsSetFromRenderFrameMetadata
-#else
-#define MAYBE_FlagGetsSetFromRenderFrameMetadata \
-  FlagGetsSetFromRenderFrameMetadata
-#endif
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
-                       MAYBE_FlagGetsSetFromRenderFrameMetadata) {
+                       FlagGetsSetFromRenderFrameMetadata) {
   ASSERT_TRUE(ExecJs(shell()->web_contents(), R"(
-      let presenter = null;
-      navigator.ink.requestPresenter().then(e => { presenter = e; });
-      let style = { color: 'green', diameter: 21 };
+    let ctx = board.getContext('2d');
+    let presenter = null;
+    navigator.ink.requestPresenter().then(e => { presenter = e; });
+    const pointSize = 15;
+    const style = { color: 'rgb(255,0,0)', diameter: pointSize };
 
-      window.addEventListener('pointermove' , evt => {
-        presenter.updateInkTrailStartPoint(evt, style);
-      });
-      )"));
+    board.addEventListener('pointermove', event => {
+        // Paint on the canvas to force damage and new frames generation.
+        ctx.fillstyle = 'rgb(0,255,0)';
+        ctx.fillRect(event.clientX, event.clientY - board
+                .getBoundingClientRect().top, pointSize, pointSize);
+        presenter.updateInkTrailStartPoint(event, style);
+    });
+  )"));
+  RenderFrameMetadataProviderImpl* metadata_provider =
+      host()->render_frame_metadata_provider();
+  RenderFrameSubmissionObserver frame_observer(metadata_provider);
   SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 10, 10, 0,
                            false);
-  RunUntilInputProcessed(host());
+  WaitForDelegatedInkMetadata(frame_observer);
 
-  {
-    const cc::RenderFrameMetadata& last_metadata =
-        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
-    EXPECT_TRUE(last_metadata.delegated_ink_metadata.has_value());
-    EXPECT_TRUE(
-        last_metadata.delegated_ink_metadata.value().delegated_ink_is_hovering);
-  }
+  EXPECT_TRUE(metadata_provider->LastRenderFrameMetadata()
+                  .delegated_ink_metadata.value()
+                  .delegated_ink_is_hovering);
 
   // Confirm that the state of hover changing on the next produced delegated ink
   // metadata results in a new RenderFrameMetadata being sent, with
   // |delegated_ink_hovering| false.
   SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 20, 20,
                            blink::WebInputEvent::kLeftButtonDown, false);
-  RunUntilInputProcessed(host());
+  WaitForDelegatedInkMetadata(frame_observer);
 
-  {
-    const cc::RenderFrameMetadata& last_metadata =
-        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
-    EXPECT_TRUE(last_metadata.delegated_ink_metadata.has_value());
-    EXPECT_FALSE(
-        last_metadata.delegated_ink_metadata.value().delegated_ink_is_hovering);
-  }
+  EXPECT_FALSE(metadata_provider->LastRenderFrameMetadata()
+                   .delegated_ink_metadata.value()
+                   .delegated_ink_is_hovering);
 
   // Confirm that the flag is set back to false when the JS API isn't called.
   RunUntilInputProcessed(host());
   const cc::RenderFrameMetadata& last_metadata =
-      host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
+      metadata_provider->LastRenderFrameMetadata();
   EXPECT_FALSE(last_metadata.delegated_ink_metadata.has_value());
 
   // Finally, confirm that a change in hovering state (pointerdown to pointerup
@@ -1121,9 +1140,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
   SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 20, 20, 0,
                            false);
   RunUntilInputProcessed(host());
-  EXPECT_EQ(
-      last_metadata,
-      host()->render_frame_metadata_provider()->LastRenderFrameMetadata());
+  EXPECT_EQ(last_metadata, metadata_provider->LastRenderFrameMetadata());
 }
 
 // If the DelegatedInkTrailPresenter creates a metadata that has the same
@@ -1131,41 +1148,43 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostDelegatedInkMetadataTest,
                        DuplicateMetadata) {
   ASSERT_TRUE(ExecJs(shell()->web_contents(), R"(
-      let presenter = null;
-      navigator.ink.requestPresenter().then(e => { presenter = e; });
-      let style = { color: 'green', diameter: 21 };
-      let first_move_event = null;
+    let ctx = board.getContext('2d');
+    let presenter = null;
+    navigator.ink.requestPresenter().then(e => { presenter = e; });
+    const pointSize = 15;
+    const style = { color: 'rgb(255,0,0)', diameter: pointSize };
+    let first_move_event = null;
 
-      window.addEventListener('pointermove' , evt => {
+    board.addEventListener('pointermove', event => {
+        // Paint on the canvas to force damage and new frames generation.
+        ctx.fillstyle = 'rgb(0,255,0)';
+        ctx.fillRect(event.clientX, event.clientY - board
+                .getBoundingClientRect().top, pointSize, pointSize);
         if (first_move_event == null) {
-          first_move_event = evt;
+          first_move_event = event;
         }
         presenter.updateInkTrailStartPoint(first_move_event, style);
-      });
-      )"));
+    });
+  )"));
+
+  RenderFrameMetadataProviderImpl* metadata_provider =
+      host()->render_frame_metadata_provider();
+  RenderFrameSubmissionObserver frame_observer(metadata_provider);
   SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 10, 10, 0,
                            false);
-  RunUntilInputProcessed(host());
 
-  {
-    const cc::RenderFrameMetadata& last_metadata =
-        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
-    EXPECT_TRUE(last_metadata.delegated_ink_metadata.has_value());
-    EXPECT_TRUE(
-        last_metadata.delegated_ink_metadata.value().delegated_ink_is_hovering);
-  }
+  WaitForDelegatedInkMetadata(frame_observer);
+  EXPECT_TRUE(metadata_provider->LastRenderFrameMetadata()
+                  .delegated_ink_metadata.value()
+                  .delegated_ink_is_hovering);
 
   // Confirm metadata has no value when updateInkTrailStartPoint is called
   // with the same event.
   SimulateRoutedMouseEvent(blink::WebInputEvent::Type::kMouseMove, 20, 20,
                            blink::WebInputEvent::kLeftButtonDown, false);
   RunUntilInputProcessed(host());
-
-  {
-    const cc::RenderFrameMetadata& last_metadata =
-        host()->render_frame_metadata_provider()->LastRenderFrameMetadata();
-    EXPECT_FALSE(last_metadata.delegated_ink_metadata.has_value());
-  }
+  EXPECT_FALSE(metadata_provider->LastRenderFrameMetadata()
+                   .delegated_ink_metadata.has_value());
 }
 
 namespace {

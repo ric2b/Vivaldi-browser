@@ -171,6 +171,7 @@ targets.tests.gtest_test(
     name = "ash_pixeltests",
     mixins = [
         "skia_gold_test",
+        "skia_gold_test_on_linux_gce",
     ],
     args = [
         "--enable-pixel-output-in-tests",
@@ -558,7 +559,7 @@ targets.tests.gtest_test(
         "skia_gold_test",
     ],
     args = [
-        "--annotation=Restriction=Tablet,ImportantFormFactors=Tablet",
+        "--annotation=Restriction=Tablet,Restriction=TabletOrDesktop,ImportantFormFactors=Tablet,ImportantFormFactors=TabletOrDesktop",
     ],
     binary = "chrome_public_test_apk",
 )
@@ -713,6 +714,10 @@ targets.tests.isolated_script_test(
 
 targets.tests.gtest_test(
     name = "components_unittests",
+)
+
+targets.tests.isolated_script_test(
+    name = "component_storage_test",
 )
 
 targets.tests.gtest_test(
@@ -2746,6 +2751,62 @@ targets.tests.gpu_telemetry_test(
 targets.tests.gpu_telemetry_test(
     name = "webcodecs_tests",
     telemetry_test_name = "webcodecs",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_integration_test_common_args",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webrtc_gl_passthrough_ganesh_tests",
+    telemetry_test_name = "webrtc",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_gl",
+        "gpu_force_skia_ganesh",
+        "gpu_integration_test_common_args",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webrtc_metal_passthrough_ganesh_tests",
+    telemetry_test_name = "webrtc",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_metal",
+        "gpu_force_skia_ganesh",
+        "gpu_integration_test_common_args",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webrtc_metal_passthrough_graphite_tests",
+    telemetry_test_name = "webrtc",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_force_command_decoder_passthrough",
+        "gpu_force_angle_metal",
+        "gpu_force_skia_graphite",
+        "gpu_integration_test_common_args",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webrtc_graphite_tests",
+    telemetry_test_name = "webrtc",
+    mixins = [
+        "has_native_resultdb_integration",
+        "gpu_force_command_decoder_validating",
+        "gpu_force_skia_graphite",
+        "gpu_integration_test_common_args",
+    ],
+)
+
+targets.tests.gpu_telemetry_test(
+    name = "webrtc_tests",
+    telemetry_test_name = "webrtc",
     mixins = [
         "has_native_resultdb_integration",
         "gpu_integration_test_common_args",

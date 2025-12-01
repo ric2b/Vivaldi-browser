@@ -489,6 +489,9 @@ Called by update_bad_message_reasons.py.-->
   <int value="321" label="RFH_INITIATOR_BASE_URL_IS_EMPTY"/>
   <int value="322" label="MDDH_SELECT_AUDIO_OUTPUT_WITHOUT_FEATURE"/>
   <int value="323" label="MDDH_SET_PREFERRED_SINK_ID_WITHOUT_FEATURE"/>
+  <int value="324" label="MH_MULTIPLE_MIDI_SESSIONS"/>
+  <int value="325" label="RFHI_INVALID_NET_ERROR_CODE"/>
+  <int value="326" label="MSDH_DISABLED_FEATURE_IS_SET"/>
 </enum>
 
 <enum name="BadMessageReasonExtensions">
@@ -764,6 +767,16 @@ Called by update_debug_scenarios.py.-->
   </int>
 </enum>
 
+<!-- LINT.IfChange(SpareRendererAvailabilityWhenKilled) -->
+
+<enum name="SpareRendererAvailabilityWhenKilled">
+  <int value="0" label="KillSpareRenderer"/>
+  <int value="1" label="KillNonSpareRendererWithoutSpareRenderer"/>
+  <int value="2" label="KillNonSpareRendererWithSpareRenderer"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/crash/content/browser/crash_metrics_reporter_android.h:SpareRendererAvailabilityWhenKilled) -->
+
 <enum name="StabilityEventType">
   <summary>
     One of several separate stability metrics. The values are non-contiguous as
@@ -1025,6 +1038,10 @@ Called by update_debug_scenarios.py.-->
   <int value="33" label="chrome::RESULT_CODE_DOWNGRADE_AND_RELAUNCH"/>
   <int value="34" label="chrome::RESULT_CODE_GPU_EXIT_ON_CONTEXT_LOST"/>
   <int value="35" label="chrome::RESULT_CODE_NORMAL_EXIT_UPGRADE_RELAUNCHED"/>
+  <int value="36"
+      label="chrome::RESULT_CODE_NORMAL_EXIT_PACK_EXTENSION_SUCCESS"/>
+  <int value="37" label="chrome::RESULT_CODE_SYSTEM_RESOURCE_EXHAUSTED"/>
+  <int value="38" label="chrome::RESULT_CODE_NORMAL_EXIT_AUTO_DE_ELEVATED"/>
   <int value="259" label="0x103 - STILL_ACTIVE."/>
   <int value="1285" label="ERROR_DELAY_LOAD_FAILED"/>
   <int value="1717" label="RPC_S_UNKNOWN_IF"/>

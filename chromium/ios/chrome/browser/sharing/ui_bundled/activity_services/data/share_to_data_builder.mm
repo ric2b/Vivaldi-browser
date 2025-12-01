@@ -4,6 +4,8 @@
 
 #import "ios/chrome/browser/sharing/ui_bundled/activity_services/data/share_to_data_builder.h"
 
+#import <LinkPresentation/LinkPresentation.h>
+
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/send_tab_to_self/entry_point_display_reason.h"
@@ -14,11 +16,14 @@
 #import "ios/chrome/browser/shared/ui/util/url_with_title.h"
 #import "ios/chrome/browser/sharing/ui_bundled/activity_services/data/chrome_activity_item_thumbnail_generator.h"
 #import "ios/chrome/browser/sharing/ui_bundled/activity_services/data/share_to_data.h"
+#import "ios/chrome/browser/snapshots/model/snapshot_tab_helper.h"
 #import "ios/chrome/browser/sync/model/send_tab_to_self_sync_service_factory.h"
 #import "ios/chrome/browser/tabs/model/tab_title_util.h"
+#import "ios/web/public/favicon/favicon_status.h"
 #import "ios/web/public/navigation/navigation_item.h"
 #import "ios/web/public/navigation/navigation_manager.h"
 #import "ios/web/public/web_state.h"
+#import "net/base/apple/url_conversions.h"
 #import "url/gurl.h"
 
 // Vivaldi
@@ -72,20 +77,8 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
       ProfileIOS::FromBrowserState(web_state->GetBrowserState());
 
 #if defined(VIVALDI_BUILD)
-  BOOL can_send_tab_to_self = !profile->IsOffTheRecord();
-  // Send to tabs is not available for private tabs by design from Chromium.
-  if (!profile->IsOffTheRecord()) {
-    VivaldiAccountSyncManager* sync_account_manager =
-        [[VivaldiAccountSyncManager alloc] initWithProfile:profile];
-    send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
-        SendTabToSelfSyncServiceFactory::GetForProfile(profile);
-  can_send_tab_to_self =
-        sync_account_manager &&
-        [sync_account_manager hasSyncConsent] &&
-        send_tab_to_self_service &&
-        send_tab_to_self_service->GetEntryPointDisplayReason(
-            final_url_to_share);
-  }
+  BOOL can_send_tab_to_self =
+      canSendTabToSelfForURL(final_url_to_share, profile);
 #else
   send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
       SendTabToSelfSyncServiceFactory::GetForProfile(profile);
@@ -94,17 +87,41 @@ ShareToData* ShareToDataForWebState(web::WebState* web_state,
       send_tab_to_self_service->GetEntryPointDisplayReason(final_url_to_share);
 #endif // End Vivaldi
 
+  LPLinkMetadata* metadata = [[LPLinkMetadata alloc] init];
+  metadata.URL = net::NSURLWithGURL(final_url_to_share);
+  metadata.title = tab_title;
+  metadata.originalURL = net::NSURLWithGURL(web_state->GetVisibleURL());
+  if (!web_state->GetBrowserState()->IsOffTheRecord()) {
+    UIImage* thumbnail = SnapshotTabHelper::FromWebState(web_state)
+                             ->GenerateSnapshotWithoutOverlays();
+    if (thumbnail) {
+      metadata.imageProvider =
+          [[NSItemProvider alloc] initWithObject:thumbnail];
+    }
+  }
+  web::FaviconStatus favicon_status = web_state->GetFaviconStatus();
+  if (favicon_status.valid) {
+#if defined(VIVALDI_BUILD)
+    if (!favicon_status.image.IsEmpty()) {
+      metadata.iconProvider = [[NSItemProvider alloc]
+          initWithObject:favicon_status.image.ToUIImage()];
+    }
+#else
+    metadata.iconProvider = [[NSItemProvider alloc]
+        initWithObject:favicon_status.image.ToUIImage()];
+#endif // End Vivaldi
+  }
   return [[ShareToData alloc] initWithShareURL:final_url_to_share
                                     visibleURL:web_state->GetVisibleURL()
                                          title:tab_title
-                                additionalText:nil
+                                additionalText:tab_title
                                isOriginalTitle:is_original_title
                                isPagePrintable:is_page_printable
                               isPageSearchable:is_page_searchable
                               canSendTabToSelf:can_send_tab_to_self
                                      userAgent:user_agent
                             thumbnailGenerator:thumbnail_generator
-                                  linkMetadata:nil];
+                                  linkMetadata:metadata];
 }
 
 ShareToData* ShareToDataForURL(const GURL& url,
@@ -127,5 +144,44 @@ ShareToData* ShareToDataForURL(const GURL& url,
 ShareToData* ShareToDataForURLWithTitle(URLWithTitle* url_with_title) {
   return ShareToDataForURL(url_with_title.URL, url_with_title.title, nil, nil);
 }
+
+// Vivaldi
+ShareToData* ShareToDataForURL(const GURL& url,
+                               NSString* title,
+                               NSString* additional_text,
+                               LPLinkMetadata* link_metadata,
+                               ProfileIOS* profile) {
+  BOOL can_send_tab_to_self = canSendTabToSelfForURL(url, profile);
+  return [[ShareToData alloc] initWithShareURL:url
+                                    visibleURL:url
+                                         title:title
+                                additionalText:additional_text
+                               isOriginalTitle:YES
+                               isPagePrintable:NO
+                              isPageSearchable:NO
+                              canSendTabToSelf:can_send_tab_to_self
+                                     userAgent:web::UserAgentType::NONE
+                            thumbnailGenerator:nil
+                                  linkMetadata:link_metadata];
+}
+
+bool canSendTabToSelfForURL(const GURL& url, ProfileIOS* profile) {
+  BOOL can_send_tab_to_self = !profile->IsOffTheRecord();
+
+  // Send to tabs is not available for private tabs by design from Chromium.
+  if (!profile->IsOffTheRecord()) {
+    VivaldiAccountSyncManager* sync_account_manager =
+        [[VivaldiAccountSyncManager alloc] initWithProfile:profile];
+    send_tab_to_self::SendTabToSelfSyncService* send_tab_to_self_service =
+        SendTabToSelfSyncServiceFactory::GetForProfile(profile);
+    can_send_tab_to_self =
+        sync_account_manager && [sync_account_manager hasSyncConsent] &&
+        send_tab_to_self_service &&
+        send_tab_to_self_service->GetEntryPointDisplayReason(url);
+  }
+
+  return can_send_tab_to_self;
+}
+// End Vivaldi
 
 }  // namespace activity_services

@@ -8,6 +8,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/task_environment.h"
 #include "gin/public/context_holder.h"
@@ -33,7 +34,10 @@ class TestIsolateHolder : public BindingsIsolateHolder {
   TestIsolateHolder() = default;
   TestIsolateHolder(const TestIsolateHolder&) = delete;
   TestIsolateHolder& operator=(const TestIsolateHolder&) = delete;
-  virtual ~TestIsolateHolder() = default;
+  virtual ~TestIsolateHolder() {
+    v8::HandleScope handle_scope(GetIsolate());
+    context_holder_.reset();
+  }
 
   // BindingsIsolateHolder:
   v8::Isolate* GetIsolate() const override {

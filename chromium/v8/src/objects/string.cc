@@ -23,6 +23,7 @@
 #include "src/objects/oddball.h"
 #include "src/objects/string-comparator.h"
 #include "src/objects/string-inl.h"
+#include "src/objects/tagged.h"
 #include "src/strings/char-predicates.h"
 #include "src/strings/string-builder-inl.h"
 #include "src/strings/string-hasher.h"
@@ -245,7 +246,7 @@ template <bool is_one_byte>
 Tagged<Map> ComputeExternalStringMap(Isolate* isolate, Tagged<String> string,
                                      int size) {
   ReadOnlyRoots roots(isolate);
-  StringShape shape(string, isolate);
+  StringShape shape(string);
   const bool is_internalized = shape.IsInternalized();
   const bool is_shared = shape.IsShared();
   if constexpr (is_one_byte) {
@@ -562,7 +563,8 @@ bool String::SupportsExternalization(v8::String::Encoding encoding) {
   static_assert(kStringEncodingMask == 1 << 3);
   static_assert(v8::String::Encoding::ONE_BYTE_ENCODING == 1 << 3);
   static_assert(v8::String::Encoding::TWO_BYTE_ENCODING == 0);
-  return shape.encoding_tag() == static_cast<uint32_t>(encoding);
+  return (static_cast<uint32_t>(shape.IsOneByte()) << 3) ==
+         static_cast<uint32_t>(encoding);
 }
 
 const char* String::PrefixForDebugPrint() const {
@@ -895,49 +897,36 @@ SinkCharT* WriteNonConsToFlat2(Tagged<String> src, StringShape shape,
                                const DisallowGarbageCollection& no_gc) {
   DCHECK(!shape.IsCons());
   DCHECK_LE(src_index + length, src->length());
-  DCHECK_EQ(shape, StringShape{src});
-
-  switch (shape.representation_and_encoding_tag()) {
-    case kOneByteStringTag | kSeqStringTag: {
-      auto s = Cast<SeqOneByteString>(src);
-      CopyChars(dst, s->GetChars(no_gc, aguard) + src_index, length);
-      return dst + length;
-    }
-    case kTwoByteStringTag | kSeqStringTag: {
-      auto s = Cast<SeqTwoByteString>(src);
-      CopyChars(dst, s->GetChars(no_gc, aguard) + src_index, length);
-      return dst + length;
-    }
-    case kOneByteStringTag | kExternalStringTag: {
-      auto s = Cast<ExternalOneByteString>(src);
-      CopyChars(dst, s->GetChars() + src_index, length);
-      return dst + length;
-    }
-    case kTwoByteStringTag | kExternalStringTag: {
-      auto s = Cast<ExternalTwoByteString>(src);
-      CopyChars(dst, s->GetChars() + src_index, length);
-      return dst + length;
-    }
-    case kOneByteStringTag | kSlicedStringTag:
-    case kTwoByteStringTag | kSlicedStringTag: {
-      auto s = Cast<SlicedString>(src);
-      Tagged<String> parent = s->parent();
-      return WriteNonConsToFlat2(parent, StringShape{parent}, dst,
-                                 src_index + s->offset(), length, aguard,
-                                 no_gc);
-    }
-    case kOneByteStringTag | kThinStringTag:
-    case kTwoByteStringTag | kThinStringTag: {
-      Tagged<String> actual = Cast<ThinString>(src)->actual();
-      return WriteNonConsToFlat2(actual, StringShape{actual}, dst, src_index,
-                                 length, aguard, no_gc);
-    }
-    case kOneByteStringTag | kConsStringTag:
-    case kTwoByteStringTag | kConsStringTag:
-      UNREACHABLE();
-  }
-
-  UNREACHABLE();
+  return shape.DispatchToSpecificType(
+      src, base::overloaded{
+               [&](Tagged<SeqOneByteString> s) {
+                 CopyChars(dst, s->GetChars(no_gc, aguard) + src_index, length);
+                 return dst + length;
+               },
+               [&](Tagged<SeqTwoByteString> s) {
+                 CopyChars(dst, s->GetChars(no_gc, aguard) + src_index, length);
+                 return dst + length;
+               },
+               [&](Tagged<ExternalOneByteString> s) {
+                 CopyChars(dst, s->GetChars() + src_index, length);
+                 return dst + length;
+               },
+               [&](Tagged<ExternalTwoByteString> s) {
+                 CopyChars(dst, s->GetChars() + src_index, length);
+                 return dst + length;
+               },
+               [&](Tagged<SlicedString> s) {
+                 Tagged<String> parent = s->parent();
+                 return WriteNonConsToFlat2(parent, StringShape{parent}, dst,
+                                            src_index + s->offset(), length,
+                                            aguard, no_gc);
+               },
+               [&](Tagged<ThinString> s) {
+                 Tagged<String> actual = Cast<ThinString>(src)->actual();
+                 return WriteNonConsToFlat2(actual, StringShape{actual}, dst,
+                                            src_index, length, aguard, no_gc);
+               },
+               [&](Tagged<ConsString>) -> SinkCharT* { UNREACHABLE(); }});
 }
 
 enum WriteToFlatImplVariant {
@@ -1084,6 +1073,11 @@ void String::WriteToFlat2(SinkCharT* dst, Tagged<ConsString> src,
   DCHECK_EQ(src_index, 0);
   DCHECK_EQ(length, src->length());
 
+#ifdef V8_ENABLE_SANDBOX
+  // See also: https://crbug.com/415407113.
+  DCHECK(Sandbox::current()->Contains(dst));
+#endif  // V8_ENABLE_SANDBOX
+
   // The most common form of cons strings are degenerate unbalanced left-heavy
   // binary trees (i.e. where `second` is a flat string and `first` another
   // cons string). This form is created when building a string by appending
@@ -1138,6 +1132,22 @@ size_t String::WriteUtf8(Isolate* isolate, DirectHandle<String> string,
 
   return encoding_result.bytes_written;
 }
+
+// LINT.IfChange(StringDoesNotContainEscapeCharacters)
+// static
+bool String::DoesNotContainEscapeCharacters(Tagged<String> string) {
+  // This method is not optimized. It is only meant to be used in verification
+  // code.
+  bool requires_escape = false;
+  StringCharacterStream stream(string);
+  while (stream.HasMore() && !requires_escape) {
+    uint16_t c = stream.GetNext();
+    requires_escape =
+        c < 0x20 || c == 0x22 || c == 0x5c || (c >= 0xD800 && c <= 0xDFFF);
+  }
+  return !requires_escape;
+}
+// LINT.ThenChange(/src/json/json-stringifier.cc:StringDoesNotContainEscapeCharacters)
 
 template <typename SourceChar>
 static void CalculateLineEndsImpl(String::LineEndsVector* line_ends,
@@ -1321,10 +1331,6 @@ bool String::SlowEquals(Isolate* isolate, DirectHandle<String> one,
 #endif
     if (one_hash != two_hash) return false;
   }
-
-  // We know the strings are both non-empty. Compare the first chars
-  // before we try to flatten the strings.
-  if (one->Get(0) != two->Get(0)) return false;
 
   one = String::Flatten(isolate, one);
   two = String::Flatten(isolate, two);
@@ -1866,7 +1872,7 @@ uint32_t String::ComputeAndSetRawHash(
     }
   }
   uint32_t raw_hash_field =
-      shape.encoding_tag() == kOneByteStringTag
+      shape.IsOneByte()
           ? HashString<uint8_t>(string, start, length(), seed, access_guard)
           : HashString<uint16_t>(string, start, length(), seed, access_guard);
   set_raw_hash_field_if_empty(raw_hash_field);
@@ -2030,6 +2036,29 @@ uint16_t ConsString::Get(
   }
 
   UNREACHABLE();
+}
+
+void ConsString::PrintTree() {
+  DisallowGarbageCollection no_gc;
+
+  using stack_elem_t = std::pair<Tagged<String>, int>;
+  std::stack<stack_elem_t> s{{stack_elem_t{this, 0}}};
+
+  while (!s.empty()) {
+    auto elem = s.top();
+    s.pop();
+
+    int depth = elem.second;
+    if (IsConsString(elem.first)) {
+      auto cons = Cast<ConsString>(elem.first);
+      printf("%d %p\n", depth, reinterpret_cast<void*>(cons.ptr()));
+      s.push({cons->second(), depth + 1});
+      s.push({cons->first(), depth + 1});
+    } else {
+      printf("%d ", depth);
+      Print(elem.first);
+    }
+  }
 }
 
 uint16_t ThinString::Get(
@@ -2208,36 +2237,40 @@ const uint8_t* String::AddressOfCharacterAt(
   DCHECK(IsFlat());
   Tagged<String> subject = this;
   StringShape shape(subject);
-  if (IsConsString(subject)) {
+  if (shape.IsCons()) {
     subject = Cast<ConsString>(subject)->first();
     shape = StringShape(subject);
-  } else if (IsSlicedString(subject)) {
+  } else if (shape.IsSliced()) {
     start_index += Cast<SlicedString>(subject)->offset();
     subject = Cast<SlicedString>(subject)->parent();
     shape = StringShape(subject);
   }
-  if (IsThinString(subject)) {
+  if (shape.IsThin()) {
     subject = Cast<ThinString>(subject)->actual();
     shape = StringShape(subject);
   }
   CHECK_LE(0, start_index);
   CHECK_LE(start_index, subject->length());
-  switch (shape.representation_and_encoding_tag()) {
-    case kOneByteStringTag | kSeqStringTag:
-      return reinterpret_cast<const uint8_t*>(
-          Cast<SeqOneByteString>(subject)->GetChars(no_gc) + start_index);
-    case kTwoByteStringTag | kSeqStringTag:
-      return reinterpret_cast<const uint8_t*>(
-          Cast<SeqTwoByteString>(subject)->GetChars(no_gc) + start_index);
-    case kOneByteStringTag | kExternalStringTag:
-      return reinterpret_cast<const uint8_t*>(
-          Cast<ExternalOneByteString>(subject)->GetChars() + start_index);
-    case kTwoByteStringTag | kExternalStringTag:
-      return reinterpret_cast<const uint8_t*>(
-          Cast<ExternalTwoByteString>(subject)->GetChars() + start_index);
-    default:
-      UNREACHABLE();
-  }
+
+  return shape.DispatchToSpecificType(
+      subject, base::overloaded{
+                   [&](Tagged<SeqOneByteString> s) {
+                     return reinterpret_cast<const uint8_t*>(
+                         s->GetChars(no_gc) + start_index);
+                   },
+                   [&](Tagged<SeqTwoByteString> s) {
+                     return reinterpret_cast<const uint8_t*>(
+                         s->GetChars(no_gc) + start_index);
+                   },
+                   [&](Tagged<ExternalOneByteString> s) {
+                     return reinterpret_cast<const uint8_t*>(s->GetChars() +
+                                                             start_index);
+                   },
+                   [&](Tagged<ExternalTwoByteString> s) {
+                     return reinterpret_cast<const uint8_t*>(s->GetChars() +
+                                                             start_index);
+                   },
+                   [&](Tagged<String> s) -> const uint8_t* { UNREACHABLE(); }});
 }
 
 template EXPORT_TEMPLATE_DEFINE(V8_EXPORT_PRIVATE) void String::WriteToFlat(

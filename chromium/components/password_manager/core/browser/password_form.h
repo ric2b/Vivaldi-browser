@@ -127,6 +127,9 @@ struct PasswordNote {
                          const PasswordNote& rhs) = default;
   friend auto operator<=>(const PasswordNote&, const PasswordNote&) = default;
 
+  static constexpr char16_t kPasswordChangeBackupNoteName[] =
+      u"PasswordChangeBackup";
+
   // The name displayed in the UI labeling this note. Currently unused and added
   // for future compatibility.
   std::u16string unique_display_name;
@@ -292,14 +295,6 @@ struct PasswordForm {
   // The renderer id of the username input element. It is set during the new
   // form parsing and not persisted.
   autofill::FieldRendererId username_element_renderer_id;
-
-  // True if the server-side classification was successful.
-  bool server_side_classification_successful = false;
-
-  // True if the server-side classification believes that the field may be
-  // pre-filled with a placeholder in the value attribute. It is set during
-  // form parsing and not persisted.
-  bool username_may_use_prefilled_placeholder = false;
 
   // When parsing an HTML form, this is typically empty unless the site
   // has implemented some form of autofill.
@@ -552,12 +547,21 @@ struct PasswordForm {
   // Returns true when |password_value| or |new_password_value| are non-empty.
   bool HasNonEmptyPasswordValue() const;
 
-  // Returns the value of the note with an empty `unique_display_name`, returns
-  // an empty string if none exists.
+  // Returns the value of the note with an empty `unique_display_name`,
+  // returns an empty string if none exists.
   std::u16string GetNoteWithEmptyUniqueDisplayName() const;
 
   // Updates the note with an empty `unique_display_name`.
   void SetNoteWithEmptyUniqueDisplayName(const std::u16string& new_note_value);
+
+  // Returns the value of the note with a password change backup specific
+  // `unique_display_name`.
+  // returns an empty string if none exists.
+  std::u16string GetPasswordBackupNote() const;
+
+  // Updates the note with a password change backup specific
+  // `unique_display_name`.
+  void SetPasswordBackupNote(const std::u16string& new_note_value);
 
   PasswordForm();
   PasswordForm(const PasswordForm& other);
@@ -571,8 +575,6 @@ struct PasswordForm {
   // An exact equality comparison of all the fields is only useful for tests.
   // Production code should be using `ArePasswordFormUniqueKeysEqual` instead.
   friend bool operator==(const PasswordForm&, const PasswordForm&) = default;
-  friend bool operator!=(const PasswordForm& lhs,
-                         const PasswordForm& rhs) = default;
 #endif
 };
 

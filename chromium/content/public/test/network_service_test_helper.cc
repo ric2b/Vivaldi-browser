@@ -22,6 +22,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial.h"
 #include "base/process/process.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/current_thread.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -635,9 +636,8 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
   void GetEnvironmentVariableValue(
       const std::string& name,
       GetEnvironmentVariableValueCallback callback) override {
-    std::string value;
-    base::Environment::Create()->GetVar(name, &value);
-    std::move(callback).Run(value);
+    std::move(callback).Run(
+        base::Environment::Create()->GetVar(name).value_or(std::string()));
   }
 
   void Log(const std::string& message, LogCallback callback) override {

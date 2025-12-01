@@ -17,7 +17,6 @@
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
@@ -28,6 +27,7 @@
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/scroll/scroll_alignment.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_vector.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
@@ -80,11 +80,6 @@ bool AllowedToPropagateToParent(
 ALWAYS_INLINE ScrollableArea* GetScrollableAreaForLayoutBox(
     const LayoutBox& box,
     const mojom::blink::ScrollIntoViewParamsPtr& params) {
-  // Root element with ::scroll-marker-group pseudo element should use
-  // root frame viewport.
-  if (box.IsDocumentElement() && box.IsScrollContainerWithScrollMarkerGroup()) {
-    return box.GetFrameView()->GetRootFrameViewport();
-  }
   if (box.IsScrollContainer() && !box.IsLayoutView()) {
     return box.GetScrollableArea();
   } else if (!box.ContainingBlock()) {
@@ -195,10 +190,13 @@ std::optional<PhysicalRect> PerformBubblingScrollIntoView(
   const LayoutBox* current_box = &box;
   HeapHashSet<Member<const LayoutBox>> stop_at;
   if (const LayoutObject* halt_object =
-          container ? current_box->CommonAncestor(*container) : nullptr) {
-    for (const LayoutBox* halt_box = halt_object->EnclosingBox(); halt_box;
-         halt_box = halt_box->ParentBox()) {
-      stop_at.insert(halt_box);
+          container && !container->IsDocumentElement()
+              ? current_box->CommonAncestor(*container)
+              : nullptr) {
+    for (; halt_object; halt_object = halt_object->Parent()) {
+      if (const LayoutBox* halt_box = DynamicTo<LayoutBox>(halt_object)) {
+        stop_at.insert(halt_box);
+      }
     }
   }
   while (current_box) {
@@ -284,10 +282,6 @@ std::optional<PhysicalRect> PerformBubblingScrollIntoView(
       break;
     }
 
-    if (stop_at.Contains(current_box)) {
-      break;
-    }
-
     // If the scroll was stopped prior to reaching the local root, we cannot
     // return a rect since the caller cannot know which frame it's relative to.
     std::optional<LayoutBox*> next_box_opt =
@@ -297,6 +291,23 @@ std::optional<PhysicalRect> PerformBubblingScrollIntoView(
     }
 
     LayoutBox* next_box = *next_box_opt;
+
+    if (container) {
+      // If we just found a scrolling container that is or contains the
+      // requested container, stop scrolling.
+      // Additionally stop scrolling if we would continue on to scroll a
+      // different frame.
+      // TODO(crbug.com/365913982): We shouldn't scroll the scroll container
+      // on which scrollIntoView was called, which would obviate the need
+      // for the check that area_to_scroll is not the target.
+      // TODO(crbug.com/416730010): Revisit this if we allow passing a
+      // container from a different document.
+      if ((area_to_scroll && area_to_scroll->GetLayoutBox() != &box &&
+           stop_at.Contains(current_box)) ||
+          (next_box && next_box->GetFrame() != current_box->GetFrame())) {
+        return std::nullopt;
+      }
+    }
 
     AdjustRectAndParamsForParentFrame(*current_box, next_box,
                                       absolute_rect_to_scroll, params);
@@ -434,7 +445,6 @@ mojom::blink::ScrollIntoViewParamsPtr CreateScrollIntoViewParams(
   return params;
 }
 
-namespace {
 mojom::blink::ScrollAlignment ResolveToPhysicalAlignment(
     V8ScrollLogicalPosition::Enum inline_alignment,
     V8ScrollLogicalPosition::Enum block_alignment,
@@ -502,8 +512,6 @@ V8ScrollLogicalPosition::Enum SnapAlignmentToV8ScrollLogicalPosition(
       return V8ScrollLogicalPosition::Enum::kCenter;
   }
 }
-
-}  // namespace
 
 mojom::blink::ScrollIntoViewParamsPtr CreateScrollIntoViewParams(
     const ScrollIntoViewOptions& options,
@@ -585,15 +593,13 @@ ScrollOffset GetScrollOffsetToExpose(
       Intersection(non_zero_visible_rect, expose_rect_x).Width();
   if (intersect_width == expose_rect_no_margin.Width()) {
     // If the rectangle is fully visible, use the specified visible behavior.
-    // If the rectangle is partially visible, but over a certain threshold,
-    // then treat it as fully visible to avoid unnecessary horizontal scrolling
     scroll_x = align_x.rect_visible;
   } else if (intersect_width == non_zero_visible_rect.Width()) {
     // The rect is bigger than the visible area.
     scroll_x = align_x.rect_visible;
   } else if (intersect_width > 0) {
-    // If the rectangle is partially visible, but not above the minimum
-    // threshold, use the specified partial behavior
+    // If the rectangle is partially visible, use the specified partial
+    // behavior.
     scroll_x = align_x.rect_partial;
   } else {
     scroll_x = align_x.rect_hidden;
@@ -627,7 +633,8 @@ ScrollOffset GetScrollOffsetToExpose(
     // The rect is bigger than the visible area.
     scroll_y = align_y.rect_visible;
   } else if (intersect_height > 0) {
-    // If the rectangle is partially visible, use the specified partial behavior
+    // If the rectangle is partially visible, use the specified partial
+    // behavior.
     scroll_y = align_y.rect_partial;
   } else {
     scroll_y = align_y.rect_hidden;

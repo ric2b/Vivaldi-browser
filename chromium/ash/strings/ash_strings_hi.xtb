@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">कैरेट ब्राउज़िंग को चालू या बंद करने के लिए</translation>
 <translation id="2531025035050312891">डिवाइस धीमा चल रहा है</translation>
 <translation id="2531107890083353124">टैब को खींचकर रखते समय, <ph name="KEY_ONE" /> दबाएं</translation>
+<translation id="2532199152994248594">किसी हिस्से की इमेज कैप्चर करने के लिए, उसे खींचें और छोड़ें या Space दबाएं</translation>
 <translation id="2545334090614121435">क्या आपको Home का इस्तेमाल करना है? इनका इस्तेमाल करें</translation>
 <translation id="254900897760075745">चुने गए कॉन्टेंट को क्लिपबोर्ड पर कॉपी करें</translation>
 <translation id="2549711466868162843">रोशनी बढ़ाना</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765"><ph name="MODIFIER" /> दबाएं और किसी लिंक पर क्लिक करें</translation>
 <translation id="2957159466053076448">सेटिंग में जाकर, इन सुविधाओं को किसी भी समय बंद किया जा सकता है. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">डिवाइस का ऑडियो</translation>
-<translation id="2960314608273155470">कैप्चर मोड में, <ph name="SOURCE" /> <ph name="TYPE" /> डिफ़ॉल्ट के तौर पर सेट है. कीबोर्ड नेविगेशन के लिए, Tab दबाएं.</translation>
 <translation id="2961963223658824723">कुछ गड़बड़ी हो गई. कुछ सेकंड में फिर से कोशिश करें.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">माइक्रोफ़ोन का ऐक्सेस देना है?</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">वाई-फ़ाई बंद है</translation>
 <translation id="3554215588514239132">डेवलपर टूल पैनल दिखाएं या छिपाएं</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> को पिन किया गया</translation>
+<translation id="3554928024630051016">कोई अन्य यूएसबी डिवाइस जोड़ने के लिए, पहले किसी एक डिवाइस को हटाकर देखें. इसके बाद, नए डिवाइस को प्लग-इन करें</translation>
 <translation id="3558768885091059911">क्या कैमरे और माइक्रोफ़ोन का ऐक्सेस चालू करना है?</translation>
 <translation id="3560174576767922131">वीडियो रिकॉर्ड करें</translation>
 <translation id="3563775809269155755">हॉटस्पॉट चालू करें</translation>
@@ -869,6 +870,7 @@
 <translation id="3861651314799684201">पूरी स्क्रीन को रिकॉर्ड करने के लिए, Enter दबाएं</translation>
 <translation id="3870197372373144624">अपने डिवाइस को बंद करके देखें.</translation>
 <translation id="3879748587602334249">डाउनलोड मैनेजर</translation>
+<translation id="3884007280698606545">इससे ज़्यादा यूएसबी डिवाइस नहीं जोड़े जा सकते</translation>
 <translation id="3886872229787704059">इसे आज खोला गया था</translation>
 <translation id="3891340733213178823">साइन आउट करने के लिए दो बार Ctrl+Shift+Q दबाएं.</translation>
 <translation id="3892148308691398805">टेक्स्ट कॉपी करें</translation>
@@ -1441,6 +1443,7 @@
 <translation id="5672890847723042801">काम की सेवाएं</translation>
 <translation id="5673434351075758678">अपनी सेटिंग सिंक करने के बाद "<ph name="FROM_LOCALE" />" से "<ph name="TO_LOCALE" />".</translation>
 <translation id="5675363643668471212">शेल्फ़ आइटम</translation>
+<translation id="5677022547882470786">किसी हिस्से को चुनकर उसके बारे में जानकारी खोजने के लिए, खींचें और छोड़ें या Space दबाएं</translation>
 <translation id="5677928146339483299">ब्लॉक किया गया है</translation>
 <translation id="5678564054339031017">अगले हफ़्ते के इवेंट दिखाएं</translation>
 <translation id="5679050765726761783">लो-पावर अडैप्टर कनेक्ट किया गया</translation>
@@ -1486,6 +1489,7 @@
 <translation id="5788127256798019331">Play की फ़ाइलें</translation>
 <translation id="5788535737706478207">बंद किया गया पिछला टैब या विंडो फिर से खोलें</translation>
 <translation id="5790085346892983794">सफलता</translation>
+<translation id="5791926618942305301">स्क्रीन कैप्चर में, <ph name="SOURCE" /> <ph name="TYPE" /> पर सेट करें. कैप्चर का टाइप चुनने के लिए, tab दबाएं. कैप्चर करने के लिए enter दबाएं. किसी हिस्से को कैप्चर करने के लिए, 'स्क्रीन के कुछ हिस्से का स्क्रीनशॉट लें' पर सेट करें. अगर यह पहले से चालू नहीं है, तो हिस्सा चुनने के लिए Space दबाएं.</translation>
 <translation id="579415080077680903">आवाज़ बंद करें</translation>
 <translation id="5802516411616338943">क्विक सेटिंग खोलें</translation>
 <translation id="5804651031882187592">"सिम लॉक करें" सेटिंग बंद करें</translation>
@@ -1642,6 +1646,7 @@
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> काे माता-पिता की अनुमति से, बाद में जोड़ा जा सकता है.</translation>
 <translation id="6291221004442998378">चार्ज नहीं हो रहा है</translation>
 <translation id="6298183524022479114">ऐप्लिकेशन में इस डिवाइस को पसंद के मुताबिक बनाएं</translation>
+<translation id="6304076460080088478">Google Lens की मदद से, स्क्रीन पर मौजूद कॉन्टेंट के बारे में खोजने के लिए, गुप्त विंडो को बंद या छोटा करें</translation>
 <translation id="6309219492973062892">शेल्फ़ आइकॉन 1-8 पर क्लिक या टैप करने के लिए</translation>
 <translation id="6315170314923504164">Voice</translation>
 <translation id="6319058840130157106">स्क्रीन पर सबसे नीचे दाएं कोने, लॉन्चर, पता बार, बुकमार्क बार, खुली हुई वेबसाइट, और डाउनलोड के बीच स्विच करने के लिए, पीछे की ओर जाएं</translation>
@@ -1770,6 +1775,7 @@
 <translation id="6700713906295497288">IME मेन्यू बटन</translation>
 <translation id="6704073473590541209">हैंडल, चुने गए हिस्से के दाएं कोने में मौजूद है. हैंडल को मूव करने के लिए, ऐरो बटन इस्तेमाल करें</translation>
 <translation id="6706742084323792866">कीबोर्ड पिन करें</translation>
+<translation id="6709719156428404245">किसी हिस्से का वीडियो रिकॉर्ड करने के लिए, उसे खींचें और छोड़ें या Space दबाएं</translation>
 <translation id="6710213216561001401">पिछला</translation>
 <translation id="6723839937902243910">पावर</translation>
 <translation id="672609503628871915">देखें कि नया क्या है</translation>

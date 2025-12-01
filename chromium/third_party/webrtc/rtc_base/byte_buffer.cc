@@ -12,14 +12,21 @@
 
 #include <string.h>
 
-namespace rtc {
+#include <cstdint>
+#include <string>
+
+#include "absl/strings/string_view.h"
+#include "api/array_view.h"
+#include "rtc_base/byte_order.h"
+
+namespace webrtc {
 
 ByteBufferWriter::ByteBufferWriter() : ByteBufferWriterT() {}
 
 ByteBufferWriter::ByteBufferWriter(const uint8_t* bytes, size_t len)
     : ByteBufferWriterT(bytes, len) {}
 
-ByteBufferReader::ByteBufferReader(rtc::ArrayView<const uint8_t> bytes) {
+ByteBufferReader::ByteBufferReader(ArrayView<const uint8_t> bytes) {
   Construct(bytes.data(), bytes.size());
 }
 
@@ -49,7 +56,7 @@ bool ByteBufferReader::ReadUInt16(uint16_t* val) {
   if (!ReadBytes(reinterpret_cast<uint8_t*>(&v), 2)) {
     return false;
   } else {
-    *val = webrtc::NetworkToHost16(v);
+    *val = NetworkToHost16(v);
     return true;
   }
 }
@@ -65,7 +72,7 @@ bool ByteBufferReader::ReadUInt24(uint32_t* val) {
   if (!ReadBytes(read_into, 3)) {
     return false;
   } else {
-    *val = webrtc::NetworkToHost32(v);
+    *val = NetworkToHost32(v);
     return true;
   }
 }
@@ -78,7 +85,7 @@ bool ByteBufferReader::ReadUInt32(uint32_t* val) {
   if (!ReadBytes(reinterpret_cast<uint8_t*>(&v), 4)) {
     return false;
   } else {
-    *val = webrtc::NetworkToHost32(v);
+    *val = NetworkToHost32(v);
     return true;
   }
 }
@@ -91,7 +98,7 @@ bool ByteBufferReader::ReadUInt64(uint64_t* val) {
   if (!ReadBytes(reinterpret_cast<uint8_t*>(&v), 8)) {
     return false;
   } else {
-    *val = webrtc::NetworkToHost64(v);
+    *val = NetworkToHost64(v);
     return true;
   }
 }
@@ -140,7 +147,7 @@ bool ByteBufferReader::ReadStringView(absl::string_view* val, size_t len) {
   return true;
 }
 
-bool ByteBufferReader::ReadBytes(rtc::ArrayView<uint8_t> val) {
+bool ByteBufferReader::ReadBytes(ArrayView<uint8_t> val) {
   if (val.size() == 0) {
     return true;
   }
@@ -167,4 +174,4 @@ bool ByteBufferReader::Consume(size_t size) {
   return true;
 }
 
-}  // namespace rtc
+}  // namespace webrtc

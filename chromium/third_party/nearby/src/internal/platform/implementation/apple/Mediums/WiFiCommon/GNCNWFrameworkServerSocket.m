@@ -26,12 +26,20 @@
 #import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWFrameworkError.h"
 #import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWFrameworkServerSocket+Internal.h"
 #import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWFrameworkSocket.h"
+#import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWParameters.h"
 #import "GoogleToolboxForMac/GTMLogger.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 @interface GNCNWFrameworkServerSocket ()
 
 @property(nonatomic, readonly) NSMutableArray<nw_connection_t> *pendingConnections;
 @property(nonatomic, readonly) NSMutableArray<nw_connection_t> *readyConnections;
+
+- (BOOL)internalStartListeningWithPSKIdentity:(nullable NSData *)PSKIdentify
+                              PSKSharedSecret:(nullable NSData *)PSKSharedSecret
+                            includePeerToPeer:(BOOL)includePeerToPeer
+                                        error:(NSError **_Nullable)error;
 
 @end
 
@@ -40,6 +48,7 @@
   nw_listener_t _listener;
   nw_listener_state_t _listenerState;
   NSError *_listenerError;
+  dispatch_queue_t _dispatchQueue;
 }
 
 - (instancetype)initWithPort:(NSInteger)port {
@@ -48,6 +57,7 @@
     _port = port;
     _condition = [[NSCondition alloc] init];
     _listenerState = nw_listener_state_invalid;
+    _dispatchQueue = dispatch_queue_create("GNCNWFrameworkServerSocket", DISPATCH_QUEUE_SERIAL);
   }
   return self;
 }
@@ -79,7 +89,7 @@
   return _ipAddress;
 }
 
-- (GNCNWFrameworkSocket *)acceptWithError:(NSError **)error {
+- (nullable GNCNWFrameworkSocket *)acceptWithError:(NSError **)error {
   // Wait until we have a ready connection and listener is in a ready/invalid state.
   [_condition lock];
   nw_connection_t connection = [self.readyConnections lastObject];
@@ -111,16 +121,108 @@
 }
 
 - (BOOL)startListeningWithError:(NSError **)error includePeerToPeer:(BOOL)includePeerToPeer {
-  // Create a parameters object configured to support TCP. TLS MUST be disabled for Nearby to
-  // function properly.
-  nw_parameters_t parameters =
-      nw_parameters_create_secure_tcp(/*tls*/ NW_PARAMETERS_DISABLE_PROTOCOL,
-                                      /*tcp*/ NW_PARAMETERS_DEFAULT_CONFIGURATION);
-  nw_parameters_set_include_peer_to_peer(parameters, includePeerToPeer);
+  return [self internalStartListeningWithPSKIdentity:nil
+                                     PSKSharedSecret:nil
+                                   includePeerToPeer:includePeerToPeer
+                                               error:error];
+}
 
-  // If the server socket port is zero, a random port will be selected. The server socket port will
-  // be updated to reflect the port it's listening on, once the listener transitions to the ready
-  // state.
+- (BOOL)startListeningWithPSKIdentity:(NSData *)PSKIdentify
+                      PSKSharedSecret:(NSData *)PSKSharedSecret
+                    includePeerToPeer:(BOOL)includePeerToPeer
+                                error:(NSError **_Nullable)error {
+  return [self internalStartListeningWithPSKIdentity:PSKIdentify
+                                     PSKSharedSecret:PSKSharedSecret
+                                   includePeerToPeer:includePeerToPeer
+                                               error:error];
+}
+
+- (void)startAdvertisingServiceName:(NSString *)serviceName
+                        serviceType:(NSString *)serviceType
+                         txtRecords:(NSDictionary<NSString *, NSString *> *)txtRecords {
+  GTMLoggerInfo(@"[GNCNWFrameworkServerSocket] Start advertising {serviceName:%@, "
+                @"serviceType: %@}",
+                serviceName, serviceType);
+
+  nw_advertise_descriptor_t advertiseDescriptor = nw_advertise_descriptor_create_bonjour_service(
+      [serviceName UTF8String], [serviceType UTF8String], /*domain=*/nil);
+  nw_txt_record_t txtRecord = nw_txt_record_create_dictionary();
+  for (NSString *key in txtRecords) {
+    NSString *recordValue = [txtRecords objectForKey:key];
+    NSData *encodedRecord = [recordValue dataUsingEncoding:NSUTF8StringEncoding];
+    if (!nw_txt_record_set_key(txtRecord, [key UTF8String], encodedRecord.bytes,
+                               encodedRecord.length)) {
+      GTMLoggerError(@"[GNCNWFrameworkServerSocket] Failed to set text record key: %@, value: %@",
+                     key, recordValue);
+      continue;
+    }
+    GTMLoggerDebug(@"[GNCNWFrameworkServerSocket] Text record {key: "
+                   @"%@, value: %@}",
+                   key, recordValue);
+  }
+  nw_advertise_descriptor_set_txt_record_object(advertiseDescriptor, txtRecord);
+  nw_listener_set_advertise_descriptor(_listener, advertiseDescriptor);
+}
+
+- (void)stopAdvertising {
+  nw_listener_set_advertise_descriptor(_listener, nil);
+}
+
+/**
+ * Attemps to find an IPv4 hostname for a Wi-Fi/Ethernet interface.
+ *
+ * Returns the IP address as a 4 byte string. If not available, this returns an empty string to
+ * align with the Windows implementation.
+ */
++ (GNCIPv4Address *)lookupIpAddress {
+  GNCIPv4Address *result = [GNCIPv4Address addressFromFourByteInt:0];
+  struct ifaddrs *ifaddr;
+  if (getifaddrs(&ifaddr) == 0) {
+    for (struct ifaddrs *cur = ifaddr; cur != NULL; cur = cur->ifa_next) {
+      struct sockaddr *address = cur->ifa_addr;
+      if (address == nil) {
+        continue;
+      }
+
+      // Filter out any interfaces that aren't IPv4.
+      if (address->sa_family != AF_INET) {
+        continue;
+      }
+
+      // Filter out any interfaces that aren't en0 (Wi-Fi/Ethernet).
+      NSString *interfaceName = @(cur->ifa_name);
+      if (![interfaceName isEqualToString:@"en0"]) {
+        continue;
+      }
+
+      uint32_t host = ((struct sockaddr_in *)address)->sin_addr.s_addr;
+      result = [GNCIPv4Address addressFromFourByteInt:host];
+      break;
+    }
+    freeifaddrs(ifaddr);
+  }
+  return result;
+}
+
+// MARK: - Private Methods (Implementation)
+
+- (BOOL)internalStartListeningWithPSKIdentity:(nullable NSData *)PSKIdentify
+                              PSKSharedSecret:(nullable NSData *)PSKSharedSecret
+                            includePeerToPeer:(BOOL)includePeerToPeer
+                                        error:(NSError **_Nullable)error {
+  nw_parameters_t parameters =
+      (PSKIdentify == nil || PSKSharedSecret == nil)
+          ? GNCBuildNonTLSParameters(/*includePeerToPeer=*/includePeerToPeer)
+          : GNCBuildTLSParameters(/*PSK=*/PSKSharedSecret, /*identity=*/PSKIdentify,
+                                  /*includePeerToPeer=*/includePeerToPeer);
+  if (!parameters) {
+    GTMLoggerError(@"[GNCNWFrameworkServerSocket] Failed to create NW parameters.");
+    return NO;
+  }
+
+  // If the server socket port is zero, a random port will be selected. The server socket port
+  // will be updated to reflect the port it's listening on, once the listener transitions to the
+  // ready state.
   if (self.port == 0) {
     _listener = nw_listener_create(parameters);
   } else {
@@ -128,14 +230,14 @@
   }
 
   // Register to listen for incoming connections.
-  nw_listener_set_queue(_listener, dispatch_get_main_queue());
+  nw_listener_set_queue(_listener, _dispatchQueue);
   nw_listener_set_new_connection_handler(_listener, ^(nw_connection_t connection) {
     // Keep track of any incoming connections. We must keep a reference otherwise the connection
     // will be dropped.
     [self.pendingConnections addObject:connection];
     // Register for state changes so we can clean up any failed/canceled connections and inform
     // Nearby of any ready connections when asked.
-    nw_connection_set_queue(connection, dispatch_get_main_queue());
+    nw_connection_set_queue(connection, _dispatchQueue);
     nw_connection_set_state_changed_handler(connection,
                                             ^(nw_connection_state_t state, nw_error_t error) {
                                               [_condition lock];
@@ -203,75 +305,16 @@
     case nw_listener_state_waiting:
     case nw_listener_state_failed:
     case nw_listener_state_cancelled:
+      GTMLoggerError(@"[GNCNWFrameworkServerSocket] Listen state: %u", _listenerState);
       [self close];
       return NO;
     case nw_listener_state_ready:
       _port = nw_listener_get_port(_listener);
+      GTMLoggerInfo(@"[GNCNWFrameworkServerSocket] Listen on port: %ld", (long)_port);
       return YES;
   }
 }
 
-- (void)startAdvertisingServiceName:(NSString *)serviceName
-                        serviceType:(NSString *)serviceType
-                         txtRecords:(NSDictionary<NSString *, NSString *> *)txtRecords {
-  nw_advertise_descriptor_t advertiseDescriptor = nw_advertise_descriptor_create_bonjour_service(
-      [serviceName UTF8String], [serviceType UTF8String], /*domain=*/nil);
-  nw_txt_record_t txtRecord = nw_txt_record_create_dictionary();
-  for (NSString *key in txtRecords) {
-    NSString *recordValue = [txtRecords objectForKey:key];
-    nw_txt_record_set_key(txtRecord, [key UTF8String], [recordValue UTF8String],
-                          [recordValue length]);
-  }
-  nw_advertise_descriptor_set_txt_record_object(advertiseDescriptor, txtRecord);
-  nw_listener_set_advertise_descriptor(_listener, advertiseDescriptor);
-}
-
-- (void)stopAdvertising {
-  nw_listener_set_advertise_descriptor(_listener, nil);
-}
-
-/**
- * Attemps to find an IPv4 hostname for a Wi-Fi/Ethernet interface.
- *
- * Returns the IP address as a 4 byte string. If not available, this returns an empty string to
- * align with the Windows implementation.
- */
-+ (GNCIPv4Address *)lookupIpAddress {
-  struct ifaddrs *ifaddr;
-
-  // Note: The data returned by `getifaddrs()` is dynamically allocated and should be freed using
-  // `freeifaddrs()` when no longer needed.
-  //
-  // See: https://linux.die.net/man/3/getifaddrs
-  if (getifaddrs(&ifaddr) == -1) {
-    return [GNCIPv4Address addressFromFourByteInt:0];
-  }
-
-  // Walk through linked list, maintaining head pointer so we can free list later.
-  for (struct ifaddrs *cur = ifaddr; cur != nil; cur = cur->ifa_next) {
-    struct sockaddr *address = cur->ifa_addr;
-    if (address == nil) {
-      continue;
-    }
-
-    // Filter out any interfaces that aren't IPv4.
-    if (address->sa_family != AF_INET) {
-      continue;
-    }
-
-    // Filter out any interfaces that aren't en0 (Wi-Fi/Ethernet).
-    NSString *interfaceName = @(cur->ifa_name);
-    if (![interfaceName isEqualToString:@"en0"]) {
-      continue;
-    }
-
-    uint32_t host = ((struct sockaddr_in *)address)->sin_addr.s_addr;
-    freeifaddrs(ifaddr);
-    return [GNCIPv4Address addressFromFourByteInt:host];
-  }
-
-  freeifaddrs(ifaddr);
-  return [GNCIPv4Address addressFromFourByteInt:0];
-}
-
 @end
+
+NS_ASSUME_NONNULL_END

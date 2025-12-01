@@ -16,6 +16,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/system/sys_info.h"
 #include "base/task/common/task_annotator.h"
 #include "base/task/single_thread_task_runner.h"
@@ -240,10 +241,6 @@ void BackForwardCacheBrowserTest::SetUpCommandLine(
     // `content::kBackForwardCacheSize`, as many browser tests here assume
     // specific or smaller cache size (e.g. 1) rather than 6.
     DisableFeature(kBackForwardCacheSize);
-
-    // WebSQL is disabled by default as of M119 (crbug/695592). Enable feature
-    // in tests during deprecation trial and enterprise policy support.
-    EnableFeatureAndSetParams(blink::features::kWebSQLAccess, "", "");
 
     SetupFeaturesAndParameters();
 
@@ -1815,7 +1812,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 // Tests that we're getting the correct TextInputState and focus updates when a
 // page enters the back-forward cache and when it gets restored.
 // TODO(b/324570785): Re-enable the test for Android.
-#if BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
 #define MAYBE_TextInputStateUpdated DISABLED_TextInputStateUpdated
 #else
 #define MAYBE_TextInputStateUpdated TextInputStateUpdated
@@ -1828,6 +1825,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
 
   // 1) Navigate to |url_1| and add a text input with "foo" as the value.
   EXPECT_TRUE(NavigateToURL(shell(), url_1));
+  SimulateEndOfPaintHoldingOnPrimaryMainFrame(web_contents());
   RenderFrameHostImpl* rfh_1 = current_frame_host();
   EXPECT_TRUE(ExecJs(rfh_1,
                      "document.title='bfcached';"
@@ -1928,6 +1926,7 @@ IN_PROC_BROWSER_TEST_F(BackForwardCacheBrowserTest,
   // 1) Navigate to |url_1| and add a text input with "foo" as the value in the
   // a.com subframe.
   EXPECT_TRUE(NavigateToURL(shell(), url_1));
+  SimulateEndOfPaintHoldingOnPrimaryMainFrame(web_contents());
   RenderFrameHostImpl* rfh_a = current_frame_host();
   RenderFrameHostImpl* rfh_b = rfh_a->child_at(0)->current_frame_host();
   RenderFrameHostImpl* rfh_subframe_a =

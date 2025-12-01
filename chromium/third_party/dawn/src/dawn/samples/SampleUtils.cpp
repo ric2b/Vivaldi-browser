@@ -198,7 +198,12 @@ int SampleBase::Run(unsigned int delay) {
     }
     wgpu::AdapterInfo info;
     sample->adapter.GetInfo(&info);
-    dawn::InfoLog() << "Using adapter \"" << info.device << "\"";
+    dawn::InfoLog() << "Adaptor info:";
+    dawn::InfoLog() << "  vendor: \"" << info.vendor << "\"";
+    dawn::InfoLog() << "  architecture: \"" << info.architecture << "\"";
+    dawn::InfoLog() << "  device: \"" << info.device << "\"";
+    dawn::InfoLog() << "  subgroupSizes: { min: " << info.subgroupMinSize
+                    << " max: " << info.subgroupMaxSize << " }";
 
     // Create device descriptor with callbacks and toggles
     wgpu::DeviceDescriptor deviceDesc = {};
@@ -326,6 +331,8 @@ bool SampleBase::Setup() {
     config.format = capabilities.formats[0];
     config.width = width;
     config.height = height;
+    DAWN_ASSERT(capabilities.presentModeCount > 0);
+    config.presentMode = capabilities.presentModes[0];
     surface.Configure(&config);
     this->preferredSurfaceTextureFormat = capabilities.formats[0];
 

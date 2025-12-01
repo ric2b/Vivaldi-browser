@@ -53,6 +53,8 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Connected to service with KeepAlive connection"/>
 </enum>
 
+<!--LINT.IfChange(CustomTabsFeatureUsed) -->
+
 <enum name="CustomTabsFeatureUsed">
   <int value="0" label="Sessions - counter for all sessions"/>
   <int value="1" label="Action button EXTRA_ACTION_BUTTON_BUNDLE"/>
@@ -133,7 +135,14 @@ chromium-metrics-reviews@google.com.
       label="Auth Tab https redirect host EXTRA_HTTPS_REDIRECT_HOST"/>
   <int value="62"
       label="Auth Tab https redirect path EXTRA_HTTPS_REDIRECT_PATH"/>
+  <int value="63"
+      label="Open in Browser button in the toolbar state
+             EXTRA_OPEN_IN_BROWSER_STATE"/>
+  <int value="64" label="Launch Handler API usage EXTRA_LAUNCH_HANDLER"/>
+  <int value="65" label="File Handlers API usage EXTRA_FILE_HANDLERS"/>
 </enum>
+
+<!--LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/customtabs/CustomTabsFeatureUsage.java:CustomTabsFeature) -->
 
 <enum name="CustomTabsMinimizedEvents">
   <int value="0" label="Minimized into PiP"/>
@@ -183,6 +192,28 @@ chromium-metrics-reviews@google.com.
       label="Custom Tab in Background, KEEP_ALIVE set, the system is low on
              memory"/>
 </enum>
+
+<enum name="EarlyNavFailureReason">
+  <int value="0" label="Success"/>
+  <int value="1" label="No session"/>
+  <int value="2" label="No speculation"/>
+  <int value="3" label="Wrong URL, valid session"/>
+  <int value="4" label="Wrong URL, invalid session"/>
+  <int value="5" label="Wrong referrer, valid session"/>
+  <int value="6" label="Wrong referrer, invalid session"/>
+</enum>
+
+<!-- LINT.IfChange(FinishReason) -->
+
+<enum name="FinishReason">
+  <int value="0" label="User Navigation"/>
+  <int value="1" label="Reparenting"/>
+  <int value="2" label="Other"/>
+  <int value="3" label="Open in Browser"/>
+  <int value="4" label="Handled by OS"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/android/java/src/org/chromium/chrome/browser/customtabs/content/CustomTabActivityNavigationController.java:FinishReason) -->
 
 <enum name="GoogleBottomBarButtonEvent">
   <int value="0" label="Unknown button"/>
@@ -257,6 +288,25 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="High-end and Pip"/>
 </enum>
 
+<enum name="TwaLaunchHandlerClientMode">
+  <int value="0" label="Initial intent (client mode is ignored)"/>
+  <int value="1" label="Client mode navigate_existing"/>
+  <int value="2" label="Client mode navigate_new"/>
+  <int value="3" label="Client mode focus_existing"/>
+  <int value="4" label="Client mode auto"/>
+</enum>
+
+<enum name="TwaLaunchHandlerFailureReason">
+  <int value="0" label="Target URL verification failed"/>
+  <int value="1" label="Current page URL verification failed"/>
+</enum>
+
+<enum name="TwaLaunchHandlerFileHandling">
+  <int value="0" label="No files"/>
+  <int value="1" label="Single file"/>
+  <int value="2" label="Multiple files"/>
+</enum>
+
 <enum name="VisibleTab">
   <int value="0" label="Custom Tab"/>
   <int value="1" label="Chrome Tab"/>
@@ -269,6 +319,40 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Session, No Warmup, Warmup called from another UID"/>
   <int value="3" label="Session, No Warmup"/>
   <int value="4" label="Session, Warmup"/>
+</enum>
+
+<enum name="WebAppBackButtonEvent">
+  <int value="0"
+      label="Invalid back event due to tab switching, e.g. re-parenting."/>
+  <int value="1"
+      label="Back event triggered by click or touch without meta keys."/>
+  <int value="2"
+      label="Open a history navigation popup after long pressing button."/>
+</enum>
+
+<!-- LINT.IfChange(WebAppHeaderDisplayMode) -->
+
+<enum name="WebAppHeaderDisplayMode">
+  <int value="0" label="undefined"/>
+  <int value="1" label="browser"/>
+  <int value="2" label="minimalUI"/>
+  <int value="3" label="standalone"/>
+  <int value="4" label="fullscreen"/>
+  <int value="5" label="windowControlsOverlay"/>
+  <int value="6" label="tabbed"/>
+  <int value="7" label="borderless"/>
+  <int value="8" label="pictureInPicture"/>
+</enum>
+
+<!-- LINT.ThenChange(//third_party/blink/public/mojom/manifest/display_mode.mojom:DisplayMode)-->
+
+<enum name="WebAppReloadButtonEvent">
+  <int value="0"
+      label="Invalid reload type due to tab switching, e.g. re-parenting."/>
+  <int value="1" label="Stop reloading currently active tab."/>
+  <int value="2"
+      label="Reload currently active tab including checking the cache."/>
+  <int value="3" label="Reload currently active tab ignoring the cache."/>
 </enum>
 
 <enum name="WebContentsState">

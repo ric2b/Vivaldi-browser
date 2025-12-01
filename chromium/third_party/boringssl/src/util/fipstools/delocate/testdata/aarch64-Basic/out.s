@@ -58,12 +58,40 @@ foo:
 	adr x10, .Llocal_data2
 // WAS ldr q0, [x10, :lo12:.Llocal_data2]
 	ldr	q0, [x10]
+// WAS ldr x0, [x10, :lo12:.Llocal_data2]
+	ldr	x0, [x10]
+// WAS ldr w0, [x10, :lo12:.Llocal_data2]
+	ldr	w0, [x10]
+// WAS ldrh w0, [x10, :lo12:.Llocal_data2]
+	ldrh	w0, [x10]
+// WAS ldrb w0, [x10, :lo12:.Llocal_data2]
+	ldrb	w0, [x10]
+// WAS ldrsw x0, [x10, :lo12:.Llocal_data2]
+	ldrsw	x0, [x10]
+// WAS ldrsh w0, [x10, :lo12:.Llocal_data2]
+	ldrsh	w0, [x10]
+// WAS ldrsb w0, [x10, :lo12:.Llocal_data2]
+	ldrsb	w0, [x10]
 
 	// Load from local symbol with offset
 // WAS adrp x10, .Llocal_data2+16
 	adr x10, .Llocal_data2+16
 // WAS ldr q0, [x10, :lo12:.Llocal_data2+16]
 	ldr	q0, [x10]
+// WAS ldr x0, [x10, :lo12:.Llocal_data2+16]
+	ldr	x0, [x10]
+// WAS ldr w0, [x10, :lo12:.Llocal_data2+16]
+	ldr	w0, [x10]
+// WAS ldrh w0, [x10, :lo12:.Llocal_data2+16]
+	ldrh	w0, [x10]
+// WAS ldrb w0, [x10, :lo12:.Llocal_data2+16]
+	ldrb	w0, [x10]
+// WAS ldrsw x0, [x10, :lo12:.Llocal_data2+16]
+	ldrsw	x0, [x10]
+// WAS ldrsh w0, [x10, :lo12:.Llocal_data2+16]
+	ldrsh	w0, [x10]
+// WAS ldrsb w0, [x10, :lo12:.Llocal_data2+16]
+	ldrsb	w0, [x10]
 
 // WAS bl local_function
 	bl	.Llocal_function_local_target

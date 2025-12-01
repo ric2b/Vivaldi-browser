@@ -102,6 +102,17 @@ BASE_FEATURE(kNtpDummyModules,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+// If enabled, the Compose box will appear upon clicking the NTP Compose
+// entrypoint.
+BASE_FEATURE(kNtpSearchboxComposebox,
+             "NtpSearchboxComposebox",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the Compose entrypoint will appear in the NTP Searchbox.
+BASE_FEATURE(kNtpSearchboxComposeEntrypoint,
+             "NtpSearchboxComposeEntrypoint",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // If enabled, Google Drive module will be shown.
 // This is a kill switch. Keep indefinitely.
 BASE_FEATURE(kNtpDriveModule,
@@ -235,23 +246,19 @@ BASE_FEATURE(kNtpShortcuts, "NtpShortcuts", base::FEATURE_ENABLED_BY_DEFAULT);
 // If enabled, the Tab Resumption module will be shown.
 BASE_FEATURE(kNtpMostRelevantTabResumptionModule,
              "NtpMostRelevantTabResumptionModule",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-// If enabled, the Tab Resumption module with the device icon will be shown.
-BASE_FEATURE(kNtpMostRelevantTabResumptionModuleDeviceIcon,
-             "NtpMostRelevantTabResumptionModuleDeviceIcon",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// If enabled, the Tab Resumption module will use the synced fallback icon.
-BASE_FEATURE(kNtpMostRelevantTabResumptionUseIsKnownToSync,
-             "NtpMostRelevantTabResumptionUseIsKnownToSync",
+// If enabled, the Tab Resumption module will be allowed to fallback to the
+// favicon server when fetching favicons for displayed continuation suggestions.
+BASE_FEATURE(kNtpMostRelevantTabResumptionAllowFaviconServerFallback,
+             "NtpMostRelevantTabResumptionAllowFaviconServerFallback",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, the Tab Resumption module will fallback to host url to find a
 // favicon if there are none locally available.
 BASE_FEATURE(kNtpMostRelevantTabResumptionModuleFallbackToHost,
              "NtpMostRelevantTabResumptionModuleFallbackToHost",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kNtpTabResumptionModuleCategories,
              "NtpTabResumptionModuleCategories",

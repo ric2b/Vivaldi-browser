@@ -14,11 +14,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
 import org.chromium.base.Callback;
+import org.chromium.base.Token;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.tab_group_sync.SavedTabGroup;
 import org.chromium.components.tab_group_sync.SavedTabGroupTab;
@@ -29,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Parent view of the up to four corner favicon images/counts. */
+@NullMarked
 public class TabGroupFaviconCluster extends ConstraintLayout {
 
     /**
@@ -88,13 +92,32 @@ public class TabGroupFaviconCluster extends ConstraintLayout {
     }
 
     /**
+     * Convenience method that builds a list of urls for a cluster from a tab group model filter.
+     * TODO(crbug.com/394154545): Move to a better location.
+     *
+     * @param tabGroupId The id for the tab group.
+     * @param filter The tab group model filter for the tab group.
+     * @return A list of URLs with an appropriate size for the cluster logic.
+     */
+    public static List<GURL> buildUrlListFromFilter(Token tabGroupId, TabGroupModelFilter filter) {
+        List<Tab> savedTabs = filter.getTabsInGroup(tabGroupId);
+        int numberOfTabs = savedTabs.size();
+        int urlCount = Math.min(TabGroupFaviconCluster.CORNER_COUNT, numberOfTabs);
+        List<GURL> urlList = new ArrayList<>();
+        for (int i = 0; i < urlCount; i++) {
+            urlList.add(savedTabs.get(i).getUrl());
+        }
+        return urlList;
+    }
+
+    /**
      * A wrapping resolver that helps count outstanding resolution calls. The callback is invoked
      * when all favicons are fetched.
      */
     private static class TrackingFaviconResolver implements FaviconResolver {
         public int outstandingResolveCalls;
         private final FaviconResolver mDelegateFaviconResolver;
-        private Runnable mRunOnCompletion;
+        private @Nullable Runnable mRunOnCompletion;
 
         /* package */ TrackingFaviconResolver(FaviconResolver delegateFaviconResolver) {
             outstandingResolveCalls = 0;
@@ -138,10 +161,10 @@ public class TabGroupFaviconCluster extends ConstraintLayout {
      * @param callback Invoked when the bitmap is ready or has failed and null is provided.
      */
     public static void createBitmapFrom(
-            @NonNull SavedTabGroup savedTabGroup,
-            @NonNull Context context,
-            @NonNull FaviconResolver faviconResolver,
-            @NonNull Callback<Bitmap> callback) {
+            SavedTabGroup savedTabGroup,
+            Context context,
+            FaviconResolver faviconResolver,
+            Callback<@Nullable Bitmap> callback) {
         TrackingFaviconResolver trackingFaviconResolver =
                 new TrackingFaviconResolver(faviconResolver);
 
@@ -173,7 +196,7 @@ public class TabGroupFaviconCluster extends ConstraintLayout {
     }
 
     /** Constructor for inflation. */
-    public TabGroupFaviconCluster(@NonNull Context context, @Nullable AttributeSet attrs) {
+    public TabGroupFaviconCluster(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
     }
 

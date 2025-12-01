@@ -6,11 +6,12 @@ import collections
 from typing import Generator
 import unittest
 
+# vpython-provided modules.
+import pandas  # pylint: disable=import-error
+
 from bad_machine_finder import bigquery
 from bad_machine_finder import swarming
 from bad_machine_finder import test_specs
-
-import pandas  # pylint: disable=import-error
 
 FakeRow = collections.namedtuple(
     'FakeRow', ['mixin', 'bot_id', 'total_tasks', 'failed_tasks', 'test_suite'])
@@ -26,8 +27,7 @@ class FakeQuerier(bigquery.Querier):
   def GetSeriesForQuery(self,
                         query: str) -> Generator[pandas.Series, None, None]:
     self.last_run_query = query
-    for r in self.rows:
-      yield r
+    yield from self.rows
 
 
 class QueryParsingUnittest(unittest.TestCase):

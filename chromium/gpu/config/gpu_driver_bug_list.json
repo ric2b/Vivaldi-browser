@@ -282,7 +282,11 @@
       "description": "Disable D3D11 on older nVidia drivers",
       "cr_bugs": [349929],
       "os": {
-        "type": "win"
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0.22000.0"
+        }
       },
       "vendor_id": "0x10de",
       "driver_version": {
@@ -327,7 +331,11 @@
       "description": "Disable use of Direct3D 11 on Matrox video cards",
       "cr_bugs": [395861],
       "os": {
-        "type": "win"
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0.22000.0"
+        }
       },
       "vendor_id": "0x102b",
       "features": [
@@ -339,7 +347,11 @@
       "description": "Disable use of Direct3D 11 on older AMD drivers",
       "cr_bugs": [402134],
       "os": {
-        "type": "win"
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0.22000.0"
+        }
       },
       "vendor_id": "0x1002",
       "driver_version": {
@@ -383,7 +395,11 @@
       "description": "Old Intel drivers cannot reliably support D3D11",
       "cr_bugs": [363721],
       "os": {
-        "type": "win"
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0.22000.0"
+        }
       },
       "vendor_id": "0x8086",
       "driver_version": {
@@ -3376,14 +3392,24 @@
       "vendor_id": "0x8086",
       "multi_gpu_category": "any",
       "intel_gpu_series": [
+            "tigerlake",
+            "rocketlake",
+            "dg1",
+            "alderlake",
+            "alchemist",
+            "raptorlake",
             "meteorlake",
             "arrowlake",
             "lunarlake",
             "battlemage"
       ],
       "features": [
-        "use_current_picture_for_av1_invalid_ref"
-      ]
+        "use_first_valid_ref_for_av1_invalid_ref"
+      ],
+      "driver_version": {
+        "op": "<",
+        "value": "32.0.101.6557"
+      }
     },
     {
       "id": 438,
@@ -3401,21 +3427,6 @@
       },
       "features": [
         "disable_dml_meta_commands_for_gpu"
-      ]
-    },
-    {
-      "id": 439,
-      "cr_bugs": [ 315860185 ],
-      "description": "Disable hardware secure decryption on AMD GPUs with higher error rates to achieve better playback results.",
-      "os": {
-        "type": "win"
-      },
-      "vendor_id": "0x1002",
-      "device_id": [
-        "0x744c", "0x73a5", "0x73ef", "0x7480", "0x73bf"
-      ],
-      "features": [
-        "disable_media_foundation_hardware_security"
       ]
     },
     {
@@ -3455,6 +3466,54 @@
       "features": [
         "force_rgb10a2_overlay_support"
       ]
+    },
+    {
+      "id": 443,
+      "cr_bugs": [385039726],
+      "description": "Disable DComp texture support on older Windows versions",
+      "os": {
+        "type": "win",
+        "version": {
+          "op": "<",
+          "value": "10.0.26100.3624"
+        }
+      },
+      "features": [
+        "disable_dcomp_texture"
+      ]
+    },
+    {
+      "id": 446,
+      "description": "Video jitter happens during letterboxing on old Qualcomm GPUs",
+      "cr_bugs": [406175378],
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x4d4f4351",
+      "device_id": ["0x36333630"],
+      "features": [
+        "disable_direct_composition_letterbox_video_optimization"
+      ]
+    },
+    {
+      "id": 447,
+      "cr_bugs": [425487302],
+      "description": "Video decoded into array texture may show artifacts on some Intel GPUs.",
+      "os": {
+        "type": "win"
+      },
+      "vendor_id": "0x8086",
+      "intel_gpu_series": [
+        "meteorlake",
+        "arrowlake"
+      ],
+      "features": [
+        "disable_decode_into_array_texture"
+      ],
+      "driver_version": {
+        "op": ">",
+        "value": "32.0.101.6078"
+      }
     }
   ]
 }

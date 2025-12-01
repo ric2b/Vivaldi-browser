@@ -2,22 +2,23 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/closure_compiler/closure_args.gni")
 import("//third_party/closure_compiler/compile_js.gni")
+import("//third_party/protobuf/proto_library.gni")
 
-reporting_proto_js_dir =
-    "${root_out_dir}/jsproto/components/reporting/proto/synced"
+reporting_proto_js_dir = "$proto_js_root/components/reporting/proto/synced"
 
 # JS library that includes all protos used by the extension for reporting
 # purposes
 js_library("reporting_protos") {
   extra_deps = [
-    "//components/reporting/proto:health_proto",
-    "//components/reporting/proto:metric_data_proto",
-    "//components/reporting/proto:record_constants",
-    "//components/reporting/proto:record_proto",
-    "//components/reporting/proto:session_affiliated_user_proto",
-    "//components/reporting/proto:status_proto",
+    "//components/reporting/proto:health_proto_gen",
+    "//components/reporting/proto:metric_data_proto_gen",
+    "//components/reporting/proto:record_constants_gen",
+    "//components/reporting/proto:record_proto_gen",
+    "//components/reporting/proto:session_affiliated_user_proto_gen",
+    "//components/reporting/proto:status_proto_gen",
   ]
 
   deps = [ "//third_party/protobuf:js_proto" ]

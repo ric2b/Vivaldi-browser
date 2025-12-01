@@ -80,6 +80,7 @@ static_library("safe_browsing") {
   if (is_android) {
     deps += [
       "//chrome/browser/password_manager/android:utils",
+      "//chrome/browser/ui/android/tab_model",
       "//components/safe_browsing/android:safe_browsing_api_handler",
       "//components/safe_browsing/android:safe_browsing_api_handler_util",
     ]
@@ -171,6 +172,12 @@ static_library("safe_browsing") {
       "network_context_service_factory.h",
       "notification_content_detection/notification_content_detection_service_factory.cc",
       "notification_content_detection/notification_content_detection_service_factory.h",
+      "notification_content_detection/notification_content_detection_util.cc",
+      "notification_content_detection/notification_content_detection_util.h",
+      "notification_telemetry/notification_telemetry_service.cc",
+      "notification_telemetry/notification_telemetry_service.h",
+      "notification_telemetry/notification_telemetry_service_factory.cc",
+      "notification_telemetry/notification_telemetry_service_factory.h",
       "phishy_interaction_tracker.cc",
       "phishy_interaction_tracker.h",
       "safe_browsing_navigation_observer_manager_factory.cc",
@@ -211,6 +218,8 @@ static_library("safe_browsing") {
       "//chrome/browser/content_settings:content_settings_factory",
       "//chrome/browser/download",
       "//chrome/browser/enterprise/connectors/analysis:features",
+      "//chrome/browser/permissions:permissions_proto",
+      "//chrome/browser/profiles",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/ui/safety_hub",
       "//chrome/common/safe_browsing:archive_analyzer_results",
@@ -223,6 +232,7 @@ static_library("safe_browsing") {
       "//components/no_state_prefetch/browser",
       "//components/omnibox/browser",
       "//components/password_manager/content/browser",
+      "//components/password_manager/core/browser/features:password_features",
       "//components/password_manager/core/browser/form_parsing",
       "//components/permissions",
       "//components/safe_browsing/content/browser",
@@ -532,6 +542,7 @@ source_set("verdict_cache_manager_factory") {
 
 static_library("advanced_protection") {
   sources = [
+    "advanced_protection_status_manager.cc",
     "advanced_protection_status_manager.h",
     "advanced_protection_status_manager_factory.cc",
     "advanced_protection_status_manager_factory.h",
@@ -561,6 +572,10 @@ static_library("advanced_protection") {
     "//components/signin/public/identity_manager",
     "//content/public/browser",
   ]
+
+  if (is_android) {
+    deps += [ "android:jni_headers" ]
+  }
 }
 
 source_set("metrics_collector") {
@@ -585,8 +600,32 @@ source_set("metrics_collector") {
   ]
 }
 
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "advanced_protection_status_manager_factory_unittest.cc",
+    "advanced_protection_status_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":safe_browsing",
+    "//chrome/browser/safe_browsing:advanced_protection",
+    "//chrome/test:test_support",
+    "//components/safe_browsing/core/common",
+    "//components/safe_browsing/core/common:safe_browsing_prefs",
+    "//components/signin/public/identity_manager:test_support",
+    "//components/sync_preferences:test_support",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
+  if (is_android) {
+    deps += [ "android:test_support" ]
+  }
+}
+
 source_set("test_support") {
   testonly = true
+  deps = []
 
   if (safe_browsing_mode != 0) {
     sources = [
@@ -601,7 +640,7 @@ source_set("test_support") {
       ]
     }
 
-    deps = [
+    deps += [
       ":safe_browsing",
       "//chrome/browser:browser",
       "//chrome/browser/content_settings:content_settings_factory",
@@ -627,6 +666,13 @@ source_set("test_support") {
     sources += [
       "cloud_content_scanning/test_binary_upload_service.cc",
       "cloud_content_scanning/test_binary_upload_service.h",
+    ]
+  }
+
+  if (is_android) {
+    deps += [
+      "android:test_support",
+      "android:test_support_java",
     ]
   }
 }

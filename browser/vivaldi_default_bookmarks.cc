@@ -66,6 +66,7 @@ struct DefaultBookmarkItem {
   GURL url;
   std::string favicon;
   GURL favicon_url;
+  GURL display_url;
   bool speeddial = false;
   std::vector<DefaultBookmarkItem> children;
 };
@@ -290,6 +291,11 @@ void DefaultBookmarkParser::ParseBookmarkList(
       if (favicon_url.is_valid()) {
         item.favicon_url = std::move(favicon_url);
       }
+
+      GURL display_url(details->display_url);
+      if (display_url.is_valid()) {
+        item.display_url = std::move(display_url);
+      }
     }
 
     default_items->push_back(std::move(item));
@@ -501,6 +507,10 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
     custom_meta.SetMap(*old_meta_info);
   }
 
+  if (!item.display_url.is_empty()) {
+    custom_meta.SetDisplayUrl(item.display_url);
+  }
+
   custom_meta.SetPartner(item.uuid);
 
   // If nick is taken by other node do nothing. But ensure that it is cleared
@@ -640,6 +650,7 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   custom_meta.SetThumbnail(item.thumbnail);
   custom_meta.SetDescription(item.description);
   custom_meta.SetSpeeddial(item.speeddial);
+  custom_meta.SetDisplayUrl(item.display_url);
 
   std::u16string title = base::UTF8ToUTF16(item.title);
   size_t index = parent_node->children().size();

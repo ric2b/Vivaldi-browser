@@ -20,7 +20,6 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/to_v8_traits.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_clipboard_unsanitized_formats.h"
-#include "third_party/blink/renderer/core/clipboard/clipboard_mime_types.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/editing/commands/clipboard_commands.h"
@@ -72,7 +71,7 @@ class ClipboardPromise::ClipboardItemDataPromiseFulfill final
   void React(ScriptState* script_state,
              HeapVector<Member<V8UnionBlobOrString>> clipboard_item_list) {
     auto* list_copy =
-        MakeGarbageCollected<HeapVector<Member<V8UnionBlobOrString>>>(
+        MakeGarbageCollected<GCedHeapVector<Member<V8UnionBlobOrString>>>(
             std::move(clipboard_item_list));
     clipboard_promise_->HandlePromiseWrite(list_copy);
   }
@@ -249,7 +248,7 @@ void ClipboardPromise::HandleRead(ClipboardUnsanitizedFormats* formats) {
           "Reading multiple unsanitized formats is not supported.");
       return;
     }
-    if (unsanitized_formats[0] != kMimeTypeTextHTML) {
+    if (unsanitized_formats[0] != ui::kMimeTypeHtml) {
       script_promise_resolver_->RejectWithDOMException(
           DOMExceptionCode::kNotAllowedError, "The unsanitized type " +
                                                   unsanitized_formats[0] +
@@ -436,7 +435,7 @@ void ClipboardPromise::HandleReadTextWithPermission(
 }
 
 void ClipboardPromise::HandlePromiseWrite(
-    HeapVector<Member<V8UnionBlobOrString>>* clipboard_item_list) {
+    GCedHeapVector<Member<V8UnionBlobOrString>>* clipboard_item_list) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   GetClipboardTaskRunner()->PostTask(
@@ -446,7 +445,7 @@ void ClipboardPromise::HandlePromiseWrite(
 }
 
 void ClipboardPromise::WriteClipboardItemData(
-    HeapVector<Member<V8UnionBlobOrString>>* clipboard_item_list) {
+    GCedHeapVector<Member<V8UnionBlobOrString>>* clipboard_item_list) {
   wtf_size_t clipboard_item_index = 0;
   CHECK_EQ(write_clipboard_item_types_.size(), clipboard_item_list->size());
   for (const auto& clipboard_item_data : *clipboard_item_list) {
@@ -580,8 +579,8 @@ void ClipboardPromise::ValidatePreconditions(
 
   constexpr char kFeaturePolicyMessage[] =
       "The Clipboard API has been blocked because of a permissions policy "
-      "applied to the current document. See https://goo.gl/EuHzyv for more "
-      "details.";
+      "applied to the current document. See https://crbug.com/414348233 for "
+      "more details.";
 
   if ((permission == mojom::blink::PermissionName::CLIPBOARD_READ &&
        !window.IsFeatureEnabled(

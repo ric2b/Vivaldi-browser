@@ -107,15 +107,6 @@ class CONTENT_EXPORT PrefetchService {
   virtual PrefetchOriginProber* GetPrefetchOriginProber() const;
   virtual void PrefetchUrl(base::WeakPtr<PrefetchContainer> prefetch_container);
 
-  // Finds the prefetch (if any) that can be used to serve a navigation to
-  // |url|, and then calls |on_prefetch_to_serve_ready| with that prefetch.
-  using OnPrefetchToServeReady =
-      base::OnceCallback<void(PrefetchContainer::Reader prefetch_to_serve)>;
-  void GetPrefetchToServe(const PrefetchContainer::Key& key,
-                          base::WeakPtr<PrefetchServingPageMetricsContainer>
-                              serving_page_metrics_container,
-                          PrefetchMatchResolver& prefetch_match_resolver);
-
   // Copies any cookies in the isolated network context associated with
   // |prefetch_container| to the default network context.
   virtual void CopyIsolatedCookies(const PrefetchContainer::Reader& reader);
@@ -445,18 +436,24 @@ class CONTENT_EXPORT PrefetchService {
   void RecordExistingPrefetchWithMatchingURL(
       base::WeakPtr<PrefetchContainer> prefetch_container) const;
 
+  // If `should_progress` is true, calls `PrefetchScheduler::ProgressAsync()`
+  // (implicitly). This argument is meaningful only if `UsePrefetchScheduler()`.
   void ResetPrefetchContainer(
-      base::WeakPtr<PrefetchContainer> prefetch_container);
+      base::WeakPtr<PrefetchContainer> prefetch_container,
+      bool should_progress = true);
 
   // Methods for scheduling
   void ScheduleAndProgress(base::WeakPtr<PrefetchContainer> prefetch_container);
-  void ResetPrefetchContainerAndProgress(
+  void ScheduleAndProgressAsync(
       base::WeakPtr<PrefetchContainer> prefetch_container);
-  void ResetPrefetchContainersAndProgress(
+  void ResetPrefetchContainerAndProgressAsync(
+      base::WeakPtr<PrefetchContainer> prefetch_container);
+  void ResetPrefetchContainersAndProgressAsync(
       std::vector<base::WeakPtr<PrefetchContainer>> prefetch_containers);
   // CAUTION: This doesn't call `ResetPrefetchContainer()` to preserve current
   // behavior.
-  void RemoveFromSchedulerAndProgress(PrefetchContainer& prefetch_container);
+  void RemoveFromSchedulerAndProgressAsync(
+      PrefetchContainer& prefetch_container);
 
   // Returns `true` if the `prefetch_container` is stale. I.e.
   // the prefetch either is not or never will be servable to a

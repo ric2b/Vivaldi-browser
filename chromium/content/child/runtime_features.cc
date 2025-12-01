@@ -203,10 +203,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {wf::EnableEyeDropperAPI, raw_ref(features::kEyeDropper),
            kSetOnlyIfOverridden},
           {wf::EnableFedCm, raw_ref(features::kFedCm), kSetOnlyIfOverridden},
-          {wf::EnableFedCm, raw_ref(features::kFedCmButtonMode),
-           kSetOnlyIfOverridden},
-          {wf::EnableFedCm, raw_ref(features::kFedCmAuthz),
-           kSetOnlyIfOverridden},
+          {wf::EnableFedCmAutofill, raw_ref(features::kFedCmAutofill),
+           kDefault},
           {wf::EnableFedCmDelegation, raw_ref(features::kFedCmDelegation),
            kDefault},
           {wf::EnableFedCmIdPRegistration,
@@ -223,8 +221,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {wf::EnableFedCmMultipleIdentityProviders,
            raw_ref(features::kFedCmMultipleIdentityProviders),
            kSetOnlyIfOverridden},
-          {wf::EnableFedCmSelectiveDisclosure,
-           raw_ref(features::kFedCmSelectiveDisclosure), kDefault},
           {wf::EnableFencedFrames,
            raw_ref(features::kPrivacySandboxAdsAPIsOverride),
            kSetOnlyIfOverridden},
@@ -240,6 +236,8 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            raw_ref(features::kUserMediaScreenCapturing)},
 #endif
           {wf::EnableInstalledApp, raw_ref(features::kInstalledApp)},
+          {wf::EnableIntegrityPolicyScript,
+           raw_ref(network::features::kIntegrityPolicyScript)},
           {wf::EnableLazyInitializeMediaControls,
            raw_ref(features::kLazyInitializeMediaControls)},
 #if BUILDFLAG(IS_CHROMEOS)
@@ -252,8 +250,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {wf::EnablePaymentApp, raw_ref(features::kServiceWorkerPaymentApps)},
           {wf::EnablePeriodicBackgroundSync,
            raw_ref(features::kPeriodicBackgroundSync)},
-          {wf::EnablePushMessagingSubscriptionChange,
-           raw_ref(features::kPushSubscriptionChangeEvent)},
           {wf::EnableSecurePaymentConfirmation,
            raw_ref(features::kSecurePaymentConfirmation)},
           {wf::EnableSecurePaymentConfirmationDebug,
@@ -264,10 +260,13 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
 #if BUILDFLAG(IS_ANDROID)
           {wf::EnableSmartZoom, raw_ref(features::kSmartZoom)},
 #endif
+          {wf::EnableTouchDragAndDrop, raw_ref(features::kTouchDragAndDrop)},
           {wf::EnableTouchDragAndContextMenu,
            raw_ref(features::kTouchDragAndContextMenu)},
           {wf::EnableWebAuthenticationAmbient,
            raw_ref(device::kWebAuthnAmbientSignin)},
+          {wf::EnableWebAuthenticationImmediateGet,
+           raw_ref(device::kWebAuthnImmediateGet), kSetOnlyIfOverridden},
           {wf::EnableWebAuthenticationConditionalCreate,
            raw_ref(device::kWebAuthnPasskeyUpgrade)},
           {wf::EnableWebBluetooth, raw_ref(features::kWebBluetooth),
@@ -317,6 +316,10 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
         *mapping.chromium_feature, mapping.option, mapping.feature_enabler);
   }
 
+  if (features::IsPushSubscriptionChangeEventEnabled()) {
+    wf::EnablePushMessagingSubscriptionChange(true);
+  }
+
   // TODO(crbug.com/40571563): Cleanup the inconsistency between custom WRF
   // enabler function and using feature string name with
   // EnableFeatureFromString.
@@ -363,8 +366,6 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            kSetOnlyIfOverridden},
           {"FledgeBiddingAndAuctionServerAPI",
            raw_ref(blink::features::kFledgeBiddingAndAuctionServer), kDefault},
-          {"FontationsFontBackend",
-           raw_ref(blink::features::kFontationsFontBackend)},
           {"FontSrcLocalMatching", raw_ref(features::kFontSrcLocalMatching)},
           {"MachineLearningNeuralNetwork",
            raw_ref(webnn::mojom::features::kWebMachineLearningNeuralNetwork),
@@ -372,13 +373,11 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
           {"OriginIsolationHeader", raw_ref(features::kOriginIsolationHeader)},
           {"ReduceAcceptLanguage",
            raw_ref(network::features::kReduceAcceptLanguage)},
-          {"Serial",
+          {"RelatedWebsitePartitionAPI",
+           raw_ref(net::features::kRelatedWebsitePartitionAPI)},
 #if BUILDFLAG(IS_ANDROID)
-           raw_ref(device::features::kBluetoothRfcommAndroid)
-#else
-           raw_ref(device::features::kSerial)
+          {"Serial", raw_ref(device::features::kBluetoothRfcommAndroid)},
 #endif
-          },
           {"SerialPortConnected", raw_ref(features::kSerialPortConnected)},
           {"SignatureBasedIntegrity",
            raw_ref(network::features::kSRIMessageSignatureEnforcement)},
@@ -406,8 +405,13 @@ void SetRuntimeFeaturesFromChromiumFeatures() {
            raw_ref(webnn::mojom::features::
                        kExperimentalWebMachineLearningNeuralNetwork),
            kSetOnlyIfOverridden},
+#if BUILDFLAG(IS_ANDROID)
+          {"WebAppLaunchQueue", raw_ref(features::kAndroidWebAppLaunchHandler)},
+#endif
           {"WebAuthenticationNewBfCacheHandlingBlink",
-           raw_ref(device::kWebAuthnNewBfCacheHandling)}};
+           raw_ref(device::kWebAuthnNewBfCacheHandling)},
+          {"LocalNetworkAccessPermissionPolicy",
+           raw_ref(network::features::kLocalNetworkAccessChecks)}};
   for (const auto& mapping : runtimeFeatureNameToChromiumFeatureMapping) {
     SetRuntimeFeatureFromChromiumFeature(
         *mapping.chromium_feature, mapping.option, [&mapping](bool enabled) {
@@ -461,8 +465,6 @@ void SetRuntimeFeaturesFromCommandLine(const base::CommandLine& command_line) {
       {wrf::EnableScriptedSpeechSynthesis, switches::kDisableSpeechSynthesisAPI,
        false},
       {wrf::EnableSharedWorker, switches::kDisableSharedWorkers, false},
-      {wrf::EnableMutationEvents, blink::switches::kMutationEventsEnabled,
-       true},
       {wrf::EnableKeyboardFocusableScrollers,
        blink::switches::kKeyboardFocusableScrollersEnabled, true},
       {wrf::EnableKeyboardFocusableScrollers,

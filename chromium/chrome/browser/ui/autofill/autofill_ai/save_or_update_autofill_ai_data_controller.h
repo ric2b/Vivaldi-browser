@@ -10,7 +10,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/types/optional_ref.h"
-#include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
+#include "components/autofill/core/browser/integrators/autofill_ai/autofill_ai_delegate.h"
 #include "components/autofill_ai/core/browser/autofill_ai_client.h"
 #include "content/public/browser/web_contents.h"
 
@@ -36,6 +36,7 @@ class SaveOrUpdateAutofillAiDataController {
     kNotInteracted,
     // The bubble lost focus and was closed.
     kLostFocus,
+    kMaxValue = kLostFocus
   };
 
   enum class EntityAttributeUpdateType {

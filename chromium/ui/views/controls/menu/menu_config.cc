@@ -76,6 +76,20 @@ bool MenuConfig::ShouldShowAcceleratorText(const MenuItemView* item,
   return true;
 }
 
+bool MenuConfig::ShouldUseBubbleBorderForMenu(
+    const MenuController* controller) const {
+  if (controller && (controller->use_ash_system_ui_layout() &&
+                     CornerRadiusForMenu(controller))) {
+    return true;
+  }
+
+  if (controller && (use_bubble_border && CornerRadiusForMenu(controller))) {
+    return true;
+  }
+
+  return false;
+}
+
 void MenuConfig::InitCommon() {
   if (vivaldi::IsVivaldiRunning() &&
       MenuController::VivaldiGetCompactLayout()) {

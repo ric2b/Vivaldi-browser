@@ -258,10 +258,10 @@ describeWithEnvironment('JSONEditor', () => {
   const serializePopupContent = () => {
     const container = document.body.querySelector<HTMLDivElement>('[data-devtools-glass-pane]');
     const hintDetailView = container?.shadowRoot?.querySelector('devtools-css-hint-details-view');
-    return hintDetailView?.shadowRoot?.textContent?.replaceAll(/\s/g, '');
+    return hintDetailView?.shadowRoot?.querySelector('.hint-popup-wrapper')?.textContent?.replaceAll(/\s/g, '');
   };
 
-  const renderEditorForCommand = async(command: string, parameters: {[paramName: string]: unknown}): Promise<{
+  const renderEditorForCommand = async(command: string, parameters: Record<string, unknown>): Promise<{
     inputs: NodeListOf<SuggestionInput.SuggestionInput.SuggestionInput>,
     displayedCommand: string,
     jsonEditor: ProtocolMonitor.JSONEditor.JSONEditor,
@@ -357,7 +357,7 @@ describeWithEnvironment('JSONEditor', () => {
          const {command, parameters} = ProtocolMonitor.ProtocolMonitor.parseCommandInput(JSON.stringify(cdpCommand));
          const {inputs} = await renderEditorForCommand(command, parameters);
          const parameterRecorderInput = inputs[1];
-         const value = parameterRecorderInput.renderRoot.textContent?.replaceAll(/\s/g, '');
+         const value = parameterRecorderInput.value;
          const expectedValue = 'test';
          assert.deepEqual(value, expectedValue);
        });
@@ -373,7 +373,7 @@ describeWithEnvironment('JSONEditor', () => {
          const {command, parameters} = ProtocolMonitor.ProtocolMonitor.parseCommandInput(JSON.stringify(cdpCommand));
          const {inputs} = await renderEditorForCommand(command, parameters);
          const parameterRecorderInput = inputs[1];
-         const value = parameterRecorderInput.renderRoot.textContent?.replaceAll(/\s/g, '');
+         const value = parameterRecorderInput.value;
          const expectedValue = 'test';
          assert.deepEqual(value, expectedValue);
        });
@@ -393,7 +393,7 @@ describeWithEnvironment('JSONEditor', () => {
          const {command, parameters} = ProtocolMonitor.ProtocolMonitor.parseCommandInput(JSON.stringify(cdpCommand));
          const {inputs} = await renderEditorForCommand(command, parameters);
          const parameterRecorderInput = inputs[1];
-         const value = parameterRecorderInput.renderRoot.textContent?.replaceAll(/\s/g, '');
+         const value = parameterRecorderInput.value;
          const expectedValue = 'test1';
          assert.deepEqual(value, expectedValue);
        });
@@ -997,10 +997,12 @@ describeWithEnvironment('JSONEditor', () => {
          };
 
          jsonEditor.parameters = inputParameters as ProtocolMonitor.JSONEditor.Parameter[];
+         await jsonEditor.updateComplete;
 
          const promise = jsonEditor.once(ProtocolMonitor.JSONEditor.Events.SUBMIT_EDITOR);
 
-         dispatchKeyDownEvent(jsonEditor.contentElement, {key: 'Enter', ctrlKey: true, metaKey: true});
+         dispatchKeyDownEvent(
+             jsonEditor.contentElement.querySelector('.wrapper')!, {key: 'Enter', ctrlKey: true, metaKey: true});
 
          const response = await promise;
 
@@ -1259,7 +1261,8 @@ describeWithEnvironment('JSONEditor', () => {
        const promise = jsonEditor.once(ProtocolMonitor.JSONEditor.Events.SUBMIT_EDITOR);
 
        // We send the command
-       dispatchKeyDownEvent(jsonEditor.contentElement, {key: 'Enter', ctrlKey: true, metaKey: true});
+       dispatchKeyDownEvent(
+           jsonEditor.contentElement.querySelector('.wrapper')!, {key: 'Enter', ctrlKey: true, metaKey: true});
 
        const response = await promise;
 
@@ -1312,7 +1315,7 @@ describeWithEnvironment('JSONEditor', () => {
     it('filters the commands by substring match', async () => {
       assert(ProtocolMonitor.JSONEditor.suggestionFilter('Test', 'Tes'));
       assert(ProtocolMonitor.JSONEditor.suggestionFilter('Test', 'est'));
-      assert(!ProtocolMonitor.JSONEditor.suggestionFilter('Test', 'dest'));
+      assert.isNotOk(ProtocolMonitor.JSONEditor.suggestionFilter('Test', 'dest'));
     });
   });
 });

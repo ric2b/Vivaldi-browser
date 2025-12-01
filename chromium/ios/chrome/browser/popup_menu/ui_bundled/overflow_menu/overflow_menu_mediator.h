@@ -34,6 +34,7 @@ class BrowserPolicyConnectorIOS;
 @protocol FindInPageCommands;
 class FollowBrowserAgent;
 @protocol HelpCommands;
+@protocol ReaderModeCommands;
 @protocol LensOverlayCommands;
 @protocol OverflowMenuCustomizationCommands;
 @class OverflowMenuOrderer;
@@ -54,6 +55,7 @@ class TemplateURLService;
 class WebNavigationBrowserAgent;
 class WebStateList;
 @protocol WhatsNewCommands;
+@protocol PageActionMenuCommands;
 
 // Mediator for the overflow menu. This object is in charge of creating and
 // updating the items of the overflow menu.
@@ -88,12 +90,14 @@ class WebStateList;
 @property(nonatomic, weak) id<TextZoomCommands> textZoomHandler;
 @property(nonatomic, weak) id<QuickDeleteCommands> quickDeleteHandler;
 @property(nonatomic, weak) id<WhatsNewCommands> whatsNewHandler;
+@property(nonatomic, weak) id<ReaderModeCommands> readerModeHandler;
+@property(nonatomic, weak) id<PageActionMenuCommands> pageActionMenuHandler;
 
 // Navigation agent for reloading pages.
 @property(nonatomic, assign) WebNavigationBrowserAgent* navigationAgent;
 
 // If the current session is off the record or not.
-@property(nonatomic, assign) bool isIncognito;
+@property(nonatomic, assign) bool incognito;
 
 // The Orderer to control the order of the overflow menu.
 @property(nonatomic, weak) OverflowMenuOrderer* menuOrderer;

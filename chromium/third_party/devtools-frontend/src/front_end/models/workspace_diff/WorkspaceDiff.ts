@@ -18,39 +18,40 @@ interface DiffResponse {
 export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventTypes> {
   readonly #persistence = Persistence.Persistence.PersistenceImpl.instance();
   readonly #diffs = new WeakMap<Workspace.UISourceCode.UISourceCode, UISourceCodeDiff>();
+  /** used in web tests */
   private readonly loadingUISourceCodes =
       new Map<Workspace.UISourceCode.UISourceCode, Promise<[string | null, string|null]>>();
   readonly #modified = new Set<Workspace.UISourceCode.UISourceCode>();
 
   constructor(workspace: Workspace.Workspace.WorkspaceImpl) {
     super();
-    workspace.addEventListener(Workspace.Workspace.Events.WorkingCopyChanged, this.uiSourceCodeChanged, this);
-    workspace.addEventListener(Workspace.Workspace.Events.WorkingCopyCommitted, this.uiSourceCodeChanged, this);
-    workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, this.uiSourceCodeAdded, this);
-    workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, this.uiSourceCodeRemoved, this);
-    workspace.addEventListener(Workspace.Workspace.Events.ProjectRemoved, this.projectRemoved, this);
-    workspace.uiSourceCodes().forEach(this.updateModifiedState.bind(this));
+    workspace.addEventListener(Workspace.Workspace.Events.WorkingCopyChanged, this.#uiSourceCodeChanged, this);
+    workspace.addEventListener(Workspace.Workspace.Events.WorkingCopyCommitted, this.#uiSourceCodeChanged, this);
+    workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeAdded, this.#uiSourceCodeAdded, this);
+    workspace.addEventListener(Workspace.Workspace.Events.UISourceCodeRemoved, this.#uiSourceCodeRemoved, this);
+    workspace.addEventListener(Workspace.Workspace.Events.ProjectRemoved, this.#projectRemoved, this);
+    workspace.uiSourceCodes().forEach(this.#updateModifiedState.bind(this));
   }
 
   requestDiff(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<DiffResponse|null> {
-    return this.uiSourceCodeDiff(uiSourceCode).requestDiff();
+    return this.#uiSourceCodeDiff(uiSourceCode).requestDiff();
   }
 
   subscribeToDiffChange(uiSourceCode: Workspace.UISourceCode.UISourceCode, callback: () => void, thisObj?: Object):
       void {
-    this.uiSourceCodeDiff(uiSourceCode).addEventListener(UISourceCodeDiffEvents.DIFF_CHANGED, callback, thisObj);
+    this.#uiSourceCodeDiff(uiSourceCode).addEventListener(UISourceCodeDiffEvents.DIFF_CHANGED, callback, thisObj);
   }
 
   unsubscribeFromDiffChange(uiSourceCode: Workspace.UISourceCode.UISourceCode, callback: () => void, thisObj?: Object):
       void {
-    this.uiSourceCodeDiff(uiSourceCode).removeEventListener(UISourceCodeDiffEvents.DIFF_CHANGED, callback, thisObj);
+    this.#uiSourceCodeDiff(uiSourceCode).removeEventListener(UISourceCodeDiffEvents.DIFF_CHANGED, callback, thisObj);
   }
 
   modifiedUISourceCodes(): Workspace.UISourceCode.UISourceCode[] {
     return Array.from(this.#modified);
   }
 
-  private uiSourceCodeDiff(uiSourceCode: Workspace.UISourceCode.UISourceCode): UISourceCodeDiff {
+  #uiSourceCodeDiff(uiSourceCode: Workspace.UISourceCode.UISourceCode): UISourceCodeDiff {
     let diff = this.#diffs.get(uiSourceCode);
     if (!diff) {
       diff = new UISourceCodeDiff(uiSourceCode);
@@ -59,46 +60,46 @@ export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventT
     return diff;
   }
 
-  private uiSourceCodeChanged(
-      event: Common.EventTarget.EventTargetEvent<{uiSourceCode: Workspace.UISourceCode.UISourceCode}>): void {
+  #uiSourceCodeChanged(event: Common.EventTarget.EventTargetEvent<{uiSourceCode: Workspace.UISourceCode.UISourceCode}>):
+      void {
     const uiSourceCode = event.data.uiSourceCode;
-    void this.updateModifiedState(uiSourceCode);
+    void this.#updateModifiedState(uiSourceCode);
   }
 
-  private uiSourceCodeAdded(event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.UISourceCode>): void {
+  #uiSourceCodeAdded(event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.UISourceCode>): void {
     const uiSourceCode = event.data;
-    void this.updateModifiedState(uiSourceCode);
+    void this.#updateModifiedState(uiSourceCode);
   }
 
-  private uiSourceCodeRemoved(event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.UISourceCode>): void {
+  #uiSourceCodeRemoved(event: Common.EventTarget.EventTargetEvent<Workspace.UISourceCode.UISourceCode>): void {
     const uiSourceCode = event.data;
-    this.removeUISourceCode(uiSourceCode);
+    this.#removeUISourceCode(uiSourceCode);
   }
 
-  private projectRemoved(event: Common.EventTarget.EventTargetEvent<Workspace.Workspace.Project>): void {
+  #projectRemoved(event: Common.EventTarget.EventTargetEvent<Workspace.Workspace.Project>): void {
     const project = event.data;
     for (const uiSourceCode of project.uiSourceCodes()) {
-      this.removeUISourceCode(uiSourceCode);
+      this.#removeUISourceCode(uiSourceCode);
     }
   }
 
-  private removeUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
+  #removeUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
     this.loadingUISourceCodes.delete(uiSourceCode);
     const uiSourceCodeDiff = this.#diffs.get(uiSourceCode);
     if (uiSourceCodeDiff) {
       uiSourceCodeDiff.dispose = true;
     }
-    this.markAsUnmodified(uiSourceCode);
+    this.#markAsUnmodified(uiSourceCode);
   }
 
-  private markAsUnmodified(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
+  #markAsUnmodified(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
     this.uiSourceCodeProcessedForTest();
     if (this.#modified.delete(uiSourceCode)) {
       this.dispatchEventToListeners(Events.MODIFIED_STATUS_CHANGED, {uiSourceCode, isModified: false});
     }
   }
 
-  private markAsModified(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
+  #markAsModified(uiSourceCode: Workspace.UISourceCode.UISourceCode): void {
     this.uiSourceCodeProcessedForTest();
     if (this.#modified.has(uiSourceCode)) {
       return;
@@ -114,14 +115,10 @@ export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventT
     switch (uiSourceCode.project().type()) {
       case Workspace.Workspace.projectTypes.Network:
         // We track differences for all Network resources.
-        return true;
+        return this.#persistence.binding(uiSourceCode) === null;
 
       case Workspace.Workspace.projectTypes.FileSystem:
         // We track differences for FileSystem resources without bindings.
-        return this.#persistence.binding(uiSourceCode) === null;
-
-      case Workspace.Workspace.projectTypes.Inspector:
-        // We track differences for all Inspector resources (style sheets).
         return true;
 
       default:
@@ -129,19 +126,19 @@ export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventT
     }
   }
 
-  private async updateModifiedState(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
+  async #updateModifiedState(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
     this.loadingUISourceCodes.delete(uiSourceCode);
 
     if (!this.#shouldTrack(uiSourceCode)) {
-      this.markAsUnmodified(uiSourceCode);
+      this.#markAsUnmodified(uiSourceCode);
       return;
     }
     if (uiSourceCode.isDirty()) {
-      this.markAsModified(uiSourceCode);
+      this.#markAsModified(uiSourceCode);
       return;
     }
     if (!uiSourceCode.hasCommits()) {
-      this.markAsUnmodified(uiSourceCode);
+      this.#markAsUnmodified(uiSourceCode);
       return;
     }
 
@@ -158,14 +155,14 @@ export class WorkspaceDiffImpl extends Common.ObjectWrapper.ObjectWrapper<EventT
     this.loadingUISourceCodes.delete(uiSourceCode);
 
     if (contents[0] !== null && contents[1] !== null && contents[0] !== contents[1]) {
-      this.markAsModified(uiSourceCode);
+      this.#markAsModified(uiSourceCode);
     } else {
-      this.markAsUnmodified(uiSourceCode);
+      this.#markAsUnmodified(uiSourceCode);
     }
   }
 
   requestOriginalContentForUISourceCode(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<string|null> {
-    return this.uiSourceCodeDiff(uiSourceCode).originalContent();
+    return this.#uiSourceCodeDiff(uiSourceCode).originalContent();
   }
 
   revertToOriginal(uiSourceCode: Workspace.UISourceCode.UISourceCode): Promise<void> {
@@ -196,63 +193,60 @@ export interface EventTypes {
 }
 
 export class UISourceCodeDiff extends Common.ObjectWrapper.ObjectWrapper<UISourceCodeDiffEventTypes> {
-  private uiSourceCode: Workspace.UISourceCode.UISourceCode;
-  private requestDiffPromise: Promise<DiffResponse|null>|null;
-  private pendingChanges: number|null;
-  dispose: boolean;
+  #uiSourceCode: Workspace.UISourceCode.UISourceCode;
+  #requestDiffPromise: Promise<DiffResponse|null>|null = null;
+  #pendingChanges: number|null = null;
+  dispose = false;
   constructor(uiSourceCode: Workspace.UISourceCode.UISourceCode) {
     super();
-    this.uiSourceCode = uiSourceCode;
-    uiSourceCode.addEventListener(Workspace.UISourceCode.Events.WorkingCopyChanged, this.uiSourceCodeChanged, this);
-    uiSourceCode.addEventListener(Workspace.UISourceCode.Events.WorkingCopyCommitted, this.uiSourceCodeChanged, this);
-    this.requestDiffPromise = null;
-    this.pendingChanges = null;
-    this.dispose = false;
+    this.#uiSourceCode = uiSourceCode;
+    uiSourceCode.addEventListener(Workspace.UISourceCode.Events.WorkingCopyChanged, this.#uiSourceCodeChanged, this);
+    uiSourceCode.addEventListener(Workspace.UISourceCode.Events.WorkingCopyCommitted, this.#uiSourceCodeChanged, this);
   }
 
-  private uiSourceCodeChanged(): void {
-    if (this.pendingChanges) {
-      clearTimeout(this.pendingChanges);
-      this.pendingChanges = null;
+  #uiSourceCodeChanged(): void {
+    if (this.#pendingChanges) {
+      clearTimeout(this.#pendingChanges);
+      this.#pendingChanges = null;
     }
-    this.requestDiffPromise = null;
+    this.#requestDiffPromise = null;
 
-    const content = this.uiSourceCode.content();
-    const delay = (!content || content.length < 65536) ? 0 : UpdateTimeout;
-    this.pendingChanges = window.setTimeout(emitDiffChanged.bind(this), delay);
+    const content = this.#uiSourceCode.content();
+    const delay = (!content || content.length < 65536) ? 0 : 200;
+    this.#pendingChanges = window.setTimeout(emitDiffChanged.bind(this), delay);
 
     function emitDiffChanged(this: UISourceCodeDiff): void {
       if (this.dispose) {
         return;
       }
       this.dispatchEventToListeners(UISourceCodeDiffEvents.DIFF_CHANGED);
-      this.pendingChanges = null;
+      this.#pendingChanges = null;
     }
   }
 
   requestDiff(): Promise<DiffResponse|null> {
-    if (!this.requestDiffPromise) {
-      this.requestDiffPromise = this.innerRequestDiff();
+    if (!this.#requestDiffPromise) {
+      this.#requestDiffPromise = this.#requestDiff();
     }
-    return this.requestDiffPromise;
+    return this.#requestDiffPromise;
   }
 
   async originalContent(): Promise<string|null> {
     const originalNetworkContent =
         Persistence.NetworkPersistenceManager.NetworkPersistenceManager.instance().originalContentForUISourceCode(
-            this.uiSourceCode);
+            this.#uiSourceCode);
     if (originalNetworkContent) {
       return await originalNetworkContent;
     }
 
-    const content = await this.uiSourceCode.project().requestFileContent(this.uiSourceCode);
+    const content = await this.#uiSourceCode.project().requestFileContent(this.#uiSourceCode);
     if (TextUtils.ContentData.ContentData.isError(content)) {
       return content.error;
     }
     return content.asDeferedContent().content;
   }
 
-  private async innerRequestDiff(): Promise<DiffResponse|null> {
+  async #requestDiff(): Promise<DiffResponse|null> {
     if (this.dispose) {
       return null;
     }
@@ -269,9 +263,9 @@ export class UISourceCodeDiff extends Common.ObjectWrapper.ObjectWrapper<UISourc
       return null;
     }
 
-    let current = this.uiSourceCode.workingCopy();
-    if (!current && !this.uiSourceCode.contentLoaded()) {
-      current = ((await this.uiSourceCode.requestContent()).content as string);
+    let current = this.#uiSourceCode.workingCopy();
+    if (!current && !this.#uiSourceCode.contentLoaded()) {
+      current = ((await this.#uiSourceCode.requestContent()).content as string);
     }
 
     if (current.length > 1024 * 1024) {
@@ -283,10 +277,10 @@ export class UISourceCodeDiff extends Common.ObjectWrapper.ObjectWrapper<UISourc
     }
 
     baseline = (await FormatterModule.ScriptFormatter.format(
-                    this.uiSourceCode.contentType(), this.uiSourceCode.mimeType(), baseline))
+                    this.#uiSourceCode.contentType(), this.#uiSourceCode.mimeType(), baseline))
                    .formattedContent;
     const formatCurrentResult = await FormatterModule.ScriptFormatter.format(
-        this.uiSourceCode.contentType(), this.uiSourceCode.mimeType(), current);
+        this.#uiSourceCode.contentType(), this.#uiSourceCode.mimeType(), current);
     current = formatCurrentResult.formattedContent;
     const formattedCurrentMapping = formatCurrentResult.formattedMapping;
     const reNewline = /\r\n?|\n/;
@@ -314,5 +308,3 @@ export function workspaceDiff({forceNew}: {forceNew?: boolean} = {}): WorkspaceD
   }
   return workspaceDiffImplInstance;
 }
-
-export const UpdateTimeout = 200;

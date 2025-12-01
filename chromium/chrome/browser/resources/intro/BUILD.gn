@@ -17,7 +17,7 @@ build_webui("build") {
     "intro.html",
   ]
 
-  non_web_component_files = [
+  ts_files = [
     "browser_proxy.ts",
     "default_browser/browser_proxy.ts",
   ]
@@ -32,7 +32,7 @@ build_webui("build") {
       static_files += [ "images/security.svg" ]
     }
 
-    non_web_component_files += [
+    ts_files += [
       "default_browser/app.html.ts",
       "default_browser/app.ts",
       "dice_app.html.ts",
@@ -50,7 +50,6 @@ build_webui("build") {
 
   ts_definitions = [ "//tools/typescript/definitions/chrome_send.d.ts" ]
   ts_composite = true
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_deps = [
     "//chrome/browser/resources/signin:build_ts",
     "//third_party/lit/v3_0:build_ts",

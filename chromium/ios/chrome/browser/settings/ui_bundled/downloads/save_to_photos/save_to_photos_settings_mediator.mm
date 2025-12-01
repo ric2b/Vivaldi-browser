@@ -7,6 +7,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/prefs/ios/pref_observer_bridge.h"
+#import "components/prefs/pref_change_registrar.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_selection/account_picker_selection_screen_identity_item_configurator.h"
@@ -17,20 +18,17 @@
 #import "ios/chrome/browser/settings/ui_bundled/downloads/save_to_photos/save_to_photos_settings_mediator_delegate.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
+#import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
 
 @interface SaveToPhotosSettingsMediator () <
-    ChromeAccountManagerServiceObserver,
     IdentityManagerObserverBridgeDelegate,
     PrefObserverDelegate>
 
 @end
 
 @implementation SaveToPhotosSettingsMediator {
-  // Account manager service with observer.
+  // Account manager service.
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
 
   // PrefService with registrar and observer.
   raw_ptr<PrefService> _prefService;
@@ -61,9 +59,6 @@
     CHECK(identityManager);
 
     _accountManagerService = accountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
 
     _prefService = prefService;
     _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
@@ -103,7 +98,6 @@
 #pragma mark - Public
 
 - (void)disconnect {
-  _accountManagerServiceObserver.reset();
   _accountManagerService = nullptr;
   _prefServiceObserver.reset();
   _prefService = nullptr;
@@ -125,24 +119,6 @@
                            !askEveryTime);
 }
 
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated];
-}
-
 #pragma mark - PrefObserverDelegate
 
 - (void)onPreferenceChanged:(const std::string&)preferenceName {
@@ -162,30 +138,14 @@
 }
 
 - (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
+  [self updateConsumers];
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated];
+  [self updateConsumers];
 }
 
 #pragma mark - Private
-
-- (void)handleIdentityListChanged {
-  [self updateConsumers];
-}
-
-- (void)handleIdentityUpdated {
-  [self updateConsumers];
-}
 
 // The Save to Photos settings UI will be displayed or removed depending on
 // whether the application's current state is configured to support Save to

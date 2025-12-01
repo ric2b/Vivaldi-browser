@@ -66,8 +66,7 @@ class CheckedNumeric {
 #elif defined(_MSC_VER)
   _Check_return_
 #endif
-  constexpr bool
-  AssignIfValid(Dst* result) const {
+  constexpr bool AssignIfValid(Dst* result) const {
     return BASE_NUMERICS_LIKELY(IsValid<Dst>())
                ? ((*result = static_cast<Dst>(state_.value())), true)
                : false;

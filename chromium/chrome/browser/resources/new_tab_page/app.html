@@ -25,7 +25,9 @@
         @open-voice-search="${this.onOpenVoiceSearch_}" ?shown="${this.realboxShown_}"
         ?had-secondary-side="${this.realboxHadSecondarySide}"
         @had-secondary-side-changed="${this.onRealboxHadSecondarySideChanged_}"
-        ?can-show-secondary-side="${this.realboxCanShowSecondarySide}">
+        ?can-show-secondary-side="${this.realboxCanShowSecondarySide}"
+        ?compose-button-enabled="${this.composeButtonEnabled}"
+        ?composebox-enabled="${this.composeboxEnabled}">
     </cr-searchbox>
     ${this.showLensUploadDialog_ ? html`
       <ntp-lens-upload-dialog id="lensUploadDialog"
@@ -55,43 +57,42 @@
     ` : ''}
     ${this.modulesEnabled_ ? html`
       ${html`
-        <ntp-modules-v2 id="modules"
+        <ntp-modules id="modules"
             ?modules-shown-to-user="${this.modulesShownToUser}"
             @modules-shown-to-user-changed="${this.onModulesShownToUserChanged_}"
             @customize-module="${this.onCustomizeModule_}"
             @modules-loaded="${this.onModulesLoaded_}"
             ?hidden="${!this.promoAndModulesLoaded_}">
-        </ntp-modules-v2>
+        </ntp-modules>
       `}
     ` : ''}
-    <ntp-footer .theme="${this.theme_}"></ntp-footer>
-    <!-- TODO(crbug.com/394906782): Move customize buttons and
-     theme attribution into the ntp footer. -->
-    <div id="customizeButtons">
-      ${this.showWallpaperSearchButton_ ? html`
-        <cr-button id="wallpaperSearchButton"
-            class="customize-button" @click="${this.onWallpaperSearchClick_}"
-            title="$i18n{customizeThisPageWallpaperSearch}"
-            aria-pressed="${this.showWallpaperSearch_}">
-          <div id="wallpaperSearchIcon"
-              class="customize-icon cr-icon" slot="prefix-icon"></div>
-          <div id="wallpaperSearchText" class="customize-text"
-              ?hidden="${this.showWallpaperSearch_}">
-            $i18n{wallpaperSearchButton}
-          </div>
-        </cr-button>
-      ` : ''}
-      <cr-button id="customizeButton" class="customize-button"
-          @click="${this.onCustomizeClick_}" title="$i18n{customizeThisPage}"
-          aria-pressed="${this.showCustomize_}">
-        <div id="customizeIcon"
-            class="customize-icon cr-icon" slot="prefix-icon"></div>
-        <div id="customizeText" class="customize-text"
-            ?hidden="${!this.showCustomizeChromeText_}">
-          $i18n{customizeButton}
+    <a id="backgroundImageAttribution"
+        href="${this.backgroundImageAttributionUrl_}"
+        ?hidden="${!this.backgroundImageAttribution1_}">
+      <div id="backgroundImageAttribution1Container">
+        <div id="linkIcon" ?hidden="${!this.backgroundImageAttributionUrl_}"></div>
+        <div id="backgroundImageAttribution1">
+          ${this.backgroundImageAttribution1_}
         </div>
-      </cr-button>
-    </div>
+      </div>
+      <div id="backgroundImageAttribution2"
+          ?hidden="${!this.backgroundImageAttribution2_}">
+        ${this.backgroundImageAttribution2_}
+      </div>
+    </a>
+    <!-- TODO(crbug.com/409296433) Hide ntp-customize-buttons on new-tab-page when
+      footer is enabled and visible. -->
+    <ntp-customize-buttons id="customizeButtons"
+        ?modules-shown-to-user="${this.modulesShownToUser}"
+        ?show-background-image="${this.showBackgroundImage_}"
+        ?show-customize="${this.showCustomize_}"
+        ?show-customize-chrome-text="${this.showCustomizeChromeText_}"
+        ?show-wallpaper-search="${this.showWallpaperSearch_}"
+        ?show-wallpaper-search-button="${this.showWallpaperSearchButton_}"
+        ?wallpaper-search-button-animation-enabled="${this.wallpaperSearchButtonAnimationEnabled_}"
+        @customize-click="${this.onCustomizeClick_}"
+        @wallpaper-search-click="${this.onWallpaperSearchClick_}">
+    </ntp-customize-buttons>
     ${this.showThemeAttribution_() ? html`
       <div id="themeAttribution">
         <div>$i18n{themeCreatedBy}</div>

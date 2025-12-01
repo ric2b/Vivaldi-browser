@@ -6,11 +6,6 @@
 
 #include "extensions/browser/extension_function.h"
 
-DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateAutoUpdateFunction,
-                                        "developerPrivate.autoUpdate")
-DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
-    DeveloperPrivateGetExtensionSizeFunction,
-    "developerPrivate.getExtensionSize")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateReloadFunction,
                                         "developerPrivate.reload")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateLoadUnpackedFunction,
@@ -21,17 +16,10 @@ DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
     DeveloperPrivateNotifyDragInstallInProgressFunction,
     "developerPrivate.notifyDragInstallInProgress")
-DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateChoosePathFunction,
-                                        "developerPrivate.choosePath")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivatePackDirectoryFunction,
                                         "developerPrivate.packDirectory")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateLoadDirectoryFunction,
                                         "developerPrivate.loadDirectory")
-DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
-    DeveloperPrivateRequestFileSourceFunction,
-    "developerPrivate.requestFileSource")
-DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateOpenDevToolsFunction,
-                                        "developerPrivate.openDevTools")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateRepairExtensionFunction,
                                         "developerPrivate.repairExtension")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateShowOptionsFunction,
@@ -41,9 +29,6 @@ DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(DeveloperPrivateShowPathFunction,
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
     DeveloperPrivateSetShortcutHandlingSuspendedFunction,
     "developerPrivate.setShortcutHandlingSuspended")
-DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
-    DeveloperPrivateUpdateExtensionCommandFunction,
-    "developerPrivate.updateExtensionCommand")
 DEFINE_UNIMPLEMENTED_EXTENSION_FUNCTION(
     DeveloperPrivateRemoveMultipleExtensionsFunction,
     "developerPrivate.removeMultipleExtensions")

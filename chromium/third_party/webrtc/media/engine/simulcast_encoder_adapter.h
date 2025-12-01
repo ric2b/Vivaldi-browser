@@ -50,8 +50,8 @@ class RTC_EXPORT SimulcastEncoderAdapter : public VideoEncoder {
   // `fallback_factory`, if non-null, is used to create fallback encoder that
   // will be used if InitEncode() fails for the primary encoder.
   SimulcastEncoderAdapter(const Environment& env,
-                          absl::Nonnull<VideoEncoderFactory*> primary_factory,
-                          absl::Nullable<VideoEncoderFactory*> fallback_factory,
+                          VideoEncoderFactory* absl_nonnull primary_factory,
+                          VideoEncoderFactory* absl_nullable fallback_factory,
                           const SdpVideoFormat& format);
 
   ~SimulcastEncoderAdapter() override;
@@ -196,6 +196,7 @@ class RTC_EXPORT SimulcastEncoderAdapter : public VideoEncoder {
   const bool boost_base_layer_quality_;
   const bool prefer_temporal_support_on_base_layer_;
   const bool per_layer_pli_;
+  const bool drop_unaligned_resolution_;
 
   const SimulcastEncoderAdapterEncoderInfoSettings encoder_info_override_;
 };

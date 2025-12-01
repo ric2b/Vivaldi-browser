@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/style/style_shape.h"
 
+#include <numbers>
 #include <variant>
 
 #include "base/memory/stack_allocated.h"
@@ -15,8 +16,10 @@
 #include "third_party/blink/renderer/platform/geometry/length_point.h"
 #include "third_party/blink/renderer/platform/geometry/path.h"
 #include "third_party/blink/renderer/platform/geometry/path_types.h"
+#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 
 namespace blink {
 
@@ -122,9 +125,18 @@ class SegmentVisitor {
         .target_point = PointForLengthPoint(segment.target_point, box_size),
         .arc_sweep = segment.sweep,
         .arc_large = segment.large};
-    gfx::SizeF radius = SizeForLengthSize(segment.radius, box_size);
-    arc_data.SetArcRadiusX(radius.width());
-    arc_data.SetArcRadiusY(radius.height());
+    // https://drafts.csswg.org/css-shapes-2/#direction-agnostic-size:
+    // The direction-agnostic size of a box is equal to the length of the
+    // diagonal of the box, divided by sqrt(2).
+    const float direction_agnostic_size = FloatValueForLength(
+        segment.direction_agnostic_radius,
+        std::hypot(box_size.width(), box_size.height()) / std::numbers::sqrt2);
+    arc_data.SetArcRadiusX(
+        FloatValueForLength(segment.radius.Width(), box_size.width()) +
+        direction_agnostic_size);
+    arc_data.SetArcRadiusY(
+        FloatValueForLength(segment.radius.Height(), box_size.height()) +
+        direction_agnostic_size);
     arc_data.SetArcAngle(segment.angle);
     builder.EmitSegment(arc_data);
   }
@@ -134,7 +146,9 @@ class SegmentVisitor {
 };
 }  // namespace
 
-Path StyleShape::GetPath(const gfx::RectF& box_rect, float zoom) const {
+Path StyleShape::GetPath(const gfx::RectF& box_rect,
+                         float /*zoom*/,
+                         float path_scale) const {
   SVGPathBuilder builder(GetWindRule());
 
   builder.EmitSegment(
@@ -147,7 +161,10 @@ Path StyleShape::GetPath(const gfx::RectF& box_rect, float zoom) const {
   }
 
   // TODO(crbug.com/384870258): retain an LRU size->path cache.
-  builder.Translate(box_rect.OffsetFromOrigin());
+  const gfx::Vector2dF offset = box_rect.OffsetFromOrigin();
+  builder.Transform(
+      AffineTransform::Translation(offset.x(), offset.x()).Scale(path_scale));
+
   return builder.Finalize();
 }
 

@@ -5,14 +5,16 @@
 /* eslint @typescript-eslint/no-explicit-any: 0 */
 
 import * as path from 'path';
+import type {Page, Target} from 'puppeteer-core';
+import puppeteer from 'puppeteer-core';
 
 import {formatAsPatch, resultAssertionsDiff, ResultsDBReporter} from '../../test/conductor/karma-resultsdb-reporter.js';
 import {CHECKOUT_ROOT, GEN_DIR, SOURCE_ROOT} from '../../test/conductor/paths.js';
 import * as ResultsDb from '../../test/conductor/resultsdb.js';
 import {loadTests, TestConfig} from '../../test/conductor/test_config.js';
+import {ScreenshotError} from '../conductor/screenshot-error.js';
 import {assertElementScreenshotUnchanged} from '../shared/screenshots.js';
 
-const puppeteer = require('puppeteer-core');
 const COVERAGE_OUTPUT_DIRECTORY = 'karma-coverage';
 const REMOTE_DEBUGGING_PORT = 7722;
 
@@ -35,8 +37,8 @@ interface BrowserWithArgs {
 }
 const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: BrowserWithArgs, _config: unknown) {
   require('karma-chrome-launcher')['launcher:Chrome'][1].apply(this, arguments);
-  this._execCommand = async function(cmd: string, args: string[]) {
-    const url = args.pop();
+  this._execCommand = async function(_cmd: string, args: string[]) {
+    const url = args.pop()!;
     const browser = await puppeteer.launch({
       headless: !TestConfig.debug || TestConfig.headless,
       executablePath: TestConfig.chromeBinary,
@@ -53,16 +55,35 @@ const CustomChrome = function(this: any, _baseBrowserDecorator: unknown, args: B
 
     const page = await browser.newPage();
 
-    await page.exposeFunction('assertScreenshot', async (elementSelector: string, filename: string) => {
-      try {
-        const testFrame = page.frames()[1];
-        const element = await testFrame.waitForSelector(elementSelector);
+    async function setupBindings(page: Page) {
+      await page.exposeFunction('assertScreenshot', async (elementSelector: string, filename: string) => {
+        try {
+          // Karma sometimes runs tests in an iframe or in the main frame.
+          const testFrame = page.frames()[1] ?? page.mainFrame();
+          const element = await testFrame.waitForSelector(elementSelector);
 
-        await assertElementScreenshotUnchanged(element, filename, {
-          captureBeyondViewport: false,
-        });
-      } catch (err) {
-        return err.message;
+          await assertElementScreenshotUnchanged(element, filename, {
+            captureBeyondViewport: false,
+          });
+          return undefined;
+        } catch (error) {
+          if (error instanceof ScreenshotError) {
+            ScreenshotError.errors.push(error);
+          }
+          return `ScreenshotError: ${error.message}`;
+        }
+      });
+    }
+
+    await setupBindings(page);
+
+    browser.on('targetcreated', async (target: Target) => {
+      if (target.type() === 'page') {
+        const page = await target.page();
+        if (!page) {
+          return;
+        }
+        await setupBindings(page);
       }
     });
 
@@ -108,7 +129,7 @@ const ProgressWithDiffReporter = function(
     this: any, formatError: unknown, reportSlow: unknown, useColors: unknown, browserConsoleLogOptions: unknown) {
   BaseProgressReporter.call(this, formatError, reportSlow, useColors, browserConsoleLogOptions);
   const baseSpecFailure = this.specFailure;
-  this.specFailure = function(this: any, browser: unknown, result: any) {
+  this.specFailure = function(this: any, _browser: unknown, result: any) {
     baseSpecFailure.apply(this, arguments);
     const patch = formatAsPatch(resultAssertionsDiff(result));
     if (patch) {
@@ -136,7 +157,6 @@ module.exports = function(config: any) {
       // Global hooks in test_setup must go first
       {pattern: path.join(GEN_DIR, 'front_end', 'testing', 'test_setup.js'), type: 'module'},
       ...tests.map(pattern => ({pattern, type: 'module'})),
-      {pattern: path.join(GEN_DIR, 'front_end', 'testing', 'test_post_setup.js'), type: 'module'},
       ...tests.map(pattern => ({pattern: `${pattern}.map`, served: true, included: false, watched: true})),
       {pattern: path.join(GEN_DIR, 'front_end/Images/*.{svg,png}'), served: true, included: false},
       {pattern: path.join(GEN_DIR, 'front_end/core/i18n/locales/*.json'), served: true, included: false},

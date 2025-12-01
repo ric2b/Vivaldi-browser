@@ -8,8 +8,6 @@ source_set("ui_bundled") {
   sources = [
     "authentication_ui_util.h",
     "authentication_ui_util.mm",
-    "continuation.h",
-    "continuation.mm",
     "re_signin_infobar_delegate.h",
     "re_signin_infobar_delegate.mm",
     "signin_notification_infobar_delegate.h",
@@ -20,6 +18,7 @@ source_set("ui_bundled") {
   deps = [
     ":account_settings_presenter",
     ":authentication_constants",
+    ":continuation",
     ":signin_presenter",
     "//components/bookmarks/common",
     "//components/browser_sync",
@@ -27,7 +26,6 @@ source_set("ui_bundled") {
     "//components/infobars/core",
     "//components/policy/core/common",
     "//components/prefs",
-    "//components/reading_list/features:flags",
     "//components/signin/ios/browser",
     "//components/signin/public/base",
     "//components/signin/public/base:signin_switches",
@@ -58,6 +56,7 @@ source_set("ui_bundled") {
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
@@ -123,7 +122,8 @@ source_set("unit_tests") {
   ]
   deps = [
     ":account_settings_presenter",
-    ":change_profile_continuation_test",
+    ":continuation",
+    ":continuation_test",
     ":signin_presenter",
     ":ui_bundled",
     "//base",
@@ -138,6 +138,7 @@ source_set("unit_tests") {
     "//components/signin/public/base",
     "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager:test_support",
+    "//components/signin/public/identity_manager/objc",
     "//components/sync:test_support",
     "//components/sync/base:features",
     "//components/sync_preferences",
@@ -157,6 +158,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/shared/model/browser/test:test_support",
     "//ios/chrome/browser/shared/model/prefs:browser_prefs",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
@@ -212,6 +214,7 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/ui/util",
@@ -279,6 +282,9 @@ source_set("eg2_tests") {
   sources = [
     "separate_profiles_egtest.mm",
     "separate_profiles_migration_egtest.mm",
+    "separate_profiles_rollback_egtest.mm",
+    "separate_profiles_util.h",
+    "separate_profiles_util.mm",
   ]
   deps = [
     ":eg_test_support+eg2",
@@ -286,8 +292,9 @@ source_set("eg2_tests") {
     "//components/policy/core/browser",
     "//components/signin/public/base:signin_switches",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser/authentication/ui_bundled/account_menu:constants",
+    "//ios/chrome/browser/authentication/ui_bundled/history_sync:pref_names",
     "//ios/chrome/browser/authentication/ui_bundled/signin:constants",
-    "//ios/chrome/browser/authentication/ui_bundled/signin/account_menu:constants",
     "//ios/chrome/browser/first_run/ui_bundled:constants",
     "//ios/chrome/browser/ntp/ui_bundled:constants",
     "//ios/chrome/browser/ntp/ui_bundled:feature_flags",
@@ -302,18 +309,31 @@ source_set("eg2_tests") {
     "//ios/chrome/test/earl_grey:switches",
     "//ios/testing/earl_grey:eg_test_support+eg2",
     "//net:test_support",
-    "//ui/base:base",
+    "//ui/base",
   ]
   frameworks = [ "UIKit.framework" ]
 }
 
-source_set("change_profile_continuation_test") {
+source_set("continuation") {
+  sources = [
+    "change_profile_continuation_provider.h",
+    "continuation.h",
+    "continuation.mm",
+  ]
+  deps = [
+    "//base",
+    "//ios/chrome/app:change_profile_continuation",
+  ]
+}
+
+source_set("continuation_test") {
   testonly = true
   sources = [
     "authentication_test_util.h",
     "authentication_test_util.mm",
   ]
   deps = [
+    ":continuation",
     ":ui_bundled",
     "//base",
     "//ios/chrome/app:change_profile_continuation",

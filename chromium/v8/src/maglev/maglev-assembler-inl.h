@@ -11,9 +11,13 @@
 #include <algorithm>
 #include <type_traits>
 
+#include "src/base/bits.h"
 #include "src/base/iterator.h"
 #include "src/base/template-utils.h"
+#include "src/builtins/builtins.h"
 #include "src/codegen/machine-type.h"
+#include "src/objects/instance-type-inl.h"
+#include "src/objects/instance-type.h"
 
 #ifdef V8_TARGET_ARCH_ARM
 #include "src/maglev/arm/maglev-assembler-arm-inl.h"
@@ -54,17 +58,15 @@ struct CopyForDeferredByValue {
 
 // Node pointers are copied by value.
 template <typename T>
-struct CopyForDeferredHelper<
-    T*, typename std::enable_if<std::is_base_of<NodeBase, T>::value>::type>
+struct CopyForDeferredHelper<T*,
+                             std::enable_if_t<std::is_base_of_v<NodeBase, T>>>
     : public CopyForDeferredByValue<T*> {};
 // Arithmetic values and enums are copied by value.
 template <typename T>
-struct CopyForDeferredHelper<
-    T, typename std::enable_if<std::is_arithmetic<T>::value>::type>
+struct CopyForDeferredHelper<T, std::enable_if_t<std::is_arithmetic_v<T>>>
     : public CopyForDeferredByValue<T> {};
 template <typename T>
-struct CopyForDeferredHelper<
-    T, typename std::enable_if<std::is_enum<T>::value>::type>
+struct CopyForDeferredHelper<T, std::enable_if_t<std::is_enum_v<T>>>
     : public CopyForDeferredByValue<T> {};
 // MaglevCompilationInfos are copied by value.
 template <>
@@ -114,8 +116,8 @@ struct CopyForDeferredHelper<FeedbackSlot>
     : public CopyForDeferredByValue<FeedbackSlot> {};
 // Heap Refs are copied by value.
 template <typename T>
-struct CopyForDeferredHelper<T, typename std::enable_if<std::is_base_of<
-                                    compiler::ObjectRef, T>::value>::type>
+struct CopyForDeferredHelper<
+    T, std::enable_if_t<std::is_base_of_v<compiler::ObjectRef, T>>>
     : public CopyForDeferredByValue<T> {};
 
 template <typename T>
@@ -282,6 +284,31 @@ inline void MaglevAssembler::SmiToDouble(DoubleRegister result, Register smi) {
   AssertSmi(smi);
   SmiUntag(smi);
   Int32ToDouble(result, smi);
+}
+
+inline void MaglevAssembler::AssertContextCellState(Register cell,
+                                                    ContextCell::State state,
+                                                    Condition condition) {
+  if (!v8_flags.slow_debug_code) return;
+  TemporaryRegisterScope temps(this);
+  Register scratch = temps.AcquireScratch();
+  LoadContextCellState(scratch, cell);
+  CompareInt32AndAssert(scratch, static_cast<int>(state), condition,
+                        AbortReason::kUnexpectedValue);
+}
+
+inline void MaglevAssembler::LoadContextCellTaggedValue(Register value,
+                                                        Register cell) {
+  static_assert(ContextCell::kConst == 0);
+  static_assert(ContextCell::kSmi == 1);
+  AssertContextCellState(cell, ContextCell::kSmi, kLessThanEqual);
+  LoadTaggedField(value, cell, offsetof(ContextCell, tagged_value_));
+}
+
+inline void MaglevAssembler::StoreContextCellSmiValue(Register cell,
+                                                      Register value) {
+  StoreTaggedFieldNoWriteBarrier(cell, offsetof(ContextCell, tagged_value_),
+                                 value);
 }
 
 #if !defined(V8_TARGET_ARCH_RISCV64)
@@ -727,6 +754,9 @@ inline void MaglevAssembler::CallBuiltin(Builtin builtin) {
   // registers and therefore doesn't require special spill handling.
   DCHECK(allow_call() || builtin == Builtin::kDoubleToI);
 
+  DCHECK_IMPLIES(!allow_allocate(), builtin == Builtin::kDoubleToI ||
+                                        !BuiltinCanAllocate(builtin));
+
   // Temporaries have to be reset before calling CallBuiltin, in case it uses
   // temporaries that alias register parameters.
   TemporaryRegisterScope reset_temps(this);
@@ -923,6 +953,52 @@ inline void MaglevAssembler::JumpIfStringMap(Register map, Label* target,
 #endif
 }
 
+inline void MaglevAssembler::JumpIfSeqOneByteStringMap(Register map,
+                                                       Label* target,
+                                                       Label::Distance distance,
+                                                       bool jump_if_true) {
+  Label fallthrough;
+  Label* target_if_false = jump_if_true ? &fallthrough : target;
+  Label::Distance distance_if_false = jump_if_true ? Label::kNear : distance;
+
+#if V8_STATIC_ROOTS_BOOL
+  // All string maps are allocated at the start of the read only heap. Thus,
+  // non-strings must have maps with larger (compressed) addresses.
+  static_assert(
+      InstanceTypeChecker::kUniqueMapRangeOfStringType::kSeqString.first == 0);
+
+  CompareInt32AndJumpIf(
+      map, InstanceTypeChecker::kUniqueMapRangeOfStringType::kSeqString.second,
+      kUnsignedGreaterThan, target_if_false, distance_if_false);
+  static_assert(base::bits::CountPopulation(
+                    InstanceTypeChecker::kStringMapEncodingMask) == 1);
+  static_assert(InstanceTypeChecker::kTwoByteStringMapBit ==
+                InstanceTypeChecker::kStringMapEncodingMask);
+  if (jump_if_true) {
+    TestInt32AndJumpIfAllClear(map, InstanceTypeChecker::kStringMapEncodingMask,
+                               target, distance);
+  } else {
+    TestInt32AndJumpIfAnySet(map, InstanceTypeChecker::kStringMapEncodingMask,
+                             target, distance);
+  }
+#else
+#ifdef V8_COMPRESS_POINTERS
+  DecompressTagged(map, map);
+#endif
+  static_assert(FIRST_STRING_TYPE == FIRST_TYPE);
+  TemporaryRegisterScope temps(this);
+  Register instance_type = temps.AcquireScratch();
+  Condition jump_cond = CompareInstanceTypeRange(map, instance_type, FIRST_TYPE,
+                                                 LAST_STRING_TYPE);
+  JumpIf(NegateCondition(jump_cond), target_if_false, distance_if_false);
+  AndInt32(instance_type, kStringRepresentationAndEncodingMask);
+  CompareInt32AndJumpIf(instance_type, kSeqOneByteStringTag,
+                        jump_if_true ? kEqual : kNotEqual, target, distance);
+#endif
+
+  bind(&fallthrough);
+}
+
 inline void MaglevAssembler::JumpIfString(Register heap_object, Label* target,
                                           Label::Distance distance) {
   TemporaryRegisterScope temps(this);
@@ -946,6 +1022,18 @@ inline void MaglevAssembler::JumpIfNotString(Register heap_object,
   LoadMap(scratch, heap_object);
 #endif
   JumpIfStringMap(scratch, target, distance, false);
+}
+
+inline void MaglevAssembler::JumpIfNotSeqOneByteString(
+    Register heap_object, Label* target, Label::Distance distance) {
+  TemporaryRegisterScope temps(this);
+  Register scratch = temps.AcquireScratch();
+#ifdef V8_COMPRESS_POINTERS
+  LoadCompressedMap(scratch, heap_object);
+#else
+  LoadMap(scratch, heap_object);
+#endif
+  JumpIfSeqOneByteStringMap(scratch, target, distance, false);
 }
 
 inline void MaglevAssembler::CheckJSAnyIsStringAndBranch(

@@ -12,6 +12,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/functional/overloaded.h"
+#include "base/memory/safety_checks.h"
 #include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/broadcast_channel/broadcast_channel_provider.h"
@@ -41,6 +42,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/network_service_util.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/common/content_client.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -80,8 +82,8 @@ DedicatedWorkerHost::DedicatedWorkerHost(
     const net::IsolationInfo& isolation_info,
     network::mojom::ClientSecurityStatePtr creator_client_security_state,
     base::WeakPtr<CrossOriginEmbedderPolicyReporter> creator_coep_reporter,
-    base::WeakPtr<CrossOriginEmbedderPolicyReporter> ancestor_coep_reporter,
-    mojo::PendingReceiver<blink::mojom::DedicatedWorkerHost> host)
+    mojo::PendingReceiver<blink::mojom::DedicatedWorkerHost> host,
+    net::StorageAccessApiStatus storage_access_api_status)
     : service_(service),
       token_(token),
       worker_process_host_(worker_process_host),
@@ -98,14 +100,19 @@ DedicatedWorkerHost::DedicatedWorkerHost(
       creator_client_security_state_(std::move(creator_client_security_state)),
       host_receiver_(this, std::move(host)),
       creator_coep_reporter_(std::move(creator_coep_reporter)),
-      ancestor_coep_reporter_(std::move(ancestor_coep_reporter)),
       code_cache_host_receivers_(GetProcessHost()
                                      ->GetStoragePartition()
-                                     ->GetGeneratedCodeCacheContext()) {
+                                     ->GetGeneratedCodeCacheContext()),
+      storage_access_api_status_(storage_access_api_status) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(worker_process_host_);
   DCHECK(worker_process_host_->IsInitializedAndNotDead());
   DCHECK(creator_client_security_state_);
+
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/414710225) and these are disabled here.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
 
   // TODO(https://crbug.com/11990077): Once we add more stuff to
   // `blink::StorageKey`, DCHECK that `storage_key` is consistent with
@@ -125,6 +132,11 @@ DedicatedWorkerHost::DedicatedWorkerHost(
 }
 
 DedicatedWorkerHost::~DedicatedWorkerHost() {
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/414710225) and these are disabled here.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
+
   // If this instance is being destroyed because its mojo connection was
   // disconnected, then the destruction of the `service_worker_handle_` could
   // end up causing this instance to be deleted again through
@@ -187,12 +199,22 @@ void DedicatedWorkerHost::CreateContentSecurityNotifier(
 }
 
 void DedicatedWorkerHost::OnMojoDisconnect() {
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/414710225) and these are disabled here.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
+
   delete this;
 }
 
 void DedicatedWorkerHost::RenderProcessExited(
     RenderProcessHost* render_process_host,
     const ChildProcessTerminationInfo& info) {
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/414710225) and these are disabled here.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
+
   DCHECK_EQ(worker_process_host_, render_process_host);
 
   delete this;
@@ -200,6 +222,11 @@ void DedicatedWorkerHost::RenderProcessExited(
 
 void DedicatedWorkerHost::InProcessRendererExiting(
     RenderProcessHost* render_process_host) {
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/414710225) and these are disabled here.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
+
   DCHECK_EQ(worker_process_host_, render_process_host);
 
   delete this;
@@ -360,6 +387,11 @@ void DedicatedWorkerHost::DidStartScriptLoad(
       "loading", "WorkerScriptFetcher CreateAndStart", TRACE_ID_LOCAL(this));
   TRACE_EVENT("loading", "DedicatedWorkerHost::DidStartScriptLoad",
               "final_response_url", script_request_url_);
+
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/414710225) and these are disabled here.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
 
   if (!result) {
     ScriptLoadStartFailed(network::URLLoaderCompletionStatus(net::ERR_ABORTED));
@@ -757,8 +789,7 @@ void DedicatedWorkerHost::CreateNestedDedicatedWorker(
       std::make_unique<DedicatedWorkerHostFactoryImpl>(
           worker_process_host_->GetDeprecatedID(), /*creator=*/token_,
           ancestor_render_frame_host_id_, GetStorageKey(), isolation_info_,
-          worker_client_security_state_->Clone(), creator_coep_reporter,
-          ancestor_coep_reporter_),
+          worker_client_security_state_->Clone(), creator_coep_reporter),
       std::move(receiver));
 }
 
@@ -791,6 +822,15 @@ void DedicatedWorkerHost::CreateBroadcastChannelProvider(
       std::move(receiver));
 }
 
+bool DedicatedWorkerHost::WasStorageAccessGranted() {
+  switch (storage_access_api_status_) {
+    case net::StorageAccessApiStatus::kAccessViaAPI:
+      return true;
+    case net::StorageAccessApiStatus::kNone:
+      return false;
+  }
+}
+
 void DedicatedWorkerHost::CreateBlobUrlStoreProvider(
     mojo::PendingReceiver<blink::mojom::BlobURLStore> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -800,6 +840,14 @@ void DedicatedWorkerHost::CreateBlobUrlStoreProvider(
   storage_partition_impl->GetBlobUrlRegistry()->AddReceiver(
       GetStorageKey(), renderer_origin_, GetProcessHost()->GetDeprecatedID(),
       std::move(receiver),
+      base::BindRepeating(
+          [](base::WeakPtr<DedicatedWorkerHost> host) -> bool {
+            if (!host) {
+              return false;
+            }
+            return host->WasStorageAccessGranted();
+          },
+          weak_factory_.GetWeakPtr()),
       !(GetContentClient()->browser()->IsBlobUrlPartitioningEnabled(
           GetProcessHost()->GetBrowserContext())),
       storage::BlobURLValidityCheckBehavior::
@@ -1022,8 +1070,10 @@ blink::mojom::PermissionStatus DedicatedWorkerHost::GetPermissionStatus(
   return GetProcessHost()
       ->GetBrowserContext()
       ->GetPermissionController()
-      ->GetPermissionStatusForWorker(permission_type, GetProcessHost(),
-                                     GetStorageKey().origin());
+      ->GetPermissionStatusForWorker(
+          content::PermissionDescriptorUtil::
+              CreatePermissionDescriptorForPermissionType(permission_type),
+          GetProcessHost(), GetStorageKey().origin());
 }
 
 void DedicatedWorkerHost::BindCacheStorageForBucket(

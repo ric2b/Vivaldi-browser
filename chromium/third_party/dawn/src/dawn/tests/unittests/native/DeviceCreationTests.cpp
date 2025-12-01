@@ -114,6 +114,50 @@ TEST_F(DeviceCreationTest, CreateDeviceSuccess) {
     EXPECT_NE(device, nullptr);
 }
 
+// Test successful call to CreateDevice with allocator descriptor.
+TEST_F(DeviceCreationTest, CreateDeviceWithAllocatorSuccess) {
+    wgpu::DawnDeviceAllocatorControl allocationDesc = {};
+    allocationDesc.allocatorHeapBlockSize = 4 * 1024;
+
+    wgpu::DeviceDescriptor desc = {};
+    wgpu::FeatureName feature = wgpu::FeatureName::DawnDeviceAllocatorControl;
+    desc.requiredFeatures = &feature;
+    desc.requiredFeatureCount = 1;
+    desc.nextInChain = &allocationDesc;
+
+    wgpu::Device device = unsafeAdapter.CreateDevice(&desc);
+    EXPECT_NE(device, nullptr);
+}
+
+// Test failed call to CreateDevice with allocator descriptor. This is using an adapter that does
+// not have DawnDeviceAllocatorControl feature enabled.
+TEST_F(DeviceCreationTest, CreateDeviceWithAllocatorFailedMissingFeature) {
+    wgpu::DawnDeviceAllocatorControl allocationDesc = {};
+    allocationDesc.allocatorHeapBlockSize = 4 * 1024;
+
+    wgpu::DeviceDescriptor desc = {};
+    desc.nextInChain = &allocationDesc;
+
+    wgpu::Device device = adapter.CreateDevice(&desc);
+    EXPECT_EQ(device, nullptr);
+}
+
+// Test failed call to CreateDevice with allocator descriptor. The heap block size provided is not a
+// power of two.
+TEST_F(DeviceCreationTest, CreateDeviceWithAllocatorFailedHeapBlockSize) {
+    wgpu::DawnDeviceAllocatorControl allocationDesc = {};
+    allocationDesc.allocatorHeapBlockSize = 4 * 1024 + 1;
+
+    wgpu::DeviceDescriptor desc = {};
+    wgpu::FeatureName feature = wgpu::FeatureName::DawnDeviceAllocatorControl;
+    desc.requiredFeatures = &feature;
+    desc.requiredFeatureCount = 1;
+    desc.nextInChain = &allocationDesc;
+
+    wgpu::Device device = unsafeAdapter.CreateDevice(&desc);
+    EXPECT_EQ(device, nullptr);
+}
+
 // Test successful call to CreateDevice with toggle descriptor.
 TEST_F(DeviceCreationTest, CreateDeviceWithTogglesSuccess) {
     wgpu::DeviceDescriptor desc = {};
@@ -280,6 +324,41 @@ TEST_F(DeviceCreationTest, CreateDeviceWithCacheSuccess) {
         EXPECT_NE(device2, nullptr);
 
         EXPECT_NE(FromAPI(device1.Get())->GetCacheKey(), FromAPI(device2.Get())->GetCacheKey());
+    }
+}
+
+// Test that maxImmediateSize is available iff the adapter has AllowUnsafeAPIs.
+TEST_F(DeviceCreationTest, AdapterMaxImmediateSize) {
+    wgpu::Limits requiredLimits{.maxImmediateSize = 1};
+    wgpu::DeviceDescriptor deviceDesc;
+    deviceDesc.requiredLimits = &requiredLimits;
+
+    {
+        wgpu::Adapter wgpuAdapter{adapter.Get()};
+        wgpu::Limits limits;
+        wgpuAdapter.GetLimits(&limits);
+        EXPECT_EQ(limits.maxImmediateSize, 0u);
+
+        wgpuAdapter.RequestDevice(
+            &deviceDesc, wgpu::CallbackMode::AllowSpontaneous,
+            [](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
+                EXPECT_EQ(status, wgpu::RequestDeviceStatus::Error);
+                EXPECT_EQ(device.Get(), nullptr);
+            });
+    }
+
+    // The null backend always supports immediates.
+    {
+        wgpu::Adapter wgpuAdapter{unsafeAdapter.Get()};
+        wgpu::Limits limits;
+        wgpuAdapter.GetLimits(&limits);
+        EXPECT_GT(limits.maxImmediateSize, 0u);
+        wgpuAdapter.RequestDevice(
+            &deviceDesc, wgpu::CallbackMode::AllowSpontaneous,
+            [](wgpu::RequestDeviceStatus status, wgpu::Device device, wgpu::StringView message) {
+                EXPECT_EQ(status, wgpu::RequestDeviceStatus::Success);
+                EXPECT_NE(device.Get(), nullptr);
+            });
     }
 }
 

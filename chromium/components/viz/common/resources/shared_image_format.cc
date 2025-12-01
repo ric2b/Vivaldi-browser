@@ -35,10 +35,6 @@ const char* SinglePlaneFormatToString(SharedImageFormat format) {
     return "BGRA_8888";
   } else if (format == SinglePlaneFormat::kALPHA_8) {
     return "ALPHA_8";
-  } else if (format == SinglePlaneFormat::kLUMINANCE_8) {
-    return "LUMINANCE_8";
-  } else if (format == SinglePlaneFormat::kRGB_565) {
-    return "RGB_565";
   } else if (format == SinglePlaneFormat::kBGR_565) {
     return "BGR_565";
   } else if (format == SinglePlaneFormat::kETC1) {
@@ -134,11 +130,6 @@ static_assert(std::is_trivially_copyable_v<SharedImageFormat>);
 // TODO(kylechar): Ideally SharedImageFormat would be "trivially comparable" so
 // that operator==() is just memcmp(). That would probably require something
 // like manually packing bits into a single uint64_t for storage.
-
-bool SharedImageFormat::IsBitmapFormatSupported() const {
-  return is_single_plane() &&
-         singleplanar_format() == mojom::SingleplanarFormat::RGBA_8888;
-}
 
 int SharedImageFormat::NumberOfPlanes() const {
   if (is_single_plane()) {
@@ -375,7 +366,6 @@ int SharedImageFormat::BitsPerPixel() const {
     case mojom::SingleplanarFormat::RG_1616:
       return 32;
     case mojom::SingleplanarFormat::RGBA_4444:
-    case mojom::SingleplanarFormat::RGB_565:
     case mojom::SingleplanarFormat::LUMINANCE_F16:
     case mojom::SingleplanarFormat::R_F16:
     case mojom::SingleplanarFormat::R_16:
@@ -383,13 +373,20 @@ int SharedImageFormat::BitsPerPixel() const {
     case mojom::SingleplanarFormat::RG_88:
       return 16;
     case mojom::SingleplanarFormat::ALPHA_8:
-    case mojom::SingleplanarFormat::LUMINANCE_8:
     case mojom::SingleplanarFormat::R_8:
       return 8;
     case mojom::SingleplanarFormat::ETC1:
       return 4;
   }
   NOTREACHED();
+}
+
+SharedImageFormat SharedImageFormat::N32Format() {
+#if BUILDFLAG(IS_ANDROID)
+  return SinglePlaneFormat::kRGBA_8888;
+#else
+  return SinglePlaneFormat::kBGRA_8888;
+#endif
 }
 
 bool SharedImageFormat::operator==(const SharedImageFormat& o) const {

@@ -5,17 +5,36 @@
 #include "net/log/net_log.h"
 
 #include <algorithm>
+#include <string_view>
 
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
+#include "net/log/net_log_heavily_redacted_allowlist.h"
 #include "net/log/net_log_values.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_set.h"
 
 namespace net {
+
+namespace {
+
+void HeavilyRedactParams(base::Value::Dict& params) {
+  static const base::NoDestructor<absl::flat_hash_set<std::string_view>>
+      kAllowlist(kNetLogHeavilyRedactedParamAllowlist.cbegin(),
+                 kNetLogHeavilyRedactedParamAllowlist.cend());
+  for (auto param = params.begin(); param != params.end();) {
+    if (kAllowlist->contains(param->first)) {
+      ++param;
+    } else {
+      param = params.erase(param);
+    }
+  }
+}
+
+}  // namespace
 
 NetLog::ThreadSafeObserver::ThreadSafeObserver() = default;
 
@@ -108,7 +127,7 @@ void NetLog::RemoveObserver(NetLog::ThreadSafeObserver* observer) {
   DCHECK_EQ(this, observer->net_log_);
 
   auto it = std::ranges::find(observers_, observer);
-  CHECK(it != observers_.end(), base::NotFatalUntil::M130);
+  CHECK(it != observers_.end());
   observers_.erase(it);
 
   observer->net_log_ = nullptr;
@@ -136,7 +155,7 @@ void NetLog::RemoveCaptureModeObserver(
   DCHECK(HasCaptureModeObserver(observer));
 
   auto it = std::ranges::find(capture_mode_observers_, observer);
-  CHECK(it != capture_mode_observers_.end(), base::NotFatalUntil::M130);
+  CHECK(it != capture_mode_observers_.end());
   capture_mode_observers_.erase(it);
 
   observer->net_log_ = nullptr;
@@ -235,10 +254,11 @@ void NetLog::InitializeSourceIdPartition() {
                              "after NextID() or called multiple times";
 }
 
-void NetLog::AddEntryInternal(NetLogEventType type,
-                              const NetLogSource& source,
-                              NetLogEventPhase phase,
-                              const GetParamsInterface* get_params) {
+void NetLog::AddEntryInternal(
+    NetLogEventType type,
+    const NetLogSource& source,
+    NetLogEventPhase phase,
+    base::FunctionRef<base::Value::Dict(NetLogCaptureMode)> get_params) {
   NetLogCaptureModeSet observer_capture_modes = GetObserverCaptureModes();
 
   for (int i = 0; i <= static_cast<int>(NetLogCaptureMode::kLast); ++i) {
@@ -246,8 +266,13 @@ void NetLog::AddEntryInternal(NetLogEventType type,
     if (!NetLogCaptureModeSetContains(capture_mode, observer_capture_modes))
       continue;
 
+    base::Value::Dict params = get_params(capture_mode);
+    if (capture_mode == NetLogCaptureMode::kHeavilyRedacted) {
+      HeavilyRedactParams(params);
+    }
+
     NetLogEntry entry(type, source, phase, base::TimeTicks::Now(),
-                      get_params->GetParams(capture_mode));
+                      std::move(params));
 
     // Notify all of the log observers with |capture_mode|.
     base::AutoLock lock(lock_);
@@ -271,12 +296,35 @@ void NetLog::AddEntryAtTimeWithMaterializedParams(NetLogEventType type,
                                                   NetLogEventPhase phase,
                                                   base::TimeTicks time,
                                                   base::Value::Dict params) {
-  NetLogEntry entry(type, source, phase, time, std::move(params));
+  const NetLogCaptureModeSet capture_modes = GetObserverCaptureModes();
+  const NetLogCaptureModeSet heavily_redacted_bit =
+      NetLogCaptureModeToBit(NetLogCaptureMode::kHeavilyRedacted);
+  const bool has_heavily_redacted_observers =
+      capture_modes & heavily_redacted_bit;
+  const bool has_non_heavily_redacted_observers =
+      capture_modes & ~heavily_redacted_bit;
+
+  std::optional<NetLogEntry> non_heavily_redacted_entry;
+  if (has_non_heavily_redacted_observers) {
+    non_heavily_redacted_entry = NetLogEntry(
+        type, source, phase, time,
+        has_heavily_redacted_observers ? params.Clone() : std::move(params));
+  }
+
+  std::optional<NetLogEntry> heavily_redacted_entry;
+  if (has_heavily_redacted_observers) {
+    HeavilyRedactParams(params);
+    heavily_redacted_entry =
+        NetLogEntry(type, source, phase, time, std::move(params));
+  }
 
   // Notify all of the log observers, regardless of capture mode.
   base::AutoLock lock(lock_);
   for (net::NetLog::ThreadSafeObserver* observer : observers_) {
-    observer->OnAddEntry(entry);
+    observer->OnAddEntry(observer->capture_mode() ==
+                                 NetLogCaptureMode::kHeavilyRedacted
+                             ? *heavily_redacted_entry
+                             : *non_heavily_redacted_entry);
   }
 }
 

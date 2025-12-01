@@ -22,7 +22,6 @@ namespace glic {
 // TabSearchButton for sizing and appropriate theming.
 
 class GlicButton : public TabStripNudgeButton,
-                   public GlicButtonControllerDelegate,
                    public views::ContextMenuController,
                    public ui::SimpleMenuModel::Delegate {
   METADATA_HEADER(GlicButton, TabStripNudgeButton)
@@ -32,15 +31,12 @@ class GlicButton : public TabStripNudgeButton,
                       PressedCallback pressed_callback,
                       PressedCallback close_pressed_callback,
                       base::RepeatingClosure hovered_callback,
+                      base::RepeatingClosure mouse_down_callback,
                       const gfx::VectorIcon& icon,
                       const std::u16string& tooltip);
   GlicButton(const GlicButton&) = delete;
   GlicButton& operator=(const GlicButton&) = delete;
   ~GlicButton() override;
-
-  // GlicButtonControllerDelegate:
-  void SetShowState(bool show) override;
-  void SetIcon(const gfx::VectorIcon& icon) override;
 
   // TabStripNudgeButton:
   void SetIsShowingNudge(bool is_showing) override;
@@ -66,6 +62,11 @@ class GlicButton : public TabStripNudgeButton,
   // ui::SimpleMenuModel::Delegate:
   void ExecuteCommand(int command_id, int event_flags) override;
 
+  // views::View:
+  // Note that this is an optimization for fetching zero-state suggestions so
+  // that we can load the suggestions in the UI as quickly as possible.
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+
   bool IsContextMenuShowingForTest();
 
  private:
@@ -74,6 +75,10 @@ class GlicButton : public TabStripNudgeButton,
 
   // Callback when the context menu closes.
   void OnMenuClosed();
+
+  // Called every time the contextual cue is shown to make a screen reader
+  // announcement.
+  void AnnounceNudgeShown();
 
   PrefService* profile_prefs() {
     return tab_strip_controller_->GetProfile()->GetPrefs();
@@ -94,13 +99,13 @@ class GlicButton : public TabStripNudgeButton,
   // Tab strip that contains this button.
   raw_ptr<TabStripController> tab_strip_controller_;
 
-  // Represents the show state of the button. Visibility of the button
-  // is reflected by the show state except when the nudge is showing.
-  bool show_state_ = true;
-
   // Callback which is invoked when the button is hovered (i.e., the user is
   // more likely to interact with it soon).
   base::RepeatingClosure hovered_callback_;
+
+  // Callback which is invoked when there is a mouse down event on the button
+  // (i.e., the user is very likely to interact with it soon).
+  base::RepeatingClosure mouse_down_callback_;
 };
 
 }  // namespace glic

@@ -68,6 +68,7 @@
 #include "content/public/test/test_launcher.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_scale_factor.h"
 
 namespace {
@@ -102,6 +103,9 @@ using bookmarks_helper::SetTitle;
 using BookmarkGeneration =
     fake_server::BookmarkEntityBuilder::BookmarkGeneration;
 using syncer::MatchesDeletionOrigin;
+using syncer::MatchesLocalDataDescription;
+using syncer::MatchesLocalDataItemModel;
+using testing::_;
 using testing::AllOf;
 using testing::Contains;
 using testing::Each;
@@ -117,17 +121,24 @@ using testing::SizeIs;
 // All tests in this file utilize a single profile.
 // TODO(pvalenzuela): Standardize this pattern by moving this constant to
 // SyncTest and using it in all single client tests.
-const int kSingleProfileIndex = 0;
+constexpr int kSingleProfileIndex = 0;
 
 #if !BUILDFLAG(IS_ANDROID)
 // An arbitrary GUID, to be used for injecting the same bookmark entity to the
 // fake server across PRE_MyTest and MyTest.
-const char kBookmarkGuid[] = "e397ed62-9532-4dbf-ae55-200236eba15c";
+constexpr char kBookmarkGuid[] = "e397ed62-9532-4dbf-ae55-200236eba15c";
 #endif  // !BUILDFLAG(IS_ANDROID)
 
 // A title and a URL which are used across PRE_MyTest and MyTest.
-const char16_t kBookmarkTitle[] = u"Title";
-const char kBookmarkPageUrl[] = "http://www.foo.com/";
+constexpr char16_t kBookmarkTitle[] = u"Title";
+constexpr char kBookmarkPageUrl[] = "http://www.foo.com/";
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+constexpr char kPreviouslySyncingGaiaIdMetricName[] =
+    "Sync.BookmarkModelMerger.PreviouslySyncingGaiaId";
+
+constexpr char kOtherEmail[] = "account2@gmail.com";
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 
 MATCHER(HasUniquePosition, "") {
   return arg.specifics().bookmark().has_unique_position();
@@ -266,13 +277,16 @@ class SingleClientBookmarksThrottlingSyncTest : public SyncTest {
   void SetupBookmarksSync() {
     // Only enable bookmarks so that sync is not nudged by another data type
     // (with a shorter delay).
-    ASSERT_TRUE(GetClient(0)->SetupSync(
+    ASSERT_TRUE(GetClient(0)->SetupSyncWithCustomSettings(
         base::BindOnce([](syncer::SyncUserSettings* user_settings) {
-#if BUILDFLAG(IS_CHROMEOS)
-          user_settings->SetSelectedOsTypes(false, {});
-#endif
           user_settings->SetSelectedTypes(
               false, {syncer::UserSelectableType::kBookmarks});
+#if BUILDFLAG(IS_CHROMEOS)
+          user_settings->SetSelectedOsTypes(false, {});
+#else   // BUILDFLAG(IS_CHROMEOS)
+          user_settings->SetInitialSyncFeatureSetupComplete(
+              syncer::SyncFirstSetupCompleteSource::ADVANCED_FLOW_CONFIRM);
+#endif  // BUILDFLAG(IS_CHROMEOS)
         })));
   }
 
@@ -2515,6 +2529,198 @@ IN_PROC_BROWSER_TEST_F(SingleClientBookmarksWithAccountStorageSyncTest,
               ElementsAre(IsFolder(kInitiallyAccountTitle)));
 }
 
+IN_PROC_BROWSER_TEST_F(SingleClientBookmarksWithAccountStorageSyncTest,
+                       ShouldReturnLocalDataDescriptions) {
+  ASSERT_TRUE(SetupClients());
+
+  BookmarkModel* model = GetBookmarkModel(kSingleProfileIndex);
+
+  // Create the following structure while the user is signed out:
+  // bookmark_bar
+  //   l1_folder
+  //     l2_folder
+  //       l3_url
+  //     l2_url
+  //   l1_url
+  const bookmarks::BookmarkNode* l1_folder = model->AddFolder(
+      /*parent=*/model->bookmark_bar_node(), /*index=*/0, u"l1_folder");
+  const bookmarks::BookmarkNode* l2_folder =
+      model->AddFolder(/*parent=*/l1_folder, /*index=*/0, u"l2_folder");
+  model->AddURL(/*parent=*/l2_folder, /*index=*/0, u"l3_url",
+                GURL("http://l3.com/"));
+  model->AddURL(/*parent=*/l1_folder, /*index=*/1, u"l2_url",
+                GURL("http://l2.com/"));
+  const bookmarks::BookmarkNode* l1_bookmark =
+      model->AddURL(/*parent=*/model->bookmark_bar_node(),
+                    /*index=*/1, u"l1_url", GURL("http://l1.com/"));
+
+  // Setup a primary account, but don't actually enable Sync-the-feature (so
+  // that Sync will start in transport mode).
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->SignInPrimaryAccount());
+  // Note: Depending on the state of feature flags (specifically
+  // kReplaceSyncPromosWithSignInPromos), Bookmarks may or may not be considered
+  // selected by default.
+  GetSyncService(kSingleProfileIndex)
+      ->GetUserSettings()
+      ->SetSelectedType(syncer::UserSelectableType::kBookmarks, true);
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitSyncTransportActive());
+  ASSERT_FALSE(GetSyncService(kSingleProfileIndex)->IsSyncFeatureEnabled());
+  ASSERT_TRUE(GetSyncService(kSingleProfileIndex)
+                  ->GetUserSettings()
+                  ->GetSelectedTypes()
+                  .Has(syncer::UserSelectableType::kBookmarks));
+  ASSERT_TRUE(GetSyncService(kSingleProfileIndex)
+                  ->GetActiveDataTypes()
+                  .Has(syncer::BOOKMARKS));
+
+  ASSERT_THAT(
+      model->bookmark_bar_node()->children(),
+      ElementsAre(
+          IsFolder(
+              u"l1_folder",
+              ElementsAre(IsFolder(u"l2_folder",
+                                   ElementsAre(IsUrlBookmark(
+                                       u"l3_url", GURL("http://l3.com/")))),
+                          IsUrlBookmark(u"l2_url", GURL("http://l2.com/")))),
+          IsUrlBookmark(u"l1_url", GURL("http://l1.com/"))));
+
+  EXPECT_THAT(
+      GetClient(kSingleProfileIndex)
+          ->GetLocalDataDescriptionAndWait(syncer::BOOKMARKS),
+      MatchesLocalDataDescription(
+          syncer::DataType::BOOKMARKS,
+          // The full list includes only the top-level items. The bookmark count
+          // includes the URLs in the subtree (but not the folder).
+          ElementsAre(
+              MatchesLocalDataItemModel(
+                  l1_folder->id(), syncer::LocalDataItemModel::FolderIcon(),
+                  "l1_folder", _),
+              MatchesLocalDataItemModel(l1_bookmark->id(),
+                                        syncer::LocalDataItemModel::PageUrlIcon(
+                                            GURL("http://l1.com/")),
+                                        /*title=*/"l1_url",
+                                        /*subtitle=*/IsEmpty())),
+          /*item_count=*/3u,
+          /*domains=*/ElementsAre("l1.com", "l2.com", "l3.com"),
+          /*domain_count=*/3u));
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientBookmarksWithAccountStorageSyncTest,
+                       ShouldBatchUploadAllEntries) {
+  const std::u16string kTitle1 = u"Title1";
+  const GURL kUrl1("http://url1.com/");
+  const std::u16string kTitle2 = u"Title2";
+  const GURL kUrl2("http://url2.com/");
+
+  ASSERT_TRUE(SetupClients());
+
+  BookmarkModel* model = GetBookmarkModel(kSingleProfileIndex);
+
+  model->AddURL(/*parent=*/model->bookmark_bar_node(),
+                /*index=*/0, kTitle1, kUrl1);
+  model->AddURL(/*parent=*/model->bookmark_bar_node(),
+                /*index=*/1, kTitle2, kUrl2);
+
+  ASSERT_THAT(model->account_bookmark_bar_node(), IsNull());
+
+  // Setup a primary account, but don't actually enable Sync-the-feature (so
+  // that Sync will start in transport mode).
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->SignInPrimaryAccount());
+  // Note: Depending on the state of feature flags (specifically
+  // kReplaceSyncPromosWithSignInPromos), Bookmarks may or may not be considered
+  // selected by default.
+  GetSyncService(kSingleProfileIndex)
+      ->GetUserSettings()
+      ->SetSelectedType(syncer::UserSelectableType::kBookmarks, true);
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitSyncTransportActive());
+  ASSERT_FALSE(GetSyncService(kSingleProfileIndex)->IsSyncFeatureEnabled());
+  ASSERT_TRUE(GetSyncService(kSingleProfileIndex)
+                  ->GetUserSettings()
+                  ->GetSelectedTypes()
+                  .Has(syncer::UserSelectableType::kBookmarks));
+  ASSERT_TRUE(GetSyncService(kSingleProfileIndex)
+                  ->GetActiveDataTypes()
+                  .Has(syncer::BOOKMARKS));
+
+  ASSERT_THAT(model->bookmark_bar_node()->children(),
+              ElementsAre(IsUrlBookmark(kTitle1, kUrl1),
+                          IsUrlBookmark(kTitle2, kUrl2)));
+  ASSERT_THAT(model->account_bookmark_bar_node(), NotNull());
+  ASSERT_THAT(GetFakeServer()->GetSyncEntitiesByDataType(syncer::BOOKMARKS),
+              IsEmpty());
+
+  GetSyncService(kSingleProfileIndex)
+      ->TriggerLocalDataMigration({syncer::BOOKMARKS});
+
+  EXPECT_TRUE(bookmarks_helper::ServerBookmarksEqualityChecker(
+                  {{kTitle1, kUrl1}, {kTitle2, kUrl2}},
+                  /*cryptographer=*/nullptr)
+                  .Wait());
+  EXPECT_THAT(model->account_bookmark_bar_node()->children(),
+              ElementsAre(IsUrlBookmark(kTitle1, kUrl1),
+                          IsUrlBookmark(kTitle2, kUrl2)));
+  EXPECT_THAT(model->bookmark_bar_node()->children(), IsEmpty());
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientBookmarksWithAccountStorageSyncTest,
+                       ShouldBatchUploadSomeEntries) {
+  const std::u16string kTitle1 = u"Title1";
+  const GURL kUrl1("http://url1.com/");
+  const std::u16string kTitle2 = u"Title2";
+  const GURL kUrl2("http://url2.com/");
+
+  ASSERT_TRUE(SetupClients());
+
+  BookmarkModel* model = GetBookmarkModel(kSingleProfileIndex);
+
+  const bookmarks::BookmarkNode* bookmark1 =
+      model->AddURL(/*parent=*/model->bookmark_bar_node(),
+                    /*index=*/0, kTitle1, kUrl1);
+  model->AddURL(/*parent=*/model->bookmark_bar_node(),
+                /*index=*/1, kTitle2, kUrl2);
+
+  ASSERT_THAT(model->account_bookmark_bar_node(), IsNull());
+
+  // Setup a primary account, but don't actually enable Sync-the-feature (so
+  // that Sync will start in transport mode).
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->SignInPrimaryAccount());
+  // Note: Depending on the state of feature flags (specifically
+  // kReplaceSyncPromosWithSignInPromos), Bookmarks may or may not be considered
+  // selected by default.
+  GetSyncService(kSingleProfileIndex)
+      ->GetUserSettings()
+      ->SetSelectedType(syncer::UserSelectableType::kBookmarks, true);
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitSyncTransportActive());
+  ASSERT_FALSE(GetSyncService(kSingleProfileIndex)->IsSyncFeatureEnabled());
+  ASSERT_TRUE(GetSyncService(kSingleProfileIndex)
+                  ->GetUserSettings()
+                  ->GetSelectedTypes()
+                  .Has(syncer::UserSelectableType::kBookmarks));
+  ASSERT_TRUE(GetSyncService(kSingleProfileIndex)
+                  ->GetActiveDataTypes()
+                  .Has(syncer::BOOKMARKS));
+
+  ASSERT_THAT(model->bookmark_bar_node()->children(),
+              ElementsAre(IsUrlBookmark(kTitle1, kUrl1),
+                          IsUrlBookmark(kTitle2, kUrl2)));
+  ASSERT_THAT(model->account_bookmark_bar_node(), NotNull());
+  ASSERT_THAT(GetFakeServer()->GetSyncEntitiesByDataType(syncer::BOOKMARKS),
+              IsEmpty());
+
+  GetSyncService(kSingleProfileIndex)
+      ->TriggerLocalDataMigrationForItems(
+          {{syncer::BOOKMARKS, {bookmark1->id()}}});
+
+  EXPECT_TRUE(bookmarks_helper::ServerBookmarksEqualityChecker(
+                  {{kTitle1, kUrl1}},
+                  /*cryptographer=*/nullptr)
+                  .Wait());
+  EXPECT_THAT(model->account_bookmark_bar_node()->children(),
+              ElementsAre(IsUrlBookmark(kTitle1, kUrl1)));
+  EXPECT_THAT(model->bookmark_bar_node()->children(),
+              ElementsAre(IsUrlBookmark(kTitle2, kUrl2)));
+}
+
 // Regression test for crbug.com/329278277: turning sync-the-feature on, then
 // off, and later signing in with account bookmarks enabled should lead to all
 // bookmarks being duplicated (local bookmarks and account bookmarks). The user
@@ -2966,5 +3172,126 @@ IN_PROC_BROWSER_TEST_F(
         << "for title " << entity.specifics().bookmark().full_title();
   }
 }
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
+IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, PRE_ComparisonMetrics) {
+  base::HistogramTester histogram_tester;
+
+  ASSERT_TRUE(SetupClients());
+
+  // Create one URL bookmark under Bookmarks Bar to deal with non-empty
+  // datasets.
+  ASSERT_TRUE(AddURL(kSingleProfileIndex,
+                     GetBookmarkBarNode(kSingleProfileIndex), 0, u"Url1",
+                     GURL("http://www.url1.com")));
+
+  ASSERT_TRUE(SetupSync());
+  histogram_tester.ExpectUniqueSample(
+      kPreviouslySyncingGaiaIdMetricName,
+      /*sample=*/2 /*kSyncFeatureNeverPreviouslyTurnedOn*/,
+      /*expected_bucket_count=*/1);
+
+  // Turn Sync off by removing the primary account.
+  GetClient(kSingleProfileIndex)->SignOutPrimaryAccount();
+
+  // Create a second bookmark, this time under Other Bookmarks.
+  ASSERT_TRUE(AddURL(kSingleProfileIndex, GetOtherNode(kSingleProfileIndex), 0,
+                     u"Url2", GURL("http://www.url2.com")));
+
+  // Turn Sync on with the same account.
+  ASSERT_TRUE(SetupSync());
+  histogram_tester.ExpectBucketCount(
+      kPreviouslySyncingGaiaIdMetricName,
+      /*sample=*/3 /*kCurrentGaiaIdMatchesPreviousWithSyncFeatureOn*/,
+      /*expected_bucket_count=*/1);
+
+  // Sanity-check the existence of a few comparison metrics.
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison.MatchesPreviousGaiaId."
+      "ConsideringAllBookmarks.ByUrl",
+      /*sample=*/4 /*kAccountDataIsStrictSubsetOfLocalData*/,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison.MatchesPreviousGaiaId."
+      "ConsideringAllBookmarks.ByUrlAndUuid",
+      /*sample=*/4 /*kAccountDataIsStrictSubsetOfLocalData*/,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison.MatchesPreviousGaiaId."
+      "UnderBookmarksBar.ByUrlAndUuid",
+      /*sample=*/3 /*kExactMatchNonEmpty*/,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison.MatchesPreviousGaiaId."
+      "ConsideringAllBookmarks.ByUrlAndUuid.Between1And19LocalUrlBookmarks",
+      /*sample=*/4 /*kAccountDataIsStrictSubsetOfLocalData*/,
+      /*expected_bucket_count=*/1);
+
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison2.MatchesPreviousGaiaId."
+      "ConsideringAllBookmarks.ByUrl",
+      /*sample=*/8 /*kIntersectionBetween50And90Percent*/,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison2.MatchesPreviousGaiaId."
+      "ConsideringAllBookmarks.ByUrlAndUuid",
+      /*sample=*/8 /*kIntersectionBetween50And90Percent*/,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison2.MatchesPreviousGaiaId."
+      "UnderBookmarksBar.ByUrlAndUuid",
+      /*sample=*/3 /*kExactMatchNonEmpty*/,
+      /*expected_bucket_count=*/1);
+  histogram_tester.ExpectUniqueSample(
+      "Sync.BookmarkModelMerger.Comparison2.MatchesPreviousGaiaId."
+      "ConsideringAllBookmarks.ByUrlAndUuid.Between1And19LocalUrlBookmarks",
+      /*sample=*/8 /*kIntersectionBetween50And90Percent*/,
+      /*expected_bucket_count=*/1);
+
+  // Enable Sync with a different account.
+  GetClient(kSingleProfileIndex)->SignOutPrimaryAccount();
+  GetClient(kSingleProfileIndex)->SetUsernameForFutureSignins(kOtherEmail);
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->SetupSync());
+  histogram_tester.ExpectBucketCount(
+      kPreviouslySyncingGaiaIdMetricName,
+      /*sample=*/4 /*kCurrentGaiaIdDiffersPreviousWithSyncFeatureOn*/,
+      /*expected_bucket_count=*/1);
+}
+
+IN_PROC_BROWSER_TEST_F(SingleClientBookmarksSyncTest, ComparisonMetrics) {
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(SetupClients());
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitSyncSetupCompletion());
+  histogram_tester.ExpectTotalCount(kPreviouslySyncingGaiaIdMetricName, 0);
+
+  // Turn off bookmark sync specifically and turn it back on.
+  GetSyncService(kSingleProfileIndex)
+      ->GetUserSettings()
+      ->SetSelectedTypes(/*sync_everything=*/false, /*types=*/{});
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitSyncTransportActive());
+  GetSyncService(kSingleProfileIndex)
+      ->GetUserSettings()
+      ->SetSelectedTypes(/*sync_everything=*/false,
+                         /*types=*/{syncer::UserSelectableType::kBookmarks});
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitSyncTransportActive());
+
+  // No metric should be recorded, because this sync the feature was already on
+  // and toggling bookmark sync off and on shouldn't pollute metrics.
+  histogram_tester.ExpectTotalCount(kPreviouslySyncingGaiaIdMetricName, 0);
+
+  // Turn Sync off and on with the same account. Note that `kOtherEmail` needs
+  // to be specified again because it doesn't automatically carry over from the
+  // PRE_ test.
+  GetClient(kSingleProfileIndex)->SignOutPrimaryAccount();
+  GetClient(kSingleProfileIndex)->SetUsernameForFutureSignins(kOtherEmail);
+  ASSERT_TRUE(SetupSync());
+
+  // The histogram should be recorded once again.
+  histogram_tester.ExpectBucketCount(
+      kPreviouslySyncingGaiaIdMetricName,
+      /*sample=*/3 /*kCurrentGaiaIdMatchesPreviousWithSyncFeatureOn*/,
+      /*expected_bucket_count=*/1);
+}
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace

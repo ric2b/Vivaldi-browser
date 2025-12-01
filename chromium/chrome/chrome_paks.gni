@@ -8,6 +8,7 @@ import("//build/config/locales.gni")
 import("//chrome/browser/buildflags.gni")
 import("//chrome/common/features.gni")
 import("//components/compose/features.gni")
+import("//content/browser/devtools/features.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//pdf/features.gni")
 import("//ui/base/ui_features.gni")
@@ -69,6 +70,10 @@ template("chrome_repack_percent") {
         "//ui/views/resources",
       ]
     }
+    if (enable_builtin_search_provider_assets) {
+      sources += [ "$root_gen_dir/third_party/search_engines_data/search_engines_resources_${percent}_percent.pak" ]
+      deps += [ "//third_party/search_engines_data:resources" ]
+    }
     if (is_chromeos) {
       sources += [
         "$root_gen_dir/ash/login/resources/login_resources_${percent}_percent.pak",
@@ -90,6 +95,12 @@ template("chrome_repack_percent") {
     if (enable_extensions_core) {
       sources += [ "$root_gen_dir/extensions/extensions_browser_resources_${percent}_percent.pak" ]
       deps += [ "//extensions:extensions_browser_resources" ]
+    }
+    if (enable_extensions) {
+      sources +=
+          [ "$root_gen_dir/chrome/extensions_zero_state_promo_resources.pak" ]
+      deps +=
+          [ "//chrome/browser/resources/extensions_zero_state_promo:resources" ]
     }
 
     output = "${invoker.output_dir}/vivaldi_${percent}_percent.pak"
@@ -166,6 +177,11 @@ template("chrome_extra_paks") {
       sources += invoker.additional_paks
     }
 
+    if (enable_extensions_core) {
+      sources += [ "$root_gen_dir/chrome/component_extension_resources.pak" ]
+      deps += [ "//chrome/browser/resources:component_extension_resources" ]
+    }
+
     if (!is_android) {
       # New paks should be added here by default.
       sources += [
@@ -174,7 +190,6 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/app_service_internals_resources.pak",
         "$root_gen_dir/chrome/bookmarks_resources.pak",
         "$root_gen_dir/chrome/commerce_product_specifications_resources.pak",
-        "$root_gen_dir/chrome/component_extension_resources.pak",
         "$root_gen_dir/chrome/data_sharing_resources.pak",
         "$root_gen_dir/chrome/dev_ui_resources.pak",
         "$root_gen_dir/chrome/downloads_resources.pak",
@@ -187,10 +202,12 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/lens_shared_resources.pak",
         "$root_gen_dir/chrome/lens_untrusted_resources.pak",
         "$root_gen_dir/chrome/management_resources.pak",
+        "$root_gen_dir/chrome/new_tab_footer_resources.pak",
         "$root_gen_dir/chrome/new_tab_page_instant_resources.pak",
         "$root_gen_dir/chrome/new_tab_page_resources.pak",
         "$root_gen_dir/chrome/new_tab_page_third_party_resources.pak",
         "$root_gen_dir/chrome/new_tab_page_untrusted_resources.pak",
+        "$root_gen_dir/chrome/new_tab_shared_resources.pak",
         "$root_gen_dir/chrome/omnibox_popup_resources.pak",
         "$root_gen_dir/chrome/password_manager_resources.pak",
         "$root_gen_dir/chrome/privacy_sandbox_resources.pak",
@@ -208,6 +225,7 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/signin_resources.pak",
         "$root_gen_dir/chrome/suggest_internals_resources.pak",
         "$root_gen_dir/chrome/support_tool_resources.pak",
+        "$root_gen_dir/chrome/tab_group_home_resources.pak",
         "$root_gen_dir/chrome/tab_search_resources.pak",
         "$root_gen_dir/chrome/web_app_internals_resources.pak",
         "$root_gen_dir/chrome/webui_gallery_resources.pak",
@@ -216,13 +234,13 @@ template("chrome_extra_paks") {
         "$root_gen_dir/content/traces_internals_resources.pak",
       ]
       deps += [
-        "//chrome/browser/resources:component_extension_resources",
         "//chrome/browser/resources:dev_ui_paks",
         "//chrome/browser/resources/commerce/product_specifications:resources",
         "//chrome/browser/resources/data_sharing:resources",
         "//chrome/browser/resources/lens/overlay:resources",
         "//chrome/browser/resources/lens/shared:resources",
         "//chrome/browser/resources/search_engine_choice:resources",
+        "//chrome/browser/resources/tabs/tab_group_home:resources",
         "//content/browser/tracing:resources",
       ]
       if (is_chrome_branded) {
@@ -244,7 +262,7 @@ template("chrome_extra_paks") {
         deps += [ "//chrome/browser/resources/settings_shared:resources" ]
       }
     }
-    if (!is_android || is_desktop_android) {
+    if (enable_devtools_frontend) {
       sources +=
           [ "$root_gen_dir/content/browser/devtools/devtools_resources.pak" ]
       deps += [ "//content/browser/devtools:devtools_resources" ]
@@ -311,6 +329,7 @@ template("chrome_extra_paks") {
         "$root_gen_dir/chrome/emoji_picker_resources.pak",
         "$root_gen_dir/chrome/enterprise_reporting_resources.pak",
         "$root_gen_dir/chrome/extended_updates_resources.pak",
+        "$root_gen_dir/chrome/floating_workspace_resources.pak",
         "$root_gen_dir/chrome/gaia_action_buttons_resources.pak",
         "$root_gen_dir/chrome/healthd_internals_resources.pak",
         "$root_gen_dir/chrome/internet_config_dialog_resources.pak",
@@ -402,6 +421,7 @@ template("chrome_extra_paks") {
         "//ash/wm/overview/birch/resources:coral_resources",
         "//chrome/browser/resources:office_web_app_resources",
         "//chrome/browser/resources/chromeos/dlp_internals:resources",
+        "//chrome/browser/resources/chromeos/floating_workspace:resources",
         "//chrome/browser/resources/chromeos/kerberos:resources",
         "//chrome/common/chromeos/extensions:resources",
         "//chromeos/ash/components/emoji:resources",
@@ -458,14 +478,13 @@ template("chrome_extra_paks") {
     }
 
     if (is_win || is_mac || is_linux || is_chromeos) {
-      sources += [
-        "$root_gen_dir/chrome/connectors_internals_resources.pak",
-        "$root_gen_dir/chrome/discards_resources.pak",
-      ]
-      deps += [
-        "//chrome/browser/resources/connectors_internals:resources",
-        "//chrome/browser/resources/discards:resources",
-      ]
+      sources += [ "$root_gen_dir/chrome/connectors_internals_resources.pak" ]
+      deps += [ "//chrome/browser/resources/connectors_internals:resources" ]
+    }
+
+    if (is_win || is_mac || is_linux || is_chromeos || is_desktop_android) {
+      sources += [ "$root_gen_dir/chrome/discards_resources.pak" ]
+      deps += [ "//chrome/browser/resources/discards:resources" ]
     }
 
     if (is_win || is_mac || is_linux) {

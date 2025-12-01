@@ -34,6 +34,7 @@
 #include "chrome/browser/metrics/structured/test/structured_metrics_mixin.h"
 #include "chrome/test/base/fake_gaia_mixin.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
+#include "chromeos/ash/components/policy/device_local_account/device_local_account_type.h"
 #include "components/metrics/metrics_service.h"
 #include "components/metrics/structured/structured_events.h"
 #include "components/metrics/structured/structured_metrics_client.h"
@@ -42,7 +43,6 @@
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_store.h"
 #include "components/policy/core/common/cloud/test/policy_builder.h"
-#include "components/policy/core/common/device_local_account_type.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -221,15 +221,6 @@ class MetadataProcessorTest : public policy::DevicePolicyCrosBrowserTest,
     UploadDeviceLocalAccountPolicy();
     session_manager_client()->set_device_local_account_policy(
         kAccountId1, device_local_account_policy_.GetBlob());
-  }
-
-  void SetUp() override {
-    // These tests are only applicable if structured metrics service is enabled.
-    if (!base::FeatureList::IsEnabled(kEnabledStructuredMetricsService)) {
-      GTEST_SKIP() << "Skipping test: Structured Metrics Service and CrOS "
-                      "Events must be enabled";
-    }
-    policy::DevicePolicyCrosBrowserTest::SetUp();
   }
 
   void SetDevicePolicy() {

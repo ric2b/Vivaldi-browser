@@ -176,9 +176,13 @@ config("ffmpeg_warnings") {
 
       # Various files convert MAX_INT to double and similar without casting.
       "-Wno-implicit-int-float-conversion",
+
+      # codec_internal.h forward declares some enums.
+      "-Wno-microsoft-enum-forward-reference",
     ]
 
-    if (target_cpu == "arm" || target_cpu == "arm64") {
+    if (target_cpu == "arm" || target_cpu == "arm64" ||
+        target_cpu == "arm64e") {
       # ffmpeg uses ARM instructions that clang deems deprecated.
       cflags += [ "-Wno-inline-asm" ]
     }
@@ -306,7 +310,8 @@ target(link_target_type, "ffmpeg_internal") {
       cflags += [ "-w" ]
     }
 
-    if (current_cpu == "arm" || current_cpu == "arm64") {
+    if (current_cpu == "arm" || current_cpu == "arm64" ||
+        current_cpu == "arm64e") {
       asmflags = []
       if (arm_float_abi == "hard") {
         asmflags += [ "-DHAVE_VFP_ARGS=1" ]

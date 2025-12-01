@@ -52,6 +52,7 @@
 #include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "base/uuid.h"
+#include "base/version.h"
 #include "base/win/atl.h"
 #include "base/win/elevation_util.h"
 #include "base/win/registry.h"
@@ -62,6 +63,7 @@
 #include "base/win/scoped_variant.h"
 #include "base/win/startup_information.h"
 #include "chrome/enterprise_companion/installer_paths.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/registration_data.h"
 #include "chrome/updater/updater_branding.h"
@@ -106,7 +108,7 @@ HRESULT GetSidIntegrityLevel(PSID sid, MANDATORY_LEVEL* level) {
   if (!authority) {
     return E_FAIL;
   }
-  constexpr SID_IDENTIFIER_AUTHORITY kMandatoryLabelAuth =
+  static constexpr SID_IDENTIFIER_AUTHORITY kMandatoryLabelAuth =
       SECURITY_MANDATORY_LABEL_AUTHORITY;
   if (UNSAFE_TODO(std::memcmp(authority, &kMandatoryLabelAuth,
                               sizeof(SID_IDENTIFIER_AUTHORITY)))) {
@@ -512,11 +514,12 @@ std::string GetUACState() {
   return s;
 }
 
-std::wstring GetServiceName(bool is_internal_service) {
+std::wstring GetServiceName(bool is_internal_service,
+                            const base::Version& version) {
   std::wstring service_name = base::StrCat(
       {base::UTF8ToWide(PRODUCT_FULLNAME_STRING), L" ",
        is_internal_service ? kWindowsInternalServiceName : kWindowsServiceName,
-       L" ", kUpdaterVersionUtf16});
+       L" ", base::UTF8ToWide(version.GetString())});
   std::erase_if(service_name, base::IsAsciiWhitespace<wchar_t>);
   return service_name;
 }
@@ -603,6 +606,7 @@ HRESULT RunDeElevatedCmdLine(const std::wstring& cmd_line) {
     return E_INVALIDARG;
   }
 
+  const base::FilePath program(argv->at(0));
   return base::win::RunDeElevatedNoWait(
       argv->at(0),
       base::JoinString(
@@ -620,7 +624,8 @@ HRESULT RunDeElevatedCmdLine(const std::wstring& cmd_line) {
                 });
             return parameters;
           }(),
-          L" "));
+          L" "),
+      program.DirName().value());
 }
 
 std::optional<base::FilePath> GetGoogleUpdateExePath(UpdaterScope scope) {
@@ -754,9 +759,10 @@ std::optional<OSVERSIONINFOEX> GetOSVersion() {
 bool CompareOSVersions(const OSVERSIONINFOEX& os_version, BYTE oper) {
   CHECK(oper);
 
-  constexpr DWORD kOSTypeMask = VER_MAJORVERSION | VER_MINORVERSION |
-                                VER_SERVICEPACKMAJOR | VER_SERVICEPACKMINOR;
-  constexpr DWORD kBuildTypeMask = VER_BUILDNUMBER;
+  static constexpr DWORD kOSTypeMask = VER_MAJORVERSION | VER_MINORVERSION |
+                                       VER_SERVICEPACKMAJOR |
+                                       VER_SERVICEPACKMINOR;
+  static constexpr DWORD kBuildTypeMask = VER_BUILDNUMBER;
 
   // If the OS and the service pack match, return the build number comparison.
   return CompareOSVersionsInternal(os_version, kOSTypeMask, VER_EQUAL)
@@ -1151,8 +1157,13 @@ bool MigrateLegacyUpdaters(
          it.Valid(); ++it) {
       const std::wstring app_id = it.Name();
 
-      // Skip importing legacy updater.
+      // Skip importing the legacy updater.
       if (base::EqualsCaseInsensitiveASCII(app_id, kLegacyGoogleUpdateAppID)) {
+        continue;
+      }
+
+      // Skip importing this updater.
+      if (base::EqualsCaseInsensitiveASCII(app_id, kUpdaterAppId)) {
         continue;
       }
 
@@ -1439,7 +1450,7 @@ bool IsOemInstalling() {
 
 std::wstring StringFromGuid(const GUID& guid) {
   // {xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx}
-  constexpr int kGuidStringCharacters =
+  static constexpr int kGuidStringCharacters =
       1 + 8 + 1 + 4 + 1 + 4 + 1 + 4 + 1 + 12 + 1 + 1;
   wchar_t guid_string[kGuidStringCharacters] = {};
   CHECK_NE(::StringFromGUID2(guid, guid_string, kGuidStringCharacters), 0);
@@ -1470,6 +1481,51 @@ std::optional<base::FilePath> GetBundledEnterpriseCompanionExecutablePath(
                         .RemoveExtension()
                         .AsUTF8Unsafe(),
                     kExecutableSuffix, ".exe"}));
+}
+
+[[nodiscard]] bool IsServicePresent(const std::wstring& service_name) {
+  ScopedScHandle scm(::OpenSCManager(
+      nullptr, nullptr, SC_MANAGER_CONNECT | SC_MANAGER_CREATE_SERVICE));
+  if (!scm.IsValid()) {
+    return false;
+  }
+
+  ScopedScHandle service(
+      ::OpenService(scm.Get(), service_name.c_str(),
+                    SERVICE_QUERY_CONFIG | SERVICE_CHANGE_CONFIG));
+  if (!service.IsValid()) {
+    return false;
+  }
+
+  return ::ChangeServiceConfig(service.Get(), SERVICE_NO_CHANGE,
+                               SERVICE_NO_CHANGE, SERVICE_NO_CHANGE, nullptr,
+                               nullptr, nullptr, nullptr, nullptr, nullptr,
+                               nullptr) ||
+         (::GetLastError() != ERROR_SERVICE_MARKED_FOR_DELETE);
+}
+
+[[nodiscard]] bool IsServiceEnabled(const std::wstring& service_name) {
+  ScopedScHandle scm(
+      ::OpenSCManager(nullptr, nullptr, SC_MANAGER_CONNECT | GENERIC_READ));
+  if (!scm.IsValid()) {
+    return false;
+  }
+
+  ScopedScHandle service(
+      ::OpenService(scm.Get(), service_name.c_str(), SERVICE_QUERY_CONFIG));
+  if (!service.IsValid()) {
+    return false;
+  }
+
+  static constexpr uint32_t kMaxQueryConfigBufferBytes = 8 * 1024;
+  auto buffer = std::make_unique<uint8_t[]>(kMaxQueryConfigBufferBytes);
+  DWORD bytes_needed_ignored = 0;
+  QUERY_SERVICE_CONFIG* service_config =
+      reinterpret_cast<QUERY_SERVICE_CONFIG*>(buffer.get());
+  return ::QueryServiceConfig(service.Get(), service_config,
+                              kMaxQueryConfigBufferBytes,
+                              &bytes_needed_ignored) &&
+         (service_config->dwStartType != SERVICE_DISABLED);
 }
 
 }  // namespace updater

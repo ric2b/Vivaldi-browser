@@ -12,6 +12,7 @@
 #include <stdio.h>
 
 #include <cmath>
+#include <cstdint>
 #include <optional>
 #include <string>
 
@@ -70,7 +71,7 @@ void AppendWithPrecision(double value,
 
 StdoutMetricsExporter::StdoutMetricsExporter() : output_(stdout) {}
 
-bool StdoutMetricsExporter::Export(rtc::ArrayView<const Metric> metrics) {
+bool StdoutMetricsExporter::Export(ArrayView<const Metric> metrics) {
   for (const Metric& metric : metrics) {
     PrintMetric(metric);
   }

@@ -32,11 +32,15 @@ const ALLOWED_ASSERTION_FAILURES = [
   'Request Runtime.evaluate failed. {"code":-32602,"message":"uniqueContextId not found"}',
   'uniqueContextId not found',
   'Request Storage.getStorageKeyForFrame failed. {"code":-32602,"message":"Frame tree node for given frame not found"}',
+  // Some left-over a11y calls show up in the logs.
+  'Request Accessibility.getChildAXNodes failed. {"code":-32602,"message":"Invalid ID"}',
   'Unable to create texture',
   'Not allowed to load local resource: devtools://theme/colors.css',
   // neterror.js started serving sourcemaps and we're requesting it unnecessarily.
   'Request Network.loadNetworkResource failed. {"code":-32602,"message":"Unsupported URL scheme"}',
   'Fetch API cannot load chrome-error://chromewebdata/neterror.rollup.js.map. URL scheme "chrome-error" is not supported.',
+  // crbug.com/413061397: Temporarily ignore until CfT roll includes https://crrev.com/c/6480657
+  'Request Page.getAdScriptAncestryIds failed. {"code":-32601,"message":"\'Page.getAdScriptAncestryIds\' wasn\'t found"}',
 ];
 
 const logLevels = {

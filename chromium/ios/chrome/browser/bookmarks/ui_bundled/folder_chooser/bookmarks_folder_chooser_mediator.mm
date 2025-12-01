@@ -20,6 +20,10 @@
 #import "ios/chrome/browser/signin/model/authentication_service_observer_bridge.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 using bookmarks::BookmarkNode;
 
 @interface BookmarksFolderChooserMediator () <
@@ -120,6 +124,9 @@ using bookmarks::BookmarkNode;
 }
 
 - (BOOL)shouldDisplayCloudIconForLocalOrSyncableBookmarks {
+  if (vivaldi::IsVivaldiRunning())
+    return NO; // End Vivaldi
+
   return bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(_syncService);
 }
 

@@ -13,6 +13,8 @@
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/ash/floating_sso/floating_sso_service.h"
+#include "chrome/browser/ash/floating_sso/floating_sso_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/network/network_handler.h"
@@ -23,37 +25,33 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 
-namespace ash {
-
-namespace {
-
-PrefService* GetActiveUserPrefService() {
-  auto* active_user = user_manager::UserManager::Get()->GetActiveUser();
-  if (active_user) {
-    auto* browser_context =
-        ash::BrowserContextHelper::Get()->GetBrowserContextByUser(active_user);
-    if (browser_context) {
-      return Profile::FromBrowserContext(browser_context)->GetPrefs();
-    }
-  }
-  return nullptr;
-}
-
-}  // namespace
-
-namespace floating_workspace_util {
+namespace ash::floating_workspace_util {
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kFloatingWorkspaceV2Enabled, false);
 }
 
-// TODO(crbug.com/297795546): Clean up V1 code path and feature flag check.
 bool IsFloatingWorkspaceV1Enabled() {
   return features::IsFloatingWorkspaceEnabled();
 }
 
 bool IsFloatingWorkspaceV2Enabled() {
-  PrefService* pref_service = GetActiveUserPrefService();
+  auto* active_user = user_manager::UserManager::Get()->GetActiveUser();
+  if (!active_user) {
+    return false;
+  }
+  auto* browser_context =
+      ash::BrowserContextHelper::Get()->GetBrowserContextByUser(active_user);
+  if (!browser_context) {
+    return false;
+  }
+
+  return IsFloatingWorkspaceEnabled(
+      Profile::FromBrowserContext(browser_context));
+}
+
+bool IsFloatingWorkspaceEnabled(const Profile* profile) {
+  const PrefService* pref_service = profile->GetPrefs();
   if (!pref_service) {
     return false;
   }
@@ -80,10 +78,28 @@ bool IsFloatingWorkspaceV2Enabled() {
   return features::IsFloatingWorkspaceV2Enabled();
 }
 
+bool IsFloatingSsoEnabled(Profile* profile) {
+  if (!ash::features::IsFloatingSsoAllowed()) {
+    return false;
+  }
+  ash::floating_sso::FloatingSsoService* floating_sso_service =
+      ash::floating_sso::FloatingSsoServiceFactory::GetForProfile(profile);
+  if (!floating_sso_service) {
+    return false;
+  }
+  return floating_sso_service->IsFloatingSsoEnabled();
+}
+
 bool IsInternetConnected() {
   NetworkStateHandler* nsh = NetworkHandler::Get()->network_state_handler();
-  return nsh != nullptr &&
-         nsh->ConnectedNetworkByType(NetworkTypePattern::Default()) != nullptr;
+  if (!nsh) {
+    return false;
+  }
+  const NetworkState* state = nsh->DefaultNetwork();
+  if (!state) {
+    return false;
+  }
+  return state->IsOnline();
 }
 
 bool IsSafeMode() {
@@ -95,5 +111,4 @@ bool ShouldHandleRestartRestore() {
   return IsFloatingWorkspaceV2Enabled() && !IsSafeMode();
 }
 
-}  // namespace floating_workspace_util
-}  // namespace ash
+}  // namespace ash::floating_workspace_util

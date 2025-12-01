@@ -6,16 +6,16 @@
 #include <vector>
 
 #include "base/values.h"
-#include "chrome/common/importer/importer_data_types.h"
-#include "chrome/common/importer/importer_type.h"
 #include "chrome/utility/importer/importer.h"
 #include "components/password_manager/core/browser/password_form.h"
+#include "components/user_data_importer/common/importer_data_types.h"
+#include "components/user_data_importer/common/importer_type.h"
 
 using password_manager::PasswordForm;
 
 struct ChromiumProfile {
   ChromiumProfile();
-  importer::ImporterType importer_type;
+  user_data_importer::ImporterType importer_type;
   int import_name_resource_idx;
 };
 
@@ -28,11 +28,13 @@ class ChromiumProfileImporter {
   ChromiumProfileImporter(const ChromiumProfileImporter&) = delete;
   ChromiumProfileImporter& operator=(const ChromiumProfileImporter&) = delete;
 
-  void DetectChromiumProfiles(std::vector<importer::SourceProfile>* profiles);
+  void DetectChromiumProfiles(
+      std::vector<user_data_importer::SourceProfile>* profiles);
 
  private:
-  ChromiumProfile GetChromeProfile(importer::ImporterType importerType);
-  void ReadProfiles(std::vector<importer::ChromeProfileInfo>* cp,
+  ChromiumProfile GetChromeProfile(
+      user_data_importer::ImporterType importerType);
+  void ReadProfiles(std::vector<user_data_importer::ChromeProfileInfo>* cp,
                     base::FilePath profileDirectory);
   std::vector<ChromiumProfile> chromeProfiles;
 };

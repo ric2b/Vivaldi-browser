@@ -38,10 +38,11 @@
 #include "src/tint/utils/macros/defer.h"
 
 #if TINT_BUILD_WGSL_READER
+#include "src/tint/cmd/fuzz/ir/helpers/substitute_overrides_config.h"
 #include "src/tint/cmd/fuzz/wgsl/fuzz.h"
+#include "src/tint/lang/core/ir/transform/substitute_overrides.h"
 #include "src/tint/lang/core/ir/validator.h"
 #include "src/tint/lang/wgsl/ast/module.h"
-#include "src/tint/lang/wgsl/helpers/apply_substitute_overrides.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
 #endif
 
@@ -57,12 +58,6 @@ Vector<IRFuzzer, 32>& Fuzzers() {
 }
 
 thread_local std::string_view currently_running;
-
-[[noreturn]] void TintInternalCompilerErrorReporter(const tint::InternalCompilerError& err) {
-    std::cerr << "ICE while running fuzzer: '" << currently_running << "'" << '\n';
-    std::cerr << err.Error() << "\n";
-    __builtin_trap();
-}
 #endif  // TINT_BUILD_IR_BINARY
 
 void Register(const IRFuzzer& fuzzer) {
@@ -74,15 +69,38 @@ void Register(const IRFuzzer& fuzzer) {
             if (program.AST().Enables().Any(tint::wgsl::reader::IsUnsupportedByIR)) {
                 return;
             }
-            auto transformed = tint::wgsl::ApplySubstituteOverrides(program);
-            auto& src = transformed ? transformed.value() : program;
-            if (!src.IsValid()) {
-                return;
-            }
-            auto ir = tint::wgsl::reader::ProgramToLoweredIR(src);
+
+            auto ir = tint::wgsl::reader::ProgramToLoweredIR(program);
             if (ir != Success) {
                 return;
             }
+
+            auto cfg = SubstituteOverridesConfig(ir.Get());
+            auto substituteOverridesResult =
+                tint::core::ir::transform::SubstituteOverrides(ir.Get(), cfg);
+            if (substituteOverridesResult != Success) {
+                return;
+            }
+
+            // Workgroup sizes < 1 are checked by Dawn and the Tint binary,
+            // should be skipped by the fuzzer.
+            for (auto func : ir->functions) {
+                if (func->Stage() != tint::core::ir::Function::PipelineStage::kCompute) {
+                    continue;
+                }
+
+                auto wg = func->WorkgroupSize().value();
+                for (auto value : wg) {
+                    auto* cnst = value->As<core::ir::Constant>();
+                    TINT_ASSERT(cnst);
+
+                    auto val = cnst->Value()->ValueAs<int32_t>();
+                    if (val < 1) {
+                        return;
+                    }
+                }
+            }
+
             if (auto val = core::ir::Validate(ir.Get()); val != Success) {
                 TINT_ICE() << val.Failure();
             }
@@ -107,8 +125,6 @@ void Register(const IRFuzzer& fuzzer) {
 void Run(const std::function<tint::core::ir::Module()>& acquire_module,
          const Options& options,
          Slice<const std::byte> data) {
-    tint::SetInternalCompilerErrorReporter(&TintInternalCompilerErrorReporter);
-
     // Ensure that fuzzers are sorted. Without this, the fuzzers may be registered in any order,
     // leading to non-determinism, which we must avoid.
     TINT_STATIC_INIT(Fuzzers().Sort([](auto& a, auto& b) { return a.name < b.name; }));

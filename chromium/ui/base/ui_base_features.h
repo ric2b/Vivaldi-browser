@@ -68,6 +68,9 @@ BASE_DECLARE_FEATURE(kTouchTextEditingRedesign);
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsTouchTextEditingRedesignEnabled();
 
+COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kTouchDragAndDrop);
+COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsTouchDragAndDropEnabled();
+
 // Used to enable forced colors mode for web content.
 COMPONENT_EXPORT(UI_BASE_FEATURES) BASE_DECLARE_FEATURE(kForcedColors);
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsForcedColorsEnabled();
@@ -131,6 +134,9 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kOverrideDefaultOzonePlatformHintToAuto);
 #endif  // BUILDFLAG(IS_LINUX)
 
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kXInput2KeyEvents);
+
 // Indicates whether DrmOverlayManager should used the synchronous API to
 // perform pageflip tests.
 COMPONENT_EXPORT(UI_BASE_FEATURES)
@@ -167,7 +173,11 @@ extern const char kPredictionTypeFramesBased[];
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const char kPredictionTypeDefaultTime[];
 COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const char kPredictionTypeDefaultFramesRatio[];
+extern const char kPredictionTypeDefaultFramesVariation1[];
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const char kPredictionTypeDefaultFramesVariation2[];
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const char kPredictionTypeDefaultFramesVariation3[];
 
 // The type of filter to use for filtering events. These values are used as the
 // 'filter' feature param for |blink::features::kFilteringScrollPrediction|.
@@ -236,6 +246,11 @@ BASE_DECLARE_FEATURE(kAsyncFullscreenWindowState);
 // https://chromestatus.com/feature/5085102657503232
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 BASE_DECLARE_FEATURE(kClipboardChangeEvent);
+
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+BASE_DECLARE_FEATURE(kEnablePixelCanvasRecording);
+
+bool COMPONENT_EXPORT(UI_BASE_FEATURES) IsPixelCanvasRecordingEnabled();
 
 }  // namespace features
 

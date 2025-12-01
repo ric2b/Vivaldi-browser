@@ -46,15 +46,15 @@ class MockUdpSocketPosix : public UdpSocketPosix {
 // Mock event waiter
 class MockNetworkWaiter final : public SocketHandleWaiter {
  public:
-  using ReadyHandle = SocketHandleWaiter::ReadyHandle;
+  using HandleWithFlags = SocketHandleWaiter::HandleWithFlags;
 
   MockNetworkWaiter() : SocketHandleWaiter(&FakeClock::now) {}
   ~MockNetworkWaiter() override = default;
 
-  MOCK_METHOD2(
-      AwaitSocketsReadable,
-      ErrorOr<std::vector<ReadyHandle>>(const std::vector<SocketHandleRef>&,
-                                        const Clock::duration&));
+  MOCK_METHOD(ErrorOr<std::vector<HandleWithFlags>>,
+              AwaitSocketsReady,
+              (const std::vector<HandleWithFlags>&, const Clock::duration&),
+              (override));
 
   FakeClock fake_clock{Clock::time_point{Clock::duration{1234567}}};
 };

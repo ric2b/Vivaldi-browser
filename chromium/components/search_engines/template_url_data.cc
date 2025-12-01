@@ -11,18 +11,23 @@
 #include "base/containers/flat_map.h"
 #include "base/i18n/case_conversion.h"
 #include "base/pickle.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/memory_usage_estimator.h"
 #include "base/uuid.h"
 #include "base/values.h"
+#include "build/branding_buildflags.h"
 #include "components/search_engines/regulatory_extension_type.h"
 #include "components/search_engines/search_engines_switches.h"
 #include "crypto/hash.h"
 #include "components/search_engines/prepopulated_engines.h"
 
 namespace {
+
+constexpr bool kEnableBuiltinSearchProviderAssets =
+    !!BUILDFLAG(ENABLE_BUILTIN_SEARCH_PROVIDER_ASSETS);
 
 // Returns a GUID used for sync, which is random except for built-in search
 // engines. The latter benefit from using a deterministic GUID, to make sure
@@ -78,6 +83,7 @@ TemplateURLData::TemplateURLData(
     std::string_view contextual_search_url,
     std::string_view logo_url,
     std::string_view doodle_url,
+    std::string_view base_builtin_resource_id,
     std::string_view search_url_post_params,
     std::string_view suggest_url_post_params,
     std::string_view image_url_post_params,
@@ -100,6 +106,11 @@ TemplateURLData::TemplateURLData(
       contextual_search_url(contextual_search_url),
       logo_url(logo_url),
       doodle_url(doodle_url),
+      // Loading search engines resources is not supporting on non-branded
+      // builds.
+      base_builtin_resource_id(kEnableBuiltinSearchProviderAssets
+                                   ? base_builtin_resource_id
+                                   : std::string_view()),
       search_url_post_params(search_url_post_params),
       suggestions_url_post_params(suggest_url_post_params),
       image_url_post_params(image_url_post_params),
@@ -182,6 +193,13 @@ std::vector<uint8_t> TemplateURLData::GenerateHash() const {
   return result;
 }
 
+std::string TemplateURLData::GetBuiltinImageResourceId() const {
+  if (base_builtin_resource_id.empty()) {
+    return "IDR_DEFAULT_FAVICON";
+  }
+  return base::StrCat({base_builtin_resource_id, "_IMAGE"});
+}
+
 void TemplateURLData::GenerateSyncGUID() {
   sync_guid = GenerateGUID(prepopulate_id, starter_pack_id);
 }
@@ -225,4 +243,8 @@ bool TemplateURLData::CreatedByNonDefaultSearchProviderPolicy() const {
 
 bool TemplateURLData::CreatedByEnterpriseSearchAggregatorPolicy() const {
   return policy_origin == PolicyOrigin::kSearchAggregator;
+}
+
+bool TemplateURLData::CreatedBySiteSearchPolicy() const {
+  return policy_origin == PolicyOrigin::kSiteSearch;
 }

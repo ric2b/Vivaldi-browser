@@ -26,6 +26,7 @@ class FederatedIdentityApiPermissionContextDelegate;
 class FederatedIdentityPermissionContextDelegate;
 enum class IdpSigninStatus;
 class FederatedAuthRequestPageData;
+class RenderFrameHost;
 
 namespace webid {
 
@@ -99,18 +100,17 @@ bool HasSharingPermissionOrIdpHasThirdPartyCookiesAccess(
     FederatedIdentityPermissionContextDelegate* sharing_permission_delegate,
     FederatedIdentityApiPermissionContextDelegate* api_permission_delegate);
 
-bool IsFedCmAuthzEnabled();
-
 FederatedAuthRequestPageData* GetPageData(Page& page);
-
-// Returns a new session ID. Used to record UKM metrics corresponding to a new
-// API invocation, like get() or disconnect().
-int GetNewSessionID();
 
 // Returns the frame type of the requester.
 FedCmRequesterFrameType ComputeRequesterFrameType(const RenderFrameHost& rfh,
                                                   const url::Origin& requester,
                                                   const url::Origin& embedder);
+
+void MaybeAddResponseCodeToConsole(RenderFrameHost& render_frame_host,
+                                   const char* fetch_description,
+                                   int response_code);
+
 }  // namespace webid
 
 }  // namespace content

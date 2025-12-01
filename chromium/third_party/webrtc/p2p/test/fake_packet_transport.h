@@ -29,7 +29,7 @@
 namespace webrtc {
 
 // Used to simulate a packet-based transport.
-class FakePacketTransport : public rtc::PacketTransportInternal {
+class FakePacketTransport : public PacketTransportInternal {
  public:
   explicit FakePacketTransport(const std::string& transport_name)
       : transport_name_(transport_name) {}
@@ -67,7 +67,7 @@ class FakePacketTransport : public rtc::PacketTransportInternal {
   bool receiving() const override { return receiving_; }
   int SendPacket(const char* data,
                  size_t len,
-                 const rtc::PacketOptions& options,
+                 const AsyncSocketPacketOptions& options,
                  int /* flags */) override {
     if (!dest_ || error_ != 0) {
       return -1;
@@ -75,7 +75,7 @@ class FakePacketTransport : public rtc::PacketTransportInternal {
     CopyOnWriteBuffer packet(data, len);
     SendPacketInternal(packet, options);
 
-    rtc::SentPacket sent_packet(options.packet_id, rtc::TimeMillis());
+    SentPacketInfo sent_packet(options.packet_id, TimeMillis());
     SignalSentPacket(this, sent_packet);
     return static_cast<int>(len);
   }
@@ -99,16 +99,16 @@ class FakePacketTransport : public rtc::PacketTransportInternal {
 
   const CopyOnWriteBuffer* last_sent_packet() { return &last_sent_packet_; }
 
-  std::optional<rtc::NetworkRoute> network_route() const override {
+  std::optional<NetworkRoute> network_route() const override {
     return network_route_;
   }
-  void SetNetworkRoute(std::optional<rtc::NetworkRoute> network_route) {
+  void SetNetworkRoute(std::optional<NetworkRoute> network_route) {
     network_route_ = network_route;
     SignalNetworkRouteChanged(network_route);
   }
 
-  using rtc::PacketTransportInternal::NotifyOnClose;
-  using rtc::PacketTransportInternal::NotifyPacketReceived;
+  using PacketTransportInternal::NotifyOnClose;
+  using PacketTransportInternal::NotifyPacketReceived;
 
  private:
   void set_writable(bool writable) {
@@ -131,11 +131,11 @@ class FakePacketTransport : public rtc::PacketTransportInternal {
   }
 
   void SendPacketInternal(const CopyOnWriteBuffer& packet,
-                          const rtc::PacketOptions& options) {
+                          const AsyncSocketPacketOptions& options) {
     last_sent_packet_ = packet;
     if (dest_) {
-      dest_->NotifyPacketReceived(rtc::ReceivedPacket(
-          packet, SocketAddress(), Timestamp::Micros(rtc::TimeMicros()),
+      dest_->NotifyPacketReceived(ReceivedIpPacket(
+          packet, SocketAddress(), Timestamp::Micros(TimeMicros()),
           options.ecn_1 ? EcnMarking::kEct1 : EcnMarking::kNotEct));
     }
   }
@@ -149,15 +149,17 @@ class FakePacketTransport : public rtc::PacketTransportInternal {
   std::map<Socket::Option, int> options_;
   int error_ = 0;
 
-  std::optional<rtc::NetworkRoute> network_route_;
+  std::optional<NetworkRoute> network_route_;
 };
 
 }  //  namespace webrtc
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::FakePacketTransport;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_FAKE_PACKET_TRANSPORT_H_

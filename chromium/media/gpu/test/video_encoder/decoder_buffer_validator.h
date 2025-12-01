@@ -2,16 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #ifndef MEDIA_GPU_TEST_VIDEO_ENCODER_DECODER_BUFFER_VALIDATOR_H_
 #define MEDIA_GPU_TEST_VIDEO_ENCODER_DECODER_BUFFER_VALIDATOR_H_
 
 #include <stdint.h>
 
+#include <array>
 #include <optional>
 
 #include "base/memory/scoped_refptr.h"
@@ -65,7 +62,9 @@ class DecoderBufferValidator : public BitstreamProcessor {
   // The number of temporal layers.
   const size_t num_temporal_layers_;
 
-  std::vector<int> qp_values_[kMaxSpatialLayers][kMaxTemporalLayers];
+  std::array<std::array<std::vector<int>, kMaxTemporalLayers>,
+             kMaxSpatialLayers>
+      qp_values_;
 
  private:
   // The number of detected errors by Validate().

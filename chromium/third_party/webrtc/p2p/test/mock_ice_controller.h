@@ -26,7 +26,7 @@
 
 namespace webrtc {
 
-class MockIceController : public cricket::IceControllerInterface {
+class MockIceController : public IceControllerInterface {
  public:
   explicit MockIceController(const IceControllerFactoryArgs& /* args */) {}
   ~MockIceController() override = default;
@@ -34,59 +34,50 @@ class MockIceController : public cricket::IceControllerInterface {
   MOCK_METHOD(void, SetIceConfig, (const webrtc::IceConfig&), (override));
   MOCK_METHOD(void,
               SetSelectedConnection,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
-  MOCK_METHOD(void, AddConnection, (const cricket::Connection*), (override));
+  MOCK_METHOD(void, AddConnection, (const webrtc::Connection*), (override));
   MOCK_METHOD(void,
               OnConnectionDestroyed,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
-  MOCK_METHOD(rtc::ArrayView<const cricket::Connection* const>,
+  MOCK_METHOD(ArrayView<const Connection* const>,
               GetConnections,
               (),
               (const, override));
-  MOCK_METHOD(rtc::ArrayView<const cricket::Connection*>,
-              connections,
-              (),
-              (const, override));
+  MOCK_METHOD(ArrayView<const Connection*>, connections, (), (const, override));
   MOCK_METHOD(bool, HasPingableConnection, (), (const, override));
-  MOCK_METHOD(cricket::IceControllerInterface::PingResult,
+  MOCK_METHOD(IceControllerInterface::PingResult,
               SelectConnectionToPing,
               (int64_t),
               (override));
   MOCK_METHOD(bool,
               GetUseCandidateAttr,
-              (const cricket::Connection*,
+              (const webrtc::Connection*,
                webrtc::NominationMode,
-               cricket::IceMode),
+               webrtc::IceMode),
               (const, override));
-  MOCK_METHOD(const cricket::Connection*,
-              FindNextPingableConnection,
-              (),
-              (override));
+  MOCK_METHOD(const Connection*, FindNextPingableConnection, (), (override));
   MOCK_METHOD(void,
               MarkConnectionPinged,
-              (const cricket::Connection*),
+              (const webrtc::Connection*),
               (override));
-  MOCK_METHOD(cricket::IceControllerInterface::SwitchResult,
+  MOCK_METHOD(IceControllerInterface::SwitchResult,
               ShouldSwitchConnection,
-              (cricket::IceSwitchReason, const cricket::Connection*),
+              (webrtc::IceSwitchReason, const webrtc::Connection*),
               (override));
-  MOCK_METHOD(cricket::IceControllerInterface::SwitchResult,
+  MOCK_METHOD(IceControllerInterface::SwitchResult,
               SortAndSwitchConnection,
-              (cricket::IceSwitchReason),
+              (webrtc::IceSwitchReason),
               (override));
-  MOCK_METHOD(std::vector<const cricket::Connection*>,
-              PruneConnections,
-              (),
-              (override));
+  MOCK_METHOD(std::vector<const Connection*>, PruneConnections, (), (override));
 };
 
 class MockIceControllerFactory : public IceControllerFactoryInterface {
  public:
   ~MockIceControllerFactory() override = default;
 
-  std::unique_ptr<cricket::IceControllerInterface> Create(
+  std::unique_ptr<IceControllerInterface> Create(
       const IceControllerFactoryArgs& args) override {
     RecordIceControllerCreated();
     return std::make_unique<MockIceController>(args);
@@ -99,9 +90,11 @@ class MockIceControllerFactory : public IceControllerFactoryInterface {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::MockIceController;
 using ::webrtc::MockIceControllerFactory;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_MOCK_ICE_CONTROLLER_H_

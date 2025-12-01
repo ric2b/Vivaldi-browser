@@ -54,7 +54,7 @@ const char kEmailPattern[] =
 const int32_t kMaximumDomainNameLength = 255;
 
 // Use the same option as in url/url_canon_icu.cc
-// TODO(crbug.com/694157): Change the options if UseIDNA2008NonTransitional flag
+// TODO(crbug.com/40086853): Change the options now that IDNA2008NonTransitional
 // is enabled.
 const int32_t kIdnaConversionOption = UIDNA_CHECK_BIDI;
 
@@ -87,7 +87,8 @@ String EmailInputType::ConvertEmailAddressToASCII(const ScriptRegexp& regexp,
   // build.) TODO(jshin): In an unlikely case this is a perf-issue, treat
   // 8bit and non-8bit strings separately.
   host.Ensure16Bit();
-  icu::UnicodeString idn_domain_name(host.Characters16(), host.length());
+  icu::UnicodeString idn_domain_name(UNSAFE_TODO(host.Characters16()),
+                                     host.length());
   icu::UnicodeString domain_name;
 
   // Leak |idna| at the end.

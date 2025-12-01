@@ -484,9 +484,6 @@ bool SpecificsContainsOnlyValidURLs(
   return true;
 }
 
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// LINT.IfChange(SyncHistorySpecificsError)
 enum class SpecificsError {
   kMissingRequiredFields = 0,
   kTooOld = 1,
@@ -494,7 +491,6 @@ enum class SpecificsError {
   kUnwantedURL = 3,
   kMaxValue = kUnwantedURL
 };
-// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:SyncHistorySpecificsError)
 
 // Checks the given `specifics` for validity, i.e. whether it passes some basic
 // validation checks, and returns the appropriate error if it doesn't.
@@ -531,10 +527,6 @@ std::optional<SpecificsError> GetSpecificsError(
   }
 
   return {};
-}
-
-void RecordSpecificsError(SpecificsError error) {
-  base::UmaHistogramEnumeration("Sync.History.IncomingSpecificsError", error);
 }
 
 }  // namespace
@@ -595,7 +587,6 @@ HistorySyncBridge::ApplyIncrementalSyncChanges(
     if (specifics_error.has_value()) {
       DVLOG(1) << "Skipping invalid visit, reason "
                << static_cast<int>(*specifics_error);
-      RecordSpecificsError(*specifics_error);
       continue;
     }
 
@@ -741,7 +732,7 @@ std::unique_ptr<syncer::DataBatch> HistorySyncBridge::GetAllDataForDebugging() {
 }
 
 std::string HistorySyncBridge::GetClientTag(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(entity_data.specifics.has_history())
       << "EntityData does not have history specifics.";
@@ -751,7 +742,7 @@ std::string HistorySyncBridge::GetClientTag(
 }
 
 std::string HistorySyncBridge::GetStorageKey(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(entity_data.specifics.has_history())
       << "EntityData does not have history specifics.";

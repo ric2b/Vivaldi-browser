@@ -17,6 +17,7 @@
 // End Vivaldi
 
 
+namespace password_manager {
 namespace {
 
 // Point size of the SF Symbol used for the logo.
@@ -27,29 +28,22 @@ const CGFloat kHorizontalSpacing = 9.0;
 
 }  // namespace
 
-namespace password_manager {
-
 BrandedNavigationItemTitleView* CreatePasswordManagerTitleView(
     NSString* title) {
   BrandedNavigationItemTitleView* title_view =
       [[BrandedNavigationItemTitleView alloc]
           initWithFont:ios::provider::GetBrandedProductRegularFont(
                            UIFont.labelFontSize)];
-
   title_view.title = title;
 
   if (!vivaldi::IsVivaldiRunning()) {
-  // Using password logo as placeholder until Password Manager SF Symbol is
-  // added.
   title_view.imageLogo = MakeSymbolMulticolor(
       CustomSymbolWithPointSize(kPasswordManagerSymbol, kSymbolPointSize));
   } // End Vivaldi
 
   title_view.accessibilityLabel = l10n_util::GetNSString(
       IDS_IOS_PASSWORD_MANAGER_TITLE_VIEW_ACCESSIBILITY_LABEL);
-
   title_view.titleLogoSpacing = kHorizontalSpacing;
-
   return title_view;
 }
 

@@ -8,10 +8,12 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ObserverList;
 import org.chromium.base.shared_preferences.SharedPreferencesManager;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 
 /** Handles the sharing Tabs with the system state changes in settings. */
+@NullMarked
 public class AuxiliarySearchConfigManager {
     /** An interface to get updates of the sharing Tabs with the system state. */
     public interface ShareTabsWithOsStateListener {
@@ -23,7 +25,7 @@ public class AuxiliarySearchConfigManager {
 
     /** Static class that implements the initialization-on-demand holder idiom. */
     private static class LazyHolder {
-        static AuxiliarySearchConfigManager sInstance = new AuxiliarySearchConfigManager();
+        static final AuxiliarySearchConfigManager sInstance = new AuxiliarySearchConfigManager();
     }
 
     /** Returns the singleton instance of AuxiliarySearchConfigManager. */

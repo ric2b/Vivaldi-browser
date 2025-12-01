@@ -25,6 +25,7 @@
 #import "ios/chrome/browser/data_sharing/model/data_sharing_service_observer_bridge.h"
 #import "ios/chrome/browser/saved_tab_groups/favicon/coordinator/tab_group_favicons_grid_configurator.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
+#import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_face_pile_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
 #import "ios/chrome/browser/share_kit/model/sharing_state.h"
@@ -70,8 +71,7 @@ using ScopedTabGroupSyncObservation =
 // Comparator for groups by creation date.
 bool CompareGroupByCreationDate(const tab_groups::SavedTabGroup& a,
                                 const tab_groups::SavedTabGroup& b) {
-  return a.creation_time_windows_epoch_micros() >
-         b.creation_time_windows_epoch_micros();
+  return a.creation_time() > b.creation_time();
 }
 
 // Converts deletion notifications from the messaging service into a
@@ -367,9 +367,8 @@ NSString* CreationText(base::Time creation_date) {
     itemData.title = l10n_util::GetPluralNSStringF(
         IDS_IOS_TAB_GROUP_TABS_NUMBER, numberOfTabs);
   }
-  itemData.color = TabGroup::ColorForTabGroupColorId(group->color());
-  itemData.creationText =
-      CreationText(group->creation_time_windows_epoch_micros());
+  itemData.color = tab_groups::ColorForTabGroupColorId(group->color());
+  itemData.creationText = CreationText(group->creation_time());
   itemData.numberOfTabs = static_cast<NSUInteger>(numberOfTabs);
 
   return itemData;
@@ -380,7 +379,7 @@ NSString* CreationText(base::Time creation_date) {
                                                    cell.item.savedTabGroupID);
 }
 
-- (UIViewController*)facePileViewControllerForItem:(TabGroupsPanelItem*)item {
+- (UIView*)facePileViewForItem:(TabGroupsPanelItem*)item {
   if (!_shareKitService || !_shareKitService->IsSupported() ||
       !_collaborationService || !_tabGroupSyncService) {
     return nil;
@@ -401,7 +400,7 @@ NSString* CreationText(base::Time creation_date) {
   config.showsEmptyState = NO;
   config.avatarSize = kFacePileAvatarSize;
 
-  return _shareKitService->FacePile(config);
+  return _shareKitService->FacePileView(config);
 }
 
 #pragma mark TabGroupsPanelMutator
@@ -425,11 +424,14 @@ NSString* CreationText(base::Time creation_date) {
   if (!group) {
     return;
   }
+
   [self.delegate tabGroupsPanelMediator:self
-      showLeaveSharedGroupConfirmationWithSyncID:item.savedTabGroupID
-                                      groupTitle:base::SysUTF16ToNSString(
-                                                     group->title())
-                                      sourceView:sourceView];
+      startLeaveOrDeleteSharedGroupWithSyncID:item.savedTabGroupID
+                                   groupTitle:base::SysUTF16ToNSString(
+                                                  group->title())
+                                    forAction:TabGroupActionType::
+                                                  kLeaveSharedTabGroup
+                                   sourceView:sourceView];
 }
 
 - (void)deleteSharedTabGroupsPanelItem:(TabGroupsPanelItem*)item
@@ -439,11 +441,14 @@ NSString* CreationText(base::Time creation_date) {
   if (!group) {
     return;
   }
+
   [self.delegate tabGroupsPanelMediator:self
-      showDeleteSharedGroupConfirmationWithSyncID:item.savedTabGroupID
-                                       groupTitle:base::SysUTF16ToNSString(
-                                                      group->title())
-                                       sourceView:sourceView];
+      startLeaveOrDeleteSharedGroupWithSyncID:item.savedTabGroupID
+                                   groupTitle:base::SysUTF16ToNSString(
+                                                  group->title())
+                                    forAction:TabGroupActionType::
+                                                  kDeleteSharedTabGroup
+                                   sourceView:sourceView];
 }
 
 - (void)deleteNotificationItem:(TabGroupsPanelItem*)item {

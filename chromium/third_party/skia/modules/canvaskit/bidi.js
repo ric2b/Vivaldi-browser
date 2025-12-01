@@ -16,6 +16,30 @@
       return ret;
     }
 
+    function Int32ArrayToBidiIndexes(int32Array) {
+      if (!int32Array || !int32Array.length) {
+        return [];
+      }
+      let ret = [];
+      for (let i = 0; i < int32Array.length; i+=1) {
+        let index = int32Array[i];
+        ret.push({'index': index});
+      }
+      return ret;
+    }
+
+    function Int16ArrayToCodeUnitsFlags(int16Array) {
+      if (!int16Array || !int16Array.length) {
+        return [];
+      }
+      let ret = [];
+      for (let i = 0; i < int16Array.length; i+=1) {
+        let index = int16Array[i];
+        ret.push({'flags': index});
+      }
+      return ret;
+    }
+
     CanvasKit.Bidi.getBidiRegions = function(text, textDirection) {
       let dir = textDirection === CanvasKit.TextDirection.LTR ? 1 : 0;
       /**
@@ -35,7 +59,7 @@
        */
       let int32Array = CanvasKit.Bidi._reorderVisual(vPtr, visualRuns && visualRuns.length || 0);
       freeArraysThatAreNotMallocedByUsers(vPtr, visualRuns);
-      return int32Array;
+      return Int32ArrayToBidiIndexes(int32Array);
     }
 
     CanvasKit.CodeUnits.compute = function(text) {
@@ -43,7 +67,7 @@
        * @type {Uint16Array}
        */
       let uint16Array = CanvasKit.CodeUnits._compute(text);
-      return uint16Array;
+      return Int16ArrayToCodeUnitsFlags(uint16Array);
     }
 
     if (!CanvasKit['TextDirection']) {

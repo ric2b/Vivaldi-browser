@@ -1184,8 +1184,10 @@ class BufferHelper : public ReadWriteResource
 
     void initializeBarrierTracker(ErrorContext *context);
 
-    // Returns the current VkAccessFlags bits
-    VkAccessFlags getCurrentWriteAccess() const { return mCurrentWriteAccess; }
+    bool isLastAccessShaderWriteOnly() const
+    {
+        return mCurrentReadAccess == 0 && (mCurrentWriteAccess & VK_ACCESS_SHADER_WRITE_BIT) != 0;
+    }
 
   private:
     // Only called by DynamicBuffer.
@@ -1578,11 +1580,6 @@ class CommandBufferHelperCommon : angle::NonCopyable
     void releaseCommandPoolImpl();
 
     template <class DerivedT>
-    void attachAllocatorImpl(SecondaryCommandMemoryAllocator *allocator);
-    template <class DerivedT>
-    SecondaryCommandMemoryAllocator *detachAllocatorImpl();
-
-    template <class DerivedT>
     void assertCanBeRecycledImpl();
 
     void bufferWriteImpl(Context *context,
@@ -1680,9 +1677,6 @@ class OutsideRenderPassCommandBufferHelper final : public CommandBufferHelperCom
     angle::Result attachCommandPool(ErrorContext *context, SecondaryCommandPool *commandPool);
     angle::Result detachCommandPool(ErrorContext *context, SecondaryCommandPool **commandPoolOut);
     void releaseCommandPool();
-
-    void attachAllocator(SecondaryCommandMemoryAllocator *allocator);
-    SecondaryCommandMemoryAllocator *detachAllocator();
 
     void assertCanBeRecycled();
 
@@ -1916,9 +1910,6 @@ class RenderPassCommandBufferHelper final : public CommandBufferHelperCommon
     angle::Result attachCommandPool(ErrorContext *context, SecondaryCommandPool *commandPool);
     void detachCommandPool(SecondaryCommandPool **commandPoolOut);
     void releaseCommandPool();
-
-    void attachAllocator(SecondaryCommandMemoryAllocator *allocator);
-    SecondaryCommandMemoryAllocator *detachAllocator();
 
     void assertCanBeRecycled();
 
@@ -2209,7 +2200,6 @@ class CommandBufferRecycler
 
     angle::Result getCommandBufferHelper(ErrorContext *context,
                                          SecondaryCommandPool *commandPool,
-                                         SecondaryCommandMemoryAllocator *commandsAllocator,
                                          CommandBufferHelperT **commandBufferHelperOut);
 
     void recycleCommandBufferHelper(CommandBufferHelperT **commandBuffer);
@@ -2440,7 +2430,7 @@ class ImageHelper final : public Resource, public angle::Subject
         OnlyQuerySuccess,
         RequireMultisampling
     };
-    static bool FormatSupportsUsage(Renderer *renderer,
+    static bool FormatSupportsUsage(const Renderer *renderer,
                                     VkFormat format,
                                     VkImageType imageType,
                                     VkImageTiling tilingMode,
@@ -3023,6 +3013,8 @@ class ImageHelper final : public Resource, public angle::Subject
     }
     void updatePipelineStageAccessHistory();
 
+    bool areStagedUpdatesClearOnly();
+
   private:
     ANGLE_ENABLE_STRUCT_PADDING_WARNINGS
     struct ClearUpdate
@@ -3241,7 +3233,7 @@ class ImageHelper final : public Resource, public angle::Subject
                                         uint32_t baseArrayLayer,
                                         uint32_t layerCount);
 
-    angle::Result updateSubresourceOnHost(ErrorContext *context,
+    angle::Result updateSubresourceOnHost(ContextVk *contextVk,
                                           ApplyImageUpdate applyUpdate,
                                           const gl::ImageIndex &index,
                                           const gl::Extents &glExtents,
@@ -3285,6 +3277,9 @@ class ImageHelper final : public Resource, public angle::Subject
     void pruneSupersededUpdatesForLevel(ContextVk *contextVk,
                                         const gl::LevelIndex level,
                                         const PruneReason reason);
+    void pruneSupersededUpdatesForLevelImpl(ContextVk *contextVk,
+                                            const gl::LevelIndex level,
+                                            const gl::Box &upcomingUpdateBoundingBox);
 
     // Whether there are any updates in [start, end).
     bool hasStagedUpdatesInLevels(gl::LevelIndex levelStart, gl::LevelIndex levelEnd) const;
@@ -3709,6 +3704,7 @@ class ImageViewHelper final : angle::NonCopyable
 
     // Helpers for colorspace state
     ImageViewColorspace getColorspaceForRead() const { return mReadColorspace; }
+
     bool hasColorspaceOverrideForRead(const ImageHelper &image) const
     {
         ASSERT(image.valid());
@@ -3726,7 +3722,7 @@ class ImageViewHelper final : angle::NonCopyable
                (image.getActualFormat().isSRGB &&
                 mWriteColorspace == vk::ImageViewColorspace::Linear);
     }
-    angle::FormatID getColorspaceOverrideFormatForWrite(angle::FormatID format) const;
+
     void updateStaticTexelFetch(const ImageHelper &image, bool staticTexelFetchAccess) const
     {
         if (mColorspaceState.hasStaticTexelFetchAccess != staticTexelFetchAccess)
@@ -3768,6 +3764,16 @@ class ImageViewHelper final : angle::NonCopyable
             mColorspaceState.eglImageColorspace = eglImageColorspace;
             updateColorspace(image);
         }
+    }
+
+    angle::FormatID getColorspaceOverrideFormatForRead(angle::FormatID format) const
+    {
+        return getColorspaceOverrideFormatImpl(mReadColorspace, format);
+    }
+
+    angle::FormatID getColorspaceOverrideFormatForWrite(angle::FormatID format) const
+    {
+        return getColorspaceOverrideFormatImpl(mWriteColorspace, format);
     }
 
   private:
@@ -3856,6 +3862,9 @@ class ImageViewHelper final : angle::NonCopyable
                                                  VkImageUsageFlags imageUsageFlags);
 
     void updateColorspace(const ImageHelper &image) const;
+
+    angle::FormatID getColorspaceOverrideFormatImpl(ImageViewColorspace colorspace,
+                                                    angle::FormatID format) const;
 
     // For applications that frequently switch a texture's base/max level, and make no other changes
     // to the texture, keep track of the currently-used base and max levels, and keep one "read

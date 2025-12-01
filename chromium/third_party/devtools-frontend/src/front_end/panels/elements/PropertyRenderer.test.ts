@@ -99,26 +99,27 @@ describeWithEnvironment('PropertyRenderer', () => {
 
 describe('TracingContext', () => {
   it('assumes no substitutions by default', () => {
-    const matchedResult = sinon.createStubInstance(SDK.CSSPropertyParser.BottomUpTreeMatching);
-    matchedResult.hasMatches.returns(false);
-    const context =
-        new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), matchedResult);
+    const matchedResult = SDK.CSSPropertyParser.matchDeclaration('prop', 'value', []);
+    assert.exists(matchedResult);
+    const context = new Elements.PropertyRenderer.TracingContext(
+        new Elements.PropertyRenderer.Highlighting(), false, 0, matchedResult);
     assert.isFalse(context.nextSubstitution());
 
-    matchedResult.hasMatches.returns(true);
-    const context2 =
-        new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), matchedResult);
+    sinon.stub(matchedResult, 'hasMatches').returns(true);
+    const context2 = new Elements.PropertyRenderer.TracingContext(
+        new Elements.PropertyRenderer.Highlighting(), false, 0, matchedResult);
     assert.isTrue(context2.nextSubstitution());
 
-    const context3 = new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting());
+    const context3 = new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), false);
     assert.isFalse(context3.nextSubstitution());
   });
 
   it('controls substitution by creating "nested" tracing contexts', () => {
-    const matchedResult = sinon.createStubInstance(SDK.CSSPropertyParser.BottomUpTreeMatching);
-    matchedResult.hasMatches.returns(true);
-    const context =
-        new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), matchedResult);
+    const matchedResult = SDK.CSSPropertyParser.matchDeclaration('prop', 'value', []);
+    assert.exists(matchedResult);
+    sinon.stub(matchedResult, 'hasMatches').returns(true);
+    const context = new Elements.PropertyRenderer.TracingContext(
+        new Elements.PropertyRenderer.Highlighting(), false, 0, matchedResult);
 
     assert.isTrue(context.nextSubstitution());
     assert.exists(context.substitution());
@@ -142,10 +143,11 @@ describe('TracingContext', () => {
   });
 
   it('does not allow tracing evaluations until substitutions are exhausted', () => {
-    const matchedResult = sinon.createStubInstance(SDK.CSSPropertyParser.BottomUpTreeMatching);
-    matchedResult.hasMatches.returns(true);
-    const context =
-        new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), matchedResult);
+    const matchedResult = SDK.CSSPropertyParser.matchDeclaration('prop', 'value', []);
+    assert.exists(matchedResult);
+    sinon.stub(matchedResult, 'hasMatches').returns(true);
+    const context = new Elements.PropertyRenderer.TracingContext(
+        new Elements.PropertyRenderer.Highlighting(), false, 0, matchedResult);
 
     assert.throw(() => context.nextEvaluation());
     context.nextSubstitution();
@@ -153,11 +155,12 @@ describe('TracingContext', () => {
   });
 
   it('controls evaluations creating nested context', () => {
-    const matchedResult = sinon.createStubInstance(SDK.CSSPropertyParser.BottomUpTreeMatching);
-    matchedResult.hasMatches.returns(false);
-    const context =
-        new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), matchedResult);
+    const matchedResult = SDK.CSSPropertyParser.matchDeclaration('prop', 'value', []);
+    assert.exists(matchedResult);
+    const context = new Elements.PropertyRenderer.TracingContext(
+        new Elements.PropertyRenderer.Highlighting(), false, 0, matchedResult);
 
+    const evaluation = () => ({placeholder: []});
     // Evaluations are applied bottom up
     assert.isTrue(context.nextEvaluation());
     {
@@ -173,13 +176,13 @@ describe('TracingContext', () => {
       // Bottom-up pass: actually apply evaluations "from the inside out".
       // Grand children don't have any inner expressions to be evaluated, no need to request evaluation and no inner
       // tracing contexts to be passed here.
-      assert.isTrue(firstGrandChild.applyEvaluation([]));
-      assert.isTrue(secondGrandChild.applyEvaluation([]));
-      assert.isTrue(thirdGrandChild.applyEvaluation([]));
-      assert.isTrue(secondChild.applyEvaluation([]));
+      assert.isOk(firstGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(secondGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(thirdGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(secondChild.applyEvaluation([], evaluation));
       // firstChild has inner expressions (the grand children), so pass the inner tracing contexts here.
-      assert.isFalse(firstChild.applyEvaluation([firstGrandChild, secondGrandChild, thirdGrandChild]));
-      assert.isFalse(context.applyEvaluation([firstChild, secondChild]));
+      assert.isNotOk(firstChild.applyEvaluation([firstGrandChild, secondGrandChild, thirdGrandChild], evaluation));
+      assert.isNotOk(context.applyEvaluation([firstChild, secondChild], evaluation));
     }
 
     assert.isTrue(context.nextEvaluation());
@@ -191,12 +194,12 @@ describe('TracingContext', () => {
       assert.exists(firstGrandChild);
       assert.exists(secondGrandChild);
       assert.exists(thirdGrandChild);
-      assert.isTrue(firstGrandChild.applyEvaluation([]));
-      assert.isTrue(secondGrandChild.applyEvaluation([]));
-      assert.isTrue(thirdGrandChild.applyEvaluation([]));
-      assert.isTrue(secondChild.applyEvaluation([]));
-      assert.isTrue(firstChild.applyEvaluation([firstGrandChild, secondGrandChild, thirdGrandChild]));
-      assert.isFalse(context.applyEvaluation([firstChild, secondChild]));
+      assert.isOk(firstGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(secondGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(thirdGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(secondChild.applyEvaluation([], evaluation));
+      assert.isOk(firstChild.applyEvaluation([firstGrandChild, secondGrandChild, thirdGrandChild], evaluation));
+      assert.isNotOk(context.applyEvaluation([firstChild, secondChild], evaluation));
     }
 
     assert.isTrue(context.nextEvaluation());
@@ -208,21 +211,63 @@ describe('TracingContext', () => {
       assert.exists(firstGrandChild);
       assert.exists(secondGrandChild);
       assert.exists(thirdGrandChild);
-      assert.isTrue(firstGrandChild.applyEvaluation([]));
-      assert.isTrue(secondGrandChild.applyEvaluation([]));
-      assert.isTrue(thirdGrandChild.applyEvaluation([]));
-      assert.isTrue(secondChild.applyEvaluation([]));
-      assert.isTrue(firstChild.applyEvaluation([firstGrandChild, secondGrandChild, thirdGrandChild]));
-      assert.isTrue(context.applyEvaluation([firstChild, secondChild]));
+      assert.isOk(firstGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(secondGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(thirdGrandChild.applyEvaluation([], evaluation));
+      assert.isOk(secondChild.applyEvaluation([], evaluation));
+      assert.isOk(firstChild.applyEvaluation([firstGrandChild, secondGrandChild, thirdGrandChild], evaluation));
+      assert.isOk(context.applyEvaluation([firstChild, secondChild], evaluation));
     }
 
     assert.isFalse(context.nextEvaluation());
   });
 
   it('can inject itself into a RenderingContext', () => {
-    const tracingContext = new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting());
+    const tracingContext =
+        new Elements.PropertyRenderer.TracingContext(new Elements.PropertyRenderer.Highlighting(), false);
     const renderingContext = sinon.createStubInstance(Elements.PropertyRenderer.RenderingContext);
     assert.strictEqual(tracingContext.renderingContext(renderingContext).tracing, tracingContext);
+  });
+
+  it('keeps track of longhand offsets', () => {
+    // The property name isn't relevant, but we need something with sufficiently many longhands. `animation` has lots
+    // of longhands.
+    const matchedResult = SDK.CSSPropertyParser.matchDeclaration(
+        'animation', 'a b var(--c)',
+        [new SDK.CSSPropertyParserMatchers.BaseVariableMatcher(match => match.name === '--c' ? 'ddd' : null)]);
+    assert.exists(matchedResult);
+    const tracingContext = new Elements.PropertyRenderer.TracingContext(
+        new Elements.PropertyRenderer.Highlighting(), false, 0, matchedResult);
+
+    // The initial offset is 0.
+    assert.strictEqual(tracingContext.longhandOffset, 0);
+    const varNode = matchedResult.ast.tree.lastChild;
+    const match = varNode && matchedResult.getMatch(varNode);
+    assert.exists(match);
+    // Apply one level of substitutions (for the var(--c)).
+    assert.isTrue(tracingContext.nextSubstitution());
+    const childTracingContext = tracingContext.substitution({
+      match,
+      context: new Elements.PropertyRenderer.RenderingContext(matchedResult.ast, null, new Map(), matchedResult)
+    });
+    assert.exists(childTracingContext);
+    // The var(--c) appears in the longhand position #2.
+    assert.strictEqual(childTracingContext?.longhandOffset, 2);
+
+    // Now test that the offset of the var(--c) gets passed down to what the var gets substituted with.
+    const innerMatchedResult = SDK.CSSPropertyParser.matchDeclaration('--c', 'c1 c2 c3', []);
+    assert.exists(innerMatchedResult);
+    const lastNode = innerMatchedResult.ast.tree.lastChild;  // c3
+    assert.exists(lastNode);
+    const renderingContext = new Elements.PropertyRenderer.RenderingContext(
+        innerMatchedResult.ast, null, new Map(), innerMatchedResult, undefined, undefined, childTracingContext);
+
+    const longhands = SDK.CSSMetadata.cssMetadata().getLonghands(matchedResult.ast.propertyName ?? '');
+    assert.exists(longhands);
+    // In the fully substituted value, c3 appears in the fifth position.
+    const expectedLonghand = longhands.at(4);
+    assert.exists(expectedLonghand);
+    assert.strictEqual(renderingContext.getComputedLonghandName(lastNode), expectedLonghand);
   });
 });
 

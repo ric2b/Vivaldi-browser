@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_ADVANCED_PROTECTION_STATUS_MANAGER_H_
 #define CHROME_BROWSER_SAFE_BROWSING_ADVANCED_PROTECTION_STATUS_MANAGER_H_
 
+#include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "components/keyed_service/core/keyed_service.h"
 
@@ -23,18 +24,25 @@ class AdvancedProtectionStatusManager : public KeyedService {
     virtual void OnAdvancedProtectionStatusChanged(bool enabled) = 0;
   };
 
+  AdvancedProtectionStatusManager();
+
+  virtual void SetAdvancedProtectionStatusForTesting(bool enrolled) = 0;
+
   // Returns whether the unconsented primary account of the associated profile
   // is under Advanced Protection.
   virtual bool IsUnderAdvancedProtection() const = 0;
 
   // Adds and removes observers to observe enabled/disabled status changes.
-  virtual void AddObserver(StatusChangedObserver* observer) = 0;
-  virtual void RemoveObserver(StatusChangedObserver* observer) = 0;
-
-  virtual void SetAdvancedProtectionStatusForTesting(bool enrolled) = 0;
+  void AddObserver(StatusChangedObserver* observer);
+  void RemoveObserver(StatusChangedObserver* observer);
 
  protected:
-  ~AdvancedProtectionStatusManager() override = default;
+  ~AdvancedProtectionStatusManager() override;
+
+  void NotifyObserversStatusChanged();
+
+ private:
+  base::ObserverList<StatusChangedObserver> observers_;
 };
 
 }  // namespace safe_browsing

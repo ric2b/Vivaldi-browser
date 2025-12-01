@@ -2,7 +2,8 @@ import { isCompatibilityDevice } from '../common/framework/test_config.js';
 import { keysOf } from '../common/util/data_tables.js';
 import { assert, unreachable } from '../common/util/util.js';
 
-import { align } from './util/math.js';
+import { align, roundDown } from './util/math.js';
+import { getTextureDimensionFromView } from './util/texture/base.js';
 import { ImageCopyType } from './util/texture/layout.js';
 
 //
@@ -1438,10 +1439,12 @@ const kASTCTextureFormatInfo = formatTableWithDefaults({
 /** An uncompressed (block size 1x1) format (regular | depth/stencil). */
 /* prettier-ignore */ export type UncompressedTextureFormat = keyof typeof kUncompressedTextureFormatInfo;
 
-/* prettier-ignore */ export const      kRegularTextureFormats: readonly      RegularTextureFormat[] = keysOf(     kRegularTextureFormatInfo);
-/* prettier-ignore */ export const   kSizedDepthStencilFormats: readonly   SizedDepthStencilFormat[] = keysOf(  kSizedDepthStencilFormatInfo);
-/* prettier-ignore */ export const kUnsizedDepthStencilFormats: readonly UnsizedDepthStencilFormat[] = keysOf(kUnsizedDepthStencilFormatInfo);
-/* prettier-ignore */ export const   kCompressedTextureFormats: readonly   CompressedTextureFormat[] = keysOf(  kCompressedTextureFormatInfo);
+/* prettier-ignore */ export const        kRegularTextureFormats: readonly      RegularTextureFormat[] = keysOf(     kRegularTextureFormatInfo);
+/* prettier-ignore */ export const     kSizedDepthStencilFormats: readonly   SizedDepthStencilFormat[] = keysOf(  kSizedDepthStencilFormatInfo);
+/* prettier-ignore */ export const   kUnsizedDepthStencilFormats: readonly UnsizedDepthStencilFormat[] = keysOf(kUnsizedDepthStencilFormatInfo);
+/* prettier-ignore */ export const     kCompressedTextureFormats: readonly   CompressedTextureFormat[] = keysOf(  kCompressedTextureFormatInfo);
+/* prettier-ignore */ export const   kBCCompressedTextureFormats: readonly   CompressedTextureFormat[] = keysOf(          kBCTextureFormatInfo);
+/* prettier-ignore */ export const kASTCCompressedTextureFormats: readonly   CompressedTextureFormat[] = keysOf(        kASTCTextureFormatInfo);
 
 /* prettier-ignore */ export const        kColorTextureFormats: readonly        ColorTextureFormat[] = keysOf(       kColorTextureFormatInfo);
 /* prettier-ignore */ export const    kEncodableTextureFormats: readonly    EncodableTextureFormat[] = keysOf(   kEncodableTextureFormatInfo);
@@ -1863,14 +1866,55 @@ export function depthStencilFormatAspectSize(
  * Returns true iff a texture can be created with the provided GPUTextureDimension
  * (defaulting to 2d) and GPUTextureFormat, by spec.
  */
-export function textureDimensionAndFormatCompatible(
+export function textureFormatAndDimensionPossiblyCompatible(
   dimension: undefined | GPUTextureDimension,
   format: GPUTextureFormat
 ): boolean {
+  if (dimension === '3d' && (isBCTextureFormat(format) || isASTCTextureFormat(format))) {
+    return true;
+  }
   const info = kAllTextureFormatInfo[format];
   return !(
     (dimension === '1d' || dimension === '3d') &&
     (info.blockWidth > 1 || info.depth || info.stencil)
+  );
+}
+
+/**
+ * Returns true iff a texture can be created with the provided GPUTextureDimension
+ * (defaulting to 2d) and GPUTextureFormat for a GPU device, by spec.
+ */
+export function textureDimensionAndFormatCompatibleForDevice(
+  device: GPUDevice,
+  dimension: undefined | GPUTextureDimension,
+  format: GPUTextureFormat
+): boolean {
+  if (
+    dimension === '3d' &&
+    ((isBCTextureFormat(format) && device.features.has('texture-compression-bc-sliced-3d')) ||
+      (isASTCTextureFormat(format) && device.features.has('texture-compression-astc-sliced-3d')))
+  ) {
+    return true;
+  }
+  const info = kAllTextureFormatInfo[format];
+  return !(
+    (dimension === '1d' || dimension === '3d') &&
+    (info.blockWidth > 1 || info.depth || info.stencil)
+  );
+}
+
+/**
+ * Returns true iff a texture can be used with the provided GPUTextureViewDimension
+ */
+export function textureViewDimensionAndFormatCompatibleForDevice(
+  device: GPUDevice,
+  dimension: GPUTextureViewDimension,
+  format: GPUTextureFormat
+): boolean {
+  return textureDimensionAndFormatCompatibleForDevice(
+    device,
+    getTextureDimensionFromView(dimension),
+    format
   );
 }
 
@@ -2075,6 +2119,14 @@ export function canCopyFromAllAspectsOfTextureFormat(format: GPUTextureFormat) {
 
 export function isCompressedTextureFormat(format: GPUTextureFormat) {
   return format in kCompressedTextureFormatInfo;
+}
+
+export function isBCTextureFormat(format: GPUTextureFormat) {
+  return format in kBCTextureFormatInfo;
+}
+
+export function isASTCTextureFormat(format: GPUTextureFormat) {
+  return format in kASTCTextureFormatInfo;
 }
 
 export function isColorTextureFormat(format: GPUTextureFormat) {
@@ -2382,4 +2434,34 @@ export function computeBytesPerSampleFromFormats(formats: readonly GPUTextureFor
  */
 export function computeBytesPerSample(targets: GPUColorTargetState[]) {
   return computeBytesPerSampleFromFormats(targets.map(({ format }) => format));
+}
+
+/**
+ * Returns the maximum valid size in each dimension for a given texture format.
+ * This is useful because compressed formats must be a multiple of blocks in size
+ * so, for example, the largest valid width of a 2d texture
+ * roundDown(device.limits.maxTextureDimension2D, blockWidth)
+ */
+export function getMaxValidTextureSizeForFormatAndDimension(
+  device: GPUDevice,
+  format: GPUTextureFormat,
+  dimension: GPUTextureDimension
+): [number, number, number] {
+  const info = getBlockInfoForTextureFormat(format);
+  switch (dimension) {
+    case '1d':
+      return [device.limits.maxTextureDimension1D, 1, 1];
+    case '2d':
+      return [
+        roundDown(device.limits.maxTextureDimension2D, info.blockWidth),
+        roundDown(device.limits.maxTextureDimension2D, info.blockHeight),
+        device.limits.maxTextureArrayLayers,
+      ];
+    case '3d':
+      return [
+        roundDown(device.limits.maxTextureDimension3D, info.blockWidth),
+        roundDown(device.limits.maxTextureDimension3D, info.blockHeight),
+        device.limits.maxTextureDimension3D,
+      ];
+  }
 }

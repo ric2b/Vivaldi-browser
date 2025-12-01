@@ -711,14 +711,14 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
 #endif
 
 // This test verifies that navigating with WindowOpenDisposition = NEW_POPUP
-// and is_tab_modal_popup = true results in a new WebContents that is a popup
-// and behaves like a tab modal.
+// and is_tab_modal_popup_deprecated = true results in a new WebContents that is
+// a popup and behaves like a tab modal.
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_NewPopupTabModal) {
   NavigateParams params(MakeNavigateParams());
   params.disposition = WindowOpenDisposition::NEW_POPUP;
-  params.is_tab_modal_popup = true;
+  params.is_tab_modal_popup_deprecated = true;
   params.window_features.bounds = gfx::Rect(0, 0, 200, 200);
-  // Wait for new popup to to load and gain focus.
+  // Wait for new popup to load and gain focus.
   ui_test_utils::NavigateToURL(&params);
 
   // Add a new tab.
@@ -735,6 +735,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, Disposition_NewPopupTabModal) {
 
   // Verify the popup window is visible again.
   EXPECT_TRUE(params.browser->window()->IsVisible());
+
+  // Verify the popup window is set as tab model popup.
+  EXPECT_TRUE(params.browser->window()->IsTabModalPopupDeprecated());
 }
 
 // This test verifies that navigating with WindowOpenDisposition = NEW_WINDOW
@@ -1429,22 +1432,32 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   RunDoNothingIfIncognitoIsForcedTest(GetSettingsURL());
 }
 
-// This test verifies that the bookmarks page isn't opened in the incognito
-// window.
+// This test verifies that the bookmarks page can open in incognito windows.
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       Disposition_Bookmarks_UseNonIncognitoWindow) {
-  RunUseNonIncognitoWindowTest(
-      GURL(chrome::kChromeUIBookmarksURL),
-      ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK);
-}
+                       Disposition_Bookmarks_UseIncognitoWindow) {
+  Browser* const incognito_browser = CreateIncognitoBrowser();
+  TabStripModel* const incognito_tab_strip_model =
+      incognito_browser->tab_strip_model();
 
-// Bookmark manager is expected to always open in normal mode regardless
-// of whether the user is trying to open it in incognito mode or not.
-// This test verifies that if incognito mode is forced (by policy), bookmark
-// manager doesn't open at all.
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
-                       Disposition_Bookmarks_DoNothingIfIncognitoIsForced) {
-  RunDoNothingIfIncognitoIsForcedTest(GURL(chrome::kChromeUIBookmarksURL));
+  EXPECT_EQ(2u, chrome::GetTotalBrowserCount());
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+  EXPECT_EQ(1, incognito_tab_strip_model->count());
+
+  // Navigate to the page.
+  const GURL bookmarks_page = GURL(chrome::kChromeUIBookmarksURL);
+  NavigateParams params(MakeNavigateParams(incognito_browser));
+  params.disposition = WindowOpenDisposition::SINGLETON_TAB;
+  params.url = bookmarks_page;
+  params.window_action = NavigateParams::SHOW_WINDOW;
+  params.transition = ui::PageTransition::PAGE_TRANSITION_AUTO_BOOKMARK;
+  Navigate(&params);
+
+  // This page should be opened in browser() window.
+  EXPECT_EQ(incognito_browser, params.browser);
+  EXPECT_NE(browser(), params.browser);
+  EXPECT_EQ(2, incognito_tab_strip_model->count());
+  EXPECT_EQ(bookmarks_page,
+            incognito_tab_strip_model->GetActiveWebContents()->GetURL());
 }
 
 // This test makes sure a crashed singleton tab reloads from a new navigation.
@@ -1966,75 +1979,6 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   LocationBar* location_bar = browser()->window()->GetLocationBar();
   OmniboxView* omnibox_view = location_bar->GetOmniboxView();
   EXPECT_EQ(base::UTF8ToUTF16(expected_url), omnibox_view->GetText());
-}
-
-// Test that main frame navigations generate a NavigationUIData with the
-// correct disposition.
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MainFrameNavigationUIData) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  {
-    const GURL url = embedded_test_server()->GetURL("/title1.html");
-    TestNavigationUIDataObserver observer(url);
-
-    NavigateParams params(MakeNavigateParams());
-    params.url = url;
-    params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-    ui_test_utils::NavigateToURL(&params);
-    observer.WaitForNavigationFinished();
-
-    EXPECT_EQ(WindowOpenDisposition::NEW_FOREGROUND_TAB,
-              observer.last_navigation_ui_data()->window_open_disposition());
-  }
-
-  {
-    const GURL url = embedded_test_server()->GetURL("/title2.html");
-    TestNavigationUIDataObserver observer(url);
-
-    NavigateParams params(MakeNavigateParams());
-    params.url = url;
-    params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
-    ui_test_utils::NavigateToURL(&params);
-    observer.WaitForNavigationFinished();
-
-    EXPECT_EQ(WindowOpenDisposition::NEW_BACKGROUND_TAB,
-              observer.last_navigation_ui_data()->window_open_disposition());
-  }
-}
-
-// TODO(crbug.com/40806044): Reactivate the test.
-// Test that subframe navigations generate a NavigationUIData with no
-// disposition.
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, SubFrameNavigationUIData) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-
-  // Load page with iframe.
-  const GURL url1 = embedded_test_server()->GetURL("/iframe.html");
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url1));
-
-  // Retrieve the iframe.
-  content::RenderFrameHost* main_frame = tab->GetPrimaryMainFrame();
-  content::RenderFrameHost* iframe = ChildFrameAt(main_frame, 0);
-  ASSERT_TRUE(iframe);
-
-  // Navigate the iframe with a disposition.
-  NavigateParams params(browser(),
-                        embedded_test_server()->GetURL("/simple.html"),
-                        ui::PAGE_TRANSITION_LINK);
-  params.frame_tree_node_id = iframe->GetFrameTreeNodeId();
-  params.disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
-
-  TestNavigationUIDataObserver observer(
-      embedded_test_server()->GetURL("/simple.html"));
-  ui_test_utils::NavigateToURL(&params);
-  observer.WaitForNavigationFinished();
-
-  // The disposition passed to NavigateToURL should be ignored for sub frame
-  // navigations.
-  EXPECT_EQ(WindowOpenDisposition::CURRENT_TAB,
-            observer.last_navigation_ui_data()->window_open_disposition());
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,

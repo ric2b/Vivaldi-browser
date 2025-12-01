@@ -14,6 +14,7 @@
 #include "gpu/ipc/common/vulkan_ycbcr_info_mojom_traits.h"
 #include "services/viz/public/cpp/compositing/shared_image_format_mojom_traits.h"
 #include "services/viz/public/mojom/compositing/transferable_resource.mojom-shared.h"
+#include "skia/public/mojom/image_info_mojom_traits.h"
 #include "skia/public/mojom/surface_origin_mojom_traits.h"
 #include "ui/gfx/ipc/color/gfx_param_traits.h"
 
@@ -27,6 +28,16 @@ struct EnumTraits<viz::mojom::SynchronizationType,
 
   static bool FromMojom(viz::mojom::SynchronizationType input,
                         viz::TransferableResource::SynchronizationType* out);
+};
+
+template <>
+struct EnumTraits<viz::mojom::ResourceSource,
+                  viz::TransferableResource::ResourceSource> {
+  static viz::mojom::ResourceSource ToMojom(
+      viz::TransferableResource::ResourceSource source);
+
+  static bool FromMojom(viz::mojom::ResourceSource input,
+                        viz::TransferableResource::ResourceSource* out);
 };
 
 template <>
@@ -119,6 +130,15 @@ struct StructTraits<viz::mojom::TransferableResourceDataView,
 
   static GrSurfaceOrigin origin(const viz::TransferableResource& resource) {
     return resource.origin;
+  }
+
+  static SkAlphaType alpha_type(const viz::TransferableResource& resource) {
+    return resource.alpha_type;
+  }
+
+  static viz::TransferableResource::ResourceSource resource_source(
+      const viz::TransferableResource& resource) {
+    return resource.resource_source;
   }
 
   static bool Read(viz::mojom::TransferableResourceDataView data,

@@ -12,17 +12,17 @@ namespace locale_kit {
 const char kVivaldiCountry[] = "VIVALDI_COUNTRY";
 
 std::string GetUserCountry() {
-  std::string country;
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  if (env->GetVar(kVivaldiCountry, &country)) {
-    if (country.empty()) {
+  auto country = env->GetVar(kVivaldiCountry);
+  if (country.has_value()) {
+    if (country.value().empty()) {
       // This allows testing of code paths that deals with an unknown country.
-      return country;
+      return country.value();
     }
-    if (country.length() == 2)
-      return base::ToUpperASCII(country);
+    if (country.value().length() == 2)
+      return base::ToUpperASCII(country.value());
     LOG(ERROR) << kVivaldiCountry << " must be two-letter country ISO code - "
-               << country;
+               << country.value();
   }
   country_codes::CountryId code = country_codes::GetCurrentCountryID();
   if (!code.IsValid())

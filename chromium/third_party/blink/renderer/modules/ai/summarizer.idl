@@ -4,7 +4,7 @@
 
 // https://github.com/WICG/writing-assistance-apis
 
-enum SummarizerType { "tl;dr", "key-points", "teaser", "headline" };
+enum SummarizerType { "tldr", "key-points", "teaser", "headline" };
 enum SummarizerFormat { "plain-text", "markdown" };
 enum SummarizerLength { "short", "medium", "long" };
 
@@ -20,7 +20,7 @@ dictionary SummarizerCreateCoreOptions {
 
 dictionary SummarizerCreateOptions : SummarizerCreateCoreOptions {
   AbortSignal signal;
-  AICreateMonitorCallback monitor;
+  CreateMonitorCallback monitor;
   DOMString sharedContext;
 };
 
@@ -30,7 +30,7 @@ dictionary SummarizerSummarizeOptions {
 };
 
 [
-  Exposed=(Window,Worker),
+  Exposed(Window AISummarizationAPI, Worker AISummarizationAPIForWorkers),
   RuntimeEnabled=AISummarizationAPI,
   SecureContext
 ]
@@ -40,7 +40,7 @@ interface Summarizer {
     CallWith=ScriptState,
     RaisesException
   ]
-  static Promise<AIAvailability> availability(
+  static Promise<Availability> availability(
     optional SummarizerCreateCoreOptions options = {}
   );
 

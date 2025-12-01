@@ -37,9 +37,9 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/viz/common/surfaces/surface_id.h"
+#include "media/base/picture_in_picture_events_info.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_metadata.h"
-#include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/platform/web_audio_source_provider_impl.h"
 #include "third_party/blink/public/platform/web_content_decryption_module.h"
 #include "third_party/blink/public/platform/web_media_source.h"
@@ -123,6 +123,19 @@ class WebMediaPlayer {
   // Returned by Load() to signal when a players choose to defer (e.g. as part
   // of pre-rendering)
   enum LoadTiming { kImmediate, kDeferred };
+
+  enum class DisplayType {
+    // Playback is happening inline.
+    kInline,
+    // Playback is happening either with the video fullscreen. It may also be
+    // set when Blink detects that the video is effectively fullscreen even if
+    // the element is not.
+    kFullscreen,
+    // Playback is happening in a video Picture-in-Picture window.
+    kVideoPictureInPicture,
+    // Playback is happening in a document Picture-in-Picture window.
+    kDocumentPictureInPicture,
+  };
 
   // This is the reason supplied to `WebMediaPlayer::Pause()`. A
   // `WebMediaPlayer` can be paused for many reasons that affect the internal
@@ -441,6 +454,13 @@ class WebMediaPlayer {
   // HTMLVideoElement visibility is reported. The state is recorded using
   // `MediaLogEvent` s.
   virtual void RecordVideoOcclusionState(std::string_view occlusion_state) {}
+
+  // Request the media player to record auto picture in picture related
+  // information. This information helps identify why a request to enter picture
+  // in picture automatically is denied/accepted.
+  virtual void RecordAutoPictureInPictureInfo(
+      const media::PictureInPictureEventsInfo::AutoPipInfo&
+          auto_picture_in_picture_info) = 0;
 };
 
 }  // namespace blink

@@ -9,7 +9,8 @@ import {AnnotationMode} from './constants.js';
     .strings="${this.strings}"
     .hasEnteredAnnotationMode="${this.hasEnteredAnnotationMode_}"
 <if expr="enable_pdf_ink2">
-    .hasInk2Edits="${this.hasInk2Edits_}"
+    .enableUndoRedo="${!this.isTextboxActive_()}"
+    .hasInk2Edits="${this.hasInk2AnnotationEdits_()}"
 </if>
     .rotated="${this.isRotated_()}"
     .formFieldFocus="${this.formFieldFocus_}"
@@ -20,7 +21,6 @@ import {AnnotationMode} from './constants.js';
 <if expr="enable_ink or enable_pdf_ink2">
     .annotationAvailable="${this.annotationAvailable_()}"
 </if>
-    .pdfCr23Enabled="${this.pdfCr23Enabled}"
 <if expr="enable_pdf_ink2">
     .pdfInk2Enabled="${this.pdfInk2Enabled_}"
 </if>
@@ -54,7 +54,6 @@ import {AnnotationMode} from './constants.js';
         .bookmarks="${this.bookmarks_}"
         .clockwiseRotations="${this.clockwiseRotations_}"
         .docLength="${this.docLength_}"
-        .pdfCr23Enabled="${this.pdfCr23Enabled}"
         .strings="${this.strings}"
         @change-page="${this.onChangePage_}"
         @change-page-and-xy="${this.onChangePageAndXy_}"
@@ -64,8 +63,17 @@ import {AnnotationMode} from './constants.js';
   </div>
   <div id="main">
     <div id="scroller">
-      <div id="sizer"></div>
-      <div id="content"></div>
+      <div id="sizer">
+      </div>
+      <if expr="enable_pdf_ink2">
+        ${this.isInTextAnnotationMode_() ? html`
+          <div class="text-box-container">
+            <ink-text-box @state-changed="${this.onTextBoxStateChanged_}">
+            </ink-text-box>
+          </div>` : ''}
+      </if>
+      <div id="content">
+      </div>
     </div>
     <div id="content-focus-rectangle" ?hidden="${!this.documentHasFocus_}">
     </div>
@@ -76,10 +84,8 @@ import {AnnotationMode} from './constants.js';
           <viewer-bottom-toolbar .strings="${this.strings}"
               toolbar-name="${AnnotationMode.DRAW}">
           </viewer-bottom-toolbar>
-          <div toolbar-name="${AnnotationMode.TEXT}"
-              style="background-color: lightgray; position: fixed; bottom: 0;">
-            Text Annotation coming soon
-          </div>
+          <viewer-text-bottom-toolbar toolbar-name="${AnnotationMode.TEXT}">
+          </viewer-text-bottom-toolbar>
         </cr-page-selector>` : ''}
     </if>
   </div>

@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Älä pyydä vahvistusta uudelleen</translation>
 <translation id="1462666970065907900">Haluatko varmasti sulkea ikkunan?</translation>
 <translation id="1480046233931937785">Kiitokset</translation>
+<translation id="1490502035430975848">Tarkastele Portal Documenttia</translation>
 <translation id="1521774566618522728">Aktiivinen tänään</translation>
 <translation id="1526344461589023948">Ladattua päivitystä tallennettaessa tapahtui virhe. Tarkista, että laitteella on riittävästi tallennustilaa ja yritä myöhemmin uudelleen.</translation>
 <translation id="1635542496948266458">Vaihda profiilia</translation>
@@ -34,6 +35,7 @@
 <translation id="2141974047387702305">Päivitystiedostoja ladattaessa tapahtui virhe. Tarkista Internet-yhteys ja yritä myöhemmin uudelleen.</translation>
 <translation id="2226825946708954262">⚠ Jatka menettämällä tietoa</translation>
 <translation id="2339641773402824483">Tarkistetaan päivityksiä…</translation>
+<translation id="2429571091666452569">Listalta:</translation>
 <translation id="2441056087170876076">Hirviö 2</translation>
 <translation id="2444387452209867610">Lisää muistiinpano</translation>
 <translation id="2486841023299517366">Eläin 4</translation>
@@ -73,9 +75,11 @@
 <translation id="3521635864657970829">Haluatko varmasti sulkea ikkunan?</translation>
 <translation id="3540597690227428180">Eläin 9</translation>
 <translation id="3542768452570884558">Avaa linkki uuteen ikkunaan</translation>
+<translation id="3586931643579894722">Piilota tiedot</translation>
 <translation id="3588820906588687999">Avaa kuva uuteen välilehteen</translation>
 <translation id="3601066750251199488">Hirviö 3</translation>
 <translation id="3620979700683094848">Sivustot voivat automaattitoistaa videoita</translation>
+<translation id="3650023731264842343">Ladattaessa seuraavaa sivua:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">Vivaldista on saatavilla uusi versio!</translation>
 <translation id="3708982624815781692">Lataus peruttiin.</translation>
@@ -137,9 +141,11 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="588258955323874662">Koko näyttö</translation>
 <translation id="5916080360077521750">Chromen asetuksia ei valitettavasti voida lukea selaimen ollessa käynnissä. Tuodaksesi asetukset Vivaldiin, tallenna työsi, sulje kaikki Chrome-ikkunat ja paina "Jatka".</translation>
 <translation id="6040143037577758943">Sulje</translation>
+<translation id="6140948187512243695">Näytä tiedot</translation>
 <translation id="6229528619562190452">Päivitä Vivaldi painamalla tästä.</translation>
 <translation id="6234173136417926046">Käytä kuvaa aloitussivun taustana</translation>
 <translation id="6339818817272922368">Paikallinen tili</translation>
+<translation id="6376435169746695498"><ph name="BLOCKER_NAME" /> vastasi tätä sivua ja esti sen latauksen</translation>
 <translation id="6398710281890660037">Salaa profiilini</translation>
 <translation id="6438786710866753178">Maisema 4</translation>
 <translation id="6477028720702061455">Valitse Operan profiilikansio tuomista varten</translation>
@@ -178,6 +184,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="8331671104904436324">Avaa taustavälilehdellä</translation>
 <translation id="8373293945112511707">Maisema 1</translation>
 <translation id="8388552048012645975">Ladataan päivitystä…</translation>
+<translation id="8392904568172593155">Ilman parametrejä</translation>
 <translation id="8427094907586191051">Maisema 17</translation>
 <translation id="8439034818057146672">Vivaldin uusi versio on valmiina asennukseen.</translation>
 <translation id="8446668873108041390">JavaScriptin suoritus AppleScriptin välityksellä on poistettu käytöstä. Asetusten osiosta Yksityisyys &gt; Apple-tapahtumat on asetus tämän sallimiseksi.</translation>
@@ -193,6 +200,7 @@ Haluatko varmasti jatkaa tietojen menetyksestä huolimatta?</translation>
 <translation id="8773635261052182196">Et saa enää näitä ilmoituksia. Voit ottaa ne uudelleen käyttöön Vivaldin asetuksista.</translation>
 <translation id="8774017153185436870">Sivustot saattavat automaattitoistaa videoita</translation>
 <translation id="8813277370772331957">Muistuta myöhemmin</translation>
+<translation id="8837256239226739065">Tarkastele Background Service Workeriä</translation>
 <translation id="8894900864683381599">Lisää linkki verkkopaneeliin</translation>
 <translation id="8912720443398351457">Haluatko varmasti sulkea Vivaldin?</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" /> estänyt</translation>

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "ash/constants/ash_features.h"
@@ -23,6 +24,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notimplemented.h"
 #include "base/notreached.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
@@ -174,7 +176,7 @@ void EmitCorruptionStateMetric(CorruptionStates state) {
 
 void EmitTimeInStageHistogram(base::TimeDelta duration,
                               mojom::InstallerState state) {
-  std::string name;
+  std::string_view name;
   switch (state) {
     case mojom::InstallerState::kStart:
       name = "Crostini.RestarterTimeInState2.Start";
@@ -198,12 +200,19 @@ void EmitTimeInStageHistogram(base::TimeDelta duration,
       name = "Crostini.RestarterTimeInState2.SetupContainer";
       break;
     case mojom::InstallerState::kStartContainer:
+    case mojom::InstallerState::kFetchSshKeys_DEPRECATED:
+    case mojom::InstallerState::kMountContainer_DEPRECATED:
+      // kFetchSshKeys and kMountContainer are no longer used, but their values
+      // cannot be renumbered. Map the deprecated values to kStartContainer to
+      // allow the stage tracking logic to correctly find the histogram name of
+      // the stage preceding kConfigureContainer.
       name = "Crostini.RestarterTimeInState2.StartContainer";
       break;
     case mojom::InstallerState::kConfigureContainer:
       name = "Crostini.RestarterTimeInState2.ConfigureContainer";
       break;
   }
+  DCHECK(!name.empty());
   base::UmaHistogramCustomTimes(name, duration, base::Milliseconds(10),
                                 base::Hours(6), 50);
 }
@@ -504,6 +513,10 @@ void CrostiniManager::CrostiniRestarter::Timeout(mojom::InstallerState state) {
       break;
     case mojom::InstallerState::kStart:
       result = CrostiniResult::START_TIMED_OUT;
+      break;
+    case mojom::InstallerState::kFetchSshKeys_DEPRECATED:
+    case mojom::InstallerState::kMountContainer_DEPRECATED:
+      NOTREACHED();
   }
   // Note: FinishRestart deletes |this|.
   FinishRestart(result);
@@ -1581,23 +1594,26 @@ void CrostiniManager::CreateDiskImage(
 
   if (base::FeatureList::IsEnabled(ash::features::kCrostiniContainerless)) {
     if (!disk_image.has_value()) {
-      LOG(ERROR) << "No disk image was provided for baguette installation";
-      std::move(callback).Run(CrostiniResult::UNKNOWN_ERROR, base::FilePath());
+      // CreateDiskImage will still run, as a no-op that provides the location
+      // of the disk image.
+      LOG(WARNING)
+          << "No disk image was provided for baguette installation, this "
+             "should indicate an existing baguette disk image";
+    } else {
+      request.set_copy_baguette_image(true);
+
+      GetConciergeClient()->CreateDiskImageWithFd(
+          std::move(disk_image.value()), std::move(request),
+          base::BindOnce(&CrostiniManager::OnCreateDiskImage,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
       return;
     }
-
-    request.set_copy_baguette_image(true);
-
-    GetConciergeClient()->CreateDiskImageWithFd(
-        std::move(disk_image.value()), std::move(request),
-        base::BindOnce(&CrostiniManager::OnCreateDiskImage,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
-  } else {
-    GetConciergeClient()->CreateDiskImage(
-        std::move(request),
-        base::BindOnce(&CrostiniManager::OnCreateDiskImage,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
+
+  GetConciergeClient()->CreateDiskImage(
+      std::move(request),
+      base::BindOnce(&CrostiniManager::OnCreateDiskImage,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void CrostiniManager::StartTerminaVm(std::string name,
@@ -1778,6 +1794,7 @@ void CrostiniManager::SetUpBaguetteUser(
   request.add_group_names("cdrom");
   request.add_group_names("dialout");
   request.add_group_names("floppy");
+  request.add_group_names("kvm");
   request.add_group_names("netdev");
   request.add_group_names("sudo");
   request.add_group_names("tss");

@@ -56,12 +56,10 @@ import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Callback;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.chrome.browser.toolbar.ButtonData;
-import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
-import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarFeatures;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonConstants.TransitionType;
 import org.chromium.ui.listmenu.ListMenuButton;
 
@@ -146,7 +144,6 @@ public class OptionalButtonViewTest {
                         /* buttonVariant= */ AdaptiveToolbarButtonVariant.NEW_TAB,
                         /* actionChipLabelResId= */ Resources.ID_NULL,
                         /* tooltipTextResId= */ R.string.new_tab_title,
-                        /* showBackgroundHighlight= */ true,
                         /* hasErrorBadge= */ false);
         ButtonDataImpl buttonData = new ButtonDataImpl();
         buttonData.setButtonSpec(buttonSpec);
@@ -175,7 +172,6 @@ public class OptionalButtonViewTest {
                         /* buttonVariant= */ AdaptiveToolbarButtonVariant.READER_MODE,
                         /* actionChipLabelResId= */ Resources.ID_NULL,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showBackgroundHighlight= */ false,
                         /* hasErrorBadge= */ false);
         ButtonDataImpl buttonData = new ButtonDataImpl();
         buttonData.setButtonSpec(buttonSpec);
@@ -203,7 +199,6 @@ public class OptionalButtonViewTest {
                         /* buttonVariant= */ AdaptiveToolbarButtonVariant.READER_MODE,
                         /* actionChipLabelResId= */ actionChipLabelResId,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showBackgroundHighlight= */ false,
                         /* hasErrorBadge= */ false);
         ButtonDataImpl buttonData = new ButtonDataImpl();
         buttonData.setButtonSpec(buttonSpec);
@@ -230,7 +225,6 @@ public class OptionalButtonViewTest {
                         /* buttonVariant= */ buttonVariant,
                         0,
                         tooltipTextIdRes,
-                        /* showBackgroundHighlight= */ true,
                         /* hasErrorBadge= */ false);
         ButtonDataImpl buttonData = new ButtonDataImpl();
         buttonData.setButtonSpec(buttonSpec);
@@ -256,7 +250,6 @@ public class OptionalButtonViewTest {
                         /* buttonVariant= */ AdaptiveToolbarButtonVariant.UNKNOWN,
                         /* actionChipLabelResId= */ Resources.ID_NULL,
                         /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showBackgroundHighlight= */ false,
                         /* hasErrorBadge= */ false);
         ButtonDataImpl buttonData = new ButtonDataImpl();
         buttonData.setButtonSpec(buttonSpec);
@@ -322,6 +315,20 @@ public class OptionalButtonViewTest {
 
         // The enabled property should be reflected immediately.
         assertFalse(mOptionalButtonView.getButtonView().isEnabled());
+        assertFalse(mActionChipLabel.isEnabled());
+    }
+
+    @Test
+    public void testSetEnabledMethod() {
+        ButtonDataImpl buttonData = getDataForReaderModeActionChip();
+
+        mOptionalButtonView.updateButtonWithAnimation(buttonData);
+
+        // setEnabled updates the button's enabled status without requiring a new ButtonData.
+        mOptionalButtonView.setEnabled(false);
+
+        assertFalse(mOptionalButtonView.getButtonView().isEnabled());
+        assertFalse(mActionChipLabel.isEnabled());
     }
 
     @Test
@@ -815,7 +822,6 @@ public class OptionalButtonViewTest {
                         originalButtonSpec.getButtonVariant(),
                         originalButtonSpec.getActionChipLabelResId(),
                         originalButtonSpec.getHoverTooltipTextId(),
-                        originalButtonSpec.shouldShowBackgroundHighlight(),
                         originalButtonSpec.hasErrorBadge()));
 
         mOptionalButtonView.updateButtonWithAnimation(readerModeButtonData);

@@ -32,6 +32,7 @@ component("platform") {
   defines = [ "IS_AX_PLATFORM_IMPL" ]
 
   visibility = [
+    "//chrome/browser/ui/webui/accessibility",
     "//ui/accessibility",
     "//ui/views:views",
   ]
@@ -219,6 +220,7 @@ component("platform") {
         "browser_accessibility_manager_win.h",
         "browser_accessibility_win.cc",
         "browser_accessibility_win.h",
+        "iaccessible2/scoped_co_mem_array.cc",
         "iaccessible2/scoped_co_mem_array.h",
         "inspect/ax_call_statement_invoker_win.cc",
         "inspect/ax_call_statement_invoker_win.h",
@@ -350,6 +352,7 @@ component("platform") {
 
       if (use_glib) {
         configs += [ "//build/config/linux:glib" ]
+        deps += [ "//ui/base/glib" ]
       }
       if (use_gio) {
         configs += [ "//build/linux:gio_config" ]

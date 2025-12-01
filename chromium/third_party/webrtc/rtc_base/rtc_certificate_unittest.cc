@@ -32,8 +32,8 @@ static const char* kTestCertCommonName = "RTCCertificateTest's certificate";
 class RTCCertificateTest : public ::testing::Test {
  protected:
   scoped_refptr<RTCCertificate> GenerateECDSA() {
-    std::unique_ptr<rtc::SSLIdentity> identity(
-        rtc::SSLIdentity::Create(kTestCertCommonName, rtc::KeyParams::ECDSA()));
+    std::unique_ptr<SSLIdentity> identity(
+        SSLIdentity::Create(kTestCertCommonName, KeyParams::ECDSA()));
     RTC_CHECK(identity);
     return RTCCertificate::Create(std::move(identity));
   }
@@ -68,18 +68,17 @@ class RTCCertificateTest : public ::testing::Test {
   // or later.
   scoped_refptr<RTCCertificate> GenerateCertificateWithExpires(
       uint64_t expires_s) const {
-    RTC_CHECK(webrtc::IsValueInRangeForNumericType<time_t>(expires_s));
+    RTC_CHECK(IsValueInRangeForNumericType<time_t>(expires_s));
 
-    rtc::SSLIdentityParams params;
+    SSLIdentityParams params;
     params.common_name = kTestCertCommonName;
     params.not_before = 0;
     params.not_after = static_cast<time_t>(expires_s);
     // Certificate type does not matter for our purposes, using ECDSA because it
     // is fast to generate.
-    params.key_params = rtc::KeyParams::ECDSA();
+    params.key_params = KeyParams::ECDSA();
 
-    std::unique_ptr<rtc::SSLIdentity> identity(
-        rtc::SSLIdentity::CreateForTest(params));
+    std::unique_ptr<SSLIdentity> identity(SSLIdentity::CreateForTest(params));
     return RTCCertificate::Create(std::move(identity));
   }
 };

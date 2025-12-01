@@ -72,6 +72,10 @@ std::string_view ConvertIconToPrintableString(Suggestion::Icon icon) {
       return "kGooglePasswordManager";
     case Suggestion::Icon::kGooglePay:
       return "kGooglePay";
+    case Suggestion::Icon::kGoogleWallet:
+      return "kGoogleWallet";
+    case Suggestion::Icon::kGoogleWalletMonochrome:
+      return "kGoogleWalletMonochrome";
     case Suggestion::Icon::kHome:
       return "kHome";
     case Suggestion::Icon::kHttpWarning:
@@ -257,9 +261,13 @@ Suggestion::PaymentsPayload::PaymentsPayload() = default;
 
 Suggestion::PaymentsPayload::PaymentsPayload(
     std::u16string main_text_content_description,
-    bool should_display_terms_available)
+    bool should_display_terms_available,
+    Guid guid,
+    bool is_local_payments_method)
     : main_text_content_description(main_text_content_description),
-      should_display_terms_available(should_display_terms_available) {}
+      should_display_terms_available(should_display_terms_available),
+      guid(std::move(guid)),
+      is_local_payments_method(is_local_payments_method) {}
 
 Suggestion::PaymentsPayload::PaymentsPayload(const PaymentsPayload&) = default;
 

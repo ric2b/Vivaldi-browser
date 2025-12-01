@@ -23,7 +23,6 @@
 
 #include <stdatomic.h>
 
-#include "thread.h"
 #include "pixdesc.h"
 #include "bprint.h"
 #include "hwcontext.h"
@@ -81,6 +80,7 @@ typedef struct FFVulkanDescriptorSetBinding {
     uint32_t            dimensions;  /* Needed for e.g. sampler%iD */
     uint32_t            elems;       /* 0 - scalar, 1 or more - vector */
     VkShaderStageFlags  stages;
+    uint32_t            buf_elems;   /* Appends [buf_elems] to the contents. Avoids manually printing to a string. */
     VkSampler           samplers[4]; /* Sampler to use for all elems */
 } FFVulkanDescriptorSetBinding;
 
@@ -95,14 +95,22 @@ typedef struct FFVkBuffer {
     VkPipelineStageFlags2 stage;
     VkAccessFlags2 access;
 
-    /* Only valid when allocated via ff_vk_get_pooled_buffer with HOST_VISIBLE */
+    /* Only valid when allocated via ff_vk_get_pooled_buffer with HOST_VISIBLE or
+     * via ff_vk_host_map_buffer */
     uint8_t *mapped_mem;
+
+    /* Set by ff_vk_host_map_buffer. This is the offset at which the buffer data
+     * actually begins at.
+     * The address and mapped_mem fields will be offset by this amount. */
+    size_t virtual_offset;
+
+    /* If host mapping, reference to the backing host memory buffer */
+    AVBufferRef *host_ref;
 } FFVkBuffer;
 
 typedef struct FFVkExecContext {
     uint32_t idx;
     const struct FFVkExecPool *parent;
-    pthread_mutex_t lock;
     int had_submission;
 
     /* Queue for the execution context */
@@ -245,7 +253,7 @@ typedef struct FFVkExecPool {
     FFVkExecContext *contexts;
     atomic_uint_least64_t idx;
 
-    VkCommandPool cmd_buf_pool;
+    VkCommandPool *cmd_buf_pools;
     VkCommandBuffer *cmd_bufs;
     int pool_size;
 
@@ -277,6 +285,7 @@ typedef struct FFVulkanContext {
     VkPhysicalDeviceDescriptorBufferPropertiesEXT desc_buf_props;
     VkPhysicalDeviceSubgroupSizeControlProperties subgroup_props;
     VkPhysicalDeviceCooperativeMatrixPropertiesKHR coop_matrix_props;
+    VkPhysicalDevicePushDescriptorPropertiesKHR push_desc_props;
     VkPhysicalDeviceOpticalFlowPropertiesNV optical_flow_props;
     VkQueueFamilyQueryResultStatusPropertiesKHR *query_props;
     VkQueueFamilyVideoPropertiesKHR *video_props;
@@ -340,6 +349,15 @@ static inline void ff_vk_link_struct(void *chain, const void *in)
     out->pNext = (void *)in;
 }
 
+#define FF_VK_STRUCT_EXT(CTX, BASE, STRUCT_P, EXT_FLAG, TYPE) \
+    do {                                                      \
+        if ((EXT_FLAG == FF_VK_EXT_NO_FLAG) ||                \
+            ((CTX)->extensions & EXT_FLAG)) {                 \
+            (STRUCT_P)->sType = TYPE;                         \
+            ff_vk_link_struct(BASE, STRUCT_P);                \
+        }                                                     \
+    } while (0)
+
 /* Identity mapping - r = r, b = b, g = g, a = a */
 extern const VkComponentMapping ff_comp_identity_map;
 
@@ -357,9 +375,21 @@ int ff_vk_init(FFVulkanContext *s, void *log_parent,
 const char *ff_vk_ret2str(VkResult res);
 
 /**
+ * Map between usage and features.
+ */
+VkImageUsageFlags ff_vk_map_feats_to_usage(VkFormatFeatureFlagBits2 feats);
+VkFormatFeatureFlagBits2 ff_vk_map_usage_to_feats(VkImageUsageFlags usage);
+
+/**
  * Returns 1 if pixfmt is a usable RGB format.
  */
 int ff_vk_mt_is_np_rgb(enum AVPixelFormat pix_fmt);
+
+/**
+ * Since storage images may not be swizzled, we have to do this in the
+ * shader itself. This fills in a lookup table to do it.
+ */
+void ff_vk_set_perm(enum AVPixelFormat pix_fmt, int lut[4], int inv);
 
 /**
  * Get the aspect flag for a plane from an image.
@@ -440,6 +470,9 @@ void ff_vk_exec_wait(FFVulkanContext *s, FFVkExecContext *e);
  */
 int ff_vk_exec_add_dep_buf(FFVulkanContext *s, FFVkExecContext *e,
                            AVBufferRef **deps, int nb_deps, int ref);
+int ff_vk_exec_add_dep_wait_sem(FFVulkanContext *s, FFVkExecContext *e,
+                                VkSemaphore sem, uint64_t val,
+                                VkPipelineStageFlagBits2 stage);
 int ff_vk_exec_add_dep_bool_sem(FFVulkanContext *s, FFVkExecContext *e,
                                 VkSemaphore *sem, int nb,
                                 VkPipelineStageFlagBits2 stage,
@@ -455,6 +488,13 @@ int ff_vk_exec_mirror_sem_value(FFVulkanContext *s, FFVkExecContext *e,
                                 VkSemaphore *dst, uint64_t *dst_val,
                                 AVFrame *f);
 void ff_vk_exec_discard_deps(FFVulkanContext *s, FFVkExecContext *e);
+
+/**
+ * Create a single imageview for a given plane.
+ */
+int ff_vk_create_imageview(FFVulkanContext *s,
+                           VkImageView *img_view, VkImageAspectFlags *aspect,
+                           AVFrame *f, int plane, enum FFVkShaderRepFormat rep_fmt);
 
 /**
  * Create an imageview and add it as a dependency to an execution.
@@ -480,9 +520,6 @@ int ff_vk_alloc_mem(FFVulkanContext *s, VkMemoryRequirements *req,
 int ff_vk_create_buf(FFVulkanContext *s, FFVkBuffer *buf, size_t size,
                      void *pNext, void *alloc_pNext,
                      VkBufferUsageFlags usage, VkMemoryPropertyFlagBits flags);
-int ff_vk_create_avbuf(FFVulkanContext *s, AVBufferRef **ref, size_t size,
-                       void *pNext, void *alloc_pNext,
-                       VkBufferUsageFlags usage, VkMemoryPropertyFlagBits flags);
 
 /**
  * Buffer management code.
@@ -514,6 +551,13 @@ int ff_vk_get_pooled_buffer(FFVulkanContext *ctx, AVBufferPool **buf_pool,
                             AVBufferRef **buf, VkBufferUsageFlags usage,
                             void *create_pNext, size_t size,
                             VkMemoryPropertyFlagBits mem_props);
+
+/** Maps a system RAM buffer into a Vulkan buffer.
+ * References the source buffer.
+ */
+int ff_vk_host_map_buffer(FFVulkanContext *s, AVBufferRef **dst,
+                          uint8_t *src_data, const AVBufferRef *src_buf,
+                          VkBufferUsageFlags usage);
 
 /**
  * Create a sampler.
@@ -588,6 +632,14 @@ int ff_vk_shader_update_desc_buffer(FFVulkanContext *s, FFVkExecContext *e,
                                     int set, int bind, int elem,
                                     FFVkBuffer *buf, VkDeviceSize offset, VkDeviceSize len,
                                     VkFormat fmt);
+
+/**
+ * Sets an image descriptor for specified shader and binding.
+ */
+int ff_vk_shader_update_img(FFVulkanContext *s, FFVkExecContext *e,
+                            FFVulkanShader *shd, int set, int bind, int offs,
+                            VkImageView view, VkImageLayout layout,
+                            VkSampler sampler);
 
 /**
  * Update a descriptor in a buffer with an image array..

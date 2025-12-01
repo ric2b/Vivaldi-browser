@@ -57,8 +57,8 @@ TEST_F(GlslWriter_ShaderIOTest, NoInputsOrOutputs) {
 
     auto* expect = src;
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -137,9 +137,8 @@ $B1: {  # root
   }
 }
 )";
-
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -152,52 +151,34 @@ TEST_F(GlslWriter_ShaderIOTest, Parameters_Struct) {
                                      mod.symbols.New("front_facing"),
                                      ty.bool_(),
                                      core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kFrontFacing,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .builtin = core::BuiltinValue::kFrontFacing,
                                      },
                                  },
                                  {
                                      mod.symbols.New("position"),
                                      ty.vec4<f32>(),
                                      core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kPosition,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ true,
+                                         .builtin = core::BuiltinValue::kPosition,
+                                         .invariant = true,
                                      },
                                  },
                                  {
                                      mod.symbols.New("color1"),
                                      ty.f32(),
                                      core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .location = 0u,
                                      },
                                  },
                                  {
                                      mod.symbols.New("color2"),
                                      ty.f32(),
                                      core::IOAttributes{
-                                         /* location */ 1u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */
-                                         core::Interpolation{
-                                             core::InterpolationType::kLinear,
-                                             core::InterpolationSampling::kSample,
-                                         },
-                                         /* invariant */ false,
+                                         .location = 1u,
+                                         .interpolation =
+                                             core::Interpolation{
+                                                 core::InterpolationType::kLinear,
+                                                 core::InterpolationSampling::kSample,
+                                             },
                                      },
                                  },
                              });
@@ -290,41 +271,32 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
 }
 
 TEST_F(GlslWriter_ShaderIOTest, Parameters_Mixed) {
-    auto* str_ty = ty.Struct(mod.symbols.New("Inputs"),
-                             {
-                                 {
-                                     mod.symbols.New("position"),
-                                     ty.vec4<f32>(),
-                                     core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kPosition,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ true,
-                                     },
-                                 },
-                                 {
-                                     mod.symbols.New("color1"),
-                                     ty.f32(),
-                                     core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                             });
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("Inputs"), {
+                                                 {
+                                                     mod.symbols.New("position"),
+                                                     ty.vec4<f32>(),
+                                                     core::IOAttributes{
+                                                         .builtin = core::BuiltinValue::kPosition,
+                                                         .invariant = true,
+                                                     },
+                                                 },
+                                                 {
+                                                     mod.symbols.New("color1"),
+                                                     ty.f32(),
+                                                     core::IOAttributes{
+                                                         .location = 0u,
+                                                     },
+                                                 },
+                                             });
 
     auto* ep = b.Function("foo", ty.void_());
     auto* front_facing = b.FunctionParam("front_facing", ty.bool_());
@@ -412,8 +384,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -469,8 +441,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -515,8 +487,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -529,40 +501,27 @@ TEST_F(GlslWriter_ShaderIOTest, ReturnValue_Struct) {
                                      mod.symbols.New("position"),
                                      ty.vec4<f32>(),
                                      core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kPosition,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ true,
+                                         .builtin = core::BuiltinValue::kPosition,
+                                         .invariant = true,
                                      },
                                  },
                                  {
                                      mod.symbols.New("color1"),
                                      ty.f32(),
                                      core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .location = 0u,
                                      },
                                  },
                                  {
                                      mod.symbols.New("color2"),
                                      ty.f32(),
                                      core::IOAttributes{
-                                         /* location */ 1u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */
-                                         core::Interpolation{
-                                             core::InterpolationType::kLinear,
-                                             core::InterpolationSampling::kSample,
-                                         },
-                                         /* invariant */ false,
+                                         .location = 1u,
+                                         .interpolation =
+                                             core::Interpolation{
+                                                 core::InterpolationType::kLinear,
+                                                 core::InterpolationSampling::kSample,
+                                             },
                                      },
                                  },
                              });
@@ -635,41 +594,32 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
 }
 
 TEST_F(GlslWriter_ShaderIOTest, ReturnValue_DualSourceBlending) {
-    auto* str_ty =
-        ty.Struct(mod.symbols.New("Output"), {
-                                                 {
-                                                     mod.symbols.New("color1"),
-                                                     ty.f32(),
-                                                     core::IOAttributes{
-                                                         /* location */ 0u,
-                                                         /* blend_src */ 0u,
-                                                         /* color */ std::nullopt,
-                                                         /* builtin */ std::nullopt,
-                                                         /* interpolation */ std::nullopt,
-                                                         /* invariant */ false,
-                                                     },
-                                                 },
-                                                 {
-                                                     mod.symbols.New("color2"),
-                                                     ty.f32(),
-                                                     core::IOAttributes{
-                                                         /* location */ 0u,
-                                                         /* blend_src */ 1u,
-                                                         /* color */ std::nullopt,
-                                                         /* builtin */ std::nullopt,
-                                                         /* interpolation */ std::nullopt,
-                                                         /* invariant */ false,
-                                                     },
-                                                 },
-                                             });
+    auto* str_ty = ty.Struct(mod.symbols.New("Output"), {
+                                                            {
+                                                                mod.symbols.New("color1"),
+                                                                ty.f32(),
+                                                                core::IOAttributes{
+                                                                    .location = 0u,
+                                                                    .blend_src = 0u,
+                                                                },
+                                                            },
+                                                            {
+                                                                mod.symbols.New("color2"),
+                                                                ty.f32(),
+                                                                core::IOAttributes{
+                                                                    .location = 0u,
+                                                                    .blend_src = 1u,
+                                                                },
+                                                            },
+                                                        });
 
     auto* ep = b.Function("foo", str_ty);
     ep->SetStage(core::ir::Function::PipelineStage::kFragment);
@@ -722,8 +672,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -737,24 +687,14 @@ TEST_F(GlslWriter_ShaderIOTest, Struct_SharedByVertexAndFragment) {
                                      mod.symbols.New("position"),
                                      vec4f,
                                      core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kPosition,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .builtin = core::BuiltinValue::kPosition,
                                      },
                                  },
                                  {
                                      mod.symbols.New("color"),
                                      vec4f,
                                      core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .location = 0u,
                                      },
                                  },
                              });
@@ -873,8 +813,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -882,33 +822,23 @@ $B1: {  # root
 
 TEST_F(GlslWriter_ShaderIOTest, Struct_SharedWithBuffer) {
     auto* vec4f = ty.vec4<f32>();
-    auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
-                             {
-                                 {
-                                     mod.symbols.New("position"),
-                                     vec4f,
-                                     core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kPosition,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                                 {
-                                     mod.symbols.New("color"),
-                                     vec4f,
-                                     core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                             });
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("Outputs"), {
+                                                  {
+                                                      mod.symbols.New("position"),
+                                                      vec4f,
+                                                      core::IOAttributes{
+                                                          .builtin = core::BuiltinValue::kPosition,
+                                                      },
+                                                  },
+                                                  {
+                                                      mod.symbols.New("color"),
+                                                      vec4f,
+                                                      core::IOAttributes{
+                                                          .location = 0u,
+                                                      },
+                                                  },
+                                              });
 
     auto* var = b.Var(ty.ptr(storage, str_ty, read));
     var->SetBindingPoint(0, 0);
@@ -980,8 +910,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -995,24 +925,14 @@ TEST_F(GlslWriter_ShaderIOTest, SampleMask) {
                                      mod.symbols.New("color"),
                                      ty.f32(),
                                      core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .location = 0u,
                                      },
                                  },
                                  {
                                      mod.symbols.New("mask"),
                                      ty.u32(),
                                      core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kSampleMask,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
+                                         .builtin = core::BuiltinValue::kSampleMask,
                                      },
                                  },
                              });
@@ -1078,8 +998,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
@@ -1087,25 +1007,21 @@ $B1: {  # root
 
 // Test that interpolation attributes are stripped from vertex inputs and fragment outputs.
 TEST_F(GlslWriter_ShaderIOTest, InterpolationOnVertexInputOrFragmentOutput) {
-    auto* str_ty =
-        ty.Struct(mod.symbols.New("MyStruct"), {
-                                                   {
-                                                       mod.symbols.New("color"),
-                                                       ty.f32(),
-                                                       core::IOAttributes{
-                                                           /* location */ 1u,
-                                                           /* blend_src */ std::nullopt,
-                                                           /* color */ std::nullopt,
-                                                           /* builtin */ std::nullopt,
-                                                           /* interpolation */
-                                                           core::Interpolation{
-                                                               core::InterpolationType::kLinear,
-                                                               core::InterpolationSampling::kSample,
-                                                           },
-                                                           /* invariant */ false,
-                                                       },
-                                                   },
-                                               });
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"),
+                             {
+                                 {
+                                     mod.symbols.New("color"),
+                                     ty.f32(),
+                                     core::IOAttributes{
+                                         .location = 1u,
+                                         .interpolation =
+                                             core::Interpolation{
+                                                 core::InterpolationType::kLinear,
+                                                 core::InterpolationSampling::kSample,
+                                             },
+                                     },
+                                 },
+                             });
 
     // Vertex shader.
     {
@@ -1239,41 +1155,31 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     Run(ShaderIO, config);
 
     EXPECT_EQ(expect, str());
 }
 
 TEST_F(GlslWriter_ShaderIOTest, ClampFragDepth) {
-    auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
-                             {
-                                 {
-                                     mod.symbols.New("color"),
-                                     ty.f32(),
-                                     core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                                 {
-                                     mod.symbols.New("depth"),
-                                     ty.f32(),
-                                     core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kFragDepth,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                             });
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("Outputs"), {
+                                                  {
+                                                      mod.symbols.New("color"),
+                                                      ty.f32(),
+                                                      core::IOAttributes{
+                                                          .location = 0u,
+                                                      },
+                                                  },
+                                                  {
+                                                      mod.symbols.New("depth"),
+                                                      ty.f32(),
+                                                      core::IOAttributes{
+                                                          .builtin = core::BuiltinValue::kFragDepth,
+                                                      },
+                                                  },
+                                              });
 
     auto* ep = b.Function("foo", str_ty);
     ep->SetStage(core::ir::Function::PipelineStage::kFragment);
@@ -1303,13 +1209,13 @@ Outputs = struct @align(4) {
   depth:f32 @offset(4)
 }
 
-tint_push_constant_struct = struct @align(4), @block {
+tint_immediate_data_struct = struct @align(4), @block {
   depth_min:f32 @offset(4)
   depth_max:f32 @offset(8)
 }
 
 $B1: {  # root
-  %tint_push_constants:ptr<push_constant, tint_push_constant_struct, read> = var undef
+  %tint_immediate_data:ptr<immediate, tint_immediate_data_struct, read> = var undef
   %foo_loc0_Output:ptr<__out, f32, write> = var undef @location(0)
   %foo_frag_depth:ptr<__out, f32, write> = var undef @builtin(frag_depth)
 }
@@ -1326,9 +1232,9 @@ $B1: {  # root
     %8:f32 = access %7, 0u
     store %foo_loc0_Output, %8
     %9:f32 = access %7, 1u
-    %10:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %10:ptr<immediate, f32, read> = access %tint_immediate_data, 0u
     %11:f32 = load %10
-    %12:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %12:ptr<immediate, f32, read> = access %tint_immediate_data, 1u
     %13:f32 = load %12
     %14:f32 = clamp %9, %11, %13
     store %foo_frag_depth, %14
@@ -1337,13 +1243,12 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PreparePushConstantsConfig push_constants_config;
-    push_constants_config.AddInternalConstant(4, mod.symbols.New("depth_min"), ty.f32());
-    push_constants_config.AddInternalConstant(8, mod.symbols.New("depth_max"), ty.f32());
-    auto push_constants = PreparePushConstants(mod, push_constants_config);
-    EXPECT_EQ(push_constants, Success);
-
-    ShaderIOConfig config{push_constants.Get()};
+    core::ir::transform::PrepareImmediateDataConfig immediate_data_config;
+    immediate_data_config.AddInternalImmediateData(4, mod.symbols.New("depth_min"), ty.f32());
+    immediate_data_config.AddInternalImmediateData(8, mod.symbols.New("depth_max"), ty.f32());
+    auto immediate_data = PrepareImmediateData(mod, immediate_data_config);
+    EXPECT_EQ(immediate_data, Success);
+    ShaderIOConfig config{immediate_data.Get()};
     config.depth_range_offsets = {4, 8};
     Run(ShaderIO, config);
 
@@ -1351,33 +1256,23 @@ $B1: {  # root
 }
 
 TEST_F(GlslWriter_ShaderIOTest, ClampFragDepth_MultipleFragmentShaders) {
-    auto* str_ty = ty.Struct(mod.symbols.New("Outputs"),
-                             {
-                                 {
-                                     mod.symbols.New("color"),
-                                     ty.f32(),
-                                     core::IOAttributes{
-                                         /* location */ 0u,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ std::nullopt,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                                 {
-                                     mod.symbols.New("depth"),
-                                     ty.f32(),
-                                     core::IOAttributes{
-                                         /* location */ std::nullopt,
-                                         /* blend_src */ std::nullopt,
-                                         /* color */ std::nullopt,
-                                         /* builtin */ core::BuiltinValue::kFragDepth,
-                                         /* interpolation */ std::nullopt,
-                                         /* invariant */ false,
-                                     },
-                                 },
-                             });
+    auto* str_ty =
+        ty.Struct(mod.symbols.New("Outputs"), {
+                                                  {
+                                                      mod.symbols.New("color"),
+                                                      ty.f32(),
+                                                      core::IOAttributes{
+                                                          .location = 0u,
+                                                      },
+                                                  },
+                                                  {
+                                                      mod.symbols.New("depth"),
+                                                      ty.f32(),
+                                                      core::IOAttributes{
+                                                          .builtin = core::BuiltinValue::kFragDepth,
+                                                      },
+                                                  },
+                                              });
 
     auto make_entry_point = [&](std::string_view name) {
         auto* ep = b.Function(name, str_ty);
@@ -1423,13 +1318,13 @@ Outputs = struct @align(4) {
   depth:f32 @offset(4)
 }
 
-tint_push_constant_struct = struct @align(4), @block {
+tint_immediate_data_struct = struct @align(4), @block {
   depth_min:f32 @offset(4)
   depth_max:f32 @offset(8)
 }
 
 $B1: {  # root
-  %tint_push_constants:ptr<push_constant, tint_push_constant_struct, read> = var undef
+  %tint_immediate_data:ptr<immediate, tint_immediate_data_struct, read> = var undef
   %ep1_loc0_Output:ptr<__out, f32, write> = var undef @location(0)
   %ep1_frag_depth:ptr<__out, f32, write> = var undef @builtin(frag_depth)
   %ep2_loc0_Output:ptr<__out, f32, write> = var undef @location(0)
@@ -1462,9 +1357,9 @@ $B1: {  # root
     %16:f32 = access %15, 0u
     store %ep1_loc0_Output, %16
     %17:f32 = access %15, 1u
-    %18:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %18:ptr<immediate, f32, read> = access %tint_immediate_data, 0u
     %19:f32 = load %18
-    %20:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %20:ptr<immediate, f32, read> = access %tint_immediate_data, 1u
     %21:f32 = load %20
     %22:f32 = clamp %17, %19, %21
     store %ep1_frag_depth, %22
@@ -1477,9 +1372,9 @@ $B1: {  # root
     %25:f32 = access %24, 0u
     store %ep2_loc0_Output, %25
     %26:f32 = access %24, 1u
-    %27:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %27:ptr<immediate, f32, read> = access %tint_immediate_data, 0u
     %28:f32 = load %27
-    %29:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %29:ptr<immediate, f32, read> = access %tint_immediate_data, 1u
     %30:f32 = load %29
     %31:f32 = clamp %26, %28, %30
     store %ep2_frag_depth, %31
@@ -1492,9 +1387,9 @@ $B1: {  # root
     %34:f32 = access %33, 0u
     store %ep3_loc0_Output, %34
     %35:f32 = access %33, 1u
-    %36:ptr<push_constant, f32, read> = access %tint_push_constants, 0u
+    %36:ptr<immediate, f32, read> = access %tint_immediate_data, 0u
     %37:f32 = load %36
-    %38:ptr<push_constant, f32, read> = access %tint_push_constants, 1u
+    %38:ptr<immediate, f32, read> = access %tint_immediate_data, 1u
     %39:f32 = load %38
     %40:f32 = clamp %35, %37, %39
     store %ep3_frag_depth, %40
@@ -1503,13 +1398,12 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PreparePushConstantsConfig push_constants_config;
-    push_constants_config.AddInternalConstant(4, mod.symbols.New("depth_min"), ty.f32());
-    push_constants_config.AddInternalConstant(8, mod.symbols.New("depth_max"), ty.f32());
-    auto push_constants = PreparePushConstants(mod, push_constants_config);
-    EXPECT_EQ(push_constants, Success);
-
-    ShaderIOConfig config{push_constants.Get()};
+    core::ir::transform::PrepareImmediateDataConfig immediate_data_config;
+    immediate_data_config.AddInternalImmediateData(4, mod.symbols.New("depth_min"), ty.f32());
+    immediate_data_config.AddInternalImmediateData(8, mod.symbols.New("depth_max"), ty.f32());
+    auto immediate_data = PrepareImmediateData(mod, immediate_data_config);
+    EXPECT_EQ(immediate_data, Success);
+    ShaderIOConfig config{immediate_data.Get()};
     config.depth_range_offsets = {4, 8};
     Run(ShaderIO, config);
 
@@ -1573,8 +1467,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     config.bgra_swizzle_locations.insert(0u);
     Run(ShaderIO, config);
 
@@ -1669,8 +1563,8 @@ $B1: {  # root
 }
 )";
 
-    core::ir::transform::PushConstantLayout push_constants;
-    ShaderIOConfig config{push_constants};
+    core::ir::transform::ImmediateDataLayout immediate_data;
+    ShaderIOConfig config{immediate_data};
     config.bgra_swizzle_locations = swizzled_locations;
     Run(ShaderIO, config);
 

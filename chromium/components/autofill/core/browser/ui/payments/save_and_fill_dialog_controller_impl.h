@@ -24,12 +24,26 @@ class SaveAndFillDialogControllerImpl : public SaveAndFillDialogController {
       const SaveAndFillDialogControllerImpl&) = delete;
   ~SaveAndFillDialogControllerImpl() override;
 
-  void ShowDialog(base::OnceCallback<base::WeakPtr<SaveAndFillDialogView>()>
+  void ShowDialog(base::OnceCallback<std::unique_ptr<SaveAndFillDialogView>()>
                       create_and_show_view_callback);
+
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  std::u16string GetWindowTitle() const override;
+  std::u16string GetExplanatoryMessage() const override;
+  std::u16string GetCardNumberLabel() const override;
+  std::u16string GetNameOnCardLabel() const override;
+  std::u16string GetAcceptButtonText() const override;
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  bool IsUploadSaveAndFill() const override;
+
   base::WeakPtr<SaveAndFillDialogController> GetWeakPtr() override;
 
  private:
-  base::WeakPtr<SaveAndFillDialogView> dialog_view_;
+  std::unique_ptr<SaveAndFillDialogView> dialog_view_;
+
+  // Determines whether the local or upload save version of the UI should be
+  // shown.
+  bool is_upload_save_and_fill_ = false;
 
   base::WeakPtrFactory<SaveAndFillDialogControllerImpl> weak_ptr_factory_{this};
 };

@@ -45,11 +45,12 @@ void SearchEnginesPromptManager::MarkCurrentPromptAsSeen(
   }
 }
 
-void SearchEnginesPromptManager::IgnoreCurrentPromptVersion(
+void SearchEnginesPromptManager::PutProfileToQuarantine(
     PrefService* prefs) const {
   if (!IsQuarantined(prefs)) {
-    prefs->SetInteger(vivaldiprefs::kStartupLastSeenSearchEnginePromptVersion,
-                      GetCurrentVersion());
+    // Put to quarantine.
+    prefs->SetDouble(vivaldiprefs::kStartupLastSeenSearchEnginePromptTime,
+                     base::Time::Now().InSecondsFSinceUnixEpoch());
   }
 }
 
@@ -119,7 +120,7 @@ SearchEnginesPromptManager::GetPartnerSearchEnginesToPrompt(
 
   ParsedSearchEngines::EnginesListWithDefaults prepopulated_engines =
       TemplateURLPrepopulateData::GetPrepopulatedSearchEngines(
-          country_id, application_locale, prefs);
+          country_id, prefs, application_locale);
 
   TemplateURLService::TemplateURLVector template_urls =
       template_url_service->GetTemplateURLs();

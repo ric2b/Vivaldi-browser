@@ -5,6 +5,7 @@
 package org.chromium.android_webview;
 
 import org.chromium.android_webview.common.Lifetime;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 
 import java.util.function.BooleanSupplier;
@@ -15,6 +16,7 @@ import java.util.function.BooleanSupplier;
  * <p>All methods are called on the IO thread.
  */
 @Lifetime.WebView
+@NullMarked
 class AwContentsIoThreadClientImpl extends AwContentsIoThreadClient {
     private final AwSettings mSettings;
     private final AwContentsClient mContentsClient;
@@ -81,6 +83,11 @@ class AwContentsIoThreadClientImpl extends AwContentsIoThreadClient {
     @Override
     public boolean getSafeBrowsingEnabled() {
         return mSettings.getSafeBrowsingEnabled();
+    }
+
+    @Override
+    public boolean shouldIncludeCookiesInIntercept() {
+        return mSettings.getIncludeCookiesOnIntercept();
     }
 
     @Override

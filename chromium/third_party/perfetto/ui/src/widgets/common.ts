@@ -28,6 +28,7 @@ export interface HTMLAttrs {
   readonly title?: string;
   readonly className?: string;
   readonly onclick?: (e: PointerEvent) => void;
+  readonly ondblclick?: (e: PointerEvent) => void;
   readonly onmouseover?: (e: MouseEvent) => void;
   readonly onmouseout?: (e: MouseEvent) => void;
   readonly onmousedown?: (e: MouseEvent) => void;
@@ -48,8 +49,10 @@ export interface HTMLInputAttrs extends HTMLFocusableAttrs {
   readonly oninput?: (e: KeyboardEvent) => void;
   readonly onkeydown?: (e: KeyboardEvent) => void;
   readonly onkeyup?: (e: KeyboardEvent) => void;
-  readonly value?: string;
+  readonly value?: string | number;
   readonly placeholder?: string;
+  readonly min?: number;
+  readonly max?: number;
 }
 
 export interface HTMLCheckboxAttrs extends HTMLInputAttrs {
@@ -68,8 +71,11 @@ export interface HTMLLabelAttrs extends HTMLAttrs {
 }
 
 export enum Intent {
-  None = 'none',
-  Primary = 'primary',
+  None = 'None',
+  Primary = 'Primary',
+  Success = 'Success',
+  Danger = 'Danger',
+  Warning = 'Warning',
 }
 
 export function classForIntent(intent: Intent): string | undefined {
@@ -78,6 +84,12 @@ export function classForIntent(intent: Intent): string | undefined {
       return undefined;
     case Intent.Primary:
       return 'pf-intent-primary';
+    case Intent.Success:
+      return 'pf-intent-success';
+    case Intent.Danger:
+      return 'pf-intent-danger';
+    case Intent.Warning:
+      return 'pf-intent-warning';
     default:
       return assertUnreachable(intent);
   }

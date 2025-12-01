@@ -14,6 +14,7 @@
 #include "base/path_service.h"
 #include "components/history/core/browser/features.h"
 #include "components/metrics/persistent_histograms.h"
+#include "components/payments/content/android/payment_feature_map.h"
 #include "components/permissions/features.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/translate/core/common/translate_util.h"
@@ -24,6 +25,7 @@
 #include "mojo/public/cpp/bindings/features.h"
 #include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
+#include "storage/browser/blob/features.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/features_generated.h"
 #include "ui/android/ui_android_features.h"
@@ -94,6 +96,14 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   aw_feature_overrides.DisableFeature(
       net::features::kThirdPartyStoragePartitioning);
 
+  // Disable fetching partitioned Blob URL on WebView.
+  aw_feature_overrides.DisableFeature(
+      ::features::kBlockCrossPartitionBlobUrlFetching);
+
+  // Disable enforcing `noopener` on Blob URL navigations on WebView.
+  aw_feature_overrides.DisableFeature(
+      blink::features::kEnforceNoopenerOnBlobURLNavigation);
+
 #if BUILDFLAG(ENABLE_VALIDATING_COMMAND_DECODER)
   // Disable the passthrough on WebView.
   aw_feature_overrides.DisableFeature(
@@ -138,8 +148,9 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // kVulkan in case it becomes enabled by default.
   aw_feature_overrides.DisableFeature(::features::kVulkan);
 
-  aw_feature_overrides.DisableFeature(::features::kWebPayments);
   aw_feature_overrides.DisableFeature(::features::kServiceWorkerPaymentApps);
+  aw_feature_overrides.EnableFeature(
+      ::payments::android::kAndroidPaymentIntentsOmitDeprecatedParameters);
 
   // WebView does not support overlay fullscreen yet for video overlays.
   aw_feature_overrides.DisableFeature(media::kOverlayFullscreenVideo);
@@ -208,8 +219,6 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
 
   // FedCM is not yet supported on WebView.
   aw_feature_overrides.DisableFeature(::features::kFedCm);
-  aw_feature_overrides.DisableFeature(
-      blink::features::kFedCmWithStorageAccessAPI);
 
   // TODO(crbug.com/40272633): Web MIDI permission prompt for all usage.
   aw_feature_overrides.DisableFeature(blink::features::kBlockMidiByDefault);
@@ -306,14 +315,16 @@ void AwFieldTrials::RegisterFeatureOverrides(base::FeatureList* feature_list) {
   // Sharing ANGLE's Vulkan queue is not supported on WebView.
   aw_feature_overrides.DisableFeature(::features::kVulkanFromANGLE);
 
-  // Viz has no internal differentiation for WebView. We will roll out these
-  // combined features separately.
-  aw_feature_overrides.DisableFeature(
-      ::features::kDrawImmediatelyWhenInteractive);
-  aw_feature_overrides.DisableFeature(
-      ::features::kAckOnSurfaceActivationWhenInteractive);
-
   // Partitioned :visited links history is not supported on WebView.
   aw_feature_overrides.DisableFeature(
       blink::features::kPartitionVisitedLinkDatabaseWithSelfLinks);
+
+  // Disable draw cutout edge-to-edge on WebView. Safe area insets are not
+  // handled correctly when WebView is drawing edge-to-edge.
+  aw_feature_overrides.DisableFeature(features::kDrawCutoutEdgeToEdge);
+
+  // This is enabled for WebView to improve crbug.com/418159642.
+  // TODO(crbug.com/422161917): Revert this for the ablation study.
+  aw_feature_overrides.EnableFeature(
+      features::kServiceWorkerBackgroundUpdateForRegisteredStorageKeys);
 }

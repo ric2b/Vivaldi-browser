@@ -23,7 +23,6 @@
 #include "chrome/browser/new_tab_page/promos/promo_service.h"
 #include "chrome/browser/new_tab_page/promos/promo_service_observer.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
-#include "chrome/browser/search/background/ntp_background_service_observer.h"
 #include "chrome/browser/search/background/ntp_custom_background_service.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_observer.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -35,6 +34,7 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/search_provider_logos/logo_common.h"
 #include "components/segmentation_platform/public/result.h"
+#include "components/themes/ntp_background_service_observer.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -132,8 +132,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
                           const std::string& collection_id) override;
   void SetDailyRefreshCollectionId(const std::string& collection_id) override;
   void SetNoBackgroundImage() override;
-  void RevertBackgroundChanges() override;
-  void ConfirmBackgroundChanges() override;
   void GetBackgroundCollections(
       GetBackgroundCollectionsCallback callback) override;
   void GetBackgroundImages(const std::string& collection_id,
@@ -156,17 +154,8 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   void SetModulesOrder(const std::vector<std::string>& module_ids) override;
   void GetModulesOrder(GetModulesOrderCallback callback) override;
   void UpdateModulesLoadable() override;
-  void SetCustomizeChromeSidePanelVisible(
-      bool visible,
-      new_tab_page::mojom::CustomizeChromeSection section) override;
-  void IncrementCustomizeChromeButtonOpenCount() override;
-  void GetMobilePromoQrCode(GetMobilePromoQrCodeCallback callback) override;
-  void OnMobilePromoShown() override;
-  void OnDismissMobilePromo() override;
-  void OnUndoDismissMobilePromo() override;
   void MaybeShowFeaturePromo(
       new_tab_page::mojom::IphFeature iph_feature) override;
-  void IncrementWallpaperSearchButtonShownCount() override;
   void OnAppRendered(double time) override;
   void OnOneGoogleBarRendered(double time) override;
   void OnPromoRendered(double time,
@@ -183,6 +172,7 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
                       const std::string& doodle_id,
                       const std::optional<std::string>& share_id) override;
   void OnPromoLinkClicked() override;
+  void IncrementComposeButtonShownCount() override;
 
   void SetCustomizeChromeSidePanelControllerForTesting(
       customize_chrome::SidePanelController* side_panel_controller);
@@ -217,11 +207,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   void FileSelected(const ui::SelectedFileInfo& file, int index) override;
   void FileSelectionCanceled() override;
 
-  // Called when the embedding TabInterface has changed.
-  // TODO(crbug.com/378475391): This can be removed once the NTP has been
-  // restricted from loading in app windows.
-  void OnTabInterfaceChanged();
-
   void OnLogoAvailable(
       GetDoodleCallback callback,
       search_provider_logos::LogoCallbackReason type,
@@ -242,7 +227,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
 
   bool IsCustomLinksEnabled() const;
   bool IsShortcutsVisible() const;
-  void NotifyCustomizeChromeSidePanelVisibilityChanged(bool is_open);
   void MaybeLaunchInteractionSurvey(std::string_view interaction,
                                     const std::string& module_id,
                                     int delay_time_ms = 0);
@@ -259,18 +243,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
       std::string_view interaction,
       const std::string& module_id);
 
-  // Check if user is eligible to see a mobile promo generated locally. The
-  // callback is a mojo callback that must be called in all cases.
-  void CheckIfUserEligibleForMobilePromo(GetMobilePromoQrCodeCallback callback);
-  // Handle the response from the segmentation platform querying mobile promo
-  // status. The callback is a mojo callback that must be called in all cases.
-  void HandleMobilePromoSegmentationResponse(
-      GetMobilePromoQrCodeCallback callback,
-      base::Time request_start_time,
-      const segmentation_platform::ClassificationResult& result);
-
-  void SetCustomizeChromeSidePanelController(
-      customize_chrome::SidePanelController* side_panel_controller);
   void SetModuleHidden(const std::string& module_id, bool hidden);
 
   // Synchronizes Microsoft module enablement with their current authentication
@@ -326,8 +298,6 @@ class NewTabPageHandler : public new_tab_page::mojom::PageHandler,
   // to be present during load and fixed for the NTP's lifetime.
   raw_ptr<customize_chrome::SidePanelController>
       customize_chrome_side_panel_controller_;
-
-  base::CallbackListSubscription tab_changed_subscription_;
 
   // These are located at the end of the list of member variables to ensure the
   // WebUI page is disconnected before other members are destroyed.

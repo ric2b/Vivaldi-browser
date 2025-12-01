@@ -7,6 +7,7 @@ import {mockAidaClient} from '../../../testing/AiAssistanceHelpers.js';
 import {
   describeWithEnvironment,
 } from '../../../testing/EnvironmentHelpers.js';
+import {html, type TemplateResult} from '../../../ui/lit/lit.js';
 import * as AiAssistance from '../ai_assistance.js';
 
 const {AiAgent, ResponseType, ConversationContext, ErrorType} = AiAssistance;
@@ -21,22 +22,17 @@ function mockConversationContext(): AiAssistance.ConversationContext<unknown> {
       return null;
     }
 
-    override getIcon(): HTMLElement {
-      return document.createElement('span');
+    override getIcon(): TemplateResult {
+      return html`<span></span>`;
     }
 
     override getTitle(): string {
       return 'title';
     }
-
-    override getSuggestions(): undefined {
-      return;
-    }
   })();
 }
 
 class AiAgentMock extends AiAgent<unknown> {
-  type = AiAssistance.AgentType.STYLING;
   override preamble = 'preamble';
 
   // eslint-disable-next-line require-yield
@@ -164,7 +160,6 @@ describeWithEnvironment('AiAgent', () => {
 
     it('builds a request without preamble', async () => {
       class AiAgentMockWithoutPreamble extends AiAgent<unknown> {
-        type = AiAssistance.AgentType.STYLING;
         override preamble = undefined;
         // eslint-disable-next-line require-yield
         override async * handleContextDetails(): AsyncGenerator<AiAssistance.ContextResponse, void, void> {
@@ -185,6 +180,47 @@ describeWithEnvironment('AiAgent', () => {
       assert.deepEqual(request.current_message?.parts[0], {text: 'test input'});
       assert.isUndefined(request.preamble);
       assert.isUndefined(request.historical_contexts);
+    });
+
+    it('builds a request with a fact', async () => {
+      const agent = new AiAgentMock({
+        aidaClient: mockAidaClient([[{
+          explanation: 'answer',
+        }]]),
+        serverSideLoggingEnabled: true,
+      });
+      const fact: Host.AidaClient.RequestFact = {text: 'This is a fact', metadata: {source: 'devtools'}};
+      agent.addFact(fact);
+      await Array.fromAsync(agent.run('question', {selected: null}));
+      const request = agent.buildRequest({text: 'test input'}, Host.AidaClient.Role.USER);
+      assert.deepEqual(request.facts, [fact]);
+    });
+
+    it('can manage multiple facts and remove them', async () => {
+      const agent = new AiAgentMock({
+        aidaClient: mockAidaClient([[{
+          explanation: 'answer',
+        }]]),
+        serverSideLoggingEnabled: true,
+      });
+      const f1: Host.AidaClient.RequestFact = {text: 'f1', metadata: {source: 'devtools'}};
+      const f2 = {text: 'f2', metadata: {source: 'devtools'}};
+      agent.addFact(f1);
+      agent.addFact(f2);
+
+      await Array.fromAsync(agent.run('question', {selected: null}));
+      const request1 = agent.buildRequest({text: 'test input'}, Host.AidaClient.Role.USER);
+      assert.deepEqual(request1.facts, [f1, f2]);
+
+      agent.removeFact(f1);
+      await Array.fromAsync(agent.run('question', {selected: null}));
+      const request2 = agent.buildRequest({text: 'test input'}, Host.AidaClient.Role.USER);
+      assert.deepEqual(request2.facts, [f2]);
+
+      agent.clearFacts();
+      await Array.fromAsync(agent.run('question', {selected: null}));
+      const request3 = agent.buildRequest({text: 'test input'}, Host.AidaClient.Role.USER);
+      assert.isUndefined(request3.facts);
     });
 
     it('builds a request with chat history', async () => {
@@ -324,7 +360,7 @@ describeWithEnvironment('AiAgent', () => {
   describe('ConversationContext', () => {
     function getTestContext(origin: string) {
       class TestContext extends ConversationContext<undefined> {
-        override getIcon(): HTMLElement {
+        override getIcon(): TemplateResult {
           throw new Error('Method not implemented.');
         }
         override getTitle(): string {
@@ -335,10 +371,6 @@ describeWithEnvironment('AiAgent', () => {
         }
         override getItem(): undefined {
           return undefined;
-        }
-
-        override getSuggestions(): undefined {
-          return;
         }
       }
       return new TestContext();
@@ -384,7 +416,6 @@ describeWithEnvironment('AiAgent', () => {
 
   describe('functions', () => {
     class AgentWithFunction extends AiAgent<unknown> {
-      type = AiAssistance.AgentType.STYLING;
       override preamble = 'preamble';
       called = 0;
 

@@ -21,16 +21,24 @@ enum class PromoAction : int;
 // which `accessPoint` the sign in flow was initialized, using which
 // `promoAction` (when relevant) and whether an `optionalHistorySync` (even if
 // it is NO, it might still be skipped if the user previously approved it).
+// `fullscreenPromo`: whether the promo should be displayed in a fullscreen
+// modal.
+// The `contextStyle` is used to customize content on screens.
 - (instancetype)
     initWithBaseViewController:(UIViewController*)viewController
                        browser:(Browser*)browser
+                  contextStyle:(SigninContextStyle)contextStyle
                    accessPoint:(signin_metrics::AccessPoint)accessPoint
                    promoAction:(signin_metrics::PromoAction)promoAction
            optionalHistorySync:(BOOL)optionalHistorySync
+               fullscreenPromo:(BOOL)fullscreenPromo
+          continuationProvider:
+              (const ChangeProfileContinuationProvider&)continuationProvider
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+                              contextStyle:(SigninContextStyle)contextStyle
                                accessPoint:
                                    (signin_metrics::AccessPoint)accessPoint
     NS_UNAVAILABLE;

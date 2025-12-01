@@ -33,6 +33,10 @@ BASE_FEATURE(kSynchronizedScrolling,
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
+BASE_FEATURE(kZeroCopyRBPPartialRasterWithGpuCompositor,
+             "ZeroCopyRBPPartialRasterWithGpuCompositor",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 BASE_FEATURE(kMainRepaintScrollPrefersNewContent,
              "MainRepaintScrollPrefersNewContent",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -54,10 +58,6 @@ BASE_FEATURE(kUseDMSAAForTiles,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
-
-BASE_FEATURE(kUIEnableSharedImageCacheForGpu,
-             "UIEnableSharedImageCacheForGpu",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kReclaimResourcesDelayedFlushInBackground,
              "ReclaimResourcesDelayedFlushInBackground",
@@ -102,10 +102,6 @@ BASE_FEATURE(kEvictionThrottlesDraw,
              "EvictionThrottlesDraw",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAdjustFastMainThreadThreshold,
-             "AdjustFastMainThreadThreshold",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kClearCanvasResourcesInBackground,
              "ClearCanvasResourcesInBackground",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -121,20 +117,12 @@ BASE_FEATURE(kWaitForLateScrollEvents,
 const base::FeatureParam<double> kWaitForLateScrollEventsDeadlineRatio{
     &kWaitForLateScrollEvents, "deadline_ratio", 0.333};
 
-BASE_FEATURE(kNonBatchedCopySharedImage,
-             "NonBatchedCopySharedImage",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kDontAlwaysPushPictureLayerImpls,
              "DontAlwaysPushPictureLayerImpls",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPreserveDiscardableImageMapQuality,
              "PreserveDiscardableImageMapQuality",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-BASE_FEATURE(kWarmUpCompositor,
-             "WarmUpCompositor",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kCCSlimming, "CCSlimming", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -168,10 +156,6 @@ BASE_FEATURE(kSendExplicitDecodeRequestsImmediately,
              "SendExplicitDecodeRequestsImmediately",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kThrottleFrameRateOnManyDidNotProduceFrame,
-             "ThrottleFrameRateOnManyDidNotProduceFrame",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kNewContentForCheckerboardedScrolls,
              "NewContentForCheckerboardedScrolls",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -179,13 +163,6 @@ BASE_FEATURE(kNewContentForCheckerboardedScrolls,
 BASE_FEATURE(kAllowLCDTextWithFilter,
              "AllowLCDTextWithFilter",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-// By default, frame rate starts being throttled when 4 consecutive "did not
-// produce frame" are observed. It stops being throttled when there's a drawn
-// frame.
-const base::FeatureParam<int> kNumDidNotProduceFrameBeforeThrottle{
-    &kThrottleFrameRateOnManyDidNotProduceFrame,
-    "num_did_not_produce_frame_before_throttle", 4};
 
 BASE_FEATURE(kMultipleImplOnlyScrollAnimations,
              "MultipleImplOnlyScrollAnimations",
@@ -229,15 +206,6 @@ BASE_FEATURE(kViewTransitionCaptureAndDisplay,
              "ViewTransitionCaptureAndDisplay",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// When enabled, this flag stops the export of most of the
-// UKMs calculated by the DroppedFrameCounter.
-BASE_FEATURE(kStopExportDFCMetrics,
-             "StopExportDFCMetrics",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-bool StopExportDFCMetrics() {
-  return base::FeatureList::IsEnabled(features::kStopExportDFCMetrics);
-}
-
 BASE_FEATURE(kZeroScrollMetricsUpdate,
              "ZeroScrollMetricsUpdate",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -280,5 +248,37 @@ const base::FeatureParam<int>
 BASE_FEATURE(kUseLayerListsByDefault,
              "UseLayerListsByDefault",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kProgrammaticScrollAnimationOverride,
+             "ProgrammaticScrollAnimationOverride",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Default to `gfx::CubicBezierTimingFunction::EaseType::EASE_IN_OUT`.
+BASE_FEATURE_PARAM(double,
+                   kCubicBezierX1,
+                   &kProgrammaticScrollAnimationOverride,
+                   "cubic_bezier_x1",
+                   0.42);
+BASE_FEATURE_PARAM(double,
+                   kCubicBezierY1,
+                   &kProgrammaticScrollAnimationOverride,
+                   "cubic_bezier_y1",
+                   0.0);
+BASE_FEATURE_PARAM(double,
+                   kCubicBezierX2,
+                   &kProgrammaticScrollAnimationOverride,
+                   "cubic_bezier_x2",
+                   0.58);
+BASE_FEATURE_PARAM(double,
+                   kCubicBezierY2,
+                   &kProgrammaticScrollAnimationOverride,
+                   "cubic_bezier_y2",
+                   1.0);
+
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kMaxAnimtionDuration,
+                   &kProgrammaticScrollAnimationOverride,
+                   "max_animation_duration",
+                   base::Milliseconds(700));
 
 }  // namespace features

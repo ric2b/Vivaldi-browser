@@ -4,7 +4,6 @@
 
 #include "chrome/browser/ui/toolbar/toolbar_actions_model_factory.h"
 
-#include "chrome/browser/extensions/chrome_extension_system_factory.h"
 #include "chrome/browser/extensions/extension_action_dispatcher.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/profiles/profile.h"
@@ -43,8 +42,9 @@ ToolbarActionsModelFactory::ToolbarActionsModelFactory()
   DependsOn(extensions::ExtensionActionDispatcher::GetFactoryInstance());
   DependsOn(extensions::ExtensionPrefsFactory::GetInstance());
   DependsOn(extensions::ExtensionRegistryFactory::GetInstance());
-  DependsOn(extensions::ChromeExtensionSystemFactory::GetInstance());
   DependsOn(extensions::ExtensionManagementFactory::GetInstance());
+  DependsOn(
+      extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
   DependsOn(extensions::PermissionsManager::GetFactory());
 }
 

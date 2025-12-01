@@ -33,7 +33,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "third_party/blink/public/mojom/indexeddb/indexeddb.mojom-blink.h"
 #include "third_party/blink/public/platform/web_blob_info.h"
@@ -556,15 +555,10 @@ IDBRequest* IDBObjectStore::DoPut(ScriptState* script_state,
 
   IDBRequest* request = IDBRequest::Create(
       script_state, source, transaction_.Get(), std::move(metrics));
-
   value_wrapper.DoneCloning();
 
-  auto idb_value = std::make_unique<IDBValue>(
-      value_wrapper.TakeWireBytes(), value_wrapper.TakeBlobInfo(),
-      value_wrapper.TakeFileSystemAccessTransferTokens());
-
   transaction_->Put(
-      Id(), std::move(idb_value), IDBKey::Clone(key), put_mode,
+      Id(), std::move(value_wrapper).Build(), IDBKey::Clone(key), put_mode,
       std::move(index_keys),
       WTF::BindOnce(&IDBRequest::OnPut, WrapWeakPersistent(request)));
 
@@ -1152,9 +1146,7 @@ void IDBObjectStore::RenameIndex(int64_t index_id, const String& new_name) {
   db().RenameIndex(transaction_->Id(), Id(), index_id, new_name);
 
   auto metadata_iterator = metadata_->indexes.find(index_id);
-  CHECK_NE(metadata_iterator, metadata_->indexes.end(),
-           base::NotFatalUntil::M130)
-      << "Invalid index_id";
+  CHECK_NE(metadata_iterator, metadata_->indexes.end()) << "Invalid index_id";
   const String& old_name = metadata_iterator->value->name;
 
   DCHECK(index_map_.Contains(old_name))

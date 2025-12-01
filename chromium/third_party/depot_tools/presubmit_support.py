@@ -36,7 +36,8 @@ import unittest  # Exposed through the API.
 import urllib.parse as urlparse
 import urllib.request as urllib_request
 import urllib.error as urllib_error
-from typing import Mapping
+from dataclasses import asdict, dataclass
+from typing import ClassVar, Mapping
 from warnings import warn
 
 # Local imports.
@@ -313,20 +314,94 @@ def prompt_should_continue(prompt_string):
 
 # Top level object so multiprocessing can pickle
 # Public access through OutputApi object.
+@dataclass
+class _PresubmitResultLocation:
+    COMMIT_MSG_PATH: ClassVar[str] = '/COMMIT_MSG'
+    # path to the file where errors/warnings are reported.
+    #
+    # path MUST either be COMMIT_MSG_PATH or relative to the repo root to
+    # indicate the errors/warnings are against the commit message
+    # (a.k.a cl description).
+    file_path: str
+    # The range in the file defined by (start_line, start_col) -
+    # (end_line, end_col) where errors/warnings are reported.
+    # The semantic are the same as Gerrit comment range:
+    # https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#comment-range
+    #
+    # To specify the entire line, make start_line == end_line and
+    # start_col == end_col == 0.
+    start_line: int = 0  # inclusive 1-based
+    start_col: int = 0  # inclusive 0-based
+    end_line: int = 0  # exclusive 1-based
+    end_col: int = 0  # exclusive 0-based
+
+    def validate(self):
+        if not self.file_path:
+            raise ValueError('file path is required')
+        if self.file_path != self.COMMIT_MSG_PATH and os.path.isabs(
+                self.file_path):
+            raise ValueError(
+                f'file path must be relative path, got {self.file_path}')
+        if not self.start_line:
+            if self.end_line:
+                raise ValueError('end_line must be empty if start line is not '
+                                 'specified')
+            if self.start_col:
+                raise ValueError('start_col must be empty if start line is not '
+                                 'specified')
+            if self.end_col:
+                raise ValueError('end_col must be empty if start line is not '
+                                 'specified')
+        elif self.start_line < 0:
+            raise ValueError('start_line MUST not be negative, '
+                             f'got {self.start_line}')
+        elif self.end_line < 1:
+            raise ValueError('start_line is specified so end_line must be '
+                             f'positive, got {self.end_line}')
+        elif self.start_col < 0:
+            raise ValueError('start_col MUST not be negative, '
+                             f'got {self.start_col}')
+        elif self.end_col < 0:
+            raise ValueError('end_col MUST not be negative, '
+                             f'got {self.end_col}')
+        elif self.start_line > self.end_line or (
+                self.start_line == self.end_line
+                and self.start_col > self.end_col and self.end_col > 0):
+            raise ValueError(
+                '(start_line, start_col) must not be after (end_line, end_col'
+                f'), got ({self.start_line}, {self.start_col}) .. '
+                f'({self.end_line}, {self.end_col})')
+
+
+# Top level object so multiprocessing can pickle
+# Public access through OutputApi object.
 class _PresubmitResult(object):
     """Base class for result objects."""
     fatal = False
     should_prompt = False
 
-    def __init__(self, message, items=None, long_text='', show_callstack=None):
-        """
-        message: A short one-line message to indicate errors.
-        items: A list of short strings to indicate where errors occurred.
-        long_text: multi-line text output, e.g. from another tool
+    def __init__(self,
+                 message: str,
+                 items: list[str] = None,
+                 long_text: str = '',
+                 locations: list[_PresubmitResultLocation] = None,
+                 show_callstack: bool = None):
+        """Inits _PresubmitResult.
+
+        Args:
+            message: A short one-line message to indicate errors.
+            items: A list of short strings to indicate where errors occurred.
+                Note that if you are using this parameter to print where errors
+                occurred, please use `locations` instead
+            long_text: multi-line text output, e.g. from another tool
+            locations: The locations indicate where the errors occurred.
         """
         self._message = _PresubmitResult._ensure_str(message)
         self._items = items or []
         self._long_text = _PresubmitResult._ensure_str(long_text.rstrip())
+        self._locations = locations or []
+        for loc in self._locations:
+            loc.validate()
         if show_callstack is None:
             show_callstack = _SHOW_CALLSTACKS
         if show_callstack:
@@ -346,24 +421,45 @@ class _PresubmitResult(object):
             return val.decode()
         raise ValueError("Unknown string type %s" % type(val))
 
-    def handle(self):
-        sys.stdout.write(self._message)
-        sys.stdout.write('\n')
+    def handle(self, out_file=None):
+        if not out_file:
+            out_file = sys.stdout
+        out_file.write(self._message)
+        out_file.write('\n')
         for item in self._items:
-            sys.stdout.write('  ')
+            out_file.write('  ')
             # Write separately in case it's unicode.
-            sys.stdout.write(str(item))
-            sys.stdout.write('\n')
+            out_file.write(str(item))
+            out_file.write('\n')
+        if self._locations:
+            out_file.write('Found in:\n')
+            for loc in self._locations:
+                if loc.file_path == _PresubmitResultLocation.COMMIT_MSG_PATH:
+                    out_file.write('  - Commit Message')
+                else:
+                    out_file.write(f'  - {loc.file_path}')
+                if not loc.start_line:
+                    pass
+                elif loc.start_line == loc.end_line and (loc.start_col == 0
+                                                         and loc.end_col == 0):
+                    out_file.write(f' [Ln {loc.start_line}]')
+                elif loc.start_col == 0 and loc.end_col == 0:
+                    out_file.write(f' [Ln {loc.start_line} - {loc.end_line}]')
+                else:
+                    out_file.write(f' [Ln {loc.start_line}, Col {loc.start_col}'
+                                   f' - Ln {loc.end_line}, Col {loc.end_col}]')
+                out_file.write('\n')
         if self._long_text:
-            sys.stdout.write('\n***************\n')
+            out_file.write('\n***************\n')
             # Write separately in case it's unicode.
-            sys.stdout.write(self._long_text)
-            sys.stdout.write('\n***************\n')
+            out_file.write(self._long_text)
+            out_file.write('\n***************\n')
 
     def json_format(self):
         return {
             'message': self._message,
             'items': [str(item) for item in self._items],
+            'locations': [asdict(loc) for loc in self._locations],
             'long_text': self._long_text,
             'fatal': self.fatal
         }
@@ -515,6 +611,7 @@ class OutputApi(object):
     PresubmitPromptWarning = _PresubmitPromptWarning
     PresubmitNotifyResult = _PresubmitNotifyResult
     MailTextResult = _MailTextResult
+    PresubmitResultLocation = _PresubmitResultLocation
 
     def __init__(self, is_committing):
         self.is_committing = is_committing
@@ -574,6 +671,7 @@ class InputApi(object):
         r'.+\.mojom$',
         r'.+\.fidl$',
         r'.+\.rs$',
+        r'.+\/res\/.+\.xml$',
     )
 
     # Path regexp that should be excluded from being considered containing
@@ -1041,10 +1139,10 @@ class AffectedFile(object):
         self._path = path
         self._action = action
         self._local_root = repository_root
-        self._is_directory = None
+        self._diff_cache = diff_cache
         self._cached_changed_contents = None
         self._cached_new_contents = None
-        self._diff_cache = diff_cache
+        self._extension = None
         self._is_testable_file = None
         logging.debug('%s(%s)', self.__class__.__name__, self._path)
 
@@ -1160,6 +1258,20 @@ class AffectedFile(object):
             return result
         self._cached_changed_contents = result
         return self._cached_changed_contents[:]
+
+    def Extension(self):
+        """Returns the file extension as a string.
+
+        File extension is the portion of file name after the last dot, including the dot.
+        If file name has no dot (like 'OWNERS'), then returns an empty string ''.
+        If file has multiple extensions (like 'archive.tar.gz'), then the last
+        extension is returned (like '.gz')
+        This method is equivalent to NodeJS node:path method path.extname()
+        and Python3 pathlib PurePath.suffix() and os.path.splitext()
+        """
+        if self._extension is None:
+            self._extension = os.path.splitext(self._path)[1]
+        return self._extension
 
     def __str__(self):
         return self.LocalPath()
@@ -1434,6 +1546,10 @@ class Change(object):
     def LocalSubmodules(self):
         """Returns local paths for affected submodules."""
         return [af.LocalPath() for af in self.AffectedSubmodules()]
+
+    def AllLocalSubmodules(self) -> set[str]:
+        """Returns local paths for all submodules."""
+        return set(self._repo_submodules())
 
     def AbsoluteLocalPaths(self):
         """Convenience function."""
@@ -2011,16 +2127,43 @@ def DoPresubmitChecks(change,
             else:
                 messages.setdefault('Messages', []).append(result)
 
-        # Print the different message types in a consistent order. ERRORS go
-        # last so that they will be most visible in the local-presubmit output.
-        for name in ['Messages', 'Warnings', 'ERRORS']:
-            if name in messages:
-                items = messages[name]
-                sys.stdout.write('** Presubmit %s: %d **\n' %
-                                 (name, len(items)))
-                for item in items:
-                    item.handle()
-                    sys.stdout.write('\n')
+        presubmit_results_json = json.dumps(
+            {
+                'errors':
+                [error.json_format() for error in messages.get('ERRORS', [])],
+                'notifications': [
+                    notification.json_format()
+                    for notification in messages.get('Messages', [])
+                ],
+                'warnings': [
+                    warning.json_format()
+                    for warning in messages.get('Warnings', [])
+                ],
+                'more_cc':
+                executer.more_cc,
+            },
+            sort_keys=True)
+
+        # Write json result to stdout if json_output is '-'. Otherwise, write
+        # output string to stdout and json result to the file specified by
+        # json_output
+        if json_output == '-':
+            sys.stdout.write('**** Presubmit Results ****\n')
+            sys.stdout.write(presubmit_results_json)
+            sys.stdout.write('\n**** End of Presubmit Results ****\n')
+        else:
+            # Print the different message types in a consistent order. ERRORS go
+            # last so that they will be most visible in the local-presubmit output.
+            for name in ['Messages', 'Warnings', 'ERRORS']:
+                if name in messages:
+                    items = messages[name]
+                    sys.stdout.write('** Presubmit %s: %d **\n' %
+                                     (name, len(items)))
+                    for item in items:
+                        item.handle()
+                        sys.stdout.write('\n')
+            if json_output:
+                gclient_utils.FileWrite(json_output, presubmit_results_json)
 
         total_time = time_time() - start_time
         if total_time > 1.0:
@@ -2038,26 +2181,6 @@ def DoPresubmitChecks(change,
                 sys.stdout.write('\n')
         else:
             sys.stdout.write('There were presubmit errors.\n')
-
-        if json_output:
-            # Write the presubmit results to json output
-            presubmit_results = {
-                'errors':
-                [error.json_format() for error in messages.get('ERRORS', [])],
-                'notifications': [
-                    notification.json_format()
-                    for notification in messages.get('Messages', [])
-                ],
-                'warnings': [
-                    warning.json_format()
-                    for warning in messages.get('Warnings', [])
-                ],
-                'more_cc':
-                executer.more_cc,
-            }
-
-            gclient_utils.FileWrite(
-                json_output, json.dumps(presubmit_results, sort_keys=True))
 
         global _ASKED_FOR_FEEDBACK
         # Ask for feedback one time out of 5.
@@ -2399,7 +2522,8 @@ def main(argv=None):
                         help='Run all tests specified by input_api.RunTests in '
                         'all PRESUBMIT files in parallel.')
     parser.add_argument('--json_output',
-                        help='Write presubmit errors to json output.')
+                        help='Write presubmit results to json output. If \'-\' '
+                        'is provided, the results will be writting to stdout.')
     parser.add_argument('--all_files',
                         action='store_true',
                         help='Mark all files under source control as modified.')

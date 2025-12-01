@@ -145,6 +145,7 @@ class ChromeAuthenticatorRequestDelegate
       AccountPreselectedCallback account_preselected_callback,
       PasswordSelectedCallback password_selected_callback,
       device::FidoRequestHandlerBase::RequestCallback request_callback,
+      base::OnceClosure cancel_ui_timeout_callback,
       base::RepeatingClosure bluetooth_adapter_power_on_callback,
       base::RepeatingCallback<
           void(device::FidoRequestHandlerBase::BlePermissionCallback)>
@@ -318,6 +319,9 @@ class ChromeAuthenticatorRequestDelegate
   void OnPasswordCredentialsReceived(
       PasswordCredentialController::PasswordCredentials credentials);
 
+  void UpdateModelForTransportAvailability(
+      const device::FidoRequestHandlerBase::TransportAvailabilityInfo& tai);
+
   const content::GlobalRenderFrameHostId render_frame_host_id_;
   const scoped_refptr<AuthenticatorRequestDialogModel> dialog_model_;
   const std::unique_ptr<AuthenticatorRequestDialogController>
@@ -328,6 +332,7 @@ class ChromeAuthenticatorRequestDelegate
   AccountPreselectedCallback account_preselected_callback_;
   PasswordSelectedCallback password_selected_callback_;
   device::FidoRequestHandlerBase::RequestCallback request_callback_;
+  base::OnceClosure cancel_ui_timeout_callback_;
 
   // The number of credential types that have been requested to be displayed.
   int credential_types_ =

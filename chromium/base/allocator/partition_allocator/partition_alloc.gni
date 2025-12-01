@@ -69,7 +69,9 @@ if (is_nacl) {
   # NaCl targets don't use 64-bit pointers.
   has_64_bit_pointers = false
 } else if (current_cpu == "x64" || current_cpu == "arm64" ||
-           current_cpu == "loong64" || current_cpu == "riscv64") {
+           current_cpu == "arm64e" || current_cpu == "loong64" ||
+           current_cpu == "riscv64") {
+  assert(current_cpu != "arm64e" || (is_ios && target_environment == "device"))
   has_64_bit_pointers = true
 } else if (current_cpu == "x86" || current_cpu == "arm" ||
            current_cpu == "wasm") {
@@ -140,6 +142,9 @@ declare_args() {
   # calls to PartitionAlloc, rather than some other platform allocator.
   use_partition_alloc_as_malloc = use_partition_alloc && use_allocator_shim &&
                                   use_partition_alloc_as_malloc_default
+
+  shim_supports_sized_dealloc =
+      use_allocator_shim && shim_supports_sized_dealloc_default
 }
 
 declare_args() {
@@ -191,8 +196,6 @@ if (use_allocator_shim && is_win) {
 }
 
 declare_args() {
-  use_freeslot_bitmap = false
-
   # Introduces pointer compression support in PA. These are 4-byte
   # pointers that can point within the core pools (regular and BRP).
   #
@@ -361,9 +364,9 @@ declare_args() {
   use_full_mte = false
 }
 
-stack_scan_supported =
-    current_cpu == "x64" || current_cpu == "x86" || current_cpu == "arm" ||
-    current_cpu == "arm64" || current_cpu == "riscv64"
+stack_scan_supported = current_cpu == "x64" || current_cpu == "x86" ||
+                       current_cpu == "arm" || current_cpu == "arm64" ||
+                       current_cpu == "riscv64" || current_cpu == "loong64"
 
 # We want to provide assertions that guard against inconsistent build
 # args, but there is no point in having them fire if we're not building
@@ -533,4 +536,14 @@ declare_args() {
   # Assert that PartitionAlloc and MiraclePtr run on C++20 when set to true.
   # Embedders may opt-out of using C++ 20 build.
   assert_cpp20 = assert_cpp20_default
+}
+
+declare_args() {
+  # Set to true to enable futex priority inheritance.
+  #
+  # Enabled only on 64-bit Android. On 32 bit Android, PI futexes require an
+  # extra level of indirection, so we don't bother enabling it. See:
+  # https://cs.android.com/android/platform/superproject/+/android14-qpr3-release:bionic/libc/bionic/pthread_mutex.cpp;drc=9108f258adad329a537e10461fbd526d5b9ad8bf;l=242
+  enable_partition_lock_priority_inheritance =
+      is_android && (current_cpu == "x64" || current_cpu == "arm64")
 }

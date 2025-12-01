@@ -12,10 +12,11 @@
 #include "base/no_destructor.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/filling/filling_product.h"
-#include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
-#include "components/autofill/core/browser/integrators/autofill_compose_delegate.h"
-#include "components/autofill/core/browser/integrators/autofill_plus_address_delegate.h"
-#include "components/autofill/core/browser/integrators/identity_credential_delegate.h"
+#include "components/autofill/core/browser/integrators/autofill_ai/autofill_ai_delegate.h"
+#include "components/autofill/core/browser/integrators/compose/autofill_compose_delegate.h"
+#include "components/autofill/core/browser/integrators/identity_credential/identity_credential_delegate.h"
+#include "components/autofill/core/browser/integrators/password_manager/password_manager_delegate.h"
+#include "components/autofill/core/browser/integrators/plus_addresses/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/studies/autofill_ablation_study.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
@@ -65,6 +66,10 @@ const PersonalDataManager& AutofillClient::GetPersonalDataManager() const {
   return const_cast<AutofillClient*>(this)->GetPersonalDataManager();
 }
 
+const ValuablesDataManager* AutofillClient::GetValuablesDataManager() const {
+  return const_cast<AutofillClient*>(this)->GetValuablesDataManager();
+}
+
 AutofillOptimizationGuide* AutofillClient::GetAutofillOptimizationGuide()
     const {
   return nullptr;
@@ -85,6 +90,11 @@ AutofillComposeDelegate* AutofillClient::GetComposeDelegate() {
 }
 
 AutofillPlusAddressDelegate* AutofillClient::GetPlusAddressDelegate() {
+  return nullptr;
+}
+
+PasswordManagerDelegate* AutofillClient::GetPasswordManagerDelegate(
+    const FieldGlobalId& field_id) {
   return nullptr;
 }
 
@@ -140,10 +150,6 @@ AutofillClient::GetPaymentsAutofillClient() const {
   // payments::PaymentsAutofillClient for a given platform this will return
   // nullptr.
   return const_cast<AutofillClient*>(this)->GetPaymentsAutofillClient();
-}
-
-ValuableManager* AutofillClient::GetValuableManager() {
-  return nullptr;
 }
 
 GeoIpCountryCode AutofillClient::GetVariationConfigCountryCode() const {

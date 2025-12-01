@@ -13,7 +13,6 @@
 #include "base/i18n/case_conversion.h"
 #include "chrome/browser/ui/monogram_utils.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
-#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/webid/account_selection_view.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
@@ -21,6 +20,10 @@
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/styled_label.h"
+
+namespace network {
+class SharedURLLoaderFactory;
+}  // namespace network
 
 namespace webid {
 
@@ -108,6 +111,9 @@ class AccountHoverButton : public HoverButton {
   AccountHoverButton& operator=(const AccountHoverButton&) = delete;
   ~AccountHoverButton() override = default;
 
+  // HoverButton
+  void StateChanged(ButtonState old_state) override;
+
   void OnPressed(const ui::Event& event);
   bool HasBeenClicked();
 
@@ -118,6 +124,9 @@ class AccountHoverButton : public HoverButton {
 
   // Should only be invoked when the button has a secondary view.
   void ReplaceSecondaryViewWithSpinner();
+
+  // Used for testing.
+  void SetCallbackForTesting(PressedCallback callback);
 
  private:
   PressedCallback callback_;
@@ -152,7 +161,7 @@ class AccountSelectionViewBase {
   AccountSelectionViewBase(
       FedCmAccountSelectionView* owner,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-      std::u16string rp_for_display);
+      const content::RelyingPartyData& rp_data);
   virtual ~AccountSelectionViewBase();
 
   // Updates the FedCM dialog to show the "account picker" sheet.
@@ -193,10 +202,8 @@ class AccountSelectionViewBase {
   // Gets the title of the dialog.
   virtual std::string GetDialogTitle() const = 0;
 
-  // Gets the initial letter from the given string and returns it as
-  // a UTF-16 string. Correctly handles non-BMP characters.
-  static std::u16string GetInitialLetterAsUppercase(
-      const std::string& utf8_string);
+  // Gets the subtitle of the dialog, if any.
+  virtual std::optional<std::string> GetDialogSubtitle() const = 0;
 
  protected:
   void SetLabelProperties(views::Label* label);
@@ -222,7 +229,6 @@ class AccountSelectionViewBase {
   // Gets the summary and description string of the error.
   std::pair<std::u16string, std::u16string> GetErrorDialogText(
       const std::optional<TokenError>& error,
-      const std::u16string& rp_for_display,
       const std::u16string& idp_for_display);
 
   // Observes events on AccountSelectionBubbleView.
@@ -239,8 +245,8 @@ class AccountSelectionViewBase {
   // but that's after FedCmAccountSelectionView is destroyed.
   raw_ptr<FedCmAccountSelectionView, DanglingUntriaged> owner_{nullptr};
 
-  // The description of the RP to be used in the dialog.
-  std::u16string rp_for_display_;
+  // Relying party data to customize the dialog.
+  content::RelyingPartyData rp_data_;
 
   // Used to ensure that callbacks are not run if the AccountSelectionViewBase
   // is destroyed.

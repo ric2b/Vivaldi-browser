@@ -10,26 +10,32 @@
 
 #include "rtc_base/fake_ssl_identity.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/strings/string_view.h"
+#include "rtc_base/buffer.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/message_digest.h"
+#include "rtc_base/ssl_certificate.h"
+#include "rtc_base/ssl_identity.h"
 
 namespace webrtc {
 
 FakeSSLCertificate::FakeSSLCertificate(absl::string_view pem_string)
     : pem_string_(pem_string),
-      digest_algorithm_(rtc::DIGEST_SHA_1),
+      digest_algorithm_(DIGEST_SHA_1),
       expiration_time_(-1) {}
 
 FakeSSLCertificate::FakeSSLCertificate(const FakeSSLCertificate&) = default;
 
 FakeSSLCertificate::~FakeSSLCertificate() = default;
 
-std::unique_ptr<rtc::SSLCertificate> FakeSSLCertificate::Clone() const {
+std::unique_ptr<SSLCertificate> FakeSSLCertificate::Clone() const {
   return std::make_unique<FakeSSLCertificate>(*this);
 }
 
@@ -39,8 +45,8 @@ std::string FakeSSLCertificate::ToPEMString() const {
 
 void FakeSSLCertificate::ToDER(Buffer* der_buffer) const {
   std::string der_string;
-  RTC_CHECK(rtc::SSLIdentity::PemToDer(rtc::kPemTypeCertificate, pem_string_,
-                                       &der_string));
+  RTC_CHECK(
+      SSLIdentity::PemToDer(kPemTypeCertificate, pem_string_, &der_string));
   der_buffer->SetData(der_string.c_str(), der_string.size());
 }
 
@@ -63,43 +69,43 @@ bool FakeSSLCertificate::GetSignatureDigestAlgorithm(
 }
 
 bool FakeSSLCertificate::ComputeDigest(absl::string_view algorithm,
-                                       unsigned char* digest,
-                                       size_t size,
-                                       size_t* length) const {
-  *length = rtc::ComputeDigest(algorithm, pem_string_.c_str(),
-                               pem_string_.size(), digest, size);
-  return (*length != 0);
+                                       Buffer& digest) const {
+  size_t length = ::webrtc::ComputeDigest(algorithm, pem_string_.c_str(),
+                                          pem_string_.size(), digest.data(),
+                                          digest.capacity());
+  digest.SetSize(length);
+  return length != 0;
 }
 
 FakeSSLIdentity::FakeSSLIdentity(absl::string_view pem_string)
     : FakeSSLIdentity(FakeSSLCertificate(pem_string)) {}
 
 FakeSSLIdentity::FakeSSLIdentity(const std::vector<std::string>& pem_strings) {
-  std::vector<std::unique_ptr<rtc::SSLCertificate>> certs;
+  std::vector<std::unique_ptr<SSLCertificate>> certs;
   certs.reserve(pem_strings.size());
   for (const std::string& pem_string : pem_strings) {
     certs.push_back(std::make_unique<FakeSSLCertificate>(pem_string));
   }
-  cert_chain_ = std::make_unique<rtc::SSLCertChain>(std::move(certs));
+  cert_chain_ = std::make_unique<SSLCertChain>(std::move(certs));
 }
 
 FakeSSLIdentity::FakeSSLIdentity(const FakeSSLCertificate& cert)
-    : cert_chain_(std::make_unique<rtc::SSLCertChain>(cert.Clone())) {}
+    : cert_chain_(std::make_unique<SSLCertChain>(cert.Clone())) {}
 
 FakeSSLIdentity::FakeSSLIdentity(const FakeSSLIdentity& o)
     : cert_chain_(o.cert_chain_->Clone()) {}
 
 FakeSSLIdentity::~FakeSSLIdentity() = default;
 
-std::unique_ptr<rtc::SSLIdentity> FakeSSLIdentity::CloneInternal() const {
+std::unique_ptr<SSLIdentity> FakeSSLIdentity::CloneInternal() const {
   return std::make_unique<FakeSSLIdentity>(*this);
 }
 
-const rtc::SSLCertificate& FakeSSLIdentity::certificate() const {
+const SSLCertificate& FakeSSLIdentity::certificate() const {
   return cert_chain_->Get(0);
 }
 
-const rtc::SSLCertChain& FakeSSLIdentity::cert_chain() const {
+const SSLCertChain& FakeSSLIdentity::cert_chain() const {
   return *cert_chain_.get();
 }
 
@@ -113,7 +119,7 @@ std::string FakeSSLIdentity::PublicKeyToPEMString() const {
   return "";
 }
 
-bool FakeSSLIdentity::operator==(const rtc::SSLIdentity& other) const {
+bool FakeSSLIdentity::operator==(const SSLIdentity& other) const {
   RTC_DCHECK_NOTREACHED();  // Not implemented.
   return false;
 }

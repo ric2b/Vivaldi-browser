@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007 Apple Inc.  All rights reserved.
@@ -226,9 +227,6 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
 
     UI.Context.Context.instance().addFlavorChangeListener(SDK.DOMModel.DOMNode, this.forceUpdate, this);
     this.contentElement.addEventListener('copy', this.clipboardCopy.bind(this));
-    if (Common.Settings.Settings.instance().moduleSetting('show-css-property-documentation-on-hover')) {
-      this.#webCustomData = WebCustomData.create();
-    }
 
     this.boundOnScroll = this.onScroll.bind(this);
     this.imagePreviewPopover = new ImagePreviewPopover(this.contentElement, event => {
@@ -241,6 +239,11 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
   }
 
   get webCustomData(): WebCustomData|undefined {
+    if (!this.#webCustomData &&
+        Common.Settings.Settings.instance().moduleSetting('show-css-property-documentation-on-hover').get()) {
+      // WebCustomData.create() fetches the property docs, so this must happen lazily.
+      this.#webCustomData = WebCustomData.create();
+    }
     return this.#webCustomData;
   }
 
@@ -347,6 +350,10 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
 
   jumpToSectionBlock(section: string): void {
     this.decorator.findAndHighlightSectionBlock(section);
+  }
+
+  jumpToFunctionDefinition(functionName: string): void {
+    this.jumpToSection(functionName, FUNCTION_SECTION_NAME);
   }
 
   forceUpdate(): void {
@@ -1187,7 +1194,7 @@ export class StylesSidebarPane extends Common.ObjectWrapper.eventMixin<EventType
         this.idleCallbackManager.schedule(() => {
           block.sections.push(new FunctionRuleSection(
               this, matchedStyles, functionRule.style, functionRule.children(), sectionIdx,
-              functionRule.functionName().text, functionRule.parameters(), expandedByDefault));
+              functionRule.nameWithParameters(), expandedByDefault));
           sectionIdx++;
         });
       }

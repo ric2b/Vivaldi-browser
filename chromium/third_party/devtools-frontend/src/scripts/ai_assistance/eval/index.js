@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-const FREESTYLER_SERVER_URL = 'http://localhost:8000';
+const DATA_URL = 'http://localhost:8000/auto-run/data';
 const Utils = {
   jsonToAsciiTable(data) {
     const exampleIdEvaluations = {};
@@ -138,7 +138,7 @@ const Utils = {
 const examplesMapCache = {};
 const API = {
   fetchDatasets: async () => {
-    const datasetNamesHtml = await (await fetch(`${FREESTYLER_SERVER_URL}/data`)).text();
+    const datasetNamesHtml = await (await fetch(DATA_URL)).text();
     const parser = new DOMParser();
     const document = parser.parseFromString(datasetNamesHtml, 'text/html');
     const links = document.querySelectorAll('a');
@@ -150,20 +150,42 @@ const API = {
       return examplesMapCache[title];
     }
 
-    const {examples, metadata} = await (await fetch(`${FREESTYLER_SERVER_URL}/data/${title}`)).json();
+    function serializeFunctionCalls(calls) {
+      const parts = calls.map(call => {
+        if (call.name === 'executeJavaScript') {
+          return `Called ${call.name}\nthought="${call.args.thought}\ntitle=${call.args.title}\n${call.args.code}`;
+        }
+        return JSON.stringify(call, null, 2);
+      });
+      return parts.join('\n');
+    }
+
+    function serializeFunctionResponse(functionResponse) {
+      if (functionResponse.response.result) {
+        functionResponse = JSON.parse(functionResponse.response.result);
+      }
+      return JSON.stringify(functionResponse, null, 2);
+    }
+
+    const {examples, metadata} = await (await fetch(`${DATA_URL}/${title}`)).json();
     examples.sort((ex1, ex2) => ex1.exampleId > ex2.exampleId ? 1 : ex1.exampleId < ex2.exampleId ? -1 : 0);
     const examplesMap = {};
     for (const example of examples) {
       const exampleId = example.exampleId;
-      const request = example.request.input || example.request.current_message.parts[0].text;
-      const response = example.response;
+      const request = example.request.input || example.request.current_message.parts[0].text ||
+          serializeFunctionResponse(example.request.current_message.parts[0].functionResponse);
+      // Even though we don't collect `response` texts anymore, we still need it for backwards compatibility.
+      // TODO: Show function calling responses here as well.
+      const response =
+          (example.aidaResponse.functionCalls ? serializeFunctionCalls(example.aidaResponse.functionCalls) : null) ||
+          example.aidaResponse?.explanation || example.response;
       if (!examplesMap[exampleId]) {
         examplesMap[exampleId] = [];
       }
 
       examplesMap[exampleId].push({
         exampleId,
-        request: {input: request},
+        request,
         response,
       });
     }
@@ -261,7 +283,7 @@ function renderExample(container, sourceMap, {onEvaluationChange}) {
 
   let i = 0;
   for (const requestResponse of requestResponses) {
-    const text = `${requestResponse.request.input}\n\n${requestResponse.response}`;
+    const text = `${requestResponse.request}\n\n=======>\n\n${requestResponse.response}`;
     const evaluationId = JSON.stringify({
       datasetTitle: viewState.dataId,
       exampleId,

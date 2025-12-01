@@ -284,6 +284,8 @@ inline constexpr char16_t kInvalidAboutPageExpectRelativePath[] =
 inline constexpr char kInvalidAction[] = "Invalid value for 'action'.";
 inline constexpr char16_t kInvalidActionDefaultIcon[] =
     u"Invalid value for 'default_icon'.";
+inline constexpr char kInvalidActionDefaultIconMimeType[] =
+    "Invalid mime type for 'default_icon'.";
 inline constexpr char16_t kInvalidActionDefaultPopup[] =
     u"Invalid type for 'default_popup'.";
 inline constexpr char16_t kInvalidActionDefaultState[] =
@@ -301,6 +303,10 @@ inline constexpr char kInvalidBackgroundScript[] =
     "Invalid value for 'background.scripts[*]'.";
 inline constexpr char16_t kInvalidBackgroundScripts[] =
     u"Invalid value for 'background.scripts'.";
+inline constexpr char kInvalidBackgroundScriptMimeType[] =
+    "Invalid background script mime type for 'background.scripts[*]', a "
+    "background script can only be loaded from supported JavaScript files such "
+    "as .js files.";
 inline constexpr char16_t kInvalidBackgroundServiceWorkerScript[] =
     u"Invalid value for 'background.service_worker'.";
 inline constexpr char16_t kInvalidBackgroundServiceWorkerType[] =
@@ -362,9 +368,9 @@ inline constexpr char kInvalidExportAllowlistEmpty[] =
     "Empty 'export.allowlist' implies any extension can import this module.";
 inline constexpr char kInvalidExportAllowlistString[] =
     "Invalid value for 'export.allowlist[*]'.";
-inline constexpr char kInvalidExtensionOriginPopup[] =
-    "The default_popup path specified in the manifest is invalid. Ensure it is "
-    "a path to a file in this extension.";
+inline constexpr char kInvalidExtensionPopupPath[] =
+    "The specified popup path is invalid. Ensure it is a path to a file in "
+    "this extension.";
 inline constexpr char16_t kInvalidFileAccessList[] =
     u"Invalid value for 'file_access'.";
 inline constexpr char kInvalidFileAccessValue[] =
@@ -411,6 +417,8 @@ inline constexpr char kInvalidHostPermission[] = "Invalid value for '*[*]'.";
 inline constexpr char kInvalidHostPermissions[] = "Invalid value for '*'.";
 inline constexpr char kInvalidIconKey[] = "Invalid key in icons: \"*\".";
 inline constexpr char kInvalidIconPath[] = "Invalid value for 'icons[\"*\"]'.";
+inline constexpr char kInvalidIconMimeType[] =
+    "Invalid mime type for 'icons[\"*\"]'.";
 inline constexpr char16_t kInvalidIcons[] = u"Invalid value for 'icons'.";
 inline constexpr char16_t kInvalidImportAndExport[] =
     u"Simultaneous 'import' and 'export' are not allowed.";
@@ -418,7 +426,7 @@ inline constexpr char kInvalidImportId[] = "Invalid value for 'import[*].id'.";
 inline constexpr char kInvalidImportVersion[] =
     "Invalid value for 'import[*].minimum_version'.";
 inline constexpr char kInvalidImportRepeatedImport[] =
-    "There are multiple occurences of the same extension ID in 'import'. Only "
+    "There are multiple occurrences of the same extension ID in 'import'. Only "
     "one version will be installed.";
 inline constexpr char kInvalidInputComponents[] =
     "Invalid value for 'input_components'";
@@ -428,7 +436,8 @@ inline constexpr char kInvalidInputComponentLayoutName[] =
     "Invalid value for 'input_components[*].layouts[*]";
 inline constexpr char kInvalidInputComponentName[] =
     "Invalid value for 'input_components[*].name";
-inline constexpr char kInvalidInputView[] = "Invalid value for 'input_view'.";
+inline constexpr char kInvalidInputView[] =
+    "Invalid value for 'input_components[*].input_view'.";
 inline constexpr char16_t kInvalidIsolation[] =
     u"Invalid value for 'app.isolation'.";
 inline constexpr char kInvalidIsolationValue[] =
@@ -524,7 +533,8 @@ inline constexpr char16_t kInvalidOAuth2ClientId[] =
     u"Invalid value for 'oauth2.client_id'.";
 inline constexpr char16_t kInvalidOfflineEnabled[] =
     u"Invalid value for 'offline_enabled'.";
-inline constexpr char kInvalidOptionsPage[] = "Invalid value for '*'.";
+inline constexpr char kInvalidOptionsPage[] =
+    "Invalid value for 'input_components[*].options_page'.";
 inline constexpr char16_t kInvalidOptionsPageExpectUrlInPackage[] =
     u"Invalid value for 'options_page'.  Value must be a relative path.";
 inline constexpr char16_t kInvalidOptionsPageInHostedApp[] =
@@ -565,6 +575,12 @@ inline constexpr char16_t kInvalidThemeColors[] =
     u"Invalid value for theme colors - colors must be integers";
 inline constexpr char16_t kInvalidThemeImages[] =
     u"Invalid value for theme images - images must be strings.";
+inline constexpr char kInvalidThemeImageMimeType[] =
+    "Invalid mime type for theme image '*'.";
+inline constexpr char kThemeImageMissingFileExtension[] =
+    "A file name extension is missing for theme image '*'. The image is "
+    "accepted for compatibility reasons, but such images might become "
+    "unsupported in the future.";
 inline constexpr char kInvalidThemeImagesMissing[] =
     "An image specified in the theme is missing.";
 inline constexpr char16_t kInvalidThemeTints[] =
@@ -657,8 +673,10 @@ inline constexpr char kManifestParseError[] = "Manifest is not valid JSON.";
 inline constexpr char kManifestUnreadable[] =
     "Manifest file is missing or unreadable";
 inline constexpr char kManifestV2IsDeprecatedWarning[] =
-    "Manifest version 2 is deprecated, and support will be removed in 2024. "
-    "See https://developer.chrome.com/docs/extensions/develop/migrate/mv2-deprecation-timeline"
+    "Manifest version 2 is deprecated, and support will be removed in 2025. "
+    "See "
+    "https://developer.chrome.com/docs/extensions/develop/migrate/"
+    "mv2-deprecation-timeline"
     " for details.";
 inline constexpr char kManifestVersionTooHighWarning[] =
     "The maximum currently-supported manifest version is *, but this is *.  "

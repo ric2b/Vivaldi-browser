@@ -485,6 +485,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
     OnHeadersReceived(const std::string& headers,
                       const net::IPEndPoint& remote_endpoint,
                       OnHeadersReceivedCallback callback) {
+  auto parsed_headers = base::MakeRefCounted<net::HttpResponseHeaders>(headers);
   if (!current_request_uses_header_client_) {
     if (forwarding_header_client_) {
       forwarding_header_client_->OnHeadersReceived(headers, remote_endpoint,
@@ -494,7 +495,12 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
       // webrequest listeners was set.
       std::move(callback).Run(net::OK, std::nullopt, std::nullopt);
     }
-    if (for_cors_preflight_) {
+    // Do not finish proxied preflight requests that require proxy auth.
+    // The request is not finished yet, give control back to network service
+    // which will start authentication process.
+    const int status_code = parsed_headers->response_code();
+    if (for_cors_preflight_ &&
+        status_code != net::HTTP_PROXY_AUTHENTICATION_REQUIRED) {
       // CORS preflight is supported only when "ExtraHeaders" are requested.
       // Deletes |this| unless we have a forwarding client dealing with the
       // callback. In that case, the forwarding client may delete itself,
@@ -508,8 +514,7 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
 
   on_headers_received_callback_ = std::move(callback);
   current_response_ = network::mojom::URLResponseHead::New();
-  current_response_->headers =
-      base::MakeRefCounted<net::HttpResponseHeaders>(headers);
+  current_response_->headers = std::move(parsed_headers);
   current_response_->remote_endpoint = remote_endpoint;
   HandleResponseOrRedirectHeaders(
       base::BindOnce(&InProgressRequest::ContinueToHandleOverrideHeaders,
@@ -1265,7 +1270,7 @@ void RequestFilterProxyingURLLoaderFactory::OnLoaderCreated(
         request_id, forwarding_header_client.InitWithNewPipeAndPassReceiver());
   }
   auto request_it = requests_.find(it->second);
-  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
+  CHECK(request_it != requests_.end());
   request_it->second->OnLoaderCreated(std::move(receiver),
                                       std::move(forwarding_header_client));
 }

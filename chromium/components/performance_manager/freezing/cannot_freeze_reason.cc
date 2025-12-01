@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "components/performance_manager/freezing/cannot_freeze_reason.h"
+#include "components/performance_manager/public/freezing/cannot_freeze_reason.h"
 
 #include "base/notreached.h"
 
-namespace performance_manager {
+namespace performance_manager::freezing {
 
 const char* CannotFreezeReasonToString(CannotFreezeReason reason) {
   switch (reason) {
@@ -52,8 +52,10 @@ const char* CannotFreezeReasonToString(CannotFreezeReason reason) {
       return "has notification permission";
     case CannotFreezeReason::kOptedOut:
       return "opted out";
+    case CannotFreezeReason::kMostRecentlyUsed:
+      return "most recently used";
   }
   NOTREACHED();
 }
 
-}  // namespace performance_manager
+}  // namespace performance_manager::freezing

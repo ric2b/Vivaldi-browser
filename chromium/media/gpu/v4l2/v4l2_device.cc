@@ -30,6 +30,7 @@
 #include "base/not_fatal_until.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "build/build_config.h"
 #include "media/base/color_plane_layout.h"
 #include "media/base/media_switches.h"
@@ -549,13 +550,6 @@ V4L2Device::EnumerateSupportedDecodeProfiles(
 
   for (uint32_t pixelformat : v4l2_codecs_as_pix_fmts) {
     if (!base::Contains(pixelformats, pixelformat)) {
-      continue;
-    }
-
-    // Skip AV1 decoder profiles if kChromeOSHWAV1Decoder is disabled.
-    if ((pixelformat == V4L2_PIX_FMT_AV1 ||
-         pixelformat == V4L2_PIX_FMT_AV1_FRAME) &&
-        !base::FeatureList::IsEnabled(kChromeOSHWAV1Decoder)) {
       continue;
     }
 

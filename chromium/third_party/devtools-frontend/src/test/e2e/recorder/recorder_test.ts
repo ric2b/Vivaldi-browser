@@ -32,10 +32,6 @@ import {
 } from './helpers.js';
 
 describe('Recorder', function() {
-  if (this.timeout() !== 0) {
-    this.timeout(5000);
-  }
-
   it('should capture the initial page as the url of the first section', async () => {
     await startRecording('recorder/recorder.html');
     const recording = await stopRecording();
@@ -594,8 +590,7 @@ describe('Recorder', function() {
     });
   });
 
-  // Flaky.
-  it.skip('[crbug.com/382417597]: should also record network conditions', async () => {
+  it('should also record network conditions', async () => {
     await startRecording('recorder/recorder.html', {
       networkCondition: '3G',
     });
@@ -605,10 +600,10 @@ describe('Recorder', function() {
     await target.click('#test');
     await frontend.bringToFront();
     await changeNetworkConditions('Slow 4G');
-    await raf(frontend);
-    await openRecorderPanel();
     await target.bringToFront();
     await target.click('#test');
+    await frontend.bringToFront();
+    await openRecorderPanel();
 
     const recording = await stopRecording();
     assert.deepEqual(
@@ -1283,7 +1278,8 @@ describe('Recorder', function() {
         });
   });
 
-  it('should edit while recording', async () => {
+  // Disable flaky test to unblock the tree
+  it.skip('[crbug.com/414578149]: should edit while recording', async () => {
     await startRecording('recorder/recorder.html');
 
     const {target, frontend} = getBrowserAndPages();
@@ -1447,7 +1443,7 @@ describe('Recorder', function() {
         return element.getCurrentPageForTesting();
       });
 
-      assert.isTrue(page !== 'CreateRecordingPage');
+      assert.notStrictEqual(page, 'CreateRecordingPage');
 
       await stopRecording();
     });

@@ -92,6 +92,19 @@ class BookmarkContextMenuController
   size_t GetIndexForNewNodes() const;
 
  private:
+  friend class BookmarkContextMenuControllerTest;
+  FRIEND_TEST_ALL_PREFIXES(
+      BookmarkContextMenuControllerTest,
+      ComputeNodeToFocusForBookmarkManagerForPermanentNodesSelection);
+  FRIEND_TEST_ALL_PREFIXES(BookmarkContextMenuControllerTest,
+                           ComputeNodeToFocusForBookmarkManagerReturnsNoNode);
+  FRIEND_TEST_ALL_PREFIXES(
+      BookmarkContextMenuControllerTest,
+      ComputeNodeToFocusForBookmarkManagerForDirectChildrenOfPermanentNodes);
+  FRIEND_TEST_ALL_PREFIXES(
+      BookmarkContextMenuControllerTest,
+      ComputeNodeToFocusForBookmarkManagerForNonDirectChildrenOfPermanentNodes);
+
   void BuildMenu();
 
   // Adds a IDC_* style command to the menu with a string16.
@@ -107,6 +120,10 @@ class BookmarkContextMenuController
   // Any change to the model results in closing the menu.
   void BookmarkModelChanged() override;
 
+  // Returns the node that needs to be focused based on the `selection_`.
+  // Returns null if no node should be focused.
+  const bookmarks::BookmarkNode* ComputeNodeToFocusForBookmarkManager() const;
+
   gfx::NativeWindow parent_window_;
   raw_ptr<BookmarkContextMenuControllerDelegate> delegate_;
   const raw_ptr<Browser> browser_;
@@ -120,5 +137,12 @@ class BookmarkContextMenuController
   // Used to detect deletion of |this| executing a command.
   base::WeakPtrFactory<BookmarkContextMenuController> weak_factory_{this};
 };
+
+// Returns true if `selection` represents a permanent bookmark folder.
+// It can be represented by two nodes (local and account) of the same permanent
+// type.
+bool IsSelectionPermanentBookmarkFolder(
+    const std::vector<
+        raw_ptr<const bookmarks::BookmarkNode, VectorExperimental>>& selection);
 
 #endif  // CHROME_BROWSER_UI_BOOKMARKS_BOOKMARK_CONTEXT_MENU_CONTROLLER_H_

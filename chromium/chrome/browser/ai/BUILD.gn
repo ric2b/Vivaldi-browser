@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/common/features.gni")
 import("//components/optimization_guide/features.gni")
 import("//pdf/features.gni")
 
@@ -17,10 +18,9 @@ source_set("ai") {
     "ai_data_keyed_service_factory.h",
     "ai_language_model.h",
     "ai_manager.h",
-    "ai_on_device_model_component_observer.h",
+    "ai_on_device_session.h",
     "ai_rewriter.h",
     "ai_summarizer.h",
-    "ai_utils.h",
     "ai_writer.h",
     "built_in_ai_logger.cc",
     "built_in_ai_logger.h",
@@ -32,15 +32,31 @@ source_set("ai") {
     "//build/config/compiler:wexit_time_destructors",
     "//build/config/compiler:wglobal_constructors",
   ]
-
   public_deps = [
     "//base",
     "//chrome/browser:browser_process",
+    "//chrome/browser/ai:ai_model_download_progress_manager",
+    "//chrome/browser/ai:ai_utils",
     "//chrome/browser/optimization_guide",
     "//chrome/browser/profiles:profile",
     "//components/component_updater:component_updater",
     "//components/optimization_guide/core",
     "//components/update_client:update_client",
+    "//content/public/browser",
+  ]
+  if (enable_glic) {
+    public_deps += [ "//chrome/browser/glic:glic" ]
+  }
+  if (!is_android) {
+    public_deps += [ "//chrome/browser/actor:actor" ]
+  }
+}
+
+source_set("ai_utils") {
+  sources = [ "ai_utils.h" ]
+
+  deps = [
+    "//components/optimization_guide/core",
     "//content/public/browser",
   ]
 }
@@ -54,7 +70,7 @@ source_set("impl") {
     "ai_data_keyed_service_factory.cc",
     "ai_language_model.cc",
     "ai_manager.cc",
-    "ai_on_device_model_component_observer.cc",
+    "ai_on_device_session.cc",
     "ai_rewriter.cc",
     "ai_summarizer.cc",
     "ai_utils.cc",
@@ -85,6 +101,7 @@ source_set("impl") {
   ]
   if (!is_android) {
     deps += [
+      "//chrome/browser/ui/browser_window:browser_window",
       "//chrome/browser/ui/tabs:tab_group",
       "//chrome/browser/ui/tabs:tab_strip",
     ]
@@ -103,9 +120,9 @@ source_set("ai_model_download_progress_manager") {
     "ai_model_download_progress_manager.h",
   ]
   public_deps = [
-    ":ai",
     "//base",
     "//chrome/browser:browser_process",
+    "//chrome/browser/ai:ai_utils",
     "//components/component_updater",
     "//components/update_client",
     "//content/public/browser",

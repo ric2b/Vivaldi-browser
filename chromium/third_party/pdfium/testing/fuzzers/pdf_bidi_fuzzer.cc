@@ -16,8 +16,9 @@
 #include "xfa/fgas/layout/cfgas_rtfbreak.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  if (size > 8192)
+  if (size > 8192) {
     return 0;
+  }
 
   auto font = std::make_unique<CFX_Font>();
   font->LoadSubst("Arial", true, 0, pdfium::kFontWeightNormal, 0,
@@ -30,13 +31,14 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   rtf_break.SetFontSize(12);
 
   // SAFETY: trusted arguments from fuzzer.
-  auto span = UNSAFE_BUFFERS(pdfium::make_span(data, size));
+  auto span = UNSAFE_BUFFERS(pdfium::span(data, size));
   WideString input = WideString::FromUTF16LE(span);
-  for (wchar_t ch : input)
+  for (wchar_t ch : input) {
     rtf_break.AppendChar(ch);
+  }
 
   std::vector<CFGAS_Char> chars =
-      rtf_break.GetCurrentLineForTesting()->m_LineChars;
+      rtf_break.GetCurrentLineForTesting()->line_chars_;
   CFGAS_Char::BidiLine(&chars, chars.size());
   return 0;
 }

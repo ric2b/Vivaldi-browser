@@ -182,8 +182,6 @@ class VivaldiPrivateTabObserver
   void WebContentsDestroyed() override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                      const GURL& validated_url) override;
-  void WebContentsDidDetach() override;
-  void WebContentsDidAttach() override;
   void BeforeUnloadFired(bool proceed) override;
   void NavigationEntryCommitted(
       const content::LoadCommittedDetails& load_details) override;

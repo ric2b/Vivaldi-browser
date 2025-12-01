@@ -22,7 +22,6 @@
 #include "ui/webui/resources/cr_components/color_change_listener/color_change_listener.mojom.h"
 
 class BookmarksPageHandler;
-
 namespace commerce {
 class ShoppingListContextMenuController;
 class ShoppingServiceHandler;
@@ -31,13 +30,21 @@ class PriceTrackingHandler;
 
 namespace ui {
 class ColorChangeHandler;
-}
+}  // namespace ui
 
 namespace page_image_service {
 class ImageServiceHandler;
-}
+}  // namespace page_image_service
 
 class BookmarksSidePanelUI;
+
+// Merge nodes Side Panel IDs. Those IDs do not map to any real bookmark ID.
+extern const char kSidePanelRootBookmarkID[];
+extern const char kSidePanelBookmarkBarID[];
+extern const char kSidePanelOtherBookmarksID[];
+extern const char kSidePanelMobileBookmarksID[];
+extern const char kSidePanelManagedBookmarksID[];
+extern const char kSidePanelTrashID[];
 
 class BookmarksSidePanelUIConfig
     : public DefaultTopChromeWebUIConfig<BookmarksSidePanelUI> {
@@ -91,6 +98,7 @@ class BookmarksSidePanelUI
  private:
   // side_panel::mojom::BookmarksPageHandlerFactory:
   void CreateBookmarksPageHandler(
+      mojo::PendingRemote<side_panel::mojom::BookmarksPage> page,
       mojo::PendingReceiver<side_panel::mojom::BookmarksPageHandler> receiver)
       override;
 

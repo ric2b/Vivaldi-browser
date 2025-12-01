@@ -90,6 +90,7 @@ export class IsolatedFileSystemManager extends Common.ObjectWrapper.ObjectWrappe
       '/\\.svn/',
       '/\\.cache/',
       '/\\.project/',
+      '/\\.next/',
     ];
     const defaultWinExcludedFolders = ['/Thumbs.db$', '/ehthumbs.db$', '/Desktop.ini$', '/\\$RECYCLE.BIN/'];
     const defaultMacExcludedFolders = [
@@ -206,7 +207,7 @@ export class IsolatedFileSystemManager extends Common.ObjectWrapper.ObjectWrappe
       event: Common.EventTarget.EventTargetEvent<Host.InspectorFrontendHostAPI.FileSystemAddedEvent>): void {
     const {errorMessage, fileSystem} = event.data;
     if (errorMessage) {
-      if (errorMessage !== '<selection cancelled>') {
+      if (errorMessage !== '<selection cancelled>' && errorMessage !== '<permission denied>') {
         Common.Console.Console.instance().error(i18nString(UIStrings.unableToAddFilesystemS, {PH1: errorMessage}));
       }
       if (!this.fileSystemRequestResolve) {

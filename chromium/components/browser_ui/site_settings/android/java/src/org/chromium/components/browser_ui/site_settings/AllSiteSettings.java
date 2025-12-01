@@ -62,6 +62,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
+// Vivaldi
+import android.app.Activity;
+import androidx.annotation.NonNull;
+import org.chromium.build.BuildConfig;
+
 /**
  * Shows a list of all sites. When the user selects a site, SingleWebsiteSettings is launched to
  * allow the user to see or modify the settings for that particular website.
@@ -236,7 +241,7 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
         getInfoForOrigins();
     }
 
-    /** OnClickListener for the zoom button **/
+    /** OnClickListener for the zoom button */
     @Initializer
     public void handleZoomClearAll(View v) {
         Resources resources = getContext().getResources();
@@ -405,6 +410,24 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
                             R.drawable.ic_help_and_feedback,
                             getContext().getTheme()));
         }
+        if (BuildConfig.IS_VIVALDI) {
+            MenuItem done =
+                    menu.add(Menu.NONE,
+                            R.id.menu_id_done,
+                            Menu.NONE,
+                            org.chromium.components.browser_ui.site_settings.R.string.done)
+                            .setIcon(R.drawable.vivaldi_close_mobile_24dp);
+            done.setShowAsAction(MenuItem.SHOW_AS_ACTION_ALWAYS);
+            done.setOnMenuItemClickListener(new MenuItem.OnMenuItemClickListener() {
+                @Override
+                public boolean onMenuItemClick(@NonNull MenuItem menuItem) {
+                    if (getActivity() == null) return false;
+                    getActivity().setResult(Activity.RESULT_OK);
+                    getActivity().finish();
+                    return true;
+                }
+            });
+        } // End Vivaldi
     }
 
     @Override
@@ -442,8 +465,8 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
+    public void onStart() {
+        super.onStart();
 
         if (mSearch == null && mSearchItem != null) {
             SearchUtils.clearSearch(mSearchItem, getActivity());
@@ -554,5 +577,10 @@ public class AllSiteSettings extends BaseSiteSettingsFragment
                 it.remove();
             }
         }
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

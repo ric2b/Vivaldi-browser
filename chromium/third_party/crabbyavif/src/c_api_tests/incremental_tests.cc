@@ -268,6 +268,85 @@ TEST(IncrementalTest, Decode) {
             AVIF_RESULT_OK);
 }
 
+TEST(ProgressiveTest, PartialData) {
+  auto file_data = testutil::read_file(
+      get_file_name("progressive/progressive_dimension_change.avif").c_str());
+  avifRWData encoded_avif = {.data = file_data.data(),
+                             .size = file_data.size()};
+  ASSERT_NE(encoded_avif.size, 0u);
+  // Emulate a byte-by-byte stream.
+  PartialData data = {
+      /*available=*/{encoded_avif.data, 0}, /*fullSize=*/encoded_avif.size,
+      /*nonpersistent_bytes=*/nullptr, /*num_nonpersistent_bytes=*/0};
+  avifIO io = {/*destroy=*/nullptr,    PartialRead,
+               /*write=*/nullptr,      encoded_avif.size,
+               /*is_persistent=*/true, &data};
+  DecoderPtr decoder(avifDecoderCreate());
+  ASSERT_NE(decoder, nullptr);
+  avifDecoderSetIO(decoder.get(), &io);
+  decoder->allowProgressive = AVIF_TRUE;
+
+  // Parse.
+  avifResult parse_result = avifDecoderParse(decoder.get());
+  while (parse_result == AVIF_RESULT_WAITING_ON_IO) {
+    if (data.available.size >= data.full_size) {
+      ASSERT_FALSE(true)
+          << "avifDecoderParse() returned WAITING_ON_IO instead of OK";
+    }
+    data.available.size = std::min(data.available.size + 1, data.full_size);
+    parse_result = avifDecoderParse(decoder.get());
+  }
+  EXPECT_EQ(parse_result, AVIF_RESULT_OK);
+
+  EXPECT_EQ(decoder->imageCount, 2);
+  avifExtent extent0;
+  ASSERT_EQ(avifDecoderNthImageMaxExtent(decoder.get(), 0, &extent0),
+            AVIF_RESULT_OK);
+  EXPECT_EQ(extent0.offset, 306);
+  EXPECT_EQ(extent0.size, 2250);
+  avifExtent extent1;
+  ASSERT_EQ(avifDecoderNthImageMaxExtent(decoder.get(), 1, &extent1),
+            AVIF_RESULT_OK);
+  EXPECT_EQ(extent1.offset, 306);
+  EXPECT_EQ(extent1.size, 3813);
+
+  // Getting the first frame now should fail.
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_WAITING_ON_IO);
+  // Set the available size to 1 byte less than the first frame's extent.
+  data.available.size = extent0.offset + extent0.size - 1;
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_WAITING_ON_IO);
+  // Set the available size to exactly the first frame's extent.
+  data.available.size = extent0.offset + extent0.size;
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_OK);
+  EXPECT_EQ(decoder->image->width, 256);
+  EXPECT_EQ(decoder->image->height, 256);
+  EXPECT_NE(decoder->image->yuvPlanes[AVIF_CHAN_Y], nullptr);
+  EXPECT_NE(decoder->image->yuvPlanes[AVIF_CHAN_U], nullptr);
+  EXPECT_NE(decoder->image->yuvPlanes[AVIF_CHAN_V], nullptr);
+  // Set the available size to an offset between the first and second frame's
+  // extents.
+  data.available.size = extent0.offset + extent0.size + 100;
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_OK);
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 1), AVIF_RESULT_WAITING_ON_IO);
+  // Set the available size to 1 byte less than the second frame's extent.
+  data.available.size = extent1.offset + extent1.size - 1;
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_OK);
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 1), AVIF_RESULT_WAITING_ON_IO);
+  // Set the available size to exactly the second frame's extent.
+  data.available.size = extent1.offset + extent1.size;
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 1), AVIF_RESULT_OK);
+  EXPECT_EQ(decoder->image->width, 256);
+  EXPECT_EQ(decoder->image->height, 256);
+  EXPECT_NE(decoder->image->yuvPlanes[AVIF_CHAN_Y], nullptr);
+  EXPECT_NE(decoder->image->yuvPlanes[AVIF_CHAN_U], nullptr);
+  EXPECT_NE(decoder->image->yuvPlanes[AVIF_CHAN_V], nullptr);
+  // At this point, we should be able to fetch both the frames in any order.
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_OK);
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 1), AVIF_RESULT_OK);
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 1), AVIF_RESULT_OK);
+  EXPECT_EQ(avifDecoderNthImage(decoder.get(), 0), AVIF_RESULT_OK);
+}
+
 }  // namespace
 }  // namespace avif
 

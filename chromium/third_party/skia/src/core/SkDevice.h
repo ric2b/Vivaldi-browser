@@ -48,6 +48,7 @@ class SkPaint;
 class SkPath;
 class SkPixmap;
 class SkRRect;
+class SkRecorder;
 class SkSurface;
 class SkVertices;
 enum SkColorType : int;
@@ -282,6 +283,7 @@ public:
 
     virtual GrRecordingContext* recordingContext() const { return nullptr; }
     virtual skgpu::graphite::Recorder* recorder() const { return nullptr; }
+    virtual SkRecorder* baseRecorder() const { return nullptr; }
 
     virtual skgpu::ganesh::Device* asGaneshDevice() { return nullptr; }
     virtual skgpu::graphite::Device* asGraphiteDevice() { return nullptr; }
@@ -385,7 +387,7 @@ public:
                               const SkPaint&,
                               bool skipColorXform = false) = 0;
     virtual void drawMesh(const SkMesh& mesh, sk_sp<SkBlender>, const SkPaint&) = 0;
-    virtual void drawShadow(const SkPath&, const SkDrawShadowRec&);
+    virtual void drawShadow(SkCanvas*, const SkPath&, const SkDrawShadowRec&);
 
     // default implementation calls drawVertices
     virtual void drawPatch(const SkPoint cubics[12], const SkColor colors[4],

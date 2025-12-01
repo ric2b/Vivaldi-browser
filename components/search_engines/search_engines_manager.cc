@@ -1,14 +1,11 @@
 // Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved
 #include "components/search_engines/search_engines_manager.h"
 
-#include "components/search_engines/search_engine_type.h"
-
 #include "base/version.h"
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/parsed_search_engines.h"
 #include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/search_engines_helper.h"
-#include "components/search_engines/vivaldi_pref_names.h"
 #include "components/version_utils/vivaldi_version_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -37,47 +34,24 @@ ParsedSearchEngines::EnginesListWithDefaults GetVersionedEngineForProfile(
     if (engine_version.IsValid() &&
         // Use the same or lower search engine version than the first version
         // seen.
-        vivaldi::version::CompareVivaldiMajorVersions(
-            engine_version, first_seen_version) <= 0) {
+        engine_version.CompareTo(first_seen_version) <= 0) {
       default_engine = engine;
     }
   }
   return default_engine;
 }
 
+std::string LanguageCodeFromApplicationLocale(
+    const std::string_view application_locale) {
+  std::string lang(
+      application_locale.begin(),
+      std::find(application_locale.begin(), application_locale.end(), '-'));
+  return lang;
+}
+
 }  // namespace
 
 namespace TemplateURLPrepopulateData {
-// The built-in version of the google search engine is used throughout chromium,
-// mainly for its type. We define a dummy version here which will serve only for
-// that purpose and only that purpose.
-const PrepopulatedEngine google = {{
-    .name = u"Google",
-    .keyword = nullptr,
-    .favicon_url = nullptr,
-    .search_url = nullptr,
-    .encoding = nullptr,
-    .suggest_url = nullptr,
-    .image_url = nullptr,
-    .image_translate_url = nullptr,
-    .new_tab_url = nullptr,
-    .contextual_search_url = nullptr,
-    .logo_url = nullptr,
-    .doodle_url = nullptr,
-    .search_url_post_params = nullptr,
-    .suggest_url_post_params = nullptr,
-    .image_url_post_params = nullptr,
-    .image_translate_source_language_param_key = nullptr,
-    .image_translate_target_language_param_key = nullptr,
-    .image_search_branding_label = nullptr,
-    .search_intent_params = {},
-    .alternate_urls = {},
-    .type = SEARCH_ENGINE_GOOGLE,
-    .preconnect_to_search_url = nullptr,
-    .prefetch_likely_navigations = nullptr,
-    .id = 1,
-    .regulatory_extensions = {},
-}};
 
 base::span<const PrepopulatedEngine* const> kAllEngines;
 }  // namespace TemplateURLPrepopulateData
@@ -92,12 +66,15 @@ SearchEnginesManager::SearchEnginesManager(
 SearchEnginesManager::~SearchEnginesManager() = default;
 
 ParsedSearchEngines::EnginesListWithDefaults
-SearchEnginesManager::GetEnginesByCountryId(country_codes::CountryId country_id,
-                                            const std::string& language,
-                                            PrefService& prefs) const {
+SearchEnginesManager::GetEnginesByCountryId(
+    country_codes::CountryId country_id,
+    const std::string& application_locale,
+    PrefService& prefs) const {
   const auto& engines_for_locale = search_engines_->engines_for_locale();
   const auto& default_country_for_language =
       search_engines_->default_country_for_language();
+  const std::string language =
+      LanguageCodeFromApplicationLocale(application_locale);
 
   if (!engines_for_locale.contains(country_id.Serialize())) {
     // We were unable to find the country_id in `locales_for_country`
@@ -142,18 +119,6 @@ const PrepopulatedEngine* SearchEnginesManager::GetEngine(
   }
   return search_engine->second;
 }
-
-/*const std::vector<const PrepopulatedEngine*>&
-SearchEnginesManager::GetAllEngines() const {
-  CHECK(IsInitialized());
-  return search_engines_->all_engines();
-}*/
-
-/*const PrepopulatedEngine* SearchEnginesManager::GetGoogleEngine() const {
-  const PrepopulatedEngine* result = GetEngine(kGoogle);
-  CHECK(result);
-  return result;
-}*/
 
 const PrepopulatedEngine* SearchEnginesManager::GetMainDefaultEngine(
     PrefService* prefs) const {

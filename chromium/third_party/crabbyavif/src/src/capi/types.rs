@@ -97,6 +97,18 @@ impl From<&AvifError> for avifResult {
     }
 }
 
+impl<T> From<AvifResult<T>> for avifResult {
+    fn from(res: AvifResult<T>) -> Self {
+        match res {
+            Ok(_) => avifResult::Ok,
+            Err(err) => {
+                let res: avifResult = (&err).into();
+                res
+            }
+        }
+    }
+}
+
 impl From<avifResult> for AvifError {
     fn from(res: avifResult) -> Self {
         match res {
@@ -247,7 +259,9 @@ impl avifDiagnostics {
 }
 
 #[repr(C)]
+#[derive(Default)]
 pub enum avifCodecChoice {
+    #[default]
     Auto = 0,
     Aom = 1,
     Dav1d = 2,
@@ -262,16 +276,6 @@ pub(crate) fn to_avifBool(val: bool) -> avifBool {
         AVIF_TRUE
     } else {
         AVIF_FALSE
-    }
-}
-
-pub(crate) fn to_avifResult<T>(res: &AvifResult<T>) -> avifResult {
-    match res {
-        Ok(_) => avifResult::Ok,
-        Err(err) => {
-            let res: avifResult = err.into();
-            res
-        }
     }
 }
 
@@ -329,12 +333,29 @@ pub unsafe extern "C" fn crabby_avifCropRectConvertCleanApertureBox(
     yuvFormat: PixelFormat,
     _diag: *mut avifDiagnostics,
 ) -> avifBool {
-    let rust_clap: CleanAperture = unsafe { (&(*clap)).into() };
-    let rect = unsafe { &mut (*cropRect) };
+    let rust_clap: CleanAperture = deref_const!(clap).into();
+    let rect = deref_mut!(cropRect);
     *rect = match CropRect::create_from(&rust_clap, imageW, imageH, yuvFormat) {
         Ok(x) => x,
         Err(_) => return AVIF_FALSE,
     };
+    AVIF_TRUE
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn crabby_avifCleanApertureBoxConvertCropRect(
+    clap: *mut avifCleanApertureBox,
+    cropRect: *const avifCropRect,
+    imageW: u32,
+    imageH: u32,
+    yuvFormat: PixelFormat,
+    _diag: *mut avifDiagnostics,
+) -> avifBool {
+    *deref_mut!(clap) =
+        match CleanAperture::create_from(deref_const!(cropRect), imageW, imageH, yuvFormat) {
+            Ok(x) => (&Some(x)).into(),
+            Err(_) => return AVIF_FALSE,
+        };
     AVIF_TRUE
 }
 
@@ -384,7 +405,7 @@ pub unsafe extern "C" fn crabby_avifGetPixelFormatInfo(
     if info.is_null() {
         return;
     }
-    let info = unsafe { &mut (*info) };
+    let info = deref_mut!(info);
     match format {
         PixelFormat::Yuv444 => {
             info.chromaShiftX = 0;
@@ -415,9 +436,7 @@ pub unsafe extern "C" fn crabby_avifDiagnosticsClearError(diag: *mut avifDiagnos
     if diag.is_null() {
         return;
     }
-    unsafe {
-        (*diag).error[0] = 0;
-    }
+    deref_mut!(diag).error[0] = 0;
 }
 
 #[repr(C)]
@@ -443,7 +462,9 @@ pub const AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084: u32 = 16;
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifAlloc(size: usize) -> *mut c_void {
     let mut data: Vec<u8> = Vec::new();
-    data.reserve_exact(size);
+    if data.try_reserve_exact(size).is_err() {
+        return std::ptr::null_mut();
+    }
     data.resize(size, 0);
     let mut boxed_slice = data.into_boxed_slice();
     let ptr = boxed_slice.as_mut_ptr();
@@ -457,3 +478,8 @@ pub unsafe extern "C" fn crabby_avifFree(p: *mut c_void) {
         let _ = unsafe { Box::from_raw(p as *mut u8) };
     }
 }
+
+pub const AVIF_ADD_IMAGE_FLAG_NONE: u32 = 0;
+pub const AVIF_ADD_IMAGE_FLAG_FORCE_KEYFRAME: u32 = 1 << 0;
+pub const AVIF_ADD_IMAGE_FLAG_SINGLE: u32 = 1 << 1;
+pub type avifAddImageFlags = u32;

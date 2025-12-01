@@ -259,7 +259,7 @@ used when committed.
     related tools.
 *   [Chroot Notes](linux/using_a_chroot.md) - Setting up a chroot to work around
     libfreetype differences in some versions of Linux.
-*   [Linux Sandboxing](linux/sandboxing.md) - The Linux multi-process model to
+*   [Linux Sandboxing](../sandbox/linux/README.md) - The Linux multi-process model to
     isolate browser components with different privileges.
 *   [Zygote Process](linux/zygote.md) - How the Linux Zygote process, used to
     spawn new processes, works.
@@ -276,7 +276,6 @@ used when committed.
     with clang/ninja
 *   [Cocoa tips and tricks](cocoa_tips_and_tricks.md) - A collection of idioms
     used when writing Cocoa views and controllers
-*   [MacViews Release Plan](ui/views/macviews_release.md)
 
 ### Misc Windows-Specific Docs
 *   [Handling cygwin rebaseall failures](cygwin_dll_remapping_failure.md)
@@ -310,7 +309,7 @@ used when committed.
     coverage data with the EMMA tool.
 *   [Dynamic Feature Modules (DFMs)](android_dynamic_feature_modules.md) - What
     are they and how to create new ones.
-*   [Other build-related Android docs](../build/android/docs/index.md)
+*   [Other build-related Android docs](../build/android/docs/README.md)
 *   [Chrome for Android UI](ui/android/overview.md) - Resources and best practices for
     developing UI
 
@@ -354,7 +353,7 @@ used when committed.
 *   [Piranha Plant](piranha_plant.md) - Future architecture of MediaStreams
 *   [Media Capture](media/capture/README.md) - Features and APIs that enable the
     browser to capture pixels and audio from itself or the underlying OS.
-*   [Video Encode Accelerator Tests](media/gpu/veatest_usage.md) - How to
+*   [Video Encode Accelerator Tests](media/gpu/video_encoder_test_usage.md) - How to
     use the accelerated video encoder test program.
 *   [Video Decoder Tests](media/gpu/video_decoder_test_usage.md) - Running the
     video decoder tests.

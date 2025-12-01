@@ -5,7 +5,7 @@
 import * as Host from '../../../core/host/host.js';
 import * as Root from '../../../core/root/root.js';
 import type * as Lit from '../../../ui/lit/lit.js';
-import {debugLog, isDebugMode} from '../debug.js';
+import {debugLog, isStructuredLogEnabled} from '../debug.js';
 
 export const enum ResponseType {
   CONTEXT = 'context',
@@ -25,6 +25,17 @@ export const enum ErrorType {
   ABORT = 'abort',
   MAX_STEPS = 'max-steps',
   BLOCK = 'block',
+}
+
+export const enum MultimodalInputType {
+  SCREENSHOT = 'screenshot',
+  UPLOADED_IMAGE = 'uploaded-image',
+}
+
+export interface MultimodalInput {
+  input: Host.AidaClient.Part;
+  type: MultimodalInputType;
+  id: string;
 }
 
 export interface AnswerResponse {
@@ -130,22 +141,18 @@ export interface ParsedStep {
 
 export type ParsedResponse = ParsedAnswer|ParsedStep;
 
-export const enum AgentType {
-  STYLING = 'freestyler',
-  FILE = 'drjones-file',
-  NETWORK = 'drjones-network-request',
-  PERFORMANCE = 'drjones-performance',
-  PERFORMANCE_INSIGHT = 'performance-insight',
-  PATCH = 'patch',
-}
-
 export const MAX_STEPS = 10;
+
+export interface ConversationSuggestion {
+  title: string;
+  jslogContext?: string;
+}
 
 export abstract class ConversationContext<T> {
   abstract getOrigin(): string;
   abstract getItem(): T;
-  abstract getIcon(): HTMLElement;
-  abstract getTitle(): string|ReturnType<typeof Lit.Directives.until>;
+  abstract getIcon(): Lit.TemplateResult|undefined;
+  abstract getTitle(opts?: {disabled: boolean}): string|ReturnType<typeof Lit.Directives.until>;
 
   isOriginAllowed(agentOrigin: string|undefined): boolean {
     if (!agentOrigin) {
@@ -166,7 +173,7 @@ export abstract class ConversationContext<T> {
     return;
   }
 
-  getSuggestions(): [string, ...string[]]|undefined {
+  async getSuggestions(): Promise<[ConversationSuggestion, ...ConversationSuggestion[]]|undefined> {
     return;
   }
 }
@@ -231,8 +238,6 @@ interface AidaFetchResult {
  * more than MAX_STEPS iterations.
  */
 export abstract class AiAgent<T> {
-  /** Subclasses need to define these. */
-  abstract readonly type: AgentType;
   /**
    * WARNING: preamble defined in code is only used when userTier is
    * TESTERS. Otherwise, a server-side preamble is used (see
@@ -255,8 +260,7 @@ export abstract class AiAgent<T> {
    */
   readonly #structuredLog: Array<{
     request: Host.AidaClient.AidaRequest,
-    response: string,
-    aidaResponse?: Host.AidaClient.AidaResponse,
+    aidaResponse: Host.AidaClient.AidaResponse,
   }> = [];
 
   /**
@@ -268,15 +272,40 @@ export abstract class AiAgent<T> {
   #id: string = crypto.randomUUID();
   #history: Host.AidaClient.Content[] = [];
 
+  #facts: Set<Host.AidaClient.RequestFact> = new Set<Host.AidaClient.RequestFact>();
+
   constructor(opts: AgentOptions) {
     this.#aidaClient = opts.aidaClient;
     this.#serverSideLoggingEnabled = opts.serverSideLoggingEnabled ?? false;
     this.confirmSideEffect = opts.confirmSideEffectForTest ?? (() => Promise.withResolvers());
   }
 
-  async enhanceQuery(query: string, selected: ConversationContext<T>|null, hasImageInput?: boolean): Promise<string>;
+  async enhanceQuery(query: string, selected: ConversationContext<T>|null, multimodalInputType?: MultimodalInputType):
+      Promise<string>;
   async enhanceQuery(query: string): Promise<string> {
     return query;
+  }
+
+  currentFacts(): ReadonlySet<Host.AidaClient.RequestFact> {
+    return this.#facts;
+  }
+
+  /**
+   * Add a fact which will be sent for any subsequent requests.
+   * Returns the new list of all facts.
+   * Facts are never automatically removed.
+   */
+  addFact(fact: Host.AidaClient.RequestFact): ReadonlySet<Host.AidaClient.RequestFact> {
+    this.#facts.add(fact);
+    return this.#facts;
+  }
+
+  removeFact(fact: Host.AidaClient.RequestFact): boolean {
+    return this.#facts.delete(fact);
+  }
+
+  clearFacts(): void {
+    this.#facts.clear();
   }
 
   buildRequest(
@@ -301,14 +330,15 @@ export abstract class AiAgent<T> {
     }
     const enableAidaFunctionCalling = declarations.length && !this.functionCallEmulationEnabled;
     const userTier = Host.AidaClient.convertToUserTierEnum(this.userTier);
-    const premable = userTier === Host.AidaClient.UserTier.TESTERS ? this.preamble : undefined;
+    const preamble = userTier === Host.AidaClient.UserTier.TESTERS ? this.preamble : undefined;
+    const facts = Array.from(this.#facts);
     const request: Host.AidaClient.AidaRequest = {
       client: Host.AidaClient.CLIENT_NAME,
-
       current_message: currentMessage,
-      preamble: premable,
+      preamble,
 
       historical_contexts: history.length ? history : undefined,
+      facts: facts.length ? facts : undefined,
 
       ...(enableAidaFunctionCalling ? {function_declarations: declarations} : {}),
       options: {
@@ -382,9 +412,10 @@ export abstract class AiAgent<T> {
 
   async *
       run(initialQuery: string, options: {
-        signal?: AbortSignal, selected: ConversationContext<T>|null,
+        selected: ConversationContext<T>|null,
+        signal?: AbortSignal,
       },
-          imageInput?: Host.AidaClient.Part, imageId?: string): AsyncGenerator<ResponseData, void, void> {
+          multimodalInput?: MultimodalInput): AsyncGenerator<ResponseData, void, void> {
     await options.selected?.refresh();
 
     // First context set on the agent determines its origin from now on.
@@ -396,19 +427,19 @@ export abstract class AiAgent<T> {
       this.#context = options.selected;
     }
 
-    const enhancedQuery = await this.enhanceQuery(initialQuery, options.selected, Boolean(imageInput));
+    const enhancedQuery = await this.enhanceQuery(initialQuery, options.selected, multimodalInput?.type);
     Host.userMetrics.freestylerQueryLength(enhancedQuery.length);
 
     let query: Host.AidaClient.Part|Host.AidaClient.Part[];
-    query = imageInput ? [{text: enhancedQuery}, imageInput] : [{text: enhancedQuery}];
+    query = multimodalInput ? [{text: enhancedQuery}, multimodalInput.input] : [{text: enhancedQuery}];
     // Request is built here to capture history up to this point.
     let request = this.buildRequest(query, Host.AidaClient.Role.USER);
 
     yield {
       type: ResponseType.USER_QUERY,
       query: initialQuery,
-      imageInput,
-      imageId,
+      imageInput: multimodalInput?.input,
+      imageId: multimodalInput?.id,
     };
 
     yield* this.handleContextDetails(options.selected);
@@ -439,9 +470,6 @@ export abstract class AiAgent<T> {
               text: partialAnswer,
               complete: false,
             };
-          }
-          if (functionCall) {
-            break;
           }
         }
       } catch (err) {
@@ -508,7 +536,7 @@ export abstract class AiAgent<T> {
       }
     }
 
-    if (isDebugMode()) {
+    if (isStructuredLogEnabled()) {
       window.dispatchEvent(new CustomEvent('aiassistancedone'));
     }
   }
@@ -640,7 +668,6 @@ export abstract class AiAgent<T> {
       #aidaFetch(request: Host.AidaClient.AidaRequest, options?: {signal?: AbortSignal}):
           AsyncGenerator<AidaFetchResult, void, void> {
     let aidaResponse: Host.AidaClient.AidaResponse|undefined = undefined;
-    let response = '';
     let rpcId: Host.AidaClient.RpcGlobalId|undefined;
 
     for await (aidaResponse of this.#aidaClient.fetch(request, options)) {
@@ -669,7 +696,6 @@ export abstract class AiAgent<T> {
         }
       }
 
-      response = aidaResponse.explanation;
       rpcId = aidaResponse.metadata.rpcGlobalId ?? rpcId;
       yield {
         rpcId,
@@ -682,10 +708,9 @@ export abstract class AiAgent<T> {
       request,
       response: aidaResponse,
     });
-    if (isDebugMode()) {
+    if (isStructuredLogEnabled() && aidaResponse) {
       this.#structuredLog.push({
         request: structuredClone(request),
-        response,
         aidaResponse,
       });
       localStorage.setItem('aiAssistanceStructuredLog', JSON.stringify(this.#structuredLog));

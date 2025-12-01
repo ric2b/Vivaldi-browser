@@ -4,11 +4,16 @@
 
 package org.chromium.chrome.browser.compositor.scene_layer;
 
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil.FOLIO_FOOT_LENGTH_DP;
+
 import androidx.annotation.ColorInt;
+import androidx.annotation.DrawableRes;
+import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.JNINamespace;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.base.Token;
 import org.chromium.cc.input.OffsetTag;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.components.CompositorButton;
@@ -18,6 +23,7 @@ import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutHelperMa
 import org.chromium.chrome.browser.compositor.overlays.strip.StripLayoutTab;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneLayer;
 import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
+import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
 import org.chromium.ui.resources.ResourceManager;
 
 // Vivaldi
@@ -35,7 +41,7 @@ import org.vivaldi.browser.common.VivaldiUtils;
 public class TabStripSceneLayer extends SceneOverlayLayer {
     private static boolean sTestFlag;
     private long mNativePtr;
-    private float mDpToPx;
+    private final float mDpToPx;
 
     // Vivaldi
     private boolean mShouldHideOverlay;
@@ -115,6 +121,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             float leftPaddingDp,
             float rightPaddingDp,
             float topPaddingDp) {
+
         if (mNativePtr == 0) return;
 
         // Note(david@vivaldi.com): If we have a stack the offset is twice as big. We also always
@@ -135,6 +142,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             // required since these values are originated from Android UI.
             float leftPaddingPx = (float) Math.ceil(leftPaddingDp * mDpToPx);
             float rightPaddingPx = (float) Math.ceil(rightPaddingDp * mDpToPx);
+            topPaddingDp = 0; // Vivaldi: There is never a top padding.
             float topPaddingPx = (float) Math.ceil(topPaddingDp * mDpToPx);
 
             pushButtonsAndBackground(
@@ -146,7 +154,7 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                     leftPaddingPx,
                     rightPaddingPx,
                     topPaddingPx);
-            pushGroupIndicators(stripLayoutGroupTitlesToRender, layerTitleCache);
+            pushGroupIndicators(stripLayoutGroupTitlesToRender, layerTitleCache, resourceManager);
             pushStripTabs(
                     layoutHelper,
                     layerTitleCache,
@@ -162,7 +170,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         TabStripSceneLayerJni.get().updateOffsetTag(mNativePtr, TabStripSceneLayer.this, offsetTag);
     }
 
-    private void pushButtonsAndBackground(
+    @VisibleForTesting
+    /* package */ void pushButtonsAndBackground(
             StripLayoutHelperManager layoutHelper,
             ResourceManager resourceManager,
             float yOffset,
@@ -209,6 +218,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                         newTabButton.getTint(),
                         newTabButton.getBackgroundTint(),
                         newTabButton.getOpacity(),
+                        newTabButton.isKeyboardFocused(),
+                        TabUiThemeUtil.getCircularButtonKeyboardFocusDrawableRes(),
+                        newTabButton.getKeyboardFocusRingColor(),
                         resourceManager);
 
         CompositorButton modelSelectorButton = layoutHelper.getModelSelectorButton();
@@ -228,6 +240,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                             ((TintedCompositorButton) modelSelectorButton).getTint(),
                             ((TintedCompositorButton) modelSelectorButton).getBackgroundTint(),
                             modelSelectorButton.getOpacity(),
+                            modelSelectorButton.isKeyboardFocused(),
+                            TabUiThemeUtil.getCircularButtonKeyboardFocusDrawableRes(),
+                            modelSelectorButton.getKeyboardFocusRingColor(),
                             resourceManager);
         }
 
@@ -252,7 +267,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                         rightPaddingPx);
     }
 
-    private void pushStripTabs(
+    @VisibleForTesting
+    /* package */ void pushStripTabs(
             StripLayoutHelperManager layoutHelper,
             LayerTitleCache layerTitleCache,
             ResourceManager resourceManager,
@@ -268,6 +284,11 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
             boolean isSelected = st.getTabId() == selectedTabId;
             boolean isHovered = st.getTabId() == hoveredTabId;
             boolean shouldShowOutline = layoutHelper.shouldShowTabOutline(st);
+            @DrawableRes
+            int focusBackground =
+                    isSelected && shouldShowOutline
+                            ? TabUiThemeUtil.getSelectedTabInTabGroupKeyboardFocusDrawableRes()
+                            : TabUiThemeUtil.getTabKeyboardFocusDrawableRes();
 
             // TODO(crbug.com/326301060): Update tab outline placeholder color with color picker.
             TabStripSceneLayerJni.get()
@@ -277,6 +298,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                             st.getTabId(),
                             st.getCloseButton().getResourceId(),
                             st.getCloseButton().getBackgroundResourceId(),
+                            st.getCloseButton().isKeyboardFocused(),
+                            TabUiThemeUtil.getCircularButtonKeyboardFocusDrawableRes(),
                             st.getDividerResourceId(),
                             st.getResourceId(),
                             st.getOutlineResourceId(),
@@ -305,18 +328,25 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                             st.isLoading(),
                             st.getLoadingSpinnerRotation(),
                             st.getContainerOpacity(),
+                            st.isKeyboardFocused(),
+                            focusBackground,
+                            st.getKeyboardFocusRingColor(),
+                            st.getKeyboardFocusRingOffset(),
+                            st.getLineWidth(),
+                            FOLIO_FOOT_LENGTH_DP * mDpToPx,
                             layerTitleCache,
                             resourceManager,
 
                             // Note(david@vivaldi.com): From here we pass the Vivaldi parameters.
-                            st.getAlpha(),
                             layoutHelper.getActiveStripLayoutHelper().showTabsAsFavIcon(),
                             st.getTitleOffset() * mDpToPx);
         }
     }
 
-    private void pushGroupIndicators(
-            StripLayoutGroupTitle[] groupTitles, LayerTitleCache layerTitleCache) {
+    /* package */ void pushGroupIndicators(
+            StripLayoutGroupTitle[] groupTitles,
+            LayerTitleCache layerTitleCache,
+            ResourceManager resourceManager) {
         final int titlesCount = groupTitles != null ? groupTitles.length : 0;
 
         for (int i = 0; i < titlesCount; i++) {
@@ -328,9 +358,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                             TabStripSceneLayer.this,
                             gt.isIncognito(),
                             gt.isForegrounded(),
-                            gt.shouldShowReorderBackground(),
+                            gt.isCollapsed(),
                             gt.getNotificationBubbleShown(),
-                            gt.getRootId(),
+                            gt.getTabGroupId(),
                             gt.getTint(),
                             gt.getReorderBackgroundTint(),
                             gt.getBubbleTint(),
@@ -345,7 +375,13 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                             gt.getBottomIndicatorHeight() * mDpToPx,
                             gt.getBubblePadding() * mDpToPx,
                             gt.getBubbleSize() * mDpToPx,
-                            layerTitleCache);
+                            gt.isKeyboardFocused(),
+                            TabUiThemeUtil.getTabGroupIndicatorKeyboardFocusDrawableRes(),
+                            gt.getKeyboardFocusRingColor(),
+                            gt.getKeyboardFocusRingOffset(),
+                            gt.getKeyboardFocusRingWidth(),
+                            layerTitleCache,
+                            resourceManager);
         }
     }
 
@@ -398,8 +434,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 long nativeTabStripSceneLayer,
                 int reorderBackgroundTopMargin,
                 int reorderBackgroundBottomMargin,
-                int reorderBackgroundPaddingStart,
-                int reorderBackgroundPaddingEnd,
+                int reorderBackgroundPaddingShort,
+                int reorderBackgroundPaddingLong,
                 int reorderBackgroundCornerRadius);
 
         void beginBuildingFrame(
@@ -436,6 +472,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 int tint,
                 int backgroundTint,
                 float buttonAlpha,
+                boolean isKeyboardFocused,
+                int keyboardFocusRingResourceId,
+                int keyboardFocusRingColor,
                 ResourceManager resourceManager);
 
         void updateModelSelectorButton(
@@ -450,6 +489,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 int tint,
                 int backgroundTint,
                 float buttonAlpha,
+                boolean isKeyboardFocused,
+                int keyboardFocusRingResourceId,
+                int keyboardFocusRingColor,
                 ResourceManager resourceManager);
 
         void updateTabStripLeftFade(
@@ -476,6 +518,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 int id,
                 int closeResourceId,
                 int closeBackgroundResourceId,
+                boolean isCloseKeyboardFocused,
+                int closeFocusRingResourceId,
                 int dividerResourceId,
                 int handleResourceId,
                 int handleOutlineResourceId,
@@ -503,10 +547,15 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 boolean isLoading,
                 float spinnerRotation,
                 float opacity,
+                boolean isKeyboardFocused,
+                int keyboardFocusRingResourceId,
+                int keyboardFocusRingColor,
+                int keyboardFocusRingOffset,
+                int strokeWidth,
+                float folioFootLength,
                 LayerTitleCache layerTitleCache,
                 ResourceManager resourceManager,
                 // Vivaldi
-                float tabAlpha,
                 boolean isShownAsFavicon,
                 float titleOffset); // Vivaldi
 
@@ -515,9 +564,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 TabStripSceneLayer caller,
                 boolean incognito,
                 boolean foreground,
-                boolean showReorderBackground,
+                boolean collapsed,
                 boolean showBubble,
-                int id,
+                Token groupToken,
                 int tint,
                 int reorderBackgroundTint,
                 int bubbleTint,
@@ -532,7 +581,13 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
                 float bottomIndicatorHeight,
                 float bubblePadding,
                 float bubbleSize,
-                LayerTitleCache layerTitleCache);
+                boolean isKeyboardFocused,
+                int keyboardFocusRingResourceId,
+                int keyboardFocusRingColor,
+                int keyboardFocusRingOffset,
+                int keyboardFocusRingWidth,
+                LayerTitleCache layerTitleCache,
+                ResourceManager resourceManager);
 
         void setContentTree(
                 long nativeTabStripSceneLayer, TabStripSceneLayer caller, SceneLayer contentTree);

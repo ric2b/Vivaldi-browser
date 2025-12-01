@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="az">
-<translation id="2277224997687551299">Qrup adına düzəliş etmək</translation>
+<translation id="1062777154504442433">Yeni vərəq qrupu</translation>
+<translation id="1625440863545383011">Vərəqi çıxartmaqla qrupu tərk etmək</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Vərəqi əlfəcin kimi saxla}
           other {Vərəqləri əlfəcin kimi saxla}
         }</translation>
 <translation id="2947471979790858922">Sizin bu məxfi vərəqlərdəki fəaliyyətləriniz bu cihazdan silinəcək</translation>
+<translation id="3298614730029636660">Qrupu tərk etmək</translation>
+<translation id="354698175756845966">Qrup rəngini dəyişmək</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Məxfi vərəqləriniz istisna olmaqla, bağladığınız vərəqləri, Vivaldinin əsas menyusundakı "Sonuncu vərəqlər"də tapa bilərsiniz.}
         other {# məxfi vərəqləriniz istisna olmaqla, bağladığınız vərəqləri, Vivaldinin əsas menyusundakı "Sonuncu vərəqlər"də tapa bilərsiniz.}</translation>
-<translation id="4460014764210899310">Qrupu ayırmaq</translation>
 <translation id="4871187110787939393">Bütün məxfi vərəqlər bağlansın?</translation>
 <translation id="5494920125229734069">Hamısını seçmək</translation>
-<translation id="6744956528665271406">Qrup rənginiə düzəliş etmək</translation>
+<translation id="6807841890213931603">Vərəqi çıxartmaqla qrupu silmək</translation>
+<translation id="750227952939161636">Vərəq qruplarınız avtomatik saxlanılır və bütün cihazlarınız arasında eyniləşdirilir</translation>
+<translation id="7640137753339219124">Qrupu silmək</translation>
+<translation id="7653857400289671414">Vərəq qruplarınız avtomatik saxlanılır</translation>
+<translation id="8440938071054361204">Qrup adını dəyişmək</translation>
+<translation id="8602902357364871325">Qrupu bağlamaq</translation>
+<translation id="8851621822786801079">Qrupdan silmək</translation>
 </translationbundle>

@@ -26,6 +26,7 @@
 #include "net/base/net_errors.h"
 #include "net/disk_cache/disk_cache_test_util.h"
 #include "net/http/http_cache_writers.h"
+#include "net/http/no_vary_search_cache_storage_file_operations.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace net {
@@ -712,9 +713,11 @@ MockHttpCache::MockHttpCache()
     : MockHttpCache(std::make_unique<MockBackendFactory>()) {}
 
 MockHttpCache::MockHttpCache(
-    std::unique_ptr<HttpCache::BackendFactory> disk_cache_factory)
+    std::unique_ptr<HttpCache::BackendFactory> disk_cache_factory,
+    std::unique_ptr<NoVarySearchCacheStorageFileOperations> file_operations)
     : http_cache_(std::make_unique<MockNetworkLayer>(),
-                  std::move(disk_cache_factory)) {}
+                  std::move(disk_cache_factory),
+                  std::move(file_operations)) {}
 
 disk_cache::Backend* MockHttpCache::backend() {
   TestGetBackendCompletionCallback cb;
@@ -727,8 +730,8 @@ MockDiskCache* MockHttpCache::disk_cache() {
   return static_cast<MockDiskCache*>(backend());
 }
 
-int MockHttpCache::CreateTransaction(std::unique_ptr<HttpTransaction>* trans) {
-  return http_cache_.CreateTransaction(DEFAULT_PRIORITY, trans);
+std::unique_ptr<HttpTransaction> MockHttpCache::CreateTransaction() {
+  return http_cache_.CreateTransaction(DEFAULT_PRIORITY);
 }
 
 void MockHttpCache::SimulateCacheLockTimeout() {

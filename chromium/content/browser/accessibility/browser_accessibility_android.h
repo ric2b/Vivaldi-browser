@@ -98,6 +98,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   // Returns a relative score of how likely a node is to be clickable.
   int ClickableScore() const;
 
+  int ExpandedState() const;
+
   bool CanOpenPopup() const;
 
   bool HasAriaCurrent() const;
@@ -123,6 +125,12 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   std::u16string GetValueForControl() const override;
   int GetTextContentLengthUTF16() const override;
 
+  // This method firstly checks GetTextContentUTF16(). In the case of accessible
+  // name from kAttribute resulting in GetTextContentUTF16 is empty, it falls
+  // back to first non-empty GetContainerName(), GetContentDescription(), and
+  // GetSupplementalDescription().
+  std::u16string GetAccessibleNameUTF16() const;
+
   typedef base::RepeatingCallback<bool(const std::u16string& partial)>
       EarlyExitPredicate;
   std::u16string GetSubstringTextContentUTF16(
@@ -137,6 +145,9 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   // the value is placed. These pieces of content are concatenated for Android.
   std::u16string GetHint() const;
 
+  // This method maps to the Android API "TooltipText" attribute.
+  std::u16string GetTooltipText() const;
+
   std::string GetRoleString() const;
 
   std::u16string GetPaneTitle() const;
@@ -147,6 +158,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
 
   std::u16string GetStateDescription() const;
   std::u16string GetContainerTitle() const;
+  std::u16string GetContentDescription() const;
+  std::u16string GetSupplementalDescription() const;
   std::u16string GetMultiselectableStateDescription() const;
   std::u16string GetToggleStateDescription() const;
   std::u16string GetCheckboxStateDescription() const;
@@ -187,6 +200,8 @@ class CONTENT_EXPORT BrowserAccessibilityAndroid
   int GetMaxScrollX() const;
   int GetMaxScrollY() const;
   bool Scroll(int direction, bool is_page_scroll) const;
+
+  int GetChecked() const;
 
   int GetTextChangeFromIndex() const;
   int GetTextChangeAddedCount() const;

@@ -7,8 +7,8 @@
 #include "base/check_deref.h"
 #include "chromeos/ash/components/cryptohome/cryptohome_parameters.h"
 #include "chromeos/ash/components/dbus/userdataauth/userdataauth_client.h"
+#include "chromeos/ash/components/policy/device_local_account/device_local_account_type.h"
 #include "components/account_id/account_id.h"
-#include "components/policy/core/common/device_local_account_type.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/user_manager/known_user.h"
 #include "components/user_manager/user_manager.h"
@@ -136,6 +136,19 @@ User* TestHelper::AddKioskAppUser(std::string_view user_id) {
   }
 
   return AddDeviceLocalAccountUserInternal(user_id, UserType::kKioskApp);
+}
+
+User* TestHelper::AddWebKioskAppUser(std::string_view user_id) {
+  // Quick check that the `user_id` satisfies web-kiosk-app type.
+  auto type = policy::GetDeviceLocalAccountType(user_id);
+  if (type != policy::DeviceLocalAccountType::kWebKioskApp) {
+    LOG(ERROR) << "user_id (" << user_id << ") did not satisfy to be used for "
+               << "a web kiosk user. See policy::GetDeviceLocalAccountType for "
+                  "details.";
+    return nullptr;
+  }
+
+  return AddDeviceLocalAccountUserInternal(user_id, UserType::kWebKioskApp);
 }
 
 User* TestHelper::AddPublicAccountUser(std::string_view user_id) {

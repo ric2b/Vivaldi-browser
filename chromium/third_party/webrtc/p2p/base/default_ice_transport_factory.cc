@@ -27,9 +27,9 @@ namespace {
 
 class BasicIceControllerFactory : public webrtc::IceControllerFactoryInterface {
  public:
-  std::unique_ptr<cricket::IceControllerInterface> Create(
+  std::unique_ptr<webrtc::IceControllerInterface> Create(
       const webrtc::IceControllerFactoryArgs& args) override {
-    return std::make_unique<cricket::BasicIceController>(args);
+    return std::make_unique<webrtc::BasicIceController>(args);
   }
 };
 
@@ -38,23 +38,22 @@ class BasicIceControllerFactory : public webrtc::IceControllerFactoryInterface {
 namespace webrtc {
 
 DefaultIceTransport::DefaultIceTransport(
-    std::unique_ptr<cricket::P2PTransportChannel> internal)
+    std::unique_ptr<P2PTransportChannel> internal)
     : internal_(std::move(internal)) {}
 
 DefaultIceTransport::~DefaultIceTransport() {
   RTC_DCHECK_RUN_ON(&thread_checker_);
 }
 
-rtc::scoped_refptr<IceTransportInterface>
+scoped_refptr<IceTransportInterface>
 DefaultIceTransportFactory::CreateIceTransport(
     const std::string& transport_name,
     int component,
     IceTransportInit init) {
   BasicIceControllerFactory factory;
   init.set_ice_controller_factory(&factory);
-  return rtc::make_ref_counted<DefaultIceTransport>(
-      cricket::P2PTransportChannel::Create(transport_name, component,
-                                           std::move(init)));
+  return make_ref_counted<DefaultIceTransport>(
+      P2PTransportChannel::Create(transport_name, component, std::move(init)));
 }
 
 }  // namespace webrtc

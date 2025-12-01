@@ -85,7 +85,7 @@ export class Target extends ProtocolClient.InspectorBackend.TargetBase {
         this.#capabilitiesMask = Capability.JS | Capability.LOG | Capability.EVENT_BREAKPOINTS | Capability.NETWORK;
         break;
       case Type.NODE:
-        this.#capabilitiesMask = Capability.JS | Capability.NETWORK;
+        this.#capabilitiesMask = Capability.JS | Capability.NETWORK | Capability.TARGET;
         break;
       case Type.AUCTION_WORKLET:
         this.#capabilitiesMask = Capability.JS | Capability.EVENT_BREAKPOINTS;
@@ -96,6 +96,8 @@ export class Target extends ProtocolClient.InspectorBackend.TargetBase {
       case Type.TAB:
         this.#capabilitiesMask = Capability.TARGET | Capability.TRACING;
         break;
+      case Type.NODE_WORKER:
+        this.#capabilitiesMask = Capability.JS | Capability.NETWORK | Capability.TARGET;
     }
     this.#typeInternal = type;
     this.#parentTargetInternal = parentTarget;
@@ -197,7 +199,7 @@ export class Target extends ProtocolClient.InspectorBackend.TargetBase {
         const model = new modelClass(this);
         this.#modelByConstructor.set(modelClass, model);
         if (!this.#creatingModels) {
-          this.#targetManagerInternal.modelAdded(this, modelClass, model, this.#targetManagerInternal.isInScope(this));
+          this.#targetManagerInternal.modelAdded(modelClass, model, this.#targetManagerInternal.isInScope(this));
         }
       }
     }
@@ -296,6 +298,7 @@ export enum Type {
   AUCTION_WORKLET = 'auction-worklet',
   WORKLET = 'worklet',
   TAB = 'tab',
+  NODE_WORKER = 'node-worker',
 }
 
 export const enum Capability {

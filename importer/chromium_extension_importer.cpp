@@ -7,7 +7,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/webstore_install_with_prompt.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/importer/importer_data_types.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"

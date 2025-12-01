@@ -202,9 +202,8 @@ suite('VoiceSelectionMenu', () => {
           getDropdownItemForVoice(selectedVoice)
               .querySelector<HTMLElement>('#check-mark')!;
 
-      assertFalse(
-          hasStyle(checkMarkSelectedVoice, 'color', 'rgba(0, 0, 0, 0)'));
-      assertTrue(hasStyle(checkMarkVoice0, 'color', 'rgba(0, 0, 0, 0)'));
+      assertFalse(hasStyle(checkMarkSelectedVoice, 'visibility', 'hidden'));
+      assertTrue(hasStyle(checkMarkVoice0, 'visibility', 'hidden'));
     });
 
     test('it groups voices by language', () => {
@@ -392,7 +391,7 @@ suite('VoiceSelectionMenu', () => {
       await openVoiceMenu();
       voiceSelectionMenu.previewVoicePlaying = previewVoice;
       await microtasksFinished();
-      voiceSelectionMenu.previewVoicePlaying = undefined;
+      voiceSelectionMenu.previewVoicePlaying = null;
       await microtasksFinished();
 
       const playIconVoice0 =

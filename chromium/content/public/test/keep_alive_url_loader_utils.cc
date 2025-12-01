@@ -63,7 +63,7 @@ class AtomicCounter {
   void Increment() {
     base::AutoLock auto_lock(lock_);
     count_++;
-    if (waiting_run_loop_) {
+    if (waiting_run_loop_ && last_waited_value_ <= count_) {
       waiting_run_loop_->Quit();
     }
   }
@@ -76,6 +76,7 @@ class AtomicCounter {
       if (count_ >= value) {
         return;
       }
+      last_waited_value_ = value;
     }
 
     {
@@ -94,6 +95,7 @@ class AtomicCounter {
  private:
   base::Lock lock_;
   size_t count_ GUARDED_BY(lock_) = 0;
+  size_t last_waited_value_ = 0;
   std::unique_ptr<base::RunLoop> waiting_run_loop_ = nullptr;
 };
 
@@ -144,6 +146,7 @@ class TestObserverImpl : public KeepAliveURLLoader::TestObserver {
   // `error_codes`.
   void WaitForTotalOnComplete(const std::vector<int>& error_codes) {
     on_complete_count_.WaitUntil(error_codes.size());
+    CHECK_EQ(error_codes.size(), on_complete_status_.size());
     EXPECT_THAT(on_complete_status_,
                 testing::Pointwise(ErrorCodeEq(), error_codes));
   }
@@ -186,20 +189,20 @@ class TestObserverImpl : public KeepAliveURLLoader::TestObserver {
   void OnComplete(
       KeepAliveURLLoader* loader,
       const network::URLLoaderCompletionStatus& completion_status) override {
-    on_complete_count_.Increment();
     on_complete_status_.push_back(completion_status);
+    on_complete_count_.Increment();
   }
   void OnCompleteForwarded(
       KeepAliveURLLoader* loader,
       const network::URLLoaderCompletionStatus& completion_status) override {
-    on_complete_forwarded_count_.Increment();
     on_complete_forwarded_status_.push_back(completion_status);
+    on_complete_forwarded_count_.Increment();
   }
   void OnCompleteProcessed(
       KeepAliveURLLoader* loader,
       const network::URLLoaderCompletionStatus& completion_status) override {
-    on_complete_processed_count_.Increment();
     on_complete_processed_status_.push_back(completion_status);
+    on_complete_processed_count_.Increment();
   }
 
   // OnReceiveRedirect*:
@@ -285,6 +288,33 @@ void KeepAliveURLLoadersTestObserver::WaitForTotalOnCompleteProcessed(
   impl_->get()->WaitForTotalOnCompleteProcessed(error_codes);
 }
 
+KeepAliveRequestUkmMatcher::CommonUkm::CommonUkm(
+    KeepAliveRequestTracker::RequestType request_type,
+    size_t category_id,
+    size_t num_redirects,
+    bool is_context_detached,
+    KeepAliveRequestTracker::RequestStageType end_stage,
+    std::optional<KeepAliveRequestTracker::RequestStageType> previous_stage,
+    const std::optional<base::UnguessableToken>& keepalive_token,
+    std::optional<int64_t> failed_error_code,
+    std::optional<int64_t> failed_extended_error_code,
+    std::optional<int64_t> completed_error_code,
+    std::optional<int64_t> completed_extended_error_code)
+    : request_type(request_type),
+      category_id(category_id),
+      num_redirects(num_redirects),
+      is_context_detached(is_context_detached),
+      end_stage(end_stage),
+      previous_stage(previous_stage),
+      keepalive_token(keepalive_token),
+      failed_error_code(failed_error_code),
+      failed_extended_error_code(failed_extended_error_code),
+      completed_error_code(completed_error_code),
+      completed_extended_error_code(completed_extended_error_code) {}
+
+KeepAliveRequestUkmMatcher::CommonUkm::CommonUkm(const CommonUkm& other) =
+    default;
+
 const ukm::mojom::UkmEntry* KeepAliveRequestUkmMatcher::GetUkmEntry() {
   auto entries = ukm_recorder().GetEntriesByName(UkmEvent::kEntryName);
   CHECK_EQ(entries.size(), 1u)
@@ -307,8 +337,10 @@ void KeepAliveRequestUkmMatcher::ExpectCommonUkm(
     KeepAliveRequestTracker::RequestStageType end_stage,
     std::optional<KeepAliveRequestTracker::RequestStageType> previous_stage,
     const std::optional<base::UnguessableToken>& keepalive_token,
-    std::optional<int64_t> error_code,
-    std::optional<int64_t> extended_error_code) {
+    std::optional<int64_t> failed_error_code,
+    std::optional<int64_t> failed_extended_error_code,
+    std::optional<int64_t> completed_error_code,
+    std::optional<int64_t> completed_extended_error_code) {
   EXPECT_TRUE(ukm_recorder().EntryHasMetric(entry, "Id.Low"));
   EXPECT_TRUE(ukm_recorder().EntryHasMetric(entry, "Id.High"));
   if (keepalive_token.has_value()) {
@@ -335,21 +367,39 @@ void KeepAliveRequestUkmMatcher::ExpectCommonUkm(
     EXPECT_FALSE(ukm_recorder().EntryHasMetric(entry, "PreviousStage"));
   }
 
-  if (error_code.has_value()) {
-    ukm_recorder().ExpectEntryMetric(entry, "CompletionStatus.ErrorCode",
-                                     static_cast<int64_t>(*error_code));
+  if (failed_error_code.has_value()) {
+    ukm_recorder().ExpectEntryMetric(entry, "RequestFailed.ErrorCode",
+                                     static_cast<int64_t>(*failed_error_code));
   } else {
     EXPECT_FALSE(
-        ukm_recorder().EntryHasMetric(entry, "CompletionStatus.ErrorCode"));
+        ukm_recorder().EntryHasMetric(entry, "RequestFailed.ErrorCode"));
   }
 
-  if (extended_error_code.has_value()) {
+  if (failed_extended_error_code.has_value()) {
     ukm_recorder().ExpectEntryMetric(
-        entry, "CompletionStatus.ExtendedErrorCode",
-        static_cast<int64_t>(*extended_error_code));
+        entry, "RequestFailed.ExtendedErrorCode",
+        static_cast<int64_t>(*failed_extended_error_code));
   } else {
     EXPECT_FALSE(ukm_recorder().EntryHasMetric(
-        entry, "CompletionStatus.ExtendedErrorCode"));
+        entry, "RequestFailed.ExtendedErrorCode"));
+  }
+
+  if (completed_error_code.has_value()) {
+    ukm_recorder().ExpectEntryMetric(
+        entry, "LoaderCompleted.ErrorCode",
+        static_cast<int64_t>(*completed_error_code));
+  } else {
+    EXPECT_FALSE(
+        ukm_recorder().EntryHasMetric(entry, "LoaderCompleted.ErrorCode"));
+  }
+
+  if (completed_extended_error_code.has_value()) {
+    ukm_recorder().ExpectEntryMetric(
+        entry, "LoaderCompleted.ExtendedErrorCode",
+        static_cast<int64_t>(*completed_extended_error_code));
+  } else {
+    EXPECT_FALSE(ukm_recorder().EntryHasMetric(
+        entry, "LoaderCompleted.ExtendedErrorCode"));
   }
 }
 
@@ -361,12 +411,16 @@ void KeepAliveRequestUkmMatcher::ExpectCommonUkm(
     KeepAliveRequestTracker::RequestStageType end_stage,
     std::optional<KeepAliveRequestTracker::RequestStageType> previous_stage,
     const std::optional<base::UnguessableToken>& keepalive_token,
-    std::optional<int64_t> error_code,
-    std::optional<int64_t> extended_error_code) {
+    std::optional<int64_t> failed_error_code,
+    std::optional<int64_t> failed_extended_error_code,
+    std::optional<int64_t> completed_error_code,
+    std::optional<int64_t> completed_extended_error_code) {
   const ukm::mojom::UkmEntry* entry = GetUkmEntry();
   ExpectCommonUkm(entry, request_type, category_id, num_redirects,
                   is_context_detached, end_stage, previous_stage,
-                  keepalive_token, error_code, extended_error_code);
+                  keepalive_token, failed_error_code,
+                  failed_extended_error_code, completed_error_code,
+                  completed_extended_error_code);
 }
 
 void KeepAliveRequestUkmMatcher::ExpectCommonUkms(
@@ -378,11 +432,12 @@ void KeepAliveRequestUkmMatcher::ExpectCommonUkms(
       << ukms.size();
 
   for (size_t i = 0; i < entries.size(); ++i) {
-    ExpectCommonUkm(entries[i], ukms[i].request_type, ukms[i].category_id,
-                    ukms[i].num_redirects, ukms[i].is_context_detached,
-                    ukms[i].end_stage, ukms[i].previous_stage,
-                    ukms[i].keepalive_token, ukms[i].error_code,
-                    ukms[i].extended_error_code);
+    ExpectCommonUkm(
+        entries[i], ukms[i].request_type, ukms[i].category_id,
+        ukms[i].num_redirects, ukms[i].is_context_detached, ukms[i].end_stage,
+        ukms[i].previous_stage, ukms[i].keepalive_token,
+        ukms[i].failed_error_code, ukms[i].failed_extended_error_code,
+        ukms[i].completed_error_code, ukms[i].completed_extended_error_code);
   }
 }
 

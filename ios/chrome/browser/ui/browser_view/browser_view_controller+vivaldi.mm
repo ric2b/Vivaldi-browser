@@ -13,7 +13,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "components/notes/note_node.h"
 #import "components/notes/notes_model.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_view_ios.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_view_ios.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"

@@ -71,47 +71,14 @@ class PLATFORM_EXPORT CanvasResource
 
   virtual ~CanvasResource();
 
-  // Non-virtual override of ThreadSafeRefCounted::Release
-  void Release();
-
-  // Set a callback that will be invoked as the last outstanding reference to
-  // this CanvasResource goes out of scope.  This provides a last chance hook
-  // to intercept a canvas before it get destroyed. For resources that need to
-  // be destroyed on their thread of origin, this hook can be used to return
-  // resources to their creators.
-  void SetLastUnrefCallback(LastUnrefCallback callback) {
-    last_unref_callback_ = std::move(callback);
-  }
-
-  bool HasLastUnrefCallback() { return !!last_unref_callback_; }
-
-  // We perform a lazy copy on write if the canvas content needs to be updated
-  // while its current resource is in use. In order to avoid re-allocating
-  // resources, its preferable to reuse a resource if its no longer in use.
-  // This API indicates whether a resource can be recycled.  This method does
-  // not however check whether the resource is still in use (e.g. has
-  // outstanding references).
-  virtual bool IsRecycleable() const = 0;
+  static void OnPlaceholderReleasedResource(
+      scoped_refptr<CanvasResource> resource);
 
   // Returns true if this instance creates TransferableResources for usage with
   // GPU compositing.
   virtual bool CreatesAcceleratedTransferableResources() const = 0;
 
-  // Transfers ownership of the resource's vix::ReleaseCallback.  This is useful
-  // prior to transferring a resource to another thread, to retain the release
-  // callback on the current thread since the callback may not be thread safe.
-  // Even if the callback is never executed on another thread, simply transiting
-  // through another thread is dangerous because garbage collection races may
-  // make it impossible to return the resource to its thread of origin for
-  // destruction; in which case the callback (and its bound arguments) may be
-  // destroyed on the wrong thread.
-  virtual viz::ReleaseCallback TakeVizReleaseCallback() {
-    return viz::ReleaseCallback();
-  }
-
-  virtual void SetVizReleaseCallback(viz::ReleaseCallback cb) {
-    CHECK(cb.is_null());
-  }
+  virtual void OnRefReturned(scoped_refptr<CanvasResource>&& resource) {}
 
   // Returns true if the resource is still usable. It maybe not be valid in the
   // case of a context loss or if we fail to initialize the memory backing for
@@ -119,9 +86,7 @@ class PLATFORM_EXPORT CanvasResource
   virtual bool IsValid() const = 0;
 
   // The bounds for this resource.
-  gfx::Size Size() const { return size_; }
-
-  viz::SharedImageFormat GetFormat() const { return format_; }
+  gfx::Size Size() const { return GetClientSharedImage()->size(); }
 
   const gfx::ColorSpace& GetColorSpace() const { return color_space_; }
 
@@ -129,7 +94,8 @@ class PLATFORM_EXPORT CanvasResource
 
   // The ClientSharedImage containing information on the SharedImage
   // attached to the resource.
-  virtual scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() = 0;
+  virtual const scoped_refptr<gpu::ClientSharedImage>& GetClientSharedImage()
+      const = 0;
 
   // A CanvasResource is not thread-safe and does not allow concurrent usage
   // from multiple threads. But it maybe used from any thread. It remains bound
@@ -179,8 +145,6 @@ class PLATFORM_EXPORT CanvasResource
 
  protected:
   CanvasResource(base::WeakPtr<CanvasResourceProvider>,
-                 gfx::Size size,
-                 viz::SharedImageFormat format,
                  SkAlphaType alpha_type,
                  const gfx::ColorSpace& color_space);
 
@@ -204,6 +168,9 @@ class PLATFORM_EXPORT CanvasResource
   const scoped_refptr<base::SingleThreadTaskRunner> owning_thread_task_runner_;
 
  private:
+  static void OnPlaceholderReleasedResourceOnOwningThread(
+      scoped_refptr<CanvasResource> resource);
+
   // Returns true if the resource is rastered via the GPU.
   virtual bool UsesAcceleratedRaster() const = 0;
 
@@ -218,11 +185,8 @@ class PLATFORM_EXPORT CanvasResource
   }
 
   base::WeakPtr<CanvasResourceProvider> provider_;
-  gfx::Size size_;
-  viz::SharedImageFormat format_;
   SkAlphaType alpha_type_;
   gfx::ColorSpace color_space_;
-  LastUnrefCallback last_unref_callback_;
   bool is_origin_clean_ = true;
 };
 
@@ -248,10 +212,10 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
       gpu::SharedImageUsageSet shared_image_usage_flags);
   ~CanvasResourceSharedImage() override;
 
-  bool IsRecycleable() const final { return !IsLost(); }
   bool CreatesAcceleratedTransferableResources() const override {
     return !GetClientSharedImage()->is_software();
   }
+  void OnRefReturned(scoped_refptr<CanvasResource>&& resource) final;
   bool IsValid() const final;
   scoped_refptr<StaticBitmapImage> Bitmap() final;
   void Transfer() final;
@@ -271,8 +235,8 @@ class PLATFORM_EXPORT CanvasResourceSharedImage final : public CanvasResource {
   void WillDraw();
   bool IsLost() const { return owning_thread_data().is_lost; }
 
-  scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() override;
-  const scoped_refptr<gpu::ClientSharedImage>& GetClientSharedImage() const;
+  const scoped_refptr<gpu::ClientSharedImage>& GetClientSharedImage()
+      const override;
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
                     const std::string& parent_path) const;
 
@@ -379,21 +343,15 @@ class PLATFORM_EXPORT ExternalCanvasResource final : public CanvasResource {
       base::WeakPtr<CanvasResourceProvider>);
 
   ~ExternalCanvasResource() override;
-  bool IsRecycleable() const final { return IsValid(); }
   bool IsValid() const override;
   bool CreatesAcceleratedTransferableResources() const override { return true; }
   void NotifyResourceLost() override { resource_is_lost_ = true; }
-  scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() final {
+  const scoped_refptr<gpu::ClientSharedImage>& GetClientSharedImage()
+      const final {
     return client_si_;
   }
 
   scoped_refptr<StaticBitmapImage> Bitmap() override;
-  viz::ReleaseCallback TakeVizReleaseCallback() override {
-    return std::move(release_callback_);
-  }
-  void SetVizReleaseCallback(viz::ReleaseCallback cb) override {
-    release_callback_ = std::move(cb);
-  }
 
  private:
   gfx::HDRMetadata GetHDRMetadata() const final { return hdr_metadata_; }
@@ -437,7 +395,6 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
       base::WeakPtr<WebGraphicsContext3DProviderWrapper>,
       base::WeakPtr<CanvasResourceProvider>);
   ~CanvasResourceSwapChain() override;
-  bool IsRecycleable() const final { return IsValid(); }
   bool IsValid() const override;
   bool CreatesAcceleratedTransferableResources() const override { return true; }
   void NotifyResourceLost() override {
@@ -453,7 +410,8 @@ class PLATFORM_EXPORT CanvasResourceSwapChain final : public CanvasResource {
     return back_buffer_shared_image_;
   }
   void PresentSwapChain();
-  scoped_refptr<gpu::ClientSharedImage> GetClientSharedImage() override;
+  const scoped_refptr<gpu::ClientSharedImage>& GetClientSharedImage()
+      const override;
 
  private:
   bool UsesAcceleratedRaster() const final { return true; }

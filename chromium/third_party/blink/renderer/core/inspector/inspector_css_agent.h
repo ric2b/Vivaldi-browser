@@ -131,7 +131,6 @@ class CORE_EXPORT InspectorCSSAgent final
   // the rule list, and the CSSFunctionRules that resulted from looking up
   // those function references.
   static void CollectReferencedFunctionRules(
-      Document&,
       const HeapHashSet<Member<CSSStyleSheet>>& document_style_sheets,
       const RuleIndexList&,
       HeapHashMap<Member<const ScopedCSSName>, Member<CSSFunctionRule>>&
@@ -524,7 +523,8 @@ class CORE_EXPORT InspectorCSSAgent final
   void NotifyComputedStyleUpdatedForNode(int node_id);
   static String ResolvePercentagesValues(Element*,
                                          CSSPropertyName,
-                                         const CSSValue*);
+                                         const CSSValue* parsed_value,
+                                         const String& original_value);
 
   Member<InspectorDOMAgent> dom_agent_;
   Member<InspectedFrames> inspected_frames_;

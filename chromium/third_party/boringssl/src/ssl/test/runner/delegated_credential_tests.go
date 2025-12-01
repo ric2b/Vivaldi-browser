@@ -297,4 +297,24 @@ func addDelegatedCredentialTests() {
 		},
 	})
 
+	// Delegated credentials participate in trust anchor IDs.
+	id1 := []byte{1, 1}
+	id2 := []byte{2, 2, 2}
+	testCases = append(testCases, testCase{
+		testType: serverTest,
+		name:     "DelegatedCredentials-TrustAnchorIDs",
+		config: Config{
+			RequestTrustAnchors:           [][]byte{id2},
+			DelegatedCredentialAlgorithms: []signatureAlgorithm{signatureECDSAWithP256AndSHA256},
+			Bugs: ProtocolBugs{
+				ExpectPeerAvailableTrustAnchors: [][]byte{id1, id2},
+			},
+		},
+		shimCredentials: []*Credential{
+			p256DC.WithTrustAnchorID(id1), p256DCFromECDSA.WithTrustAnchorID(id2)},
+		flags: []string{"-expect-selected-credential", "1"},
+		expectations: connectionExpectations{
+			peerCertificate: p256DCFromECDSA,
+		},
+	})
 }

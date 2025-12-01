@@ -5,6 +5,8 @@
 #ifndef CHROME_BROWSER_UI_BROWSER_TAB_STRIP_MODEL_DELEGATE_H_
 #define CHROME_BROWSER_UI_BROWSER_TAB_STRIP_MODEL_DELEGATE_H_
 
+#include <vector>
+
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -42,6 +44,7 @@ class BrowserTabStripModelDelegate : public TabStripModelDelegate {
   bool CanDuplicateContentsAt(int index) override;
   bool IsTabStripEditable() override;
   void DuplicateContentsAt(int index) override;
+  void DuplicateSplit(split_tabs::SplitTabId split) override;
   void MoveToExistingWindow(const std::vector<int>& indices,
                             int browser_index) override;
   bool CanMoveTabsToWindow(const std::vector<int>& indices) override;
@@ -67,6 +70,7 @@ class BrowserTabStripModelDelegate : public TabStripModelDelegate {
   bool CanGoBack(content::WebContents* web_contents) override;
   bool IsNormalWindow() override;
   BrowserWindowInterface* GetBrowserWindowInterface() override;
+  void NewSplitTab(std::vector<int> indices) override;
   void OnGroupsDestruction(const std::vector<tab_groups::TabGroupId>& group_ids,
                            base::OnceCallback<void()> close_callback,
                            bool delete_groups) override;

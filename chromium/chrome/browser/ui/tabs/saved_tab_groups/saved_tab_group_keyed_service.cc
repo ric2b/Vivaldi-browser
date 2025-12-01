@@ -31,7 +31,6 @@
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_pref_names.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/tab_group_sync_service_proxy.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/common/channel_info.h"
 #include "components/data_sharing/public/features.h"
@@ -57,9 +56,10 @@
 #include "components/sync/service/sync_user_settings.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_device_info/device_info_tracker.h"
-#include "components/tab_collections/public/tab_interface.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/tab_group.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 
 namespace tab_groups {
@@ -120,27 +120,6 @@ MaybeCreateSyncConfigurationForSharedTabGroupData(
       CreateSharedTabGroupDataChangeProcessor(), std::move(store_factory));
 }
 
-std::unique_ptr<syncer::DataTypeLocalChangeProcessor>
-CreateSharedTabGroupAccountDataChangeProcessor() {
-  return std::make_unique<syncer::ClientTagBasedDataTypeProcessor>(
-      syncer::SHARED_TAB_GROUP_ACCOUNT_DATA,
-      base::BindRepeating(&syncer::ReportUnrecoverableError,
-                          chrome::GetChannel()));
-}
-
-std::unique_ptr<SyncDataTypeConfiguration>
-MaybeCreateSyncConfigurationForSharedTabGroupAccountData(
-    syncer::OnceDataTypeStoreFactory store_factory) {
-  if (!data_sharing::features::IsDataSharingFunctionalityEnabled() ||
-      !base::FeatureList::IsEnabled(syncer::kSyncSharedTabGroupAccountData)) {
-    return nullptr;
-  }
-
-  return std::make_unique<SyncDataTypeConfiguration>(
-      CreateSharedTabGroupAccountDataChangeProcessor(),
-      std::move(store_factory));
-}
-
 }  // anonymous namespace
 
 SavedTabGroupKeyedService::SavedTabGroupKeyedService(
@@ -163,14 +142,6 @@ SavedTabGroupKeyedService::SavedTabGroupKeyedService(
               GetStoreFactory()))),
       metrics_logger_(std::make_unique<TabGroupSyncMetricsLoggerImpl>(
           device_info_tracker)) {
-  std::unique_ptr<SyncDataTypeConfiguration> shared_tab_account_configuration =
-      MaybeCreateSyncConfigurationForSharedTabGroupAccountData(
-          GetStoreFactory());
-  if (shared_tab_account_configuration) {
-    shared_tab_group_account_data_bridge_ =
-        std::make_unique<SharedTabGroupAccountDataSyncBridge>(
-            std::move(shared_tab_account_configuration));
-  }
   model_->AddObserver(this);
 
   metrics_timer_.Start(
@@ -201,9 +172,11 @@ SavedTabGroupKeyedService::GetSharedTabGroupControllerDelegate() {
 
 base::WeakPtr<syncer::DataTypeControllerDelegate>
 SavedTabGroupKeyedService::GetSharedTabGroupAccountControllerDelegate() {
-  CHECK(shared_tab_group_account_data_bridge_);
-  return shared_tab_group_account_data_bridge_->change_processor()
-      ->GetControllerDelegate();
+  // SharedTabGroupAccountDataSyncBridge needs access to the
+  // TabGroupSyncService in order to access the data model. This is
+  // incompatible with SavedTabGroupKeyedService (which will be removed
+  // shortly), so the controller delegate is not available.
+  return nullptr;
 }
 
 void SavedTabGroupKeyedService::ConnectRestoredGroupToSaveId(
@@ -362,9 +335,10 @@ TabGroupId SavedTabGroupKeyedService::AddOpenedTabsToGroup(
       tab_strip_model_for_creation->group_model()->GetTabGroup(tab_group_id);
 
   // Activate the first tab in the tab group.
-  std::optional<int> first_tab = tab_group->GetFirstTab();
-  DCHECK(first_tab.has_value());
-  tab_strip_model_for_creation->ActivateTabAt(first_tab.value());
+  tabs::TabInterface* first_tab = tab_group->GetFirstTab();
+  DCHECK(first_tab);
+  tab_strip_model_for_creation->ActivateTabAt(
+      tab_strip_model_for_creation->GetIndexOfTab(first_tab));
 
   // Set the group's visual data after the tab strip is in its final state. This
   // ensures the tab group's bounds are correctly set. crbug/1408814.
@@ -560,7 +534,8 @@ void SavedTabGroupKeyedService::SavedTabGroupModelLoaded() {
     ConnectLocalTabGroup(local_group_id, saved_guid);
   }
 
-  for (SavedTabGroup group : restored_groups_to_save_on_load_) {
+  for (SavedTabGroup& group : restored_groups_to_save_on_load_) {
+    // Move from vector about to be cleared below.
     SaveRestoredGroup(std::move(group));
   }
 
@@ -634,8 +609,9 @@ void SavedTabGroupKeyedService::RemoveExtraTabsFromOutOfSyncLocalTabGroup(
 
   // Remove tabs from the end of the tab group to even out the number of tabs in
   // the local and saved group.
-  while (tab_group->tab_count() > int(num_tabs_in_saved_group)) {
-    const int last_tab = tab_group->GetLastTab().value();
+  while (tab_group->tab_count() > static_cast<int>(num_tabs_in_saved_group)) {
+    const int last_tab =
+        tab_strip_model->GetIndexOfTab(tab_group->GetLastTab());
     tab_strip_model->CloseWebContentsAt(
         last_tab, TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB);
   }
@@ -725,6 +701,9 @@ const TabStripModel* SavedTabGroupKeyedService::GetTabStripModelWithTabGroupId(
 void SavedTabGroupKeyedService::UpdateGroupVisualData(
     const base::Uuid saved_group_guid,
     const TabGroupId group_id) {
+  const Browser* const browser =
+      SavedTabGroupUtils::GetBrowserWithTabGroupId(group_id);
+  CHECK(browser);
   TabGroup* const tab_group = SavedTabGroupUtils::GetTabGroupWithId(group_id);
   CHECK(tab_group);
   const SavedTabGroup* const saved_group = model_->Get(saved_group_guid);
@@ -734,7 +713,7 @@ void SavedTabGroupKeyedService::UpdateGroupVisualData(
   TabGroupVisualData visual_data(
       saved_group->title(), saved_group->color(),
       /*is_collapsed=*/tab_group->visual_data()->is_collapsed());
-  tab_group->SetVisualData(visual_data, /*is_customized=*/true);
+  browser->tab_strip_model()->ChangeTabGroupVisuals(group_id, visual_data);
 }
 
 bool SavedTabGroupKeyedService::IsRemoteDevice(

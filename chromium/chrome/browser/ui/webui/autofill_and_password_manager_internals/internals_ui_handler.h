@@ -27,10 +27,11 @@ class Profile;
 
 namespace autofill {
 
-constexpr char kCacheResetDone[] =
+inline constexpr char kCacheResetDone[] =
     "Done. Please close and reopen all tabs that should be affected by the "
     "cache reset.";
-constexpr char kCacheResetAlreadyInProgress[] = "Reset already in progress";
+inline constexpr char kCacheResetAlreadyInProgress[] =
+    "Reset already in progress";
 
 void CreateAndAddInternalsHTMLSource(Profile* profile,
                                      const std::string& source_name);
@@ -91,7 +92,11 @@ class InternalsUIHandler : public content::WebUIMessageHandler,
   void OnGetAutofillAiCache(const base::Value::List& args);
   void OnLoaded(const base::Value::List& args);
   void OnResetCache(const base::Value::List& args);
+#if BUILDFLAG(IS_ANDROID)
   void OnResetUpmEviction(const base::Value::List& args);
+#else
+  void SetDomNodeId(const base::Value::List& args);
+#endif
 
   void OnResetCacheDone(const std::string& message);
 

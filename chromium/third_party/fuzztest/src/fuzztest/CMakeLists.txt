@@ -1,3 +1,6 @@
+# The DEPS in this file are sorted in the same order as the corresponding
+# deps in the BUILD file. This is to make it easier to compare the two files.
+
 function(_link_libfuzzer_in_compatibility_mode name)
   if (FUZZTEST_COMPATIBILITY_MODE STREQUAL "libfuzzer")
     EXECUTE_PROCESS (
@@ -61,10 +64,14 @@ fuzztest_cc_library(
   SRCS
     "fuzztest_macros.cc"
   DEPS
-    fuzztest::io
     fuzztest::logging
     fuzztest::registration
     fuzztest::registry
+    fuzztest::runtime
+    absl::status
+    absl::statusor
+    absl::strings
+    absl::string_view
 )
 
 fuzztest_cc_test(
@@ -75,11 +82,11 @@ fuzztest_cc_test(
   SRCS
     "fuzztest_macros_test.cc"
   DEPS
+    fuzztest::fuzztest_macros
     GTest::gmock_main
-    absl::log
+    absl::check
     absl::status
     absl::strings
-    fuzztest::fuzztest_macros
     fuzztest::temp_dir
 )
 
@@ -89,8 +96,6 @@ fuzztest_cc_library(
   SRCS
     "fuzztest_gtest_main.cc"
   DEPS
-    absl::flags_parse
-    absl::strings
     fuzztest::init_fuzztest
     GTest::gtest
 )
@@ -110,16 +115,16 @@ fuzztest_cc_library(
     fuzztest::logging
     fuzztest::registry
     fuzztest::runtime
+    GTest::gtest
     absl::algorithm_container
+    absl::no_destructor
+    absl::flat_hash_set
     absl::flags
     absl::flags_parse
     absl::flags_reflection
-    absl::flat_hash_set
-    absl::no_destructor
     absl::strings
     absl::str_format
     absl::time
-    GTest::gtest
 )
 
 fuzztest_cc_library(
@@ -129,9 +134,9 @@ fuzztest_cc_library(
     "llvm_fuzzer_main.cc"
   DEPS
     fuzztest::init_fuzztest
+    GTest::gtest
     absl::flags
     absl::flags_parse
-    GTest::gtest
 )
 
 fuzztest_cc_library(
@@ -140,22 +145,18 @@ fuzztest_cc_library(
   SRCS
     "llvm_fuzzer_wrapper.cc"
   DEPS
-    fuzztest::coverage
     fuzztest::domain_core
     fuzztest::fuzztest
+    fuzztest::fuzztest_macros
     fuzztest::io
-    fuzztest::llvm_fuzzer_main
     fuzztest::logging
     absl::core_headers
-    absl::flags
-    absl::log
     absl::no_destructor
+    absl::flags
+    absl::absl_check
     absl::random_random
     absl::random_bit_gen_ref
-    absl::strings
-    absl::string_view
     absl::synchronization
-    re2::re2
 )
 
 ################################################################################
@@ -191,8 +192,8 @@ fuzztest_cc_test(
     "internal/any_test.cc"
   DEPS
     fuzztest::any
-    absl::strings
     GTest::gmock_main
+    absl::strings
 )
 
 # TODO(lszekeres): centipede_adaptor
@@ -225,7 +226,7 @@ fuzztest_cc_library(
   SRCS
     "internal/configuration.cc"
   DEPS
-    absl::check
+    absl::absl_check
     absl::status
     absl::statusor
     absl::strings
@@ -240,9 +241,9 @@ fuzztest_cc_test(
     "internal/configuration_test.cc"
   DEPS
     fuzztest::configuration
+    GTest::gmock_main
     absl::statusor
     absl::time
-    GTest::gmock_main
 )
 
 fuzztest_cc_library(
@@ -257,6 +258,7 @@ fuzztest_cc_library(
     fuzztest::io
     absl::strings
     absl::string_view
+    absl::time
 )
 
 fuzztest_cc_library(
@@ -286,6 +288,7 @@ fuzztest_cc_library(
     "internal/domains/protobuf_domain_impl.h"
   SRCS
     "internal/domains/in_grammar_impl.cc"
+    "internal/domains/in_regexp_impl.cc"
   DEPS
     fuzztest::any
     fuzztest::domain_core
@@ -318,6 +321,7 @@ fuzztest_cc_library(
     "internal/domains/aggregate_of_impl.h"
     "internal/domains/arbitrary_impl.h"
     "internal/domains/bit_flag_combination_of_impl.h"
+    "internal/domains/bit_gen_ref.h"
     "internal/domains/container_mutation_helpers.h"
     "internal/domains/container_of_impl.h"
     "internal/domains/domain.h"
@@ -338,15 +342,13 @@ fuzztest_cc_library(
     "internal/domains/unique_elements_container_of_impl.h"
     "internal/domains/value_mutation_helpers.h"
     "internal/domains/variant_of_impl.h"
-  SRCS
-    "internal/domains/domain_base.cc"
   DEPS
     fuzztest::absl_helpers
     fuzztest::any
+    fuzztest::fuzzing_bit_gen
     fuzztest::logging
     fuzztest::meta
     fuzztest::printer
-    fuzztest::seed_seq
     fuzztest::serialization
     fuzztest::status
     fuzztest::table_of_recent_compares
@@ -354,6 +356,8 @@ fuzztest_cc_library(
     absl::flat_hash_map
     absl::flat_hash_set
     absl::function_ref
+    absl::absl_check
+    absl::absl_log
     absl::bits
     absl::int128
     absl::random_random
@@ -381,6 +385,7 @@ fuzztest_cc_library(
     fuzztest::printer
     fuzztest::registration
     fuzztest::type_support
+    absl::any_invocable
     absl::status
     absl::str_format
     absl::span
@@ -397,8 +402,9 @@ fuzztest_cc_test(
     fuzztest::fixture_driver
     fuzztest::logging
     fuzztest::registration
-    absl::span
     GTest::gmock_main
+    absl::any_invocable
+    absl::span
 )
 
 fuzztest_cc_library(
@@ -406,6 +412,24 @@ fuzztest_cc_library(
     flag_name
   HDRS
     "internal/flag_name.h"
+)
+
+fuzztest_cc_library(
+  NAME
+    fuzzing_bit_gen
+  HDRS
+    "internal/fuzzing_bit_gen.h"
+  SRCS
+    "internal/fuzzing_bit_gen.cc"
+  DEPS
+    fuzztest::register_fuzzing_mocks
+    absl::fast_type_id
+    absl::no_destructor
+    absl::flat_hash_map
+    absl::bits
+    absl::int128
+    absl::random_bit_gen_ref
+    absl::span
 )
 
 fuzztest_cc_library(
@@ -422,10 +446,10 @@ fuzztest_cc_library(
     fuzztest::io
     fuzztest::registry
     fuzztest::runtime
-    absl::strings
-    absl::string_view
-    absl::str_format
     GTest::gtest
+    absl::strings
+    absl::str_format
+    absl::string_view
 )
 
 fuzztest_cc_library(
@@ -446,16 +470,17 @@ fuzztest_cc_library(
   SRCS
     "internal/io.cc"
   DEPS
-    fuzztest::blob_file
-    fuzztest::defs
     fuzztest::logging
-    fuzztest::remote_file
     absl::function_ref
     absl::hash
     absl::status
     absl::str_format
     absl::string_view
+    absl::time
     absl::span
+    fuzztest::blob_file
+    fuzztest::defs
+    fuzztest::remote_file
 )
 
 fuzztest_cc_test(
@@ -464,15 +489,16 @@ fuzztest_cc_test(
   SRCS
     "internal/io_test.cc"
   DEPS
-    fuzztest::blob_file
-    fuzztest::defs
-    fuzztest::temp_dir
     fuzztest::fuzztest_core
     fuzztest::io
+    GTest::gmock_main
     absl::check
     absl::status
     absl::strings
-    GTest::gmock_main
+    absl::time
+    fuzztest::blob_file
+    fuzztest::defs
+    fuzztest::temp_dir
 )
 
 fuzztest_cc_library(
@@ -483,7 +509,9 @@ fuzztest_cc_library(
   SRCS
     "internal/logging.cc"
   DEPS
+    absl::core_headers
     absl::strings
+    absl::synchronization
 )
 
 fuzztest_cc_library(
@@ -520,7 +548,23 @@ fuzztest_cc_library(
     absl::status
     absl::statusor
     absl::strings
+    absl::string_view
     re2::re2
+)
+
+fuzztest_cc_library(
+  NAME
+    register_fuzzing_mocks
+  HDRS
+    "internal/register_fuzzing_mocks.h"
+  SRCS
+    "internal/register_fuzzing_mocks.cc"
+  DEPS
+    absl::fast_type_id
+    absl::function_ref
+    absl::absl_check
+    absl::random_distributions
+    absl::span
 )
 
 fuzztest_cc_library(
@@ -564,7 +608,6 @@ fuzztest_cc_library(
   SRCS
     "internal/runtime.cc"
   DEPS
-    fuzztest::bazel
     fuzztest::configuration
     fuzztest::corpus_database
     fuzztest::coverage
@@ -582,7 +625,7 @@ fuzztest_cc_library(
     absl::any_invocable
     absl::bind_front
     absl::function_ref
-    absl::check
+    absl::absl_check
     absl::random_random
     absl::random_bit_gen_ref
     absl::random_distributions
@@ -592,8 +635,7 @@ fuzztest_cc_library(
     absl::str_format
     absl::time
     absl::span
-  LINKOPTS
-    pthread
+    fuzztest::bazel
 )
 
 fuzztest_cc_test(
@@ -607,9 +649,10 @@ fuzztest_cc_test(
     fuzztest::flag_name
     fuzztest::runtime
     test_protobuf
-    absl::time
-    absl::flags
     GTest::gmock_main
+    absl::flags
+    absl::strings
+    absl::time
 )
 
 fuzztest_cc_library(
@@ -633,9 +676,9 @@ fuzztest_cc_test(
     "internal/seed_seq_test.cc"
   DEPS
     fuzztest::seed_seq
+    GTest::gmock_main
     absl::strings
     absl::span
-    GTest::gmock_main
 )
 
 fuzztest_cc_library(
@@ -699,9 +742,9 @@ fuzztest_cc_test(
     "internal/subprocess_test.cc"
   DEPS
     fuzztest::subprocess
+    GTest::gmock_main
     absl::strings
     absl::time
-    GTest::gmock_main
 )
 
 fuzztest_cc_library(
@@ -723,8 +766,8 @@ fuzztest_cc_test(
     "internal/table_of_recent_compares_test.cc"
   DEPS
     fuzztest::table_of_recent_compares
-    absl::random_random
     GTest::gmock_main
+    absl::random_random
 )
 
 # TODO(lszekeres): Support fuzztest_cc_proto_library.
@@ -775,8 +818,8 @@ fuzztest_cc_library(
     fuzztest::absl_helpers
     fuzztest::meta
     fuzztest::printer
-    absl::function_ref
     absl::symbolize
+    absl::function_ref
     absl::int128
     absl::strings
     absl::str_format
@@ -794,9 +837,9 @@ fuzztest_cc_test(
     fuzztest::printer
     test_protobuf
     fuzztest::type_support
+    GTest::gmock_main
     absl::int128
     absl::strings
     absl::str_format
     absl::time
-    GTest::gmock_main
 )

@@ -33,6 +33,7 @@ TEST(SourceFile, GetType) {
       {"foo.h", SourceFile::SOURCE_H},
       {"foo.hh", SourceFile::SOURCE_H},
       {"foo.hpp", SourceFile::SOURCE_H},
+      {"foo.hpp11", SourceFile::SOURCE_H},
       {"foo.inc", SourceFile::SOURCE_H},
       {"foo.inl", SourceFile::SOURCE_H},
       {"foo.ipp", SourceFile::SOURCE_H},

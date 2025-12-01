@@ -52,7 +52,6 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/heap_array.h"
-#include "base/debug/alias.h"
 #include "base/debug/crash_logging.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file_path.h"
@@ -725,6 +724,20 @@ bool UserAccountControlIsEnabled() {
   return (uac_enabled != 0);
 }
 
+bool UserAccountIsUnnecessarilyElevated() {
+  // Check the process token to tell us that it's:
+  // * Elevated
+  // * UAC is enabled
+  // * It's not an account that always runs elevated even with UAC enabled
+  // The last bullet happens on built-in Admin *without* the "run BA filtered"
+  // policy set.
+  DWORD size;
+  TOKEN_ELEVATION_TYPE elevation_type;
+  return GetTokenInformation(GetCurrentProcessToken(), TokenElevationType,
+                             &elevation_type, sizeof(elevation_type), &size) &&
+         elevation_type == TokenElevationTypeFull;
+}
+
 bool SetBooleanValueForPropertyStore(IPropertyStore* property_store,
                                      const PROPERTYKEY& property_key,
                                      bool property_bool_value) {
@@ -1190,21 +1203,6 @@ expected<std::wstring, NTSTATUS> GetObjectTypeName(HANDLE handle) {
                       type_info->TypeName.Length / sizeof(wchar_t));
 }
 
-expected<ScopedHandle, NTSTATUS> TakeHandleOfType(
-    HANDLE handle,
-    std::wstring_view object_type_name) {
-  auto type_name = GetObjectTypeName(handle);
-  if (!type_name.has_value()) {
-    // `handle` is invalid. Return the error to the caller.
-    return unexpected(type_name.error());
-  }
-  // Crash if `handle` is an unexpected type. This represents a dangerous
-  // type confusion condition that should never happen.
-  base::debug::Alias(&handle);
-  CHECK_EQ(*type_name, object_type_name);
-  return ScopedHandle(handle);  // Ownership of `handle` goes to the caller.
-}
-
 ProcessPowerState GetProcessEcoQoSState(HANDLE process) {
   return GetProcessPowerThrottlingState(
       process, PROCESS_POWER_THROTTLING_EXECUTION_SPEED);
@@ -1253,6 +1251,17 @@ ScopedDomainStateForTesting::ScopedDomainStateForTesting(bool state)
 
 ScopedDomainStateForTesting::~ScopedDomainStateForTesting() {
   *GetDomainEnrollmentStateStorage() = initial_state_;
+}
+
+ScopedDeviceRegisteredWithManagementForTesting::
+    ScopedDeviceRegisteredWithManagementForTesting(bool state)
+    : initial_state_(IsDeviceRegisteredWithManagement()) {
+  *GetRegisteredWithManagementStateStorage() = state;
+}
+
+ScopedDeviceRegisteredWithManagementForTesting::
+    ~ScopedDeviceRegisteredWithManagementForTesting() {
+  *GetRegisteredWithManagementStateStorage() = initial_state_;
 }
 
 ScopedAzureADJoinStateForTesting::ScopedAzureADJoinStateForTesting(bool state)

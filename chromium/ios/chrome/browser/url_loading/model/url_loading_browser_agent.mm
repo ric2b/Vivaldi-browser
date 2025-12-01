@@ -30,8 +30,6 @@
 #import "ios/chrome/browser/web/model/load_timing_tab_helper.h"
 #import "net/base/url_util.h"
 
-BROWSER_USER_DATA_KEY_IMPL(UrlLoadingBrowserAgent)
-
 namespace {
 
 // Rapidly starts leaking memory by 10MB blocks.
@@ -127,7 +125,7 @@ NOINLINE void InduceBrowserCrash(const GURL& url) {
 }  // namespace
 
 UrlLoadingBrowserAgent::UrlLoadingBrowserAgent(Browser* browser)
-    : browser_(browser),
+    : BrowserUserData(browser),
       notifier_(UrlLoadingNotifierBrowserAgent::FromBrowser(browser_)) {
   DCHECK(notifier_);
 }

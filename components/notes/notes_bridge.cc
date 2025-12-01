@@ -11,6 +11,7 @@
 #include <memory>
 #include <queue>
 
+
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/containers/stack.h"
@@ -172,30 +173,15 @@ void NotesBridge::GetTopLevelFolderParentIDs(
 void NotesBridge::GetTopLevelFolderIDs(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
-    jboolean get_special,
-    jboolean get_normal,
     const JavaParamRef<jobject>& j_result_obj) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(IsLoaded());
   std::vector<const NoteNode*> top_level_folders;
 
-  std::size_t special_count = top_level_folders.size();
-
-  if (get_normal) {
-    // Vivaldi: trash folder added
-    DCHECK_EQ(/*5u*/ 6u, notes_model_->root_node()->children().size());
-    const NoteNode* main_node = notes_model_->main_node();
-    for (const auto& child : main_node->children()) {
-      const NoteNode* node = child.get();
-      if (node->is_folder()) {
-        top_level_folders.push_back(node);
-      }
-    }
-
-    std::unique_ptr<icu::Collator> collator = GetICUCollator();
-    std::stable_sort(top_level_folders.begin() + special_count,
-                     top_level_folders.end(),
-                     NoteTitleComparer(this, collator.get()));
-  }
+  const NoteNode* trash_node = notes_model_->trash_node();
+  top_level_folders.push_back(trash_node);
+  const NoteNode* main_node = notes_model_->main_node();
+  top_level_folders.push_back(main_node);
 
   for (std::vector<const NoteNode*>::const_iterator it =
            top_level_folders.begin();
@@ -862,4 +848,12 @@ void NotesBridge::ReorderChildren(JNIEnv* env,
   }
 
   notes_model_->ReorderChildren(note_node, ordered_nodes);
+}
+
+bool NotesBridge::IsChildOfTrashNode(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj,
+                                     jlong id) {
+    DCHECK(IsLoaded());
+    const NoteNode* node = GetNodeByID(id);
+    return notes_model_->IsChildOfTrashNode(node);
 }

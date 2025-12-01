@@ -8,6 +8,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "base/containers/contains.h"
 #include "base/functional/callback.h"
 #include "base/functional/callback_helpers.h"
+#include "base/i18n/break_iterator.h"
 #include "base/i18n/message_formatter.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/collaboration/internal/messaging/data_sharing_change_notifier_impl.h"
@@ -49,14 +51,48 @@ collaboration_pb::Message CreateMessage(
   return message;
 }
 
+std::u16string TruncateTabTitle(const std::u16string& original_title) {
+  constexpr int kMaxTabTitleCharacters = 28;
+  constexpr char16_t kEllipsis = u'\u2026';
+  std::u16string trimmed;
+  base::TrimWhitespace(original_title, base::TrimPositions::TRIM_ALL, &trimmed);
+
+  // If the size of the text is already smaller than the max size without
+  // grapheme counting, then we can just return the text untrimmed.
+  if (trimmed.size() <= kMaxTabTitleCharacters) {
+    return trimmed;
+  }
+
+  // Count the number of graphemes, stopping when we hit the max size.
+  // Copy the string_view contents over to the result string.
+  std::u16string result;
+  base::i18n::BreakIterator iter(trimmed,
+                                 base::i18n::BreakIterator::BREAK_CHARACTER);
+  iter.Init();
+  int seen = 0;
+  while (seen < kMaxTabTitleCharacters && iter.Advance()) {
+    ++seen;
+
+    // GetString returns the span that Advance() moved forwards on.
+    auto span = iter.GetString();
+    result.append(span.data(), span.size());
+  }
+
+  // If seen count hit the max characters and there are still more, add the
+  // ellipsis.
+  if (iter.Advance()) {
+    result.push_back(kEllipsis);
+  }
+  return result;
+}
+
 collaboration_pb::Message CreateTabGroupMessage(
     data_sharing::GroupId collaboration_group_id,
     const tab_groups::SavedTabGroup& tab_group,
     collaboration_pb::EventType event_type,
     DirtyType dirty_type) {
-  collaboration_pb::Message message =
-      CreateMessage(collaboration_group_id, event_type, dirty_type,
-                    tab_group.update_time_windows_epoch_micros());
+  collaboration_pb::Message message = CreateMessage(
+      collaboration_group_id, event_type, dirty_type, tab_group.update_time());
   message.mutable_tab_group_data()->set_sync_tab_group_id(
       tab_group.saved_guid().AsLowercaseString());
   message.mutable_tab_group_data()->set_title(
@@ -83,11 +119,10 @@ collaboration_pb::Message CreateTabMessage(
     const tab_groups::SavedTabGroupTab& tab,
     collaboration_pb::EventType event_type,
     DirtyType dirty_type) {
-  collaboration_pb::Message message =
-      CreateMessage(collaboration_group_id, event_type, dirty_type,
-                    event_type == collaboration_pb::TAB_ADDED
-                        ? tab.creation_time_windows_epoch_micros()
-                        : tab.update_time_windows_epoch_micros());
+  collaboration_pb::Message message = CreateMessage(
+      collaboration_group_id, event_type, dirty_type,
+      event_type == collaboration_pb::TAB_ADDED ? tab.creation_time()
+                                                : tab.update_time());
   message.mutable_tab_data()->set_sync_tab_id(
       tab.saved_tab_guid().AsLowercaseString());
   message.mutable_tab_data()->set_sync_tab_group_id(
@@ -295,7 +330,8 @@ std::u16string GetTitleForTabRemovedMessage(const InstantMessage& message) {
 
   return l10n_util::GetStringFUTF16(
       IDS_DATA_SHARING_TOAST_TAB_REMOVED, base::UTF8ToUTF16(user->given_name),
-      base::UTF8ToUTF16(tab_metadata->last_known_title.value()));
+      TruncateTabTitle(
+          base::UTF8ToUTF16(tab_metadata->last_known_title.value())));
 }
 
 std::u16string GetTitleForTabUpdatedMessage(const InstantMessage& message) {
@@ -310,7 +346,8 @@ std::u16string GetTitleForTabUpdatedMessage(const InstantMessage& message) {
 
   return l10n_util::GetStringFUTF16(
       IDS_DATA_SHARING_TOAST_TAB_UPDATED, base::UTF8ToUTF16(user->given_name),
-      base::UTF8ToUTF16(tab_metadata->last_known_title.value()));
+      TruncateTabTitle(
+          base::UTF8ToUTF16(tab_metadata->last_known_title.value())));
 }
 
 std::u16string GetTitleForMemberAddedMessage(const InstantMessage& message) {
@@ -326,7 +363,8 @@ std::u16string GetTitleForMemberAddedMessage(const InstantMessage& message) {
 
   return l10n_util::GetStringFUTF16(
       IDS_DATA_SHARING_TOAST_NEW_MEMBER, base::UTF8ToUTF16(user->given_name),
-      base::UTF8ToUTF16(tab_group_metadata->last_known_title.value()));
+      TruncateTabTitle(
+          base::UTF8ToUTF16(tab_group_metadata->last_known_title.value())));
 }
 
 std::u16string GetTitleForTabGroupRemovedMessage(
@@ -342,7 +380,8 @@ std::u16string GetTitleForTabGroupRemovedMessage(
 
   return l10n_util::GetStringFUTF16(
       IDS_DATA_SHARING_TOAST_BLOCK_LEAVE,
-      base::UTF8ToUTF16(tab_group_metadata->last_known_title.value()));
+      TruncateTabTitle(
+          base::UTF8ToUTF16(tab_group_metadata->last_known_title.value())));
 }
 
 DirtyType GetDirtyTypeFromPersistentNotificationTypeForQuery(
@@ -436,6 +475,10 @@ bool IsCurrentUserOwner(const signin::IdentityManager* identity_manager,
   }
 
   return IsMemberOwner(group_data, account.gaia);
+}
+
+bool HasSeenTabUpdate(const tab_groups::SavedTabGroupTab& tab) {
+  return tab.last_seen_time() >= tab.navigation_time();
 }
 
 }  // namespace
@@ -609,6 +652,8 @@ void MessagingBackendServiceImpl::ClearDirtyTabMessagesForGroup(
     return;
   }
 
+  std::vector<base::Uuid> cleared_tab_ids;
+
   // Since the dirty bits are cleared from DB, hide any dirty dots from the tabs
   // and tab groups if they are already showing.
   for (auto& message : cleared_messages) {
@@ -620,6 +665,11 @@ void MessagingBackendServiceImpl::ClearDirtyTabMessagesForGroup(
     NotifyHidePersistentMessagesForTypes(
         persistent_message, {PersistentNotificationType::CHIP,
                              PersistentNotificationType::DIRTY_TAB});
+    if (persistent_message.attribution.tab_metadata.has_value() &&
+        persistent_message.attribution.tab_metadata->sync_tab_id.has_value()) {
+      cleared_tab_ids.emplace_back(
+          persistent_message.attribution.tab_metadata->sync_tab_id.value());
+    }
 
     if (persistent_message.attribution.tab_group_metadata &&
         persistent_message.attribution.tab_group_metadata->sync_tab_group_id) {
@@ -630,21 +680,18 @@ void MessagingBackendServiceImpl::ClearDirtyTabMessagesForGroup(
                                                tab_group_id);
     }
   }
+
+  for (const base::Uuid& tab_id : cleared_tab_ids) {
+    tab_group_sync_service_->UpdateTabLastSeenTime(
+        tab_group->saved_guid(), tab_id, tab_groups::TriggerSource::LOCAL);
+  }
 }
 
 void MessagingBackendServiceImpl::ClearDirtyTabMessagesForGroup(
     const data_sharing::GroupId& collaboration_group_id) {
-  std::optional<tab_groups::SavedTabGroup> tab_group;
-  for (const auto& group : tab_group_sync_service_->GetAllGroups()) {
-    if (group.collaboration_id() &&
-        data_sharing::GroupId(group.collaboration_id().value().value()) ==
-            collaboration_group_id) {
-      tab_group = group;
-      break;
-    }
-  }
-
-  ClearDirtyTabMessagesForGroup(collaboration_group_id, tab_group);
+  ClearDirtyTabMessagesForGroup(
+      collaboration_group_id,
+      GetTabGroupFromCollaborationId(collaboration_group_id.value()));
 }
 
 void MessagingBackendServiceImpl::OnStoreInitialized(bool success) {
@@ -706,16 +753,30 @@ void MessagingBackendServiceImpl::OnTabGroupRemoved(
     return;
   }
 
-  // Remove all messages from the DB related to this tab group. The only message
-  // that will stay will be the group removal message which will be added in the
-  // next section.
+  // Clear any the dirty persistent messages related to the group that are
+  // already showing in UI. This is important in unshare flow since the tab
+  // group continues to exist in the UI. This will also clear the dirty bits in
+  // the DB and notify all the observers to update the UI.
+  ClearDirtyTabMessagesForGroup(*collaboration_group_id, removed_group);
+
+  // Remove all messages from the DB related to this tab group (including the
+  // ones that were just cleared from dirty state). The only message that will
+  // stay will be the group removal message which will be added in the next
+  // section.
   std::vector<collaboration_pb::Message> messages =
       store_->GetRecentMessagesForGroup(*collaboration_group_id);
-  std::set<std::string> message_uuids;
+  std::set<std::string> message_uuid_strings;
+  std::set<base::Uuid> message_uuids;
   for (auto& message : messages) {
-    message_uuids.insert(message.uuid());
+    message_uuid_strings.insert(message.uuid());
+    message_uuids.insert(base::Uuid::ParseLowercase(message.uuid()));
   }
-  store_->RemoveMessages(message_uuids);
+  store_->RemoveMessages(message_uuid_strings);
+
+  // Regardless of whether the user is leaving or deleting the group and
+  // regardless of whether it happened from a remote event or a local event,
+  // we should hide any instant messages related to the group.
+  instant_message_processor_->HideInstantMessage(message_uuids);
 
   if (source == tab_groups::TriggerSource::LOCAL) {
     return;
@@ -819,24 +880,30 @@ void MessagingBackendServiceImpl::OnTabAdded(
     return;
   }
 
-  DirtyType dirty_type = source == tab_groups::TriggerSource::LOCAL
+  bool is_local = source == tab_groups::TriggerSource::LOCAL;
+  bool triggering_user_is_self = IsMemberCurrentUser(
+      identity_manager_, added_tab.shared_attribution().created_by);
+  DirtyType dirty_type = (is_local || triggering_user_is_self)
                              ? DirtyType::kNone
                              : DirtyType::kDotAndChip;
+
+  if (HasSeenTabUpdate(added_tab)) {
+    dirty_type = DirtyType::kNone;
+  }
+
   collaboration_pb::Message message =
       CreateTabMessage(*collaboration_group_id, added_tab,
                        collaboration_pb::TAB_ADDED, dirty_type);
   store_->AddMessage(message);
 
-  if (source == tab_groups::TriggerSource::LOCAL) {
-    return;
+  if (dirty_type != DirtyType::kNone) {
+    PersistentMessage persistent_message =
+        CreatePersistentMessage(message, std::nullopt, added_tab, std::nullopt);
+
+    NotifyDisplayPersistentMessagesForTypes(
+        persistent_message, {PersistentNotificationType::CHIP,
+                             PersistentNotificationType::DIRTY_TAB});
   }
-
-  PersistentMessage persistent_message =
-      CreatePersistentMessage(message, std::nullopt, added_tab, std::nullopt);
-
-  NotifyDisplayPersistentMessagesForTypes(
-      persistent_message, {PersistentNotificationType::CHIP,
-                           PersistentNotificationType::DIRTY_TAB});
 
   DisplayOrHideTabGroupDirtyDotForTabGroup(*collaboration_group_id,
                                            added_tab.saved_group_guid());
@@ -854,7 +921,11 @@ void MessagingBackendServiceImpl::OnTabRemoved(
   }
 
   bool is_local = source == tab_groups::TriggerSource::LOCAL;
-  DirtyType dirty_type = is_local ? DirtyType::kNone : DirtyType::kTombstoned;
+  bool triggering_user_is_self = IsMemberCurrentUser(
+      identity_manager_, removed_tab.shared_attribution().updated_by);
+  DirtyType dirty_type = (is_local || triggering_user_is_self)
+                             ? DirtyType::kNone
+                             : DirtyType::kTombstoned;
   collaboration_pb::Message message =
       CreateTabMessage(*collaboration_group_id, removed_tab,
                        collaboration_pb::TAB_REMOVED, dirty_type);
@@ -878,7 +949,11 @@ void MessagingBackendServiceImpl::OnTabRemoved(
   DisplayOrHideTabGroupDirtyDotForTabGroup(*collaboration_group_id,
                                            removed_tab.saved_group_guid());
 
-  if (!is_local && is_selected && instant_message_processor_->IsEnabled()) {
+  if (dirty_type == DirtyType::kNone) {
+    return;
+  }
+
+  if (is_selected && instant_message_processor_->IsEnabled()) {
     InstantMessage instant_message =
         CreateInstantMessage(message, /*tab_group=*/std::nullopt, removed_tab);
     instant_message.type = InstantNotificationType::CONFLICT_TAB_REMOVED;
@@ -894,9 +969,11 @@ void MessagingBackendServiceImpl::OnTabRemoved(
 }
 
 void MessagingBackendServiceImpl::OnTabUpdated(
-    const tab_groups::SavedTabGroupTab& updated_tab,
+    const tab_groups::SavedTabGroupTab& before,
+    const tab_groups::SavedTabGroupTab& after,
     tab_groups::TriggerSource source,
     bool is_selected) {
+  const tab_groups::SavedTabGroupTab& updated_tab = after;
   std::optional<data_sharing::GroupId> collaboration_group_id =
       GetCollaborationGroupIdForTab(updated_tab);
   if (!collaboration_group_id) {
@@ -905,24 +982,34 @@ void MessagingBackendServiceImpl::OnTabUpdated(
   }
 
   bool is_local = source == tab_groups::TriggerSource::LOCAL;
+  bool triggering_user_is_self = IsMemberCurrentUser(
+      identity_manager_, updated_tab.shared_attribution().updated_by);
+
   DirtyType dirty_type =
-      is_local ? DirtyType::kNone
-               : (is_selected ? DirtyType::kChip : DirtyType::kDotAndChip);
+      (is_local || triggering_user_is_self)
+          ? DirtyType::kNone
+          : (is_selected ? DirtyType::kChip : DirtyType::kDotAndChip);
+  if (HasSeenTabUpdate(updated_tab)) {
+    dirty_type = DirtyType::kNone;
+  }
 
   collaboration_pb::Message message =
       CreateTabMessage(*collaboration_group_id, updated_tab,
                        collaboration_pb::TAB_UPDATED, dirty_type);
   store_->AddMessage(message);
 
-  PersistentMessage persistent_message =
-      CreatePersistentMessage(message, std::nullopt, updated_tab, std::nullopt);
-
-  if (is_local) {
+  if (dirty_type == DirtyType::kNone) {
     // For local updates, hide any dirty messages for tab from storage and
     // dismiss any messages already being displayed for tab.
     store_->ClearDirtyMessageForTab(*collaboration_group_id,
                                     updated_tab.saved_tab_guid(),
                                     DirtyType::kDotAndChip);
+  }
+
+  PersistentMessage persistent_message =
+      CreatePersistentMessage(message, std::nullopt, updated_tab, std::nullopt);
+
+  if (dirty_type == DirtyType::kNone) {
     NotifyHidePersistentMessagesForTypes(
         persistent_message, {PersistentNotificationType::CHIP,
                              PersistentNotificationType::DIRTY_TAB});
@@ -941,11 +1028,14 @@ void MessagingBackendServiceImpl::OnTabUpdated(
   DisplayOrHideTabGroupDirtyDotForTabGroup(*collaboration_group_id,
                                            updated_tab.saved_group_guid());
 
-  if (!is_local && is_selected && instant_message_processor_->IsEnabled()) {
+  if (dirty_type != DirtyType::kNone && is_selected &&
+      instant_message_processor_->IsEnabled()) {
     InstantMessage instant_message_base;
-    instant_message_base.attributions.emplace_back(
-        CreateMessageAttributionForTabUpdates(message, std::nullopt,
-                                              updated_tab));
+    auto message_attribution = CreateMessageAttributionForTabUpdates(
+        message, std::nullopt, updated_tab);
+    message_attribution.tab_metadata->previous_url = before.url().spec();
+    instant_message_base.attributions.emplace_back(message_attribution);
+
     instant_message_base.collaboration_event = CollaborationEvent::TAB_UPDATED;
     // TODO(crbug.com/391941212): CONFLICT_TAB_REMOVED and UNDEFINED don't seem
     // to be used. In that case, remove them.
@@ -1023,6 +1113,48 @@ void MessagingBackendServiceImpl::OnTabSelectionChanged(
                                            tab->saved_group_guid());
 }
 
+void MessagingBackendServiceImpl::OnTabLastSeenTimeChanged(
+    const base::Uuid& tab_id,
+    tab_groups::TriggerSource source) {
+  // Only remote changes need to update the notification states.
+  if (source != tab_groups::TriggerSource::REMOTE) {
+    return;
+  }
+
+  std::optional<tab_groups::SavedTabGroupTab> tab;
+  std::optional<data_sharing::GroupId> collaboration_group_id;
+  for (const auto& group : tab_group_sync_service_->GetAllGroups()) {
+    if (group.is_shared_tab_group() && group.GetTab(tab_id)) {
+      tab = *(group.GetTab(tab_id));
+      collaboration_group_id =
+          data_sharing::GroupId(group.collaboration_id().value().value());
+      break;
+    }
+  }
+
+  if (!tab) {
+    return;
+  }
+
+  if (!HasSeenTabUpdate(*tab)) {
+    return;
+  }
+
+  store_->ClearDirtyMessageForTab(
+      *collaboration_group_id, tab->saved_tab_guid(), DirtyType::kDotAndChip);
+
+  // Hide any existing persistent dot or chip messages already showing.
+  PersistentMessage persistent_message =
+      CreatePersistentMessageFromTabGroupAndTab(*collaboration_group_id, *tab,
+                                                CollaborationEvent::UNDEFINED);
+  NotifyHidePersistentMessagesForTypes(persistent_message,
+                                       {PersistentNotificationType::CHIP,
+                                        PersistentNotificationType::DIRTY_TAB});
+
+  DisplayOrHideTabGroupDirtyDotForTabGroup(*collaboration_group_id,
+                                           tab->saved_group_guid());
+}
+
 void MessagingBackendServiceImpl::OnTabGroupOpened(
     const tab_groups::SavedTabGroup& tab_group) {
   std::optional<data_sharing::GroupId> collaboration_group_id =
@@ -1066,15 +1198,8 @@ void MessagingBackendServiceImpl::OnGroupMemberAdded(
     return;
   }
 
-  std::optional<tab_groups::SavedTabGroup> tab_group;
-  for (const auto& group : tab_group_sync_service_->GetAllGroups()) {
-    if (group.collaboration_id() &&
-        data_sharing::GroupId(group.collaboration_id().value().value()) ==
-            group_data.group_token.group_id) {
-      tab_group = group;
-      break;
-    }
-  }
+  std::optional<tab_groups::SavedTabGroup> tab_group =
+      GetTabGroupFromCollaborationId(group_data.group_token.group_id.value());
   if (!tab_group) {
     // The tab group may be deleted or not synced.
     // TODO(386420717): Maybe persist the message to disk in case the tab group
@@ -1115,6 +1240,12 @@ void MessagingBackendServiceImpl::OnGroupMemberRemoved(
                     DirtyType::kNone, event_time);
   message.set_affected_user_gaia_id(member_gaia_id.ToString());
   store_->AddMessage(message);
+}
+
+// static
+std::u16string MessagingBackendServiceImpl::GetTruncatedTabTitleForTesting(
+    const std::u16string& original_title) {
+  return TruncateTabTitle(original_title);
 }
 
 void MessagingBackendServiceImpl::ClearPersistentMessage(
@@ -1244,17 +1375,16 @@ MessagingBackendServiceImpl::ConvertMessageToActivityLogItem(
   item.activity_metadata.id = base::Uuid::ParseLowercase(message.uuid());
   item.activity_metadata.collaboration_id = collaboration_group_id;
 
+  std::optional<tab_groups::SavedTabGroup> tab_group =
+      GetTabGroupFromCollaborationId(message.collaboration_id());
+  item.activity_metadata.tab_group_metadata =
+      CreateTabGroupMessageMetadataFromMessageOrTabGroup(message, tab_group);
+
   // The code below needs to fill in `activity_metadata`, and optionally
   // `show_favicon` if it is true.
   switch (GetMessageCategory(message)) {
     case MessageCategory::kTab: {
       item.show_favicon = true;
-
-      std::optional<tab_groups::SavedTabGroup> tab_group =
-          GetTabGroupFromMessage(message);
-      item.activity_metadata.tab_group_metadata =
-          CreateTabGroupMessageMetadataFromMessageOrTabGroup(message,
-                                                             tab_group);
       item.activity_metadata.tab_metadata =
           CreateTabMessageMetadataFromMessageOrTab(
               message, GetTabFromGroup(message, tab_group));
@@ -1272,9 +1402,6 @@ MessagingBackendServiceImpl::ConvertMessageToActivityLogItem(
     case MessageCategory::kTabGroup: {
       item.activity_metadata.triggering_user = group_member;
       item.activity_metadata.triggering_user_is_self = is_self;
-      item.activity_metadata.tab_group_metadata =
-          CreateTabGroupMessageMetadataFromMessageOrTabGroup(message,
-                                                             std::nullopt);
 
       // Only tab group name changes have specialized description.
       if (message.event_type() == collaboration_pb::TAB_GROUP_NAME_UPDATED) {
@@ -1346,25 +1473,26 @@ MessagingBackendServiceImpl::CreateTabGroupMessageMetadataFromMessageOrTabGroup(
   }
 
   return CreateTabGroupMessageMetadataFromCollaborationId(
-      message, GetTabGroupFromMessage(message),
+      message, GetTabGroupFromCollaborationId(message.collaboration_id()),
       data_sharing::GroupId(message.collaboration_id()));
 }
 
 std::optional<tab_groups::SavedTabGroup>
-MessagingBackendServiceImpl::GetTabGroupFromMessage(
-    const collaboration_pb::Message& message) {
-  std::string sync_tab_group_id = message.tab_group_data().sync_tab_group_id();
-  if (sync_tab_group_id.empty()) {
-    // Try from tab data next.
-    sync_tab_group_id = message.tab_data().sync_tab_group_id();
-  }
-
-  if (sync_tab_group_id.empty()) {
+MessagingBackendServiceImpl::GetTabGroupFromCollaborationId(
+    const std::string& collaboration_id) {
+  if (collaboration_id.empty()) {
     return std::nullopt;
   }
 
-  return tab_group_sync_service_->GetGroup(
-      base::Uuid::ParseLowercase(sync_tab_group_id));
+  tab_groups::CollaborationId collaboration_group_id(collaboration_id);
+  for (const auto& group : tab_group_sync_service_->GetAllGroups()) {
+    if (group.collaboration_id().has_value() &&
+        group.collaboration_id().value() == collaboration_group_id) {
+      return group;
+    }
+  }
+
+  return std::nullopt;
 }
 
 std::optional<data_sharing::GroupMember>
@@ -1443,7 +1571,7 @@ MessagingBackendServiceImpl::ConvertMessageToPersistentMessages(
     bool allow_dirty_tab_group_message) {
   std::vector<PersistentMessage> persistent_messages;
   std::optional<tab_groups::SavedTabGroup> tab_group =
-      GetTabGroupFromMessage(message);
+      GetTabGroupFromCollaborationId(message.collaboration_id());
 
   // Special case: First handle if it's of type TOMBSTONED.
   bool has_tombstoned =

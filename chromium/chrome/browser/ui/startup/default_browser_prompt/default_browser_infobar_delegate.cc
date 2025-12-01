@@ -83,7 +83,7 @@ DefaultBrowserInfoBarDelegate::GetIdentifier() const {
 
 const gfx::VectorIcon& DefaultBrowserInfoBarDelegate::GetVectorIcon() const {
   return dark_mode() ? omnibox::kProductChromeRefreshIcon
-                     : vector_icons::kProductIcon;
+                     : vector_icons::kProductRefreshIcon;
 }
 
 bool DefaultBrowserInfoBarDelegate::ShouldExpire(
@@ -153,4 +153,8 @@ bool DefaultBrowserInfoBarDelegate::Accept() {
   }
 
   return ConfirmInfoBarDelegate::Accept();
+}
+
+bool DefaultBrowserInfoBarDelegate::ShouldHideInFullscreen() const {
+  return true;
 }

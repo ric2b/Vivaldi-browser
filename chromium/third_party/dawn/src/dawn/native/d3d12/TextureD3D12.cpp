@@ -28,10 +28,10 @@
 #include "dawn/native/d3d12/TextureD3D12.h"
 
 #include <algorithm>
+#include <bit>
 #include <iterator>
 #include <utility>
 
-#include "absl/numeric/bits.h"
 #include "dawn/common/Constants.h"
 #include "dawn/common/Math.h"
 #include "dawn/native/ChainUtils.h"
@@ -427,7 +427,7 @@ void Texture::TrackUsageAndTransitionNow(CommandRecordingContext* commandContext
 
     std::vector<D3D12_RESOURCE_BARRIER> barriers;
 
-    uint32_t aspectCount = absl::popcount(static_cast<uint8_t>(range.aspects));
+    int32_t aspectCount = std::popcount(static_cast<uint8_t>(range.aspects));
     barriers.reserve(range.levelCount * range.layerCount * aspectCount);
 
     TransitionUsageAndGetResourceBarrier(commandContext, &barriers, newState, range);
@@ -888,11 +888,6 @@ MaybeError Texture::EnsureSubresourceContentInitialized(CommandRecordingContext*
         DAWN_TRY(ClearTexture(commandContext, range, TextureBase::ClearValue::Zero));
     }
     return {};
-}
-
-bool Texture::StateAndDecay::operator==(const Texture::StateAndDecay& other) const {
-    return lastState == other.lastState && lastDecaySerial == other.lastDecaySerial &&
-           isValidToDecay == other.isValidToDecay;
 }
 
 // static

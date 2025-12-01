@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "base/functional/callback_helpers.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
@@ -19,7 +20,8 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure_test_api.h"
 #include "components/autofill/core/browser/foundations/test_autofill_client.h"
-#include "components/autofill/core/browser/integrators/mock_autofill_optimization_guide.h"
+#include "components/autofill/core/browser/integrators/optimization_guide/mock_autofill_optimization_guide.h"
+#include "components/autofill/core/browser/payments/iban_manager_test_api.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/grit/components_scaled_resources.h"
@@ -98,7 +100,13 @@ class IbanManagerTest : public testing::Test,
         .WillByDefault(testing::Return(false));
   }
 
-  bool IsNewFopDisplayEnabled() const { return GetParam(); }
+  bool IsNewFopDisplayEnabled() const {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+    return false;
+#else
+    return GetParam();
+#endif
+  }
 
   void TearDown() override {
     ui::ResourceBundle::CleanupSharedInstance();
@@ -228,7 +236,7 @@ TEST_P(IbanManagerTest, ShowsAllIbanSuggestions) {
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -243,7 +251,7 @@ TEST_P(IbanManagerTest, PaymentsAutofillEnabledPrefOff_NoIbanSuggestionsShown) {
 
   // Because the "Save and autofill payment methods" toggle is off, the
   // suggestion handler should not be triggered.
-  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -268,7 +276,7 @@ TEST_P(IbanManagerTest, IbanSuggestions_SeparatorAndFooter) {
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -285,12 +293,10 @@ TEST_P(IbanManagerTest,
   // The field contains value matches existing IBAN already, so check that we
   // do not return suggestions to the handler.
   MockSuggestionsReturnedCallback mock_callback;
-  EXPECT_CALL(mock_callback, Run(autofill_field_->global_id(), IsEmpty()));
+  EXPECT_CALL(mock_callback, Run).Times(0);
 
   // Simulate request for suggestions.
-  // Because all criteria are met to trigger returning to the handler,
-  // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -322,7 +328,7 @@ TEST_P(IbanManagerTest,
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 
@@ -342,7 +348,7 @@ TEST_P(IbanManagerTest,
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 
@@ -350,12 +356,11 @@ TEST_P(IbanManagerTest,
 
   // Verify that the handler is not triggered because no IBAN suggestions
   // match the given prefix.
-  EXPECT_CALL(mock_callback, Run(autofill_field_->global_id(), IsEmpty()));
+  EXPECT_CALL(mock_callback, Run).Times(0);
 
   // Simulate request for suggestions.
-  // Because all criteria are met to trigger returning to the handler,
-  // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  // Verify that no IBAN suggestions match the given prefix.
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -393,7 +398,7 @@ TEST_P(IbanManagerTest,
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -430,7 +435,7 @@ TEST_P(IbanManagerTest,
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -469,7 +474,7 @@ TEST_P(
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 
@@ -489,7 +494,7 @@ TEST_P(
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -519,12 +524,10 @@ TEST_P(
   // Expect that no suggestions are returned because length of input field
   // exceeds `kFieldLengthLimitOnServerIbanSuggestion`.
   MockSuggestionsReturnedCallback mock_callback;
-  EXPECT_CALL(mock_callback, Run(autofill_field_->global_id(), IsEmpty()));
+  EXPECT_CALL(mock_callback, Run).Times(0);
 
   // Simulate request for suggestions.
-  // Because all criteria are met to trigger returning to the handler,
-  // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -541,7 +544,7 @@ TEST_P(IbanManagerTest, DoesNotShowIbansForBlockedWebsite) {
       .WillByDefault(testing::Return(true));
 
   // Simulate request for suggestions.
-  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -567,7 +570,7 @@ TEST_P(IbanManagerTest, ShowsIbanSuggestions_OptimizationGuideNotPresent) {
   // Simulate request for suggestions.
   // Because all criteria are met to trigger returning to the handler,
   // the handler should be triggered and this should return true.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -586,7 +589,7 @@ TEST_P(IbanManagerTest, NotIbanFieldFocused_NoSuggestionsShown) {
   EXPECT_CALL(mock_callback, Run).Times(0);
 
   // Simulate request for suggestions.
-  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
 }
@@ -601,7 +604,7 @@ TEST_P(IbanManagerTest, Metrics_Suggestions_Allowed) {
   // Simulate request for suggestions.
   // TODO: handle return value.
   OnSuggestionsReturnedCallback do_nothing = base::DoNothing();
-  std::ignore = iban_manager_.OnGetSingleFieldSuggestions(
+  std::ignore = iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_, do_nothing);
 
   histogram_tester.ExpectUniqueSample(
@@ -624,7 +627,7 @@ TEST_P(IbanManagerTest, Metrics_Suggestions_Blocked) {
       .WillByDefault(testing::Return(true));
   // Simulate request for suggestions.
   // TODO: handle return value.
-  std::ignore = iban_manager_.OnGetSingleFieldSuggestions(
+  std::ignore = iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef());
 
@@ -644,41 +647,13 @@ TEST_P(IbanManagerTest, Metrics_Suggestions_BlocklistNotAccessible) {
   // Simulate request for suggestions.
   // TODO: handle return value.
   OnSuggestionsReturnedCallback do_nothing = base::DoNothing();
-  std::ignore = iban_manager_.OnGetSingleFieldSuggestions(
+  std::ignore = iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_, do_nothing);
 
   histogram_tester.ExpectUniqueSample(
       "Autofill.Iban.ShowSuggestionsBlocklistDecision",
       autofill_metrics::IbanSuggestionBlockListStatus::kBlocklistIsNotAvailable,
       1);
-}
-
-// Test that the metrics for IBAN-related suggestions shown and shown once are
-// logged correctly.
-TEST_P(IbanManagerTest, Metrics_SuggestionsShown) {
-  base::HistogramTester histogram_tester;
-  SetUpLocalIban(test::kIbanValue, kNickname_0);
-
-  autofill_field_->set_renderer_id(test::MakeFieldRendererId());
-
-  // Simulate request for suggestions.
-  MockSuggestionsReturnedCallback mock_callback;
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      *autofill_field_, *autofill_field_, autofill_client_,
-      mock_callback.GetNewRef()));
-
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
-      *autofill_field_, *autofill_field_, autofill_client_,
-      mock_callback.GetNewRef()));
-
-  EXPECT_THAT(
-      histogram_tester.GetAllSamples("Autofill.Iban.Suggestions"),
-      BucketsAre(
-          base::Bucket(
-              autofill_metrics::IbanSuggestionsEvent::kIbanSuggestionsShown, 2),
-          base::Bucket(
-              autofill_metrics::IbanSuggestionsEvent::kIbanSuggestionsShownOnce,
-              1)));
 }
 
 // Test that the metrics for local IBAN suggestion selected (once and total
@@ -690,10 +665,12 @@ TEST_P(IbanManagerTest, Metrics_LocalIbanSuggestionSelected) {
   SetUpLocalIban(test::kIbanValue_2, "");
 
   autofill_field_->set_renderer_id(test::MakeFieldRendererId());
+  test_api(iban_manager_).set_most_recent_suggestions_shown_field_global_id(
+      autofill_field_->global_id());
 
   // Simulate request for suggestions and select one suggested IBAN.
   MockSuggestionsReturnedCallback mock_callback;
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
   Suggestion suggestion(kIbanValue, SuggestionType::kIbanEntry);
@@ -707,7 +684,7 @@ TEST_P(IbanManagerTest, Metrics_LocalIbanSuggestionSelected) {
       autofill_metrics::IbanSuggestionsEvent::kLocalIbanSuggestionSelectedOnce,
       1);
 
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
   iban_manager_.OnSingleFieldSuggestionSelected(suggestion);
@@ -731,10 +708,12 @@ TEST_P(IbanManagerTest, Metrics_ServerIbanSuggestionSelected) {
       kNickname_0));
 
   autofill_field_->set_renderer_id(test::MakeFieldRendererId());
+  test_api(iban_manager_).set_most_recent_suggestions_shown_field_global_id(
+    autofill_field_->global_id());
 
   // Simulate request for suggestions and select one suggested IBAN.
   MockSuggestionsReturnedCallback mock_callback;
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
   iban_manager_.OnSingleFieldSuggestionSelected(suggestion);
@@ -747,7 +726,7 @@ TEST_P(IbanManagerTest, Metrics_ServerIbanSuggestionSelected) {
       autofill_metrics::IbanSuggestionsEvent::kServerIbanSuggestionSelectedOnce,
       1);
 
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
   iban_manager_.OnSingleFieldSuggestionSelected(suggestion);
@@ -778,13 +757,14 @@ TEST_P(IbanManagerTest, Metrics_NoSuggestionShown) {
   // Input a prefix that does not have any matching IBAN value so that no IBAN
   // suggestions will be shown.
   autofill_field_->set_value(u"XY");
+  test_api(iban_manager_).set_most_recent_suggestions_shown_field_global_id(
+    autofill_field_->global_id());
 
   MockSuggestionsReturnedCallback mock_callback;
-  EXPECT_CALL(mock_callback, Run(autofill_field_->global_id(), IsEmpty()));
+  EXPECT_CALL(mock_callback, Run).Times(0);
 
-  // The suggestion handler should be triggered as some IBANs are available.
-  // However, no suggestions are returned due to the prefix match requirement.
-  EXPECT_TRUE(iban_manager_.OnGetSingleFieldSuggestions(
+  // No suggestions are returned due to the prefix match requirement.
+  EXPECT_FALSE(iban_manager_.OnGetSingleFieldSuggestions(*form_structure_,
       *autofill_field_, *autofill_field_, autofill_client_,
       mock_callback.GetNewRef()));
   EXPECT_THAT(

@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/check_op.h"
-#include "base/debug/alias.h"
+#include "base/debug/crash_logging.h"
 #include "base/json/json_writer.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
@@ -32,12 +32,12 @@ PrintingContextFactoryForTest* g_printing_context_factory_for_test = nullptr;
 }  // namespace
 
 PrintingContext::PrintingContext(Delegate* delegate,
-                                 ProcessBehavior process_behavior)
+                                 OutOfProcessBehavior out_of_process_behavior)
     : settings_(std::make_unique<PrintSettings>()),
       delegate_(delegate),
       in_print_job_(false),
       abort_printing_(false),
-      process_behavior_(process_behavior) {
+      out_of_process_behavior_(out_of_process_behavior) {
   DCHECK(delegate_);
 }
 
@@ -46,11 +46,11 @@ PrintingContext::~PrintingContext() = default;
 // static
 std::unique_ptr<PrintingContext> PrintingContext::Create(
     Delegate* delegate,
-    ProcessBehavior process_behavior) {
+    OutOfProcessBehavior out_of_process_behavior) {
   return g_printing_context_factory_for_test
              ? g_printing_context_factory_for_test->CreatePrintingContext(
-                   delegate, process_behavior)
-             : PrintingContext::CreateImpl(delegate, process_behavior);
+                   delegate, out_of_process_behavior)
+             : PrintingContext::CreateImpl(delegate, out_of_process_behavior);
 }
 
 // static
@@ -92,7 +92,8 @@ std::unique_ptr<PrintSettings> PrintingContext::TakeAndResetSettings() {
 void PrintingContext::SetJobId(int job_id) {
   // Should only use this method to update the browser `PrintingContext` with
   // the value provided by the PrintBackend service.
-  CHECK_EQ(process_behavior_, ProcessBehavior::kOopEnabledSkipSystemCalls);
+  CHECK_EQ(out_of_process_behavior_,
+           OutOfProcessBehavior::kEnabledSkipSystemCalls);
   job_id_ = job_id;
 }
 #endif
@@ -164,10 +165,8 @@ mojom::ResultCode PrintingContext::UpdatePrintSettings(
       // TODO(crbug.com/40897743): Investigate and remove.
       std::optional<std::string> job_settings_json =
           base::WriteJson(job_settings);
-      if (job_settings_json.has_value()) {
-        DEBUG_ALIAS_FOR_CSTR(job_settings_json_copy,
-                             job_settings_json.value().c_str(), 1024);
-      }
+      SCOPED_CRASH_KEY_STRING1024("PrintingContext", "job_settings_json",
+                                  job_settings_json.value_or("nullopt"));
       DUMP_WILL_BE_NOTREACHED();
       return OnError();
     }

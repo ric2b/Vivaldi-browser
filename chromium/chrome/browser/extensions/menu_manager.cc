@@ -22,7 +22,7 @@
 #include "chrome/browser/extensions/extension_menu_icon_loader.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/menu_manager_factory.h"
-#include "chrome/browser/extensions/tab_helper.h"
+#include "chrome/browser/extensions/permissions/active_tab_permission_granter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/api/chrome_web_view_internal.h"
 #include "chrome/common/extensions/api/context_menus.h"
@@ -723,9 +723,9 @@ void MenuManager::ExecuteCommand(content::BrowserContext* context,
   }
 
   // Note: web_contents are null in unit tests :(
-  if (web_contents && TabHelper::FromWebContents(web_contents)) {
-    TabHelper::FromWebContents(web_contents)
-        ->active_tab_permission_granter()
+  if (web_contents &&
+      ActiveTabPermissionGranter::FromWebContents(web_contents)) {
+    ActiveTabPermissionGranter::FromWebContents(web_contents)
         ->GrantIfRequested(extension);
   }
   {
@@ -1049,10 +1049,6 @@ bool MenuItem::ExtensionKey::operator<(const ExtensionKey& other) const {
   return extension_id < other.extension_id;
 }
 
-bool MenuItem::ExtensionKey::operator!=(const ExtensionKey& other) const {
-  return !(*this == other);
-}
-
 bool MenuItem::ExtensionKey::empty() const {
   return extension_id.empty() &&
       webview_embedder_process_id == ChildProcessHost::kInvalidUniqueID &&
@@ -1065,16 +1061,6 @@ MenuItem::Id::Id(bool incognito, const MenuItem::ExtensionKey& extension_key)
     : incognito(incognito), extension_key(extension_key), uid(0) {}
 
 MenuItem::Id::~Id() = default;
-
-bool MenuItem::Id::operator==(const Id& other) const {
-  return (incognito == other.incognito &&
-          extension_key == other.extension_key && uid == other.uid &&
-          string_uid == other.string_uid);
-}
-
-bool MenuItem::Id::operator!=(const Id& other) const {
-  return !(*this == other);
-}
 
 bool MenuItem::Id::operator<(const Id& other) const {
   return std::tie(incognito, extension_key, uid, string_uid) <

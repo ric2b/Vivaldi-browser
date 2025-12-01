@@ -1,4 +1,5 @@
 ---
+redirect: https://googlechrome.github.io/chromerootprogram/moving-forward-together/
 breadcrumbs:
 - - /Home
   - Chromium

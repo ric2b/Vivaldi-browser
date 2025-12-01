@@ -1213,7 +1213,7 @@ void WebContentsViewAura::StartDragging(
   }
 
   // |this| should still be alive at this point.
-  CHECK(weak_this, base::NotFatalUntil::M130);
+  CHECK(weak_this);
 
   // If drag is still in progress that means we haven't received drop targeting
   // callback yet. So we have to make sure to delay calling EndDrag until drop
@@ -1477,6 +1477,11 @@ void WebContentsViewAura::DragUpdatedCallback(
   if (!target) {
     return;
   }
+
+  if (transformed_pt.has_value()) {
+    web_contents_->PreHandleDragUpdate(*drop_data, transformed_pt.value());
+  }
+
   RenderWidgetHostImpl* target_rwh =
       RenderWidgetHostImpl::From(target->GetRenderWidgetHost());
   if (!drag_security_info_.IsValidDragTarget(target_rwh)) {
@@ -1563,6 +1568,8 @@ void WebContentsViewAura::OnDragExited() {
 
 void WebContentsViewAura::CompleteDragExit() {
   drag_in_progress_ = false;
+
+  web_contents_->PreHandleDragExit();
 
   if (current_rwh_for_drag_ && !web_contents_->IsBeingDestroyed() &&
       current_rvh_for_drag_ ==

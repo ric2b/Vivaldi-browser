@@ -1,6 +1,7 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/legacy/legacy.js';
 
@@ -695,7 +696,6 @@ export class DeviceModeToolbar {
     }
 
     const contextMenu = new UI.ContextMenu.ContextMenu(event.data, {
-      useSoftMenu: false,
       x: this.modeButton.element.getBoundingClientRect().left,
       y: this.modeButton.element.getBoundingClientRect().top + (this.modeButton.element as HTMLElement).offsetHeight,
     });

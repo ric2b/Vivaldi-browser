@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
+#include <optional>
 #include <tuple>
 #include <type_traits>
 
@@ -143,12 +144,18 @@ public:
         return *this;
     }
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Returns a copy of this path in the current state, and resets the path to empty. */
     SkPath detach() {
         SkPath result = *this;
         this->reset();
         return result;
     }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
 
     /** Constructs a copy of an existing path.
         SkPath assignment makes two paths identical by value. Internally, assignment
@@ -200,6 +207,9 @@ public:
     */
     bool isInterpolatable(const SkPath& compare) const;
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Interpolates between SkPath with SkPoint array of equal size.
         Copy verb array and weights to out, and set out SkPoint array to a weighted
         average of this SkPoint array and ending SkPoint array, using the formula:
@@ -222,6 +232,10 @@ public:
         example: https://fiddle.skia.org/c/@Path_interpolate
     */
     bool interpolate(const SkPath& ending, SkScalar weight, SkPath* out) const;
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
+    SkPath makeInterpolate(const SkPath& ending, SkScalar weight) const;
 
     /** Returns SkPathFillType, the rule used to fill SkPath.
 
@@ -229,26 +243,49 @@ public:
     */
     SkPathFillType getFillType() const { return (SkPathFillType)fFillType; }
 
-    /** Sets FillType, the rule used to fill SkPath. While there is no check
-        that ft is legal, values outside of FillType are not supported.
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
+    /** Sets SkPathFillType, the rule used to fill SkPath. While there is no
+        check that ft is legal, values outside of SkPathFillType are not supported.
     */
     void setFillType(SkPathFillType ft) {
         fFillType = SkToU8(ft);
     }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
 
-    /** Returns if FillType describes area outside SkPath geometry. The inverse fill area
+    /** Creates an SkPath with the same properties and data, and with SkPathFillType
+        set to newFillType.
+    */
+    SkPath makeFillType(SkPathFillType newFillType) const;
+
+    /** Returns if SkPathFillType describes area outside SkPath geometry. The inverse fill area
         extends indefinitely.
 
         @return  true if FillType is kInverseWinding or kInverseEvenOdd
     */
     bool isInverseFillType() const { return SkPathFillType_IsInverse(this->getFillType()); }
 
-    /** Replaces FillType with its inverse. The inverse of FillType describes the area
-        unmodified by the original FillType.
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
+    /** Replaces SkPathFillType with its inverse. The inverse of SkPathFillType describes the area
+        unmodified by the original SkPathFillType.
     */
     void toggleInverseFillType() {
         fFillType ^= 2;
     }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
+
+    /** Creates an SkPath with the same properties and data, and with SkPathFillType
+        replaced with its inverse.  The inverse of SkPathFillType describes the area unmodified
+        by the original FillType.
+    */
+    SkPath makeToggleInverseFillType() const;
 
     /** Returns true if the path is convex. If necessary, it will first compute the convexity.
      */
@@ -291,6 +328,9 @@ public:
     */
     bool isArc(SkArc* arc) const;
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Sets SkPath to its initial state.
         Removes verb array, SkPoint array, and weights, and sets FillType to kWinding.
         Internal storage associated with SkPath is released.
@@ -313,6 +353,9 @@ public:
         example: https://fiddle.skia.org/c/@Path_rewind
     */
     SkPath& rewind();
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
 
     /** Returns if SkPath is empty.
         Empty SkPath may have FillType but has no SkPoint, SkPath::Verb, or conic weight.
@@ -351,6 +394,9 @@ public:
         return SkToBool(fIsVolatile);
     }
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Specifies whether SkPath is volatile; whether it will be altered or discarded
         by the caller after it is drawn. SkPath by default have volatile set false, allowing
         Skia to attach a cache of data which speeds repeated drawing.
@@ -371,6 +417,10 @@ public:
         fIsVolatile = isVolatile;
         return *this;
     }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
+    SkPath makeIsVolatile(bool isVolatile) const;
 
     /** Tests if line between SkPoint pair is degenerate.
         Line with no length or that moves a very short distance is degenerate; it is
@@ -488,6 +538,9 @@ public:
     */
     size_t approximateBytesUsed() const;
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Exchanges the verb array, SkPoint array, weights, and SkPath::FillType with other.
         Cached state is also exchanged. swap() internally exchanges pointers, so
         it is lightweight and does not allocate memory.
@@ -501,6 +554,9 @@ public:
         example: https://fiddle.skia.org/c/@Path_swap
     */
     void swap(SkPath& other);
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
 
     /** Returns minimum and maximum axes values of SkPoint array.
         Returns (0, 0, 0, 0) if SkPath contains no points. Returned bounds width and height may
@@ -560,6 +616,10 @@ public:
     */
     bool conservativelyContainsRect(const SkRect& rect) const;
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
+
     /** Grows SkPath verb array, SkPoint array, and conics to contain additional space.
         May improve performance and use less memory by
         reducing the number and size of allocations when creating SkPath.
@@ -571,10 +631,6 @@ public:
         example: https://fiddle.skia.org/c/@Path_incReserve
     */
     void incReserve(int extraPtCount, int extraVerbCount = 0, int extraConicCount = 0);
-
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-private:
-#endif
 
     /** Adds beginning of contour at SkPoint (x, y).
 
@@ -1264,10 +1320,6 @@ private:
         return this->addPoly(list.begin(), SkToInt(list.size()), close);
     }
 
-#ifdef SK_HIDE_PATH_EDIT_METHODS
-public:
-#endif
-
     /** \enum SkPath::AddPathMode
         AddPathMode chooses how addPath() appends. Adding one SkPath to another can extend
         the last contour or start a new contour.
@@ -1341,6 +1393,17 @@ public:
     */
     SkPath& reverseAddPath(const SkPath& src);
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
+    SkPath makeOffset(SkScalar dx, SkScalar dy) const {
+        SkPath dst;
+        this->offset(dx, dy, &dst);
+        return dst;
+    }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Offsets SkPoint array by (dx, dy). Offset SkPath replaces dst.
         If dst is nullptr, SkPath is replaced by offset data.
 
@@ -1384,10 +1447,13 @@ public:
         @param pc      whether to apply perspective clipping
     */
     SkPath& transform(const SkMatrix& matrix,
-                   SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) {
+                      SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) {
         this->transform(matrix, this, pc);
         return *this;
     }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
 
     SkPath makeTransform(const SkMatrix& m,
                          SkApplyPerspectiveClip pc = SkApplyPerspectiveClip::kYes) const {
@@ -1396,7 +1462,7 @@ public:
         return dst;
     }
 
-    SkPath makeScale(SkScalar sx, SkScalar sy) {
+    SkPath makeScale(SkScalar sx, SkScalar sy) const {
         return this->makeTransform(SkMatrix::Scale(sx, sy), SkApplyPerspectiveClip::kNo);
     }
 
@@ -1410,6 +1476,9 @@ public:
     */
     bool getLastPt(SkPoint* lastPt) const;
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Sets last point to (x, y). If SkPoint array is empty, append kMove_Verb to
         verb array and append (x, y) to SkPoint array.
 
@@ -1428,6 +1497,10 @@ public:
     void setLastPt(const SkPoint& p) {
         this->setLastPt(p.fX, p.fY);
     }
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
+
 
     /** \enum SkPath::SegmentMask
         SegmentMask constants correspond to each drawing Verb type in SkPath; for
@@ -1760,6 +1833,9 @@ public:
     */
     sk_sp<SkData> serialize() const;
 
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+private:
+#endif
     /** Initializes SkPath from buffer of size length. Returns zero if the buffer is
         data is inconsistent, or the length is too small.
 
@@ -1776,6 +1852,27 @@ public:
         example: https://fiddle.skia.org/c/@Path_readFromMemory
     */
     size_t readFromMemory(const void* buffer, size_t length);
+#ifdef SK_HIDE_PATH_EDIT_METHODS
+public:
+#endif
+    /** Initializes SkPath from buffer of size length. If the buffer data is inconsistent, or the
+        length is too small, returns a nullopt.
+
+        Reads SkPath::FillType, verb array, SkPoint array, conic weight, and
+        additionally reads computed information like SkPath::Convexity and bounds.
+
+        Used only in concert with writeToMemory();
+        the format used for SkPath in memory is not guaranteed.
+
+        @param buffer    storage for SkPath
+        @param length    buffer size in bytes; must be multiple of 4
+        @param bytesRead if not null, the number of bytes read from buffer will be written here
+        @return          the path read, or nullopt on failure
+
+        example: https://fiddle.skia.org/c/@Path_readFromMemory
+    */
+    static std::optional<SkPath> ReadFromMemory(const void* buffer, size_t length,
+                                                size_t* bytesRead = nullptr);
 
     /** (See Skia bug 1762.)
         Returns a non-zero, globally unique value. A different value is returned
@@ -1877,7 +1974,7 @@ private:
 
     // Bottlenecks for working with fConvexity and fFirstDirection.
     // Notice the setters are const... these are mutable atomic fields.
-    void  setConvexity(SkPathConvexity) const;
+    void setConvexity(SkPathConvexity) const;
 
     void setFirstDirection(SkPathFirstDirection) const;
     SkPathFirstDirection getFirstDirection() const;

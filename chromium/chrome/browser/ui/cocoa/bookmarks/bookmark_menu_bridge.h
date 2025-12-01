@@ -66,12 +66,15 @@ class BookmarkMenuBridge : public BookmarkMergedSurfaceServiceObserver {
       const BookmarkParentFolder& folder) override;
   void BookmarkAllUserNodesRemoved() override;
 
-  // Rebuilds the main bookmark menu, if it has been marked invalid. Or builds
-  // a bookmark folder submenu on demand. If |recurse| is true, also fills all
-  // submenus recursively.
-  void UpdateMenu(NSMenu* menu,
-                  std::optional<BookmarkParentFolder> folder,
-                  bool recurse);
+  bool IsMenuRoot(NSMenu* menu);
+
+  // Builds the main bookmark menu if it has been marked invalid. Its submenus
+  // will NOT be built recursively.
+  void UpdateRootMenuIfInvalid();
+
+  // Builds a bookmark folder submenu on demand. Submenus of `menu` will NOT be
+  // built recursively.
+  void UpdateNonRootMenu(NSMenu* menu, const BookmarkParentFolder& folder);
 
   // I wish I had a "friend @class" construct.
   bookmarks::BookmarkModel* GetBookmarkModelForTesting();
@@ -147,12 +150,7 @@ class BookmarkMenuBridge : public BookmarkMergedSurfaceServiceObserver {
   // This configures an NSMenuItem with all the data from a BookmarkNode. This
   // is used to update existing menu items, as well as to configure newly
   // created ones, like in AddNodeToMenu().
-  // |set_title| is optional since it is only needed when we get a
-  // node changed notification.  On initial build of the menu we set
-  // the title as part of alloc/init.
-  void ConfigureMenuItem(const bookmarks::BookmarkNode* node,
-                         NSMenuItem* item,
-                         bool set_title);
+  void ConfigureMenuItem(const bookmarks::BookmarkNode* node, NSMenuItem* item);
 
   // Returns the NSMenuItem for a given BookmarkNode.
   NSMenuItem* MenuItemForNode(const bookmarks::BookmarkNode* node);

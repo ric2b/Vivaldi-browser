@@ -1,6 +1,7 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -316,7 +317,7 @@ export class AXNodePropertyTreeElement extends UI.TreeOutline.TreeElement {
   appendRelatedNodeInline(relatedNode: Protocol.Accessibility.AXRelatedNode): void {
     const deferredNode =
         new SDK.DOMModel.DeferredDOMNode(this.axNode.accessibilityModel().target(), relatedNode.backendDOMNodeId);
-    const linkedNode = new AXRelatedNodeElement({deferredNode, idref: undefined}, relatedNode);
+    const linkedNode = new AXRelatedNodeElement({deferredNode, idref: undefined});
     this.listItemElement.appendChild(linkedNode.render());
   }
 
@@ -337,9 +338,7 @@ export class AXNodePropertyTreeElement extends UI.TreeOutline.TreeElement {
   }
 }
 
-export const TypeStyles: {
-  [x: string]: string,
-} = {
+export const TypeStyles: Record<string, string> = {
   attribute: 'ax-value-string',
   boolean: 'object-value-boolean',
   booleanOrUndefined: 'object-value-boolean',
@@ -544,7 +543,7 @@ export class AXRelatedNodeSourceTreeElement extends UI.TreeOutline.TreeElement {
     super('');
 
     this.value = value;
-    this.axRelatedNodeElement = new AXRelatedNodeElement(node, value);
+    this.axRelatedNodeElement = new AXRelatedNodeElement(node);
     this.selectable = true;
   }
 
@@ -569,16 +568,12 @@ export class AXRelatedNodeSourceTreeElement extends UI.TreeOutline.TreeElement {
 export class AXRelatedNodeElement {
   private readonly deferredNode: SDK.DOMModel.DeferredDOMNode|undefined;
   private readonly idref: string|undefined;
-  private readonly value: Protocol.Accessibility.AXRelatedNode|undefined;
-  constructor(
-      node: {
-        deferredNode?: SDK.DOMModel.DeferredDOMNode,
-        idref?: string,
-      },
-      value?: Protocol.Accessibility.AXRelatedNode) {
+  constructor(node: {
+    deferredNode?: SDK.DOMModel.DeferredDOMNode,
+    idref?: string,
+  }) {
     this.deferredNode = node.deferredNode;
     this.idref = node.idref;
-    this.value = value;
   }
 
   render(): Element {

@@ -11,6 +11,10 @@ version <next>:
 - Enhanced FLV v2: Multitrack audio/video, modern codec support
 - Animated JPEG XL encoding (via libjxl)
 - VVC in Matroska
+- CENC AV1 support in MP4 muxer
+- pngenc: set default prediction method to PAETH
+- APV decoder and APV raw bitstream muxing and demuxing
+
 
 version 7.1:
 - Raw Captions with Time (RCWT) closed caption demuxer
@@ -47,6 +51,11 @@ version 7.1:
       question mark is a part of <val> or not)
     - multiple stream types in a single specifier (e.g. :s:s:0) now cause an
       error, as such a specifier makes no sense
+- Mastering Display and Content Light Level metadata support in hevc_nvenc
+  and av1_nvenc encoders
+- libswresample now accepts custom order channel layouts as input, with some
+  constrains
+- FFV1 parser
 
 
 version 7.0:

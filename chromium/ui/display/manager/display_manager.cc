@@ -978,7 +978,7 @@ gfx::Insets DisplayManager::GetOverscanInsets(int64_t display_id) const {
                                      : gfx::Insets();
 }
 
-void DisplayManager::OnNativeDisplaysChanged(
+bool DisplayManager::OnNativeDisplaysChanged(
     const DisplayInfoList& updated_displays) {
   DISPLAY_LOG(EVENT) << "Native displays updated"
                      << ". Unified desktop allowed: "
@@ -1028,7 +1028,7 @@ void DisplayManager::OnNativeDisplaysChanged(
         }
       }
     }
-    return;
+    return false;
   }
 
   first_display_id_ = updated_displays[0].id();
@@ -1127,7 +1127,7 @@ void DisplayManager::OnNativeDisplaysChanged(
   mirroring_source_id_ = mirroring_source_id;
   connected_display_id_list_ = CreateDisplayIdList(updated_displays);
 
-  UpdateDisplaysWith(new_display_info_list);
+  return UpdateDisplaysWith(new_display_info_list);
 }
 
 void DisplayManager::UpdateDisplays() {
@@ -1139,7 +1139,7 @@ void DisplayManager::UpdateDisplays() {
   UpdateDisplaysWith(display_info_list);
 }
 
-void DisplayManager::UpdateDisplaysWith(
+bool DisplayManager::UpdateDisplaysWith(
     const DisplayInfoList& updated_display_info_list) {
   base::AutoReset<bool> is_updating_displays_resetter(&is_updating_displays_,
                                                       true);
@@ -1175,6 +1175,10 @@ void DisplayManager::UpdateDisplaysWith(
     // request is invalid. (e.g, This may happen when a mirroring source or
     // destination display is removed.)
     multi_display_mode_ = current_default_multi_display_mode_;
+  }
+
+  if (num_connected_displays() == 1) {
+    multi_display_mode_ = EXTENDED;
   }
 
   UMA_HISTOGRAM_ENUMERATION("DisplayManager.MultiDisplayMode",
@@ -1488,7 +1492,7 @@ void DisplayManager::UpdateDisplaysWith(
   // Create the mirroring window asynchronously after all displays
   // are added so that it can mirror the display newly added. This can
   // happen when switching from dock mode to software mirror mode.
-  CreateMirrorWindowAsyncIfAny();
+  return CreateMirrorWindowAsyncIfAny();
 }
 
 const Display& DisplayManager::GetDisplayAt(size_t index) const {
@@ -2013,16 +2017,18 @@ bool DisplayManager::UpdateDisplayBounds(int64_t display_id,
   return true;
 }
 
-void DisplayManager::CreateMirrorWindowAsyncIfAny() {
+bool DisplayManager::CreateMirrorWindowAsyncIfAny() {
   // Do not post a task if the software mirroring doesn't exist, or
   // during initialization when compositor's init task isn't posted yet.
   // ash::Shell::Init() will call this after the compositor is initialized.
   if (software_mirroring_display_list_.empty() || !delegate_) {
-    return;
+    return false;
   }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&DisplayManager::CreateMirrorWindowIfAny,
                                 weak_ptr_factory_.GetWeakPtr()));
+
+  return true;
 }
 
 void DisplayManager::UpdateInternalManagedDisplayModeListForTest() {
@@ -2181,6 +2187,7 @@ void DisplayManager::CreateSoftwareMirroringDisplayInfo(
 
 void DisplayManager::CreateUnifiedDesktopDisplayInfo(
     DisplayInfoList* display_info_list) {
+  DCHECK(!display_info_list->empty());
   if (display_info_list->size() == 1) {
     return;
   }
@@ -2594,10 +2601,7 @@ void DisplayManager::ApplyDisplayLayout(DisplayLayout* layout,
 }
 
 void DisplayManager::RunPendingTasksForTest() {
-  if (software_mirroring_display_list_.empty()) {
-    return;
-  }
-
+  CHECK(!software_mirroring_display_list_.empty() && delegate_);
   base::RunLoop run_loop;
   created_mirror_window_ = run_loop.QuitClosure();
   run_loop.Run();

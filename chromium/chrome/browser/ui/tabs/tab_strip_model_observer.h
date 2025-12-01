@@ -14,17 +14,17 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
 #include "components/sessions/core/session_id.h"
-#include "components/tab_collections/public/tab_interface.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/split_tab_id.h"
+#include "components/tabs/public/split_tab_visual_data.h"
+#include "components/tabs/public/tab_interface.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "ui/base/models/list_selection_model.h"
 
 class TabStripModel;
 namespace tabs {
-class TabModel;
 class TabGroupTabCollection;
-enum class SplitTabLayout;
 }  // namespace tabs
 
 namespace content {
@@ -297,7 +297,7 @@ struct TabGroupChange {
     ~CreateChange() override;
 
     TabGroupCreationReason reason() const { return reason_; }
-    std::vector<tabs::TabModel*> GetDetachedTabs() const;
+    std::vector<tabs::TabInterface*> GetDetachedTabs() const;
 
    private:
     TabGroupCreationReason reason_;
@@ -310,7 +310,7 @@ struct TabGroupChange {
     ~CloseChange() override;
 
     TabGroupClosureReason reason() const { return reason_; }
-    std::vector<tabs::TabModel*> GetDetachedTabs() const;
+    std::vector<tabs::TabInterface*> GetDetachedTabs() const;
 
    private:
     TabGroupClosureReason reason_;
@@ -338,6 +338,131 @@ struct TabGroupChange {
   const CloseChange* GetCloseChange() const;
 
   tab_groups::TabGroupId group;
+  raw_ptr<TabStripModel> model;
+  Type type;
+
+ private:
+  std::unique_ptr<Delta> delta;
+};
+
+struct SplitTabChange {
+  enum class Type { kAdded, kVisualsChanged, kContentsChanged, kRemoved };
+
+  enum class SplitTabAddReason {
+    kNewSplitTabAdded,
+    kSplitTabUpdated,
+    kInsertedFromAnotherTabstrip
+  };
+
+  enum class SplitTabRemoveReason {
+    kSplitTabRemoved,
+    kSplitTabUpdated,
+    kDetachedToAnotherTabstrip
+  };
+
+  // Base class for all changes. Similar to TabStripModelChange::Delta.
+  struct Delta {
+    virtual ~Delta() = default;
+  };
+
+  struct AddedChange : public Delta {
+    AddedChange(const std::vector<std::pair<tabs::TabInterface*, int>>& tabs,
+                SplitTabAddReason reason,
+                const split_tabs::SplitTabVisualData& visual_data);
+    ~AddedChange() override;
+    AddedChange(const AddedChange&);
+
+    const std::vector<std::pair<tabs::TabInterface*, int>>& tabs() const {
+      return tabs_;
+    }
+    const split_tabs::SplitTabVisualData& visual_data() const {
+      return visual_data_;
+    }
+    SplitTabAddReason reason() const { return reason_; }
+
+   private:
+    std::vector<std::pair<tabs::TabInterface*, int>> tabs_;
+    SplitTabAddReason reason_;
+    split_tabs::SplitTabVisualData visual_data_;
+  };
+
+  struct VisualsChange : public Delta {
+    VisualsChange(const split_tabs::SplitTabVisualData& old_visual_data,
+                  const split_tabs::SplitTabVisualData& new_visual_data);
+    ~VisualsChange() override;
+
+    const split_tabs::SplitTabVisualData& old_visual_data() const {
+      return old_visual_data_;
+    }
+    const split_tabs::SplitTabVisualData& new_visual_data() const {
+      return new_visual_data_;
+    }
+
+   private:
+    split_tabs::SplitTabVisualData old_visual_data_;
+    split_tabs::SplitTabVisualData new_visual_data_;
+  };
+
+  struct ContentsChange : public Delta {
+    ContentsChange(
+        const std::vector<std::pair<tabs::TabInterface*, int>>& prev_tabs,
+        const std::vector<std::pair<tabs::TabInterface*, int>>& new_tabs);
+    ~ContentsChange() override;
+    ContentsChange(const ContentsChange&);
+
+    const std::vector<std::pair<tabs::TabInterface*, int>>& prev_tabs() const {
+      return prev_tabs_;
+    }
+    const std::vector<std::pair<tabs::TabInterface*, int>>& new_tabs() const {
+      return new_tabs_;
+    }
+
+   private:
+    std::vector<std::pair<tabs::TabInterface*, int>> prev_tabs_;
+    std::vector<std::pair<tabs::TabInterface*, int>> new_tabs_;
+  };
+
+  struct RemovedChange : public Delta {
+    RemovedChange(const std::vector<std::pair<tabs::TabInterface*, int>>& tabs,
+                  SplitTabRemoveReason reason);
+    ~RemovedChange() override;
+    RemovedChange(const RemovedChange&);
+
+    const std::vector<std::pair<tabs::TabInterface*, int>>& tabs() const {
+      return tabs_;
+    }
+    SplitTabRemoveReason reason() const { return reason_; }
+
+   private:
+    std::vector<std::pair<tabs::TabInterface*, int>> tabs_;
+    SplitTabRemoveReason reason_;
+  };
+
+  SplitTabChange(TabStripModel* model,
+                 split_tabs::SplitTabId split_id,
+                 Type type,
+                 std::unique_ptr<Delta> deltap);
+  SplitTabChange(TabStripModel* model,
+                 split_tabs::SplitTabId split_id,
+                 AddedChange deltap);
+  SplitTabChange(TabStripModel* model,
+                 split_tabs::SplitTabId split_id,
+                 VisualsChange deltap);
+  SplitTabChange(TabStripModel* model,
+                 split_tabs::SplitTabId split_id,
+                 ContentsChange deltap);
+  SplitTabChange(TabStripModel* model,
+                 split_tabs::SplitTabId split_id,
+                 RemovedChange deltap);
+
+  ~SplitTabChange();
+
+  const AddedChange* GetAddedChange() const;
+  const VisualsChange* GetVisualsChange() const;
+  const ContentsChange* GetContentsChange() const;
+  const RemovedChange* GetRemovedChange() const;
+
+  split_tabs::SplitTabId split_id;
   raw_ptr<TabStripModel> model;
   Type type;
 
@@ -417,38 +542,9 @@ class TabStripModelObserver {
   // Notfies us when a Tab Group will be removed from the Tab Group Model.
   virtual void OnTabGroupWillBeRemoved(const tab_groups::TabGroupId& group_id);
 
-  enum class SplitTabAddReason {
-    kNewSplitTabCreated,
-    kInsertedFromAnotherTabstrip
-  };
-
-  enum class SplitTabRemoveReason {
-    kSplitTabClosed,
-    kDetachedToAnotherTabstrip
-  };
-
-  // Notification that a new split view has been added to the TabStripModel.
-  virtual void OnSplitTabCreated(
-      std::vector<std::pair<tabs::TabInterface*, int>> tabs,
-      split_tabs::SplitTabId split_id,
-      SplitTabAddReason reason,
-      tabs::SplitTabLayout tab_layout);
-
-  // Notification that a split view has been removed from the TabStripModel.
-  virtual void OnSplitTabRemoved(
-      std::vector<std::pair<tabs::TabInterface*, int>> tabs,
-      split_tabs::SplitTabId split_id,
-      SplitTabRemoveReason reason);
-
-  // Notification that the orientation of a split view is updated.
-  virtual void OnSplitTabOrientationChanged(split_tabs::SplitTabId split_id,
-                                            tabs::SplitTabLayout tab_layout);
-
-  // Notification that the contents of a split view is updated.
-  virtual void OnSplitTabContentsUpdated(
-      split_tabs::SplitTabId split_id,
-      std::vector<std::pair<tabs::TabInterface*, int>> prev_tabs,
-      std::vector<std::pair<tabs::TabInterface*, int>> new_tabs);
+  // Notifies us when there is a change to split tab state in the TabStripModel.
+  // The |change| provides details of the change to split tab.
+  virtual void OnSplitTabChanged(const SplitTabChange& change);
 
   // The specified WebContents at |index| changed in some way. |contents|
   // may be an entirely different object and the old value is no longer

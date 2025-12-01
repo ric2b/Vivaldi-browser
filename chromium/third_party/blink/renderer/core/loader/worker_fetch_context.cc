@@ -211,7 +211,7 @@ void WorkerFetchContext::PrepareRequest(
 
   probe::PrepareRequest(Probe(), nullptr, request, options, resource_type);
 
-  request.SetAllowsDeviceBoundSessions(
+  request.SetAllowsDeviceBoundSessionRegistration(
       RuntimeEnabledFeatures::DeviceBoundSessionCredentialsEnabled(
           GetExecutionContext()));
 }
@@ -242,17 +242,13 @@ void WorkerFetchContext::ModifyRequestForMixedContentUpgrade(
   MixedContentChecker::UpgradeInsecureRequest(
       request, &GetResourceFetcherProperties().GetFetchClientSettingsObject(),
       global_scope_, mojom::blink::RequestContextFrameType::kNone,
-      global_scope_->ContentSettingsClient());
+      global_scope_->ContentSettingsClient(), nullptr);
 }
 
 void WorkerFetchContext::PopulateResourceRequestBeforeCacheAccess(
     const ResourceLoaderOptions& options,
-    ResourceRequest& request,
-    FetchParameters::HasPreloadedResponseCandidate
-        has_preloaded_response_candidate) {
-  if (!RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled()) {
-    ModifyRequestForMixedContentUpgrade(request);
-  }
+    ResourceRequest& request) {
+  ModifyRequestForMixedContentUpgrade(request);
   request.SetTopFrameOrigin(GetTopFrameOrigin());
 }
 

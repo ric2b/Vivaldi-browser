@@ -12,7 +12,7 @@
 #include "core/fpdfapi/parser/cpdf_name.h"
 
 CPDF_ViewerPreferences::CPDF_ViewerPreferences(const CPDF_Document* pDoc)
-    : m_pDoc(pDoc) {}
+    : doc_(pDoc) {}
 
 CPDF_ViewerPreferences::~CPDF_ViewerPreferences() = default;
 
@@ -42,20 +42,22 @@ ByteString CPDF_ViewerPreferences::Duplex() const {
 }
 
 std::optional<ByteString> CPDF_ViewerPreferences::GenericName(
-    const ByteString& bsKey) const {
+    ByteStringView key) const {
   RetainPtr<const CPDF_Dictionary> pDict = GetViewerPreferences();
-  if (!pDict)
+  if (!pDict) {
     return std::nullopt;
+  }
 
-  RetainPtr<const CPDF_Name> pName = ToName(pDict->GetObjectFor(bsKey));
-  if (!pName)
+  RetainPtr<const CPDF_Name> pName = ToName(pDict->GetObjectFor(key));
+  if (!pName) {
     return std::nullopt;
+  }
 
   return pName->GetString();
 }
 
 RetainPtr<const CPDF_Dictionary> CPDF_ViewerPreferences::GetViewerPreferences()
     const {
-  const CPDF_Dictionary* pDict = m_pDoc->GetRoot();
+  const CPDF_Dictionary* pDict = doc_->GetRoot();
   return pDict ? pDict->GetDictFor("ViewerPreferences") : nullptr;
 }

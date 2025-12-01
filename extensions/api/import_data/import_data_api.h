@@ -11,8 +11,8 @@
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/importer/importer_progress_observer.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/common/importer/importer_type.h"
 #include "components/sessions/core/session_id.h"
+#include "components/user_data_importer/common/importer_type.h"
 #include "content/public/browser/web_ui.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"
@@ -48,15 +48,15 @@ class ImportDataAPI : public importer::ImporterProgressObserver,
   explicit ImportDataAPI(content::BrowserContext* context);
   ~ImportDataAPI() override;
 
-  void StartImport(const importer::SourceProfile& source_profile,
+  void StartImport(const user_data_importer::SourceProfile& source_profile,
                    uint16_t imported_items);
 
-  // importer::ImporterProgressObserver:
+  // user_data_importer::ImporterProgressObserver:
   void ImportStarted() override;
-  void ImportItemStarted(importer::ImportItem item) override;
-  void ImportItemEnded(importer::ImportItem item) override;
+  void ImportItemStarted(user_data_importer::ImportItem item) override;
+  void ImportItemEnded(user_data_importer::ImportItem item) override;
   void ImportEnded() override;
-  void ImportItemFailed(importer::ImportItem item,
+  void ImportItemFailed(user_data_importer::ImportItem item,
                         const std::string& error) override;
 
   // BrowserContextKeyedAPI implementation.
@@ -124,7 +124,7 @@ class ImportDataStartImportFunction : public ExtensionFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void StartImport(const importer::SourceProfile& source_profile);
+  void StartImport(const user_data_importer::SourceProfile& source_profile);
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
@@ -132,7 +132,8 @@ class ImportDataStartImportFunction : public ExtensionFunction {
   int imported_items_ = 0;
 
   // The importer type, need to select correct dialog
-  importer::ImporterType importer_type_ = importer::TYPE_UNKNOWN;
+  user_data_importer::ImporterType importer_type_ =
+      user_data_importer::TYPE_UNKNOWN;
 };
 
 class ImportDataOpenThunderbirdMailboxFunction : public ExtensionFunction {

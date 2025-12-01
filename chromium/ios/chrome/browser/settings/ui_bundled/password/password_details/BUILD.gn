@@ -19,10 +19,12 @@ source_set("password_details") {
     "password_details_mediator_delegate.h",
   ]
   deps = [
+    ":metrics",
     "//build:branding_buildflags",
     "//components/autofill/core/common",
     "//components/password_manager/core/browser:password_switches",
     "//components/password_manager/core/browser/form_parsing",
+    "//components/password_manager/core/browser/generation",
     "//components/password_manager/core/browser/generation:core",
     "//components/password_manager/core/common",
     "//components/prefs",
@@ -86,7 +88,8 @@ source_set("password_details_ui") {
     "//components/autofill/core/common",
     "//components/crash/core/common:crash_key",
     "//components/device_reauth",
-    "//components/password_manager/core/browser:browser",
+    "//components/password_manager/core/browser",
+    "//components/password_manager/core/browser/generation:core",
     "//components/password_manager/core/common",
     "//components/strings",
     "//ios/chrome/app/strings",
@@ -102,7 +105,7 @@ source_set("password_details_ui") {
     "//ios/chrome/browser/settings/ui_bundled/password:password_constants",
     "//ios/chrome/browser/settings/ui_bundled/password/password_details/cells",
     "//ios/chrome/browser/shared/public/commands",
-    "//ios/chrome/browser/shared/ui/list_model:list_model",
+    "//ios/chrome/browser/shared/ui/list_model",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/table_view:utils",
     "//ios/chrome/browser/shared/ui/table_view/cells",
@@ -122,6 +125,13 @@ source_set("password_details_table_view_constants") {
     "password_details_table_view_constants.mm",
   ]
   deps = [ "//ios/chrome/browser/shared/ui/list_model" ]
+}
+
+source_set("metrics") {
+  sources = [
+    "add_password_metrics.h",
+    "add_password_metrics.mm",
+  ]
 }
 
 source_set("unit_tests") {

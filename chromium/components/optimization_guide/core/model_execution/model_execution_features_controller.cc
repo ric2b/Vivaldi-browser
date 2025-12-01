@@ -148,13 +148,15 @@ ModelExecutionFeaturesController::ModelExecutionFeaturesController(
     PrefService* browser_context_profile_service,
     signin::IdentityManager* identity_manager,
     PrefService* local_state,
-    DogfoodStatus dogfood_status)
+    DogfoodStatus dogfood_status,
+    bool is_official_build)
     : browser_context_profile_service_(browser_context_profile_service),
       identity_manager_(identity_manager),
       local_state_(local_state),
       features_allowed_for_unsigned_user_(
           features::internal::GetAllowedFeaturesForUnsignedUser()),
-      dogfood_status_(dogfood_status) {
+      dogfood_status_(dogfood_status),
+      is_official_build_(is_official_build) {
   CHECK(browser_context_profile_service_);
 
   pref_change_registrar_.Init(browser_context_profile_service_);
@@ -230,12 +232,14 @@ bool ModelExecutionFeaturesController::
     ShouldFeatureBeCurrentlyAllowedForLogging(
         const MqlsFeatureMetadata* metadata) const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  // For dogfood users only, allow the relevant chrome://flags option to
-  // override the default enterprise policy.
+  // For dogfood users and developer builds only, allow the relevant
+  // chrome://flags option to override the default enterprise policy.
+  bool is_eligible_for_override =
+      dogfood_status_ == DogfoodStatus::DOGFOOD || !is_official_build_;
   bool has_logging_force_enabled =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableModelQualityDogfoodLogging);
-  if (dogfood_status_ == DogfoodStatus::DOGFOOD && has_logging_force_enabled) {
+  if (is_eligible_for_override && has_logging_force_enabled) {
     return true;
   }
 
@@ -351,16 +355,6 @@ bool ModelExecutionFeaturesController::IsSettingVisible(
       break;
   }
 
-  // Graduated feature should never be visible in settings.
-  // TODO(crbug.com/362225975): This code can be removed when the settings
-  // refresh is launched.
-  if (features::internal::IsGraduatedFeature(feature) &&
-      !features::IsAiSettingsPageRefreshEnabled()) {
-    metrics_recorder.SetResult(
-        feature, SettingsVisibilityResult::kNotVisibleGraduatedFeature);
-    return false;
-  }
-
   // Check feature-specific requirements.
   if (feature == UserVisibleFeatureKey::kHistorySearch) {
     SettingsVisibilityResult result = ShouldHideHistorySearch();
@@ -421,10 +415,9 @@ void ModelExecutionFeaturesController::OnFeatureSettingPrefChanged(
   // When the feature is enabled, check the user is valid to enable the
   // feature.
   CHECK(!is_enabled ||
-            GetCurrentUserValidityResult(feature,
-                                         /*skip_enterprise_check=*/false) ==
-                ModelExecutionFeaturesController::UserValidityResult::kValid,
-        base::NotFatalUntil::M125);
+        GetCurrentUserValidityResult(feature,
+                                     /*skip_enterprise_check=*/false) ==
+            ModelExecutionFeaturesController::UserValidityResult::kValid);
 
   if (pref_value != prefs::FeatureOptInState::kNotInitialized) {
     base::UmaHistogramBoolean(

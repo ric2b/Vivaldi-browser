@@ -42,12 +42,22 @@
 #include "url/origin.h"
 
 namespace privacy_sandbox {
-
-using Status =
-    privacy_sandbox_test_util::PrivacySandboxSettingsTestPeer::Status;
-using Topic = browsing_topics::Topic;
-
 namespace {
+
+using ::browsing_topics::Topic;
+using ::privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate;
+using ::privacy_sandbox_test_util::MultipleInputKeys;
+using ::privacy_sandbox_test_util::MultipleOutputKeys;
+using ::privacy_sandbox_test_util::MultipleStateKeys;
+using ::privacy_sandbox_test_util::PrivacySandboxSettingsTestPeer;
+using ::privacy_sandbox_test_util::SiteDataExceptions;
+using ::privacy_sandbox_test_util::TestCase;
+using ::privacy_sandbox_test_util::TestInput;
+using ::privacy_sandbox_test_util::TestOutput;
+using ::privacy_sandbox_test_util::TestState;
+using ::testing::Return;
+
+using Status = PrivacySandboxSettingsTestPeer::Status;
 
 using enum privacy_sandbox_test_util::StateKey;
 using enum privacy_sandbox_test_util::InputKey;
@@ -60,19 +70,8 @@ constexpr auto CONTENT_SETTING_BLOCK = ContentSetting::CONTENT_SETTING_BLOCK;
 // using enum content_settings::CookieControlsMode;
 constexpr auto kBlockThirdParty =
     content_settings::CookieControlsMode::kBlockThirdParty;
-constexpr auto kLimitedThirdParty =
-    content_settings::CookieControlsMode::kLimited;
 
 constexpr int kTestTaxonomyVersion = 1;
-
-using privacy_sandbox_test_util::MultipleInputKeys;
-using privacy_sandbox_test_util::MultipleOutputKeys;
-using privacy_sandbox_test_util::MultipleStateKeys;
-using privacy_sandbox_test_util::SiteDataExceptions;
-using privacy_sandbox_test_util::TestCase;
-using privacy_sandbox_test_util::TestInput;
-using privacy_sandbox_test_util::TestOutput;
-using privacy_sandbox_test_util::TestState;
 
 }  // namespace
 
@@ -81,21 +80,21 @@ class PrivacySandboxSettingsTest : public testing::Test {
   PrivacySandboxSettingsTest()
       : browser_task_environment_(
             base::test::TaskEnvironment::TimeSource::MOCK_TIME),
-        scoped_attestations_(
-            privacy_sandbox::PrivacySandboxAttestations::CreateForTesting()) {
+        scoped_attestations_(PrivacySandboxAttestations::CreateForTesting()) {
     // Mark all Privacy Sandbox APIs as attested since the test cases are
     // testing behaviors not related to attestations.
-    privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+    PrivacySandboxAttestations::GetInstance()
         ->SetAllPrivacySandboxAttestedForTesting(true);
     content_settings::CookieSettings::RegisterProfilePrefs(prefs()->registry());
     HostContentSettingsMap::RegisterProfilePrefs(prefs()->registry());
-    privacy_sandbox::RegisterProfilePrefs(prefs()->registry());
+    RegisterProfilePrefs(prefs()->registry());
     host_content_settings_map_ = new HostContentSettingsMap(
         &prefs_, false /* is_off_the_record */, false /* store_last_modified */,
         false /* restore_session */, false /* should_record_metrics */);
     tracking_protection_settings_ =
-        std::make_unique<privacy_sandbox::TrackingProtectionSettings>(
+        std::make_unique<TrackingProtectionSettings>(
             &prefs_, host_content_settings_map_.get(),
+            /*management_service=*/nullptr,
             /*is_incognito=*/false);
     cookie_settings_ = new content_settings::CookieSettings(
         host_content_settings_map_.get(), &prefs_,
@@ -110,8 +109,8 @@ class PrivacySandboxSettingsTest : public testing::Test {
   }
 
   void SetUp() override {
-    auto mock_delegate = std::make_unique<testing::NiceMock<
-        privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate>>();
+    auto mock_delegate = std::make_unique<
+        testing::NiceMock<MockPrivacySandboxSettingsDelegate>>();
     mock_delegate_ = mock_delegate.get();
 
     InitializePrefsBeforeStart();
@@ -144,10 +143,7 @@ class PrivacySandboxSettingsTest : public testing::Test {
             /*result=*/false);
   }
 
-  privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate*
-  mock_delegate() {
-    return mock_delegate_;
-  }
+  MockPrivacySandboxSettingsDelegate* mock_delegate() { return mock_delegate_; }
   sync_preferences::TestingPrefServiceSyncable* prefs() { return &prefs_; }
   HostContentSettingsMap* host_content_settings_map() {
     return host_content_settings_map_.get();
@@ -162,14 +158,13 @@ class PrivacySandboxSettingsTest : public testing::Test {
     return privacy_sandbox_settings_.get();
   }
   bool IsFledgeJoiningAllowed(const std::string& url) {
-    return privacy_sandbox_test_util::PrivacySandboxSettingsTestPeer(
-               privacy_sandbox_settings_impl())
+    return PrivacySandboxSettingsTestPeer(privacy_sandbox_settings_impl())
         .IsFledgeJoiningAllowed(url::Origin::Create(GURL(url)));
   }
   void ResetDisabledTopicsFeature(const std::string& topics_to_disable) {
     // Recreate the service to reset the cache of topics blocked via Finch.
-    auto mock_delegate = std::make_unique<testing::NiceMock<
-        privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate>>();
+    auto mock_delegate = std::make_unique<
+        testing::NiceMock<MockPrivacySandboxSettingsDelegate>>();
     mock_delegate_ = mock_delegate.get();
     privacy_sandbox_settings_ = std::make_unique<PrivacySandboxSettingsImpl>(
         std::move(mock_delegate), host_content_settings_map(), cookie_settings_,
@@ -193,15 +188,12 @@ class PrivacySandboxSettingsTest : public testing::Test {
 
  private:
   content::BrowserTaskEnvironment browser_task_environment_;
-  raw_ptr<privacy_sandbox_test_util::MockPrivacySandboxSettingsDelegate,
-          DanglingUntriaged>
-      mock_delegate_;
+  raw_ptr<MockPrivacySandboxSettingsDelegate, DanglingUntriaged> mock_delegate_;
   sync_preferences::TestingPrefServiceSyncable prefs_;
   browsing_topics::MockBrowsingTopicsService mock_browsing_topics_service_;
   scoped_refptr<HostContentSettingsMap> host_content_settings_map_;
   scoped_refptr<content_settings::CookieSettings> cookie_settings_;
-  std::unique_ptr<privacy_sandbox::TrackingProtectionSettings>
-      tracking_protection_settings_;
+  std::unique_ptr<TrackingProtectionSettings> tracking_protection_settings_;
   ScopedPrivacySandboxAttestations scoped_attestations_;
 
   std::unique_ptr<PrivacySandboxSettingsImpl> privacy_sandbox_settings_;
@@ -500,7 +492,7 @@ TEST_F(PrivacySandboxSettingsTest,
   EXPECT_CALL(*mock_delegate(),
               GetCookieDeprecationExperimentCurrentEligibility())
       .Times(1)
-      .WillOnce(testing::Return(TpcdExperimentEligibility(
+      .WillOnce(Return(TpcdExperimentEligibility(
           TpcdExperimentEligibility::Reason::k3pCookiesBlocked)));
   EXPECT_EQ(privacy_sandbox_settings()
                 ->GetCookieDeprecationExperimentCurrentEligibility()
@@ -510,7 +502,7 @@ TEST_F(PrivacySandboxSettingsTest,
   EXPECT_CALL(*mock_delegate(),
               GetCookieDeprecationExperimentCurrentEligibility())
       .Times(1)
-      .WillOnce(testing::Return(TpcdExperimentEligibility(
+      .WillOnce(Return(TpcdExperimentEligibility(
           TpcdExperimentEligibility::Reason::kEligible)));
   EXPECT_EQ(privacy_sandbox_settings()
                 ->GetCookieDeprecationExperimentCurrentEligibility()
@@ -521,12 +513,12 @@ TEST_F(PrivacySandboxSettingsTest,
 TEST_F(PrivacySandboxSettingsTest, IsCookieDeprecationLabelAllowed) {
   EXPECT_CALL(*mock_delegate(), IsCookieDeprecationLabelAllowed())
       .Times(1)
-      .WillOnce(testing::Return(false));
+      .WillOnce(Return(false));
   EXPECT_FALSE(privacy_sandbox_settings()->IsCookieDeprecationLabelAllowed());
 
   EXPECT_CALL(*mock_delegate(), IsCookieDeprecationLabelAllowed())
       .Times(1)
-      .WillOnce(testing::Return(true));
+      .WillOnce(Return(true));
   EXPECT_TRUE(privacy_sandbox_settings()->IsCookieDeprecationLabelAllowed());
 }
 
@@ -573,7 +565,7 @@ TEST_P(
   if (enabled) {
     EXPECT_CALL(*mock_delegate(),
                 AreThirdPartyCookiesBlockedByCookieDeprecationExperiment())
-        .WillOnce(testing::Return(false));
+        .WillOnce(Return(false));
   } else {
     EXPECT_CALL(*mock_delegate(),
                 AreThirdPartyCookiesBlockedByCookieDeprecationExperiment())
@@ -595,7 +587,7 @@ TEST_P(
   if (enabled) {
     EXPECT_CALL(*mock_delegate(),
                 AreThirdPartyCookiesBlockedByCookieDeprecationExperiment())
-        .WillOnce(testing::Return(true));
+        .WillOnce(Return(true));
   } else {
     EXPECT_CALL(*mock_delegate(),
                 AreThirdPartyCookiesBlockedByCookieDeprecationExperiment())
@@ -732,7 +724,7 @@ TEST_P(PrivacySandboxSettingsPrivateAggregationDebugModeTest,
 
   ON_CALL(*mock_delegate(),
           AreThirdPartyCookiesBlockedByCookieDeprecationExperiment())
-      .WillByDefault(testing::Return(test_case.cookies_blocked_by_experiment));
+      .WillByDefault(Return(test_case.cookies_blocked_by_experiment));
 
   prefs()->SetUserPref(prefs::kCookieControlsMode,
                        std::make_unique<base::Value>(static_cast<int>(
@@ -806,12 +798,12 @@ TEST_F(PrivacySandboxSettingsMockDelegateTest, IsSubjectToM1NoticeRestricted) {
   // The settings should return the decision made by the delegate.
   EXPECT_CALL(*mock_delegate(), IsSubjectToM1NoticeRestricted())
       .Times(1)
-      .WillOnce(testing::Return(true));
+      .WillOnce(Return(true));
   EXPECT_TRUE(privacy_sandbox_settings()->IsSubjectToM1NoticeRestricted());
 
   EXPECT_CALL(*mock_delegate(), IsSubjectToM1NoticeRestricted())
       .Times(1)
-      .WillOnce(testing::Return(false));
+      .WillOnce(Return(false));
   EXPECT_FALSE(privacy_sandbox_settings()->IsSubjectToM1NoticeRestricted());
 }
 
@@ -1559,7 +1551,7 @@ class PrivacySandboxSettingsM1RestrictedNotice
 TEST_F(PrivacySandboxSettingsM1RestrictedNotice,
        AllApisAreOffExceptMeasurementForRestrictedAccounts) {
   ON_CALL(*mock_delegate(), IsRestrictedNoticeEnabled())
-      .WillByDefault(testing::Return(true));
+      .WillByDefault(Return(true));
   RunTestCase(
       TestState{{MultipleStateKeys{kM1TopicsEnabledUserPrefValue,
                                    kM1FledgeEnabledUserPrefValue,
@@ -1613,7 +1605,7 @@ class PrivacySandboxAttestationsTest : public base::test::WithFeatureOverride,
             kDefaultAllowPrivacySandboxAttestations) {
     // This test suite tests Privacy Sandbox Attestations related behaviors,
     // turn off the setting that makes all APIs considered attested.
-    privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+    PrivacySandboxAttestations::GetInstance()
         ->SetAllPrivacySandboxAttestedForTesting(false);
   }
 
@@ -2026,7 +2018,7 @@ TEST_P(PrivacySandboxAttestationsTest,
                              kM1FledgeEnabledUserPrefValue,
                              kM1AdMeasurementEnabledUserPrefValue},
            true},
-          {kCookieControlsModeUserPrefValue, kLimitedThirdParty},
+          {kTrackingProtection3pcdEnabledUserPrefValue, true},
           {kAttestationsMap,
            PrivacySandboxAttestationsMap{
                {net::SchemefulSite(enrollee_url),
@@ -2245,8 +2237,8 @@ TEST_P(PrivacySandboxAttestationsTest, SetOverrideFromDevtools) {
 
   // Set an empty attestations map to prevent the API being default allowed
   // when feature `kDefaultAllowPrivacySandboxAttestations` is on.
-  privacy_sandbox::PrivacySandboxAttestations::GetInstance()
-      ->SetAttestationsForTesting(PrivacySandboxAttestationsMap{});
+  PrivacySandboxAttestations::GetInstance()->SetAttestationsForTesting(
+      PrivacySandboxAttestationsMap{});
 
   GURL top_level_url("https://top-level-origin.com");
   GURL caller_url("https://embedded.com");
@@ -2256,7 +2248,7 @@ TEST_P(PrivacySandboxAttestationsTest, SetOverrideFromDevtools) {
       url::Origin::Create(top_level_url), caller_url));
   EXPECT_FALSE(privacy_sandbox_settings()->IsEventReportingDestinationAttested(
       url::Origin::Create(GURL("https://embedded.com")),
-      privacy_sandbox::PrivacySandboxAttestationsGatedAPI::kProtectedAudience));
+      PrivacySandboxAttestationsGatedAPI::kProtectedAudience));
 
   // With an override of the site from a devtools call, Topics is allowed.
   PrivacySandboxAttestations::GetInstance()->AddOverride(
@@ -2265,7 +2257,7 @@ TEST_P(PrivacySandboxAttestationsTest, SetOverrideFromDevtools) {
       url::Origin::Create(top_level_url), caller_url));
   EXPECT_TRUE(privacy_sandbox_settings()->IsEventReportingDestinationAttested(
       url::Origin::Create(GURL("https://embedded.com")),
-      privacy_sandbox::PrivacySandboxAttestationsGatedAPI::kProtectedAudience));
+      PrivacySandboxAttestationsGatedAPI::kProtectedAudience));
 }
 
 TEST_P(PrivacySandboxAttestationsTest, SetOverrideFromFlags) {
@@ -2293,29 +2285,27 @@ TEST_P(PrivacySandboxAttestationsTest, SetOverrideFromFlags) {
 
   // Set an empty attestations map to prevent the API being default allowed
   // when feature `kDefaultAllowPrivacySandboxAttestations` is on.
-  privacy_sandbox::PrivacySandboxAttestations::GetInstance()
-      ->SetAttestationsForTesting(PrivacySandboxAttestationsMap{});
+  PrivacySandboxAttestations::GetInstance()->SetAttestationsForTesting(
+      PrivacySandboxAttestationsMap{});
 
   for (const auto& test : kTestCases) {
     // Reset the overrides flags from the previous test loop.
     scoped_command_line.GetProcessCommandLine()->RemoveSwitch(
-        privacy_sandbox::kPrivacySandboxEnrollmentOverrides);
+        kPrivacySandboxEnrollmentOverrides);
 
     // Event reporting for Protected Audience should not be allowed at first.
     EXPECT_FALSE(
         privacy_sandbox_settings()->IsEventReportingDestinationAttested(
             url::Origin::Create(test.report_url),
-            privacy_sandbox::PrivacySandboxAttestationsGatedAPI::
-                kProtectedAudience));
+            PrivacySandboxAttestationsGatedAPI::kProtectedAudience));
 
     scoped_command_line.GetProcessCommandLine()->AppendSwitchASCII(
-        privacy_sandbox::kPrivacySandboxEnrollmentOverrides, test.flags);
+        kPrivacySandboxEnrollmentOverrides, test.flags);
 
     // Check reporting for Protected Audience after setting the flag.
     EXPECT_EQ(privacy_sandbox_settings()->IsEventReportingDestinationAttested(
                   url::Origin::Create(test.report_url),
-                  privacy_sandbox::PrivacySandboxAttestationsGatedAPI::
-                      kProtectedAudience),
+                  PrivacySandboxAttestationsGatedAPI::kProtectedAudience),
               test.expected)
         << test.name;
   }
@@ -2440,7 +2430,7 @@ class PrivacySandboxSettingsSharedStorageDebugTest
 
     // This test suite tests Privacy Sandbox Attestations related behaviors,
     // turn off the setting that makes all APIs considered attested.
-    privacy_sandbox::PrivacySandboxAttestations::GetInstance()
+    PrivacySandboxAttestations::GetInstance()
         ->SetAllPrivacySandboxAttestedForTesting(false);
   }
 
@@ -2644,36 +2634,6 @@ TEST_F(PrivacySandboxSettingsSharedStorageDebugTest, NoEnrollments) {
                  {kIsSharedStorageAllowedDebugMessage,
                   &expected_out_shared_storage_debug_message},
                  {kIsSharedStorageBlockSiteSettingSpecific, &kFalse_}});
-}
-
-class PrivacySandboxSettingsCookieControlsModeTest
-    : public PrivacySandboxSettingsTest {
- public:
-  PrivacySandboxSettingsCookieControlsModeTest() {
-    feature_list_.InitWithFeatures(
-        {privacy_sandbox::kAddLimit3pcsSetting},
-        {content_settings::features::kTrackingProtection3pcd});
-  }
-};
-
-TEST_F(PrivacySandboxSettingsCookieControlsModeTest,
-       OnRelatedWebsiteSetsEnabledChangedCalledWhen3pcBlockingChanges) {
-  prefs()->SetBoolean(prefs::kPrivacySandboxRelatedWebsiteSetsEnabled, false);
-
-  privacy_sandbox_test_util::MockPrivacySandboxObserver observer;
-  privacy_sandbox_settings()->AddObserver(&observer);
-
-  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/true));
-  prefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kLimited));
-  testing::Mock::VerifyAndClearExpectations(&observer);
-
-  EXPECT_CALL(observer, OnRelatedWebsiteSetsEnabledChanged(/*enabled=*/false));
-  prefs()->SetInteger(
-      prefs::kCookieControlsMode,
-      static_cast<int>(content_settings::CookieControlsMode::kBlockThirdParty));
-  testing::Mock::VerifyAndClearExpectations(&observer);
 }
 
 }  // namespace privacy_sandbox

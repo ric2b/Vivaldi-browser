@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <stdint.h>
 
 #include <algorithm>
@@ -503,32 +498,26 @@ void DiskCacheBackendTest::BackendKeying() {
   EXPECT_TRUE(entry1 != entry2) << "Case sensitive";
   entry2->Close();
 
-  char buffer[30];
-  base::strlcpy(buffer, kName1, std::size(buffer));
-  ASSERT_THAT(OpenEntry(buffer, &entry2), IsOk());
+  ASSERT_THAT(OpenEntry(kName1, &entry2), IsOk());
   EXPECT_TRUE(entry1 == entry2);
   entry2->Close();
 
-  base::strlcpy(buffer + 1, kName1, std::size(buffer) - 1);
-  ASSERT_THAT(OpenEntry(buffer + 1, &entry2), IsOk());
+  ASSERT_THAT(OpenEntry(kName1, &entry2), IsOk());
   EXPECT_TRUE(entry1 == entry2);
   entry2->Close();
 
-  base::strlcpy(buffer + 3, kName1, std::size(buffer) - 3);
-  ASSERT_THAT(OpenEntry(buffer + 3, &entry2), IsOk());
+  ASSERT_THAT(OpenEntry(kName1, &entry2), IsOk());
   EXPECT_TRUE(entry1 == entry2);
   entry2->Close();
 
   // Now verify long keys.
-  char buffer2[20000];
-  memset(buffer2, 's', sizeof(buffer2));
-  buffer2[1023] = '\0';
-  ASSERT_EQ(net::OK, CreateEntry(buffer2, &entry2)) << "key on block file";
+  std::string long_key(1023, 's');
+  ASSERT_EQ(net::OK, CreateEntry(long_key, &entry2)) << "key on block file";
   entry2->Close();
 
-  buffer2[1023] = 'g';
-  buffer2[19999] = '\0';
-  ASSERT_EQ(net::OK, CreateEntry(buffer2, &entry2)) << "key on external file";
+  std::string longer_key = long_key + std::string(19999 - 1023, 'g');
+  ASSERT_EQ(net::OK, CreateEntry(longer_key, &entry2))
+      << "key on external file";
   entry2->Close();
   entry1->Close();
 
@@ -888,7 +877,7 @@ TEST_F(DiskCacheBackendTest, ExternalFiles) {
   // And verify that the first file is still there.
   auto buffer2(base::MakeRefCounted<net::IOBufferWithSize>(kSize));
   ASSERT_EQ(kSize, base::ReadFile(filename, buffer2->data(), kSize));
-  EXPECT_EQ(0, memcmp(buffer1->data(), buffer2->data(), kSize));
+  EXPECT_EQ(buffer1->span(), buffer2->span());
 }
 
 // Tests that we deal with file-level pending operations at destruction time.
@@ -1122,7 +1111,7 @@ void DiskCacheBackendTest::BackendSetSize() {
   ASSERT_THAT(CreateEntry(first, &entry), IsOk());
 
   auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(cache_size);
-  memset(buffer->data(), 0, cache_size);
+  std::ranges::fill(buffer->span(), 0);
   EXPECT_EQ(cache_size / 10,
             WriteData(entry, 0, 0, buffer.get(), cache_size / 10, false))
       << "normal file";
@@ -1196,7 +1185,7 @@ void DiskCacheBackendTest::BackendLoad() {
   int seed = static_cast<int>(Time::Now().ToInternalValue());
   srand(seed);
 
-  disk_cache::Entry* entries[kLargeNumEntries];
+  std::array<disk_cache::Entry*, kLargeNumEntries> entries;
   for (auto*& entry : entries) {
     std::string key = GenerateKey(true);
     ASSERT_THAT(CreateEntry(key, &entry), IsOk());
@@ -1332,8 +1321,9 @@ void DiskCacheBackendTest::BackendValidEntry() {
 
   const int kSize = 50;
   auto buffer1 = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer1->data(), 0, kSize);
-  base::strlcpy(buffer1->data(), "And the data to save", kSize);
+  std::ranges::fill(buffer1->span(), 0);
+  buffer1->span().copy_prefix_from(
+      base::byte_span_with_nul_from_cstring("And the data to save"));
   EXPECT_EQ(kSize, WriteData(entry, 0, 0, buffer1.get(), kSize, false));
   entry->Close();
   SimulateCrash();
@@ -1341,7 +1331,7 @@ void DiskCacheBackendTest::BackendValidEntry() {
   ASSERT_THAT(OpenEntry(key, &entry), IsOk());
 
   auto buffer2 = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer2->data(), 0, kSize);
+  std::ranges::fill(buffer2->span(), 0);
   EXPECT_EQ(kSize, ReadData(entry, 0, 0, buffer2.get(), kSize));
   entry->Close();
   EXPECT_STREQ(buffer1->data(), buffer2->data());
@@ -1368,8 +1358,9 @@ void DiskCacheBackendTest::BackendInvalidEntry() {
 
   const int kSize = 50;
   auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer->data(), 0, kSize);
-  base::strlcpy(buffer->data(), "And the data to save", kSize);
+  std::ranges::fill(buffer->span(), 0);
+  buffer->span().copy_prefix_from(
+      base::byte_span_with_nul_from_cstring("And the data to save"));
   EXPECT_EQ(kSize, WriteData(entry, 0, 0, buffer.get(), kSize, false));
   SimulateCrash();
 
@@ -1412,8 +1403,9 @@ void DiskCacheBackendTest::BackendInvalidEntryRead() {
 
   const int kSize = 50;
   auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer->data(), 0, kSize);
-  base::strlcpy(buffer->data(), "And the data to save", kSize);
+  std::ranges::fill(buffer->span(), 0);
+  buffer->span().copy_prefix_from(
+      base::byte_span_with_nul_from_cstring("And the data to save"));
   EXPECT_EQ(kSize, WriteData(entry, 0, 0, buffer.get(), kSize, false));
   entry->Close();
   ASSERT_THAT(OpenEntry(key, &entry), IsOk());
@@ -1466,7 +1458,7 @@ void DiskCacheBackendTest::BackendInvalidEntryWithLoad() {
   srand(seed);
 
   const int kNumEntries = 100;
-  disk_cache::Entry* entries[kNumEntries];
+  std::array<disk_cache::Entry*, kNumEntries> entries;
   for (auto*& entry : entries) {
     std::string key = GenerateKey(true);
     ASSERT_THAT(CreateEntry(key, &entry), IsOk());
@@ -1481,7 +1473,7 @@ void DiskCacheBackendTest::BackendInvalidEntryWithLoad() {
     entries[source2] = temp;
   }
 
-  std::string keys[kNumEntries];
+  std::array<std::string, kNumEntries> keys;
   for (int i = 0; i < kNumEntries; i++) {
     keys[i] = entries[i]->GetKey();
     if (i < kNumEntries / 2)
@@ -1539,7 +1531,7 @@ void DiskCacheBackendTest::BackendTrimInvalidEntry() {
   ASSERT_THAT(CreateEntry(first, &entry), IsOk());
 
   auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer->data(), 0, kSize);
+  std::ranges::fill(buffer->span(), 0);
   EXPECT_EQ(kSize, WriteData(entry, 0, 0, buffer.get(), kSize, false));
 
   // Simulate a crash.
@@ -1588,7 +1580,7 @@ void DiskCacheBackendTest::BackendTrimInvalidEntry2() {
   InitCache();
 
   auto buffer = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer->data(), 0, kSize);
+  std::ranges::fill(buffer->span(), 0);
   disk_cache::Entry* entry;
 
   // Writing 32 entries to this cache chains most of them.
@@ -1663,7 +1655,7 @@ void DiskCacheBackendTest::BackendEnumerations() {
   disk_cache::Entry* entry;
   std::unique_ptr<TestIterator> iter = CreateIterator();
   int count = 0;
-  Time last_used[kNumEntries];
+  std::array<Time, kNumEntries> last_used;
   while (iter->OpenNextEntry(&entry) == net::OK) {
     ASSERT_TRUE(nullptr != entry);
     if (count < kNumEntries) {
@@ -1852,8 +1844,9 @@ TEST_F(DiskCacheBackendTest, ShaderCacheEnumerationReadData) {
   auto buffer1 = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
 
   ASSERT_THAT(CreateEntry(first, &entry1), IsOk());
-  memset(buffer1->data(), 0, kSize);
-  base::strlcpy(buffer1->data(), "And the data to save", kSize);
+  std::ranges::fill(buffer1->span(), 0);
+  buffer1->span().copy_prefix_from(
+      base::byte_span_with_nul_from_cstring("And the data to save"));
   EXPECT_EQ(kSize, WriteData(entry1, 0, 0, buffer1.get(), kSize, false));
 
   ASSERT_THAT(CreateEntry(second, &entry2), IsOk());
@@ -1886,8 +1879,9 @@ void DiskCacheBackendTest::BackendInvalidEntryEnumeration() {
 
   const int kSize = 50;
   auto buffer1 = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
-  memset(buffer1->data(), 0, kSize);
-  base::strlcpy(buffer1->data(), "And the data to save", kSize);
+  std::ranges::fill(buffer1->span(), 0);
+  buffer1->span().copy_prefix_from(
+      base::byte_span_with_nul_from_cstring("And the data to save"));
   EXPECT_EQ(kSize, WriteData(entry1, 0, 0, buffer1.get(), kSize, false));
   entry1->Close();
   ASSERT_THAT(OpenEntry(key, &entry1), IsOk());
@@ -3227,7 +3221,7 @@ void DiskCacheBackendTest::BackendDisable4() {
 
   const int kBufSize = 20000;
   auto buf = base::MakeRefCounted<net::IOBufferWithSize>(kBufSize);
-  memset(buf->data(), 0, kBufSize);
+  std::ranges::fill(buf->span(), 0);
   EXPECT_EQ(100, WriteData(entry2, 0, 0, buf.get(), 100, false));
   EXPECT_EQ(kBufSize, WriteData(entry3, 0, 0, buf.get(), kBufSize, false));
 
@@ -3868,11 +3862,11 @@ TEST_F(DiskCacheBackendTest, FileSharing) {
     const int kSize = 200;
     char buffer1[kSize];
     char buffer2[kSize];
-    memset(buffer1, 't', kSize);
-    memset(buffer2, 0, kSize);
+    std::ranges::fill(base::as_writable_byte_span(buffer1), 't');
+    std::ranges::fill(base::as_writable_byte_span(buffer2), 0);
     EXPECT_TRUE(file->Write(buffer1, kSize, 0));
     EXPECT_TRUE(file->Read(buffer2, kSize, 0));
-    EXPECT_EQ(0, memcmp(buffer1, buffer2, kSize));
+    EXPECT_EQ(base::as_byte_span(buffer1), base::as_byte_span(buffer2));
   }
 
   base::File file(name, base::File::FLAG_OPEN | base::File::FLAG_READ);
@@ -4445,8 +4439,8 @@ TEST_F(DiskCacheBackendTest, SimpleFdLimit) {
   SetCacheType(net::APP_CACHE);
   InitCache();
 
-  disk_cache::Entry* entries[kLargeNumEntries];
-  std::string keys[kLargeNumEntries];
+  std::array<disk_cache::Entry*, kLargeNumEntries> entries;
+  std::array<std::string, kLargeNumEntries> keys;
   for (int i = 0; i < kLargeNumEntries; ++i) {
     keys[i] = GenerateKey(true);
     ASSERT_THAT(CreateEntry(keys[i], &entries[i]), IsOk());
@@ -4490,7 +4484,7 @@ TEST_F(DiskCacheBackendTest, SimpleFdLimit) {
     EXPECT_EQ(kSize, WriteData(entries[i], 1, 0, buf1.get(), kSize, true));
     auto read_buf = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
     ASSERT_EQ(kSize, ReadData(entries[i], 1, 0, read_buf.get(), kSize));
-    EXPECT_EQ(0, memcmp(read_buf->data(), buf1->data(), kSize));
+    EXPECT_EQ(read_buf->span(), buf1->span());
   }
 
   histogram_tester.ExpectBucketCount(
@@ -4507,11 +4501,11 @@ TEST_F(DiskCacheBackendTest, SimpleFdLimit) {
 
   auto read_buf = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
   ASSERT_EQ(kSize, ReadData(entries[0], 1, 0, read_buf.get(), kSize));
-  EXPECT_EQ(0, memcmp(read_buf->data(), buf1->data(), kSize));
+  EXPECT_EQ(read_buf->span(), buf1->span());
 
   auto read_buf2 = base::MakeRefCounted<net::IOBufferWithSize>(kSize);
   ASSERT_EQ(kSize, ReadData(alt_entry, 1, 0, read_buf2.get(), kSize));
-  EXPECT_EQ(0, memcmp(read_buf2->data(), buf2->data(), kSize));
+  EXPECT_EQ(read_buf2->span(), buf2->span());
 
   // Two more things than last time --- entries[0] and |alt_entry|
   histogram_tester.ExpectBucketCount(

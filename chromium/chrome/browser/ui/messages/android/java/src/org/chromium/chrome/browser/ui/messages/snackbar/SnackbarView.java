@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.ui.messages.snackbar;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
@@ -24,13 +26,14 @@ import android.widget.LinearLayout.LayoutParams;
 import android.widget.TextView;
 
 import androidx.annotation.ColorInt;
-import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeControllerFactory;
 import org.chromium.chrome.ui.messages.R;
 import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgePadAdjuster;
-import org.chromium.components.browser_ui.edge_to_edge.EdgeToEdgeSupplier;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.text.TemplatePreservingTextView;
 import org.chromium.ui.InsetObserver;
@@ -46,10 +49,11 @@ import org.chromium.build.BuildConfig;
  */
 // TODO (jianli): Change this class and its methods back to package protected after the offline
 // indicator experiment is done.
+@NullMarked
 public class SnackbarView implements InsetObserver.WindowInsetObserver {
     private static final int MAX_LINES = 5;
 
-    private final WindowAndroid mWindowAndroid;
+    private final @Nullable WindowAndroid mWindowAndroid;
     protected final ViewGroup mContainerView;
     protected final ViewGroup mSnackbarView;
     protected final TemplatePreservingTextView mMessageView;
@@ -57,19 +61,19 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
     private final ImageView mProfileImageView;
     private final int mAnimationDuration;
     private final boolean mIsTablet;
-    @Nullable private final EdgeToEdgeSupplier mEdgeToEdgeSupplier;
-    @Nullable private final EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
-    private ViewGroup mOriginalParent;
+    private final @Nullable EdgeToEdgeController mEdgeToEdgeSupplier;
+    private final @Nullable EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
+    private final ViewGroup mOriginalParent;
     protected ViewGroup mParent;
     protected Snackbar mSnackbar;
-    private View mRootContentView;
+    private final View mRootContentView;
     private @ColorInt int mBackgroundColor;
 
     // Variables used to adjust view position and size when visible frame is changed.
-    private Rect mCurrentVisibleRect = new Rect();
-    private Rect mPreviousVisibleRect = new Rect();
+    private final Rect mCurrentVisibleRect = new Rect();
+    private final Rect mPreviousVisibleRect = new Rect();
 
-    private OnLayoutChangeListener mLayoutListener =
+    private final OnLayoutChangeListener mLayoutListener =
             new OnLayoutChangeListener() {
                 @Override
                 public void onLayoutChange(
@@ -126,7 +130,7 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
             Snackbar snackbar,
             ViewGroup parentView,
             @Nullable WindowAndroid windowAndroid,
-            @Nullable EdgeToEdgeSupplier edgeToEdgeSupplier,
+            @Nullable EdgeToEdgeController edgeToEdgeSupplier,
             boolean isTablet) {
         mIsTablet = isTablet;
         mOriginalParent = parentView;
@@ -143,6 +147,9 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
         mContainerView =
                 (ViewGroup) LayoutInflater.from(activity).inflate(snackbarLayout, mParent, false);
 
+        // Make sure clicks are not consumed by content beneath the container view.
+        mContainerView.setClickable(true);
+
         mSnackbarView = mContainerView.findViewById(R.id.snackbar);
         mAnimationDuration =
                 mContainerView.getResources().getInteger(android.R.integer.config_mediumAnimTime);
@@ -153,6 +160,15 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
         mProfileImageView = (ImageView) mContainerView.findViewById(R.id.snackbar_profile_image);
         mEdgeToEdgeSupplier = edgeToEdgeSupplier;
         if (SnackbarManager.isFloatingSnackbarEnabled()) {
+            // Add bottom margin to extend the snackbar view into the bottom window inset. This
+            // margin has to be applied to the snackbar view itself to avoid weird visual clipping
+            // in its dismissal animation.
+            FrameLayout.LayoutParams lp = getLayoutParams();
+            int bottomInsetPx =
+                    edgeToEdgeSupplier != null ? edgeToEdgeSupplier.getBottomInsetPx() : 0;
+            lp.bottomMargin = lp.bottomMargin + bottomInsetPx;
+            mContainerView.setLayoutParams(lp);
+
             mEdgeToEdgePadAdjuster = null;
         } else {
             mEdgeToEdgePadAdjuster =
@@ -191,6 +207,7 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
         if (!SnackbarManager.isFloatingSnackbarEnabled()) {
             // We do not use mEdgeToEdgePadAdjuster if FloatingSnackbar is enabled.
             if (mEdgeToEdgeSupplier != null) {
+                assumeNonNull(mEdgeToEdgePadAdjuster);
                 mEdgeToEdgeSupplier.registerAdjuster(mEdgeToEdgePadAdjuster);
             }
         }
@@ -344,6 +361,10 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
             return snackbar.getBackgroundColor();
         }
 
+        if (SnackbarManager.isFloatingSnackbarEnabled()) {
+            return SemanticColorUtils.getFloatingSnackbarBackgroundColor(view.getContext());
+        }
+
         return SemanticColorUtils.getSnackbarBackgroundColor(view.getContext());
     }
 
@@ -388,6 +409,9 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
         if (SnackbarManager.isFloatingSnackbarEnabled()) {
             // Round the corners for snackbars in both tablets and non-tablets.
             mSnackbarView.setBackgroundResource(R.drawable.snackbar_background);
+            GradientDrawable backgroundDrawable =
+                    (GradientDrawable) mSnackbarView.getBackground().mutate();
+            backgroundDrawable.setColor(mBackgroundColor);
         } else if (mIsTablet && !BuildConfig.IS_VIVALDI) {
             // isFloatingSnackbarEnabled == false, mIsTablet == true
             // On tablet, snackbars have rounded corners.
@@ -432,10 +456,6 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
             mProfileImageView.setVisibility(View.GONE);
         }
 
-        if (BuildConfig.IS_VIVALDI) { // Vivaldi
-            mContainerView.findViewById(R.id.snackbar_shadow_top).setVisibility(View.GONE);
-        } // End Vivaldi
-
         return true;
     }
 
@@ -472,7 +492,7 @@ public class SnackbarView implements InsetObserver.WindowInsetObserver {
         return mSnackbarView;
     }
 
-    public EdgeToEdgePadAdjuster getEdgeToEdgePadAdjusterForTesting() {
+    public @Nullable EdgeToEdgePadAdjuster getEdgeToEdgePadAdjusterForTesting() {
         return mEdgeToEdgePadAdjuster;
     }
 }

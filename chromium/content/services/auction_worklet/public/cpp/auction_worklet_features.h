@@ -27,12 +27,22 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeNoWasmLazyCompilation);
 // If kFledgeNumberBidderWorkletGroupByOriginContextsToKeep is enabled,
 // kFledgeNumberBidderWorkletGroupByOriginContextsToKeepValue sets the number of
 // previously-used group-by-origin contexts to keep in case they can be reused
-// in a bidder worklet. Defaulted to 1.
+// in a bidder worklet. Defaulted to 10.
 CONTENT_EXPORT BASE_DECLARE_FEATURE(
     kFledgeNumberBidderWorkletGroupByOriginContextsToKeep);
 CONTENT_EXPORT BASE_DECLARE_FEATURE_PARAM(
     int,
     kFledgeNumberBidderWorkletGroupByOriginContextsToKeepValue);
+
+// If kFledgeNumberSellerWorkletGroupByOriginContextsToKeep is enabled,
+// kFledgeNumberSellerWorkletGroupByOriginContextsToKeepValue sets the number of
+// previously-used group-by-origin contexts to keep in case they can be reused
+// in a bidder worklet. Defaulted to 10.
+CONTENT_EXPORT BASE_DECLARE_FEATURE(
+    kFledgeNumberSellerWorkletGroupByOriginContextsToKeep);
+CONTENT_EXPORT BASE_DECLARE_FEATURE_PARAM(
+    int,
+    kFledgeNumberSellerWorkletGroupByOriginContextsToKeepValue);
 
 // Prepare bidder contexts, including running top level scripts, before
 // we're ready to generate a worklet's first bid.
@@ -67,8 +77,6 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE_PARAM(
 // Send each trusted seller signals request right after it is queued, so
 // that it does not get batched.
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeSellerSignalsRequestsOneAtATime);
-
-CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeSplitTrustedSignalsFetchingURL);
 
 // Provide encodeUtf8/decodeUtf8 helpers.
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kFledgeTextConversionHelpers);

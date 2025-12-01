@@ -150,6 +150,11 @@ class KioskAccessibilityExtensionTest
       public testing::WithParamInterface<KioskMixin::Config> {
  public:
   KioskAccessibilityExtensionTest() = default;
+  KioskAccessibilityExtensionTest(const KioskAccessibilityExtensionTest&) =
+      delete;
+  KioskAccessibilityExtensionTest& operator=(
+      const KioskAccessibilityExtensionTest&) = delete;
+  ~KioskAccessibilityExtensionTest() override = default;
 
   void SetUpOnMainThread() override {
     MixinBasedInProcessBrowserTest::SetUpOnMainThread();

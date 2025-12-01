@@ -130,6 +130,7 @@ void PopulateSourceForWebUI(content::WebUIDataSource* source,
       "enableHistoryEmbeddingsImages",
       history_embeddings::GetFeatureParameters().enable_images_for_results);
   static constexpr webui::LocalizedString kHistoryEmbeddingsStrings[] = {
+      {"foundSearchResults", IDS_HISTORY_FOUND_SEARCH_RESULTS},
       {"historyEmbeddingsSearchPrompt", IDS_HISTORY_EMBEDDINGS_SEARCH_PROMPT},
       {"historyEmbeddingsHeading", IDS_HISTORY_EMBEDDINGS_HEADING},
       {"historyEmbeddingsWithAnswersResultsHeading",
@@ -156,11 +157,8 @@ void PopulateSourceForWebUI(content::WebUIDataSource* source,
   source->AddInteger("historyEmbeddingsSearchMinimumWordCount",
                      history_embeddings::GetFeatureParameters()
                          .search_query_minimum_word_count);
-  source->AddString(
-      "historyEmbeddingsSettingsUrl",
-      optimization_guide::features::IsAiSettingsPageRefreshEnabled()
-          ? chrome::kHistorySearchV2SettingURL
-          : chrome::kHistorySearchSettingURL);
+  source->AddString("historyEmbeddingsSettingsUrl",
+                    chrome::kHistorySearchSettingURL);
 
   bool logging_disabled_by_enterprise =
       profile->GetPrefs()->GetInteger(

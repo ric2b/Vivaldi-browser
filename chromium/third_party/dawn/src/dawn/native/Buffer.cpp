@@ -202,8 +202,11 @@ struct BufferBase::MapAsyncEvent final : public EventManager::TrackedEvent {
           mCallback(callbackInfo.callback),
           mUserdata1(callbackInfo.userdata1),
           mUserdata2(callbackInfo.userdata2) {
-        TRACE_EVENT_ASYNC_BEGIN0(device->GetPlatform(), General, "Buffer::APIMapAsync",
-                                 uint64_t(serial));
+        // `this` is used as a unique ID to match begin/end events for concurrent MapAsync calls.
+        // It's not a problem that same memory address could be reused for a future MapAsync call
+        // since it won't be concurrent with an earlier call.
+        TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(device->GetPlatform(), General, "Buffer::APIMapAsync",
+                                          this);
     }
 
     // Create an event that's ready at creation (for errors, etc.)
@@ -212,22 +215,20 @@ struct BufferBase::MapAsyncEvent final : public EventManager::TrackedEvent {
                   const std::string& message,
                   WGPUMapAsyncStatus status)
         : TrackedEvent(static_cast<wgpu::CallbackMode>(callbackInfo.mode),
-                       SystemEvent::CreateSignaled()),
+                       TrackedEvent::Completed{}),
           mBufferOrError(BufferErrorData{status, message}),
           mCallback(callbackInfo.callback),
           mUserdata1(callbackInfo.userdata1),
-          mUserdata2(callbackInfo.userdata2) {
-        TRACE_EVENT_ASYNC_BEGIN0(device->GetPlatform(), General, "Buffer::APIMapAsync",
-                                 uint64_t(kBeginningOfGPUTime));
-    }
+          mUserdata2(callbackInfo.userdata2) {}
 
     ~MapAsyncEvent() override { EnsureComplete(EventCompletionType::Shutdown); }
 
     void Complete(EventCompletionType completionType) override {
-        if (const auto* queueAndSerial = std::get_if<QueueAndSerial>(&GetCompletionData())) {
-            TRACE_EVENT_ASYNC_END0(queueAndSerial->queue->GetDevice()->GetPlatform(), General,
-                                   "Buffer::APIMapAsync",
-                                   uint64_t(queueAndSerial->completionSerial));
+        if (const auto* queueAndSerial = GetIfQueueAndSerial()) {
+            if (auto queue = queueAndSerial->queue.Promote()) {
+                TRACE_EVENT_NESTABLE_ASYNC_END0(queue->GetDevice()->GetPlatform(), General,
+                                                "Buffer::APIMapAsync", this);
+            }
         }
 
         void* userdata1 = mUserdata1.ExtractAsDangling();
@@ -290,12 +291,8 @@ ResultOrError<UnpackedPtr<BufferDescriptor>> ValidateBufferDescriptor(
     DAWN_TRY(ValidateBufferUsage(descriptor->usage));
 
     if (const auto* hostMappedDesc = unpacked.Get<BufferHostMappedPointer>()) {
-        // TODO(crbug.com/dawn/2018): Properly expose this limit.
-        uint32_t requiredAlignment = 4096;
-        if (device->GetAdapter()->GetPhysicalDevice()->GetBackendType() ==
-            wgpu::BackendType::D3D12) {
-            requiredAlignment = 65536;
-        }
+        uint32_t requiredAlignment =
+            device->GetLimits().hostMappedPointerLimits.hostMappedPointerAlignment;
 
         DAWN_INVALID_IF(!device->HasFeature(Feature::HostMappedPointer), "%s requires %s.",
                         hostMappedDesc->sType, ToAPI(Feature::HostMappedPointer));

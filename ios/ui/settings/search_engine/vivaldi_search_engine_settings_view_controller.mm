@@ -68,6 +68,14 @@ NSString* const kPrivateTabsSearchEngineCellId =
   [self loadModel];
 }
 
+- (void)didMoveToParentViewController:(UIViewController*)parent {
+  [super didMoveToParentViewController:parent];
+  if (!parent) {
+    [self.presentationDelegate
+        searchEngineSettingsViewControllerWasRemoved:self];
+  }
+}
+
 #pragma mark - ChromeTableViewController
 
 - (void)loadModel {

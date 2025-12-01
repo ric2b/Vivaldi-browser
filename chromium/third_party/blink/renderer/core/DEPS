@@ -85,6 +85,7 @@ include_rules = [
     "+services/network/public/cpp/cross_origin_embedder_policy.h",
     "+services/network/public/cpp/features.h",
     "+services/network/public/cpp/header_util.h",
+    "+services/network/public/cpp/integrity_policy.h",
     "+services/network/public/cpp/is_potentially_trustworthy.h",
     "+services/network/public/cpp/ip_address_space_util.h",
     "+services/network/public/cpp/request_destination.h",
@@ -110,6 +111,7 @@ include_rules = [
     "+ui/accessibility/ax_event.h",
     "+ui/accessibility/ax_event_intent.h",
     "+ui/accessibility/ax_mode.h",
+    "+ui/base/clipboard/clipboard_constants.h",
     "+ui/base/cursor/cursor.h",
     "+ui/base/ime/ime_text_span.h",
     "+ui/base/ime/mojom/ime_types.mojom-blink-forward.h",
@@ -150,6 +152,9 @@ specific_include_rules = {
         "+base/threading/thread_task_runner_handle.h",
         # Test harness may use cc directly instead of going through WebViewImpl etc.
         "+cc",
+        "+components/subresource_filter/content/renderer",
+        "+components/subresource_filter/core/common",
+        "+components/subresource_filter/core/mojom",
         "+components/ukm/test_ukm_recorder.h",
         "+components/viz/test",
 	# TODO(crbug.com/838693): Test harnesses use LayerTreeView

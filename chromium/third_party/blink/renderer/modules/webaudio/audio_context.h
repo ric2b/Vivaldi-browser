@@ -127,6 +127,9 @@ class MODULES_EXPORT AudioContext final
   void RequestMediaRemoting() override {}
   void RequestVisibility(
       RequestVisibilityCallback request_visibility_cb) override {}
+  void RecordAutoPictureInPictureInfo(
+      const media::PictureInPictureEventsInfo::AutoPipInfo&
+          auto_picture_in_picture_info) override {}
 
   // https://webaudio.github.io/web-audio-api/#AudioContext
   double baseLatency() const;
@@ -318,6 +321,10 @@ class MODULES_EXPORT AudioContext final
 
   // Handles a disconnection from the MediaPlayerHost.
   void OnMediaPlayerDisconnect();
+
+  // Returns whether the media-playback-while-not-visible permission policy
+  // allows this audio context to play while not visible.
+  bool CanPlayWhileHidden() const;
 
   // https://webaudio.github.io/web-audio-api/#dom-audiocontext-suspended-by-user-slot
   bool suspended_by_user_ = false;

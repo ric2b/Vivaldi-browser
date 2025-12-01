@@ -80,6 +80,14 @@ def _is_google_corp_machine():
     return shutil.which("gcert") is not None
 
 
+def _has_internal_checkout():
+    """Check if internal is checked out."""
+    root_dir = gclient_paths.GetPrimarySolutionPath()
+    if not root_dir:
+        return False
+    return os.path.exists(os.path.join(root_dir, "internal", ".git"))
+
+
 def _reclient_rbe_project():
     """Returns RBE project used by reclient."""
     instance = os.environ.get('RBE_instance')
@@ -161,43 +169,50 @@ def _get_remoteexec_defaults():
     return values
 
 
-def _siso_supported(output_dir):
+# `use_siso` value is used to determine whether siso or ninja is used,
+# and used to determine default value of `use_reclient`, so
+# this logic should match with //build/toolchain/siso.gni
+def _get_use_siso_default(output_dir):
+    """Returns use_siso default value."""
     root_dir = gclient_paths.GetPrimarySolutionPath()
     if not root_dir:
         return False
+
+    # autoninja requires .sisoenv to set Siso env vars such as SISO_PROJECT
+    # and SISO_REAPI_INSTANCE.
     sisoenv_path = os.path.join(root_dir, "build/config/siso/.sisoenv")
     if not os.path.exists(sisoenv_path):
         return False
-    # If it's not chromium project, use Ninja.
+
+    # Use Siso by default on Googlers on corp machine for now.
+    # TODO: crbug.com/409223168 - Enable Siso by default for external devs.
+    if not _is_google_corp_machine():
+        return False
+
+    # Check the project wide default in `.gn`.
+    dot_gn = os.path.join(root_dir, ".gn")
+    if os.path.exists(dot_gn):
+        with open(dot_gn) as f:
+            dot_gn_lines = f.readlines()
+        p = re.compile(r"(^|\s*)(use_siso)\s*=\s*(true)\s*$")
+        if any(p.match(l) for l in dot_gn_lines):
+            return True
+
+    # Checking `build_with_chromium` var in //build/config/gclient_args.gni
+    # to enable Siso on Chromium.
+    # TODO: crbug.com/409223168 - Remove this condition after setting use_siso
+    # in Chromium's .gn + some buffer.
     gclient_args_gni = os.path.join(root_dir, "build/config/gclient_args.gni")
-    if not os.path.exists(gclient_args_gni):
-        return False
-    with open(gclient_args_gni) as f:
-        if "build_with_chromium = true" not in f.read():
-            return False
-    # Use Siso by default for Googlers working on corp machine.
-    if _is_google_corp_machine():
-        return True
-    # Otherwise, use Ninja, until we are ready to roll it out
-    # on non-corp machines, too.
-    # TODO(378078715): enable True by default.
-    return False
-
-
-def _get_use_siso_default(output_dir):
-    """Returns use_siso default value."""
-    if not _siso_supported(output_dir):
-        return False
+    if os.path.exists(gclient_args_gni):
+        with open(gclient_args_gni) as f:
+            if "build_with_chromium = true" in f.read():
+                return True
 
     # This output directory is already using Siso.
     if os.path.exists(os.path.join(output_dir, ".siso_deps")):
         return True
 
-    # This output directory is still using Ninja.
-    if os.path.exists(os.path.join(output_dir, ".ninja_deps")):
-        print(_SISO_SUGGESTION.format(output_dir=output_dir), file=sys.stderr)
-        return False
-    return True
+    return False
 
 
 def _main_inner(input_args, build_id, should_collect_logs=False):
@@ -250,10 +265,11 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             )
             print(file=sys.stderr)
 
+    is_android = False
     use_remoteexec = False
     use_reclient = None
-    use_android_build_server = False
     use_siso = None
+    use_android_build_server = None
 
     # Attempt to auto-detect remote build acceleration. We support gn-based
     # builds, where we look for args.gn in the build tree, and cmake-based
@@ -285,22 +301,37 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             if k == "use_reclient" and v == "false":
                 use_reclient = False
                 continue
-            if k == "android_static_analysis" and v == '"build_server"':
-                use_android_build_server = True
+            if k == "target_os" and v == '"android"':
+                is_android = True
+                continue
+            if k == "android_static_analysis" and v != '"build_server"':
+                use_android_build_server = False
                 continue
 
         if use_siso is None:
             use_siso = _get_use_siso_default(output_dir)
 
+            # If use_siso is True by default, but the output directory is still using
+            # Ninja, print the suggestion message.
+            is_ninja_used = os.path.exists(
+                os.path.join(output_dir, ".ninja_deps"))
+            if use_siso and is_ninja_used:
+                print(_SISO_SUGGESTION.format(output_dir=output_dir),
+                      file=sys.stderr)
+                use_siso = False
+
         if use_reclient is None:
-            if os.path.exists(os.path.join(output_dir, ".reproxy_tmp")):
-                use_reclient = True
-            elif use_remoteexec:
+            if use_remoteexec:
                 values = _get_remoteexec_defaults()
                 if use_siso:
                     use_reclient = values["use_reclient_on_siso"]
                 else:
                     use_reclient = values["use_reclient_on_ninja"]
+
+    # Use the server for target_os="android" (where it is relevant), unless it
+    # is disabled via GN arg.
+    if use_android_build_server is None and is_android:
+        use_android_build_server = True
 
     if use_remoteexec:
         if use_reclient:
@@ -310,20 +341,20 @@ def _main_inner(input_args, build_id, should_collect_logs=False):
             # even if use_remoteexec=true is set.
             project = _siso_rbe_project()
 
-        if _is_google_corp_machine():
+        if _has_internal_checkout():
             # user may login on non-@google.com account on corp,
             # but need to use @google.com and rbe-chrome-untrusted
-            # on corp machine.
+            # with src-internal.
             if project == 'rbe-chromium-untrusted':
                 print(
-                    "You can't use rbe-chromium-untrusted on corp "
-                    "machine.\n"
+                    "You can't use rbe-chromium-untrusted for "
+                    "src-internal.\n"
                     "Please use rbe-chrome-untrusted and @google.com "
-                    "account instead to build chromium.\n",
+                    "account instead to build chrome.\n",
                     file=sys.stderr,
                 )
                 return 1
-        else:
+        elif not _is_google_corp_machine():
             # only @google.com is allowed to use rbe-chrome-untrusted
             # and use @google.com on non-corp machine is not allowed
             # by corp security policy.

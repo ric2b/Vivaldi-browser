@@ -7,12 +7,15 @@
 #include <optional>
 
 #include "base/auto_reset.h"
+#include "base/callback_list.h"
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
+#include "base/memory/raw_ref.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
@@ -22,6 +25,7 @@
 #include "base/timer/timer.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/enterprise/util/managed_browser_utils.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -31,7 +35,9 @@
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/account_consistency_mode_manager.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/signin/signin_ui_util.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/themes/theme_service_factory.h"
@@ -41,7 +47,10 @@
 #include "chrome/browser/ui/profiles/profile_colors_util.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button.h"
+#include "chrome/browser/ui/views/profiles/profile_menu_coordinator.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
+#include "chrome/browser/user_education/user_education_service.h"
+#include "chrome/browser/user_education/user_education_service_factory.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -57,6 +66,7 @@
 #include "components/signin/public/identity_manager/primary_account_change_event.h"
 #include "components/sync/base/features.h"
 #include "components/sync/service/sync_service.h"
+#include "components/sync/service/sync_user_settings.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -77,6 +87,11 @@ static std::optional<base::TimeDelta> g_show_name_duration_for_testing;
 constexpr base::TimeDelta kShowSigninPendingTextDelay = base::Minutes(50);
 static std::optional<base::TimeDelta>
     g_show_signin_pending_text_delay_for_testing;
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+constexpr base::TimeDelta kHistorySyncOptinDuration = base::Seconds(60);
+static std::optional<base::TimeDelta> g_history_sync_optin_duration_for_testing;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 ProfileAttributesStorage& GetProfileAttributesStorage() {
   return g_browser_process->profile_manager()->GetProfileAttributesStorage();
@@ -120,6 +135,9 @@ enum class ButtonState {
   kPassphraseError,
   // Catch-all for remaining errors in sync-the-feature or sync-the-transport.
   kSyncError,
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  kHistorySyncOptin,
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Includes Work and School.
   kManagement,
   kNormal
@@ -133,6 +151,7 @@ class SyncErrorStateProvider;
 class SigninPendingStateProvider;
 class ShowIdentityNameStateProvider;
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+class HistorySyncOptinStateProvider;
 class ManagementStateProvider;
 #endif
 
@@ -145,6 +164,7 @@ class StateVisitor {
   virtual void visit(const SigninPendingStateProvider* state_provider) = 0;
   virtual void visit(const ShowIdentityNameStateProvider* state_provider) = 0;
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  virtual void visit(const HistorySyncOptinStateProvider* state_provider) = 0;
   virtual void visit(const ManagementStateProvider* state_provider) = 0;
 #endif
 };
@@ -154,6 +174,22 @@ class StateObserver {
   virtual void OnStateProviderUpdateRequest(StateProvider* state_provider) = 0;
 
   virtual ~StateObserver() = default;
+};
+
+// StateManagerObserver is used to observe changes in the active button state.
+//
+// NOTE: This should only be used by `StateProvider`(s) if they really need to
+// know when the active state changes. `StateProvider`(s) should be as
+// independent as possible and in most cases this is not needed.
+class StateManagerObserver {
+ public:
+  // Called by `StateManager` when the active button state changes.
+  // `old_state` will be `std::nullopt` if there was no active state before
+  // (i.e. initialization).
+  virtual void OnButtonStateChanged(std::optional<ButtonState> old_state,
+                                    ButtonState new_state) = 0;
+
+  virtual ~StateManagerObserver() = default;
 };
 
 // Each implementation of StateProvider should be able to manage itself with the
@@ -191,7 +227,7 @@ class StateProvider {
   // it should call this method to attempt to propagate the changes.
   void RequestUpdate() { state_observer_->OnStateProviderUpdateRequest(this); }
 
-  virtual void accept(StateVisitor& visitor) const {}
+  virtual void Accept(StateVisitor& visitor) const {}
 
   virtual ~StateProvider() = default;
 
@@ -226,10 +262,12 @@ class ExplicitStateProvider : public StateProvider {
   explicit ExplicitStateProvider(
       StateObserver& state_observer,
       const std::u16string& explicit_text,
-      std::optional<std::u16string> accessibility_label)
+      std::optional<std::u16string> accessibility_label,
+      std::optional<base::RepeatingClosure> explicit_action)
       : StateProvider(state_observer),
         explicit_text_(explicit_text),
-        accessibility_label_(accessibility_label) {}
+        accessibility_label_(std::move(accessibility_label)),
+        explicit_action_(std::move(explicit_action)) {}
   ~ExplicitStateProvider() override = default;
 
   // StateProvider:
@@ -247,18 +285,25 @@ class ExplicitStateProvider : public StateProvider {
     RequestUpdate();
   }
 
+  std::optional<base::RepeatingClosure> GetButtonAction() {
+    return explicit_action_;
+  }
+
   base::WeakPtr<ExplicitStateProvider> GetWeakPtr() {
     return weak_ptr_factory_.GetWeakPtr();
   }
 
  private:
   // StateProvider:
-  void accept(StateVisitor& visitor) const override { visitor.visit(this); }
+  void Accept(StateVisitor& visitor) const override { visitor.visit(this); }
 
   bool active_ = true;
 
   const std::u16string explicit_text_;
   const std::optional<std::u16string> accessibility_label_;
+
+  // The explicit action to be used when the button is pressed.
+  std::optional<base::RepeatingClosure> explicit_action_;
 
   base::WeakPtrFactory<ExplicitStateProvider> weak_ptr_factory_{this};
 };
@@ -325,7 +370,7 @@ class ShowIdentityNameStateProvider : public StateProvider,
 
     refresh_tokens_loaded_ = true;
     if (!signin_ui_util::ShouldShowAnimatedIdentityOnOpeningWindow(
-            GetProfileAttributesStorage(), &profile_.get())) {
+            profile_.get())) {
       return;
     }
 
@@ -368,7 +413,7 @@ class ShowIdentityNameStateProvider : public StateProvider,
 
  private:
   // StateProvider:
-  void accept(StateVisitor& visitor) const override { visitor.visit(this); }
+  void Accept(StateVisitor& visitor) const override { visitor.visit(this); }
 
   // Initiates showing the identity.
   void OnUserIdentityChanged() {
@@ -473,6 +518,308 @@ class ShowIdentityNameStateProvider : public StateProvider,
   base::WeakPtrFactory<ShowIdentityNameStateProvider> weak_ptr_factory_{this};
 };
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+class HistorySyncOptinCoordinator : public base::SupportsUserData::Data,
+                                    public StateManagerObserver,
+                                    public signin::IdentityManager::Observer {
+ public:
+  static HistorySyncOptinCoordinator& GetOrCreateForProfile(Profile& profile) {
+    HistorySyncOptinCoordinator* coordinator =
+        static_cast<HistorySyncOptinCoordinator*>(
+            profile.GetUserData(kHistorySyncOptinCoordinatorKey));
+    if (!coordinator) {
+      coordinator = new HistorySyncOptinCoordinator(profile);
+      profile.SetUserData(kHistorySyncOptinCoordinatorKey,
+                          base::WrapUnique(coordinator));
+    }
+    return *coordinator;
+  }
+
+  bool triggered() const { return triggered_; }
+
+  signin_metrics::AccessPoint access_point() const { return access_point_; }
+
+  base::CallbackListSubscription AddStateChangedCallback(
+      base::RepeatingClosure callback) {
+    return state_changed_callbacks.Add(std::move(callback));
+  }
+
+  void PromoUsed() {
+    CHECK(before_promo_used_elapsed_timer_.has_value());
+    base::UmaHistogramMediumTimes(
+        "Signin.SyncOptIn.IdentityPill.DurationBeforeClick",
+        before_promo_used_elapsed_timer_->Elapsed());
+    sync_promo_identity_pill_manager_.RecordPromoUsed();
+    Collapse();
+  }
+
+  void ForceDelayTimeoutForTesting() { Collapse(); }
+
+  // StateManagerObserver:
+  void OnButtonStateChanged(std::optional<ButtonState> old_state,
+                            ButtonState new_state) override {
+    switch (new_state) {
+      case ButtonState::kHistorySyncOptin:
+        PromoShown();
+        return;
+      case ButtonState::kUpgradeClientError:
+      case ButtonState::kPassphraseError:
+      case ButtonState::kSyncError:
+      case ButtonState::kSigninPending:
+      case ButtonState::kSyncPaused:
+      case ButtonState::kExplicitTextShowing:
+        Collapse();
+        return;
+      case ButtonState::kShowIdentityName:
+      case ButtonState::kIncognitoProfile:
+      case ButtonState::kGuestSession:
+        break;
+      case ButtonState::kNormal:
+      case ButtonState::kManagement:
+        CHECK(!collapse_timer_.IsRunning());
+        break;
+    }
+    if (!old_state.has_value()) {
+      return;
+    }
+    switch (*old_state) {
+      case ButtonState::kShowIdentityName:
+        // `ShowIdentityName` state should be followed by `HistorySyncOptin`
+        // state.
+        Trigger(signin_metrics::AccessPoint::
+                    kHistorySyncOptinExpansionPillOnStartup);
+        break;
+      case ButtonState::kIncognitoProfile:
+      case ButtonState::kGuestSession:
+      case ButtonState::kNormal:
+      case ButtonState::kExplicitTextShowing:
+      case ButtonState::kHistorySyncOptin:
+      case ButtonState::kSyncError:
+      case ButtonState::kManagement:
+      case ButtonState::kSigninPending:
+      case ButtonState::kSyncPaused:
+      case ButtonState::kUpgradeClientError:
+      case ButtonState::kPassphraseError:
+        break;
+    }
+  }
+
+  // IdentityManager::Observer:
+  void OnPrimaryAccountChanged(
+      const signin::PrimaryAccountChangeEvent& /*event*/) override {
+    if (!IsSyncPromoEligible()) {
+      // Needed to prevent the promo from showing when it is already triggered
+      // and the user sign out or turns on sync without dismissing the promo.
+      Collapse();
+    }
+  }
+
+  void OnIdentityManagerShutdown(signin::IdentityManager*) override {
+    identity_manager_observation_.Reset();
+  }
+
+ private:
+  constexpr static const void* const kHistorySyncOptinCoordinatorKey =
+      &kHistorySyncOptinCoordinatorKey;
+
+  explicit HistorySyncOptinCoordinator(Profile& profile)
+      : profile_(profile), sync_promo_identity_pill_manager_(profile) {
+    UserEducationService* user_education_service =
+        UserEducationServiceFactory::GetForBrowserContext(&profile_.get());
+    CHECK(user_education_service);
+    new_session_callback_subscription_ =
+        user_education_service->user_education_session_manager()
+            .AddNewSessionCallback(base::BindRepeating(
+                &HistorySyncOptinCoordinator::OnNewSession,
+                // This is safe because `HistorySyncOptinCoordinator`
+                // owns `CallbackListSubscription`.
+                base::Unretained(this)));
+    identity_manager_observation_.Observe(
+        IdentityManagerFactory::GetForProfile(&profile));
+  }
+
+  void Trigger(signin_metrics::AccessPoint access_point) {
+    if (triggered_) {
+      return;
+    }
+    if (!sync_promo_identity_pill_manager_.ShouldShowPromo()) {
+      return;
+    }
+    if (!IsSyncPromoEligible()) {
+      return;
+    }
+    access_point_ = access_point;
+    triggered_ = true;
+    state_changed_callbacks.Notify();
+  }
+
+  void Collapse() {
+    if (!triggered_) {
+      return;
+    }
+    if (collapse_timer_.IsRunning()) {
+      collapse_timer_.Stop();
+    }
+    triggered_ = false;
+    before_promo_used_elapsed_timer_.reset();
+    state_changed_callbacks.Notify();
+  }
+
+  void PromoShown() {
+    if (collapse_timer_.IsRunning()) {
+      // This prevents starting a new timer when the button state changes to
+      // `HistorySyncOptin` in the next browser window(s).
+      return;
+    }
+    before_promo_used_elapsed_timer_.emplace();
+    has_been_shown_since_startup_ = true;
+    sync_promo_identity_pill_manager_.RecordPromoShown();
+    base::UmaHistogramEnumeration("Signin.SyncOptIn.IdentityPill.Shown",
+                                  access_point_);
+    collapse_timer_.Start(FROM_HERE,
+                          g_history_sync_optin_duration_for_testing.value_or(
+                              kHistorySyncOptinDuration),
+                          base::BindOnce(&HistorySyncOptinCoordinator::Collapse,
+                                         // This is safe because
+                                         // `HistorySyncOptinStateProvider`
+                                         // owns `clear_timer_`.
+                                         base::Unretained(this)));
+  }
+
+  void OnNewSession() {
+    // NOTE: All history sync opt-in triggers for enterprise badging are
+    // considered "on inactivity" (`kHistorySyncOptinExpansionPillOnInactivity`
+    // access point).
+    if (!enterprise_util::CanShowEnterpriseBadgingForAvatar(&profile_.get())) {
+      if (!has_been_shown_since_startup_) {
+        // If the history sync opt-in has not been shown since startup,
+        // do NOT trigger it. This avoids a subtle race condition on startup
+        // when the greetings are about to show roughly at the same time as the
+        // new session is detected (greetings are followed by the history sync
+        // opt-in anyway).
+        //
+        // NOTE: We assume that we are notified about the new session before the
+        // first history sync opt-in collapses (~60 seconds).
+        return;
+      }
+    }
+    Trigger(signin_metrics::AccessPoint::
+                kHistorySyncOptinExpansionPillOnInactivity);
+  }
+
+  bool IsSyncPromoEligible() const {
+    if (signin_util::GetSignedInState(IdentityManagerFactory::GetForProfile(
+            &profile_.get())) != signin_util::SignedInState::kSignedIn) {
+      return false;
+    }
+    syncer::SyncService* sync_service =
+        SyncServiceFactory::GetForProfile(&profile_.get());
+    if (!sync_service) {
+      return false;
+    }
+    if (sync_service->HasDisableReason(
+            syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY)) {
+      return false;
+    }
+    if (sync_service->GetUserSettings()->IsTypeManagedByPolicy(
+            syncer::UserSelectableType::kHistory) ||
+        sync_service->GetUserSettings()->IsTypeManagedByPolicy(
+            syncer::UserSelectableType::kTabs)) {
+      return false;
+    }
+    if (sync_service->GetUserSettings()->IsTypeManagedByCustodian(
+            syncer::UserSelectableType::kHistory) ||
+        sync_service->GetUserSettings()->IsTypeManagedByCustodian(
+            syncer::UserSelectableType::kTabs)) {
+      return false;
+    }
+    return true;
+  }
+
+  signin_metrics::AccessPoint access_point_ =
+      signin_metrics::AccessPoint::kUnknown;
+  bool triggered_ = false;
+  bool has_been_shown_since_startup_ = false;
+  base::OneShotTimer collapse_timer_;
+
+  // Timer to measure the time between the promo being shown and used (clicked).
+  std::optional<base::ElapsedTimer> before_promo_used_elapsed_timer_;
+
+  const raw_ref<Profile> profile_;
+
+  signin::SyncPromoIdentityPillManager sync_promo_identity_pill_manager_;
+
+  // New (user education) session callback subscription. The callback is
+  // triggered whenever a new user education session starts (i.e. after a
+  // 'certain' period of inactivity, see
+  // `user_education::features::GetIdleTimeBetweenSessions()`).
+  base::CallbackListSubscription new_session_callback_subscription_;
+
+  // Callbacks to be triggered when the history sync opt-in state (`triggered_`)
+  // changes.
+  base::RepeatingCallbackList<void()> state_changed_callbacks;
+
+  base::ScopedObservation<signin::IdentityManager,
+                          signin::IdentityManager::Observer>
+      identity_manager_observation_{this};
+};
+
+class HistorySyncOptinStateProvider : public StateProvider {
+ public:
+  explicit HistorySyncOptinStateProvider(StateObserver& state_observer,
+                                         Browser& browser)
+      : StateProvider(state_observer),
+        coordinator_(HistorySyncOptinCoordinator::GetOrCreateForProfile(
+            *browser.profile())),
+        browser_(browser) {}
+  ~HistorySyncOptinStateProvider() override = default;
+
+  // StateProvider:
+  bool IsActive() const override { return coordinator_->triggered(); }
+
+  void Init() override {
+    state_changed_callback_subscription_ =
+        coordinator_->AddStateChangedCallback(
+            base::BindRepeating(&HistorySyncOptinStateProvider::RequestUpdate,
+                                base::Unretained(this)));
+    if (coordinator_->triggered()) {
+      RequestUpdate();
+    }
+  }
+
+  std::optional<base::RepeatingClosure> GetButtonAction() {
+    return base::BindRepeating(&HistorySyncOptinStateProvider::OnButtonClick,
+                               // This is safe because `AvatarToolbarButton`
+                               // owning all the providers owns the callback.
+                               base::Unretained(this));
+  }
+
+  void ForceDelayTimeoutForTesting() {
+    coordinator_->ForceDelayTimeoutForTesting();
+  }
+
+ private:
+  // StateProvider:
+  void Accept(StateVisitor& visitor) const override { visitor.visit(this); }
+
+  void OnButtonClick() {
+    ProfileMenuCoordinator::GetOrCreateForBrowser(&browser_.get())
+        ->Show(/*is_source_accelerator=*/false, coordinator_->access_point());
+    coordinator_->PromoUsed();
+  }
+
+  // History sync opt-in coordinator state change callback subscription.
+  // The callbacks are used to notify the state provider(s) when the history
+  // sync opt-in state changes.
+  base::CallbackListSubscription state_changed_callback_subscription_;
+
+  raw_ref<HistorySyncOptinCoordinator> coordinator_;
+
+  // This is needed to delay the creation of `ProfileMenuCoordinator`.
+  raw_ref<Browser> browser_;
+};
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
 // This provider observes sync errors (including transport mode). It can be
 // configured to listen to a specific error with `sync_error_type`, or to all
 // errors by passing nullopt. That way specific `SyncErrorStateProvider`s can
@@ -537,7 +884,7 @@ class SyncErrorStateProvider : public StateProvider,
   }
 
   // StateProvider:
-  void accept(StateVisitor& visitor) const override { visitor.visit(this); }
+  void Accept(StateVisitor& visitor) const override { visitor.visit(this); }
 
   // syncer::SyncServiceObserver:
   void OnStateChanged(syncer::SyncService*) override {
@@ -664,7 +1011,7 @@ class SigninPendingStateProvider : public StateProvider,
 
  private:
   // StateProvider:
-  void accept(StateVisitor& visitor) const override { visitor.visit(this); }
+  void Accept(StateVisitor& visitor) const override { visitor.visit(this); }
 
   // signin::IdentityManager::Observer:
   void OnErrorStateOfRefreshTokenUpdatedForAccount(
@@ -736,6 +1083,7 @@ class SigninPendingStateProvider : public StateProvider,
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 class ManagementStateProvider : public StateProvider,
                                 public ProfileAttributesStorage::Observer,
+                                public policy::ManagementService::Observer,
                                 public BrowserListObserver {
  public:
   explicit ManagementStateProvider(
@@ -747,16 +1095,8 @@ class ManagementStateProvider : public StateProvider,
         avatar_toolbar_button_(avatar_toolbar_button) {
     BrowserList::AddObserver(this);
     profile_observation_.Observe(&GetProfileAttributesStorage());
-
-    profile_pref_change_registrar_.Init(profile_->GetPrefs());
-    profile_pref_change_registrar_.Add(
-        prefs::kEnterpriseCustomLabelForProfile,
-        base::BindRepeating(&ManagementStateProvider::RequestUpdate,
-                            weak_ptr_factory_.GetWeakPtr()));
-    profile_pref_change_registrar_.Add(
-        prefs::kEnterpriseProfileBadgeToolbarSettings,
-        base::BindRepeating(&ManagementStateProvider::RequestUpdate,
-                            weak_ptr_factory_.GetWeakPtr()));
+    management_observation_.Observe(
+        policy::ManagementServiceFactory::GetForProfile(&profile));
   }
 
   ~ManagementStateProvider() override { BrowserList::RemoveObserver(this); }
@@ -768,7 +1108,7 @@ class ManagementStateProvider : public StateProvider,
 
  private:
   // StateProvider:
-  void accept(StateVisitor& visitor) const override { visitor.visit(this); }
+  void Accept(StateVisitor& visitor) const override { visitor.visit(this); }
 
   void OnBrowserAdded(Browser*) override {
     // This is required so that the enterprise text is shown when a profile is
@@ -782,14 +1122,19 @@ class ManagementStateProvider : public StateProvider,
     RequestUpdate();
   }
 
+  // ManagementService::Observer
+  void OnEnterpriseLabelUpdated() override { RequestUpdate(); }
+
   raw_ref<Profile> profile_;
   const raw_ref<const AvatarToolbarButton> avatar_toolbar_button_;
-
-  PrefChangeRegistrar profile_pref_change_registrar_;
 
   base::ScopedObservation<ProfileAttributesStorage,
                           ProfileAttributesStorage::Observer>
       profile_observation_{this};
+
+  base::ScopedObservation<policy::ManagementService,
+                          policy::ManagementService::Observer>
+      management_observation_{this};
 
   base::WeakPtrFactory<ManagementStateProvider> weak_ptr_factory_{this};
 };
@@ -810,7 +1155,7 @@ class NormalStateProvider : public StateProvider {
 class StateProviderGetter : public StateVisitor {
  public:
   explicit StateProviderGetter(const StateProvider& state_provider) {
-    state_provider.accept(*this);
+    state_provider.Accept(*this);
   }
 
   const ExplicitStateProvider* AsExplicit() { return explicit_state_; }
@@ -822,8 +1167,11 @@ class StateProviderGetter : public StateVisitor {
     return show_identity_state_;
   }
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  const HistorySyncOptinStateProvider* AsHistorySyncOptin() {
+    return history_sync_optin_state_;
+  }
   const ManagementStateProvider* AsManagement() { return management_state_; }
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
  private:
   void visit(const ExplicitStateProvider* state_provider) override {
@@ -841,18 +1189,23 @@ class StateProviderGetter : public StateVisitor {
     show_identity_state_ = state_provider;
   }
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  void visit(const HistorySyncOptinStateProvider* state_provider) override {
+    history_sync_optin_state_ = state_provider;
+  }
   void visit(const ManagementStateProvider* state_provider) override {
     management_state_ = state_provider;
   }
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
   raw_ptr<const ExplicitStateProvider> explicit_state_ = nullptr;
   raw_ptr<const SyncErrorStateProvider> sync_error_state_ = nullptr;
   raw_ptr<const SigninPendingStateProvider> signin_pending_state_ = nullptr;
   raw_ptr<const ShowIdentityNameStateProvider> show_identity_state_ = nullptr;
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  raw_ptr<const HistorySyncOptinStateProvider> history_sync_optin_state_ =
+      nullptr;
   raw_ptr<const ManagementStateProvider> management_state_ = nullptr;
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 };
 
 }  // namespace
@@ -921,7 +1274,7 @@ class StateManager : public StateObserver,
 
     // Recompute the button active state after adding a new state.
     ComputeButtonActiveState();
-    UpdateButtonText();
+    UpdateAvatarButton();
   }
 
  private:
@@ -945,16 +1298,14 @@ class StateManager : public StateObserver,
           std::make_unique<ShowIdentityNameStateProvider>(
               /*state_observer=*/*this, *profile, avatar_toolbar_button_.get());
 
-      if (switches::IsImprovedSigninUIOnDesktopEnabled()) {
-        states_[ButtonState::kUpgradeClientError] =
-            std::make_unique<SyncErrorStateProvider>(
-                /*state_observer=*/*this, *profile,
-                AvatarSyncErrorType::kUpgradeClientError);
-        states_[ButtonState::kPassphraseError] =
-            std::make_unique<SyncErrorStateProvider>(
-                /*state_observer=*/*this, *profile,
-                AvatarSyncErrorType::kPassphraseError);
-      }
+      states_[ButtonState::kUpgradeClientError] =
+          std::make_unique<SyncErrorStateProvider>(
+              /*state_observer=*/*this, *profile,
+              AvatarSyncErrorType::kUpgradeClientError);
+      states_[ButtonState::kPassphraseError] =
+          std::make_unique<SyncErrorStateProvider>(
+              /*state_observer=*/*this, *profile,
+              AvatarSyncErrorType::kPassphraseError);
 
       if (AccountConsistencyModeManager::IsDiceEnabledForProfile(profile)) {
         states_[ButtonState::kSyncPaused] =
@@ -972,6 +1323,17 @@ class StateManager : public StateObserver,
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
       if (base::FeatureList::IsEnabled(
+              switches::kEnableHistorySyncOptinExpansionPill)) {
+        auto history_sync_optin_state_provider =
+            std::make_unique<HistorySyncOptinStateProvider>(
+                /*state_observer=*/*this, *browser);
+        state_manager_observers_.emplace_back(
+            HistorySyncOptinCoordinator::GetOrCreateForProfile(*profile));
+        states_[ButtonState::kHistorySyncOptin] =
+            std::move(history_sync_optin_state_provider);
+      }
+
+      if (base::FeatureList::IsEnabled(
               features::kEnterpriseProfileBadgingForAvatar) ||
           base::FeatureList::IsEnabled(
               features::kEnterpriseProfileBadgingPolicies)) {
@@ -985,8 +1347,7 @@ class StateManager : public StateObserver,
       states_[ButtonState::kSigninPending] =
           std::make_unique<SigninPendingStateProvider>(
               /*state_observer=*/*this, *profile, *avatar_toolbar_button_);
-
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
       signin::IdentityManager* identity_manager =
           IdentityManagerFactory::GetForProfile(profile);
@@ -1051,7 +1412,18 @@ class StateManager : public StateObserver,
     for (auto& state_pair : states_) {
       // Sets first state that is active.
       if (state_pair.second->IsActive()) {
+        std::optional<ButtonState> old_state;
+        if (current_active_state_pair_) {
+          if (current_active_state_pair_->first == state_pair.first) {
+            return;
+          }
+          old_state = current_active_state_pair_->first;
+        }
         current_active_state_pair_ = &state_pair;
+        for (auto observer : state_manager_observers_) {
+          observer->OnButtonStateChanged(old_state,
+                                         current_active_state_pair_->first);
+        }
         return;
       }
     }
@@ -1065,12 +1437,15 @@ class StateManager : public StateObserver,
 
   void UpdateButtonText() { avatar_toolbar_button_->UpdateText(); }
 
-  // This is mainly used `OnStateProviderUpdateRequest()` where currently only
-  // one state transition needs the icon update. Consider adding a filter if
-  // this impacting performance.
+  void UpdateButtonAction() { avatar_toolbar_button_->UpdateButtonAction(); }
+
+  // This is mainly used `OnStateProviderUpdateRequest()` where not all of the
+  // state transitions update all of the button properties. Consider adding a
+  // filter if this is impacting performance.
   void UpdateAvatarButton() {
     UpdateButtonText();
     UpdateButtonIcon();
+    UpdateButtonAction();
   }
 
   // signin::IdentityManager::Observer:
@@ -1121,6 +1496,8 @@ class StateManager : public StateObserver,
   base::ScopedObservation<ProfileAttributesStorage,
                           ProfileAttributesStorage::Observer>
       profile_observation_{this};
+
+  std::vector<raw_ref<StateManagerObserver>> state_manager_observers_;
 };
 
 }  // namespace internal
@@ -1258,15 +1635,17 @@ void AvatarToolbarButtonDelegate::OnThemeChanged(
           : GetCurrentProfileThemeColors(*color_provider, *service));
 }
 
-base::ScopedClosureRunner AvatarToolbarButtonDelegate::ShowExplicitText(
-    const std::u16string& new_text,
-    std::optional<std::u16string> accessibility_label) {
-  CHECK(!new_text.empty());
+base::ScopedClosureRunner AvatarToolbarButtonDelegate::SetExplicitButtonState(
+    const std::u16string& text,
+    std::optional<std::u16string> accessibility_label,
+    std::optional<base::RepeatingClosure> action) {
+  CHECK(!text.empty());
 
   // Create the new explicit state with the clear text callback.
   std::unique_ptr<ExplicitStateProvider> explicit_state_provider =
       std::make_unique<ExplicitStateProvider>(
-          /*state_observer=*/*state_manager_, new_text, accessibility_label);
+          /*state_observer=*/*state_manager_, text,
+          std::move(accessibility_label), std::move(action));
 
   ExplicitStateProvider* explicit_state_provider_ptr =
       explicit_state_provider.get();
@@ -1326,8 +1705,7 @@ AvatarToolbarButtonDelegate::GetTextAndColor(
       break;
     case ButtonState::kSyncError:
       if (!IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount(
-              signin::ConsentLevel::kSync) &&
-          switches::IsImprovedSigninUIOnDesktopEnabled()) {
+              signin::ConsentLevel::kSync)) {
         color =
             color_provider->GetColor(kColorAvatarButtonHighlightSigninPaused);
         text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SIGNIN_PAUSED);
@@ -1363,15 +1741,42 @@ AvatarToolbarButtonDelegate::GetTextAndColor(
                                            guest_window_count));
       text = l10n_util::GetPluralStringFUTF16(IDS_AVATAR_BUTTON_GUEST,
                                               guest_window_count);
+      color = color_provider->GetColor(kColorAvatarButtonHighlightNormal);
       break;
     }
     case ButtonState::kManagement: {
       text = enterprise_util::GetEnterpriseLabel(profile_, /*truncated=*/true);
-      color = color_provider->GetColor(kColorAvatarButtonHighlightNormal);
+      if (base::FeatureList::IsEnabled(
+              features::
+                  kEnableAppMenuButtonColorsForDefaultAvatarButtonStates)) {
+        color = color_provider->GetColor(kColorAvatarButtonHighlightManagement);
+      }
       break;
     }
     case ButtonState::kNormal:
+      color = color_provider->GetColor(kColorAvatarButtonHighlightNormal);
       break;
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin: {
+      switch (switches::kHistorySyncOptinExpansionPillOption.Get()) {
+        case switches::HistorySyncOptinExpansionPillOption::
+            kBrowseAcrossDevices:
+        case switches::HistorySyncOptinExpansionPillOption::
+            kBrowseAcrossDevicesNewProfileMenuPromoVariant:
+          text = l10n_util::GetStringUTF16(
+              IDS_AVATAR_BUTTON_BROWSE_ACROSS_DEVICES);
+          break;
+        case switches::HistorySyncOptinExpansionPillOption::kSyncHistory:
+          text = l10n_util::GetStringUTF16(IDS_AVATAR_BUTTON_SYNC_HISTORY);
+          break;
+        case switches::HistorySyncOptinExpansionPillOption::
+            kSeeTabsFromOtherDevices:
+          text = l10n_util::GetStringUTF16(
+              IDS_AVATAR_BUTTON_SEE_TABS_FROM_OTHER_DEVICES);
+          break;
+      }
+    }
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
   }
 
   return {text, color};
@@ -1391,6 +1796,9 @@ AvatarToolbarButtonDelegate::GetAccessibilityLabel() const {
     case ButtonState::kSyncError:
     case ButtonState::kSyncPaused:
     case ButtonState::kNormal:
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
       break;
     case ButtonState::kSigninPending: {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
@@ -1425,25 +1833,34 @@ SkColor AvatarToolbarButtonDelegate::GetHighlightTextColor(
           kColorAvatarButtonHighlightIncognitoForeground);
     case ButtonState::kSyncError:
       if (IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount(
-              signin::ConsentLevel::kSync) ||
-          !switches::IsImprovedSigninUIOnDesktopEnabled()) {
+              signin::ConsentLevel::kSync)) {
         return color_provider->GetColor(
             kColorAvatarButtonHighlightSyncErrorForeground);
       }
       [[fallthrough]];
-    case ButtonState::kManagement:
     case ButtonState::kSigninPending:
     case ButtonState::kUpgradeClientError:
     case ButtonState::kPassphraseError:
     case ButtonState::kSyncPaused:
-      return color_provider->GetColor(
-          kColorAvatarButtonHighlightNormalForeground);
     case ButtonState::kExplicitTextShowing:
-    case ButtonState::kGuestSession:
     case ButtonState::kShowIdentityName:
-    case ButtonState::kNormal:
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
       return color_provider->GetColor(
           kColorAvatarButtonHighlightDefaultForeground);
+    case ButtonState::kGuestSession:
+    case ButtonState::kNormal:
+      return color_provider->GetColor(
+          kColorAvatarButtonHighlightNormalForeground);
+    case ButtonState::kManagement:
+      return base::FeatureList::IsEnabled(
+                 features::
+                     kEnableAppMenuButtonColorsForDefaultAvatarButtonStates)
+                 ? color_provider->GetColor(
+                       kColorAvatarButtonHighlightManagementForeground)
+                 : color_provider->GetColor(
+                       kColorAvatarButtonHighlightDefaultForeground);
   }
 }
 
@@ -1479,6 +1896,9 @@ std::u16string AvatarToolbarButtonDelegate::GetAvatarTooltipText() const {
     case ButtonState::kExplicitTextShowing:
     case ButtonState::kManagement:
     case ButtonState::kNormal:
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
       return GetProfileName();
   }
 }
@@ -1497,11 +1917,13 @@ AvatarToolbarButtonDelegate::GetInkdropColors() const {
       case ButtonState::kNormal:
       case ButtonState::kExplicitTextShowing:
       case ButtonState::kShowIdentityName:
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+      case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
         break;
       case ButtonState::kSyncError:
         if (IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount(
-                signin::ConsentLevel::kSync) ||
-            !switches::IsImprovedSigninUIOnDesktopEnabled()) {
+                signin::ConsentLevel::kSync)) {
           break;
         }
         [[fallthrough]];
@@ -1535,13 +1957,15 @@ ui::ImageModel AvatarToolbarButtonDelegate::GetAvatarIcon(
     case ButtonState::kSyncPaused:
     case ButtonState::kManagement:
     case ButtonState::kNormal:
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
       return ui::ImageModel::FromImage(profiles::GetSizedAvatarIcon(
           GetProfileAvatarImage(icon_size), icon_size, icon_size,
           profiles::SHAPE_CIRCLE));
     case ButtonState::kSyncError:
       if (IdentityManagerFactory::GetForProfile(profile_)->HasPrimaryAccount(
-              signin::ConsentLevel::kSync) ||
-          !switches::IsImprovedSigninUIOnDesktopEnabled()) {
+              signin::ConsentLevel::kSync)) {
         return ui::ImageModel::FromImage(profiles::GetSizedAvatarIcon(
             GetProfileAvatarImage(icon_size), icon_size, icon_size,
             profiles::SHAPE_CIRCLE));
@@ -1566,9 +1990,12 @@ ui::ImageModel AvatarToolbarButtonDelegate::GetAvatarIcon(
 bool AvatarToolbarButtonDelegate::ShouldPaintBorder() const {
   switch (state_manager_->GetButtonActiveState()) {
     case ButtonState::kGuestSession:
+      return true;
     case ButtonState::kShowIdentityName:
     case ButtonState::kNormal:
-      return true;
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
     case ButtonState::kIncognitoProfile:
     case ButtonState::kExplicitTextShowing:
     case ButtonState::kManagement:
@@ -1578,6 +2005,33 @@ bool AvatarToolbarButtonDelegate::ShouldPaintBorder() const {
     case ButtonState::kSyncPaused:
     case ButtonState::kSyncError:
       return false;
+  }
+}
+
+bool AvatarToolbarButtonDelegate::ShouldBlendHighlightColor() const {
+  switch (state_manager_->GetButtonActiveState()) {
+    case ButtonState::kManagement:
+      return base::FeatureList::IsEnabled(
+                 features::
+                     kEnableAppMenuButtonColorsForDefaultAvatarButtonStates)
+                 ? false
+                 : avatar_toolbar_button_->GetWidget() &&
+                       avatar_toolbar_button_->GetWidget()->GetCustomTheme();
+    case ButtonState::kShowIdentityName:
+    case ButtonState::kNormal:
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin:
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kIncognitoProfile:
+    case ButtonState::kExplicitTextShowing:
+    case ButtonState::kSigninPending:
+    case ButtonState::kUpgradeClientError:
+    case ButtonState::kPassphraseError:
+    case ButtonState::kSyncPaused:
+    case ButtonState::kSyncError:
+    case ButtonState::kGuestSession:
+      return avatar_toolbar_button_->GetWidget() &&
+             avatar_toolbar_button_->GetWidget()->GetCustomTheme();
   }
 }
 
@@ -1608,6 +2062,43 @@ void AvatarToolbarButtonDelegate::OnPrimaryAccountChanged(
         ->MaybeShowExplicitBrowserSigninPreferenceRememberedIPH(account_info);
   } else {
     gaia_id_for_signin_choice_remembered_ = account_info.gaia;
+  }
+}
+
+std::optional<base::RepeatingClosure>
+AvatarToolbarButtonDelegate::GetButtonAction() {
+  switch (state_manager_->GetButtonActiveState()) {
+    case ButtonState::kIncognitoProfile:
+    case ButtonState::kSyncError:
+    case ButtonState::kManagement:
+    case ButtonState::kSigninPending:
+    case ButtonState::kUpgradeClientError:
+    case ButtonState::kPassphraseError:
+    case ButtonState::kSyncPaused:
+    case ButtonState::kGuestSession:
+    case ButtonState::kShowIdentityName:
+    case ButtonState::kNormal:
+      return std::nullopt;
+    case ButtonState::kExplicitTextShowing: {
+      internal::ExplicitStateProvider* explicit_state =
+          const_cast<internal::ExplicitStateProvider*>(
+              internal::StateProviderGetter(
+                  *state_manager_->GetActiveStateProvider())
+                  .AsExplicit());
+      CHECK(explicit_state);
+      return explicit_state->GetButtonAction();
+    }
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case ButtonState::kHistorySyncOptin: {
+      internal::HistorySyncOptinStateProvider* history_sync_optin_state =
+          const_cast<internal::HistorySyncOptinStateProvider*>(
+              internal::StateProviderGetter(
+                  *state_manager_->GetActiveStateProvider())
+                  .AsHistorySyncOptin());
+      CHECK(history_sync_optin_state);
+      return history_sync_optin_state->GetButtonAction();
+    }
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
   }
 }
 
@@ -1651,6 +2142,11 @@ AvatarToolbarButtonDelegate::CreateScopedInfiniteDelayOverrideForTesting(
       return base::AutoReset<std::optional<base::TimeDelta>>(
           &g_show_signin_pending_text_delay_for_testing,
           kInfiniteTimeForTesting);
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case AvatarDelayType::kHistorySyncOptin:
+      return base::AutoReset<std::optional<base::TimeDelta>>(
+          &g_history_sync_optin_duration_for_testing, kInfiniteTimeForTesting);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
   }
 }
 
@@ -1679,6 +2175,19 @@ void AvatarToolbarButtonDelegate::TriggerTimeoutForTesting(
         signin_pending_state->ForceTimerTimeoutForTesting();  // IN-TEST
       }
       break;
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+    case AvatarDelayType::kHistorySyncOptin:
+      if (state_manager_->GetButtonActiveState() ==
+          ButtonState::kHistorySyncOptin) {
+        internal::HistorySyncOptinStateProvider* history_sync_optin_state =
+            const_cast<internal::HistorySyncOptinStateProvider*>(
+                internal::StateProviderGetter(
+                    *state_manager_->GetActiveStateProvider())
+                    .AsHistorySyncOptin());
+        history_sync_optin_state->ForceDelayTimeoutForTesting();  // IN-TEST
+      }
+      break;
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
   }
 }
 

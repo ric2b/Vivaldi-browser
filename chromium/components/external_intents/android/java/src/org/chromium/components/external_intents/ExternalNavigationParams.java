@@ -96,9 +96,11 @@ public class ExternalNavigationParams {
     private final boolean mIsHiddenCrossFrameNavigation;
     private final boolean mIsSandboxedMainFrame;
     private final @Nullable Callback<AsyncActionTakenParams> mAsyncActionTakenCallback;
-    private boolean mIsRendererInitiated;
-    private @Nullable Origin mInitiatorOrigin;
+    private final boolean mIsRendererInitiated;
+    private final @Nullable Origin mInitiatorOrigin;
     private final long mNavigationId;
+    private final boolean mIsTabInPWA;
+    private final boolean mIsInDesktopWindowingMode;
 
     // Populated when an async action is taken, ensuring the callback gets called.
     private @Nullable RequiredCallback<AsyncActionTakenParams> mRequiredAsyncActionTakenCallback;
@@ -122,7 +124,9 @@ public class ExternalNavigationParams {
             boolean isInitialNavigationInFrame,
             boolean isHiddenCrossFrameNavigation,
             boolean isSandboxedMainFrame,
-            long navigationId) {
+            long navigationId,
+            boolean isTabInPWA,
+            boolean isInDesktopWindowingMode) {
         mUrl = url;
         mIsIncognito = isIncognito;
         mPageTransition = pageTransition;
@@ -142,6 +146,8 @@ public class ExternalNavigationParams {
         mIsHiddenCrossFrameNavigation = isHiddenCrossFrameNavigation;
         mIsSandboxedMainFrame = isSandboxedMainFrame;
         mNavigationId = navigationId;
+        mIsTabInPWA = isTabInPWA;
+        mIsInDesktopWindowingMode = isInDesktopWindowingMode;
     }
 
     public void onAsyncActionStarted() {
@@ -261,10 +267,24 @@ public class ExternalNavigationParams {
         return mNavigationId;
     }
 
+    /**
+     * @return whether this Tab is in a PWA (TWA or WebAPK), false otherwise.
+     */
+    public boolean isTabInPWA() {
+        return mIsTabInPWA;
+    }
+
+    /**
+     * @return whether this activity is in Android desktop windowing mode or not.
+     */
+    public boolean isInDesktopWindowingMode() {
+        return mIsInDesktopWindowingMode;
+    }
+
     /** The builder for {@link ExternalNavigationParams} objects. */
     public static class Builder {
-        private GURL mUrl;
-        private boolean mIsIncognito;
+        private final GURL mUrl;
+        private final boolean mIsIncognito;
         private @Nullable GURL mReferrerUrl;
         private int mPageTransition;
         private boolean mIsRedirect;
@@ -282,6 +302,8 @@ public class ExternalNavigationParams {
         private boolean mIsHiddenCrossFrameNavigation;
         private boolean mIsSandboxedMainFrame;
         private long mNavigationId;
+        private boolean mIsTabInPWA;
+        private boolean mIsInDesktopWindowingMode;
 
         public Builder(GURL url, boolean isIncognito) {
             mUrl = url;
@@ -331,7 +353,7 @@ public class ExternalNavigationParams {
             return this;
         }
 
-        /** Sets the package name of the TWA or WebAPK within which the navigation is happening. **/
+        /** Sets the package name of the TWA or WebAPK within which the navigation is happening. */
         public Builder setNativeClientPackageName(String v) {
             mNativeClientPackageName = v;
             return this;
@@ -384,6 +406,18 @@ public class ExternalNavigationParams {
             return this;
         }
 
+        /** Sets whether this navigation was started in a PWA (TWA or WebAPK). */
+        public Builder setIsTabInPWA(boolean isTabInPWA) {
+            mIsTabInPWA = isTabInPWA;
+            return this;
+        }
+
+        /** Sets whether this application is in a desktop window. */
+        public Builder setIsInDesktopWindowingMode(boolean v) {
+            mIsInDesktopWindowingMode = v;
+            return this;
+        }
+
         /**
          * @return A fully constructed {@link ExternalNavigationParams} object.
          */
@@ -407,7 +441,9 @@ public class ExternalNavigationParams {
                     mIsInitialNavigationInFrame,
                     mIsHiddenCrossFrameNavigation,
                     mIsSandboxedMainFrame,
-                    mNavigationId);
+                    mNavigationId,
+                    mIsTabInPWA,
+                    mIsInDesktopWindowingMode);
         }
     }
 }

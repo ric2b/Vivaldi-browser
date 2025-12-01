@@ -16,7 +16,9 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/test_future.h"
+#include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/screen_ai/screen_ai_install_state.h"
 #include "chrome/browser/screen_ai/screen_ai_service_router.h"
@@ -37,6 +39,16 @@
 #include "ui/gfx/codec/png_codec.h"
 
 namespace {
+
+// LINT.IfChange(kServiceIdleCheckingDelay)
+constexpr base::TimeDelta kServiceIdleCheckingDelay = base::Seconds(3);
+// LINT.ThenChange(//services/screen_ai/screen_ai_service_impl.cc:kIdleCheckingDelay)
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_BROWSERTESTS) && !BUILDFLAG(USE_FAKE_SCREEN_AI)
+// LINT.IfChange(kResourceMeasurementInterval)
+constexpr base::TimeDelta kResourceMeasurementInterval = base::Seconds(1);
+// LINT.ThenChange(//chrome/browser/screen_ai/resource_monitor.cc:kSampleInterval)
+#endif
 
 using ::testing::ElementsAre;
 using ::testing::Field;
@@ -84,18 +96,19 @@ void WaitForStatus(scoped_refptr<screen_ai::OpticalCharacterRecognizer> ocr,
 void WaitForDisconnecting(screen_ai::ScreenAIServiceRouter* router,
                           base::OnceCallback<void()> callback,
                           int remaining_tries) {
-  if (!router->IsProcessRunningForTesting() || !remaining_tries) {
+  if (!router->IsProcessRunningForTesting(
+          screen_ai::ScreenAIServiceRouter::Service::kOCR) ||
+      !remaining_tries) {
     std::move(callback).Run();
     return;
   }
-  router->ShutDownIfNoClientsForTesting();
 
   // Wait more...
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&WaitForDisconnecting, router, std::move(callback),
                      remaining_tries - 1),
-      base::Milliseconds(200));
+      kServiceIdleCheckingDelay);
 }
 
 // bool: PDF OCR service enabled.
@@ -113,6 +126,17 @@ struct OpticalCharacterRecognizerTestParamsToString {
 };
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_BROWSERTESTS) && !BUILDFLAG(USE_FAKE_SCREEN_AI)
+
+// Name of files which have results.
+const int kTestFilenamesCount = 7;
+std::string_view kTestFilenames[kTestFilenamesCount] = {
+    "simple_text_only_sample",
+    "chinese",
+    "farsi",
+    "hindi",
+    "japanese",
+    "korean",
+    "russian"};
 
 // Computes string match based on the edit distance of the two strings.
 // Returns 0 for totally different strings and 1 for totally matching. See
@@ -239,9 +263,21 @@ class OpticalCharacterRecognizerTest
     }
   }
 
+  // Returns true if ocr initialization was successful.
+  bool CreateAndInitOCR(mojom::OcrClientType client_type) {
+    base::test::TestFuture<bool> init_future;
+    ocr_ = OpticalCharacterRecognizer::CreateWithStatusCallback(
+        browser()->profile(), client_type, init_future.GetCallback());
+    EXPECT_TRUE(init_future.Wait());
+    return init_future.Get<bool>();
+  }
+
+  scoped_refptr<OpticalCharacterRecognizer> ocr() { return ocr_; }
+
  private:
   base::ScopedObservation<ScreenAIInstallState, ScreenAIInstallState::Observer>
       component_download_observer_{this};
+  scoped_refptr<OpticalCharacterRecognizer> ocr_;
   base::test::ScopedFeatureList feature_list_;
 };
 
@@ -256,6 +292,12 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, Create) {
 
   EXPECT_TRUE(ocr->StatusAvailableForTesting());
   EXPECT_EQ(ocr->is_ready(), IsOcrAvailable());
+
+  base::test::TestFuture<uint32_t> max_dimension_future;
+  ocr->GetMaxImageDimension(max_dimension_future.GetCallback());
+  ASSERT_TRUE(max_dimension_future.Wait());
+  ASSERT_EQ(max_dimension_future.Get<uint32_t>(),
+            IsOcrAvailable() ? screen_ai::GetMaxDimensionForOCR() : 0);
 }
 
 IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
@@ -269,6 +311,12 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
   ASSERT_TRUE(future.Wait());
   ASSERT_EQ(future.Get<bool>(), IsOcrAvailable());
   ASSERT_TRUE(ocr);
+
+  base::test::TestFuture<uint32_t> max_dimension_future;
+  ocr->GetMaxImageDimension(max_dimension_future.GetCallback());
+  ASSERT_TRUE(max_dimension_future.Wait());
+  ASSERT_EQ(max_dimension_future.Get<uint32_t>(),
+            IsOcrAvailable() ? screen_ai::GetMaxDimensionForOCR() : 0);
 }
 
 IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
@@ -286,20 +334,12 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
 }
 
 IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, PerformOCR_Empty) {
-  // Init OCR.
-  base::test::TestFuture<bool> init_future;
-  scoped_refptr<OpticalCharacterRecognizer> ocr =
-      OpticalCharacterRecognizer::CreateWithStatusCallback(
-          browser()->profile(), mojom::OcrClientType::kTest,
-          init_future.GetCallback());
-  ASSERT_TRUE(init_future.Wait());
-  ASSERT_EQ(init_future.Get<bool>(), IsOcrAvailable());
+  ASSERT_EQ(CreateAndInitOCR(mojom::OcrClientType::kTest), IsOcrAvailable());
 
-  // Perform OCR.
   SkBitmap bitmap =
       LoadImageFromTestFile(base::FilePath(FILE_PATH_LITERAL("ocr/empty.png")));
   base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
-  ocr->PerformOCR(bitmap, perform_future.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
   ASSERT_TRUE(perform_future.Wait());
   ASSERT_TRUE(perform_future.Get<mojom::VisualAnnotationPtr>()->lines.empty());
 }
@@ -311,20 +351,12 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, PerformOCR_Empty) {
 IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, PerformOCR_Simple) {
   base::HistogramTester histograms;
 
-  // Init OCR.
-  base::test::TestFuture<bool> init_future;
-  scoped_refptr<OpticalCharacterRecognizer> ocr =
-      OpticalCharacterRecognizer::CreateWithStatusCallback(
-          browser()->profile(), mojom::OcrClientType::kTest,
-          init_future.GetCallback());
-  ASSERT_TRUE(init_future.Wait());
-  ASSERT_EQ(init_future.Get<bool>(), IsOcrAvailable());
+  ASSERT_EQ(CreateAndInitOCR(mojom::OcrClientType::kTest), IsOcrAvailable());
 
-  // Perform OCR.
   SkBitmap bitmap = LoadImageFromTestFile(
       base::FilePath(FILE_PATH_LITERAL("ocr/just_one_letter.png")));
   base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
-  ocr->PerformOCR(bitmap, perform_future.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
   ASSERT_TRUE(perform_future.Wait());
 
 // Fake library always returns empty.
@@ -360,21 +392,17 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, PerformOCR_Simple) {
   histograms.ExpectBucketCount("Accessibility.ScreenAI.OCR.LinesCount",
                                expected_lines_count, expected_calls);
 
-  int image_size = bitmap.width() * bitmap.height();
-  histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.ImageSize10M",
-                              expected_calls);
-  histograms.ExpectBucketCount("Accessibility.ScreenAI.OCR.ImageSize10M",
-                               image_size, expected_calls);
-
   // Expect measured latency, but we don't know how long it taskes to process.
   // So we just check the total count of the expected bucket determined by the
-  // image size.
-  EXPECT_GT(500 * 500, image_size);
-  histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.Latency.Small",
-                              expected_calls);
-  histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.Latency.Medium", 0);
-  histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.Latency.Large", 0);
-  histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.Latency.XLarge", 0);
+  // image dimensions, with threshold 2048 for each dimension.
+  EXPECT_GE(2048, bitmap.width());
+  EXPECT_GE(2048, bitmap.height());
+  histograms.ExpectTotalCount(
+      "Accessibility.ScreenAI.OCR.Latency.NotDownsampled", expected_calls);
+  histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.Latency.Downsampled",
+                              0);
+  histograms.ExpectTotalCount(
+      "Accessibility.ScreenAI.OCR.Downsampled.ClientType", 0);
 
   // PDF Specific metrics should not be recorded as the client type is test.
   histograms.ExpectTotalCount("Accessibility.ScreenAI.OCR.LinesCount.PDF", 0);
@@ -390,20 +418,13 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, PerformOCR_Simple) {
 IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest, PerformOCR_PdfMetrics) {
   base::HistogramTester histograms;
 
-  // Init OCR.
-  base::test::TestFuture<bool> init_future;
-  scoped_refptr<OpticalCharacterRecognizer> ocr =
-      OpticalCharacterRecognizer::CreateWithStatusCallback(
-          browser()->profile(), mojom::OcrClientType::kPdfViewer,
-          init_future.GetCallback());
-  ASSERT_TRUE(init_future.Wait());
-  ASSERT_EQ(init_future.Get<bool>(), IsOcrAvailable());
+  ASSERT_EQ(CreateAndInitOCR(mojom::OcrClientType::kPdfViewer),
+            IsOcrAvailable());
 
-  // Perform OCR.
   SkBitmap bitmap = LoadImageFromTestFile(
       base::FilePath(FILE_PATH_LITERAL("ocr/just_one_letter.png")));
   base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
-  ocr->PerformOCR(bitmap, perform_future.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
   ASSERT_TRUE(perform_future.Wait());
 
 // Fake library always returns empty.
@@ -465,6 +486,8 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
                             perform_ocr_future.GetCallback());
           }));
 
+  ASSERT_TRUE(perform_ocr_future.Wait());
+
 #if BUILDFLAG(USE_FAKE_SCREEN_AI)
   EXPECT_THAT(perform_ocr_future.Get()->lines, IsEmpty());
 #else
@@ -483,39 +506,28 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
       ScreenAIServiceRouterFactory::GetForBrowserContext(browser()->profile());
 
   // Init OCR once and verify service availability.
-  {
-    base::test::TestFuture<bool> init_future;
-    scoped_refptr<OpticalCharacterRecognizer> ocr =
-        OpticalCharacterRecognizer::CreateWithStatusCallback(
-            browser()->profile(), mojom::OcrClientType::kTest,
-            init_future.GetCallback());
-    ASSERT_TRUE(init_future.Wait());
-    ASSERT_TRUE(init_future.Get<bool>());
+  ASSERT_TRUE(CreateAndInitOCR(mojom::OcrClientType::kTest));
+  ASSERT_TRUE(router->IsProcessRunningForTesting(
+      screen_ai::ScreenAIServiceRouter::Service::kOCR));
 
-    ASSERT_TRUE(router->IsProcessRunningForTesting());
-  }
-
-  // Trigger service shut down and wait for disconnecting.
+  // Release it and wait for shutdown due to being idle.
+  ocr().reset();
   base::test::TestFuture<void> future;
-  WaitForDisconnecting(router, future.GetCallback(), /*remaining_tries=*/10);
+  WaitForDisconnecting(router, future.GetCallback(), /*remaining_tries=*/3);
   ASSERT_TRUE(future.Wait());
-  ASSERT_FALSE(router->IsProcessRunningForTesting());
+  ASSERT_FALSE(router->IsProcessRunningForTesting(
+      screen_ai::ScreenAIServiceRouter::Service::kOCR));
 
   // Init OCR again.
-  base::test::TestFuture<bool> init_future;
-  scoped_refptr<OpticalCharacterRecognizer> ocr =
-      OpticalCharacterRecognizer::CreateWithStatusCallback(
-          browser()->profile(), mojom::OcrClientType::kTest,
-          init_future.GetCallback());
-  ASSERT_TRUE(init_future.Wait());
-  ASSERT_TRUE(init_future.Get<bool>());
-  ASSERT_TRUE(router->IsProcessRunningForTesting());
+  ASSERT_TRUE(CreateAndInitOCR(mojom::OcrClientType::kTest));
+  ASSERT_TRUE(router->IsProcessRunningForTesting(
+      screen_ai::ScreenAIServiceRouter::Service::kOCR));
 
   // Perform OCR.
   SkBitmap bitmap = LoadImageFromTestFile(
       base::FilePath(FILE_PATH_LITERAL("ocr/just_one_letter.png")));
   base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
-  ocr->PerformOCR(bitmap, perform_future.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
   ASSERT_TRUE(perform_future.Wait());
 
   // Fake library always returns empty results.
@@ -530,22 +542,14 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
     GTEST_SKIP() << "This test is only available when service is available";
   }
 
-  // Init OCR.
-  base::test::TestFuture<bool> init_future;
-  scoped_refptr<OpticalCharacterRecognizer> ocr =
-      OpticalCharacterRecognizer::CreateWithStatusCallback(
-          browser()->profile(), mojom::OcrClientType::kTest,
-          init_future.GetCallback());
-  ASSERT_TRUE(init_future.Wait());
-  ASSERT_TRUE(init_future.Get<bool>());
-
-  ocr->DisconnectForTesting();
+  ASSERT_TRUE(CreateAndInitOCR(mojom::OcrClientType::kTest));
+  ocr()->DisconnectAnnotator();
 
   // Perform OCR and get VisualAnnotation.
   SkBitmap bitmap = LoadImageFromTestFile(
       base::FilePath(FILE_PATH_LITERAL("ocr/just_one_letter.png")));
   base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
-  ocr->PerformOCR(bitmap, perform_future.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
   ASSERT_TRUE(perform_future.Wait());
 
   // Fake library always returns empty results.
@@ -553,11 +557,11 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerTest,
   ASSERT_FALSE(perform_future.Get<mojom::VisualAnnotationPtr>()->lines.empty());
 #endif
 
-  ocr->DisconnectForTesting();
+  ocr()->DisconnectAnnotator();
 
   // Perform OCR and get AxTreeUpdate.
   base::test::TestFuture<const ui::AXTreeUpdate&> perform_future2;
-  ocr->PerformOCR(bitmap, perform_future2.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future2.GetCallback());
   ASSERT_TRUE(perform_future2.Wait());
 
   // Fake library always returns empty results.
@@ -585,7 +589,7 @@ TEST(OpticalCharacterRecognizer, StringMatchTest) {
 // Param: Test name.
 class OpticalCharacterRecognizerResultsTest
     : public InProcessBrowserTest,
-      public ::testing::WithParamInterface<const char*> {
+      public ::testing::WithParamInterface<std::string_view> {
  public:
   OpticalCharacterRecognizerResultsTest() {
     feature_list_.InitWithFeatures({ax::mojom::features::kScreenAIOCREnabled,
@@ -600,8 +604,23 @@ class OpticalCharacterRecognizerResultsTest
         GetComponentBinaryPathForTests().DirName());
   }
 
+  // Returns true if ocr initialization was successful.
+  // TODO(crbug.com/378472917): Add a `OpticalCharacterRecognizerTestBase` to
+  // avoid redundancy.
+  bool CreateAndInitOCR() {
+    base::test::TestFuture<bool> init_future;
+    ocr_ = OpticalCharacterRecognizer::CreateWithStatusCallback(
+        browser()->profile(), mojom::OcrClientType::kTest,
+        init_future.GetCallback());
+    EXPECT_TRUE(init_future.Wait());
+    return init_future.Get<bool>();
+  }
+
+  scoped_refptr<OpticalCharacterRecognizer> ocr() { return ocr_; }
+
  private:
   base::test::ScopedFeatureList feature_list_;
+  scoped_refptr<OpticalCharacterRecognizer> ocr_;
 };
 
 // If this test fails after updating the library, the failure can be related to
@@ -610,14 +629,7 @@ class OpticalCharacterRecognizerResultsTest
 // line in the .txt file is the minimum acceptable match and it can be updated.
 IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerResultsTest, PerformOCR) {
   base::ScopedAllowBlockingForTesting allow_blocking;
-  // Init OCR.
-  base::test::TestFuture<bool> init_future;
-  scoped_refptr<OpticalCharacterRecognizer> ocr =
-      OpticalCharacterRecognizer::CreateWithStatusCallback(
-          browser()->profile(), mojom::OcrClientType::kTest,
-          init_future.GetCallback());
-  ASSERT_TRUE(init_future.Wait());
-  ASSERT_EQ(init_future.Get<bool>(), true);
+  ASSERT_TRUE(CreateAndInitOCR());
 
   // Perform OCR.
   base::FilePath image_path =
@@ -625,7 +637,7 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerResultsTest, PerformOCR) {
           .AppendASCII(base::StringPrintf("%s.png", GetParam()));
   SkBitmap bitmap = LoadImageFromTestFile(image_path);
   base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
-  ocr->PerformOCR(bitmap, perform_future.GetCallback());
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
   ASSERT_TRUE(perform_future.Wait());
   auto& results = perform_future.Get<mojom::VisualAnnotationPtr>();
 
@@ -660,13 +672,184 @@ IN_PROC_BROWSER_TEST_P(OpticalCharacterRecognizerResultsTest, PerformOCR) {
 
 INSTANTIATE_TEST_SUITE_P(All,
                          OpticalCharacterRecognizerResultsTest,
-                         testing::Values("simple_text_only_sample",
-                                         "chinese",
-                                         "farsi",
-                                         "hindi",
-                                         "japanese",
-                                         "korean",
-                                         "russian"));
+                         testing::ValuesIn(kTestFilenames));
+
+// This test is slow and most probably failing on debug builds and ASAN builds
+// which are slower than the other tests.
+#if !defined(NDEBUG) || defined(ADDRESS_SANITIZER)
+#define MAYBE_PerformOCRLargeImage DISABLED_PerformOCRLargeImage
+#else
+#define MAYBE_PerformOCRLargeImage PerformOCRLargeImage
+#endif
+IN_PROC_BROWSER_TEST_F(OpticalCharacterRecognizerResultsTest,
+                       MAYBE_PerformOCRLargeImage) {
+  base::HistogramTester histograms;
+
+  // Since this test processes a huge image, it can be slow and overrun the
+  // timeout.
+  base::test::ScopedDisableRunLoopTimeout disable_timeout;
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  ASSERT_TRUE(CreateAndInitOCR());
+
+  base::FilePath image_path =
+      base::FilePath(FILE_PATH_LITERAL("ocr"))
+          .Append(FILE_PATH_LITERAL("building_chromium_long.png"));
+  SkBitmap bitmap = LoadImageFromTestFile(image_path);
+  base::test::TestFuture<mojom::VisualAnnotationPtr> perform_future;
+  ocr()->PerformOCR(bitmap, perform_future.GetCallback());
+  ASSERT_TRUE(perform_future.Wait());
+  auto& results = perform_future.Get<mojom::VisualAnnotationPtr>();
+
+  // Since OCR downsamples large images, the content of this image becomes quite
+  // small and unreadable, hence nothing is recognized.
+  EXPECT_FALSE(results->lines.size());
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+  histograms.ExpectTotalCount(
+      "Accessibility.ScreenAI.OCR.Downsampled.ClientType", 1);
+}
+
+IN_PROC_BROWSER_TEST_F(OpticalCharacterRecognizerResultsTest,
+                       PerformOCRMultipleFilesOneByOne) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  ASSERT_TRUE(CreateAndInitOCR());
+
+  for (std::string_view& file_name : kTestFilenames) {
+    base::FilePath image_path =
+        base::FilePath(FILE_PATH_LITERAL("ocr"))
+            .AppendASCII(base::StringPrintf("%s.png", file_name));
+    SkBitmap bitmap = LoadImageFromTestFile(image_path);
+    base::test::TestFuture<mojom::VisualAnnotationPtr> future;
+    ocr()->PerformOCR(bitmap, future.GetCallback());
+    ASSERT_TRUE(future.Wait());
+    auto& results = future.Get<mojom::VisualAnnotationPtr>();
+    EXPECT_TRUE(results->lines.size());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(OpticalCharacterRecognizerResultsTest,
+                       PerformOCRMultipleFilesNoWaitBetween) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  ASSERT_TRUE(CreateAndInitOCR());
+
+  SkBitmap bitmaps[kTestFilenamesCount];
+  {
+    auto* bitmap = std::begin(bitmaps);
+    for (std::string_view& file_name : kTestFilenames) {
+      base::FilePath image_path =
+          base::FilePath(FILE_PATH_LITERAL("ocr"))
+              .AppendASCII(base::StringPrintf("%s.png", file_name));
+      *bitmap = LoadImageFromTestFile(image_path);
+      bitmap = std::next(bitmap);
+    }
+  }
+
+  base::test::TestFuture<mojom::VisualAnnotationPtr>
+      futures[kTestFilenamesCount];
+  {
+    auto* future = std::begin(futures);
+    for (SkBitmap& bitmap : bitmaps) {
+      ocr()->PerformOCR(bitmap, future->GetCallback());
+      future = std::next(future);
+    }
+  }
+
+  for (auto& future : futures) {
+    ASSERT_TRUE(future.Wait());
+    auto& results = future.Get<mojom::VisualAnnotationPtr>();
+    EXPECT_TRUE(results->lines.size());
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(OpticalCharacterRecognizerResultsTest,
+                       PerformOCRMultipleClientsNoWaitBetween) {
+  base::HistogramTester histograms;
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
+  base::TimeTicks start_time = base::TimeTicks::Now();
+
+  // Create multiple OCR clients.
+  scoped_refptr<OpticalCharacterRecognizer> ocr_clients[kTestFilenamesCount];
+  {
+    base::test::TestFuture<bool> futures[kTestFilenamesCount];
+    {
+      auto* future = std::begin(futures);
+      auto* ocr = std::begin(ocr_clients);
+      for (int i = 0; i < kTestFilenamesCount; i++) {
+        (*ocr) = OpticalCharacterRecognizer::CreateWithStatusCallback(
+            browser()->profile(), mojom::OcrClientType::kTest,
+            future->GetCallback());
+        future = std::next(future);
+        ocr = std::next(ocr);
+      }
+    }
+
+    for (auto& future : futures) {
+      ASSERT_TRUE(future.Wait());
+      ASSERT_TRUE(future.Get<bool>());
+    }
+  }
+
+  // Load files.
+  SkBitmap bitmaps[kTestFilenamesCount];
+  {
+    auto* bitmap = std::begin(bitmaps);
+    for (std::string_view& file_name : kTestFilenames) {
+      base::FilePath image_path =
+          base::FilePath(FILE_PATH_LITERAL("ocr"))
+              .AppendASCII(base::StringPrintf("%s.png", file_name));
+      *bitmap = LoadImageFromTestFile(image_path);
+      bitmap = std::next(bitmap);
+    }
+  }
+
+  // Perform OCR on all client without waiting.
+  base::test::TestFuture<mojom::VisualAnnotationPtr>
+      futures[kTestFilenamesCount];
+  {
+    auto* future = std::begin(futures);
+    auto* ocr = std::begin(ocr_clients);
+    for (SkBitmap& bitmap : bitmaps) {
+      (*ocr)->PerformOCR(bitmap, future->GetCallback());
+      future = std::next(future);
+      ocr = std::next(ocr);
+    }
+  }
+
+  // Verify all got results.
+  for (auto& future : futures) {
+    ASSERT_TRUE(future.Wait());
+    auto& results = future.Get<mojom::VisualAnnotationPtr>();
+    EXPECT_TRUE(results->lines.size());
+  }
+
+  // Disconnect all clients.
+  for (auto& ocr : ocr_clients) {
+    ocr.reset();
+  }
+
+  // Wait for the service to shutdown and store metrics.
+  screen_ai::ScreenAIServiceRouter* router =
+      ScreenAIServiceRouterFactory::GetForBrowserContext(browser()->profile());
+  base::test::TestFuture<void> future;
+  WaitForDisconnecting(router, future.GetCallback(), /*remaining_tries=*/3);
+  ASSERT_TRUE(future.Wait());
+  ASSERT_FALSE(router->IsProcessRunningForTesting(
+      screen_ai::ScreenAIServiceRouter::Service::kOCR));
+
+  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
+
+  // Memory use and lifetime measurements should be recorded only once since all
+  // tasks were done with the same process.
+  histograms.ExpectTotalCount("Accessibility.OCR.Service.LifeTime", 1);
+
+  // Since this metric is recorded at long intervals, ensure the test has been
+  // running long enough to record it.
+  if (base::TimeTicks::Now() - start_time > kResourceMeasurementInterval * 2) {
+    histograms.ExpectTotalCount("Accessibility.OCR.Service.MaxMemoryLoad", 1);
+  }
+}
 
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_BROWSERTESTS) && !
         // BUILDFLAG(USE_FAKE_SCREEN_AI)

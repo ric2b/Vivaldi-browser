@@ -20,12 +20,6 @@ import {Router} from '../router.js';
 import {getTemplate} from './ai_page.html.js';
 import {FeatureOptInState, SettingsAiPageFeaturePrefName} from './constants.js';
 
-export interface SettingsAiPageElement {
-  $: {
-    historySearchRow: HTMLElement,
-  };
-}
-
 // BaseMixin is needed to populate the associatedControl field for search in
 // subpages, see crbug.com/378927854.
 const SettingsAiPageElementBase = PrefsMixin(BaseMixin(PolymerElement));
@@ -40,11 +34,6 @@ export class SettingsAiPageElement extends SettingsAiPageElementBase {
 
   static get properties() {
     return {
-      enableAiSettingsPageRefresh_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('enableAiSettingsPageRefresh'),
-      },
-
       showAutofillAiControl_: {
         type: Boolean,
         value: () => loadTimeData.getBoolean('showAutofillAiControl'),
@@ -103,28 +92,16 @@ export class SettingsAiPageElement extends SettingsAiPageElementBase {
           return map;
         },
       },
-
-      historySearchRowSublabel_: {
-        type: String,
-        value: () => {
-          return loadTimeData.getBoolean(
-                     'historyEmbeddingsAnswersFeatureEnabled') ?
-              loadTimeData.getString('historySearchAnswersSettingSublabel') :
-              loadTimeData.getString('historySearchSettingSublabel');
-        },
-      },
     };
   }
 
-  private enableAiSettingsPageRefresh_: boolean;
-  private showAutofillAiControl_: boolean;
-  private showComposeControl_: boolean;
-  private showCompareControl_: boolean;
-  private showHistorySearchControl_: boolean;
-  private showTabOrganizationControl_: boolean;
-  private showPasswordChangeControl_: boolean;
-  private focusConfig_: FocusConfig;
-  private historySearchRowSublabel_: string;
+  declare private showAutofillAiControl_: boolean;
+  declare private showComposeControl_: boolean;
+  declare private showCompareControl_: boolean;
+  declare private showHistorySearchControl_: boolean;
+  declare private showTabOrganizationControl_: boolean;
+  declare private showPasswordChangeControl_: boolean;
+  declare private focusConfig_: FocusConfig;
   private shouldRecordMetrics_: boolean = true;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
@@ -136,7 +113,7 @@ export class SettingsAiPageElement extends SettingsAiPageElementBase {
 
   private maybeLogVisibilityMetrics_() {
     // Only record metrics when the user first navigates to the main AI page.
-    if (!this.shouldRecordMetrics_ || !this.enableAiSettingsPageRefresh_ ||
+    if (!this.shouldRecordMetrics_ ||
         Router.getInstance().getCurrentRoute() !== routes.AI) {
       return;
     }
@@ -161,11 +138,9 @@ export class SettingsAiPageElement extends SettingsAiPageElementBase {
   }
 
   private onHistorySearchRowClick_() {
-    if (this.enableAiSettingsPageRefresh_) {
-      this.recordInteractionMetrics_(
-          AiPageInteractions.HISTORY_SEARCH_CLICK,
-          'Settings.AiPage.HistorySearchEntryPointClick');
-    }
+    this.recordInteractionMetrics_(
+        AiPageInteractions.HISTORY_SEARCH_CLICK,
+        'Settings.AiPage.HistorySearchEntryPointClick');
 
     const router = Router.getInstance();
     router.navigateTo(router.getRoutes().HISTORY_SEARCH);

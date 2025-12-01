@@ -45,6 +45,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_LAYER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_LAYER_H_
 
+#include <concepts>
 #include <memory>
 
 #include "base/auto_reset.h"
@@ -335,7 +336,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   // |backdrop_filter_on_effect_node_dirty_| will be cleared.
   void UpdateCompositorFilterOperationsForBackdropFilter(
       CompositorFilterOperations& operations,
-      gfx::RRectF& backdrop_filter_bounds);
+      SkPath& backdrop_filter_bounds);
   void SetBackdropFilterOnEffectNodeDirty() {
     backdrop_filter_on_effect_node_dirty_ = true;
   }
@@ -369,7 +370,7 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   gfx::RectF FilterReferenceBox() const;
   std::optional<gfx::SizeF> FilterViewport() const;
   gfx::RectF BackdropFilterReferenceBox() const;
-  gfx::RRectF BackdropFilterBounds() const;
+  SkPath BackdropFilterBounds() const;
 
   void UpdateFilterReferenceBox();
   void UpdateFilters(StyleDifference,
@@ -420,6 +421,10 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   bool HasSelfPaintingLayerDescendant() const {
     DCHECK(!needs_descendant_dependent_flags_update_);
     return has_self_painting_layer_descendant_;
+  }
+  bool HasBackdropFilterDescendant() const {
+    DCHECK(!needs_descendant_dependent_flags_update_);
+    return has_backdrop_filter_descendant_;
   }
 
   // See
@@ -751,6 +756,8 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
 
   unsigned has_self_painting_layer_descendant_ : 1;
 
+  unsigned has_backdrop_filter_descendant_ : 1;
+
   unsigned needs_reorder_overlay_overflow_controls_ : 1;
   unsigned static_inline_edge_ : 2;
   unsigned static_block_edge_ : 2;
@@ -873,9 +880,8 @@ CORE_EXPORT void ShowLayerTree(const blink::LayoutObject*);
 namespace cppgc {
 // Assign PaintLayer to be allocated on custom LayoutObjectSpace.
 template <typename T>
-struct SpaceTrait<
-    T,
-    std::enable_if_t<std::is_base_of<blink::PaintLayer, T>::value>> {
+  requires(std::derived_from<T, blink::PaintLayer>)
+struct SpaceTrait<T> {
   using Space = blink::LayoutObjectSpace;
 };
 }  // namespace cppgc

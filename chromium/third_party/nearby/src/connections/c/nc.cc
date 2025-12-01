@@ -221,6 +221,38 @@ NcContext* GetContext(NC_INSTANCE instance) {
 
 NC_INSTANCE NcCreateService() {
   NcContext nc_context;
+
+#if defined(NC_IOS_SDK)
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableBleV2,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableDct,
+      false);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableDynamicRoleSwitch,
+      false);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableBleL2cap,
+      false);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableGattClientDisconnection,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableAwdl,
+      true);
+  nearby::NearbyFlags::GetInstance().OverrideBoolFlagValue(
+      ::nearby::connections::config_package_nearby::nearby_connections_feature::
+          kEnableStopBLEScanningOnWifiUpgrade,
+      true);
+#endif
+
   nc_context.router = new ::nearby::connections::ServiceControllerRouter();
   nc_context.core = new ::nearby::connections::Core(nc_context.router);
 
@@ -287,6 +319,8 @@ void NcStartAdvertising(
         std::string(advertising_options->fast_advertisement_service_uuid.data,
                     advertising_options->fast_advertisement_service_uuid.size);
   }
+  cpp_advertising_options.allowed.awdl =
+      advertising_options->common_options.allowed_mediums[NC_MEDIUM_AWDL];
 
   cpp_advertising_options.is_out_of_band_connection =
       advertising_options->is_out_of_band_connection;
@@ -378,6 +412,8 @@ void NcStartDiscovery(NC_INSTANCE instance, const NC_DATA* service_id,
       discovery_options->common_options.allowed_mediums[NC_MEDIUM_WIFI_HOTSPOT];
   cpp_discovery_options.allowed.web_rtc =
       discovery_options->common_options.allowed_mediums[NC_MEDIUM_WEB_RTC];
+  cpp_discovery_options.allowed.awdl =
+      discovery_options->common_options.allowed_mediums[NC_MEDIUM_AWDL];
 
   NC_DISCOVERY_LISTENER discovery_listener_copy = *discovery_listener;
   ::nearby::connections::DiscoveryListener listener;
@@ -472,6 +508,8 @@ void NcRequestConnection(
       GetCppConnectionRequestInfo(instance, *connection_request_info, context);
 
   ::nearby::connections::ConnectionOptions cpp_connection_options;
+  cpp_connection_options.allowed.awdl =
+      connection_options->common_options.allowed_mediums[NC_MEDIUM_AWDL];
   cpp_connection_options.allowed.ble =
       connection_options->common_options.allowed_mediums[NC_MEDIUM_BLE];
   cpp_connection_options.allowed.bluetooth =
@@ -480,6 +518,9 @@ void NcRequestConnection(
       connection_options->common_options.allowed_mediums[NC_MEDIUM_WEB_RTC];
   cpp_connection_options.allowed.wifi_lan =
       connection_options->common_options.allowed_mediums[NC_MEDIUM_WIFI_LAN];
+  cpp_connection_options.allowed.wifi_hotspot =
+      connection_options->common_options
+          .allowed_mediums[NC_MEDIUM_WIFI_HOTSPOT];
   cpp_connection_options.auto_upgrade_bandwidth =
       connection_options->auto_upgrade_bandwidth;
   cpp_connection_options.enforce_topology_constraints =

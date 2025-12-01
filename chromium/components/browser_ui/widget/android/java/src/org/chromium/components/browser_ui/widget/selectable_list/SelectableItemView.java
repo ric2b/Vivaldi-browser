@@ -47,7 +47,7 @@ public abstract class SelectableItemView<E> extends CheckableSelectableItemView<
     protected TextView mDescriptionView;
 
     /** Layout res to be used when inflating the view, used to swap in the visual refresh. */
-    private int mLayoutRes;
+    private final int mLayoutRes;
 
     /** Levels for the background. */
     private final int mDefaultLevel;
@@ -55,17 +55,17 @@ public abstract class SelectableItemView<E> extends CheckableSelectableItemView<
     private final int mSelectedLevel;
 
     /** The resource for the start icon background. */
-    private int mStartIconBackgroundRes;
+    private final int mStartIconBackgroundRes;
 
     /** Constructor for inflating from XML. */
     public SelectableItemView(Context context, AttributeSet attrs) {
         super(context, attrs);
 
         mLayoutRes = R.layout.modern_list_item_view;
-        mStartIconBackgroundRes = R.drawable.list_item_icon_modern_bg;
-
         if (BuildConfig.IS_VIVALDI)
             mStartIconBackgroundRes = R.drawable.vivaldi_list_item_icon_modern_bg;
+        else
+        mStartIconBackgroundRes = R.drawable.list_item_icon_modern_bg;
 
         mDefaultLevel = getResources().getInteger(R.integer.list_item_level_default);
         mSelectedLevel = getResources().getInteger(R.integer.list_item_level_selected);

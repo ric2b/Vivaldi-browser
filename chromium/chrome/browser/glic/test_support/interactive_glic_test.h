@@ -18,6 +18,8 @@
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/glic/host/glic.mojom.h"
 #include "chrome/browser/glic/host/glic_cookie_synchronizer.h"
+#include "chrome/browser/glic/host/glic_page_handler.h"
+#include "chrome/browser/glic/host/host.h"
 #include "chrome/browser/glic/test_support/glic_test_environment.h"
 #include "chrome/browser/glic/test_support/glic_test_util.h"
 #include "chrome/browser/glic/test_support/interactive_test_util.h"
@@ -28,6 +30,7 @@
 #include "chrome/browser/signin/identity_test_environment_profile_adaptor.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -79,6 +82,7 @@ class InteractiveGlicTestT : public T {
     features_.InitWithFeaturesAndParameters(
         {{features::kGlic, glic_params},
          {features::kTabstripComboButton, {}},
+         {features::kGlicRollout, {}},
          {features::kGlicKeyboardShortcutNewBadge, {}}},
         {});
   }
@@ -139,9 +143,9 @@ class InteractiveGlicTestT : public T {
     }
 
     auto* command_line = base::CommandLine::ForCurrentProcess();
-    command_line->AppendSwitchASCII(
-        ::switches::kGlicGuestURL,
-        Test::embedded_test_server()->GetURL(path.str()).spec());
+    guest_url_ = Test::embedded_test_server()->GetURL(path.str());
+    command_line->AppendSwitchASCII(::switches::kGlicGuestURL,
+                                    guest_url_.spec());
 
     Browser* browser = InProcessBrowserTest::browser();
 
@@ -183,8 +187,8 @@ class InteractiveGlicTestT : public T {
             Api::ObserveState(internal::kGlicWindowControllerState,
                               std::ref(window_controller)),
             Api::InAnyContext(Api::Steps(
-                Api::InstrumentNonTabWebView(
-                    kGlicHostElementId, GlicView::kWebViewElementIdForTesting),
+                Api::InstrumentNonTabWebView(kGlicHostElementId,
+                                             kGlicViewElementId),
                 Api::InstrumentInnerWebContents(kGlicContentsElementId,
                                                 kGlicHostElementId, 0),
                 Api::WaitForWebContentsReady(kGlicContentsElementId))),
@@ -198,8 +202,8 @@ class InteractiveGlicTestT : public T {
             Api::UninstrumentWebContents(kGlicHostElementId, false),
             Api::ObserveState(internal::kGlicWindowControllerState,
                               std::ref(window_controller)),
-            Api::InAnyContext(Api::InstrumentNonTabWebView(
-                kGlicHostElementId, GlicView::kWebViewElementIdForTesting)),
+            Api::InAnyContext(Api::InstrumentNonTabWebView(kGlicHostElementId,
+                                                           kGlicViewElementId)),
             Api::WaitForState(
                 internal::kGlicWindowControllerState,
                 testing::Matcher<GlicWindowController::State>(testing::AnyOf(
@@ -394,6 +398,15 @@ class InteractiveGlicTestT : public T {
         Api::WaitForState(glic::test::internal::kDelayState, true));
   }
 
+  content::RenderFrameHost* FindGlicGuestMainFrame() {
+    for (GlicPageHandler* handler : host().GetPageHandlersForTesting()) {
+      if (handler->GetGuestMainFrame()) {
+        return handler->GetGuestMainFrame();
+      }
+    }
+    return nullptr;
+  }
+
   glic::GlicTestEnvironment& glic_test_environment() {
     return *glic_test_environment_;
   }
@@ -407,6 +420,8 @@ class InteractiveGlicTestT : public T {
   GlicWindowController& window_controller() {
     return glic_service()->window_controller();
   }
+
+  Host& host() { return glic_service()->host(); }
 
   template <typename... M>
   auto EnsureGlicWindowState(const std::string& desc, M&&... matchers) {
@@ -424,6 +439,11 @@ class InteractiveGlicTestT : public T {
     mock_glic_query_params_.emplace(key, value);
   }
 
+  GURL GetGuestURL() {
+    CHECK(guest_url_.is_valid()) << "Guest URL not yet configured.";
+    return guest_url_;
+  }
+
  private:
   // Because of limitations in the template system, calls to base class methods
   // that are guaranteed by the `requires` clause must still be scoped. These
@@ -433,6 +453,7 @@ class InteractiveGlicTestT : public T {
 
   // This is the default test file. Tests can override with a different path.
   std::string glic_page_path_ = "/glic/test_client/index.html";
+  GURL guest_url_;
 
   base::test::ScopedFeatureList features_;
 

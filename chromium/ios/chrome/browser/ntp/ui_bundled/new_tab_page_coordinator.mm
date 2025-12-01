@@ -22,6 +22,7 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "components/search/search.h"
+#import "components/search_engines/template_url_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "components/signin/public/identity_manager/tribool.h"
@@ -29,7 +30,12 @@
 #import "ios/chrome/app/profile/profile_init_stage.h"
 #import "ios/chrome/app/profile/profile_state.h"
 #import "ios/chrome/app/profile/profile_state_observer.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_constants.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator_delegate.h"
+#import "ios/chrome/browser/authentication/ui_bundled/continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_view_controller_presenter.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_coordinator.h"
@@ -39,6 +45,7 @@
 #import "ios/chrome/browser/discover_feed/model/discover_feed_observer_bridge.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service.h"
 #import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_observer.h"
 #import "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #import "ios/chrome/browser/discover_feed/model/feed_model_configuration.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
@@ -56,12 +63,9 @@
 #import "ios/chrome/browser/ntp/shared/metrics/new_tab_page_metrics_constants.h"
 #import "ios/chrome/browser/ntp/shared/metrics/new_tab_page_metrics_recorder.h"
 #import "ios/chrome/browser/ntp/ui_bundled/discover_feed_constants.h"
-#import "ios/chrome/browser/ntp/ui_bundled/discover_feed_manage_delegate.h"
 #import "ios/chrome/browser/ntp/ui_bundled/discover_feed_preview_delegate.h"
 #import "ios/chrome/browser/ntp/ui_bundled/feed_control_delegate.h"
 #import "ios/chrome/browser/ntp/ui_bundled/feed_header_view_controller.h"
-#import "ios/chrome/browser/ntp/ui_bundled/feed_management/feed_management_coordinator.h"
-#import "ios/chrome/browser/ntp/ui_bundled/feed_menu_coordinator.h"
 #import "ios/chrome/browser/ntp/ui_bundled/feed_sign_in_promo_delegate.h"
 #import "ios/chrome/browser/ntp/ui_bundled/feed_top_section/feed_top_section_coordinator.h"
 #import "ios/chrome/browser/ntp/ui_bundled/feed_wrapper_view_controller.h"
@@ -87,8 +91,8 @@
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
-#import "ios/chrome/browser/shared/model/prefs/pref_backed_boolean.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
@@ -119,6 +123,7 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/public/fakebox_focuser.h"
 #import "ios/chrome/browser/toolbar/ui_bundled/tab_groups/coordinator/tab_group_indicator_coordinator.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
+#import "ios/chrome/common/NSString+Chromium.h"
 #import "ios/chrome/common/material_timing.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
@@ -138,14 +143,13 @@
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
 
-@interface NewTabPageCoordinator () <AuthenticationServiceObserving,
-                                     BooleanObserver,
+@interface NewTabPageCoordinator () <AccountMenuCoordinatorDelegate,
+                                     AuthenticationServiceObserving,
                                      ContentSuggestionsDelegate,
-                                     DiscoverFeedManageDelegate,
                                      DiscoverFeedObserverBridgeDelegate,
                                      DiscoverFeedPreviewDelegate,
+                                     DiscoverFeedVisibilityObserver,
                                      FeedControlDelegate,
-                                     FeedMenuCoordinatorDelegate,
                                      FeedSignInPromoDelegate,
                                      FeedWrapperViewControllerDelegate,
                                      HomeCustomizationDelegate,
@@ -214,10 +218,6 @@ using vivaldi::IsVivaldiRunning;
 // PrefService used by this Coordinator.
 @property(nonatomic, assign) PrefService* prefService;
 
-// Whether the feed is expanded or collapsed. Collapsed
-// means the feed header is shown, but not any of the feed content.
-@property(nonatomic, strong) PrefBackedBoolean* feedExpandedPref;
-
 // The view controller representing the selected feed, such as the Discover or
 // Following feed.
 @property(nonatomic, weak) UIViewController* feedViewController;
@@ -228,9 +228,6 @@ using vivaldi::IsVivaldiRunning;
 
 // The view controller representing the NTP feed header.
 @property(nonatomic, strong) FeedHeaderViewController* feedHeaderViewController;
-
-// Coordinator for handling the feed menu.
-@property(nonatomic, strong) FeedMenuCoordinator* feedMenuCoordinator;
 
 // Authentication Service for the user's signed-in state.
 @property(nonatomic, assign) AuthenticationService* authService;
@@ -247,10 +244,6 @@ using vivaldi::IsVivaldiRunning;
 // The header view controller containing the fake omnibox and logo.
 @property(nonatomic, strong)
     NewTabPageHeaderViewController* headerViewController;
-
-// The coordinator for handling feed management.
-@property(nonatomic, strong)
-    FeedManagementCoordinator* feedManagementCoordinator;
 
 // Coordinator for Feed top section.
 @property(nonatomic, strong)
@@ -287,10 +280,10 @@ using vivaldi::IsVivaldiRunning;
   TabGroupIndicatorCoordinator* _tabGroupIndicatorCoordinator;
   // Indicates whether the fakebox was tapped as part of an omnibox focus event.
   BOOL _fakeboxTapped;
-  // Whether the account menu is displayed on top of this NTP.
-  BOOL _showAccountMenuInProgress;
-  // Whether the signin menu is displayed on top of this NTP.
-  BOOL _showSigninCommandInProgress;
+  // The account menu coordinator.
+  AccountMenuCoordinator* _accountMenuCoordinator;
+  // The sign in and history sync coordinator displayed on top of the NTP.
+  SigninCoordinator* _signinCoordinator;
 
   // Vivaldi
   VivaldiSpeedDialHomeCoordinator* _speedDialHomeCoordinator;
@@ -335,7 +328,7 @@ using vivaldi::IsVivaldiRunning;
   [sceneState addObserver:self];
 
   // Configures incognito NTP if user is in incognito mode.
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     DCHECK(!self.incognitoViewController);
     UrlLoadingBrowserAgent* URLLoader =
         UrlLoadingBrowserAgent::FromBrowser(self.browser);
@@ -384,7 +377,7 @@ using vivaldi::IsVivaldiRunning;
   [self updateFeedWithIsSupervisedUser:(capability == signin::Tribool::kTrue)];
 
   [self configureNTPMediator];
-  if (self.NTPMediator.feedHeaderVisible) {
+  if ([self.NTPMediator isFeedHeaderVisible]) {
     [self configureFeedAndHeader];
   }
   [self configureHeaderViewController];
@@ -409,7 +402,7 @@ using vivaldi::IsVivaldiRunning;
   SceneState* sceneState = self.browser->GetSceneState();
   [sceneState removeObserver:self];
 
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     self.incognitoViewController = nil;
     self.started = NO;
     return;
@@ -423,8 +416,6 @@ using vivaldi::IsVivaldiRunning;
   [_tabGroupIndicatorCoordinator stop];
   _tabGroupIndicatorCoordinator = nil;
 
-  [self.feedManagementCoordinator stop];
-  self.feedManagementCoordinator = nil;
   [self.contentSuggestionsCoordinator stop];
   self.contentSuggestionsCoordinator = nil;
   self.headerViewController = nil;
@@ -440,6 +431,8 @@ using vivaldi::IsVivaldiRunning;
   self.feedHeaderViewController = nil;
   [self.feedTopSectionCoordinator stop];
   self.feedTopSectionCoordinator = nil;
+  [self stopAccountMenuCoordinator];
+  [self stopSigninCoordinator];
 
   self.NTPMetricsRecorder = nil;
 
@@ -462,20 +455,11 @@ using vivaldi::IsVivaldiRunning;
   self.feedMetricsRecorder.NTPActionsDelegate = nil;
   self.feedMetricsRecorder = nil;
 
-  [self.feedExpandedPref stop];
-  [self.feedExpandedPref setObserver:nil];
-  self.feedExpandedPref = nil;
-
-  [self.feedMenuCoordinator stop];
-  self.feedMenuCoordinator = nil;
-
   _familyLinkUserCapabilitiesObserverBridge.reset();
   _discoverFeedObserverBridge.reset();
   _identityObserverBridge.reset();
   _authServiceObserverBridge.reset();
-
-  [_sharingCoordinator stop];
-  _sharingCoordinator = nil;
+  [self clearPresentedState];
 
   [_customizationCoordinator stop];
   _customizationCoordinator = nil;
@@ -525,15 +509,13 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)focusFakebox {
-  if (IsHomeCustomizationEnabled()) {
-    [self dismissCustomizationMenu];
-  }
+  [self dismissCustomizationMenu];
   _fakeboxTapped = NO;
   [self.NTPViewController focusOmnibox];
 }
 
 - (void)reload {
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     return;
   }
   [self.contentSuggestionsCoordinator refresh];
@@ -558,15 +540,12 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)constrainNamedGuideForFeedIPH {
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     return;
   }
-  UIView* viewToConstrain =
-      IsHomeCustomizationEnabled()
-          ? [self.headerViewController customizationMenuButton]
-          : self.feedHeaderViewController.managementButton;
-  [LayoutGuideCenterForBrowser(self.browser) referenceView:viewToConstrain
-                                                 underName:kFeedIPHNamedGuide];
+  [LayoutGuideCenterForBrowser(self.browser)
+      referenceView:[self.headerViewController customizationMenuButton]
+          underName:kFeedIPHNamedGuide];
 }
 
 - (void)updateFollowingFeedHasUnseenContent:(BOOL)hasUnseenContent {
@@ -596,9 +575,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (void)didNavigateAwayFromNTP {
   [self cancelOmniboxEdit];
-  if (IsHomeCustomizationEnabled()) {
-    [self dismissCustomizationMenu];
-  }
+  [self dismissCustomizationMenu];
   [self saveNTPState];
   [self updateNTPIsVisible:NO];
   [self updateStartForVisibilityChange:NO];
@@ -606,7 +583,7 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (BOOL)isFakeboxPinned {
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     return YES;
   }
   return self.NTPViewController.isFakeboxPinned;
@@ -626,6 +603,17 @@ using vivaldi::IsVivaldiRunning;
   }
 
   [self presentLensIconBubbleNow];
+}
+
+- (BOOL)isFeedVisible {
+  return [self.NTPMediator isFeedHeaderVisible] && self.feedViewController;
+}
+
+- (void)clearPresentedState {
+  [self.contentSuggestionsCoordinator clearPresentedState];
+  [self stopSharingCoordinator];
+  [self stopAccountMenuCoordinator];
+  [self stopSigninCoordinator];
 }
 
 #pragma mark - Setters
@@ -659,12 +647,6 @@ using vivaldi::IsVivaldiRunning;
   DCHECK(self.prefService);
   DCHECK(self.headerViewController);
 
-  self.feedExpandedPref = [[PrefBackedBoolean alloc]
-      initWithPrefService:self.prefService
-                 prefName:feed::prefs::kArticlesListVisible];
-  // Observer is necessary for multiwindow NTPs to remain in sync.
-  [self.feedExpandedPref setObserver:self];
-
   // Start observing IdentityManager.
   signin::IdentityManager* identityManager =
       IdentityManagerFactory::GetForProfile(self.profile);
@@ -695,9 +677,6 @@ using vivaldi::IsVivaldiRunning;
   self.logoVendor = ios::provider::CreateLogoVendor(browser, self.webState);
   self.NTPViewController = [componentFactory NTPViewController];
   self.headerViewController = [componentFactory headerViewController];
-  [self.headerViewController
-      setUserSignedIn:self.authService && self.authService->HasPrimaryIdentity(
-                                              signin::ConsentLevel::kSignin)];
   self.NTPMediator =
       [componentFactory NTPMediatorForBrowser:browser
                      identityDiscImageUpdater:self.headerViewController];
@@ -712,19 +691,12 @@ using vivaldi::IsVivaldiRunning;
 
 // Creates and configures the feed and feed header based on user prefs.
 - (void)configureFeedAndHeader {
-  CHECK(self.NTPMediator.feedHeaderVisible);
+  CHECK([self.NTPMediator isFeedHeaderVisible]);
   CHECK(self.NTPViewController);
 
   if (!self.feedHeaderViewController) {
     self.feedHeaderViewController =
         [self.componentFactory feedHeaderViewController];
-    self.feedMenuCoordinator = [[FeedMenuCoordinator alloc]
-        initWithBaseViewController:self.NTPViewController
-                           browser:self.browser];
-    self.feedMenuCoordinator.delegate = self;
-    [self.feedMenuCoordinator start];
-    self.feedHeaderViewController.feedMenuHandler = HandlerForProtocol(
-        self.browser->GetCommandDispatcher(), FeedMenuCommands);
   }
 
   self.feedHeaderViewController.feedControlDelegate = self;
@@ -738,7 +710,7 @@ using vivaldi::IsVivaldiRunning;
       self.feedHeaderViewController;
 
   // Requests feeds here if the correct flags and prefs are enabled.
-  if ([self shouldFeedBeVisible]) {
+  if ([self.NTPMediator isFeedHeaderVisible]) {
     if ([self isFollowingFeedAvailable] &&
         self.selectedFeed == FeedTypeFollowing) {
       self.feedViewController = [self.componentFactory
@@ -779,6 +751,8 @@ using vivaldi::IsVivaldiRunning;
       HandlerForProtocol(dispatcher, ApplicationCommands);
   headerViewController.browserCoordinatorHandler =
       HandlerForProtocol(dispatcher, BrowserCoordinatorCommands);
+  headerViewController.helpHandler =
+      HandlerForProtocol(dispatcher, HelpCommands);
 
   headerViewController.commandHandler = self;
   headerViewController.customizationDelegate = self;
@@ -805,6 +779,7 @@ using vivaldi::IsVivaldiRunning;
 - (void)configureNTPMediator {
   NewTabPageMediator* NTPMediator = self.NTPMediator;
   DCHECK(NTPMediator);
+  NTPMediator.feedVisibilityObserver = self;
   NTPMediator.feedControlDelegate = self;
   NTPMediator.NTPContentDelegate = self;
   NTPMediator.headerConsumer = self.headerViewController;
@@ -836,6 +811,8 @@ using vivaldi::IsVivaldiRunning;
   self.feedWrapperViewController = [self.componentFactory
       feedWrapperViewControllerWithDelegate:self
                          feedViewController:self.feedViewController];
+  self.NTPMediator.contentCollectionView =
+      self.feedWrapperViewController.contentCollectionView;
 
   if ([self isFeedVisible]) {
     self.NTPViewController.feedTopSectionViewController =
@@ -864,8 +841,6 @@ using vivaldi::IsVivaldiRunning;
   _tabGroupIndicatorCoordinator = [[TabGroupIndicatorCoordinator alloc]
       initWithBaseViewController:self.NTPViewController
                          browser:self.browser];
-  _tabGroupIndicatorCoordinator.parentViewController =
-      self.headerViewController;
   _tabGroupIndicatorCoordinator.toolbarHeightDelegate = nil;
   _tabGroupIndicatorCoordinator.displayedOnNTP = YES;
   [_tabGroupIndicatorCoordinator start];
@@ -894,7 +869,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (UIViewController*)viewController {
   DCHECK(self.started);
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     return self.incognitoViewController;
   } else {
     return self.containerViewController;
@@ -919,21 +894,17 @@ using vivaldi::IsVivaldiRunning;
 }
 
 - (void)fakeboxTapped {
-  if (IsHomeCustomizationEnabled()) {
-    [self dismissCustomizationMenu];
-  }
+  [self dismissCustomizationMenu];
   _fakeboxTapped = YES;
   [self.NTPViewController focusOmnibox];
 }
 
 - (void)identityDiscWasTapped:(UIView*)identityDisc {
-  if (_showAccountMenuInProgress || _showSigninCommandInProgress) {
+  if (_accountMenuCoordinator || _signinCoordinator) {
     // Double tap, or tap before dismissing of the previous one is complete.
     return;
   }
-  if (IsHomeCustomizationEnabled()) {
-    [self dismissCustomizationMenu];
-  }
+  [self dismissCustomizationMenu];
   [self.NTPMetricsRecorder recordIdentityDiscTapped];
   id<ApplicationCommands> handler = HandlerForProtocol(
       self.browser->GetCommandDispatcher(), ApplicationCommands);
@@ -944,32 +915,33 @@ using vivaldi::IsVivaldiRunning;
     [handler showSettingsFromViewController:self.baseViewController];
   } else if (isSignedIn) {
     if (IsIdentityDiscAccountMenuEnabled()) {
-      _showAccountMenuInProgress = YES;
-      __weak __typeof(self) weakSelf = self;
-      [handler showAccountMenuWithAnchorView:identityDisc
-                        skipIfUINotAvailable:NO
-                                  completion:^{
-                                    [weakSelf showAccountMenuDidFinish];
-                                  }];
-
+      [self showAccountMenu:identityDisc];
     } else {
       [handler showSettingsFromViewController:self.baseViewController];
     }
   } else {
     __weak __typeof(self) weakSelf = self;
-    _showSigninCommandInProgress = YES;
-    ShowSigninCommand* const showSigninCommand = [[ShowSigninCommand alloc]
-        initWithOperation:AuthenticationOperation::kSheetSigninAndHistorySync
-                 identity:nil
-              accessPoint:signin_metrics::AccessPoint::kNtpSignedOutIcon
-              promoAction:signin_metrics::PromoAction::
-                              PROMO_ACTION_NO_SIGNIN_PROMO
-               completion:^(SigninCoordinatorResult result,
-                            id<SystemIdentity> completionIdentity) {
-                 [weakSelf showSigninCommandDidFinish];
-               }];
-    [handler showSignin:showSigninCommand
-        baseViewController:self.baseViewController];
+    auto accessPoint = signin_metrics::AccessPoint::kNtpSignedOutIcon;
+    auto promoAction =
+        signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO;
+    _signinCoordinator = [SigninCoordinator
+        signinAndHistorySyncCoordinatorWithBaseViewController:
+            self.baseViewController
+                                                      browser:self.browser
+                                                 contextStyle:
+                                                     SigninContextStyle::
+                                                         kDefault
+                                                  accessPoint:accessPoint
+                                                  promoAction:promoAction
+                                          optionalHistorySync:YES
+                                              fullscreenPromo:NO
+                                         continuationProvider:
+                                             DoNothingContinuationProvider()];
+    _signinCoordinator.signinCompletion = ^(
+        SigninCoordinatorResult result, id<SystemIdentity> completionIdentity) {
+      [weakSelf showSigninCommandDidFinish];
+    };
+    [_signinCoordinator start];
   }
 }
 
@@ -1001,35 +973,16 @@ using vivaldi::IsVivaldiRunning;
   [self openCustomizationMenuAtPage:CustomizationMenuPage::kMain animated:YES];
 }
 
-#pragma mark - FeedMenuCoordinatorDelegate
+#pragma mark - DiscoverFeedVisibilityObserver
 
-- (void)didSelectFeedMenuItem:(FeedMenuItemType)item {
-  switch (item) {
-    case FeedMenuItemType::kTurnOff:
-      [self setFeedVisibleFromHeader:NO];
-      break;
-    case FeedMenuItemType::kTurnOn:
-      [self setFeedVisibleFromHeader:YES];
-      break;
-    case FeedMenuItemType::kManage:
-      [self handleFeedManageTapped];
-      break;
-    case FeedMenuItemType::kManageActivity:
-      [self.NTPMediator handleNavigateToActivity];
-      break;
-    case FeedMenuItemType::kManageFollowing:
-      [self.NTPMediator handleNavigateToFollowing];
-      break;
-    case FeedMenuItemType::kLearnMore:
-      [self.NTPMediator handleFeedLearnMoreTapped];
-      break;
+- (void)didChangeDiscoverFeedVisibility {
+  // TODO(crbug.com/412691611): Consider moving to mediator after refactor.
+  if (!self.NTPViewController.viewLoaded) {
+    return;
   }
-}
-
-#pragma mark - DiscoverFeedManageDelegate
-
-- (void)didTapDiscoverFeedManage {
-  [self handleFeedManageTapped];
+  [self handleChangeInModules];
+  [self.NTPViewController setContentOffsetToTop];
+  [self updateModuleVisibility];
 }
 
 #pragma mark - DiscoverFeedPreviewDelegate
@@ -1111,11 +1064,6 @@ using vivaldi::IsVivaldiRunning;
   [self saveNTPState];
 }
 
-- (BOOL)shouldFeedBeVisible {
-  return self.NTPMediator.feedHeaderVisible &&
-         ([self.feedExpandedPref value] || IsHomeCustomizationEnabled());
-}
-
 - (BOOL)isFollowingFeedAvailable {
   return IsWebChannelsEnabled() && self.authService &&
          self.authService->HasPrimaryIdentity(signin::ConsentLevel::kSignin);
@@ -1123,14 +1071,6 @@ using vivaldi::IsVivaldiRunning;
 
 - (NSUInteger)lastVisibleFeedCardIndex {
   return [self.feedWrapperViewController lastVisibleFeedCardIndex];
-}
-
-- (void)setFeedAndHeaderVisibility:(BOOL)visible {
-  if (!self.NTPViewController.viewLoaded) {
-    return;
-  }
-  [self handleChangeInModules];
-  [self.NTPViewController setContentOffsetToTop];
 }
 
 - (void)updateFeedForDefaultSearchEngineChanged {
@@ -1195,19 +1135,13 @@ using vivaldi::IsVivaldiRunning;
                                   feed::FeedSyncPromo::kShowDisableToast];
     return;
   }
-  if (_showAccountMenuInProgress || _showSigninCommandInProgress) {
+  if (_accountMenuCoordinator || _signinCoordinator) {
     return;
   }
   BOOL hasUserIdentities = [self hasIdentitiesOnDevice];
 
   signin_metrics::AccessPoint accessPoint =
       signin_metrics::AccessPoint::kNtpFeedCardMenuPromo;
-  id<ApplicationCommands> handler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), ApplicationCommands);
-  // If there are 0 identities, kInstantSignin requires less taps.
-  AuthenticationOperation operation =
-      (hasUserIdentities) ? AuthenticationOperation::kSigninOnly
-                          : AuthenticationOperation::kInstantSignin;
   switch (source) {
     case FeedSignInCommandSourceBottom:
       // TODO(crbug.com/40066051): Strictly speaking this should record a bucket
@@ -1225,18 +1159,38 @@ using vivaldi::IsVivaldiRunning;
       break;
   }
   __weak __typeof(self) weakSelf = self;
-  _showSigninCommandInProgress = YES;
-  ShowSigninCommand* command = [[ShowSigninCommand alloc]
-      initWithOperation:operation
-               identity:nil
-            accessPoint:accessPoint
-            promoAction:signin_metrics::PromoAction::
-                            PROMO_ACTION_NO_SIGNIN_PROMO
-             completion:^(SigninCoordinatorResult result,
-                          id<SystemIdentity> completionIdentity) {
-               [weakSelf showSigninCommandDidFinish];
-             }];
-  [handler showSignin:command baseViewController:self.NTPViewController];
+  // If there are 0 identities, kInstantSignin requires less taps.
+  if (hasUserIdentities) {
+    _signinCoordinator = [SigninCoordinator
+        consistencyPromoSigninCoordinatorWithBaseViewController:
+            self.NTPViewController
+                                                        browser:self.browser
+                                                   contextStyle:
+                                                       SigninContextStyle::
+                                                           kDefault
+                                                    accessPoint:accessPoint
+                                           prepareChangeProfile:nil
+                                           continuationProvider:
+                                               DoNothingContinuationProvider()];
+  } else {
+    _signinCoordinator = [SigninCoordinator
+        instantSigninCoordinatorWithBaseViewController:self.NTPViewController
+                                               browser:self.browser
+                                              identity:nil
+                                          contextStyle:SigninContextStyle::
+                                                           kDefault
+                                           accessPoint:accessPoint
+                                           promoAction:
+                                               signin_metrics::PromoAction::
+                                                   PROMO_ACTION_NO_SIGNIN_PROMO
+                                  continuationProvider:
+                                      DoNothingContinuationProvider()];
+  }
+  _signinCoordinator.signinCompletion =
+      ^(SigninCoordinatorResult result, id<SystemIdentity> completionIdentity) {
+        [weakSelf showSigninCommandDidFinish];
+      };
+  [_signinCoordinator start];
   signin_metrics::RecordSigninUserActionForAccessPoint(accessPoint);
 }
 
@@ -1491,7 +1445,7 @@ using vivaldi::IsVivaldiRunning;
 
 - (BOOL)shouldAllowOverscrollActionsForOverscrollActionsController:
     (OverscrollActionsController*)controller {
-  return !IsHomeCustomizationEnabled() || !_customizationCoordinator;
+  return !_customizationCoordinator;
 }
 
 - (UIView*)toolbarSnapshotViewForOverscrollActionsController:
@@ -1540,13 +1494,6 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
-#pragma mark - BooleanObserver
-
-- (void)booleanDidChange:(id<ObservableBoolean>)observableBoolean {
-  // Observes changes in feed visibility pref.
-  [self updateModuleVisibility];
-}
-
 #pragma mark - DiscoverFeedObserverBridge
 
 - (void)discoverFeedModelWasCreated {
@@ -1574,10 +1521,6 @@ using vivaldi::IsVivaldiRunning;
   }
   signin::PrimaryAccountChangeEvent::Type eventType =
       event.GetEventTypeFor(signin::ConsentLevel::kSignin);
-  [self.headerViewController
-      setUserSignedIn:eventType ==
-                      signin::PrimaryAccountChangeEvent::Type::kSet];
-
   switch (eventType) {
     case signin::PrimaryAccountChangeEvent::Type::kSet:
     case signin::PrimaryAccountChangeEvent::Type::kCleared: {
@@ -1632,31 +1575,62 @@ using vivaldi::IsVivaldiRunning;
   }
 }
 
+#pragma mark - AccountMenuCoordinatorDelegate
+
+// Update the state, to take into account that the account menu coordinator is
+// stopped.
+- (void)accountMenuCoordinatorWantsToBeStopped:
+    (AccountMenuCoordinator*)coordinator {
+  CHECK_EQ(_accountMenuCoordinator, coordinator, base::NotFatalUntil::M140);
+  [self stopAccountMenuCoordinator];
+}
+
 #pragma mark - Private
 
+- (void)stopSharingCoordinator {
+  [_sharingCoordinator stop];
+  _sharingCoordinator = nil;
+}
+
+- (void)stopAccountMenuCoordinator {
+  [_accountMenuCoordinator stop];
+  _accountMenuCoordinator.delegate = nil;
+  _accountMenuCoordinator = nil;
+}
+
+- (void)stopSigninCoordinator {
+  [_signinCoordinator stop];
+  _signinCoordinator = nil;
+}
+
+- (void)showAccountMenu:(UIView*)identityDisc {
+  _accountMenuCoordinator = [[AccountMenuCoordinator alloc]
+      initWithBaseViewController:self.NTPViewController
+                         browser:self.browser
+                      anchorView:identityDisc
+                     accessPoint:AccountMenuAccessPoint::kNewTabPage
+                             URL:GURL()];
+  _accountMenuCoordinator.delegate = self;
+  [_accountMenuCoordinator start];
+}
+
 - (bool)hasIdentitiesOnDevice {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    return !IdentityManagerFactory::GetForProfile(self.profile)
-                ->GetAccountsOnDevice()
-                .empty();
-  } else {
-    return ChromeAccountManagerServiceFactory::GetForProfile(self.profile)
-        ->HasIdentities();
-  }
+  return !IdentityManagerFactory::GetForProfile(self.profile)
+              ->GetAccountsOnDevice()
+              .empty();
 }
 
 // Update the state, to take into account that the account menu coordinator is
 // stopped.
 - (void)showAccountMenuDidFinish {
-  CHECK(_showAccountMenuInProgress, base::NotFatalUntil::M135);
-  _showAccountMenuInProgress = NO;
+  [self stopAccountMenuCoordinator];
 }
 
 // Update the state, to take into account that the signin coordinator
 // coordinator is stopped.
 - (void)showSigninCommandDidFinish {
-  CHECK(_showSigninCommandInProgress, base::NotFatalUntil::M135);
-  _showSigninCommandInProgress = NO;
+  CHECK(_signinCoordinator, base::NotFatalUntil::M140);
+  [self stopSigninCoordinator];
 }
 
 // Updates the feed visibility or content based on the supervision state
@@ -1709,7 +1683,7 @@ using vivaldi::IsVivaldiRunning;
 
   // Fetches feed header and conditionally fetches feed. Feed can only be
   // visible if feed header is visible.
-  if (self.NTPMediator.feedHeaderVisible) {
+  if ([self.NTPMediator isFeedHeaderVisible]) {
     [self configureFeedAndHeader];
   } else {
     self.NTPViewController.feedHeaderViewController = nil;
@@ -1729,15 +1703,12 @@ using vivaldi::IsVivaldiRunning;
 
   self.NTPViewController.feedWrapperViewController =
       self.feedWrapperViewController;
+  self.NTPMediator.contentCollectionView =
+      self.feedWrapperViewController.contentCollectionView;
 
   [self.NTPViewController layoutContentInParentCollectionView];
 
   [self updateFeedLayout];
-}
-
-// Returns `YES` if the feed is currently visible on the NTP.
-- (BOOL)isFeedVisible {
-  return [self shouldFeedBeVisible] && self.feedViewController;
 }
 
 // Creates, configures and returns a feed view controller configuration.
@@ -1747,19 +1718,9 @@ using vivaldi::IsVivaldiRunning;
   viewControllerConfig.browser = self.browser;
   viewControllerConfig.scrollDelegate = self.NTPViewController;
   viewControllerConfig.previewDelegate = self;
-  viewControllerConfig.manageDelegate = self;
   viewControllerConfig.signInPromoDelegate = self;
 
   return viewControllerConfig;
-}
-
-// Toggles feed visibility between hidden or expanded using the feed header
-// menu. A hidden feed will continue to show the header, with a modified label.
-// TODO(crbug.com/1304382): Modify this comment when Web Channels is launched.
-- (void)setFeedVisibleFromHeader:(BOOL)visible {
-  [self.feedExpandedPref setValue:visible];
-  [self.feedMetricsRecorder recordDiscoverFeedVisibilityChanged:visible];
-  [self updateModuleVisibility];
 }
 
 // Configures and returns the feed top section coordinator.
@@ -1772,20 +1733,6 @@ using vivaldi::IsVivaldiRunning;
   feedTopSectionCoordinator.NTPDelegate = self;
   [feedTopSectionCoordinator start];
   return feedTopSectionCoordinator;
-}
-
-// Handles the feed management button being tapped.
-- (void)handleFeedManageTapped {
-  [self.feedMetricsRecorder recordHeaderMenuManageTapped];
-  [self.feedManagementCoordinator stop];
-  self.feedManagementCoordinator = nil;
-
-  self.feedManagementCoordinator = [[FeedManagementCoordinator alloc]
-      initWithBaseViewController:self.NTPViewController
-                         browser:self.browser];
-  self.feedManagementCoordinator.navigationDelegate = self.NTPMediator;
-  self.feedManagementCoordinator.feedMetricsRecorder = self.feedMetricsRecorder;
-  [self.feedManagementCoordinator start];
 }
 
 // Private setter for the `webState` property.
@@ -1810,47 +1757,39 @@ using vivaldi::IsVivaldiRunning;
 
   self.visible = visible;
   self.NTPViewController.NTPVisible = visible;
+  self.NTPMediator.NTPVisible = visible;
 
-  if (!self.profile->IsOffTheRecord()) {
+  if (!self.isOffTheRecord) {
     if (visible) {
       self.didAppearTime = base::TimeTicks::Now();
 
-      if (IsHomeCustomizationEnabled()) {
-        [self.NTPMetricsRecorder
-            recordCustomizationState:[self currentCustomizationState]];
+      [self.NTPMetricsRecorder
+          recordCustomizationState:[self currentCustomizationState]];
 
-        PrefService* prefService = self.prefService;
-        BOOL safetyCheckEnabled = prefService->GetBoolean(
-            prefs::kHomeCustomizationMagicStackSafetyCheckEnabled);
-        BOOL setUpListEnabled = prefService->GetBoolean(
-            prefs::kHomeCustomizationMagicStackSetUpListEnabled);
-        BOOL tabResumptionEnabled = prefService->GetBoolean(
-            prefs::kHomeCustomizationMagicStackTabResumptionEnabled);
-        BOOL parcelTrackingEnabled = prefService->GetBoolean(
-            prefs::kHomeCustomizationMagicStackParcelTrackingEnabled);
-        BOOL tipsEnabled = prefService->GetBoolean(
-            prefs::kHomeCustomizationMagicStackTipsEnabled);
-        [self.NTPMetricsRecorder
-            recordMagicStackCustomizationStateWithSetUpList:setUpListEnabled
-                                                safetyCheck:safetyCheckEnabled
-                                              tabResumption:tabResumptionEnabled
-                                             parcelTracking:
-                                                 parcelTrackingEnabled
-                                                       tips:tipsEnabled];
-      }
+      PrefService* prefService = self.prefService;
+      BOOL safetyCheckEnabled = prefService->GetBoolean(
+          prefs::kHomeCustomizationMagicStackSafetyCheckEnabled);
+      BOOL setUpListEnabled = prefService->GetBoolean(
+          prefs::kHomeCustomizationMagicStackSetUpListEnabled);
+      BOOL tabResumptionEnabled = prefService->GetBoolean(
+          prefs::kHomeCustomizationMagicStackTabResumptionEnabled);
+      BOOL parcelTrackingEnabled = prefService->GetBoolean(
+          prefs::kHomeCustomizationMagicStackParcelTrackingEnabled);
+      BOOL tipsEnabled = prefService->GetBoolean(
+          prefs::kHomeCustomizationMagicStackTipsEnabled);
+      [self.NTPMetricsRecorder
+          recordMagicStackCustomizationStateWithSetUpList:setUpListEnabled
+                                              safetyCheck:safetyCheckEnabled
+                                            tabResumption:tabResumptionEnabled
+                                           parcelTracking:parcelTrackingEnabled
+                                                     tips:tipsEnabled];
 
       // TODO(crbug.com/350990359): Deprecate IOS.NTP.Impression when Home
       // Customization launches.
-      if (self.NTPMediator.feedHeaderVisible) {
-        if ([self.feedExpandedPref value] || IsHomeCustomizationEnabled()) {
-          [self.NTPMetricsRecorder
-              recordHomeImpression:IOSNTPImpressionType::kFeedVisible
-                    isStartSurface:[self isStartSurface]];
-        } else {
-          [self.NTPMetricsRecorder
-              recordHomeImpression:IOSNTPImpressionType::kFeedCollapsed
-                    isStartSurface:[self isStartSurface]];
-        }
+      if ([self.NTPMediator isFeedHeaderVisible]) {
+        [self.NTPMetricsRecorder
+            recordHomeImpression:IOSNTPImpressionType::kFeedVisible
+                  isStartSurface:[self isStartSurface]];
       } else {
         [self.NTPMetricsRecorder
             recordHomeImpression:IOSNTPImpressionType::kFeedDisabled
@@ -1866,7 +1805,8 @@ using vivaldi::IsVivaldiRunning;
     }
     // Check if feed is visible before reporting NTP visibility as the feed
     // needs to be visible in order to use for metrics.
-    // TODO(crbug.com/40871863) Move isFeedVisible check to the metrics recorder
+    // TODO(crbug.com/40871863) Move isFeedVisible check to the metrics
+    // recorder
     if ([self isFeedVisible]) {
       [self.feedMetricsRecorder recordNTPDidChangeVisibility:visible];
     }
@@ -1917,13 +1857,12 @@ using vivaldi::IsVivaldiRunning;
 // Returns the current customization state represnting the visibility of NTP
 // components.
 - (IOSNTPImpressionCustomizationState)currentCustomizationState {
-  CHECK(IsHomeCustomizationEnabled());
   PrefService* prefService = self.prefService;
   BOOL MVTEnabled =
       prefService->GetBoolean(prefs::kHomeCustomizationMostVisitedEnabled);
   BOOL magicStackEnabled =
       prefService->GetBoolean(prefs::kHomeCustomizationMagicStackEnabled);
-  BOOL feedEnabled = prefService->GetBoolean(prefs::kArticlesForYouEnabled);
+  BOOL feedEnabled = [self.NTPMediator isFeedHeaderVisible];
 
   // All components enabled/disabled.
   if (MVTEnabled && magicStackEnabled && feedEnabled) {

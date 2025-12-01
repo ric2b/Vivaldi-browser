@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/* eslint-disable no-unused-private-class-members */
+import type * as Platform from '../../../core/platform/platform.js';
 import type * as Protocol from '../../../generated/protocol.js';
 
 import type {Micro, Milli, Seconds, TraceWindowMicro} from './Timing.js';
@@ -249,7 +249,10 @@ export interface ParseHTML extends Complete {
   name: 'ParseHTML';
   args: Args&{
     beginData: {
-      sampleTraceId?: number, frame: string, startLine: number, url: string,
+      frame: string,
+      startLine: number,
+      url: string,
+      sampleTraceId?: number,
     },
     endData?: {
       endLine: number,
@@ -370,8 +373,9 @@ export interface SyntheticNetworkRequest extends Complete, SyntheticBased<Phase.
        */
       encodedDataLength: number,
       frame: string,
-      fromServiceWorker: boolean,
+      fromServiceWorker: boolean|undefined,
       isLinkPreload: boolean,
+      /** Empty string if no response. */
       mimeType: string,
       priority: Protocol.Network.ResourcePriority,
       initialPriority: Protocol.Network.ResourcePriority,
@@ -387,17 +391,21 @@ export interface SyntheticNetworkRequest extends Complete, SyntheticBased<Phase.
       renderBlocking: RenderBlocking,
       requestId: string,
       requestingFrameUrl: string,
+      /** 0 if no response. */
       statusCode: number,
       resourceType: Protocol.Network.ResourceType,
-      responseHeaders: Array<{name: string, value: string}>,
+      responseHeaders: Array<{name: string, value: string}>|null,
       fetchPriorityHint: FetchPriorityHint,
       url: string,
       /** True only if got a 'resourceFinish' event indicating a failure. */
       failed: boolean,
-      /** True only if got a 'resourceFinish' event. */
+      /** True only if got a 'resourceFinish' event. Note even failed requests with no response may be "finished". */
       finished: boolean,
-      connectionId: number,
-      connectionReused: boolean,
+      hasResponse: boolean,
+      /** If undefined, trace was either too old or had no response. */
+      connectionId: number|undefined,
+      /** If undefined, trace was either too old or had no response. */
+      connectionReused: boolean|undefined,
       // Optional fields
       initiator?: Initiator,
       requestMethod?: string,
@@ -453,36 +461,35 @@ export interface SyntheticAuctionWorklet extends Instant, SyntheticBased<Phase.I
   target: string;
   type: AuctionWorkletType;
   args: Args&{
-    data:
-        ArgsData & {
-          // There are two threads for a worklet that we care about, so we gather
-          // the thread_name events so we can know the PID and TID for them (and
-          // hence display the right events in the track for each thread)
-          utilityThread: ThreadName,
-          v8HelperThread: ThreadName,
-        } &
+    data: ArgsData & {
+      // There are two threads for a worklet that we care about, so we gather
+      // the thread_name events so we can know the PID and TID for them (and
+      // hence display the right events in the track for each thread)
+      utilityThread: ThreadName,
+      v8HelperThread: ThreadName,
+    } &
         (
-            // This type looks odd, but this is because these events could either have:
-            // 1. Just the DoneWithProcess event
-            // 2. Just the RunningInProcess event
-            // 3. Both events
-            // But crucially it cannot have both events missing, hence listing all the
-            // allowed cases.
-            // Clang is disabled as the combination of nested types and optional
-            // properties cause it to weirdly indent some of the properties and make it
-            // very unreadable.
-            // clang-format off
+              // This type looks odd, but this is because these events could either have:
+              // 1. Just the DoneWithProcess event
+              // 2. Just the RunningInProcess event
+              // 3. Both events
+              // But crucially it cannot have both events missing, hence listing all the
+              // allowed cases.
+              // Clang is disabled as the combination of nested types and optional
+              // properties cause it to weirdly indent some of the properties and make it
+              // very unreadable.
+              // clang-format off
               {
                 runningInProcessEvent: AuctionWorkletRunningInProcess,
                 doneWithProcessEvent: AuctionWorkletDoneWithProcess,
               } |
               {
+                doneWithProcessEvent: AuctionWorkletDoneWithProcess,
                 runningInProcessEvent?: AuctionWorkletRunningInProcess,
-                doneWithProcessEvent: AuctionWorkletDoneWithProcess,
               } |
               {
-                doneWithProcessEvent?: AuctionWorkletDoneWithProcess,
                 runningInProcessEvent: AuctionWorkletRunningInProcess,
+                doneWithProcessEvent?: AuctionWorkletDoneWithProcess,
 
               }),
     // clang-format on
@@ -819,7 +826,8 @@ export interface TracingStartedInBrowser extends Instant {
     data?: ArgsData & {
       frameTreeNodeId: number,
       // Frames can only missing in "fake" traces
-      frames?: TraceFrame[], persistentIds: boolean,
+      persistentIds: boolean,
+      frames?: TraceFrame[],
     },
   };
 }
@@ -879,7 +887,8 @@ export interface MarkDOMContent extends Instant {
     data?: ArgsData & {
       frame: string,
       isMainFrame: boolean,
-      isOutermostMainFrame?: boolean, page: string,
+      page: string,
+      isOutermostMainFrame?: boolean,
     },
   };
 }
@@ -1128,7 +1137,9 @@ export interface ResourceReceiveResponse extends Instant {
       responseTime: Milli,
       statusCode: number,
       // Some cached events don't have this field
-      timing?: ResourceReceiveResponseTimingData, connectionId: number, connectionReused: boolean,
+      connectionId: number,
+      connectionReused: boolean,
+      timing?: ResourceReceiveResponseTimingData,
       headers?: Array<{name: string, value: string}>,
     },
   };
@@ -1215,7 +1226,7 @@ export interface StyleInvalidatorInvalidationTracking extends Instant {
       frame: string,
       nodeId: Protocol.DOM.BackendNodeId,
       reason: string,
-      invalidationList: Array<{classes?: string[], id: string}>,
+      invalidationList: Array<{id: string, classes?: string[]}>,
       subtree: boolean,
       nodeName?: string,
       extraData?: string,
@@ -1251,6 +1262,21 @@ export interface ParseMetaViewport extends Instant {
 }
 export function isParseMetaViewport(event: Event): event is ParseMetaViewport {
   return event.name === Name.PARSE_META_VIEWPORT;
+}
+
+export interface LinkPreconnect extends Instant {
+  name: Name.LINK_PRECONNECT;
+  args: Args&{
+    data: {
+      // eslint-disable-next-line @typescript-eslint/naming-convention
+      node_id: Protocol.DOM.BackendNodeId,
+      url: string,
+      frame?: string,
+    },
+  };
+}
+export function isLinkPreconnect(event: Event): event is LinkPreconnect {
+  return event.name === Name.LINK_PRECONNECT;
 }
 
 export interface ScheduleStyleRecalculation extends Instant {
@@ -1540,14 +1566,22 @@ const enum FrameType {
   BACKFILL = 'BACKFILL',
 }
 
+// TODO(crbug.com/409484302): Remove once Chrome migrates from
+// ChromeTrackEvent.chrome_frame_reporter to ChromeTrackEvent.frame_reporter.
+export interface OldChromeFrameReporterArgs {
+  chrome_frame_reporter: ChromeFrameReporter;
+}
+
+export interface NewChromeFrameReporterArgs {
+  frame_reporter: ChromeFrameReporter;
+}
+
 export interface PipelineReporter extends Event {
   id2?: {
     local?: string,
   };
   ph: Phase.ASYNC_NESTABLE_START|Phase.ASYNC_NESTABLE_END;
-  args: Args&{
-    chrome_frame_reporter: ChromeFrameReporter,
-  };
+  args: Args&(OldChromeFrameReporterArgs|NewChromeFrameReporterArgs);
 }
 
 export function isPipelineReporter(event: Event): event is PipelineReporter {
@@ -1652,7 +1686,8 @@ export interface SyntheticJSSample extends Event {
   args: Args&{
     data: ArgsData & {
       // Used to associate a stack sample with a trace event.
-      traceId?: number, stackTrace: Protocol.Runtime.CallFrame[],
+      stackTrace: Protocol.Runtime.CallFrame[],
+      traceId?: number,
     },
   };
   ph: Phase.INSTANT;
@@ -1875,7 +1910,8 @@ export interface UpdateLayoutTree extends Complete {
   args: Args&{
     elementCount: number,
     beginData?: {
-      sampleTraceId?: number, frame: string,
+      frame: string,
+      sampleTraceId?: number,
       stackTrace?: CallFrame[],
     },
   };
@@ -1888,7 +1924,11 @@ export interface Layout extends Complete {
   name: Name.LAYOUT;
   args: Args&{
     beginData: {
-      sampleTraceId?: number, frame: string, dirtyObjects: number, partialLayout: boolean, totalObjects: number,
+      frame: string,
+      dirtyObjects: number,
+      partialLayout: boolean,
+      totalObjects: number,
+      sampleTraceId?: number,
       stackTrace?: CallFrame[],
     },
     // endData is not reliably populated.
@@ -1937,55 +1977,37 @@ export function isDebuggerAsyncTaskRun(event: Event): event is DebuggerAsyncTask
   return event.name === Name.DEBUGGER_ASYNC_TASK_RUN;
 }
 
-class ProfileIdTag {
-  readonly #profileIdTag: (symbol|undefined);
-}
-export type ProfileID = string&ProfileIdTag;
+export type ProfileID = Platform.Brand.Brand<string, 'profileIdTag'>;
 
 export function ProfileID(value: string): ProfileID {
   return value as ProfileID;
 }
 
-class CallFrameIdTag {
-  readonly #callFrameIdTag: (symbol|undefined);
-}
-export type CallFrameID = number&CallFrameIdTag;
+export type CallFrameID = Platform.Brand.Brand<number, 'callFrameIdTag'>;
 
 export function CallFrameID(value: number): CallFrameID {
   return value as CallFrameID;
 }
 
-class SampleIndexTag {
-  readonly #sampleIndexTag: (symbol|undefined);
-}
-export type SampleIndex = number&SampleIndexTag;
+export type SampleIndex = Platform.Brand.Brand<number, 'sampleIndexTag'>;
 
 export function SampleIndex(value: number): SampleIndex {
   return value as SampleIndex;
 }
 
-class ProcessIdTag {
-  readonly #processIdTag: (symbol|undefined);
-}
-export type ProcessID = number&ProcessIdTag;
+export type ProcessID = Platform.Brand.Brand<number, 'processIdTag'>;
 
 export function ProcessID(value: number): ProcessID {
   return value as ProcessID;
 }
 
-class ThreadIdTag {
-  readonly #threadIdTag: (symbol|undefined);
-}
-export type ThreadID = number&ThreadIdTag;
+export type ThreadID = Platform.Brand.Brand<number, 'threadIdTag'>;
 
 export function ThreadID(value: number): ThreadID {
   return value as ThreadID;
 }
 
-class WorkerIdTag {
-  readonly #workerIdTag: (symbol|undefined);
-}
-export type WorkerId = string&WorkerIdTag;
+export type WorkerId = Platform.Brand.Brand<string, 'workerIdTag'>;
 
 export function WorkerId(value: string): WorkerId {
   return value as WorkerId;
@@ -2068,7 +2090,7 @@ export function isCommitLoad(
 export function isAnimation(
     event: Event,
     ): event is Animation {
-  // We've found some rare traces with an Animtation trace event from a different category: https://crbug.com/1472375#comment7
+  // We've found some rare traces with an Animation trace event from a different category: https://crbug.com/1472375#comment7
   return event.name === 'Animation' && event.cat.includes('devtools.timeline');
 }
 
@@ -2342,6 +2364,8 @@ export interface Paint extends Complete {
       // With CompositeAfterPaint enabled, paint events are no longer
       // associated with a Node, and nodeId will not be present.
       nodeId?: Protocol.DOM.BackendNodeId,
+      // Optional as it was added in M137: crrev.com/c/6491448
+      nodeName?: string,
     },
   };
 }
@@ -2359,11 +2383,15 @@ export interface PaintImage extends Complete {
       x: number,
       y: number,
       isCSS: boolean,
+      srcHeight: number,
+      srcWidth: number,
       isPicture?: boolean,
       loadingAttribute?: string,
       srcsetAttribute?: string,
-      url?: string, srcHeight: number, srcWidth: number,
+      url?: string,
       nodeId?: Protocol.DOM.BackendNodeId,
+      // Optional as it was added in M137: crrev.com/c/6491448
+      nodeName?: string,
       frame?: string,
     },
   };
@@ -2518,7 +2546,9 @@ export interface TimerInstall extends Instant {
     data: {
       frame: string,
       singleShot: boolean,
-      stackTrace?: CallFrame, timeout: number, timerId: number,
+      timeout: number,
+      timerId: number,
+      stackTrace?: CallFrame,
     },
   };
 }
@@ -2589,8 +2619,9 @@ export interface WebSocketTransfer extends Instant {
     data: ArgsData & {
       identifier: number,
       url: string,
+      dataLength: number,
       frame?: string,
-      workerId?: string, dataLength: number,
+      workerId?: string,
     },
   };
 }
@@ -2609,8 +2640,9 @@ export interface WebSocketSend extends Instant {
     data: ArgsData & {
       identifier: number,
       url: string,
+      dataLength: number,
       frame?: string,
-      workerId?: string, dataLength: number,
+      workerId?: string,
     },
   };
 }
@@ -2625,8 +2657,9 @@ export interface WebSocketReceive extends Instant {
     data: ArgsData & {
       identifier: number,
       url: string,
+      dataLength: number,
       frame?: string,
-      workerId?: string, dataLength: number,
+      workerId?: string,
     },
   };
 }
@@ -2810,6 +2843,19 @@ export interface FlowEvent extends Event {
 
 export function isFlowPhaseEvent(event: Event): event is FlowEvent {
   return event.ph === Phase.FLOW_START || event.ph === Phase.FLOW_STEP || event.ph === Phase.FLOW_END;
+}
+
+export interface ParseAuthorStyleSheet extends Complete {
+  name: Name.PARSE_AUTHOR_STYLE_SHEET;
+  args?: Args&{
+    data: {
+      stylesheetUrl: string,
+    },
+  };
+}
+
+export function isParseAuthorStyleSheetEvent(event: Event): event is ParseAuthorStyleSheet {
+  return event.name === Name.PARSE_AUTHOR_STYLE_SHEET;
 }
 
 /**
@@ -3029,6 +3075,8 @@ export const enum Name {
 
   SYNTHETIC_NETWORK_REQUEST = 'SyntheticNetworkRequest',
   USER_TIMING_MEASURE = 'UserTiming::Measure',
+
+  LINK_PRECONNECT = 'LinkPreconnect',
 }
 
 // NOT AN EXHAUSTIVE LIST: just some categories we use and refer
@@ -3118,16 +3166,13 @@ export interface V8SourceRundownEvent extends Event {
       isolate: string,
       executionContextId: Protocol.Runtime.ExecutionContextId,
       scriptId: number,
-      startLine: number,
-      startColumn: number,
-      endLine: number,
-      endColumn: number,
       hash: string,
       isModule: boolean,
       hasSourceUrl: boolean,
       url?: string,
       sourceUrl?: string,
       sourceMapUrl?: string,
+      sourceMapUrlElided?: boolean,
     },
   };
 }
@@ -3171,4 +3216,25 @@ export interface V8SourceRundownSourcesLargeScriptCatchupEvent extends Event {
 export function isV8SourceRundownSourcesLargeScriptCatchupEvent(event: Event):
     event is V8SourceRundownSourcesLargeScriptCatchupEvent {
   return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources' && event.name === 'LargeScriptCatchup';
+}
+
+export interface V8SourceRundownSourcesStubScriptCatchupEvent extends Event {
+  cat: 'disabled-by-default-devtools.v8-source-rundown-sources';
+  name: 'StubScriptCatchup';
+  args: Args&{
+    data: {
+      isolate: string,
+      scriptId: number,
+    },
+  };
+}
+
+export function isV8SourceRundownSourcesStubScriptCatchupEvent(event: Event):
+    event is V8SourceRundownSourcesStubScriptCatchupEvent {
+  return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources' && event.name === 'StubScriptCatchup';
+}
+
+export function isAnyScriptCatchupEvent(event: Event): event is V8SourceRundownSourcesScriptCatchupEvent|
+    V8SourceRundownSourcesLargeScriptCatchupEvent|V8SourceRundownSourcesStubScriptCatchupEvent {
+  return event.cat === 'disabled-by-default-devtools.v8-source-rundown-sources';
 }

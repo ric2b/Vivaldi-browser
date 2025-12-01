@@ -90,12 +90,6 @@ std::string_view GetStringNameForModelExecutionFeature(
         MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS:
       return "FormsClassifications";
     case proto::ModelExecutionFeature::
-        MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS:
-      return "FormsPredictions";
-    case proto::ModelExecutionFeature::
-        MODEL_EXECUTION_FEATURE_FORMS_ANNOTATIONS:
-      return "FormsAnnotations";
-    case proto::ModelExecutionFeature::
         MODEL_EXECUTION_FEATURE_BLING_PROTOTYPING:
       return "BlingPrototyping";
     case proto::ModelExecutionFeature::
@@ -114,6 +108,9 @@ std::string_view GetStringNameForModelExecutionFeature(
     case proto::ModelExecutionFeature::
         MODEL_EXECUTION_FEATURE_ZERO_STATE_SUGGESTIONS:
       return "ZeroStateSuggestions";
+    case proto::ModelExecutionFeature::
+        MODEL_EXECUTION_FEATURE_PROOFREADER_API:
+      return "ProofreaderApi";
     case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_UNSPECIFIED:
       return "Unknown";
       // Must be in sync with the ModelExecutionFeature variant in

@@ -38,11 +38,12 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+#include "components/supervised_user/core/common/pref_names.h"
 #include "extensions/browser/pref_names.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "components/supervised_user/core/common/pref_names.h"
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_pref_names.h"
 #endif
 
 #include "prefs/vivaldi_prefs_definitions.h"
@@ -392,6 +393,9 @@ enum {
   kAccessibilityAXTreeFixingEnabled = 100324,
   kTabSearchMigrationComplete = 100325,
   kReadAloudPlaybackMode = 100326,
+  kPinSplitTabButton = 100327,
+  kGlicRolloutEligibility = 100328,
+  kShelfNotebookLmAppPinRolls = 100329,
   // See components/sync_preferences/README.md about adding new entries here.
   // vvvvv IMPORTANT! vvvvv
   // Note to the reviewer: IT IS YOUR RESPONSIBILITY to ensure that new syncable
@@ -516,7 +520,7 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kHomePageIsNewTabPage, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {prefs::kNtpCustomBackgroundDictDoNotUse,
+    {prefs::kDeprecatedNtpCustomBackgroundDictDoNotUse,
      {syncable_prefs_ids::kNtpCustomBackgroundDict, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
@@ -548,6 +552,10 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kShowForwardButton, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
+    {prefs::kPinSplitTabButton,
+     {syncable_prefs_ids::kPinSplitTabButton, syncer::PREFERENCES,
+      sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kNone}},
     {prefs::kPinnedActions,
      {syncable_prefs_ids::kPinnedActions, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
@@ -574,13 +582,11 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kPinnedExtensions, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-#endif
-#if BUILDFLAG(ENABLE_EXTENSIONS)
     {prefs::kSupervisedUserApprovedExtensions,
      {syncable_prefs_ids::kSupervisedUserApprovedExtensions,
       syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 #if BUILDFLAG(IS_MAC)
     {prefs::kShowFullscreenToolbar,
      {syncable_prefs_ids::kShowFullscreenToolbar, syncer::PREFERENCES,
@@ -1297,6 +1303,10 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kKeyboardHasSplitModifierKeyboard,
       syncer::OS_PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
+    {prefs::kShelfNotebookLmAppPinRolls,
+     {syncable_prefs_ids::kShelfNotebookLmAppPinRolls, syncer::OS_PREFERENCES,
+      sync_preferences::PrefSensitivity::kNone,
+      sync_preferences::MergeBehavior::kMergeableListWithRewriteOnUpdate}},
 #endif  // BUILDFLAG(IS_CHROMEOS)
     {performance_manager::user_tuning::prefs::kTabDiscardingExceptions,
      {syncable_prefs_ids::kTabDiscardingExceptions, syncer::PREFERENCES,
@@ -1322,11 +1332,11 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kAccessibilityMainNodeAnnotationsEnabled,
       syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {prefs::kBrowserColorSchemeDoNotUse,
+    {prefs::kDeprecatedBrowserColorSchemeDoNotUse,
      {syncable_prefs_ids::kBrowserColorScheme, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {prefs::kBrowserColorVariantDoNotUse,
+    {prefs::kDeprecatedBrowserColorVariantDoNotUse,
      {syncable_prefs_ids::kBrowserColorVariant, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
@@ -1354,7 +1364,7 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kExtensionsUIDeveloperMode, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
-    {prefs::kGrayscaleThemeEnabledDoNotUse,
+    {prefs::kDeprecatedGrayscaleThemeEnabledDoNotUse,
      {syncable_prefs_ids::kGrayscaleThemeEnabled, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
@@ -1416,7 +1426,7 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kURLsToRestoreOnStartup, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kSensitiveRequiresHistory,
       sync_preferences::MergeBehavior::kMergeableListWithRewriteOnUpdate}},
-    {prefs::kUserColorDoNotUse,
+    {prefs::kDeprecatedUserColorDoNotUse,
      {syncable_prefs_ids::kUserColor, syncer::PREFERENCES,
       sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
@@ -1672,6 +1682,12 @@ constexpr auto kChromeSyncablePrefsAllowlist = base::MakeFixedFlatMap<
      {syncable_prefs_ids::kPrivacySandboxFakeNoticePromptShownTimeSync,
       syncer::PREFERENCES, sync_preferences::PrefSensitivity::kNone,
       sync_preferences::MergeBehavior::kNone}},
+#if BUILDFLAG(ENABLE_GLIC)
+    {glic::prefs::kGlicRolloutEligibility,
+     {syncable_prefs_ids::kGlicRolloutEligibility, syncer::PRIORITY_PREFERENCES,
+      sync_preferences::PrefSensitivity::kExemptFromUserControlWhileSignedIn,
+      sync_preferences::MergeBehavior::kNone}},
+#endif  // BUILDFLAG(ENABLE_GLIC)
 });
 
 }  // namespace

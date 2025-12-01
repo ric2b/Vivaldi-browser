@@ -28,17 +28,20 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as Settings from '../components/settings/settings.js';
+import {Directives} from '../lit/lit.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import {InspectorView} from './InspectorView.js';
 import {Tooltip} from './Tooltip.js';
-import {CheckboxLabel, createOption} from './UIUtils.js';
+import {bindInput, CheckboxLabel, createOption} from './UIUtils.js';
 
 const UIStrings = {
   /**
@@ -56,8 +59,8 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export function createSettingCheckbox(
     name: Common.UIString.LocalizedString, setting: Common.Settings.Setting<boolean>, tooltip?: string): CheckboxLabel {
   const label = CheckboxLabel.create(name, undefined, undefined, setting.name);
-  label.checkboxElement.name = name;
-  bindCheckbox(label.checkboxElement, setting);
+  label.name = name;
+  bindCheckbox(label, setting);
   if (tooltip) {
     Tooltip.install(label, tooltip);
   }
@@ -125,27 +128,94 @@ const createSettingSelect = function(
   }
 };
 
+export const bindToSetting =
+    (setting: string|Common.Settings.Setting<boolean|string>|Common.Settings.RegExpSetting,
+     stringValidator?: (newSettingValue: string) => boolean): ReturnType<typeof Directives.ref> => {
+      if (typeof setting === 'string') {
+        setting = Common.Settings.Settings.instance().moduleSetting(setting);
+      }
+
+      // We can't use `setValue` as the change listener directly, otherwise we won't
+      // be able to remove it again.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let setValue: (value: any) => void;
+      function settingChanged(): void {
+        setValue((setting as Common.Settings.Setting<unknown>| Common.Settings.RegExpSetting).get());
+      }
+
+      if (setting.type() === Common.Settings.SettingType.BOOLEAN || typeof setting.defaultValue === 'boolean') {
+        return Directives.ref(e => {
+          if (e === undefined) {
+            setting.removeChangeListener(settingChanged);
+            return;
+          }
+
+          setting.addChangeListener(settingChanged);
+          setValue =
+              bindCheckboxImpl(e as CheckboxLabel, (setting as Common.Settings.Setting<boolean>).set.bind(setting));
+          setValue(setting.get());
+        });
+      }
+
+      if (setting.type() === Common.Settings.SettingType.REGEX || setting instanceof Common.Settings.RegExpSetting) {
+        return Directives.ref(e => {
+          if (e === undefined) {
+            setting.removeChangeListener(settingChanged);
+            return;
+          }
+
+          setting.addChangeListener(settingChanged);
+          setValue = bindInput(e as HTMLInputElement, setting.set.bind(setting), (value: string) => {
+            try {
+              new RegExp(value);
+              return true;
+            } catch {
+              return false;
+            }
+          }, /* numeric */ false);
+          setValue(setting.get());
+        });
+      }
+
+      if (typeof setting.defaultValue === 'string') {
+        return Directives.ref(e => {
+          if (e === undefined) {
+            setting.removeChangeListener(settingChanged);
+            return;
+          }
+
+          setting.addChangeListener(settingChanged);
+          setValue = bindInput(
+              e as HTMLInputElement, setting.set.bind(setting), stringValidator ?? (() => true), /* numeric */ false);
+          setValue(setting.get());
+        });
+      }
+
+      throw new Error(`Cannot infer type for setting  '${setting.name}'`);
+    };
+
+/**
+ * @deprecated Prefer {@link bindToSetting} as this function leaks the checkbox via the setting listener.
+ */
 export const bindCheckbox = function(
-    inputElement: Element, setting: Common.Settings.Setting<boolean>, metric?: UserMetricOptions): void {
-  const input = (inputElement as HTMLInputElement);
-  function settingChanged(): void {
-    if (input.checked !== setting.get()) {
-      input.checked = setting.get();
-    }
-  }
-  setting.addChangeListener(settingChanged);
-  settingChanged();
+    input: CheckboxLabel, setting: Common.Settings.Setting<boolean>, metric?: UserMetricOptions): void {
+  const setValue = bindCheckboxImpl(input, setting.set.bind(setting), metric);
+  setting.addChangeListener(event => setValue(event.data));
+  setValue(setting.get());
+};
 
-  function inputChanged(): void {
-    if (setting.get() !== input.checked) {
-      setting.set(input.checked);
-    }
+const bindCheckboxImpl = function(
+    input: CheckboxLabel, apply: (value: boolean) => void, metric?: UserMetricOptions): (value: boolean) => void {
+  input.addEventListener('change', onInputChanged, false);
 
-    if (setting.get() && metric?.enable) {
+  function onInputChanged(): void {
+    apply(input.checked);
+
+    if (input.checked && metric?.enable) {
       Host.userMetrics.actionTaken(metric.enable);
     }
 
-    if (!setting.get() && metric?.disable) {
+    if (!input.checked && metric?.disable) {
       Host.userMetrics.actionTaken(metric.disable);
     }
 
@@ -154,7 +224,11 @@ export const bindCheckbox = function(
     }
   }
 
-  input.addEventListener('change', inputChanged, false);
+  return function setValue(value: boolean): void {
+    if (value !== input.checked) {
+      input.checked = value;
+    }
+  };
 };
 
 export const createCustomSetting = function(name: string, element: Element): Element {

@@ -21,9 +21,11 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/heavy_ad_intervention/heavy_ad_features.h"
 #include "components/page_load_metrics/browser/ads_page_load_metrics_test_waiter.h"
+#include "components/page_load_metrics/browser/features.h"
 #include "components/page_load_metrics/browser/observers/ad_metrics/ad_intervention_browser_test_utils.h"
 #include "components/page_load_metrics/browser/observers/ad_metrics/frame_tree_data.h"
 #include "components/page_load_metrics/browser/observers/use_counter_page_load_metrics_observer.h"
@@ -127,7 +129,8 @@ class AdsPageLoadMetricsObserverBrowserTest
 
   void SetUp() override {
     std::vector<base::test::FeatureRef> enabled = {
-        subresource_filter::kAdTagging, features::kV8PerFrameMemoryMonitoring};
+        subresource_filter::kAdTagging,
+        page_load_metrics::features::kV8PerFrameMemoryMonitoring};
     std::vector<base::test::FeatureRef> disabled = {};
 
     scoped_feature_list_.InitWithFeatures(enabled, disabled);
@@ -148,6 +151,8 @@ class AdsPageLoadMetricsObserverBrowserTest
          subresource_filter::testing::CreateSuffixRule(
              "expensive_animation_frame.html*"),
          subresource_filter::testing::CreateSuffixRule("ad.html")});
+    // Ensure browser is active so that the expected dimensions are correct.
+    ui_test_utils::BrowserActivationWaiter(browser()).WaitForActivation();
   }
 
  private:
@@ -656,14 +661,17 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
     bool HasChild() const { return child_ != nullptr; }
 
     bool HasDescendantRenderingText(bool is_top_frame = true) const {
-      if (!is_top_frame && has_text_ && !is_outside_view_)
+      if (!is_top_frame && has_text_ && !is_outside_view_) {
         return true;
+      }
 
-      if (!is_top_frame && is_outside_view_)
+      if (!is_top_frame && is_outside_view_) {
         return false;
+      }
 
-      if (!child_)
+      if (!child_) {
         return false;
+      }
 
       return child_->HasDescendantRenderingText(false);
     }
@@ -672,19 +680,22 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
 
     std::string Print(bool should_escape = false) const {
       std::vector<std::string> query_pieces = {origin_};
-      if (!has_text_ && is_outside_view_)
+      if (!has_text_ && is_outside_view_) {
         query_pieces.push_back("{no-text-render,out-of-view}");
-      else if (!has_text_)
+      } else if (!has_text_) {
         query_pieces.push_back("{no-text-render}");
-      else if (is_outside_view_)
+      } else if (is_outside_view_) {
         query_pieces.push_back("{out-of-view}");
+      }
       query_pieces.push_back("(");
-      if (child_)
+      if (child_) {
         query_pieces.push_back(child_->Print());
+      }
       query_pieces.push_back(")");
       std::string out = base::StrCat(query_pieces);
-      if (should_escape)
+      if (should_escape) {
         out = base::EscapeQueryParamValue(out, false /* use_plus */);
+      }
       return out;
     }
 
@@ -715,8 +726,9 @@ class CreativeOriginAdsPageLoadMetricsObserverBrowserTest
     // The frame thus intended as the creative will be the only one in which
     // text renders.
     std::string ad_suffix = frame->PrintChild(true /* should_escape */);
-    if (!ad_suffix.empty())
+    if (!ad_suffix.empty()) {
       SetRulesetToDisallowURLsWithPathSuffix(ad_suffix);
+    }
     std::string query = frame->Print();
     std::string relative_url = "/cross_site_iframe_factory.html?" + query;
     const GURL main_url(
@@ -1686,15 +1698,6 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
   main_html_response->Send(std::string(1024, ' '));
   main_html_response->Done();
 
-  // Clipboard apis require that the calling context is focused.
-#if BUILDFLAG(IS_MAC)
-  content::HandleMissingKeyWindow();
-#endif
-  browser()->tab_strip_model()->GetActiveWebContents()->Focus();
-  views::test::WaitForWidgetActive(
-      BrowserView::GetBrowserViewForBrowser(browser())->GetWidget(),
-      /*active=*/true);
-
   ad_script_response->WaitForRequest();
   ad_script_response->Send(page_load_metrics::kHttpOkResponseHeader);
   // Get ad script to use a bunch of privacy sensitive features.
@@ -1702,8 +1705,6 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
         navigator.bluetooth.requestDevice().catch(e => {});
         navigator.geolocation.getCurrentPosition(() => {});
         navigator.mediaDevices.getUserMedia({video: true});
-        navigator.clipboard.readText().catch(() => {});
-        navigator.clipboard.writeText("foo").catch(() => {});
         navigator.mediaDevices.getDisplayMedia().catch(() => {});
         navigator.mediaDevices.getUserMedia({audio: true});
         navigator.serial.requestPort().catch(() => {});
@@ -1714,11 +1715,9 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
 
   waiter->AddMinimumNetworkBytesExpectation(5000);
 
-  std::array<network::mojom::PermissionsPolicyFeature, 9> features = {
+  std::vector<network::mojom::PermissionsPolicyFeature> features = {
       network::mojom::PermissionsPolicyFeature::kBluetooth,
       network::mojom::PermissionsPolicyFeature::kCamera,
-      network::mojom::PermissionsPolicyFeature::kClipboardRead,
-      network::mojom::PermissionsPolicyFeature::kClipboardWrite,
       network::mojom::PermissionsPolicyFeature::kDisplayCapture,
       network::mojom::PermissionsPolicyFeature::kGeolocation,
       network::mojom::PermissionsPolicyFeature::kMicrophone,
@@ -1739,11 +1738,11 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
   browser()->tab_strip_model()->CloseAllTabs();
 
   histogram_tester.ExpectTotalCount(
-      "Blink.UseCounter.PermissionsPolicy.PrivacySensitive.Enabled", 9);
+      "Blink.UseCounter.PermissionsPolicy.PrivacySensitive.Enabled", features.size());
 
   auto entries = ukm_recorder.GetEntriesByName(
       ukm::builders::Permissions_PrivacySensitive_UseCounter::kEntryName);
-  EXPECT_EQ(9u, entries.size());
+  EXPECT_EQ(features.size(), entries.size());
 }
 
 // Verify that per-resource metrics are recorded correctly.
@@ -1957,8 +1956,9 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
       got_report = true;
       break;
     }
-    if (message == "\"END\"")
+    if (message == "\"END\"") {
       break;
+    }
   }
   EXPECT_TRUE(got_report);
 }
@@ -2357,8 +2357,9 @@ IN_PROC_BROWSER_TEST_P(AdsPageLoadMetricsObserverResourceBrowserTest,
 void WaitForRAF(content::DOMMessageQueue* message_queue) {
   std::string message;
   while (message_queue->WaitForMessage(&message)) {
-    if (message == "\"RAF DONE\"")
+    if (message == "\"RAF DONE\"") {
       break;
+    }
   }
   EXPECT_EQ("\"RAF DONE\"", message);
 }
@@ -2588,7 +2589,8 @@ class AdsMemoryMeasurementBrowserTest
     performance_manager::v8_memory::internal::
         SetEagerMemoryMeasurementEnabledForTesting(true);
     std::vector<base::test::FeatureRef> enabled = {
-        subresource_filter::kAdTagging, features::kV8PerFrameMemoryMonitoring};
+        subresource_filter::kAdTagging,
+        page_load_metrics::features::kV8PerFrameMemoryMonitoring};
     std::vector<base::test::FeatureRef> disabled = {};
     scoped_feature_list_.InitWithFeatures(enabled, disabled);
 
@@ -2660,8 +2662,9 @@ IN_PROC_BROWSER_TEST_F(AdsMemoryMeasurementBrowserTest,
 
   // Add any additional frame routing IDs and wait until we get positive
   // memory measurements for each frame.
-  for (content::GlobalRenderFrameHostId id : GetFrameRoutingIds())
+  for (content::GlobalRenderFrameHostId id : GetFrameRoutingIds()) {
     waiter->AddMemoryUpdateExpectation(id);
+  }
   waiter->Wait();
 
   // Navigate away to force the histogram recording.

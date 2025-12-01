@@ -183,22 +183,10 @@ interop::Interface<interop::GPUSupportedFeatures> GPUDevice::getFeatures(Napi::E
 
 interop::Interface<interop::GPUSupportedLimits> GPUDevice::getLimits(Napi::Env env) {
     wgpu::Limits limits{};
-    wgpu::DawnExperimentalImmediateDataLimits immediateDataLimits{};
-
-    auto InsertInChain = [&](wgpu::ChainedStructOut* node) {
-        node->nextInChain = limits.nextInChain;
-        limits.nextInChain = node;
-    };
-
-    // Query the immediate data limits only if ChromiumExperimentalImmediateData feature
-    // is available on device.
-    if (device_.HasFeature(FeatureName::ChromiumExperimentalImmediateData)) {
-        InsertInChain(&immediateDataLimits);
-    }
-
     if (!device_.GetLimits(&limits)) {
         Napi::Error::New(env, "failed to get device limits").ThrowAsJavaScriptException();
     }
+
     return interop::GPUSupportedLimits::Create<GPUSupportedLimits>(env, limits);
 }
 
@@ -546,9 +534,22 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
 
     device_.PopErrorScope(
         wgpu::CallbackMode::AllowProcessEvents,
-        [ctx = std::move(ctx)](wgpu::PopErrorScopeStatus, wgpu::ErrorType type,
+        [ctx = std::move(ctx)](wgpu::PopErrorScopeStatus status, wgpu::ErrorType type,
                                wgpu::StringView message) {
             auto env = ctx->env;
+            switch (status) {
+                case wgpu::PopErrorScopeStatus::Error:
+                    // PopErrorScope itself failed, e.g. the error scope stack was empty.
+                    ctx->promise.Reject(Errors::OperationError(env, std::string(message)));
+                    return;
+                case wgpu::PopErrorScopeStatus::CallbackCancelled:
+                    // The instance has been dropped. Shouldn't happen except maybe during shutdown.
+                    return;
+                case wgpu::PopErrorScopeStatus::Success:
+                    // This is the only case where `type` is set to a meaningful value.
+                    break;
+            }
+
             switch (type) {
                 case wgpu::ErrorType::NoError:
                     ctx->promise.Resolve({});
@@ -574,7 +575,10 @@ interop::Promise<std::optional<interop::Interface<interop::GPUError>>> GPUDevice
                     break;
                 }
                 case wgpu::ErrorType::Unknown:
-                    ctx->promise.Reject(Errors::OperationError(env, std::string(message)));
+                    // This error type is reserved for when translating an error type from a newer
+                    // implementation (e.g. the browser added a new error type) to another (e.g.
+                    // you're using an older version of Emscripten). It shouldn't happen in Dawn.
+                    assert(false);
                     break;
             }
         });
@@ -620,7 +624,7 @@ void GPUDevice::removeEventListener(
     UNIMPLEMENTED(env);
 }
 
-bool GPUDevice::dispatchEvent(Napi::Env env, interop::Interface<interop::Event> event) {
+bool GPUDevice::dispatchEvent(Napi::Env env, interop::Event event) {
     // TODO(dawn:1348): Implement support for the "unhandlederror" event.
     UNIMPLEMENTED(env, {});
 }

@@ -382,7 +382,7 @@ static int encode_slice_plane(int16_t *blocks, int mb_count, uint8_t *buf, unsig
     encode_acs(&pb, blocks, blocks_per_slice, qmat, scan);
 
     flush_put_bits(&pb);
-    return put_bits_ptr(&pb) - pb.buf;
+    return put_bytes_output(&pb);
 }
 
 static av_always_inline unsigned encode_slice_data(AVCodecContext *avctx,
@@ -955,7 +955,7 @@ const FFCodec ff_prores_aw_encoder = {
     .p.id           = AV_CODEC_ID_PRORES,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
-    .p.pix_fmts     = pix_fmts,
+    CODEC_PIXFMTS_ARRAY(pix_fmts),
     .color_ranges   = AVCOL_RANGE_MPEG,
     .priv_data_size = sizeof(ProresContext),
     .init           = prores_encode_init,
@@ -973,7 +973,7 @@ const FFCodec ff_prores_encoder = {
     .p.id           = AV_CODEC_ID_PRORES,
     .p.capabilities = AV_CODEC_CAP_DR1 | AV_CODEC_CAP_FRAME_THREADS |
                       AV_CODEC_CAP_ENCODER_REORDERED_OPAQUE,
-    .p.pix_fmts     = pix_fmts,
+    CODEC_PIXFMTS_ARRAY(pix_fmts),
     .color_ranges   = AVCOL_RANGE_MPEG,
     .priv_data_size = sizeof(ProresContext),
     .init           = prores_encode_init,

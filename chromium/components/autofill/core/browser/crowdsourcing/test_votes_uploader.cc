@@ -36,9 +36,7 @@ void TestVotesUploader::UploadVote(
     for (size_t i = 0; i < expected_submitted_field_types_.size(); ++i) {
       SCOPED_TRACE(base::StringPrintf(
           "Field %d with value %s", static_cast<int>(i),
-          base::UTF16ToUTF8(
-              submitted_form->field(i)->value(ValueSemantics::kCurrent))
-              .c_str()));
+          base::UTF16ToUTF8(submitted_form->field(i)->value()).c_str()));
       const FieldTypeSet& possible_types =
           submitted_form->field(i)->possible_types();
       EXPECT_EQ(expected_submitted_field_types_[i].size(),
@@ -47,6 +45,25 @@ void TestVotesUploader::UploadVote(
         EXPECT_TRUE(possible_types.count(it))
             << "Expected type: " << FieldTypeToStringView(it);
       }
+    }
+  }
+
+  last_uploaded_form_associations_ = {};
+  for (const AutofillUploadContents& upload : upload_contents) {
+    if (!last_uploaded_form_associations_.last_address_form_submitted &&
+        upload.has_last_address_form_submitted()) {
+      last_uploaded_form_associations_.last_address_form_submitted =
+          FormSignature(upload.last_address_form_submitted());
+    }
+    if (!last_uploaded_form_associations_.second_last_address_form_submitted &&
+        upload.has_second_last_address_form_submitted()) {
+      last_uploaded_form_associations_.second_last_address_form_submitted =
+          FormSignature(upload.second_last_address_form_submitted());
+    }
+    if (!last_uploaded_form_associations_.last_credit_card_form_submitted &&
+        upload.last_credit_card_form_submitted()) {
+      last_uploaded_form_associations_.last_credit_card_form_submitted =
+          FormSignature(upload.last_credit_card_form_submitted());
     }
   }
 
@@ -63,12 +80,10 @@ bool TestVotesUploader::MaybeStartVoteUploadProcess(
     base::TimeTicks initial_interaction_timestamp,
     const std::u16string& last_unlocked_credit_card_cvc,
     ukm::SourceId ukm_source_id) {
-  FormStructure* form_ptr = form.get();
   if (VotesUploader::MaybeStartVoteUploadProcess(
           std::move(form), observed_submission, current_page_language,
           initial_interaction_timestamp, last_unlocked_credit_card_cvc,
           ukm_source_id)) {
-    last_uploaded_form_associations_ = form_ptr->form_associations();
     // The purpose of this runloop is to ensure that the field type
     // determination finishes.
     base::RunLoop run_loop;

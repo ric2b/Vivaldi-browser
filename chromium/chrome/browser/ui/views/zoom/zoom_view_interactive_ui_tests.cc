@@ -22,6 +22,7 @@
 #include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/interaction/element_identifier.h"
+#include "ui/base/interaction/state_observer.h"
 #include "ui/base/models/image_model.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
@@ -67,14 +68,22 @@ class ZoomViewInteractiveUiTest : public InteractiveBrowserTest {
     return Do([&]() { SetZoomLevel(content::PAGE_ZOOM_RESET); });
   }
 
-  auto EnsureZoomBubblePresent() {
-    return CheckResult([&]() { return ZoomBubbleView::GetZoomBubble(); },
-                       testing::Ne(nullptr));
-  }
+  auto WaitForZoomBubbleShow() { return WaitForZoomBubble(/*visible=*/true); }
 
-  auto EnsureZoomBubbleNotPresent() {
-    return CheckResult([&]() { return ZoomBubbleView::GetZoomBubble(); },
-                       testing::Eq(nullptr));
+  auto WaitForZoomBubbleHide() { return WaitForZoomBubble(/*visible=*/false); }
+
+  MultiStep WaitForZoomBubble(bool visible) {
+    DEFINE_LOCAL_STATE_IDENTIFIER_VALUE(ui::test::PollingStateObserver<bool>,
+                                        kZoomBubbleVisible);
+
+    return Steps(PollState(kZoomBubbleVisible,
+                           [&, visible]() {
+                             bool is_visible =
+                                 ZoomBubbleView::GetZoomBubble() != nullptr;
+                             return is_visible == visible;
+                           }),
+                 WaitForState(kZoomBubbleVisible, true),
+                 StopObservingState(kZoomBubbleVisible));
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -85,9 +94,8 @@ IN_PROC_BROWSER_TEST_F(ZoomViewInteractiveUiTest, ZoomStateUpdates) {
   // image.
   ui::ImageModel zoom_in_image;
   RunTestSequence(
-      EnsureZoomBubbleNotPresent(), DoZoomIn(),
-      CheckViewProperty(kActionItemZoomElementId,
-                        &page_actions::PageActionView::GetVisible, true),
+      WaitForZoomBubbleHide(), DoZoomIn(),
+      WaitForShow(kActionItemZoomElementId),
       CheckViewProperty(kActionItemZoomElementId,
                         &page_actions::PageActionView::GetTooltipText,
                         u"Zoom: 110%"),
@@ -99,11 +107,9 @@ IN_PROC_BROWSER_TEST_F(ZoomViewInteractiveUiTest, ZoomStateUpdates) {
                          ->GetImageModel(views::Button::STATE_NORMAL)
                          .value();
                }),
-      EnsureZoomBubblePresent(), DoZoomReset(), EnsureZoomBubblePresent(),
+      WaitForZoomBubbleShow(), DoZoomReset(), WaitForZoomBubbleShow(),
       CheckResult([&]() { return GetZoomPercent(); }, testing::Eq(100)),
-      DoZoomOut(),
-      CheckViewProperty(kActionItemZoomElementId,
-                        &page_actions::PageActionView::GetVisible, true),
+      DoZoomOut(), WaitForShow(kActionItemZoomElementId),
       CheckViewProperty(kActionItemZoomElementId,
                         &page_actions::PageActionView::GetTooltipText,
                         u"Zoom: 90%"),
@@ -114,7 +120,29 @@ IN_PROC_BROWSER_TEST_F(ZoomViewInteractiveUiTest, ZoomStateUpdates) {
                              ->GetImageModel(views::Button::STATE_NORMAL)
                              .value() != zoom_in_image;
                 }),
-      EnsureZoomBubblePresent());
+      WaitForZoomBubbleShow());
+}
+
+IN_PROC_BROWSER_TEST_F(ZoomViewInteractiveUiTest,
+                       ShowAndHideZoomBubbleByClickWithMouse) {
+  RunTestSequence(WaitForZoomBubbleHide(), DoZoomIn(),
+                  WaitForShow(kActionItemZoomElementId),
+                  MoveMouseTo(kActionItemZoomElementId), ClickMouse(),
+                  WaitForZoomBubbleShow(),
+                  MoveMouseTo(kActionItemZoomElementId), ClickMouse(),
+                  WaitForZoomBubbleHide(),
+                  MoveMouseTo(kActionItemZoomElementId), ClickMouse(),
+                  WaitForZoomBubbleShow());
+}
+
+IN_PROC_BROWSER_TEST_F(ZoomViewInteractiveUiTest,
+                       ShowAndHideZoomBubbleByClickWithKeyboardPress) {
+  RunTestSequence(
+      WaitForZoomBubbleHide(), DoZoomIn(),
+      WaitForShow(kActionItemZoomElementId),
+      PressButton(kActionItemZoomElementId), WaitForZoomBubbleShow(),
+      PressButton(kActionItemZoomElementId), WaitForZoomBubbleHide(),
+      PressButton(kActionItemZoomElementId), WaitForZoomBubbleShow());
 }
 
 }  // namespace

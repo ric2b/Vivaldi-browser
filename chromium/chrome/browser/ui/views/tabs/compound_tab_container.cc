@@ -452,6 +452,19 @@ void CompoundTabContainer::NotifyTabstripBubbleClosed() {
   unpinned_tab_container_->NotifyTabstripBubbleClosed();
 }
 
+void CompoundTabContainer::OnSplitCreated(const std::vector<int>& indices) {
+  unpinned_tab_container_->OnSplitCreated(indices);
+}
+
+void CompoundTabContainer::OnSplitRemoved(const std::vector<int>& indices) {
+  unpinned_tab_container_->OnSplitRemoved(indices);
+}
+
+void CompoundTabContainer::OnSplitContentsChanged(
+    const std::vector<int>& indices) {
+  unpinned_tab_container_->OnSplitContentsChanged(indices);
+}
+
 std::optional<int> CompoundTabContainer::GetModelIndexOf(
     const TabSlotView* slot_view) const {
   const std::optional<int> unpinned_index =
@@ -656,16 +669,6 @@ const std::map<tab_groups::TabGroupId, std::unique_ptr<TabGroupViews>>&
 CompoundTabContainer::get_group_views_for_testing() const {
   // Only the unpinned container can have groups.
   return unpinned_tab_container_->get_group_views_for_testing();  // IN-TEST
-}
-
-int CompoundTabContainer::GetActiveTabWidth() const {
-  // Only the unpinned container has variable-width tabs.
-  return unpinned_tab_container_->GetActiveTabWidth();
-}
-
-int CompoundTabContainer::GetInactiveTabWidth() const {
-  // Only the unpinned container has variable-width tabs.
-  return unpinned_tab_container_->GetInactiveTabWidth();
 }
 
 gfx::Rect CompoundTabContainer::GetIdealBounds(int model_index) const {

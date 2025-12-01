@@ -788,7 +788,7 @@ post_skip :
     }
 }
 
-static int rpza_encode_init(AVCodecContext *avctx)
+static av_cold int rpza_encode_init(AVCodecContext *avctx)
 {
     RpzaContext *s = avctx->priv_data;
 
@@ -847,7 +847,7 @@ static int rpza_encode_frame(AVCodecContext *avctx, AVPacket *pkt,
     return 0;
 }
 
-static int rpza_encode_end(AVCodecContext *avctx)
+static av_cold int rpza_encode_end(AVCodecContext *avctx)
 {
     RpzaContext *s = (RpzaContext *)avctx->priv_data;
 
@@ -884,6 +884,5 @@ const FFCodec ff_rpza_encoder = {
     .init           = rpza_encode_init,
     FF_CODEC_ENCODE_CB(rpza_encode_frame),
     .close          = rpza_encode_end,
-    .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_RGB555,
-                                                     AV_PIX_FMT_NONE},
+    CODEC_PIXFMTS(AV_PIX_FMT_RGB555),
 };

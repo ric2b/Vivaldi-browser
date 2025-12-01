@@ -662,11 +662,10 @@ cleanup:
 
 #endif  // FFAT_USE_FILE_STREAM_PARSE
 
-static int ffat_decode(AVCodecContext *avctx, void *data,
+static int ffat_decode(AVCodecContext *avctx, AVFrame *frame,
                        int *got_frame_ptr, AVPacket *avpkt)
 {
     ATDecodeContext *at = avctx->priv_data;
-    AVFrame *frame = data;
     int ret;
     AudioBufferList out_buffers;
 
@@ -735,6 +734,8 @@ static int ffat_decode(AVCodecContext *avctx, void *data,
 
     frame->nb_samples = avctx->frame_size;
 
+    frame->flags |= AV_FRAME_FLAG_KEY;
+
     out_buffers.mBuffers[0].mData = at->decoded_data;
 
     at->in_pkt = avpkt;
@@ -800,13 +801,13 @@ static av_cold int ffat_close_decoder(AVCodecContext *avctx)
     FFAT_DEC_CLASS(NAME) \
     const FFCodec ff_##NAME##_at_decoder = { \
         .p.name         = #NAME "_at", \
-        .p.long_name    = NULL_IF_CONFIG_SMALL(#NAME " (AudioToolbox)"), \
+        CODEC_LONG_NAME(#NAME " (AudioToolbox)"), \
         .p.type         = AVMEDIA_TYPE_AUDIO, \
         .p.id           = ID, \
         .priv_data_size = sizeof(ATDecodeContext), \
         .init           = ffat_init_decoder, \
         .close          = ffat_close_decoder, \
-        .cb.decode         = ffat_decode, \
+        FF_CODEC_DECODE_CB(ffat_decode), \
         .flush          = ffat_decode_flush, \
         .p.priv_class   = &ffat_##NAME##_dec_class, \
         .bsfs           = bsf_name, \

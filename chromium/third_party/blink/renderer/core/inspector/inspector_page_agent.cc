@@ -160,8 +160,11 @@ String FrameDetachTypeToProtocol(FrameDetachType type) {
   switch (type) {
     case FrameDetachType::kRemove:
       return ReasonEnum::Remove;
-    case FrameDetachType::kSwap:
+    case FrameDetachType::kSwapForRemote:
       return ReasonEnum::Swap;
+    case FrameDetachType::kSwapForLocal:
+      // These are not supposed to be reported to client.
+      NOTREACHED();
   }
 }
 
@@ -564,7 +567,7 @@ protocol::Response InspectorPageAgent::disable() {
       resource_content_loader_client_id_);
   requested_compilation_cache_.clear();
   compilation_cache_.clear();
-  ad_script_identifiers_.clear();
+  frame_ad_script_ancestry_.clear();
   stopScreencast();
 
   return protocol::Response::Success();
@@ -795,18 +798,27 @@ void InspectorPageAgent::getResourceContent(
           WrapPersistent(this), frame_id, url, std::move(callback)));
 }
 
-protocol::Response InspectorPageAgent::getAdScriptId(
+protocol::Response InspectorPageAgent::getAdScriptAncestryIds(
     const String& frame_id,
-    std::unique_ptr<protocol::Page::AdScriptId>* ad_script_id) {
-  if (ad_script_identifiers_.Contains(frame_id)) {
-    AdScriptIdentifier* ad_script_identifier =
-        ad_script_identifiers_.at(frame_id);
-    *ad_script_id =
-        protocol::Page::AdScriptId::create()
-            .setScriptId(String::Number(ad_script_identifier->id))
-            .setDebuggerId(ToCoreString(
-                ad_script_identifier->context_id.toString()->string()))
-            .build();
+    std::unique_ptr<protocol::Array<protocol::Page::AdScriptId>>*
+        out_ad_script_ancestry) {
+  auto it = frame_ad_script_ancestry_.find(frame_id);
+  if (it != frame_ad_script_ancestry_.end()) {
+    const Vector<AdScriptIdentifier>& ad_script_ancestry = it->value;
+
+    std::vector<std::unique_ptr<protocol::Page::AdScriptId>> results;
+    for (const auto& ad_script_identifier : ad_script_ancestry) {
+      results.push_back(
+          protocol::Page::AdScriptId::create()
+              .setScriptId(String::Number(ad_script_identifier.id))
+              .setDebuggerId(ToCoreString(
+                  ad_script_identifier.context_id.toString()->string()))
+              .build());
+    }
+
+    *out_ad_script_ancestry =
+        std::make_unique<protocol::Array<protocol::Page::AdScriptId>>(
+            std::move(results));
   }
 
   return protocol::Response::Success();
@@ -1147,16 +1159,15 @@ void InspectorPageAgent::DidOpenDocument(LocalFrame* frame,
 
 void InspectorPageAgent::FrameAttachedToParent(
     LocalFrame* frame,
-    const std::optional<AdScriptIdentifier>& ad_script_on_stack) {
+    const Vector<AdScriptIdentifier>& ad_script_ancestry) {
   // TODO(crbug.com/1217041): If an ad script on the stack caused this frame to
   // be tagged as an ad, send the script's ID to the frontend.
   Frame* parent_frame = frame->Tree().Parent();
   std::unique_ptr<SourceLocation> location =
       SourceLocation::CaptureWithFullStackTrace();
-  if (ad_script_on_stack.has_value()) {
-    ad_script_identifiers_.Set(
-        IdentifiersFactory::FrameId(frame),
-        std::make_unique<AdScriptIdentifier>(ad_script_on_stack.value()));
+  if (!ad_script_ancestry.empty()) {
+    frame_ad_script_ancestry_.Set(IdentifiersFactory::FrameId(frame),
+                                  ad_script_ancestry);
   }
   GetFrontend()->frameAttached(
       IdentifiersFactory::FrameId(frame),
@@ -1172,9 +1183,13 @@ void InspectorPageAgent::FrameDetachedFromParent(LocalFrame* frame,
                                                  FrameDetachType type) {
   // If the frame is swapped, we still maintain the ad script id for it.
   if (type == FrameDetachType::kRemove) {
-    ad_script_identifiers_.erase(IdentifiersFactory::FrameId(frame));
+    frame_ad_script_ancestry_.erase(IdentifiersFactory::FrameId(frame));
   }
-
+  // Skip reporting local swaps as nothing changes for the client and the
+  // frame remains in current frame tree.
+  if (type == FrameDetachType::kSwapForLocal) {
+    return;
+  }
   GetFrontend()->frameDetached(IdentifiersFactory::FrameId(frame),
                                FrameDetachTypeToProtocol(type));
 }

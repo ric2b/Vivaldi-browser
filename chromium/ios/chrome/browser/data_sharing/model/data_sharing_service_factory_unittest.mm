@@ -11,6 +11,7 @@
 #import "components/data_sharing/public/data_sharing_service.h"
 #import "components/data_sharing/public/features.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
+#import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "testing/gtest/include/gtest/gtest.h"
 #import "testing/platform_test.h"
@@ -24,22 +25,29 @@ class DataSharingServiceFactoryTest : public PlatformTest {
 
   void InitService(bool enable_feature) {
     if (enable_feature) {
-      scoped_feature_list_.InitWithFeaturesAndParameters(
-          {{data_sharing::features::kDataSharingFeature, {}}}, {});
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/
+          {
+              kTabGroupSync,
+              data_sharing::features::kDataSharingJoinOnly,
+          },
+          /*disable_features=*/{});
     } else {
-      scoped_feature_list_.InitWithFeaturesAndParameters(
-          {}, {{data_sharing::features::kDataSharingFeature}});
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{},
+          /*disable_features=*/{
+              data_sharing::features::kDataSharingJoinOnly,
+              data_sharing::features::kDataSharingFeature,
+          });
     }
-    TestProfileIOS::Builder builder;
-    builder.AddTestingFactory(DataSharingServiceFactory::GetInstance(),
-                              DataSharingServiceFactory::GetDefaultFactory());
-    profile_ = std::move(builder).Build();
+    profile_ = TestProfileIOS::Builder().Build();
   }
 
   void TearDown() override { web_task_env_.RunUntilIdle(); }
 
-  web::WebTaskEnvironment web_task_env_;
+ protected:
   base::test::ScopedFeatureList scoped_feature_list_;
+  web::WebTaskEnvironment web_task_env_;
   std::unique_ptr<TestProfileIOS> profile_;
 };
 
@@ -60,11 +68,8 @@ TEST_F(DataSharingServiceFactoryTest, FeatureDisabledUsesEmptyService) {
 TEST_F(DataSharingServiceFactoryTest,
        FeatureEnabledUsesEmptyServiceInIncognito) {
   InitService(/*enable_feature=*/true);
-  raw_ptr<ProfileIOS> otr_profile =
-      profile_->CreateOffTheRecordProfileWithTestingFactories(
-          {TestProfileIOS::TestingFactory{
-              DataSharingServiceFactory::GetInstance(),
-              DataSharingServiceFactory::GetDefaultFactory()}});
+  TestProfileIOS* otr_profile =
+      profile_->CreateOffTheRecordProfileWithTestingFactories();
   DataSharingService* service =
       DataSharingServiceFactory::GetForProfile(otr_profile);
   EXPECT_TRUE(service->IsEmptyService());

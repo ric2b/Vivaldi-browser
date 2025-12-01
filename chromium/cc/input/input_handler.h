@@ -441,7 +441,7 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
 
   // Notifies when any input event is received, irrespective of whether it is
   // being handled by the InputHandler or not.
-  virtual void NotifyInputEvent();
+  virtual void NotifyInputEvent(bool is_fling);
 
   // Returns true if ScrollbarController is in the middle of a scroll operation.
   virtual bool ScrollbarScrollIsActive();
@@ -880,6 +880,8 @@ class CC_EXPORT InputHandler : public InputDelegateForCompositor {
   // The set of scroll containers for which an impl scroll ended between the
   // last commit and the next one.
   base::flat_set<ElementId> pending_scrollend_containers_;
+
+  base::TimeTicks last_scroll_begin_time_;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

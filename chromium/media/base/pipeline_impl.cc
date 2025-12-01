@@ -101,16 +101,10 @@ class PipelineImpl::RendererWrapper final : public DemuxerHost,
   PipelineStatistics GetStatistics() const;
   void SetCdm(CdmContext* cdm_context, CdmAttachedCB cdm_attached_cb);
 
-  // |enabled_track_ids| contains track ids of enabled audio tracks.
-  void OnEnabledAudioTracksChanged(
-      const std::vector<MediaTrack::Id>& enabled_track_ids,
-      base::OnceClosure change_completed_cb);
-
-  // |selected_track_id| is either empty, which means no video track is
-  // selected, or contains the selected video track id.
-  void OnSelectedVideoTrackChanged(
-      std::optional<MediaTrack::Id> selected_track_id,
-      base::OnceClosure change_completed_cb);
+  // Handles asynchronous track changing for the demuxer and renderer.
+  void OnTracksChanged(DemuxerStream::Type track_type,
+                       std::vector<MediaTrack::Id> enabled_track_ids,
+                       base::OnceClosure change_completed_cb);
 
   void OnExternalVideoFrameRequest();
 
@@ -770,13 +764,32 @@ void PipelineImpl::OnEnabledAudioTracksChanged(
   media_task_runner_->PostTask(
       FROM_HERE,
       base::BindOnce(
-          &RendererWrapper::OnEnabledAudioTracksChanged,
-          base::Unretained(renderer_wrapper_.get()), enabled_track_ids,
+          &RendererWrapper::OnTracksChanged,
+          base::Unretained(renderer_wrapper_.get()), DemuxerStream::AUDIO,
+          std::move(enabled_track_ids),
           base::BindPostTaskToCurrentDefault(std::move(change_completed_cb))));
 }
 
-void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
-    const std::vector<MediaTrack::Id>& enabled_track_ids,
+void PipelineImpl::OnSelectedVideoTrackChanged(
+    std::optional<MediaTrack::Id> selected_track_id,
+    base::OnceClosure change_completed_cb) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  std::vector<MediaTrack::Id> tracks;
+  if (selected_track_id) {
+    tracks.push_back(*selected_track_id);
+  }
+
+  media_task_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&RendererWrapper::OnTracksChanged,
+                                base::Unretained(renderer_wrapper_.get()),
+                                DemuxerStream::VIDEO, std::move(tracks),
+                                base::BindPostTaskToCurrentDefault(
+                                    std::move(change_completed_cb))));
+}
+
+void PipelineImpl::RendererWrapper::OnTracksChanged(
+    DemuxerStream::Type track_type,
+    std::vector<MediaTrack::Id> enabled_track_ids,
     base::OnceClosure change_completed_cb) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
@@ -797,51 +810,27 @@ void PipelineImpl::RendererWrapper::OnEnabledAudioTracksChanged(
     std::move(change_completed_cb).Run();
     return;
   }
-  demuxer_->OnEnabledAudioTracksChanged(
-      enabled_track_ids, GetCurrentTimestamp(),
+
+  demuxer_->OnTracksChanged(
+      track_type, std::move(enabled_track_ids), GetCurrentTimestamp(),
       base::BindOnce(&RendererWrapper::OnDemuxerCompletedTrackChange,
-                     weak_factory_.GetWeakPtr(), DemuxerStream::AUDIO,
+                     weak_factory_.GetWeakPtr(), track_type,
                      std::move(change_completed_cb)));
 }
 
-void PipelineImpl::OnSelectedVideoTrackChanged(
-    std::optional<MediaTrack::Id> selected_track_id,
-    base::OnceClosure change_completed_cb) {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  media_task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(
-          &RendererWrapper::OnSelectedVideoTrackChanged,
-          base::Unretained(renderer_wrapper_.get()), selected_track_id,
-          base::BindPostTaskToCurrentDefault(std::move(change_completed_cb))));
-}
-
-void PipelineImpl::RendererWrapper::OnSelectedVideoTrackChanged(
-    std::optional<MediaTrack::Id> selected_track_id,
-    base::OnceClosure change_completed_cb) {
+void PipelineImpl::RendererWrapper::OnDemuxerCompletedTrackChange(
+    DemuxerStream::Type stream_type,
+    base::OnceClosure change_completed_cb,
+    const std::vector<DemuxerStream*>& streams) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-
-  // See RenderWrapper::OnEnabledAudioTracksChanged.
-  if (state_ == State::kCreated) {
-    DCHECK(!demuxer_);
+  if (!shared_state_.renderer) {
+    // This can happen if the pipeline has been suspended.
     std::move(change_completed_cb).Run();
     return;
   }
 
-  if (state_ == State::kStopping || state_ == State::kStopped) {
-    std::move(change_completed_cb).Run();
-    return;
-  }
-
-  std::vector<MediaTrack::Id> tracks;
-  if (selected_track_id)
-    tracks.push_back(*selected_track_id);
-
-  demuxer_->OnSelectedVideoTrackChanged(
-      tracks, GetCurrentTimestamp(),
-      base::BindOnce(&RendererWrapper::OnDemuxerCompletedTrackChange,
-                     weak_factory_.GetWeakPtr(), DemuxerStream::VIDEO,
-                     std::move(change_completed_cb)));
+  shared_state_.renderer->OnTracksChanged(stream_type, std::move(streams),
+                                          std::move(change_completed_cb));
 }
 
 void PipelineImpl::OnExternalVideoFrameRequest() {
@@ -863,31 +852,6 @@ void PipelineImpl::RendererWrapper::OnExternalVideoFrameRequest() {
   }
 
   shared_state_.renderer->OnExternalVideoFrameRequest();
-}
-
-void PipelineImpl::RendererWrapper::OnDemuxerCompletedTrackChange(
-    DemuxerStream::Type stream_type,
-    base::OnceClosure change_completed_cb,
-    const std::vector<DemuxerStream*>& streams) {
-  DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
-  if (!shared_state_.renderer) {
-    // This can happen if the pipeline has been suspended.
-    std::move(change_completed_cb).Run();
-    return;
-  }
-
-  switch (stream_type) {
-    case DemuxerStream::AUDIO:
-      shared_state_.renderer->OnEnabledAudioTracksChanged(
-          streams, std::move(change_completed_cb));
-      break;
-    case DemuxerStream::VIDEO:
-      shared_state_.renderer->OnSelectedVideoTracksChanged(
-          streams, std::move(change_completed_cb));
-      break;
-    case DemuxerStream::UNKNOWN:  // Fail on unknown type.
-      NOTREACHED();
-  }
 }
 
 void PipelineImpl::RendererWrapper::OnStatisticsUpdate(
@@ -1179,23 +1143,10 @@ void PipelineImpl::RendererWrapper::InitializeRenderer(
   DVLOG(1) << __func__;
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
 
-  switch (demuxer_->GetType()) {
-    case MediaResource::Type::kStream:
-      if (demuxer_->GetAllStreams().empty()) {
-        DVLOG(1) << "Error: demuxer does not have an audio or a video stream.";
-        std::move(done_cb).Run(PIPELINE_ERROR_COULD_NOT_RENDER);
-        return;
-      }
-      break;
-
-    case MediaResource::Type::KUrl:
-      // NOTE: Empty GURL are not valid.
-      if (!demuxer_->GetMediaUrlParams().media_url.is_valid()) {
-        DVLOG(1) << "Error: demuxer does not have a valid URL.";
-        std::move(done_cb).Run(PIPELINE_ERROR_COULD_NOT_RENDER);
-        return;
-      }
-      break;
+  if (demuxer_->GetAllStreams().empty()) {
+    DVLOG(1) << "Error: demuxer does not have an audio or a video stream.";
+    std::move(done_cb).Run(PIPELINE_ERROR_COULD_NOT_RENDER);
+    return;
   }
 
   if (cdm_context_)
@@ -1245,32 +1196,21 @@ void PipelineImpl::RendererWrapper::ReportMetadata(StartType start_type) {
   PipelineMetadata metadata;
   std::vector<DemuxerStream*> streams;
 
-  switch (demuxer_->GetType()) {
-    case MediaResource::Type::kStream:
-      metadata.timeline_offset = demuxer_->GetTimelineOffset();
-      // TODO(servolk): What should we do about metadata for multiple streams?
-      streams = demuxer_->GetAllStreams();
-      for (media::DemuxerStream* stream : streams) {
-        if (stream->type() == DemuxerStream::VIDEO && !metadata.has_video) {
-          metadata.has_video = true;
-          metadata.natural_size = GetRotatedVideoSize(
-              stream->video_decoder_config().video_transformation().rotation,
-              stream->video_decoder_config().natural_size());
-          metadata.video_decoder_config = stream->video_decoder_config();
-        }
-        if (stream->type() == DemuxerStream::AUDIO && !metadata.has_audio) {
-          metadata.has_audio = true;
-          metadata.audio_decoder_config = stream->audio_decoder_config();
-        }
-      }
-      break;
-
-    case MediaResource::Type::KUrl:
-      // We don't know if the MediaPlayerRender has Audio/Video until we start
-      // playing. Conservatively assume that they do.
+  metadata.timeline_offset = demuxer_->GetTimelineOffset();
+  // TODO(servolk): What should we do about metadata for multiple streams?
+  streams = demuxer_->GetAllStreams();
+  for (media::DemuxerStream* stream : streams) {
+    if (stream->type() == DemuxerStream::VIDEO && !metadata.has_video) {
       metadata.has_video = true;
+      metadata.natural_size = GetRotatedVideoSize(
+          stream->video_decoder_config().video_transformation().rotation,
+          stream->video_decoder_config().natural_size());
+      metadata.video_decoder_config = stream->video_decoder_config();
+    }
+    if (stream->type() == DemuxerStream::AUDIO && !metadata.has_audio) {
       metadata.has_audio = true;
-      break;
+      metadata.audio_decoder_config = stream->audio_decoder_config();
+    }
   }
 
   main_task_runner_->PostTask(
@@ -1297,10 +1237,6 @@ void PipelineImpl::RendererWrapper::ReportMetadata(StartType start_type) {
 }
 
 bool PipelineImpl::RendererWrapper::HasEncryptedStream() {
-  // Encrypted streams are only handled explicitly for STREAM type.
-  if (demuxer_->GetType() != MediaResource::Type::kStream)
-    return false;
-
   auto streams = demuxer_->GetAllStreams();
 
   for (media::DemuxerStream* stream : streams) {

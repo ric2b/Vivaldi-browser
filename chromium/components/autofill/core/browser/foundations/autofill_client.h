@@ -22,10 +22,12 @@
 #include "components/autofill/core/browser/autofill_trigger_source.h"
 #include "components/autofill/core/browser/country_type.h"
 #include "components/autofill/core/browser/data_manager/autofill_ai/entity_data_manager.h"
+#include "components/autofill/core/browser/data_manager/valuables/valuables_data_manager.h"
 #include "components/autofill/core/browser/filling/filling_product.h"
-#include "components/autofill/core/browser/integrators/fast_checkout_client.h"
-#include "components/autofill/core/browser/integrators/identity_credential_delegate.h"
+#include "components/autofill/core/browser/integrators/fast_checkout/fast_checkout_client.h"
+#include "components/autofill/core/browser/integrators/identity_credential/identity_credential_delegate.h"
 #include "components/autofill/core/browser/integrators/password_form_classification.h"
+#include "components/autofill/core/browser/integrators/password_manager/password_manager_delegate.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/suggestions/suggestion_hiding_reason.h"
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
@@ -95,7 +97,6 @@ class LogManager;
 class PersonalDataManager;
 class SingleFieldFillRouter;
 class StrikeDatabase;
-class ValuableManager;
 class VotesUploader;
 struct Suggestion;
 enum class WebauthnDialogState;
@@ -262,6 +263,10 @@ class AutofillClient {
   virtual PersonalDataManager& GetPersonalDataManager() = 0;
   const PersonalDataManager& GetPersonalDataManager() const;
 
+  // Gets the ValuablesDataManager instance associated with the profile.
+  virtual ValuablesDataManager* GetValuablesDataManager() = 0;
+  const ValuablesDataManager* GetValuablesDataManager() const;
+
   // Gets the EntityDataManager instance associated with the client, if there is
   // one.
   virtual EntityDataManager* GetEntityDataManager() = 0;
@@ -324,6 +329,11 @@ class AutofillClient {
   // the window of this tab.
   virtual AutofillPlusAddressDelegate* GetPlusAddressDelegate();
 
+  // Returns the `PasswordManagerDelegate` responsible to provide
+  // password suggestions for the given `field_id`.
+  virtual PasswordManagerDelegate* GetPasswordManagerDelegate(
+      const FieldGlobalId& field_id);
+
   // TODO(crbug.com/365494310): Move these methods to a plus-address-specific
   // client class.
 
@@ -379,9 +389,6 @@ class AutofillClient {
   // functions will return nullptr.
   virtual payments::PaymentsAutofillClient* GetPaymentsAutofillClient();
   const payments::PaymentsAutofillClient* GetPaymentsAutofillClient() const;
-
-  // Gets the ValuableManager instance associated with the client.
-  virtual ValuableManager* GetValuableManager();
 
   // Gets the StrikeDatabase associated with the client. Note: Nullptr may be
   // returned so check before use.
@@ -596,7 +603,8 @@ class AutofillClient {
   // instead of the `PersonalDataManager`.
   virtual void set_test_addresses(std::vector<AutofillProfile> test_addresses);
 
-  virtual base::span<const AutofillProfile> GetTestAddresses() const;
+  virtual base::span<const AutofillProfile> GetTestAddresses() const
+      LIFETIME_BOUND;
 
   // Returns the heuristics predictions for the renderer form to which
   // `field_id` belongs inside the form with `form_id`. The browser form with

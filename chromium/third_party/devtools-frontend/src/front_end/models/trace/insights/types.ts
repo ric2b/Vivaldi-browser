@@ -28,6 +28,7 @@ export interface InsightSetContextWithNavigation {
 }
 
 export interface LanternContext {
+  requests: Array<Lantern.Types.NetworkRequest<Types.Events.SyntheticNetworkRequest>>;
   graph: Lantern.Graph.Node<Types.Events.SyntheticNetworkRequest>;
   simulator: Lantern.Simulation.Simulator<Types.Events.SyntheticNetworkRequest>;
   metrics: Record<string, Lantern.Metrics.MetricResult>;
@@ -75,9 +76,19 @@ export type InsightModel<UIStrings extends Record<string, string> = Record<strin
       description: Common.UIString.LocalizedString,
       category: InsightCategory,
       state: 'pass' | 'fail' | 'informative',
+      /** Used by RelatedInsightChips.ts */
       relatedEvents?: RelatedEventsMap | Types.Events.Event[],
       warnings?: InsightWarning[],
       metricSavings?: MetricSavings,
+      /**
+       * An estimate for the number of bytes that this insight deems to have been wasted.
+       * Bytes are in terms of transfer size: for each component of savings related to an
+       * individual request, the insight will estimate its impact on transfer size by using
+       * the compression ratio of the resource.
+       *
+       * This field is only displayed for informational purposes.
+       */
+      wastedBytes?: number,
       frameId?: string,
       /**
        * If this insight is attached to a navigation, this stores its ID.

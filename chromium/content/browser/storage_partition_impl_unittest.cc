@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <map>
 #include <memory>
 #include <set>
@@ -66,6 +67,7 @@
 #include "content/browser/interest_group/interest_group_permissions_checker.h"
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
 #include "content/browser/private_aggregation/private_aggregation_test_utils.h"
+#include "content/browser/renderer_host/navigation_request.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -76,7 +78,10 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/mock_render_process_host.h"
+#include "content/public/test/navigation_simulator.h"
 #include "content/public/test/test_browser_context.h"
+#include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
 #include "net/base/network_isolation_key.h"
@@ -86,6 +91,7 @@
 #include "net/cookies/cookie_access_params.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_inclusion_status.h"
+#include "net/net_buildflags.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/cookie_manager.h"
 #include "services/network/public/cpp/features.h"
@@ -151,7 +157,7 @@ class RemoveCookieTester {
     base::RunLoop loop;
     storage_partition_->GetCookieManagerForBrowserProcess()->GetCookieList(
         origin.GetURL(), net::CookieOptions::MakeAllInclusive(),
-        net::CookiePartitionKeyCollection::FromOptional(cookie_partition_key),
+        net::CookiePartitionKeyCollection(cookie_partition_key),
         base::BindOnce(&RemoveCookieTester::GetCookieListCallback,
                        base::Unretained(this), loop.QuitClosure()));
     loop.Run();
@@ -270,6 +276,31 @@ class RemoveInterestGroupTester {
     k_anon_key = HashedKAnonKeyForAdBid(
         group, GURL("https://owner.example.com/ad1").spec());
     interest_group_manager->UpdateLastKAnonymityReported(k_anon_key);
+  }
+
+  void AddClick(const url::Origin& provider_origin,
+                const url::Origin& eligible_origin) {
+    ASSERT_TRUE(storage_partition_->GetInterestGroupManager());
+    network::AdAuctionEventRecord event;
+    event.type = network::AdAuctionEventRecord::Type::kClick;
+    event.providing_origin = provider_origin;
+    event.eligible_origins.push_back(eligible_origin);
+    InterestGroupManagerImpl* interest_group_manager =
+        static_cast<InterestGroupManagerImpl*>(
+            storage_partition_->GetInterestGroupManager());
+    interest_group_manager->RecordViewClickForTesting(std::move(event));
+  }
+
+  std::optional<bool> ClickInDb(const url::Origin& provider_origin,
+                                const url::Origin& eligible_origin) {
+    base::test::TestFuture<std::optional<bool>> future;
+    InterestGroupManagerImpl* interest_group_manager =
+        static_cast<InterestGroupManagerImpl*>(
+            storage_partition_->GetInterestGroupManager());
+    interest_group_manager->CheckViewClickInfoInDbForTesting(
+        /*provider_origin=*/provider_origin,
+        /*eligible_origin=*/eligible_origin, future.GetCallback());
+    return future.Get();
   }
 
  private:
@@ -414,27 +445,44 @@ class RemoveLocalStorageTester {
 
   static std::vector<uint8_t> CreateAccessMetaDataKey(
       const url::Origin& origin) {
-    const uint8_t kMetaPrefix[] = {'M', 'E', 'T', 'A', 'A', 'C',
-                                   'C', 'E', 'S', 'S', ':'};
+    const auto kMetaPrefix = std::to_array<uint8_t>({
+        'M',
+        'E',
+        'T',
+        'A',
+        'A',
+        'C',
+        'C',
+        'E',
+        'S',
+        'S',
+        ':',
+    });
     auto origin_str = origin.Serialize();
     std::vector<uint8_t> serialized_origin(origin_str.begin(),
                                            origin_str.end());
     std::vector<uint8_t> key;
     key.reserve(std::size(kMetaPrefix) + serialized_origin.size());
-    key.insert(key.end(), kMetaPrefix, kMetaPrefix + std::size(kMetaPrefix));
+    key.insert(key.end(), kMetaPrefix.data(),
+               base::span<const uint8_t>(kMetaPrefix)
+                   .subspan(std::size(kMetaPrefix))
+                   .data());
     key.insert(key.end(), serialized_origin.begin(), serialized_origin.end());
     return key;
   }
 
   static std::vector<uint8_t> CreateWriteMetaDataKey(
       const url::Origin& origin) {
-    const uint8_t kMetaPrefix[] = {'M', 'E', 'T', 'A', ':'};
+    const auto kMetaPrefix = std::to_array<uint8_t>({'M', 'E', 'T', 'A', ':'});
     auto origin_str = origin.Serialize();
     std::vector<uint8_t> serialized_origin(origin_str.begin(),
                                            origin_str.end());
     std::vector<uint8_t> key;
     key.reserve(std::size(kMetaPrefix) + serialized_origin.size());
-    key.insert(key.end(), kMetaPrefix, kMetaPrefix + std::size(kMetaPrefix));
+    key.insert(key.end(), kMetaPrefix.data(),
+               base::span<const uint8_t>(kMetaPrefix)
+                   .subspan(std::size(kMetaPrefix))
+                   .data());
     key.insert(key.end(), serialized_origin.begin(), serialized_origin.end());
     return key;
   }
@@ -732,6 +780,30 @@ void ClearInterestGroups(content::StoragePartition* partition,
                        StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
                        blink::StorageKey(), delete_begin, delete_end,
                        run_loop->QuitClosure());
+}
+
+void ClearInterestGroupsViewClick(content::StoragePartition* partition,
+                                  const url::Origin& origin,
+                                  bool user_action,
+                                  base::RunLoop* run_loop) {
+  partition->ClearData(
+      StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS |
+          (user_action
+               ? StoragePartition::REMOVE_DATA_MASK_INTEREST_GROUPS_USER_CLEAR
+               : 0),
+      StoragePartition::QUOTA_MANAGED_STORAGE_MASK_ALL,
+      blink::StorageKey::CreateFirstParty(origin), base::Time(),
+      base::Time::Max(), run_loop->QuitClosure());
+}
+
+void ClearInterestGroupsViewClickOnRunLoop(content::StoragePartition* partition,
+                                           const url::Origin& origin,
+                                           bool user_action) {
+  base::RunLoop run_loop;
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&ClearInterestGroupsViewClick, partition,
+                                origin, user_action, &run_loop));
+  run_loop.Run();
 }
 
 void ClearInterestGroupsAndKAnon(content::StoragePartition* partition,
@@ -1221,6 +1293,69 @@ TEST_F(StoragePartitionImplTest, RemoveInterestGroupForever) {
   }
   EXPECT_FALSE(tester.ContainsInterestGroupOwner(kOrigin));
   EXPECT_FALSE(tester.ContainsInterestGroupKAnon(kOrigin));
+}
+
+TEST_F(StoragePartitionImplTest, RemoveInterestGroupClicks) {
+  const url::Origin kProvider1 =
+      url::Origin::Create(GURL("https://provider1.test"));
+  const url::Origin kProvider2 =
+      url::Origin::Create(GURL("https://provider2.test"));
+  const url::Origin kEligible1 =
+      url::Origin::Create(GURL("https://elig1.test"));
+  const url::Origin kEligible2 =
+      url::Origin::Create(GURL("https://elig2.test"));
+
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+
+  RemoveInterestGroupTester tester(partition);
+  tester.AddClick(kProvider1, kEligible1);
+  tester.AddClick(kProvider2, kEligible2);
+  EXPECT_EQ(true, tester.ClickInDb(kProvider1, kEligible1));
+  EXPECT_EQ(true, tester.ClickInDb(kProvider2, kEligible2));
+
+  // Deleting based on eligible origin doesn't match.
+  ClearInterestGroupsViewClickOnRunLoop(partition, kEligible1,
+                                        /*user_action=*/false);
+  EXPECT_EQ(true, tester.ClickInDb(kProvider1, kEligible1));
+  EXPECT_EQ(true, tester.ClickInDb(kProvider2, kEligible2));
+
+  // Provider origin does.
+  ClearInterestGroupsViewClickOnRunLoop(partition, kProvider2,
+                                        /*user_action=*/false);
+  EXPECT_EQ(true, tester.ClickInDb(kProvider1, kEligible1));
+  EXPECT_EQ(false, tester.ClickInDb(kProvider2, kEligible2));
+
+  ClearInterestGroupsViewClickOnRunLoop(partition, kProvider1,
+                                        /*user_action=*/false);
+  EXPECT_EQ(false, tester.ClickInDb(kProvider1, kEligible1));
+  EXPECT_EQ(false, tester.ClickInDb(kProvider2, kEligible2));
+}
+
+TEST_F(StoragePartitionImplTest, RemoveInterestGroupClicksUserAction) {
+  const url::Origin kProvider1 =
+      url::Origin::Create(GURL("https://provider1.test"));
+  const url::Origin kProvider2 =
+      url::Origin::Create(GURL("https://provider2.test"));
+  const url::Origin kEligible1 =
+      url::Origin::Create(GURL("https://elig1.test"));
+  const url::Origin kEligible2 =
+      url::Origin::Create(GURL("https://elig2.test"));
+
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+
+  RemoveInterestGroupTester tester(partition);
+  tester.AddClick(kProvider1, kEligible1);
+  tester.AddClick(kProvider2, kEligible2);
+  EXPECT_EQ(true, tester.ClickInDb(kProvider1, kEligible1));
+  EXPECT_EQ(true, tester.ClickInDb(kProvider2, kEligible2));
+
+  // If the delete is in response to a user request, it just clears everything.
+  ClearInterestGroupsViewClickOnRunLoop(partition, kEligible1,
+                                        /*user_action=*/true);
+  EXPECT_EQ(false, tester.ClickInDb(kProvider1, kEligible1));
+  EXPECT_EQ(false, tester.ClickInDb(kProvider2, kEligible2));
 }
 
 TEST_F(StoragePartitionImplTest, RemoveInterestGroupPermissionsCacheForever) {
@@ -2453,8 +2588,8 @@ TEST_F(StoragePartitionImplTest, PrivateNetworkAccessPermission) {
       browser_context()->GetDefaultStoragePartition());
 
   mojo::Remote<network::mojom::URLLoaderNetworkServiceObserver> observer(
-      partition->CreateAuthCertObserverForServiceWorker(
-          network::mojom::kBrowserProcessId));
+      partition->CreateURLLoaderNetworkObserverForServiceWorker(
+          network::mojom::kBrowserProcessId, url::Origin()));
 
   base::test::TestFuture<bool> grant_permission;
   observer->OnPrivateNetworkAccessPermissionRequired(
@@ -2463,16 +2598,74 @@ TEST_F(StoragePartitionImplTest, PrivateNetworkAccessPermission) {
   EXPECT_FALSE(grant_permission.Get());
 }
 
-TEST_F(StoragePartitionImplTest, LocalNetworkAccessPermission) {
+// Local network access tests require there to be a (minimal) frame setup.
+using StoragePartitionImplLocalNetworkAccessTest = RenderViewHostTestHarness;
+
+// Tests triggering the Local Network Access permission check for a subresource
+// request.
+TEST_F(StoragePartitionImplLocalNetworkAccessTest,
+       LocalNetworkAccessPermission_SubresourceContext) {
   base::test::ScopedFeatureList features(
       network::features::kLocalNetworkAccessChecks);
-
   StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
       browser_context()->GetDefaultStoragePartition());
 
   mojo::Remote<network::mojom::URLLoaderNetworkServiceObserver> observer(
-      partition->CreateAuthCertObserverForServiceWorker(
-          network::mojom::kBrowserProcessId));
+      partition->CreateURLLoaderNetworkObserverForFrame(
+          process()->GetDeprecatedID(), main_rfh()->GetRoutingID()));
+
+  base::test::TestFuture<bool> grant_permission;
+  observer->OnLocalNetworkAccessPermissionRequired(
+      base::BindOnce(grant_permission.GetCallback()));
+  EXPECT_FALSE(grant_permission.Get());
+}
+
+// Tests triggering the Local Network Access permission check for a subframe
+// navigation context.
+TEST_F(StoragePartitionImplLocalNetworkAccessTest,
+       LocalNetworkAccessPermission_SubframeNavigationContext) {
+  base::test::ScopedFeatureList features(
+      network::features::kLocalNetworkAccessChecks);
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+
+  // Set up a frame tree with a subframe, start a navigation in the subframe,
+  // and get the NavigationRequest for that navigation.
+  NavigateAndCommit(GURL("https://foo.com"));
+  content::RenderFrameHost* sub_frame =
+      content::RenderFrameHostTester::For(main_rfh())
+          ->AppendChild(std::string("child"));
+  std::unique_ptr<content::NavigationSimulator> simulator =
+      content::NavigationSimulator::CreateRendererInitiated(
+          GURL("http://test.local"), sub_frame);
+  simulator->Start();
+  NavigationRequest* request =
+      NavigationRequest::From(simulator->GetNavigationHandle());
+
+  mojo::Remote<network::mojom::URLLoaderNetworkServiceObserver> observer(
+      partition->CreateURLLoaderNetworkObserverForNavigationRequest(*request));
+
+  base::test::TestFuture<bool> grant_permission;
+  observer->OnLocalNetworkAccessPermissionRequired(
+      base::BindOnce(grant_permission.GetCallback()));
+  EXPECT_FALSE(grant_permission.Get());
+}
+
+// Tests triggering the Local Network Access permission check for a worker
+// request.
+TEST_F(StoragePartitionImplLocalNetworkAccessTest,
+       LocalNetworkAccessPermission_WorkerContext) {
+  base::test::ScopedFeatureList features(
+      network::features::kLocalNetworkAccessChecks);
+  StoragePartitionImpl* partition = static_cast<StoragePartitionImpl*>(
+      browser_context()->GetDefaultStoragePartition());
+
+  const url::Origin worker_origin =
+      url::Origin::Create(GURL("https://foo.com"));
+
+  mojo::Remote<network::mojom::URLLoaderNetworkServiceObserver> observer(
+      partition->CreateURLLoaderNetworkObserverForServiceWorker(
+          network::mojom::kBrowserProcessId, worker_origin));
 
   base::test::TestFuture<bool> grant_permission;
   observer->OnLocalNetworkAccessPermissionRequired(

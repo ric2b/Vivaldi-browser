@@ -430,8 +430,8 @@ void BrowserAccessibilityStateImplAndroid::OnContrastLevelChanged(
   native_theme->NotifyOnNativeThemeUpdated();
 }
 
-void BrowserAccessibilityStateImplAndroid::SetScreenReaderAppActive(
-    bool is_active) {
+void BrowserAccessibilityStateImplAndroid::RefreshAssistiveTech() {
+  bool is_active = GetAccessibilityMode().has_mode(ui::AXMode::kScreenReader);
   static auto* ax_talkback_crash_key = base::debug::AllocateCrashKeyString(
       "ax_talkback", base::debug::CrashKeySize::Size32);
 
@@ -441,7 +441,7 @@ void BrowserAccessibilityStateImplAndroid::SetScreenReaderAppActive(
     base::debug::ClearCrashKeyString(ax_talkback_crash_key);
   }
 
-  UMA_HISTOGRAM_BOOLEAN("Accessibility.Android.Talkback", is_active);
+  UMA_HISTOGRAM_BOOLEAN("Accessibility.Android.TalkBack", is_active);
 
   OnAssistiveTechFound(is_active ? ui::AssistiveTech::kTalkback
                                  : ui::AssistiveTech::kNone);

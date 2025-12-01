@@ -23,7 +23,6 @@ import '../simple_confirmation_dialog.js';
 import './autofill_ai_add_or_edit_dialog.js';
 
 import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
-import {HelpBubbleMixin} from 'chrome://resources/cr_components/help_bubble/help_bubble_mixin.js';
 import {AnchorAlignment} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import type {CrActionMenuElement} from 'chrome://resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import type {CrLazyRenderElement} from 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.js';
@@ -32,6 +31,7 @@ import {assert} from 'chrome://resources/js/assert.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import type {DomRepeatEvent} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
+import {AiEnterpriseFeaturePrefName, ModelExecutionEnterprisePolicyValue} from '../ai_page/constants.js';
 import type {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
 import type {SettingsSimpleConfirmationDialogElement} from '../simple_confirmation_dialog.js';
 
@@ -43,21 +43,16 @@ type EntityInstance = chrome.autofillPrivate.EntityInstance;
 type EntityInstanceWithLabels = chrome.autofillPrivate.EntityInstanceWithLabels;
 type EntityType = chrome.autofillPrivate.EntityType;
 
-// browser_element_identifiers constants
-const AUTOFILL_AI_HEADER_ELEMENT_ID =
-    'SettingsUI::kAutofillPredictionImprovementsHeaderElementId';
-
 export interface SettingsAutofillAiSectionElement {
   $: {
     actionMenu: CrLazyRenderElement<CrActionMenuElement>,
     addMenu: CrLazyRenderElement<CrActionMenuElement>,
-    entriesHeaderTitle: HTMLElement,
     prefToggle: SettingsToggleButtonElement,
   };
 }
 
 const SettingsAutofillAiSectionElementBase =
-    I18nMixin(HelpBubbleMixin(PrefsMixin(PolymerElement)));
+    I18nMixin(PrefsMixin(PolymerElement));
 
 export class SettingsAutofillAiSectionElement extends
     SettingsAutofillAiSectionElementBase {
@@ -87,16 +82,18 @@ export class SettingsAutofillAiSectionElement extends
 
       /**
          A "fake" preference object that reflects the state of the opt-in
-         toggle.
+         toggle and the presence/absence of an enterprise policy.
+         This allows leveraging the settings-toggle-button component
+         to reflect enterprise enabled/disabled states.
        */
       optedIn_: {
         type: Object,
-        value: {
+        value: () => ({
           // Does not correspond to an actual pref - this is faked to allow
           // writing it into a GAIA-id keyed dictionary of opt-ins.
           type: chrome.settingsPrivate.PrefType.BOOLEAN,
           value: false,
-        },
+        }),
       },
 
       /**
@@ -143,18 +140,15 @@ export class SettingsAutofillAiSectionElement extends
     };
   }
 
-  ineligibleUser: boolean;
-  private optedIn_: chrome.settingsPrivate.PrefObject;
-  private activeEntityInstance_: EntityInstance|null;
-  private completeEntityTypesList_: EntityType[];
-  private showAddOrEditEntityInstanceDialog_: boolean;
-  private addOrEditEntityInstanceDialogTitle_: string;
-  private showRemoveEntityInstanceDialog_: boolean;
-  private entityInstances_: EntityInstanceWithLabels[];
+  declare ineligibleUser: boolean;
+  declare private optedIn_: chrome.settingsPrivate.PrefObject;
+  declare private activeEntityInstance_: EntityInstance|null;
+  declare private completeEntityTypesList_: EntityType[];
+  declare private showAddOrEditEntityInstanceDialog_: boolean;
+  declare private addOrEditEntityInstanceDialogTitle_: string;
+  declare private showRemoveEntityInstanceDialog_: boolean;
+  declare private entityInstances_: EntityInstanceWithLabels[];
 
-  // The correspondent `EntityInstanceWithLabels` model for any entity instance
-  // related action menus or dialogs.
-  private activeEntityInstanceWithLabels_: EntityInstanceWithLabels|null;
   private entityInstancesChangedListener_: EntityInstancesChangedListener|null =
       null;
   private entityDataManager_: EntityDataManagerProxy =
@@ -165,25 +159,32 @@ export class SettingsAutofillAiSectionElement extends
 
     this.entityDataManager_.getOptInStatus().then(
         optedIn => this.set('optedIn_.value', !this.ineligibleUser && optedIn));
+    const policyDisabled =
+        this.getPref(AiEnterpriseFeaturePrefName.AUTOFILL_AI).value ===
+        ModelExecutionEnterprisePolicyValue.DISABLE;
+    if (policyDisabled) {
+      this.set(
+          'optedIn_.enforcement', chrome.settingsPrivate.Enforcement.ENFORCED);
+      this.set(
+          'optedIn_.controlledBy',
+          chrome.settingsPrivate.ControlledBy.USER_POLICY);
+    }
 
     this.entityInstancesChangedListener_ =
-        (entityInstances => this.entityInstances_ = entityInstances);
+        (entityInstances => this.entityInstances_ =
+             entityInstances.sort(this.entityInstancesWithLabelsComparator_));
     this.entityDataManager_.addEntityInstancesChangedListener(
         this.entityInstancesChangedListener_);
 
     this.entityDataManager_.getAllEntityTypes().then(
         (entityTypes: EntityType[]) => {
-          this.completeEntityTypesList_ = entityTypes;
+          this.completeEntityTypesList_ =
+              entityTypes.sort(this.entityTypesComparator_);
         });
 
     this.entityDataManager_.loadEntityInstances().then(
         (entityInstances: EntityInstanceWithLabels[]) => this.entityInstances_ =
-            entityInstances);
-
-    // TODO(crbug.com/393318914): Remove this help bubble, which was introduced
-    // in crrev.com/c/5939704.
-    this.registerHelpBubble(
-        AUTOFILL_AI_HEADER_ELEMENT_ID, this.$.entriesHeaderTitle);
+            entityInstances.sort(this.entityInstancesWithLabelsComparator_));
   }
 
   override disconnectedCallback() {
@@ -195,22 +196,27 @@ export class SettingsAutofillAiSectionElement extends
     this.entityInstancesChangedListener_ = null;
   }
 
-  /**
-   * @returns the accessibility title for the "More Actions button"
-   *     corresponding to the entity instance which is described by `label` and
-   *     `sublabel`.
+  /*
+   * This comparator purposefully uses sensitivity 'base', not to differentiate
+   * between different capitalization or diacritics.
    */
-  private getMoreButtonTitle_(label: string, subLabel: string) {
-    return this.i18n('autofillAiMoreActionsForEntityInstance', label, subLabel);
+  private entityTypesComparator_(a: EntityType, b: EntityType) {
+    return a.typeNameAsString.localeCompare(
+        b.typeNameAsString, undefined, {sensitivity: 'base'});
   }
 
   /**
-   * Open the action menu.
+   * This comparator compares the labels alphabetically, and, in case of
+   * equality, the sublabels.
+   * This comparator purposefully uses sensitivity 'base', not to differentiate
+   * between different capitalization or diacritics.
    */
-  private onMoreButtonClick_(e: DomRepeatEvent<EntityInstanceWithLabels>) {
-    this.activeEntityInstanceWithLabels_ = e.model.item;
-    const moreButton = e.target as HTMLElement;
-    this.$.actionMenu.get().showAt(moreButton);
+  private entityInstancesWithLabelsComparator_(
+      a: EntityInstanceWithLabels, b: EntityInstanceWithLabels) {
+    return (a.entityInstanceLabel + a.entityInstanceSubLabel)
+        .localeCompare(
+            b.entityInstanceLabel + b.entityInstanceSubLabel, undefined,
+            {sensitivity: 'base'});
   }
 
   private async onOptInToggleChange_() {
@@ -222,6 +228,15 @@ export class SettingsAutofillAiSectionElement extends
     if (this.ineligibleUser) {
       this.set('optedIn_.value', false);
     }
+  }
+
+  /**
+   * Whether an info bullet regarding logging is shown. Autofill Ai only shows
+   * logging behaviour information for enterprise clients who have either the
+   * feature disabled or just logging disabled.
+   */
+  private showLoggingInfoBullet_(pref: number) {
+    return pref !== ModelExecutionEnterprisePolicyValue.ALLOW;
   }
 
   /**
@@ -253,13 +268,23 @@ export class SettingsAutofillAiSectionElement extends
   }
 
   /**
-   * Handles tapping on the "Edit" entity instance button in the action menu.
+   * Open the action menu.
    */
-  private async onMenuEditEntityInstanceClick_(e: Event) {
-    e.preventDefault();
+  private async onMoreButtonClick_(
+      e: DomRepeatEvent<EntityInstanceWithLabels>) {
+    const moreButton = e.target as HTMLElement;
     this.activeEntityInstance_ =
         await this.entityDataManager_.getEntityInstanceByGuid(
-            this.activeEntityInstanceWithLabels_!.guid);
+            e.model.item.guid);
+    this.$.actionMenu.get().showAt(moreButton);
+  }
+
+  /**
+   * Handles tapping on the "Edit" entity instance button in the action menu.
+   */
+  private onMenuEditEntityInstanceClick_(e: Event) {
+    e.preventDefault();
+    assert(this.activeEntityInstance_);
     this.addOrEditEntityInstanceDialogTitle_ =
         this.activeEntityInstance_.type.editEntityTypeString;
     this.showAddOrEditEntityInstanceDialog_ = true;
@@ -283,6 +308,7 @@ export class SettingsAutofillAiSectionElement extends
   private onAddOrEditEntityInstanceDialogClose_(e: Event) {
     e.stopPropagation();
     this.showAddOrEditEntityInstanceDialog_ = false;
+    this.activeEntityInstance_ = null;
   }
 
   private onRemoveEntityInstanceDialogClose_() {
@@ -291,11 +317,12 @@ export class SettingsAutofillAiSectionElement extends
             .querySelector<SettingsSimpleConfirmationDialogElement>(
                 '#removeEntityInstanceDialog')!.wasConfirmed();
     if (wasDeletionConfirmed) {
+      assert(this.activeEntityInstance_);
       this.entityDataManager_.removeEntityInstance(
-          this.activeEntityInstanceWithLabels_!.guid);
+          this.activeEntityInstance_.guid);
     }
-
     this.showRemoveEntityInstanceDialog_ = false;
+    this.activeEntityInstance_ = null;
   }
 }
 

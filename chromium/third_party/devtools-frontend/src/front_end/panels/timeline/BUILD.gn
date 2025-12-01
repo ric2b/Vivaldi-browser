@@ -73,6 +73,7 @@ devtools_module("timeline") {
     "ModificationsManager.ts",
     "NetworkTrackAppender.ts",
     "SaveFileFormatter.ts",
+    "StatusDialog.ts",
     "TargetForEvent.ts",
     "ThirdPartyTreeView.ts",
     "ThreadAppender.ts",
@@ -116,6 +117,7 @@ devtools_module("timeline") {
     "../../services/trace_bounds:bundle",
     "../../ui/components/buttons:bundle",
     "../../ui/components/code_highlighter:bundle",  # trace event highlighting
+    "../../ui/components/copy_to_clipboard:bundle",
     "../../ui/components/icon_button:bundle",
     "../../ui/components/linkifier:bundle",
     "../../ui/components/menus:bundle",

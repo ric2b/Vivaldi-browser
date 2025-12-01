@@ -15,8 +15,6 @@ std::string GetRendererName(RendererType renderer_type) {
       return "RendererImpl";
     case RendererType::kMojo:
       return "MojoRenderer";
-    case RendererType::kMediaPlayer:
-      return "MediaPlayerRenderer";
     case RendererType::kCourier:
       return "CourierRenderer";
     case RendererType::kFlinging:
@@ -45,16 +43,9 @@ void Renderer::SetCdm(CdmContext* cdm_context, CdmAttachedCB cdm_attached_cb) {
   std::move(cdm_attached_cb).Run(false);
 }
 
-void Renderer::OnSelectedVideoTracksChanged(
-    const std::vector<DemuxerStream*>& enabled_tracks,
-    base::OnceClosure change_completed_cb) {
-  DLOG(WARNING) << "Track changes are not supported.";
-  std::move(change_completed_cb).Run();
-}
-
-void Renderer::OnEnabledAudioTracksChanged(
-    const std::vector<DemuxerStream*>& enabled_tracks,
-    base::OnceClosure change_completed_cb) {
+void Renderer::OnTracksChanged(DemuxerStream::Type track_type,
+                               std::vector<DemuxerStream*> enabled_tracks,
+                               base::OnceClosure change_completed_cb) {
   DLOG(WARNING) << "Track changes are not supported.";
   std::move(change_completed_cb).Run();
 }

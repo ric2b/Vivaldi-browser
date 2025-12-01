@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="bg">
-<translation id="2277224997687551299">Редактирай името на каталога</translation>
+<translation id="1062777154504442433">Създай куп</translation>
+<translation id="1625440863545383011">Извади раздела и напусни купа</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {отметнат раздел}
           other {отметнати раздела}
         }</translation>
 <translation id="2947471979790858922">Работата с тях ще бъде премахната от устройството.</translation>
+<translation id="3298614730029636660">Напусни купа</translation>
+<translation id="354698175756845966">Редактирай цвета на купа</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Затворените раздели са в Последни раздели на основното меню на Vivaldi. Вашият частен раздел няма да е наличен.}
         other {Затворените раздели са в Последни раздели на основното меню на Vivaldi. Вашите # частни раздела няма да са налични.}}</translation>
-<translation id="4460014764210899310">Раздели</translation>
 <translation id="4871187110787939393">Затваряне на всички частни раздели?</translation>
 <translation id="5494920125229734069">Избeри всичко</translation>
-<translation id="6744956528665271406">Редактирай цвета на купа</translation>
+<translation id="6807841890213931603">Извади раздела и изтрий купа</translation>
+<translation id="750227952939161636">Куповете с раздели се записват автоматично и се обновяват на всички ваши устройства, в които сте вписани</translation>
+<translation id="7640137753339219124">Изтрий купа</translation>
+<translation id="7653857400289671414">Куповете с раздели се записват автоматично</translation>
+<translation id="8440938071054361204">Редактирай името на купа</translation>
+<translation id="8602902357364871325">Затвори купа</translation>
+<translation id="8851621822786801079">Извади от купа</translation>
 </translationbundle>

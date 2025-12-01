@@ -20,17 +20,19 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat;
 import androidx.core.widget.ImageViewCompat;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** ViewBinder for the price tracking bottom sheet content. */
+@NullMarked
 public class PriceTrackingBottomSheetContentViewBinder {
     public static void bind(PropertyModel model, View view, PropertyKey propertyKey) {
         View priceTrackingButton = view.findViewById(R.id.price_tracking_button);
         TextView priceTrackingButtonText =
-                (TextView) priceTrackingButton.findViewById(R.id.price_tracking_button_text);
+                priceTrackingButton.findViewById(R.id.price_tracking_button_text);
         ImageView priceTrackingButtonIcon =
-                (ImageView) priceTrackingButton.findViewById(R.id.price_tracking_button_icon);
+                priceTrackingButton.findViewById(R.id.price_tracking_button_icon);
         if (PRICE_TRACKING_TITLE == propertyKey) {
             ((TextView) view.findViewById(R.id.price_tracking_title))
                     .setText(model.get(PRICE_TRACKING_TITLE));

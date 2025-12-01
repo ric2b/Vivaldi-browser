@@ -192,16 +192,8 @@ static int add_cert_dir(BY_DIR *ctx, const char *dir, int type) {
 
 static int get_cert_by_subject(X509_LOOKUP *xl, int type, X509_NAME *name,
                                X509_OBJECT *ret) {
-  union {
-    struct {
-      X509 st_x509;
-      X509_CINF st_x509_cinf;
-    } x509;
-    struct {
-      X509_CRL st_crl;
-      X509_CRL_INFO st_crl_info;
-    } crl;
-  } data;
+  bssl::UniquePtr<X509> lookup_cert;
+  bssl::UniquePtr<X509_CRL> lookup_crl;
   int ok = 0;
   size_t i;
   int k;
@@ -219,14 +211,20 @@ static int get_cert_by_subject(X509_LOOKUP *xl, int type, X509_NAME *name,
   stmp.type = type;
   BY_DIR *ctx = reinterpret_cast<BY_DIR *>(xl->method_data);
   if (type == X509_LU_X509) {
-    data.x509.st_x509.cert_info = &data.x509.st_x509_cinf;
-    data.x509.st_x509_cinf.subject = name;
-    stmp.data.x509 = &data.x509.st_x509;
+    lookup_cert.reset(X509_new());
+    if (lookup_cert == nullptr ||
+        !X509_set_subject_name(lookup_cert.get(), name)) {
+      return 0;
+    }
+    stmp.data.x509 = lookup_cert.get();
     postfix = "";
   } else if (type == X509_LU_CRL) {
-    data.crl.st_crl.crl = &data.crl.st_crl_info;
-    data.crl.st_crl_info.issuer = name;
-    stmp.data.crl = &data.crl.st_crl;
+    lookup_crl.reset(X509_CRL_new());
+    if (lookup_crl == nullptr ||
+        !X509_CRL_set_issuer_name(lookup_crl.get(), name)) {
+      return 0;
+    }
+    stmp.data.crl = lookup_crl.get();
     postfix = "r";
   } else {
     OPENSSL_PUT_ERROR(X509, X509_R_WRONG_LOOKUP_TYPE);

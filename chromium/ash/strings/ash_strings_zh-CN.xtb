@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">开启或关闭光标浏览模式</translation>
 <translation id="2531025035050312891">设备运行缓慢</translation>
 <translation id="2531107890083353124">在拖动标签页的同时按 <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">拖动或按空格键可选择要截取的区域</translation>
 <translation id="2545334090614121435">要使用 Home 键吗？请使用</translation>
 <translation id="254900897760075745">将所选内容复制到剪贴板</translation>
 <translation id="2549711466868162843">改善光线</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765">在按住 <ph name="MODIFIER" /> 的同时点击链接</translation>
 <translation id="2957159466053076448">您随时可以在“设置”中关闭这些功能。<ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">设备音频</translation>
-<translation id="2960314608273155470">截屏/录屏模式，默认为<ph name="SOURCE" /><ph name="TYPE" />。按 Tab 键即可使用键盘进行导航。</translation>
 <translation id="2961963223658824723">出了点问题。请过几秒钟后重试。</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">开启麦克风使用权限？</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">Wi-Fi 处于关闭状态</translation>
 <translation id="3554215588514239132">显示或隐藏开发者工具面板</translation>
 <translation id="3554637740840164787">“<ph name="ITEM_TITLE" />”已被固定</translation>
+<translation id="3554928024630051016">如需添加其他 USB 设备，请尝试移除一个设备，然后再插入新设备</translation>
 <translation id="3558768885091059911">要启用摄像头和麦克风使用权限吗？</translation>
 <translation id="3560174576767922131">录制视频</translation>
 <translation id="3563775809269155755">启用热点</translation>
@@ -868,6 +869,7 @@
 <translation id="3861651314799684201">按 Enter 键即可录制整个屏幕</translation>
 <translation id="3870197372373144624">请尝试关闭设备。</translation>
 <translation id="3879748587602334249">下载管理器</translation>
+<translation id="3884007280698606545">已达到 USB 设备数量上限</translation>
 <translation id="3886872229787704059">今天打开过</translation>
 <translation id="3891340733213178823">连按两次Ctrl+Shift+Q即可退出。</translation>
 <translation id="3892148308691398805">复制文字</translation>
@@ -882,7 +884,7 @@
 <translation id="3925540965556789199"><ph name="DATE" />，正在加载活动。</translation>
 <translation id="3927049937406914450">由于位置信息权限已关闭，无法获取天气信息。您可以在设置中开启此权限。</translation>
 <translation id="3932043219784172185">未连接任何设备</translation>
-<translation id="3934456833412894880">已开启“自适应充电”功能。电池电量将会保持在 80% 以延长电池寿命，并会在您需要时完全充满。</translation>
+<translation id="3934456833412894880">已开启“自动调节充电”功能。电池电量将会保持在 80% 以延长电池寿命，并会在您需要时完全充满。</translation>
 <translation id="3943857333388298514">粘贴</translation>
 <translation id="394485226368336402">音频设置</translation>
 <translation id="3945319193631853098">点按即可完成设置</translation>
@@ -1438,6 +1440,7 @@
 <translation id="5672890847723042801">实用程序</translation>
 <translation id="5673434351075758678">当系统同步完您的设置后，“<ph name="FROM_LOCALE" />”即会改为“<ph name="TO_LOCALE" />”。</translation>
 <translation id="5675363643668471212">任务栏中的项目</translation>
+<translation id="5677022547882470786">拖动或按空格键可选择要搜索的区域</translation>
 <translation id="5677928146339483299">已阻止</translation>
 <translation id="5678564054339031017">显示下一周的活动</translation>
 <translation id="5679050765726761783">已连接低功耗适配器</translation>
@@ -1483,6 +1486,7 @@
 <translation id="5788127256798019331">Play 文件</translation>
 <translation id="5788535737706478207">重新打开上次关闭的标签页或窗口</translation>
 <translation id="5790085346892983794">成功</translation>
+<translation id="5791926618942305301">在屏幕截取中，将其设置为<ph name="SOURCE" /><ph name="TYPE" />。按 Tab 键可选择截取类型。按 Enter 键可截取。若要选择截取区域，请设为截取部分屏幕。如果尚未启用，请按空格键选择区域。</translation>
 <translation id="579415080077680903">静音</translation>
 <translation id="5802516411616338943">打开“快捷设置”</translation>
 <translation id="5804651031882187592">关闭“锁定 SIM 卡”设置</translation>
@@ -1639,6 +1643,7 @@
 <translation id="6288235558961782912">日后在获得家长允许的情况下可以重新添加 <ph name="USER_EMAIL_ADDRESS" />。</translation>
 <translation id="6291221004442998378">未在充电</translation>
 <translation id="6298183524022479114">在应用内自定义此设备</translation>
+<translation id="6304076460080088478">关闭或最小化无痕式窗口，以便使用 Google 智能镜头搜索屏幕内容</translation>
 <translation id="6309219492973062892">点击或点按任务栏图标 1-8</translation>
 <translation id="6315170314923504164">语音</translation>
 <translation id="6319058840130157106">在右下角、启动器、地址栏、书签栏、打开的网站以及下载内容之间向后移动</translation>
@@ -1767,6 +1772,7 @@
 <translation id="6700713906295497288">IME 菜单按钮</translation>
 <translation id="6704073473590541209">已选择右边缘手柄，使用箭头键即可移动</translation>
 <translation id="6706742084323792866">PIN 码键盘</translation>
+<translation id="6709719156428404245">拖动或按空格键可选择要录制的区域</translation>
 <translation id="6710213216561001401">上一项</translation>
 <translation id="6723839937902243910">电源</translation>
 <translation id="672609503628871915">了解一下新变化</translation>
@@ -1774,7 +1780,7 @@
 <translation id="6732087373923685049">摄像头</translation>
 <translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6737983188036277605">摄像头和麦克风正在使用中</translation>
-<translation id="6739144137573853180">转到“设置”</translation>
+<translation id="6739144137573853180">前往“设置”</translation>
 <translation id="6747985245839783873">剩余的电池电量为 <ph name="PERCENTAGE" />%。省电模式已开启。</translation>
 <translation id="6751052314767925245">由您的管理员强制执行</translation>
 <translation id="6751826523481687655">已启用性能跟踪</translation>

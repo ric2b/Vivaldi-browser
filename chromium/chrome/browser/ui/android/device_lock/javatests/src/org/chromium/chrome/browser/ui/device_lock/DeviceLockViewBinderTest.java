@@ -59,10 +59,10 @@ public class DeviceLockViewBinderTest {
 
     private static Activity sActivity;
 
-    private AtomicBoolean mCreateDeviceLockButtonClicked = new AtomicBoolean();
-    private AtomicBoolean mGoToOSSettingsButtonClicked = new AtomicBoolean();
-    private AtomicBoolean mUserUnderstandsButtonClicked = new AtomicBoolean();
-    private AtomicBoolean mDismissButtonClicked = new AtomicBoolean();
+    private final AtomicBoolean mCreateDeviceLockButtonClicked = new AtomicBoolean();
+    private final AtomicBoolean mGoToOSSettingsButtonClicked = new AtomicBoolean();
+    private final AtomicBoolean mUserUnderstandsButtonClicked = new AtomicBoolean();
+    private final AtomicBoolean mDismissButtonClicked = new AtomicBoolean();
 
     private DeviceLockView mView;
     private PropertyModel mViewModel;
@@ -214,7 +214,7 @@ public class DeviceLockViewBinderTest {
     @SmallTest
     public void
             testDeviceLockView_inSignInFlowWithPreExistingLock_dismissButtonHasDismissedSignInText() {
-        mViewModel.set(SOURCE, DeviceLockActivityLauncher.Source.SYNC_CONSENT);
+        mViewModel.set(SOURCE, DeviceLockActivityLauncher.Source.ACCOUNT_PICKER);
         mViewModel.set(PREEXISTING_DEVICE_LOCK, true);
 
         assertEquals(
@@ -228,7 +228,7 @@ public class DeviceLockViewBinderTest {
     @SmallTest
     public void
             testDeviceLockView_inSignInFlowWithNoPreExistingLock_dismissButtonHasNoThanksText() {
-        mViewModel.set(SOURCE, DeviceLockActivityLauncher.Source.SYNC_CONSENT);
+        mViewModel.set(SOURCE, DeviceLockActivityLauncher.Source.ACCOUNT_PICKER);
         mViewModel.set(PREEXISTING_DEVICE_LOCK, false);
 
         assertEquals(

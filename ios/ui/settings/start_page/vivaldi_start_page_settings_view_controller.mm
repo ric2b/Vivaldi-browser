@@ -117,6 +117,13 @@ NSString* const kStartPageShowAddSettingsCellId =
   [self loadModel];
 }
 
+- (void)didMoveToParentViewController:(UIViewController*)parent {
+  [super didMoveToParentViewController:parent];
+  if (!parent) {
+    [self.presentationDelegate startPageSettingsViewControllerWasRemoved:self];
+  }
+}
+
 #pragma mark - ChromeTableViewController
 
 - (void)loadModel {
@@ -463,6 +470,8 @@ NSString* const kStartPageShowAddSettingsCellId =
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SMALL);
     case VivaldiStartPageLayoutStyleList:
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_LIST);
+    case VivaldiStartPageLayoutStyleIcon:
+      return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_ICON);
     default:
       return GetNSString(IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SMALL);
   }

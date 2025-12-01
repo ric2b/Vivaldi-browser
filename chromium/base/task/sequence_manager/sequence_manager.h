@@ -54,8 +54,8 @@ class BASE_EXPORT SequenceManager {
 
     static PrioritySettings CreateDefault();
 
-    template <typename T,
-              typename = typename std::enable_if_t<std::is_enum_v<T>>>
+    template <typename T>
+      requires(std::is_enum_v<T>)
     PrioritySettings(T priority_count, T default_priority)
         : PrioritySettings(
               static_cast<TaskQueue::QueuePriority>(priority_count),
@@ -142,6 +142,11 @@ class BASE_EXPORT SequenceManager {
     ~Settings();
 
     MessagePumpType message_loop_type = MessagePumpType::DEFAULT;
+
+    // Whether or not CPU time should be sampled for a fixed percentage of
+    // tasks.
+    bool sample_cpu_time = false;
+
     raw_ptr<const TickClock, DanglingUntriaged> clock =
         DefaultTickClock::GetInstance();
 
@@ -196,6 +201,10 @@ class BASE_EXPORT SequenceManager {
   // CreateUnboundSequenceManager(). Must not be called in any other
   // circumstances. The ownership of the pump is transferred to SequenceManager.
   virtual void BindToMessagePump(std::unique_ptr<MessagePump> message_pump) = 0;
+
+  // Gets a pointer to the message pump that this sequence manager is bound to,
+  // if any.
+  virtual MessagePump* GetMessagePump() const = 0;
 
   // Must be called on the main thread.
   // Can be called only once, before creating TaskQueues.
@@ -287,6 +296,10 @@ class BASE_EXPORT SequenceManager::Settings::Builder {
 
   // Sets the MessagePumpType which is used to create a MessagePump.
   Builder& SetMessagePumpType(MessagePumpType message_loop_type);
+
+  // Whether or not CPU time will be sampled for tasks at a fixed sampling
+  // ratio.
+  Builder& SetShouldSampleCPUTime(bool enable);
 
   // Sets the TickClock the SequenceManager uses to obtain Now.
   Builder& SetTickClock(const TickClock* clock);

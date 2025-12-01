@@ -8,6 +8,7 @@
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/process/launch.h"
+#include "base/strings/cstring_view.h"
 #include "base/strings/string_util_win.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -374,13 +375,12 @@ base::FilePath SetupExeDirToInstallDir(const base::FilePath& setup_exe_dir) {
 
 #if !defined(OFFICIAL_BUILD)
 void CheckForDebugSetupCommand(int show_command) {
-  std::string debug_setup;
-  base::Environment::Create()->GetVar(
-      vivaldi::constants::kDebugSetupCommandEnvironment, &debug_setup);
-  if (debug_setup.empty())
+  auto debug_setup = base::Environment::Create()->GetVar(
+      std::string(vivaldi::constants::kDebugSetupCommandEnvironment));
+  if (!debug_setup.has_value() || debug_setup.value().empty())
     return;
   base::CommandLine debug_cmdline =
-      base::CommandLine::FromString(base::UTF8ToWide(debug_setup));
+      base::CommandLine::FromString(base::UTF8ToWide(debug_setup.value()));
   // Check if setup.exe is already the debug one.
   base::FilePath debug_exe = debug_cmdline.GetProgram();
   base::NormalizeFilePath(debug_exe, &debug_exe);

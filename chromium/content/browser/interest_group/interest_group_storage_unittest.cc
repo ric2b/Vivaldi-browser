@@ -18,6 +18,7 @@
 #include "base/run_loop.h"
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -28,6 +29,7 @@
 #include "content/browser/interest_group/bidding_and_auction_server_key_fetcher.h"
 #include "content/browser/interest_group/for_debugging_only_report_util.h"
 #include "content/browser/interest_group/interest_group_features.h"
+#include "content/browser/interest_group/interest_group_storage.pb.h"
 #include "content/browser/interest_group/interest_group_update.h"
 #include "content/browser/interest_group/storage_interest_group.h"
 #include "content/public/browser/browser_thread.h"
@@ -41,6 +43,7 @@
 #include "services/network/public/cpp/features.h"
 #include "sql/database.h"
 #include "sql/meta_table.h"
+#include "sql/statement.h"
 #include "sql/test/scoped_error_expecter.h"
 #include "sql/test/test_helpers.h"
 #include "third_party/blink/public/common/features.h"
@@ -78,6 +81,36 @@ constexpr char kViewClickProviderOrigin2Str[] =
     "https://view-click.provider2.test";
 
 constexpr int kOldestAllFieldsVersion = 28;
+
+struct ClickinessCompactionEvents {
+  ListOfTimestamps uncompacted_events;
+  ListOfTimestampAndCounts compacted_events;
+};
+
+// A convenience wrapper to
+// InterestGroupStorage::ComputeCompactClickinessForTesting that operates on
+// protos rather than their serializations.
+std::optional<ClickinessCompactionEvents> ComputeCompactClickiness(
+    base::Time now,
+    const ClickinessCompactionEvents& events) {
+  InterestGroupStorage::ClickinessCompactionRawEvents raw;
+  EXPECT_TRUE(
+      events.uncompacted_events.SerializeToString(&raw.uncompacted_events));
+  EXPECT_TRUE(events.compacted_events.SerializeToString(&raw.compacted_events));
+  std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+      compact_raw =
+          InterestGroupStorage::ComputeCompactClickinessForTesting(now, raw);
+  if (!compact_raw) {
+    return std::nullopt;
+  }
+  std::optional<ClickinessCompactionEvents> result;
+  result.emplace();
+  EXPECT_TRUE(result->uncompacted_events.ParseFromString(
+      compact_raw->uncompacted_events));
+  EXPECT_TRUE(
+      result->compacted_events.ParseFromString(compact_raw->compacted_events));
+  return result;
+}
 
 class InterestGroupStorageTest : public testing::Test {
  public:
@@ -1438,10 +1471,12 @@ TEST_F(InterestGroupStorageTest, RecordsWins) {
             interest_groups[0].bidding_browser_signals->prev_wins[1]->ad_json);
 
   // Try delete
-  storage->DeleteInterestGroupData(base::BindLambdaForTesting(
-      [&test_origin](const blink::StorageKey& candidate) {
+  storage->DeleteInterestGroupData(
+      base::BindLambdaForTesting([&test_origin](
+                                     const blink::StorageKey& candidate) {
         return candidate == blink::StorageKey::CreateFirstParty(test_origin);
-      }));
+      }),
+      /*user_initiated_deletion=*/true);
 
   origins = storage->GetAllInterestGroupOwners();
   EXPECT_EQ(0u, origins.size());
@@ -2064,6 +2099,100 @@ TEST_F(InterestGroupStorageTest, KAnonDataExpires) {
   EXPECT_TRUE(groups[0].hashed_kanon_keys.empty());
 }
 
+TEST_F(InterestGroupStorageTest, ClickinessDelete) {
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  const url::Origin kViewClickEligibleOrigin3 =
+      url::Origin::Create(GURL("https://view-click.eligible3.test"));
+  const url::Origin kViewClickProviderOrigin3 =
+      url::Origin::Create(GURL("https://view-click.provider3.test"));
+
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kView;
+    record.providing_origin = kViewClickProviderOrigin1;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kView;
+    record.providing_origin = kViewClickProviderOrigin2;
+    record.eligible_origins = {kViewClickEligibleOrigin2};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kView;
+    record.providing_origin = kViewClickProviderOrigin3;
+    record.eligible_origins = {kViewClickEligibleOrigin3};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+
+  EXPECT_EQ(true,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin1, kViewClickEligibleOrigin1));
+  EXPECT_EQ(true,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin2, kViewClickEligibleOrigin2));
+  EXPECT_EQ(true,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin3, kViewClickEligibleOrigin3));
+
+  // Try delete for provider origins 1 and 2, eligible origin 3, as
+  // non-user-initiated. Provider origins 1 and 2 should be deleted.
+  auto predicate =
+      base::BindLambdaForTesting([&](const blink::StorageKey& candidate) {
+        return candidate == blink::StorageKey::CreateFirstParty(
+                                kViewClickProviderOrigin1) ||
+               candidate == blink::StorageKey::CreateFirstParty(
+                                kViewClickProviderOrigin2) ||
+               candidate == blink::StorageKey::CreateFirstParty(
+                                kViewClickEligibleOrigin3);
+      });
+  storage->DeleteInterestGroupData(predicate,
+                                   /*user_initiated_deletion=*/false);
+  EXPECT_EQ(false,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin1, kViewClickEligibleOrigin1));
+  EXPECT_EQ(false,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin2, kViewClickEligibleOrigin2));
+  EXPECT_EQ(true,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin3, kViewClickEligibleOrigin3));
+
+  // Try the same predicate with `user_initiated_deletion` set to true; this
+  // should delete everything.
+  storage->DeleteInterestGroupData(predicate, /*user_initiated_deletion=*/true);
+  EXPECT_EQ(false,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin3, kViewClickEligibleOrigin3));
+}
+
+// Null callback in non-user-initiated mode doesn't crash.
+TEST_F(InterestGroupStorageTest, ClickinessDelete2) {
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kView;
+    record.providing_origin = kViewClickProviderOrigin1;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+
+  storage->DeleteInterestGroupData(base::NullCallback(),
+                                   /*user_initiated_deletion=*/false);
+  EXPECT_EQ(false,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin1, kViewClickEligibleOrigin1));
+}
+
 enum class GroupLifetime {
   k30Day,
   k90Day,
@@ -2118,8 +2247,155 @@ TEST_P(InterestGroupStorageDualLifetimeTest, ViewClickStoreRetrieve_Basic) {
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_day);
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_week);
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-            view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_30_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_90_days);
+}
+
+// No counts for negative groups.
+TEST_P(InterestGroupStorageDualLifetimeTest,
+       ViewClickStoreRetrieve_NegativeGroup) {
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  AdAuctionEventRecord record;
+  record.type = AdAuctionEventRecord::Type::kView;
+  record.providing_origin = kViewClickProviderOrigin1;
+  record.eligible_origins = {kViewClickEligibleOrigin1};
+  ASSERT_TRUE(record.IsValid());
+  storage->RecordViewClick(record);
+
+  InterestGroup g = NewInterestGroup(kViewClickEligibleOrigin1, "cars");
+  g.view_and_click_counts_providers = {{kViewClickProviderOrigin1}};
+  g.expiry = base::Time::Now() + base::Days(90);
+  g.update_url = std::nullopt;
+  g.additional_bid_key.emplace();
+  storage->JoinInterestGroup(g, GURL("https://joining-site.test"));
+
+  std::vector<StorageInterestGroup> groups =
+      storage->GetInterestGroupsForOwner(kViewClickEligibleOrigin1);
+  ASSERT_EQ(1u, groups.size());
+
+  blink::mojom::ViewAndClickCountsPtr& view_and_click_counts =
+      groups[0].bidding_browser_signals->view_and_click_counts;
+
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_hour);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_day);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_week);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_30_days);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_30_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_90_days);
+}
+
+// No providers defaults to IG origin.
+TEST_P(InterestGroupStorageDualLifetimeTest,
+       ViewClickStoreRetrieve_NullProviders) {
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kClick;
+    record.providing_origin = kViewClickProviderOrigin1;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kClick;
+    record.providing_origin = kViewClickProviderOrigin2;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kView;
+    record.providing_origin = kViewClickEligibleOrigin1;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+
+  InterestGroup g = NewInterestGroup(kViewClickEligibleOrigin1, "cars");
+  g.view_and_click_counts_providers = std::nullopt;
+  g.expiry = base::Time::Now() + base::Days(90);
+  storage->JoinInterestGroup(g, GURL("https://joining-site.test"));
+
+  std::vector<StorageInterestGroup> groups =
+      storage->GetInterestGroupsForOwner(kViewClickEligibleOrigin1);
+  ASSERT_EQ(1u, groups.size());
+
+  blink::mojom::ViewAndClickCountsPtr& view_and_click_counts =
+      groups[0].bidding_browser_signals->view_and_click_counts;
+
+  // These are view, not clicks.
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_hour);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_day);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_week);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_30_days);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_30_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_90_days);
+}
+
+// Empty providers defaults to IG origin.
+TEST_P(InterestGroupStorageDualLifetimeTest,
+       ViewClickStoreRetrieve_EmptyProviders) {
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kClick;
+    record.providing_origin = kViewClickProviderOrigin1;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kClick;
+    record.providing_origin = kViewClickProviderOrigin2;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+  {
+    AdAuctionEventRecord record;
+    record.type = AdAuctionEventRecord::Type::kView;
+    record.providing_origin = kViewClickEligibleOrigin1;
+    record.eligible_origins = {kViewClickEligibleOrigin1};
+    ASSERT_TRUE(record.IsValid());
+    storage->RecordViewClick(record);
+  }
+
+  InterestGroup g = NewInterestGroup(kViewClickEligibleOrigin1, "cars");
+  g.view_and_click_counts_providers = {{}};
+  g.expiry = base::Time::Now() + base::Days(90);
+  storage->JoinInterestGroup(g, GURL("https://joining-site.test"));
+
+  std::vector<StorageInterestGroup> groups =
+      storage->GetInterestGroupsForOwner(kViewClickEligibleOrigin1);
+  ASSERT_EQ(1u, groups.size());
+
+  blink::mojom::ViewAndClickCountsPtr& view_and_click_counts =
+      groups[0].bidding_browser_signals->view_and_click_counts;
+
+  // These are view, not clicks.
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_hour);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_day);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_week);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_30_days);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_90_days);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
@@ -2154,8 +2430,7 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_day);
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_week);
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-            view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_90_days);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
@@ -2244,8 +2519,7 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_day);
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_week);
   EXPECT_EQ(1, view_and_click_counts->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-            view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_90_days);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
@@ -2316,8 +2590,7 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(2, view_and_click_counts->view_counts->past_day);
   EXPECT_EQ(2, view_and_click_counts->view_counts->past_week);
   EXPECT_EQ(2, view_and_click_counts->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 2 : 0,
-            view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(2, view_and_click_counts->view_counts->past_90_days);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
   EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
@@ -2346,6 +2619,9 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   //
   //           90d           30d           1w          1d           1h         F
   //   1V,1C    |    2V,1C    |    0V,2C   |   1V,0C   |   2V,2C    |   1V,2C  |
+
+  base::Time original_maintenance_time =
+      storage->GetLastMaintenanceTimeForTesting();
 
   storage->RecordViewClick(record_view);
   storage->RecordViewClick(record_click);
@@ -2381,6 +2657,12 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   storage->RecordViewClick(record_click);
   storage->RecordViewClick(record_click);
 
+  // Check that maintenance (and therefore compaction) has occurred.
+  // (The ViewClickStoreRetrieve_BucketsTimeNoMaintenance test case below checks
+  // that reading non-compacted past events also works).
+  EXPECT_NE(original_maintenance_time,
+            storage->GetLastMaintenanceTimeForTesting());
+
   // Fast forward one more second so that events aren't on the exact boundaries
   // between time buckets. Each event will go to the next older time bucket,
   // and the oldest events fall out of reporting.
@@ -2402,14 +2684,148 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(3, view_and_click_counts->view_counts->past_day);
   EXPECT_EQ(4, view_and_click_counts->view_counts->past_week);
   EXPECT_EQ(4, view_and_click_counts->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 6 : 0,
+  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 6 : 4,
             view_and_click_counts->view_counts->past_90_days);
   EXPECT_EQ(2, view_and_click_counts->click_counts->past_hour);
   EXPECT_EQ(4, view_and_click_counts->click_counts->past_day);
   EXPECT_EQ(4, view_and_click_counts->click_counts->past_week);
   EXPECT_EQ(6, view_and_click_counts->click_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 7 : 0,
+  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 7 : 6,
             view_and_click_counts->click_counts->past_90_days);
+}
+
+// Like ViewClickStoreRetrieve_BucketsTime, but destroys and recreates the
+// storage between fast forwards such that maintenance never runs.
+TEST_P(InterestGroupStorageDualLifetimeTest,
+       ViewClickStoreRetrieve_BucketsTimeNoMaintenance) {
+  AdAuctionEventRecord record_view;
+  record_view.type = AdAuctionEventRecord::Type::kView;
+  record_view.providing_origin = kViewClickProviderOrigin1;
+  record_view.eligible_origins = {kViewClickEligibleOrigin1};
+  ASSERT_TRUE(record_view.IsValid());
+
+  AdAuctionEventRecord record_click;
+  record_click.type = AdAuctionEventRecord::Type::kClick;
+  record_click.providing_origin = kViewClickProviderOrigin1;
+  record_click.eligible_origins = {kViewClickEligibleOrigin1};
+  ASSERT_TRUE(record_click.IsValid());
+
+  // Timeline as follows, in time before final time
+  // (d: day, w: week, h: hour, V: view, C: click, F: final time):
+  //
+  //           90d           30d           1w          1d           1h         F
+  //   1V,1C    |    2V,1C    |    0V,2C   |   1V,0C   |   2V,2C    |   1V,2C  |
+
+  {
+    std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+    storage->RecordViewClick(record_view);
+    storage->RecordViewClick(record_click);
+
+    // No maintenance run.
+    EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
+  }
+
+  task_environment().FastForwardBy(base::Days(90) - base::Days(30));
+
+  {
+    std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+    storage->RecordViewClick(record_view);
+    storage->RecordViewClick(record_view);
+
+    storage->RecordViewClick(record_click);
+
+    // No maintenance run.
+    EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
+  }
+
+  task_environment().FastForwardBy(base::Days(30) - base::Days(7));
+
+  {
+    std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+    storage->RecordViewClick(record_click);
+    storage->RecordViewClick(record_click);
+
+    // No maintenance run.
+    EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
+  }
+
+  task_environment().FastForwardBy(base::Days(7) - base::Days(1));
+
+  {
+    std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+    storage->RecordViewClick(record_view);
+
+    // No maintenance run.
+    EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
+  }
+
+  task_environment().FastForwardBy(base::Days(1) - base::Hours(1));
+
+  {
+    std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+    storage->RecordViewClick(record_view);
+    storage->RecordViewClick(record_view);
+
+    storage->RecordViewClick(record_click);
+    storage->RecordViewClick(record_click);
+
+    // No maintenance run.
+    EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
+  }
+
+  task_environment().FastForwardBy(base::Hours(1));
+
+  {
+    std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+    storage->RecordViewClick(record_view);
+
+    storage->RecordViewClick(record_click);
+    storage->RecordViewClick(record_click);
+
+    // No maintenance run.
+    EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
+  }
+
+  // Fast forward one more second so that events aren't on the exact boundaries
+  // between time buckets. Each event will go to the next older time bucket,
+  // and the oldest events fall out of reporting.
+  task_environment().FastForwardBy(base::Seconds(1));
+
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  InterestGroup g = NewInterestGroup(kViewClickEligibleOrigin1, "cars");
+  g.view_and_click_counts_providers = {{kViewClickProviderOrigin1}};
+  g.expiry = base::Time::Now() + base::Days(90);
+  storage->JoinInterestGroup(g, GURL("https://joining-site.test"));
+
+  std::vector<StorageInterestGroup> groups =
+      storage->GetInterestGroupsForOwner(kViewClickEligibleOrigin1);
+  ASSERT_EQ(1u, groups.size());
+
+  blink::mojom::ViewAndClickCountsPtr& view_and_click_counts =
+      groups[0].bidding_browser_signals->view_and_click_counts;
+
+  EXPECT_EQ(1, view_and_click_counts->view_counts->past_hour);
+  EXPECT_EQ(3, view_and_click_counts->view_counts->past_day);
+  EXPECT_EQ(4, view_and_click_counts->view_counts->past_week);
+  EXPECT_EQ(4, view_and_click_counts->view_counts->past_30_days);
+  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 6 : 4,
+            view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(2, view_and_click_counts->click_counts->past_hour);
+  EXPECT_EQ(4, view_and_click_counts->click_counts->past_day);
+  EXPECT_EQ(4, view_and_click_counts->click_counts->past_week);
+  EXPECT_EQ(6, view_and_click_counts->click_counts->past_30_days);
+  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 7 : 6,
+            view_and_click_counts->click_counts->past_90_days);
+
+  // No maintenance run.
+  EXPECT_EQ(base::Time::Min(), storage->GetLastMaintenanceTimeForTesting());
 }
 
 TEST_P(InterestGroupStorageDualLifetimeTest,
@@ -2526,14 +2942,12 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(2, view_and_click_counts->view_counts->past_day);
   EXPECT_EQ(2, view_and_click_counts->view_counts->past_week);
   EXPECT_EQ(2, view_and_click_counts->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 2 : 0,
-            view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(2, view_and_click_counts->view_counts->past_90_days);
   EXPECT_EQ(1, view_and_click_counts->click_counts->past_hour);
   EXPECT_EQ(1, view_and_click_counts->click_counts->past_day);
   EXPECT_EQ(1, view_and_click_counts->click_counts->past_week);
   EXPECT_EQ(1, view_and_click_counts->click_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-            view_and_click_counts->click_counts->past_90_days);
+  EXPECT_EQ(1, view_and_click_counts->click_counts->past_90_days);
 }
 
 TEST_P(InterestGroupStorageDualLifetimeTest,
@@ -2629,14 +3043,12 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
       EXPECT_EQ(view_count, view_and_click_counts->view_counts->past_day);
       EXPECT_EQ(view_count, view_and_click_counts->view_counts->past_week);
       EXPECT_EQ(view_count, view_and_click_counts->view_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? view_count : 0,
-                view_and_click_counts->view_counts->past_90_days);
+      EXPECT_EQ(view_count, view_and_click_counts->view_counts->past_90_days);
       EXPECT_EQ(click_count, view_and_click_counts->click_counts->past_hour);
       EXPECT_EQ(click_count, view_and_click_counts->click_counts->past_day);
       EXPECT_EQ(click_count, view_and_click_counts->click_counts->past_week);
       EXPECT_EQ(click_count, view_and_click_counts->click_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? click_count : 0,
-                view_and_click_counts->click_counts->past_90_days);
+      EXPECT_EQ(click_count, view_and_click_counts->click_counts->past_90_days);
     }
 
     // Now record kMaxEvents + 1 events of the second type. Only kMaxEvents get
@@ -2664,14 +3076,12 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
       EXPECT_EQ(kMaxEvents, view_and_click_counts->view_counts->past_day);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->view_counts->past_week);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->view_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? kMaxEvents : 0,
-                view_and_click_counts->view_counts->past_90_days);
+      EXPECT_EQ(kMaxEvents, view_and_click_counts->view_counts->past_90_days);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_hour);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_day);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_week);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? kMaxEvents : 0,
-                view_and_click_counts->click_counts->past_90_days);
+      EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_90_days);
     }
 
     // (kViewClickEligibleOrigin1, kViewClickProviderOrigin1)'s currently rate
@@ -2693,14 +3103,13 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
       EXPECT_EQ(kMaxEvents + 1, view_and_click_counts->view_counts->past_week);
       EXPECT_EQ(kMaxEvents + 1,
                 view_and_click_counts->view_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? kMaxEvents + 1 : 0,
+      EXPECT_EQ(kMaxEvents + 1,
                 view_and_click_counts->view_counts->past_90_days);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_hour);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_day);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_week);
       EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? kMaxEvents : 0,
-                view_and_click_counts->click_counts->past_90_days);
+      EXPECT_EQ(kMaxEvents, view_and_click_counts->click_counts->past_90_days);
     }
 
     {
@@ -2720,8 +3129,7 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
       EXPECT_EQ(1, view_and_click_counts->click_counts->past_day);
       EXPECT_EQ(1, view_and_click_counts->click_counts->past_week);
       EXPECT_EQ(1, view_and_click_counts->click_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-                view_and_click_counts->click_counts->past_90_days);
+      EXPECT_EQ(1, view_and_click_counts->click_counts->past_90_days);
     }
 
     // Finally advance time. (kViewClickProviderOrigin1,
@@ -2744,14 +3152,14 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
       EXPECT_EQ(kMaxEvents + 2, view_and_click_counts->view_counts->past_week);
       EXPECT_EQ(kMaxEvents + 2,
                 view_and_click_counts->view_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? kMaxEvents + 2 : 0,
+      EXPECT_EQ(kMaxEvents + 2,
                 view_and_click_counts->view_counts->past_90_days);
       EXPECT_EQ(kMaxEvents + 1, view_and_click_counts->click_counts->past_hour);
       EXPECT_EQ(kMaxEvents + 1, view_and_click_counts->click_counts->past_day);
       EXPECT_EQ(kMaxEvents + 1, view_and_click_counts->click_counts->past_week);
       EXPECT_EQ(kMaxEvents + 1,
                 view_and_click_counts->click_counts->past_30_days);
-      EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? kMaxEvents + 1 : 0,
+      EXPECT_EQ(kMaxEvents + 1,
                 view_and_click_counts->click_counts->past_90_days);
     }
 
@@ -2795,8 +3203,7 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(1, view_and_click_counts_cars->view_counts->past_day);
   EXPECT_EQ(1, view_and_click_counts_cars->view_counts->past_week);
   EXPECT_EQ(1, view_and_click_counts_cars->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-            view_and_click_counts_cars->view_counts->past_90_days);
+  EXPECT_EQ(1, view_and_click_counts_cars->view_counts->past_90_days);
   EXPECT_EQ(0, view_and_click_counts_cars->click_counts->past_hour);
   EXPECT_EQ(0, view_and_click_counts_cars->click_counts->past_day);
   EXPECT_EQ(0, view_and_click_counts_cars->click_counts->past_week);
@@ -2814,13 +3221,118 @@ TEST_P(InterestGroupStorageDualLifetimeTest,
   EXPECT_EQ(1, view_and_click_counts_shoes->view_counts->past_day);
   EXPECT_EQ(1, view_and_click_counts_shoes->view_counts->past_week);
   EXPECT_EQ(1, view_and_click_counts_shoes->view_counts->past_30_days);
-  EXPECT_EQ(GetParam() == GroupLifetime::k90Day ? 1 : 0,
-            view_and_click_counts_shoes->view_counts->past_90_days);
+  EXPECT_EQ(1, view_and_click_counts_shoes->view_counts->past_90_days);
   EXPECT_EQ(0, view_and_click_counts_shoes->click_counts->past_hour);
   EXPECT_EQ(0, view_and_click_counts_shoes->click_counts->past_day);
   EXPECT_EQ(0, view_and_click_counts_shoes->click_counts->past_week);
   EXPECT_EQ(0, view_and_click_counts_shoes->click_counts->past_30_days);
   EXPECT_EQ(0, view_and_click_counts_shoes->click_counts->past_90_days);
+}
+
+// Make sure that nothing goes wrong when the clock is rolled back, making
+// previously compacted events look fresh again.
+TEST_P(InterestGroupStorageDualLifetimeTest, ClickinessCompactTimeRevert) {
+  base::Time epoch = base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta());
+
+  // Compact a couple of events that were more than an hour ago, but less than
+  // two.
+  base::Time first_run = epoch + base::Hours(3);
+  ClickinessCompactionEvents events;
+  events.uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run - base::Minutes(65)));
+  events.uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run - base::Minutes(70)));
+  std::optional<ClickinessCompactionEvents> events2 =
+      ComputeCompactClickiness(first_run, events);
+  ASSERT_TRUE(events2);
+  EXPECT_EQ(0, events2->uncompacted_events.timestamps_size());
+  ASSERT_EQ(1, events2->compacted_events.timestamp_and_counts_size());
+  EXPECT_EQ(2, events2->compacted_events.timestamp_and_counts(0).count());
+  // These get rounded all the way back to base + 1h.
+  EXPECT_EQ(base::Hours(1).InMicroseconds(),
+            events2->compacted_events.timestamp_and_counts(0).timestamp());
+
+  // Now roll back the clock by two hours so they're under one hour old, even
+  // in their post-rounding form.
+  base::Time second_run = epoch + base::Hours(1);
+  std::optional<ClickinessCompactionEvents> events3 =
+      ComputeCompactClickiness(second_run, *events2);
+
+  // There should be two uncompacted events, with same timestamp. Also this
+  // shouldn't DCHECK-fail.
+  ASSERT_EQ(2, events3->uncompacted_events.timestamps_size());
+  EXPECT_EQ(base::Hours(1).InMicroseconds(),
+            events3->uncompacted_events.timestamps(0));
+  EXPECT_EQ(base::Hours(1).InMicroseconds(),
+            events3->uncompacted_events.timestamps(1));
+  EXPECT_EQ(0, events3->compacted_events.timestamp_and_counts_size());
+}
+
+// Try to compact a couple of events that have timestamps in the future; they
+// should be unchanged.
+TEST_P(InterestGroupStorageDualLifetimeTest, ClickinessCompactTimeFuture) {
+  base::Time epoch = base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta());
+
+  base::Time first_run = epoch + base::Hours(3);
+  ClickinessCompactionEvents events;
+  events.uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run + base::Minutes(65)));
+  events.uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run + base::Minutes(70)));
+
+  std::optional<ClickinessCompactionEvents> events2 =
+      ComputeCompactClickiness(first_run, events);
+  ASSERT_TRUE(events2);
+  ASSERT_EQ(2, events2->uncompacted_events.timestamps_size());
+  EXPECT_EQ(0, events2->compacted_events.timestamp_and_counts_size());
+  EXPECT_EQ(events.uncompacted_events.timestamps(0),
+            events2->uncompacted_events.timestamps(0));
+  EXPECT_EQ(events.uncompacted_events.timestamps(1),
+            events2->uncompacted_events.timestamps(1));
+}
+
+// Test some entries being compacted into an existing category.
+TEST_P(InterestGroupStorageDualLifetimeTest, ClickinessCompactMerge) {
+  base::Time epoch = base::Time::FromDeltaSinceWindowsEpoch(base::TimeDelta());
+
+  base::Time first_run = epoch + base::Hours(3);
+  ClickinessCompactionEvents events;
+  // These get rounded all the way back to base + 1h, which we already have
+  // entries for.
+  events.uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run - base::Minutes(65)));
+  events.uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run - base::Minutes(70)));
+  auto* entry = events.compacted_events.add_timestamp_and_counts();
+  entry->set_timestamp(base::Hours(1).InMicroseconds());
+  entry->set_count(3);
+
+  std::optional<ClickinessCompactionEvents> events2 =
+      ComputeCompactClickiness(first_run, events);
+  ASSERT_TRUE(events2);
+  EXPECT_EQ(0, events2->uncompacted_events.timestamps_size());
+  ASSERT_EQ(1, events2->compacted_events.timestamp_and_counts_size());
+  EXPECT_EQ(base::Hours(1).InMicroseconds(),
+            events2->compacted_events.timestamp_and_counts(0).timestamp());
+  EXPECT_EQ(5, events2->compacted_events.timestamp_and_counts(0).count());
+
+  // Add a few more requests afterwards.
+  events2->uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run + base::Minutes(5)));
+  events2->uncompacted_events.add_timestamps(
+      sql::Statement::TimeToSqlValue(first_run + base::Minutes(10)));
+
+  // Now make everything more than a day old.
+  base::Time second_run = first_run + base::Hours(25);
+  std::optional<ClickinessCompactionEvents> events3 =
+      ComputeCompactClickiness(second_run, *events2);
+  ASSERT_TRUE(events3);
+  EXPECT_EQ(0, events3->uncompacted_events.timestamps_size());
+  ASSERT_EQ(1, events3->compacted_events.timestamp_and_counts_size());
+  // Here we get rounded to day base.
+  EXPECT_EQ(base::Hours(0).InMicroseconds(),
+            events3->compacted_events.timestamp_and_counts(0).timestamp());
+  EXPECT_EQ(7, events3->compacted_events.timestamp_and_counts(0).count());
 }
 
 INSTANTIATE_TEST_SUITE_P(DualLifetime,
@@ -2910,11 +3422,13 @@ TEST_F(InterestGroupStorageTest, DeleteOriginDeleteAll) {
   EXPECT_THAT(joining_origins,
               UnorderedElementsAre(joining_originA, joining_originB));
 
-  storage->DeleteInterestGroupData(base::BindLambdaForTesting(
-      [&owner_originA](const blink::StorageKey& storage_key) {
+  storage->DeleteInterestGroupData(
+      base::BindLambdaForTesting([&owner_originA](
+                                     const blink::StorageKey& storage_key) {
         return storage_key ==
                blink::StorageKey::CreateFirstParty(owner_originA);
-      }));
+      }),
+      /*user_initiated_deletion=*/true);
 
   origins = storage->GetAllInterestGroupOwners();
   EXPECT_THAT(origins, UnorderedElementsAre(owner_originB, owner_originC));
@@ -2924,18 +3438,21 @@ TEST_F(InterestGroupStorageTest, DeleteOriginDeleteAll) {
 
   // Delete all interest groups that joined on joining_origin A. We expect that
   // we will be left with the one that joined on joining_origin B.
-  storage->DeleteInterestGroupData(base::BindLambdaForTesting(
-      [&joining_originA](const blink::StorageKey& storage_key) {
+  storage->DeleteInterestGroupData(
+      base::BindLambdaForTesting([&joining_originA](
+                                     const blink::StorageKey& storage_key) {
         return storage_key ==
                blink::StorageKey::CreateFirstParty(joining_originA);
-      }));
+      }),
+      /*user_initiated_deletion=*/true);
 
   origins = storage->GetAllInterestGroupOwners();
   EXPECT_THAT(origins, UnorderedElementsAre(owner_originB));
   joining_origins = storage->GetAllInterestGroupJoiningOrigins();
   EXPECT_THAT(joining_origins, UnorderedElementsAre(joining_originB));
 
-  storage->DeleteInterestGroupData(base::NullCallback());
+  storage->DeleteInterestGroupData(base::NullCallback(),
+                                   /*user_initiated_deletion=*/false);
 
   origins = storage->GetAllInterestGroupOwners();
   EXPECT_EQ(0u, origins.size());
@@ -3586,6 +4103,68 @@ class InterestGroupStorageWithNoIdleFastForwardTest
 
   base::test::ScopedFeatureList scoped_feature_list_;
 };
+
+TEST_F(InterestGroupStorageWithNoIdleFastForwardTest, ViewClickExpire) {
+  std::unique_ptr<InterestGroupStorage> storage = CreateStorage();
+
+  AdAuctionEventRecord record_view;
+  record_view.type = AdAuctionEventRecord::Type::kView;
+  record_view.providing_origin = kViewClickProviderOrigin1;
+  record_view.eligible_origins = {kViewClickEligibleOrigin1};
+  ASSERT_TRUE(record_view.IsValid());
+
+  AdAuctionEventRecord record_click;
+  record_click.type = AdAuctionEventRecord::Type::kClick;
+  record_click.providing_origin = kViewClickProviderOrigin1;
+  record_click.eligible_origins = {kViewClickEligibleOrigin1};
+  ASSERT_TRUE(record_click.IsValid());
+
+  base::Time start_time = base::Time::Now();
+
+  storage->RecordViewClick(record_view);
+  storage->RecordViewClick(record_view);
+  storage->RecordViewClick(record_click);
+  EXPECT_EQ(true,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin1, kViewClickEligibleOrigin1));
+
+  // Quickly fast fordward by 91 days (not 90 to account for rounding),
+  // then a bit more to get maintenance to happen with that much time elapsed.
+  FastForwardWithoutIdlingBy(task_environment(), *storage, base::Days(91));
+  task_environment().FastForwardBy(kIdlePeriod);
+
+  // Check that maintenance (and therefore compaction) has occurred.
+  EXPECT_LE(start_time + base::Days(91),
+            storage->GetLastMaintenanceTimeForTesting());
+
+  EXPECT_EQ(false,
+            storage->CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+                kViewClickProviderOrigin1, kViewClickEligibleOrigin1));
+
+  // Doing a fancy high-level read via an IG just gives 0 for all counters.
+  InterestGroup g = NewInterestGroup(kViewClickEligibleOrigin1, "cars");
+  g.view_and_click_counts_providers = {{kViewClickProviderOrigin1}};
+  g.expiry = base::Time::Now() + base::Days(90);
+  storage->JoinInterestGroup(g, GURL("https://joining-site.test"));
+
+  std::vector<StorageInterestGroup> groups =
+      storage->GetInterestGroupsForOwner(kViewClickEligibleOrigin1);
+  ASSERT_EQ(1u, groups.size());
+
+  blink::mojom::ViewAndClickCountsPtr& view_and_click_counts =
+      groups[0].bidding_browser_signals->view_and_click_counts;
+
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_hour);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_day);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_week);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_30_days);
+  EXPECT_EQ(0, view_and_click_counts->view_counts->past_90_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_hour);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_day);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_week);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_30_days);
+  EXPECT_EQ(0, view_and_click_counts->click_counts->past_90_days);
+}
 
 // Like InterestGroupStorage.ExpirationDeletesMetadata, but it also checks edge
 // cases near the expiration point.

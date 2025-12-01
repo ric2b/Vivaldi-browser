@@ -48,7 +48,7 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
   NSLayoutConstraint* _tableViewHeightConstraint;
   UITableViewDiffableDataSource<NSNumber*, NSNumber*>* _dataSource;
 }
-
+@synthesize mergeBrowsingDataByDefault;
 @synthesize canShowBrowsingDataMigration;
 @synthesize browsingDataMigrationDisabledByPolicy;
 
@@ -77,22 +77,12 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
 
   self.titleText =
       l10n_util::GetNSString(IDS_IOS_ENTERPRISE_PROFILE_CREATION_TITLE);
-  if (self.canShowBrowsingDataMigration) {
-    self.subtitleText = [NSString
-        stringWithFormat:
-            @"%@\n\n%@",
-            l10n_util::GetNSString(
-                IDS_IOS_ENTERPRISE_PROFILE_CREATION_SUBTITLE),
-            l10n_util::GetNSString(
-                IDS_IOS_ENTERPRISE_PROFILE_CREATION_ACCOUNT_KEEP_BROWSING_DATA_DESCRIPTION)];
+  if (self.canShowBrowsingDataMigration && mergeBrowsingDataByDefault) {
+    self.subtitleText = l10n_util::GetNSString(
+        IDS_IOS_ENTERPRISE_PROFILE_CREATION_ACCOUNT_KEEP_BROWSING_DATA_DESCRIPTION);
   } else if (self.browsingDataMigrationDisabledByPolicy) {
-    self.subtitleText = [NSString
-        stringWithFormat:
-            @"%@\n\n%@",
-            l10n_util::GetNSString(
-                IDS_IOS_ENTERPRISE_PROFILE_CREATION_SUBTITLE),
-            l10n_util::GetNSString(
-                IDS_IOS_ENTERPRISE_PROFILE_CREATION_ACCOUNT_KEEP_BROWSING_DATA_DISABLED_DESCRIPTION)];
+    self.subtitleText = l10n_util::GetNSString(
+        IDS_IOS_ENTERPRISE_PROFILE_CREATION_ACCOUNT_KEEP_BROWSING_DATA_DISABLED_DESCRIPTION);
   } else {
     self.subtitleText =
         l10n_util::GetNSString(IDS_IOS_ENTERPRISE_PROFILE_CREATION_SUBTITLE);

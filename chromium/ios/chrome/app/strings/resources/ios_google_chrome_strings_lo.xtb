@@ -47,6 +47,7 @@
 <translation id="1917964099031477364">ບັນຊີນີ້ ແລະ ຂໍ້ມູນທີ່ບໍ່ໄດ້ບັນທຶກໄວ້ຕ່າງໆຈະຖືກລຶບອອກຈາກ Chrome ແລະ ແອັບອື່ນຂອງ Google ໃນອຸປະກອນນີ້.</translation>
 <translation id="1919130412786645364">ອະນຸຍາດການເຂົ້າສູ່ລະບົບ Chrome</translation>
 <translation id="1965935827552890526">ສຳເລັດສິ່ງທີ່ທ່ານກຳລັງເຮັດໃນໜ້າຈໍອື່ນຂອງ Chrome ທີ່ີເປີດຢູ່.</translation>
+<translation id="1966638102563776885">ເຄັດລັບສໍາລັບ Chrome: ເບິ່ງລະຫັດຜ່ານຂອງທ່ານໃນແອັບໃດກໍໄດ້</translation>
 <translation id="1973910962341002002">ຈາກການຕັ້ງຄ່າ "<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />", ໃຫ້ເປີດ "Chrome"</translation>
 <translation id="1984705450038014246">ຊິ້ງຂໍ້ມູນ Chrome ຂອງທ່ານ</translation>
 <translation id="1987779152850321833">ເຮັດສຳເລັດການກະທຳທີ່ແນະນຳຕໍ່ໄປນີ້ເພື່ອຮັບປະໂຫຍດສູງສຸດຈາກ Chrome.</translation>
@@ -114,7 +115,6 @@
 <translation id="3655656110921623717">ນີ້ໝາຍຄວາມວ່າ Chrome ຈະຮ້ອງຂໍເວັບໄຊເດັສທັອບທຸກເທື່ອ.</translation>
 <translation id="3740397331642243698">ເປີດ URL ທີ່ປ້ອນເຂົ້າໃນ Google Chrome ໃນໂໝດບໍ່ເປີດເຜີຍຕົວຕົນ.</translation>
 <translation id="3741995255368156336">ເປີດລາຍຊື່ການອ່ານ Chrome.</translation>
-<translation id="3808570423967020928">ເຂົ້າເຖິງ Chrome ໄດ້ໄວຂຶ້ນຈາກດັອກໂຮມສະກຣີນຂອງທ່ານ.</translation>
 <translation id="3827545470516145620">ທ່ານຈະໄດ້ຮັບການປົກປ້ອງຄວາມປອດໄພມາດຕະຖານຢູ່ອຸປະກອນນີ້</translation>
 <translation id="384394811301901750">Google Chrome ບໍ່ສາມາດໃຊ້ກ້ອງຖ່າຍຮູບຂອງທ່ານໄດ້ໃນຂະນະນີ້</translation>
 <translation id="3863841106411295595">ເພີ່ມ URL ທີ່ປ້ອນເຂົ້າໃສ່ລາຍຊື່ການອ່ານຂອງທ່ານໃນ Chrome.</translation>
@@ -123,6 +123,7 @@
 <translation id="3984746313391923992">ອົງການຂອງທ່ານກຳນົດໃຫ້ທ່ານສືບຕໍ່ອອກຈາກລະບົບ Chrome.</translation>
 <translation id="3988789688219830639">Google Chrome ບໍ່​ມີ​ການ​ເຂົ້າເຖິງຮູບຖ່າຍ ຫຼື ​ວິ​ດີ​ໂອ​ຂອງ​ທ່ານ. ເປີດ​ໃຊ້​ການ​ເຂົ້າ​ເຖິງ​ຢູ່​ໃນ​ການ​ຕັ້ງ​ຄ່າ iOS &gt; Privacy &gt; Photos.</translation>
 <translation id="4064699917955374540">ເພື່ອໃຊ້ ແລະ ບັນທຶກຂໍ້ມູນ Chrome ໃນບັນຊີ Google ຂອງທ່ານ, ກະລຸນາຢັ້ງຢືນວ່າແມ່ນທ່ານ.</translation>
+<translation id="411154422556990518">ຕິດຕາມຂໍ້ມູນອັບເດດກ່ຽວກັບການຕິດຕາມລາຄາ ແລະ ເຄັດລັບ Chrome.</translation>
 <translation id="417201473131094001">ບໍ່ຮອງຮັບໃນ Chrome Canary</translation>
 <translation id="424864128008805179">ອອກຈາກລະບົບ Chrome ບໍ?</translation>
 <translation id="4430797724889237570">ເປີດລິ້ງຈາກ Gmail, ແຜນທີ່, YouTube ແລະ ແອັບອື່ນໆໃນ Chrome</translation>
@@ -133,9 +134,11 @@
 <translation id="4636900170638246267">ເຂົ້າສູ່ລະບົບຫາເວັບໄຊນີ້ ແລະ Chrome.</translation>
 <translation id="4647910807533196601">ເປີດແຖບຫຼ້າສຸດຂອງຂ້ອຍໃນ Chrome.</translation>
 <translation id="4693084815234024320">ທ່ານກຳລັງຢູ່ໃນ Chrome ແບບບໍ່ເປີດເຜີຍຕົວຕົນ</translation>
+<translation id="4713907610796204963">ສຶກສາພື້ນຖານ Chrome ທີ່ເປັນປະໂຫຍດເພື່ອໃຫ້ທ່ານເລີ່ມຕົ້ນ</translation>
 <translation id="4724297637870447613">ໃຊ້ Chrome ໄດ້ຢູ່ທົ່ວທຸກບ່ອນ</translation>
 <translation id="4738647308035481133">ໜ້າ Google Chrome</translation>
 <translation id="4742795653798179840">ລຶບຂໍ້ມູນ Chrome ແລ້ວ</translation>
+<translation id="4749294594657945639">ເພື່ອເບິ່ງລະຫັດຜ່ານທີ່ບັນທຶກໄວ້ໃນແອັບອື່ນໆຂອງທ່ານໄດ້ຢ່າງງ່າຍດາຍ, ໃຫ້ເລືອກ Chrome ສຳລັບການຕື່ມຂໍ້ມູນອັດຕະໂນມັດ</translation>
 <translation id="4761869838909035636">ເປີດໃຊ້ການກວດສອບຄວາມປອດໄພ Chrome</translation>
 <translation id="4798859546468762093">ເພື່ອຮັບການປັບແຕ່ງເປັນແບບສ່ວນຕົວ ແລະ ຄຸນສົມບັດອື່ນໆ, ໃຫ້ຮວມ Chrome ໄວ້ໃນ <ph name="FEATURE_NAME_1" /> ພ້ອມທັງ<ph name="FEATURE_NAME_2" /></translation>
 <translation id="4819268619367838612">ເພື່ອຊ່ວຍປັບປຸງແອັບ, Chrome ຈະສົ່ງຂໍ້ມູນການນຳໃຊ້ ແລະ ການຫຼົ້ມໄປໃຫ້ Google. <ph name="BEGIN_LINK" />ຈັດການ<ph name="END_LINK" /></translation>
@@ -228,11 +231,9 @@
 ສຳລັບການຕັ້ງຄ່າເພີ່ມເຕີມທີ່ໃຊ້ຂໍ້ມູນເພື່ອປັບປຸງປະສົບການ Chrome ຂອງທ່ານ, ໃຫ້ເຂົ້າໄປ <ph name="BEGIN_LINK" />ບໍລິການ Google<ph name="END_LINK" />.</translation>
 <translation id="6922332667202044570">ລຶບຂໍ້ມູນການທ່ອງເວັບໃນ Chrome.</translation>
 <translation id="6924922227983877439">ເປີດລິ້ງໃນ Chrome ຕາມຄ່າເລີ່ມຕົ້ນ</translation>
-<translation id="6931601805528922498">ການເຂົ້າສູ່ລະບົບຈະເພີ່ມບັນຊີຂອງທ່ານໃສ່ໃນ Chrome ສຳລັບການທ່ອງເວັບທີ່ກ່ຽວຂ້ອງກັບວຽກ.</translation>
 <translation id="6975725306479268850">ເລືອກ Chrome ສຳລັບການຕື່ມຂໍ້ມູນອັດຕະໂນມັດ</translation>
 <translation id="7056826488869329999">ເປີດ ແລະ ເອີ້ນໃຊ້ການກວດສອບຄວາມປອດໄພໃນ Chrome.</translation>
 <translation id="7061455974939528301">ກົດໄອຄອນ Chrome ຄ້າງໄວ້ ແລ້ວຄລິກ "ແກ້ໄຂໂຮມສະກຣີນ"</translation>
-<translation id="7065813315247345131">ຍ້າຍ Chrome ໄປຫາດັອກ</translation>
 <translation id="7124339256045485976">ຮັກສາໃຫ້ Chrome ໃໝ່ຫຼ້າສຸດ</translation>
 <translation id="7145599899567697473">ບັນທຶກ ແລະ ຕື່ມລະຫັດຜ່ານອັດຕະໂນມັດໃນ Chrome</translation>
 <translation id="7161390184744336561">Google Chrome ເກົ່າແລ້ວ</translation>
@@ -240,7 +241,6 @@
 <translation id="7175129790242719365">ເຄັດລັບ Chrome: ເຂົ້າສູ່ລະບົບ Chrome</translation>
 <translation id="7187993566681480880">ຮັກສາໃຫ້ທ່ານປອດໄພໃນ Chrome ແລະ ອາດຈະຖືກໃຊ້ເພື່ອປັບປຸງຄວາມປອດໄພໃນແອັບອື່ນຂອງ Google ເມື່ອທ່ານເຂົ້າສູ່ລະບົບ.</translation>
 <translation id="7200524487407690471">Chrome ເອີ້ນໃຊ້ການກວດສອບຄວາມປອດໄພໂດຍອັດຕະໂນມັດທຸກມື້ເພື່ອຊ່ວຍໃຫ້ທ່ານປອດໄພຈາກການລະເມີດຂໍ້ມູນ, ເວັບໄຊທີ່ບໍ່ປອດໄພ ແລະ ອື່ນໆ. ທ່ານສາມາດຊອກຫາຂໍ້ມູນເພີ່ມເຕີມກ່ຽວກັບການກວດສອບຄວາມປອດໄພໄດ້ໃນການຕັ້ງຄ່າ.</translation>
-<translation id="7203324561587388418">ຕິດຕາມເນື້ອຫາ ແລະ ເຄັດລັບ Chrome ທີ່ມີປະໂຫຍດ.</translation>
 <translation id="72119412072970160">ທ່ານສາມາດໃຊ້ລະຫັດຜ່ານທີ່ທ່ານບັນທຶກໄປໃສ່ຕົວຈັດການລະຫັດຜ່ານ Google ໃນແອັບອື່ນຢູ່ iPad ຂອງທ່ານໄດ້.</translation>
 <translation id="7214019116829172458">ເປີດແຖບບໍ່ເປີດເຜີຍຕົວຕົນໃນ Chrome</translation>
 <translation id="722167379782941918">Chrome ແນະນຳໃຫ້ໃຊ້ການປົກປ້ອງທີ່ປັບປຸງດີຂຶ້ນ</translation>
@@ -253,6 +253,7 @@
 <translation id="7299681342915173313">ຕອນນີ້ທ່ານສາມາດໃຊ້ Chrome ທຸກເທື່ອທີ່ທ່ານແຕະລິ້ງໃນອີເມວ, ເອກະສານ ແລະ ແອັບອື່ນໆໄດ້ແລ້ວ.</translation>
 <translation id="7344094882820374540">ຮັບການຮັກສາຄວາມປອດໄພທີ່ເຂັ້ມງວດທີ່ສຸດຂອງ Chrome ຈາກເວັບໄຊທີ່ເປັນອັນຕະລາຍ</translation>
 <translation id="7349129508108954623">ອະນຸຍາດໃຫ້ Chrome ໃຊ້ Google ແຜນທີ່ເພື່ອບອກເສັ້ນທາງ ແລະ ຂໍ້ມູນໃນທ້ອງຖິ່ນໃຫ້ທ່ານຢູ່ທີ່ຢູ່ທີ່ກວດພົບ.</translation>
+<translation id="7371674917547846460">ຕິດຕາມເຄັດລັບ Chrome ທີ່ມີປະໂຫຍດ ແລະ ອື່ນໆອີກຫຼາກຫຼາຍ.</translation>
 <translation id="7394108421562933108">ແຜນທີ່ໃນ Chrome</translation>
 <translation id="7400722733683201933">ກ່ຽວ​ກັບ Google Chrome</translation>
 <translation id="7466693328838535498">ໃນຊ່ອງວິດເຈັດຊອກຫາ, ໃຫ້ລະບຸ Chrome</translation>
@@ -263,6 +264,7 @@
 <translation id="7581063337314642333">ເຂົ້າເບິ່ງໂຄງຮ່າງຕາຕະລາງຂອງແຖບໃນ Chrome</translation>
 <translation id="7599894504325210080">ຂະຫຍາຍມຸມມອງການຕື່ມຂໍ້ມູນອັດຕະໂນມັດຂອງ Chrome ຢູ່</translation>
 <translation id="7617512710641355143">Chrome ໄດ້ຮັບການຈັດການ</translation>
+<translation id="7626032353295482388">ຍິນ​ດີ​ຕ້ອນ​ຮັບສູ່ Chrome</translation>
 <translation id="7642373780953416937">ຮັບການແຈ້ງເຕືອນກ່ຽວກັບບັນຫາດ້ານຄວາມເປັນສ່ວນຕົວ ຫຼື ຄວາມປອດໄພທີ່ Chrome ກວດຫາໃຫ້ທ່ານໂດຍອັດຕະໂນມັດ.</translation>
 <translation id="7660356333829433649">ກັບມາເບິ່ງບ່ອນນີ້ສຳລັບເຄັດລັບທີ່ເປັນປະໂຫຍດເພີ່ມເຕີມເພື່ອໃຊ້ປະໂຫຍດສູງສຸດຈາກ Chrome.</translation>
 <translation id="7662994914830945754">ເພື່ອເຫັນແຖບຂອງທ່ານຈາກທຸກບ່ອນທີ່ທ່ານໃຊ້ Chrome, ກະລຸນາເຂົ້າສູ່ລະບົບ ແລະ ເປີດການຊິ້ງຂໍ້ມູນ</translation>
@@ -276,6 +278,7 @@
 <translation id="778855399387580014">ເລີ່ມການຊອກຫາໃນແຖບ Chrome ໃໝ່.</translation>
 <translation id="7792140019572081272">Chrome ຮັກສາຂໍ້ມູນລະອຽດອ່ອນຂອງທ່ານໃຫ້ປອດໄພດ້ວຍ Face ID.</translation>
 <translation id="7855730255114109580">Google Chrome ແມ່ນເວີຊັນໃໝ່ຫຼ້າສຸດແລ້ວ</translation>
+<translation id="787226752901403048">ເຂົ້າສູ່ລະບົບ Chrome ເພື່ອແບ່ງປັນ ແລະ ເຂົ້າຮ່ວມກຸ່ມແຖບ, ຮວມທັງເຮັດວຽກຮ່ວມກັນກ່ຽວກັບແນວຄິດຕ່າງໆ</translation>
 <translation id="7897703007638178753">ເບິ່ງແຖບຫຼ້າສຸດໃນ Chrome</translation>
 <translation id="7948283758957877064">ມີຫຍັງໃໝ່ໃນ Chrome</translation>
 <translation id="8000174216052461231">ເຄັດລັບສຳລັບ Chrome: ຮັບການຮັກສາຄວາມປອດໄພທີ່ເຂັ້ມງວດທີ່ສຸດຂອງ Chrome</translation>
@@ -314,10 +317,10 @@
 <translation id="8603022514504485810">ຕົວຈັດການລະຫັດຜ່ານ Google ບໍ່ສາມາດກວດສອບລະຫັດຜ່ານທັງໝົດໄດ້. ລອງໃໝ່ໃນມື້ອື່ນ ຫຼື <ph name="BEGIN_LINK" />ກວດລະຫັດຜ່ານໃນບັນຊີ Google ຂອງທ່ານ.<ph name="END_LINK" /></translation>
 <translation id="8630122478628016441">ເປີດ “ລັອກແຖບບໍ່ເປີດເຜີຍຕົວຕົນເມື່ອທ່ານປິດ Chrome”.</translation>
 <translation id="8673726683583791503">ຊື້ດ້ວຍ Google Lens</translation>
-<translation id="8727043961453758442">ຮັບປະໂຫຍດສູງສຸດຈາກ Chrome</translation>
 <translation id="8765470054473112089">ເມື່ອທ່ານພິມໃນແຖບທີ່ຢູ່ ຫຼື ກ່ອງຊອກຫາ, Chrome ຈະສົ່ງສິ່ງທີ່ທ່ານພິມໄປຫາໂປຣແກຣມຊອກຫາຄ່າເລີ່ມຕົ້ນຂອງທ່ານເພື່ອຮັບການແນະນຳທີ່ດີຍິ່ງຂຶ້ນ. ສິ່ງນີ້ຖືກປິດໃນໂໝດບໍ່ເປີດເຜີຍຕົວຕົນ.</translation>
 <translation id="8772179140489533211">ສະແດງຂໍ້ຄວາມເພື່ອເຂົ້າສູ່ລະບົບຫາ Chrome.</translation>
 <translation id="8788269841521769222">ທ່ານບໍ່ຈຳເປັນຕ້ອງຈື່ລະຫັດຜ່ານນີ້. ມັນຈະຖືກບັນທຶກໄປໃສ່ຕົວຈັດການລະຫັດຜ່ານ Google ສຳລັບ <ph name="EMAIL" /></translation>
+<translation id="8796490717897731471"><ph name="EMAIL" />. Chrome ໄດ້ຮັບການຈັດການ.</translation>
 <translation id="880967149107462122">ໄປຫາການຕັ້ງຄ່າ Chrome</translation>
 <translation id="8842132678697187091">ທ່ານສາມາດເປີດ Google Lens ໄດ້ບ່ອນນີ້.</translation>
 <translation id="8850736900032787670">ເພື່ອຮັບເນື້ອຫາແບບປັບແຕ່ງສ່ວນຕົວໂດຍອີງຕາມຄວາມສົນໃຈຂອງທ່ານ, ໃຫ້ເຂົ້າສູ່ລະບົບ Chrome.</translation>

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/functional/callback.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
 #include "components/autofill/core/browser/payments/card_unmask_challenge_option.h"
 #include "url/gurl.h"
@@ -73,6 +74,11 @@ class PaymentsWindowManager {
 
   // The result of the BNPL flow, which will be sent to the caller that
   // initiated the flow.
+  //
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  //
+  // LINT.IfChange(BnplFlowResult)
   enum class BnplFlowResult {
     // The BNPL flow was successful.
     kSuccess = 0,
@@ -80,7 +86,10 @@ class PaymentsWindowManager {
     kFailure = 1,
     // The user closed the pop-up which ended the BNPL flow.
     kUserClosed = 2,
+
+    kMaxValue = kUserClosed,
   };
+  // LINT.ThenChange(/tools/metrics/histograms/metadata/autofill/enums.xml:BnplPopupWindowResult)
 
   using OnVcn3dsAuthenticationCompleteCallback =
       base::OnceCallback<void(Vcn3dsAuthenticationResponse)>;
@@ -122,6 +131,8 @@ class PaymentsWindowManager {
     BnplContext& operator=(BnplContext&&);
     ~BnplContext();
 
+    // The ID of the issuer for the BNPL flow.
+    autofill::BnplIssuer::IssuerId issuer_id;
     // The starting location of the BNPL flow, which is an initial URL to
     // open inside of the pop-up.
     GURL initial_url;

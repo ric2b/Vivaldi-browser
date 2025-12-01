@@ -433,7 +433,7 @@ enum AddressSpace {
     handle = 1;
     pixel_local = 2;
     private = 3;
-    push_constant = 4;
+    immediate = 4;
     storage = 5;
     uniform = 6;
     workgroup = 7;
@@ -541,6 +541,7 @@ enum BuiltinValue {
     workgroup_id = 14;
     clip_distances = 15;
     cull_distance = 16;
+    subgroup_id = 17;
 }
 
 enum BuiltinFn {

@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.ui.android.webid;
 
 import org.chromium.blink.mojom.RpContext;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.ui.android.webid.data.Account;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityCredentialTokenError;
 import org.chromium.chrome.browser.ui.android.webid.data.IdentityProviderData;
@@ -20,6 +21,7 @@ import java.util.List;
  * This component supports accounts selection for WebID. It shows a list of
  * accounts to the user which can select one of them or dismiss it.
  */
+@NullMarked
 public interface AccountSelectionComponent {
     /**
      * This delegate is called when the AccountSelection component is interacted with (e.g.
@@ -66,7 +68,6 @@ public interface AccountSelectionComponent {
      * @param rpEtldPlusOne The {@link String} for the relying party.
      * @param accounts A list of {@link Account}s that will be displayed.
      * @param idpDataList The list with information about the identity providers.
-     * @param isAutoReauthn A {@link boolean} that represents whether this is an auto re-authn flow.
      * @param newAccounts The newly logged in accounts.
      * @return whether the invocation is successful. If false is returned, the caller must assume
      *     that onDismiss was called and must return early.
@@ -75,7 +76,6 @@ public interface AccountSelectionComponent {
             String rpEtldPlusOne,
             List<Account> accounts,
             List<IdentityProviderData> idpDataList,
-            boolean isAutoReauthn,
             List<Account> newAccounts);
 
     /**
@@ -130,6 +130,14 @@ public interface AccountSelectionComponent {
      */
     boolean showLoadingDialog(
             String rpForDisplay, String idpForDisplay, @RpContext.EnumType int rpContext);
+
+    /**
+     * Displays the verifying UI in a new bottom sheet.
+     *
+     * @param account An {@link Account} that will be displayed.
+     * @param isAutoReauthn A {@link boolean} that represents whether this is an auto re-authn flow.
+     */
+    boolean showVerifyingDialog(Account account, boolean isAutoReauthn);
 
     /**
      * Closes the outstanding bottom sheet or the popup, depending on what this object corresponds

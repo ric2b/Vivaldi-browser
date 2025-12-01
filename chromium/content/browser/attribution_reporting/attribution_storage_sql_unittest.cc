@@ -85,7 +85,6 @@ using ::testing::AllOf;
 using ::testing::ElementsAre;
 using ::testing::Field;
 using ::testing::IsEmpty;
-using ::testing::Key;
 using ::testing::Pair;
 using ::testing::Property;
 using ::testing::SizeIs;
@@ -1530,15 +1529,21 @@ TEST_F(AttributionStorageSqlTest,
 
   OpenDatabase();
 
-  EXPECT_THAT(storage()->GetActiveSources(),
-              UnorderedElementsAre(
-                  AllOf(Property(&StoredSource::source_event_id, 1u),
-                        Property(&StoredSource::trigger_specs,
-                                 ElementsAre(Key(0), Key(1), Key(2), Key(3),
-                                             Key(4), Key(5), Key(6), Key(7)))),
-                  AllOf(Property(&StoredSource::source_event_id, 2u),
-                        Property(&StoredSource::trigger_specs,
-                                 ElementsAre(Key(0), Key(1))))));
+  EXPECT_THAT(
+      storage()->GetActiveSources(),
+      UnorderedElementsAre(
+          AllOf(
+              Property(&StoredSource::source_event_id, 1u),
+              Property(
+                  &StoredSource::trigger_data,
+                  Property(&attribution_reporting::TriggerDataSet::trigger_data,
+                           ElementsAre(0, 1, 2, 3, 4, 5, 6, 7)))),
+          AllOf(
+              Property(&StoredSource::source_event_id, 2u),
+              Property(
+                  &StoredSource::trigger_data,
+                  Property(&attribution_reporting::TriggerDataSet::trigger_data,
+                           ElementsAre(0, 1))))));
 }
 
 // Having the missing field default to the correct value allows us to avoid a
@@ -2419,7 +2424,11 @@ TEST_F(AttributionStorageSqlTest,
                                AttributionStorageSql::ReportCorruptionStatus::
                                    kSourceInvalidAggregatableNamedBudgets,
                                2);
-  histograms.ExpectTotalCount("Conversions.CorruptReportsInDatabase5", 31);
+  histograms.ExpectBucketCount("Conversions.CorruptReportsInDatabase5",
+                               AttributionStorageSql::ReportCorruptionStatus::
+                                   kSourceInvalidEventReportWindows,
+                               1);
+  histograms.ExpectTotalCount("Conversions.CorruptReportsInDatabase5", 32);
 }
 
 TEST_F(AttributionStorageSqlTest, SourceRemainingAggregatableBudget) {
@@ -2768,6 +2777,38 @@ TEST_F(AttributionStorageSqlTest, ClearData_OsRegistrationsDataDeleted) {
                        /*filter=*/base::NullCallback(),
                        /*delete_rate_limit_data=*/false);
   EXPECT_THAT(storage()->GetAllDataKeys(), IsEmpty());
+}
+
+TEST_F(AttributionStorageSqlTest, UniqueReportingOriginsCounted) {
+  OpenDatabase();
+
+  auto s1 =
+      SourceBuilder()
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://a.test"))
+          .Build();
+  auto s2 =
+      SourceBuilder()
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://b.test"))
+          .Build();
+  auto s3 =
+      SourceBuilder()
+          .SetReportingOrigin(*SuitableOrigin::Deserialize("https://b.test"))
+          .Build();
+  storage()->StoreSource(s1);
+  storage()->StoreSource(s2);
+  storage()->StoreSource(s3);
+
+  storage()->StoreOsRegistrations(
+      {url::Origin::Create(GURL("https://c.test"))});
+  CloseDatabase();
+
+  base::HistogramTester histograms;
+
+  OpenDatabase();
+  EXPECT_THAT(storage()->GetActiveSources(), SizeIs(3));
+  CloseDatabase();
+
+  histograms.ExpectUniqueSample("Conversions.DistinctReportingOrigins", 3, 1);
 }
 
 }  // namespace

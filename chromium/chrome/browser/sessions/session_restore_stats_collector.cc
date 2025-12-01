@@ -13,8 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
+#include "base/strings/strcat.h"
 #include "base/task/bind_post_task.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/session_restore_policy.h"
@@ -30,6 +29,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
@@ -112,9 +112,18 @@ bool HasNotificationPermission(content::WebContents* contents) {
   return contents->GetBrowserContext()
              ->GetPermissionController()
              ->GetPermissionResultForOriginWithoutContext(
-                 blink::PermissionType::NOTIFICATIONS,
+                 content::PermissionDescriptorUtil::
+                     CreatePermissionDescriptorForPermissionType(
+                         blink::PermissionType::NOTIFICATIONS),
                  url::Origin::Create(contents->GetLastCommittedURL()))
              .status == blink::mojom::PermissionStatus::GRANTED;
+}
+
+void LogFirstPaintHistogram(base::TimeDelta paint_time,
+                            std::string_view suffix = "") {
+  base::UmaHistogramCustomTimes(
+      base::StrCat({"SessionRestore.ForegroundTabFirstPaint4", suffix}),
+      paint_time, base::Milliseconds(100), base::Minutes(16), 50);
 }
 
 }  // namespace
@@ -308,19 +317,26 @@ SessionRestoreStatsCollector::UmaStatsReportingDelegate::
 void SessionRestoreStatsCollector::UmaStatsReportingDelegate::
     ReportTabLoaderStats(const TabLoaderStats& tab_loader_stats) {
   if (!tab_loader_stats.foreground_tab_first_paint.is_zero()) {
-    UMA_HISTOGRAM_CUSTOM_TIMES("SessionRestore.ForegroundTabFirstPaint4",
-                               tab_loader_stats.foreground_tab_first_paint,
-                               base::Milliseconds(100), base::Minutes(16), 50);
-
-    std::string time_for_count = base::StringPrintf(
-        "SessionRestore.ForegroundTabFirstPaint4_%u",
-        static_cast<unsigned int>(tab_loader_stats.tab_count));
-    base::HistogramBase* counter_for_count = base::Histogram::FactoryTimeGet(
-        time_for_count, base::Milliseconds(100), base::Minutes(16), 50,
-        base::Histogram::kUmaTargetedHistogramFlag);
-    counter_for_count->AddTime(tab_loader_stats.foreground_tab_first_paint);
+    LogFirstPaintHistogram(tab_loader_stats.foreground_tab_first_paint);
+    std::string_view count_suffix;
+    CHECK_GT(tab_loader_stats.tab_count, 0u);
+    if (tab_loader_stats.tab_count < 2) {
+      count_suffix = ".1Tab";
+    } else if (tab_loader_stats.tab_count < 4) {
+      count_suffix = ".2to3Tabs";
+    } else if (tab_loader_stats.tab_count < 8) {
+      count_suffix = ".4to7Tabs";
+    } else if (tab_loader_stats.tab_count < 16) {
+      count_suffix = ".8to15Tabs";
+    } else if (tab_loader_stats.tab_count < 32) {
+      count_suffix = ".16to31Tabs";
+    } else {
+      count_suffix = ".32PlusTabs";
+    }
+    LogFirstPaintHistogram(tab_loader_stats.foreground_tab_first_paint,
+                           count_suffix);
   }
-  UMA_HISTOGRAM_ENUMERATION(
+  base::UmaHistogramEnumeration(
       "SessionRestore.ForegroundTabFirstPaint4.FinishReason",
       tab_loader_stats.tab_first_paint_reason, PAINT_FINISHED_UMA_MAX);
 

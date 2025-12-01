@@ -20,9 +20,7 @@
 #include "src/wasm/compilation-environment-inl.h"
 #include "src/wasm/decoder.h"
 #include "src/wasm/function-body-decoder-impl.h"
-#include "src/wasm/wasm-engine.h"
 #include "src/wasm/wasm-module.h"
-#include "src/wasm/wasm-objects.h"
 #include "src/wasm/wasm-opcodes-inl.h"
 #include "src/wasm/wasm-subtyping.h"
 
@@ -658,6 +656,46 @@ class WasmInJsInliningInterface {
   }
   void ThrowRef(FullDecoder* decoder, Value* value) { Bailout(decoder); }
 
+  void ContNew(FullDecoder* decoder, const wasm::ContIndexImmediate& imm,
+               const Value& func_ref, Value* result) {
+    Bailout(decoder);
+  }
+
+  void ContBind(FullDecoder* decoder, const wasm::ContIndexImmediate& orig_imm,
+                Value input_cont, const Value args[],
+                const wasm::ContIndexImmediate& new_imm, Value* result) {
+    Bailout(decoder);
+  }
+
+  void Resume(FullDecoder* decoder, const wasm::ContIndexImmediate& imm,
+              base::Vector<wasm::HandlerCase> handlers, const Value args[],
+              const Value returns[]) {
+    Bailout(decoder);
+  }
+
+  void ResumeThrow(FullDecoder* decoder,
+                   const wasm::ContIndexImmediate& cont_imm,
+                   const TagIndexImmediate& exc_imm,
+                   base::Vector<wasm::HandlerCase> handlers, const Value args[],
+                   const Value returns[]) {
+    Bailout(decoder);
+  }
+
+  void Switch(FullDecoder* decoder, const TagIndexImmediate& tag_imm,
+              const wasm::ContIndexImmediate& con_imm, const Value& cont_ref,
+              const Value args[], Value returns[]) {
+    Bailout(decoder);
+  }
+
+  void Suspend(FullDecoder* decoder, const TagIndexImmediate& imm,
+               const Value args[], const Value returns[]) {
+    Bailout(decoder);
+  }
+
+  void EffectHandlerTable(FullDecoder* decoder, Control* block) {
+    Bailout(decoder);
+  }
+
   // TODO(dlehmann,353475584): Support traps in the inlinee.
 
   void Trap(FullDecoder* decoder, wasm::TrapReason reason) { Bailout(decoder); }
@@ -685,6 +723,20 @@ class WasmInJsInliningInterface {
     Bailout(decoder);
   }
   void AtomicFence(FullDecoder* decoder) { Bailout(decoder); }
+
+  void StructAtomicRMW(FullDecoder* decoder, WasmOpcode opcode,
+                       const Value& struct_object, const FieldImmediate& field,
+                       const Value& field_value, AtomicMemoryOrder order,
+                       Value* result) {
+    Bailout(decoder);
+  }
+
+  void ArrayAtomicRMW(FullDecoder* decoder, WasmOpcode opcode,
+                      const Value& array_obj, const ArrayIndexImmediate& imm,
+                      const Value& index, const Value& value,
+                      AtomicMemoryOrder order, Value* result) {
+    Bailout(decoder);
+  }
 
   void MemoryInit(FullDecoder* decoder, const MemoryInitImmediate& imm,
                   const Value& dst, const Value& src, const Value& size) {
@@ -753,6 +805,16 @@ class WasmInJsInliningInterface {
                  const FieldImmediate& field, const Value& field_value) {
     Bailout(decoder);
   }
+  void StructAtomicGet(FullDecoder* decoder, const Value& struct_obj,
+                       const FieldImmediate& field, bool is_signed,
+                       AtomicMemoryOrder memory_order, Value* result) {
+    Bailout(decoder);
+  }
+  void StructAtomicSet(FullDecoder* decoder, const Value& struct_object,
+                       const FieldImmediate& field, const Value& field_value,
+                       AtomicMemoryOrder memory_order) {
+    Bailout(decoder);
+  }
   void ArrayNew(FullDecoder* decoder, const ArrayIndexImmediate& imm,
                 const Value& length, const Value& initial_value,
                 Value* result) {
@@ -771,9 +833,20 @@ class WasmInJsInliningInterface {
                 bool is_signed, Value* result) {
     Bailout(decoder);
   }
+  void ArrayAtomicGet(FullDecoder* decoder, const Value& array_obj,
+                      const ArrayIndexImmediate& imm, const Value& index,
+                      bool is_signed, AtomicMemoryOrder memory_order,
+                      Value* result) {
+    Bailout(decoder);
+  }
   void ArraySet(FullDecoder* decoder, const Value& array_obj,
                 const ArrayIndexImmediate& imm, const Value& index,
                 const Value& value) {
+    Bailout(decoder);
+  }
+  void ArrayAtomicSet(FullDecoder* decoder, const Value& array_obj,
+                      const ArrayIndexImmediate& imm, const Value& index_val,
+                      const Value& value_val, AtomicMemoryOrder order) {
     Bailout(decoder);
   }
   void ArrayLen(FullDecoder* decoder, const Value& array_obj, Value* result) {
@@ -928,6 +1001,12 @@ class WasmInJsInliningInterface {
                 bool null_succeeds) {
     Bailout(decoder);
   }
+  void BrOnCastDesc(FullDecoder* decoder, wasm::HeapType target_type,
+                    const Value& object, const Value& descriptor,
+                    Value* value_on_branch, uint32_t br_depth,
+                    bool null_succeeds) {
+    Bailout(decoder);
+  }
   void BrOnCastAbstract(FullDecoder* decoder, const Value& object,
                         wasm::HeapType type, Value* value_on_branch,
                         uint32_t br_depth, bool null_succeeds) {
@@ -936,6 +1015,12 @@ class WasmInJsInliningInterface {
   void BrOnCastFail(FullDecoder* decoder, wasm::HeapType target_type,
                     const Value& object, Value* value_on_fallthrough,
                     uint32_t br_depth, bool null_succeeds) {
+    Bailout(decoder);
+  }
+  void BrOnCastDescFail(FullDecoder* decoder, wasm::HeapType target_type,
+                        const Value& object, const Value& descriptor,
+                        Value* value_on_fallthrough, uint32_t br_depth,
+                        bool null_succeeds) {
     Bailout(decoder);
   }
   void BrOnCastFailAbstract(FullDecoder* decoder, const Value& object,

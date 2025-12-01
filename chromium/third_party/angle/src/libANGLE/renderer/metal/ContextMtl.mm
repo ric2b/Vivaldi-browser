@@ -53,29 +53,29 @@ constexpr uint32_t kMaxTriFanLineLoopBuffersPerFrame = 0;
 constexpr uint32_t kMaxTriFanLineLoopBuffersPerFrame = 10;
 #endif
 
-#define ANGLE_MTL_XFB_DRAW(DRAW_PROC)                                                       \
-    if (!mState.isTransformFeedbackActiveUnpaused())                                        \
-    {                                                                                       \
-        /* Normal draw call */                                                              \
-        DRAW_PROC(false);                                                                   \
-    }                                                                                       \
-    else                                                                                    \
-    {                                                                                       \
-        /* First pass: write to XFB buffers in vertex shader, fragment shader inactive */   \
-        bool rasterizationEnabled = mRenderPipelineDesc.getRasterizationType() !=           \
-                                    mtl::RenderPipelineRasterization::Disabled;             \
-        if (rasterizationEnabled)                                                           \
-        {                                                                                   \
-            invalidateRenderPipeline();                                                     \
-        }                                                                                   \
-        DRAW_PROC(true);                                                                    \
-        if (rasterizationEnabled)                                                           \
-        {                                                                                   \
-            /* Second pass: full rasterization: vertex shader + fragment shader are active. \
-               Vertex shader writes to stage output but won't write to XFB buffers */       \
-            invalidateRenderPipeline();                                                     \
-            DRAW_PROC(false);                                                               \
-        }                                                                                   \
+#define ANGLE_MTL_XFB_DRAW(DRAW_PROC)                                                            \
+    if (!mState.isTransformFeedbackActiveUnpaused())                                             \
+    {                                                                                            \
+        /* Normal draw call */                                                                   \
+        DRAW_PROC(false);                                                                        \
+    }                                                                                            \
+    else                                                                                         \
+    {                                                                                            \
+        /* First pass: write to XFB buffers in vertex shader, fragment shader inactive */        \
+        bool rasterizationNotDisabled =                                                          \
+            mRenderPipelineDesc.rasterizationType != mtl::RenderPipelineRasterization::Disabled; \
+        if (rasterizationNotDisabled)                                                            \
+        {                                                                                        \
+            invalidateRenderPipeline();                                                          \
+        }                                                                                        \
+        DRAW_PROC(true);                                                                         \
+        if (rasterizationNotDisabled)                                                            \
+        {                                                                                        \
+            /* Second pass: full rasterization: vertex shader + fragment shader are active.      \
+               Vertex shader writes to stage output but won't write to XFB buffers */            \
+            invalidateRenderPipeline();                                                          \
+            DRAW_PROC(false);                                                                    \
+        }                                                                                        \
     }
 
 angle::Result AllocateTriangleFanBufferFromPool(ContextMtl *context,
@@ -123,20 +123,6 @@ bool NeedToInvertDepthRange(float near, float far)
 bool IsTransformFeedbackOnly(const gl::State &glState)
 {
     return glState.isTransformFeedbackActiveUnpaused() && glState.isRasterizerDiscardEnabled();
-}
-
-std::string ConvertMarkerToString(GLsizei length, const char *marker)
-{
-    std::string cppString;
-    if (length == 0)
-    {
-        cppString = marker;
-    }
-    else
-    {
-        cppString.assign(marker, length);
-    }
-    return cppString;
 }
 
 // This class constructs line loop's last segment buffer inside begin() method
@@ -228,12 +214,12 @@ angle::Result ContextMtl::initialize(const angle::ImageLoadContext &imageLoadCon
 {
     for (mtl::BlendDesc &blendDesc : mBlendDescArray)
     {
-        blendDesc = {};
+        blendDesc.reset();
     }
 
     mWriteMaskArray.fill(MTLColorWriteMaskAll);
 
-    mDepthStencilDesc = {};
+    mDepthStencilDesc.reset();
 
     mTriFanIndexBuffer.initialize(this, 0, mtl::kIndexBufferOffsetAlignment,
                                   kMaxTriFanLineLoopBuffersPerFrame);
@@ -884,8 +870,8 @@ angle::Result ContextMtl::drawElementsBaseVertex(const gl::Context *context,
                                                  const void *indices,
                                                  GLint baseVertex)
 {
-    UNIMPLEMENTED();
-    return angle::Result::Stop;
+    ANGLE_TRY(resyncDrawFramebufferIfNeeded(context));
+    return drawElementsImpl(context, mode, count, type, indices, 0, baseVertex, 0);
 }
 
 angle::Result ContextMtl::drawElementsInstanced(const gl::Context *context,
@@ -955,9 +941,8 @@ angle::Result ContextMtl::drawRangeElementsBaseVertex(const gl::Context *context
                                                       const void *indices,
                                                       GLint baseVertex)
 {
-    // NOTE(hqle): ES 3.2
-    UNIMPLEMENTED();
-    return angle::Result::Stop;
+    ANGLE_TRY(resyncDrawFramebufferIfNeeded(context));
+    return drawElementsImpl(context, mode, count, type, indices, 0, baseVertex, 0);
 }
 
 angle::Result ContextMtl::drawArraysIndirect(const gl::Context *context,
@@ -1077,12 +1062,13 @@ gl::GraphicsResetStatus ContextMtl::getResetStatus()
 // EXT_debug_marker
 angle::Result ContextMtl::insertEventMarker(GLsizei length, const char *marker)
 {
+    mCmdBuffer.insertDebugSignpost(std::string(marker, length));
     return checkCommandBufferError();
 }
 
 angle::Result ContextMtl::pushGroupMarker(GLsizei length, const char *marker)
 {
-    mCmdBuffer.pushDebugGroup(ConvertMarkerToString(length, marker));
+    mCmdBuffer.pushDebugGroup(std::string(marker, length));
     return checkCommandBufferError();
 }
 
@@ -1183,12 +1169,12 @@ angle::Result ContextMtl::syncState(const gl::Context *context,
                 for (; i < blendStateExt.getDrawBufferCount(); i++)
                 {
                     mBlendDescArray[i].updateWriteMask(blendStateExt.getColorMaskIndexed(i));
-                    mWriteMaskArray[i] = static_cast<uint8_t>(mBlendDescArray[i].getWriteMask());
+                    mWriteMaskArray[i] = mBlendDescArray[i].writeMask;
                 }
                 for (; i < mBlendDescArray.size(); i++)
                 {
                     mBlendDescArray[i].updateWriteMask(0);
-                    mWriteMaskArray[i] = static_cast<uint8_t>(mBlendDescArray[i].getWriteMask());
+                    mWriteMaskArray[i] = mBlendDescArray[i].writeMask;
                 }
                 invalidateRenderPipeline();
                 break;
@@ -1957,13 +1943,22 @@ mtl::RenderCommandEncoder *ContextMtl::getTextureRenderCommandEncoder(
     const mtl::TextureRef &textureTarget,
     const mtl::ImageNativeIndex &index)
 {
+    return getTextureRenderCommandEncoder(textureTarget, index.getNativeLevel(),
+                                          index.hasLayer() ? index.getLayerIndex() : 0);
+}
+
+mtl::RenderCommandEncoder *ContextMtl::getTextureRenderCommandEncoder(
+    const mtl::TextureRef &textureTarget,
+    mtl::MipmapNativeLevel level,
+    uint32_t layer)
+{
     ASSERT(textureTarget && textureTarget->valid());
 
     mtl::RenderPassDesc rpDesc;
 
     rpDesc.colorAttachments[0].texture      = textureTarget;
-    rpDesc.colorAttachments[0].level        = index.getNativeLevel();
-    rpDesc.colorAttachments[0].sliceOrDepth = index.hasLayer() ? index.getLayerIndex() : 0;
+    rpDesc.colorAttachments[0].level        = level;
+    rpDesc.colorAttachments[0].sliceOrDepth = layer;
     rpDesc.numColorAttachments              = 1;
     rpDesc.rasterSampleCount                = textureTarget->samples();
 
@@ -2113,17 +2108,25 @@ void ContextMtl::updateBlendDescArray(const gl::BlendStateExt &blendStateExt)
         mtl::BlendDesc &blendDesc = mBlendDescArray[i];
         if (blendStateExt.getEnabledMask().test(i))
         {
-            blendDesc.setBlendingEnabled(mtl::GetBlendFactor(blendStateExt.getSrcColorIndexed(i)),
-                                         mtl::GetBlendFactor(blendStateExt.getSrcAlphaIndexed(i)),
-                                         mtl::GetBlendFactor(blendStateExt.getDstColorIndexed(i)),
-                                         mtl::GetBlendFactor(blendStateExt.getDstAlphaIndexed(i)),
-                                         mtl::GetBlendOp(blendStateExt.getEquationColorIndexed(i)),
-                                         mtl::GetBlendOp(blendStateExt.getEquationAlphaIndexed(i)));
+            blendDesc.blendingEnabled = true;
+
+            blendDesc.sourceRGBBlendFactor =
+                mtl::GetBlendFactor(blendStateExt.getSrcColorIndexed(i));
+            blendDesc.sourceAlphaBlendFactor =
+                mtl::GetBlendFactor(blendStateExt.getSrcAlphaIndexed(i));
+            blendDesc.destinationRGBBlendFactor =
+                mtl::GetBlendFactor(blendStateExt.getDstColorIndexed(i));
+            blendDesc.destinationAlphaBlendFactor =
+                mtl::GetBlendFactor(blendStateExt.getDstAlphaIndexed(i));
+
+            blendDesc.rgbBlendOperation = mtl::GetBlendOp(blendStateExt.getEquationColorIndexed(i));
+            blendDesc.alphaBlendOperation =
+                mtl::GetBlendOp(blendStateExt.getEquationAlphaIndexed(i));
         }
         else
         {
             // Enforce default state when blending is disabled,
-            blendDesc.reset(blendDesc.getWriteMask());
+            blendDesc.reset(blendDesc.writeMask);
         }
     }
     invalidateRenderPipeline();
@@ -2378,6 +2381,12 @@ void ContextMtl::serverWaitEvent(id<MTLEvent> event, uint64_t value)
     mCmdBuffer.serverWaitEvent(event, value);
 }
 
+void ContextMtl::markResourceWrittenByCommandBuffer(const mtl::ResourceRef &resource)
+{
+    ensureCommandBufferReady();
+    mCmdBuffer.setWriteDependency(resource, /*isRenderCommand=*/false);
+}
+
 void ContextMtl::updateProgramExecutable(const gl::Context *context)
 {
     // Need to rebind textures
@@ -2424,7 +2433,7 @@ static bool isDrawNoOp(const mtl::RenderPipelineDesc &descriptor,
     for (NSUInteger i = 0; i < maxColorRenderTargets; ++i)
     {
         const auto &colorAttachment = descriptor.outputDescriptor.colorAttachments[i];
-        if (colorAttachment.getPixelFormat() != MTLPixelFormatInvalid)
+        if (colorAttachment.pixelFormat != MTLPixelFormatInvalid)
         {
             hasValidRenderTarget = true;
             break;
@@ -2432,13 +2441,13 @@ static bool isDrawNoOp(const mtl::RenderPipelineDesc &descriptor,
     }
 
     if (!hasValidRenderTarget &&
-        descriptor.outputDescriptor.getDepthAttachmentPixelFormat() != MTLPixelFormatInvalid)
+        descriptor.outputDescriptor.depthAttachmentPixelFormat != MTLPixelFormatInvalid)
     {
         hasValidRenderTarget = true;
     }
 
     if (!hasValidRenderTarget &&
-        descriptor.outputDescriptor.getStencilAttachmentPixelFormat() != MTLPixelFormatInvalid)
+        descriptor.outputDescriptor.stencilAttachmentPixelFormat != MTLPixelFormatInvalid)
     {
         hasValidRenderTarget = true;
     }
@@ -2861,13 +2870,14 @@ angle::Result ContextMtl::handleDirtyDepthStencilState(const gl::Context *contex
 
     if (!renderPassDesc.depthAttachment.texture)
     {
-        dsDesc.setDepthWriteDisabled();
+        dsDesc.depthWriteEnabled    = false;
+        dsDesc.depthCompareFunction = MTLCompareFunctionAlways;
     }
 
     if (!renderPassDesc.stencilAttachment.texture)
     {
-        dsDesc.frontFaceStencil = {};
-        dsDesc.backFaceStencil  = {};
+        dsDesc.frontFaceStencil.reset();
+        dsDesc.backFaceStencil.reset();
     }
 
     // Apply depth stencil state
@@ -2903,7 +2913,7 @@ angle::Result ContextMtl::checkIfPipelineChanged(const gl::Context *context,
     MTLPrimitiveTopologyClass topologyClass = mtl::GetPrimitiveTopologyClass(primitiveMode);
 
     bool rppChange = mDirtyBits.test(DIRTY_BIT_RENDER_PIPELINE) ||
-                     topologyClass != mRenderPipelineDesc.getInputPrimitiveTopology();
+                     topologyClass != mRenderPipelineDesc.inputPrimitiveTopology;
 
     // Obtain RenderPipelineDesc's vertex array descriptor.
     ANGLE_TRY(mVertexArray->setupDraw(context, &mRenderEncoder, &rppChange,
@@ -2919,25 +2929,25 @@ angle::Result ContextMtl::checkIfPipelineChanged(const gl::Context *context,
         if (xfbPass)
         {
             // In XFB pass, we disable fragment shader.
-            mRenderPipelineDesc.setRasterizationType(mtl::RenderPipelineRasterization::Disabled);
+            mRenderPipelineDesc.rasterizationType = mtl::RenderPipelineRasterization::Disabled;
         }
         else if (mState.isRasterizerDiscardEnabled())
         {
             // If XFB is not active and rasterizer discard is enabled, we need to emulate the
             // discard. Because in this case, vertex shader might write to stage output values and
             // Metal doesn't allow rasterization to be disabled.
-            mRenderPipelineDesc.setRasterizationType(
-                mtl::RenderPipelineRasterization::EmulatedDiscard);
+            mRenderPipelineDesc.rasterizationType =
+                mtl::RenderPipelineRasterization::EmulatedDiscard;
         }
         else
         {
-            mRenderPipelineDesc.setRasterizationType(mtl::RenderPipelineRasterization::Enabled);
+            mRenderPipelineDesc.rasterizationType = mtl::RenderPipelineRasterization::Enabled;
         }
-        mRenderPipelineDesc.setInputPrimitiveTopology(topologyClass);
-        mRenderPipelineDesc.setAlphaToCoverageEnabled(
+        mRenderPipelineDesc.inputPrimitiveTopology = topologyClass;
+        mRenderPipelineDesc.alphaToCoverageEnabled =
             mState.isSampleAlphaToCoverageEnabled() &&
-            mRenderPipelineDesc.outputDescriptor.getRasterSampleCount() > 1 &&
-            !getDisplay()->getFeatures().emulateAlphaToCoverage.enabled);
+            mRenderPipelineDesc.outputDescriptor.rasterSampleCount > 1 &&
+            !getDisplay()->getFeatures().emulateAlphaToCoverage.enabled;
 
         mRenderPipelineDesc.outputDescriptor.updateEnabledDrawBuffers(
             mDrawFramebuffer->getState().getEnabledDrawBuffers());

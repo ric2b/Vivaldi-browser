@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/core/paint/object_painter.h"
 #include "third_party/blink/renderer/core/paint/outline_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/size_assertions.h"
 #include "ui/gfx/geometry/quad_f.h"
 
@@ -160,11 +161,6 @@ void LayoutInline::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
 void LayoutInline::UpdateFromStyle() {
   NOT_DESTROYED();
   LayoutBoxModelObject::UpdateFromStyle();
-
-  // This is needed (at a minimum) for LayoutSVGInline, which (including
-  // subclasses) is constructed for svg:a, svg:textPath, and svg:tspan,
-  // regardless of CSS 'display'.
-  SetInline(true);
 
   // FIXME: Support transforms and reflections on inline flows someday.
   SetHasTransformRelatedProperty(false);
@@ -457,7 +453,13 @@ void LayoutInline::CollectLineBoxRects(
   cursor.MoveToIncludingCulledInline(*this);
   for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
     if (!IsInChildRubyText(*this, cursor.Current().GetLayoutObject())) {
-      yield(cursor.CurrentRectInBlockFlow());
+      PhysicalRect rect;
+      if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+        rect = cursor.CurrentRectInFirstContainerFragment();
+      } else {
+        rect = cursor.CurrentRectInBlockFlow();
+      }
+      yield(rect);
     }
   }
 }
@@ -499,7 +501,9 @@ void LayoutInline::QuadsForSelfInternal(Vector<gfx::QuadF>& quads,
                            this](const PhysicalRect& rect) {
     if (!transform_depends_on_point_computed) {
       transform_depends_on_point_computed = true;
-      transform_depends_on_point = AbsoluteTransformDependsOnPoint(*this);
+      transform_depends_on_point =
+          !RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled() &&
+          AbsoluteTransformDependsOnPoint(*this);
       if (!transform_depends_on_point)
         mapping_to_ancestor.emplace(LocalToAncestorTransform(ancestor, mode));
     }
@@ -537,7 +541,10 @@ std::optional<PhysicalOffset> LayoutInline::FirstLineBoxTopLeftInternal()
     cursor.MoveToIncludingCulledInline(*this);
     if (!cursor)
       return std::nullopt;
-    return cursor.CurrentOffsetInBlockFlow();
+    if (!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+      return cursor.CurrentOffsetInBlockFlow();
+    }
+    return cursor.CurrentOffsetInFirstContainerFragment();
   }
   return std::nullopt;
 }
@@ -589,12 +596,39 @@ LayoutUnit LayoutInline::OffsetTop(const Element* parent) const {
 
 LayoutUnit LayoutInline::OffsetWidth() const {
   NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    return LayoutBoxModelObject::OffsetWidth();
+  }
   return PhysicalLinesBoundingBox().Width();
 }
 
 LayoutUnit LayoutInline::OffsetHeight() const {
   NOT_DESTROYED();
+  if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+    return LayoutBoxModelObject::OffsetHeight();
+  }
   return PhysicalLinesBoundingBox().Height();
+}
+
+PhysicalRect LayoutInline::BoundingBoxRelativeToFirstFragment() const {
+  NOT_DESTROYED();
+  DCHECK(RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled());
+  DCHECK(IsInLayoutNGInlineFormattingContext());
+  InlineCursor cursor;
+  cursor.MoveToIncludingCulledInline(*this);
+  PhysicalRect bounding_box;
+  std::optional<PhysicalOffset> first_fragment_offset;
+  for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
+    PhysicalRect rect = cursor.CurrentRectInFirstContainerFragment();
+    if (!first_fragment_offset) {
+      // All fragment rectangles need to be relative to the first container
+      // fragment.
+      first_fragment_offset = rect.offset;
+    }
+    rect.offset -= *first_fragment_offset;
+    bounding_box.UniteIfNonZero(rect);
+  }
+  return bounding_box;
 }
 
 static LayoutUnit ComputeMargin(const LayoutInline* layout_object,
@@ -750,6 +784,9 @@ PhysicalRect LayoutInline::PhysicalLinesBoundingBox() const {
     InlineCursor cursor;
     cursor.MoveToIncludingCulledInline(*this);
     PhysicalRect bounding_box;
+    // TODO(layout-dev): Current().RectInContainerFragment() is unsuitable when
+    // there are multiple container fragments (block fragmentation). Use
+    // CurrentRectInFirstContainerFragment() instead.
     for (; cursor; cursor.MoveToNextForSameLayoutObject())
       bounding_box.UniteIfNonZero(cursor.Current().RectInContainerFragment());
     return bounding_box;
@@ -763,6 +800,9 @@ PhysicalRect LayoutInline::LinesVisualOverflowBoundingBox() const {
     PhysicalRect result;
     InlineCursor cursor;
     cursor.MoveToIncludingCulledInline(*this);
+    // TODO(layout-dev): Current().OffsetInContainerFragment() is unsuitable
+    // when there are multiple container fragments (block fragmentation). Use
+    // CurrentOffsetInFirstContainerFragment() instead.
     for (; cursor; cursor.MoveToNextForSameLayoutObject()) {
       PhysicalRect child_rect = cursor.Current().InkOverflowRect();
       child_rect.offset += cursor.Current().OffsetInContainerFragment();

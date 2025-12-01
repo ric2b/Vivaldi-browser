@@ -23,6 +23,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/permissions/notifications_engagement_service.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "components/site_engagement/content/site_engagement_service.h"
 #include "ui/base/l10n/l10n_util.h"
 
@@ -117,7 +118,7 @@ std::vector<NotificationPermissions> NotificationPermissionsReviewService::
 std::set<ContentSettingsPattern> NotificationPermissionsReviewService::
     NotificationPermissionsResult::GetOrigins() const {
   std::set<ContentSettingsPattern> origins;
-  for (NotificationPermissions permission : notification_permissions_) {
+  for (const auto& permission : notification_permissions_) {
     origins.insert(permission.primary_pattern);
   }
   return origins;
@@ -133,7 +134,7 @@ base::Value::Dict NotificationPermissionsReviewService::
     NotificationPermissionsResult::ToDictValue() const {
   base::Value::Dict result = BaseToDictValue();
   base::Value::List notification_permissions;
-  for (NotificationPermissions permission : notification_permissions_) {
+  for (const auto& permission : notification_permissions_) {
     base::Value::Dict permission_dict;
     permission_dict.Set(kSafetyHubOriginKey,
                         permission.primary_pattern.ToString());
@@ -190,13 +191,17 @@ NotificationPermissionsReviewService::NotificationPermissionsReviewService(
   }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  // TODO(crbug.com/40267370): Because there is only a UI thread for this
-  // service, calling both |StartRepeatedUpdates()| and
-  // |InitializeLatestResult()| will result in the result being calculated twice
-  // when the service starts. When redesigning SafetyHubService, that should be
-  // avoided.
-  StartRepeatedUpdates();
-  InitializeLatestResult();
+  // Disruptive notification revocation overlaps with the notification review
+  // module. Disable this module when the disruptive revocation is running.
+  if (!IsDisruptiveNotificationRevocationEnabled()) {
+    // TODO(crbug.com/40267370): Because there is only a UI thread for this
+    // service, calling both |StartRepeatedUpdates()| and
+    // |InitializeLatestResult()| will result in the result being calculated
+    // twice when the service starts. When redesigning SafetyHubService, that
+    // should be avoided.
+    StartRepeatedUpdates();
+    InitializeLatestResult();
+  }
 }
 
 NotificationPermissionsReviewService::~NotificationPermissionsReviewService() =
@@ -322,6 +327,9 @@ NotificationPermissionsReviewService::UpdateOnUIThread(
 
 std::unique_ptr<NotificationPermissionsReviewService::Result>
 NotificationPermissionsReviewService::GetNotificationPermissions() {
+  if (IsDisruptiveNotificationRevocationEnabled()) {
+    return std::make_unique<NotificationPermissionsResult>();
+  }
   // Return the cached result, which is kept in sync with the values on disk
   // (i.e. HCSM), when available. Otherwise, re-calculate the result.
   return GetCachedResult().value_or(
@@ -396,4 +404,11 @@ bool NotificationPermissionsReviewService::
       notification_count > min_engagement_notification_limit;
 
   return is_minimal_engagement || is_low_engagement;
+}
+
+bool NotificationPermissionsReviewService::
+    IsDisruptiveNotificationRevocationEnabled() {
+  return base::FeatureList::IsEnabled(
+             features::kSafetyHubDisruptiveNotificationRevocation) &&
+         !features::kSafetyHubDisruptiveNotificationRevocationShadowRun.Get();
 }

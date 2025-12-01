@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "calendar/calendar_type.h"
 #include "calendar/event_type.h"

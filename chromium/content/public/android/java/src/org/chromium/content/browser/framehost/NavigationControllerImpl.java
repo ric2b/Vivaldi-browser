@@ -416,6 +416,18 @@ import org.chromium.build.BuildConfig;
                         value);
     }
 
+    @Override
+    public void copyStateFrom(NavigationController sourceNavigationController) {
+        if (mNativeNavigationControllerAndroid == 0) return;
+        NavigationControllerImpl sourceImpl = (NavigationControllerImpl) sourceNavigationController;
+        if (sourceImpl.mNativeNavigationControllerAndroid == 0) return;
+        NavigationControllerImplJni.get()
+                .copyStateFrom(
+                        mNativeNavigationControllerAndroid,
+                        sourceImpl.mNativeNavigationControllerAndroid,
+                        /* needsReload= */ true);
+    }
+
     @CalledByNative
     private static void addToNavigationHistory(Object history, Object navigationEntry) {
         ((NavigationHistory) history).addEntry((NavigationEntry) navigationEntry);
@@ -578,5 +590,10 @@ import org.chromium.build.BuildConfig;
                 int index,
                 String key,
                 String value);
+
+        void copyStateFrom(
+                long nativeNavigationControllerAndroid,
+                long nativeSourceNavigationControllerAndroid,
+                boolean needsReload);
     }
 }

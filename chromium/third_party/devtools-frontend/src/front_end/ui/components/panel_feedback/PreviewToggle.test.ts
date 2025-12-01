@@ -4,7 +4,6 @@
 
 import * as Root from '../../../core/root/root.js';
 import {
-  dispatchClickEvent,
   renderElementIntoDOM,
 } from '../../../testing/DOMHelpers.js';
 import {describeWithLocale} from '../../../testing/EnvironmentHelpers.js';
@@ -33,14 +32,14 @@ describeWithLocale('Preview toggle', () => {
     await RenderCoordinator.done();
 
     assert.isNotNull(component.shadowRoot);
-    const input = component.shadowRoot.querySelector('input');
-    assert.instanceOf(input, HTMLElement);
-    dispatchClickEvent(input);
-    assert.strictEqual(setEnabledStub.callCount, 1);
+    const checkbox = component.shadowRoot.querySelector('devtools-checkbox');
+    assert.exists(checkbox);
+    checkbox.click();
+    sinon.assert.callCount(setEnabledStub, 1);
     assert.isTrue(
         setEnabledStub.firstCall.calledWith('testExperiment', true),
         'experiments.setEnabled was not called with the correct experiment');
-    assert.strictEqual(spy.callCount, 1);
+    sinon.assert.callCount(spy, 1);
     assert.isTrue(spy.firstCall.firstArg);
   });
 
@@ -63,14 +62,14 @@ describeWithLocale('Preview toggle', () => {
     renderElementIntoDOM(component);
     await RenderCoordinator.done();
 
-    const input = component.shadowRoot!.querySelector('input');
-    assert.instanceOf(input, HTMLElement);
-    dispatchClickEvent(input);
-    assert.strictEqual(setEnabledStub.callCount, 1);
+    const checkbox = component.shadowRoot!.querySelector('devtools-checkbox');
+    assert.exists(checkbox);
+    checkbox.click();
+    sinon.assert.callCount(setEnabledStub, 1);
     assert.isTrue(
         setEnabledStub.firstCall.calledWith('testExperiment', false),
         'experiments.setEnabled was not called with the correct experiment');
-    assert.strictEqual(spy.callCount, 1);
+    sinon.assert.callCount(spy, 1);
     assert.isFalse(spy.firstCall.firstArg);
   });
 });

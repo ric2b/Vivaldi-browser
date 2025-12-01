@@ -1638,6 +1638,11 @@ static int dec_open(DecoderPriv *dp, AVDictionary **dec_opts,
             param_out->color_range          = dp->dec_ctx->color_range;
         }
 
+        av_frame_side_data_free(&param_out->side_data, &param_out->nb_side_data);
+        ret = clone_side_data(&param_out->side_data, &param_out->nb_side_data,
+                              dp->dec_ctx->decoded_side_data, dp->dec_ctx->nb_decoded_side_data, 0);
+        if (ret < 0)
+            return ret;
         param_out->time_base = dp->dec_ctx->pkt_timebase;
     }
 

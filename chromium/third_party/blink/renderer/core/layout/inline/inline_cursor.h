@@ -12,10 +12,10 @@
 #include "base/memory/stack_allocated.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/inline/fragment_item.h"
 #include "third_party/blink/renderer/core/layout/inline/fragment_items.h"
 #include "third_party/blink/renderer/core/layout/style_variant.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_view.h"
@@ -317,9 +317,6 @@ class CORE_EXPORT InlineCursor {
 
   // |Current*| functions return an object for the current position.
   const FragmentItem* CurrentItem() const { return Current().Item(); }
-  LayoutObject* CurrentMutableLayoutObject() const {
-    return Current().GetMutableLayoutObject();
-  }
 
   // Returns text of the current position. It is error to call other than
   // text.
@@ -364,6 +361,13 @@ class CORE_EXPORT InlineCursor {
     DCHECK_EQ(Current().OffsetInContainerFragment(),
               Current().RectInContainerFragment().offset);
     return CurrentRectInBlockFlow().offset;
+  }
+
+  // Return the rectangle of the current item, relatively to the first container
+  // fragment. Used by block fragmentation.
+  PhysicalRect CurrentRectInFirstContainerFragment() const;
+  PhysicalOffset CurrentOffsetInFirstContainerFragment() const {
+    return CurrentRectInFirstContainerFragment().offset;
   }
 
   // Returns inline position relative to current text fragment for
@@ -670,6 +674,10 @@ class CORE_EXPORT InlineCursor {
   void ResetFragmentIndex();
   void DecrementFragmentIndex();
   void IncrementFragmentIndex();
+
+  wtf_size_t ToSpanIndex(const ItemsSpan::iterator& iter) const {
+    return base::checked_cast<wtf_size_t>(std::distance(items_.begin(), iter));
+  }
 
   InlineCursorPosition current_;
 

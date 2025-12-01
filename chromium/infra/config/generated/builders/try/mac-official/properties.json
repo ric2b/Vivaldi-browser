@@ -10,7 +10,7 @@
             "builder_id": {
               "bucket": "ci",
               "builder": "mac-official",
-              "project": "chromium-m136"
+              "project": "chromium-m138"
             },
             "builder_spec": {
               "builder_group": "chromium",
@@ -37,11 +37,15 @@
         {
           "bucket": "ci",
           "builder": "mac-official",
-          "project": "chromium-m136"
+          "project": "chromium-m138"
         }
       ],
       "targets_spec_directory": "src/infra/config/generated/builders/try/mac-official/targets"
     }
+  },
+  "$build/flakiness": {
+    "check_for_flakiness": true,
+    "check_for_flakiness_with_resultdb": true
   },
   "$build/siso": {
     "configs": [
@@ -63,5 +67,6 @@
     ]
   },
   "builder_group": "tryserver.chromium",
+  "cq": "path-based",
   "recipe": "chromium_trybot"
 }

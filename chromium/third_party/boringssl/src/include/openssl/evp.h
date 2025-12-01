@@ -313,8 +313,8 @@ OPENSSL_EXPORT int EVP_DigestVerifyInit(EVP_MD_CTX *ctx, EVP_PKEY_CTX **pctx,
 // will be verified by |EVP_DigestVerifyFinal|. It returns one.
 //
 // This function performs streaming signature verification and will fail for
-// signature algorithms which do not support this. Use |EVP_PKEY_verify_message|
-// for a single-shot verification.
+// signature algorithms which do not support this. Use |EVP_DigestVerify| for a
+// single-shot verification.
 OPENSSL_EXPORT int EVP_DigestVerifyUpdate(EVP_MD_CTX *ctx, const void *data,
                                           size_t len);
 
@@ -323,8 +323,8 @@ OPENSSL_EXPORT int EVP_DigestVerifyUpdate(EVP_MD_CTX *ctx, const void *data,
 // |EVP_DigestVerifyUpdate|. It returns one on success and zero otherwise.
 //
 // This function performs streaming signature verification and will fail for
-// signature algorithms which do not support this. Use |EVP_PKEY_verify_message|
-// for a single-shot verification.
+// signature algorithms which do not support this. Use |EVP_DigestVerify| for a
+// single-shot verification.
 OPENSSL_EXPORT int EVP_DigestVerifyFinal(EVP_MD_CTX *ctx, const uint8_t *sig,
                                          size_t sig_len);
 

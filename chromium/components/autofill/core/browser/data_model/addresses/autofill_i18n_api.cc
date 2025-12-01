@@ -226,6 +226,7 @@ std::unique_ptr<AddressComponent> BuildTreeNode(
     case DRIVERS_LICENSE_NUMBER:
     case DRIVERS_LICENSE_EXPIRATION_DATE:
     case DRIVERS_LICENSE_ISSUE_DATE:
+    case EMAIL_OR_LOYALTY_MEMBERSHIP_ID:
     case MAX_VALID_FIELD_TYPE:
       return nullptr;
   }
@@ -430,18 +431,8 @@ bool IsCustomHierarchyAvailableForCountry(AddressCountryCode country_code) {
     return false;
   }
 
-  if (country_code == AddressCountryCode("IT") &&
-      !base::FeatureList::IsEnabled(features::kAutofillUseITAddressModel)) {
-    return false;
-  }
-
   if (country_code == AddressCountryCode("NL") &&
       !base::FeatureList::IsEnabled(features::kAutofillUseNLAddressModel)) {
-    return false;
-  }
-
-  if (country_code == AddressCountryCode("PL") &&
-      !base::FeatureList::IsEnabled(features::kAutofillUsePLAddressModel)) {
     return false;
   }
 

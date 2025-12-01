@@ -8,17 +8,14 @@
 #import "base/strings/sys_string_conversions.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/table_view_identity_item.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/identity_chooser/identity_chooser_consumer.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
 
-@interface IdentityChooserMediator () <ChromeAccountManagerServiceObserver,
-                                       IdentityManagerObserverBridgeDelegate> {
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
+@interface IdentityChooserMediator () <IdentityManagerObserverBridgeDelegate> {
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
 }
@@ -54,9 +51,6 @@
 }
 
 - (void)start {
-  _accountManagerServiceObserver =
-      std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-          self, _accountManagerService);
   _identityManagerObserver =
       std::make_unique<signin::IdentityManagerObserverBridge>(_identityManager,
                                                               self);
@@ -64,7 +58,6 @@
 }
 
 - (void)disconnect {
-  _accountManagerServiceObserver.reset();
   _accountManagerService = nullptr;
   _identityManagerObserver.reset();
   _identityManager = nullptr;
@@ -99,16 +92,12 @@
 #pragma mark - Private
 
 - (bool)selectedIdentityIsValid {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    if (self.selectedIdentity) {
-      GaiaId gaia(self.selectedIdentity.gaiaID);
-      return base::Contains(_identityManager->GetAccountsOnDevice(), gaia,
-                            [](const AccountInfo& info) { return info.gaia; });
-    }
-    return false;
-  } else {
-    return _accountManagerService->IsValidIdentity(self.selectedIdentity);
+  if (self.selectedIdentity) {
+    GaiaId gaia(self.selectedIdentity.gaiaID);
+    return base::Contains(_identityManager->GetAccountsOnDevice(), gaia,
+                          [](const AccountInfo& info) { return info.gaia; });
   }
+  return false;
 }
 
 // Creates the identity section with its header item, and all the identity items
@@ -143,10 +132,34 @@
       [self.selectedIdentity.gaiaID isEqualToString:identity.gaiaID];
   item.avatar = _accountManagerService->GetIdentityAvatarWithIdentity(
       identity, IdentityAvatarSize::Regular);
+
+  if (std::optional<BOOL> isManaged = IsIdentityManaged(identity);
+      isManaged.has_value()) {
+    item.managed = isManaged.value();
+  } else {
+    __weak __typeof(self) weakSelf = self;
+    FetchManagedStatusForIdentity(
+        identity, base::BindOnce(^(bool managed) {
+          if (managed) {
+            [weakSelf updateTableViewIdentityItem:item withIdentity:identity];
+          }
+        }));
+  }
+
   [self.consumer itemHasChanged:item];
 }
 
-- (void)handleIdentityListChanged {
+#pragma mark - IdentityManagerObserverBridgeDelegate
+
+- (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
+  id<SystemIdentity> identity =
+      _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
+  TableViewIdentityItem* item =
+      [self.consumer tableViewIdentityItemWithGaiaID:identity.gaiaID];
+  [self updateTableViewIdentityItem:item withIdentity:identity];
+}
+
+- (void)onAccountsOnDeviceChanged {
   if (!_accountManagerService || !_identityManager) {
     return;
   }
@@ -159,56 +172,6 @@
     self.selectedIdentity = signin::GetDefaultIdentityOnDevice(
         _identityManager, _accountManagerService);
   }
-}
-
-- (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
-  TableViewIdentityItem* item =
-      [self.consumer tableViewIdentityItemWithGaiaID:identity.gaiaID];
-  [self updateTableViewIdentityItem:item withIdentity:identity];
-}
-
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
-}
-
-#pragma mark - IdentityManagerObserverBridgeDelegate
-
-- (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
-  id<SystemIdentity> identity =
-      _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
 }
 
 @end

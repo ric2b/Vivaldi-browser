@@ -504,13 +504,13 @@ enum class GenerateCertificateAlgorithms {
 };
 
 void MeasureGenerateCertificateKeyType(
-    const std::optional<rtc::KeyParams>& key_params) {
+    const std::optional<webrtc::KeyParams>& key_params) {
   if (!key_params.has_value()) {
     return;
   }
   GenerateCertificateAlgorithms bucket =
       GenerateCertificateAlgorithms::kEcDsaP256;
-  if (key_params->type() == rtc::KT_RSA) {
+  if (key_params->type() == webrtc::KT_RSA) {
     switch (key_params->rsa_params().mod_size) {
       case 1024:
         bucket = GenerateCertificateAlgorithms::kRsa1024;
@@ -593,7 +593,7 @@ RTCPeerConnection* RTCPeerConnection::Create(
   if (!configuration.certificates.empty()) {
     DOMTimeStamp now = ConvertSecondsToDOMTimeStamp(
         base::Time::Now().InSecondsFSinceUnixEpoch());
-    for (const rtc::scoped_refptr<rtc::RTCCertificate>& certificate :
+    for (const webrtc::scoped_refptr<webrtc::RTCCertificate>& certificate :
          configuration.certificates) {
       DOMTimeStamp expires = certificate->Expires();
       if (expires <= now) {
@@ -937,7 +937,7 @@ HeapHashSet<Member<RTCIceTransport>> RTCPeerConnection::ActiveIceTransports()
 
 void RTCPeerConnection::GenerateCertificateCompleted(
     ScriptPromiseResolver<RTCCertificate>* resolver,
-    rtc::scoped_refptr<rtc::RTCCertificate> certificate) {
+    webrtc::scoped_refptr<webrtc::RTCCertificate> certificate) {
   if (!certificate) {
     resolver->Reject();
     return;
@@ -1338,6 +1338,10 @@ void RTCPeerConnection::setConfiguration(
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
         "The given configuration has a syntax error.");
+  } else if (error == webrtc::RTCErrorType::INVALID_PARAMETER) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kInvalidAccessError,
+        "The given configuration has invalid parameters.");
   } else {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kOperationError,
@@ -1399,7 +1403,7 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
   const char* unsupported_params_string =
       "The 1st argument provided is an AlgorithmIdentifier with a supported "
       "algorithm name, but the parameters are not supported.";
-  std::optional<rtc::KeyParams> key_params;
+  std::optional<webrtc::KeyParams> key_params;
   switch (crypto_algorithm.Id()) {
     case kWebCryptoAlgorithmIdRsaSsaPkcs1v1_5: {
       // name: "RSASSA-PKCS1-v1_5"
@@ -1407,7 +1411,7 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
           crypto_algorithm.RsaHashedKeyGenParams()->PublicExponentAsU32();
       unsigned modulus_length =
           crypto_algorithm.RsaHashedKeyGenParams()->ModulusLengthBits();
-      // Parameters must fit in int to be passed to rtc::KeyParams::RSA. The
+      // Parameters must fit in int to be passed to webrtc::KeyParams::RSA. The
       // only recognized "hash" is "SHA-256".
       // TODO(bugs.webrtc.org/364338811): deprecate 1024 bit keys.
       if (public_exponent &&
@@ -1416,8 +1420,8 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
           crypto_algorithm.RsaHashedKeyGenParams()->GetHash().Id() ==
               kWebCryptoAlgorithmIdSha256) {
         key_params =
-            rtc::KeyParams::RSA(base::checked_cast<int>(modulus_length),
-                                base::checked_cast<int>(*public_exponent));
+            webrtc::KeyParams::RSA(base::checked_cast<int>(modulus_length),
+                                   base::checked_cast<int>(*public_exponent));
       } else {
         exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                           unsupported_params_string);
@@ -1430,7 +1434,7 @@ ScriptPromise<RTCCertificate> RTCPeerConnection::generateCertificate(
       // The only recognized "namedCurve" is "P-256".
       if (crypto_algorithm.EcKeyGenParams()->NamedCurve() ==
           kWebCryptoNamedCurveP256) {
-        key_params = rtc::KeyParams::ECDSA(rtc::EC_NIST_P256);
+        key_params = webrtc::KeyParams::ECDSA(webrtc::EC_NIST_P256);
       } else {
         exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                           unsupported_params_string);
@@ -1679,7 +1683,7 @@ void RTCPeerConnection::restartIce() {
   peer_handler_->RestartIce();
 }
 
-void RTCPeerConnection::addStream(v8::Isolate* isolate,
+void RTCPeerConnection::addStream(ScriptState* script_state,
                                   MediaStream* stream,
                                   ExceptionState& exception_state) {
   if (ThrowExceptionIfSignalingStateClosed(signaling_state_, &exception_state))
@@ -1688,14 +1692,13 @@ void RTCPeerConnection::addStream(v8::Isolate* isolate,
   MediaStreamVector streams;
   streams.push_back(stream);
   for (const auto& track : stream->getTracks()) {
-    addTrack(track, streams, IgnoreException(isolate));
+    addTrack(track, streams, IGNORE_EXCEPTION);
   }
 
   stream->RegisterObserver(this);
 }
 
-void RTCPeerConnection::removeStream(v8::Isolate* isolate,
-                                     MediaStream* stream,
+void RTCPeerConnection::removeStream(MediaStream* stream,
                                      ExceptionState& exception_state) {
   if (ThrowExceptionIfSignalingStateClosed(signaling_state_, &exception_state))
     return;
@@ -1703,7 +1706,7 @@ void RTCPeerConnection::removeStream(v8::Isolate* isolate,
     auto* sender = FindSenderForTrackAndStream(track, stream);
     if (!sender)
       continue;
-    removeTrack(sender, IgnoreException(isolate));
+    removeTrack(sender, IGNORE_EXCEPTION);
   }
   stream->UnregisterObserver(this);
 }
@@ -2058,7 +2061,7 @@ RTCDataChannel* RTCPeerConnection::createDataChannel(
   }
   // Further checks of DataChannelId are done in the webrtc layer.
 
-  rtc::scoped_refptr<webrtc::DataChannelInterface> webrtc_channel =
+  webrtc::scoped_refptr<webrtc::DataChannelInterface> webrtc_channel =
       peer_handler_->CreateDataChannel(label, init);
   if (!webrtc_channel) {
     exception_state.ThrowDOMException(DOMExceptionCode::kOperationError,
@@ -2224,7 +2227,7 @@ RTCRtpTransceiver* RTCPeerConnection::CreateOrUpdateTransceiver(
 }
 
 RTCDtlsTransport* RTCPeerConnection::CreateOrUpdateDtlsTransport(
-    rtc::scoped_refptr<webrtc::DtlsTransportInterface> native_transport,
+    webrtc::scoped_refptr<webrtc::DtlsTransportInterface> native_transport,
     const webrtc::DtlsTransportInformation& information) {
   if (!native_transport.get()) {
     return nullptr;
@@ -2243,7 +2246,7 @@ RTCDtlsTransport* RTCPeerConnection::CreateOrUpdateDtlsTransport(
 }
 
 RTCIceTransport* RTCPeerConnection::CreateOrUpdateIceTransport(
-    rtc::scoped_refptr<webrtc::IceTransportInterface> ice_transport) {
+    webrtc::scoped_refptr<webrtc::IceTransportInterface> ice_transport) {
   if (!ice_transport.get()) {
     return nullptr;
   }
@@ -2605,7 +2608,7 @@ void RTCPeerConnection::SetAssociatedMediaStreams(
 }
 
 void RTCPeerConnection::DidAddRemoteDataChannel(
-    rtc::scoped_refptr<webrtc::DataChannelInterface> channel) {
+    webrtc::scoped_refptr<webrtc::DataChannelInterface> channel) {
   DCHECK(!closed_);
   DCHECK(GetExecutionContext()->IsContextThread());
 

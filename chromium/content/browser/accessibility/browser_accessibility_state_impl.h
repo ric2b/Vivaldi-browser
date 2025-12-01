@@ -5,9 +5,11 @@
 #ifndef CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_STATE_IMPL_H_
 #define CONTENT_BROWSER_ACCESSIBILITY_BROWSER_ACCESSIBILITY_STATE_IMPL_H_
 
+#include <list>
 #include <memory>
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "components/metrics/metrics_provider.h"
@@ -22,6 +24,7 @@
 namespace content {
 
 struct FocusedNodeDetails;
+class WebContentsImpl;
 
 // The BrowserAccessibilityState class is used to determine if Chrome should be
 // customized for users with assistive technology, such as screen readers. We
@@ -43,7 +46,8 @@ struct FocusedNodeDetails;
 class CONTENT_EXPORT BrowserAccessibilityStateImpl
     : public BrowserAccessibilityState,
       public ui::AXPlatform::Delegate,
-      public content::RenderWidgetHost::InputEventObserver {
+      public content::RenderWidgetHost::InputEventObserver,
+      public ScopedModeCollection::Delegate {
  public:
   BrowserAccessibilityStateImpl(const BrowserAccessibilityStateImpl&) = delete;
   BrowserAccessibilityStateImpl& operator=(
@@ -59,22 +63,9 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   static std::unique_ptr<BrowserAccessibilityStateImpl> Create();
 
   // BrowserAccessibilityState implementation.
-  void EnableProcessAccessibility() override;
-  void DisableProcessAccessibility() override;
-  bool IsAccessibilityAllowed() override;
   ui::AXMode GetAccessibilityMode() override;
   ui::AXMode GetAccessibilityModeForBrowserContext(
       BrowserContext* browser_context) override;
-  // TODO(aleventhal): Rename this to Add/RemoveProcessAccessibilityFlags()
-  void AddAccessibilityModeFlags(ui::AXMode mode) override;
-  void RemoveAccessibilityModeFlags(ui::AXMode mode) override;
-  // Some platforms have a strong signal indicating the presence of a
-  // screen reader and can call in to let us know when one has
-  // been enabled/disabled.
-  // Other platforms require looking through running processes or modules
-  // attached to the process, for the name of known assistive tech such as
-  // screen readers, which takes time, and must override RefreshAssistiveTech().
-  void SetScreenReaderAppActive(bool is_active) override;
   // Any currently running assistive tech that should prevent accessibility from
   // being auto-disabled.
   ui::AssistiveTech ActiveAssistiveTech() const override;
@@ -92,12 +83,19 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
       ui::AXMode mode) override;
   void SetAXModeChangeAllowed(bool allowed) override;
   bool IsAXModeChangeAllowed() const override;
+  void SetActivationFromPlatformEnabled(bool enabled) override;
+  bool IsActivationFromPlatformEnabled() override;
+  bool IsAccessibilityPerformanceMeasurementExperimentActive() const override;
   void NotifyWebContentsPreferencesChanged() const override;
 
   // ui::AXPlatform::Delegate:
-  ui::AXMode GetProcessMode() override;
-  void SetProcessMode(ui::AXMode new_mode) override;
-  void OnAccessibilityApiUsage() override;
+  void OnMinimalPropertiesUsed() override;
+  void OnPropertiesUsedInBrowserUI() override;
+  void OnPropertiesUsedInWebContent() override;
+  void OnInlineTextBoxesUsedInWebContent() override;
+  void OnExtendedPropertiesUsedInWebContent() override;
+  void OnHTMLAttributesUsed() override;
+  void OnActionFromAssistiveTech() override;
 
   // content::RenderWidgetHost::InputEventObserver:
   void OnInputEvent(const RenderWidgetHost& widget,
@@ -118,6 +116,32 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // Signal to BrowserAccessibilityState that a page navigation has occurred.
   void OnPageNavigationComplete();
 
+  // Sets the initial accessibility mode for `web_contents` if it is not
+  // hidden or if ProgressiveAccessibility is not enabled.
+  void OnWebContentsInitialized(WebContentsImpl* web_contents);
+
+  // Applies the effective accessibility mode for `web_contents` if
+  // ProgressiveAccessibility is enabled.
+  void OnWebContentsRevealed(WebContentsImpl* web_contents);
+
+  // Tracks `web_contents` for the sake of disabling accessibility later if
+  // ProgressiveAccessibility is enabled and disable_on_hide is selected. A
+  // previously-hidden WebContents becomes eligible for disablement if it is
+  // not among the last five to be hidden once it has been hidden for at least
+  // five minutes.
+  void OnWebContentsHidden(WebContentsImpl* web_contents);
+
+  // A hidden WebContents is guaranteed to retain its accessibility state when
+  // the ProgressiveAccessibility feature is in disable_on_hide mode for at
+  // least five minutes, plus or minus twenty seconds.
+  static base::TimeDelta GetRandomizedDisableDelay();
+  static base::TimeDelta GetMaxDisableDelay();
+
+  // The number of recently-hidden WebContents that will not have accessibility
+  // disabled if the ProgressiveAccessibility feature is on in disable_on_hide
+  // mode.
+  static constexpr int kMaxPreservedWebContents = 5;
+
  protected:
   BrowserAccessibilityStateImpl();
 
@@ -128,16 +152,43 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // platform-specific means.
   void OnAssistiveTechFound(ui::AssistiveTech assistive_tech);
 
- private:
-  // Called by `OnScreenReaderStopped` as a delayed task. If accessibility
-  // support has not been re-enabled by the time the delay has expired, we clear
-  // `process_accessibility_mode_` so that all WebContentses are updated.
-  void MaybeResetAccessibilityMode();
+  // Refreshes the assistive tech if an AXMode change indicates that the
+  // presence of an active screen reader may have changed.
+  // * Platforms that have a perfect signal for the presence of a screen reader
+  // should not override this method: the default implementation treats the
+  // screen reader flag as a deterministic indicator.
+  // * Platforms such as Windows and Linux that require a slow computation
+  // to determine the presence of a screen reader should begin the computation
+  // when the presence of AXMode::kExtendedProperties is inconsistent with the
+  // current known screen reader state.
+  virtual void RefreshAssistiveTechIfNecessary(ui::AXMode new_mode);
 
+  ui::AXPlatform& ax_platform() { return ax_platform_; }
+
+ private:
   void UpdateAccessibilityActivityTask();
 
+  // Stops tracking `web_contents` for disabling accessibility while it is
+  // hidden.
+  void OnDisablerDestroyedForWebContents(WebContentsImpl* web_contents);
+
+  // Combines the effective accessibility mode for the process, for
+  // `web_contents`'s BrowserContext, and for `web_contents` and applies it
+  // to `web_contents` if ProgressiveAccessibility is disabled or if
+  // `web_contents` is not hidden.
+  void ApplyAccessibilityModeToWebContents(WebContentsImpl* web_contents,
+                                           ui::AXMode process_mode,
+                                           ui::AXMode browser_context_mode,
+                                           ui::AXMode web_contents_mode);
+
+  // ScopedModeCollection::Delegate:
   // Handles a change to the effective accessibility mode for the process.
-  void OnModeChangedForProcess(ui::AXMode old_mode, ui::AXMode new_mode);
+  void OnModeChanged(ui::AXMode old_mode, ui::AXMode new_mode) override;
+
+  // Filters out `kFromPlatform` from `mode` if activation from platform
+  // integration is enabled; otherwise, filters all mode flags from `mode` if
+  // `kFromPlatform` is present in it.
+  ui::AXMode FilterModeFlags(ui::AXMode mode) override;
 
   // Handles a change to the effective accessibility mode for `browser_context`.
   void OnModeChangedForBrowserContext(BrowserContext* browser_context,
@@ -149,13 +200,21 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
                                    ui::AXMode old_mode,
                                    ui::AXMode new_mode);
 
+  // Add the AXModes + AXMode::kFromPlatform, when corresponding platform APIs
+  // are used.
+  void EnableAXModeFromPlatform(ui::AXMode modes_to_add);
+
   // Refreshes the instance's notion of active assistive technologies.
   // Implementations must call `OnAssistiveTechFound()` with the results of any
-  // discovery. Does nothing by default.
-  virtual void RefreshAssistiveTech() {}
+  // discovery.
+  virtual void RefreshAssistiveTech();
+
+  // Helper function to configure the accessibility performance experiment.
+  std::unique_ptr<ScopedAccessibilityMode>
+  ConfigureAccessibilityPerformanceExperiment();
 
   // The process's single AXPlatform instance.
-  ui::AXPlatform ax_platform_;
+  ui::AXPlatform ax_platform_{*this};
 
   // Whether there is a pending task to run UpdateAccessibilityActivityTask.
   bool accessibility_update_task_pending_ = false;
@@ -174,6 +233,10 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // the current session. Toggled to true when accessibility is first enabled,
   // and never toggled back to false.
   bool has_enabled_accessibility_in_session_ = false;
+
+  // True if activation of accessibility from interactions with the platform's
+  // accessibility integration is enabled.
+  bool activation_from_platform_enabled_ = true;
 
   // Timer used to track the time between start-up and engine first-use.
   base::ElapsedTimer first_use_timer_;
@@ -202,25 +265,36 @@ class CONTENT_EXPORT BrowserAccessibilityStateImpl
   // The time accessibility was auto-disabled, for statistics.
   base::TimeTicks accessibility_disabled_time_;
 
-  // The time of the most-recent, explicit request to disable accessibility
-  // support. This is set in `OnScreenReaderStopped`. We keep track of this
-  // in order to prevent destroying and/or (re)creating large accessibility
-  // trees in response to an assistive technology being toggled.
-  base::TimeTicks disable_accessibility_request_time_;
-
   base::RepeatingCallbackList<void(const FocusedNodeDetails&)>
       focus_changed_callbacks_;
 
   // The collection of active ScopedAccessibilityMode instances targeting all
   // WebContentses in the process.
-  ScopedModeCollection scoped_modes_for_process_;
+  ScopedModeCollection scoped_modes_for_process_{*this};
 
   // A ScopedAccessibilityMode that holds the process-wide mode flags modified
-  // via ui::AXPlatformNode::NotifyAddAXModeFlags(),
-  // AddAccessibilityModeFlags(), RemoveAccessibilityModeFlags(), and
-  // ResetAccessibilityMode(); and applies them to all WebContentses in the
-  // process. Guaranteed to hold at least an instance with no mode flags set.
-  std::unique_ptr<ScopedAccessibilityMode> process_accessibility_mode_;
+  // via --force-renderer-accessibility on the command line.
+  std::unique_ptr<ScopedAccessibilityMode> forced_accessibility_mode_;
+
+  // A ScopedAccessibilityMode that holds process-wide mode flags required to
+  // support the platform API calls being used.
+  std::unique_ptr<ScopedAccessibilityMode> platform_ax_mode_;
+
+  // Keeps track of whether the Accessibility Performance Measurement Experiment
+  // is currently active. This is necessary because there are cases where we
+  // don't want to make the experiment active, and checking the state of the
+  // feature flag causes the study to be active. In this case, if the conditions
+  // are met, this will contain the mode of the current experiment group,
+  // nullptr otherwise.
+  std::unique_ptr<ScopedAccessibilityMode> experiment_accessibility_mode_;
+
+  // The most recently hidden WebContentses; used only when the disable-on-hide
+  // feature of ProgressiveAccessibility is enabled. This container holds the
+  // most-recently hidden WebContentses. Accessibility is disabled for each one
+  // that is pushed out of this list when a sixth element is added.
+  std::list<raw_ptr<WebContentsImpl>> last_hidden_;
+
+  friend class ui::AXPlatform;
 };
 
 }  // namespace content

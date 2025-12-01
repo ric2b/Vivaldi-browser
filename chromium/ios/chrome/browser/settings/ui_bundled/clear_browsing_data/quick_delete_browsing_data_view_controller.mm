@@ -22,6 +22,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
+// End Vivaldi
+
 namespace {
 
 using browsing_data::DeleteBrowsingDataDialogAction;
@@ -461,26 +466,56 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
 - (UIImage*)iconForItemIdentifier:(ItemIdentifier)itemIdentifier {
   switch (itemIdentifier) {
     case ItemIdentifierHistory: {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return [UIImage imageNamed:vClearHistory];
+      } // End Vivaldi
+
       return DefaultSymbolTemplateWithPointSize(kHistorySymbol,
                                                 kDefaultSymbolSize);
     }
     case ItemIdentifierTabs: {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return [UIImage imageNamed:vClearHistoryTabs];
+      } // End Vivaldi
+
       return DefaultSymbolTemplateWithPointSize(kTabsSymbol,
                                                 kDefaultSymbolSize);
     }
     case ItemIdentifierSiteData: {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return [UIImage imageNamed:vClearHistoryCookies];
+      } // End Vivaldi
+
       return DefaultSymbolTemplateWithPointSize(kInfoCircleSymbol,
                                                 kDefaultSymbolSize);
     }
     case ItemIdentifierCache: {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return [UIImage imageNamed:vClearHistoryCache];
+      } // End Vivaldi
+
       return DefaultSymbolTemplateWithPointSize(kCachedDataSymbol,
                                                 kDefaultSymbolSize);
     }
     case ItemIdentifierPasswords: {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return [UIImage imageNamed:vClearHistoryPasswords];
+      } // End Vivaldi
+
       return CustomSymbolTemplateWithPointSize(kPasswordSymbol,
                                                kDefaultSymbolSize);
     }
     case ItemIdentifierAutofill: {
+
+      if (vivaldi::IsVivaldiRunning()) {
+        return [UIImage imageNamed:vClearHistoryAutofill];
+      } // End Vivaldi
+
       return DefaultSymbolTemplateWithPointSize(kAutofillDataSymbol,
                                                 kDefaultSymbolSize);
     }

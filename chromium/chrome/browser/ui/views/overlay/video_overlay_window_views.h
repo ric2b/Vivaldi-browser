@@ -11,7 +11,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/picture_in_picture/auto_pip_setting_overlay_view.h"
-#include "chromeos/ui/frame/highlight_border_overlay.h"
 #include "components/global_media_controls/public/views/media_progress_view.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
@@ -20,6 +19,10 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/ui/frame/highlight_border_overlay.h"
+#endif
 
 #include "ui/views/video_pip_controller.h"
 
@@ -39,6 +42,7 @@ class BackToTabLabelButton;
 class CloseImageButton;
 class HangUpButton;
 class OverlayWindowBackToTabButton;
+class OverlayWindowLiveCaptionDialog;
 class OverlayWindowMinimizeButton;
 class PlaybackImageButton;
 class ResizeHandleButton;
@@ -79,6 +83,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   // VideoOverlayWindow:
   void Close() override;
   void ShowInactive() override;
+  bool IsVisible() const override;
   void Hide() override;
   gfx::Rect GetBounds() override;
   void UpdateNaturalSize(const gfx::Size& natural_size) override;
@@ -102,7 +107,6 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
 
   // views::Widget:
   bool IsActive() const override;
-  bool IsVisible() const override;
   void OnNativeFocus() override;
   void OnNativeBlur() override;
   gfx::Size GetMinimumSize() const override;
@@ -177,6 +181,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   gfx::Rect GetPreviousSlideControlsBounds();
   gfx::Rect GetNextSlideControlsBounds();
   gfx::Rect GetProgressViewBounds();
+  gfx::Rect GetLiveCaptionButtonBounds();
+  gfx::Rect GetLiveCaptionDialogBounds();
 
   PlaybackImageButton* play_pause_controls_view_for_testing() const;
   SimpleOverlayWindowImageButton* replay_10_seconds_button_for_testing() const;
@@ -194,6 +200,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   global_media_controls::MediaProgressView* progress_view_for_testing() const;
   views::Label* timestamp_for_testing() const;
   views::Label* live_status_for_testing() const;
+  SimpleOverlayWindowImageButton* live_caption_button_for_testing() const;
+  OverlayWindowLiveCaptionDialog* live_caption_dialog_for_testing() const;
   views::ImageView* favicon_view_for_testing() const;
   views::Label* origin_for_testing() const;
   CloseImageButton* close_button_for_testing() const;
@@ -330,6 +338,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   void UpdateTimestampLabel(base::TimeDelta current_time,
                             base::TimeDelta duration);
 
+  void OnLiveCaptionButtonPressed();
+
   void OnFaviconReceived(const SkBitmap& image);
   void UpdateFavicon(const gfx::ImageSkia& favicon);
 
@@ -387,6 +397,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   raw_ptr<views::View> controls_top_scrim_view_ = nullptr;
   raw_ptr<views::View> controls_bottom_scrim_view_ = nullptr;
   raw_ptr<views::View> controls_container_view_ = nullptr;
+  raw_ptr<views::View> playback_controls_container_view_ = nullptr;
+  raw_ptr<views::View> vc_controls_container_view_ = nullptr;
   raw_ptr<views::ImageView> favicon_view_ = nullptr;
   raw_ptr<views::Label> origin_ = nullptr;
   raw_ptr<CloseImageButton> close_controls_view_ = nullptr;
@@ -410,6 +422,8 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
   raw_ptr<global_media_controls::MediaProgressView> progress_view_ = nullptr;
   raw_ptr<views::Label> timestamp_ = nullptr;
   raw_ptr<views::Label> live_status_ = nullptr;
+  raw_ptr<SimpleOverlayWindowImageButton> live_caption_button_ = nullptr;
+  raw_ptr<OverlayWindowLiveCaptionDialog> live_caption_dialog_ = nullptr;
   raw_ptr<AutoPipSettingOverlayView> overlay_view_ = nullptr;
 
 #if BUILDFLAG(IS_CHROMEOS)

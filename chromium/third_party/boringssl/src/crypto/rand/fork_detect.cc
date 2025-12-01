@@ -26,7 +26,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #if defined(MADV_WIPEONFORK)
-static_assert(MADV_WIPEONFORK == 18, "MADV_WIPEONFORK is not 18");
+static_assert(MADV_WIPEONFORK == 18);
 #else
 #define MADV_WIPEONFORK 18
 #endif

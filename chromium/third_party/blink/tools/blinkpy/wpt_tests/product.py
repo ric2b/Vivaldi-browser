@@ -16,6 +16,8 @@ from blinkpy.web_tests.port.base import Port
 _log = logging.getLogger(__name__)
 IOS_VERSION = '17.0'
 IOS_DEVICE = 'iPhone 14 Pro'
+# Use a hard coded version, we might need to update this occasionally
+CHROME_ANDROID_STABLE_VERSION = '138.0.7158.0'
 
 
 def do_delay_imports():
@@ -80,6 +82,8 @@ class Product:
         options.processes = self.processes
         # pylint: disable=assignment-from-none
         options.browser_version = self.get_version()
+        if self._options.stable:
+            options.channel = 'stable'
         options.webdriver_binary = self._options.webdriver_binary or self.webdriver_binary
         options.webdriver_args.extend(self.additional_webdriver_args())
 
@@ -233,15 +237,33 @@ class ChromeAndroidBase(Product):
             device.Uninstall(path)
 
     @contextlib.contextmanager
-    def _install_incremental_apk(self, device, path):
+    def _install_chrome_stable(self, device):
+        install_script = self._port._path_finder.path_from_chromium_base(
+            'clank', 'bin', 'install_chrome.py')
+        self._host.executive.run_command([
+            install_script, '--serial', device.serial, '--channel', 'stable',
+            '--adb', self.adb_binary, '--chrome-version',
+            CHROME_ANDROID_STABLE_VERSION, '--package',
+            'TrichromeChromeGoogle6432'
+        ])
+        try:
+            yield
+        finally:
+            # Do nothing as install_chrome.py does not uninstall.
+            pass
+
+    @contextlib.contextmanager
+    def _install_incremental_apk(self, device):
         """Helper context manager for ensuring a device uninstalls incremental
         APK."""
-        self._host.executive.run_command([path, 'install', '--device', device])
+        install_script = self._port.build_path('bin/chrome_public_apk')
+        self._host.executive.run_command(
+            [install_script, 'install', '--device', device])
         try:
             yield
         finally:
             self._host.executive.run_command(
-                [path, 'uninstall', '--device', device])
+                [install_script, 'uninstall', '--device', device])
 
     @contextlib.contextmanager
     def get_devices(self):
@@ -288,6 +310,8 @@ class ChromeAndroidBase(Product):
         options.package_name = self.get_browser_package_name()
 
     def get_version(self):
+        if self._options.stable:
+            return CHROME_ANDROID_STABLE_VERSION
         version_provider = self.get_version_provider_package_name()
         if self.devices and version_provider:
             # Assume devices are identically provisioned, so select any.
@@ -322,6 +346,8 @@ class ChromeAndroidBase(Product):
         See Also:
             https://github.com/web-platform-tests/wpt/blob/merge_pr_33203/tools/wpt/browser.py#L867-L924
         """
+        if self._options.stable:
+            return 'com.android.chrome'
         if self.browser_apk:
             # pylint: disable=undefined-variable;
             with contextlib.suppress(apk_helper.ApkHelperError):
@@ -361,11 +387,10 @@ class ChromeAndroidBase(Product):
         with contextlib.ExitStack() as exit_stack:
             for apk in self._options.additional_apk:
                 exit_stack.enter_context(self._install_apk(device, apk))
-            if self._port._build_is_incremental_install():
-                incremental_install_script = self._port.build_path(
-                    'bin/chrome_public_apk')
-                install_context_manager = self._install_incremental_apk(
-                    device, incremental_install_script)
+            if self._options.stable:
+                install_context_manager = self._install_chrome_stable(device)
+            elif self._port._build_is_incremental_install():
+                install_context_manager = self._install_incremental_apk(device)
             else:
                 install_context_manager = self._install_apk(
                     device, self.browser_apk)

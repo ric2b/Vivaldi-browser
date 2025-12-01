@@ -9,7 +9,7 @@
 #include <string>
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "base/time/time.h"
 #include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
 #include "chrome/browser/devtools/devtools_toggle_action.h"
@@ -18,9 +18,15 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_list_observer.h"
+#endif
+
 #include "base/memory/ref_counted.h"
 
 class Browser;
+class BrowserList;
 class BrowserWindow;
 class DevToolsWindowTesting;
 class DevToolsEventForwarder;
@@ -30,7 +36,7 @@ namespace content {
 class DevToolsAgentHost;
 struct NativeWebKeyboardEvent;
 class NavigationHandle;
-class NavigationThrottle;
+class NavigationThrottleRegistry;
 class RenderFrameHost;
 }
 
@@ -90,6 +96,9 @@ enum class DevToolsClosedByAction {
 class DevToolsWindow : public DevToolsUIBindings::Delegate,
                        public content::WebContentsDelegate,
                        public content::WebContentsObserver,
+#if !BUILDFLAG(IS_ANDROID)
+                       public BrowserListObserver,
+#endif
                        public infobars::InfoBarManager::Observer {
  public:
   static const char kDevToolsApp[];
@@ -188,8 +197,8 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   // Logs UKM event when DevTools is opened.
   static void LogDevToolsOpenedUKM(content::WebContents* web_contents);
 
-  static std::unique_ptr<content::NavigationThrottle>
-  MaybeCreateNavigationThrottle(content::NavigationHandle* handle);
+  static void MaybeCreateAndAddNavigationThrottle(
+      content::NavigationThrottleRegistry& registry);
 
   // Sets closure to be called after load is done. If already loaded, calls
   // closure immediately.
@@ -487,6 +496,11 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   using content::WebContentsObserver::BeforeUnloadFired;
   void PrimaryPageChanged(content::Page& page) override;
 
+#if !BUILDFLAG(IS_ANDROID)
+  // BrowserListObserver:
+  void OnBrowserRemoved(Browser* browser) override;
+#endif
+
   // infobars::InfoBarManager::Observer
   void OnInfoBarRemoved(infobars::InfoBar* infobar, bool animate) override;
 
@@ -586,6 +600,11 @@ class DevToolsWindow : public DevToolsUIBindings::Delegate,
   bool open_new_window_for_popups_ = false;
   raw_ptr<infobars::InfoBar> sharing_infobar_ = nullptr;
   int checked_sharing_process_id_ = content::ChildProcessHost::kInvalidUniqueID;
+
+#if !BUILDFLAG(IS_ANDROID)
+  base::ScopedObservation<BrowserList, BrowserListObserver>
+      browser_list_observation_{this};
+#endif
 
   PrefChangeRegistrar pref_change_registrar_;
 

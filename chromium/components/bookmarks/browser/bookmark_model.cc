@@ -5,6 +5,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
@@ -19,7 +20,6 @@
 #include "base/functional/callback_helpers.h"
 #include "base/i18n/string_compare.h"
 #include "base/memory/raw_ptr.h"
-#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/strings/string_util.h"
@@ -74,12 +74,13 @@ BookmarkNode* AsMutable(const BookmarkNode* node) {
 // root node or because `node` is in the process of being deleted (i.e. removed
 // from the indices), typically as a result of feature code reacting to
 // BookmarkModelObserver::BookmarkNodeRemoved().
-const BookmarkNode* GetSelfOrAncestorPermanentNode(const BookmarkNode* node) {
+const BookmarkPermanentNode* GetSelfOrAncestorPermanentNode(
+    const BookmarkNode* node) {
   CHECK(node);
   while (node && !node->is_permanent_node()) {
     node = node->parent();
   }
-  return node;
+  return static_cast<const BookmarkPermanentNode*>(node);
 }
 
 // Gets the number of user-generated folders from `node` (inclusive) along the
@@ -153,6 +154,62 @@ class SortComparator {
   raw_ptr<icu::Collator> collator_;
 };
 
+// Returns std::nullopt if there are no bookmarks in the input nodes.
+std::optional<metrics::BookmarksExistInStorageType> ComputeCombinedStorageType(
+    const std::vector<const BookmarkPermanentNode*>& local_permanent_nodes,
+    const std::vector<const BookmarkPermanentNode*>& account_permanent_nodes) {
+  auto has_children = [](const BookmarkPermanentNode* node) {
+    return !node->children().empty();
+  };
+  const bool has_local_nodes =
+      std::ranges::any_of(local_permanent_nodes, has_children);
+  const bool has_account_nodes =
+      std::ranges::any_of(account_permanent_nodes, has_children);
+
+  if (has_local_nodes && has_account_nodes) {
+    return metrics::BookmarksExistInStorageType::kLocalAndAccount;
+  } else if (has_local_nodes) {
+    return metrics::BookmarksExistInStorageType::kLocalOnly;
+  } else if (has_account_nodes) {
+    return metrics::BookmarksExistInStorageType::kAccountOnly;
+  }
+
+  return std::nullopt;
+}
+
+// Records whether there are local and/or account bookmarks in Bookmark Bar and
+// All Bookmkarks.
+void RecordPermanentNodesLocalAndAccountStoragesMetrics(BookmarkModel* model) {
+  // Do not log any data if the account nodes do not exist - only checking one
+  // of the permanent nodes.
+  if (!model->account_bookmark_bar_node()) {
+    return;
+  }
+
+  // Bookmarks Bar:
+  std::optional<metrics::BookmarksExistInStorageType> bookmark_bar_storages =
+      ComputeCombinedStorageType(
+          /*local_permanent_nodes=*/{model->bookmark_bar_node()},
+          /*account_permanent_nodes=*/{model->account_bookmark_bar_node()});
+  if (bookmark_bar_storages.has_value()) {
+    metrics::RecordBookmarksExistInStorageType(
+        /*bookmark_bar_only=*/true, bookmark_bar_storages.value());
+  }
+
+  // All Bookmarks (without Managed Bookmarks)
+  std::optional<metrics::BookmarksExistInStorageType> all_bookmarks_storages =
+      ComputeCombinedStorageType(
+          /*local_permanent_nodes=*/{model->bookmark_bar_node(),
+                                     model->other_node(), model->mobile_node()},
+          /*account_permanent_nodes=*/{model->account_bookmark_bar_node(),
+                                       model->account_other_node(),
+                                       model->account_mobile_node()});
+  if (all_bookmarks_storages.has_value()) {
+    metrics::RecordBookmarksExistInStorageType(
+        /*bookmark_bar_only=*/false, all_bookmarks_storages.value());
+  }
+}
+
 }  // namespace
 
 // BookmarkModel --------------------------------------------------------------
@@ -192,8 +249,8 @@ BookmarkModel::~BookmarkModel() {
   // be reset before the observer list.
   client_.reset();
 
-  // Set raw_ptr values to null to avoid danling pointer detection when UrlIndex
-  // is destroyed.
+  // Set raw_ptr values to null to avoid dangling pointer detection when
+  // UrlIndex is destroyed.
   account_bookmark_bar_node_ = nullptr;
   account_other_node_ = nullptr;
   account_mobile_node_ = nullptr;
@@ -236,28 +293,31 @@ scoped_refptr<ModelLoader> BookmarkModel::model_loader() {
   return model_loader_;
 }
 
-const BookmarkNode* BookmarkModel::account_bookmark_bar_node() const {
+const BookmarkPermanentNode* BookmarkModel::account_bookmark_bar_node() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Must be null if the feature flag isn't enabled.
   CHECK(!account_bookmark_bar_node_ || AreFoldersForAccountStorageAllowed());
   return account_bookmark_bar_node_;
 }
 
-const BookmarkNode* BookmarkModel::account_other_node() const {
+const BookmarkPermanentNode* BookmarkModel::account_other_node() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Must be null if the feature flag isn't enabled.
   CHECK(!account_other_node_ || AreFoldersForAccountStorageAllowed());
   return account_other_node_;
 }
 
-const BookmarkNode* BookmarkModel::account_mobile_node() const {
+const BookmarkPermanentNode* BookmarkModel::account_mobile_node() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Must be null if the feature flag isn't enabled.
   CHECK(!account_mobile_node_ || AreFoldersForAccountStorageAllowed());
   return account_mobile_node_;
 }
 
-bool BookmarkModel::IsNodeVisible(const BookmarkNode& node) const {
+bool BookmarkModel::DetermineIfNodeShouldBeVisible(
+    const BookmarkNode& node,
+    bool account_folders_exist,
+    bool local_bookmarks_exist) const {
   if (!node.is_permanent_node()) {
     return true;
   }
@@ -271,8 +331,8 @@ bool BookmarkModel::IsNodeVisible(const BookmarkNode& node) const {
   }
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  if (IsLocalOnlyNode(node) && account_bookmark_bar_node() &&
-      !HasLocalOrSyncableBookmarks(this)) {
+  if (IsLocalOnlyNode(node) && account_folders_exist &&
+      !local_bookmarks_exist) {
     // Prune this local empty permanent node, since the user has account
     // permanent folders.
     return false;
@@ -290,7 +350,7 @@ bool BookmarkModel::IsLocalOnlyNode(const BookmarkNode& node) const {
     return true;
   }
 
-  const BookmarkNode* ancestor_permanent_node =
+  const BookmarkPermanentNode* ancestor_permanent_node =
       GetSelfOrAncestorPermanentNode(&node);
   if (!ancestor_permanent_node) {
     // In rare cases, `node` may already be 'dettached' from the bookmark tree.
@@ -314,12 +374,7 @@ bool BookmarkModel::IsLocalOnlyNode(const BookmarkNode& node) const {
     return false;
   }
 
-  // If sync is off, the only remaining possibility to return false is if `node`
-  // is actually a descendant of an account permanent folder (if they exist).
-  return ancestor_permanent_node != account_bookmark_bar_node_ &&
-         ancestor_permanent_node != account_other_node_ &&
-         ancestor_permanent_node != account_mobile_node_ &&
-         ancestor_permanent_node != account_trash_node_;
+  return !ancestor_permanent_node->is_account_node();
 }
 
 void BookmarkModel::AddObserver(BookmarkModelObserver* observer) {
@@ -507,6 +562,15 @@ void BookmarkModel::Move(const BookmarkNode* node,
   }
 #endif
 
+  BookmarkNode* mutable_old_parent = AsMutable(old_parent);
+  BookmarkNode* mutable_new_parent = AsMutable(new_parent);
+
+  // If the new parent was not previously visible, this move will make it
+  // visible. Trigger the visibility change event for the new parent before the
+  // move event, so that the observer is aware of the new parent.
+  UpdateNodeVisibilityIfNeeded(*mutable_new_parent, /*new_visibility=*/true,
+                               /*notify_observers=*/true);
+
   const NodeTypeForUuidLookup old_type_for_uuid_lookup =
       DetermineTypeForUuidLookupForExistingNode(old_parent);
   const NodeTypeForUuidLookup new_type_for_uuid_lookup =
@@ -517,10 +581,8 @@ void BookmarkModel::Move(const BookmarkNode* node,
                                          new_type_for_uuid_lookup);
   }
 
-  BookmarkNode* mutable_old_parent = AsMutable(old_parent);
   std::unique_ptr<BookmarkNode> owned_node =
       mutable_old_parent->Remove(old_index);
-  BookmarkNode* mutable_new_parent = AsMutable(new_parent);
   mutable_new_parent->Add(std::move(owned_node), index);
 
   // These two calls don't guarantee that they get scheduled at the same time,
@@ -535,6 +597,11 @@ void BookmarkModel::Move(const BookmarkNode* node,
   for (BookmarkModelObserver& observer : observers_) {
     observer.BookmarkNodeMoved(old_parent, old_index, new_parent, index);
   }
+
+  // Conversely the move might make the old parent invisible. Trigger this
+  // update after the move (so that the observer doesn't treat the old parent
+  // visibility change as implying that the moved node became invisible).
+  RefreshPermanentFolderVisibility(/*notify_observers=*/true);
 
   if (old_parent != new_parent) {
     // TODO(crbug.com/40074470): Remove if check once the root cause of this
@@ -626,7 +693,7 @@ void BookmarkModel::SetTitle(const BookmarkNode* node,
   }
 
   // The title index doesn't support changing the title, instead we remove then
-  // add it back. Only do this for URL nodes. A directory node can have its
+  // add it back. Only do this for URL nodes. A folder node can have its
   // title changed but should be excluded from the index.
   if (node->is_url()) {
     titled_url_index_->Remove(node);
@@ -902,10 +969,15 @@ bool BookmarkModel::HasBookmarks() const {
   return url_index_ && url_index_->HasBookmarks();
 }
 
-bool BookmarkModel::HasNoUserCreatedBookmarksOrFolders() const {
+bool BookmarkModel::HasUserCreatedBookmarksOrFolders() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return bookmark_bar_node_->children().empty() &&
-         other_node_->children().empty() && mobile_node_->children().empty();
+  return !bookmark_bar_node_->children().empty() ||
+         !other_node_->children().empty() ||
+         !mobile_node_->children().empty() ||
+         (account_bookmark_bar_node_ &&
+          !account_bookmark_bar_node_->children().empty()) ||
+         (account_other_node_ && !account_other_node_->children().empty()) ||
+         (account_mobile_node_ && !account_mobile_node_->children().empty());
 }
 
 bool BookmarkModel::IsBookmarked(const GURL& url) const {
@@ -1329,11 +1401,18 @@ void BookmarkModel::OnVivaldiSyncedFilesStoreLoaded(
     }
   }
 
+  RefreshPermanentFolderVisibility(/*notify_observers=*/false);
+
   const base::TimeDelta load_duration =
       base::TimeTicks::Now() - details->load_start();
   metrics::RecordTimeToLoadAtStartup(load_duration);
 
   loaded_ = true;
+
+  client_->SchedulePersistentTimerForDailyMetrics(base::BindRepeating(
+      &RecordPermanentNodesLocalAndAccountStoragesMetrics,
+      // Unretained is safe here because this owns `client_`.
+      base::Unretained(this)));
 
   // Notify our direct observers.
   for (BookmarkModelObserver& observer : observers_) {
@@ -1348,6 +1427,12 @@ BookmarkNode* BookmarkModel::AddNode(
     bool added_by_user,
     NodeTypeForUuidLookup type_for_uuid_lookup) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CHECK(parent);
+  CHECK(node);
+
+  UpdateNodeVisibilityIfNeeded(*parent,
+                               /*new_visibility=*/true,
+                               /*notify_observers=*/true);
 
   BookmarkNode* node_ptr = node.get();
   url_index_->Add(parent, index, std::move(node));
@@ -1359,6 +1444,10 @@ BookmarkNode* BookmarkModel::AddNode(
   for (BookmarkModelObserver& observer : observers_) {
     observer.BookmarkNodeAdded(parent, index, added_by_user);
   }
+
+  // This operation may have changed the visibility of permanent folders other
+  // than `parent` (if `node` is the first local bookmark).
+  RefreshPermanentFolderVisibility(/*notify_observers=*/true);
 
   return node_ptr;
 }
@@ -1427,6 +1516,10 @@ void BookmarkModel::RemoveChildAt(
                                            std::move(owned_node));
   }
 
+  // Removing a node can change the visibility of permanent folders (if this
+  // is the last bookmark in a permanent folder).
+  RefreshPermanentFolderVisibility(notify_observers);
+
   if (source.has_value()) {
     metrics::RecordBookmarkRemoved(*source);
   }
@@ -1443,10 +1536,6 @@ void BookmarkModel::RemoveAccountPermanentFoldersImpl(bool notify_observers) {
     CHECK(!account_trash_node_); // Vivaldi
     return;
   }
-
-  base::ScopedUmaHistogramTimer scoped_timer(
-      "Bookmarks.RemoveAccountPermanentFoldersDuration",
-      base::ScopedUmaHistogramTimer::ScopedHistogramTiming::kMediumTimes);
 
   CHECK(account_other_node_);
   CHECK(account_mobile_node_);
@@ -1466,7 +1555,18 @@ void BookmarkModel::RemoveAccountPermanentFoldersImpl(bool notify_observers) {
   account_mobile_node_ = nullptr;
   account_trash_node_ = nullptr; // Vivaldi
 
-  for (const BookmarkNode* node : account_permanent_folders) {
+  // Now that the account permanent folders have been unset, refresh the
+  // visibility of all permanent folders. This may trigger the local permanent
+  // folders to become visible (if they were previously invisible due to being
+  // empty).
+  //
+  // This is done before actually removing the account folders below, in order
+  // to avoid RemoveChildAt() triggering the visibility change notifications for
+  // the local folders (which would result in interleaved
+  // remove/visibilitychanged/remove notifications).
+  RefreshPermanentFolderVisibility(notify_observers);
+
+  for (BookmarkNode* node : account_permanent_folders) {
     RemoveChildAt(node->parent(), node->parent()->GetIndexOf(node).value(),
                   FROM_HERE, /*source=*/std::nullopt, /*is_undoable=*/false,
                   notify_observers);
@@ -1598,33 +1698,68 @@ void BookmarkModel::CreateAccountPermanentFolders() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(AreFoldersForAccountStorageAllowed());
   CHECK(loaded_);
+  CHECK(!account_bookmark_bar_node_);
+  CHECK(!account_other_node_);
+  CHECK(!account_mobile_node_);
 
+  // Creating account permanent folders may cause local permanent folders to
+  // become invisible. Start by triggering the visibility change
+  // notifications, otherwise they will be triggered by AddNode() below in an
+  // interleaved order.
+  for (const auto& local_permanent_folder : root_->children()) {
+    const bool new_visibility = DetermineIfNodeShouldBeVisible(
+        *local_permanent_folder, /*account_folders_exist=*/true,
+        HasLocalOrSyncableBookmarks(this));
+    UpdateNodeVisibilityIfNeeded(*local_permanent_folder, new_visibility,
+                                 /*notify_observers=*/true);
+  }
+
+  // Set the nodes' `date_added` to the same time so that there is no inherent
+  // hierarchy in terms of their added time between them. This is relevant for
+  // deciding which folder should be the default parent for new nodes.
+  const base::Time current_timestamp = base::Time::Now();
   {
     std::unique_ptr<BookmarkPermanentNode> account_bookmark_bar_node =
-        BookmarkPermanentNode::CreateBookmarkBar(next_node_id_++);
+        BookmarkPermanentNode::CreateBookmarkBar(next_node_id_++,
+                                                 /*is_account_node=*/true);
     account_bookmark_bar_node_ = account_bookmark_bar_node.get();
+    account_bookmark_bar_node_->set_date_added(current_timestamp);
+    account_bookmark_bar_node_->set_visibility(DetermineIfNodeShouldBeVisible(
+        *account_bookmark_bar_node, /*account_folders_exist=*/true,
+        HasLocalOrSyncableBookmarks(this)));
     AddNode(root_, root_->children().size(),
             std::move(account_bookmark_bar_node),
             /*added_by_user=*/false, NodeTypeForUuidLookup::kAccountNodes);
   }
   {
     std::unique_ptr<BookmarkPermanentNode> account_other_node =
-        BookmarkPermanentNode::CreateOtherBookmarks(next_node_id_++);
+        BookmarkPermanentNode::CreateOtherBookmarks(next_node_id_++,
+                                                    /*is_account_node=*/true);
     account_other_node_ = account_other_node.get();
+    account_other_node_->set_date_added(current_timestamp);
+    account_other_node_->set_visibility(DetermineIfNodeShouldBeVisible(
+        *account_other_node,
+        /*account_folders_exist=*/true, HasLocalOrSyncableBookmarks(this)));
     AddNode(root_, root_->children().size(), std::move(account_other_node),
             /*added_by_user=*/false, NodeTypeForUuidLookup::kAccountNodes);
   }
   {
     std::unique_ptr<BookmarkPermanentNode> account_mobile_node =
-        BookmarkPermanentNode::CreateMobileBookmarks(next_node_id_++);
+        BookmarkPermanentNode::CreateMobileBookmarks(next_node_id_++,
+                                                     /*is_account_node=*/true);
     account_mobile_node_ = account_mobile_node.get();
+    account_mobile_node_->set_date_added(current_timestamp);
+    account_mobile_node_->set_visibility(DetermineIfNodeShouldBeVisible(
+        *account_mobile_node,
+        /*account_folders_exist=*/true, HasLocalOrSyncableBookmarks(this)));
     AddNode(root_, root_->children().size(), std::move(account_mobile_node),
             /*added_by_user=*/false, NodeTypeForUuidLookup::kAccountNodes);
   }
 
   if (vivaldi::IsVivaldiRunning()) {
     std::unique_ptr<BookmarkPermanentNode> account_trash_node =
-        BookmarkPermanentNode::CreateTrashFolder(next_node_id_++);
+        BookmarkPermanentNode::CreateTrashFolder(next_node_id_++,
+                                                 /*is_account_node=*/true);
     account_trash_node_ = account_trash_node.get();
     AddNode(root_, root_->children().size(), std::move(account_trash_node),
             /*added_by_user=*/false, NodeTypeForUuidLookup::kAccountNodes);
@@ -1696,6 +1831,41 @@ metrics::StorageStateForUma BookmarkModel::GetStorageStateForUma(
              ? metrics::StorageStateForUma::kSyncEnabled
              : metrics::StorageStateForUma::kLocalOnly;
 }
+
+void BookmarkModel::RefreshPermanentFolderVisibility(bool notify_observers) {
+  for (const auto& permanent_folder : root_->children()) {
+    const bool new_visibility = DetermineIfNodeShouldBeVisible(
+        *permanent_folder, account_bookmark_bar_node() != nullptr,
+        HasLocalOrSyncableBookmarks(this));
+    UpdateNodeVisibilityIfNeeded(*permanent_folder, new_visibility,
+                                 notify_observers);
+  }
+}
+
+void BookmarkModel::UpdateNodeVisibilityIfNeeded(BookmarkNode& node,
+                                                 bool new_visiblity,
+                                                 bool notify_observers) {
+  if (node.IsVisible() == new_visiblity) {
+    return;
+  }
+
+  // Non-permanent nodes are always visible.
+  CHECK(node.is_permanent_node());
+  BookmarkPermanentNode* permanent_node =
+      static_cast<BookmarkPermanentNode*>(&node);
+
+  permanent_node->set_visibility(new_visiblity);
+
+  if (notify_observers) {
+    // Nodes are always visible if they have children.
+    CHECK(node.children().empty());
+
+    for (BookmarkModelObserver& observer : observers_) {
+      observer.BookmarkPermanentNodeVisibilityChanged(permanent_node);
+    }
+  }
+}
+
 
 // Vivaldi
 const BookmarkNode* BookmarkModel::account_trash_node() const {

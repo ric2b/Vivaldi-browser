@@ -24,7 +24,6 @@
 #include "chrome/browser/ash/shimless_rma/diagnostics_app_profile_helper_constants.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/crx_installer.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/commands/install_isolated_web_app_command.h"
@@ -40,9 +39,11 @@
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
+#include "components/webapps/browser/uninstall_result_code.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/service_worker_context.h"
 #include "extensions/browser/crx_file_info.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
@@ -85,20 +86,9 @@ std::optional<url::Origin>& GetInstalledDiagnosticsAppOriginInternal() {
   return *g_origin;
 }
 
-extensions::ExtensionService* GetExtensionService(
-    content::BrowserContext* context) {
-  CHECK(context);
-  auto* system = extensions::ExtensionSystem::Get(context);
-  CHECK(system);
-  auto* service = system->extension_service();
-  CHECK(service);
-  return service;
-}
-
 void DisableAllExtensions(content::BrowserContext* context) {
   auto* registry = extensions::ExtensionRegistry::Get(context);
   CHECK(registry);
-  auto* service = GetExtensionService(context);
 
   std::vector<std::string> ids;
   for (const auto& extension : registry->enabled_extensions()) {
@@ -108,9 +98,11 @@ void DisableAllExtensions(content::BrowserContext* context) {
     ids.push_back(extension->id());
   }
 
+  auto* registrar = extensions::ExtensionRegistrar::Get(context);
+  CHECK(registrar);
   for (const auto& id : ids) {
-    service->DisableExtension(id,
-                              extensions::disable_reason::DISABLE_USER_ACTION);
+    registrar->DisableExtension(
+        id, {extensions::disable_reason::DISABLE_USER_ACTION});
   }
 }
 
@@ -180,7 +172,7 @@ void OnIsolatedWebAppInstalled(
     return;
   }
 
-  const web_app::WebApp* web_app = state->delegate->GetWebAppById(
+  const web_app::WebApp* web_app = state->delegate->GetWebAppByIdUnsafe(
       web_app::IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
           *state->iwa_id)
           .app_id(),
@@ -225,6 +217,33 @@ void OnIsolatedWebAppInstalled(
 void InstallIsolatedWebApp(
     std::unique_ptr<PrepareDiagnosticsAppProfileState> state) {
   CHECK(state->context);
+  CHECK(state->iwa_id);
+
+  auto url_info = web_app::IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
+      state->iwa_id.value());
+  auto install_source = web_app::IsolatedWebAppInstallSource::FromShimlessRma(
+      web_app::IwaSourceBundleProdModeWithFileOp(
+          state->swbn_path, web_app::IwaSourceBundleProdFileOp::kCopy));
+  state->delegate->GetWebAppCommandScheduler(state->context)
+      ->InstallIsolatedWebApp(
+          url_info, install_source,
+          /*expected_version=*/std::nullopt, /*optional_keep_alive=*/nullptr,
+          /*optional_profile_keep_alive=*/nullptr,
+          base::BindOnce(&OnIsolatedWebAppInstalled, std::move(state)));
+}
+
+void OnIsolatedWebAppRemoved(
+    std::unique_ptr<PrepareDiagnosticsAppProfileState> state,
+    webapps::UninstallResultCode code) {
+  if (!webapps::UninstallSucceeded(code)) {
+    LOG(WARNING) << "Failed to unsintalled IWA before installing IWA";
+  }
+  InstallIsolatedWebApp(std::move(state));
+}
+
+void PrepareIsolatedWebApp(
+    std::unique_ptr<PrepareDiagnosticsAppProfileState> state) {
+  CHECK(state->context);
   CHECK(state->extension_id);
 
   auto info =
@@ -238,15 +257,24 @@ void InstallIsolatedWebApp(
 
   auto url_info = web_app::IsolatedWebAppUrlInfo::CreateFromSignedWebBundleId(
       state->iwa_id.value());
-  auto install_source = web_app::IsolatedWebAppInstallSource::FromShimlessRma(
-      web_app::IwaSourceBundleProdModeWithFileOp(
-          state->swbn_path, web_app::IwaSourceBundleProdFileOp::kCopy));
+  const web_app::WebApp* web_app =
+      state->delegate->GetWebAppByIdUnsafe(url_info.app_id(), state->context);
+  if (!web_app) {
+    // Install the IWA directly if IWA doesn't exist.
+    InstallIsolatedWebApp((std::move(state)));
+    return;
+  }
+
+  // Since we can not install IWA when the IWA is already installed, we should
+  // remove the existing IWA first before installation.
+  // It is safe to run uninstall job here since Shimless RMA is the only install
+  // source for the third-party diagnostics IWA.
+  // Note that the flow will be broken if there are multiple install sources.
   state->delegate->GetWebAppCommandScheduler(state->context)
-      ->InstallIsolatedWebApp(
-          url_info, install_source,
-          /*expected_version=*/std::nullopt, /*optional_keep_alive=*/nullptr,
-          /*optional_profile_keep_alive=*/nullptr,
-          base::BindOnce(&OnIsolatedWebAppInstalled, std::move(state)));
+      ->RemoveInstallManagementMaybeUninstall(
+          url_info.app_id(), web_app::WebAppManagement::Type::kIwaShimlessRma,
+          webapps::WebappUninstallSource::kUnknown,
+          base::BindOnce(&OnIsolatedWebAppRemoved, std::move(state)));
 }
 
 void CheckExtensionIsReady(
@@ -276,7 +304,7 @@ void OnCheckExtensionIsReadyResponse(
     return;
   }
 
-  InstallIsolatedWebApp(std::move(state));
+  PrepareIsolatedWebApp(std::move(state));
 }
 
 void CheckExtensionIsReady(
@@ -343,10 +371,12 @@ void OnExtensionInstalled(
     state->permission_message = base::UTF16ToUTF8(message);
   }
 
-  GetExtensionService(state->context)->EnableExtension(extension->id());
+  extensions::ExtensionRegistrar::Get(state->context)
+      ->EnableExtension(extension->id());
   // Reload the extension to make sure old service worker are cleaned. This is
   // important when the extension has already been installed to the profile.
-  GetExtensionService(state->context)->ReloadExtension(extension->id());
+  extensions::ExtensionRegistrar::Get(state->context)
+      ->ReloadExtension(extension->id());
 
   GURL script_url = extension->GetResourceURL(
       extensions::BackgroundInfo::GetBackgroundServiceWorkerScript(extension));
@@ -442,7 +472,7 @@ DiagnosticsAppProfileHelperDelegate::GetWebAppCommandScheduler(
   return &web_app_provider->scheduler();
 }
 
-const web_app::WebApp* DiagnosticsAppProfileHelperDelegate::GetWebAppById(
+const web_app::WebApp* DiagnosticsAppProfileHelperDelegate::GetWebAppByIdUnsafe(
     const webapps::AppId& app_id,
     content::BrowserContext* browser_context) {
   auto* web_app_provider = web_app::WebAppProvider::GetForWebApps(

@@ -8,6 +8,7 @@
 
 ### Android
 
+ * [android-byra-perf](https://ci.chromium.org/p/chrome/builders/ci/android-byra-perf): AL Byra.
  * [android-go-wembley-perf](https://ci.chromium.org/p/chrome/builders/ci/android-go-wembley-perf): Android U.
  * [android-go-wembley_webview-perf](https://ci.chromium.org/p/chrome/builders/ci/android-go-wembley_webview-perf): Android U.
  * [android-pixel-fold-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel-fold-perf): Android U.
@@ -18,10 +19,12 @@
  * [android-pixel6-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-perf): Android U.
  * [android-pixel6-perf-pgo](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-perf-pgo): Android U.
  * [android-pixel6-pro-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel6-pro-perf): Android T.
+ * [android-pixel9-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel9-perf): Android B.
+ * [android-pixel9-pro-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel9-pro-perf): Android B.
+ * [android-pixel9-pro-xl-perf](https://ci.chromium.org/p/chrome/builders/ci/android-pixel9-pro-xl-perf): Android B.
 
 ### Linux
 
- * [linux-perf](https://ci.chromium.org/p/chrome/builders/ci/linux-perf): Ubuntu-18.04, 8 core, NVIDIA Quadro P400.
  * [linux-perf-calibration](https://ci.chromium.org/p/chrome/builders/ci/linux-perf-calibration): Ubuntu-18.04, 8 core, NVIDIA Quadro P400.
  * [linux-perf-rel](https://ci.chromium.org/p/chrome/builders/ci/linux-perf-rel): Ubuntu-18.04, 8 core, NVIDIA Quadro P400.
  * [linux-r350-perf](https://ci.chromium.org/p/chrome/builders/ci/linux-r350-perf): Ubuntu-22.04, 16 core.
@@ -34,6 +37,7 @@
  * [mac-m1_mini_2020-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-m1_mini_2020-perf): Mac M1 Mini 2020.
  * [mac-m1_mini_2020-perf-pgo](https://ci.chromium.org/p/chrome/builders/ci/mac-m1_mini_2020-perf-pgo): Mac M1 Mini 2020.
  * [mac-m2-pro-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-m2-pro-perf): Mac M2 PRO Baremetal ARM.
+ * [mac-m3-pro-perf](https://ci.chromium.org/p/chrome/builders/ci/mac-m3-pro-perf): Mac M3 PRO ARM.
 
 ### Win
 
@@ -47,10 +51,6 @@
 
 ### Android
 
- * android-new-pixel-perf: Android T.
- * android-new-pixel-perf-pgo: Android T.
- * android-new-pixel-pro-perf: Android T.
- * android-new-pixel-pro-perf-pgo: Android T.
  * android-pixel4-perf-pgo: Android R.
  * android-pixel6-pro-perf-pgo: Android T.
 

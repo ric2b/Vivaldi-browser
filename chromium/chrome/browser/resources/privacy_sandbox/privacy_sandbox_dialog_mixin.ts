@@ -25,6 +25,7 @@ export const PrivacySandboxDialogMixin = dedupingMixin(
             wasScrolledToBottom: {
               type: Boolean,
               observer: 'onWasScrolledToBottomChange_',
+              value: true,
             },
 
             /**
@@ -38,23 +39,22 @@ export const PrivacySandboxDialogMixin = dedupingMixin(
               },
             },
 
-            /*
-             * If true the dismissal buttons should have the same styling.
+            /**
+             * If true, the privacy policy page should be loaded.
              */
-            equalizedButtons_: {
+            loadPrivacyPolicy_: {
               type: Boolean,
-              value: () => {
-                return loadTimeData.getBoolean('isEqualizedPromptButtons');
-              },
+              value: false,
             },
           };
         }
 
-        wasScrolledToBottom: boolean = true;
+        declare wasScrolledToBottom: boolean;
         private didStartWithScrollbar_: boolean = false;
         private wasScrolledToBottomResolver_: PromiseResolver<void>;
         private moreButtonInitialized_: PromiseResolver<void>;
-        private shouldShowV2_: boolean;
+        declare private shouldShowV2_: boolean;
+        declare private loadPrivacyPolicy_: boolean;
 
         /**
          * Contains true if the dialog dismissal buttons should be the same
@@ -67,8 +67,12 @@ export const PrivacySandboxDialogMixin = dedupingMixin(
           return this.shouldShowV2_;
         }
 
-        equalizedButtons(): boolean {
-          return this.equalizedButtons_;
+        loadPrivacyPolicyOnExpand(newValue: boolean, oldValue: boolean) {
+          // When the expand is triggered, load the privacy policy the first
+          // time the learn more expand section is clicked.
+          if (newValue && !oldValue) {
+            this.loadPrivacyPolicy_ = true;
+          }
         }
 
         onConsentLearnMoreExpandedChanged(
@@ -309,9 +313,7 @@ export interface PrivacySandboxDialogMixinInterface {
   // Returns true if the Ads API UX Enhancement should be shown.
   shouldShowV2(): boolean;
 
-  // Returns true if the notice buttons should be equalized.
-  equalizedButtons(): boolean;
-
+  loadPrivacyPolicyOnExpand(newValue: boolean, oldValue: boolean): void;
   onConsentLearnMoreExpandedChanged(newValue: boolean, oldValue: boolean): void;
   onNoticeLearnMoreExpandedChanged(newValue: boolean, oldValue: boolean): void;
   onNoticeSiteSuggestedAdsLearnMoreExpandedChanged(

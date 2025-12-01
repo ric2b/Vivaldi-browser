@@ -42,6 +42,7 @@ import org.chromium.ui.CaptionBarInsetsRectProvider;
 import org.chromium.ui.InsetObserver;
 import org.chromium.ui.InsetObserver.WindowInsetsConsumer;
 import org.chromium.ui.InsetsRectProvider;
+import org.chromium.ui.display.DisplayUtil;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.util.TokenHolder;
 
@@ -62,13 +63,13 @@ public class AppHeaderCoordinator
 
     private static final String TAG = "AppHeader";
 
-    private static @Nullable InsetsRectProvider sInsetsRectProviderForTesting;
+    private static @Nullable CaptionBarInsetsRectProvider sInsetsRectProviderForTesting;
 
     private @Nullable Activity mActivity;
     private final View mRootView;
     private final BrowserStateBrowserControlsVisibilityDelegate mBrowserControlsVisibilityDelegate;
     private final InsetObserver mInsetObserver;
-    private final InsetsRectProvider mCaptionBarRectProvider;
+    private final CaptionBarInsetsRectProvider mCaptionBarRectProvider;
     private final WindowInsetsController mInsetsController;
     private final ObserverList<AppHeaderObserver> mObservers = new ObserverList<>();
     private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
@@ -135,6 +136,7 @@ public class AppHeaderCoordinator
                                 insetObserver,
                                 insetObserver.getLastRawWindowInsets(),
                                 InsetConsumerSource.APP_HEADER_COORDINATOR_CAPTION);
+
         InsetsRectProvider.Observer insetsRectUpdateRunnable = this::onInsetsRectsUpdated;
         mCaptionBarRectProvider.addObserver(insetsRectUpdateRunnable);
 
@@ -157,12 +159,6 @@ public class AppHeaderCoordinator
     @Override
     public @Nullable AppHeaderState getAppHeaderState() {
         return mAppHeaderState;
-    }
-
-    // TODO(crbug.com/337086192): Read from mAppHeaderState.
-    @Override
-    public boolean isInDesktopWindow() {
-        return mIsInDesktopWindow;
     }
 
     @Override
@@ -198,7 +194,12 @@ public class AppHeaderCoordinator
     }
 
     private void onInsetsRectsUpdated(Rect widestUnoccludedRect) {
-        mHeuristicResult = checkIsInDesktopWindow(mCaptionBarRectProvider, mHeuristicResult);
+        // mActivity is only set to null in destroy().
+        boolean isOnExternalDisplay =
+                !DisplayUtil.isContextInDefaultDisplay(assumeNonNull(mActivity));
+        mHeuristicResult =
+                checkIsInDesktopWindow(
+                        mCaptionBarRectProvider, mHeuristicResult, isOnExternalDisplay);
         var isInDesktopWindow = mHeuristicResult == DesktopWindowHeuristicResult.IN_DESKTOP_WINDOW;
 
         // Avoid determining the mode when there are no window insets, which may be the case in the
@@ -207,10 +208,8 @@ public class AppHeaderCoordinator
         assert mInsetObserver.getLastRawWindowInsets() != null
                 : "Attempt to read the insets too early.";
         if (mInsetObserver.getLastRawWindowInsets().hasInsets()) {
-            // mActivity is only set to null in destroy().
             mWindowingMode =
-                    AppHeaderUtils.getWindowingMode(
-                            assumeNonNull(mActivity), isInDesktopWindow, mWindowingMode);
+                    AppHeaderUtils.getWindowingMode(mActivity, isInDesktopWindow, mWindowingMode);
         }
 
         var appHeaderState =
@@ -258,6 +257,7 @@ public class AppHeaderCoordinator
      *   <li>Caption bar has insets.top > 0;
      *   <li>Widest unoccluded rect in caption bar has space available to draw the tab strip;
      *   <li>Widest unoccluded rect in captionBar insets is connected to the bottom;
+     *   <li>Header customization is not disallowed;
      * </ol>
      *
      * This method is marked as static, in order to ensure it does not change / read any state from
@@ -265,10 +265,14 @@ public class AppHeaderCoordinator
      */
     private static @DesktopWindowHeuristicResult int checkIsInDesktopWindow(
             InsetsRectProvider insetsRectProvider,
-            @DesktopWindowHeuristicResult int currentResult) {
+            @DesktopWindowHeuristicResult int currentResult,
+            boolean isOnExternalDisplay) {
         @DesktopWindowHeuristicResult int newResult;
 
         Insets captionBarInset = insetsRectProvider.getCachedInset();
+        boolean allowHeaderCustomization =
+                AppHeaderUtils.shouldAllowHeaderCustomizationOnNonDefaultDisplay()
+                        || !isOnExternalDisplay;
 
         if (insetsRectProvider.getWidestUnoccludedRect().isEmpty()) {
             newResult = DesktopWindowHeuristicResult.WIDEST_UNOCCLUDED_RECT_EMPTY;
@@ -276,6 +280,8 @@ public class AppHeaderCoordinator
             newResult = DesktopWindowHeuristicResult.CAPTION_BAR_TOP_INSETS_ABSENT;
         } else if (insetsRectProvider.getWidestUnoccludedRect().bottom != captionBarInset.top) {
             newResult = DesktopWindowHeuristicResult.CAPTION_BAR_BOUNDING_RECT_INVALID_HEIGHT;
+        } else if (!allowHeaderCustomization) {
+            newResult = DesktopWindowHeuristicResult.DISALLOWED_ON_EXTERNAL_DISPLAY;
         } else {
             newResult = DesktopWindowHeuristicResult.IN_DESKTOP_WINDOW;
         }
@@ -348,7 +354,8 @@ public class AppHeaderCoordinator
         }
     }
 
-    public static void setInsetsRectProviderForTesting(InsetsRectProvider providerForTesting) {
+    public static void setInsetsRectProviderForTesting(
+            CaptionBarInsetsRectProvider providerForTesting) {
         sInsetsRectProviderForTesting = providerForTesting;
         ResettersForTesting.register(() -> sInsetsRectProviderForTesting = null);
     }

@@ -31,16 +31,16 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kCctSignInPrompt);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kForceSupervisedSigninWithCapabilities);
+BASE_DECLARE_FEATURE(kHistoryPageHistorySyncPromo);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kHistoryOptInEntryPoints);
+BASE_DECLARE_FEATURE(kHistoryPagePromoCtaStringVariation);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kHistoryOptInPromoCtaStringVariation);
+BASE_DECLARE_FEATURE(kHistoryOptInEducationalTip);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kHistoryOptInIph);
+extern const base::FeatureParam<int> kHistoryOptInEducationalTipVariation;
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kSkipCheckForAccountManagementOnSignin);
@@ -50,6 +50,12 @@ BASE_DECLARE_FEATURE(kUnoForAuto);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kUseHostedDomainForManagementCheckOnSignin);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kMakeAccountsAvailableInIdentityManager);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kFullscreenSignInPromoUseDate);
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -93,19 +99,33 @@ bool IsChromeRefreshTokenBindingEnabled(const PrefService* profile_prefs);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kBoundSessionCredentialsKillSwitch);
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kUseIssueTokenToFetchAccessTokens);
 #endif
 
 // Enables a separate account-scoped storage for preferences.
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnablePreferencesAccountStorage);
 
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kForceDisableExtendedSyncPromos);
-
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
+BASE_DECLARE_FEATURE(kEnableHistorySyncOptinExpansionPill);
+
+enum class HistorySyncOptinExpansionPillOption {
+  kBrowseAcrossDevices,
+  kSyncHistory,
+  kSeeTabsFromOtherDevices,
+  kBrowseAcrossDevicesNewProfileMenuPromoVariant,
+};
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
+extern const base::FeatureParam<HistorySyncOptinExpansionPillOption>
+    kHistorySyncOptinExpansionPillOption;
+
+COMPONENT_EXPORT(SIGNIN_SWITCHES)
 extern const char kForceFreDefaultBrowserStep[];
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
@@ -114,18 +134,6 @@ BASE_DECLARE_FEATURE(kForceStartupSigninPromo);
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kInterceptBubblesDismissibleByAvatarButton);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kImprovedSigninUIOnDesktop);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-bool IsImprovedSigninUIOnDesktopEnabled();
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kImprovedSettingsUIOnDesktop);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-bool IsImprovedSettingsUIOnDesktopEnabled();
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnableSnackbarInSettings);
@@ -151,14 +159,6 @@ BASE_DECLARE_FEATURE(kEnableErrorBadgeOnIdentityDisc);
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kEnableASWebAuthenticationSession);
 #endif
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kBatchUploadDesktop);
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-bool IsBatchUploadDesktopEnabled();
 
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kShowEnterpriseDialogForAllManagedAccountsSignin);
@@ -194,16 +194,8 @@ COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kStableDeviceId);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(ENABLE_MIRROR) && !BUILDFLAG(IS_IOS)
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kVerifyRequestInitiatorForMirrorHeaders);
-#endif  // BUILDFLAG(ENABLE_MIRROR) && !BUILDFLAG(IS_IOS)
-
 COMPONENT_EXPORT(SIGNIN_SWITCHES)
 BASE_DECLARE_FEATURE(kProfilesReordering);
-
-COMPONENT_EXPORT(SIGNIN_SWITCHES)
-BASE_DECLARE_FEATURE(kOutlineSilhouetteIcon);
 
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(SIGNIN_SWITCHES)

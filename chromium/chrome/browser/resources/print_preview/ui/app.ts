@@ -2,35 +2,39 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
-import './print_preview_vars.css.js';
 import '/strings.m.js';
 import '../data/document_info.js';
+import '../data/model.js';
+import '../data/state.js';
+import './preview_area.js';
 import './sidebar.js';
 
 import type {CrDialogElement} from 'chrome://resources/cr_elements/cr_dialog/cr_dialog.js';
-import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.js';
 import {FocusOutlineManager} from 'chrome://resources/js/focus_outline_manager.js';
 import {isMac, isWindows} from 'chrome://resources/js/platform.js';
 import {hasKeyModifiers} from 'chrome://resources/js/util.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import type {Destination} from '../data/destination.js';
 import {PrinterType} from '../data/destination.js';
 import type {DocumentSettings, PrintPreviewDocumentInfoElement} from '../data/document_info.js';
+import {createDocumentSettings} from '../data/document_info.js';
 import type {Margins} from '../data/margins.js';
 import {MeasurementSystem} from '../data/measurement_system.js';
 import type {PrintPreviewModelElement} from '../data/model.js';
 import {DuplexMode, whenReady} from '../data/model.js';
-import type {PrintableArea} from '../data/printable_area.js';
-import type {Size} from '../data/size.js';
+import {Size} from '../data/size.js';
 import type {PrintPreviewStateElement} from '../data/state.js';
 import {Error, State} from '../data/state.js';
 import type {NativeInitialSettings, NativeLayer} from '../native_layer.js';
 import {NativeLayerImpl} from '../native_layer.js';
 
-import {getTemplate} from './app.html.js';
+import {getCss} from './app.css.js';
+import {getHtml} from './app.html.js';
 import {DestinationState} from './destination_settings.js';
 import type {PrintPreviewPreviewAreaElement} from './preview_area.js';
 import {PreviewAreaState} from './preview_area.js';
@@ -48,88 +52,47 @@ export interface PrintPreviewAppElement {
 }
 
 const PrintPreviewAppElementBase =
-    WebUiListenerMixin(SettingsMixin(PolymerElement));
+    WebUiListenerMixinLit(SettingsMixin(CrLitElement));
 
 export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   static get is() {
     return 'print-preview-app';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
+  override render() {
+    return getHtml.bind(this)();
+  }
+
+  static override get properties() {
     return {
-      state: {
-        type: Number,
-        observer: 'onStateChanged_',
-      },
-
-      controlsManaged_: {
-        type: Boolean,
-        computed: 'computeControlsManaged_(destinationsManaged_, ' +
-            'settingsManaged_, maxSheets_)',
-      },
-
-      destination_: Object,
-
-      destinationsManaged_: {
-        type: Boolean,
-        value: false,
-      },
-
-      destinationState_: {
-        type: Number,
-        observer: 'onDestinationStateChange_',
-      },
-
-      documentSettings_: Object,
-
-      error_: {
-        type: Number,
-        observer: 'onErrorChange_',
-      },
-
-      margins_: Object,
-
-      pageSize_: Object,
-
-      previewState_: {
-        type: String,
-        observer: 'onPreviewStateChange_',
-      },
-
-      printableArea_: Object,
-
-      settingsManaged_: {
-        type: Boolean,
-        value: false,
-      },
-
-      measurementSystem_: {
-        type: Object,
-        value: null,
-      },
-
-      maxSheets_: Number,
+      state: {type: Number},
+      controlsManaged_: {type: Boolean},
+      destination_: {type: Object},
+      destinationsManaged_: {type: Boolean},
+      documentSettings_: {type: Object},
+      error_: {type: Number},
+      margins_: {type: Object},
+      pageSize_: {type: Object},
+      settingsManaged_: {type: Boolean},
+      measurementSystem_: {type: Object},
     };
   }
 
-  state: State;
-  private controlsManaged_: boolean;
-  private destination_: Destination;
-  private destinationsManaged_: boolean;
-  private destinationState_: DestinationState;
-  private documentSettings_: DocumentSettings;
-  private error_: Error;
-  private margins_: Margins;
-  private pageSize_: Size;
-  private previewState_: PreviewAreaState;
-  private printableArea_: PrintableArea;
-  private settingsManaged_: boolean;
-  private measurementSystem_: MeasurementSystem|null;
-  private maxSheets_: number;
+  accessor state: State = State.NOT_READY;
+  protected accessor controlsManaged_: boolean = false;
+  protected accessor destination_: Destination|null = null;
+  private accessor destinationsManaged_: boolean = false;
+  protected accessor documentSettings_: DocumentSettings =
+      createDocumentSettings();
+  protected accessor error_: Error|null = null;
+  protected accessor margins_: Margins|null = null;
+  protected accessor pageSize_: Size = new Size(612, 792);
+  protected accessor settingsManaged_: boolean = false;
+  protected accessor measurementSystem_: MeasurementSystem|null = null;
 
   private nativeLayer_: NativeLayer|null = null;
   private tracker_: EventTracker = new EventTracker();
@@ -154,9 +117,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
   }
 
-  override ready() {
-    super.ready();
-
+  override firstUpdated() {
     FocusOutlineManager.forDocument(document);
   }
 
@@ -183,7 +144,38 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     this.whenReady_ = null;
   }
 
-  private onSidebarFocus_() {
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    const changedPrivateProperties =
+        changedProperties as Map<PropertyKey, unknown>;
+
+    if (changedPrivateProperties.has('destinationsManaged_') ||
+        changedPrivateProperties.has('settingsManaged_')) {
+      this.controlsManaged_ =
+          this.destinationsManaged_ || this.settingsManaged_;
+    }
+  }
+
+  override updated(changedProperties: PropertyValues<this>) {
+    super.updated(changedProperties);
+
+    const changedPrivateProperties =
+        changedProperties as Map<PropertyKey, unknown>;
+
+    if (changedProperties.has('state')) {
+      this.updateUiForStateChange_();
+    }
+
+    if (changedPrivateProperties.has('error_')) {
+      if (this.error_ !== null && this.error_ !== Error.NONE) {
+        this.nativeLayer_!.recordInHistogram(
+            'PrintPreview.StateError', this.error_, Error.MAX_BUCKET);
+      }
+    }
+  }
+
+  protected onSidebarFocus_() {
     this.$.previewArea.hideToolbar();
   }
 
@@ -197,10 +189,10 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     // itself is closed.
     if (e.key === 'Escape' && !hasKeyModifiers(e)) {
       // Don't close the Print Preview dialog if there is a child dialog open.
-      if (this.openDialogs_.length !== 0) {
+      if (this.openDialogs_.length > 0) {
         // Manually cancel the dialog, since we call preventDefault() to prevent
         // views from closing the Print Preview dialog.
-        const dialogToClose = this.openDialogs_[this.openDialogs_.length - 1];
+        const dialogToClose = this.openDialogs_[this.openDialogs_.length - 1]!;
         dialogToClose.cancel();
         e.preventDefault();
         return;
@@ -248,7 +240,15 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
 
     if ((e.key === 'Enter' || e.key === 'NumpadEnter') &&
         this.state === State.READY && this.openDialogs_.length === 0) {
-      const activeElementTag = (e.composedPath()[0] as HTMLElement).tagName;
+      const activeElement = e.composedPath()[0] as HTMLElement | undefined;
+      // activeElement may be undefined if this is a forwarded key event from
+      // the plugin. Print Preview conventionally does not trigger a print for
+      // Enter when the plugin is focused
+      if (!activeElement) {
+        return;
+      }
+
+      const activeElementTag = activeElement.tagName;
       if (['CR-BUTTON', 'BUTTON', 'SELECT', 'A', 'CR-CHECKBOX'].includes(
               activeElementTag)) {
         return;
@@ -286,8 +286,8 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
     this.whenReady_.then(() => {
       this.$.documentInfo.init(
-          settings.previewModifiable, settings.previewIsFromArc,
-          settings.documentTitle, settings.documentHasSelection);
+          settings.previewModifiable, settings.documentTitle,
+          settings.documentHasSelection);
       this.$.model.setStickySettings(settings.serializedAppStateStr);
       this.$.model.setPolicySettings(settings.policies);
       this.measurementSystem_ = new MeasurementSystem(
@@ -311,18 +311,11 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     });
   }
 
-  /**
-   * @return Whether any of the print preview settings or destinations
-   *     are managed.
-   */
-  private computeControlsManaged_(): boolean {
-    // If |this.maxSheets_| equals to 0, no sheets limit policy is present.
-    return this.destinationsManaged_ || this.settingsManaged_ ||
-        this.maxSheets_ > 0;
-  }
+  protected onDestinationStateChanged_(
+      e: CustomEvent<{value: DestinationState}>) {
+    const destinationState = e.detail.value;
 
-  private onDestinationStateChange_() {
-    switch (this.destinationState_) {
+    switch (destinationState) {
       case DestinationState.SET:
         if (this.state !== State.NOT_READY &&
             this.state !== State.FATAL_ERROR) {
@@ -339,7 +332,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
         this.startPreviewWhenReady_ = true;
 
         if (this.state === State.NOT_READY &&
-            this.destination_.type !== PrinterType.PDF_PRINTER) {
+            this.destination_!.type !== PrinterType.PDF_PRINTER) {
           this.nativeLayer_!.recordBooleanHistogram(
               'PrintPreview.TransitionedToReadyState', true);
         }
@@ -348,7 +341,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
         break;
       case DestinationState.ERROR:
         if (this.state === State.NOT_READY &&
-            this.destination_.type !== PrinterType.PDF_PRINTER) {
+            this.destination_!.type !== PrinterType.PDF_PRINTER) {
           this.nativeLayer_!.recordBooleanHistogram(
               'PrintPreview.TransitionedToReadyState', false);
         }
@@ -363,12 +356,18 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   /**
    * @param e Event containing the new sticky settings.
    */
-  private onStickySettingChanged_(e: CustomEvent<string>) {
+  protected onStickySettingChanged_(e: CustomEvent<string>) {
     this.nativeLayer_!.saveAppState(e.detail);
   }
 
-  private onPreviewSettingChanged_() {
+  protected async onPreviewSettingChanged_() {
     if (this.state === State.READY) {
+      // Need to wait for rendering to finish, to ensure that the `destination`
+      // is synced across print-preview-app, print-preview-model and
+      // print-preview-area.
+      await this.updateComplete;
+      assert(this.destination_!.id === this.$.previewArea.destination!.id);
+      assert(this.destination_!.id === this.$.model.destination!.id);
       this.$.previewArea.startPreview(false);
       this.startPreviewWhenReady_ = false;
     } else {
@@ -376,7 +375,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
   }
 
-  private onStateChanged_() {
+  private updateUiForStateChange_() {
     if (this.state === State.READY) {
       if (this.startPreviewWhenReady_) {
         this.$.previewArea.startPreview(false);
@@ -391,12 +390,14 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
       this.remove();
       this.nativeLayer_!.dialogClose(this.cancelled_);
     } else if (this.state === State.PRINT_PENDING) {
+      assert(this.destination_);
       if (this.destination_.type !== PrinterType.PDF_PRINTER) {
         // Only hide the preview for local, non PDF destinations.
         this.nativeLayer_!.hidePreview();
         this.$.state.transitTo(State.HIDDEN);
       }
     } else if (this.state === State.PRINTING) {
+      assert(this.destination_);
       const whenPrintDone =
           this.nativeLayer_!.doPrint(this.$.model.createPrintTicket(
               this.destination_, this.openPdfInPreview_,
@@ -408,14 +409,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     }
   }
 
-  private onErrorChange_() {
-    if (this.error_ !== Error.NONE) {
-      this.nativeLayer_!.recordInHistogram(
-          'PrintPreview.StateError', this.error_, Error.MAX_BUCKET);
-    }
-  }
-
-  private onPrintRequested_() {
+  protected onPrintRequested_() {
     if (this.state === State.NOT_READY) {
       this.printRequested_ = true;
       return;
@@ -426,7 +420,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
                                              State.PRINT_PENDING);
   }
 
-  private onCancelRequested_() {
+  protected onCancelRequested_() {
     this.cancelled_ = true;
     this.$.state.transitTo(State.CLOSING);
   }
@@ -434,7 +428,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   /**
    * @param e The event containing the new validity.
    */
-  private onSettingValidChanged_(e: CustomEvent<boolean>) {
+  protected onSettingValidChanged_(e: CustomEvent<boolean>) {
     if (e.detail) {
       this.$.state.transitTo(State.READY);
     } else {
@@ -447,7 +441,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     this.$.state.transitTo(State.READY);
   }
 
-  private onPrintWithSystemDialog_() {
+  protected onPrintWithSystemDialog_() {
     // <if expr="is_win">
     this.showSystemDialogBeforePrint_ = true;
     this.onPrintRequested_();
@@ -459,7 +453,7 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   }
 
   // <if expr="is_macosx">
-  private onOpenPdfInPreview_() {
+  protected onOpenPdfInPreview_() {
     this.openPdfInPreview_ = true;
     this.$.previewArea.setOpeningPdfInPreview();
     this.onPrintRequested_();
@@ -477,8 +471,10 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
     this.$.state.transitTo(State.FATAL_ERROR);
   }
 
-  private onPreviewStateChange_() {
-    switch (this.previewState_) {
+  protected onPreviewStateChanged_(e: CustomEvent<{value: PreviewAreaState}>) {
+    const previewState = e.detail.value;
+
+    switch (previewState) {
       case PreviewAreaState.DISPLAY_PREVIEW:
       case PreviewAreaState.OPEN_IN_PREVIEW_LOADED:
         if (this.state === State.PRINT_PENDING || this.state === State.HIDDEN) {
@@ -534,14 +530,49 @@ export class PrintPreviewAppElement extends PrintPreviewAppElementBase {
   /**
    * @param e Contains the new preview request ID.
    */
-  private onPreviewStart_(e: CustomEvent<number>) {
+  protected onPreviewStart_(e: CustomEvent<number>) {
     this.$.documentInfo.inFlightRequestId = e.detail;
   }
 
   private close_() {
     this.$.state.transitTo(State.CLOSING);
   }
+
+  protected onDestinationChanged_(e: CustomEvent<{value: Destination}>) {
+    this.destination_ = e.detail.value;
+  }
+
+  protected onDestinationCapabilitiesChanged_() {
+    this.$.model.updateSettingsFromDestination();
+  }
+
+  protected onStateChanged_(e: CustomEvent<{value: State}>) {
+    this.state = e.detail.value;
+  }
+
+  protected onErrorChanged_(e: CustomEvent<{value: Error}>) {
+    this.error_ = e.detail.value;
+  }
+
+  protected onSettingsManagedChanged_(e: CustomEvent<{value: boolean}>) {
+    this.settingsManaged_ = e.detail.value;
+  }
+
+  protected onDocumentSettingsChanged_(
+      e: CustomEvent<{value: DocumentSettings}>) {
+    this.documentSettings_ = e.detail.value;
+  }
+
+  protected onMarginsChanged_(e: CustomEvent<{value: Margins}>) {
+    this.margins_ = e.detail.value;
+  }
+
+  protected onPageSizeChanged_(e: CustomEvent<{value: Size}>) {
+    this.pageSize_ = e.detail.value;
+  }
 }
+
+export type AppElement = PrintPreviewAppElement;
 
 declare global {
   interface HTMLElementTagNameMap {

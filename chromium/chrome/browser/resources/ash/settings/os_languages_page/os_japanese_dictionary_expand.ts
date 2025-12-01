@@ -10,15 +10,19 @@ import './os_japanese_dictionary_entry_row.js';
 import 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
 
 import type {CrInputElement} from 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import type {BigBuffer} from 'chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom-webui.js';
 import type {BigString} from 'chrome://resources/mojo/mojo/public/mojom/base/big_string.mojom-webui.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {afterNextRender, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import type {JapaneseDictionary} from '../mojom-webui/user_data_japanese_dictionary.mojom-webui.js';
 import {JpPosType} from '../mojom-webui/user_data_japanese_dictionary.mojom-webui.js';
 
+import type {EntryDeletedCustomEvent} from './os_japanese_dictionary_entry_row.js';
 import {getTemplate} from './os_japanese_dictionary_expand.html.js';
 import {UserDataServiceProvider} from './user_data_service_provider.js';
+
+export type DictionaryDeletedCustomEvent = CustomEvent<{dictIndex: number}>;
 
 interface OsJapaneseDictionaryExpandElement {
   $: {
@@ -26,7 +30,8 @@ interface OsJapaneseDictionaryExpandElement {
   };
 }
 
-class OsJapaneseDictionaryExpandElement extends PolymerElement {
+class OsJapaneseDictionaryExpandElement extends I18nMixin
+(PolymerElement) {
   static get is() {
     return 'os-japanese-dictionary-expand' as const;
   }
@@ -43,7 +48,21 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
       syncedEntriesCount: {
         type: Number,
       },
+      showingDeleteDialog_: {
+        type: Boolean,
+      },
+      statusMessage_: {
+        type: String,
+      },
+      dictIndex: {
+        type: Number,
+      },
     };
+  }
+
+  override ready(): void {
+    super.ready();
+    this.addEventListener('dictionary-entry-deleted', this.onEntryDelete_);
   }
 
   // The Japanese Dictionary that this component displays information on.
@@ -56,6 +75,33 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
   // Whether or not this container UI is expanded or folded.
   private expanded_ = false;
 
+  private showingDeleteDialog_ = false;
+
+  // Used for chromevox announcements.
+  private statusMessage_ = '';
+
+  private dictIndex = 0;
+
+  private onEntryDelete_(event: EntryDeletedCustomEvent): void {
+    this.statusMessage_ = '';
+    afterNextRender(this, () => {
+      this.statusMessage_ = this.i18n('japaneseDictionaryEntryDeleted');
+      if (event.detail.isLastEntry) {
+        const newEntryButton =
+            this.shadowRoot!.querySelector<HTMLElement>('#newEntryButton');
+
+        if (newEntryButton) {
+          // TODO(crbug.com/419677565): Find a way to queue this focus only
+          // after the hidden value has changed by itself. This is a hacky way
+          // to resolve a race condition where the hidden value has not changed
+          // yet before the focus is moved.
+          newEntryButton.removeAttribute('hidden');
+          newEntryButton.focus();
+        }
+      }
+    });
+  }
+
   // Adds a new entry locally to create an entry-row component.
   private addEntry_(): void {
     // This changes the entries array from the parent component which it will
@@ -64,6 +110,12 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
     this.push(
         'dict.entries',
         {key: '', value: '', pos: JpPosType.kNoPos, comment: ''});
+    afterNextRender(this, () => {
+      this.shadowRoot!
+          .querySelector<HTMLElement>(
+              'os-japanese-dictionary-entry-row:last-of-type')!.shadowRoot!
+          .querySelector<HTMLElement>('cr-input')!.focus();
+    });
   }
 
   // Renames the dictionary.
@@ -85,8 +137,18 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
              this.dict.id))
             .status.success;
     if (dictionarySaved) {
+      this.dispatchDictionaryDeletedEvent_();
       this.dispatchSavedEvent_();
     }
+    this.showingDeleteDialog_ = false;
+  }
+
+  private hideDeleteDialog_() {
+    this.showingDeleteDialog_ = false;
+  }
+
+  private showDeleteDialog_() {
+    this.showingDeleteDialog_ = true;
   }
 
   // Export dictionary.
@@ -112,13 +174,14 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
     // The limit below is the max size that a mojo BigBuffer can handle via
     // directly using the bytes rather than shared memory.
     if (fileData.size >= 128 * 1048576) {
+      // Clear value so that file select change will retrigger for the same
+      // file.
+      fileInput.value = '';
       return;
     }
     const fileDataView = new Uint8Array(await fileData.arrayBuffer());
     const fileMojomBigBuffer: BigBuffer = {
       bytes: Array.from(fileDataView),
-      sharedMemory: undefined,
-      invalidBuffer: undefined,
     };
     const fileMojomBigString: BigString = {data: fileMojomBigBuffer};
 
@@ -128,6 +191,8 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
     if (status.success) {
       this.dispatchSavedEvent_();
     }
+    // Clear value so that file select change will retrigger for the same file.
+    fileInput.value = '';
   }
 
   // Returns true if this entry is a locally added entry.
@@ -135,6 +200,11 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
     // This entry falls outside of the range of entries that were initially
     // synced, hence it must be added locally.
     return entryIndex > this.syncedEntriesCount;
+  }
+
+  // Returns true if this entry is the last one.
+  private isLastEntry_(entryIndex: number): boolean {
+    return entryIndex === this.dict.entries.length - 1;
   }
 
   // If there is currently an unsynced entry then hide the add button.
@@ -149,7 +219,21 @@ class OsJapaneseDictionaryExpandElement extends PolymerElement {
     this.dispatchEvent(
         new CustomEvent('dictionary-saved', {bubbles: true, composed: true}));
   }
+
+  private dispatchDictionaryDeletedEvent_(): void {
+    this.dispatchEvent(new CustomEvent('dictionary-deleted', {
+      bubbles: true,
+      composed: true,
+      detail: {dictIndex: this.dictIndex},
+    }));
+  }
+
+
+  private i18nDialogString_(dictName: string): string {
+    return this.i18n('japaneseDeleteDictionaryDetail', dictName);
+  }
 }
+
 
 customElements.define(
     OsJapaneseDictionaryExpandElement.is, OsJapaneseDictionaryExpandElement);
@@ -163,5 +247,6 @@ declare global {
 declare global {
   interface HTMLElementEventMap {
     ['dictionary-saved']: CustomEvent;
+    ['dictionary-deleted']: DictionaryDeletedCustomEvent;
   }
 }

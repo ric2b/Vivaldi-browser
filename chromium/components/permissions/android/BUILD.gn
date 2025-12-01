@@ -3,7 +3,6 @@
 # found in the LICENSE file.
 
 import("//build/config/android/rules.gni")
-import("//build/config/locales.gni")
 import("//third_party/jni_zero/jni_zero.gni")
 import("//tools/grit/grit_rule.gni")
 
@@ -12,7 +11,6 @@ generate_jni("jni_headers") {
     "java/src/org/chromium/components/permissions/AndroidPermissionRequester.java",
     "java/src/org/chromium/components/permissions/BluetoothChooserDialog.java",
     "java/src/org/chromium/components/permissions/BluetoothScanningPermissionDialog.java",
-    "java/src/org/chromium/components/permissions/OsAdditionalSecurityPermissionUtil.java",
     "java/src/org/chromium/components/permissions/PermissionDialogController.java",
     "java/src/org/chromium/components/permissions/PermissionDialogDelegate.java",
     "java/src/org/chromium/components/permissions/nfc/NfcSystemLevelSetting.java",
@@ -55,6 +53,7 @@ android_resources("java_resources") {
     "res/drawable/code_off_24px.xml",
     "res/drawable/content_paste_off_24px.xml",
     "res/drawable/devices_off_24px.xml",
+    "res/drawable/download_24px.xml",
     "res/drawable/file_download_off_24px.xml",
     "res/drawable/file_save_off_24px.xml",
     "res/drawable/filled_cardboard_off_24px.xml",
@@ -90,6 +89,7 @@ android_resources("java_resources") {
     "res/drawable/permission_icon_background.xml",
     "res/drawable/sensors_off_24px.xml",
     "res/drawable/smartphone_24px.xml",
+    "res/drawable/sync_24px.xml",
     "res/drawable/sync_disabled_24px.xml",
     "res/drawable/tenancy.xml",
     "res/drawable/tv_24px.xml",
@@ -119,11 +119,6 @@ android_resources("java_resources") {
 
 java_strings_grd("permissions_strings_grd") {
   grd_file = "permissions_android_strings.grd"
-  outputs =
-      [ "values/permissions_android_strings.xml" ] +
-      process_file_template(
-          android_bundle_locales_as_resources,
-          [ "values-{{source_name_part}}/permissions_android_strings.xml" ])
 }
 
 android_library("content_settings_enums_java") {
@@ -215,6 +210,7 @@ android_library("core_java") {
   deps = [
     "//base:base_java",
     "//build/android:build_java",
+    "//components/cached_flags:java",
     "//components/content_settings/android:content_settings_enums_java",
     "//components/location/android:location_java",
     "//components/webxr/android:features_java",
@@ -236,6 +232,7 @@ robolectric_library("components_permissions_junit_tests") {
     ":java_resources",
     "//base:base_java_test_support",
     "//base:base_junit_test_support",
+    "//base:callback_java",
     "//components/browser_ui/theme/android:java_resources",
     "//components/browser_ui/widget/android:java",
     "//third_party/androidx:androidx_appcompat_appcompat_resources_java",

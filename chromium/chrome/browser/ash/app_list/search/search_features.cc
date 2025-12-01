@@ -37,7 +37,7 @@ BASE_FEATURE(kICASupportedByHardware,
 
 BASE_FEATURE(kLauncherImageSearchOcr,
              "LauncherImageSearchOcr",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLauncherImageSearchIndexingLimit,
              "LauncherImageSearchIndexingLimit",
@@ -46,10 +46,6 @@ BASE_FEATURE(kLauncherImageSearchIndexingLimit,
 BASE_FEATURE(kLauncherImageSearchDebug,
              "kLauncherImageSearchDebug",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kLauncherSystemInfoAnswerCards,
-             "LauncherSystemInfoAnswerCards",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kLauncherSearchFileScan,
              "kLauncherSearchFileScan",
@@ -92,10 +88,6 @@ bool IsLauncherImageSearchIndexingLimitEnabled() {
 
 bool IsLauncherImageSearchDebugEnabled() {
   return base::FeatureList::IsEnabled(kLauncherImageSearchDebug);
-}
-
-bool IsLauncherSystemInfoAnswerCardsEnabled() {
-  return base::FeatureList::IsEnabled(kLauncherSystemInfoAnswerCards);
 }
 
 bool IsLauncherSearchFileScanEnabled() {

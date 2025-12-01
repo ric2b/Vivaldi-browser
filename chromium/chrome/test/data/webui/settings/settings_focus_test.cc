@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/web_ui_mocha_browser_test.h"
@@ -74,13 +75,7 @@ class SettingsGlicPageFocusTest : public SettingsFocusTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// TODO(crbug.com/400246327) Times out on Mac.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_GlicPageFocus DISABLED_GlicPageFocus
-#else
-#define MAYBE_GlicPageFocus GlicPageFocus
-#endif
-IN_PROC_BROWSER_TEST_F(SettingsGlicPageFocusTest, MAYBE_GlicPageFocus) {
+IN_PROC_BROWSER_TEST_F(SettingsGlicPageFocusTest, GlicPageFocus) {
   RunTest("settings/glic_page_focus_test.js", "mocha.run()");
 }
 #endif

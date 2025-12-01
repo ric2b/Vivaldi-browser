@@ -10,15 +10,19 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Insets;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.os.Build;
 import android.os.Build.VERSION;
 import android.os.Build.VERSION_CODES;
 import android.util.DisplayMetrics;
+import android.util.Pair;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 
 import org.chromium.base.BuildInfo;
+import org.chromium.base.CommandLine;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.build.annotations.NullMarked;
@@ -72,6 +76,19 @@ public abstract class DisplayUtil {
                         org.chromium.ui.R.dimen.automotive_ui_scale_factor,
                         automotiveUiScaleFactor,
                         true);
+        if (CommandLine.getInstance().hasSwitch(DisplaySwitches.CLAMP_AUTOMOTIVE_SCALE_UP)) {
+            String maxAutomotiveScalingString =
+                    CommandLine.getInstance()
+                            .getSwitchValue(DisplaySwitches.CLAMP_AUTOMOTIVE_SCALE_UP);
+            float maxAutomotiveScaling;
+            try {
+                maxAutomotiveScaling = Float.parseFloat(maxAutomotiveScalingString);
+                if (maxAutomotiveScaling < automotiveUiScaleFactor.getFloat()) {
+                    return maxAutomotiveScaling;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         return automotiveUiScaleFactor.getFloat();
     }
 
@@ -286,6 +303,19 @@ public abstract class DisplayUtil {
         return xrUiScaleFactor.getFloat();
     }
 
+    /** Returns the scaling factor for the current device. */
+    public static float getCurrentUiScalingFactor(Context context) {
+        if (!isUiScaled()) return 1;
+        if (BuildInfo.getInstance().isAutomotive) {
+            return sUiScalingFactorForAutomotiveOverride != null
+                    ? sUiScalingFactorForAutomotiveOverride
+                    : getTargetScalingFactorForAutomotive(context);
+        }
+        return sUiScalingFactorForXrOverride != null
+                ? sUiScalingFactorForXrOverride
+                : getUiScalingFactorForXrFromResource(context);
+    }
+
     /** Get the density base on the UI scaling factor on XR devices. */
     public static int getUiDensityForXr(Context context, int baseDensity) {
         float uiScalingFactor =
@@ -334,5 +364,42 @@ public abstract class DisplayUtil {
                         + configuration.screenWidthDp
                         + ", heightDp="
                         + configuration.screenHeightDp);
+    }
+
+    /**
+     * Translates rectangles between global work area coordinates (as in Web API spec) and local
+     * coordinates (display ID and pixel coordinates relative to the origin of the display).
+     * Currently it uses only the current display which has to be explicitly provided as an
+     * argument. This additional argument will be removed when proper multi-display support is
+     * landed in Android as we will use solely global coordinates provided to determine the target
+     * display.
+     *
+     * @param globalCoordinatesDp Global coordinates in dp.
+     * @param targetDisplay Target display of the resulting local coordinates.
+     * @return A pair of display ID and local coordinates in px.
+     */
+    public static Pair<Integer, Rect> getLocalCoordinatesPx(
+            RectF globalCoordinatesDp, DisplayAndroid targetDisplay) {
+        float displayDensity = targetDisplay.getDipScale();
+        int targetDisplayId = targetDisplay.getDisplayId();
+
+        int leftPx = Math.round(globalCoordinatesDp.left * displayDensity);
+        int topPx = Math.round(globalCoordinatesDp.top * displayDensity);
+        int rightPx = Math.round(globalCoordinatesDp.right * displayDensity);
+        int bottomPx = Math.round(globalCoordinatesDp.bottom * displayDensity);
+
+        return Pair.create(targetDisplayId, new Rect(leftPx, topPx, rightPx, bottomPx));
+    }
+
+    /**
+     * Determine whether the given context is associated with the default display.
+     *
+     * @param context The context to determine display state.
+     * @return {@code true} if the context is associated with the default display, {@code false}
+     *     otherwise.
+     */
+    public static boolean isContextInDefaultDisplay(Context context) {
+        Display display = DisplayAndroidManager.getDefaultDisplayForContext(context);
+        return display.getDisplayId() == Display.DEFAULT_DISPLAY;
     }
 }

@@ -67,6 +67,7 @@ AutofillRegexCache& GetAutofillRegexCache() {
 }
 
 void MaybePrintMatchLogs(LogManager* log_manager,
+                         const AutofillField& field,
                          std::string_view regex_name,
                          std::string_view match_attribute_str,
                          std::u16string_view value,
@@ -77,7 +78,13 @@ void MaybePrintMatchLogs(LogManager* log_manager,
   }
   CHECK(!matches.empty());
   LogBuffer table_rows;
-  LOG_AF(table_rows) << Tr{} << "Match type: Match in " << match_attribute_str;
+  LOG_AF(table_rows) << Tr{} << "Match in: " << match_attribute_str;
+  LOG_AF(table_rows) << Tr{} << "Field identifiers: "
+                     << base::StrCat(
+                            {"renderer id: ",
+                             base::NumberToString(field.renderer_id().value()),
+                             ", host frame: ",
+                             field.renderer_form_id().frame_token.ToString()});
   LOG_AF(table_rows) << Tr{} << "RegEx:" << regex_name
                      << (is_negative_pattern ? " (Negative Pattern)" : "");
   LOG_AF(table_rows) << Tr{} << "Value: " << HighlightValue(value, matches[0]);
@@ -105,7 +112,6 @@ bool IsLabelHigherQualityThanPlaceholder(
     case FormFieldData::LabelSource::kPTag:
       return true;
     case FormFieldData::LabelSource::kAriaLabel:
-    case FormFieldData::LabelSource::kDefaultSelectText:
     case FormFieldData::LabelSource::kDdTag:
     case FormFieldData::LabelSource::kDivTable:
     case FormFieldData::LabelSource::kLiTag:
@@ -307,6 +313,11 @@ void FormFieldParser::ClearCandidatesIfHeuristicsDidNotFindEnoughFields(
     permitted_single_field_types.insert(LOYALTY_MEMBERSHIP_ID);
   }
 
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableEmailOrLoyaltyCardsFilling)) {
+    permitted_single_field_types.insert(EMAIL_OR_LOYALTY_MEMBERSHIP_ID);
+  }
+
   // For historic reasons email addresses are only retained if they appear in
   // a <form> tag. It's unclear whether that's necessary.
   FieldTypeSet permitted_single_field_types_in_form{EMAIL_ADDRESS};
@@ -392,18 +403,26 @@ void FormFieldParser::ParseSingleFields(
   ParseFormFieldsPass(IbanFieldParser::Parse, context, processed_fields,
                       field_candidates);
 
-  if (base::FeatureList::IsEnabled(
-          features::kAutofillEnableLoyaltyCardsFilling)) {
-    // Loyalty Cards pass.
-    ParseFormFieldsPass(LoyaltyFieldParser::Parse, context, processed_fields,
-                        field_candidates);
-  }
-
   if (AddressFieldParser::IsStandaloneZipSupported(context.client_country)) {
     // In some countries we observe address forms that are particularly small
     // (e.g. only a zip code.)
     ParseFormFieldsPass(AddressFieldParser::ParseStandaloneZip, context,
                         processed_fields, field_candidates);
+  }
+}
+
+void FormFieldParser::ParseStandaloneLoyaltyCardFields(
+    ParsingContext& context,
+    const std::vector<std::unique_ptr<AutofillField>>& fields,
+    FieldCandidatesMap& field_candidates) {
+  std::vector<raw_ptr<AutofillField, VectorExperimental>> processed_fields =
+      RemoveCheckableFields(fields);
+
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableLoyaltyCardsFilling)) {
+    // Loyalty Cards pass.
+    ParseFormFieldsPass(LoyaltyFieldParser::Parse, context, processed_fields,
+                        field_candidates);
   }
 }
 
@@ -725,8 +744,8 @@ std::optional<FormFieldParser::MatchInfo> FormFieldParser::MatchInLabel(
 
   if (!context.better_placeholder_support || field.placeholder().empty()) {
     if (MatchesRegexWithCache(context, label, pattern, capture_destination)) {
-      MaybePrintMatchLogs(context.log_manager, regex_name, "label", label,
-                          matches, is_negative_pattern);
+      MaybePrintMatchLogs(context.log_manager, field, regex_name, "label",
+                          label, matches, is_negative_pattern);
       return MatchInfo{.matched_attribute =
                            MatchInfo::MatchAttribute::kHighQualityLabel};
     }
@@ -742,15 +761,17 @@ std::optional<FormFieldParser::MatchInfo> FormFieldParser::MatchInLabel(
 
   if (MatchesRegexWithCache(context, high_quality_label, pattern,
                             capture_destination)) {
-    MaybePrintMatchLogs(context.log_manager, regex_name, "high quality label",
-                        high_quality_label, matches, is_negative_pattern);
+    MaybePrintMatchLogs(context.log_manager, field, regex_name,
+                        "high quality label", high_quality_label, matches,
+                        is_negative_pattern);
     return MatchInfo{.matched_attribute =
                          MatchInfo::MatchAttribute::kHighQualityLabel};
   }
   if (MatchesRegexWithCache(context, low_quality_label, pattern,
                             capture_destination)) {
-    MaybePrintMatchLogs(context.log_manager, regex_name, "low quality label",
-                        low_quality_label, matches, is_negative_pattern);
+    MaybePrintMatchLogs(context.log_manager, field, regex_name,
+                        "low quality label", low_quality_label, matches,
+                        is_negative_pattern);
     return MatchInfo{.matched_attribute =
                          MatchInfo::MatchAttribute::kLowQualityLabel};
   }
@@ -771,8 +792,8 @@ std::optional<FormFieldParser::MatchInfo> FormFieldParser::MatchInName(
 
   const std::u16string& name = field.parseable_name();
   if (MatchesRegexWithCache(context, name, pattern, capture_destination)) {
-    MaybePrintMatchLogs(context.log_manager, regex_name, "name", name, matches,
-                        is_negative_pattern);
+    MaybePrintMatchLogs(context.log_manager, field, regex_name, "name", name,
+                        matches, is_negative_pattern);
     return MatchInfo{.matched_attribute = MatchInfo::MatchAttribute::kName};
   }
   return std::nullopt;
@@ -802,12 +823,6 @@ bool FormFieldParser::MatchesFormControlType(
     FormControlType type,
     DenseSet<FormControlType> match_type) {
   return match_type.contains(type);
-}
-
-// static
-bool FormFieldParser::IsSingleFieldParseableType(FieldType field_type) {
-  return field_type == MERCHANT_PROMO_CODE || field_type == IBAN_VALUE ||
-         field_type == CREDIT_CARD_STANDALONE_VERIFICATION_CODE;
 }
 
 }  // namespace autofill

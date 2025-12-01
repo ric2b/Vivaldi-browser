@@ -13,7 +13,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
-#include "chrome/browser/bitmap_fetcher/bitmap_fetcher_delegate.h"
 #include "chrome/browser/extensions/active_install_data.h"
 #include "chrome/browser/extensions/extension_install_prompt.h"
 #include "chrome/browser/extensions/webstore_install_helper.h"
@@ -54,7 +53,7 @@ class WebstorePrivateApi {
   // Sets a delegate for testing.
   static base::AutoReset<Delegate*> SetDelegateForTesting(Delegate* delegate);
 
-  // Gets the pending approval for the |extension_id| in |profile|. Pending
+  // Gets the pending approval for the `extension_id` in `profile`. Pending
   // approvals are held between the calls to beginInstallWithManifest and
   // completeInstall. This should only be used for testing.
   static std::unique_ptr<InstallApproval> PopApprovalForTesting(
@@ -133,8 +132,8 @@ class WebstorePrivateBeginInstallWithManifest3Function
   void ShowInstallFrictionDialog(content::WebContents* contents);
   void ShowInstallDialog(content::WebContents* contents);
 
-  // Shows block dialog when |extension| is blocked by policy on the Window that
-  // |contents| belongs to. |done_callback| will be invoked once the dialog is
+  // Shows block dialog when `extension` is blocked by policy on the Window that
+  // `contents` belongs to. `done_callback` will be invoked once the dialog is
   // closed by user.
   // Custom error message will be appended if it's set by the policy.
   void ShowBlockedByPolicyDialog(const Extension* extension,

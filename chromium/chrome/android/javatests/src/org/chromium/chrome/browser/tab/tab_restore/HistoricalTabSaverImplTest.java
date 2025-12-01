@@ -21,11 +21,8 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
-import org.chromium.base.test.util.Features.DisableFeatures;
-import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.app.tabmodel.ArchivedTabModelOrchestrator;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBulkEvent;
 import org.chromium.chrome.browser.ntp.RecentlyClosedEntry;
@@ -63,7 +60,6 @@ import java.util.Map;
     ChromeSwitches.DISABLE_STARTUP_PROMOS
 })
 @Batch(Batch.PER_CLASS)
-@DisableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER)
 public class HistoricalTabSaverImplTest {
     private static final String TEST_PAGE_1 = "/chrome/test/data/android/about.html";
     private static final String TEST_PAGE_2 = "/chrome/test/data/android/simple.html";
@@ -435,8 +431,9 @@ public class HistoricalTabSaverImplTest {
 
     @Test
     @MediumTest
-    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER)
     public void testArchivedTabsAreExcluded() {
+        final Tab newTab = sActivityTestRule.loadUrlInNewTab("about:blank", /* incognito= */ false);
+
         ArchivedTabModelOrchestrator archivedTabModelOrchestrator =
                 runOnUiThreadBlocking(
                         () ->
@@ -455,7 +452,11 @@ public class HistoricalTabSaverImplTest {
                 () -> {
                     archivedTabModelOrchestrator
                             .getTabArchiver()
-                            .archiveAndRemoveTabs(mTabModel, Arrays.asList(mTabModel.getTabAt(0)));
+                            .archiveAndRemoveTabs(
+                                    mTabModelSelector
+                                            .getTabGroupModelFilterProvider()
+                                            .getTabGroupModelFilter(false),
+                                    Arrays.asList(newTab));
                 });
         List<List<HistoricalEntry>> empty = new ArrayList<List<HistoricalEntry>>();
         assertEntriesAre(empty);

@@ -10,7 +10,6 @@
 
 #include "build/build_config.h"
 #include "core/fxcrt/notreached.h"
-#include "core/fxcrt/stl_util.h"
 #include "core/fxge/fx_font.h"
 #include "public/cpp/fpdf_scopers.h"
 #include "public/fpdf_doc.h"
@@ -80,14 +79,14 @@ class FPDFTextEmbedderTest : public EmbedderTest {};
 
 TEST_F(FPDFTextEmbedderTest, Text) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
   ASSERT_TRUE(textpage);
 
   unsigned short buffer[128];
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
 
   // Check that edge cases are handled gracefully
   EXPECT_EQ(0, FPDFText_GetText(textpage.get(), 0, 128, nullptr));
@@ -97,7 +96,7 @@ TEST_F(FPDFTextEmbedderTest, Text) {
   EXPECT_EQ(0, buffer[0]);
 
   // Keep going and check the next case.
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(2, FPDFText_GetText(textpage.get(), 0, 1, buffer));
   EXPECT_EQ(kHelloGoodbyeText[0], buffer[0]);
   EXPECT_EQ(0, buffer[1]);
@@ -105,7 +104,7 @@ TEST_F(FPDFTextEmbedderTest, Text) {
   // Check includes the terminating NUL that is provided.
   int num_chars = FPDFText_GetText(textpage.get(), 0, 128, buffer);
   ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-  EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+  EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
               ElementsAreArray(kHelloGoodbyeText));
 
   // Count does not include the terminating NUL in the string literal.
@@ -124,9 +123,9 @@ TEST_F(FPDFTextEmbedderTest, Text) {
   // the expected string, plus 2 more for the terminating character.
   static const char kSmallExpected[] = "Hello";
   unsigned short small_buffer[12];
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(6, FPDFText_GetText(textpage.get(), 0, 5, small_buffer));
-  EXPECT_THAT(pdfium::make_span(small_buffer).first(sizeof(kSmallExpected)),
+  EXPECT_THAT(pdfium::span(small_buffer).first(sizeof(kSmallExpected)),
               ElementsAreArray(kSmallExpected));
 
   EXPECT_EQ(12.0, FPDFText_GetFontSize(textpage.get(), 0));
@@ -255,33 +254,33 @@ TEST_F(FPDFTextEmbedderTest, Text) {
                                        nullptr, 0));
 
   // Extract starting at character 4 as above.
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(1, FPDFText_GetBoundedText(textpage.get(), 41.0, 56.0, 82.0, 48.0,
                                        buffer, 1));
   EXPECT_EQ('o', buffer[0]);  // 5th character in "hello".
   EXPECT_EQ(0xbdbd, buffer[1]);
 
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(9, FPDFText_GetBoundedText(textpage.get(), 41.0, 56.0, 82.0, 48.0,
                                        buffer, 9));
   EXPECT_THAT(
-      pdfium::make_span(buffer).first(9u),
-      ElementsAreArray(pdfium::make_span(kHelloGoodbyeText).subspan(4u, 9u)));
+      pdfium::span(buffer).first(9u),
+      ElementsAreArray(pdfium::span(kHelloGoodbyeText).subspan(4u, 9u)));
   EXPECT_EQ(0xbdbd, buffer[9]);
 
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(10, FPDFText_GetBoundedText(textpage.get(), 41.0, 56.0, 82.0, 48.0,
                                         buffer, 128));
   EXPECT_THAT(
-      pdfium::make_span(buffer).first(9u),
-      ElementsAreArray(pdfium::make_span(kHelloGoodbyeText).subspan(4u, 9u)));
+      pdfium::span(buffer).first(9u),
+      ElementsAreArray(pdfium::span(kHelloGoodbyeText).subspan(4u, 9u)));
   EXPECT_EQ(0u, buffer[9]);
   EXPECT_EQ(0xbdbd, buffer[10]);
 }
 
 TEST_F(FPDFTextEmbedderTest, TextVertical) {
   ASSERT_TRUE(OpenDocument("vertical_text.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -350,7 +349,7 @@ TEST_F(FPDFTextEmbedderTest, TextVertical) {
 
 TEST_F(FPDFTextEmbedderTest, TextHebrewMirrored) {
   ASSERT_TRUE(OpenDocument("hebrew_mirrored.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -360,7 +359,7 @@ TEST_F(FPDFTextEmbedderTest, TextHebrewMirrored) {
   ASSERT_EQ(kCharCount, FPDFText_CountChars(textpage.get()));
 
   unsigned short buffer[kCharCount + 1];
-  fxcrt::Fill(buffer, 0x4242);
+  std::ranges::fill(buffer, 0x4242);
   EXPECT_EQ(kCharCount + 1,
             FPDFText_GetText(textpage.get(), 0, kCharCount, buffer));
   EXPECT_EQ(0x05d1, buffer[0]);
@@ -377,7 +376,7 @@ TEST_F(FPDFTextEmbedderTest, TextHebrewMirrored) {
 
 TEST_F(FPDFTextEmbedderTest, TextSearch) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -492,7 +491,7 @@ TEST_F(FPDFTextEmbedderTest, TextSearch) {
 
 TEST_F(FPDFTextEmbedderTest, TextSearchConsecutive) {
   ASSERT_TRUE(OpenDocument("find_text_consecutive.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -574,7 +573,7 @@ TEST_F(FPDFTextEmbedderTest, TextSearchConsecutive) {
 
 TEST_F(FPDFTextEmbedderTest, TextSearchTermAtEnd) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -598,7 +597,7 @@ TEST_F(FPDFTextEmbedderTest, TextSearchTermAtEnd) {
 
 TEST_F(FPDFTextEmbedderTest, TextSearchLeadingSpace) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -620,7 +619,7 @@ TEST_F(FPDFTextEmbedderTest, TextSearchLeadingSpace) {
 
 TEST_F(FPDFTextEmbedderTest, TextSearchTrailingSpace) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -642,7 +641,7 @@ TEST_F(FPDFTextEmbedderTest, TextSearchTrailingSpace) {
 
 TEST_F(FPDFTextEmbedderTest, TextSearchSpaceInSearchTerm) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -673,7 +672,7 @@ TEST_F(FPDFTextEmbedderTest, TextSearchSpaceInSearchTerm) {
 #endif
 TEST_F(FPDFTextEmbedderTest, MAYBE_TextSearchLatinExtended) {
   ASSERT_TRUE(OpenDocument("latin_extended.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -704,7 +703,7 @@ TEST_F(FPDFTextEmbedderTest, MAYBE_TextSearchLatinExtended) {
 // Test that the page has characters despite a bad stream length.
 TEST_F(FPDFTextEmbedderTest, StreamLengthPastEndOfFile) {
   ASSERT_TRUE(OpenDocument("bug_57.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -714,7 +713,7 @@ TEST_F(FPDFTextEmbedderTest, StreamLengthPastEndOfFile) {
 
 TEST_F(FPDFTextEmbedderTest, WebLinks) {
   ASSERT_TRUE(OpenDocument("weblinks.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -747,35 +746,35 @@ TEST_F(FPDFTextEmbedderTest, WebLinks) {
   // Retrieve a link with too small a buffer.  Buffer will not be
   // NUL-terminated, but must not be modified past indicated length,
   // so pre-fill with a pattern to check write bounds.
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(1, FPDFLink_GetURL(pagelink, 0, buffer.data(), 1));
   EXPECT_EQ('h', buffer[0]);
   EXPECT_EQ(0xbdbd, buffer[1]);
 
   // Check buffer that doesn't have space for a terminating NUL.
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   auto kExpectedUrlTruncated =
-      pdfium::make_span(kExpectedUrl).first(kExpectedLen - 1);
+      pdfium::span(kExpectedUrl).first(kExpectedLen - 1);
   EXPECT_EQ(static_cast<int>(kExpectedUrlTruncated.size()),
             FPDFLink_GetURL(pagelink, 0, buffer.data(), kExpectedLen - 1));
-  EXPECT_THAT(pdfium::make_span(buffer).first(kExpectedLen - 1),
+  EXPECT_THAT(pdfium::span(buffer).first(kExpectedLen - 1),
               ElementsAreArray(kExpectedUrlTruncated));
   EXPECT_EQ(0xbdbd, buffer[kExpectedLen - 1]);
 
   // Retreive link with exactly-sized buffer.
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(static_cast<int>(kExpectedLen),
             FPDFLink_GetURL(pagelink, 0, buffer.data(), kExpectedLen));
-  EXPECT_THAT(pdfium::make_span(buffer).first(kExpectedLen),
+  EXPECT_THAT(pdfium::span(buffer).first(kExpectedLen),
               ElementsAreArray(kExpectedUrl));
   EXPECT_EQ(0u, buffer[kExpectedLen - 1]);
   EXPECT_EQ(0xbdbd, buffer[kExpectedLen]);
 
   // Retreive link with ample-sized-buffer.
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   EXPECT_EQ(static_cast<int>(kExpectedLen),
             FPDFLink_GetURL(pagelink, 0, buffer.data(), buffer.size()));
-  EXPECT_THAT(pdfium::make_span(buffer).first(kExpectedLen),
+  EXPECT_THAT(pdfium::span(buffer).first(kExpectedLen),
               ElementsAreArray(kExpectedUrl));
   EXPECT_EQ(0u, buffer[kExpectedLen - 1]);
   EXPECT_EQ(0xbdbd, buffer[kExpectedLen]);
@@ -827,7 +826,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinks) {
 
 TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLines) {
   ASSERT_TRUE(OpenDocument("weblinks_across_lines.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -836,7 +835,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLines) {
   FPDF_PAGELINK pagelink = FPDFLink_LoadWebLinks(textpage.get());
   EXPECT_TRUE(pagelink);
 
-  static constexpr auto kExpectedUrls = fxcrt::ToArray<const char*>({
+  static constexpr auto kExpectedUrls = std::to_array<const char*>({
       "http://example.com",           // from "http://www.example.com?\r\nfoo"
       "http://example.com/",          // from "http://www.example.com/\r\nfoo"
       "http://example.com/test-foo",  // from "http://example.com/test-\r\nfoo"
@@ -856,7 +855,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLines) {
               FPDFLink_GetURL(pagelink, i, nullptr, 0));
     EXPECT_EQ(static_cast<int>(expected_url.GetLength() + 1),
               FPDFLink_GetURL(pagelink, i, buffer.data(), buffer.size()));
-    EXPECT_THAT(pdfium::make_span(buffer).first(expected_url.GetLength()),
+    EXPECT_THAT(pdfium::span(buffer).first(expected_url.GetLength()),
                 ElementsAreArray(expected_url));
     EXPECT_EQ(0u, buffer[expected_url.GetLength()]);
   }
@@ -866,7 +865,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLines) {
 
 TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLinesBug) {
   ASSERT_TRUE(OpenDocument("bug_650.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -885,7 +884,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLinesBug) {
             FPDFLink_GetURL(pagelink, 1, nullptr, 0));
   EXPECT_EQ(static_cast<int>(kUrlSize),
             FPDFLink_GetURL(pagelink, 1, buffer, std::size(buffer)));
-  EXPECT_THAT(pdfium::make_span(buffer).first(kUrlSize),
+  EXPECT_THAT(pdfium::span(buffer).first(kUrlSize),
               ElementsAreArray(kExpectedUrl));
 
   FPDFLink_CloseWebLinks(pagelink);
@@ -893,7 +892,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksAcrossLinesBug) {
 
 TEST_F(FPDFTextEmbedderTest, WebLinksCharRanges) {
   ASSERT_TRUE(OpenDocument("weblinks.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -939,7 +938,7 @@ TEST_F(FPDFTextEmbedderTest, WebLinksCharRanges) {
 
 TEST_F(FPDFTextEmbedderTest, AnnotLinks) {
   ASSERT_TRUE(OpenDocument("annots.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   // Get link count via checking annotation subtype
@@ -1002,13 +1001,13 @@ TEST_F(FPDFTextEmbedderTest, AnnotLinks) {
 
 TEST_F(FPDFTextEmbedderTest, GetFontSize) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
   ASSERT_TRUE(textpage);
 
-  static constexpr auto kExpectedFontsSizes = fxcrt::ToArray<const double>(
+  static constexpr auto kExpectedFontsSizes = std::to_array<const double>(
       {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 1,  1,
        16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16});
 
@@ -1022,7 +1021,7 @@ TEST_F(FPDFTextEmbedderTest, GetFontSize) {
 
 TEST_F(FPDFTextEmbedderTest, GetFontInfo) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1104,7 +1103,7 @@ TEST_F(FPDFTextEmbedderTest, GetFontInfo) {
 
 TEST_F(FPDFTextEmbedderTest, ToUnicode) {
   ASSERT_TRUE(OpenDocument("bug_583.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1116,7 +1115,7 @@ TEST_F(FPDFTextEmbedderTest, ToUnicode) {
 
 TEST_F(FPDFTextEmbedderTest, IsGenerated) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1143,7 +1142,7 @@ TEST_F(FPDFTextEmbedderTest, IsGenerated) {
 
 TEST_F(FPDFTextEmbedderTest, IsHyphen) {
   ASSERT_TRUE(OpenDocument("bug_781804.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1170,7 +1169,7 @@ TEST_F(FPDFTextEmbedderTest, IsHyphen) {
 
 TEST_F(FPDFTextEmbedderTest, IsInvalidUnicode) {
   ASSERT_TRUE(OpenDocument("bug_1388_2.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   static constexpr int kExpectedCharCount = 5;
@@ -1196,13 +1195,13 @@ TEST_F(FPDFTextEmbedderTest, IsInvalidUnicode) {
 
 TEST_F(FPDFTextEmbedderTest, Bug921) {
   ASSERT_TRUE(OpenDocument("bug_921.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
   ASSERT_TRUE(textpage);
 
-  static constexpr auto kData = fxcrt::ToArray<const unsigned int>(
+  static constexpr auto kData = std::to_array<const unsigned int>(
       {1095, 1077, 1083, 1086, 1074, 1077, 1095, 1077, 1089, 1082, 1086, 1077,
        32,   1089, 1090, 1088, 1072, 1076, 1072, 1085, 1080, 1077, 46,   32});
   static constexpr int kStartIndex = 238;
@@ -1212,7 +1211,7 @@ TEST_F(FPDFTextEmbedderTest, Bug921) {
     EXPECT_EQ(kData[i], FPDFText_GetUnicode(textpage.get(), kStartIndex + i));
   }
   std::array<unsigned short, std::size(kData) + 1> buffer;
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   int count = FPDFText_GetText(textpage.get(), kStartIndex, kData.size(),
                                buffer.data());
   ASSERT_GT(count, 0);
@@ -1225,7 +1224,7 @@ TEST_F(FPDFTextEmbedderTest, Bug921) {
 
 TEST_F(FPDFTextEmbedderTest, GetTextWithHyphen) {
   ASSERT_TRUE(OpenDocument("bug_781804.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1235,7 +1234,7 @@ TEST_F(FPDFTextEmbedderTest, GetTextWithHyphen) {
   // Expecting 'Veritaserum', except there is a \uFFFE where the hyphen was in
   // the original text. This is a weird thing that Adobe does, which we
   // replicate.
-  static constexpr auto soft_expected = fxcrt::ToArray<unsigned short>(
+  static constexpr auto soft_expected = std::to_array<unsigned short>(
       {0x0056, 0x0065, 0x0072, 0x0069, 0x0074, 0x0061, 0xfffe, 0x0073, 0x0065,
        0x0072, 0x0075, 0x006D, 0x0000});
   {
@@ -1253,7 +1252,7 @@ TEST_F(FPDFTextEmbedderTest, GetTextWithHyphen) {
     static constexpr size_t offset = std::size(soft_expected) + 1;
     // Expecting 'User-\r\ngenerated', the - is a unicode character, so cannot
     // store in a char[].
-    static constexpr auto hard_expected = fxcrt::ToArray<unsigned short>(
+    static constexpr auto hard_expected = std::to_array<unsigned short>(
         {0x0055, 0x0073, 0x0065, 0x0072, 0x2010, 0x000d, 0x000a, 0x0067, 0x0065,
          0x006e, 0x0065, 0x0072, 0x0061, 0x0074, 0x0065, 0x0064, 0x0000});
     static constexpr int count = std::size(hard_expected) - 1;
@@ -1269,7 +1268,7 @@ TEST_F(FPDFTextEmbedderTest, GetTextWithHyphen) {
 TEST_F(FPDFTextEmbedderTest, Bug782596) {
   // If there is a regression in this test, it will only fail under ASAN
   ASSERT_TRUE(OpenDocument("bug_782596.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
   ASSERT_TRUE(textpage);
@@ -1277,7 +1276,7 @@ TEST_F(FPDFTextEmbedderTest, Bug782596) {
 
 TEST_F(FPDFTextEmbedderTest, ControlCharacters) {
   ASSERT_TRUE(OpenDocument("control_characters.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1285,22 +1284,22 @@ TEST_F(FPDFTextEmbedderTest, ControlCharacters) {
 
   // Should not include the control characters in the output
   unsigned short buffer[128];
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   int num_chars = FPDFText_GetText(textpage.get(), 0, 128, buffer);
   ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-  EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+  EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
               ElementsAreArray(kHelloGoodbyeText));
 
   // Attempting to get a chunk of text after the control characters
   static const char kExpectedSubstring[] = "Goodbye, world!";
   // Offset is the length of 'Hello, world!\r\n' + 2 control characters in the
   // original stream
-  fxcrt::Fill(buffer, 0xbdbd);
+  std::ranges::fill(buffer, 0xbdbd);
   num_chars = FPDFText_GetText(textpage.get(), 17, 128, buffer);
 
   ASSERT_GE(num_chars, 0);
   EXPECT_EQ(sizeof(kExpectedSubstring), static_cast<size_t>(num_chars));
-  EXPECT_THAT(pdfium::make_span(buffer).first(sizeof(kExpectedSubstring)),
+  EXPECT_THAT(pdfium::span(buffer).first(sizeof(kExpectedSubstring)),
               ElementsAreArray(kExpectedSubstring));
 }
 
@@ -1308,7 +1307,7 @@ TEST_F(FPDFTextEmbedderTest, ControlCharacters) {
 // the word contains non-ASCII characters.
 TEST_F(FPDFTextEmbedderTest, Bug1029) {
   ASSERT_TRUE(OpenDocument("bug_1029.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1323,7 +1322,7 @@ TEST_F(FPDFTextEmbedderTest, Bug1029) {
   //
   // The original text has a fi ligature, but that is broken up into
   // two characters when the PDF is processed.
-  static constexpr auto expected = fxcrt::ToArray<unsigned int>({
+  static constexpr auto expected = std::to_array<unsigned int>({
       0x004d, 0x0045, 0x0054, 0x0041, 0x0044, 0x0041, 0x0054, 0x0041,
       0x0020, 0x0074, 0x0061, 0x0062, 0x006c, 0x0065, 0x002e, 0x0020,
       0x0057, 0x0068, 0x0065, 0x006e, 0x0020, 0x0074, 0x0068, 0x0065,
@@ -1346,7 +1345,7 @@ TEST_F(FPDFTextEmbedderTest, Bug1029) {
 
 TEST_F(FPDFTextEmbedderTest, CountRects) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -1358,7 +1357,7 @@ TEST_F(FPDFTextEmbedderTest, CountRects) {
     unsigned short buffer[128];
     int num_chars = FPDFText_GetText(textpage.get(), 0, 128, buffer);
     ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-    EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+    EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
                 ElementsAreArray(kHelloGoodbyeText));
   }
 
@@ -1415,7 +1414,7 @@ TEST_F(FPDFTextEmbedderTest, CountRects) {
 
 TEST_F(FPDFTextEmbedderTest, GetText) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1474,7 +1473,7 @@ TEST_F(FPDFTextEmbedderTest, CroppedText) {
   ASSERT_EQ(kPageCount, FPDF_GetPageCount(document()));
 
   for (int i = 0; i < kPageCount; ++i) {
-    ScopedEmbedderTestPage page = LoadScopedPage(i);
+    ScopedPage page = LoadScopedPage(i);
     ASSERT_TRUE(page);
 
     FS_RECTF box;
@@ -1485,10 +1484,10 @@ TEST_F(FPDFTextEmbedderTest, CroppedText) {
     ASSERT_TRUE(textpage);
 
     unsigned short buffer[128];
-    fxcrt::Fill(buffer, 0xbdbd);
+    std::ranges::fill(buffer, 0xbdbd);
     int num_chars = FPDFText_GetText(textpage.get(), 0, 128, buffer);
     ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-    EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+    EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
                 ElementsAreArray(kHelloGoodbyeText));
 
     ByteStringView expected_text(kExpectedText[i]);
@@ -1496,18 +1495,18 @@ TEST_F(FPDFTextEmbedderTest, CroppedText) {
               FPDFText_GetBoundedText(textpage.get(), box.left, box.top,
                                       box.right, box.bottom, nullptr, 0));
 
-    fxcrt::Fill(buffer, 0xbdbd);
+    std::ranges::fill(buffer, 0xbdbd);
     ASSERT_EQ(static_cast<int>(expected_text.GetLength()) + 1,
               FPDFText_GetBoundedText(textpage.get(), box.left, box.top,
                                       box.right, box.bottom, buffer, 128));
-    EXPECT_THAT(pdfium::make_span(buffer).first(expected_text.GetLength()),
+    EXPECT_THAT(pdfium::span(buffer).first(expected_text.GetLength()),
                 ElementsAreArray(expected_text));
   }
 }
 
 TEST_F(FPDFTextEmbedderTest, Bug1139) {
   ASSERT_TRUE(OpenDocument("bug_1139.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1522,13 +1521,13 @@ TEST_F(FPDFTextEmbedderTest, Bug1139) {
   unsigned short buffer[128];
   int num_chars = FPDFText_GetText(text_page.get(), 0, 128, buffer);
   ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-  EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+  EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
               ElementsAreArray(kHelloGoodbyeText));
 }
 
 TEST_F(FPDFTextEmbedderTest, Bug642) {
   ASSERT_TRUE(OpenDocument("bug_642.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1549,7 +1548,7 @@ TEST_F(FPDFTextEmbedderTest, Bug642) {
 
 TEST_F(FPDFTextEmbedderTest, GetCharAngle) {
   ASSERT_TRUE(OpenDocument("rotated_text.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1599,7 +1598,7 @@ TEST_F(FPDFTextEmbedderTest, GetCharAngle) {
 
 TEST_F(FPDFTextEmbedderTest, GetFontWeight) {
   ASSERT_TRUE(OpenDocument("font_weight.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1623,7 +1622,7 @@ TEST_F(FPDFTextEmbedderTest, GetFontWeight) {
 
 TEST_F(FPDFTextEmbedderTest, GetTextRenderMode) {
   ASSERT_TRUE(OpenDocument("text_render_mode.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1650,7 +1649,7 @@ TEST_F(FPDFTextEmbedderTest, GetTextRenderMode) {
 
 TEST_F(FPDFTextEmbedderTest, GetFillColor) {
   ASSERT_TRUE(OpenDocument("text_color.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1680,7 +1679,7 @@ TEST_F(FPDFTextEmbedderTest, GetFillColor) {
 
 TEST_F(FPDFTextEmbedderTest, GetStrokeColor) {
   ASSERT_TRUE(OpenDocument("text_color.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1711,7 +1710,7 @@ TEST_F(FPDFTextEmbedderTest, GetStrokeColor) {
 TEST_F(FPDFTextEmbedderTest, GetMatrix) {
   static constexpr char kExpectedText[] = "A1\r\nA2\r\nA3";
   static constexpr size_t kExpectedTextSize = std::size(kExpectedText);
-  static constexpr auto kExpectedMatrices = fxcrt::ToArray<const FS_MATRIX>({
+  static constexpr auto kExpectedMatrices = std::to_array<const FS_MATRIX>({
       {12.0f, 0.0f, 0.0f, 10.0f, 66.0f, 90.0f},
       {12.0f, 0.0f, 0.0f, 10.0f, 66.0f, 90.0f},
       {1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f},
@@ -1728,7 +1727,7 @@ TEST_F(FPDFTextEmbedderTest, GetMatrix) {
                 "Bad expected matrix size");
 
   ASSERT_TRUE(OpenDocument("font_matrix.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1741,7 +1740,7 @@ TEST_F(FPDFTextEmbedderTest, GetMatrix) {
     unsigned short buffer[kExpectedTextSize];
     ASSERT_EQ(static_cast<int>(kExpectedTextSize),
               FPDFText_GetText(text_page.get(), 0, kExpectedCount, buffer));
-    EXPECT_THAT(pdfium::make_span(buffer).first(kExpectedTextSize),
+    EXPECT_THAT(pdfium::span(buffer).first(kExpectedTextSize),
                 ElementsAreArray(kExpectedText));
   }
 
@@ -1772,7 +1771,7 @@ TEST_F(FPDFTextEmbedderTest, CharBox) {
   static constexpr float kExpectedLooseCharHeight = 12.82999f;
 
   ASSERT_TRUE(OpenDocument("font_matrix.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1819,7 +1818,7 @@ TEST_F(FPDFTextEmbedderTest, CharBox) {
 
 TEST_F(FPDFTextEmbedderTest, CharBoxForRotated45DegreesText) {
   ASSERT_TRUE(OpenDocument("rotated_text.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1888,7 +1887,7 @@ TEST_F(FPDFTextEmbedderTest, CharBoxForRotated45DegreesText) {
 
 TEST_F(FPDFTextEmbedderTest, CharBoxForRotated90DegreesText) {
   ASSERT_TRUE(OpenDocument("rotated_text_90.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1958,7 +1957,7 @@ TEST_F(FPDFTextEmbedderTest, CharBoxForRotated90DegreesText) {
 
 TEST_F(FPDFTextEmbedderTest, CharBoxForLatinExtendedText) {
   ASSERT_TRUE(OpenDocument("latin_extended.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -1998,7 +1997,7 @@ TEST_F(FPDFTextEmbedderTest, CharBoxForLatinExtendedText) {
 
 TEST_F(FPDFTextEmbedderTest, Bug399689604) {
   ASSERT_TRUE(OpenDocument("bug_399689604.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -2024,7 +2023,7 @@ TEST_F(FPDFTextEmbedderTest, Bug399689604) {
 
 TEST_F(FPDFTextEmbedderTest, SmallType3Glyph) {
   ASSERT_TRUE(OpenDocument("bug_1591.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -2080,7 +2079,7 @@ TEST_F(FPDFTextEmbedderTest, BigtableTextExtraction) {
   ByteStringView expected_text(kExpectedText);
 
   ASSERT_TRUE(OpenDocument("bigtable_mini.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage text_page(FPDFText_LoadPage(page.get()));
@@ -2104,7 +2103,7 @@ TEST_F(FPDFTextEmbedderTest, BigtableTextRects) {
   // TODO(crbug.com/40448046): The PDF uses fonts [/F2, /F1, /F2, /F1] with a
   // constant size on a single line. FPDFText_CountRects() should merge the text
   // into 4 rects.
-  static constexpr auto kExpectedRects = fxcrt::ToArray<TextRect>({
+  static constexpr auto kExpectedRects = std::to_array<TextRect>({
       {7.0195, 657.8847, 10.3102, 648.9273},
       {11.1978, 657.4722, 13.9057, 651.1599},
       {14.1085, 655.3652, 22.2230, 649.2321},
@@ -2120,7 +2119,7 @@ TEST_F(FPDFTextEmbedderTest, BigtableTextRects) {
   });
 
   ASSERT_TRUE(OpenDocument("bigtable_mini.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -2141,7 +2140,7 @@ TEST_F(FPDFTextEmbedderTest, BigtableTextRects) {
 
 TEST_F(FPDFTextEmbedderTest, Bug1769) {
   ASSERT_TRUE(OpenDocument("bug_1769.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -2154,13 +2153,13 @@ TEST_F(FPDFTextEmbedderTest, Bug1769) {
   // extracted is debatable.
   static constexpr char kNeedsImprovementResult[] = "wo d wo d";
   ASSERT_EQ(10, FPDFText_GetText(textpage.get(), 0, 128, buffer));
-  EXPECT_THAT(pdfium::make_span(buffer).first(10u),
+  EXPECT_THAT(pdfium::span(buffer).first(10u),
               ElementsAreArray(kNeedsImprovementResult));
 }
 
 TEST_F(FPDFTextEmbedderTest, Bug384770169) {
   ASSERT_TRUE(OpenDocument("bug_384770169.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   ScopedFPDFTextPage textpage(FPDFText_LoadPage(page.get()));
@@ -2172,13 +2171,13 @@ TEST_F(FPDFTextEmbedderTest, Bug384770169) {
   unsigned short buffer[256] = {};
   EXPECT_EQ(kExpectedSize,
             FPDFText_GetText(textpage.get(), 0, std::size(buffer), buffer));
-  EXPECT_THAT(pdfium::make_span(buffer).first(kExpectedSize),
+  EXPECT_THAT(pdfium::span(buffer).first<kExpectedSize>(),
               ElementsAreArray(kExpected));
 }
 
 TEST_F(FPDFTextEmbedderTest, TextObjectSetIsActive) {
   ASSERT_TRUE(OpenDocument("hello_world.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   {
@@ -2190,7 +2189,7 @@ TEST_F(FPDFTextEmbedderTest, TextObjectSetIsActive) {
     int num_chars =
         FPDFText_GetText(textpage.get(), 0, std::size(buffer), buffer);
     ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-    EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+    EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
                 ElementsAreArray(kHelloGoodbyeText));
   }
 
@@ -2211,9 +2210,9 @@ TEST_F(FPDFTextEmbedderTest, TextObjectSetIsActive) {
     int num_chars =
         FPDFText_GetText(textpage.get(), 0, std::size(buffer), buffer);
     ASSERT_EQ(kGoodbyeTextSize, num_chars);
-    EXPECT_THAT(pdfium::make_span(buffer).first(kGoodbyeTextSize),
-                ElementsAreArray(
-                    pdfium::make_span(kHelloGoodbyeText).subspan<kOffset>()));
+    EXPECT_THAT(
+        pdfium::span(buffer).first<kGoodbyeTextSize>(),
+        ElementsAreArray(pdfium::span(kHelloGoodbyeText).subspan<kOffset>()));
   }
 
   {
@@ -2227,7 +2226,7 @@ TEST_F(FPDFTextEmbedderTest, TextObjectSetIsActive) {
     int num_chars =
         FPDFText_GetText(textpage.get(), 0, std::size(buffer), buffer);
     ASSERT_EQ(kHelloGoodbyeTextSize, num_chars);
-    EXPECT_THAT(pdfium::make_span(buffer).first(kHelloGoodbyeTextSize),
+    EXPECT_THAT(pdfium::span(buffer).first<kHelloGoodbyeTextSize>(),
                 ElementsAreArray(kHelloGoodbyeText));
   }
 }

@@ -333,6 +333,8 @@ public class LayoutManagerChrome extends LayoutManagerImpl
     @Override
     protected void tabModelSwitched(boolean incognito) {
         super.tabModelSwitched(incognito);
+        // Vivaldi: Avoids opening tab switcher on startup before everything is initialized.
+        if (mHubLayout != null) {
         getTabModelSelector().commitAllTabClosures();
         if (getActiveLayout() == mStaticLayout
                 && !incognito
@@ -340,6 +342,7 @@ public class LayoutManagerChrome extends LayoutManagerImpl
                 && getNextLayoutType() != LayoutType.TAB_SWITCHER) {
             showLayout(LayoutType.TAB_SWITCHER, /* animate= */ false);
         }
+        } // Vivaldi
     }
 
     /** Initializes HubLayout without needing to open the Tab Switcher. */

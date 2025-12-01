@@ -20,7 +20,7 @@
 
 namespace openscreen {
 
-class TaskRunnerImpl final : public TaskRunner {
+class TaskRunnerImpl : public TaskRunner {
  public:
   using Task = TaskRunner::Task;
 
@@ -50,20 +50,20 @@ class TaskRunnerImpl final : public TaskRunner {
       Clock::duration waiter_timeout = std::chrono::milliseconds(100));
 
   // TaskRunner overrides
-  ~TaskRunnerImpl() final;
-  void PostPackagedTask(Task task) final;
-  void PostPackagedTaskWithDelay(Task task, Clock::duration delay) final;
-  bool IsRunningOnTaskRunner() final;
+  ~TaskRunnerImpl();
+  void PostPackagedTask(Task task) override;
+  void PostPackagedTaskWithDelay(Task task, Clock::duration delay) override;
+  bool IsRunningOnTaskRunner() override;
 
   // Blocks the current thread, executing tasks from the queue with the desired
   // timing; and does not return until some time after RequestStopSoon() is
   // called.
-  void RunUntilStopped();
+  virtual void RunUntilStopped();
 
   // Blocks the current thread, executing tasks from the queue with the desired
   // timing; and does not return until some time after the current process is
   // signaled with SIGINT or SIGTERM, or after RequestStopSoon() is called.
-  void RunUntilSignaled();
+  virtual void RunUntilSignaled();
 
   // Thread-safe method for requesting the TaskRunner to stop running after all
   // non-delayed tasks in the queue have run. This behavior allows final
@@ -71,7 +71,7 @@ class TaskRunnerImpl final : public TaskRunner {
   //
   // If any non-delayed tasks post additional non-delayed tasks, those will be
   // run as well before returning.
-  void RequestStopSoon();
+  virtual void RequestStopSoon();
 
  private:
 #if defined(ENABLE_TRACE_LOGGING)

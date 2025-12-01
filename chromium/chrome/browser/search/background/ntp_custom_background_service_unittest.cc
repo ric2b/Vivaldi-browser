@@ -18,6 +18,7 @@
 #include "base/time/time.h"
 #include "base/token.h"
 #include "build/build_config.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/search/background/ntp_background_service_factory.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_factory.h"
 #include "chrome/browser/search/background/ntp_custom_background_service_observer.h"
@@ -29,7 +30,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/search/instant_types.h"
 #include "chrome/common/url_constants.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/application_locale_storage/application_locale_storage.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
@@ -70,8 +73,9 @@ class MockThemeService : public ThemeService {
 class MockNtpBackgroundService : public NtpBackgroundService {
  public:
   explicit MockNtpBackgroundService(
+      ApplicationLocaleStorage* application_locale_storage,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
-      : NtpBackgroundService(url_loader_factory) {}
+      : NtpBackgroundService(application_locale_storage, url_loader_factory) {}
   MOCK_CONST_METHOD1(IsValidBackdropCollection, bool(const std::string&));
   MOCK_METHOD(void,
               VerifyImageURL,
@@ -80,6 +84,7 @@ class MockNtpBackgroundService : public NtpBackgroundService {
 };
 
 std::unique_ptr<TestingProfile> MakeTestingProfile(
+    ApplicationLocaleStorage* application_locale_storage,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory) {
   {
     TestingProfile::Builder profile_builder;
@@ -92,15 +97,16 @@ std::unique_ptr<TestingProfile> MakeTestingProfile(
     profile_builder.AddTestingFactory(
         NtpBackgroundServiceFactory::GetInstance(),
         base::BindRepeating(
-            [](scoped_refptr<network::SharedURLLoaderFactory>
+            [](ApplicationLocaleStorage* application_locale_storage,
+               scoped_refptr<network::SharedURLLoaderFactory>
                    url_loader_factory,
                content::BrowserContext* context)
                 -> std::unique_ptr<KeyedService> {
               return std::make_unique<
                   testing::NiceMock<MockNtpBackgroundService>>(
-                  url_loader_factory);
+                  application_locale_storage, url_loader_factory);
             },
-            url_loader_factory));
+            application_locale_storage, url_loader_factory));
     profile_builder.SetSharedURLLoaderFactory(url_loader_factory);
     auto profile = profile_builder.Build();
     TemplateURLServiceFactory::GetInstance()->SetTestingFactoryAndUse(
@@ -137,8 +143,12 @@ base::Time GetReferenceTime() {
 class NtpCustomBackgroundServiceTest : public testing::Test {
  public:
   NtpCustomBackgroundServiceTest()
-      : profile_(
-            MakeTestingProfile(test_url_loader_factory_.GetSafeWeakWrapper())),
+      : application_locale_storage_(TestingBrowserProcess::GetGlobal()
+                                        ->GetFeatures()
+                                        ->application_locale_storage()),
+        profile_(
+            MakeTestingProfile(application_locale_storage_,
+                               test_url_loader_factory_.GetSafeWeakWrapper())),
         mock_theme_service_(static_cast<MockThemeService*>(
             ThemeServiceFactory::GetForProfile(profile_.get()))),
         mock_ntp_background_service_(static_cast<MockNtpBackgroundService*>(
@@ -148,6 +158,7 @@ class NtpCustomBackgroundServiceTest : public testing::Test {
     custom_background_service_ =
         NtpCustomBackgroundServiceFactory::GetForProfile(profile_.get());
     scoped_observation_.Observe(custom_background_service_);
+    application_locale_storage_->Set("foo");
   }
 
   void TearDown() override { scoped_observation_.Reset(); }
@@ -179,6 +190,7 @@ class NtpCustomBackgroundServiceTest : public testing::Test {
   // NOTE: The initialization order of these members matters.
   content::BrowserTaskEnvironment task_environment_;
   network::TestURLLoaderFactory test_url_loader_factory_;
+  raw_ptr<ApplicationLocaleStorage> application_locale_storage_;
   std::unique_ptr<TestingProfile> profile_;
   base::SimpleTestClock clock_;
   MockNtpCustomBackgroundServiceObserver observer_;
@@ -315,19 +327,15 @@ TEST_F(NtpCustomBackgroundServiceTest, UpdatingPrefUpdatesNtpTheme) {
 
   sync_preferences::TestingPrefServiceSyncable* pref_service =
       profile().GetTestingPrefService();
-  pref_service->SetUserPref(
-      std::string(GetThemePrefNameInMigration(
-          ThemePrefInMigration::kNtpCustomBackgroundDict)),
-      GetBackgroundInfoAsDict(kUrlFoo, GURL()));
+  pref_service->SetUserPref(prefs::kNtpCustomBackgroundDict,
+                            GetBackgroundInfoAsDict(kUrlFoo, GURL()));
 
   auto custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kUrlFoo, custom_background->custom_background_url);
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 
-  pref_service->SetUserPref(
-      std::string(GetThemePrefNameInMigration(
-          ThemePrefInMigration::kNtpCustomBackgroundDict)),
-      GetBackgroundInfoAsDict(kUrlBar, GURL()));
+  pref_service->SetUserPref(prefs::kNtpCustomBackgroundDict,
+                            GetBackgroundInfoAsDict(kUrlBar, GURL()));
 
   custom_background = custom_background_service_->GetCustomBackground();
   EXPECT_EQ(kUrlBar, custom_background->custom_background_url);
@@ -386,10 +394,8 @@ TEST_F(NtpCustomBackgroundServiceTest, SyncPrefOverridesAndRemovesLocalImage) {
   EXPECT_TRUE(base::PathExists(path));
 
   // Update custom_background info via Sync.
-  pref_service->SetUserPref(
-      std::string(GetThemePrefNameInMigration(
-          ThemePrefInMigration::kNtpCustomBackgroundDict)),
-      GetBackgroundInfoAsDict(kUrl, GURL()));
+  pref_service->SetUserPref(prefs::kNtpCustomBackgroundDict,
+                            GetBackgroundInfoAsDict(kUrl, GURL()));
   task_environment_.RunUntilIdle();
 
   auto custom_background = custom_background_service_->GetCustomBackground();
@@ -571,8 +577,7 @@ TEST_F(NtpCustomBackgroundServiceTest, RefreshesBackgroundAfter24Hours) {
   task_environment_.RunUntilIdle();
 
   auto custom_background = custom_background_service_->GetCustomBackground();
-  const std::string image_options =
-      mock_ntp_background_service().GetImageOptionsForTesting();
+  const std::string image_options = GetImageOptions();
   EXPECT_EQ(GURL(kImageUrl1.spec() + image_options),
             custom_background->custom_background_url);
   EXPECT_EQ(kValidId, custom_background->collection_id);
@@ -628,84 +633,6 @@ TEST_F(NtpCustomBackgroundServiceTest, RefreshesBackgroundAfter24Hours) {
             custom_background->custom_background_url);
   EXPECT_EQ(kValidId, custom_background->collection_id);
   EXPECT_TRUE(custom_background->daily_refresh_enabled);
-  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
-}
-
-TEST_F(NtpCustomBackgroundServiceTest, RevertBackgroundChanges) {
-  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(2);
-  ASSERT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-  const GURL kBackdropUrl1("https://www.foo.com");
-
-  mock_ntp_background_service().AddValidBackdropUrlForTesting(kBackdropUrl1);
-
-  custom_background_service_->SetCustomBackgroundInfo(kBackdropUrl1, GURL(), "",
-                                                      "", GURL(), "");
-  auto custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(kBackdropUrl1, custom_background->custom_background_url);
-  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
-
-  // Revert from background set using |kBackdropUrl1| to the starting state (no
-  // background) since no background change was confirmed.
-  custom_background_service_->RevertBackgroundChanges();
-  custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-}
-
-TEST_F(NtpCustomBackgroundServiceTest,
-       RevertBackgroundChangesWithMultipleSelections) {
-  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(3);
-  ASSERT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-  const GURL kBackdropUrl1("https://www.foo.com");
-  const GURL kBackdropUrl2("https://www.bar.com");
-
-  mock_ntp_background_service().AddValidBackdropUrlForTesting(kBackdropUrl1);
-  mock_ntp_background_service().AddValidBackdropUrlForTesting(kBackdropUrl2);
-
-  custom_background_service_->SetCustomBackgroundInfo(kBackdropUrl1, GURL(), "",
-                                                      "", GURL(), "");
-  auto custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(kBackdropUrl1, custom_background->custom_background_url);
-  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
-
-  custom_background_service_->SetCustomBackgroundInfo(kBackdropUrl2, GURL(), "",
-                                                      "", GURL(), "");
-
-  // Revert from background set using |kBackdropUrl2| to the starting state (no
-  // background) since no background change was confirmed.
-  custom_background_service_->RevertBackgroundChanges();
-  custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-}
-
-TEST_F(NtpCustomBackgroundServiceTest, ConfirmBackgroundChanges) {
-  EXPECT_CALL(observer_, OnCustomBackgroundImageUpdated).Times(3);
-  ASSERT_FALSE(custom_background_service_->IsCustomBackgroundSet());
-  const GURL kBackdropUrl1("https://www.foo.com");
-  const GURL kBackdropUrl2("https://www.bar.com");
-
-  mock_ntp_background_service().AddValidBackdropUrlForTesting(kBackdropUrl1);
-  mock_ntp_background_service().AddValidBackdropUrlForTesting(kBackdropUrl2);
-
-  custom_background_service_->SetCustomBackgroundInfo(kBackdropUrl1, GURL(), "",
-                                                      "", GURL(), "");
-  auto custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(kBackdropUrl1, custom_background->custom_background_url);
-  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
-
-  custom_background_service_->ConfirmBackgroundChanges();
-
-  custom_background_service_->SetCustomBackgroundInfo(kBackdropUrl2, GURL(), "",
-                                                      "", GURL(), "");
-  custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(kBackdropUrl2, custom_background->custom_background_url);
-  EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
-
-  // Revert from background set using |kBackdropUrl2| to the starting state
-  // (background set using |kBackdropUrl1|) since it is the last confirmed
-  // background change.
-  custom_background_service_->RevertBackgroundChanges();
-  custom_background = custom_background_service_->GetCustomBackground();
-  EXPECT_EQ(kBackdropUrl1, custom_background->custom_background_url);
   EXPECT_TRUE(custom_background_service_->IsCustomBackgroundSet());
 }
 
@@ -919,8 +846,7 @@ TEST_F(NtpCustomBackgroundServiceTest,
   const std::string kValidId("art");
   const std::string kImageUrl1("https://www.test.com/1/");
   const std::string kImageUrl2("https://www.test.com/2/");
-  const std::string image_options(
-      mock_ntp_background_service().GetImageOptionsForTesting());
+  const std::string image_options(GetImageOptions());
   const GURL kImageUrl1WithOptions(kImageUrl1 + image_options);
   const GURL kImageUrl2WithOptions(kImageUrl2 + image_options);
 

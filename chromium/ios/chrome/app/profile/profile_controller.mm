@@ -47,16 +47,17 @@
 #import "ios/chrome/app/profile/profile_state_observer.h"
 #import "ios/chrome/app/profile/search_engine_choice_profile_agent.h"
 #import "ios/chrome/app/profile/session_metrics_profile_agent.h"
+#import "ios/chrome/app/profile/welcome_back_screen_profile_agent.h"
 #import "ios/chrome/app/spotlight/spotlight_manager.h"
 #import "ios/chrome/app/tests_hook.h"
 #import "ios/chrome/browser/content_settings/model/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/credential_provider/model/credential_provider_buildflags.h"
-#import "ios/chrome/browser/discover_feed/model/discover_feed_profile_agent.h"
 #import "ios/chrome/browser/enterprise/model/idle/idle_service.h"
 #import "ios/chrome/browser/enterprise/model/idle/idle_service_factory.h"
 #import "ios/chrome/browser/external_files/model/external_file_remover.h"
 #import "ios/chrome/browser/external_files/model/external_file_remover_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/first_run/ui_bundled/features.h"
 #import "ios/chrome/browser/mailto_handler/model/mailto_handler_service_factory.h"
 #import "ios/chrome/browser/profile_metrics/model/profile_activity_profile_agent.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_download_service.h"
@@ -79,6 +80,7 @@
 #import "ios/chrome/browser/shared/model/profile/profile_attributes_storage_ios.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
+#import "ios/chrome/browser/shared/model/profile/scoped_profile_keep_alive_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -239,6 +241,9 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
   // during the current profile startup (used to detect whether data loss
   // occurred).
   SessionIds _purgedSessionIdentifiers;
+
+  // Keep the loaded profile alive.
+  ScopedProfileKeepAliveIOS _scopedProfileKeepAlive;
 }
 
 - (instancetype)initWithAppState:(AppState*)appState
@@ -247,6 +252,9 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
     _state = [[ProfileState alloc] initWithAppState:appState];
     _metricsMediator = metricsMediator;
     [_state addObserver:self];
+
+    // Inform the AppState of the ProfileState creation.
+    [appState profileStateCreated:_state];
   }
   return self;
 }
@@ -264,10 +272,10 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
   [_state queueTransitionToNextInitStage];
 
   __weak ProfileController* weakSelf = self;
-  _profileManager->CreateProfileAsync(profileName,
-                                      base::BindOnce(^(ProfileIOS* profile) {
-                                        [weakSelf profileLoaded:profile];
-                                      }));
+  _profileManager->CreateProfileAsync(
+      profileName, base::BindOnce(^(ScopedProfileKeepAliveIOS keep_alive) {
+        [weakSelf profileLoaded:std::move(keep_alive)];
+      }));
 }
 
 - (void)shutdown {
@@ -288,6 +296,16 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
   // Cancel any pending deferred startup tasks (the profile is shutting
   // down, so there is no point in running them).
   [_state.deferredRunner cancelAllBlocks];
+
+  // Inform the AppState of the ProfileState destruction.
+  [_state.appState profileStateDestroyed:_state];
+
+  // Clear the -profile property of ProfileState before unloading the object.
+  [_state setProfile:nullptr];
+
+  // Destroy the ScopedProfileKeepAlive which will allow the ProfileManagerIOS
+  // to unload the profile (if this was the last object keeping it alive).
+  _scopedProfileKeepAlive.Reset();
 }
 
 #pragma mark ProfileStateObserver
@@ -521,7 +539,10 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
 
 #pragma mark Private methods
 
-- (void)profileLoaded:(ProfileIOS*)profile {
+- (void)profileLoaded:(ScopedProfileKeepAliveIOS)keepAlive {
+  CHECK(!_scopedProfileKeepAlive.profile());
+  _scopedProfileKeepAlive = std::move(keepAlive);
+  ProfileIOS* profile = _scopedProfileKeepAlive.profile();
   CHECK(profile);
 
   [_state setProfile:profile];
@@ -621,9 +642,6 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
 }
 
 - (void)attachProfileAgents {
-  // TODO(crbug.com/355142171): Remove the DiscoverFeedProfileAgent?
-  [_state addAgent:[[DiscoverFeedProfileAgent alloc] init]];
-
   [_state addAgent:[[CertificatePolicyProfileAgent alloc] init]];
   [_state addAgent:[[FirstRunProfileAgent alloc] init]];
   [_state addAgent:[[IdentityConfirmationProfileAgent alloc] init]];
@@ -641,6 +659,10 @@ void RecordDiscardedSceneConnectedAfterBeingPurged(
         [_state addAgent:[[DockingPromoProfileAgent alloc] init]];
         break;
     }
+  }
+
+  if (first_run::IsWelcomeBackInFirstRunEnabled()) {
+    [_state addAgent:[[WelcomeBackScreenProfileAgent alloc] init]];
   }
 }
 

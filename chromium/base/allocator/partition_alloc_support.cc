@@ -34,6 +34,7 @@
 #include "base/pending_task.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/synchronization/lock_impl.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/thread_annotations.h"
@@ -848,6 +849,48 @@ bool PartitionAllocSupport::ShouldEnableMemoryTaggingInRendererProcess() {
 }
 
 // static
+::partition_alloc::internal::SchedulerLoopQuarantineConfig
+PartitionAllocSupport::GetSchedulerLoopQuarantineConfiguration(
+    const std::string& process_type,
+    features::internal::SchedulerLoopQuarantineBranchType branch_type) {
+  ::partition_alloc::internal::SchedulerLoopQuarantineConfig config;
+
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  if (!base::FeatureList::IsEnabled(
+          base::features::kPartitionAllocSchedulerLoopQuarantine)) {
+    return config;
+  }
+
+  config.enable_quarantine = true;
+  config.quarantine_config.branch_capacity_in_bytes = static_cast<size_t>(
+      base::features::kPartitionAllocSchedulerLoopQuarantineBranchCapacity
+          .Get());
+  config.enable_zapping = base::FeatureList::IsEnabled(
+      base::features::kPartitionAllocZappingByFreeFlags);
+
+  switch (branch_type) {
+    case features::internal::SchedulerLoopQuarantineBranchType::kGlobal:
+      config.quarantine_config.leak_on_destruction = true;
+      config.quarantine_config.lock_required = true;
+      break;
+    case features::internal::SchedulerLoopQuarantineBranchType::
+        kThreadLocalDefault:
+    case features::internal::SchedulerLoopQuarantineBranchType::kMain:
+      config.quarantine_config.leak_on_destruction = false;
+      config.quarantine_config.lock_required = false;
+      if (process_type == "") {
+        config.quarantine_config.branch_capacity_in_bytes = static_cast<size_t>(
+            base::features::
+                kPartitionAllocSchedulerLoopQuarantineBrowserUICapacity.Get());
+      }
+      break;
+  }
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+
+  return config;
+}
+
+// static
 bool PartitionAllocSupport::ShouldEnablePartitionAllocWithAdvancedChecks(
     const std::string& process_type) {
 #if !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
@@ -1030,14 +1073,15 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
       break;
   }
 
-  const bool scheduler_loop_quarantine = base::FeatureList::IsEnabled(
-      base::features::kPartitionAllocSchedulerLoopQuarantine);
-  const size_t scheduler_loop_quarantine_branch_capacity_in_bytes =
-      static_cast<size_t>(
-          base::features::kPartitionAllocSchedulerLoopQuarantineBranchCapacity
-              .Get());
-  const bool zapping_by_free_flags = base::FeatureList::IsEnabled(
-      base::features::kPartitionAllocZappingByFreeFlags);
+  const auto scheduler_loop_quarantine_global_config =
+      GetSchedulerLoopQuarantineConfiguration(
+          process_type,
+          features::internal::SchedulerLoopQuarantineBranchType::kGlobal);
+  const auto scheduler_loop_quarantine_thread_local_config =
+      GetSchedulerLoopQuarantineConfiguration(
+          process_type, features::internal::SchedulerLoopQuarantineBranchType::
+                            kThreadLocalDefault);
+
   const bool eventually_zero_freed_memory = base::FeatureList::IsEnabled(
       base::features::kPartitionAllocEventuallyZeroFreedMemory);
   const bool fewer_memory_regions = base::FeatureList::IsEnabled(
@@ -1131,6 +1175,14 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
   }
 #endif  // PA_BUILDFLAG(HAS_MEMORY_TAGGING)
 
+#if PA_BUILDFLAG(ENABLE_PARTITION_LOCK_PRIORITY_INHERITANCE)
+  if (base::KernelSupportsPriorityInheritanceFutex() &&
+      base::FeatureList::IsEnabled(
+          features::kPartitionAllocUsePriorityInheritanceLocks)) {
+    partition_alloc::internal::SpinningMutex::EnableUsePriorityInheritance();
+  }
+#endif  // PA_BUILDFLAG(ENABLE_PARTITION_LOCK_PRIORITY_INHERITANCE)
+
   allocator_shim::UseSmallSingleSlotSpans use_small_single_slot_spans(
       base::FeatureList::IsEnabled(
           features::kPartitionAllocUseSmallSingleSlotSpans));
@@ -1140,9 +1192,8 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
       brp_config.extra_extras_size,
       allocator_shim::EnableMemoryTagging(enable_memory_tagging),
       memory_tagging_reporting_mode, bucket_distribution,
-      allocator_shim::SchedulerLoopQuarantine(scheduler_loop_quarantine),
-      scheduler_loop_quarantine_branch_capacity_in_bytes,
-      allocator_shim::ZappingByFreeFlags(zapping_by_free_flags),
+      scheduler_loop_quarantine_global_config,
+      scheduler_loop_quarantine_thread_local_config,
       allocator_shim::EventuallyZeroFreedMemory(eventually_zero_freed_memory),
       allocator_shim::FewerMemoryRegions(fewer_memory_regions),
       use_small_single_slot_spans);
@@ -1169,13 +1220,13 @@ void PartitionAllocSupport::ReconfigureAfterFeatureListInit(
   if (process_type == "" &&
       base::FeatureList::IsEnabled(
           base::features::kPartitionAllocSchedulerLoopQuarantine)) {
-    // `ReconfigureAfterTaskRunnerInit()` is called on the UI thread.
-    const size_t capacity_in_bytes = static_cast<size_t>(
-        base::features::kPartitionAllocSchedulerLoopQuarantineBrowserUICapacity
-            .Get());
+    // `ReconfigureAfterTaskRunnerInit()` is called on the Main thread.
+    partition_alloc::internal::SchedulerLoopQuarantineConfig quarantine_config =
+        GetSchedulerLoopQuarantineConfiguration(
+            process_type,
+            features::internal::SchedulerLoopQuarantineBranchType::kMain);
     allocator_shim::internal::PartitionAllocMalloc::Allocator()
-        ->SetSchedulerLoopQuarantineThreadLocalBranchCapacity(
-            capacity_in_bytes);
+        ->ReconfigureSchedulerLoopQuarantineForCurrentThread(quarantine_config);
   }
 
 #if PA_BUILDFLAG( \

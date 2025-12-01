@@ -310,8 +310,6 @@ class ObjectTemplateInfo
     : public TorqueGeneratedObjectTemplateInfo<ObjectTemplateInfo,
                                                TemplateInfoWithProperties> {
  public:
-  NEVER_READ_ONLY_SPACE
-
   DECL_INT_ACCESSORS(embedder_field_count)
   DECL_BOOLEAN_ACCESSORS(immutable_proto)
   DECL_BOOLEAN_ACCESSORS(code_like)
@@ -319,6 +317,9 @@ class ObjectTemplateInfo
   // Starting from given object template's constructor walk up the inheritance
   // chain till a function template that has an instance template is found.
   inline Tagged<ObjectTemplateInfo> GetParent(Isolate* isolate);
+
+  static void SealAndPrepareForPromotionToReadOnly(
+      Isolate* isolate, DirectHandle<ObjectTemplateInfo> info);
 
   using BodyDescriptor = StructBodyDescriptor;
 
@@ -341,8 +342,6 @@ class DictionaryTemplateInfo
       DirectHandle<NativeContext> context,
       DirectHandle<DictionaryTemplateInfo> self,
       const MemorySpan<MaybeLocal<Value>>& property_values);
-
-  NEVER_READ_ONLY_SPACE
 
   TQ_OBJECT_CONSTRUCTORS(DictionaryTemplateInfo)
 };

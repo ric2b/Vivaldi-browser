@@ -9,7 +9,6 @@ import android.content.Context;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Token;
-import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -84,20 +83,18 @@ public class TabGroupMenuActionHandler {
      */
     public void handleAddToGroupAction(Tab tab) {
         if (mFilter.getTabGroupCount() == 0) {
-            RecordUserAction.record("MobileMenuAddToNewGroup");
             mFilter.createSingleTabGroup(tab);
-
             @Nullable Token groupId = tab.getTabGroupId();
             if (groupId != null) {
                 onTabGroupCreation(groupId);
             }
         } else {
-            RecordUserAction.record("MobileMenuAddToGroup");
             TabGroupListBottomSheetCoordinator tabGroupListBottomSheetCoordinator =
                     mFactory.create(
                             mContext,
                             mProfile,
                             this::onTabGroupCreation,
+                            /* tabMovedCallback= */ null,
                             mFilter,
                             mBottomSheetController,
                             true,

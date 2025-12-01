@@ -7,9 +7,13 @@ package org.chromium.chrome.browser.compositor.layouts;
 import android.content.Context;
 import android.graphics.RectF;
 
+import androidx.annotation.NonNull;
+
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
+import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcherImpl;
 import org.chromium.ui.resources.ResourceManager;
 
 /**
@@ -28,7 +32,10 @@ public class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
     public MockLayoutHost(Context context) {
         mContext = context;
         mBrowserControlsManager =
-                new BrowserControlsManager(null, BrowserControlsStateProvider.ControlsPosition.TOP);
+                new BrowserControlsManager(
+                        null,
+                        BrowserControlsStateProvider.ControlsPosition.TOP,
+                        new MultiWindowModeStateDispatcherImpl(null));
     }
 
     public void setOrientation(boolean portrait) {
@@ -112,4 +119,15 @@ public class MockLayoutHost implements LayoutManagerHost, LayoutRenderHost {
 
     @Override
     public void hideKeyboard(Runnable postHideTask) {}
+
+    @Override
+    public void resetKeyboardFocus() {}
+
+    @Override
+    public void requestKeyboardFocus(@NonNull SceneOverlay sceneOverlay) {}
+
+    @Override
+    public boolean containsKeyboardFocus(@NonNull SceneOverlay sceneOverlay) {
+        return false;
+    }
 }

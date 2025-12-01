@@ -25,9 +25,9 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &blink::features::kDevicePosture,
     &blink::features::kSecurePaymentConfirmationNetworkAndIssuerIcons,
     &blink::features::kSecurePaymentConfirmationBrowserBoundKeys,
-    &blink::features::kStylusRichGestures,
     &blink::features::kViewportSegments,
     &input::features::kInputOnViz,
+    &features::kAccessibilityDeprecateJavaNodeCache,
     &features::kAccessibilityDeprecateTypeAnnounce,
     &features::kAccessibilityIncludeLongClickAction,
     &features::kAccessibilityPageZoomV2,
@@ -36,6 +36,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kAndroidFallbackToNextSlot,
     &features::kAndroidOpenPdfInline,
     &features::kFedCm,
+    &features::kGroupRebindingForGroupImportance,
     &features::kHidePastePopupOnGSB,
     &features::kReduceGpuPriorityOnBackground,
     &features::kContinueGestureOnLosingFocus,
@@ -44,6 +45,7 @@ const base::Feature* const kFeaturesExposedToJava[] = {
     &features::kWebBluetoothNewPermissionsBackend,
     &features::kWebIdentityDigitalCredentials,
     &features::kBtmTtl,
+    &features::kSpareRendererProcessPriority,
 };
 
 // static

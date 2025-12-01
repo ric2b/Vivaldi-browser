@@ -41,7 +41,7 @@
 #include "progressframe.h"
 #include "libavutil/refstruct.h"
 
-/**< same with Div_Lut defined in spec 7.11.3.7 */
+/** same with Div_Lut defined in spec 7.11.3.7 */
 static const uint16_t div_lut[AV1_DIV_LUT_NUM] = {
   16384, 16320, 16257, 16194, 16132, 16070, 16009, 15948, 15888, 15828, 15768,
   15709, 15650, 15592, 15534, 15477, 15420, 15364, 15308, 15252, 15197, 15142,
@@ -1196,12 +1196,6 @@ static int set_output_frame(AVCodecContext *avctx, AVFrame *frame)
 
     frame->pts = pkt->pts;
     frame->pkt_dts = pkt->dts;
-#if FF_API_FRAME_PKT
-FF_DISABLE_DEPRECATION_WARNINGS
-    frame->pkt_size = pkt->size;
-    frame->pkt_pos = pkt->pos;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     av_packet_unref(pkt);
 
@@ -1329,6 +1323,15 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
 
             s->pix_fmt = AV_PIX_FMT_NONE;
 
+            if (FF_HW_HAS_CB(avctx, decode_params)) {
+                ret = FF_HW_CALL(avctx, decode_params, AV1_OBU_SEQUENCE_HEADER,
+                                 s->seq_data_ref->data, s->seq_data_ref->size);
+                if (ret < 0) {
+                    av_log(avctx, AV_LOG_ERROR, "HW accel decode params fail.\n");
+                    return ret;
+                }
+            }
+
             break;
         case AV1_OBU_REDUNDANT_FRAME_HEADER:
             if (s->raw_frame_header)
@@ -1380,7 +1383,8 @@ static int av1_receive_frame_internal(AVCodecContext *avctx, AVFrame *frame)
             s->cur_frame.temporal_id = header->temporal_id;
 
             if (avctx->hwaccel && s->cur_frame.f) {
-                ret = FF_HW_CALL(avctx, start_frame, unit->data, unit->data_size);
+                ret = FF_HW_CALL(avctx, start_frame, s->pkt->buf,
+                                 unit->data, unit->data_size);
                 if (ret < 0) {
                     av_log(avctx, AV_LOG_ERROR, "HW accel start frame fail.\n");
                     goto end;

@@ -31,22 +31,24 @@ struct BooleanMediumSelector {
   bool wifi_lan = false;
   bool wifi_hotspot = false;
   bool wifi_direct = false;
-
+  bool awdl = false;
 
   constexpr bool Any(bool value) const {
     return bluetooth == value || ble == value || web_rtc_no_cellular == value ||
            web_rtc == value || wifi_lan == value || wifi_hotspot == value ||
-           wifi_direct == value;
+           wifi_direct == value || awdl == value;
   }
 
   constexpr bool All(bool value) const {
     return bluetooth == value && ble == value &&
            (web_rtc == value || web_rtc_no_cellular == value) &&
-           wifi_lan == value && wifi_hotspot == value && wifi_direct == value;
+           awdl == value && wifi_lan == value && wifi_hotspot == value &&
+           wifi_direct == value;
   }
 
   constexpr int Count(bool value) const {
     int count = 0;
+    if (awdl == value) count++;
     if (bluetooth == value) count++;
     if (ble == value) count++;
     if (wifi_lan == value) count++;
@@ -63,12 +65,17 @@ struct BooleanMediumSelector {
     wifi_lan = value;
     wifi_hotspot = value;
     wifi_direct = value;
+    awdl = value;
     return *this;
   }
 
   std::vector<Medium> GetMediums(bool value) const {
     std::vector<Medium> mediums;
     // Mediums are sorted in order of decreasing preference.
+    // AWDL works on Apple devices only for now. Put it at the top of WIFI_LAN
+    // because it is the most preferred medium for Apple devices and no impact
+    // to other medium connections.
+    if (awdl == value) mediums.push_back(Medium::AWDL);
     if (wifi_lan == value) mediums.push_back(Medium::WIFI_LAN);
     if (wifi_direct == value) mediums.push_back(Medium::WIFI_DIRECT);
     if (wifi_hotspot == value) mediums.push_back(Medium::WIFI_HOTSPOT);

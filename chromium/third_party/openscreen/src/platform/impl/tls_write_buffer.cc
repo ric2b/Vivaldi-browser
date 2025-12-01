@@ -52,7 +52,7 @@ bool TlsWriteBuffer::Push(ByteView data) {
   return true;
 }
 
-ByteView TlsWriteBuffer::GetReadableRegion() {
+ByteView TlsWriteBuffer::GetReadableRegion() const {
   const size_t current_read_bytes =
       bytes_read_so_far_.load(std::memory_order_relaxed);
   const size_t currently_written_bytes =

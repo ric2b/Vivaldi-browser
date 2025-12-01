@@ -13,7 +13,6 @@
 #include "base/containers/contains.h"
 #include "base/dcheck_is_on.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/trace_event/trace_event.h"
 #include "base/types/pass_key.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -99,6 +98,9 @@ const char kFeatureNotSupportedBySessionPrefix[] =
     "Session does not support feature ";
 
 const char kDeviceDisconnected[] = "The XR device has been disconnected.";
+
+const char kNotInAnimationFrame[] =
+    "Not called from inside an active animation frame.";
 
 const char kUnableToDecomposeMatrix[] =
     "The operation was unable to decompose a matrix and could not be "
@@ -229,6 +231,20 @@ V8XRDepthDataFormat::Enum DepthDataFormatToEnum(
       return V8XRDepthDataFormat::Enum::kFloat32;
     case device::mojom::XRDepthDataFormat::kUnsignedShort:
       return V8XRDepthDataFormat::Enum::kUnsignedShort;
+  }
+  NOTREACHED();
+}
+
+std::optional<V8XRDepthType::Enum> DepthTypeToEnum(
+    std::optional<device::mojom::XRDepthType> maybe_type) {
+  if (!maybe_type) {
+    return std::nullopt;
+  }
+  switch (*maybe_type) {
+    case device::mojom::XRDepthType::kRaw:
+      return V8XRDepthType::Enum::kRaw;
+    case device::mojom::XRDepthType::kSmooth:
+      return V8XRDepthType::Enum::kSmooth;
   }
   NOTREACHED();
 }
@@ -414,6 +430,7 @@ XRSession::XRSession(
     auto* depth_config = device_config_->depth_configuration.get();
     depth_usage_ = DepthUsageToEnum(depth_config->depth_usage);
     depth_data_format_ = DepthDataFormatToEnum(depth_config->depth_data_format);
+    depth_type_ = DepthTypeToEnum(depth_config->depth_type);
   }
 }
 
@@ -562,6 +579,80 @@ std::optional<V8XRDepthDataFormat> XRSession::depthDataFormat(
   }
 
   return V8XRDepthDataFormat(depth_data_format_);
+}
+
+std::optional<V8XRDepthType> XRSession::depthType(
+    ExceptionState& exception_state) {
+  if (!device_config_->depth_configuration) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kDepthSensingFeatureNotSupported);
+    return std::nullopt;
+  }
+
+  if (!depth_type_) {
+    return std::nullopt;
+  }
+
+  return V8XRDepthType(*depth_type_);
+}
+
+std::optional<bool> XRSession::depthActive(ExceptionState& exception_state) {
+  if (!IsFeatureEnabled(device::mojom::XRSessionFeature::DEPTH)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kDepthSensingFeatureNotSupported);
+    return std::nullopt;
+  }
+
+  return depth_active_;
+}
+
+void XRSession::pauseDepthSensing(ExceptionState& exception_state) {
+  if (ended_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kSessionEnded);
+    return;
+  }
+
+  if (!animation_frame_ || !animation_frame_->IsActive()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kNotInAnimationFrame);
+    return;
+  }
+
+  if (!IsFeatureEnabled(device::mojom::XRSessionFeature::DEPTH)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      kDepthSensingFeatureNotSupported);
+    return;
+  }
+
+  depth_active_ = false;
+}
+
+void XRSession::resumeDepthSensing(ExceptionState& exception_state) {
+  if (ended_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kSessionEnded);
+    return;
+  }
+
+  if (!animation_frame_ || !animation_frame_->IsActive()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kNotInAnimationFrame);
+    return;
+  }
+
+  if (!IsFeatureEnabled(device::mojom::XRSessionFeature::DEPTH)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      kDepthSensingFeatureNotSupported);
+    return;
+  }
+
+  depth_active_ = true;
+}
+
+bool XRSession::IsDepthActive() {
+  return IsFeatureEnabled(device::mojom::XRSessionFeature::DEPTH) &&
+         depth_active_;
 }
 
 void XRSession::UpdateViews(Vector<device::mojom::blink::XRViewPtr> views) {
@@ -1220,7 +1311,7 @@ void XRSession::ProcessAnchorsData(
     // already moved to |updated_anchors|. Otherwise just copy it over as-is.
     if (it_updated == updated_anchors.end()) {
       auto it = anchor_ids_to_anchors_.find(anchor_id);
-      CHECK(it != anchor_ids_to_anchors_.end(), base::NotFatalUntil::M130);
+      CHECK(it != anchor_ids_to_anchors_.end());
       updated_anchors.insert(anchor_id, it->value);
     }
   }
@@ -2043,7 +2134,8 @@ void XRSession::OnFrame(
       return;
     }
 
-    XRFrame* presentation_frame = CreatePresentationFrame(true);
+    CHECK(animation_frame_ == nullptr);
+    animation_frame_ = CreatePresentationFrame(true);
 
     // If the device has opted in, mark the viewports as modifiable
     // at the start of an animation frame:
@@ -2060,13 +2152,14 @@ void XRSession::OnFrame(
     base::AutoReset<bool> resolving(&resolving_frame_, true);
     page_animation_frame_timer_.StartTimer();
     ExecuteVideoFrameCallbacks(timestamp);
-    callback_collection_->ExecuteCallbacks(this, timestamp, presentation_frame);
+    callback_collection_->ExecuteCallbacks(this, timestamp, animation_frame_);
     page_animation_frame_timer_.StopTimer();
 
     frame_base_layer->OnFrameEnd();
 
     // Ensure the XRFrame cannot be used outside the callbacks.
-    presentation_frame->Deactivate();
+    animation_frame_->Deactivate();
+    animation_frame_ = nullptr;
   }
 }
 
@@ -2459,6 +2552,7 @@ void XRSession::Trace(Visitor* visitor) const {
   visitor->Trace(pending_render_state_);
   visitor->Trace(end_session_resolver_);
   visitor->Trace(enabled_features_);
+  visitor->Trace(animation_frame_);
   visitor->Trace(input_sources_);
   visitor->Trace(resize_observer_);
   visitor->Trace(canvas_input_provider_);

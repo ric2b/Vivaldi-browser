@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 ## --------------------------------------------------------------------------
 ##
-##   Copyright 1996-2018 The NASM Authors - All Rights Reserved
+##   Copyright 1996-2020 The NASM Authors - All Rights Reserved
 ##   See the file AUTHORS included with the NASM distribution for
 ##   the specific copyright holders.
 ##
@@ -40,7 +40,7 @@
 
 require 'phash.ph';
 
-my($output, $insns_dat, $regs_dat, $tokens_dat) = @ARGV;
+my($output, $insnsn_c, $regs_dat, $tokens_dat) = @ARGV;
 
 %tokens = ();
 @tokendata = ();
@@ -53,33 +53,18 @@ my($output, $insns_dat, $regs_dat, $tokens_dat) = @ARGV;
 	       'nle', 'no', 'np', 'ns', 'nz', 'o', 'p', 'pe', 'po', 's', 'z');
 
 #
-# Read insns.dat
+# Read insnsn.c
 #
-open(ID, '<', $insns_dat) or die "$0: cannot open $insns_dat: $!\n";
+open(ID, '<', $insnsn_c) or die "$0: cannot open $insnsn_c: $!\n";
 while (defined($line = <ID>)) {
-    if ($line =~ /^([\?\@A-Z0-9_]+)(|cc)\s/) {
-	$insn = $1.$2;
-	($token = $1) =~ tr/A-Z/a-z/;
+    next unless ($line =~ /^\s*\"([\?\@a-z0-9_]+)\"/);
 
-	if ($2 eq '') {
-	    # Single instruction token
-	    if (!defined($tokens{$token})) {
-		$tokens{$token} = scalar @tokendata;
-		push(@tokendata, "\"${token}\", ".length($token).
-		     ", TOKEN_INSN, C_none, 0, I_${insn}");
-	    }
-	} else {
-	    # Conditional instruction
-	    foreach $cc (@conditions) {
-		my $etok = $token.$cc;
-		if (!defined($tokens{$etok})) {
-		    $tokens{$etok} = scalar @tokendata;
-		    push(@tokendata, "\"${etok}\", ".length($etok).
-			 ", TOKEN_INSN, C_\U$cc\E, 0, I_${insn}");
-		}
-	    }
-	}
-    }
+    my $token = $1;
+    next if (defined($tokens{$token}));	# This should never happen
+
+    $tokens{$token} = scalar @tokendata;
+    push(@tokendata, "\"${token}\", ".length($token).
+	 ", TOKEN_INSN, 0, 0, I_\U${token}");
 }
 close(ID);
 
@@ -201,6 +186,7 @@ if ($output eq 'h') {
 
     ($n, $sv, $g) = @hashinfo;
     die if ($n & ($n-1));
+    $n <<= 1;
 
     print "/*\n";
     print " * This file is generated from insns.dat, regs.dat and token.dat\n";
@@ -234,19 +220,12 @@ if ($output eq 'h') {
     # Put a large value in unused slots.  This makes it extremely unlikely
     # that any combination that involves unused slot will pass the range test.
     # This speeds up rejection of unrecognized tokens, i.e. identifiers.
-    print "#define UNUSED_HASH_ENTRY (65535/3)\n";
+    print "#define INVALID_HASH_ENTRY (65535/3)\n";
 
-    print "    static const int16_t hash1[$n] = {\n";
+    printf "    static const int16_t hashdata[%d] = {\n", $n;
     for ($i = 0; $i < $n; $i++) {
-	my $h = ${$g}[$i*2+0];
-	print "        ", defined($h) ? $h : 'UNUSED_HASH_ENTRY', ",\n";
-    }
-    print "    };\n";
-
-    print "    static const int16_t hash2[$n] = {\n";
-    for ($i = 0; $i < $n; $i++) {
-	my $h = ${$g}[$i*2+1];
-	print "        ", defined($h) ? $h : 'UNUSED_HASH_ENTRY', ",\n";
+	my $h = ${$g}[$i];
+	print "        ", defined($h) ? $h : 'INVALID_HASH_ENTRY', ",\n";
     }
     print "    };\n";
 
@@ -275,10 +254,11 @@ if ($output eq 'h') {
     print  "        crc = crc64_byte(crc, c);\n";
     print  "    };\n";
     print  "\n";
-    print  "    k1 = (uint32_t)crc;\n";
-    print  "    k2 = (uint32_t)(crc >> 32);\n";
+    printf "    k1 = ((uint32_t)crc & 0x%x) + 0;\n", $n-2;
+    printf "    k2 = ((uint32_t)(crc >> 32) & 0x%x) + 1;\n", $n-2;
     print  "\n";
-    printf "    ix = hash1[k1 & 0x%x] + hash2[k2 & 0x%x];\n", $n-1, $n-1;
+    printf "    ix = hashdata[k1] + hashdata[k2];\n",
+	$n-2, $n-2;
     printf "    if (ix >= %d)\n", scalar(@tokendata);
     print  "        goto notfound;\n";
     print  "\n";

@@ -59,6 +59,7 @@
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/navigation_throttle_registry.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_process_host.h"
@@ -73,9 +74,9 @@
 #include "content/shell/browser/shell_browser_context.h"
 #include "content/shell/browser/shell_browser_main_parts.h"
 #include "content/shell/browser/shell_devtools_manager_delegate.h"
-#include "content/shell/browser/shell_paths.h"
 #include "content/shell/browser/shell_web_contents_view_delegate_creator.h"
 #include "content/shell/common/shell_controller.test-mojom.h"
+#include "content/shell/common/shell_paths.h"
 #include "content/shell/common/shell_switches.h"
 #include "media/mojo/buildflags.h"
 #include "media/mojo/mojom/media_service.mojom.h"
@@ -180,10 +181,11 @@ class ShellControllerImpl : public mojom::ShellController {
   void GetSwitchValue(const std::string& name,
                       GetSwitchValueCallback callback) override {
     const auto& command_line = *base::CommandLine::ForCurrentProcess();
-    if (command_line.HasSwitch(name))
+    if (command_line.HasSwitch(name)) {
       std::move(callback).Run(command_line.GetSwitchValueASCII(name));
-    else
+    } else {
       std::move(callback).Run(std::nullopt);
+    }
   }
 
   void ExecuteJavaScript(const std::u16string& script,
@@ -443,16 +445,17 @@ void ShellContentBrowserClient::AppendExtraCommandLineSwitches(
     int child_process_id) {
   static const char* const kForwardSwitches[] = {
 #if BUILDFLAG(IS_MAC)
-    // Needed since on Mac, content_browsertests doesn't use
-    // content_test_launcher.cc and instead uses shell_main.cc. So give a signal
-    // to shell_main.cc that it's a browser test.
-    switches::kBrowserTest,
+      // Needed since on Mac, content_browsertests doesn't use
+      // content_test_launcher.cc and instead uses shell_main.cc. So give a
+      // signal
+      // to shell_main.cc that it's a browser test.
+      switches::kBrowserTest,
 #endif
-    switches::kCrashDumpsDir,
-    switches::kEnableCrashReporter,
-    switches::kExposeInternalsForTesting,
-    switches::kRunWebTests,
-    switches::kTestRegisterStandardScheme,
+      switches::kCrashDumpsDir,
+      switches::kEnableCrashReporter,
+      switches::kExposeInternalsForTesting,
+      switches::kRunWebTests,
+      switches::kTestRegisterStandardScheme,
   };
 
   command_line->CopySwitchesFrom(*base::CommandLine::ForCurrentProcess(),
@@ -623,8 +626,9 @@ void ShellContentBrowserClient::OverrideWebPreferences(
     prefs->preferred_contrast = blink::mojom::PreferredContrast::kNoPreference;
   }
 
-  if (override_web_preferences_callback_)
+  if (override_web_preferences_callback_) {
     override_web_preferences_callback_.Run(prefs);
+  }
 }
 
 std::unique_ptr<content::DevToolsManagerDelegate>
@@ -686,13 +690,11 @@ void ShellContentBrowserClient::OpenURL(
           ->web_contents());
 }
 
-std::vector<std::unique_ptr<NavigationThrottle>>
-ShellContentBrowserClient::CreateThrottlesForNavigation(
-    NavigationHandle* navigation_handle) {
-  std::vector<std::unique_ptr<NavigationThrottle>> empty_throttles;
-  if (create_throttles_for_navigation_callback_)
-    return create_throttles_for_navigation_callback_.Run(navigation_handle);
-  return empty_throttles;
+void ShellContentBrowserClient::CreateThrottlesForNavigation(
+    NavigationThrottleRegistry& registry) {
+  if (create_throttles_for_navigation_callback_) {
+    create_throttles_for_navigation_callback_.Run(registry);
+  }
 }
 
 std::unique_ptr<LoginDelegate> ShellContentBrowserClient::CreateLoginDelegate(
@@ -770,10 +772,11 @@ void ShellContentBrowserClient::OverrideURLLoaderFactoryParams(
     BrowserContext* browser_context,
     const url::Origin& origin,
     bool is_for_isolated_world,
+    bool is_for_service_worker,
     network::mojom::URLLoaderFactoryParams* factory_params) {
   if (url_loader_factory_params_callback_) {
-    url_loader_factory_params_callback_.Run(factory_params, origin,
-                                            is_for_isolated_world);
+    url_loader_factory_params_callback_.Run(
+        factory_params, origin, is_for_isolated_world, is_for_service_worker);
   }
 }
 
@@ -844,8 +847,9 @@ BluetoothDelegate* ShellContentBrowserClient::GetBluetoothDelegate() {
 
 void ShellContentBrowserClient::BindBrowserControlInterface(
     mojo::ScopedMessagePipeHandle pipe) {
-  if (!pipe.is_valid())
+  if (!pipe.is_valid()) {
     return;
+  }
   mojo::MakeSelfOwnedReceiver(
       std::make_unique<ShellControllerImpl>(),
       mojo::PendingReceiver<mojom::ShellController>(std::move(pipe)));
@@ -883,8 +887,9 @@ void ShellContentBrowserClient::ConfigureNetworkContextParamsForShell(
   auto exempt_header =
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
           "cors_exempt_header_list");
-  if (!exempt_header.empty())
+  if (!exempt_header.empty()) {
     context_params->cors_exempt_header_list.push_back(exempt_header);
+  }
   context_params->device_bound_sessions_enabled =
       base::FeatureList::IsEnabled(net::features::kDeviceBoundSessions);
 }

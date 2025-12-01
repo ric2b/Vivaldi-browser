@@ -707,7 +707,7 @@ ZSTD_safecopyLiterals(BYTE* op, BYTE const* ip, BYTE const* const iend, BYTE con
 {
     assert(iend > ilimit_w);
     if (ip <= ilimit_w) {
-        ZSTD_wildcopy(op, ip, ilimit_w - ip, ZSTD_no_overlap);
+        ZSTD_wildcopy(op, ip, (size_t)(ilimit_w - ip), ZSTD_no_overlap);
         op += ilimit_w - ip;
         ip = ilimit_w;
     }
@@ -800,7 +800,7 @@ ZSTD_storeSeq(SeqStore_t* seqStorePtr,
         ZSTD_STATIC_ASSERT(WILDCOPY_OVERLENGTH >= 16);
         ZSTD_copy16(seqStorePtr->lit, literals);
         if (litLength > 16) {
-            ZSTD_wildcopy(seqStorePtr->lit+16, literals+16, (ptrdiff_t)litLength-16, ZSTD_no_overlap);
+            ZSTD_wildcopy(seqStorePtr->lit+16, literals+16, litLength-16, ZSTD_no_overlap);
         }
     } else {
         ZSTD_safecopyLiterals(seqStorePtr->lit, literals, litEnd, litLimit_w);
@@ -1523,7 +1523,7 @@ typedef struct {
 /* for benchmark */
 size_t ZSTD_convertBlockSequences(ZSTD_CCtx* cctx,
                         const ZSTD_Sequence* const inSeqs, size_t nbSequences,
-                        int const repcodeResolution);
+                        int repcodeResolution);
 
 typedef struct {
     size_t nbSequences;

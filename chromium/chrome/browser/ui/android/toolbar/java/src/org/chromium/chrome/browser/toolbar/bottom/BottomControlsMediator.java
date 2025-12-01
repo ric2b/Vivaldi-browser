@@ -4,11 +4,11 @@
 
 package org.chromium.chrome.browser.toolbar.bottom;
 
-import androidx.annotation.Nullable;
-
 import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BottomControlsLayer;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
@@ -39,6 +39,7 @@ import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
  * coordinators, running most of the business logic associated with the bottom controls component,
  * and updating the model accordingly.
  */
+@NullMarked
 class BottomControlsMediator
         implements BrowserControlsStateProvider.Observer,
                 KeyboardVisibilityDelegate.KeyboardVisibilityListener,
@@ -66,10 +67,10 @@ class BottomControlsMediator
     private final Supplier<Boolean> mReadAloudRestoringSupplier;
 
     /** The height of the bottom bar in pixels, not including the top shadow. */
-    private int mBottomControlsHeight;
+    private final int mBottomControlsHeight;
 
     /** The height of the top shadow. */
-    private int mBottomControlsShadowHeight;
+    private final int mBottomControlsShadowHeight;
 
     /** A {@link WindowAndroid} for watching keyboard visibility events. */
     private final WindowAndroid mWindowAndroid;
@@ -86,9 +87,9 @@ class BottomControlsMediator
     /** Whether the soft keyboard is visible. */
     private boolean mIsKeyboardVisible;
 
-    private LayoutStateProvider mLayoutStateProvider;
+    private @Nullable LayoutStateProvider mLayoutStateProvider;
 
-    @Nullable private ChangeObserver mEdgeToEdgeChangeObserver;
+    private @Nullable ChangeObserver mEdgeToEdgeChangeObserver;
     private int mEdgeToEdgePaddingPx;
 
     /**
@@ -384,7 +385,7 @@ class BottomControlsMediator
         return mBottomControlsShadowHeight;
     }
 
-    ChangeObserver getEdgeToEdgeChangeObserverForTesting() {
+    @Nullable ChangeObserver getEdgeToEdgeChangeObserverForTesting() {
         return mEdgeToEdgeChangeObserver;
     }
 

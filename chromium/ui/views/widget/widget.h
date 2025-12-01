@@ -438,9 +438,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
     gfx::NativeView parent = gfx::NativeView();
 
     // Specifies the initial bounds of the Widget. Default is empty, which means
-    // the NativeWidget may specify a default size. If the parent is specified,
-    // |bounds| is in the parent's coordinate system. If the parent is not
-    // specified, it's in screen's global coordinate system.
+    // the NativeWidget may specify a default size. If the parent is specified
+    // and the widget type is not WINDOW_TYPE_POPUP, `bounds` is in the parent's
+    // coordinate system. Otherwise, it's in screen coordinates.
+    // TODO(crbug.com/40287810): can we use screen coordinates universally?
     gfx::Rect bounds;
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -753,7 +754,10 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   std::string GetWorkspace() const;
 
   // Sizes and/or places the widget to the specified bounds, size or position.
-  // `bounds` is in screen coordinates.
+  // `bounds` is in screen coordinates for top-level (is_top_level() == true)
+  // widgets and WINDOW_TYPE_POPUP widgets. Other widgets use its parent
+  // widget's client area coordinates.
+  // TODO(crbug.com/40287810): can we use screen coordinates universally?
   void SetBounds(const gfx::Rect& bounds);
   void SetSize(const gfx::Size& size);
 
@@ -1005,8 +1009,23 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   }
   bool is_secondary_widget() const { return is_secondary_widget_; }
 
-  // Returns whether the Widget is visible to the user.
-  virtual bool IsVisible() const;
+  // Returns whether the Widget is mapped by the window server. It doesn't
+  // necessarily mean the window's pixels are currently visible on a physical
+  // display to the user.
+  // Example: a mapped Widget on a hidden virtual desktop returns true for
+  // IsVisible(), but is not physically visible to the user.
+  //
+  // On some platforms (e.g., macOS), this is asynchronously updated, i.e.
+  // calling Show() or Hide() will not synchronously update this.
+  bool IsVisible() const;
+
+  // Returns true if the Widget is physically visible to the user on any screen.
+  // This is implemented only on macOS and Windows. On other platforms this is
+  // equivalent to IsVisible().
+  //
+  // On some platforms (e.g., macOS), this is asynchronously updated, i.e.
+  // calling Show() or Hide() will not synchronously update this.
+  bool IsVisibleOnScreen() const;
 
   // Returns the ThemeProvider that provides theme resources for this Widget.
   virtual const ui::ThemeProvider* GetThemeProvider() const;
@@ -1292,6 +1311,7 @@ class VIEWS_EXPORT Widget : public internal::NativeWidgetDelegate,
   void OnNativeFocus() override;
   void OnNativeBlur() override;
   void OnNativeWidgetVisibilityChanged(bool visible) override;
+  void OnNativeWidgetVisibilityOnScreenChanged(bool visible) override;
   void OnNativeWidgetCreated() override;
   void OnNativeWidgetDestroying() override;
   void OnNativeWidgetDestroyed() override;

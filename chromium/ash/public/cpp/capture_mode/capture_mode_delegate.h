@@ -108,11 +108,13 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
   virtual bool Uses24HourFormat() const = 0;
 
   // Called when capture mode is being started to check if there are any content
-  // currently on the screen that are restricted by DLP. `callback` will be
-  // triggered by the DLP manager with `proceed` set to true if capture mode
-  // initialization is allowed to continue, or set to false if it should be
-  // aborted.
+  // currently on the screen that are restricted by DLP.`shutting_down` is true
+  // if the lock state controller has received a request to shut down, and false
+  // otherwise. `callback` will be triggered by the DLP manager with `proceed`
+  // set to true if capture mode initialization is allowed to continue, or set
+  // to false if it should be aborted.
   virtual void CheckCaptureModeInitRestrictionByDlp(
+      bool shutting_down,
       OnCaptureModeDlpRestrictionChecked callback) = 0;
 
   // Checks whether capture of the region defined by |window| and |bounds|
@@ -264,21 +266,6 @@ class ASH_PUBLIC_EXPORT CaptureModeDelegate {
       OnSearchUrlFetchedCallback search_callback,
       OnTextDetectionComplete text_callback,
       base::OnceCallback<void()> error_callback) = 0;
-
-  // Sends the captured `region` and `image` to the backend. Invokes `callback`
-  // when the response is fetched.
-  virtual void SendRegionSearch(const SkBitmap& image,
-                                const gfx::Rect& region,
-                                OnSearchUrlFetchedCallback search_callback,
-                                OnTextDetectionComplete text_callback) = 0;
-
-  // Sends the captured `image`, `region`, and search box `text` to the backend.
-  // Invokes `callback` when the response is fetched.
-  virtual void SendMultimodalSearch(
-      const SkBitmap& image,
-      const gfx::Rect& region,
-      const std::string& text,
-      ash::OnSearchUrlFetchedCallback callback) = 0;
 
   // Returns true if the network is currently in an offline or unknown state.
   virtual bool IsNetworkConnectionOffline() const = 0;

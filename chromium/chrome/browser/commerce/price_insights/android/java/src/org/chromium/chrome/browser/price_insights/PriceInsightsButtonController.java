@@ -9,18 +9,19 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.commerce.CommerceBottomSheetContentController;
 import org.chromium.chrome.browser.price_insights.PriceInsightsBottomSheetCoordinator.PriceInsightsDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.optional_button.BaseButtonDataProvider;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
@@ -37,6 +38,7 @@ import org.chromium.ui.widget.Toast;
  * Responsible for providing UI resources for showing price insights action on optional toolbar
  * button.
  */
+@NullMarked
 public class PriceInsightsButtonController extends BaseButtonDataProvider {
 
     private final Context mContext;
@@ -44,16 +46,16 @@ public class PriceInsightsButtonController extends BaseButtonDataProvider {
     private final BottomSheetObserver mBottomSheetObserver;
     private final Supplier<ShoppingService> mShoppingServiceSupplier;
     private final Supplier<TabModelSelector> mTabModelSelectorSupplier;
-    private final Supplier<Tab> mTabSupplier;
+    private final Supplier<@Nullable Tab> mTabSupplier;
     private final PriceInsightsDelegate mPriceInsightsDelegate;
-    private PriceInsightsBottomSheetCoordinator mBottomSheetCoordinator;
-    private PriceInsightsBottomSheetCoordinator mBottomSheetCoordinatorForTesting;
+    private @Nullable PriceInsightsBottomSheetCoordinator mBottomSheetCoordinator;
+    private @Nullable PriceInsightsBottomSheetCoordinator mBottomSheetCoordinatorForTesting;
 
-    @NonNull Supplier<CommerceBottomSheetContentController> mCommerceBottomSheetContentController;
+    Supplier<CommerceBottomSheetContentController> mCommerceBottomSheetContentController;
 
     public PriceInsightsButtonController(
             Context context,
-            Supplier<Tab> tabSupplier,
+            Supplier<@Nullable Tab> tabSupplier,
             Supplier<TabModelSelector> tabModelSelectorSupplier,
             Supplier<ShoppingService> shoppingServiceSupplier,
             ModalDialogManager modalDialogManager,
@@ -61,9 +63,7 @@ public class PriceInsightsButtonController extends BaseButtonDataProvider {
             SnackbarManager snackbarManager,
             PriceInsightsDelegate priceInsightsDelegate,
             Drawable buttonDrawable,
-            @NonNull
-                    Supplier<CommerceBottomSheetContentController>
-                            commerceBottomSheetContentController) {
+            Supplier<CommerceBottomSheetContentController> commerceBottomSheetContentController) {
         super(
                 tabSupplier,
                 modalDialogManager,
@@ -73,8 +73,7 @@ public class PriceInsightsButtonController extends BaseButtonDataProvider {
                 /* supportsTinting= */ true,
                 /* iphCommandBuilder= */ null,
                 AdaptiveToolbarButtonVariant.PRICE_INSIGHTS,
-                /* tooltipTextResId= */ Resources.ID_NULL,
-                /* showBackgroundHighlight= */ false);
+                /* tooltipTextResId= */ Resources.ID_NULL);
 
         mContext = context;
         mBottomSheetController = bottomSheetController;

@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 2016-2017 The NASM Authors - All Rights Reserved
+ *   Copyright 2016-2023 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -89,14 +89,15 @@ void nasm_do_legacy_output(const struct out_data *data)
 
     case OUT_SEGMENT:
         type = OUT_ADDRESS;
+        if (tsegment != NO_SEG && tsegment < SEG_ABS)
+            tsegment |= 1;
         dptr = zero_buffer;
-        size = (data->sign == OUT_SIGNED) ? -data->size : data->size;
-        tsegment |= 1;
+        size = data->size;
         break;
 
     case OUT_ADDRESS:
         dptr = &data->toffset;
-        size = (data->sign == OUT_SIGNED) ? -data->size : data->size;
+        size = (data->flags & OUT_SIGNED) ? -data->size : data->size;
         break;
 
     case OUT_RAWDATA:

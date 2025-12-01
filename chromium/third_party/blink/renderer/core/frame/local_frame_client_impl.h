@@ -140,6 +140,7 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
       network::mojom::CSPDisposition should_bypass_main_world_csp,
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
       base::TimeTicks input_start_time,
+      base::TimeTicks actual_navigation_start,
       const String& href_translate,
       const std::optional<Impression>& impression,
       const LocalFrameToken* initiator_frame_token,
@@ -272,9 +273,8 @@ class CORE_EXPORT LocalFrameClientImpl final : public LocalFrameClient {
   v8::Local<v8::Object> GetScriptableObject(HTMLPlugInElement&,
                                             v8::Isolate*) override;
 
-  scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext() override;
-  scoped_refptr<WebWorkerFetchContext>
-  CreateWorkerFetchContextForPlzDedicatedWorker(
+  scoped_refptr<WebWorkerFetchContext> CreateWorkletFetchContext() override;
+  scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext(
       WebDedicatedWorkerHostFactoryClient*) override;
   std::unique_ptr<WebContentSettingsClient> CreateWorkerContentSettingsClient()
       override;

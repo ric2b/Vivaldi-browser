@@ -54,35 +54,36 @@ CBC_OneDimWriter::CBC_OneDimWriter() = default;
 CBC_OneDimWriter::~CBC_OneDimWriter() = default;
 
 void CBC_OneDimWriter::SetPrintChecksum(bool checksum) {
-  m_bPrintChecksum = checksum;
+  print_checksum_ = checksum;
 }
 
 void CBC_OneDimWriter::SetDataLength(int32_t length) {
-  m_iDataLenth = length;
+  data_length_ = length;
 }
 
 void CBC_OneDimWriter::SetCalcChecksum(bool state) {
-  m_bCalcChecksum = state;
+  calc_checksum_ = state;
 }
 
 bool CBC_OneDimWriter::SetFont(CFX_Font* cFont) {
-  if (!cFont)
+  if (!cFont) {
     return false;
+  }
 
-  m_pFont = cFont;
+  font_ = cFont;
   return true;
 }
 
 void CBC_OneDimWriter::SetFontSize(float size) {
-  m_fFontSize = size;
+  font_size_ = size;
 }
 
 void CBC_OneDimWriter::SetFontStyle(int32_t style) {
-  m_iFontStyle = style;
+  font_style_ = style;
 }
 
 void CBC_OneDimWriter::SetFontColor(FX_ARGB color) {
-  m_fontColor = color;
+  font_color_ = color;
 }
 
 pdfium::span<uint8_t> CBC_OneDimWriter::AppendPattern(
@@ -93,8 +94,9 @@ pdfium::span<uint8_t> CBC_OneDimWriter::AppendPattern(
   size_t added = 0;
   size_t pos = 0;
   for (const int8_t pattern_value : pattern) {
-    for (int32_t i = 0; i < pattern_value; ++i)
+    for (int32_t i = 0; i < pattern_value; ++i) {
       target[pos++] = color ? 1 : 0;
+    }
     added += pattern_value;
     color = !color;
   }
@@ -129,21 +131,21 @@ void CBC_OneDimWriter::CalcTextInfo(const ByteString& text,
   float penY = (float)abs(cFont->GetDescent()) * (float)fontSize / 1000.0f;
   float left = leftPositon;
   float top = 0.0;
-  charPos[0].m_Origin = CFX_PointF(penX + left, penY + top);
-  charPos[0].m_GlyphIndex = encoding->GlyphFromCharCode(charcodes[0]);
-  charPos[0].m_FontCharWidth = cFont->GetGlyphWidth(charPos[0].m_GlyphIndex);
+  charPos[0].origin_ = CFX_PointF(penX + left, penY + top);
+  charPos[0].glyph_index_ = encoding->GlyphFromCharCode(charcodes[0]);
+  charPos[0].font_char_width_ = cFont->GetGlyphWidth(charPos[0].glyph_index_);
 #if BUILDFLAG(IS_APPLE)
-  charPos[0].m_ExtGID = charPos[0].m_GlyphIndex;
+  charPos[0].ext_gid_ = charPos[0].glyph_index_;
 #endif
-  penX += (float)(charPos[0].m_FontCharWidth) * (float)fontSize / 1000.0f;
+  penX += (float)(charPos[0].font_char_width_) * (float)fontSize / 1000.0f;
   for (size_t i = 1; i < length; i++) {
-    charPos[i].m_Origin = CFX_PointF(penX + left, penY + top);
-    charPos[i].m_GlyphIndex = encoding->GlyphFromCharCode(charcodes[i]);
-    charPos[i].m_FontCharWidth = cFont->GetGlyphWidth(charPos[i].m_GlyphIndex);
+    charPos[i].origin_ = CFX_PointF(penX + left, penY + top);
+    charPos[i].glyph_index_ = encoding->GlyphFromCharCode(charcodes[i]);
+    charPos[i].font_char_width_ = cFont->GetGlyphWidth(charPos[i].glyph_index_);
 #if BUILDFLAG(IS_APPLE)
-    charPos[i].m_ExtGID = charPos[i].m_GlyphIndex;
+    charPos[i].ext_gid_ = charPos[i].glyph_index_;
 #endif
-    penX += (float)(charPos[i].m_FontCharWidth) * (float)fontSize / 1000.0f;
+    penX += (float)(charPos[i].font_char_width_) * (float)fontSize / 1000.0f;
   }
 }
 
@@ -155,11 +157,11 @@ void CBC_OneDimWriter::ShowDeviceChars(CFX_RenderDevice* device,
                                        float locX,
                                        float locY,
                                        int32_t barWidth) {
-  int32_t iFontSize = static_cast<int32_t>(fabs(m_fFontSize));
+  int32_t iFontSize = static_cast<int32_t>(fabs(font_size_));
   int32_t iTextHeight = iFontSize + 1;
   CFX_FloatRect rect((float)locX, (float)locY, (float)(locX + geWidth),
                      (float)(locY + iTextHeight));
-  if (geWidth != m_Width) {
+  if (geWidth != width_) {
     rect.right -= 1;
   }
   FX_RECT re = matrix.TransformRect(rect).GetOuterRect();
@@ -167,38 +169,40 @@ void CBC_OneDimWriter::ShowDeviceChars(CFX_RenderDevice* device,
   CFX_Matrix affine_matrix(1.0, 0.0, 0.0, -1.0, (float)locX,
                            (float)(locY + iFontSize));
   affine_matrix.Concat(matrix);
-  device->DrawNormalText(pCharPos.first(str.GetLength()), m_pFont,
+  device->DrawNormalText(pCharPos.first(str.GetLength()), font_,
                          static_cast<float>(iFontSize), affine_matrix,
-                         m_fontColor, GetTextRenderOptions());
+                         font_color_, GetTextRenderOptions());
 }
 
 bool CBC_OneDimWriter::ShowChars(WideStringView contents,
                                  CFX_RenderDevice* device,
                                  const CFX_Matrix& matrix,
                                  int32_t barWidth) {
-  if (!device || !m_pFont)
+  if (!device || !font_) {
     return false;
+  }
 
   ByteString str = FX_UTF8Encode(contents);
   std::vector<TextCharPos> charpos(str.GetLength());
   float charsLen = 0;
   float geWidth = 0;
-  if (m_locTextLoc == BC_TEXT_LOC::kAboveEmbed ||
-      m_locTextLoc == BC_TEXT_LOC::kBelowEmbed) {
+  if (loc_text_loc_ == BC_TEXT_LOC::kAboveEmbed ||
+      loc_text_loc_ == BC_TEXT_LOC::kBelowEmbed) {
     geWidth = 0;
-  } else if (m_locTextLoc == BC_TEXT_LOC::kAbove ||
-             m_locTextLoc == BC_TEXT_LOC::kBelow) {
+  } else if (loc_text_loc_ == BC_TEXT_LOC::kAbove ||
+             loc_text_loc_ == BC_TEXT_LOC::kBelow) {
     geWidth = (float)barWidth;
   }
-  int32_t iFontSize = static_cast<int32_t>(fabs(m_fFontSize));
+  int32_t iFontSize = static_cast<int32_t>(fabs(font_size_));
   int32_t iTextHeight = iFontSize + 1;
-  CalcTextInfo(str, charpos, m_pFont, geWidth, iFontSize, charsLen);
-  if (charsLen < 1)
+  CalcTextInfo(str, charpos, font_, geWidth, iFontSize, charsLen);
+  if (charsLen < 1) {
     return true;
+  }
 
   int32_t locX = 0;
   int32_t locY = 0;
-  switch (m_locTextLoc) {
+  switch (loc_text_loc_) {
     case BC_TEXT_LOC::kAboveEmbed:
       locX = static_cast<int32_t>(barWidth - charsLen) / 2;
       locY = 0;
@@ -211,13 +215,13 @@ bool CBC_OneDimWriter::ShowChars(WideStringView contents,
       break;
     case BC_TEXT_LOC::kBelowEmbed:
       locX = static_cast<int32_t>(barWidth - charsLen) / 2;
-      locY = m_Height - iTextHeight;
+      locY = height_ - iTextHeight;
       geWidth = charsLen;
       break;
     case BC_TEXT_LOC::kBelow:
     default:
       locX = 0;
-      locY = m_Height - iTextHeight;
+      locY = height_ - iTextHeight;
       geWidth = (float)barWidth;
       break;
   }
@@ -229,55 +233,59 @@ bool CBC_OneDimWriter::ShowChars(WideStringView contents,
 bool CBC_OneDimWriter::RenderDeviceResult(CFX_RenderDevice* device,
                                           const CFX_Matrix& matrix,
                                           WideStringView contents) {
-  if (m_output.empty())
+  if (output_.empty()) {
     return false;
+  }
 
   CFX_GraphStateData stateData;
   CFX_Path path;
-  path.AppendRect(0, 0, static_cast<float>(m_Width),
-                  static_cast<float>(m_Height));
+  path.AppendRect(0, 0, static_cast<float>(width_),
+                  static_cast<float>(height_));
   device->DrawPath(path, &matrix, &stateData, kBackgroundColor,
                    kBackgroundColor, CFX_FillRenderOptions::EvenOddOptions());
-  CFX_Matrix scaledMatrix(m_outputHScale, 0.0, 0.0,
-                          static_cast<float>(m_Height), 0.0, 0.0);
+  CFX_Matrix scaledMatrix(output_hscale_, 0.0, 0.0, static_cast<float>(height_),
+                          0.0, 0.0);
   scaledMatrix.Concat(matrix);
-  for (const auto& rect : m_output) {
+  for (const auto& rect : output_) {
     CFX_GraphStateData data;
     device->DrawPath(rect, &scaledMatrix, &data, kBarColor, 0,
                      CFX_FillRenderOptions::WindingOptions());
   }
 
-  return m_locTextLoc == BC_TEXT_LOC::kNone || !contents.Contains(' ') ||
-         ShowChars(contents, device, matrix, m_barWidth);
+  return loc_text_loc_ == BC_TEXT_LOC::kNone || !contents.Contains(' ') ||
+         ShowChars(contents, device, matrix, bar_width_);
 }
 
 bool CBC_OneDimWriter::RenderResult(WideStringView contents,
                                     pdfium::span<const uint8_t> code) {
-  if (code.empty())
+  if (code.empty()) {
     return false;
+  }
 
-  m_ModuleHeight = std::max(m_ModuleHeight, 20);
+  module_height_ = std::max(module_height_, 20);
   const size_t original_codelength = code.size();
-  const int32_t leftPadding = m_bLeftPadding ? 7 : 0;
-  const int32_t rightPadding = m_bRightPadding ? 7 : 0;
+  const int32_t leftPadding = left_padding_ ? 7 : 0;
+  const int32_t rightPadding = right_padding_ ? 7 : 0;
   const size_t codelength = code.size() + leftPadding + rightPadding;
-  m_outputHScale =
-      m_Width > 0 ? static_cast<float>(m_Width) / static_cast<float>(codelength)
-                  : 1.0;
-  m_barWidth = m_Width;
+  output_hscale_ =
+      width_ > 0 ? static_cast<float>(width_) / static_cast<float>(codelength)
+                 : 1.0;
+  bar_width_ = width_;
 
-  m_output.clear();
-  m_output.reserve(original_codelength);
+  output_.clear();
+  output_.reserve(original_codelength);
   for (size_t i = 0; i < original_codelength; ++i) {
-    if (code[i] != 1)
+    if (code[i] != 1) {
       continue;
+    }
 
     size_t output_index = i + leftPadding;
-    if (output_index >= codelength)
+    if (output_index >= codelength) {
       return true;
+    }
 
-    m_output.emplace_back();
-    m_output.back().AppendRect(output_index, 0.0f, output_index + 1, 1.0f);
+    output_.emplace_back();
+    output_.back().AppendRect(output_index, 0.0f, output_index + 1, 1.0f);
   }
   return true;
 }

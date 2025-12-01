@@ -57,16 +57,18 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.collaboration.messaging.MessagingBackendServiceFactory;
+import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.PaneId;
 import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.ActionConfirmationManager;
+import org.chromium.chrome.browser.tab_ui.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabRemover;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager.MaybeBlockingResult;
 import org.chromium.chrome.browser.tasks.tab_management.TabGroupRowView.TabGroupRowViewTitleData;
 import org.chromium.components.browser_ui.widget.ActionConfirmationResult;
 import org.chromium.components.collaboration.CollaborationService;
@@ -93,8 +95,6 @@ import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.components.tab_group_sync.TriggerSource;
 import org.chromium.components.tab_groups.TabGroupColorId;
 import org.chromium.ui.modaldialog.ModalDialogManager;
-import org.chromium.ui.modaldialog.ModalDialogProperties;
-import org.chromium.ui.modaldialog.ModalDialogProperties.ButtonType;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.MockitoHelper;
@@ -142,6 +142,7 @@ public class TabGroupListMediatorUnitTest {
     @Mock private ModalDialogManager mModalDialogManager;
     @Mock private MessagingBackendService mMessagingBackendService;
     @Mock private Runnable mFinishBlocking;
+    @Mock private DataSharingTabManager mDataSharingTabManager;
 
     @Captor private ArgumentCaptor<TabModelObserver> mTabModelObserver;
     @Captor private ArgumentCaptor<TabGroupSyncService.Observer> mTabGroupSyncObserverCaptor;
@@ -205,7 +206,8 @@ public class TabGroupListMediatorUnitTest {
                         mTabGroupUiActionHandler,
                         mActionConfirmationManager,
                         mSyncService,
-                        mModalDialogManager);
+                        /* enableContainment= */ true,
+                        mDataSharingTabManager);
         verify(mSyncService).addSyncStateChangedListener(mSyncStateChangedListenerCaptor.capture());
         return mediator;
     }
@@ -235,7 +237,8 @@ public class TabGroupListMediatorUnitTest {
 
         PropertyModel model = mModelList.get(0).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Title", 1, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData(
+                        "Title", 1, R.plurals.tab_group_row_accessibility_text),
                 model.get(TITLE_DATA));
         assertEquals(TabGroupColorId.BLUE, model.get(COLOR_INDEX));
     }
@@ -259,13 +262,13 @@ public class TabGroupListMediatorUnitTest {
 
         PropertyModel barModel = mModelList.get(0).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Bar", 3, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData("Bar", 3, R.plurals.tab_group_row_accessibility_text),
                 barModel.get(TITLE_DATA));
         assertEquals(TabGroupColorId.RED, barModel.get(COLOR_INDEX));
 
         PropertyModel fooModel = mModelList.get(1).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Foo", 2, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData("Foo", 2, R.plurals.tab_group_row_accessibility_text),
                 fooModel.get(TITLE_DATA));
         assertEquals(TabGroupColorId.BLUE, fooModel.get(COLOR_INDEX));
     }
@@ -330,7 +333,7 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromTabGroupId(LOCAL_GROUP_ID2))
                 .thenReturn(Tab.INVALID_TAB_ID);
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
@@ -341,12 +344,12 @@ public class TabGroupListMediatorUnitTest {
         PropertyModel model1 = mModelList.get(0).model;
         assertEquals(
                 new TabGroupRowViewTitleData(
-                        "in current", 1, R.string.tab_group_row_accessibility_text),
+                        "in current", 1, R.plurals.tab_group_row_accessibility_text),
                 model1.get(TITLE_DATA));
         PropertyModel model2 = mModelList.get(1).model;
         assertEquals(
                 new TabGroupRowViewTitleData(
-                        "hidden", 1, R.string.tab_group_row_accessibility_text),
+                        "hidden", 1, R.plurals.tab_group_row_accessibility_text),
                 model2.get(TITLE_DATA));
     }
 
@@ -365,7 +368,7 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromTabGroupId(LOCAL_GROUP_ID2))
                 .thenReturn(Tab.INVALID_TAB_ID);
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
@@ -409,7 +412,7 @@ public class TabGroupListMediatorUnitTest {
         group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
 
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(true);
@@ -445,7 +448,7 @@ public class TabGroupListMediatorUnitTest {
         group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
 
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(true);
@@ -470,8 +473,8 @@ public class TabGroupListMediatorUnitTest {
         group1.localId = new LocalTabGroupId(LOCAL_GROUP_ID1);
 
         when(mComprehensiveModel.getCount()).thenReturn(2);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
-        when(mComprehensiveModel.getTabAt(1)).thenReturn(mTab2);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(1)).thenReturn(mTab2);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab2.getRootId()).thenReturn(ROOT_ID1);
@@ -515,7 +518,7 @@ public class TabGroupListMediatorUnitTest {
                 .thenReturn(Tab.INVALID_TAB_ID);
         when(mTabGroupModelFilter.getTabsInGroup(LOCAL_GROUP_ID1)).thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
@@ -558,7 +561,7 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromTabGroupId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
         when(mTabGroupModelFilter.getTabsInGroup(LOCAL_GROUP_ID1)).thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(true);
@@ -632,7 +635,7 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromTabGroupId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
         when(mTabGroupModelFilter.getTabsInGroup(LOCAL_GROUP_ID1)).thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
@@ -647,21 +650,7 @@ public class TabGroupListMediatorUnitTest {
         assertNotNull(model.get(DELETE_RUNNABLE));
         model.get(DELETE_RUNNABLE).run();
 
-        verify(mActionConfirmationManager)
-                .processDeleteSharedGroupAttempt(
-                        any(), mMaybeBlockingResultCallbackCaptor.capture());
-        mMaybeBlockingResultCallbackCaptor
-                .getValue()
-                .onResult(
-                        new MaybeBlockingResult(
-                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking));
-
-        verify(mCollaborationService)
-                .deleteGroup(eq(COLLABORATION_ID1), mDeleteGroupResultCallbackCaptor.capture());
-        mDeleteGroupResultCallbackCaptor.getValue().onResult(true);
-        verify(mFinishBlocking).run();
-        verify(mModalDialogManager, never())
-                .showDialog(mModalPropertyModelCaptor.capture(), anyInt());
+        verify(mDataSharingTabManager).leaveOrDeleteFlow(any(), anyInt());
     }
 
     @Test
@@ -675,7 +664,7 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromTabGroupId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
         when(mTabGroupModelFilter.getTabsInGroup(LOCAL_GROUP_ID1)).thenReturn(List.of(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
@@ -689,25 +678,7 @@ public class TabGroupListMediatorUnitTest {
         assertNotNull(model.get(LEAVE_RUNNABLE));
         model.get(LEAVE_RUNNABLE).run();
 
-        verify(mActionConfirmationManager)
-                .processLeaveGroupAttempt(any(), mMaybeBlockingResultCallbackCaptor.capture());
-        mMaybeBlockingResultCallbackCaptor
-                .getValue()
-                .onResult(
-                        new MaybeBlockingResult(
-                                ActionConfirmationResult.CONFIRMATION_POSITIVE, mFinishBlocking));
-
-        verify(mCollaborationService)
-                .leaveGroup(eq(COLLABORATION_ID1), mDeleteGroupResultCallbackCaptor.capture());
-        mDeleteGroupResultCallbackCaptor.getValue().onResult(false);
-        verify(mFinishBlocking).run();
-
-        verify(mModalDialogManager).showDialog(mModalPropertyModelCaptor.capture(), anyInt());
-
-        ModalDialogProperties.Controller controller =
-                mModalPropertyModelCaptor.getValue().get(ModalDialogProperties.CONTROLLER);
-        controller.onClick(mModalPropertyModelCaptor.getValue(), ButtonType.POSITIVE);
-        verify(mModalDialogManager).dismissDialog(any(), anyInt());
+        verify(mDataSharingTabManager).leaveOrDeleteFlow(any(), anyInt());
     }
 
     @Test
@@ -722,7 +693,7 @@ public class TabGroupListMediatorUnitTest {
         when(mTabGroupModelFilter.getRootIdFromTabGroupId(LOCAL_GROUP_ID1)).thenReturn(ROOT_ID1);
         when(mTabGroupModelFilter.getTabsInGroup(LOCAL_GROUP_ID1)).thenReturn(Arrays.asList(mTab1));
         when(mComprehensiveModel.getCount()).thenReturn(1);
-        when(mComprehensiveModel.getTabAt(0)).thenReturn(mTab1);
+        when(mComprehensiveModel.getTabAtChecked(0)).thenReturn(mTab1);
         when(mTab1.getRootId()).thenReturn(ROOT_ID1);
         when(mTab1.getTabGroupId()).thenReturn(LOCAL_GROUP_ID1);
         when(mTab1.isClosing()).thenReturn(false);
@@ -860,13 +831,13 @@ public class TabGroupListMediatorUnitTest {
 
         PropertyModel barModel = mModelList.get(1).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Bar", 3, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData("Bar", 3, R.plurals.tab_group_row_accessibility_text),
                 barModel.get(TITLE_DATA));
         assertEquals(TabGroupColorId.RED, barModel.get(COLOR_INDEX));
 
         PropertyModel fooModel = mModelList.get(2).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Foo", 2, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData("Foo", 2, R.plurals.tab_group_row_accessibility_text),
                 fooModel.get(TITLE_DATA));
         assertEquals(TabGroupColorId.BLUE, fooModel.get(COLOR_INDEX));
     }
@@ -908,13 +879,13 @@ public class TabGroupListMediatorUnitTest {
 
         PropertyModel barModel = mModelList.get(0).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Bar", 3, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData("Bar", 3, R.plurals.tab_group_row_accessibility_text),
                 barModel.get(TITLE_DATA));
         assertEquals(TabGroupColorId.RED, barModel.get(COLOR_INDEX));
 
         PropertyModel fooModel = mModelList.get(1).model;
         assertEquals(
-                new TabGroupRowViewTitleData("Foo", 2, R.string.tab_group_row_accessibility_text),
+                new TabGroupRowViewTitleData("Foo", 2, R.plurals.tab_group_row_accessibility_text),
                 fooModel.get(TITLE_DATA));
         assertEquals(TabGroupColorId.BLUE, fooModel.get(COLOR_INDEX));
     }

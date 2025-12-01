@@ -42,16 +42,14 @@
 #include "test/gtest.h"
 #include "test/wait_until.h"
 
-namespace rtc {
+namespace webrtc {
 namespace {
-
-using ::webrtc::CreateEnvironment;
 
 bool CheckReceive(webrtc::TestClient* client,
                   bool should_receive,
                   const char* buf,
                   size_t size) {
-  return (should_receive) ? client->CheckNextPacket(buf, size, 0)
+  return (should_receive) ? client->CheckNextPacket(buf, size, nullptr)
                           : client->CheckNoPacket();
 }
 
@@ -241,7 +239,7 @@ bool TestConnectivity(const webrtc::SocketAddress& src,
   int sent = client->SendTo(buf, len, server->GetLocalAddress());
 
   webrtc::Thread::Current()->SleepMs(100);
-  rtc::Buffer payload;
+  Buffer payload;
   webrtc::Socket::ReceiveBuffer receive_buffer(payload);
   int received = server->RecvFrom(receive_buffer);
   return received == sent && ::memcmp(buf, payload.data(), len) == 0;
@@ -250,15 +248,16 @@ bool TestConnectivity(const webrtc::SocketAddress& src,
 void TestPhysicalInternal(const webrtc::SocketAddress& int_addr) {
   webrtc::AutoThread main_thread;
   webrtc::PhysicalSocketServer socket_server;
-  BasicNetworkManager network_manager(CreateEnvironment(), &socket_server);
+  webrtc::BasicNetworkManager network_manager(CreateEnvironment(),
+                                              &socket_server);
   network_manager.StartUpdating();
   // Process pending messages so the network list is updated.
   webrtc::Thread::Current()->ProcessMessages(0);
 
-  std::vector<const Network*> networks = network_manager.GetNetworks();
+  std::vector<const webrtc::Network*> networks = network_manager.GetNetworks();
   networks.erase(std::remove_if(networks.begin(), networks.end(),
-                                [](const rtc::Network* network) {
-                                  return rtc::kDefaultNetworkIgnoreMask &
+                                [](const webrtc::Network* network) {
+                                  return webrtc::kDefaultNetworkIgnoreMask &
                                          network->type();
                                 }),
                  networks.end());
@@ -304,7 +303,7 @@ TEST(NatTest, TestPhysicalIPv4) {
 }
 
 TEST(NatTest, TestPhysicalIPv6) {
-  if (HasIPv6Enabled()) {
+  if (webrtc::HasIPv6Enabled()) {
     TestPhysicalInternal(webrtc::SocketAddress("::1", 0));
   } else {
     RTC_LOG(LS_WARNING) << "No IPv6, skipping";
@@ -347,7 +346,7 @@ TEST(NatTest, TestVirtualIPv4) {
 }
 
 TEST(NatTest, TestVirtualIPv6) {
-  if (HasIPv6Enabled()) {
+  if (webrtc::HasIPv6Enabled()) {
     TestVirtualInternal(AF_INET6);
   } else {
     RTC_LOG(LS_WARNING) << "No IPv6, skipping";
@@ -440,4 +439,4 @@ TEST_F(NatTcpTest, DISABLED_TestConnectOut) {
 }
 
 }  // namespace
-}  // namespace rtc
+}  // namespace webrtc

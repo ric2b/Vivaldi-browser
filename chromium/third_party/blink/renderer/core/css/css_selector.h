@@ -260,6 +260,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoFocusWithin,
     kPseudoFullPageMedia,
     kPseudoHasInterest,
+    kPseudoHasPartialInterest,
     kPseudoHasSlotted,
     kPseudoHorizontal,
     kPseudoHover,
@@ -288,6 +289,7 @@ class CORE_EXPORT CSSSelector {
     kPseudoPermissionElementInvalidStyle,
     kPseudoPermissionElementOccluded,
     kPseudoPermissionGranted,
+    kPseudoPermissionIcon,
     kPseudoPlaceholder,
     kPseudoPlaceholderShown,
     kPseudoReadOnly,
@@ -312,6 +314,8 @@ class CORE_EXPORT CSSSelector {
     kPseudoStart,
     kPseudoState,
     kPseudoTarget,
+    kPseudoTargetOfInterest,
+    kPseudoTargetOfPartialInterest,
     kPseudoUnknown,
     // Something that was unparsable, but contained either a nesting
     // selector (&), or a :scope pseudo-class, and must therefore be kept
@@ -535,6 +539,10 @@ class CORE_EXPORT CSSSelector {
   bool IsOrContainsHostPseudoClass() const;
   bool IsUserActionPseudoClass() const;
   bool IsIdClassOrAttributeSelector() const;
+  // Support :is(:host) and :is(#foo:host) but not :is(:host, #foo);
+  // see SelectorChecker::MatchForRelation() for explanation about
+  // this limitation.
+  bool IsDeeplyHostPseudoClass() const;
 
   RelationType Relation() const {
     return static_cast<RelationType>(bits_.get<RelationField>());

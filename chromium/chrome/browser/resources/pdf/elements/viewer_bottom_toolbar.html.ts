@@ -15,13 +15,13 @@ import type {ViewerBottomToolbarElement} from './viewer_bottom_toolbar.js';
 
 export function getHtml(this: ViewerBottomToolbarElement) {
   // clang-format off
-  return html`
-    <ink-brush-selector .currentType="${this.currentType}"
+  return html`<!--_html_template_start_-->
+    <ink-brush-selector class="toolbar-icon" .currentType="${this.currentType}"
         @current-type-changed="${this.onCurrentTypeChanged}">
     </ink-brush-selector>
     <span id="vertical-separator"></span>
     ${this.shouldShowBrushOptions_() ? html`
-      <viewer-bottom-toolbar-dropdown id="size"
+      <viewer-bottom-toolbar-dropdown id="size" class="toolbar-icon"
           .buttonTitle="${this.getSizeTitle_()}">
         <cr-icon slot="icon" icon="${this.getSizeIcon_()}"></cr-icon>
         <ink-size-selector slot="menu" .currentSize="${this.currentSize}"
@@ -29,13 +29,15 @@ export function getHtml(this: ViewerBottomToolbarElement) {
             @current-size-changed="${this.onCurrentSizeChanged}">
         </ink-size-selector>
       </viewer-bottom-toolbar-dropdown>
-      <viewer-bottom-toolbar-dropdown id="color"
+      <viewer-bottom-toolbar-dropdown id="color" class="toolbar-icon"
           .buttonTitle="${this.getColorTitle_()}">
-        <div slot="icon" id="color-chip"></div>
-        <ink-color-selector slot="menu" .currentColor="${this.currentColor}"
-            @current-color-changed="${this.onCurrentColorChanged}"
-            .currentType="${this.currentType}"></ink-color-selector>
+        <div slot="icon" class="color-chip"></div>
+        <ink-color-selector slot="menu" label="$i18n{ink2Color}"
+            .colors="${this.availableBrushColors()}"
+            .currentColor="${this.currentColor}"
+            @current-color-changed="${this.onCurrentColorChanged}">
+        </ink-color-selector>
       </viewer-bottom-toolbar-dropdown>` : ''}
-  `;
+  <!--_html_template_end_-->`;
   // clang-format on
 }

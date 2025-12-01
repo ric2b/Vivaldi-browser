@@ -35,8 +35,8 @@
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/logging.h"
+#include "base/logging/log_severity.h"
 #include "base/strings/cstring_view.h"
-#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -126,13 +126,6 @@ class Environment {
 
   // The path the database is copied to after it's been mutated.
   const base::FilePath& out_db_path() const { return out_db_path_; }
-
-  // Deletes the backing file and related journal files.
-  void DeleteDbFiles() const {
-    CHECK(base::DeleteFile(GetTempFilePath("db.sqlite")));
-    CHECK(base::DeleteFile(GetTempFilePath("db.sqlite-journal")));
-    CHECK(base::DeleteFile(GetTempFilePath("db.sqlite-wal")));
-  }
 
   void AssertTempDirIsEmpty() const {
     if (base::IsDirectoryEmpty(temp_dir_.GetPath())) {
@@ -350,12 +343,16 @@ DEFINE_PROTO_FUZZER(const sql_fuzzers::RecoveryFuzzerTestCase& fuzzer_input) {
     logging::ScopedLoggingSettings scoped_logging;
     logging::SetMinLogLevel(logging::LOGGING_FATAL);
     std::ignore = database.Execute(test_case.sql_statement_after_open());
-
-    database.Close();
   }
 
-  // Delete the backing file to prepare for the next iteration.
-  env.DeleteDbFiles();
+  // The database must be closed before we can call `sql::Database::Delete()`.
+  // Note that it could be open even though `database.Open()` returned false.
+  database.Close();
+  CHECK(!database.is_open());
+
+  // Delete the backing file and related journal files so the next iteration
+  // starts with a clean slate.
+  PCHECK(sql::Database::Delete(env.db_path()));
   // Ensure that no unexpected files were created in the temp directory.
   env.AssertTempDirIsEmpty();
 }

@@ -2,11 +2,13 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
 <translation id="1038842779957582377">tuntematon nimi</translation>
+<translation id="1068672505746868501">Älä käännä kielellä <ph name="SOURCE_LANGUAGE" /> kirjoitettuja sivuja</translation>
 <translation id="1089439967362294234">Vaihda salasana</translation>
 <translation id="1110994991967754504">Valitse käyttöoikeus kohteelle <ph name="PERMISSION_NAME" /></translation>
 <translation id="1158211211994409885"><ph name="HOST_NAME" /> katkaisi yhteyden yllättäen.</translation>
 <translation id="1161325031994447685">Yhdistä langaton verkko uudelleen</translation>
 <translation id="1175364870820465910">Tulo&amp;sta…</translation>
+<translation id="1285320974508926690">Älä käännä tätä sivustoa</translation>
 <translation id="1375198122581997741">Tietoja versiosta</translation>
 <translation id="139305205187523129"><ph name="HOST_NAME" /> ei lähettänyt tietoa.</translation>
 <translation id="1555191101192706055">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat yrittää huijata asentamaan selaamiseen vaikuttavia haittaohjelmia – esimerkiksi vaihtaa aloitussivusi tai näyttää avaamillasi sivuilla lisää mainoksia.</translation>
@@ -20,6 +22,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Kokeile auttaako Windowsin Verkko ja Internet -vianselvitys<ph name="END_LINK" />.</translation>
 <translation id="1974060860693918893">Lisäasetukset</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Tarkista välityspalvelin ja palomuuri<ph name="END_LINK" /></translation>
+<translation id="2048261947532620704">Käännetään sivua</translation>
 <translation id="2119505898009119320">Myönnetty: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
 <translation id="2166378884831602661">Tämä sivusto ei voi tarjota suojattua yhteyttä</translation>
 <translation id="2178904466768126352">Hyökkääjät sivustolla, jolle yritit siirtyä, saattavat asentaa haittaohjelmia, jotka varastavat tai poistavat esimerkiksi salasanoja, kuvia, viestejä tai luottokorttinumeroita.</translation>
@@ -44,6 +47,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />Tarkista yhteyksien toiminta<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Yhteys katkaistiin.</translation>
 <translation id="2826760142808435982">Yhteyden salaus- ja todennusmenetelmänä on <ph name="CIPHER" /> ja avainvaihtomekanismina <ph name="KX" />.</translation>
+<translation id="290376772003165898">Eikö sivua ole kirjoitettu kielellä <ph name="LANGUAGE" />?</translation>
 <translation id="2909946352844186028">Verkossa havaittiin muutos.</translation>
 <translation id="2948083400971632585">Voit poistaa yhteydelle asetetut välityspalvelimet käytöstä asetussivulta.</translation>
 <translation id="2954624054936281172">Taulukko tallennetuista maksutavoista</translation>
@@ -78,6 +82,7 @@ kokeile auttaako sen poistaminen ja uudelleenlisääminen.</translation>
 <translation id="3681007416295224113">Varmenteen tiedot</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Tarkista välityspalvelin-, palomuuri- ja DNS-nimipalvelinasetukset<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Jos käytät välityspalvelinta…</translation>
+<translation id="3861977424605124250">Näytä käynnistettäessä</translation>
 <translation id="3950820424414687140">Kirjaudu</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
@@ -149,17 +154,21 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="6328639280570009161">Kokeile auttaako verkkoennakoinnin käytöstäpoisto</translation>
 <translation id="6348220984832452017">Aktiiviset muunnelmat</translation>
 <translation id="6358450015545214790">Mitä tämä tarkoittaa?</translation>
+<translation id="6404511346730675251">Muokkaa kirjanmerkkiä</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> kieltäytyi muodostamasta yhteyttä.</translation>
 <translation id="6447842834002726250">Evästeet</translation>
 <translation id="6451458296329894277">Vahvista lomakkeen uudelleenlähetys</translation>
 <translation id="6569060085658103619">Tarkastelet laajennussivua</translation>
+<translation id="6653655836861174026">Vivaldin profiileilla voit jakaa Vivaldin luomalla omat profiilit kavereillesi ja perheellesi, tai vapaalle ja töille.</translation>
 <translation id="6657585470893396449">Salasana</translation>
 <translation id="6711464428925977395">Välityspalvelimessa on jotain vikaa tai osoite on virheellinen.</translation>
 <translation id="6757797048963528358">Laitteesi siirtyi nukkumaan.</translation>
 <translation id="6890956352250146925">Eväste- ja sivustotietoasetukset</translation>
 <translation id="6897140037006041989">User agent</translation>
+<translation id="6935179587384421592"><ph name="SIZE" />. Jotkin sivustot saattavat latautua hitaammin kun ne avataan seuraavan kerran.</translation>
 <translation id="6957624206566198865">Avaa sivu uudessa yksityisvälilehdessä</translation>
 <translation id="7053983685419859001">Estä</translation>
+<translation id="7066262000446496119">Kuka on käyttämässä Vivaldia?</translation>
 <translation id="7096937462164235847">Sivuston identiteettiä ei ole tarkistettu.</translation>
 <translation id="7108819624672055576">Laajennuksen sallima</translation>
 <translation id="7111012039238467737">(voimassa)</translation>
@@ -167,6 +176,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata suojausstandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Näytä ilmoitukset</translation>
+<translation id="7283555985781738399">Vierastla</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7419106976560586862">Profiilin polku</translation>
 <translation id="7455133967321480974">Käytä yleistä oletusasetusta (estä)</translation>
@@ -178,6 +188,7 @@ Pyri tavoittamaan järjestelmäsi ylläpito.</translation>
 <translation id="7714464543167945231">Varmenne</translation>
 <translation id="7716147886133743102">Ylläpidon estämä</translation>
 <translation id="7716424297397655342">Tätä sivustoa ei voi ladata välimuistista</translation>
+<translation id="773466115871691567">Käännä kielellä <ph name="SOURCE_LANGUAGE" /> kirjoitetut sivut aina</translation>
 <translation id="7758069387465995638">Palomuuri tai virustorjunta on saattanut estää yhteyden.</translation>
 <translation id="7800304661137206267">Yhteyden salausmenetelmä on <ph name="CIPHER" />, viestien todennusmenetelmä <ph name="MAC" /> ja avainvaihtomekanismi <ph name="KX" />.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> suojaa tietosi normaalisti salaamalla ne. Kuitenkin, kun Vivaldi tällä kertaa muodosti yhteyttä sivustoon <ph name="SITE" />, palautti sivusto epätavalliset ja virheelliset tunnistautumistiedot. Näin voi tapahtua, jos hyökkääjä pyrkii esiintymään sivustona <ph name="SITE" /> tai langattoman verkon kirjautumisruutu on keskeyttänyt yhteyden. Tietosi ovat edelleen turvassa, koska Vivaldi katkaisi yhteyden ennen kuin tietoja vaihdettiin.</translation>

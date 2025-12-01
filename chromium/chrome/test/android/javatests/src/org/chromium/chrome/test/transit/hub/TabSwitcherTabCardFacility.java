@@ -4,14 +4,17 @@
 
 package org.chromium.chrome.test.transit.hub;
 
+import android.view.View;
+
 import androidx.annotation.Nullable;
 
-import org.chromium.base.test.transit.Elements;
+import org.chromium.base.test.transit.ViewElement;
 import org.chromium.chrome.test.transit.page.PageStation;
 
 /** Represents a non-grouped tab card in the Tab Switcher. */
 public class TabSwitcherTabCardFacility extends TabSwitcherCardFacility {
     private final int mTabId;
+    public ViewElement<View> closeButtonElement;
 
     public TabSwitcherTabCardFacility(@Nullable Integer cardIndex, int tabId, String title) {
         super(cardIndex, title);
@@ -19,8 +22,9 @@ public class TabSwitcherTabCardFacility extends TabSwitcherCardFacility {
     }
 
     @Override
-    public void declareElements(Elements.Builder elements) {
-        super.declareElements(elements);
+    public void declareExtraElements() {
+        super.declareExtraElements();
+        closeButtonElement = declareActionButton();
     }
 
     /** Clicks the tab card to show the page. */
@@ -34,6 +38,6 @@ public class TabSwitcherTabCardFacility extends TabSwitcherCardFacility {
                         .withIsSelectingTabs(isSelecting ? 1 : 0)
                         .withExpectedTitle(mTitle)
                         .build();
-        return mHostStation.travelToSync(destination, clickTitleTrigger());
+        return mHostStation.travelToSync(destination, titleElement.getClickTrigger());
     }
 }

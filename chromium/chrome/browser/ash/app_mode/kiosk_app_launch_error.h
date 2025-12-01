@@ -9,6 +9,8 @@
 
 namespace ash {
 
+extern const char kKioskLaunchErrorHistogram[];
+
 class AuthFailure;
 
 class KioskAppLaunchError {
@@ -39,7 +41,8 @@ class KioskAppLaunchError {
     kUserNotAllowlisted = 16,  // LoginPerformer disallowed this user.
     // kLacrosDataMigrationStarted = 17,  // Deprecated
     // kLacrosBackwardDataMigrationStarted = 18,  // Deprecated
-    kMaxValue = kUserNotAllowlisted,  // Max value of errors.
+    kChromeAppDeprecated = 19,
+    kMaxValue = kChromeAppDeprecated,  // Max value of errors.
   };
 
   // Returns a message for given `error`.

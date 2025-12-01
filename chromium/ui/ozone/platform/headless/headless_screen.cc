@@ -14,8 +14,8 @@
 #include "base/strings/string_split.h"
 #include "components/headless/display_util/headless_display_util.h"
 #include "components/headless/screen_info/headless_screen_info.h"
-#include "ui/base/ui_base_switches.h"
 #include "ui/display/util/display_util.h"
+#include "ui/gfx/switches.h"
 #include "ui/ozone/platform/headless/headless_window.h"
 #include "ui/ozone/platform/headless/headless_window_manager.h"
 #include "ui/ozone/platform/headless/ozone_platform_headless.h"
@@ -33,7 +33,7 @@ namespace {
 //
 // More complex headless screen configuration (including multiple screens)
 // can be specified using the --screen-info command line switch.
-// See //components/headless/screen_info/headless_screen_info.h for details.
+// See //components/headless/screen_info/README.md for more details.
 
 // Ozone/headless display defaults.
 constexpr int64_t kHeadlessDisplayIdBase = 1;
@@ -149,7 +149,7 @@ const std::vector<display::Display>& HeadlessScreen::GetAllDisplays() const {
 
 display::Display HeadlessScreen::GetPrimaryDisplay() const {
   auto iter = display_list_.GetPrimaryDisplayIterator();
-  CHECK(iter != display_list_.displays().end(), base::NotFatalUntil::M130);
+  CHECK(iter != display_list_.displays().end());
   return *iter;
 }
 

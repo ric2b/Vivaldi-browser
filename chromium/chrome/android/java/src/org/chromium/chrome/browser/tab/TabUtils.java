@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tab;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
@@ -20,12 +22,12 @@ import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -49,6 +51,7 @@ import java.lang.annotation.RetentionPolicy;
 import org.chromium.build.BuildConfig;
 
 /** Collection of utility methods that operates on Tab. */
+@NullMarked
 public class TabUtils {
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public static final float PORTRAIT_THUMBNAIL_ASPECT_RATIO = 0.85f;
@@ -131,17 +134,18 @@ public class TabUtils {
      */
     public static void switchUserAgent(Tab tab, boolean switchToDesktop, int caller) {
         final boolean reloadOnChange = !tab.isNativePage();
-        tab.getWebContents()
+        assumeNonNull(tab.getWebContents())
                 .getNavigationController()
                 .setUseDesktopUserAgent(switchToDesktop, reloadOnChange, caller);
     }
 
     /**
      * Get UseDesktopUserAgent setting from webContents.
+     *
      * @param webContents The webContents used to retrieve UseDesktopUserAgent setting.
      * @return Whether the webContents is set to use desktop user agent.
      */
-    public static boolean isUsingDesktopUserAgent(WebContents webContents) {
+    public static boolean isUsingDesktopUserAgent(@Nullable WebContents webContents) {
         return webContents != null
                 && webContents.getNavigationController().getUseDesktopUserAgent();
     }
@@ -291,22 +295,36 @@ public class TabUtils {
             int cardWidthPx,
             Context context,
             BrowserControlsStateProvider browserControlsStateProvider) {
-        int tabThumbnailHeight =
-                (int)
-                        ((cardWidthPx - getThumbnailWidthDiff(context))
-                                / getTabThumbnailAspectRatio(
-                                        context, browserControlsStateProvider));
-        int cardHeightPx = tabThumbnailHeight + getThumbnailHeightDiff(context);
-        return cardHeightPx;
+        float aspectRatio = getTabThumbnailAspectRatio(context, browserControlsStateProvider);
+        int thumbnailHeight = (int) ((cardWidthPx - getThumbnailWidthDiff(context)) / aspectRatio);
+        return thumbnailHeight + getThumbnailHeightDiff(context);
+    }
+
+    /**
+     * Derive grid card width based on height, expected thumbnail aspect ratio and margins.
+     *
+     * @param cardHeightPx width of the card
+     * @param context to derive view margins
+     * @param browserControlsStateProvider - For getting browser controls height.
+     * @return computed card height.
+     */
+    public static int deriveGridCardWidth(
+            int cardHeightPx,
+            Context context,
+            BrowserControlsStateProvider browserControlsStateProvider) {
+        float aspectRatio = getTabThumbnailAspectRatio(context, browserControlsStateProvider);
+        int thumbnailWidth = (int) ((cardHeightPx - getThumbnailHeightDiff(context)) * aspectRatio);
+        return thumbnailWidth + getThumbnailWidthDiff(context);
     }
 
     /**
      * Derive thumbnail size based on parent card size.
+     *
      * @param gridCardSize size of parent card.
      * @param context to derive view margins.
      * @return computed width and height of thumbnail.
      */
-    public static Size deriveThumbnailSize(@NonNull Size gridCardSize, @NonNull Context context) {
+    public static Size deriveThumbnailSize(Size gridCardSize, Context context) {
         int thumbnailWidth = gridCardSize.getWidth() - getThumbnailWidthDiff(context);
         int thumbnailHeight = gridCardSize.getHeight() - getThumbnailHeightDiff(context);
         return new Size(thumbnailWidth, thumbnailHeight);

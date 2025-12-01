@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 
+#include "base/time/time.h"
 #include "components/lens/lens_overlay_invocation_source.h"
 #include "third_party/lens_server_proto/lens_overlay_cluster_info.pb.h"
 #include "third_party/lens_server_proto/lens_overlay_request_id.pb.h"
@@ -38,6 +39,7 @@ GURL AppendInvocationSourceParamToURL(
     lens::LensOverlayInvocationSource invocation_source);
 
 GURL BuildTextOnlySearchURL(
+    base::Time query_start_time,
     const std::string& text_query,
     std::optional<GURL> page_url,
     std::optional<std::string> page_title,
@@ -47,6 +49,7 @@ GURL BuildTextOnlySearchURL(
     bool use_dark_mode);
 
 GURL BuildLensSearchURL(
+    base::Time query_start_time,
     std::optional<std::string> text_query,
     std::optional<GURL> page_url,
     std::optional<std::string> page_title,
@@ -63,6 +66,12 @@ const std::string GetTextQueryParameterValue(const GURL& url);
 // Returns the value of the lens mode parameter value from the provided search
 // URL if any. Empty string otherwise.
 const std::string GetLensModeParameterValue(const GURL& url);
+
+// Returns true if the two URLs have the same base url, and the same query
+// parameters. This differs from comparing two GURLs using == since this method
+// will ensure equivalence even if there are empty query params, viewport
+// params, or different query param ordering.
+bool AreSearchUrlsEquivalent(const GURL& a, const GURL& b);
 
 // Returns whether the given |url| contains all the common search query
 // parameters required to properly enable the lens overlay results in the side
@@ -95,6 +104,11 @@ GURL RemoveIgnoredSearchURLParameters(const GURL& url);
 // when opening the SRP in a new tab.
 GURL RemoveSidePanelURLParameters(const GURL& url);
 
+// Returns the URL to open in a new tab by adding a unique vsrid to the side
+// panel new tab URL. If the given URL is empty, or is a URL for a contextual
+// query, returns an empty URL since they cannot be opened in a new tab.
+GURL GetSidePanelNewTabUrl(const GURL& side_panel_url, std::string vsrid);
+
 // Builds the appropriate translate service URL for fetching supported
 // languages.
 GURL BuildTranslateLanguagesURL(std::string country, std::string language);
@@ -109,6 +123,14 @@ bool IsLensTextSelectionType(
 // both URLs.
 bool URLsMatchWithoutTextFragment(const GURL& first_url,
                                   const GURL& second_url);
+
+// Adds the `text_fragments` and `pdf_page_number` to the ref attribute of `url`
+// without modifying any part of the rest of the URL. Any information in the
+// current ref of `url` is discarded.
+GURL AddPDFScrollToParametersToUrl(
+    const GURL& url,
+    const std::vector<std::string>& text_fragments,
+    int pdf_page_number);
 
 }  // namespace lens
 

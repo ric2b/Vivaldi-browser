@@ -33,7 +33,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
 
     const addExtensionStub = sinon.stub(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
     createTarget().setInspectedURL(urlString`http://example.com`);
-    assert.isTrue(addExtensionStub.calledOnceWithExactly(context.extensionDescriptor));
+    sinon.assert.calledOnceWithExactly(addExtensionStub, context.extensionDescriptor);
   });
 
   it('are not initialized before the target is initialized and navigated to a non-privileged URL', async () => {
@@ -43,7 +43,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
 
     const addExtensionStub = sinon.stub(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
     createTarget().setInspectedURL(urlString`chrome://version`);
-    assert.isTrue(addExtensionStub.notCalled);
+    sinon.assert.notCalled(addExtensionStub);
   });
 
   it('defers loading extensions until after navigation from a privileged to a non-privileged host', async () => {
@@ -79,67 +79,93 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     assert.deepEqual(resources.map(r => r.url), ['https://example.com/', 'http://example.com']);
   });
 
-  describe('Resource.setFunctionRangesForScript API', () => {
-    const validFunctionRanges = [{start: {line: 0, column: 0}, end: {line: 10, column: 1}, name: 'foo'}];
-    it('correctly calls DebuggerWorkspaceBindings.setFunctionRanges via Resource.setFunctionRangesForScript API',
-       async () => {
-         const target = createTarget();
-         const inspectedUrl = urlString`https://www.example.com/`;
-         const scriptUrl = urlString`https://example.com/foo.js.map/foo.js`;
-         target.setInspectedURL(inspectedUrl);
+  describe('Resource', () => {
+    let target: SDK.Target.Target;
+    let project: Bindings.ContentProviderBasedProject.ContentProviderBasedProject;
 
-         const project = new Bindings.ContentProviderBasedProject.ContentProviderBasedProject(
-             Workspace.Workspace.WorkspaceImpl.instance(), target.id(), Workspace.Workspace.projectTypes.Network, '',
-             false /* isServiceProject */);
+    beforeEach(() => {
+      target = createTarget();
+      const inspectedUrl = urlString`https://www.example.com/`;
+      target.setInspectedURL(inspectedUrl);
 
-         const targetManager = target.targetManager();
-         const resourceMapping =
-             new Bindings.ResourceMapping.ResourceMapping(targetManager, Workspace.Workspace.WorkspaceImpl.instance());
-         Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
-             {forceNew: true, resourceMapping, targetManager});
-         // create a mock uiSourceCode for the sourceMap script
-         project.addUISourceCode(
-             new Workspace.UISourceCode.UISourceCode(
-                 project, scriptUrl, Common.ResourceType.resourceTypes.SourceMapScript),
-         );
-         const uiSourceCode = project.uiSourceCodeForURL(scriptUrl);
-         assert.exists(uiSourceCode);
-         assert.exists(context.chrome.devtools);
+      project = new Bindings.ContentProviderBasedProject.ContentProviderBasedProject(
+          Workspace.Workspace.WorkspaceImpl.instance(), target.id(), Workspace.Workspace.projectTypes.Network, '',
+          false /* isServiceProject */);
 
-         const resources = await new Promise<Chrome.DevTools.Resource[]>(
-             r => context.chrome.devtools?.inspectedWindow.getResources(r));
+      const targetManager = target.targetManager();
+      const resourceMapping =
+          new Bindings.ResourceMapping.ResourceMapping(targetManager, Workspace.Workspace.WorkspaceImpl.instance());
+      Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(
+          {forceNew: true, resourceMapping, targetManager});
+    });
 
-         const nonSourceMapScripts = resources.filter(r => r.type !== 'sm-script');
-         const sourceMapScripts = resources.filter(r => r.type === 'sm-script');
+    describe('setFunctionRangesForScript', () => {
+      const validFunctionRanges = [{start: {line: 0, column: 0}, end: {line: 10, column: 1}, name: 'foo'}];
+      it('correctly calls DebuggerWorkspaceBindings.setFunctionRanges via Resource.setFunctionRangesForScript API',
+         async () => {
+           // create a mock uiSourceCode for the sourceMap script
+           const scriptUrl = urlString`https://example.com/foo.js.map/foo.js`;
+           project.addUISourceCode(
+               new Workspace.UISourceCode.UISourceCode(
+                   project, scriptUrl, Common.ResourceType.resourceTypes.SourceMapScript),
+           );
+           const uiSourceCode = project.uiSourceCodeForURL(scriptUrl);
+           assert.exists(uiSourceCode);
+           assert.exists(context.chrome.devtools);
 
-         const workspaceBindingSetFunctionRangesStub =
-             sinon.stub(Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(), 'setFunctionRanges');
+           const resources = await new Promise<Chrome.DevTools.Resource[]>(
+               r => context.chrome.devtools?.inspectedWindow.getResources(r));
 
-         // The assert.throws() helper does not work with async/await, hence the manual try catch
-         let didThrow = false;
-         try {
-           // Should throw if called with a non-sourceMap script
-           await nonSourceMapScripts[0].setFunctionRangesForScript(validFunctionRanges);
-         } catch (e) {
-           didThrow = true;
-           assertIsStatus(e);
-           assert.strictEqual(e.code, 'E_BADARG');
-         }
-         assert.isTrue(didThrow, 'SetFunctionRangesForScript did not throw an error as expected.');
+           const nonSourceMapScripts = resources.filter(r => r.type !== 'sm-script');
+           const sourceMapScripts = resources.filter(r => r.type === 'sm-script');
 
-         try {
-           // Should throw if called with invalid/empty ranges
-           await sourceMapScripts[0].setFunctionRangesForScript([/** empty ranges */]);
-         } catch (e) {
-           didThrow = true;
-           assertIsStatus(e);
-           assert.strictEqual(e.code, 'E_BADARG');
-         }
-         assert.isTrue(didThrow, 'SetFunctionRangesForScript did not throw an error as expected.');
-         assert.isTrue(workspaceBindingSetFunctionRangesStub.notCalled);
-         await sourceMapScripts[0].setFunctionRangesForScript(validFunctionRanges);
-         assert.isTrue(workspaceBindingSetFunctionRangesStub.calledOnceWithExactly(uiSourceCode, validFunctionRanges));
-       });
+           const workspaceBindingSetFunctionRangesStub =
+               sinon.stub(Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(), 'setFunctionRanges');
+
+           // The assert.throws() helper does not work with async/await, hence the manual try catch
+           let didThrow = false;
+           try {
+             // Should throw if called with a non-sourceMap script
+             await nonSourceMapScripts[0].setFunctionRangesForScript(validFunctionRanges);
+           } catch (e) {
+             didThrow = true;
+             assertIsStatus(e);
+             assert.strictEqual(e.code, 'E_BADARG');
+           }
+           assert.isTrue(didThrow, 'SetFunctionRangesForScript did not throw an error as expected.');
+
+           try {
+             // Should throw if called with invalid/empty ranges
+             await sourceMapScripts[0].setFunctionRangesForScript([/** empty ranges */]);
+           } catch (e) {
+             didThrow = true;
+             assertIsStatus(e);
+             assert.strictEqual(e.code, 'E_BADARG');
+           }
+           assert.isTrue(didThrow, 'SetFunctionRangesForScript did not throw an error as expected.');
+           sinon.assert.notCalled(workspaceBindingSetFunctionRangesStub);
+           await sourceMapScripts[0].setFunctionRangesForScript(validFunctionRanges);
+           sinon.assert.calledOnceWithExactly(workspaceBindingSetFunctionRangesStub, uiSourceCode, validFunctionRanges);
+         });
+    });
+
+    it('returns the buildId', async () => {
+      const stubScript = sinon.createStubInstance(SDK.Script.Script);
+      // @ts-expect-error
+      stubScript.buildId = 'my-build-id';
+      sinon.stub(Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance(), 'scriptsForUISourceCode')
+          .returns([stubScript]);
+      project.addUISourceCode(
+          new Workspace.UISourceCode.UISourceCode(
+              project, urlString`http://example.com/index.js`, Common.ResourceType.resourceTypes.Script),
+      );
+
+      const resources =
+          await new Promise<Chrome.DevTools.Resource[]>(r => context.chrome.devtools?.inspectedWindow.getResources(r));
+
+      assert.strictEqual(resources[0].url, 'http://example.com/index.js');
+      assert.strictEqual(resources[0].buildId, 'my-build-id');
+    });
   });
 });
 
@@ -234,7 +260,7 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
       steps: [],
     });
 
-    assert.isTrue(stub.called);
+    sinon.assert.called(stub);
 
     await context.chrome.devtools?.recorder.unregisterRecorderExtensionPlugin(extensionPlugin);
   });
@@ -349,8 +375,8 @@ describeWithDevtoolsExtension('Extensions', {}, context => {
     const reloadPromise = new Promise(resolve => reloadStub.callsFake(resolve));
     context.chrome.devtools!.inspectedWindow.reload();
     await reloadPromise;
-    assert.isTrue(reloadStub.calledOnce);
-    assert.isTrue(secondReloadStub.notCalled);
+    sinon.assert.calledOnce(reloadStub);
+    sinon.assert.notCalled(secondReloadStub);
   });
 
   it('correcly installs blocked extensions after navigation', async () => {
@@ -415,7 +441,7 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
       const addExtensionStub = sinon.stub(Extensions.ExtensionServer.ExtensionServer.instance(), 'addExtension');
 
       target.setInspectedURL(urlString`${`${protocol}://foo`}`);
-      assert.isTrue(addExtensionStub.notCalled);
+      sinon.assert.notCalled(addExtensionStub);
       assert.isUndefined(context.chrome.devtools);
     });
   }
@@ -609,6 +635,9 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     const target = createTarget({id: 'target' as Protocol.Target.TargetID});
     target.setInspectedURL(allowedUrl);
 
+    sinon.stub(Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding, 'instance')
+        .returns(sinon.createStubInstance(
+            Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding, {scriptsForUISourceCode: []}));
     const project = new Bindings.ContentProviderBasedProject.ContentProviderBasedProject(
         Workspace.Workspace.WorkspaceImpl.instance(), target.id(), Workspace.Workspace.projectTypes.Network, '',
         false /* isServiceProject */);
@@ -673,6 +702,9 @@ describeWithDevtoolsExtension('Runtime hosts policy', {hostsPolicy}, context => 
     const target = createTarget({id: 'target' as Protocol.Target.TargetID});
     target.setInspectedURL(allowedUrl);
 
+    sinon.stub(Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding, 'instance')
+        .returns(sinon.createStubInstance(
+            Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding, {scriptsForUISourceCode: []}));
     const project = new Bindings.ContentProviderBasedProject.ContentProviderBasedProject(
         Workspace.Workspace.WorkspaceImpl.instance(), target.id(), Workspace.Workspace.projectTypes.Network, '',
         false /* isServiceProject */);
@@ -782,8 +814,8 @@ describe('ExtensionServer', () => {
   });
 });
 
-function assertIsStatus<T>(value: T|
-                           Extensions.ExtensionServer.Record): asserts value is Extensions.ExtensionServer.Record {
+function assertIsStatus<T>(value: T|Extensions.ExtensionServer.Record):
+    asserts value is Extensions.ExtensionServer.Record {
   if (value && typeof value === 'object' && 'code' in value) {
     assert.isTrue(value.code === 'OK' || Boolean(value.isError), `Value ${value} is not a status code`);
   } else {
@@ -825,7 +857,7 @@ describeWithDevtoolsExtension('Wasm extension API', {}, context => {
     const log = captureError('Extension server error: Invalid argument global: No global with index 0');
     const result = await context.chrome.devtools?.languageServices.getWasmGlobal(0, stopId);
     assertIsStatus(result);
-    assert.isTrue(log.calledOnce);
+    sinon.assert.calledOnce(log);
     assert.strictEqual(result.code, 'E_BADARG');
     assert.strictEqual(result.details[0], 'global');
   });
@@ -834,7 +866,7 @@ describeWithDevtoolsExtension('Wasm extension API', {}, context => {
     const log = captureError('Extension server error: Invalid argument local: No local with index 0');
     const result = await context.chrome.devtools?.languageServices.getWasmLocal(0, stopId);
     assertIsStatus(result);
-    assert.isTrue(log.calledOnce);
+    sinon.assert.calledOnce(log);
     assert.strictEqual(result.code, 'E_BADARG');
     assert.strictEqual(result.details[0], 'local');
   });
@@ -843,7 +875,7 @@ describeWithDevtoolsExtension('Wasm extension API', {}, context => {
     const log = captureError('Extension server error: Invalid argument op: No operand with index 0');
     const result = await context.chrome.devtools?.languageServices.getWasmOp(0, stopId);
     assertIsStatus(result);
-    assert.isTrue(log.calledOnce);
+    sinon.assert.calledOnce(log);
     assert.strictEqual(result.code, 'E_BADARG');
     assert.strictEqual(result.details[0], 'op');
   });
@@ -900,7 +932,7 @@ describeWithDevtoolsExtension('Language Extension API', {}, context => {
     const spy = sinon.spy(pageResourceLoader, 'resourceLoadedThroughExtension');
     await context.chrome.devtools?.languageServices.reportResourceLoad('test.dwo', {success: true, size: 10});
 
-    assert.isTrue(spy.calledOnce);
+    sinon.assert.calledOnce(spy);
     assert.strictEqual(pageResourceLoader.getNumberOfResources().resources, 1);
 
     const resource = spy.args[0][0];
@@ -951,9 +983,9 @@ for (const allowFileAccess of [true, false]) {
                 type: Protocol.Debugger.DebugSymbolsType.SourceMap,
                 externalURL: 'file:///source/url.map',
               }],
-              null);
+              null, null);
 
-          assert.isTrue(endpointSpy.calledOnce);
+          sinon.assert.calledOnce(endpointSpy);
           assert.strictEqual(
               (endpointSpy.thisValues[0] as Extensions.LanguageExtensionEndpoint.LanguageExtensionEndpoint)
                   .allowFileAccess,

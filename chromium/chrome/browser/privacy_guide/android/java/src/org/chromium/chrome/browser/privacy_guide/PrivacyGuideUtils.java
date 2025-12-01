@@ -4,8 +4,12 @@
 
 package org.chromium.chrome.browser.privacy_guide;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
+import org.chromium.chrome.browser.privacy_guide.PrivacyGuideFragment.FragmentType;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingBridge;
 import org.chromium.chrome.browser.safe_browsing.SafeBrowsingState;
@@ -26,13 +30,15 @@ import java.util.Set;
  * A utility class for Privacy Guide that fetches the current state of {@link
  * PrivacyGuideFragment.FragmentType}s.
  */
+@NullMarked
 class PrivacyGuideUtils {
     static boolean isMsbbEnabled(Profile profile) {
         return UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionEnabled(profile);
     }
 
     static boolean isHistorySyncEnabled(Profile profile) {
-        Set<Integer> syncTypes = SyncServiceFactory.getForProfile(profile).getSelectedTypes();
+        Set<Integer> syncTypes =
+                assumeNonNull(SyncServiceFactory.getForProfile(profile)).getSelectedTypes();
 
         // The toggle represents both History and Tabs.
         // History and Tabs should usually have the same value, but in some
@@ -46,6 +52,7 @@ class PrivacyGuideUtils {
     static boolean isUserSignedIn(Profile profile) {
         IdentityManager identityManager =
                 IdentityServicesProvider.get().getIdentityManager(profile);
+        assumeNonNull(identityManager);
         return identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN);
     }
 
@@ -87,5 +94,27 @@ class PrivacyGuideUtils {
             return false;
         }
         return true;
+    }
+
+    static int getFragmentFocusViewId(@FragmentType int fragmentType) {
+        switch (fragmentType) {
+            case FragmentType.WELCOME:
+                return R.id.welcome_view;
+            case FragmentType.MSBB:
+                return R.id.msbb_switch;
+            case FragmentType.HISTORY_SYNC:
+                return R.id.history_sync_switch;
+            case FragmentType.SAFE_BROWSING:
+                return R.id.sb_step_header;
+            case FragmentType.COOKIES:
+                return R.id.cookies_step_header;
+            case FragmentType.AD_TOPICS:
+                return R.id.ad_topics_switch;
+            case FragmentType.DONE:
+                return R.id.done_step_header;
+            default:
+                assert false : "Unexpected fragment type: " + fragmentType;
+                return -1;
+        }
     }
 }

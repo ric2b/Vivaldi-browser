@@ -6,6 +6,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "base/containers/adapters.h"
@@ -18,6 +19,9 @@
 #include "content/services/auction_worklet/public/cpp/private_aggregation_reporting.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/features_generated.h"
+#include "third_party/blink/public/mojom/aggregation_service/aggregatable_report.mojom.h"
+#include "third_party/blink/public/mojom/private_aggregation/private_aggregation_host.mojom.h"
 #include "url/origin.h"
 
 namespace content {
@@ -142,6 +146,7 @@ std::optional<BiddingAndAuctionResponse> BiddingAndAuctionResponse::TryParse(
   }
   output.is_chaff = false;
 
+  // By design, missing "adRenderURL" field means there is no winner.
   base::Value* maybe_render_url_value = input_dict->Find("adRenderURL");
   if (maybe_render_url_value) {
     std::string* maybe_render_url = maybe_render_url_value->GetIfString();
@@ -510,7 +515,6 @@ BiddingAndAuctionResponse::TryParseKAnonGhostWinner(
                               /*bucket=*/U128FromBigEndian(*bucket),
                               /*value=*/*value,
                               /*filtering_id=*/std::nullopt)),
-              blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New()));
     }
   }
@@ -773,7 +777,9 @@ void BiddingAndAuctionResponse::TryParsePAggContributions(
           event_type_str,
           base::FeatureList::IsEnabled(
               blink::features::
-                  kPrivateAggregationApiProtectedAudienceAdditionalExtensions));
+                  kPrivateAggregationApiProtectedAudienceAdditionalExtensions),
+          base::FeatureList::IsEnabled(
+              blink::features::kPrivateAggregationApiErrorReporting));
   if (!event_type) {
     // Don't throw an error if an invalid reserved event type is provided, to
     // provide forward compatibility with new reserved event types added
@@ -795,9 +801,9 @@ void BiddingAndAuctionResponse::TryParsePAggContributions(
     }
     if (component_win) {
       // Response contains all event types for a component winner, since it may
-      // win or lose the top level auction. `request` needs to contain event
-      // type because it's needed to decide whether it needs to be filtered out
-      // based on the top level auction result.
+      // win or lose the top-level auction. `request` needs to contain any
+      // non-error event type because it's needed to decide whether it needs to
+      // be filtered out based on the top-level auction result.
       auction_worklet::mojom::PrivateAggregationRequestPtr request =
           auction_worklet::mojom::PrivateAggregationRequest::New(
               auction_worklet::mojom::AggregatableReportContribution::
@@ -809,32 +815,32 @@ void BiddingAndAuctionResponse::TryParsePAggContributions(
                               auction_worklet::mojom::ForEventSignalValue::
                                   NewIntValue(*value),
                               filtering_id, event_type->Clone())),
-              // TODO(qingxinwu): consider allowing this to be set
-              blink::mojom::AggregationServiceMode::kDefault,
               blink::mojom::DebugModeDetails::New());
       output.component_win_pagg_requests[agg_phase_key].emplace_back(
           std::move(request));
     } else {
+      std::optional<blink::mojom::PrivateAggregationErrorEvent> error_event;
+      if (event_type->is_reserved_error()) {
+        error_event =
+            ConvertErrorEventToPAggType(event_type->get_reserved_error());
+      }
+
       // Server already filtered out not needed contributions based on final
       // auction result.
-      auction_worklet::mojom::PrivateAggregationRequestPtr request =
-          auction_worklet::mojom::PrivateAggregationRequest::New(
-              auction_worklet::mojom::AggregatableReportContribution::
-                  NewHistogramContribution(
-                      blink::mojom::AggregatableReportHistogramContribution::
-                          New(
-                              /*bucket=*/U128FromBigEndian(*bucket),
-                              /*value=*/*value,
-                              /*filtering_id=*/filtering_id)),
-              // TODO(qingxinwu): consider allowing this to be set
-              blink::mojom::AggregationServiceMode::kDefault,
-              blink::mojom::DebugModeDetails::New());
-      if (event_type->is_reserved()) {
-        output.server_filtered_pagg_requests_reserved[agg_key].emplace_back(
-            std::move(request));
-      } else {
+      auction_worklet::mojom::FinalizedPrivateAggregationRequestPtr request =
+          auction_worklet::mojom::FinalizedPrivateAggregationRequest::New(
+              blink::mojom::AggregatableReportHistogramContribution::New(
+                  /*bucket=*/U128FromBigEndian(*bucket),
+                  /*value=*/*value,
+                  /*filtering_id=*/filtering_id),
+              blink::mojom::DebugModeDetails::New(), error_event);
+
+      if (event_type->is_non_reserved()) {
         output.server_filtered_pagg_requests_non_reserved[event_type_str]
             .emplace_back(std::move(request));
+      } else {
+        output.server_filtered_pagg_requests_reserved[agg_key].emplace_back(
+            std::move(request));
       }
     }
   }

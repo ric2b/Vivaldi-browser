@@ -1,9 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="1062777154504442433">Uusi välilehtinippu</translation>
+<translation id="1625440863545383011">Poista välilehti, mutta jätä nippu</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+=1 {Lisää välilehti kirjanmerkkeihin}
+other {Lisää välilehdet kirjanmerkkeihin}
+}</translation>
 <translation id="2947471979790858922">Toimintasi näissä yksityisvälilehdissä poistetaan tältä laitteelta</translation>
+<translation id="3298614730029636660">Jätä nippu</translation>
+<translation id="354698175756845966">Vaihda nipun väriä</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Löydät sulkemasi välilehdet Vivaldin valikosta löytyvästä "Viimeaikaiset välilehdet" -kohdasta. Yksityisvälilehteäsi ei tallenneta.}
         other {Löydät sulkemasi välilehdet Vivaldin valikosta löytyvästä "Viimeaikaiset välilehdet" -kohdasta. # yksityisvälilehteäsi ei tallenneta.}}</translation>
 <translation id="4871187110787939393">Suljetaanko kaikki yksityisvälilehdet?</translation>
+<translation id="5494920125229734069">Valitse kaikki</translation>
+<translation id="6807841890213931603">Poista välilehti ja poista nippu</translation>
+<translation id="750227952939161636">Välilehtiniput tallennetaan automaattisesti ja synkronoidaan kaikille tilillesi kirjautuneille laitteille.</translation>
+<translation id="7640137753339219124">Poista nippu</translation>
+<translation id="7653857400289671414">Välilehtiniput tallennetaan automaattisesti</translation>
+<translation id="8440938071054361204">Muuta nipun nimeä</translation>
+<translation id="8602902357364871325">Sulje nippu</translation>
+<translation id="8851621822786801079">Poista nipusta</translation>
 </translationbundle>

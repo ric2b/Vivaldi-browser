@@ -10,6 +10,7 @@
 
 #include "base/callback_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/background/glic/glic_launcher_configuration.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
@@ -90,8 +91,6 @@ class GlicBackgroundModeManager
   void UnregisterHotkey();
   void UpdateState();
 
-  void OnProfileAllowedChanged();
-
   bool IsEnabledInAnyLoadedProfile();
 
   // A helper class for observing pref changes.
@@ -124,10 +123,14 @@ class GlicBackgroundModeManager
   ui::Accelerator actual_registered_hotkey_;
 
   // Listens to changes to IsEnabled() for profiles.
-  std::map<Profile*, base::CallbackListSubscription> profile_subscriptions_;
+  std::map<Profile*, base::CallbackListSubscription>
+      profile_enabled_subscriptions_;
+  std::map<Profile*, base::CallbackListSubscription>
+      profile_consent_subscriptions_;
   using ScopedProfileObserver =
       base::ScopedObservation<Profile, ProfileObserver>;
   std::map<Profile*, ScopedProfileObserver> profile_observers_;
+  base::WeakPtrFactory<GlicBackgroundModeManager> weak_ptr_factory_{this};
 };
 }  // namespace glic
 

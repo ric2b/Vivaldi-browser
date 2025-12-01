@@ -82,8 +82,8 @@ export async function waitForResult() {
   return {...result, reportEl};
 }
 
-// Can't reference ToolbarSettingCheckbox inside e2e
-type CheckboxLabel = Element&{checkboxElement: HTMLInputElement};
+// Can't reference UIUtils.CheckboxLabel inside e2e tests
+type CheckboxLabel = Element&{checked: boolean};
 
 /**
  * Set the category checkboxes
@@ -91,13 +91,13 @@ type CheckboxLabel = Element&{checkboxElement: HTMLInputElement};
  */
 export async function selectCategories(selectedCategoryIds: string[]) {
   const startViewHandle = await waitFor('.lighthouse-start-view');
-  const checkboxHandles = await startViewHandle.$$('dt-checkbox');
+  const checkboxHandles = await startViewHandle.$$('devtools-checkbox');
   for (const checkboxHandle of checkboxHandles) {
     await checkboxHandle.evaluate((dtCheckboxElem, selectedCategoryIds: string[]) => {
       const elem = dtCheckboxElem as CheckboxLabel;
       const categoryId = elem.getAttribute('data-lh-category') || '';
-      elem.checkboxElement.checked = selectedCategoryIds.includes(categoryId);
-      elem.checkboxElement.dispatchEvent(new Event('change'));  // Need change event to update the backing setting.
+      elem.checked = selectedCategoryIds.includes(categoryId);
+      elem.dispatchEvent(new Event('change'));  // Need change event to update the backing setting.
     }, selectedCategoryIds);
   }
 }

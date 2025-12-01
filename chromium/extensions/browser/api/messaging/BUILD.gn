@@ -20,6 +20,8 @@ source_set("messaging") {
     "message_service_bindings.cc",
     "messaging_delegate.cc",
     "messaging_delegate.h",
+    "native_message_port.cc",
+    "native_message_port.h",
   ]
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
@@ -38,6 +40,7 @@ source_set("messaging") {
   deps = [
     "//components/back_forward_cache",
     "//content/public/common",
+    "//extensions/browser/api:extensions_api_client",
     "//extensions/common:common_constants",
     "//extensions/common:mojom_shared",
     "//extensions/common:mojom_shared_cpp_sources",
@@ -49,6 +52,7 @@ source_set("native_messaging") {
   sources = [
     "native_message_host.cc",
     "native_message_host.h",
+    "native_message_port_dispatcher.h",
     "native_messaging_channel.h",
   ]
 

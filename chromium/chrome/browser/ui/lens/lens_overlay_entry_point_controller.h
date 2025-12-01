@@ -8,6 +8,7 @@
 #include "base/scoped_observation.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_observer.h"
+#include "chrome/browser/ui/lens/lens_url_matcher.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
@@ -56,13 +57,17 @@ class LensOverlayEntryPointController : public FullscreenObserver,
   // this current moment in time. Sometimes, entrypoints are hidden ephermally,
   // such as when the Lens Overlay is currently active, so entrypoints do
   // nothing.
-  bool AreVisible();
+  bool AreVisible() const;
 
   // Updates the enable/disable and visibility state of entry points. If
   // hide_toolbar_entrypoint is true, instead of just disabling the toolbar
   // entrypoint, we will also hide the entrypoint from the user. All other
   // entrypoints will be updated to their correct state.
   void UpdateEntryPointsState(bool hide_toolbar_entrypoint);
+
+  // Returns true if the given URL is eligible for EDU promos present on some
+  // entrypoints.
+  bool IsUrlEduEligible(const GURL& url) const;
 
   // Invokes the entrypoint action.
   static void InvokeAction(tabs::TabInterface* active_tab,
@@ -91,7 +96,11 @@ class LensOverlayEntryPointController : public FullscreenObserver,
   actions::ActionItem* GetToolbarEntrypoint();
 
   // Return true if the Lens Overlay is active on the current tab.
-  bool IsOverlayActive();
+  bool IsOverlayActive() const;
+
+  // Observer to check for focus changes.
+  base::ScopedObservation<views::FocusManager, views::FocusChangeListener>
+      focus_manager_observation_{this};
 
   // Observer to check for browser window entering fullscreen.
   base::ScopedObservation<FullscreenController, FullscreenObserver>
@@ -112,6 +121,9 @@ class LensOverlayEntryPointController : public FullscreenObserver,
   PrefChangeRegistrar pref_change_registrar_;
 
   raw_ptr<views::View> location_bar_;
+
+  // URL matcher for entrypoints with EDU promos.
+  std::unique_ptr<LensUrlMatcher> edu_url_matcher_;
 };
 
 }  // namespace lens

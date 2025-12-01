@@ -99,6 +99,7 @@ source_set("common_export") {
 }
 
 source_set("preloading_headers") {
+  deps = [ ":common_export" ]
   sources = [ "navigation/preloading_headers.h" ]
 }
 
@@ -216,10 +217,6 @@ source_set("headers") {
     "manifest/manifest.h",
     "manifest/manifest_icon_selector.h",
     "manifest/manifest_util.h",
-    "media/display_type.h",
-    "media/video_capture.h",
-    "media/watch_time_component.h",
-    "media/watch_time_reporter.h",
     "mediastream/media_device_id.h",
     "mediastream/media_devices.h",
     "mediastream/media_devices_mojom_traits.h",
@@ -257,8 +254,6 @@ source_set("headers") {
     "origin_trials/trial_token.h",
     "origin_trials/trial_token_result.h",
     "origin_trials/trial_token_validator.h",
-    "page/browsing_context_group_info.h",
-    "page/browsing_context_group_info_mojom_traits.h",
     "page/color_provider_color_maps.h",
     "page/color_provider_color_maps_mojom_traits.h",
     "page/content_to_visible_time_reporter.h",
@@ -309,6 +304,7 @@ source_set("headers") {
     "use_counter/use_counter_feature_tracker.h",
     "user_agent/user_agent_brand_version_type.h",
     "user_agent/user_agent_metadata.h",
+    "view_source/rendering_preferences.h",
     "web_cache/web_cache_resource_type_stats.h",
     "web_package/signed_exchange_consts.h",
     "web_package/web_package_request_matcher.h",

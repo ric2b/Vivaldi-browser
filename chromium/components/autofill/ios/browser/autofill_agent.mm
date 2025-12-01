@@ -33,6 +33,7 @@
 #import "base/strings/utf_string_conversions.h"
 #import "base/time/time.h"
 #import "base/types/cxx23_to_underlying.h"
+#import "base/types/zip.h"
 #import "base/uuid.h"
 #import "base/values.h"
 #import "build/branding_buildflags.h"
@@ -339,7 +340,7 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
   // TODO(crbug.com/366247033): This double-checks the assumption that this
   // crash is caused by an unexpected suggestion type, and not a nil suggestion.
   // It can be removed once a root cause for the issue is known.
-  CHECK(suggestion, base::NotFatalUntil::M133);
+  CHECK(suggestion);
 
   _suggestionHandledCompletion = [completion copy];
 
@@ -371,10 +372,8 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
       suggestion.type == autofill::SuggestionType::kCreditCardEntry ||
       suggestion.type == autofill::SuggestionType::kCreateNewPlusAddress ||
       suggestion.type == autofill::SuggestionType::kVirtualCreditCardEntry ||
-      ((base::FeatureList::IsEnabled(
-            autofill::features::kAutofillAddressFieldSwapping) &&
-        suggestion.type ==
-            autofill::SuggestionType::kAddressFieldByFieldFilling))) {
+      suggestion.type ==
+          autofill::SuggestionType::kAddressFieldByFieldFilling) {
     _pendingAutocompleteFieldID = fieldRendererID;
     if (_suggestionDelegate) {
       autofill::Suggestion autofill_suggestion;
@@ -452,7 +451,7 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
     // crash has been fixed.
     SCOPED_CRASH_KEY_NUMBER("Bug366247033", "suggestion_type",
                             static_cast<int>(suggestion.type));
-    NOTREACHED(base::NotFatalUntil::M133);
+    NOTREACHED();
   }
 }
 
@@ -551,10 +550,10 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
   base::Value::Dict predictionData;
   for (const auto& form : forms) {
     base::Value::Dict fieldData;
-    DCHECK(form.fields.size() == form.data.fields().size());
-    for (size_t i = 0; i < form.fields.size(); i++) {
-      fieldData.Set(NumberToString(form.data.fields()[i].renderer_id().value()),
-                    base::Value(form.fields[i].overall_type));
+    for (const auto [field, field_prediction] :
+         base::zip(form.data.fields(), form.fields)) {
+      fieldData.Set(NumberToString(field.renderer_id().value()),
+                    base::Value(field_prediction.overall_type));
     }
     predictionData.Set(base::UTF16ToUTF8(form.data.name()),
                        std::move(fieldData));
@@ -592,10 +591,8 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
         popup_suggestion.type == autofill::SuggestionType::kCreditCardEntry ||
         popup_suggestion.type ==
             autofill::SuggestionType::kVirtualCreditCardEntry ||
-        (base::FeatureList::IsEnabled(
-             autofill::features::kAutofillAddressFieldSwapping) &&
-         popup_suggestion.type ==
-             autofill::SuggestionType::kAddressFieldByFieldFilling)) {
+        popup_suggestion.type ==
+            autofill::SuggestionType::kAddressFieldByFieldFilling) {
       // Filter out any key/value suggestions if the user hasn't typed yet.
       if (popup_suggestion.type ==
               autofill::SuggestionType::kAutocompleteEntry &&
@@ -661,6 +658,16 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
              ? *popup_suggestion.field_by_field_filling_type_used
              : autofill::FieldType::EMPTY_TYPE);
 
+    SuggestionIconType suggestionIconType = SuggestionIconType::kNone;
+    if (base::FeatureList::IsEnabled(
+            autofill::features::kAutofillEnableSupportForHomeAndWork)) {
+      suggestionIconType =
+          (popup_suggestion.icon == autofill::Suggestion::Icon::kHome)
+              ? SuggestionIconType::kAccountHome
+          : (popup_suggestion.icon == autofill::Suggestion::Icon::kWork)
+              ? SuggestionIconType::kAccountWork
+              : SuggestionIconType::kNone;
+    }
     FormSuggestion* suggestion =
         [FormSuggestion suggestionWithValue:value
                                  minorValue:minorValue
@@ -673,6 +680,7 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
                  acceptanceA11yAnnouncement:acceptanceA11yAnnouncement];
 
     suggestion.featureForIPH = SuggestionFeatureForIPH::kUnknown;
+    suggestion.suggestionIconType = suggestionIconType;
     if (popup_suggestion.iph_metadata.feature ==
         &feature_engagement::
             kIPHAutofillExternalAccountProfileSuggestionFeature) {
@@ -681,6 +689,11 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
     } else if (popup_suggestion.iph_metadata.feature ==
                &feature_engagement::kIPHPlusAddressCreateSuggestionFeature) {
       suggestion.featureForIPH = SuggestionFeatureForIPH::kPlusAddressCreation;
+    } else if (popup_suggestion.iph_metadata.feature ==
+               &feature_engagement::
+                   kIPHAutofillHomeWorkProfileSuggestionFeature) {
+      suggestion.featureForIPH =
+          SuggestionFeatureForIPH::kHomeWorkAddressSuggestion;
     }
 
     // Put "clear form" entry at the front of the suggestions.
@@ -988,6 +1001,16 @@ bool ContainsFocusableField(const FormData& form, FieldRendererId field_id) {
     [self notifyAboutFormFillingResults:fillingResults
                                 inFrame:frame
                    fieldToFormLookupMap:fieldToFormLookupMap];
+  }
+
+  if (base::FeatureList::IsEnabled(kAutofillRefillForFormsIos) &&
+      base::FeatureList::IsEnabled(
+          autofill::features::kAutofillAcrossIframesIos)) {
+    auto* driver =
+        autofill::AutofillDriverIOS::FromWebStateAndWebFrame(_webState, frame);
+    if (driver && driver->is_processed()) {
+      driver->ScanForms();
+    }
   }
 
   [self recordFormFillingSuccessMetrics:!fillingResults.empty()];

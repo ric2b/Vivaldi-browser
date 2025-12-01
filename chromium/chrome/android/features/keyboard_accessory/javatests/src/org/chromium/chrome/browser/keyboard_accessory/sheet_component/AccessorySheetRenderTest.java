@@ -43,6 +43,8 @@ import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.chrome.browser.autofill.AutofillImageFetcher;
+import org.chromium.chrome.browser.autofill.AutofillImageFetcherFactory;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
 import org.chromium.chrome.browser.autofill.helpers.FaviconHelper;
@@ -71,6 +73,7 @@ import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.BlankUiTestActivity;
 import org.chromium.ui.test.util.NightModeTestUtils;
 import org.chromium.ui.test.util.ViewUtils;
+import org.chromium.url.GURL;
 
 import java.util.Arrays;
 import java.util.List;
@@ -83,7 +86,7 @@ import java.util.List;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class AccessorySheetRenderTest {
     @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
+    private static final List<ParameterSet> sClassParams =
             Arrays.asList(
                     new ParameterSet().value(false, false).name("Default"),
                     new ParameterSet().value(false, true).name("RTL"),
@@ -94,7 +97,7 @@ public class AccessorySheetRenderTest {
 
     // No @Rule since we only need the launching helpers. Adding the rule to the chain breaks with
     // any ParameterizedRunnerDelegate.
-    private BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =
+    private final BaseActivityTestRule<BlankUiTestActivity> mActivityTestRule =
             new BaseActivityTestRule<>(BlankUiTestActivity.class);
 
     @Rule
@@ -107,6 +110,7 @@ public class AccessorySheetRenderTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock private Profile mProfile;
+    @Mock private AutofillImageFetcher mImageFetcher;
     @Mock private PersonalDataManager mPersonalDataManager;
 
     public AccessorySheetRenderTest(boolean nightModeEnabled, boolean useRtlLayout) {
@@ -133,6 +137,7 @@ public class AccessorySheetRenderTest {
         FaviconHelper.setCreationStrategy((context, profile) -> new TestFaviconHelper(context));
 
         ProfileManager.setLastUsedProfileForTesting(mProfile);
+        AutofillImageFetcherFactory.setInstanceForTesting(mImageFetcher);
         PersonalDataManagerFactory.setInstanceForTesting(mPersonalDataManager);
 
         mActivityTestRule.launchActivity(null);
@@ -319,17 +324,15 @@ public class AccessorySheetRenderTest {
         sheet.getPromoCodeInfoList().add(new KeyboardAccessoryData.PromoCodeInfo());
         sheet.getPromoCodeInfoList()
                 .get(0)
-                .setPromoCode(
-                        new UserInfoField.Builder()
+                .initialize(
+                        /* promoCode= */ new UserInfoField.Builder()
                                 .setSuggestionType(AccessorySuggestionType.PROMO_CODE)
                                 .setDisplayText("50$OFF")
                                 .setA11yDescription("Promo Code for Todd Tester")
                                 .setId("1")
                                 .setCallback(result -> {})
-                                .build());
-        sheet.getPromoCodeInfoList()
-                .get(0)
-                .setDetailsText("Get $50 off when you use this code at checkout.");
+                                .build(),
+                        /* detailsText= */ "Get $50 off when you use this code at checkout.");
         sheet.getFooterCommands()
                 .add(new KeyboardAccessoryData.FooterCommand("Manage payment methods", cb -> {}));
 
@@ -376,6 +379,42 @@ public class AccessorySheetRenderTest {
         showSheetTab(coordinator, sheet);
 
         mRenderTestRule.render(mContentView, "ibans");
+    }
+
+    // Tests rendering of Payments tab with loyalty cards.
+    // Loyalty cards should appear in Payment Methods section.
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    public void testAddingLoyaltyCardToModelRendersTabsView() throws Exception {
+        final KeyboardAccessoryData.AccessorySheetData sheet =
+                new KeyboardAccessoryData.AccessorySheetData(
+                        AccessoryTabType.CREDIT_CARDS,
+                        /* userInfoTitle= */ "No payment methods",
+                        /* plusAddressTitle= */ "",
+                        /* warning= */ "");
+        sheet.getLoyaltyCardInfoList()
+                .add(
+                        new KeyboardAccessoryData.LoyaltyCardInfo(
+                                "CVS Pharmacy",
+                                new GURL("https:://image.server.com/image.png"),
+                                new UserInfoField.Builder()
+                                        .setSuggestionType(AccessorySuggestionType.LOYALTY_CARD)
+                                        .setDisplayText("987654321")
+                                        .setId("")
+                                        .setCallback(result -> {})
+                                        .build()));
+        sheet.getFooterCommands()
+                .add(new KeyboardAccessoryData.FooterCommand("Manage loyalty cards", cb -> {}));
+
+        CreditCardAccessorySheetCoordinator coordinator =
+                ThreadUtils.runOnUiThreadBlocking(
+                        () ->
+                                new CreditCardAccessorySheetCoordinator(
+                                        mActivityTestRule.getActivity(), mProfile, null));
+        showSheetTab(coordinator, sheet);
+
+        mRenderTestRule.render(mContentView, "loyalty_cards");
     }
 
     @Test

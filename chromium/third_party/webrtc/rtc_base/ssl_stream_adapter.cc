@@ -13,12 +13,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/functional/any_invocable.h"
 #include "absl/strings/string_view.h"
 #include "api/array_view.h"
+#include "api/field_trials_view.h"
 #include "rtc_base/openssl_stream_adapter.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/stream.h"
@@ -82,21 +86,91 @@ bool IsGcmCryptoSuite(int crypto_suite) {
 
 std::unique_ptr<SSLStreamAdapter> SSLStreamAdapter::Create(
     std::unique_ptr<StreamInterface> stream,
-    absl::AnyInvocable<void(webrtc::SSLHandshakeError)> handshake_error,
+    absl::AnyInvocable<void(SSLHandshakeError)> handshake_error,
     const FieldTrialsView* field_trials) {
-  return std::make_unique<rtc::OpenSSLStreamAdapter>(
+  return std::make_unique<OpenSSLStreamAdapter>(
       std::move(stream), std::move(handshake_error), field_trials);
 }
 
 bool SSLStreamAdapter::IsBoringSsl() {
-  return rtc::OpenSSLStreamAdapter::IsBoringSsl();
+  return OpenSSLStreamAdapter::IsBoringSsl();
 }
-bool SSLStreamAdapter::IsAcceptableCipher(int cipher, rtc::KeyType key_type) {
-  return rtc::OpenSSLStreamAdapter::IsAcceptableCipher(cipher, key_type);
+bool SSLStreamAdapter::IsAcceptableCipher(int cipher, KeyType key_type) {
+  return OpenSSLStreamAdapter::IsAcceptableCipher(cipher, key_type);
 }
 bool SSLStreamAdapter::IsAcceptableCipher(absl::string_view cipher,
-                                          rtc::KeyType key_type) {
-  return rtc::OpenSSLStreamAdapter::IsAcceptableCipher(cipher, key_type);
+                                          KeyType key_type) {
+  return OpenSSLStreamAdapter::IsAcceptableCipher(cipher, key_type);
+}
+
+std::optional<std::string>
+SSLStreamAdapter::GetEphemeralKeyExchangeCipherGroupName(uint16_t group_id) {
+#if defined(OPENSSL_IS_BORINGSSL)
+  auto val = SSL_get_group_name(group_id);
+  if (val != nullptr) {
+    return std::string(val);
+  }
+#endif
+  return std::nullopt;
+}
+
+std::set<uint16_t>
+SSLStreamAdapter::GetSupportedEphemeralKeyExchangeCipherGroups() {
+  return {
+  // It would be nice if BoringSSL had a function like this!
+#ifdef SSL_GROUP_SECP224R1
+      SSL_GROUP_SECP224R1,
+#endif
+#ifdef SSL_GROUP_SECP256R1
+      SSL_GROUP_SECP256R1,
+#endif
+#ifdef SSL_GROUP_SECP384R1
+      SSL_GROUP_SECP384R1,
+#endif
+#ifdef SSL_GROUP_SECP521R1
+      SSL_GROUP_SECP521R1,
+#endif
+#ifdef SSL_GROUP_X25519
+      SSL_GROUP_X25519,
+#endif
+#ifdef SSL_GROUP_X25519_MLKEM768
+      SSL_GROUP_X25519_MLKEM768,
+#endif
+  };
+}
+
+std::vector<uint16_t>
+SSLStreamAdapter::GetDefaultEphemeralKeyExchangeCipherGroups(
+    const FieldTrialsView* field_trials) {
+  // It would be nice if BoringSSL had a function like this!
+  // from boringssl/src/ssl/extensions.cc kDefaultGroups.
+  if (field_trials && field_trials->IsEnabled("WebRTC-EnableDtlsPqc")) {
+    return {
+#ifdef SSL_GROUP_X25519_MLKEM768
+        SSL_GROUP_X25519_MLKEM768,
+#endif
+#ifdef SSL_GROUP_X25519
+        SSL_GROUP_X25519,
+#endif
+#ifdef SSL_GROUP_SECP256R1
+        SSL_GROUP_SECP256R1,
+#endif
+#ifdef SSL_GROUP_SECP384R1
+        SSL_GROUP_SECP384R1,
+#endif
+    };
+  }
+  return {
+#ifdef SSL_GROUP_X25519
+      SSL_GROUP_X25519,
+#endif
+#ifdef SSL_GROUP_SECP256R1
+      SSL_GROUP_SECP256R1,
+#endif
+#ifdef SSL_GROUP_SECP384R1
+      SSL_GROUP_SECP384R1,
+#endif
+  };
 }
 
 // Default shim for backward compat.
@@ -107,7 +181,7 @@ bool SSLStreamAdapter::SetPeerCertificateDigest(
     SSLPeerCertificateDigestError* error) {
   unsigned char* nonconst_val = const_cast<unsigned char*>(digest_val);
   SSLPeerCertificateDigestError ret = SetPeerCertificateDigest(
-      digest_alg, rtc::ArrayView<uint8_t>(nonconst_val, digest_len));
+      digest_alg, ArrayView<uint8_t>(nonconst_val, digest_len));
   if (error)
     *error = ret;
   return ret == SSLPeerCertificateDigestError::NONE;
@@ -118,11 +192,11 @@ bool SSLStreamAdapter::SetPeerCertificateDigest(
 ///////////////////////////////////////////////////////////////////////////////
 
 void SSLStreamAdapter::EnableTimeCallbackForTesting() {
-  rtc::OpenSSLStreamAdapter::EnableTimeCallbackForTesting();
+  OpenSSLStreamAdapter::EnableTimeCallbackForTesting();
 }
 
 SSLProtocolVersion SSLStreamAdapter::GetMaxSupportedDTLSProtocolVersion() {
-  return rtc::OpenSSLStreamAdapter::GetMaxSupportedDTLSProtocolVersion();
+  return OpenSSLStreamAdapter::GetMaxSupportedDTLSProtocolVersion();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

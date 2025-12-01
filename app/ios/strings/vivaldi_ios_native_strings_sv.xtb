@@ -46,6 +46,7 @@
 <translation id="1470330357709335121">Vivaldi är långsamt eller laggar</translation>
 <translation id="1502492982318476895">Synkroniseringen misslyckades: <ph name="ERROR_MESSAGE" /></translation>
 <translation id="1521731267649138856">din e-postadress för återställning.</translation>
+<translation id="1534183273237573805">Genom att välja en av dessa sökmotorer stöder du utvecklingen av Vivaldi.</translation>
 <translation id="1535446875484049224">Mörkt läge är problematiskt eller ser inte bra ut</translation>
 <translation id="1567659716528258242">Vivaldi värmer upp min enhet</translation>
 <translation id="156793582229023040">Jag är orolig för spårning eller datainsamling</translation>
@@ -75,6 +76,7 @@
 <translation id="1809939268435598390">Radera mapp</translation>
 <translation id="1813686536470127172">Annan mapp</translation>
 <translation id="1828800626900562968">Tryck på plusikonen nedan för att skapa en ny privat flik.</translation>
+<translation id="1852679645333476285">Tillåt mediauppspelning i bakgrunden</translation>
 <translation id="1861262398884155592">Denna mapp är tom</translation>
 <translation id="1871058849247304245">Zoomnivå för <ph name="HOST" /></translation>
 <translation id="1921508034244765766">Vivaldi är långsam, kraschar eller värmer upp enheten</translation>
@@ -88,16 +90,20 @@
 <translation id="2048247880942380698">Arabisk (<ph name="ORIGIN" />)</translation>
 <translation id="2079545284768500474">Ångra</translation>
 <translation id="2129408066358825297">Ålder</translation>
+<translation id="2138901399878617625">Plantera träd medan du söker</translation>
 <translation id="2148384276939959392">Synkronisera vald</translation>
 <translation id="2195713384412091023">Detta kommer att ta bort alla synkroniserade data som lagras på vår server, återställa ditt krypteringslösenord och logga ut.</translation>
 <translation id="2228584369802328636">Gaming</translation>
+<translation id="2240680014596059312">Privat. Snabbt. Färre annonser.</translation>
 <translation id="2243210264130642074">Anteckningen sparad</translation>
 <translation id="2272338747456392228">Kontot har låsts</translation>
 <translation id="2273327106802955778">Mer meny</translation>
 <translation id="2283599456633275070">Resa</translation>
 <translation id="2324160330092901720">En verifieringskod har skickats till <ph name="EMAIL_ID" /></translation>
 <translation id="2324257568471626606">En ny sökmotor</translation>
+<translation id="2326657631721795616">Du kan fortfarande stödja Vivaldi genom att helt enkelt välja en integritetsfokuserad, oberoende sökmotor:</translation>
 <translation id="2330644510603114741">Flik beteende</translation>
+<translation id="233493642829799329">Att ändra detta kan ladda om vissa av dina flikar</translation>
 <translation id="2336309953058658733">Töm papperskorgen</translation>
 <translation id="2359808026110333948">Fortsätt</translation>
 <translation id="2386793615875593361">1 vald</translation>
@@ -173,8 +179,8 @@ blockerad</translation>
 <translation id="3270894089048358271">Ställ in Vivaldi som din standardwebläsare</translation>
 <translation id="3270930591809084274">Synkroniserade flikar</translation>
 <translation id="3285898158753554866">Kopiera Översatt</translation>
+<translation id="3288330578370776290">Föredrar att öppna sidor i webbläsaren istället för externa appar</translation>
 <translation id="3335772982573114336">Ny anteckning</translation>
-<translation id="3337207574172839542">Tillåt sök förslag</translation>
 <translation id="33451081266695216">Anslutningen strypt av servern.</translation>
 <translation id="3346386541263128307">E -postadresser måste matcha.</translation>
 <translation id="3363375699928395745">Ange titel</translation>
@@ -253,6 +259,7 @@ blockerad</translation>
 <translation id="4152011295694446843">Du hittar dina bokmärken här</translation>
 <translation id="4152623049003960417">Spårardetaljer</translation>
 <translation id="4176463684765177261">Inaktiverad</translation>
+<translation id="4181792832006033883">Vivaldi drivs av våra användare, inte av Big Tech eller investerare. Varje donation stöder direkt vårt uppdrag för ett öppet och privat internet. Var en del av förändringen.</translation>
 <translation id="4184746246941929945">Vivaldi har samarbetat med <ph name="PARTNER_NAME" /> för att inte blockera annonser på den här sidan. Dessa annonser hjälper till att finansiera utvecklingen av Vivaldi.</translation>
 <translation id="4193549853510262477">Automatiskt upptäckt</translation>
 <translation id="4209092469652827314">Stor</translation>
@@ -269,6 +276,7 @@ blockerad</translation>
 <translation id="4316955624679873896">Bokmärkt i</translation>
 <translation id="432696242656678770">Rysk (<ph name="ORIGIN" />)</translation>
 <translation id="4350751486125178847">Spansk (<ph name="ORIGIN" />)</translation>
+<translation id="4354058221156080376">Stå upp med oss för en bättre webb</translation>
 <translation id="4376661454588260127">Vietnamesisk (<ph name="ORIGIN" />)</translation>
 <translation id="4380745054983890306">Jag önskar att jag kunde spara sidor som PDF-filer</translation>
 <translation id="4394049700291259645">Inaktivera</translation>
@@ -287,6 +295,7 @@ blockerad</translation>
 <translation id="4525945044609022380">Den här e-posten är redan länkat till ett annat konto.</translation>
 <translation id="4526803704855831732">Privata flikar</translation>
 <translation id="4542001945479572846">Någonting annat</translation>
+<translation id="4548278119881373657">Bekräfta val</translation>
 <translation id="4553717494760925411">Navigering Tillbaka</translation>
 <translation id="4563480492836333884">E -post accepteras inte. Använd en annan domän.</translation>
 <translation id="457386861538956877">Mer...</translation>
@@ -341,6 +350,7 @@ blockerad</translation>
 <translation id="5094376253685335202">Aktivera synkronisering</translation>
 <translation id="5116316489033177455">Synkronisera bokmärken och snabbval</translation>
 <translation id="5122095890854520072">Lettisk (<ph name="ORIGIN" />)</translation>
+<translation id="5128025282874907098">100 % av dina donationer kommer att användas för att finansiera den långsiktiga utvecklingen av Vivaldi och vår kamp för en bättre webb.</translation>
 <translation id="5153806174841856652">Inloggningen misslyckades</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Skicka koden igen<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Visa toppwebbplatser</translation>
@@ -402,19 +412,25 @@ blockerad</translation>
  Öppna inställningarna för att fixa det.</translation>
 <translation id="604930981600990598">Översättning kopierad!</translation>
 <translation id="6052689967593623141">Vivaldi kan tjäna en affiliate-kommission om du gör ett köp efter att ha klickat på några av dessa länkar. Detta hjälper till att stödja Vivaldis utveckling och håller webbläsaren oberoende. Tack för ditt stöd!</translation>
+<translation id="6056094614114332761">Adressfältförslag</translation>
 <translation id="6077943432358741146">Snabbval</translation>
 <translation id="6079696972035130497">Obegränsat</translation>
+<translation id="6093557041367452381">Visar din inskrivna historik när adressfältet är fokuserat på startsidan.</translation>
 <translation id="6110857187283700804">Din indata skickas till din sökleverantör för förslag. Detta är avstängt i privata fönster.</translation>
+<translation id="6119047040189002834">Gå bort från övervakning och välj en sökmotor som överensstämmer med dina värderingar:</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> objekt har flyttats</translation>
 <translation id="6147094071357011481">Nyligen stängda flikar är inte tillgängliga</translation>
+<translation id="6171727814244883097">Ett enklare sätt att stödja oss</translation>
 <translation id="6177301865411451337">Vivaldi Sync-tjänsten kan ha problem. Få tjänstuppdateringar på: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Jag tycker att det är svårt att spara en webbplats som ett snabbval</translation>
 <translation id="6193995664633100765">Indisk (<ph name="ORIGIN" />)</translation>
+<translation id="6209408431919042972">Donera nu</translation>
 <translation id="6224086034182508647">Inställningar för webbplatsens utseende</translation>
 <translation id="6253990869902066991">Vivaldi laddar om webbsidor oväntat</translation>
 <translation id="6257488392933423163">Visa som HTML</translation>
 <translation id="6275978505813092431">Mata in bild</translation>
 <translation id="6329717714920146925">Webbplatser (endast visning)</translation>
+<translation id="6346549829676591152">Aktivera sökhistorik</translation>
 <translation id="6365929278691047681">Tysk (<ph name="ORIGIN" />)</translation>
 <translation id="638249699236255123">Webbplatsens layout är trasig eller ser konstig ut</translation>
 <translation id="6383855939619098095">Det är svårt att anpassa startsidan för Vivaldi</translation>
@@ -432,6 +448,7 @@ blockerad</translation>
 <translation id="6544880104552732240">Välj målspråk</translation>
 <translation id="659351303388691480">Rensa surfhistorik ...</translation>
 <translation id="6602272356389933803">Utseende och tema</translation>
+<translation id="6609906162587123522">Öppna inte länkar i externa appar</translation>
 <translation id="6614744450826097546">Annons detaljer</translation>
 <translation id="6631760746795162665">Colombiansk (<ph name="ORIGIN" />)</translation>
 <translation id="6639866709520319699">Spårare och annonser är blockerade. Vissa webbplatser fungerar kanske inte korrekt.</translation>
@@ -481,6 +498,7 @@ blockerad</translation>
 <translation id="711946737922560234">Inmatningslänk</translation>
 <translation id="7120229714826964836">Dela sida</translation>
 <translation id="713792263829536729">Streamingtjänster fungerar inte korrekt</translation>
+<translation id="7142332680286898952">Visa inskriven historik</translation>
 <translation id="7158507293261405349">Lägg till ny grupp</translation>
 <translation id="7173114856073700355">Öppna inställningar</translation>
 <translation id="718052827125696482">Skärmen roterar inte ordentligt</translation>
@@ -506,7 +524,6 @@ blockerad</translation>
 <translation id="7393145587390257456">Annonsblockeraren fungerar inte bra</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Sökmotorer kommer att återställas till standardinställningarna, vilket också återställer dina anpassade sökmotorer.</translation>
-<translation id="7418655219500602072">Adressfältsprioriteringar</translation>
 <translation id="7451784507428459503">YouTube-videor spelas inte upp eller har problem</translation>
 <translation id="7454640759045234067">Spårare Blockerade</translation>
 <translation id="7461899062138731833">KÄLLOR</translation>
@@ -541,7 +558,9 @@ blockerad</translation>
 <translation id="7791543448312431591">Lägg till</translation>
 <translation id="7801111502975417831">Jag vill kunna spela upp videor i bakgrunden</translation>
 <translation id="7801204999757211519">Har du redan ett konto? <ph name="BEGIN_LINK" />Logga in ➔<ph name="END_LINK" /></translation>
+<translation id="780301667611848630">Nej tack</translation>
 <translation id="7850070199083838600">Skapa en ny grupp?</translation>
+<translation id="7862984977194621600">Aktivera sökförslag</translation>
 <translation id="7870765213383950011">Första gruppen</translation>
 <translation id="7914995060146784406">Redigera anteckning</translation>
 <translation id="7925340978147141704">Visa lösenord</translation>
@@ -568,6 +587,7 @@ blockerad</translation>
 <translation id="8147118677117542370">Var god ange din ålder.</translation>
 <translation id="8165573437634525334">Data säkrat med krypteringslösenord</translation>
 <translation id="8237090677709100373">Anpassad färgkod</translation>
+<translation id="8255101384731542819">Oberoende sökning, byggd i Frankrike</translation>
 <translation id="8257908958623224237">Konflikt med en annan klients data.</translation>
 <translation id="8261506727792406068">Radera</translation>
 <translation id="8273666073173891138">Anteckningen har sparats i <ph name="FOLDER_TITLE" /></translation>
@@ -575,6 +595,7 @@ blockerad</translation>
 <translation id="8284356787013856231">Tillstånd att öppna filen nekades</translation>
 <translation id="8289933454364510719">Högst upp eller längst ner</translation>
 <translation id="8304044605002588416">Anpassa startside knappen</translation>
+<translation id="8304538706952727936">Bryt dig loss från Big Tech</translation>
 <translation id="8323167517179506834">Skriv URL</translation>
 <translation id="8326104954595890674">Ny privat flik</translation>
 <translation id="8329813750766387010">Uppdaterad: <ph name="DATE" /></translation>
@@ -617,7 +638,9 @@ blockerad</translation>
 <translation id="8818152010000655963">Bakgrund</translation>
 <translation id="8819841443522803117">Dags att byta standardwebbläsare? Välj Vivaldi.</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
+<translation id="8828442094222036738">Privata Google-resultat, tillverkade i Europa</translation>
 <translation id="8855707633300847215">Visa Flikfält</translation>
+<translation id="8861211142470908937">Minsta lösenordslängd på 12 tecken krävs</translation>
 <translation id="8892354889971902600">Flikar som du nyligen stängt kommer att visas här.</translation>
 <translation id="89390081013973080">Redo! Dags att bestämma vilken data som ska synkroniseras mellan enheter.</translation>
 <translation id="8948792607467387336">Välj som bakgrund</translation>

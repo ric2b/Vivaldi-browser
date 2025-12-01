@@ -18,6 +18,7 @@
 #include "absl/memory/memory.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "quiche/quic/core/crypto/crypto_protocol.h"
 #include "quiche/quic/core/frames/quic_ack_frequency_frame.h"
 #include "quiche/quic/core/frames/quic_reset_stream_at_frame.h"
 #include "quiche/quic/core/frames/quic_window_update_frame.h"
@@ -38,7 +39,6 @@
 #include "quiche/quic/platform/api/quic_flags.h"
 #include "quiche/quic/platform/api/quic_logging.h"
 #include "quiche/quic/platform/api/quic_server_stats.h"
-#include "quiche/quic/platform/api/quic_stack_trace.h"
 #include "quiche/common/platform/api/quiche_logging.h"
 #include "quiche/common/quiche_callbacks.h"
 #include "quiche/common/quiche_text_utils.h"
@@ -704,6 +704,7 @@ void QuicSession::OnWindowUpdateFrame(const QuicWindowUpdateFrame& frame) {
 }
 
 void QuicSession::OnBlockedFrame(const QuicBlockedFrame& frame) {
+  QUIC_CODE_COUNT(quic_session_blocked_frame_received);
   // TODO(rjshade): Compare our flow control receive windows for specified
   //                streams: if we have a large window then maybe something
   //                had gone wrong with the flow control accounting.

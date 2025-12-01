@@ -768,6 +768,13 @@ bool ParseContentType(const String& content_type,
   return true;
 }
 
+#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+bool IsDolbyVisionVideoCodec(const String& video_codec_str) {
+  return video_codec_str.StartsWith("dvh1.", WTF::kTextCaseSensitive) ||
+         video_codec_str.StartsWith("dvhe.", WTF::kTextCaseSensitive);
+}
+#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+
 }  // anonymous namespace
 
 const char MediaCapabilities::kLearningBadWindowThresholdParamName[] =
@@ -1000,19 +1007,41 @@ ScriptPromise<MediaCapabilitiesDecodingInfo> MediaCapabilities::decodingInfo(
         config->audio(), audio_mime_str, audio_codec_str);
   }
 
-  // No need to check video capabilities if video not included in configuration
-  // or when audio is already known to be unsupported.
-  if (!audio_supported || !config->hasVideo()) {
-    return CreateResolvedPromiseToDecodingInfoWith(audio_supported,
-                                                   script_state, config);
+  if (!audio_supported) {
+    return CreateResolvedPromiseToDecodingInfoWith(false, script_state, config);
+  }
+
+  // Audio-only
+  if (!config->hasVideo()) {
+    // Clear audio
+    if (!config->hasKeySystemConfiguration()) {
+      return CreateResolvedPromiseToDecodingInfoWith(audio_supported,
+                                                     script_state, config);
+    } else {
+      return GetEmeSupport(script_state, video_codec, video_profile,
+                           video_color_space, config, request_time,
+                           exception_state);
+    }
   }
 
   DCHECK(message.empty());
   DCHECK(config->hasVideo());
 
+  const bool is_video_config_supported = IsVideoConfigurationSupported(
+      video_mime_str, video_codec_str, video_color_space, hdr_metadata_type);
+
+#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+  // Defer support check to EME for DV instead of asking from
+  // SupplementalProfileCache.
+  const bool should_defer_support_check_to_eme =
+      IsDolbyVisionVideoCodec(video_codec_str) &&
+      config->hasKeySystemConfiguration();
+#else
+  const bool should_defer_support_check_to_eme = false;
+#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_DOLBY_VISION)
+
   // Return early for unsupported configurations.
-  if (!IsVideoConfigurationSupported(video_mime_str, video_codec_str,
-                                     video_color_space, hdr_metadata_type)) {
+  if (!is_video_config_supported && !should_defer_support_check_to_eme) {
     return CreateResolvedPromiseToDecodingInfoWith(false, script_state, config);
   }
 

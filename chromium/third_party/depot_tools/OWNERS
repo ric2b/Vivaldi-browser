@@ -1,10 +1,9 @@
 set noparent
 
-ajp@google.com
+ajp@google.com #{LAST_RESORT_SUGGESTION}
 bryner@google.com
 ddoman@chromium.org
 gavinmak@google.com
-jojwang@google.com
 sokcevic@google.com
 yiwzhang@google.com
 
@@ -23,6 +22,7 @@ per-file ninja*=file://BUILD_OWNERS
 per-file post_build_ninja_summary.py=file://BUILD_OWNERS
 per-file android_build_server_helper.py=mheikal@chromium.org
 per-file android_build_server_helper.py=agrieve@chromium.org
+per-file android_build_server_helper.py=wnwen@chromium.org
 
 # GN
 per-file gn*=dpranke@google.com
@@ -53,6 +53,7 @@ per-file cros_sdk=file://CROS_OWNERS
 per-file gerrit=file://CROS_OWNERS
 per-file repo=file://CROS_OWNERS
 per-file repo_launcher=file://CROS_OWNERS
+per-file repo_launcher=copybara-worker-blackhole@google.com #{LAST_RESORT_SUGGESTION}
 
 # LUCI related tooling
 per-file bb*=file://LUCI_OWNERS

@@ -28,7 +28,9 @@
 #include "decode.h"
 #include "hwaccel_internal.h"
 
-static int nvdec_mpeg4_start_frame(AVCodecContext *avctx, const uint8_t *buffer, uint32_t size)
+static int nvdec_mpeg4_start_frame(AVCodecContext *avctx,
+                                   const AVBufferRef *buffer_ref,
+                                   const uint8_t *buffer, uint32_t size)
 {
     Mpeg4DecContext *m = avctx->priv_data;
     MpegEncContext *s = &m->m;
@@ -46,7 +48,7 @@ static int nvdec_mpeg4_start_frame(AVCodecContext *avctx, const uint8_t *buffer,
     if (ret < 0)
         return ret;
 
-    fdd = (FrameDecodeData*)cur_frame->private_ref->data;
+    fdd = cur_frame->private_ref;
     cf  = (NVDECFrame*)fdd->hwaccel_priv;
 
     *pp = (CUVIDPICPARAMS) {

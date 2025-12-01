@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "."
+  },
+  "references": [
+    {
+      "path": "../conductor/tsconfig.json"
+    },
+    {
+      "path": "../shared/tsconfig.json"
+    }
+  ]
+}

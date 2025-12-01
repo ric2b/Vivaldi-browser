@@ -29,6 +29,8 @@ WebCSPSourceList ConvertSourceList(
   return {base::ToVector(source_list->sources, ConvertSource),
           base::ToVector(source_list->nonces, ToWebString),
           base::ToVector(source_list->hashes, ConvertHashSource),
+          base::ToVector(source_list->url_hashes, ConvertHashSource),
+          base::ToVector(source_list->eval_hashes, ConvertHashSource),
           source_list->allow_self,
           source_list->allow_star,
           source_list->allow_inline,
@@ -76,7 +78,6 @@ WebContentSecurityPolicy ConvertToPublic(
            policy->header->source},
           policy->use_reporting_api,
           base::ToVector(policy->report_endpoints, ToWebString),
-          policy->require_sri_for,
           policy->require_trusted_types_for,
           ConvertTrustedTypes(policy->trusted_types),
           base::ToVector(policy->parsing_errors, ToWebString)};

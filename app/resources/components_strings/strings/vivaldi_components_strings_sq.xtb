@@ -82,6 +82,7 @@
 <translation id="3681007416295224113">Informacion për certifikatën</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Të kontrolloni konfigurimin e proxy-t, të sistemit mbrojtës të rrjetit dhe të DNS-së<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Nëse përdorni server proxy...</translation>
+<translation id="3861977424605124250">Tregoj në fillim</translation>
 <translation id="3950820424414687140">Identifikohem</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> është bllokuar</translation>
 <translation id="3987940399970879459">Më pak se 1 MB</translation>
@@ -158,6 +159,7 @@
 <translation id="6447842834002726250">Cookies</translation>
 <translation id="6451458296329894277">Konfirmoni ridërgimin e formularit</translation>
 <translation id="6569060085658103619">Po shihni faqen e shtesës</translation>
+<translation id="6653655836861174026">Profilet e Vivaldit mundësojnë ndarjen e gjërave që bëni me Vivaldin. Krijoni profile për miqtë dhe familjen, ose ndani punën nga koha e lirë.</translation>
 <translation id="6657585470893396449">Fjalëkalimi</translation>
 <translation id="6711464428925977395">Ka problem me serverin proxy ose adresa është e pasaktë.</translation>
 <translation id="6757797048963528358">Aparati hyri në gjendje mosgatishmërie.</translation>
@@ -166,6 +168,7 @@
 <translation id="6935179587384421592"><ph name="SIZE" />. Disa uebsajte mund të hapen më ngadalë gjatë vizitës së radhës.</translation>
 <translation id="6957624206566198865">Hap faqen në skedë private të re</translation>
 <translation id="7053983685419859001">Bllokoj</translation>
+<translation id="7066262000446496119">Kush e përdor Vivaldin?</translation>
 <translation id="7096937462164235847">Identiteti i uebsajtit është i paverifikuar.</translation>
 <translation id="7108819624672055576">Lejohet nga një shtesë</translation>
 <translation id="7111012039238467737">(E vlefshme)</translation>
@@ -173,6 +176,7 @@
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> nuk i respekton standardet e sigurisë.</translation>
 <translation id="7219179957768738017">Linja përdor <ph name="SSL_VERSION" />.</translation>
 <translation id="7221855153210829124">Shfaq njoftimet</translation>
+<translation id="7283555985781738399">Këndi i të ftuarit</translation>
 <translation id="7353601530677266744">Terminali i komandave</translation>
 <translation id="7419106976560586862">Vendndodhja e profilit</translation>
 <translation id="7455133967321480974">Përdor standardin e përgjithshëm (Bllokoj)</translation>

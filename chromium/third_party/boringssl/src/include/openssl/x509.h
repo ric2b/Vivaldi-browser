@@ -30,7 +30,6 @@
 #include <openssl/ecdh.h>
 #include <openssl/ecdsa.h>
 #include <openssl/evp.h>
-#include <openssl/lhash.h>
 #include <openssl/obj.h>
 #include <openssl/pkcs7.h>
 #include <openssl/pool.h>
@@ -1504,9 +1503,12 @@ OPENSSL_EXPORT int X509_NAME_ENTRY_set_object(X509_NAME_ENTRY *entry,
 // pointer for OpenSSL compatibility, but callers should not mutate the result.
 // Doing so will break internal invariants in the library.
 //
-// TODO(https://crbug.com/boringssl/412): Although the spec says any ASN.1 type
-// is allowed, we currently only allow an ad-hoc set of types. Additionally, it
-// is unclear if some types can even be represented by this function.
+// See |ASN1_STRING| for how values are represented in this library. Where a
+// specific |ASN1_STRING| representation exists, that representation is used.
+// Otherwise, the |V_ASN1_OTHER| representation is used. Note that NULL, OBJECT
+// IDENTIFIER, and BOOLEAN attribute values are represented as |V_ASN1_OTHER|,
+// because their usual representation in this library is not
+// |ASN1_STRING|-compatible.
 OPENSSL_EXPORT ASN1_STRING *X509_NAME_ENTRY_get_data(
     const X509_NAME_ENTRY *entry);
 
@@ -4973,11 +4975,7 @@ OPENSSL_EXPORT X509_EXTENSION *X509V3_EXT_nconf_nid(const CONF *conf,
                                                     const char *value);
 
 // X509V3_EXT_conf_nid calls |X509V3_EXT_nconf_nid|. |conf| must be NULL.
-//
-// TODO(davidben): This is the only exposed instance of an LHASH in our public
-// headers. cryptography.io wraps this function so we cannot, yet, replace the
-// type with a dummy struct.
-OPENSSL_EXPORT X509_EXTENSION *X509V3_EXT_conf_nid(LHASH_OF(CONF_VALUE) *conf,
+OPENSSL_EXPORT X509_EXTENSION *X509V3_EXT_conf_nid(CRYPTO_MUST_BE_NULL *conf,
                                                    const X509V3_CTX *ctx,
                                                    int ext_nid,
                                                    const char *value);

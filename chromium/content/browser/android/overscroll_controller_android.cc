@@ -11,6 +11,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "ui/android/edge_effect.h"
@@ -187,9 +188,10 @@ void OverscrollControllerAndroid::OnOverscrolled(
   if (refresh_effect_) {
     refresh_effect_->OnOverscrolled(params.overscroll_behavior,
                                     params.accumulated_overscroll);
+    bool refresh_effect_active = refresh_effect_->IsActive();
+    is_handling_sequence_ |= refresh_effect_active;
 
-    if (refresh_effect_->IsActive() ||
-        refresh_effect_->IsAwaitingScrollUpdateAck()) {
+    if (refresh_effect_active || refresh_effect_->IsAwaitingScrollUpdateAck()) {
       // An active (or potentially active) refresh effect should always pre-empt
       // the passive glow effect.
       return;
@@ -297,14 +299,30 @@ bool OverscrollControllerAndroid::ShouldHandleInputEvents() {
   return true;
 }
 
+bool OverscrollControllerAndroid::IsHandlingInputSequence() {
+  return is_handling_sequence_;
+}
+
 bool OverscrollControllerAndroid::OnTouchEvent(
     const ui::MotionEventAndroid& event) {
-  if (!ShouldHandleInputEvents()) {
-    return false;
+  const auto action = event.GetAction();
+  // This will consume touch events until the next Action::DOWN. Ideally we
+  // should consume until the final Action::UP/Action::CANCEL. But, apparently,
+  // we can't reliably determine the final Action::CANCEL in a multi-touch
+  // scenario. See https://crbug.com/653212.
+  if (action == ui::MotionEventAndroid::Action::DOWN) {
+    is_handling_sequence_ = false;
   }
 
-  bool handled = false;
-  switch (event.GetAction()) {
+  const bool handles_current_event = IsHandlingInputSequence();
+
+  // |refresh_effect_| might have been consuming input events earlier, return if
+  // the OverscrollController is consuming the whole input sequence.
+  if (!ShouldHandleInputEvents()) {
+    return handles_current_event;
+  }
+
+  switch (action) {
     case ui::MotionEventAndroid::Action::DOWN:
       last_pos_ = gfx::Vector2dF(event.GetXPix(0), event.GetYPix(0));
       break;
@@ -312,21 +330,20 @@ bool OverscrollControllerAndroid::OnTouchEvent(
     case ui::MotionEventAndroid::Action::MOVE: {
       gfx::Vector2dF curr_pointer(event.GetXPix(0), event.GetYPix(0));
       gfx::Vector2dF scroll_delta = curr_pointer - last_pos_;
-      handled = refresh_effect_->WillHandleScrollUpdate(scroll_delta);
+      refresh_effect_->WillHandleScrollUpdate(scroll_delta);
       last_pos_ = curr_pointer;
     } break;
 
+    case ui::MotionEventAndroid::Action::CANCEL:
     case ui::MotionEventAndroid::Action::UP: {
       refresh_effect_->OnScrollEnd(gfx::Vector2dF());
-      last_pos_.set_x(0);
-      last_pos_.set_y(0);
     } break;
 
     default:
       break;
   }
 
-  return handled;
+  return handles_current_event;
 }
 
 void OverscrollControllerAndroid::OnInputEvent(

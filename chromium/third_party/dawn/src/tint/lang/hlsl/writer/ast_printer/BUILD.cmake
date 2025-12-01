@@ -48,15 +48,13 @@ tint_add_target(tint_lang_hlsl_writer_ast_printer lib
 tint_target_add_dependencies(tint_lang_hlsl_writer_ast_printer lib
   tint_api_common
   tint_lang_core
-  tint_lang_core_common
   tint_lang_core_constant
+  tint_lang_core_ir_transform
   tint_lang_core_type
   tint_lang_hlsl_writer_common
   tint_lang_wgsl
   tint_lang_wgsl_ast
   tint_lang_wgsl_ast_transform
-  tint_lang_wgsl_features
-  tint_lang_wgsl_helpers
   tint_lang_wgsl_program
   tint_lang_wgsl_sem
   tint_utils
@@ -134,8 +132,6 @@ tint_target_add_dependencies(tint_lang_hlsl_writer_ast_printer_test test
   tint_lang_wgsl_ast
   tint_lang_wgsl_ast_transform
   tint_lang_wgsl_ast_test
-  tint_lang_wgsl_common
-  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver
   tint_lang_wgsl_sem

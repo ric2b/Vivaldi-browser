@@ -17,16 +17,18 @@ class CAndroidPlatform : public CFX_GEModule::PlatformIface {
  public:
   CAndroidPlatform() = default;
   ~CAndroidPlatform() override {
-    if (m_pDeviceModule)
-      m_pDeviceModule->Destroy();
+    if (device_module_) {
+      device_module_->Destroy();
+    }
   }
 
-  void Init() override { m_pDeviceModule = CFPF_GetSkiaDeviceModule(); }
+  void Init() override { device_module_ = CFPF_GetSkiaDeviceModule(); }
 
   std::unique_ptr<SystemFontInfoIface> CreateDefaultSystemFontInfo() override {
-    CFPF_SkiaFontMgr* pFontMgr = m_pDeviceModule->GetFontMgr();
-    if (!pFontMgr)
+    CFPF_SkiaFontMgr* pFontMgr = device_module_->GetFontMgr();
+    if (!pFontMgr) {
       return nullptr;
+    }
 
     auto pFontInfo = std::make_unique<CFX_AndroidFontInfo>();
     pFontInfo->Init(pFontMgr, CFX_GEModule::Get()->GetUserFontPaths());
@@ -34,7 +36,7 @@ class CAndroidPlatform : public CFX_GEModule::PlatformIface {
   }
 
  private:
-  UnownedPtr<CFPF_SkiaDeviceModule> m_pDeviceModule;
+  UnownedPtr<CFPF_SkiaDeviceModule> device_module_;
 };
 
 // static

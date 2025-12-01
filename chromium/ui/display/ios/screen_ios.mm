@@ -91,6 +91,8 @@ class ScreenIos : public ScreenBase, public ScreenNotification {
       scale = Display::GetForcedDeviceScaleFactor();
     }
     display.set_device_scale_factor(scale);
+
+#if !BUILDFLAG(IS_IOS_TVOS)
     Display::Rotation rotation = Display::ROTATE_0;
     switch (UIDevice.currentDevice.orientation) {
       case UIDeviceOrientationPortrait:
@@ -113,6 +115,8 @@ class ScreenIos : public ScreenBase, public ScreenNotification {
     display.set_touch_support(Display::TouchSupport::AVAILABLE);
     display.set_accelerometer_support(Display::AccelerometerSupport::AVAILABLE);
     AddInternalDisplayId(display_id);
+#endif
+
     ProcessDisplayChanged(display, true /* is_primary */);
   }
 
@@ -166,6 +170,22 @@ gfx::NativeWindow Screen::GetWindowForView(gfx::NativeView view) {
 
 Screen* CreateNativeScreen() {
   return new ScreenIos;
+}
+
+float GetInternalDisplayDeviceScaleFactor() {
+#if BUILDFLAG(IS_IOS_APP_EXTENSION)
+  return 1.0f;
+#else
+  for (UIScene* scene in UIApplication.sharedApplication.connectedScenes) {
+    UIWindowScene* windowScene =
+        base::apple::ObjCCastStrict<UIWindowScene>(scene);
+    UIScreen* screen = windowScene.keyWindow.screen;
+    if (screen) {
+      return [screen scale];
+    }
+  }
+  return 1.0f;
+#endif
 }
 
 }  // namespace display

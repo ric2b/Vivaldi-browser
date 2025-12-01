@@ -16,18 +16,35 @@ disable=()
 distcheck=0
 enable_install=1
 disable_check=0
+clean_build=1
 cross=0
-buildsys="autotools"
-type="both"
+subproject=0
+subprojectname=""
+buildsys="meson"
+type="shared"
 arch=""
 buildopt=()
+optimization=""
 SRCDIR=$MyPWD
 export MAKE=${MAKE:-make}
 export BUILD_ID=${BUILD_ID:-fontconfig-$$}
 export PREFIX=${PREFIX:-$MyPWD/prefix}
 export BUILDDIR=${BUILDDIR:-$MyPWD/build}
+export CI_PROJECT_URL=${CI_PROJECT_URL:-https://gitlab.freedesktop.org/fontconfig/fontconfig}
+export CI_COMMIT_REF_NAME=${CI_COMMIT_REF_NAME:-main}
 
-while getopts a:cCe:d:hIs:t:X: OPT
+if [ "x$FC_DISTRO_NAME" = "x" ]; then
+    . /etc/os-release || :
+    FC_DISTRO_NAME=$ID
+fi
+if [ "x$FC_DISTRO_NAME" = "x" ]; then
+    echo "***"
+    echo "*** Unable to detect OS. cross-compiling may not work. Please consider setting FC_DISTRO_NAME"
+    echo "***"
+    sleep 3
+fi
+
+while getopts a:cCe:d:hINO:s:St:X: OPT
 do
     case $OPT in
         'a') arch=$OPTARG ;;
@@ -36,24 +53,43 @@ do
         'e') enable+=($OPTARG) ;;
         'd') disable+=($OPTARG) ;;
         'I') enable_install=0 ;;
+        'N') clean_build=0 ;;
+        'O') optimization=$OPTARG ;;
         's') buildsys=$OPTARG ;;
+        'S') subproject=1 ;;
         't') type=$OPTARG ;;
         'X') backend=$OPTARG ;;
         'h')
-            echo "Usage: $0 [-a ARCH] [-c] [-e OPT] [-d OPT] [-I] [-s BUILDSYS] [-t BUILDTYPE] [-X XMLBACKEND]"
+            echo "Usage: $0 [-a ARCH] [-c] [-C] [-e OPT] [-d OPT] [-h] [-I] [-N] [-s BUILDSYS] [-t BUILDTYPE] [-X XMLBACKEND]"
             exit 1
             ;;
     esac
 done
 case x"$FC_BUILD_PLATFORM" in
     'xmingw') cross=1 ;;
+    'xandroid') cross=1 ;;
     *) cross=0 ;;
 esac
 
 env
-r=0
+
+clean_exit() {
+    rc=$?
+    trap - INT TERM ABRT EXIT
+    if [ "x$TASK" != "x" ]; then
+        echo "Aborting from \"$TASK\" with the exit code $rc"
+    fi
+    mv /tmp/fc-build.log . || :
+    exit $rc
+}
+
+trap clean_exit INT TERM ABRT EXIT
 
 if [ x"$buildsys" == "xautotools" ]; then
+    if [ $subproject -eq 1 ]; then
+        echo "Subproject build not supported in autotools"
+        exit 1
+    fi
     for i in "${enable[@]}"; do
         buildopt+=(--enable-$i)
     done
@@ -82,63 +118,127 @@ if [ x"$buildsys" == "xautotools" ]; then
             buildopt+=(--enable-static)
             ;;
     esac
-    if [ $cross -eq 1 -a -z "$arch" ]; then
+    if [ $cross -eq 1 -a -n "$arch" ]; then
         buildopt+=(--host=$arch)
-        if [ -f .gitlab-ci/${FC_DISTRO_NAME}-cross.sh ]; then
+        if [ ! -f .gitlab-ci/${FC_DISTRO_NAME}-cross.sh ]; then
             echo "No ${FC_DISTRO_NAME}-cross.sh available"
             exit 1
         fi
         . .gitlab-ci/${FC_DISTRO_NAME}-cross.sh
     fi
-    rm -rf "$BUILDDIR" "$PREFIX" || :
-    mkdir "$BUILDDIR" "$PREFIX"
+    if [ $clean_build -eq 1 ]; then
+        rm -rf "$BUILDDIR" "$PREFIX" || :
+        mkdir "$BUILDDIR" "$PREFIX"
+    fi
     cd "$BUILDDIR"
-    ../autogen.sh --prefix="$PREFIX" ${buildopt[*]} 2>&1 | tee /tmp/fc-build.log || r=$?
-    $MAKE V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    TASK="autogen.sh"
+    ../autogen.sh --prefix="$PREFIX" --disable-cache-build ${buildopt[*]} 2>&1 | tee /tmp/fc-build.log
+    TASK="make"
+    $MAKE V=1 2>&1 | tee -a /tmp/fc-build.log
     if [ $disable_check -eq 0 ]; then
-        $MAKE check V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        TASK="make check"
+        $MAKE check V=1 2>&1 | tee -a /tmp/fc-build.log
     fi
     if [ $enable_install -eq 1 ]; then
-        $MAKE install V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        TASK="make install"
+        $MAKE install V=1 2>&1 | tee -a /tmp/fc-build.log
     fi
     if [ $distcheck -eq 1 ]; then
-        $MAKE distcheck V=1 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        TASK="make distcheck"
+        $MAKE distcheck V=1 2>&1 | tee -a /tmp/fc-build.log
     fi
 elif [ x"$buildsys" == "xmeson" ]; then
-    pip install meson
+    TASK="pip install"
+    pip install "meson>=1.6.1"
+#   tomli not required for Python >= 3.11
+    pip install tomli
+    pip install pytest pytest-tap requests
     for i in "${enable[@]}"; do
-        buildopt+=(-D$i=true)
+        buildopt+=(-D$i=enabled)
+
+        # Update bindgen on Fontations builds to improve support for constants in fcint.h
+        if [[ "$i" == "fontations" ]]; then
+            TASK="cargo install"
+            cargo install bindgen-cli
+            # Prepend the cargo bin directory to PATH
+            if [[ -d "$HOME/.cargo/bin" ]]; then
+                export PATH="$HOME/.cargo/bin:$PATH"
+                echo "Cargo bin directory added to PATH."
+            else
+                echo "Cargo bin directory not found."
+            fi
+        fi
     done
+    if [ $subproject -eq 1 ]; then
+        buildopt+=(--force-fallback-for=fontconfig)
+        if [ -d fc-ci-meson-subproject ]; then
+            rm -rf fc-ci-meson-subproject
+        fi
+        TASK="git clone"
+        git clone https://gitlab.freedesktop.org/fontconfig/fc-ci-meson-subproject.git
+        cd fc-ci-meson-subproject
+        pushd subprojects
+        git clone ${CI_PROJECT_URL}.git
+        if [ -n "$CI_MERGE_REQUEST_IID" ]; then
+            pushd fontconfig
+            git fetch origin merge-requests/$CI_MERGE_REQUEST_IID/head:$CI_COMMIT_REF_NAME
+            git switch $CI_COMMIT_REF_NAME
+            popd
+        else
+            # use main branch instead
+            :
+        fi
+        popd
+        subprojectname="fontconfig:"
+    fi
+    TASK=
+    if [ -n "$optimization" ]; then
+        buildopt+=(--optimization=$optimization)
+    fi
     for i in "${disable[@]}"; do
-        buildopt+=(-D$i=false)
+        buildopt+=(-D${subprojectname}$i=disabled)
     done
     case x"$backend" in
         'xexpat')
-        ;;
+            buildopt+=(-D${subprojectname}xml-backend=expat)
+            ;;
         'xlibxml2')
-        ;;
+            buildopt+=(-D${subprojectname}xml-backend=libxml2)
+            ;;
     esac
-    if [ $cross -eq 1 -a -z "$arch" ]; then
+    if [ $cross -eq 1 -a -n "$arch" ]; then
         buildopt+=(--cross-file)
         buildopt+=(.gitlab-ci/$arch.txt)
-        if [ -f .gitlab-ci/cross-$FC_DISTRO_NAME.sh ]; then
-            echo "No cross-$FC_DISTRO_NAME.sh available"
+        if [ ! -f .gitlab-ci/$FC_DISTRO_NAME-cross.sh ]; then
+            echo "No $FC_DISTRO_NAME-cross.sh available"
             exit 1
         fi
-        . .gitlab-ci/cross-$FC_DISTRO_NAME.sh
+        if [ $subproject -eq 1 ]; then
+            . subprojects/fontconfig/.gitlab-ci/$FC_DISTRO_NAME-cross.sh
+        else
+            . .gitlab-ci/$FC_DISTRO_NAME-cross.sh
+        fi
     fi
     buildopt+=(--default-library=$type)
-    meson setup --prefix="$PREFIX" ${buildopt[*]} "$BUILDDIR" 2>&1 | tee /tmp/fc-build.log || r=$?
-    meson compile -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
+    if [ $clean_build -eq 1 ]; then
+        rm -rf $BUILDDIR || :
+    fi
+    TASK="meson setup"
+    meson setup --prefix="$PREFIX" -D${subprojectname}nls=enabled -D${subprojectname}cache-build=disabled -D${subprojectname}iconv=enabled ${buildopt[*]} "$BUILDDIR" 2>&1 | tee /tmp/fc-build.log
+    TASK="meson compile"
+    meson compile -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
     if [ $disable_check -eq 0 ]; then
-        meson test -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        TASK="meson test"
+        meson test -v -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
     fi
     if [ $enable_install -eq 1 ]; then
-        meson install -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        TASK="meson install"
+        meson install -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
     fi
     if [ $distcheck -eq 1 ]; then
-        meson dist -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log || r=$?
+        TASK="meson dist"
+        meson dist -C "$BUILDDIR" 2>&1 | tee -a /tmp/fc-build.log
     fi
 fi
-mv /tmp/fc-build.log . || :
-exit $r
+TASK=
+exit 0

@@ -50,14 +50,13 @@ interface UISourceCodeData {
 }
 
 export class ContentProviderBasedProject extends Workspace.Workspace.ProjectStore {
-  readonly #isServiceProjectInternal: boolean;
-  readonly #uiSourceCodeToData: WeakMap<Workspace.UISourceCode.UISourceCode, UISourceCodeData>;
+  readonly #isServiceProject: boolean;
+  readonly #uiSourceCodeToData = new WeakMap<Workspace.UISourceCode.UISourceCode, UISourceCodeData>();
   constructor(
       workspace: Workspace.Workspace.WorkspaceImpl, id: string, type: Workspace.Workspace.projectTypes,
       displayName: string, isServiceProject: boolean) {
     super(workspace, id, type, displayName);
-    this.#isServiceProjectInternal = isServiceProject;
-    this.#uiSourceCodeToData = new WeakMap();
+    this.#isServiceProject = isServiceProject;
     workspace.addProject(this);
   }
 
@@ -75,7 +74,7 @@ export class ContentProviderBasedProject extends Workspace.Workspace.ProjectStor
   }
 
   isServiceProject(): boolean {
-    return this.#isServiceProjectInternal;
+    return this.#isServiceProject;
   }
 
   async requestMetadata(uiSourceCode: Workspace.UISourceCode.UISourceCode):
@@ -111,17 +110,11 @@ export class ContentProviderBasedProject extends Workspace.Workspace.ProjectStor
   }
 
   override rename(
-      uiSourceCode: Workspace.UISourceCode.UISourceCode, newName: Platform.DevToolsPath.RawPathString,
+      _uiSourceCode: Workspace.UISourceCode.UISourceCode, _newName: Platform.DevToolsPath.RawPathString,
       callback:
           (arg0: boolean, arg1?: string|undefined, arg2?: Platform.DevToolsPath.UrlString|undefined,
            arg3?: Common.ResourceType.ResourceType|undefined) => void): void {
-    const path = uiSourceCode.url();
-    this.performRename(path, newName, (success: boolean, newName?: string) => {
-      if (success && newName) {
-        this.renameUISourceCode(uiSourceCode, newName);
-      }
-      callback(success, newName);
-    });
+    callback(false);
   }
 
   override excludeFolder(_path: Platform.DevToolsPath.UrlString): void {
@@ -145,12 +138,6 @@ export class ContentProviderBasedProject extends Workspace.Workspace.ProjectStor
   }
 
   override remove(): void {
-  }
-
-  performRename(
-      path: Platform.DevToolsPath.UrlString, newName: string,
-      callback: (arg0: boolean, arg1?: string|undefined) => void): void {
-    callback(false);
   }
 
   searchInFileContent(
@@ -196,8 +183,11 @@ export class ContentProviderBasedProject extends Workspace.Workspace.ProjectStor
   }
 
   addUISourceCodeWithProvider(
-      uiSourceCode: Workspace.UISourceCode.UISourceCode, contentProvider: TextUtils.ContentProvider.ContentProvider,
-      metadata: Workspace.UISourceCode.UISourceCodeMetadata|null, mimeType: string): void {
+      uiSourceCode: Workspace.UISourceCode.UISourceCode,
+      contentProvider: TextUtils.ContentProvider.ContentProvider,
+      metadata: Workspace.UISourceCode.UISourceCodeMetadata|null,
+      mimeType: string,
+      ): void {
     this.#uiSourceCodeToData.set(uiSourceCode, {mimeType, metadata, contentProvider});
     this.addUISourceCode(uiSourceCode);
   }

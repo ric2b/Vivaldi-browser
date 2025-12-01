@@ -338,6 +338,7 @@ const SwitchInfoMap& GetSwitches() {
     INSERT_VARIABLE(NinjaExecutable)
     INSERT_VARIABLE(NoColor)
     INSERT_VARIABLE(Root)
+    INSERT_VARIABLE(RootPattern)
     INSERT_VARIABLE(RootTarget)
     INSERT_VARIABLE(Quiet)
     INSERT_VARIABLE(RuntimeDepsListFile)

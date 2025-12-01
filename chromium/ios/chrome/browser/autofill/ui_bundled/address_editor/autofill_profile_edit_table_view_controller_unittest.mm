@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/autofill_constants.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/autofill_profile_edit_mediator.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/autofill_profile_edit_table_view_controller.h"
+#import "ios/chrome/browser/autofill/ui_bundled/address_editor/cells/autofill_edit_profile_button_footer_item.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/cells/autofill_profile_edit_item.h"
 #import "ios/chrome/browser/autofill/ui_bundled/address_editor/cells/country_item.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
@@ -101,10 +102,8 @@ class AutofillProfileEditTableViewControllerTest
         base::SysUTF16ToNSString(profile_->GetRawInfo(autofill::NAME_FULL));
     company_name_ =
         base::SysUTF16ToNSString(profile_->GetRawInfo(autofill::COMPANY_NAME));
-    address_home_line_1_ = base::SysUTF16ToNSString(
-        profile_->GetRawInfo(autofill::ADDRESS_HOME_LINE1));
-    address_home_line_2_ = base::SysUTF16ToNSString(
-        profile_->GetRawInfo(autofill::ADDRESS_HOME_LINE2));
+    street_address_ = base::SysUTF16ToNSString(
+        profile_->GetRawInfo(autofill::ADDRESS_HOME_STREET_ADDRESS));
     city_ = base::SysUTF16ToNSString(
         profile_->GetRawInfo(autofill::ADDRESS_HOME_CITY));
     state_ = base::SysUTF16ToNSString(
@@ -121,7 +120,7 @@ class AutofillProfileEditTableViewControllerTest
   }
 
   NSString* GetFieldValue(int section, int index) {
-    if (index == 7) {
+    if (section == 1 && index == 4) {
       return base::apple::ObjCCastStrict<TableViewMultiDetailTextItem>(
                  GetTableViewItem(section, index))
           .trailingDetailText;
@@ -132,23 +131,20 @@ class AutofillProfileEditTableViewControllerTest
         .textFieldValue;
   }
 
-  NSString* GetFooterTextForModal() {
-    return base::apple::ObjCCastStrict<TableViewTextItem>(
-               GetTableViewItem(0, 10))
-        .text;
-  }
-
-  NSAttributedString* GetErrorFooterString(int num_of_errors) {
+  NSAttributedString* GetErrorFooterString(int num_of_errors,
+                                           bool show_update_string) {
     NSString* error = l10n_util::GetPluralNSStringF(
         IDS_IOS_SETTINGS_EDIT_AUTOFILL_ADDRESS_REQUIREMENT_ERROR,
         num_of_errors);
 
-    NSString* finalErrorString =
-        [NSString stringWithFormat:
-                      @"%@\n%@", error,
-                      l10n_util::GetNSStringF(
-                          IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT,
-                          kTestSyncingEmail)];
+    NSString* finalErrorString = [NSString
+        stringWithFormat:
+            @"%@\n%@", error,
+            l10n_util::GetNSStringF(
+                show_update_string
+                    ? IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT
+                    : IDS_IOS_AUTOFILL_SAVE_ADDRESS_IN_ACCOUNT_FOOTER,
+                kTestSyncingEmail)];
 
     NSMutableParagraphStyle* paragraphStyle =
         [[NSMutableParagraphStyle alloc] init];
@@ -175,8 +171,7 @@ class AutofillProfileEditTableViewControllerTest
   AutofillProfileEditMediator* autofill_profile_edit_mediator_;
   NSString* full_name_;
   NSString* company_name_;
-  NSString* address_home_line_1_;
-  NSString* address_home_line_2_;
+  NSString* street_address_;
   NSString* city_;
   NSString* state_;
   NSString* zip_;
@@ -234,28 +229,41 @@ INSTANTIATE_TEST_SUITE_P(
 // Tests the items present in the view.
 TEST_P(AutofillProfileEditTableViewControllerTest, TestItems) {
   auto test_case = GetParam();
-  bool multiple_sections = (test_case.is_settings && test_case.account_profile);
-  EXPECT_EQ(NumberOfSections(), multiple_sections ? 2 : 1);
-  if (test_case.account_profile ||
-      test_case.prompt_mode == AutofillSaveProfilePromptMode::kMigrateProfile) {
-    EXPECT_EQ(NumberOfItemsInSection(0), test_case.is_settings ? 10 : 12);
+  int numOfSections;
+  if (test_case.is_settings) {
+    numOfSections = test_case.account_profile ? 4 : 3;
   } else {
-    EXPECT_EQ(NumberOfItemsInSection(0), test_case.is_settings ? 10 : 11);
+    numOfSections = test_case.account_profile ||
+                            test_case.prompt_mode ==
+                                AutofillSaveProfilePromptMode::kMigrateProfile
+                        ? 5
+                        : 4;
   }
+
+  EXPECT_EQ(NumberOfSections(), numOfSections);
+  EXPECT_EQ(NumberOfItemsInSection(0), 2);
+  EXPECT_EQ(NumberOfItemsInSection(1), 5);
+  EXPECT_EQ(NumberOfItemsInSection(2), 2);
 
   EXPECT_NSEQ(GetFieldValue(0, 0), full_name_);
   EXPECT_NSEQ(GetFieldValue(0, 1), company_name_);
-  EXPECT_NSEQ(GetFieldValue(0, 2), address_home_line_1_);
-  EXPECT_NSEQ(GetFieldValue(0, 3), address_home_line_2_);
-  EXPECT_NSEQ(GetFieldValue(0, 4), city_);
-  EXPECT_NSEQ(GetFieldValue(0, 5), state_);
-  EXPECT_NSEQ(GetFieldValue(0, 6), zip_);
-  EXPECT_NSEQ(GetFieldValue(0, 7), country_);
-  EXPECT_NSEQ(GetFieldValue(0, 8), phone_home_whole_number_);
-  EXPECT_NSEQ(GetFieldValue(0, 9), email_);
+  EXPECT_NSEQ(GetFieldValue(1, 0), street_address_);
+  EXPECT_NSEQ(GetFieldValue(1, 1), city_);
+  EXPECT_NSEQ(GetFieldValue(1, 2), state_);
+  EXPECT_NSEQ(GetFieldValue(1, 3), zip_);
+  EXPECT_NSEQ(GetFieldValue(1, 4), country_);
+  EXPECT_NSEQ(GetFieldValue(2, 0), phone_home_whole_number_);
+  EXPECT_NSEQ(GetFieldValue(2, 1), email_);
 
-  if (!test_case.is_settings) {
-    int index = 10;
+  if (test_case.is_settings) {
+    if (test_case.account_profile) {
+      EXPECT_EQ(NumberOfItemsInSection(3), 0);
+      NSString* expected_footer_text = l10n_util::GetNSStringF(
+          IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT,
+          kTestSyncingEmail);
+      CheckSectionFooter(expected_footer_text, 3);
+    }
+  } else {
     if (test_case.account_profile ||
         test_case.prompt_mode ==
             AutofillSaveProfilePromptMode::kMigrateProfile) {
@@ -265,9 +273,10 @@ TEST_P(AutofillProfileEditTableViewControllerTest, TestItems) {
                ? IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT
                : IDS_IOS_AUTOFILL_SAVE_ADDRESS_IN_ACCOUNT_FOOTER);
       // Check footer text in the save prompt.
-      EXPECT_NSEQ(GetFooterTextForModal(),
-                  l10n_util::GetNSStringF(expected_text_id, kTestSyncingEmail));
-      index = 11;
+      CheckSectionFooter(
+          l10n_util::GetNSStringF(expected_text_id, kTestSyncingEmail),
+          numOfSections - 2);
+      EXPECT_EQ(NumberOfItemsInSection(4), 0);
     }
 
     int button_id = IDS_AUTOFILL_SAVE_ADDRESS_PROMPT_OK_BUTTON_LABEL;
@@ -280,75 +289,67 @@ TEST_P(AutofillProfileEditTableViewControllerTest, TestItems) {
           IDS_AUTOFILL_ADDRESS_MIGRATION_TO_ACCOUNT_PROMPT_OK_BUTTON_LABEL;
     }
 
-    // Check button in the save prompt.
-    CheckTextButtonCellButtonTextWithId(button_id, 0, index);
-  }
+    AutofillEditProfileButtonFooterItem* footer =
+        static_cast<AutofillEditProfileButtonFooterItem*>([[controller()
+            tableViewModel] footerForSectionIndex:numOfSections - 1]);
 
-  // Check contents of the other section if present.
-  if (multiple_sections) {
-    EXPECT_EQ(NumberOfItemsInSection(1), 0);
-    NSString* expected_footer_text = l10n_util::GetNSStringF(
-        IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT,
-        kTestSyncingEmail);
-    CheckSectionFooter(expected_footer_text, 1);
+    // Check button in the save prompt.
+    EXPECT_NSEQ(footer.buttonText, l10n_util::GetNSString(button_id));
+    EXPECT_EQ(NumberOfItemsInSection(3), 0);
   }
 }
 
 // Test the contents of the view when the value requirements fail.
 TEST_P(AutofillProfileEditTableViewControllerTest, TestRequirements) {
   TableViewTextEditItem* city_item =
-      static_cast<TableViewTextEditItem*>(GetTableViewItem(0, 4));
+      static_cast<TableViewTextEditItem*>(GetTableViewItem(1, 1));
   // Remove the city field value.
   city_item.textFieldValue = @"";
   [autofill_profile_edit_table_view_controller_
       tableViewItemDidChange:city_item];
 
   auto test_case = GetParam();
-  if (test_case.is_settings) {
-    if (test_case.account_profile) {
-      // Check the error message.
-      TableViewAttributedStringHeaderFooterItem* footer =
-          static_cast<TableViewAttributedStringHeaderFooterItem*>(
-              [[controller() tableViewModel] footerForSectionIndex:1]);
-      EXPECT_NSEQ(GetErrorFooterString(1), footer.attributedString);
-    }
-  } else {
-    // The button in the save prompt should be disabled.
-    TableViewTextButtonItem* button_item =
-        static_cast<TableViewTextButtonItem*>(
-            GetTableViewItem(0, NumberOfItemsInSection(0) - 1));
+  BOOL show_update_string =
+      test_case.prompt_mode == AutofillSaveProfilePromptMode::kUpdateProfile ||
+      test_case.is_settings;
+  if (test_case.account_profile ||
+      test_case.prompt_mode == AutofillSaveProfilePromptMode::kMigrateProfile) {
+    int sectionIndex = test_case.is_settings ? (NumberOfSections() - 1)
+                                             : (NumberOfSections() - 2);
+    TableViewAttributedStringHeaderFooterItem* footer_item =
+        static_cast<TableViewAttributedStringHeaderFooterItem*>(
+            [[controller() tableViewModel] footerForSectionIndex:sectionIndex]);
+    EXPECT_NSEQ(GetErrorFooterString(1, show_update_string),
+                footer_item.attributedString);
+  }
+
+  if (!test_case.is_settings) {
+    AutofillEditProfileButtonFooterItem* button_item =
+        static_cast<AutofillEditProfileButtonFooterItem*>([[controller()
+            tableViewModel] footerForSectionIndex:NumberOfSections() - 1]);
     EXPECT_EQ(button_item.enabled,
               !test_case.account_profile &&
                   test_case.prompt_mode !=
                       AutofillSaveProfilePromptMode::kMigrateProfile);
-
-    // Footer text remains unchanged for the save prompts.
-    if (test_case.account_profile ||
-        test_case.prompt_mode ==
-            AutofillSaveProfilePromptMode::kMigrateProfile) {
-      int expected_text_id =
-          (test_case.prompt_mode ==
-                   AutofillSaveProfilePromptMode::kUpdateProfile
-               ? IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT
-               : IDS_IOS_AUTOFILL_SAVE_ADDRESS_IN_ACCOUNT_FOOTER);
-      EXPECT_NSEQ(GetFooterTextForModal(),
-                  l10n_util::GetNSStringF(expected_text_id, kTestSyncingEmail));
-    }
   }
 
   TableViewTextEditItem* zip_item =
-      static_cast<TableViewTextEditItem*>(GetTableViewItem(0, 6));
+      static_cast<TableViewTextEditItem*>(GetTableViewItem(1, 3));
   // Remove the zip field value.
   zip_item.textFieldValue = @"";
   [autofill_profile_edit_table_view_controller_
       tableViewItemDidChange:zip_item];
 
-  if (test_case.is_settings && test_case.account_profile) {
-    TableViewAttributedStringHeaderFooterItem* footer =
+  // Check that the error message has been updated.
+  if (test_case.account_profile ||
+      test_case.prompt_mode == AutofillSaveProfilePromptMode::kMigrateProfile) {
+    int sectionIndex = test_case.is_settings ? (NumberOfSections() - 1)
+                                             : (NumberOfSections() - 2);
+    TableViewAttributedStringHeaderFooterItem* footer_item =
         static_cast<TableViewAttributedStringHeaderFooterItem*>(
-            [[controller() tableViewModel] footerForSectionIndex:1]);
-    // Check that the error message has been updated.
-    EXPECT_NSEQ(GetErrorFooterString(2), footer.attributedString);
+            [[controller() tableViewModel] footerForSectionIndex:sectionIndex]);
+    EXPECT_NSEQ(GetErrorFooterString(2, show_update_string),
+                footer_item.attributedString);
   }
 }
 
@@ -357,19 +358,24 @@ TEST_P(AutofillProfileEditTableViewControllerTest,
        TestItemsOnCountrySelection) {
   auto test_case = GetParam();
   TableViewTextEditItem* city_item =
-      static_cast<TableViewTextEditItem*>(GetTableViewItem(0, 4));
+      static_cast<TableViewTextEditItem*>(GetTableViewItem(1, 1));
   // Remove the city field value.
   city_item.textFieldValue = @"";
   [autofill_profile_edit_table_view_controller_
       tableViewItemDidChange:city_item];
 
-  // Check the error message is shown.
-  if (test_case.is_settings && test_case.account_profile) {
-    TableViewAttributedStringHeaderFooterItem* footer =
+  BOOL show_update_string =
+      test_case.prompt_mode == AutofillSaveProfilePromptMode::kUpdateProfile ||
+      test_case.is_settings;
+  if (test_case.account_profile ||
+      test_case.prompt_mode == AutofillSaveProfilePromptMode::kMigrateProfile) {
+    int sectionIndex = test_case.is_settings ? (NumberOfSections() - 1)
+                                             : (NumberOfSections() - 2);
+    TableViewAttributedStringHeaderFooterItem* footer_item =
         static_cast<TableViewAttributedStringHeaderFooterItem*>(
-            [[controller() tableViewModel] footerForSectionIndex:1]);
-    // Check that the error message has been updated.
-    EXPECT_NSEQ(GetErrorFooterString(1), footer.attributedString);
+            [[controller() tableViewModel] footerForSectionIndex:sectionIndex]);
+    EXPECT_NSEQ(GetErrorFooterString(1, show_update_string),
+                footer_item.attributedString);
   }
 
   [autofill_profile_edit_table_view_controller_
@@ -382,122 +388,30 @@ TEST_P(AutofillProfileEditTableViewControllerTest,
 
   [autofill_profile_edit_mediator_ didSelectCountry:countryItem];
 
-  bool multiple_sections = (test_case.is_settings && test_case.account_profile);
-  EXPECT_EQ(NumberOfSections(), multiple_sections ? 2 : 1);
-  if (test_case.account_profile ||
-      test_case.prompt_mode == AutofillSaveProfilePromptMode::kMigrateProfile) {
-    EXPECT_EQ(NumberOfItemsInSection(0), test_case.is_settings ? 10 : 12);
-  } else {
-    EXPECT_EQ(NumberOfItemsInSection(0), test_case.is_settings ? 10 : 11);
-  }
-
-  // Check the error message persists.
-  if (test_case.is_settings && test_case.account_profile) {
-    TableViewAttributedStringHeaderFooterItem* footer =
-        static_cast<TableViewAttributedStringHeaderFooterItem*>(
-            [[controller() tableViewModel] footerForSectionIndex:1]);
-    // Check that the error message has been updated.
-    EXPECT_NSEQ(GetErrorFooterString(1), footer.attributedString);
-  }
-}
-
-class AutofillProfileEditTableViewControllerTestWithDynamicFieldsEnabled
-    : public AutofillProfileEditTableViewControllerTest {
- protected:
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        kAutofillDynamicallyLoadsFieldsForAddressInput);
-
-    AutofillProfileEditTableViewControllerTest::SetUp();
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-INSTANTIATE_TEST_SUITE_P(
-    /* No InstantiationName */,
-    AutofillProfileEditTableViewControllerTestWithDynamicFieldsEnabled,
-    testing::Values(
-        // Editing an account profile via settings.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kNewProfile, /*account_profile=*/YES,
-            /*is_settings=*/YES},
-
-        // Editing a local profile via settings.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kNewProfile, /*account_profile=*/NO,
-            /*is_settings=*/YES},
-
-        // Save Flow via Overlay UI: Editing an account profile.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kNewProfile, /*account_profile=*/YES,
-            /*is_settings=*/NO},
-
-        // Save Flow via Overlay UI: Editing a local profile.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kNewProfile, /*account_profile=*/NO,
-            /*is_settings=*/NO},
-
-        // Save Flow via Overlay UI: Editing an account profile after showing
-        // the update prompt.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kUpdateProfile,
-            /*account_profile=*/YES, /*is_settings=*/NO},
-
-        // Save Flow via Overlay UI: Editing a local profile after showing the
-        // update prompt.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kUpdateProfile,
-            /*account_profile=*/NO, /*is_settings=*/NO},
-
-        // Save Flow via Overlay UI: Editing a local profile after showing the
-        // migration to account prompt.
-        AutofillProfileEditTableViewControllerTestCase{
-            AutofillSaveProfilePromptMode::kMigrateProfile,
-            /*account_profile=*/NO, /*is_settings=*/NO}));
-
-// Tests that the sections and items are as expected on initialization, as well
-// as when the country value is changed.
-// TODO(crbug.com/402776694): Re-enable the test once the NumberOfItemsInSection
-// based on the selected country problem is fixed.
-TEST_P(AutofillProfileEditTableViewControllerTestWithDynamicFieldsEnabled,
-       DISABLED_SectionsAndItems) {
-  auto test_case = GetParam();
+  int numOfSections;
   if (test_case.is_settings) {
-    EXPECT_EQ(NumberOfSections(), test_case.account_profile ? 4 : 3);
+    numOfSections = test_case.account_profile ? 4 : 3;
   } else {
-    EXPECT_EQ(NumberOfSections(),
-              (test_case.account_profile ||
-               test_case.prompt_mode ==
-                   AutofillSaveProfilePromptMode::kMigrateProfile)
-                  ? 5
-                  : 4);
+    numOfSections = test_case.account_profile ||
+                            test_case.prompt_mode ==
+                                AutofillSaveProfilePromptMode::kMigrateProfile
+                        ? 5
+                        : 4;
   }
 
+  EXPECT_EQ(NumberOfSections(), numOfSections);
   EXPECT_EQ(NumberOfItemsInSection(0), 2);
   EXPECT_EQ(NumberOfItemsInSection(1), 5);
   EXPECT_EQ(NumberOfItemsInSection(2), 2);
 
-  if ((test_case.account_profile ||
-       test_case.prompt_mode ==
-           AutofillSaveProfilePromptMode::kMigrateProfile)) {
-    EXPECT_EQ(NumberOfItemsInSection(3), 0);
-    NSString* expected_footer_text = l10n_util::GetNSStringF(
-        IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT,
-        kTestSyncingEmail);
-    CheckSectionFooter(expected_footer_text, 3);
-
-    if (!test_case.is_settings) {
-      EXPECT_EQ(NumberOfItemsInSection(4), 0);
-    }
+  if (test_case.account_profile ||
+      test_case.prompt_mode == AutofillSaveProfilePromptMode::kMigrateProfile) {
+    int sectionIndex = test_case.is_settings ? (NumberOfSections() - 1)
+                                             : (NumberOfSections() - 2);
+    TableViewAttributedStringHeaderFooterItem* footer_item =
+        static_cast<TableViewAttributedStringHeaderFooterItem*>(
+            [[controller() tableViewModel] footerForSectionIndex:sectionIndex]);
+    EXPECT_NSEQ(GetErrorFooterString(1, show_update_string),
+                footer_item.attributedString);
   }
-
-  CountryItem* countryItem =
-      [[CountryItem alloc] initWithType:kItemTypeEnumZero];
-  countryItem.countryCode = @"DE";
-  countryItem.text = @"Germany";
-
-  [autofill_profile_edit_mediator_ didSelectCountry:countryItem];
-
-  EXPECT_EQ(NumberOfItemsInSection(1), 4);
 }

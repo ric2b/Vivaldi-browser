@@ -77,7 +77,6 @@ cc_library(
         "ble_peripheral.h",
         "ble_socket.h",
         "ble_v2.h",
-        "ble_v2_peripheral.h",
         "ble_v2_server_socket.h",
         "ble_v2_socket.h",
         "bluetooth_adapter.h",
@@ -158,7 +157,10 @@ cc_library(
     hdrs = [
         "string_utils.h",
     ],
-    visibility = ["//location/nearby:__subpackages__"],
+    visibility = [
+        "//:__subpackages__",
+        "//location/nearby:__subpackages__",
+    ],
     deps = [
         "//internal/platform:logging",
         "@com_google_absl//absl/strings",
@@ -174,7 +176,6 @@ cc_library(
         "ble_medium.cc",
         "ble_socket.cc",
         "ble_v2.cc",
-        "ble_v2_peripheral.cc",
         "ble_v2_server_socket.cc",
         "ble_v2_socket.cc",
         "bluetooth_adapter.cc",
@@ -248,6 +249,7 @@ cc_library(
         "//internal/platform:base",
         "//internal/platform:cancellation_flag",
         "//internal/platform:logging",
+        "//internal/platform:mac_address",
         "//internal/platform:types",
         "//internal/platform:uuid",
         "//internal/platform/flags:platform_flags",
@@ -302,7 +304,6 @@ cc_test(
         "atomic_reference_test.cc",
         "ble_gatt_server_test.cc",
         "ble_medium_test.cc",
-        "ble_v2_peripheral_test.cc",
         "ble_v2_test.cc",
         "bluetooth_adapter_test.cc",
         "count_down_latch_test.cc",

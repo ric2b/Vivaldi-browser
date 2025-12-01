@@ -17,6 +17,7 @@ import android.widget.TextView;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.ui.autofill.internal.R;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
@@ -25,7 +26,8 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 
 import java.util.Optional;
 
-/** The coordinator for the OTP Verification Dialog. Manages the sub-component objects. **/
+/** The coordinator for the OTP Verification Dialog. Manages the sub-component objects. */
+@NullMarked
 class OtpVerificationDialogCoordinator {
     /** Interface for the caller to be notified of user actions. */
     interface Delegate {
@@ -89,9 +91,9 @@ class OtpVerificationDialogCoordinator {
         ViewStub title_view_stub = mDialogView.findViewById(R.id.title_with_icon_stub);
         title_view_stub.setLayoutResource(R.layout.icon_after_title_view);
         title_view_stub.inflate();
-        TextView titleView = (TextView) mDialogView.findViewById(R.id.title);
+        TextView titleView = mDialogView.findViewById(R.id.title);
         titleView.setText(mContext.getString(R.string.autofill_card_unmask_otp_input_dialog_title));
-        ImageView iconView = (ImageView) mDialogView.findViewById(R.id.title_icon);
+        ImageView iconView = mDialogView.findViewById(R.id.title_icon);
         iconView.setImageResource(R.drawable.google_pay);
 
         PropertyModel.Builder dialogModelBuilder = getModalDialogModelBuilder(mDialogView);

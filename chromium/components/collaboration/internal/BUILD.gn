@@ -22,6 +22,7 @@ static_library("core_internal") {
     "//chrome/browser/collaboration:*",
     "//chrome/test:*",
     "//ios/chrome/browser/collaboration/model",
+    "//ios/chrome/browser/data_sharing/model",
   ]
 
   sources = [
@@ -36,6 +37,7 @@ static_library("core_internal") {
   ]
 
   deps = [
+    "//components/data_sharing/public:group_data",
     "//components/data_sharing/public:logger",
     "//components/sync/service",
     "//ui/base",
@@ -44,6 +46,7 @@ static_library("core_internal") {
   public_deps = [
     "//base",
     "//components/collaboration/public",
+    "//components/collaboration/public:prefs",
     "//components/data_sharing/public",
     "//components/keyed_service/core",
   ]
@@ -85,8 +88,6 @@ static_library("messaging_internal") {
     "messaging/data_sharing_change_notifier.h",
     "messaging/data_sharing_change_notifier_impl.cc",
     "messaging/data_sharing_change_notifier_impl.h",
-    "messaging/empty_messaging_backend_service.cc",
-    "messaging/empty_messaging_backend_service.h",
     "messaging/instant_message_processor.h",
     "messaging/instant_message_processor_impl.cc",
     "messaging/instant_message_processor_impl.h",
@@ -112,6 +113,7 @@ static_library("messaging_internal") {
   deps = [
     "//base",
     "//components/collaboration/internal/messaging/storage/protocol",
+    "//components/collaboration/public:empty_messaging_backend_service",
     "//components/collaboration/public:messaging_public",
     "//components/data_sharing/public",
     "//components/saved_tab_groups/public",
@@ -251,6 +253,7 @@ if (is_android) {
       "//build/android:build_java",
       "//components/collaboration/public:java",
       "//components/data_sharing/public:public_java",
+      "//components/saved_tab_groups/public:java",
       "//third_party/jni_zero:jni_zero_java",
       "//url:url_java",
     ]

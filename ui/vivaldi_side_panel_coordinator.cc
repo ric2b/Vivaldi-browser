@@ -69,6 +69,10 @@ std::optional<SidePanelEntryId> SidePanelCoordinator::GetCurrentEntryId()
   return std::optional<SidePanelEntryId>();
 }
 
+int SidePanelCoordinator::GetCurrentEntryDefaultContentWidth() const {
+  return 0;
+}
+
 bool SidePanelCoordinator::IsSidePanelShowing() const {
   return false;
 }

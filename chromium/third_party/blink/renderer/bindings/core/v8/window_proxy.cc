@@ -155,4 +155,13 @@ void WindowProxy::InitializeIfNeeded() {
   }
 }
 
+// Vivaldi VB-113263 - the same condition from InitializeIfNeeded()
+bool WindowProxy::NeedInitialize() const {
+   if (lifecycle_ == Lifecycle::kContextIsUninitialized ||
+      lifecycle_ == Lifecycle::kGlobalObjectIsDetached) {
+     return true;
+  }
+  return false;
+}
+
 }  // namespace blink

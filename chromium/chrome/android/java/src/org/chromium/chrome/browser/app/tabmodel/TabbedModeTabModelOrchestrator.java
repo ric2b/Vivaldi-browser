@@ -14,6 +14,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.DeferredStartupHandler;
+import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.crypto.CipherFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -30,6 +31,7 @@ import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorBase;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorImpl;
+import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.tabmodel.TabPersistentStore;
 import org.chromium.chrome.browser.tabmodel.TabbedModeTabPersistencePolicy;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -195,12 +197,26 @@ public class TabbedModeTabModelOrchestrator extends TabModelOrchestrator {
     public void onNativeLibraryReady(TabContentManager tabContentManager) {
         super.onNativeLibraryReady(tabContentManager);
 
-        if (ChromeFeatureList.sAndroidTabDeclutterRescueKillSwitch.isEnabled()) {
-            DeferredStartupHandler.getInstance()
-                    .addDeferredTask(
-                            () -> createAndInitArchivedTabModelOrchestrator(tabContentManager));
-            DeferredStartupHandler.getInstance().queueDeferredTasksOnIdleHandler();
+        if (!ChromeFeatureList.sAndroidTabDeclutterRescueKillSwitch.isEnabled()) {
+            return;
         }
+
+        if (ChromeFeatureList.sAndroidTabDeclutterPerformanceImprovements.isEnabled()) {
+            TabModelUtils.runOnTabStateInitialized(
+                    mTabModelSelector,
+                    (selector) -> {
+                        createArchivedTabModelInDeferredTask(tabContentManager);
+                    });
+        } else {
+            createArchivedTabModelInDeferredTask(tabContentManager);
+        }
+    }
+
+    private void createArchivedTabModelInDeferredTask(TabContentManager tabContentManager) {
+        DeferredStartupHandler.getInstance()
+                .addDeferredTask(
+                        () -> createAndInitArchivedTabModelOrchestrator(tabContentManager));
+        DeferredStartupHandler.getInstance().queueDeferredTasksOnIdleHandler();
     }
 
     @Override

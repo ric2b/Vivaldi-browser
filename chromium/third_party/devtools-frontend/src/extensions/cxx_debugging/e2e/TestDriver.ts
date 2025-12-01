@@ -51,6 +51,7 @@ function pausedReasonText(reason: string) {
     case 'step':
       return 'Debugger paused';
   }
+  return;
 }
 
 describe('CXX Debugging Extension Test Suite', function() {
@@ -242,7 +243,7 @@ async function scrollToLine(lineNumber: number): Promise<void> {
 }
 
 async function doActions({actions, reason}: {actions?: Action[], reason: string}) {
-  const {frontend, target} = getBrowserAndPages();
+  const {target} = getBrowserAndPages();
   let continuation;
   if (actions) {
     for (const step of actions) {
@@ -258,7 +259,7 @@ async function doActions({actions, reason}: {actions?: Action[], reason: string}
           }
           await openFileInEditor(file);
           await scrollToLine(Number(breakpoint));
-          await addBreakpointForLine(frontend, breakpoint);
+          await addBreakpointForLine(breakpoint);
           break;
         }
         case 'remove_breakpoint': {
@@ -267,7 +268,7 @@ async function doActions({actions, reason}: {actions?: Action[], reason: string}
             throw new Error('Invalid breakpoint spec: missing `breakpoint`');
           }
           await scrollToLine(Number(breakpoint));
-          await removeBreakpointForLine(frontend, breakpoint);
+          await removeBreakpointForLine(breakpoint);
           break;
         }
         case 'step_over':

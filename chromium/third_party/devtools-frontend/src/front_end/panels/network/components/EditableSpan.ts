@@ -1,16 +1,13 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import {html, render} from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import editableSpanStylesRaw from './EditableSpan.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const editableSpanStyles = new CSSStyleSheet();
-editableSpanStyles.replaceSync(editableSpanStylesRaw.cssText);
+import editableSpanStyles from './EditableSpan.css.js';
 
 export interface EditableSpanData {
   value: string;
@@ -18,11 +15,9 @@ export interface EditableSpanData {
 
 export class EditableSpan extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
   #value = '';
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [editableSpanStyles];
     this.#shadow.addEventListener('focusin', this.#selectAllText.bind(this));
     this.#shadow.addEventListener('keydown', this.#onKeyDown.bind(this));
     this.#shadow.addEventListener('input', this.#onInput.bind(this));
@@ -30,7 +25,7 @@ export class EditableSpan extends HTMLElement {
 
   set data(data: EditableSpanData) {
     this.#value = data.value;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   get value(): string {
@@ -72,13 +67,15 @@ export class EditableSpan extends HTMLElement {
 
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
-    render(html`<span
+    render(html`
+      <style>${editableSpanStyles}</style>
+      <span
         contenteditable="plaintext-only"
         class="editable"
         tabindex="0"
         .innerText=${this.#value}
         jslog=${VisualLogging.value('header-editor').track({change: true, keydown: 'Enter|Escape'})}
-    </span>`, this.#shadow, {host: this});
+      </span>`, this.#shadow, {host: this});
     // clang-format on
   }
 

@@ -71,7 +71,7 @@ class COMPONENT_EXPORT(ON_DEVICE_MODEL) OnDeviceModelService
   void LoadModel(mojom::LoadModelParamsPtr params,
                  mojo::PendingReceiver<mojom::OnDeviceModel> model,
                  LoadModelCallback callback) override;
-  void GetCapabilities(ModelAssets assets,
+  void GetCapabilities(ModelFile model_file,
                        GetCapabilitiesCallback callback) override;
   void LoadTextSafetyModel(
       mojom::TextSafetyModelParamsPtr params,
@@ -80,6 +80,8 @@ class COMPONENT_EXPORT(ON_DEVICE_MODEL) OnDeviceModelService
       GetEstimatedPerformanceClassCallback callback) override;
 
   size_t NumModelsForTesting() const { return models_.size(); }
+
+  void SetForceQueueingForTesting(bool force_queueing);
 
  private:
   on_device_model::mojom::PerformanceClass GetEstimatedPerformanceClassImpl();

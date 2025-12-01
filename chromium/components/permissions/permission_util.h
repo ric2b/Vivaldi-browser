@@ -28,6 +28,7 @@ class GURL;
 
 namespace permissions {
 class PermissionRequest;
+struct PermissionRequestData;
 
 // This enum backs a UMA histogram, so it must be treated as append-only.
 enum class PermissionAction {
@@ -57,6 +58,16 @@ class PermissionUtil {
 
   // Returns the permission string for the given permission.
   static std::string GetPermissionString(ContentSettingsType);
+
+  // Returns the request type uma value for the given permissions.
+  static RequestTypeForUma GetUmaValueForRequests(
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests);
+
+  static RequestTypeForUma GetUmaValueForRequests(
+      const std::vector<base::WeakPtr<PermissionRequest>>& requests);
+
+  // Returns the request type uma value for the given request type.
+  static RequestTypeForUma GetUmaValueForRequestType(RequestType request_type);
 
   // Returns the gesture type corresponding to whether a permission request is
   // made with or without a user gesture.
@@ -172,7 +183,7 @@ class PermissionUtil {
   static bool HasUserGesture(PermissionPrompt::Delegate* delegate);
 
   static bool CanPermissionRequestIgnoreStatus(
-      const PermissionRequestData& request,
+      const std::unique_ptr<PermissionRequestData>& request,
       content::PermissionStatusSource source);
 
   // Returns `true` if the current platform support permission chips.

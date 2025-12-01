@@ -28,7 +28,6 @@
 #include <utility>
 
 #include "core/fxcrt/data_vector.h"
-#include "core/fxcrt/stl_util.h"
 #include "fxbarcode/BC_TwoDimWriter.h"
 #include "fxbarcode/pdf417/BC_PDF417.h"
 #include "fxbarcode/pdf417/BC_PDF417BarcodeMatrix.h"
@@ -62,14 +61,15 @@ bool CBC_PDF417Writer::SetErrorCorrectionLevel(int32_t level) {
 CBC_PDF417Writer::EncodeResult CBC_PDF417Writer::Encode(
     WideStringView contents) const {
   CBC_PDF417 encoder;
-  int32_t col = (m_Width / m_ModuleWidth - 69) / 17;
-  int32_t row = m_Height / (m_ModuleWidth * 20);
-  if (row >= 3 && row <= 90 && col >= 1 && col <= 30)
+  int32_t col = (width_ / module_width_ - 69) / 17;
+  int32_t row = height_ / (module_width_ * 20);
+  if (row >= 3 && row <= 90 && col >= 1 && col <= 30) {
     encoder.setDimensions(col, 1, row, 3);
-  else if (col >= 1 && col <= 30)
+  } else if (col >= 1 && col <= 30) {
     encoder.setDimensions(col, col, 90, 3);
-  else if (row >= 3 && row <= 90)
+  } else if (row >= 3 && row <= 90) {
     encoder.setDimensions(30, 1, row, row);
+  }
   if (!encoder.GenerateBarcodeLogic(contents, error_correction_level())) {
     return {DataVector<uint8_t>(), 0, 0};
   }

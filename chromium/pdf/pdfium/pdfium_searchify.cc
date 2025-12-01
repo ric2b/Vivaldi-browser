@@ -25,6 +25,7 @@
 #include "pdf/pdfium/pdfium_mem_buffer_file_write.h"
 #include "pdf/pdfium/pdfium_ocr.h"
 #include "pdf/pdfium/pdfium_searchify_font.h"
+#include "services/screen_ai/public/cpp/utilities.h"
 #include "services/screen_ai/public/mojom/screen_ai_service.mojom.h"
 #include "third_party/pdfium/public/cpp/fpdf_scopers.h"
 #include "third_party/pdfium/public/fpdf_edit.h"
@@ -229,7 +230,7 @@ gfx::Rect GetSpaceRect(const gfx::Rect& rect1, const gfx::Rect& rect2) {
 // inserts a new word between them to represent it, and returns the vector of
 // words and spaces.
 std::vector<screen_ai::mojom::WordBox> GetWordsAndSpaces(
-    const std::vector<screen_ai::mojom::WordBoxPtr>& words) {
+    base::span<const screen_ai::mojom::WordBoxPtr> words) {
   std::vector<screen_ai::mojom::WordBox> words_and_spaces;
 
   size_t original_word_count = words.size();
@@ -284,7 +285,9 @@ std::vector<uint8_t> PDFiumSearchify(
     for (int object_index = 0; object_index < object_count; object_index++) {
       // GetImageForOcr() checks for null `image`.
       FPDF_PAGEOBJECT image = FPDFPage_GetObject(page.get(), object_index);
-      SkBitmap bitmap = GetImageForOcr(document.get(), page.get(), image);
+      SkBitmap bitmap = GetImageForOcr(document.get(), page.get(), image,
+                                       screen_ai::GetMaxDimensionForOCR(),
+                                       /*rotate_image_to_upright=*/false);
       // The object is not an image or failed to get the bitmap from the image.
       if (bitmap.empty()) {
         continue;
@@ -393,7 +396,7 @@ gfx::Rect GetSpaceRectForTesting(const gfx::Rect& rect1,  // IN-TEST
 }
 
 std::vector<screen_ai::mojom::WordBox> GetWordsAndSpacesForTesting(  // IN-TEST
-    const std::vector<screen_ai::mojom::WordBoxPtr>& words) {
+    base::span<const screen_ai::mojom::WordBoxPtr> words) {
   return GetWordsAndSpaces(words);
 }
 

@@ -56,8 +56,6 @@ inline constexpr char kManagedDefaultFileSystemWriteGuardSetting[] =
     "profile.managed_default_content_settings.file_system_write_guard";
 inline constexpr char kManagedDefaultSerialGuardSetting[] =
     "profile.managed_default_content_settings.serial_guard";
-inline constexpr char kManagedDefaultInsecurePrivateNetworkSetting[] =
-    "profile.managed_default_content_settings.insecure_private_network";
 inline constexpr char kManagedDefaultJavaScriptJitSetting[] =
     "profile.managed_default_content_settings.javascript_jit";
 inline constexpr char kManagedDefaultJavaScriptOptimizerSetting[] =
@@ -81,6 +79,10 @@ inline constexpr char kManagedDefaultLegacyCookieScope[] =
     "profile.managed_default_content_settings.legacy_cookie_scope";
 inline constexpr char kManagedDefaultControlledFrameSetting[] =
     "profile.managed_default_content_settings.controlled_frame";
+#if BUILDFLAG(IS_CHROMEOS)
+inline constexpr char kManagedDefaultSmartCardConnectSetting[] =
+    "profile.managed_default_content_settings.smart_card_connect";
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Preferences that are exclusively used to store managed content settings
 // patterns.
@@ -148,8 +150,6 @@ inline constexpr char kManagedSerialAskForUrls[] =
     "profile.managed_serial_ask_for_urls";
 inline constexpr char kManagedSerialBlockedForUrls[] =
     "profile.managed_serial_blocked_for_urls";
-inline constexpr char kManagedInsecurePrivateNetworkAllowedForUrls[] =
-    "profile.managed_insecure_private_network_allowed_for_urls";
 inline constexpr char kManagedJavaScriptJitAllowedForSites[] =
     "profile.managed_javascript_jit_allowed_for_sites";
 inline constexpr char kManagedJavaScriptJitBlockedForSites[] =

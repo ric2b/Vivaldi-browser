@@ -21,6 +21,11 @@ const std::u16string TitledUrlNode::GetTitledUrlNodeDescription() const {
   return std::u16string();
 }
 
+// Vivaldi: Returns the display url for the node.
+const GURL TitledUrlNode::GetTitledUrlDisplayURL() const {
+  return GURL();
+}
+
 // BookmarkNode ---------------------------------------------------------------
 
 // Below predefined UUIDs for permanent bookmark folders, determined via named
@@ -40,13 +45,20 @@ const std::u16string BookmarkNode::GetTitledUrlNodeDescription() const {
   return base::UTF8ToUTF16(vivaldi_bookmark_kit::GetDescription(this));
 }
 
+const GURL BookmarkNode::GetTitledUrlDisplayURL() const {
+  const GURL url = GURL(vivaldi_bookmark_kit::GetDisplayURL(this));
+  return url.is_valid() ? url : GetTitledUrlNodeUrl();
+}
+
 // static
 std::unique_ptr<BookmarkPermanentNode> BookmarkPermanentNode::CreateTrashFolder(
-    int64_t id) {
+    int64_t id,
+    bool is_account_node) {
   // base::WrapUnique() used because the constructor is private.
   return base::WrapUnique(new BookmarkPermanentNode(
       id, TRASH, base::Uuid::ParseLowercase(kVivaldiTrashNodeUuid),
-      l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME)));
+      l10n_util::GetStringUTF16(IDS_BOOKMARK_BAR_TRASH_FOLDER_NAME),
+      is_account_node));
 }
 
 }  // namespace bookmarks

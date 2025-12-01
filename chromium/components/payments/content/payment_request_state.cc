@@ -585,6 +585,18 @@ void PaymentRequestState::PopulateProfileCache() {
   std::vector<const autofill::AutofillProfile*> profiles =
       personal_data_manager_->address_data_manager().GetProfilesToSuggest();
 
+  // Remove home and work profiles since they are non-editable.
+  std::erase_if(profiles, [](const autofill::AutofillProfile* profile) {
+    switch (profile->record_type()) {
+      case autofill::AutofillProfile::RecordType::kLocalOrSyncable:
+      case autofill::AutofillProfile::RecordType::kAccount:
+        return false;
+      case autofill::AutofillProfile::RecordType::kAccountHome:
+      case autofill::AutofillProfile::RecordType::kAccountWork:
+        return true;
+    }
+  });
+
   std::vector<raw_ptr<autofill::AutofillProfile, VectorExperimental>>
       raw_profiles_for_filtering;
   raw_profiles_for_filtering.reserve(profiles.size());

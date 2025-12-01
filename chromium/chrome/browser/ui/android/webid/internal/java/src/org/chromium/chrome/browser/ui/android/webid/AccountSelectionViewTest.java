@@ -79,11 +79,11 @@ public class AccountSelectionViewTest extends AccountSelectionJUnitTestBase {
     private static final String LINK_TAG_REGEX = "<[^>]*>";
 
     private class TokenError {
-        public String mCode;
-        public GURL mUrl;
-        public String mExpectedSummary;
-        public String mExpectedDescription;
-        public boolean mClickableText;
+        public final String mCode;
+        public final GURL mUrl;
+        public final String mExpectedSummary;
+        public final String mExpectedDescription;
+        public final boolean mClickableText;
 
         TokenError(String code, GURL url, boolean clickableText) {
             mCode = code;
@@ -418,6 +418,7 @@ public class AccountSelectionViewTest extends AccountSelectionJUnitTestBase {
                 mContentView.findViewById(R.id.account_selection_continue_btn);
         assertTrue(continueButton.isShown());
         assertEquals("Continue", continueButton.getText());
+        assertEquals("Continue, opens in a new tab", continueButton.getContentDescription());
         continueButton.performClick();
 
         ArgumentCaptor<ButtonData> captor = ArgumentCaptor.forClass(ButtonData.class);
@@ -549,6 +550,35 @@ public class AccountSelectionViewTest extends AccountSelectionJUnitTestBase {
                     error.mExpectedDescription,
                     actualError.mDescription.toString());
         }
+    }
+
+    @Test
+    public void testContentDescription() {
+        mModel.set(
+                ItemProperties.CONTINUE_BUTTON,
+                buildContinueButton(mAnaAccount, mIdpMetadata, HeaderType.SIGN_IN));
+        // Check that there is not a period in the content description since one will be appended.
+        assertEquals(
+                "Sign in bottom sheet", mBottomSheetContent.getSheetContentDescription(mContext));
+    }
+
+    @Test
+    public void testMultipleIdPLogins() {
+        mSheetAccountItems.addAll(
+                asList(
+                        buildIdpLoginItem(mIdpData, /* showIdp= */ true),
+                        buildIdpLoginItem(mIdpDataWithoutIcons, /* showIdp= */ true)));
+        ShadowLooper.shadowMainLooper().idle();
+
+        assertEquals(View.VISIBLE, mContentView.getVisibility());
+        RecyclerView buttons = mContentView.findViewById(R.id.sheet_item_list);
+        assertEquals("Incorrect account count", 2, buttons.getChildCount());
+        View idpLogin = buttons.getChildAt(0);
+        TextView title = idpLogin.findViewById(R.id.title);
+        assertEquals("Use your " + mTestEtldPlusOne2 + " account", title.getText());
+        assertEquals(
+                "Use your " + mTestEtldPlusOne2 + " account, opens in a new tab",
+                title.getContentDescription());
     }
 
     private RecyclerView getAccounts() {

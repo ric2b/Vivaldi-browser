@@ -13,7 +13,7 @@
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/common.h"
@@ -23,7 +23,6 @@
 #include "components/download/public/common/download_item.h"
 #include "components/safe_browsing/core/browser/download_check_result.h"
 #include "content/public/browser/browser_thread.h"
-#include "url/gurl.h"
 
 class Profile;
 
@@ -50,15 +49,22 @@ class CheckClientDownloadRequest : public CheckClientDownloadRequestBase,
   void OnDownloadDestroyed(download::DownloadItem* download) override;
   void OnDownloadUpdated(download::DownloadItem* download) override;
 
-  static bool IsSupportedDownload(const download::DownloadItem& item,
-                                  const base::FilePath& target_path,
-                                  DownloadCheckResultReason* reason);
+  // Returns enum value indicating whether `item` is eligible for
+  // CheckClientDownloadRequest. If return value is not kMayCheckDownload, then
+  // `reason` will be populated with the reason why.
+  // Note: Behavior is platform-specific.
+  // TODO(chlily): Rename this method since it does not return a bool.
+  static MayCheckDownloadResult IsSupportedDownload(
+      const download::DownloadItem& item,
+      const base::FilePath& file_name,
+      DownloadCheckResultReason* reason);
 
   download::DownloadItem* item() const override;
 
  private:
   // CheckClientDownloadRequestBase overrides:
-  bool IsSupportedDownload(DownloadCheckResultReason* reason) override;
+  MayCheckDownloadResult IsSupportedDownload(
+      DownloadCheckResultReason* reason) override;
   content::BrowserContext* GetBrowserContext() const override;
   bool IsCancelled() override;
   base::WeakPtr<CheckClientDownloadRequestBase> GetWeakPtr() override;

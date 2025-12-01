@@ -658,7 +658,13 @@ void WebFrameWidgetImpl::DragSourceEndedAt(const gfx::PointF& point_in_viewport,
       WebInputEvent::Type::kMouseMove,
       GetPage()->GetVisualViewport().ViewportToRootFrame(point_in_viewport),
       screen_point, WebPointerProperties::Button::kLeft, 0,
-      WebInputEvent::kNoModifiers, base::TimeTicks::Now());
+      WebInputEvent::kNoModifiers, base::TimeTicks::Now(), kMenuSourceNone,
+      local_root_->GetFrame()
+          ->GetPage()
+          ->GetDragController()
+          .drag_pointer_id()
+          .value_or(WebMouseEvent::kMousePointerId));
+
   fake_mouse_move.SetFrameScale(1);
   local_root_->GetFrame()->GetEventHandler().DragSourceEndedAt(fake_mouse_move,
                                                                operation);
@@ -1670,14 +1676,21 @@ WebFrameWidgetImpl::GetAssociatedFrameWidgetHost() const {
   return frame_widget_host_.get();
 }
 
-void WebFrameWidgetImpl::RequestDecode(
-    const cc::DrawImage& image,
-    base::OnceCallback<void(bool)> callback) {
+void WebFrameWidgetImpl::RequestDecode(const cc::DrawImage& image,
+                                       base::OnceCallback<void(bool)> callback,
+                                       bool speculative) {
   if (auto* layer_tree_host = widget_base_->LayerTreeHost()) {
-    layer_tree_host->QueueImageDecode(image, std::move(callback));
+    layer_tree_host->QueueImageDecode(image, std::move(callback), speculative);
   } else {
     std::move(callback).Run(false);
   }
+}
+
+bool WebFrameWidgetImpl::SpeculativeDecodeRequestInFlight() const {
+  if (auto* layer_tree_host = widget_base_->LayerTreeHost()) {
+    return layer_tree_host->SpeculativeDecodeRequestInFlight();
+  }
+  return false;
 }
 
 void WebFrameWidgetImpl::Trace(Visitor* visitor) const {
@@ -1928,7 +1941,13 @@ bool WebFrameWidgetImpl::ShouldAckSyntheticInputImmediately() {
 }
 
 void WebFrameWidgetImpl::UpdateVisualProperties(
-    const VisualProperties& visual_properties) {
+    const VisualProperties& properties) {
+  VisualProperties visual_properties(properties);
+  if (browser_controls_top_height_override_) {
+    visual_properties.browser_controls_params.top_controls_height =
+        *browser_controls_top_height_override_;
+  }
+
   SetZoomInternal(visual_properties.zoom_level,
                   visual_properties.css_zoom_factor);
 
@@ -2500,6 +2519,7 @@ void WebFrameWidgetImpl::SetZoomInternal(double zoom_level,
         // The local root is responsible for propagating to its connected tree
         // of Frame descendants.
         local_frame->SetLayoutZoomFactor(layout_zoom_factor);
+        local_frame->SetCssZoomFactor(css_zoom_factor_);
       }
     }
   }
@@ -2666,8 +2686,6 @@ void WebFrameWidgetImpl::InitializeCompositingInternal(
 
   probe::DidInitializeFrameWidget(local_root_->GetFrame());
   local_root_->GetFrame()->NotifyFrameWidgetCreated();
-  SetShouldThrottleFrameRate(
-      features::kThrottleFrameRateOnInitialization.Get());
 
   // TODO(bokan): This seems wrong. Page may host multiple FrameWidgets so this
   // will call DidInitializeCompositing once per FrameWidget. It probably makes
@@ -5271,12 +5289,10 @@ void WebFrameWidgetImpl::PrepareForFinalLifecyclUpdateForTesting() {
         // In a web test, a rendering update may not have occurred before the
         // test finishes so ensure the transition moves out of rendering
         // blocked state.
-        if (RuntimeEnabledFeatures::ViewTransitionOnNavigationEnabled()) {
-          if (ViewTransition* transition =
-                  ViewTransitionUtils::GetTransition(*document);
-              transition && transition->IsForNavigationOnNewDocument()) {
-            transition->ActivateFromSnapshot();
-          }
+        if (ViewTransition* transition =
+                ViewTransitionUtils::GetTransition(*document);
+            transition && transition->IsForNavigationOnNewDocument()) {
+          transition->ActivateFromSnapshot();
         }
       });
 }
@@ -5455,6 +5471,11 @@ void WebFrameWidgetImpl::DispatchNonBlockingEventForTesting(
       ->DispatchEventOnInputThreadForTesting(
           std::move(event),
           mojom::blink::WidgetInputHandler::DispatchEventCallback());
+}
+
+void WebFrameWidgetImpl::SetBrowserControlsTopHeightOverride(
+    std::optional<float> height) {
+  browser_controls_top_height_override_ = height;
 }
 
 }  // namespace blink

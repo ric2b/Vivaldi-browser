@@ -49,6 +49,9 @@ extern NSString* const kTabGridSearchBarIdentifier;
 extern NSString* const kTabGridSearchTextFieldIdentifierPrefix;
 extern NSString* const kTabGridScrimIdentifier;
 
+// Accessibility identifier for the activity label on a tab cell.
+extern NSString* const kTabCellActivityLabelIdentifier;
+
 // All kxxxColor constants are RGB values stored in a Hex integer. These will be
 // converted into UIColors using the UIColorFromRGB() function, from
 // uikit_ui_util.h
@@ -71,8 +74,8 @@ extern const CGFloat kTabGridEmptyStateVerticalInset;
 extern const CGFloat kTabGridEmptyStateHorizontalInset;
 
 // The insets from the edges for the floating button.
-extern const CGFloat kTabGridFloatingButtonVerticalInset;
-extern const CGFloat kTabGridFloatingButtonHorizontalInset;
+extern const CGFloat kTabGridFloatingButtonInset;
+extern const CGFloat kTabGridFloatingButtonInsetIPad;
 
 // Intrinsic heights of the tab grid toolbars.
 extern const CGFloat kTabGridTopToolbarHeight;

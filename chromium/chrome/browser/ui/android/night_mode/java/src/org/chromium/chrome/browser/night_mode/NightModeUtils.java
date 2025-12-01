@@ -54,6 +54,8 @@ public class NightModeUtils {
             boolean inNightMode,
             Configuration newConfig,
             LinkedHashSet<Integer> themeResIds) {
+        // Vivaldi ref. AUTO-258. Vivaldi for Automotive should ignore system night mode changes.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return;
         final int uiNightMode =
                 inNightMode ? Configuration.UI_MODE_NIGHT_YES : Configuration.UI_MODE_NIGHT_NO;
 

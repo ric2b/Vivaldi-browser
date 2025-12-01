@@ -11,7 +11,8 @@
 
 @protocol AutocompleteSuggestion;
 @class OmniboxAutocompleteController;
-class OmniboxController;
+class OmniboxControllerIOS;
+@protocol OmniboxFocusDelegate;
 @protocol OmniboxTextControllerDelegate;
 @class OmniboxTextFieldIOS;
 class OmniboxViewIOS;
@@ -22,6 +23,9 @@ class OmniboxViewIOS;
 /// Delegate of the omnibox text controller.
 @property(nonatomic, weak) id<OmniboxTextControllerDelegate> delegate;
 
+/// Omnibox focus delegate.
+@property(nonatomic, weak) id<OmniboxFocusDelegate> focusDelegate;
+
 /// Controller of autocomplete.
 @property(nonatomic, weak)
     OmniboxAutocompleteController* omniboxAutocompleteController;
@@ -30,13 +34,30 @@ class OmniboxViewIOS;
 @property(nonatomic, weak) OmniboxTextFieldIOS* textField;
 
 /// Temporary initializer, used during the refactoring. crbug.com/390409559
-- (instancetype)initWithOmniboxController:(OmniboxController*)omniboxController
+- (instancetype)initWithOmniboxController:
+                    (OmniboxControllerIOS*)omniboxController
                            omniboxViewIOS:(OmniboxViewIOS*)omniboxViewIOS
+                            inLensOverlay:(BOOL)inLensOverlay
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
 /// Removes all C++ references.
 - (void)disconnect;
+
+/// Updates the omnibox text based on its current client state.
+- (void)updateAppearance;
+
+/// Returns whether the omnibox is first responder.
+- (BOOL)isOmniboxFirstResponder;
+
+/// Focuses the omnibox.
+- (void)focusOmnibox;
+
+/// Ends omnibox editing / defocus the omnibox.
+- (void)endEditing;
+
+/// Inserts text into the omnibox without triggering autocomplete.
+- (void)insertTextToOmnibox:(NSString*)text;
 
 #pragma mark - Autocomplete event
 
@@ -57,11 +78,17 @@ class OmniboxViewIOS;
 /// Clears the Omnibox text.
 - (void)clearText;
 
+/// Accepts the current input / default suggestion.
+- (void)acceptInput;
+
 /// Prepares the omnibox for scribble.
 - (void)prepareForScribble;
 
 /// Cleans up the omnibox after scribble.
 - (void)cleanupAfterScribble;
+
+/// Called when the text input mode changed.
+- (void)onTextInputModeChange;
 
 /// Called when the omnibox text field starts editing.
 - (void)onDidBeginEditing;
@@ -88,11 +115,46 @@ class OmniboxViewIOS;
 /// Called when the backspace button is pressed in the Omnibox text field.
 - (void)onDeleteBackward;
 
+// Vivaldi
+/// Keyword is inserted into omnibox. This can happen either when
+/// user types something and keyword is matched and activated
+/// or when user pasted something to the omnibox and a match
+/// is found for a keyword.
+- (void)insertKeywordToOmnibox:(NSString*)text fromPaste:(BOOL)fromPaste;
+// End Vivaldi
+
 #pragma mark - Omnibox popup event
 
-/// Previews `suggestion` in the Omnibox. Called when a suggestion is
-/// highlighted in the popup.
-- (void)previewSuggestion:(id<AutocompleteSuggestion>)suggestion;
+/// Sets the currently previewed autocomplete suggestion.
+- (void)previewSuggestion:(id<AutocompleteSuggestion>)suggestion
+            isFirstUpdate:(BOOL)isFirstUpdate;
+
+/// Notifies of scroll event.
+- (void)onScroll;
+
+/// Hides the keyboard.
+- (void)hideKeyboard;
+
+/// Refines omnibox content with `text`.
+- (void)refineWithText:(const std::u16string&)text;
+
+#pragma mark - Private event
+// Events that are private. Removed from header after refactoring
+// (crbug.com/390409559). Since these methods should be private, comments are in
+// the implementation file.
+
+- (void)setCaretPos:(NSUInteger)caretPos;
+
+- (void)startAutocompleteAfterEdit;
+
+- (void)setWindowText:(const std::u16string&)text
+             caretPos:(size_t)caretPos
+    startAutocomplete:(BOOL)startAutocomplete
+    notifyTextChanged:(BOOL)notifyTextChanged;
+
+- (void)updateAutocompleteIfTextChanged:(const std::u16string&)userText
+                         autocompletion:
+                             (const std::u16string&)inlineAutocomplete;
 
 @end
 

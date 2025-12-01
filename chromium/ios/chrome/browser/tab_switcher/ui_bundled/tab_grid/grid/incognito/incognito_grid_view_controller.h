@@ -8,8 +8,9 @@
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_consumer.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/base_grid_view_controller.h"
 
-@protocol IncognitoReauthCommands;
 @protocol GridCommands;
+@protocol IncognitoGridCommands;
+@protocol IncognitoReauthCommands;
 
 // Grid view controller for incognito grid. This class will handle every grid's
 // features that are only available in incognito grid.
@@ -20,6 +21,8 @@
 @property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
 // Handler for grid content commands.
 @property(nonatomic, weak) id<GridCommands> gridHandler;
+// Handler for Incognito grid commands.
+@property(nonatomic, weak) id<IncognitoGridCommands> incognitoGridHandler;
 // YES when the current contents are hidden from the user before a successful
 // biometric authentication.
 @property(nonatomic, assign) BOOL contentNeedsAuthentication;

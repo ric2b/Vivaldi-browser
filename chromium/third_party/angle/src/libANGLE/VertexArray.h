@@ -121,20 +121,6 @@ class VertexArrayState final : angle::NonCopyable
     AttributesMask mCachedInvalidMappedArrayBuffer;
 };
 
-class VertexArrayBufferContentsObservers final : angle::NonCopyable
-{
-  public:
-    VertexArrayBufferContentsObservers(VertexArray *vertexArray);
-    void enableForBuffer(Buffer *buffer, uint32_t bufferIndex);
-    void disableForBuffer(Buffer *buffer, uint32_t bufferIndex);
-    bool any() const { return mBufferObserversBitMask.any(); }
-
-  private:
-    VertexArray *mVertexArray;
-    // Bit is set when it is observing the buffer content change
-    gl::AttributesMask mBufferObserversBitMask;
-};
-
 class VertexArray final : public angle::ObserverInterface,
                           public LabeledObject,
                           public angle::Subject
@@ -245,7 +231,8 @@ class VertexArray final : public angle::ObserverInterface,
                                 VertexAttribType type,
                                 bool normalized,
                                 GLsizei stride,
-                                const void *pointer);
+                                const void *pointer,
+                                bool *isVertexAttribDirtyOut);
 
     void setVertexAttribIPointer(const Context *context,
                                  size_t attribIndex,
@@ -253,7 +240,8 @@ class VertexArray final : public angle::ObserverInterface,
                                  GLint size,
                                  VertexAttribType type,
                                  GLsizei stride,
-                                 const void *pointer);
+                                 const void *pointer,
+                                 bool *isVertexAttribDirtyOut);
 
     void setVertexAttribFormat(size_t attribIndex,
                                GLint size,
@@ -318,6 +306,8 @@ class VertexArray final : public angle::ObserverInterface,
     AttributesMask getAttributesMask() const { return mState.mEnabledAttributesMask; }
 
     void onBindingChanged(const Context *context, int incr);
+    void onRebind(const Context *context) { onBind(context); }
+
     bool hasTransformFeedbackBindingConflict(const Context *context) const;
 
     angle::Result getIndexRange(const Context *context,
@@ -331,6 +321,10 @@ class VertexArray final : public angle::ObserverInterface,
     {
         mBufferAccessValidationEnabled = enabled;
     }
+
+    void onBufferChanged(const Context *context,
+                         angle::SubjectMessage message,
+                         VertexArrayBufferBindingMask vertexArrayBufferBindingMask);
 
   private:
     ~VertexArray() override;
@@ -363,7 +357,8 @@ class VertexArray final : public angle::ObserverInterface,
                                     VertexAttribType type,
                                     bool normalized,
                                     GLsizei stride,
-                                    const void *pointer);
+                                    const void *pointer,
+                                    bool *isVertexAttribDirtyOut);
 
     // These two functions return true if the state was dirty.
     bool setVertexAttribFormatImpl(VertexAttribute *attrib,
@@ -392,13 +387,10 @@ class VertexArray final : public angle::ObserverInterface,
 
     rx::VertexArrayImpl *mVertexArray;
 
-    std::vector<angle::ObserverBinding> mArrayBufferObserverBindings;
-
     AttributesMask mCachedTransformFeedbackConflictedBindingsMask;
 
     mutable IndexRangeInlineCache mIndexRangeInlineCache;
     bool mBufferAccessValidationEnabled;
-    VertexArrayBufferContentsObservers mContentsObservers;
 };
 
 inline angle::Result VertexArray::getIndexRange(const Context *context,

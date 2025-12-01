@@ -115,6 +115,7 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
     public static final String PREF_RESET_SITE = "reset_site_button";
 
     public static final int REQUEST_CODE_NOTIFICATION_CHANNEL_SETTINGS = 1;
+    public static final int RWS_ROW_ID = View.generateViewId();
 
     private static boolean arrayContains(int[] array, int element) {
         for (int e : array) {
@@ -809,9 +810,13 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
         // generic Sites channel if no specific channel has been created for the given
         // origin, so it is safe to open the channel settings for whatever channel ID
         // it returns.
-        String channelId =
-                getSiteSettingsDelegate().getChannelIdForOrigin(mSite.getAddress().getOrigin());
-        launchOsChannelSettings(preference.getContext(), channelId);
+        getSiteSettingsDelegate()
+                .getChannelIdForOrigin(
+                        mSite.getAddress().getOrigin(),
+                        (channelId) -> {
+                            assumeNonNull(mSite);
+                            launchOsChannelSettings(preference.getContext(), channelId);
+                        });
     }
 
     @RequiresNonNull({"mSite"})
@@ -1116,6 +1121,7 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
                                     getActivity().getLayoutInflater(),
                                     /* showRwsMembershipLabels= */ false,
                                     /* isClickable= */ false);
+                    preference.setViewId(RWS_ROW_ID);
                     preference.setOnDeleteCallback(
                             isCurrentSite(entry)
                                     // If deleting data for the current site, pop back to refresh
@@ -1166,7 +1172,6 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
             row.setImageView(
                     R.drawable.ic_delete_white_24dp,
                     getContext()
-                            .getResources()
                             .getString(
                                     R.string.website_settings_file_editing_grant_revoke,
                                     grant.getDisplayName()),
@@ -1302,6 +1307,10 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
         @ContentSettingsType.EnumType
         int contentType = getContentSettingsTypeFromPreferenceKey(preference.getKey());
         int titleResourceId = ContentSettingsResources.getTitle(contentType);
+
+        if (contentType == ContentSettingsType.JAVASCRIPT_OPTIMIZER) {
+            titleResourceId = R.string.website_settings_single_website_javascript_optimizer_toggle;
+        }
 
         if (titleResourceId != 0) {
             preference.setTitle(titleResourceId);
@@ -1678,6 +1687,11 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
         return false;
     }
 
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
+    }
+
     /** Vivaldi **/
     private void setUpAutoplayPreference(Preference preference) {
         if (mSite == null) return;
@@ -1702,4 +1716,5 @@ public class SingleWebsiteSettings extends BaseSiteSettingsFragment
                 /* isEmbargoed */ false,
                 isOneTime(ContentSettingsType.AUTOPLAY));
     }
+    // End Vivaldi
 }

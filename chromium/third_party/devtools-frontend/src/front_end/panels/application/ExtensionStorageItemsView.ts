@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2008 Nokia Inc.  All rights reserved.
@@ -159,13 +160,13 @@ export class ExtensionStorageItemsView extends KeyValueStorageItemsView {
 
   async #refreshItems(): Promise<void> {
     const items = await this.#extensionStorage.getItems();
-    if (!items) {
+    if (!items || !this.toolbar) {
       return;
     }
-    const filteredItems = this.filter(
-        Object.entries(items).map(
-            ([key, value]) => ({key, value: typeof value === 'string' ? value : JSON.stringify(value)})),
-        item => `${item.key} ${item.value}`);
+    const filteredItems =
+        Object.entries(items)
+            .map(([key, value]) => ({key, value: typeof value === 'string' ? value : JSON.stringify(value)}))
+            .filter(item => this.toolbar?.filterRegex?.test(`${item.key} ${item.value}`) ?? true);
     this.showItems(filteredItems);
     this.extensionStorageItemsDispatcher.dispatchEventToListeners(
         ExtensionStorageItemsDispatcher.Events.ITEMS_REFRESHED);

@@ -54,13 +54,21 @@ namespace interop {
 
 namespace {
 
+// This is passed to constructors so that constructor can
+// check if it's being called legitimately from C++ or
+// illegitimately from JavaScript.
+static void* kInternalConstructionMarker = nullptr;
+
 {{template "Wrappers" $}}
 
 }  // namespace
 
 {{ range $ := .Declarations}}
 {{-        if IsDictionary $}}{{template "Dictionary" $}}
-{{-   else if IsInterface  $}}{{template "Interface"  $}}
+{{-   else if IsInterface  $}}
+{{-     if not (HasAnnotation $ "ManualImplementation")}}
+  {{template "Interface"  $}}
+{{-     end}}
 {{-   else if IsEnum       $}}{{template "Enum"       $}}
 {{-   end}}
 {{- end}}
@@ -92,11 +100,20 @@ Napi::Object Initialize(Napi::Env env) {
 {{- define "Wrappers"}}
 // Wrappers holds all the Napi class constructors, and Napi::ObjectWrap type
 // declarations, for each of the WebIDL interface and namespace types.
-class Wrappers {
-  Wrappers(Napi::Env env) {
+class Wrappers : public Constructors  {
+  Wrappers(Napi::Env env) : Constructors(env) {
 {{-   range $ := .Declarations}}
-{{-     if IsInterfaceOrNamespace $}}
+{{-     if and (IsInterfaceOrNamespace $) (not (HasAnnotation $ "ManualImplementation"))}}
+{{-       if and (IsInterface $) ($.Inherits)}}
+    {
+      // It's an interface and it inherits from another class, pass the class it inherits
+      // from to its Class factory
+      Napi::Value baseClassValue = {{$.Inherits}}_ctor.Value();
+      {{$.Name}}_ctor = Napi::Persistent(W{{$.Name}}::Class(env, baseClassValue));
+    }
+{{-       else}}
     {{$.Name}}_ctor = Napi::Persistent(W{{$.Name}}::Class(env));
+{{-       end}}
 {{-     end}}
 {{-   end}}
   }
@@ -105,7 +122,8 @@ class Wrappers {
 
 public:
 {{-   range $ := .Declarations}}
-{{-     if IsInterfaceOrNamespace $}}{{template "Wrapper" $}}
+{{-     if and (IsInterfaceOrNamespace $) (not (HasAnnotation $ "ManualImplementation"))}}
+  {{template "Wrapper" $}}
 {{-     end}}
 {{-   end}}
 
@@ -121,17 +139,11 @@ public:
     instance = nullptr;
   }
 
-  static Wrappers* For(Napi::Env env) {
+  static Constructors* For(Napi::Env env) {
     // Currently Napi only actually supports a single Env, so there's no point
     // maintaining a map of Env to Wrapper. Note: This might not always be true.
     return instance;
   }
-
-{{   range $ := .Declarations}}
-{{-     if IsInterfaceOrNamespace $}}
-  Napi::FunctionReference {{$.Name}}_ctor;
-{{-     end}}
-{{-   end}}
 };
 
 Wrappers* Wrappers::instance = nullptr;
@@ -158,8 +170,14 @@ Wrappers* Wrappers::instance = nullptr;
 {{-  if IsInterface $}}
     std::unique_ptr<{{$.Name}}> impl;
 {{-  end}}
+{{-  if and (IsInterface $) ($.Inherits) }}
+    // This class inherits from another, require the class factory to
+    // receive the base class so it can setup inheritance.
+    static Napi::Function Class(Napi::Env env, Napi::Value baseClassValue) {
+{{-  else}}
     static Napi::Function Class(Napi::Env env) {
-      return DefineClass(env, "{{$.Name}}", {
+{{-  end}}
+      auto func = DefineClass(env, "{{$.Name}}", {
 {{   if $s := SetlikeOf $}}
         InstanceMethod("has", &W{{$.Name}}::has),
         InstanceMethod("keys", &W{{$.Name}}::keys),
@@ -180,9 +198,23 @@ Wrappers* Wrappers::instance = nullptr;
         StaticValue("{{$c.Name}}", ToJS(env, {{$.Name}}::{{$c.Name}}), napi_default_jsproperty),
 {{-  end}}
       });
+
+{{-  if and (IsInterface $) ($.Inherits)}}
+      // It inherits from another class, setup the prototype chain.
+      ChainPrototype(baseClassValue, func);
+{{-  end}}
+      return func;
     }
 
-    W{{$.Name}}(const Napi::CallbackInfo& info) : ObjectWrap(info) {}
+    W{{$.Name}}(const Napi::CallbackInfo& info) : ObjectWrap(info) {
+{{-   if and (IsInterface $) (not (HasConstructor $))}}
+        // Check if the first argument is our internal Napi::External<void> marker
+        // to prevent JavaScript from constructing this non-constructable object.
+        if (info.Length() < 1 || !info[0].IsExternal() || info[0].As<Napi::External<void>>().Data() != &kInternalConstructionMarker) {
+           Napi::TypeError::New(info.Env(), "Failed to construct '{{$.Name}}': Illegal constructor").ThrowAsJavaScriptException();
+         }
+{{-   end}}
+    }
 
 {{-  if $s := SetlikeOf $}}
     Napi::Value has(const Napi::CallbackInfo& info) {
@@ -366,7 +398,10 @@ std::ostream& operator<<(std::ostream& o, const {{$.Name}}& dict) {
 
 Interface<{{$.Name}}> {{$.Name}}::Bind(Napi::Env env, std::unique_ptr<{{$.Name}}>&& impl) {
   auto* wrappers = Wrappers::For(env);
-  auto object = wrappers->{{$.Name}}_ctor.New({});
+  // Pass in kInternalConstructionMarker to allow this instance to actually be constructed.
+  auto object = wrappers->{{$.Name}}_ctor.New({
+    Napi::External<void>::New(env, &kInternalConstructionMarker)
+  });
   auto* wrapper = Wrappers::W{{$.Name}}::Unwrap(object);
   wrapper->impl = std::move(impl);
 

@@ -400,102 +400,55 @@ size_t xnn_init_qu8_conv_minmax_rndnu_neon_params(
 void xnn_init_qs8_qc8w_scale_fp32_params(
   size_t channels,
   size_t channels_tile,
-  size_t channels_subtile,
   size_t stride,
-  size_t substride,
-  size_t stride_offset,
   const float scale[XNN_MIN_ELEMENTS(1)],
   void* packed_w)
 {
-  const size_t tiled_channels = round_down_po2(channels, channels_tile);
-  size_t tile_start = 0;
-  for (; tile_start < tiled_channels; tile_start += channels_tile) {
-    const size_t tile_size = channels_tile;
+  for (size_t tile_start = 0; tile_start < channels; tile_start += channels_tile) {
+    const size_t tile_size = min(channels - tile_start, channels_tile);
     for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
       unaligned_indexed_store_f32(packed_w, tile_offset, scale[tile_start + tile_offset]);
     }
     packed_w = (void*) ((uintptr_t) packed_w + stride);
-  }
-
-  packed_w = (void*) ((uintptr_t) packed_w - stride_offset);
-
-  for (; tile_start < channels; tile_start += channels_subtile) {
-    const size_t tile_size = min(channels - tile_start, channels_subtile);
-    for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
-      unaligned_indexed_store_f32(packed_w, tile_offset, scale[tile_start + tile_offset]);
-    }
-    packed_w = (void*) ((uintptr_t) packed_w + substride);
   }
 }
 
 void xnn_init_qs8_to_qs8_qc8w_scale_fp32_params(
   size_t channels,
   size_t channels_tile,
-  size_t channels_subtile,
   size_t stride,
-  size_t substride,
-  size_t stride_offset,
   const float scale[XNN_MIN_ELEMENTS(1)],
   void* packed_w)
 {
-  const size_t tiled_channels = round_down_po2(channels, channels_tile);
-  size_t tile_start = 0;
-  for (; tile_start < tiled_channels; tile_start += channels_tile) {
-    const size_t tile_size = channels_tile;
+  for (size_t tile_start = 0; tile_start < channels; tile_start += channels_tile) {
+    const size_t tile_size = min(channels - tile_start, channels_tile);
     for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
       unaligned_indexed_store_f32(packed_w, tile_offset, *scale);
     }
     packed_w = (void*) ((uintptr_t) packed_w + stride);
-  }
-
-  packed_w = (void*) ((uintptr_t) packed_w - stride_offset);
-
-  for (; tile_start < channels; tile_start += channels_subtile) {
-    const size_t tile_size = min(channels - tile_start, channels_subtile);
-    for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
-      unaligned_indexed_store_f32(packed_w, tile_offset, *scale);
-    }
-    packed_w = (void*) ((uintptr_t) packed_w + substride);
   }
 }
 
 void xnn_init_blockwise_scale_fp32_params(
   size_t channels,
   size_t channels_tile,
-  size_t channels_subtile,
   size_t stride,
-  size_t substride,
   size_t num_blocks,
   size_t block_stride,
-  size_t stride_offset,
   const float scale[XNN_MIN_ELEMENTS(1)],
   void* packed_w)
 {
   void* packed_w_saved = packed_w;
   for (size_t block_start = 0; block_start < num_blocks; block_start++) {
     packed_w = (void*)((uintptr_t) packed_w_saved + block_start * block_stride);
-    const size_t tiled_channels = round_down_po2(channels, channels_tile);
-    size_t tile_start = 0;
-    for (; tile_start < tiled_channels; tile_start += channels_tile) {
-      const size_t tile_size = channels_tile;
+    for (size_t tile_start = 0; tile_start < channels; tile_start += channels_tile) {
+      const size_t tile_size = min(channels - tile_start, channels_tile);
       for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
         size_t scale_index = (tile_start + tile_offset) * num_blocks + block_start;
         // 1/16 because the weight are << 4 in the innermost loop to save a shift
         unaligned_indexed_store_f32(packed_w, tile_offset, scale[scale_index] / 16.0f);
       }
       packed_w = (void*) ((uintptr_t) packed_w + stride);
-    }
-
-    packed_w = (void*) ((uintptr_t) packed_w - stride_offset);
-
-    for (; tile_start < channels; tile_start += channels_subtile) {
-      const size_t tile_size = min(channels - tile_start, channels_subtile);
-      for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
-        size_t scale_index = (tile_start + tile_offset) * num_blocks + block_start;
-        // 1/16 because the weight are << 4 in the innermost loop to save a shift
-        unaligned_indexed_store_f32(packed_w, tile_offset, scale[scale_index] / 16.0f);
-      }
-      packed_w = (void*) ((uintptr_t) packed_w + substride);
     }
   }
 }
@@ -503,22 +456,17 @@ void xnn_init_blockwise_scale_fp32_params(
 void xnn_init_blockwise_scale_bf16_params(
   size_t channels,
   size_t channels_tile,
-  size_t channels_subtile,
   size_t stride,
-  size_t substride,
   size_t num_blocks,
   size_t block_stride,
-  size_t stride_offset,
   const xnn_bfloat16 scale[XNN_MIN_ELEMENTS(1)],
   void* packed_w)
 {
   void* packed_w_saved = packed_w;
   for (size_t block_start = 0; block_start < num_blocks; block_start++) {
     packed_w = (void*)((uintptr_t) packed_w_saved + block_start * block_stride);
-    const size_t tiled_channels = round_down_po2(channels, channels_tile);
-    size_t tile_start = 0;
-    for (; tile_start < tiled_channels; tile_start += channels_tile) {
-      const size_t tile_size = channels_tile;
+    for (size_t tile_start = 0; tile_start < channels; tile_start += channels_tile) {
+      const size_t tile_size = min(channels - tile_start, channels_tile);
       for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
         size_t scale_index = (tile_start + tile_offset) * num_blocks + block_start;
         // 1/16 because the weight are << 4 in the innermost loop to save a shift
@@ -526,19 +474,6 @@ void xnn_init_blockwise_scale_bf16_params(
         unaligned_indexed_store_u16(packed_w, tile_offset, scale_16);
       }
       packed_w = (void*) ((uintptr_t) packed_w + stride);
-    }
-
-    packed_w = (void*) ((uintptr_t) packed_w - stride_offset);
-
-    for (; tile_start < channels; tile_start += channels_subtile) {
-      const size_t tile_size = min(channels - tile_start, channels_subtile);
-      for (size_t tile_offset = 0; tile_offset < tile_size; tile_offset++) {
-        size_t scale_index = (tile_start + tile_offset) * num_blocks + block_start;
-        // 1/16 because the weight are << 4 in the innermost loop to save a shift
-        float scale_16 = math_cvt_bf16_fp32(xnn_bfloat16_to_float(scale[scale_index]) / 16.0f);
-        unaligned_indexed_store_u16(packed_w, tile_offset, scale_16);
-      }
-      packed_w = (void*) ((uintptr_t) packed_w + substride);
     }
   }
 }
@@ -999,6 +934,30 @@ size_t xnn_init_qs8_add_minmax_scalar_params(
   return sizeof(uparams->scalar);
 }
 
+size_t xnn_init_qs8_vprelu_scalar_params(
+    union xnn_qs8_vprelu_scalar_params uparams[XNN_MIN_ELEMENTS(1)],
+    const struct xnn_quantization_params* a_quantization,
+    const struct xnn_quantization_params* b_quantization,
+    const struct xnn_quantization_params* output_quantization) {
+  assert(a_quantization);
+  assert(b_quantization);
+  assert(output_quantization);
+  const float negative_product_scale = (a_quantization->scale * b_quantization->scale) / output_quantization->scale;
+  const float positive_product_scale = a_quantization->scale / output_quantization->scale;
+  const float rprelu_positive_product_scale = b_quantization->scale / output_quantization->scale;
+  assert(negative_product_scale >= 0x1.0p-16f);
+  assert(negative_product_scale < 0x1.0p+8f);
+  uparams->scalar.input_zero_point = a_quantization->zero_point;
+  uparams->scalar.slope_zero_point = b_quantization->zero_point;
+  uparams->scalar.negative_multiplier = negative_product_scale;
+  uparams->scalar.positive_multiplier = positive_product_scale;
+  uparams->scalar.rprelu_positive_multiplier = rprelu_positive_product_scale;
+  uparams->scalar.output_zero_point = output_quantization->zero_point;
+  uparams->scalar.output_min = INT8_MIN;
+  uparams->scalar.output_max = INT8_MAX;
+  return sizeof(uparams->scalar);
+}
+
 size_t xnn_init_qu8_mul_minmax_scalar_params(
     union xnn_qu8_mul_minmax_params uparams[XNN_MIN_ELEMENTS(1)],
     const struct xnn_quantization_params* a_quantization,
@@ -1064,6 +1023,31 @@ size_t xnn_init_qu8_mul_minmax_rndnu_neon_params(
   return sizeof(uparams->rndnu_neon);
 }
 #endif  // XNN_ARCH_ARM || XNN_ARCH_ARM64
+
+size_t xnn_init_qu8_vprelu_scalar_params(
+    union xnn_qs8_vprelu_scalar_params uparams[XNN_MIN_ELEMENTS(1)],
+    const struct xnn_quantization_params* a_quantization,
+    const struct xnn_quantization_params* b_quantization,
+    const struct xnn_quantization_params* output_quantization) {
+  assert(a_quantization);
+  assert(b_quantization);
+  assert(output_quantization);
+  const float negative_product_scale = (a_quantization->scale * b_quantization->scale) / output_quantization->scale;
+  const float positive_product_scale = a_quantization->scale / output_quantization->scale;
+  const float rprelu_positive_product_scale = b_quantization->scale / output_quantization->scale;
+  assert(negative_product_scale >= 0x1.0p-16f);
+  assert(negative_product_scale < 0x1.0p+8f);
+  uparams->scalar.input_zero_point = a_quantization->zero_point;
+  uparams->scalar.slope_zero_point = b_quantization->zero_point;
+  uparams->scalar.negative_multiplier = negative_product_scale;
+  uparams->scalar.positive_multiplier = positive_product_scale;
+  uparams->scalar.rprelu_positive_multiplier = rprelu_positive_product_scale;
+  uparams->scalar.output_zero_point = output_quantization->zero_point;
+  uparams->scalar.output_min = 0;
+  uparams->scalar.output_max = UINT8_MAX;
+  return sizeof(uparams->scalar);
+}
+
 
 size_t xnn_init_qs8_mul_minmax_scalar_params(
     union xnn_qs8_mul_minmax_params uparams[XNN_MIN_ELEMENTS(1)],

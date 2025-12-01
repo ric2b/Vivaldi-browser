@@ -9,6 +9,7 @@
 
 #include "base/types/id_type.h"
 #include "components/visited_url_ranking/public/url_visit.h"
+#include "components/visited_url_ranking/public/visited_url_ranking_service.h"
 
 namespace visited_url_ranking {
 
@@ -25,21 +26,30 @@ struct GroupSuggestion {
   GroupSuggestion(GroupSuggestion&&);
   GroupSuggestion& operator=(GroupSuggestion&&);
 
-  // The list of tabs / URLs to suggest, in order of relevance. For the initial
-  // prototype, the current tab is always the first entry in the list. This need
-  // not be the tab order in the group, if the group is created.
-  std::vector<int> tab_ids;
+  GroupSuggestion DeepCopy() const;
 
+  // LINT.IfChange
+  // These values are persisted to logs. Entries should not be
+  // renumbered and numeric values should never be reused.
   enum class SuggestionReason {
     kUnknown = 0,
     kRecentlyOpened = 1,
     kSwitchedBetween = 2,
     kSimilarSource = 3,
-    kNumReasons
+    kSameOrigin = 4,
+    kMaxValue = kSameOrigin
   };
+  // LINT.ThenChange(/tools/metrics/histograms/visited_url_ranking/enums.xml:GroupSuggesionReason)
+
+  // LINT.IfChange
+
+  // The list of tabs / URLs to suggest, in order of relevance. For the initial
+  // prototype, the current tab is always the first entry in the list. This need
+  // not be the tab order in the group, if the group is created.
+  std::vector<int> tab_ids;
 
   // The contents of the promo to be shown.
-  SuggestionReason suggestion_reason;
+  SuggestionReason suggestion_reason = SuggestionReason::kUnknown;
   std::u16string suggested_name;
   std::string promo_header;
   std::string promo_contents;
@@ -47,6 +57,8 @@ struct GroupSuggestion {
   // The ID of the suggestion used to record the user action, or cancel ongoing
   // requests.
   UrlGroupingSuggestionId suggestion_id;
+
+  // LINT.ThenChange(components/visited_url_ranking/public/url_grouping/group_suggestions.cc)
 };
 
 struct GroupSuggestions {
@@ -61,6 +73,21 @@ struct GroupSuggestions {
   // Currently the service only supports one suggestion at a time.
   std::vector<GroupSuggestion> suggestions;
 };
+
+// Returns a string representation of the reason.
+const char* GetSuggestionReasonString(GroupSuggestion::SuggestionReason reason);
+
+// LINT.IfChange
+// These values are persisted to logs. Entries should not be
+// renumbered and numeric values should never be reused.
+enum class TabGroupSuggestionThrottleReason {
+  kUnknown = 0,
+  kOverlappingTabs = 1,
+  kOverlappingHosts = 2,
+  kGroupNotVisible = 3,
+  kMaxValue = kGroupNotVisible
+};
+// LINT.ThenChange(/tools/metrics/histograms/visited_url_ranking/enums.xml:TabGroupSuggestionThrottleReason)
 
 }  // namespace visited_url_ranking
 

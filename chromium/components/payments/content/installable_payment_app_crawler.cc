@@ -9,7 +9,6 @@
 
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/payments/content/icon/icon_size.h"
@@ -22,6 +21,7 @@
 #include "content/public/browser/manifest_icon_downloader.h"
 #include "content/public/browser/payment_app_provider_util.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -200,7 +200,9 @@ void InstallablePaymentAppCrawler::OnPaymentMethodManifestParsed(
 
     if (permission_controller
             ->GetPermissionResultForOriginWithoutContext(
-                blink::PermissionType::PAYMENT_HANDLER,
+                content::PermissionDescriptorUtil::
+                    CreatePermissionDescriptorForPermissionType(
+                        blink::PermissionType::PAYMENT_HANDLER),
                 url::Origin::Create(web_app_manifest_url))
             .status != blink::mojom::PermissionStatus::GRANTED) {
       // Do not download the web app manifest if it is blocked.
@@ -507,7 +509,7 @@ void InstallablePaymentAppCrawler::OnPaymentWebAppIconDownloadAndDecoded(
   switch (crawling_mode_) {
     case CrawlingMode::kJustInTimeInstallation: {
       auto it = installable_apps_.find(method_manifest_url);
-      CHECK(it != installable_apps_.end(), base::NotFatalUntil::M130);
+      CHECK(it != installable_apps_.end());
       DCHECK(
           IsSameOriginWith(GURL(it->second->sw_scope), web_app_manifest_url));
       if (icon.drawsNothing() &&
@@ -529,8 +531,7 @@ void InstallablePaymentAppCrawler::OnPaymentWebAppIconDownloadAndDecoded(
     case CrawlingMode::kInstalledAppMetadataRefresh: {
       auto it =
           method_manifest_urls_for_metadata_refresh_.find(method_manifest_url);
-      CHECK(it != method_manifest_urls_for_metadata_refresh_.end(),
-            base::NotFatalUntil::M130);
+      CHECK(it != method_manifest_urls_for_metadata_refresh_.end());
       if (icon.drawsNothing()) {
         log_.Warn("Failed to refetch a valid icon from web app manifest \"" +
                   web_app_manifest_url.spec() +

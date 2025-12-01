@@ -4,9 +4,9 @@
 
 package org.chromium.chrome.browser.toolbar;
 
-import androidx.annotation.Nullable;
-
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.ImeAdapter;
 import org.chromium.content_public.browser.ImeEventObserver;
 import org.chromium.content_public.browser.WebContents;
@@ -14,11 +14,14 @@ import org.chromium.content_public.browser.WebContents;
 /**
  * Supplier of a boolean indicating whether an editable node is focused in the currently active
  * WebContents. Changes to the WebContents considered active must be reflected with calls to
- * onWebContentsChanged; this class does not attempt to track these changes.
+ * onWebContentsChanged; this class does not attempt to track these changes directly. This class
+ * also allows limited interaction with the current
  */
-class FormFieldFocusedSupplier extends ObservableSupplierImpl<Boolean> implements ImeEventObserver {
-    private WebContents mWebContents;
-    private ImeAdapter mImeAdapter;
+@NullMarked
+public class FormFieldFocusedSupplier extends ObservableSupplierImpl<Boolean>
+        implements ImeEventObserver {
+    private @Nullable WebContents mWebContents;
+    private @Nullable ImeAdapter mImeAdapter;
 
     public FormFieldFocusedSupplier() {
         super(false);
@@ -50,5 +53,17 @@ class FormFieldFocusedSupplier extends ObservableSupplierImpl<Boolean> implement
     @Override
     public void onNodeAttributeUpdated(boolean editable, boolean password) {
         super.set(editable);
+    }
+
+    public boolean getAsBoolean() {
+        return hasValue() ? get() : false;
+    }
+
+    /**
+     * See {@link ImeAdapter#resetAndHideKeyboard()}. Does nothing if there is no active ImeAdapter
+     * for the current web contents.
+     */
+    public void resetAndHideKeyboard() {
+        if (mImeAdapter != null) mImeAdapter.resetAndHideKeyboard();
     }
 }

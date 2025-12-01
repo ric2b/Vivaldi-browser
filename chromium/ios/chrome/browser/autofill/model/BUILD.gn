@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//components/optimization_guide/features.gni")
+
 source_set("model") {
   sources = [
     "address_normalizer_factory.h",
@@ -26,6 +28,12 @@ source_set("model") {
     "validation_rules_storage_factory.cc",
     "validation_rules_storage_factory.h",
   ]
+  if (build_with_tflite_lib) {
+    sources += [
+      "ios_autofill_field_classification_model_handler_factory.h",
+      "ios_autofill_field_classification_model_handler_factory.mm",
+    ]
+  }
   deps = [
     ":features",
     ":model_shared",
@@ -55,7 +63,7 @@ source_set("model") {
     "//ios/chrome/browser/signin/model",
     "//ios/chrome/browser/sync/model",
     "//ios/chrome/browser/webdata_services/model",
-    "//ios/chrome/common/ui/colors:colors",
+    "//ios/chrome/common/ui/colors",
     "//ios/web/common",
     "//ios/web/public",
     "//ios/web/public:web_state_observer",
@@ -66,6 +74,9 @@ source_set("model") {
     "//ui/base",
     "//url",
   ]
+  if (build_with_tflite_lib) {
+    deps += [ "//ios/chrome/browser/optimization_guide/model" ]
+  }
   public_deps = [ ":constants" ]
   frameworks = [ "QuartzCore.framework" ]
 }
@@ -123,7 +134,7 @@ source_set("model_internal") {
     "//ios/chrome/browser/infobars/model",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/profile",
-    "//ios/chrome/browser/shared/public/commands:commands",
+    "//ios/chrome/browser/shared/public/commands",
     "//third_party/leveldatabase",
     "//ui/gfx/geometry",
     "//url",
@@ -220,11 +231,12 @@ source_set("unit_tests") {
     "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/ssl/model",
-    "//ios/chrome/browser/sync/model:model",
+    "//ios/chrome/browser/sync/model",
     "//ios/chrome/browser/web/model:web_internal",
     "//ios/chrome/browser/webdata_services/model",
     "//ios/chrome/test:test_support",
     "//ios/testing:block_swizzler",
+    "//ios/testing:embedded_test_server_support",
     "//ios/web/public/js_messaging",
     "//ios/web/public/test",
     "//ios/web/public/test:javascript_test",

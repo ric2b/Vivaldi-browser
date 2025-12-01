@@ -6,11 +6,11 @@
 
 #import "base/apple/foundation_util.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
+#import "ios/chrome/browser/bubble/model/tab_based_iph_browser_agent.h"
 #import "ios/chrome/browser/collaboration/model/messaging/messaging_backend_service_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_updater.h"
-#import "ios/chrome/browser/iph_for_new_chrome_user/model/tab_based_iph_browser_agent.h"
 #import "ios/chrome/browser/menu/ui_bundled/browser_action_factory.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_util.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
@@ -127,7 +127,7 @@
 
 - (void)updateToolbarForSideSwipeSnapshot:(web::WebState*)webState {
   BOOL isNonIncognitoNTP =
-      !self.profile->IsOffTheRecord() && IsVisibleURLNewTabPage(webState);
+      !self.isOffTheRecord && IsVisibleURLNewTabPage(webState);
 
   [self.mediator updateConsumerForWebState:webState];
   [self.viewController updateForSideSwipeSnapshot:isNonIncognitoNTP];
@@ -181,6 +181,10 @@
   // Implemented in primary and secondary toolbars directly.
 }
 
+- (void)indicateLensOverlayVisible:(BOOL)lensOverlayVisible {
+  // NO-OP
+}
+
 #pragma mark - ToolbarCoordinatee
 
 - (id<PopupMenuUIUpdating>)popupMenuUIUpdater {
@@ -190,7 +194,7 @@
 #pragma mark - Protected
 
 - (ToolbarButtonFactory*)buttonFactoryWithType:(ToolbarType)type {
-  BOOL isIncognito = self.profile->IsOffTheRecord();
+  BOOL isIncognito = self.isOffTheRecord;
   ToolbarStyle style =
       isIncognito ? ToolbarStyle::kIncognito : ToolbarStyle::kNormal;
 

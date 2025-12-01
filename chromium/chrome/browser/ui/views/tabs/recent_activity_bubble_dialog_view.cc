@@ -9,25 +9,30 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
+#include "chrome/browser/collaboration/collaboration_service_factory.h"
 #include "chrome/browser/collaboration/messaging/messaging_backend_service_factory.h"
 #include "chrome/browser/data_sharing/data_sharing_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/image_fetcher/image_fetcher_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_metrics.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/views/data_sharing/collaboration_controller_delegate_desktop.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_bubble_controller.h"
 #include "chrome/browser/ui/views/data_sharing/data_sharing_utils.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/tabs/collaboration_messaging_page_action_icon_view.h"
+#include "chrome/browser/ui/views/page_action/collaboration_messaging_page_action_icon_view.h"
 #include "chrome/browser/ui/views/tabs/tab_group_editor_bubble_view.h"
 #include "chrome/browser/ui/views/tabs/tab_group_header.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/collaboration/public/collaboration_flow_entry_point.h"
+#include "components/collaboration/public/collaboration_service.h"
 #include "components/collaboration/public/messaging/activity_log.h"
 #include "components/collaboration/public/messaging/messaging_backend_service.h"
 #include "components/data_sharing/public/data_sharing_service.h"
@@ -38,9 +43,10 @@
 #include "components/saved_tab_groups/public/saved_tab_group.h"
 #include "components/signin/public/base/avatar_icon_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/compositor/layer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/favicon_size.h"
@@ -48,7 +54,11 @@
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/controls/menu/menu_types.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
@@ -69,6 +79,7 @@ namespace {
 
 // Unicode value for a bullet point.
 constexpr std::u16string kBulletPoint = u"\u2022";
+constexpr int bubble_content_margin_px = 20;
 
 // Returns the correct user that should be used for a given log item.
 // Sometimes the string should describe the user that triggered an event
@@ -100,21 +111,6 @@ std::optional<data_sharing::GroupMember> GetRelevantUserForActivity(
       NOTREACHED();
   }
   return user;
-}
-
-// Gets the string for the metadata line to describe an event.
-std::u16string GetMetadataText(const ActivityLogItem& item) {
-  if (item.description_text == u"") {
-    // If there is no description, the line simply contains elapsed time
-    // since the action.
-    return item.time_delta_text;
-  } else {
-    // The metadata line contains the item's description, a bullet point,
-    // and the elapsed time since the action, separated by spaces.
-    std::u16string_view separator = u" ";
-    return base::JoinString(
-        {item.description_text, kBulletPoint, item.time_delta_text}, separator);
-  }
 }
 
 // TODO(crbug.com/392150086): Refactor this into utilities.
@@ -174,14 +170,15 @@ RecentActivityBubbleDialogView::RecentActivityBubbleDialogView(
       group_activity_log_(group_activity_log),
       profile_(profile) {
   SetProperty(views::kElementIdentifierKey, kRecentActivityBubbleDialogId);
-  SetTitle(l10n_util::GetStringUTF16(IDS_DATA_SHARING_RECENT_ACTIVITY_TITLE));
-  SetShowCloseButton(true);
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kVertical)
       .SetCollapseMargins(true);
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
+  set_margins(gfx::Insets(bubble_content_margin_px));
+
+  CreateTitleView();
 
   if (tab_activity_log.empty() && group_activity_log.empty()) {
     CreateEmptyState();
@@ -192,7 +189,8 @@ RecentActivityBubbleDialogView::RecentActivityBubbleDialogView(
 
   // Add bottom margin to tab container if the group container will appear
   // below.
-  if (group_activity_container_->GetVisible()) {
+  if (group_activity_container_->GetVisible() &&
+      tab_activity_container_->GetVisible()) {
     const int container_vertical_margin =
         ChromeLayoutProvider::Get()->GetDistanceMetric(
             DISTANCE_RECENT_ACTIVITY_CONTAINER_VERTICAL_MARGIN);
@@ -203,6 +201,102 @@ RecentActivityBubbleDialogView::RecentActivityBubbleDialogView(
 }
 
 RecentActivityBubbleDialogView::~RecentActivityBubbleDialogView() = default;
+
+// TODO(crbug.com/410609387): Update the bubble dialog view to replace the
+// options menu button with a secondary button, and revert the custom title view
+// back to using the default title and close button provided by the bubble
+// dialog.
+void RecentActivityBubbleDialogView::CreateTitleView() {
+  // Create title view.
+  auto title_view = std::make_unique<views::View>();
+  title_view->SetBorder(
+      views::CreateEmptyBorder(gfx::Insets::TLBR(12, 0, 8, 0)));
+  auto* box_layout =
+      title_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, gfx::Insets()));
+  title_view->SetID(TITLE_VIEW_ID);
+
+  // Add title.
+  auto* title = title_view->AddChildView(std::make_unique<views::Label>(
+      l10n_util::GetStringUTF16(IDS_DATA_SHARING_RECENT_ACTIVITY_TITLE),
+      views::style::CONTEXT_DIALOG_TITLE, views::style::STYLE_PRIMARY));
+  title->SetID(TITLE_ID);
+
+  // Add spacer that fills the space between title and the menu button.
+  auto* spacer = title_view->AddChildView(std::make_unique<views::View>());
+  box_layout->SetFlexForView(spacer, 1);
+
+  // Add buttons container for menu button and close button.
+  const ChromeLayoutProvider* layout_provider = ChromeLayoutProvider::Get();
+  const int button_horizontal_spacing = layout_provider->GetDistanceMetric(
+      views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
+  auto* buttons_container =
+      title_view->AddChildView(std::make_unique<views::View>());
+  buttons_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+      button_horizontal_spacing));
+
+  buttons_container->AddChildView(CreateOptionsMenuButton());
+  buttons_container->AddChildView(CreateCloseButton());
+
+  // Add title view to bubble dialog view.
+  AddChildView(std::move(title_view));
+}
+
+std::unique_ptr<views::Button>
+RecentActivityBubbleDialogView::CreateCloseButton() {
+  auto close_button =
+      views::BubbleFrameView::CreateCloseButton(base::BindRepeating(
+          [](views::View* view) {
+            view->GetWidget()->CloseWithReason(
+                views::Widget::ClosedReason::kCloseButtonClicked);
+          },
+          base::Unretained(this)));
+  close_button->SetVisible(true);
+  return close_button;
+}
+
+std::unique_ptr<views::Button>
+RecentActivityBubbleDialogView::CreateOptionsMenuButton() {
+  auto menu_button = views::CreateVectorImageButtonWithNativeTheme(
+      views::Button::PressedCallback(), kBrowserToolsIcon);
+  menu_button->SetCallback(base::BindRepeating(
+      &RecentActivityBubbleDialogView::ShowOptionsMenu, base::Unretained(this),
+      base::Unretained(menu_button.get())));
+
+  InstallCircleHighlightPathGenerator(menu_button.get());
+
+  menu_button->GetViewAccessibility().SetName(
+      l10n_util::GetStringUTF16(IDS_DOWNLOAD_MORE_ACTIONS));
+  menu_button->SetVisible(true);
+  return menu_button;
+}
+
+void RecentActivityBubbleDialogView::ShowOptionsMenu(views::Button* source) {
+  options_menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
+
+  options_menu_model_->AddItemWithStringId(
+      OptionsMenuItem::SEE_ALL_ACTIVITY,
+      IDS_DATA_SHARING_MANAGE_ACTIVITY_LOG_OPTION);
+
+  options_menu_runner_ = std::make_unique<views::MenuRunner>(
+      options_menu_model_.get(), views::MenuRunner::COMBOBOX);
+  gfx::Rect screen_bounds = source->GetAnchorBoundsInScreen();
+  options_menu_runner_->RunMenuAt(source->GetWidget(), nullptr, screen_bounds,
+                                  views::MenuAnchorPosition::kTopRight,
+                                  ui::mojom::MenuSourceType::kMouse);
+}
+
+void RecentActivityBubbleDialogView::ExecuteCommand(int command_id,
+                                                    int event_flags) {
+  switch (command_id) {
+    case OptionsMenuItem::SEE_ALL_ACTIVITY:
+      chrome::ShowSharedTabGroupActivity(profile_);
+      break;
+    default:
+      NOTREACHED();
+  }
+}
 
 void RecentActivityBubbleDialogView::CreateEmptyState() {
   // No activity to show. Fill in the empty state label and return early.
@@ -338,6 +432,16 @@ void RecentActivityBubbleDialogView::Close() {
   LocationBarBubbleDelegateView::CloseBubble();
 }
 
+std::u16string RecentActivityBubbleDialogView::GetTitleForTesting() {
+  views::View* title_view =
+      views::AsViewClass<views::View>(GetViewByID(TITLE_VIEW_ID));
+  views::Label* title =
+      title_view
+          ? views::AsViewClass<views::Label>(title_view->GetViewByID(TITLE_ID))
+          : nullptr;
+  return title ? std::u16string(title->GetText()) : std::u16string();
+}
+
 RecentActivityRowView* RecentActivityBubbleDialogView::GetRowForTesting(int n) {
   int tab_activity_size = tab_activity_container()->children().size();
   int group_activity_size = group_activity_container()->children().size();
@@ -371,13 +475,6 @@ RecentActivityRowView::RecentActivityRowView(
   // Remove HoverButton's empty border.
   SetBorder({});
 
-  GetViewAccessibility().SetRole(ax::mojom::Role::kRow);
-  GetViewAccessibility().SetName(
-      l10n_util::GetStringUTF16(IDS_DATA_SHARING_RECENT_ACTIVITY_TITLE));
-  SetFocusBehavior(FocusBehavior::ALWAYS);
-  SetFocusBehavior(views::PlatformStyle::kDefaultFocusBehavior);
-  SetEnabled(GetActionEnabledForItem(item_));
-
   image_view_ = AddChildView(
       std::make_unique<RecentActivityRowImageView>(item_, profile_));
   // Let hover button process events.
@@ -389,20 +486,66 @@ RecentActivityRowView::RecentActivityRowView(
   // Let hover button process events.
   label_container->SetCanProcessEventsWithinSubtree(false);
 
-  activity_text_ = item.title_text;
   auto* activity_label =
       label_container->AddChildView(std::make_unique<views::Label>());
-  activity_label->SetText(activity_text_);
+  activity_label->SetText(item.title_text);
   activity_label->SetTextStyle(views::style::TextStyle::STYLE_BODY_4_MEDIUM);
   activity_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
 
-  metadata_text_ = GetMetadataText(item_);
-  auto* metadata_label =
-      label_container->AddChildView(std::make_unique<views::Label>());
-  metadata_label->SetText(metadata_text_);
-  metadata_label->SetTextStyle(views::style::TextStyle::STYLE_BODY_5);
-  metadata_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
-  metadata_label->SetEnabledColor(ui::kColorSysOnSurfaceSubtle);
+  auto* metadata_container =
+      label_container->AddChildView(std::make_unique<views::View>());
+  auto* metadata_layout = metadata_container->SetLayoutManager(
+      std::make_unique<views::FlexLayout>());
+  metadata_layout->SetOrientation(views::LayoutOrientation::kHorizontal);
+
+  auto* description_label = metadata_container->AddChildView(
+      std::make_unique<views::Label>(item.description_text));
+  description_label->SetTextStyle(views::style::TextStyle::STYLE_BODY_5);
+  description_label->SetHorizontalAlignment(
+      gfx::HorizontalAlignment::ALIGN_LEFT);
+  description_label->SetEnabledColor(ui::kColorSysOnSurfaceSubtle);
+
+  // The email will be elided by using up all available space in the layout.
+  description_label->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                               views::MaximumFlexSizeRule::kPreferred));
+
+  // The time text is not elided and takes up as much space as possible. It only
+  // has a delimiter if there is a description.
+  std::u16string time_text;
+  if (item.description_text.size() > 0) {
+    time_text += u" " + kBulletPoint + u" ";
+  }
+  time_text += item_.time_delta_text;
+
+  auto* time_label = metadata_container->AddChildView(
+      std::make_unique<views::Label>(time_text));
+  time_label->SetTextStyle(views::style::TextStyle::STYLE_BODY_5);
+  time_label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_RIGHT);
+  time_label->SetEnabledColor(ui::kColorSysOnSurfaceSubtle);
+
+  // The time value will be completely shown on the right.
+  time_label->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kPreferred,
+                               views::MaximumFlexSizeRule::kPreferred));
+
+  // Add extra padding matching the ImageView on the left.
+  gfx::Insets margins;
+  margins.set_right(ChromeLayoutProvider::Get()
+                        ->GetInsetsMetric(INSETS_RECENT_ACTIVITY_IMAGE_MARGIN)
+                        .left());
+  time_label->SetProperty(views::kMarginsKey, margins);
+
+  GetViewAccessibility().SetRole(ax::mojom::Role::kRow);
+  GetViewAccessibility().SetName(item.title_text);
+  GetViewAccessibility().SetDescription(
+      (item_.description_text.size() > 0 ? item_.description_text : u"") +
+      time_text);
+  SetFocusBehavior(FocusBehavior::ALWAYS);
+  SetFocusBehavior(views::PlatformStyle::kDefaultFocusBehavior);
+  SetEnabled(GetActionEnabledForItem(item_));
 
   // Set a preferred height so the HoverButton will not cut off the row's
   // contents. Set height based on image size and vertical row padding.
@@ -501,8 +644,15 @@ void RecentActivityRowView::ManageSharing() {
           group_id.value())) {
     data_sharing::RequestInfo request_info(group_id.value(),
                                            data_sharing::FlowType::kManage);
-    DataSharingBubbleController::GetOrCreateForBrowser(browser)->Show(
-        request_info);
+    collaboration::CollaborationService* service =
+        collaboration::CollaborationServiceFactory::GetForProfile(
+            browser->profile());
+    std::unique_ptr<CollaborationControllerDelegateDesktop> delegate =
+        std::make_unique<CollaborationControllerDelegateDesktop>(browser);
+    service->StartShareOrManageFlow(
+        std::move(delegate), group_id.value(),
+        collaboration::CollaborationServiceShareOrManageEntryPoint::
+            kDesktopRecentActivity);
   }
 }
 

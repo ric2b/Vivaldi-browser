@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "api/array_view.h"
-#include "api/environment/environment.h"
+#include "api/field_trials_view.h"
 #include "api/frame_transformer_interface.h"
 #include "api/scoped_refptr.h"
 #include "api/task_queue/task_queue_factory.h"
@@ -88,7 +88,7 @@ class RTPSenderVideo : public RTPVideoFrameSenderInterface {
     bool enable_retransmit_all_layers = false;
     std::optional<int> red_payload_type;
     const FieldTrialsView* field_trials = nullptr;
-    rtc::scoped_refptr<FrameTransformerInterface> frame_transformer;
+    scoped_refptr<FrameTransformerInterface> frame_transformer;
     TaskQueueFactory* task_queue_factory = nullptr;
   };
 
@@ -105,7 +105,7 @@ class RTPSenderVideo : public RTPVideoFrameSenderInterface {
                  std::optional<VideoCodecType> codec_type,
                  uint32_t rtp_timestamp,
                  Timestamp capture_time,
-                 rtc::ArrayView<const uint8_t> payload,
+                 ArrayView<const uint8_t> payload,
                  size_t encoder_output_size,
                  RTPVideoHeader video_header,
                  TimeDelta expected_retransmission_time,
@@ -254,7 +254,7 @@ class RTPSenderVideo : public RTPVideoFrameSenderInterface {
   // targets bitmask should be attached to the dependency descriptor.
   ActiveDecodeTargetsHelper active_decode_targets_tracker_;
 
-  const rtc::scoped_refptr<RTPSenderVideoFrameTransformerDelegate>
+  const scoped_refptr<RTPSenderVideoFrameTransformerDelegate>
       frame_transformer_delegate_;
 };
 

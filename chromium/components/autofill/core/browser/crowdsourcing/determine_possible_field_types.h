@@ -7,39 +7,57 @@
 
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/containers/flat_set.h"
+#include "base/containers/span.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/common/unique_ids.h"
 
 namespace autofill {
 
-class AutofillClient;
 class AutofillProfile;
 class CreditCard;
+class EntityInstance;
 class FormStructure;
+class LoyaltyCard;
 
 // For each submitted field in the `form_structure`, determines whether
 // `ADDRESS_HOME_STATE` is a possible matching type.
-// This function is intended to run before
-// DeterminePossibleFieldTypesForUpload() on the browser UI thread.
-void PreProcessStateMatchingTypes(const AutofillClient& client,
-                                  const std::vector<AutofillProfile>& profiles,
-                                  FormStructure& form_structure);
+// This function is intended to run on the UI thread and its result can be
+// passed to DeterminePossibleFieldTypesForUpload().
+[[nodiscard]] std::set<FieldGlobalId> PreProcessStateMatchingTypes(
+    base::span<const AutofillProfile*> profiles,
+    const FormStructure& form_structure,
+    const std::string& app_locale);
 
-// Uses the existing personal data in |profiles| and |credit_cards| to
-// determine possible field types for the |form|.  This is
-// potentially expensive -- on the order of 50ms even for a small set of
-// |stored_data|. Hence, it should not run on the UI thread -- to avoid
+// Determines the `FieldType`s for which profiles etc. define non-empty
+// values. The result is stored in FormStructure::possible_types().
+//
+// This is potentially expensive -- on the order of 50ms even for a small set of
+// `stored_data`. Hence, it should not run on the UI thread -- to avoid
 // locking up the UI -- nor on the IO thread -- to avoid blocking IPC calls.
 void DeterminePossibleFieldTypesForUpload(
-    const std::vector<AutofillProfile>& profiles,
-    const std::vector<CreditCard>& credit_cards,
-    const std::u16string& last_unlocked_credit_card_cvc,
+    base::span<const AutofillProfile> profiles,
+    base::span<const CreditCard> credit_cards,
+    base::span<const EntityInstance> entities,
+    base::span<const LoyaltyCard> loyalty_cards,
+    const std::set<FieldGlobalId>& fields_that_match_state,
+    std::u16string_view last_unlocked_credit_card_cvc,
     const std::string& app_locale,
     FormStructure& form);
+
+// Returns the set of `FieldType`s for which the given profiles etc. contain
+// non-empty values.
+FieldTypeSet DetermineAvailableFieldTypes(
+    base::span<const AutofillProfile> profiles,
+    base::span<const CreditCard> credit_cards,
+    base::span<const EntityInstance> entities,
+    base::span<const LoyaltyCard> loyalty_cards,
+    std::u16string_view last_unlocked_credit_card_cvc,
+    const std::string& app_locale);
 
 // Matches the current field values against regular expressions.
 // There are two types of matches:

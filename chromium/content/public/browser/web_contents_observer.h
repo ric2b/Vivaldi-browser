@@ -245,7 +245,7 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
 
   // This method is invoked when a write-access Captured Surface Control API is
   // successfully invoked by a tab-capturing Web application. These include:
-  // * CaptureController.sendWheel()
+  // * CaptureController.forwardWheel()
   // * CaptureController.increaseZoomLevel()
   // * CaptureController.decreaseZoomLevel()
   // * CaptureController.resetZoomLevel()
@@ -253,10 +253,6 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // Observing this occurrence allows us to update the UX accordingly; for
   // example, show the user an indicator that the capturing tab is being
   // controlled by the capturing tab.
-  //
-  // TODO(crbug.com/40276312): Update the sendWheel() portion of the
-  // comment when moving from sendWheel() to forwardWheel() or
-  // to forwardGestures(), whichever the case ends up being.
   virtual void OnCapturedSurfaceControl() {}
 
   // This method is invoked when the `blink::WebView` of the current
@@ -525,6 +521,9 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
   // Called when a network request issued by the navigation reads or sets a
   // cookie. If a notification is received after the navigation has committed,
   // it will be attributed to the RenderFrameHost created by the navigation.
+  // This method not only includes accesses from the navigation's
+  // request/response, but also accesses from other requests/responses triggered
+  // by the navigation e.g. early hints requests.
   virtual void OnCookiesAccessed(NavigationHandle* navigation_handle,
                                  const CookieAccessDetails& details) {}
 
@@ -903,6 +902,12 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
       const MediaPlayerInfo& video_type,
       const MediaPlayerId& id,
       WebContentsObserver::MediaStoppedReason reason) {}
+
+  // Invoked when the set of tracks in the media has changed. Possible reasons
+  // include adding/removing a track via MediaStream.addTrack()/removeTrack().
+  virtual void MediaMetadataChanged(const MediaPlayerInfo& video_type,
+                                    const MediaPlayerId& id) {}
+
   virtual void MediaResized(const gfx::Size& size, const MediaPlayerId& id) {}
   // Invoked when media enters or exits fullscreen. We must use a heuristic
   // to determine this as it is not trivial for media with custom controls.
@@ -1024,12 +1029,6 @@ class CONTENT_EXPORT WebContentsObserver : public base::CheckedObserver {
       RenderFrameHost* initiator_rfh) {}
 
   WebContents* web_contents() const;
-
-  // NOTE(andre@vivaldi.com) : This is invoked only for embedded contents where
-  // the containing element node is removed.
-  virtual void WebContentsDidDetach() {}
-  // Element node is attached.
-  virtual void WebContentsDidAttach() {}
 
   // (ondrej@vivaldi): VB-112989
   virtual void OnJavascriptDialogClosed(bool success) {}

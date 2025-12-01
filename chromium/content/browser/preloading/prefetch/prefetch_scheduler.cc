@@ -194,6 +194,20 @@ PrefetchPriority PrefetchScheduler::CalculatePriority(
   return CalculatePriorityImpl(prefetch_container);
 }
 
+void PrefetchScheduler::PushAndProgress(PrefetchContainer& prefetch_container) {
+  // Precondition: Pushing already registered one is not allowed.
+  for (auto& it : active_set_) {
+    if (it.get() == &prefetch_container) {
+      NOTREACHED();
+    }
+  }
+
+  PrefetchPriority priority = CalculatePriority(prefetch_container);
+  queue_.Push(prefetch_container.GetWeakPtr(), priority);
+
+  Progress();
+}
+
 void PrefetchScheduler::PushAndProgressAsync(
     PrefetchContainer& prefetch_container) {
   // Precondition: Pushing already registered one is not allowed.
@@ -210,7 +224,8 @@ void PrefetchScheduler::PushAndProgressAsync(
 }
 
 void PrefetchScheduler::RemoveAndProgressAsync(
-    PrefetchContainer& prefetch_container) {
+    PrefetchContainer& prefetch_container,
+    bool should_progress) {
   [&]() {
     for (auto it = active_set_.cbegin(); it != active_set_.cend(); ++it) {
       if (it->get() == &prefetch_container) {
@@ -222,6 +237,10 @@ void PrefetchScheduler::RemoveAndProgressAsync(
     queue_.Remove(prefetch_container.GetWeakPtr());
   }();
 
+  if (!should_progress) {
+    return;
+  }
+
   // This method can be called in `PrefetechService::EvictPrefetch()` called in
   // `ProcessOne()`. Don't call `ProcessAsync()` to prevent infinite loop in
   // that case.
@@ -231,7 +250,12 @@ void PrefetchScheduler::RemoveAndProgressAsync(
 }
 
 void PrefetchScheduler::NotifyAttributeMightChangedAndProgressAsync(
-    PrefetchContainer& prefetch_container) {
+    PrefetchContainer& prefetch_container,
+    bool should_progress) {
+  if (!should_progress) {
+    return;
+  }
+
   const bool is_changed = queue_.MaybeUpdatePriority(
       prefetch_container, CalculatePriority(prefetch_container));
   if (is_changed) {

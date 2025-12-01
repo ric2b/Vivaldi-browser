@@ -27,13 +27,22 @@ ${this.showDrawer_ ? html`
       align="$i18n{textdirection}" @close="${this.onDrawerClose_}">
     <div slot="body">
       <extensions-sidebar @close-drawer="${this.onCloseDrawer_}"
-          enable-enhanced-site-controls="${this.enableEnhancedSiteControls}">
+          ?in-dev-mode="${this.inDevMode}"
+          ?enable-enhanced-site-controls="${this.enableEnhancedSiteControls}">
       </extensions-sidebar>
     </div>
+    <if expr="is_android">
+      <picture slot="header-icon">
+        <source media="(prefers-color-scheme: dark)"
+            srcset="//resources/images/chrome_logo_dark.svg">
+        <img srcset="images/product_logo.png" role="presentation">
+      </picture>
+    </if>
   </cr-drawer>` : ''}
 <div id="container">
   <div id="left" ?hidden="${this.narrow_}">
     <extensions-sidebar @close-drawer="${this.onCloseDrawer_}"
+        ?in-dev-mode="${this.inDevMode}"
         ?enable-enhanced-site-controls="${this.enableEnhancedSiteControls}">
     </extensions-sidebar>
   </div>

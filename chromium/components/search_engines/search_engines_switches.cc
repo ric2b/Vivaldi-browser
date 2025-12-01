@@ -30,11 +30,17 @@ COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 const char kForceSearchEngineChoiceScreen[] =
     "force-search-engine-choice-screen";
 
-// Enables the new guest mode experience for the search engine choice dialog.
+// Invalidates old search engine choices when Chrome detects that it has been
+// transferred to a new device.
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-BASE_FEATURE(kSearchEngineChoiceGuestExperience,
-             "SearchEngineChoiceGuestExperience",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE(kInvalidateSearchEngineChoiceOnDeviceRestoreDetection,
+             "InvalidateSearchEngineChoiceOnDeviceRestoreDetection",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
+const base::FeatureParam<bool> kInvalidateChoiceOnRestoreIsRetroactive{
+    /*feature=*/&kInvalidateSearchEngineChoiceOnDeviceRestoreDetection,
+    /*name=*/"is_retroactive", /*default_value=*/false};
 
 // Enables the search engine choice screen. Feature parameters below can
 // affect the actual triggering logic.
@@ -44,7 +50,7 @@ BASE_FEATURE(kSearchEngineChoiceGuestExperience,
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
 BASE_FEATURE(kSearchEngineChoiceTrigger,
              "SearchEngineChoiceTrigger",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
 #if BUILDFLAG(IS_ANDROID)
 COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
@@ -67,11 +73,6 @@ extern const base::FeatureParam<int> kSearchEngineChoiceMaximumSkipCount{
     &kSearchEngineChoiceTrigger,
     /*name=*/"maximum_skip_count",
     /*default_value=*/10};
-
-COMPONENT_EXPORT(SEARCH_ENGINES_SWITCHES)
-BASE_FEATURE(kIOSPromptSearchEngineChoiceAfterDeviceRestore,
-             "IOSPromptSearchEngineChoiceAfterDeviceRestore",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

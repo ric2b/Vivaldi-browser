@@ -20,8 +20,11 @@ import androidx.annotation.Nullable;
 import androidx.annotation.Px;
 import androidx.annotation.StringRes;
 
+import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.keyboard_accessory.AccessoryAction;
+import org.chromium.chrome.browser.keyboard_accessory.KeyboardAccessoryVisualStateProvider;
 import org.chromium.chrome.browser.keyboard_accessory.ManualFillingMetricsRecorder;
 import org.chromium.chrome.browser.keyboard_accessory.R;
 import org.chromium.chrome.browser.keyboard_accessory.bar_component.KeyboardAccessoryCoordinator.BarVisibilityDelegate;
@@ -67,18 +70,23 @@ class KeyboardAccessoryMediator
     private final BarVisibilityDelegate mBarVisibilityDelegate;
     private final AccessorySheetCoordinator.SheetVisibilityDelegate mSheetVisibilityDelegate;
     private final TabSwitchingDelegate mTabSwitcher;
+    private final Supplier<Integer> mBackgroundColorSupplier;
     private Optional<Boolean> mHasFilteredTouchEvent = Optional.empty();
+    private final ObserverList<KeyboardAccessoryVisualStateProvider.Observer> mVisualObservers =
+            new ObserverList<>();
 
     KeyboardAccessoryMediator(
             PropertyModel model,
             BarVisibilityDelegate barVisibilityDelegate,
             AccessorySheetCoordinator.SheetVisibilityDelegate sheetVisibilityDelegate,
             TabSwitchingDelegate tabSwitcher,
-            KeyboardAccessoryButtonGroupCoordinator.SheetOpenerCallbacks sheetOpenerCallbacks) {
+            KeyboardAccessoryButtonGroupCoordinator.SheetOpenerCallbacks sheetOpenerCallbacks,
+            Supplier<Integer> backgroundColorSupplier) {
         mModel = model;
         mBarVisibilityDelegate = barVisibilityDelegate;
         mSheetVisibilityDelegate = sheetVisibilityDelegate;
         mTabSwitcher = tabSwitcher;
+        mBackgroundColorSupplier = backgroundColorSupplier;
 
         // Add mediator as observer so it can use model changes as signal for accessory visibility.
         mModel.set(OBFUSCATED_CHILD_AT_CALLBACK, this::onSuggestionObfuscatedAt);
@@ -166,6 +174,7 @@ class KeyboardAccessoryMediator
             case SuggestionType.MANAGE_CREDIT_CARD:
             case SuggestionType.MANAGE_IBAN:
             case SuggestionType.MANAGE_PLUS_ADDRESS:
+            case SuggestionType.MANAGE_LOYALTY_CARD:
                 return false;
             case SuggestionType.AUTOCOMPLETE_ENTRY:
             case SuggestionType.PASSWORD_ENTRY:
@@ -288,6 +297,10 @@ class KeyboardAccessoryMediator
             if (!mModel.get(VISIBLE)) {
                 // TODO: crbug.com/398065928 - The generation controller should control the timing..
                 onItemAvailable(AccessoryAction.GENERATE_PASSWORD_AUTOMATIC, new Action[0]);
+            }
+            for (KeyboardAccessoryVisualStateProvider.Observer observer : mVisualObservers) {
+                observer.onKeyboardAccessoryVisualStateChanged(
+                        mModel.get(VISIBLE), mBackgroundColorSupplier.get());
             }
             return;
         }
@@ -419,5 +432,15 @@ class KeyboardAccessoryMediator
             }
         }
         return R.string.select_passkey;
+    }
+
+    void addObserver(KeyboardAccessoryVisualStateProvider.Observer observer) {
+        mVisualObservers.addObserver(observer);
+        observer.onKeyboardAccessoryVisualStateChanged(
+                mModel.get(VISIBLE), mBackgroundColorSupplier.get());
+    }
+
+    void removeObserver(KeyboardAccessoryVisualStateProvider.Observer observer) {
+        mVisualObservers.removeObserver(observer);
     }
 }

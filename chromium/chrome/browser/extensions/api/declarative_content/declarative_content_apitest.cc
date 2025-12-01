@@ -33,6 +33,7 @@
 #include "extensions/browser/browsertest_util.h"
 #include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_action_manager.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/rules_registry_ids.h"
@@ -585,7 +586,7 @@ void ParameterizedShowActionDeclarativeContentApiTest::TestShowAction(
       action_type.value_or(ActionInfo::Type::kPage);
   EXPECT_EQ(expected_type, action->action_type());
   EXPECT_EQ(expected_type == ActionInfo::Type::kPage ? 1u : 0u,
-            extension_action_test_util::GetVisiblePageActionCount(tab));
+            extension_action_test_util::GetActivePageActionCount(tab));
 }
 
 IN_PROC_BROWSER_TEST_P(ParameterizedShowActionDeclarativeContentApiTest,
@@ -848,7 +849,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeContentApiTestWithContextType,
 
   EXPECT_TRUE(action->GetIsVisible(tab_id));
   EXPECT_TRUE(WaitForPageActionVisibilityChangeTo(1));
-  EXPECT_EQ(1u, extension_action_test_util::GetVisiblePageActionCount(tab));
+  EXPECT_EQ(1u, extension_action_test_util::GetActivePageActionCount(tab));
   EXPECT_EQ(1u, extension_action_test_util::GetTotalPageActionCount(tab));
 
   ExtensionTestMessageListener reload_ready_listener("ready");
@@ -861,7 +862,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeContentApiTestWithContextType,
   // navigation.
   EXPECT_FALSE(NavigateInRenderer(tab, GURL("http://test/")));
   EXPECT_TRUE(WaitForPageActionVisibilityChangeTo(1));
-  EXPECT_EQ(1u, extension_action_test_util::GetVisiblePageActionCount(tab));
+  EXPECT_EQ(1u, extension_action_test_util::GetActivePageActionCount(tab));
   EXPECT_EQ(1u, extension_action_test_util::GetTotalPageActionCount(tab));
 
   UnloadExtension(extension_id);
@@ -869,7 +870,7 @@ IN_PROC_BROWSER_TEST_P(DeclarativeContentApiTestWithContextType,
   profile()->GetDefaultStoragePartition()->FlushNetworkInterfaceForTesting();
   EXPECT_FALSE(NavigateInRenderer(tab, GURL("http://test/")));
   EXPECT_TRUE(WaitForPageActionVisibilityChangeTo(0));
-  EXPECT_EQ(0u, extension_action_test_util::GetVisiblePageActionCount(tab));
+  EXPECT_EQ(0u, extension_action_test_util::GetActivePageActionCount(tab));
   EXPECT_EQ(0u, extension_action_test_util::GetTotalPageActionCount(tab));
 }
 
@@ -1099,14 +1100,10 @@ IN_PROC_BROWSER_TEST_P(DeclarativeContentApiTestWithContextType,
   EXPECT_EQ("add_rule",
             ExecuteScriptInBackgroundPage(extension->id(), kAddTestRule));
 
-  ExtensionService* extension_service = extensions::ExtensionSystem::Get(
-      browser()->profile())->extension_service();
-
   std::u16string error;
-  ASSERT_TRUE(extension_service->UninstallExtension(
-      extension->id(),
-      UNINSTALL_REASON_FOR_TESTING,
-      &error));
+  ASSERT_TRUE(extensions::ExtensionRegistrar::Get(browser()->profile())
+                  ->UninstallExtension(extension->id(),
+                                       UNINSTALL_REASON_FOR_TESTING, &error));
   ASSERT_EQ(u"", error);
 
   // Reload the extension, then add and remove a rule.

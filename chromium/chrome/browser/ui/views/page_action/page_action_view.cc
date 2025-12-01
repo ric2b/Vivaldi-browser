@@ -4,6 +4,8 @@
 
 #include "chrome/browser/ui/views/page_action/page_action_view.h"
 
+#include <utility>
+
 #include "base/callback_list.h"
 #include "base/functional/bind.h"
 #include "chrome/browser/ui/layout_constants.h"
@@ -17,14 +19,17 @@
 #include "ui/color/color_id.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/view_class_properties.h"
 
 namespace page_actions {
 
 PageActionView::PageActionView(actions::ActionItem* action_item,
-                               const PageActionViewParams& params)
+                               const PageActionViewParams& params,
+                               ui::ElementIdentifier element_identifier)
     : IconLabelBubbleView(gfx::FontList(), params.icon_label_bubble_delegate),
       action_item_(action_item->GetAsWeakPtr()),
       icon_size_(params.icon_size),
@@ -32,8 +37,7 @@ PageActionView::PageActionView(actions::ActionItem* action_item,
   CHECK(action_item_->GetActionId().has_value());
   SetUpForAnimation(base::Milliseconds(600));
 
-  SetProperty(views::kElementIdentifierKey,
-              action_item_->GetProperty(views::kElementIdentifierKey));
+  SetProperty(views::kElementIdentifierKey, element_identifier);
 
   if (params.font_list) {
     SetFontList(*params.font_list);
@@ -47,6 +51,7 @@ PageActionView::PageActionView(actions::ActionItem* action_item,
   SetUseTonalColorsWhenExpanded(true);
   SetBackgroundVisibility(BackgroundVisibility::kWithLabel);
   UpdateBorder();
+  SetExpandedLabelAdditionalInsets(views::Inset1D(4, 8));
 
   label_visibility_changed_subscription_ =
       label()->AddVisibleChangedCallback(base::BindRepeating(
@@ -68,6 +73,8 @@ void PageActionView::OnNewActiveController(PageActionController* controller) {
   observation_.Reset();
   action_item_controller_subscription_ = {};
   if (controller) {
+    click_callback_ =
+        controller->GetClickCallback(action_item_->GetActionId().value());
     controller->AddObserver(action_item_->GetActionId().value(), observation_);
     // TODO(crbug.com/388524315): Have the controller manage its own ActionItem
     // observation. See bug for more explanation.
@@ -83,10 +90,11 @@ void PageActionView::OnPageActionModelChanged(
     const PageActionModelInterface& model) {
   SetEnabled(model.GetVisible());
   SetVisible(model.GetVisible());
-  SetText(model.GetText());
+  SetLabel(model.GetText(), model.GetAccessibleName());
   SetTooltipText(model.GetTooltipText());
   UpdateIconImage();
 
+  const bool was_chip_visible = IsChipVisible();
   if (!model.GetVisible()) {
     ResetSlideAnimation(/*show=*/false);
   } else if (!model.GetShouldAnimateChip()) {
@@ -95,6 +103,12 @@ void PageActionView::OnPageActionModelChanged(
     AnimateIn(/*string_id=*/std::nullopt);
   } else {
     AnimateOut();
+  }
+
+  // Announce the chip only if announcements are enabled and the chip was
+  // newly shown.
+  if (model.GetShouldAnnounceChip() && !was_chip_visible && IsChipVisible()) {
+    GetViewAccessibility().AnnounceAlert(label()->GetText());
   }
 }
 
@@ -124,26 +138,11 @@ void PageActionView::ViewHierarchyChanged(
   View::ViewHierarchyChanged(details);
   if (details.is_add && details.child == this) {
     UpdateIconImage();
-    UpdateBorder();
   }
 }
 
 void PageActionView::UpdateBorder() {
-  gfx::Insets insets = icon_insets_;
-  if (IsChipVisible()) {
-    constexpr int kInsetsLeftPaddingMax = 4;
-    constexpr int kInsetsRightPaddingMax = 8;
-
-    // Set the padding according to the progress of the expand/collapse
-    // animation.
-    const int left_padding = GetWidthBetween(0, kInsetsLeftPaddingMax);
-    const int right_padding = GetWidthBetween(0, kInsetsRightPaddingMax);
-    insets += gfx::Insets().set_left_right(left_padding, right_padding);
-  }
-
-  if (GetInsets() != insets) {
-    SetBorder(views::CreateEmptyBorder(insets));
-  }
+  SetBorder(views::CreateEmptyBorder(icon_insets_));
 }
 
 bool PageActionView::ShouldShowSeparator() const {
@@ -176,6 +175,9 @@ void PageActionView::NotifyClick(const ui::Event& event) {
                        static_cast<std::underlying_type_t<PageActionTrigger>>(
                            trigger_source))
           .Build());
+
+  CHECK(click_callback_);
+  click_callback_.Run(trigger_source);
 }
 
 void PageActionView::UpdateIconImage() {
@@ -215,9 +217,23 @@ bool PageActionView::IsBubbleShowing() const {
          observation_.GetSource()->GetActionItemIsShowingBubble();
 }
 
+bool PageActionView::IsTriggerableEvent(const ui::Event& event) {
+  // Returns whether the bubble should be shown given the event. Only trigger an
+  // action when action UI isn't already showing (managed at the
+  // IconLabelBubbleView level), and if mouse input, when event is a left button
+  // click.
+  if (event.IsMouseEvent()) {
+    // IconLabelBubbleView allows any mouse click to be triggerable event so
+    // need to manually check here.
+    return IconLabelBubbleView::IsTriggerableEvent(event) &&
+           ((GetTriggerableEventFlags() & event.flags()) != 0);
+  }
+
+  return IconLabelBubbleView::IsTriggerableEvent(event);
+}
+
 void PageActionView::OnLabelVisibilityChanged() {
   UpdateBackground();
-  UpdateBorder();
   UpdateLabelColors();
   UpdateIconImage();
   chip_visibility_changed_callbacks_.Notify(this);

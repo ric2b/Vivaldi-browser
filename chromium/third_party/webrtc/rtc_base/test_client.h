@@ -29,7 +29,7 @@ class TestClient : public sigslot::has_slots<> {
  public:
   // Records the contents of a packet that was received.
   struct Packet {
-    Packet(const rtc::ReceivedPacket& received_packet);
+    Packet(const ReceivedIpPacket& received_packet);
     Packet(const Packet& p);
 
     SocketAddress addr;
@@ -96,7 +96,7 @@ class TestClient : public sigslot::has_slots<> {
   Socket::ConnState GetState();
 
   void OnPacket(AsyncPacketSocket* socket,
-                const rtc::ReceivedPacket& received_packet);
+                const ReceivedIpPacket& received_packet);
   void OnReadyToSend(AsyncPacketSocket* socket);
   bool CheckTimestamp(std::optional<Timestamp> packet_timestamp);
   void AdvanceTime(int ms);
@@ -113,8 +113,10 @@ class TestClient : public sigslot::has_slots<> {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::TestClient;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_TEST_CLIENT_H_

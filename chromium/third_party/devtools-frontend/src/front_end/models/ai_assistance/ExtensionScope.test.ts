@@ -102,6 +102,20 @@ describe('ExtensionScope', () => {
       const selector = ExtensionScope.ExtensionScope.getSelectorForNode(node);
       assert.strictEqual(selector, '.my\\.special-class.my-class-b');
     });
+
+    it('should work with only ai generated class', () => {
+      const node = createNode({
+        getAttribute: attribute => {
+          if (attribute === 'class') {
+            return `${Injected.AI_ASSISTANCE_CSS_CLASS_NAME}-2`;
+          }
+
+          return undefined;
+        }
+      });
+      const selector = ExtensionScope.ExtensionScope.getSelectorForNode(node);
+      assert.strictEqual(selector, 'div');
+    });
   });
 
   describe('getSelectorFromRules', () => {
@@ -280,6 +294,77 @@ describe('ExtensionScope', () => {
       ];
       const selector = await getSelector({matchedPayload});
       assert.strictEqual(selector, 'div');
+    });
+
+    it('should ignore * selectors', async () => {
+      const matchedPayload = [
+        ruleMatch('*', MOCK_STYLE),
+      ];
+      const selector = await getSelector({matchedPayload});
+      assert.strictEqual(selector, '');
+    });
+
+    it('should ignore selectors ending with * ', async () => {
+      const matchedPayload = [
+        ruleMatch(
+            {
+              selectors: [{
+                text: 'div > *',
+                specificity: {
+                  a: 0,
+                  b: 0,
+                  c: 1,
+                }
+              }],
+              text: 'div > *',
+
+            },
+            MOCK_STYLE,
+            ),
+      ];
+      const selector = await getSelector({matchedPayload});
+      assert.strictEqual(selector, '');
+    });
+
+    it('should not ignore selectors with intermediate * and class', async () => {
+      const matchedPayload = [
+        ruleMatch(
+            {
+              selectors: [{
+                text: '.main > * > .header',
+                specificity: {
+                  a: 0,
+                  b: 2,
+                  c: 0,
+                }
+              }],
+              text: '.main > * > .header',
+
+            },
+            MOCK_STYLE,
+            ),
+      ];
+      const selector = await getSelector({matchedPayload});
+      assert.strictEqual(selector, '.main > * > .header');
+    });
+    it('should not ignore selectors with intermediate * and id', async () => {
+      const matchedPayload = [ruleMatch(
+          {
+            selectors: [{
+              text: '.main > * > #header',
+              specificity: {
+                a: 1,
+                b: 1,
+                c: 0,
+              }
+            }],
+            text: '.main > * > #header',
+
+          },
+          MOCK_STYLE,
+          )];
+      const selector = await getSelector({matchedPayload});
+      assert.strictEqual(selector, '.main > * > #header');
     });
   });
 

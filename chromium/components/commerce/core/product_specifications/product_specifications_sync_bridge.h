@@ -16,7 +16,6 @@
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/protocol/entity_data.h"
 #include "components/sync/protocol/product_comparison_specifics.pb.h"
-#include "url/gurl.h"
 
 namespace syncer {
 class MetadataChangeList;
@@ -76,8 +75,11 @@ class ProductSpecificationsSyncBridge : public syncer::DataTypeSyncBridge {
   std::optional<syncer::ModelError> ApplyIncrementalSyncChanges(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
       syncer::EntityChangeList entity_changes) override;
-  std::string GetStorageKey(const syncer::EntityData& entity_data) override;
-  std::string GetClientTag(const syncer::EntityData& entity_data) override;
+  std::string GetStorageKey(
+      const syncer::EntityData& entity_data) const override;
+  std::string GetClientTag(
+      const syncer::EntityData& entity_data) const override;
+  bool IsEntityDataValid(const syncer::EntityData& entity_data) const override;
   std::unique_ptr<syncer::DataBatch> GetDataForCommit(
       StorageKeyList storage_keys) override;
   std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;

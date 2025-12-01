@@ -10,6 +10,7 @@
 #import "base/memory/raw_ptr.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/test/scoped_feature_list.h"
+#import "components/signin/public/base/signin_switches.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "components/sync/base/user_selectable_type.h"
 #import "components/sync/service/sync_service.h"
@@ -24,6 +25,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_table_view_controller.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_detail_icon_item.h"
@@ -157,6 +159,7 @@ TEST_F(ManageSyncSettingsMediatorTest,
 // for a signed in account along with manage accounts items.
 TEST_F(ManageSyncSettingsMediatorTest,
        CheckSignOutSectionItemsForSignedInAccount) {
+  feature_list_.InitAndDisableFeature(kIOSManageAccountStorage);
   CreateManageSyncSettingsMediator();
   sync_service_->SetSignedIn(signin::ConsentLevel::kSignin);
 
@@ -236,6 +239,36 @@ TEST_F(ManageSyncSettingsMediatorTest,
   } else {
     ASSERT_EQ([items count], 3u);
   }
+}
+
+// Tests that a persistent auth error is displayed as a text button at the top
+// of the page for a signed in account.
+TEST_F(ManageSyncSettingsMediatorTest, TestAuthErrorForSignedInAccount) {
+  feature_list_.InitAndEnableFeature(switches::kEnableIdentityInAuthError);
+  CreateManageSyncSettingsMediator();
+  sync_service_->SetSignedIn(signin::ConsentLevel::kSignin);
+  sync_service_->SetPersistentAuthError();
+
+  // Loads the account settings page.
+  [mediator_ manageSyncSettingsTableViewControllerLoadModel:mediator_.consumer];
+
+  EXPECT_TRUE([mediator_.consumer.tableViewModel
+      hasSectionForSectionIdentifier:SyncSettingsSectionIdentifier::
+                                         SyncErrorsSectionIdentifier]);
+  NSArray* error_items = [mediator_.consumer.tableViewModel
+      itemsInSectionWithIdentifier:SyncSettingsSectionIdentifier::
+                                       SyncErrorsSectionIdentifier];
+
+  EXPECT_EQ(2UL, error_items.count);
+  EXPECT_NSEQ(
+      base::apple::ObjCCastStrict<SettingsImageDetailTextItem>(error_items[0])
+          .detailText,
+      l10n_util::GetNSString(
+          IDS_IOS_ACCOUNT_TABLE_ERROR_VERIFY_ITS_YOU_MESSAGE));
+  EXPECT_NSEQ(
+      base::apple::ObjCCastStrict<TableViewTextItem>(error_items[1]).text,
+      l10n_util::GetNSString(
+          IDS_IOS_ACCOUNT_TABLE_ERROR_VERIFY_ITS_YOU_BUTTON));
 }
 
 // Tests that Sync errors display as a text button at the top of the page for a

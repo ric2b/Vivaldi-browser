@@ -1011,13 +1011,13 @@
         /**
          * Stop listening for events
          */
-        function stop_watching() {
+        this.stop_watching = function() {
             for (var i = 0; i < eventTypes.length; i++) {
                 watchedNode.removeEventListener(eventTypes[i], eventHandler, false);
             }
         };
 
-        test._add_cleanup(stop_watching);
+        test._add_cleanup(this.stop_watching);
 
         return this;
     }
@@ -1330,6 +1330,15 @@
         "0xffff": "uffff",
     };
 
+    const formatEscapeMap = {
+        "\\": "\\\\",
+        '"': '\\"'
+    };
+    for (const p in replacements) {
+        formatEscapeMap[String.fromCharCode(p)] = "\\" + replacements[p];
+    }
+    const formatEscapePattern = new RegExp(`[${Object.keys(formatEscapeMap).map(k => k === "\\" ? "\\\\" : k).join("")}]`, "g");
+
     /**
      * Convert a value to a nice, human-readable string
      *
@@ -1380,12 +1389,7 @@
 
         switch (typeof val) {
         case "string":
-            val = val.replace(/\\/g, "\\\\");
-            for (var p in replacements) {
-                var replace = "\\" + replacements[p];
-                val = val.replace(RegExp(String.fromCharCode(p), "g"), replace);
-            }
-            return '"' + val.replace(/"/g, '\\"') + '"';
+            return '"' + val.replace(formatEscapePattern, match => formatEscapeMap[match]) + '"';
         case "boolean":
         case "undefined":
             return String(val);
@@ -2275,7 +2279,6 @@
                 NetworkError: 19,
                 AbortError: 20,
                 URLMismatchError: 21,
-                QuotaExceededError: 22,
                 TimeoutError: 23,
                 InvalidNodeTypeError: 24,
                 DataCloneError: 25,
@@ -2290,7 +2293,8 @@
                 VersionError: 0,
                 OperationError: 0,
                 NotAllowedError: 0,
-                OptOutError: 0
+                OptOutError: 0,
+                QuotaExceededError: 0
             };
 
             var code_name_map = {};

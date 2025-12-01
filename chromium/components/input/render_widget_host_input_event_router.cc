@@ -13,6 +13,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "components/input/cursor_manager.h"
 #include "components/input/features.h"
@@ -379,7 +380,7 @@ void RenderWidgetHostInputEventRouter::OnRenderWidgetHostViewInputDestroyed(
   // If the target that's being destroyed is in the gesture target map, we
   // replace it with nullptr so that we maintain the 1:1 correspondence between
   // map entries and the touch sequences that underly them.
-  for (auto it : touchscreen_gesture_target_map_) {
+  for (auto& it : touchscreen_gesture_target_map_) {
     if (it.second.get() == view)
       it.second = nullptr;
   }

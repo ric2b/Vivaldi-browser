@@ -38,9 +38,10 @@ using MoqtObjectAckFunction =
 class RemoteTrack {
  public:
   RemoteTrack(const FullTrackName& full_track_name, uint64_t id,
-              SubscribeWindow window)
+              SubscribeWindow window, MoqtPriority priority)
       : full_track_name_(full_track_name),
-        subscribe_id_(id),
+        request_id_(id),
+        subscriber_priority_(priority),
         window_(window),
         weak_ptr_factory_(this) {}
   virtual ~RemoteTrack() = default;
@@ -62,23 +63,29 @@ class RemoteTrack {
            *data_stream_type_ == MoqtDataStreamType::kStreamHeaderFetch;
   }
 
-  uint64_t subscribe_id() const { return subscribe_id_; }
+  uint64_t request_id() const { return request_id_; }
 
   // Is the object one that was requested?
-  bool InWindow(FullSequence sequence) const {
-    return window_.InWindow(sequence);
-  }
+  bool InWindow(Location sequence) const { return window_.InWindow(sequence); }
 
   quiche::QuicheWeakPtr<RemoteTrack> weak_ptr() {
     return weak_ptr_factory_.Create();
   }
 
+  const SubscribeWindow& window() const { return window_; }
+
+  MoqtPriority subscriber_priority() const { return subscriber_priority_; }
+  void set_subscriber_priority(MoqtPriority priority) {
+    subscriber_priority_ = priority;
+  }
+
  protected:
-  SubscribeWindow& window() { return window_; };
+  SubscribeWindow& window_mutable() { return window_; };
 
  private:
   const FullTrackName full_track_name_;
-  const uint64_t subscribe_id_;
+  const uint64_t request_id_;
+  MoqtPriority subscriber_priority_;
   SubscribeWindow window_;
   std::optional<MoqtDataStreamType> data_stream_type_;
   // If false, an object or OK message has been received, so any ERROR message
@@ -102,28 +109,30 @@ class SubscribeRemoteTrack : public RemoteTrack {
     // automatically retry.
     virtual void OnReply(
         const FullTrackName& full_track_name,
-        std::optional<FullSequence> largest_id,
+        std::optional<Location> largest_location,
         std::optional<absl::string_view> error_reason_phrase) = 0;
     // Called when the subscription process is far enough that it is possible to
     // send OBJECT_ACK messages; provides a callback to do so. The callback is
     // valid for as long as the session is valid.
     virtual void OnCanAckObjects(MoqtObjectAckFunction ack_function) = 0;
     // Called when an object fragment (or an entire object) is received.
-    virtual void OnObjectFragment(
-        const FullTrackName& full_track_name, FullSequence sequence,
-        MoqtPriority publisher_priority, MoqtObjectStatus object_status,
-        absl::string_view object, bool end_of_message) = 0;
+    virtual void OnObjectFragment(const FullTrackName& full_track_name,
+                                  Location sequence,
+                                  MoqtPriority publisher_priority,
+                                  MoqtObjectStatus object_status,
+                                  absl::string_view object,
+                                  bool end_of_message) = 0;
     virtual void OnSubscribeDone(FullTrackName full_track_name) = 0;
   };
-  SubscribeRemoteTrack(
-      const MoqtSubscribe& subscribe, Visitor* visitor,
-      quic::QuicTimeDelta delivery_timeout = quic::QuicTimeDelta::Infinite())
-      : RemoteTrack(subscribe.full_track_name, subscribe.subscribe_id,
-                    SubscribeWindow(subscribe.start.value_or(FullSequence()),
-                                    subscribe.end_group)),
+  SubscribeRemoteTrack(const MoqtSubscribe& subscribe, Visitor* visitor)
+      : RemoteTrack(subscribe.full_track_name, subscribe.request_id,
+                    SubscribeWindow(subscribe.start.value_or(Location()),
+                                    subscribe.end_group),
+                    subscribe.subscriber_priority),
         track_alias_(subscribe.track_alias),
+        forward_(subscribe.forward),
         visitor_(visitor),
-        delivery_timeout_(delivery_timeout),
+        delivery_timeout_(subscribe.parameters.delivery_timeout),
         subscribe_(std::make_unique<MoqtSubscribe>(subscribe)) {}
   ~SubscribeRemoteTrack() override {
     if (subscribe_done_alarm_ != nullptr) {
@@ -153,12 +162,12 @@ class SubscribeRemoteTrack : public RemoteTrack {
     }
   }
   // Called on SUBSCRIBE_OK or SUBSCRIBE_UPDATE.
-  bool TruncateStart(FullSequence start) {
-    return window().TruncateStart(start);
+  bool TruncateStart(Location start) {
+    return window_mutable().TruncateStart(start);
   }
   // Called on SUBSCRIBE_UPDATE.
   bool TruncateEnd(uint64_t end_group) {
-    return window().TruncateEnd(end_group);
+    return window_mutable().TruncateEnd(end_group);
   }
   void OnStreamOpened();
   void OnStreamClosed();
@@ -174,6 +183,9 @@ class SubscribeRemoteTrack : public RemoteTrack {
   // FETCH objects to pipe directly into the visitor.
   void OnJoiningFetchReady(std::unique_ptr<MoqtFetchTask> fetch_task);
 
+  bool forward() const { return forward_; }
+  void set_forward(bool forward) { forward_ = forward; }
+
  private:
   friend class test::MoqtSessionPeer;
   friend class test::SubscribeRemoteTrackPeer;
@@ -184,6 +196,7 @@ class SubscribeRemoteTrack : public RemoteTrack {
   std::unique_ptr<MoqtFetchTask> fetch_task_;
 
   const uint64_t track_alias_;
+  bool forward_;
   Visitor* visitor_;
   std::optional<bool> is_datagram_;
   int currently_open_streams_ = 0;
@@ -224,9 +237,10 @@ class UpstreamFetch : public RemoteTrack {
   UpstreamFetch(const MoqtFetch& fetch, FetchResponseCallback callback)
       : RemoteTrack(fetch.full_track_name, fetch.fetch_id,
                     fetch.joining_fetch.has_value()
-                        ? SubscribeWindow(FullSequence(0, 0))
+                        ? SubscribeWindow(Location(0, 0))
                         : SubscribeWindow(fetch.start_object, fetch.end_group,
-                                          fetch.end_object)),
+                                          fetch.end_object),
+                    fetch.subscriber_priority),
         ok_callback_(std::move(callback)) {
     // Immediately set the data stream type.
     CheckDataStreamType(MoqtDataStreamType::kStreamHeaderFetch);
@@ -239,9 +253,9 @@ class UpstreamFetch : public RemoteTrack {
     // If the UpstreamFetch is destroyed, it will call OnStreamAndFetchClosed
     // which sets the TaskDestroyedCallback to nullptr. Thus, |callback| can
     // assume that UpstreamFetch is valid.
-    UpstreamFetchTask(FullSequence largest_id, absl::Status status,
+    UpstreamFetchTask(Location largest_location, absl::Status status,
                       TaskDestroyedCallback callback)
-        : largest_id_(largest_id),
+        : largest_location_(largest_location),
           status_(status),
           task_destroyed_callback_(std::move(callback)),
           weak_ptr_factory_(this) {}
@@ -253,8 +267,10 @@ class UpstreamFetch : public RemoteTrack {
         ObjectsAvailableCallback callback) override {
       object_available_callback_ = std::move(callback);
     };
+    // TODO(martinduke): Implement the new API, but for now, only deliver the
+    // FetchTask on FETCH_OK.
+    void SetFetchResponseCallback(FetchResponseCallback callback) override {}
     absl::Status GetStatus() override { return status_; };
-    FullSequence GetLargestId() const override { return largest_id_; }
 
     quiche::QuicheWeakPtr<UpstreamFetchTask> weak_ptr() {
       return weak_ptr_factory_.Create();
@@ -289,7 +305,7 @@ class UpstreamFetch : public RemoteTrack {
         absl::string_view reason_phrase);
 
    private:
-    FullSequence largest_id_;
+    Location largest_location_;
     absl::Status status_;
     TaskDestroyedCallback task_destroyed_callback_;
 
@@ -316,7 +332,7 @@ class UpstreamFetch : public RemoteTrack {
   };
 
   // Arrival of FETCH_OK/FETCH_ERROR.
-  void OnFetchResult(FullSequence largest_id, absl::Status status,
+  void OnFetchResult(Location largest_location, absl::Status status,
                      TaskDestroyedCallback callback);
 
   UpstreamFetchTask* task() { return task_.GetIfAvailable(); }

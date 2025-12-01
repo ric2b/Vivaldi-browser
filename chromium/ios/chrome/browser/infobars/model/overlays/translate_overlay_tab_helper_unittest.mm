@@ -5,7 +5,6 @@
 #import "ios/chrome/browser/infobars/model/overlays/translate_overlay_tab_helper.h"
 
 #import "base/memory/raw_ptr.h"
-#import "base/test/task_environment.h"
 #import "ios/chrome/browser/infobars/model/infobar_ios.h"
 #import "ios/chrome/browser/infobars/model/infobar_manager_impl.h"
 #import "ios/chrome/browser/infobars/model/overlays/default_infobar_overlay_request_factory.h"
@@ -14,9 +13,9 @@
 #import "ios/chrome/browser/infobars/model/test/fake_infobar_ios.h"
 #import "ios/chrome/browser/overlays/model/public/default/default_infobar_overlay_request_config.h"
 #import "ios/chrome/browser/overlays/model/public/infobar_banner/infobar_banner_placeholder_request_config.h"
+#import "ios/chrome/browser/overlays/model/public/overlay_request_config.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request_queue.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_request_queue_util.h"
-#import "ios/chrome/browser/overlays/model/test/overlay_test_macros.h"
 #import "ios/chrome/browser/passwords/model/test/mock_ios_chrome_save_passwords_infobar_delegate.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/tips_manager/model/tips_manager_ios_factory.h"
@@ -24,10 +23,11 @@
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/web/public/test/fakes/fake_navigation_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
+#import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
 
 namespace {
-DEFINE_TEST_OVERLAY_REQUEST_CONFIG(FakeConfig);
+DEFINE_STATELESS_OVERLAY_REQUEST_CONFIG(FakeConfig);
 
 // Creates a matcher callback for ConfigType and config's InfoBar.
 template <class ConfigType>
@@ -90,7 +90,7 @@ class TranslateInfobarOverlayTranslateOverlayTabHelperTest
   }
 
  protected:
-  base::test::TaskEnvironment task_environment_;
+  web::WebTaskEnvironment task_environment_;
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
   std::unique_ptr<TestProfileIOS> profile_;
   web::FakeWebState web_state_;

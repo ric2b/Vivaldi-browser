@@ -55,13 +55,12 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   ~AXNodeObject() override;
 
   static std::optional<String> GetCSSAltText(const Element*);
+  static std::optional<String> GetCSSContentText(const Element*);
 
   void Trace(Visitor*) const override;
 
   // Call to force-load inline text boxes for the current subtree.
   void LoadInlineTextBoxes() override;
-  // Should inline text boxes be considered when adding chldren to this node.
-  bool ShouldLoadInlineTextBoxes() const override;
 
   ScrollableArea* GetScrollableAreaIfScrollable() const final;
 
@@ -150,7 +149,6 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool IsSelectedFromFocusSupported() const override;
   bool IsSelectedFromFocus() const override;
   bool IsNotUserSelectable() const override;
-  bool ComputeIsOffScreen() const override;
   bool IsRequired() const final;
   bool IsControl() const override;
   AXRestriction Restriction() const override;
@@ -279,6 +277,9 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   // Add a child that must be included in tree, enforced via DCHECK.
   void AddChildAndCheckIncluded(AXObject*, bool is_from_aria_owns = false);
   // If node is non-null, GetOrCreate an AXObject for it and add as a child.
+  // This includes expanding the given node if the structure needs to be
+  // unpacked. For example, scrollers and their nested scroll-marker-groups
+  // become siblings.
   void AddNodeChild(Node*);
   // Set is_from_aria_owns to true if the child is being insert because it was
   // pointed to from aria-owns.
@@ -292,7 +293,11 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   Element* ActionElement() const override;
   Element* AnchorElement() const override;
   Document* GetDocument() const override;
-  Node* GetNode() const final;
+  // This function is manually inlined because it is very hot and LTO/PGO
+  // doesn't manage to inline it. To call it, you will need to include
+  // ax_object-inl.h.
+  ALWAYS_INLINE Node* GetNode() const;
+
   LayoutObject* GetLayoutObject() const final;
 
   // Modify or take an action on an object.
@@ -402,6 +407,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   bool UseNameFromSelectedOption() const;
   virtual bool IsTabItemSelected() const;
 
+  void AddNodeChildImpl(Node*);
   void AddChildrenImpl();
   void AddNodeChildren();
   void AddPseudoElementChildrenFromLayoutTree();
@@ -412,6 +418,7 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
   void AddPopupChildren();
   bool HasValidHTMLTableStructureAndLayout() const;
   void AddTableChildren();
+  void AddSelectChildren();
   bool FindAllTableCellsWithRole(ax::mojom::blink::Role, AXObjectVector&) const;
   void AddValidationMessageChild();
   void AddAccessibleNodeChildren();
@@ -440,12 +447,18 @@ class MODULES_EXPORT AXNodeObject : public AXObject {
       bool first) const;
   AXObject* NextOnLine() const override;
   AXObject* PreviousOnLine() const override;
-#if defined(REDUCE_AX_INLINE_TEXTBOXES)
-  bool always_load_inline_text_boxes_ = false;
-#endif
 
   Member<Node> node_;
   Member<LayoutObject> layout_object_;
+
+  friend class AXObject;  // For GetNode().
+};
+
+template <>
+struct DowncastTraits<AXNodeObject> {
+  static bool AllowFrom(const AXObject& object) {
+    return object.IsNodeObject();
+  }
 };
 
 }  // namespace blink

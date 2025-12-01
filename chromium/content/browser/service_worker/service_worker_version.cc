@@ -22,9 +22,9 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/observer_list.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
@@ -674,15 +674,6 @@ bool ServiceWorkerVersion::OnRequestTermination() {
     }
   }
 
-  static const bool kSpeculativeServiceWorkerWarmUpOnIdleTimeoutEnabled =
-      base::FeatureList::IsEnabled(
-          blink::features::kSpeculativeServiceWorkerWarmUp) &&
-      blink::features::kSpeculativeServiceWorkerWarmUpOnIdleTimeout.Get();
-  will_warm_up_on_stopped_ =
-      will_be_terminated &&
-      kSpeculativeServiceWorkerWarmUpOnIdleTimeoutEnabled &&
-      scope_.SchemeIsHTTPOrHTTPS();
-
   if (will_be_terminated) {
     embedded_worker_->Stop();
   } else {
@@ -1018,7 +1009,7 @@ void ServiceWorkerVersion::OnControlleeNavigationCommitted(
 #if DCHECK_IS_ON()
   // Ensures this function is only called for a known window client.
   auto it = controllee_map_.find(client_uuid);
-  CHECK(it != controllee_map_.end(), base::NotFatalUntil::M130);
+  CHECK(it != controllee_map_.end());
 
   DCHECK_EQ(it->second->GetClientType(),
             blink::mojom::ServiceWorkerClientType::kWindow);
@@ -1213,6 +1204,17 @@ void ServiceWorkerVersion::Doom() {
   // worker service, we need to release it to avoid creating a reference loop
   // between ServiceWorker(New|Updated)ScriptLoader and this class.
   main_script_load_params_.reset();
+}
+
+void ServiceWorkerVersion::SetPolicyContainerHost(
+    scoped_refptr<PolicyContainerHost> policy_container_host) {
+  policy_container_host_ = std::move(policy_container_host);
+  if (policy_container_host_ &&
+      policy_container_host_->policies()
+              .integrity_policy.blocked_destinations.size() > 0) {
+    CountFeature(
+        blink::mojom::WebFeature::kIntegrityPolicyInServiceWorkerResponse);
+  }
 }
 
 void ServiceWorkerVersion::InitializeGlobalScope() {
@@ -1460,6 +1462,12 @@ void ServiceWorkerVersion::OnProcessAllocated() {
 void ServiceWorkerVersion::OnStarting() {
   for (auto& observer : observers_) {
     observer.OnRunningStateChanged(this);
+  }
+}
+
+void ServiceWorkerVersion::OnStartWorkerMessageSent() {
+  for (auto& observer : observers_) {
+    observer.OnStartWorkerMessageSent(this);
   }
 }
 
@@ -2801,27 +2809,21 @@ void ServiceWorkerVersion::OnStoppedInternal(
   // the worker was stopping. The worker must be restarted to fulfill the
   // request.
   bool should_restart = !start_callbacks_.empty();
-  bool should_warm_up =
-      will_warm_up_on_stopped_ && !is_stopping_warmed_up_worker_;
   if (is_redundant() || in_dtor_) {
     // This worker will be destroyed soon.
     should_restart = false;
-    should_warm_up = false;
   } else if (ping_controller_.IsTimedOut()) {
     // This worker exhausted its time to run, don't let it restart.
     should_restart = false;
-    should_warm_up = false;
   } else if (old_status == blink::EmbeddedWorkerStatus::kStarting) {
     // This worker unexpectedly stopped because start failed.  Attempting to
     // restart on start failure could cause an endless loop of start attempts,
     // so don't try to restart now.
     should_restart = false;
-    should_warm_up = false;
   } else if (is_stopping_warmed_up_worker_) {
     // This worker is stopped while warmed-up or warming-up. Such workers don't
-    // need to restart nor re-warm-up.
+    // need to restart.
     should_restart = false;
-    should_warm_up = false;
   }
 
   if (!stop_time_.is_null()) {
@@ -2881,7 +2883,6 @@ void ServiceWorkerVersion::OnStoppedInternal(
   pending_external_requests_.clear();
   worker_is_idle_on_renderer_ = true;
   worker_host_.reset();
-  will_warm_up_on_stopped_ = false;
   is_stopping_warmed_up_worker_ = false;
 
   for (auto& observer : observers_) {
@@ -2891,22 +2892,6 @@ void ServiceWorkerVersion::OnStoppedInternal(
     StartWorkerInternal();
   } else if (!HasWorkInBrowser()) {
     OnNoWorkInBrowser();
-  }
-
-  if (should_warm_up && !should_restart && context_) {
-    // Posts a re-warm-up task so that the warming up operation runs in a
-    // different task.
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE, base::BindOnce(
-                       [](base::WeakPtr<ServiceWorkerContextCore> context,
-                          const GURL scope, const blink::StorageKey key) {
-                         if (!context) {
-                           return;
-                         }
-                         context->wrapper()->WarmUpServiceWorker(
-                             scope, key, base::DoNothing());
-                       },
-                       context_, scope_, key_));
   }
 }
 
@@ -2973,7 +2958,7 @@ bool ServiceWorkerVersion::IsStartWorkerAllowed() const {
   // tab, pass a null callback as WebContents getter.
   if (!GetContentClient()->browser()->AllowServiceWorker(
           scope_, net::SiteForCookies::FromUrl(scope_),
-          url::Origin::Create(scope_), script_url_, browser_context)) {
+          url::Origin::Create(scope_), key_, script_url_, browser_context)) {
     return false;
   }
 
@@ -3035,7 +3020,7 @@ void ServiceWorkerVersion::PrepareForUpdate(
            ->browser()
            ->ShouldServiceWorkerInheritPolicyContainerFromCreator(
                updated_script_url)) {
-    set_policy_container_host(policy_container_host);
+    SetPolicyContainerHost(policy_container_host);
   }
 }
 
@@ -3047,7 +3032,7 @@ ServiceWorkerVersion::compared_script_info_map() const {
 ServiceWorkerUpdateChecker::ComparedScriptInfo
 ServiceWorkerVersion::TakeComparedScriptInfo(const GURL& script_url) {
   auto it = compared_script_info_map_.find(script_url);
-  CHECK(it != compared_script_info_map_.end(), base::NotFatalUntil::M130);
+  CHECK(it != compared_script_info_map_.end());
   ServiceWorkerUpdateChecker::ComparedScriptInfo info = std::move(it->second);
   compared_script_info_map_.erase(it);
   return info;

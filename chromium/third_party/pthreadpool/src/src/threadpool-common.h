@@ -91,6 +91,21 @@
 #define PTHREADPOOL_STATIC_ASSERT(predicate, message)
 #endif
 
+// We declare these symbols as having weak linkage, so they can be replaced by
+// a custom implementation.
+#if defined(__GNUC__)
+#define PTHREADPOOL_WEAK __attribute__((__weak__))
+#else
+#define PTHREADPOOL_WEAK
+#endif
+
+#if defined(__GNUC__) && defined(__linux__)
+#define PTHREADPOOL_PRIVATE_IMPL(name) \
+  extern __typeof(name) name##_private_impl __attribute__((alias(#name)));
+#else
+#define PTHREADPOOL_PRIVATE_IMPL(name)
+#endif
+
 #ifndef PTHREADPOOL_INTERNAL
 #if defined(__ELF__)
 #define PTHREADPOOL_INTERNAL __attribute__((__visibility__("internal")))

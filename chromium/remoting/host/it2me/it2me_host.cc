@@ -5,6 +5,7 @@
 #include "remoting/host/it2me/it2me_host.h"
 
 #include <cstddef>
+#include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
@@ -93,6 +94,15 @@ typedef ValidatingAuthenticator::ResultCallback ValidationResultCallback;
 // for messages (such as session-terminate) to be sent.
 constexpr base::TimeDelta kDestroyMessagingObjectDelay = base::Seconds(2);
 
+#if BUILDFLAG(IS_CHROMEOS)
+// Enabled value for ClassManagementEnabled when host belongs to a student and
+// their screen can be viewed by a teacher.
+constexpr char kClassManagementStudent[] = "student";
+// Enabled value for ClassManagementEnabled when host belongs to a teacher and
+// they would like to access their host via another device.
+constexpr char kClassManagementTeacher[] = "teacher";
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 // STL containers do not have a defined destruction orders for their elements.
 // Post(Delayed)Task relies on these containers so the destruction order is also
 // undefined, causing problems when there are dependencies between objects to be
@@ -139,6 +149,7 @@ It2MeHost::~It2MeHost() {
 void It2MeHost::set_chrome_os_enterprise_params(
     ChromeOsEnterpriseParams params) {
 #if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
+  CHECK_NE(params.request_origin, ChromeOsEnterpriseRequestOrigin::kUnknown);
   chrome_os_enterprise_params_ = std::move(params);
 #else
   NOTREACHED() << "It2MeHost::set_chrome_os_enterprise_params is only "
@@ -307,7 +318,8 @@ void It2MeHost::ConnectOnNetworkThread(
     }
   }
 
-  if (connection_context->use_corp_session_authz) {
+  if (connection_context->is_corp_user ||
+      connection_context->use_corp_session_authz) {
     use_corp_session_authz_ = true;
   }
 
@@ -342,7 +354,8 @@ void It2MeHost::ConnectOnNetworkThread(
         reconnect_params_->support_id);
   }
   register_request_->StartRequest(
-      signal_strategy_.get(), host_key_pair_, authorized_helper_,
+      signal_strategy_.get(), host_context_->CreateClientCertStore(),
+      host_key_pair_, authorized_helper_,
       std::move(chrome_os_enterprise_params_),
       base::BindOnce(&It2MeHost::OnReceivedSupportID,
                      weak_factory_.GetWeakPtr()));
@@ -506,7 +519,7 @@ void It2MeHost::OnPolicyUpdate(base::Value::Dict policies) {
   // it until after we've finished reading the rest of the policies and started
   // the connection process.
   remote_support_connections_allowed_ =
-      policies.FindBool(GetRemoteSupportPolicyKey()).value_or(true);
+      RemoteSupportConnectionsAllowed(policies);
 
   const base::Value::List* host_domain_list =
       policies.FindList(policy::key::kRemoteAccessHostDomainList);
@@ -629,10 +642,24 @@ void It2MeHost::UpdateLocalSessionPolicies(
   local_session_policies->allow_file_transfer = false;
   local_session_policies->allow_uri_forwarding = false;
 
+  local_session_policies->allow_remote_input = true;
+
 #if BUILDFLAG(IS_CHROMEOS) || !defined(NDEBUG)
   if (is_enterprise_session()) {
     local_session_policies->curtain_required =
         chrome_os_enterprise_params_->curtain_local_user_session;
+
+    local_session_policies->allow_remote_input =
+        chrome_os_enterprise_params_->allow_remote_input;
+
+    if (!chrome_os_enterprise_params_->allow_clipboard_sync) {
+      local_session_policies->clipboard_size_bytes = 0;
+    }
+
+    if (!chrome_os_enterprise_params_->maximum_session_duration.is_zero()) {
+      local_session_policies->maximum_session_duration =
+          chrome_os_enterprise_params_->maximum_session_duration;
+    }
 
 #if BUILDFLAG(IS_CHROMEOS)
     bool enterprise_file_transfer_allowed =
@@ -927,19 +954,41 @@ void It2MeHost::OnConfirmationResult(ValidationResultCallback result_callback,
   }
 }
 
-const char* It2MeHost::GetRemoteSupportPolicyKey() const {
+bool It2MeHost::RemoteSupportConnectionsAllowed(
+    const base::Value::Dict& policies) {
 #if BUILDFLAG(IS_CHROMEOS)
   // The policy to disallow remote support connections
   // (RemoteAccessHostAllowRemoteSupportConnections) does not apply to support
-  // sessions initiated by the enterprise admin via a RemoteCommand. This case
-  // is handled specifically by the policy to disallow enterprise remote support
-  // connections (RemoteAccessHostAllowEnterpriseRemoteSupportConnections).
+  // sessions initiated by the enterprise admin via a RemoteCommand or by Class
+  // tools. These two cases are handled specifically by the policy to disallow
+  // enterprise remote support connections
+  // (RemoteAccessHostAllowEnterpriseRemoteSupportConnections) and the policy
+  // to disallow teachers from viewing student screens
+  // (ClassManagementEnabled).
   if (is_enterprise_session()) {
-    return policy::key::
-        kRemoteAccessHostAllowEnterpriseRemoteSupportConnections;
+    switch (chrome_os_enterprise_params_->request_origin) {
+      case remoting::ChromeOsEnterpriseRequestOrigin::kClassManagement:
+        if (const std::string* class_management_enabled_value =
+                policies.FindString(policy::key::kClassManagementEnabled)) {
+          return *class_management_enabled_value == kClassManagementStudent ||
+                 *class_management_enabled_value == kClassManagementTeacher;
+        }
+        return false;
+      case remoting::ChromeOsEnterpriseRequestOrigin::kEnterpriseAdmin:
+        return policies
+            .FindBool(
+                policy::key::
+                    kRemoteAccessHostAllowEnterpriseRemoteSupportConnections)
+            .value_or(true);
+      case remoting::ChromeOsEnterpriseRequestOrigin::kUnknown:
+        NOTREACHED() << "RequestOrigin is validated to be known when "
+                        "enterprise parameters are set";
+    }
   }
 #endif
-  return policy::key::kRemoteAccessHostAllowRemoteSupportConnections;
+  return policies
+      .FindBool(policy::key::kRemoteAccessHostAllowRemoteSupportConnections)
+      .value_or(true);
 }
 
 It2MeHostFactory::It2MeHostFactory() = default;

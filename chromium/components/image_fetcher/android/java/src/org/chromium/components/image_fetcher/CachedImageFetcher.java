@@ -72,7 +72,7 @@ public class CachedImageFetcher extends ImageFetcher {
         }
     }
 
-    private ImageLoader mImageLoader;
+    private final ImageLoader mImageLoader;
 
     /**
      * Creates a CachedImageFetcher with the given bridge.
@@ -125,7 +125,7 @@ public class CachedImageFetcher extends ImageFetcher {
                     .fetchGif(
                             getConfig(),
                             params,
-                            (BaseGifImage gifFromNative) -> {
+                            (@Nullable BaseGifImage gifFromNative) -> {
                                 callback.onResult(gifFromNative);
                                 getImageFetcherBridge()
                                         .reportTotalFetchTimeFromNative(
@@ -171,7 +171,7 @@ public class CachedImageFetcher extends ImageFetcher {
                     .fetchImage(
                             getConfig(),
                             params,
-                            (Bitmap bitmapFromNative) -> {
+                            (@Nullable Bitmap bitmapFromNative) -> {
                                 callback.onResult(bitmapFromNative);
                                 getImageFetcherBridge()
                                         .reportTotalFetchTimeFromNative(

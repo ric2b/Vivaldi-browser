@@ -23,6 +23,7 @@
 #include "api/test/time_controller.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/network.h"
+#include "rtc_base/thread.h"
 #include "rtc_base/thread_annotations.h"
 #include "test/network/fake_network_socket_server.h"
 #include "test/network/network_emulation.h"
@@ -30,13 +31,12 @@
 namespace webrtc {
 namespace test {
 
-// Framework assumes that rtc::NetworkManager is called from network thread.
-class EmulatedNetworkManager::NetworkManagerImpl
-    : public rtc::NetworkManagerBase {
+// Framework assumes that webrtc::NetworkManager is called from network thread.
+class EmulatedNetworkManager::NetworkManagerImpl : public NetworkManagerBase {
  public:
-  explicit NetworkManagerImpl(
-      absl::Nonnull<Thread*> network_thread,
-      absl::Nonnull<EndpointsContainer*> endpoints_container)
+  explicit NetworkManagerImpl(Thread* absl_nonnull network_thread,
+                              EndpointsContainer* absl_nonnull
+                                  endpoints_container)
       : network_thread_(network_thread),
         endpoints_container_(endpoints_container) {}
 
@@ -47,13 +47,11 @@ class EmulatedNetworkManager::NetworkManagerImpl
   void MaybeSignalNetworksChanged();
 
   // We don't support any address interfaces in the network emulation framework.
-  std::vector<const rtc::Network*> GetAnyAddressNetworks() override {
-    return {};
-  }
+  std::vector<const Network*> GetAnyAddressNetworks() override { return {}; }
 
  private:
-  const absl::Nonnull<Thread*> network_thread_;
-  const absl::Nonnull<const EndpointsContainer*> endpoints_container_;
+  Thread* absl_nonnull const network_thread_;
+  const EndpointsContainer* absl_nonnull const endpoints_container_;
   bool sent_first_update_ RTC_GUARDED_BY(network_thread_) = false;
   int start_count_ RTC_GUARDED_BY(network_thread_) = 0;
 };
@@ -75,7 +73,7 @@ EmulatedNetworkManager::EmulatedNetworkManager(
 
 EmulatedNetworkManager::~EmulatedNetworkManager() = default;
 
-absl::Nonnull<std::unique_ptr<rtc::NetworkManager>>
+absl_nonnull std::unique_ptr<NetworkManager>
 EmulatedNetworkManager::ReleaseNetworkManager() {
   RTC_CHECK(network_manager_ != nullptr)
       << "ReleaseNetworkManager can be called at most once.";
@@ -83,7 +81,7 @@ EmulatedNetworkManager::ReleaseNetworkManager() {
 }
 
 void EmulatedNetworkManager::UpdateNetworks() {
-  absl::Nonnull<NetworkManagerImpl*> network_manager = network_manager_ptr_;
+  NetworkManagerImpl* absl_nonnull network_manager = network_manager_ptr_;
   network_thread_->PostTask(
       [network_manager] { network_manager->UpdateNetworksOnce(); });
 }
@@ -124,8 +122,8 @@ void EmulatedNetworkManager::GetStats(
 void EmulatedNetworkManager::NetworkManagerImpl::UpdateNetworksOnce() {
   RTC_DCHECK_RUN_ON(network_thread_);
 
-  std::vector<std::unique_ptr<rtc::Network>> networks;
-  for (std::unique_ptr<rtc::Network>& net :
+  std::vector<std::unique_ptr<Network>> networks;
+  for (std::unique_ptr<Network>& net :
        endpoints_container_->GetEnabledNetworks()) {
     net->set_default_local_address_provider(this);
     networks.push_back(std::move(net));

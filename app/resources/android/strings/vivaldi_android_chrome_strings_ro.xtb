@@ -12,6 +12,7 @@
 <translation id="1910514478706885609">Deschideți într-o filă nouă suprapusă</translation>
 <translation id="1925021887439448749">Introduceți adresa web personalizată</translation>
 <translation id="2038563949887743358">Activați solicitarea pentru versiunea desktop</translation>
+<translation id="208033313373016095">Mod de lectură pentru paginile web</translation>
 <translation id="2149973817440762519">Editare semn de carte</translation>
 <translation id="2306442503286132111">Semnul de carte a fost salvat în dosarul <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Aspect</translation>
@@ -29,10 +30,11 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> semn de carte}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> semne de carte}}</translation>
 <translation id="3076631378407175873">Drepturi de autor <ph name="YEAR" /> Vivaldi Technologies AS. Toate drepturile rezervate.</translation>
+<translation id="3110967157686007724">Filă privată</translation>
 <translation id="3232293466644486101">Șterge datele de navigare…</translation>
 <translation id="3234355010754616171">Filă privată nouă</translation>
 <translation id="3237087289225714896">Preîncărcare standard:</translation>
-<translation id="3377025655491224618">Filă privată</translation>
+<translation id="3478414204555961127">Mod de Lectură</translation>
 <translation id="3504699618187058974">Grupează filele</translation>
 <translation id="3518985090088779359">Acceptați și continuați</translation>
 <translation id="3571177741182643350">Articole Necitite - Disponibile offline:</translation>
@@ -120,5 +122,4 @@ Pentru a ajusta termenul de căutare, apăsați lung pentru a-l selecta. Pentru 
 <translation id="9080642952018487277">Intrați în modul privat</translation>
 <translation id="930124987204876019">Șterge istoricul, cookie-urile, datele privind site-urile, memoria cache…</translation>
 <translation id="961856697154696964">Ștergere date de navigare</translation>
-<translation id="96681097142096641">Vizualizați pagina simplificată?</translation>
 </translationbundle>

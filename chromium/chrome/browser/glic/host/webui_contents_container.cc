@@ -20,32 +20,6 @@
 
 namespace glic {
 
-class WebUIContentsContainer::WCObserver : public content::WebContentsObserver {
- public:
-  WCObserver(content::WebContents* web_contents,
-             WebUIContentsContainer* container)
-      : container_(container) {
-    Observe(web_contents);
-  }
-
- private:
-  // content::WebContentsObserver:
-  void InnerWebContentsAttached(
-      content::WebContents* inner_web_contents,
-      content::RenderFrameHost* render_frame_host) override {
-    container_->InnerWebContentsAttached(inner_web_contents, this);
-  }
-
-  void PrimaryMainFrameRenderProcessGone(
-      base::TerminationStatus status) override {
-    container_->RendererCrashed(this);
-    // WARNING: Do not do any more work, as `this` may have been destroyed.
-  }
-
-  // The container that owns this.
-  const raw_ptr<WebUIContentsContainer> container_;
-};
-
 WebUIContentsContainer::WebUIContentsContainer(
     Profile* profile,
     GlicWindowController* glic_window_controller)
@@ -54,20 +28,24 @@ WebUIContentsContainer::WebUIContentsContainer(
           content::WebContents::CreateParams(profile))),
       glic_window_controller_(glic_window_controller) {
   CHECK(web_contents_);
+  Observe(web_contents_.get());
   web_contents_->SetDelegate(this);
   web_contents_->SetPageBaseBackgroundColor(SK_ColorTRANSPARENT);
 
   web_contents_->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(
           GURL{chrome::kChromeUIGlicURL}));
-  outer_wc_observer_ = std::make_unique<WCObserver>(web_contents_.get(), this);
 }
 
 WebUIContentsContainer::~WebUIContentsContainer() {
   web_contents_->ClosePage();
+  GlicProfileManager* glic_profile_manager = GlicProfileManager::GetInstance();
+  if (!glic_profile_manager) {
+    return;
+  }
   auto* glic_service = GlicKeyedServiceFactory::GetGlicKeyedService(
       glic_window_controller_->profile());
-  GlicProfileManager::GetInstance()->OnUnloadingClientForService(glic_service);
+  glic_profile_manager->OnUnloadingClientForService(glic_service);
 }
 
 bool WebUIContentsContainer::HandleKeyboardEvent(
@@ -75,7 +53,7 @@ bool WebUIContentsContainer::HandleKeyboardEvent(
     const input::NativeWebKeyboardEvent& event) {
   GlicView* glic_view = glic_window_controller_->GetGlicView();
   return glic_view && unhandled_keyboard_event_handler_.HandleKeyboardEvent(
-                          event, glic_view->web_view()->GetFocusManager());
+                          event, glic_view->GetFocusManager());
 }
 
 void WebUIContentsContainer::RequestMediaAccessPermission(
@@ -86,32 +64,15 @@ void WebUIContentsContainer::RequestMediaAccessPermission(
       web_contents, request, std::move(callback), nullptr);
 }
 
-void WebUIContentsContainer::InnerWebContentsAttached(
-    content::WebContents* contents,
-    WCObserver* observer) {
-  if (outer_wc_observer_.get() == observer) {
-    inner_wc_observer_ = std::make_unique<WCObserver>(contents, this);
-  }
-}
-
-void WebUIContentsContainer::RendererCrashed(WCObserver* observer) {
-  RecordRendererCrashedMetrics(observer);
-  if (outer_wc_observer_.get() == observer) {
-    auto* keyed_service = GlicKeyedServiceFactory::GetGlicKeyedService(
-        web_contents_->GetBrowserContext());
-    keyed_service->CloseUI();
-  }
-  // WARNING: Do not do any more work, as `this` may have been destroyed.
-}
-
-void WebUIContentsContainer::RecordRendererCrashedMetrics(
-    WCObserver* observer) {
-  if (inner_wc_observer_.get() == observer) {
-    base::RecordAction(base::UserMetricsAction("GlicSessionWebClientCrash"));
-  }
-  if (outer_wc_observer_.get() == observer) {
+void WebUIContentsContainer::PrimaryMainFrameRenderProcessGone(
+    base::TerminationStatus status) {
+  if (status != base::TERMINATION_STATUS_NORMAL_TERMINATION) {
     base::RecordAction(base::UserMetricsAction("GlicSessionWebUiCrash"));
   }
+  auto* keyed_service = GlicKeyedServiceFactory::GetGlicKeyedService(
+      web_contents_->GetBrowserContext());
+  keyed_service->CloseUI();
+  // WARNING: Do not do any more work, as `this` may have been destroyed.
 }
 
 }  // namespace glic

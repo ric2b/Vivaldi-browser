@@ -2,12 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
 import type {AidaRequest} from '../../front_end/core/host/AidaClient.ts';
 
-/**
- * Some types used in auto-run.js. They only exist here because it's
- * nicer to define these types in a .d.ts file than JSDOc syntax.
- */
+declare global {
+  interface Window {
+    aiAssistanceTestPatchPrompt?(folderName: string, query: string, changedFiles: Array<{
+                                   path: string,
+                                   matches: string[],
+                                   doesNotMatch?: string[],
+                                 }>): Promise<{assertionFailures: string[], debugInfo: string, error?: string}>;
+    setDebugAiAssistanceEnabled?(enabled: boolean): void;
+    // Define the structure expected for __commentElements if possible
+    // eslint-disable-next-line @typescript-eslint/naming-convention
+    __commentElements?: Array<{comment: string, commentElement: Comment, targetElement: Element|null}>;
+  }
+  // Define the custom event if needed
+  interface WindowEventMap {
+    aiassistancedone: CustomEvent;
+  }
+}
 
 /**
  * The result of running auto_freestyler against all the provided examples.
@@ -29,9 +44,13 @@ export interface ExecutedExample {
  * The result of making a single request to Aida.
  */
 export interface IndividualPromptRequestResponse {
-  request: AidaRequest;
-  response: string;
+  request: AidaRequest|string;
+  response: string|object;
   exampleId: string;
+  /** Automatically computed score [0-1]. */
+  score?: number;
+  error?: string;
+  assertionFailures?: string[];
 }
 
 export interface ExampleMetadata {
@@ -39,17 +58,7 @@ export interface ExampleMetadata {
   explanation: string;
 }
 
-/**
- * The CLI arguments people can use to configure the run.
- */
-export interface YargsInput {
-  exampleUrls: string[];
-  label: string;
-  parallel: boolean;
-  includeFollowUp: boolean;
-  testTarget: TestTarget;
-}
-export type TestTarget = 'elements'|'performance-main-thread'|'performance-insights';
+export type TestTarget = 'elements'|'performance-main-thread'|'performance-insights'|'elements-multimodal'|'patching';
 
 // Clang cannot handle the Record<> syntax over multiple lines, it seems.
 /* clang-format off */
@@ -58,3 +67,10 @@ export type Logs = Record<string, {
   text: string,
 }> ;
 /* clang-format on */
+
+export interface PatchTest {
+  repository: string;
+  folderName: string;
+  query: string;
+  changedFiles: Array<{path: string, matches: string[], doesNotMatch?: string[]}>;
+}

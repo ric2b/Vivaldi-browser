@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "Ice19fd7cfd50ae54a3d647cfbb684dde02296d1e",
+  "upstream_commit_id": "I6bcf7a9b44efcc5efb0526d09afe6e15f55c3471",
 
   # The path of the sysroots.json file.
   # This is used by vendor builds like Electron.
@@ -134,7 +134,6 @@ hooks = [
     'action': [ 'python3', "-u",
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--no_auth',
                 '--bucket', 'chromium-browser-clang/ciopfs',
                 '-s', 'chromium/build/ciopfs.sha1',
     ]
@@ -209,7 +208,6 @@ hooks = [
     'action': [ 'python3',
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--no_auth',
                 '--bucket', 'chromium-browser-clang',
                 '-s', 'chromium/tools/clang/dsymutil/bin/dsymutil.arm64.sha1',
                 '-o', 'chromium/tools/clang/dsymutil/bin/dsymutil',
@@ -222,7 +220,6 @@ hooks = [
     'action': [ 'python3',
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--no_auth',
                 '--bucket', 'chromium-browser-clang',
                 '-s', 'chromium/tools/clang/dsymutil/bin/dsymutil.x64.sha1',
                 '-o', 'chromium/tools/clang/dsymutil/bin/dsymutil',
@@ -248,7 +245,6 @@ hooks = [
     'action': [ 'python3', "-u",
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--no_auth',
                 '--bucket', 'chromium-browser-clang/rc',
                 '-s', 'chromium/build/toolchain/win/rc/mac/rc.sha1',
     ],
@@ -260,21 +256,11 @@ hooks = [
     'action': [ 'python3', "-u",
                 'chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
-                '--no_auth',
                 '--bucket', 'chromium-browser-clang/rc',
                 '-s', 'chromium/build/toolchain/win/rc/linux64/rc.sha1',
     ]
   },
   # Download test resources for opus, i.e. audio files.
-  {
-    'name': 'opus_test_files',
-    'pattern': '.',
-    'action': ['download_from_google_storage',
-               '--no_auth',
-               '--quiet',
-               '--bucket', 'chromium-webrtc-resources',
-               '-d', 'chromium/third_party/opus/tests/resources'],
-  },
   {
     'name': 'Fetch Android AFDO profile',
     'pattern': '.',

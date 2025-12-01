@@ -2,6 +2,8 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chrome_build.gni")
+
 source_set("ui_bundled") {
   sources = [
     "search_engine_choice_consumer.h",
@@ -39,10 +41,10 @@ source_set("ui_bundled") {
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/profile",
     "//ios/chrome/browser/shared/public/commands",
-    "//ios/chrome/browser/shared/ui/list_model:list_model",
+    "//ios/chrome/browser/shared/ui/list_model",
     "//ios/chrome/browser/shared/ui/symbols",
     "//ios/chrome/browser/shared/ui/util",
-    "//ios/chrome/common/ui/colors:colors",
+    "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/promo_style:constants",
     "//ios/chrome/common/ui/promo_style:utils",
     "//ios/chrome/common/ui/util",
@@ -66,13 +68,23 @@ source_set("ui_util") {
   ]
   deps = [
     "//base",
+    "//build:branding_buildflags",
     "//components/regional_capabilities",
+    "//components/resources:components_scaled_resources_grit",
     "//components/search_engines",
     "//ios/chrome/browser/favicon/model",
     "//ios/chrome/common/ui/favicon",
     "//ios/chrome/common/ui/favicon:favicon_constants",
     "//ui/base",
+    "//ui/resources",
   ]
+
+  if (enable_builtin_search_provider_assets) {
+    deps += [
+      "//third_party/search_engines_data:search_engines_scaled_resources_grit",
+    ]
+  }
+
   frameworks = [ "UIKit.framework" ]
 }
 

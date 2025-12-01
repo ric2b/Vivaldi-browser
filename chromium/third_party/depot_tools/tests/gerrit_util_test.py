@@ -739,7 +739,7 @@ class ShouldUseSSOTest(unittest.TestCase):
         scm_mock.GIT(self)
         self.addCleanup(mock.patch.stopall)
 
-        gerrit_util.ShouldUseSSO.cache_clear()
+        gerrit_util.CheckShouldUseSSO.cache_clear()
         return super().setUp()
 
     def tearDown(self) -> None:

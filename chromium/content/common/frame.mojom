@@ -46,7 +46,6 @@ import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_params.mojom";
 import "third_party/blink/public/mojom/navigation/navigation_initiator_activation_and_ad_status.mojom";
-import "third_party/blink/public/mojom/page/browsing_context_group_info.mojom";
 import "third_party/blink/public/mojom/page/page.mojom";
 import "third_party/blink/public/mojom/page/prerender_page_param.mojom";
 import "third_party/blink/public/mojom/partitioned_popins/partitioned_popin_params.mojom";
@@ -165,7 +164,7 @@ struct CreateViewParams {
   blink.mojom.ColorProviderColorMaps color_provider_colors;
 
   // Indicates which browsing context group the page in this view belongs to.
-  blink.mojom.BrowsingContextGroupInfo browsing_context_group_info;
+  mojo_base.mojom.UnguessableToken browsing_context_group_token;
 
   // Indicates whether web or OS-level Attribution Reporting is supported. See
   // https://github.com/WICG/attribution-reporting-api/blob/main/app_to_web.md
@@ -174,6 +173,10 @@ struct CreateViewParams {
   // This must be null unless the view being created is a partitioned popin.
   // See https://explainers-by-googlers.github.io/partitioned-popins/
   blink.mojom.PartitionedPopinParams? partitioned_popin_params;
+
+  // Identifies the navigation that triggered this view creation, if any. Used
+  // for collecting metrics.
+  mojo_base.mojom.UnguessableToken? navigation_metrics_token;
 };
 
 // A union to distinguish between parameters specific to local main frame
@@ -354,6 +357,10 @@ struct CreateFrameParams {
   // Set if this frame corresponds to the main frame for a non top-level
   // FrameTree (GuestView, fenced frame etc.).
   bool is_for_nested_main_frame;
+
+  // Identifies the navigation that triggered this frame creation, if any. Used
+  // for collecting metrics.
+  mojo_base.mojom.UnguessableToken? navigation_metrics_token;
 };
 
 // Provided with each call to Frame::GetSerializedHtmlWithLocalLinks() so that
@@ -703,7 +710,7 @@ struct CreateNewWindowReply {
   blink.mojom.PolicyContainer policy_container;
 
   // Indicates which browsing context group the page in this view belongs to.
-  blink.mojom.BrowsingContextGroupInfo browsing_context_group_info;
+  mojo_base.mojom.UnguessableToken browsing_context_group_token;
 
   // The ColorProviderColorMaps for this view.
   blink.mojom.ColorProviderColorMaps color_provider_colors;

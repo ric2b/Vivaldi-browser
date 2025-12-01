@@ -23,7 +23,15 @@
 using ItemBlock = void (^)(id idResponse, NSError* error);
 
 namespace {
+
 const CGFloat kShareSheetCornerRadius = 20;
+
+const CGFloat kShareImageTargetHeight = 1024;
+const CGFloat kShareImageTargetWidth = 1024;
+
+// Character limit for the text search.
+const NSUInteger kSearchCharacterLimit = 1000;
+
 }  // namespace
 
 @interface ExtendedShareViewController () <ShareExtensionDelegate>
@@ -50,9 +58,13 @@ const CGFloat kShareSheetCornerRadius = 20;
 
 // The image to share.
 @property(nonatomic, strong) UIImage* shareImage;
+@property(nonatomic, strong) NSData* shareImageData;
 
 // The text to share.
 @property(nonatomic, copy) NSString* shareText;
+
+// Whether a text reach the character limit.
+@property(nonatomic, assign) BOOL characterLimitReached;
 
 // Creates a file in `app_group::ShareExtensionItemsFolder()` containing a
 // serialized NSDictionary.
@@ -82,10 +94,10 @@ const CGFloat kShareSheetCornerRadius = 20;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-
+  self.view.backgroundColor = [UIColor clearColor];
   self.shareSheet = [[ShareExtensionSheet alloc] init];
   self.shareSheet.delegate = self;
-  self.shareSheet.modalPresentationStyle = UIModalPresentationPageSheet;
+  self.shareSheet.modalPresentationStyle = UIModalPresentationFormSheet;
   UISheetPresentationController* presentationController =
       self.shareSheet.sheetPresentationController;
   presentationController.prefersEdgeAttachedInCompactHeight = YES;
@@ -102,6 +114,7 @@ const CGFloat kShareSheetCornerRadius = 20;
 
 - (void)didTapCloseShareExtensionSheet:
     (ShareExtensionSheet*)shareExtensionSheet {
+  self.shareSheet.dismissedFromSheetAction = YES;
   __weak ExtendedShareViewController* weakSelf = self;
   [self
       queueActionItemURL:nil
@@ -121,6 +134,7 @@ const CGFloat kShareSheetCornerRadius = 20;
 
 - (void)didTapOpenInChromeShareExtensionSheet:
     (ShareExtensionSheet*)shareExtensionSheet {
+  self.shareSheet.dismissedFromSheetAction = YES;
   __weak ExtendedShareViewController* weakSelf = self;
   AppGroupCommand* command = [[AppGroupCommand alloc]
       initWithSourceApp:app_group::kOpenCommandSourceShareExtension
@@ -135,7 +149,7 @@ const CGFloat kShareSheetCornerRadius = 20;
                     action:app_group::OPEN_IN_CHROME_ITEM
                     cancel:NO
                 completion:^{
-                  [weakSelf dissmissAndShowShareItem];
+                  [weakSelf dismissAndShowShareItem];
                 }];
 }
 
@@ -158,6 +172,11 @@ const CGFloat kShareSheetCornerRadius = 20;
   [moreActionsAlertController addAction:[self openInIncognitoAlertAction]];
   [moreActionsAlertController addAction:cancelAlertAction];
 
+  moreActionsAlertController.popoverPresentationController.sourceView =
+      self.shareSheet.secondaryActionButton;
+  moreActionsAlertController.popoverPresentationController.sourceRect =
+      self.shareSheet.secondaryActionButton.bounds;
+
   [self.shareSheet presentViewController:moreActionsAlertController
                                 animated:YES
                               completion:nil];
@@ -165,6 +184,7 @@ const CGFloat kShareSheetCornerRadius = 20;
 
 - (void)didTapSearchInChromeShareExtensionSheet:
     (ShareExtensionSheet*)shareExtensionSheet {
+  self.shareSheet.dismissedFromSheetAction = YES;
   CHECK(!self.shareURL);
   __weak ExtendedShareViewController* weakSelf = self;
   AppGroupCommand* command = [[AppGroupCommand alloc]
@@ -177,9 +197,7 @@ const CGFloat kShareSheetCornerRadius = 20;
     [command executeInApp];
     [self queueActionItemURL:_shareURL
                        title:_shareText
-                      // TODO(crbug.com/398803565): Add and handle search text
-                      // and image in ShareExtensionItemType.
-                      action:app_group::OPEN_IN_CHROME_ITEM
+                      action:app_group::TEXT_SEARCH_ITEM
                       cancel:NO
                   completion:^{
                     [weakSelf dismissAndReturnItem:weakSelf.shareItem
@@ -188,24 +206,20 @@ const CGFloat kShareSheetCornerRadius = 20;
     return;
   }
 
-  if (self.shareImage) {
-    [command prepareToSearchImage:self.shareImage];
-    [command executeInApp];
-    [self queueActionItemURL:_shareURL
-                       title:_shareTitle
-                      // TODO(crbug.com/398803565): Add and handle search text
-                      // and image in ShareExtensionItemType.
-                      action:app_group::OPEN_IN_CHROME_ITEM
-                      cancel:NO
-                  completion:^{
-                    [weakSelf dissmissAndShowShareItem];
-                  }];
+  if (self.shareImageData) {
+    [command prepareToSearchImageData:self.shareImageData
+                           completion:^{
+                             [weakSelf handleImageSharingForCommand:command
+                                                          incognito:NO];
+                           }];
+
     return;
   }
 }
 
 - (void)didTapSearchInIncognitoShareExtensionSheet:
     (ShareExtensionSheet*)shareExtensionSheet {
+  self.shareSheet.dismissedFromSheetAction = YES;
   CHECK(!self.shareURL);
   __weak ExtendedShareViewController* weakSelf = self;
   AppGroupCommand* command = [[AppGroupCommand alloc]
@@ -218,9 +232,7 @@ const CGFloat kShareSheetCornerRadius = 20;
     [command executeInApp];
     [self queueActionItemURL:_shareURL
                        title:_shareText
-                      // TODO(crbug.com/398803565): Add and handle search text
-                      // and image in ShareExtensionItemType.
-                      action:app_group::OPEN_IN_CHROME_ITEM
+                      action:app_group::INCOGNITO_TEXT_SEARCH_ITEM
                       cancel:NO
                   completion:^{
                     [weakSelf dismissAndReturnItem:weakSelf.shareItem
@@ -229,23 +241,43 @@ const CGFloat kShareSheetCornerRadius = 20;
     return;
   }
 
-  if (self.shareImage) {
-    [command prepareToIncognitoSearchImage:self.shareImage];
-    [command executeInApp];
-    [self queueActionItemURL:_shareURL
-                       title:_shareTitle
-                      // TODO(crbug.com/398803565): Add and handle search text
-                      // and image in ShareExtensionItemType.
-                      action:app_group::OPEN_IN_CHROME_ITEM
-                      cancel:NO
-                  completion:^{
-                    [weakSelf dissmissAndShowShareItem];
-                  }];
+  if (self.shareImageData) {
+    [command prepareToIncognitoSearchImageData:self.shareImageData
+                                    completion:^{
+                                      [weakSelf
+                                          handleImageSharingForCommand:command
+                                                             incognito:YES];
+                                    }];
     return;
   }
 }
 
+- (void)shareExtensionSheetDidDisappear:
+    (ShareExtensionSheet*)shareExtensionSheet {
+  [self
+      handleSheetDismissalForItem:nil
+                            error:[NSError errorWithDomain:NSCocoaErrorDomain
+                                                      code:NSUserCancelledError
+                                                  userInfo:nil]];
+}
+
 #pragma mark - Private methods
+
+- (void)handleImageSharingForCommand:(AppGroupCommand*)command
+                           incognito:(BOOL)incognito {
+  __weak ExtendedShareViewController* weakSelf = self;
+  app_group::ShareExtensionItemType action =
+      (incognito) ? app_group::INCOGNITO_IMAGE_SEARCH_ITEM
+                  : app_group::IMAGE_SEARCH_ITEM;
+  [command executeInApp];
+  [self queueActionItemURL:_shareURL
+                     title:_shareTitle
+                    action:action
+                    cancel:NO
+                completion:^{
+                  [weakSelf dismissAndShowShareItem];
+                }];
+}
 
 - (void)displayShareSheet {
   if (_shareURL) {
@@ -255,6 +287,7 @@ const CGFloat kShareSheetCornerRadius = 20;
     self.shareSheet.sharedImage = _shareImage;
   } else if (_shareText) {
     self.shareSheet.sharedText = _shareText;
+    self.shareSheet.displayMaxLimit = _characterLimitReached;
   }
 
   __weak ExtendedShareViewController* weakSelf = self;
@@ -297,7 +330,8 @@ const CGFloat kShareSheetCornerRadius = 20;
                     [NSError errorWithDomain:NSURLErrorDomain
                                         code:NSURLErrorUnsupportedURL
                                     userInfo:nil];
-                [weakSelf dismissAndReturnItem:nil error:unsupportedURLError];
+                [weakSelf handleSheetDismissalForItem:nil
+                                                error:unsupportedURLError];
               }];
   [alert addAction:defaultAction];
   [self presentViewController:alert animated:YES completion:nil];
@@ -352,6 +386,9 @@ const CGFloat kShareSheetCornerRadius = 20;
                           dataWithContentsOfURL:base::apple::ObjCCast<NSURL>(
                                                     idImage)]];
   }
+
+  [self resizeAndScaleShareImage];
+
   self.shareItem = item;
   if (self.shareImage) {
     [self displayShareSheet];
@@ -360,9 +397,46 @@ const CGFloat kShareSheetCornerRadius = 20;
   }
 }
 
+- (void)resizeAndScaleShareImage {
+  CHECK(self.shareImage);
+  CGSize originalSize = self.shareImage.size;
+  if ((originalSize.width > 0 && originalSize.height > 0) &&
+      (originalSize.width > kShareImageTargetWidth ||
+       originalSize.height > kShareImageTargetHeight)) {
+    CGSize targetSize =
+        CGSizeMake(kShareImageTargetWidth, kShareImageTargetHeight);
+    CGSize scaledSize;
+
+    CGFloat widthRatio = targetSize.width / originalSize.width;
+    CGFloat heightRatio = targetSize.height / originalSize.height;
+
+    if (heightRatio < widthRatio) {
+      scaledSize =
+          CGSizeMake(originalSize.width * heightRatio, targetSize.height);
+    } else {
+      scaledSize =
+          CGSizeMake(targetSize.width, originalSize.height * widthRatio);
+    }
+
+    self.shareImage =
+        [self.shareImage imageByPreparingThumbnailOfSize:scaledSize];
+  }
+
+  self.shareImageData = UIImageJPEGRepresentation(self.shareImage, 1.0);
+}
+
 - (void)handleText:(id)idText
            forItem:(NSExtensionItem*)item
          withError:(NSError*)error {
+  NSString* shareText = [[item attributedContentText] string];
+  if ([shareText length] > kSearchCharacterLimit) {
+    self.shareText =
+        [shareText substringWithRange:NSMakeRange(0, kSearchCharacterLimit)];
+    self.characterLimitReached = YES;
+  } else {
+    self.shareText = shareText;
+    self.characterLimitReached = NO;
+  }
   self.shareText = [[item attributedContentText] string];
   self.shareItem = item;
 
@@ -581,6 +655,7 @@ const CGFloat kShareSheetCornerRadius = 20;
 }
 
 - (void)handleAddingToBookmark {
+  self.shareSheet.dismissedFromSheetAction = YES;
   __weak ExtendedShareViewController* weakSelf = self;
   [self queueActionItemURL:_shareURL
                      title:_shareTitle
@@ -592,6 +667,7 @@ const CGFloat kShareSheetCornerRadius = 20;
 }
 
 - (void)handleAddingToReadingList {
+  self.shareSheet.dismissedFromSheetAction = YES;
   __weak ExtendedShareViewController* weakSelf = self;
   [self queueActionItemURL:_shareURL
                      title:_shareTitle
@@ -603,6 +679,7 @@ const CGFloat kShareSheetCornerRadius = 20;
 }
 
 - (void)handleOpeningInIncognito {
+  self.shareSheet.dismissedFromSheetAction = YES;
   __weak ExtendedShareViewController* weakSelf = self;
   AppGroupCommand* command = [[AppGroupCommand alloc]
       initWithSourceApp:app_group::kOpenCommandSourceShareExtension
@@ -614,14 +691,14 @@ const CGFloat kShareSheetCornerRadius = 20;
 
   [self queueActionItemURL:_shareURL
                      title:_shareTitle
-                    action:app_group::OPEN_IN_CHROME_ITEM
+                    action:app_group::OPEN_IN_CHROME_INCOGNITO_ITEM
                     cancel:NO
                 completion:^{
-                  [weakSelf dissmissAndShowShareItem];
+                  [weakSelf dismissAndShowShareItem];
                 }];
 }
 
-- (void)dissmissAndShowShareItem {
+- (void)dismissAndShowShareItem {
   [self dismissAndReturnItem:_shareItem error:nil];
 }
 @end

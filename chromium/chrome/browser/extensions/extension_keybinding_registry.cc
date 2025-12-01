@@ -57,6 +57,38 @@ void ExtensionKeybindingRegistry::SetShortcutHandlingSuspended(bool suspended) {
   OnShortcutHandlingSuspended(suspended);
 }
 
+void ExtensionKeybindingRegistry::AddExtensionKeybindings(
+    const Extension* extension,
+    const std::string& command_name) {
+  // This object only handles named commands, not toolbar action execution.
+  if (ShouldIgnoreCommand(command_name)) {
+    return;
+  }
+
+  // Add all the active keybindings (except toolbar action executions,
+  // which are handled elsewhere).
+  ui::CommandMap commands;
+  if (!PopulateCommands(extension, &commands)) {
+    return;
+  }
+
+  for (auto& command : commands) {
+    if (!command_name.empty() &&
+        (command.second.command_name() != command_name)) {
+      continue;
+    }
+    const ui::Accelerator& accelerator = command.second.accelerator();
+
+    if (!IsAcceleratorRegistered(accelerator)) {
+      if (!RegisterAccelerator(accelerator)) {
+        continue;
+      }
+    }
+
+    AddEventTarget(accelerator, extension->id(), command.second.command_name());
+  }
+}
+
 void ExtensionKeybindingRegistry::RemoveExtensionKeybinding(
     const Extension* extension,
     const std::string& command_name) {
@@ -76,7 +108,7 @@ void ExtensionKeybindingRegistry::RemoveExtensionKeybinding(
     auto old = it++;
     if (target_list.empty()) {
       // Let each platform-specific implementation get a chance to clean up.
-      RemoveExtensionKeybindingImpl(old->first, command_name);
+      UnregisterAccelerator(old->first);
 
       if (old->first.IsMediaKey()) {
         any_media_keys_removed = true;
@@ -146,6 +178,8 @@ void ExtensionKeybindingRegistry::CommandExecuted(
   base::Value::List args;
   args.Append(command);
 
+// TODO(crbug.com/406136564): Support tab parameter for commands.onCommand.
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   base::Value tab_value;
   if (delegate_) {
     content::WebContents* web_contents =
@@ -155,8 +189,7 @@ void ExtensionKeybindingRegistry::CommandExecuted(
     // not set the delegate as it deals only with named commands (not
     // page/browser actions that are associated with the current page directly).
     ActiveTabPermissionGranter* granter =
-        web_contents ? TabHelper::FromWebContents(web_contents)
-                           ->active_tab_permission_granter()
+        web_contents ? ActiveTabPermissionGranter::FromWebContents(web_contents)
                      : nullptr;
     if (granter) {
       granter->GrantIfRequested(extension);
@@ -178,6 +211,7 @@ void ExtensionKeybindingRegistry::CommandExecuted(
   }
 
   args.Append(std::move(tab_value));
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   auto event =
       std::make_unique<Event>(events::COMMANDS_ON_COMMAND, kOnCommandEventName,

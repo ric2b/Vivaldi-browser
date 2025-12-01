@@ -150,10 +150,54 @@ class AuthenticationService : public KeyedService,
   friend class AuthenticationServiceTestBase;
   friend class FakeAuthenticationService;
 
-  // If the current profile is being opened for the first time, this performs
-  // any necessary first-time setup (notably, signing in the assigned managed
-  // account to a managed profile), and then marks the profile as initialized.
-  void PerformFirstTimeProfileInitializationIfNecessary();
+  // LINT.IfChange(IOSProfileInitializationOutcome)
+  enum class ProfileInitializationOutcome {
+    // Test-only code path.
+    kNoneForTesting = 0,
+
+    // Good / expected cases:
+
+    // The multi-profile feature was disabled, so no action taken.
+    kFeatureDisabledAlreadyInitialized = 1,
+    kFeatureDisabledNewlyInitialized = 2,
+
+    // This is the personal profile, so no action was necessary.
+    kPersonalProfileAlreadyInitialized = 3,
+    kPersonalProfileNewlyInitialized = 4,
+    // This is a managed profile, and it was already initialized (i.e. already
+    // signed in).
+    kManagedProfileAlreadyInitialized = 5,
+    // This is a managed profile, and it was newly initialized (and signed in).
+    kManagedProfileNewlyInitialized = 6,
+
+    // Bad / unexpected cases:
+
+    // This is a managed profile which was newly initialized, but it was somehow
+    // already signed in. This most likely means the "IsFullyInitialized" flag
+    // wasn't properly set.
+    kManagedProfileNewlyInitializedButAlreadySignedIn = 7,
+    // This is a managed profile which was already initialized, but not signed
+    // in yet. It was signed in (again). This means that either signin failed
+    // previously, or the managed profile somehow got signed out.
+    kManagedProfileAlreadyInitializedButNewlySignedIn = 8,
+    // This is a managed profile, but it had no available accounts and so could
+    // not be signed in. This likely indicates some issue with
+    // AccountProfileMapper.
+    kManagedProfileAlreadyInitializedNoAccounts = 9,
+    kManagedProfileNewlyInitializedNoAccounts = 10,
+    // This is a managed profile, which somehow had multiple accounts available.
+    // This likely indicates some issue with AccountProfileMapper.
+    kManagedProfileAlreadyInitializedMultipleAccountsAndNewlySignedIn = 11,
+    kManagedProfileNewlyInitializedMultipleAccounts = 12,
+
+    kMaxValue = kManagedProfileNewlyInitializedMultipleAccounts
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/signin/enums.xml:IOSProfileInitializationOutcome)
+
+  // Performs any necessary first-time setup (notably, signing in the assigned
+  // managed account to a managed profile), and then marks the profile as
+  // initialized.
+  ProfileInitializationOutcome PerformProfileInitializationIfNecessary();
 
   // Returns the cached MDM errors associated with `identity`. If the cache
   // is stale for `identity`, the entry might be removed.
@@ -203,6 +247,9 @@ class AuthenticationService : public KeyedService,
   // Notification for prefs::kSigninAllowed.
   void OnSigninAllowedChanged(const std::string& name);
 
+  // Notification for prefs::kSigninAllowedOnDevice.
+  void OnSigninAllowedOnDeviceChanged(const std::string& name);
+
   // Notification for prefs::kBrowserSigninPolicy.
   void OnBrowserSigninPolicyChanged(const std::string& name);
 
@@ -250,7 +297,7 @@ class AuthenticationService : public KeyedService,
 
   // Registrar for prefs::kSigninAllowed.
   PrefChangeRegistrar pref_change_registrar_;
-  // Registrar for prefs::kBrowserSigninPolicy.
+  // Registrar for prefs::kBrowserSigninPolicy and kSigninAllowedOnDevice.
   PrefChangeRegistrar local_pref_change_registrar_;
 
   base::WeakPtrFactory<AuthenticationService> weak_pointer_factory_;

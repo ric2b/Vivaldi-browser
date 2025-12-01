@@ -95,7 +95,8 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_rel_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.ARM,
             target_bits = 32,
@@ -209,7 +210,8 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_rel_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.ARM,
             target_bits = 32,
@@ -227,7 +229,7 @@ ci.thin_tester(
             "gpu_fyi_android_webgl2_and_gold_telemetry_tests",
         ],
         mixins = [
-            "chromium_pixel_2_pie",
+            "chromium_pixel_2_q",
             "has_native_resultdb_integration",
         ],
         per_test_modifications = {
@@ -269,7 +271,8 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_rel_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.ARM,
             target_bits = 32,
@@ -513,7 +516,8 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_rel_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.ARM,
             target_bits = 32,
@@ -566,7 +570,8 @@ ci.thin_tester(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_rel_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.ARM,
             target_bits = 32,
@@ -847,7 +852,8 @@ ci.gpu.linux_builder(
             ],
         ),
         chromium_config = builder_config.chromium_config(
-            config = "main_builder_rel_mb",
+            config = "main_builder",
+            apply_configs = ["mb"],
             build_config = builder_config.build_config.RELEASE,
             target_arch = builder_config.target_arch.ARM,
             target_bits = 32,
@@ -861,6 +867,7 @@ ci.gpu.linux_builder(
         configs = [
             "gpu_tests",
             "android_builder",
+            "android_fastbuild",
             "release_builder",
             "try_builder",
             "remoteexec",
@@ -906,6 +913,7 @@ ci.gpu.linux_builder(
         configs = [
             "gpu_tests",
             "android_builder",
+            "android_fastbuild",
             "release_builder",
             "try_builder",
             "remoteexec",
@@ -1683,6 +1691,13 @@ ci.thin_tester(
         mixins = [
             "mac_mini_intel_gpu_stable",
         ],
+        per_test_modifications = {
+            "pixel_skia_gold_gl_passthrough_ganesh_test": targets.mixin(
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
+            ),
+        },
     ),
     targets_settings = targets.settings(
         browser_config = targets.browser_config.DEBUG,
@@ -1718,7 +1733,8 @@ ci.thin_tester(
         # the gpu_noop_sleep_telemetry_test test should be used. Otherwise, this
         # should have the same test_suites as 'Mac FYI Release (Apple M1)'.
         targets = [
-            "gpu_noop_sleep_telemetry_test",
+            "gpu_fyi_mac_release_gtests",
+            "gpu_fyi_only_mac_release_graphite_telemetry_tests",
         ],
         mixins = [
             "mac_arm64_apple_m1_gpu_experimental",
@@ -1729,10 +1745,10 @@ ci.thin_tester(
         os_type = targets.os_type.MAC,
     ),
     # Uncomment this entry when this experimental tester is actually in use.
-    # console_view_entry = consoles.console_view_entry(
-    #     category = "Mac|Apple",
-    #     short_name = "exp",
-    # ),
+    console_view_entry = consoles.console_view_entry(
+        category = "Mac|Apple",
+        short_name = "exp",
+    ),
     list_view = "chromium.gpu.experimental",
 )
 
@@ -1955,7 +1971,7 @@ ci.thin_tester(
     targets = targets.bundle(
         targets = [
             "gpu_fyi_mac_release_gtests",
-            "gpu_fyi_only_mac_release_telemetry_tests",
+            "gpu_fyi_only_mac_release_graphite_telemetry_tests",
         ],
         mixins = [
             "mac_arm64_apple_m1_gpu_stable",
@@ -1995,7 +2011,7 @@ ci.thin_tester(
     targets = targets.bundle(
         targets = [
             "gpu_fyi_mac_release_gtests",
-            "gpu_fyi_only_mac_release_telemetry_tests",
+            "gpu_fyi_only_mac_release_graphite_telemetry_tests",
         ],
         mixins = [
             "mac_arm64_apple_m2_retina_gpu_stable",
@@ -2008,6 +2024,46 @@ ci.thin_tester(
     console_view_entry = consoles.console_view_entry(
         category = "Mac|Apple",
         short_name = "m2",
+    ),
+)
+
+ci.thin_tester(
+    name = "Mac FYI Retina Release (Apple M3)",
+    description_html = "Runs release GPU tests on stable Mac/M3 Macbook Pro configs",
+    triggered_by = ["GPU FYI Mac arm64 Builder"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+        run_tests_serially = True,
+    ),
+    targets = targets.bundle(
+        targets = [
+            "gpu_fyi_mac_release_gtests",
+            "gpu_fyi_only_mac_release_graphite_telemetry_tests",
+        ],
+        mixins = [
+            "mac_arm64_apple_m3_retina_gpu_stable",
+        ],
+    ),
+    targets_settings = targets.settings(
+        browser_config = targets.browser_config.RELEASE,
+        os_type = targets.os_type.MAC,
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "Mac|Apple",
+        short_name = "m3",
     ),
 )
 
@@ -2256,6 +2312,13 @@ ci.thin_tester(
         mixins = [
             "mac_retina_amd_gpu_stable",
         ],
+        per_test_modifications = {
+            "pixel_skia_gold_gl_passthrough_ganesh_test": targets.mixin(
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
+            ),
+        },
     ),
     targets_settings = targets.settings(
         browser_config = targets.browser_config.DEBUG,
@@ -2334,6 +2397,11 @@ ci.thin_tester(
         mixins = [
             "mac_retina_nvidia_gpu_stable",
         ],
+        per_test_modifications = {
+            "pixel_skia_gold_gl_passthrough_ganesh_test": targets.remove(
+                reason = "Tests timeout too often, also bot will be decommissioned. See crbug.com/407800772",
+            ),
+        },
     ),
     targets_settings = targets.settings(
         browser_config = targets.browser_config.RELEASE,
@@ -2701,22 +2769,31 @@ ci.thin_tester(
         # should be running the same test_suites as
         # 'Win10 FYI x64 Release (NVIDIA)'
         targets = [
-            "gpu_noop_sleep_telemetry_test",
+            "gpu_fyi_win_gtests",
+            "gpu_fyi_win_release_telemetry_tests",
+            "gpu_fyi_win_optional_isolated_scripts",
         ],
         mixins = [
             "limited_capacity_bot",
             "win10_nvidia_gtx_1660_experimental",
         ],
+        per_test_modifications = {
+            "gl_unittests": targets.mixin(
+                args = [
+                    "--test-launcher-filter-file=../../testing/buildbot/filters/win.nvidia.gtx.1660.gl_unittests.filter",
+                ],
+            ),
+        },
     ),
     targets_settings = targets.settings(
         browser_config = targets.browser_config.RELEASE_X64,
         os_type = targets.os_type.WINDOWS,
     ),
     # Uncomment this entry when this experimental tester is actually in use.
-    # console_view_entry = consoles.console_view_entry(
-    #     category = "Windows|10|x64|Nvidia",
-    #     short_name = "exp",
-    # ),
+    console_view_entry = consoles.console_view_entry(
+        category = "Windows|10|x64|Nvidia",
+        short_name = "exp",
+    ),
     list_view = "chromium.gpu.experimental",
 )
 
@@ -2989,12 +3066,6 @@ ci.thin_tester(
             "gl_tests_passthrough": targets.mixin(
                 args = [
                     "--test-launcher-filter-file=../../testing/buildbot/filters/win.amd.7600.gl_tests_passthrough.filter",
-                ],
-            ),
-            "media_foundation_browser_tests": targets.remove(
-                reason = [
-                    "TODO(crbug.com/40912267): Enable Media Foundation browser tests on ",
-                    "gpu bots once the Windows OS supports HW secure decryption.",
                 ],
             ),
         },

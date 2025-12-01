@@ -515,8 +515,8 @@ struct TridiagonalizationMatrixTReturnType : public ReturnByValue<Tridiagonaliza
     result.template diagonal<-1>() = m_matrix.template diagonal<-1>();
   }
 
-  EIGEN_CONSTEXPR Index rows() const EIGEN_NOEXCEPT { return m_matrix.rows(); }
-  EIGEN_CONSTEXPR Index cols() const EIGEN_NOEXCEPT { return m_matrix.cols(); }
+  constexpr Index rows() const noexcept { return m_matrix.rows(); }
+  constexpr Index cols() const noexcept { return m_matrix.cols(); }
 
  protected:
   typename MatrixType::Nested m_matrix;

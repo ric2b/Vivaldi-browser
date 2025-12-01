@@ -11,7 +11,6 @@
 
 #include "base/files/file.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_api.h"
 #include "chrome/browser/extensions/api/developer_private/developer_private_event_router.h"
@@ -20,7 +19,6 @@
 #include "chrome/browser/extensions/load_error_reporter.h"
 #include "chrome/browser/extensions/pack_extension_job.h"
 #include "chrome/common/extensions/api/developer_private.h"
-#include "chrome/common/extensions/webstore_install_result.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/extension_function.h"
@@ -37,39 +35,6 @@ class Profile;
 namespace extensions {
 
 namespace api {
-
-class DeveloperPrivateAutoUpdateFunction : public DeveloperPrivateAPIFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.autoUpdate",
-                             DEVELOPERPRIVATE_AUTOUPDATE)
-
- protected:
-  ~DeveloperPrivateAutoUpdateFunction() override;
-  ResponseAction Run() override;
-
- private:
-  void OnComplete();
-};
-
-class DeveloperPrivateGetExtensionSizeFunction
-    : public DeveloperPrivateAPIFunction {
- public:
-  DeveloperPrivateGetExtensionSizeFunction();
-
-  DeveloperPrivateGetExtensionSizeFunction(
-      const DeveloperPrivateGetExtensionSizeFunction&) = delete;
-  DeveloperPrivateGetExtensionSizeFunction& operator=(
-      const DeveloperPrivateGetExtensionSizeFunction&) = delete;
-
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.getExtensionSize",
-                             DEVELOPERPRIVATE_GETEXTENSIONSIZE)
-
- private:
-  ~DeveloperPrivateGetExtensionSizeFunction() override;
-  ResponseAction Run() override;
-
-  void OnSizeCalculated(const std::u16string& size);
-};
 
 class DeveloperPrivateReloadFunction : public DeveloperPrivateAPIFunction,
                                        public ExtensionRegistryObserver,
@@ -186,41 +151,6 @@ class DeveloperPrivateLoadUnpackedFunction
   std::optional<ui::SelectedFileInfo> selected_file_for_testing_;
 };
 
-class DeveloperPrivateChoosePathFunction
-    : public DeveloperPrivateAPIFunction,
-      public ui::SelectFileDialog::Listener {
- public:
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.choosePath",
-                             DEVELOPERPRIVATE_CHOOSEPATH)
-  DeveloperPrivateChoosePathFunction();
-
-  // ui::SelectFileDialog::Listener:
-  void FileSelected(const ui::SelectedFileInfo& file, int index) override;
-  void FileSelectionCanceled() override;
-
-  // For testing:
-  void set_accept_dialog_for_testing(bool accept) {
-    accept_dialog_for_testing_ = accept;
-  }
-  void set_selected_file_for_testing(const ui::SelectedFileInfo& file) {
-    selected_file_for_testing_ = file;
-  }
-
- protected:
-  ~DeveloperPrivateChoosePathFunction() override;
-  ResponseAction Run() override;
-
- private:
-  // The dialog with the select file picker.
-  scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
-
-  // For testing:
-  // Whether to accept or reject the select file dialog without showing it.
-  std::optional<bool> accept_dialog_for_testing_;
-  // File to load when accepting the select file dialog without showing it.
-  std::optional<ui::SelectedFileInfo> selected_file_for_testing_;
-};
-
 class DeveloperPrivatePackDirectoryFunction
     : public DeveloperPrivateAPIFunction,
       public PackExtensionJob::Client {
@@ -301,52 +231,8 @@ class DeveloperPrivateLoadDirectoryFunction : public ExtensionFunction {
   // call of the API. It is returned as a response of the API call.
   bool success_;
 
-  // Error string if |success_| is false.
+  // Error string if `success_` is false.
   std::string error_;
-};
-
-class DeveloperPrivateRequestFileSourceFunction
-    : public DeveloperPrivateAPIFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.requestFileSource",
-                             DEVELOPERPRIVATE_REQUESTFILESOURCE)
-  DeveloperPrivateRequestFileSourceFunction();
-
- protected:
-  ~DeveloperPrivateRequestFileSourceFunction() override;
-  ResponseAction Run() override;
-
- private:
-  void Finish(const std::string& file_contents);
-
-  std::optional<api::developer_private::RequestFileSource::Params> params_;
-};
-
-class DeveloperPrivateOpenDevToolsFunction
-    : public DeveloperPrivateAPIFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.openDevTools",
-                             DEVELOPERPRIVATE_OPENDEVTOOLS)
-  DeveloperPrivateOpenDevToolsFunction();
-
- protected:
-  ~DeveloperPrivateOpenDevToolsFunction() override;
-  ResponseAction Run() override;
-};
-
-class DeveloperPrivateRepairExtensionFunction
-    : public DeveloperPrivateAPIFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.repairExtension",
-                             DEVELOPERPRIVATE_REPAIREXTENSION)
-
- protected:
-  ~DeveloperPrivateRepairExtensionFunction() override;
-  ResponseAction Run() override;
-
-  void OnReinstallComplete(bool success,
-                           const std::string& error,
-                           webstore_install::Result result);
 };
 
 class DeveloperPrivateShowOptionsFunction : public DeveloperPrivateAPIFunction {
@@ -377,17 +263,6 @@ class DeveloperPrivateSetShortcutHandlingSuspendedFunction
 
  protected:
   ~DeveloperPrivateSetShortcutHandlingSuspendedFunction() override;
-  ResponseAction Run() override;
-};
-
-class DeveloperPrivateUpdateExtensionCommandFunction
-    : public DeveloperPrivateAPIFunction {
- public:
-  DECLARE_EXTENSION_FUNCTION("developerPrivate.updateExtensionCommand",
-                             DEVELOPERPRIVATE_UPDATEEXTENSIONCOMMAND)
-
- protected:
-  ~DeveloperPrivateUpdateExtensionCommandFunction() override;
   ResponseAction Run() override;
 };
 

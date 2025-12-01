@@ -39,8 +39,8 @@ class FrameGeneratorCapturer : public TestVideoCapturer {
    public:
     // OnSinkWantsChanged is called when FrameGeneratorCapturer::AddOrUpdateSink
     // is called.
-    virtual void OnSinkWantsChanged(rtc::VideoSinkInterface<VideoFrame>* sink,
-                                    const rtc::VideoSinkWants& wants) = 0;
+    virtual void OnSinkWantsChanged(VideoSinkInterface<VideoFrame>* sink,
+                                    const VideoSinkWants& wants) = 0;
 
    protected:
     virtual ~SinkWantsObserver() {}
@@ -74,9 +74,9 @@ class FrameGeneratorCapturer : public TestVideoCapturer {
 
   void SetSinkWantsObserver(SinkWantsObserver* observer);
 
-  void AddOrUpdateSink(rtc::VideoSinkInterface<VideoFrame>* sink,
-                       const rtc::VideoSinkWants& wants) override;
-  void RemoveSink(rtc::VideoSinkInterface<VideoFrame>* sink) override;
+  void AddOrUpdateSink(VideoSinkInterface<VideoFrame>* sink,
+                       const VideoSinkWants& wants) override;
+  void RemoveSink(VideoSinkInterface<VideoFrame>* sink) override;
   void RequestRefreshFrame() override;
 
   void ForceFrame();
@@ -97,7 +97,7 @@ class FrameGeneratorCapturer : public TestVideoCapturer {
 
   Mutex lock_;
   std::unique_ptr<FrameGeneratorInterface> frame_generator_;
-  rtc::scoped_refptr<VideoFrameBuffer> last_frame_captured_;
+  scoped_refptr<VideoFrameBuffer> last_frame_captured_;
 
   int source_fps_ RTC_GUARDED_BY(&lock_);
   int target_capture_fps_ RTC_GUARDED_BY(&lock_);

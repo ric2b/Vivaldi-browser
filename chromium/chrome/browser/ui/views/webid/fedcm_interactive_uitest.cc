@@ -41,18 +41,20 @@ class FedCmCUJTest : public InteractiveBrowserTest {
       idps_ = {base::MakeRefCounted<content::IdentityProviderData>(
           "idp-example.com", content::IdentityProviderMetadata(),
           content::ClientMetadata(GURL(), GURL(), GURL(), gfx::Image()),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false)};
       accounts_ = {base::MakeRefCounted<Account>(
           "id", "display_identifier", "display_name", "email", "name",
-          "given_name", GURL(),
+          "given_name", GURL(), "phone", "username",
           /*login_hints=*/std::vector<std::string>(),
           /*domain_hints=*/std::vector<std::string>(),
           /*labels=*/std::vector<std::string>())};
       accounts_[0]->identity_provider = idps_[0];
       account_selection_view_->Show(
-          content::RelyingPartyData("rp-example.com"), idps_, accounts_,
-          Account::SignInMode::kExplicit, mode,
+          content::RelyingPartyData(u"rp-example.com",
+                                    /*iframe_for_display=*/u""),
+          idps_, accounts_, mode,
           /*new_accounts=*/std::vector<IdentityRequestAccountPtr>());
     });
   }

@@ -29,15 +29,16 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="1356661055722410047">Baharu! Anda boleh menterjemahkan teks dan imej pada skrin anda</translation>
 <translation id="1383876407941801731">Carian</translation>
 <translation id="1414495520565016063">Anda log masuk ke Chromium!</translation>
+<translation id="141901961143729572">Kongsi pendapat anda</translation>
 <translation id="1465192221147974788">Untuk berkongsi tetingkap anda, benarkan rakaman skrin untuk Chromium dalam Tetapan Sistem.</translation>
 <translation id="1478370723027452770">Dapatkan bantuan tentang Chrome for Testing</translation>
 <translation id="1497802159252041924">Ralat pemasangan: <ph name="INSTALL_ERROR" /></translation>
+<translation id="1518627427551567882">Halaman ini dilindungi</translation>
 <translation id="1524282610922162960">Kongsi tab Chromium</translation>
 <translation id="1547469039832541117">Tamatkan tugasan yang diserlahkan.</translation>
 <translation id="1553461853655228091">Chromium memerlukan kebenaran untuk mengakses kamera anda untuk membuat peta 3D persekitaran anda</translation>
 <translation id="1555494096857516577">{NUM_EXTENSIONS,plural, =1{Sambungan ini tidak disokong lagi. Chromium mengesyorkan supaya anda mengalih keluar sambungan tersebut.}other{Sambungan ini tidak disokong lagi. Chromium mengesyorkan supaya anda mengalih keluar sambungan tersebut.}}</translation>
 <translation id="1574377791422810894">Alatan keselamatan Chromium</translation>
-<translation id="1591808205441691831">Chromium perlu mengesahkan identiti anda sebelum sesetengah data boleh disimpan dalam Google Account anda dan digunakan pada semua peranti anda. Jika anda log keluar, data ini akan kekal pada peranti ini.</translation>
 <translation id="1594928384848033697">Chromium mahu memadamkan data Password Manager anda. Taip kata laluan Windows anda untuk membenarkan tindakan ini.</translation>
 <translation id="1607715478322902680">{COUNT,plural, =0{Pentadbir anda menghendaki anda melancarkan semula Chromium untuk menggunakan kemas kini}=1{Pentadbir anda menghendaki anda melancarkan semula Chromium untuk menggunakan kemas kini. Tetingkap Inkognito anda tidak dapat dibuka semula.}other{Pentadbir anda menghendaki anda melancarkan semula Chromium untuk menggunakan kemas kini. # tetingkap Inkognito anda tidak dapat dibuka semula.}}</translation>
 <translation id="1625909126243026060">Semak privasi dan kawalan keselamatan utama dalam Chromium</translation>
@@ -79,7 +80,6 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="2049376729098081731">Pilih sama ada untuk memasukkan sejarah Chromium untuk mendapatkan pengalaman yang lebih diperibadikan dalam Perkhidmatan Google</translation>
 <translation id="2054039611381840095">Untuk mendapatkan kemaskinian Chromium yang akan datang, anda memerlukan macOS 12 atau versi lebih baharu. Komputer ini menggunakan macOS 11.</translation>
 <translation id="2086476982681781442">Chromium menyekat muat turun ini kerana fail mengelirukan dan mungkin membuat perubahan tidak dijangka pada peranti anda</translation>
-<translation id="2088953378266246249">Maklumat tentang cara Chromium mengurus sijil akarnya</translation>
 <translation id="2099452623287920103">Kata laluan anda dan data Chromium lain yang anda simpan dalam Google Account anda akan dialih keluar daripada peranti ini. Untuk menggunakan maklumat itu semula dalam Chromium, log masuk semula.</translation>
 <translation id="2120965832000301375">{COUNT,plural, =1{Organisasi anda akan memadamkan data semakan imbas secara automatik apabila Chromium tidak digunakan selama 1 minit. Pemadaman ini termasuk sejarah, autolengkap dan muat turun. Tab anda akan kekal terbuka.}other{Organisasi anda akan memadamkan data semakan imbas secara automatik apabila Chromium tidak digunakan selama # minit. Pemadaman ini termasuk sejarah, autolengkap dan muat turun. Tab anda akan kekal terbuka.}}</translation>
 <translation id="2126108037660393668">Pengesahan fail yang dimuat turun gagal.</translation>
@@ -119,7 +119,6 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="2572494885440352020">Pembantu Chromium</translation>
 <translation id="2575822587468774919">Pilih apa-apa sahaja untuk dicari dengan Carian Imej</translation>
 <translation id="2576118232315942160">Untuk mendapatkan kata laluan anda dan pelbagai lagi pada semua peranti anda, log masuk ke Chromium</translation>
-<translation id="2583187216237139145">Sebarang data Chromium yang dijana semasa penggunaan profil ini (seperti pembuatan penanda halaman, sejarah, kata laluan dan tetapan lain) boleh dialih keluar oleh pentadbir profil kerja. <ph name="LEARN_MORE" /></translation>
 <translation id="2592940277904433508">Terus menggunakan Chromium</translation>
 <translation id="259935314519650377">Gagal mengcache pemasang yang dimuat turun. Ralat: <ph name="UNPACK_CACHING_ERROR_CODE" />.</translation>
 <translation id="2620436844016719705">Sistem</translation>
@@ -163,6 +162,7 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="3079753320517721795">{NUM_DEVICES,plural, =0{1 peranti USB telah diakses oleh satu atau beberapa sambungan Chromium}=1{1 peranti USB sedang diakses oleh satu atau beberapa sambungan Chromium}other{# peranti USB sedang diakses oleh satu atau beberapa sambungan Chromium}}</translation>
 <translation id="3101560983689755071">Sejarah penyemakan imbas anda mempengaruhi iklan yang anda lihat dan minat seperti yang dianggarkan di bawah. Untuk melindungi privasi anda, Chromium memadamkan minat anda secara automatik secara bergilir setiap bulan. Minat akan dimuat semula melainkan anda mengalih keluar minat anda.</translation>
 <translation id="3103660991484857065">Pemasang gagal untuk menyahmampat arkib. Sila muat turun Chromium sekali lagi.</translation>
+<translation id="310459126943037700">Gagal menamatkan tugasan.</translation>
 <translation id="3130323860337406239">Chromium menggunakan mikrofon anda.</translation>
 <translation id="3137969841538672700">Seret untuk mencari</translation>
 <translation id="3144188012276422546">Tab ini menggunakan sumber tambahan. Untuk meningkatkan prestasi anda, benarkan Chromium menjadikan tab tersebut tidak aktif.</translation>
@@ -182,6 +182,7 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="3296368748942286671">Terus menjalankan apl latar belakang apabila Chromium ditutup</translation>
 <translation id="3313189106987092621">Chromium akan memberi anda amaran sebelum memuatkan sebarang laman menggunakan sambungan yang tidak selamat</translation>
 <translation id="3316771292331273802">Anda akan dilog keluar daripada kebanyakan laman apabila anda menutup semua tetingkap Chromium, kecuali Google Account anda jika anda log masuk ke Chromium. Untuk membenarkan laman mengingati anda, <ph name="SETTINGS_LINK" />.</translation>
+<translation id="3352986031709923790">penjuru atas sebelah kanan kawasan carian: kanan <ph name="RIGHT" />%, atas <ph name="TOP" />%</translation>
 <translation id="3387527074123400161">Chromium OS</translation>
 <translation id="3406848076815591792">Tukar kepada profil Chromium yang sedia ada?</translation>
 <translation id="3412460710772753638">Dalam Password Manager pada peranti ini</translation>
@@ -207,7 +208,6 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="3790262771324122253">Ketahui sebab Chromium menghalang sesetengah muat turun</translation>
 <translation id="379589255253486813">Chromium akan memaklumi anda jika terdapat apa-apa perkara yang memerlukan semakan anda</translation>
 <translation id="3802055581630249637">Chromium mempramuat halaman yang mungkin anda lawati supaya halaman tersebut dimuatkan dengan lebih pantas apabila dilawati</translation>
-<translation id="3830894615770080216">Sistem Chromium OS</translation>
 <translation id="3848258323044014972"><ph name="PAGE_TITLE" /> - Chromium</translation>
 <translation id="3885770153807205175">Pemilih bahasa</translation>
 <translation id="388648406173476553">Sesuaikan dan kawal Chromium. Perhatian anda diperlukan - klik untuk mendapatkan butiran.</translation>
@@ -218,12 +218,14 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="3941890832296813527">Ralat pemasangan: Nama fail pemasang tidak sah atau tidak disokong.</translation>
 <translation id="3945058413678539331">Chromium cuba menyalin kata laluan. Taip kata laluan Windows anda untuk membenarkan penyalinan.</translation>
 <translation id="3954172517175569325">Kata laluan, kaedah pembayaran dan alamat anda yang anda simpan dalam Google Account anda akan dialih keluar daripada peranti ini. Untuk menggunakan maklumat itu semula dalam Chromium, log masuk semula.</translation>
+<translation id="395904275706073188">Halaman yang dilindungi tidak dapat dibaca. Cuba halaman yang lain.</translation>
 <translation id="3962647064319009959">Ketahui tentang cara Chromium memastikan anda selamat</translation>
 <translation id="3975724895399328945">Perihal &amp;Google Chrome for Testing</translation>
 <translation id="3997429360543082038">Perihal Chromium OS</translation>
 <translation id="4019629340646866719">Chromium OS menjadi kenyataan dengan <ph name="BEGIN_LINK_CROS_OSS" />perisian sumber terbuka<ph name="END_LINK_CROS_OSS" /> tambahan, sebagaimana <ph name="BEGIN_LINK_LINUX_OSS" />persekitaran pembangunan Linux<ph name="END_LINK_LINUX_OSS" />.</translation>
 <translation id="4022972681110646219">Terjemahkan skrin</translation>
 <translation id="4023601594785368013">Bahasa asal: <ph name="LANGUAGE" /></translation>
+<translation id="4023845192681161785">Buka pautan dalam Chromium daripada sebarang apl. Selain itu, untuk akses mudah, sematkan Chromium pada bar tugas anda.</translation>
 <translation id="4036079820698952681">Bantu jadikan Chromium lebih baik dengan melaporkan <ph name="BEGIN_LINK" />tetapan semasa<ph name="END_LINK" /></translation>
 <translation id="4050175100176540509">Peningkatan keselamatan penting dan ciri baharu tersedia dalam versi terkini.</translation>
 <translation id="4055805654398742145">Password Manager</translation>
@@ -322,8 +324,10 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="5487574057737591516">Untuk melindungi privasi anda, kami memadamkan minat anda yang disimpan melebihi 4 minggu secara automatik. Semasa anda terus menyemak imbas, minat itu mungkin muncul semula dalam senarai. Jika Chromium tersilap atau anda tidak mahu melihat iklan tertentu, anda boleh mengalih keluar minat itu.</translation>
 <translation id="549669000822060376">Sila tunggu sementara Chromium memasang kemas kini sistem terkini.</translation>
 <translation id="5496810170689441661">Chromium cuba mengedit kata laluan. Taip kata laluan Windows anda untuk membenarkan tindakan ini.</translation>
+<translation id="5524890928877629608">penjuru atas sebelah kiri kawasan carian: kiri <ph name="LEFT" />%, atas <ph name="TOP" />%</translation>
 <translation id="5527463683072221100">Buka PDF dalam Chromium</translation>
 <translation id="5579324208890605088">Ralat permulaan: sila jalankan pemasang sebagai pengguna biasa, bukan sebagai pentadbir.</translation>
+<translation id="5580770360767802657">Gunakan Chromium secara lalai dan sematkan Chromium</translation>
 <translation id="5596627076506792578">Lagi pilihan</translation>
 <translation id="5605834417512968703">Pilih apa-apa sahaja untuk dicari dengan Carian Imej atau tekan kekunci escape untuk keluar daripada Carian Imej</translation>
 <translation id="5618818588972826921">Pilih mana-mana teks atau imej untuk membuat carian dengan Carian Imej atau tekan Escape untuk keluar daripada Carian Imej</translation>
@@ -339,6 +343,7 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="5800158606660203929">Sesuaikan dan kawal Chromium. Tetapkan Chromium sebagai lalai anda.</translation>
 <translation id="5809516625706423866">Tidak dapat disambungkan kepada Internet. HTTP 401 Tidak Dibenarkan. Sila semak konfigurasi proksi anda.</translation>
 <translation id="5821520528363214608">Untuk menggunakan dan menyimpan data Chromium dalam Google Account anda, kemas kinikan Chromium</translation>
+<translation id="5824893331272123205">Tidak dapat memuatkan panel ini, cuba lagi</translation>
 <translation id="5862307444128926510">Selamat datang ke Chromium</translation>
 <translation id="5871205389137001634">Klik untuk keluar daripada Carian Imej</translation>
 <translation id="5883558403894052917">Chromium mendapati bahawa item ini mengandungi perisian hasad:</translation>
@@ -360,7 +365,6 @@ peranti Bluetooth. <ph name="IDS_SERIAL_DEVICE_CHOOSER_AUTHORIZE_BLUETOOTH_LINK"
 <translation id="6069027071882229820">Salin sebagai imej</translation>
 <translation id="6072279588547424923"><ph name="EXTENSION_NAME" /> telah ditambahkan pada Chromium</translation>
 <translation id="6072463441809498330">Jadikan Chromium Lebih Pantas</translation>
-<translation id="608006075545470555">Tambahkan Profil Kerja pada penyemak imbas ini</translation>
 <translation id="6096348254544841612">Sesuaikan dan kawal Chromium. Kemas kini tersedia.</translation>
 <translation id="6107893135096467929">Hidupkan • Chromium tidak dapat mengesahkan tempat asal sambungan ini</translation>
 <translation id="6119438414301547735">Benarkan sambungan menunjukkan permintaan akses pada bar alat Chromium</translation>
@@ -435,6 +439,7 @@ Beberapa ciri mungkin tidak tersedia. Sila nyatakan direktori profil yang berbez
 <translation id="684888714667046800">Tidak dapat disambungkan kepada Internet. Jika anda menggunakan tembok api, sila pastikan bahawa <ph name="PRODUCT_EXE_NAME" /> terkandung dalam senarai putih.</translation>
 <translation id="6857782730669500492">Chromium - <ph name="PAGE_TITLE" /></translation>
 <translation id="6873893289264747459">Chromium mendapati bahawa "<ph name="EXTENSION_NAME" />" mengandungi perisian hasad</translation>
+<translation id="6877155553248388166">penjuru bawah sebelah kanan kawasan carian: kanan <ph name="RIGHT" />%, bawah <ph name="BOTTOM" />%</translation>
 <translation id="6896758677409633944">Salin</translation>
 <translation id="6901631050894301805">Tetapkan Chromium sebagai penyemak imbas lalai anda dan sematkan Chromium pada bar tugas anda</translation>
 <translation id="6929417474050522668">Apabila percubaan sedang berlangsung, pengukuran iklan membenarkan laman yang anda lawati meminta maklumat daripada Chromium yang membantu laman tersebut mengukur prestasi iklan mereka. Pengukuran iklan mengehadkan penjejakan rentas laman dengan memindahkan maklumat antara laman sedikit yang mungkin.</translation>
@@ -471,6 +476,7 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="7339898014177206373">Tetingkap baharu</translation>
 <translation id="734373864078049451">Web, penanda halaman dan barangan Chromium anda yang lain tinggal di sini.</translation>
 <translation id="7349591376906416160">Pentadbir sistem anda telah mengkonfigurasikan Chromium agar membuka <ph name="ALTERNATIVE_BROWSER_NAME" /> untuk mengakses <ph name="TARGET_URL_HOSTNAME" />.</translation>
+<translation id="7352651011704765696">Kesilapan telah berlaku</translation>
 <translation id="7384121030444253939">Sambungan ini tidak disokong lagi. Chromium mengesyorkan supaya anda mengalih keluar sambungan tersebut.</translation>
 <translation id="7449453770951226939"><ph name="PAGE_TITLE" /> - Chromium Dev</translation>
 <translation id="7450541714075000668">Teks disalin</translation>
@@ -491,6 +497,7 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="7686590090926151193">Chromium bukan penyemak imbas lalai anda</translation>
 <translation id="7689606757190482937">Segerakkan dan peribadikan Chromium pada semua peranti anda</translation>
 <translation id="7699779824407626136">Kemaskinian Chromium</translation>
+<translation id="7716950018788545737">Tugasan tamat.</translation>
 <translation id="77283119132245232">Menyediakan perkhidmatan penyurihan sistem untuk <ph name="BROWSER_NAME" />. Jika perkhidmatan ini dilumpuhkan, penyurihan prestasi yang dibuat oleh penyemak imbas tidak akan menyertakan peristiwa seluruh sistem seperti peristiwa suis konteks dan urutan tersedia.</translation>
 <translation id="7745317241717453663">Tindakan ini akan memadamkan data semakan imbas anda daripada peranti ini. Untuk mendapatkan kembali data anda kemudian, log masuk ke Chromium sebagai <ph name="USER_EMAIL" />.</translation>
 <translation id="7747138024166251722">Pemasang tidak dapat mencipta direktori sementara. Sila semak ruang cakera kosong dan kebenaran untuk memasang perisian.</translation>
@@ -544,6 +551,7 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="837460953767177950">Kemudian, anda perlu memulakan semula Chromium.</translation>
 <translation id="8397248745433792218">Chromium mengesyorkan supaya anda mengalih keluar sambungan tersebut. <ph name="BEGIN_LINK" />Ketahui lebih lanjut tentang sambungan yang disokong<ph name="END_LINK" /></translation>
 <translation id="8401454788024434101">Sambungan ini telah dinyahterbitkan boleh pembangun dan mungkin tidak selamat. Alih keluar sambungan ini daripada Chromium supaya sambungan ini tidak dapat melihat dan mengubah data anda pada laman yang anda lawati lagi, termasuk maklumat peribadi anda.</translation>
+<translation id="8416884904046428725">Chromium perlu mengesahkan identiti anda sebelum sesetengah data boleh disimpan dalam Google Account anda dan digunakan pada semua peranti anda. Jika anda log keluar sekarang, data ini akan dipadamkan.</translation>
 <translation id="8417404458978023919">{0,plural, =1{Lancarkan semula Chromium dalam masa sehari}other{Lancarkan semula Chromium dalam masa # hari}}</translation>
 <translation id="8438543370129609977">Apabila anda menggunakan Carian Imej, tajuk halaman, URL dan kandungan, termasuk PDF, akan dihantar kepada pelayan. <ph name="LEARN_MORE" /></translation>
 <translation id="8453117565092476964">Arkib pemasang rosak atau tidak sah. Sila muat turun Chromium sekali lagi.</translation>
@@ -552,7 +560,6 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="8471947159125090285">Untuk menggunakan dan menyimpan data Chromium dalam Google Account anda, sahkan identiti anda</translation>
 <translation id="8493179195440786826">Chromium sudah usang</translation>
 <translation id="8522801943730206384">Chromium boleh menyemak kata laluan anda yang disimpan</translation>
-<translation id="8550334526674375523">Profil kerja ini terpisah sepenuhnya daripada profil peribadi anda.</translation>
 <translation id="8555465886620020932">Ralat perkhidmatan: <ph name="SERVICE_ERROR" />.</translation>
 <translation id="8556420416730706394">Anda boleh menyematkan Carian Imej untuk akses mudah; klik butang Semat pada bahagian atas panel sisi</translation>
 <translation id="856656450041460113">Cari senarai bahasa</translation>
@@ -566,6 +573,7 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="8697124171261953979">Sambungan turut mengawal halaman yang ditunjukkan apabila anda memulakan Chromium atau membuat carian dari Kotak Omni.</translation>
 <translation id="8704119203788522458">Ini Chromium anda</translation>
 <translation id="8719993436687031146">Log masuk ke Chromium?</translation>
+<translation id="8747073452963259673">penjuru bawah sebelah kiri kawasan carian: kiri <ph name="LEFT" />%, bawah <ph name="BOTTOM" />%</translation>
 <translation id="878572486461146056">Ralat pemasangan: Pentadbir rangkaian anda telah menggunakan Dasar Kumpulan yang menghalang pemasangan: <ph name="INSTALL_ERROR" /></translation>
 <translation id="8796602469536043152">Chromium memerlukan kebenaran untuk mengakses kamera dan mikrofon anda bagi tapak ini</translation>
 <translation id="8818550178040858407">Log Masuk ke Chromium?</translation>
@@ -580,7 +588,6 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="8931379085695076764">Chromium dapat menganggarkan minat anda berdasarkan sejarah penyemakan imbas anda dari beberapa minggu yang lalu. Maklumat ini kekal pada peranti anda.</translation>
 <translation id="8941642502866065432">Tidak dapat mengemas kini Chromium</translation>
 <translation id="897581876605952338">Logo Chromium Enterprise</translation>
-<translation id="8986207147630327271">Anda menambahkan profil kerja pada penyemak imbas ini dan memberi pentadbir anda kawalan terhadap profil kerja sahaja.</translation>
 <translation id="8988036198400390003">Urus profil Chromium</translation>
 <translation id="9019929317751753759">Untuk menjadikan Chromium lebih selamat, kami melumpuhkan sambungan berikut yang tidak disenaraikan dalam  <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> dan mungkin telah ditambahkan tanpa pengetahuan anda.</translation>
 <translation id="9022552996538154597">Log masuk ke Chromium</translation>
@@ -593,13 +600,13 @@ Chromium tidak dapat mengembalikan tetapan anda.</translation>
 <translation id="9106612006984859720">Untuk mendapatkan kemaskinian Chromium yang akan datang, anda memerlukan Windows 10 atau yang lebih baharu. Komputer ini menggunakan Windows 8.1.</translation>
 <translation id="91086099826398415">Buka Pautan dalam &amp;tab Chromium Baharu</translation>
 <translation id="911206726377975832">Padamkan juga data menyemak imbas anda?</translation>
+<translation id="9134482777260927479">Bantuan kerja rumah</translation>
 <translation id="9148058034647219655">Keluar</translation>
 <translation id="9158494823179993217">Pentadbir sistem anda telah mengkonfigurasikan Chromium agar membuka penyemak imbas alternatif untuk mengakses <ph name="TARGET_URL_HOSTNAME" />.</translation>
 <translation id="9185526690718004400">Lancarkan semula untuk mengemas kini &amp;Chromium</translation>
 <translation id="9190841055450128916">Chromium (mDNS-In)</translation>
 <translation id="924957577793602335">Peribadikan Chromium anda</translation>
 <translation id="93478295209880648">Chromium mungkin tidak akan berfungsi dengan betul kerana tidak lagi disokong pada Windows XP atau Windows Vista</translation>
-<translation id="942598560705308788">Sijil diurus oleh Chromium</translation>
 <translation id="945522503751344254">Hantar maklum balas</translation>
 <translation id="965162752251293939">Siapakah yang sedang menggunakan Chromium?</translation>
 <translation id="967427899662692980">Dapatkan keselamatan Chromium yang paling kukuh</translation>

@@ -24,6 +24,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.content_public.browser.GestureListenerManager;
 import org.chromium.content_public.browser.GestureStateListener;
+import org.chromium.content_public.browser.test.util.WebContentsUtils;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -194,7 +195,7 @@ public class WebViewModalDialogOverrideTest extends AwParameterizedTest {
     }
 
     private static class TapGestureStateListener extends GestureStateListener {
-        private CallbackHelper mCallbackHelper = new CallbackHelper();
+        private final CallbackHelper mCallbackHelper = new CallbackHelper();
 
         public int getCallCount() {
             return mCallbackHelper.getCallCount();
@@ -251,6 +252,9 @@ public class WebViewModalDialogOverrideTest extends AwParameterizedTest {
                 BEFORE_UNLOAD_URL,
                 "text/html",
                 false);
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> WebContentsUtils.simulateEndOfPaintHolding(awContents.getWebContents()));
+
         AwActivityTestRule.enableJavaScriptOnUiThread(awContents);
         // JavaScript onbeforeunload dialogs require a user gesture.
         tapViewAndWait(view);

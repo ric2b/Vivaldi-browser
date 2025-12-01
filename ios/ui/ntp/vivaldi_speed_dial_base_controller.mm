@@ -181,9 +181,9 @@ NSUInteger toolbarVisibleThreshold = 2;
 // this only checks if we got a response from backend for the query.
 @property(nonatomic,assign) BOOL isTopSitesResultsAvailable;
 // Height constraint of the top menu container
-@property (assign, nonatomic) NSLayoutConstraint* menuContainerHeight;
+@property (strong, nonatomic) NSLayoutConstraint* menuContainerHeight;
 // Collection view top constraint when top toolbar is present
-@property (assign, nonatomic) NSLayoutConstraint* cvTopConstraint;
+@property (strong, nonatomic) NSLayoutConstraint* cvTopConstraint;
 // Height for navigation bar
 @property (assign, nonatomic) CGFloat navgationBarHeight;
 
@@ -1484,7 +1484,8 @@ NSUInteger toolbarVisibleThreshold = 2;
           frequentlyVisited:NO
           topSitesAvailable:NO
            topToolbarHidden:[self shouldHideToolbar]
-          verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+          verticalSizeClass:self.view.traitCollection.verticalSizeClass
+                   wallpaper:[self getWallpaperImage]];
     return emptyCell;
   }
 
@@ -1513,7 +1514,8 @@ NSUInteger toolbarVisibleThreshold = 2;
       frequentlyVisited:NO
       topSitesAvailable:NO
        topToolbarHidden:[self shouldHideToolbar]
-      verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+      verticalSizeClass:self.view.traitCollection.verticalSizeClass
+              wallpaper:[self getWallpaperImage]];
   } else {
     [cell setCurrentPage:index];
 
@@ -1535,7 +1537,8 @@ NSUInteger toolbarVisibleThreshold = 2;
       frequentlyVisited:toolbarItem.pageType == VivaldiSpeedDialPageTypeTopSites
       topSitesAvailable:self.isTopSitesResultsAvailable
        topToolbarHidden:[self shouldHideToolbar]
-      verticalSizeClass:self.view.traitCollection.verticalSizeClass];
+      verticalSizeClass:self.view.traitCollection.verticalSizeClass
+              wallpaper:[self getWallpaperImage]];
   }
 
   return cell;

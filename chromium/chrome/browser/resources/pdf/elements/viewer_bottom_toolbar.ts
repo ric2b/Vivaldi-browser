@@ -48,7 +48,7 @@ export class ViewerBottomToolbarElement extends ViewerBottomToolbarElementBase {
     };
   }
 
-  strings?: {[key: string]: string};
+  accessor strings: {[key: string]: string}|undefined;
 
   override updated(changedProperties: PropertyValues<this>) {
     super.updated(changedProperties);
@@ -74,7 +74,7 @@ export class ViewerBottomToolbarElement extends ViewerBottomToolbarElementBase {
     const option = options.find(option => option.size === this.currentSize);
     assert(option);
 
-    return 'pdf:' + option.icon;
+    return 'pdf-ink:' + option.icon;
   }
 
   protected getSizeTitle_(): string {

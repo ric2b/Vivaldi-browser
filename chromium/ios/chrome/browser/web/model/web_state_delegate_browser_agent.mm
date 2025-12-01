@@ -32,8 +32,6 @@
 #import "ios/web/public/ui/context_menu_params.h"
 #import "ios/web/public/ui/crw_web_view_proxy.h"
 
-BROWSER_USER_DATA_KEY_IMPL(WebStateDelegateBrowserAgent)
-
 namespace {
 // Callback for HTTP authentication dialogs. This callback is a standalone
 // function rather than an instance method. This is to ensure that the callback
@@ -97,10 +95,10 @@ bool IsMicOrCameraAccessSubjectToParentalControls(
 WebStateDelegateBrowserAgent::WebStateDelegateBrowserAgent(
     Browser* browser,
     TabInsertionBrowserAgent* tab_insertion_agent)
-    : web_state_list_(browser->GetWebStateList()),
+    : BrowserUserData(browser),
+      web_state_list_(browser->GetWebStateList()),
       tab_insertion_agent_(tab_insertion_agent) {
   DCHECK(tab_insertion_agent_);
-  browser_ = browser;
   browser_observation_.Observe(browser);
   web_state_list_observation_.Observe(web_state_list_.get());
 

@@ -18,7 +18,6 @@
 #include "chrome/browser/content_extraction/inner_text.h"
 #include "chrome/browser/lens/core/mojom/geometry.mojom.h"
 #include "chrome/browser/lens/core/mojom/lens.mojom.h"
-#include "chrome/browser/lens/core/mojom/lens_ghost_loader.mojom.h"
 #include "chrome/browser/lens/core/mojom/lens_side_panel.mojom.h"
 #include "chrome/browser/lens/core/mojom/overlay_object.mojom.h"
 #include "chrome/browser/lens/core/mojom/page_content_type.mojom.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/ui/lens/lens_overlay_gen204_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_languages_controller.h"
 #include "chrome/browser/ui/lens/lens_overlay_query_controller.h"
+#include "chrome/browser/ui/lens/lens_overlay_translate_options.h"
 #include "chrome/browser/ui/lens/lens_preselection_bubble.h"
 #include "chrome/browser/ui/omnibox/omnibox_tab_helper.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
@@ -50,7 +50,7 @@
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/sessions/core/session_id.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/url_matcher/regex_set_matcher.h"
 #include "components/url_matcher/url_matcher.h"
 #include "components/url_matcher/url_util.h"
@@ -72,25 +72,20 @@
 #include "pdf/mojom/pdf.mojom.h"
 #endif  // BUILDFLAG(ENABLE_PDF)
 
-namespace lens {
-class LensOverlayQueryController;
-class LensOverlaySidePanelCoordinator;
-class LensPermissionBubbleController;
-class LensOverlayEventHandler;
-}  // namespace lens
-
-namespace optimization_guide {
-  struct AIPageContentResult;
-}  // namespace optimization_guide
-
-namespace views {
-class View;
-class WebView;
-}  // namespace views
-
 namespace content {
 class WebUI;
 }  // namespace content
+
+namespace lens {
+class LensSessionMetricsLogger;
+class LensOverlayQueryController;
+class LensOverlaySidePanelCoordinator;
+class LensPermissionBubbleController;
+class LensSearchboxController;
+class LensSearchContextualizationController;
+struct SearchQuery;
+class SidePanelInUse;
+}  // namespace lens
 
 namespace signin {
 class IdentityManager;
@@ -100,36 +95,30 @@ namespace syncer {
 class SyncService;
 }  // namespace syncer
 
+namespace ui {
+class TrackedElement;
+}  // namespace ui
+
 namespace variations {
 class VariationsClient;
 }  // namespace variations
 
-enum class SidePanelEntryHideReason;
+namespace views {
+class View;
+class WebView;
+}  // namespace views
 
 class PrefService;
 class Profile;
+class LensSearchController;
+enum class SidePanelEntryHideReason;
 
 extern void* kLensOverlayPreselectionWidgetIdentifier;
-
-// Callback type alias for page content bytes retrieved. Multiple pieces and
-// types of content may be retrieved and returned in `page_contents`.
-// `primary_content_type` is the main type used in the request flow and used to
-// determine request params and whether updated requests need to be sent.
-// `pdf_page_count` is the number of pages in the document being retrieved, not
-// necessarily the number of pages in `bytes`. For example, if the document is a
-// PDF, `pdf_page_count` is the number of pages in the PDF, while `bytes` could
-// be empty because the PDF is too large.
-using PageContentRetrievedCallback =
-    base::OnceCallback<void(std::vector<lens::PageContent> page_contents,
-                            lens::MimeType primary_content_type,
-                            std::optional<uint32_t> pdf_page_count)>;
 
 // Manages all state associated with the lens overlay.
 // This class is not thread safe. It should only be used from the browser
 // thread.
-class LensOverlayController : public LensSearchboxClient,
-                              public lens::mojom::LensPageHandler,
-                              public lens::mojom::LensSidePanelPageHandler,
+class LensOverlayController : public lens::mojom::LensPageHandler,
                               public content::WebContentsDelegate,
                               public FullscreenObserver,
                               public views::ViewObserver,
@@ -140,6 +129,7 @@ class LensOverlayController : public LensSearchboxClient,
                               public find_in_page::FindResultObserver {
  public:
   LensOverlayController(tabs::TabInterface* tab,
+                        LensSearchController* lens_search_controller,
                         variations::VariationsClient* variations_client,
                         signin::IdentityManager* identity_manager,
                         PrefService* pref_service,
@@ -150,101 +140,19 @@ class LensOverlayController : public LensSearchboxClient,
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kOverlayId);
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kOverlaySidePanelWebViewId);
 
-  // Data struct representing options for translate data if set.
-  struct TranslateOptions {
-    std::string source_language;
-    std::string target_language;
-
-    TranslateOptions(const std::string& source, const std::string& target)
-        : source_language(source), target_language(target) {}
-  };
-
-  // Data struct representing a previous search query.
-  struct SearchQuery {
-    explicit SearchQuery(std::string text_query, GURL url);
-    SearchQuery(const SearchQuery& other);
-    SearchQuery& operator=(const SearchQuery& other);
-    ~SearchQuery();
-
-    // The text query of the SRP panel.
-    std::string search_query_text_;
-    // The selected region for this query, if any.
-    lens::mojom::CenterRotatedBoxPtr selected_region_;
-    // The selected region bitmap for this query, if any.
-    SkBitmap selected_region_bitmap_;
-    // The selected text for this query, if any.
-    std::optional<std::pair<int, int>> selected_text_;
-    // The data URI of the thumbnail in the searchbox.
-    std::string selected_region_thumbnail_uri_;
-    // Additional parameters used to build search URLs.
-    std::map<std::string, std::string> additional_search_query_params_;
-    // The url that the search query loaded into the results frame.
-    GURL search_query_url_;
-    // The selection type of the current Lens request, if any.
-    lens::LensOverlaySelectionType lens_selection_type_;
-    // The translate options currently enabled in the overlay.
-    std::optional<TranslateOptions> translate_options_;
-  };
+  // A simple utility that gets the the LensOverlayController TabFeature set by
+  // the embedding tab of a lens WebUI hosted in `webui_web_contents`.
+  // May return nullptr if no LensOverlayController TabFeature is associated
+  // with `webui_web_contents`.
+  static LensOverlayController* FromWebUIWebContents(
+      content::WebContents* webui_web_contents);
 
   // A simple utility that gets the the LensOverlayController TabFeature set by
-  // the embedding context of a lens WebUI hosted in `webui_contents`.
-  static LensOverlayController* GetController(
-      content::WebContents* webui_contents);
-
-  // Issues a contextual search request for Lens to fulfill.
-  // No-op if the Lens Overlay is off or closing. If the Lens Overlay is in the
-  // process of opening, the request will be queued until the overlay is fully
-  // opened.
-  // TODO(crbug.com/403629222): Revisit if it makes sense to pass the
-  // destination URL instead of the query text directly.
-  void IssueContextualSearchRequest(const GURL& destination_url,
-                                    AutocompleteMatchType::Type match_type,
-                                    bool is_zero_prefix_suggestion);
-
-  // Starts the contextualization flow without the overlay being shown to the
-  // user.
-  // TODO(crbug.com/404941800): This still goes through the entire
-  // initialization flow for the overlay. This is not efficeient, but is being
-  // done to unblock the contextual searchbox prototype. This should be
-  // refactored to be done in the LensSearchController to not go through the
-  // overlay controller.
-  void StartContextualizationWithoutOverlay(
-      lens::LensOverlayInvocationSource invocation_source);
-
-  // Sets a region to search after the overlay loads, then calls ShowUI().
-  // All units are in device pixels. region_bitmap contains the high definition
-  // image bytes to use for the search instead of cropping the region from the
-  // viewport.
-  void ShowUIWithPendingRegion(
-      lens::LensOverlayInvocationSource invocation_source,
-      const gfx::Rect& tab_bounds,
-      const gfx::Rect& view_bounds,
-      const gfx::Rect& region_bounds,
-      const SkBitmap& region_bitmap);
-
-  // Implementation detail of above, exposed for testing. Do not call this
-  // directly.
-  void ShowUIWithPendingRegion(
-      lens::LensOverlayInvocationSource invocation_source,
-      lens::mojom::CenterRotatedBoxPtr region,
-      const SkBitmap& region_bitmap);
-
-  // This is entry point for showing the overlay UI. This has no effect if state
-  // is not kOff. This has no effect if the tab is not in the foreground. If the
-  // overlay is successfully invoked, then the value of `invocation_source` will
-  // be recorded in the relevant metrics.
-  void ShowUI(lens::LensOverlayInvocationSource invocation_source);
-
-  // Starts the closing process of the overlay. This is an asynchronous process
-  // with the following sequence:
-  //   (1) Close the side panel
-  //   (2) Close the overlay.
-  // Step (1) is asynchronous.
-  void CloseUIAsync(lens::LensOverlayDismissalSource dismissal_source);
-
-  // Instantly closes the overlay. This may not look nice if the overlay is
-  // visible when this is called.
-  void CloseUISync(lens::LensOverlayDismissalSource dismissal_source);
+  // the instances of WebContents associated with a tab.
+  // May return nullptr if no LensOverlayController TabFeature is associated
+  // with `tab_web_contents`.
+  static LensOverlayController* FromTabWebContents(
+      content::WebContents* tab_web_contents);
 
   // This method is used to set up communication between this instance and the
   // overlay WebUI. This is called by the WebUIController when the WebUI is
@@ -252,48 +160,6 @@ class LensOverlayController : public LensSearchboxClient,
   virtual void BindOverlay(
       mojo::PendingReceiver<lens::mojom::LensPageHandler> receiver,
       mojo::PendingRemote<lens::mojom::LensPage> page);
-
-  // This method is used to set up communication between this instance and the
-  // side panel WebUI. This is called by the WebUIController when the WebUI is
-  // executing javascript and ready to bind.
-  void BindSidePanel(
-      mojo::PendingReceiver<lens::mojom::LensSidePanelPageHandler> receiver,
-      mojo::PendingRemote<lens::mojom::LensSidePanelPage> page);
-
-  // This method is used to set up communication between this instance and the
-  // overlay ghost loader's WebUI. This is called by the WebUIController when
-  // the WebUI is executing javascript and ready to bind.
-  void BindOverlayGhostLoader(
-      mojo::PendingRemote<lens::mojom::LensGhostLoaderPage> page);
-
-  // This method is used to set up communication between this instance and the
-  // side panel's ghost loader WebUI. This is called by the WebUIController
-  // when the WebUI is executing javascript and ready to bind.
-  void BindSidePanelGhostLoader(
-      mojo::PendingRemote<lens::mojom::LensGhostLoaderPage> page);
-
-  // This method is used to set up communication between this instance and the
-  // searchbox WebUI. This is called by the WebUIController when the WebUI is
-  // executing javascript and has bound the handler. Takes ownership of
-  // `handler`.
-  void SetSidePanelSearchboxHandler(
-      std::unique_ptr<LensSearchboxHandler> handler);
-
-  // Passes ownership of the lens serachbox handler to the search bubble
-  // controller. This is called by the WebUIController when the WebUI is
-  // executing javascript and has bound the handler.
-  void SetContextualSearchboxHandler(
-      std::unique_ptr<LensSearchboxHandler> handler);
-
-  // This method is used to release the owned `SearchboxHandler`. It should be
-  // called before the embedding web contents is destroyed since it contains a
-  // reference to that web contents.
-  void ResetSidePanelSearchboxHandler();
-
-  // Shows a toast in the side panel with the string provided in `message`. If
-  // the side panel connection has not been established or was reset this is a
-  // no-op.
-  void ShowToastInSidePanel(std::string message);
 
   // Internal state machine. States are mutually exclusive. Exposed for testing.
   enum class State {
@@ -340,9 +206,6 @@ class LensOverlayController : public LensSearchboxClient,
     // TODO(b/335516480): Implement suspended state.
     kSuspended,
 
-    // In the process of closing the side panel before closing the overlay.
-    kClosingSidePanel,
-
     // Will be kOff soon.
     kClosing,
   };
@@ -376,11 +239,6 @@ class LensOverlayController : public LensSearchboxClient,
   // WebContents.
   const content::WebContents* tab_contents() { return tab_->GetContents(); }
 
-  // Returns the event handler for this instance of the Lens Overlay.
-  lens::LensOverlayEventHandler* lens_overlay_event_handler() {
-    return lens_overlay_event_handler_.get();
-  }
-
   // Returns invocation time since epoch. Used to set up html source for metric
   // logging.
   uint64_t GetInvocationTimeSinceEpoch();
@@ -409,10 +267,10 @@ class LensOverlayController : public LensSearchboxClient,
   void TriggerCopy();
 
   // Returns true if the overlay is open and covering the current active tab.
-  bool IsOverlayShowing();
+  bool IsOverlayShowing() const;
 
   // Returns true if the overlay is showing or is in live page mode.
-  bool IsOverlayActive();
+  bool IsOverlayActive() const;
 
   // Returns true if the overlay is in the process of initializing.
   bool IsOverlayInitializing();
@@ -423,44 +281,11 @@ class LensOverlayController : public LensSearchboxClient,
   // Pass a result frame URL to load in the side panel.
   void LoadURLInResultsFrame(const GURL& url);
 
-  // Adds a text query to the history stack for this lens overlay. This allows
-  // the user to navigate to previous SRP results after sending new queries.
-  void AddQueryToHistory(std::string query, GURL search_url);
-
-  // lens::mojom::LensSidePanelPageHandler overrides.
-  void PopAndLoadQueryFromHistory() override;
-  void GetIsContextualSearchbox(
-      GetIsContextualSearchboxCallback callback) override;
-
-  // Sets whether the results frame should show its loading state.
-  virtual void SetSidePanelIsLoadingResults(bool is_loading);
-
-  // Sets the URL to be used when opening the side panel in new tab.
-  void SetSidePanelNewTabUrl(const GURL& url);
-
-  // Gets the URL (with param modifications) to be used when opening the side
-  // panel in new tab.
-  GURL GetSidePanelNewTabUrl();
-
-  // Sets whether the side panel should show a full error page. This is only
-  // done if the side panel is not already in the state provided by the
-  // parameters or on its first load.
-  void MaybeSetSidePanelShowErrorPage(bool should_show_error_page,
-                                      lens::SidePanelResultStatus status);
-  // Set the side panel state as being offline.
-  void SetSidePanelIsOffline(bool is_offline);
-  // Record the error page being hidden / shown and set the value on the WebUI.
-  void RecordAndShowSidePanelErrorPage();
   // Whether it's possible to capture a screenshot. virtual for testing.
   virtual bool IsScreenshotPossible(content::RenderWidgetHostView* view);
 
-  // Called before the lens results panel begins hiding. This is called before
-  // any side panel closing animations begin.
-  void OnSidePanelWillHide(SidePanelEntryHideReason reason);
-
-  // Called when the lens side panel has been hidden.
-  void OnSidePanelHidden();
-
+  // Returns the tab interface that that owns the search controller that owns
+  // this overlay controller.
   tabs::TabInterface* GetTabInterface();
 
   // Show preselection toast bubble. Creates a preselection bubble if it does
@@ -474,15 +299,6 @@ class LensOverlayController : public LensSearchboxClient,
   // Hides preselection toast bubble. Used when backgrounding the overlay. This
   // hides the widget associated with the bubble.
   void HidePreselectionBubble();
-
-  // Shows the feedback page.
-  void FeedbackRequestedByEvent(int event_flags);
-
-  // Shows the info page.
-  void InfoRequestedByEvent(int event_flags);
-
-  // Shows My Activity.
-  void ActivityRequestedByEvent(int event_flags);
 
   // Queues a tutorial IPH to be shown if the given URL is eligible. Cancels any
   // queued IPH.
@@ -531,6 +347,7 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Testing function to issue a searchbox request.
   void IssueSearchBoxRequestForTesting(
+      base::Time query_start_time,
       const std::string& search_box_text,
       AutocompleteMatchType::Type match_type,
       bool is_zero_prefix_suggestion,
@@ -568,6 +385,10 @@ class LensOverlayController : public LensSearchboxClient,
   // Handles the event where zero suggest was shown for testing.
   void OnZeroSuggestShownForTesting();
 
+  // Opens the side panel for testing. If the side panel is already open, this
+  // does nothing.
+  void OpenSidePanelForTesting();
+
   // Returns the lens suggest inputs stored in this controller for testing.
   const lens::proto::LensOverlaySuggestInputs& GetLensSuggestInputsForTesting();
 
@@ -583,22 +404,9 @@ class LensOverlayController : public LensSearchboxClient,
     return initialization_data_->selected_text_;
   }
 
-  const std::vector<SearchQuery>& get_search_query_history_for_testing() {
-    return initialization_data_->search_query_history_stack_;
-  }
-
-  const std::optional<SearchQuery>& get_loaded_search_query_for_testing() {
-    return initialization_data_->currently_loaded_search_query_;
-  }
-
   const std::vector<lens::mojom::CenterRotatedBoxPtr>&
   GetSignificantRegionBoxesForTesting() {
     return initialization_data_->significant_region_boxes_;
-  }
-
-  lens::LensPermissionBubbleController*
-  get_lens_permission_bubble_controller_for_testing() {
-    return permission_bubble_controller_.get();
   }
 
   views::Widget* get_preselection_widget_for_testing() {
@@ -611,21 +419,137 @@ class LensOverlayController : public LensSearchboxClient,
   }
 
  protected:
-  // Override these methods to stub out network requests for testing.
-  virtual std::unique_ptr<lens::LensOverlayQueryController>
-  CreateLensQueryController(
-      lens::LensOverlayFullImageResponseCallback full_image_callback,
-      lens::LensOverlayUrlResponseCallback url_callback,
-      lens::LensOverlayInteractionResponseCallback interaction_callback,
-      lens::LensOverlaySuggestInputsCallback suggest_inputs_callback,
-      lens::LensOverlayThumbnailCreatedCallback thumbnail_created_callback,
-      lens::UploadProgressCallback upload_progress_callback,
-      variations::VariationsClient* variations_client,
-      signin::IdentityManager* identity_manager,
-      Profile* profile,
+  friend class LensSearchController;
+  friend class lens::LensSearchboxController;
+  friend class lens::LensOverlaySidePanelCoordinator;
+
+  // This is entry point for showing the overlay UI. This has no effect if state
+  // is not kOff. This has no effect if the tab is not in the foreground. If the
+  // overlay is successfully invoked, then the value of `invocation_source` will
+  // be recorded in the relevant metrics.
+  void ShowUI(lens::LensOverlayInvocationSource invocation_sourc,
+              lens::LensOverlayQueryController* lens_overlay_query_controller);
+
+  // Issues a contextual search request for Lens to fulfill.
+  // No-op if the Lens Overlay is off or closing. If the Lens Overlay is in the
+  // process of opening, the request will be queued until the overlay is fully
+  // opened.
+  // TODO(crbug.com/403629222): Revisit if it makes sense to pass the
+  // destination URL instead of the query text directly.
+  void IssueContextualSearchRequest(
+      const GURL& destination_url,
+      lens::LensOverlayQueryController* lens_overlay_query_controller,
+      AutocompleteMatchType::Type match_type,
+      bool is_zero_prefix_suggestion,
+      lens::LensOverlayInvocationSource invocation_source);
+
+  // Sets a region to search after the overlay loads, then calls ShowUI().
+  // All units are in device pixels. region_bitmap contains the high definition
+  // image bytes to use for the search instead of cropping the region from the
+  // viewport.
+  void ShowUIWithPendingRegion(
+      lens::LensOverlayQueryController* lens_overlay_query_controller,
       lens::LensOverlayInvocationSource invocation_source,
-      bool use_dark_mode,
-      lens::LensOverlayGen204Controller* gen204_controller);
+      lens::mojom::CenterRotatedBoxPtr region,
+      const SkBitmap& region_bitmap);
+
+  // Plays the overlay close animation and then invokes the callback.
+  void TriggerOverlayCloseAnimation(base::OnceClosure callback);
+
+  // Closes the overlay UI and sets state to kOff. This method is the final
+  // cleanup of closing the overlay UI. This resets all state internal to the
+  // LensOverlayController.
+  // Anyone called trying to close the UI should go through CloseUIAsync or
+  // CloseUISync. Those methods also reset state external to
+  // LensOverlayController.
+  void CloseUI(lens::LensOverlayDismissalSource dismissal_source);
+
+  // Returns the vsrid to use for the new tab URL.
+  std::string GetVsridForNewTab();
+
+  // Sets the overlay translate mode. If `translate_options` is nullopt, it will
+  // disable translate mode.
+  void SetTranslateMode(
+      std::optional<lens::TranslateOptions> translate_options);
+
+  // Sets the text selection on the overlay.
+  void SetTextSelection(int32_t selection_start_index,
+                        int32_t selection_end_index);
+
+  // Sets the post region selection on the overlay.
+  void SetPostRegionSelection(lens::mojom::CenterRotatedBoxPtr);
+
+  // Stores the additional query parameters to pass to the query controller for
+  // generating urls, set by the search box.
+  void SetAdditionalSearchQueryParams(
+      std::map<std::string, std::string> additional_search_query_params);
+
+  // Clears the selected text from the overlay if there is any.
+  void ClearTextSelection();
+
+  // Clears the selected region.
+  void ClearRegionSelection();
+
+  // Clears any selections currently made in the overlay.
+  void ClearAllSelections();
+
+  // Called by the searchbox controller when the focus on the searchbox changes.
+  void OnSearchboxFocusChanged(bool focused);
+
+  // Called by the searchbox controller when zero suggest is shown.
+  void OnZeroSuggestShown();
+
+  // Makes a Lens request and updates all state related to the Lens request. If
+  // region_bitmap is provided, it will use those bytes to send to the Lens
+  // server instead of cropping the region from the full page screenshot.
+  void IssueLensRequest(base::Time query_start_time,
+                        lens::mojom::CenterRotatedBoxPtr region,
+                        lens::LensOverlaySelectionType selection_type,
+                        std::optional<SkBitmap> region_bitmap);
+
+  // Issues a multimodal request to the query controller.
+  void IssueMultimodalRequest(base::Time query_start_time,
+                              lens::mojom::CenterRotatedBoxPtr region,
+                              const std::string& text_query,
+                              lens::LensOverlaySelectionType selection_type,
+                              std::optional<SkBitmap> region_bitmap);
+
+  // Tries to update the page content and then issues a searchbox request.
+  void IssueSearchBoxRequest(
+      base::Time query_start_time,
+      const std::string& search_box_text,
+      AutocompleteMatchType::Type match_type,
+      bool is_zero_prefix_suggestion,
+      std::map<std::string, std::string> additional_query_params);
+
+  // Issues a contextual text request to the query controller.
+  void IssueContextualTextRequest(
+      base::Time query_start_time,
+      const std::string& text_query,
+      lens::LensOverlaySelectionType selection_type);
+
+  // Returns a search query struct containing the current state of the overlay.
+  void AddOverlayStateToSearchQuery(lens::SearchQuery& search_query);
+
+  // TODO(crbug.com/404941800): All the Handle*Response methods should not exist
+  // in this class. They currently exist to unblock development. They will be
+  // removed once the migration is complete. Handles the response to the Lens
+  // start query request.
+  void HandleStartQueryResponse(
+      std::vector<lens::mojom::OverlayObjectPtr> objects,
+      lens::mojom::TextPtr text,
+      bool is_error);
+
+  // Handles the URL response to the Lens interaction request.
+  void HandleInteractionURLResponse(
+      lens::proto::LensOverlayUrlResponse response);
+
+  // Handles the text response to the Lens interaction request.
+  void HandleInteractionResponse(lens::mojom::TextPtr text);
+
+  // Handles the progress of the page content upload. Notifies the side panel
+  // to update the progress bar.
+  void HandlePageContentUploadProgress(uint64_t position, uint64_t total);
 
  private:
   // Data class for constructing overlay and storing overlay state for
@@ -695,9 +619,6 @@ class LensOverlayController : public LensSearchboxClient,
     // Bounding boxes for significant regions identified in the screenshot.
     std::vector<lens::mojom::CenterRotatedBoxPtr> significant_region_boxes_;
 
-    // The latest suggest inputs from the query controller.
-    lens::proto::LensOverlaySuggestInputs suggest_inputs_;
-
     // The selected region. Stored so that it can be used for multiple
     // requests, such as if the user changes the text query without changing
     // the region. Cleared if the user makes a text-only or object selection
@@ -726,15 +647,8 @@ class LensOverlayController : public LensSearchboxClient,
     // generating urls, set by the search box.
     std::map<std::string, std::string> additional_search_query_params_;
 
-    // A list representing the search query stack that hosts the history of the
-    // SRPs the user has navigated to.
-    std::vector<SearchQuery> search_query_history_stack_;
-
-    // The search query that is currently loaded in the results frame.
-    std::optional<SearchQuery> currently_loaded_search_query_;
-
     // The translate options currently enabled in the overlay.
-    std::optional<TranslateOptions> translate_options_;
+    std::optional<lens::TranslateOptions> translate_options_;
   };
 
   class UnderlyingWebContentsObserver;
@@ -789,106 +703,9 @@ class LensOverlayController : public LensSearchboxClient,
       lens::MimeType primary_content_type,
       std::optional<uint32_t> page_count);
 
-  // Tries to fetch the underlying page content bytes to use for
-  // contextualization. If page content can not be retrieved, the callback will
-  // be run with no bytes.
-  void GetPageContextualization(PageContentRetrievedCallback callback);
-
-#if BUILDFLAG(ENABLE_PDF)
-  // Receives the PDF bytes from the IPC call to the PDF renderer and stores
-  // them in initialization data. `pdf_page_count` is passed to the partial PDF
-  // text fetch to be used to determine when to stop fetching.
-  void OnPdfBytesReceived(PageContentRetrievedCallback callback,
-                          pdf::mojom::PdfListener::GetPdfBytesStatus status,
-                          const std::vector<uint8_t>& bytes,
-                          uint32_t pdf_page_count);
-
-  // Fetches the visible page index from the PDF renderer and then starts the
-  // process of fetching the text from the PDF to be used for suggest signals.
-  void FetchVisiblePageIndexAndGetPartialPdfText(uint32_t page_count);
-
-  // Gets the partial text from the PDF to be used for suggest. Schedules for
-  // the next page of text to be fetched, from the PDF in page order until
-  // either 1) all the text is received or 2) the character limit is reached.
-  // This method should only be called by GetPartialPdfText.
-  void GetPartialPdfTextCallback(uint32_t page_index,
-                                 uint32_t total_page_count,
-                                 uint32_t total_characters_retrieved,
-                                 const std::u16string& page_text);
-#endif  // BUILDFLAG(ENABLE_PDF)
-
-  // Gets the inner HTML for contextualization if flag enabled. Otherwise skip
-  // to MaybeGetInnerText().
-  void MaybeGetInnerHtml(std::vector<lens::PageContent> page_contents,
-                         content::RenderFrameHost* render_frame_host,
-                         PageContentRetrievedCallback callback);
-
-  // Callback for when the inner HTML is retrieved from the underlying page.
-  // Calls MaybeGetInnerText().
-  void OnInnerHtmlReceived(std::vector<lens::PageContent> page_contents,
-                           content::RenderFrameHost* render_frame_host,
-                           PageContentRetrievedCallback callback,
-                           const std::optional<std::string>& result);
-
-  // Gets the inner text for contextualization if flag enabled. Otherwise skip
-  // to MaybeGetAnnotatedPageContent().
-  void MaybeGetInnerText(std::vector<lens::PageContent> page_contents,
-                         content::RenderFrameHost* render_frame_host,
-                         PageContentRetrievedCallback callback);
-
-  // Callback for when the inner text is retrieved from the underlying page.
-  // Calls MaybeGetAnnotatedPageContent().
-  void OnInnerTextReceived(
-      std::vector<lens::PageContent> page_contents,
-      content::RenderFrameHost* render_frame_host,
-      PageContentRetrievedCallback callback,
-      std::unique_ptr<content_extraction::InnerTextResult> result);
-
-  // Gets the annotated page content for contextualization if flag enabled.
-  // Otherwise run the callback with the HTML and/or innerText.
-  void MaybeGetAnnotatedPageContent(
-      std::vector<lens::PageContent> page_contents,
-      content::RenderFrameHost* render_frame_host,
-      PageContentRetrievedCallback callback);
-
-  // Callback for when the annotated page content is retrieved. Runs the
-  // callback with the HTML, innerText, and/or annotated page content.
-  void OnAnnotatedPageContentReceived(
-      std::vector<lens::PageContent> page_contents,
-      PageContentRetrievedCallback callback,
-      std::optional<optimization_guide::AIPageContentResult> apc);
-
   // Creates the mojo bounding boxes for the significant regions.
   std::vector<lens::mojom::CenterRotatedBoxPtr> ConvertSignificantRegionBoxes(
       const std::vector<gfx::Rect>& all_bounds);
-
-  // Tries to fetch the underlying page content bytes and update the query flow
-  // with them.
-  void TryUpdatePageContextualization();
-
-  // Begin updating page contextualization by potentially taking a new
-  // screenshot.
-  void UpdatePageContextualization(std::vector<lens::PageContent> page_contents,
-                                   lens::MimeType primary_content_type,
-                                   std::optional<uint32_t> pdf_page_count);
-
-  // Continue updating page contextualization by potentially getting the current
-  // PDF page.
-  void UpdatePageContextualizationPart2(
-      std::vector<lens::PageContent> page_contents,
-      lens::MimeType primary_content_type,
-      std::optional<uint32_t> pdf_page_count,
-      const SkBitmap& bitmap);
-
-  // Updates the query flow with the new page content bytes and/or screenshot. A
-  // request will only be sent if the bytes are different from the previous
-  // bytes sent or the screenshot is different from the previous screenshot.
-  void UpdatePageContextualizationPart3(
-      std::vector<lens::PageContent> page_contents,
-      lens::MimeType primary_content_type,
-      std::optional<uint32_t> pdf_page_count,
-      const SkBitmap& bitmap,
-      std::optional<uint32_t> pdf_current_page);
 
   // Updates state of the ghost loader. |suppress_ghost_loader| is true when
   // the page bytes can't be uploaded.
@@ -910,13 +727,9 @@ class LensOverlayController : public LensSearchboxClient,
   // visible.
   void MaybeHideSharedOverlayView();
 
-  // Closes the overlay UI and sets state to kOff. This method is the final
-  // cleanup of closing the overlay UI. This resets all state internal to the
-  // LensOverlayController.
-  // Anyone called trying to close the UI should go through CloseUIAsync or
-  // CloseUISync. Those methods also reset state external to
-  // LensOverlayController.
-  void CloseUIPart2(lens::LensOverlayDismissalSource dismissal_source);
+  // Requests to open the side panel if this class has not already done so.
+  // Must be called before issuing results to the side panel.
+  void MaybeOpenSidePanel();
 
   // Initializes all parts of our UI and starts the query flow.
   // Runs once the overlay WebUI and initialization data are both ready.
@@ -936,9 +749,6 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Called when the UI needs to create the view to show in the overlay.
   raw_ptr<views::View> CreateViewForOverlay();
-
-  // Clears the selected region.
-  void ClearRegionSelection();
 
   // content::WebContentsDelegate:
   bool HandleContextMenu(content::RenderFrameHost& render_frame_host,
@@ -975,26 +785,16 @@ class LensOverlayController : public LensSearchboxClient,
   void OnImmersiveFullscreenEntered() override;
   void OnImmersiveFullscreenExited() override;
 
-  // Overridden from LensSearchboxClient:
-  const GURL& GetPageURL() const override;
-  SessionID GetTabId() const override;
-  metrics::OmniboxEventProto::PageClassification GetPageClassification()
-      const override;
-  std::string& GetThumbnail() override;
-  const lens::proto::LensOverlaySuggestInputs& GetLensSuggestInputs()
-      const override;
-  void OnTextModified() override;
-  void OnThumbnailRemoved() override;
-  void OnSuggestionAccepted(const GURL& destination_url,
-                            AutocompleteMatchType::Type match_type,
-                            bool is_zero_prefix_suggestion) override;
-  void OnFocusChanged(bool focused) override;
-  void OnPageBound() override;
-  void ShowGhostLoaderErrorState() override;
-  void OnZeroSuggestShown() override;
+  // Called when the Lens backend handshake is complete.
+  void OnHandshakeComplete();
 
-  // Gets the page title.
-  std::optional<std::string> GetPageTitle();
+  // Gets the page classification from the searchbox controller.
+  metrics::OmniboxEventProto::PageClassification GetPageClassification() const;
+
+  // Adds a callback to be called when the Lens backend handshake is finished.
+  // If the handshake is already finished, the callback will be called
+  // immediately.
+  void OnLensBackendHandshakeFinished(base::OnceClosure callback);
 
   // Gets the ui scale factor of the page.
   float GetUiScaleFactor();
@@ -1016,22 +816,6 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Called when the associated tab will enter the background.
   void TabWillEnterBackground(tabs::TabInterface* tab);
-
-  // Called when the tab's WebContents is discarded.
-  void WillDiscardContents(tabs::TabInterface* tab,
-                           content::WebContents* old_contents,
-                           content::WebContents* new_contents);
-
-  // Called when the tab will be removed from the window.
-  void WillDetach(tabs::TabInterface* tab,
-                  tabs::TabInterface::DetachReason reason);
-
-  // Makes a Lens request and updates all state related to the Lens request. If
-  // region_bitmap is provided, it will use those bytes to send to the Lens
-  // server instead of cropping the region from the full page screenshot.
-  void DoLensRequest(lens::mojom::CenterRotatedBoxPtr region,
-                     lens::LensOverlaySelectionType selection_type,
-                     std::optional<SkBitmap> region_bitmap);
 
   // Suggest a name for the save as image feature incorporating the hostname of
   // the page. Protocol, TLD, etc are not taken into consideration. Duplicate
@@ -1090,97 +874,19 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Performs shared logic for IssueTextSelectionRequest() and
   // IssueTranslateSelectionRequest().
-  void IssueTextSelectionRequestInner(const std::string& text_query,
+  void IssueTextSelectionRequestInner(base::Time query_start_time,
+                                      const std::string& text_query,
                                       int selection_start_index,
                                       int selection_end_index);
-
-  // Tries to update the page content and then issues a searchbox request.
-  void IssueSearchBoxRequest(
-      const std::string& search_box_text,
-      AutocompleteMatchType::Type match_type,
-      bool is_zero_prefix_suggestion,
-      std::map<std::string, std::string> additional_query_params);
 
   // Handles a request (either region or multimodal) trigger by sending
   // the request to the query controller.
   void IssueSearchBoxRequestPart2(
+      base::Time query_start_time,
       const std::string& search_box_text,
       AutocompleteMatchType::Type match_type,
       bool is_zero_prefix_suggestion,
       std::map<std::string, std::string> additional_query_params);
-
-  // Handles the response to the Lens start query request.
-  void HandleStartQueryResponse(
-      std::vector<lens::mojom::OverlayObjectPtr> objects,
-      lens::mojom::TextPtr text,
-      bool is_error);
-
-  // Handles the URL response to the Lens interaction request.
-  void HandleInteractionURLResponse(
-      lens::proto::LensOverlayUrlResponse response);
-
-  // Handles the text response to the Lens interaction request.
-  void HandleInteractionResponse(lens::mojom::TextPtr text);
-
-  // Handles an update to the suggest inputs. This will be called whenever
-  // any part of the suggest inputs changes, such as when a new objects
-  // request is sent, or when an interaction data response is received.
-  void HandleSuggestInputsResponse(
-      lens::proto::LensOverlaySuggestInputs suggest_inputs);
-
-  // Handles the progress of the page content upload. Notifies the side panel
-  // to update the progress bar.
-  void HandlePageContentUploadProgress(uint64_t position, uint64_t total);
-
-  // Handles the creation of a new thumbnail based on the user selection.
-  void HandleThumbnailCreated(const std::string& thumbnail_bytes);
-
-  // Sets the input text for the searchbox. If the searchbox has not been bound,
-  // it stores it in `pending_text_query_` instead.
-  void SetSearchboxInputText(const std::string& text);
-
-  // Sets the thumbnail URI values on the searchbox if it is
-  // bound. If it hasn't yet been bound, stores the value in
-  // `pending_thumbnail_uri_` instead.
-  void SetSearchboxThumbnail(const std::string& thumbnail_uri);
-
-  // Records UMA and UKM metrics for time to first interaction. Not recorded
-  // when invocation source is an image's content area menu because in this
-  // case the time to first interaction is essentially zero.
-  void RecordTimeToFirstInteraction(
-      lens::LensOverlayFirstInteractionType interaction_type);
-
-  // Records the UMA for the first time the contextual searchbox is focused
-  // after the page has been navigated.
-  void RecordContextualSearchboxTimeToFocusAfterNavigation();
-
-  // Records the UMA for the first time the user interacts with the contextual
-  // searchbox after the page has been navigated.
-  void RecordContextualSearchboxTimeToInteractionAfterNavigation();
-
-  // Records UMA and UKM metrics for dismissal and end of session metrics.
-  // This includes dismissal source, session length, and whether a search was
-  // recorded in the session.
-  void RecordEndOfSessionMetrics(
-      lens::LensOverlayDismissalSource dismissal_source);
-
-  // Records the UMA for the metrics relating to the document where the
-  // contextual search box was shown. If this is a webpage, records the size of
-  // the innerHtml and the innerText. If this is a PDF, records the byte size of
-  // the PDF and the number of pages. `pdf_page_count` is only used for PDFs.
-  void RecordDocumentMetrics(std::optional<uint32_t> pdf_page_count);
-
-  // Posts a task to the background thread to calculate the OCR DOM similarity
-  // and then records the result. Only records the similarity once per session.
-  // Only records the similarity if the OCR text and page content are available.
-  void TryCalculateAndRecordOcrDomSimilarity();
-
-  // Callback to record the size of the innerText once it is fetched.
-  void RecordInnerTextSize(
-      std::unique_ptr<content_extraction::InnerTextResult> result);
-
-  // Callback to record the size of the innerHtml once it is fetched.
-  void RecordInnerHtmlSize(const std::optional<std::string>& result);
 
   // Launches the Lens overlay HaTS survey if eligible.
   void MaybeLaunchSurvey();
@@ -1204,8 +910,33 @@ class LensOverlayController : public LensSearchboxClient,
   // points since the state of the overlay has changed.
   void UpdateEntryPointsState();
 
+  // Callback to run when the partial page text is retrieved from the PDF.
+  void OnPdfPartialPageTextRetrieved(
+      std::vector<std::u16string> pdf_pages_text);
+
+  // Callback to run when the page context has been updated and the suggestion
+  // query should now be issued.
+  void OnPageContextUpdatedForSuggestion(
+      const GURL& destination_url,
+      AutocompleteMatchType::Type match_type,
+      bool is_zero_prefix_suggestion,
+      lens::LensOverlayInvocationSource invocation_source);
+
+  // Shorthand to grab the LensSearchboxController for this instance of Lens.
+  lens::LensSearchboxController* GetLensSearchboxController();
+
+  // Shorthand to grab the LensSearchContextualizationController for this
+  // instance of Lens.
+  lens::LensSearchContextualizationController* GetContextualizationController();
+
+  // Shorthand to grab the LensSessionMetricsLogger for this instance of Lens.
+  lens::LensSessionMetricsLogger* GetLensSessionMetricsLogger();
+
   // Owns the LensSearchController which owns this class
   raw_ptr<tabs::TabInterface> tab_;
+
+  // Owns this class.
+  raw_ptr<LensSearchController> lens_search_controller_;
 
   // A monotonically increasing id. This is used to differentiate between
   // different screenshot attempts.
@@ -1218,10 +949,6 @@ class LensOverlayController : public LensSearchboxClient,
   // that the overlay will return to when the tab is foregrounded.
   State backgrounded_state_ = State::kOff;
 
-  // Controller for showing the page screenshot permission bubble.
-  std::unique_ptr<lens::LensPermissionBubbleController>
-      permission_bubble_controller_;
-
   // The assembly data needed for the overlay to be created and shown.
   std::unique_ptr<OverlayInitializationData> initialization_data_;
 
@@ -1229,35 +956,8 @@ class LensOverlayController : public LensSearchboxClient,
   lens::LensOverlayInvocationSource invocation_source_ =
       lens::LensOverlayInvocationSource::kAppMenu;
 
-  // Whether the overlay should be visible when it is opened. This is a hacky
-  // approach to start contextual searchbox flow without the overlay UI being
-  // shown. See StartContextualizationWithoutOverlay todo for more details.
-  bool should_show_overlay_ = true;
-
-  // A pending url to be loaded in the side panel. Needed when the side
-  // panel is not bound at the time of a text request.
-  std::optional<GURL> pending_side_panel_url_ = std::nullopt;
-
-  // A pending text query to be loaded in the side panel. Needed when the side
-  // panel is not bound at the time of a text request.
-  std::optional<std::string> pending_text_query_ = std::nullopt;
-
-  // A pending thumbnail URI to be loaded in the side panel. Needed when the
-  // side panel is not bound at the time of a region request.
-  std::optional<std::string> pending_thumbnail_uri_ = std::nullopt;
-
   // A contextual search request to be issued once the overlay is initialized.
   base::OnceClosure pending_contextual_search_request_;
-
-  // URL to load when command to open side panel in a new tab is executed.
-  GURL side_panel_new_tab_url_;
-
-  // Whether the side panel should show the error page.
-  bool side_panel_should_show_error_page_ = false;
-  // The status of the side panel, or whether it is currently showing an error
-  // page.
-  lens::SidePanelResultStatus side_panel_result_status_ =
-      lens::SidePanelResultStatus::kUnknown;
 
   // Pending region to search after the overlay loads.
   lens::mojom::CenterRotatedBoxPtr pending_region_;
@@ -1266,16 +966,6 @@ class LensOverlayController : public LensSearchboxClient,
   // pending_region_ and pending_region_bitmap_ are correlated and their
   // lifecycles are should stay in sync.
   SkBitmap pending_region_bitmap_;
-
-  // If the side panel needed to be closed before dismissing the overlay, this
-  // stores the original dismissal_source so it is properly recorded when the
-  // side panel is done closing and the callback is invoked.
-  std::optional<lens::LensOverlayDismissalSource> last_dismissal_source_;
-
-  // Thumbnail URI referencing the data defined by the user image selection on
-  // the overlay. If the user hasn't made any selection or has made a text
-  // selection this will contain an empty string. Returned by GetThumbnail().
-  std::string selected_region_thumbnail_uri_;
 
   // The selection type of the current Lens request. If the
   // user is not currently viewing results for a Lens query, this will be
@@ -1289,33 +979,13 @@ class LensOverlayController : public LensSearchboxClient,
   mojo::Receiver<lens::mojom::LensPageHandler> receiver_{this};
   mojo::Remote<lens::mojom::LensPage> page_;
 
-  // Connections to and from the side panel WebUI. Only valid when the side
-  // panel is currently open and after the WebUI has started executing JS and
-  // has bound the connection.
-  mojo::Receiver<lens::mojom::LensSidePanelPageHandler> side_panel_receiver_{
-      this};
-  mojo::Remote<lens::mojom::LensSidePanelPage> side_panel_page_;
-
-  // Connections to the overlay ghost loader WebUI. Only valid while
-  // `overlay_view_` is showing, and after the WebUI has started executing JS
-  // and has bound the connection.
-  mojo::Remote<lens::mojom::LensGhostLoaderPage> overlay_ghost_loader_page_;
-
-  // Connections to the side panel ghost loader WebUI. Only valid when the side
-  // panel is currently open and after the WebUI has started executing JS and
-  // has bound the connection.
-  mojo::Remote<lens::mojom::LensGhostLoaderPage> side_panel_ghost_loader_page_;
-
   // Observer for the WebContents of the associated tab. Only valid while the
   // overlay view is showing.
   std::unique_ptr<UnderlyingWebContentsObserver> tab_contents_observer_;
 
-  // Query controller.
-  std::unique_ptr<lens::LensOverlayQueryController>
-      lens_overlay_query_controller_;
-
-  // Holds subscriptions for TabInterface callbacks.
-  std::vector<base::CallbackListSubscription> tab_subscriptions_;
+  // Query controller. Owned by the search controller, guaranteed to be alive
+  // until the overlay is closed.
+  raw_ptr<lens::LensOverlayQueryController> lens_overlay_query_controller_;
 
   // Owned by Profile, and thus guaranteed to outlive this instance.
   raw_ptr<variations::VariationsClient> variations_client_;
@@ -1336,54 +1006,14 @@ class LensOverlayController : public LensSearchboxClient,
   // Prevents other features from showing tab-modal UI.
   std::unique_ptr<tabs::ScopedTabModalUI> scoped_tab_modal_ui_;
 
-  // Indicates whether a search has been performed in the current session. Used
-  // to record success/abandonment rate, as defined by whether or not a search
-  // was performed.
-  bool search_performed_in_session_ = false;
-
   // Whether the OCR DOM similarity has been recorded in the current session.
   bool ocr_dom_similarity_recorded_in_session_ = false;
-
-  // Metrics for the contextual searchbox that will be recorded at the end of a
-  // session.
-  lens::ContextualSearchboxSessionEndMetrics csb_session_end_metrics_;
-
-  // The type of the page content extracted from the page when the lens overlay
-  // was initialized. This is used when recording contextual searchbox metrics
-  // at the end of sessions, since the initialization data can change on page
-  // contextualization updates and these metrics only want to record the initial
-  // invocation page content type.
-  lens::MimeType initial_page_content_type_ = lens::MimeType::kUnknown;
-
-  // The type of the document that the lens overlay was initialized on as
-  // determined by the mime type reported by the tab web contents. This differs
-  // from initial_page_content_type_ in that the document type is the type of
-  // the top level document, while the intial_page_content_type_ is the type of
-  // the content extracted from the page that we are contextualizing to. This is
-  // used when recording invocation document metrics, since the document type
-  // can change on page contextualization updates.
-  lens::MimeType initial_document_type_ = lens::MimeType::kUnknown;
-
   // The time at which the overlay was invoked. Used to compute timing metrics.
   base::TimeTicks invocation_time_;
 
   // The time at which the overlay was invoked, since epoch. Used to calculate
   // timeToWebUIReady on the WebUI side.
   base::Time invocation_time_since_epoch_;
-
-  // The time at which the live page navigated while in the contextual searchbox
-  // flow. Used to compute timing metrics. Is empty if the user is not in the
-  // contextual searchbox flow, or this navigation has already been recorded.
-  std::optional<base::TimeTicks> last_navigation_time_;
-
-  // Whether the contextual searchbox has been focused since the last page
-  // navigation.
-  bool contextual_searchbox_focused_after_navigation_ = false;
-
-  // Indicates whether a trigger for the HaTS survey has occurred in the current
-  // session. Note that a trigger does not mean the survey will actually be
-  // shown.
-  bool hats_triggered_in_session_ = false;
 
   // Indicates whether this is the first upload handler event received. This is
   // used to determine whether to show the upload progress bar.
@@ -1393,15 +1023,20 @@ class LensOverlayController : public LensSearchboxClient,
   // upload.
   bool is_upload_progress_bar_shown_ = true;
 
-  // TODO(384778180): The three `pre_initialization_*` fields below are used to
+  // Indicates whether the user is currently on a context eligible page.
+  bool is_page_context_eligible_ = true;
+
+  // Indicates whether the screenshot should be sent when updating the page
+  // content when first initializing the overlay. This is only used when the
+  // early start query flow optimization is enabled. Setting this to true does
+  // not guarantee the screenshot is sent on initialization, as that is still
+  // dependent on whether the page is context eligible or not.
+  bool should_send_screenshot_on_init_ = false;
+
+  // TODO(384778180): The two `pre_initialization_*` fields below are used to
   // store data that came back before the initialization data was ready. This
   // should be refactored into one struct to make it cleaner.
   //
-  // The stored suggest inputs to be attached to the initialization data if
-  // suggest inputs were updated before the initialization data was ready.
-  std::optional<lens::proto::LensOverlaySuggestInputs>
-      pre_initialization_suggest_inputs_;
-
   // The stored objects response to be attached to the initialization data
   // if the object response came back before the initialization data was ready.
   std::optional<std::vector<lens::mojom::OverlayObjectPtr>>
@@ -1417,6 +1052,11 @@ class LensOverlayController : public LensSearchboxClient,
 
   // Matcher for URLs that are eligible to have the tutorial IPH shown.
   std::unique_ptr<url_matcher::URLMatcher> tutorial_iph_url_matcher_;
+
+  // Matcher for URLs that are do not need to pass the check for allowed paths.
+  // Instead, if they match the tutorial_iph_url_matcher_` and do not contain
+  // any of the blocked paths, they are considered matches.
+  std::unique_ptr<url_matcher::RegexSetMatcher> forced_url_matcher_;
 
   // Matcher for URL paths that are eligible to have the tutorial IPH shown.
   std::unique_ptr<url_matcher::RegexSetMatcher> page_path_allow_matcher_;
@@ -1470,25 +1110,6 @@ class LensOverlayController : public LensSearchboxClient,
   // requests to be sent upon query end.
   std::unique_ptr<lens::LensOverlayGen204Controller> gen204_controller_;
 
-  // Searchbox handler for passing in image and text selections. The handler is
-  // null if the WebUI containing the searchbox has not been initialized yet,
-  // like in the case of side panel opening. In addition, the handler may be
-  // initialized, but the remote not yet set because the WebUI calls SetPage()
-  // once it is ready to receive data from C++. Therefore, we must always check
-  // that:
-  //      1) searchbox_handler_ exists and
-  //      2) searchbox_handler_->IsRemoteBound() is true.
-  std::unique_ptr<LensSearchboxHandler> side_panel_searchbox_handler_;
-
-  // Handler for the contextual searchbox in the overlay . The handler is
-  // null if the WebUI containing the searchbox has not been initialized yet.
-  // In addition, the handler may be initialized, but the remote not yet set
-  // because the WebUI calls SetPage() once it is ready to receive data from
-  // C++. Therefore, we must always check that:
-  //      1) contextual_searchbox_handler_ exists and
-  //      2) contextual_searchbox_handler_->IsRemoteBound() is true.
-  std::unique_ptr<LensSearchboxHandler> overlay_searchbox_handler_;
-
   // The controller for sending requests to get the list of supported languages.
   // Requests are only made if the WebUI has not already cached the languages
   // and none of the update cache conditions are met.
@@ -1502,12 +1123,10 @@ class LensOverlayController : public LensSearchboxClient,
   // be assumed to be non-null.
   raw_ptr<SidePanelCoordinator> side_panel_coordinator_ = nullptr;
 
-  // Side panel coordinator for showing results in the panel.
-  std::unique_ptr<lens::LensOverlaySidePanelCoordinator>
+  // Side panel coordinator for the side panel coordinator that controls the
+  // results side panel. Guaranteed to exist if the overlay is not `kOff`.
+  raw_ptr<lens::LensOverlaySidePanelCoordinator>
       results_side_panel_coordinator_;
-
-  // Class for handling key events from the renderer that were not handled.
-  std::unique_ptr<lens::LensOverlayEventHandler> lens_overlay_event_handler_;
 
   // Layer delegate that handles blurring the background behind the WebUI.
   std::unique_ptr<lens::LensOverlayBlurLayerDelegate>

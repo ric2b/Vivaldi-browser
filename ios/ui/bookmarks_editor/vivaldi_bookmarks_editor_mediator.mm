@@ -128,7 +128,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 }
 
 - (void)dealloc {
-  DCHECK(!_bookmarkModel);
+  [self disconnect];
 }
 
 #pragma mark - Public

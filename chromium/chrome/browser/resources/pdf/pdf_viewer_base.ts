@@ -43,7 +43,6 @@ export type KeyEventData = MessageData&{keyEvent: SerializedKeyEvent};
 export abstract class PdfViewerBaseElement extends CrLitElement {
   static override get properties() {
     return {
-      pdfCr23Enabled: {type: Boolean},
       showErrorDialog: {type: Boolean},
       strings: {type: Object},
     };
@@ -56,10 +55,9 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
   protected lastViewportPosition: Point|null = null;
   protected originalUrl: string = '';
   protected paramsParser: OpenPdfParamsParser|null = null;
-  protected pdfCr23Enabled: boolean = false;
   protected pdfOopifEnabled: boolean = false;
-  showErrorDialog: boolean = false;
-  protected strings?: LoadTimeDataRaw;
+  accessor showErrorDialog: boolean = false;
+  protected accessor strings: LoadTimeDataRaw|undefined;
   protected tracker: EventTracker = new EventTracker();
   private delayedScriptingMessages_: MessageEvent[] = [];
   private initialLoadComplete_: boolean = false;
@@ -154,8 +152,6 @@ export abstract class PdfViewerBaseElement extends CrLitElement {
       content: HTMLElement) {
     this.browserApi = browserApi;
     this.originalUrl = this.browserApi.getStreamInfo().originalUrl;
-    this.pdfCr23Enabled =
-        document.documentElement.hasAttribute('pdfCr23Enabled');
     this.pdfOopifEnabled =
         document.documentElement.hasAttribute('pdfOopifEnabled');
 

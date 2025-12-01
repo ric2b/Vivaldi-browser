@@ -51,19 +51,12 @@ void AndroidStateTransferHandler::StateOnTouchTransfer(
 
   EmitPendingTransfersHistogram();
 
-  // TODO(crbug.com/383323530): Convert it to CHECK once we are using
-  // AssociatedRemotes for passing state from Browser to Viz.
   const bool state_received_out_of_order =
       (!pending_transferred_states_.empty() &&
        (state->down_time_ms <
         pending_transferred_states_.back().transfer_state->down_time_ms));
-  if (state_received_out_of_order) {
-    TRACE_EVENT_INSTANT("viz", "OutOfOrderTransferStateDropped");
-    // Drop out of order state received.
-    // It is possible since the state transfers coming from different web
-    // contents come over different mojo pipes.
-    return;
-  }
+
+  CHECK(!state_received_out_of_order);
 
   MaybeDropEventsFromEarlierSequences(state);
 
@@ -216,7 +209,7 @@ void AndroidStateTransferHandler::HandleTouchEvent(
 
   if (GetEventDowntime(input_event) !=
       state_for_curr_sequence_->transfer_state->down_time_ms) {
-    TRACE_EVENT_INSTANT("input", "DifferentDownTimeInSequence");
+    TRACE_EVENT_INSTANT("input,input.scrolling", "DifferentDownTimeInSequence");
   }
 
   if (!state_for_curr_sequence_->rir_support) {
@@ -236,10 +229,20 @@ void AndroidStateTransferHandler::HandleTouchEvent(
     return;
   }
 
+  std::optional<ui::MotionEventAndroidNative::EventTimes> event_times =
+      std::nullopt;
+  if (action == AMOTION_EVENT_ACTION_DOWN) {
+    event_times = ui::MotionEventAndroidNative::EventTimes();
+    // AMotionEvent_getDownTime returns down time in nanoseconds precision.
+    event_times->latest = base::TimeTicks::FromJavaNanoTime(
+        AMotionEvent_getDownTime(input_event.a_input_event()));
+    event_times->oldest = event_times->latest;
+  }
   auto event = ui::MotionEventAndroidNative::Create(
       std::move(input_event),
       1.f / state_for_curr_sequence_->transfer_state->dip_scale,
-      state_for_curr_sequence_->transfer_state->web_contents_y_offset_pix);
+      state_for_curr_sequence_->transfer_state->web_contents_y_offset_pix,
+      event_times);
 
   state_for_curr_sequence_->rir_support->OnTouchEvent(
       *event.get(), /* emit_histograms= */ true);

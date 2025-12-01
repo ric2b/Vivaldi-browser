@@ -14,7 +14,7 @@ ffmpeg_asm_sources = []
 
 use_linux_config = is_linux || is_chromeos || is_fuchsia
 
-if (current_cpu == "arm64" || current_cpu == "x64" ||
+if (current_cpu == "arm64" || current_cpu == "arm64e" || current_cpu == "x64" ||
     (is_android && current_cpu == "arm" && arm_use_neon) ||
     (is_android && current_cpu == "x86") || is_apple || is_win ||
     use_linux_config) {
@@ -29,7 +29,6 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavcodec/autorename_libavcodec_vorbisdsp.c",
     "libavcodec/avcodec.c",
     "libavcodec/avdct.c",
-    "libavcodec/avfft.c",
     "libavcodec/bitstream.c",
     "libavcodec/bitstream_filters.c",
     "libavcodec/bsf.c",
@@ -42,7 +41,6 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavcodec/dirac.c",
     "libavcodec/dv_profile.c",
     "libavcodec/encode.c",
-    "libavcodec/executor.c",
     "libavcodec/flac.c",
     "libavcodec/flac_parser.c",
     "libavcodec/flacdata.c",
@@ -142,11 +140,10 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavformat/url.c",
     "libavformat/vorbiscomment.c",
     "libavformat/wavdec.c",
-    "libavutil/aes.c",
     "libavutil/aes_ctr.c",
     "libavutil/ambient_viewing_environment.c",
+    "libavutil/autorename_libavutil_aes.c",
     "libavutil/autorename_libavutil_cpu.c",
-    "libavutil/autorename_libavutil_executor.c",
     "libavutil/autorename_libavutil_fixed_dsp.c",
     "libavutil/autorename_libavutil_float_dsp.c",
     "libavutil/autorename_libavutil_imgutils.c",
@@ -170,9 +167,11 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavutil/encryption_info.c",
     "libavutil/error.c",
     "libavutil/eval.c",
+    "libavutil/executor.c",
     "libavutil/fifo.c",
     "libavutil/file_open.c",
     "libavutil/film_grain_params.c",
+    "libavutil/float_scalarproduct.c",
     "libavutil/frame.c",
     "libavutil/hdr_dynamic_metadata.c",
     "libavutil/hdr_dynamic_vivid_metadata.c",
@@ -199,6 +198,7 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavutil/reverse.c",
     "libavutil/samplefmt.c",
     "libavutil/sha.c",
+    "libavutil/side_data.c",
     "libavutil/slicethread.c",
     "libavutil/spherical.c",
     "libavutil/stereo3d.c",
@@ -206,6 +206,7 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
     "libavutil/threadmessage.c",
     "libavutil/time.c",
     "libavutil/timecode.c",
+    "libavutil/timecode_internal.c",
     "libavutil/timestamp.c",
     "libavutil/twofish.c",
     "libavutil/tx.c",
@@ -215,7 +216,8 @@ if (current_cpu == "arm64" || current_cpu == "x64" ||
   ]
 }
 
-if ((current_cpu == "arm64" && ffmpeg_branding == "Chrome") ||
+if (((current_cpu == "arm64" || current_cpu == "arm64e") &&
+     ffmpeg_branding == "Chrome") ||
     (current_cpu == "x64" && ffmpeg_branding == "Chrome") ||
     (is_android && current_cpu == "x86" && ffmpeg_branding == "Chrome") ||
     (is_apple && ffmpeg_branding == "Chrome") ||
@@ -253,7 +255,8 @@ if ((current_cpu == "arm64" && ffmpeg_branding == "Chrome") ||
   ]
 }
 
-if ((current_cpu == "arm64" && ffmpeg_branding == "Chrome") ||
+if (((current_cpu == "arm64" || current_cpu == "arm64e") &&
+     ffmpeg_branding == "Chrome") ||
     (current_cpu == "x64" && ffmpeg_branding == "Chrome") ||
     (is_android && current_cpu == "arm" && arm_use_neon &&
      ffmpeg_branding == "Chrome") ||
@@ -310,7 +313,8 @@ if ((current_cpu == "x64" && ffmpeg_branding == "Chrome") ||
   ]
 }
 
-if (current_cpu == "arm64" && ffmpeg_branding == "Chrome") {
+if ((current_cpu == "arm64" || current_cpu == "arm64e") &&
+    ffmpeg_branding == "Chrome") {
   ffmpeg_c_sources += [
     "libavcodec/aarch64/aacpsdsp_init_aarch64.c",
     "libavcodec/aarch64/autorename_libavcodec_aarch64_videodsp_init.c",
@@ -342,6 +346,7 @@ if (current_cpu == "x64" || (is_win && current_cpu == "x86") ||
     "libavcodec/x86/flacdsp.asm",
     "libavcodec/x86/imdct36.asm",
     "libavcodec/x86/vorbisdsp.asm",
+    "libavutil/x86/aes.asm",
     "libavutil/x86/cpuid.asm",
     "libavutil/x86/fixed_dsp.asm",
     "libavutil/x86/float_dsp.asm",
@@ -351,12 +356,29 @@ if (current_cpu == "x64" || (is_win && current_cpu == "x86") ||
   ]
 }
 
-if (current_cpu == "arm64") {
+if (current_cpu == "x64" || (is_android && current_cpu == "x86") ||
+    (is_win && current_cpu == "x86") ||
+    (use_linux_config && current_cpu == "x86")) {
   ffmpeg_c_sources += [
-    "libavcodec/aarch64/autorename_libavcodec_aarch64_vorbisdsp_init.c",
+    "libavcodec/x86/autorename_libavcodec_x86_vorbisdsp_init.c",
+    "libavcodec/x86/constants.c",
+    "libavcodec/x86/flacdsp_init.c",
+    "libavcodec/x86/mpegaudiodsp.c",
+    "libavutil/x86/aes_init.c",
+    "libavutil/x86/autorename_libavutil_x86_cpu.c",
+    "libavutil/x86/autorename_libavutil_x86_float_dsp_init.c",
+    "libavutil/x86/fixed_dsp_init.c",
+    "libavutil/x86/imgutils_init.c",
+    "libavutil/x86/lls_init.c",
+  ]
+}
+
+if (current_cpu == "arm64" || current_cpu == "arm64e") {
+  ffmpeg_c_sources += [
     "libavcodec/aarch64/mpegaudiodsp_init.c",
+    "libavcodec/aarch64/vorbisdsp_init.c",
     "libavutil/aarch64/autorename_libavutil_aarch64_cpu.c",
-    "libavutil/aarch64/autorename_libavutil_aarch64_float_dsp_init.c",
+    "libavutil/aarch64/float_dsp_init.c",
     "libavutil/aarch64/tx_float_init.c",
   ]
   ffmpeg_gas_sources += [
@@ -365,22 +387,6 @@ if (current_cpu == "arm64") {
     "libavutil/aarch64/autorename_libavutil_aarch64_float_dsp_neon.S",
     "libavutil/aarch64/cpu_sve.S",
     "libavutil/aarch64/tx_float_neon.S",
-  ]
-}
-
-if (current_cpu == "x64" || (is_android && current_cpu == "x86") ||
-    (is_win && current_cpu == "x86") ||
-    (use_linux_config && current_cpu == "x86")) {
-  ffmpeg_c_sources += [
-    "libavcodec/x86/constants.c",
-    "libavcodec/x86/flacdsp_init.c",
-    "libavcodec/x86/mpegaudiodsp.c",
-    "libavcodec/x86/vorbisdsp_init.c",
-    "libavutil/x86/autorename_libavutil_x86_cpu.c",
-    "libavutil/x86/fixed_dsp_init.c",
-    "libavutil/x86/float_dsp_init.c",
-    "libavutil/x86/imgutils_init.c",
-    "libavutil/x86/lls_init.c",
   ]
 }
 
@@ -476,8 +482,8 @@ if ((is_android && current_cpu == "arm" && arm_use_neon &&
   ]
 }
 
-if ((is_android && current_cpu == "arm" && arm_use_neon) ||
-    (is_android && current_cpu == "arm64") ||
+if ((is_android && (current_cpu == "arm64" || current_cpu == "arm64e")) ||
+    (is_android && current_cpu == "arm" && arm_use_neon) ||
     (is_android && current_cpu == "x64") ||
     (is_android && current_cpu == "x86")) {
   ffmpeg_c_sources += [ "compat/strtod.c" ]

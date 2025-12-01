@@ -1,14 +1,13 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/components/data_grid/data_grid.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Protocol from '../../../generated/protocol.js';
-// inspectorCommonStyles is imported for the empty state styling that is used for the start view
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStyles from '../../../ui/legacy/inspectorCommon.css.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 
 import interestGroupAccessGridStyles from './interestGroupAccessGrid.css.js';
@@ -82,8 +81,8 @@ export class InterestGroupAccessGrid extends HTMLElement {
   #render(): void {
     // clang-format off
     Lit.render(html`
-      <style>${interestGroupAccessGridStyles.cssText}</style>
-      <style>${inspectorCommonStyles.cssText}</style>
+      <style>${interestGroupAccessGridStyles}</style>
+      <style>${UI.inspectorCommonStyles}</style>
       ${this.#datastores.length === 0 ?
         html`
           <div class="empty-state">

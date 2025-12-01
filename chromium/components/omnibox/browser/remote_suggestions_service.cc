@@ -61,16 +61,46 @@ std::string ResponseCodeToSuccessString(int response_code) {
   return response_code == 200 ? "Successful" : "Failed";
 }
 
-void LogRequestSent(RemoteRequestType request_type) {
+void LogRequestSent(
+    RemoteRequestType request_type,
+    metrics::OmniboxEventProto::PageClassification page_classification) {
   base::UmaHistogramEnumeration("Omnibox.SuggestRequestsSent", request_type);
+
+  // Don't slice by page classification for invalid page classifications.
+  if (page_classification == metrics::OmniboxEventProto::INVALID_SPEC) {
+    return;
+  }
+  const std::string page_context =
+      metrics::OmniboxEventProto::PageClassification_Name(page_classification);
+  base::UmaHistogramEnumeration(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.%s", page_context),
+      request_type);
 }
 
-void LogResponseCode(RemoteRequestType request_type, int response_code) {
+void LogResponseCode(
+    RemoteRequestType request_type,
+    int response_code,
+    metrics::OmniboxEventProto::PageClassification page_classification) {
   base::UmaHistogramSparse("Omnibox.SuggestRequestsSent.HttpResponseCode",
                            response_code);
   base::UmaHistogramSparse(
       base::StringPrintf("Omnibox.SuggestRequestsSent.HttpResponseCode.%s",
                          RequestTypeToString(request_type)),
+      response_code);
+
+  // Don't slice by page classification for invalid page classifications.
+  if (page_classification == metrics::OmniboxEventProto::INVALID_SPEC) {
+    return;
+  }
+  const std::string page_context =
+      metrics::OmniboxEventProto::PageClassification_Name(page_classification);
+  base::UmaHistogramSparse(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.HttpResponseCode.%s",
+                         page_context),
+      response_code);
+  base::UmaHistogramSparse(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.HttpResponseCode.%s.%s",
+                         page_context, RequestTypeToString(request_type)),
       response_code);
 }
 
@@ -250,19 +280,24 @@ void RemoteSuggestionsService::LogResponseTime(RemoteRequestType request_type,
       base::StringPrintf("%s.%s", kResponseTimeHistogramName,
                          kEnterpriseRequestTypeString),
       elapsed_time);
-  SetTimeRequestSent(request_type, base::TimeTicks());
+  // Since the `EnterpriseSearchAggregator` makes more than one request, don't
+  // override `request_time_sent_[request_type]`. This is handled in the
+  // provider.
+  if (request_type != RemoteRequestType::kEnterpriseSearchAggregatorSuggest) {
+    SetTimeRequestSent(request_type, base::TimeTicks());
+  }
 }
 
 // static
 GURL RemoteSuggestionsService::EndpointUrl(
-    const TemplateURL* template_url,
-    TemplateURLRef::SearchTermsArgs search_terms_args,
+    const TemplateURL& template_url,
+    const TemplateURLRef::SearchTermsArgs& search_terms_args,
     const SearchTermsData& search_terms_data) {
-  GURL url = GURL(template_url->suggestions_url_ref().ReplaceSearchTerms(
+  GURL url = GURL(template_url.suggestions_url_ref().ReplaceSearchTerms(
       search_terms_args, search_terms_data));
 
   // Return early for non-Google template URLs.
-  if (!search::TemplateURLIsGoogle(template_url, search_terms_data)) {
+  if (!search::TemplateURLIsGoogle(&template_url, search_terms_data)) {
     return url;
   }
 
@@ -290,6 +325,7 @@ GURL RemoteSuggestionsService::EndpointUrl(
       break;
   }
   url = AddLensOverlaySuggestInputsDataToEndpointUrl(search_terms_args, url);
+
   return url;
 }
 
@@ -304,7 +340,7 @@ RemoteSuggestionsService::StartSuggestionsRequest(
   DCHECK(template_url);
 
   const GURL suggest_url =
-      EndpointUrl(template_url, search_terms_args, search_terms_data);
+      EndpointUrl(*template_url, search_terms_args, search_terms_data);
   if (!suggest_url.is_valid()) {
     return nullptr;
   }
@@ -362,7 +398,8 @@ RemoteSuggestionsService::StartSuggestionsRequest(
                      search_terms_args.page_classification,
                      std::move(completion_callback), loader.get()));
 
-  OnRequestStarted(request_id, request_type, loader.get(),
+  OnRequestStarted(request_id, request_type,
+                   search_terms_args.page_classification, loader.get(),
                    /*request_body*/ "");
   return loader;
 }
@@ -378,7 +415,7 @@ RemoteSuggestionsService::StartZeroPrefixSuggestionsRequest(
   DCHECK(template_url);
 
   const GURL suggest_url =
-      EndpointUrl(template_url, search_terms_args, search_terms_data);
+      EndpointUrl(*template_url, search_terms_args, search_terms_data);
   if (!suggest_url.is_valid()) {
     return nullptr;
   }
@@ -441,7 +478,8 @@ RemoteSuggestionsService::StartZeroPrefixSuggestionsRequest(
                      search_terms_args.page_classification,
                      std::move(completion_callback), loader.get()));
 
-  OnRequestStarted(request_id, request_type, loader.get(),
+  OnRequestStarted(request_id, request_type,
+                   search_terms_args.page_classification, loader.get(),
                    /*request_body*/ "");
   return loader;
 }
@@ -449,6 +487,7 @@ RemoteSuggestionsService::StartZeroPrefixSuggestionsRequest(
 void RemoteSuggestionsService::CreateDocumentSuggestionsRequest(
     const std::u16string& query,
     bool is_off_the_record,
+    metrics::OmniboxEventProto::PageClassification page_classification,
     StartCallback start_callback,
     CompletionCallback completion_callback) {
   if (!document_suggestions_service_) {
@@ -466,12 +505,11 @@ void RemoteSuggestionsService::CreateDocumentSuggestionsRequest(
       base::BindOnce(&RemoteSuggestionsService::OnRequestStartedAsync,
                      weak_ptr_factory_.GetWeakPtr(), request_id,
                      /*request_type=*/RemoteRequestType::kDocumentSuggest,
-                     std::move(start_callback)),
+                     page_classification, std::move(start_callback)),
       base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
                      weak_ptr_factory_.GetWeakPtr(), request_id,
                      /*request_type=*/RemoteRequestType::kDocumentSuggest,
-                     std::move(request_timer),
-                     metrics::OmniboxEventProto::INVALID_SPEC,
+                     std::move(request_timer), page_classification,
                      std::move(completion_callback)));
 }
 
@@ -485,9 +523,10 @@ void RemoteSuggestionsService::
     CreateEnterpriseSearchAggregatorSuggestionsRequest(
         const std::u16string& query,
         const GURL& suggest_url,
-        StartCallback start_callback,
-        CompletionCallback completion_callback,
-        bool in_keyword_mode) {
+        metrics::OmniboxEventProto::PageClassification page_classification,
+        IndexedStartCallback start_callback,
+        IndexedCompletionCallback completion_callback,
+        std::vector<std::vector<int>> suggestion_types) {
   if (!enterprise_search_aggregator_suggestions_service_) {
     return;
   }
@@ -495,25 +534,33 @@ void RemoteSuggestionsService::
   // Create a unique identifier for the request.
   const base::UnguessableToken request_id = base::UnguessableToken::Create();
 
-  base::ElapsedTimer request_timer;
   enterprise_search_aggregator_suggestions_service_
       ->CreateEnterpriseSearchAggregatorSuggestionsRequest(
           query, suggest_url,
-          base::BindOnce(&RemoteSuggestionsService::OnRequestCreated,
-                         weak_ptr_factory_.GetWeakPtr(), request_id),
-          base::BindOnce(&RemoteSuggestionsService::OnRequestStartedAsync,
-                         weak_ptr_factory_.GetWeakPtr(), request_id,
-                         /*request_type=*/
-                         RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
-                         std::move(start_callback)),
-          base::BindOnce(&RemoteSuggestionsService::OnRequestCompleted,
-                         weak_ptr_factory_.GetWeakPtr(), request_id,
-                         /*request_type=*/
-                         RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
-                         std::move(request_timer),
-                         metrics::OmniboxEventProto::INVALID_SPEC,
-                         std::move(completion_callback)),
-          in_keyword_mode);
+          base::BindRepeating(&RemoteSuggestionsService::OnRequestCreated,
+                              weak_ptr_factory_.GetWeakPtr(), request_id),
+          base::BindRepeating(
+              &RemoteSuggestionsService::OnIndexedRequestStartedAsync,
+              weak_ptr_factory_.GetWeakPtr(), request_id,
+              /*request_type=*/
+              RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
+              page_classification, start_callback),
+          base::BindRepeating(
+              &RemoteSuggestionsService::OnIndexedRequestCompleted,
+              weak_ptr_factory_.GetWeakPtr(), request_id,
+              /*request_type=*/
+              RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
+              metrics::OmniboxEventProto::INVALID_SPEC, base::TimeTicks::Now(),
+              std::move(completion_callback)),
+          suggestion_types);
+}
+
+void RemoteSuggestionsService::
+    StopCreatingEnterpriseSearchAggregatorSuggestionsRequest() {
+  if (enterprise_search_aggregator_suggestions_service_) {
+    enterprise_search_aggregator_suggestions_service_
+        ->StopCreatingEnterpriseSearchAggregatorSuggestionsRequest();
+  }
 }
 
 std::unique_ptr<network::SimpleURLLoader>
@@ -585,7 +632,7 @@ RemoteSuggestionsService::StartDeletionRequest(
                      std::move(completion_callback), loader.get()));
 
   OnRequestStarted(request_id, /*request_type=*/RemoteRequestType::kDeletion,
-                   loader.get(),
+                   metrics::OmniboxEventProto::INVALID_SPEC, loader.get(),
                    /*request_body*/ "");
   return loader;
 }
@@ -617,22 +664,38 @@ void RemoteSuggestionsService::OnRequestCreated(
 void RemoteSuggestionsService::OnRequestStarted(
     const base::UnguessableToken& request_id,
     RemoteRequestType request_type,
+    metrics::OmniboxEventProto::PageClassification page_classification,
     network::SimpleURLLoader* loader,
     const std::string& request_body) {
   // Notify the observers that the transfer started.
   observers_.Notify(&Observer::OnRequestStarted, request_id, loader,
                     request_body);
-  LogRequestSent(request_type);
+  LogRequestSent(request_type, page_classification);
 }
 
 void RemoteSuggestionsService::OnRequestStartedAsync(
     const base::UnguessableToken& request_id,
     RemoteRequestType request_type,
+    metrics::OmniboxEventProto::PageClassification page_classification,
     StartCallback start_callback,
     std::unique_ptr<network::SimpleURLLoader> loader,
     const std::string& request_body) {
-  OnRequestStarted(request_id, request_type, loader.get(), request_body);
+  OnRequestStarted(request_id, request_type, page_classification, loader.get(),
+                   request_body);
   std::move(start_callback).Run(std::move(loader));
+}
+
+void RemoteSuggestionsService::OnIndexedRequestStartedAsync(
+    const base::UnguessableToken& request_id,
+    RemoteRequestType request_type,
+    metrics::OmniboxEventProto::PageClassification page_classification,
+    IndexedStartCallback start_callback,
+    int request_index,
+    std::unique_ptr<network::SimpleURLLoader> loader,
+    const std::string& request_body) {
+  OnRequestStarted(request_id, request_type, page_classification, loader.get(),
+                   request_body);
+  std::move(start_callback).Run(request_index, std::move(loader));
 }
 
 void RemoteSuggestionsService::OnRequestCompleted(
@@ -651,7 +714,7 @@ void RemoteSuggestionsService::OnRequestCompleted(
   // Notify the observers that the transfer is done.
   observers_.Notify(&Observer::OnRequestCompleted, request_id, response_code,
                     response_body);
-  LogResponseCode(request_type, response_code);
+  LogResponseCode(request_type, response_code, page_classification);
   LogResponseTimeAndCode(page_classification, request_type,
                          request_timer.Elapsed(), response_code);
 
@@ -663,5 +726,36 @@ void RemoteSuggestionsService::OnRequestCompleted(
   } else {
     std::move(completion_callback)
         .Run(source, response_code, std::move(response_body));
+  }
+}
+
+void RemoteSuggestionsService::OnIndexedRequestCompleted(
+    const base::UnguessableToken& request_id,
+    RemoteRequestType request_type,
+    metrics::OmniboxEventProto::PageClassification page_classification,
+    base::TimeTicks start_time,
+    IndexedCompletionCallback completion_callback,
+    const network::SimpleURLLoader* source,
+    int request_index,
+    std::unique_ptr<std::string> response_body) {
+  const int response_code =
+      source->ResponseInfo() && source->ResponseInfo()->headers
+          ? source->ResponseInfo()->headers->response_code()
+          : 0;
+  // Notify the observers that the transfer is done.
+  observers_.Notify(&Observer::OnRequestCompleted, request_id, response_code,
+                    response_body);
+  LogResponseCode(request_type, response_code, page_classification);
+  LogResponseTimeAndCode(page_classification, request_type,
+                         base::TimeTicks::Now() - start_time, response_code);
+
+  // Call the completion callback or delegate it.
+  if (delegate_) {
+    delegate_->OnIndexedRequestCompleted(request_index, source, response_code,
+                                         std::move(response_body),
+                                         completion_callback);
+  } else {
+    std::move(completion_callback)
+        .Run(request_index, source, response_code, std::move(response_body));
   }
 }

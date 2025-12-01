@@ -8,6 +8,12 @@
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/platform/ax_mode_observer.h"
 
+#if BUILDFLAG(IS_WIN)
+#include <oleacc.h>
+
+#include <uiautomation.h>
+#endif  // BUILDFLAG(IS_WIN)
+
 namespace ui {
 
 namespace {
@@ -36,7 +42,7 @@ AXPlatform::~AXPlatform() {
 
 AXMode AXPlatform::GetMode() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  return delegate_->GetProcessMode();
+  return delegate_->GetAccessibilityMode();
 }
 
 void AXPlatform::AddModeObserver(AXModeObserver* observer) {
@@ -66,11 +72,6 @@ void AXPlatform::NotifyAssistiveTechChanged(AssistiveTech assistive_tech) {
 bool AXPlatform::IsScreenReaderActive() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return IsScreenReader(active_assistive_tech_);
-}
-
-void AXPlatform::NotifyAccessibilityApiUsage() {
-  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  delegate_->OnAccessibilityApiUsage();
 }
 
 bool AXPlatform::IsCaretBrowsingEnabled() {
@@ -109,6 +110,25 @@ void AXPlatform::SetUiaProviderEnabled(bool is_enabled) {
                                         : UiaProviderEnablement::kDisabled;
 }
 
+void AXPlatform::DisableActiveUiaProvider() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (uia_provider_enablement_ == UiaProviderEnablement::kDisabled) {
+    // Already disabled.
+    return;
+  }
+
+  uia_provider_enablement_ = UiaProviderEnablement::kDisabled;
+
+  // We must call this *after* we disabled the UIA provider to ensure that we
+  // don't respond with the same provider to a re-entrant WM_GETOBJECT call. See
+  // https://learn.microsoft.com/en-us/windows/win32/api/uiautomationcoreapi/nf-uiautomationcoreapi-uiadisconnectallproviders
+  // for more info.
+  HRESULT hr = ::UiaDisconnectAllProviders();
+  DCHECK(SUCCEEDED(hr));
+
+  delegate_->OnUiaProviderDisabled();
+}
+
 bool AXPlatform::IsUiaProviderEnabled() const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return uia_provider_enablement_ == UiaProviderEnablement::kVariations
@@ -122,13 +142,72 @@ void AXPlatform::OnUiaProviderRequested(bool uia_provider_enabled) {
 }
 #endif  // BUILDFLAG(IS_WIN)
 
-void AXPlatform::DetachFromThreadForTesting() {
-  DETACH_FROM_THREAD(thread_checker_);
+#if BUILDFLAG(IS_WIN)
+void AXPlatform::OnScreenReaderHoneyPotQueried() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  // We used to trust this as a signal that a screen reader is running, but it's
+  // been abused. Now only enable accessibility if we detect that the name is
+  // also used. Do not do the same for location and role, as the Windows Text
+  // Services Framework (MSTSF) has been known to check the role of each new
+  // window; see https://crbug.com/416429182.
+  if (screen_reader_honeypot_queried_) {
+    return;
+  }
+  screen_reader_honeypot_queried_ = true;
+  if (is_name_used_) {
+    OnPropertiesUsedInWebContent();
+  }
+}
+#endif  // BUILDFLAG(IS_WIN)
+
+void AXPlatform::OnMinimalPropertiesUsed(bool is_name_used) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  delegate_->OnMinimalPropertiesUsed();
+#if BUILDFLAG(IS_WIN)
+  // See OnScreenReaderHoneyPotQueried, above.
+  if (!is_name_used || is_name_used_) {
+    return;
+  }
+  is_name_used_ = true;
+  if (screen_reader_honeypot_queried_) {
+    OnPropertiesUsedInWebContent();
+    return;
+  }
+#endif
 }
 
-void AXPlatform::SetMode(AXMode new_mode) {
+void AXPlatform::OnPropertiesUsedInBrowserUI() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  delegate_->SetProcessMode(new_mode);
+  delegate_->OnPropertiesUsedInBrowserUI();
+}
+
+void AXPlatform::OnPropertiesUsedInWebContent() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  delegate_->OnPropertiesUsedInWebContent();
+}
+
+void AXPlatform::OnInlineTextBoxesUsedInWebContent() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  delegate_->OnInlineTextBoxesUsedInWebContent();
+}
+
+void AXPlatform::OnExtendedPropertiesUsedInWebContent() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  delegate_->OnExtendedPropertiesUsedInWebContent();
+}
+
+void AXPlatform::OnHTMLAttributesUsed() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  delegate_->OnHTMLAttributesUsed();
+}
+
+void AXPlatform::OnActionFromAssistiveTech() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  delegate_->OnActionFromAssistiveTech();
+}
+
+void AXPlatform::DetachFromThreadForTesting() {
+  DETACH_FROM_THREAD(thread_checker_);
 }
 
 #if BUILDFLAG(IS_WIN)

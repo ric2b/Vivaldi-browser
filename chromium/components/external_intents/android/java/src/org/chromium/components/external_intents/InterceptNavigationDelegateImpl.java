@@ -18,6 +18,7 @@ import org.chromium.base.CancelableRunnable;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.RequiredCallback;
 import org.chromium.base.ResettersForTesting;
+import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
@@ -40,6 +41,7 @@ import org.chromium.content_public.common.ConsoleMessageLevel;
 import org.chromium.content_public.common.Referrer;
 import org.chromium.network.mojom.ReferrerPolicy;
 import org.chromium.ui.base.PageTransition;
+import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.url.GURL;
 import org.chromium.url.Origin;
 
@@ -120,19 +122,21 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
     private static final String MAIN_FRAME_INTENT_LAUNCH_NAME =
             "Android.Intent.MainFrameIntentLaunch";
 
-    private static final String TAB_OPENED_FOR_REDIRECT = "Android.TabOpenedForRedirect";
+    private static final String INTENT_LAUNCH_FROM_TAB_CREATION =
+            "Android.Intent.IntentLaunchFromTabCreation";
+
+    private static final String OVERRIDE_BROWSER_AUXILIARY_NAVIGATION =
+            "Android.Intent.OverrideBrowserAuxiliaryNavigation";
 
     private static final long DEFER_NAVIGATION_TIMEOUT_MILLIS = 5000;
 
-    private InterceptNavigationDelegateClient mClient;
+    private final InterceptNavigationDelegateClient mClient;
     private static @Nullable Callback<Pair<GURL, OverrideUrlLoadingResult>>
             sResultCallbackForTesting;
 
-    @SuppressWarnings("NullAway.Init")
-    private WebContents mWebContents;
+    private @Nullable WebContents mWebContents;
 
-    @SuppressWarnings("NullAway.Init")
-    private ExternalNavigationHandler mExternalNavHandler;
+    private @Nullable ExternalNavigationHandler mExternalNavHandler;
 
     private @Nullable WebContentsObserver mWebContentsObserver;
 
@@ -160,7 +164,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
         maybeUpdateNavigationHistory();
     }
 
-    public void setExternalNavigationHandler(ExternalNavigationHandler handler) {
+    public void setExternalNavigationHandler(@Nullable ExternalNavigationHandler handler) {
         mExternalNavHandler = handler;
     }
 
@@ -177,7 +181,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
         requestFinishPendingShouldIgnoreCheck();
     }
 
-    public void associateWithWebContents(WebContents webContents) {
+    public void associateWithWebContents(@Nullable WebContents webContents) {
         if (mWebContents == webContents) return;
 
         // Before we attach to another WebContents, cancel any checks that were in progress.
@@ -203,11 +207,13 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                 new WebContentsObserver(mWebContents) {
                     @Override
                     public void didStartNavigationInPrimaryMainFrame(NavigationHandle navigation) {
+                        assumeNonNull(mExternalNavHandler);
                         mExternalNavHandler.onNavigationStarted(navigation.getNavigationId());
                     }
 
                     @Override
                     public void didFinishNavigationInPrimaryMainFrame(NavigationHandle navigation) {
+                        assumeNonNull(mExternalNavHandler);
                         mExternalNavHandler.onNavigationFinished(navigation.getNavigationId());
                     }
                 };
@@ -299,6 +305,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
             case OverrideUrlLoadingResultType.OVERRIDE_CLOSING_AFTER_AUTH:
                 shouldIgnore = true;
                 break;
+            case OverrideUrlLoadingResultType.OVERRIDE_WITH_REPARENT_TO_BROWSER:
             case OverrideUrlLoadingResultType.NO_OVERRIDE:
             default:
                 if (isExternalProtocol) {
@@ -310,6 +317,13 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                 break;
         }
         runResultCallback(shouldIgnore);
+
+        if (!shouldIgnore
+                && result.getResultType()
+                        == OverrideUrlLoadingResultType.OVERRIDE_WITH_REPARENT_TO_BROWSER) {
+            // Reparenting task must be executed after runResultCallback has been called.
+            mClient.startReparentingTask();
+        }
     }
 
     @Override
@@ -447,6 +461,8 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         .setIsHiddenCrossFrameNavigation(hiddenCrossFrame)
                         .setIsSandboxedMainFrame(isSandboxedMainFrame)
                         .setNavigationId(navigationId)
+                        .setIsTabInPWA(mClient.isTabInPWA())
+                        .setIsInDesktopWindowingMode(mClient.isInDesktopWindowingMode())
                         .build();
         if (!shouldRunAsync) return doShouldOverrideUrlLoading(params, isExternalProtocol);
         Runnable shouldIgnoreCheck =
@@ -497,50 +513,79 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
 
     private OverrideUrlLoadingResult doShouldOverrideUrlLoading(
             ExternalNavigationParams params, boolean isExternalProtocol) {
-        OverrideUrlLoadingResult result = mExternalNavHandler.shouldOverrideUrlLoading(params);
-        if (sResultCallbackForTesting != null) {
-            sResultCallbackForTesting.onResult(Pair.create(params.getUrl(), result));
-        }
+        try (TraceEvent e = TraceEvent.scoped("shouldOverrideUrlLoading")) {
+            OverrideUrlLoadingResult result = null;
+            if (shouldReparentTab(mClient.getWebContents())) {
+                // Catches all cases where a navigation that starts in a PWA should cause a Tab
+                // reparenting towards the Chrome browser.
+                // TODO(crbug.com/416562397): eventually consider in-scope PWAs in the reparenting
+                // process.
+                // TODO(crbug.com/415926894): do not override POPUP auxiliary navigations when they
+                // lead to popup window opening.
+                result = OverrideUrlLoadingResult.forReparentToBrowser();
+            } else if (ExternalIntentsFeatures.AUXILIARY_NAVIGATION_STAYS_IN_BROWSER.isEnabled(
+                            mClient.isInDesktopWindowingMode())
+                    && isBrowserAuxiliaryNavigation()) {
+                // A new auxiliary browsing context navigation starting in the browser should not be
+                // captured.
+                result = OverrideUrlLoadingResult.forNoOverride();
+            } else {
+                result = assumeNonNull(mExternalNavHandler).shouldOverrideUrlLoading(params);
+            }
 
-        String protocolType = isExternalProtocol ? "ExternalProtocol" : "InternalProtocol";
-        RecordHistogram.recordEnumeratedHistogram(
-                "Android.TabNavigationInterceptResult.For" + protocolType,
-                result.getResultType(),
-                OverrideUrlLoadingResultType.NUM_ENTRIES);
+            if (sResultCallbackForTesting != null) {
+                sResultCallbackForTesting.onResult(Pair.create(params.getUrl(), result));
+            }
 
-        int scheme = InterceptScheme.UNKNOWN_SCHEME;
-        if (result.getResultType() == OverrideUrlLoadingResultType.NO_OVERRIDE) {
-            scheme = InterceptScheme.NOT_INTERCEPTED;
-        } else if (UrlUtilities.isAcceptedScheme(params.getUrl())) {
-            scheme = InterceptScheme.ACCEPTED_SCHEME;
-        } else if (UrlUtilities.hasIntentScheme(params.getUrl())) {
-            scheme = InterceptScheme.INTENT_SCHEME;
-        } else if (MDOC_SCHEME.equals(params.getUrl().getScheme())) {
-            scheme = InterceptScheme.MDOC_SCHEME;
-            ContentWebFeatureUsageUtils.logWebFeatureForCurrentPage(
-                    mClient.getWebContents(), WebFeature.IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK);
-            // Record spread of `result` in order to get an idea of by how much the
-            // IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK use counter is over counting as a user may
-            // cancel the OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION dialog.
+            String protocolType = isExternalProtocol ? "ExternalProtocol" : "InternalProtocol";
             RecordHistogram.recordEnumeratedHistogram(
-                    "Android.TabNavigationInterceptResult.ForMdoc",
+                    "Android.TabNavigationInterceptResult.For" + protocolType,
                     result.getResultType(),
                     OverrideUrlLoadingResultType.NUM_ENTRIES);
-        } else if (params.getUrl().getScheme().endsWith(OPENID4VP_SCHEME_SUFFIX)) {
-            scheme = InterceptScheme.OPENID4VP_SCHEME;
-            ContentWebFeatureUsageUtils.logWebFeatureForCurrentPage(
-                    mClient.getWebContents(), WebFeature.IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK);
-            // Record spread of `result` in order to get an idea of by how much the
-            // IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK use counter is over counting as a user may
-            // cancel the OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION dialog.
+
+            // Measure how many navigations would be affected if enabling feature flag
+            // AUXILIARY_NAVIGATION_STAYS_IN_BROWSER for all windowing modes.
+            RecordHistogram.recordBooleanHistogram(
+                    OVERRIDE_BROWSER_AUXILIARY_NAVIGATION,
+                    isBrowserAuxiliaryNavigation()
+                            && result.getResultType() != OverrideUrlLoadingResultType.NO_OVERRIDE);
+
+            int scheme = InterceptScheme.UNKNOWN_SCHEME;
+            if (result.getResultType() == OverrideUrlLoadingResultType.NO_OVERRIDE) {
+                scheme = InterceptScheme.NOT_INTERCEPTED;
+            } else if (UrlUtilities.isAcceptedScheme(params.getUrl())) {
+                scheme = InterceptScheme.ACCEPTED_SCHEME;
+            } else if (UrlUtilities.hasIntentScheme(params.getUrl())) {
+                scheme = InterceptScheme.INTENT_SCHEME;
+            } else if (MDOC_SCHEME.equals(params.getUrl().getScheme())) {
+                scheme = InterceptScheme.MDOC_SCHEME;
+                ContentWebFeatureUsageUtils.logWebFeatureForCurrentPage(
+                        mClient.getWebContents(),
+                        WebFeature.IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK);
+                // Record spread of `result` in order to get an idea of by how much the
+                // IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK use counter is over counting as a user may
+                // cancel the OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION dialog.
+                RecordHistogram.recordEnumeratedHistogram(
+                        "Android.TabNavigationInterceptResult.ForMdoc",
+                        result.getResultType(),
+                        OverrideUrlLoadingResultType.NUM_ENTRIES);
+            } else if (params.getUrl().getScheme().endsWith(OPENID4VP_SCHEME_SUFFIX)) {
+                scheme = InterceptScheme.OPENID4VP_SCHEME;
+                ContentWebFeatureUsageUtils.logWebFeatureForCurrentPage(
+                        mClient.getWebContents(),
+                        WebFeature.IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK);
+                // Record spread of `result` in order to get an idea of by how much the
+                // IDENTITY_DIGITAL_CREDENTIALS_DEEP_LINK use counter is over counting as a user may
+                // cancel the OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION dialog.
+                RecordHistogram.recordEnumeratedHistogram(
+                        "Android.TabNavigationInterceptResult.ForOpenId4Vp",
+                        result.getResultType(),
+                        OverrideUrlLoadingResultType.NUM_ENTRIES);
+            }
             RecordHistogram.recordEnumeratedHistogram(
-                    "Android.TabNavigationInterceptResult.ForOpenId4Vp",
-                    result.getResultType(),
-                    OverrideUrlLoadingResultType.NUM_ENTRIES);
+                    "Android.TabNavigationIntercept.Scheme", scheme, InterceptScheme.NUM_ENTRIES);
+            return result;
         }
-        RecordHistogram.recordEnumeratedHistogram(
-                "Android.TabNavigationIntercept.Scheme", scheme, InterceptScheme.NUM_ENTRIES);
-        return result;
     }
 
     @Override
@@ -561,7 +606,6 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
     public void maybeUpdateNavigationHistory() {
         WebContents webContents = mClient.getWebContents();
         NavigationController navigationController = webContents.getNavigationController();
-        assumeNonNull(navigationController);
         if (mClearAllForwardHistoryRequired && webContents != null) {
             navigationController.pruneForwardEntries();
         } else if (mShouldClearRedirectHistoryForTabClobbering && webContents != null) {
@@ -582,14 +626,12 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
 
     private int getLastCommittedEntryIndex() {
         if (mClient.getWebContents() == null) return -1;
-        return assumeNonNull(mClient.getWebContents().getNavigationController())
-                .getLastCommittedEntryIndex();
+        return mClient.getWebContents().getNavigationController().getLastCommittedEntryIndex();
     }
 
     private boolean isInitialNavigation() {
         if (mClient.getWebContents() == null) return true;
-        return assumeNonNull(mClient.getWebContents().getNavigationController())
-                .isInitialNavigation();
+        return mClient.getWebContents().getNavigationController().isInitialNavigation();
     }
 
     private boolean isTabOnInitialNavigationChain() {
@@ -603,6 +645,23 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
             return !mClient.getOrCreateRedirectHandler().hasUserStartedNonInitialNavigation();
         }
         return false;
+    }
+
+    /** Returns whether a Tab instance should be reparented from the PWA to the browser. */
+    public boolean shouldReparentTab(WebContents webContents) {
+        return ExternalIntentsFeatures.REPARENT_AUXILIARY_NAVIGATION_FROM_PWA.isEnabled()
+                && mClient.isTabInPWA()
+                && mClient.isInDesktopWindowingMode()
+                && webContents.hasOpener()
+                && webContents.getOriginalWindowOpenDisposition()
+                        == WindowOpenDisposition.NEW_FOREGROUND_TAB;
+    }
+
+    private boolean isBrowserAuxiliaryNavigation() {
+        return mClient.isTabInBrowser()
+                && mClient.getWebContents().hasOpener()
+                && mClient.getWebContents().getOriginalWindowOpenDisposition()
+                        == WindowOpenDisposition.NEW_FOREGROUND_TAB;
     }
 
     private void onDidAsyncActionInMainFrame(AsyncActionTakenParams params) {
@@ -625,7 +684,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         ? params.targetUrl
                         : null;
         InterceptNavigationDelegateImplJni.get()
-                .onSubframeAsyncActionTaken(mWebContents, redirectUrl);
+                .onSubframeAsyncActionTaken(assumeNonNull(mWebContents), redirectUrl);
     }
 
     private void onDidFinishMainFrameIntentLaunch(boolean canCloseTab, GURL escapedUrl) {
@@ -655,7 +714,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                 mainFrameLaunchType,
                 MainFrameIntentLaunch.NUM_ENTRIES);
         RecordHistogram.recordBooleanHistogram(
-                TAB_OPENED_FOR_REDIRECT, fromApp && isTabOnInitialNavigationChain());
+                INTENT_LAUNCH_FROM_TAB_CREATION, fromApp && isTabOnInitialNavigationChain());
 
         // Before leaving Chrome, close any tab created for the navigation chain.
         if (shouldCloseTab) {
@@ -712,7 +771,8 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
                         // index which was saved before this navigation, and remove the empty
                         // entries from the navigation history.
                         mClearAllForwardHistoryRequired = true;
-                        assumeNonNull(mClient.getWebContents().getNavigationController())
+                        mClient.getWebContents()
+                                .getNavigationController()
                                 .goToNavigationIndex(lastCommittedEntryIndexBeforeNavigation);
                     }
                 });
@@ -756,7 +816,7 @@ public class InterceptNavigationDelegateImpl extends InterceptNavigationDelegate
 
     private void logBlockedNavigationToDevToolsConsole(GURL url) {
         int resId =
-                mExternalNavHandler.canExternalAppHandleUrl(url)
+                assumeNonNull(mExternalNavHandler).canExternalAppHandleUrl(url)
                         ? R.string.blocked_navigation_warning
                         : R.string.unreachable_navigation_warning;
         mClient.getWebContents()

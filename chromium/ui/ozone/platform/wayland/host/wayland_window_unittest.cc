@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
 
@@ -5347,16 +5343,9 @@ TEST_P(PerSurfaceScaleWaylandWindowTest, UiScale_SanitizeFontScale) {
 }
 
 TEST_P(PerSurfaceScaleWaylandWindowTest, UiScale_ForceDeviceScaleFactor) {
-  // Ensures force-device-scale-factor switch is not used when ui scaling is
-  // disabled or unsupported.
-  ASSERT_FALSE(connection_->IsUiScaleEnabled());
-  ASSERT_TRUE(connection_->window_manager());
-  display::Display::SetForceDeviceScaleFactor(2.0);
-  EXPECT_EQ(1.0f, connection_->window_manager()->DetermineUiScale());
-
-  // When it is enabled, it must take precedence over font scale.
-  base::test::ScopedFeatureList enable_ui_scaling(features::kWaylandUiScale);
+  // When enabled, it must take precedence over font scale.
   ASSERT_TRUE(connection_->IsUiScaleEnabled());
+  display::Display::SetForceDeviceScaleFactor(2.0);
   EXPECT_EQ(2.0f, connection_->window_manager()->DetermineUiScale());
   EXPECT_CALL(delegate_, OnBoundsChanged(Eq(kDefaultBoundsChange))).Times(1);
   SendConfigureEvent(surface_id_, gfx::Size(1000, 1000), wl::ScopedWlArray({}));

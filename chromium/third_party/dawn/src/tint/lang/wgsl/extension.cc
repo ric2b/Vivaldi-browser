@@ -48,11 +48,11 @@ Extension ParseExtension(std::string_view str) {
     if (str == "chromium_experimental_framebuffer_fetch") {
         return Extension::kChromiumExperimentalFramebufferFetch;
     }
+    if (str == "chromium_experimental_immediate") {
+        return Extension::kChromiumExperimentalImmediate;
+    }
     if (str == "chromium_experimental_pixel_local") {
         return Extension::kChromiumExperimentalPixelLocal;
-    }
-    if (str == "chromium_experimental_push_constant") {
-        return Extension::kChromiumExperimentalPushConstant;
     }
     if (str == "chromium_experimental_subgroup_matrix") {
         return Extension::kChromiumExperimentalSubgroupMatrix;
@@ -62,9 +62,6 @@ Extension ParseExtension(std::string_view str) {
     }
     if (str == "chromium_internal_input_attachments") {
         return Extension::kChromiumInternalInputAttachments;
-    }
-    if (str == "chromium_internal_relaxed_uniform_layout") {
-        return Extension::kChromiumInternalRelaxedUniformLayout;
     }
     if (str == "clip_distances") {
         return Extension::kClipDistances;
@@ -78,9 +75,6 @@ Extension ParseExtension(std::string_view str) {
     if (str == "subgroups") {
         return Extension::kSubgroups;
     }
-    if (str == "subgroups_f16") {
-        return Extension::kSubgroupsF16;
-    }
     return Extension::kUndefined;
 }
 
@@ -92,18 +86,16 @@ std::string_view ToString(Extension value) {
             return "chromium_disable_uniformity_analysis";
         case Extension::kChromiumExperimentalFramebufferFetch:
             return "chromium_experimental_framebuffer_fetch";
+        case Extension::kChromiumExperimentalImmediate:
+            return "chromium_experimental_immediate";
         case Extension::kChromiumExperimentalPixelLocal:
             return "chromium_experimental_pixel_local";
-        case Extension::kChromiumExperimentalPushConstant:
-            return "chromium_experimental_push_constant";
         case Extension::kChromiumExperimentalSubgroupMatrix:
             return "chromium_experimental_subgroup_matrix";
         case Extension::kChromiumInternalGraphite:
             return "chromium_internal_graphite";
         case Extension::kChromiumInternalInputAttachments:
             return "chromium_internal_input_attachments";
-        case Extension::kChromiumInternalRelaxedUniformLayout:
-            return "chromium_internal_relaxed_uniform_layout";
         case Extension::kClipDistances:
             return "clip_distances";
         case Extension::kDualSourceBlending:
@@ -112,8 +104,6 @@ std::string_view ToString(Extension value) {
             return "f16";
         case Extension::kSubgroups:
             return "subgroups";
-        case Extension::kSubgroupsF16:
-            return "subgroups_f16";
     }
     return "<unknown>";
 }

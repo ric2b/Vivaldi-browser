@@ -83,7 +83,6 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
       previewVoicePlaying: {type: Object},
       currentNotifications_: {type: Object},
       previewVoiceInitiated: {type: Object},
-      isSpeechActive: {type: Boolean},
       localeToDisplayName: {type: Object},
       showLanguageMenuDialog_: {type: Boolean},
       downloadingMessages_: {type: Boolean},
@@ -91,23 +90,22 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
     };
   }
 
-  selectedVoice?: SpeechSynthesisVoice;
-  localeToDisplayName: {[lang: string]: string} = {};
-  previewVoicePlaying?: SpeechSynthesisVoice;
-  enabledLangs: string[] = [];
-  availableVoices: SpeechSynthesisVoice[] = [];
-  isSpeechActive: boolean = false;
+  accessor selectedVoice: SpeechSynthesisVoice|undefined;
+  accessor localeToDisplayName: {[lang: string]: string} = {};
+  accessor previewVoicePlaying: SpeechSynthesisVoice|null = null;
+  accessor enabledLangs: string[] = [];
+  accessor availableVoices: SpeechSynthesisVoice[] = [];
 
   // The current notifications that should be used in the voice menu.
-  private currentNotifications_: {[language: string]: NotificationType} = {};
+  private accessor currentNotifications_:
+      {[language: string]: NotificationType} = {};
 
-  private previewVoiceInitiated?: SpeechSynthesisVoice;
+  private accessor previewVoiceInitiated: SpeechSynthesisVoice|null = null;
   protected errorMessages_: string[] = [];
-  protected downloadingMessages_: string[] = [];
-  protected voiceGroups_: VoiceDropdownGroup[] = [];
-  protected showLanguageMenuDialog_: boolean = false;
+  protected accessor downloadingMessages_: string[] = [];
+  protected accessor voiceGroups_: VoiceDropdownGroup[] = [];
+  protected accessor showLanguageMenuDialog_: boolean = false;
 
-  private voicePlayingWhenMenuOpened_: boolean = false;
   private readonly spBodyPadding_ = Number.parseInt(
       window.getComputedStyle(document.body)
           .getPropertyValue('--sp-body-padding'),
@@ -154,21 +152,23 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
   }
 
   onVoiceSelectionMenuClick(targetElement: HTMLElement) {
-    this.voicePlayingWhenMenuOpened_ = this.isSpeechActive;
     this.notificationManager_.addListener(this);
 
     const menu = this.$.voiceSelectionMenu.get();
-    openMenu(menu, targetElement, {
-      minX: this.spBodyPadding_,
-      maxX: document.body.clientWidth - this.spBodyPadding_,
-    });
+    openMenu(
+        menu, targetElement, {
+          minX: this.spBodyPadding_,
+          maxX: document.body.clientWidth - this.spBodyPadding_,
+        },
+        this.onMenuShown.bind(this));
+  }
 
-    // Scroll to the selected voice.
-    requestAnimationFrame(() => {
-      const selectedItem =
-          menu.querySelector<HTMLElement>('.item-invisible-false');
-      selectedItem?.scrollIntoViewIfNeeded();
-    });
+  private onMenuShown() {
+    this.fire(ToolbarEvent.VOICE_MENU_OPEN);
+    const selectedItem =
+        this.$.voiceSelectionMenu.get().querySelector<HTMLElement>(
+            '.item-hidden-false.check-mark');
+    selectedItem?.scrollIntoViewIfNeeded();
   }
 
   protected voiceItemTabIndex_(groupIndex: number, voiceIndex: number) {
@@ -273,9 +273,11 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
         ToolbarEvent.PLAY_PREVIEW,
         // If preview is currently playing, we pass null to indicate the audio
         // should be paused.
-        dropdownItem.previewActuallyPlaying ?
-            null :
-            {previewVoice: dropdownItem.voice});
+        {
+          previewVoice:
+              dropdownItem.previewActuallyPlaying ? null : dropdownItem.voice,
+        },
+    );
   }
 
   protected openLanguageMenu_() {
@@ -294,13 +296,7 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
   protected onClose_() {
     this.notificationManager_.removeListener(this);
     this.currentNotifications_ = {};
-    this.dispatchEvent(new CustomEvent('voice-menu-close', {
-      bubbles: true,
-      composed: true,
-      detail: {
-        voicePlayingWhenMenuOpened: this.voicePlayingWhenMenuOpened_,
-      },
-    }));
+    this.fire(ToolbarEvent.VOICE_MENU_CLOSE);
   }
 
   private shouldAllowPropagation_(
@@ -354,7 +350,9 @@ export class VoiceSelectionMenuElement extends VoiceSelectionMenuElementBase
 
     // When the menu first opens, the target is the whole menu.
     // In that case, use default behavior.
-    if (!targetIsVoiceOption && !targetIsPreviewButton) return;
+    if (!targetIsVoiceOption && !targetIsPreviewButton) {
+      return;
+    }
 
     e.preventDefault();
 

@@ -96,6 +96,40 @@
     </span>
   </select>
 
+  <!-- Custom element -->
+  <script>
+    class CustomElement extends HTMLElement {
+        constructor() {
+            super();
+        }
+    }
+    customElements.define('custom-element', CustomElement);
+  </script>
+
+  <select>
+    <custom-element></custom-element>
+  </select>
+
+  <!-- Custom element with <option> children -->
+  <select>
+    <custom-element>
+      <option>..</option>
+      <option>..</option>
+    </custom-element>
+  </select>
+
+  <!-- Nested custom elements -->
+  <select>
+    <custom-element>
+      <custom-element>
+        <custom-element>
+          <option>..</option>
+          <option>..</option>
+        </custom-element>
+      </custom-element>
+    </custom-element>
+  </select>
+
   <!-- <noscript> -->
   <select>
     <noscript>
@@ -139,6 +173,50 @@
       <selectedcontent></selectedcontent>
     </button>
     <option>..</option>
+  </select>
+
+  <!-- <selectedcontent> as descendant of <div>, <span>, custom element -->
+  <select>
+    <button>
+      <div>
+        <selectedcontent></selectedcontent>
+      </div>
+    </button>
+  </select>
+
+  <select>
+    <button>
+      <span>
+        <selectedcontent></selectedcontent>
+      </span>
+    </button>
+  </select>
+
+  <select>
+    <button>
+      <custom-element>
+        <selectedcontent></selectedcontent>
+      </custom-element>
+    </button>
+  </select>
+
+  <!-- Allowed phrasing content as descendant of <button> and <div> -->
+  <select>
+    <button>
+      <div>
+        <small>Text</small>
+      </div>
+      <small>Text</small>
+    </button>
+  </select>
+
+  <select>
+    <button>
+      <selectedcontent></selectedcontent>
+      <svg width="100" height="100">
+        <circle cx="50" cy="50" r="40" stroke="black" stroke-width="3" fill="red" />
+      </svg>
+    </button>
   </select>
 
   <!-- <selectedcontent> and <option> content with multiple levels of children -->
@@ -220,6 +298,30 @@
           </span>
         </span>
       </span>
+    </optgroup>
+  </select>
+
+  <!-- Custom element -->
+  <select>
+    <optgroup>
+      <custom-element>
+        <option>..</option>
+        <option>..</option>
+      </custom-element>
+    </optgroup>
+  </select>
+  
+  <!-- Nested custom elements -->
+  <select>
+    <optgroup>
+      <custom-element>
+        <custom-element>
+          <custom-element>
+            <option>..</option>
+            <option>..</option>
+          </custom-element>
+        </custom-element>
+      </custom-element>
     </optgroup>
   </select>
 
@@ -325,6 +427,25 @@
     </option>
   </select>
 
+  <!-- Custom element -->
+    <select>
+      <option>
+        <custom-element></custom-element>
+      </option>
+      <option>
+        <custom-element></custom-element>
+      </option>
+    </select>
+  
+    <!-- Nested custom elements -->
+    <select>
+      <option>
+        <custom-element>
+          <custom-element></custom-element>
+        </custom-element>
+      </option>
+    </select>
+
   <!-- <noscript> -->
   <select>
     <option>
@@ -342,6 +463,18 @@
         console.log("<script> element");
       </script>
     </option>
+  </select>
+
+  <!-- Comments -->
+  <select>
+    <!-- 1 -->
+    <optgroup>
+      <!-- 2 -->
+      <option>
+        <!-- 3 -->
+        ..
+      </option>
+    </optgroup>
   </select>
 
 <script>

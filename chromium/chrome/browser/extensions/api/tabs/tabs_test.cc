@@ -1762,20 +1762,10 @@ IN_PROC_BROWSER_TEST_F(ExtensionTabsTest, TestGroupDetachedAndReInserted) {
   tab_groups::TabGroupId group =
       browser()->tab_strip_model()->AddToNewGroup({0, 1});
 
-  tab_groups::TabGroupSyncService* tab_group_service =
-      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
-          browser()->profile());
-
-  // TODO(crbug.com/392952244): Remove this after migrating callers to using new
-  // APIs.
-  std::unique_ptr<tab_groups::ScopedLocalObservationPauser>
-      observation_pauser_ =
-          tab_group_service->CreateScopedLocalObserverPauser();
-
   TestEventRouterObserver event_observer(
       EventRouter::Get(browser()->profile()));
 
-  std::unique_ptr<DetachedTabGroup> detached_group =
+  std::unique_ptr<DetachedTabCollection> detached_group =
       browser()->tab_strip_model()->DetachTabGroupForInsertion(group);
 
   event_observer.WaitForEventWithName(api::tabs::OnUpdated::kEventName);

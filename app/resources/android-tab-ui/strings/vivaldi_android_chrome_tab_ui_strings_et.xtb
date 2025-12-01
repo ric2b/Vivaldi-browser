@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="et">
-<translation id="2277224997687551299">Muuda rühma nime</translation>
+<translation id="1062777154504442433">Uus kaardivirn</translation>
+<translation id="1625440863545383011">Eemalda kaart ja välju virnast</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Lisa kaart järjehoidjatesse}
           other {Lisa kaardid järjehoidjatesse}
         }</translation>
 <translation id="2947471979790858922">Sellest seadmest eemaldatakse nende privaatsete kaartidega seotud toimingud</translation>
+<translation id="3298614730029636660">Välju kaardivirnast</translation>
+<translation id="354698175756845966">Muuda kaardivirna värvi</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Suletud kaartide leidmiseks vali Vivaldi põhimenüüst „Viimatised kaardid”. Sinu privaatset kaarti seal ei näidata.}
         other {Suletud kaartide leidmiseks vali Vivaldi põhimenüüst „Viimatised kaardid”. Sinu # privaatset kaarti seal ei näidata.}}</translation>
-<translation id="4460014764210899310">Lammuta rühm</translation>
 <translation id="4871187110787939393">Kas sulgeda kõik privaatsed kaardid?</translation>
 <translation id="5494920125229734069">Vali kõik</translation>
-<translation id="6744956528665271406">Muuda rühma värvi</translation>
+<translation id="6807841890213931603">Eemalda kaart ja kustuta virn</translation>
+<translation id="750227952939161636">Kaardivirnad salvestatakse automaatselt ja uuendatakse kõigis seadmetes, kus sünkimisteenusesse sisse loginud oled.</translation>
+<translation id="7640137753339219124">Kustuta kaardivirn</translation>
+<translation id="7653857400289671414">Kaardivirnad salvestatakse automaatselt.</translation>
+<translation id="8440938071054361204">Muuda kaardivirna nime</translation>
+<translation id="8602902357364871325">Sulge kaardivirn</translation>
+<translation id="8851621822786801079">Eemalda kaardivirnast</translation>
 </translationbundle>

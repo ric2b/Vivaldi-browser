@@ -54,6 +54,7 @@ const char kNameKey[] = "name";
 const char kSpeeddialKey[] = "speeddial";
 const char kThumbnailKey[] = "thumbnail";
 const char kTitleKey[] = "title";
+const char kDisplayUrlKey[] = "display_url";
 
 bool IsValidBookmarkName(bool folder, std::string_view name) {
   if (name.empty())
@@ -154,6 +155,10 @@ bool ParsePartnerDatabaseDetailsList(
         if (!v.is_string())
           return error(property + " is not a string");
         details.favicon_url = std::move(v.GetString());
+      } else if (property == kDisplayUrlKey) {
+        if (!v.is_string())
+          return error(property + " is not a string");
+        details.display_url = std::move(v.GetString());
       } else {
         return error("unsupported or unknown property '" + property + "'");
       }

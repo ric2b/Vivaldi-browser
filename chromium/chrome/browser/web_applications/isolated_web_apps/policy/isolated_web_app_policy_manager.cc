@@ -41,7 +41,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_install_source.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
-#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/iwa_key_distribution_info_provider.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_installer.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -52,6 +51,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
+#include "components/webapps/isolated_web_apps/iwa_key_distribution_info_provider.h"
 #include "content/public/browser/isolated_web_apps_policy.h"
 #include "net/base/backoff_entry.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -79,25 +79,6 @@ constexpr net::BackoffEntry::Policy kInstallRetryBackoffPolicy = {
 constexpr int kIsolatedWebAppForceInstallMaxRetryTreshold = 2;
 constexpr base::TimeDelta kIsolatedWebAppForceInstallEmergencyDelay =
     base::Hours(5);
-
-std::vector<IsolatedWebAppExternalInstallOptions> ParseIwaPolicyValues(
-    const base::Value::List& iwa_policy_values) {
-  std::vector<IsolatedWebAppExternalInstallOptions> iwa_install_options;
-  iwa_install_options.reserve(iwa_policy_values.size());
-  for (const auto& policy_entry : iwa_policy_values) {
-    const base::expected<IsolatedWebAppExternalInstallOptions, std::string>
-        options = IsolatedWebAppExternalInstallOptions::FromPolicyPrefValue(
-            policy_entry);
-    if (options.has_value()) {
-      iwa_install_options.push_back(options.value());
-    } else {
-      LOG(ERROR) << "Could not interpret IWA force-install policy: "
-                 << options.error();
-    }
-  }
-
-  return iwa_install_options;
-}
 
 // Remove the install source from the already installed app, possibly
 // uninstalling it if no more sources are remaining.
@@ -212,6 +193,27 @@ void IsolatedWebAppPolicyManager::SetOnInstallTaskCompletedCallbackForTesting(
                                  IwaInstaller::Result)> callback) {
   CHECK_IS_TEST();
   GetOnInstallTaskCompletedCallbackForTesting() = callback;
+}
+
+// static
+std::vector<IsolatedWebAppExternalInstallOptions>
+IsolatedWebAppPolicyManager::GetIwaInstallForceList(const Profile& profile) {
+  std::vector<IsolatedWebAppExternalInstallOptions> iwas_in_policy;
+
+  for (const auto& policy_entry :
+       profile.GetPrefs()->GetList(prefs::kIsolatedWebAppInstallForceList)) {
+    const base::expected<IsolatedWebAppExternalInstallOptions, std::string>
+        options = IsolatedWebAppExternalInstallOptions::FromPolicyPrefValue(
+            policy_entry);
+    if (options.has_value()) {
+      iwas_in_policy.push_back(options.value());
+    } else {
+      LOG(ERROR) << "Could not interpret IWA force-install policy: "
+                 << options.error();
+    }
+  }
+
+  return iwas_in_policy;
 }
 
 IsolatedWebAppPolicyManager::IsolatedWebAppPolicyManager(Profile* profile)
@@ -373,8 +375,7 @@ void IsolatedWebAppPolicyManager::DoProcessPolicy(
   CHECK(install_tasks_.empty());
 
   std::vector<IsolatedWebAppExternalInstallOptions> apps_in_policy =
-      ParseIwaPolicyValues(profile_->GetPrefs()->GetList(
-          prefs::kIsolatedWebAppInstallForceList));
+      GetIwaInstallForceList(*profile_);
   base::flat_map<web_package::SignedWebBundleId,
                  std::reference_wrapper<const WebApp>>
       installed_iwas = GetInstalledIwas(lock.registrar());
@@ -425,6 +426,13 @@ void IsolatedWebAppPolicyManager::DoProcessPolicy(
         break;
 
       case WebAppManagement::kIwaUserInstalled:
+        if (!CHECK_DEREF(IwaKeyDistributionInfoProvider::GetInstance())
+                 .IsManagedInstallPermitted(
+                     install_options.web_bundle_id().id())) {
+          DLOG(WARNING) << "The IWA " << install_options.web_bundle_id()
+                        << " is not in the managed allowlist. ";
+          continue;
+        }
         // Always fully uninstall user installed apps (dev mode and regular)
         // if they're to be replaced by a policy installation.
         app_actions.emplace(
@@ -571,12 +579,15 @@ void IsolatedWebAppPolicyManager::OnAllInstallTasksCompleted(
     return;
   }
 
-  const bool any_task_failed = std::ranges::any_of(
+  const bool any_app_needs_retry = std::ranges::any_of(
       install_results, [](const IwaInstaller::Result& result) {
-        return result.type() != IwaInstallerResultType::kSuccess;
+        // The component update (allowlist change) triggers reprocessing
+        // policy, so do not retry when app rejected because of allowlist.
+        return result.type() != IwaInstallerResultType::kSuccess &&
+               result.type() != IwaInstallerResultType::kErrorAppNotInAllowlist;
       });
 
-  if (any_task_failed) {
+  if (any_app_needs_retry) {
     install_retry_backoff_entry_.InformOfRequest(/*succeeded=*/false);
     CleanupOrphanedBundles(/*finished_closure=*/base::DoNothing());
   } else {

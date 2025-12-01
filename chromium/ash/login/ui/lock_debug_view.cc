@@ -2,14 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "ash/login/ui/lock_debug_view.h"
 
 #include <algorithm>
+#include <array>
 #include <map>
 #include <memory>
 #include <optional>
@@ -67,19 +63,20 @@
 namespace ash {
 namespace {
 
-constexpr const char* kDebugUserNames[] = {
+constexpr std::array<const char*, 6> kDebugUserNames = {
     "Angelina Johnson", "Marcus Cohen", "Chris Wallace",
     "Debbie Craig",     "Stella Wong",  "Stephanie Wade",
 };
 
-constexpr const char* kDebugPublicAccountNames[] = {
+constexpr std::array<const char*, 4> kDebugPublicAccountNames = {
     "Seattle Public Library",
     "San Jose Public Library",
     "Sunnyvale Public Library",
     "Mountain View Public Library",
 };
 
-constexpr const char* kDebugDetachableBases[] = {"Base A", "Base B", "Base C"};
+constexpr std::array<const char*, 3> kDebugDetachableBases = {
+    "Base A", "Base B", "Base C"};
 
 constexpr const char kDebugOsVersion[] =
     "Chromium 64.0.3279.0 (Platform 10146.0.0 dev-channel peppy test)";
@@ -207,10 +204,10 @@ std::unique_ptr<views::View> CreateCurtainOverlay() {
 // |LoginDataDispatcher| instance; this is used for debugging and
 // development. The debug overlay uses this class to change what data is exposed
 // to the UI.
-class LockDebugView::DebugDataDispatcherTransformer
+class LockDebugViewDataDispatcherTransformer
     : public LoginDataDispatcher::Observer {
  public:
-  DebugDataDispatcherTransformer(
+  LockDebugViewDataDispatcherTransformer(
       LoginDataDispatcher* dispatcher,
       const base::RepeatingClosure& on_users_received,
       LockDebugView* lock_debug_view)
@@ -220,12 +217,12 @@ class LockDebugView::DebugDataDispatcherTransformer
     root_dispatcher_->AddObserver(this);
   }
 
-  DebugDataDispatcherTransformer(const DebugDataDispatcherTransformer&) =
-      delete;
-  DebugDataDispatcherTransformer& operator=(
-      const DebugDataDispatcherTransformer&) = delete;
+  LockDebugViewDataDispatcherTransformer(
+      const LockDebugViewDataDispatcherTransformer&) = delete;
+  LockDebugViewDataDispatcherTransformer& operator=(
+      const LockDebugViewDataDispatcherTransformer&) = delete;
 
-  ~DebugDataDispatcherTransformer() override {
+  ~LockDebugViewDataDispatcherTransformer() override {
     auth_panel_debug_widget_ = nullptr;
     root_dispatcher_->RemoveObserver(this);
   }
@@ -423,11 +420,10 @@ class LockDebugView::DebugDataDispatcherTransformer
     auto delegate = std::make_unique<views::DialogDelegate>();
     delegate->SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
     delegate->SetModalType(ui::mojom::ModalType::kSystem);
-    delegate->SetOwnedByWidget(true);
-    delegate->SetCloseCallback(
-        base::BindOnce(&LockDebugView::DebugDataDispatcherTransformer::
-                           OnAuthPanelDebugWidgetClose,
-                       base::Unretained(this)));
+    delegate->SetOwnedByWidget(views::WidgetDelegate::OwnedByWidgetPassKey());
+    delegate->SetCloseCallback(base::BindOnce(
+        &LockDebugViewDataDispatcherTransformer::OnAuthPanelDebugWidgetClose,
+        base::Unretained(this)));
 
     DCHECK(user_index >= 0 && user_index < debug_users_.size());
     UserMetadata* debug_user = &debug_users_[user_index];
@@ -849,12 +845,13 @@ class LockDebugView::DebugLoginDetachableBaseModel
 };
 
 LockDebugView::LockDebugView(LockScreen::ScreenType screen_type)
-    : debug_data_dispatcher_(std::make_unique<DebugDataDispatcherTransformer>(
-          Shell::Get()->login_screen_controller()->data_dispatcher(),
-          base::BindRepeating(
-              &LockDebugView::UpdatePerUserActionContainerAndLayout,
-              base::Unretained(this)),
-          this)),
+    : debug_data_dispatcher_(
+          std::make_unique<LockDebugViewDataDispatcherTransformer>(
+              Shell::Get()->login_screen_controller()->data_dispatcher(),
+              base::BindRepeating(
+                  &LockDebugView::UpdatePerUserActionContainerAndLayout,
+                  base::Unretained(this)),
+              this)),
       next_auth_error_type_(AuthErrorType::kFirstUnlockFailed) {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal));
@@ -1093,7 +1090,7 @@ void LockDebugView::AuthInputRowView() {
   auto delegate = std::make_unique<views::DialogDelegate>();
   delegate->SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   delegate->SetModalType(ui::mojom::ModalType::kSystem);
-  delegate->SetOwnedByWidget(true);
+  delegate->SetOwnedByWidget(views::WidgetDelegate::OwnedByWidgetPassKey());
   delegate->SetCloseCallback(base::BindOnce(
       &LockDebugView::OnAuthInputRowDebugWidgetClose, base::Unretained(this)));
 
@@ -1264,104 +1261,112 @@ void LockDebugView::UpdatePerUserActionContainer() {
     name->SetAutoColorReadabilityEnabled(false);
     row->AddChildViewRaw(name);
 
-    AddButton("Toggle PIN",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::TogglePinStateForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
-              row);
+    AddButton(
+        "Toggle PIN",
+        base::BindRepeating(
+            &LockDebugViewDataDispatcherTransformer::TogglePinStateForUserIndex,
+            base::Unretained(debug_data_dispatcher_.get()), i),
+        row);
     AddButton(
         "Toggle Dark/Light mode",
-        base::BindRepeating(
-            &DebugDataDispatcherTransformer::ToggleDarkLigntModeForUserIndex,
-            base::Unretained(debug_data_dispatcher_.get()), i),
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
+                                ToggleDarkLigntModeForUserIndex,
+                            base::Unretained(debug_data_dispatcher_.get()), i),
         row);
 
     AddButton(
         "Toggle Smart card",
-        base::BindRepeating(&DebugDataDispatcherTransformer::
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
                                 ToggleChallengeResponseStateForUserIndex,
                             base::Unretained(debug_data_dispatcher_.get()), i),
         row);
-    AddButton("Toggle Tap",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::ToggleTapStateForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
-              row);
-    AddButton("Cycle Smart Lock",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::CycleSmartLockForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
-              row);
+    AddButton(
+        "Toggle Tap",
+        base::BindRepeating(
+            &LockDebugViewDataDispatcherTransformer::ToggleTapStateForUserIndex,
+            base::Unretained(debug_data_dispatcher_.get()), i),
+        row);
+    AddButton(
+        "Cycle Smart Lock",
+        base::BindRepeating(
+            &LockDebugViewDataDispatcherTransformer::CycleSmartLockForUserIndex,
+            base::Unretained(debug_data_dispatcher_.get()), i),
+        row);
     for (bool success : {true, false}) {
       std::string button_label = "Send Smart Lock auth ";
       button_label += (success ? "success" : "fail");
       AddButton(std::move(button_label),
                 base::BindRepeating(
-                    &DebugDataDispatcherTransformer::
+                    &LockDebugViewDataDispatcherTransformer::
                         AuthenticateSmartLockForUserIndex,
                     base::Unretained(debug_data_dispatcher_.get()), i, success),
                 row);
     }
     AddButton(
         "Cycle fingerprint state",
-        base::BindRepeating(
-            &DebugDataDispatcherTransformer::CycleFingerprintStateForUserIndex,
-            base::Unretained(debug_data_dispatcher_.get()), i),
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
+                                CycleFingerprintStateForUserIndex,
+                            base::Unretained(debug_data_dispatcher_.get()), i),
         row);
     AddButton("Send fingerprint auth success",
               base::BindRepeating(
-                  &DebugDataDispatcherTransformer::
+                  &LockDebugViewDataDispatcherTransformer::
                       AuthenticateFingerprintForUserIndex,
                   base::Unretained(debug_data_dispatcher_.get()), i, true),
               row);
     AddButton("Send fingerprint auth fail",
               base::BindRepeating(
-                  &DebugDataDispatcherTransformer::
+                  &LockDebugViewDataDispatcherTransformer::
                       AuthenticateFingerprintForUserIndex,
                   base::Unretained(debug_data_dispatcher_.get()), i, false),
               row);
     AddButton(
         "Toggle force online sign-in",
-        base::BindRepeating(&DebugDataDispatcherTransformer::
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
                                 ToggleForceOnlineSignInForUserIndex,
                             base::Unretained(debug_data_dispatcher_.get()), i),
         row);
-    AddButton("Toggle user is managed",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::ToggleManagementForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
-              row);
-    AddButton("Toggle disabled TPM",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::ToggleDisableTpmForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
-              row);
+    AddButton(
+        "Toggle user is managed",
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
+                                ToggleManagementForUserIndex,
+                            base::Unretained(debug_data_dispatcher_.get()), i),
+        row);
+    AddButton(
+        "Toggle disabled TPM",
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
+                                ToggleDisableTpmForUserIndex,
+                            base::Unretained(debug_data_dispatcher_.get()), i),
+        row);
     AddButton(
         "Cycle disabled auth",
-        base::BindRepeating(&DebugDataDispatcherTransformer::
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
                                 CycleDisabledAuthMessageForUserIndex,
                             base::Unretained(debug_data_dispatcher_.get()), i),
         row);
 
-    AddButton("Show legacy AuthPanel",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::AuthPanelRequestForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i,
-                  /*use_legacy_authpanel=*/true),
-              row);
+    AddButton(
+        "Show legacy AuthPanel",
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
+                                AuthPanelRequestForUserIndex,
+                            base::Unretained(debug_data_dispatcher_.get()), i,
+                            /*use_legacy_authpanel=*/true),
+        row);
 
-    AddButton("Show AuthPanel",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::AuthPanelRequestForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i,
-                  /*use_legacy_authpanel=*/false),
-              row);
+    AddButton(
+        "Show AuthPanel",
+        base::BindRepeating(&LockDebugViewDataDispatcherTransformer::
+                                AuthPanelRequestForUserIndex,
+                            base::Unretained(debug_data_dispatcher_.get()), i,
+                            /*use_legacy_authpanel=*/false),
+        row);
 
-    AddButton("Show local authentication request",
-              base::BindRepeating(
-                  &DebugDataDispatcherTransformer::AuthRequestForUserIndex,
-                  base::Unretained(debug_data_dispatcher_.get()), i),
-              row);
+    AddButton(
+        "Show local authentication request",
+        base::BindRepeating(
+            &LockDebugViewDataDispatcherTransformer::AuthRequestForUserIndex,
+            base::Unretained(debug_data_dispatcher_.get()), i),
+        row);
 
     if (debug_detachable_base_model_->debugging_pairing_state() &&
         debug_detachable_base_model_->GetPairingStatus() ==

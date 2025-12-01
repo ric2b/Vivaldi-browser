@@ -149,6 +149,10 @@
 #include "extensions/common/extension.h"
 #endif
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/glic/glic_metrics_provider.h"
+#endif
+
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_features.h"
 #include "base/feature_list.h"
@@ -165,6 +169,7 @@
 #include "chrome/browser/metrics/chromeos_family_link_user_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
 #include "chrome/browser/metrics/chromeos_system_profile_provider.h"
+#include "chrome/browser/metrics/class_management_enabled_metrics_provider.h"
 #include "chrome/browser/metrics/cros_healthd_metrics_provider.h"
 #include "chrome/browser/metrics/cros_pre_consent_metrics_manager.h"
 #include "chrome/browser/metrics/family_user_metrics_provider.h"
@@ -481,7 +486,7 @@ void UpdateMetricsServicesForPerUser(bool enabled) {
   g_browser_process->local_state()->SetBoolean(
       metrics::prefs::kMetricsReportingEnabled, enabled);
 
-  g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions(true);
+  g_browser_process->GetMetricsServicesManager()->UpdateUploadPermissions();
 }
 #endif
 
@@ -937,6 +942,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
     metrics_service_->RegisterMetricsProvider(
         std::make_unique<K12AgeClassificationMetricsProvider>());
   }
+  if (base::FeatureList::IsEnabled(
+          ::features::kClassManagementEnabledMetricsProvider)) {
+    metrics_service_->RegisterMetricsProvider(
+        std::make_unique<ClassManagementEnabledMetricsProvider>());
+  }
 
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -978,6 +988,11 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       metrics::CreateDesktopSessionMetricsProvider());
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || (BUILDFLAG(IS_LINUX)
+
+#if BUILDFLAG(ENABLE_GLIC)
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<glic::GlicMetricsProvider>());
+#endif
 }
 
 void ChromeMetricsServiceClient::RegisterUKMProviders() {

@@ -39,14 +39,15 @@ class ChatServer {
    public:
     explicit RemoteTrackVisitor(ChatServer* server);
     void OnReply(const moqt::FullTrackName& full_track_name,
-                 std::optional<FullSequence> largest_id,
+                 std::optional<Location> largest_id,
                  std::optional<absl::string_view> reason_phrase) override;
     void OnCanAckObjects(MoqtObjectAckFunction) override {}
-    void OnObjectFragment(
-        const moqt::FullTrackName& full_track_name, FullSequence sequence,
-        moqt::MoqtPriority /*publisher_priority*/,
-        moqt::MoqtObjectStatus /*status*/,
-        absl::string_view object, bool end_of_message) override;
+    void OnObjectFragment(const moqt::FullTrackName& full_track_name,
+                          Location sequence,
+                          moqt::MoqtPriority /*publisher_priority*/,
+                          moqt::MoqtObjectStatus /*status*/,
+                          absl::string_view object,
+                          bool end_of_message) override;
     void OnSubscribeDone(FullTrackName /*full_track_name*/) override {}
 
    private:
@@ -70,7 +71,8 @@ class ChatServer {
               track_namespace,
               absl::bind_front(&ChatServer::ChatServerSessionHandler::
                                    OnOutgoingAnnounceReply,
-                               this));
+                               this),
+              VersionSpecificParameters());
           return;
         }
       }
@@ -89,7 +91,7 @@ class ChatServer {
     // Callback for incoming announces.
     std::optional<MoqtAnnounceErrorReason> OnIncomingAnnounce(
         const moqt::FullTrackName& track_namespace,
-        AnnounceEvent announce_type);
+        std::optional<VersionSpecificParameters> parameters);
     void OnOutgoingAnnounceReply(
         FullTrackName track_namespace,
         std::optional<MoqtAnnounceErrorReason> error_message);

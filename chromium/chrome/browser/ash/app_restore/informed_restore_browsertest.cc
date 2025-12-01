@@ -86,9 +86,6 @@ class InformedRestoreTest : public InProcessBrowserTest {
  public:
   InformedRestoreTest() {
     set_launch_browser_for_testing(nullptr);
-
-    feature_list_.InitWithFeatures(
-        {features::kForestFeature, features::kSanitize}, {});
   }
   InformedRestoreTest(const InformedRestoreTest&) = delete;
   InformedRestoreTest& operator=(const InformedRestoreTest&) = delete;
@@ -109,11 +106,12 @@ class InformedRestoreTest : public InProcessBrowserTest {
   base::HistogramTester histogram_tester_;
 
  private:
-  base::test::ScopedFeatureList feature_list_;
+  base::test::ScopedFeatureList feature_list_{features::kSanitize};
 };
 
+// TODO(crbug.com/413281717): Test is flaky
 // Creates 2 browser windows that will be restored in the main test.
-IN_PROC_BROWSER_TEST_F(InformedRestoreTest, PRE_LaunchBrowsers) {
+IN_PROC_BROWSER_TEST_F(InformedRestoreTest, DISABLED_PRE_LaunchBrowsers) {
   EXPECT_TRUE(BrowserList::GetInstance()->empty());
 
   Profile* profile = ProfileManager::GetActiveUserProfile();
@@ -125,9 +123,10 @@ IN_PROC_BROWSER_TEST_F(InformedRestoreTest, PRE_LaunchBrowsers) {
   AppLaunchInfoSaveWaiter::Wait();
 }
 
+// TODO(crbug.com/413281717): Test is flaky
 // Verify that with two elements in the full restore file, we enter overview on
 // login. Then when we click the restore button, we restore two browsers.
-IN_PROC_BROWSER_TEST_F(InformedRestoreTest, LaunchBrowsers) {
+IN_PROC_BROWSER_TEST_F(InformedRestoreTest, DISABLED_LaunchBrowsers) {
   EXPECT_TRUE(BrowserList::GetInstance()->empty());
 
   // Verify we have entered overview. The restore button will be null if we

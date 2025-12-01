@@ -31,6 +31,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/permission_controller_delegate.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
@@ -367,44 +368,6 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, DefaultSizes) {
               DictHasValue("result.result.value", expected_height));
 }
 
-class HeadlessBrowserWindowSizeTest : public HeadlessBrowserTest {
- public:
-  static constexpr gfx::Size kWindowSize = {1920, 1080};
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    HeadlessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(
-        switches::kWindowSize,
-        base::StringPrintf("%u,%u", kWindowSize.width(), kWindowSize.height()));
-  }
-};
-
-IN_PROC_BROWSER_TEST_F(HeadlessBrowserWindowSizeTest, WindowSize) {
-  HeadlessBrowserContext* browser_context =
-      browser()->CreateBrowserContextBuilder().Build();
-
-  HeadlessWebContents* web_contents =
-      browser_context->CreateWebContentsBuilder().Build();
-
-  const int expected_width = kWindowSize.width();
-  const int expected_height = kWindowSize.height();
-
-  EXPECT_THAT(EvaluateScript(web_contents, "screen.width"),
-              DictHasValue("result.result.value", expected_width));
-  EXPECT_THAT(EvaluateScript(web_contents, "screen.height"),
-              DictHasValue("result.result.value", expected_height));
-
-  EXPECT_THAT(EvaluateScript(web_contents, "window.outerWidth"),
-              DictHasValue("result.result.value", expected_width));
-  EXPECT_THAT(EvaluateScript(web_contents, "window.outerHeight"),
-              DictHasValue("result.result.value", expected_height));
-
-  EXPECT_THAT(EvaluateScript(web_contents, "window.innerWidth"),
-              DictHasValue("result.result.value", expected_width));
-  EXPECT_THAT(EvaluateScript(web_contents, "window.innerHeight"),
-              DictHasValue("result.result.value", expected_height));
-}
-
 // TODO(skyostil): This test currently relies on being able to run a shell
 // script.
 #if BUILDFLAG(IS_POSIX)
@@ -582,7 +545,10 @@ IN_PROC_BROWSER_TEST_F(HeadlessBrowserTest, PermissionManagerAlwaysASK) {
   // Check that the permission manager returns ASK for a given permission type.
   EXPECT_EQ(blink::mojom::PermissionStatus::ASK,
             permission_controller_delegate->GetPermissionStatus(
-                blink::PermissionType::NOTIFICATIONS, url, url));
+                content::PermissionDescriptorUtil::
+                    CreatePermissionDescriptorForPermissionType(
+                        blink::PermissionType::NOTIFICATIONS),
+                url, url));
 }
 
 class BrowserTargetTracingTest : public HeadlessBrowserTest {

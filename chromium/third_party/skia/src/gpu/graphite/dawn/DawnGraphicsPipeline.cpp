@@ -364,7 +364,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
                              paintID,
                              useStorageBuffers,
                              renderPassDesc.fWriteSwizzle,
-                             renderPassDesc.fDstReadStrategyIfRequired,
+                             renderPassDesc.fDstReadStrategy,
                              samplerDescArrPtr);
 
     const std::string& fsSkSL = shaderInfo->fragmentSkSL();
@@ -426,15 +426,14 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     }
 
     wgpu::ColorTargetState colorTarget;
-    colorTarget.format = TextureInfoPriv::Get<DawnTextureInfo>(
-            renderPassDesc.fColorAttachment.fTextureInfo).getViewFormat();
+    colorTarget.format = TextureFormatToDawnFormat(renderPassDesc.fColorAttachment.fFormat);
     colorTarget.blend = blendOn ? &blend : nullptr;
     colorTarget.writeMask = blendInfo.fWritesColor && hasFragmentSkSL ? wgpu::ColorWriteMask::All
                                                                       : wgpu::ColorWriteMask::None;
 
 #if !defined(__EMSCRIPTEN__)
     const bool loadMsaaFromResolve =
-            renderPassDesc.fColorResolveAttachment.fTextureInfo.isValid() &&
+            renderPassDesc.fColorResolveAttachment.fFormat != TextureFormat::kUnsupported &&
             renderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad;
     // Special case: a render pass loading resolve texture requires additional settings for the
     // pipeline to make it compatible.
@@ -461,12 +460,11 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
     const auto& depthStencilSettings = step->depthStencilSettings();
     SkASSERT(depthStencilSettings.fDepthTestEnabled ||
              depthStencilSettings.fDepthCompareOp == CompareOp::kAlways);
+    TextureFormat dsFormat = renderPassDesc.fDepthStencilAttachment.fFormat;
     wgpu::DepthStencilState depthStencil;
-    if (renderPassDesc.fDepthStencilAttachment.fTextureInfo.isValid()) {
-        wgpu::TextureFormat dsFormat = TextureInfoPriv::Get<DawnTextureInfo>(
-                renderPassDesc.fDepthStencilAttachment.fTextureInfo).getViewFormat();
-        depthStencil.format =
-                DawnFormatIsDepthOrStencil(dsFormat) ? dsFormat : wgpu::TextureFormat::Undefined;
+    if (dsFormat != TextureFormat::kUnsupported) {
+        SkASSERT(TextureFormatIsDepthOrStencil(dsFormat));
+        depthStencil.format = TextureFormatToDawnFormat(dsFormat);
         if (depthStencilSettings.fDepthTestEnabled) {
             depthStencil.depthWriteEnabled = depthStencilSettings.fDepthWriteEnabled;
         }
@@ -474,7 +472,7 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
 
         // Dawn validation fails if the stencil state is non-default and the
         // format doesn't have the stencil aspect.
-        if (DawnFormatIsStencil(dsFormat) && depthStencilSettings.fStencilTestEnabled) {
+        if (TextureFormatHasStencil(dsFormat) && depthStencilSettings.fStencilTestEnabled) {
             depthStencil.stencilFront = stencil_face_to_dawn(depthStencilSettings.fFrontStencil);
             depthStencil.stencilBack = stencil_face_to_dawn(depthStencilSettings.fBackStencil);
             depthStencil.stencilReadMask = depthStencilSettings.fFrontStencil.fReadMask;
@@ -592,18 +590,18 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
 
     // Vertex state
     std::array<wgpu::VertexBufferLayout, kNumVertexBuffers> vertexBufferLayouts;
-    // Vertex buffer layout
-    std::vector<wgpu::VertexAttribute> vertexAttributes;
+    // Static data buffer layout
+    std::vector<wgpu::VertexAttribute> staticDataAttributes;
     {
-        auto arrayStride = create_vertex_attributes(step->vertexAttributes(),
+        auto arrayStride = create_vertex_attributes(step->staticAttributes(),
                                                     0,
-                                                    &vertexAttributes);
-        auto& layout = vertexBufferLayouts[kVertexBufferIndex];
+                                                    &staticDataAttributes);
+        auto& layout = vertexBufferLayouts[kStaticDataBufferIndex];
         if (arrayStride) {
             layout.arrayStride = arrayStride;
             layout.stepMode = wgpu::VertexStepMode::Vertex;
-            layout.attributeCount = vertexAttributes.size();
-            layout.attributes = vertexAttributes.data();
+            layout.attributeCount = staticDataAttributes.size();
+            layout.attributes = staticDataAttributes.data();
         } else {
             layout.arrayStride = 0;
 #if defined(__EMSCRIPTEN__)
@@ -616,18 +614,20 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
         }
     }
 
-    // Instance buffer layout
-    std::vector<wgpu::VertexAttribute> instanceAttributes;
+    // Append data buffer layout
+    std::vector<wgpu::VertexAttribute> appendDataAttributes;
     {
-        auto arrayStride = create_vertex_attributes(step->instanceAttributes(),
-                                                    step->vertexAttributes().size(),
-                                                    &instanceAttributes);
-        auto& layout = vertexBufferLayouts[kInstanceBufferIndex];
+        // Note: the shaderLocationOffset in this function call needs to be the staticAttributeSize
+        auto arrayStride = create_vertex_attributes(step->appendAttributes(),
+                                                    step->staticAttributes().size(),
+                                                    &appendDataAttributes);
+        auto& layout = vertexBufferLayouts[kAppendDataBufferIndex];
         if (arrayStride) {
             layout.arrayStride = arrayStride;
-            layout.stepMode = wgpu::VertexStepMode::Instance;
-            layout.attributeCount = instanceAttributes.size();
-            layout.attributes = instanceAttributes.data();
+            layout.stepMode = step->appendsVertices() ? wgpu::VertexStepMode::Vertex :
+                                                        wgpu::VertexStepMode::Instance;
+            layout.attributeCount = appendDataAttributes.size();
+            layout.attributes = appendDataAttributes.data();
         } else {
             layout.arrayStride = 0;
 #if defined(__EMSCRIPTEN__)
@@ -721,6 +721,12 @@ sk_sp<DawnGraphicsPipeline> DawnGraphicsPipeline::Make(
             asyncCreation->fRenderPipeline = nullptr;
         }
 
+        // Fail ASAP for synchronous pipeline creation so it affects the Recording snap instead of
+        // being detected later at insertRecording().
+        if (!asyncCreation->fRenderPipeline) {
+            return nullptr;
+        }
+
         log_pipeline_creation(asyncCreation.get());
     }
 
@@ -764,6 +770,12 @@ void DawnGraphicsPipeline::freeGpuData() {
     // Wait for async creation to finish before we can destroy this object.
     (void)this->dawnRenderPipeline();
     fAsyncPipelineCreation = nullptr;
+}
+
+bool DawnGraphicsPipeline::didAsyncCompilationFail() const {
+    return fAsyncPipelineCreation &&
+           fAsyncPipelineCreation->fFinished &&
+           !fAsyncPipelineCreation->fRenderPipeline;
 }
 
 const wgpu::RenderPipeline& DawnGraphicsPipeline::dawnRenderPipeline() const {

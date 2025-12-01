@@ -7,11 +7,11 @@
 #include "base/files/file_util.h"
 #include "base/functional/callback.h"
 #include "base/logging.h"
+#include "content/public/browser/browser_thread.h"
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 #include "chrome/browser/accessibility/embedded_a11y_extension_loader.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "components/crx_file/id_util.h"
 #include "ui/accessibility/accessibility_features.h"
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
@@ -40,6 +40,47 @@ constexpr std::array<uint8_t, 32> kWasmTtsEnginePublicKeySHA256 = {
     0x56, 0x89, 0xcb, 0x53, 0x8e, 0x13, 0x92, 0xc1, 0x44, 0x5d};
 
 const char kWasmTtsEngineManifestName[] = "WASM TTS Engine";
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+class WasmTTSEngineDirectory {
+ public:
+  static WasmTTSEngineDirectory* Get() {
+    static base::NoDestructor<WasmTTSEngineDirectory> wasm_directory;
+    return wasm_directory.get();
+  }
+
+  void Get(base::OnceCallback<void(const base::FilePath&)> callback) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    callbacks_.push_back(std::move(callback));
+    if (!dir_.empty()) {
+      FireCallbacks();
+    }
+  }
+
+  void Set(const base::FilePath& new_dir) {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    CHECK(!new_dir.empty());
+    dir_ = new_dir;
+    FireCallbacks();
+  }
+
+ private:
+  void FireCallbacks() {
+    DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    CHECK(!dir_.empty());
+    std::vector<base::OnceCallback<void(const base::FilePath&)>> callbacks;
+    std::swap(callbacks, callbacks_);
+    for (base::OnceCallback<void(const base::FilePath&)>& callback :
+         callbacks) {
+      base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+          FROM_HERE, base::BindOnce(std::move(callback), dir_));
+    }
+  }
+
+  base::FilePath dir_;
+  std::vector<base::OnceCallback<void(const base::FilePath&)>> callbacks_;
+};
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 }  // namespace
 
@@ -73,11 +114,13 @@ void WasmTtsEngineComponentInstallerPolicy::ComponentReady(
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
   if (features::IsWasmTtsComponentUpdaterEnabled() &&
       !features::IsWasmTtsEngineAutoInstallDisabled()) {
-    EmbeddedA11yExtensionLoader::GetInstance()->Init();
-    EmbeddedA11yExtensionLoader::GetInstance()->InstallExtensionWithIdAndPath(
-        extension_misc::kComponentUpdaterTTSEngineExtensionId, install_dir,
-        kManifestFileName,
-        /*should_localize=*/false);
+    // Instead of installing the component extension as soon as it is ready,
+    // store the install directory, so that the install can be triggered
+    // via ReadAnythingService once the side panel has been opened. This
+    // prevents the extension from being installed unnecessarily for those
+    // who aren't using reading mode.
+    WasmTTSEngineDirectory* wasm_directory = WasmTTSEngineDirectory::Get();
+    wasm_directory->Set(install_dir);
   }
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 }
@@ -121,10 +164,12 @@ void RegisterWasmTtsEngineComponent(ComponentUpdateService* cus) {
   installer->Register(cus, base::OnceClosure());
 }
 
+void WasmTtsEngineComponentInstallerPolicy::GetWasmTTSEngineDirectory(
+    base::OnceCallback<void(const base::FilePath&)> callback) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
-std::string WasmTtsEngineComponentInstallerPolicy::GetId() {
-  return crx_file::id_util::GenerateIdFromHash((kWasmTtsEnginePublicKeySHA256));
-}
+  WasmTTSEngineDirectory* wasm_directory = WasmTTSEngineDirectory::Get();
+  wasm_directory->Get(std::move(callback));
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+}
 
 }  // namespace component_updater

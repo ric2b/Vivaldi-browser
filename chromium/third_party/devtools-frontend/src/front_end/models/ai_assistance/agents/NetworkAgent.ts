@@ -7,10 +7,10 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Root from '../../../core/root/root.js';
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as PanelUtils from '../../../panels/utils/utils.js';
+import type {TemplateResult} from '../../../ui/lit/lit.js';
 import {NetworkRequestFormatter} from '../data_formatters/NetworkRequestFormatter.js';
 
 import {
-  AgentType,
   AiAgent,
   type ContextDetail,
   type ContextResponse,
@@ -109,7 +109,7 @@ export class RequestContext extends ConversationContext<SDK.NetworkRequest.Netwo
     return this.#request;
   }
 
-  override getIcon(): HTMLElement {
+  override getIcon(): TemplateResult {
     return PanelUtils.PanelUtils.getIconForNetworkRequest(this.#request);
   }
 
@@ -123,7 +123,6 @@ export class RequestContext extends ConversationContext<SDK.NetworkRequest.Netwo
  * instance for a new conversation.
  */
 export class NetworkAgent extends AiAgent<SDK.NetworkRequest.NetworkRequest> {
-  override readonly type = AgentType.NETWORK;
   readonly preamble = preamble;
   readonly clientFeature = Host.AidaClient.ClientFeature.CHROME_NETWORK_AGENT;
   get userTier(): string|undefined {

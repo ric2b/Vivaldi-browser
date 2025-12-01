@@ -61,6 +61,9 @@ NSString* WidgetPromoDisabledImageName();
 // Accessibility identifier for the Password Manager widget promo.
 extern NSString* const kWidgetPromoID;
 
+// Accessibility identifier for the Password Manager Trusted Vault widget promo.
+extern NSString* const kWidgetTrustedVaultPromoID;
+
 // Accessibility identifier for the Password Manager widget promo's close
 // button.
 extern NSString* const kWidgetPromoCloseButtonID;
@@ -68,19 +71,39 @@ extern NSString* const kWidgetPromoCloseButtonID;
 // Accessibility identifier for the Password Manager widget promo's image.
 extern NSString* const kWidgetPromoImageID;
 
+// Accessibility identifier for the Password Manager Trusted Vault widget
+// promo's image.
+extern NSString* const kWidgetTrustedVaultPromoImageID;
+
 // Name of histogram tracking actions taken on the Password Manager widget
 // promo.
 extern const char kPasswordManagerWidgetPromoActionHistogram[];
 
+// Name of histogram tracking actions taken on the Trusted Vault Password
+// Manager widget promo.
+extern const char
+    kPasswordManagerPromoWithTrustedVaultKeyRetrievalActionHistogram[];
+
 // Enum for the IOS.PasswordManager.WidgetPromo.Action histogram. Keep in sync
 // with the "PromoWithInstructionsAction" enum.
-// LINT.IfChange
+// LINT.IfChange(PromoWithInstructionsAction)
 enum class PasswordManagerWidgetPromoAction {
   kClose = 0,             // The user closed the promo.
   kOpenInstructions = 1,  // The user opened the instruction view.
   kMaxValue = kOpenInstructions,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml:PromoWithInstructionsAction)
+
+// Enum for the IOS.PasswordManager.TrustedVaultKeyRetrievalPromo.Action
+// histogram. Keep in sync with the "PromoWithTrustedVaultKeyRetrievalAction"
+// enum.
+// LINT.IfChange(PromoWithTrustedVaultKeyRetrievalAction)
+enum class PasswordManagerPromoWithTrustedVaultKeyRetrievalAction {
+  kDisplayed = 0,  // The promo has been displayed for a user.
+  kActedUpon = 1,  // The user acted upon the recommended action.
+  kMaxValue = kActedUpon,
+};
+// LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml:PromoWithTrustedVaultKeyRetrievalAction)
 
 // Sections of the password settings
 typedef NS_ENUM(NSInteger, PasswordSectionIdentifier) {
@@ -90,6 +113,7 @@ typedef NS_ENUM(NSInteger, PasswordSectionIdentifier) {
   SectionIdentifierAddPasswordButton,
   SectionIdentifierManageAccountHeader,
   SectionIdentifierWidgetPromo,
+  SectionIdentifierTrustedVaultWidgetPromo,
 };
 
 // Enum with all possible UI states for the Password Manager's Password Checkup

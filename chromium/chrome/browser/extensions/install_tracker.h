@@ -16,7 +16,10 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension_id.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace base {
 class FilePath;
@@ -46,7 +49,7 @@ class InstallTracker : public KeyedService, public ExtensionRegistryObserver {
   void AddObserver(InstallObserver* observer);
   void RemoveObserver(InstallObserver* observer);
 
-  // If an install is currently in progress for |extension_id|, returns details
+  // If an install is currently in progress for `extension_id`, returns details
   // of the installation. This instance retains ownership of the returned
   // pointer. Returns NULL if the extension is not currently being installed.
   const ActiveInstallData* GetActiveInstall(
@@ -96,7 +99,7 @@ class InstallTracker : public KeyedService, public ExtensionRegistryObserver {
   typedef std::map<std::string, ActiveInstallData> ActiveInstallsMap;
   ActiveInstallsMap active_installs_;
 
-  // Safe: |this| belongs to |browser_context_| via KeyedService, and this
+  // Safe: `this` belongs to `browser_context_` via KeyedService, and this
   // pointer is nulled in Shutdown().
   raw_ptr<content::BrowserContext> browser_context_;
 

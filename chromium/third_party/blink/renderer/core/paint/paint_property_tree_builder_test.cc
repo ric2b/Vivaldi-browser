@@ -4621,10 +4621,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
     </div>
   )HTML");
 
-  LayoutObject* thread =
-      GetLayoutObjectByElementId("multicol")->SlowFirstChild();
   LayoutObject* container = GetLayoutObjectByElementId("container");
-  EXPECT_TRUE(thread->IsLayoutFlowThread());
   ASSERT_EQ(2u, NumFragments(container));
   EXPECT_EQ(PhysicalOffset(100, 0), FragmentAt(container, 0).PaintOffset());
   EXPECT_EQ(PhysicalOffset(200, 100), FragmentAt(container, 1).PaintOffset());
@@ -5742,7 +5739,7 @@ TEST_P(PaintPropertyTreeBuilderTest, ClearClipPathEffectNode) {
   // removal of a clip-path.
   SetBodyInnerHTML(R"HTML(
     <svg>
-      <clipPath clip-path="circle()" id="clip"></clipPath>
+      <clipPath clip-path="circle()" id="clip"><text/></clipPath>
       <rect id="rect" width="800" clip-path="url(#clip)" height="800"/>
     </svg>
   )HTML");

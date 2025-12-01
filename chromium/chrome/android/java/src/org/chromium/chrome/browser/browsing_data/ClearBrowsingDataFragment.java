@@ -100,7 +100,6 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
         private final @DialogOption int mOption;
         private final ClearBrowsingDataCheckBoxPreference mCheckbox;
         private BrowsingDataCounterBridge mCounter;
-        private boolean mShouldAnnounceCounterResult;
         private @TimePeriod int mSelectedTimePeriod;
 
         public Item(
@@ -165,25 +164,13 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
             assert mCheckbox == preference;
 
             mParent.updateButtonState();
-            mShouldAnnounceCounterResult = true;
             return true;
         }
 
         @Override
-        public void onCounterFinished(String result) {
-            mCheckbox.setSummary(result);
-            if (mShouldAnnounceCounterResult) {
-                mCheckbox.announceForAccessibility(result);
-            }
-        }
-
-        /**
-         * Sets whether the BrowsingDataCounter result should be announced. This is when the counter
-         * recalculation was caused by a checkbox state change (as opposed to fragment
-         * initialization or time period change).
-         */
-        public void setShouldAnnounceCounterResult(boolean value) {
-            mShouldAnnounceCounterResult = value;
+        public void onCounterFinished(String summary) {
+            mCheckbox.setSummary(summary);
+            mCheckbox.maybeAnnounceSummaryChange(summary);
         }
 
         public void setSelectedTimePeriod(@TimePeriod int selectedTimePeriod) {
@@ -223,7 +210,8 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
         DialogOption.CLEAR_TABS,
         DialogOption.CLEAR_PASSWORDS,
         DialogOption.CLEAR_FORM_DATA,
-        DialogOption.CLEAR_SITE_SETTINGS
+        DialogOption.CLEAR_SITE_SETTINGS,
+        DialogOption.CLEAR_ADS_TRACKER_BLOCKER // Vivaldi VAB-11363
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface DialogOption {
@@ -238,7 +226,8 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
         int CLEAR_PASSWORDS = 4;
         int CLEAR_FORM_DATA = 5;
         int CLEAR_SITE_SETTINGS = 6;
-        int NUM_ENTRIES = 7;
+        int CLEAR_ADS_TRACKER_BLOCKER = 7; // Vivaldi VAB-11363
+        int NUM_ENTRIES = 8;
     }
 
     public static final String CLEAR_BROWSING_DATA_FETCHER = "clearBrowsingDataFetcher";
@@ -289,6 +278,8 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
                 return BrowsingDataType.SITE_SETTINGS;
             case DialogOption.CLEAR_TABS:
                 return BrowsingDataType.TABS;
+            case DialogOption.CLEAR_ADS_TRACKER_BLOCKER: // Vivaldi VAB-11363
+                return BrowsingDataType.ADS_TRACKER_BLOCKER;
             default:
                 throw new IllegalArgumentException();
         }
@@ -310,6 +301,8 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
                 return "clear_site_settings_checkbox";
             case DialogOption.CLEAR_TABS:
                 return "clear_tabs_checkbox";
+            case DialogOption.CLEAR_ADS_TRACKER_BLOCKER: // Vivaldi VAB-11363
+                return "clear_ads_tracker_blocker_checkbox";
             default:
                 throw new IllegalArgumentException();
         }
@@ -331,6 +324,8 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
                 return R.drawable.ic_tv_options_input_settings_rotated_grey;
             case DialogOption.CLEAR_TABS:
                 return R.drawable.ic_tab_icon_24dp;
+            case DialogOption.CLEAR_ADS_TRACKER_BLOCKER: // Vivaldi VAB-11363
+                return R.drawable.shield_block_ads_24dp;
             default:
                 throw new IllegalArgumentException();
         }
@@ -477,7 +472,8 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
                     DialogOption.CLEAR_TABS,
                     DialogOption.CLEAR_PASSWORDS,
                     DialogOption.CLEAR_FORM_DATA,
-                    DialogOption.CLEAR_SITE_SETTINGS);
+                    DialogOption.CLEAR_SITE_SETTINGS,
+                    DialogOption.CLEAR_ADS_TRACKER_BLOCKER); // Vivaldi VAB-11363
         }
         return Arrays.asList(
                 DialogOption.CLEAR_HISTORY,
@@ -581,7 +577,6 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
             // Inform the items that a recalculation is going to happen as a result of the time
             // period change.
             for (Item item : mItems) {
-                item.setShouldAnnounceCounterResult(false);
                 item.setSelectedTimePeriod(mLastSelectedTimePeriod);
             }
             return true;
@@ -621,7 +616,7 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         Bundle fragmentArgs = getArguments();
         assert fragmentArgs != null : "A valid fragment argument is required.";
 
@@ -716,7 +711,9 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
 
     @Override
     public View onCreateView(
-            LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+            LayoutInflater inflater,
+            @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
         LinearLayout view =
                 (LinearLayout) super.onCreateView(inflater, container, savedInstanceState);
 
@@ -734,7 +731,7 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
     }
 
     @Override
-    public void onActivityCreated(Bundle savedInstanceState) {
+    public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
         // Now that the dialog's view has been created, update the button state.
         updateButtonState();
@@ -983,5 +980,10 @@ public class ClearBrowsingDataFragment extends ChromeBaseSettingsFragment
 
     private boolean isInMultiWindowMode() {
         return MultiWindowUtils.getInstanceCount() > 1;
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

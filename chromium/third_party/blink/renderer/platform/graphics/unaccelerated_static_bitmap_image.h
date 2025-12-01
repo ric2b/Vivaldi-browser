@@ -27,7 +27,7 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
       PaintImage,
       ImageOrientation orientation = ImageOrientationEnum::kDefault);
 
-  bool CurrentFrameKnownToBeOpaque() override;
+  bool IsOpaque() override;
 
   void Draw(cc::PaintCanvas*,
             const cc::PaintFlags&,
@@ -49,17 +49,12 @@ class PLATFORM_EXPORT UnacceleratedStaticBitmapImage final
   SkAlphaType GetAlphaType() const override {
     return GetSkImageInfo().alphaType();
   }
-  SkColorType GetSkColorType() const override {
-    return GetSkImageInfo().colorType();
-  }
-  sk_sp<SkColorSpace> GetSkColorSpace() const override {
-    return GetSkImageInfo().refColorSpace();
-  }
   gfx::ColorSpace GetColorSpace() const override {
-    return SkColorSpaceToGfxColorSpace(GetSkColorSpace());
+    return SkColorSpaceToGfxColorSpace(GetSkImageInfo().refColorSpace());
   }
   viz::SharedImageFormat GetSharedImageFormat() const override {
-    return viz::SkColorTypeToSinglePlaneSharedImageFormat(GetSkColorType());
+    return viz::SkColorTypeToSinglePlaneSharedImageFormat(
+        GetSkImageInfo().colorType());
   }
 
  private:

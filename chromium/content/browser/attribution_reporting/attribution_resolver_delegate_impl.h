@@ -67,8 +67,8 @@ class CONTENT_EXPORT AttributionResolverDelegateImpl
   AttributionResolverDelegateImpl& operator=(
       const AttributionResolverDelegateImpl&) = delete;
   AttributionResolverDelegateImpl(AttributionResolverDelegateImpl&&) = delete;
-  AttributionResolverDelegateImpl& operator=(AttributionResolverDelegateImpl&&) =
-      delete;
+  AttributionResolverDelegateImpl& operator=(
+      AttributionResolverDelegateImpl&&) = delete;
   ~AttributionResolverDelegateImpl() override;
 
   // AttributionResolverDelegate:
@@ -86,7 +86,9 @@ class CONTENT_EXPORT AttributionResolverDelegateImpl
   void ShuffleReports(std::vector<AttributionReport>& reports) override;
   GetRandomizedResponseResult GetRandomizedResponse(
       attribution_reporting::mojom::SourceType,
-      const attribution_reporting::TriggerSpecs&,
+      const attribution_reporting::TriggerDataSet&,
+      const attribution_reporting::EventReportWindows&,
+      attribution_reporting::MaxEventLevelReports,
       attribution_reporting::EventLevelEpsilon,
       const std::optional<attribution_reporting::AttributionScopesData>&)
       override;
@@ -97,8 +99,8 @@ class CONTENT_EXPORT AttributionResolverDelegateImpl
 
  protected:
   AttributionResolverDelegateImpl(AttributionNoiseMode noise_mode,
-                                 AttributionDelayMode delay_mode,
-                                 const AttributionConfig& config);
+                                  AttributionDelayMode delay_mode,
+                                  const AttributionConfig& config);
 
  private:
   const AttributionNoiseMode noise_mode_ GUARDED_BY_CONTEXT(sequence_checker_);

@@ -110,7 +110,7 @@ bool IsWgcSupported(CaptureType capture_type) {
     // There is a bug in the DWM (Desktop Window Manager) that prevents it from
     // providing image data if there are no displays attached. This was fixed in
     // Windows 11.
-    if (rtc::rtc_win::GetVersion() < rtc::rtc_win::Version::VERSION_WIN11)
+    if (webrtc::rtc_win::GetVersion() < webrtc::rtc_win::Version::VERSION_WIN11)
       return false;
   }
 
@@ -119,7 +119,8 @@ bool IsWgcSupported(CaptureType capture_type) {
   // we can't assert that we won't be asked to capture the entire virtual
   // screen, we report unsupported so we can fallback to another capturer.
   if (capture_type == CaptureType::kScreen &&
-      rtc::rtc_win::GetVersion() < rtc::rtc_win::Version::VERSION_WIN10_20H1) {
+      webrtc::rtc_win::GetVersion() <
+          webrtc::rtc_win::Version::VERSION_WIN10_20H1) {
     return false;
   }
 
@@ -322,7 +323,7 @@ void WgcCapturerWin::CaptureFrame() {
     }
   }
 
-  int64_t capture_start_time_nanos = rtc::TimeNanos();
+  int64_t capture_start_time_nanos = webrtc::TimeNanos();
 
   WgcCaptureSession* capture_session = nullptr;
   std::map<SourceId, WgcCaptureSession>::iterator session_iter =
@@ -380,8 +381,8 @@ void WgcCapturerWin::CaptureFrame() {
     return;
   }
 
-  int capture_time_ms = (rtc::TimeNanos() - capture_start_time_nanos) /
-                        rtc::kNumNanosecsPerMillisec;
+  int capture_time_ms = (webrtc::TimeNanos() - capture_start_time_nanos) /
+                        webrtc::kNumNanosecsPerMillisec;
   RTC_HISTOGRAM_COUNTS_1000("WebRTC.DesktopCapture.Win.WgcCapturerFrameTime",
                             capture_time_ms);
   frame->set_capture_time_ms(capture_time_ms);

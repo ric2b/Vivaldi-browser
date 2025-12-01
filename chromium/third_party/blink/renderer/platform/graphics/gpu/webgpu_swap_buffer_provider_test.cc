@@ -13,6 +13,8 @@
 #include <dawn/wire/WireClient.h>
 #include <dawn/wire/WireServer.h>
 
+#include <array>
+
 #include "base/memory/raw_ptr.h"
 #include "base/test/task_environment.h"
 #include "gpu/command_buffer/client/webgpu_interface_stub.h"
@@ -100,6 +102,7 @@ class FakeProviderClient : public WebGPUSwapBufferProvider::Client {
   }
   void InitializeLayer(cc::Layer* layer) override {}
   void SetNeedsCompositingUpdate() override {}
+  bool IsGPUDeviceDestroyed() override { return false; }
 
   scoped_refptr<WebGPUMailboxTexture> texture;
 };
@@ -157,15 +160,17 @@ class WebGPUSwapBufferProviderForTests : public WebGPUSwapBufferProvider {
 
 class WireSerializer : public dawn::wire::CommandSerializer {
  public:
-  size_t GetMaximumAllocationSize() const override { return sizeof(buf_); }
+  size_t GetMaximumAllocationSize() const override {
+    return (buf_.size() * sizeof(decltype(buf_)::value_type));
+  }
 
   void SetHandler(dawn::wire::CommandHandler* handler) { handler_ = handler; }
 
   void* GetCmdSpace(size_t size) override {
-    if (size > sizeof(buf_)) {
+    if (size > (buf_.size() * sizeof(decltype(buf_)::value_type))) {
       return nullptr;
     }
-    if (sizeof(buf_) - size < offset_) {
+    if ((buf_.size() * sizeof(decltype(buf_)::value_type)) - size < offset_) {
       if (!Flush()) {
         return nullptr;
       }
@@ -176,14 +181,14 @@ class WireSerializer : public dawn::wire::CommandSerializer {
   }
 
   bool Flush() override {
-    bool success = handler_->HandleCommands(buf_, offset_) != nullptr;
+    bool success = handler_->HandleCommands(buf_.data(), offset_) != nullptr;
     offset_ = 0;
     return success;
   }
 
  private:
   size_t offset_ = 0;
-  char buf_[1024 * 1024];
+  std::array<char, 1024 * 1024> buf_;
   raw_ptr<dawn::wire::CommandHandler> handler_;
 };
 
@@ -332,17 +337,16 @@ TEST_F(WebGPUSwapBufferProviderTest,
   EXPECT_TRUE(
       provider_->PrepareTransferableResource(&resource3, &release_callback3));
 
-  // Release resources one by one, the provider should only be freed when the
-  // last one is called.
+  // Release resources one by one and expect shared images to be destroyed.
   provider_ = nullptr;
   std::move(release_callback1).Run(gpu::SyncToken(), false /* lostResource */);
-  ASSERT_EQ(provider_alive_, true);
+  EXPECT_EQ(sii_->shared_image_count(), 2u);
 
   std::move(release_callback2).Run(gpu::SyncToken(), false /* lostResource */);
-  ASSERT_EQ(provider_alive_, true);
+  EXPECT_EQ(sii_->shared_image_count(), 1u);
 
   std::move(release_callback3).Run(gpu::SyncToken(), false /* lostResource */);
-  ASSERT_EQ(provider_alive_, false);
+  EXPECT_EQ(sii_->shared_image_count(), 0u);
 }
 
 TEST_F(WebGPUSwapBufferProviderTest, VerifyResizingProperlyAffectsResources) {
@@ -732,18 +736,19 @@ TEST_F(WebGPUSwapBufferProviderTest, VerifyZeroSizeRejects) {
   EXPECT_EQ(nullptr, provider_->GetNewTexture(kZeroHeight));
 }
 
-// Verifies that GetLastWebGPUMailboxTexture() returns empty information if no
+// Verifies that GetFrontBufferSharedImage() returns empty information if no
 // swapbuffer has been created.
 TEST_F(WebGPUSwapBufferProviderTest,
-       GetLastWebGPUMailboxTextureReturnsEmptyWithoutSwapBuffer) {
-  auto mailbox_texture = provider_->GetLastWebGPUMailboxTexture();
-  EXPECT_EQ(mailbox_texture, nullptr);
+       GetFrontBufferSharedImageReturnsEmptyWithoutSwapBuffer) {
+  auto front_buffer_si = provider_->GetFrontBufferSharedImage();
+  EXPECT_EQ(front_buffer_si, nullptr);
 }
 
-// Verifies that GetLastWebGPUMailboxTexture() returns a correctly-configured
-// texture if a swapbuffer has been created.
+// Verifies that GetFrontBufferSharedImage() returns a correctly-configured
+// SharedImage if the contents of the swapbuffer have been sent to the
+// compositor.
 TEST_F(WebGPUSwapBufferProviderTest,
-       GetLastWebGPUMailboxTextureReturnsValidTextureWithSwapBuffer) {
+       GetFrontBufferSharedImageReturnsValidSharedImageAfterSwap) {
   const gfx::Size kSize(10, 20);
 
   EXPECT_CALL(*webgpu_, ReserveTexture(device_.Get(), _))
@@ -753,18 +758,15 @@ TEST_F(WebGPUSwapBufferProviderTest,
           }));
   provider_->GetNewTexture(kSize);
 
-  auto mailbox_texture = provider_->GetLastWebGPUMailboxTexture();
-  EXPECT_NE(mailbox_texture, nullptr);
+  viz::TransferableResource resource;
+  viz::ReleaseCallback release_callback;
+  EXPECT_TRUE(
+      provider_->PrepareTransferableResource(&resource, &release_callback));
 
-  auto texture = mailbox_texture->GetTexture();
-  EXPECT_EQ(texture.GetUsage(), kUsage);
-  EXPECT_EQ(texture.GetFormat(), kFormat);
-  EXPECT_EQ(texture.GetDepthOrArrayLayers(), 1u);
-  EXPECT_EQ(texture.GetDimension(), wgpu::TextureDimension::e2D);
-  EXPECT_EQ(texture.GetMipLevelCount(), 1u);
-  EXPECT_EQ(texture.GetSampleCount(), 1u);
-  EXPECT_EQ(texture.GetHeight(), static_cast<uint32_t>(kSize.height()));
-  EXPECT_EQ(texture.GetWidth(), static_cast<uint32_t>(kSize.width()));
+  auto front_buffer_si = provider_->GetFrontBufferSharedImage();
+  EXPECT_NE(front_buffer_si, nullptr);
+  EXPECT_EQ(front_buffer_si->size(), kSize);
+  EXPECT_EQ(front_buffer_si->format(), resource.format);
 }
 
 // Verifies that GetNewTexture() passes client-specified internal usages to
@@ -788,30 +790,6 @@ TEST_F(WebGPUSwapBufferProviderTest,
 
   EXPECT_EQ(webgpu_->internal_usage_from_most_recent_associate_mailbox_call,
             kInternalUsage | wgpu::TextureUsage::RenderAttachment);
-}
-
-// Verifies that GetLastMailboxTexture() passes client-specified internal usages
-// to AssociateMailbox() and doesn't additionally add RenderAttachment (since
-// it does not instruct the decoder to do lazy clearing on this texture).
-TEST_F(WebGPUSwapBufferProviderTest,
-       GetLastMailboxTexturePassesClientSpecifiedInternalUsage) {
-  ASSERT_EQ(kInternalUsage & wgpu::TextureUsage::RenderAttachment, 0);
-
-  const gfx::Size kSize(10, 20);
-
-  EXPECT_EQ(webgpu_->internal_usage_from_most_recent_associate_mailbox_call,
-            wgpu::TextureUsage::None);
-
-  EXPECT_CALL(*webgpu_, ReserveTexture(device_.Get(), _))
-      .WillRepeatedly(Invoke(
-          [&](WGPUDevice device, const WGPUTextureDescriptor* desc) -> auto {
-            return ReserveTextureImpl(device, desc);
-          }));
-  provider_->GetNewTexture(kSize);
-
-  provider_->GetLastWebGPUMailboxTexture();
-  EXPECT_EQ(webgpu_->internal_usage_from_most_recent_associate_mailbox_call,
-            kInternalUsage);
 }
 
 }  // namespace blink

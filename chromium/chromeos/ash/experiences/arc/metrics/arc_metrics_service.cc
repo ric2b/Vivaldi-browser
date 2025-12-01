@@ -23,6 +23,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chromeos/ash/components/dbus/concierge/concierge_client.h"
@@ -909,6 +910,13 @@ void ArcMetricsService::ReportDataDirectorySizeList(
                                    kUmaDataSizeInMBMin, kUmaDataSizeInMBMax,
                                    kUmaNumBuckets);
   }
+}
+
+void ArcMetricsService::ReportCertificateSigningResult(
+    mojom::CertificateSigningResult result) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  base::UmaHistogramEnumeration("Arc.Attestation.CertificateSigning.Result",
+                                result);
 }
 
 void ArcMetricsService::OnWindowActivated(

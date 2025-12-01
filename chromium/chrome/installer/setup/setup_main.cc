@@ -56,7 +56,7 @@
 #include "base/win/resource_exhaustion.h"
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_handle.h"
-#include "base/win/win_util.h"
+#include "base/win/windows_handle_util.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/connectors/device_trust/key_management/core/network/win_key_network_delegate.h"
@@ -660,14 +660,10 @@ installer::InstallStatus UninstallProducts(InstallationState& original_state,
   }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-  // Tell Google Update that an uninstall has taken place if this install did
-  // not originate from the MSI. Google Update has its own logic relating to
-  // MSI-driven uninstalls that conflicts with this. Ignore the return value:
-  // success or failure of Google Update has no bearing on the success or
-  // failure of Chrome's uninstallation.
-  if (!installer_state.is_msi()) {
-    google_update::UninstallGoogleUpdate(installer_state.system_install());
-  }
+  // Tell Google Update that an uninstall has taken place. Ignore the return
+  // value: success or failure of Google Update has no bearing on the success
+  // or failure of Chrome's uninstallation.
+  google_update::UninstallGoogleUpdate(installer_state.system_install());
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
   return install_status;

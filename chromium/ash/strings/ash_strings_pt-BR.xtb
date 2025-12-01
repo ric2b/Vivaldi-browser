@@ -68,7 +68,7 @@ Veja o que você pode fazer para começar.</translation>
 <translation id="1195667586424773550">Arrastar o link até a barra de endereço da guia</translation>
 <translation id="119944043368869598">Remover tudo</translation>
 <translation id="1199716647557067911">Tem certeza de que você quer desativar o "acesso com interruptor"?</translation>
-<translation id="1201402288615127009">Próxima</translation>
+<translation id="1201402288615127009">Avançar</translation>
 <translation id="1210557957257435379">gravação da tela</translation>
 <translation id="121097972571826261">Avançar por palavra</translation>
 <translation id="1218444235442067213"><ph name="APP_NAME" />, app da Play Store</translation>
@@ -424,7 +424,7 @@ Veja o que você pode fazer para começar.</translation>
 <translation id="2427507373259914951">Clicar com o botão esquerdo</translation>
 <translation id="2429753432712299108">O dispositivo Bluetooth "<ph name="DEVICE_NAME" />" deseja permissão para realizar o pareamento. Antes de aceitar, verifique se esta senha aparece no dispositivo: <ph name="PASSKEY" /></translation>
 <translation id="2435457462613246316">Mostrar senha</translation>
-<translation id="2437771564543046790">Pouca bateria. A Economia de bateria está ativada</translation>
+<translation id="2437771564543046790">Pouca bateria. A economia de bateria está ativada</translation>
 <translation id="243878895369688216">Aberto ontem</translation>
 <translation id="2440978926514840421">Gravação de GIF concluída</translation>
 <translation id="2441427462554639370">A gravação foi encerrada porque há pouco espaço de armazenamento</translation>
@@ -462,6 +462,7 @@ Veja o que você pode fazer para começar.</translation>
 <translation id="2530896289327917474">Ativar ou desativar Caret Browsing</translation>
 <translation id="2531025035050312891">dispositivo lento</translation>
 <translation id="2531107890083353124">Ao arrastar a guia, pressione <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Arraste ou pressione a barra de espaço para selecionar uma área para capturar</translation>
 <translation id="2545334090614121435">Quer usar a tecla Home? Use</translation>
 <translation id="254900897760075745">Copiar conteúdo selecionado para a área de transferência</translation>
 <translation id="2549711466868162843">Ajustar iluminação</translation>
@@ -581,7 +582,6 @@ Caso contrário, o touchpad integrado será reativado em <ph name="TIMEOUT_SECON
 <translation id="2949420361496057765">Pressione <ph name="MODIFIER" /> e clique em um link</translation>
 <translation id="2957159466053076448">Você pode desativar esses recursos quando quiser nas configurações. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Áudio do dispositivo</translation>
-<translation id="2960314608273155470">O padrão do modo de captura é <ph name="TYPE" /> <ph name="SOURCE" />. Pressione a tecla Tab para ativar a navegação pelo teclado.</translation>
 <translation id="2961963223658824723">Algo deu errado. Tente novamente em alguns segundos.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Ativar o acesso ao microfone?</translation>
@@ -666,7 +666,7 @@ Caso contrário, o touchpad integrado será reativado em <ph name="TIMEOUT_SECON
 <translation id="3217205077783620295">O som está ativado. Alterná-lo desativará o som.</translation>
 <translation id="3226991577105957773">Mais <ph name="COUNT" /></translation>
 <translation id="3227137524299004712">Microfone</translation>
-<translation id="3233611303007751344">"Economia de bateria" desativada</translation>
+<translation id="3233611303007751344">Economia de bateria desativada</translation>
 <translation id="3238409143297336341">Configure os controles da família para apps</translation>
 <translation id="324366796737464147">Cancelamento de ruído</translation>
 <translation id="3249513730522716925">A janela <ph name="WINDOW_TITLE" /> foi movida do espaço de trabalho <ph name="ACTIVE_DESK" /> para o <ph name="TARGET_DESK" /></translation>
@@ -761,6 +761,7 @@ Caso contrário, o touchpad integrado será reativado em <ph name="TIMEOUT_SECON
 <translation id="3552189655002856821">O Wi-Fi está desativado</translation>
 <translation id="3554215588514239132">Mostrar ou ocultar o painel "Ferramentas para desenvolvedores"</translation>
 <translation id="3554637740840164787">O item <ph name="ITEM_TITLE" /> foi fixado</translation>
+<translation id="3554928024630051016">Para adicionar outros dispositivos USB, tente remover um e conectar outro</translation>
 <translation id="3558768885091059911">Ativar o acesso à câmera e ao microfone?</translation>
 <translation id="3560174576767922131">Gravar vídeo</translation>
 <translation id="3563775809269155755">Ativar ponto de acesso</translation>
@@ -868,6 +869,7 @@ Conecte o dispositivo a uma fonte de energia.</translation>
 <translation id="3861651314799684201">Pressione "Enter" para gravar em tela cheia</translation>
 <translation id="3870197372373144624">Tente desligar o dispositivo.</translation>
 <translation id="3879748587602334249">Gerenciador de downloads</translation>
+<translation id="3884007280698606545">Limite de USB atingido</translation>
 <translation id="3886872229787704059">Aberto hoje</translation>
 <translation id="3891340733213178823">Pressione Ctrl+Shift+Q duas vezes para sair.</translation>
 <translation id="3892148308691398805">Copiar texto</translation>
@@ -1038,7 +1040,7 @@ Alguns recursos estão limitados para aumentar a duração da bateria.</translat
 <translation id="439598569299422042">Pausado, <ph name="SIZE_INFO" /></translation>
 <translation id="440113666232554208">Falha ao salvar screencast</translation>
 <translation id="4405151984121254935">O tipo do periférico conectado não é compatível</translation>
-<translation id="4406883609789734330">Legenda instantânea</translation>
+<translation id="4406883609789734330">Legenda Instantânea</translation>
 <translation id="4412698727486357573">Central de Ajuda</translation>
 <translation id="4412944820643904175">O recurso <ph name="FEATURE_NAME" /> está desativado.</translation>
 <translation id="4417647906073317561">Configurações de foco. Defina um timer, uma tarefa e uma música para entrar no ritmo.</translation>
@@ -1440,6 +1442,7 @@ Nenhum dispositivo conectado.</translation>
 <translation id="5672890847723042801">Utilitários</translation>
 <translation id="5673434351075758678">De "<ph name="FROM_LOCALE" />" para "<ph name="TO_LOCALE" />" após a sincronização das suas configurações.</translation>
 <translation id="5675363643668471212">Item da estante</translation>
+<translation id="5677022547882470786">Arraste a tela ou pressione a barra de espaço para selecionar uma área para pesquisar</translation>
 <translation id="5677928146339483299">Bloqueado</translation>
 <translation id="5678564054339031017">Mostrar próxima semana</translation>
 <translation id="5679050765726761783">Adaptador de baixa potência conectado</translation>
@@ -1485,6 +1488,7 @@ Nenhum dispositivo conectado.</translation>
 <translation id="5788127256798019331">Arquivos do Google Play</translation>
 <translation id="5788535737706478207">Reabrir a última guia ou janela fechada</translation>
 <translation id="5790085346892983794">Sucesso</translation>
+<translation id="5791926618942305301">Na captura de tela, defina como <ph name="SOURCE" /> <ph name="TYPE" />. Pressione Tab para escolher o tipo de captura. Pressione Enter para capturar. Para selecionar a área, defina como uma captura de tela parcial. Pressione a barra de espaço para selecionar a região, se ainda não estiver ativa.</translation>
 <translation id="579415080077680903">Silenciar</translation>
 <translation id="5802516411616338943">Abrir as Configurações rápidas</translation>
 <translation id="5804651031882187592">Desative a configuração "Bloquear chip"</translation>
@@ -1500,7 +1504,7 @@ Nenhum dispositivo conectado.</translation>
 <translation id="5842553299352339114">O ponto de acesso do <ph name="DEVICE_NAME" /> está ativado. Nenhum dispositivo conectado</translation>
 <translation id="584525477304726060">Para maximizar a janela, mantenha-a pressionada</translation>
 <translation id="5856638668464565213">A rede <ph name="NETWORK_NAME" /> não está ativada.</translation>
-<translation id="5860033963881614850">Desativada</translation>
+<translation id="5860033963881614850">Desativado</translation>
 <translation id="5860491529813859533">Ativar</translation>
 <translation id="5864691701242730005">Mostrar configurações do Quick Share. Visibilidade <ph name="VISIBILITY" /> selecionada</translation>
 <translation id="5864748620896638071">Bateria em <ph name="BATTERY_PERCENTAGE" />%</translation>
@@ -1641,6 +1645,7 @@ Nenhum dispositivo conectado.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> pode ser adicionado novamente com a permissão do familiar responsável.</translation>
 <translation id="6291221004442998378">Não está carregando</translation>
 <translation id="6298183524022479114">Personalize este dispositivo no app</translation>
+<translation id="6304076460080088478">Feche ou minimize as janelas anônimas para pesquisar sobre o que está na tela com o Google Lens</translation>
 <translation id="6309219492973062892">Clicar ou tocar nos ícones de estante 1 a 8</translation>
 <translation id="6315170314923504164">Voz</translation>
 <translation id="6319058840130157106">Navegue para trás, passando pelo canto inferior direito, o acesso rápido, a barra de endereço, a barra de favoritos, o site aberto e os downloads</translation>
@@ -1769,6 +1774,7 @@ Nova instalação</translation>
 <translation id="6700713906295497288">Botão do menu do IME</translation>
 <translation id="6704073473590541209">Alça da borda direita selecionada, use as teclas de seta para mover</translation>
 <translation id="6706742084323792866">Fixar teclado</translation>
+<translation id="6709719156428404245">Arraste ou pressione a barra de espaço para selecionar uma área para registrar</translation>
 <translation id="6710213216561001401">Anterior</translation>
 <translation id="6723839937902243910">Energia</translation>
 <translation id="672609503628871915">Veja o que há de novo</translation>
@@ -1777,7 +1783,7 @@ Nova instalação</translation>
 <translation id="6732800389263199929">+<ph name="COUNT" /></translation>
 <translation id="6737983188036277605">Câmera e microfone em uso</translation>
 <translation id="6739144137573853180">IR PARA CONFIGURAÇÕES</translation>
-<translation id="6747985245839783873">Bateria em <ph name="PERCENTAGE" /> por cento. A Economia de bateria está ativada.</translation>
+<translation id="6747985245839783873">Bateria em <ph name="PERCENTAGE" /> por cento. A economia de bateria está ativada.</translation>
 <translation id="6751052314767925245">Aplicado pelo seu administrador</translation>
 <translation id="6751826523481687655">O acompanhamento de performance está ativado</translation>
 <translation id="6752912906630585008">Espaço de trabalho <ph name="REMOVED_DESK" /> removido e integrado ao <ph name="RECEIVE_DESK" /></translation>
@@ -1894,7 +1900,7 @@ Nova instalação</translation>
 <translation id="7131634465328662194">Você será automaticamente desconectado.</translation>
 <translation id="7143207342074048698">Conectando</translation>
 <translation id="7144942256906679589">Status da bateria</translation>
-<translation id="7145639536026937076">Bateria em <ph name="PERCENTAGE" />% e carregando. A Economia de bateria está ativada.</translation>
+<translation id="7145639536026937076">Bateria em <ph name="PERCENTAGE" />% e carregando. A economia de bateria está ativada.</translation>
 <translation id="7147587499155271409">Não há histórico de navegação</translation>
 <translation id="7147657298465433425">Para acessar as teclas F, pressione a tecla Fn + as teclas da linha de cima</translation>
 <translation id="7149149900052329230">Gerencie seus arquivos locais e do Google Drive no app Arquivos.</translation>

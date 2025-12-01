@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include <array>
 
 #include "base/containers/span.h"
@@ -14,7 +9,7 @@
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache.h"
 #include "third_party/blink/renderer/platform/fonts/font_test_utilities.h"
-#include "third_party/blink/renderer/platform/fonts/shaping/shape_result_inline_headers.h"
+#include "third_party/blink/renderer/platform/fonts/shaping/shape_result_run.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_spacing.h"
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_test_info.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -35,7 +30,7 @@ class FontsHolder : public GarbageCollected<FontsHolder> {
     }
   }
 
-  Member<Font> fonts[3];
+  std::array<Member<Font>, 3> fonts;
 };
 }  // namespace
 
@@ -87,7 +82,7 @@ class ShapeResultTest : public FontTestBase {
   }
 
   const Font* GetFont(FontType type) const {
-    return fonts_holder->fonts[static_cast<size_t>(type)];
+    return UNSAFE_TODO(fonts_holder->fonts[static_cast<size_t>(type)]);
   }
 
   FontCachePurgePreventer font_cache_purge_preventer;
@@ -453,6 +448,26 @@ TEST_F(ShapeResultTest, DISABLED_ComputeInkBoundsWithNonZeroOffset) {
   const auto* result = shaper.Shape(GetFont(kLatinFont), TextDirection::kLtr);
   ASSERT_TRUE(HasNonZeroGlyphOffsets(*result));
   EXPECT_FALSE(result->ComputeInkBounds().IsEmpty());
+}
+
+TEST_F(ShapeResultTest, LetterSpacingNotAppliedForCursiveScripts) {
+  // خطية النصية
+  String string(
+      u"\u062E\u0637\u0651\u064E\u064A\u0651\u064E\u0020"
+      u"\u0627\u0644\u0646\u0651\u064E\u0635\u0651\u064E");
+
+  HarfBuzzShaper shaper(string);
+  auto* result = shaper.Shape(GetFont(kArabicFont), TextDirection::kRtl);
+
+  // Letter spacing should not be applied.
+  ShapeResultSpacing<String> spacing(string);
+  FontDescription font_description;
+  font_description.SetLetterSpacing(5);
+  font_description.SetWordSpacing(20);
+  spacing.SetSpacing(font_description);
+  result->ApplySpacing(spacing);
+  EXPECT_FALSE(spacing.IsLetterSpacingAppliedForTesting());
+  EXPECT_TRUE(spacing.IsWordSpacingAppliedForTesting());
 }
 
 // Tests for CaretPositionForOffset

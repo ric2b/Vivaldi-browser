@@ -23,7 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <histogram name="BrowsingTopics.ApiActionType"
-    enum="BrowsingTopicsApiActionType" expires_after="2025-08-17">
+    enum="BrowsingTopicsApiActionType" expires_after="2025-10-19">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -34,7 +34,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.BrowsingTopicsState.LoadFinishStatus"
-    enum="BooleanSuccess" expires_after="2025-08-24">
+    enum="BooleanSuccess" expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -45,7 +45,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.DidNotOccurAtScheduledTime.DaysSinceSessionStart"
-    units="days" expires_after="2025-08-10">
+    units="days" expires_after="2025-10-12">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -58,7 +58,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.DidNotOccurAtScheduledTime.HoursSinceScheduledTime"
-    units="hours" expires_after="2025-08-10">
+    units="hours" expires_after="2025-10-12">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -71,7 +71,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.EligibleDistinctHistoryHostsCount"
-    units="hosts" expires_after="2025-08-24">
+    units="hosts" expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -84,7 +84,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.FirstTry.CalculatorResultStatus"
-    enum="BrowsingTopicsCalculatorResultStatus" expires_after="2025-08-24">
+    enum="BrowsingTopicsCalculatorResultStatus" expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -99,7 +99,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.EpochTopicsCalculation.Hanging.RetryNumber"
-    units="retry number" expires_after="2025-04-27">
+    units="retry number" expires_after="2025-10-07">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -122,7 +122,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.ObservationContextDomainsCountPerTopTopic"
-    units="context domains" expires_after="2025-08-24">
+    units="context domains" expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -137,7 +137,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.EpochTopicsCalculation.Started.RetryNumber"
-    units="retry number" expires_after="2025-04-27">
+    units="retry number" expires_after="2025-10-07">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -161,7 +161,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.TimeoutRetry.CalculatorResultStatus"
-    enum="BrowsingTopicsCalculatorResultStatus" expires_after="2025-04-13">
+    enum="BrowsingTopicsCalculatorResultStatus" expires_after="2025-10-07">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -178,7 +178,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BrowsingTopics.EpochTopicsCalculation.TopTopicsCountBeforePadding"
-    units="topics" expires_after="2025-08-24">
+    units="topics" expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -214,7 +214,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.JavaScriptAPI.TimeToResolve" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -224,7 +224,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.OverrideList.FileLoadResult"
-    enum="BrowsingTopicsOverrideListFileLoadResult" expires_after="2025-05-04">
+    enum="BrowsingTopicsOverrideListFileLoadResult" expires_after="2025-10-07">
   <owner>robertogden@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
@@ -238,18 +238,20 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.OverrideList.UsedOverride" enum="Boolean"
-    expires_after="2024-10-27">
+    expires_after="2025-10-07">
   <owner>robertogden@chromium.org</owner>
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
     When the override list is checked, whether it contained the given input.
+    Warning: this histogram was expired from 2024-10-27 to 2025-04-07; data may
+    be missing.
   </summary>
 </histogram>
 
 <histogram
     name="BrowsingTopics.RedirectChain.OnTopicsFirstInvokedForSite.TopicsCallingSitesCount"
-    units="count" expires_after="2025-08-26">
+    units="count" expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -262,7 +264,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.Result.FakeTopicCount"
-    enum="BrowsingTopicsNumberOfTopics" expires_after="2025-03-30">
+    enum="BrowsingTopicsNumberOfTopics" expires_after="2025-10-07">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -272,7 +274,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.Result.FilteredTopicCount"
-    enum="BrowsingTopicsNumberOfTopics" expires_after="2025-08-10">
+    enum="BrowsingTopicsNumberOfTopics" expires_after="2025-10-12">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -283,7 +285,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.Result.RealTopicCount"
-    enum="BrowsingTopicsNumberOfTopics" expires_after="2025-07-27">
+    enum="BrowsingTopicsNumberOfTopics" expires_after="2025-09-28">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -293,7 +295,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.Result.Status"
-    enum="BrowsingTopicsApiAccessResult" expires_after="2025-07-27">
+    enum="BrowsingTopicsApiAccessResult" expires_after="2025-09-28">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>
@@ -313,7 +315,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BrowsingTopics.SiteDataStorage.InitStatus"
-    enum="BooleanSuccess" expires_after="2025-04-13">
+    enum="BooleanSuccess" expires_after="2025-10-07">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <summary>

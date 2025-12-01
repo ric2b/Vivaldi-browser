@@ -217,8 +217,9 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
     updater::test::SetupFakeUpdaterLowerVersion(updater_scope_);
   }
 
-  void SetupRealUpdater(const base::FilePath& updater_path) const override {
-    updater::test::SetupRealUpdater(updater_scope_, updater_path);
+  void SetupRealUpdater(const base::FilePath& updater_path,
+                        const base::Value::List& switches) const override {
+    updater::test::SetupRealUpdater(updater_scope_, updater_path, switches);
   }
 
   void SetExistenceCheckerPath(const std::string& app_id,
@@ -367,8 +368,10 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
         updater_scope_, app_id, command_id, parameters, expected_exit_code);
   }
 
-  void ExpectLegacyPolicyStatusSucceeds() const override {
-    updater::test::ExpectLegacyPolicyStatusSucceeds(updater_scope_);
+  void ExpectLegacyPolicyStatusSucceeds(
+      const base::Version& updater_version) const override {
+    updater::test::ExpectLegacyPolicyStatusSucceeds(updater_scope_,
+                                                    updater_version);
   }
 
   void LegacyInstallApp(const std::string& app_id,
@@ -446,7 +449,16 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
       std::optional<UpdaterScope> store_flag,
       std::optional<std::string> want_tag) const override {
     updater::test::ExpectKSAdminFetchTag(updater_scope_, elevate, product_id,
-                                         xc_path, store_flag, want_tag);
+                                         xc_path, store_flag,
+                                         std::move(want_tag));
+  }
+
+  void ExpectKSAdminXattrBrand(
+      bool elevate,
+      const base::FilePath& path,
+      std::optional<std::string> want_brand) const override {
+    updater::test::ExpectKSAdminXattrBrand(updater_scope_, elevate, path,
+                                           std::move(want_brand));
   }
 #endif  // BUILDFLAG(IS_MAC)
 
@@ -476,9 +488,12 @@ class IntegrationTestCommandsUser : public IntegrationTestCommands {
   }
 
   void RunOfflineInstall(bool is_legacy_install,
-                         bool is_silent_install) override {
+                         bool is_silent_install,
+                         int installer_result,
+                         int installer_error) override {
     updater::test::RunOfflineInstall(updater_scope_, is_legacy_install,
-                                     is_silent_install);
+                                     is_silent_install, installer_result,
+                                     installer_error);
   }
 
   void RunOfflineInstallOsNotSupported(bool is_legacy_install,

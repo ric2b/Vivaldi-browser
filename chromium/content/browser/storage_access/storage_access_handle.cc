@@ -13,6 +13,7 @@
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/worker_host/shared_worker_connector_impl.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_client.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
@@ -43,32 +44,14 @@ void StorageAccessHandle::Create(
     RenderFrameHost* host,
     mojo::PendingReceiver<blink::mojom::StorageAccessHandle> receiver) {
   CHECK(host);
-  if (!DoesDocumentHaveStorageAccess(host)) {
+  if (!host->DoesDocumentHaveStorageAccess()) {
 #if DCHECK_IS_ON()
     mojo::ReportBadMessage(
-        "Binding a StorageAccessHandle requires third-party cookie access or "
-        "permission access.");
+        "Binding a StorageAccessHandle requires third-party cookie access.");
 #endif
     return;
   }
   new StorageAccessHandle(*host, std::move(receiver));
-}
-
-// static
-bool StorageAccessHandle::DoesDocumentHaveStorageAccess(RenderFrameHost* host) {
-  bool has_full_cookie_access =
-      GetContentClient()->browser()->IsFullCookieAccessAllowed(
-          host->GetBrowserContext(), WebContents::FromRenderFrameHost(host),
-          host->GetLastCommittedURL(), host->GetStorageKey());
-  if (has_full_cookie_access) {
-    return true;
-  }
-  return host->GetProcess()
-             ->GetBrowserContext()
-             ->GetPermissionController()
-             ->GetPermissionStatusForCurrentDocument(
-                 blink::PermissionType::STORAGE_ACCESS_GRANT, host) ==
-         blink::mojom::PermissionStatus::GRANTED;
 }
 
 void StorageAccessHandle::BindIndexedDB(

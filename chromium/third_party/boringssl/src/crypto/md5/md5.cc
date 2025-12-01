@@ -17,6 +17,7 @@
 #include <string.h>
 
 #include <openssl/mem.h>
+#include <openssl/span.h>
 
 #include "../fipsmodule/digest/md32_common.h"
 #include "../internal.h"
@@ -52,17 +53,26 @@ void MD5_Transform(MD5_CTX *c, const uint8_t data[MD5_CBLOCK]) {
   md5_block_data_order(c->h, data, 1);
 }
 
+namespace {
+struct MD5Traits {
+  using HashContext = MD5_CTX;
+  static constexpr size_t kBlockSize = MD5_CBLOCK;
+  static constexpr bool kLengthIsBigEndian = false;
+  static void HashBlocks(uint32_t *state, const uint8_t *data,
+                         size_t num_blocks) {
+    md5_block_data_order(state, data, num_blocks);
+  }
+};
+}  // namespace
+
 int MD5_Update(MD5_CTX *c, const void *data, size_t len) {
-  crypto_md32_update(&md5_block_data_order, c->h, c->data, MD5_CBLOCK, &c->num,
-                     &c->Nh, &c->Nl, reinterpret_cast<const uint8_t *>(data),
-                     len);
+  bssl::crypto_md32_update<MD5Traits>(
+      c, bssl::Span(static_cast<const uint8_t *>(data), len));
   return 1;
 }
 
 int MD5_Final(uint8_t out[MD5_DIGEST_LENGTH], MD5_CTX *c) {
-  crypto_md32_final(&md5_block_data_order, c->h, c->data, MD5_CBLOCK, &c->num,
-                    c->Nh, c->Nl, /*is_big_endian=*/0);
-
+  bssl::crypto_md32_final<MD5Traits>(c);
   CRYPTO_store_u32_le(out, c->h[0]);
   CRYPTO_store_u32_le(out + 4, c->h[1]);
   CRYPTO_store_u32_le(out + 8, c->h[2]);

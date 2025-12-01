@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 package org.chromium.chrome.browser.readaloud.player;
+
+import static org.chromium.build.NullUtil.assumeNonNull;
 import static org.chromium.chrome.modules.readaloud.PlaybackListener.State.BUFFERING;
 import static org.chromium.chrome.modules.readaloud.PlaybackListener.State.ERROR;
 import static org.chromium.chrome.modules.readaloud.PlaybackListener.State.PAUSED;
@@ -12,12 +14,16 @@ import static org.chromium.chrome.modules.readaloud.PlaybackListener.State.STOPP
 import android.widget.SeekBar;
 import android.widget.SeekBar.OnSeekBarChangeListener;
 
-import androidx.annotation.Nullable;
-
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.readaloud.ReadAloudMetrics;
 import org.chromium.chrome.browser.readaloud.ReadAloudPrefs;
+import org.chromium.chrome.modules.readaloud.Feedback.FeedbackType;
+import org.chromium.chrome.modules.readaloud.Feedback.NegativeFeedbackReason;
 import org.chromium.chrome.modules.readaloud.Playback;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackModeSelectionEnablementStatus;
 import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackVoice;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.contentjs.Highlighter.Mode;
@@ -28,6 +34,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /** Mediator class in charge of updating player UI property model. */
+@NullMarked
 class PlayerMediator implements InteractionHandler {
     private static final long SEEK_BACK_NANOS = -10 * 1_000_000_000L;
     private static final long SEEK_FORWARD_NANOS = 10 * 1_000_000_000L;
@@ -58,14 +65,22 @@ class PlayerMediator implements InteractionHandler {
             new PlaybackListener() {
                 @Override
                 public void onPlaybackDataChanged(PlaybackData data) {
+                  // Due to a race, sometimes a STOPPED state is received after the playback is null (e.g. if it was received in favor of creating a new playback).
+                  // In these cases, we don't propagate the state event.
+                  if (mPlayback == null) {
+                    return;
+                  }
+
                     if (!isHiddenAndPlaying()) {
-                        mModel.set(PlayerProperties.ELAPSED_NANOS, data.absolutePositionNanos());
                         mModel.set(PlayerProperties.DURATION_NANOS, data.totalDurationNanos());
                         float percent =
                                 (float) data.absolutePositionNanos()
                                         / (float) data.totalDurationNanos();
-                        mModel.set(PlayerProperties.PROGRESS, percent);
-                        mModel.set(PlayerProperties.ELAPSED_NANOS, data.absolutePositionNanos());
+                        // We update the progress only if the user is not currently interacting with the seekbar (i.e. scrubbing).
+                        if (!mIsScrubbingSeekBar) {
+                          mModel.set(PlayerProperties.PROGRESS, percent);
+                          mModel.set(PlayerProperties.ELAPSED_NANOS, data.absolutePositionNanos());
+                        }
                         mModel.set(PlayerProperties.DURATION_NANOS, data.totalDurationNanos());
                     }
 
@@ -91,6 +106,8 @@ class PlayerMediator implements InteractionHandler {
                     }
                 }
             };
+
+    private boolean mIsScrubbingSeekBar;
     private final OnSeekBarChangeListener mSeekBarChangeListener =
             new OnSeekBarChangeListener() {
                 @PlaybackListener.State int mPrevState;
@@ -101,11 +118,18 @@ class PlayerMediator implements InteractionHandler {
                         return;
                     }
                     float percent = (float) progress / (float) seekBar.getMax();
-                    mPlayback.seek((long) (mModel.get(PlayerProperties.DURATION_NANOS) * percent));
+                    long locationNanos = (long) (mModel.get(PlayerProperties.DURATION_NANOS) * percent);
+                    if (!mIsScrubbingSeekBar) {
+                      // This happens when user seeks with the volume keys while in TalkBack
+                      mPlayback.seek(locationNanos);
+                      return;
+                    }
+                    mModel.set(PlayerProperties.ELAPSED_NANOS, locationNanos);
                 }
 
                 @Override
                 public void onStartTrackingTouch(SeekBar seekBar) {
+                    mIsScrubbingSeekBar = true;
                     mPrevState = mModel.get(PlayerProperties.PLAYBACK_STATE);
                     setPlaybackState(PlaybackListener.State.PAUSED);
                     mSeekbarStartTimeNanos = mModel.get(PlayerProperties.ELAPSED_NANOS);
@@ -113,6 +137,10 @@ class PlayerMediator implements InteractionHandler {
 
                 @Override
                 public void onStopTrackingTouch(SeekBar seekBar) {
+                  mIsScrubbingSeekBar = false;
+                  if (mPlayback == null) {
+                    return;
+                  }
                     setPlaybackState(mPrevState);
                     long seekbarDurationMillis =
                             TimeUnit.NANOSECONDS.toMillis(
@@ -124,6 +152,8 @@ class PlayerMediator implements InteractionHandler {
                     } else {
                         ReadAloudMetrics.recordDurationScrubbingForwards(seekbarDurationMillis);
                     }
+                    float percent = (float) seekBar.getProgress() / (float) seekBar.getMax();
+                    mPlayback.seek((long) (mModel.get(PlayerProperties.DURATION_NANOS) * percent));
                 }
             };
     private final PlaybackListener mPreviewPlaybackListener =
@@ -142,9 +172,12 @@ class PlayerMediator implements InteractionHandler {
     private final Callback<List<PlaybackVoice>> mVoiceListObserver = this::setVoices;
     private final Callback<String> mVoiceIdObserver = this::setVoice;
 
-    private final Callback<Boolean> mPlaybackModeSelectionEnabledObserver = this::setPlaybackModeSelectionEnabled;
+    private final Callback<PlaybackModeSelectionEnablementStatus>
+            mPlaybackModeSelectionEnabledObserver = this::setPlaybackModeSelectionEnabled;
 
-    private Playback mPlayback;
+    private final Callback<FeedbackType> mFeedbackTypeObserver = this::setFeedbackType;
+
+    @Nullable private Playback mPlayback;
     @Nullable Playback mVoicePreviewPlayback;
 
     PlayerMediator(
@@ -159,6 +192,7 @@ class PlayerMediator implements InteractionHandler {
         mDelegate.getCurrentLanguageVoicesSupplier().addObserver(mVoiceListObserver);
         mDelegate.getVoiceIdSupplier().addObserver(mVoiceIdObserver);
         mDelegate.getPlaybackModeSelectionEnabled().addObserver(mPlaybackModeSelectionEnabledObserver);
+        mDelegate.getFeedbackTypeSupplier().addObserver(mFeedbackTypeObserver);
     }
 
     void destroy() {
@@ -168,6 +202,8 @@ class PlayerMediator implements InteractionHandler {
 
         mDelegate.getVoiceIdSupplier().removeObserver(mVoiceIdObserver);
         mDelegate.getCurrentLanguageVoicesSupplier().removeObserver(mVoiceListObserver);
+        mDelegate.getPlaybackModeSelectionEnabled().removeObserver(mPlaybackModeSelectionEnabledObserver);
+        mDelegate.getFeedbackTypeSupplier().removeObserver(mFeedbackTypeObserver);
     }
 
     void setPlayback(@Nullable Playback playback) {
@@ -177,21 +213,26 @@ class PlayerMediator implements InteractionHandler {
         mPlayback = playback;
         if (mPlayback != null) {
             mPlayback.addListener(mPlaybackListener);
-            mModel.set(PlayerProperties.TITLE, mPlayback.getMetadata().title());
-            mModel.set(PlayerProperties.PUBLISHER, mPlayback.getMetadata().publisher());
+            Playback.Metadata metadata = mPlayback.getMetadata();
+            assumeNonNull(metadata);
+            mModel.set(PlayerProperties.TITLE, metadata.title());
+            mModel.set(PlayerProperties.PUBLISHER, metadata.publisher());
             onSpeedChange(ReadAloudPrefs.getSpeed(mDelegate.getPrefService()));
             mModel.set(
                     PlayerProperties.HIGHLIGHTING_ENABLED,
-                    mDelegate.getHighlightingEnabledSupplier().get());
+                    assumeNonNull(mDelegate.getHighlightingEnabledSupplier().get()));
             mModel.set(
-                    PlayerProperties.HIGHLIGHTING_SUPPORTED, mDelegate.isHighlightingSupported());
-            mModel.set(
-                PlayerProperties.PLAYBACK_MODE,
-                mPlayback.getMetadata().playbackMode().getValue());
+                    PlayerProperties.HIGHLIGHTING_SUPPORTED,
+                    mDelegate.isHighlightingSupported(metadata.playbackMode()));
+            mModel.set(PlayerProperties.PLAYBACK_MODE, metadata.playbackMode().getValue());
 
             mTotalTimeMillis = 0;
             mLastStartTimeMillis = mClock.currentTimeMillis();
         }
+    }
+
+    void setRequestedPlaybackMode(PlaybackMode playbackMode) {
+        mModel.set(PlayerProperties.REQUESTED_PLAYBACK_MODE, playbackMode.getValue());
     }
 
     void setPlaybackState(@PlaybackListener.State int currentPlaybackState) {
@@ -228,6 +269,11 @@ class PlayerMediator implements InteractionHandler {
     }
 
     // InteractionHandler implementation
+    @Override
+    public void onPlaybackModeChanged(PlaybackMode playbackMode) {
+        mDelegate.setPlaybackModeAndApplyToPlayback(playbackMode);
+    }
+
     @Override
     public void onPlayPauseClick() {
         if (mPlayback == null) {
@@ -328,6 +374,21 @@ class PlayerMediator implements InteractionHandler {
     }
 
     @Override
+    public void setFeedbackType(FeedbackType feedbackType) {
+        mModel.set(PlayerProperties.FEEDBACK_TYPE, feedbackType.getValue());
+    }
+
+    @Override
+    public void onPositiveFeedback() {
+      mDelegate.onPositiveFeedback();
+    }
+
+    @Override
+    public void onNegativeFeedback(NegativeFeedbackReason reason) {
+      mDelegate.onNegativeFeedback(reason);
+    }
+
+    @Override
     public OnSeekBarChangeListener getSeekBarChangeListener() {
         return mSeekBarChangeListener;
     }
@@ -387,8 +448,8 @@ class PlayerMediator implements InteractionHandler {
         }
     }
 
-    private void setPlaybackModeSelectionEnabled(boolean enabled) {
-        mModel.set(PlayerProperties.PLAYBACK_MODE_SELECTION_ENABLED, enabled);
+    private void setPlaybackModeSelectionEnabled(PlaybackModeSelectionEnablementStatus status) {
+        mModel.set(PlayerProperties.PLAYBACK_MODE_SELECTION_ENABLED, status.getValue());
     }
 
     private void setVoices(List<PlaybackVoice> voices) {

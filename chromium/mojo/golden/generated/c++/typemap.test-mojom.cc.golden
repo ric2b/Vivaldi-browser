@@ -16,7 +16,6 @@
 #include <utility>
 
 #include "base/debug/alias.h"
-#include "base/hash/md5_constexpr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -138,14 +137,13 @@ const char* IFaceWithTypemap::MessageToMethodName_(mojo::Message& message) {
 
 #if !BUILDFLAG(IS_FUCHSIA)
 uint32_t IFaceWithTypemap::Echo_Sym::IPCStableHash() {
-  // This method's address is used for indetifiying the mojo method name after
+  // This method's address is used for identifiying the mojo method name after
   // symbolization. So each IPCStableHash should have a unique address.
   // We cannot use NO_CODE_FOLDING() here - it relies on the uniqueness of
   // __LINE__ value, which is not unique accross different mojo modules.
   // The code below is very similar to NO_CODE_FOLDING, but it uses a unique
   // hash instead of __LINE__.
-  constexpr uint32_t kHash = base::MD5Hash32Constexpr(
-          "(Impl)golden::IFaceWithTypemap::Echo");
+  static constexpr uint32_t kHash = 0xdfc8d278;  // IPCStableHash for golden::IFaceWithTypemap::Echo
   const uint32_t hash = kHash;
   base::debug::Alias(&hash);
   return hash;
@@ -207,14 +205,20 @@ void IFaceWithTypemapProxy::Echo(
   mojo::internal::MessageFragment<
       typename decltype(params->param)::BaseType> param_fragment(
           params.message());
+  
   mojo::internal::Serialize<::golden::TypemappedDataView>(
-      in_param, param_fragment);
+    in_param,
+    param_fragment);
+
   params->param.Set(
       param_fragment.is_null() ? nullptr : param_fragment.data());
-  MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
-      params->param.is_null(),
-      mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-      "null param in IFaceWithTypemap.Echo request");
+
+  
+  MOJO_INTERNAL_CHECK_SERIALIZATION(
+    mojo::internal::SendValidation::kDefault,
+    !(params->param.is_null()),
+    mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
+    "null param in IFaceWithTypemap.Echo request");
 
 #if defined(ENABLE_IPC_FUZZER)
   message.set_interface_name(IFaceWithTypemap::Name_);
@@ -282,7 +286,7 @@ bool IFaceWithTypemap_Echo_ForwardToCallback::Accept(
           internal::IFaceWithTypemap_Echo_ResponseParams_Data*>(
               message->mutable_payload());
   
-  
+
   // Validation for IFaceWithTypemap.0
   bool success = true;
   TypemappedPtr p_out{};
@@ -333,14 +337,20 @@ void IFaceWithTypemap_Echo_ProxyToResponder::Run(
   mojo::internal::MessageFragment<
       typename decltype(params->out)::BaseType> out_fragment(
           params.message());
+  
   mojo::internal::Serialize<::golden::TypemappedDataView>(
-      in_out, out_fragment);
+    in_out,
+    out_fragment);
+
   params->out.Set(
       out_fragment.is_null() ? nullptr : out_fragment.data());
-  MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
-      params->out.is_null(),
-      mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-      "null out in ");
+
+  
+  MOJO_INTERNAL_CHECK_SERIALIZATION(
+    mojo::internal::SendValidation::kDefault,
+    !(params->out.is_null()),
+    mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
+    "null out in ");
 
 #if defined(ENABLE_IPC_FUZZER)
   message.set_interface_name(IFaceWithTypemap::Name_);
@@ -386,7 +396,7 @@ bool IFaceWithTypemapStubDispatch::AcceptWithResponder(
               internal::IFaceWithTypemap_Echo_Params_Data*>(
                   message->mutable_payload());
       
-      
+
       // Validation for IFaceWithTypemap.0
       bool success = true;
       TypemappedPtr p_param{};
@@ -474,6 +484,7 @@ IFaceWithTypemapAsyncWaiter::IFaceWithTypemapAsyncWaiter(
     IFaceWithTypemap* proxy) : proxy_(proxy) {}
 
 IFaceWithTypemapAsyncWaiter::~IFaceWithTypemapAsyncWaiter() = default;
+
 
 void IFaceWithTypemapAsyncWaiter::Echo(
     TypemappedPtr param, TypemappedPtr* out_out) {

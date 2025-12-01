@@ -22,6 +22,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
@@ -577,8 +578,10 @@ void TileManager::Release(Tile* tile) {
   if (tile->raster_task_scheduled_with_checker_images())
     num_of_tiles_with_checker_images_--;
   DCHECK_GE(num_of_tiles_with_checker_images_, 0);
+  CHECK(tile->deleted());
 
   FreeResourcesForTile(tile);
+  client_->NotifyTileStateChanged(tile, /*update_damage=*/false);
   tiles_.erase(tile->id());
 }
 
@@ -757,7 +760,7 @@ void TileManager::InitializeTilesWithResourcesForTesting(
   for (size_t i = 0; i < tiles.size(); ++i) {
     TileDrawInfo& draw_info = tiles[i]->draw_info();
     ResourcePool::InUsePoolResource resource = resource_pool_->AcquireResource(
-        tiles[i]->desired_texture_size(), raster_buffer_provider_->GetFormat(),
+        tiles[i]->desired_texture_size(), client_->GetTileFormat(),
         client_->GetTargetColorParams(gfx::ContentColorUsage::kSRGB)
             .color_space);
     raster_buffer_provider_->AcquireBufferForRaster(
@@ -775,7 +778,7 @@ void TileManager::InitializeTilesWithResourcesForTesting(
     bool exported = resource_pool_->PrepareForExport(
         resource, viz::TransferableResource::ResourceSource::kTest);
     DCHECK(exported);
-    draw_info.SetResource(std::move(resource), false, false);
+    draw_info.SetResource(std::move(resource), false);
     draw_info.set_resource_ready_for_draw();
   }
 }
@@ -972,7 +975,7 @@ TileManager::PrioritizedWorkToSchedule TileManager::AssignGpuMemoryToTiles() {
     MemoryUsage memory_required_by_tile_to_be_scheduled;
     if (!tile->raster_task_.get()) {
       memory_required_by_tile_to_be_scheduled = MemoryUsage::FromConfig(
-          tile->desired_texture_size(), DetermineFormat(tile));
+          tile->desired_texture_size(), client_->GetTileFormat());
     }
 
     bool tile_is_needed_now = priority.priority_bin == TilePriority::NOW;
@@ -1119,16 +1122,21 @@ void TileManager::FreeResourcesForOccludedTiles() {
   std::unique_ptr<TilesWithResourceIterator> iterator =
       client_->CreateTilesWithResourceIterator();
   for (; !iterator->AtEnd(); iterator->Next()) {
-    if (iterator->IsCurrentTileOccluded())
+    if (iterator->IsCurrentTileOccluded()) {
       FreeResourcesForTile(iterator->GetCurrent());
+      // We don't update the damage when Occluded tiles are released.
+      client_->NotifyTileStateChanged(iterator->GetCurrent(),
+                                      /*update_damage=*/false);
+    }
   }
 }
 
 void TileManager::FreeResourcesForTile(Tile* tile) {
   TileDrawInfo& draw_info = tile->draw_info();
 
-  if (draw_info.is_checker_imaged())
+  if (draw_info.is_checker_imaged()) {
     num_of_tiles_with_checker_images_--;
+  }
   DCHECK_GE(num_of_tiles_with_checker_images_, 0);
 
   if (draw_info.has_resource()) {
@@ -1142,8 +1150,7 @@ void TileManager::FreeResourcesForTileAndNotifyClientIfTileWasReadyToDraw(
   TRACE_EVENT0("viz", __PRETTY_FUNCTION__);
   bool was_ready_to_draw = tile->draw_info().IsReadyToDraw();
   FreeResourcesForTile(tile);
-  if (was_ready_to_draw)
-    client_->NotifyTileStateChanged(tile);
+  client_->NotifyTileStateChanged(tile, /*update_damage=*/was_ready_to_draw);
 }
 
 void TileManager::PartitionImagesForCheckering(
@@ -1428,7 +1435,7 @@ scoped_refptr<TileTask> TileManager::CreateRasterTask(
   //
   // TODO(crbug.com/40128725): Once we have access to the display's buffer
   // format via gfx::DisplayColorSpaces, we should also do this for HBD images.
-  auto format = DetermineFormat(tile);
+  auto format = client_->GetTileFormat();
   if (target_color_params.color_space.IsHDR() &&
       GetContentColorUsageForPrioritizedTile(prioritized_tile) ==
           gfx::ContentColorUsage::kHDR) {
@@ -1719,10 +1726,8 @@ void TileManager::OnRasterTaskCompleted(
 
   TileDrawInfo& draw_info = tile->draw_info();
   if (exported) {
-    bool is_premultiplied = raster_buffer_provider_->IsResourcePremultiplied();
     draw_info.SetResource(std::move(resource),
-                          raster_task_was_scheduled_with_checker_images,
-                          is_premultiplied);
+                          raster_task_was_scheduled_with_checker_images);
   } else {
     resource_pool_->ReleaseResource(std::move(resource));
     draw_info.set_oom();
@@ -2005,10 +2010,6 @@ void TileManager::SetCheckerImagingForceDisabled(bool force_disable) {
 
 void TileManager::NeedsInvalidationForCheckerImagedTiles() {
   client_->RequestImplSideInvalidationForCheckerImagedTiles();
-}
-
-viz::SharedImageFormat TileManager::DetermineFormat(const Tile* tile) const {
-  return raster_buffer_provider_->GetFormat();
 }
 
 std::unique_ptr<base::trace_event::ConvertableToTraceFormat>

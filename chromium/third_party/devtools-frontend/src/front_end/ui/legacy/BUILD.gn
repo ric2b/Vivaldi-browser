@@ -144,6 +144,7 @@ devtools_entrypoint("bundle") {
     "../../panels/*",
     "../../services/window_bounds/*",
     "../../testing/*",
+    "../components/copy_to_clipboard:*",
     "../components/data_grid:*",
     "../components/docs/combo_box/*",
     "../components/docs/performance_panel/*",
@@ -154,6 +155,7 @@ devtools_entrypoint("bundle") {
     "../components/linear_memory_inspector:*",
     "../components/markdown_view:*",
     "../components/request_link_icon:unittests",
+    "../components/snackbars:*",
     "./*",
 
     # Required for x-link
@@ -180,6 +182,7 @@ ts_library("unittests") {
     "KeyboardShortcut.test.ts",
     "ListModel.test.ts",
     "ListWidget.test.ts",
+    "SettingsUI.test.ts",
     "ShortcutRegistry.test.ts",
     "SplitWidget.test.ts",
     "SuggestBox.test.ts",
@@ -199,6 +202,7 @@ ts_library("unittests") {
     "../../core/platform:bundle",
     "../../core/root:bundle",
     "../../testing",
+    "../lit:bundle",
     "./components/quick_open:bundle",
   ]
 }

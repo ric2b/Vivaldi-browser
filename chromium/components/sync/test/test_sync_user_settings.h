@@ -45,12 +45,13 @@ class TestSyncUserSettings : public SyncUserSettings {
   void SetSelectedType(UserSelectableType type, bool is_type_on) override;
   void ResetSelectedType(UserSelectableType type) override;
   void KeepAccountSettingsPrefsOnlyForUsers(
-      const std::vector<signin::GaiaIdHash>& available_gaia_ids) override;
+      const std::vector<GaiaId>& available_gaia_ids) override;
   DataTypeSet GetPreferredDataTypes() const;
   UserSelectableTypeSet GetRegisteredSelectableTypes() const override;
 
 #if BUILDFLAG(IS_CHROMEOS)
   bool IsSyncFeatureDisabledViaDashboard() const override;
+  void ClearSyncFeatureDisabledViaDashboard() override;
   bool IsSyncAllOsTypesEnabled() const override;
   UserSelectableOsTypeSet GetSelectedOsTypes() const override;
   bool IsOsTypeManagedByPolicy(UserSelectableOsType type) const override;
@@ -99,7 +100,7 @@ class TestSyncUserSettings : public SyncUserSettings {
   void SetExplicitPassphraseTime(base::Time t);
 
 #if BUILDFLAG(IS_CHROMEOS)
-  void SetSyncFeatureDisabledViaDashboard(bool disabled_via_dashboard);
+  void SetSyncFeatureDisabledViaDashboard();
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   const std::string& GetEncryptionPassphrase() const;

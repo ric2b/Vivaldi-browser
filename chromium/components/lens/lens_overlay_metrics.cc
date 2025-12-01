@@ -36,6 +36,12 @@ std::string InvocationSourceToString(
       return "LVFGallery";
     case LensOverlayInvocationSource::kContextMenu:
       return "ContextMenu";
+    case LensOverlayInvocationSource::kOmniboxPageAction:
+      return "OmniboxPageAction";
+    case LensOverlayInvocationSource::kOmniboxContextualSuggestion:
+      return "OmniboxContextualSuggestion";
+    case LensOverlayInvocationSource::kHomeworkActionChip:
+      return "HomeworkActionChip";
   }
 }
 
@@ -388,7 +394,16 @@ void RecordTimeToFirstInteraction(
       event.SetFindInPage(time_to_first_interaction.InMilliseconds());
       break;
     case lens::LensOverlayInvocationSource::kOmnibox:
+    // TODO(crbug.com/419051875): Add separate UKM for homework action chip.
+    case lens::LensOverlayInvocationSource::kHomeworkActionChip:
       event.SetOmnibox(time_to_first_interaction.InMilliseconds());
+      break;
+    case lens::LensOverlayInvocationSource::kOmniboxPageAction:
+      event.SetOmniboxPageAction(time_to_first_interaction.InMilliseconds());
+      break;
+    case lens::LensOverlayInvocationSource::kOmniboxContextualSuggestion:
+      event.SetOmniboxContextualSuggestion(
+          time_to_first_interaction.InMilliseconds());
       break;
   }
   event.SetFirstInteractionType(static_cast<int64_t>(first_interaction_type))
@@ -502,6 +517,11 @@ void RecordSidePanelMenuOptionSelected(
     lens::LensOverlaySidePanelMenuOption menu_option) {
   base::UmaHistogramEnumeration(
       "Lens.Overlay.SidePanel.SelectedMoreInfoMenuOption", menu_option);
+}
+
+void RecordHandleTextDirectiveResult(
+    lens::LensOverlayTextDirectiveResult result) {
+  base::UmaHistogramEnumeration("Lens.Overlay.TextDirectiveResult", result);
 }
 
 }  // namespace lens

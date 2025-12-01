@@ -124,19 +124,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Linux.Wayland.BaseShellUsed" enum="LinuxWaylandShellName"
-    expires_after="never">
-<!-- expires-never: Needed to measure Linux ecosystem. -->
-
-  <owner>fangzhoug@chromium.org</owner>
-  <owner>adunaev@igalia.com</owner>
-  <owner>chrome-gpu-metric-alerts@chromium.org</owner>
-  <summary>
-    The Linux Wayland base shell protocol used actually. Logged in each session
-    when the browser creates the first shell surface.
-  </summary>
-</histogram>
-
 <histogram name="Linux.Wayland.Compositor" enum="WaylandCompositor"
     expires_after="never">
 <!-- expires-never: Needed to measure Linux Wayland compositors used by users. -->
@@ -174,6 +161,13 @@ chromium-metrics-reviews@google.com.
   <summary>
     The window manager used. (Linux only) Logged on each start up.
   </summary>
+</histogram>
+
+<histogram name="Linux.X11.XInput2" enum="BooleanEnabled"
+    expires_after="2025-10-21">
+  <owner>hidehiko@chromium.org</owner>
+  <owner>thomasanderson@chromium.org</owner>
+  <summary>Whether X Input Extension version 2.x is available.</summary>
 </histogram>
 
 </histograms>

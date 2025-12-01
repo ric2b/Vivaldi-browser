@@ -49,6 +49,7 @@
 
                   "setPressureSourceOverrideEnabled",
                   "setPressureStateOverride",
+                  "setPressureDataOverride",
 
                   "setIdleOverride",
                   "clearIdleOverride",
@@ -66,7 +67,8 @@
                 "async": [
                   "getOverriddenSensorInformation",
                   "setSensorOverrideReadings",
-                  "setPressureStateOverride"
+                  "setPressureStateOverride",
+                  "setPressureDataOverride"
                 ]
             },
             {
@@ -150,7 +152,7 @@
             },
             {
                 "domain": "Target",
-                "async": ["createBrowserContext", "disposeBrowserContext", "setAutoAttach", "autoAttachRelated" ]
+                "async": ["createBrowserContext", "disposeBrowserContext", "setAutoAttach", "autoAttachRelated", "exposeDevToolsProtocol" ]
             },
             {
                 "domain": "Tethering",
@@ -180,16 +182,20 @@
             },
             {
                 "domain": "BluetoothEmulation",
-                "include_events": ["gattOperationReceived"],
                 "async": [
                     "setSimulatedCentralState",
                     "simulatePreconnectedPeripheral",
                     "simulateAdvertisement",
                     "simulateGATTOperationResponse",
+                    "simulateCharacteristicOperationResponse",
+                    "simulateDescriptorOperationResponse",
                     "addService",
                     "removeService",
                     "addCharacteristic",
-                    "removeCharacteristic"
+                    "removeCharacteristic",
+                    "addDescriptor",
+                    "removeDescriptor",
+                    "simulateGATTDisconnection"
                 ]
             }
         ]

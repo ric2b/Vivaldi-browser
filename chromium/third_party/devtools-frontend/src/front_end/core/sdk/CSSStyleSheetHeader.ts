@@ -121,7 +121,11 @@ export class CSSStyleSheetHeader implements TextUtils.ContentProvider.ContentPro
     }
     console.assert(Boolean(frame));
     const parsedURL = new Common.ParsedURL.ParsedURL(frame.url);
-    let urlPath = parsedURL.host + parsedURL.folderPathComponents;
+    let urlPath = parsedURL.host;
+    if (parsedURL.port) {
+      urlPath += ':' + parsedURL.port;
+    }
+    urlPath += parsedURL.folderPathComponents;
     if (!urlPath.endsWith('/')) {
       urlPath += '/';
     }
@@ -129,7 +133,7 @@ export class CSSStyleSheetHeader implements TextUtils.ContentProvider.ContentPro
   }
 
   private viaInspectorResourceURL(): Platform.DevToolsPath.UrlString {
-    return `inspector:///inspector-stylesheet#${this.id}` as Platform.DevToolsPath.UrlString;
+    return `inspector://${this.getFrameURLPath()}inspector-stylesheet#${this.id}` as Platform.DevToolsPath.UrlString;
   }
 
   lineNumberInSource(lineNumberInStyleSheet: number): number {

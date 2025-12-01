@@ -20,10 +20,11 @@
 #include "chrome/common/webui_url_constants.h"
 #include "components/autofill/core/browser/ui/payments/select_bnpl_issuer_dialog_controller.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/throbber.h"
 #include "ui/views/layout/box_layout.h"
@@ -83,9 +84,8 @@ SelectBnplIssuerDialog::SelectBnplIssuerDialog(
     : controller_(controller), web_contents_(web_contents->GetWeakPtr()) {
   // Set the ownership of the delegate, not the View. The View is owned by the
   // Widget as a child view.
-  // TODO(crbug.com/338254375): Remove the following two lines once this is the
-  // default state for widgets and the delegates.
-  views::WidgetDelegate::SetOwnedByWidget(false);
+  // TODO(crbug.com/338254375): Remove the following line once this is the
+  // default state for widgets.
   SetOwnershipOfNewWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
 
   // TODO(crbug.com/363332740): Initialize the UI.
@@ -113,6 +113,7 @@ SelectBnplIssuerDialog::SelectBnplIssuerDialog(
       std::make_unique<BnplIssuerView>(controller_, this));
   bnpl_issuer_view_->SetProperty(views::kElementIdentifierKey,
                                  SelectBnplIssuerDialog::kBnplIssuerView);
+
   TextWithLink link_text = controller_.get()->GetLinkText();
   TextLinkInfo link_info;
   link_info.offset = link_text.offset;
@@ -141,6 +142,8 @@ void SelectBnplIssuerDialog::DisplayThrobber() {
           .Build());
   throbber->Start();
   throbber->SizeToPreferredSize();
+  throbber->GetViewAccessibility().AnnouncePolitely(l10n_util::GetStringUTF16(
+      IDS_AUTOFILL_BNPL_PROGRESS_DIALOG_LOADING_MESSAGE));
 }
 
 bool SelectBnplIssuerDialog::OnCancelled() {
@@ -151,12 +154,14 @@ bool SelectBnplIssuerDialog::OnCancelled() {
 }
 
 void SelectBnplIssuerDialog::AddedToWidget() {
+  std::u16string title = controller_->GetTitle();
   // The BubbleFrameView is only available after this view is added to the
   // Widget.
   GetBubbleFrameView()->SetTitleView(
       std::make_unique<TitleWithIconAfterLabelView>(
-          controller_->GetTitle(),
-          TitleWithIconAfterLabelView::Icon::GOOGLE_PAY));
+          title, TitleWithIconAfterLabelView::Icon::GOOGLE_PAY));
+  SetAccessibleWindowRole(ax::mojom::Role::kDialog);
+  SetAccessibleTitle(title);
 }
 
 void SelectBnplIssuerDialog::OnSettingsLinkClicked() {

@@ -6,11 +6,11 @@ import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Root from '../../../core/root/root.js';
 import * as PanelUtils from '../../../panels/utils/utils.js';
+import type {TemplateResult} from '../../../ui/lit/lit.js';
 import type * as Workspace from '../../workspace/workspace.js';
 import {FileFormatter} from '../data_formatters/FileFormatter.js';
 
 import {
-  AgentType,
   AiAgent,
   type ContextDetail,
   type ContextResponse,
@@ -92,7 +92,7 @@ export class FileContext extends ConversationContext<Workspace.UISourceCode.UISo
     return this.#file;
   }
 
-  override getIcon(): HTMLElement {
+  override getIcon(): TemplateResult {
     return PanelUtils.PanelUtils.getIconForSourceFile(this.#file);
   }
 
@@ -110,7 +110,6 @@ export class FileContext extends ConversationContext<Workspace.UISourceCode.UISo
  * instance for a new conversation.
  */
 export class FileAgent extends AiAgent<Workspace.UISourceCode.UISourceCode> {
-  override readonly type = AgentType.FILE;
   readonly preamble = preamble;
   readonly clientFeature = Host.AidaClient.ClientFeature.CHROME_FILE_AGENT;
   get userTier(): string|undefined {

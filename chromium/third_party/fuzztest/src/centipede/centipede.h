@@ -41,7 +41,7 @@
 #include "./common/blob_file.h"
 #include "./common/defs.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 // The main fuzzing class.
 class Centipede {
@@ -67,6 +67,11 @@ class Centipede {
   // Ignores inputs that already exist in the shard they need to be added to.
   // Sharding is stable and depends only on env.total_shards and the file name.
   static void CorpusFromFiles(const Environment &env, std::string_view dir);
+  // Saves the sharded crash reproducers and metadata (failure description) into
+  // `dir`. Each crash with `ID` will be saved with file `ID.data` for the
+  // reproducer and `ID.metadata` metadata.
+  static absl::Status CrashesToFiles(const Environment &env,
+                                     std::string_view dir);
 
  private:
   // Executes inputs from `input_vec`.
@@ -79,13 +84,13 @@ class Centipede {
   // Returns true if new features were observed.
   // Post-condition: `batch_result.results.size()` == `input_vec.size()`.
   bool RunBatch(const std::vector<ByteArray> &input_vec,
-                absl::Nullable<BlobFileWriter *> corpus_file,
-                absl::Nullable<BlobFileWriter *> features_file,
-                absl::Nullable<BlobFileWriter *> unconditional_features_file);
+                BlobFileWriter *absl_nullable corpus_file,
+                BlobFileWriter *absl_nullable features_file,
+                BlobFileWriter *absl_nullable unconditional_features_file);
   // Loads seed inputs from the user callbacks, execute them, and store them
   // with the corresponding features into `corpus_file` and `features_file`.
-  void LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
-                      absl::Nonnull<BlobFileWriter *> features_file);
+  void LoadSeedInputs(BlobFileWriter *absl_nonnull corpus_file,
+                      BlobFileWriter *absl_nonnull features_file);
   // Loads a shard `shard_index` from `load_env.workdir`.
   // Note: `load_env_` may be different from `env_`.
   // If `rerun` is true, then also re-runs any inputs
@@ -210,9 +215,9 @@ class Centipede {
   Command input_filter_cmd_;
 
   // Resource usage stats collection & reporting.
-  perf::RUsageProfiler rusage_profiler_;
+  RUsageProfiler rusage_profiler_;
 };
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_CENTIPEDE_H_

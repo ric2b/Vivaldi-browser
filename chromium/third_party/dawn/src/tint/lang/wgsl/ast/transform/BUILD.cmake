@@ -71,8 +71,6 @@ tint_add_target(tint_lang_wgsl_ast_transform lib
   lang/wgsl/ast/transform/manager.h
   lang/wgsl/ast/transform/multiplanar_external_texture.cc
   lang/wgsl/ast/transform/multiplanar_external_texture.h
-  lang/wgsl/ast/transform/preserve_padding.cc
-  lang/wgsl/ast/transform/preserve_padding.h
   lang/wgsl/ast/transform/promote_initializers_to_let.cc
   lang/wgsl/ast/transform/promote_initializers_to_let.h
   lang/wgsl/ast/transform/promote_side_effects_to_decl.cc
@@ -99,8 +97,6 @@ tint_add_target(tint_lang_wgsl_ast_transform lib
   lang/wgsl/ast/transform/unshadow.h
   lang/wgsl/ast/transform/vectorize_scalar_matrix_initializers.cc
   lang/wgsl/ast/transform/vectorize_scalar_matrix_initializers.h
-  lang/wgsl/ast/transform/vertex_pulling.cc
-  lang/wgsl/ast/transform/vertex_pulling.h
   lang/wgsl/ast/transform/zero_init_workgroup_memory.cc
   lang/wgsl/ast/transform/zero_init_workgroup_memory.h
 )
@@ -108,13 +104,11 @@ tint_add_target(tint_lang_wgsl_ast_transform lib
 tint_target_add_dependencies(tint_lang_wgsl_ast_transform lib
   tint_api_common
   tint_lang_core
-  tint_lang_core_common
   tint_lang_core_constant
+  tint_lang_core_ir_transform
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
-  tint_lang_wgsl_common
-  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver
   tint_lang_wgsl_sem
@@ -157,7 +151,6 @@ tint_add_target(tint_lang_wgsl_ast_transform_test test
   lang/wgsl/ast/transform/hoist_to_decl_before_test.cc
   lang/wgsl/ast/transform/manager_test.cc
   lang/wgsl/ast/transform/multiplanar_external_texture_test.cc
-  lang/wgsl/ast/transform/preserve_padding_test.cc
   lang/wgsl/ast/transform/promote_initializers_to_let_test.cc
   lang/wgsl/ast/transform/promote_side_effects_to_decl_test.cc
   lang/wgsl/ast/transform/remove_continue_in_switch_test.cc
@@ -171,23 +164,20 @@ tint_add_target(tint_lang_wgsl_ast_transform_test test
   lang/wgsl/ast/transform/transform_test.cc
   lang/wgsl/ast/transform/unshadow_test.cc
   lang/wgsl/ast/transform/vectorize_scalar_matrix_initializers_test.cc
-  lang/wgsl/ast/transform/vertex_pulling_test.cc
   lang/wgsl/ast/transform/zero_init_workgroup_memory_test.cc
 )
 
 tint_target_add_dependencies(tint_lang_wgsl_ast_transform_test test
   tint_api_common
   tint_lang_core
-  tint_lang_core_common
   tint_lang_core_constant
   tint_lang_core_ir
+  tint_lang_core_ir_transform
   tint_lang_core_type
   tint_lang_wgsl
   tint_lang_wgsl_ast
   tint_lang_wgsl_ast_transform
   tint_lang_wgsl_ast_test
-  tint_lang_wgsl_common
-  tint_lang_wgsl_features
   tint_lang_wgsl_program
   tint_lang_wgsl_resolver
   tint_lang_wgsl_sem

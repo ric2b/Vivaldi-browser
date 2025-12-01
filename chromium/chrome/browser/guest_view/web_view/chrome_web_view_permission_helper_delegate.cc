@@ -20,6 +20,7 @@
 #include "components/permissions/permission_util.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -378,7 +379,10 @@ void ChromeWebViewPermissionHelperDelegate::OnGeolocationPermissionResponse(
       ->RequestPermissionFromCurrentDocument(
           web_view_guest()->embedder_rfh(),
           content::PermissionRequestDescription(
-              blink::PermissionType::GEOLOCATION, user_gesture),
+              content::PermissionDescriptorUtil::
+                  CreatePermissionDescriptorForPermissionType(
+                      blink::PermissionType::GEOLOCATION),
+              user_gesture),
           std::move(callback));
 }
 
@@ -477,12 +481,13 @@ ChromeWebViewPermissionHelperDelegate::OverridePermissionResult(
   const url::Origin& origin =
       web_view_guest()->owner_rfh()->GetLastCommittedOrigin();
   // chrome://glic requires additional permissions, and webview's
-  // permissionrequest API does not handle clipboard access.
+  // permissionrequest API does not handle clipboard access or screen wake lock.
   if (origin.scheme() == content::kChromeUIScheme &&
       origin.host() == chrome::kChromeUIGlicHost) {
     switch (type) {
       case ContentSettingsType::CLIPBOARD_READ_WRITE:
       case ContentSettingsType::CLIPBOARD_SANITIZED_WRITE:
+      case ContentSettingsType::WAKE_LOCK_SCREEN:
         return content::PermissionResult(
             content::PermissionStatus::GRANTED,
             content::PermissionStatusSource::UNSPECIFIED);

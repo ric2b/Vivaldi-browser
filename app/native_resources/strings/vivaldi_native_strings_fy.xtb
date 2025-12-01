@@ -14,6 +14,7 @@
 <translation id="1454726940098520109">Befêstiging net wer sjen litte</translation>
 <translation id="1462666970065907900">Wolle jo dit finster slute?</translation>
 <translation id="1480046233931937785">Mei tank oan</translation>
+<translation id="1490502035430975848">Portaal dokumint ynspektearje</translation>
 <translation id="1521774566618522728">Hjoed aktyf</translation>
 <translation id="1526344461589023948">Der barde in flater by it bewarjen fan de ynladen fernijing. Kontrolearje of de kompjûter genôch skiifromte hat en besykje it nochris.</translation>
 <translation id="1635542496948266458">Wikselje fan Profyl</translation>
@@ -34,6 +35,7 @@
 <translation id="2141974047387702305">Der barde in flater by it ynladen fan triemmen foar it fernijen. Kontrolearje jo ynternet ferbining en besykje nochris.</translation>
 <translation id="2226825946708954262">⚠ trochgean mei ferlies fan gegevens</translation>
 <translation id="2339641773402824483">Kontrolearje op fernijings...</translation>
+<translation id="2429571091666452569">Fan de list:</translation>
 <translation id="2441056087170876076">Meunster 2</translation>
 <translation id="2444387452209867610">Notysje ynfoegje</translation>
 <translation id="2486841023299517366">Bist 4</translation>
@@ -73,9 +75,11 @@
 <translation id="3521635864657970829">Wolle jo dit finster ferlitte?</translation>
 <translation id="3540597690227428180">Bist 9</translation>
 <translation id="3542768452570884558">Keppeling yn nije finster iepenje</translation>
+<translation id="3586931643579894722">Details ferbergje</translation>
 <translation id="3588820906588687999">Ofbylding yn nije ljepper iepenje</translation>
 <translation id="3601066750251199488">Meunster 3</translation>
 <translation id="3620979700683094848">Websteeën kinne automatysk fideo's ôfspylje</translation>
+<translation id="3650023731264842343">Under it laden fan de folgjende side:</translation>
 <translation id="3658651522139217005">Opera GX</translation>
 <translation id="3680031241659195730">In nije ferzje fan Vivaldi is beskikber!</translation>
 <translation id="3708982624815781692">De ynlaad is ôfbrútsen.</translation>
@@ -136,9 +140,11 @@
 <translation id="588258955323874662">Folslein skerm</translation>
 <translation id="5916080360077521750">Jammer de Chrome ynstellings binne net beskikber as dy sneuper iepen stiet. Om dizze ynstellings te ymportearjen nei Vivaldi, bewarje jo wurk en lit alle finster fan Chrome de ein berinne. Klik dêrnei op trochgean.</translation>
 <translation id="6040143037577758943">Slute</translation>
+<translation id="6140948187512243695">Details sjen litte</translation>
 <translation id="6229528619562190452">Klik hjir om Vivaldi te fernijen.</translation>
 <translation id="6234173136417926046">Ofbylding as startside eftergrûn brûke</translation>
 <translation id="6339818817272922368">Lokaal akkount</translation>
+<translation id="6376435169746695498">It laden fan dizze side waard tsjinkeard troch in oerienkomst yn <ph name="BLOCKER_NAME" /></translation>
 <translation id="6398710281890660037">Befeiligje myn profyl</translation>
 <translation id="6438786710866753178">Lânskip 4</translation>
 <translation id="6477028720702061455">Selektearje Opera profyl map foar ymportearjen</translation>
@@ -177,6 +183,7 @@
 <translation id="8331671104904436324">Iepenje op 'e eftergrûn ljepper</translation>
 <translation id="8373293945112511707">Lânskip 1</translation>
 <translation id="8388552048012645975">Fernijing wurdt ynladen...</translation>
+<translation id="8392904568172593155">Sûnder parameters</translation>
 <translation id="8427094907586191051">Lânskip 17</translation>
 <translation id="8439034818057146672">In nije ferzje fan Vivaldi is ree foar ynstallaasje.</translation>
 <translation id="8446668873108041390">it útfieren fan JavaSkript troch AppleSkript is útskeakele. By Ynstellingen &gt; Privacy &gt; Apple barren stiet in ynstelling om JavaSkript fanút Apple barren ta te stean.</translation>
@@ -192,6 +199,7 @@
 <translation id="8773635261052182196">Jo sille dizze notifikaasjes net langer mear sjen. Jo kinne se wer oansette yn de Vivaldi ynstellings.</translation>
 <translation id="8774017153185436870">Websteeën soenen automatysk fideo's ôfspylje</translation>
 <translation id="8813277370772331957">Werinnerje my letter</translation>
+<translation id="8837256239226739065">Background Service Worker ynspektearje</translation>
 <translation id="8894900864683381599">Keppeling oan webpaniel taheakje</translation>
 <translation id="8912720443398351457">Wolle jo Vivaldi ferlitte?</translation>
 <translation id="8940028675168378100">Tsjinkeard op <ph name="BLOCKER_NAME" /></translation>

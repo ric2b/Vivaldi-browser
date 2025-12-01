@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2011 Google Inc.  All rights reserved.
@@ -142,12 +143,6 @@ export class ThemeSupport extends EventTarget {
 
   themeName(): string {
     return this.themeNameInternal;
-  }
-
-  appendStyle(node: Node, {cssText}: {cssText: string}): void {
-    const styleElement = document.createElement('style');
-    styleElement.textContent = cssText;
-    node.appendChild(styleElement);
   }
 
   #applyTheme(): void {

@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/version_info/version_info.h"
 #include "components/autofill/core/browser/data_quality/validation.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/studies/autofill_experiments.h"
@@ -51,7 +52,7 @@ bool IsMeaningfulFieldName(const std::u16string& name) {
 AutocompleteHistoryManager::AutocompleteHistoryManager() = default;
 
 AutocompleteHistoryManager::~AutocompleteHistoryManager() {
-  CancelAllPendingQueries();
+  CancelPendingQueries();
 }
 
 bool AutocompleteHistoryManager::OnGetSingleFieldSuggestions(
@@ -174,7 +175,7 @@ void AutocompleteHistoryManager::Init(
     // stored in this pref.
     int last_cleaned_version = pref_service_->GetInteger(
         prefs::kAutocompleteLastVersionRetentionPolicy);
-    if (CHROME_VERSION_MAJOR > last_cleaned_version) {
+    if (version_info::GetMajorVersionNumberAsInt() > last_cleaned_version) {
       // Trigger the cleanup.
       profile_database_->RemoveExpiredAutocompleteEntries(base::BindOnce(
           &AutocompleteHistoryManager::OnWebDataServiceRequestDone,
@@ -244,16 +245,6 @@ void AutocompleteHistoryManager::SendSuggestions(
       .Run(query_handler.field_id_, suggestions);
 }
 
-void AutocompleteHistoryManager::CancelAllPendingQueries() {
-  if (profile_database_) {
-    for (const auto& [handle, query_handler] : pending_queries_) {
-      profile_database_->CancelRequest(handle);
-    }
-  }
-
-  pending_queries_.clear();
-}
-
 void AutocompleteHistoryManager::OnAutofillValuesReturned(
     WebDataServiceBase::Handle current_handle,
     std::unique_ptr<WDTypedResult> result) {
@@ -287,7 +278,7 @@ void AutocompleteHistoryManager::OnAutofillCleanupReturned(
 
   // Cleanup was successful, update the latest run milestone.
   pref_service_->SetInteger(prefs::kAutocompleteLastVersionRetentionPolicy,
-                            CHROME_VERSION_MAJOR);
+                            version_info::GetMajorVersionNumberAsInt());
 }
 
 // We put the following restriction on stored FormFields:

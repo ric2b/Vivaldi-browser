@@ -24,7 +24,6 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/strcat.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/thread_pool.h"
@@ -122,6 +121,8 @@
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_store/password_store_interface.h"
 #include "components/password_manager/core/browser/password_store/smart_bubble_stats_store.h"
+#include "components/payments/content/browser_binding/browser_bound_keys_deleter.h"
+#include "components/payments/content/browser_binding/browser_bound_keys_deleter_factory.h"
 #include "components/payments/content/payment_manifest_web_data_service.h"
 #include "components/performance_manager/public/user_tuning/prefs.h"
 #include "components/permissions/permission_actions_history.h"
@@ -225,6 +226,17 @@
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#endif
+
+// Vivaldi
+#if BUILDFLAG(IS_ANDROID)
+#include "components/ad_blocker/adblock_rule_service.h"
+#include "components/ad_blocker/adblock_stats_store.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_content.h"
+#include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs.h"
+#include "components/request_filter/adblock_filter/adblock_state_and_logs_impl.h"
+#include "components/request_filter/adblock_filter/adblock_tab_state_and_logs.h"
 #endif
 
 using base::UserMetricsAction;
@@ -753,6 +765,14 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
           base::DoNothing());
     }
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID)
+    if (payments::BrowserBoundKeyDeleter* browser_bound_key_deleter =
+            payments::BrowserBoundKeyDeleterFactory::GetForBrowserContext(
+                profile_)) {
+      browser_bound_key_deleter->RemoveInvalidBBKs();
+    }
+#endif  // BUILDFLAG(IS_ANDROID)
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -909,6 +929,10 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 
 #if !BUILDFLAG(IS_ANDROID)
     host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
+        ContentSettingsType::INITIALIZED_TRANSLATIONS, delete_begin_,
+        delete_end_, website_settings_filter);
+
+    host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
         ContentSettingsType::INTENT_PICKER_DISPLAY, delete_begin_, delete_end_,
         website_settings_filter);
 
@@ -927,6 +951,10 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
         ContentSettingsType::ARE_SUSPICIOUS_NOTIFICATIONS_ALLOWLISTED_BY_USER,
         delete_begin_, delete_end_, website_settings_filter);
+
+    host_content_settings_map_->ClearSettingsForOneTypeWithPredicate(
+        ContentSettingsType::SUSPICIOUS_NOTIFICATION_IDS, delete_begin_,
+        delete_end_, website_settings_filter);
 
     PermissionDecisionAutoBlockerFactory::GetForProfile(profile_)
         ->RemoveEmbargoAndResetCounts(filter);
@@ -1035,8 +1063,7 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
             kClearBrowsingData);
   }
 
-  CHECK(deferred_disable_passwords_auto_signin_cb_.is_null(),
-        base::NotFatalUntil::M125);
+  CHECK(deferred_disable_passwords_auto_signin_cb_.is_null());
   if ((remove_mask & content::BrowsingDataRemover::DATA_TYPE_COOKIES) &&
       !filter_builder->PartitionedCookiesOnly()) {
     // Unretained() is safe, this is only executed in OnTasksComplete() if the
@@ -1528,6 +1555,17 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     search_engines::SearchEngineChoiceServiceFactory::GetForProfile(profile_)
         ->ResetState();
   }
+#if BUILDFLAG(IS_ANDROID)  // Vivaldi VAB-11363
+  if (remove_mask & constants::DATA_TYPE_ADS_TRACKER_BLOCKER) {
+    adblock_filter::RuleService* rule_service =
+        adblock_filter::RuleServiceFactory::GetForBrowserContext(
+            profile_.get());
+    auto* stats_store = rule_service->GetStatsStore();
+    if (stats_store) {
+      stats_store->ClearStatsData(delete_begin, delete_end);
+    }
+  }
+#endif
 }
 
 void ChromeBrowsingDataRemoverDelegate::OnTaskStarted(
@@ -1600,7 +1638,7 @@ void ChromeBrowsingDataRemoverDelegate::OnTaskComplete(
             SyncServiceFactory::GetForProfile(profile_);
         sync_service) {
       sync_service->GetUserSettings()->KeepAccountSettingsPrefsOnlyForUsers(
-          base::ToVector(gaia_ids, &signin::GaiaIdHash::FromGaiaId));
+          base::ToVector(gaia_ids));
     }
   }
 #endif  // !BUILDFLAG(IS_ANDROID)

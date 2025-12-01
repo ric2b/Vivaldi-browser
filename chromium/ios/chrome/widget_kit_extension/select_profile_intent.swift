@@ -17,7 +17,10 @@ struct AccountQuery: EntityQuery {
   }
 
   func defaultResult() async -> AccountDetail? {
-    let noAccount = AccountDetail(id: "No account", gaia: "Default")
+    let noAccountName = String(
+      localized: "IDS_IOS_WIDGET_KIT_EXTENSION_NO_ACCOUNT_LABEL")
+
+    let noAccount = AccountDetail(id: noAccountName, gaia: "Default")
 
     guard let accounts = try? await suggestedEntities()
     else { return noAccount }
@@ -57,7 +60,9 @@ struct AccountDetail: AppEntity {
 
     var accountsDetail: [AccountDetail] = []
 
-    accountsDetail.append(AccountDetail(id: "No account", gaia: "Default"))
+    let noAccountName = String(
+      localized: "IDS_IOS_WIDGET_KIT_EXTENSION_NO_ACCOUNT_LABEL")
+    accountsDetail.append(AccountDetail(id: noAccountName, gaia: "Default"))
 
     for (key, value) in accounts {
       if let email = value["email"] as? String {
@@ -73,7 +78,7 @@ struct SelectAccountIntent: WidgetConfigurationIntent {
   static var title: LocalizedStringResource = "Select Account"
   static var description = IntentDescription("Selects the account to display shortcuts for.")
 
-  @Parameter(title: "Account")
+  @Parameter(title: "IDS_IOS_WIDGET_KIT_EXTENSION_SELECT_ACCOUNT_LABEL")
   var account: AccountDetail?
 
   // Returns the avatar linked to the account.
@@ -96,5 +101,10 @@ struct SelectAccountIntent: WidgetConfigurationIntent {
     else { return nil }
 
     return gaia
+  }
+
+  // Returns a boolean used to check if the account was deleted from device.
+  func deleted() -> Bool {
+    return account?.gaia == nil
   }
 }

@@ -22,6 +22,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/gmock_callback_support.h"
@@ -176,6 +177,7 @@ class MockDownloadItemFactory final : public download::DownloadItemFactory {
       download::DownloadItemImplDelegate* delegate,
       uint32_t download_id,
       const base::FilePath& path,
+      const base::FilePath& display_name,
       const GURL& url,
       const std::string& mime_type,
       download::DownloadJob::CancelRequestCallback cancel_request_callback)
@@ -332,6 +334,7 @@ download::DownloadItemImpl* MockDownloadItemFactory::CreateSavePageItem(
     download::DownloadItemImplDelegate* delegate,
     uint32_t download_id,
     const base::FilePath& path,
+    const base::FilePath& display_name,
     const GURL& url,
     const std::string& mime_type,
     download::DownloadJob::CancelRequestCallback cancel_request_callback) {

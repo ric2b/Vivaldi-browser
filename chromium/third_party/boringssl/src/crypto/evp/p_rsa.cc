@@ -120,8 +120,8 @@ static int setup_tbuf(RSA_PKEY_CTX *ctx, EVP_PKEY_CTX *pk) {
   if (ctx->tbuf) {
     return 1;
   }
-  ctx->tbuf =
-      reinterpret_cast<uint8_t *>(OPENSSL_malloc(EVP_PKEY_size(pk->pkey)));
+  ctx->tbuf = reinterpret_cast<uint8_t *>(
+      OPENSSL_malloc(EVP_PKEY_size(pk->pkey.get())));
   if (!ctx->tbuf) {
     return 0;
   }
@@ -132,7 +132,7 @@ static int pkey_rsa_sign(EVP_PKEY_CTX *ctx, uint8_t *sig, size_t *siglen,
                          const uint8_t *tbs, size_t tbslen) {
   RSA_PKEY_CTX *rctx = reinterpret_cast<RSA_PKEY_CTX *>(ctx->data);
   RSA *rsa = reinterpret_cast<RSA *>(ctx->pkey->pkey);
-  const size_t key_len = EVP_PKEY_size(ctx->pkey);
+  const size_t key_len = EVP_PKEY_size(ctx->pkey.get());
 
   if (!sig) {
     *siglen = key_len;
@@ -186,7 +186,7 @@ static int pkey_rsa_verify(EVP_PKEY_CTX *ctx, const uint8_t *sig, size_t siglen,
   }
 
   size_t rslen;
-  const size_t key_len = EVP_PKEY_size(ctx->pkey);
+  const size_t key_len = EVP_PKEY_size(ctx->pkey.get());
   if (!setup_tbuf(rctx, ctx) ||
       !RSA_verify_raw(rsa, &rslen, rctx->tbuf, key_len, sig, siglen,
                       rctx->pad_mode)) {
@@ -205,7 +205,7 @@ static int pkey_rsa_verify_recover(EVP_PKEY_CTX *ctx, uint8_t *out,
                                    size_t sig_len) {
   RSA_PKEY_CTX *rctx = reinterpret_cast<RSA_PKEY_CTX *>(ctx->data);
   RSA *rsa = reinterpret_cast<RSA *>(ctx->pkey->pkey);
-  const size_t key_len = EVP_PKEY_size(ctx->pkey);
+  const size_t key_len = EVP_PKEY_size(ctx->pkey.get());
 
   if (out == NULL) {
     *out_len = key_len;
@@ -269,7 +269,7 @@ static int pkey_rsa_encrypt(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *outlen,
                             const uint8_t *in, size_t inlen) {
   RSA_PKEY_CTX *rctx = reinterpret_cast<RSA_PKEY_CTX *>(ctx->data);
   RSA *rsa = reinterpret_cast<RSA *>(ctx->pkey->pkey);
-  const size_t key_len = EVP_PKEY_size(ctx->pkey);
+  const size_t key_len = EVP_PKEY_size(ctx->pkey.get());
 
   if (!out) {
     *outlen = key_len;
@@ -300,7 +300,7 @@ static int pkey_rsa_decrypt(EVP_PKEY_CTX *ctx, uint8_t *out, size_t *outlen,
                             const uint8_t *in, size_t inlen) {
   RSA_PKEY_CTX *rctx = reinterpret_cast<RSA_PKEY_CTX *>(ctx->data);
   RSA *rsa = reinterpret_cast<RSA *>(ctx->pkey->pkey);
-  const size_t key_len = EVP_PKEY_size(ctx->pkey);
+  const size_t key_len = EVP_PKEY_size(ctx->pkey.get());
 
   if (!out) {
     *outlen = key_len;

@@ -1,5 +1,6 @@
 
 declare_args() {
+  vivaldi_v8_context_snapshot = false
   # Media decoders based on the original Opera patches
   system_proprietary_codecs = is_win || is_mac
 

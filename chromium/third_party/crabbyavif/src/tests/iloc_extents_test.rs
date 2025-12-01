@@ -12,11 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[path = "./mod.rs"]
-mod tests;
+mod utils;
 
 use crabby_avif::reformat::rgb::*;
-use tests::*;
+use utils::*;
 
 #[test]
 fn iloc_extents() {
@@ -31,18 +30,21 @@ fn iloc_extents() {
     rgb.format = Format::Rgb;
     assert!(rgb.allocate().is_ok());
     assert!(rgb.convert_from_yuv(decoded).is_ok());
-    let source = decode_png("sacre_coeur.png");
-    // sacre_coeur_2extents.avif was generated with
-    //   avifenc --lossless --ignore-exif --ignore-xmp --ignore-icc sacre_coeur.png
-    // so pixels can be compared byte by byte.
-    assert_eq!(
-        source,
-        rgb.pixels
-            .as_ref()
-            .unwrap()
-            .slice(0, source.len() as u32)
-            .unwrap()
-    );
+    #[cfg(feature = "png")]
+    {
+        let source = decode_png("sacre_coeur.png");
+        // sacre_coeur_2extents.avif was generated with
+        //   avifenc --lossless --ignore-exif --ignore-xmp --ignore-icc sacre_coeur.png
+        // so pixels can be compared byte by byte.
+        assert_eq!(
+            source,
+            rgb.pixels
+                .as_ref()
+                .unwrap()
+                .slice(0, source.len() as u32)
+                .unwrap()
+        );
+    }
 }
 
 #[test]

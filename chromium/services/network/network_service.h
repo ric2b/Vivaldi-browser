@@ -161,7 +161,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void StartNetLog(base::File file,
                    uint64_t max_total_size,
                    net::NetLogCaptureMode capture_mode,
-                   base::Value::Dict constants) override;
+                   base::Value::Dict constants,
+                   std::optional<base::TimeDelta> duration) override;
   void AttachNetLogProxy(
       mojo::PendingRemote<mojom::NetLogProxySource> proxy_source,
       mojo::PendingReceiver<mojom::NetLogProxySink>) override;
@@ -269,6 +270,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
       mojo::PendingReceiver<network::mojom::URLLoader> dest_url_loader,
       mojo::PendingRemote<network::mojom::URLLoaderClient>
           dest_url_loader_client) override;
+
+  void SetTLS13EarlyDataEnabled(bool enabled) override;
 
   void StartNetLogBounded(base::File file,
                           uint64_t max_total_size,
@@ -407,6 +410,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   void InitMockNetworkChangeNotifierForTesting();
 
   void DestroyNetworkContexts();
+
+  void StopNetLog();
 
   // Called by a NetworkContext when its mojo pipe is closed. Deletes the
   // context.
@@ -554,7 +559,6 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkService
   std::unique_ptr<network::tpcd::metadata::Manager> tpcd_metadata_manager_;
 
   bool exclusive_cookie_database_locking_ = true;
-
   base::WeakPtrFactory<NetworkService> weak_factory_{this};
 };
 

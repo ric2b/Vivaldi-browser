@@ -33,6 +33,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkUiPrefs.Observer;
 import org.chromium.chrome.browser.bookmarks.BookmarkUiState.BookmarkUiMode;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRow.Location;
 import org.chromium.chrome.browser.bookmarks.ImprovedBookmarkRowProperties.ImageVisibility;
+import org.chromium.chrome.browser.bookmarks.bar.BookmarkBarUtils;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksReader;
 import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
@@ -79,6 +80,7 @@ import java.util.function.Predicate;
 // Vivaldi
 import android.graphics.Rect;
 import android.view.View;
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.util.Collections;
 import java.util.Comparator;
@@ -474,7 +476,6 @@ public class BookmarkManagerMediator // Vivaldi
     private final PendingRunnable mPendingRefresh =
             new PendingRunnable(
                     TaskTraits.UI_DEFAULT, mCallbackController.makeCancelable(this::refresh));
-    private final BookmarkMoveSnackbarManager mBookmarkMoveSnackbarManager;
     private final BookmarkManagerOpener mBookmarkManagerOpener;
     private final PriceDropNotificationManager mPriceDropNotificationManager;
 
@@ -518,7 +519,6 @@ public class BookmarkManagerMediator // Vivaldi
             SnackbarManager snackbarManager,
             BooleanSupplier canShowSigninPromo,
             Consumer<OnScrollListener> onScrollListenerConsumer,
-            BookmarkMoveSnackbarManager bookmarkMoveSnackbarManager,
             BookmarkManagerOpener bookmarkManagerOpener,
             PriceDropNotificationManager priceDropNotificationManager) {
         mContext = activity;
@@ -562,7 +562,6 @@ public class BookmarkManagerMediator // Vivaldi
                             mContext, mProfile.getOriginalProfile(), this::updateHeader);
         }
         mBookmarkUndoController = bookmarkUndoController;
-        mBookmarkMoveSnackbarManager = bookmarkMoveSnackbarManager;
         mBookmarkManagerOpener = bookmarkManagerOpener;
         mPriceDropNotificationManager = priceDropNotificationManager;
         if (CommerceFeatureUtils.isShoppingListEligible(mShoppingService)) {
@@ -570,7 +569,14 @@ public class BookmarkManagerMediator // Vivaldi
         }
 
         mBookmarkQueryHandler =
-                new ImprovedBookmarkQueryHandler(mBookmarkModel, bookmarkUiPrefs, mShoppingService);
+                new ImprovedBookmarkQueryHandler(
+                        mBookmarkModel,
+                        bookmarkUiPrefs,
+                        mShoppingService,
+                        /* rootFolderForceVisibleMask= */ BookmarkBarUtils.isFeatureEnabled(
+                                        mContext)
+                                ? BookmarkNodeMaskBit.ACCOUNT_AND_LOCAL_BOOKMARK_BAR
+                                : BookmarkNodeMaskBit.NONE);
 
         onScrollListenerConsumer.accept(
                 new OnScrollListener() {
@@ -643,7 +649,6 @@ public class BookmarkManagerMediator // Vivaldi
         mCallbackController.destroy();
 
         mBookmarkUiPrefs.removeObserver(mBookmarkUiPrefsObserver);
-        mBookmarkMoveSnackbarManager.destroy();
 
         if (mShoppingService != null
                 && CommerceFeatureUtils.isShoppingListEligible(mShoppingService)) {
@@ -1011,6 +1016,9 @@ public class BookmarkManagerMediator // Vivaldi
         if (state.mUiMode == BookmarkUiMode.FOLDER) {
             // Loading and searching states may be pushed to the stack but should never be stored in
             // preferences.
+            if (!ChromeApplicationImpl.isVivaldi() ||
+                    (mContext instanceof AppCompatActivity activity &&
+                    PanelUtils.isPanelOpen(activity)))
             BookmarkUtils.setLastUsedUrl(state.mUrl);
             // If a loading state is replaced by another loading state, do not notify this change.
             if (mNativePage != null) {
@@ -1617,8 +1625,8 @@ public class BookmarkManagerMediator // Vivaldi
                                 bookmarkItem.getId(), /* read= */ false);
                         RecordUserAction.record("Android.BookmarkPage.ReadingList.MarkAsUnread");
                     } else if (textId == R.string.bookmark_item_move) {
-                        mBookmarkMoveSnackbarManager.startFolderPickerAndObserveResult(
-                                mBookmarkManagerOpener, bookmarkId);
+                        mBookmarkManagerOpener.startFolderPickerActivity(
+                                mContext, mProfile, bookmarkId);
                         RecordUserAction.record("MobileBookmarkManagerMoveToFolder");
                     } else if (textId == R.string.bookmark_item_delete) {
                         if (mBookmarkModel != null) {

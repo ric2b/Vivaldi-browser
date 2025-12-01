@@ -21,6 +21,9 @@ source_set("coordinator") {
     "//components/segmentation_platform/embedder/home_modules/tips_manager:signal_constants",
     "//ios/chrome/app/strings:ios_strings_grit",
     "//ios/chrome/browser/feature_engagement/model",
+    "//ios/chrome/browser/first_run/ui_bundled:features",
+    "//ios/chrome/browser/first_run/ui_bundled/best_features/ui:best_features_item",
+    "//ios/chrome/browser/first_run/ui_bundled/welcome_back/model",
     "//ios/chrome/browser/intents/model:model_donation_helper",
     "//ios/chrome/browser/search_engines/model:template_url_service_factory",
     "//ios/chrome/browser/shared/coordinator/chrome_coordinator",
@@ -68,7 +71,7 @@ source_set("lens_availability") {
     "//ios/chrome/browser/lens_overlay/coordinator:lens_overlay_availability",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
-    "//ios/chrome/browser/shared/public/features:features",
+    "//ios/chrome/browser/shared/public/features",
     "//ios/public/provider/chrome/browser/lens:lens_api",
     "//ui/base",
   ]

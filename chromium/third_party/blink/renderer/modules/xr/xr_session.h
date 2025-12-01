@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_depth_data_format.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_xr_depth_type.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_depth_usage.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_environment_blend_mode.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_xr_image_tracking_score.h"
@@ -193,6 +194,14 @@ class XRSession final : public EventTarget,
   std::optional<V8XRDepthUsage> depthUsage(ExceptionState& exception_state);
   std::optional<V8XRDepthDataFormat> depthDataFormat(
       ExceptionState& exception_state);
+  std::optional<V8XRDepthType> depthType(ExceptionState& exception_state);
+  std::optional<bool> depthActive(ExceptionState& exception_state);
+
+  void pauseDepthSensing(ExceptionState& exception_state);
+  void resumeDepthSensing(ExceptionState& exception_state);
+
+  // Returns true iff depth is enabled on the system and depth_active_ is true.
+  bool IsDepthActive();
 
   ScriptPromise<IDLUndefined> updateTargetFrameRate(float rate,
                                                     ExceptionState&);
@@ -520,6 +529,10 @@ class XRSession final : public EventTarget,
   device::mojom::blink::XRSessionDeviceConfigPtr device_config_;
   V8XRDepthUsage::Enum depth_usage_;
   V8XRDepthDataFormat::Enum depth_data_format_;
+  std::optional<V8XRDepthType::Enum> depth_type_;
+  // On sessions where depth is enabled, it is active by default. On sessions
+  // where it is not enabled, we throw instead of return this value.
+  bool depth_active_ = true;
 
   Member<XRLightProbe> world_light_probe_;
   HeapVector<Member<XRRenderStateInit>> pending_render_state_;
@@ -603,6 +616,7 @@ class XRSession final : public EventTarget,
 
   HeapVector<Member<XRViewData>> views_;
 
+  Member<XRFrame> animation_frame_ = nullptr;
   Member<XRInputSourceArray> input_sources_;
   Member<XRLayer> prev_base_layer_;
   Member<ResizeObserver> resize_observer_;

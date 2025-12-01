@@ -1,14 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="af">
+<translation id="1062777154504442433">Nuwe oortjiegroep</translation>
+<translation id="1625440863545383011">Verwyder oortjie en verlaat groep</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Boekmerk oortjie}
           other {Boekmerk oortjies}
         }</translation>
 <translation id="2947471979790858922">U aktiwiteit in hierdie privaat oortjies word van hierdie toestel verwyder</translation>
+<translation id="3298614730029636660">Verlaat oortjiegroep</translation>
+<translation id="354698175756845966">Wysig groepkleur</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {U kan u geslote oortjies in Onlangse oortjies onder Vivaldi se hoofkieslys vind. U privaat oortjie is nie beskikbaar nie.}
         other {U kan u geslote oortjies in Onlangse oortjies onder Vivaldi se hoofkieslys vind. U # privaat oortjies is nie beskikbaar nie.}}</translation>
-<translation id="4460014764210899310">Hef groep op</translation>
 <translation id="4871187110787939393">Sluit alle privaat oortjies?</translation>
+<translation id="5494920125229734069">Kies alles</translation>
+<translation id="6807841890213931603">Verwyder oortjie en skrap groep</translation>
+<translation id="750227952939161636">U oortjiestapels word outomaties oor al u aangetekende toestelle bewaar en bygewerk</translation>
+<translation id="7640137753339219124">Skrap groep</translation>
+<translation id="7653857400289671414">U oortjiestapels word outomaties bewaar</translation>
+<translation id="8440938071054361204">Wysig groepnaam</translation>
+<translation id="8602902357364871325">Sluit oortjiegroep</translation>
+<translation id="8851621822786801079">Verwyder uit groep</translation>
 </translationbundle>

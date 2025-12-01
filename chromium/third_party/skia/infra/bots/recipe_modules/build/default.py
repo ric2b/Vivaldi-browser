@@ -86,7 +86,11 @@ def get_compile_flags(api, checkout_root, out_dir, workdir):
   cc, cxx, ccache = None, None, None
   extra_cflags = []
   extra_ldflags = []
-  args = {'werror': 'true', 'link_pool_depth':'2'}
+  args = {
+      'is_trivial_abi': 'true',
+      'link_pool_depth': '2',
+      'werror': 'true',
+  }
   env = {}
 
   if os == 'Mac' or os == 'Mac10.15.7':
@@ -158,6 +162,7 @@ def get_compile_flags(api, checkout_root, out_dir, workdir):
       'skia_enable_fontmgr_empty':     'true',
       'skia_enable_graphite':          'true',
       'skia_enable_pdf':               'true',
+      'skia_use_cpp20':                'true',
       'skia_use_dawn':                 'true',
       'skia_use_expat':                'true',
       'skia_use_freetype':             'true',
@@ -207,6 +212,7 @@ def get_compile_flags(api, checkout_root, out_dir, workdir):
     args['is_debug'] = 'false'
   if 'Dawn' in extra_tokens:
     util.set_dawn_args_and_env(args, env, api, extra_tokens, skia_dir)
+    args['skia_use_cpp20'] = 'true'
   if 'ANGLE' in extra_tokens:
     args['skia_use_angle'] = 'true'
     args['skia_use_cpp20'] = 'true'

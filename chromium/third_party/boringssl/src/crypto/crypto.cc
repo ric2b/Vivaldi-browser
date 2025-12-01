@@ -67,52 +67,19 @@ uint32_t OPENSSL_get_ia32cap(int idx) {
   return OPENSSL_ia32cap_P[idx];
 }
 
-#elif defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)
-
-#if defined(OPENSSL_STATIC_ARMCAP)
-
-// See ARM ACLE for the definitions of these macros. Note |__ARM_FEATURE_AES|
-// covers both AES and PMULL and |__ARM_FEATURE_SHA2| covers SHA-1 and SHA-256.
-// https://developer.arm.com/architectures/system-architectures/software-standards/acle
-// https://github.com/ARM-software/acle/issues/152
-//
-// TODO(davidben): Do we still need |OPENSSL_STATIC_ARMCAP_*| or are the
-// standard flags and -march sufficient?
-HIDDEN uint32_t OPENSSL_armcap_P =
-#if defined(OPENSSL_STATIC_ARMCAP_NEON) || defined(__ARM_NEON)
-    ARMV7_NEON |
-#endif
-#if defined(OPENSSL_STATIC_ARMCAP_AES) || defined(__ARM_FEATURE_AES)
-    ARMV8_AES |
-#endif
-#if defined(OPENSSL_STATIC_ARMCAP_PMULL) || defined(__ARM_FEATURE_AES)
-    ARMV8_PMULL |
-#endif
-#if defined(OPENSSL_STATIC_ARMCAP_SHA1) || defined(__ARM_FEATURE_SHA2)
-    ARMV8_SHA1 |
-#endif
-#if defined(OPENSSL_STATIC_ARMCAP_SHA256) || defined(__ARM_FEATURE_SHA2)
-    ARMV8_SHA256 |
-#endif
-#if defined(__ARM_FEATURE_SHA512)
-    ARMV8_SHA512 |
-#endif
-    0;
-
-#else
+#elif (defined(OPENSSL_ARM) || defined(OPENSSL_AARCH64)) && \
+    !defined(OPENSSL_STATIC_ARMCAP)
 HIDDEN uint32_t OPENSSL_armcap_P = 0;
 
 uint32_t *OPENSSL_get_armcap_pointer_for_test(void) {
   OPENSSL_init_cpuid();
   return &OPENSSL_armcap_P;
 }
-#endif
 
 uint32_t OPENSSL_get_armcap(void) {
   OPENSSL_init_cpuid();
   return OPENSSL_armcap_P;
 }
-
 #endif
 
 #if defined(NEED_CPUID)

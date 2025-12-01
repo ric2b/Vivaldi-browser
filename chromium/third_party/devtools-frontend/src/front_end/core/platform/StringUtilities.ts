@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import type {Brand} from './Brand.js';
+
 export const escapeCharacters = (inputString: string, charsToEscape: string): string => {
   let foundChar = false;
   for (let i = 0; i < charsToEscape.length; ++i) {
@@ -463,8 +465,12 @@ export const findUnclosedCssQuote = function(str: string): string {
 };
 
 export const countUnmatchedLeftParentheses = (str: string): number => {
+  const stringLiteralRegex = /'(?:\\.|[^'\\])*'|"(?:\\.|[^"\\])*"/g;
+  // Remove all matched string literals from the original string.
+  const strWithoutStrings = str.replace(stringLiteralRegex, '');
+
   let unmatchedCount = 0;
-  for (const c of str) {
+  for (const c of strWithoutStrings) {
     if (c === '(') {
       unmatchedCount++;
     } else if (c === ')' && unmatchedCount > 0) {
@@ -487,11 +493,7 @@ export const createPlainTextSearchRegex = function(query: string, flags?: string
   return new RegExp(regex, flags || '');
 };
 
-class LowerCaseStringTag {
-  private lowerCaseStringTag: (string|undefined);
-}
-
-export type LowerCaseString = string&LowerCaseStringTag;
+export type LowerCaseString = Brand<string, 'lowerCaseStringTag'>;
 
 export const toLowerCaseString = function(input: string): LowerCaseString {
   return input.toLowerCase() as LowerCaseString;
@@ -516,12 +518,8 @@ export const toKebabCase = function(input: string): Lowercase<string> {
 };
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export function toKebabCaseKeys(settingValue: {
-  [x: string]: any,
-}): {[x: string]: any} {
-  const result: {
-    [x: string]: any,
-  } = {};
+export function toKebabCaseKeys(settingValue: Record<string, any>): Record<string, any> {
+  const result: Record<string, any> = {};
   for (const [key, value] of Object.entries(settingValue)) {
     result[toKebabCase(key)] = value;
   }

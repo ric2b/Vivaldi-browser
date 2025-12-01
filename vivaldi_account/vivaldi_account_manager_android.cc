@@ -71,6 +71,7 @@ void VivaldiAccountManagerAndroid::SetSessionName(
   profile_->GetPrefs()->SetString(
       vivaldiprefs::kSyncSessionName,
       base::android::ConvertJavaStringToUTF8(env, session_name));
+      SendStateUpdate();
 }
 
 base::android::ScopedJavaLocalRef<jobject>

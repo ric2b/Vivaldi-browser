@@ -35,6 +35,9 @@ class TitledUrlNode {
   // Vivaldi: Returns the description for the node.
   virtual const std::u16string GetTitledUrlNodeDescription() const;
 
+  // Vivaldi: Returns the display url for the node.
+  virtual const GURL GetTitledUrlDisplayURL() const;
+
  protected:
   virtual ~TitledUrlNode() = default;
 };

@@ -484,10 +484,6 @@ class TestingProfile : public Profile {
   // Creates a TestingPrefService and associates it with the TestingProfile.
   void CreateTestingPrefService();
 
-  // Creates a pref service that uses SupervisedUserPrefStore and associates
-  // it with the TestingProfile.
-  void CreatePrefServiceForSupervisedUser();
-
   // Initializes |prefs_| for an incognito profile, derived from
   // |original_profile_|.
   void CreateIncognitoPrefService();
@@ -515,7 +511,7 @@ class TestingProfile : public Profile {
 
   base::FilePath last_selected_directory_;
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   scoped_refptr<ExtensionSpecialStoragePolicy>
       extension_special_storage_policy_;
 #endif
@@ -559,8 +555,6 @@ class TestingProfile : public Profile {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
   std::unique_ptr<policy::PolicyService> policy_service_;
-
-  scoped_refptr<TestingPrefStore> supervised_user_pref_store_ = nullptr;
 
   scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory_;
 };

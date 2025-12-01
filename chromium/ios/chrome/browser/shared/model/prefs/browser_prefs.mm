@@ -16,6 +16,7 @@
 #import "components/breadcrumbs/core/breadcrumbs_status.h"
 #import "components/browser_sync/sync_to_signin_migration.h"
 #import "components/browsing_data/core/pref_names.h"
+#import "components/collaboration/public/pref_names.h"
 #import "components/commerce/core/pref_names.h"
 #import "components/component_updater/component_updater_service.h"
 #import "components/component_updater/installer_policies/autofill_states_component_installer.h"
@@ -28,6 +29,7 @@
 #import "components/feed/core/v2/public/ios/pref_names.h"
 #import "components/handoff/handoff_manager.h"
 #import "components/history/core/common/pref_names.h"
+#import "components/image_fetcher/core/cache/image_cache.h"
 #import "components/invalidation/impl/fcm_invalidation_service.h"
 #import "components/invalidation/impl/invalidator_registrar_with_memory.h"
 #import "components/invalidation/impl/per_user_topic_subscription_manager.h"
@@ -39,6 +41,7 @@
 #import "components/network_time/network_time_tracker.h"
 #import "components/ntp_tiles/most_visited_sites.h"
 #import "components/ntp_tiles/popular_sites_impl.h"
+#import "components/omnibox/browser/omnibox_prefs.h"
 #import "components/omnibox/browser/zero_suggest_provider.h"
 #import "components/optimization_guide/core/model_execution/model_execution_prefs.h"
 #import "components/optimization_guide/core/optimization_guide_prefs.h"
@@ -54,6 +57,7 @@
 #import "components/pref_registry/pref_registry_syncable.h"
 #import "components/prefs/pref_service.h"
 #import "components/proxy_config/pref_proxy_config_tracker_impl.h"
+#import "components/regional_capabilities/regional_capabilities_prefs.h"
 #import "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #import "components/saved_tab_groups/public/pref_names.h"
 #import "components/search_engines/template_url_prepopulate_data.h"
@@ -98,6 +102,7 @@
 #import "ios/chrome/browser/download/model/auto_deletion/auto_deletion_service.h"
 #import "ios/chrome/browser/drive/model/drive_policy.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
+#import "ios/chrome/browser/first_run/ui_bundled/welcome_back/model/welcome_back_prefs.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/memory/model/memory_debugger_manager.h"
 #import "ios/chrome/browser/metrics/model/constants.h"
@@ -151,15 +156,6 @@
 
 namespace {
 
-// Deprecated 05/2024.
-constexpr char kSyncCachedTrustedVaultAutoUpgradeDebugInfo[] =
-    "sync.cached_trusted_vault_auto_upgrade_debug_info";
-
-// Deprecated 05/2024.
-inline constexpr char kAutologinEnabled[] = "autologin.enabled";
-inline constexpr char kReverseAutologinRejectedEmailList[] =
-    "reverse_autologin.rejected_email_list";
-
 // Deprecated 06/2024.
 constexpr char kObsoletePasswordsPerAccountPrefMigrationDone[] =
     "sync.passwords_per_account_pref_migration_done";
@@ -208,36 +204,24 @@ inline constexpr char kIosParcelTrackingOptInPromptSwipedDown[] =
 inline constexpr char kIosParcelTrackingPolicyEnabled[] =
     "ios.parcel_tracking.policy_enabled";
 
-// Helper function migrating the preference `pref_name` of type "int" from
-// `defaults` to `pref_service`.
-void MigrateIntegerPreferenceFromUserDefaults(std::string_view pref_name,
-                                              PrefService* pref_service,
-                                              NSUserDefaults* defaults) {
-  NSString* key = @(pref_name.data());
-  NSNumber* value =
-      base::apple::ObjCCast<NSNumber>([defaults objectForKey:key]);
-  if (!value) {
-    return;
-  }
+// Deprecated 04/2025.
+inline constexpr char kMixedContentAutoupgradeEnabled[] =
+    "ios.mixed_content_autoupgrade_enabled";
 
-  pref_service->SetInteger(pref_name.data(), [value intValue]);
-  [defaults removeObjectForKey:key];
-}
+// Deprecated 04/2025.
+inline constexpr char kAutologinEnabled[] = "autologin.enabled";
 
-// Helper function migrating the preference `pref_name` of type "NSDate" from
-// `defaults` to `pref_service`.
-void MigrateNSDatePreferenceFromUserDefaults(std::string_view pref_name,
-                                             PrefService* pref_service,
-                                             NSUserDefaults* defaults) {
-  NSString* key = @(pref_name.data());
-  NSDate* value = base::apple::ObjCCast<NSDate>([defaults objectForKey:key]);
-  if (!value) {
-    return;
-  }
+// Deprecated 04/2025.
+inline constexpr char kSuggestionGroupVisibility[] =
+    "omnibox.suggestionGroupVisibility";
 
-  pref_service->SetTime(pref_name.data(), base::Time::FromNSDate(value));
-  [defaults removeObjectForKey:key];
-}
+// Deprecated 05/2025.
+inline constexpr char kSyncCacheGuid[] = "sync.cache_guid";
+inline constexpr char kSyncBirthday[] = "sync.birthday";
+inline constexpr char kSyncBagOfChips[] = "sync.bag_of_chips";
+inline constexpr char kSyncLastSyncedTime[] = "sync.last_synced_time";
+inline constexpr char kSyncLastPollTime[] = "sync.last_poll_time";
+inline constexpr char kSyncPollInterval[] = "sync.short_poll_interval";
 
 // Migrates a boolean pref from source to target PrefService.
 void MigrateBooleanPref(std::string_view pref_name,
@@ -417,6 +401,21 @@ void MigrateTimePrefFromProfilePrefsToLocalStatePrefs(
                   profile_pref_service);
 }
 
+void MigrateBooleanFromUserDefaultsToProfilePrefs(
+    NSString* user_defaults_key,
+    std::string_view pref_name,
+    PrefService* profile_pref_service) {
+  auto* pref = profile_pref_service->FindPreference(pref_name);
+  CHECK(pref);
+  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
+  // Only migrate if the pref is not set in the prefs.
+  if (pref->IsDefaultValue()) {
+    profile_pref_service->SetBoolean(pref_name,
+                                     [defaults boolForKey:user_defaults_key]);
+  }
+  [defaults removeObjectForKey:user_defaults_key];
+}
+
 }  // namespace
 
 void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
@@ -453,6 +452,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   TipsNotificationClient::RegisterLocalStatePrefs(registry);
   auto_deletion::AutoDeletionService::RegisterLocalStatePrefs(registry);
   push_notification_prefs::RegisterLocalStatePrefs(registry);
+  RegisterWelcomeBackLocalStatePrefs(registry);
 
 #if !BUILDFLAG(IS_IOS_MACCATALYST)
   default_status::RegisterDefaultStatusPrefs(registry);
@@ -519,6 +519,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterListPref(prefs::kRestrictAccountsToPatterns);
   registry->RegisterIntegerPref(prefs::kBrowserSigninPolicy,
                                 static_cast<int>(BrowserSigninMode::kEnabled));
+  registry->RegisterBooleanPref(prefs::kSigninAllowedOnDevice, true);
   registry->RegisterBooleanPref(prefs::kAppStoreRatingPolicyEnabled, true);
   registry->RegisterBooleanPref(kIosParcelTrackingPolicyEnabled, true);
 
@@ -535,6 +536,8 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
   registry->RegisterIntegerPref(
       prefs::kIosCredentialProviderPromoLastActionTaken, -1);
+  registry->RegisterTimePref(prefs::kIosCredentialProviderPromoDisplayTime,
+                             base::Time());
 
   registry->RegisterBooleanPref(prefs::kIosCredentialProviderPromoStopPromo,
                                 false);
@@ -546,6 +549,9 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
   registry->RegisterBooleanPref(prefs::kIosCredentialProviderPromoPolicyEnabled,
                                 true);
+
+  registry->RegisterTimePref(prefs::kIosSuccessfulLoginWithExistingPassword,
+                             base::Time());
 
   registry->RegisterTimePref(prefs::kIosDefaultBrowserBlueDotPromoFirstDisplay,
                              base::Time());
@@ -636,6 +642,12 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::kNTPHomeCustomizationNewBadgeImpressionCount, 0);
 
+  registry->RegisterBooleanPref(prefs::kHasSwitchedAccountsViaWebFlow, false);
+
+  // Prefs used to force multi-profile migration.
+  registry->RegisterTimePref(
+      prefs::kWaitingForMultiProfileForcedMigrationTimestamp, base::Time());
+
   // Deprecated 07/2024 (migrated to profile prefs).
   registry->RegisterTimePref(prefs::kTabPickupLastDisplayedTime, base::Time());
   registry->RegisterStringPref(prefs::kTabPickupLastDisplayedURL,
@@ -701,6 +713,7 @@ void RegisterLocalStatePrefs(PrefRegistrySimple* registry) {
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   autofill::prefs::RegisterProfilePrefs(registry);
+  collaboration::prefs::RegisterProfilePrefs(registry);
   commerce::RegisterPrefs(registry);
   dom_distiller::DistilledPagePrefs::RegisterProfilePrefs(registry);
   enterprise::RegisterIdentifiersProfilePrefs(registry);
@@ -711,6 +724,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   HostContentSettingsMap::RegisterProfilePrefs(registry);
   invalidation::InvalidatorRegistrarWithMemory::RegisterProfilePrefs(registry);
   invalidation::PerUserTopicSubscriptionManager::RegisterProfilePrefs(registry);
+  image_fetcher::ImageCache::RegisterProfilePrefs(registry);
   language::LanguagePrefs::RegisterProfilePrefs(registry);
   metrics::RegisterDemographicsProfilePrefs(registry);
   ntp_tiles::MostVisitedSites::RegisterProfilePrefs(registry);
@@ -724,6 +738,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   PrefProxyConfigTrackerImpl::RegisterProfilePrefs(registry);
   PushNotificationService::RegisterProfilePrefs(registry);
   RegisterPriceTrackingPromoPrefs(registry);
+  regional_capabilities::prefs::RegisterProfilePrefs(registry);
   shop_card_prefs::RegisterPrefs(registry);
   tips_prefs::RegisterPrefs(registry);
   RegisterVoiceSearchBrowserStatePrefs(registry);
@@ -772,6 +787,7 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   [VivaldiAddressBarSettingsPrefs registerBrowserStatePrefs:registry];
   [VivaldiPageZoomSettingPrefs registerBrowserStatePrefs:registry];
   [VivaldiSyncErrorDialogPrefs registerBrowserStatePrefs:registry];
+  registry->RegisterBooleanPref(vivaldiprefs::kVivaldiBlockExternalApps, NO);
   // End Vivaldi
 
   registry->RegisterBooleanPref(policy::policy_prefs::kPolicyTestPageEnabled,
@@ -850,12 +866,15 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   // Register HTTPS related settings.
   registry->RegisterBooleanPref(prefs::kHttpsOnlyModeEnabled, false);
-  registry->RegisterBooleanPref(prefs::kMixedContentAutoupgradeEnabled, true);
+  registry->RegisterBooleanPref(kMixedContentAutoupgradeEnabled, false);
 
   // Register pref used to determine whether the User Policy notification was
   // already shown.
   registry->RegisterBooleanPref(
       policy::policy_prefs::kUserPolicyNotificationWasShown, false);
+
+  registry->RegisterBooleanPref(policy::policy_prefs::kSyncDisabledAlertShown,
+                                false);
 
   registry->RegisterIntegerPref(prefs::kIosShareChromeCount, 0,
                                 PrefRegistry::LOSSY_PREF);
@@ -984,8 +1003,6 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterDictionaryPref(
       prefs::kContentNotificationsEnrollmentEligibility);
 
-  registry->RegisterStringPref(kSyncCachedTrustedVaultAutoUpgradeDebugInfo, "");
-
   // Registers the Home customization visibility prefs.
   registry->RegisterBooleanPref(prefs::kHomeCustomizationMostVisitedEnabled,
                                 true);
@@ -1077,9 +1094,18 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   registry->RegisterIntegerPref(prefs::kChromeDataRegionSetting, 0);
 
-  // Deprecated 05/2024.
-  registry->RegisterBooleanPref(kAutologinEnabled, true);
-  registry->RegisterListPref(kReverseAutologinRejectedEmailList);
+  registry->RegisterBooleanPref(prefs::kProvisionalNotificationsAllowedByPolicy,
+                                true);
+
+  registry->RegisterBooleanPref(prefs::kIOSGLICConsent, false);
+
+  registry->RegisterTimePref(prefs::kIosSyncInfobarErrorLastDismissedTimestamp,
+                             base::Time());
+
+  // TODO(crbug.com/422744656): Remove `kAIModeSearchSuggestSettings` pref once
+  // `kAIModeSettings` is implemented.
+  registry->RegisterIntegerPref(omnibox::kAIModeSearchSuggestSettings, 0);
+  registry->RegisterIntegerPref(omnibox::kAIModeSettings, 0);
 
   // Deprecated 09/2024 (migrated to localState prefs).
   registry->RegisterBooleanPref(prefs::kIncognitoInterstitialEnabled, false);
@@ -1121,6 +1147,20 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   // Deprecated 02/2025 (migrated to localState prefs).
   registry->RegisterIntegerPref(
       prefs::kNTPHomeCustomizationNewBadgeImpressionCount, 0);
+
+  // Deprecated 04/2025.
+  registry->RegisterBooleanPref(kAutologinEnabled, false);
+
+  // Deprecated 04/2025.
+  registry->RegisterDictionaryPref(kSuggestionGroupVisibility);
+
+  // Deprecated 05/2025.
+  registry->RegisterStringPref(kSyncCacheGuid, std::string());
+  registry->RegisterStringPref(kSyncBirthday, std::string());
+  registry->RegisterStringPref(kSyncBagOfChips, std::string());
+  registry->RegisterTimePref(kSyncLastSyncedTime, base::Time());
+  registry->RegisterTimePref(kSyncLastPollTime, base::Time());
+  registry->RegisterTimeDeltaPref(kSyncPollInterval, base::TimeDelta());
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -1159,6 +1199,9 @@ void MigrateObsoleteLocalStatePrefs(PrefService* prefs) {
 
   // Added 03/2025.
   prefs->ClearPref(kIosParcelTrackingPolicyEnabled);
+
+  // Added 04/2025.
+  prefs->ClearPref("set_up_list.disabled");
 }
 
 // This method should be periodically pruned of year+ old migrations.
@@ -1177,24 +1220,6 @@ void MigrateObsoleteProfilePrefs(PrefService* prefs) {
 
   // Check MigrateDeprecatedAutofillPrefs() to see if this is safe to remove.
   autofill::prefs::MigrateDeprecatedAutofillPrefs(prefs);
-
-  NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-
-  // Added 04/2024.
-  prefs->ClearPref(prefs::kMixedContentAutoupgradeEnabled);
-
-  // Added 04/2024.
-  MigrateIntegerPreferenceFromUserDefaults(
-      spotlight::kSpotlightLastIndexingVersionKey, prefs, defaults);
-  MigrateNSDatePreferenceFromUserDefaults(
-      spotlight::kSpotlightLastIndexingDateKey, prefs, defaults);
-
-  // Added 05/2024.
-  prefs->ClearPref(kSyncCachedTrustedVaultAutoUpgradeDebugInfo);
-
-  // Added 05/2024.
-  prefs->ClearPref(kAutologinEnabled);
-  prefs->ClearPref(kReverseAutologinRejectedEmailList);
 
   // Added 06/2024.
   MigrateIntegerPrefFromLocalStatePrefsToProfilePrefs(
@@ -1332,13 +1357,32 @@ void MigrateObsoleteProfilePrefs(PrefService* prefs) {
   prefs->ClearPref(kIosParcelTrackingOptInPromptDisplayLimitMet);
   prefs->ClearPref(kIosParcelTrackingOptInStatus);
   prefs->ClearPref(kIosParcelTrackingOptInPromptSwipedDown);
+
+  // Added 04/2025.
+  prefs->ClearPref(kMixedContentAutoupgradeEnabled);
+
+  // Added 04/2025
+  MigrateBooleanFromUserDefaultsToProfilePrefs(
+      @"SyncDisabledAlertShown", policy::policy_prefs::kSyncDisabledAlertShown,
+      prefs);
+
+  // Added 04/2025.
+  prefs->ClearPref(kAutologinEnabled);
+
+  // Added 04/2025.
+  prefs->ClearPref(kSuggestionGroupVisibility);
+
+  // Added 05/2025.
+  prefs->ClearPref(kSyncCacheGuid);
+  prefs->ClearPref(kSyncBirthday);
+  prefs->ClearPref(kSyncBagOfChips);
+  prefs->ClearPref(kSyncLastSyncedTime);
+  prefs->ClearPref(kSyncLastPollTime);
+  prefs->ClearPref(kSyncPollInterval);
 }
 
 void MigrateObsoleteUserDefault() {
   NSUserDefaults* defaults = [NSUserDefaults standardUserDefaults];
-
-  // Added 05/2024.
-  [defaults removeObjectForKey:@"lastSignificantUserEventVideo"];
 
   // Added 06/2024.
   [defaults removeObjectForKey:@"TimestampAppLastOpenedViaFirstPartyIntent"];

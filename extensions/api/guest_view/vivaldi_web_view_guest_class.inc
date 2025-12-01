@@ -27,6 +27,7 @@
                          const gfx::Rect& bounds) override;
 
   // Vivaldi customs below
+  bool IsVivaldiRegularTab();
   bool IsVivaldiMail();
   bool IsVivaldiWebPanel();
   bool IsVivaldiWebPageWidget();
@@ -133,7 +134,11 @@
   // Starts loading in the current WebContents if this is needed.
   void LoadTabContentsIfNecessary();
 
-  void VivaldiCreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
+  // returns true if WebContents was created or returned. false if an error or
+  // tear-down of the guestview caused the WebContents not to be returned. No
+  // further operation on |this| must be done if false is returned, we might be
+  // deleted.
+  bool VivaldiCreateWebContents(std::unique_ptr<GuestViewBase> owned_this,
                                 const base::Value::Dict& create_params,
                                 GuestPageCreatedCallback callback);
 

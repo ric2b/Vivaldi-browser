@@ -105,6 +105,9 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   // This must be called before `ComputePolicies()`.
   void SetDocumentIsolationPolicy(const network::DocumentIsolationPolicy& dip);
 
+  void SetIntegrityPolicy(network::IntegrityPolicy ip);
+  void SetIntegrityPolicyReportOnly(network::IntegrityPolicy ip);
+
   // Sets the IP address space of the delivered policies of the new document.
   //
   // This must be called before `ComputePolicies()`.
@@ -116,10 +119,6 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   //
   // This must be called before `ComputePolicies()`.
   void SetIsOriginPotentiallyTrustworthy(bool value);
-
-  // Sets whether COOP origins allow the document to be crossOriginIsolated.
-  // This must be called before `ComputePolicies()`.
-  void SetAllowCrossOriginIsolation(bool value);
 
   // Sets whether crossOriginIsolation is enabled by DocumentIsolationPolicy.
   // This must be called after `ComputePolicies()`.
@@ -235,10 +234,14 @@ class CONTENT_EXPORT NavigationPolicyContainerBuilder {
   // Sets `host_`.
   void SetFinalPolicies(PolicyContainerPolicies policies);
 
-  // Helper for `FinalizePolicies()`. Appends the delivered Content Security
-  // Policies to `policies`.
-  void IncorporateDeliveredPolicies(const GURL& url,
-                                    PolicyContainerPolicies& policies);
+  // Helper for `FinalizePolicies()`. Called for local scheme urls only,
+  // incorporates `delivered_policies_` into `policies` (e.g. appending the
+  // delivered Content Security Policies). This is needed for example for CSP
+  // Embedded Enforcement, in order to merge the inherited policies with the
+  // policies forced by the `csp` attribute (which are contained in
+  // `delivered_policies_`).
+  void IncorporateDeliveredPoliciesForLocalURL(
+      PolicyContainerPolicies& policies);
 
   // Helper for `FinalizePolicies()`. Returns, depending on `url`, the policies
   // that this document inherits from parent/initiator.

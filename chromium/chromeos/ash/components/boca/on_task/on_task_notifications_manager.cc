@@ -227,9 +227,8 @@ void OnTaskNotificationsManager::CreateNotificationInternal(
       // When the countdown finishes, immediately clear the last countdown
       // notification.
       ClearNotification(params.id);
-    } else {
-      StopProcessingNotification(params.id);
     }
+    StopProcessingNotification(params.id);
     return;
   }
 
@@ -250,6 +249,11 @@ void OnTaskNotificationsManager::CreateNotificationInternal(
       /*origin_url=*/GURL(), params.notifier_id,
       message_center::RichNotificationData(),
       /*delegate=*/nullptr, icon, SystemNotificationWarningLevel::NORMAL);
+
+  // Ensure notification is visible over fullscreen windows (for example, locked
+  // quiz).
+  notification->set_fullscreen_visibility(
+      message_center::FullscreenVisibility::OVER_USER);
   delegate_->ShowNotification(std::move(notification));
 }
 

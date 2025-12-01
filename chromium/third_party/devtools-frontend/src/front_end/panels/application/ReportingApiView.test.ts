@@ -29,12 +29,12 @@ describeWithMockConnection('ReportingApiView', () => {
     const endpointsGridData = sinon.spy(endpointsGrid, 'data', ['set']);
     networkManager.dispatchEventToListeners(
         SDK.NetworkManager.Events.ReportingApiEndpointsChangedForOrigin, {origin: ORIGIN_1, endpoints: ENDPOINTS_1});
-    assert.isTrue(endpointsGridData.set.calledOnce);
+    sinon.assert.calledOnce(endpointsGridData.set);
     sinon.assert.calledWith(endpointsGridData.set, {endpoints: new Map([[ORIGIN_1, ENDPOINTS_1]])});
 
     networkManager.dispatchEventToListeners(
         SDK.NetworkManager.Events.ReportingApiEndpointsChangedForOrigin, {origin: ORIGIN_2, endpoints: ENDPOINTS_2});
-    assert.isTrue(endpointsGridData.set.calledTwice);
+    sinon.assert.calledTwice(endpointsGridData.set);
     sinon.assert.calledWith(
         endpointsGridData.set, {endpoints: new Map([[ORIGIN_1, ENDPOINTS_1], [ORIGIN_2, ENDPOINTS_2]])});
   });
@@ -62,7 +62,7 @@ describeWithMockConnection('ReportingApiView', () => {
 
     networkManager.dispatchEventToListeners(
         SDK.NetworkManager.Events.ReportingApiEndpointsChangedForOrigin, {origin: 'dummy', endpoints: []});
-    assert.isTrue(view.showMode() === UI.SplitWidget.ShowMode.BOTH);
+    assert.strictEqual(view.showMode(), UI.SplitWidget.ShowMode.BOTH);
     assert.isNotNull(view.mainWidget());
     assert.instanceOf(view.mainWidget(), Application.ReportingApiReportsView.ReportingApiReportsView);
     assert.isNotNull(view.sidebarElement());
@@ -94,7 +94,7 @@ describeWithMockConnection('ReportingApiView', () => {
     };
 
     networkManager.dispatchEventToListeners(SDK.NetworkManager.Events.ReportingApiReportAdded, report);
-    assert.isTrue(view.showMode() === UI.SplitWidget.ShowMode.BOTH);
+    assert.strictEqual(view.showMode(), UI.SplitWidget.ShowMode.BOTH);
     assert.isNotNull(view.mainWidget());
     assert.instanceOf(view.mainWidget(), Application.ReportingApiReportsView.ReportingApiReportsView);
     assert.isNotNull(view.sidebarElement());

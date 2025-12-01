@@ -29,6 +29,7 @@ tests_sources = [
   "$_tests/BlendTest.cpp",
   "$_tests/BlitMaskClip.cpp",
   "$_tests/BlurTest.cpp",
+  "$_tests/CPUContextRecorderTest.cpp",
   "$_tests/CachedDataTest.cpp",
   "$_tests/CachedDecodingPixelRefTest.cpp",
   "$_tests/CanvasStateHelpers.cpp",
@@ -69,6 +70,7 @@ tests_sources = [
   "$_tests/DrawBitmapRectTest.cpp",
   "$_tests/DrawPathTest.cpp",
   "$_tests/DrawTextTest.cpp",
+  "$_tests/EdgeTest.cpp",
   "$_tests/EmptyPathTest.cpp",
   "$_tests/EncodeTest.cpp",
   "$_tests/EncodedInfoTest.cpp",
@@ -96,6 +98,7 @@ tests_sources = [
   "$_tests/FrontBufferedStreamTest.cpp",
   "$_tests/GLBackendSurfaceTest.cpp",
   "$_tests/GainmapShaderTest.cpp",
+  "$_tests/GaneshContextRecorderTest.cpp",
   "$_tests/GeometryTest.cpp",
   "$_tests/GifTest.cpp",
   "$_tests/GpuDrawPathTest.cpp",
@@ -355,6 +358,7 @@ graphite_tests_sources = [
   "$_tests/graphite/ComputeTest.cpp",
   "$_tests/graphite/DeviceTest.cpp",
   "$_tests/graphite/DrawAtlasTest.cpp",
+  "$_tests/graphite/GraphiteContextRecorderTest.cpp",
   "$_tests/graphite/GraphitePromiseImageTest.cpp",
   "$_tests/graphite/GraphiteResourceCacheTest.cpp",
   "$_tests/graphite/GraphiteYUVAPromiseImageTest.cpp",
@@ -384,17 +388,23 @@ graphite_tests_sources = [
 ]
 
 precompile_tests_sources = [
+  "$_tests/graphite/precompile/AndroidPrecompileTest.cpp",
   "$_tests/graphite/precompile/ChromePrecompileTest.cpp",
   "$_tests/graphite/precompile/CombinationBuilderTest.cpp",
   "$_tests/graphite/precompile/PaintParamsKeyTest.cpp",
+  "$_tests/graphite/precompile/PrecompileStatsTest.cpp",
+  "$_tests/graphite/precompile/PrecompileTestUtils.cpp",
+  "$_tests/graphite/precompile/PrecompileTestUtils.h",
   "$_tests/graphite/precompile/ThreadedPrecompileTest.cpp",
   "$_tests/graphite/precompile/UserdefinedStableKeyTest.cpp",
 ]
 
 graphite_dawn_tests_sources = [ "$_tests/graphite/DawnBackendTextureTest.cpp" ]
 graphite_metal_tests_sources = [ "$_tests/graphite/MtlBackendTextureTest.mm" ]
-graphite_vulkan_tests_sources =
-    [ "$_tests/graphite/VulkanBackendTextureTest.cpp" ]
+graphite_vulkan_tests_sources = [
+  "$_tests/graphite/VulkanBackendTextureTest.cpp",
+  "$_tests/graphite/VulkanDstReadRenderpassReuseTest.cpp",
+]
 
 pathops_tests_sources = [
   "$_tests/PathOpsAngleIdeas.cpp",

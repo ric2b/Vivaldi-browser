@@ -15,6 +15,7 @@
 #include <string.h>
 
 #include <openssl/mem.h>
+#include <openssl/span.h>
 
 #include "../../internal.h"
 #include "../bcm_interface.h"
@@ -43,10 +44,21 @@ bcm_infallible BCM_sha1_transform(SHA_CTX *c, const uint8_t data[SHA_CBLOCK]) {
   return bcm_infallible::approved;
 }
 
+namespace {
+struct SHA1Traits {
+  using HashContext = SHA_CTX;
+  static constexpr size_t kBlockSize = BCM_SHA_CBLOCK;
+  static constexpr bool kLengthIsBigEndian = true;
+  static void HashBlocks(uint32_t *state, const uint8_t *data,
+                         size_t num_blocks) {
+    sha1_block_data_order(state, data, num_blocks);
+  }
+};
+}  // namespace
+
 bcm_infallible BCM_sha1_update(SHA_CTX *c, const void *data, size_t len) {
-  crypto_md32_update(&sha1_block_data_order, c->h, c->data, SHA_CBLOCK, &c->num,
-                     &c->Nh, &c->Nl, reinterpret_cast<const uint8_t *>(data),
-                     len);
+  bssl::crypto_md32_update<SHA1Traits>(
+      c, bssl::Span(static_cast<const uint8_t *>(data), len));
   return bcm_infallible::approved;
 }
 
@@ -60,9 +72,7 @@ static void sha1_output_state(uint8_t out[SHA_DIGEST_LENGTH],
 }
 
 bcm_infallible BCM_sha1_final(uint8_t out[SHA_DIGEST_LENGTH], SHA_CTX *c) {
-  crypto_md32_final(&sha1_block_data_order, c->h, c->data, SHA_CBLOCK, &c->num,
-                    c->Nh, c->Nl, /*is_big_endian=*/1);
-
+  bssl::crypto_md32_final<SHA1Traits>(c);
   sha1_output_state(out, c);
   FIPS_service_indicator_update_state();
   return bcm_infallible::approved;

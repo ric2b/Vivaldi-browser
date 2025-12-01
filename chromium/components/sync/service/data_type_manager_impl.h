@@ -57,7 +57,8 @@ class DataTypeManagerImpl : public DataTypeManager,
   DataTypeSet GetDataTypesWithPermanentErrors() const override;
   void GetTypesWithUnsyncedData(
       DataTypeSet requested_types,
-      base::OnceCallback<void(DataTypeSet)> callback) const override;
+      base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)> callback)
+      const override;
   void GetLocalDataDescriptions(
       DataTypeSet types,
       base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>
@@ -108,8 +109,7 @@ class DataTypeManagerImpl : public DataTypeManager,
   void NotifyStart();
   void NotifyDone(ConfigureStatus status);
 
-  void ConfigureImpl(DataTypeSet preferred_types,
-                     const ConfigureContext& context);
+  void ConfigureImpl();
 
   // Calls data type controllers of requested types to connect.
   void ConnectDataTypes();

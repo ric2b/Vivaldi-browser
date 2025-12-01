@@ -53,6 +53,7 @@
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 
 namespace blink {
@@ -291,6 +292,7 @@ CSSStyleSheet::InspectorMutationScope::~InspectorMutationScope() {
 
 bool CSSStyleSheet::IsContentsShared() const {
   return contents_->IsUsedFromTextCache() ||
+         contents_->IsUsedFromResourceCache() ||
          contents_->IsReferencedFromResource();
 }
 
@@ -345,8 +347,8 @@ void CSSStyleSheet::RemovedAdoptedFromTreeScope(TreeScope& tree_scope) {
   }
 }
 
-bool CSSStyleSheet::IsAdoptedByTreeScope(TreeScope& tree_scope) {
-  return adopted_tree_scopes_.Contains(&tree_scope);
+bool CSSStyleSheet::IsAdoptedByTreeScope(const TreeScope& tree_scope) {
+  return adopted_tree_scopes_.Contains(const_cast<TreeScope*>(&tree_scope));
 }
 
 bool CSSStyleSheet::HasViewportDependentMediaQueries() const {
@@ -412,9 +414,9 @@ unsigned CSSStyleSheet::insertRule(const String& rule_string,
   if (index > length()) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kIndexSizeError,
-        "The index provided (" + String::Number(index) +
-            ") is larger than the maximum index (" + String::Number(length()) +
-            ").");
+        WTF::StrCat({"The index provided (", String::Number(index),
+                     ") is larger than the maximum index (",
+                     String::Number(length()), ")."}));
     return 0;
   }
 
@@ -428,7 +430,7 @@ unsigned CSSStyleSheet::insertRule(const String& rule_string,
   if (!rule) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
-        "Failed to parse the rule '" + rule_string + "'.");
+        WTF::StrCat({"Failed to parse the rule '", rule_string, "'."}));
     return 0;
   }
   RuleMutationScope mutation_scope(this);
@@ -472,9 +474,9 @@ void CSSStyleSheet::deleteRule(unsigned index,
     if (length()) {
       exception_state.ThrowDOMException(
           DOMExceptionCode::kIndexSizeError,
-          "The index provided (" + String::Number(index) +
-              ") is larger than the maximum index (" +
-              String::Number(length() - 1) + ").");
+          WTF::StrCat({"The index provided (", String::Number(index),
+                       ") is larger than the maximum index (",
+                       String::Number(length() - 1), ")."}));
     } else {
       exception_state.ThrowDOMException(DOMExceptionCode::kIndexSizeError,
                                         "Style sheet is empty (length 0).");

@@ -442,9 +442,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "keyLen": [{
           "min": 8, "max": 524288, "increment": 8
         }],
-        "macLen": [{
-          "min": 32, "max": 160, "increment": 8
-        }]
+        "macLen": [160]
       },
       {
         "algorithm": "HMAC-SHA2-224",
@@ -452,9 +450,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "keyLen": [{
           "min": 8, "max": 524288, "increment": 8
         }],
-        "macLen": [{
-          "min": 32, "max": 224, "increment": 8
-        }]
+        "macLen": [224]
       },
       {
         "algorithm": "HMAC-SHA2-256",
@@ -462,9 +458,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "keyLen": [{
           "min": 8, "max": 524288, "increment": 8
         }],
-        "macLen": [{
-          "min": 32, "max": 256, "increment": 8
-        }]
+        "macLen": [256]
       },
       {
         "algorithm": "HMAC-SHA2-384",
@@ -472,9 +466,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "keyLen": [{
           "min": 8, "max": 524288, "increment": 8
         }],
-        "macLen": [{
-          "min": 32, "max": 384, "increment": 8
-        }]
+        "macLen": [384]
       },
       {
         "algorithm": "HMAC-SHA2-512",
@@ -482,9 +474,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "keyLen": [{
           "min": 8, "max": 524288, "increment": 8
         }],
-        "macLen": [{
-          "min": 32, "max": 512, "increment": 8
-        }]
+        "macLen": [512]
       },
       {
         "algorithm": "HMAC-SHA2-512/256",
@@ -492,9 +482,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
         "keyLen": [{
           "min": 8, "max": 524288, "increment": 8
         }],
-        "macLen": [{
-          "min": 32, "max": 256, "increment": 8
-        }]
+        "macLen": [256]
       },
       {
         "algorithm": "ctrDRBG",
@@ -848,11 +836,7 @@ static bool GetConfig(const Span<const uint8_t> args[],
             "increment": 8
           }],
           "keyLen": [128, 256],
-          "macLen": [{
-            "min": 8,
-            "max": 128,
-            "increment": 8
-          }]
+          "macLen": [128]
         }]
       },
       {
@@ -1966,11 +1950,11 @@ static bool CMAC_AES(const Span<const uint8_t> args[],
     return false;
   }
   memcpy(&mac_len, args[0].data(), sizeof(mac_len));
-  if (mac_len > sizeof(mac)) {
+  if (mac_len != sizeof(mac)) {
     return false;
   }
 
-  return write_reply({Span<const uint8_t>(mac, mac_len)});
+  return write_reply({Span<const uint8_t>(mac, sizeof(mac))});
 }
 
 static bool CMAC_AESVerify(const Span<const uint8_t> args[],

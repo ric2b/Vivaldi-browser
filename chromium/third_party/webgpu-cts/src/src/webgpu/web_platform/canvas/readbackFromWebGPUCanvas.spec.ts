@@ -69,6 +69,9 @@ const expect = {
   ]),
 };
 
+// ULP tolerance fo cross color space readback
+const kMaxDiffULPsForNormFormatWithDifferentColorSpaceCanvas = 3;
+
 /**
  * Given 4 pixels in rgba8unorm format, puts them into an ImageData
  * of the specified color space and then puts them into an srgb color space
@@ -181,7 +184,12 @@ function checkImageResultWithDifferentColorSpaceCanvas(
     destinationColorSpace
   );
 
-  readPixelsFrom2DCanvasAndCompare(t, fromWebGPUCtx, expect, 2);
+  readPixelsFrom2DCanvasAndCompare(
+    t,
+    fromWebGPUCtx,
+    expect,
+    kMaxDiffULPsForNormFormatWithDifferentColorSpaceCanvas
+  );
 }
 
 function checkImageResult(
@@ -505,7 +513,7 @@ g.test('transferToImageBitmap_unconfigured_nonzero_size')
     const readbackCanvas = createCanvas(t, t.params.readbackCanvasType, kWidth, kHeight);
     const readbackContext = readbackCanvas.getContext('2d', {
       alpha: true,
-    });
+    }) as CanvasRenderingContext2D;
     if (readbackContext === null) {
       t.skip('Cannot get a 2D canvas context');
       return;

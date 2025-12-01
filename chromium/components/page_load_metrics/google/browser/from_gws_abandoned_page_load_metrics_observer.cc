@@ -7,6 +7,7 @@
 #include <string>
 
 #include "base/time/time.h"
+#include "base/trace_event/named_trigger.h"
 #include "components/page_load_metrics/browser/page_load_metrics_util.h"
 #include "components/page_load_metrics/google/browser/google_url_util.h"
 #include "content/public/browser/navigation_handle.h"
@@ -40,6 +41,10 @@ FromGWSAbandonedPageLoadMetricsObserver::OnStart(
   if (!page_load_metrics::IsGoogleSearchResultUrl(currently_committed_url)) {
     return ObservePolicy::STOP_OBSERVING;
   }
+
+  // Emit a trigger to allow trace collection tied to from gws navigations.
+  base::trace_event::EmitNamedTrigger("from-gws-navigation-start");
+
   category_parameter_id_ =
       page_load_metrics::GetCategoryIdFromUrl(navigation_handle->GetURL());
   impression_ = navigation_handle->GetImpression();
@@ -51,6 +56,13 @@ FromGWSAbandonedPageLoadMetricsObserver::OnNavigationHandleTimingUpdated(
     content::NavigationHandle* navigation_handle) {
   auto navigation_handle_timing =
       navigation_handle->GetNavigationHandleTiming();
+
+  if (navigation_handle->GetNetErrorCode() < 0) {
+    CHECK(!net_error_.has_value());
+    CHECK(!net_extended_error_code_.has_value());
+    net_error_ = navigation_handle->GetNetErrorCode();
+    net_extended_error_code_ = navigation_handle->GetNetExtendedErrorCode();
+  }
 
   // Set the request / response time of the second redirect by checking:
   // 1) We have not yet recorded second redirect
@@ -108,6 +120,13 @@ void FromGWSAbandonedPageLoadMetricsObserver::OnFailedProvisionalLoad(
     const page_load_metrics::FailedProvisionalLoadInfo&
         failed_provisional_load_info) {
   CHECK(!is_committed_);
+  // Record network error code in case we abort the navigation without going
+  // through `OnNavigationHandleTimingUpdated`.
+  if (!net_error_.has_value()) {
+    net_error_ = failed_provisional_load_info.error;
+    net_extended_error_code_ =
+        failed_provisional_load_info.net_extended_error_code;
+  }
   AbandonedPageLoadMetricsObserver::OnFailedProvisionalLoad(
       failed_provisional_load_info);
 }
@@ -195,6 +214,14 @@ void FromGWSAbandonedPageLoadMetricsObserver::LogUKMHistograms(
     } else if (!second_redirect_request_start_time_.is_null()) {
       milestone = NavigationMilestone::kSecondRedirectedRequestStart;
     }
+  }
+
+  if (net_error_.has_value()) {
+    CHECK(net_extended_error_code_.has_value());
+    builder.SetNet_ErrorCode(
+        std::abs(static_cast<int64_t>(net_error_.value())));
+    builder.SetNet_ExtendedErrorCode(
+        std::abs(net_extended_error_code_.value()));
   }
 
   LogUKMHistogramsForAbandonMetrics(builder, abandon_reason, milestone,

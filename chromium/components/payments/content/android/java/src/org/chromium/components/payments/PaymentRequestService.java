@@ -9,7 +9,6 @@ import static org.chromium.build.NullUtil.assumeNonNull;
 import android.content.Context;
 import android.text.TextUtils;
 
-import androidx.annotation.VisibleForTesting;
 import androidx.collection.ArrayMap;
 
 import org.chromium.base.Callback;
@@ -79,12 +78,6 @@ public class PaymentRequestService
                 PaymentResponseHelperInterface.PaymentResponseResultCallback,
                 CSPChecker {
     private static final String TAG = "PaymentRequestServ";
-
-    /**
-     * Hold the currently showing PaymentRequest. Used to prevent showing more than one
-     * PaymentRequest UI per browser process.
-     */
-    private static @Nullable PaymentRequestService sShowingPaymentRequest;
 
     private static @Nullable PaymentRequestServiceObserverForTest sObserverForTest;
     private static @Nullable NativeObserverForTest sNativeObserverForTest;
@@ -643,17 +636,25 @@ public class PaymentRequestService
     /**
      * Called to open a new PaymentHandler UI on the showing PaymentRequest.
      *
+     * <p>TODO(crbug.com/411013540): Change call-sites to retrieve the currently showing payment
+     * flow from BrowserGlobalPaymentFlowManager.
+     *
      * @param url The url of the payment app to be displayed in the UI.
      * @return The WebContents of the payment handler that's just opened when the opening is
      *     successful; null if failed.
      */
     public static @Nullable WebContents openPaymentHandlerWindow(GURL url) {
-        if (sShowingPaymentRequest == null) return null;
-        PaymentApp invokedPaymentApp = sShowingPaymentRequest.mInvokedPaymentApp;
+        PaymentRequestService showingPaymentRequest =
+                BrowserGlobalPaymentFlowManager.getShowingPaymentFlow();
+        if (showingPaymentRequest == null) {
+            return null;
+        }
+
+        PaymentApp invokedPaymentApp = showingPaymentRequest.mInvokedPaymentApp;
         assert invokedPaymentApp != null;
         assert invokedPaymentApp.getPaymentAppType() == PaymentAppType.SERVICE_WORKER_APP;
-        assumeNonNull(sShowingPaymentRequest.mBrowserPaymentRequest);
-        return sShowingPaymentRequest.mBrowserPaymentRequest.openPaymentHandlerWindow(
+        assumeNonNull(showingPaymentRequest.mBrowserPaymentRequest);
+        return showingPaymentRequest.mBrowserPaymentRequest.openPaymentHandlerWindow(
                 url, invokedPaymentApp.getUkmSourceId());
     }
 
@@ -682,6 +683,19 @@ public class PaymentRequestService
                                     != AppCreationFailureReason.ICON_DOWNLOAD_FAILED
                             && reason != PaymentErrorReason.USER_OPT_OUT
                             && !mRejectShowForUserActivation;
+
+            // A new error type `USER_CANCEL` is being experimented with to communicate back to the
+            // the merchant page that the user explicitly does not wish to continue with payment.
+            // This is different from `NOT_ALLOWED_ERROR` which is used for when the user wishes to
+            // proceed with payment but either cannot OR does not want to use the passed-in
+            // credentials to do that.
+            if (obscureRealError
+                    && reason == PaymentErrorReason.USER_CANCEL
+                    && PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
+                            PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION_FALLBACK)) {
+                obscureRealError = false;
+            }
+
             mClient.onError(
                     obscureRealError ? PaymentErrorReason.NOT_ALLOWED_ERROR : reason,
                     obscureRealError
@@ -728,12 +742,6 @@ public class PaymentRequestService
                     break;
                 case MethodStrings.SECURE_PAYMENT_CONFIRMATION:
                     methodTypes.add(PaymentMethodCategory.SECURE_PAYMENT_CONFIRMATION);
-                    break;
-                case MethodStrings.BASIC_CARD:
-                    // Not to record requestedMethodBasicCard because JourneyLogger ignore the case
-                    // where the specified networks are unsupported.
-                    // mPaymentUiService.merchantSupportsAutofillCards() better captures this group
-                    // of interest than requestedMethodBasicCard.
                     break;
                 default:
                     // "Other" includes https url, http url(when certificate check is bypassed) and
@@ -795,13 +803,8 @@ public class PaymentRequestService
      */
     public void invokePaymentApp(
             PaymentApp paymentApp, PaymentResponseHelperInterface paymentResponseHelper) {
-        if (paymentApp.getPaymentAppType() == PaymentAppType.NATIVE_MOBILE_APP) {
-            PaymentDetailsUpdateServiceHelper.getInstance()
-                    .initialize(
-                            new PackageManagerDelegate(),
-                            ((AndroidPaymentApp) paymentApp).packageName(),
-                            this /* PaymentApp.PaymentRequestUpdateEventListener */);
-        }
+        BrowserGlobalPaymentFlowManager.initPaymentDetailsUpdateServiceHelperForInvokedApp(
+                this, paymentApp);
         mPaymentResponseHelper = paymentResponseHelper;
         mJourneyLogger.recordCheckoutStep(CheckoutFunnelStep.PAYMENT_HANDLER_INVOKED);
         // Create maps that are subsets of mMethodData and mModifiers, that contain the payment
@@ -931,7 +934,8 @@ public class PaymentRequestService
         if (mSpec != null
                 && !mSpec.isDestroyed()
                 && mSpec.isSecurePaymentConfirmationRequested()
-                && !mBrowserPaymentRequest.hasAvailableApps()
+                && (!mBrowserPaymentRequest.hasAvailableApps()
+                        || shouldShowSecurePaymentConfirmationFallback())
                 // In most cases, we show the 'No Matching Payment Credential' dialog in order to
                 // preserve user privacy. An exception is failure to download the card art icon -
                 // because we download it in all cases, revealing a failure doesn't leak any
@@ -977,6 +981,17 @@ public class PaymentRequestService
         }
 
         return null;
+    }
+
+    private boolean shouldShowSecurePaymentConfirmationFallback() {
+        if (!PaymentFeatureList.isEnabledOrExperimentalFeaturesEnabled(
+                PaymentFeatureList.SECURE_PAYMENT_CONFIRMATION_FALLBACK)) {
+            return false;
+        }
+        assert mSpec.isSecurePaymentConfirmationRequested();
+        assert mBrowserPaymentRequest != null;
+        assert mBrowserPaymentRequest.getSelectedPaymentApp() != null;
+        return !mBrowserPaymentRequest.getSelectedPaymentApp().hasEnrolledInstrument();
     }
 
     private void onShowFailed(String error) {
@@ -1088,6 +1103,7 @@ public class PaymentRequestService
      */
     private void sendCanMakePaymentResponseToRenderer(boolean response) {
         if (mClient == null) return;
+        Log.i(TAG, "Can make payment: \"%b\".", response);
         mClient.onCanMakePayment(
                 response
                         ? CanMakePaymentQueryResult.CAN_MAKE_PAYMENT
@@ -1131,13 +1147,16 @@ public class PaymentRequestService
         int result;
         if (HasEnrolledInstrumentQuery.canQuery(
                 mWebContents, mTopLevelOrigin, mPaymentRequestOrigin, mQueryForQuota)) {
+            Log.i(TAG, "Has enrolled instrument: \"%b\".", response);
             result =
                     response
                             ? HasEnrolledInstrumentQueryResult.HAS_ENROLLED_INSTRUMENT
                             : HasEnrolledInstrumentQueryResult.HAS_NO_ENROLLED_INSTRUMENT;
         } else if (shouldEnforceHasEnrolledInstrumentQueryQuota()) {
+            Log.i(TAG, "Has enrolled instrument: No quota.");
             result = HasEnrolledInstrumentQueryResult.QUERY_QUOTA_EXCEEDED;
         } else {
+            Log.i(TAG, "Has enrolled instrument: \"%b\".", response);
             result =
                     response
                             ? HasEnrolledInstrumentQueryResult.WARNING_HAS_ENROLLED_INSTRUMENT
@@ -1239,8 +1258,9 @@ public class PaymentRequestService
         return result;
     }
 
+    // TODO(crbug.com/411013540): Change call-sites to use BrowserGlobalPaymentFlowManager directly.
     public static void resetShowingPaymentRequestForTest() {
-        sShowingPaymentRequest = null;
+        BrowserGlobalPaymentFlowManager.resetShowingPaymentFlowForTest();
     }
 
     /**
@@ -1261,7 +1281,7 @@ public class PaymentRequestService
                     ErrorStrings.CANNOT_SHOW_TWICE, PaymentErrorReason.USER_CANCEL);
             return;
         }
-        if (sShowingPaymentRequest != null) {
+        if (!BrowserGlobalPaymentFlowManager.startPaymentFlow(this)) {
             // The renderer can create multiple instances of PaymentRequest and call show() on each
             // one. Only the first one will be shown. This also prevents multiple tabs and windows
             // from showing PaymentRequest UI at the same time.
@@ -1284,7 +1304,6 @@ public class PaymentRequestService
             mJourneyLogger.setActivationlessShow();
             paymentRequestWebContentsData.recordActivationlessShow();
         }
-        sShowingPaymentRequest = this;
         mJourneyLogger.recordCheckoutStep(CheckoutFunnelStep.SHOW_CALLED);
         mIsShowCalled = true;
         mIsShowWaitingForUpdatedDetails = waitForUpdatedDetails;
@@ -1534,11 +1553,13 @@ public class PaymentRequestService
         assert !mSpec.isDestroyed() : "mSpec should not be used after being destroyed.";
         mSpec.retry(errors);
         mBrowserPaymentRequest.onRetry(errors);
-        PaymentDetailsUpdateServiceHelper.getInstance().reset();
+        // Payment apps do not support retry.
+        BrowserGlobalPaymentFlowManager.onInvokedPaymentAppStopped(this);
     }
 
     /** The component part of the {@link PaymentRequest#canMakePayment} implementation. */
     /* package */ void canMakePayment() {
+        Log.i(TAG, "Check can make payment.");
         if (sNativeObserverForTest != null) {
             sNativeObserverForTest.onCanMakePaymentCalled();
         }
@@ -1552,6 +1573,7 @@ public class PaymentRequestService
 
     /** The component part of the {@link PaymentRequest#hasEnrolledInstrument} implementation. */
     /* package */ void hasEnrolledInstrument() {
+        Log.i(TAG, "Check has enrolled instrument.");
         if (sNativeObserverForTest != null) {
             sNativeObserverForTest.onHasEnrolledInstrumentCalled();
         }
@@ -1615,8 +1637,6 @@ public class PaymentRequestService
         if (mHasClosed) return;
         mHasClosed = true;
 
-        sShowingPaymentRequest = null;
-
         if (mBrowserPaymentRequest != null) {
             mBrowserPaymentRequest.close();
             mBrowserPaymentRequest = null;
@@ -1643,7 +1663,7 @@ public class PaymentRequestService
             sNativeObserverForTest.onClosed();
         }
 
-        PaymentDetailsUpdateServiceHelper.getInstance().reset();
+        BrowserGlobalPaymentFlowManager.onPaymentFlowStopped(this);
     }
 
     /**
@@ -1904,7 +1924,7 @@ public class PaymentRequestService
     @Override
     public void onInstrumentDetailsError(String errorMessage) {
         mInvokedPaymentApp = null;
-        PaymentDetailsUpdateServiceHelper.getInstance().reset();
+        BrowserGlobalPaymentFlowManager.onInvokedPaymentAppStopped(this);
         if (sNativeObserverForTest != null) sNativeObserverForTest.onErrorDisplayed();
         if (mBrowserPaymentRequest == null) return;
         if (mBrowserPaymentRequest.hasSkippedAppSelector()) {
@@ -1926,10 +1946,10 @@ public class PaymentRequestService
         }
     }
 
-    @VisibleForTesting
+    // TODO(crbug.com/411013540): Change call-sites to use BrowserGlobalPaymentFlowManager directly.
     public static @Nullable BrowserPaymentRequest getBrowserPaymentRequestForTesting() {
-        return sShowingPaymentRequest != null
-                ? sShowingPaymentRequest.mBrowserPaymentRequest
-                : null;
+        PaymentRequestService showingPaymentRequest =
+                BrowserGlobalPaymentFlowManager.getShowingPaymentFlow();
+        return showingPaymentRequest != null ? showingPaymentRequest.mBrowserPaymentRequest : null;
     }
 }

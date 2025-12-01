@@ -37,12 +37,6 @@ extern const char kExpirationKey[];
 extern const char kLifetimeKey[];
 // Key of the revoked chooser permissions in the |UnusedSitePermissions| object.
 extern const char kSafetyHubChooserPermissionsData[];
-// Key of the expiration time for an abusive notification permission object.
-// Indicates the time after which the associated origin and permissions are no
-// longer shown in the UI.
-extern const char kAbusiveRevocationExpirationKey[];
-// Key of the lifetime for an abusive notification permission object.
-extern const char kAbusiveRevocationLifetimeKey[];
 
 // Key of the base::Value dictionary we assign to the
 // REVOKED_ABUSIVE_NOTIFICATION_PERMISSION value.
@@ -51,23 +45,8 @@ extern const char kRevokedStatusDictKeyStr[];
 // so, we should ignore the origin in future auto revocations. To do this, we
 // will assign the REVOKED_ABUSIVE_NOTIFICATION_PERMISSION permission
 // base::Value to the "ignore" string. Otherwise, the value should be "revoke".
-// Same values are used for REVOKED_DISRUPTIVE_NOTIFICATION_PERMISSIONS, with
-// the addition of "proposed", which indicates that the permission won't be
-// revoked, only proposed to be revoked to collect metrics and learn, and
-// "false_positive", which indicates that the user has interacted with the site,
-// therefore the revocation might have been a false positive.
 extern const char kIgnoreStr[];
 extern const char kRevokeStr[];
-extern const char kProposedStr[];
-extern const char kFalsePositiveStr[];
-
-// Keys of the base::Value dictionary for
-// REVOKED_DISRUPTIVE_NOTIFICATION_PERMISSIONS, used to record metrics when a
-// notification is shown.
-extern const char kSiteEngagementStr[];
-extern const char kDailyNotificationCountStr[];
-extern const char kHasReportedMetricsStr[];
-extern const char kTimestampStr[];
 
 // Key to store origin for a detected compromised password in
 // PasswordStatusCheckResult.

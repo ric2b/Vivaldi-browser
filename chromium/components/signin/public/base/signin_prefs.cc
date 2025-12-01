@@ -82,6 +82,23 @@ constexpr char kExtensionsExplicitBrowserSigninEnabled[] =
 constexpr char kBookmarksExplicitBrowserSigninEnabled[] =
     "BookmarksExplicitBrowserSigninEnabled";
 
+// Number of times the sync promo was shown in the identity pill (avatar toolbar
+// button).
+constexpr std::string_view kSyncPromoIdentityPillShownCount =
+    "ChromeSigninSyncPromoIdentityPillShownCount";
+
+// Number of times the sync promo was used (clicked) in the identity pill
+// (avatar toolbar button).
+constexpr std::string_view kSyncPromoIdentityPillUsedCount =
+    "ChromeSigninSyncPromoIdentityPillUsedCount";
+
+// Number of times the Bookmark Batch Upload promo was dismissed.
+constexpr std::string_view kBookmarkBatchUploadPromoDismissCount =
+    "BookmarkBatchUploadPromoDismissCount";
+// The time at which the last Bookmark Batch Upload promo was dismissed.
+constexpr std::string_view kBookmarkBatchUploadPromoLastDismissTime =
+    "BookmarkBatchUploadPromoLastDismissTime";
+
 }  // namespace
 
 SigninPrefs::SigninPrefs(PrefService& pref_service)
@@ -93,6 +110,8 @@ void SigninPrefs::RegisterProfilePrefs(PrefRegistrySimple* registry) {
   registry->RegisterDictionaryPref(kSigninAccountPrefs);
   registry->RegisterIntegerPref(prefs::kHistorySyncSuccessiveDeclineCount, 0);
   registry->RegisterInt64Pref(prefs::kHistorySyncLastDeclinedTimestamp, 0);
+  registry->RegisterIntegerPref(kSyncPromoIdentityPillShownCount, 0);
+  registry->RegisterIntegerPref(kSyncPromoIdentityPillUsedCount, 0);
 }
 
 bool SigninPrefs::HasAccountPrefs(const GaiaId& gaia_id) const {
@@ -275,6 +294,40 @@ bool SigninPrefs::GetBookmarksExplicitBrowserSignin(
                                   kBookmarksExplicitBrowserSigninEnabled);
 }
 
+void SigninPrefs::IncrementSyncPromoIdentityPillShownCount(
+    const GaiaId& gaia_id) {
+  IncrementIntPrefForAccount(gaia_id, kSyncPromoIdentityPillShownCount);
+}
+
+int SigninPrefs::GetSyncPromoIdentityPillShownCount(
+    const GaiaId& gaia_id) const {
+  return GetIntPrefForAccount(gaia_id, kSyncPromoIdentityPillShownCount);
+}
+
+void SigninPrefs::IncrementSyncPromoIdentityPillUsedCount(
+    const GaiaId& gaia_id) {
+  IncrementIntPrefForAccount(gaia_id, kSyncPromoIdentityPillUsedCount);
+}
+
+int SigninPrefs::GetSyncPromoIdentityPillUsedCount(
+    const GaiaId& gaia_id) const {
+  return GetIntPrefForAccount(gaia_id, kSyncPromoIdentityPillUsedCount);
+}
+
+void SigninPrefs::IncrementBookmarkBatchUploadPromoDismissCountWithLastTime(
+    const GaiaId& gaia_id) {
+  IncrementIntPrefForAccount(gaia_id, kBookmarkBatchUploadPromoDismissCount);
+  SetTimePref(base::Time::Now(), gaia_id,
+              kBookmarkBatchUploadPromoLastDismissTime);
+}
+
+std::pair<int, std::optional<base::Time>>
+SigninPrefs::GetBookmarkBatchUploadPromoDismissCountWithLastTime(
+    const GaiaId& gaia_id) {
+  return {GetIntPrefForAccount(gaia_id, kBookmarkBatchUploadPromoDismissCount),
+          GetTimePref(gaia_id, kBookmarkBatchUploadPromoLastDismissTime)};
+}
+
 int SigninPrefs::IncrementIntPrefForAccount(const GaiaId& gaia_id,
                                             std::string_view pref) {
   CHECK(!gaia_id.empty());
@@ -310,7 +363,6 @@ void SigninPrefs::SetBooleanPrefForAccount(const GaiaId& gaia_id,
                                            std::string_view pref,
                                            bool enabled) {
   CHECK(!gaia_id.empty());
-
   ScopedDictPrefUpdate scoped_update(&pref_service_.get(), kSigninAccountPrefs);
   // `EnsureDict` gets or create the dictionary.
   base::Value::Dict* account_dict =
@@ -319,10 +371,10 @@ void SigninPrefs::SetBooleanPrefForAccount(const GaiaId& gaia_id,
   // will overwrite it.
   account_dict->Set(pref, enabled);
 }
+
 bool SigninPrefs::GetBooleanPrefForAccount(const GaiaId& gaia_id,
                                            std::string_view pref) const {
   CHECK(!gaia_id.empty());
-
   const base::Value::Dict* account_dict =
       pref_service_->GetDict(kSigninAccountPrefs).FindDict(gaia_id.ToString());
   // If the account dict does not exist yet; return the default value.
@@ -337,6 +389,7 @@ bool SigninPrefs::GetBooleanPrefForAccount(const GaiaId& gaia_id,
 void SigninPrefs::SetTimePref(base::Time time,
                               const GaiaId& gaia_id,
                               std::string_view pref) {
+  CHECK(!gaia_id.empty());
   ScopedDictPrefUpdate scoped_update(&pref_service_.get(), kSigninAccountPrefs);
   // `EnsureDict` gets or create the dictionary.
   base::Value::Dict* account_dict =
@@ -349,6 +402,7 @@ void SigninPrefs::SetTimePref(base::Time time,
 std::optional<base::Time> SigninPrefs::GetTimePref(
     const GaiaId& gaia_id,
     std::string_view pref) const {
+  CHECK(!gaia_id.empty());
   const base::Value::Dict* account_dict =
       pref_service_->GetDict(kSigninAccountPrefs).FindDict(gaia_id.ToString());
   // If the account dict does not exist yet; return no time.
@@ -361,6 +415,7 @@ std::optional<base::Time> SigninPrefs::GetTimePref(
 }
 
 void SigninPrefs::ClearPref(const GaiaId& gaia_id, std::string_view pref) {
+  CHECK(!gaia_id.empty());
   ScopedDictPrefUpdate scoped_update(&pref_service_.get(), kSigninAccountPrefs);
   // Do not create an account dictionary if it does not already exist.
   base::Value::Dict* account_dict = scoped_update->FindDict(gaia_id.ToString());

@@ -58,8 +58,15 @@ if (vivaldi_build_tests) {
         "//vivaldi/components/ad_blocker:unit_tests",
         "//vivaldi/components/datasource:dataurl_unit_tests",
         "//vivaldi/components/notes:unit_tests",
-        "//vivaldi/components/direct_match:unit_tests"
+        "//vivaldi/components/direct_match:unit_tests",
+        "//vivaldi/components:tabs"
       ]
+  }
+
+  update_target("//components/search_engines:test_support") {
+    public_deps -= [
+      "//third_party/search_engines_data:regional_settings",
+    ]
   }
 }
 
@@ -93,5 +100,17 @@ update_template_instance("//third_party/blink/renderer/core:core") {
 update_template_instance("//content/common:common") {
   deps += [
     "//vivaldi/components:user_agent",
+  ]
+}
+
+update_target("//components/regional_capabilities:regional_capabilities") {
+  deps -= [
+    #"//third_party/search_engines_data:regional_settings",
+  ]
+}
+
+update_target("//components/shared_highlighting/core/common:common") {
+  deps -= [
+    "//components/search_engines:search_engine_utils"
   ]
 }

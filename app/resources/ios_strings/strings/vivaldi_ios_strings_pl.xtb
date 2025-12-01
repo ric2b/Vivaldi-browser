@@ -4,48 +4,101 @@
 <translation id="1063263220330818888">Prywatne wyszukiwanie</translation>
 <translation id="1097355661841455597">Chcemy poznać Twoją opinię.</translation>
 <translation id="1137850887415122856">Aby zablokować prywatne karty, skonfiguruj Touch ID, Face ID lub kod dostępu.</translation>
+<translation id="1189137610071296104">Otwórz w grupie kart</translation>
 <translation id="1310184829257917508">Poproś o prywatne otwieranie linków z innych aplikacji</translation>
 <translation id="1743244221910283364">Odrzuć zmiany</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {Dodaj kartę do grupy kart}
+        other {Dodaj karty do grupy kart}}</translation>
 <translation id="207677936531967364">Nowa strona karty prywatnej</translation>
+<translation id="2099591136582442348">Spowoduje to trwałe usunięcie grupy kart z Twojego urządzenia.</translation>
+<translation id="2181990701313127304">Nowa karta w grupie</translation>
+<translation id="2351280151183279120">Udostępnij grupę kart</translation>
 <translation id="2353953000228441783">Domyślny widok strony</translation>
 <translation id="2394192052244849643">Wklej i wyszukaj</translation>
 <translation id="2418705169960294134">Nowa karta prywatna</translation>
+<translation id="2565593432251168402">Utrzymuj porządek tworząc grupy kart</translation>
 <translation id="2783161812871838616">Wersja na komputer</translation>
+<translation id="2806957659107692459">Utwórz grupę kart</translation>
 <translation id="2899836479226240291">Ustaw Vivaldi jako przeglądarkę domyślną, aby linki otwierały się w niej automatycznie.</translation>
 <translation id="3365529507898144230">Zapisz w Zdjęciach</translation>
 <translation id="3434473769478814796">Wklej i przejdź</translation>
 <translation id="3463990832590571933">Otwórz w nowej prywatnej karcie</translation>
 <translation id="3473652525653758699">Nowe okno prywatne</translation>
 <translation id="3501504415290398157">Użyj <ph name="BIOMETRIC_AUTHENITCATION_TYPE" />, aby odblokować Twoje prywatne karty.</translation>
+<translation id="353418192940651934">Zachowaj grupę</translation>
 <translation id="3607792383367580513">Tłumacz</translation>
 <translation id="3692650606013198282">Otwórz w trybie prywatnym</translation>
+<translation id="3873885181515160073">Utwórz nową grupę kart, nadając jej nazwę i kolor</translation>
 <translation id="3922395466317605522">Dostosuj menu</translation>
 <translation id="3981599532037327317">Otwórz ${url} w trybie prywatnym</translation>
 <translation id="398477389655464998">Kopiuj link do podświetlenia</translation>
+<translation id="3993429087389909418">Karty pozostaną otwarte na tym urządzeniu, ale grupa kart zostanie usunięta ze wszystkich urządzeń zalogowanych na konto <ph name="USER_EMAIL" />.</translation>
 <translation id="4026745073321351206">🙄 Coś nie działa?</translation>
+<translation id="4216644171369573466">Grupa kart, <ph name="GROUP_TITLE" />, Menu.</translation>
 <translation id="4304713468139749426">Menedżer haseł</translation>
+<translation id="4569525137269575065">Zamknij grupę kart</translation>
 <translation id="473775607612524610">Aktualizuj</translation>
 <translation id="4755216899422789286">Otwórz adresy URL w Vivaldi</translation>
+<translation id="4772190485302020393">Zamknij wszystkie karty i grupy kart</translation>
 <translation id="4802185666270672526">Ukryj opcję „Wersja na komputer”</translation>
+<translation id="4828571836982833289">Czy chcesz rozgrupować grupę kart?</translation>
+<translation id="4838250035189612538">Zmień nazwę grupy</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 grupa kart została zamknięta i zapisana}
+            few {{count} grupy kart zostały zamknięte i zapisane}}
+            many {{count} grup kart zostało zamkniętych i zapisanych}}
+            other {{count} grup kart zostało zamkniętych i zapisanych}}</translation>
+<translation id="5019787757991745254">Kolor grupy kart <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Grupa kart. Zwinięta.</translation>
 <translation id="5217245356412073535">Możesz ustawić wersję na komputery jako domyślny widok dla stron wybierając Ustawienia &gt; Ustawienia treści</translation>
 <translation id="5271549068863921519">Zapisz hasło</translation>
 <translation id="5317780077021120954">Zapisz</translation>
+<translation id="5385953732213322025">Ta strona próbuje otworzyć aplikację. Spowoduje to opuszczenie trybu prywatnego.</translation>
 <translation id="5431239785743546285">Przeczytane strony</translation>
+<translation id="5521301883748677039">Czy chcesz usunąć grupę kart?</translation>
+<translation id="5544011153887687593">Karta w grupie. <ph name="TAB_INDEX_IN_GROUP" /> z <ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Zapisać hasło?</translation>
 <translation id="570209299585559496">Możesz ustawić wersję na komputery jako domyślny widok dla stron otwierając Ustawienia, a następnie Ustawienia treści</translation>
+<translation id="5719777162751096990">Przenieś do grupy kart</translation>
 <translation id="5962477178930921574">Wklej i wyszukaj</translation>
+<translation id="6163856768888310791">Rozgrupuj</translation>
+<translation id="6168969409902608220">Nazwa grupy</translation>
 <translation id="6233792867654386826">Otwiera wprowadzone adresy URL w Vivaldi.</translation>
+<translation id="6478587527114893588">Zamknij grupę kart.</translation>
+<translation id="6527405730445064713">Grupa kart. Rozwinięta.</translation>
 <translation id="6532106788206463496">Zapisz zmiany</translation>
+<translation id="6666425778700353369">Spowoduje to usunięcie grupy kart ze wszystkich urządzeń zalogowanych na konto <ph name="USER_EMAIL" />.</translation>
 <translation id="6680416467695217368">Dostosuj menu</translation>
+<translation id="6695835495840050460">Naciśnij „Dodaj kartę do nowej grupy”</translation>
+<translation id="6708694844902784277">Usuń grupę</translation>
 <translation id="6827597288286078054">Prywatne wyszukiwanie</translation>
 <translation id="6851516051005285358">Wersja na komputer</translation>
+<translation id="6890907822330704077">Grupa kart, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> kart.</translation>
 <translation id="7307970171564921489">Odblokuj prywatne karty używając <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Otworzyć w trybie prywatnym?</translation>
+<translation id="7363285031331302144">Utwórz grupy kart, aby uporządkować otwarte karty</translation>
+<translation id="7395230742578757172">Otwórz w nowej grupie kart</translation>
+<translation id="7424676799308869002">Czy chcesz zachować grupę kart?</translation>
 <translation id="7498234416455752244">Edytuj dalej</translation>
 <translation id="7549299604720382000">Nowa karta prywatna</translation>
+<translation id="7585610907974664408">Nowa karta prywatna w grupie</translation>
+<translation id="7661319142491611883">Rozwiń grupę kart.</translation>
+<translation id="7706213624515206557">Pokaż wszystkie karty w grupie</translation>
 <translation id="7961015016161918242">Nigdy</translation>
 <translation id="8326104954595890674">Nowa karta prywatna</translation>
+<translation id="8345989863850359861">Czy chcesz przenieść kartę i usunąć grupę?</translation>
+<translation id="8407986162266014185">Udostępnij grupę kart</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {Dodaj kartę do nowej grupy kart}
+        other {Dodaj karty do nowej grupy kart}}</translation>
+<translation id="8465550436083180511">Zwiń grupę kart.</translation>
+<translation id="8685478989144570078">Grupy kart</translation>
 <translation id="8756969031206844760">Zaktualizować hasło?</translation>
+<translation id="8852861335827546438">Nowa grupa kart</translation>
+<translation id="8951084872625418241">Nowa karta w grupie</translation>
 <translation id="9042893549633094279">Prywatność i bezpieczeństwo</translation>
 <translation id="9094033019050270033">Aktualizuj hasło</translation>
+<translation id="944434461715569989">Opuść grupę</translation>
+<translation id="959061183386231608">Karty pozostaną otwarte na tym urządzeniu, ale grupa kart zostanie trwale usunięta.</translation>
 </translationbundle>

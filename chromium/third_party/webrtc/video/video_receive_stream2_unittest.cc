@@ -12,37 +12,44 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <deque>
 #include <limits>
 #include <memory>
 #include <optional>
-#include <queue>
-#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "absl/memory/memory.h"
+#include "api/array_view.h"
 #include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
 #include "api/metronome/test/fake_metronome.h"
+#include "api/rtp_packet_info.h"
+#include "api/rtp_packet_infos.h"
 #include "api/test/mock_video_decoder.h"
 #include "api/test/mock_video_decoder_factory.h"
 #include "api/test/time_controller.h"
+#include "api/transport/rtp/rtp_source.h"
 #include "api/units/frequency.h"
 #include "api/units/time_delta.h"
-#include "api/video/encoded_image.h"
+#include "api/units/timestamp.h"
 #include "api/video/recordable_encoded_frame.h"
 #include "api/video/test/video_frame_matchers.h"
 #include "api/video/video_frame.h"
+#include "api/video/video_frame_type.h"
+#include "api/video/video_rotation.h"
+#include "api/video/video_sink_interface.h"
+#include "api/video/video_timing.h"
 #include "api/video_codecs/sdp_video_format.h"
-#include "api/video_codecs/video_decoder.h"
 #include "call/rtp_stream_receiver_controller.h"
 #include "call/video_receive_stream.h"
 #include "common_video/test/utilities.h"
 #include "media/engine/fake_webrtc_call.h"
 #include "modules/pacing/packet_router.h"
 #include "modules/rtp_rtcp/source/rtp_packet_to_send.h"
-#include "modules/video_coding/encoded_frame.h"
+#include "modules/video_coding/nack_requester.h"
 #include "rtc_base/logging.h"
 #include "system_wrappers/include/clock.h"
 #include "test/fake_decoder.h"
@@ -54,6 +61,7 @@
 #include "test/time_controller/simulated_time_controller.h"
 #include "test/video_decoder_proxy_factory.h"
 #include "video/call_stats2.h"
+#include "video/decode_synchronizer.h"
 
 namespace webrtc {
 
@@ -103,7 +111,7 @@ constexpr uint8_t kAv1PayloadType = 101;
 constexpr uint32_t kRemoteSsrc = 1111;
 constexpr uint32_t kLocalSsrc = 2222;
 
-class FakeVideoRenderer : public rtc::VideoSinkInterface<VideoFrame> {
+class FakeVideoRenderer : public VideoSinkInterface<VideoFrame> {
  public:
   explicit FakeVideoRenderer(TimeController* time_controller)
       : time_controller_(time_controller) {}
@@ -207,7 +215,9 @@ class VideoReceiveStream2Test : public ::testing::TestWithParam<bool> {
         .WillByDefault(Invoke(&fake_decoder_, &test::FakeDecoder::Release));
     ON_CALL(mock_transport_, SendRtcp)
         .WillByDefault(
-            Invoke(&rtcp_packet_parser_, &test::RtcpPacketParser::Parse));
+            Invoke([this](ArrayView<const uint8_t> packet, ::testing::Unused) {
+              return rtcp_packet_parser_.Parse(packet);
+            }));
   }
 
   ~VideoReceiveStream2Test() override {
@@ -247,12 +257,10 @@ class VideoReceiveStream2Test : public ::testing::TestWithParam<bool> {
       video_receive_stream_ = nullptr;
     }
     timing_ = new VCMTiming(&env_.clock(), env_.field_trials());
-    video_receive_stream_ =
-        std::make_unique<webrtc::internal::VideoReceiveStream2>(
-            env_, &fake_call_, kDefaultNumCpuCores, &packet_router_,
-            config_.Copy(), &call_stats_, absl::WrapUnique(timing_),
-            &nack_periodic_processor_,
-            UseMetronome() ? &decode_sync_ : nullptr);
+    video_receive_stream_ = std::make_unique<internal::VideoReceiveStream2>(
+        env_, &fake_call_, kDefaultNumCpuCores, &packet_router_, config_.Copy(),
+        &call_stats_, absl::WrapUnique(timing_), &nack_periodic_processor_,
+        UseMetronome() ? &decode_sync_ : nullptr);
     video_receive_stream_->RegisterWithTransport(
         &rtp_stream_receiver_controller_);
     if (state)
@@ -273,7 +281,7 @@ class VideoReceiveStream2Test : public ::testing::TestWithParam<bool> {
   test::RtcpPacketParser rtcp_packet_parser_;
   PacketRouter packet_router_;
   RtpStreamReceiverController rtp_stream_receiver_controller_;
-  std::unique_ptr<webrtc::internal::VideoReceiveStream2> video_receive_stream_;
+  std::unique_ptr<internal::VideoReceiveStream2> video_receive_stream_;
   VCMTiming* timing_;
   test::FakeMetronome fake_metronome_;
   DecodeSynchronizer decode_sync_;
@@ -585,7 +593,7 @@ TEST_P(VideoReceiveStream2Test, PassesNtpTime) {
 }
 
 TEST_P(VideoReceiveStream2Test, PassesRotation) {
-  const webrtc::VideoRotation kRotation = webrtc::kVideoRotation_180;
+  const VideoRotation kRotation = kVideoRotation_180;
   std::unique_ptr<test::FakeEncodedFrame> test_frame =
       test::FakeFrameBuilder()
           .Id(0)

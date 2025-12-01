@@ -18,7 +18,10 @@ const {html} = Lit;
 export class DocumentLatency extends BaseInsightComponent<DocumentLatencyInsightModel> {
   static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-document-latency`;
   override internalName = 'document-latency';
-  protected override hasAskAISupport = true;
+
+  protected override hasAskAiSupport(): boolean {
+    return true;
+  }
 
   override createOverlays(): Overlays.Overlays.TimelineOverlay[] {
     if (!this.model?.data?.documentRequest) {
@@ -79,10 +82,6 @@ export class DocumentLatency extends BaseInsightComponent<DocumentLatencyInsight
 
   override getEstimatedSavingsTime(): Trace.Types.Timing.Milli|null {
     return this.model?.metricSavings?.FCP ?? null;
-  }
-
-  override getEstimatedSavingsBytes(): number|null {
-    return this.model?.data?.uncompressedResponseBytes ?? null;
   }
 
   override renderContent(): Lit.LitTemplate {

@@ -70,6 +70,7 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -158,6 +159,7 @@ import java.util.stream.Stream;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "show-autofill-signatures"})
 @DoNotBatch(reason = "Tests cannot run batched because they launch a Settings activity.")
+@DisableFeatures(ChromeFeatureList.DATA_SHARING)
 public class MainSettingsFragmentTest {
     private static final String SEARCH_ENGINE_SHORT_NAME = "Google";
 
@@ -240,11 +242,13 @@ public class MainSettingsFragmentTest {
                 mSettingsActivityTestRule
                         .getActivity()
                         .findViewById(R.id.account_management_account_row);
+        ChromeRenderTestRule.sanitize(accountRow);
         mRenderTestRule.render(accountRow, "main_settings_signed_out_account");
         View googleServicesRow =
                 mSettingsActivityTestRule
                         .getActivity()
                         .findViewById(R.id.account_management_google_services_row);
+        ChromeRenderTestRule.sanitize(googleServicesRow);
         mRenderTestRule.render(googleServicesRow, "main_settings_signed_out_google_services");
     }
 
@@ -260,6 +264,7 @@ public class MainSettingsFragmentTest {
                 mSettingsActivityTestRule
                         .getActivity()
                         .findViewById(R.id.account_management_account_row);
+        ChromeRenderTestRule.sanitize(accountRow);
         mRenderTestRule.render(accountRow, "main_settings_signin_disabled_by_policy_account");
     }
 
@@ -546,6 +551,7 @@ public class MainSettingsFragmentTest {
                         .getActivity()
                         .findViewById(android.R.id.content)
                         .getRootView();
+        ChromeRenderTestRule.sanitize(view);
         mRenderTestRule.render(view, "main_settings_signed_in_identity_error");
     }
 
@@ -779,77 +785,48 @@ public class MainSettingsFragmentTest {
         intended(IntentMatchers.hasData("https://test.plusaddresses.google.com"));
     }
 
+    /**
+     * Verifies that when the feature flag is enabled, the PREF_HOME_MODULES_CONFIG is removed from
+     * the settings page.
+     */
+    // TODO(crbug.com/376238770): Remove @EnableFeatures once the feature flag is turned on by
+    // default.
     @Test
     @SmallTest
-    public void testHomeModulesConfigSettingsWithCustomizableModule() {
+    @EnableFeatures(ChromeFeatureList.NEW_TAB_PAGE_CUSTOMIZATION)
+    public void testHomeModulesConfigSettingsWithCustomizableModuleWhileFeatureTurnOn() {
+        when(mHomeModulesConfigManager.hasModuleShownInSettings()).thenReturn(true);
+        HomeModulesConfigManager.setInstanceForTesting(mHomeModulesConfigManager);
+        startSettings();
+        assertSettingsNotExists(MainSettings.PREF_HOME_MODULES_CONFIG);
+    }
+
+    /**
+     * Verifies that when the feature flag is turned off, the PREF_HOME_MODULES_CONFIG is removed
+     * from the settings page, only if hasModuleShownInSettings returns false.
+     */
+    // TODO(crbug.com/376238770): Removes this test when the feature flag is turned on by default.
+    @Test
+    @SmallTest
+    @DisableFeatures("NewTabPageCustomization")
+    public void testHomeModulesConfigSettingsWithCustomizableModuleWhileFeatureTurnOff() {
         when(mHomeModulesConfigManager.hasModuleShownInSettings()).thenReturn(true);
         HomeModulesConfigManager.setInstanceForTesting(mHomeModulesConfigManager);
         startSettings();
         assertSettingsExists(
                 MainSettings.PREF_HOME_MODULES_CONFIG, HomeModulesConfigSettings.class);
-    }
 
-    @Test
-    @SmallTest
-    public void testHomeModulesConfigSettingsWithoutCustomizableModule() {
         when(mHomeModulesConfigManager.hasModuleShownInSettings()).thenReturn(false);
         HomeModulesConfigManager.setInstanceForTesting(mHomeModulesConfigManager);
         startSettings();
-        Assert.assertNull(
-                "Home modules config setting should not be shown on automotive",
-                mMainSettings.findPreference(MainSettings.PREF_HOME_MODULES_CONFIG));
+        assertSettingsNotExists(MainSettings.PREF_HOME_MODULES_CONFIG);
     }
 
     @Test
     @SmallTest
-    @EnableFeatures({
-        ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
-        ChromeFeatureList.TAB_GROUP_SYNC_AUTO_OPEN_KILL_SWITCH
-    })
-    @DisableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER)
-    public void testTabsSettingsOn_GroupSync_KillSwitchInactive() {
+    public void testTabsSettingsOn() {
         startSettings();
         assertSettingsExists(MainSettings.PREF_TABS, TabsSettings.class);
-    }
-
-    @Test
-    @SmallTest
-    @EnableFeatures(ChromeFeatureList.TAB_GROUP_SYNC_ANDROID)
-    @DisableFeatures({
-        ChromeFeatureList.ANDROID_TAB_DECLUTTER,
-        ChromeFeatureList.TAB_GROUP_SYNC_AUTO_OPEN_KILL_SWITCH
-    })
-    public void testTabsSettingsOn_GroupSync_KillSwitchActive() {
-        startSettings();
-        Assert.assertNull(
-                "Tabs settings should not be shown",
-                mMainSettings.findPreference(MainSettings.PREF_TABS));
-    }
-
-    @Test
-    @SmallTest
-    @DisableFeatures({
-        ChromeFeatureList.TAB_GROUP_SYNC_ANDROID,
-        ChromeFeatureList.TAB_GROUP_SYNC_AUTO_OPEN_KILL_SWITCH
-    })
-    @EnableFeatures(ChromeFeatureList.ANDROID_TAB_DECLUTTER)
-    public void testTabsSettingsOn_Declutter() {
-        startSettings();
-        assertSettingsExists(MainSettings.PREF_TABS, TabsSettings.class);
-    }
-
-    @Test
-    @SmallTest
-    @DisableFeatures({
-        ChromeFeatureList.ANDROID_TAB_DECLUTTER,
-        ChromeFeatureList.TAB_GROUP_SYNC_ANDROID
-    })
-    @EnableFeatures(ChromeFeatureList.TAB_GROUP_SYNC_AUTO_OPEN_KILL_SWITCH)
-    public void testTabsSettingsOff() {
-        startSettings();
-        Assert.assertNull(
-                "Tabs settings should not be shown",
-                mMainSettings.findPreference(MainSettings.PREF_TABS));
     }
 
     @Test
@@ -914,9 +891,10 @@ public class MainSettingsFragmentTest {
         // this is an instrumentation test there's not a good way to fake or force device
         // characteristics, so we just fork the test's behavior based on the eligibility state.
         boolean showSetting =
-                BuildInfo.getInstance().isFoldable
-                        || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
-                                mSettingsActivityTestRule.getActivity());
+                !DeviceInfo.isAutomotive()
+                        && (BuildInfo.getInstance().isFoldable
+                                || !DeviceFormFactor.isNonMultiDisplayContextOnTablet(
+                                        mSettingsActivityTestRule.getActivity()));
         if (!showSetting) {
             Assert.assertNull(
                     "Address Bar should not be shown for for ineligible devices",
@@ -1078,6 +1056,11 @@ public class MainSettingsFragmentTest {
             throw new AssertionError("Pref fragment <" + pref.getFragment() + "> is not found.");
         }
         return pref;
+    }
+
+    private void assertSettingsNotExists(String prefKey) {
+        Preference pref = mMainSettings.findPreference(prefKey);
+        Assert.assertNull(pref);
     }
 
     private boolean supportAddressBarSettings() {

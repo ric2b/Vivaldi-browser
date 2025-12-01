@@ -46,6 +46,7 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DoNotBatch;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
@@ -55,6 +56,7 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChrome;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerChromePhone;
 import org.chromium.chrome.browser.compositor.layouts.LayoutManagerHost;
 import org.chromium.chrome.browser.compositor.layouts.MockLayoutHost;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
 import org.chromium.chrome.browser.layouts.LayoutType;
@@ -71,7 +73,7 @@ import org.chromium.chrome.browser.tabmodel.TabClosureParams;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
@@ -251,7 +253,7 @@ public class SensitiveContentTest {
                 HistogramWatcher.newSingleRecordWatcher(histogram, /* value= */ true);
         // Open a second tab.
         PageStation page = mPage.openNewTabFast();
-        final Tab secondTab = page.getLoadedTab();
+        final Tab secondTab = page.loadedTabElement.get();
         // Load sensitive content only into the second tab.
         page = page.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
         pollUiThread(() -> secondTab.getTabHasSensitiveContent());
@@ -293,7 +295,7 @@ public class SensitiveContentTest {
         PageStation page = mPage.openNewIncognitoTabFast();
         // Open the second incognito tab.
         page = page.openNewIncognitoTabFast();
-        final Tab secondIncognitoTab = page.getLoadedTab();
+        final Tab secondIncognitoTab = page.loadedTabElement.get();
         // Load sensitive content only into the second incognito tab.
         page = page.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
         pollUiThread(() -> secondIncognitoTab.getTabHasSensitiveContent());
@@ -326,10 +328,10 @@ public class SensitiveContentTest {
     @LargeTest
     @EnableFeatures(SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)
     public void testRegularTabSwitcherBecomesSensitiveWithTabGroups() {
-        final Tab firstTab = mPage.getLoadedTab();
+        final Tab firstTab = mPage.loadedTabElement.get();
         // Open a second tab.
         PageStation page = mPage.openNewTabFast();
-        final Tab secondTab = page.getLoadedTab();
+        final Tab secondTab = page.loadedTabElement.get();
         // Load sensitive content only into the second tab.
         page = page.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
         pollUiThread(() -> secondTab.getTabHasSensitiveContent());
@@ -353,10 +355,10 @@ public class SensitiveContentTest {
     public void testIncognitoTabSwitcherBecomesSensitiveWithTabGroups() {
         // Open the first incognito tab.
         PageStation page = mPage.openNewIncognitoTabFast();
-        final Tab firstIncognitoTab = page.getLoadedTab();
+        final Tab firstIncognitoTab = page.loadedTabElement.get();
         // Open the second incognito tab.
         page = page.openNewIncognitoTabFast();
-        final Tab secondIncognitoTab = page.getLoadedTab();
+        final Tab secondIncognitoTab = page.loadedTabElement.get();
         // Load sensitive content only into the second incognito tab.
         page = page.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
         pollUiThread(() -> secondIncognitoTab.getTabHasSensitiveContent());
@@ -384,12 +386,12 @@ public class SensitiveContentTest {
         HistogramWatcher histogramWatcher =
                 HistogramWatcher.newSingleRecordWatcher(histogram, /* value= */ true);
         // Load sensitive content only into the first tab.
-        final Tab firstTab = mPage.getLoadedTab();
+        final Tab firstTab = mPage.loadedTabElement.get();
         PageStation page = mPage.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
         pollUiThread(() -> firstTab.getTabHasSensitiveContent());
         // Open a second tab.
         page = page.openNewTabFast();
-        final Tab secondTab = page.getLoadedTab();
+        final Tab secondTab = page.loadedTabElement.get();
         // Group the tabs.
         TabUiTestHelper.createTabGroup(
                 mCtaTestRule.getActivity(), false, List.of(firstTab, secondTab));
@@ -420,7 +422,7 @@ public class SensitiveContentTest {
         page = page.openNewTabFast();
         // Load sensitive content into the third tab.
         page = page.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
-        assertTrue(page.getLoadedTab().getTabHasSensitiveContent());
+        assertTrue(page.loadedTabElement.get().getTabHasSensitiveContent());
         // Open a fourth tab.
         page = page.openNewTabFast();
 
@@ -487,7 +489,7 @@ public class SensitiveContentTest {
     }
 
     private int getPageContentSensitivity(PageStation page) {
-        return page.getLoadedTab().getContentView().getContentSensitivity();
+        return page.loadedTabElement.get().getContentView().getContentSensitivity();
     }
 
     // The tested animation occurs for example when a link is opened in a new tab or in a new tab in
@@ -495,6 +497,7 @@ public class SensitiveContentTest {
     @Test
     @MediumTest
     @EnableFeatures(SensitiveContentFeatures.SENSITIVE_CONTENT_WHILE_SWITCHING_TABS)
+    @DisableFeatures({ChromeFeatureList.SHOW_NEW_TAB_ANIMATIONS})
     @Restriction(DeviceFormFactor.PHONE)
     public void testSimpleAnimationLayoutHasSensitiveContent() throws TimeoutException {
         final String histogram = "SensitiveContent.SensitiveTabSwitchingAnimations";
@@ -591,7 +594,7 @@ public class SensitiveContentTest {
     public void testSensitiveContentIsRestoredFromTabState() {
         // Create a new tab.
         PageStation page = mPage.openNewTabFast();
-        final Tab secondTabBeforeFreeze = page.getLoadedTab();
+        final Tab secondTabBeforeFreeze = page.loadedTabElement.get();
         page = page.loadWebPageProgrammatically(mTestServer.getURL(SENSITIVE_FILE));
         pollUiThread(() -> secondTabBeforeFreeze.getTabHasSensitiveContent());
 

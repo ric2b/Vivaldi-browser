@@ -11,6 +11,10 @@
 
 @synthesize visibleAreaLayoutGuide = _visibleAreaLayoutGuide;
 
+- (CGSize)imageSize {
+  return CGSizeZero;
+}
+
 - (void)setLensOverlayDelegate:(id<ChromeLensOverlayDelegate>)delegate {
   // NO-OP
 }
@@ -59,6 +63,10 @@
 
 - (CGRect)selectionRect {
   return CGRectZero;
+}
+
+- (void)setGuidanceRestHeight:(CGFloat)height {
+  // NO-OP
 }
 
 @end

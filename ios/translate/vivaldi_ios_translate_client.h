@@ -108,8 +108,6 @@ class VivaldiIOSTranslateClient
 
   // Metrics recorder for page load events.
   std::unique_ptr<translate::TranslateMetricsLogger> translate_metrics_logger_;
-
-  WEB_STATE_USER_DATA_KEY_DECL();
 };
 
 #endif  // IOS_TRANSLATE_VIVALDI_IOS_TRANSLATE_CLIENT_H_

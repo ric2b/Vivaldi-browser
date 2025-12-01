@@ -346,6 +346,10 @@ public class PdfUtils {
         RecordHistogram.recordTimesHistogram("Android.Pdf.DocumentLoadTime.FirstPaired", duration);
     }
 
+    static void recordPdfLoadInterval(long duration) {
+        RecordHistogram.recordMediumTimesHistogram("Android.Pdf.DocumentLoadInterval", duration);
+    }
+
     static void recordPdfTransientDownloadTime(long duration) {
         RecordHistogram.recordTimesHistogram("Android.Pdf.DownloadTime.Transient", duration);
     }
@@ -358,6 +362,11 @@ public class PdfUtils {
     static void recordIsWorkProfile(boolean isWorkProfile) {
         RecordHistogram.recordBooleanHistogram(
                 "Android.Pdf.AssistContent.IsWorkProfile", isWorkProfile);
+    }
+
+    static void recordGetAssistantPackageResult(boolean success) {
+        RecordHistogram.recordBooleanHistogram(
+                "Android.Pdf.AssistContent.GetAssistantPackageResult", success);
     }
 
     private static void recordIsPdfDownloadUrlEncoded(boolean encodeResult) {

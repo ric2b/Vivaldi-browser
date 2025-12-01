@@ -81,26 +81,6 @@ enum class CrossUserSharingDecryptionResult {
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:CrossUserSharingDecryptionResult)
 
-// Result of a GetUpdates request for a data type that was nudged (contained at
-// least one invalidation hint for the data type).
-//
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// LINT.IfChange(NudgedUpdateResult)
-enum class NudgedUpdateResult {
-  // The data type successfully downloaded at least one entity.
-  kSuccess = 0,
-
-  // No entities were downloaded when data type was invalidated.
-  kEmptyResponse = 1,
-
-  // The data type failed to download updates during a sync cycle.
-  kDownloadFailure = 2,
-
-  kMaxValue = kDownloadFailure,
-};
-// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:NudgedUpdateResult)
-
 void LogPasswordNotesState(PasswordNotesStateForUMA state) {
   base::UmaHistogramEnumeration(kPasswordNotesStateHistogramName, state);
 }
@@ -125,7 +105,8 @@ void LogNudgedUpdateLatency(DataType type, base::TimeDelta latency) {
                               latency);
 }
 
-void LogNudgedUpdateResult(NudgedUpdateResult result, DataType type) {
+void LogNudgedUpdateResult(UpdateHandler::NudgedUpdateResult result,
+                           DataType type) {
   base::UmaHistogramEnumeration(base::StrCat({"Sync.NudgedUpdateResult.",
                                               DataTypeToHistogramSuffix(type)}),
                                 result);
@@ -164,15 +145,20 @@ void AdaptClientTagForFullUpdateData(DataType data_type,
   }
   DCHECK(!data->specifics.has_encrypted());
   if (data_type == AUTOFILL_WALLET_DATA) {
-    DCHECK(data->specifics.has_autofill_wallet());
+    CHECK(data->specifics.has_autofill_wallet());
     data->client_tag_hash = ClientTagHash::FromUnhashed(
         AUTOFILL_WALLET_DATA, GetUnhashedClientTagFromAutofillWalletSpecifics(
                                   data->specifics.autofill_wallet()));
   } else if (data_type == AUTOFILL_WALLET_OFFER) {
-    DCHECK(data->specifics.has_autofill_offer());
+    CHECK(data->specifics.has_autofill_offer());
     data->client_tag_hash = ClientTagHash::FromUnhashed(
         AUTOFILL_WALLET_OFFER, GetUnhashedClientTagFromAutofillOfferSpecifics(
                                    data->specifics.autofill_offer()));
+  } else if (data_type == AUTOFILL_VALUABLE) {
+    CHECK(data->specifics.has_autofill_valuable());
+    data->client_tag_hash = ClientTagHash::FromUnhashed(
+        AUTOFILL_VALUABLE, GetUnhashedClientTagFromAutofillValuableSpecifics(
+                               data->specifics.autofill_valuable()));
   } else {
     NOTREACHED();
   }
@@ -754,7 +740,8 @@ DataTypeWorker::DecryptionStatus DataTypeWorker::PopulateUpdateResponseData(
     AdaptTitleForNote(update_entity, &data.specifics, specifics_were_encrypted);
     AdaptGuidForNote(update_entity, &data.specifics);
   } else if (data_type == AUTOFILL_WALLET_DATA ||
-             data_type == AUTOFILL_WALLET_OFFER) {
+             data_type == AUTOFILL_WALLET_OFFER ||
+             data_type == AUTOFILL_VALUABLE) {
     AdaptClientTagForFullUpdateData(data_type, &data);
   } else if (data_type == WEBAUTHN_CREDENTIAL) {
     AdaptWebAuthnClientTagHash(&data);
@@ -1363,11 +1350,12 @@ void DataTypeWorker::RecordRemoteInvalidation(
   SendPendingInvalidationsToProcessor();
 }
 
-void DataTypeWorker::RecordDownloadFailure() const {
+void DataTypeWorker::RecordDownloadFailure(
+    NudgedUpdateResult failure_result) const {
   // Record the failure only if the data type was nudged / invalidated.
   for (const PendingInvalidation& invalidation : pending_invalidations_) {
     if (invalidation.is_processed) {
-      LogNudgedUpdateResult(NudgedUpdateResult::kDownloadFailure, type_);
+      LogNudgedUpdateResult(failure_result, type_);
       break;
     }
   }

@@ -292,8 +292,6 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   bool blending = true;
   ResourceId resource_id(82);
-  gfx::Size resource_size_in_pixels = gfx::Size(40, 41);
-  bool premultiplied_alpha = true;
   gfx::PointF uv_top_left(0.5f, 224.f);
   gfx::PointF uv_bottom_right(51.5f, 260.f);
   bool nearest_neighbor = true;
@@ -303,35 +301,28 @@ TEST(DrawQuadTest, CopyTextureDrawQuad) {
   CREATE_SHARED_STATE();
 
   CREATE_QUAD_NEW(TextureDrawQuad, visible_rect, blending, resource_id,
-                  premultiplied_alpha, uv_top_left, uv_bottom_right,
-                  SkColors::kTransparent, nearest_neighbor, secure_output_only,
-                  protected_video_type);
+                  uv_top_left, uv_bottom_right, SkColors::kTransparent,
+                  nearest_neighbor, secure_output_only, protected_video_type);
   EXPECT_EQ(DrawQuad::Material::kTextureContent, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(blending, copy_quad->needs_blending);
   EXPECT_EQ(resource_id, copy_quad->resource_id);
-  EXPECT_EQ(premultiplied_alpha, copy_quad->premultiplied_alpha);
   EXPECT_EQ(uv_top_left, copy_quad->uv_top_left);
   EXPECT_EQ(uv_bottom_right, copy_quad->uv_bottom_right);
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
   EXPECT_EQ(secure_output_only, copy_quad->secure_output_only);
   EXPECT_EQ(protected_video_type, copy_quad->protected_video_type);
-  EXPECT_FALSE(copy_quad->is_stream_video);
 
-  CREATE_QUAD_ALL(TextureDrawQuad, resource_id, resource_size_in_pixels,
-                  premultiplied_alpha, uv_top_left, uv_bottom_right,
+  CREATE_QUAD_ALL(TextureDrawQuad, resource_id, uv_top_left, uv_bottom_right,
                   SkColors::kTransparent, nearest_neighbor, secure_output_only,
                   protected_video_type);
   EXPECT_EQ(DrawQuad::Material::kTextureContent, copy_quad->material);
   EXPECT_EQ(resource_id, copy_quad->resource_id);
-  EXPECT_EQ(resource_size_in_pixels, copy_quad->resource_size_in_pixels());
-  EXPECT_EQ(premultiplied_alpha, copy_quad->premultiplied_alpha);
   EXPECT_EQ(uv_top_left, copy_quad->uv_top_left);
   EXPECT_EQ(uv_bottom_right, copy_quad->uv_bottom_right);
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
   EXPECT_EQ(secure_output_only, copy_quad->secure_output_only);
   EXPECT_EQ(protected_video_type, copy_quad->protected_video_type);
-  EXPECT_FALSE(copy_quad->is_stream_video);
 }
 
 TEST(DrawQuadTest, CopyTileDrawQuad) {
@@ -340,14 +331,13 @@ TEST(DrawQuadTest, CopyTileDrawQuad) {
   ResourceId resource_id(104);
   gfx::RectF tex_coord_rect(31.f, 12.f, 54.f, 20.f);
   gfx::Size texture_size(85, 32);
-  bool contents_premultiplied = true;
   bool nearest_neighbor = true;
   bool force_anti_aliasing_off = false;
   CREATE_SHARED_STATE();
 
   CREATE_QUAD_NEW(TileDrawQuad, visible_rect, blending, resource_id,
-                  tex_coord_rect, texture_size, contents_premultiplied,
-                  nearest_neighbor, force_anti_aliasing_off);
+                  tex_coord_rect, texture_size, nearest_neighbor,
+                  force_anti_aliasing_off);
   EXPECT_EQ(DrawQuad::Material::kTiledContent, copy_quad->material);
   EXPECT_EQ(visible_rect, copy_quad->visible_rect);
   EXPECT_EQ(blending, copy_quad->needs_blending);
@@ -357,8 +347,7 @@ TEST(DrawQuadTest, CopyTileDrawQuad) {
   EXPECT_EQ(nearest_neighbor, copy_quad->nearest_neighbor);
 
   CREATE_QUAD_ALL(TileDrawQuad, resource_id, tex_coord_rect, texture_size,
-                  contents_premultiplied, nearest_neighbor,
-                  force_anti_aliasing_off);
+                  nearest_neighbor, force_anti_aliasing_off);
   EXPECT_EQ(DrawQuad::Material::kTiledContent, copy_quad->material);
   EXPECT_EQ(resource_id, copy_quad->resource_id);
   EXPECT_EQ(tex_coord_rect, copy_quad->tex_coord_rect);
@@ -485,7 +474,6 @@ TEST_F(DrawQuadIteratorTest, SurfaceDrawQuad) {
 TEST_F(DrawQuadIteratorTest, TextureDrawQuad) {
   gfx::Rect visible_rect(40, 50, 30, 20);
   ResourceId resource_id(82);
-  bool premultiplied_alpha = true;
   gfx::PointF uv_top_left(0.5f, 224.f);
   gfx::PointF uv_bottom_right(51.5f, 260.f);
   bool nearest_neighbor = true;
@@ -495,9 +483,8 @@ TEST_F(DrawQuadIteratorTest, TextureDrawQuad) {
 
   CREATE_SHARED_STATE();
   CREATE_QUAD_NEW(TextureDrawQuad, visible_rect, needs_blending, resource_id,
-                  premultiplied_alpha, uv_top_left, uv_bottom_right,
-                  SkColors::kTransparent, nearest_neighbor, secure_output_only,
-                  protected_video_type);
+                  uv_top_left, uv_bottom_right, SkColors::kTransparent,
+                  nearest_neighbor, secure_output_only, protected_video_type);
   EXPECT_EQ(resource_id, quad_new->resource_id);
 }
 
@@ -506,14 +493,13 @@ TEST_F(DrawQuadIteratorTest, TileDrawQuad) {
   ResourceId resource_id(104);
   gfx::RectF tex_coord_rect(31.f, 12.f, 54.f, 20.f);
   gfx::Size texture_size(85, 32);
-  bool contents_premultiplied = true;
   bool nearest_neighbor = true;
   bool force_anti_aliasing_off = false;
 
   CREATE_SHARED_STATE();
   CREATE_QUAD_NEW(TileDrawQuad, visible_rect, needs_blending, resource_id,
-                  tex_coord_rect, texture_size, contents_premultiplied,
-                  nearest_neighbor, force_anti_aliasing_off);
+                  tex_coord_rect, texture_size, nearest_neighbor,
+                  force_anti_aliasing_off);
   EXPECT_EQ(resource_id, quad_new->resource_id);
 }
 
@@ -648,13 +634,12 @@ class TextureDrawQuadTest
 
     TextureDrawQuad* texture_quad =
         render_pass->CreateAndAppendDrawQuad<TextureDrawQuad>();
-    texture_quad->SetNew(quad_state, quad_rect, quad_rect,
-                         /*needs_blending=*/true, ResourceId{1},
-                         /*premultiplied=*/true, gfx::PointF(), gfx::PointF(),
-                         /*background=*/SkColors::kTransparent,
-                         /*nearest=*/false,
-                         /*secure_output=*/false,
-                         gfx::ProtectedVideoType::kClear);
+    texture_quad->SetNew(
+        quad_state, quad_rect, quad_rect,
+        /*needs_blending=*/true, ResourceId{1}, gfx::PointF(), gfx::PointF(),
+        /*background=*/SkColors::kTransparent,
+        /*nearest=*/false,
+        /*secure_output=*/false, gfx::ProtectedVideoType::kClear);
 
     texture_quad->rounded_display_masks_info = rounded_display_masks_info;
   }

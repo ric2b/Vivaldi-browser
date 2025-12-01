@@ -34,6 +34,9 @@ class VivaldiContentBrowserClientParts
       content::WebContents* web_contents,
       content::SiteInstance& main_frame_site,
       blink::web_pref::WebPreferences* web_prefs) override;
+  void AppendExtraRendererCommandLineSwitches(
+      base::CommandLine* command_line,
+      content::RenderProcessHost& process) override;
 };
 
 #endif  // CLIENTPARTS_VIVALDI_CONTENT_BROWSER_CLIENT_PARTS_H_

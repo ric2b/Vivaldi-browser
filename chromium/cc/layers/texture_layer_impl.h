@@ -52,7 +52,6 @@ class CC_EXPORT TextureLayerImpl : public LayerImpl {
   // must explicitly invalidate if they intend to cause a visible change in the
   // layer's output.
   void SetTextureId(unsigned id);
-  void SetPremultipliedAlpha(bool premultiplied_alpha);
   void SetBlendBackgroundColor(bool blend);
   void SetForceTextureToOpaque(bool opaque);
   void SetUVTopLeft(const gfx::PointF& top_left);
@@ -70,22 +69,38 @@ class CC_EXPORT TextureLayerImpl : public LayerImpl {
   static bool MayEvictResourceInBackground(
       viz::TransferableResource::ResourceSource source);
 
+  bool blend_background_color() const { return blend_background_color_; }
+  bool force_texture_to_opaque() const { return force_texture_to_opaque_; }
+  bool needs_set_resource_push() const { return needs_set_resource_push_; }
+  void ClearNeedsSetResourcePush() { needs_set_resource_push_ = false; }
+
+  gfx::PointF uv_top_left() const { return uv_top_left_; }
+  gfx::PointF uv_bottom_right() const { return uv_bottom_right_; }
+  const viz::TransferableResource& transferable_resource() const {
+    return transferable_resource_;
+  }
+  viz::ResourceId resource_id() const { return resource_id_; }
+
  private:
   TextureLayerImpl(LayerTreeImpl* tree_impl, int id);
 
   void FreeTransferableResource();
   void OnResourceEvicted();
 
-  bool premultiplied_alpha_ = true;
   bool blend_background_color_ = false;
   bool force_texture_to_opaque_ = false;
-  gfx::PointF uv_top_left_ = gfx::PointF();
-  gfx::PointF uv_bottom_right_ = gfx::PointF(1.f, 1.f);
 
   // True while the |transferable_resource_| is owned by this layer, and
   // becomes false once it is passed to another layer or to the
   // viz::ClientResourceProvider, at which point we get back a |resource_id_|.
   bool own_resource_ = false;
+
+  // True when a resource change should be pushed to the next tree.
+  bool needs_set_resource_push_ = false;
+
+  gfx::PointF uv_top_left_ = gfx::PointF();
+  gfx::PointF uv_bottom_right_ = gfx::PointF(1.f, 1.f);
+
   // A TransferableResource from the layer's client that will be given
   // to the display compositor.
   viz::TransferableResource transferable_resource_;

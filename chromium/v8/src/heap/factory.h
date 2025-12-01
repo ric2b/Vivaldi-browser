@@ -94,6 +94,7 @@ class ArrayType;
 class StructType;
 class ContType;
 struct WasmElemSegment;
+class WasmImportWrapperHandle;
 class WasmValue;
 enum class OnResume : int;
 enum Suspend : int;
@@ -437,6 +438,11 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<Context> NewBlockContext(DirectHandle<Context> previous,
                                         DirectHandle<ScopeInfo> scope_info);
 
+  // Create a context cell with a const value.
+  DirectHandle<ContextCell> NewContextCell(
+      DirectHandle<JSAny> value,
+      AllocationType allocation_type = AllocationType::kYoung);
+
   // Create a context that's used by builtin functions.
   //
   // These are similar to function context but don't have a previous
@@ -449,6 +455,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       int aliased_context_slot);
 
   DirectHandle<AccessorInfo> NewAccessorInfo();
+
+  DirectHandle<InterceptorInfo> NewInterceptorInfo(
+      AllocationType allocation = AllocationType::kOld);
 
   DirectHandle<ErrorStackData> NewErrorStackData(
       DirectHandle<UnionOf<JSAny, FixedArray>>
@@ -487,7 +496,7 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<Foreign> NewForeign(
       Address addr, AllocationType allocation_type = AllocationType::kYoung);
 
-  Handle<TrustedForeign> NewTrustedForeign(Address addr);
+  Handle<TrustedForeign> NewTrustedForeign(Address addr, bool shared);
 
   Handle<Cell> NewCell(Tagged<Smi> value);
   Handle<Cell> NewCell();
@@ -495,9 +504,6 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   Handle<PropertyCell> NewPropertyCell(
       DirectHandle<Name> name, PropertyDetails details,
       DirectHandle<Object> value,
-      AllocationType allocation = AllocationType::kOld);
-  DirectHandle<ContextSidePropertyCell> NewContextSidePropertyCell(
-      ContextSidePropertyCell::Property property,
       AllocationType allocation = AllocationType::kOld);
   DirectHandle<PropertyCell> NewProtector();
 
@@ -733,17 +739,18 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<Map> map);
 
 #if V8_ENABLE_WEBASSEMBLY
-  DirectHandle<WasmTrustedInstanceData> NewWasmTrustedInstanceData();
+  DirectHandle<WasmTrustedInstanceData> NewWasmTrustedInstanceData(bool shared);
   DirectHandle<WasmDispatchTable> NewWasmDispatchTable(
-      int length, wasm::CanonicalValueType table_type);
+      int length, wasm::CanonicalValueType table_type, bool shared);
   DirectHandle<WasmTypeInfo> NewWasmTypeInfo(
       wasm::CanonicalValueType type, wasm::CanonicalValueType element_type,
-      DirectHandle<Map> opt_parent);
+      DirectHandle<Map> opt_parent, bool shared);
   DirectHandle<WasmInternalFunction> NewWasmInternalFunction(
-      DirectHandle<TrustedObject> ref, int function_index);
+      DirectHandle<TrustedObject> ref, int function_index, bool shared,
+      WasmCodePointer call_target);
   DirectHandle<WasmFuncRef> NewWasmFuncRef(
       DirectHandle<WasmInternalFunction> internal_function,
-      DirectHandle<Map> rtt);
+      DirectHandle<Map> rtt, bool shared);
   DirectHandle<WasmCapiFunctionData> NewWasmCapiFunctionData(
       Address call_target, DirectHandle<Foreign> embedder_data,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
@@ -758,9 +765,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<WasmImportData> NewWasmImportData(
       DirectHandle<HeapObject> callable, wasm::Suspend suspend,
       MaybeDirectHandle<WasmTrustedInstanceData> instance_data,
-      const wasm::CanonicalSig* sig);
+      const wasm::CanonicalSig* sig, bool shared);
   DirectHandle<WasmImportData> NewWasmImportData(
-      DirectHandle<WasmImportData> ref);
+      DirectHandle<WasmImportData> ref, bool shared);
 
   DirectHandle<WasmFastApiCallData> NewWasmFastApiCallData(
       DirectHandle<HeapObject> signature, DirectHandle<Object> callback_data);
@@ -770,7 +777,8 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   DirectHandle<WasmJSFunctionData> NewWasmJSFunctionData(
       wasm::CanonicalTypeIndex sig_index, DirectHandle<JSReceiver> callable,
       DirectHandle<Code> wrapper_code, DirectHandle<Map> rtt,
-      wasm::Suspend suspend, wasm::Promise promise);
+      wasm::Suspend suspend, wasm::Promise promise,
+      std::shared_ptr<wasm::WasmImportWrapperHandle> wrapper_handle);
   DirectHandle<WasmResumeData> NewWasmResumeData(
       DirectHandle<WasmSuspenderObject> suspender, wasm::OnResume on_resume);
   DirectHandle<WasmSuspenderObject> NewWasmSuspenderObject();
@@ -801,9 +809,6 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<WasmTrustedInstanceData> shared_trusted_instance_data,
       uint32_t segment_index, uint32_t start_offset, uint32_t length,
       DirectHandle<Map> map, wasm::CanonicalValueType element_type);
-  DirectHandle<WasmContinuationObject> NewWasmContinuationObject(
-      wasm::StackMemory* stack, DirectHandle<HeapObject> parent,
-      AllocationType allocation = AllocationType::kYoung);
 
   DirectHandle<SharedFunctionInfo> NewSharedFunctionInfoForWasmExportedFunction(
       DirectHandle<String> name, DirectHandle<WasmExportedFunctionData> data,
@@ -852,6 +857,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
       DirectHandle<JSArrayBuffer> buffer, size_t byte_offset,
       size_t byte_length, bool is_length_tracking = false);
 
+  DirectHandle<JSUint8ArraySetFromResult> NewJSUint8ArraySetFromResult(
+      DirectHandle<Number> read, DirectHandle<Number> written);
+
   DirectHandle<JSIteratorResult> NewJSIteratorResult(DirectHandle<Object> value,
                                                      bool done);
   DirectHandle<JSAsyncFromSyncIterator> NewJSAsyncFromSyncIterator(
@@ -888,6 +896,10 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   // Create an External object for V8's external API.
   Handle<JSObject> NewExternal(
       void* value, AllocationType allocation = AllocationType::kYoung);
+
+  // Create a CppHeapExternal object for V8's external API.
+  Handle<CppHeapExternalObject> NewCppHeapExternal(
+      AllocationType allocation = AllocationType::kYoung);
 
   // Allocates a new code object and initializes it to point to the given
   // off-heap entry point.
@@ -1274,9 +1286,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
 
   // ------
   // Customization points for FactoryBase
-  Tagged<HeapObject> AllocateRaw(
-      int size, AllocationType allocation,
-      AllocationAlignment alignment = kTaggedAligned);
+  Tagged<HeapObject> AllocateRaw(int size, AllocationType allocation,
+                                 AllocationAlignment alignment = kTaggedAligned,
+                                 AllocationHint hint = AllocationHint());
 
   Isolate* isolate() const {
     // Downcast to the privately inherited sub-class using c-style casts to
@@ -1344,19 +1356,6 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   MaybeHandle<String> NewStringFromTwoByte(const base::uc16* string, int length,
                                            AllocationType allocation);
 
-  // Functions to get the hash of a number for the number_string_cache.
-  int NumberToStringCacheHash(Tagged<Smi> number);
-  int NumberToStringCacheHash(double number);
-
-  // Attempt to find the number in a small cache.  If we finds it, return
-  // the string representation of the number.  Otherwise return undefined.
-  V8_INLINE Handle<Object> NumberToStringCacheGet(Tagged<Object> number,
-                                                  int hash);
-
-  // Update the cache with a new number-string pair.
-  V8_INLINE void NumberToStringCacheSet(DirectHandle<Object> number, int hash,
-                                        DirectHandle<String> js_string);
-
   // Creates a new JSArray with the given backing storage. Performs no
   // verification of the backing storage because it may not yet be filled.
   Handle<JSArray> NewJSArrayWithUnverifiedElements(
@@ -1385,7 +1384,6 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
   // Initializes JSObject body starting at given offset.
   void InitializeJSObjectBody(Tagged<JSObject> obj, Tagged<Map> map,
                               int start_offset);
-  void InitializeCppHeapWrapper(Tagged<JSObject> obj);
 
   Handle<WeakArrayList> NewUninitializedWeakArrayList(
       int capacity, AllocationType allocation = AllocationType::kYoung);

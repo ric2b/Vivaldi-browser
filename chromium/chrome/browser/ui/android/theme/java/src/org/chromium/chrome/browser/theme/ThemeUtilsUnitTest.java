@@ -10,16 +10,25 @@ import android.content.Context;
 import android.graphics.Color;
 import android.view.ContextThemeWrapper;
 
+import androidx.core.content.ContextCompat;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
-import org.chromium.components.browser_ui.styles.ChromeColors;
+import org.chromium.base.test.util.Features;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.ui.util.ColorUtils;
 
 @RunWith(BaseRobolectricTestRunner.class)
+// TODO(crbug.com/419289558): Re-enable color surface feature flags
+@Features.DisableFeatures({
+    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE
+})
 public class ThemeUtilsUnitTest {
     private Context mContext;
 
@@ -89,8 +98,7 @@ public class ThemeUtilsUnitTest {
 
     @Test
     public void getTextBoxColorForToolbarBackgroundInNonNativePage_anyDefault() {
-        float tabElevation = mContext.getResources().getDimension(R.dimen.default_elevation_4);
-        int expectedColor = ChromeColors.getSurfaceColor(mContext, tabElevation);
+        int expectedColor = ContextCompat.getColor(mContext, R.color.toolbar_text_box_bg_color);
 
         int themeColor =
                 ThemeUtils.getTextBoxColorForToolbarBackgroundInNonNativePage(

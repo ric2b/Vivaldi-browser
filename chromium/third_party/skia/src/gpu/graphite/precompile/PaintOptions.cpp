@@ -16,6 +16,7 @@
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/KeyContext.h"
 #include "src/gpu/graphite/PaintParamsKey.h"
+#include "src/gpu/graphite/PipelineData.h"
 #include "src/gpu/graphite/PrecompileInternal.h"
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/ShaderCodeDictionary.h"
@@ -174,9 +175,6 @@ void PaintOptions::createKey(const KeyContext& keyContext,
     const int desiredShaderCombination = remainingCombinations;
     SkASSERT(desiredShaderCombination < this->numShaderCombinations());
 
-    // TODO: this probably needs to be passed in just like addPrimitiveBlender
-    const bool kOpaquePaintColor = true;
-
     auto clipShader = PrecompileBase::SelectOption(SkSpan(fClipShaderOptions),
                                                    desiredClipShaderCombination);
 
@@ -195,7 +193,7 @@ void PaintOptions::createKey(const KeyContext& keyContext,
     PrecompileBlender* blender = finalBlender.first.get();
     std::optional<SkBlendMode> blendMode = blender ? blender->priv().asBlendMode()
                                                    : SkBlendMode::kSrcOver;
-    PaintOption option(kOpaquePaintColor,
+    PaintOption option(fPaintColorIsOpaque,
                        finalBlender,
                        PrecompileBase::SelectOption(SkSpan(fShaderOptions),
                                                     desiredShaderCombination),
@@ -203,7 +201,9 @@ void PaintOptions::createKey(const KeyContext& keyContext,
                                                     desiredColorFilterCombination),
                        addPrimitiveBlender,
                        clipShader,
-                       IsDstReadRequired(keyContext.caps(), blendMode, coverage),
+                       /*dstReadRequired=*/!CanUseHardwareBlending(keyContext.caps(),
+                                                                   blendMode,
+                                                                   coverage),
                        fDither);
 
     option.toKey(keyContext, keyBuilder, gatherer);
@@ -219,8 +219,8 @@ void create_image_drawing_pipelines(const KeyContext& keyContext,
     PaintOptions imagePaintOptions;
 
     // For imagefilters we know we don't have alpha-only textures and don't need cubic filtering.
-    sk_sp<PrecompileShader> imageShader = PrecompileShadersPriv::Image(
-            PrecompileImageShaderFlags::kExcludeAlpha | PrecompileImageShaderFlags::kExcludeCubic);
+    sk_sp<PrecompileShader> imageShader = PrecompileShaders::Image(
+            PrecompileShaders::ImageShaderFlags::kNoAlphaNoCubic);
 
     imagePaintOptions.setShaders({ imageShader });
     imagePaintOptions.setBlendModes(orig.getBlendModes());

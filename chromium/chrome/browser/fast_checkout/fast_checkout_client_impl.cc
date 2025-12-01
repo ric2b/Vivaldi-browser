@@ -23,7 +23,7 @@
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card.h"
-#include "components/autofill/core/browser/integrators/fast_checkout_enums.h"
+#include "components/autofill/core/browser/integrators/fast_checkout/fast_checkout_enums.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics_utils.h"
 #include "components/autofill/core/browser/payments/credit_card_cvc_authenticator.h"
 #include "components/autofill/core/browser/payments/payments_autofill_client.h"
@@ -60,8 +60,7 @@ const autofill::AutofillField* GetFieldToFill(
     const std::vector<std::unique_ptr<autofill::AutofillField>>& fields,
     bool is_credit_card_form) {
   for (const std::unique_ptr<autofill::AutofillField>& field : fields) {
-    if (IsVisibleTextField(*field) &&
-        field->value(autofill::ValueSemantics::kCurrent).empty() &&
+    if (IsVisibleTextField(*field) && field->value().empty() &&
         ((!is_credit_card_form &&
           kAddressFieldTypes.contains(field->Type().group())) ||
          (is_credit_card_form &&
@@ -444,10 +443,10 @@ void FastCheckoutClientImpl::TryToFillForms() {
         auto* bam = static_cast<autofill::BrowserAutofillManager*>(
             autofill_manager_.get());
         bam->SetFastCheckoutRunId(autofill::FieldTypeGroup::kAddress, run_id_);
-        bam->FillOrPreviewProfileForm(
-            autofill::mojom::ActionPersistence::kFill, form->ToFormData(),
-            field->global_id(), *autofill_profile,
-            autofill::AutofillTriggerSource::kFastCheckout);
+        bam->FillOrPreviewForm(autofill::mojom::ActionPersistence::kFill,
+                               form->ToFormData(), field->global_id(),
+                               autofill_profile,
+                               autofill::AutofillTriggerSource::kFastCheckout);
       }
     }
 
@@ -485,9 +484,9 @@ void FastCheckoutClientImpl::FillCreditCardForm(
   auto* bam =
       static_cast<autofill::BrowserAutofillManager*>(autofill_manager_.get());
   bam->SetFastCheckoutRunId(autofill::FieldTypeGroup::kCreditCard, run_id_);
-  bam->FillOrPreviewCreditCardForm(
-      autofill::mojom::ActionPersistence::kFill, form.ToFormData(), field_id,
-      credit_card, autofill::AutofillTriggerSource::kFastCheckout);
+  bam->FillOrPreviewForm(autofill::mojom::ActionPersistence::kFill,
+                         form.ToFormData(), field_id, &credit_card,
+                         autofill::AutofillTriggerSource::kFastCheckout);
 }
 
 const autofill::AutofillProfile*

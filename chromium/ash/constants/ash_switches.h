@@ -288,6 +288,7 @@ extern const char kOobeTimezoneOverrideForTests[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kOobeTriggerSyncTimeoutForTests[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kOverviewButtonForTests[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kOverscanInsetsOverride[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kHiddenNetworkMigrationInterval[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -399,6 +400,11 @@ COMPONENT_EXPORT(ASH_CONSTANTS) bool ShouldSkipNewUserCheckForTesting();
 
 // Returns true if we should skip all other OOBE pages after user login.
 COMPONENT_EXPORT(ASH_CONSTANTS) bool ShouldSkipOobePostLogin();
+
+// Returns true if we should disable pre-consent metrics for testing. Consent
+// won't be enabled by CrosPreConsentMetricsManager.
+COMPONENT_EXPORT(ASH_CONSTANTS)
+bool ShouldDisablePreConsentMetricsForTesting();
 
 // Returns true if we should skip split modifier check on the split modifier
 // info screen.

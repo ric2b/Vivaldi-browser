@@ -163,7 +163,7 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Timeout"/>
 </enum>
 
-<!-- LINT.ThenChange(//components/signin/public/identity_manager/account_managed_status_finder.h:AccountManagedStatusFinderOutcome) -->
+<!-- LINT.ThenChange(//components/signin/public/identity_manager/account_managed_status_finder_outcome.h:AccountManagedStatusFinderOutcome) -->
 
 <!-- LINT.IfChange(AccountManagementTypesSummary) -->
 
@@ -181,6 +181,17 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/signin/core/browser/account_management_type_metrics_recorder.h:AccountManagementTypesSummary) -->
+
+<!-- LINT.IfChange(AccountProfileStartupState) -->
+
+<enum name="AccountProfileStartupState">
+  <int value="0" label="Managed account in personal profile"/>
+  <int value="1" label="Managed account in managed profile"/>
+  <int value="2" label="Personal account in managed profile"/>
+  <int value="3" label="Personal account in personal profile"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/signin/model/account_profile_mapper.mm:AccountProfileStartupState) -->
 
 <enum name="AccountReauthenticationEvent">
   <int value="0" label="STARTED"/>
@@ -259,6 +270,19 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Sign challenge failed"/>
   <int value="8" label="Challenge session ID mismatch"/>
 </enum>
+
+<!-- LINT.IfChange(BoundSessionCredentialsRegistrationTokenResult) -->
+
+<enum name="BoundSessionCredentialsRegistrationTokenResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Failed to load a reused key"/>
+  <int value="2" label="Failed to generate a new key"/>
+  <int value="3" label="Failed to create an unsigned assertion token"/>
+  <int value="4" label="Failed to sign an assertion token"/>
+  <int value="5" label="Failed to attach the signature to an assertion token"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/signin/bound_session_credentials/registration_token_helper.h:Error) -->
 
 <enum name="BoundSessionCredentialsSessionRegistrationResult">
   <int value="0" label="Success"/>
@@ -467,12 +491,53 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow.mm:IOSAccountSwitchType) -->
 
+<!-- LINT.IfChange(IOSChangeProfileReason) -->
+
+<enum name="IOSChangeProfileReason">
+  <int value="0"
+      label="User switched accounts (i.e. both old and new profile are signed
+             in, though the new one may only be newly signed in via this
+             action)"/>
+  <int value="1"
+      label="Managed account sign-in (i.e. signing in to a managed account
+             while being signed-out in the personal profile)"/>
+  <int value="2"
+      label="Managed account sign-out (i.e. signing out from a managed
+             account, which switches to the personal profile and signs out
+             there if necessary)"/>
+  <int value="3"
+      label="Authentication error while signing in or switching, and
+             therefore switching back"/>
+  <int value="4"
+      label="Profile deleted (usually because the associated managed account
+             was removed, either from another Google app or remotely)"/>
+  <int value="5"
+      label="User tapped a push notification that's associated with a
+             different profile"/>
+  <int value="6"
+      label="User tapped on a widget and the account used on the widget is
+             different from the account used in the app"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/app/change_profile_commands.h:IOSChangeProfileReason) -->
+
 <enum name="IOSDeviceRestoreSignedinState">
   <int value="0" label="User not signed in before iOS device restore"/>
   <int value="1"
       label="User signed in before iOS device restore, and signed out after"/>
   <int value="2" label="User signed in before and after iOS device restore"/>
 </enum>
+
+<!-- LINT.IfChange(IOSHostedDomainFetchEvent) -->
+
+<enum name="IOSHostedDomainFetchEvent">
+  <int value="0" label="Started"/>
+  <int value="1" label="Finished with success"/>
+  <int value="2" label="Finished with error, will retry"/>
+  <int value="3" label="Finished with error, giving up"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/signin/model/account_profile_mapper.mm:IOSHostedDomainFetchEvent) -->
 
 <enum name="IOSIdentityAvailableInProfile">
   <int value="0"
@@ -488,6 +553,42 @@ chromium-metrics-reviews@google.com.
       label="The identity is available in AccountProfileMapper and
              IdentityManager"/>
 </enum>
+
+<!-- LINT.IfChange(IOSProfileInitializationOutcome) -->
+
+<enum name="IOSProfileInitializationOutcome">
+  <int value="0"
+      label="Test-only code path, should never be recorded in production"/>
+  <int value="1"
+      label="Okay: Multi-profile feature disabled; profile was already
+             initialized"/>
+  <int value="2"
+      label="Okay: Multi-profile feature disabled; profile newly initialized"/>
+  <int value="3" label="Okay: Personal profile was already initialized"/>
+  <int value="4" label="Okay: Personal profile newly initialized"/>
+  <int value="5" label="Okay: Managed profile was already initialized"/>
+  <int value="6" label="Okay: Managed profile newly initialized"/>
+  <int value="7"
+      label="Bad: Managed profile newly initialized, but was already signed
+             in"/>
+  <int value="8"
+      label="Bad: Managed profile was already initialized, but newly signed
+             in"/>
+  <int value="9"
+      label="Bad: Managed profile was already initialized, but had no
+             assigned accounts"/>
+  <int value="10"
+      label="Bad: Managed profile newly initialized, but had no assigned
+             accounts"/>
+  <int value="11"
+      label="Bad: Managed profile was already initialized, but had multiple
+             assigned accounts, and was newly signed in"/>
+  <int value="12"
+      label="Bad: Managed profile newly initialized, but had multiple
+             assigned accounts"/>
+</enum>
+
+<!-- LINT.ThenChange(//ios/chrome/browser/signin/model/authentication_service.h:IOSProfileInitializationOutcome) -->
 
 <enum name="LaunchWebAuthFlowResult">
   <int value="0" label="Success"/>
@@ -654,7 +755,7 @@ chromium-metrics-reviews@google.com.
   <int value="49" label="Account consistency service"/>
   <int value="50" label="(Obsolete) Search companion"/>
   <int value="51" label="Set Up List (iOS only)"/>
-  <int value="52" label="Password migration warning (Android only)"/>
+  <int value="52" label="(obsolete) Password migration warning (Android only)"/>
   <int value="53" label="Save to photos (iOS only)"/>
   <int value="54" label="Chrome Sign-in intercept bubble."/>
   <int value="55" label="Restore primary account on profile load"/>
@@ -679,6 +780,17 @@ chromium-metrics-reviews@google.com.
   <int value="74" label="Glic launch button"/>
   <int value="75" label="History page (Android only)"/>
   <int value="76" label="Join collaboration tab group authentication"/>
+  <int value="77" label="History Sync Opt-in Expanded Pill on startup"/>
+  <int value="78" label="Widget (iOS only)"/>
+  <int value="79" label="Leave or delete collaboration tab group"/>
+  <int value="80" label="History Sync Opt-in Expanded Pill on inactivity"/>
+  <int value="81" label="History sync educational tip module (Android only)"/>
+  <int value="82"
+      label="Managed profile was automatically signed in (iOS only)"/>
+  <int value="83"
+      label="Contextual non modal sign-in password promo (iOS only)"/>
+  <int value="84"
+      label="Contextual non modal sign-in bookmark promo (iOS only)"/>
 </enum>
 
 <enum name="SigninAccountReconcilorState">
@@ -1013,6 +1125,11 @@ chromium-metrics-reviews@google.com.
       label="Signed out before a forced sign-in with a supervised account">
     A sign-out was triggered to allow a switch to a supervised account that was
     added to the device. Android only.
+  </int>
+  <int value="39" label="Sign out when opening the app from widget">
+    The user has a widget with no account on it, opens the app from the widget
+    and if there is a signed-in account in the app, sign-out is performed. iOS
+    only.
   </int>
 </enum>
 

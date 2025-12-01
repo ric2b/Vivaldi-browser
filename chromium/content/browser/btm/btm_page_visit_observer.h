@@ -24,7 +24,7 @@ namespace content {
 struct CONTENT_EXPORT BtmPageVisitInfo {
   GURL url;
   ukm::SourceId source_id;
-  bool had_qualifying_storage_access = false;
+  bool had_active_storage_access = false;
   bool received_user_activation = false;
   bool had_successful_web_authn_assertion = false;
   // Computed based on wall-clock times, so the usual caveat for working with
@@ -42,8 +42,6 @@ struct CONTENT_EXPORT BtmServerRedirectInfo {
 struct CONTENT_EXPORT BtmNavigationInfo {
   // Precondition: `navigation_handle.HasCommitted()` must be `true`.
   explicit BtmNavigationInfo(NavigationHandle& navigation_handle);
-  BtmNavigationInfo(const BtmNavigationInfo&);
-  BtmNavigationInfo& operator=(const BtmNavigationInfo&);
   BtmNavigationInfo(BtmNavigationInfo&&);
   BtmNavigationInfo& operator=(BtmNavigationInfo&&);
   ~BtmNavigationInfo();
@@ -58,8 +56,8 @@ struct CONTENT_EXPORT BtmNavigationInfo {
 
 class CONTENT_EXPORT BtmPageVisitObserver : public WebContentsObserver {
  public:
-  using VisitCallback = base::RepeatingCallback<void(const BtmPageVisitInfo&,
-                                                     const BtmNavigationInfo&)>;
+  using VisitCallback =
+      base::RepeatingCallback<void(BtmPageVisitInfo, BtmNavigationInfo)>;
 
   // The arguments to `VisitCallback`.
   struct VisitTuple {

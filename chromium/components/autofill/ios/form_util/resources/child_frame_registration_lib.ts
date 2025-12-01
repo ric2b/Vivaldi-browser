@@ -8,8 +8,7 @@
  */
 
 import {CHILD_FRAME_REMOTE_TOKEN_ATTRIBUTE} from '//components/autofill/ios/form_util/resources/fill_constants.js';
-import {getFrameId} from '//ios/web/public/js_messaging/resources/frame_id.js';
-import {gCrWeb} from '//ios/web/public/js_messaging/resources/gcrweb.js';
+import {gCrWeb, gCrWebLegacy} from '//ios/web/public/js_messaging/resources/gcrweb.js';
 import {generateRandomId, sendWebKitMessage} from '//ios/web/public/js_messaging/resources/utils.js';
 
 /**
@@ -89,7 +88,7 @@ function updateRegistrationLogbook(remoteToken: string, count: number) {
  */
 function registerSelfWithRemoteToken(remoteId: string): void {
   sendWebKitMessage(NATIVE_MESSAGE_HANDLER, {
-    'local_frame_id': getFrameId(),
+    'local_frame_id': gCrWeb.getFrameId(),
     'remote_frame_id': remoteId,
   });
 }
@@ -99,7 +98,7 @@ function registerSelfWithRemoteToken(remoteId: string): void {
  * @param {MessageEvent} payload The data sent via postMessage.
  */
 function processChildFrameMessage(payload: MessageEvent): void {
-  if (!gCrWeb.autofill_form_features.isAutofillAcrossIframesEnabled()) {
+  if (!gCrWebLegacy.autofill_form_features.isAutofillAcrossIframesEnabled()) {
     return;
   }
   const command: unknown = payload.data?.command;
@@ -111,7 +110,7 @@ function processChildFrameMessage(payload: MessageEvent): void {
       payload.source?.postMessage({
         command: REGISTER_AS_CHILD_FRAME_ACK,
         remoteFrameId: remoteId,
-      });
+      }, {targetOrigin: payload.origin});
     }
   } else if (command === REGISTER_AS_CHILD_FRAME_ACK) {
     const remoteId = payload.data?.remoteFrameId;
@@ -131,18 +130,18 @@ function processChildFrameMessage(payload: MessageEvent): void {
  *      cached or a freshly generated one.
  */
 function getRemoteIdForFrame(frame: HTMLIFrameElement): string {
-  if (!gCrWeb.hasOwnProperty('remoteFrameIdRegistrar')) {
-    gCrWeb.remoteFrameIdRegistrar = new Map();
+  if (!gCrWebLegacy.hasOwnProperty('remoteFrameIdRegistrar')) {
+    gCrWebLegacy.remoteFrameIdRegistrar = new Map();
   }
 
   // Return the cached remote token if the frame was already registered.
-  if (gCrWeb.remoteFrameIdRegistrar.has(frame)) {
-    return gCrWeb.remoteFrameIdRegistrar.get(frame);
+  if (gCrWebLegacy.remoteFrameIdRegistrar.has(frame)) {
+    return gCrWebLegacy.remoteFrameIdRegistrar.get(frame);
   }
 
   // Otherwise, create a remote ID for the frame and cache it.
   const remoteId: string = generateRandomId();
-  gCrWeb.remoteFrameIdRegistrar.set(frame, remoteId);
+  gCrWebLegacy.remoteFrameIdRegistrar.set(frame, remoteId);
   return remoteId;
 }
 
@@ -200,7 +199,7 @@ function registerChildFrame(frame: HTMLIFrameElement): string {
   return remoteFrameId;
 }
 
-gCrWeb.remoteFrameRegistration = {
+gCrWebLegacy.remoteFrameRegistration = {
   processChildFrameMessage,
   registerChildFrame,
   registerSelfWithRemoteToken,

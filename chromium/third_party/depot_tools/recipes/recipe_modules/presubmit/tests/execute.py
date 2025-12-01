@@ -4,21 +4,23 @@
 
 import textwrap
 
+from PB.go.chromium.org.luci.common.proto.findings import findings as findings_pb
 from recipe_engine import post_process
-from recipe_engine import recipe_api
+
 
 PYTHON_VERSION_COMPATIBILITY = 'PY3'
 
 DEPS = [
-  'gclient',
-  'presubmit',
-  'recipe_engine/buildbucket',
-  'recipe_engine/context',
-  'recipe_engine/cq',
-  'recipe_engine/json',
-  'recipe_engine/path',
-  'recipe_engine/properties',
-  'recipe_engine/runtime',
+    'gclient',
+    'presubmit',
+    'recipe_engine/buildbucket',
+    'recipe_engine/context',
+    'recipe_engine/cq',
+    'recipe_engine/json',
+    'recipe_engine/path',
+    'recipe_engine/properties',
+    'recipe_engine/proto',
+    'recipe_engine/runtime',
 ]
 
 
@@ -249,3 +251,152 @@ def GenTests(api):
       api.post_process(post_process.SummaryMarkdown, bug_msg),
       api.post_process(post_process.DropExpectation),
       status="INFRA_FAILURE")
+
+  def _has_uploaded_findings(check, steps, expected_findings):
+    step_name = 'upload presubmit results as findings'
+    check(step_name in steps)
+    check('findings.json' in steps[step_name].logs)
+    findings = api.proto.decode(steps[step_name].logs['findings.json'],
+                                findings_pb.Findings, 'JSONPB').findings
+    check(len(findings) == len(expected_findings))
+    for (actual, expected) in zip(findings, expected_findings):
+      check(actual == expected)
+
+  gerrit_change_ref = findings_pb.Location.GerritChangeReference(
+      host='chromium-review.googlesource.com',
+      project='infra',
+      change=123456,
+      patchset=7)
+
+  yield api.test(
+      'upload_findings',
+      api.runtime(is_experimental=False),
+      api.buildbucket.try_build(project='infra'),
+      api.step_data(
+          'presubmit',
+          api.json.output(
+              {
+                  'errors': [{
+                      'message':
+                      'bug bug bug',
+                      'long_text':
+                      '',
+                      'items': [],
+                      'locations': [{
+                          'file_path': 'path/to/file1',
+                      }, {
+                          'file_path': 'path/to/file2',
+                      }],
+                      'fatal':
+                      True
+                  }],
+                  'notifications':
+                  [{
+                      'message': 'cc abc@google.com',
+                      'long_text': '',
+                      'items': [],
+                      'locations': [{
+                          'file_path': '/COMMIT_MSG',
+                      }],
+                      'fatal': False
+                  }],
+                  'warnings': [{
+                      'message':
+                      'Change takes 20 min to take effect after landing',
+                      'long_text': '',
+                      'items': [],
+                      'locations': [],
+                      'fatal': False
+                  }, {
+                      'message':
+                      'typo!!',
+                      'long_text':
+                      'replace foo with bar',
+                      'items': [],
+                      'locations': [{
+                          'file_path': 'path/to/file',
+                          'start_line': 1,
+                          'start_col': 2,
+                          'end_line': 1,
+                          'end_col': 5,
+                      }],
+                      'fatal':
+                      False
+                  }]
+              },
+              retcode=1)),
+      api.post_process(
+          _has_uploaded_findings,
+          [
+              findings_pb.Finding(
+                  category='chromium_presubmit',
+                  location=findings_pb.Location(
+                      gerrit_change_ref=gerrit_change_ref,
+                      file_path='path/to/file1'),
+                  message='bug bug bug',
+                  severity_level=findings_pb.Finding.SEVERITY_LEVEL_ERROR),
+              findings_pb.Finding(
+                  category='chromium_presubmit',
+                  location=findings_pb.Location(
+                      gerrit_change_ref=gerrit_change_ref,
+                      file_path='path/to/file2'),
+                  message='bug bug bug',
+                  severity_level=findings_pb.Finding.SEVERITY_LEVEL_ERROR),
+              findings_pb.Finding(
+                  category='chromium_presubmit',
+                  location=findings_pb.Location(
+                      gerrit_change_ref=gerrit_change_ref,
+                      file_path='path/to/file',
+                      range=findings_pb.Location.Range(
+                          start_line=1,
+                          start_column=2,
+                          end_line=1,
+                          end_column=5,
+                      )),
+                  message='typo!!',
+                  severity_level=findings_pb.Finding.SEVERITY_LEVEL_WARNING),
+              findings_pb.Finding(
+                  category='chromium_presubmit',
+                  location=findings_pb.Location(
+                      gerrit_change_ref=gerrit_change_ref,
+                      file_path='/COMMIT_MSG'),
+                  message='cc abc@google.com',
+                  severity_level=findings_pb.Finding.SEVERITY_LEVEL_INFO),
+          ],
+      ),
+      api.post_process(post_process.StatusFailure),
+      api.post_process(post_process.DropExpectation),
+      status="FAILURE")
+
+  yield api.test(
+      'upload_findings_when_presubmit_succeeds',
+      api.runtime(is_experimental=False),
+      api.buildbucket.try_build(project='infra'),
+      api.step_data(
+          'presubmit',
+          api.json.output({
+              'errors': [],
+              'notifications': [],
+              'warnings': [{
+                  'message': 'this is a message',
+                  'long_text': '',
+                  'items': [],
+                  'locations': [{
+                      'file_path': 'path/to/file',
+                  }],
+                  'fatal': False
+              }]
+          })),
+      api.post_process(
+          _has_uploaded_findings,
+          [
+              findings_pb.Finding(
+                  category='chromium_presubmit',
+                  location=findings_pb.Location(
+                      gerrit_change_ref=gerrit_change_ref,
+                      file_path='path/to/file'),
+                  message='this is a message',
+                  severity_level=findings_pb.Finding.SEVERITY_LEVEL_WARNING),
+          ],
+      ), api.post_process(post_process.StatusSuccess),
+      api.post_process(post_process.DropExpectation))

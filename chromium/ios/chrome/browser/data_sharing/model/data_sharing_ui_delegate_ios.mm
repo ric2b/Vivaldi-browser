@@ -6,6 +6,7 @@
 
 #import "base/functional/callback_helpers.h"
 #import "base/notimplemented.h"
+#import "components/collaboration/public/collaboration_flow_type.h"
 #import "components/collaboration/public/collaboration_service.h"
 #import "ios/chrome/browser/collaboration/model/ios_collaboration_controller_delegate.h"
 #import "ios/chrome/browser/data_sharing/model/ios_share_url_interception_context.h"
@@ -17,6 +18,7 @@
 #import "ios_share_url_interception_context.h"
 #import "url/gurl.h"
 
+using collaboration::FlowType;
 using collaboration::IOSCollaborationControllerDelegate;
 
 namespace data_sharing {
@@ -26,6 +28,7 @@ DataSharingUIDelegateIOS::DataSharingUIDelegateIOS(
     collaboration::CollaborationService* collaboration_service)
     : share_kit_service_(share_kit_service),
       collaboration_service_(collaboration_service) {}
+
 DataSharingUIDelegateIOS::~DataSharingUIDelegateIOS() = default;
 
 void DataSharingUIDelegateIOS::HandleShareURLIntercepted(
@@ -58,10 +61,10 @@ void DataSharingUIDelegateIOS::OnJoinFlowReadyToBePresented(GURL url,
 
   std::unique_ptr<IOSCollaborationControllerDelegate> delegate =
       std::make_unique<IOSCollaborationControllerDelegate>(
-          browser, base_view_controller);
-  collaboration_service_->StartJoinFlow(
-      std::move(delegate), url,
-      collaboration::CollaborationServiceJoinEntryPoint::kUnknown);
+          browser,
+          CreateControllerDelegateParamsFromProfile(
+              browser->GetProfile(), base_view_controller, FlowType::kJoin));
+  collaboration_service_->StartJoinFlow(std::move(delegate), url);
 }
 
 }  // namespace data_sharing

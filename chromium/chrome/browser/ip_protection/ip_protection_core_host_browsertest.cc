@@ -62,12 +62,15 @@ using ::ip_protection::GeoHint;
 namespace {
 class ScopedIpProtectionFeatureList {
  public:
-  explicit ScopedIpProtectionFeatureList(bool incognito_mode) {
+  explicit ScopedIpProtectionFeatureList(bool incognito_mode,
+                                         bool enterprise_killswitch_enabled) {
     std::vector<base::test::FeatureRefAndParams> features_and_params;
     features_and_params.push_back(
         {net::features::kEnableIpProtectionProxy,
          {{net::features::kIpPrivacyOnlyInIncognito.name,
-           base::ToString(incognito_mode)}}});
+           base::ToString(incognito_mode)},
+          {net::features::kIpPrivacyDisableForEnterpriseByDefault.name,
+           base::ToString(enterprise_killswitch_enabled)}}});
     features_and_params.push_back({network::features::kMaskedDomainList, {}});
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
     BUILDFLAG(IS_CHROMEOS)
@@ -162,20 +165,16 @@ class IpProtectionCoreHostInterceptor
   bool should_intercept_;
 };
 
-void SetIsLikelyDogfoodClient(bool is_dogfood) {
-  CHECK(g_browser_process);
-  CHECK(g_browser_process->variations_service());
-  g_browser_process->variations_service()->SetIsLikelyDogfoodClientForTesting(
-      is_dogfood);
-}
-
 constexpr base::Time kDontRetry = base::Time::Max();
 }  // namespace
 
 class IpProtectionCoreHostBrowserTest : public PlatformBrowserTest {
  public:
-  explicit IpProtectionCoreHostBrowserTest(bool incognito_mode = false)
-      : scoped_ip_protection_feature_list_(incognito_mode),
+  explicit IpProtectionCoreHostBrowserTest(
+      bool incognito_mode = false,
+      bool enterprise_killswitch_enabled = false)
+      : scoped_ip_protection_feature_list_(incognito_mode,
+                                           enterprise_killswitch_enabled),
         profile_selections_(
             IpProtectionCoreHostFactory::GetInstance(),
             IpProtectionCoreHostFactory::CreateProfileSelectionsForTesting()) {}
@@ -354,13 +353,32 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostBrowserTest,
   ASSERT_EQ(getter->receivers_for_testing().size(), 2U);
 }
 
-// If the device is considered managed and IP Protection isn't enabled via
-// enterprise policy, IP Protection should be disabled. Note that we don't rely
-// on managed device detection for ChromeOS and instead just default the
-// enterprise policy value to false (disabling IP Protection) for enterprise
-// users on ChromeOS.
-#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostBrowserTest,
+                       NotDisabledForManagedDevice) {
+  IpProtectionCoreHost* getter =
+      IpProtectionCoreHostFactory::GetForProfile(GetProfile());
+  ASSERT_TRUE(getter);
+  ASSERT_TRUE(getter->IsIpProtectionEnabled());
+
+  {
+    policy::ScopedManagementServiceOverrideForTesting browser_management{
+        policy::ManagementServiceFactory::GetForPlatform(),
+        policy::EnterpriseManagementAuthority::COMPUTER_LOCAL};
+
+    EXPECT_TRUE(getter->IsIpProtectionEnabled());
+  }
+}
+
+class IpProtectionBrowserTestEnterpriseKillSwitchEnabled
+    : public IpProtectionCoreHostBrowserTest {
+ public:
+  IpProtectionBrowserTestEnterpriseKillSwitchEnabled()
+      : IpProtectionCoreHostBrowserTest(
+            /*incognito_mode=*/false,
+            /*enterprise_killswitch_enabled=*/true) {}
+};
+
+IN_PROC_BROWSER_TEST_F(IpProtectionBrowserTestEnterpriseKillSwitchEnabled,
                        DisabledForManagedDevice) {
   IpProtectionCoreHost* getter =
       IpProtectionCoreHostFactory::GetForProfile(GetProfile());
@@ -368,7 +386,7 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostBrowserTest,
 
   // If this test is running on a device that is already managed, we expect IP
   // Protection to be disabled. Verify this and then skip the rest of the test.
-  if (getter->ShouldDisableIpProtectionForManagedForTesting()) {
+  if (getter->ShouldDisableIpProtectionForEnterpriseForTesting()) {
     EXPECT_FALSE(getter->IsIpProtectionEnabled());
     return;
   }
@@ -382,27 +400,6 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostBrowserTest,
     EXPECT_FALSE(getter->IsIpProtectionEnabled());
   }
 }
-
-IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostBrowserTest,
-                       NotDisabledForManagedDogfoodDevice) {
-  IpProtectionCoreHost* getter =
-      IpProtectionCoreHostFactory::GetForProfile(GetProfile());
-  ASSERT_TRUE(getter);
-
-  {
-    policy::ScopedManagementServiceOverrideForTesting browser_management{
-        policy::ManagementServiceFactory::GetForPlatform(),
-        policy::EnterpriseManagementAuthority::COMPUTER_LOCAL};
-
-    EXPECT_FALSE(getter->IsIpProtectionEnabled());
-
-    SetIsLikelyDogfoodClient(true);
-    EXPECT_TRUE(getter->IsIpProtectionEnabled());
-
-    SetIsLikelyDogfoodClient(false);
-  }
-}
-#endif
 
 class IpProtectionBrowserTestIncognitoOnlyModeDisabled
     : public IpProtectionCoreHostBrowserTest {
@@ -636,13 +633,6 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostUserSettingBrowserTest,
       IpProtectionCoreHostFactory::GetForProfile(GetProfile());
   ASSERT_TRUE(provider);
 
-  // If this test is running on a device that is already managed, we expect IP
-  // Protection to be disabled. Verify this and then skip the rest of the test.
-  if (provider->ShouldDisableIpProtectionForManagedForTesting()) {
-    EXPECT_FALSE(provider->IsIpProtectionEnabled());
-    return;
-  }
-
   CreateIncognitoNetworkContextAndInterceptors();
 
   // Simulate the user disabling the IP Protection setting.
@@ -741,8 +731,11 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostUserSettingBrowserTest,
 
 class IpProtectionCoreHostPolicyBrowserTest : public policy::PolicyTest {
  public:
-  IpProtectionCoreHostPolicyBrowserTest()
-      : scoped_ip_protection_feature_list_(/*incognito_mode=*/false),
+  explicit IpProtectionCoreHostPolicyBrowserTest(
+      bool incognito_mode = false,
+      bool enterprise_killswitch_enabled = false)
+      : scoped_ip_protection_feature_list_(incognito_mode,
+                                           enterprise_killswitch_enabled),
         profile_selections_(
             IpProtectionCoreHostFactory::GetInstance(),
             IpProtectionCoreHostFactory::CreateProfileSelectionsForTesting()) {}
@@ -767,14 +760,6 @@ class IpProtectionCoreHostPolicyBrowserTest : public policy::PolicyTest {
     provider_.UpdateChromePolicy(policies);
   }
 
-#if BUILDFLAG(IS_CHROMEOS)
-  void SetChromeOSEnterpriseUserDefaults() {
-    policy::PolicyMap policies;
-    policy::SetEnterpriseUsersDefaults(&policies);
-    provider_.UpdateChromePolicy(policies);
-  }
-#endif
-
   void UnsetPolicyValues() {
     policy::PolicyMap policies;
     provider_.UpdateChromePolicy(policies);
@@ -793,13 +778,6 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
   IpProtectionCoreHost* provider =
       IpProtectionCoreHostFactory::GetForProfile(GetProfile());
   ASSERT_TRUE(provider);
-
-  // If this test is running on a device that is already managed, we expect IP
-  // Protection to be disabled. Verify this and then skip the rest of the test.
-  if (provider->ShouldDisableIpProtectionForManagedForTesting()) {
-    EXPECT_FALSE(provider->IsIpProtectionEnabled());
-    return;
-  }
   ASSERT_TRUE(provider->IsIpProtectionEnabled());
 
   // Setting the enterprise policy value to "Disabled" should change the default
@@ -833,21 +811,59 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
   EXPECT_EQ(provider->IsIpProtectionEnabled(), initial_state);
 }
 
-// If the browser is considered managed and IP Protection isn't enabled via
-// enterprise policy, IP Protection should be disabled. For ChromeOS, setting a
-// user policy isn't enough to make the profile/device be considered managed,
-// but instead a default value will be applied to managed users (via the
-// "default_for_enterprise_users" policy setting).
-#if !BUILDFLAG(IS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
+                       NotDisabledForManagedBrowser) {
+#if BUILDFLAG(IS_CHROMEOS)
+  // On ChromeOS this is required for the unrelated policy enabled below to
+  // cause the profile `policy::ManagementService` to reflect that the profile
+  // is managed.
+  policy::ScopedManagementServiceOverrideForTesting browser_management{
+      policy::ManagementServiceFactory::GetForProfile(GetProfile()),
+      policy::EnterpriseManagementAuthority::COMPUTER_LOCAL};
+#endif
+
+  IpProtectionCoreHost* provider =
+      IpProtectionCoreHostFactory::GetForProfile(GetProfile());
+  ASSERT_TRUE(provider);
+  ASSERT_TRUE(provider->IsIpProtectionEnabled());
+
+  EnableUnrelatedPolicy();
+
+  EXPECT_TRUE(provider->IsIpProtectionEnabled());
+
+  UnsetPolicyValues();
+  EXPECT_TRUE(provider->IsIpProtectionEnabled());
+}
+
+class IpProtectionPolicyBrowserTestEnterpriseKillSwitchEnabled
+    : public IpProtectionCoreHostPolicyBrowserTest {
+ public:
+  IpProtectionPolicyBrowserTestEnterpriseKillSwitchEnabled()
+      : IpProtectionCoreHostPolicyBrowserTest(
+            /*incognito_mode=*/false,
+            /*enterprise_killswitch_enabled=*/true) {}
+};
+
+// With the killswitch, if the browser is considered managed and IP Protection
+// isn't enabled via enterprise policy, IP Protection should be disabled.
+IN_PROC_BROWSER_TEST_F(IpProtectionPolicyBrowserTestEnterpriseKillSwitchEnabled,
                        DisabledForManagedBrowser) {
+#if BUILDFLAG(IS_CHROMEOS)
+  // On ChromeOS this is required for the unrelated policy enabled below to
+  // cause the profile `policy::ManagementService` to reflect that the profile
+  // is managed.
+  policy::ScopedManagementServiceOverrideForTesting browser_management{
+      policy::ManagementServiceFactory::GetForProfile(GetProfile()),
+      policy::EnterpriseManagementAuthority::COMPUTER_LOCAL};
+#endif
+
   IpProtectionCoreHost* provider =
       IpProtectionCoreHostFactory::GetForProfile(GetProfile());
   ASSERT_TRUE(provider);
 
   // If this test is running on a device that is already managed, we expect IP
   // Protection to be disabled. Verify this and then skip the rest of the test.
-  if (provider->ShouldDisableIpProtectionForManagedForTesting()) {
+  if (provider->ShouldDisableIpProtectionForEnterpriseForTesting()) {
     EXPECT_FALSE(provider->IsIpProtectionEnabled());
     return;
   }
@@ -860,49 +876,3 @@ IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
   UnsetPolicyValues();
   EXPECT_TRUE(provider->IsIpProtectionEnabled());
 }
-IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
-                       NotDisabledForManagedDogfoodBrowser) {
-  IpProtectionCoreHost* provider =
-      IpProtectionCoreHostFactory::GetForProfile(GetProfile());
-  ASSERT_TRUE(provider);
-
-  EnableUnrelatedPolicy();
-  EXPECT_FALSE(provider->IsIpProtectionEnabled());
-
-  SetIsLikelyDogfoodClient(true);
-  EXPECT_TRUE(provider->IsIpProtectionEnabled());
-
-  UnsetPolicyValues();
-  SetIsLikelyDogfoodClient(false);
-}
-#else
-IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
-                       DisabledForEnterpriseUser) {
-  IpProtectionCoreHost* provider =
-      IpProtectionCoreHostFactory::GetForProfile(GetProfile());
-  ASSERT_TRUE(provider);
-  ASSERT_TRUE(provider->IsIpProtectionEnabled());
-
-  SetChromeOSEnterpriseUserDefaults();
-  EXPECT_FALSE(provider->IsIpProtectionEnabled());
-
-  UnsetPolicyValues();
-  ASSERT_TRUE(provider->IsIpProtectionEnabled());
-}
-
-IN_PROC_BROWSER_TEST_F(IpProtectionCoreHostPolicyBrowserTest,
-                       NotDisabledForEnterpriseDogfoodUser) {
-  IpProtectionCoreHost* provider =
-      IpProtectionCoreHostFactory::GetForProfile(GetProfile());
-  ASSERT_TRUE(provider);
-
-  SetChromeOSEnterpriseUserDefaults();
-  EXPECT_FALSE(provider->IsIpProtectionEnabled());
-
-  SetIsLikelyDogfoodClient(true);
-  EXPECT_TRUE(provider->IsIpProtectionEnabled());
-
-  UnsetPolicyValues();
-  SetIsLikelyDogfoodClient(false);
-}
-#endif

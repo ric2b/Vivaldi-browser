@@ -17,6 +17,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -287,11 +288,25 @@ class WebAppRegistrar {
   bool IsAppFileHandlerPermissionBlocked(const webapps::AppId& app_id) const;
   bool IsIsolated(const webapps::AppId& app_id) const;
 
-  // Returns the state of the File Handling API for the given app.
+  // Returns approval state for File Handling API including
+  // DefaultHandlersForFileExtensions policy check.
   ApiApprovalState GetAppFileHandlerApprovalState(
+      const webapps::AppId& app_id,
+      std::optional<std::string> file_extension) const;
+
+  bool IsAppPolicyDefinedHandlerForFileExtension(
+      const webapps::AppId& app_id,
+      const std::string file_extension) const;
+
+  bool IsAppSetAsPolicyDefinedFileHandlerForAnyFileExtension(
       const webapps::AppId& app_id) const;
-  // Returns true iff it's expected that File Handlers have been, **or are in
-  // the process of being**, registered with the OS.
+
+  // Returns the state of the File Handling API for the given app.
+  ApiApprovalState GetAppFileHandlerUserApprovalState(
+      const webapps::AppId& app_id) const;
+
+  // Returns true iff it's expected that File Handlers have been, **or are
+  // in the process of being**, registered with the OS.
   bool ExpectThatFileHandlersAreRegisteredWithOs(
       const webapps::AppId& app_id) const;
 
@@ -325,6 +340,7 @@ class WebAppRegistrar {
   base::Time GetAppLastBadgingTime(const webapps::AppId& app_id) const;
   base::Time GetAppLastLaunchTime(const webapps::AppId& app_id) const;
   base::Time GetAppFirstInstallTime(const webapps::AppId& app_id) const;
+  base::Time GetAppLatestInstallTime(const webapps::AppId& app_id) const;
 
   std::optional<webapps::WebappInstallSource> GetLatestAppInstallSource(
       const webapps::AppId& app_id) const;
@@ -499,6 +515,9 @@ class WebAppRegistrar {
   void NotifyAlwaysShowToolbarInFullscreenChanged(const webapps::AppId& app_id,
                                                   bool show);
 #endif
+
+  // Returns whether the DIY app's icons are marked as masked on Mac.
+  bool IsDiyAppIconsMarkedMaskedOnMac(const webapps::AppId& app_id) const;
 
   void AddObserver(WebAppRegistrarObserver* observer);
   void RemoveObserver(WebAppRegistrarObserver* observer);

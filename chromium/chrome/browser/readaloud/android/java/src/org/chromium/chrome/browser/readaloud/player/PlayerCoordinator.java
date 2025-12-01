@@ -11,12 +11,14 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.BundleUtils;
 import org.chromium.base.ObserverList;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.readaloud.ReadAloudPrefs;
 import org.chromium.chrome.browser.readaloud.player.expanded.ExpandedPlayerCoordinator;
 import org.chromium.chrome.browser.readaloud.player.mini.MiniPlayerCoordinator;
 import org.chromium.chrome.modules.readaloud.Playback;
+import org.chromium.chrome.modules.readaloud.PlaybackArgs.PlaybackMode;
 import org.chromium.chrome.modules.readaloud.PlaybackListener;
 import org.chromium.chrome.modules.readaloud.Player;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -31,6 +33,7 @@ import org.chromium.ui.modelutil.PropertyModel;
  * <p>States: A. no players shown B. mini player visible C. expanded player open and mini player
  * visible (behind expanded player)
  */
+@NullMarked
 public class PlayerCoordinator implements Player {
     private static final String TAG = "ReadAloudPlayer";
     private final ObserverList<Observer> mObserverList;
@@ -116,8 +119,9 @@ public class PlayerCoordinator implements Player {
     }
 
     @Override
-    public void playTabRequested() {
+    public void playTabRequested(PlaybackMode playbackMode) {
         mMediator.setPlayback(null);
+        mMediator.setRequestedPlaybackMode(playbackMode);
         mMediator.setPlaybackState(PlaybackListener.State.BUFFERING);
         if (!mExpandedPlayer.anySheetShowing()) {
             mMiniPlayer.show(/* animate= */ true);

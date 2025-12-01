@@ -24,8 +24,9 @@ namespace {
 CPDF_FontGlobals* g_FontGlobals = nullptr;
 
 RetainPtr<const CPDF_CMap> LoadPredefinedCMap(ByteStringView name) {
-  if (!name.IsEmpty() && name[0] == '/')
+  if (!name.IsEmpty() && name[0] == '/') {
     name = name.Last(name.GetLength() - 1);
+  }
   return pdfium::MakeRetain<CPDF_CMap>(name);
 }
 
@@ -64,9 +65,10 @@ void CPDF_FontGlobals::LoadEmbeddedMaps() {
 RetainPtr<CPDF_Font> CPDF_FontGlobals::Find(
     CPDF_Document* pDoc,
     CFX_FontMapper::StandardFont index) {
-  auto it = m_StockMap.find(pDoc);
-  if (it == m_StockMap.end() || !it->second)
+  auto it = stock_map_.find(pDoc);
+  if (it == stock_map_.end() || !it->second) {
     return nullptr;
+  }
 
   return it->second->GetFont(index);
 }
@@ -75,55 +77,59 @@ void CPDF_FontGlobals::Set(CPDF_Document* pDoc,
                            CFX_FontMapper::StandardFont index,
                            RetainPtr<CPDF_Font> pFont) {
   UnownedPtr<CPDF_Document> pKey(pDoc);
-  if (!pdfium::Contains(m_StockMap, pKey))
-    m_StockMap[pKey] = std::make_unique<CFX_StockFontArray>();
-  m_StockMap[pKey]->SetFont(index, std::move(pFont));
+  if (!pdfium::Contains(stock_map_, pKey)) {
+    stock_map_[pKey] = std::make_unique<CFX_StockFontArray>();
+  }
+  stock_map_[pKey]->SetFont(index, std::move(pFont));
 }
 
 void CPDF_FontGlobals::Clear(CPDF_Document* pDoc) {
   // Avoid constructing smart-pointer key as erase() doesn't invoke
   // transparent lookup in the same way find() does.
-  auto it = m_StockMap.find(pDoc);
-  if (it != m_StockMap.end())
-    m_StockMap.erase(it);
+  auto it = stock_map_.find(pDoc);
+  if (it != stock_map_.end()) {
+    stock_map_.erase(it);
+  }
 }
 
 void CPDF_FontGlobals::LoadEmbeddedGB1CMaps() {
-  SetEmbeddedCharset(CIDSET_GB1, fxcmap::kGB1_cmaps_span);
+  SetEmbeddedCharset(CIDSET_GB1, fxcmap::kGB1_cmaps);
   SetEmbeddedToUnicode(CIDSET_GB1, fxcmap::kGB1CID2Unicode_5);
 }
 
 void CPDF_FontGlobals::LoadEmbeddedCNS1CMaps() {
-  SetEmbeddedCharset(CIDSET_CNS1, fxcmap::kCNS1_cmaps_span);
+  SetEmbeddedCharset(CIDSET_CNS1, fxcmap::kCNS1_cmaps);
   SetEmbeddedToUnicode(CIDSET_CNS1, fxcmap::kCNS1CID2Unicode_5);
 }
 
 void CPDF_FontGlobals::LoadEmbeddedJapan1CMaps() {
-  SetEmbeddedCharset(CIDSET_JAPAN1, fxcmap::kJapan1_cmaps_span);
+  SetEmbeddedCharset(CIDSET_JAPAN1, fxcmap::kJapan1_cmaps);
   SetEmbeddedToUnicode(CIDSET_JAPAN1, fxcmap::kJapan1CID2Unicode_4);
 }
 
 void CPDF_FontGlobals::LoadEmbeddedKorea1CMaps() {
-  SetEmbeddedCharset(CIDSET_KOREA1, fxcmap::kKorea1_cmaps_span);
+  SetEmbeddedCharset(CIDSET_KOREA1, fxcmap::kKorea1_cmaps);
   SetEmbeddedToUnicode(CIDSET_KOREA1, fxcmap::kKorea1CID2Unicode_2);
 }
 
 RetainPtr<const CPDF_CMap> CPDF_FontGlobals::GetPredefinedCMap(
     const ByteString& name) {
-  auto it = m_CMaps.find(name);
-  if (it != m_CMaps.end())
+  auto it = cmaps_.find(name);
+  if (it != cmaps_.end()) {
     return it->second;
+  }
 
   RetainPtr<const CPDF_CMap> pCMap = LoadPredefinedCMap(name.AsStringView());
-  if (!name.IsEmpty())
-    m_CMaps[name] = pCMap;
+  if (!name.IsEmpty()) {
+    cmaps_[name] = pCMap;
+  }
 
   return pCMap;
 }
 
 CPDF_CID2UnicodeMap* CPDF_FontGlobals::GetCID2UnicodeMap(CIDSet charset) {
-  if (!m_CID2UnicodeMaps[charset]) {
-    m_CID2UnicodeMaps[charset] = std::make_unique<CPDF_CID2UnicodeMap>(charset);
+  if (!cid2unicode_maps_[charset]) {
+    cid2unicode_maps_[charset] = std::make_unique<CPDF_CID2UnicodeMap>(charset);
   }
-  return m_CID2UnicodeMaps[charset].get();
+  return cid2unicode_maps_[charset].get();
 }

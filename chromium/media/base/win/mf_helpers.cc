@@ -25,18 +25,20 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/win/scoped_co_mem.h"
 #include "base/win/windows_version.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
+#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
+#include "gpu/ipc/common/dxgi_helpers.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/channel_layout.h"
 #include "media/base/win/mf_helpers.h"
-#if BUILDFLAG(ENABLE_PLATFORM_AC4_AUDIO)
-#include "media/formats/mp4/ac4.h"
-#endif  // BUILDFLAG(ENABLE_PLATFORM_AC4_AUDIO)
-#include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
-#include "gpu/ipc/common/dxgi_helpers.h"
 #include "media/gpu/command_buffer_helper.h"
 #include "media/media_buildflags.h"
 #include "third_party/libyuv/include/libyuv.h"
+
+#if BUILDFLAG(ENABLE_PLATFORM_AC4_AUDIO)
+#include "media/formats/mp4/ac4.h"
+#endif  // BUILDFLAG(ENABLE_PLATFORM_AC4_AUDIO)
 
 namespace media {
 
@@ -460,9 +462,7 @@ HRESULT GetAacAudioType(const AudioDecoderConfig& decoder_config,
   ComPtr<IMFMediaType> media_type;
   RETURN_IF_FAILED(GetDefaultAudioType(decoder_config, &media_type));
 
-  // On Windows `extra_data` is not populated for AAC in `decoder_config`. Use
-  // `aac_extra_data` instead. See crbug.com/1245123.
-  const auto& extra_data = decoder_config.aac_extra_data();
+  const auto& extra_data = decoder_config.extra_data();
 
   size_t wave_format_size = sizeof(HEAACWAVEINFO) + extra_data.size();
   std::vector<uint8_t> wave_format_buffer(wave_format_size);
@@ -985,8 +985,7 @@ void GenerateSampleOnSyncTokenReleased(
     D3D11_TEXTURE2D_DESC texture_desc;
     input_texture->GetDesc(&texture_desc);
     texture_desc.Usage = D3D11_USAGE_DEFAULT;
-    texture_desc.BindFlags =
-        D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_RENDER_TARGET;
+    texture_desc.BindFlags = D3D11_BIND_VIDEO_ENCODER;
     texture_desc.ArraySize = 1;
     texture_desc.CPUAccessFlags = 0;
     texture_desc.MiscFlags = 0;

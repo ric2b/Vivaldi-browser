@@ -86,6 +86,21 @@ TEST_F(IR_ValidatorTest, Var_RootBlock_NullResult) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, Var_RootBlock_TooManyResults) {
+    auto* v = b.Var(ty.ptr(private_, ty.i32()));
+    v->SetInitializer(b.Constant(0_i));
+    v->SetResults(Vector{b.InstructionResult<i32>(), b.InstructionResult<i32>()});
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:2:20 error: var: expected exactly 1 results, got 2
+  %1:i32, %2:i32 = var 0i
+                   ^^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Var_VoidType) {
     mod.root_block->Append(b.Var(ty.ptr(private_, ty.void_())));
 
@@ -135,12 +150,31 @@ TEST_F(IR_ValidatorTest, Var_Function_NoResult) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, Var_Function_TooManyResults) {
+    auto* f = b.Function("my_func", ty.void_());
+
+    b.Append(f->Block(), [&] {
+        auto* v = b.Var<function, i32>();
+        v->SetInitializer(b.Constant(0_i));
+        v->SetResults(Vector{b.InstructionResult<i32>(), b.InstructionResult<i32>()});
+        b.Return(f);
+    });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(R"(:3:22 error: var: expected exactly 1 results, got 2
+    %2:i32, %3:i32 = var 0i
+                     ^^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Var_Function_NonPtrResult) {
     auto* f = b.Function("my_func", ty.void_());
 
     b.Append(f->Block(), [&] {
         auto* v = b.Var<function, f32>();
-        v->Result(0)->SetType(ty.f32());
+        v->Result()->SetType(ty.f32());
         b.Return(f);
     });
 
@@ -234,8 +268,8 @@ TEST_F(IR_ValidatorTest, Var_Private_UnexpectedInputAttachmentIndex) {
 )")) << res.Failure();
 }
 
-TEST_F(IR_ValidatorTest, Var_PushConstant_UnexpectedInputAttachmentIndex) {
-    auto* v = b.Var<push_constant, f32>();
+TEST_F(IR_ValidatorTest, Var_Immediate_UnexpectedInputAttachmentIndex) {
+    auto* v = b.Var<immediate, f32>();
     v->SetInputAttachmentIndex(0);
     mod.root_block->Append(v);
 
@@ -243,9 +277,10 @@ TEST_F(IR_ValidatorTest, Var_PushConstant_UnexpectedInputAttachmentIndex) {
     ASSERT_NE(res, Success);
     EXPECT_THAT(res.Failure().reason,
                 testing::HasSubstr(
-                    R"(:2:38 error: var: '@input_attachment_index' is not valid for non-handle var
-  %1:ptr<push_constant, f32, read> = var undef @input_attachment_index(0)
-                                     ^^^
+                    R"(:2:34 error: var: '@input_attachment_index' is not valid for non-handle var
+  %1:ptr<immediate, f32, read> = var undef @input_attachment_index(0)
+                                 ^^^
+
 )")) << res.Failure();
 }
 
@@ -322,7 +357,7 @@ TEST_F(IR_ValidatorTest, Var_Init_NullType) {
         auto* i = b.Var<function, f32>("i");
         i->SetInitializer(b.Constant(0_f));
         auto* load = b.Load(i);
-        auto* load_ret = load->Result(0);
+        auto* load_ret = load->Result();
         auto* j = b.Var<function, f32>("j");
         j->SetInitializer(load_ret);
         load_ret->SetType(nullptr);
@@ -439,12 +474,57 @@ TEST_F(IR_ValidatorTest, Var_NonResourceWithBindingPoint) {
 )")) << res.Failure();
 }
 
+TEST_F(IR_ValidatorTest, Var_Uniform_NotConstructible) {
+    auto* v = b.Var<uniform, atomic<u32>>();
+    v->SetBindingPoint(0, 0);
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:40 error: var: vars in the 'uniform' address space must be host-shareable and constructible
+  %1:ptr<uniform, atomic<u32>, read> = var undef @binding_point(0, 0)
+                                       ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_Uniform_NotHostShareable) {
+    auto* v = b.Var<uniform, bool>();
+    v->SetBindingPoint(0, 0);
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:33 error: var: vars in the 'uniform' address space must be host-shareable and constructible
+  %1:ptr<uniform, bool, read> = var undef @binding_point(0, 0)
+                                ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_Storage_NotHostShareable) {
+    auto* v = b.Var<storage, bool, read>();
+    v->SetBindingPoint(0, 0);
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:2:33 error: var: vars in the 'storage' address space must be host-shareable
+  %1:ptr<storage, bool, read> = var undef @binding_point(0, 0)
+                                ^^^
+)")) << res.Failure();
+}
+
 TEST_F(IR_ValidatorTest, Var_MultipleIOAnnotations) {
     auto* v = b.Var<AddressSpace::kIn, vec4<f32>>();
-    IOAttributes attr;
-    attr.builtin = BuiltinValue::kPosition;
-    attr.location = 0;
-    v->SetAttributes(attr);
+    v->SetBuiltin(BuiltinValue::kPosition);
+    v->SetLocation(0);
     mod.root_block->Append(v);
 
     auto res = ir::Validate(mod);
@@ -559,6 +639,72 @@ TEST_F(IR_ValidatorTest, Var_BindingArray_Texture_NonHandleAddressSpace) {
             R"(:2:62 error: var: handle types can only be declared in the 'handle' address space
   %1:ptr<private, binding_array<texture_2d<f32>, 4>, read> = var undef
                                                              ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_InputAttachementIndex_NonHandle) {
+    auto* v = b.Var(ty.ptr(AddressSpace::kPrivate, ty.f32(), read_write));
+    v->SetInputAttachmentIndex(0);
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:2:38 error: var: '@input_attachment_index' is not valid for non-handle var
+  %1:ptr<private, f32, read_write> = var undef @input_attachment_index(0)
+                                     ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_InputAttachementIndex_WrongType) {
+    auto* v = b.Var(ty.ptr(AddressSpace::kHandle, ty.f32(), read_write));
+    v->SetBindingPoint(0, 0);
+    v->SetInputAttachmentIndex(0);
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:2:37 error: var: '@input_attachment_index' is only valid for 'input_attachment' type var
+  %1:ptr<handle, f32, read_write> = var undef @binding_point(0, 0) @input_attachment_index(0)
+                                    ^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_RuntimeArray_NonStorage) {
+    auto* v = b.Var(ty.ptr(AddressSpace::kPrivate, ty.runtime_array(ty.f32()), read_write));
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:2:3 error: var: runtime arrays must be in the 'storage' address space
+  %1:ptr<private, array<f32>, read_write> = var undef
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Var_RuntimeArray_NonStorageInStruct) {
+    auto* str_ty = ty.Struct(mod.symbols.New("MyStruct"),
+                             {
+                                 {mod.symbols.New("a"), ty.runtime_array(ty.f32()), {}},
+                             });
+    auto* v = b.Var(ty.ptr(AddressSpace::kHandle, str_ty, read_write));
+    v->SetBindingPoint(0, 0);
+    v->SetInputAttachmentIndex(0);
+    mod.root_block->Append(v);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason,
+                testing::HasSubstr(
+                    R"(:6:3 error: var: runtime arrays must be in the 'storage' address space
+  %1:ptr<handle, MyStruct, read_write> = var undef @binding_point(0, 0) @input_attachment_index(0)
+  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
 
@@ -840,6 +986,16 @@ TEST_F(IR_ValidatorTest, Phony_MissingCapability) {
     undef = phony 1i
             ^^^^^
 )")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, PointerToNonStructPixelLocal) {
+    auto* var = b.Var("var", ty.ptr<core::AddressSpace::kPixelLocal>(ty.i32()));
+    mod.root_block->Append(var);
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(res.Failure().reason, testing::HasSubstr("pixel_local var must be of type struct"))
+        << res.Failure();
 }
 
 }  // namespace tint::core::ir

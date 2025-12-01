@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/modules/mediastream/video_track_adapter.h"
 
 #include <algorithm>
@@ -629,12 +624,7 @@ VideoTrackAdapter::~VideoTrackAdapter() {
 
 void VideoTrackAdapter::AddTrack(
     const MediaStreamVideoTrack* track,
-    VideoCaptureDeliverFrameCB frame_callback,
-    VideoCaptureNotifyFrameDroppedCB notify_frame_dropped_callback,
-    EncodedVideoFrameCB encoded_frame_callback,
-    VideoCaptureSubCaptureTargetVersionCB sub_capture_target_version_callback,
-    VideoTrackSettingsCallback settings_callback,
-    VideoTrackFormatCallback format_callback,
+    MediaStreamVideoSourceCallbacks video_stream_fallbacks,
     const VideoTrackAdapterSettings& settings) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -643,13 +633,18 @@ void VideoTrackAdapter::AddTrack(
       CrossThreadBindOnce(
           &VideoTrackAdapter::AddTrackOnVideoTaskRunner,
           WTF::CrossThreadUnretained(this), WTF::CrossThreadUnretained(track),
-          CrossThreadBindRepeating(std::move(frame_callback)),
-          CrossThreadBindRepeating(std::move(notify_frame_dropped_callback)),
-          CrossThreadBindRepeating(std::move(encoded_frame_callback)),
           CrossThreadBindRepeating(
-              std::move(sub_capture_target_version_callback)),
-          CrossThreadBindRepeating(std::move(settings_callback)),
-          CrossThreadBindRepeating(std::move(format_callback)), settings));
+              std::move(video_stream_fallbacks.deliver_frame_cb)),
+          CrossThreadBindRepeating(
+              std::move(video_stream_fallbacks.frame_dropped_cb)),
+          CrossThreadBindRepeating(
+              std::move(video_stream_fallbacks.encoded_frame_cb)),
+          CrossThreadBindRepeating(
+              std::move(video_stream_fallbacks.sub_capture_target_version_cb)),
+          CrossThreadBindRepeating(
+              std::move(video_stream_fallbacks.settings_cb)),
+          CrossThreadBindRepeating(std::move(video_stream_fallbacks.format_cb)),
+          settings));
 }
 
 void VideoTrackAdapter::AddTrackOnVideoTaskRunner(
@@ -845,7 +840,10 @@ void VideoTrackAdapter::SetSourceFrameSizeOnVideoTaskRunner(
 void VideoTrackAdapter::RemoveTrackOnVideoTaskRunner(
     const MediaStreamVideoTrack* track) {
   DCHECK(video_task_runner_->RunsTasksInCurrentSequence());
-  for (auto it = adapters_.begin(); it != adapters_.end(); ++it) {
+  for (auto it = adapters_.begin(); it != adapters_.end();
+       // SAFETY: The iterator is used only for traversal, and the loop is
+       // exited directly after the erase.
+       UNSAFE_BUFFERS(++it)) {
     (*it)->RemoveCallbacks(track);
     if ((*it)->IsEmpty()) {
       adapters_.erase(it);
@@ -861,7 +859,10 @@ void VideoTrackAdapter::ReconfigureTrackOnVideoTaskRunner(
 
   VideoFrameResolutionAdapter::VideoTrackCallbacks track_callbacks;
   // Remove the track.
-  for (auto it = adapters_.begin(); it != adapters_.end(); ++it) {
+  for (auto it = adapters_.begin(); it != adapters_.end();
+       // SAFETY: The iterator is used only for traversal, and the loop is
+       // exited directly after the erase.
+       UNSAFE_BUFFERS(++it)) {
     track_callbacks = (*it)->RemoveAndGetCallbacks(track);
     if (!track_callbacks.frame_callback)
       continue;

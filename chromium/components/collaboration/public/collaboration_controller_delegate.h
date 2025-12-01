@@ -35,6 +35,8 @@ class CollaborationControllerDelegate {
       kSyncDisabledByPolicy = 4,
       // Show the group full error dialog.
       kGroupFull = 5,
+      // Show the group closed error dialog.
+      kGroupClosedByOrganizationPolicy = 6,
     };
 
     explicit ErrorInfo(Type type) : type_(type) { GetStringForErrorType(); }
@@ -61,6 +63,8 @@ class CollaborationControllerDelegate {
           return "Signin Disabled By Policy";
         case Type::kGroupFull:
           return "Group Is Full";
+        case Type::kGroupClosedByOrganizationPolicy:
+          return "Group Is Closed By Organization Policy";
       }
     }
 
@@ -91,6 +95,12 @@ class CollaborationControllerDelegate {
           error_body = l10n_util::GetStringUTF8(
               IDS_COLLABORATION_GROUP_IS_FULL_ERROR_DIALOG_BODY);
           break;
+        case Type::kGroupClosedByOrganizationPolicy:
+          error_header = l10n_util::GetStringUTF8(
+              IDS_COLLABORATION_ENTREPRISE_GROUP_CLOSED_HEADER);
+          error_body = l10n_util::GetStringUTF8(
+              IDS_COLLABORATION_ENTREPRISE_GROUP_CLOSED_BODY);
+          break;
         case Type::kGenericError:
         case Type::kUnknown:
           error_header = l10n_util::GetStringUTF8(
@@ -109,7 +119,7 @@ class CollaborationControllerDelegate {
     kSuccess = 0,
     kFailure = 1,
     kCancel = 2,
-    kDeleteOrLeaveGroup = 3,
+    kGroupLeftOrDeleted = 3,
   };
 
   CollaborationControllerDelegate() = default;
@@ -164,6 +174,14 @@ class CollaborationControllerDelegate {
 
   // Request to show the manage dialog.
   virtual void ShowManageDialog(const tab_groups::EitherGroupID& either_id,
+                                ResultCallback result) = 0;
+
+  // Request to show the leave dialog.
+  virtual void ShowLeaveDialog(const tab_groups::EitherGroupID& either_id,
+                               ResultCallback result) = 0;
+
+  // Request to show the delete dialog.
+  virtual void ShowDeleteDialog(const tab_groups::EitherGroupID& either_id,
                                 ResultCallback result) = 0;
 
   // Open the local tab group associated with `group_id` in UI.

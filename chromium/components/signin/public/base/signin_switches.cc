@@ -15,29 +15,30 @@ namespace switches {
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kCctSignInPrompt,
              "CctSignInPrompt",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Migrate usages of USM flag to force child account sign-in to use the account
-// capability `IsSubjectToParentalControls`.
-BASE_FEATURE(kForceSupervisedSigninWithCapabilities,
-             "ForceSupervisedSigninWithCapabilities",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Add some history opt-in entry points on Android.
-BASE_FEATURE(kHistoryOptInEntryPoints,
-             "HistoryOptInEntryPoints",
+// Add history sync opt-in promo in the History Page.
+BASE_FEATURE(kHistoryPageHistorySyncPromo,
+             "HistoryPageHistorySyncPromo",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Makes the History Page history opt-in promo use a different CTA String.
-// No-op unless "HistoryOptInEntryPoints" is enabled.
-BASE_FEATURE(kHistoryOptInPromoCtaStringVariation,
-             "HistoryOptInPromoCtaStringVariation",
+// No-op unless "HistoryPageHistorySyncPromo" is enabled.
+BASE_FEATURE(kHistoryPagePromoCtaStringVariation,
+             "HistoryPagePromoCtaStringVariation",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Add history opt-in IPH in settings on Android.
-BASE_FEATURE(kHistoryOptInIph,
-             "HistoryOptInIph",
+// Enables a history sync educational tip in the magic stack on NTP.
+BASE_FEATURE(kHistoryOptInEducationalTip,
+             "HistoryOptInEducationalTip",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Determines which text should be shown on the history sync educational tip
+// button. No-op unless HistoryOptInEducationalTip is enabled.
+const base::FeatureParam<int> kHistoryOptInEducationalTipVariation(
+    &kHistoryOptInEducationalTip,
+    "history_opt_in_educational_tip_param",
+    0);
 
 // Feature to bypass double-checking that signin callers have correctly gotten
 // the user to accept account management. This check is slow and not strictly
@@ -53,6 +54,14 @@ BASE_FEATURE(kUnoForAuto, "UnoForAuto", base::FEATURE_DISABLED_BY_DEFAULT);
 BASE_FEATURE(kUseHostedDomainForManagementCheckOnSignin,
              "UseHostedDomainForManagementCheckOnSignin",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kMakeAccountsAvailableInIdentityManager,
+             "MakeAccountsAvailableInIdentityManager",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kFullscreenSignInPromoUseDate,
+             "FullscreenSignInPromoUseDate",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
@@ -63,9 +72,36 @@ BASE_FEATURE(kEnableHistorySyncOptin,
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
+// Enables the History Sync Opt-in expansion pill on Desktop.
+BASE_FEATURE(kEnableHistorySyncOptinExpansionPill,
+             "EnableHistorySyncOptinExpansionPill",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<HistorySyncOptinExpansionPillOption>::Option
+    kHistorySyncOptinExpansionPillOptions[] = {
+        {HistorySyncOptinExpansionPillOption::kBrowseAcrossDevices,
+         "browse-across-devices"},
+        {HistorySyncOptinExpansionPillOption::kSyncHistory, "sync-history"},
+        {HistorySyncOptinExpansionPillOption::kSeeTabsFromOtherDevices,
+         "see-tabs-from-other-devices"},
+        {HistorySyncOptinExpansionPillOption::
+             kBrowseAcrossDevicesNewProfileMenuPromoVariant,
+         "browse-across-devices-new-profile-menu-promo-variant"}};
+
+// Determines the experiment arm of the History Sync Opt-in expansion pill
+// (different text options for the pill and the profile menu promo variant).
+//
+// It is no-op unless "EnableHistorySyncOptin" is enabled.
+constexpr base::FeatureParam<HistorySyncOptinExpansionPillOption>
+    kHistorySyncOptinExpansionPillOption = {
+        &kEnableHistorySyncOptinExpansionPill,
+        "history-sync-optin-expansion-pill-option",
+        HistorySyncOptinExpansionPillOption::kBrowseAcrossDevices,
+        &kHistorySyncOptinExpansionPillOptions};
+
 // Force enable the default browser step in the first run experience on Desktop.
 const char kForceFreDefaultBrowserStep[] = "force-fre-default-browser-step";
-#endif
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 // Clears the token service before using it. This allows simulating the
 // expiration of credentials during testing.
@@ -121,21 +157,22 @@ bool IsChromeRefreshTokenBindingEnabled(const PrefService* profile_prefs) {
 BASE_FEATURE(kBoundSessionCredentialsKillSwitch,
              "BoundSessionCredentialsKillSwitch",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, Chrome will always use the /IssueToken endpoint to fetch access
+// tokens, no matter if a refresh token is bound or not.
+BASE_FEATURE(kUseIssueTokenToFetchAccessTokens,
+             "UseIssueTokenToFetchAccessTokens",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
 BASE_FEATURE(kEnablePreferencesAccountStorage,
              "EnablePreferencesAccountStorage",
-#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
+#if BUILDFLAG(IS_CHROMEOS)
              base::FEATURE_DISABLED_BY_DEFAULT
-#endif
+#else
+             base::FEATURE_ENABLED_BY_DEFAULT
+#endif  // BUILDFLAG(IS_CHROMEOS)
 );
-
-// This feature disables all extended sync promos.
-BASE_FEATURE(kForceDisableExtendedSyncPromos,
-             "ForceDisableExtendedSyncPromos",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
 // Features to trigger the startup sign-in promo at boot.
@@ -148,38 +185,17 @@ BASE_FEATURE(kInterceptBubblesDismissibleByAvatarButton,
              "InterceptBubblesDismissibleByAvatarButton",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-BASE_FEATURE(kImprovedSigninUIOnDesktop,
-             "ImprovedSigninUIOnDesktop",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-bool IsImprovedSigninUIOnDesktopEnabled() {
-  return base::FeatureList::IsEnabled(kImprovedSigninUIOnDesktop);
-}
-
-BASE_FEATURE(kImprovedSettingsUIOnDesktop,
-             "ImprovedSettingsUIOnDesktop",
-#if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
-
-bool IsImprovedSettingsUIOnDesktopEnabled() {
-  return base::FeatureList::IsEnabled(kImprovedSettingsUIOnDesktop);
-}
-
 BASE_FEATURE(kEnableSnackbarInSettings,
              "EnableSnackbarInSettings",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnableImprovedGuestProfileMenu,
              "EnableImprovedGuestProfileMenu",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kEnablePendingModePasswordsPromo,
              "EnablePendingModePasswordsPromo",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_IOS)
 
@@ -193,22 +209,8 @@ BASE_FEATURE(kEnableErrorBadgeOnIdentityDisc,
 
 BASE_FEATURE(kEnableASWebAuthenticationSession,
              "EnableASWebAuthenticationSession",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-#endif
-
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-BASE_FEATURE(kBatchUploadDesktop,
-             "BatchUploadDesktop",
              base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
-
-bool IsBatchUploadDesktopEnabled() {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-  return base::FeatureList::IsEnabled(kBatchUploadDesktop);
-#else
-  return false;
 #endif
-}
 
 // Enables showing the enterprise dialog after every signin into a managed
 // account.
@@ -248,19 +250,9 @@ BASE_FEATURE(kStableDeviceId,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(ENABLE_MIRROR) && !BUILDFLAG(IS_IOS)
-BASE_FEATURE(kVerifyRequestInitiatorForMirrorHeaders,
-             "VerifyRequestInitiatorForMirrorHeaders",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-#endif  // BUILDFLAG(ENABLE_MIRROR) && !BUILDFLAG(IS_IOS)
-
 BASE_FEATURE(kProfilesReordering,
              "ProfilesReordering",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kOutlineSilhouetteIcon,
-             "OutlineSilhouetteIcon",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kIgnoreMirrorHeadersInBackgoundTabs,

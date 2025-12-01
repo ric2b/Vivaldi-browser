@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <filesystem>  // NOLINT
 #include <string>
@@ -46,7 +45,7 @@
 #include "./common/hash.h"
 #include "./common/logging.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 // When running a test binary in a subprocess, we don't want these environment
@@ -111,25 +110,15 @@ void CentipedeCallbacks::PopulateBinaryInfo(BinaryInfo &binary_info) {
 
 std::string CentipedeCallbacks::ConstructRunnerFlags(
     std::string_view extra_flags, bool disable_coverage) {
-  int64_t force_abort_timeout = 0;
-  if (env_.force_abort_timeout == absl::InfiniteDuration() ||
-      env_.force_abort_timeout <= absl::ZeroDuration()) {
-    LOG(INFO) << "Centipede's force abort feature is disabled because force "
-                 "abort timeout is set to "
-              << env_.force_abort_timeout << ".";
-    force_abort_timeout = 0;
-  } else {
-    force_abort_timeout = absl::ToInt64Seconds(env_.force_abort_timeout);
-  }
   std::vector<std::string> flags = {
       "CENTIPEDE_RUNNER_FLAGS=",
       absl::StrCat("timeout_per_input=", env_.timeout_per_input),
       absl::StrCat("timeout_per_batch=", env_.timeout_per_batch),
-      absl::StrCat("force_abort_timeout=", force_abort_timeout),
       absl::StrCat("address_space_limit_mb=", env_.address_space_limit_mb),
       absl::StrCat("rss_limit_mb=", env_.rss_limit_mb),
       absl::StrCat("stack_limit_kb=", env_.stack_limit_kb),
       absl::StrCat("crossover_level=", env_.crossover_level),
+      absl::StrCat("max_len=", env_.max_len),
   };
   if (env_.ignore_timeout_reports) {
     flags.emplace_back("ignore_timeout_reports");
@@ -213,8 +202,7 @@ int CentipedeCallbacks::ExecuteCentipedeSancovBinaryWithShmem(
     num_inputs_written = 1;
   } else {
     // Feed the inputs to inputs_blobseq_.
-    num_inputs_written =
-        runner_request::RequestExecution(inputs, inputs_blobseq_);
+    num_inputs_written = RequestExecution(inputs, inputs_blobseq_);
   }
 
   if (num_inputs_written != inputs.size()) {
@@ -364,7 +352,7 @@ MutationResult CentipedeCallbacks::MutateViaExternalBinary(
   outputs_blobseq_.Reset();
 
   size_t num_inputs_written =
-      runner_request::RequestMutation(num_mutants, inputs, inputs_blobseq_);
+      RequestMutation(num_mutants, inputs, inputs_blobseq_);
   LOG_IF(INFO, num_inputs_written != inputs.size())
       << VV(num_inputs_written) << VV(inputs.size());
 
@@ -374,7 +362,7 @@ MutationResult CentipedeCallbacks::MutateViaExternalBinary(
   inputs_blobseq_.ReleaseSharedMemory();  // Inputs are already consumed.
 
   if (retval != EXIT_SUCCESS) {
-    LOG(WARNING) << "Custom mutator failed with exit code " << retval;
+    LOG(WARNING) << "Custom mutator failed with exit code: " << retval;
   }
   if (env_.print_runner_log || retval != EXIT_SUCCESS) {
     PrintExecutionLog();
@@ -441,4 +429,4 @@ void CentipedeCallbacks::PrintExecutionLog() const {
   }
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

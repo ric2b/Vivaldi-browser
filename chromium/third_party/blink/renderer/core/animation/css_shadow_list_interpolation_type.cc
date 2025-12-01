@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/core/animation/interpolable_shadow.h"
 #include "third_party/blink/renderer/core/animation/list_interpolation_functions.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
@@ -125,7 +126,7 @@ class AlwaysInvalidateChecker
 
 InterpolationValue CSSShadowListInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState* state,
+    const StyleResolverState& state,
     ConversionCheckers&) const {
   auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (identifier_value && identifier_value->GetValueID() == CSSValueID::kNone)
@@ -136,7 +137,7 @@ InterpolationValue CSSShadowListInterpolationType::MaybeConvertValue(
 
   const auto& value_list = To<CSSValueList>(value);
   return ListInterpolationFunctions::CreateList(
-      value_list.length(), [&value_list, state](wtf_size_t index) {
+      value_list.length(), [&value_list, &state](wtf_size_t index) {
         return InterpolationValue(InterpolableShadow::MaybeConvertCSSValue(
             value_list.Item(index), state));
       });
@@ -171,7 +172,7 @@ void CSSShadowListInterpolationType::Composite(
     double interpolation_fraction) const {
   // We do our compositing behavior in |PreInterpolationCompositeIfNeeded|; see
   // the documentation on that method.
-  underlying_value_owner.Set(*this, value);
+  underlying_value_owner.Set(this, value);
 }
 
 static ShadowList* CreateShadowList(

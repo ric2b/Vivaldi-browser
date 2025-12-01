@@ -3,6 +3,7 @@
 #import "ios/ui/settings/pagezoom/dialog/vivaldi_pagezoom_view_controller.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/ui/ntp/vivaldi_ntp_constants.h"
 #import "ios/ui/settings/pagezoom/dialog/uiwindow_pagezoom.h"
 #import "ui/base/l10n/l10n_util.h"
@@ -224,6 +225,11 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
 
   // Layout Constraints
   [self setupConstraints];
+
+  if (@available(iOS 17, *)) {
+    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
+                       withAction:@selector(updateUIForTraitChanges)];
+  }
 }
 
 - (void)setupConstraints {
@@ -380,22 +386,16 @@ NSString *fallbackIcon = @"vivaldi_ntp_fallback_favicon";
   self.iconImageView.image = image;
 }
 
-// Add support for trait collection changes
-- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
+- (void)updateUIForTraitChanges {
+  // Layout Constraints
+  [self.view setNeedsUpdateConstraints];
+  [self.view updateConstraintsIfNeeded];
 
-  if (self.traitCollection.userInterfaceStyle !=
-        previousTraitCollection.userInterfaceStyle) {
-    // Layout Constraints
-    [self.view setNeedsUpdateConstraints];
-    [self.view updateConstraintsIfNeeded];
-
-    // Update shadow color based on interface style
-    self.view.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.view.layer.shadowOpacity =
-      self.traitCollection.userInterfaceStyle ==
-        UIUserInterfaceStyleDark ? kShadowOpacityDark : kShadowOpacity;
-  }
+  // Update shadow color based on interface style
+  self.view.layer.shadowColor = [UIColor blackColor].CGColor;
+  self.view.layer.shadowOpacity =
+    self.traitCollection.userInterfaceStyle ==
+      UIUserInterfaceStyleDark ? kShadowOpacityDark : kShadowOpacity;
 }
 
 @end

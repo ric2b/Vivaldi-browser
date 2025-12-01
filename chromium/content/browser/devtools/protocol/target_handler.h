@@ -14,6 +14,7 @@
 #include "base/memory/weak_ptr.h"
 #include "content/browser/devtools/devtools_throttle_handle.h"
 #include "content/browser/devtools/protocol/devtools_domain_handler.h"
+#include "content/browser/devtools/protocol/hidden_target_manager.h"
 #include "content/browser/devtools/protocol/target.h"
 #include "content/browser/devtools/protocol/target_auto_attacher.h"
 #include "content/public/browser/devtools_agent_host_observer.h"
@@ -24,7 +25,6 @@ namespace content {
 
 class DevToolsAgentHostImpl;
 class DevToolsSession;
-class NavigationHandle;
 class NavigationThrottle;
 
 namespace protocol {
@@ -99,10 +99,11 @@ class TargetHandler : public DevToolsDomainHandler,
   Response ActivateTarget(const std::string& target_id) override;
   Response CloseTarget(const std::string& target_id,
                        bool* out_success) override;
-  Response ExposeDevToolsProtocol(
+  void ExposeDevToolsProtocol(
       const std::string& target_id,
       std::optional<std::string> binding_name,
-      std::optional<bool> inherit_permissions) override;
+      std::optional<bool> inherit_permissions,
+      std::unique_ptr<ExposeDevToolsProtocolCallback> callback) override;
   void CreateBrowserContext(
       std::optional<bool> in_disposeOnDetach,
       std::optional<String> in_proxyServer,
@@ -121,11 +122,12 @@ class TargetHandler : public DevToolsDomainHandler,
                         std::optional<int> width,
                         std::optional<int> height,
                         std::optional<std::string> window_state,
-                        std::optional<std::string> context_id,
+                        std::optional<std::string> browser_context_id,
                         std::optional<bool> enable_begin_frame_control,
                         std::optional<bool> new_window,
                         std::optional<bool> background,
                         std::optional<bool> for_tab,
+                        std::optional<bool> hidden,
                         std::string* out_target_id) override;
   Response GetTargets(
       std::unique_ptr<protocol::Array<protocol::Target::FilterEntry>> filter,
@@ -160,7 +162,7 @@ class TargetHandler : public DevToolsDomainHandler,
       const std::string& type) override;
   std::unique_ptr<NavigationThrottle> CreateThrottleForNavigation(
       TargetAutoAttacher* auto_attacher,
-      NavigationHandle* navigation_handle) override;
+      NavigationThrottleRegistry& registry) override;
   void TargetInfoChanged(DevToolsAgentHost* host) override;
   void AutoAttacherDestroyed(TargetAutoAttacher* auto_attacher) override;
 
@@ -216,6 +218,8 @@ class TargetHandler : public DevToolsDomainHandler,
   base::flat_map<std::string, net::ProxyConfig> contexts_with_overridden_proxy_;
   base::flat_set<raw_ptr<Throttle, CtnExperimental>> throttles_;
   std::optional<net::ProxyConfig> pending_proxy_config_;
+  HiddenTargetManager hidden_target_manager_;
+
   base::WeakPtrFactory<TargetHandler> weak_factory_{this};
 };
 

@@ -160,6 +160,7 @@ source_set("headers") {
     "${dawn_root}/include/dawn/native/NullBackend.h",
     "${dawn_root}/include/dawn/native/OpenGLBackend.h",
     "${dawn_root}/include/dawn/native/VulkanBackend.h",
+    "${dawn_root}/include/dawn/native/WebGPUBackend.h",
   ]
 }
 
@@ -172,12 +173,12 @@ source_set("sources") {
     ":utils_gen",
     "${dawn_root}/src/dawn/common",
     "${dawn_root}/src/tint/api",
-    "${dawn_root}/src/tint/lang/wgsl/features",
+    "${dawn_root}/src/tint/lang/wgsl",
   ]
   defines = []
   libs = []
   data_deps = []
-
+  public_configs = []
   configs += [
     ":internal",
     "${dawn_root}/src/tint:tint_public_config",
@@ -318,7 +319,6 @@ source_set("sources") {
     "ObjectBase.h",
     "ObjectContentHasher.cpp",
     "ObjectContentHasher.h",
-    "PassResourceUsage.cpp",
     "PassResourceUsage.h",
     "PassResourceUsageTracker.cpp",
     "PassResourceUsageTracker.h",
@@ -398,6 +398,8 @@ source_set("sources") {
     "ValidationUtils.h",
     "VisitableMembers.h",
     "WaitAnySystemEvent.h",
+    "WaitListEvent.cpp",
+    "WaitListEvent.h",
     "dawn_platform.h",
     "stream/BlobSource.cpp",
     "stream/BlobSource.h",
@@ -434,7 +436,7 @@ source_set("sources") {
       "user32.lib",
       "delayimp.lib",
     ]
-    public_configs = [ ":win_delayload" ]
+    public_configs += [ ":win_delayload" ]
   }
 
   if (dawn_is_winuwp && is_debug) {
@@ -629,13 +631,15 @@ source_set("sources") {
 
   if (dawn_enable_metal) {
     frameworks = [
-      "IOKit.framework",
       "IOSurface.framework",
       "Metal.framework",
       "QuartzCore.framework",
     ]
     if (is_mac) {
-      frameworks += [ "Cocoa.framework" ]
+      frameworks += [
+        "Cocoa.framework",
+        "IOKit.framework",
+      ]
     }
     sources += [
       "Surface_metal.mm",
@@ -695,6 +699,16 @@ source_set("sources") {
     sources += [
       "null/DeviceNull.cpp",
       "null/DeviceNull.h",
+    ]
+  }
+
+  if (dawn_enable_webgpu_on_webgpu) {
+    sources += [
+      "webgpu/BackendWGPU.cpp",
+      "webgpu/BackendWGPU.h",
+      "webgpu/Forward.h",
+      "webgpu/PhysicalDeviceWGPU.cpp",
+      "webgpu/PhysicalDeviceWGPU.h",
     ]
   }
 
@@ -950,6 +964,9 @@ dawn_component("native") {
   }
   if (dawn_enable_null) {
     sources += [ "null/NullBackend.cpp" ]
+  }
+  if (dawn_enable_webgpu_on_webgpu) {
+    sources += [ "webgpu/WebGPUBackend.cpp" ]
   }
   if (dawn_enable_opengl) {
     sources += [ "opengl/OpenGLBackend.cpp" ]

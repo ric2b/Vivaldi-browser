@@ -1,6 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/components/cards/cards.js';
 
@@ -216,19 +217,19 @@ export class FrameworkIgnoreListSettingsTab extends UI.Widget.VBox implements
 
     const listSetting = this.setting;
 
-    const checkbox = UI.UIUtils.CheckboxLabel.createWithStringLiteral(
-        item.pattern, !item.disabled, undefined, 'settings.ignore-list-pattern');
+    const checkbox =
+        UI.UIUtils.CheckboxLabel.createWithStringLiteral(item.pattern, !item.disabled, 'settings.ignore-list-pattern');
     const helpText = i18nString(UIStrings.ignoreScriptsWhoseNamesMatchS, {PH1: item.pattern});
     UI.Tooltip.Tooltip.install(checkbox, helpText);
-    checkbox.checkboxElement.ariaLabel = helpText;
-    checkbox.checkboxElement.addEventListener('change', inputChanged, false);
+    checkbox.ariaLabel = helpText;
+    checkbox.addEventListener('change', inputChanged, false);
     element.appendChild(checkbox);
     element.classList.add('ignore-list-item');
 
     return element;
 
     function inputChanged(): void {
-      const disabled = !checkbox.checkboxElement.checked;
+      const disabled = !checkbox.checked;
       if (item.disabled !== disabled) {
         item.disabled = disabled;
         item.disabledForUrl = undefined;
@@ -238,7 +239,7 @@ export class FrameworkIgnoreListSettingsTab extends UI.Widget.VBox implements
     }
   }
 
-  removeItemRequested(item: Common.Settings.RegExpSettingItem, index: number): void {
+  removeItemRequested(_item: Common.Settings.RegExpSettingItem, index: number): void {
     const patterns = this.setting.getAsArray();
     patterns.splice(index, 1);
     this.setting.setAsArray(patterns);
@@ -282,7 +283,7 @@ export class FrameworkIgnoreListSettingsTab extends UI.Widget.VBox implements
     return editor;
 
     function patternValidator(
-        this: FrameworkIgnoreListSettingsTab, item: Common.Settings.RegExpSettingItem, index: number,
+        this: FrameworkIgnoreListSettingsTab, _item: Common.Settings.RegExpSettingItem, index: number,
         input: UI.ListWidget.EditorControl): UI.ListWidget.ValidatorResult {
       const pattern = input.value.trim();
       const patterns = this.setting.getAsArray();

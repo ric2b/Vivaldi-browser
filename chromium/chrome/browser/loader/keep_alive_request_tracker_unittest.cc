@@ -76,6 +76,10 @@ class ChromeKeepAliveRequestTrackerTestBase : public testing::Test {
     request.keepalive = true;
     request.keepalive_token = base::UnguessableToken::Create();
     request.is_fetch_later_api = IsFetchLaterRequest();
+    request.attribution_reporting_eligibility =
+        IsAttributionReportingEligibleRequest()
+            ? network::mojom::AttributionReportingEligibility::kTrigger
+            : network::mojom::AttributionReportingEligibility::kUnset;
 
     return request;
   }
@@ -83,7 +87,7 @@ class ChromeKeepAliveRequestTrackerTestBase : public testing::Test {
   std::unique_ptr<ChromeKeepAliveRequestTracker> CreateTracker(
       const network::ResourceRequest& request) const {
     return ChromeKeepAliveRequestTracker::MaybeCreateKeepAliveRequestTracker(
-        request, GetUkmSourceId(), IsAttributionReportingEligibleRequest(),
+        request, GetUkmSourceId(),
         /*is_context_detached_callback=*/base::BindRepeating([]() {
           return false;
         }));
@@ -434,6 +438,8 @@ TEST_P(ChromeKeepAliveRequestTrackerTest, LoaderCompleted) {
                   /*is_context_detached=*/false,
                   RequestStageType::kLoaderCompleted,
                   RequestStageType::kResponseReceived, *request.keepalive_token,
+                  /*failed_error_code=*/std::nullopt,
+                  /*failed_extended_error_code=*/std::nullopt,
                   status.error_code, status.extended_error_code);
   ExpectTimeSortedTimeDeltaUkm(
 
@@ -462,6 +468,8 @@ TEST_P(ChromeKeepAliveRequestTrackerTest, LoaderCompletedWithError) {
                   /*is_context_detached=*/false,
                   RequestStageType::kLoaderCompleted,
                   RequestStageType::kRequestStarted, *request.keepalive_token,
+                  /*failed_error_code=*/std::nullopt,
+                  /*failed_extended_error_code=*/std::nullopt,
                   failed_status.error_code, failed_status.extended_error_code);
   ExpectTimeSortedTimeDeltaUkm(
 

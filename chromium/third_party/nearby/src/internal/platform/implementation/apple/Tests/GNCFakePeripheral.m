@@ -108,6 +108,19 @@ NS_ASSUME_NONNULL_BEGIN
   }];
 }
 
+- (void)openL2CAPChannel:(CBL2CAPPSM)PSM {
+  [self delayDelegateUsingBlock:^() {
+    CBL2CAPChannel *channel = [[CBL2CAPChannel alloc] init];
+    if (_openL2CAPChannelError) {
+      [peripheralDelegate gnc_peripheral:self
+                     didOpenL2CAPChannel:channel
+                                   error:_openL2CAPChannelError];
+    } else {
+      [peripheralDelegate gnc_peripheral:self didOpenL2CAPChannel:channel error:nil];
+    }
+  }];
+}
+
 - (void)delayDelegateUsingBlock:(void (^)())block {
   if (_delegateDelay <= 0) {
     block();

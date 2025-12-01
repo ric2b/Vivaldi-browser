@@ -8,18 +8,22 @@
 #include "base/containers/flat_set.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/weak_ptr.h"
+#include "components/visited_url_ranking/internal/url_grouping/group_suggestions_tracker.h"
+#include "components/visited_url_ranking/internal/url_grouping/grouping_heuristics.h"
 #include "components/visited_url_ranking/public/url_grouping/group_suggestions.h"
 #include "components/visited_url_ranking/public/url_grouping/group_suggestions_delegate.h"
 #include "components/visited_url_ranking/public/url_grouping/group_suggestions_service.h"
 #include "components/visited_url_ranking/public/visited_url_ranking_service.h"
+
+class PrefService;
 
 namespace visited_url_ranking {
 
 // Tracks and runs computation of suggestions.
 class GroupSuggestionsManager {
  public:
-  explicit GroupSuggestionsManager(
-      VisitedURLRankingService* visited_url_ranking_service);
+  GroupSuggestionsManager(VisitedURLRankingService* visited_url_ranking_service,
+                          PrefService* pref_service);
   ~GroupSuggestionsManager();
 
   GroupSuggestionsManager(const GroupSuggestionsManager&) = delete;
@@ -34,14 +38,18 @@ class GroupSuggestionsManager {
                         const GroupSuggestionsService::Scope& scope);
   void UnregisterDelegate(GroupSuggestionsDelegate* delegate);
 
-  bool GetCurrentComputationForTesting() const;
-
   void set_suggestion_computed_callback_for_testing(
       base::RepeatingClosure callback) {
     suggestion_computed_callback_ = std::move(callback);
   }
 
+  void set_consecutive_computation_delay_for_testing(base::TimeDelta delay) {
+    consecutive_computation_delay_ = delay;
+  }
+
  private:
+  friend class GroupSuggestionsManagerTest;
+
   class GroupSuggestionComputer;
 
   struct DelegateMetadata {
@@ -49,25 +57,33 @@ class GroupSuggestionsManager {
     GroupSuggestionsService::Scope scope;
   };
 
-  using SuggestedTabs = base::flat_set<int>;
-  using SuggestionResults =
-      std::map<SuggestedTabs, GroupSuggestionsDelegate::UserResponseMetadata>;
+  void OnFinishComputeSuggestions(const GroupSuggestionsService::Scope& scope,
+                                  GroupingHeuristics::SuggestionsResult result);
 
-  void ShowSuggestion(const GroupSuggestionsService::Scope& scope,
-                      std::optional<GroupSuggestions> suggestions);
+  void ShowSuggestion(
+      const GroupSuggestionsService::Scope& scope,
+      std::optional<GroupSuggestions> suggestions,
+      const std::vector<scoped_refptr<segmentation_platform::InputContext>>&
+          inputs);
 
   void OnSuggestionResult(
-      const std::vector<int>& tab_ids,
+      const GroupSuggestion& shown_suggestion,
+      const std::vector<scoped_refptr<segmentation_platform::InputContext>>&
+          inputs,
       GroupSuggestionsDelegate::UserResponseMetadata user_response);
 
   const raw_ptr<VisitedURLRankingService> visited_url_ranking_service_;
   base::flat_map<GroupSuggestionsDelegate*, DelegateMetadata>
       registered_delegates_;
 
+  base::TimeDelta consecutive_computation_delay_;
+
   base::RepeatingClosure suggestion_computed_callback_;
 
   std::unique_ptr<GroupSuggestionComputer> suggestion_computer_;
-  SuggestionResults suggestion_results_;
+  std::unique_ptr<GroupSuggestionsTracker> suggestion_tracker_;
+
+  base::Time last_computation_time_;
 
   base::WeakPtrFactory<GroupSuggestionsManager> weak_ptr_factory_{this};
 };

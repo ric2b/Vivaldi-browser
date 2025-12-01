@@ -10,6 +10,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "base/files/file_path.h"
 #include "base/types/expected.h"
 #include "base/version.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -19,8 +20,13 @@
 #include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_management_type.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
+#include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
 #include "components/webapps/browser/uninstall_result_code.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_cache_client.h"
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 class GURL;
 class Profile;
@@ -71,6 +77,18 @@ struct SynchronizeOsOptions;
 struct WebAppIconDiagnosticResult;
 struct WebAppInstallInfo;
 
+#if BUILDFLAG(IS_CHROMEOS)
+class CleanupBundleCacheSuccess;
+class CleanupBundleCacheError;
+class CopyBundleToCacheSuccess;
+enum class CopyBundleToCacheError;
+class GetBundleCachePathSuccess;
+enum class GetBundleCachePathError;
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
+#if BUILDFLAG(IS_MAC)
+enum class RewriteIconResult;
+#endif  // BUILDFLAG(IS_MAC)
 // The command scheduler is the main API to access the web app system. The
 // scheduler internally ensures:
 // * Operations occur after the WebAppProvider is ready (so you don't have to
@@ -97,7 +115,7 @@ class WebAppCommandScheduler {
   using WebAppIconDiagnosticResultCallback =
       base::OnceCallback<void(std::optional<WebAppIconDiagnosticResult>)>;
   using WebInstallFromUrlCommandCallback =
-      base::OnceCallback<void(const GURL& manifest_id,
+      base::OnceCallback<void(const webapps::AppId& app_id,
                               webapps::InstallResultCode code)>;
   using UninstallCallback =
       base::OnceCallback<void(webapps::UninstallResultCode)>;
@@ -178,6 +196,19 @@ class WebAppCommandScheduler {
   // Schedule a command that performs fetching data from the manifest
   // for a manifest update.
   void ScheduleManifestUpdateCheck(
+      const GURL& url,
+      const webapps::AppId& app_id,
+      base::Time check_time,
+      base::WeakPtr<content::WebContents> contents,
+      ManifestUpdateCheckCompletedCallback callback,
+      const base::Location& location = FROM_HERE);
+
+  // Schedule a command that performs fetching data from the manifest
+  // for a manifest update. This is part of the predicatable app updating
+  // algorithm that will be implemented. After implementation, this should
+  // replace the current ScheduleManifestUpdateCheck.
+  // For more details, go/predictable-app-updating-design-doc.
+  void ScheduleManifestUpdateCheckV2(
       const GURL& url,
       const webapps::AppId& app_id,
       base::Time check_time,
@@ -273,6 +304,39 @@ class WebAppCommandScheduler {
                               std::optional<base::Version>)> callback,
       const base::Location& call_location = FROM_HERE);
 
+#if BUILDFLAG(IS_CHROMEOS)
+  // Schedules a command that gets IWA bundle path from cache for
+  // `session_type`. If `version` is not provided, returns the newest cached
+  // version.
+  void GetIsolatedWebAppBundleCachePath(
+      const IsolatedWebAppUrlInfo& url_info,
+      const std::optional<base::Version>& version,
+      IwaCacheClient::SessionType session_type,
+      base::OnceCallback<void(
+          base::expected<GetBundleCachePathSuccess, GetBundleCachePathError>)>
+          callback,
+      const base::Location& call_location = FROM_HERE);
+
+  //  Schedules a command that copies IWA bundle file to the cache for
+  //  `session_type`.
+  void CopyIsolatedWebAppBundleToCache(
+      const IsolatedWebAppUrlInfo& url_info,
+      IwaCacheClient::SessionType session_type,
+      base::OnceCallback<void(base::expected<CopyBundleToCacheSuccess,
+                                             CopyBundleToCacheError>)> callback,
+      const base::Location& call_location = FROM_HERE);
+
+  //  Schedules a command that cleans all IWA cached bundles for `session_type`
+  //  which are not in the `iwas_to_keep_in_cache`.
+  void CleanupIsolatedWebAppBundleCache(
+      const std::vector<web_package::SignedWebBundleId>& iwas_to_keep_in_cache,
+      IwaCacheClient::SessionType session_type,
+      base::OnceCallback<void(
+          base::expected<CleanupBundleCacheSuccess, CleanupBundleCacheError>)>
+          callback,
+      const base::Location& call_location = FROM_HERE);
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
   // Computes the browsing data size of all installed Isolated Web Apps.
   void GetIsolatedWebAppBrowsingData(
       base::OnceCallback<void(base::flat_map<url::Origin, uint64_t>)> callback,
@@ -288,7 +352,7 @@ class WebAppCommandScheduler {
           callback,
       const base::Location& location = FROM_HERE);
 
-  // Scheduler a command that installs a web app from sync.
+  // Schedules a command that installs a web app from sync.
   void InstallFromSync(const WebApp& web_app,
                        OnceInstallCallback callback,
                        const base::Location& location = FROM_HERE);
@@ -511,6 +575,16 @@ class WebAppCommandScheduler {
                           base::OnceClosure callback,
                           const base::Location& location = FROM_HERE);
 
+#if BUILDFLAG(IS_MAC)
+  // Rewrites icons for an app if and only if it is a DIY app, where this
+  // operation has not yet occurred (e.g. WebApp::diy_app_icons_masked_on_mac()
+  // returns false). This will set diy_app_icons_masked_on_mac() to true when
+  // complete.
+  void RewriteDiyIcons(const webapps::AppId& app_id,
+                       base::OnceCallback<void(RewriteIconResult)> callback,
+                       const base::Location& location = FROM_HERE);
+#endif  // BUILDFLAG(IS_MAC)
+
   // Finds web apps that share the same install URLs (possibly across different
   // install sources) and dedupes the install URL configs into the most
   // recently installed non-placeholder-like web app.
@@ -539,11 +613,14 @@ class WebAppCommandScheduler {
       WebAppIconDiagnosticResultCallback result_callback,
       const base::Location& location = FROM_HERE);
 
-  // Installs the web content at `install_url`, verifying that it has the
-  // given resolved `manifest_id`. Returns the `InstallResultCode` and the
-  // computed manifest id if successful. Used by Web Install API.
+  // User initiated install uses the shared web contents to install the content
+  // at `install_url`, with optional `manifest_id`.
+  // Calls `installed_callback` with the `InstallResultCode` and the computed
+  // manifest id if successful. Used by Web Install API.
   void InstallAppFromUrl(const GURL& install_url,
                          const std::optional<GURL>& manifest_id,
+                         base::WeakPtr<content::WebContents> web_contents,
+                         WebAppInstallDialogCallback dialog_callback,
                          WebInstallFromUrlCommandCallback installed_callback,
                          const base::Location& location = FROM_HERE);
 

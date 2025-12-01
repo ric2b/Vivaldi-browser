@@ -97,7 +97,7 @@ class SaveUpdateBubbleControllerTest : public ::testing::Test {
         base::BindRepeating(
             &password_manager::BuildPasswordStoreInterface<
                 content::BrowserContext,
-                testing::StrictMock<
+                testing::NiceMock<
                     password_manager::MockPasswordStoreInterface>>));
     profile_ = profile_builder.Build();
 
@@ -380,6 +380,18 @@ TEST_F(SaveUpdateBubbleControllerTest, ClickNever) {
   EXPECT_EQ(password_manager::ui::PENDING_PASSWORD_STATE,
             controller()->state());
   DestroyModelExpectReason(password_manager::metrics_util::CLICKED_NEVER);
+}
+
+TEST_F(SaveUpdateBubbleControllerTest, ClickNotNow) {
+  PretendPasswordWaiting();
+
+  EXPECT_CALL(*delegate(), SavePassword(_, _)).Times(0);
+  EXPECT_CALL(*delegate(), NeverSavePassword()).Times(0);
+  EXPECT_CALL(*delegate(), OnNotNowClicked());
+  controller()->OnNotNowClicked();
+  EXPECT_EQ(password_manager::ui::PENDING_PASSWORD_STATE,
+            controller()->state());
+  DestroyModelExpectReason(password_manager::metrics_util::CLICKED_NOT_NOW);
 }
 
 TEST_F(SaveUpdateBubbleControllerTest, ClickUpdate) {

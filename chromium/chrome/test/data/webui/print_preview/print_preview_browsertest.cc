@@ -54,10 +54,6 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewTest, MediaSizeSettings) {
   RunTest("print_preview/media_size_settings_test.js", "mocha.run()");
 }
 
-IN_PROC_BROWSER_TEST_F(PrintPreviewTest, MediaTypeSettings) {
-  RunTest("print_preview/media_type_settings_test.js", "mocha.run()");
-}
-
 IN_PROC_BROWSER_TEST_F(PrintPreviewTest, ModelSettingsAvailability) {
   RunTest("print_preview/model_settings_availability_test.js", "mocha.run()");
 }
@@ -76,6 +72,10 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewTest, SelectMixin) {
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewTest, SettingsSelect) {
   RunTest("print_preview/settings_select_test.js", "mocha.run()");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewTest, Observable) {
+  RunTest("print_preview/observable_test.js", "mocha.run()");
 }
 
 class PrintPreviewAppTest : public PrintPreviewBrowserTest {
@@ -119,14 +119,6 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewSidebarTest,
   RunTestCase("SettingsSectionsVisibilityChange");
 }
 
-IN_PROC_BROWSER_TEST_F(PrintPreviewSidebarTest, SheetCountWithDuplex) {
-  RunTestCase("SheetCountWithDuplex");
-}
-
-IN_PROC_BROWSER_TEST_F(PrintPreviewSidebarTest, SheetCountWithCopies) {
-  RunTestCase("SheetCountWithCopies");
-}
-
 class PrintPreviewPagesSettingsTest : public PrintPreviewBrowserTest {
  protected:
   void RunTestCase(const std::string& testCase) {
@@ -139,6 +131,10 @@ class PrintPreviewPagesSettingsTest : public PrintPreviewBrowserTest {
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewPagesSettingsTest, PagesDropdown) {
   RunTestCase("PagesDropdown");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewPagesSettingsTest, PagesDropdownDisabled) {
+  RunTestCase("PagesDropdownDisabled");
 }
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewPagesSettingsTest, NoParityOptions) {
@@ -317,6 +313,10 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewModelTest, GetPrintTicket) {
   RunTestCase("GetPrintTicket");
 }
 
+IN_PROC_BROWSER_TEST_F(PrintPreviewModelTest, GetPrintTicketPdf) {
+  RunTestCase("GetPrintTicketPdf");
+}
+
 IN_PROC_BROWSER_TEST_F(PrintPreviewModelTest, GetCloudPrintTicket) {
   RunTestCase("GetCloudPrintTicket");
 }
@@ -347,6 +347,10 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewModelTest, CustomMarginsAreNotNegative) {
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewModelTest, CustomMarginsAreNotStrings) {
   RunTestCase("CustomMarginsAreNotStrings");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewModelTest, GetSettingValueReturnsRawArray) {
+  RunTestCase("GetSettingValueReturnsRawArray");
 }
 
 class PrintPreviewPreviewGenerationTest : public PrintPreviewBrowserTest {
@@ -623,6 +627,10 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewPreviewAreaTest, ViewportSizeChanges) {
   RunTestCase("ViewportSizeChanges");
 }
 
+IN_PROC_BROWSER_TEST_F(PrintPreviewPreviewAreaTest, PointerEvents) {
+  RunTestCase("PointerEvents");
+}
+
 class PrintPreviewCustomMarginsTest : public PrintPreviewBrowserTest {
  protected:
   void RunTestCase(const std::string& testCase) {
@@ -728,6 +736,14 @@ IN_PROC_BROWSER_TEST_F(PrintPreviewHeaderTest, HeaderChangesForState) {
 
 IN_PROC_BROWSER_TEST_F(PrintPreviewHeaderTest, EnterprisePolicy) {
   RunTestCase("EnterprisePolicy");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewHeaderTest, SheetCountWithDuplex) {
+  RunTestCase("SheetCountWithDuplex");
+}
+
+IN_PROC_BROWSER_TEST_F(PrintPreviewHeaderTest, SheetCountWithCopies) {
+  RunTestCase("SheetCountWithCopies");
 }
 
 class PrintPreviewButtonStripTest : public PrintPreviewBrowserTest {

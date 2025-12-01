@@ -32,6 +32,7 @@ import android.os.Bundle;
 import androidx.test.filters.SmallTest;
 
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -64,6 +65,7 @@ import org.chromium.components.webauthn.cred_man.CredManMetricsHelper.CredManGet
 import org.chromium.components.webauthn.cred_man.CredManMetricsHelper.CredManPrepareRequestEnum;
 import org.chromium.content_public.browser.RenderFrameHost;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.mojo_base.mojom.String16;
 
 @RunWith(BaseRobolectricTestRunner.class)
 @Config(
@@ -90,10 +92,11 @@ public class CredManHelperRobolectricTest {
     private Fido2ApiTestHelper.AuthenticatorCallback mCallback;
     private PublicKeyCredentialCreationOptions mCreationOptions;
     private PublicKeyCredentialRequestOptions mRequestOptions;
-    private String mOriginString = "https://subdomain.coolwebsitekayserispor.com";
-    private byte[] mClientDataHash = new byte[] {1, 2, 3};
+    private final String mOriginString = "https://subdomain.coolwebsitekayserispor.com";
+    private final byte[] mClientDataHash = new byte[] {1, 2, 3};
 
-    private CredentialManager mCredentialManager = Shadow.newInstanceOf(CredentialManager.class);
+    private final CredentialManager mCredentialManager =
+            Shadow.newInstanceOf(CredentialManager.class);
     @Mock private Context mContext;
     @Mock private RenderFrameHost mFrameHost;
     @Mock private WebContents mWebContents;
@@ -108,7 +111,7 @@ public class CredManHelperRobolectricTest {
     @Mock private CredManGetCredentialRequestHelper mCredManGetCredentialRequestHelper;
     @Mock private GetCredentialRequest mGetCredentialRequest;
     @Mock private AuthenticationContextProvider mAuthenticationContextProviderMock;
-    private WebauthnBrowserBridge.Provider mBridgeProvider =
+    private final WebauthnBrowserBridge.Provider mBridgeProvider =
             new WebauthnBrowserBridge.Provider() {
                 @Override
                 public WebauthnBrowserBridge getBridge() {
@@ -690,6 +693,43 @@ public class CredManHelperRobolectricTest {
         assertThat(credManRequest).isEqualTo(mGetCredentialRequest);
     }
 
+    @Test
+    @SmallTest
+    public void testImmediateMediation_userSelectsPassword_canHavePasswordResponse() {
+        mRequestOptions.mediation = Mediation.IMMEDIATE;
+
+        int result =
+                mCredManHelper.startGetRequest(
+                        mRequestOptions,
+                        mOriginString,
+                        /* clientDataJson= */ null,
+                        mClientDataHash,
+                        mCallback::onSignResponse,
+                        mErrorCallback,
+                        /* ignoreGpm= */ false);
+
+        assertThat(result).isEqualTo(AuthenticatorStatus.SUCCESS);
+
+        ShadowCredentialManager shadowCredentialManager = Shadow.extract(mCredentialManager);
+        String username = "user123";
+        String password = "hunter2";
+        GetCredentialResponse response =
+                new GetCredentialResponse(createPasswordCredential(username, password));
+        shadowCredentialManager.getGetCredentialCallback().onResult(response);
+
+        verify(mBrowserBridge, never()).onCredManUiClosed(any(), anyBoolean());
+        verify(mBrowserBridge, never()).onPasswordCredentialReceived(any(), any(), any());
+
+        assertThat(mCallback.getStatus()).isEqualTo(Integer.valueOf(AuthenticatorStatus.SUCCESS));
+        Assert.assertNotNull(mCallback.getGetAssertionPasswordCredential());
+        assertThat(mojoStringToJavaString(mCallback.getGetAssertionPasswordCredential().name))
+                .isEqualTo(username);
+        assertThat(mojoStringToJavaString(mCallback.getGetAssertionPasswordCredential().id))
+                .isEqualTo(username);
+        assertThat(mojoStringToJavaString(mCallback.getGetAssertionPasswordCredential().password))
+                .isEqualTo(password);
+    }
+
     private Credential createPasskeyCredential() {
         Bundle data = new Bundle();
         data.putString("androidx.credentials.BUNDLE_KEY_AUTHENTICATION_RESPONSE_JSON", "json");
@@ -701,5 +741,14 @@ public class CredManHelperRobolectricTest {
         data.putString("androidx.credentials.BUNDLE_KEY_ID", username);
         data.putString("androidx.credentials.BUNDLE_KEY_PASSWORD", password);
         return new Credential(Credential.TYPE_PASSWORD_CREDENTIAL, data);
+    }
+
+    private static String mojoStringToJavaString(String16 mojoString) {
+        short[] data = mojoString.data;
+        char[] chars = new char[data.length];
+        for (int i = 0; i < chars.length; i++) {
+            chars[i] = (char) data[i];
+        }
+        return String.valueOf(chars);
     }
 }

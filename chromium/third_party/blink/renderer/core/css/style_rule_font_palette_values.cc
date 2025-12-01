@@ -39,8 +39,8 @@ const CSSValue* StyleRuleFontPaletteValues::GetBasePalette() const {
 const CSSValue* StyleRuleFontPaletteValues::GetOverrideColors() const {
   return properties_->GetPropertyCSSValue(CSSPropertyID::kOverrideColors);
 }
-FontPalette::BasePaletteValue StyleRuleFontPaletteValues::GetBasePaletteIndex()
-    const {
+FontPalette::BasePaletteValue StyleRuleFontPaletteValues::GetBasePaletteIndex(
+    const Document& document) const {
   constexpr FontPalette::BasePaletteValue kNoBasePaletteValue = {
       FontPalette::kNoBasePalette, 0};
   const CSSValue* base_palette = GetBasePalette();
@@ -62,10 +62,11 @@ FontPalette::BasePaletteValue StyleRuleFontPaletteValues::GetBasePaletteIndex()
     }
   }
 
-  const CSSPrimitiveValue& palette_primitive =
-      To<CSSPrimitiveValue>(*base_palette);
-  return FontPalette::BasePaletteValue(
-      {FontPalette::kIndexBasePalette, palette_primitive.GetIntValue()});
+  MediaValues* media_values =
+      MediaValues::CreateDynamicIfFrameExists(document.GetFrame());
+  int index =
+      To<CSSPrimitiveValue>(*base_palette).ComputeInteger(*media_values);
+  return FontPalette::BasePaletteValue({FontPalette::kIndexBasePalette, index});
 }
 
 Vector<FontPalette::FontPaletteOverride>
@@ -84,7 +85,8 @@ StyleRuleFontPaletteValues::GetOverrideColorsAsVector(
   // TODO(yosin): Should we use ` ThreadState::NoAllocationScope` for main
   // thread? Font threads hit `DCHECK` because they don't have `ThreadState'.
 
-  auto ConvertToColor = [](const CSSValuePair& override_pair) -> Color {
+  auto ConvertToColor =
+      [](const CSSValuePair& override_pair) -> std::optional<Color> {
     if (override_pair.Second().IsIdentifierValue()) {
       const CSSIdentifierValue& color_identifier =
           To<CSSIdentifierValue>(override_pair.Second());
@@ -95,9 +97,15 @@ StyleRuleFontPaletteValues::GetOverrideColorsAsVector(
           color_identifier.GetValueID(), mojom::blink::ColorScheme::kLight,
           /*color_provider=*/nullptr, /*is_in_web_app_scope=*/false);
     }
-    const cssvalue::CSSColor& css_color =
-        To<cssvalue::CSSColor>(override_pair.Second());
-    return css_color.Value();
+    if (const cssvalue::CSSColor* css_color =
+            DynamicTo<cssvalue::CSSColor>(override_pair.Second())) {
+      return css_color->Value();
+    }
+    // TODO(crbug.com/417398613): The code above needs to call
+    // ResolveColorValue() with an appropriate context to resolve all kinds of
+    // absolute colors here.
+    // Ignore complex colors for now to avoid crashing.
+    return std::nullopt;
   };
 
   MediaValues* media_values =
@@ -112,11 +120,14 @@ StyleRuleFontPaletteValues::GetOverrideColorsAsVector(
         To<CSSPrimitiveValue>(override_pair.First());
     DCHECK(palette_index.IsInteger());
 
-    const Color override_color = ConvertToColor(override_pair);
-
+    std::optional<const Color> override_color = ConvertToColor(override_pair);
+    if (!override_color.has_value()) {
+      // See comment in ConvertToColor() above.
+      continue;
+    }
     FontPalette::FontPaletteOverride palette_override{
         ClampTo<uint16_t>(palette_index.ComputeInteger(*media_values)),
-        override_color};
+        override_color.value()};
     return_overrides.push_back(palette_override);
   }
 

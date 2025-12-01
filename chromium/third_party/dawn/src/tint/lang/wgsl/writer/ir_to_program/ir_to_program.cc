@@ -83,10 +83,10 @@
 #include "src/tint/lang/core/type/texture.h"
 #include "src/tint/lang/core/type/type.h"
 #include "src/tint/lang/wgsl/ast/type.h"
-#include "src/tint/lang/wgsl/common/reserved_words.h"
 #include "src/tint/lang/wgsl/ir/builtin_call.h"
 #include "src/tint/lang/wgsl/ir/unary.h"
 #include "src/tint/lang/wgsl/program/program_builder.h"
+#include "src/tint/lang/wgsl/reserved_words.h"
 #include "src/tint/lang/wgsl/resolver/resolve.h"
 #include "src/tint/utils/containers/hashmap.h"
 #include "src/tint/utils/containers/predicates.h"
@@ -96,8 +96,6 @@
 #include "src/tint/utils/macros/scoped_assignment.h"
 #include "src/tint/utils/math/math.h"
 #include "src/tint/utils/rtti/switch.h"
-
-TINT_BEGIN_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);
 
 // Helper for incrementing nesting_depth_ and then decrementing nesting_depth_ at the end
 // of the scope that holds the call.
@@ -118,7 +116,8 @@ class State {
         core::ir::Capabilities caps{core::ir::Capability::kAllowRefTypes,
                                     core::ir::Capability::kAllowOverrides,
                                     core::ir::Capability::kAllowPhonyInstructions};
-        if (auto res = core::ir::Validate(mod, caps); res != Success) {
+        if (auto res = core::ir::ValidateAndDumpIfNeeded(mod, "wgsl.to_program", caps);
+            res != Success) {
             // IR module failed validation.
             b.Diagnostics().AddError(Source{}) << res.Failure();
             return Program{resolver::Resolve(b)};
@@ -368,7 +367,7 @@ class State {
             [&](const core::ir::Binary* i) { Binary(i); },                          //
             [&](const core::ir::BreakIf* i) { BreakIf(i); },                        //
             [&](const core::ir::Call* i) { Call(i); },                              //
-            [&](const core::ir::Continue*) {},                                      //
+            [&](const core::ir::Continue* c) { EmitContinue(c); },                  //
             [&](const core::ir::ExitIf*) {},                                        //
             [&](const core::ir::ExitLoop* i) { ExitLoop(i); },                      //
             [&](const core::ir::ExitSwitch* i) { ExitSwitch(i); },                  //
@@ -549,6 +548,15 @@ class State {
         Append(b.Break());
     }
 
+    void EmitContinue(const core::ir::Continue* c) {
+        auto* loop = c->Loop();
+        // No need to emit the continue as the last statement in loop as it's implicit
+        if (loop->Body()->Terminator() == c) {
+            return;
+        }
+        Append(b.Continue());
+    }
+
     void ExitLoop(const core::ir::ExitLoop*) { Append(b.Break()); }
 
     void BreakIf(const core::ir::BreakIf* i) { Append(b.BreakIf(Expr(i->Condition()))); }
@@ -574,12 +582,12 @@ class State {
     }
 
     void Var(const core::ir::Var* var) {
-        auto* val = var->Result(0);
+        auto* val = var->Result();
         auto* ref = As<core::type::Reference>(val->Type());
         TINT_ASSERT(ref /* converted by PtrToRef */);
         auto ty = Type(ref->StoreType());
-        Symbol name = NameFor(var->Result(0));
-        Bind(var->Result(0), name);
+        Symbol name = NameFor(var->Result());
+        Bind(var->Result(), name);
 
         Vector<const ast::Attribute*, 4> attrs;
         if (auto bp = var->BindingPoint()) {
@@ -609,8 +617,8 @@ class State {
                 Enable(wgsl::Extension::kChromiumExperimentalPixelLocal);
                 b.GlobalVar(name, ty, init, ref->AddressSpace(), std::move(attrs));
                 return;
-            case core::AddressSpace::kPushConstant:
-                Enable(wgsl::Extension::kChromiumExperimentalPushConstant);
+            case core::AddressSpace::kImmediate:
+                Enable(wgsl::Extension::kChromiumExperimentalImmediate);
                 b.GlobalVar(name, ty, init, ref->AddressSpace(), std::move(attrs));
                 return;
             default:
@@ -620,9 +628,9 @@ class State {
     }
 
     void Override(const core::ir::Override* override_) {
-        auto* val = override_->Result(0);
-        Symbol name = NameFor(override_->Result(0));
-        Bind(override_->Result(0), name);
+        auto* val = override_->Result();
+        Symbol name = NameFor(override_->Result());
+        Bind(override_->Result(), name);
 
         Vector<const ast::Attribute*, 4> attrs;
         if (override_->OverrideId().has_value()) {
@@ -638,7 +646,7 @@ class State {
     }
 
     void Let(const core::ir::Let* let) {
-        auto* result = let->Result(0);
+        auto* result = let->Result();
         Symbol name = NameFor(result);
         Append(b.Decl(b.Let(name, Expr(let->Value()))));
         Bind(result, name);
@@ -667,11 +675,11 @@ class State {
             call,  //
             [&](const core::ir::UserCall* c) {
                 auto* expr = b.Call(NameFor(c->Target()), std::move(args));
-                if (call->Results().IsEmpty() || !call->Result(0)->IsUsed()) {
+                if (call->Results().IsEmpty() || !call->Result()->IsUsed()) {
                     Append(b.CallStmt(expr));
                     return;
                 }
-                Bind(c->Result(0), expr);
+                Bind(c->Result(), expr);
             },
             [&](const wgsl::ir::BuiltinCall* c) {
                 if (!disabled_derivative_uniformity_ && RequiresDerivativeUniformity(c->Func())) {
@@ -725,33 +733,33 @@ class State {
                     expr = b.Call(c->Func(), std::move(args));
                 }
 
-                if (call->Results().IsEmpty() || !call->Result(0)->IsUsed()) {
+                if (call->Results().IsEmpty() || !call->Result()->IsUsed()) {
                     Append(b.CallStmt(expr));
                     return;
                 }
-                Bind(c->Result(0), expr);
+                Bind(c->Result(), expr);
             },
             [&](const core::ir::Construct* c) {
-                auto ty = Type(c->Result(0)->Type());
-                Bind(c->Result(0), b.Call(ty, std::move(args)));
+                auto ty = Type(c->Result()->Type());
+                Bind(c->Result(), b.Call(ty, std::move(args)));
             },
             [&](const core::ir::Convert* c) {
-                auto ty = Type(c->Result(0)->Type());
-                Bind(c->Result(0), b.Call(ty, std::move(args)));
+                auto ty = Type(c->Result()->Type());
+                Bind(c->Result(), b.Call(ty, std::move(args)));
             },
             [&](const core::ir::Bitcast* c) {
-                auto ty = Type(c->Result(0)->Type());
-                Bind(c->Result(0), b.Bitcast(ty, args[0]));
+                auto ty = Type(c->Result()->Type());
+                Bind(c->Result(), b.Bitcast(ty, args[0]));
             },
             [&](const core::ir::Discard*) { Append(b.Discard()); },  //
             TINT_ICE_ON_NO_MATCH);
     }
 
-    void Load(const core::ir::Load* l) { Bind(l->Result(0), Expr(l->From())); }
+    void Load(const core::ir::Load* l) { Bind(l->Result(), Expr(l->From())); }
 
     void LoadVectorElement(const core::ir::LoadVectorElement* l) {
         auto* vec = Expr(l->From());
-        Bind(l->Result(0), VectorMemberAccess(vec, l->Index()));
+        Bind(l->Result(), VectorMemberAccess(vec, l->Index()));
     }
 
     void Unary(const core::ir::Unary* u) {
@@ -773,7 +781,7 @@ class State {
                 expr = b.Deref(Expr(u->Val()));
                 break;
         }
-        Bind(u->Result(0), expr);
+        Bind(u->Result(), expr);
     }
 
     void Access(const core::ir::Access* a) {
@@ -807,21 +815,22 @@ class State {
                 },  //
                 TINT_ICE_ON_NO_MATCH);
         }
-        Bind(a->Result(0), expr);
+        Bind(a->Result(), expr);
     }
 
     void Swizzle(const core::ir::Swizzle* s) {
+        static constexpr std::array<char, 4> xyzw = {'x', 'y', 'z', 'w'};
         auto* vec = Expr(s->Object());
         Vector<char, 4> components;
         for (uint32_t i : s->Indices()) {
             if (DAWN_UNLIKELY(i >= 4)) {
                 TINT_ICE() << "invalid swizzle index: " << i;
             }
-            components.Push("xyzw"[i]);
+            components.Push(xyzw[i]);
         }
         auto* swizzle =
             b.MemberAccessor(vec, std::string_view(components.begin(), components.Length()));
-        Bind(s->Result(0), swizzle);
+        Bind(s->Result(), swizzle);
     }
 
     void Binary(const core::ir::Binary* e) {
@@ -830,7 +839,7 @@ class State {
             if (rhs && rhs->Type()->Is<core::type::Bool>() &&
                 rhs->Value()->ValueAs<bool>() == false) {
                 // expr == false
-                Bind(e->Result(0), b.Not(Expr(e->LHS())));
+                Bind(e->Result(), b.Not(Expr(e->LHS())));
                 return;
             }
         }
@@ -893,7 +902,7 @@ class State {
                 expr = b.LogicalOr(lhs, rhs);
                 break;
         }
-        Bind(e->Result(0), expr);
+        Bind(e->Result(), expr);
     }
 
     TINT_BEGIN_DISABLE_WARNING(UNREACHABLE_CODE);
@@ -1254,7 +1263,7 @@ class State {
         if (i->Results().IsEmpty()) {
             return false;
         }
-        auto* result = i->Result(0);
+        auto* result = i->Result();
         if (!result->Type()->Is<core::type::Bool>()) {
             return false;  // Wrong result type
         }
@@ -1380,5 +1389,3 @@ Program IRToProgram(const core::ir::Module& i, const ProgramOptions& options) {
 }
 
 }  // namespace tint::wgsl::writer
-
-TINT_END_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);

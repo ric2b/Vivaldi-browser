@@ -70,6 +70,9 @@ Syntax: cpplint.py [--verbose=#] [--output=vs7] [--filter=-x,+y,...]
   'NOLINT(category)' comment to the line.  NOLINT or NOLINT(*)
   suppresses errors of all categories on that line.
 
+  To suppress false-positive errors for a block of lines, enclose the
+  block with 'NOLINTBEGIN(category)' and 'NOLINTEND' comment lines.
+
   The files passed in will be linted; at least one file must be provided.
   Default linted extensions are .cc, .cpp, .cu, .cuh and .h.  Change the
   extensions with the --extensions flag.
@@ -785,7 +788,29 @@ _valid_extensions = set(['cc', 'h', 'cpp', 'cu', 'cuh'])
 _global_error_suppressions = {}
 
 
-def ParseNolintSuppressions(filename, raw_line, linenum, error):
+def AddSuppression(suppressed_line, category):
+    """Update global error_suppressions for a single line.
+
+  Args:
+    suppressed_line: int, line number where suppression is to be added.
+    category: str, category to suppress, or None to suppress all.
+  """
+    if category:
+        if category.startswith('(') and category.endswith(')'):
+            category = category[1:-1]
+        if category == '*':
+            category = None  # "(*)" -> Suppress all
+
+    if category is None or category in _ERROR_CATEGORIES:
+        _error_suppressions.setdefault(category, set()).add(suppressed_line)
+    else:
+        # Unknown category.  We used to track these in an _LEGACY_ERROR_CATEGORIES
+        # list, but these days we just silently ignore them since they may be
+        # intended for ClangTidy.
+        pass
+
+
+def ParseNolintSuppressions(filename, raw_lines, linenum, error):
     """Updates the global list of line error-suppressions.
 
     Parses any NOLINT comments on the current line, updating the global
@@ -794,28 +819,54 @@ def ParseNolintSuppressions(filename, raw_line, linenum, error):
 
     Args:
         filename: str, the name of the input file.
-        raw_line: str, the line of input text, with comments.
+        raw_lines: List[str], list of input lines, with comments.
         linenum: int, the number of the current line.
         error: function, an error handler.
     """
-    matched = Search(r'\bNOLINT(NEXTLINE)?\b(\([^)]+\))?', raw_line)
+    matched = Search(r'\bNOLINT(NEXTLINE|BEGIN)?\b(\([^)]+\))?',
+                     raw_lines[linenum])
     if matched:
-        if matched.group(1):
-            suppressed_line = linenum + 1
-        else:
-            suppressed_line = linenum
+        annotation_type = matched.group(1)
         category = matched.group(2)
-        if category in (None, '(*)'):  # => "suppress all"
-            _error_suppressions.setdefault(None, set()).add(suppressed_line)
-        else:
-            if category.startswith('(') and category.endswith(')'):
-                category = category[1:-1]
-                if category in _ERROR_CATEGORIES:
-                    _error_suppressions.setdefault(category,
-                                                   set()).add(suppressed_line)
-                elif category not in _LEGACY_ERROR_CATEGORIES:
+        if annotation_type:
+            # Suppressed line(s) are not the current line.
+            if annotation_type == 'NEXTLINE':
+                # Silence next line only.
+                AddSuppression(linenum + 1, category)
+            else:
+                # Silence a block of lines.
+                #
+                # Note that multiple NOLINTBEGIN lines may be terminated by a
+                # single NOLINTEND line:
+                #
+                #   // NOLINTBEGIN(some-category)
+                #   // NOLINTBEGIN(different-category)
+                #   ...
+                #   // NOLINTEND  <- ends both silences
+                #
+                # Also note that because we only consume one single NOLINT
+                # annotation per line, in order to silence multiple categories
+                # of warnings, the above example would be the preferred way to
+                # do it.  This is actually an improvement over historical
+                # handling of single line NOLINT annotations, where the choices
+                # were to silence 0 or 1 or all categories on a single line.
+                lastline = None
+                for i in range(linenum + 1, len(raw_lines)):
+                    if Search(r'\bNOLINTEND\b', raw_lines[i]):
+                        lastline = i
+                        break
+                if not lastline:
+                    # Because multiple NOLINTBEGIN may be terminated by a single
+                    # NOLINTEND, the error message here deliberately avoids
+                    # something like "Unmatched NOLINTEND".
                     error(filename, linenum, 'readability/nolint', 5,
-                          'Unknown NOLINT error category: %s' % category)
+                          'Missing NOLINTEND')
+                else:
+                    for i in range(linenum + 1, lastline):
+                        AddSuppression(i, category)
+        else:
+            # Suppressing errors on current line.
+            AddSuppression(linenum, category)
 
 
 def ProcessGlobalSuppresions(lines):
@@ -2158,14 +2209,12 @@ def CheckForHeaderGuard(filename, clean_lines, error):
         if ifndef != cppvar + '_':
             error_level = 5
 
-        ParseNolintSuppressions(filename, raw_lines[ifndef_linenum],
-                                ifndef_linenum, error)
+        ParseNolintSuppressions(filename, raw_lines, ifndef_linenum, error)
         error(filename, ifndef_linenum, 'build/header_guard', error_level,
               '#ifndef header guard has wrong style, please use: %s' % cppvar)
 
     # Check for "//" comments on endif line.
-    ParseNolintSuppressions(filename, raw_lines[endif_linenum], endif_linenum,
-                            error)
+    ParseNolintSuppressions(filename, raw_lines, endif_linenum, error)
     match = Match(r'#endif\s*//\s*' + cppvar + r'(_)?\b', endif)
     if match:
         if match.group(1) == '_':
@@ -6137,7 +6186,7 @@ def ProcessLine(filename,
             clean_lines, line, error
     """
     raw_lines = clean_lines.raw_lines
-    ParseNolintSuppressions(filename, raw_lines[line], line, error)
+    ParseNolintSuppressions(filename, raw_lines, line, error)
     nesting_state.Update(filename, clean_lines, line, error)
     CheckForNamespaceIndentation(filename, nesting_state, clean_lines, line,
                                  error)

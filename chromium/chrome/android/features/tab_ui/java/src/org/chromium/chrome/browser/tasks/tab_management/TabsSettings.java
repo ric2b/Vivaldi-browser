@@ -7,13 +7,14 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import android.os.Bundle;
 import android.view.View;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 import androidx.preference.Preference;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchConfigManager;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchControllerFactory;
@@ -33,6 +34,7 @@ import org.chromium.ui.text.ChromeClickableSpan;
 import org.chromium.ui.text.SpanApplier;
 
 /** Fragment for tab related configurations to Chrome. */
+@NullMarked
 public class TabsSettings extends ChromeBaseSettingsFragment {
     // Must match key in tabs_settings.xml
     @VisibleForTesting
@@ -56,7 +58,7 @@ public class TabsSettings extends ChromeBaseSettingsFragment {
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+    public void onCreatePreferences(@Nullable Bundle savedInstanceState, @Nullable String rootKey) {
         SettingsUtils.addPreferencesFromResource(this, R.xml.tabs_settings);
         mPageTitle.set(getString(R.string.tabs_settings_title));
 
@@ -102,10 +104,6 @@ public class TabsSettings extends ChromeBaseSettingsFragment {
 
     private void configureTabArchiveSettings() {
         Preference tabArchiveSettingsPref = findPreference(PREF_TAB_ARCHIVE_SETTINGS);
-        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_TAB_DECLUTTER)) {
-            tabArchiveSettingsPref.setVisible(false);
-            return;
-        }
 
         TabArchiveSettings archiveSettings =
                 new TabArchiveSettings(ChromeSharedPreferences.getInstance());
@@ -159,7 +157,12 @@ public class TabsSettings extends ChromeBaseSettingsFragment {
     }
 
     @VisibleForTesting
-    void onLearnMoreClicked(@NonNull View view) {
+    void onLearnMoreClicked(View view) {
         getCustomTabLauncher().openUrlInCct(getContext(), LEARN_MORE_URL);
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

@@ -34,7 +34,6 @@
 #                       Do not modify this file directly
 ################################################################################
 
-include(lang/core/common/BUILD.cmake)
 include(lang/core/constant/BUILD.cmake)
 include(lang/core/intrinsic/BUILD.cmake)
 include(lang/core/ir/BUILD.cmake)
@@ -80,6 +79,7 @@ tint_add_target(tint_lang_core lib
 )
 
 tint_target_add_dependencies(tint_lang_core lib
+  tint_api_common
   tint_utils
   tint_utils_containers
   tint_utils_ice
@@ -111,59 +111,18 @@ tint_add_target(tint_lang_core_test test
 )
 
 tint_target_add_dependencies(tint_lang_core_test test
-  tint_api_common
   tint_lang_core
-  tint_lang_core_constant
-  tint_lang_core_type
-  tint_lang_wgsl
-  tint_lang_wgsl_ast
-  tint_lang_wgsl_features
-  tint_lang_wgsl_program
-  tint_lang_wgsl_sem
   tint_utils
   tint_utils_containers
-  tint_utils_diagnostic
   tint_utils_ice
   tint_utils_macros
   tint_utils_math
   tint_utils_memory
   tint_utils_rtti
-  tint_utils_symbol
   tint_utils_text
 )
 
 tint_target_add_external_dependencies(tint_lang_core_test test
   "gtest"
-  "src_utils"
-)
-
-################################################################################
-# Target:    tint_lang_core_bench
-# Kind:      bench
-################################################################################
-tint_add_target(tint_lang_core_bench bench
-  lang/core/access_bench.cc
-  lang/core/address_space_bench.cc
-  lang/core/attribute_bench.cc
-  lang/core/builtin_type_bench.cc
-  lang/core/builtin_value_bench.cc
-  lang/core/interpolation_sampling_bench.cc
-  lang/core/interpolation_type_bench.cc
-  lang/core/texel_format_bench.cc
-)
-
-tint_target_add_dependencies(tint_lang_core_bench bench
-  tint_lang_core
-  tint_utils
-  tint_utils_containers
-  tint_utils_ice
-  tint_utils_macros
-  tint_utils_math
-  tint_utils_memory
-  tint_utils_rtti
-)
-
-tint_target_add_external_dependencies(tint_lang_core_bench bench
-  "google-benchmark"
   "src_utils"
 )

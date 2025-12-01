@@ -23,7 +23,6 @@ import static org.chromium.chrome.browser.autofill.editors.EditorProperties.Fiel
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.FieldProperties.LABEL;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.FieldProperties.VALUE;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.ItemType.TEXT_INPUT;
-import static org.chromium.chrome.browser.autofill.editors.EditorProperties.SHOW_REQUIRED_INDICATOR;
 import static org.chromium.chrome.browser.autofill.editors.EditorProperties.TextFieldProperties.TEXT_FIELD_TYPE;
 
 import android.app.Activity;
@@ -111,23 +110,6 @@ public class ContactEditorTest {
 
     @Test
     @SmallTest
-    public void validateRequiredFieldIndicator() {
-        ContactEditor editor =
-                new ContactEditor(
-                        /* requestPayerName= */ true,
-                        /* requestPayerPhone= */ false,
-                        /* requestPayerEmail= */ false,
-                        /* saveToDisk= */ false,
-                        mPersonalDataManager);
-        editor.setEditorDialog(mEditorDialog);
-        editor.edit(null, unused -> {});
-
-        assertNotNull(editor.getEditorModelForTesting());
-        assertTrue(editor.getEditorModelForTesting().get(SHOW_REQUIRED_INDICATOR));
-    }
-
-    @Test
-    @SmallTest
     public void requestName_NewContact() {
         ContactEditor editor =
                 new ContactEditor(
@@ -137,7 +119,7 @@ public class ContactEditorTest {
                         /* saveToDisk= */ false,
                         mPersonalDataManager);
         editor.setEditorDialog(mEditorDialog);
-        editor.edit(null, unused -> {});
+        editor.showEditPrompt(null, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -162,7 +144,7 @@ public class ContactEditorTest {
                         /* saveToDisk= */ false,
                         mPersonalDataManager);
         editor.setEditorDialog(mEditorDialog);
-        editor.edit(null, unused -> {});
+        editor.showEditPrompt(null, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -187,7 +169,7 @@ public class ContactEditorTest {
                         /* saveToDisk= */ false,
                         mPersonalDataManager);
         editor.setEditorDialog(mEditorDialog);
-        editor.edit(null, unused -> {});
+        editor.showEditPrompt(null, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -212,7 +194,7 @@ public class ContactEditorTest {
                         /* saveToDisk= */ false,
                         mPersonalDataManager);
         editor.setEditorDialog(mEditorDialog);
-        editor.edit(null, unused -> {});
+        editor.showEditPrompt(null, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -258,7 +240,7 @@ public class ContactEditorTest {
                         true,
                         false,
                         false);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -294,7 +276,7 @@ public class ContactEditorTest {
                         false,
                         true,
                         false);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -330,7 +312,7 @@ public class ContactEditorTest {
                         false,
                         false,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -366,7 +348,7 @@ public class ContactEditorTest {
                         true,
                         true,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -412,7 +394,7 @@ public class ContactEditorTest {
                         true,
                         false,
                         false);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -452,7 +434,7 @@ public class ContactEditorTest {
                         false,
                         true,
                         false);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -492,7 +474,7 @@ public class ContactEditorTest {
                         false,
                         false,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -532,7 +514,7 @@ public class ContactEditorTest {
                         true,
                         false,
                         false);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -570,7 +552,7 @@ public class ContactEditorTest {
                         false,
                         true,
                         false);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -609,7 +591,7 @@ public class ContactEditorTest {
                         false,
                         false,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -647,7 +629,7 @@ public class ContactEditorTest {
                         true,
                         true,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);
@@ -670,7 +652,7 @@ public class ContactEditorTest {
 
     @Test
     @SmallTest
-    public void edit_CorrectContactInfo_NoErrors() {
+    public void showEditPrompt_CorrectContactInfo_NoErrors() {
         ContactEditor editor =
                 new ContactEditor(
                         /* requestPayerName= */ true,
@@ -690,14 +672,14 @@ public class ContactEditorTest {
                         true,
                         true,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         validateErrorMessages(editor.getEditorModelForTesting(), /* errorsPresent= */ false);
     }
 
     @Test
     @SmallTest
-    public void edit_EditorErrorsSet_ErrorMessagesShown() {
+    public void showEditPrompt_EditorErrorsSet_ErrorMessagesShown() {
         ContactEditor editor =
                 new ContactEditor(
                         /* requestPayerName= */ true,
@@ -722,14 +704,14 @@ public class ContactEditorTest {
                         true,
                         true,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         validateErrorMessages(editor.getEditorModelForTesting(), /* errorsPresent= */ true);
     }
 
     @Test
     @SmallTest
-    public void edit_FieldsAreEmpty_ErrorMessagesShown() {
+    public void showEditPrompt_FieldsAreEmpty_ErrorMessagesShown() {
         ContactEditor editor =
                 new ContactEditor(
                         /* requestPayerName= */ true,
@@ -749,14 +731,14 @@ public class ContactEditorTest {
                         true,
                         true,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         validateErrorMessages(editor.getEditorModelForTesting(), /* errorsPresent= */ true);
     }
 
     @Test
     @SmallTest
-    public void edit_EmptyInputToFields_ErrorMessagesShown() {
+    public void showEditPrompt_EmptyInputToFields_ErrorMessagesShown() {
         ContactEditor editor =
                 new ContactEditor(
                         /* requestPayerName= */ true,
@@ -776,7 +758,7 @@ public class ContactEditorTest {
                         true,
                         true,
                         true);
-        editor.edit(contact, unused -> {});
+        editor.showEditPrompt(contact, unused -> {});
 
         PropertyModel editorModel = editor.getEditorModelForTesting();
         assertNotNull(editorModel);

@@ -171,6 +171,17 @@ const CGSize iconViewShadowOffset = CGSizeMake(0, 1);
     [self updateCellForAccessibilityContentSizeCategory:
               UIContentSizeCategoryIsAccessibilityCategory(
                   self.traitCollection.preferredContentSizeCategory)];
+
+    if (@available(iOS 17, *)) {
+      NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+          @[ UITraitPreferredContentSizeCategory.class ]);
+      __weak __typeof(self) weakSelf = self;
+      UITraitChangeHandler handler = ^(id<UITraitEnvironment> traitEnvironment,
+                                       UITraitCollection* previousCollection) {
+        [weakSelf updateUIOnTraitChange:previousCollection];
+      };
+      [self registerForTraitChanges:traits withHandler:handler];
+    }
   }
   return self;
 }
@@ -249,8 +260,9 @@ const CGSize iconViewShadowOffset = CGSizeMake(0, 1);
 
 #pragma mark - UIView
 
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
+// Updates the view's accessiblity properties when the device's
+// UITraitPreferredContentSizeCategory is modified.
+- (void)updateUIOnTraitChange:(UITraitCollection*)previousTraitCollection {
   BOOL isCurrentCategoryAccessibility =
       UIContentSizeCategoryIsAccessibilityCategory(
           self.traitCollection.preferredContentSizeCategory);

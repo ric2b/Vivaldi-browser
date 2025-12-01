@@ -71,12 +71,14 @@ const wchar_t kFXJSEProxyObjectTag[] = L"FXJSE Proxy Object";
 v8::Local<v8::Object> CreateReturnValue(v8::Isolate* pIsolate,
                                         v8::TryCatch* trycatch) {
   v8::Local<v8::Object> hReturnValue = v8::Object::New(pIsolate);
-  if (!trycatch->HasCaught())
+  if (!trycatch->HasCaught()) {
     return hReturnValue;
+  }
 
   v8::Local<v8::Message> hMessage = trycatch->Message();
-  if (hMessage.IsEmpty())
+  if (hMessage.IsEmpty()) {
     return hReturnValue;
+  }
 
   v8::Local<v8::Context> context = pIsolate->GetCurrentContext();
   v8::Local<v8::Value> hException = trycatch->Exception();
@@ -95,10 +97,11 @@ v8::Local<v8::Object> CreateReturnValue(v8::Isolate* pIsolate,
         fxv8::NewStringHelper(pIsolate, "message");
     hValue =
         hException.As<v8::Object>()->Get(context, hMessageStr).ToLocalChecked();
-    if (hValue->IsString() || hValue->IsStringObject())
+    if (hValue->IsString() || hValue->IsStringObject()) {
       hReturnValue->Set(context, 1, hValue).FromJust();
-    else
+    } else {
       hReturnValue->Set(context, 1, hMessage->Get()).FromJust();
+    }
   } else {
     v8::Local<v8::String> hErrorStr = fxv8::NewStringHelper(pIsolate, "Error");
     hReturnValue->Set(context, 0, hErrorStr).FromJust();
@@ -144,22 +147,26 @@ void FXJSE_ClearObjectBinding(v8::Local<v8::Object> hObject) {
 }
 
 CFXJSE_HostObject* FXJSE_RetrieveObjectBinding(v8::Local<v8::Value> hValue) {
-  if (!fxv8::IsObject(hValue))
+  if (!fxv8::IsObject(hValue)) {
     return nullptr;
+  }
 
   v8::Local<v8::Object> hObject = hValue.As<v8::Object>();
   if (hObject->InternalFieldCount() != 2 ||
       hObject->GetAlignedPointerFromInternalField(0) == kFXJSEProxyObjectTag) {
     v8::Local<v8::Value> hProtoObject = hObject->GetPrototype();
-    if (!fxv8::IsObject(hProtoObject))
+    if (!fxv8::IsObject(hProtoObject)) {
       return nullptr;
+    }
 
     hObject = hProtoObject.As<v8::Object>();
-    if (hObject->InternalFieldCount() != 2)
+    if (hObject->InternalFieldCount() != 2) {
       return nullptr;
+    }
   }
-  if (hObject->GetAlignedPointerFromInternalField(0) != kFXJSEHostObjectTag)
+  if (hObject->GetAlignedPointerFromInternalField(0) != kFXJSEHostObjectTag) {
     return nullptr;
+  }
 
   return static_cast<CFXJSE_HostObject*>(
       hObject->GetAlignedPointerFromInternalField(1));
@@ -199,12 +206,12 @@ std::unique_ptr<CFXJSE_Context> CFXJSE_Context::Create(
   v8::Local<v8::Context> hRootContext =
       CFXJSE_RuntimeData::Get(pIsolate)->GetRootContext(pIsolate);
   hNewContext->SetSecurityToken(hRootContext->GetSecurityToken());
-  pContext->m_hContext.Reset(pIsolate, hNewContext);
+  pContext->context_.Reset(pIsolate, hNewContext);
   return pContext;
 }
 
 CFXJSE_Context::CFXJSE_Context(v8::Isolate* pIsolate, CXFA_ThisProxy* pProxy)
-    : m_pIsolate(pIsolate), m_pProxy(pProxy) {}
+    : isolate_(pIsolate), this_proxy_(pProxy) {}
 
 CFXJSE_Context::~CFXJSE_Context() = default;
 
@@ -212,27 +219,26 @@ v8::Local<v8::Object> CFXJSE_Context::GetGlobalObject() {
   v8::Isolate::Scope isolate_scope(GetIsolate());
   v8::EscapableHandleScope handle_scope(GetIsolate());
   v8::Local<v8::Context> hContext =
-      v8::Local<v8::Context>::New(GetIsolate(), m_hContext);
+      v8::Local<v8::Context>::New(GetIsolate(), context_);
   v8::Local<v8::Object> result =
       hContext->Global()->GetPrototype().As<v8::Object>();
   return handle_scope.Escape(result);
 }
 
 v8::Local<v8::Context> CFXJSE_Context::GetContext() {
-  return v8::Local<v8::Context>::New(GetIsolate(), m_hContext);
+  return v8::Local<v8::Context>::New(GetIsolate(), context_);
 }
 
 void CFXJSE_Context::AddClass(std::unique_ptr<CFXJSE_Class> pClass) {
-  m_rgClasses.push_back(std::move(pClass));
+  classes_.push_back(std::move(pClass));
 }
 
 CFXJSE_Class* CFXJSE_Context::GetClassByName(ByteStringView szName) const {
-  auto pClass =
-      std::find_if(m_rgClasses.begin(), m_rgClasses.end(),
-                   [szName](const std::unique_ptr<CFXJSE_Class>& item) {
-                     return item->IsName(szName);
-                   });
-  return pClass != m_rgClasses.end() ? pClass->get() : nullptr;
+  auto pClass = std::ranges::find_if(
+      classes_, [szName](const std::unique_ptr<CFXJSE_Class>& item) {
+        return item->IsName(szName);
+      });
+  return pClass != classes_.end() ? pClass->get() : nullptr;
 }
 
 void CFXJSE_Context::EnableCompatibleMode() {

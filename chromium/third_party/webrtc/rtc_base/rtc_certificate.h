@@ -16,16 +16,12 @@
 #include <memory>
 #include <string>
 
-#include "absl/base/attributes.h"
 #include "absl/strings/string_view.h"
 #include "api/ref_counted_base.h"
 #include "api/scoped_refptr.h"
+#include "rtc_base/ssl_certificate.h"
+#include "rtc_base/ssl_identity.h"
 #include "rtc_base/system/rtc_export.h"
-namespace rtc {
-class SSLCertChain;
-class SSLCertificate;
-class SSLIdentity;
-}  // namespace rtc
 
 namespace webrtc {
 
@@ -53,11 +49,11 @@ class RTCCertificatePEM {
 // SSLCertificate and WebRTC usage. Takes ownership of some lower level objects,
 // reference counting protects these from premature destruction.
 class RTC_EXPORT RTCCertificate final
-    : public rtc::RefCountedNonVirtual<RTCCertificate> {
+    : public RefCountedNonVirtual<RTCCertificate> {
  public:
   // Takes ownership of `identity`.
   static scoped_refptr<RTCCertificate> Create(
-      std::unique_ptr<rtc::SSLIdentity> identity);
+      std::unique_ptr<SSLIdentity> identity);
 
   // Returns the expiration time in ms relative to epoch, 1970-01-01T00:00:00Z.
   uint64_t Expires() const;
@@ -65,14 +61,14 @@ class RTC_EXPORT RTCCertificate final
   // relative to epoch, 1970-01-01T00:00:00Z.
   bool HasExpired(uint64_t now) const;
 
-  const rtc::SSLCertificate& GetSSLCertificate() const;
-  const rtc::SSLCertChain& GetSSLCertificateChain() const;
+  const SSLCertificate& GetSSLCertificate() const;
+  const SSLCertChain& GetSSLCertificateChain() const;
 
   // TODO(hbos): If possible, remove once RTCCertificate and its
   // GetSSLCertificate() is used in all relevant places. Should not pass around
   // raw SSLIdentity* for the sake of accessing SSLIdentity::certificate().
   // However, some places might need SSLIdentity* for its public/private key...
-  rtc::SSLIdentity* identity() const { return identity_.get(); }
+  SSLIdentity* identity() const { return identity_.get(); }
 
   // To/from PEM, a text representation of the RTCCertificate.
   RTCCertificatePEM ToPEM() const;
@@ -82,7 +78,7 @@ class RTC_EXPORT RTCCertificate final
   bool operator!=(const RTCCertificate& certificate) const;
 
  protected:
-  explicit RTCCertificate(rtc::SSLIdentity* identity);
+  explicit RTCCertificate(SSLIdentity* identity);
 
   friend class RefCountedNonVirtual<RTCCertificate>;
   ~RTCCertificate();
@@ -90,16 +86,18 @@ class RTC_EXPORT RTCCertificate final
  private:
   // The SSLIdentity is the owner of the SSLCertificate. To protect our
   // GetSSLCertificate() we take ownership of `identity_`.
-  const std::unique_ptr<rtc::SSLIdentity> identity_;
+  const std::unique_ptr<SSLIdentity> identity_;
 };
 
 }  //  namespace webrtc
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::RTCCertificate;
 using ::webrtc::RTCCertificatePEM;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_RTC_CERTIFICATE_H_

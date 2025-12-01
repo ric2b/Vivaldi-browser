@@ -29,7 +29,7 @@
 // while this code allows multiple instrumented DSO.
 // TODO(kcc): this code is not a full replacement for the old code yet.
 
-namespace centipede {
+namespace fuzztest::internal {
 
 // Information about one sancov-instrumented object (DSO).
 // See https://clang.llvm.org/docs/SanitizerCoverage.html.
@@ -51,11 +51,10 @@ struct SanCovObject {
 class SanCovObjectArray {
  public:
   // To be called in __sanitizer_cov_trace_pc_guard_init.
-  void PCGuardInit(absl::Nullable<PCGuard *> start, PCGuard *stop);
+  void PCGuardInit(PCGuard *absl_nullable start, PCGuard *stop);
 
   // To be called in __sanitizer_cov_pcs_init.
-  void PCInfoInit(absl::Nullable<const PCInfo *> pcs_beg,
-                  const PCInfo *pcs_end);
+  void PCInfoInit(const PCInfo *absl_nullable pcs_beg, const PCInfo *pcs_end);
 
   // To be called in __sanitizer_cov_cfs_init.
   void CFSInit(const uintptr_t *cfs_beg, const uintptr_t *cfs_end);
@@ -111,6 +110,6 @@ class SanCovObjectArray {
   size_t num_instrumented_pcs_;  // Total number of instrumented PCs.
 };
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_RUNNER_SANCOV_OBJECT_H_

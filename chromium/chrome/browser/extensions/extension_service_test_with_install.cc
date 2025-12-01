@@ -352,7 +352,7 @@ void ExtensionServiceTestWithInstall::UninstallExtension(
   // once it's uninstalled.
   std::string extension_id = id;
   // Uninstall it.
-  EXPECT_TRUE(service()->UninstallExtension(
+  EXPECT_TRUE(registrar()->UninstallExtension(
       id, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr));
   --expected_extensions_count_;
 
@@ -367,13 +367,14 @@ void ExtensionServiceTestWithInstall::UninstallExtension(
 
   switch (delete_type) {
     case kDeleteAllVersions:
-      EXPECT_FALSE(base::PathExists(extension_path.DirName()));
+      EXPECT_FALSE(base::PathExists(extension_path.DirName()))
+          << extension_path.value();
       break;
     case kDeletePath:
-      EXPECT_FALSE(base::PathExists(extension_path));
+      EXPECT_FALSE(base::PathExists(extension_path)) << extension_path.value();
       break;
     case kDoNotDelete:
-      EXPECT_TRUE(base::PathExists(extension_path));
+      EXPECT_TRUE(base::PathExists(extension_path)) << extension_path.value();
       break;
   }
 }
@@ -384,11 +385,11 @@ void ExtensionServiceTestWithInstall::TerminateExtension(
     ADD_FAILURE();
     return;
   }
-  service()->TerminateExtension(id);
+  registrar()->TerminateExtension(id);
 }
 
 void ExtensionServiceTestWithInstall::BlockAllExtensions() {
-  service()->BlockAllExtensions();
+  registrar()->BlockAllExtensions();
 }
 
 void ExtensionServiceTestWithInstall::ClearLoadedExtensions() {

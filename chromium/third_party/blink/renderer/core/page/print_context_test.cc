@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/core/page/print_context.h"
 
 #include <memory>
+#include <ranges>
+#include <string_view>
 
+#include "base/containers/span.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/viz/test/test_context_provider.h"
 #include "components/viz/test/test_gles2_interface.h"
@@ -37,6 +35,7 @@
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/graphics/test/gpu_test_utils.h"
 #include "third_party/blink/renderer/platform/testing/paint_test_configurations.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder_stream.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 
@@ -63,8 +62,10 @@ class MockPageContextCanvas : public SkCanvas {
                         const char key[],
                         SkData* value) override {
     // Ignore PDF node key annotations, defined in SkPDFDocument.cpp.
-    if (0 == strcmp(key, "PDF_Node_Key"))
+    static constexpr std::string_view kPDFNodeKey("PDF_Node_Key");
+    if (kPDFNodeKey == key) {
       return;
+    }
 
     if (rect.width() == 0 && rect.height() == 0) {
       SkPoint point = getTotalMatrix().mapXY(rect.x(), rect.y());
@@ -549,12 +550,12 @@ TEST_P(PrintContextTest, LinkedTarget) {
   EXPECT_SKRECT_EQ(50, 460, 10, 10, operations[3].rect);
 
   // The DrawPoint operations come from an unstable iterator.
-  std::sort(operations.begin() + 4, operations.begin() + 8,
-            [](const MockPageContextCanvas::Operation& a,
-               const MockPageContextCanvas::Operation& b) {
-              return std::pair(a.rect.x(), a.rect.y()) <
-                     std::pair(b.rect.x(), b.rect.y());
-            });
+  std::ranges::sort(base::span(operations).subspan(4ul, 4ul),
+                    [](const MockPageContextCanvas::Operation& a,
+                       const MockPageContextCanvas::Operation& b) {
+                      return std::pair(a.rect.x(), a.rect.y()) <
+                             std::pair(b.rect.x(), b.rect.y());
+                    });
   EXPECT_EQ(MockPageContextCanvas::kDrawPoint, operations[4].type);
   EXPECT_SKRECT_EQ(0, 0, 0, 0, operations[4].rect);
   EXPECT_EQ(MockPageContextCanvas::kDrawPoint, operations[5].type);
@@ -669,6 +670,28 @@ TEST_P(PrintContextTest, LinkedTargetSecondPage) {
   ASSERT_EQ(1u, operations->size());
   EXPECT_EQ(MockPageContextCanvas::kDrawPoint, (*operations)[0].type);
   EXPECT_SKRECT_EQ(0, 50, 0, 0, (*operations)[0].rect);
+}
+
+TEST_P(PrintContextTest, LinkedTargetRootMargin) {
+  ScopedLayoutBoxVisualLocationForTest scoped_feature(true);
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      html { margin-top: 50px; }
+    </style>
+    <a style="display:block; width:33px; height:33px;" href="#target"></a>
+    <div id="target" style="margin-top:100px; width:10px; height:10px;"></div>
+  )HTML");
+
+  testing::NiceMock<MockPageContextCanvas> first_canvas;
+  PrintSinglePage(first_canvas, 0);
+  const Vector<MockPageContextCanvas::Operation>* operations =
+      &first_canvas.RecordedOperations();
+  ASSERT_EQ(2u, operations->size());
+  EXPECT_EQ(MockPageContextCanvas::kDrawRect, (*operations)[0].type);
+  EXPECT_SKRECT_EQ(0, 50, 33, 33, (*operations)[0].rect);
+
+  EXPECT_EQ(MockPageContextCanvas::kDrawPoint, (*operations)[1].type);
+  EXPECT_SKRECT_EQ(0, 183, 0, 0, (*operations)[1].rect);
 }
 
 // Here are a few tests to check that shrink to fit doesn't mess up page count.

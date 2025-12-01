@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ru">
-<translation id="2277224997687551299">Изменить название группы</translation>
+<translation id="1062777154504442433">Новая группа</translation>
+<translation id="1625440863545383011">Убрать вкладку и покинуть группу</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Поместить в закладки}
           other {Поместить в закладки}
         }</translation>
 <translation id="2947471979790858922">Ваша активность в приватных вкладках будет удалена с устройства</translation>
+<translation id="3298614730029636660">Покинуть группу</translation>
+<translation id="354698175756845966">Изменить цвет группы</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Все закрытые вкладки, кроме приватной, вы можете найти в Недавно закрытых в меню Vivaldi.}
         other {Все закрытые вкладки, кроме # приватных, вы можете найти в Недавно закрытых в меню Vivaldi.}}</translation>
-<translation id="4460014764210899310">Разгруппировать</translation>
 <translation id="4871187110787939393">Закрыть все приватные вкладки?</translation>
 <translation id="5494920125229734069">Выбрать всё</translation>
-<translation id="6744956528665271406">Изменить цвет группы</translation>
+<translation id="6807841890213931603">Убрать вкладку и удалить группу</translation>
+<translation id="750227952939161636">Ваши группы сохранены и обновлены на всех синхронизированных устройствах</translation>
+<translation id="7640137753339219124">Удалить группу</translation>
+<translation id="7653857400289671414">Ваши группы автоматически сохранены</translation>
+<translation id="8440938071054361204">Сменить имя группы</translation>
+<translation id="8602902357364871325">Закрыть группу</translation>
+<translation id="8851621822786801079">Убрать из группы</translation>
 </translationbundle>

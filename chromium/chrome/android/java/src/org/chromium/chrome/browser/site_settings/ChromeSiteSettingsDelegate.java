@@ -77,7 +77,7 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     private BrowsingDataModel mBrowsingDataModel;
     private ManagedPreferenceDelegate mManagedPreferenceDelegate;
     private SnackbarManager mSnackbarManager;
-    private PrivacySandboxSnackbarController mPrivacySandboxController;
+    private final PrivacySandboxSnackbarController mPrivacySandboxController;
     private LargeIconBridge mLargeIconBridge;
 
     public ChromeSiteSettingsDelegate(Context context, Profile profile) {
@@ -203,8 +203,8 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     }
 
     @Override
-    public String getChannelIdForOrigin(String origin) {
-        return SiteChannelsManager.getInstance().getChannelIdForOrigin(origin);
+    public void getChannelIdForOrigin(String origin, Callback<String> callback) {
+        SiteChannelsManager.getInstance().getChannelIdForOriginAsync(origin, callback);
     }
 
     @Override
@@ -355,25 +355,6 @@ public class ChromeSiteSettingsDelegate implements SiteSettingsDelegate {
     public boolean shouldShowTrackingProtectionUi() {
         return UserPrefs.get(mProfile).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
                 || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD);
-    }
-
-    @Override
-    public boolean shouldShowTrackingProtectionActFeaturesUi() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.ACT_USER_BYPASS_UX)
-                && (shouldDisplayIpProtection() || shouldDisplayFingerprintingProtection());
-    }
-
-    @Override
-    public boolean shouldDisplayIpProtection() {
-        // This is copied from the `IsIpProtectionEnabled` check in the TPS API.
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_UX)
-                && UserPrefs.get(mProfile).getBoolean(Pref.IP_PROTECTION_ENABLED);
-    }
-
-    @Override
-    public boolean shouldDisplayFingerprintingProtection() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.FINGERPRINTING_PROTECTION_UX)
-                && UserPrefs.get(mProfile).getBoolean(Pref.FINGERPRINTING_PROTECTION_ENABLED);
     }
 
     @Override

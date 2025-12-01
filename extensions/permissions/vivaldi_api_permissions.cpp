@@ -29,6 +29,7 @@ constexpr APIPermissionInfo::InitInfo permissions_to_register[] = {
     {APIPermissionID::kContentBlocking, "contentBlocking"},
     {APIPermissionID::kContextMenu, "contextMenu"},
     {APIPermissionID::kDevtoolsPrivate, "devtoolsPrivate"},
+    {APIPermissionID::kDnsOverHttpsPrivate, "dnsOverHttpsPrivate"},
     {APIPermissionID::kEditCommand, "editcommand"},
     {APIPermissionID::kExtensionActionUtils, "extensionActionUtils"},
     {APIPermissionID::kHistoryPrivate, "historyPrivate"},

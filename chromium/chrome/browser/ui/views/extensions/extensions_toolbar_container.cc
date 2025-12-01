@@ -11,7 +11,6 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "build/build_config.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
@@ -152,9 +151,11 @@ ExtensionsToolbarContainer::ExtensionsToolbarContainer(Browser* browser,
                                views::MaximumFlexSizeRule::kPreferred)
           .WithWeight(0);
   GetTargetLayoutManager()
-      ->SetFlexAllocationOrder(views::FlexAllocationOrder::kReverse)
+      ->SetFlexAllocationOrder(views::FlexAllocationOrder::kNormal)
       .SetDefault(views::kFlexBehaviorKey,
-                  hide_icon_flex_specification.WithOrder(3));
+                  hide_icon_flex_specification.WithOrder(
+                      ExtensionsToolbarContainerViewController::
+                          kFlexOrderExtensionsButton));
 
   switch (display_mode) {
     case DisplayMode::kNormal:
@@ -261,7 +262,7 @@ void ExtensionsToolbarContainer::RemoveAction(
 
   auto iter = std::ranges::find(actions_, action_id,
                                 &ToolbarActionViewController::GetId);
-  CHECK(iter != actions_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != actions_.end());
   // Ensure the action outlives the UI element to perform any cleanup.
   std::unique_ptr<ToolbarActionViewController> controller = std::move(*iter);
   actions_.erase(iter);
@@ -356,7 +357,7 @@ void ExtensionsToolbarContainer::UpdateRequestAccessButton(
 
   // Extensions are included in the request access button only when:
   //   - site allows customizing site access by extension
-  //   - extension added a request that has not been dismised
+  //   - extension added a request that has not been dismissed
   //   - requests can be shown in the toolbar
   std::vector<extensions::ExtensionId> extensions;
   if (site_setting ==
@@ -884,7 +885,7 @@ views::View::DropCallback ExtensionsToolbarContainer::GetDropCallback(
 void ExtensionsToolbarContainer::OnWidgetDestroying(views::Widget* widget) {
   auto iter =
       std::ranges::find(anchored_widgets_, widget, &AnchoredWidget::widget);
-  CHECK(iter != anchored_widgets_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != anchored_widgets_.end());
   iter->widget->RemoveObserver(this);
   const std::string extension_id = std::move(iter->extension_id);
   anchored_widgets_.erase(iter);

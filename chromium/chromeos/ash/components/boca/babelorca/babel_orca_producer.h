@@ -15,6 +15,7 @@
 #include "base/thread_annotations.h"
 #include "chromeos/ash/components/boca/babelorca/babel_orca_caption_translator.h"
 #include "chromeos/ash/components/boca/babelorca/babel_orca_controller.h"
+#include "chromeos/ash/components/boca/babelorca/babel_orca_speech_recognizer.h"
 #include "chromeos/ash/components/boca/babelorca/tachyon_authed_client_impl.h"
 #include "media/mojo/mojom/speech_recognition.mojom.h"
 
@@ -28,15 +29,27 @@ class SharedURLLoaderFactory;
 
 namespace ash::babelorca {
 
-class BabelOrcaSpeechRecognizer;
 class CaptionController;
 class TachyonRequestDataProvider;
 class TokenManager;
 class TranscriptSenderRateLimiter;
 
 // Class to control captions handling behavior in producer mode.
-class BabelOrcaProducer : public BabelOrcaController {
+class BabelOrcaProducer : public BabelOrcaController,
+                          public BabelOrcaSpeechRecognizer::Observer {
  public:
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. Public for testing.
+  //
+  // LINT.IfChange(SendingStoppedReason)
+  enum class SendingStoppedReason {
+    kSessionEnded = 0,
+    kSessionCaptionTurnedOff = 1,
+    kTachyonSendMessagesError = 2,
+    kMaxValue = kTachyonSendMessagesError,
+  };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/ash/enums.xml:BabelOrcaSendingStoppedReason)
+
   static std::unique_ptr<BabelOrcaController> Create(
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::unique_ptr<BabelOrcaSpeechRecognizer> speech_recognizer,
@@ -61,18 +74,16 @@ class BabelOrcaProducer : public BabelOrcaController {
   void OnSessionCaptionConfigUpdated(bool session_captions_enabled,
                                      bool translations_enabled) override;
   void OnLocalCaptionConfigUpdated(bool local_captions_enabled) override;
+  bool IsProducer() override;
+
+  // BabelOrcaSpeechRecognizer::Observer:
+  void OnTranscriptionResult(const media::SpeechRecognitionResult& result,
+                             const std::string& source_language) override;
+  void OnLanguageIdentificationEvent(
+      const media::mojom::LanguageIdentificationEventPtr& event) override;
 
  private:
   void InitSending(bool signed_in);
-
-  void OnTranscriptionResult(const media::SpeechRecognitionResult& result,
-                             const std::string& source_language);
-
-  // This callback method forwards language identification events to the
-  // live caption controller wrapper, the source language for translations
-  // is passed per call to OnTranscriptionResult above.
-  void OnLanguageIdentificationEvent(
-      const media::mojom::LanguageIdentificationEventPtr& event);
 
   void OnSendFailed();
 

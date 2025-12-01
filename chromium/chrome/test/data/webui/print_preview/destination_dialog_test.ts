@@ -2,13 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {Destination, DestinationStore, LocalDestinationInfo,
-             PrintPreviewDestinationDialogElement,
-             PrintPreviewDestinationListItemElement} from 'chrome://print/print_preview.js';
-import {
-  GooglePromotedDestinationId, makeRecentDestination, NativeLayerImpl} from 'chrome://print/print_preview.js';
-import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import 'chrome://print/print_preview.js';
+
+import type {Destination, DestinationStore, LocalDestinationInfo, PrintPreviewDestinationDialogElement, PrintPreviewDestinationListItemElement} from 'chrome://print/print_preview.js';
+import {GooglePromotedDestinationId, makeRecentDestination, NativeLayerImpl} from 'chrome://print/print_preview.js';
 import {assertEquals} from 'chrome://webui-test/chai_assert.js';
+import {microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {NativeLayerStub} from './native_layer_stub.js';
 import {createDestinationStore, getDestinations, getExtensionDestinations, setupTestListenerElement} from './print_preview_test_utils.js';
@@ -53,11 +52,11 @@ suite('DestinationDialogTest', function() {
 
   function validatePrinterList() {
     const list =
-        dialog.shadowRoot!.querySelector('print-preview-destination-list');
-    const printerItems = list!.shadowRoot!.querySelectorAll(
+        dialog.shadowRoot.querySelector('print-preview-destination-list');
+    const printerItems = list!.shadowRoot.querySelectorAll(
         'print-preview-destination-list-item');
     const getDisplayedName = (item: PrintPreviewDestinationListItemElement) =>
-        item.shadowRoot!.querySelector('.name')!.textContent;
+        item.shadowRoot.querySelector('.name')!.textContent;
     // 5 local printers + 3 extension printers + Save as PDF
     assertEquals(9, printerItems.length);
     // Save as PDF shows up first.
@@ -88,27 +87,26 @@ suite('DestinationDialogTest', function() {
     // This should trigger 1 new getPrinters() call, for extension printers.
     finishSetup();
     await whenPrinterListReady;
-    flush();
+    await microtasksFinished();
     validatePrinterList();
   });
 
   // Test that destinations are correctly displayed in the lists when all
   // printers have been preloaded before the dialog is opened. Regression test
   // for https://crbug.com/1330678.
-  test(
-      'PrinterListPreloaded', async () => {
-        // All printers are fetched at startup since both native and extension
-        // printers are recent.
-        const whenAllPreloaded = nativeLayer.waitForGetPrinters(2);
-        destinationStore.init(
-            false /* pdfPrinterDisabled */, 'FooDevice' /* printerName */,
-            '' /* serializedDefaultDestinationSelectionRulesStr */, [
-              makeRecentDestination(destinations[4]!),
-              makeRecentDestination(extensionDestinations[0]!),
-            ] /* recentDestinations */);
-        await whenAllPreloaded;
-        finishSetup();
-        flush();
-        validatePrinterList();
-      });
+  test('PrinterListPreloaded', async () => {
+    // All printers are fetched at startup since both native and extension
+    // printers are recent.
+    const whenAllPreloaded = nativeLayer.waitForGetPrinters(2);
+    destinationStore.init(
+        false /* pdfPrinterDisabled */, 'FooDevice' /* printerName */,
+        '' /* serializedDefaultDestinationSelectionRulesStr */, [
+          makeRecentDestination(destinations[4]!),
+          makeRecentDestination(extensionDestinations[0]!),
+        ] /* recentDestinations */);
+    await whenAllPreloaded;
+    finishSetup();
+    await microtasksFinished();
+    validatePrinterList();
+  });
 });

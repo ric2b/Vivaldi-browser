@@ -165,6 +165,8 @@ std::string GetBlockingReasonSubtitle(
     case FilteringBehaviorReason::MANUAL:
       message_id = IDS_PARENT_WEBSITE_APPROVAL_MANUAL_URL;
       break;
+    case FilteringBehaviorReason::FILTER_DISABLED:
+      NOTREACHED() << "No blocking reason when the filter is disabled";
   }
   return l10n_util::GetStringFUTF8(message_id, blocked_hostname);
 }
@@ -311,14 +313,6 @@ GURL NormalizeUrl(const GURL& url) {
     effective_url = url;
   }
   return url_matcher::util::Normalize(effective_url);
-}
-
-bool AreWebFilterPrefsDefault(const PrefService& pref_service) {
-  return pref_service
-             .FindPreference(prefs::kDefaultSupervisedUserFilteringBehavior)
-             ->IsDefaultValue() ||
-         pref_service.FindPreference(prefs::kSupervisedUserSafeSites)
-             ->IsDefaultValue();
 }
 
 bool EmitLogRecordHistograms(

@@ -5,6 +5,8 @@
 #include <limits.h>
 #include <stdint.h>
 
+#include <algorithm>
+#include <array>
 #include <limits>
 #include <type_traits>
 
@@ -12,19 +14,24 @@
 #include "core/fxcodec/jpx/jpx_decode_utils.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
 #include "core/fxcrt/fx_memory.h"
-#include "core/fxcrt/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/libopenjpeg/opj_malloc.h"
 
 namespace fxcodec {
 
-static const OPJ_OFF_T kSkipError = static_cast<OPJ_OFF_T>(-1);
-static const OPJ_SIZE_T kReadError = static_cast<OPJ_SIZE_T>(-1);
+namespace {
 
-static const uint8_t kStreamData[] = {
+constexpr OPJ_OFF_T kSkipError = static_cast<OPJ_OFF_T>(-1);
+constexpr OPJ_SIZE_T kReadError = static_cast<OPJ_SIZE_T>(-1);
+
+constexpr auto kStreamData = std::to_array<const uint8_t>({
+    // clang-format off
     0x00, 0x01, 0x02, 0x03,
     0x84, 0x85, 0x86, 0x87,  // Include some hi-bytes, too.
-};
+    // clang-format on
+});
+
+}  // namespace
 
 TEST(fxcodec, DecodeDataNullDecodeData) {
   uint8_t buffer[16];
@@ -41,12 +48,12 @@ TEST(fxcodec, DecodeDataNullStream) {
   uint8_t buffer[16];
 
   // Reads of size 0 do nothing but return an error code.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 0, &dd));
   EXPECT_EQ(0xbd, buffer[0]);
 
   // Reads of nonzero size do nothing but return an error code.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, sizeof(buffer), &dd));
   EXPECT_EQ(0xbd, buffer[0]);
 
@@ -64,16 +71,17 @@ TEST(fxcodec, DecodeDataNullStream) {
 }
 
 TEST(fxcodec, DecodeDataZeroSize) {
-  DecodeData dd(pdfium::make_span(kStreamData).first(0u));
+  static constexpr pdfium::span<const uint8_t> kEmptySpan;
+  DecodeData dd(kEmptySpan);
   uint8_t buffer[16];
 
   // Reads of size 0 do nothing but return an error code.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 0, &dd));
   EXPECT_EQ(0xbd, buffer[0]);
 
   // Reads of nonzero size do nothing but return an error code.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, sizeof(buffer), &dd));
   EXPECT_EQ(0xbd, buffer[0]);
 
@@ -96,7 +104,7 @@ TEST(fxcodec, DecodeDataReadInBounds) {
     DecodeData dd(kStreamData);
 
     // Exact sized read in a single call.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(8u, opj_read_from_memory(buffer, sizeof(buffer), &dd));
     EXPECT_EQ(0x00, buffer[0]);
     EXPECT_EQ(0x01, buffer[1]);
@@ -112,19 +120,19 @@ TEST(fxcodec, DecodeDataReadInBounds) {
     DecodeData dd(kStreamData);
 
     // Simple read.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(2u, opj_read_from_memory(buffer, 2, &dd));
     EXPECT_EQ(0x00, buffer[0]);
     EXPECT_EQ(0x01, buffer[1]);
     EXPECT_EQ(0xbd, buffer[2]);
 
     // Read of size 0 doesn't affect things.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(0u, opj_read_from_memory(buffer, 0, &dd));
     EXPECT_EQ(0xbd, buffer[0]);
 
     // Read exactly up to end of data.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(6u, opj_read_from_memory(buffer, 6, &dd));
     EXPECT_EQ(0x02, buffer[0]);
     EXPECT_EQ(0x03, buffer[1]);
@@ -135,7 +143,7 @@ TEST(fxcodec, DecodeDataReadInBounds) {
     EXPECT_EQ(0xbd, buffer[6]);
 
     // Read of size 0 at EOF is still an error.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 0, &dd));
     EXPECT_EQ(0xbd, buffer[0]);
   }
@@ -147,7 +155,7 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
     DecodeData dd(kStreamData);
 
     // Read beyond bounds in a single step.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(8u, opj_read_from_memory(buffer, sizeof(buffer) + 1, &dd));
     EXPECT_EQ(0x00, buffer[0]);
     EXPECT_EQ(0x01, buffer[1]);
@@ -163,7 +171,7 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
     DecodeData dd(kStreamData);
 
     // Read well beyond bounds in a single step.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(8u, opj_read_from_memory(
                       buffer, std::numeric_limits<OPJ_SIZE_T>::max(), &dd));
     EXPECT_EQ(0x00, buffer[0]);
@@ -181,7 +189,7 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
 
     // Read of size 6 gets first 6 bytes.
     // rest of buffer intact.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(6u, opj_read_from_memory(buffer, 6, &dd));
     EXPECT_EQ(0x00, buffer[0]);
     EXPECT_EQ(0x01, buffer[1]);
@@ -192,14 +200,14 @@ TEST(fxcodec, DecodeDataReadBeyondBounds) {
     EXPECT_EQ(0xbd, buffer[6]);
 
     // Read of size 6 gets remaining two bytes.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(2u, opj_read_from_memory(buffer, 6, &dd));
     EXPECT_EQ(0x86, buffer[0]);
     EXPECT_EQ(0x87, buffer[1]);
     EXPECT_EQ(0xbd, buffer[2]);
 
     // Read of 6 more gets nothing and leaves rest of buffer intact.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 6, &dd));
     EXPECT_EQ(0xbd, buffer[0]);
   }
@@ -213,28 +221,28 @@ TEST(fxcodec, DecodeDataSkip) {
     DecodeData dd(kStreamData);
 
     // Skiping within buffer is allowed.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(1u, opj_skip_from_memory(1, &dd));
     EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
     EXPECT_EQ(0x01, buffer[0]);
     EXPECT_EQ(0xbd, buffer[1]);
 
     // Skiping 0 bytes changes nothing.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(0, opj_skip_from_memory(0, &dd));
     EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
     EXPECT_EQ(0x02, buffer[0]);
     EXPECT_EQ(0xbd, buffer[1]);
 
     // Skiping to EOS-1 is possible.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(4u, opj_skip_from_memory(4, &dd));
     EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
     EXPECT_EQ(0x87, buffer[0]);
     EXPECT_EQ(0xbd, buffer[1]);
 
     // Next read fails.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 1, &dd));
     EXPECT_EQ(0xbd, buffer[0]);
   }
@@ -242,7 +250,7 @@ TEST(fxcodec, DecodeDataSkip) {
     DecodeData dd(kStreamData);
 
     // Skiping directly to EOS is allowed.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(8u, opj_skip_from_memory(8, &dd));
 
     // Next read fails.
@@ -253,7 +261,7 @@ TEST(fxcodec, DecodeDataSkip) {
     DecodeData dd(kStreamData);
 
     // Skipping beyond end of stream is allowed and returns full distance.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(9u, opj_skip_from_memory(9, &dd));
 
     // Next read fails.
@@ -265,7 +273,7 @@ TEST(fxcodec, DecodeDataSkip) {
 
     // Skipping way beyond EOS is allowd, doesn't wrap, and returns
     // full distance.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(4u, opj_skip_from_memory(4, &dd));
     EXPECT_EQ(std::numeric_limits<OPJ_OFF_T>::max(),
               opj_skip_from_memory(std::numeric_limits<OPJ_OFF_T>::max(), &dd));
@@ -278,7 +286,7 @@ TEST(fxcodec, DecodeDataSkip) {
     DecodeData dd(kStreamData);
 
     // Negative skip within buffer not is allowed, position unchanged.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(4u, opj_skip_from_memory(4, &dd));
     EXPECT_EQ(kSkipError, opj_skip_from_memory(-2, &dd));
 
@@ -288,7 +296,7 @@ TEST(fxcodec, DecodeDataSkip) {
     EXPECT_EQ(0xbd, buffer[1]);
 
     // Negative skip before buffer is not allowed, position unchanged.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(kSkipError, opj_skip_from_memory(-4, &dd));
 
     // Next read succeeds as if nothing has happenned.
@@ -300,7 +308,7 @@ TEST(fxcodec, DecodeDataSkip) {
     DecodeData dd(kStreamData);
 
     // Negative skip way before buffer is not allowed, doesn't wrap
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(4u, opj_skip_from_memory(4, &dd));
     EXPECT_EQ(kSkipError,
               opj_skip_from_memory(std::numeric_limits<OPJ_OFF_T>::min(), &dd));
@@ -314,7 +322,7 @@ TEST(fxcodec, DecodeDataSkip) {
     DecodeData dd(kStreamData);
 
     // Negative skip after EOS isn't alowed, still EOS.
-    fxcrt::Fill(buffer, 0xbd);
+    std::ranges::fill(buffer, 0xbd);
     EXPECT_EQ(8u, opj_skip_from_memory(8, &dd));
     EXPECT_EQ(kSkipError, opj_skip_from_memory(-4, &dd));
 
@@ -329,21 +337,21 @@ TEST(fxcodec, DecodeDataSeek) {
   DecodeData dd(kStreamData);
 
   // Seeking within buffer is allowed and read succeeds
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_TRUE(opj_seek_from_memory(1, &dd));
   EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0x01, buffer[0]);
   EXPECT_EQ(0xbd, buffer[1]);
 
   // Seeking before start returns error leaving position unchanged.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_FALSE(opj_seek_from_memory(-1, &dd));
   EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0x02, buffer[0]);
   EXPECT_EQ(0xbd, buffer[1]);
 
   // Seeking way before start returns error leaving position unchanged.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_FALSE(
       opj_seek_from_memory(std::numeric_limits<OPJ_OFF_T>::min(), &dd));
   EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
@@ -351,33 +359,33 @@ TEST(fxcodec, DecodeDataSeek) {
   EXPECT_EQ(0xbd, buffer[1]);
 
   // Seeking exactly to EOS is allowed but read fails.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_TRUE(opj_seek_from_memory(8, &dd));
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0xbd, buffer[0]);
 
   // Seeking back to zero offset is allowed and read succeeds.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_TRUE(opj_seek_from_memory(0, &dd));
   EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0x00, buffer[0]);
   EXPECT_EQ(0xbd, buffer[1]);
 
   // Seeking beyond end of stream is allowed but read fails.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_TRUE(opj_seek_from_memory(16, &dd));
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0xbd, buffer[0]);
 
   // Seeking within buffer after seek past EOF restores good state.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_TRUE(opj_seek_from_memory(4, &dd));
   EXPECT_EQ(1u, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0x84, buffer[0]);
   EXPECT_EQ(0xbd, buffer[1]);
 
   // Seeking way beyond EOS is allowed, doesn't wrap, and read fails.
-  fxcrt::Fill(buffer, 0xbd);
+  std::ranges::fill(buffer, 0xbd);
   EXPECT_TRUE(opj_seek_from_memory(std::numeric_limits<OPJ_OFF_T>::max(), &dd));
   EXPECT_EQ(kReadError, opj_read_from_memory(buffer, 1, &dd));
   EXPECT_EQ(0xbd, buffer[0]);

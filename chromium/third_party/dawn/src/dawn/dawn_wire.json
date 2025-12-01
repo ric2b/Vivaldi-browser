@@ -221,7 +221,8 @@
         "client_side_structures": [
             "FutureWaitInfo",
             "SurfaceDescriptorFromWindowsCoreWindow",
-            "SurfaceDescriptorFromWindowsSwapChainPanel",
+            "SurfaceDescriptorFromWindowsUWPSwapChainPanel",
+            "SurfaceDescriptorFromWindowsWinUISwapChainPanel",
             "SurfaceSourceMetalLayer",
             "SurfaceSourceWindowsHWND",
             "SurfaceSourceXlibWindow",
@@ -314,6 +315,7 @@
             "ComputePassEncoder"
         ],
         "server_custom_pre_handler_commands": [
+            "DeviceCreateErrorBuffer",
             "BufferDestroy",
             "BufferUnmap"
         ]

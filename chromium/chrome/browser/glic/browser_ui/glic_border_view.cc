@@ -84,6 +84,16 @@ gfx::Insets GetContentsBorderInsets(BrowserView& browser_view) {
 }
 }  // namespace
 
+GlicBorderView::Factory* GlicBorderView::Factory::factory_ = nullptr;
+
+std::unique_ptr<GlicBorderView> GlicBorderView::Factory::Create(
+    Browser* browser) {
+  if (factory_) [[unlikely]] {
+    return factory_->CreateBorderView(browser);
+  }
+  return base::WrapUnique(new GlicBorderView(browser, /*tester=*/nullptr));
+}
+
 class GlicBorderView::BorderViewUpdater {
  public:
   explicit BorderViewUpdater(Browser* browser, GlicBorderView* border_view)
@@ -120,20 +130,9 @@ class GlicBorderView::BorderViewUpdater {
 
     auto* current_focus = glic_focused_contents_in_current_window_.get();
     bool focus_changed = previous_focus != current_focus;
-    if (border_view_->tester_ && focus_changed) [[unlikely]] {
-      auto current_focus_url = current_focus ? current_focus->GetURL() : GURL();
-      border_view_->tester_->FocusedTabChanged(current_focus_url);
-    }
 
     bool tab_switch = previous_focus &&
                       glic_focused_contents_in_current_window_ && focus_changed;
-    // OnFocusedTabChanged is dispatched after the previous focused WebContents
-    // is destroyed, making it no different than the focus changing to a
-    // different browser window. `border_view_->compositor_` helps
-    // differentiating between the two states.
-    bool focused_tab_destroyed = !previous_focus &&
-                                 glic_focused_contents_in_current_window_ &&
-                                 border_view_->compositor_;
     bool window_gained_focus =
         !previous_focus && glic_focused_contents_in_current_window_;
     bool window_lost_focus =
@@ -141,8 +140,6 @@ class GlicBorderView::BorderViewUpdater {
 
     if (tab_switch) {
       UpdateBorderView(UpdateBorderReason::kFocusedTabChanged_NoFocusChange);
-    } else if (focused_tab_destroyed) {
-      UpdateBorderView(UpdateBorderReason::kFocusedTabDestroyed_NoFocusChange);
     } else if (window_gained_focus) {
       UpdateBorderView(UpdateBorderReason::kFocusedTabChanged_GainFocus);
     } else if (window_lost_focus) {
@@ -171,9 +168,6 @@ class GlicBorderView::BorderViewUpdater {
     // Tab focus changes in the same window.
     kFocusedTabChanged_NoFocusChange,
 
-    // The focused tab is destroyed so the focus changes to a different tab.
-    kFocusedTabDestroyed_NoFocusChange,
-
     // Focus changes across different application windows.
     kFocusedTabChanged_GainFocus,
     kFocusedTabChanged_LostFocus,
@@ -183,6 +177,13 @@ class GlicBorderView::BorderViewUpdater {
     auto reasons_string = UpdateReasonsToString();
     SCOPED_CRASH_KEY_STRING1024("crbug-398319435", "update_reasons",
                                 reasons_string);
+    SCOPED_CRASH_KEY_BOOL("crbug-398319435", "access_indicator",
+                          context_access_indicator_enabled_);
+    SCOPED_CRASH_KEY_BOOL("crbug-398319435", "glic_focused_contents",
+                          !!glic_focused_contents_in_current_window_);
+    SCOPED_CRASH_KEY_BOOL("crbug-398319435", "is_glic_window_showing",
+                          IsGlicWindowShowing());
+
     switch (reason) {
       case UpdateBorderReason::kContextAccessIndicatorOn: {
         // Off to On. Throw away everything we have and start the animation from
@@ -199,8 +200,7 @@ class GlicBorderView::BorderViewUpdater {
         }
         break;
       }
-      case UpdateBorderReason::kFocusedTabChanged_NoFocusChange:
-      case UpdateBorderReason::kFocusedTabDestroyed_NoFocusChange: {
+      case UpdateBorderReason::kFocusedTabChanged_NoFocusChange: {
         if (ShouldShowBorderAnimation()) {
           border_view_->ResetEmphasisAndReplay();
         }
@@ -225,10 +225,7 @@ class GlicBorderView::BorderViewUpdater {
   }
 
   bool IsGlicWindowShowing() const {
-    auto* service =
-        GlicKeyedServiceFactory::GetGlicKeyedService(browser_->GetProfile());
-    CHECK(service);
-    return service->window_controller().IsShowing();
+    return border_view_->GetGlicService()->window_controller().IsShowing();
   }
 
   bool IsTabInCurrentWindow(const content::WebContents* tab) const {
@@ -254,8 +251,6 @@ class GlicBorderView::BorderViewUpdater {
         return "IndicatorOff";
       case UpdateBorderReason::kFocusedTabChanged_NoFocusChange:
         return "TabFocusChange";
-      case UpdateBorderReason::kFocusedTabDestroyed_NoFocusChange:
-        return "TabDestroyed";
       case UpdateBorderReason::kFocusedTabChanged_GainFocus:
         return "WindowGainFocus";
       case UpdateBorderReason::kFocusedTabChanged_LostFocus:
@@ -295,9 +290,10 @@ class GlicBorderView::BorderViewUpdater {
   std::list<std::string> border_update_reasons_;
 };
 
-GlicBorderView::GlicBorderView(Browser* browser)
+GlicBorderView::GlicBorderView(Browser* browser, std::unique_ptr<Tester> tester)
     : updater_(std::make_unique<BorderViewUpdater>(browser, this)),
       creation_time_(base::TimeTicks::Now()),
+      tester_(std::move(tester)),
       theme_service_(ThemeServiceFactory::GetForProfile(browser->GetProfile())),
       browser_(browser) {
   auto* gpu_data_manager = content::GpuDataManager::GetInstance();
@@ -375,10 +371,16 @@ void GlicBorderView::OnPaint(gfx::Canvas* canvas) {
        .value = UseDarkMode(theme_service_) ? 1 : 0}};
 
   views::View::OnPaint(canvas);
+
   cc::PaintFlags flags;
-  flags.setShader(cc::PaintShader::MakeSkSLCommand(
+  auto shader = cc::PaintShader::MakeSkSLCommand(
       shader_, std::move(float_uniforms), std::move(float2_uniforms),
-      /*float4_uniforms=*/{}, std::move(int_uniforms)));
+      /*float4_uniforms=*/{}, std::move(int_uniforms), cached_paint_shader_);
+  flags.setShader(shader);
+
+  if (base::FeatureList::IsEnabled(features::kGlicUseShaderCache)) {
+    cached_paint_shader_ = shader;
+  }
 
   // TODO(liuwilliam): This will create a hard clip at the boundary. Figure out
   // a better way of the falloff.
@@ -569,6 +571,7 @@ void GlicBorderView::StopShowing() {
   first_emphasis_frame_ = base::TimeTicks{};
   last_emphasis_frame_ = base::TimeTicks{};
   first_ramp_down_frame_ = base::TimeTicks{};
+  record_first_ramp_down_frame_ = false;
   total_steady_time_ = base::Milliseconds(0);
   opacity_ = 0.f;
   emphasis_ = 0.f;
@@ -611,6 +614,12 @@ void GlicBorderView::ResetEmphasisAndReplay() {
     SCOPED_CRASH_KEY_NUMBER("crbug-398319435", "first_rampdown",
                             TimeTicksToMicroseconds(first_ramp_down_frame_));
     base::debug::DumpWithoutCrashing();
+
+    // Gracefully handling the crash case in b/398319435 by
+    // closing(minimizing) the glic window.
+    // TODO(b/413442838): Add tests to reproduce the dump without crash and
+    // validate the solution.
+    GetGlicService()->window_controller().Close();
     return;
   }
   CHECK(compositor_->HasObserver(this));
@@ -624,7 +633,7 @@ void GlicBorderView::ResetEmphasisAndReplay() {
   }
 }
 
-float GlicBorderView::GetOpacity(base::TimeTicks timestamp) const {
+float GlicBorderView::GetOpacity(base::TimeTicks timestamp) {
   auto ramp_up_duration = skip_emphasis_animation_ ? kFastOpacityRampUpDuration
                                                    : kOpacityRampUpDuration;
   if (!first_ramp_down_frame_.is_null()) {
@@ -642,13 +651,15 @@ float GlicBorderView::GetOpacity(base::TimeTicks timestamp) const {
     float ramp_down_opacity =
         static_cast<float>(time_since_first_ramp_down_frame.InMillisecondsF() /
                            kOpacityRampDownDuration.InMillisecondsF());
-
-    return std::clamp(ramp_up_opacity - ramp_down_opacity, 0.0f, 1.0f);
+    ramp_down_opacity_ =
+        std::clamp(ramp_up_opacity - ramp_down_opacity, 0.0f, 1.0f);
+    return ramp_down_opacity_;
   } else {
     base::TimeDelta time_since_first_frame = timestamp - first_frame_time_;
     return std::clamp(
-        static_cast<float>(time_since_first_frame.InMillisecondsF() /
-                           ramp_up_duration.InMillisecondsF()),
+        static_cast<float>(ramp_down_opacity_ +
+                           (time_since_first_frame.InMillisecondsF() /
+                            ramp_up_duration.InMillisecondsF())),
         0.0f, 1.0f);
   }
 }
@@ -710,6 +721,13 @@ base::TimeTicks GlicBorderView::GetCreationTime() const {
 bool GlicBorderView::ForceSimplifiedShader() const {
   return base::FeatureList::IsEnabled(features::kGlicForceSimplifiedBorder) ||
          !has_hardware_acceleration_;
+}
+
+GlicKeyedService* GlicBorderView::GetGlicService() const {
+  auto* service =
+      GlicKeyedServiceFactory::GetGlicKeyedService(browser_->GetProfile());
+  CHECK(service);
+  return service;
 }
 
 BEGIN_METADATA(GlicBorderView)

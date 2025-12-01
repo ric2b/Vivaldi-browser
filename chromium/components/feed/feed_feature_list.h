@@ -24,6 +24,13 @@ inline constexpr char kEnableRssLinkReader[] = "enable-rss-link-reader";
 }
 
 COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
+extern const char kFeedHeaderRemovalTreatmentParam[];
+COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
+extern const char kFeedHeaderRemovalTreatmentValue1[];
+COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
+extern const char kFeedHeaderRemovalTreatmentValue2[];
+
+COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
 BASE_DECLARE_FEATURE(kInterestFeedV2);
 
 // Use the new DiscoFeed endpoint.
@@ -94,10 +101,6 @@ BASE_DECLARE_FEATURE(kSyntheticCapabilities);
 COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
 BASE_DECLARE_FEATURE(kFeedSignedOutViewDemotion);
 
-// Feature that enables dynamic colors in the feed.
-COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
-BASE_DECLARE_FEATURE(kFeedDynamicColors);
-
 // Feature that enables UI update for Follow.
 COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
 BASE_DECLARE_FEATURE(kFeedFollowUiUpdate);
@@ -121,6 +124,10 @@ BASE_DECLARE_FEATURE(kFeedRecyclerBinderUnmountOnDetach);
 // Feature that enables feed streaming.
 COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
 BASE_DECLARE_FEATURE(kFeedStreaming);
+
+// Feature that removes feed header.
+COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
+BASE_DECLARE_FEATURE(kFeedHeaderRemoval);
 
 COMPONENT_EXPORT(COMPONENTS_FEED_FEATURE_LIST)
 bool IsWebFeedEnabledForLocale(const std::string& country);

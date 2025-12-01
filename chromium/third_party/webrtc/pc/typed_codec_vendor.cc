@@ -26,13 +26,13 @@
 #include "media/base/media_engine.h"
 #include "rtc_base/logging.h"
 
-namespace cricket {
+namespace webrtc {
 
 namespace {
 
 // Create the voice codecs. Do not allocate payload types at this time.
 std::vector<Codec> CollectAudioCodecs(
-    const std::vector<webrtc::AudioCodecSpec>& specs) {
+    const std::vector<AudioCodecSpec>& specs) {
   std::vector<Codec> out;
 
   // Only generate CN payload types for these clockrates:
@@ -42,7 +42,7 @@ std::vector<Codec> CollectAudioCodecs(
                                                           {48000, false}};
 
   for (const auto& spec : specs) {
-    cricket::Codec codec = CreateAudioCodec(spec.format);
+    Codec codec = CreateAudioCodec(spec.format);
     if (spec.info.supports_network_adaption) {
       codec.AddFeedbackParam(
           FeedbackParam(kRtcpFbParamTransportCc, kParamValueEmpty));
@@ -70,7 +70,7 @@ std::vector<Codec> CollectAudioCodecs(
     if (codec.name == kOpusCodecName) {
       // We don't know the PT to put into the RED fmtp parameter yet.
       // Leave it out.
-      cricket::Codec red_codec = CreateAudioCodec({kRedCodecName, 48000, 2});
+      Codec red_codec = CreateAudioCodec({kRedCodecName, 48000, 2});
       out.push_back(red_codec);
     }
   }
@@ -78,7 +78,7 @@ std::vector<Codec> CollectAudioCodecs(
   // Add CN codecs after "proper" audio codecs.
   for (const auto& cn : generate_cn) {
     if (cn.second) {
-      cricket::Codec cn_codec = CreateAudioCodec({kCnCodecName, cn.first, 1});
+      Codec cn_codec = CreateAudioCodec({kCnCodecName, cn.first, 1});
       out.push_back(cn_codec);
     }
   }
@@ -86,8 +86,7 @@ std::vector<Codec> CollectAudioCodecs(
   // Add telephone-event codecs last.
   for (const auto& dtmf : generate_dtmf) {
     if (dtmf.second) {
-      cricket::Codec dtmf_codec =
-          CreateAudioCodec({kDtmfCodecName, dtmf.first, 1});
+      Codec dtmf_codec = CreateAudioCodec({kDtmfCodecName, dtmf.first, 1});
       out.push_back(dtmf_codec);
     }
   }
@@ -97,13 +96,13 @@ std::vector<Codec> CollectAudioCodecs(
 }  // namespace
 
 TypedCodecVendor::TypedCodecVendor(MediaEngineInterface* media_engine,
-                                   webrtc::MediaType type,
+                                   MediaType type,
                                    bool is_sender,
                                    bool rtx_enabled,
-                                   const webrtc::FieldTrialsView& trials) {
+                                   const FieldTrialsView& trials) {
   if (trials.IsEnabled("WebRTC-PayloadTypesInTransport")) {
     // Get the capabilities from the factory and compute the codecs.
-    if (type == webrtc::MediaType::AUDIO) {
+    if (type == MediaType::AUDIO) {
       if (is_sender) {
         if (media_engine->voice().encoder_factory()) {
           codecs_ = CodecList::CreateFromTrustedData(CollectAudioCodecs(
@@ -134,7 +133,7 @@ TypedCodecVendor::TypedCodecVendor(MediaEngineInterface* media_engine,
     }
   } else {
     // Use current mechanisms for getting codecs from media engine.
-    if (type == webrtc::MediaType::AUDIO) {
+    if (type == MediaType::AUDIO) {
       if (is_sender) {
         codecs_ = CodecList::CreateFromTrustedData(
             media_engine->voice().LegacySendCodecs());
@@ -154,4 +153,4 @@ TypedCodecVendor::TypedCodecVendor(MediaEngineInterface* media_engine,
   }
 }
 
-}  // namespace cricket
+}  // namespace webrtc

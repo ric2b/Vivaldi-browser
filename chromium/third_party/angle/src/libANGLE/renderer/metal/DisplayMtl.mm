@@ -1051,9 +1051,6 @@ void DisplayMtl::initializeExtensions() const
 
         // GL_OES_EGL_sync
         mNativeExtensions.EGLSyncOES = true;
-
-        // GL_ARB_sync
-        mNativeExtensions.syncARB = true;
     }
 
     // GL_KHR_parallel_shader_compile
@@ -1063,6 +1060,9 @@ void DisplayMtl::initializeExtensions() const
     mNativeExtensions.baseVertexBaseInstanceANGLE = mFeatures.hasBaseVertexInstancedDraw.enabled;
     mNativeExtensions.baseVertexBaseInstanceShaderBuiltinANGLE =
         mFeatures.hasBaseVertexInstancedDraw.enabled;
+
+    mNativeExtensions.drawElementsBaseVertexEXT = mFeatures.hasBaseVertexInstancedDraw.enabled;
+    mNativeExtensions.drawElementsBaseVertexOES = mFeatures.hasBaseVertexInstancedDraw.enabled;
 
     // Metal uses the opposite provoking vertex as GLES so emulation is required to use the GLES
     // behaviour. Allow users to change the provoking vertex for improved performance.

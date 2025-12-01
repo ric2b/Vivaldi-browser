@@ -8,7 +8,9 @@
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -20,6 +22,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/enterprise/data_controls/core/browser/test_utils.h"
+#include "components/safe_browsing/core/common/features.h"
 #include "content/public/test/browser_test.h"
 #include "ui/views/widget/widget_delegate.h"
 
@@ -49,7 +52,11 @@ class DataControlsClipboardUtilsBrowserTest
     : public InProcessBrowserTest,
       public testing::WithParamInterface<bool> {
  public:
-  DataControlsClipboardUtilsBrowserTest() = default;
+  DataControlsClipboardUtilsBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(
+        safe_browsing::kLocalIpAddressInEvents);
+  }
+
   ~DataControlsClipboardUtilsBrowserTest() override = default;
 
   bool machine_scope() const { return GetParam(); }
@@ -71,6 +78,7 @@ class DataControlsClipboardUtilsBrowserTest
  protected:
   std::unique_ptr<enterprise_connectors::test::EventReportValidatorHelper>
       event_report_validator_helper_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -109,7 +117,9 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        PasteAllowed_SameSource) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -122,7 +132,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"WEB_CONTENT_UPLOAD",
-      /*triggered_rules=*/{{0, {"id", "name"}}},
+      /*triggered_rules=*/{{0, {"123", "name"}}},
       /*event_result=*/"EVENT_RESULT_BLOCKED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -130,7 +140,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "name",
-                                   "rule_id": "id",
+                                   "rule_id": "123",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -164,11 +174,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
   helper.WaitForDialogToInitialize();
   helper.CloseDialogWithoutBypass();
   helper.WaitForDialogToClose();
+  run_loop.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        PasteBlockedByDataControls_DestinationRule) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -181,7 +194,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"WEB_CONTENT_UPLOAD",
-      /*triggered_rules=*/{{0, {"rule_id", "rule_name"}}},
+      /*triggered_rules=*/{{0, {"222", "rule_name"}}},
       /*event_result=*/"EVENT_RESULT_BLOCKED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -189,7 +202,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "rule_name",
-                                   "rule_id": "rule_id",
+                                   "rule_id": "222",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -223,11 +236,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
   helper.WaitForDialogToInitialize();
   helper.CloseDialogWithoutBypass();
   helper.WaitForDialogToClose();
+  run_loop.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        PasteWarnedByDataControls_BypassedDestinationRule) {
+  base::RunLoop run_loop_warn;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop_warn.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -240,7 +256,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"WEB_CONTENT_UPLOAD",
-      /*triggered_rules=*/{{0, {"warn_rule_ID", "warn_rule_name"}}},
+      /*triggered_rules=*/{{0, {"333", "warn_rule_name"}}},
       /*event_result=*/"EVENT_RESULT_WARNED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -248,7 +264,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "warn_rule_name",
-                                   "rule_id": "warn_rule_ID",
+                                   "rule_id": "333",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -277,11 +293,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
       MakeClipboardPasteData("text", "image", {}), future.GetCallback());
 
   helper.WaitForDialogToInitialize();
+  run_loop_warn.Run();
 
   // The first warn event should already be reported before the dialog has been
   // initialized, so it can be reassigned so that the bypass event can be
   // validated.
+  base::RunLoop run_loop_bypass;
   event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop_bypass.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -294,7 +313,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"WEB_CONTENT_UPLOAD",
-      /*triggered_rules=*/{{0, {"warn_rule_ID", "warn_rule_name"}}},
+      /*triggered_rules=*/{{0, {"333", "warn_rule_name"}}},
       /*event_result=*/"EVENT_RESULT_BYPASSED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -312,11 +331,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
   EXPECT_EQ(paste_data->text, u"text");
   EXPECT_EQ(std::string(paste_data->png.begin(), paste_data->png.end()),
             "image");
+  run_loop_bypass.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        PasteWarnedByDataControls_CanceledDestinationRule) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -329,7 +351,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"WEB_CONTENT_UPLOAD",
-      /*triggered_rules=*/{{0, {"warn rule ID", "warn rule name"}}},
+      /*triggered_rules=*/{{0, {"1416", "warn rule name"}}},
       /*event_result=*/"EVENT_RESULT_WARNED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -337,7 +359,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "warn rule name",
-                                   "rule_id": "warn rule ID",
+                                   "rule_id": "1416",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -376,6 +398,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   auto paste_data = future.Get();
   EXPECT_FALSE(paste_data);
+  run_loop.Run();
 }
 
 // ChromeOS requires extra boilerplate to run this test, and since copy-pasting
@@ -389,7 +412,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "report_rule_name",
-                                   "rule_id": "report_rule_ID",
+                                   "rule_id": "4321",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -446,7 +469,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "report_rule_name",
-                                   "rule_id": "report_rule_ID",
+                                   "rule_id": "6543",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -508,7 +531,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "report_rule_name",
-                                   "rule_id": "report_rule_ID",
+                                   "rule_id": "7654",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -563,7 +586,9 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        PasteReportedByDataControls_DestinationRule) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -576,7 +601,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"WEB_CONTENT_UPLOAD",
-      /*triggered_rules=*/{{0, {"report_rule_ID", "report_rule_name"}}},
+      /*triggered_rules=*/{{0, {"8765", "report_rule_name"}}},
       /*event_result=*/"EVENT_RESULT_ALLOWED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -584,7 +609,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "report_rule_name",
-                                   "rule_id": "report_rule_ID",
+                                   "rule_id": "8765",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -618,6 +643,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
   EXPECT_EQ(paste_data->text, u"text");
   EXPECT_EQ(std::string(paste_data->png.begin(), paste_data->png.end()),
             "image");
+  run_loop.Run();
 }
 
 // ChromeOS requires extra boilerplate to run this test, and since copy-pasting
@@ -631,7 +657,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "report_rule_name",
-                                   "rule_id": "report_rule_ID",
+                                   "rule_id": "9753",
                                    "destinations": {
                                      "urls": ["google.com"]
                                    },
@@ -707,7 +733,9 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyAllowed) {
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyReported) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -720,7 +748,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyReported) {
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"report_only_id", "report_only"}}},
+      /*triggered_rules=*/{{0, {"1248", "report_only"}}},
       /*event_result=*/"EVENT_RESULT_ALLOWED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -728,7 +756,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyReported) {
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "report_only",
-                                   "rule_id": "report_only_id",
+                                   "rule_id": "1248",
                                    "sources": {
                                      "urls": ["google.com"]
                                    },
@@ -760,10 +788,13 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyReported) {
 
   auto replacement = future.Get<std::optional<std::u16string>>();
   EXPECT_FALSE(replacement);
+  run_loop.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyBlocked) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -776,7 +807,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyBlocked) {
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"block_id", "block"}}},
+      /*triggered_rules=*/{{0, {"987", "block"}}},
       /*event_result=*/"EVENT_RESULT_BLOCKED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -784,7 +815,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyBlocked) {
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "block",
-                                   "rule_id": "block_id",
+                                   "rule_id": "987",
                                    "sources": {
                                      "urls": ["google.com"]
                                    },
@@ -818,11 +849,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest, CopyBlocked) {
   helper.WaitForDialogToClose();
 
   EXPECT_FALSE(future.IsReady());
+  run_loop.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        CopyWarnedThenCanceled) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -835,7 +869,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"warn_id", "warn"}}},
+      /*triggered_rules=*/{{0, {"3927", "warn"}}},
       /*event_result=*/"EVENT_RESULT_WARNED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -843,7 +877,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "warn",
-                                   "rule_id": "warn_id",
+                                   "rule_id": "3927",
                                    "sources": {
                                      "urls": ["google.com"]
                                    },
@@ -886,11 +920,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   auto replacement = future.Get<std::optional<std::u16string>>();
   EXPECT_FALSE(replacement);
+  run_loop.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        CopyWarnedThenCanceled_OsClipboardDestination) {
+  base::RunLoop run_loop;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -903,7 +940,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"warn_cancel_id", "warn_cancel"}}},
+      /*triggered_rules=*/{{0, {"101", "warn_cancel"}}},
       /*event_result=*/"EVENT_RESULT_WARNED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -911,7 +948,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "warn_cancel",
-                                   "rule_id": "warn_cancel_id",
+                                   "rule_id": "101",
                                    "sources": {
                                      "urls": ["google.com"]
                                    },
@@ -957,11 +994,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   auto replacement = future.Get<std::optional<std::u16string>>();
   EXPECT_FALSE(replacement);
+  run_loop.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        CopyWarnedThenBypassed) {
+  base::RunLoop run_loop_warn;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop_warn.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -974,7 +1014,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"warn_bypass_id", "warn_bypass"}}},
+      /*triggered_rules=*/{{0, {"12345", "warn_bypass"}}},
       /*event_result=*/"EVENT_RESULT_WARNED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -982,7 +1022,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "warn_bypass",
-                                   "rule_id": "warn_bypass_id",
+                                   "rule_id": "12345",
                                    "sources": {
                                      "urls": ["google.com"]
                                    },
@@ -1013,6 +1053,8 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   helper.WaitForDialogToInitialize();
 
+  run_loop_warn.Run();
+
   // The dialog will stay up until a user action dismisses it, so `future`
   // shouldn't be ready yet.
   EXPECT_FALSE(future.IsReady());
@@ -1020,7 +1062,9 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
   // The first warn event should already be reported before the dialog has been
   // initialized, so it can be reassigned so that the bypass event can be
   // validated.
+  base::RunLoop run_loop_bypass;
   event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop_bypass.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -1033,7 +1077,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"warn_bypass_id", "warn_bypass"}}},
+      /*triggered_rules=*/{{0, {"12345", "warn_bypass"}}},
       /*event_result=*/"EVENT_RESULT_BYPASSED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -1047,11 +1091,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   auto replacement = future.Get<std::optional<std::u16string>>();
   EXPECT_FALSE(replacement);
+  run_loop_bypass.Run();
 }
 
 IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
                        CopyWarnedThenBypassed_OsClipboardDestination) {
+  base::RunLoop run_loop_warn;
   auto event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop_warn.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -1064,7 +1111,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"warn_bypass_os_id", "warn_bypass_os"}}},
+      /*triggered_rules=*/{{0, {"111", "warn_bypass_os"}}},
       /*event_result=*/"EVENT_RESULT_WARNED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -1072,7 +1119,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   data_controls::SetDataControls(browser()->profile()->GetPrefs(), {R"({
                                    "name": "warn_bypass_os",
-                                   "rule_id": "warn_bypass_os_id",
+                                   "rule_id": "111",
                                    "sources": {
                                      "urls": ["google.com"]
                                    },
@@ -1109,11 +1156,14 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
   // The dialog will stay up until a user action dismisses it, so `future`
   // shouldn't be ready yet.
   EXPECT_FALSE(future.IsReady());
+  run_loop_warn.Run();
 
   // The first warn event should already be reported before the dialog has been
   // initialized, so it can be reassigned so that the bypass event can be
   // validated.
+  base::RunLoop run_loop_bypass;
   event_validator = event_report_validator_helper_->CreateValidator();
+  event_validator.SetDoneClosure(run_loop_bypass.QuitClosure());
   event_validator.ExpectDataControlsSensitiveDataEvent(
       /*expected_url=*/
       kGoogleUrl,
@@ -1126,7 +1176,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
         return &set;
       }(),
       /*trigger=*/"CLIPBOARD_COPY",
-      /*triggered_rules=*/{{0, {"warn_bypass_os_id", "warn_bypass_os"}}},
+      /*triggered_rules=*/{{0, {"111", "warn_bypass_os"}}},
       /*event_result=*/"EVENT_RESULT_BYPASSED",
       /*profile_username=*/kUserName,
       /*profile_identifier=*/browser()->profile()->GetPath().AsUTF8Unsafe(),
@@ -1140,6 +1190,7 @@ IN_PROC_BROWSER_TEST_P(DataControlsClipboardUtilsBrowserTest,
 
   auto replacement = future.Get<std::optional<std::u16string>>();
   EXPECT_FALSE(replacement);
+  run_loop_bypass.Run();
 }
 
 }  // namespace enterprise_data_protection

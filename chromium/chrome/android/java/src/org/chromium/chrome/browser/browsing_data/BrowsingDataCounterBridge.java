@@ -8,24 +8,28 @@ import org.jni_zero.CalledByNative;
 import org.jni_zero.JniType;
 import org.jni_zero.NativeMethods;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.profiles.Profile;
 
 /**
  * Communicates between BrowsingDataCounter (C++ backend) and ClearBrowsingDataFragment (Java UI).
  */
+@NullMarked
 public class BrowsingDataCounterBridge {
     /** Can receive a callback from a BrowsingDataCounter. */
     public interface BrowsingDataCounterCallback {
         /**
-         * The callback to be called when a BrowsingDataCounter is finished.
-         * @param result A string describing how much storage space will be reclaimed by clearing
-         *      this data type.
+         * The callback to be called when a BrowsingDataCounter is finished and an update to the
+         * summary is required.
+         *
+         * @param result For example, a string describing how much storage space will be reclaimed
+         *     by clearing this data type.
          */
-        public void onCounterFinished(String result);
+        public void onCounterFinished(String summary);
     }
 
     private long mNativeBrowsingDataCounterBridge;
-    private BrowsingDataCounterCallback mCallback;
+    private final BrowsingDataCounterCallback mCallback;
 
     /**
      * Initializes BrowsingDataCounterBridge.
@@ -70,8 +74,8 @@ public class BrowsingDataCounterBridge {
     }
 
     @CalledByNative
-    private void onBrowsingDataCounterFinished(@JniType("std::u16string") String result) {
-        mCallback.onCounterFinished(result);
+    private void onBrowsingDataCounterFinished(@JniType("std::u16string") String summary) {
+        mCallback.onCounterFinished(summary);
     }
 
     @NativeMethods

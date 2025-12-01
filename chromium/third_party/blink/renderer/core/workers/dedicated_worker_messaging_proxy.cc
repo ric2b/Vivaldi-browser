@@ -79,10 +79,6 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
     const KURL& script_url,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     const v8_inspector::V8StackTraceId& stack_id,
-    // TODO(crbug.com/40093136): Remove this now that PlzDedicatedWorker has
-    // launched.
-    const String& source_code,
-    RejectCoepUnsafeNone reject_coep_unsafe_none,
     const blink::DedicatedWorkerToken& token,
     mojo::PendingRemote<mojom::blink::DedicatedWorkerHost>
         dedicated_worker_host,
@@ -100,10 +96,18 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
   pending_dedicated_worker_host_ = std::move(dedicated_worker_host);
   pending_back_forward_cache_controller_host_ =
       std::move(back_forward_cache_controller_host);
-  InitializeWorkerThread(
+  bool initialized = InitializeWorkerThread(
       std::move(creation_params),
       CreateBackingThreadStartupData(GetExecutionContext()->GetIsolate()),
       token);
+  if (base::FeatureList::IsEnabled(
+          blink::features::kWorkerThreadRespectTermRequest) &&
+      !initialized) {
+    virtual_time_pauser_.UnpauseVirtualTime();
+    // if the current thread (i.e. parent thread) has been asked to terminate,
+    // we do not start the child thread.
+    return;
+  }
 
   // Step 13: "Obtain script by switching on the value of options's type
   // member:"
@@ -137,7 +141,7 @@ void DedicatedWorkerMessagingProxy::StartWorkerGlobalScope(
     GetWorkerThread()->FetchAndRunModuleScript(
         script_url, std::move(worker_main_script_load_params),
         /*policy_container=*/nullptr, outside_settings_object.CopyData(),
-        resource_timing_notifier, credentials_mode, reject_coep_unsafe_none);
+        resource_timing_notifier, credentials_mode);
   } else {
     NOTREACHED();
   }

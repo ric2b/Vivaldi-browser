@@ -27,6 +27,7 @@ import platform
 import shlex
 import subprocess
 import sys
+from typing import NamedTuple
 
 
 # These should never be newer than the main.py version since this needs to be a
@@ -56,9 +57,14 @@ class Trace:
 trace = Trace()
 
 
+def cmdstr(cmd):
+    """Get a nicely quoted shell command."""
+    return " ".join(shlex.quote(x) for x in cmd)
+
+
 def exec_command(cmd):
     """Execute |cmd| or return None on failure."""
-    trace.print(":", " ".join(cmd))
+    trace.print(":", cmdstr(cmd))
     try:
         if platform.system() == "Windows":
             ret = subprocess.call(cmd)
@@ -124,7 +130,7 @@ if not REPO_REV:
 BUG_URL = "https://issues.gerritcodereview.com/issues/new?component=1370071"
 
 # increment this whenever we make important changes to this script
-VERSION = (2, 50)
+VERSION = (2, 54)
 
 # increment this if the MAINTAINER_KEYS block is modified
 KEYRING_VERSION = (2, 3)
@@ -217,7 +223,6 @@ S_manifests = "manifests"  # special manifest repository
 REPO_MAIN = S_repo + "/main.py"  # main script
 
 
-import collections
 import errno
 import json
 import optparse
@@ -482,16 +487,6 @@ def InitParser(parser):
     return parser
 
 
-# This is a poor replacement for subprocess.run until we require Python 3.6+.
-RunResult = collections.namedtuple(
-    "RunResult", ("returncode", "stdout", "stderr")
-)
-
-
-class RunError(Exception):
-    """Error when running a command failed."""
-
-
 def run_command(cmd, **kwargs):
     """Run |cmd| and return its output."""
     check = kwargs.pop("check", False)
@@ -516,7 +511,7 @@ def run_command(cmd, **kwargs):
     # Run & package the results.
     proc = subprocess.Popen(cmd, **kwargs)
     (stdout, stderr) = proc.communicate(input=cmd_input)
-    dbg = ": " + " ".join(cmd)
+    dbg = ": " + cmdstr(cmd)
     if cmd_input is not None:
         dbg += " 0<|"
     if stdout == subprocess.PIPE:
@@ -526,7 +521,9 @@ def run_command(cmd, **kwargs):
     elif stderr == subprocess.STDOUT:
         dbg += " 2>&1"
     trace.print(dbg)
-    ret = RunResult(proc.returncode, decode(stdout), decode(stderr))
+    ret = subprocess.CompletedProcess(
+        cmd, proc.returncode, decode(stdout), decode(stderr)
+    )
 
     # If things failed, print useful debugging output.
     if check and ret.returncode:
@@ -547,13 +544,13 @@ def run_command(cmd, **kwargs):
 
         _print_output("stdout", ret.stdout)
         _print_output("stderr", ret.stderr)
-        raise RunError(ret)
+        # This will raise subprocess.CalledProcessError for us.
+        ret.check_returncode()
 
     return ret
 
 
 class CloneFailure(Exception):
-
     """Indicate the remote clone of repo itself failed."""
 
 
@@ -672,15 +669,20 @@ def run_git(*args, **kwargs):
             file=sys.stderr,
         )
         sys.exit(1)
-    except RunError:
+    except subprocess.CalledProcessError:
         raise CloneFailure()
 
 
-# The git version info broken down into components for easy analysis.
-# Similar to Python's sys.version_info.
-GitVersion = collections.namedtuple(
-    "GitVersion", ("major", "minor", "micro", "full")
-)
+class GitVersion(NamedTuple):
+    """The git version info broken down into components for easy analysis.
+
+    Similar to Python's sys.version_info.
+    """
+
+    major: int
+    minor: int
+    micro: int
+    full: int
 
 
 def ParseGitVersion(ver_str=None):
@@ -846,10 +848,11 @@ def _GetRepoConfig(name):
         return None
     else:
         print(
-            f"repo: error: git {' '.join(cmd)} failed:\n{ret.stderr}",
+            f"repo: error: git {cmdstr(cmd)} failed:\n{ret.stderr}",
             file=sys.stderr,
         )
-        raise RunError()
+        # This will raise subprocess.CalledProcessError for us.
+        ret.check_returncode()
 
 
 def _InitHttp():

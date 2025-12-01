@@ -9,16 +9,13 @@ use skrifa::{
     charmap::MappingIndex,
     instance::{Location, Size},
     metrics::{GlyphMetrics, Metrics as SkrifaMetrics},
-    outline::{pen::NullPen, DrawSettings},
+    outline::OutlineGlyphFormat,
     setting::VariationSetting,
     MetadataProvider, OutlineGlyphCollection, Tag,
 };
 use std::pin::Pin;
 
-use crate::{
-    ffi::{AxisWrapper, BridgeFontStyle, Metrics, SkiaDesignCoordinate},
-    hinting::BridgeHintingInstance,
-};
+use crate::ffi::{AxisWrapper, BridgeFontStyle, Metrics, OutlineFormat, SkiaDesignCoordinate};
 
 pub struct BridgeFontRef<'a> {
     font: Option<FontRef<'a>>,
@@ -100,28 +97,14 @@ pub fn unhinted_advance_width_or_zero(
         .unwrap_or_default()
 }
 
-pub fn scaler_hinted_advance_width(
-    outlines: &BridgeOutlineCollection,
-    hinting_instance: &BridgeHintingInstance,
-    glyph_id: u16,
-    out_advance_width: &mut f32,
-) -> bool {
-    hinting_instance
-        .0
-        .as_ref()
-        .and_then(|instance| {
-            let draw_settings = DrawSettings::hinted(instance, false);
-
-            let outlines = outlines.0.as_ref()?;
-            let glyph = outlines.get(GlyphId::from(glyph_id))?;
-            let mut null_pen = NullPen {};
-            let adjusted_metrics = glyph.draw(draw_settings, &mut null_pen).ok()?;
-            adjusted_metrics.advance_width.map(|adjusted_advance| {
-                *out_advance_width = adjusted_advance;
-                ()
-            })
-        })
-        .is_some()
+pub fn outline_format(outlines: &BridgeOutlineCollection) -> OutlineFormat {
+    let outlines = outlines.0.as_ref();
+    match outlines.and_then(|o| o.format()) {
+        None => OutlineFormat::NoOutlines,
+        Some(OutlineGlyphFormat::Glyf) => OutlineFormat::Glyf,
+        Some(OutlineGlyphFormat::Cff) => OutlineFormat::Cff,
+        Some(OutlineGlyphFormat::Cff2) => OutlineFormat::Cff2,
+    }
 }
 
 pub fn units_per_em_or_zero(font_ref: &BridgeFontRef) -> u16 {

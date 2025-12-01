@@ -9,8 +9,6 @@
 #include "base/posix/eintr_wrapper.h"
 #include "base/test/mock_callback.h"
 #include "base/test/task_environment.h"
-#include "components/viz/common/resources/shared_image_format.h"
-#include "gpu/command_buffer/client/test_shared_image_interface.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "media/mojo/common/media_type_converters.h"
 #include "media/mojo/common/mojo_decoder_buffer_converter.h"
@@ -26,7 +24,9 @@
 
 using testing::_;
 using testing::ByMove;
+using testing::IsTrue;
 using testing::Mock;
+using testing::Property;
 using testing::Return;
 using testing::SaveArg;
 using testing::StrictMock;
@@ -50,11 +50,7 @@ VideoDecoderConfig CreateValidVideoDecoderConfig() {
   return config;
 }
 
-scoped_refptr<VideoFrame> CreateTestNV12MappableVideoFrame(
-    scoped_refptr<gpu::TestSharedImageInterface> test_sii) {
-  gfx::GpuMemoryBufferHandle gmb_handle;
-  gmb_handle.type = gfx::NATIVE_PIXMAP;
-
+scoped_refptr<VideoFrame> CreateTestNV12VideoFrame() {
   // We need to create something that looks like a dma-buf in order to pass the
   // validation in the mojo traits, so we use memfd_create() + ftruncate().
   auto y_fd = base::ScopedFD(memfd_create("nv12_dummy_buffer", 0));
@@ -68,35 +64,34 @@ scoped_refptr<VideoFrame> CreateTestNV12MappableVideoFrame(
   if (!uv_fd.is_valid()) {
     return nullptr;
   }
+  std::vector<base::ScopedFD> dmabuf_fds;
+  dmabuf_fds.emplace_back(std::move(y_fd));
+  dmabuf_fds.emplace_back(std::move(uv_fd));
 
-  gfx::NativePixmapPlane y_plane;
+  std::vector<ColorPlaneLayout> planes;
+  ColorPlaneLayout y_plane;
   y_plane.stride = 700;
   y_plane.offset = 0;
   y_plane.size = 280000;
-  y_plane.fd = std::move(y_fd);
-  gmb_handle.native_pixmap_handle.planes.push_back(std::move(y_plane));
+  planes.emplace_back(std::move(y_plane));
 
-  gfx::NativePixmapPlane uv_plane;
+  ColorPlaneLayout uv_plane;
   uv_plane.stride = 700;
   uv_plane.offset = 280000;
   uv_plane.size = 140000;
-  uv_plane.fd = std::move(uv_fd);
-  gmb_handle.native_pixmap_handle.planes.push_back(std::move(uv_plane));
+  planes.emplace_back(std::move(uv_plane));
 
-  // Setting some default usage in order to get a mappable shared image.
-  const auto si_usage = gpu::SHARED_IMAGE_USAGE_CPU_WRITE_ONLY |
-                        gpu::SHARED_IMAGE_USAGE_DISPLAY_READ;
+  std::optional<VideoFrameLayout> layout = VideoFrameLayout::CreateWithPlanes(
+      /*format=*/PIXEL_FORMAT_NV12, /*coded_size=*/gfx::Size(640, 368),
+      std::move(planes));
+  if (!layout.has_value()) {
+    return nullptr;
+  }
 
-  auto shared_image = test_sii->CreateSharedImage(
-      {viz::MultiPlaneFormat::kNV12, gfx::Size(640, 368), gfx::ColorSpace(),
-       gpu::SharedImageUsageSet(si_usage), "StableVideoDecoderServiceTest"},
-      gpu::kNullSurfaceHandle, gfx::BufferUsage::SCANOUT_VDA_WRITE,
-      std::move(gmb_handle));
-
-  auto video_frame = VideoFrame::WrapMappableSharedImage(
-      std::move(shared_image), test_sii->GenVerifiedSyncToken(),
-      base::NullCallback(), /*visible_rect=*/gfx::Rect(640, 368),
-      /*natural_size=*/gfx::Size(640, 368), base::TimeDelta());
+  auto video_frame = VideoFrame::WrapExternalDmabufs(
+      *layout, /*visible_rect=*/gfx::Rect(640, 368),
+      /*natural_size=*/gfx::Size(640, 368), std::move(dmabuf_fds),
+      base::TimeDelta());
   if (!video_frame) {
     return nullptr;
   }
@@ -178,15 +173,8 @@ class MockVideoDecoder : public mojom::VideoDecoder {
   MOCK_METHOD4(Initialize,
                void(const VideoDecoderConfig& config,
                     bool low_delay,
-                    const std::optional<base::UnguessableToken>& cdm_id,
+                    mojom::CdmPtr cdm,
                     InitializeCallback callback));
-#if BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
-  MOCK_METHOD4(InitializeWithCdmContext,
-               void(const VideoDecoderConfig& config,
-                    bool low_delay,
-                    mojo::PendingRemote<mojom::CdmContextForOOPVD> cdm_context,
-                    InitializeWithCdmContextCallback callback));
-#endif  // BUILDFLAG(ALLOW_OOP_VIDEO_DECODER)
   MOCK_METHOD2(Decode,
                void(mojom::DecoderBufferPtr buffer, DecodeCallback callback));
   MOCK_METHOD1(Reset, void(ResetCallback callback));
@@ -376,7 +364,6 @@ class OOPVideoDecoderServiceTest : public testing::Test {
         std::move(video_decoder_factory_receiver),
         /*disconnect_cb=*/base::DoNothing());
     ASSERT_TRUE(video_decoder_factory_remote_.is_connected());
-    test_sii_ = base::MakeRefCounted<gpu::TestSharedImageInterface>();
   }
 
  protected:
@@ -408,7 +395,6 @@ class OOPVideoDecoderServiceTest : public testing::Test {
   OOPVideoDecoderFactoryService oop_video_decoder_factory_service_;
   mojo::Remote<mojom::InterfaceFactory> video_decoder_factory_remote_;
   mojo::Remote<mojom::VideoDecoder> video_decoder_remote_;
-  scoped_refptr<gpu::TestSharedImageInterface> test_sii_;
 };
 
 // Tests that we can create multiple VideoDecoder implementation instances
@@ -510,7 +496,7 @@ TEST_F(OOPVideoDecoderServiceTest, VideoDecoderCanGetSupportedConfigs) {
   EXPECT_EQ(received_supported_configs, supported_configs_to_reply_with);
 }
 
-// Tests that a call to mojom::VideoDecoder::InitializeWithCdmContext() gets
+// Tests that a call to mojom::VideoDecoder::Initialize() gets
 // routed correctly to the underlying mojom::VideoDecoder as an Initialize()
 // call. Also tests that when the underlying mojom::VideoDecoder calls the
 // initialization callback, the call gets routed to the client.
@@ -529,7 +515,6 @@ TEST_F(OOPVideoDecoderServiceTest, VideoDecoderCanBeInitialized) {
   const VideoDecoderConfig config_to_send = CreateValidVideoDecoderConfig();
   VideoDecoderConfig received_config;
   constexpr bool kLowDelay = true;
-  constexpr std::optional<base::UnguessableToken> kCdmId = std::nullopt;
   StrictMock<base::MockOnceCallback<void(
       const media::DecoderStatus& status, bool needs_bitstream_conversion,
       int32_t max_decode_requests, VideoDecoderType decoder_type,
@@ -542,10 +527,11 @@ TEST_F(OOPVideoDecoderServiceTest, VideoDecoderCanBeInitialized) {
   constexpr VideoDecoderType kDecoderType = VideoDecoderType::kVda;
 
   EXPECT_CALL(*mock_video_decoder_raw,
-              Initialize(/*config=*/_, kLowDelay, kCdmId,
+              Initialize(/*config=*/_, kLowDelay,
+                         /*cdm=*/Property(&mojom::CdmPtr::is_null, IsTrue()),
                          /*callback=*/_))
       .WillOnce([&](const VideoDecoderConfig& config, bool low_delay,
-                    const std::optional<base::UnguessableToken>& cdm_id,
+                    mojom::CdmPtr cdm,
                     mojom::VideoDecoder::InitializeCallback callback) {
         received_config = config;
         received_initialize_cb = std::move(callback);
@@ -553,22 +539,20 @@ TEST_F(OOPVideoDecoderServiceTest, VideoDecoderCanBeInitialized) {
   EXPECT_CALL(initialize_cb_to_send,
               Run(kDecoderStatus, kNeedsBitstreamConversion, kMaxDecodeRequests,
                   kDecoderType, /*needs_transcryption=*/false));
-  video_decoder_remote->InitializeWithCdmContext(
-      config_to_send, kLowDelay,
-      mojo::PendingRemote<mojom::CdmContextForOOPVD>(),
-      initialize_cb_to_send.Get());
+  video_decoder_remote->Initialize(config_to_send, kLowDelay, nullptr,
+                                   initialize_cb_to_send.Get());
   video_decoder_remote.FlushForTesting();
   ASSERT_TRUE(Mock::VerifyAndClearExpectations(mock_video_decoder_raw));
 
   std::move(received_initialize_cb)
       .Run(kDecoderStatus, kNeedsBitstreamConversion, kMaxDecodeRequests,
-           kDecoderType);
+           kDecoderType, /*needs_transcryption=*/false);
   task_environment_.RunUntilIdle();
 }
 
 // Tests that the OOPVideoDecoderService rejects a call to
-// mojom::VideoDecoder::InitializeWithCdmContext() before
-// mojom::VideoDecoder::Construct() gets called.
+// mojom::VideoDecoder::Initialize() before mojom::VideoDecoder::Construct()
+// gets called.
 TEST_F(OOPVideoDecoderServiceTest,
        VideoDecoderCannotBeInitializedBeforeConstruction) {
   auto mock_video_decoder = std::make_unique<StrictMock<MockVideoDecoder>>();
@@ -590,10 +574,8 @@ TEST_F(OOPVideoDecoderServiceTest,
                   /*needs_bitstream_conversion=*/false,
                   /*max_decode_requests=*/1, VideoDecoderType::kUnknown,
                   /*needs_transcryption=*/false));
-  video_decoder_remote->InitializeWithCdmContext(
-      config_to_send, kLowDelay,
-      mojo::PendingRemote<mojom::CdmContextForOOPVD>(),
-      initialize_cb_to_send.Get());
+  video_decoder_remote->Initialize(config_to_send, kLowDelay, nullptr,
+                                   initialize_cb_to_send.Get());
   video_decoder_remote.FlushForTesting();
 }
 
@@ -786,8 +768,7 @@ TEST_F(OOPVideoDecoderServiceTest,
 
   const std::optional<base::UnguessableToken> token_for_release =
       base::UnguessableToken::Create();
-  scoped_refptr<VideoFrame> video_frame_to_send =
-      CreateTestNV12MappableVideoFrame(test_sii_);
+  scoped_refptr<VideoFrame> video_frame_to_send = CreateTestNV12VideoFrame();
   ASSERT_TRUE(video_frame_to_send);
   scoped_refptr<VideoFrame> video_frame_received;
   constexpr bool kCanReadWithoutStalling = true;

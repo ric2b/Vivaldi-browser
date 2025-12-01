@@ -94,54 +94,53 @@ static inline VkFormat attrib_type_to_vkformat(VertexAttribType type) {
 }
 
 static void setup_vertex_input_state(
-        const SkSpan<const Attribute>& vertexAttrs,
-        const SkSpan<const Attribute>& instanceAttrs,
+        VkVertexInputRate appendVertexRate,
+        const SkSpan<const Attribute>& staticAttrs,
+        const SkSpan<const Attribute>& appendAttrs,
         VkPipelineVertexInputStateCreateInfo* vertexInputInfo,
         skia_private::STArray<2, VkVertexInputBindingDescription, true>* bindingDescs,
         skia_private::STArray<16, VkVertexInputAttributeDescription>* attributeDescs) {
     // Setup attribute & binding descriptions
     int attribIndex = 0;
-    size_t vertexAttributeOffset = 0;
-    for (auto attrib : vertexAttrs) {
+    size_t staticAttributeOffset = 0;
+    for (auto attrib : staticAttrs) {
         VkVertexInputAttributeDescription vkAttrib;
         vkAttrib.location = attribIndex++;
-        vkAttrib.binding = VulkanGraphicsPipeline::kVertexBufferIndex;
+        vkAttrib.binding = VulkanGraphicsPipeline::kStaticDataBufferIndex;
         vkAttrib.format = attrib_type_to_vkformat(attrib.cpuType());
-        vkAttrib.offset = vertexAttributeOffset;
-        vertexAttributeOffset += attrib.sizeAlign4();
+        vkAttrib.offset = staticAttributeOffset;
+        staticAttributeOffset += attrib.sizeAlign4();
         attributeDescs->push_back(vkAttrib);
     }
 
-    size_t instanceAttributeOffset = 0;
-    for (auto attrib : instanceAttrs) {
+    size_t appendAttributeOffset = 0;
+    for (auto attrib : appendAttrs) {
         VkVertexInputAttributeDescription vkAttrib;
         vkAttrib.location = attribIndex++;
-        vkAttrib.binding = VulkanGraphicsPipeline::kInstanceBufferIndex;
+        vkAttrib.binding = VulkanGraphicsPipeline::kAppendDataBufferIndex;
         vkAttrib.format = attrib_type_to_vkformat(attrib.cpuType());
-        vkAttrib.offset = instanceAttributeOffset;
-        instanceAttributeOffset += attrib.sizeAlign4();
+        vkAttrib.offset = appendAttributeOffset;
+        appendAttributeOffset += attrib.sizeAlign4();
         attributeDescs->push_back(vkAttrib);
     }
 
-    if (bindingDescs && !vertexAttrs.empty()) {
+    if (bindingDescs && !staticAttrs.empty()) {
         bindingDescs->push_back() = {
-                VulkanGraphicsPipeline::kVertexBufferIndex,
-                (uint32_t) vertexAttributeOffset,
+                VulkanGraphicsPipeline::kStaticDataBufferIndex,
+                (uint32_t) staticAttributeOffset,
                 VK_VERTEX_INPUT_RATE_VERTEX
         };
     }
-    if (bindingDescs && !instanceAttrs.empty()) {
+    if (bindingDescs && !appendAttrs.empty()) {
         bindingDescs->push_back() = {
-                VulkanGraphicsPipeline::kInstanceBufferIndex,
-                (uint32_t) instanceAttributeOffset,
-                VK_VERTEX_INPUT_RATE_INSTANCE
+                VulkanGraphicsPipeline::kAppendDataBufferIndex,
+                (uint32_t) appendAttributeOffset,
+                appendVertexRate
         };
     }
 
-    memset(vertexInputInfo, 0, sizeof(VkPipelineVertexInputStateCreateInfo));
+    *vertexInputInfo = {};
     vertexInputInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo->pNext = nullptr;
-    vertexInputInfo->flags = 0;
     vertexInputInfo->vertexBindingDescriptionCount = bindingDescs ? bindingDescs->size() : 0;
     vertexInputInfo->pVertexBindingDescriptions =
             bindingDescs && !bindingDescs->empty() ? bindingDescs->begin() : VK_NULL_HANDLE;
@@ -164,10 +163,8 @@ static VkPrimitiveTopology primitive_type_to_vk_topology(PrimitiveType primitive
 
 static void setup_input_assembly_state(PrimitiveType primitiveType,
                                        VkPipelineInputAssemblyStateCreateInfo* inputAssemblyInfo) {
-    memset(inputAssemblyInfo, 0, sizeof(VkPipelineInputAssemblyStateCreateInfo));
+    *inputAssemblyInfo = {};
     inputAssemblyInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssemblyInfo->pNext = nullptr;
-    inputAssemblyInfo->flags = 0;
     inputAssemblyInfo->primitiveRestartEnable = false;
     inputAssemblyInfo->topology = primitive_type_to_vk_topology(primitiveType);
 }
@@ -238,10 +235,8 @@ static void setup_depth_stencil_state(const DepthStencilSettings& stencilSetting
     SkASSERT(stencilSettings.fDepthTestEnabled ||
              stencilSettings.fDepthCompareOp == CompareOp::kAlways);
 
-    memset(stencilInfo, 0, sizeof(VkPipelineDepthStencilStateCreateInfo));
+    *stencilInfo = {};
     stencilInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    stencilInfo->pNext = nullptr;
-    stencilInfo->flags = 0;
     stencilInfo->depthTestEnable = stencilSettings.fDepthTestEnabled;
     stencilInfo->depthWriteEnable = stencilSettings.fDepthWriteEnabled;
     stencilInfo->depthCompareOp = compare_op_to_vk_compare_op(stencilSettings.fDepthCompareOp);
@@ -260,26 +255,20 @@ static void setup_depth_stencil_state(const DepthStencilSettings& stencilSetting
 }
 
 static void setup_viewport_scissor_state(VkPipelineViewportStateCreateInfo* viewportInfo) {
-    memset(viewportInfo, 0, sizeof(VkPipelineViewportStateCreateInfo));
+    *viewportInfo = {};
     viewportInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    viewportInfo->pNext = nullptr;
-    viewportInfo->flags = 0;
 
+    // The viewport and scissor are set dyanmically with draw pass commands
     viewportInfo->viewportCount = 1;
-    viewportInfo->pViewports = nullptr; // This is set dynamically with a draw pass command
-
     viewportInfo->scissorCount = 1;
-    viewportInfo->pScissors = nullptr; // This is set dynamically with a draw pass command
 
     SkASSERT(viewportInfo->viewportCount == viewportInfo->scissorCount);
 }
 
 static void setup_multisample_state(int numSamples,
                                     VkPipelineMultisampleStateCreateInfo* multisampleInfo) {
-    memset(multisampleInfo, 0, sizeof(VkPipelineMultisampleStateCreateInfo));
+    *multisampleInfo = {};
     multisampleInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    multisampleInfo->pNext = nullptr;
-    multisampleInfo->flags = 0;
     SkAssertResult(skgpu::SampleCountToVkSampleCount(numSamples,
                                                      &multisampleInfo->rasterizationSamples));
     multisampleInfo->sampleShadingEnable = VK_FALSE;
@@ -388,7 +377,7 @@ static void setup_color_blend_state(const skgpu::BlendInfo& blendInfo,
     skgpu::BlendCoeff dstCoeff = blendInfo.fDstBlend;
     bool blendOff = skgpu::BlendShouldDisable(equation, srcCoeff, dstCoeff);
 
-    memset(attachmentState, 0, sizeof(VkPipelineColorBlendAttachmentState));
+    *attachmentState = {};
     attachmentState->blendEnable = !blendOff;
     if (!blendOff) {
         attachmentState->srcColorBlendFactor = blend_coeff_to_vk_blend(srcCoeff);
@@ -406,10 +395,8 @@ static void setup_color_blend_state(const skgpu::BlendInfo& blendInfo,
                                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
     }
 
-    memset(colorBlendInfo, 0, sizeof(VkPipelineColorBlendStateCreateInfo));
+    *colorBlendInfo = {};
     colorBlendInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-    colorBlendInfo->pNext = nullptr;
-    colorBlendInfo->flags = 0;
     colorBlendInfo->logicOpEnable = VK_FALSE;
     colorBlendInfo->attachmentCount = 1;
     colorBlendInfo->pAttachments = attachmentState;
@@ -418,10 +405,8 @@ static void setup_color_blend_state(const skgpu::BlendInfo& blendInfo,
 
 static void setup_raster_state(bool isWireframe,
                                VkPipelineRasterizationStateCreateInfo* rasterInfo) {
-    memset(rasterInfo, 0, sizeof(VkPipelineRasterizationStateCreateInfo));
+    *rasterInfo = {};
     rasterInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rasterInfo->pNext = nullptr;
-    rasterInfo->flags = 0;
     rasterInfo->depthClampEnable = VK_FALSE;
     rasterInfo->rasterizerDiscardEnable = VK_FALSE;
     rasterInfo->polygonMode = isWireframe ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL;
@@ -437,14 +422,11 @@ static void setup_raster_state(bool isWireframe,
 static void setup_shader_stage_info(VkShaderStageFlagBits stage,
                                     VkShaderModule shaderModule,
                                     VkPipelineShaderStageCreateInfo* shaderStageInfo) {
-    memset(shaderStageInfo, 0, sizeof(VkPipelineShaderStageCreateInfo));
+    *shaderStageInfo = {};
     shaderStageInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    shaderStageInfo->pNext = nullptr;
-    shaderStageInfo->flags = 0;
     shaderStageInfo->stage = stage;
     shaderStageInfo->module = shaderModule;
     shaderStageInfo->pName = "main";
-    shaderStageInfo->pSpecializationInfo = nullptr;
 }
 
 static VkDescriptorSetLayout descriptor_data_to_layout(
@@ -510,7 +492,7 @@ static bool uniform_desc_set_layout(VkDescriptorSetLayout& outLayout,
         uniformDescriptors.push_back({
                 uniformBufferType, /*count=*/1,
                 VulkanGraphicsPipeline::kPaintUniformBufferIndex,
-                PipelineStageFlags::kFragmentShader});
+                PipelineStageFlags::kVertexShader | PipelineStageFlags::kFragmentShader});
     }
     if (hasGradientBuffer) {
         uniformDescriptors.push_back({
@@ -544,10 +526,10 @@ static bool texture_sampler_desc_set_layout(VkDescriptorSetLayout& outLayout,
             immutableSampler = immutableSamplers[i].get();
         }
         textureSamplerDescs.push_back({DescriptorType::kCombinedTextureSampler,
-                                        /*count=*/1,
-                                        /*bindingIdx=*/i,
-                                        PipelineStageFlags::kFragmentShader,
-                                        immutableSampler});
+                                       /*count=*/1,
+                                       /*bindingIdx=*/i,
+                                       PipelineStageFlags::kFragmentShader,
+                                       immutableSampler});
     }
 
     // If no texture/samplers are used, a mock VkDescriptorSetLayout handle by passing in the
@@ -609,11 +591,8 @@ static VkPipelineLayout setup_pipeline_layout(const VulkanSharedContext* sharedC
         pushConstantRange.size = pushConstantSize;
         pushConstantRange.stageFlags = pushConstantPipelineStageFlags;
     }
-    VkPipelineLayoutCreateInfo layoutCreateInfo;
-    memset(&layoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateFlags));
+    VkPipelineLayoutCreateInfo layoutCreateInfo = {};
     layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.pNext = nullptr;
-    layoutCreateInfo.flags = 0;
     layoutCreateInfo.setLayoutCount = setLayouts.size();
     layoutCreateInfo.pSetLayouts = setLayouts.begin();
     layoutCreateInfo.pushConstantRangeCount = pushConstantSize ? 1 : 0;
@@ -636,10 +615,8 @@ static VkPipelineLayout setup_pipeline_layout(const VulkanSharedContext* sharedC
 
 static void setup_dynamic_state(VkPipelineDynamicStateCreateInfo* dynamicInfo,
                                 VkDynamicState* dynamicStates) {
-    memset(dynamicInfo, 0, sizeof(VkPipelineDynamicStateCreateInfo));
+    *dynamicInfo = {};
     dynamicInfo->sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dynamicInfo->pNext = VK_NULL_HANDLE;
-    dynamicInfo->flags = 0;
     dynamicStates[0] = VK_DYNAMIC_STATE_VIEWPORT;
     dynamicStates[1] = VK_DYNAMIC_STATE_SCISSOR;
     dynamicStates[2] = VK_DYNAMIC_STATE_BLEND_CONSTANTS;
@@ -668,6 +645,7 @@ VulkanProgramInfo::~VulkanProgramInfo() {
 }
 
 sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
+        const VulkanSharedContext* sharedContext,
         VulkanResourceProvider* rsrcProvider,
         const RuntimeEffectDictionary* runtimeDict,
         const UniqueKey& pipelineKey,
@@ -676,7 +654,6 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
         SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
         uint32_t compilationID) {
     SkASSERT(rsrcProvider);
-    const VulkanSharedContext* sharedContext = rsrcProvider->vulkanSharedContext();
 
     SkSL::ProgramSettings settings;
     settings.fSharpenTextures = true;
@@ -687,7 +664,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     const RenderStep* step = sharedContext->rendererProvider()->lookup(pipelineDesc.renderStepID());
     const bool useStorageBuffers = sharedContext->caps()->storageBufferSupport();
 
-    if (step->vertexAttributes().size() + step->instanceAttributes().size() >
+    if (step->staticAttributes().size() + step->appendAttributes().size() >
         sharedContext->vulkanCaps().maxVertexAttributes()) {
         SKGPU_LOG_W("Requested more than the supported number of vertex attributes");
         return nullptr;
@@ -702,7 +679,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
                              pipelineDesc.paintParamsID(),
                              useStorageBuffers,
                              renderPassDesc.fWriteSwizzle,
-                             renderPassDesc.fDstReadStrategyIfRequired,
+                             renderPassDesc.fDstReadStrategy,
                              &descContainer);
 
     // Populate an array of sampler ptrs where a sampler's index within the array indicates their
@@ -786,12 +763,15 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     // if there will be a load-MSAA subpass, the index changes. Ideally with
     // VK_dynamic_rendering_local_read, we can reuse pipelines across subpasses for layer elision.
     int subpassIndex = RenderPassDescWillLoadMSAAFromResolve(renderPassDesc) ? 1 : 0;
-    VkPipeline vkPipeline = MakePipeline(rsrcProvider,
+    VkPipeline vkPipeline = MakePipeline(sharedContext,
+                                         rsrcProvider,
                                          *program,
                                          subpassIndex,
                                          step->primitiveType(),
-                                         step->vertexAttributes(),
-                                         step->instanceAttributes(),
+                                         step->appendsVertices() ? VK_VERTEX_INPUT_RATE_VERTEX :
+                                                                   VK_VERTEX_INPUT_RATE_INSTANCE,
+                                         step->staticAttributes(),
+                                         step->appendAttributes(),
                                          step->depthStencilSettings(),
                                          shaderInfo->blendInfo(),
                                          renderPassDesc);
@@ -817,12 +797,14 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::Make(
     return pipeline;
 }
 
-VkPipeline VulkanGraphicsPipeline::MakePipeline(VulkanResourceProvider* rsrcProvider,
+VkPipeline VulkanGraphicsPipeline::MakePipeline(const VulkanSharedContext* sharedContext,
+                                                VulkanResourceProvider* rsrcProvider,
                                                 const VulkanProgramInfo& program,
                                                 int subpassIndex,
                                                 PrimitiveType primitiveType,
-                                                SkSpan<const Attribute> vertexAttrs,
-                                                SkSpan<const Attribute> instanceAttrs,
+                                                VkVertexInputRate appendInputRate,
+                                                SkSpan<const Attribute> staticAttrs,
+                                                SkSpan<const Attribute> appendAttrs,
                                                 const DepthStencilSettings& depthStencilSettings,
                                                 const BlendInfo& blendInfo,
                                                 const RenderPassDesc& renderPassDesc) {
@@ -831,8 +813,9 @@ VkPipeline VulkanGraphicsPipeline::MakePipeline(VulkanResourceProvider* rsrcProv
     VkPipelineVertexInputStateCreateInfo vertexInputInfo;
     skia_private::STArray<2, VkVertexInputBindingDescription, true> bindingDescs;
     skia_private::STArray<16, VkVertexInputAttributeDescription> attributeDescs;
-    setup_vertex_input_state(vertexAttrs,
-                             instanceAttrs,
+    setup_vertex_input_state(appendInputRate,
+                             staticAttrs,
+                             appendAttrs,
                              &vertexInputInfo,
                              &bindingDescs,
                              &attributeDescs);
@@ -847,8 +830,7 @@ VkPipeline VulkanGraphicsPipeline::MakePipeline(VulkanResourceProvider* rsrcProv
     setup_viewport_scissor_state(&viewportInfo);
 
     VkPipelineMultisampleStateCreateInfo multisampleInfo;
-    setup_multisample_state(renderPassDesc.fColorAttachment.fTextureInfo.numSamples(),
-                            &multisampleInfo);
+    setup_multisample_state(renderPassDesc.fColorAttachment.fSampleCount, &multisampleInfo);
 
     // We will only have one color blend attachment per pipeline.
     VkPipelineColorBlendAttachmentState attachmentStates[1];
@@ -882,11 +864,8 @@ VkPipeline VulkanGraphicsPipeline::MakePipeline(VulkanResourceProvider* rsrcProv
     SkDEBUGCODE(int subpassCount = RenderPassDescWillLoadMSAAFromResolve(renderPassDesc) ? 2 : 1;)
     SkASSERT(subpassIndex >= 0 && subpassIndex < subpassCount);
 
-    VkGraphicsPipelineCreateInfo pipelineCreateInfo;
-    memset(&pipelineCreateInfo, 0, sizeof(VkGraphicsPipelineCreateInfo));
+    VkGraphicsPipelineCreateInfo pipelineCreateInfo = {};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-    pipelineCreateInfo.pNext = nullptr;
-    pipelineCreateInfo.flags = 0;
     pipelineCreateInfo.stageCount = program.fs() ? 2 : 1;
     pipelineCreateInfo.pStages = &pipelineShaderStages[0];
     pipelineCreateInfo.pVertexInputState = &vertexInputInfo;
@@ -908,7 +887,6 @@ VkPipeline VulkanGraphicsPipeline::MakePipeline(VulkanResourceProvider* rsrcProv
     VkResult result;
     {
         TRACE_EVENT0_ALWAYS("skia.shaders", "VkCreateGraphicsPipeline");
-        const VulkanSharedContext* sharedContext = rsrcProvider->vulkanSharedContext();
         VULKAN_CALL_RESULT(sharedContext,
                            result,
                            CreateGraphicsPipelines(sharedContext->device(),
@@ -1013,6 +991,7 @@ std::unique_ptr<VulkanProgramInfo> VulkanGraphicsPipeline::CreateLoadMSAAProgram
 }
 
 sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
+        const VulkanSharedContext* sharedContext,
         VulkanResourceProvider* rsrcProvider,
         const VulkanProgramInfo& loadMSAAProgram,
         const RenderPassDesc& renderPassDesc) {
@@ -1021,12 +1000,14 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
     // shader modules or layout. The pipeline layout will not be owned by the created
     // VulkanGraphicsPipeline either, as it's owned by the resource provider.
     SkASSERT(RenderPassDescWillLoadMSAAFromResolve(renderPassDesc));
-    VkPipeline vkPipeline = MakePipeline(rsrcProvider,
+    VkPipeline vkPipeline = MakePipeline(sharedContext,
+                                         rsrcProvider,
                                          loadMSAAProgram,
                                          /*subpassIndex=*/0, // loading to MSAA is always first
                                          PrimitiveType::kTriangleStrip,
-                                         /*vertexAttrs=*/{},
-                                         /*instanceAttrs=*/{},
+                                         /*appendInputRate=*/{},
+                                         /*staticAttrs=*/{},
+                                         /*appendAttrs=*/{},
                                          /*depthStencilSettings=*/{},
                                          /*blendInfo=*/{},
                                          renderPassDesc);
@@ -1035,7 +1016,7 @@ sk_sp<VulkanGraphicsPipeline> VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
     }
 
     return sk_sp<VulkanGraphicsPipeline>(new VulkanGraphicsPipeline(
-        rsrcProvider->vulkanSharedContext(),
+        sharedContext,
         /*pipelineInfo=*/{}, // leave empty for an internal pipeline
         loadMSAAProgram.layout(),
         vkPipeline,

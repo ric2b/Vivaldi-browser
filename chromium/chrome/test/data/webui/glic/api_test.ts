@@ -6,10 +6,13 @@
 // ash/webui/personalization_app/tools/gen_tsconfig.py --root_out_dir out/pc \
 //   --gn_target chrome/test/data/webui/glic:build_ts
 
-import {PanelStateKind, ScrollToErrorReason, WebClientMode} from '/glic/glic_api/glic_api.js';
+import {ScrollToErrorReason, WebClientMode} from '/glic/glic_api/glic_api.js';
 import type {GlicBrowserHost, GlicHostRegistry, GlicWebClient, Observable, OpenPanelInfo, PanelOpeningData, ScrollToError, Subscriber} from '/glic/glic_api/glic_api.js';
+import {ObservableValue} from '/glic/observable.js';
 
 import {createGlicHostRegistryOnLoad} from './api_boot.js';
+
+let maxTimeoutEndTime = performance.now() + 10000;
 
 function getTestName(): string|null {
   let testName = new URL(window.location.href).searchParams.get('test');
@@ -31,6 +34,9 @@ class SequencedSubscriber<T> {
   }
   next(): Promise<T> {
     return this.getSignal(this.readIndex++).promise;
+  }
+  isEmpty(): boolean {
+    return this.readIndex === this.writeIndex;
   }
   unsubscribe() {
     this.subscriber.unsubscribe();
@@ -67,6 +73,8 @@ class WebClient implements GlicWebClient {
   host?: GlicBrowserHost;
   firstOpened = Promise.withResolvers<void>();
   initializedPromise = Promise.withResolvers<void>();
+  onNotifyPanelWasClosed: () => void = () => {};
+  panelOpenState = ObservableValue.withValue<boolean>(false);
 
   async initialize(glicBrowserHost: GlicBrowserHost): Promise<void> {
     this.host = glicBrowserHost;
@@ -74,8 +82,19 @@ class WebClient implements GlicWebClient {
   }
 
   async notifyPanelWillOpen(_panelOpeningData: PanelOpeningData):
-      Promise<void|OpenPanelInfo> {
+      Promise<OpenPanelInfo> {
+    this.panelOpenState.assignAndSignal(true);
     this.firstOpened.resolve();
+
+    const openPanelInfo: OpenPanelInfo = {
+      startingMode: WebClientMode.TEXT,
+    };
+    return openPanelInfo;
+  }
+
+  async notifyPanelWasClosed(): Promise<void> {
+    this.onNotifyPanelWasClosed();
+    this.panelOpenState.assignAndSignal(false);
   }
 
   waitForFirstOpen(): Promise<void> {
@@ -100,13 +119,22 @@ class ApiTestFixtureBase {
   testParams: any;
   constructor(protected testStepper: TestStepper) {}
 
+  // Return to the C++ side, and wait for it to call ContinueJsTest() to
+  // continue execution in the JS test. Optionally, pass data to the C++ side.
+  advanceToNextStep(data?: any): Promise<void> {
+    return this.testStepper.nextStep(data);
+  }
+
   // Sets up the web client. This is called when the web contents loads,
   // before `ExecuteJsTest()`.
   async setUpClient() {
+    this.setUpWithClient(this.createWebClient());
+  }
+
+  async setUpWithClient(client: WebClient) {
     const registry = await glicHostRegistry.promise;
-    const webClient = this.createWebClient();
-    registry.registerWebClient(webClient);
-    this.clientValue = webClient;
+    this.clientValue = client;
+    await registry.registerWebClient(client);
     assertTrue(!!this.clientValue);
   }
 
@@ -130,7 +158,7 @@ class ApiTestFixtureBase {
   }
 }
 
-// Test cases here correspond to test cases in glic_api_uitest.cc.
+// Test cases here correspond to test cases in glic_api_browsertest.cc.
 // Since these tests run in the webview, this test can't use normal deps like
 // mocha or chai assert.
 class ApiTests extends ApiTestFixtureBase {
@@ -138,14 +166,8 @@ class ApiTests extends ApiTestFixtureBase {
     await this.client.waitForFirstOpen();
   }
 
-  // Return to the C++ side, and wait for it to call ContinueJsTest() to
-  // continue execution in the JS test. Optionally, pass data to the C++ side.
-  private advanceToNextStep(data?: any): Promise<void> {
-    return this.testStepper.nextStep(data);
-  }
-
-  // WARNING: Remember to update chrome/browser/glic/host/glic_api_uitest.cc
-  // if you add a new test!
+  // WARNING: Remember to update
+  // chrome/browser/glic/host/glic_api_browsertest.cc if you add a new test!
 
   async testDoNothing() {}
 
@@ -158,12 +180,59 @@ class ApiTests extends ApiTestFixtureBase {
     await this.advanceToNextStep(allNames);
   }
 
+  async testRequestHeader() {}
+
   async testCreateTab() {
     assertTrue(!!this.host.createTab);
     // Open a tab pointing to test.html.
     const url = location.href;
     const data = await this.host.createTab(url, {openInBackground: false});
     assertEquals(data.url, url);
+  }
+
+  async testCreateTabFailsWithUnsupportedScheme() {
+    assertTrue(!!this.host.createTab);
+
+    this.assertCreateTabFails('chrome://settings');
+    this.assertCreateTabFails('ftps://www.google.com');
+    this.assertCreateTabFails('chrome-extension://www.google.com');
+    this.assertCreateTabFails('mailto:user@google.com');
+    this.assertCreateTabFails(
+        'data:text/html;charset=utf-8,<html>Hello World</html>');
+    this.assertCreateTabFails('file:///tmp/test.html');
+  }
+
+  async testCreateTabInBackground() {
+    assertTrue(!!this.host.createTab);
+
+    await this.host.createTab(
+        location.href + '#foreground', {openInBackground: false});
+
+    await this.advanceToNextStep();
+
+    await this.host.createTab(
+        location.href + '#background', {openInBackground: true});
+  }
+
+  async testCreateTabByClickingOnLink() {
+    assertTrue(!!this.host.setAudioDucking);
+    // Check that audio ducking still works after clicking a link.
+    this.host.setAudioDucking(true);
+    const link = document.createElement('a');
+    link.setAttribute('href', 'https://www.chromium.org');
+    link.setAttribute('target', '_blank');
+    document.body.appendChild(link);
+    link.click();
+
+    await this.advanceToNextStep();
+    this.host.setAudioDucking(false);
+  }
+
+  async testCreateTabFailsIfNotActive() {
+    assertTrue(!!this.host.closePanel);
+    assertTrue(!!this.host.createTab);
+    await this.closePanelAndWaitUntilInactive();
+    this.assertCreateTabFails(location.href);
   }
 
   async testOpenGlicSettingsPage() {
@@ -177,42 +246,12 @@ class ApiTests extends ApiTestFixtureBase {
 
   async testClosePanel() {
     assertTrue(!!this.host.closePanel);
+
+    // Close the panel, and verify notifyPanelWasClosed is called.
+    const closedPromise = Promise.withResolvers<void>();
+    this.client.onNotifyPanelWasClosed = closedPromise.resolve;
     await this.host.closePanel();
-  }
-
-  async testAttachPanel() {
-    // Test starts in attached mode.
-    await this.waitForPanelState(PanelStateKind.DETACHED);
-    assertTrue(!!this.host.attachPanel);
-    this.host.attachPanel();
-    await this.waitForPanelState(PanelStateKind.ATTACHED);
-  }
-
-  async testDetachPanel() {
-    // Test starts in detached mode.
-    await this.waitForPanelState(PanelStateKind.ATTACHED);
-    assertTrue(!!this.host.detachPanel);
-    this.host.detachPanel();
-    await this.waitForPanelState(PanelStateKind.DETACHED);
-  }
-
-  // Verify that unsubscribing from an observable prevents future updates.
-  async testUnsubscribeFromObservable() {
-    await this.waitForPanelState(PanelStateKind.DETACHED);
-    const panelStateSequence1 = observeSequence(this.host.getPanelState!());
-    const panelStateSequence2 = observeSequence(this.host.getPanelState!());
-    assertEquals(
-        PanelStateKind.DETACHED, (await panelStateSequence1.next()).kind);
-    assertEquals(
-        PanelStateKind.DETACHED, (await panelStateSequence2.next()).kind);
-    panelStateSequence2.unsubscribe();
-    this.host.attachPanel!();
-    assertEquals(
-        PanelStateKind.ATTACHED, (await panelStateSequence1.next()).kind);
-    assertEquals('no-change', await Promise.race([
-      panelStateSequence2.next().then(state => state.kind),
-      sleep(100).then(() => 'no-change'),
-    ]));
+    await waitFor(closedPromise.promise);
   }
 
   async testShowProfilePicker() {
@@ -232,14 +271,6 @@ class ApiTests extends ApiTestFixtureBase {
     assertTrue(await activeSequence.next());
     await this.advanceToNextStep();
     assertFalse(await activeSequence.next());
-  }
-
-  async testCanAttachPanel() {
-    assertTrue(!!this.host.canAttachPanel);
-    const canAttach = observeSequence(this.host.canAttachPanel());
-    // When subscribing to this value, an initial update is guaranteed to be
-    // emited.
-    assertTrue(await canAttach.next());
   }
 
   async testIsBrowserOpen() {
@@ -263,6 +294,22 @@ class ApiTests extends ApiTestFixtureBase {
     await this.host.enableDragResize(false);
   }
 
+  async testGetZeroStateSuggestions() {
+    assertTrue(!!this.host.getZeroStateSuggestionsForFocusedTab);
+    const suggestions = await this.host.getZeroStateSuggestionsForFocusedTab();
+    assertTrue(!!suggestions);
+    assertEquals(0, suggestions.suggestions.length);
+  }
+
+  async testGetZeroStateSuggestionsFailsWhenHidden() {
+    assertTrue(!!this.host.getZeroStateSuggestionsForFocusedTab);
+    assertTrue(!!this.host.closePanel);
+    await this.closePanelAndWaitUntilInactive();
+    const suggestions = await this.host.getZeroStateSuggestionsForFocusedTab();
+    assertTrue(!!suggestions);
+    assertEquals(0, suggestions.suggestions.length);
+  }
+
   async testGetFocusedTabState() {
     assertTrue(!!this.host.getFocusedTabState);
     const sequence = observeSequence(this.host.getFocusedTabState());
@@ -282,6 +329,95 @@ class ApiTests extends ApiTestFixtureBase {
         `url=${focus.hasFocus.tabData.url}`);
     assertEquals('Test Page', focus.hasFocus.tabData.title);
     assertFalse(!!focus.hasNoFocus);
+  }
+
+  async testGetFocusedTabStateV2WithNavigation() {
+    // Initial state.
+    assertTrue(!!this.host.getFocusedTabStateV2);
+    const sequence = observeSequence(this.host.getFocusedTabStateV2());
+    const focus = await sequence.next();
+    assertTrue(!!focus.hasFocus);
+    assertTrue(
+        focus.hasFocus.tabData.url.endsWith('glic/test.html'),
+        `url=${focus.hasFocus.tabData.url}`);
+    assertFalse(!!focus.hasNoFocus);
+
+    // After a second navigation occurs.
+    await this.advanceToNextStep();
+    const focus2 = await sequence.next();
+    assertTrue(!!focus2.hasFocus);
+    assertTrue(
+        focus2.hasFocus.tabData.url.endsWith(
+            'scrollable_page_with_content.html'),
+        `url=${focus2.hasFocus.tabData.url}`);
+
+    await this.advanceToNextStep();
+    let focus3 = await sequence.next();
+
+    // After a navigation occurs in a new tab, there could first exist a
+    // transitory states where the focus is not yet available, is empty, or
+    // still previous page.
+    while (focus3.hasNoFocus ||
+           (!!focus3.hasFocus &&
+            (focus3.hasFocus.tabData.url === '' ||
+             focus3.hasFocus.tabData.url.endsWith(
+                 'scrollable_page_with_content.html')))) {
+      focus3 = await sequence.next();
+    }
+
+    // Final state, after the tab is fully loaded.
+    assertTrue(!!focus3.hasFocus);
+    assertTrue(
+        focus3.hasFocus.tabData.url.endsWith('glic/test.html'),
+        `url=${focus3.hasFocus.tabData.url}`);
+    assertFalse(!!focus3.hasNoFocus);
+  }
+
+  async testGetFocusedTabStateV2WithNavigationWhenInactive() {
+    // Initial state.
+    assertTrue(!!this.host.getFocusedTabStateV2);
+    await this.closePanelAndWaitUntilInactive();
+    const sequence = observeSequence(this.host.getFocusedTabStateV2());
+    const focus = await sequence.next();
+    assertTrue(!!focus.hasFocus);
+    assertTrue(
+        focus.hasFocus.tabData.url.endsWith('glic/test.html'),
+        `url=${focus.hasFocus.tabData.url}`);
+    assertFalse(!!focus.hasNoFocus);
+
+    await this.closePanelAndWaitUntilInactive();
+
+    // After we hide, two navigations will occur. The second in a new tab.
+    await this.advanceToNextStep();
+
+    const focus2 = await runUntil(async () => {
+      const nextFocus = await sequence.next();
+
+      // After a navigation occurs in a new tab, there could first exist a
+      // transitory states where the focus is not yet available, is empty, or
+      // still previous page.
+      if (!nextFocus || !!nextFocus.hasNoFocus || !nextFocus.hasFocus) {
+        return undefined;
+      }
+
+      const focused_url = nextFocus.hasFocus.tabData.url;
+      if (focused_url === '' ||
+          focused_url.endsWith('scrollable_page_with_content.html')) {
+        return undefined;
+      }
+      return nextFocus;
+    });
+
+    // Final state, after the tab is fully loaded.
+    assertFalse(
+        !!focus2.hasFocus &&
+        focus2.hasFocus.tabData.url.endsWith(
+            'scrollable_page_with_content.html'));
+    assertTrue(!!focus2.hasFocus);
+    assertTrue(
+        focus2.hasFocus.tabData.url.endsWith('glic/test.html'),
+        `url=${focus2.hasFocus.tabData.url}`);
+    assertFalse(!!focus2.hasNoFocus);
   }
 
   async testGetFocusedTabStateV2BrowserClosed() {
@@ -321,7 +457,6 @@ class ApiTests extends ApiTestFixtureBase {
     assertFalse(!!result.viewportScreenshot);
   }
 
-  // TODO(harringtond): Add a test for a PDF.
   async testGetContextFromFocusedTabWithAllRequestedData() {
     await this.host.setTabContextPermissionState(true);
 
@@ -372,6 +507,38 @@ class ApiTests extends ApiTestFixtureBase {
     assertEquals(metaTag.content, 'George');
   }
 
+  async testGetContextFromFocusedTabWithPdfFile() {
+    await this.host.setTabContextPermissionState(true);
+
+    // Pdf pages have two loads: one of the WebContents, and another of the
+    // element within an iframe that contains the actual pdf. We need to wait
+    // for both to be finished before running the test. The cpp side waits for
+    // the WebContents to be loaded, but we must still wait here.
+    const result = await runUntil(async () => {
+      const result =
+          await this.host.getContextFromFocusedTab?.({pdfData: true});
+      if (!result || !result.pdfDocumentData ||
+          !result.pdfDocumentData.pdfData) {
+        return undefined;
+      }
+      return result;
+    });
+
+    assertTrue(
+        result.tabData.url.endsWith('pdf/test.pdf') ?? false,
+        `Tab data has unexpected url ${result.tabData.url}`);
+    assertFalse(!!result.webPageData);
+
+    // Original PDF size is 7984 bytes, because Chrome reserializes the PDF,
+    // the size can change, but it shouldn't be too small.
+    const pdfData = await readStream(result.pdfDocumentData!.pdfData!);
+    assertTrue(
+        pdfData.byteLength > 5000,
+        `PDF data is too short. length=${pdfData.byteLength}`);
+    assertEquals('%PDF', new TextDecoder().decode(pdfData.slice(0, 4)));
+    assertFalse(result.pdfDocumentData!.pdfSizeLimitExceeded);
+  }
+
   // TODO(harringtond): This is disabled because it hangs. Fix it.
   async testCaptureScreenshot() {
     assertTrue(!!this.host.captureScreenshot);
@@ -412,11 +579,28 @@ class ApiTests extends ApiTestFixtureBase {
   async testGetOsHotkeyState() {
     assertTrue(!!this.host.getOsHotkeyState);
     const osHotkeyState = observeSequence(this.host.getOsHotkeyState());
-    const initialHotkeyState = await osHotkeyState.next();
-    assertEquals('<Ctrl>-<G>', initialHotkeyState.hotkey);
+    let hotkeyState = await osHotkeyState.next();
+    const isMac = /Mac/.test(navigator.platform);
+    let expectedHotkey = isMac ? '<⌃>-<G>' : '<Ctrl>-<G>';
+    assertEquals(expectedHotkey, hotkeyState.hotkey);
     await this.advanceToNextStep();
-    const changedState = await osHotkeyState.next();
-    assertEquals('<Ctrl>-<Shift>-<1>', changedState.hotkey);
+    hotkeyState = await osHotkeyState.next();
+    expectedHotkey = isMac ? '<⌃>-<⇧>-<1>' : '<Ctrl>-<Shift>-<1>';
+    assertEquals(expectedHotkey, hotkeyState.hotkey);
+    await this.advanceToNextStep();
+    hotkeyState = await osHotkeyState.next();
+    expectedHotkey = '';
+    assertEquals(expectedHotkey, hotkeyState.hotkey);
+  }
+
+  async testClosedCaptioning() {
+    assertTrue(!!this.host.getClosedCaptioningSetting);
+    assertTrue(!!this.host.setClosedCaptioningSetting);
+    const closedCaptioningState =
+        observeSequence(this.host.getClosedCaptioningSetting());
+    assertFalse(await closedCaptioningState.next());
+    await this.host.setClosedCaptioningSetting(true);
+    assertTrue(await closedCaptioningState.next());
   }
 
   async testGetUserProfileInfo() {
@@ -430,10 +614,38 @@ class ApiTests extends ApiTestFixtureBase {
     assertTrue((profileInfo.localProfileName?.length ?? 0) > 0);
   }
 
+  async testGetUserProfileInfoDefersWhenInactive() {
+    assertTrue(!!this.host.getUserProfileInfo);
+    assertTrue(!!this.host.closePanel);
+    await this.closePanelAndWaitUntilInactive();
+    const promise = this.host.getUserProfileInfo();
+    try {
+      await waitFor(promise, 200);
+      // We should have thrown here as the promise should not resolve until
+      // advancing to the next step.
+      assertTrue(false);
+    } catch {
+    }
+    await this.advanceToNextStep();
+    const profileInfo = await promise;
+    assertEquals('glic-test@example.com', profileInfo.email);
+  }
+
   async testRefreshSignInCookies() {
     assertTrue(!!this.host.refreshSignInCookies);
 
     await this.host.refreshSignInCookies();
+  }
+
+  async testSignInPauseState() {
+    assertTrue(!!this.host.getUserProfileInfo);
+    const profileInfo = await this.host.getUserProfileInfo();
+
+    assertEquals('', profileInfo.displayName);
+    assertEquals('glic-test@example.com', profileInfo.email);
+    assertEquals('', profileInfo.givenName);
+    assertEquals(false, profileInfo.isManaged!);
+    assertTrue((profileInfo.localProfileName?.length ?? 0) > 0);
   }
 
   async testSetContextAccessIndicator() {
@@ -446,6 +658,39 @@ class ApiTests extends ApiTestFixtureBase {
     assertTrue(!!this.host.setAudioDucking);
 
     await this.host.setAudioDucking(true);
+  }
+
+  async testGetDisplayMedia() {
+    async function waitForFirstFrame(track: MediaStreamVideoTrack):
+        Promise<boolean> {
+      const processor = new MediaStreamTrackProcessor({track});
+      const reader = processor.readable.getReader();
+
+      try {
+        const result = await reader.read();
+        if (result.done) {
+          throw new Error('Track ended before a frame could be read.');
+        }
+        const frame = result.value;  // This is a VideoFrame
+        frame.close();
+        return true;
+      } finally {
+        reader.releaseLock();
+      }
+    }
+
+    // The client should be able to use getDisplayMedia() to capture the glic
+    // window.
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: false,
+      preferCurrentTab: true,
+    } as any);
+    const videoTracks = stream.getVideoTracks();
+    assertTrue(videoTracks.length > 0);
+    const track = videoTracks[0] as MediaStreamVideoTrack;
+    assertTrue(!!track);
+    assertTrue(await waitForFirstFrame(track));
   }
 
   async testMetrics() {
@@ -466,12 +711,45 @@ class ApiTests extends ApiTestFixtureBase {
 
   async testScrollToFindsText() {
     assertTrue(!!this.host.scrollTo);
+    assertTrue(!!this.host.setTabContextPermissionState);
+    await this.host.setTabContextPermissionState(true);
     await this.host.scrollTo(
         {selector: {exactText: {text: 'Test Page'}}, highlight: true});
   }
 
+  async testScrollToFindsTextNoTabContextPermission() {
+    assertTrue(!!this.host.scrollTo);
+    try {
+      await this.host.scrollTo(
+          {selector: {exactText: {text: 'Abracadabra'}}, highlight: true});
+    } catch (e) {
+      assertEquals(
+          ScrollToErrorReason.TAB_CONTEXT_PERMISSION_DISABLED,
+          (e as ScrollToError).reason);
+      return;
+    }
+    assertTrue(false, 'scrollTo should have thrown an error');
+  }
+
+  async testScrollToFailsWhenInactive() {
+    assertTrue(!!this.host.scrollTo);
+    assertTrue(!!this.host.closePanel);
+    await this.closePanelAndWaitUntilInactive();
+    try {
+      await this.host.scrollTo(
+          {selector: {exactText: {text: 'Abracadabra'}}, highlight: true});
+    } catch (e) {
+      assertEquals(
+          ScrollToErrorReason.NOT_SUPPORTED, (e as ScrollToError).reason);
+      return;
+    }
+    assertTrue(false, 'scrollTo should have thrown an error');
+  }
+
   async testScrollToNoMatchFound() {
     assertTrue(!!this.host.scrollTo);
+    assertTrue(!!this.host.setTabContextPermissionState);
+    await this.host.setTabContextPermissionState(true);
     try {
       await this.host.scrollTo(
           {selector: {exactText: {text: 'Abracadabra'}}, highlight: true});
@@ -513,6 +791,84 @@ class ApiTests extends ApiTestFixtureBase {
     const minSize = {width: 200, height: 100};
     await this.host.setMinimumWidgetSize(minSize.width, minSize.height);
     await this.advanceToNextStep(minSize);
+  }
+
+  async testManualResizeChanged() {
+    assertTrue(!!this.host.isManuallyResizing);
+    await observeSequence(this.host.isManuallyResizing()).waitForValue(true);
+
+    await this.advanceToNextStep();
+    await observeSequence(this.host.isManuallyResizing()).waitForValue(false);
+  }
+
+  async testResizeWindowTooSmall() {
+    assertTrue(!!this.host.resizeWindow);
+    await this.host.resizeWindow(0, 0);
+  }
+
+  async testResizeWindowTooLarge() {
+    assertTrue(!!this.host.resizeWindow);
+    await this.host.resizeWindow(20000, 20000);
+  }
+
+  async testResizeWindowWithinBounds() {
+    assertTrue(!!this.host.resizeWindow);
+    assertTrue(!!this.testParams);
+    await this.host.resizeWindow(this.testParams.width, this.testParams.height);
+  }
+
+  async testGetContextFromFocusedTabWithIneligiblePage() {
+    assertTrue(!!this.host.getContextFromFocusedTab);
+    await this.host.setTabContextPermissionState(true);
+
+    try {
+      await this.host.getContextFromFocusedTab?.({
+        innerText: true,
+        viewportScreenshot: true,
+        annotatedPageContent: true,
+        maxMetaTags: 32,
+        pdfData: true,
+      });
+    } catch (e) {
+      assertEquals(
+          'tabContext failed: page context ineligible', (e as Error).message);
+      return;
+    }
+    assertTrue(false, 'getContextFromFocusedTab should have thrown an error');
+  }
+
+  async testGetContextFromFocusedTabWithEligiblePage() {
+    await this.host.setTabContextPermissionState(true);
+
+    const result = await this.host.getContextFromFocusedTab?.({
+      innerText: true,
+      viewportScreenshot: true,
+      annotatedPageContent: true,
+      maxMetaTags: 32,
+      pdfData: true,
+    });
+
+    assertTrue(!!result);
+  }
+
+  async testOpenOsMediaPermissionSettings() {
+    assertTrue(!!this.host.openOsPermissionSettingsMenu);
+    this.host.openOsPermissionSettingsMenu('media');
+  }
+
+  async testOpenOsGeoPermissionSettings() {
+    assertTrue(!!this.host.openOsPermissionSettingsMenu);
+    this.host.openOsPermissionSettingsMenu('geolocation');
+  }
+
+  async testGetOsMicrophonePermissionStatusAllowed() {
+    assertTrue(!!this.host.getOsMicrophonePermissionStatus);
+    assertTrue(await this.host.getOsMicrophonePermissionStatus());
+  }
+
+  async testGetOsMicrophonePermissionStatusNotAllowed() {
+    assertTrue(!!this.host.getOsMicrophonePermissionStatus);
+    assertFalse(await this.host.getOsMicrophonePermissionStatus());
   }
 
   // Test navigating successfully after client connection.
@@ -561,10 +917,30 @@ class ApiTests extends ApiTestFixtureBase {
     assertEquals(url.pathname, '/glic/test.html');
   }
 
-  private async waitForPanelState(kind: PanelStateKind): Promise<void> {
-    assertTrue(!!this.host.getPanelState);
-    await observeSequence(this.host.getPanelState())
-        .waitFor(s => s.kind === kind);
+  async testCallingApiWhileHiddenRecordsMetrics() {
+    assertTrue(!!this.host.createTab);
+    await this.advanceToNextStep();
+    await runUntil(() => document.visibilityState === 'hidden');
+    try {
+      await this.host.createTab(
+          'https://www.google.com', {openInBackground: false});
+    } catch {
+    }
+  }
+
+  async testReloadWebUi() {}
+
+  private async assertCreateTabFails(url: string) {
+    assertTrue(!!this.host.createTab);
+    const errorMessage = await assertRejects(
+        this.host.createTab(url, {openInBackground: false}));
+    assertEquals('createTab: failed', errorMessage);
+  }
+
+  private async closePanelAndWaitUntilInactive() {
+    assertTrue(!!this.host.closePanel);
+    await this.host.closePanel();
+    await observeSequence(this.host.panelActive()).waitForValue(false);
   }
 }
 
@@ -577,9 +953,29 @@ class ApiTestWithoutOpen extends ApiTestFixtureBase {
   async testLoadWhileWindowClosed() {
     await observeSequence(this.host.panelActive()).waitForValue(false);
   }
+
+  async testDeferredFocusedTabStateAtCreation() {
+    // Initial state.
+    assertTrue(!!this.host.getFocusedTabStateV2);
+    const focusedTabStateV2Sequence =
+        observeSequence(this.host.getFocusedTabStateV2());
+    let focusedTabState = await focusedTabStateV2Sequence.next();
+    assertTrue(!!focusedTabState.hasNoFocus);
+    const tabStatePromise = focusedTabStateV2Sequence.next();
+    assertRejects(waitFor(tabStatePromise, 200));
+    // We should only see the second page.
+    await this.advanceToNextStep();
+    focusedTabState = await tabStatePromise;
+    assertTrue(!!focusedTabState.hasFocus);
+    assertTrue(
+        focusedTabState.hasFocus.tabData.url.endsWith(
+            'scrollable_page_with_content.html'),
+        `url=${focusedTabState.hasFocus.tabData.url}`);
+  }
 }
 
-type InitFailureType = 'error'|'timeout'|'none'|'reloadAfterInitialize';
+type InitFailureType = 'error'|'timeout'|'none'|'reloadAfterInitialize'|
+    'navigateToSorryPageBeforeInitialize'|'navigateToSorryPageAfterInitialize';
 
 // A web client that can fail initialize.
 class WebClientThatFailsInitialize extends WebClient {
@@ -598,6 +994,17 @@ class WebClientThatFailsInitialize extends WebClient {
     if (this.failWith === 'reloadAfterInitialize') {
       sleep(500).then(() => location.reload());
     }
+    if (this.failWith === 'navigateToSorryPageBeforeInitialize') {
+      location.href = '/sorry/index.html';
+      return sleep(5000);
+    }
+    if (this.failWith === 'navigateToSorryPageAfterInitialize') {
+      sleep(500).then(() => {
+        location.href = '/sorry/index.html';
+      });
+    }
+    // This initialization is sometimes skipped depending on the type of desired
+    // failure detected above
     return super.initialize(glicBrowserHost);
   }
 }
@@ -616,22 +1023,25 @@ class ApiTestFailsToInitialize extends ApiTestFixtureBase {
   // testParams when `createWebClient()` is called.
   override async setUpClient() {}
 
-  async testInitializeFailsWindowClosed() {
-    // Failing initialize will tear down this web contents. Deferring that here
-    // so that our test can exit cleanly.
+  // Runs ApiTestFixtureBase.setUpClient() after 100 ms, and returns
+  // immediately. This allows the test to exit cleanly before the web contents
+  // is torn down.
+  deferredSetUpClient() {
     sleep(100).then(() => super.setUpClient());
   }
 
+  async testInitializeFailsWindowClosed() {
+    this.deferredSetUpClient();
+  }
+
   async testInitializeFailsWindowOpen() {
-    // Failing initialize will tear down this web contents. Deferring that here
-    // so that our test can exit cleanly.
-    sleep(100).then(() => super.setUpClient());
+    this.deferredSetUpClient();
   }
 
   async testReload() {
     // First run.
     if (this.getTestParams().failWith === 'reloadAfterInitialize') {
-      sleep(100).then(() => super.setUpClient());
+      this.deferredSetUpClient();
       return;
     }
 
@@ -640,21 +1050,56 @@ class ApiTestFailsToInitialize extends ApiTestFixtureBase {
     await this.client.waitForFirstOpen();
   }
 
-  async testInitializeFailsAfterReload() {
-    sleep(100).then(() => super.setUpClient());
+  async testSorryPageBeforeInitialize() {
+    this.deferredSetUpClient();
   }
 
+  async testSorryPageAfterInitialize() {
+    this.deferredSetUpClient();
+  }
+
+  async testInitializeFailsAfterReload() {
+    this.deferredSetUpClient();
+  }
+  // Skips the setup entirely.
+  async testNoClientCreated() {}
+  // Skips the bootstrap as well. The test name "testNoBootstrap" is handled
+  // specially.
+  async testNoBootstrap() {}
   async testInitializeTimesOut() {
     await super.setUpClient();
+  }
+
+  // Tests notifyPanelWillOpen() returning after the panel is closed and then
+  // reopened.
+  async testCloseAndOpenWhileOpening() {
+    const openSignal = Promise.withResolvers<void>();
+    class WebClientThatOpensSlowly extends WebClient {
+      override async notifyPanelWillOpen(): Promise<OpenPanelInfo> {
+        this.panelOpenState.assignAndSignal(true);
+        await openSignal.promise;
+        return {
+          startingMode: WebClientMode.TEXT,
+        };
+      }
+    }
+    await this.setUpWithClient(new WebClientThatOpensSlowly());
+    const panelOpenState = observeSequence(this.client.panelOpenState);
+    panelOpenState.waitForValue(true);
+    await this.host.closePanel!();
+    panelOpenState.waitForValue(false);
+    await this.advanceToNextStep();
+    openSignal.resolve();
+    await panelOpenState.waitForValue(true);
   }
 }
 
 class WebClientThatOpensOnce extends WebClient {
   notifyPanelWillOpenCallCount = 0;
   override async notifyPanelWillOpen(panelOpeningData: PanelOpeningData):
-      Promise<void> {
+      Promise<OpenPanelInfo> {
     this.notifyPanelWillOpenCallCount += 1;
-    super.notifyPanelWillOpen(panelOpeningData);
+    return super.notifyPanelWillOpen(panelOpeningData);
   }
 }
 
@@ -673,7 +1118,7 @@ class NotifyPanelWillOpenTest extends ApiTestFixtureBase {
 
 class InitiallyNotResizableWebClient extends WebClient {
   override async notifyPanelWillOpen(_panelOpeningData: PanelOpeningData):
-      Promise<void|OpenPanelInfo> {
+      Promise<OpenPanelInfo> {
     return {startingMode: WebClientMode.TEXT, canUserResize: false};
   }
 }
@@ -744,8 +1189,9 @@ class TestRunner implements TestStepper {
   }
 
   // Sets up the test and starts running it.
-  async run(payload: any): Promise<TestResult> {
+  async run(maxTimeoutMs: number, payload: any): Promise<TestResult> {
     assertTrue(this.testFound, `Test not found`);
+    maxTimeoutEndTime = performance.now() + maxTimeoutMs;
     console.info(`Running test ${this.testName} with payload ${
         JSON.stringify(payload)}`);
     this.fixture!.testParams = payload;
@@ -819,8 +1265,10 @@ async function improveStackTrace(stack: string) {
 }
 
 async function main() {
-  console.info('api_test waiting for GlicHostRegistry');
-  glicHostRegistry.resolve(await createGlicHostRegistryOnLoad());
+  if (getTestName() !== 'testNoBootstrap') {
+    console.info('api_test waiting for GlicHostRegistry');
+    glicHostRegistry.resolve(await createGlicHostRegistryOnLoad());
+  }
 
   // If no test is selected, load a client that does nothing.
   // This is present because test.html is used as a dummy test client in
@@ -828,9 +1276,10 @@ async function main() {
   const testRunner = new TestRunner(getTestName() ?? 'testDoNothing');
   await testRunner.setUp();
 
-  (window as any).runApiTest = (payload: any): Promise<TestResult> => {
-    return testRunner.run(payload);
-  };
+  (window as any).runApiTest =
+      (maxTimeoutMs: number, payload: any): Promise<TestResult> => {
+        return testRunner.run(maxTimeoutMs, payload);
+      };
 
   (window as any).continueApiTest = (payload: any): Promise<TestResult> => {
     return testRunner.stepComplete(payload);
@@ -866,5 +1315,60 @@ function sleep(timeoutMs: number): Promise<void> {
   });
 }
 
-main();
+function getTimeout(timeoutMs?: number): number {
+  if (timeoutMs === undefined) {
+    return Math.max(0, maxTimeoutEndTime - performance.now());
+  }
+  return timeoutMs;
+}
 
+// Waits for a promise to resolve. If the timeout is reached first, throws an
+// exception. Note this is useful because if the test times out in the normal
+// way, we do not receive a very useful error.
+async function waitFor<T>(value: Promise<T>, timeoutMs?: number): Promise<T> {
+  const timeoutResult = Symbol();
+  const result = await Promise.race(
+      [value, sleep(getTimeout(timeoutMs)).then(() => timeoutResult)]);
+  if (result === timeoutResult) {
+    throw new Error(`Timed out while waiting`);
+  }
+  return value;
+}
+
+
+// Run until `condition()` returns a truthy value. Throws an exception if the
+// timeout is reached first. Otherwise, this returns the value returned by
+// condition.
+async function runUntil<T>(
+    condition: () => T | PromiseLike<T>,
+    timeoutMs?: number): Promise<NonNullable<T>> {
+  timeoutMs = getTimeout(timeoutMs);
+  const sleepMs = getTimeout(timeoutMs) / 20;
+  const timeout = performance.now() + timeoutMs;
+  while (performance.now() < timeout) {
+    const result = await condition();
+    if (result) {
+      return result;
+    }
+    await sleep(sleepMs);
+  }
+  throw new Error('runUntil timed out');
+}
+
+function readStream(stream: ReadableStream<Uint8Array>): Promise<Uint8Array> {
+  return new Response(stream).bytes();
+}
+
+async function assertRejects<T>(promise: Promise<T>):
+    Promise<string|undefined> {
+  return promise.then(
+      () => {
+        // The promise should have rejected.
+        assertTrue(false);
+      },
+      (e) => {
+        return (e as Error).message;
+      });
+}
+
+main();

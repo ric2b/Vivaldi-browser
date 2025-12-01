@@ -4,7 +4,6 @@
 
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
-import("//build/config/locales.gni")
 import("//device/vr/buildflags/buildflags.gni")
 import("//third_party/jni_zero/jni_zero.gni")
 import("//tools/grit/grit_rule.gni")
@@ -129,7 +128,6 @@ android_library("content_main_dex_java") {
     "java/src/org/chromium/content/app/SandboxedProcessService.java",
     "java/src/org/chromium/content/browser/BrowserStartupControllerImpl.java",
     "java/src/org/chromium/content/browser/ChildProcessCreationParamsImpl.java",
-    "java/src/org/chromium/content/browser/ContentChildProcessConstants.java",
     "java/src/org/chromium/content/browser/DeviceUtilsImpl.java",
     "java/src/org/chromium/content/browser/ServicificationStartupUma.java",
     "java/src/org/chromium/content/browser/TracingControllerAndroidImpl.java",
@@ -166,7 +164,6 @@ android_library("content_full_java") {
     "$google_play_services_package:google_play_services_auth_api_phone_java",
     "$google_play_services_package:google_play_services_base_java",
     "$google_play_services_package:google_play_services_basement_java",
-    "$google_play_services_package:google_play_services_identity_credentials_java",
     "$google_play_services_package:google_play_services_tasks_java",
     "//base:base_java",
     "//base:process_launcher_java",
@@ -179,6 +176,7 @@ android_library("content_full_java") {
     "//content/public/common:common_java",
     "//device/bluetooth:java",
     "//device/gamepad:java",
+    "//device/vr/public:java",
     "//media/base/android:media_java",
     "//media/capture/video/android:capture_java",
     "//media/midi:midi_java",
@@ -232,11 +230,11 @@ android_library("content_full_java") {
     ":content_jni_headers",
     ":is_ready_to_pay_service_aidl",
     "//content/browser:client_data_json_generated_enum",
-    "//content/browser:transfer_input_to_viz_result_enum",
     "//content/browser/accessibility:content_browser_accessibility_java_enums_srcjar",
     "//content/browser/sms:sms_provider_gms_backend_enum",
     "//content/public/browser:bluetooth_chooser_event_javagen",
     "//content/public/browser:digital_identity_enum",
+    "//content/public/browser:transfer_input_to_viz_result_enum",
     "//ui/touch_selection:ui_touch_handle_orientation_srcjar",
     "//ui/touch_selection:ui_touch_selection_enums_srcjar",
   ]
@@ -368,8 +366,6 @@ android_library("content_full_java") {
     "java/src/org/chromium/content/browser/webcontents/EmptyInternalAccessDelegate.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsImpl.java",
     "java/src/org/chromium/content/browser/webcontents/WebContentsObserverProxy.java",
-    "java/src/org/chromium/content/browser/webid/DigitalCredentialsCreationDelegate.java",
-    "java/src/org/chromium/content/browser/webid/IdentityCredentialsDelegate.java",
     "java/src/org/chromium/content_public/browser/ActionModeCallback.java",
     "java/src/org/chromium/content_public/browser/ActionModeCallbackHelper.java",
     "java/src/org/chromium/content_public/browser/AdditionalNavigationParams.java",
@@ -452,10 +448,6 @@ android_library("content_util_java") {
 
 java_strings_grd("content_strings_grd") {
   grd_file = "java/strings/android_content_strings.grd"
-  outputs = [ "values/android_content_strings.xml" ] +
-            process_file_template(
-                android_bundle_locales_as_resources,
-                [ "values-{{source_name_part}}/android_content_strings.xml" ])
 }
 
 java_cpp_enum("content_public_android_java_enums_srcjar") {
@@ -644,11 +636,11 @@ android_library("content_javatests") {
     "javatests/src/org/chromium/content/browser/JavaBridgeFieldsTest.java",
     "javatests/src/org/chromium/content/browser/JavaBridgeReturnValuesTest.java",
     "javatests/src/org/chromium/content/browser/MediaSessionTest.java",
+    "javatests/src/org/chromium/content/browser/NavigationHandleTest.java",
     "javatests/src/org/chromium/content/browser/NavigationTest.java",
     "javatests/src/org/chromium/content/browser/ScreenOrientationListenerTest.java",
     "javatests/src/org/chromium/content/browser/TestsJavaScriptEvalTest.java",
     "javatests/src/org/chromium/content/browser/TracingControllerAndroidImplTest.java",
-    "javatests/src/org/chromium/content/browser/VSyncPausedTest.java",
     "javatests/src/org/chromium/content/browser/VideoFullscreenOrientationLockTest.java",
     "javatests/src/org/chromium/content/browser/VideoRotateToFullscreenTest.java",
     "javatests/src/org/chromium/content/browser/ViewportTest.java",

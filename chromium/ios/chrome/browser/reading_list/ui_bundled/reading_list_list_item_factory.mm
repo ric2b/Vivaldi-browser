@@ -16,6 +16,10 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "ui/base/l10n/time_format.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 @interface ReadingListListItemFactory ()
 
 // The factory supplying custom accessibility actions to the items.
@@ -75,7 +79,13 @@
       hasDistillationDetails ? entry->DistillationTime() : 0;
   item.distillationDateText =
       GetReadingListCellDistillationDateText(distillationDate);
+
+  if (vivaldi::IsVivaldiRunning()) {
+    item.showCloudSlashIcon = NO;
+  } else {
   item.showCloudSlashIcon = needsExplicitUpload;
+  } // End Vivaldi
+
   item.customActionFactory = self.customActionFactory;
   return item;
 }

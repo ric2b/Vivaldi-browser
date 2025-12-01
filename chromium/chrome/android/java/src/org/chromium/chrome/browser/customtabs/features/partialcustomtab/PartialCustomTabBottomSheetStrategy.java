@@ -49,6 +49,8 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.features.partialcustomtab.ContentGestureListener.GestureState;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
+import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarButtonsCoordinator;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.fullscreen.FullscreenOptions;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
@@ -109,7 +111,7 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
     private GestureDetector mGestureDetector;
     private ContentGestureListener mGestureHandler;
 
-    private TabAnimator mTabAnimator;
+    private final TabAnimator mTabAnimator;
 
     private @HeightStatus int mStatus = HeightStatus.INITIAL_HEIGHT;
 
@@ -118,7 +120,7 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
     private Runnable mSoftKeyboardRunnable;
     private boolean mStopShowingSpinner;
     private boolean mRestoreAfterFindPage;
-    private boolean mContentScrollMayResizeTab;
+    private final boolean mContentScrollMayResizeTab;
 
     // Y offset when a dragging gesture/animation starts.
     private int mMoveStartY;
@@ -223,7 +225,9 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
 
         // If the user is scrolling and the event is a cancel or up action, update scroll state and
         // return. Fling should have already cleared the gesture state. The following is for
-        // the non-fling release.
+        // the non-fling release. But user gesture intended as a fling action is often recognized
+        // as non-fling release. We compute the velocity in the GestureHandler to determine which
+        // action to take.
         if (mGestureHandler.getState() != GestureState.NONE
                 && (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)) {
             mGestureHandler.doNonFlingRelease();
@@ -332,14 +336,22 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
 
     @Override
     public void onToolbarInitialized(
-            View coordinatorView, CustomTabToolbar toolbar, @Px int toolbarCornerRadius) {
-        super.onToolbarInitialized(coordinatorView, toolbar, toolbarCornerRadius);
+            View coordinatorView,
+            CustomTabToolbar toolbar,
+            @Px int toolbarCornerRadius,
+            CustomTabToolbarButtonsCoordinator toolbarButtonsCoordinator) {
+        super.onToolbarInitialized(
+                coordinatorView, toolbar, toolbarCornerRadius, toolbarButtonsCoordinator);
 
         mHandleStrategy =
                 new PartialCustomTabHandleStrategy(
                         mActivity, this::isFullHeight, () -> mStatus, this);
         toolbar.setHandleStrategy(mHandleStrategy);
-        toolbar.setMinimizeButtonEnabled(false);
+        if (ChromeFeatureList.sCctToolbarRefactor.isEnabled()) {
+            toolbarButtonsCoordinator.setMinimizeButtonEnabled(false);
+        } else {
+            toolbar.setMinimizeButtonEnabled(false);
+        }
         CustomTabDragBar dragBar = mActivity.findViewById(R.id.drag_bar);
         dragBar.setHandleStrategy(mHandleStrategy);
         View dragHandle = mActivity.findViewById(R.id.drag_handle);
@@ -535,7 +547,9 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
         boolean isMaxWidthLandscapeBottomSheet = isMaxWidthLandscapeBottomSheet();
 
         float maxWidthBottomSheetEv =
-                mActivity.getResources().getDimensionPixelSize(R.dimen.default_elevation_2);
+                mActivity
+                        .getResources()
+                        .getDimensionPixelSize(R.dimen.custom_tabs_max_width_bottom_sheet_elev);
         float regBottomSheetEv =
                 mActivity.getResources().getDimensionPixelSize(R.dimen.custom_tabs_elevation);
         float elevation = isMaxWidthLandscapeBottomSheet ? maxWidthBottomSheetEv : regBottomSheetEv;
@@ -674,7 +688,7 @@ public class PartialCustomTabBottomSheetStrategy extends PartialCustomTabBaseStr
             mVersionCompat.setImeStateCallback(this::onImeStateChanged);
         }
 
-        if (AccessibilityState.isScreenReaderEnabled()) {
+        if (AccessibilityState.isComplexUserInteractionServiceEnabled()) {
             int textId =
                     mStatus == HeightStatus.TOP
                             ? R.string.accessibility_custom_tab_expanded

@@ -16,3 +16,15 @@ check_targets = [
   "//tools/*",
   "//util/*",
 ]
+
+default_args = {
+  # Disable js dependencies like the closure compiler.
+  enable_js_protobuf = false
+
+  # Disable rust dependencies. Would be cool to potentially eventually support
+  # rust in Open Screen, but not yet!
+  enable_rust = false
+
+  # Needed only for std::atomic_ref<T> for large Ts http://crbug.com/402171653
+  use_llvm_libatomic = false
+}

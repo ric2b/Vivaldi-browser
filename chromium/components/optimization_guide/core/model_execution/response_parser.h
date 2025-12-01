@@ -19,14 +19,23 @@ namespace optimization_guide {
 enum class ResponseParsingError {
   // Response did not have the expected structure, or similar parsing errors.
   kFailed = 1,
+
   // Response potentially contained disallowed PII.
   kRejectedPii = 2,
+
+  // The response configuration had an error that prevented parsing.
+  kInvalidConfiguration = 3,
 };
 
 // A method for converting model responses to structured data.
 class ResponseParser {
  public:
-  virtual ~ResponseParser() = 0;
+  ResponseParser();
+  virtual ~ResponseParser();
+
+  ResponseParser(const ResponseParser&) = delete;
+  ResponseParser& operator=(const ResponseParser&) = delete;
+
   using Result = base::expected<proto::Any, ResponseParsingError>;
   using ResultCallback = base::OnceCallback<void(Result)>;
 
@@ -35,18 +44,6 @@ class ResponseParser {
                           ResultCallback result_callback) const = 0;
 
   virtual bool SuppressParsingIncompleteResponse() const = 0;
-
- protected:
-};
-
-// Constructs response parsers for a registered type.
-class ResponseParserFactory {
- public:
-  virtual ~ResponseParserFactory() = 0;
-
-  // Constructs a parser for the given config.
-  virtual std::unique_ptr<ResponseParser> CreateParser(
-      const proto::OnDeviceModelExecutionOutputConfig& config) = 0;
 };
 
 }  // namespace optimization_guide

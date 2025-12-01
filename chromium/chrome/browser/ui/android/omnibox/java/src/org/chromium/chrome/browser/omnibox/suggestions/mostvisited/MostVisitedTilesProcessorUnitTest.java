@@ -75,9 +75,9 @@ public final class MostVisitedTilesProcessorUnitTest {
     private MostVisitedTilesProcessor mProcessor;
     private List<AutocompleteMatch> mMatches;
 
-    private ArgumentCaptor<Callback<Bitmap>> mFavIconCallbackCaptor =
+    private final ArgumentCaptor<Callback<Bitmap>> mFavIconCallbackCaptor =
             ArgumentCaptor.forClass(Callback.class);
-    private ArgumentCaptor<Callback<Bitmap>> mGenIconCallbackCaptor =
+    private final ArgumentCaptor<Callback<Bitmap>> mGenIconCallbackCaptor =
             ArgumentCaptor.forClass(Callback.class);
     private @Mock Bitmap mFaviconBitmap;
     private @Mock SuggestionHost mSuggestionHost;
@@ -138,7 +138,7 @@ public final class MostVisitedTilesProcessorUnitTest {
                                             ? OmniboxSuggestionType.TILE_REPEATABLE_QUERY
                                             : OmniboxSuggestionType.TILE_MOST_VISITED_SITE)
                             .setIsSearch(tile.isSearch)
-                            .setDisplayText(tile.title)
+                            .setDescription(tile.title)
                             .setUrl(tile.url)
                             .build();
             mProcessor.populateModel(mInput, match, mPropertyModel, placement);

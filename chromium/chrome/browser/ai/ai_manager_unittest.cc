@@ -9,14 +9,20 @@
 #include "base/memory/raw_ptr.h"
 #include "base/task/current_thread.h"
 #include "base/test/mock_callback.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ai/ai_language_model.h"
 #include "chrome/browser/ai/ai_test_utils.h"
 #include "chrome/browser/optimization_guide/mock_optimization_guide_keyed_service.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/optimization_guide/core/mock_optimization_guide_model_executor.h"
+#include "components/optimization_guide/core/model_execution/test/fake_model_broker.h"
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "components/optimization_guide/core/optimization_guide_switches.h"
+#include "components/policy/core/common/policy_pref_names.h"
+#include "components/prefs/pref_service.h"
+#include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "third_party/blink/public/mojom/ai/ai_common.mojom-forward.h"
 #include "third_party/blink/public/mojom/ai/ai_common.mojom.h"
 #include "third_party/blink/public/mojom/ai/ai_language_model.mojom.h"
@@ -34,6 +40,33 @@ using testing::NiceMock;
 
 class AIManagerTest : public AITestUtils::AITestBase {
  protected:
+  AIManagerTest()
+      : fake_broker_(optimization_guide::FakeAdaptationAsset({
+            .config =
+                [] {
+                  optimization_guide::proto::OnDeviceModelExecutionFeatureConfig
+                      config;
+                  config.set_can_skip_text_safety(true);
+                  config.set_feature(
+                      optimization_guide::proto::ModelExecutionFeature::
+                          MODEL_EXECUTION_FEATURE_PROMPT_API);
+                  return config;
+                }(),
+        })) {}
+
+  void SetUp() override {
+    AITestUtils::AITestBase::SetUp();
+    SetupMockOptimizationGuideKeyedService();
+    ai_manager_ =
+        std::make_unique<AIManager>(main_rfh()->GetBrowserContext(),
+                                    &component_update_service_, main_rfh());
+  }
+
+  void TearDown() override {
+    ai_manager_.reset();
+    AITestUtils::AITestBase::TearDown();
+  }
+
   void SetupMockOptimizationGuideKeyedService() override {
     AITestUtils::AITestBase::SetupMockOptimizationGuideKeyedService();
 
@@ -42,7 +75,7 @@ class AIManagerTest : public AITestUtils::AITestBase {
             [&] { return std::make_unique<NiceMock<MockSession>>(&session_); });
     ON_CALL(session_, GetTokenLimits())
         .WillByDefault(AITestUtils::GetFakeTokenLimits);
-    ON_CALL(session_, GetContextSizeInTokens(_, _))
+    ON_CALL(session_, GetExecutionInputSizeInTokens(_, _))
         .WillByDefault(
             [&](optimization_guide::MultimodalMessageReadView request_metadata,
                 optimization_guide::OptimizationGuideModelSizeInTokenCallback
@@ -52,23 +85,33 @@ class AIManagerTest : public AITestUtils::AITestBase {
             });
     ON_CALL(session_, GetOnDeviceFeatureMetadata())
         .WillByDefault(AITestUtils::GetFakeFeatureMetadata);
+    ON_CALL(*mock_optimization_guide_keyed_service_, GetOnDeviceCapabilities())
+        .WillByDefault(testing::Return(on_device_model::Capabilities()));
     ON_CALL(*mock_optimization_guide_keyed_service_,
             GetOnDeviceModelEligibility(_))
-        .WillByDefault([](optimization_guide::ModelBasedCapabilityKey feature) {
-          return optimization_guide::OnDeviceModelEligibilityReason::
-              kFeatureNotEnabled;
+        .WillByDefault(testing::Return(
+            optimization_guide::OnDeviceModelEligibilityReason::kSuccess));
+    ON_CALL(*mock_optimization_guide_keyed_service_, CreateModelBrokerClient())
+        .WillByDefault([&]() {
+          return std::make_unique<optimization_guide::ModelBrokerClient>(
+              fake_broker_.BindAndPassRemote(),
+              optimization_guide::CreateSessionArgs(nullptr, {}));
         });
+  }
+
+  void SetBuildInAIAPIsEnterprisePolicy(bool value) {
+    profile()->GetPrefs()->SetBoolean(
+        policy::policy_prefs::kBuiltInAIAPIsEnabled, value);
   }
 
  private:
   testing::NiceMock<MockSession> session_;
+  optimization_guide::FakeModelBroker fake_broker_;
 };
 
 // Tests that involve invalid on-device model file paths should not crash when
 // the associated RFH is destroyed.
 TEST_F(AIManagerTest, NoUAFWithInvalidOnDeviceModelPath) {
-  SetupMockOptimizationGuideKeyedService();
-
   auto* command_line = base::CommandLine::ForCurrentProcess();
   command_line->AppendSwitchASCII(
       optimization_guide::switches::kOnDeviceModelExecutionOverride,
@@ -76,15 +119,8 @@ TEST_F(AIManagerTest, NoUAFWithInvalidOnDeviceModelPath) {
 
   base::MockCallback<blink::mojom::AIManager::CanCreateLanguageModelCallback>
       callback;
-  EXPECT_CALL(callback, Run(_))
-      .Times(AtMost(1))
-      .WillOnce(Invoke([&](blink::mojom::ModelAvailabilityCheckResult result) {
-        EXPECT_EQ(result, blink::mojom::ModelAvailabilityCheckResult::
-                              kUnavailableFeatureNotEnabled);
-      }));
-
-  AIManager ai_manager = AIManager(main_rfh()->GetBrowserContext());
-  ai_manager.CanCreateLanguageModel(/*options=*/{}, callback.Get());
+  EXPECT_CALL(callback, Run(_)).Times(AtMost(1));
+  ai_manager_->CanCreateLanguageModel(/*options=*/{}, callback.Get());
 
   // The callback may still be pending, delete the WebContents and destroy the
   // associated RFH, which should not result in a UAF.
@@ -96,8 +132,6 @@ TEST_F(AIManagerTest, NoUAFWithInvalidOnDeviceModelPath) {
 // Tests the `AIUserDataSet`'s behavior of managing the lifetime of
 // `AILanguageModel`s.
 TEST_F(AIManagerTest, AIContextBoundObjectSet) {
-  SetupMockOptimizationGuideKeyedService();
-
   mojo::Remote<blink::mojom::AILanguageModel> mock_session;
   AITestUtils::MockCreateLanguageModelClient mock_create_language_model_client;
   base::RunLoop run_loop;
@@ -121,10 +155,10 @@ TEST_F(AIManagerTest, AIContextBoundObjectSet) {
       mock_create_language_model_client.BindNewPipeAndPassRemote(),
       blink::mojom::AILanguageModelCreateOptions::New(
           /*sampling_params=*/nullptr,
-          /*system_prompt=*/std::nullopt,
           /*initial_prompts=*/
           std::vector<blink::mojom::AILanguageModelPromptPtr>(),
-          /*expected_inputs=*/std::nullopt));
+          /*expected_inputs=*/std::nullopt,
+          /*expected_outputs=*/std::nullopt));
   run_loop.Run();
   ASSERT_EQ(1u, GetAIManagerContextBoundObjectSetSize());
 
@@ -136,23 +170,99 @@ TEST_F(AIManagerTest, AIContextBoundObjectSet) {
 }
 
 TEST_F(AIManagerTest, CanCreate) {
-  SetupMockOptimizationGuideKeyedService();
   base::MockCallback<
       base::OnceCallback<void(blink::mojom::ModelAvailabilityCheckResult)>>
       callback;
-  EXPECT_CALL(callback, Run(_))
-      .Times(4)
-      .WillRepeatedly(testing::Invoke(
-          [&](blink::mojom::ModelAvailabilityCheckResult result) {
-            EXPECT_EQ(result, blink::mojom::ModelAvailabilityCheckResult::
-                                  kUnavailableFeatureNotEnabled);
-          }));
+  EXPECT_CALL(callback,
+              Run(blink::mojom::ModelAvailabilityCheckResult::kAvailable))
+      .Times(4);
 
-  AIManager ai_manager = AIManager(main_rfh()->GetBrowserContext());
-  ai_manager.CanCreateLanguageModel(/*options=*/{}, callback.Get());
-  ai_manager.CanCreateWriter(/*options=*/{}, callback.Get());
-  ai_manager.CanCreateSummarizer(/*options=*/{}, callback.Get());
-  ai_manager.CanCreateRewriter(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateLanguageModel(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateWriter(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateSummarizer(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateRewriter(/*options=*/{}, callback.Get());
+}
+
+TEST_F(AIManagerTest, CanCreateNotEnabled) {
+  EXPECT_CALL(*mock_optimization_guide_keyed_service_,
+              GetOnDeviceModelEligibilityAsync(_, _, _))
+      .Times(4)
+      .WillRepeatedly([](auto feature, auto capabilities, auto callback) {
+        std::move(callback).Run(
+            optimization_guide::OnDeviceModelEligibilityReason::
+                kFeatureNotEnabled);
+      });
+  base::MockCallback<
+      base::OnceCallback<void(blink::mojom::ModelAvailabilityCheckResult)>>
+      callback;
+  EXPECT_CALL(callback, Run(blink::mojom::ModelAvailabilityCheckResult::
+                                kUnavailableFeatureNotEnabled))
+      .Times(4);
+
+  ai_manager_->CanCreateLanguageModel(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateWriter(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateSummarizer(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateRewriter(/*options=*/{}, callback.Get());
+}
+
+TEST_F(AIManagerTest, CanCreateSessionWithTextInputCapabilities) {
+  base::MockCallback<blink::mojom::AIManager::CanCreateLanguageModelCallback>
+      callback;
+  optimization_guide::ModelBasedCapabilityKey key =
+      optimization_guide::ModelBasedCapabilityKey::kPromptApi;
+  EXPECT_CALL(callback,
+              Run(blink::mojom::ModelAvailabilityCheckResult::kAvailable))
+      .Times(1);
+  EXPECT_CALL(callback, Run(blink::mojom::ModelAvailabilityCheckResult::
+                                kUnavailableModelAdaptationNotAvailable))
+      .Times(2);
+  on_device_model::Capabilities capabilities;
+  ai_manager_->CanCreateSession(key, capabilities, callback.Get());
+  capabilities.Put(on_device_model::CapabilityFlags::kImageInput);
+  ai_manager_->CanCreateSession(key, capabilities, callback.Get());
+  capabilities.Clear();
+  capabilities.Put(on_device_model::CapabilityFlags::kAudioInput);
+  ai_manager_->CanCreateSession(key, capabilities, callback.Get());
+}
+
+TEST_F(AIManagerTest, CanCreateSessionWithImageAndAudioInputCapabilities) {
+  base::test::ScopedFeatureList scoped_feature_list(
+      blink::features::kAIPromptAPIMultimodalInput);
+  EXPECT_CALL(*mock_optimization_guide_keyed_service_,
+              GetOnDeviceCapabilities())
+      .Times(2)
+      .WillRepeatedly(testing::Return(on_device_model::Capabilities(
+          {on_device_model::CapabilityFlags::kImageInput,
+           on_device_model::CapabilityFlags::kAudioInput})));
+  base::MockCallback<blink::mojom::AIManager::CanCreateLanguageModelCallback>
+      callback;
+  optimization_guide::ModelBasedCapabilityKey key =
+      optimization_guide::ModelBasedCapabilityKey::kPromptApi;
+  EXPECT_CALL(callback,
+              Run(blink::mojom::ModelAvailabilityCheckResult::kAvailable))
+      .Times(3);
+  on_device_model::Capabilities capabilities;
+  ai_manager_->CanCreateSession(key, capabilities, callback.Get());
+  capabilities.Put(on_device_model::CapabilityFlags::kImageInput);
+  ai_manager_->CanCreateSession(key, capabilities, callback.Get());
+  capabilities.Put(on_device_model::CapabilityFlags::kAudioInput);
+  ai_manager_->CanCreateSession(key, capabilities, callback.Get());
+}
+
+TEST_F(AIManagerTest, CanCreateEnterprisePolicyDisabled) {
+  SetBuildInAIAPIsEnterprisePolicy(false);
+  base::MockCallback<
+      base::OnceCallback<void(blink::mojom::ModelAvailabilityCheckResult)>>
+      callback;
+  EXPECT_CALL(callback, Run(blink::mojom::ModelAvailabilityCheckResult::
+                                kUnavailableEnterprisePolicyDisabled))
+      .Times(4);
+
+  ai_manager_->CanCreateLanguageModel(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateWriter(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateSummarizer(/*options=*/{}, callback.Get());
+  ai_manager_->CanCreateRewriter(/*options=*/{}, callback.Get());
+  SetBuildInAIAPIsEnterprisePolicy(true);
 }
 
 class AIManagerIsLanguagesSupportedTest : public AITestUtils::AITestBase {

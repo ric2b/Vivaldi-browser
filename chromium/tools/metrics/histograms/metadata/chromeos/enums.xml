@@ -222,6 +222,7 @@ chromium-metrics-reviews@google.com.
   <int value="9026" label="DevToggleUnifiedDesktop"/>
   <int value="9027" label="DebugToggleFocusModeState"/>
   <int value="9028" label="DebugStartSunfishSession"/>
+  <int value="9029" label="DebugShowTestWindow"/>
 </enum>
 
 <enum name="ArcIntentHandlerDestinationPlatform">
@@ -401,6 +402,8 @@ chromium-metrics-reviews@google.com.
   <int value="15" label="kImportCertificateInstructionReceived"/>
 </enum>
 
+<!-- LINT.IfChange(ChromeOSCameraClientType) -->
+
 <enum name="ChromeOSCameraClientType">
   <int value="0" label="Unknown"/>
   <int value="1" label="Testing"/>
@@ -408,8 +411,10 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Android"/>
   <int value="4" label="PluginVM"/>
   <int value="5" label="AshChrome"/>
-  <int value="6" label="LacrosChrome"/>
+  <int value="6" label="DEPRECATED: LacrosChrome"/>
 </enum>
+
+<!-- LINT.ThenChange(//media/capture/video/chromeos/mojom/cros_camera_service.mojom:CameraClientType) -->
 
 <enum name="ChromeOSCameraErrorType">
   <int value="1" label="Device"/>
@@ -446,9 +451,14 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Statistics provider hasn't finished loading data"/>
   <int value="2"
       label="Loaded region is a group and not an individual country"/>
-  <int value="3" label="Region in VPD is too short for country code"/>
+  <int value="3"
+      label="Region in VPD is non-empty but too short for country code"/>
   <int value="4" label="Region in VPD is too long for country code"/>
   <int value="5" label="Valid country code parsed from VPD"/>
+  <int value="6" label="[Deprecated] Removed subkey from country information"/>
+  <int value="7" label="Region in VPD is absent"/>
+  <int value="8" label="Region in VPD is empty"/>
+  <int value="9" label="Region in VPD is not a valid country code"/>
 </enum>
 
 <!-- LINT.ThenChange(//chrome/browser/regional_capabilities/regional_capabilities_service_client.h:ChromeOSFallbackCountry) -->
@@ -820,6 +830,12 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="kLoggedOut"/>
   <int value="1" label="kLoggedIn"/>
   <int value="2" label="kLocked"/>
+</enum>
+
+<enum name="ClassManagementEnabled">
+  <int value="0" label="Class Management disabled"/>
+  <int value="1" label="Class Management enabled for student"/>
+  <int value="2" label="Class Management enabled for teacher"/>
 </enum>
 
 <enum name="ComboDeviceClassification">

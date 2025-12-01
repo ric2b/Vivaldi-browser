@@ -9,13 +9,14 @@ import android.content.res.Resources;
 import android.view.LayoutInflater;
 import android.view.View;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 
 /** BottomSheetContent implementation for app filter bottom sheet. */
+@NullMarked
 class AppFilterSheetContent implements BottomSheetContent {
     private final View mContentView;
     private final View mToolbarView;
@@ -63,11 +64,6 @@ class AppFilterSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public int getPeekHeight() {
-        return BottomSheetContent.HeightMode.DISABLED;
-    }
-
-    @Override
     public float getHalfHeightRatio() {
         return BottomSheetContent.HeightMode.DISABLED;
     }
@@ -78,7 +74,7 @@ class AppFilterSheetContent implements BottomSheetContent {
     }
 
     @Override
-    public @NonNull String getSheetContentDescription(Context context) {
+    public String getSheetContentDescription(Context context) {
         return context.getString(R.string.history_app_filter_sheet_description);
     }
 

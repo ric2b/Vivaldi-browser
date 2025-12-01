@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
 
@@ -40,6 +36,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/testing/unit_test_helpers.h"
 
@@ -2228,6 +2225,7 @@ TEST_F(DisplayLockContextRenderingTest,
 }
 TEST_F(DisplayLockContextRenderingTest,
        SelectionOnAnonymousColumnSpannerDoesNotCrash) {
+  ScopedFlowThreadLessForTest scope(false);
   SetHtmlInnerHTML(R"HTML(
     <style>
       #columns {
@@ -3231,8 +3229,8 @@ TEST_F(DisplayLockContextTest, PrintingUnlocksAutoLocks) {
 
   {
     // Create a paint preview scope.
-    Document::PaintPreviewScope scope(GetDocument(),
-                                      Document::kPaintingPreview);
+    Document::PaintPreviewScope scope(GetDocument(), Document::kPaintingPreview,
+                                      /*allow_scrollbars=*/false);
     UpdateAllLifecyclePhasesForTest();
 
     EXPECT_FALSE(target->GetDisplayLockContext()->IsLocked());

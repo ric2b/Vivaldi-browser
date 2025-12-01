@@ -444,7 +444,7 @@
 <translation id="2486214324139475545"><ph name="DESK_NAME" /> 미리보기입니다. 활성 데스크입니다.</translation>
 <translation id="2486405091093637109">"<ph name="DISPLAY_NAME" />" 디스플레이가 <ph name="RESOLUTION" />(<ph name="REFRESH_RATE" />Hz) 해상도로 변경되었습니다. 확인하지 않으면 <ph name="TIMEOUT_SECONDS" /> 후 이전 설정으로 복원됩니다.</translation>
 <translation id="2487915095798731898">가입</translation>
-<translation id="2496180316473517155">인터넷 사용 기록</translation>
+<translation id="2496180316473517155">방문 기록</translation>
 <translation id="2499445554382787206">데스크 프로필 메뉴. <ph name="DESK_NAME" /></translation>
 <translation id="2501920221385095727">고정키</translation>
 <translation id="2504454902900101003">휴대전화의 최근 사진, 미디어, 알림 보기 설정 닫기</translation>
@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">캐럿 브라우징 사용 설정 또는 중지</translation>
 <translation id="2531025035050312891">기기 속도가 느림</translation>
 <translation id="2531107890083353124">탭을 드래그하는 동안 <ph name="KEY_ONE" /> 키 누르기</translation>
+<translation id="2532199152994248594">드래그하거나 스페이스바를 눌러 캡처할 영역을 선택하세요.</translation>
 <translation id="2545334090614121435">Home 키를 사용하려는 중인가요? 사용</translation>
 <translation id="254900897760075745">클립보드에 선택한 콘텐츠 복사</translation>
 <translation id="2549711466868162843">조명 개선</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765"><ph name="MODIFIER" /> 키를 누른 상태에서 링크 클릭</translation>
 <translation id="2957159466053076448">언제든지 설정에서 이러한 기능을 사용 중지할 수 있습니다. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">기기 오디오</translation>
-<translation id="2960314608273155470">캡처 모드, 기본값은 <ph name="SOURCE" /> <ph name="TYPE" />입니다. 키보드 탐색을 사용하려면 Tab 키를 누르세요.</translation>
 <translation id="2961963223658824723">문제가 발생했습니다. 잠시 후 다시 시도해 주세요.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">마이크 액세스를 사용 설정하시겠습니까?</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">Wi-Fi가 사용 중지됨</translation>
 <translation id="3554215588514239132">개발자 도구 패널 표시 또는 숨기기</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> 고정됨</translation>
+<translation id="3554928024630051016">USB 기기를 추가하려면 기존 기기를 제거하고 새 기기를 연결해 보세요</translation>
 <translation id="3558768885091059911">카메라 및 마이크 액세스 권한을 사용 설정하시겠습니까?</translation>
 <translation id="3560174576767922131">동영상 녹화</translation>
 <translation id="3563775809269155755">핫스팟 사용</translation>
@@ -868,6 +869,7 @@
 <translation id="3861651314799684201">전체 화면을 녹화하려면 Enter를 누르세요</translation>
 <translation id="3870197372373144624">기기를 종료해 보세요.</translation>
 <translation id="3879748587602334249">다운로드 관리자</translation>
+<translation id="3884007280698606545">USB 한도 도달</translation>
 <translation id="3886872229787704059">오늘 열림</translation>
 <translation id="3891340733213178823">로그아웃하려면 Ctrl+Shift+Q를 두 번 누릅니다.</translation>
 <translation id="3892148308691398805">텍스트 복사</translation>
@@ -1440,6 +1442,7 @@
 <translation id="5672890847723042801">유틸리티</translation>
 <translation id="5673434351075758678">설정 동기화 후 ‘<ph name="FROM_LOCALE" />’에서 ‘<ph name="TO_LOCALE" />’(으)로 변경합니다.</translation>
 <translation id="5675363643668471212">앱 표시줄 항목</translation>
+<translation id="5677022547882470786">드래그하거나 스페이스바를 눌러 검색할 영역을 선택하세요.</translation>
 <translation id="5677928146339483299">차단됨</translation>
 <translation id="5678564054339031017">다음 주 일정 보기</translation>
 <translation id="5679050765726761783">저전력 어댑터 연결됨</translation>
@@ -1485,6 +1488,7 @@
 <translation id="5788127256798019331">Play 파일</translation>
 <translation id="5788535737706478207">마지막으로 닫았던 탭이나 창 다시 열기</translation>
 <translation id="5790085346892983794">완료</translation>
+<translation id="5791926618942305301">화면 캡처에서 <ph name="SOURCE" /> <ph name="TYPE" /> 유형으로 설정합니다. Tab 키를 눌러 캡처 유형을 선택합니다. Enter 키를 눌러 캡처합니다. 캡처 영역을 선택하려면 부분 스크린샷으로 설정합니다. 아직 활성화되지 않은 경우 스페이스바를 눌러 영역을 선택합니다.</translation>
 <translation id="579415080077680903">음소거</translation>
 <translation id="5802516411616338943">빠른 설정 열기</translation>
 <translation id="5804651031882187592">'SIM 잠금' 설정 사용 중지</translation>
@@ -1641,6 +1645,7 @@
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" />은(는) 나중에 부모님의 허락을 받아 다시 추가할 수 있습니다.</translation>
 <translation id="6291221004442998378">충전 안함</translation>
 <translation id="6298183524022479114">앱에서 이 기기 맞춤설정</translation>
+<translation id="6304076460080088478">시크릿 창을 닫거나 최소화하여 Google 렌즈로 화면을 검색하세요</translation>
 <translation id="6309219492973062892">앱 표시줄 아이콘 1-8 클릭 또는 탭</translation>
 <translation id="6315170314923504164">음성</translation>
 <translation id="6319058840130157106">오른쪽 하단, 런처, 주소 표시줄, 북마크바, 열려 있는 웹사이트, 다운로드 항목 간에 뒤로 이동</translation>
@@ -1769,6 +1774,7 @@
 <translation id="6700713906295497288">IME 메뉴 버튼</translation>
 <translation id="6704073473590541209">선택된 오른쪽 가장자리 핸들, 화살표 키를 사용하여 이동</translation>
 <translation id="6706742084323792866">키보드 고정</translation>
+<translation id="6709719156428404245">드래그하거나 스페이스바를 눌러 녹화할 영역을 선택하세요.</translation>
 <translation id="6710213216561001401">이전</translation>
 <translation id="6723839937902243910">전원</translation>
 <translation id="672609503628871915">새로운 기능 알아보기</translation>
@@ -2085,7 +2091,7 @@
 <translation id="7792590255364786396">표시</translation>
 <translation id="7796735576426975947">새로운 알림 숨겨짐</translation>
 <translation id="7798302898096527229">취소하려면 검색 또는 Shift 키를 누르세요.</translation>
-<translation id="780301667611848630">사용 안함</translation>
+<translation id="780301667611848630">나중에</translation>
 <translation id="7807067443225230855">검색 및 어시스턴트</translation>
 <translation id="7814236020522506259"><ph name="HOUR" />시간 <ph name="MINUTE" />분</translation>
 <translation id="7825412704590278437">예정된 캘린더 일정</translation>

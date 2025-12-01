@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/page_action/page_action_model.h"
 
 #include "base/types/pass_key.h"
+#include "chrome/browser/ui/views/page_action/page_action_controller.h"
 #include "chrome/browser/ui/views/page_action/page_action_model_observer.h"
 #include "ui/actions/actions.h"
 
@@ -14,7 +15,8 @@ namespace {
 using ::actions::ActionItem;
 }  // namespace
 
-PageActionModel::PageActionModel() = default;
+PageActionModel::PageActionModel(bool is_ephemeral)
+    : is_ephemeral_(is_ephemeral) {}
 
 PageActionModel::~PageActionModel() {
   observer_list_.Notify(
@@ -39,12 +41,15 @@ void PageActionModel::SetShowSuggestionChip(base::PassKey<PageActionController>,
   NotifyChange();
 }
 
-void PageActionModel::SetShouldAnimateChip(base::PassKey<PageActionController>,
-                                           bool animate) {
-  if (should_animate_ == animate) {
+void PageActionModel::SetSuggestionChipConfig(
+    base::PassKey<PageActionController>,
+    const SuggestionChipConfig& config) {
+  if (should_animate_ == config.should_animate &&
+      should_announce_chip_ == config.should_announce_chip) {
     return;
   }
-  should_animate_ = animate;
+  should_animate_ = config.should_animate;
+  should_announce_chip_ = config.should_announce_chip;
   NotifyChange();
 }
 
@@ -118,6 +123,10 @@ bool PageActionModel::GetShouldAnimateChip() const {
   return should_animate_;
 }
 
+bool PageActionModel::GetShouldAnnounceChip() const {
+  return should_announce_chip_;
+}
+
 const ui::ImageModel& PageActionModel::GetImage() const {
   return override_image_.has_value() ? override_image_.value()
                                      : action_item_image_;
@@ -125,6 +134,12 @@ const ui::ImageModel& PageActionModel::GetImage() const {
 
 const std::u16string& PageActionModel::GetText() const {
   return override_text_.has_value() ? override_text_.value() : text_;
+}
+
+const std::u16string& PageActionModel::GetAccessibleName() const {
+  return override_accessible_name_.has_value()
+             ? override_accessible_name_.value()
+             : text_;
 }
 
 const std::u16string& PageActionModel::GetTooltipText() const {
@@ -142,6 +157,16 @@ void PageActionModel::SetOverrideText(
     return;
   }
   override_text_ = override_text;
+  NotifyChange();
+}
+
+void PageActionModel::SetOverrideAccessibleName(
+    base::PassKey<PageActionController>,
+    const std::optional<std::u16string>& override_accessible_name) {
+  if (override_accessible_name_ == override_accessible_name) {
+    return;
+  }
+  override_accessible_name_ = override_accessible_name;
   NotifyChange();
 }
 
@@ -190,6 +215,10 @@ void PageActionModel::NotifyChange() {
   base::AutoReset<bool> auto_reset(&is_notifying_observers_, true);
   observer_list_.Notify(&PageActionModelObserver::OnPageActionModelChanged,
                         *this);
+}
+
+bool PageActionModel::IsEphemeral() const {
+  return is_ephemeral_;
 }
 
 }  // namespace page_actions

@@ -11,6 +11,7 @@ package optimization_guide.proto;
 
 import "components/optimization_guide/proto/common_types.proto";
 import "components/optimization_guide/proto/descriptors.proto";
+import "components/optimization_guide/proto/fieldwise_parser_config.proto";
 import "components/optimization_guide/proto/redaction.proto";
 import "components/optimization_guide/proto/substitution.proto";
 import "components/optimization_guide/proto/model_execution.proto";
@@ -101,13 +102,26 @@ message OnDeviceModelExecutionInputConfig {
   optional uint32 max_execute_tokens = 6;
 }
 
+// Rules that generated output must follow.
+message ResponseConstraint {
+  oneof format {
+    // A JSON Schema describing an llguidance constraint on the output. See
+    // https://github.com/guidance-ai/llguidance/blob/main/docs/json_schema.md
+    string json_schema = 1;
+    // A regex describing the llguidance constraint on the output.
+    // See https://docs.rs/regex/latest/regex/#syntax for syntax.
+    string regex = 2;
+  }
+}
+
 message OnDeviceModelExecutionOutputConfig {
   reserved 7;
 
   // The proto type to use for the response metadata.
   optional string proto_type = 1;
 
-  // The proto field to populate the output string with.
+  // The proto field to populate the output string with. Applies for
+  // PARSER_KIND_SIMPLE only.
   optional ProtoField proto_field = 2;
 
   // Rules that result in redacting the output.
@@ -116,11 +130,17 @@ message OnDeviceModelExecutionOutputConfig {
   // Which output parsing implementation to use.
   optional ParserKind parser_kind = 4;
 
+  // A config for specifying parsing logic for the fieldwise parser.
+  optional FieldwiseParserConfig fieldwise_parser_config = 8;
+
   // Whether to suppress parsing incomplete output.
   optional bool suppress_parsing_incomplete_output = 5;
 
   // The maximum number of tokens that can be generated as output.
   optional uint32 max_output_tokens = 6;
+
+  // The response constraint to use when generating output.
+  optional ResponseConstraint response_constraint = 9;
 }
 
 message TextSafetyFallbackConfig {

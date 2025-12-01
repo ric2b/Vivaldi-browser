@@ -52,6 +52,11 @@ found in the LICENSE file.
         android:persistent="false"
         android:title="@string/prefs_site_settings" />
 
+    <org.chromium.chrome.browser.browsing_data.ClearBrowsingDataCheckBoxPreference
+        android:key="clear_ads_tracker_blocker_checkbox"
+        android:persistent="false"
+        android:title="@string/delete_browsing_data_ads_and_trackers_title" />
+
     <org.chromium.components.browser_ui.settings.ClickableSpansTextMessagePreference
         android:key="sign_out_of_chrome_text" />
 </PreferenceScreen>

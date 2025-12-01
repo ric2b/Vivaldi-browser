@@ -58,6 +58,7 @@ class CustomMetaInfo {
   void SetDescription(const std::string& description);
   void SetPartner(const base::Uuid& partner);
   void SetThumbnail(const std::string& thumbnail);
+  void SetDisplayUrl(const GURL& display_url);
 
  private:
   BookmarkNode::MetaInfoMap map_;
@@ -73,6 +74,7 @@ const std::string& GetThumbnail(const BookmarkNode* node);
 const std::string& GetThumbnail(const BookmarkNode::MetaInfoMap& meta_info_map);
 SkColor GetThemeColor(const BookmarkNode* node);
 std::string GetThemeColorForCSS(const BookmarkNode* node);
+const std::string& GetDisplayURL(const BookmarkNode* node);
 
 bool IsSeparator(const BookmarkNode* node);
 bool IsTrash(const BookmarkNode* node);
@@ -136,6 +138,9 @@ bool IsURLAddedToNode(BookmarkModel* model,
 // Returns True when the provided BookmarkNode is a direct child of one of the
 // root nodes such as Bookmarks Bar, Mobile nodes.
 bool IsDirectChildOfRoot(BookmarkModel* model, const BookmarkNode* node);
+
+// Returns |True| when provided bookmark node's root parent is Trash node.
+bool IsChildOfTrashNode(BookmarkModel* model, const BookmarkNode* node);
 
 // Helper method to return non empty root nodes from the provided model.
 std::vector<const BookmarkNode*> GetRootNodes(BookmarkModel* model);

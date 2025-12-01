@@ -17,6 +17,7 @@ WebSchedulingTaskState::WebSchedulingTaskState(
       scheduler_task_context_(task_context) {}
 
 void WebSchedulingTaskState::Trace(Visitor* visitor) const {
+  WrappableTaskState::Trace(visitor);
   visitor->Trace(scheduler_task_context_);
   visitor->Trace(subtask_propagatable_task_state_);
 }
@@ -26,13 +27,8 @@ WebSchedulingTaskState::GetTaskAttributionInfo() {
   return subtask_propagatable_task_state_.Get();
 }
 
-SchedulerTaskContext* WebSchedulingTaskState::GetSchedulerTaskContextFor(
-    const ExecutionContext& context) {
-  if (scheduler_task_context_ &&
-      scheduler_task_context_->CanPropagateTo(context)) {
-    return scheduler_task_context_.Get();
-  }
-  return nullptr;
+SchedulerTaskContext* WebSchedulingTaskState::GetSchedulerTaskContext() {
+  return scheduler_task_context_.Get();
 }
 
 }  // namespace blink

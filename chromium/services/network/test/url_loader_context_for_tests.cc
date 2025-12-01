@@ -23,16 +23,6 @@ URLLoaderContextForTests::GetFactoryParams() const {
   return factory_params_;
 }
 
-mojom::CookieAccessObserver* URLLoaderContextForTests::GetCookieAccessObserver()
-    const {
-  return nullptr;
-}
-
-mojom::TrustTokenAccessObserver*
-URLLoaderContextForTests::GetTrustTokenAccessObserver() const {
-  return nullptr;
-}
-
 mojom::CrossOriginEmbedderPolicyReporter*
 URLLoaderContextForTests::GetCoepReporter() const {
   return nullptr;
@@ -43,12 +33,9 @@ URLLoaderContextForTests::GetDipReporter() const {
   return nullptr;
 }
 
-mojom::DevToolsObserver* URLLoaderContextForTests::GetDevToolsObserver() const {
-  return nullptr;
-}
-
-mojom::DeviceBoundSessionAccessObserver*
-URLLoaderContextForTests::GetDeviceBoundSessionAccessObserver() const {
+scoped_refptr<RefCountedDeviceBoundSessionAccessObserverRemote>
+URLLoaderContextForTests::GetDeviceBoundSessionAccessObserverSharedRemote()
+    const {
   return nullptr;
 }
 
@@ -59,11 +46,6 @@ mojom::NetworkContextClient* URLLoaderContextForTests::GetNetworkContextClient()
 
 mojom::TrustedURLLoaderHeaderClient*
 URLLoaderContextForTests::GetUrlLoaderHeaderClient() const {
-  return nullptr;
-}
-
-mojom::URLLoaderNetworkServiceObserver*
-URLLoaderContextForTests::GetURLLoaderNetworkServiceObserver() const {
   return nullptr;
 }
 

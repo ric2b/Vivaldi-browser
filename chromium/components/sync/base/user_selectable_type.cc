@@ -7,8 +7,10 @@
 #include <optional>
 #include <ostream>
 
+#include "base/feature_list.h"
 #include "base/notreached.h"
 #include "components/sync/base/data_type.h"
+#include "components/sync/base/features.h"
 
 namespace syncer {
 
@@ -34,12 +36,15 @@ constexpr char kAppsTypeName[] = "apps";
 constexpr char kReadingListTypeName[] = "readingList";
 constexpr char kTabsTypeName[] = "tabs";
 constexpr char kSavedTabGroupsTypeName[] = "savedTabGroups";
-constexpr char kSharedTabGroupDataTypeName[] = "sharedTabGroupData";
 constexpr char kPaymentsTypeName[] = "payments";
 constexpr char kProductComparisonTypeName[] = "productComparison";
 constexpr char kCookiesTypeName[] = "cookies";
 
-UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
+UserSelectableTypeInfo GetUserSelectableTypeInfo(
+    UserSelectableType type,
+    // TODO(crbug.com/412602018): Remove this parameter once the feature is
+    // launched.
+    bool skip_feature_checks_if_early = false) {
   static_assert(55 + 1 /* notes */ == syncer::GetNumDataTypes(),
                 "Almost always when adding a new Data, you must tie it to "
                 "a UserSelectableType below (new or existing) so the user can "
@@ -51,10 +56,21 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
   switch (type) {
     case UserSelectableType::kBookmarks:
       return {kBookmarksTypeName, BOOKMARKS, {BOOKMARKS, POWER_BOOKMARK}};
-    case UserSelectableType::kPreferences:
-      return {kPreferencesTypeName,
-              PREFERENCES,
-              {PREFERENCES, DICTIONARY, PRIORITY_PREFERENCES, SEARCH_ENGINES}};
+    case UserSelectableType::kPreferences: {
+      DataTypeSet types = {PREFERENCES, DICTIONARY, SEARCH_ENGINES};
+      // `skip_feature_checks_if_early` is used to avoid checking the feature
+      // state during early startup phase, which can happen when setting
+      // policies during pref service initialization. It is only set to true
+      // when called from `GetUserSelectableTypeName()` and thus, is not
+      // affected by the feature flag anyway.
+      // See crbug.com/415305009 for more context.
+      if ((!skip_feature_checks_if_early || base::FeatureList::GetInstance()) &&
+          !base::FeatureList::IsEnabled(
+              kSyncSupportAlwaysSyncingPriorityPreferences)) {
+        types.Put(PRIORITY_PREFERENCES);
+      }
+      return {kPreferencesTypeName, PREFERENCES, types};
+    }
     case UserSelectableType::kPasswords:
       return {
           kPasswordsTypeName,
@@ -100,16 +116,6 @@ UserSelectableTypeInfo GetUserSelectableTypeInfo(UserSelectableType type) {
       return {kSavedTabGroupsTypeName,
               SAVED_TAB_GROUP,
               {SAVED_TAB_GROUP, SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP,
-               SHARED_TAB_GROUP_ACCOUNT_DATA}};
-    case UserSelectableType::kSharedTabGroupData:
-      // Note: COLLABORATION_GROUP might be re-used for other
-      // features. If this happens, it should probably be in
-      // AlwaysPreferredUserTypes().
-      // TODO(crbug.com/361625648): Remove kSharedTabGroupData as it's not
-      // needed any more.
-      return {kSharedTabGroupDataTypeName,
-              SHARED_TAB_GROUP_DATA,
-              {SHARED_TAB_GROUP_DATA, COLLABORATION_GROUP,
                SHARED_TAB_GROUP_ACCOUNT_DATA}};
     case UserSelectableType::kPayments:
       return {kPaymentsTypeName,
@@ -160,7 +166,8 @@ UserSelectableTypeInfo GetUserSelectableOsTypeInfo(UserSelectableOsType type) {
 }  // namespace
 
 const char* GetUserSelectableTypeName(UserSelectableType type) {
-  return GetUserSelectableTypeInfo(type).type_name;
+  return GetUserSelectableTypeInfo(type, /*skip_feature_checks_if_early=*/true)
+      .type_name;
 }
 
 std::optional<UserSelectableType> GetUserSelectableTypeFromString(
@@ -197,9 +204,6 @@ std::optional<UserSelectableType> GetUserSelectableTypeFromString(
   }
   if (type == kSavedTabGroupsTypeName) {
     return UserSelectableType::kSavedTabGroups;
-  }
-  if (type == kSharedTabGroupDataTypeName) {
-    return UserSelectableType::kSharedTabGroupData;
   }
   if (type == kProductComparisonTypeName) {
     return UserSelectableType::kProductComparison;

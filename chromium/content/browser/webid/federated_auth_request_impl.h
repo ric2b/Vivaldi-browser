@@ -9,18 +9,21 @@
 #include <string>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/containers/queue.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
+#include "content/browser/webid/fedcm_accounts_fetcher.h"
+#include "content/browser/webid/fedcm_idp_registration_handler.h"
 #include "content/browser/webid/fedcm_metrics.h"
-#include "content/browser/webid/federated_provider_fetcher.h"
+#include "content/browser/webid/fedcm_url_computations.h"
+#include "content/browser/webid/federated_sd_jwt_handler.h"
+#include "content/browser/webid/identity_provider_info.h"
 #include "content/browser/webid/identity_registry.h"
 #include "content/browser/webid/identity_registry_delegate.h"
 #include "content/browser/webid/idp_network_request_manager.h"
-#include "content/browser/webid/jwt_signer.h"
-#include "content/browser/webid/sd_jwt.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/federated_auth_autofill_source.h"
@@ -29,28 +32,20 @@
 #include "content/public/browser/identity_request_dialog_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/credentialmanagement/credential_manager.mojom.h"
-#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "url/gurl.h"
-
-namespace gfx {
-class Image;
-}
-
-namespace blink::common::webid {
-struct LoginStatusOptions;
-}  // namespace blink::common::webid
 
 namespace content {
 
 class FederatedAuthDisconnectRequest;
 class FederatedAuthUserInfoRequest;
-class FederatedIdentityApiPermissionContextDelegate;
 class FederatedIdentityAutoReauthnPermissionContextDelegate;
 class FederatedIdentityPermissionContextDelegate;
 class RenderFrameHost;
 
+using blink::mojom::IdentityProviderGetParametersPtr;
 using IdentityProviderDataPtr = scoped_refptr<content::IdentityProviderData>;
+using IdentityProviderGetInfo = FedCmAccountsFetcher::IdentityProviderGetInfo;
 using IdentityRequestAccountPtr =
     scoped_refptr<content::IdentityRequestAccount>;
 using MediationRequirement = ::password_manager::CredentialMediationRequirement;
@@ -134,8 +129,11 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // content::FederatedAuthAutofillSource
   const std::optional<std::vector<IdentityRequestAccountPtr>>
   GetAutofillSuggestions() const override;
-  void NotifyAutofillSuggestionAccepted(const GURL& idp,
-                                        const std::string& account_id) override;
+  void NotifyAutofillSuggestionAccepted(
+      const GURL& idp,
+      const std::string& account_id,
+      bool show_modal,
+      OnFederatedTokenReceivedCallback callback) override;
 
   // To be called on the FederatedAuthRequest object corresponding to a
   // popup opened by ShowModalDialog, specifically for the case when
@@ -152,43 +150,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // Returns whether the API is enabled or not.
   FederatedIdentityApiPermissionContextDelegate::PermissionStatus
   GetApiPermissionStatus();
-
-  struct IdentityProviderGetInfo {
-    IdentityProviderGetInfo(blink::mojom::IdentityProviderRequestOptionsPtr,
-                            blink::mojom::RpContext rp_context,
-                            blink::mojom::RpMode rp_mode);
-    ~IdentityProviderGetInfo();
-    IdentityProviderGetInfo(const IdentityProviderGetInfo&);
-    IdentityProviderGetInfo& operator=(const IdentityProviderGetInfo& other);
-
-    blink::mojom::IdentityProviderRequestOptionsPtr provider;
-    blink::mojom::RpContext rp_context{blink::mojom::RpContext::kSignIn};
-    blink::mojom::RpMode rp_mode{blink::mojom::RpMode::kPassive};
-  };
-
-  struct IdentityProviderInfo {
-    IdentityProviderInfo(const blink::mojom::IdentityProviderRequestOptionsPtr&,
-                         IdpNetworkRequestManager::Endpoints,
-                         IdentityProviderMetadata,
-                         blink::mojom::RpContext rp_context,
-                         blink::mojom::RpMode rp_mode);
-    ~IdentityProviderInfo();
-    IdentityProviderInfo(const IdentityProviderInfo&);
-
-    blink::mojom::IdentityProviderRequestOptionsPtr provider;
-    IdpNetworkRequestManager::Endpoints endpoints;
-    IdentityProviderMetadata metadata;
-    bool has_failing_idp_signin_status{false};
-    blink::mojom::RpContext rp_context{blink::mojom::RpContext::kSignIn};
-    blink::mojom::RpMode rp_mode{blink::mojom::RpMode::kPassive};
-    IdentityProviderDataPtr data;
-    gfx::Image decoded_idp_brand_icon;
-  };
-
-  struct IdentityProviderLoginUrlInfo {
-    std::string login_hint;
-    std::string domain_hint;
-  };
 
   // For use by the devtools protocol for browser automation.
   IdentityRequestDialogController* GetDialogController() {
@@ -242,11 +203,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   void ClickErrorDialogMoreDetailsForDevtools();
   void DismissErrorDialogForDevtools();
 
-  // Returns a list of fields that we should mediate authorization for. If
-  // empty, we should not show a permission request dialog.
-  std::vector<IdentityRequestDialogDisclosureField> GetDisclosureFields(
-      const blink::mojom::IdentityProviderRequestOptions& provider);
-
   // Whether we can show the continue_on popup (not using mediation: silent,
   // etc.)
   bool CanShowContinueOnPopup() const;
@@ -258,6 +214,72 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   FedCmUseOtherAccountResult ComputeUseOtherAccountResult(
       blink::mojom::FederatedAuthRequestResult result,
       const std::optional<GURL>& selected_idp_config_url);
+
+  void SetIdpLoginInfo(const GURL& idp_login_url,
+                       const std::string& login_hint,
+                       const std::string& domain_hint);
+  void SetWellKnownAndConfigFetchedTime(base::TimeTicks time);
+
+  // Called when there is an error in fetching information to show the prompt
+  // for a given IDP - `idp_info`, but we do not need to show failure UI for the
+  // IDP.
+  void OnFetchDataForIdpFailed(
+      std::unique_ptr<IdentityProviderInfo> idp_info,
+      blink::mojom::FederatedAuthRequestResult result,
+      std::optional<content::FedCmRequestIdTokenStatus> token_status,
+      bool should_delay_callback);
+
+  // Called when all of the data needed to display the FedCM prompt has been
+  // fetched for `idp_info`. Accounts should be moved instead of copied to this
+  // function.
+  void OnFetchDataForIdpSucceeded(
+      std::vector<IdentityRequestAccountPtr> accounts,
+      std::unique_ptr<IdentityProviderInfo> idp_info);
+
+  void MaybeShowActiveModeModalDialog(const GURL& idp_config_url,
+                                      const GURL& idp_login_url);
+
+  void SetAccountsFetchedTime(base::TimeTicks time) {
+    accounts_fetched_time_ = time;
+  }
+  void SetClientMetadataFetchedTime(base::TimeTicks time) {
+    client_metadata_fetched_time_ = time;
+  }
+
+  url::Origin GetEmbeddingOrigin() const;
+
+  // TODO(crbug.com/417197032): Remove these once code has been refactored.
+  base::flat_map<GURL, IdentityProviderGetInfo>& GetTokenRequestGetInfos() {
+    return token_request_get_infos_;
+  }
+  GURL login_url() { return login_url_; }
+  bool HadAccountIdBeforeLogin(const std::string& account_id) {
+    return account_ids_before_login_.contains(account_id);
+  }
+  // Return the FedCmMetrics for use by FedCmAccountsFetcher.
+  // TODO(crbug.com/417784830): Remove this once code has been refactored and
+  // FedCmAccountsFetcher can hold a raw pointer to FedCmMetrics.
+  FedCmMetrics* fedcm_metrics() { return fedcm_metrics_.get(); }
+
+  // Called when there is an error fetching information to show the prompt for a
+  // given IDP, and because of the mismatch this IDP must be present in the
+  // dialog we show to the user.
+  void OnIdpMismatch(std::unique_ptr<IdentityProviderInfo> idp_info);
+
+  void CompleteRequestWithError(
+      blink::mojom::FederatedAuthRequestResult result,
+      std::optional<content::FedCmRequestIdTokenStatus> token_status,
+      bool should_delay_callback);
+
+  // Completes request. Displays a dialog if there is an error and the error is
+  // during a fetch triggered by an IdP sign-in status change.
+  void CompleteRequest(
+      blink::mojom::FederatedAuthRequestResult result,
+      std::optional<content::FedCmRequestIdTokenStatus> token_status,
+      std::optional<TokenError> token_error,
+      const std::optional<GURL>& selected_idp_config_url,
+      const std::string& token,
+      bool should_delay_callback);
 
  private:
   friend class FederatedAuthRequestImplTest;
@@ -287,36 +309,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // passed-in IdPs. Uses parameters from `token_request_get_infos_`.
   void FetchEndpointsForIdps(const std::set<GURL>& idp_config_urls);
 
-  void OnAllConfigAndWellKnownFetched(
-      std::vector<FederatedProviderFetcher::FetchResult> fetch_results);
-  void OnClientMetadataResponseReceived(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      std::vector<IdentityRequestAccountPtr>&& accounts,
-      IdpNetworkRequestManager::FetchStatus status,
-      IdpNetworkRequestManager::ClientMetadata client_metadata);
-
-  // Called when all of the data needed to display the FedCM prompt has been
-  // fetched for `idp_info`.
-  void OnFetchDataForIdpSucceeded(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      std::vector<IdentityRequestAccountPtr>&& accounts,
-      const IdpNetworkRequestManager::ClientMetadata& client_metadata,
-      const gfx::Image& rp_brand_icon);
-
-  // Called when there is an error in fetching information to show the prompt
-  // for a given IDP - `idp_info`, but we do not need to show failure UI for the
-  // IDP.
-  void OnFetchDataForIdpFailed(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      blink::mojom::FederatedAuthRequestResult result,
-      std::optional<content::FedCmRequestIdTokenStatus> token_status,
-      bool should_delay_callback);
-
-  // Called when there is an error fetching information to show the prompt for a
-  // given IDP, and because of the mismatch this IDP must be present in the
-  // dialog we show to the user.
-  void OnIdpMismatch(std::unique_ptr<IdentityProviderInfo> idp_info);
-
   std::vector<blink::mojom::IdentityProviderRequestOptionsPtr>
   MaybeAddRegisteredProviders(
       std::vector<blink::mojom::IdentityProviderRequestOptionsPtr>& providers);
@@ -332,36 +324,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // account fetch resulted in a mismatch with its login status.
   void ShowSingleIdpFailureDialog();
   void OnAccountsDisplayed();
-
-  // Updates the IdpSigninStatus in case of accounts fetch failure and shows a
-  // failure UI if applicable.
-  void HandleAccountsFetchFailure(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      std::optional<bool> old_idp_signin_status,
-      blink::mojom::FederatedAuthRequestResult result,
-      std::optional<content::FedCmRequestIdTokenStatus> token_status);
-
-  void OnAccountsResponseReceived(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      IdpNetworkRequestManager::FetchStatus status,
-      std::vector<IdentityRequestAccountPtr> accounts);
-  // Fetches the account pictures for |accounts| and calls
-  // OnFetchDataForIdpSucceeded when done.
-  void FetchAccountPicturesAndBrandIcons(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      const std::vector<IdentityRequestAccountPtr>& accounts,
-      IdpNetworkRequestManager::ClientMetadata&& client_metadata);
-  // Fetches the given `url` and stores the result in `downloaded_images_`. Runs
-  // the `callback` exactly once regardless of whether the GURL is valid or the
-  // fetch result.
-  void FetchImage(const GURL& url, base::OnceClosure callback);
-  void OnImageReceived(base::OnceClosure callback,
-                       GURL url,
-                       const gfx::Image& image);
-  void OnAllAccountPicturesAndBrandIconUrlReceived(
-      std::unique_ptr<IdentityProviderInfo> idp_info,
-      std::vector<IdentityRequestAccountPtr>&& accounts,
-      const IdpNetworkRequestManager::ClientMetadata& client_metadata);
 
   void OnAccountSelected(const GURL& idp_config_url,
                          const std::string& account_id,
@@ -393,39 +355,26 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   void MarkUserAsSignedIn(const GURL& idp_config_url,
                           const std::string& account_id);
 
-  void CompleteRequestWithError(
-      blink::mojom::FederatedAuthRequestResult result,
-      std::optional<content::FedCmRequestIdTokenStatus> token_status,
-      bool should_delay_callback);
-
-  // Completes request. Displays a dialog if there is an error and the error is
-  // during a fetch triggered by an IdP sign-in status change.
-  void CompleteRequest(
-      blink::mojom::FederatedAuthRequestResult result,
-      std::optional<content::FedCmRequestIdTokenStatus> token_status,
-      std::optional<TokenError> token_error,
-      const std::optional<GURL>& selected_idp_config_url,
-      const std::string& token,
-      bool should_delay_callback);
-  void ProcessSdJwt(const GURL& selected_idp_config_url,
-                    const std::string& token);
-  void OnDisclosureParsed(base::RepeatingClosure cb,
-                          const std::string& json,
-                          data_decoder::DataDecoder::ValueOrError result);
-  void OnSdJwtParsed(const GURL& selected_idp_config_url,
-                     const sdjwt::Jwt& token);
   void CompleteUserInfoRequest(
       FederatedAuthUserInfoRequest* request,
       RequestUserInfoCallback callback,
       blink::mojom::RequestUserInfoStatus status,
       std::optional<std::vector<blink::mojom::IdentityUserInfoPtr>> user_info);
 
-  // Notifies metrics endpoint that either the user did not select the IDP in
-  // the prompt or that there was an error in fetching data for the IDP.
-  void SendFailedTokenRequestMetrics(
-      const GURL& metrics_endpoint,
-      blink::mojom::FederatedAuthRequestResult result);
-  void SendSuccessfulTokenRequestMetrics(const GURL& idp_config_url);
+  // Validates the input from the renderer and signals to terminate the request
+  // if needed.
+  bool ShouldTerminateRequest(
+      const std::vector<IdentityProviderGetParametersPtr>& idp_get_params_ptrs,
+      const MediationRequirement& requirement);
+
+  // If a new request is associated with active mode, it can replace the pending
+  // request with passive mode. Otherwise a new request will be cancelled when
+  // there's a pending request. Returns `true` if the new request needs to be
+  // cancelled.
+  bool HandlePendingRequestAndCancelNewRequest(
+      const std::vector<GURL>& old_idp_order,
+      const std::vector<IdentityProviderGetParametersPtr>& idps,
+      const MediationRequirement& requirement);
 
   void CleanUp();
 
@@ -440,17 +389,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // issue. The Issues panel is preferred, but for now we also surface console
   // error messages since it is much simpler to add.
   void AddConsoleErrorMessage(blink::mojom::FederatedAuthRequestResult result);
-
-  void MaybeAddResponseCodeToConsole(const char* fetch_description,
-                                     int response_code);
-
-  // Computes the login state of accounts. It uses the IDP-provided signal, if
-  // it had been populated. Otherwise, it uses the browser knowledge on which
-  // accounts are returning and which are not.
-  void ComputeLoginStates(const GURL& idp_config_url,
-                          std::vector<IdentityRequestAccountPtr>& accounts);
-
-  url::Origin GetEmbeddingOrigin() const;
 
   // Returns true and the `IdentityProviderData` + `IdentityRequestAccount` for
   // the only returning account. Returns false if there are multiple returning
@@ -475,9 +413,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
                   const GURL& idp_config_url,
                   GURL login_url);
 
-  void MaybeShowActiveModeModalDialog(const GURL& idp_config_url,
-                                      const GURL& idp_login_url);
-
   void CompleteDisconnectRequest(DisconnectCallback callback,
                                  blink::mojom::DisconnectStatus status);
 
@@ -489,30 +424,20 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
       std::optional<IdpNetworkRequestManager::FedCmErrorUrlType>
           error_url_type);
 
+  void OnIdpRegistrationConfigFetched(
+      RegisterIdPCallback callback,
+      const GURL& idp,
+      std::vector<FedCmConfigFetcher::FetchResult> fetch_results);
   void OnRegisterIdPPermissionResponse(RegisterIdPCallback callback,
                                        const GURL& idp,
                                        bool accepted);
-  void MaybeCreateFedCmMetrics();
+  std::unique_ptr<FedCmMetrics> CreateFedCmMetrics();
 
   bool IsNewlyLoggedIn(const IdentityRequestAccount& account);
 
-  // Returns whether the algorithm should terminate after applying the account
-  // label filter.
-  bool FilterAccountsWithLabel(
-      const std::string& label,
-      std::vector<IdentityRequestAccountPtr>& accounts);
-  // Returns whether the algorithm should terminate after applying the login
-  // hint filter.
-  bool FilterAccountsWithLoginHint(
-      const std::string& login_hint,
-      std::vector<IdentityRequestAccountPtr>& accounts);
-  // Returns whether the algorithm should terminate after applying the domain
-  // hint filter.
-  bool FilterAccountsWithDomainHint(
-      const std::string& domain_hint,
-      std::vector<IdentityRequestAccountPtr>& accounts);
-
   RpMode GetRpMode() const { return rp_mode_; }
+
+  RelyingPartyData CreateRpData() const;
 
   std::unique_ptr<IdpNetworkRequestManager> network_manager_;
   std::unique_ptr<IdentityRequestDialogController> request_dialog_controller_;
@@ -524,9 +449,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // Helper that records FedCM UMA and UKM metrics. Initialized in the
   // RequestToken() method, so all metrics must be recorded after that.
   std::unique_ptr<FedCmMetrics> fedcm_metrics_;
-
-  // Populated in OnAllConfigAndWellKnownFetched().
-  base::flat_map<GURL, GURL> metrics_endpoints_;
 
   // Populated by OnFetchDataForIdpSucceeded() and OnIdpMismatch().
   base::flat_map<GURL, std::unique_ptr<IdentityProviderInfo>> idp_infos_;
@@ -551,9 +473,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // Maps the login URL to the info that may be added as query parameters to
   // that URL. Populated by OnAllConfigAndWellKnownFetched().
   base::flat_map<GURL, IdentityProviderLoginUrlInfo> idp_login_infos_;
-
-  // The downloaded image data.
-  std::map<GURL, gfx::Image> downloaded_images_;
 
   raw_ptr<FederatedIdentityApiPermissionContextDelegate>
       api_permission_delegate_ = nullptr;
@@ -593,7 +512,13 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // simultaneously.
   RequestTokenCallback auth_request_token_callback_;
 
-  std::unique_ptr<FederatedProviderFetcher> provider_fetcher_;
+  OnFederatedTokenReceivedCallback token_received_callback_for_autofill_;
+
+  std::unique_ptr<FedCmAccountsFetcher> fedcm_accounts_fetcher_;
+
+  std::unique_ptr<FederatedSdJwtHandler> federated_sdjwt_handler_;
+
+  std::unique_ptr<FedCmIdpRegistrationHandler> fedcm_idp_registration_handler_;
 
   // Set of pending user info requests.
   base::flat_set<std::unique_ptr<FederatedAuthUserInfoRequest>>
@@ -676,14 +601,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl
   // Keeps track of the state of the verifying dialog. Is std::nullopt when the
   // verifying dialog has not been shown.
   std::optional<FedCmVerifyingDialogResult> verifying_dialog_result_;
-
-  // A private key that is used to bind the token when the token "format" is
-  // "vc+sd-jwt".
-  std::unique_ptr<crypto::ECPrivateKey> private_key_;
-
-  // A list of discloures that were parsed in the token response, when
-  // the token's format is "vc+sd-jwt".
-  std::vector<std::pair<std::string, std::string>> disclosures_;
 
   base::WeakPtrFactory<FederatedAuthRequestImpl> weak_ptr_factory_{this};
 };

@@ -16,8 +16,8 @@
 #import "ios/chrome/browser/shared/model/profile/profile_attributes_storage_ios.h"
 #import "ios/chrome/browser/shared/model/profile/profile_manager_ios.h"
 #import "ios/chrome/browser/shared/model/profile/profile_manager_observer_ios.h"
+#import "ios/chrome/browser/shared/model/profile/scoped_profile_keep_alive_ios.h"
 #import "testing/gtest/include/gtest/gtest.h"
-#import "testing/platform_test.h"
 
 namespace {
 
@@ -45,11 +45,15 @@ class ScopedTestProfileManagerObserverIOS final
     return on_profile_unloaded_called_;
   }
 
-  bool on_profile_marked_for_permanent_deletation_called() const {
-    return on_profile_marked_for_permanent_deletation_called_;
+  bool on_profile_marked_for_permanent_deletion_called() const {
+    return on_profile_marked_for_permanent_deletion_called_;
   }
 
   // ProfileManagerObserverIOS implementation:
+  void OnProfileManagerWillBeDestroyed(ProfileManagerIOS* manager) final {
+    // Nothing to do.
+  }
+
   void OnProfileManagerDestroyed(ProfileManagerIOS* manager) final {
     DCHECK(scoped_observation_.IsObservingSource(manager));
     scoped_observation_.Reset();
@@ -74,7 +78,7 @@ class ScopedTestProfileManagerObserverIOS final
   void OnProfileMarkedForPermanentDeletion(ProfileManagerIOS* manager,
                                            ProfileIOS* profile) final {
     DCHECK(scoped_observation_.IsObservingSource(manager));
-    on_profile_marked_for_permanent_deletation_called_ = true;
+    on_profile_marked_for_permanent_deletion_called_ = true;
   }
 
  private:
@@ -84,7 +88,7 @@ class ScopedTestProfileManagerObserverIOS final
   bool on_profile_created_called_ = false;
   bool on_profile_loaded_called_ = false;
   bool on_profile_unloaded_called_ = false;
-  bool on_profile_marked_for_permanent_deletation_called_ = false;
+  bool on_profile_marked_for_permanent_deletion_called_ = false;
 };
 
 // Returns a callback that fail the current test if invoked.
@@ -97,7 +101,8 @@ base::OnceCallback<void(Args...)> FailCallback() {
 // The `output` must outlive the returned callback as it is captured by copy.
 template <typename T>
 base::OnceCallback<void(T)> CaptureParam(T* output) {
-  return base::BindOnce([](T* output, T value) { *output = value; }, output);
+  return base::BindOnce([](T* output, T value) { *output = std::move(value); },
+                        output);
 }
 
 }  // namespace
@@ -130,35 +135,35 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync) {
       }));
 
   base::RunLoop run_loop;
-  ProfileIOS* created_profile = nullptr;
-  ProfileIOS* loaded_profile = nullptr;
+  ScopedProfileKeepAliveIOS created_keep_alive;
+  ScopedProfileKeepAliveIOS loaded_keep_alive;
 
-  // Load the Profile asynchronously while disallowing blocking on the/ current
+  // Load the Profile asynchronously while disallowing blocking on the current
   // sequence (to ensure that the method is really asynchronous and does not
   // block the sequence).
   {
     base::ScopedDisallowBlocking disallow_blocking;
     const bool success = profile_manager().LoadProfileAsync(
         profile_name,
-        CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-        CaptureParam(&created_profile));
+        CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+        CaptureParam(&created_keep_alive));
 
     ASSERT_TRUE(success);
   }
 
   // The Profile instance should have been created but not yet fully initialized
-  // (as the initialisation is asynchronous).
-  EXPECT_TRUE(created_profile);
-  EXPECT_FALSE(loaded_profile);
+  // (as the initialization is asynchronous).
+  EXPECT_TRUE(created_keep_alive.profile());
+  EXPECT_FALSE(loaded_keep_alive.profile());
 
   run_loop.Run();
 
   // The Profile should have been successfully loaded and initialized.
-  EXPECT_TRUE(created_profile);
-  EXPECT_TRUE(loaded_profile);
+  EXPECT_TRUE(created_keep_alive.profile());
+  EXPECT_TRUE(loaded_keep_alive.profile());
 
   // The two callbacks were invoked with the same object.
-  EXPECT_EQ(created_profile, loaded_profile);
+  EXPECT_EQ(created_keep_alive.profile(), loaded_keep_alive.profile());
 }
 
 // Tests that calls LoadProfileAsync(...) on a loaded Profile return the Profile
@@ -171,11 +176,15 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync_Reload) {
         attrs.ClearIsNewProfile();
       }));
 
+  // Ensure the profile is not deleted between the two blocks when the
+  // ScopedProfileKeepAliveIOS is dropped.
+  ScopedProfileKeepAliveIOS keep_alive;
+
   // Load the Profile a first time.
   {
     base::RunLoop run_loop;
-    ProfileIOS* created_profile = nullptr;
-    ProfileIOS* loaded_profile = nullptr;
+    ScopedProfileKeepAliveIOS created_keep_alive;
+    ScopedProfileKeepAliveIOS loaded_keep_alive;
 
     // Load the Profile asynchronously while disallowing blocking on the current
     // sequence (to ensure that the method is really asynchronous and does not
@@ -184,33 +193,35 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync_Reload) {
       base::ScopedDisallowBlocking disallow_blocking;
       const bool success = profile_manager().LoadProfileAsync(
           profile_name,
-          CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-          CaptureParam(&created_profile));
+          CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+          CaptureParam(&created_keep_alive));
 
       ASSERT_TRUE(success);
     }
 
     // The Profile instance should have been created but not yet fully
-    // initialized (as the initialisation is asynchronous).
-    EXPECT_TRUE(created_profile);
-    EXPECT_FALSE(loaded_profile);
+    // initialized (as the initialization is asynchronous).
+    EXPECT_TRUE(created_keep_alive.profile());
+    EXPECT_FALSE(loaded_keep_alive.profile());
 
     run_loop.Run();
 
     // The Profile should have been successfully loaded and initialized.
-    EXPECT_TRUE(created_profile);
-    EXPECT_TRUE(loaded_profile);
+    EXPECT_TRUE(created_keep_alive.profile());
+    EXPECT_TRUE(loaded_keep_alive.profile());
 
     // The two callbacks were invoked with the same object.
-    EXPECT_EQ(created_profile, loaded_profile);
+    EXPECT_EQ(created_keep_alive.profile(), loaded_keep_alive.profile());
+
+    keep_alive = std::move(loaded_keep_alive);
   }
 
   // Load the Profile a second time. Since it is already loaded, the callback
   // should be called synchronously and successfully.
   {
     base::RunLoop run_loop;
-    ProfileIOS* created_profile = nullptr;
-    ProfileIOS* loaded_profile = nullptr;
+    ScopedProfileKeepAliveIOS created_keep_alive;
+    ScopedProfileKeepAliveIOS loaded_keep_alive;
 
     // Load the Profile asynchronously while disallowing blocking on the current
     // sequence (to ensure that the method is really asynchronous and does not
@@ -219,19 +230,19 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync_Reload) {
       base::ScopedDisallowBlocking disallow_blocking;
       const bool success = profile_manager().LoadProfileAsync(
           profile_name,
-          CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-          CaptureParam(&created_profile));
+          CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+          CaptureParam(&created_keep_alive));
 
       ASSERT_TRUE(success);
     }
 
     // Since the Profile has already been loaded, both callback should be
     // invoked synchronously.
-    EXPECT_TRUE(created_profile);
-    EXPECT_TRUE(loaded_profile);
+    EXPECT_TRUE(created_keep_alive.profile());
+    EXPECT_TRUE(loaded_keep_alive.profile());
 
     // The two callbacks were invoked with the same object.
-    EXPECT_EQ(created_profile, loaded_profile);
+    EXPECT_EQ(created_keep_alive.profile(), loaded_keep_alive.profile());
 
     run_loop.Run();
   }
@@ -244,8 +255,8 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync_Missing) {
   ASSERT_FALSE(attributes_storage().HasProfileWithName(kProfileName1));
 
   base::RunLoop run_loop;
-  ProfileIOS* created_profile = nullptr;
-  ProfileIOS* loaded_profile = nullptr;
+  ScopedProfileKeepAliveIOS created_keep_alive;
+  ScopedProfileKeepAliveIOS loaded_keep_alive;
 
   // Load the Profile asynchronously while disallowing blocking on the current
   // sequence (to ensure that the method is really asynchronous and does not
@@ -254,8 +265,8 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync_Missing) {
     base::ScopedDisallowBlocking disallow_blocking;
     const bool success = profile_manager().LoadProfileAsync(
         kProfileName1,
-        CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-        CaptureParam(&created_profile));
+        CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+        CaptureParam(&created_keep_alive));
 
     ASSERT_FALSE(success);
   }
@@ -263,8 +274,8 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfileAsync_Missing) {
   run_loop.Run();
 
   // The Profile was not loaded nor created.
-  EXPECT_FALSE(created_profile);
-  EXPECT_FALSE(loaded_profile);
+  EXPECT_FALSE(created_keep_alive.profile());
+  EXPECT_FALSE(loaded_keep_alive.profile());
 }
 
 // Tests that CreateProfileAsync(...) creates and load successfully a new
@@ -275,8 +286,8 @@ TEST_F(ProfileManagerIOSImplTest, CreateProfileAsync) {
   ASSERT_FALSE(attributes_storage().HasProfileWithName(kProfileName1));
 
   base::RunLoop run_loop;
-  ProfileIOS* created_profile = nullptr;
-  ProfileIOS* loaded_profile = nullptr;
+  ScopedProfileKeepAliveIOS created_keep_alive;
+  ScopedProfileKeepAliveIOS loaded_keep_alive;
 
   // Load the Profile asynchronously while disallowing blocking on the current
   // sequence (to ensure that the method is really asynchronous and does not
@@ -285,45 +296,49 @@ TEST_F(ProfileManagerIOSImplTest, CreateProfileAsync) {
     base::ScopedDisallowBlocking disallow_blocking;
     const bool success = profile_manager().CreateProfileAsync(
         kProfileName1,
-        CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-        CaptureParam(&created_profile));
+        CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+        CaptureParam(&created_keep_alive));
 
     ASSERT_TRUE(success);
   }
 
   // The Profile instance should have been created but not yet fully initialized
-  // (as the initialisation is asynchronous).
-  EXPECT_TRUE(created_profile);
-  EXPECT_FALSE(loaded_profile);
+  // (as the initialization is asynchronous).
+  EXPECT_TRUE(created_keep_alive.profile());
+  EXPECT_FALSE(loaded_keep_alive.profile());
 
   run_loop.Run();
 
   // The Profile should have been successfully loaded and initialized.
-  EXPECT_TRUE(created_profile);
-  EXPECT_TRUE(loaded_profile);
+  EXPECT_TRUE(created_keep_alive.profile());
+  EXPECT_TRUE(loaded_keep_alive.profile());
 
   // The two callbacks were invoked with the same object.
-  EXPECT_EQ(created_profile, loaded_profile);
+  EXPECT_EQ(created_keep_alive.profile(), loaded_keep_alive.profile());
 }
 
 // Tests that Profile marked for deletion does not create a new profile.
 TEST_F(ProfileManagerIOSImplTest, CreateProfile_MarkedForDeletion) {
   // Create a few profiles synchronously.
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName1));
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName2));
+  ScopedProfileKeepAliveIOS keep_alive1 = CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_TRUE(keep_alive1.profile());
+  ASSERT_TRUE(keep_alive2.profile());
+
   // Check that the profiles are accessible.
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName2));
 
   profile_manager().MarkProfileForDeletion(kProfileName2);
-  profile_manager().UnloadProfile(kProfileName2);
+  keep_alive2.Reset();
 
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName2));
 
   // Ensures that the profile cannot be created and has been removed from
   // the profile attributes storage.
-  ASSERT_FALSE(profile_manager().CreateProfile(kProfileName2));
+  keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_FALSE(keep_alive2.profile());
   ASSERT_FALSE(attributes_storage().HasProfileWithName(kProfileName2));
 }
 
@@ -334,11 +349,15 @@ TEST_F(ProfileManagerIOSImplTest, CreateProfileAsync_Reload) {
   // CreateProfileAsync(...) to create a new Profile.
   ASSERT_FALSE(attributes_storage().HasProfileWithName(kProfileName1));
 
+  // Ensure the profile is not deleted between the two blocks when the
+  // ScopedProfileKeepAliveIOS is dropped.
+  ScopedProfileKeepAliveIOS keep_alive;
+
   // Load the Profile a first time.
   {
     base::RunLoop run_loop;
-    ProfileIOS* created_profile = nullptr;
-    ProfileIOS* loaded_profile = nullptr;
+    ScopedProfileKeepAliveIOS created_keep_alive;
+    ScopedProfileKeepAliveIOS loaded_keep_alive;
 
     // Load the Profile asynchronously while disallowing blocking on the current
     // sequence (to ensure that the method is really asynchronous and does not
@@ -347,33 +366,35 @@ TEST_F(ProfileManagerIOSImplTest, CreateProfileAsync_Reload) {
       base::ScopedDisallowBlocking disallow_blocking;
       const bool success = profile_manager().CreateProfileAsync(
           kProfileName1,
-          CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-          CaptureParam(&created_profile));
+          CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+          CaptureParam(&created_keep_alive));
 
       ASSERT_TRUE(success);
     }
 
     // The Profile instance should have been created but not yet fully
-    // initialized (as the initialisation is asynchronous).
-    EXPECT_TRUE(created_profile);
-    EXPECT_FALSE(loaded_profile);
+    // initialized (as the initialization is asynchronous).
+    EXPECT_TRUE(created_keep_alive.profile());
+    EXPECT_FALSE(loaded_keep_alive.profile());
 
     run_loop.Run();
 
     // The Profile should have been successfully loaded and initialized.
-    EXPECT_TRUE(created_profile);
-    EXPECT_TRUE(loaded_profile);
+    EXPECT_TRUE(created_keep_alive.profile());
+    EXPECT_TRUE(loaded_keep_alive.profile());
 
     // The two callbacks were invoked with the same object.
-    EXPECT_EQ(created_profile, loaded_profile);
+    EXPECT_EQ(created_keep_alive.profile(), loaded_keep_alive.profile());
+
+    keep_alive = std::move(loaded_keep_alive);
   }
 
   // Load the Profile a second time. Since it is already loaded, the callback
   // should be called synchronously and successfully.
   {
     base::RunLoop run_loop;
-    ProfileIOS* created_profile = nullptr;
-    ProfileIOS* loaded_profile = nullptr;
+    ScopedProfileKeepAliveIOS created_keep_alive;
+    ScopedProfileKeepAliveIOS loaded_keep_alive;
 
     // Load the Profile asynchronously while disallowing blocking on the current
     // sequence (to ensure that the method is really asynchronous and does not
@@ -382,19 +403,19 @@ TEST_F(ProfileManagerIOSImplTest, CreateProfileAsync_Reload) {
       base::ScopedDisallowBlocking disallow_blocking;
       const bool success = profile_manager().CreateProfileAsync(
           kProfileName1,
-          CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-          CaptureParam(&created_profile));
+          CaptureParam(&loaded_keep_alive).Then(run_loop.QuitClosure()),
+          CaptureParam(&created_keep_alive));
 
       ASSERT_TRUE(success);
     }
 
     // Since the Profile has already been loaded, both callback should be
     // invoked synchronously.
-    EXPECT_TRUE(created_profile);
-    EXPECT_TRUE(loaded_profile);
+    EXPECT_TRUE(created_keep_alive.profile());
+    EXPECT_TRUE(loaded_keep_alive.profile());
 
     // The two callbacks were invoked with the same object.
-    EXPECT_EQ(created_profile, loaded_profile);
+    EXPECT_EQ(created_keep_alive.profile(), loaded_keep_alive.profile());
 
     run_loop.Run();
   }
@@ -411,14 +432,15 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfile) {
       }));
 
   // Load the Profile synchronously.
-  ProfileIOS* profile = profile_manager().LoadProfile(profile_name);
+  ScopedProfileKeepAliveIOS keep_alive = LoadProfile(profile_name);
+  ProfileIOS* profile = keep_alive.profile();
 
   // The Profile should have been successfully loaded and initialized.
   EXPECT_TRUE(profile);
 
   // Calling LoadProfile(...) a second time should return the same
   // object.
-  EXPECT_EQ(profile, profile_manager().LoadProfile(profile_name));
+  EXPECT_EQ(profile, LoadProfile(profile_name).profile());
 }
 
 // Tests that LoadProfile(...) fails to load an unknown Profile.
@@ -428,7 +450,8 @@ TEST_F(ProfileManagerIOSImplTest, LoadProfile_Missing) {
   ASSERT_FALSE(attributes_storage().HasProfileWithName(kProfileName1));
 
   // Load the Profile synchronously.
-  ProfileIOS* profile = profile_manager().LoadProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive = LoadProfile(kProfileName1);
+  ProfileIOS* profile = keep_alive.profile();
 
   // The Profile was not loaded nor created.
   EXPECT_FALSE(profile);
@@ -442,14 +465,15 @@ TEST_F(ProfileManagerIOSImplTest, CreateProfile) {
   ASSERT_FALSE(attributes_storage().HasProfileWithName(kProfileName1));
 
   // Create the Profile synchronously.
-  ProfileIOS* profile = profile_manager().CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive = CreateProfile(kProfileName1);
 
   // The Profile should have been successfully loaded and initialized.
-  EXPECT_TRUE(profile);
+  EXPECT_TRUE(keep_alive.profile());
 
   // Calling CreateProfile(...) a second time should return the same
   // object.
-  EXPECT_EQ(profile, profile_manager().CreateProfile(kProfileName1));
+  ScopedProfileKeepAliveIOS second_keep_alive = CreateProfile(kProfileName1);
+  EXPECT_EQ(keep_alive.profile(), second_keep_alive.profile());
 }
 
 // Check that if there are not profile marked as the personal profile, then
@@ -470,7 +494,8 @@ TEST_F(ProfileManagerIOSImplTest, CreatingProfileDontOverwritePersonalProfile) {
 
   // Create another profile, this should not change the personal profile.
   const std::string profile_name2 = profile_manager().ReserveNewProfileName();
-  EXPECT_TRUE(profile_manager().CreateProfile(profile_name2));
+  ScopedProfileKeepAliveIOS keep_alive = CreateProfile(profile_name2);
+  EXPECT_TRUE(keep_alive.profile());
 
   // The personal profile should not have been changed.
   EXPECT_EQ(attributes_storage().GetPersonalProfileName(), profile_name1);
@@ -480,8 +505,10 @@ TEST_F(ProfileManagerIOSImplTest, CreatingProfileDontOverwritePersonalProfile) {
 // observers.
 TEST_F(ProfileManagerIOSImplTest, UnloadProfile) {
   // Create a few profiles synchronously.
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName1));
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName2));
+  ScopedProfileKeepAliveIOS keep_alive1 = CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_TRUE(keep_alive1.profile());
+  ASSERT_TRUE(keep_alive2.profile());
 
   ScopedTestProfileManagerObserverIOS observer(profile_manager());
   EXPECT_FALSE(observer.on_profile_unloaded_called());
@@ -492,7 +519,7 @@ TEST_F(ProfileManagerIOSImplTest, UnloadProfile) {
 
   // Unload a profile, it should not longer be accessible and the
   // observer must have been notified of that.
-  profile_manager().UnloadProfile(kProfileName1);
+  keep_alive1.Reset();
 
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName2));
@@ -503,8 +530,10 @@ TEST_F(ProfileManagerIOSImplTest, UnloadProfile) {
 // observers.
 TEST_F(ProfileManagerIOSImplTest, UnloadAllProfiles) {
   // Create a few profiles synchronously.
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName1));
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName2));
+  ScopedProfileKeepAliveIOS keep_alive1 = CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_TRUE(keep_alive1.profile());
+  ASSERT_TRUE(keep_alive2.profile());
 
   ScopedTestProfileManagerObserverIOS observer(profile_manager());
   EXPECT_FALSE(observer.on_profile_unloaded_called());
@@ -515,41 +544,12 @@ TEST_F(ProfileManagerIOSImplTest, UnloadAllProfiles) {
 
   // Unload all profiles, they should not longer be accessible and the
   // observer must have been notified of that.
-  profile_manager().UnloadAllProfiles();
+  keep_alive2.Reset();
+  keep_alive1.Reset();
 
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName2));
   EXPECT_TRUE(observer.on_profile_unloaded_called());
-}
-
-// Tests that OnProfileUnloaded(...) is not called if a profile in unloaded
-// while still loading.
-TEST_F(ProfileManagerIOSImplTest, UnloadAllProfiles_LoadPending) {
-  // Load a profile asynchronously.
-  base::RunLoop run_loop;
-  ProfileIOS* loaded_profile = nullptr;
-  ProfileIOS* created_profile = nullptr;
-  const bool success = profile_manager().CreateProfileAsync(
-      kProfileName1, CaptureParam(&loaded_profile).Then(run_loop.QuitClosure()),
-      CaptureParam(&created_profile));
-
-  EXPECT_TRUE(created_profile);
-  EXPECT_TRUE(success);
-
-  ScopedTestProfileManagerObserverIOS observer(profile_manager());
-  EXPECT_FALSE(observer.on_profile_unloaded_called());
-
-  // Unload all profiles. The profile whose load is pending should no longer
-  // be loading, and the load should be considered as failed.
-  profile_manager().UnloadAllProfiles();
-
-  // The callback should be called from UnloadAllProfiles(), so the RunLoop
-  // should be considered as having quit called, and thus Run() should return
-  // immediately.
-  run_loop.Run();
-
-  EXPECT_FALSE(observer.on_profile_unloaded_called());
-  EXPECT_FALSE(loaded_profile);
 }
 
 // Tests that ReserveNewProfileName(...) returns a new profile name that is
@@ -572,11 +572,13 @@ TEST_F(ProfileManagerIOSImplTest, ReserveNewProfileName) {
 // OnProfileMarkedForPermanentDeletion(...) on the observers.
 TEST_F(ProfileManagerIOSImplTest, MarkProfileForDeletion) {
   // Create a few profiles synchronously.
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName1));
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName2));
+  ScopedProfileKeepAliveIOS keep_alive1 = CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_TRUE(keep_alive1.profile());
+  ASSERT_TRUE(keep_alive2.profile());
 
   ScopedTestProfileManagerObserverIOS observer(profile_manager());
-  EXPECT_FALSE(observer.on_profile_marked_for_permanent_deletation_called());
+  EXPECT_FALSE(observer.on_profile_marked_for_permanent_deletion_called());
   EXPECT_FALSE(observer.on_profile_unloaded_called());
 
   // Check that the profiles are accessible.
@@ -590,7 +592,7 @@ TEST_F(ProfileManagerIOSImplTest, MarkProfileForDeletion) {
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName2));
   EXPECT_FALSE(attributes_storage().HasProfileWithName(kProfileName2));
-  EXPECT_TRUE(observer.on_profile_marked_for_permanent_deletation_called());
+  EXPECT_TRUE(observer.on_profile_marked_for_permanent_deletion_called());
 }
 
 // Tests that marking unloaded profile for deletion does not invoke
@@ -598,11 +600,13 @@ TEST_F(ProfileManagerIOSImplTest, MarkProfileForDeletion) {
 TEST_F(ProfileManagerIOSImplTest,
        MarkProfileForDeletion_UnloadedProfileShouldNotCallObserver) {
   // Create a few profiles synchronously.
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName1));
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName2));
+  ScopedProfileKeepAliveIOS keep_alive1 = CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_TRUE(keep_alive1.profile());
+  ASSERT_TRUE(keep_alive2.profile());
 
   ScopedTestProfileManagerObserverIOS observer(profile_manager());
-  EXPECT_FALSE(observer.on_profile_marked_for_permanent_deletation_called());
+  EXPECT_FALSE(observer.on_profile_marked_for_permanent_deletion_called());
   EXPECT_FALSE(observer.on_profile_unloaded_called());
 
   // Check that the profiles are accessible.
@@ -611,7 +615,7 @@ TEST_F(ProfileManagerIOSImplTest,
 
   // Unload a profile, it should not longer be accessible and the
   // observer must have been notified of that.
-  profile_manager().UnloadProfile(kProfileName2);
+  keep_alive2.Reset();
 
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName2));
@@ -623,7 +627,7 @@ TEST_F(ProfileManagerIOSImplTest,
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName1));
   EXPECT_FALSE(profile_manager().GetProfileWithName(kProfileName2));
   EXPECT_FALSE(attributes_storage().HasProfileWithName(kProfileName2));
-  EXPECT_FALSE(observer.on_profile_marked_for_permanent_deletation_called());
+  EXPECT_FALSE(observer.on_profile_marked_for_permanent_deletion_called());
 }
 
 // Tests that it is not possible to create a profile with a name marked for
@@ -631,8 +635,10 @@ TEST_F(ProfileManagerIOSImplTest,
 TEST_F(ProfileManagerIOSImplTest,
        MarkProfileForDeletion_CantCreateProfileWithProfileMarkedForDeletion) {
   // Create a few profiles synchronously.
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName1));
-  ASSERT_TRUE(profile_manager().CreateProfile(kProfileName2));
+  ScopedProfileKeepAliveIOS keep_alive1 = CreateProfile(kProfileName1);
+  ScopedProfileKeepAliveIOS keep_alive2 = CreateProfile(kProfileName2);
+  ASSERT_TRUE(keep_alive1.profile());
+  ASSERT_TRUE(keep_alive2.profile());
 
   // Check that the profiles are accessible.
   EXPECT_TRUE(profile_manager().GetProfileWithName(kProfileName1));

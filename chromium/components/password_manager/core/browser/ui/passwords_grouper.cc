@@ -106,10 +106,10 @@ class SortedPasskeysView {
    public:
     iterator(size_t i, const SortedPasskeysView* sorted)
         : i_(i), sorted_(sorted) {}
+
+    friend bool operator==(const iterator&, const iterator&) = default;
+
     void operator++() { i_++; }
-    bool operator!=(const iterator& other) const {
-      return i_ != other.i_ || sorted_ != other.sorted_;
-    }
     const PasskeyCredential& operator*() {
       return sorted_->passkeys_[sorted_->sorted_indexes_[i_]];
     }
@@ -442,8 +442,7 @@ PasswordsGrouper::MapFacetsToGroupId(const std::vector<GroupedFacets>& groups) {
 void PasswordsGrouper::InitializePSLExtensionList(
     std::vector<std::string> psl_extension_list) {
   CheckHeapIntegrity();
-  psl_extensions_ =
-      base::MakeFlatSet<std::string>(std::move(psl_extension_list));
+  psl_extensions_ = base::flat_set<std::string>(std::move(psl_extension_list));
   CheckHeapIntegrity();
 }
 

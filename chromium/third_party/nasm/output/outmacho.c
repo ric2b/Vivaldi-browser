@@ -1621,7 +1621,7 @@ static void macho_write (void)
     **   uint32_t in-file offset
     **   uint32_t alignment
     **    (irrelevant in MH_OBJECT)
-    **   uint32_t in-file offset of relocation entires
+    **   uint32_t in-file offset of relocation entries
     **   uint32_t number of relocations
     **   uint32_t flags
     **   uint32_t reserved
@@ -2175,9 +2175,13 @@ static void macho_dbg_linenum(const char *file_name, int32_t line_num, int32_t s
             }
         }
 
-        if(need_new_list) {
+        if (need_new_list)
             new_file_list(cur_file, cur_dir);
-        }
+    }
+
+    if (!need_new_list) {
+            nasm_free((void *)cur_file);
+            nasm_free((void *)cur_dir);
     }
 
     dbg_immcall = true;
@@ -2327,6 +2331,9 @@ static const struct dfmt macho32_df_dwarf = {
     macho_dbg_init,
     macho_dbg_linenum,
     null_debug_deflabel,
+    NULL,                       /* .debug_smacros */
+    NULL,                       /* .debug_include */
+    NULL,                       /* .debug_mmacros */
     null_debug_directive,
     null_debug_typevalue,
     macho_dbg_output,
@@ -2394,6 +2401,9 @@ static const struct dfmt macho64_df_dwarf = {
     macho_dbg_init,
     macho_dbg_linenum,
     null_debug_deflabel,
+    NULL,                       /* .debug_smacros */
+    NULL,                       /* .debug_include */
+    NULL,                       /* .debug_mmacros */
     null_debug_directive,
     null_debug_typevalue,
     macho_dbg_output,

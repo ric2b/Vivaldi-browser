@@ -336,6 +336,32 @@ CalculationExpressionOperationNode::CreateSimplified(Children&& children,
             std::move(children), op);
       }
     }
+    case CalculationOperator::kLog: {
+      DCHECK_GE(children.size(), 1u);
+      DCHECK_LE(children.size(), 2u);
+      Vector<float> operand_pixels;
+      operand_pixels.reserve(children.size());
+      bool can_simplify = true;
+      for (auto& child : children) {
+        const auto* pixels_and_percent =
+            DynamicTo<CalculationExpressionPixelsAndPercentNode>(*child);
+        if (!pixels_and_percent || pixels_and_percent->Percent()) {
+          can_simplify = false;
+          break;
+        }
+        operand_pixels.push_back(pixels_and_percent->Pixels());
+      }
+      if (can_simplify) {
+        float value = operand_pixels.size() == 1u
+                          ? std::log(operand_pixels.front())
+                          : std::log2(operand_pixels.front()) /
+                                std::log2(operand_pixels.back());
+        return base::MakeRefCounted<CalculationExpressionPixelsAndPercentNode>(
+            PixelsAndPercent(value));
+      }
+      return base::MakeRefCounted<CalculationExpressionOperationNode>(
+          std::move(children), op);
+    }
     case CalculationOperator::kHypot: {
       DCHECK_GE(children.size(), 1u);
       Vector<float> operand_pixels;
@@ -368,6 +394,8 @@ CalculationExpressionOperationNode::CreateSimplified(Children&& children,
     case CalculationOperator::kAcos:
     case CalculationOperator::kAtan:
     case CalculationOperator::kAbs:
+    case CalculationOperator::kExp:
+    case CalculationOperator::kSqrt:
     case CalculationOperator::kSign: {
       DCHECK_EQ(children.size(), 1u);
       const auto* pixels_and_percent =
@@ -387,6 +415,12 @@ CalculationExpressionOperationNode::CreateSimplified(Children&& children,
         }
         return base::MakeRefCounted<CalculationExpressionNumberNode>(
             value > 0 ? 1 : -1);
+      } else if (op == CalculationOperator::kExp) {
+        return base::MakeRefCounted<CalculationExpressionNumberNode>(
+            std::exp(value));
+      } else if (op == CalculationOperator::kSqrt) {
+        return base::MakeRefCounted<CalculationExpressionNumberNode>(
+            std::sqrt(value));
       } else {
         if (ShouldConvertRad2DegForOperator(op) &&
             children.front()->IsNumber()) {
@@ -566,6 +600,14 @@ float CalculationExpressionOperationNode::Evaluate(
       float b = children_[1]->Evaluate(max_value, input);
       return EvaluateSteppedValueFunction(operator_, a, b);
     }
+    case CalculationOperator::kLog: {
+      DCHECK_GE(children_.size(), 1u);
+      DCHECK_LE(children_.size(), 2u);
+      return children_.size() == 1u
+                 ? std::log(children_.front()->Evaluate(max_value, input))
+                 : std::log2(children_.front()->Evaluate(max_value, input)) /
+                       std::log2(children_.back()->Evaluate(max_value, input));
+    }
     case CalculationOperator::kHypot: {
       DCHECK_GE(children_.size(), 1u);
       float value = 0;
@@ -576,16 +618,22 @@ float CalculationExpressionOperationNode::Evaluate(
       return value;
     }
     case CalculationOperator::kAbs:
+    case CalculationOperator::kExp:
+    case CalculationOperator::kSqrt:
     case CalculationOperator::kSign: {
       DCHECK_EQ(children_.size(), 1u);
       const float value = children_.front()->Evaluate(max_value, input);
       if (operator_ == CalculationOperator::kAbs) {
         return std::abs(value);
-      } else {
+      } else if (operator_ == CalculationOperator::kExp) {
+        return std::exp(value);
+      } else if (operator_ == CalculationOperator::kSign) {
         if (value == 0 || std::isnan(value)) {
           return value;
         }
         return value > 0 ? 1 : -1;
+      } else {
+        return std::sqrt(value);
       }
     }
     case CalculationOperator::kCalcSize: {
@@ -695,6 +743,9 @@ CalculationExpressionOperationNode::Zoom(double factor) const {
     case CalculationOperator::kRem:
     case CalculationOperator::kHypot:
     case CalculationOperator::kAbs:
+    case CalculationOperator::kLog:
+    case CalculationOperator::kExp:
+    case CalculationOperator::kSqrt:
     case CalculationOperator::kSign:
     case CalculationOperator::kProgress:
     case CalculationOperator::kMediaProgress:
@@ -806,6 +857,7 @@ CalculationExpressionOperationNode::ResolvedResultType() const {
     case CalculationOperator::kRoundToZero:
     case CalculationOperator::kMod:
     case CalculationOperator::kRem:
+    case CalculationOperator::kSqrt:
     case CalculationOperator::kHypot:
     case CalculationOperator::kAbs: {
       DCHECK(children_.size());
@@ -821,6 +873,8 @@ CalculationExpressionOperationNode::ResolvedResultType() const {
     case CalculationOperator::kContainerProgress:
     case CalculationOperator::kProgress:
     case CalculationOperator::kMediaProgress:
+    case CalculationOperator::kLog:
+    case CalculationOperator::kExp:
     case CalculationOperator::kSin:
     case CalculationOperator::kCos:
     case CalculationOperator::kTan:

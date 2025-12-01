@@ -77,6 +77,8 @@ public class SystemNightModeMonitor {
 
     /** Updates the system night mode state, and notifies observers if system night mode changes. */
     public void onApplicationConfigurationChanged() {
+        // Vivaldi ref. AUTO-258. Vivaldi for Automotive should ignore system night mode changes.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return;
         final boolean oldNightMode = mSystemNightModeOn;
         calculateSystemNightMode();
 

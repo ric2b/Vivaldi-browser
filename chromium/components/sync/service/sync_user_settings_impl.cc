@@ -90,6 +90,7 @@ SyncUserSettingsImpl::SyncUserSettingsImpl(Delegate* delegate,
   CHECK(delegate_);
   CHECK(crypto_);
   CHECK(prefs_);
+  prefs_observation_.Observe(prefs_);
 }
 
 SyncUserSettingsImpl::~SyncUserSettingsImpl() = default;
@@ -108,6 +109,7 @@ void SyncUserSettingsImpl::SetInitialSyncFeatureSetupComplete(
   }
   UMA_HISTOGRAM_ENUMERATION("Signin.SyncFirstSetupCompleteSource", source);
   prefs_->SetInitialSyncFeatureSetupComplete();
+  delegate_->OnInitialSyncFeatureSetupCompleted();
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -154,9 +156,8 @@ SyncUserSettingsImpl::GetTypePrefStateForAccount(
       SyncPrefs::SyncAccountState::kSignedInNotSyncing) {
     return SyncUserSettings::UserSelectableTypePrefState::kNotApplicable;
   }
-  signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(
-      delegate_->GetSyncAccountInfoForPrefs().gaia);
-  if (prefs_->IsTypeDisabledByUserForAccount(type, gaia_id_hash)) {
+  if (prefs_->IsTypeDisabledByUserForAccount(
+          type, delegate_->GetSyncAccountInfoForPrefs().gaia)) {
     return SyncUserSettings::UserSelectableTypePrefState::kDisabled;
   }
   return SyncUserSettings::UserSelectableTypePrefState::kEnabledOrDefault;
@@ -171,10 +172,7 @@ void SyncUserSettingsImpl::SetSelectedTypes(bool sync_everything,
 
   switch (delegate_->GetSyncAccountStateForPrefs()) {
     case SyncPrefs::SyncAccountState::kNotSignedIn:
-      // TODO(crbug.com/40945692): Convert to NOTREACHED.
-      DUMP_WILL_BE_NOTREACHED()
-          << "Must not set selected types while signed out";
-      break;
+      NOTREACHED();
     case SyncPrefs::SyncAccountState::kSignedInNotSyncing:
       for (UserSelectableType type : registered_types) {
         SetSelectedType(type, types.Has(type) || sync_everything);
@@ -193,16 +191,11 @@ void SyncUserSettingsImpl::SetSelectedType(UserSelectableType type,
   CHECK(registered_types.Has(type));
 
   switch (delegate_->GetSyncAccountStateForPrefs()) {
-    case SyncPrefs::SyncAccountState::kNotSignedIn: {
-      // TODO(crbug.com/40945692): Convert to NOTREACHED.
-      DUMP_WILL_BE_NOTREACHED()
-          << "Must not set selected types while signed out";
-      break;
-    }
+    case SyncPrefs::SyncAccountState::kNotSignedIn:
+      NOTREACHED();
     case SyncPrefs::SyncAccountState::kSignedInNotSyncing: {
-      signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(
-          delegate_->GetSyncAccountInfoForPrefs().gaia);
-      prefs_->SetSelectedTypeForAccount(type, is_type_on, gaia_id_hash);
+      prefs_->SetSelectedTypeForAccount(
+          type, is_type_on, delegate_->GetSyncAccountInfoForPrefs().gaia);
       break;
     }
     case SyncPrefs::SyncAccountState::kSyncing: {
@@ -219,13 +212,12 @@ void SyncUserSettingsImpl::SetSelectedType(UserSelectableType type,
 void SyncUserSettingsImpl::ResetSelectedType(UserSelectableType type) {
   CHECK_EQ(SyncPrefs::SyncAccountState::kSignedInNotSyncing,
            delegate_->GetSyncAccountStateForPrefs());
-  signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(
-      delegate_->GetSyncAccountInfoForPrefs().gaia);
-  prefs_->ResetSelectedTypeForAccount(type, gaia_id_hash);
+  prefs_->ResetSelectedTypeForAccount(
+      type, delegate_->GetSyncAccountInfoForPrefs().gaia);
 }
 
 void SyncUserSettingsImpl::KeepAccountSettingsPrefsOnlyForUsers(
-    const std::vector<signin::GaiaIdHash>& available_gaia_ids) {
+    const std::vector<GaiaId>& available_gaia_ids) {
   prefs_->KeepAccountSettingsPrefsOnlyForUsers(available_gaia_ids);
 }
 
@@ -248,7 +240,11 @@ void SyncUserSettingsImpl::SetSyncFeatureDisabledViaDashboard() {
 }
 
 void SyncUserSettingsImpl::ClearSyncFeatureDisabledViaDashboard() {
+  if (!IsSyncFeatureDisabledViaDashboard()) {
+    return;
+  }
   prefs_->ClearSyncFeatureDisabledViaDashboard();
+  delegate_->OnSyncFeatureDisabledViaDashboardCleared();
 }
 
 bool SyncUserSettingsImpl::IsSyncFeatureDisabledViaDashboard() const {
@@ -451,22 +447,31 @@ std::string SyncUserSettingsImpl::GetEncryptionBootstrapToken() const {
   if (gaia_id.empty()) {
     return std::string();
   }
-  signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(gaia_id);
-  CHECK(gaia_id_hash.IsValid());
-  return prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id_hash);
+  return prefs_->GetEncryptionBootstrapTokenForAccount(gaia_id);
 }
 
 void SyncUserSettingsImpl::SetEncryptionBootstrapToken(
     const std::string& token) {
   const GaiaId& gaia_id = delegate_->GetSyncAccountInfoForPrefs().gaia;
   if (gaia_id.empty()) {
-    // TODO(crbug.com/40945692): Convert to NOTREACHED.
-    DUMP_WILL_BE_NOTREACHED() << "Must not set passphrase while signed out";
+    // The user must be signed in, so the only legit scenario where SyncService
+    // uses no Gaia ID is local sync (roaming profiles).
+    CHECK(prefs_->IsLocalSyncEnabled());
     return;
   }
-  signin::GaiaIdHash gaia_id_hash = signin::GaiaIdHash::FromGaiaId(gaia_id);
-  CHECK(gaia_id_hash.IsValid());
-  prefs_->SetEncryptionBootstrapTokenForAccount(token, gaia_id_hash);
+  prefs_->SetEncryptionBootstrapTokenForAccount(token, gaia_id);
+}
+
+bool SyncUserSettingsImpl::IsSyncClientDisabledByPolicy() const {
+  return prefs_->IsSyncClientDisabledByPolicy();
+}
+
+void SyncUserSettingsImpl::OnSyncManagedPrefChange(bool is_sync_managed) {
+  delegate_->OnSyncClientDisabledByPolicyChanged();
+}
+
+void SyncUserSettingsImpl::OnSelectedTypesPrefChange() {
+  delegate_->OnSelectedTypesChanged();
 }
 
 }  // namespace syncer

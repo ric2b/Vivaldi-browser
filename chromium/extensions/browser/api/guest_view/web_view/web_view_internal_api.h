@@ -17,6 +17,8 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/url_fetcher.h"
 
+class SkBitmap;
+
 namespace base {
 class TaskRunner;
 }
@@ -121,7 +123,7 @@ class WebViewInternalExecuteCodeFunction
  protected:
   ~WebViewInternalExecuteCodeFunction() override;
 
-  // Initialize |details_| if it hasn't already been.
+  // Initialize `details_` if it hasn't already been.
   InitResult Init() override;
   bool ShouldInsertCSS() const override;
   bool ShouldRemoveCSS() const override;

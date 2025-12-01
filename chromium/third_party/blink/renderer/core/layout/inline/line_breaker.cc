@@ -408,7 +408,7 @@ inline bool LineBreaker::ShouldAutoWrap(const ComputedStyle& style) const {
   if (disallow_auto_wrap_) [[unlikely]] {
     return false;
   }
-  return style.ShouldWrapLine();
+  return ShouldWrapLine(style);
 }
 
 void LineBreaker::UpdateAvailableWidth() {
@@ -869,8 +869,15 @@ void LineBreaker::NextLine(LineInfo* line_info) {
     FinalizeHyphen(line_info->MutableResults());
   }
   if (!disable_trailing_whitespace_collapsing_) {
-    RemoveTrailingCollapsibleSpace(line_info);
-    SplitTrailingBidiPreservedSpace(line_info);
+    if (!line_clamp_ellipsis_width_) {
+      RemoveTrailingCollapsibleSpace(line_info);
+      SplitTrailingBidiPreservedSpace(line_info);
+    } else {
+      // With the line-clamp ellipsis, we remove even preserved trailing spaces.
+      // TODO(abotella): Pending CSSWG resolution
+      // (https://github.com/w3c/csswg-drafts/issues/12008)
+      RemoveLineClampTrailingSpace(line_info);
+    }
   }
 
   const InlineItemResults& item_results = line_info->Results();
@@ -885,12 +892,29 @@ void LineBreaker::NextLine(LineInfo* line_info) {
   //    before a forced new-line.
   //  - During min/max content sizing (to correctly determine the line width).
   //
+  // With line-clamp, the entire contents of the line can be replaced by an
+  // ellipsis. This can only happen when the non-displaced line would create a
+  // line box, and the line box is still created after the replacement.
+  //
   // TODO(kojii): There are cases where we need to PlaceItems() without creating
   // line boxes. These cases need to be reviewed.
   const bool should_create_line_box =
       ShouldCreateLineBox(item_results) ||
       (force_non_empty_if_last_line_ && line_info->IsLastLine()) ||
       mode_ != LineBreakerMode::kContent;
+
+  // Don't add a line-clamp ellipsis if we're in an empty line or a
+  // block-in-inline.
+  if (line_clamp_ellipsis_width_ &&
+      (!should_create_line_box || line_info->IsBlockInInline())) {
+    line_clamp_ellipsis_width_ = LayoutUnit();
+  }
+
+  // If the line-clamp ellipsis would overflow, the entire line is replaced.
+  if (line_clamp_ellipsis_width_ && !CanFitOnLine()) {
+    Rewind(0, line_info);
+    line_info->SetIsLastLine(false);
+  }
 
   if (!should_create_line_box) {
     if (To<LayoutBlockFlow>(node_.GetLayoutBox())->HasLineIfEmpty())
@@ -1440,7 +1464,8 @@ void LineBreaker::SplitTextIntoSegments(const InlineItem& item,
   DCHECK_EQ(current_.text_offset, item.StartOffset());
 
   const ShapeResult& shape = *item.TextShapeResult();
-  if (shape.NumGlyphs() == 0 || !needs_svg_segmentation_) {
+  const unsigned num_glyphs = shape.NumGlyphs();
+  if (num_glyphs == 0 || !needs_svg_segmentation_) {
     InlineItemResult* result = AddItem(item, line_info);
     result->should_create_line_box = true;
     result->shape_result = ShapeResultView::Create(&shape);
@@ -1453,7 +1478,7 @@ void LineBreaker::SplitTextIntoSegments(const InlineItem& item,
   }
 
   Vector<unsigned> index_list;
-  index_list.reserve(shape.NumGlyphs());
+  index_list.reserve(num_glyphs);
   shape.ForEachGlyph(0, CollectCharIndex, &index_list);
   if (shape.IsRtl())
     index_list.Reverse();
@@ -1726,7 +1751,7 @@ bool LineBreaker::BreakTextAtPreviousBreakOpportunity(
   DCHECK(item_result->may_break_inside);
   const InlineItem& item = *item_result->item;
   DCHECK_EQ(item.Type(), InlineItem::kText);
-  DCHECK(item.Style() && item.Style()->ShouldWrapLine());
+  DCHECK(item.Style() && ShouldWrapLine(*item.Style()));
   DCHECK(!is_text_combine_);
 
   // TODO(jfernandez): Should we use the non-hangable-run-end instead ?
@@ -2375,7 +2400,7 @@ void LineBreaker::HandleTrailingSpaces(const InlineItem& item,
   } else if (!style.ShouldBreakSpaces()) {
     // Find the end of the run of space characters in this item.
     // Other white space characters (e.g., tab) are not included in this item.
-    DCHECK(style.ShouldBreakOnlyAfterWhiteSpace() ||
+    DCHECK(ShouldBreakOnlyAfterWhiteSpace(style) ||
            Character::IsOtherSpaceSeparator(text[current_.text_offset]));
     unsigned end = current_.text_offset;
     while (end < item.EndOffset() &&
@@ -2459,6 +2484,88 @@ void LineBreaker::RewindTrailingOpenTags(LineInfo* line_info) {
       }
       break;
     }
+  }
+}
+
+void LineBreaker::RemoveLineClampTrailingSpace(LineInfo* line_info) {
+  DCHECK(line_clamp_ellipsis_width_);
+
+  // Rewind trailing open-tags to wrap before them, except when this line ends
+  // with a forced break, including the one implied by block-in-inline.
+  if (!is_forced_break_) {
+    RewindTrailingOpenTags(line_info);
+  }
+
+  if (trailing_whitespace_ == WhitespaceState::kNone) {
+    return;
+  }
+
+  const String& text = Text();
+  bool collapsed = false;
+  for (auto& item_result : base::Reversed(*line_info->MutableResults())) {
+    DCHECK(item_result.item);
+    const InlineItem& item = *item_result.item;
+
+    if (item.TextType() == TextItemType::kForcedLineBreak) {
+      DCHECK(!item_result.inline_size);
+      continue;
+    }
+
+    if (item_result.has_only_pre_wrap_trailing_spaces) {
+      position_ -= item_result.inline_size;
+      item_result.text_offset.end = item_result.text_offset.start;
+      item_result.shape_result = nullptr;
+      item_result.inline_size = LayoutUnit();
+      collapsed = true;
+      continue;
+    }
+
+    if (item.Type() != InlineItem::kText &&
+        item.Type() != InlineItem::kControl) {
+      break;
+    }
+
+    if (!item_result.Length()) {
+      DCHECK(!item_result.inline_size);
+      continue;
+    }
+
+    DCHECK_GT(item_result.EndOffset(), 0u);
+
+    wtf_size_t i = item_result.EndOffset();
+    for (; i > item_result.StartOffset() &&
+           IsBreakableSpaceOrOtherSeparator(text[i - 1]);
+         i--) {
+    }
+
+    if (i == item_result.EndOffset()) {
+      break;
+    }
+
+    if (i != item_result.StartOffset()) {
+      DCHECK(item_result.shape_result);
+      ShapeResultView* collapsed_shape_result = ShapeResultView::Create(
+          item_result.shape_result, item_result.StartOffset(), i);
+      position_ -=
+          item_result.inline_size - collapsed_shape_result->SnappedWidth();
+      item_result.text_offset.end = i;
+      item_result.shape_result = collapsed_shape_result;
+      item_result.inline_size = collapsed_shape_result->SnappedWidth();
+      collapsed = true;
+      break;
+    }
+
+    position_ -= item_result.inline_size;
+    item_result.text_offset.end = item_result.text_offset.start;
+    item_result.shape_result = nullptr;
+    item_result.inline_size = LayoutUnit();
+    collapsed = true;
+  }
+
+  if (collapsed) {
+    trailing_whitespace_ = WhitespaceState::kCollapsed;
+  } else if (trailing_whitespace_ == WhitespaceState::kUnknown) {
+    trailing_whitespace_ = WhitespaceState::kNone;
   }
 }
 
@@ -2574,8 +2681,7 @@ bool LineBreaker::ComputeTrailingCollapsibleSpaceHelper(LineInfo& line_info) {
   for (auto& item_result : base::Reversed(*line_info.MutableResults())) {
     DCHECK(item_result.item);
     const InlineItem& item = *item_result.item;
-    if (RuntimeEnabledFeatures::NoCollapseSpaceBeforeRubyEnabled() &&
-        item_result.IsRubyColumn()) {
+    if (item_result.IsRubyColumn()) {
       if (ComputeTrailingCollapsibleSpaceHelper(
               item_result.ruby_column->base_line)) {
         if (trailing_collapsible_space_ &&
@@ -2592,8 +2698,7 @@ bool LineBreaker::ComputeTrailingCollapsibleSpaceHelper(LineInfo& line_info) {
       continue;
     }
     if (item.Type() == InlineItem::kText) {
-      if (RuntimeEnabledFeatures::NoCollapseSpaceBeforeRubyEnabled() &&
-          item_result.Length() == 0) {
+      if (item_result.Length() == 0) {
         continue;
       }
       DCHECK_GT(item_result.EndOffset(), 0u);
@@ -3436,10 +3541,8 @@ LineInfo LineBreaker::CreateSubLineInfo(
   sub_line_breaker.disallow_auto_wrap_ = disallow_auto_wrap;
   sub_line_breaker.SetInputRange(start, end_item_index,
                                  initial_whitespace_state, this);
-  if (RuntimeEnabledFeatures::NoCollapseSpaceBeforeRubyEnabled()) {
-    sub_line_breaker.disable_trailing_whitespace_collapsing_ =
-        disable_trailing_whitespace_collapsing;
-  }
+  sub_line_breaker.disable_trailing_whitespace_collapsing_ =
+      disable_trailing_whitespace_collapsing;
   // OverrideAvailableWidth() prevents HandleFloat() from updating
   // available_width_.
   sub_line_breaker.OverrideAvailableWidth(limit);
@@ -3518,10 +3621,7 @@ InlineItemResult* LineBreaker::AddRubyColumnResult(
       position_ -= overhang.start;
     }
   }
-  trailing_whitespace_ =
-      RuntimeEnabledFeatures::NoCollapseSpaceBeforeRubyEnabled()
-          ? WhitespaceState::kUnknown
-          : WhitespaceState::kNone;
+  trailing_whitespace_ = WhitespaceState::kUnknown;
   return column_result;
 }
 
@@ -3907,7 +4007,7 @@ void LineBreaker::HandleCloseTag(const InlineItem& item, LineInfo* line_info) {
           IsBreakableSpace(Text()[item_result->EndOffset() - 1]);
       item_result->can_break_after =
           IsBreakableSpace(Text()[item_result->EndOffset()]) &&
-          (!current_style_->ShouldBreakOnlyAfterWhiteSpace() ||
+          (!ShouldBreakOnlyAfterWhiteSpace(*current_style_) ||
            preceded_by_breakable_space);
       return;
     }
@@ -4184,7 +4284,7 @@ void LineBreaker::RewindOverflow(unsigned new_end, LineInfo* line_info) {
           (break_anywhere_if_overflow_ && !override_break_anywhere_)) {
         DCHECK(item.Style());
         const ComputedStyle& style = *item.Style();
-        if (style.ShouldWrapLine() && !style.ShouldBreakSpaces() &&
+        if (ShouldWrapLine(style) && !style.ShouldBreakSpaces() &&
             IsBreakableSpace(text[item_result.StartOffset()])) {
           // If all characters are trailable spaces, check the next item.
           if (item_result.shape_result &&
@@ -4210,7 +4310,7 @@ void LineBreaker::RewindOverflow(unsigned new_end, LineInfo* line_info) {
       DCHECK_NE(text[item_result.StartOffset()], kNewlineCharacter);
       DCHECK(item.Style());
       const ComputedStyle& style = *item.Style();
-      if (style.ShouldWrapLine() && !style.ShouldBreakSpaces()) {
+      if (ShouldWrapLine(style) && !style.ShouldBreakSpaces()) {
         continue;
       }
     } else if (item.Type() == InlineItem::kOpenTag) {

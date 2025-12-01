@@ -47,6 +47,9 @@ bool ConvertPermissionType(::permissions::RequestType type,
     case ::permissions::RequestType::kIdleDetection:
       *out_type = WEB_VIEW_PERMISSION_TYPE_IDLE_DETECTION;
       return true;
+    case ::permissions::RequestType::kMultipleDownloads:
+      *out_type = WEB_VIEW_PERMISSION_TYPE_MULTIPLE_DOWNLOADS;
+      return true;
     // ----------------------------------------------.
     // Following are unsupported by our handling code.
     // ----------------------------------------------.
@@ -58,7 +61,6 @@ bool ConvertPermissionType(::permissions::RequestType type,
     case ::permissions::RequestType::kFileSystemAccess:
     case ::permissions::RequestType::kIdentityProvider:
     case ::permissions::RequestType::kLocalFonts:
-    case ::permissions::RequestType::kMultipleDownloads:
     case ::permissions::RequestType::kKeyboardLock:
     case ::permissions::RequestType::kPointerLock:
     case ::permissions::RequestType::kStorageAccess:

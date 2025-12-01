@@ -6,11 +6,19 @@
 
 #import "base/metrics/field_trial_params.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
+
 BASE_FEATURE(kEnhancedCalendar,
              "EnhancedCalendar",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsEnhancedCalendarEnabled() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return false;
+  } // End Vivaldi
+
   return base::FeatureList::IsEnabled(kEnhancedCalendar);
 }
 
@@ -19,12 +27,48 @@ BASE_FEATURE(kPageActionMenu,
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsPageActionMenuEnabled() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return false;
+  } // End Vivaldi
+
   return base::FeatureList::IsEnabled(kPageActionMenu);
 }
+
+const char kGLICPromoConsentParams[] = "GLICPromoConsentVariations";
+
+GLICPromoConsentVariations GLICPromoConsentVariationsParam() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return GLICPromoConsentVariations::kDisabled;
+  } // End Vivaldi
+
+  int param = base::GetFieldTrialParamByFeatureAsInt(
+      kGLICPromoConsent, kGLICPromoConsentParams, 0);
+  if (!IsPageActionMenuEnabled()) {
+    return GLICPromoConsentVariations::kDisabled;
+  }
+  if (param == 1) {
+    return GLICPromoConsentVariations::kSinglePage;
+  }
+  if (param == 2) {
+    return GLICPromoConsentVariations::kDoublePage;
+  }
+  if (param == 3) {
+    return GLICPromoConsentVariations::kSkipConsent;
+  }
+  return GLICPromoConsentVariations::kDisabled;
+}
+
+BASE_FEATURE(kGLICPromoConsent,
+             "GLICPromoConsent",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kExplainGeminiEditMenuParams[] = "PositionForExplainGeminiEditMenu";
 
 PositionForExplainGeminiEditMenu ExplainGeminiEditMenuPosition() {
+  if (vivaldi::IsVivaldiRunning()) {
+    return PositionForExplainGeminiEditMenu::kDisabled;
+  } // End Vivaldi
+
   int param = base::GetFieldTrialParamByFeatureAsInt(
       kExplainGeminiEditMenu, kExplainGeminiEditMenuParams, 0);
   if (param == 1) {

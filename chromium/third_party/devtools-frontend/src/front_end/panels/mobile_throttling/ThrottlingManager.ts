@@ -1,6 +1,7 @@
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
@@ -419,7 +420,7 @@ export class ThrottlingManager {
     const warning = new UI.Toolbar.ToolbarItem(icon);
     warning.setTitle(i18nString(UIStrings.excessConcurrency));
 
-    checkbox.checkboxElement.disabled = true;  // Prevent modification while still wiring things up asynchronously below
+    checkbox.disabled = true;  // Prevent modification while still wiring things up asynchronously below
     reset.element.classList.add('concurrency-hidden');
     warning.element.classList.add('concurrency-hidden');
 
@@ -446,9 +447,9 @@ export class ThrottlingManager {
 
       inputElement.value = `${defaultValue}`;
       inputElement.oninput = () => setHardwareConcurrency(Number(inputElement.value));
-      checkbox.checkboxElement.disabled = false;
-      checkbox.checkboxElement.addEventListener('change', () => {
-        this.#hardwareConcurrencyOverrideEnabled = checkbox.checkboxElement.checked;
+      checkbox.disabled = false;
+      checkbox.addEventListener('change', () => {
+        this.#hardwareConcurrencyOverrideEnabled = checkbox.checked;
 
         numericInput.setEnabled(this.hardwareConcurrencyOverrideEnabled);
         setHardwareConcurrency(this.hardwareConcurrencyOverrideEnabled ? Number(inputElement.value) : defaultValue);

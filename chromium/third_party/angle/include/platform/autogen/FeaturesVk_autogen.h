@@ -170,6 +170,12 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
+    FeatureInfo preferGlobalPipelineCache = {
+        "preferGlobalPipelineCache",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
     FeatureInfo supportsYUVSamplerConversion = {
         "supportsYUVSamplerConversion",
         FeatureCategory::VulkanFeatures,
@@ -310,12 +316,6 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo persistentlyMappedBuffers = {
         "persistentlyMappedBuffers",
-        FeatureCategory::VulkanFeatures,
-        &members,
-    };
-
-    FeatureInfo enablePreRotateSurfaces = {
-        "enablePreRotateSurfaces",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -508,12 +508,6 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo emulatedPrerotation270 = {
         "emulatedPrerotation270",
-        FeatureCategory::VulkanFeatures,
-        &members,
-    };
-
-    FeatureInfo preferDriverUniformOverSpecConst = {
-        "preferDriverUniformOverSpecConst",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -980,6 +974,12 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
+    FeatureInfo enableExtraSubmitFence = {
+        "enableExtraSubmitFence",
+        FeatureCategory::VulkanWorkarounds,
+        &members,
+    };
+
     FeatureInfo supportsPipelineProtectedAccess = {
         "supportsPipelineProtectedAccess",
         FeatureCategory::VulkanFeatures,
@@ -1118,6 +1118,12 @@ struct FeaturesVk : FeatureSetBase
         &members,
     };
 
+    FeatureInfo forceHostImageCopyForLuma = {
+        "forceHostImageCopyForLuma",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
     FeatureInfo enableParallelCompileAndLink = {
         "enableParallelCompileAndLink",
         FeatureCategory::VulkanFeatures,
@@ -1246,6 +1252,12 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo useVkEventForBufferBarrier = {
         "useVkEventForBufferBarrier",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo recycleVkEvent = {
+        "recycleVkEvent",
         FeatureCategory::VulkanFeatures,
         &members,
     };
@@ -1420,6 +1432,12 @@ struct FeaturesVk : FeatureSetBase
 
     FeatureInfo supportsTextureCompressionAstcHdr = {
         "supportsTextureCompressionAstcHdr",
+        FeatureCategory::VulkanFeatures,
+        &members,
+    };
+
+    FeatureInfo supportsAstcHdr3dTextures = {
+        "supportsAstcHdr3dTextures",
         FeatureCategory::VulkanFeatures,
         &members,
     };

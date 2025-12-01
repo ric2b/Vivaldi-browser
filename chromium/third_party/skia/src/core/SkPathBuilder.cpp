@@ -8,6 +8,8 @@
 #include "include/core/SkPathBuilder.h"
 
 #include "include/core/SkMatrix.h"
+#include "include/core/SkPath.h"
+#include "include/core/SkPathTypes.h"
 #include "include/core/SkRRect.h"
 #include "include/private/SkPathRef.h"
 #include "include/private/base/SkFloatingPoint.h"
@@ -23,6 +25,22 @@
 #include <cstring>
 #include <iterator>
 #include <utility>
+
+namespace {
+
+void subdivide_cubic_to(SkPathBuilder* path, const SkPoint pts[4], int level = 2) {
+    if (--level >= 0) {
+        SkPoint tmp[7];
+
+        SkChopCubicAtHalf(pts, tmp);
+        subdivide_cubic_to(path, &tmp[0], level);
+        subdivide_cubic_to(path, &tmp[3], level);
+    } else {
+        path->cubicTo(pts[1], pts[2], pts[3]);
+    }
+}
+
+}  // namespace
 
 SkPathBuilder::SkPathBuilder() {
     this->reset();
@@ -817,8 +835,47 @@ SkPathBuilder& SkPathBuilder::addPath(const SkPath& src) {
     return *this;
 }
 
-SkPathBuilder& SkPathBuilder::privateReverseAddPath(const SkPath& src) {
+// ignore the last point of the 1st contour
+SkPathBuilder& SkPathBuilder::privateReversePathTo(const SkPath& path) {
+    if (path.fPathRef->fVerbs.empty()) {
+        return *this;
+    }
 
+    const uint8_t* verbs = path.fPathRef->verbsEnd();
+    const uint8_t* verbsBegin = path.fPathRef->verbsBegin();
+    const SkPoint*  pts = path.fPathRef->pointsEnd() - 1;
+    const SkScalar* conicWeights = path.fPathRef->conicWeightsEnd();
+
+    while (verbs > verbsBegin) {
+        uint8_t v = *--verbs;
+        pts -= SkPathPriv::PtsInVerb(v);
+        switch (v) {
+            case SkPath::Verb::kMove_Verb:
+                // if the path has multiple contours, stop after reversing the last
+                return *this;
+            case SkPath::Verb::kLine_Verb:
+                this->lineTo(pts[0]);
+                break;
+            case SkPath::Verb::kQuad_Verb:
+                this->quadTo(pts[1], pts[0]);
+                break;
+            case SkPath::Verb::kConic_Verb:
+                this->conicTo(pts[1], pts[0], *--conicWeights);
+                break;
+            case SkPath::Verb::kCubic_Verb:
+                this->cubicTo(pts[2], pts[1], pts[0]);
+                break;
+            case SkPath::Verb::kClose_Verb:
+                break;
+            default:
+                SkDEBUGFAIL("bad verb");
+                break;
+        }
+    }
+    return *this;
+}
+
+SkPathBuilder& SkPathBuilder::privateReverseAddPath(const SkPath& src) {
     const uint8_t* verbsBegin = src.fPathRef->verbsBegin();
     const uint8_t* verbs = src.fPathRef->verbsEnd();
     const SkPoint* pts = src.fPathRef->pointsEnd();
@@ -865,4 +922,88 @@ SkPathBuilder& SkPathBuilder::privateReverseAddPath(const SkPath& src) {
         }
     }
     return *this;
+}
+
+std::optional<SkPoint> SkPathBuilder::getLastPt() const {
+    int count = this->fPts.size();
+    if (count > 0) {
+        return this->fPts.at(count - 1);
+    }
+    return std::nullopt;
+};
+
+void SkPathBuilder::setLastPt(SkScalar x, SkScalar y) {
+    int count = fPts.size();
+    if (count == 0) {
+        this->moveTo(x, y);
+    } else {
+        fPts.at(count-1).set(x, y);
+    }
+}
+
+SkPathBuilder& SkPathBuilder::transform(const SkMatrix& matrix, SkApplyPerspectiveClip pc) {
+    if (matrix.isIdentity()) {
+        return *this;
+    }
+
+    if (matrix.hasPerspective()) {
+        SkPath src = this->detach();
+
+        // Apply perspective clip if needed.
+        if (pc == SkApplyPerspectiveClip::kYes) {
+            SkPath clipped;
+            if (SkPathPriv::PerspectiveClip(src, matrix, &clipped)) {
+                src = std::move(clipped);
+            }
+        }
+
+        // Convert to a format more amenable to perspective.
+        *this = SkPathBuilder(fFillType);
+        for (auto [verb, pts, wt] : SkPathPriv::Iterate(src)) {
+            switch (verb) {
+                case SkPathVerb::kMove:
+                    this->moveTo(pts[0]);
+                    break;
+                case SkPathVerb::kLine:
+                    this->lineTo(pts[1]);
+                    break;
+                case SkPathVerb::kQuad:
+                    // promote the quad to a conic
+                    this->conicTo(pts[1], pts[2],
+                                  SkConic::TransformW(pts, SK_Scalar1, matrix));
+                    break;
+                case SkPathVerb::kConic:
+                    this->conicTo(pts[1], pts[2],
+                                  SkConic::TransformW(pts, wt[0], matrix));
+                    break;
+                case SkPathVerb::kCubic:
+                    subdivide_cubic_to(this, pts);
+                    break;
+                case SkPathVerb::kClose:
+                    this->close();
+                    break;
+            }
+        }
+    }
+
+    matrix.mapPoints(fPts.data(), fPts.size());
+
+    // TODO: handle bounds, convexity, and direction when added.
+
+    return *this;
+}
+
+bool SkPathBuilder::isZeroLengthSincePoint(int startPtIndex) const {
+    int count = fPts.size() - startPtIndex;
+    if (count < 2) {
+        return true;
+    }
+    const SkPoint* pts = fPts.begin() + startPtIndex;
+    const SkPoint& first = *pts;
+    for (int index = 1; index < count; ++index) {
+        if (first != pts[index]) {
+            return false;
+        }
+    }
+    return true;
 }

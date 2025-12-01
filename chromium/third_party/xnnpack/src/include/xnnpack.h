@@ -55,7 +55,7 @@ extern "C" {
 /// Enable timing of each operator's runtime.
 #define XNN_FLAG_BASIC_PROFILING 0x00000008
 
-/// Enable the just-in-time compiler.
+/// Deprecated
 #define XNN_FLAG_JIT 0x00000010
 
 /// The convolution operator represents a depthwise convolution, and use HWGo layout for filters.
@@ -201,7 +201,7 @@ enum xnn_status xnn_initialize(const struct xnn_allocator* allocator);
 
 /// Deinitialize XNNPACK library.
 ///
-/// To avoid memory and resource leaks, users must call xnn_deinitialize once for each successful xnn_initialize call.
+/// Currently, this does nothing.
 ///
 /// @retval xnn_status_success - deinitialization call succeeded.
 enum xnn_status xnn_deinitialize(void);
@@ -449,6 +449,23 @@ enum xnn_status xnn_define_channelwise_quantized_tensor_value_v2(
 ///                     number of input channel element per output channel.
 ///                     For Fully connected operators with 2d filters of size [output_channels, input_channels],
 ///                     expecting number of scale values to be = output_channels * (input_channels / block_size).
+/// @param scale_type - datatype of the scale. bf6 & fp16 are supported,
+///                     however, only 7 mantisaa bits are used for scale calculation.
+enum xnn_status xnn_define_blockwise_quantized_tensor_value_v2(
+  xnn_subgraph_t subgraph,
+  enum xnn_datatype datatype,
+  int32_t zero_point,
+  const void* scale,
+  size_t num_dims,
+  size_t channel_dim,
+  size_t block_size,
+  const size_t* dims,
+  const void* data,
+  uint32_t external_id,
+  uint32_t flags,
+  enum xnn_datatype scale_type,
+  uint32_t* id_out);
+
 enum xnn_status xnn_define_blockwise_quantized_tensor_value(
   xnn_subgraph_t subgraph,
   enum xnn_datatype datatype,
@@ -1205,54 +1222,6 @@ struct xnn_attention_logits_cap_tanh_params {
   float cap;
 };
 
-/// Define a Scaled Dot-Product Attention Node and add it to a Subgraph.
-///
-/// This operator is experimental.
-///
-/// The Scaled Dot-Product Attention Node computes a multi-head or multi-query scaled dot attention on the query, key,
-/// and value tensors.
-///
-/// @param subgraph - a Subgraph object that will own the created Node.
-/// @param cap_type - type of cap to be applied to the logits.
-/// @param cap_params - parameters for the cap. Must be a pointer to xnn_attention_logits_cap_tanh_params if cap_type
-///                     is xnn_attention_logits_cap_type_tanh.
-/// @param query_id - Value ID for the query tensor. The query tensor must be a 3+-dimensional tensor defined in the
-///                   @a subgraph with the dimensions as [*, H, T, C], where H/T/C are the heads/tokens/channels, and *
-///                   is the 0 or more dimensions treated as batch size.
-/// @param key_id - Value ID for the key tensor. The key tensor must be a 2+--dimensional tensor defined in the
-///                 @a subgraph. It can have the same number of dimensions as the query, with the dimensions as
-///                 [*, H, U, C] (multi-head), or have 1 less dimension than the query, with the dimensions as
-///                 as [*, U, C] (multi-query, number of heads omitted implies single head), where H/U/C are the
-///                 heads/key_value_tokens/channels, and * is the 0 or more dimensions treated as batch size. These
-///                 batch size dimensions must be the same as query.
-/// @param value_id - Value ID for the value tensor. The value tensor must be a 2+--dimensional tensor defined in the
-///                   @a subgraph. It can have the same number of dimensions as the query, with the dimensions as
-///                   [*, H, U, D] (multi-head), or have 1 less dimension than the query, with the dimensions as
-///                   as [*, U, D] (multi-query, number of heads omitted implies single head), where H/U/D are the
-///                   heads/key_value_tokens/value_channels, and * is the 0 or more dimensions treated as batch size.
-///                   These batch size dimensions must be the same as query and key.
-/// @param scale_id - Value ID for the scale tensor. The scale tensor must be a 1D tensor defined in the @a subgraph
-///                   with [C] dimensions. The query tensor is multiplied with this scale tensor before the dot product
-///                   with the key tensor.
-/// @param mask_id - Value ID for the mask tensor. The mask tensor must be a 2D tensor defined in the @a subgraph with
-///                  [T, U] dimensions. The mask tensor is added to the logits (query dot value).
-/// @param output_id - Value ID for the output tensor. The output tensor must be a 3+-dimensional tensor defined in the
-///                    @a subgraph with the dimensions as [*, H, T, D], where H/T/D are the heads/tokens/value_channels,
-///                    and * is the 0 or more dimensions treated as batch size. These batch size dimensions must be the
-///                    same as query, key, and value.
-/// @param flags - binary features of the Scaled Dot Product Attention Node. No supported flags are currently defined.
-enum xnn_status xnn_define_scaled_dot_product_attention(
-  xnn_subgraph_t subgraph,
-  enum xnn_attention_logits_cap_type cap_type,
-  const void* cap_params,
-  uint32_t query_id,
-  uint32_t key_id,
-  uint32_t value_id,
-  uint32_t scale_id,
-  uint32_t mask_id,
-  uint32_t output_id,
-  uint32_t flags);
-
 /// Define a Subtract Node and add it to a Subgraph.
 ///
 /// The Subtract Node computes elementwise subtraction of two tensor inputs with numpy broadcasting rules.
@@ -1407,11 +1376,15 @@ enum xnn_status xnn_define_static_constant_pad(
 ///
 /// @param subgraph - a Subgraph object that will own the created Node.
 /// @param num_new_axes - number of new axes of size 1 to be inserted.
-/// @param new_axes - The axis positions of the new axes in the expanded dimensions.
-/// @param input_id - Value ID for the input tensor. The input tensor must be defined in the @a subgraph.
-/// @param output_id - Value ID for the output tensor. The output tensor must be defined in the @a subgraph, and its
-///                    shape must match the shape of the input tensor with padding.
-/// @param flags - binary features of the Constant Pad Node. No supported flags are currently defined.
+/// @param new_axes - The axis positions of the new axes in the expanded
+///                   dimensions.
+/// @param input_id - Value ID for the input tensor. The input tensor must be
+///                   defined in the @a subgraph.
+/// @param output_id - Value ID for the output tensor. The output tensor must be
+///                    defined in the @a subgraph, and its shape must match the
+///                    shape of the input tensor with padding.
+/// @param flags - binary features of the Expand Dims Node. No supported flags
+/// are currently defined.
 enum xnn_status xnn_define_static_expand_dims(
   xnn_subgraph_t subgraph,
   size_t num_new_axes,
@@ -1419,6 +1392,63 @@ enum xnn_status xnn_define_static_expand_dims(
   uint32_t input_id,
   uint32_t output_id,
   uint32_t flags);
+
+/// Define a Fuse Dims Node with and add it to a Subgraph.
+///
+/// Given an input Tensor of shape `[a, b, c, d]` and @a axis = 1 and
+/// @a axes_count = 2, this node reshapes the Tensor to the shape
+/// `[a, b * c, d]`.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param axis - The index of the first dimension to be contracted.
+/// @param axes_count - The number of dimensions, starting from @a axis,
+///                     to contract.
+/// @param input_id - Value ID for the input tensor. The input tensor must be
+///                   defined in the @a subgraph.
+/// @param output_id - Value ID for the output tensor. The output tensor must be
+///                    defined in the @a subgraph.
+/// @param flags - binary features of the Fuse Dims Node. No supported flags
+///                are currently defined.
+enum xnn_status xnn_define_fuse_dims(  //
+    xnn_subgraph_t subgraph,                  //
+    size_t axis,                       //
+    size_t axes_count,                        //
+    uint32_t input_id,                        //
+    uint32_t output_id,                       //
+    uint32_t flags);
+
+/// Define a Split Dims Node with and add it to a Subgraph.
+///
+/// Given an input Tensor of shape `[a, b, c]` and @a axis = 1,
+/// @a num_splits = 3, and @a splits = `[3, 0, 2]`, this node reshapes the
+/// Tensor to the shape `[a, 3, b / (3 * 2), 2, c]`, i.e. the first zero in
+/// @a splits is replaced with the original dimension divided by the product of
+/// the non-zero entries of @a splits. Note that if the original dimension is
+/// not an integer multiple of the product of non-zero entries of @a splits, an
+/// error is returned.
+///
+/// @param subgraph - a Subgraph object that will own the created Node.
+/// @param axis - The index of the first dimension to split.
+/// @param num_splits - The number of dimensions in which to split the given
+///                     @a axis.
+/// @param splits - The size of the dimensions in which to split the given
+///                 @a axis.
+/// @param input_id - Value ID for the input tensor. The input tensor must be
+///                   defined in the @a subgraph.
+/// @param output_id - Value ID for the output tensor. The output tensor must be
+///                    defined in the @a subgraph, and its
+///                    shape must match the shape of the input tensor with
+///                    padding.
+/// @param flags - binary features of the Split Dims Node. No supported flags
+///                are currently defined.
+enum xnn_status xnn_define_split_dim(  //
+    xnn_subgraph_t subgraph,                   //
+    size_t axis,                               //
+    size_t num_splits,                         //
+    const size_t* splits,                      //
+    uint32_t input_id,                         //
+    uint32_t output_id,                        //
+    uint32_t flags);
 
 /// Define a Mean Node and add it to a Subgraph.
 ///
@@ -1444,6 +1474,8 @@ enum xnn_reduce_operator {
   xnn_reduce_invalid = -1,
   xnn_reduce_sum,
   xnn_reduce_mean,
+  xnn_reduce_max,
+  xnn_reduce_min,
 };
 
 /// Define a Reduce Node and add it to a Subgraph.
@@ -1680,11 +1712,11 @@ enum xnn_status xnn_define_copy(
 ///                    dimensions is added to it.
 /// @param input_id - Value ID for the input tensor. The input tensor must be an N-dimensional tensor defined in the @a
 ///                   subgraph.
-/// @param num_outputs - The number of output tensors to generate. The input tensor will be evenly split into 
-///                      this number of output tensors along the `split_dim`. Each output tensor will have 
-///                      the same dimensions as the input tensor, except for the `split_dim`, which will be 
+/// @param num_outputs - The number of output tensors to generate. The input tensor will be evenly split into
+///                      this number of output tensors along the `split_dim`. Each output tensor will have
+///                      the same dimensions as the input tensor, except for the `split_dim`, which will be
 ///                      divided evenly between the outputs.
-/// @param outputs - An array of Value IDs for the output tensors. Each output tensor must be an N-dimensional 
+/// @param outputs - An array of Value IDs for the output tensors. Each output tensor must be an N-dimensional
 ///                  tensor defined in the @a subgraph with the same shape as the input tensor, except along the
 ///                  `split_dim` dimension, which will be split evenly among the output tensors. The number of
 ///                  output tensors corresponds to the value of `num_outputs`.
@@ -2226,9 +2258,6 @@ XNN_DEPRECATED enum xnn_status xnn_define_tanh(
   uint32_t input_id,
   uint32_t output_id,
   uint32_t flags);
-
-/// Code cache is a cache for JIT generated code.
-typedef struct xnn_code_cache* xnn_code_cache_t;
 
 /// Weights cache can be finalized in these ways:
 enum xnn_weights_cache_finalization_kind {
@@ -2896,7 +2925,6 @@ enum xnn_status xnn_create_convolution2d_nchw_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -2935,7 +2963,6 @@ enum xnn_status xnn_create_convolution2d_nchw_f32(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -2974,7 +3001,6 @@ enum xnn_status xnn_create_convolution2d_nhwc_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -3016,7 +3042,6 @@ enum xnn_status xnn_create_convolution2d_nhwc_f32(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -3041,7 +3066,6 @@ enum xnn_status xnn_create_convolution2d_nhwc_f32_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -3070,7 +3094,6 @@ enum xnn_status xnn_create_fused_convolution2d_nhwc_f32(
     size_t num_post_operations,
     struct xnn_post_operation* post_operations,
     uint32_t flags,
-    xnn_code_cache_t code_cache,
     xnn_weights_cache_t weights_cache,
     xnn_operator_t* convolution_op_out);
 
@@ -3100,7 +3123,7 @@ enum xnn_status xnn_create_convolution2d_nhwc_qd8_f16_qc8w(
     size_t group_output_channels, size_t input_channel_stride,
     size_t output_channel_stride, const float* kernel_scale,
     const int8_t* kernel, const float* bias, float output_min, float output_max,
-    uint32_t flags, xnn_code_cache_t code_cache,
+    uint32_t flags,
     xnn_weights_cache_t weights_cache, xnn_operator_t* convolution_op_out);
 
 enum xnn_status xnn_create_convolution2d_nhwc_qd8_f32_qc8w(
@@ -3112,7 +3135,7 @@ enum xnn_status xnn_create_convolution2d_nhwc_qd8_f32_qc8w(
     size_t group_output_channels, size_t input_channel_stride,
     size_t output_channel_stride, const float* kernel_scale,
     const int8_t* kernel, const float* bias, float output_min, float output_max,
-    uint32_t flags, xnn_code_cache_t code_cache,
+    uint32_t flags,
     xnn_weights_cache_t weights_cache, xnn_operator_t* convolution_op_out);
 
 enum xnn_status xnn_create_convolution2d_nhwc_qs8(
@@ -3141,7 +3164,6 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8(
   int8_t output_min,
   int8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -3210,7 +3232,6 @@ enum xnn_status xnn_create_convolution2d_nhwc_qs8_qc8w(
   int8_t output_min,
   int8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -3258,7 +3279,6 @@ enum xnn_status xnn_create_convolution2d_nhwc_qu8(
   uint8_t output_min,
   uint8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* convolution_op_out);
 
@@ -3361,7 +3381,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3402,7 +3421,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_f32(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3427,7 +3445,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_f32_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3469,7 +3486,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_qd8_f32_qc8w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3516,7 +3532,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_qs8(
   int8_t output_min,
   int8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3562,7 +3577,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_qs8_qc8w(
   int8_t output_min,
   int8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3609,7 +3623,6 @@ enum xnn_status xnn_create_deconvolution2d_nhwc_qu8(
   uint8_t output_min,
   uint8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* deconvolution_op_out);
 
@@ -3794,7 +3807,6 @@ enum xnn_status xnn_create_fully_connected_nc_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3818,7 +3830,6 @@ enum xnn_status xnn_create_fully_connected_nc_f32_f16(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3832,7 +3843,6 @@ enum xnn_status xnn_create_fully_connected_nc_bf16_f32(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3846,7 +3856,6 @@ enum xnn_status xnn_create_fully_connected_nc_f32(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3892,7 +3901,6 @@ enum xnn_status xnn_create_fully_connected_nc_f32_qc4w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3917,7 +3925,6 @@ enum xnn_status xnn_create_fully_connected_nc_f32_qc8w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3943,7 +3950,6 @@ enum xnn_status xnn_create_fully_connected_nc_qd8_f16_qc4w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -3971,7 +3977,6 @@ enum xnn_status xnn_create_fully_connected_nc_qd8_f16_qb4w(
     float output_min,
     float output_max,
     uint32_t flags,
-    xnn_code_cache_t code_cache,
     xnn_weights_cache_t weights_cache,
     xnn_operator_t* fully_connected_op_out);
 
@@ -3998,7 +4003,6 @@ enum xnn_status xnn_create_fully_connected_nc_qd8_f32_qc4w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4026,7 +4030,6 @@ enum xnn_status xnn_create_fully_connected_nc_qd8_f32_qb4w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4052,7 +4055,6 @@ enum xnn_status xnn_create_fully_connected_nc_qd8_f16_qc8w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4078,7 +4080,6 @@ enum xnn_status xnn_create_fully_connected_nc_qd8_f32_qc8w(
   float output_min,
   float output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4108,7 +4109,6 @@ enum xnn_status xnn_create_fully_connected_nc_qs8(
   int8_t output_min,
   int8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4118,6 +4118,35 @@ enum xnn_status xnn_reshape_fully_connected_nc_qs8(
   pthreadpool_t threadpool);
 
 enum xnn_status xnn_setup_fully_connected_nc_qs8(
+  xnn_operator_t fully_connected_op,
+  const int8_t* input,
+  int8_t* output);
+
+enum xnn_status xnn_create_fully_connected_nc_qs8_qc4w(
+  size_t input_channels,
+  size_t output_channels,
+  size_t input_stride,
+  size_t output_stride,
+  int8_t input_zero_point,
+  float input_scale,
+  uint8_t kernel_zero_point,
+  const float* kernel_scale,
+  const void* kernel,
+  const int32_t* bias,
+  int8_t output_zero_point,
+  float output_scale,
+  int8_t output_min,
+  int8_t output_max,
+  uint32_t flags,
+  xnn_weights_cache_t weights_cache,
+  xnn_operator_t* fully_connected_op_out);
+
+enum xnn_status xnn_reshape_fully_connected_nc_qs8_qc4w(
+  xnn_operator_t fully_connected_op,
+  size_t batch_size,
+  pthreadpool_t threadpool);
+
+enum xnn_status xnn_setup_fully_connected_nc_qs8_qc4w(
   xnn_operator_t fully_connected_op,
   const int8_t* input,
   int8_t* output);
@@ -4137,7 +4166,6 @@ enum xnn_status xnn_create_fully_connected_nc_qs8_qc8w(
   int8_t output_min,
   int8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4167,7 +4195,6 @@ enum xnn_status xnn_create_fully_connected_nc_qu8(
   uint8_t output_min,
   uint8_t output_max,
   uint32_t flags,
-  xnn_code_cache_t code_cache,
   xnn_weights_cache_t weights_cache,
   xnn_operator_t* fully_connected_op_out);
 
@@ -4421,86 +4448,6 @@ enum xnn_status xnn_setup_rope_nthc_f32(
   const float* weights,
   float* output);
 
-// N: batch size
-// H: number of heads
-// T: tokens (sequence length)
-// C: channels (head dimension)
-enum xnn_status xnn_create_scaled_dot_product_attention_nhtc_f16(
-  enum xnn_attention_logits_cap_type cap_type,
-  const void* cap_params,
-  uint32_t flags,
-  xnn_operator_t* attention_op_out);
-
-enum xnn_status xnn_reshape_scaled_dot_product_attention_nhtc_f16(
-  xnn_operator_t attention_op,
-  size_t batch_size,
-  size_t query_heads,
-  // Number of tokens in query.
-  size_t query_tokens,
-  size_t key_value_heads,
-  // Number of tokens in key/value. For self-attention, this is same as tokens.
-  size_t key_value_tokens,
-  size_t query_key_channels,
-  size_t value_channels,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
-  pthreadpool_t threadpool);
-
-// Query is of dimension [batch_size, query_heads, query_tokens, channels].
-// Key and value are of dimension [batch_size, key_value_heads, key_value_tokens, channels].
-// Scale is of dimension [channels].
-// Mask is of dimension [query_tokens, key_value_tokens].
-enum xnn_status xnn_setup_scaled_dot_product_attention_nhtc_f16(
-  xnn_operator_t attention_op,
-  void* workspace,
-  const void* query,
-  const void* key,
-  const void* value,
-  const void* scale,
-  const void* mask,
-  void* output);
-
-// N: batch size
-// H: number of heads
-// T: tokens (sequence length)
-// C: channels (head dimension)
-enum xnn_status xnn_create_scaled_dot_product_attention_nhtc_f32(
-  enum xnn_attention_logits_cap_type cap_type,
-  const void* cap_params,
-  uint32_t flags,
-  xnn_operator_t* attention_op_out);
-
-enum xnn_status xnn_reshape_scaled_dot_product_attention_nhtc_f32(
-  xnn_operator_t attention_op,
-  size_t batch_size,
-  size_t query_heads,
-  // Number of tokens in query.
-  size_t query_tokens,
-  size_t key_value_heads,
-  // Number of tokens in key/value. For self-attention, this is same as tokens.
-  size_t key_value_tokens,
-  size_t query_key_channels,
-  size_t value_channels,
-  size_t* workspace_size,
-  size_t* workspace_alignment,
-  pthreadpool_t threadpool);
-
-// Query is of dimension [batch_size, query_heads, query_tokens, query_key_channels].
-// Key and value are of dimension [batch_size, key_value_heads, key_value_tokens, query_key_channels].
-// Scale is of dimension [query_key_channels].
-// Mask is of dimension [query_tokens, key_value_tokens].
-// Output is of dimension [batch_size, query_heads, query_tokens, value_channels].
-enum xnn_status xnn_setup_scaled_dot_product_attention_nhtc_f32(
-  xnn_operator_t attention_op,
-  void* workspace,
-  const float* query,
-  const float* key,
-  const float* value,
-  const float* scale,
-  const float* mask,
-  float* output);
-
-
 enum xnn_status xnn_create_slice_nd_x16(
   uint32_t flags,
   xnn_operator_t* slice_op_out);
@@ -4748,9 +4695,6 @@ enum xnn_status xnn_create_unpooling2d_nhwc_x32(
   uint32_t input_padding_left,
   uint32_t pooling_height,
   uint32_t pooling_width,
-  size_t channels,
-  size_t input_pixel_stride,
-  size_t output_pixel_stride,
   uint32_t flags,
   xnn_operator_t* unpooling_op_out);
 
@@ -4759,6 +4703,9 @@ enum xnn_status xnn_reshape_unpooling2d_nhwc_x32(
   size_t batch_size,
   size_t input_height,
   size_t input_width,
+  size_t channels,
+  size_t input_pixel_stride,
+  size_t output_pixel_stride,
   size_t* output_height_out,
   size_t* output_width_out,
   pthreadpool_t threadpool);

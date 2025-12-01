@@ -396,7 +396,7 @@ ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
     ShaderModuleParseResult* parseResult,
-    OwnedCompilationMessages* compilationMessages) {
+    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
     return ShaderModule::Create(this, descriptor, internalExtensions, parseResult,
                                 compilationMessages);
 }
@@ -493,7 +493,7 @@ MaybeError Device::CopyFromStagingToBufferImpl(BufferBase* source,
         ToBackend(GetQueue())->GetPendingCommandContext(QueueBase::SubmitMode::Passive);
 
     Buffer* dstBuffer = ToBackend(destination);
-    DAWN_TRY(dstBuffer->SynchronizeBufferBeforeUse());
+    DAWN_TRY(dstBuffer->SynchronizeBufferBeforeUseOnGPU());
 
     [[maybe_unused]] bool cleared;
     DAWN_TRY_ASSIGN(cleared, dstBuffer->EnsureDataInitializedAsDestination(

@@ -21,7 +21,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_auto_reset.h"
 #include "base/memory/weak_ptr.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/observer_list_internal.h"
 #include "base/run_loop.h"
@@ -571,6 +570,11 @@ bool InteractionSequence::IsCurrentStepInAnyContextForTesting() const {
   return current_step_->in_any_context;
 }
 
+bool InteractionSequence::IsCurrentStepImmediateForTesting() const {
+  CHECK(current_step_);
+  return current_step_->step_start_mode == StepStartMode::kImmediate;
+}
+
 void InteractionSequence::FailForTesting() {
   Abort(AbortedReason::kFailedForTesting);
 }
@@ -633,6 +637,15 @@ InteractionSequence::AbortedData InteractionSequence::BuildAbortedData(
           aborted_data.subsequence_failures.emplace_back(
               data.result == false ? std::make_optional(data.aborted_data)
                                    : std::nullopt);
+        }
+      } else if (reason == AbortedReason::kSequenceTimedOut) {
+        for (const auto& data : next_step()->subsequence_data) {
+          if (data.result == false) {
+            aborted_data.subsequence_failures.emplace_back(data.aborted_data);
+          } else if (data.result != true && data.sequence) {
+            aborted_data.subsequence_failures.emplace_back(
+                data.sequence->BuildAbortedData(reason));
+          }
         }
       }
       if (const auto* ctx =
@@ -744,7 +757,7 @@ void InteractionSequence::OnElementHidden(TrackedElement* element) {
     if (next_step()->uses_named_element()) {
       // Find the named element; if it still exists, it hasn't been hidden.
       const auto it = named_elements_.find(next_step()->element_name);
-      CHECK(it != named_elements_.end(), base::NotFatalUntil::M130);
+      CHECK(it != named_elements_.end());
       if (it->second.get()) {
         return;
       }
@@ -1096,8 +1109,13 @@ void InteractionSequence::CompleteStepTransition() {
 
   // For step types where the element passed to a callback must not be null,
   // ensure there is an element.
-  CHECK(AllowNullElementInStartCallback(current_step_->type) ||
-        !current_step_->start_callback || current_step_->element);
+  if (!AllowNullElementInStartCallback(current_step_->type) &&
+      current_step_->start_callback && !current_step_->element) {
+    LOG(ERROR) << "Assumption violated: Start callback for this step should "
+                  "always have a valid element!";
+    Abort(AbortedReason::kElementHiddenBetweenTriggerAndStepStart);
+    return;
+  }
   RunIfValid(std::move(current_step_->start_callback), this,
              current_step_->element.get());
   if (!abort_guard) {
@@ -1583,11 +1601,22 @@ void PrintTo(const InteractionSequence::AbortedData& data, std::ostream* os) {
   }
   if (data.aborted_reason ==
       InteractionSequence::AbortedReason::kSubsequenceFailed) {
-    *os << "; subsequence failures:";
+    *os << "\nsubsequence failures:";
     size_t i = 0;
     for (auto& subsequence : data.subsequence_failures) {
       if (subsequence) {
-        *os << " { subsequence " << i << " failed " << *subsequence << " }";
+        *os << "\n - subsequence " << i << " failed: " << *subsequence;
+      }
+      ++i;
+    }
+  } else if (data.aborted_reason ==
+                 InteractionSequence::AbortedReason::kSequenceTimedOut &&
+             !data.subsequence_failures.empty()) {
+    *os << "\nsubsequence failures and timeouts:";
+    size_t i = 0;
+    for (auto& subsequence : data.subsequence_failures) {
+      if (subsequence) {
+        *os << "\n - subsequence " << i << ": " << *subsequence;
       }
       ++i;
     }

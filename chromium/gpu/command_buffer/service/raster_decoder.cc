@@ -59,6 +59,7 @@
 #include "gpu/command_buffer/service/feature_info.h"
 #include "gpu/command_buffer/service/gl_utils.h"
 #include "gpu/command_buffer/service/gpu_tracer.h"
+#include "gpu/command_buffer/service/graphite_shared_context.h"
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/raster_cmd_validation.h"
@@ -148,12 +149,6 @@ base::AtomicSequenceNumber g_raster_decoder_id;
 BASE_FEATURE(kGpuYieldRasterization,
              "GpuYieldRasterization",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Controls how one component textures are supported over raster decoder for
-// VideoResourceUpdater.
-BASE_FEATURE(kDisableOneComponentTextureConditionally,
-             "DisableOneComponentTextureConditionally",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Controls how many ops are rastered before checking if we should yield.
 const base::FeatureParam<int> kGpuYieldRasterizationOpCount(
@@ -352,7 +347,7 @@ class RasterCommandsCompletedQuery : public QueryManager::Query {
       gr_context->flush(info);
       gr_context->submit();
     } else {
-      CHECK(shared_context_state_->graphite_context());
+      CHECK(shared_context_state_->graphite_shared_context());
       auto recording =
           shared_context_state_->gpu_main_graphite_recorder()->snap();
       if (recording) {
@@ -363,8 +358,8 @@ class RasterCommandsCompletedQuery : public QueryManager::Query {
         };
         info.fFinishedContext = new base::WeakPtr<RasterCommandsCompletedQuery>(
             weak_ptr_factory_.GetWeakPtr());
-        shared_context_state_->graphite_context()->insertRecording(info);
-        shared_context_state_->graphite_context()->submit();
+        shared_context_state_->graphite_shared_context()->insertRecording(info);
+        shared_context_state_->graphite_shared_context()->submit();
       } else {
         finished_ = true;
       }
@@ -424,7 +419,7 @@ class RasterQueryManager : public QueryManager {
                      QuerySync* sync) override {
     if (target == GL_COMMANDS_COMPLETED_CHROMIUM &&
         (shared_context_state_->gr_context() ||
-         shared_context_state_->graphite_context())) {
+         shared_context_state_->graphite_shared_context())) {
       auto query = base::MakeRefCounted<RasterCommandsCompletedQuery>(
           shared_context_state_, this, target, std::move(buffer), sync);
       std::pair<QueryMap::iterator, bool> result =
@@ -624,8 +619,8 @@ class RasterDecoderImpl final : public RasterDecoder,
   GrDirectContext* gr_context() const {
     return shared_context_state_->gr_context();
   }
-  skgpu::graphite::Context* graphite_context() const {
-    return shared_context_state_->graphite_context();
+  GraphiteSharedContext* graphite_shared_context() const {
+    return shared_context_state_->graphite_shared_context();
   }
   skgpu::graphite::Recorder* graphite_recorder() const {
     return shared_context_state_->gpu_main_graphite_recorder();
@@ -1088,7 +1083,7 @@ ContextResult RasterDecoderImpl::Initialize(
   query_manager_ = std::make_unique<RasterQueryManager>(shared_context_state_);
 
   if (attrib_helper.enable_gpu_rasterization) {
-    DCHECK(gr_context() || graphite_context());
+    DCHECK(gr_context() || graphite_shared_context());
     use_gpu_raster_ = true;
     paint_cache_ = std::make_unique<cc::ServicePaintCache>();
   }
@@ -1110,10 +1105,8 @@ void RasterDecoderImpl::Destroy(bool have_context) {
     DoEndRasterCHROMIUM();
   }
 
-  if (have_context) {
-    if (use_gpu_raster_) {
-      transfer_cache()->DeleteAllEntriesForDecoder(raster_decoder_id_);
-    }
+  if (have_context && use_gpu_raster_ && transfer_cache()) {
+    transfer_cache()->DeleteAllEntriesForDecoder(raster_decoder_id_);
   }
 
   if (query_manager_) {
@@ -1189,24 +1182,18 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
   caps.render_buffer_format_bgra8888 =
       feature_info()->feature_flags().ext_render_buffer_format_bgra8888;
 
-  if (base::FeatureList::IsEnabled(kDisableOneComponentTextureConditionally)) {
-    if (shared_context_state_->GrContextIsGL()) {
-      caps.disable_one_component_textures =
-          display_context_on_another_thread_ &&
-          workarounds().avoid_one_component_egl_images;
-    } else if (shared_context_state_->GrContextIsVulkan() ||
-               shared_context_state_->IsGraphiteDawnVulkan()) {
-      // Vulkan currently doesn't support single-component cross-thread shared
-      // images for WebView.
-      const bool is_drdc = features::IsDrDcEnabled() &&
-                           !feature_info()->workarounds().disable_drdc;
-      caps.disable_one_component_textures =
-          display_context_on_another_thread_ && !is_drdc;
-    }
-  } else {
+  if (shared_context_state_->GrContextIsGL()) {
     caps.disable_one_component_textures =
-        workarounds().avoid_one_component_egl_images ||
-        (display_context_on_another_thread_ && features::IsUsingVulkan());
+        display_context_on_another_thread_ &&
+        workarounds().avoid_one_component_egl_images;
+  } else if (shared_context_state_->GrContextIsVulkan() ||
+             shared_context_state_->IsGraphiteDawnVulkan()) {
+    // Vulkan currently doesn't support single-component cross-thread shared
+    // images for WebView.
+    const bool is_drdc = features::IsDrDcEnabled() &&
+                         !feature_info()->workarounds().disable_drdc;
+    caps.disable_one_component_textures =
+        display_context_on_another_thread_ && !is_drdc;
   }
 
   caps.angle_rgbx_internal_format =
@@ -1232,7 +1219,7 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
         gr_context()->colorTypeSupportedAsImage(kA16_unorm_SkColorType);
     caps.texture_half_float_linear =
         gr_context()->colorTypeSupportedAsImage(kA16_float_SkColorType);
-  } else if (graphite_context()) {
+  } else if (graphite_shared_context()) {
     caps.context_supports_distance_field_text = true;
     caps.texture_half_float_linear = true;
 #if BUILDFLAG(SKIA_USE_DAWN)
@@ -1253,7 +1240,7 @@ Capabilities RasterDecoderImpl::GetCapabilities() {
         feature_info()->feature_flags().enable_texture_half_float_linear;
   }
 
-  if (graphite_context()) {
+  if (graphite_shared_context()) {
     bool supports_multiplanar_rendering = false;
 #if BUILDFLAG(SKIA_USE_DAWN)
     if (shared_context_state_->IsGraphiteDawn()) {
@@ -1408,8 +1395,8 @@ void RasterDecoderImpl::ProcessPendingQueries(bool did_finish) {
   if (query_manager_) {
     if (gr_context()) {
       gr_context()->checkAsyncWorkCompletion();
-    } else if (graphite_context()) {
-      graphite_context()->checkAsyncWorkCompletion();
+    } else if (graphite_shared_context()) {
+      graphite_shared_context()->checkAsyncWorkCompletion();
     }
     query_manager_->ProcessPendingQueries(did_finish);
   }
@@ -2365,7 +2352,7 @@ bool RasterDecoderImpl::DoWritePixelsINTERNALDirectTextureUpload(
         &pixmap, /*numLevels=*/1, dest_shared_image->surface_origin(),
         /*finishedProc=*/nullptr, /*finishedContext=*/nullptr);
   } else {
-    CHECK(graphite_context());
+    CHECK(graphite_shared_context());
     auto graphite_texture_ref =
         dest_scoped_access->graphite_texture_holder(/*plane_index=*/0);
     auto* graphite_texture_ptr = graphite_texture_ref.release();
@@ -2706,14 +2693,14 @@ void RasterDecoderImpl::DoReadbackYUVImagePixelsINTERNAL(
   // While this function indicates it's asynchronous, the DoFinish() call below
   // ensures it completes synchronously.
   YUVReadbackResult yuv_result;
-  if (graphite_context()) {
+  if (graphite_shared_context()) {
     // SkImage/SkSurface asyncRescaleAndReadPixels methods won't be implemented
     // for Graphite. Instead the equivalent methods will be on Graphite Context.
-    graphite_context()->asyncRescaleAndReadPixelsYUV420(
+    graphite_shared_context()->asyncRescaleAndReadPixelsYUV420(
         sk_image.get(), kJPEG_Full_SkYUVColorSpace, SkColorSpace::MakeSRGB(),
         src_rect, dst_size, SkImage::RescaleGamma::kSrc,
-        SkImage::RescaleMode::kRepeatedLinear, &OnReadYUVImagePixelsDone,
-        &yuv_result);
+        SkImage::RescaleMode::kRepeatedLinear,
+        base::BindOnce(&OnReadYUVImagePixelsDone), &yuv_result);
   } else {
     CHECK(gr_context());
     sk_image->asyncRescaleAndReadPixelsYUV420(
@@ -2918,7 +2905,7 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLfloat r,
       break;
     case kMSAA:
       // Graphite operates as in the kDMSAA case below.
-      if (graphite_context()) {
+      if (graphite_shared_context()) {
         final_msaa_count = 1;
         flags = SkSurfaceProps::kDynamicMSAA_Flag;
         break;

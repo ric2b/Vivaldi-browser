@@ -11,17 +11,21 @@
 #ifndef RTC_BASE_SSL_ADAPTER_H_
 #define RTC_BASE_SSL_ADAPTER_H_
 
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "absl/strings/string_view.h"
 #include "rtc_base/async_socket.h"
+#include "rtc_base/checks.h"
+#include "rtc_base/socket.h"
+#include "rtc_base/socket_address.h"
 #include "rtc_base/ssl_certificate.h"
 #include "rtc_base/ssl_identity.h"
 #include "rtc_base/ssl_stream_adapter.h"
 #include "rtc_base/system/rtc_export.h"
 
-namespace rtc {
+namespace webrtc {
 
 class SSLAdapter;
 
@@ -35,7 +39,7 @@ class SSLAdapterFactory {
   virtual ~SSLAdapterFactory() {}
 
   // Specifies whether TLS or DTLS is to be used for the SSL adapters.
-  virtual void SetMode(webrtc::SSLMode mode) = 0;
+  virtual void SetMode(SSLMode mode) = 0;
 
   // Specify a custom certificate verifier for SSL.
   virtual void SetCertVerifier(SSLCertificateVerifier* ssl_cert_verifier) = 0;
@@ -45,14 +49,14 @@ class SSLAdapterFactory {
   virtual void SetIdentity(std::unique_ptr<SSLIdentity> identity) = 0;
 
   // Choose whether the socket acts as a server socket or client socket.
-  virtual void SetRole(webrtc::SSLRole role) = 0;
+  virtual void SetRole(SSLRole role) = 0;
 
   // Methods that control server certificate verification, used in unit tests.
   // Do not call these methods in production code.
   virtual void SetIgnoreBadCert(bool ignore) = 0;
 
   // Creates a new SSL adapter, but from a shared context.
-  virtual SSLAdapter* CreateAdapter(webrtc::Socket* socket) = 0;
+  virtual SSLAdapter* CreateAdapter(Socket* socket) = 0;
 
   static std::unique_ptr<SSLAdapterFactory> Create();
 };
@@ -62,10 +66,9 @@ class SSLAdapterFactory {
 // in which case it will share state with other SSLAdapters created from the
 // same factory.
 // After creation, call StartSSL to initiate the SSL handshake to the server.
-class SSLAdapter : public webrtc::AsyncSocketAdapter {
+class SSLAdapter : public AsyncSocketAdapter {
  public:
-  explicit SSLAdapter(webrtc::Socket* socket)
-      : webrtc::AsyncSocketAdapter(socket) {}
+  explicit SSLAdapter(Socket* socket) : AsyncSocketAdapter(socket) {}
 
   // Methods that control server certificate verification, used in unit tests.
   // Do not call these methods in production code.
@@ -77,7 +80,7 @@ class SSLAdapter : public webrtc::AsyncSocketAdapter {
   virtual void SetEllipticCurves(const std::vector<std::string>& curves) = 0;
 
   [[deprecated("Only TLS is supported by the adapter")]] virtual void SetMode(
-      webrtc::SSLMode mode) = 0;
+      SSLMode mode) = 0;
   // Specify a custom certificate verifier for SSL.
   virtual void SetCertVerifier(SSLCertificateVerifier* ssl_cert_verifier) = 0;
 
@@ -86,7 +89,7 @@ class SSLAdapter : public webrtc::AsyncSocketAdapter {
   virtual void SetIdentity(std::unique_ptr<SSLIdentity> identity) = 0;
 
   // Choose whether the socket acts as a server socket or client socket.
-  virtual void SetRole(webrtc::SSLRole role) = 0;
+  virtual void SetRole(SSLRole role) = 0;
 
   // StartSSL returns 0 if successful.
   // If StartSSL is called while the socket is closed or connecting, the SSL
@@ -103,14 +106,12 @@ class SSLAdapter : public webrtc::AsyncSocketAdapter {
   // Create the default SSL adapter for this platform. On failure, returns null
   // and deletes `socket`. Otherwise, the returned SSLAdapter takes ownership
   // of `socket`.
-  static SSLAdapter* Create(webrtc::Socket* socket);
+  static SSLAdapter* Create(Socket* socket);
 
  private:
   // Not supported.
   int Listen(int backlog) override { RTC_CHECK(false); }
-  webrtc::Socket* Accept(webrtc::SocketAddress* paddr) override {
-    RTC_CHECK(false);
-  }
+  Socket* Accept(SocketAddress* paddr) override { RTC_CHECK(false); }
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -122,6 +123,17 @@ RTC_EXPORT bool InitializeSSL();
 // Call to cleanup additional threads, and also the main thread.
 RTC_EXPORT bool CleanupSSL();
 
+}  //  namespace webrtc
+
+// Re-export symbols from the webrtc namespace for backwards compatibility.
+// TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
+namespace rtc {
+using ::webrtc::CleanupSSL;
+using ::webrtc::InitializeSSL;
+using ::webrtc::SSLAdapter;
+using ::webrtc::SSLAdapterFactory;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_SSL_ADAPTER_H_

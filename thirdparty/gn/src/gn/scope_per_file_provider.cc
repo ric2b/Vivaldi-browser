@@ -14,19 +14,28 @@
 
 #include "last_commit_position.h"
 
-ScopePerFileProvider::ScopePerFileProvider(Scope* scope, bool allow_target_vars)
-    : ProgrammaticProvider(scope), allow_target_vars_(allow_target_vars) {}
+ScopePerFileProvider::ScopePerFileProvider(Scope* scope,
+                                           bool allow_target_vars,
+                                           bool dotfile_scope)
+    : ProgrammaticProvider(scope),
+      allow_target_vars_(allow_target_vars),
+      dotfile_scope_(dotfile_scope) {}
 
 ScopePerFileProvider::~ScopePerFileProvider() = default;
 
 const Value* ScopePerFileProvider::GetProgrammaticValue(
     std::string_view ident) {
+  if (ident == variables::kGnVersion)
+    return GetGnVersion();
+
+  // In the dotfile scope, gn_version is the only thing defined.
+  if (dotfile_scope_)
+    return nullptr;
+
   if (ident == variables::kCurrentToolchain)
     return GetCurrentToolchain();
   if (ident == variables::kDefaultToolchain)
     return GetDefaultToolchain();
-  if (ident == variables::kGnVersion)
-    return GetGnVersion();
   if (ident == variables::kPythonPath)
     return GetPythonPath();
 

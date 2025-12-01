@@ -51,6 +51,7 @@ set_aom_detect_var(HAVE_SSE4_1 0 "Enables SSE 4.1 optimizations.")
 set_aom_detect_var(HAVE_SSE4_2 0 "Enables SSE 4.2 optimizations.")
 set_aom_detect_var(HAVE_AVX 0 "Enables AVX optimizations.")
 set_aom_detect_var(HAVE_AVX2 0 "Enables AVX2 optimizations.")
+set_aom_detect_var(HAVE_AVX512 0 "Enables AVX512 optimizations.")
 
 # RISC-V64 feature flags.
 set_aom_detect_var(HAVE_RVV 0 "Enables RVV optimizations.")
@@ -182,6 +183,8 @@ set_aom_config_var(CONFIG_CWG_E050 0
 set_aom_config_var(CONFIG_LIBVMAF_PSNR_PEAK 1
                    "Use libvmaf PSNR peak for 10- and 12-bit")
 
+set_aom_config_var(CONFIG_HIGHWAY 0 "Use Highway for SIMD.")
+
 #
 # Variables in this section control optional features of the build system.
 #
@@ -245,6 +248,8 @@ set_aom_option_var(ENABLE_AVX "Enables AVX optimizations on x86/x86_64 targets."
                    ON)
 set_aom_option_var(ENABLE_AVX2
                    "Enables AVX2 optimizations on x86/x86_64 targets." ON)
+set_aom_option_var(ENABLE_AVX512
+                   "Enables AVX512 optimizations on x86/x86_64 targets." ON)
 
 # RVV intrinsics flags.
 set_aom_option_var(ENABLE_RVV "Enables RVV optimizations on RISC-V targets." ON)

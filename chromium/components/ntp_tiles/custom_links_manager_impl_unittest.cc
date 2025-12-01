@@ -47,7 +47,9 @@ const TestCaseItem kTestCaseMax[] = {
     {"http://foo3.com/", u"Foo3"}, {"http://foo4.com/", u"Foo4"},
     {"http://foo5.com/", u"Foo5"}, {"http://foo6.com/", u"Foo6"},
     {"http://foo7.com/", u"Foo7"}, {"http://foo8.com/", u"Foo8"},
+#if !BUILDFLAG(IS_ANDROID)
     {"http://foo9.com/", u"Foo9"}, {"http://foo10.com/", u"Foo10"},
+#endif
 };
 
 const char kTestTitle[] = "Test";
@@ -177,6 +179,20 @@ TEST_F(CustomLinksManagerImplTest, AddLink) {
   std::vector<Link> expected_links = initial_links;
   expected_links.emplace_back(Link{GURL(kTestUrl), kTestTitle16, false});
   EXPECT_TRUE(custom_links_->AddLink(GURL(kTestUrl), kTestTitle16));
+  EXPECT_EQ(expected_links, custom_links_->GetLinks());
+}
+
+TEST_F(CustomLinksManagerImplTest, AddLinkTo) {
+  // Initialize.
+  std::vector<Link> initial_links = FillTestLinks(kTestCase1);
+  ASSERT_TRUE(custom_links_->Initialize(FillTestTiles(kTestCase1)));
+  ASSERT_EQ(initial_links, custom_links_->GetLinks());
+
+  // Add link in front.
+  std::vector<Link> expected_links = initial_links;
+  expected_links.insert(expected_links.begin(),
+                        Link{GURL(kTestUrl), kTestTitle16, false});
+  EXPECT_TRUE(custom_links_->AddLinkTo(GURL(kTestUrl), kTestTitle16, 0U));
   EXPECT_EQ(expected_links, custom_links_->GetLinks());
 }
 

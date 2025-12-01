@@ -15,6 +15,7 @@
 #include "gn/loader.h"
 #include "gn/scheduler.h"
 #include "gn/scope.h"
+#include "gn/scope_per_file_provider.h"
 #include "gn/settings.h"
 #include "gn/token.h"
 #include "gn/toolchain.h"
@@ -188,6 +189,7 @@ class Setup {
   // dot file.
   Settings dotfile_settings_;
   Scope dotfile_scope_;
+  std::unique_ptr<ScopePerFileProvider> dotfile_provider_;
 
   // State for invoking the dotfile.
   base::FilePath dotfile_name_;

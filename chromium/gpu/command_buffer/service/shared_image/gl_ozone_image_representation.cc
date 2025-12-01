@@ -11,7 +11,6 @@
 #include "gpu/command_buffer/service/memory_tracking.h"
 #include "gpu/command_buffer/service/shared_image/ozone_image_backing.h"
 #include "gpu/command_buffer/service/shared_image/ozone_image_gl_textures_holder.h"
-#include "gpu/command_buffer/service/shared_image/shared_image_manager.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_representation.h"
 #include "gpu/command_buffer/service/texture_manager.h"
 #include "ui/gl/gl_fence.h"
@@ -83,7 +82,9 @@ void GLTexturePassthroughOzoneImageRepresentation::EndAccess() {
   // synchronize with GL.
   if (gl::GLFence::IsGpuFenceSupported() && need_end_fence_) {
     if (auto gl_fence = gl::GLFence::CreateForGpuFence()) {
-      fence = gl_fence->GetGpuFence()->GetGpuFenceHandle().Clone();
+      auto gpu_fence = gl_fence->GetGpuFence();
+      CHECK(gpu_fence);
+      fence = gpu_fence->GetGpuFenceHandle().Clone();
     } else {
       DLOG(ERROR) << "Failed to create GPU fence";
     }

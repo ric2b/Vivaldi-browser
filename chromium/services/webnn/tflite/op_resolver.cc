@@ -6,12 +6,17 @@
 
 #include "services/webnn/buildflags.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
+#include "services/webnn/public/mojom/webnn_device.mojom.h"
 #include "third_party/tflite/buildflags.h"
 #include "third_party/tflite/src/tensorflow/lite/kernels/builtin_op_kernels.h"
 
 #if BUILDFLAG(BUILD_TFLITE_WITH_NNAPI)
 #include "third_party/tflite/src/tensorflow/lite/core/c/c_api_types.h"
 #include "third_party/tflite/src/tensorflow/lite/delegates/nnapi/nnapi_delegate.h"
+#endif
+
+#if BUILDFLAG(BUILD_TFLITE_WITH_OPENCL)
+#include "third_party/tflite/src/tensorflow/lite/delegates/gpu/delegate.h"
 #endif
 
 #if BUILDFLAG(BUILD_TFLITE_WITH_XNNPACK)
@@ -279,7 +284,7 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options,
              /* max_version = */ 3);
 
 #if BUILDFLAG(BUILD_TFLITE_WITH_NNAPI)
-  if (options.device == mojom::CreateContextOptions::Device::kNpu) {
+  if (options.device == mojom::Device::kNpu) {
     delegate_creators_.push_back([](TfLiteContext* context) {
       return std::unique_ptr<TfLiteDelegate, void (*)(TfLiteDelegate*)>(
           new ::tflite::StatefulNnApiDelegate(), [](TfLiteDelegate* delegate) {
@@ -292,7 +297,7 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options,
 #endif
 
 #if BUILDFLAG(WEBNN_USE_CHROME_ML_API)
-  if (options.device == mojom::CreateContextOptions::Device::kGpu) {
+  if (options.device == mojom::Device::kGpu) {
     // TODO(crbug.com/394119734): Simplify this check once these functions are
     // always available.
     auto* chrome_ml = ml::ChromeML::Get();
@@ -312,6 +317,15 @@ OpResolver::OpResolver(const mojom::CreateContextOptions& options,
                 });
           });
     }
+  }
+#endif
+
+#if BUILDFLAG(BUILD_TFLITE_WITH_OPENCL)
+  if (options.device == mojom::Device::kGpu) {
+    delegate_creators_.push_back([](TfLiteContext* context) {
+      return std::unique_ptr<TfLiteDelegate, void (*)(TfLiteDelegate*)>(
+          TfLiteGpuDelegateV2Create(nullptr), TfLiteGpuDelegateV2Delete);
+    });
   }
 #endif
 

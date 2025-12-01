@@ -9,6 +9,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/core/animation/interpolable_grid_track_list.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver_state.h"
@@ -245,20 +246,20 @@ InterpolationValue CSSGridTemplatePropertyInterpolationType::
 
 InterpolationValue CSSGridTemplatePropertyInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState* state,
+    const StyleResolverState& state,
     ConversionCheckers&) const {
-  if (auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
+  if (const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value)) {
     DCHECK_EQ(identifier_value->GetValueID(), CSSValueID::kNone);
     return InterpolationValue(nullptr);
   }
 
   ComputedGridTrackList computed_grid_track_list;
   StyleBuilderConverter::ConvertGridTrackList(
-      value, computed_grid_track_list, *const_cast<StyleResolverState*>(state));
+      value, computed_grid_track_list, const_cast<StyleResolverState&>(state));
   return InterpolationValue(
       CreateInterpolableGridTrackList(computed_grid_track_list.track_list,
                                       CssProperty(),
-                                      state->StyleBuilder().EffectiveZoom()),
+                                      state.StyleBuilder().EffectiveZoom()),
       MakeGarbageCollected<CSSGridTrackListNonInterpolableValue>(
           computed_grid_track_list.named_grid_lines,
           computed_grid_track_list.ordered_named_grid_lines));
@@ -304,7 +305,7 @@ void CSSGridTemplatePropertyInterpolationType::Composite(
            *underlying_value_owner.Value().interpolable_value)
            .IsCompatibleWith(
                To<InterpolableGridTrackList>(*value.interpolable_value))) {
-    underlying_value_owner.Set(*this, value);
+    underlying_value_owner.Set(this, value);
     return;
   }
   underlying_value_owner.SetNonInterpolableValue(value.non_interpolable_value);

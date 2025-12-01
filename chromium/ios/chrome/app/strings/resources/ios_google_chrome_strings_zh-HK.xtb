@@ -47,6 +47,7 @@
 <translation id="1917964099031477364">此帳戶和所有未儲存的資料將從 Chrome 和此裝置上的其他 Google 應用程式中移除。</translation>
 <translation id="1919130412786645364">允許登入 Chrome</translation>
 <translation id="1965935827552890526">請完成您在其他已開啟的 Chrome 視窗中正在執行的動作。</translation>
+<translation id="1966638102563776885">Chrome 提示：在任何應用程式中取得密碼</translation>
 <translation id="1973910962341002002">在「<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />」設定中，將「Chrome」切換為開啟</translation>
 <translation id="1984705450038014246">同步處理 Chrome 資料</translation>
 <translation id="1987779152850321833">完成下列建議動作，充分運用 Chrome 的各項功能。</translation>
@@ -114,7 +115,6 @@
 <translation id="3655656110921623717">這代表 Chrome 每次都會要求取得流動網站。</translation>
 <translation id="3740397331642243698">在 Google Chrome 中以無痕模式開啟已輸入的網址。</translation>
 <translation id="3741995255368156336">開啟 Chrome 閱讀清單。</translation>
-<translation id="3808570423967020928">從主畫面 Dock 更快存取 Chrome。</translation>
 <translation id="3827545470516145620">此裝置即將啟用標準安全保護功能保護</translation>
 <translation id="384394811301901750">Google Chrome 目前無法使用您的相機</translation>
 <translation id="3863841106411295595">將輸入的網址新增至 Chrome 閱讀清單。</translation>
@@ -123,6 +123,7 @@
 <translation id="3984746313391923992">您的機構要求您保持登出 Chrome。</translation>
 <translation id="3988789688219830639">Google Chrome 沒有存取相片或影片的權限。請前往「iOS 設定」&gt;「私隱」&gt;「相片」開放權限。</translation>
 <translation id="4064699917955374540">如要將 Chrome 的資料儲存至 Google 帳戶及使用這類資料，請驗證身分。</translation>
+<translation id="411154422556990518">價格追蹤更新和 Chrome 貼士幫你緊貼最新動向。</translation>
 <translation id="417201473131094001">Chrome Canary 上不支援此功能</translation>
 <translation id="424864128008805179">要登出 Chrome 嗎？</translation>
 <translation id="4430797724889237570">使用 Chrome 開啟 Gmail、地圖、YouTube 和其他應用程式中的連結</translation>
@@ -133,9 +134,11 @@
 <translation id="4636900170638246267">登入此網站和 Chrome。</translation>
 <translation id="4647910807533196601">在 Chrome 中開啟我的最新分頁。</translation>
 <translation id="4693084815234024320">你正在使用 Chrome 無痕模式</translation>
+<translation id="4713907610796204963">瞭解實用的 Chrome 基礎知識以開始使用</translation>
 <translation id="4724297637870447613">隨時隨地使用 Chrome</translation>
 <translation id="4738647308035481133">Google Chrome 頁面</translation>
 <translation id="4742795653798179840">已刪除 Chrome 資料</translation>
+<translation id="4749294594657945639">如要在其他應用程式中輕鬆取得已儲存的密碼，請選擇 Chrome 的自動填入功能。</translation>
 <translation id="4761869838909035636">執行 Chrome 安全檢查</translation>
 <translation id="4798859546468762093">如要取得個人化和其他功能，請將 Chrome 加入「<ph name="FEATURE_NAME_1" />」以及「<ph name="FEATURE_NAME_2" />」</translation>
 <translation id="4819268619367838612">Chrome 會向 Google 傳送使用情況和當機資料，以協助改善應用程式。<ph name="BEGIN_LINK" />管理<ph name="END_LINK" /></translation>
@@ -228,11 +231,9 @@
 如需其他會運用資料提升 Chrome 體驗的設定，請前往 <ph name="BEGIN_LINK" />Google 服務<ph name="END_LINK" />。</translation>
 <translation id="6922332667202044570">刪除 Chrome 中的瀏覽資料。</translation>
 <translation id="6924922227983877439">預設在 Chrome 中開啟連結</translation>
-<translation id="6931601805528922498">登入即可將帳戶新增至 Chrome，方便瀏覽工作相關內容。</translation>
 <translation id="6975725306479268850">選擇使用 Chrome 的自動填入功能</translation>
 <translation id="7056826488869329999">在 Chrome 中開啟並執行「安全檢查」。</translation>
 <translation id="7061455974939528301">按住 Chrome 圖示，然後按一下 [編輯主畫面]</translation>
-<translation id="7065813315247345131">將 Chrome 移至 Dock</translation>
 <translation id="7124339256045485976">取得 Chrome 最新更新</translation>
 <translation id="7145599899567697473">在 Chrome 儲存及自動填入密碼</translation>
 <translation id="7161390184744336561">Google Chrome 版本過舊</translation>
@@ -240,7 +241,6 @@
 <translation id="7175129790242719365">Chrome 提示：登入 Chrome</translation>
 <translation id="7187993566681480880">確保您登入使用 Chrome 的安全，並可提升您在其他 Google 應用程式的安全性。</translation>
 <translation id="7200524487407690471">Chrome 每日會自動執行「安全檢查」功能，避免資料外洩或不安全網站等。你可在「設定」中進一步瞭解「安全檢查」功能。</translation>
-<translation id="7203324561587388418">隨時掌握重要內容和 Chrome 實用提示。</translation>
 <translation id="72119412072970160">您可在 iPad 上的其他應用程式使用您儲存到「Google 密碼管理工具」的密碼。</translation>
 <translation id="7214019116829172458">開啟 Chrome 無痕式分頁</translation>
 <translation id="722167379782941918">Chrome 建議使用強化保護功能</translation>
@@ -253,6 +253,7 @@
 <translation id="7299681342915173313">你現在只要輕按電郵、文件或其他應用程式中的連結，即可使用 Chrome。</translation>
 <translation id="7344094882820374540">取得 Chrome 最強大的安全防護功能，防範危險網站</translation>
 <translation id="7349129508108954623">允許 Chrome 使用「Google 地圖」，為偵測到的地址提供路線和本地資訊。</translation>
+<translation id="7371674917547846460">Chrome 實用貼士和其他內容幫你緊貼最新動向。</translation>
 <translation id="7394108421562933108">Chrome 的地圖</translation>
 <translation id="7400722733683201933">關於 Google Chrome</translation>
 <translation id="7466693328838535498">在「搜尋小工具」框中輸入「Chrome」</translation>
@@ -263,6 +264,7 @@
 <translation id="7581063337314642333">在 Chrome 中瀏覽分頁網格</translation>
 <translation id="7599894504325210080">打開咗 Chrome 自動填入檢視畫面</translation>
 <translation id="7617512710641355143">Chrome 處於受管狀態</translation>
+<translation id="7626032353295482388">歡迎使用 Chrome</translation>
 <translation id="7642373780953416937">在 Chrome 自動偵測到任何私隱或安全問題時接收快訊。</translation>
 <translation id="7660356333829433649">隨時回來查看更多實用貼士，讓 Chrome 發揮最大效益。</translation>
 <translation id="7662994914830945754">如要在任何使用 Chrome 的裝置上查看分頁，請登入並開啟同步功能</translation>
@@ -276,6 +278,7 @@
 <translation id="778855399387580014">在新的 Chrome 分頁上開始搜尋。</translation>
 <translation id="7792140019572081272">Chrome 會使用 Face ID 保護你的敏感資料安全。</translation>
 <translation id="7855730255114109580">Google Chrome 已是最新版本</translation>
+<translation id="787226752901403048">登入 Chrome 即可分享和加入分頁群組，集思廣益</translation>
 <translation id="7897703007638178753">查看 Chrome 最近開啟的分頁</translation>
 <translation id="7948283758957877064">Chrome 的新功能</translation>
 <translation id="8000174216052461231">Chrome 提示：取得 Chrome 最強大的安全防護功能</translation>
@@ -314,10 +317,10 @@
 <translation id="8603022514504485810">「Google 密碼管理工具」無法檢查所有密碼。請明天再試，或<ph name="BEGIN_LINK" />檢查 Google 帳戶中的密碼<ph name="END_LINK" />。</translation>
 <translation id="8630122478628016441">開啟「關閉 Chrome 時鎖定無痕式分頁」。</translation>
 <translation id="8673726683583791503">使用「Google 智能鏡頭」購物</translation>
-<translation id="8727043961453758442">充分運用 Chrome 的功能</translation>
 <translation id="8765470054473112089">在網址列或搜尋框中輸入內容時，Chrome 會將輸入的內容傳送至預設搜尋引擎，以便取得更切合需求的建議。此功能不會在無痕模式下啟用。</translation>
 <translation id="8772179140489533211">顯示登入 Chrome 的指示。</translation>
 <translation id="8788269841521769222">您不需記住此密碼。密碼將會儲存至 <ph name="EMAIL" /> 的「Google 密碼管理工具」</translation>
+<translation id="8796490717897731471"><ph name="EMAIL" />。Chrome 目前由機構管理。</translation>
 <translation id="880967149107462122">前往 Chrome 設定</translation>
 <translation id="8842132678697187091">你可在此開啟「Google 智能鏡頭」。</translation>
 <translation id="8850736900032787670">如要根據個人興趣接收個人化內容，請登入 Chrome。</translation>

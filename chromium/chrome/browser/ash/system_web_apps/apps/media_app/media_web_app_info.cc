@@ -13,6 +13,7 @@
 #include "ash/webui/media_app_ui/url_constants.h"
 #include "base/containers/span.h"
 #include "base/files/file_path.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
@@ -349,8 +350,9 @@ bool MediaSystemAppDelegate::ShouldShowNewWindowMenuOption() const {
   return true;
 }
 
-Browser* MediaSystemAppDelegate::GetWindowForLaunch(Profile* profile,
-                                                    const GURL& url) const {
+ash::BrowserDelegate* MediaSystemAppDelegate::GetWindowForLaunch(
+    Profile* profile,
+    const GURL& url) const {
   return nullptr;
 }
 
@@ -358,7 +360,7 @@ bool MediaSystemAppDelegate::ShouldHandleFileOpenIntents() const {
   return true;
 }
 
-Browser* MediaSystemAppDelegate::LaunchAndNavigateSystemWebApp(
+ash::BrowserDelegate* MediaSystemAppDelegate::LaunchAndNavigateSystemWebApp(
     Profile* profile,
     web_app::WebAppProvider* provider,
     const GURL& url,

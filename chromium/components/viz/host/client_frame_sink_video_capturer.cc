@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/functional/bind.h"
-#include "base/not_fatal_until.h"
 #include "base/task/single_thread_task_runner.h"
 #include "media/capture/mojom/video_capture_buffer.mojom.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
@@ -37,6 +36,17 @@ void ClientFrameSinkVideoCapturer::SetFormat(media::VideoPixelFormat format) {
 
   format_.emplace(format);
   capturer_remote_->SetFormat(format);
+}
+
+void ClientFrameSinkVideoCapturer::SetAnimationFpsLockIn(
+    bool enabled,
+    float majority_damaged_pixel_min_ratio) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  animated_content_sampler_enabled_ = enabled;
+  majority_damaged_pixel_min_ratio_ = majority_damaged_pixel_min_ratio;
+  capturer_remote_->SetAnimationFpsLockIn(enabled,
+                                          majority_damaged_pixel_min_ratio);
 }
 
 void ClientFrameSinkVideoCapturer::SetMinCapturePeriod(
@@ -206,6 +216,10 @@ void ClientFrameSinkVideoCapturer::EstablishConnection() {
     capturer_remote_->SetMinCapturePeriod(*min_capture_period_);
   if (min_size_change_period_)
     capturer_remote_->SetMinSizeChangePeriod(*min_size_change_period_);
+  if (animated_content_sampler_enabled_ && majority_damaged_pixel_min_ratio_) {
+    capturer_remote_->SetAnimationFpsLockIn(*animated_content_sampler_enabled_,
+                                            *majority_damaged_pixel_min_ratio_);
+  }
   if (resolution_constraints_) {
     capturer_remote_->SetResolutionConstraints(
         resolution_constraints_->min_size, resolution_constraints_->max_size,
@@ -246,7 +260,7 @@ void ClientFrameSinkVideoCapturer::OnOverlayDestroyed(Overlay* overlay) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const auto it = std::ranges::find(overlays_, overlay);
-  CHECK(it != overlays_.end(), base::NotFatalUntil::M130);
+  CHECK(it != overlays_.end());
   overlays_.erase(it);
 }
 

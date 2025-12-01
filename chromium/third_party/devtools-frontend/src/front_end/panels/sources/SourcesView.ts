@@ -1,6 +1,7 @@
 // Copyright 2014 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/legacy/legacy.js';
 
@@ -57,13 +58,11 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typeof UI.Widget.VBox>(UI.Widget.VBox)
     implements TabbedEditorContainerDelegate, UI.SearchableView.Searchable, UI.SearchableView.Replaceable {
-  private selectedIndex: number;
   private readonly searchableViewInternal: UI.SearchableView.SearchableView;
   private readonly sourceViewByUISourceCode: Map<Workspace.UISourceCode.UISourceCode, UI.Widget.Widget>;
   editorContainer: TabbedEditorContainer;
   private readonly historyManager: EditingLocationHistoryManager;
-  private readonly toolbarContainerElementInternal: HTMLElement;
-  private readonly scriptViewToolbar: UI.Toolbar.Toolbar;
+  readonly #scriptViewToolbar: UI.Toolbar.Toolbar;
   private readonly bottomToolbarInternal: UI.Toolbar.Toolbar;
   private toolbarChangedListener: Common.EventTarget.EventDescriptor|null;
   private readonly focusedPlaceholderElement?: HTMLElement;
@@ -77,8 +76,6 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     this.element.id = 'sources-panel-sources-view';
     this.element.setAttribute('jslog', `${VisualLogging.pane('editor').track({keydown: 'Escape'})}`);
     this.setMinimumAndPreferredSizes(88, 52, 150, 100);
-
-    this.selectedIndex = 0;
 
     const workspace = Workspace.Workspace.WorkspaceImpl.instance();
 
@@ -97,11 +94,11 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
 
     this.historyManager = new EditingLocationHistoryManager(this);
 
-    this.toolbarContainerElementInternal = this.element.createChild('div', 'sources-toolbar');
-    this.toolbarContainerElementInternal.setAttribute('jslog', `${VisualLogging.toolbar('bottom')}`);
-    this.scriptViewToolbar = this.toolbarContainerElementInternal.createChild('devtools-toolbar');
-    this.scriptViewToolbar.style.flex = 'auto';
-    this.bottomToolbarInternal = this.toolbarContainerElementInternal.createChild('devtools-toolbar');
+    const toolbarContainerElementInternal = this.element.createChild('div', 'sources-toolbar');
+    toolbarContainerElementInternal.setAttribute('jslog', `${VisualLogging.toolbar('bottom')}`);
+    this.#scriptViewToolbar = toolbarContainerElementInternal.createChild('devtools-toolbar');
+    this.#scriptViewToolbar.style.flex = 'auto';
+    this.bottomToolbarInternal = toolbarContainerElementInternal.createChild('devtools-toolbar');
 
     this.toolbarChangedListener = null;
 
@@ -231,6 +228,10 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     return this.bottomToolbarInternal;
   }
 
+  scriptViewToolbar(): UI.Toolbar.Toolbar {
+    return this.#scriptViewToolbar;
+  }
+
   override wasShown(): void {
     super.wasShown();
     UI.Context.Context.instance().setFlavor(SourcesView, this);
@@ -239,10 +240,6 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
   override willHide(): void {
     UI.Context.Context.instance().setFlavor(SourcesView, null);
     super.willHide();
-  }
-
-  toolbarContainerElement(): Element {
-    return this.toolbarContainerElementInternal;
   }
 
   searchableView(): UI.SearchableView.SearchableView {
@@ -347,11 +344,11 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     const view = this.visibleView();
     if (view instanceof UI.View.SimpleView) {
       void view.toolbarItems().then(items => {
-        this.scriptViewToolbar.removeToolbarItems();
+        this.#scriptViewToolbar.removeToolbarItems();
         for (const action of getRegisteredEditorActions()) {
-          this.scriptViewToolbar.appendToolbarItem(action.getOrCreateButton(this));
+          this.#scriptViewToolbar.appendToolbarItem(action.getOrCreateButton(this));
         }
-        items.map(item => this.scriptViewToolbar.appendToolbarItem(item));
+        items.map(item => this.#scriptViewToolbar.appendToolbarItem(item));
       });
     }
   }
@@ -624,7 +621,7 @@ export class SourcesView extends Common.ObjectWrapper.eventMixin<EventTypes, typ
     if (!(sourceFrame instanceof UISourceCodeFrame)) {
       return;
     }
-    const uiSourceCodeFrame = (sourceFrame);
+    const uiSourceCodeFrame = sourceFrame;
     uiSourceCodeFrame.commitEditing();
   }
 

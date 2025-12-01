@@ -36,37 +36,25 @@ passed back and forth across the void.
 
 For example:
 
+```javascript
 window.onload = populate;
-
 function populate() {
-
-extension.bookmarks.getAllBookmarks(function(results) {
-
-// Assuming something MochiKit-ish is present.
-
-forEach(results, function(bookmark) {
-
-var div = DIV(A(bookmark.title, bookmark.url), " ", A("edit"));
-
-div.id = "b" + result.id;
-
-div.lastChild.onclick = bind(edit, result.id);
-
-return div;
-
-});
-
-});
-
+  extension.bookmarks.getAllBookmarks(function (results) {
+    // Assuming something MochiKit-ish is present.
+    forEach(results, function (bookmark) {
+      var div = DIV(A(bookmark.title, bookmark.url), " ", A("edit"));
+      div.id = "b" + result.id;
+      div.lastChild.onclick = bind(edit, result.id);
+      return div;
+    });
+  });
 }
 
 function edit(id) {
-
-var newTitle = prompt("Enter new title");
-
-extension.bookmarks.updateBookmark({id: id, title: newTitle});
-
+  var newTitle = prompt("Enter new title");
+  extension.bookmarks.updateBookmark({ id: id, title: newTitle });
 }
+```
 
 The advantages of this approach:
 
@@ -124,27 +112,20 @@ case-by-cases basis. I've outlined some ideas below.
 
 The main alternative is to have a stateful DOM-style API, like this:
 
-foreach(window.extensions.bookmarks, function(bookmark) {
-
-var div = DIV(A(bookmark.title, bookmark.url), " ", A("edit"));
-
-div.id = "b" + result.id;
-
-div.lastChild.onclick = bind(edit, bookmark);
-
-return div;
-
+```javascript
+foreach(window.extensions.bookmarks, function (bookmark) {
+  var div = DIV(A(bookmark.title, bookmark.url), " ", A("edit"));
+  div.id = "b" + result.id;
+  div.lastChild.onclick = bind(edit, bookmark);
+  return div;
 });
 
 function edit(bookmark) {
-
-var newTitle = prompt("Enter new title");
-
-bookmark.title = newTitle;
-
-bookmark.save();
-
+  var newTitle = prompt("Enter new title");
+  bookmark.title = newTitle;
+  bookmark.save();
 }
+```
 
 The main downside of this approach is that it requires synchronizing the state
 of the relevant object models between the extension and browser processes, and
@@ -156,65 +137,39 @@ browser process.
 
 chromium.
 
+```c++
 // An event is a way to register to be notified when something happens. In the
-rest of this
-
+// rest of this
 // documentation, Events are referred to as first-class, with the following
-notation:
-
+// notation:
 //
-
 // event name(Arg1Type arg1, Arg2Type arg2, ...);
-
 //
-
 // What this means is that the Event in variable "name" wants handlers with the
-signature:
-
+// signature:
 //
-
 // void handler(Arg1Type arg1, Arg2Type arg2, ...)
-
 class Event
-
 void addListener(object callback(...))
-
 void removeListener(object callback(...))
-
 bool hasListener(object callback(...))
 
 // Dispatches the event. Mainly this would be used by the framework, but it
-might be useful
-
-// to expose to developers.
-
+// might be useful to expose to developers.
 void dispatch(...)
 
 // A class that is essentially a client to an extension "server" process.
-Provides ways to
-
-// interact with the extension server, usually from a content script, but
-theoretically from
-
-// content or another extension.
-
+// Provides ways to interact with the extension server, usually from a content
+// script, but theoretically from content or another extension.
 class Extension
-
 constructor(int id)
-
 Port connect()
-
 string getURL(string path)
 
 // One end of a connection between an extension process and a content script (or
-content, or
-
-// another extension).
-
+// content, or another extension).
 class Port
-
 event onmessage
-
 void postMessage(object args) // args is any json-compatible type
 
 [browser.](/system/errors/NodeNotFound)
@@ -226,121 +181,76 @@ void postMessage(object args) // args is any json-compatible type
 [history.](/developers/design-documents/extensions/proposed-changes/apis-under-development/history-api)
 
 // TODO:
-
 thumbnails.
 
 // I think these all fit the basic CRUD pattern.
-
 [omnibox.](/developers/design-documents/extensions/proposed-changes/apis-under-development/omnibox-api)
 
 // This one should be really fun to figure out.
-
 // The "self" module is defined differently depending on whether you are inside
-a content
-
-// script or not.
-
+// a content script or not.
 // When in an extension, 'self' is a module, just like 'tabs', 'history', etc,
-that
-
-// provides access to some meta features.
-
+// that provides access to some meta features.
 self.
 
 // For access to other parts of an extension.
-
 DOMWindow background // Gets the single background process if there is one
-
-DOMWindow\[\] toolstrips // Gets a list of live toolstrip instances
+DOMWindow[] toolstrips // Gets a list of live toolstrip instances
 
 // Fired when somebody first creates a channel to this extension
-
 Event onconnect(Port port)
 
 // When in a content script, 'self' is an Extension instance referring to the
-parent
-
+// parent
 // extension. Content scripts can use this to talk to their parent without
-having to
-
-// know its ID, which should be handy during development.
-
+// having to know its ID, which should be handy during development.
 Extension self
+```
 
 ## Examples
 
 Move all google tabs into a new window:
+```javascript
+chromium.tabs.getAllTabs(function (tabs) {
+  var tabsToMove = [];
+  tabs.forEach(function (tab) {
+    // Too bad the URL isn't a parsed representation :(
+    if (tab.url.indexOf("google.com")) {
+      tabsToMove.push(tab);
+    }
+  });
 
-chromium.tabs.getAllTabs(function(tabs) {
-
-var tabsToMove = \[\];
-
-tabs.forEach(function(tab) {
-
-// Too bad the URL isn't a parsed representation :(
-
-if (tab.url.indexOf("google.com")) {
-
-tabsToMove.push(tab);
-
-}
-
-}
-
-if (tabsToMove.length &gt; 0) {
-
-chromium.tabs.createWindow(null, function(newWindow) {
-
-tabsToMove.forEach(function(tab) {
-
-chromium.tabs.updateTab({
-
-id: tab.id,
-
-windowId: newWindow.id
-
+  if (tabsToMove.length > 0) {
+    chromium.tabs.createWindow(null, function (newWindow) {
+      tabsToMove.forEach(function (tab) {
+        chromium.tabs.updateTab({
+          id: tab.id,
+          windowId: newWindow.id
+        });
+      });
+    });
+  }
 });
 
+// Write out navigation entries to console:
+chromium.tabs.ontabchange.addListener(function (old, new) {
+  if (old.url != new.url) {
+    console.log("navigated to: " + newTab.url);
+  }
 });
 
-});
-
-}
-
-});
-
-Write out navigation entries to console:
-
-chromium.tabs.ontabchange.addListener(function(old, new) {
-
-if (old.url != new.url) {
-
-console.log("navigated to: " + newTab.url);
-
-}
-
-});
-
-Communication between content scripts and extension:
+// Communication between content scripts and extension:
 
 // Content script
-
 var port = chromium.self.connect();
-
-port.onmessage.addListener(function(message) {
-
-console.log("got message: " + message);
-
+port.onmessage.addListener(function (message) {
+  console.log("got message: " + message);
 });
-
-port.postMessage({pageUrl: location.href});
+port.postMessage({ pageUrl: location.href });
 
 // Extension
-
-chromium.self.onconnect.addListener(function(port) {
-
-console.log("received message from: " + port.pageUrl);
-
-port.postMessage("ack");
-
+chromium.self.onconnect.addListener(function (port) {
+  console.log("received message from: " + port.pageUrl);
+  port.postMessage("ack");
 });
+```

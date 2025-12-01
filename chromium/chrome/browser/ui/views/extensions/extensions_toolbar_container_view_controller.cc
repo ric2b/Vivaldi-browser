@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container_view_controller.h"
 
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -12,8 +13,22 @@
 #include "chrome/browser/ui/views/extensions/extensions_request_access_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
+#include "chrome/common/pref_names.h"
 #include "components/user_education/common/feature_promo/feature_promo_controller.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/common/extension_features.h"
+
+namespace {
+// If true, block the Extensions Zero State Promo IPH from launching, to
+// avoid a race condition in test environments.
+bool g_block_zero_state_promo_for_testing = false;
+}  // namespace
+
+// static
+base::AutoReset<bool>
+ExtensionsToolbarContainerViewController::BlockZeroStatePromoForTesting() {
+  return base::AutoReset<bool>(&g_block_zero_state_promo_for_testing, true);
+}
 
 ExtensionsToolbarContainerViewController::
     ExtensionsToolbarContainerViewController(
@@ -54,30 +69,40 @@ void ExtensionsToolbarContainerViewController::
 }
 
 void ExtensionsToolbarContainerViewController::MaybeShowIPH() {
-  // IPH is only shown for the kExtensionsMenuAccessControl feature.
-  if (!base::FeatureList::IsEnabled(
-          extensions_features::kExtensionsMenuAccessControl)) {
-    return;
-  }
-
   CHECK(browser_->window());
 
-  // Display IPH, with priority order.
-  ExtensionsRequestAccessButton* request_access_button =
-      extensions_container_->GetRequestAccessButton();
-  if (request_access_button->GetVisible()) {
-    const int extensions_size = request_access_button->GetExtensionsCount();
-    user_education::FeaturePromoParams params(
-        feature_engagement::kIPHExtensionsRequestAccessButtonFeature);
-    params.body_params = extensions_size;
-    params.title_params = extensions_size;
-    browser_->window()->MaybeShowFeaturePromo(std::move(params));
+  // Extensions menu IPH, with priority order. These depend on the new access
+  // control feature.
+  if (base::FeatureList::IsEnabled(
+          extensions_features::kExtensionsMenuAccessControl)) {
+    ExtensionsRequestAccessButton* request_access_button =
+        extensions_container_->GetRequestAccessButton();
+    if (request_access_button->GetVisible()) {
+      const int extensions_size = request_access_button->GetExtensionsCount();
+      user_education::FeaturePromoParams params(
+          feature_engagement::kIPHExtensionsRequestAccessButtonFeature);
+      params.body_params = extensions_size;
+      params.title_params = extensions_size;
+      browser_->window()->MaybeShowFeaturePromo(std::move(params));
+    }
+
+    if (extensions_container_->GetExtensionsButton()->state() ==
+        ExtensionsToolbarButton::State::kAnyExtensionHasAccess) {
+      browser_->window()->MaybeShowFeaturePromo(
+          feature_engagement::kIPHExtensionsMenuFeature);
+    }
   }
 
-  if (extensions_container_->GetExtensionsButton()->state() ==
-      ExtensionsToolbarButton::State::kAnyExtensionHasAccess) {
+  // The Extensions Zero State promo prompts users without extensions to
+  // explore the Chrome Web Store.
+  //
+  // TODO(crbug.com/417543907): find a less busy method to trigger the zero
+  // state promo IPH.
+  if (!g_block_zero_state_promo_for_testing &&
+      !extensions::util::AnyCurrentlyInstalledExtensionIsFromWebstore(
+          browser_->profile())) {
     browser_->window()->MaybeShowFeaturePromo(
-        feature_engagement::kIPHExtensionsMenuFeature);
+        feature_engagement::kIPHExtensionsZeroStatePromoFeature);
   }
 }
 

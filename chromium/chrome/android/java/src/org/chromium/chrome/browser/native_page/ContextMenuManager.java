@@ -16,7 +16,9 @@ import androidx.annotation.StringRes;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
+import org.chromium.chrome.browser.suggestions.tile.TileUtils;
 import org.chromium.chrome.browser.ui.native_page.TouchEnabledDelegate;
 import org.chromium.components.browser_ui.widget.BrowserUiListMenuUtils;
 import org.chromium.ui.base.WindowAndroid.OnCloseContextMenuListener;
@@ -60,8 +62,8 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
         // the value of the existing ones should be modified so they stay in order.
         // Values are also used for indexing - should start from 0 and can't have gaps.
         int SEARCH = 0;
-        int OPEN_IN_NEW_TAB_IN_GROUP = 1;
-        int OPEN_IN_NEW_TAB = 2;
+        int OPEN_IN_NEW_TAB = 1;
+        int OPEN_IN_NEW_TAB_IN_GROUP = 2;
         int OPEN_IN_INCOGNITO_TAB = 3;
         int OPEN_IN_NEW_WINDOW = 4;
         int SAVE_FOR_OFFLINE = 5;
@@ -107,16 +109,25 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
          * @return the URL of the current item for saving offline, or null if the item can't be
          *     saved offline.
          */
+        @Nullable
         GURL getUrl();
 
         /**
          * @return Title to be displayed in the context menu when applicable, or null if no title
-         *         should be displayed.
+         *     should be displayed.
          */
+        @Nullable
         String getContextMenuTitle();
 
-        /** @return whether the given menu item is supported. */
+        /**
+         * @returns Whether the given menu item is supported.
+         */
         boolean isItemSupported(@ContextMenuItemId int menuItemId);
+
+        /**
+         * @returns Whether there exists enough space for pinned shortcut addition.
+         */
+        boolean hasSpaceForPinnedShortcut();
 
         /** Called when a context menu has been created. */
         void onContextMenuCreated();
@@ -161,6 +172,11 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
         }
 
         @Override
+        public boolean hasSpaceForPinnedShortcut() {
+            return false;
+        }
+
+        @Override
         public void onContextMenuCreated() {}
     }
 
@@ -198,8 +214,23 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
         for (@ContextMenuItemId int itemId = 0; itemId < ContextMenuItemId.NUM_ENTRIES; itemId++) {
             if (!shouldShowItem(itemId, delegate)) continue;
 
-            menu.add(Menu.NONE, itemId, Menu.NONE, getResourceIdForMenuItem(itemId))
-                    .setOnMenuItemClickListener(listener);
+            // TODO(crbug.com/409799465): Remove when launching the feature. The id order is already
+            // updated assuming as if the feature will launch.
+            if (itemId == ContextMenuItemId.OPEN_IN_NEW_TAB_IN_GROUP) {
+                continue;
+            } else if (itemId == ContextMenuItemId.OPEN_IN_NEW_TAB) {
+                if (ChromeFeatureList.sSwapNewTabAndNewTabInGroupAndroid.isEnabled()) {
+                    addMenuItem(menu, ContextMenuItemId.OPEN_IN_NEW_TAB, listener);
+                    addMenuItem(menu, ContextMenuItemId.OPEN_IN_NEW_TAB_IN_GROUP, listener);
+                } else {
+                    addMenuItem(menu, ContextMenuItemId.OPEN_IN_NEW_TAB_IN_GROUP, listener);
+                    addMenuItem(menu, ContextMenuItemId.OPEN_IN_NEW_TAB, listener);
+                }
+                hasItems = true;
+                continue;
+            }
+
+            addMenuItem(menu, itemId, listener);
             hasItems = true;
         }
 
@@ -302,6 +333,13 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
         return true;
     }
 
+    /** Dismisses the context menu shown by {@link showListContextMenu()}, if any. */
+    public void hideListContextMenu() {
+        if (mListContextMenu != null) {
+            mListContextMenu.dismiss();
+        }
+    }
+
     @Override
     public void onContextMenuClosed() {
         if (mAnchorView == null) return;
@@ -349,8 +387,13 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
                     GURL itemUrl = delegate.getUrl();
                     return itemUrl != null && OfflinePageBridge.canSavePage(itemUrl);
                 }
-            case ContextMenuItemId.REMOVE: // Fall through.
-            case ContextMenuItemId.PIN_THIS_SHORTCUT: // Fall through.
+            case ContextMenuItemId.REMOVE:
+                return true;
+            case ContextMenuItemId.PIN_THIS_SHORTCUT:
+                {
+                    return delegate.hasSpaceForPinnedShortcut()
+                            && TileUtils.isValidCustomTileUrl(delegate.getUrl());
+                }
             case ContextMenuItemId.EDIT_SHORTCUT: // Fall through.
             case ContextMenuItemId.UNPIN:
                 return true;
@@ -437,6 +480,11 @@ public class ContextMenuManager implements OnCloseContextMenuListener {
             default:
                 return false;
         }
+    }
+
+    private void addMenuItem(ContextMenu menu, int itemId, OnMenuItemClickListener listener) {
+        menu.add(Menu.NONE, itemId, Menu.NONE, getResourceIdForMenuItem(itemId))
+                .setOnMenuItemClickListener(listener);
     }
 
     public ListMenuHost getListMenuForTesting() {

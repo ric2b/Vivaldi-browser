@@ -216,6 +216,14 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
       @"H:|-0-[containerView]-0-|",
     ];
     ApplyVisualConstraints(constraints, viewsDictionary);
+
+    if (@available(iOS 17, *)) {
+      NSArray<UITrait>* traits = TraitCollectionSetForTraits(@[
+        UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class
+      ]);
+      [self registerForTraitChanges:traits
+                         withAction:@selector(updateToolbarMargins)];
+    }
   }
   return self;
 }
@@ -253,11 +261,6 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
   [NSLayoutConstraint deactivateConstraints:_superViewConstraints];
   [self.superview removeLayoutGuide:_bottomUnsafeAreaGuideInSuperview];
   [super willMoveToSuperview:newSuperview];
-}
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  [self updateToolbarMargins];
 }
 
 - (void)safeAreaInsetsDidChange {

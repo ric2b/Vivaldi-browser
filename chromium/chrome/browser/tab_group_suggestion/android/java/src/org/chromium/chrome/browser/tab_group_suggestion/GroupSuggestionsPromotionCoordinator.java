@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.tab_group_suggestion;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.view.LayoutInflater;
 import android.widget.LinearLayout;
@@ -19,6 +21,9 @@ import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 /** Coordinator for a GroupSuggestions promotion UI. */
 @NullMarked
 public class GroupSuggestionsPromotionCoordinator {
+    public static final String CREATE_SUGGESTIONS_PROMOTION_UI_PARAM =
+            "create_suggestions_promotion_ui";
+
     private final @NonNull PropertyModelChangeProcessor mModelChangeProcessor;
     private final @NonNull GroupSuggestionsPromotionMediator mMediator;
 
@@ -42,7 +47,7 @@ public class GroupSuggestionsPromotionCoordinator {
                 new GroupSuggestionsPromotionMediator(
                         model,
                         GroupSuggestionsServiceFactory.getForProfile(
-                                tabGroupModelFilter.getTabModel().getProfile()),
+                                assumeNonNull(tabGroupModelFilter.getTabModel().getProfile())),
                         bottomSheetController,
                         tabGroupModelFilter,
                         groupSuggestionsBottomSheetContainer);

@@ -19,6 +19,7 @@
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/sync/base/data_type.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "url/gurl.h"
 
@@ -64,6 +65,7 @@ class SigninViewController {
  public:
   DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(
       kSignoutConfirmationDialogViewElementId);
+  DECLARE_CLASS_ELEMENT_IDENTIFIER_VALUE(kHistorySyncOptinViewId);
 
   explicit SigninViewController(Browser* browser);
 
@@ -148,6 +150,12 @@ class SigninViewController {
   void ShowModalSyncConfirmationDialog(bool is_signin_intercept,
                                        bool is_sync_promo);
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+  // Shows the modal history sync opt in dialog as a browser-modal dialog on top
+  // of the `browser_`'s window.
+  void ShowModalHistorySyncOptInDialog();
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
   // Shows the modal managed user notice dialog as a browser-modal dialog on
   // top of the `browser_`'s window. `domain_name` is the domain of the
   // enterprise account being shown. `callback` is called with the user's action
@@ -230,7 +238,7 @@ class SigninViewController {
       signin_metrics::AccessPoint reauth_access_point,
       signin_metrics::ProfileSignout profile_signout_source,
       signin_metrics::SourceForRefreshTokenOperation token_signout_source,
-      syncer::DataTypeSet unsynced_datatypes);
+      absl::flat_hash_map<syncer::DataType, size_t> unsynced_datatypes);
 
   void ShowChromeSigninDialogForExtensions(
       const std::u16string& extension_name_for_display,

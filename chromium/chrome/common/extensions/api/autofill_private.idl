@@ -146,6 +146,7 @@ namespace autofillPrivate {
     DRIVERS_LICENSE_ISSUE_DATE,
     VEHICLE_YEAR,
     VEHICLE_PLATE_STATE,
+    EMAIL_OR_LOYALTY_MEMBERSHIP_ID,
     MAX_VALID_FIELD_TYPE
   };
 
@@ -156,7 +157,9 @@ namespace autofillPrivate {
     LOCAL_OR_SYNCABLE,
     // The address is stored in a third party service that is tied
     // to user's account.
-    ACCOUNT
+    ACCOUNT,
+    ACCOUNT_HOME,
+    ACCOUNT_WORK
   };
 
   // The type of data that can be stored for an attribute type.
@@ -355,6 +358,11 @@ namespace autofillPrivate {
     // dynamically, because the "<entity type>" string might need declension in
     // some languages.
     DOMString editEntityTypeString;
+    // The i18n string representation of "Delete <entity type>". Used in the
+    // entity instance deletion settings UI. The string cannot be constructed
+    // dynamically, because the "<entity type>" string might need declension in
+    // some languages.
+    DOMString deleteEntityTypeString;
   };
 
   // Contains date information: month, day and year.
@@ -420,6 +428,9 @@ namespace autofillPrivate {
 
     // The Pay Over Time issuer image source.
     DOMString? imageSrc;
+
+    // The Pay Over Time issuer image source for dark theme.
+    DOMString? imageSrcDark;
   };
 
   callback VoidCallback = void();

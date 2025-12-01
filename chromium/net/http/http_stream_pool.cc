@@ -27,6 +27,7 @@
 #include "net/base/proxy_chain.h"
 #include "net/base/request_priority.h"
 #include "net/base/session_usage.h"
+#include "net/base/tracing.h"
 #include "net/http/alternative_service.h"
 #include "net/http/http_network_session.h"
 #include "net/http/http_stream_key.h"
@@ -74,13 +75,13 @@ constexpr base::FeatureParam<base::TimeDelta>
         HttpStreamPool::kConnectionAttemptDelayParamName.data(),
         HttpStreamPool::kDefaultConnectionAttemptDelay};
 
-constexpr base::FeatureParam<HttpStreamPool::StreamAttemptDelayBehavior>
-    kStreamAttemptDelayBehavior{
+constexpr base::FeatureParam<HttpStreamPool::TcpBasedAttemptDelayBehavior>
+    kTcpBasedAttemptDelayBehavior{
         &features::kHappyEyeballsV3,
-        HttpStreamPool::kStreamAttemptDelayBehaviorParamName.data(),
-        HttpStreamPool::StreamAttemptDelayBehavior::
+        HttpStreamPool::kTcpBasedAttemptDelayBehaviorParamName.data(),
+        HttpStreamPool::TcpBasedAttemptDelayBehavior::
             kStartTimerOnFirstQuicAttempt,
-        HttpStreamPool::kStreamAttemptDelayBehaviorOptions};
+        HttpStreamPool::kTcpBasedAttemptDelayBehaviorOptions};
 
 constexpr base::FeatureParam<bool> kVerboseNetLog{
     &features::kHappyEyeballsV3, HttpStreamPool::kVerboseNetLogParamName.data(),
@@ -128,9 +129,9 @@ base::TimeDelta HttpStreamPool::GetConnectionAttemptDelay() {
 }
 
 // static
-HttpStreamPool::StreamAttemptDelayBehavior
-HttpStreamPool::GetStreamAttemptDelayBehavior() {
-  return kStreamAttemptDelayBehavior.Get();
+HttpStreamPool::TcpBasedAttemptDelayBehavior
+HttpStreamPool::GetTcpBasedAttemptDelayBehavior() {
+  return kTcpBasedAttemptDelayBehavior.Get();
 }
 
 // static
@@ -202,24 +203,22 @@ std::unique_ptr<HttpStreamRequest> HttpStreamPool::RequestStream(
 int HttpStreamPool::Preconnect(HttpStreamPoolRequestInfo request_info,
                                size_t num_streams,
                                CompletionOnceCallback callback) {
-  std::vector<SSLConfig::CertAndStatus> allowed_bad_certs;
   auto controller = std::make_unique<JobController>(
       this, std::move(request_info), /*priority=*/RequestPriority::IDLE,
-      std::move(allowed_bad_certs),
+      /*allowed_bad_certs=*/std::vector<SSLConfig::CertAndStatus>(),
       /*enable_ip_based_pooling=*/true,
       /*enable_alternative_services=*/true);
   JobController* controller_raw_ptr = controller.get();
+  // Put `controller` into `job_controllers_` before calling Preconnect() to
+  // make sure `job_controllers_` always contains `controller` when
+  // OnJobControllerComplete() is called.
+  job_controllers_.emplace(std::move(controller));
   CHECK_EQ(controller_raw_ptr->respect_limits(), RespectLimits::kRespect);
-  // SAFETY: Using base::Unretained() is safe because `this` will own
-  // `controller` when Preconnect() return ERR_IO_PENDING.
-  int rv = controller_raw_ptr->Preconnect(
+  // SAFETY: Using base::Unretained() is safe because `this` owns `controller`.
+  return controller_raw_ptr->Preconnect(
       num_streams, base::BindOnce(&HttpStreamPool::OnPreconnectComplete,
                                   base::Unretained(this), controller_raw_ptr,
                                   std::move(callback)));
-  if (rv == ERR_IO_PENDING) {
-    job_controllers_.emplace(std::move(controller));
-  }
-  return rv;
 }
 
 bool HttpStreamPool::EnsureTotalActiveStreamCountBelowLimit() const {
@@ -232,31 +231,43 @@ bool HttpStreamPool::EnsureTotalActiveStreamCountBelowLimit() const {
 void HttpStreamPool::IncrementTotalIdleStreamCount() {
   CHECK(EnsureTotalActiveStreamCountBelowLimit());
   ++total_idle_stream_count_;
+  TRACE_COUNTER("net.stream", "HttpStreamPoolTotalIdleStreams",
+                total_idle_stream_count_);
 }
 
 void HttpStreamPool::DecrementTotalIdleStreamCount() {
   CHECK_GT(total_idle_stream_count_, 0u);
   --total_idle_stream_count_;
+  TRACE_COUNTER("net.stream", "HttpStreamPoolTotalIdleStreams",
+                total_idle_stream_count_);
 }
 
 void HttpStreamPool::IncrementTotalHandedOutStreamCount() {
   CHECK(EnsureTotalActiveStreamCountBelowLimit());
   ++total_handed_out_stream_count_;
+  TRACE_COUNTER("net.stream", "HttpStreamPoolTotalHandedOutStreams",
+                total_handed_out_stream_count_);
 }
 
 void HttpStreamPool::DecrementTotalHandedOutStreamCount() {
   CHECK_GT(total_handed_out_stream_count_, 0u);
   --total_handed_out_stream_count_;
+  TRACE_COUNTER("net.stream", "HttpStreamPoolTotalHandedOutStreams",
+                total_handed_out_stream_count_);
 }
 
 void HttpStreamPool::IncrementTotalConnectingStreamCount() {
   CHECK(EnsureTotalActiveStreamCountBelowLimit());
   ++total_connecting_stream_count_;
+  TRACE_COUNTER("net.stream", "HttpStreamPoolTotalConnectingStreams",
+                total_connecting_stream_count_);
 }
 
 void HttpStreamPool::DecrementTotalConnectingStreamCount(size_t amount) {
   CHECK_GE(total_connecting_stream_count_, amount);
   total_connecting_stream_count_ -= amount;
+  TRACE_COUNTER("net.stream", "HttpStreamPoolTotalConnectingStreams",
+                total_connecting_stream_count_);
 }
 
 void HttpStreamPool::OnIPAddressChanged() {
@@ -417,6 +428,7 @@ void HttpStreamPool::SetDelegateForTesting(
 
 base::Value::Dict HttpStreamPool::GetInfoAsValue() const {
   // Using "socket" instead of "stream" for compatibility with ClientSocketPool.
+  // These fields are used by some tests.
   base::Value::Dict dict;
   dict.Set("handed_out_socket_count",
            static_cast<int>(total_handed_out_stream_count_));
@@ -431,10 +443,18 @@ base::Value::Dict HttpStreamPool::GetInfoAsValue() const {
   for (const auto& [key, group] : groups_) {
     group_dicts.Set(key.ToString(), group->GetInfoAsValue());
   }
-
   if (!group_dicts.empty()) {
     dict.Set("groups", std::move(group_dicts));
   }
+
+  base::Value::List job_controller_list;
+  for (const auto& job_controller : job_controllers_) {
+    job_controller_list.Append(job_controller->GetInfoAsValue());
+  }
+  if (!job_controller_list.empty()) {
+    dict.Set("job_controllers", std::move(job_controller_list));
+  }
+
   return dict;
 }
 
@@ -512,15 +532,8 @@ base::WeakPtr<SpdySession> HttpStreamPool::FindAvailableSpdySession(
           spdy_session_key, enable_ip_based_pooling, /*is_websocket=*/false,
           net_log);
   if (spdy_session) {
-    if (RequiresHTTP11(stream_key.destination(),
-                       stream_key.network_anonymization_key())) {
-      spdy_session->MakeUnavailable();
-      Group* group = GetGroup(stream_key);
-      if (group) {
-        group->OnRequiredHttp11();
-      }
-      return nullptr;
-    }
+    CHECK(!RequiresHTTP11(stream_key.destination(),
+                          stream_key.network_anonymization_key()));
   }
   return spdy_session;
 }

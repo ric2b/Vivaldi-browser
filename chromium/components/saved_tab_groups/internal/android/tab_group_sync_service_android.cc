@@ -14,6 +14,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "components/saved_tab_groups/public/android/tab_group_sync_conversions_bridge.h"
 #include "components/saved_tab_groups/public/android/tab_group_sync_conversions_utils.h"
+#include "components/saved_tab_groups/public/collaboration_finder.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/saved_tab_groups/public/types.h"
 #include "url/android/gurl_android.h"
@@ -418,6 +419,27 @@ void TabGroupSyncServiceAndroid::RecordTabGroupEvent(
   }
 
   tab_group_sync_service_->RecordTabGroupEvent(event_details);
+}
+
+void TabGroupSyncServiceAndroid::UpdateArchivalStatus(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_caller,
+    const JavaParamRef<jstring>& j_sync_group_id,
+    const jboolean j_archival_status) {
+  auto sync_group_id = JavaStringToUuid(env, j_sync_group_id);
+  tab_group_sync_service_->UpdateArchivalStatus(sync_group_id,
+                                                j_archival_status);
+}
+
+void TabGroupSyncServiceAndroid::SetCollaborationAvailableInFinderForTesting(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& j_caller,
+    const JavaParamRef<jstring>& j_collaboration_id) {
+  std::string collaboration_id =
+      ConvertJavaStringToUTF8(env, j_collaboration_id);
+  tab_group_sync_service_->GetCollaborationFinderForTesting()
+      ->SetCollaborationAvailableForTesting(
+          syncer::CollaborationId(collaboration_id));
 }
 
 }  // namespace tab_groups

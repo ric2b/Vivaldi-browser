@@ -83,7 +83,7 @@ class CONTENT_EXPORT AttributionStorageSql {
 
   // Latest version of the database that cannot be upgraded to
   // `kCurrentVersionNumber` without razing the database.
-  static constexpr int kDeprecatedVersionNumber = 53;
+  static constexpr int kDeprecatedVersionNumber = 55;
 
   static_assert(kCompatibleVersionNumber <= kCurrentVersionNumber);
   static_assert(kDeprecatedVersionNumber < kCompatibleVersionNumber);
@@ -164,13 +164,13 @@ class CONTENT_EXPORT AttributionStorageSql {
     kSourceInvalidFilterData = 20,
     kSourceInvalidActiveState = 21,
     kSourceInvalidReadOnlySourceData = 22,
-    // Obsolete: kSourceInvalidEventReportWindows = 23,
+    kSourceInvalidEventReportWindows = 23,
     kSourceInvalidMaxEventLevelReports = 24,
     kSourceInvalidEventLevelEpsilon = 25,
     kSourceDestinationSitesQueryFailed = 26,
     kSourceInvalidDestinationSites = 27,
     kStoredSourceConstructionFailed = 28,
-    kSourceInvalidTriggerSpecs = 29,
+    kSourceInvalidTriggerData = 29,
     kSourceDedupKeyQueryFailed = 30,
     kSourceInvalidRandomizedResponseRate = 31,
     kSourceInvalidAttributionScopesData = 32,

@@ -4,7 +4,13 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import static androidx.browser.customtabs.CustomTabsIntent.OPEN_IN_BROWSER_STATE_DEFAULT;
+import static androidx.browser.customtabs.CustomTabsIntent.OPEN_IN_BROWSER_STATE_OFF;
+import static androidx.browser.customtabs.CustomTabsIntent.OPEN_IN_BROWSER_STATE_ON;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -34,6 +40,7 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.ActivityTabProvider;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams.ButtonType;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -56,6 +63,7 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
     @Mock private Runnable mOpenInBrowserRunnable;
     @Mock private Runnable mRegisterVoiceSearchRunnable;
     @Mock private Drawable mOpenInBrowserButton;
+    @Mock private BrowserServicesIntentDataProvider mIntentDataProvider;
 
     private CustomTabAdaptiveToolbarBehavior mBehavior;
     private List<CustomButtonParams> mToolbarCustomButtons;
@@ -66,11 +74,12 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
     }
 
     private void initBehavior(List<CustomButtonParams> customButtons) {
+        when(mIntentDataProvider.getCustomButtonsOnToolbar()).thenReturn(customButtons);
         mBehavior =
                 new CustomTabAdaptiveToolbarBehavior(
                         mContext,
                         mActivityTabProvider,
-                        customButtons,
+                        mIntentDataProvider,
                         mOpenInBrowserButton,
                         mOpenInBrowserRunnable,
                         mRegisterVoiceSearchRunnable);
@@ -91,18 +100,49 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
     }
 
     @Test
-    public void registerPerSurfaceButtons_openInBrowser() {
+    public void registerPerSurfaceButtons_openInBrowser_WhenOpenInBrowserButtonSetToDefault() {
         AdaptiveToolbarButtonController controller =
                 Mockito.mock(AdaptiveToolbarButtonController.class);
         Supplier<Tracker> trackerSupplier = Mockito.mock(Supplier.class);
 
         mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
-        verify(controller, never())
-                .addButtonVariant(eq(AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER), any());
 
         ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.setForTesting(true);
+        when(mIntentDataProvider.getOpenInBrowserButtonState())
+                .thenReturn(OPEN_IN_BROWSER_STATE_DEFAULT);
         mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
         verify(controller)
+                .addButtonVariant(eq(AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER), any());
+    }
+
+    @Test
+    public void registerPerSurfaceButtons_DoesNotAddOpenInBrowser_WhenOpenInBrowserButtonEnabled() {
+        AdaptiveToolbarButtonController controller =
+                Mockito.mock(AdaptiveToolbarButtonController.class);
+        Supplier<Tracker> trackerSupplier = Mockito.mock(Supplier.class);
+
+        mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
+
+        ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.setForTesting(true);
+        when(mIntentDataProvider.getOpenInBrowserButtonState())
+                .thenReturn(OPEN_IN_BROWSER_STATE_ON);
+        mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
+        verify(controller, never())
+                .addButtonVariant(eq(AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER), any());
+    }
+
+    @Test
+    public void
+            registerPerSurfaceButtons_DoesNotAddOpenInBrowser_WhenOpenInBrowserButtonDisabled() {
+        AdaptiveToolbarButtonController controller =
+                Mockito.mock(AdaptiveToolbarButtonController.class);
+        Supplier<Tracker> trackerSupplier = Mockito.mock(Supplier.class);
+
+        ChromeFeatureList.sCctAdaptiveButtonEnableOpenInBrowser.setForTesting(true);
+        when(mIntentDataProvider.getOpenInBrowserButtonState())
+                .thenReturn(OPEN_IN_BROWSER_STATE_OFF);
+        mBehavior.registerPerSurfaceButtons(controller, trackerSupplier);
+        verify(controller, never())
                 .addButtonVariant(eq(AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER), any());
     }
 
@@ -124,5 +164,25 @@ public class CustomTabAdaptiveToolbarBehaviorUnitTest {
         // and the 3rd one (translate) is ignored.
         initBehavior(List.of(openInBrowser, share));
         assertEquals(UNKNOWN, mBehavior.resultFilter(segmentationResults));
+    }
+
+    @Test
+    @EnableFeatures(ChromeFeatureList.CCT_ADAPTIVE_BUTTON + ":open_in_browser/true")
+    public void hideManuallySetButton() {
+        // Initialize custom action button types.
+        CustomButtonParams openInBrowser = Mockito.mock(CustomButtonParams.class);
+        when(openInBrowser.getType()).thenReturn(ButtonType.CCT_OPEN_IN_BROWSER_BUTTON);
+        CustomButtonParams share = Mockito.mock(CustomButtonParams.class);
+        when(share.getType()).thenReturn(ButtonType.CCT_SHARE_BUTTON);
+
+        assertTrue(mBehavior.canShowManualOverride(OPEN_IN_BROWSER));
+
+        initBehavior(List.of(openInBrowser));
+        assertTrue(mBehavior.canShowManualOverride(SHARE));
+        assertFalse(mBehavior.canShowManualOverride(OPEN_IN_BROWSER));
+
+        initBehavior(List.of(share));
+        assertFalse(mBehavior.canShowManualOverride(SHARE));
+        assertTrue(mBehavior.canShowManualOverride(OPEN_IN_BROWSER));
     }
 }

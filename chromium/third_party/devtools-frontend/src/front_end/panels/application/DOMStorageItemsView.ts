@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2008 Nokia Inc.  All rights reserved.
@@ -65,7 +66,7 @@ export class DOMStorageItemsView extends KeyValueStorageItemsView {
 
     this.domStorage = domStorage;
     if (domStorage.storageKey) {
-      this.setStorageKey(domStorage.storageKey);
+      this.toolbar?.setStorageKey(domStorage.storageKey);
     }
 
     this.element.classList.add('storage-view', 'table');
@@ -96,7 +97,7 @@ export class DOMStorageItemsView extends KeyValueStorageItemsView {
     const storageKind = domStorage.isLocalStorage ? 'local-storage-data' : 'session-storage-data';
     this.element.setAttribute('jslog', `${VisualLogging.pane().context(storageKind)}`);
     if (domStorage.storageKey) {
-      this.setStorageKey(domStorage.storageKey);
+      this.toolbar?.setStorageKey(domStorage.storageKey);
     }
     this.eventListeners = [
       this.domStorage.addEventListener(DOMStorage.Events.DOM_STORAGE_ITEMS_CLEARED, this.domStorageItemsCleared, this),
@@ -157,11 +158,12 @@ export class DOMStorageItemsView extends KeyValueStorageItemsView {
 
   async #refreshItems(): Promise<void> {
     const items = await this.domStorage.getItems();
-    if (!items) {
+    if (!items || !this.toolbar) {
       return;
     }
-    const filteredItems =
-        this.filter(items.map(item => ({key: item[0], value: item[1]})), item => `${item.key} ${item.value}`);
+    const {filterRegex} = this.toolbar;
+    const filteredItems = items.map(item => ({key: item[0], value: item[1]}))
+                              .filter(item => filterRegex?.test(`${item.key} ${item.value}`) ?? true);
     this.showItems(filteredItems);
   }
 

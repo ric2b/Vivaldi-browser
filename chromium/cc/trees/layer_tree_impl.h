@@ -271,6 +271,19 @@ class CC_EXPORT LayerTreeImpl {
     return const_reverse_iterator(layer_list_.crend());
   }
 
+  // Tests precondition for mutating a property based on element id.
+  // These enumerated values are used in metrics, and must not be renumbered.
+  // New values must be added to the end of the list increasing kMaxValue, and
+  // obsolete values must be preserved.
+  enum class PropertyMutation {
+    kTransform = 0,
+    kOpacity = 1,
+    kFilter = 2,
+    kBackdropFilter = 3,
+    kMaxValue = kBackdropFilter
+  };
+  void ValidateEffectTreeeMapping(ElementId, PropertyMutation);
+
   void SetTransformMutated(ElementId element_id,
                            const gfx::Transform& transform);
   void SetOpacityMutated(ElementId element_id, float opacity);
@@ -793,7 +806,7 @@ class CC_EXPORT LayerTreeImpl {
   // Returns all of the view transition requests stored so far, and empties
   // the internal list.
   std::vector<std::unique_ptr<ViewTransitionRequest>>
-  TakeViewTransitionRequests();
+  TakeViewTransitionRequests(bool should_set_needs_update_draw_properties);
 
   // Returns true if there are pending ViewTransition requests that need a draw.
   bool HasViewTransitionRequests() const;
@@ -819,6 +832,8 @@ class CC_EXPORT LayerTreeImpl {
   void SetPageScaleFactorAndLimitsForDisplayTree(float page_scale_factor,
                                                  float min_page_scale_factor,
                                                  float max_page_scale_factor);
+
+  LayerTreeHostImpl* host_impl() { return host_impl_; }
 
   class CC_EXPORT DiscardableImageMapUpdater {
     STACK_ALLOCATED();

@@ -50,6 +50,7 @@ class CSSStyleSheetInit;
 class Document;
 class Element;
 class ExceptionState;
+class InspectorGhostRules;
 class MediaQuerySet;
 class QuietMutationScope;
 class ScriptState;
@@ -187,7 +188,7 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet,
   // True when this stylesheet is among the TreeScope's adopted style sheets.
   //
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-adoptedstylesheets
-  bool IsAdoptedByTreeScope(TreeScope& tree_scope);
+  bool IsAdoptedByTreeScope(const TreeScope& tree_scope);
 
   // Associated document for constructed stylesheet. Always non-null for
   // constructed stylesheets, always null otherwise.
@@ -261,6 +262,7 @@ class CORE_EXPORT CSSStyleSheet final : public StyleSheet,
 
  private:
   friend class QuietMutationScope;
+  friend class InspectorGhostRules;
 
   bool IsAlternate() const;
   bool IsCSSStyleSheet() const override { return true; }

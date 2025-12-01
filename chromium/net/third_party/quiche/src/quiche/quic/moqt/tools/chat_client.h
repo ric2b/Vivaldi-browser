@@ -92,13 +92,13 @@ class ChatClient {
     RemoteTrackVisitor(ChatClient* client) : client_(client) {}
 
     void OnReply(const moqt::FullTrackName& full_track_name,
-                 std::optional<FullSequence> largest_id,
+                 std::optional<Location> largest_id,
                  std::optional<absl::string_view> reason_phrase) override;
 
     void OnCanAckObjects(MoqtObjectAckFunction) override {}
 
     void OnObjectFragment(const moqt::FullTrackName& full_track_name,
-                          FullSequence sequence,
+                          Location sequence,
                           moqt::MoqtPriority publisher_priority,
                           moqt::MoqtObjectStatus status,
                           absl::string_view object,
@@ -127,7 +127,8 @@ class ChatClient {
   void RunEventLoop() { event_loop_->RunEventLoopOnce(kChatEventLoopDuration); }
   // Callback for incoming announces.
   std::optional<MoqtAnnounceErrorReason> OnIncomingAnnounce(
-      const moqt::FullTrackName& track_namespace, AnnounceEvent announce_type);
+      const moqt::FullTrackName& track_namespace,
+      std::optional<VersionSpecificParameters> parameters);
 
   // Basic session information
   FullTrackName my_track_name_;

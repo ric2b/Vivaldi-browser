@@ -44,6 +44,7 @@
 #include "base/win/scoped_localalloc.h"
 #include "base/win/windows_version.h"
 #include "chrome/installer/util/lzma_util.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/ping_configurator.h"
 #include "chrome/updater/tag.h"
@@ -456,7 +457,7 @@ ProcessExitResult InstallerMain(HMODULE module,
 
   const UpdaterScope scope = GetUpdaterScopeForCommandLine(command_line);
   usage_stats_enable =
-      UsageStatsProvider::Create()->AnyAppEnablesUsageStats(scope);
+      UsageStatsProvider::Create(scope)->AnyAppEnablesUsageStats();
   const std::optional<tagging::TagArgs> tag_args =
       GetTagArgsForCommandLine(command_line).tag_args;
   if (tag_args) {

@@ -15,6 +15,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/gtest_tags.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/app_mode/app_launch_utils.h"
 #include "chrome/browser/ash/app_mode/fake_cws.h"
 #include "chrome/browser/ash/app_mode/kiosk_app_launch_error.h"
@@ -29,6 +30,7 @@
 #include "chrome/browser/ash/login/test/scoped_policy_update.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/browsertest_util.h"
+#include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/ash/login/reset_screen_handler.h"
@@ -37,8 +39,8 @@
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chromeos/ash/components/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/ash/components/dbus/session_manager/session_manager_client.h"
+#include "chromeos/ash/components/policy/device_local_account/device_local_account_type.h"
 #include "components/crx_file/crx_verifier.h"
-#include "components/policy/core/common/device_local_account_type.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
@@ -86,6 +88,10 @@ class AutoLaunchedKioskTest : public OobeBaseTest {
   AutoLaunchedKioskTest()
       : verifier_format_override_(crx_file::VerifierFormat::CRX3) {
     device_state_.set_domain("domain.com");
+    // Force allow Chrome Apps in Kiosk, since they are default disabled since
+    // M138.
+    scoped_feature_list_.InitFromCommandLine("AllowChromeAppsInKioskSessions",
+                                             "");
   }
 
   AutoLaunchedKioskTest(const AutoLaunchedKioskTest&) = delete;
@@ -205,12 +211,12 @@ class AutoLaunchedKioskTest : public OobeBaseTest {
   }
 
   bool IsKioskAppAutoLaunched(const std::string& app_id) {
-    KioskChromeAppManager::App app;
-    if (!KioskChromeAppManager::Get()->GetApp(app_id, &app)) {
+    auto app = KioskChromeAppManager::Get()->GetApp(app_id);
+    if (!app.has_value()) {
       ADD_FAILURE() << "App " << app_id << " not found.";
       return false;
     }
-    return app.was_auto_launched_with_zero_delay;
+    return app->was_auto_launched_with_zero_delay;
   }
 
   void ExpectCommandLineHasDefaultPolicySwitches(
@@ -232,6 +238,8 @@ class AutoLaunchedKioskTest : public OobeBaseTest {
   FakeCWS fake_cws_;
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+
   extensions::SandboxedUnpacker::ScopedVerifierFormatOverrideForTest
       verifier_format_override_;
   base::AutoReset<bool> skip_splash_wait_override_ =
@@ -380,6 +388,9 @@ class ManagementApiKioskTest : public AutoLaunchedKioskTest {
 };
 
 IN_PROC_BROWSER_TEST_F(ManagementApiKioskTest, ManagementApi) {
+  // TODO(https://crbug.com/40804030): Remove this when updated to use MV3.
+  extensions::ScopedTestMV2Enabler mv2_enabler;
+
   // The tests expects to recieve two test result messages:
   //  * result for tests run by the secondary kiosk app.
   //  * result for tests run by the primary kiosk app.

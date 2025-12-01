@@ -35,6 +35,8 @@ import org.chromium.chrome.browser.contextmenu.ContextMenuCoordinator.ListItemTy
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.embedder_support.contextmenu.ContextMenuSwitches;
+import org.chromium.ui.listmenu.ListMenuItemProperties;
+import org.chromium.ui.listmenu.ListMenuItemViewBinder;
 import org.chromium.ui.modelutil.LayoutViewBuilder;
 import org.chromium.ui.modelutil.MVCListAdapter.ListItem;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
@@ -52,7 +54,7 @@ import java.util.List;
 @Batch(Batch.PER_CLASS)
 public class ContextMenuRenderTest {
     @ParameterAnnotations.ClassParameter
-    private static List<ParameterSet> sClassParams =
+    private static final List<ParameterSet> sClassParams =
             new NightModeTestUtils.NightModeParams().getParameters();
 
     @ClassRule
@@ -108,7 +110,7 @@ public class ContextMenuRenderTest {
                     mAdapter.registerType(
                             ListItemType.CONTEXT_MENU_ITEM,
                             new LayoutViewBuilder(R.layout.context_menu_row),
-                            ContextMenuItemViewBinder::bind);
+                            ListMenuItemViewBinder::binder);
                     mAdapter.registerType(
                             ListItemType.CONTEXT_MENU_ITEM_WITH_ICON_BUTTON,
                             new LayoutViewBuilder(R.layout.context_menu_share_row),
@@ -248,8 +250,11 @@ public class ContextMenuRenderTest {
     }
 
     private PropertyModel getItemModel(String title) {
-        return new PropertyModel.Builder(ContextMenuItemProperties.ALL_KEYS)
-                .with(ContextMenuItemProperties.TEXT, title)
+        return new PropertyModel.Builder(
+                        ListMenuItemProperties.MENU_ITEM_ID,
+                        ListMenuItemProperties.TITLE,
+                        ListMenuItemProperties.ENABLED)
+                .with(ListMenuItemProperties.TITLE, title)
                 .build();
     }
 
@@ -261,7 +266,7 @@ public class ContextMenuRenderTest {
                                 UrlUtils.getIsolatedTestFilePath(
                                         "chrome/test/data/android/UiCapture/dots.png")));
         return new PropertyModel.Builder(ContextMenuItemWithIconButtonProperties.ALL_KEYS)
-                .with(ContextMenuItemWithIconButtonProperties.TEXT, title)
+                .with(ContextMenuItemWithIconButtonProperties.TITLE, title)
                 .with(ContextMenuItemWithIconButtonProperties.ENABLED, true)
                 .with(ContextMenuItemWithIconButtonProperties.BUTTON_IMAGE, drawable)
                 .build();

@@ -17,7 +17,7 @@
 #include <openssl/obj.h>
 #include <openssl/x509.h>
 
-#include "ext_dat.h"
+#include "internal.h"
 
 
 static char *i2s_ASN1_INTEGER_cb(const X509V3_EXT_METHOD *method, void *ext) {

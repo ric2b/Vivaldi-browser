@@ -6,6 +6,7 @@
 
 #include "base/functional/callback_helpers.h"
 #include "chrome/browser/enterprise/data_controls/desktop_data_controls_dialog_factory.h"
+#include "chrome/browser/enterprise/data_controls/desktop_data_controls_dialog_test_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
@@ -29,23 +30,38 @@ class DesktopDataControlsDialogUiTest
 
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
+    helper_ = std::make_unique<DesktopDataControlsDialogTestHelper>(type());
     DesktopDataControlsDialogFactory::GetInstance()->ShowDialogIfNeeded(
         browser()->tab_strip_model()->GetActiveWebContents(), type());
   }
+
+  void DismissUi() override {
+    helper_->CloseDialogWithoutBypass();
+    helper_->WaitForDialogToClose();
+  }
+
+ private:
+  std::unique_ptr<DesktopDataControlsDialogTestHelper> helper_;
 };
 
 class DesktopDataControlsDialogTest : public InProcessBrowserTest,
                                public DesktopDataControlsDialog::TestObserver {
  public:
-  void OnConstructed(DesktopDataControlsDialog* dialog) override {
+  void OnConstructed(DesktopDataControlsDialog* dialog,
+                     views::DialogDelegate* delegate) override {
     ++constructor_called_count_;
 
     ASSERT_TRUE(dialog);
-    ASSERT_EQ(dialog->GetDefaultDialogButton(),
+    ASSERT_TRUE(delegate);
+
+    ASSERT_EQ(delegate->GetDefaultDialogButton(),
               static_cast<int>(ui::mojom::DialogButton::kOk));
+
+    ASSERT_FALSE(base::Contains(delegates_, dialog));
     ASSERT_FALSE(base::Contains(dialog_close_loops_, dialog));
     ASSERT_FALSE(base::Contains(dialog_close_callbacks_, dialog));
 
+    delegates_[dialog] = delegate;
     dialog_close_loops_[dialog] = std::make_unique<base::RunLoop>();
     dialog_close_callbacks_[dialog] =
         dialog_close_loops_[dialog]->QuitClosure();
@@ -53,6 +69,7 @@ class DesktopDataControlsDialogTest : public InProcessBrowserTest,
 
   void OnDestructed(DesktopDataControlsDialog* dialog) override {
     ASSERT_TRUE(dialog);
+    ASSERT_TRUE(base::Contains(delegates_, dialog));
     ASSERT_TRUE(base::Contains(dialog_close_loops_, dialog));
     ASSERT_TRUE(base::Contains(dialog_close_callbacks_, dialog));
 
@@ -69,8 +86,8 @@ class DesktopDataControlsDialogTest : public InProcessBrowserTest,
       // asynchronously.
       base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
           FROM_HERE,
-          base::BindOnce(&DesktopDataControlsDialog::AcceptDialog,
-                         base::Unretained(dialog_and_loop.first)));
+          base::BindOnce(&views::DialogDelegate::AcceptDialog,
+                         base::Unretained(delegates_[dialog_and_loop.first])));
     }
 
     for (auto& dialog_and_loop : dialog_close_loops_) {
@@ -81,6 +98,7 @@ class DesktopDataControlsDialogTest : public InProcessBrowserTest,
  protected:
   size_t constructor_called_count_ = 0;
 
+  std::map<DesktopDataControlsDialog*, views::DialogDelegate*> delegates_;
   std::map<DesktopDataControlsDialog*, base::OnceClosure>
       dialog_close_callbacks_;
   std::map<DesktopDataControlsDialog*, std::unique_ptr<base::RunLoop>>

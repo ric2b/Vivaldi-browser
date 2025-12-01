@@ -22,6 +22,38 @@ The most important tools are:
 
 There are a lot of git utilities included.
 
+Also, includes shell script/batch file for tools required to build chromium,
+e.g.
+
+- `gn`: a meta-build system that generates build files for Ninja
+- `autoninja`: a wrapper for `siso` and `ninja`.
+- `siso`: a build tool that aims to significantly speed up Chromium's build.
+- `ninja`: a small build system with a focus on speed.  deprecated by Siso.
+
+These shell script/batch file runs python script with `python-bin/python3`
+that find binaries in chromium checkout, and run with proper setup/check.
+To use these wrappers, you need to initialize/bootstrap depot_tools (using
+`gclient`, `update_depot_tools` or `ensure_bootstrap`).
+
+## Installing
+
+See [set-up documentation](https://commondatastorage.googleapis.com/chrome-infra-docs/flat/depot_tools/docs/html/depot_tools_tutorial.html#_setting_up).
+
+depot_tools is also available in
+
+- chromium's third_party/depot_tools:
+  propagated by [autoroller](https://autoroll.skia.org/r/depot-tools-chromium-autoroll).
+
+- on builder:
+  [infra_internal/recipe_bundles/chrome-internal.googlesource.com/chrome/tools/build](https://chrome-infra-packages.appspot.com/p/infra_internal/recipe_bundles/chrome-internal.googlesource.com/chrome/tools/build) bundles depot_tools.
+  propagated by [build_internal recipe roller](https://ci.chromium.org/ui/p/infra-internal/builders/cron/build_internal%20recipe%20roller)
+
+These depot_tools would not be initialized/bootstrapped (i.e. no
+`python-bin/python3` binary available), so the build tool wrapper won't work,
+unless it is explicitly initialized by `ensure_bootstrap`.
+Or, directly call the python script instead of using the shell script/batch
+file.
+
 
 ## Updating
 
@@ -32,7 +64,7 @@ run `./update_depot_tools_toggle.py --disable`.
 To update package manually, run `update_depot_tools.bat` on Windows,
 or `./update_depot_tools` on Linux or Mac.
 
-On Windows only, running `gclient` will install `python`.
+Running `gclient` will install `python3` binary.
 
 
 ## Contributing
@@ -73,7 +105,3 @@ https://github.com/google/styleguide/tree/gh-pages/cpplint. Unfortunately, that
 repository is not maintained any more.
 If you want to update `cpplint.py` in `depot_tools`, just upload a patch to do
 so. We will figure out a long-term strategy via issue https://crbug.com/916550.
-
-Note that the `cpplint.py` here is also used by the [Tricium
-analyzer](https://chromium.googlesource.com/infra/infra/+/HEAD/go/src/infra/tricium/functions/cpplint),
-so if the cpplint.py here changes, we should also update the copy used there.

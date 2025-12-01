@@ -375,8 +375,8 @@ class StructureType(Record, Type):
     # Returns True if the structure can be created with no parameters, e.g. all of its members have
     # defaults or are optional,
     def has_basic_constructor(self):
-        return all((member.optional or member.default_value)
-                   for member in self.members)
+        return all((member.optional or member.default_value
+                    or member.type.hasUndefined) for member in self.members)
 
 
 class CallbackInfoType(StructureType):
@@ -468,8 +468,7 @@ def link_object(obj, types):
                       autolock_enabled, json_data)
 
     obj.methods = [make_method(m) for m in obj.json_data.get('methods', [])]
-    obj.methods.sort(key=lambda method: method.name.canonical_case())
-
+    obj.methods.sort(key=lambda method: method.name.concatcase().lower())
 
 def link_structure(struct, types):
     struct.members = linked_record_members(struct.json_data['members'], types)
@@ -513,6 +512,11 @@ def topo_sort_structure(structs):
     for struct in structs:
         struct.visited = False
         struct.subdag_depth = 0
+        # String view is special cased to -1 because we purposely fully declare
+        # it before all other structs.
+        if struct.name.get() == "string view":
+            struct.subdag_depth = -1
+            struct.visited = True
 
     def compute_depth(struct):
         if struct.visited:
@@ -618,7 +622,8 @@ def parse_json(json, enabled_tags, disabled_tags=None):
 
     for category in by_category.keys():
         by_category[category] = sorted(
-            by_category[category], key=lambda typ: typ.name.canonical_case())
+            by_category[category],
+            key=lambda typ: typ.name.concatcase().lower())
 
     by_category['structure'] = topo_sort_structure(by_category['structure'])
 
@@ -803,7 +808,8 @@ def compute_kotlin_params(loaded_json, kotlin_json):
     # A structure may need to know which other structures listed it as a chain root, e.g.
     # to know whether to mark the generated class 'open'.
     chain_children = defaultdict(list)
-    for structure in params_kotlin['by_category']['structure']:
+    by_category = params_kotlin['by_category']
+    for structure in by_category['structure']:
         for chain_root in structure.chain_roots:
             chain_children[chain_root.name.get()].append(structure)
     params_kotlin['chain_children'] = chain_children
@@ -813,6 +819,14 @@ def compute_kotlin_params(loaded_json, kotlin_json):
     params_kotlin['kotlin_record_members'] = kotlin_record_members
     params_kotlin['jni_name'] = jni_name
     params_kotlin['is_async_method'] = is_async_method
+    params_kotlin['has_kotlin_classes'] = (
+        by_category['callback function'] + by_category['callback info'] +
+        by_category['enum'] + by_category['function pointer'] +
+        by_category['object'] + [
+            structure for structure in by_category['structure']
+            if include_structure(structure)
+        ])
+
     return params_kotlin
 
 
@@ -1282,6 +1296,15 @@ class MultiGeneratorFromDawnJSON(Generator):
                     'src/emdawnwebgpu/library_webgpu_generated_sig_info.js',
                     [RENDER_PARAMS_BASE, params_emscripten]))
 
+        if 'emdawnwebgpu_link_test_cpp' in targets:
+            assert api == 'webgpu'
+            params_emscripten = parse_json(
+                loaded_json, enabled_tags=['compat', 'emscripten'])
+            renders.append(
+                FileRender('emdawnwebgpu/LinkTest.cpp',
+                           'src/emdawnwebgpu/LinkTest.cpp',
+                           [RENDER_PARAMS_BASE, params_emscripten]))
+
         if 'mock_api' in targets:
             mock_params = [
                 RENDER_PARAMS_BASE, params_dawn, {
@@ -1521,7 +1544,12 @@ class MultiGeneratorFromDawnJSON(Generator):
             renders.append(
                 FileRender('art/methods.cpp', 'cpp/methods.cpp',
                            [RENDER_PARAMS_BASE, params_kotlin]))
-
+            renders.append(
+                FileRender('art/JNIClasses.h', 'cpp/JNIClasses.h',
+                           [RENDER_PARAMS_BASE, params_kotlin]))
+            renders.append(
+                FileRender('art/JNIClasses.cpp', 'cpp/JNIClasses.cpp',
+                           [RENDER_PARAMS_BASE, params_kotlin]))
         return GeneratorOutput(renders=renders,
                                imported_templates=imported_templates)
 

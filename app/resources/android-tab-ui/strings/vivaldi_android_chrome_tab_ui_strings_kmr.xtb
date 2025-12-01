@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="kmr">
-<translation id="2277224997687551299">Navê komê biguherîne</translation>
+<translation id="1062777154504442433">Rûgera komkirî ya nû</translation>
+<translation id="1625440863545383011">Rûgerê rake û komkirinê berde</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Rûgera şûnpelê}
           other {Rûgerên şûnpelê}
         }</translation>
 <translation id="2947471979790858922">Çalakiya te ya di van rûgeryên taybet de wê ji vê amûrê re werin rakirin</translation>
+<translation id="3298614730029636660">Komkirinê berde</translation>
+<translation id="354698175756845966">Rengê komkirinê biguherîne</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Tu dikarî rûgerên xwe yên girtî di rûgerên dawî de di binê menuya sereke ya Vivaldi de bibînî. Rûgerê te ya taybet wê berdest nebe.}
         other {Tu dikarî rûgerên xwe yên girtî di rûgerên dawî de di binê menuya sereke ya Vivaldi de bibînî. # Rûgerê te ya taybet wê berdest nebe.}}</translation>
-<translation id="4460014764210899310">Kom neke</translation>
 <translation id="4871187110787939393">Tevahiya rûgerên taybet bigire?</translation>
 <translation id="5494920125229734069">Tevahiyan hilbijêre</translation>
-<translation id="6744956528665271406">Rengê komê biguherîne</translation>
+<translation id="6807841890213931603">Rûgerê rake û komkirinê jê bibe</translation>
+<translation id="750227952939161636">Rûgerên komkirî yên te di navbera tevahiya amûrên te yên têketî de xweber tomar dike û rojane dibe</translation>
+<translation id="7640137753339219124">Komkirinê jê bibe</translation>
+<translation id="7653857400289671414">Rûgerên komkirî yên te xweber tên tomarkirin</translation>
+<translation id="8440938071054361204">Navê komkirinê biguherîne</translation>
+<translation id="8602902357364871325">Komkirinê bigire</translation>
+<translation id="8851621822786801079">Ji komkirinê rake</translation>
 </translationbundle>

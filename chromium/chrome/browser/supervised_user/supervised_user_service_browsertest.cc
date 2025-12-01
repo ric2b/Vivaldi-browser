@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "components/supervised_user/core/browser/supervised_user_service.h"
+
 #include "base/functional/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -11,6 +13,8 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
@@ -42,13 +46,10 @@ class SupervisedUserServiceBrowserTest
     return supervision_mixin_.api_mock_setup_mixin().api_mock();
   }
 
-  SupervisionMixin supervision_mixin_{
-      mixin_host_,
-      this,
-      embedded_test_server(),
-      {.sign_in_mode = GetSignInMode(),
-       .embedded_test_server_options = {.resolver_rules_map_host_list =
-                                            "google1.com"}}};
+  SupervisionMixin supervision_mixin_{mixin_host_,
+                                      this,
+                                      embedded_test_server(),
+                                      {.sign_in_mode = GetSignInMode()}};
 
  private:
   base::test::ScopedFeatureList scoped_feature_list;
@@ -80,16 +81,48 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserServiceBrowserTest, LocalPolicies) {
   }
 }
 
-IN_PROC_BROWSER_TEST_P(SupervisedUserServiceBrowserTest,
+IN_PROC_BROWSER_TEST_P(SupervisedUserServiceBrowserTest, ProfileName) {
+  Profile* profile = browser()->profile();
+  PrefService* prefs = profile->GetPrefs();
+  EXPECT_TRUE(prefs->IsUserModifiablePreference(prefs::kProfileName));
+
+  std::string original_name = prefs->GetString(prefs::kProfileName);
+  ProfileAttributesEntry* entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile->GetPath());
+  ASSERT_NE(entry, nullptr);
+  EXPECT_EQ(original_name, base::UTF16ToUTF8(entry->GetName()));
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    SupervisedUserServiceBrowserTest,
+    testing::Values(
+#if !BUILDFLAG(IS_CHROMEOS)
+        // Only for platforms that support signed-out browser.
+        SupervisionMixin::SignInMode::kSignedOut,
+#endif
+        SupervisionMixin::SignInMode::kRegular,
+        SupervisionMixin::SignInMode::kSupervised),
+    ::testing::PrintToStringParamName());
+
+// Suite for supervised user features activated for regular users.
+class SupervisedUserServiceForRegularUsersBrowserTest
+    : public MixinBasedInProcessBrowserTest,
+      public ::testing::WithParamInterface<SupervisionMixin::SignInMode> {
+ protected:
+  static SupervisionMixin::SignInMode GetSignInMode() { return GetParam(); }
+  SupervisionMixin supervision_mixin_{mixin_host_,
+                                      this,
+                                      embedded_test_server(),
+                                      {.sign_in_mode = GetSignInMode()}};
+};
+
+IN_PROC_BROWSER_TEST_P(SupervisedUserServiceForRegularUsersBrowserTest,
                        ForceGoogleSafeSearchCanBeOverriden) {
   Profile* profile = browser()->profile();
   PrefService* prefs = profile->GetPrefs();
-
-  if (GetSignInMode() == SupervisionMixin::SignInMode::kSupervised) {
-    // Required for supervised users, who have all navigations, including Google
-    // search, classified.
-    kids_management_api_mock().AllowSubsequentClassifyUrl();
-  }
 
   content::TestNavigationObserver observer(
       browser()->tab_strip_model()->GetActiveWebContents());
@@ -128,31 +161,87 @@ IN_PROC_BROWSER_TEST_P(SupervisedUserServiceBrowserTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_P(SupervisedUserServiceBrowserTest, ProfileName) {
-  Profile* profile = browser()->profile();
-  PrefService* prefs = profile->GetPrefs();
-  EXPECT_TRUE(prefs->IsUserModifiablePreference(prefs::kProfileName));
-
-  std::string original_name = prefs->GetString(prefs::kProfileName);
-  ProfileAttributesEntry* entry =
-      g_browser_process->profile_manager()
-          ->GetProfileAttributesStorage()
-          .GetProfileAttributesWithPath(profile->GetPath());
-  ASSERT_NE(entry, nullptr);
-  EXPECT_EQ(original_name, base::UTF16ToUTF8(entry->GetName()));
+IN_PROC_BROWSER_TEST_P(SupervisedUserServiceForRegularUsersBrowserTest,
+                       UrlFilterIsOffByDefault) {
+  EXPECT_TRUE(SupervisedUserServiceFactory::GetForProfile(browser()->profile())
+                  ->GetURLFilter()
+                  ->GetWebFilterType() == WebFilterType::kDisabled);
 }
 
 INSTANTIATE_TEST_SUITE_P(
     All,
-    SupervisedUserServiceBrowserTest,
+    SupervisedUserServiceForRegularUsersBrowserTest,
     testing::Values(
 #if !BUILDFLAG(IS_CHROMEOS)
         // Only for platforms that support signed-out browser.
         SupervisionMixin::SignInMode::kSignedOut,
 #endif
-        SupervisionMixin::SignInMode::kRegular,
-        SupervisionMixin::SignInMode::kSupervised),
+        SupervisionMixin::SignInMode::kRegular),
     ::testing::PrintToStringParamName());
+
+// Suite for supervised user features behavior for supervised users.
+class SupervisedUserServiceForSupervisedUsersBrowserTest
+    : public MixinBasedInProcessBrowserTest {
+ protected:
+  SupervisionMixin supervision_mixin_{
+      mixin_host_,
+      this,
+      embedded_test_server(),
+      {.sign_in_mode = SupervisionMixin::SignInMode::kSupervised}};
+};
+
+IN_PROC_BROWSER_TEST_F(SupervisedUserServiceForSupervisedUsersBrowserTest,
+                       UrlFilterIsOnByDefault) {
+  EXPECT_NE(WebFilterType::kDisabled,
+            SupervisedUserServiceFactory::GetForProfile(browser()->profile())
+                ->GetURLFilter()
+                ->GetWebFilterType());
+}
+
+IN_PROC_BROWSER_TEST_F(SupervisedUserServiceForSupervisedUsersBrowserTest,
+                       FilterIsNeutralized) {
+  Profile* profile = browser()->profile();
+  PrefService* pref_service = profile->GetPrefs();
+
+  supervised_user_test_util::SetWebFilterType(
+      profile, supervised_user::WebFilterType::kTryToBlockMatureSites);
+  supervised_user_test_util::SetManualFilterForHost(profile, "example1.com",
+                                                    /*allowlist=*/true);
+  supervised_user_test_util::SetManualFilterForHost(profile, "example2.com",
+                                                    /*allowlist=*/false);
+  supervised_user_test_util::SetManualFilterForUrl(profile, "example3.com",
+                                                   /*allowlist=*/true);
+  supervised_user_test_util::SetManualFilterForUrl(profile, "example4.com",
+                                                   /*allowlist=*/false);
+
+  EXPECT_FALSE(pref_service->FindPreference(prefs::kSupervisedUserManualHosts)
+                   ->IsDefaultValue());
+  EXPECT_FALSE(pref_service->FindPreference(prefs::kSupervisedUserManualURLs)
+                   ->IsDefaultValue());
+  EXPECT_FALSE(pref_service->FindPreference(prefs::kSupervisedUserSafeSites)
+                   ->IsDefaultValue());
+  EXPECT_FALSE(
+      pref_service
+          ->FindPreference(prefs::kDefaultSupervisedUserFilteringBehavior)
+          ->IsDefaultValue());
+
+  DisableParentalControls(*pref_service);
+  EXPECT_EQ(WebFilterType::kDisabled,
+            SupervisedUserServiceFactory::GetForProfile(browser()->profile())
+                ->GetURLFilter()
+                ->GetWebFilterType());
+
+  EXPECT_TRUE(pref_service->FindPreference(prefs::kSupervisedUserManualHosts)
+                  ->IsDefaultValue());
+  EXPECT_TRUE(pref_service->FindPreference(prefs::kSupervisedUserManualURLs)
+                  ->IsDefaultValue());
+  EXPECT_TRUE(pref_service->FindPreference(prefs::kSupervisedUserSafeSites)
+                  ->IsDefaultValue());
+  EXPECT_TRUE(
+      pref_service
+          ->FindPreference(prefs::kDefaultSupervisedUserFilteringBehavior)
+          ->IsDefaultValue());
+}
 
 }  // namespace
 }  // namespace supervised_user

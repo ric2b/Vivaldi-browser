@@ -18,6 +18,7 @@ DEPS = [
     'recipe_engine/buildbucket',
     'recipe_engine/context',
     'recipe_engine/cv',
+    'recipe_engine/findings',
     'recipe_engine/json',
     'recipe_engine/path',
     'recipe_engine/properties',

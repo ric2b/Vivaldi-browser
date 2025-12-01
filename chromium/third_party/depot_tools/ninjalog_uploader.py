@@ -18,6 +18,7 @@ See also the privacy review. http://eldar/assessments/656778450
 
 import argparse
 import getpass
+import contextlib
 import gzip
 import http
 import io
@@ -177,6 +178,10 @@ def GetMetadata(cmdline, ninjalog, exit_code, build_duration, user):
     jflag = GetJflag(cmdline)
     if jflag is not None:
         metadata["jobs"] = jflag
+
+    with contextlib.suppress(FileNotFoundError):
+        with open(os.path.join(build_dir, ".siso_metadata.json"), "r") as f:
+            metadata["siso_metadata"] = json.load(f)
 
     return metadata
 

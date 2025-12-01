@@ -23,6 +23,5 @@
   "background-common-bundle.js.map": { "versioned": true },
   "bundle-mailreader-worker.js.map": { "versioned": true },
   "inject-all-bundle.js.map": { "versioned": true },
-  "translate-bundle.js.map": { "versioned": true },
-  "vendor-bundle.js.map": { "versioned": true }
+  "translate-bundle.js.map": { "versioned": true }
 }

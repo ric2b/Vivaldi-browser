@@ -30,13 +30,13 @@ class CPDF_ViewerPreferences {
   RetainPtr<const CPDF_Array> PrintPageRange() const;
   ByteString Duplex() const;
 
-  // Gets the entry for |bsKey|.
-  std::optional<ByteString> GenericName(const ByteString& bsKey) const;
+  // Gets the entry for `key`.
+  std::optional<ByteString> GenericName(ByteStringView key) const;
 
  private:
   RetainPtr<const CPDF_Dictionary> GetViewerPreferences() const;
 
-  UnownedPtr<const CPDF_Document> const m_pDoc;
+  UnownedPtr<const CPDF_Document> const doc_;
 };
 
 #endif  // CORE_FPDFDOC_CPDF_VIEWERPREFERENCES_H_

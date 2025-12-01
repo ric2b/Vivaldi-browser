@@ -37,13 +37,16 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
+import org.chromium.chrome.browser.tab_ui.TabModelDotInfo;
 import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tasks.tab_management.archived_tabs_auto_delete_promo.ArchivedTabsAutoDeletePromoManager;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.undo_tab_close_snackbar.UndoBarThrottle;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
@@ -69,7 +72,10 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull TabCreatorManager tabCreatorManager,
             @NonNull OneshotSupplier<LayoutStateProvider> layoutStateProviderSupplier,
             @NonNull ModalDialogManager modalDialogManager,
-            @NonNull ThemeColorProvider themeColorProvider) {
+            @NonNull ThemeColorProvider themeColorProvider,
+            UndoBarThrottle undoBarThrottle,
+            @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
+            @NonNull Supplier<ShareDelegate> shareDelegateSupplier) {
         return new TabGroupUiCoordinator(
                 activity,
                 parentView,
@@ -83,7 +89,10 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                 tabCreatorManager,
                 layoutStateProviderSupplier,
                 modalDialogManager,
-                themeColorProvider);
+                themeColorProvider,
+                undoBarThrottle,
+                tabBookmarkerSupplier,
+                shareDelegateSupplier);
     }
 
     @Override
@@ -108,11 +117,15 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull BackPressManager backPressManager,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
             @Nullable DesktopWindowStateManager desktopWindowStateManager,
-            @NonNull ObservableSupplier<Boolean> tabModelNotificationDotSupplier,
+            @NonNull ObservableSupplier<TabModelDotInfo> tabModelNotificationDotSupplier,
             @NonNull ObservableSupplier<CompositorViewHolder> compositorViewHolderSupplier,
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
             @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
-            @NonNull TabGroupCreationUiFlow tabGroupCreationUiFlow) {
+            @NonNull TabGroupCreationUiDelegate tabGroupCreationUiDelegate,
+            UndoBarThrottle undoBarThrottle,
+            @NonNull LazyOneshotSupplier<HubManager> hubManagerSupplier,
+            @Nullable ArchivedTabsAutoDeletePromoManager archivedTabsAutoDeletePromoManager,
+            @NonNull Supplier<TabGroupUiActionHandler> tabGroupUiActionHandlerSupplier) {
         // TODO(crbug.com/40946413): Consider making this an activity scoped singleton and possibly
         // hosting it in CTA/HubProvider.
         TabSwitcherPaneCoordinatorFactory factory =
@@ -134,7 +147,10 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                         desktopWindowStateManager,
                         edgeToEdgeSupplier,
                         shareDelegateSupplier,
-                        tabBookmarkerSupplier);
+                        tabBookmarkerSupplier,
+                        undoBarThrottle,
+                        () -> hubManagerSupplier.get().getPaneManager(),
+                        tabGroupUiActionHandlerSupplier);
         OneshotSupplierImpl<Profile> profileSupplier = new OneshotSupplierImpl<>();
         Handler handler = new Handler();
         profileProviderSupplier.onAvailable(
@@ -159,7 +175,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                                 userEducationHelper,
                                 edgeToEdgeSupplier,
                                 compositorViewHolderSupplier,
-                                tabGroupCreationUiFlow)
+                                tabGroupCreationUiDelegate)
                         : new TabSwitcherPane(
                                 activity,
                                 ContextUtils.getAppSharedPreferences(),
@@ -175,7 +191,8 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                                 userEducationHelper,
                                 edgeToEdgeSupplier,
                                 compositorViewHolderSupplier,
-                                tabGroupCreationUiFlow);
+                                tabGroupCreationUiDelegate,
+                                archivedTabsAutoDeletePromoManager);
         return Pair.create(pane, pane);
     }
 
@@ -188,7 +205,8 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
             @NonNull LazyOneshotSupplier<HubManager> hubManagerSupplier,
             @NonNull Supplier<TabGroupUiActionHandler> tabGroupUiActionHandlerSupplier,
             @NonNull Supplier<ModalDialogManager> modalDialogManagerSupplier,
-            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier) {
+            @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
+            @NonNull DataSharingTabManager dataSharingTabManager) {
         LazyOneshotSupplier<TabGroupModelFilter> tabGroupModelFilterSupplier =
                 LazyOneshotSupplier.fromSupplier(
                         () ->
@@ -203,11 +221,12 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
                 () -> hubManagerSupplier.get().getPaneManager(),
                 tabGroupUiActionHandlerSupplier,
                 modalDialogManagerSupplier,
-                edgeToEdgeSupplier);
+                edgeToEdgeSupplier,
+                dataSharingTabManager);
     }
 
     @Override
-    public TabGroupCreationUiFlow createTabGroupCreationUiFlow(
+    public TabGroupCreationUiDelegate createTabGroupCreationUiFlow(
             @NonNull Context context,
             @NonNull ModalDialogManager modalDialogManager,
             @NonNull OneshotSupplier<HubManager> hubManagerSupplier,
@@ -215,7 +234,7 @@ public class TabManagementDelegateImpl implements TabManagementDelegate {
         ObservableSupplierImpl<PaneManager> paneManagerSupplier = new ObservableSupplierImpl<>();
         hubManagerSupplier.onAvailable(
                 hubManager -> paneManagerSupplier.set(hubManager.getPaneManager()));
-        return new TabGroupCreationUiFlow(
+        return new TabGroupCreationUiDelegate(
                 context,
                 () -> modalDialogManager,
                 paneManagerSupplier,

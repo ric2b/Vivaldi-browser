@@ -4,4 +4,5 @@
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> টি বুকমার্}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> টি বুকমার্ক}}</translation>
+<translation id="3076631378407175873">কপিরাইট <ph name="YEAR" /> Vivaldi Technologies AS. সর্বস্বত্ব সংরক্ষিত৷</translation>
 </translationbundle>

@@ -25,7 +25,6 @@ struct PendingConnection;
 
 class CONTENT_EXPORT ConnectionCoordinator {
  public:
-  static const int64_t kInvalidDatabaseId = 0;
   static const int64_t kMinimumIndexId = 30;
 
   ConnectionCoordinator(Database* db, BucketContext& bucket_context);
@@ -42,7 +41,7 @@ class CONTENT_EXPORT ConnectionCoordinator {
 
   // Call this method to prune any tasks that don't want to be run during
   // force close. Returns any error caused by rolling back changes.
-  Status PruneTasksForForceClose();
+  Status PruneTasksForForceClose(const std::string& message);
 
   void OnConnectionClosed(Connection* connection);
 

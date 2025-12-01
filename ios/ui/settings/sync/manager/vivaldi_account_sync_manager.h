@@ -7,6 +7,7 @@
 
 #import "components/sync/base/user_selectable_type.h"
 #import "ios/ui/settings/sync/manager/vivaldi_account_simplified_state.h"
+#import "ios/ui/settings/sync/manager/vivaldi_donation_badge_tier.h"
 #import "ios/ui/settings/sync/manager/vivaldi_sync_simplified_state.h"
 #import "sync/vivaldi_sync_service_impl.h"
 #import "vivaldi_account/vivaldi_account_manager.h"
@@ -43,6 +44,7 @@ typedef void (^ServerRequestCompletionHandler)
 - (BOOL)isSyncActive;
 - (NSString*)accountUsername;
 - (UIImage*)accountUserAvatar;
+- (VivaldiDonationBadgeTier)donationBadgeTier;
 - (BOOL)isSyncBookmarksEnabled;
 - (BOOL)isSyncSettingsEnabled;
 - (BOOL)isSyncPasswordsEnabled;

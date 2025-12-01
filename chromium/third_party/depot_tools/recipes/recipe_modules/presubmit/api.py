@@ -6,6 +6,7 @@ from recipe_engine import recipe_api
 
 from PB.recipe_engine import result as result_pb2
 from PB.go.chromium.org.luci.buildbucket.proto import common as common_pb2
+from PB.go.chromium.org.luci.common.proto.findings import findings as findings_pb
 
 # 8 minutes seems like a reasonable upper bound on presubmit timings.
 # According to event mon data we have, it seems like anything longer than
@@ -35,9 +36,7 @@ class PresubmitApi(recipe_api.RecipeApi):
       cmd.extend(['--json_output', self.m.json.output()])
       if self.m.resultdb.enabled:
         kwargs['wrapper'] = ('rdb', 'stream', '--')
-      step_data = self.m.step(name, cmd, **kwargs)
-      output = step_data.json.output or {}
-      return output
+      return self.m.step(name, cmd, **kwargs)
 
   @property
   def _relative_root(self):
@@ -116,6 +115,9 @@ class PresubmitApi(recipe_api.RecipeApi):
   def execute(self, bot_update_step, skip_owners=False, run_all=False):
     """Runs presubmit and sets summary markdown if applicable.
 
+    Also uploads the presubmit results as findings if the results contain
+    location data.
+
     Args:
       * bot_update_step: the StepResult from a previously executed bot_update step.
       * skip_owners: a boolean indicating whether Owners checks should be skipped.
@@ -177,26 +179,28 @@ class PresubmitApi(recipe_api.RecipeApi):
       ])
 
     raw_result = result_pb2.RawResult()
-    step_json = self(
+    presubmit_step = self(
         *presubmit_args,
         timeout=self._timeout_s,
         # ok_ret='any' causes all exceptions to be ignored in this step
         ok_ret='any')
-    # Set recipe result values
-    if step_json:
-      raw_result.summary_markdown = _createSummaryMarkdown(step_json)
+    if presubmit_step.exc_result.retcode != 0:
+      presubmit_step.presentation.status = 'FAILURE'
 
-    retcode = self.m.step.active_result.retcode
-    if retcode == 0:
+    # Set recipe result values and upload findings
+    if (step_json := presubmit_step.json.output):
+      raw_result.summary_markdown = _createSummaryMarkdown(step_json)
+      if self.m.tryserver.is_tryserver and self.m.resultdb.enabled:
+        self.upload_findings_from_result(step_json)
+
+    if presubmit_step.exc_result.retcode == 0:
       raw_result.status = common_pb2.SUCCESS
       return raw_result
-
-    self.m.step.active_result.presentation.status = 'FAILURE'
-    if self.m.step.active_result.exc_result.had_timeout:
+    elif presubmit_step.exc_result.had_timeout:
       raw_result.status = common_pb2.FAILURE
       raw_result.summary_markdown += (
           '\n\nTimeout occurred during presubmit step.')
-    elif retcode == 1:
+    elif presubmit_step.exc_result.retcode == 1:
       raw_result.status = common_pb2.FAILURE
       self.m.tryserver.set_test_failure_tryjob_result()
     else:
@@ -212,6 +216,48 @@ class PresubmitApi(recipe_api.RecipeApi):
           '/issues/new?component=1456211)')
     return raw_result
 
+  def upload_findings_from_result(self, result_json):
+    """Parse code findings from presubmit results and then upload them.
+
+    Args:
+      result_json: the json result output from presubmit step.
+    """
+    findings = []
+    base_finding = findings_pb.Finding(
+        category='chromium_presubmit',
+        location=findings_pb.Location(
+            gerrit_change_ref=findings_pb.Location.GerritChangeReference(
+                host=self.m.tryserver.gerrit_change.host,
+                project=self.m.tryserver.gerrit_change.project,
+                change=self.m.tryserver.gerrit_change.change,
+                patchset=self.m.tryserver.gerrit_change.patchset,
+            ), ),
+    )
+    for results, level in [
+        (result_json.get('errors',
+                         []), findings_pb.Finding.SEVERITY_LEVEL_ERROR),
+        (result_json.get('warnings',
+                         []), findings_pb.Finding.SEVERITY_LEVEL_WARNING),
+        (result_json.get('notifications',
+                         []), findings_pb.Finding.SEVERITY_LEVEL_INFO)
+    ]:
+      for result in results:
+        for loc in result.get('locations', []):
+          f = findings_pb.Finding()
+          f.CopyFrom(base_finding)
+          f.message = result.get('message', '')
+          f.severity_level = level
+          f.location.file_path = loc['file_path'].replace(self.m.path.sep, '/')
+          if loc.get('start_line', None):
+            f.location.range.start_line = loc['start_line']
+            f.location.range.end_line = loc['end_line']
+            f.location.range.start_column = loc.get('start_col', 0)
+            f.location.range.end_column = loc.get('end_col', 0)
+          findings.append(f)
+
+    if findings:
+      self.m.findings.upload_findings(
+          findings, step_name='upload presubmit results as findings')
 
 def _limitSize(message_list, char_limit=450):
   """Returns a list of strings within a certain character length.

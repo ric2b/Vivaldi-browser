@@ -103,6 +103,14 @@ class NinjaCBinaryTargetWriter : public NinjaBinaryTargetWriter {
   void WriteOrderOnlyDependencies(
       const UniqueVector<const Target*>& non_linkable_deps);
 
+  // Writes the validations for the link or stamp line. This is
+  // the "|@" and everything following it on the ninja line.
+  //
+  // The validations are the non-linkable deps passed in as an argument, plus
+  // the data file dependencies in the target.
+  void WriteValidations(
+      const UniqueVector<const Target*>& non_linkable_deps);
+
   // Checks for duplicates in the given list of output files. If any duplicates
   // are found, throws an error and return false.
   bool CheckForDuplicateObjectFiles(const std::vector<OutputFile>& files) const;

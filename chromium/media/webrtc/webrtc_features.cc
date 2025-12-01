@@ -37,6 +37,14 @@ BASE_FEATURE(kWebRtcAllowWgcWindowZeroHz,
              "AllowWgcWindowZeroHz",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+#if BUILDFLAG(IS_WIN)
+// When enabled, instruct WGC to draw a border around the captured
+// window or screen.
+BASE_FEATURE(kWebRtcWgcRequireBorder,
+             "WebRtcWgcRequireBorder",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+#endif
+
 // TODO(crbug.com/40872787): Deactivate the flag gradually before deleting it.
 // When disabled, any WebRTC Audio Processing Module input volume recommendation
 // is ignored and no adjustment takes place.
@@ -50,13 +58,6 @@ BASE_FEATURE(kWebRtcAllowInputVolumeAdjustment,
 BASE_FEATURE(kWebRtcApmDownmixCaptureAudioMethod,
              "WebRtcApmDownmixCaptureAudioMethod",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled, the Audio Processing Module is used to determine whether the
-// playout reference is needed. Otherwise the decision is based on
-// `media::AudioProcessingSettings`.
-BASE_FEATURE(kWebRtcApmTellsIfPlayoutReferenceIsNeeded,
-             "WebRtcApmTellsIfPlayoutReferenceIsNeeded",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // When enabled, allow H.265 codec to be used for sending WebRTC streams.
 // Platform hardware H.265 encoder needs to be supported and enabled in order to

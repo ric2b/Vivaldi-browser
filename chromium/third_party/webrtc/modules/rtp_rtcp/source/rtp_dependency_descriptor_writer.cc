@@ -9,6 +9,7 @@
  */
 #include "modules/rtp_rtcp/source/rtp_dependency_descriptor_writer.h"
 
+#include <algorithm>
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
@@ -18,6 +19,7 @@
 #include "absl/algorithm/container.h"
 #include "api/array_view.h"
 #include "api/transport/rtp/dependency_descriptor.h"
+#include "api/video/render_resolution.h"
 #include "rtc_base/bit_buffer.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/numerics/safe_compare.h"
@@ -55,7 +57,7 @@ NextLayerIdc GetNextLayerIdc(const FrameDependencyTemplate& previous,
 }  // namespace
 
 RtpDependencyDescriptorWriter::RtpDependencyDescriptorWriter(
-    rtc::ArrayView<uint8_t> data,
+    ArrayView<uint8_t> data,
     const FrameDependencyStructure& structure,
     std::bitset<32> active_chains,
     const DependencyDescriptor& descriptor)
@@ -63,14 +65,13 @@ RtpDependencyDescriptorWriter::RtpDependencyDescriptorWriter(
       structure_(structure),
       active_chains_(active_chains),
       bit_writer_(data.data(), data.size()) {
-  if (rtc::SafeNe(descriptor.frame_dependencies.chain_diffs.size(),
-                  structure_.num_chains)) {
+  if (SafeNe(descriptor.frame_dependencies.chain_diffs.size(),
+             structure_.num_chains)) {
     build_failed_ = true;
     return;
   }
-  if (rtc::SafeNe(
-          descriptor.frame_dependencies.decode_target_indications.size(),
-          structure_.num_decode_targets)) {
+  if (SafeNe(descriptor.frame_dependencies.decode_target_indications.size(),
+             structure_.num_decode_targets)) {
     build_failed_ = true;
     return;
   }

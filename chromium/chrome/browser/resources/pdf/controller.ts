@@ -5,10 +5,12 @@
 import {assert} from 'chrome://resources/js/assert.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.js';
 
+// clang-format off
 // <if expr="enable_pdf_ink2">
-import type {AnnotationBrush, AnnotationBrushType} from './constants.js';
+import type {AnnotationBrush, AnnotationBrushType, AnnotationMode, TextAnnotation} from './constants.js';
 // </if>
 import type {NamedDestinationMessageData, Rect, SaveRequestType} from './constants.js';
+// clang-format on
 import type {PdfPluginElement} from './internal_plugin.js';
 import type {DestinationMessageData} from './pdf_viewer_utils.js';
 import type {Viewport} from './viewport.js';
@@ -50,6 +52,22 @@ interface ThumbnailMessageData {
 interface AnnotationBrushMessage {
   type: string;
   data: AnnotationBrush;
+}
+
+interface AllTextAnnotationsMessage {
+  type: string;
+  annotations: TextAnnotation[];
+}
+
+interface StartTextAnnotationMessage {
+  type: 'startTextAnnotation';
+  data: number;
+}
+
+// finishTextAnnotation goes from the viewer to the plugin.
+interface FinishTextAnnotationMessage {
+  type: 'finishTextAnnotation';
+  data: TextAnnotation;
 }
 // </if>
 
@@ -93,6 +111,7 @@ export interface ContentController {
   save(requestType: SaveRequestType): Promise<{
     fileName: string,
     dataToSave: ArrayBuffer,
+    bypassSaveFileForTesting?: boolean,
     editModeForTesting?: boolean,
   }|null>;
 
@@ -114,6 +133,7 @@ export enum PluginControllerEventType {
   // <if expr="enable_pdf_ink2">
   CONTENT_FOCUSED = 'PluginControllerEventType.CONTENT_FOCUSED',
   FINISH_INK_STROKE = 'PluginControllerEventType.FINISH_INK_STROKE',
+  START_INK_STROKE = 'PluginControllerEventType.START_INK_STROKE',
   UPDATE_INK_THUMBNAIL = 'PluginControllerEventType.UPDATE_INK_THUMBNAIL',
   // </if>
   IS_ACTIVE_CHANGED = 'PluginControllerEventType.IS_ACTIVE_CHANGED',
@@ -197,10 +217,10 @@ export class PluginController implements ContentController {
   viewportChanged() {}
 
   // <if expr="enable_pdf_ink2">
-  setAnnotationMode(enable: boolean) {
+  setAnnotationMode(mode: AnnotationMode) {
     this.postMessage_({
       type: 'setAnnotationMode',
-      enable,
+      mode,
     });
   }
 
@@ -216,6 +236,30 @@ export class PluginController implements ContentController {
     const message: AnnotationBrushMessage = {
       type: 'setAnnotationBrush',
       data: brush,
+    };
+
+    this.postMessage_(message);
+  }
+
+  getAllTextAnnotations(): Promise<AllTextAnnotationsMessage> {
+    return this.postMessageWithReply_({
+      type: 'getAllTextAnnotations',
+    });
+  }
+
+  startTextAnnotation(id: number) {
+    const message: StartTextAnnotationMessage = {
+      type: 'startTextAnnotation',
+      data: id,
+    };
+
+    this.postMessage_(message);
+  }
+
+  finishTextAnnotation(annotation: TextAnnotation) {
+    const message: FinishTextAnnotationMessage = {
+      type: 'finishTextAnnotation',
+      data: annotation,
     };
 
     this.postMessage_(message);

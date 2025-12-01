@@ -45,6 +45,11 @@ if (!is_android && !is_ios) {
         "views/caption_bubble_controller_views.h",
         "views/caption_bubble_model.cc",
         "views/caption_bubble_model.h",
+        "views/format_constants.h",
+        "views/translation_view_wrapper.cc",
+        "views/translation_view_wrapper.h",
+        "views/translation_view_wrapper_base.cc",
+        "views/translation_view_wrapper_base.h",
       ]
 
       public_deps = [ "//ui/base/mojom:ui_base_types" ]
@@ -103,6 +108,7 @@ if (!is_android && !is_ios) {
     testonly = true
 
     sources = [
+      "caption_controller_base_unittest.cc",
       "greedy_text_stabilizer_unittest.cc",
       "live_caption_bubble_settings_unittest.cc",
     ]
@@ -137,6 +143,7 @@ if (!is_android && !is_ios) {
         "//components/pref_registry",
         "//components/soda",
         "//components/soda:constants",
+        "//components/soda:test_support",
         "//ui/native_theme",
         "//ui/views",
       ]

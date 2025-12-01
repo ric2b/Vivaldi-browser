@@ -224,22 +224,6 @@ export class OsAboutPageElement extends OsAboutPageBase {
       },
 
       /**
-       * Used by DeepLinkingMixin to focus this page's deep links.
-       */
-      supportedSettingIds: {
-        type: Object,
-        value: () => new Set<Setting>([
-          Setting.kCheckForOsUpdate,
-          Setting.kSeeWhatsNew,
-          Setting.kGetHelpWithChromeOs,
-          Setting.kReportAnIssue,
-          Setting.kTermsOfService,
-          Setting.kDiagnostics,
-          Setting.kFirmwareUpdates,
-        ]),
-      },
-
-      /**
        * Controls whether the extended updates opt-in option is shown.
        */
       showExtendedUpdatesOption_: {
@@ -291,6 +275,17 @@ export class OsAboutPageElement extends OsAboutPageBase {
           'isExtendedUpdatesOptInRequired_)',
     ];
   }
+
+  // DeepLinkingMixin override
+  override supportedSettingIds = new Set<Setting>([
+    Setting.kCheckForOsUpdate,
+    Setting.kSeeWhatsNew,
+    Setting.kGetHelpWithChromeOs,
+    Setting.kReportAnIssue,
+    Setting.kTermsOfService,
+    Setting.kDiagnostics,
+    Setting.kFirmwareUpdates,
+  ]);
 
   private isDarkModeActive_: boolean;
   private currentUpdateStatusEvent_: UpdateStatusChangedEvent;
@@ -686,14 +681,14 @@ export class OsAboutPageElement extends OsAboutPageBase {
     this.$.updateStatusMessageInner.focus();
   }
 
-  private onApplyDeferredUpdateClick_(): void {
-    this.aboutBrowserProxy_.applyDeferredUpdate();
+  private onApplyDeferredUpdateAdvancedClick_(): void {
+    this.aboutBrowserProxy_.applyDeferredUpdateAdvanced();
     this.$.updateStatusMessageInner.focus();
   }
 
   private onApplyAndSetAutoUpdateClick_(): void {
     this.aboutBrowserProxy_.setConsumerAutoUpdate(true);
-    this.onApplyDeferredUpdateClick_();
+    this.onApplyDeferredUpdateAdvancedClick_();
   }
 
   private computeShowCheckUpdates_(): boolean {

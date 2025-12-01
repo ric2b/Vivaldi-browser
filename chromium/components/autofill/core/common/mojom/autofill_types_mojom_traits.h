@@ -189,6 +189,10 @@ struct StructTraits<autofill::mojom::AutocompleteParsingResultDataView,
     return r.webauthn;
   }
 
+  static bool webidentity(const autofill::AutocompleteParsingResult& r) {
+    return r.webidentity;
+  }
+
   static bool Read(autofill::mojom::AutocompleteParsingResultDataView data,
                    autofill::AutocompleteParsingResult* out);
 };
@@ -625,11 +629,6 @@ struct StructTraits<autofill::mojom::PasswordFormFillDataDataView,
     return r.password_element_renderer_id;
   }
 
-  static bool username_may_use_prefilled_placeholder(
-      const autofill::PasswordFormFillData& r) {
-    return r.username_may_use_prefilled_placeholder;
-  }
-
   static const autofill::PasswordAndMetadata& preferred_login(
       const autofill::PasswordFormFillData& r) {
     return r.preferred_login;
@@ -748,6 +747,10 @@ struct StructTraits<autofill::mojom::TriggeringFieldDataView,
 
   static int show_webauthn_credentials(const autofill::TriggeringField& r) {
     return r.show_webauthn_credentials;
+  }
+
+  static int show_identity_credentials(const autofill::TriggeringField& r) {
+    return r.show_identity_credentials;
   }
 
   static const gfx::RectF& bounds(const autofill::TriggeringField& r) {

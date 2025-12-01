@@ -37,6 +37,7 @@ enum boringssl_keccak_phase_t {
 struct BORINGSSL_keccak_st {
   enum boringssl_keccak_config_t config;
   enum boringssl_keccak_phase_t phase;
+  size_t required_out_len;
   uint64_t state[25];
   size_t rate_bytes;
   size_t absorb_offset;
@@ -50,8 +51,10 @@ OPENSSL_EXPORT void BORINGSSL_keccak(uint8_t *out, size_t out_len,
                                      const uint8_t *in, size_t in_len,
                                      enum boringssl_keccak_config_t config);
 
-// BORINGSSL_keccak_init prepares |ctx| for absorbing. The |config| must specify
-// a SHAKE variant, otherwise callers should use |BORINGSSL_keccak|.
+// BORINGSSL_keccak_init prepares |ctx| for absorbing. If the |config| specifies
+// a fixed-output function, like SHA3-256, then the output must be squeezed in a
+// single call to |BORINGSSL_keccak_squeeze|. In that case, it is recommended to
+// use |BORINGSSL_keccak| if the input can be absorbed in a single call.
 OPENSSL_EXPORT void BORINGSSL_keccak_init(
     struct BORINGSSL_keccak_st *ctx, enum boringssl_keccak_config_t config);
 
@@ -59,7 +62,10 @@ OPENSSL_EXPORT void BORINGSSL_keccak_init(
 OPENSSL_EXPORT void BORINGSSL_keccak_absorb(struct BORINGSSL_keccak_st *ctx,
                                             const uint8_t *in, size_t in_len);
 
-// BORINGSSL_keccak_squeeze writes |out_len| bytes to |out| from |ctx|.
+// BORINGSSL_keccak_squeeze writes |out_len| bytes to |out| from |ctx|. If the
+// configuration previously passed in |BORINGSSL_keccak_init| specifies a
+// fixed-output function, then a single call to |BORINGSSL_keccak_squeeze| is
+// allowed, where |out_len| must be the correct length for that function.
 OPENSSL_EXPORT void BORINGSSL_keccak_squeeze(struct BORINGSSL_keccak_st *ctx,
                                              uint8_t *out, size_t out_len);
 

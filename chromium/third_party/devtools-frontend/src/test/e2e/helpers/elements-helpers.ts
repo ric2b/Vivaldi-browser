@@ -69,6 +69,8 @@ const CSS_AUTHORING_HINTS_ICON_SELECTOR = '.hint';
 export const SEARCH_BOX_SELECTOR = '.search-bar';
 const SEARCH_RESULTS_MATCHES = '.search-results-matches';
 export const EMULATE_FOCUSED_PAGE = 'Emulate a focused page';
+const DOM_BREAKPOINTS_SECTION_SELECTOR = '[aria-label="DOM Breakpoints"]';
+const DOM_BREAKPOINTS_LIST_SELECTOR = '[aria-label="DOM Breakpoints list"]';
 
 export const openLayoutPane = async () => {
   await step('Open Layout pane', async () => {
@@ -185,16 +187,16 @@ export const waitForSomeGridsInLayoutPane = async (minimumGridCount: number) => 
                           ])])]);
 };
 
-export const waitForContentOfSelectedElementsNode = async (expectedTextContent: string) => {
-  await waitForFunction(async () => {
-    const selectedTextContent = await getContentOfSelectedNode();
+export const waitForContentOfSelectedElementsNode =
+    async (expectedTextContent: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+  await devToolsPage.waitForFunction(async () => {
+    const selectedTextContent = await getContentOfSelectedNode(devToolsPage);
     return selectedTextContent === expectedTextContent;
   });
 };
 
 export const waitForPartialContentOfSelectedElementsNode =
-    async (expectedPartialTextContent: string, devToolsPage?: DevToolsPage) => {
-  devToolsPage = devToolsPage || getBrowserAndPagesWrappers().devToolsPage;
+    async (expectedPartialTextContent: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
   await devToolsPage.waitForFunction(async () => {
     const selectedTextContent = await getContentOfSelectedNode(devToolsPage);
     return selectedTextContent.includes(expectedPartialTextContent);
@@ -204,8 +206,7 @@ export const waitForPartialContentOfSelectedElementsNode =
 /**
  * Gets the text content of the currently selected element.
  */
-export const getContentOfSelectedNode = async (devToolsPage?: DevToolsPage) => {
-  devToolsPage = devToolsPage || getBrowserAndPagesWrappers().devToolsPage;
+export const getContentOfSelectedNode = async (devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
   const selectedNode = await devToolsPage.waitFor(SELECTED_TREE_ELEMENT_SELECTOR);
   return await selectedNode.evaluate(node => node.textContent as string);
 };
@@ -277,15 +278,16 @@ export const clickTreeElementWithPartialText = async (text: string, devToolsPage
   return false;
 };
 
-export const clickNthChildOfSelectedElementNode = async (childIndex: number) => {
+export const clickNthChildOfSelectedElementNode =
+    async (childIndex: number, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
   assert(childIndex > 0, 'CSS :nth-child() selector indices are 1-based.');
-  await click(`${SELECTED_TREE_ELEMENT_SELECTOR} + ol > li:nth-child(${childIndex})`);
-  await expectVeEvents([veClick('Panel: elements > Tree: elements > TreeItem')]);
+  await devToolsPage.click(`${SELECTED_TREE_ELEMENT_SELECTOR} + ol > li:nth-child(${childIndex})`);
+  await expectVeEvents([veClick('Panel: elements > Tree: elements > TreeItem')], undefined, devToolsPage);
 };
 
-export const focusElementsTree = async () => {
-  await click(SELECTED_TREE_ELEMENT_SELECTOR);
-  await expectVeEvents([veClick('Panel: elements > Tree: elements > TreeItem')]);
+export const focusElementsTree = async (devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+  await devToolsPage.click(SELECTED_TREE_ELEMENT_SELECTOR);
+  await expectVeEvents([veClick('Panel: elements > Tree: elements > TreeItem')], undefined, devToolsPage);
 };
 
 export const navigateToSidePane = async (paneName: string) => {
@@ -313,6 +315,42 @@ export const waitForElementsStyleSection =
   if (expectedNodeText) {
     await waitForPartialContentOfSelectedElementsNode(expectedNodeText, devToolsPage);
   }
+};
+
+export const waitForElementsDOMBreakpointsSection = async () => {
+  let domBreakpointsPane = await $('DOM Breakpoints', undefined, 'aria');
+  if (!domBreakpointsPane) {
+    const elementsPanel = await waitForAria('Elements panel');
+    await clickMoreTabsButton(elementsPanel);
+    domBreakpointsPane = await waitForAria('DOM Breakpoints');
+  }
+  await click(DOM_BREAKPOINTS_SECTION_SELECTOR);
+  await waitFor(DOM_BREAKPOINTS_LIST_SELECTOR);
+};
+
+export async function getDOMBreakpoints() {
+  return await $$('.breakpoint-entry');
+}
+
+export const isDOMBreakpointEnabled = async (breakpoint: puppeteer.ElementHandle<Element>) => {
+  const checkbox = await waitFor('input[type="checkbox"]', breakpoint);
+  return await checkbox!.evaluate(node => node.checked);
+};
+
+export const setDOMBreakpointOnSelectedNode = async (type: string) => {
+  await openSubMenu(SELECTED_TREE_ELEMENT_SELECTOR, 'Break on');
+  const breakpointToggle = await waitFor(`[aria-label="${type}, unchecked"]`);
+  await breakpointToggle.click();
+};
+
+export const toggleDOMBreakpointCheckbox =
+    async (breakpoint: puppeteer.ElementHandle<Element>, wantChecked: boolean) => {
+  const checkbox = await waitFor('input[type="checkbox"]', breakpoint);
+  const checked = await checkbox!.evaluate(box => (box as HTMLInputElement).checked);
+  if (checked !== wantChecked) {
+    await checkbox!.click();
+  }
+  assert.strictEqual(await checkbox!.evaluate(box => (box as HTMLInputElement).checked), wantChecked);
 };
 
 export const waitForElementsComputedSection = async () => {
@@ -366,8 +404,7 @@ export const getPropertyFromComputedPane = async (name: string) => {
   return undefined;
 };
 
-export const expandSelectedNodeRecursively = async (devToolsPage?: DevToolsPage) => {
-  devToolsPage = devToolsPage || getBrowserAndPagesWrappers().devToolsPage;
+export const expandSelectedNodeRecursively = async (devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
   const EXPAND_RECURSIVELY = '[aria-label="Expand recursively"]';
 
   // Find the selected node, right click.
@@ -612,10 +649,9 @@ export const getDisplayedStyleRules = async (devToolsPage?: DevToolsPage) => {
  * - isInherited: True if this is an inherited properties section, and this property is a non-inherited CSS property.
  *                The property will be shown as grayed-out in the style pane.
  */
-export const getDisplayedCSSPropertyData =
-    async (propertiesSection: puppeteer.ElementHandle<Element>, devtoolsPage?: DevToolsPage) => {
-  devtoolsPage = devtoolsPage || getBrowserAndPagesWrappers().devToolsPage;
-  const cssPropertyNames = await devtoolsPage.$$(CSS_PROPERTY_NAME_SELECTOR, propertiesSection);
+export const getDisplayedCSSPropertyData = async (
+    propertiesSection: puppeteer.ElementHandle<Element>, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+  const cssPropertyNames = await devToolsPage.$$(CSS_PROPERTY_NAME_SELECTOR, propertiesSection);
   const propertyNamesData = (await Promise.all(cssPropertyNames.map(
                                  async node => {
                                    return {
@@ -638,27 +674,28 @@ export const getDisplayedCSSPropertyNames = async (propertiesSection: puppeteer.
   return propertyNamesText;
 };
 
-export const getStyleRule = (selector: string) => {
-  return waitFor(getStyleRuleSelector(selector));
+export const getStyleRule = (selector: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+  return devToolsPage.waitFor(getStyleRuleSelector(selector));
 };
 
-export const getStyleRuleWithSourcePosition = (styleSelector: string, sourcePosition?: string) => {
-  if (!sourcePosition) {
-    return getStyleRule(styleSelector);
-  }
-  const selector = getStyleRuleSelector(styleSelector);
-  return waitForFunction(async () => {
-    const candidate = await waitFor(selector);
-    if (candidate) {
-      const sourcePositionElement = await candidate.$('.styles-section-subtitle .devtools-link');
-      const text = await sourcePositionElement?.evaluate(node => node.textContent);
-      if (text === sourcePosition) {
-        return candidate;
+export const getStyleRuleWithSourcePosition =
+    (styleSelector: string, sourcePosition?: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+      if (!sourcePosition) {
+        return getStyleRule(styleSelector, devToolsPage);
       }
-    }
-    return undefined;
-  });
-};
+      const selector = getStyleRuleSelector(styleSelector);
+      return waitForFunction(async () => {
+        const candidate = await devToolsPage.waitFor(selector);
+        if (candidate) {
+          const sourcePositionElement = await candidate.$('.styles-section-subtitle .devtools-link');
+          const text = await sourcePositionElement?.evaluate(node => node.textContent);
+          if (text === sourcePosition) {
+            return candidate;
+          }
+        }
+        return undefined;
+      });
+    };
 
 export const getColorSwatch = async (parent: puppeteer.ElementHandle<Element>|undefined, index: number) => {
   const swatches = await $$(COLOR_SWATCH_SELECTOR, parent);
@@ -708,13 +745,14 @@ export const getStyleSectionSubtitles = async () => {
   return await Promise.all(subtitles.map(node => node.evaluate(n => n.textContent)));
 };
 
-export const getCSSPropertyInRule =
-    async (ruleSection: puppeteer.ElementHandle<Element>|string, name: string, sourcePosition?: string) => {
+export const getCSSPropertyInRule = async (
+    ruleSection: puppeteer.ElementHandle<Element>|string, name: string, sourcePosition?: string,
+    devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
   if (typeof ruleSection === 'string') {
-    ruleSection = await getStyleRuleWithSourcePosition(ruleSection, sourcePosition);
+    ruleSection = await getStyleRuleWithSourcePosition(ruleSection, sourcePosition, devToolsPage);
   }
 
-  const propertyNames = await $$(CSS_PROPERTY_NAME_SELECTOR, ruleSection);
+  const propertyNames = await devToolsPage.$$(CSS_PROPERTY_NAME_SELECTOR, ruleSection);
   for (const node of propertyNames) {
     const parent =
         (await node.evaluateHandle((node, name) => (name === node.textContent) ? node.parentNode : undefined, name))
@@ -726,15 +764,16 @@ export const getCSSPropertyInRule =
   return undefined;
 };
 
-export const focusCSSPropertyValue = async (selector: string, propertyName: string) => {
-  await waitForStyleRule(selector);
-  let property = await getCSSPropertyInRule(selector, propertyName);
+export const focusCSSPropertyValue =
+    async (selector: string, propertyName: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+  await waitForStyleRule(selector, devToolsPage);
+  let property = await getCSSPropertyInRule(selector, propertyName, undefined, devToolsPage);
   // Clicking on the semicolon element to make sure we don't hit the swatch or other
   // non-editable elements.
-  await click(CSS_PROPERTY_VALUE_SELECTOR + ' + .styles-semicolon', {root: property});
-  await waitForFunction(async () => {
-    property = await getCSSPropertyInRule(selector, propertyName);
-    const value = property ? await $(CSS_PROPERTY_VALUE_SELECTOR, property) : null;
+  await devToolsPage.click(CSS_PROPERTY_VALUE_SELECTOR + ' + .styles-semicolon', {root: property});
+  await devToolsPage.waitForFunction(async () => {
+    property = await getCSSPropertyInRule(selector, propertyName, undefined, devToolsPage);
+    const value = property ? await devToolsPage.$(CSS_PROPERTY_VALUE_SELECTOR, property) : null;
     if (!value) {
       assert.fail(`Could not find property ${propertyName} in rule ${selector}`);
     }
@@ -742,8 +781,10 @@ export const focusCSSPropertyValue = async (selector: string, propertyName: stri
       return node.classList.contains('text-prompt') && node.hasAttribute('contenteditable');
     });
   });
-  await expectVeEvents([veClick(`Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: ${
-      propertyName.startsWith('--') ? 'custom-property' : propertyName}`)]);
+  await expectVeEvents(
+      [veClick(`Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: ${
+          propertyName.startsWith('--') ? 'custom-property' : propertyName}`)],
+      undefined, devToolsPage);
 };
 
 /**
@@ -754,17 +795,18 @@ export const focusCSSPropertyValue = async (selector: string, propertyName: stri
  * first one is edited.
  * @param newValue The new value to be used.
  */
-export async function editCSSProperty(selector: string, propertyName: string, newValue: string) {
-  await focusCSSPropertyValue(selector, propertyName);
+export async function editCSSProperty(
+    selector: string, propertyName: string, newValue: string,
+    devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  await focusCSSPropertyValue(selector, propertyName, devToolsPage);
 
-  const {frontend} = getBrowserAndPages();
-  await frontend.keyboard.type(newValue, {delay: 100});
-  await frontend.keyboard.press('Enter');
+  await devToolsPage.typeText(newValue, {delay: 100});
+  await devToolsPage.pressKey('Enter');
 
-  await waitForFunction(async () => {
+  await devToolsPage.waitForFunction(async () => {
     // Wait until the value element is not a text-prompt anymore.
-    const property = await getCSSPropertyInRule(selector, propertyName);
-    const value = property ? await $(CSS_PROPERTY_VALUE_SELECTOR, property) : null;
+    const property = await getCSSPropertyInRule(selector, propertyName, undefined, devToolsPage);
+    const value = property ? await devToolsPage.$(CSS_PROPERTY_VALUE_SELECTOR, property) : null;
     if (!value) {
       assert.fail(`Could not find property ${propertyName} in rule ${selector}`);
     }
@@ -772,8 +814,10 @@ export async function editCSSProperty(selector: string, propertyName: string, ne
       return !node.classList.contains('text-prompt') && !node.hasAttribute('contenteditable');
     });
   });
-  await expectVeEvents([veChange(`Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: ${
-      propertyName.startsWith('--') ? 'custom-property' : propertyName} > Value`)]);
+  await expectVeEvents(
+      [veChange(`Panel: elements > Pane: styles > Section: style-properties > Tree > TreeItem: ${
+          propertyName.startsWith('--') ? 'custom-property' : propertyName} > Value`)],
+      undefined, devToolsPage);
 }
 
 // Edit a media or container query rule text for the given styles section
@@ -815,14 +859,16 @@ export async function editQueryRuleText(queryStylesSections: puppeteer.ElementHa
   ]);
 }
 
-export async function waitForCSSPropertyValue(selector: string, name: string, value: string, sourcePosition?: string) {
-  return await waitForFunction(async () => {
-    const propertyHandle = await getCSSPropertyInRule(selector, name, sourcePosition);
+export async function waitForCSSPropertyValue(
+    selector: string, name: string, value: string, sourcePosition?: string,
+    devToolsPage = getBrowserAndPagesWrappers().devToolsPage) {
+  return await devToolsPage.waitForFunction(async () => {
+    const propertyHandle = await getCSSPropertyInRule(selector, name, sourcePosition, devToolsPage);
     if (!propertyHandle) {
       return undefined;
     }
 
-    const valueHandle = await $(CSS_PROPERTY_VALUE_SELECTOR, propertyHandle);
+    const valueHandle = await devToolsPage.$(CSS_PROPERTY_VALUE_SELECTOR, propertyHandle);
     if (!valueHandle) {
       return undefined;
     }
@@ -1002,9 +1048,9 @@ function veImpressionForAccessibilityPane() {
       ])]);
 }
 
-export const toggleAccessibilityTree = async () => {
-  await click('aria/Switch to Accessibility Tree view');
-  await expectVeEvents([veClick('Panel: elements > Action: toggle-accessibility-tree')]);
+export const toggleAccessibilityTree = async (devToolsPage = getBrowserAndPagesWrappers().devToolsPage) => {
+  await devToolsPage.click('aria/Switch to Accessibility Tree view');
+  await expectVeEvents([veClick('Panel: elements > Action: toggle-accessibility-tree')], undefined, devToolsPage);
 };
 
 export const getPropertiesWithHints = async () => {
@@ -1053,10 +1099,9 @@ export const assertSearchResultMatchesText = async (text: string) => {
   });
 };
 
-export const goToResourceAndWaitForStyleSection =
-    async (path: string, devToolsPage?: DevToolsPage, inspectedPage?: InspectedPage) => {
-  devToolsPage = devToolsPage || getBrowserAndPagesWrappers().devToolsPage;
-  inspectedPage = inspectedPage || getBrowserAndPagesWrappers().inspectedPage;
+export const goToResourceAndWaitForStyleSection = async (
+    path: string, devToolsPage = getBrowserAndPagesWrappers().devToolsPage,
+    inspectedPage: InspectedPage = getBrowserAndPagesWrappers().inspectedPage) => {
   await inspectedPage.goToResource(path);
   await waitForElementsStyleSection(null, devToolsPage);
 };

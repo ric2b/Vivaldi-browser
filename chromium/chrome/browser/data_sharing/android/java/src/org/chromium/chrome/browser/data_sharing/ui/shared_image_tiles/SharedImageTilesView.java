@@ -8,11 +8,14 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.GradientDrawable;
 import android.util.AttributeSet;
+import android.util.Pair;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+
+import androidx.annotation.Px;
 
 import org.chromium.build.annotations.NullMarked;
 
@@ -42,31 +45,28 @@ public class SharedImageTilesView extends LinearLayout {
     }
 
     void applyConfig(SharedImageTilesConfig config) {
-        int iconTotalSizePx =
-                mContext.getResources().getDimensionPixelSize(config.iconSizeDp)
-                        + 2 * mContext.getResources().getDimensionPixelSize(config.borderSizeDp);
-        int textPaddingPx = mContext.getResources().getDimensionPixelSize(config.textPaddingDp);
+        Resources res = mContext.getResources();
+        Pair<Integer, Integer> borderAndTotalIconSize = config.getBorderAndTotalIconSizes(res);
+        @Px int borderSize = borderAndTotalIconSize.first;
+        @Px int iconTotalSize = borderAndTotalIconSize.second;
+        @Px int textPadding = res.getDimensionPixelSize(config.textPaddingDp);
 
         // Style the icon tiles.
         for (int i = 0; i < getChildCount(); i++) {
             ViewGroup viewGroup = (ViewGroup) getChildAt(i);
-            viewGroup.getLayoutParams().height = iconTotalSizePx;
-            viewGroup.setMinimumWidth(iconTotalSizePx);
+            viewGroup.getLayoutParams().height = iconTotalSize;
+            viewGroup.setMinimumWidth(iconTotalSize);
             GradientDrawable drawable = (GradientDrawable) viewGroup.getBackground();
             drawable.setColor(config.backgroundColor);
-            drawable.setStroke(
-                    mContext.getResources().getDimensionPixelSize(config.borderSizeDp),
-                    config.borderColor);
+            drawable.setStroke(borderSize, config.borderColor);
         }
 
-        // Style the number tile.
-        mCountTileView.setTextColor(config.textColor);
+        // Style the number tile. Note that textColor must be set after textAppearance in order to
+        // override the color of the text.
         mCountTileView.setTextAppearance(config.textStyle);
+        mCountTileView.setTextColor(config.textColor);
         mCountTileView.setPadding(
-                /* left= */ textPaddingPx,
-                /* top= */ 0,
-                /* right= */ textPaddingPx,
-                /* bottom= */ 0);
+                /* left= */ textPadding, /* top= */ 0, /* right= */ textPadding, /* bottom= */ 0);
     }
 
     void resetIconTiles(int count) {

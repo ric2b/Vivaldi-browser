@@ -36,12 +36,14 @@
 
 #include "base/check_op.h"
 #include "base/containers/contains.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/permissions_policy/document_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
@@ -110,6 +112,9 @@ constexpr size_t kLongTaskUkmSampleInterval = 100;
 
 const char kSwapsPerInsertionHistogram[] =
     "Renderer.Core.Timing.Performance.SwapsPerPerformanceEntryInsertion";
+
+const char kParserResumeByUserTiming[] =
+    "Blink.HTMLParsing.ResumedByUserTiming";
 
 bool IsMeasureOptionsEmpty(const PerformanceMeasureOptions& options) {
   return !options.hasDetail() && !options.hasEnd() && !options.hasStart() &&
@@ -256,6 +261,7 @@ using PerformanceObserverVector = HeapVector<Member<PerformanceObserver>>;
 
 constexpr size_t kDefaultResourceTimingBufferSize = 250;
 constexpr size_t kDefaultEventTimingBufferSize = 150;
+constexpr size_t kDefaultContainerTimingBufferSize = 150;
 constexpr size_t kDefaultElementTimingBufferSize = 150;
 constexpr size_t kDefaultLayoutShiftBufferSize = 150;
 constexpr size_t kDefaultLargestContenfulPaintSize = 150;
@@ -278,6 +284,7 @@ Performance::Performance(
       back_forward_cache_restoration_buffer_size_limit_(
           kDefaultBackForwardCacheRestorationBufferSize),
       event_timing_buffer_max_size_(kDefaultEventTimingBufferSize),
+      container_timing_buffer_max_size_(kDefaultContainerTimingBufferSize),
       element_timing_buffer_max_size_(kDefaultElementTimingBufferSize),
       user_timing_(nullptr),
       time_origin_(time_origin),
@@ -466,8 +473,7 @@ PerformanceEntryVector Performance::getEntriesByTypeInternal(
       break;
 
     case PerformanceEntry::kContainer:
-      // TODO(jdapena): implementation of container timing entries storage and
-      // retrieval.
+      entries = &container_timing_buffer_;
       break;
 
     case PerformanceEntry::kElement:
@@ -654,6 +660,10 @@ void Performance::NotifyNavigationTimingToObservers() {
     NotifyObserversOfEntry(*navigation_timing_);
 }
 
+bool Performance::IsContainerTimingBufferFull() const {
+  return container_timing_buffer_.size() >= container_timing_buffer_max_size_;
+}
+
 bool Performance::IsElementTimingBufferFull() const {
   return element_timing_buffer_.size() >= element_timing_buffer_max_size_;
 }
@@ -694,6 +704,15 @@ void Performance::FireResourceTimingBufferFull(TimerBase*) {
     }
   }
   resource_timing_buffer_full_event_pending_ = false;
+}
+
+void Performance::AddToContainerTimingBuffer(
+    PerformanceContainerTiming& entry) {
+  if (!IsContainerTimingBufferFull()) {
+    InsertEntryIntoSortedBuffer(container_timing_buffer_, entry, kRecordSwaps);
+  } else {
+    ++(dropped_entries_count_map_.find(PerformanceEntry::kContainer)->value);
+  }
 }
 
 void Performance::AddToElementTimingBuffer(PerformanceElementTiming& entry) {
@@ -822,6 +841,12 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
                                   ("mark_interactive"));
   DEFINE_THREAD_SAFE_STATIC_LOCAL(const AtomicString, mark_feature_usage,
                                   ("mark_feature_usage"));
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      const AtomicString, mark_parser_blocking,
+      (blink::features::kHTMLParserYieldEventNameForPause.Get().c_str()));
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(
+      const AtomicString, mark_parser_restart,
+      (features::kHTMLParserYieldEventNameForResume.Get().c_str()));
   bool has_start_time = mark_options && mark_options->hasStartTime();
   if (has_start_time || (mark_options && mark_options->hasDetail())) {
     UseCounter::Count(GetExecutionContext(), WebFeature::kUserTimingL3);
@@ -876,6 +901,52 @@ PerformanceMark* Performance::mark(ScriptState* script_state,
         }
       }
     }
+
+    if (RuntimeEnabledFeatures::HTMLParserYieldByUserTimingEnabled() &&
+        !mark_parser_blocking.empty() && !mark_parser_restart.empty()) {
+      DCHECK_NE(mark_parser_blocking, "");
+      DCHECK_NE(mark_parser_restart, "");
+      static const size_t timeout =
+          blink::features::kHTMLParserYieldTimeoutInMs.Get();
+      LocalDOMWindow* window = LocalDOMWindow::From(script_state);
+      if (window && window->GetFrame() &&
+          window->GetFrame()->IsOutermostMainFrame()) {
+        Document* document = window->GetFrame()->GetDocument();
+        if (mark_name == mark_parser_blocking) {
+          document->NotifyParserPauseByUserTiming();
+          // Schedule a timeout based resume event here since pausing the parser
+          // can be a potential footgun. It's not guaranteed that the parser
+          // resume mark is called after the parser pause mark.
+          //
+          // If the resuming task is already scheduled, cancels and reschedule
+          // it.
+          parser_yield_task_handle_.Cancel();
+          parser_yield_task_handle_ = PostDelayedCancellableTask(
+              *document->GetTaskRunner(TaskType::kInternalLoading), FROM_HERE,
+              WTF::BindOnce(
+                  [](Document* document) {
+                    document->NotifyParserResumeByUserTiming();
+                    base::UmaHistogramBoolean(kParserResumeByUserTiming, false);
+                  },
+                  WrapPersistent(document)),
+              base::Milliseconds(timeout));
+        } else if (mark_name == mark_parser_restart) {
+          // If the parser is pausing, resume it. This has to be called as a new
+          // task to ensure that the script is not running to resume the parser.
+          document->GetTaskRunner(TaskType::kInternalLoading)
+              ->PostTask(FROM_HERE,
+                         WTF::BindOnce(
+                             [](Document* document) {
+                               document->NotifyParserResumeByUserTiming();
+                               base::UmaHistogramBoolean(
+                                   kParserResumeByUserTiming, true);
+                             },
+                             WrapPersistent(document)));
+          parser_yield_task_handle_.Cancel();
+        }
+      }
+    }
+
     NotifyObserversOfEntry(*performance_mark);
   }
   return performance_mark;
@@ -1272,6 +1343,7 @@ void Performance::InsertEntryIntoSortedBuffer(PerformanceEntryVector& entries,
 void Performance::Trace(Visitor* visitor) const {
   visitor->Trace(resource_timing_buffer_);
   visitor->Trace(resource_timing_secondary_buffer_);
+  visitor->Trace(container_timing_buffer_);
   visitor->Trace(element_timing_buffer_);
   visitor->Trace(event_timing_buffer_);
   visitor->Trace(layout_shift_buffer_);

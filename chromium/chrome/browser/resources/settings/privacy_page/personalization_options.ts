@@ -37,12 +37,10 @@ import {HelpBubbleMixin} from 'chrome://resources/cr_components/help_bubble/help
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 
 import type {SettingsToggleButtonElement} from '../controls/settings_toggle_button.js';
-import type {FocusConfig} from '../focus_config.js';
 import {loadTimeData} from '../i18n_setup.js';
 import type {PrivacyPageVisibility} from '../page_visibility.js';
 import type {SettingsSignoutDialogElement} from '../people_page/signout_dialog.js';
 import {RelaunchMixin, RestartType} from '../relaunch_mixin.js';
-import {Router} from '../router.js';
 
 import {getTemplate} from './personalization_options.html.js';
 
@@ -77,11 +75,6 @@ export class SettingsPersonalizationOptionsElement extends
 
   static get properties() {
     return {
-      focusConfig: {
-        type: Object,
-        observer: 'onFocusConfigChange_',
-      },
-
       pageVisibility: Object,
 
       syncStatus: Object,
@@ -126,41 +119,26 @@ export class SettingsPersonalizationOptionsElement extends
         value: ChromeSigninUserChoice,
       },
       // </if>
-
-      enableAiSettingsPageRefresh_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('enableAiSettingsPageRefresh'),
-      },
-
-      showHistorySearchControl_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('showHistorySearchControl');
-        },
-      },
     };
   }
 
-  pageVisibility: PrivacyPageVisibility;
-  focusConfig: FocusConfig;
-  syncStatus: SyncStatus;
+  declare pageVisibility: PrivacyPageVisibility;
+  declare syncStatus: SyncStatus;
 
   // <if expr="_google_chrome and not chromeos_ash">
-  private metricsReportingPref_: chrome.settingsPrivate.PrefObject<boolean>;
-  private showRestart_: boolean;
+  declare private metricsReportingPref_:
+      chrome.settingsPrivate.PrefObject<boolean>;
+  declare private showRestart_: boolean;
   // </if>
 
-  private showSignoutDialog_: boolean;
-  private syncFirstSetupInProgress_: boolean;
+  declare private showSignoutDialog_: boolean;
+  declare private syncFirstSetupInProgress_: boolean;
 
   // <if expr="not is_chromeos">
-  private signinAvailable_: boolean;
+  declare private signinAvailable_: boolean;
 
-  private chromeSigninUserChoiceInfo_: ChromeSigninUserChoiceInfo;
+  declare private chromeSigninUserChoiceInfo_: ChromeSigninUserChoiceInfo;
   // </if>
-
-  private enableAiSettingsPageRefresh_: boolean;
-  private showHistorySearchControl_: boolean;
 
   private browserProxy_: PrivacyPageBrowserProxy =
       PrivacyPageBrowserProxyImpl.getInstance();
@@ -331,15 +309,6 @@ export class SettingsPersonalizationOptionsElement extends
   private onRestartClick_(e: Event) {
     e.stopPropagation();
     this.performRestart(RestartType.RESTART);
-  }
-
-  private shouldShowHistorySearchControl_(): boolean {
-    return this.showHistorySearchControl_ && !this.enableAiSettingsPageRefresh_;
-  }
-
-  private onHistorySearchRowClick_() {
-    const router = Router.getInstance();
-    router.navigateTo(router.getRoutes().HISTORY_SEARCH);
   }
 
   // <if expr="not is_chromeos">

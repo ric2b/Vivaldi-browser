@@ -962,8 +962,15 @@ def run_stream_with_retcode(*cmd, **kwargs):
     finally:
         retcode = proc.wait()
         if retcode != 0:
-            raise subprocess2.CalledProcessError(retcode, cmd, os.getcwd(), b'',
-                                                 b'')
+            cwd = kwargs.get('cwd', os.getcwd())
+            raise subprocess2.CalledProcessError(
+                retcode,
+                cmd,
+                # cwd could be either str or os.PathLike.
+                f'{cwd}',
+                b'',
+                b'',
+            )
 
 
 def run_with_stderr(*cmd, **kwargs) -> Tuple[str, str] | Tuple[bytes, bytes]:
@@ -1022,8 +1029,15 @@ def _run_with_stderr(*cmd, **kwargs) -> Tuple[str, str] | Tuple[bytes, bytes]:
     stdout, stderr = proc.communicate(indata)
     retcode = proc.wait()
     if retcode not in accepted_retcodes:
-        raise subprocess2.CalledProcessError(retcode, cmd, os.getcwd(), stdout,
-                                             stderr)
+        cwd = kwargs.get('cwd', os.getcwd())
+        raise subprocess2.CalledProcessError(
+            retcode,
+            cmd,
+            # cwd could be either str or os.PathLike.
+            f'{cwd}',
+            stdout,
+            stderr,
+        )
 
     if autostrip:
         stdout = (stdout or b'').strip()

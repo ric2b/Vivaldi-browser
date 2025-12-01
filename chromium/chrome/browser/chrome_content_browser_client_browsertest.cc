@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "chrome/browser/chrome_content_browser_client.h"
 
@@ -507,7 +503,8 @@ class PrefersColorSchemeTest
     test_theme_.SetDarkMode(GetIsDarkNativeTheme());
 #if BUILDFLAG(ENABLE_GLIC)
     feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kGlic, features::kTabstripComboButton},
+        /*enabled_features=*/{features::kGlic, features::kTabstripComboButton,
+                              features::kGlicRollout},
         /*disabled_features=*/{features::kGlicWarming,
                                features::kGlicFreWarming});
 #endif

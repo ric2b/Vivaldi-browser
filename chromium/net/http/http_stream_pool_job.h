@@ -100,10 +100,6 @@ class HttpStreamPool::Job {
   // Starts this job.
   void Start();
 
-  // Resumes this job. Must be called only when Group::CanStartJob() returns
-  // false.
-  void Resume();
-
   // Returns the LoadState of this job.
   LoadState GetLoadState() const;
 
@@ -133,6 +129,11 @@ class HttpStreamPool::Job {
   // Called by the associated AttemptManager when the preconnect completed.
   void OnPreconnectComplete(int status);
 
+  // Helper method to call OnPreconnectComplete asynchronously. Used to avoid
+  // a dangling pointer since calling `delegate_->OnPreconnectComplete()`
+  // deletes `this` synchronously.
+  void CallOnPreconnectCompleteLater(int status);
+
   RequestPriority priority() const { return delegate_->priority(); }
 
   RespectLimits respect_limits() const { return delegate_->respect_limits(); }
@@ -157,6 +158,8 @@ class HttpStreamPool::Job {
 
   const NetLogWithSource& net_log() const { return job_net_log_; }
 
+  const NetLogWithSource& request_net_log() const { return request_net_log_; }
+
   quic::ParsedQuicVersion quic_version() const { return quic_version_; }
 
   const NextProtoSet& allowed_alpns() const { return allowed_alpns_; }
@@ -171,22 +174,16 @@ class HttpStreamPool::Job {
 
   base::TimeTicks create_time() const { return create_time_; }
 
-  base::TimeDelta CreateToResumeTime() const;
-
  private:
-  AttemptManager* attempt_manager() const;
-
-  void StartInternal();
-
   const raw_ptr<Delegate> delegate_;
-  raw_ptr<Group> group_;
+  raw_ptr<AttemptManager> attempt_manager_;
+
   const quic::ParsedQuicVersion quic_version_;
   const NextProtoSet allowed_alpns_;
   const NetLogWithSource request_net_log_;
   const NetLogWithSource job_net_log_;
   const size_t num_streams_;
   const base::TimeTicks create_time_;
-  base::TimeTicks resume_time_;
 
   std::optional<int> result_;
   std::optional<NextProto> negotiated_protocol_;

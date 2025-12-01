@@ -112,7 +112,11 @@ public class ChromePageInfo {
         if (mTrackerBlockerPopup == null) mTrackerBlockerPopup = new VivaldiTrackerBlockerPopup();
         mTrackerBlockerPopup.setCurrentTab(tab);
         mTrackerBlockerPopup.setSitePrefsContainer(pageInfoContainer);
-        if (activity instanceof AppCompatActivity)
+        if (activity instanceof AppCompatActivity
+                && ((AppCompatActivity) activity)
+                                .getSupportFragmentManager()
+                                .findFragmentByTag("TrackerBlocker")
+                        == null) // Vivaldi VAB-11227
             mTrackerBlockerPopup.show(
                     ((AppCompatActivity) activity).getSupportFragmentManager(), "TrackerBlocker");
     }

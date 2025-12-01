@@ -374,15 +374,6 @@ void RecordOverlayHistograms(
       is_overlay, has_occluding_surface_damage, damage_rects_empty);
 }
 
-QuadList::Iterator FindAnOverlayCandidate(QuadList& quad_list) {
-  for (auto it = quad_list.begin(); it != quad_list.end(); ++it) {
-    if (it->material == DrawQuad::Material::kTextureContent) {
-      return it;
-    }
-  }
-  return quad_list.end();
-}
-
 QuadList::Iterator FindAnOverlayCandidateExcludingMediaFoundationVideoContent(
     QuadList& quad_list) {
   QuadList::Iterator it = quad_list.end();
@@ -500,10 +491,17 @@ ValidateDrawQuadResult ValidateDrawQuad(
     return {.code = DC_LAYER_FAILED_UNSUPPORTED_QUAD};
   }
 
-  ValidateDrawQuadResult result;
-
   const TextureDrawQuad* quad = TextureDrawQuad::MaterialCast(quad_to_promote);
 
+  // `DCLayerOverlayProcessor` is only used for video overlays and low-latency
+  // canvas overlays. This avoid promoting random DComp texture-backed quads
+  // in the case that delegated compositing is enabled, but failed this frame.
+  if (!(quad->is_video_frame ||
+        resource_provider->IsLowLatencyRendering(quad->resource_id))) {
+    return {.code = DC_LAYER_FAILED_UNSUPPORTED_QUAD};
+  }
+
+  ValidateDrawQuadResult result;
   result.is_yuv_overlay = quad->is_video_frame;
 
   if (allow_promotion_hinting) {
@@ -614,58 +612,6 @@ bool DCLayerOverlayProcessor::IsPossibleFullScreenLetterboxing(
   return false;
 }
 
-std::optional<OverlayCandidate> DCLayerOverlayProcessor::FromTextureOrYuvQuad(
-    const DisplayResourceProvider* resource_provider,
-    const AggregatedRenderPass* render_pass,
-    const DrawQuad& quad,
-    bool is_possible_full_screen_letterboxing) const {
-  // Backdrop filter occlusion is checked in |OverlayProcessorWin| via
-  // |OverlayCandidate::IsOccludedByFilteredQuad|, so we don't need to populate
-  // this vector.
-  const std::vector<gfx::Rect> backdrop_filter_rects;
-
-  ValidateDrawQuadResult result = ValidateDrawQuad(
-      resource_provider, &quad, backdrop_filter_rects, true,
-      has_p010_video_processor_support_, INT_MAX, INT_MIN, false);
-
-  if (result.code != DC_LAYER_SUCCESS) {
-    RecordDCLayerResult(result.code, &quad);
-    return std::nullopt;
-  }
-
-  OverlayCandidate candidate;
-  int ignore_processed_yuv_overlay_count = 0;
-  FromDrawQuad(resource_provider, render_pass,
-               is_possible_full_screen_letterboxing, &quad,
-               ignore_processed_yuv_overlay_count, candidate);
-
-  // Once we've promoted the video as normal, add extra properties required for
-  // delegated compositing.
-
-  if (quad.shared_quad_state->mask_filter_info.HasRoundedCorners()) {
-    gfx::MaskFilterInfo mask_filter_info =
-        quad.shared_quad_state->mask_filter_info;
-    mask_filter_info.ApplyTransform(render_pass->transform_to_root_target);
-    candidate.rounded_corners = mask_filter_info.rounded_corner_bounds();
-  }
-
-  candidate.opacity = quad.shared_quad_state->opacity;
-
-  // We don't expect quads promoted by |DCLayerOverlayProcessor| to have a
-  // differing |visible_rect|, but we handle it here just in case.
-  if (quad.visible_rect != quad.rect) {
-    // |OverlayCandidate| does not support clipping a candidate via
-    // |visible_rect|, but we can get the same effect by clipping its buffer via
-    // |uv_rect| and resizing its |display_rect|. This is similar to how
-    // |OverlayCandidateFactory| handles |visible_rect|.
-    candidate.uv_rect = gfx::MapRect(gfx::RectF(quad.visible_rect),
-                                     gfx::RectF(quad.rect), candidate.uv_rect);
-    candidate.display_rect = gfx::RectF(quad.visible_rect);
-  }
-
-  return candidate;
-}
-
 DCLayerOverlayProcessor::DCLayerOverlayProcessor(
     int allowed_yuv_overlay_count,
     bool disable_video_overlay_if_moving,
@@ -674,7 +620,8 @@ DCLayerOverlayProcessor::DCLayerOverlayProcessor(
       allowed_yuv_overlay_count_(allowed_yuv_overlay_count),
       is_on_battery_power_(
           base::PowerMonitor::GetInstance()
-              ->AddPowerStateObserverAndReturnOnBatteryState(this)),
+              ->AddPowerStateObserverAndReturnBatteryPowerStatus(this) ==
+          base::PowerStateObserver::BatteryPowerStatus::kBatteryPower),
       no_undamaged_overlay_promotion_(
           base::FeatureList::IsEnabled(features::kNoUndamagedOverlayPromotion)),
       disable_video_overlay_if_moving_(disable_video_overlay_if_moving) {
@@ -928,6 +875,11 @@ void DCLayerOverlayProcessor::CollectCandidates(
         global_overlay_state.processed_yuv_overlay_count,
         allow_promotion_hinting_);
 
+    // There's copy requests, so we'll only allow quads that require overlay.
+    if (render_pass->HasCapture() && !OverlayCandidate::RequiresOverlay(*it)) {
+      result.code = DC_LAYER_FAILED_COPY_REQUESTS;
+    }
+
     if (result.is_yuv_overlay) {
       global_overlay_state.yuv_quads++;
       if (no_undamaged_overlay_promotion_) {
@@ -1012,6 +964,15 @@ void DCLayerOverlayProcessor::PromoteCandidates(
     // Quad is considered an "overlay" if it has no occluders.
     bool is_overlay = !IsOccluded(gfx::RectF(quad_rect_in_target_space),
                                   quad_list->begin(), it, render_pass_filters);
+
+    // When the the render pass has capture, always treat the overlay as the
+    // "underlay" case, so we always replace the video quad with a hole punch.
+    // If it is treated in the "overlay" case, we will remove the video quad
+    // from the render pass and potentially show stale/invalid pixels in the
+    // copy output.
+    if (render_pass->HasCapture()) {
+      is_overlay = false;
+    }
 
     // Protected video is always put in an overlay, but texture quads can be
     // skipped if they're not underlay compatible.
@@ -1180,14 +1141,14 @@ bool DCLayerOverlayProcessor::ShouldSkipOverlay(
   // enabled. When video capture is enabled, some frames might not have copy
   // request.
   if (render_pass->HasCapture()) {
-    // Find a valid overlay candidate from quad_list.
-    QuadList::Iterator it = FindAnOverlayCandidate(*quad_list);
+    QuadList::Iterator it =
+        FindAnOverlayCandidateExcludingMediaFoundationVideoContent(*quad_list);
     if (it != quad_list->end()) {
       render_pass->video_capture_enabled
           ? RecordDCLayerResult(DC_LAYER_FAILED_VIDEO_CAPTURE_ENABLED, *it)
           : RecordDCLayerResult(DC_LAYER_FAILED_COPY_REQUESTS, *it);
+      return true;
     }
-    return true;
   }
 
   if (render_pass->content_color_usage == gfx::ContentColorUsage::kHDR) {

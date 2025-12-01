@@ -20,6 +20,9 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #endif  // BUILDFLAG(ENABLE_GUEST_VIEW)
 
+// Vivaldi:
+#include "extensions/api/guest_view/vivaldi_guest_view_utils.h"
+
 namespace {
 
 SerialChooserContext* GetChooserContext(content::RenderFrameHost* frame) {
@@ -51,6 +54,11 @@ bool ChromeSerialDelegate::CanRequestPortPermission(
   // <webview> and <controlledframe> can not isolate origin-based permissions
   // from the rest of profile, therefore serial is disabled inside.
   if (extensions::WebViewGuest::FromRenderFrameHost(frame)) {
+
+    // Vivaldi: Allow for vivaldi tabs as they are legitimate usage.
+    if (!IsVivaldiRegularTabFrame(frame))
+    // Vivaldi: Normal return code follows, but conditioned.
+
     return false;
   }
 #endif  // BUILDFLAG(ENABLE_GUEST_VIEW)
@@ -65,6 +73,11 @@ bool ChromeSerialDelegate::HasPortPermission(
   // <webview> and <controlledframe> can not isolate origin-based permissions
   // from the rest of profile, therefore serial is disabled inside.
   if (extensions::WebViewGuest::FromRenderFrameHost(frame)) {
+
+    // Vivaldi: Allow for vivaldi tabs as they are legitimate usage.
+    if (!IsVivaldiRegularTabFrame(frame))
+    // Vivaldi: Normal return code follows, but conditioned.
+
     return false;
   }
 #endif  // BUILDFLAG(ENABLE_GUEST_VIEW)

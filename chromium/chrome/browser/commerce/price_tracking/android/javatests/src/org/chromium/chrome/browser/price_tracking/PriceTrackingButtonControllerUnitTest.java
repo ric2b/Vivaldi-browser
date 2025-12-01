@@ -46,10 +46,10 @@ import org.chromium.chrome.browser.commerce.PriceTrackingUtilsJni;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.ButtonData;
-import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
-import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
-import org.chromium.chrome.browser.toolbar.ButtonDataProvider.ButtonDataObserver;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonDataProvider;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonDataProvider.ButtonDataObserver;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -216,5 +216,28 @@ public class PriceTrackingButtonControllerUnitTest {
         Assert.assertTrue(buttonData.isEnabled());
         // We should have notified of changes twice (when disabled and when enabled again).
         verify(buttonDataObserver, times(2)).buttonDataChanged(true);
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.CPA_SPEC_UPDATE})
+    public void testPriceTrackingButton_testIsCheckedState() {
+        PriceTrackingButtonController priceTrackingButtonController = createButtonController();
+        // Initialize to false.
+        mPriceTrackingStateSupplier.set(false);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        ButtonData buttonData = priceTrackingButtonController.get(mMockTab);
+        Assert.assertFalse(buttonData.getButtonSpec().isChecked());
+
+        // Setting this value to true will trigger PriceTrackingButtonController#updateButtonIcon ->
+        // AdaptiveToolbarButtonController#buttonDataChanged  ->
+        // OptionalBrowsingModeButtonController#updateCurrentOptionalButton ->
+        // AdaptiveToolbarButtonController#get.
+
+        mPriceTrackingStateSupplier.set(true);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+
+        ButtonData buttonDataNew = priceTrackingButtonController.get(mMockTab);
+        Assert.assertTrue(buttonDataNew.getButtonSpec().isChecked());
     }
 }

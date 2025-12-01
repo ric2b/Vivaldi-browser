@@ -12,8 +12,8 @@ import android.view.View;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.optional_button.BaseButtonDataProvider;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -43,8 +43,7 @@ public class ReaderModeToolbarButtonController extends BaseButtonDataProvider {
                 /* supportsTinting= */ true,
                 /* iphCommandBuilder= */ null,
                 AdaptiveToolbarButtonVariant.READER_MODE,
-                /* tooltipTextResId= */ Resources.ID_NULL,
-                /* showBackgroundHighlight= */ false);
+                /* tooltipTextResId= */ Resources.ID_NULL);
     }
 
     @Override

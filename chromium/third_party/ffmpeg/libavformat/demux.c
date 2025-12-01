@@ -111,6 +111,7 @@ static int set_codec_from_probe_data(AVFormatContext *s, AVStream *st,
         { "aac",        AV_CODEC_ID_AAC,          AVMEDIA_TYPE_AUDIO    },
         { "ac3",        AV_CODEC_ID_AC3,          AVMEDIA_TYPE_AUDIO    },
         { "aptx",       AV_CODEC_ID_APTX,         AVMEDIA_TYPE_AUDIO    },
+        { "av1",        AV_CODEC_ID_AV1,          AVMEDIA_TYPE_VIDEO    },
         { "dts",        AV_CODEC_ID_DTS,          AVMEDIA_TYPE_AUDIO    },
         { "dvbsub",     AV_CODEC_ID_DVB_SUBTITLE, AVMEDIA_TYPE_SUBTITLE },
         { "dvbtxt",     AV_CODEC_ID_DVB_TELETEXT, AVMEDIA_TYPE_SUBTITLE },
@@ -1173,7 +1174,15 @@ static int parse_packet(AVFormatContext *s, AVPacket *pkt,
 
     if (!size && !flush && sti->parser->flags & PARSER_FLAG_COMPLETE_FRAMES) {
         // preserve 0-size sync packets
-        compute_pkt_fields(s, st, sti->parser, pkt, AV_NOPTS_VALUE, AV_NOPTS_VALUE);
+        compute_pkt_fields(s, st, sti->parser, pkt, pkt->dts, pkt->pts);
+
+        // Theora has valid 0-sized packets that need to be output
+        if (st->codecpar->codec_id == AV_CODEC_ID_THEORA) {
+            ret = avpriv_packet_list_put(&fci->parse_queue,
+                                         pkt, NULL, 0);
+            if (ret < 0)
+                goto fail;
+        }
     }
 
     while (size > 0 || (flush && got_output)) {
@@ -1307,12 +1316,6 @@ static int codec_close(FFStream *sti)
         goto fail;
 
     avctx_new->pkt_timebase = sti->avctx->pkt_timebase;
-
-#if FF_API_TICKS_PER_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-    avctx_new->ticks_per_frame = sti->avctx->ticks_per_frame;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     avcodec_free_context(&sti->avctx);
     sti->avctx = avctx_new;
@@ -1500,27 +1503,6 @@ static int read_frame_internal(AVFormatContext *s, AVPacket *pkt)
             }
             sti->skip_samples = 0;
         }
-
-#if FF_API_AVSTREAM_SIDE_DATA
-        if (sti->inject_global_side_data) {
-            for (int i = 0; i < st->codecpar->nb_coded_side_data; i++) {
-                const AVPacketSideData *const src_sd = &st->codecpar->coded_side_data[i];
-                uint8_t *dst_data;
-
-                if (av_packet_get_side_data(pkt, src_sd->type, NULL))
-                    continue;
-
-                dst_data = av_packet_new_side_data(pkt, src_sd->type, src_sd->size);
-                if (!dst_data) {
-                    av_log(s, AV_LOG_WARNING, "Could not inject global side data\n");
-                    continue;
-                }
-
-                memcpy(dst_data, src_sd->data, src_sd->size);
-            }
-            sti->inject_global_side_data = 0;
-        }
-#endif
     }
 
     if (!fci->metafree) {
@@ -3084,31 +3066,6 @@ int avformat_find_stream_info(AVFormatContext *ic, AVDictionary **options)
         }
 
         sti->avctx_inited = 0;
-#if FF_API_AVSTREAM_SIDE_DATA
-FF_DISABLE_DEPRECATION_WARNINGS
-        if (st->codecpar->nb_coded_side_data > 0) {
-            av_assert0(!st->side_data && !st->nb_side_data);
-            st->side_data = av_calloc(st->codecpar->nb_coded_side_data, sizeof(*st->side_data));
-            if (!st->side_data) {
-                ret = AVERROR(ENOMEM);
-                goto find_stream_info_err;
-            }
-
-            for (int j = 0; j < st->codecpar->nb_coded_side_data; j++) {
-                uint8_t *data = av_memdup(st->codecpar->coded_side_data[j].data,
-                                          st->codecpar->coded_side_data[j].size);
-                if (!data) {
-                    ret = AVERROR(ENOMEM);
-                    goto find_stream_info_err;
-                }
-                st->side_data[j].type = st->codecpar->coded_side_data[j].type;
-                st->side_data[j].size = st->codecpar->coded_side_data[j].size;
-                st->side_data[j].data = data;
-                st->nb_side_data++;
-            }
-        }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     }
 
 find_stream_info_err:

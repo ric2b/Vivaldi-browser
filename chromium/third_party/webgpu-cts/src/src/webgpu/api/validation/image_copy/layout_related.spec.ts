@@ -7,11 +7,12 @@ import { assert } from '../../../../common/util/util.js';
 import { kTextureDimensions } from '../../../capability_info.js';
 import {
   kSizedTextureFormats,
-  textureDimensionAndFormatCompatible,
+  textureFormatAndDimensionPossiblyCompatible,
   getBlockInfoForTextureFormat,
   isDepthOrStencilTextureFormat,
   getBlockInfoForSizedTextureFormat,
   getBlockInfoForColorTextureFormat,
+  getMaxValidTextureSizeForFormatAndDimension,
 } from '../../../format_info.js';
 import { align } from '../../../util/math.js';
 import {
@@ -141,7 +142,9 @@ Test the computation of requiredBytesInCopy by computing the minimum data size f
       .combine('format', kSizedTextureFormats)
       .filter(formatCopyableWithMethod)
       .combine('dimension', kTextureDimensions)
-      .filter(({ dimension, format }) => textureDimensionAndFormatCompatible(dimension, format))
+      .filter(({ dimension, format }) =>
+        textureFormatAndDimensionPossiblyCompatible(dimension, format)
+      )
       .beginSubcases()
       .combineWithParams([
         { bytesPerRowPadding: 0, rowsPerImagePaddingInBlocks: 0 }, // no padding
@@ -191,14 +194,16 @@ Test the computation of requiredBytesInCopy by computing the minimum data size f
       method,
     } = t.params;
     t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatAndDimensionNotCompatible(format, dimension);
     const info = getBlockInfoForSizedTextureFormat(format);
+    const maxSize = getMaxValidTextureSizeForFormatAndDimension(t.device, format, dimension);
 
     // In the CopyB2T and CopyT2B cases we need to have bytesPerRow 256-aligned,
     // to make this happen we align the bytesInACompleteRow value and multiply
     // bytesPerRowPadding by 256.
     const bytesPerRowAlignment = method === 'WriteTexture' ? 1 : 256;
-    const copyWidth = copyWidthInBlocks * info.blockWidth;
-    const copyHeight = copyHeightInBlocks * info.blockHeight;
+    const copyWidth = Math.min(copyWidthInBlocks * info.blockWidth, maxSize[0]);
+    const copyHeight = Math.min(copyHeightInBlocks * info.blockHeight, maxSize[1]);
     const rowsPerImage = copyHeight + rowsPerImagePaddingInBlocks * info.blockHeight;
     const bytesPerRow =
       align(bytesInACompleteRow(copyWidth, format), bytesPerRowAlignment) +
@@ -241,7 +246,9 @@ Test that rowsPerImage has no alignment constraints.
       .combine('format', kSizedTextureFormats)
       .filter(formatCopyableWithMethod)
       .combine('dimension', kTextureDimensions)
-      .filter(({ dimension, format }) => textureDimensionAndFormatCompatible(dimension, format))
+      .filter(({ dimension, format }) =>
+        textureFormatAndDimensionPossiblyCompatible(dimension, format)
+      )
       .beginSubcases()
       .expand('rowsPerImage', texelBlockAlignmentTestExpanderForRowsPerImage)
       // Copy height is info.blockHeight, so rowsPerImage must be equal or greater than it.
@@ -251,14 +258,16 @@ Test that rowsPerImage has no alignment constraints.
       )
   )
   .fn(t => {
-    const { rowsPerImage, format, method } = t.params;
+    const { rowsPerImage, format, dimension, method } = t.params;
     t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatAndDimensionNotCompatible(format, dimension);
     const info = getBlockInfoForSizedTextureFormat(format);
 
     const size = { width: info.blockWidth, height: info.blockHeight, depthOrArrayLayers: 1 };
     const texture = t.createTextureTracked({
       size,
       format,
+      dimension,
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
     });
 
@@ -285,19 +294,23 @@ Test the alignment requirement on the linear data offset (block size, or 4 for d
       .combine('format', kSizedTextureFormats)
       .filter(formatCopyableWithMethod)
       .combine('dimension', kTextureDimensions)
-      .filter(({ dimension, format }) => textureDimensionAndFormatCompatible(dimension, format))
+      .filter(({ dimension, format }) =>
+        textureFormatAndDimensionPossiblyCompatible(dimension, format)
+      )
       .beginSubcases()
       .expand('offset', texelBlockAlignmentTestExpanderForOffset)
   )
   .fn(t => {
-    const { format, offset, method } = t.params;
+    const { format, dimension, offset, method } = t.params;
     t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatAndDimensionNotCompatible(format, dimension);
     const info = getBlockInfoForSizedTextureFormat(format);
 
     const size = { width: info.blockWidth, height: info.blockHeight, depthOrArrayLayers: 1 };
     const texture = t.createTextureTracked({
       size,
       format,
+      dimension,
       usage: GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST,
     });
 
@@ -334,7 +347,9 @@ Test that bytesPerRow, if specified must be big enough for a full copy row.
       .combine('format', kSizedTextureFormats)
       .filter(formatCopyableWithMethod)
       .combine('dimension', kTextureDimensions)
-      .filter(({ dimension, format }) => textureDimensionAndFormatCompatible(dimension, format))
+      .filter(({ dimension, format }) =>
+        textureFormatAndDimensionPossiblyCompatible(dimension, format)
+      )
       .beginSubcases()
       .combine('copyHeightInBlocks', [1, 2])
       .combine('copyDepth', [1, 2])
@@ -394,6 +409,7 @@ Test that bytesPerRow, if specified must be big enough for a full copy row.
     const {
       method,
       format,
+      dimension,
       bytesPerRow,
       widthInBlocks,
       copyWidthInBlocks,
@@ -402,15 +418,21 @@ Test that bytesPerRow, if specified must be big enough for a full copy row.
       _success,
     } = t.params;
     t.skipIfTextureFormatNotSupported(format);
+    t.skipIfTextureFormatAndDimensionNotCompatible(format, dimension);
     const info = getBlockInfoForSizedTextureFormat(format);
 
     // We create an aligned texture using the widthInBlocks which may be different from the
     // copyWidthInBlocks. This allows us to test scenarios where the two may be different.
-    const texture = t.createAlignedTexture(format, {
-      width: widthInBlocks * info.blockWidth,
-      height: copyHeightInBlocks * info.blockHeight,
-      depthOrArrayLayers: copyDepth,
-    });
+    const texture = t.createAlignedTexture(
+      format,
+      {
+        width: widthInBlocks * info.blockWidth,
+        height: copyHeightInBlocks * info.blockHeight,
+        depthOrArrayLayers: copyDepth,
+      },
+      { x: 0, y: 0, z: 0 },
+      dimension
+    );
 
     const layout = { bytesPerRow, rowsPerImage: copyHeightInBlocks };
     const copySize = {

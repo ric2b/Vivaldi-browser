@@ -16,6 +16,7 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/containers/span.h"
 #include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/functional/bind.h"
@@ -154,7 +155,7 @@
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/url_loader_interceptor.h"
-#include "crypto/sha2.h"
+#include "crypto/hash.h"
 #include "extensions/browser/event_router.h"
 #include "google_apis/gaia/gaia_id.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
@@ -203,17 +204,15 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
+#include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
 #include "extensions/browser/background_script_executor.h"
 #include "extensions/common/extension.h"
 #include "extensions/test/test_extension_dir.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
 #if BUILDFLAG(USE_NSS_CERTS)
-#include "chrome/browser/certificate_manager_model.h"
 #include "chrome/browser/net/nss_service.h"
 #include "chrome/browser/net/nss_service_factory.h"
-#include "components/user_manager/scoped_user_manager.h"
-#include "components/user_manager/user_manager.h"
 #include "crypto/scoped_test_nss_db.h"
 #include "net/cert/nss_cert_database.h"
 #include "net/cert/x509_util_nss.h"
@@ -227,8 +226,6 @@
 #include "chrome/browser/policy/profile_policy_connector_builder.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/policy_service.h"
-#include "components/session_manager/core/session_manager.h"
-#include "components/user_manager/test_helper.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 using content::WebContents;
@@ -362,13 +359,12 @@ std::string EncodeQuery(const std::string& query) {
 }
 
 // Returns the Sha256 hash of the SPKI of |cert|.
-net::HashValue GetSPKIHash(const CRYPTO_BUFFER* cert) {
+std::array<uint8_t, crypto::hash::kSha256Size> GetSPKIHash(
+    const CRYPTO_BUFFER* cert) {
   std::string_view spki_bytes;
   EXPECT_TRUE(net::asn1::ExtractSPKIFromDERCert(
       net::x509_util::CryptoBufferAsStringPiece(cert), &spki_bytes));
-  net::HashValue sha256(net::HASH_VALUE_SHA256);
-  crypto::SHA256HashString(spki_bytes, sha256.data(), crypto::kSHA256Length);
-  return sha256;
+  return crypto::hash::Sha256(base::as_byte_span(spki_bytes));
 }
 
 // Compares two SSLStatuses to check if they match up before and after an
@@ -616,42 +612,6 @@ class SSLUITestBase : public InProcessBrowserTest,
     if (!helper)
       return nullptr;
     return helper->GetBlockingPageForCurrentlyCommittedNavigationForTesting();
-  }
-
-  // Sets the policy identified by |policy_name| to be true, ensuring
-  // that the corresponding boolean pref |pref_name| is updated to match.
-  void EnablePolicy(PrefService* pref_service,
-                    const char* policy_name,
-                    const char* pref_name) {
-    policy::PolicyMap policy_map;
-    policy_map.Set(policy_name, policy::POLICY_LEVEL_MANDATORY,
-                   policy::POLICY_SCOPE_MACHINE, policy::POLICY_SOURCE_CLOUD,
-                   base::Value(true), nullptr);
-
-    EXPECT_NO_FATAL_FAILURE(UpdateChromePolicy(policy_map));
-
-    EXPECT_TRUE(pref_service->GetBoolean(pref_name));
-    EXPECT_TRUE(pref_service->IsManagedPreference(pref_name));
-
-    // Wait for the updated SSL configuration to be sent to the network service,
-    // to avoid a race.
-    g_browser_process->system_network_context_manager()
-        ->FlushSSLConfigManagerForTesting();
-  }
-
-  // Sets the policy identified by |policy_name| to |policy_value|.
-  void SetPolicy(const char* policy_name, base::Value policy_value) {
-    policy::PolicyMap policy_map;
-    policy_map.Set(policy_name, policy::POLICY_LEVEL_MANDATORY,
-                   policy::POLICY_SCOPE_MACHINE, policy::POLICY_SOURCE_CLOUD,
-                   std::move(policy_value), nullptr);
-
-    EXPECT_NO_FATAL_FAILURE(UpdateChromePolicy(policy_map));
-
-    // Wait for the updated SSL configuration to be sent to the network service,
-    // to avoid a race.
-    g_browser_process->system_network_context_manager()
-        ->FlushSSLConfigManagerForTesting();
   }
 
   // Helper function for TestInterstitialLinksOpenInNewTab. Implemented as a
@@ -1914,6 +1874,9 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, TestServiceWorkerRequestsUseClientCertStore) {
 IN_PROC_BROWSER_TEST_F(
     SSLUITest,
     TestExtensionServiceWorkerCanContinueWithoutACertificate) {
+  // TODO(https://crbug.com/40804030): Remove this when updated to use MV3.
+  extensions::ScopedTestMV2Enabler mv2_enabler;
+
   // Make the browser use the ClientCertStoreStub instead of the regular one.
   ProfileNetworkContextServiceFactory::GetForContext(browser()->profile())
       ->set_client_cert_store_factory_for_testing(
@@ -5553,287 +5516,6 @@ IN_PROC_BROWSER_TEST_F(SSLUITest, DISABLED_PushStateSSLState) {
   EXPECT_TRUE(content::WaitForLoadStop(tab));
   ssl_test_util::CheckAuthenticatedState(tab, AuthState::NONE);
 }
-
-#if BUILDFLAG(IS_CHROMEOS)
-
-class SSLUITestNoCert : public SSLUITest,
-                        public CertificateManagerModel::Observer {
- public:
-  SSLUITestNoCert() {
-    // These tests are specifically for the ChromeOS NSS database integration.
-    // On ChromeOS, once the kEnableCertManagementUIV2Write feature is launched
-    // NSS is no longer used and the equivalent functionality is provided by
-    // ServerCertificateDatabaseService and is tested by
-    // cert_verifier_service_browsertest.cc.
-    feature_list_.InitWithFeatures(
-        /*enabled_features=*/{},
-        /*disabled_features=*/
-        {features::kEnableCertManagementUIV2,
-         features::kEnableCertManagementUIV2Write,
-         features::kEnableCertManagementUIV2EditCerts});
-  }
-  ~SSLUITestNoCert() override = default;
-
-  void SetUp() override {
-    net::TestRootCerts::GetInstance()->Clear();
-    SSLUITest::SetUp();
-  }
-
-  // CertificateManagerModel::Observer implementation:
-  void CertificatesRefreshed() override {}
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-class TestCertDatabaseObserver : public net::CertDatabase::Observer {
- public:
-  TestCertDatabaseObserver() {
-    net::CertDatabase* cert_db = net::CertDatabase::GetInstance();
-    cert_db->AddObserver(this);
-  }
-  ~TestCertDatabaseObserver() override = default;
-  void OnTrustStoreChanged() override { run_loop.Quit(); }
-  void WaitForCertDBChange() { run_loop.Run(); }
-
- private:
-  base::RunLoop run_loop;
-};
-
-// Checks that a newly-added certificate authority is usable immediately.
-IN_PROC_BROWSER_TEST_F(SSLUITestNoCert, NewCertificateAuthority) {
-  if (!content::IsOutOfProcessNetworkService())
-    return;
-
-  ASSERT_TRUE(https_server_.Start());
-
-  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL("/ssl/google.html")));
-  EXPECT_TRUE(chrome_browser_interstitials::IsShowingInterstitial(tab));
-
-  std::unique_ptr<CertificateManagerModel> model;
-  base::RunLoop run_loop;
-  CertificateManagerModel::Create(
-      browser()->profile(), this,
-      base::BindLambdaForTesting(
-          [&](std::unique_ptr<CertificateManagerModel> model2) {
-            model = std::move(model2);
-            run_loop.Quit();
-          }));
-  run_loop.Run();
-
-  scoped_refptr<net::X509Certificate> cert;
-  net::ScopedCERTCertificateList nss_certs;
-
-  {
-    base::ScopedAllowBlockingForTesting allow_io;
-    cert = net::CreateCertificateChainFromFile(
-        net::GetTestCertsDirectory(), "root_ca_cert.pem",
-        net::X509Certificate::FORMAT_PEM_CERT_SEQUENCE);
-
-    nss_certs = net::x509_util::CreateCERTCertificateListFromX509Certificate(
-        cert.get());
-  }
-
-  TestCertDatabaseObserver cert_database_observer;
-  net::NSSCertDatabase::ImportCertFailureList not_imported;
-  EXPECT_TRUE(model->ImportCACerts(nss_certs, net::NSSCertDatabase::TRUSTED_SSL,
-                                   &not_imported));
-  cert_database_observer.WaitForCertDBChange();
-  EXPECT_TRUE(not_imported.empty());
-
-  content::FlushNetworkServiceInstanceForTesting();
-
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), https_server_.GetURL("/ssl/google.html")));
-  EXPECT_FALSE(chrome_browser_interstitials::IsShowingInterstitial(tab));
-}
-
-// A test class which prepares two profiles and allows importing certificates
-// into their NSS databases.
-class SSLUITestCustomCACerts : public SSLUITestNoCert {
- public:
-  static inline constexpr char kPrimaryUserAccount[] = "test1@test.com";
-  static inline constexpr GaiaId::Literal kPrimaryUserGaiaId{"1234567890"};
-  static inline constexpr char kPrimaryUserHash[] = "test1-hash";
-  static inline constexpr char kSecondaryUserAccount[] = "test2@test.com";
-  static inline constexpr GaiaId::Literal kSecondaryUserGaiaId{"9876543210"};
-  static inline constexpr char kSecondaryUserHash[] = "test2-hash";
-
-  SSLUITestCustomCACerts() = default;
-
-  SSLUITestCustomCACerts(const SSLUITestCustomCACerts&) = delete;
-  SSLUITestCustomCACerts& operator=(const SSLUITestCustomCACerts&) = delete;
-
-  ~SSLUITestCustomCACerts() override = default;
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    SSLUITestNoCert::SetUpCommandLine(command_line);
-    // Don't require policy for our sessions - this is required so the policy
-    // code knows not to expect cached policy for the secondary profile.
-    command_line->AppendSwitchASCII(ash::switches::kProfileRequiresPolicy,
-                                    "false");
-
-    command_line->AppendSwitchASCII(ash::switches::kLoginUser,
-                                    kPrimaryUserAccount);
-    command_line->AppendSwitchASCII(ash::switches::kLoginProfile,
-                                    kPrimaryUserHash);
-  }
-
-  void SetUpLocalStatePrefService(PrefService* local_state) override {
-    SSLUITestNoCert::SetUpLocalStatePrefService(local_state);
-
-    // Register a persisted user.
-    user_manager::TestHelper::RegisterPersistedUser(
-        *local_state, AccountId::FromUserEmailGaiaId(kPrimaryUserAccount,
-                                                     kPrimaryUserGaiaId));
-    user_manager::TestHelper::RegisterPersistedUser(
-        *local_state, AccountId::FromUserEmailGaiaId(kSecondaryUserAccount,
-                                                     kSecondaryUserGaiaId));
-  }
-
-  void SetUpOnMainThread() override {
-    SSLUITestNoCert::SetUpOnMainThread();
-
-    profile_1_ = browser()->profile();
-
-    // Create a second profile.
-    {
-      ON_CALL(policy_for_profile_2_, IsInitializationComplete(testing::_))
-          .WillByDefault(testing::Return(true));
-      ON_CALL(policy_for_profile_2_, IsFirstPolicyLoadComplete(testing::_))
-          .WillByDefault(testing::Return(true));
-      policy::PushProfilePolicyConnectorProviderForTesting(
-          &policy_for_profile_2_);
-
-      base::FilePath user_data_directory;
-      base::PathService::Get(chrome::DIR_USER_DATA, &user_data_directory);
-      session_manager::SessionManager::Get()->CreateSession(
-          AccountId::FromUserEmailGaiaId(kSecondaryUserAccount,
-                                         kSecondaryUserGaiaId),
-          kSecondaryUserHash, /*new_user=*/false,
-          /*has_active_session=*/false);
-      // Set up the secondary profile.
-      base::FilePath profile_dir = user_data_directory.Append(
-          ash::ProfileHelper::GetUserProfileDir(kSecondaryUserHash).BaseName());
-      profile_2_ =
-          g_browser_process->profile_manager()->GetProfile(profile_dir);
-    }
-
-    // Get cert databases for both profiles.
-    {
-      base::RunLoop loop;
-      NssServiceFactory::GetForContext(profile_1_)
-          ->UnsafelyGetNSSCertDatabaseForTesting(base::BindOnce(
-              &SSLUITestCustomCACerts::DidGetCertDatabase,
-              base::Unretained(this), &loop, &profile_1_cert_db_));
-      loop.Run();
-    }
-
-    {
-      base::RunLoop loop;
-      NssServiceFactory::GetForContext(profile_2_)
-          ->UnsafelyGetNSSCertDatabaseForTesting(base::BindOnce(
-              &SSLUITestCustomCACerts::DidGetCertDatabase,
-              base::Unretained(this), &loop, &profile_2_cert_db_));
-      loop.Run();
-    }
-
-    // Double-check that the profile initialization was correct and the two
-    // profiles have distinct NSS databases with distinc NSS public slots.
-    EXPECT_NE(profile_1_cert_db_, profile_2_cert_db_);
-    EXPECT_NE(profile_1_cert_db_->GetPublicSlot().get(),
-              profile_2_cert_db_->GetPublicSlot().get());
-  }
-
-  void TearDownOnMainThread() override {
-    profile_1_cert_db_ = nullptr;
-    profile_2_cert_db_ = nullptr;
-    profile_1_ = nullptr;
-    profile_2_ = nullptr;
-  }
-
- protected:
-  void ImportCACertAsTrusted(const std::string& cert_file_name,
-                             net::NSSCertDatabase* cert_db) {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-
-    net::ScopedCERTCertificateList ca_cert_list =
-        net::CreateCERTCertificateListFromFile(
-            net::GetTestCertsDirectory(), cert_file_name,
-            net::X509Certificate::FORMAT_AUTO);
-    ASSERT_FALSE(ca_cert_list.empty());
-    net::NSSCertDatabase::ImportCertFailureList failures;
-    ASSERT_TRUE(cert_db->ImportCACerts(
-        ca_cert_list, net::NSSCertDatabase::TRUSTED_SSL, &failures));
-    ASSERT_TRUE(failures.empty());
-  }
-
-  // The first profile.
-  raw_ptr<Profile> profile_1_;
-  // The second profile.
-  raw_ptr<Profile> profile_2_;
-
-  // The NSSCertDatabase for |profile_1_|.
-  raw_ptr<net::NSSCertDatabase> profile_1_cert_db_;
-
-  // The NSSCertDatabase for |profile_2_|.
-  raw_ptr<net::NSSCertDatabase> profile_2_cert_db_;
-
-  // Policy provider for |profile_2_|. Overrides any other policy providers.
-  testing::NiceMock<policy::MockConfigurationPolicyProvider>
-      policy_for_profile_2_;
-
- private:
-  void DidGetCertDatabase(base::RunLoop* loop,
-                          raw_ptr<net::NSSCertDatabase>* out_cert_db,
-                          net::NSSCertDatabase* cert_db) {
-    *out_cert_db = cert_db;
-    loop->Quit();
-  }
-};
-
-// Imports a trusted CA certiifcate into a profile's NSS database.
-// Verifies that the certificate is trusted in the context of the profile it was
-// imported for.
-// Verifies that the certificate is *not* trusted in the context of a different
-// profile.
-IN_PROC_BROWSER_TEST_F(SSLUITestCustomCACerts,
-                       TrustedCertOnlyRespectedInProfileThatOwnsIt) {
-  ASSERT_TRUE(https_server_.Start());
-
-  ASSERT_NO_FATAL_FAILURE(
-      ImportCACertAsTrusted("root_ca_cert.pem", profile_2_cert_db_));
-
-  // Flush the network service instance so persistent NSS Database changes are
-  // reflected in the network service.
-  content::FlushNetworkServiceInstanceForTesting();
-
-  // The certificate that is trusted in |profile_2_| should not be respected in
-  // browsers that belong to |profile_1_|.
-  Browser* browser_for_profile_1 = CreateBrowser(profile_1_);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser_for_profile_1, https_server_.GetURL("/ssl/google.html")));
-  WebContents* tab_for_profile_1 =
-      browser_for_profile_1->tab_strip_model()->GetActiveWebContents();
-  ASSERT_TRUE(
-      chrome_browser_interstitials::IsShowingInterstitial(tab_for_profile_1));
-  ssl_test_util::CheckAuthenticationBrokenState(
-      tab_for_profile_1, net::CERT_STATUS_AUTHORITY_INVALID,
-      AuthState::SHOWING_INTERSTITIAL);
-
-  // The certificate that is trusted in |profile_2_| should be respected in
-  // browsers that belong to |profile_2_|.
-  Browser* browser_for_profile_2 = CreateBrowser(profile_2_);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser_for_profile_2, https_server_.GetURL("/ssl/google.html")));
-  WebContents* tab_for_profile_2 =
-      browser_for_profile_2->tab_strip_model()->GetActiveWebContents();
-  ssl_test_util::CheckAuthenticatedState(tab_for_profile_2, AuthState::NONE);
-}
-
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 // Regression test for http://crbug.com/635833 (crash when a window with no
 // NavigationEntry commits).

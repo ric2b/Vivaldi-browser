@@ -42,7 +42,7 @@ class TestStunServer : StunServer {
   TestStunServer(AsyncUDPSocket* socket, Thread& network_thread)
       : StunServer(socket), network_thread_(network_thread) {}
 
-  void OnBindingRequest(cricket::StunMessage* msg,
+  void OnBindingRequest(StunMessage* msg,
                         const SocketAddress& remote_addr) override;
 
  private:
@@ -54,8 +54,10 @@ class TestStunServer : StunServer {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::TestStunServer;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_TEST_TEST_STUN_SERVER_H_

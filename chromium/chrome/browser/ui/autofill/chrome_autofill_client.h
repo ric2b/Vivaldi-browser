@@ -28,10 +28,9 @@
 #include "components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_manager.h"
 #include "components/autofill/core/browser/crowdsourcing/votes_uploader.h"
 #include "components/autofill/core/browser/filling/filling_product.h"
-#include "components/autofill/core/browser/integrators/autofill_plus_address_delegate.h"
-#include "components/autofill/core/browser/integrators/identity_credential_delegate.h"
+#include "components/autofill/core/browser/integrators/identity_credential/identity_credential_delegate.h"
 #include "components/autofill/core/browser/integrators/password_form_classification.h"
-#include "components/autofill/core/browser/integrators/valuables/valuable_manager.h"
+#include "components/autofill/core/browser/integrators/plus_addresses/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/metrics/form_interactions_ukm_logger.h"
 #include "components/autofill/core/browser/single_field_fillers/single_field_fill_router.h"
@@ -44,7 +43,7 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/autofill/autofill_snackbar_controller_impl.h"
-#include "components/autofill/core/browser/integrators/fast_checkout_client.h"
+#include "components/autofill/core/browser/integrators/fast_checkout/fast_checkout_client.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
 namespace autofill {
@@ -115,11 +114,14 @@ class ChromeAutofillClient : public ContentAutofillClient,
   FieldClassificationModelHandler*
   GetPasswordManagerFieldClassificationModelHandler() final;
   PersonalDataManager& GetPersonalDataManager() final;
+  ValuablesDataManager* GetValuablesDataManager() final;
   EntityDataManager* GetEntityDataManager() final;
   SingleFieldFillRouter& GetSingleFieldFillRouter() final;
   AutocompleteHistoryManager* GetAutocompleteHistoryManager() final;
   AutofillComposeDelegate* GetComposeDelegate() final;
   AutofillPlusAddressDelegate* GetPlusAddressDelegate() final;
+  PasswordManagerDelegate* GetPasswordManagerDelegate(
+      const FieldGlobalId& field_id) final;
   void GetAiPageContent(GetAiPageContentCallback callback) final;
   AutofillAiDelegate* GetAutofillAiDelegate() final;
   AutofillAiModelCache* GetAutofillAiModelCache() final;
@@ -141,7 +143,6 @@ class ChromeAutofillClient : public ContentAutofillClient,
   const GoogleGroupsManager* GetGoogleGroupsManager() const final;
   FormDataImporter* GetFormDataImporter() final;
   payments::ChromePaymentsAutofillClient* GetPaymentsAutofillClient() final;
-  ValuableManager* GetValuableManager() final;
   StrikeDatabase* GetStrikeDatabase() final;
   ukm::UkmRecorder* GetUkmRecorder() final;
   AddressNormalizer* GetAddressNormalizer() final;
@@ -213,7 +214,7 @@ class ChromeAutofillClient : public ContentAutofillClient,
   void TriggerPlusAddressUserPerceptionSurvey(
       plus_addresses::hats::SurveyType survey_type) final;
 
-  // TODO(crbug.com/320634151): Create a test API.
+  // TODO(crbug.com/407666146): Create a test API.
   base::WeakPtr<AutofillSuggestionController>
   suggestion_controller_for_testing() {
     return suggestion_controller_;
@@ -269,7 +270,6 @@ class ChromeAutofillClient : public ContentAutofillClient,
   VotesUploader votes_uploader_{this};
   std::unique_ptr<FormDataImporter> form_data_importer_;
 
-  ValuableManager valuable_manager_;
   payments::ChromePaymentsAutofillClient payments_autofill_client_{this};
   SingleFieldFillRouter single_field_fill_router_{
       // This call is during construction, so GetAutocompleteHistoryManager()

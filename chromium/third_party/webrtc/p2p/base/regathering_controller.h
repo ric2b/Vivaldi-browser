@@ -50,7 +50,7 @@ class BasicRegatheringController : public sigslot::has_slots<> {
  public:
   struct Config {
     int regather_on_failed_networks_interval =
-        cricket::REGATHER_ON_FAILED_NETWORKS_INTERVAL;
+        REGATHER_ON_FAILED_NETWORKS_INTERVAL;
   };
 
   BasicRegatheringController() = delete;
@@ -77,9 +77,9 @@ class BasicRegatheringController : public sigslot::has_slots<> {
   // transport like GetStats to get additional information for the decision
   // making in regathering.
   void OnIceTransportStateChanged(IceTransportInternal*) {}
-  void OnIceTransportWritableState(rtc::PacketTransportInternal*) {}
-  void OnIceTransportReceivingState(rtc::PacketTransportInternal*) {}
-  void OnIceTransportNetworkRouteChanged(std::optional<rtc::NetworkRoute>) {}
+  void OnIceTransportWritableState(PacketTransportInternal*) {}
+  void OnIceTransportReceivingState(PacketTransportInternal*) {}
+  void OnIceTransportNetworkRouteChanged(std::optional<NetworkRoute>) {}
   // Schedules delayed and repeated regathering of local candidates on failed
   // networks, where the delay in milliseconds is given by the config. Each
   // repetition is separated by the same delay. When scheduled, all previous

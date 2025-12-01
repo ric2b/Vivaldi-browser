@@ -11,7 +11,7 @@ import {type Action, getRegisteredActionExtensions, KeybindSet} from './ActionRe
 import type {ActionRegistry} from './ActionRegistry.js';
 import {Context} from './Context.js';
 import {Dialog} from './Dialog.js';
-import {KeyboardShortcut, Modifiers, Type} from './KeyboardShortcut.js';
+import {type Key, KeyboardShortcut, type Modifier, Modifiers, Type} from './KeyboardShortcut.js';
 import {isEditing} from './UIUtils.js';
 
 let shortcutRegistryInstance: ShortcutRegistry|undefined;
@@ -66,9 +66,7 @@ export class ShortcutRegistry {
   static removeInstance(): void {
     shortcutRegistryInstance = undefined;
   }
-  private applicableActions(key: number, handlers: {
-    [x: string]: () => Promise<boolean>,
-  }|undefined = {}): Action[] {
+  private applicableActions(key: number, handlers: Record<string, () => Promise<boolean>>|undefined = {}): Action[] {
     let actions: string[] = [];
     const keyMap = this.activePrefixKey || this.keyMap;
     const keyNode = keyMap.getNode(key);
@@ -119,6 +117,12 @@ export class ShortcutRegistry {
     return keys;
   }
 
+  keysForAction(actionId: string): number[] {
+    const keys = [...this.actionToShortcut.get(actionId)].flatMap(
+        shortcut => shortcut.descriptors.map(descriptor => descriptor.key));
+    return keys;
+  }
+
   shortcutTitleForAction(actionId: string): string|undefined {
     for (const shortcut of this.actionToShortcut.get(actionId)) {
       return shortcut.title();
@@ -126,9 +130,23 @@ export class ShortcutRegistry {
     return undefined;
   }
 
-  handleShortcut(event: KeyboardEvent, handlers?: {
-    [x: string]: () => Promise<boolean>,
-  }): void {
+  keyAndModifiersForAction(actionId: string): {key: Key, modifier: Modifier}|undefined {
+    for (const keys of this.keysForAction(actionId)) {
+      const {keyCode, modifiers} = KeyboardShortcut.keyCodeAndModifiersFromKey(keys);
+      const key = KeyboardShortcut.keyCodeToKey(keyCode);
+      if (key) {
+        return {key, modifier: KeyboardShortcut.modifierValueToModifier(modifiers) || Modifiers.None};
+      }
+    }
+    return undefined;
+  }
+
+  // DevTools and Chrome modifier values do not match, see latter here: crsrc.org/c/ui/events/event_constants.h;l=24
+  devToolsToChromeModifier(devToolsModifier: Modifier): number {
+    return devToolsModifier.value * 2;
+  }
+
+  handleShortcut(event: KeyboardEvent, handlers?: Record<string, () => Promise<boolean>>): void {
     void this.handleKey(KeyboardShortcut.makeKeyFromEvent(event), event.key, event, handlers);
   }
 
@@ -136,7 +154,7 @@ export class ShortcutRegistry {
     return this.devToolsDefaultShortcutActions.has(actionId);
   }
 
-  getShortcutListener(handlers: {[x: string]: () => Promise<boolean>}): (event: KeyboardEvent) => void {
+  getShortcutListener(handlers: Record<string, () => Promise<boolean>>): (event: KeyboardEvent) => void {
     const shortcuts = Object.keys(handlers).flatMap(action => [...this.actionToShortcut.get(action)]);
     // We only want keys for these specific actions to get handled this
     // way; all others should be allowed to bubble up.
@@ -157,17 +175,18 @@ export class ShortcutRegistry {
     };
   }
 
-  addShortcutListener(element: Element, handlers: {
-    [x: string]: () => Promise<boolean>,
-  }): (arg0: Event) => void {
+  addShortcutListener(element: Element, handlers: Record<string, () => Promise<boolean>>): (arg0: Event) => void {
     const listener = this.getShortcutListener(handlers) as (event: Event) => void;
     element.addEventListener('keydown', listener);
     return listener;
   }
 
-  async handleKey(key: number, domKey: string, event?: KeyboardEvent, handlers?: {
-    [x: string]: () => Promise<boolean>,
-  }): Promise<void> {
+  async handleKey(
+      key: number,
+      domKey: string,
+      event?: KeyboardEvent,
+      handlers?: Record<string, () => Promise<boolean>>,
+      ): Promise<void> {
     const keyModifiers = key >> 8;
     const hasHandlersOrPrefixKey = Boolean(handlers) || Boolean(this.activePrefixKey);
     const keyMapNode = this.keyMap.getNode(key);

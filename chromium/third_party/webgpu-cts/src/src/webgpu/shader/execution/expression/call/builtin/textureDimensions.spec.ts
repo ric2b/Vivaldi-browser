@@ -18,14 +18,18 @@ import {
   kDepthTextureFormats,
   kPossibleStorageTextureFormats,
   sampleTypeForFormatAndAspect,
-  textureDimensionAndFormatCompatible,
+  textureFormatAndDimensionPossiblyCompatible,
 } from '../../../../../format_info.js';
+import { AllFeaturesMaxLimitsGPUTest, GPUTest } from '../../../../../gpu_test.js';
 import { align } from '../../../../../util/math.js';
 import { kShaderStages, ShaderStage } from '../../../../validation/decl/util.js';
 
-import { WGSLTextureQueryTest } from './texture_utils.js';
+import {
+  executeTextureQueryAndExpectResult,
+  skipIfNoStorageTexturesInStage,
+} from './texture_utils.js';
 
-export const g = makeTestGroup(WGSLTextureQueryTest);
+export const g = makeTestGroup(AllFeaturesMaxLimitsGPUTest);
 
 /// The maximum number of texture mipmap levels to test.
 /// Keep this small to reduce memory and test permutations.
@@ -122,7 +126,10 @@ function viewDimensions(params: {
   }
 
   return kAllViewDimensions.filter(dim =>
-    textureDimensionAndFormatCompatible(textureDimensionsForViewDimensions(dim), params.format)
+    textureFormatAndDimensionPossiblyCompatible(
+      textureDimensionsForViewDimensions(dim),
+      params.format
+    )
   );
 }
 
@@ -223,7 +230,7 @@ function testValues(params: {
  * `values.expected`.
  */
 function run(
-  t: WGSLTextureQueryTest,
+  t: GPUTest,
   stage: ShaderStage,
   texture: GPUTexture | GPUExternalTexture,
   viewDescriptor: GPUTextureViewDescriptor | undefined,
@@ -243,7 +250,7 @@ fn getValue() -> ${outputType} {
   };
 }
 `;
-  t.executeAndExpectResult(stage, wgsl, texture, viewDescriptor, values.expected);
+  executeTextureQueryAndExpectResult(t, stage, wgsl, texture, viewDescriptor, values.expected);
 }
 
 /** @returns true if the GPUTextureViewDimension is valid for a storage texture */
@@ -301,6 +308,10 @@ Parameters:
   .fn(t => {
     t.skipIfTextureFormatNotSupported(t.params.format);
     t.skipIfTextureViewDimensionNotSupported(t.params.dimensions);
+    t.skipIfTextureFormatAndDimensionNotCompatible(
+      t.params.format,
+      textureDimensionsForViewDimensions(t.params.dimensions)
+    );
     if (t.params.samples > 1) {
       t.skipIfTextureFormatNotMultisampled(t.params.format);
     }
@@ -472,7 +483,7 @@ Parameters:
       .expand('baseMipLevel', baseMipLevel)
   )
   .fn(t => {
-    t.skipIfNoStorageTexturesInStage(t.params.stage);
+    skipIfNoStorageTexturesInStage(t, t.params.stage);
     t.skipIfTextureFormatNotSupported(t.params.format);
     t.skipIfTextureFormatNotUsableAsStorageTexture(t.params.format);
 
@@ -519,8 +530,10 @@ Parameters:
   )
   .fn(t => {
     const { stage, importExternalTexture, width, height } = t.params;
-    const canvas = new OffscreenCanvas(width, height);
     const size = [width, height];
+
+    t.skipIf(typeof OffscreenCanvas === 'undefined', 'OffscreenCanvas is not supported');
+    const canvas = new OffscreenCanvas(width, height);
 
     // We have to make a context so that VideoFrame and copyExternalImageToTexture accept the canvas.
     canvas.getContext('2d');

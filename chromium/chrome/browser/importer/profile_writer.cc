@@ -22,7 +22,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/webdata_services/web_data_service_factory.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/pref_names.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -36,6 +35,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
 
@@ -121,7 +121,7 @@ void ProfileWriter::AddHomepage(const GURL& home_page) {
 }
 
 void ProfileWriter::AddBookmarks(
-    const std::vector<ImportedBookmarkEntry>& bookmarks,
+    const std::vector<user_data_importer::ImportedBookmarkEntry>& bookmarks,
     const std::u16string& top_level_folder_name) {
   if (bookmarks.empty())
     return;
@@ -137,8 +137,8 @@ void ProfileWriter::AddBookmarks(
   bool import_to_top_level = bookmark_bar->children().empty();
 
   // Reorder bookmarks so that the toolbar entries come first.
-  std::vector<ImportedBookmarkEntry> toolbar_bookmarks;
-  std::vector<ImportedBookmarkEntry> reordered_bookmarks;
+  std::vector<user_data_importer::ImportedBookmarkEntry> toolbar_bookmarks;
+  std::vector<user_data_importer::ImportedBookmarkEntry> reordered_bookmarks;
   for (auto it = bookmarks.begin(); it != bookmarks.end(); ++it) {
     if (it->in_toolbar)
       toolbar_bookmarks.push_back(*it);
@@ -159,8 +159,8 @@ void ProfileWriter::AddBookmarks(
 
   std::set<const BookmarkNode*> folders_added_to;
   const BookmarkNode* top_level_folder = nullptr;
-  for (std::vector<ImportedBookmarkEntry>::const_iterator bookmark =
-           reordered_bookmarks.begin();
+  for (std::vector<user_data_importer::ImportedBookmarkEntry>::const_iterator
+           bookmark = reordered_bookmarks.begin();
        bookmark != reordered_bookmarks.end(); ++bookmark) {
     // Disregard any bookmarks with invalid urls.
     if (!bookmark->is_folder && !bookmark->url.is_valid())
@@ -217,6 +217,7 @@ void ProfileWriter::AddBookmarks(
       vivaldi_meta.SetDescription(bookmark->description);
       vivaldi_meta.SetThumbnail(bookmark->thumbnail);
       vivaldi_meta.SetSpeeddial(bookmark->speeddial);
+      vivaldi_meta.SetDisplayUrl(bookmark->display_url);
 
       model->AddURL(parent, parent->children().size(), bookmark->title,
                     bookmark->url, vivaldi_meta.map(), bookmark->creation_time);

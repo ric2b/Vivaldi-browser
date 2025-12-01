@@ -131,11 +131,11 @@ public class SiteSettingsCategory {
     private final BrowserContextHandle mBrowserContextHandle;
 
     // The id of this category.
-    private @Type int mCategory;
+    private final @Type int mCategory;
 
     // The id of a permission in Android M that governs this category. Can be blank if Android has
     // no equivalent permission for the category.
-    private String mAndroidPermission;
+    private final String mAndroidPermission;
 
     /**
      * Construct a SiteSettingsCategory.
@@ -510,9 +510,6 @@ public class SiteSettingsCategory {
                     osWarningExtra.setIcon(transparent);
                 }
             }
-        } else if (globalMessage != null) {
-            osWarningExtra.setTitle(globalMessage);
-            osWarningExtra.setIcon(getDisabledInAndroidIcon(context));
         }
     }
 
@@ -569,12 +566,7 @@ public class SiteSettingsCategory {
     }
 
     /** Returns whether to disable the category toggle. */
-    protected boolean isToggleDisabled() {
-        return false;
-    }
-
-    /** Returns whether to show a warning message when the category is blocked. */
-    protected boolean shouldShowWarningWhenBlocked() {
+    protected boolean shouldDisableToggle() {
         return false;
     }
 
@@ -634,6 +626,14 @@ public class SiteSettingsCategory {
 
     /** Returns the message to display when per-app permission is blocked. */
     protected @Nullable String getMessageForEnablingOsGlobalPermission(Context context) {
+        return null;
+    }
+
+    /**
+     * Returns the message to display to explain why the settings toggle is disabled. Returns null
+     * if no message should be displayed.
+     */
+    protected @Nullable String getMessageWhyToggleIsDisabled(Context context) {
         return null;
     }
 

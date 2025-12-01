@@ -31,6 +31,7 @@
 #include <algorithm>
 
 #include "third_party/blink/renderer/core/accessibility/ax_object_cache.h"
+#include "third_party/blink/renderer/core/dom/frame_request_callback_collection.h"
 #include "third_party/blink/renderer/core/dom/node.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/text.h"
@@ -42,6 +43,8 @@
 #include "third_party/blink/renderer/core/editing/markers/composition_marker_list_impl.h"
 #include "third_party/blink/renderer/core/editing/markers/custom_highlight_marker.h"
 #include "third_party/blink/renderer/core/editing/markers/custom_highlight_marker_list_impl.h"
+#include "third_party/blink/renderer/core/editing/markers/glic_marker.h"
+#include "third_party/blink/renderer/core/editing/markers/glic_marker_list_impl.h"
 #include "third_party/blink/renderer/core/editing/markers/grammar_marker.h"
 #include "third_party/blink/renderer/core/editing/markers/grammar_marker_list_impl.h"
 #include "third_party/blink/renderer/core/editing/markers/sorted_document_marker_list_editor.h"
@@ -56,6 +59,7 @@
 #include "third_party/blink/renderer/core/editing/position.h"
 #include "third_party/blink/renderer/core/editing/visible_position.h"
 #include "third_party/blink/renderer/core/editing/visible_units.h"
+#include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/highlight/highlight_style_utils.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
@@ -86,6 +90,8 @@ DocumentMarker::MarkerTypeIndex MarkerTypeToMarkerIndex(
       return DocumentMarker::kTextFragmentMarkerIndex;
     case DocumentMarker::kCustomHighlight:
       return DocumentMarker::kCustomHighlightMarkerIndex;
+    case DocumentMarker::kGlic:
+      return DocumentMarker::kGlicMarkerIndex;
   }
 
   NOTREACHED();
@@ -109,6 +115,8 @@ DocumentMarkerList* CreateListForType(DocumentMarker::MarkerType type) {
       return MakeGarbageCollected<TextFragmentMarkerListImpl>();
     case DocumentMarker::kCustomHighlight:
       return MakeGarbageCollected<CustomHighlightMarkerListImpl>();
+    case DocumentMarker::kGlic:
+      return MakeGarbageCollected<GlicMarkerListImpl>();
   }
 
   NOTREACHED();
@@ -172,6 +180,29 @@ PositionInFlatTree SearchAroundPositionEnd(const PositionInFlatTree& position) {
       EndOfWordPosition(position, kNextWordIfOnBoundary);
   return end_of_word_or_null.IsNotNull() ? end_of_word_or_null : position;
 }
+
+class RequestAnimationFrameCallback final : public FrameCallback {
+ public:
+  explicit RequestAnimationFrameCallback(
+      DocumentMarkerController* marker_controller)
+      : marker_controller_(marker_controller) {}
+  RequestAnimationFrameCallback(const RequestAnimationFrameCallback&) = delete;
+  RequestAnimationFrameCallback& operator=(
+      const RequestAnimationFrameCallback&) = delete;
+
+  void Invoke(double high_res_ms) override {
+    base::TimeTicks tick = base::TimeTicks() + base::Milliseconds(high_res_ms);
+    marker_controller_->ContinueGlicMarkerAnimation(tick);
+  }
+
+  void Trace(Visitor* visitor) const override {
+    visitor->Trace(marker_controller_);
+    FrameCallback::Trace(visitor);
+  }
+
+ private:
+  const Member<DocumentMarkerController> marker_controller_;
+};
 
 }  // namespace
 
@@ -297,6 +328,13 @@ void DocumentMarkerController::AddCustomHighlightMarker(
         return MakeGarbageCollected<CustomHighlightMarker>(
             start_offset, end_offset, highlight_name, highlight);
       });
+}
+
+void DocumentMarkerController::AddGlicMarker(const EphemeralRange& range) {
+  DCHECK(!document_->NeedsLayoutTreeUpdate());
+  AddMarkerInternal(range, [](int start_offset, int end_offset) {
+    return MakeGarbageCollected<GlicMarker>(start_offset, end_offset);
+  });
 }
 
 void DocumentMarkerController::PrepareForDestruction() {
@@ -471,6 +509,9 @@ void DocumentMarkerController::DidRemoveNodeFromMap(
     markers_[type_index] = nullptr;
     possibly_existing_marker_types_ = possibly_existing_marker_types_.Subtract(
         DocumentMarker::MarkerTypes(type));
+  }
+  if (type == DocumentMarker::kGlic) {
+    glic_animation_state_ = GlicAnimationState::kNotStarted;
   }
 }
 
@@ -1351,6 +1392,90 @@ void DocumentMarkerController::DidUpdateCharacterData(CharacterData* node,
     return;
   InvalidateRectsForTextMatchMarkersInNode(*text_node);
   InvalidatePaintForNode(*node);
+}
+
+void DocumentMarkerController::StartGlicMarkerAnimationIfNeeded() {
+  CHECK(document_);
+  if (!PossiblyHasMarkers(DocumentMarker::kGlic) ||
+      glic_animation_state_ != GlicAnimationState::kNotStarted) {
+    return;
+  }
+
+  if (document_->GetSettings()->GetPrefersReducedMotion()) {
+    UpdateGlicMarkerOpacity(base::TimeDelta::Max());
+    InvalidatePaintForGlicMarkers();
+    glic_marker_animation_start_ = std::nullopt;
+    glic_animation_state_ = GlicAnimationState::kFinished;
+    return;
+  }
+
+  // Always make sure we start from a clean state.
+  glic_marker_animation_start_ = std::nullopt;
+  glic_animation_state_ = GlicAnimationState::kRunning;
+  auto* callback = MakeGarbageCollected<RequestAnimationFrameCallback>(this);
+  document_->RequestAnimationFrame(callback);
+}
+
+void DocumentMarkerController::ContinueGlicMarkerAnimation(
+    base::TimeTicks tick) {
+  CHECK(document_);
+  if (!PossiblyHasMarkers(DocumentMarker::kGlic)) {
+    // The value here can become stale: if before the previous animation
+    // finishes, glic removes the highlight.
+    glic_marker_animation_start_ = std::nullopt;
+    // Reset when the glic markers are removed.
+    CHECK_EQ(glic_animation_state_, GlicAnimationState::kNotStarted);
+    return;
+  }
+  if (!glic_marker_animation_start_) {
+    glic_marker_animation_start_ = tick;
+  }
+
+  base::TimeDelta duration = tick - *glic_marker_animation_start_;
+
+  bool is_last_frame = UpdateGlicMarkerOpacity(duration);
+
+  InvalidatePaintForGlicMarkers();
+
+  if (is_last_frame) {
+    glic_marker_animation_start_ = std::nullopt;
+    glic_animation_state_ = GlicAnimationState::kFinished;
+    return;
+  }
+
+  auto* callback = MakeGarbageCollected<RequestAnimationFrameCallback>(this);
+  document_->RequestAnimationFrame(callback);
+}
+
+bool DocumentMarkerController::UpdateGlicMarkerOpacity(
+    base::TimeDelta duration) {
+  CHECK(PossiblyHasMarkers(DocumentMarker::kGlic));
+  GCedHeapHashMap<WeakMember<const Text>, MarkerList>* marker_map =
+      markers_[MarkerTypeToMarkerIndex(DocumentMarker::kGlic)];
+  CHECK(marker_map);
+  bool is_last_frame = false;
+  for (auto& [text_node, marker_list] : *marker_map) {
+    CHECK_EQ(marker_list->MarkerType(), DocumentMarker::MarkerType::kGlic);
+    for (DocumentMarker* marker :
+         MarkersFor(*text_node, DocumentMarker::MarkerTypes::Glic())) {
+      bool last_frame =
+          To<GlicMarker>(marker)->UpdateOpacityForDuration(duration);
+      // All the `GlicMarker`s are in-sync regarding the last frame.
+      is_last_frame |= last_frame;
+    }
+  }
+  return is_last_frame;
+}
+
+void DocumentMarkerController::InvalidatePaintForGlicMarkers() {
+  CHECK(PossiblyHasMarkers(DocumentMarker::kGlic));
+  GCedHeapHashMap<WeakMember<const Text>, MarkerList>* marker_map =
+      markers_[MarkerTypeToMarkerIndex(DocumentMarker::kGlic)];
+  CHECK(marker_map);
+  for (auto& [text_node, marker_list] : *marker_map) {
+    CHECK_EQ(marker_list->MarkerType(), DocumentMarker::MarkerType::kGlic);
+    InvalidatePaintForNode(*text_node);
+  }
 }
 
 }  // namespace blink

@@ -41,9 +41,9 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_apply_task.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_apply_waiter.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_discovery_task.h"
-#include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_external_install_options.h"
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_policy_manager.h"
 #include "chrome/browser/web_applications/web_app_command_scheduler.h"
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -55,6 +55,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/webapps/common/web_app_id.h"
+#include "components/webapps/isolated_web_apps/update_channel.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/isolated_web_apps_policy.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -164,39 +165,31 @@ IwaBundleIdToUpdateOptionsMap GetForceInstalledPolicyIsolatedWebApps(
     Profile* profile) {
   IwaBundleIdToUpdateOptionsMap result;
 
-  const base::Value::List& iwa_force_install_list =
-      profile->GetPrefs()->GetList(prefs::kIsolatedWebAppInstallForceList);
-  for (const base::Value& policy_entry : iwa_force_install_list) {
-    base::expected<IsolatedWebAppExternalInstallOptions, std::string> options =
-        IsolatedWebAppExternalInstallOptions::FromPolicyPrefValue(policy_entry);
-    if (!options.has_value()) {
-      LOG(ERROR) << "IsolatedWebAppUpdateManager: "
-                 << "Could not parse IWA force-install policy: "
-                 << options.error();
-      continue;
-    }
-
-    result.emplace(options->web_bundle_id(),
-                   IsolatedWebAppUpdateOptions(options->update_manifest_url(),
-                                               options->update_channel(),
-                                               options->allow_downgrades(),
-                                               options->pinned_version()));
+  for (const auto& install_options :
+       IsolatedWebAppPolicyManager::GetIwaInstallForceList(*profile)) {
+    result.emplace(
+        install_options.web_bundle_id(),
+        IsolatedWebAppUpdateOptions(install_options.update_manifest_url(),
+                                    install_options.update_channel(),
+                                    install_options.allow_downgrades(),
+                                    install_options.pinned_version()));
   }
+
   return result;
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
 IwaBundleIdToUpdateOptionsMap GetKioskPolicyIsolatedWebApps() {
   IwaBundleIdToUpdateOptionsMap result;
-  std::optional<ash::KioskIwaPolicyData> kiosk_iwa_policy_data =
-      ash::GetCurrentKioskIwaPolicyData();
+  std::optional<ash::KioskIwaUpdateData> kiosk_iwa_policy_data =
+      ash::GetCurrentKioskIwaUpdateData();
   if (kiosk_iwa_policy_data) {
     result.emplace(
         kiosk_iwa_policy_data->web_bundle_id,
         IsolatedWebAppUpdateOptions(kiosk_iwa_policy_data->update_manifest_url,
-                                    UpdateChannel::default_channel(),
-                                    /*allow_downgrades=*/false,
-                                    /*pinned_version=*/std::nullopt));
+                                    kiosk_iwa_policy_data->update_channel,
+                                    kiosk_iwa_policy_data->allow_downgrades,
+                                    kiosk_iwa_policy_data->pinned_version));
   }
   return result;
 }
@@ -317,7 +310,7 @@ void IsolatedWebAppUpdateManager::Start() {
     return;
   }
 
-  for (WebApp web_app : provider_->registrar_unsafe().GetApps()) {
+  for (const WebApp& web_app : provider_->registrar_unsafe().GetApps()) {
     if (!web_app.isolation_data().has_value() ||
         !web_app.isolation_data()->pending_update_info().has_value()) {
       continue;
@@ -358,7 +351,7 @@ void IsolatedWebAppUpdateManager::Start() {
         std::make_unique<ScopedKeepAlive>(
             KeepAliveOrigin::ISOLATED_WEB_APP_UPDATE,
             KeepAliveRestartOption::DISABLED),
-        std::move(profile_keep_alive), provider_->scheduler()));
+        std::move(profile_keep_alive), provider_->scheduler(), &*profile_));
   }
 
   content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT})
@@ -722,7 +715,7 @@ void IsolatedWebAppUpdateManager::OnUpdateApplyWaiterFinished(
 
   task_queue_.Push(std::make_unique<IsolatedWebAppUpdateApplyTask>(
       url_info, std::move(keep_alive), std::move(profile_keep_alive),
-      provider_->scheduler()));
+      provider_->scheduler(), &*profile_));
   std::move(on_update_apply_task_created).Run();
 
   task_queue_.MaybeStartNextTask();

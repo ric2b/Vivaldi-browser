@@ -4,15 +4,17 @@
 
 package org.chromium.chrome.browser.management;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
 /** Native page that displays whether the current profile is managed or not. */
+@NullMarked
 public class ManagementPage extends BasicNativePage {
     private final ManagementCoordinator mManagementCoordinator;
-    private String mTitle;
+    private final String mTitle;
 
     /**
      * Create a new instance of the management page.

@@ -1,4 +1,5 @@
 ---
+redirect: https://googlechrome.github.io/chromerootprogram/apply-for-inclusion/
 breadcrumbs:
 - - /Home
   - Chromium

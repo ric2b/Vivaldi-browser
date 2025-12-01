@@ -11,7 +11,6 @@ import android.graphics.Color;
 import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
-import android.provider.Settings;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnDragListener;
@@ -23,7 +22,6 @@ import android.view.animation.Animation;
 import android.view.animation.ScaleAnimation;
 import android.widget.FrameLayout;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.build.annotations.EnsuresNonNullIf;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
@@ -58,22 +56,22 @@ public class ContextMenuDialog extends AlwaysDismissedDialog {
     private float mContextMenuSourceYPx;
     private int mContextMenuFirstLocationYPx;
     private @Nullable AnchoredPopupWindow mPopupWindow;
-    private View mLayout;
+    private final View mLayout;
     private @Nullable OnLayoutChangeListener mOnLayoutChangeListener;
     private @Nullable DragEventDispatchHelper mDragEventDispatchHelper;
-    private Rect mRect;
+    private final Rect mRect;
 
-    private int mTopMarginPx;
-    private int mBottomMarginPx;
+    private final int mTopMarginPx;
+    private final int mBottomMarginPx;
 
-    private @Nullable Integer mPopupMargin;
-    private @Nullable Integer mDesiredPopupContentWidth;
+    private final @Nullable Integer mPopupMargin;
+    private final @Nullable Integer mDesiredPopupContentWidth;
 
     /**
      * View that is showing behind the context menu. If menu is shown as a popup without scrim, this
      * view will be used to dispatch touch events other than ACTION_DOWN.
      */
-    private @Nullable View mTouchEventDelegateView;
+    private final @Nullable View mTouchEventDelegateView;
 
     /**
      * Creates an instance of the ContextMenuDialog.
@@ -225,7 +223,7 @@ public class ContextMenuDialog extends AlwaysDismissedDialog {
                             mPopupWindow.setAnimateFromAnchor(true);
                             // Set popup focusable so the screen reader can announce the popup
                             // properly.
-                            if (AccessibilityState.isScreenReaderEnabled()) {
+                            if (AccessibilityState.isKnownScreenReaderEnabled()) {
                                 mPopupWindow.setFocusable(true);
                             }
                             // If the popup is dismissed, dismiss this dialog as well. This is
@@ -367,13 +365,7 @@ public class ContextMenuDialog extends AlwaysDismissedDialog {
                         pivotY);
 
         long duration = isEnterAnimation ? ENTER_ANIMATION_DURATION_MS : EXIT_ANIMATION_DURATION_MS;
-        float durationScale =
-                Settings.Global.getFloat(
-                        ContextUtils.getApplicationContext().getContentResolver(),
-                        Settings.Global.ANIMATOR_DURATION_SCALE,
-                        1f);
-
-        animation.setDuration((long) (duration * durationScale));
+        animation.setDuration((long) (duration * AccessibilityState.getAnimatorDurationScale()));
         animation.setInterpolator(Interpolators.LINEAR_OUT_SLOW_IN_INTERPOLATOR);
         return animation;
     }

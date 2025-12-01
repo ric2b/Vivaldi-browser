@@ -64,7 +64,9 @@ content::WebContents* DataSharingBubbleDialogView::AddNewContents(
     bool* was_blocked) {
   NavigateParams params(browser_, std::move(new_contents));
   params.tabstrip_index = browser_->tab_strip_model()->count();
-  params.disposition = disposition;
+  // Open link in a new window for better visibility because the bubble lays on
+  // top of the current window.
+  params.disposition = WindowOpenDisposition::NEW_WINDOW;
   Navigate(&params);
   return params.navigated_or_inserted_contents;
 }
@@ -191,6 +193,10 @@ void DataSharingBubbleController::OnWidgetClosing(views::Widget* widget) {
   if (on_close_callback_) {
     std::move(on_close_callback_).Run(group_action_, group_action_progress_);
   }
+
+  // Reset progress on dialog close.
+  group_action_ = std::nullopt;
+  group_action_progress_ = std::nullopt;
 }
 
 void DataSharingBubbleController::ApiInitComplete() {

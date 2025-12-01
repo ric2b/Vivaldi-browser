@@ -65,7 +65,7 @@ class VivaldiDesktopWindowTreeHostWin : public views::DesktopWindowTreeHostWin {
   void SetFullscreen(bool fullscreen, int64_t target_display_id) override;
   bool GetDwmFrameInsetsInPixels(gfx::Insets* insets) const override;
   bool GetClientAreaInsets(gfx::Insets* insets,
-                           HMONITOR monitor) const override;
+                           int frame_thickness) const override;
 
   void SetRoundedWindowCorners(bool enable);
   void SetWindowAccentColor(COLORREF bordercolor);

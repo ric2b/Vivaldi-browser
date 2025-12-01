@@ -22,135 +22,11 @@ namespace openscreen::cast {
 
 using clock_operators::operator<<;
 
-namespace {
-
-void DispatchEnqueueEvents(StreamType stream_type,
-                           const EncodedFrame& frame,
-                           Environment& environment) {
-  if (!environment.statistics_collector()) {
-    return;
-  }
-
-  const StatisticsEventMediaType media_type = ToMediaType(stream_type);
-
-  // Submit a capture begin event.
-  FrameEvent capture_begin_event;
-  capture_begin_event.type = StatisticsEventType::kFrameCaptureBegin;
-  capture_begin_event.media_type = media_type;
-  capture_begin_event.rtp_timestamp = frame.rtp_timestamp;
-  capture_begin_event.timestamp =
-      (frame.capture_begin_time > Clock::time_point::min())
-          ? frame.capture_begin_time
-          : environment.now();
-  environment.statistics_collector()->CollectFrameEvent(
-      std::move(capture_begin_event));
-
-  // Submit a capture end event.
-  FrameEvent capture_end_event;
-  capture_end_event.type = StatisticsEventType::kFrameCaptureEnd;
-  capture_end_event.media_type = media_type;
-  capture_end_event.rtp_timestamp = frame.rtp_timestamp;
-  capture_end_event.timestamp =
-      (frame.capture_end_time > Clock::time_point::min())
-          ? frame.capture_end_time
-          : environment.now();
-  environment.statistics_collector()->CollectFrameEvent(
-      std::move(capture_end_event));
-
-  // Submit an encoded event.
-  FrameEvent encode_event;
-  encode_event.timestamp = environment.now();
-  encode_event.type = StatisticsEventType::kFrameEncoded;
-  encode_event.media_type = media_type;
-  encode_event.rtp_timestamp = frame.rtp_timestamp;
-  encode_event.frame_id = frame.frame_id;
-  encode_event.size = static_cast<uint32_t>(frame.data.size());
-  encode_event.key_frame =
-      frame.dependency == openscreen::cast::EncodedFrame::Dependency::kKeyFrame;
-
-  environment.statistics_collector()->CollectFrameEvent(
-      std::move(encode_event));
-}
-
-void DispatchAckEvent(StreamType stream_type,
-                      RtpTimeTicks rtp_timestamp,
-                      FrameId frame_id,
-                      Environment& environment) {
-  if (!environment.statistics_collector()) {
-    return;
-  }
-
-  FrameEvent ack_event;
-  ack_event.timestamp = environment.now();
-  ack_event.type = StatisticsEventType::kFrameAckReceived;
-  ack_event.media_type = ToMediaType(stream_type);
-  ack_event.rtp_timestamp = rtp_timestamp;
-  ack_event.frame_id = frame_id;
-
-  environment.statistics_collector()->CollectFrameEvent(std::move(ack_event));
-}
-
-// TODO(issuetracker.google.com/298277160): move into a helper file, add tests.
-void DispatchFrameLogMessages(
-    StreamType stream_type,
-    const std::vector<RtcpReceiverFrameLogMessage>& messages,
-    Environment& environment) {
-  if (!environment.statistics_collector()) {
-    return;
-  }
-
-  const Clock::time_point now = environment.now();
-  const StatisticsEventMediaType media_type = ToMediaType(stream_type);
-  for (const RtcpReceiverFrameLogMessage& log_message : messages) {
-    for (const RtcpReceiverEventLogMessage& event_message :
-         log_message.messages) {
-      switch (event_message.type) {
-        case StatisticsEventType::kPacketReceived: {
-          PacketEvent event;
-          event.timestamp = event_message.timestamp;
-          event.received_timestamp = now;
-          event.type = event_message.type;
-          event.media_type = media_type;
-          event.rtp_timestamp = log_message.rtp_timestamp;
-          event.packet_id = event_message.packet_id;
-          environment.statistics_collector()->CollectPacketEvent(
-              std::move(event));
-        } break;
-
-        case StatisticsEventType::kFrameAckSent:
-        case StatisticsEventType::kFrameDecoded:
-        case StatisticsEventType::kFramePlayedOut: {
-          FrameEvent event;
-          event.timestamp = event_message.timestamp;
-          event.received_timestamp = now;
-          event.type = event_message.type;
-          event.media_type = media_type;
-          event.rtp_timestamp = log_message.rtp_timestamp;
-          if (event.type == StatisticsEventType::kFramePlayedOut) {
-            event.delay_delta = event_message.delay;
-          }
-          environment.statistics_collector()->CollectFrameEvent(
-              std::move(event));
-        } break;
-
-        default:
-          OSP_VLOG << "Received log message via RTCP that we did not expect, "
-                      "StatisticsEventType="
-                   << static_cast<int>(event_message.type);
-          break;
-      }
-    }
-  }
-}
-
-}  // namespace
-
 Sender::Sender(Environment& environment,
                SenderPacketRouter& packet_router,
                SessionConfig config,
                RtpPayloadType rtp_payload_type)
-    : environment_(environment),
-      config_(config),
+    : config_(config),
       packet_router_(packet_router),
       rtcp_session_(config.sender_ssrc,
                     config.receiver_ssrc,
@@ -162,6 +38,7 @@ Sender::Sender(Environment& environment,
                       packet_router_.max_packet_size()),
       rtp_timebase_(config.rtp_timebase),
       crypto_(config.aes_secret_key, config.aes_iv_mask),
+      statistics_dispatcher_(environment),
       target_playout_delay_(config.target_playout_delay) {
   OSP_CHECK_NE(rtcp_session_.sender_ssrc(), rtcp_session_.receiver_ssrc());
   OSP_CHECK_GT(rtp_timebase_, 0);
@@ -307,7 +184,7 @@ Sender::EnqueueFrameResult Sender::EnqueueFrame(const EncodedFrame& frame) {
 
   // Re-activate RTP sending if it was suspended.
   packet_router_.RequestRtpSend(rtcp_session_.receiver_ssrc());
-  DispatchEnqueueEvents(config_.stream_type, frame, environment_);
+  statistics_dispatcher_.DispatchEnqueueEvents(config_.stream_type, frame);
 
   return OK;
 }
@@ -470,7 +347,8 @@ void Sender::OnReceiverReport(const RtcpReportBlock& receiver_report) {
 
 void Sender::OnCastReceiverFrameLogMessages(
     std::vector<RtcpReceiverFrameLogMessage> messages) {
-  DispatchFrameLogMessages(config_.stream_type, messages, environment_);
+  statistics_dispatcher_.DispatchFrameLogMessages(config_.stream_type,
+                                                  messages);
 }
 
 void Sender::OnReceiverIndicatesPictureLoss() {
@@ -520,8 +398,8 @@ void Sender::OnReceiverCheckpoint(FrameId frame_id,
     PendingFrameSlot& slot = get_slot_for(checkpoint_frame_id_);
     if (slot.is_active_for_frame(checkpoint_frame_id_)) {
       const RtpTimeTicks rtp_timestamp = slot.frame->rtp_timestamp;
-      DispatchAckEvent(config_.stream_type, rtp_timestamp, checkpoint_frame_id_,
-                       environment_);
+      statistics_dispatcher_.DispatchAckEvent(
+          config_.stream_type, rtp_timestamp, checkpoint_frame_id_);
       CancelPendingFrame(checkpoint_frame_id_, /*was_acked*/ true);
     }
   }
@@ -554,7 +432,8 @@ void Sender::OnReceiverHasFrames(std::vector<FrameId> acks) {
     PendingFrameSlot& slot = get_slot_for(id);
     if (slot.is_active_for_frame(id)) {
       const RtpTimeTicks rtp_timestamp = slot.frame->rtp_timestamp;
-      DispatchAckEvent(config_.stream_type, rtp_timestamp, id, environment_);
+      statistics_dispatcher_.DispatchAckEvent(config_.stream_type,
+                                              rtp_timestamp, id);
     }
     CancelPendingFrame(id, /*was_acked*/ true);
   }

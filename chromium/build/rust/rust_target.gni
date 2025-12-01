@@ -38,6 +38,7 @@ if (enable_rust_cxx) {
 # be provided.
 
 template("rust_target") {
+  # assert(enable_rust) # Vivaldi needs this false during signing
   _target_name = target_name
 
   # NOTE: TargetName=>CrateName mangling algorithm should be updated
@@ -337,6 +338,10 @@ template("rust_target") {
 
     if (!defined(invoker.no_std) || !invoker.no_std) {
       _rust_deps += [ "//build/rust/std" ]
+    }
+
+    if (!defined(invoker.no_allocator_crate) || !invoker.no_allocator_crate) {
+      _rust_deps += [ "//build/rust/allocator" ]
     }
 
     if (_build_unit_tests) {

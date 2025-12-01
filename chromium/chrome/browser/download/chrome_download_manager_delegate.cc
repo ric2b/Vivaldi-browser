@@ -20,7 +20,6 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/path_service.h"
 #include "base/rand_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -43,6 +42,7 @@
 #include "chrome/browser/download/download_request_limiter.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/download_target_determiner.h"
+#include "chrome/browser/download/download_ui_safe_browsing_util.h"
 #include "chrome/browser/download/insecure_download_blocking.h"
 #include "chrome/browser/download/save_package_file_picker.h"
 #include "chrome/browser/enterprise/connectors/common.h"
@@ -63,14 +63,17 @@
 #include "components/download/public/common/download_item.h"
 #include "components/download/public/common/download_item_rename_handler.h"
 #include "components/download/public/common/download_stats.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/offline_pages/buildflags/buildflags.h"
 #include "components/pdf/common/constants.h"
 #include "components/pdf/common/pdf_util.h"
+#include "components/policy/content/policy_blocklist_service.h"
 #include "components/policy/core/common/policy_pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_search_api/safe_search_util.h"
@@ -107,7 +110,6 @@
 #include "chrome/browser/download/android/download_utils.h"
 #include "chrome/browser/download/android/duplicate_download_dialog_bridge_delegate.h"
 #include "chrome/browser/download/android/insecure_download_dialog_bridge.h"
-#include "chrome/browser/download/android/insecure_download_infobar_delegate.h"
 #include "chrome/browser/download/android/new_navigation_observer.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/ui/android/pdf/pdf_jni_headers/PdfUtils_jni.h"
@@ -188,12 +190,20 @@ using extensions::CrxInstallError;
 
 namespace {
 
-#if !BUILDFLAG(IS_ANDROID)
 // How long an ephemeral warning lasts before being automatically canceled (if
 // there is no user interaction).
 constexpr base::TimeDelta kEphemeralWarningLifetimeBeforeCancel =
     base::Hours(1);
+
+bool IsEphemeralWarningCancellationEnabled() {
+#if BUILDFLAG(IS_ANDROID)
+  return ShouldShowSafeBrowsingAndroidDownloadWarnings();
 #else
+  return download::IsDownloadBubbleEnabled();
+#endif
+}
+
+#if BUILDFLAG(IS_ANDROID)
 const char kPdfDirName[] = "pdfs";
 #endif
 
@@ -360,6 +370,17 @@ bool ShouldOpenPdfInlineInternal(bool incognito) {
   JNIEnv* env = base::android::AttachCurrentThread();
   return Java_PdfUtils_shouldOpenPdfInline(env, incognito);
 }
+
+void OnDetermineSavePackagePathDone(
+    content::SavePackagePathPickedCallback callback,
+    const base::FilePath& file_path,
+    const base::FilePath& display_name) {
+  content::SavePackagePathPickedParams param;
+  param.file_path = file_path;
+  param.save_type = content::SavePageType::SAVE_PAGE_TYPE_AS_MHTML;
+  param.display_name = display_name;
+  std::move(callback).Run(param, base::DoNothing());
+}
 #endif  // BUILDFLAG(IS_ANDROID)
 
 void OnCheckExistingDownloadPathDone(download::DownloadTargetInfo target_info,
@@ -446,11 +467,18 @@ void MaybeReportDangerousDownloadBlocked(
     if (download->GetState() == DownloadItem::DownloadState::COMPLETE) {
       raw_digest_sha256 = download->GetHash();
     }
+    google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>
+        referrer_chain;
+    if (base::FeatureList::IsEnabled(safe_browsing::kEnhancedFieldsForSecOps)) {
+      referrer_chain =
+          safe_browsing::GetOrIdentifyReferrerChainForEnterprise(*download);
+    }
+
     router->OnDangerousDownloadEvent(
         download->GetURL(), download->GetTabUrl(), download_path,
         base::HexEncode(raw_digest_sha256), danger_type,
         download->GetMimeType(), /*scan_id*/ "", download->GetTotalBytes(),
-        enterprise_connectors::EventResult::BLOCKED);
+        referrer_chain, enterprise_connectors::EventResult::BLOCKED);
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
@@ -485,7 +513,6 @@ download::DownloadDangerType SavePackageDangerType(
 }
 #endif  // BUILDFLAG(SAFE_BROWSING_DOWNLOAD_PROTECTION)
 
-#if !BUILDFLAG(IS_ANDROID)
 // Events related to ephemeral warning cancellation.
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
@@ -508,7 +535,6 @@ void LogCancelEphemeralWarningEvent(CancelEphemeralWarningEvent event) {
   base::UmaHistogramEnumeration("SBClientDownload.CancelEphemeralWarning",
                                 event);
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
 void OnCheckDownloadAllowedFailed(
     content::CheckDownloadAllowedCallback check_download_allowed_cb) {
@@ -1007,6 +1033,16 @@ bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
     int64_t content_length,
     bool is_transient,
     content::WebContents* web_contents) {
+  PolicyBlocklistService* service =
+      PolicyBlocklistFactory::GetForBrowserContext(profile_);
+  policy::URLBlocklist::URLBlocklistState blocklist_state =
+      service->GetURLBlocklistState(url);
+  if (blocklist_state ==
+      policy::URLBlocklist::URLBlocklistState::URL_IN_BLOCKLIST) {
+    LOG(WARNING) << "URL is blocked by a policy.";
+    return true;
+  }
+
 #if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // For background service downloads we don't want offline pages backend to
@@ -1019,6 +1055,11 @@ bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
            .is_attachment() &&
       offline_pages::OfflinePageUtils::CanDownloadAsOfflinePage(url,
                                                                 mime_type)) {
+#if BUILDFLAG(IS_ANDROID)
+    if (profile_->IsOffTheRecord()) {
+      return false;
+    }
+#endif  // BUILDFLAG(IS_ANDROID)
     offline_pages::OfflinePageUtils::ScheduleDownload(
         web_contents, offline_pages::kDownloadNamespace, url,
         offline_pages::OfflinePageUtils::DownloadUIActionFlags::ALL,
@@ -1081,10 +1122,27 @@ void ChromeDownloadManagerDelegate::ChooseSavePath(
     const base::FilePath::StringType& default_extension,
     bool can_save_as_complete,
     content::SavePackagePathPickedCallback callback) {
+#if BUILDFLAG(IS_ANDROID)
+  if (!web_contents) {
+    return;
+  }
+
+  base::OnceCallback<void(bool)> confirm_callback =
+      base::BindOnce(&ChromeDownloadManagerDelegate::
+                         RequestIncognitoSavePackageConfirmationDone,
+                     weak_ptr_factory_.GetWeakPtr(), web_contents->GetURL(),
+                     suggested_path, std::move(callback));
+  if (profile_->IsOffTheRecord()) {
+    RequestIncognitoWarningConfirmation(std::move(confirm_callback));
+  } else {
+    std::move(confirm_callback).Run(/*accepted=*/true);
+  }
+#else
   // Deletes itself.
   new SavePackageFilePicker(web_contents, suggested_path, default_extension,
                             can_save_as_complete, download_prefs_.get(),
                             std::move(callback));
+#endif
 }
 
 void ChromeDownloadManagerDelegate::SanitizeSavePackageResourceName(
@@ -1847,7 +1905,7 @@ void ChromeDownloadManagerDelegate::OnInstallerDone(
 
   {
     auto iter = running_crx_installs_.find(token);
-    CHECK(iter != running_crx_installs_.end(), base::NotFatalUntil::M130);
+    CHECK(iter != running_crx_installs_.end());
     installer = iter->second;
     running_crx_installs_.erase(iter);
   }
@@ -2256,15 +2314,14 @@ void ChromeDownloadManagerDelegate::OnManagerInitialized() {
     download::GetDownloadTaskRunner()->PostTask(
         FROM_HERE, base::BindOnce([]() { base::DeleteFile(GetTempPdfDir()); }));
   }
-#else
-  CancelAllEphemeralWarnings();
 #endif
+
+  CancelAllEphemeralWarnings();
 }
 
-#if !BUILDFLAG(IS_ANDROID)
 void ChromeDownloadManagerDelegate::ScheduleCancelForEphemeralWarning(
     const std::string& guid) {
-  if (!download::IsDownloadBubbleEnabled()) {
+  if (!IsEphemeralWarningCancellationEnabled()) {
     return;
   }
   LogCancelEphemeralWarningEvent(
@@ -2278,6 +2335,7 @@ void ChromeDownloadManagerDelegate::ScheduleCancelForEphemeralWarning(
 
 void ChromeDownloadManagerDelegate::CancelForEphemeralWarning(
     const std::string& guid) {
+  CHECK(IsEphemeralWarningCancellationEnabled());
   LogCancelEphemeralWarningEvent(
       CancelEphemeralWarningEvent::kCancellationTriggered);
   download::DownloadItem* download = download_manager_->GetDownloadByGuid(guid);
@@ -2302,7 +2360,7 @@ void ChromeDownloadManagerDelegate::CancelForEphemeralWarning(
 }
 
 void ChromeDownloadManagerDelegate::CancelAllEphemeralWarnings() {
-  if (!download::IsDownloadBubbleEnabled()) {
+  if (!IsEphemeralWarningCancellationEnabled()) {
     return;
   }
   content::DownloadManager::DownloadVector downloads;
@@ -2315,7 +2373,21 @@ void ChromeDownloadManagerDelegate::CancelAllEphemeralWarnings() {
     }
   }
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
+
+#if BUILDFLAG(IS_ANDROID)
+void ChromeDownloadManagerDelegate::RequestIncognitoSavePackageConfirmationDone(
+    const GURL& url,
+    const base::FilePath& suggested_path,
+    content::SavePackagePathPickedCallback callback,
+    bool accept) {
+  if (!accept) {
+    return;
+  }
+  download::DetermineSavePackagePath(
+      url, suggested_path,
+      base::BindOnce(&OnDetermineSavePackagePathDone, std::move(callback)));
+}
+#endif
 
 // Vivaldi - External download manager support
 #if BUILDFLAG(IS_ANDROID)

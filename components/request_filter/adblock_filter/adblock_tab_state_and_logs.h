@@ -53,12 +53,15 @@ class TabStateAndLogs {
   };
 
   struct TabActivationState {
-    enum { kSameFrame, kParentFrame, kUI } source;
+    bool from_parent;
     std::optional<RuleData> rule_data;
   };
 
-  using TabActivations =
-      base::flat_map<RequestFilterRule::ActivationTypes, TabActivationState>;
+  struct TabActivations {
+    bool document_exception;
+    base::flat_map<RequestFilterRule::ActivationTypes, TabActivationState>
+        by_type;
+  };
 
   virtual ~TabStateAndLogs();
 

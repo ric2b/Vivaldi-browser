@@ -66,7 +66,6 @@ packager_builder(
                 "cmd": [
                     "{CHECKOUT}/src/third_party/android_deps/fetch_all.py",
                     "-v",
-                    "--ignore-vulnerabilities",
                 ],
             }],
             "gclient_config": "chromium",
@@ -337,6 +336,10 @@ packager_builder(
                 "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-34/google_apis/x86_64.yaml",
             },
             {
+                "sdk_package_name": "system-images;android-34-ext9;android-automotive;x86_64",
+                "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-34/android-automotive/x86_64.yaml",
+            },
+            {
                 "sdk_package_name": "system-images;android-35;google_apis;x86_64",
                 "cipd_yaml": "third_party/android_sdk/cipd/system_images/android-35/google_apis/x86_64.yaml",
             },
@@ -367,7 +370,7 @@ packager_builder(
     notifies = [
         luci.notifier(
             name = "rts-model-packager-notifier",
-            notify_emails = ["chrome-browser-infra-team@google.com"],
+            notify_emails = ["chrome-dev-infra-auto+alerts@google.com"],
             on_occurrence = ["FAILURE", "INFRA_FAILURE"],
         ),
     ],
@@ -376,13 +379,12 @@ packager_builder(
 ci.builder(
     name = "android-device-flasher",
     executable = "recipe:android/device_flasher",
-    # TODO(crbug.com/40201767): Find the sweet spot for the frequency.
-    schedule = "0 9 * * 1",  # at 9am UTC every Monday.
+    schedule = "0 9 * * 1,3",  # at 9am UTC every Monday and Wednesday.
     triggered_by = [],
     console_view_entry = consoles.console_view_entry(
         short_name = "flash",
     ),
-    notifies = ["chromium-infra"],
+    notifies = ["chromium-android-device-flasher"],
     properties = {
         "flash_criteria": [
             # Used by ci/Android Release (Nexus 5X)

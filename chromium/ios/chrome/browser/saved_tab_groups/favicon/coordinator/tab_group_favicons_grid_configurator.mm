@@ -17,6 +17,13 @@
 #import "ios/chrome/common/ui/util/image_util.h"
 #import "ui/gfx/favicon_size.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
+
+using vivaldi::IsVivaldiRunning;
+// End Vivaldi
+
 namespace {
 
 // The size in point of the favicons grid image.
@@ -95,6 +102,9 @@ void TabGroupFaviconsGridConfigurator::ConfigureFaviconsGrid(
   UIImage* fallback_image = SymbolWithPalette(
       DefaultSymbolWithPointSize(kGlobeAmericasSymbol, kFaviconSize),
       @[ [UIColor colorNamed:kGrey400Color] ]);
+
+  if (IsVivaldiRunning())
+    fallback_image = [UIImage imageNamed:vNTPSDFallbackFavicon]; // End Vivaldi
 
   // Display up to 4 favicons. If there are more than 4 saved tabs,
   // the last slot will display the total number of saved tabs.
@@ -181,6 +191,9 @@ void TabGroupFaviconsGridConfigurator::FetchFaviconsGrid(
   UIImage* fallback_image = SymbolWithPalette(
       DefaultSymbolWithPointSize(kGlobeAmericasSymbol, kFaviconSize),
       @[ [UIColor colorNamed:kGrey400Color] ]);
+
+  if (IsVivaldiRunning())
+    fallback_image = [UIImage imageNamed:vNTPSDFallbackFavicon]; // End Vivaldi
 
   // Update the favicons.
   for (int index = 0; index < end; index++) {

@@ -6,7 +6,7 @@
 #define CHROME_BROWSER_ANDROID_COMPOSITOR_LAYER_TOOLBAR_LAYER_H_
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "chrome/browser/android/compositor/layer/layer.h"
 #include "components/viz/common/quads/offset_tag.h"
 #include "ui/android/resources/resource_manager.h"
@@ -51,7 +51,16 @@ class ToolbarLayer : public Layer {
                          int progress_bar_background_y,
                          int progress_bar_background_width,
                          int progress_bar_background_height,
-                         int progress_bar_background_color);
+                         int progress_bar_background_color,
+                         int progress_bar_static_background_x,
+                         int progress_bar_static_background_width,
+                         int progress_bar_static_background_color,
+                         int progress_bar_end_indicator_x,
+                         int progress_bar_end_indicator_y,
+                         int progress_bar_end_indicator_width,
+                         int progress_bar_end_indicator_height,
+                         float corner_radius,
+                         bool progress_bar_visual_update_available);
 
   void SetOpacity(float opacity);
 
@@ -70,6 +79,8 @@ class ToolbarLayer : public Layer {
   scoped_refptr<cc::slim::UIResourceLayer> bitmap_layer_;
   scoped_refptr<cc::slim::SolidColorLayer> progress_bar_layer_;
   scoped_refptr<cc::slim::SolidColorLayer> progress_bar_background_layer_;
+  scoped_refptr<cc::slim::SolidColorLayer> progress_bar_end_circle_layer_;
+  scoped_refptr<cc::slim::SolidColorLayer> progress_bar_static_background_layer_;
   scoped_refptr<cc::slim::SolidColorLayer> debug_layer_;
 };
 

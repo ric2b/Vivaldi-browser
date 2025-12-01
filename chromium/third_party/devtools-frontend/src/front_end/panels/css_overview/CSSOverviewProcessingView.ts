@@ -5,8 +5,8 @@
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import {html, render} from '../../ui/lit/lit.js';
 
-import {Events, type OverviewController} from './CSSOverviewController.js';
 import cssOverviewProcessingViewStyles from './cssOverviewProcessingView.css.js';
 
 const UIStrings = {
@@ -18,31 +18,47 @@ const UIStrings = {
 const str_ = i18n.i18n.registerUIStrings('panels/css_overview/CSSOverviewProcessingView.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
-export class CSSOverviewProcessingView extends UI.Widget.Widget {
-  readonly #controller: OverviewController;
-  fragment?: UI.Fragment.Fragment;
-  constructor(controller: OverviewController) {
-    super();
-    this.registerRequiredCSS(cssOverviewProcessingViewStyles);
+interface ViewInput {
+  onCancel: () => void;
+}
 
-    this.#controller = controller;
-    this.#render();
-  }
+type View = (input: ViewInput, output: object, target: HTMLElement) => void;
 
-  #render(): void {
-    const cancelButton = UI.UIUtils.createTextButton(
-        i18nString(UIStrings.cancel), () => this.#controller.dispatchEventToListeners(Events.REQUEST_OVERVIEW_CANCEL),
-        {jslogContext: 'css-overview.cancel-processing', variant: Buttons.Button.Variant.OUTLINED});
-    this.setDefaultFocusedElement(cancelButton);
-
-    this.fragment = UI.Fragment.Fragment.build`
+export const DEFAULT_VIEW: View = (input, _output, target) => {
+  // clang-format off
+  render(html`
+    <style>${cssOverviewProcessingViewStyles}</style>
+    <div style="overflow:auto">
       <div class="vbox overview-processing-view">
         <h1>Processing page</h1>
-        <div>${cancelButton}</div>
+        <div>
+          <devtools-button
+              @click=${input.onCancel}
+              .jslogContext=${'css-overview.cancel-processing'}
+              .variant=${Buttons.Button.Variant.OUTLINED}>${i18nString(UIStrings.cancel)}</devtools-button>
+        </div>
       </div>
-    `;
+    </div>`,
+    target, {host: input});
+  // clang-format on
+};
 
-    this.contentElement.appendChild(this.fragment.element());
-    this.contentElement.style.overflow = 'auto';
+export class CSSOverviewProcessingView extends UI.Widget.Widget {
+  #onCancel = (): void => {};
+  #view: View;
+
+  constructor(element?: HTMLElement, view: View = DEFAULT_VIEW) {
+    super(false, false, element);
+    this.#view = view;
+    this.requestUpdate();
+  }
+
+  set onCancel(onCancel: () => void) {
+    this.#onCancel = onCancel;
+    this.requestUpdate();
+  }
+
+  override performUpdate(): void {
+    this.#view({onCancel: this.#onCancel}, {}, this.element);
   }
 }

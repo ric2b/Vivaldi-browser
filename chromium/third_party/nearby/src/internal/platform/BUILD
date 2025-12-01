@@ -66,6 +66,7 @@ cc_library(
         "//connections:partners",
     ],
     deps = [
+        ":mac_address",
         "//proto:connections_enums_cc_proto",
         "@com_google_absl//absl/base:core_headers",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -348,6 +349,19 @@ cc_library(
 )
 
 cc_library(
+    name = "mac_address",
+    srcs = ["mac_address.cc"],
+    hdrs = ["mac_address.h"],
+    visibility = [
+        "//:__subpackages__",
+    ],
+    deps = [
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+    ],
+)
+
+cc_library(
     name = "test_util",
     testonly = True,
     srcs = [
@@ -480,11 +494,12 @@ cc_test(
         ":cancellation_flag",
         ":comm",
         ":connection_info",
+        ":mac_address",
         ":test_util",
         ":types",
+        ":uuid",
         "//connections/implementation/flags:connections_flags",
         "//internal/flags:nearby_flags",
-        "//internal/platform:uuid",
         "//internal/platform/implementation:comm",
         "//internal/platform/implementation/g3",  # build_cleaner: keep
         "//proto:connections_enums_cc_proto",
@@ -569,4 +584,15 @@ cc_test(
             "//internal/platform/implementation/g3",
         ],
     }),
+)
+
+cc_test(
+    name = "mac_address_test",
+    srcs = ["mac_address_test.cc"],
+    deps = [
+        ":mac_address",
+        "@com_github_protobuf_matchers//protobuf-matchers",
+        "@com_google_absl//absl/hash:hash_testing",
+        "@com_google_googletest//:gtest_main",
+    ],
 )

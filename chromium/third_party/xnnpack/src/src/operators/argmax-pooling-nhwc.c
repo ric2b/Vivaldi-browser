@@ -72,13 +72,6 @@ enum xnn_status xnn_create_argmax_pooling2d_nhwc_f32(
     goto error;
   }
 
-  if (pooling_size == 1) {
-    xnn_log_error(
-      "failed to create %s operator with 1 pooling element: 1x1 pooling is meaningless",
-      xnn_operator_type_to_string(xnn_operator_type_argmax_pooling_nhwc_f32));
-    goto error;
-  }
-
   const bool any_padding = (input_padding_left | input_padding_top | input_padding_right | input_padding_bottom) != 0;
   if ((flags & XNN_FLAG_TENSORFLOW_SAME_PADDING) != 0) {
     if (any_padding) {
@@ -250,8 +243,9 @@ enum xnn_status xnn_reshape_argmax_pooling2d_nhwc_f32(
 
   const size_t indirect_input_height_stride = step_height * sizeof(void*);
   const size_t output_width_stride = output_pixel_stride * sizeof(float);
+  const size_t index_width_stride = channels * sizeof(uint32_t);
   const size_t output_height_stride = output_width * output_width_stride;
-  const size_t index_height_stride = output_width * channels * sizeof(uint32_t);
+  const size_t index_height_stride = output_width * index_width_stride;
 
   argmax_pooling_op->context.argmax_pooling = (struct argmax_pooling_context) {
     .indirect_input = argmax_pooling_op->indirection_buffer,
@@ -267,6 +261,7 @@ enum xnn_status xnn_reshape_argmax_pooling2d_nhwc_f32(
     .channels = channels,
     .input_increment = (pooling_height * step_width) * sizeof(void*),
     .output_increment = output_width_stride,
+    .index_increment = index_width_stride,
   };
   argmax_pooling_op->compute[0].range[0] = batch_size;
   argmax_pooling_op->compute[0].range[1] = output_height;

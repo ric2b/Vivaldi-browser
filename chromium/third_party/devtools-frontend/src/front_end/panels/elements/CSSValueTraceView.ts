@@ -1,6 +1,7 @@
 // Copyright 2025 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import type * as SDK from '../../core/sdk/sdk.js';
 import * as Lit from '../../third_party/lit/lit.js';
@@ -16,43 +17,38 @@ import {
 } from './PropertyRenderer.js';
 import stylePropertiesTreeOutlineStyles from './stylePropertiesTreeOutline.css.js';
 
-const {html, render, Directives: {ref, classMap, ifDefined}} = Lit;
+const {html, render, Directives: {classMap, ifDefined}} = Lit;
 
 export interface ViewInput {
   substitutions: Node[][];
   evaluations: Node[][];
-  finalResult: Node[]|undefined;
   onToggle: () => void;
-}
-
-export interface ViewOutput {
-  defaultFocusedElement?: Element;
 }
 
 export type View = (
     input: ViewInput,
-    output: ViewOutput,
+    output: object,
     target: HTMLElement,
     ) => void;
 
-function defaultView(input: ViewInput, output: ViewOutput, target: HTMLElement): void {
-  const [firstEvaluation, ...intermediateEvaluations] = input.evaluations;
+function defaultView(input: ViewInput, output: object, target: HTMLElement): void {
+  const substitutions = [...input.substitutions];
+  const evaluations = [...input.evaluations];
+  const finalResult = evaluations.pop() ?? substitutions.pop();
+  const [firstEvaluation, ...intermediateEvaluations] = evaluations;
 
   const hiddenSummary = !firstEvaluation || intermediateEvaluations.length === 0;
   const summaryTabIndex = hiddenSummary ? undefined : 0;
-  const singleResult = input.evaluations.length === 0 && input.substitutions.length === 0;
+  const singleResult = evaluations.length === 0 && substitutions.length === 0;
   render(
       // clang-format off
     html`
       <div
        role=dialog
-       ${ref(e => {
-         output.defaultFocusedElement = (e as HTMLDivElement)?.querySelector('[tabindex]') ?? undefined;
-       })}
        class="css-value-trace monospace"
        @keydown=${onKeyDown}
        >
-        ${input.substitutions.map(
+        ${substitutions.map(
           line =>
             html`<span class="trace-line-icon" aria-label="is equal to">↳</span
               ><span class="trace-line">${line}</span>`,
@@ -78,14 +74,14 @@ function defaultView(input: ViewInput, output: ViewOutput, target: HTMLElement):
                 )}
               </div>
             </details>`}
-        ${!input.finalResult
+        ${!finalResult
           ? ''
           : html`<span
                 class="trace-line-icon"
                 aria-label="is equal to"
                 ?hidden=${singleResult}
               >↳</span
-              ><span class=${classMap({ 'trace-line': true, 'full-row': singleResult})}>${input.finalResult}</span>`}
+              ><span class=${classMap({ 'trace-line': true, 'full-row': singleResult})}>${finalResult}</span>`}
       </div>
     `,
       // clang-format on
@@ -124,9 +120,9 @@ function defaultView(input: ViewInput, output: ViewOutput, target: HTMLElement):
 export class CSSValueTraceView extends UI.Widget.VBox {
   #highlighting: Highlighting|undefined;
   readonly #view: View;
-  #finalResult: Node[]|undefined = undefined;
   #evaluations: Node[][] = [];
   #substitutions: Node[][] = [];
+  #pendingFocus = false;
 
   constructor(element?: HTMLElement, view: View = defaultView) {
     super(true, false, element);
@@ -138,29 +134,34 @@ export class CSSValueTraceView extends UI.Widget.VBox {
     this.requestUpdate();
   }
 
-  showTrace(
+  async showTrace(
       property: SDK.CSSProperty.CSSProperty,
       subexpression: string|null,
       matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles,
       computedStyles: Map<string, string>|null,
       renderers: Array<MatchRenderer<SDK.CSSPropertyParser.Match>>,
-      ): void {
+      expandPercentagesInShorthands: boolean,
+      shorthandPositionOffset: number,
+      focus: boolean,
+      ): Promise<void> {
     const matchedResult = subexpression === null ?
         property.parseValue(matchedStyles, computedStyles) :
         property.parseExpression(subexpression, matchedStyles, computedStyles);
     if (!matchedResult) {
       return undefined;
     }
-    return this.#showTrace(property, matchedResult, matchedStyles, computedStyles, renderers);
+    return await this.#showTrace(
+        property, matchedResult, renderers, expandPercentagesInShorthands, shorthandPositionOffset, focus);
   }
 
-  #showTrace(
+  async #showTrace(
       property: SDK.CSSProperty.CSSProperty,
       matchedResult: SDK.CSSPropertyParser.BottomUpTreeMatching,
-      matchedStyles: SDK.CSSMatchedStyles.CSSMatchedStyles,
-      computedStyles: Map<string, string>|null,
       renderers: Array<MatchRenderer<SDK.CSSPropertyParser.Match>>,
-      ): void {
+      expandPercentagesInShorthands: boolean,
+      shorthandPositionOffset: number,
+      focus: boolean,
+      ): Promise<void> {
     this.#highlighting = new Highlighting();
     const rendererMap = new Map(renderers.map(r => [r.matchType, r]));
 
@@ -168,7 +169,8 @@ export class CSSValueTraceView extends UI.Widget.VBox {
     // 1st: Apply substitutions for var() functions
     const substitutions = [];
     const evaluations = [];
-    const tracing = new TracingContext(this.#highlighting, matchedResult);
+    const tracing =
+        new TracingContext(this.#highlighting, expandPercentagesInShorthands, shorthandPositionOffset, matchedResult);
     while (tracing.nextSubstitution()) {
       const context = new RenderingContext(
           matchedResult.ast,
@@ -179,12 +181,11 @@ export class CSSValueTraceView extends UI.Widget.VBox {
           /* options */ {},
           tracing,
       );
-      substitutions.push(
-          Renderer.render(matchedResult.ast.tree, context).nodes,
-      );
+      substitutions.push(Renderer.render(matchedResult.ast.tree, context).nodes);
     }
 
     // 2nd: Apply evaluations for calc, min, max, etc.
+    const asyncCallbackResults = [];
     while (tracing.nextEvaluation()) {
       const context = new RenderingContext(
           matchedResult.ast,
@@ -196,14 +197,28 @@ export class CSSValueTraceView extends UI.Widget.VBox {
           tracing,
       );
       evaluations.push(Renderer.render(matchedResult.ast.tree, context).nodes);
+      asyncCallbackResults.push(tracing.runAsyncEvaluations());
     }
 
     this.#substitutions = substitutions;
-    this.#finalResult = evaluations.pop();
-    this.#evaluations = evaluations;
-    if (evaluations.length === 0 && !tracing.didApplyEvaluations()) {
-      this.#substitutions.pop();
+    this.#evaluations = [];
+    for (const [index, success] of (await Promise.all(asyncCallbackResults)).entries()) {
+      if (success) {
+        this.#evaluations.push(evaluations[index]);
+      }
     }
+
+    if (this.#substitutions.length === 0 && this.#evaluations.length === 0) {
+      const context = new RenderingContext(
+          matchedResult.ast,
+          property,
+          rendererMap,
+          matchedResult,
+      );
+      this.#evaluations.push(Renderer.render(matchedResult.ast.tree, context).nodes);
+    }
+
+    this.#pendingFocus = focus;
     this.requestUpdate();
   }
 
@@ -211,11 +226,18 @@ export class CSSValueTraceView extends UI.Widget.VBox {
     const viewInput: ViewInput = {
       substitutions: this.#substitutions,
       evaluations: this.#evaluations,
-      finalResult: this.#finalResult,
       onToggle: () => this.onResize(),
     };
-    const viewOutput: ViewOutput = {};
-    this.#view(viewInput, viewOutput, this.contentElement);
-    this.setDefaultFocusedElement(viewOutput.defaultFocusedElement ?? null);
+    this.#view(viewInput, {}, this.contentElement);
+    const tabStop = this.contentElement.querySelector('[tabindex]');
+    this.setDefaultFocusedElement(tabStop);
+    if (tabStop && this.#pendingFocus) {
+      this.focus();
+      this.resetPendingFocus();
+    }
+  }
+
+  resetPendingFocus(): void {
+    this.#pendingFocus = false;
   }
 }

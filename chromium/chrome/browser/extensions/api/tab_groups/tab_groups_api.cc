@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -32,6 +31,7 @@
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/tab_group.h"
 #include "ui/gfx/range/range.h"
 
 using tabs::TabModel;
@@ -78,6 +78,8 @@ bool IndexSupportsGroupMove(TabStripModel* tab_strip,
 ExtensionFunction::ResponseAction TabGroupsGetFunction::Run() {
   std::optional<api::tab_groups::Get::Params> params =
       api::tab_groups::Get::Params::Create(args());
+  DCHECK(params.has_value());
+
   EXTENSION_FUNCTION_VALIDATE(params);
   int group_id = params->group_id;
 
@@ -168,6 +170,12 @@ ExtensionFunction::ResponseAction TabGroupsQueryFunction::Run() {
         continue;
       }
 
+      if (params->query_info.shared.has_value() &&
+          ExtensionTabUtil::GetSharedStateOfGroup(id) !=
+              params->query_info.shared.value()) {
+        continue;
+      }
+
       result_list.Append(
           ExtensionTabUtil::CreateTabGroupObject(id, *visual_data).ToValue());
     }
@@ -228,7 +236,7 @@ ExtensionFunction::ResponseAction TabGroupsUpdateFunction::Run() {
   TabGroup* tab_group = tab_strip_model->group_model()->GetTabGroup(id);
 
   tab_groups::TabGroupVisualData new_visual_data(title, color, collapsed);
-  tab_group->SetVisualData(std::move(new_visual_data));
+  tab_strip_model->ChangeTabGroupVisuals(id, std::move(new_visual_data));
 
   if (!has_callback())
     return RespondNow(NoArguments());
@@ -396,26 +404,17 @@ bool TabGroupsMoveFunction::MoveTabGroupBetweenBrowsers(
       tab_groups::SavedTabGroupUtils::GetServiceForProfile(
           target_browser->profile());
   std::unique_ptr<tab_groups::ScopedLocalObservationPauser>
-      tab_groups_sync_movement_obseration;
+      tab_groups_sync_movement_observation;
   if (tab_group_sync_service) {
-    tab_groups_sync_movement_obseration =
+    tab_groups_sync_movement_observation =
         tab_group_sync_service->CreateScopedLocalObserverPauser();
   }
 
-  target_tab_strip->AddTabGroup(group, visual_data);
-
   TabStripModel* source_tab_strip = source_browser->tab_strip_model();
-
-  for (size_t i = 0; i < tabs.length(); ++i) {
-    // Detach tabs from the same index each time, since each detached tab is
-    // removed from the model, and groups are always contiguous.
-    std::unique_ptr<TabModel> detached_tab =
-        source_tab_strip->DetachTabAtForInsertion(tabs.start());
-
-    // Attach tabs in consecutive indices, to insert them in the same order.
-    target_tab_strip->InsertDetachedTabAt(
-        new_index + i, std::move(detached_tab), AddTabTypes::ADD_NONE, group);
-  }
+  std::unique_ptr<DetachedTabCollection> detached_group =
+      source_tab_strip->DetachTabGroupForInsertion(group);
+  target_tab_strip->InsertDetachedTabGroupAt(std::move(detached_group),
+                                             new_index);
 
   return true;
 }

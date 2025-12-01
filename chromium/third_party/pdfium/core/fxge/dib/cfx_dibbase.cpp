@@ -46,7 +46,7 @@ void ConvertBuffer_Rgb2ArgbPremul(
         dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)));
     auto src_span =
         src_bitmap->GetScanlineAs<FX_BGR_STRUCT<uint8_t>>(src_top + row)
-            .subspan(src_left);
+            .subspan(static_cast<size_t>(src_left));
     for (auto [input, output] : fxcrt::Zip(src_span, dest_span)) {
       output.blue = input.blue;
       output.green = input.green;
@@ -69,7 +69,7 @@ void ConvertBuffer_ArgbPremulToRgb(
         dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)));
     auto src_span =
         src_bitmap->GetScanlineAs<FX_BGRA_STRUCT<uint8_t>>(src_top + row)
-            .subspan(src_left);
+            .subspan(static_cast<size_t>(src_left));
     for (auto [input, output] : fxcrt::Zip(src_span, dest_span)) {
       auto unpremultiplied_input = UnPreMultiplyColor(input);
       output.blue = unpremultiplied_input.blue;
@@ -117,7 +117,7 @@ void ConvertBuffer_1bppMask2Gray(pdfium::span<uint8_t> dest_buf,
         dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch));
     pdfium::span<const uint8_t> src_span =
         pSrcBitmap->GetScanline(src_top + row);
-    fxcrt::Fill(dest_span.first(width), kResetGray);
+    std::ranges::fill(dest_span.first(static_cast<size_t>(width)), kResetGray);
     uint8_t* dest_scan = dest_span.data();
     const uint8_t* src_scan = src_span.data();
     UNSAFE_TODO({
@@ -139,8 +139,10 @@ void ConvertBuffer_8bppMask2Gray(pdfium::span<uint8_t> dest_buf,
                                  int src_left,
                                  int src_top) {
   for (int row = 0; row < height; ++row) {
-    fxcrt::Copy(pSrcBitmap->GetScanline(src_top + row).subspan(src_left, width),
-                dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)));
+    fxcrt::Copy(
+        pSrcBitmap->GetScanline(src_top + row)
+            .subspan(static_cast<size_t>(src_left), static_cast<size_t>(width)),
+        dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)));
   }
 }
 
@@ -159,7 +161,9 @@ void ConvertBuffer_8bppPlt2Gray(pdfium::span<uint8_t> dest_buf,
   }
   for (int row = 0; row < height; ++row) {
     auto dest_scan = dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch));
-    auto src_scan = src->GetScanline(src_top + row).subspan(src_left, width);
+    auto src_scan =
+        src->GetScanline(src_top + row)
+            .subspan(static_cast<size_t>(src_left), static_cast<size_t>(width));
     for (auto [input, output] : fxcrt::Zip(src_scan, dest_scan)) {
       output = gray[input];
     }
@@ -201,7 +205,7 @@ void ConvertBuffer_IndexCopy(pdfium::span<uint8_t> dest_buf,
       pdfium::span<uint8_t> dest_span =
           dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch));
       // Set all destination pixels to be white initially.
-      fxcrt::Fill(dest_span.first(width), 255);
+      std::ranges::fill(dest_span.first(static_cast<size_t>(width)), 255);
       uint8_t* dest_scan = dest_span.data();
       const uint8_t* src_scan = pSrcBitmap->GetScanline(src_top + row).data();
       UNSAFE_TODO({
@@ -218,9 +222,10 @@ void ConvertBuffer_IndexCopy(pdfium::span<uint8_t> dest_buf,
     }
   } else {
     for (int row = 0; row < height; ++row) {
-      fxcrt::Copy(
-          pSrcBitmap->GetScanline(src_top + row).subspan(src_left, width),
-          dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)));
+      fxcrt::Copy(pSrcBitmap->GetScanline(src_top + row)
+                      .subspan(static_cast<size_t>(src_left),
+                               static_cast<size_t>(width)),
+                  dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)));
     }
   }
 }
@@ -280,8 +285,9 @@ void ConvertBuffer_8bppMask2Rgb(FXDIB_Format dest_format,
   for (int row = 0; row < height; ++row) {
     uint8_t* dest_scan =
         dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)).data();
-    const uint8_t* src_scan =
-        pSrcBitmap->GetScanline(src_top + row).subspan(src_left).data();
+    const uint8_t* src_scan = pSrcBitmap->GetScanline(src_top + row)
+                                  .subspan(static_cast<size_t>(src_left))
+                                  .data();
     UNSAFE_TODO({
       for (int col = 0; col < width; ++col) {
         FXSYS_memset(dest_scan, *src_scan, 3);
@@ -340,8 +346,9 @@ void ConvertBuffer_8bppPlt2Rgb(FXDIB_Format dest_format,
   for (int row = 0; row < height; ++row) {
     uint8_t* dest_scan =
         dest_buf.subspan(Fx2DSizeOrDie(row, dest_pitch)).data();
-    const uint8_t* src_scan =
-        pSrcBitmap->GetScanline(src_top + row).subspan(src_left).data();
+    const uint8_t* src_scan = pSrcBitmap->GetScanline(src_top + row)
+                                  .subspan(static_cast<size_t>(src_left))
+                                  .data();
     for (int col = 0; col < width; ++col) {
       UNSAFE_TODO({
         uint8_t* src_pixel = dst_palette + 3 * (*src_scan++);
@@ -565,12 +572,14 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ClipToInternal(
   FX_RECT rect(0, 0, GetWidth(), GetHeight());
   if (pClip) {
     rect.Intersect(*pClip);
-    if (rect.IsEmpty())
+    if (rect.IsEmpty()) {
       return nullptr;
+    }
   }
   auto pNewBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  if (!pNewBitmap->Create(rect.Width(), rect.Height(), GetFormat()))
+  if (!pNewBitmap->Create(rect.Width(), rect.Height(), GetFormat())) {
     return nullptr;
+  }
 
   pNewBitmap->SetPalette(GetPaletteSpan());
   if (GetBPP() == 1 && rect.left % 8 != 0) {
@@ -583,8 +592,12 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ClipToInternal(
           pNewBitmap->GetWritableScanlineAs<uint32_t>(row - rect.top);
       // Bounds check for free with first/subspan.
       const uint32_t* src_scan =
-          src_span.subspan(rect.left / 32, dword_count + 1).data();
-      uint32_t* dst_scan = dst_span.first(dword_count).data();
+          src_span
+              .subspan(static_cast<size_t>(rect.left / 32),
+                       static_cast<size_t>(dword_count + 1))
+              .data();
+      uint32_t* dst_scan =
+          dst_span.first(static_cast<size_t>(dword_count)).data();
       UNSAFE_TODO({
         for (int i = 0; i < dword_count; ++i) {
           dst_scan[i] =
@@ -604,8 +617,9 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ClipToInternal(
     FX_SAFE_UINT32 offset = rect.left;
     offset *= GetBPP();
     offset /= 8;
-    if (!offset.IsValid())
+    if (!offset.IsValid()) {
       return nullptr;
+    }
 
     for (int row = rect.top; row < rect.bottom; ++row) {
       const uint8_t* src_scan =
@@ -619,21 +633,24 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ClipToInternal(
 }
 
 void CFX_DIBBase::BuildPalette() {
-  if (HasPalette())
+  if (HasPalette()) {
     return;
+  }
 
   if (GetBPP() == 1) {
     palette_ = {0xff000000, 0xffffffff};
   } else if (GetBPP() == 8) {
     palette_.resize(256);
-    for (int i = 0; i < 256; ++i)
+    for (int i = 0; i < 256; ++i) {
       palette_[i] = ArgbEncode(0xff, i, i, i);
+    }
   }
 }
 
 size_t CFX_DIBBase::GetRequiredPaletteSize() const {
-  if (IsMaskFormat())
+  if (IsMaskFormat()) {
     return 0;
+  }
 
   switch (GetBPP()) {
     case 1:
@@ -647,11 +664,13 @@ size_t CFX_DIBBase::GetRequiredPaletteSize() const {
 
 uint32_t CFX_DIBBase::GetPaletteArgb(int index) const {
   DCHECK((GetBPP() == 1 || GetBPP() == 8) && !IsMaskFormat());
-  if (HasPalette())
+  if (HasPalette()) {
     return GetPaletteSpan()[index];
+  }
 
-  if (GetBPP() == 1)
+  if (GetBPP() == 1) {
     return index ? 0xffffffff : 0xff000000;
+  }
 
   return ArgbEncode(0xff, index, index, index);
 }
@@ -668,14 +687,16 @@ int CFX_DIBBase::FindPalette(uint32_t color) const {
     int palsize = (1 << GetBPP());
     pdfium::span<const uint32_t> palette = GetPaletteSpan();
     for (int i = 0; i < palsize; ++i) {
-      if (palette[i] == color)
+      if (palette[i] == color) {
         return i;
+      }
     }
     return -1;
   }
 
-  if (GetBPP() == 1)
+  if (GetBPP() == 1) {
     return (static_cast<uint8_t>(color) == 0xff) ? 1 : 0;
+  }
   return static_cast<uint8_t>(color);
 }
 
@@ -688,8 +709,9 @@ bool CFX_DIBBase::GetOverlapRect(int& dest_left,
                                  int& src_left,
                                  int& src_top,
                                  const CFX_AggClipRgn* pClipRgn) const {
-  if (width == 0 || height == 0)
+  if (width == 0 || height == 0) {
     return false;
+  }
 
   DCHECK_GT(width, 0);
   DCHECK_GT(height, 0);
@@ -700,13 +722,15 @@ bool CFX_DIBBase::GetOverlapRect(int& dest_left,
 
   FX_SAFE_INT32 safe_src_width = src_left;
   safe_src_width += width;
-  if (!safe_src_width.IsValid())
+  if (!safe_src_width.IsValid()) {
     return false;
+  }
 
   FX_SAFE_INT32 safe_src_height = src_top;
   safe_src_height += height;
-  if (!safe_src_height.IsValid())
+  if (!safe_src_height.IsValid()) {
     return false;
+  }
 
   FX_RECT src_rect(src_left, src_top, safe_src_width.ValueOrDie(),
                    safe_src_height.ValueOrDie());
@@ -715,33 +739,39 @@ bool CFX_DIBBase::GetOverlapRect(int& dest_left,
 
   FX_SAFE_INT32 safe_x_offset = dest_left;
   safe_x_offset -= src_left;
-  if (!safe_x_offset.IsValid())
+  if (!safe_x_offset.IsValid()) {
     return false;
+  }
 
   FX_SAFE_INT32 safe_y_offset = dest_top;
   safe_y_offset -= src_top;
-  if (!safe_y_offset.IsValid())
+  if (!safe_y_offset.IsValid()) {
     return false;
+  }
 
   FX_SAFE_INT32 safe_dest_left = safe_x_offset;
   safe_dest_left += src_rect.left;
-  if (!safe_dest_left.IsValid())
+  if (!safe_dest_left.IsValid()) {
     return false;
+  }
 
   FX_SAFE_INT32 safe_dest_top = safe_y_offset;
   safe_dest_top += src_rect.top;
-  if (!safe_dest_top.IsValid())
+  if (!safe_dest_top.IsValid()) {
     return false;
+  }
 
   FX_SAFE_INT32 safe_dest_right = safe_x_offset;
   safe_dest_right += src_rect.right;
-  if (!safe_dest_right.IsValid())
+  if (!safe_dest_right.IsValid()) {
     return false;
+  }
 
   FX_SAFE_INT32 safe_dest_bottom = safe_y_offset;
   safe_dest_bottom += src_rect.bottom;
-  if (!safe_dest_bottom.IsValid())
+  if (!safe_dest_bottom.IsValid()) {
     return false;
+  }
 
   FX_RECT dest_rect(safe_dest_left.ValueOrDie(), safe_dest_top.ValueOrDie(),
                     safe_dest_right.ValueOrDie(),
@@ -749,25 +779,29 @@ bool CFX_DIBBase::GetOverlapRect(int& dest_left,
   FX_RECT dest_bound(0, 0, GetWidth(), GetHeight());
   dest_rect.Intersect(dest_bound);
 
-  if (pClipRgn)
+  if (pClipRgn) {
     dest_rect.Intersect(pClipRgn->GetBox());
+  }
   dest_left = dest_rect.left;
   dest_top = dest_rect.top;
 
   FX_SAFE_INT32 safe_new_src_left = dest_left;
   safe_new_src_left -= safe_x_offset;
-  if (!safe_new_src_left.IsValid())
+  if (!safe_new_src_left.IsValid()) {
     return false;
+  }
   src_left = safe_new_src_left.ValueOrDie();
 
   FX_SAFE_INT32 safe_new_src_top = dest_top;
   safe_new_src_top -= safe_y_offset;
-  if (!safe_new_src_top.IsValid())
+  if (!safe_new_src_top.IsValid()) {
     return false;
+  }
   src_top = safe_new_src_top.ValueOrDie();
 
-  if (dest_rect.IsEmpty())
+  if (dest_rect.IsEmpty()) {
     return false;
+  }
 
   width = dest_rect.Width();
   height = dest_rect.Height();
@@ -800,7 +834,7 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::CloneAlphaMask() const {
   }
 
   for (int row = 0; row < GetHeight(); ++row) {
-    const uint8_t* src_scan = GetScanline(row).subspan(3).data();
+    const uint8_t* src_scan = GetScanline(row).subspan<3u>().data();
     uint8_t* dest_scan = pMask->GetWritableScanline(row).data();
     UNSAFE_TODO({
       for (int col = 0; col < GetWidth(); ++col) {
@@ -930,14 +964,16 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::ConvertTo(FXDIB_Format dest_format) const {
 
 RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
   FX_RECT dest_clip(0, 0, GetHeight(), GetWidth());
-  if (dest_clip.IsEmpty())
+  if (dest_clip.IsEmpty()) {
     return nullptr;
+  }
 
   auto pTransBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
   const int result_height = dest_clip.Height();
   const int result_width = dest_clip.Width();
-  if (!pTransBitmap->Create(result_width, result_height, GetFormat()))
+  if (!pTransBitmap->Create(result_width, result_height, GetFormat())) {
     return nullptr;
+  }
 
   pTransBitmap->SetPalette(GetPaletteSpan());
   const int dest_pitch = pTransBitmap->GetPitch();
@@ -950,7 +986,7 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
   const int col_start = bYFlip ? GetWidth() - dest_clip.bottom : dest_clip.top;
   const int col_end = bYFlip ? GetWidth() - dest_clip.top : dest_clip.bottom;
   if (GetBPP() == 1) {
-    fxcrt::Fill(dest_span, 0xff);
+    std::ranges::fill(dest_span, 0xff);
     if (bYFlip) {
       dest_span = dest_span.subspan(dest_last_row_offset);
     }
@@ -991,7 +1027,9 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
         size_t dest_offset = Fx2DSizeOrDie(dest_col, bytes_per_pixel);
         uint8_t* dest_scan = dest_span.subspan(dest_offset).data();
         const uint8_t* src_scan =
-            GetScanline(row).subspan(col_start * bytes_per_pixel).data();
+            GetScanline(row)
+                .subspan(static_cast<size_t>(col_start * bytes_per_pixel))
+                .data();
         for (int col = col_start; col < col_end; ++col) {
           *dest_scan = *src_scan++;
           dest_scan += dest_step;
@@ -1010,7 +1048,9 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
         size_t dest_offset = Fx2DSizeOrDie(dest_col, bytes_per_pixel);
         uint8_t* dest_scan = dest_span.subspan(dest_offset).data();
         const uint8_t* src_scan =
-            GetScanline(row).subspan(col_start * bytes_per_pixel).data();
+            GetScanline(row)
+                .subspan(static_cast<size_t>(col_start * bytes_per_pixel))
+                .data();
         for (int col = col_start; col < col_end; ++col) {
           FXSYS_memcpy(dest_scan, src_scan, 3);
           dest_scan += 2 + dest_step;
@@ -1028,8 +1068,9 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::SwapXY(bool bXFlip, bool bYFlip) const {
                      dest_clip.left;
       size_t dest_offset = Fx2DSizeOrDie(dest_col, bytes_per_pixel);
       uint8_t* dest_scan = dest_span.subspan(dest_offset).data();
-      const uint32_t* src_scan =
-          GetScanlineAs<uint32_t>(row).subspan(col_start).data();
+      const uint32_t* src_scan = GetScanlineAs<uint32_t>(row)
+                                     .subspan(static_cast<size_t>(col_start))
+                                     .data();
       for (int col = col_start; col < col_end; ++col) {
         uint32_t* dest_scan32 = reinterpret_cast<uint32_t*>(dest_scan);
         *dest_scan32 = *src_scan++;
@@ -1059,11 +1100,13 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::StretchTo(
     const FX_RECT* pClip) const {
   RetainPtr<const CFX_DIBBase> holder(this);
   FX_RECT clip_rect(0, 0, abs(dest_width), abs(dest_height));
-  if (pClip)
+  if (pClip) {
     clip_rect.Intersect(*pClip);
+  }
 
-  if (clip_rect.IsEmpty())
+  if (clip_rect.IsEmpty()) {
     return nullptr;
+  }
 
   if (dest_width == GetWidth() && dest_height == GetHeight()) {
     return ClipTo(clip_rect);
@@ -1072,8 +1115,9 @@ RetainPtr<CFX_DIBitmap> CFX_DIBBase::StretchTo(
   CFX_BitmapStorer storer;
   CFX_ImageStretcher stretcher(&storer, holder, dest_width, dest_height,
                                clip_rect, options);
-  if (stretcher.Start())
+  if (stretcher.Start()) {
     stretcher.Continue(nullptr);
+  }
 
   return storer.Detach();
 }

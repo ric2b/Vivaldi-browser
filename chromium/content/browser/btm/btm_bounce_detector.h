@@ -56,6 +56,7 @@ using BtmRedirectChainHandler =
                                  BtmRedirectChainInfoPtr)>;
 using BtmIssueHandler =
     base::RepeatingCallback<void(std::set<std::string> sites)>;
+using Btm3PcSettingsCallback = base::RepeatingCallback<bool()>;
 using BtmIssueReportingCallback =
     base::RepeatingCallback<void(const std::set<std::string>& sites)>;
 
@@ -101,6 +102,7 @@ class CONTENT_EXPORT BtmRedirectContext {
  public:
   BtmRedirectContext(BtmRedirectChainHandler handler,
                      BtmIssueHandler issue_handler,
+                     Btm3PcSettingsCallback are_3pcs_generally_enabled_callback,
                      const UrlAndSourceId& initial_url,
                      size_t redirect_prefix_count);
   ~BtmRedirectContext();
@@ -119,13 +121,8 @@ class CONTENT_EXPORT BtmRedirectContext {
                        const UrlAndSourceId& final_url,
                        bool current_page_has_interaction);
 
-  // Trims |trim_count| redirect from the front of the in-progress redirect
-  // chain. Passes the redirects as partial chains to the
-  // `BtmRedirectChainHandler`.
-  void TrimAndHandleRedirects(size_t trim_count);
-
   // Terminates the in-progress redirect chain, ending it with `final_url`, and
-  // parsing it to the `BtmRedirectChainHandler` iff the chain is valid. It
+  // passing it to the `BtmRedirectChainHandler` iff the chain is valid. It
   // also starts a fresh redirect chain with `final_url` whilst clearing the
   // state of the terminated chain.
   // NOTE: A chain is valid if it has a non-empty `initial_url_`.
@@ -161,16 +158,6 @@ class CONTENT_EXPORT BtmRedirectContext {
   // Return all sites that had an interaction in the current redirect context.
   std::set<std::string> AllSitesWithUserActivationOrAuthn() const;
 
-  // Returns a map of (site, (url, has_current_interaction)) for all URLs in the
-  // current redirect chain that satisfy the redirect heuristic. This performs
-  // all checks except for the presence of a past interaction, which should be
-  // checked by the caller using the DIPS db. If `allowed_sites` is present,
-  // only sites in `allowed_sites` should be included.
-  std::map<std::string, std::pair<GURL, bool>> GetRedirectHeuristicURLs(
-      const GURL& first_party_url,
-      base::optional_ref<std::set<std::string>> allowed_sites,
-      bool require_current_interaction) const;
-
   // Returns the server redirects from the last navigation. Note that due to
   // limitations in C++ the BtmRedirectInfo objects are unavoidably mutable.
   // Clients must not modify them.
@@ -180,10 +167,14 @@ class CONTENT_EXPORT BtmRedirectContext {
  private:
   void AppendClientRedirect(BtmRedirectInfoPtr client_redirect);
   void AppendServerRedirects(std::vector<BtmRedirectInfoPtr> server_redirects);
-  void TrimRedirectsFromFront();
+  // Evicts the first redirect from the front of the in-progress redirect chain
+  // if it exceeds its max allowed length of `kBtmRedirectChainMax`, and passes
+  // any evicted redirects as partial chains to the `BtmRedirectChainHandler`.
+  void MaybeTrimAndHandlePartialRedirectChain();
 
   BtmRedirectChainHandler handler_;
   BtmIssueHandler issue_handler_;
+  Btm3PcSettingsCallback are_3pcs_generally_enabled_callback_;
   // Represents the start of a chain and also indicates the presence of a valid
   // chain.
   UrlAndSourceId initial_url_;
@@ -214,6 +205,7 @@ class CONTENT_EXPORT BtmBounceDetectorDelegate {
   virtual void OnSiteStorageAccessed(const GURL& first_party_url,
                                      CookieOperation op,
                                      bool http_cookie) = 0;
+  virtual bool Are3PcsGenerallyEnabled() const = 0;
 };
 
 // ServerBounceDetectionState gets attached to NavigationHandle (which is a
@@ -437,6 +429,7 @@ class CONTENT_EXPORT RedirectChainDetector
   void OnSiteStorageAccessed(const GURL& first_party_url,
                              CookieOperation op,
                              bool http_cookie) override;
+  bool Are3PcsGenerallyEnabled() const override;
   // End BtmBounceDetectorDelegate overrides.
 
   // Start WebContentsObserver overrides:
@@ -593,6 +586,13 @@ CONTENT_EXPORT void Populate3PcExceptions(
     const GURL& final_url,
     base::span<BtmRedirectInfoPtr> redirects);
 
+// Checks whether third-party cookies are generally enabled within this browser
+// session.
+//
+// Any bounce tracking mitigations processing should be short-circuited when
+// TPCs are enabled by default.
+CONTENT_EXPORT bool Are3PcsGenerallyEnabled(BrowserContext* browser_context,
+                                            WebContents* web_contents);
 }  // namespace btm
 
 }  // namespace content

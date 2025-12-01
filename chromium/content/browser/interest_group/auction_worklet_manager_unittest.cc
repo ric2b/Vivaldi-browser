@@ -19,6 +19,7 @@
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -39,6 +40,7 @@
 #include "content/services/auction_worklet/public/mojom/auction_shared_storage_host.mojom.h"
 #include "content/services/auction_worklet/public/mojom/auction_worklet_service.mojom.h"
 #include "content/services/auction_worklet/public/mojom/bidder_worklet.mojom.h"
+#include "content/services/auction_worklet/public/mojom/in_progress_auction_download.mojom.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom.h"
 #include "content/services/auction_worklet/public/mojom/trusted_signals_cache.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -318,6 +320,7 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet {
       base::Time auction_start_time,
       const std::optional<blink::AdSize>& requested_ad_size,
       uint16_t multi_bid_limit,
+      uint64_t group_by_origin_id,
       uint64_t trace_id,
       mojo::PendingAssociatedRemote<auction_worklet::mojom::GenerateBidClient>
           generate_bid_client,
@@ -350,8 +353,7 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet {
       const std::optional<std::string>&
           direct_from_seller_auction_signals_header_ad_slot,
       const std::string& seller_signals_json,
-      auction_worklet::mojom::KAnonymityBidMode kanon_mode,
-      bool bid_is_kanon,
+      auction_worklet::mojom::KAnonymityStatus kanon_status,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
       const std::optional<blink::AdCurrency>& browser_signal_bid_currency,
@@ -508,6 +510,8 @@ class MockSellerWorklet : public auction_worklet::mojom::SellerWorklet {
       bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
       bool browser_signal_for_debugging_only_sampling,
       const std::optional<base::TimeDelta> seller_timeout,
+      uint64_t group_by_origin_id,
+      bool allow_group_by_origin_mode,
       uint64_t trace_id,
       const url::Origin& bidder_joining_origin,
       mojo::PendingRemote<auction_worklet::mojom::ScoreAdClient>
@@ -701,8 +705,8 @@ class MockAuctionProcessManager
           pending_url_loader_factory,
       mojo::PendingRemote<auction_worklet::mojom::AuctionNetworkEventsHandler>
           auction_network_events_handler,
-      const GURL& script_source_url,
-      const std::optional<GURL>& bidding_wasm_helper_url,
+      auction_worklet::mojom::InProgressAuctionDownloadPtr script_load,
+      auction_worklet::mojom::InProgressAuctionDownloadPtr wasm_load,
       const std::optional<GURL>& trusted_bidding_signals_url,
       const std::string& trusted_bidding_signals_slot_size_param,
       const url::Origin& top_window_origin,
@@ -716,13 +720,13 @@ class MockAuctionProcessManager
     EXPECT_EQ(receiver_set_.current_context().worklet_type,
               AuctionProcessManager::WorkletType::kBidder);
     EXPECT_EQ(receiver_set_.current_context().origin,
-              url::Origin::Create(script_source_url));
+              url::Origin::Create(script_load->url));
 
     bidder_worklet_ = std::make_unique<MockBidderWorklet>(
         std::move(bidder_worklet_receiver),
-        std::move(pending_url_loader_factory), script_source_url,
-        bidding_wasm_helper_url, trusted_bidding_signals_url, top_window_origin,
-        std::move(public_key),
+        std::move(pending_url_loader_factory), std::move(script_load->url),
+        (wasm_load ? std::move(wasm_load->url) : std::optional<GURL>()),
+        trusted_bidding_signals_url, top_window_origin, std::move(public_key),
         enable_bidder_worklet_dtor_pending_signals_check_);
 
     if (bidder_worklet_run_loop_) {
@@ -741,7 +745,7 @@ class MockAuctionProcessManager
           pending_url_loader_factory,
       mojo::PendingRemote<auction_worklet::mojom::AuctionNetworkEventsHandler>
           auction_network_events_handler,
-      const GURL& script_source_url,
+      auction_worklet::mojom::InProgressAuctionDownloadPtr script_load,
       const std::optional<GURL>& trusted_scoring_signals_url,
       const url::Origin& top_window_origin,
       auction_worklet::mojom::AuctionWorkletPermissionsPolicyStatePtr
@@ -765,11 +769,11 @@ class MockAuctionProcessManager
     EXPECT_EQ(receiver_set_.current_context().worklet_type,
               AuctionProcessManager::WorkletType::kSeller);
     EXPECT_EQ(receiver_set_.current_context().origin,
-              url::Origin::Create(script_source_url));
+              url::Origin::Create(script_load->url));
 
     seller_worklet_ = std::make_unique<MockSellerWorklet>(
         std::move(seller_worklet_receiver),
-        std::move(pending_url_loader_factory), script_source_url,
+        std::move(pending_url_loader_factory), std::move(script_load->url),
         trusted_scoring_signals_url, top_window_origin, std::move(public_key));
 
     if (seller_worklet_run_loop_) {
@@ -1734,6 +1738,7 @@ TEST_F(AuctionWorkletManagerTest, DifferentBidderWorklets) {
       /*contextual_data=*/std::nullopt, worklet_available4.GetCallback(),
       NeverInvokedFatalErrorCallback(), handle4,
       auction_metrics_recorder_manager_->CreateAuctionMetricsRecorder());
+  ASSERT_TRUE(worklet_available4.Wait());
   EXPECT_TRUE(handle4->GetBidderWorklet());
   EXPECT_NE(handle1->GetBidderWorklet(), handle4->GetBidderWorklet());
   EXPECT_NE(handle2->GetBidderWorklet(), handle4->GetBidderWorklet());
@@ -2669,6 +2674,12 @@ TEST_F(AuctionWorkletManagerTest, BidderWorkletUrlRequestProtection) {
        "application/json"},
   });
 
+  // kDecisionLogicUrl and kWasmURL were already requested in
+  // RequestBidderWorklet.
+  size_t kRequestsStartedWithWorklet = 2;
+  ASSERT_EQ(kRequestsStartedWithWorklet,
+            url_loader_factory_.pending_requests()->size());
+
   for (size_t i = 0; i < std::size(kAllowedUrls); ++i) {
     network::ResourceRequest request;
     request.url = kAllowedUrls[i].url;
@@ -2682,9 +2693,12 @@ TEST_F(AuctionWorkletManagerTest, BidderWorkletUrlRequestProtection) {
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
     bidder_worklet->url_loader_factory().FlushForTesting();
     EXPECT_TRUE(bidder_worklet->url_loader_factory().is_connected());
-    ASSERT_EQ(i + 1, url_loader_factory_.pending_requests()->size());
+    ASSERT_EQ(i + kRequestsStartedWithWorklet + 1,
+              url_loader_factory_.pending_requests()->size());
     EXPECT_EQ(kAllowedUrls[i].url,
-              (*url_loader_factory_.pending_requests())[i].request.url);
+              (*url_loader_factory_
+                    .pending_requests())[i + kRequestsStartedWithWorklet]
+                  .request.url);
   }
 
   // Other URLs should be rejected.
@@ -2700,7 +2714,7 @@ TEST_F(AuctionWorkletManagerTest, BidderWorkletUrlRequestProtection) {
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   bidder_worklet->url_loader_factory().FlushForTesting();
   EXPECT_FALSE(bidder_worklet->url_loader_factory().is_connected());
-  EXPECT_EQ(std::size(kAllowedUrls),
+  EXPECT_EQ(std::size(kAllowedUrls) + kRequestsStartedWithWorklet,
             url_loader_factory_.pending_requests()->size());
   EXPECT_EQ("Unexpected request", TakeBadMessage());
 }
@@ -2739,6 +2753,11 @@ TEST_F(AuctionWorkletManagerTest, SellerWorkletUrlRequestProtection) {
        "application/json"},
   });
 
+  // kDecisionLogicUrl was already requested in RequestBidderWorklet.
+  size_t kRequestsStartedWithWorklet = 1;
+  ASSERT_EQ(kRequestsStartedWithWorklet,
+            url_loader_factory_.pending_requests()->size());
+
   for (size_t i = 0; i < std::size(kAllowedUrls); ++i) {
     network::ResourceRequest request;
     request.url = kAllowedUrls[i].url;
@@ -2752,9 +2771,12 @@ TEST_F(AuctionWorkletManagerTest, SellerWorkletUrlRequestProtection) {
         net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
     seller_worklet->url_loader_factory().FlushForTesting();
     EXPECT_TRUE(seller_worklet->url_loader_factory().is_connected());
-    ASSERT_EQ(i + 1, url_loader_factory_.pending_requests()->size());
+    ASSERT_EQ(i + kRequestsStartedWithWorklet + 1,
+              url_loader_factory_.pending_requests()->size());
     EXPECT_EQ(kAllowedUrls[i].url,
-              (*url_loader_factory_.pending_requests())[i].request.url);
+              (*url_loader_factory_
+                    .pending_requests())[i + kRequestsStartedWithWorklet]
+                  .request.url);
   }
 
   // Other URLs should be rejected.
@@ -2770,7 +2792,7 @@ TEST_F(AuctionWorkletManagerTest, SellerWorkletUrlRequestProtection) {
       net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   seller_worklet->url_loader_factory().FlushForTesting();
   EXPECT_FALSE(seller_worklet->url_loader_factory().is_connected());
-  EXPECT_EQ(std::size(kAllowedUrls),
+  EXPECT_EQ(std::size(kAllowedUrls) + 1,
             url_loader_factory_.pending_requests()->size());
   EXPECT_EQ("Unexpected request", TakeBadMessage());
 }

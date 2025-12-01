@@ -28,6 +28,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -84,7 +85,6 @@
 #include "ui/events/test/test_event_rewriter_continuation.h"
 #include "ui/events/test/test_event_source.h"
 #include "ui/events/types/event_type.h"
-#include "ui/lottie/resource.h"
 #include "ui/message_center/fake_message_center.h"
 #include "ui/wm/core/window_util.h"
 
@@ -371,6 +371,10 @@ using KeyCapsLock = TestKey<ui::DomCode::CAPS_LOCK,
                             ui::DomKey::CAPS_LOCK,
                             ui::VKEY_CAPITAL,
                             ui::EF_MOD3_DOWN>;
+using KeyJpnAlphanumeric = TestKey<ui::DomCode::LAUNCH_ASSISTANT,
+                                   ui::DomKey::ALPHANUMERIC,
+                                   ui::VKEY_CAPITAL,
+                                   ui::EF_MOD3_DOWN>;
 using KeyFunction = TestKey<ui::DomCode::FN,
                             ui::DomKey::FN,
                             ui::VKEY_FUNCTION,
@@ -635,9 +639,6 @@ class EventRewriterTestBase : public ChromeAshTestBase {
   ~EventRewriterTestBase() override = default;
 
   void SetUp() override {
-    ui::ResourceBundle::SetLottieParsingFunctions(
-        &lottie::ParseLottieAsStillImage,
-        &lottie::ParseLottieAsThemedStillImage);
     keyboard_layout_engine_ = std::make_unique<ui::StubKeyboardLayoutEngine>();
     // Inject custom table to make this closer to en-US behavior.
     keyboard_layout_engine_->SetCustomLookupTableForTesting({
@@ -4865,6 +4866,26 @@ TEST_P(EventRewriterTest, CapsLockRemappingFnBased) {
                           ui::EF_FUNCTION_DOWN | flag));
     EXPECT_FALSE(fake_ime_keyboard_.IsCapsLockEnabled());
   }
+}
+
+TEST_P(EventRewriterTest, CapsLockRemappingFnBasedJpnLayout) {
+  if (!features::IsModifierSplitEnabled()) {
+    GTEST_SKIP() << "Test is only valid with the modifier split flag enabled";
+  }
+
+  SetUpKeyboard(kInternalChromeSplitModifierLayoutKeyboard);
+
+  EXPECT_EQ(KeyCapsLock::Typed(ui::EF_CAPS_LOCK_ON),
+            RunRewriter(
+                KeyJpnAlphanumeric::Typed(ui::EF_NONE, {kPropertyQuickInsert}),
+                ui::EF_FUNCTION_DOWN));
+  EXPECT_TRUE(fake_ime_keyboard_.IsCapsLockEnabled());
+
+  EXPECT_EQ(KeyCapsLock::Typed(),
+            RunRewriter(KeyJpnAlphanumeric::Typed(ui::EF_CAPS_LOCK_ON,
+                                                  {kPropertyQuickInsert}),
+                        ui::EF_FUNCTION_DOWN));
+  EXPECT_FALSE(fake_ime_keyboard_.IsCapsLockEnabled());
 }
 
 TEST_P(EventRewriterTest, FnDiscarded) {

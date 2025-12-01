@@ -60,8 +60,8 @@ void LogTrigger(bool incognito, bool search_engine_google) {
 }
 
 // Log the number of characters selected.
-void LogSelectedNumberChar(NSUInteger text_length) {
-  base::UmaHistogramCounts1000("IOS.SearchWith.CharSelected", text_length);
+void LogSelectedNumberChar(NSUInteger textLength) {
+  base::UmaHistogramCounts1000("IOS.SearchWith.CharSelected", textLength);
 }
 
 }  // namespace

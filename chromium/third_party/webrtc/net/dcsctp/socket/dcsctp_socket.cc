@@ -168,7 +168,7 @@ TieTag MakeTieTag(DcSctpSocketCallbacks& cb) {
 }
 
 SctpImplementation DeterminePeerImplementation(
-    rtc::ArrayView<const uint8_t> cookie) {
+    webrtc::ArrayView<const uint8_t> cookie) {
   if (cookie.size() > 8) {
     absl::string_view magic(reinterpret_cast<const char*>(cookie.data()), 8);
     if (magic == "dcSCTP00") {
@@ -224,7 +224,8 @@ std::string DcSctpSocket::log_prefix() const {
 }
 
 bool DcSctpSocket::IsConsistent() const {
-  if (tcb_ != nullptr && tcb_->reassembly_queue().HasMessages()) {
+  if (tcb_ != nullptr && (!options_.enable_receive_pull_mode &&
+                          tcb_->reassembly_queue().HasMessages())) {
     return false;
   }
   switch (state_) {
@@ -491,7 +492,7 @@ SendStatus DcSctpSocket::Send(DcSctpMessage message,
 }
 
 std::vector<SendStatus> DcSctpSocket::SendMany(
-    rtc::ArrayView<DcSctpMessage> messages,
+    webrtc::ArrayView<DcSctpMessage> messages,
     const SendOptions& send_options) {
   CallbackDeferrer::ScopedDeferrer deferrer(callbacks_);
   Timestamp now = callbacks_.Now();
@@ -557,7 +558,7 @@ SendStatus DcSctpSocket::InternalSend(const DcSctpMessage& message,
 }
 
 ResetStreamsStatus DcSctpSocket::ResetStreams(
-    rtc::ArrayView<const StreamID> outgoing_streams) {
+    webrtc::ArrayView<const StreamID> outgoing_streams) {
   CallbackDeferrer::ScopedDeferrer deferrer(callbacks_);
 
   if (tcb_ == nullptr) {
@@ -779,7 +780,7 @@ void DcSctpSocket::HandleTimeout(TimeoutID timeout_id) {
   RTC_DCHECK(IsConsistent());
 }
 
-void DcSctpSocket::ReceivePacket(rtc::ArrayView<const uint8_t> data) {
+void DcSctpSocket::ReceivePacket(webrtc::ArrayView<const uint8_t> data) {
   CallbackDeferrer::ScopedDeferrer deferrer(callbacks_);
 
   ++metrics_.rx_packets_count;
@@ -829,7 +830,8 @@ void DcSctpSocket::ReceivePacket(rtc::ArrayView<const uint8_t> data) {
   RTC_DCHECK(IsConsistent());
 }
 
-void DcSctpSocket::DebugPrintOutgoing(rtc::ArrayView<const uint8_t> payload) {
+void DcSctpSocket::DebugPrintOutgoing(
+    webrtc::ArrayView<const uint8_t> payload) {
   auto packet = SctpPacket::Parse(payload, options_);
   RTC_DCHECK(packet.has_value());
 
@@ -1008,7 +1010,7 @@ TimeDelta DcSctpSocket::OnShutdownTimerExpiry() {
   return tcb_->current_rto();
 }
 
-void DcSctpSocket::OnSentPacket(rtc::ArrayView<const uint8_t> packet,
+void DcSctpSocket::OnSentPacket(webrtc::ArrayView<const uint8_t> packet,
                                 SendPacketStatus status) {
   // The packet observer is invoked even if the packet was failed to be sent, to
   // indicate an attempt was made.
@@ -1081,15 +1083,24 @@ void DcSctpSocket::HandleDataCommon(AnyDataChunk& chunk) {
                        << tcb_->reassembly_queue().is_above_watermark();
 
   if (tcb_->reassembly_queue().is_full()) {
-    // If the reassembly queue is full, there is nothing that can be done. The
-    // specification only allows dropping gap-ack-blocks, and that's not
-    // likely to help as the socket has been trying to fill gaps since the
-    // watermark was reached.
-    packet_sender_.Send(tcb_->PacketBuilder().Add(AbortChunk(
-        true, Parameters::Builder().Add(OutOfResourceErrorCause()).Build())));
-    InternalClose(ErrorKind::kResourceExhaustion,
-                  "Reassembly Queue is exhausted");
-    return;
+    if (tcb_->reassembly_queue().HasMessages()) {
+      // If the reassembly queue is full but there are assembled messages
+      // waiting to be pulled, we can't do anything with this data except drop
+      // it, and hope the upper layer drains the accumulated messages soon.
+      RTC_DLOG(LS_VERBOSE) << log_prefix()
+                           << "Rejected data because of full reassembly queue";
+      return;
+    } else {
+      // If the reassembly queue is full and there's no messages waiting, there
+      // is nothing that can be done. The specification only allows dropping
+      // gap-ack-blocks, and that's not likely to help as the socket has been
+      // trying to fill gaps since the watermark was reached.
+      packet_sender_.Send(tcb_->PacketBuilder().Add(AbortChunk(
+          true, Parameters::Builder().Add(OutOfResourceErrorCause()).Build())));
+      InternalClose(ErrorKind::kResourceExhaustion,
+                    "Reassembly Queue is exhausted");
+      return;
+    }
   }
 
   if (tcb_->reassembly_queue().is_above_watermark()) {
@@ -1471,10 +1482,33 @@ void DcSctpSocket::HandleCookieAck(
 }
 
 void DcSctpSocket::MaybeDeliverMessages() {
-  for (auto& message : tcb_->reassembly_queue().FlushMessages()) {
-    ++metrics_.rx_messages_count;
-    callbacks_.OnMessageReceived(std::move(message));
+  if (options_.enable_receive_pull_mode) {
+    if (tcb_->reassembly_queue().HasMessages()) {
+      callbacks_.OnMessageReady();
+    }
+    return;
   }
+
+  while (std::optional<DcSctpMessage> message =
+             tcb_->reassembly_queue().GetNextMessage()) {
+    ++metrics_.rx_messages_count;
+    callbacks_.OnMessageReceived(*std::move(message));
+  }
+}
+
+size_t DcSctpSocket::MessagesReady() const {
+  return tcb_ != nullptr ? tcb_->reassembly_queue().MessagesReady() : 0;
+}
+
+std::optional<DcSctpMessage> DcSctpSocket::GetNextMessage() {
+  if (tcb_ == nullptr) {
+    return std::nullopt;
+  }
+  std::optional<DcSctpMessage> ret = tcb_->reassembly_queue().GetNextMessage();
+  if (ret.has_value()) {
+    ++metrics_.rx_messages_count;
+  }
+  return ret;
 }
 
 void DcSctpSocket::HandleSack(const CommonHeader& /* header */,

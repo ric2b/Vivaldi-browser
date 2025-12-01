@@ -84,6 +84,7 @@ ALIGNMENT_ORDER = [
     'Length',
     'UnzoomedLength',
     'TextSizeAdjust',
+    'FitText',
     'TabSize',
     'float',
     # Aligns like int
@@ -103,6 +104,7 @@ ALIGNMENT_ORDER = [
     'int',
     'PositionArea',
     # Aligns like short
+    'StyleFlexWrapData',
     'unsigned short',
     'short',
     # Aligns like char

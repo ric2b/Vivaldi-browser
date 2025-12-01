@@ -36,8 +36,7 @@ class DirectLayerTreeFrameSink : public cc::LayerTreeFrameSink,
       viz::FrameSinkManagerImpl* frame_sink_manager,
       viz::Display* display,
       scoped_refptr<viz::RasterContextProvider> context_provider,
-      scoped_refptr<cc::RasterContextProviderWrapper>
-          worker_context_provider_wrapper,
+      scoped_refptr<viz::RasterContextProvider> worker_context_provider,
       scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
       gfx::AcceleratedWidget widget = gfx::kNullAcceleratedWidget);
 
@@ -78,7 +77,6 @@ class DirectLayerTreeFrameSink : public cc::LayerTreeFrameSink,
       std::vector<viz::ReturnedResource> resources) override;
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details,
-                    bool frame_ack,
                     std::vector<viz::ReturnedResource> resource) override;
   void ReclaimResources(std::vector<viz::ReturnedResource> resources) override;
   void OnBeginFramePausedChanged(bool paused) override;

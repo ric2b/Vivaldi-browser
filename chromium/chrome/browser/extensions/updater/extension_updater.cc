@@ -20,18 +20,16 @@
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
+#include "base/notimplemented.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/corrupted_extension_reinstaller.h"
 #include "chrome/browser/extensions/crx_installer.h"
-#include "chrome/browser/extensions/delayed_install_manager.h"
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/external_install_manager.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
-#include "chrome/browser/extensions/pending_extension_manager.h"
 #include "chrome/browser/extensions/updater/extension_updater_factory.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/keep_alive/profile_keep_alive_types.h"
@@ -39,20 +37,24 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "components/update_client/update_query_params.h"
+#include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/blocklist_extension_prefs.h"
+#include "extensions/browser/delayed_install_manager.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/pending_extension_manager.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/browser/updater/extension_cache.h"
 #include "extensions/browser/updater/extension_update_data.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/extension_updater_uma.h"
 #include "extensions/common/extension_urls.h"
@@ -160,8 +162,9 @@ ExtensionUpdater::InProgressCheck::InProgressCheck() = default;
 ExtensionUpdater::InProgressCheck::~InProgressCheck() = default;
 
 // static
-ExtensionUpdater* ExtensionUpdater::Get(Profile* profile) {
-  return ExtensionUpdaterFactory::GetForBrowserContext(profile);
+ExtensionUpdater* ExtensionUpdater::Get(
+    content::BrowserContext* browser_context) {
+  return ExtensionUpdaterFactory::GetForBrowserContext(browser_context);
 }
 
 ExtensionUpdater::ExtensionUpdater(Profile* profile)
@@ -170,7 +173,9 @@ ExtensionUpdater::ExtensionUpdater(Profile* profile)
       registrar_(ExtensionRegistrar::Get(profile)),
       delayed_install_manager_(DelayedInstallManager::Get(profile)),
       pending_extension_manager_(PendingExtensionManager::Get(profile)),
-      external_install_manager_(ExternalInstallManager::Get(profile)) {}
+      external_install_manager_(ExternalInstallManager::Get(profile)),
+      corrupted_extension_reinstaller_(
+          CorruptedExtensionReinstaller::Get(profile)) {}
 
 void ExtensionUpdater::InitAndEnable(
     ExtensionPrefs* extension_prefs,
@@ -248,6 +253,7 @@ void ExtensionUpdater::Stop() {
   pending_extension_manager_ = nullptr;
   external_install_manager_ = nullptr;
   extension_cache_ = nullptr;
+  corrupted_extension_reinstaller_ = nullptr;
 }
 
 void ExtensionUpdater::ScheduleNextCheck() {
@@ -286,6 +292,26 @@ void ExtensionUpdater::CheckSoon() {
 
 bool ExtensionUpdater::WillCheckSoon() const {
   return will_check_soon_;
+}
+
+void ExtensionUpdater::AddObserver(UpdateObserver* observer) {
+  update_observers_.AddObserver(observer);
+}
+
+void ExtensionUpdater::RemoveObserver(UpdateObserver* observer) {
+  update_observers_.RemoveObserver(observer);
+}
+
+void ExtensionUpdater::NotifyChromeUpdateAvailable() {
+  for (auto& observer : update_observers_) {
+    observer.OnChromeUpdateAvailable();
+  }
+}
+
+void ExtensionUpdater::NotifyAppUpdateAvailable(const Extension& extension) {
+  for (auto& observer : update_observers_) {
+    observer.OnAppUpdateAvailable(extension);
+  }
 }
 
 void ExtensionUpdater::SetExtensionCacheForTesting(
@@ -346,7 +372,7 @@ void ExtensionUpdater::AddToDownloader(
   bool kiosk_crx_manifest_update_url_ignored = false;
 #if BUILDFLAG(IS_CHROMEOS)
   user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-  if (user_manager && user_manager->IsLoggedInAsKioskApp()) {
+  if (user_manager && user_manager->IsLoggedInAsKioskChromeApp()) {
     ash::CrosSettings::Get()->GetBoolean(
         ash::kKioskCRXManifestUpdateURLIgnored,
         &kiosk_crx_manifest_update_url_ignored);
@@ -387,9 +413,7 @@ bool ExtensionUpdater::AddExtensionToDownloader(
     const Extension& extension,
     int request_id,
     DownloadFetchPriority fetch_priority) {
-  ExtensionManagement* extension_management =
-      ExtensionManagementFactory::GetForBrowserContext(profile_);
-  GURL update_url = extension_management->GetEffectiveUpdateURL(extension);
+  GURL update_url = GetEffectiveUpdateURL(extension);
   // Skip extensions with empty update URLs converted from user
   // scripts.
   if (extension.converted_from_user_script() && update_url.is_empty()) {
@@ -441,8 +465,6 @@ void ExtensionUpdater::CheckNow(CheckParams params) {
   // and external install sources.
   const PendingExtensionManager* pending_extension_manager =
       PendingExtensionManager::Get(profile_);
-  const CorruptedExtensionReinstaller* corrupted_extension_reinstaller =
-      CorruptedExtensionReinstaller::Get(profile_);
 
   ExtensionUpdateCheckParams update_check_params;
 
@@ -459,17 +481,14 @@ void ExtensionUpdater::CheckNow(CheckParams params) {
       pending_ids.insert(id);
     }
     // Include corrupted extensions that should be repaired.
-    for (const auto& it :
-         corrupted_extension_reinstaller->GetExpectedReinstalls()) {
-      pending_ids.insert(it.first);
-    }
+    pending_ids.merge(GetCorruptedExtensionIds());
 
     for (const ExtensionId& pending_id : pending_ids) {
       const PendingExtensionInfo* info =
           pending_extension_manager->GetById(pending_id);
 
       const bool is_corrupt_reinstall =
-          corrupted_extension_reinstaller->IsReinstallForCorruptionExpected(
+          corrupted_extension_reinstaller_->IsReinstallForCorruptionExpected(
               pending_id);
 
       // Extensions from the webstore that are corrupted do not have
@@ -811,10 +830,7 @@ bool ExtensionUpdater::CanUseUpdateService(
   // Furthermore, we can only update extensions that were installed from the
   // default webstore or extensions with empty update URLs not converted from
   // user scripts.
-  ExtensionManagement* extension_management =
-      ExtensionManagementFactory::GetForBrowserContext(profile_);
-  const GURL& update_url =
-      extension_management->GetEffectiveUpdateURL(*extension);
+  GURL update_url = GetEffectiveUpdateURL(*extension);
   if (update_url.is_empty())
     return !extension->converted_from_user_script();
   return extension_urls::IsWebstoreUpdateUrl(update_url);
@@ -962,7 +978,6 @@ scoped_refptr<CrxInstaller> ExtensionUpdater::CreateUpdateInstaller(
   }
 
   installer->set_delete_source(file_ownership_passed);
-  installer->set_install_cause(extension_misc::INSTALL_CAUSE_UPDATE);
 
   return installer;
 }
@@ -971,7 +986,7 @@ void ExtensionUpdater::OnInstallerDone(
     const UnguessableToken& token,
     const std::optional<CrxInstallError>& error) {
   auto iter = running_crx_installs_.find(token);
-  CHECK(iter != running_crx_installs_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != running_crx_installs_.end());
   FetchedCRXFile& crx_file = iter->second;
 
   bool extension_removed_from_cache = false;
@@ -1040,6 +1055,21 @@ void ExtensionUpdater::NotifyIfFinished(int request_id) {
 void ExtensionUpdater::OnAppTerminating() {
   // Shutdown has started. Don't start any more extension updates.
   browser_terminating_ = true;
+}
+
+std::set<ExtensionId> ExtensionUpdater::GetCorruptedExtensionIds() const {
+  std::set<ExtensionId> ids;
+  for (const auto& it :
+       corrupted_extension_reinstaller_->GetExpectedReinstalls()) {
+    ids.insert(it.first);
+  }
+  return ids;
+}
+
+GURL ExtensionUpdater::GetEffectiveUpdateURL(const Extension& extension) const {
+  ExtensionManagement* extension_management =
+      ExtensionManagementFactory::GetForBrowserContext(profile_);
+  return extension_management->GetEffectiveUpdateURL(extension);
 }
 
 ExtensionUpdater::ScopedSkipScheduledCheckForTest::

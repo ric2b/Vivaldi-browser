@@ -134,6 +134,11 @@ struct ServerCvc {
 //                      the card is not enrolled and is not eligible for
 //                      enrollment. kRetrievalUnenrolledAndEligible means the
 //                      card is not enrolled but is eligible for enrollment.
+//   card_benefit_source
+//                      The source of the saved benefit for this card. Can be a
+//                      card issuer or a third party platform represented by
+//                      an integer. Converted from CardBenefitSource enum from
+//                      the Chrome Sync response.
 // -----------------------------------------------------------------------------
 // server_card_cloud_token_data
 //                      Stores data related to Cloud Primary Account Number
@@ -457,16 +462,15 @@ class PaymentsAutofillTable : public WebDatabaseTable {
   // This will clear all the local cvcs.
   bool ClearLocalCvcs();
 
+  // Method to clean up for crbug.com/411681430.
+  bool CleanupForCrbug411681430();
+
   // Methods to add, update, remove and get the metadata for server cards and
   // IBANs.
   // For get method, return true if the operations succeeded.
   // For add/update/remove methods, return true if any changes actually
   // occurred.
-  // TODO (crbug.com/1504063): Merge Add/UpdateServerCardMetadata into a single
-  // method AddOrUpdateServerCardMetadata.
-  bool AddServerCardMetadata(const PaymentsMetadata& card_metadata);
-  bool UpdateServerCardMetadata(const CreditCard& credit_card);
-  bool UpdateServerCardMetadata(const PaymentsMetadata& card_metadata);
+  bool AddOrUpdateServerCardMetadata(const PaymentsMetadata& card_metadata);
   bool RemoveServerCardMetadata(const std::string& id);
   bool GetServerCardsMetadata(
       std::vector<PaymentsMetadata>& cards_metadata) const;
@@ -600,6 +604,7 @@ class PaymentsAutofillTable : public WebDatabaseTable {
   bool MigrateToVersion133RemoveLengthColumnFromMaskedIbansTable();
   bool MigrateToVersion135AddCardInfoRetrievalEnrollmentState();
   bool MigrateToVersion136AddPaymentInstrumentCreationOptionsTable();
+  bool MigrateToVersion141AddCardBenefitSourceColumn();
 
  private:
   // Adds to |masked_credit_cards| and updates |server_card_metadata|.

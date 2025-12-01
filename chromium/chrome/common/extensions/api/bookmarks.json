@@ -69,6 +69,11 @@
             "optional": true,
             "description": "The URL navigated to when a user clicks the bookmark. Omitted for folders."
           },
+          "displayUrl": {
+            "type": "string",
+            "optional": true,
+            "description": "The destination URL when a user clicks the bookmark. Omitted for folders. Read only. Vivaldi extended property"
+          },
           "title": {
             "type": "string",
             "description": "The text displayed for the node."
@@ -596,6 +601,10 @@
               },
               "bookmarkbar": {
                 "type": "boolean",
+                "optional": true
+              },
+              "displayUrl": {
+                "type": "string",
                 "optional": true
               }
             }

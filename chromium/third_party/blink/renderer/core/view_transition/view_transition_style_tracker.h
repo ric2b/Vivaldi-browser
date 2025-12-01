@@ -18,12 +18,12 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/layout/geometry/box_strut.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/style/computed_style_base_constants.h"
 #include "third_party/blink/renderer/core/style/style_view_transition_group.h"
 #include "third_party/blink/renderer/platform/allow_discouraged_type.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
+#include "third_party/blink/renderer/platform/geometry/physical_size.h"
 #include "third_party/blink/renderer/platform/graphics/paint/effect_paint_property_node.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/heap_traits.h"
@@ -89,7 +89,6 @@ class ViewTransitionStyleTracker
   ViewTransitionStyleTracker(
       Element& element,
       const blink::ViewTransitionToken& transition_token);
-  ~ViewTransitionStyleTracker();
 
   void AddTransitionElementsFromCSS();
 
@@ -222,9 +221,18 @@ class ViewTransitionStyleTracker
   const Vector<AtomicString>& GetViewTransitionClassList(
       const AtomicString& name) const;
 
+  const Vector<AtomicString>& GetViewTransitionNames() const {
+    return view_transition_names_;
+  }
+
   // This returns the resolved containing group name for a given view transition
   // name. Note that this only works once the transition starts.
   AtomicString GetContainingGroupName(const AtomicString& name) const;
+
+  void WillEnterGetComputedStyleScope();
+  void WillExitGetComputedStyleScope();
+
+  void InvalidateInternalPseudoStyle();
 
  private:
   class ImageWrapperPseudoElement;
@@ -320,7 +328,8 @@ class ViewTransitionStyleTracker
   // snapshot root rect.
   gfx::Rect GetSnapshotRootInFixedViewport() const;
 
-  void InvalidateStyle();
+  void InvalidateStyleAndCompositing();
+  void InvalidatePseudoStyle();
   bool HasLiveNewContent() const;
   void EndTransition();
 
@@ -373,6 +382,10 @@ class ViewTransitionStyleTracker
   // root (html) element in the case of a document transition. It can be null
   // in the rare case that the root element has been removed from the DOM.
   Element* OriginatingElement() const;
+
+  // Returns true if we have potentially created pseudo elements that should not
+  // be exposed via getComputedStyle or should not have author styles applied.
+  bool HasInternalPseudoElements() const;
 
   Member<Document> document_;
 
@@ -450,6 +463,10 @@ class ViewTransitionStyleTracker
   base::Token token_;
 
   HashMap<AtomicString, AtomicString> id_to_auto_name_map_;
+
+  Vector<AtomicString> view_transition_names_;
+
+  bool in_get_computed_style_scope_ = false;
 };
 
 }  // namespace blink

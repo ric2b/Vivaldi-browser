@@ -459,7 +459,7 @@ void FrameFetchContext::PrepareRequest(
         webreq);
   }
 
-  request.SetAllowsDeviceBoundSessions(
+  request.SetAllowsDeviceBoundSessionRegistration(
       RuntimeEnabledFeatures::DeviceBoundSessionCredentialsEnabled(
           GetExecutionContext()));
 }
@@ -840,29 +840,21 @@ void FrameFetchContext::WillSendRequest(ResourceRequest& resource_request) {
 
 void FrameFetchContext::PopulateResourceRequestBeforeCacheAccess(
     const ResourceLoaderOptions& options,
-    ResourceRequest& request,
-    FetchParameters::HasPreloadedResponseCandidate
-        has_preloaded_response_candidate) {
+    ResourceRequest& request) {
   if (!GetResourceFetcherProperties().IsDetached()) {
     probe::SetDevToolsIds(Probe(), request, options.initiator_info);
   }
 
-  if (!RuntimeEnabledFeatures::PreloadLinkRelDataUrlsEnabled()) {
-    CHECK(!has_preloaded_response_candidate);
-    // CSP may change the url, if Upgrade-Insecure-Request is enforced for
-    // mixed content.
-    ModifyRequestForMixedContentUpgrade(request);
-    if (!request.Url().IsValid()) {
-      return;
-    }
+  // CSP may change the url, if Upgrade-Insecure-Request is enforced for
+  // mixed content.
+  ModifyRequestForMixedContentUpgrade(request);
+  if (!request.Url().IsValid()) {
+    return;
   }
-  const bool has_inspector_agents =
-      CoreProbeSink::HasAgentsGlobal(CoreProbeSink::kInspectorEmulationAgent |
-                                     CoreProbeSink::kInspectorNetworkAgent);
-  if (!has_preloaded_response_candidate || has_inspector_agents) {
-    SetFirstPartyCookie(request);
-  }
-  if (has_inspector_agents) {
+
+  SetFirstPartyCookie(request);
+  if (CoreProbeSink::HasAgentsGlobal(CoreProbeSink::kInspectorEmulationAgent |
+                                     CoreProbeSink::kInspectorNetworkAgent)) {
     request.SetRequiresUpgradeForLoader();
   }
   if (document_loader_->ForceFetchCacheMode()) {
@@ -902,6 +894,9 @@ bool FrameFetchContext::StartSpeculativeImageDecode(
     return false;
   }
   ImageResource* image_resource = To<ImageResource>(resource);
+  if (image_resource->RequestedSpeculativeDecode()) {
+    return false;
+  }
   Image* image = image_resource->GetContent()->GetImage();
   if (IsA<SVGImage>(image)) {
     return false;
@@ -911,6 +906,7 @@ bool FrameFetchContext::StartSpeculativeImageDecode(
   }
   PaintImage paint_image = image->PaintImageForCurrentFrame();
   if (paint_image) {
+    image_resource->OnRequestSpeculativeDecode();
     SkM44 matrix;
     gfx::Size image_size(image->width(), image->height());
     gfx::SizeF content_size(image_resource->GetContent()->MaxSize());
@@ -936,13 +932,35 @@ bool FrameFetchContext::StartSpeculativeImageDecode(
         static_cast<cc::PaintFlags::FilterQuality>(
             image_resource->GetContent()->MaxInterpolationQuality()),
         matrix, PaintImage::kDefaultFrameIndex);
+    auto paint_image_id = image->paint_image_id();
+    TRACE_EVENT_INSTANT2(
+        TRACE_DISABLED_BY_DEFAULT("loading"), "SpeculativeImageDecodeStarted",
+        TRACE_EVENT_SCOPE_THREAD, "url", resource->Url().GetString().Utf8(),
+        "image_id", paint_image_id);
     document_->GetFrame()->GetChromeClient().RequestDecode(
         document_->GetFrame(), draw_image,
-        WTF::BindOnce([](base::OnceClosure cb, bool) { std::move(cb).Run(); },
-                      std::move(callback)));
+        WTF::BindOnce(
+            [](base::OnceClosure cb, PaintImage::Id paint_image_id, bool) {
+              TRACE_EVENT_INSTANT1(TRACE_DISABLED_BY_DEFAULT("loading"),
+                                   "SpeculativeImageDecodeFinished",
+                                   TRACE_EVENT_SCOPE_THREAD, "image_id",
+                                   paint_image_id);
+              std::move(cb).Run();
+            },
+            std::move(callback), paint_image_id),
+        /*speculative*/ true);
     return true;
   }
   return false;
+}
+
+bool FrameFetchContext::SpeculativeDecodeRequestInFlight() const {
+  if (GetResourceFetcherProperties().IsDetached()) {
+    return false;
+  }
+  return document_->GetFrame()
+      ->GetChromeClient()
+      .SpeculativeDecodeRequestInFlight(document_->GetFrame());
 }
 
 bool FrameFetchContext::IsPrerendering() const {
@@ -1314,7 +1332,7 @@ FrameFetchContext::GetContentSecurityNotifier() const {
 }
 
 ExecutionContext* FrameFetchContext::GetExecutionContext() const {
-  return document_->GetExecutionContext();
+  return document_ ? document_->GetExecutionContext() : nullptr;
 }
 
 std::optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
@@ -1323,9 +1341,8 @@ std::optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
-    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info,
-    FetchParameters::HasPreloadedResponseCandidate
-        has_preloaded_response_candidate) const {
+    base::optional_ref<const ResourceRequest::RedirectInfo> redirect_info)
+    const {
   const bool detached = GetResourceFetcherProperties().IsDetached();
   if (!detached && document_->IsFreezingInProgress() &&
       !resource_request.GetKeepalive()) {
@@ -1339,8 +1356,7 @@ std::optional<ResourceRequestBlockedReason> FrameFetchContext::CanRequest(
   }
   std::optional<ResourceRequestBlockedReason> blocked_reason =
       BaseFetchContext::CanRequest(type, resource_request, url, options,
-                                   reporting_disposition, redirect_info,
-                                   has_preloaded_response_candidate);
+                                   reporting_disposition, redirect_info);
   if (blocked_reason) {
     return blocked_reason;
   }

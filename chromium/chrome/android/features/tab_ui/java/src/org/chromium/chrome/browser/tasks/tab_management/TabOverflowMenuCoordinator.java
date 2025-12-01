@@ -8,28 +8,31 @@ import android.app.Activity;
 import android.content.ComponentCallbacks;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.database.DataSetObserver;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.ListView;
 
 import androidx.annotation.DimenRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.IdRes;
 import androidx.annotation.LayoutRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.StyleRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.content.res.ResourcesCompat;
 
 import org.chromium.base.Callback;
-import org.chromium.base.LifetimeAssert;
+import org.chromium.base.lifetime.LifetimeAssert;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.compositor.overlays.strip.TabGroupContextMenuCoordinator;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.widget.list_view.ListViewTouchTracker;
+import org.chromium.components.browser_ui.widget.list_view.TouchTrackingListView;
 import org.chromium.components.collaboration.CollaborationService;
 import org.chromium.components.data_sharing.member_role.MemberRole;
 import org.chromium.components.tab_group_sync.TabGroupSyncService;
@@ -53,6 +56,7 @@ import org.chromium.ui.widget.ViewRectProvider;
  * @param <T> The type of the ID of the overflow menu's origin. For individual tabs, this is a tab
  *     ID. For tab groups, it's the tab group ID.
  */
+@NullMarked
 public abstract class TabOverflowMenuCoordinator<T> {
 
     /**
@@ -63,7 +67,11 @@ public abstract class TabOverflowMenuCoordinator<T> {
      */
     @FunctionalInterface
     public interface OnItemClickedCallback<T> {
-        void onClick(@IdRes int menuId, T id, @Nullable String collaborationId);
+        void onClick(
+                @IdRes int menuId,
+                T id,
+                @Nullable String collaborationId,
+                @Nullable ListViewTouchTracker listViewTouchTracker);
     }
 
     private static class OverflowMenuHolder<T> {
@@ -71,7 +79,7 @@ public abstract class TabOverflowMenuCoordinator<T> {
         private final Context mContext;
         private final View mContentView;
         private final ComponentCallbacks mComponentCallbacks;
-        private final LifetimeAssert mLifetimeAssert = LifetimeAssert.create(this);
+        private final @Nullable LifetimeAssert mLifetimeAssert = LifetimeAssert.create(this);
         private AnchoredPopupWindow mMenuWindow;
 
         OverflowMenuHolder(
@@ -82,7 +90,7 @@ public abstract class TabOverflowMenuCoordinator<T> {
                 @HorizontalOrientation int horizontalOrientation,
                 @LayoutRes int menuLayout,
                 Drawable menuBackground,
-                @NonNull ModelList modelList,
+                ModelList modelList,
                 OnItemClickedCallback<T> onItemClickedCallback,
                 T id,
                 @Nullable String collaborationId,
@@ -105,7 +113,8 @@ public abstract class TabOverflowMenuCoordinator<T> {
 
             mContentView = LayoutInflater.from(mContext).inflate(menuLayout, null);
 
-            ListView listView = mContentView.findViewById(R.id.tab_group_action_menu_list);
+            TouchTrackingListView touchTrackingListView =
+                    mContentView.findViewById(R.id.tab_group_action_menu_list);
             ListMenuItemAdapter adapter =
                     new ListMenuItemAdapter(modelList) {
                         @Override
@@ -126,10 +135,14 @@ public abstract class TabOverflowMenuCoordinator<T> {
                     ListMenuItemType.DIVIDER,
                     new LayoutViewBuilder(R.layout.list_section_divider),
                     ListSectionDividerViewBinder::bind);
-            listView.setAdapter(adapter);
-            listView.setOnItemClickListener(
+            touchTrackingListView.setAdapter(adapter);
+            touchTrackingListView.setOnItemClickListener(
                     (p, v, pos, menuId) -> {
-                        onItemClickedCallback.onClick((int) menuId, id, collaborationId);
+                        onItemClickedCallback.onClick(
+                                (int) menuId,
+                                id,
+                                collaborationId,
+                                /* listViewTouchTracker= */ touchTrackingListView);
                         mMenuWindow.dismiss();
                     });
 
@@ -193,16 +206,16 @@ public abstract class TabOverflowMenuCoordinator<T> {
             mContext.unregisterComponentCallbacks(mComponentCallbacks);
             // If mLifetimeAssert is GC'ed before this is called, it will throw an exception
             // with a stack trace showing the stack during LifetimeAssert.create().
-            LifetimeAssert.setSafeToGc(mLifetimeAssert, true);
+            LifetimeAssert.destroy(mLifetimeAssert);
         }
     }
 
-    protected final @NonNull CollaborationService mCollaborationService;
+    protected final CollaborationService mCollaborationService;
     protected final Supplier<TabModel> mTabModelSupplier;
     protected @Nullable TabGroupSyncService mTabGroupSyncService;
 
     private final @LayoutRes int mMenuLayout;
-    private final @NonNull Context mContext;
+    private final Context mContext;
     private final OnItemClickedCallback<T> mOnItemClickedCallback;
     private @Nullable OverflowMenuHolder<T> mMenuHolder;
 
@@ -219,8 +232,8 @@ public abstract class TabOverflowMenuCoordinator<T> {
             OnItemClickedCallback<T> onItemClickedCallback,
             Supplier<TabModel> tabModelSupplier,
             @Nullable TabGroupSyncService tabGroupSyncService,
-            @NonNull CollaborationService collaborationService,
-            @NonNull Context context) {
+            CollaborationService collaborationService,
+            Context context) {
         mMenuLayout = menuLayout;
         mOnItemClickedCallback = onItemClickedCallback;
         mTabModelSupplier = tabModelSupplier;
@@ -274,10 +287,27 @@ public abstract class TabOverflowMenuCoordinator<T> {
 
     /** Returns menu background drawable. */
     public static Drawable getMenuBackground(Context context, boolean isIncognito) {
+        // LINT.IfChange
         final @DrawableRes int bgDrawableId =
                 isIncognito ? R.drawable.menu_bg_tinted_on_dark_bg : R.drawable.menu_bg_tinted;
 
         return AppCompatResources.getDrawable(context, bgDrawableId);
+        // Lint.ThenChange cannot handle multiline comments.
+        // LINT.ThenChange(//components/browser_ui/widget/android/java/res/values/dimens.xml|//components/browser_ui/widget/android/java/res/values-night/dimens.xml)
+    }
+
+    private static void offsetPopupRect(Context context, boolean isIncognito, Rect rect) {
+        if (isIncognito) return;
+        Resources resources = context.getResources();
+        rect.offset(0, -resources.getDimensionPixelSize(R.dimen.popup_menu_shadow_length));
+        Drawable menuBackground = getMenuBackground(context, isIncognito);
+        Rect padding = new Rect();
+        menuBackground.getPadding(padding);
+        // Subtract off the horizontal padding (for dark mode).
+        rect.right -= (padding.left + padding.right);
+        // Make up for padding lost above and then additionally add in the shadow padding so the
+        // content will be the correct width.
+        rect.right += resources.getDimensionPixelSize(R.dimen.popup_menu_shadow_length) * 4;
     }
 
     // TODO(crbug.com/357878838): Pass the activity through constructor and setup test to test this
@@ -285,7 +315,7 @@ public abstract class TabOverflowMenuCoordinator<T> {
     /**
      * See {@link #createAndShowMenu(RectProvider, Object, boolean, boolean, int, int, Activity)}}
      */
-    protected void createAndShowMenu(View anchorView, T id, @NonNull Activity activity) {
+    protected void createAndShowMenu(View anchorView, T id, Activity activity) {
         createAndShowMenu(
                 new ViewRectProvider(anchorView),
                 id,
@@ -294,6 +324,32 @@ public abstract class TabOverflowMenuCoordinator<T> {
                 R.style.EndIconMenuAnim,
                 HorizontalOrientation.MAX_AVAILABLE_SPACE,
                 activity);
+    }
+
+    /**
+     * See {@link #createAndShowMenu(RectProvider, Object, boolean, boolean, int, int, Activity,
+     * boolean)}.
+     *
+     * <p>This overload acquires the incognito status from the tab model supplier provided to this
+     * class.
+     */
+    protected void createAndShowMenu(
+            RectProvider anchorViewRectProvider,
+            T id,
+            boolean horizontalOverlapAnchor,
+            boolean verticalOverlapAnchor,
+            @StyleRes int animStyle,
+            @HorizontalOrientation int horizontalOrientation,
+            Activity activity) {
+        createAndShowMenu(
+                anchorViewRectProvider,
+                id,
+                horizontalOverlapAnchor,
+                verticalOverlapAnchor,
+                animStyle,
+                horizontalOrientation,
+                activity,
+                /* isIncognito= */ mTabModelSupplier.get().isIncognitoBranded());
     }
 
     /**
@@ -306,6 +362,7 @@ public abstract class TabOverflowMenuCoordinator<T> {
      * @param animStyle Animation style to apply for menu show/hide.
      * @param horizontalOrientation {@link HorizontalOrientation} to use for the menu position.
      * @param activity Activity to get resources and decorView for menu.
+     * @param isIncognito Whether to theme the overflow menu with incognito colors.
      */
     protected void createAndShowMenu(
             RectProvider anchorViewRectProvider,
@@ -314,9 +371,9 @@ public abstract class TabOverflowMenuCoordinator<T> {
             boolean verticalOverlapAnchor,
             @StyleRes int animStyle,
             @HorizontalOrientation int horizontalOrientation,
-            @NonNull Activity activity) {
+            Activity activity,
+            boolean isIncognito) {
         assert mMenuHolder == null;
-        boolean isIncognito = mTabModelSupplier.get().isIncognitoBranded();
         @Nullable String collaborationId = getCollaborationIdOrNull(id);
         Drawable menuBackground = getMenuBackground(activity, isIncognito);
         // Initialize the model before creating the adapter so that
@@ -327,6 +384,8 @@ public abstract class TabOverflowMenuCoordinator<T> {
         // dividers.
         ModelList modelList = new ModelList();
         configureMenuItems(modelList, id);
+        // Apply offset from the background.
+        offsetPopupRect(mContext, isIncognito, anchorViewRectProvider.getRect());
         mMenuHolder =
                 new OverflowMenuHolder<>(
                         anchorViewRectProvider,
@@ -403,5 +462,12 @@ public abstract class TabOverflowMenuCoordinator<T> {
             buildCollaborationMenuItems(
                     modelList, mCollaborationService.getCurrentUserRoleForGroup(collaborationId));
         }
+    }
+
+    public void destroyMenuForTesting() {
+        // This is needed because mMenuHolder#destroy is usually called as an onDismissListener.
+        // However, in Robolectric tests, the onDismissListener may not be called, so the menu won't
+        // be destroyed, and the test will report a lifecycle error.
+        if (mMenuHolder != null) mMenuHolder.destroy();
     }
 }

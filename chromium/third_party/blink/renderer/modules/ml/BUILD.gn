@@ -22,6 +22,12 @@ blink_modules_sources("ml") {
     "webnn/ml_graph.h",
     "webnn/ml_graph_builder.cc",
     "webnn/ml_graph_builder.h",
+    "webnn/ml_graph_transform/layout_transformer.cc",
+    "webnn/ml_graph_transform/layout_transformer.h",
+    "webnn/ml_graph_transform/ml_graph_transformer.cc",
+    "webnn/ml_graph_transform/ml_graph_transformer.h",
+    "webnn/ml_graph_transform/pipeline.cc",
+    "webnn/ml_graph_transform/pipeline.h",
     "webnn/ml_graph_type_converter.cc",
     "webnn/ml_graph_type_converter.h",
     "webnn/ml_graph_utils.cc",
@@ -37,6 +43,7 @@ blink_modules_sources("ml") {
   deps = [
     "//services/webnn/public/cpp",
     "//services/webnn/public/mojom:mojom_blink",
+    "//third_party/blink/renderer/modules/webgpu",
   ]
 }
 

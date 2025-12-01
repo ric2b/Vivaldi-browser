@@ -10,8 +10,10 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/tabs/test/mock_tab_interface.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
 #include "chrome/browser/ui/views/webid/account_selection_view_base.h"
@@ -25,6 +27,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/color_parser.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/scoped_accessibility_mode_override.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/web_contents_tester.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -34,6 +37,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/base_event_utils.h"
+#include "ui/events/event.h"
 #include "ui/gfx/image/image_unittest_util.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -57,7 +61,7 @@ namespace {
 
 constexpr char kAccountId1[] = "account_id1";
 constexpr char kAccountSuffix[] = "suffix";
-constexpr char kTopFrameEtldPlusOne[] = "rp-example.com";
+constexpr char16_t kTopFrameEtldPlusOne[] = u"rp-example.com";
 
 class FakeTabInterface : public tabs::MockTabInterface {
  public:
@@ -79,6 +83,33 @@ class FakeFedCmAccountSelectionView : public FedCmAccountSelectionView {
     url_loader_factory_ =
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_);
+  }
+
+  void OnAccountSelected(const IdentityRequestAccountPtr& account,
+                         const ui::Event& event) {
+    // Simulate the account selection by calling ShowSingleAccountConfirmDialog
+    // directly
+    account_selection_view()->ShowSingleAccountConfirmDialog(
+        account, /*show_back_button=*/false);
+  }
+
+  void ClickAccountHoverButton(webid::AccountHoverButton* account_hover_button,
+                               const IdentityRequestAccountPtr& account) {
+    ASSERT_NE(account_hover_button, nullptr);
+
+    // Override the callback bound to FedCmAccountSelectionView class
+    // with FakeFedCmAccountSelectionView class to test for AccountHoverButton
+    // Lifecycle during account selection.
+    account_hover_button->SetCallbackForTesting(
+        base::BindRepeating(&FakeFedCmAccountSelectionView::OnAccountSelected,
+                            base::Unretained(this), account));
+
+    // Create mouse event
+    ui::MouseEvent event(ui::EventType::kMousePressed, gfx::Point(),
+                         gfx::Point(), base::TimeTicks(),
+                         ui::EF_LEFT_MOUSE_BUTTON, 0);
+
+    account_hover_button->OnPressed(event);
   }
 
  private:
@@ -107,7 +138,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
         gfx::Image::CreateFrom1xBitmap(gfx::test::CreateBitmap(1));
     idp_data_ = base::MakeRefCounted<content::IdentityProviderData>(
         kIdpForDisplay, idp_metadata, CreateTestClientMetadata(),
-        blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+        blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+        kDefaultDisclosureFields,
         /*has_login_status_mismatch=*/false);
     accounts_ = {CreateAccount(idp_data_)};
   }
@@ -119,7 +151,7 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
       LoginState browser_trusted_login_state = LoginState::kSignUp,
       std::string account_id = kAccountId1) {
     IdentityRequestAccountPtr account = base::MakeRefCounted<Account>(
-        account_id, "", "", "", "", "", GURL(),
+        account_id, "", "", "", "", "", GURL(), "", "",
         /*login_hints=*/std::vector<std::string>(),
         /*domain_hints=*/std::vector<std::string>(),
         /*labels=*/std::vector<std::string>(),
@@ -129,7 +161,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
     return account;
   }
 
-  void CreateAccountSelectionBubble() {
+  void CreateAccountSelectionBubble(
+      const std::u16string& iframe_for_display = u"") {
     Reset();
     views::Widget::InitParams params =
         CreateParams(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET,
@@ -151,19 +184,23 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
       idp_list = {idp_data_};
     }
     account_selection_view_->Show(
-        content::RelyingPartyData(kTopFrameEtldPlusOne), idp_list, accounts_,
-        Account::SignInMode::kExplicit, blink::mojom::RpMode::kPassive,
-        new_accounts);
+        content::RelyingPartyData(kTopFrameEtldPlusOne, iframe_for_display),
+        idp_list, accounts_, blink::mojom::RpMode::kPassive, new_accounts);
     dialog_ = static_cast<AccountSelectionBubbleView*>(
         account_selection_view_->account_selection_view());
   }
 
   void CreateAndShowSingleAccountPicker(
-      LoginState login_state = LoginState::kSignUp) {
+      bool has_display_identifier,
+      LoginState login_state = LoginState::kSignUp,
+      const std::u16string& iframe_for_display = u"") {
     IdentityRequestAccountPtr account = CreateTestIdentityRequestAccount(
         kAccountSuffix, idp_data_, login_state);
+    if (!has_display_identifier) {
+      account->display_identifier = "";
+    }
 
-    CreateAccountSelectionBubble();
+    CreateAccountSelectionBubble(iframe_for_display);
     account->identity_provider = idp_data_;
     dialog_->ShowSingleAccountConfirmDialog(account,
                                             /*show_back_button=*/false);
@@ -192,7 +229,8 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
 
   void PerformHeaderChecks(views::View* header,
                            const std::u16string& expected_title,
-                           bool expected_icon_visibility) {
+                           bool expected_icon_visibility,
+                           const std::u16string& expected_subtitle = u"") {
     // Perform some basic dialog checks.
     EXPECT_FALSE(dialog()->ShouldShowCloseButton());
     EXPECT_FALSE(dialog()->ShouldShowWindowTitle());
@@ -201,19 +239,38 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
     EXPECT_FALSE(dialog()->GetCancelButton());
 
     // Order: Potentially hidden IDP brand icon, potentially hidden back button,
-    // title, close button.
-    std::vector<std::string> expected_class_names = {"ImageButton", "Label",
+    // titles, close button.
+    std::vector<std::string> expected_class_names = {"ImageButton", "View",
                                                      "ImageButton"};
     expected_class_names.insert(expected_class_names.begin(),
                                 "BrandIconImageView");
     EXPECT_THAT(GetChildClassNames(header),
                 testing::ElementsAreArray(expected_class_names));
 
+    views::View* titles_container = GetViewWithClassName(header, "View");
+    EXPECT_EQ(
+        static_cast<views::BoxLayout*>(titles_container->GetLayoutManager())
+            ->main_axis_alignment(),
+        views::LayoutAlignment::kCenter);
+
     // Check title text.
     views::Label* title_view =
-        static_cast<views::Label*>(GetViewWithClassName(header, "Label"));
+        static_cast<views::Label*>(titles_container->children()[0]);
     ASSERT_TRUE(title_view);
     EXPECT_EQ(title_view->GetText(), expected_title);
+
+    views::Label* subtitle_view =
+        static_cast<views::Label*>(titles_container->children()[1]);
+    ASSERT_TRUE(subtitle_view);
+    if (expected_subtitle.empty()) {
+      EXPECT_FALSE(subtitle_view->GetVisible());
+      EXPECT_EQ(dialog()->GetDialogSubtitle(), std::nullopt);
+    } else {
+      EXPECT_TRUE(subtitle_view->GetVisible());
+      EXPECT_EQ(subtitle_view->GetText(), expected_subtitle);
+      EXPECT_EQ(dialog()->GetDialogSubtitle(),
+                base::UTF16ToUTF8(expected_subtitle));
+    }
 
     views::ImageView* idp_brand_icon = static_cast<views::ImageView*>(
         GetViewWithClassName(header, "BrandIconImageView"));
@@ -269,28 +326,23 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
     }
   }
 
-  std::vector<raw_ptr<views::View, VectorExperimental>> GetContents(
-      views::View* container) {
-    return static_cast<views::ScrollView*>(container->children()[1])
-        ->contents()
-        ->children();
-  }
-
-  void TestSingleAccount(const std::u16string expected_title,
-                         bool expected_icon_visibility) {
-    CreateAndShowSingleAccountPicker();
-
+  void PerformSingleAccountConfirmDialogChecks(
+      const std::u16string expected_title,
+      bool expected_icon_visibility,
+      bool has_display_identifier,
+      const std::u16string& expected_subtitle = u"") {
     std::vector<raw_ptr<views::View, VectorExperimental>> children =
         dialog()->children();
     ASSERT_EQ(children.size(), 3u);
-    PerformHeaderChecks(children[0], expected_title, expected_icon_visibility);
+    PerformHeaderChecks(children[0], expected_title, expected_icon_visibility,
+                        expected_subtitle);
     EXPECT_TRUE(IsViewClass<views::Separator>(children[1]));
 
     views::View* single_account_chooser = children[2];
     ASSERT_EQ(single_account_chooser->children().size(), 3u);
 
     CheckNonHoverableAccountRow(single_account_chooser->children()[0],
-                                kAccountSuffix);
+                                kAccountSuffix, has_display_identifier);
 
     // Check the "Continue as" button.
     views::MdTextButton* button = static_cast<views::MdTextButton*>(
@@ -303,6 +355,26 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
     CheckDisclosureText(single_account_chooser->children()[2],
                         /*expect_terms_of_service=*/true,
                         /*expect_privacy_policy=*/true);
+  }
+
+  std::vector<raw_ptr<views::View, VectorExperimental>> GetContents(
+      views::View* container) {
+    return static_cast<views::ScrollView*>(container->children()[1])
+        ->contents()
+        ->children();
+  }
+
+  void TestSingleAccount(const std::u16string expected_title,
+                         bool expected_icon_visibility,
+                         bool has_display_identifier,
+                         const std::u16string& iframe_for_display = u"",
+                         const std::u16string& expected_subtitle = u"") {
+    CreateAndShowSingleAccountPicker(has_display_identifier,
+                                     LoginState::kSignUp, iframe_for_display);
+
+    PerformSingleAccountConfirmDialogChecks(
+        expected_title, expected_icon_visibility, has_display_identifier,
+        expected_subtitle);
   }
 
   void TestMultipleAccounts(const std::u16string& expected_title,
@@ -509,12 +581,13 @@ class AccountSelectionBubbleViewTest : public ChromeViewsTestBase,
 
 TEST_F(AccountSelectionBubbleViewTest, SingleAccount) {
   TestSingleAccount(kTitleSignIn,
-                    /*expected_icon_visibility=*/true);
+                    /*expected_icon_visibility=*/true,
+                    /*has_display_identifier=*/true);
 }
 
 TEST_F(AccountSelectionBubbleViewTest, SingleAccountNoTermsOfService) {
   idp_data_->client_metadata.terms_of_service_url = GURL("");
-  CreateAndShowSingleAccountPicker();
+  CreateAndShowSingleAccountPicker(true);
 
   std::vector<raw_ptr<views::View, VectorExperimental>> children =
       dialog()->children();
@@ -544,7 +617,7 @@ TEST_F(AccountSelectionBubbleViewTest, SingleAccountOnlyTwoDisclosureFields) {
       content::IdentityRequestDialogDisclosureField::kName,
       content::IdentityRequestDialogDisclosureField::kEmail};
   idp_data_->client_metadata.terms_of_service_url = GURL();
-  CreateAndShowSingleAccountPicker();
+  CreateAndShowSingleAccountPicker(true);
 
   std::vector<raw_ptr<views::View, VectorExperimental>> children =
       dialog()->children();
@@ -594,7 +667,7 @@ TEST_F(AccountSelectionBubbleViewTest, UseDifferentAccountNotSupported) {
 }
 
 TEST_F(AccountSelectionBubbleViewTest, ReturningAccount) {
-  CreateAndShowSingleAccountPicker(LoginState::kSignIn);
+  CreateAndShowSingleAccountPicker(true, LoginState::kSignIn);
 
   std::vector<raw_ptr<views::View, VectorExperimental>> children =
       dialog()->children();
@@ -609,7 +682,8 @@ TEST_F(AccountSelectionBubbleViewTest, ReturningAccount) {
   ASSERT_EQ(chooser_children.size(), 2u);
   views::View* single_account_row = chooser_children[0];
 
-  CheckNonHoverableAccountRow(single_account_row, kAccountSuffix);
+  CheckNonHoverableAccountRow(single_account_row, kAccountSuffix,
+                              /*has_display_identifier=*/true);
 
   // Check the "Continue as" button.
   views::MdTextButton* button =
@@ -621,7 +695,7 @@ TEST_F(AccountSelectionBubbleViewTest, ReturningAccount) {
 
 TEST_F(AccountSelectionBubbleViewTest, NewAccountWithoutRequestPermission) {
   idp_data_->disclosure_fields = {};
-  CreateAndShowSingleAccountPicker();
+  CreateAndShowSingleAccountPicker(true);
 
   std::vector<raw_ptr<views::View, VectorExperimental>> children =
       dialog()->children();
@@ -636,7 +710,8 @@ TEST_F(AccountSelectionBubbleViewTest, NewAccountWithoutRequestPermission) {
   ASSERT_EQ(chooser_children.size(), 2u);
   views::View* single_account_row = chooser_children[0];
 
-  CheckNonHoverableAccountRow(single_account_row, kAccountSuffix);
+  CheckNonHoverableAccountRow(single_account_row, kAccountSuffix,
+                              /*has_display_identifier=*/true);
 
   // Check the "Continue as" button.
   views::MdTextButton* button =
@@ -651,7 +726,7 @@ TEST_F(AccountSelectionBubbleViewTest,
   CreateAccountSelectionBubble();
 
   // Set the dialog background color to white.
-  dialog()->set_background_color(SK_ColorWHITE);
+  dialog()->SetBackgroundColor(SK_ColorWHITE);
 
   const std::string kDarkBlue = "#1a73e8";
   SkColor bg_color;
@@ -684,7 +759,7 @@ TEST_F(AccountSelectionBubbleViewTest,
   CreateAccountSelectionBubble();
 
   // Set the dialog background color to white.
-  dialog()->set_background_color(SK_ColorWHITE);
+  dialog()->SetBackgroundColor(SK_ColorWHITE);
 
   const std::string kWhite = "#fff";
   SkColor bg_color;
@@ -733,7 +808,8 @@ TEST_F(AccountSelectionBubbleViewTest, Verifying) {
 
   views::View* row_container = dialog()->children()[2];
   ASSERT_EQ(row_container->children().size(), 1u);
-  CheckNonHoverableAccountRow(row_container->children()[0], kAccountSuffix);
+  CheckNonHoverableAccountRow(row_container->children()[0], kAccountSuffix,
+                              /*has_display_identifier=*/true);
 }
 
 TEST_F(AccountSelectionBubbleViewTest, VerifyingForAutoReauthn) {
@@ -753,7 +829,8 @@ TEST_F(AccountSelectionBubbleViewTest, VerifyingForAutoReauthn) {
 
   views::View* row_container = dialog()->children()[2];
   ASSERT_EQ(row_container->children().size(), 1u);
-  CheckNonHoverableAccountRow(row_container->children()[0], kAccountSuffix);
+  CheckNonHoverableAccountRow(row_container->children()[0], kAccountSuffix,
+                              /*has_display_identifier=*/true);
 }
 
 TEST_F(AccountSelectionBubbleViewTest, Failure) {
@@ -781,7 +858,8 @@ class MultipleIdpAccountSelectionBubbleViewTest
 // AccountSelectionBubbleViewTest's SingleAccount test.
 TEST_F(MultipleIdpAccountSelectionBubbleViewTest, SingleAccount) {
   TestSingleAccount(kTitleSignIn,
-                    /*expected_icon_visibility=*/true);
+                    /*expected_icon_visibility=*/true,
+                    /*has_display_identifier=*/true);
 }
 
 // Tests that when there is multiple accounts but only one IDP, the UI is
@@ -802,12 +880,14 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
       base::MakeRefCounted<content::IdentityProviderData>(
           kIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata(kTermsOfServiceUrl),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false),
       base::MakeRefCounted<content::IdentityProviderData>(
           kSecondIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata("https://tos-2.com"),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false)};
   std::vector<IdentityRequestAccountPtr> account_list = {
       CreateTestIdentityRequestAccount(kAccountSuffixes1[0], idp_list[0]),
@@ -845,12 +925,14 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, OneIdpWithMismatch) {
       base::MakeRefCounted<content::IdentityProviderData>(
           kIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata(kTermsOfServiceUrl),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false),
       base::MakeRefCounted<content::IdentityProviderData>(
           kSecondIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata("https://tos-2.com"),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/true)};
   std::vector<IdentityRequestAccountPtr> accounts_list =
       CreateTestIdentityRequestAccounts(kAccountSuffixes1, idp_list[0]);
@@ -874,8 +956,10 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, OneIdpWithMismatch) {
 
   // Add one for the separator.
   ++index;
-  CheckMismatchIdp(contents[index],
-                   u"Use your " + kSecondIdpETLDPlusOne + u" account");
+  ASSERT_LT(index, contents.size());
+  CheckMismatchIdp(
+      contents[index],
+      base::StrCat({u"Use your ", kSecondIdpETLDPlusOne, u" account"}));
 }
 
 TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
@@ -889,12 +973,14 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
       base::MakeRefCounted<content::IdentityProviderData>(
           kIdpForDisplay, idp_with_supports_add,
           CreateTestClientMetadata(kTermsOfServiceUrl),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false),
       base::MakeRefCounted<content::IdentityProviderData>(
           kSecondIdpForDisplay, idp_with_supports_add,
           CreateTestClientMetadata("https://tos-2.com"),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false)};
   std::vector<IdentityRequestAccountPtr> accounts_list = {
       CreateTestIdentityRequestAccount(kAccountSuffixes1[0], idp_list[0]),
@@ -930,22 +1016,26 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, ShowSingleReturningAccount) {
   idp_list_ = {base::MakeRefCounted<content::IdentityProviderData>(
                    kIdpForDisplay, content::IdentityProviderMetadata(),
                    CreateTestClientMetadata(kTermsOfServiceUrl),
-                   blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+                   blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+                   kDefaultDisclosureFields,
                    /*has_login_status_mismatch=*/false),
                base::MakeRefCounted<content::IdentityProviderData>(
                    kSecondIdpForDisplay, content::IdentityProviderMetadata(),
                    CreateTestClientMetadata("https://tos-2.com"),
-                   blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+                   blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+                   kDefaultDisclosureFields,
                    /*has_login_status_mismatch=*/false),
                base::MakeRefCounted<content::IdentityProviderData>(
                    "idp3.com", content::IdentityProviderMetadata(),
                    CreateTestClientMetadata("https://tos-3.com"),
-                   blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+                   blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+                   kDefaultDisclosureFields,
                    /*has_login_status_mismatch=*/true),
                base::MakeRefCounted<content::IdentityProviderData>(
                    "idp4.com", content::IdentityProviderMetadata(),
                    CreateTestClientMetadata("https://tos-4.com"),
-                   blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+                   blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+                   kDefaultDisclosureFields,
                    /*has_login_status_mismatch=*/true)};
   accounts_ = {
       CreateTestIdentityRequestAccount(kAccountSuffixes2[0], idp_list_[1],
@@ -988,12 +1078,14 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, MultiIdpWithAllIdpsMismatch) {
       base::MakeRefCounted<content::IdentityProviderData>(
           kIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata(kTermsOfServiceUrl),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/true),
       base::MakeRefCounted<content::IdentityProviderData>(
           kSecondIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata("https://tos-2.com"),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/true)};
   CreateAndShowMultiIdpAccountPicker(std::vector<IdentityRequestAccountPtr>(),
                                      idp_list);
@@ -1010,9 +1102,12 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, MultiIdpWithAllIdpsMismatch) {
   std::vector<raw_ptr<views::View, VectorExperimental>> contents =
       GetContents(children[1]);
 
-  CheckMismatchIdp(contents[0], u"Use your " + kIdpETLDPlusOne + u" account");
-  CheckMismatchIdp(contents[1],
-                   u"Use your " + kSecondIdpETLDPlusOne + u" account");
+  ASSERT_GE(contents.size(), 2u);
+  CheckMismatchIdp(contents[0],
+                   base::StrCat({u"Use your ", kIdpETLDPlusOne, u" account"}));
+  CheckMismatchIdp(
+      contents[1],
+      base::StrCat({u"Use your ", kSecondIdpETLDPlusOne, u" account"}));
 }
 
 TEST_F(MultipleIdpAccountSelectionBubbleViewTest, MultipleReturningAccounts) {
@@ -1020,12 +1115,14 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest, MultipleReturningAccounts) {
       base::MakeRefCounted<content::IdentityProviderData>(
           kIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata(kTermsOfServiceUrl),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false),
       base::MakeRefCounted<content::IdentityProviderData>(
           kSecondIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata("https://tos-2.com"),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false)};
   // The UI code receives the accounts sorted in the order in which they should
   // be displayed.
@@ -1069,12 +1166,14 @@ TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
       base::MakeRefCounted<content::IdentityProviderData>(
           kIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata(kTermsOfServiceUrl),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false),
       base::MakeRefCounted<content::IdentityProviderData>(
           kSecondIdpForDisplay, content::IdentityProviderMetadata(),
           CreateTestClientMetadata("https://tos-2.com"),
-          blink::mojom::RpContext::kSignIn, kDefaultDisclosureFields,
+          blink::mojom::RpContext::kSignIn, /*format=*/std::nullopt,
+          kDefaultDisclosureFields,
           /*has_login_status_mismatch=*/false)};
   // Note that `new2` is last despite having last_used_timestamp because it is
   // not considered a returning account.
@@ -1238,7 +1337,7 @@ TEST_F(AccountSelectionBubbleViewTest, ErrorWithDifferentErrorCodes) {
 TEST_F(AccountSelectionBubbleViewTest, EmptyBrandIconHidesImageView) {
   idp_data_->idp_metadata.brand_icon_url = GURL("invalid url");
   idp_data_->idp_metadata.brand_decoded_icon = gfx::Image();
-  CreateAndShowSingleAccountPicker();
+  CreateAndShowSingleAccountPicker(true);
 
   views::View* brand_icon_image_view = static_cast<views::View*>(
       GetViewWithClassName(dialog()->children()[0], "BrandIconImageView"));
@@ -1274,6 +1373,7 @@ TEST_F(AccountSelectionBubbleViewTest, OneDisabledAccount) {
 
   // Check the filtered account and use a different account button.
   CheckHoverableAccountRow(accounts[0], kAccountSuffix,
+                           /*has_display_identifier=*/true,
                            /*expect_idp=*/false, /*is_modal_dialog=*/false,
                            /*is_disabled=*/true);
   CheckUseOtherAccount(accounts[2]);
@@ -1311,6 +1411,7 @@ TEST_F(AccountSelectionBubbleViewTest, MultipleDisabledAccounts) {
   for (size_t i = 0; i < 3; ++i) {
     CheckHoverableAccountRow(contents[i],
                              kAccountSuffix + base::NumberToString(i),
+                             /*has_display_identifier=*/true,
                              /*expect_idp=*/false, /*is_modal_dialog=*/false,
                              /*is_disabled=*/true);
   }
@@ -1347,12 +1448,140 @@ TEST_F(AccountSelectionBubbleViewTest, OneDisabledAccountAndOneEnabledAccount) {
   std::vector<raw_ptr<views::View, VectorExperimental>> contents =
       GetContents(children[1]);
   CheckHoverableAccountRow(contents[0], kAccountSuffixes[0],
+                           /*has_display_identifier=*/true,
                            /*expect_idp=*/false, /*is_modal_dialog=*/false,
                            /*is_disabled=*/false);
   CheckHoverableAccountRow(contents[1], kAccountSuffixes[1],
+                           /*has_display_identifier=*/true,
                            /*expect_idp=*/false, /*is_modal_dialog=*/false,
                            /*is_disabled=*/true);
   CheckUseOtherAccount(contents[3]);
+}
+
+TEST_F(AccountSelectionBubbleViewTest, SingleIdentifierAccounts) {
+  idp_data_->idp_metadata.has_filtered_out_account = true;
+  std::vector<IdentityRequestAccountPtr> accounts_list;
+  const std::vector<std::string> kAccountSuffixes = {"enabled", "disabled"};
+  IdentityRequestAccountPtr account1 = CreateTestIdentityRequestAccount(
+      kAccountSuffixes[0], idp_data_, LoginState::kSignIn);
+  account1->display_identifier = "";
+  accounts_list.push_back(std::move(account1));
+  IdentityRequestAccountPtr account2 = CreateTestIdentityRequestAccount(
+      kAccountSuffixes[1], idp_data_, LoginState::kSignUp);
+  account2->display_identifier = "";
+  account2->is_filtered_out = true;
+  accounts_list.push_back(std::move(account2));
+
+  CreateAccountSelectionBubble();
+  dialog_->ShowMultiAccountPicker(accounts_list, {idp_data_},
+                                  /*rp_icon=*/gfx::Image(),
+                                  /*show_back_button=*/false);
+
+  std::vector<raw_ptr<views::View, VectorExperimental>> children =
+      dialog()->children();
+  // The separator is in the multiple accounts container.
+  ASSERT_EQ(children.size(), 2u);
+  PerformHeaderChecks(children[0], kTitleSignIn,
+                      /*expected_icon_visibility=*/true);
+
+  PerformMultiAccountChecks(children[1], /*expected_account_rows=*/2,
+                            /*expected_login_rows=*/1);
+
+  std::vector<raw_ptr<views::View, VectorExperimental>> contents =
+      GetContents(children[1]);
+  CheckHoverableAccountRow(contents[0], kAccountSuffixes[0],
+                           /*has_display_identifier=*/false,
+                           /*expect_idp=*/false, /*is_modal_dialog=*/false,
+                           /*is_disabled=*/false);
+  CheckHoverableAccountRow(contents[1], kAccountSuffixes[1],
+                           /*has_display_identifier=*/false,
+                           /*expect_idp=*/false, /*is_modal_dialog=*/false,
+                           /*is_disabled=*/true);
+  CheckUseOtherAccount(contents[3]);
+}
+
+TEST_F(MultipleIdpAccountSelectionBubbleViewTest,
+       SingleAccountSingleIdentifier) {
+  TestSingleAccount(kTitleSignIn,
+                    /*expected_icon_visibility=*/true,
+                    /*has_display_identifier=*/false);
+}
+
+TEST_F(AccountSelectionBubbleViewTest, IframeTitle) {
+  TestSingleAccount(kTitleIframeSignIn,
+                    /*expected_icon_visibility=*/true,
+                    /*has_display_identifier=*/false, kIframeETLDPlusOne,
+                    kSubtitleIframeSignIn);
+}
+
+// TODO(crbug.com/420421406): Re-enable this test on ChromeOS.
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_ContinueButtonFocusedWithScreenReader \
+  DISABLED_ContinueButtonFocusedWithScreenReader
+#else
+#define MAYBE_ContinueButtonFocusedWithScreenReader \
+  ContinueButtonFocusedWithScreenReader
+#endif
+TEST_F(AccountSelectionBubbleViewTest,
+       MAYBE_ContinueButtonFocusedWithScreenReader) {
+  content::ScopedAccessibilityModeOverride screen_reader_mode(
+      ui::AXMode::kScreenReader);
+  CreateAndShowSingleAccountPicker(/*has_display_identifier=*/true);
+  views::View* single_account_chooser = dialog()->children()[2];
+  views::MdTextButton* button =
+      static_cast<views::MdTextButton*>(single_account_chooser->children()[1]);
+  EXPECT_TRUE(button->HasFocus());
+}
+
+TEST_F(AccountSelectionBubbleViewTest,
+       ContinueButtonNotFocusedWithoutScreenReader) {
+  CreateAndShowSingleAccountPicker(/*has_display_identifier=*/true);
+  views::View* single_account_chooser = dialog()->children()[2];
+  views::MdTextButton* button =
+      static_cast<views::MdTextButton*>(single_account_chooser->children()[1]);
+  EXPECT_FALSE(button->HasFocus());
+}
+
+// Test interaction of AccountHoverButton & FedCmAccountSelectionView via
+// FakeFedCmAccountSelectionView when AccountHoverButton OnPressed() is
+// called.
+class AccountSelectionInteractionTest : public AccountSelectionBubbleViewTest {
+ public:
+  views::View* GetFirstAccountHoverButton() {
+    std::vector<raw_ptr<views::View, VectorExperimental>> children =
+        dialog_->children();
+
+    views::View* container = children[1];
+    std::vector<raw_ptr<views::View, VectorExperimental>> children2 =
+        static_cast<views::ScrollView*>(container->children()[1])
+            ->contents()
+            ->children();
+    // Considering three account details got passed, Account Selection Bubble
+    // view should contain three account hover buttons.
+    EXPECT_EQ(children2.size(), 3u);
+    EXPECT_EQ(children2[0]->GetClassName(), "HoverButton");
+    return children2[0];
+  }
+};
+
+TEST_F(AccountSelectionInteractionTest,
+       TestAccountHoverButtonLifecycleDuringAccountSelection) {
+  const std::vector<std::string> kAccountSuffixes = {"1", "2", "3"};
+  CreateAndShowMultiAccountPicker(kAccountSuffixes);
+
+  AccountHoverButton* account_hover_button =
+      static_cast<AccountHoverButton*>(GetFirstAccountHoverButton());
+  IdentityRequestAccountPtr account = CreateTestIdentityRequestAccount(
+      kAccountSuffix, idp_data_, LoginState::kSignUp);
+  // Simulate clicking the account hover button.
+  account_selection_view_->ClickAccountHoverButton(account_hover_button,
+                                                   account);
+
+  // Now that account selection has been made in OnAccountSelect,
+  // perform checks on contents of SingleAccountConfirmDialog
+  PerformSingleAccountConfirmDialogChecks(kTitleSignIn,
+                                          /*expected_icon_visibility=*/true,
+                                          /*has_display_identifier=*/true);
 }
 
 }  //  namespace webid

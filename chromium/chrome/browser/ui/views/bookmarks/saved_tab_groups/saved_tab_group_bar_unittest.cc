@@ -191,8 +191,8 @@ class SavedTabGroupBarUnitTest : public TestWithBrowserView {
     return guids;
   }
 
-  void Pin(const base::Uuid& sync_id) {
-    service()->UpdateGroupPosition(sync_id, true, 0);
+  void Pin(const base::Uuid& sync_id, int position = 0) {
+    service()->UpdateGroupPosition(sync_id, true, position);
     Wait();
   }
 
@@ -213,29 +213,6 @@ class SavedTabGroupBarUnitTest : public TestWithBrowserView {
 
   static constexpr int button_padding_ = 8;
   static constexpr int button_height_ = 20;
-};
-
-class STGEverythingMenuUnitTest : public SavedTabGroupBarUnitTest {
- public:
-  void SetUp() override {
-    SavedTabGroupBarUnitTest::SetUp();
-    everything_menu_ = std::make_unique<STGEverythingMenu>(nullptr, browser());
-  }
-
-  void TearDown() override {
-    everything_menu_.reset();
-    SavedTabGroupBarUnitTest::TearDown();
-  }
-
-  std::unique_ptr<ui::SimpleMenuModel> menu_model() {
-    return everything_menu_->CreateMenuModel();
-  }
-
- protected:
-  // Used to mock time elapsed between two tab groups creation.
-  static constexpr base::TimeDelta interval_ = base::Seconds(3);
-
-  std::unique_ptr<STGEverythingMenu> everything_menu_;
 };
 
 TEST_F(SavedTabGroupBarUnitTest, AddsButtonFromModelAdd) {
@@ -342,15 +319,19 @@ TEST_F(SavedTabGroupBarUnitTest, MoveButtonFromModelMove) {
   const base::Uuid sync_id_2 = AddGroupFromLocal();
   const base::Uuid sync_id_3 = AddGroupFromLocal();
 
+  Wait();
   ASSERT_THAT(GetButtonGUIDs(),
               testing::ElementsAre(sync_id_3, sync_id_2, sync_id_1));
-  service()->UpdateGroupPosition(sync_id_2, std::nullopt, 2);
+
+  Pin(sync_id_2, 2);
   EXPECT_THAT(GetButtonGUIDs(),
               testing::ElementsAre(sync_id_3, sync_id_1, sync_id_2));
-  service()->UpdateGroupPosition(sync_id_2, std::nullopt, 0);
+
+  Pin(sync_id_2, 0);
   EXPECT_THAT(GetButtonGUIDs(),
               testing::ElementsAre(sync_id_2, sync_id_3, sync_id_1));
-  service()->UpdateGroupPosition(sync_id_2, std::nullopt, 1);
+
+  Pin(sync_id_2, 1);
   EXPECT_THAT(GetButtonGUIDs(),
               testing::ElementsAre(sync_id_3, sync_id_2, sync_id_1));
 }
@@ -385,8 +366,9 @@ TEST_F(SavedTabGroupBarUnitTest, PinTabGroupAddButton) {
 }
 
 TEST_F(SavedTabGroupBarUnitTest, AccessibleName) {
-  EnforceGroupSaved(SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(
-      CreateNewGroupInBrowser()));
+  tab_groups::TabGroupId tab_group_id = CreateNewGroupInBrowser();
+  EnforceGroupSaved(
+      SavedTabGroupUtils::CreateSavedTabGroupFromLocalId(tab_group_id));
   Wait();
 
   SavedTabGroupButton* saved_tab_group_button =
@@ -397,15 +379,27 @@ TEST_F(SavedTabGroupBarUnitTest, AccessibleName) {
   ui::AXNodeData data;
   saved_tab_group_button->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT,
+                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT, u"",
                 l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)),
             data.GetString16Attribute(ax::mojom::StringAttribute::kName));
 
   saved_tab_group_button->SetText(u"Accessible Name");
   data = ui::AXNodeData();
   saved_tab_group_button->GetViewAccessibility().GetAccessibleNodeData(&data);
+  EXPECT_EQ(
+      l10n_util::GetStringFUTF16(
+          IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, u"", u"Accessible Name",
+          l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)),
+      data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+
+  SavedTabGroup saved_tab_group = *service()->GetGroup(tab_group_id);
+  saved_tab_group.SetCollaborationId(CollaborationId("collaboration_id"));
+  saved_tab_group_button->UpdateButtonData(saved_tab_group);
+  data = ui::AXNodeData();
+  saved_tab_group_button->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, u"Accessible Name",
+                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT,
+                l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_SHARED),
                 l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)),
             data.GetString16Attribute(ax::mojom::StringAttribute::kName));
 }
@@ -420,12 +414,12 @@ TEST_F(SavedTabGroupBarUnitTest, TooltipText) {
   ui::AXNodeData data;
   saved_tab_group_button->GetViewAccessibility().GetAccessibleNodeData(&data);
   EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT,
+                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT, u"",
                 l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)),
             data.GetString16Attribute(ax::mojom::StringAttribute::kName));
   EXPECT_EQ(saved_tab_group_button->GetRenderedTooltipText(gfx::Point()),
             l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT,
+                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT, u"",
                 l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)));
   EXPECT_NE(data.GetString16Attribute(ax::mojom::StringAttribute::kDescription),
             data.GetString16Attribute(ax::mojom::StringAttribute::kName));
@@ -433,14 +427,16 @@ TEST_F(SavedTabGroupBarUnitTest, TooltipText) {
   saved_tab_group_button->SetText(u"Accessible Name");
   data = ui::AXNodeData();
   saved_tab_group_button->GetViewAccessibility().GetAccessibleNodeData(&data);
-  EXPECT_EQ(l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, u"Accessible Name",
-                l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)),
-            data.GetString16Attribute(ax::mojom::StringAttribute::kName));
-  EXPECT_EQ(saved_tab_group_button->GetRenderedTooltipText(gfx::Point()),
-            l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, u"Accessible Name",
-                l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)));
+  EXPECT_EQ(
+      l10n_util::GetStringFUTF16(
+          IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, u"", u"Accessible Name",
+          l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)),
+      data.GetString16Attribute(ax::mojom::StringAttribute::kName));
+  EXPECT_EQ(
+      saved_tab_group_button->GetRenderedTooltipText(gfx::Point()),
+      l10n_util::GetStringFUTF16(
+          IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, u"", u"Accessible Name",
+          l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)));
   EXPECT_NE(data.GetString16Attribute(ax::mojom::StringAttribute::kDescription),
             data.GetString16Attribute(ax::mojom::StringAttribute::kName));
 }
@@ -565,6 +561,25 @@ TEST_F(SavedTabGroupBarUnitTest, GroupWithNoTabsDoesntShow) {
   service()->AddGroup(std::move(empty_pinned_group));
 
   EXPECT_EQ(1u, saved_tab_group_bar()->children().size());
+}
+
+TEST_F(SavedTabGroupBarUnitTest, GroupLoadFromModelInOrder) {
+  base::Uuid uuid1 = AddGroupFromLocal();
+  base::Uuid uuid2 = AddGroupFromLocal();
+  base::Uuid uuid3 = AddGroupFromLocal();
+
+  auto saved_tab_group_bar =
+      std::make_unique<SavedTabGroupBar>(browser(), false);
+  auto children = saved_tab_group_bar->children();
+
+  // Verify groups are shown in reverse order(last added groups show first).
+  EXPECT_EQ(4u, children.size());
+  EXPECT_EQ(uuid3,
+            views::AsViewClass<SavedTabGroupButton>(children[0])->guid());
+  EXPECT_EQ(uuid2,
+            views::AsViewClass<SavedTabGroupButton>(children[1])->guid());
+  EXPECT_EQ(uuid1,
+            views::AsViewClass<SavedTabGroupButton>(children[2])->guid());
 }
 
 }  // namespace tab_groups

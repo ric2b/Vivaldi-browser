@@ -167,6 +167,9 @@ class BrowserWindow : public ui::BaseWindow,
   // will return an error.
   virtual bool IsOnCurrentWorkspace() const = 0;
 
+  // Returns true if the browser window is visible on the screen.
+  virtual bool IsVisibleOnScreen() const = 0;
+
   // Sets the shown |ratio| of the browser's top controls (a.k.a. top-chrome) as
   // a result of gesture scrolling in |web_contents|.
   virtual void SetTopControlsShownRatio(content::WebContents* web_contents,
@@ -256,6 +259,15 @@ class BrowserWindow : public ui::BaseWindow,
   // Sets the starred state for the current tab.
   virtual void SetStarredState(bool is_starred) = 0;
 
+  // Checks if the browser popup is a tab modal popup.
+  virtual bool IsTabModalPopupDeprecated() const = 0;
+
+  // Sets whether the browser popup is a tab modal popup. Tab modal popups, used
+  // by autofill features, intentionally disable save card prompts because they
+  // are not intended for saving new card details.
+  virtual void SetIsTabModalPopupDeprecated(
+      bool is_tab_modal_popup_deprecated) = 0;
+
   // Called when the active tab changes.  Subclasses which implement
   // TabStripModelObserver should implement this instead of ActiveTabChanged();
   // the Browser will call this method while processing that one.
@@ -332,6 +344,9 @@ class BrowserWindow : public ui::BaseWindow,
   // Updates the visibility of the scrim that covers the content area.
   virtual void SetContentScrimVisibility(bool visible) = 0;
 
+  // Updates the visibility of the scrim that covers the devtools area.
+  virtual void SetDevToolsScrimVisibility(bool visible) = 0;
+
   // Resets the toolbar's tab state for |contents|.
   virtual void ResetToolbarTabState(content::WebContents* contents) = 0;
 
@@ -378,6 +393,9 @@ class BrowserWindow : public ui::BaseWindow,
 
   // Returns whether the tab strip is editable (for extensions).
   virtual bool IsTabStripEditable() const = 0;
+
+  // Forces the tab strip into a not editable state for testing.
+  virtual void SetTabStripNotEditableForTesting() = 0;
 
   // Returns whether the toolbar is available or not. It's called "Visible()"
   // to follow the name convention. But it does not indicate the visibility of
@@ -526,7 +544,12 @@ class BrowserWindow : public ui::BaseWindow,
   // Allows the BrowserWindow object to handle the specified mouse event
   // before sending it to the renderer.
   virtual bool PreHandleMouseEvent(const blink::WebMouseEvent& event) = 0;
-
+  // Allows the BrowserWindow object to handle a mouse drag update
+  // before sending it to the renderer.
+  // `point` is relative to the content view.
+  virtual void PreHandleDragUpdate(const content::DropData& drop_data,
+                                   const gfx::PointF& point) = 0;
+  virtual void PreHandleDragExit() = 0;
   // Allows the BrowserWindow object to handle the specified keyboard event
   // before sending it to the renderer.
   virtual content::KeyboardEventProcessingResult PreHandleKeyboardEvent(

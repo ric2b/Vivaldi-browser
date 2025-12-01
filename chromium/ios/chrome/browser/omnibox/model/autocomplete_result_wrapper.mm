@@ -11,13 +11,13 @@
 #import "components/omnibox/browser/autocomplete_match_classification.h"
 #import "components/omnibox/browser/autocomplete_result.h"
 #import "components/omnibox/browser/omnibox_client.h"
+#import "ios/chrome/browser/omnibox/model/autocomplete_match_formatter.h"
 #import "ios/chrome/browser/omnibox/model/autocomplete_result_wrapper_delegate.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/autocomplete_match_formatter.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/autocomplete_suggestion.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/autocomplete_suggestion_group_impl.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/omnibox_pedal_annotator.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/pedal_section_extractor.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/popup/row/actions/suggest_action.h"
+#import "ios/chrome/browser/omnibox/model/autocomplete_suggestion.h"
+#import "ios/chrome/browser/omnibox/model/autocomplete_suggestion_group_impl.h"
+#import "ios/chrome/browser/omnibox/model/omnibox_pedal_annotator.h"
+#import "ios/chrome/browser/omnibox/model/pedal_section_extractor.h"
+#import "ios/chrome/browser/omnibox/model/suggest_action.h"
 #import "ios/chrome/browser/search_engines/model/search_engine_observer_bridge.h"
 #import "net/base/apple/url_conversions.h"
 
@@ -118,7 +118,7 @@
   AutocompleteMatchFormatter* formatter =
       [AutocompleteMatchFormatter formatterWithMatch:match];
   formatter.starred = [self isStarredMatch:match];
-  formatter.incognito = self.isIncognito;
+  formatter.incognito = self.incognito;
   formatter.defaultSearchEngineIsGoogle = _defaultSearchEngineIsGoogle;
   formatter.pedalData = [self.pedalAnnotator pedalForMatch:match];
   formatter.isMultimodal = self.hasThumbnail;

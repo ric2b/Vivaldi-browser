@@ -103,7 +103,7 @@ update_target("//components/input:input") {
 if (!is_android) {
   update_target("//chrome/browser/safe_browsing:safe_browsing") {
     deps += [
-      "//chrome/browser/search/background:ntp_background_proto",
+      "//components/themes:ntp_background_proto",
     ]
   }
 }

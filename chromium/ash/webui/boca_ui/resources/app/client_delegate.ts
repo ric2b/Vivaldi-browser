@@ -5,14 +5,48 @@
 import type {Value} from '//resources/mojo/mojo/public/mojom/base/values.mojom-webui.js';
 
 import type {Assignment as AssignmentMojom, Config, ControlledTab as ControlledTabMojom, Course, IdentifiedActivity as Activity, Identity as IdentityMojom, Material as MaterialMojom, NetworkInfo as NetworkInfoMojom, PageHandlerRemote, TabInfo, Window} from '../mojom/boca.mojom-webui.js';
+import {CrdConnectionState as CrdConnectionStateMojom, CreateSessionError, SpeechRecognitionInstallState as SpeechRecognitionInstallStateMojom, SubmitAccessCodeError} from '../mojom/boca.mojom-webui.js';
 
-import type {BocaValidPref, CaptionConfig, ClientApiDelegate, ControlledTab, IdentifiedActivity, Identity, NetworkInfo, OnTaskConfig, Permission, PermissionSetting, SessionConfig} from './boca_app.js';
-import {SubmitAccessCodeResult} from './boca_app.js';
+import {BocaValidPref, CaptionConfig, ClientApiDelegate, ControlledTab, CrdConnectionState, CreateSessionResult, IdentifiedActivity, Identity, NetworkInfo, OnTaskConfig, Permission, PermissionSetting, SessionConfig, SpeechRecognitionInstallState, SubmitAccessCodeResult} from './boca_app.js';
+
 
 const MICRO_SECS_IN_MINUTES: bigint = 60000000n;
 
 function resultHasError(result: any) {
   return !(result.error === undefined || result.error === null);
+}
+
+export function getSpeechRecognitionInstallStateMojomToUI(
+    state: SpeechRecognitionInstallStateMojom) {
+  switch (state) {
+    case SpeechRecognitionInstallStateMojom.kUnknown:
+      return SpeechRecognitionInstallState.UNKNOWN;
+    case SpeechRecognitionInstallStateMojom.kSystemLanguageUnsupported:
+      return SpeechRecognitionInstallState.SYSTEM_LANGUAGE_NOT_SUPPORTED;
+    case SpeechRecognitionInstallStateMojom.kInProgress:
+      return SpeechRecognitionInstallState.IN_PROGRESS;
+    case SpeechRecognitionInstallStateMojom.kFailed:
+      return SpeechRecognitionInstallState.FAILED;
+    case SpeechRecognitionInstallStateMojom.kReady:
+      return SpeechRecognitionInstallState.READY;
+    default:
+      return SpeechRecognitionInstallState.UNKNOWN;
+  }
+}
+
+export function getCrdConnectionStateMojomToUI(state: CrdConnectionStateMojom) {
+  switch (state) {
+    case CrdConnectionStateMojom.kUnknown:
+      return CrdConnectionState.UNKNOWN;
+    case CrdConnectionStateMojom.kConnecting:
+      return CrdConnectionState.CONNECTING;
+    case CrdConnectionStateMojom.kConnected:
+      return CrdConnectionState.CONNECTED;
+    case CrdConnectionStateMojom.kDisconnected:
+      return CrdConnectionState.DISCONNECTED;
+    default:
+      return CrdConnectionState.UNKNOWN;
+  }
 }
 
 export function getStudentActivityMojomToUI(activities: Activity[]):
@@ -198,7 +232,14 @@ export class ClientDelegateFactory {
           },
           captionConfig: sessionConfig.captionConfig,
         } as Config);
-        return result.success;
+        if (!resultHasError(result)) {
+          return CreateSessionResult.SUCCESS;
+        } else if (result.error == CreateSessionError.kHTTPError) {
+          return CreateSessionResult.HTTP_ERROR;
+        } else if (result.error == CreateSessionError.kNetworkRestriction) {
+          return CreateSessionResult.NETWORK_RESTRICTION;
+        }
+        return CreateSessionResult.SUCCESS;
       },
       getSession: async () => {
         const result = (await pageHandler.getSession()).result;
@@ -225,8 +266,16 @@ export class ClientDelegateFactory {
         const result = await pageHandler.removeStudent(id);
         return !resultHasError(result);
       },
-      addStudents: async (ids: string[]) => {
-        const result = await pageHandler.addStudents(ids);
+      addStudents: async (students: Identity[]) => {
+        const result =
+            await pageHandler.addStudents(students?.map((item: Identity) => {
+              return {
+                id: item.id,
+                name: item.name,
+                email: item.email,
+                photoUrl: item.photoUrl ? {url: item.photoUrl} : null,
+              };
+            }));
         return !resultHasError(result);
       },
       updateOnTaskConfig: async (onTaskConfig: OnTaskConfig) => {
@@ -262,8 +311,12 @@ export class ClientDelegateFactory {
         const result = await pageHandler.submitAccessCode(code);
         if (!resultHasError(result)) {
           return SubmitAccessCodeResult.SUCCESS;
+        } else if (result.error == SubmitAccessCodeError.kInvalid) {
+          return SubmitAccessCodeResult.INVALID_CODE;
+        } else if (result.error == SubmitAccessCodeError.kNetworkRestriction) {
+          return SubmitAccessCodeResult.NETWORK_RESTRICTION;
         }
-        return SubmitAccessCodeResult.INVALID_CODE;
+        return SubmitAccessCodeResult.SUCCESS;
       },
       viewStudentScreen: async (id: string) => {
         const result = await pageHandler.viewStudentScreen(id);
@@ -297,6 +350,17 @@ export class ClientDelegateFactory {
       },
       refreshWorkbook: async () => {
         await pageHandler.refreshWorkbook();
+      },
+      getSpeechRecognitionInstallationStatus: async () => {
+        return getSpeechRecognitionInstallStateMojomToUI(
+            (await pageHandler.getSpeechRecognitionInstallationStatus()).state);
+      },
+      renotifyStudent: async (id: string) => {
+        const result = await pageHandler.renotifyStudent(id);
+        return !resultHasError(result);
+      },
+      startSpotlight: async (crdConnectionCode: string) => {
+        return await pageHandler.startSpotlight(crdConnectionCode);
       },
     };
   }

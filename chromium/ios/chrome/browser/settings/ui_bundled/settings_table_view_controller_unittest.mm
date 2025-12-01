@@ -17,6 +17,7 @@
 #import "components/plus_addresses/features.h"
 #import "components/policy/core/common/policy_loader_ios_constants.h"
 #import "components/policy/policy_constants.h"
+#import "components/search_engines/template_url_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_pref_names.h"
 #import "components/sync/test/test_sync_service.h"
@@ -25,7 +26,9 @@
 #import "components/variations/service/variations_service_client.h"
 #import "components/variations/synthetic_trial_registry.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/table_view_account_item.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_browser_agent.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
+#import "ios/chrome/browser/photos/model/photos_service_factory.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/settings/ui_bundled/settings_table_view_controller_constants.h"
@@ -171,6 +174,8 @@ class SettingsTableViewControllerTest
     builder.AddTestingFactory(
         ios::TemplateURLServiceFactory::GetInstance(),
         ios::TemplateURLServiceFactory::GetDefaultFactory());
+    builder.AddTestingFactory(PhotosServiceFactory::GetInstance(),
+                              PhotosServiceFactory::GetDefaultFactory());
     builder.AddTestingFactory(
         AuthenticationServiceFactory::GetInstance(),
         AuthenticationServiceFactory::GetFactoryWithDelegate(
@@ -184,6 +189,7 @@ class SettingsTableViewControllerTest
 
     // Prepare mocks for PushNotificationClient dependency
     browser_ = std::make_unique<TestBrowser>(profile_.get());
+    DiscoverFeedVisibilityBrowserAgent::CreateForBrowser(browser_.get());
 
     sync_service_ = static_cast<syncer::TestSyncService*>(
         SyncServiceFactory::GetForProfile(profile_.get()));
@@ -300,7 +306,6 @@ class SettingsTableViewControllerTest
   raw_ptr<TestProfileIOS> profile_;
   std::unique_ptr<TestBrowser> browser_;
 
-  SettingsTableViewController* controller_ = nullptr;
   BOOL has_default_browser_blue_dot_ = false;
   id<PopupMenuCommands> mock_popup_menu_handler_;
 };
@@ -476,6 +481,10 @@ TEST_F(SettingsTableViewControllerTest,
   CreateController();
   CheckController();
 
+  // Create a navigation controller to avoid hitting the CHECK.
+  [[maybe_unused]] UINavigationController* nav_controller =
+      [[UINavigationController alloc] initWithRootViewController:controller()];
+
   OCMExpect([mock_popup_menu_handler_ updateToolsMenuBlueDotVisibility]);
 
   // Tap on the default browser settings.
@@ -495,9 +504,28 @@ TEST_F(SettingsTableViewControllerTest,
 
   OCMReject([mock_popup_menu_handler_ updateToolsMenuBlueDotVisibility]);
 
+  // Create a navigation controller to avoid hitting the CHECK.
+  [[maybe_unused]] UINavigationController* nav_controller =
+      [[UINavigationController alloc] initWithRootViewController:controller()];
+
   // Tap on the default browser settings.
   [controller() tableView:controller().tableView
       didSelectRowAtIndexPath:[NSIndexPath indexPathForItem:0 inSection:1]];
 
   EXPECT_OCMOCK_VERIFY((id)mock_popup_menu_handler_);
+}
+
+// Tests that updating search engines does not cause a crash.
+// See crbug.com/408017580 for more details.
+TEST_F(SettingsTableViewControllerTest, SearchEngineChnagedDoesntCrash) {
+  // Make sure the controller is initialized without creating the view/model.
+  CreateControllerWithoutView();
+
+  TemplateURLService* template_url_service =
+      ios::TemplateURLServiceFactory::GetForProfile(profile_.get());
+
+  // Force the search engines to load and alert their observer (the settings
+  // table view controller). This should not crash, even though the view
+  // controller has not loaded its model yet.
+  template_url_service->Load();
 }

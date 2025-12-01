@@ -100,6 +100,11 @@ using FeatureCheck = base::FunctionRef<bool(const base::Feature&)>;
     return false;
   }
 
+  // State of the Address-Autofill pref.
+  if (!prefs->GetBoolean(prefs::kAutofillProfileEnabled)) {
+    return false;
+  }
+
   // State of the AutofillAI-specific enterprise policy pref.
   constexpr int kAutofillPredictionSettingsAllowWithoutLogging =
       base::to_underlying(
@@ -114,54 +119,33 @@ using FeatureCheck = base::FunctionRef<bool(const base::Feature&)>;
   const int policy_pref_state = prefs->GetInteger(
       optimization_guide::prefs::
           kAutofillPredictionImprovementsEnterprisePolicyAllowed);
-  if (policy_pref_state == kAutofillPredictionSettingsDisabled) {
-    return false;
-  }
-  if (policy_pref_state == kAutofillPredictionSettingsAllowWithoutLogging) {
-    switch (action) {
-      case AutofillAiAction::kLogToMqls:
-        return false;
-      case AutofillAiAction::kAddEntityInstanceInSettings:
-      case AutofillAiAction::kCrowdsourcingVote:
-      case AutofillAiAction::kEditAndDeleteEntityInstanceInSettings:
-      case AutofillAiAction::kFilling:
-      case AutofillAiAction::kImport:
-      case AutofillAiAction::kIphForOptIn:
-      case AutofillAiAction::kListEntityInstancesInSettings:
-      case AutofillAiAction::kOptIn:
-      case AutofillAiAction::kServerClassificationModel:
-      case AutofillAiAction::kUseCachedServerClassificationModelResults:
-        break;
-    }
-  }
-
-  // State of the Address-Autofill pref.
-  if (!prefs->GetBoolean(prefs::kAutofillProfileEnabled)) {
-    return false;
-  }
-
-  const bool autofill_ai_enabled = GetAutofillAiOptInStatus(client);
+  const bool policy_pref_enabled =
+      policy_pref_state != kAutofillPredictionSettingsDisabled;
+  const bool user_opted_in = GetAutofillAiOptInStatus(client);
+  // Note that the policy can become disabled even after an user has opted in.
   switch (action) {
     case AutofillAiAction::kAddEntityInstanceInSettings:
     case AutofillAiAction::kCrowdsourcingVote:
     case AutofillAiAction::kEditAndDeleteEntityInstanceInSettings:
     case AutofillAiAction::kFilling:
     case AutofillAiAction::kImport:
-    case AutofillAiAction::kListEntityInstancesInSettings:
     case AutofillAiAction::kLogToMqls:
     case AutofillAiAction::kServerClassificationModel:
     case AutofillAiAction::kUseCachedServerClassificationModelResults:
-      return autofill_ai_enabled;
+      return policy_pref_enabled && user_opted_in;
     case AutofillAiAction::kIphForOptIn:
       // IPH should only show if the user has not opted in yet.
-      return !autofill_ai_enabled;
+      return policy_pref_enabled && !user_opted_in;
     case AutofillAiAction::kOptIn:
+      return policy_pref_enabled;
+    case autofill::AutofillAiAction::kListEntityInstancesInSettings:
       return true;
   }
   NOTREACHED();
 }
 
-// Checks whether all requirements for `IdentityManager` state are required.
+// Checks whether all requirements for `IdentityManager` state are
+// met.
 [[nodiscard]] bool SatisfiesAccountRequirements(
     const signin::IdentityManager* identity_manager,
     bool has_entity_data_saved,

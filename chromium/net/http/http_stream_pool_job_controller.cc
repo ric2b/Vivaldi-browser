@@ -11,6 +11,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
+#include "base/values.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_states.h"
 #include "net/base/net_error_details.h"
@@ -117,7 +119,8 @@ HttpStreamPool::JobController::JobController(
                                         origin_stream_key_,
                                         request_info,
                                         enable_alternative_services_)),
-      net_log_(request_info.factory_job_controller_net_log) {
+      net_log_(request_info.factory_job_controller_net_log),
+      created_time_(base::TimeTicks::Now()) {
   net_log_.BeginEvent(
       NetLogEventType::HTTP_STREAM_POOL_JOB_CONTROLLER_ALIVE, [&] {
         base::Value::Dict dict;
@@ -248,20 +251,12 @@ int HttpStreamPool::JobController::Preconnect(
 
   SpdySessionKey spdy_session_key =
       origin_stream_key_.CalculateSpdySessionKey();
-  bool had_spdy_session = spdy_session_pool()->HasAvailableSession(
-      spdy_session_key, /*enable_ip_based_pooling=*/true,
-      /*is_websocket=*/false);
   if (pool_->FindAvailableSpdySession(origin_stream_key_, spdy_session_key,
                                       /*enable_ip_based_pooling=*/true)) {
     net_log_.AddEvent(
         NetLogEventType::
             HTTP_STREAM_POOL_JOB_CONTROLLER_FOUND_EXISTING_SPDY_SESSION);
     return OK;
-  }
-  if (had_spdy_session) {
-    // We had a SPDY session but the server required HTTP/1.1. The session is
-    // going away right now.
-    return ERR_HTTP_1_1_REQUIRED;
   }
 
   Group& group = pool_->GetOrCreateGroup(origin_stream_key_, origin_quic_key_);
@@ -385,11 +380,10 @@ void HttpStreamPool::JobController::OnNeedsClientAuth(
 }
 
 void HttpStreamPool::JobController::OnPreconnectComplete(Job* job, int status) {
-  CHECK(!alternative_job_);
-  CHECK_EQ(origin_job_.get(), job);
-  CHECK(preconnect_callback_);
-  origin_job_.reset();
-  std::move(preconnect_callback_).Run(status);
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&JobController::ResetJobAndInvokePreconnectCallback,
+                     weak_ptr_factory_.GetWeakPtr(), job, status));
 }
 
 LoadState HttpStreamPool::JobController::GetLoadState() const {
@@ -431,6 +425,17 @@ void HttpStreamPool::JobController::SetPriority(RequestPriority priority) {
   if (alternative_job_) {
     alternative_job_->SetPriority(priority);
   }
+}
+
+base::Value::Dict HttpStreamPool::JobController::GetInfoAsValue() const {
+  base::Value::Dict dict;
+  dict.Set("origin_stream_key", origin_stream_key_.ToValue());
+  if (alternative_.has_value()) {
+    dict.Set("alternative_stream_key", alternative_->stream_key.ToValue());
+  }
+  base::TimeDelta elapsed = base::TimeTicks::Now() - created_time_;
+  dict.Set("elapsed_ms", static_cast<int>(elapsed.InMilliseconds()));
+  return dict;
 }
 
 QuicSessionPool* HttpStreamPool::JobController::quic_session_pool() {
@@ -515,6 +520,16 @@ void HttpStreamPool::JobController::CallOnCertificateError(
 void HttpStreamPool::JobController::CallOnNeedsClientAuth(
     SSLCertRequestInfo* cert_info) {
   delegate_->OnNeedsClientAuth(cert_info);
+}
+
+void HttpStreamPool::JobController::ResetJobAndInvokePreconnectCallback(
+    Job* job,
+    int status) {
+  CHECK(!alternative_job_);
+  CHECK_EQ(origin_job_.get(), job);
+  CHECK(preconnect_callback_);
+  origin_job_.reset();
+  std::move(preconnect_callback_).Run(status);
 }
 
 void HttpStreamPool::JobController::SetJobResult(Job* job, int status) {

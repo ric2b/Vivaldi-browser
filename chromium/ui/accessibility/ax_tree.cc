@@ -19,10 +19,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
+#include "base/memory/safety_checks.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/observer_list.h"
 #include "base/strings/strcat.h"
@@ -30,6 +30,7 @@
 #include "base/timer/elapsed_timer.h"
 #include "components/crash/core/common/crash_key.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
+#include "ui/accessibility/ax_bitset.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/ax_language_detection.h"
@@ -193,6 +194,48 @@ void CallIfAttributeValuesChanged(const std::vector<std::pair<K, V>>& old_pairs,
       }
       new_i++;
     }
+  }
+}
+
+template <typename EnumType, typename CallbackType>
+void CallIfAttributeValuesChanged(const ui::AXBitset<EnumType>& old_attributes,
+                                  const ui::AXBitset<EnumType>& new_attributes,
+                                  bool value_if_unset,
+                                  CallbackType callback) {
+  // `old_values` and `new_values` will contain:
+  //   - The actual T/F value for explicitly set attributes.
+  //   - '0' for attributes that were not set.
+  uint64_t old_values =
+      old_attributes.GetValues() & old_attributes.GetSetBits();
+  uint64_t new_values =
+      new_attributes.GetValues() & new_attributes.GetSetBits();
+
+  // If `value_if_unset` is true, it means any attribute *not* in `set_bits_`
+  // should be treated as having the value 'true'.
+  if (value_if_unset) {
+    old_values |= ~old_attributes.GetSetBits();
+    new_values |= ~new_attributes.GetSetBits();
+  }
+
+  // `changes` will have a '1' at each bit position where the old and new values
+  // differ.
+  uint64_t changes = old_values ^ new_values;
+  while (changes) {
+    // Get the index of the least significant '1' bit in `changes`.
+    // This is an attribute that has changed its effective value.
+    uint64_t index = std::countr_zero(changes);
+    uint64_t mask = 1ULL << index;
+
+    // Extract the effective old and new value for this specific attribute.
+    bool effective_old_value = static_cast<bool>(old_values & mask);
+    bool effective_new_value = static_cast<bool>(new_values & mask);
+
+    DCHECK_NE(effective_old_value, effective_new_value);
+    EnumType attr = static_cast<EnumType>(index);
+    callback(attr, effective_old_value, effective_new_value);
+
+    // Clear the processed differing bit from `changes` to find the next one.
+    changes &= changes - 1;
   }
 }
 
@@ -925,6 +968,10 @@ void AXTree::Destroy() {
   if (!root_)
     return;
 
+#if DCHECK_IS_ON()
+  is_destroyed_ = true;
+#endif
+
   std::set<AXNodeID> deleting_node_ids;
   RecursivelyNotifyNodeWillBeDeletedForTreeTeardown(*root_, deleting_node_ids);
 
@@ -1167,6 +1214,13 @@ const std::set<AXTreeID> AXTree::GetAllChildTreeIds() const {
 }
 
 bool AXTree::Unserialize(const AXTreeUpdate& update) {
+  // This function is known to be heap allocation heavy and performance
+  // critical. Extra memory safety checks can introduce regression
+  // (https://crbug.com/388873485) and these are disabled here.
+  // TODO(https://crbug.com/391797366): Optimize memory allocation patterns and
+  // remove this exclusion.
+  base::ScopedSafetyChecksExclusion scoped_unsafe;
+
 #if AX_FAIL_FAST_BUILD() && !defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
   for (const auto& new_data : update.nodes)
     CHECK(new_data.id != kInvalidAXNodeID)
@@ -1178,6 +1232,13 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
   }
 #endif  // AX_FAIL_FAST_BUILD()
 
+#if DCHECK_IS_ON()
+  ++unserialize_count_;
+  DCHECK(!is_destroyed_) << "Attempt to unserialize on a destroyed tree: #"
+                         << unserialize_count_ << " on "
+                         << update.ToString(true).substr(0, 1000);
+#endif
+
   event_data_ = std::make_unique<AXEvent>();
   event_data_->event_from = update.event_from;
   event_data_->event_from_action = update.event_from_action;
@@ -1186,9 +1247,20 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
 
   AXTreeUpdateState update_state(*this, update);
   const AXNodeID old_root_id = root_ ? root_->id() : kInvalidAXNodeID;
-  DCHECK(old_root_id != kInvalidAXNodeID || update.root_id != kInvalidAXNodeID)
-      << "Tree must have a valid root or update must have a valid root.";
-
+  if (old_root_id == kInvalidAXNodeID && update.root_id == kInvalidAXNodeID) {
+#if defined(FUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION)
+    return false;
+#elif DCHECK_IS_ON()
+    DCHECK(false)
+        << "Tree must have already a valid root or update must have a "
+           "valid root: update #"
+        << unserialize_count_ << " with update:\n"
+        << update.ToString(true).substr(0, 1000);
+#else
+    NOTREACHED() << "Tree must have already a valid root or update must have a "
+                    "valid root.";
+#endif
+  }
   // Accumulates the work that will be required to update the AXTree.
   // This allows us to notify observers of structure changes when the
   // tree is still in a stable and unchanged state.
@@ -1358,7 +1430,7 @@ bool AXTree::Unserialize(const AXTreeUpdate& update) {
     if (!root_) {
       ACCESSIBILITY_TREE_UNSERIALIZE_ERROR_HISTOGRAM(
           AXTreeUnserializeError::kNoRoot);
-      RecordError(update_state, "Tree has no root.", true);
+      RecordError(update_state, "Tree has no root.", false);
       return false;
     }
 
@@ -1570,6 +1642,13 @@ void AXTree::CheckTreeConsistency(const AXTreeUpdate& update) {
 
 AXTableInfo* AXTree::GetTableInfo(const AXNode* const_table_node) const {
   DCHECK(!GetTreeUpdateInProgressState());
+
+  DCHECK(const_table_node);
+  if (!const_table_node->IsTable() ||
+      const_table_node->IsInvisibleOrIgnored()) {
+    return nullptr;
+  }
+
   // Note: the const_casts are here because we want this function to be able
   // to be called from a const virtual function on AXNode. AXTableInfo is
   // computed on demand and cached, but that's an implementation detail
@@ -1577,7 +1656,6 @@ AXTableInfo* AXTree::GetTableInfo(const AXNode* const_table_node) const {
   AXNode* table_node = const_cast<AXNode*>(const_table_node);
   AXTree* tree = const_cast<AXTree*>(this);
 
-  DCHECK(table_node);
   const auto& cached = table_info_map_.find(table_node->id());
   if (cached != table_info_map_.end()) {
     // Get existing table info, and update if invalid because the
@@ -1595,8 +1673,7 @@ AXTableInfo* AXTree::GetTableInfo(const AXNode* const_table_node) const {
   }
 
   AXTableInfo* table_info = AXTableInfo::Create(tree, table_node);
-  if (!table_info)
-    return nullptr;
+  DCHECK(table_info);
 
   table_info_map_[table_node->id()] = base::WrapUnique<AXTableInfo>(table_info);
   return table_info;
@@ -2442,7 +2519,7 @@ void AXTree::DestroyNodeAndSubtree(AXNode* node,
   UpdateReverseRelations(node, *empty_data);
 
   auto iter = id_map_.find(id);
-  CHECK(iter != id_map_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != id_map_.end());
   std::unique_ptr<AXNode> node_to_delete = std::move(iter->second);
   id_map_.erase(iter);
   node = nullptr;
@@ -2515,30 +2592,18 @@ bool AXTree::CreateNewChildVector(
                                          child->id(), child->parent()->id(),
                                          node->id()));
         } else {
-          // --- Begin temporary change ---
-          // TODO(crbug.com/1156601, crbug.com/1402673) Revert this once we have
-          // the crash data we need (crrev.com/c/2892259) Diagnose strange
-          // errors:
-          // Node did not have a previous parent, but reparenting error
-          // triggered:
-          // * New parent = id=3 rootWebArea FOCUSABLE
-          // * Child = id=1 rootWebArea (0, 0)-(0, 0) busy=true
           std::ostringstream error;
-          error << "Node did not have a previous parent, but "
-                   "reparenting error triggered:"
+          error << "Invalid tree construction: a previous root or orphaned "
+                   "node is being reparented."
                 << "\n* root_will_be_created = "
                 << update_state->root_will_be_created
                 << "\n* pending_root_id = "
                 << (update_state->pending_root_id
                         ? *update_state->pending_root_id
                         : kInvalidAXNodeID)
-                << "\n* new parent = " << *node << "\n* Old parent = "
-                << (child->parent()
-                        ? child->parent()->data().ToString(/*verbose*/ false)
-                        : "-")
-                << "\n* child = " << *child;
+                << "\n* new parent = " << *node
+                << "\n* old root or orphaned child = " << *child;
           RecordError(*update_state, error.str(), /* fatal */ true);
-          // --- End temporary change ---
         }
         success = false;
         continue;

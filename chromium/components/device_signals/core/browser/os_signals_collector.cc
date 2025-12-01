@@ -91,16 +91,19 @@ void OsSignalsCollector::GetOsSignals(UserPermission permission,
   signal_response->windows_machine_domain =
       device_signals::GetWindowsMachineDomain();
   signal_response->windows_user_domain = device_signals::GetWindowsUserDomain();
-  signal_response->machine_guid = device_signals::GetMachineGuid();
 #endif  // BUILDFLAG(IS_WIN)
 
   // PII signals requires user consent
   if (permission == UserPermission::kGranted) {
     signal_response->display_name = policy::GetDeviceName();
     signal_response->hostname = device_signals::GetHostName();
+#if BUILDFLAG(IS_WIN)
+    signal_response->machine_guid = device_signals::GetMachineGuid();
+#endif  // BUILDFLAG(IS_WIN)
   }
 
-  signal_response->device_enrollment_domain = TryGetEnrollmentDomain();
+  signal_response->device_enrollment_domain =
+      device_signals::TryGetEnrollmentDomain(device_cloud_policy_manager_);
 
   base::SysInfo::GetHardwareInfo(base::BindOnce(
       &OsSignalsCollector::OnHardwareInfoRetrieved, weak_factory_.GetWeakPtr(),
@@ -133,21 +136,6 @@ void OsSignalsCollector::OnHardwareInfoRetrieved(
       FROM_HERE, {base::MayBlock()}, std::move(add_async_os_signals_callback),
       std::move(on_signals_collected_callback));
 #endif
-}
-
-std::optional<std::string> OsSignalsCollector::TryGetEnrollmentDomain() {
-  policy::CloudPolicyStore* store = nullptr;
-  if (device_cloud_policy_manager_ && device_cloud_policy_manager_->core() &&
-      device_cloud_policy_manager_->core()->store()) {
-    store = device_cloud_policy_manager_->core()->store();
-  }
-
-  if (store && store->has_policy()) {
-    const auto* policy = store->policy();
-    return policy->has_managed_by() ? policy->managed_by()
-                                    : policy->display_domain();
-  }
-  return std::nullopt;
 }
 
 }  // namespace device_signals

@@ -140,15 +140,7 @@ inline void AddWebsiteException(
 }
 
 bool AreSafeSitesConfigured(const FamilyLinkSettingsState::Services& services) {
-  if (!IsSafeSitesEnabled(services.pref_service.get())) {
-    return false;
-  }
-
-  SupervisedUserURLFilter* url_filter =
-      services.supervised_user_service->GetURLFilter();
-  CHECK(url_filter);
-
-  return url_filter->GetDefaultFilteringBehavior() == FilteringBehavior::kAllow;
+  return IsSafeSitesEnabled(services.pref_service.get());
 }
 
 bool IsUrlConfigured(SupervisedUserURLFilter& url_filter,
@@ -204,7 +196,10 @@ bool UrlFiltersAreConfigured(const FamilyLinkSettingsState::Services& services,
 }
 
 bool UrlFiltersAreEmpty(const FamilyLinkSettingsState::Services& services) {
-  return services.supervised_user_service->GetURLFilter()->IsManualHostsEmpty();
+  return services.supervised_user_service->GetURLFilter()
+             ->GetFilteringStatistics()
+             .GetManagedSiteList() ==
+         SupervisedUserURLFilter::ManagedSiteList::kEmpty;
 }
 
 bool ToggleHasExpectedValue(const FamilyLinkSettingsState::Services& services,

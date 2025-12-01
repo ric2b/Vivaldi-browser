@@ -250,6 +250,7 @@ class CONTENT_EXPORT RenderFrameImpl
       base::optional_ref<const blink::FrameToken> parent_frame_token,
       base::optional_ref<const blink::FrameToken> previous_sibling_frame_token,
       const base::UnguessableToken& devtools_frame_token,
+      const std::optional<base::UnguessableToken>& navigation_metrics_token,
       blink::mojom::TreeScopeType tree_scope_type,
       blink::mojom::FrameReplicationStatePtr replicated_state,
       mojom::CreateFrameWidgetParamsPtr widget_params,
@@ -538,10 +539,9 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<media::SpeechRecognitionClient>
   CreateSpeechRecognitionClient() override;
 #endif
-  scoped_refptr<blink::WebWorkerFetchContext> CreateWorkerFetchContext()
+  scoped_refptr<blink::WebWorkerFetchContext> CreateWorkletFetchContext()
       override;
-  scoped_refptr<blink::WebWorkerFetchContext>
-  CreateWorkerFetchContextForPlzDedicatedWorker(
+  scoped_refptr<blink::WebWorkerFetchContext> CreateWorkerFetchContext(
       blink::WebDedicatedWorkerHostFactoryClient* factory_client) override;
   std::unique_ptr<blink::WebPrescientNetworking> CreatePrescientNetworking()
       override;
@@ -1344,11 +1344,6 @@ class CONTENT_EXPORT RenderFrameImpl
 
   mojo::Remote<blink::mojom::RendererAudioInputStreamFactory>
       audio_input_stream_factory_;
-
-  // This interface handles generated code cache requests both to fetch code
-  // cache when loading resources and to store code caches when code caches are
-  // generated during the JS / Wasm script execution.
-  mojo::Remote<blink::mojom::CodeCacheHost> code_cache_host_;
 
   // The media permission dispatcher attached to this frame.
   std::unique_ptr<MediaPermissionDispatcher> media_permission_dispatcher_;

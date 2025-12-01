@@ -243,12 +243,9 @@ Event.prototype.consume = function(preventDefault?: boolean): void {
   this.handled = true;
 };
 
-Node.prototype.deepTextContent = function(): string {
-  return this.childTextNodes()
-      .map(function(node) {
-        return node.textContent;
-      })
-      .join('');
+Node.prototype.deepTextContent = function(normalizeWhitespace = false): string {
+  const text = this.childTextNodes().map(node => node.textContent).join('');
+  return normalizeWhitespace ? text.replace(/\s+/g, ' ') : text;
 };
 
 Node.prototype.childTextNodes = function(): Node[] {
@@ -262,6 +259,41 @@ Node.prototype.childTextNodes = function(): Node[] {
     node = node.traverseNextTextNode(this);
   }
   return result;
+};
+
+function innerTextDescendants(node: Node): Node[] {
+  if (![Node.ELEMENT_NODE, Node.TEXT_NODE].includes(node.nodeType) || ['SCRIPT', 'STYLE'].includes(node.nodeName)) {
+    return [];
+  }
+  if (!(node instanceof HTMLElement)) {
+    return [node];
+  }
+  if (node instanceof HTMLSlotElement) {
+    return [...node.assignedNodes()].flatMap(innerTextDescendants);
+  }
+  if (node.shadowRoot) {
+    return [...node.shadowRoot.childNodes].flatMap(innerTextDescendants);
+  }
+  const result: Node[] = [];
+  let expanded = false;
+  for (const child of node.childNodes) {
+    const childResult = innerTextDescendants(child);
+    if (childResult.length > 1 || childResult.length === 1 && childResult[0] !== child) {
+      expanded = true;
+    }
+    result.push(...childResult);
+  }
+  if (!expanded) {
+    return [node];
+  }
+  return result;
+}
+
+Node.prototype.deepInnerText = function(): string {
+  return innerTextDescendants(this)
+      .map(n => n instanceof HTMLElement ? n.innerText : n.textContent.trim())
+      .filter(Boolean)
+      .join('\n');
 };
 
 Node.prototype.isAncestor = function(node: Node|null): boolean {

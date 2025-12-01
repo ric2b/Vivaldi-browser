@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {ActInFocusedTabParams, ActInFocusedTabResult, AnnotatedPageData, ChromeVersion, CreateTabOptions, DraggableArea, FocusedTabData, GlicBrowserHost, GlicBrowserHostMetrics, GlicHostRegistry, GlicWebClient, ObservableValue, OpenPanelInfo, OpenSettingsOptions, PanelOpeningData, PanelState, PdfDocumentData, ResizeWindowOptions, Screenshot, ScrollToParams, TabContextOptions, TabContextResult, TabData, UserProfileInfo} from '../glic_api/glic_api.js';
+import type {ActInFocusedTabParams, ActInFocusedTabResult, AnnotatedPageData, ChromeVersion, CreateTabOptions, DraggableArea, FocusedTabData, GlicBrowserHost, GlicBrowserHostMetrics, GlicHostRegistry, GlicWebClient, ObservableValue, OpenPanelInfo, OpenSettingsOptions, PanelOpeningData, PanelState, PdfDocumentData, ResizeWindowOptions, Screenshot, ScrollToParams, TabContextOptions, TabContextResult, TabData, UserProfileInfo, ZeroStateSuggestions} from '../glic_api/glic_api.js';
 import {ObservableValue as ObservableValueImpl} from '../observable.js';
 
 import {replaceProperties} from './conversions.js';
@@ -81,7 +81,7 @@ class WebClientMessageHandler implements WebClientMessageHandlerInterface {
   }
 
   glicWebClientPanelStateChanged(payload: {panelState: PanelState}): void {
-    this.host.getPanelState().assignAndSignal(payload.panelState);
+    this.host.getPanelState?.().assignAndSignal(payload.panelState);
   }
 
   glicWebClientCanAttachStateChanged(payload: {canAttach: boolean}): void {
@@ -110,6 +110,12 @@ class WebClientMessageHandler implements WebClientMessageHandlerInterface {
     enabled: boolean,
   }) {
     this.host.getOsLocationPermissionState().assignAndSignal(payload.enabled);
+  }
+
+  glicWebClientNotifyClosedCaptioningSettingChanged(payload: {
+    enabled: boolean,
+  }) {
+    this.host.closedCaptioningState.assignAndSignal(payload.enabled);
   }
 
   glicWebClientNotifyFocusedTabChanged(payload: {
@@ -163,6 +169,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
       ObservableValueImpl.withNoValue<boolean>();
   private permissionStateOsLocation =
       ObservableValueImpl.withNoValue<boolean>();
+  closedCaptioningState = ObservableValueImpl.withNoValue<boolean>();
   private osHotkeyState = ObservableValueImpl.withNoValue<{hotkey: string}>();
   panelActiveValue = ObservableValueImpl.withNoValue<boolean>();
   isBrowserOpenValue = ObservableValueImpl.withNoValue<boolean>();
@@ -222,28 +229,35 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     this.isBrowserOpenValue.assignAndSignal(state.browserIsOpen);
     this.osHotkeyState.assignAndSignal({hotkey: state.hotkey});
     this.fitWindow = state.fitWindow;
+    this.closedCaptioningState.assignAndSignal(
+        state.closedCaptioningSettingEnabled);
 
-    if (!state.scrollToEnabled) {
-      (this as GlicBrowserHost).scrollTo = undefined;
+    if (!state.enableScrollTo) {
+      this.scrollTo = undefined;
+      this.dropScrollToHighlight = undefined;
     }
 
-    if (!state.actInFocusedTabEnabled) {
-      (this as GlicBrowserHost).actInFocusedTab = undefined;
-    }
-
-    if (!state.dragResizeEnabled) {
-      (this as GlicBrowserHost).enableDragResize = undefined;
-    }
-
-    if (!state.openOsSettingsApiIsAllowed) {
-      (this as GlicBrowserHost).openOsPermissionSettingsMenu = undefined;
+    if (!state.enableActInFocusedTab) {
+      this.actInFocusedTab = undefined;
+      this.stopActorTask = undefined;
+      this.pauseActorTask = undefined;
+      this.resumeActorTask = undefined;
     }
 
     if (state.alwaysDetachedMode) {
-      (this as GlicBrowserHost).attachPanel = undefined;
-      (this as GlicBrowserHost).detachPanel = undefined;
-      (this as GlicBrowserHost).canAttachPanel = undefined;
-      (this as GlicBrowserHost).getPanelState = undefined;
+      this.attachPanel = undefined;
+      this.detachPanel = undefined;
+      this.canAttachPanel = undefined;
+      this.getPanelState = undefined;
+    }
+
+    if (!state.enableZeroStateSuggestions) {
+      this.getZeroStateSuggestionsForFocusedTab = undefined;
+    }
+
+    if (!state.enableClosedCaptioningFeature) {
+      this.getClosedCaptioningSetting = undefined;
+      this.setClosedCaptioningSetting = undefined;
     }
   }
 
@@ -301,11 +315,16 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     return this.sender.requestWithResponse('glicBrowserClosePanel', undefined);
   }
 
-  attachPanel(): void {
+  closePanelAndShutdown(): void {
+    this.sender.requestNoResponse(
+        'glicBrowserClosePanelAndShutdown', undefined);
+  }
+
+  attachPanel?(): void {
     this.sender.requestNoResponse('glicBrowserAttachPanel', undefined);
   }
 
-  detachPanel(): void {
+  detachPanel?(): void {
     this.sender.requestNoResponse('glicBrowserDetachPanel', undefined);
   }
 
@@ -320,13 +339,28 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     return convertTabContextResultFromPrivate(context.tabContextResult);
   }
 
-  async actInFocusedTab(
-      actInFocusedTabParams: ActInFocusedTabParams):
+  async actInFocusedTab?(actInFocusedTabParams: ActInFocusedTabParams):
       Promise<ActInFocusedTabResult> {
     const context = await this.sender.requestWithResponse(
         'glicBrowserActInFocusedTab', {actInFocusedTabParams});
     return convertActInFocusedTabResultFromPrivate(
         context.actInFocusedTabResult);
+  }
+
+  stopActorTask?(taskId?: number): void {
+    this.sender.requestNoResponse(
+        'glicBrowserStopActorTask', {taskId: taskId ?? 0});
+  }
+
+  pauseActorTask?(taskId: number): void {
+    this.sender.requestNoResponse('glicBrowserPauseActorTask', {taskId});
+  }
+
+  async resumeActorTask?(taskId: number, tabContextOptions: TabContextOptions):
+      Promise<TabContextResult> {
+    const response = await this.sender.requestWithResponse(
+        'glicBrowserResumeActorTask', {taskId, tabContextOptions});
+    return convertTabContextResultFromPrivate(response.tabContextResult);
   }
 
   async resizeWindow(
@@ -336,7 +370,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
         'glicBrowserResizeWindow', {size: {width, height}, options});
   }
 
-  enableDragResize(enabled: boolean): Promise<void> {
+  enableDragResize?(enabled: boolean): Promise<void> {
     return this.sender.requestWithResponse(
         'glicBrowserEnableDragResize', {enabled});
   }
@@ -357,7 +391,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
         'glicBrowserSetMinimumWidgetSize', {size: {width, height}});
   }
 
-  getPanelState(): ObservableValueImpl<PanelState> {
+  getPanelState?(): ObservableValueImpl<PanelState> {
     return this.panelState;
   }
 
@@ -365,7 +399,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     return this.panelActiveValue;
   }
 
-  canAttachPanel(): ObservableValue<boolean> {
+  canAttachPanel?(): ObservableValue<boolean> {
     return this.canAttachPanelValue;
   }
 
@@ -397,6 +431,10 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     return this.permissionStateOsLocation;
   }
 
+  getClosedCaptioningSetting?(): ObservableValueImpl<boolean> {
+    return this.closedCaptioningState;
+  }
+
   setMicrophonePermissionState(enabled: boolean): Promise<void> {
     return this.sender.requestWithResponse(
         'glicBrowserSetMicrophonePermissionState', {enabled});
@@ -410,6 +448,11 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
   setTabContextPermissionState(enabled: boolean): Promise<void> {
     return this.sender.requestWithResponse(
         'glicBrowserSetTabContextPermissionState', {enabled});
+  }
+
+  setClosedCaptioningSetting?(enabled: boolean): Promise<void> {
+    return this.sender.requestWithResponse(
+        'glicBrowserSetClosedCaptioningSetting', {enabled});
   }
 
   setContextAccessIndicator(show: boolean): void {
@@ -445,7 +488,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
     return this.metrics;
   }
 
-  scrollTo(params: ScrollToParams): Promise<void> {
+  scrollTo?(params: ScrollToParams): Promise<void> {
     return this.sender.requestWithResponse('glicBrowserScrollTo', {params});
   }
 
@@ -454,7 +497,7 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
         'glicBrowserSetSyntheticExperimentState', {trialName, groupName});
   }
 
-  openOsPermissionSettingsMenu(permission: string): void {
+  openOsPermissionSettingsMenu?(permission: string): void {
     this.sender.requestNoResponse(
         'glicBrowserOpenOsPermissionSettingsMenu', {permission});
   }
@@ -471,6 +514,25 @@ class GlicBrowserHostImpl implements GlicBrowserHost {
 
   getOsHotkeyState(): ObservableValueImpl<{hotkey: string}> {
     return this.osHotkeyState;
+  }
+
+  async getZeroStateSuggestionsForFocusedTab?
+      (isFirstRun?: boolean): Promise<ZeroStateSuggestions> {
+    const zeroStateResult = await this.sender.requestWithResponse(
+        'glicBrowserGetZeroStateSuggestionsForFocusedTab', {isFirstRun});
+    if (!zeroStateResult.suggestions) {
+      return {
+        suggestions: [],
+        tabId: '',
+        url: '',
+      };
+    }
+    return zeroStateResult.suggestions;
+  }
+
+  dropScrollToHighlight?(): void {
+    this.sender.requestWithResponse(
+        'glicBrowserDropScrollToHighlight', undefined);
   }
 }
 

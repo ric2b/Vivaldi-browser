@@ -3,7 +3,8 @@
 // found in the LICENSE file.
 
 import type * as Common from '../../../core/common/common.js';
-import type * as Host from '../../../core/host/host.js';
+import * as Host from '../../../core/host/host.js';
+import * as Platform from '../../../core/platform/platform.js';
 import * as TimelineUtils from '../../../panels/timeline/utils/utils.js';
 import {mockAidaClient} from '../../../testing/AiAssistanceHelpers.js';
 import {describeWithEnvironment} from '../../../testing/EnvironmentHelpers.js';
@@ -37,9 +38,21 @@ const FAKE_INP_MODEL = {
   state: 'fail',
   frameId: '123',
 } as const;
-const FAKE_PARSED_TRACE = {} as unknown as Trace.Handlers.Types.ParsedTrace;
+const FAKE_PARSED_TRACE = {
+  Meta: {traceBounds: {min: 0, max: 10}},
+} as unknown as Trace.Handlers.Types.ParsedTrace;
 
 describeWithEnvironment('PerformanceInsightsAgent', () => {
+  it('uses the min and max bounds of the trace as the origin', async function() {
+    const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-images.json.gz');
+    assert.isOk(insights);
+    const [firstNav] = parsedTrace.Meta.mainFrameNavigations;
+    const lcpPhases = getInsightOrError('LCPPhases', insights, firstNav);
+    const activeInsight = new TimelineUtils.InsightAIContext.ActiveInsight(lcpPhases, parsedTrace);
+    const context = new InsightContext(activeInsight);
+    assert.strictEqual(context.getOrigin(), 'trace-658799706428-658804825864');
+  });
+
   it('outputs the right title for the selected insight', async () => {
     const mockInsight = new TimelineUtils.InsightAIContext.ActiveInsight(FAKE_LCP_MODEL, FAKE_PARSED_TRACE);
     const context = new InsightContext(mockInsight);
@@ -148,7 +161,7 @@ code
       const finalQuery = await agent.enhanceQuery('What is this?', context);
       const expected = `${extraContext}
 
-# User request:
+# User question for you to answer:
 What is this?`;
 
       assert.strictEqual(finalQuery, expected);
@@ -164,7 +177,7 @@ What is this?`;
 
       await agent.enhanceQuery('What is this?', context);
       const finalQuery = await agent.enhanceQuery('Help me understand?', context);
-      const expected = `# User request:
+      const expected = `# User question for you to answer:
 Help me understand?`;
 
       assert.strictEqual(finalQuery, expected);
@@ -188,7 +201,8 @@ Help me understand?`;
   });
 
   describe('function calls', () => {
-    it('calls getNetworkActivitySummary', async function() {
+    it('calls getNetworkActivitySummary and logs the response bytes size', async function() {
+      const metricsSpy = sinon.spy(Host.userMetrics, 'performanceAINetworkSummaryResponseSize');
       const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-images.json.gz');
       assert.isOk(insights);
       const [firstNav] = parsedTrace.Meta.mainFrameNavigations;
@@ -220,6 +234,10 @@ Help me understand?`;
 
       const expectedRequestsOutput =
           requests.map(r => TraceEventFormatter.networkRequest(r, parsedTrace, {verbose: false}));
+
+      const expectedBytesSize = Platform.StringUtilities.countWtf8Bytes(expectedRequestsOutput.join('\n'));
+      sinon.assert.calledWith(metricsSpy, expectedBytesSize);
+
       const expectedOutput = JSON.stringify({requests: expectedRequestsOutput});
       const titleResponse = responses.find(response => response.type === ResponseType.TITLE);
       assert.exists(titleResponse);
@@ -299,6 +317,132 @@ Help me understand?`;
         code: 'getMainThreadActivity()',
         canceled: false
       });
+    });
+
+    it('caches getNetworkActivitySummary calls and passes them to future requests as facts', async function() {
+      const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-images.json.gz');
+      assert.isOk(insights);
+      const [firstNav] = parsedTrace.Meta.mainFrameNavigations;
+      const lcpPhases = getInsightOrError('LCPPhases', insights, firstNav);
+      const agent = new PerformanceInsightsAgent({
+        aidaClient: mockAidaClient([
+          [{explanation: '', functionCalls: [{name: 'getNetworkActivitySummary', args: {}}]}], [{explanation: 'done'}]
+        ])
+      });
+      const activeInsight = new TimelineUtils.InsightAIContext.ActiveInsight(lcpPhases, parsedTrace);
+      const context = new InsightContext(activeInsight);
+
+      // Make the first query to trigger the getNetworkActivitySummary function
+      const responses = await Array.fromAsync(agent.run('test', {selected: context}));
+      const action = responses.find(response => response.type === ResponseType.ACTION);
+      assert.exists(action);
+      assert.strictEqual(action.code, 'getNetworkActivitySummary()');
+
+      // Trigger another request so that the agent populates the facts.
+      await Array.fromAsync(agent.run('test 2', {selected: context}));
+
+      assert.strictEqual(agent.currentFacts().size, 1);
+      const networkSummaryFact = Array.from(agent.currentFacts()).at(0);
+      assert.exists(networkSummaryFact);
+
+      const expectedRequestUrls = [
+        'https://chromedevtools.github.io/performance-stories/lcp-large-image/index.html',
+        'https://fonts.googleapis.com/css2?family=Poppins:ital,wght@1,800',
+        'https://chromedevtools.github.io/performance-stories/lcp-large-image/app.css',
+        'https://via.placeholder.com/50.jpg', 'https://via.placeholder.com/2000.jpg'
+      ];
+      // Ensure that each URL was in the fact as a way to validate the fact is accurate.
+      assert.isTrue(expectedRequestUrls.every(url => {
+        return networkSummaryFact.text.includes(url);
+      }));
+
+      // Now we make one more request; we do this to ensure that we don't add the same fact again.
+      await Array.fromAsync(agent.run('test 3', {selected: context}));
+
+      assert.strictEqual(agent.currentFacts().size, 1);
+    });
+
+    it('caches getMainThreadActivity calls and passes them to future requests as facts', async function() {
+      const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-discovery-delay.json.gz');
+      assert.isOk(insights);
+      const [firstNav] = parsedTrace.Meta.mainFrameNavigations;
+      const lcpPhases = getInsightOrError('LCPPhases', insights, firstNav);
+      const agent = new PerformanceInsightsAgent({
+        aidaClient: mockAidaClient(
+            [[{explanation: '', functionCalls: [{name: 'getMainThreadActivity', args: {}}]}], [{explanation: 'done'}]])
+      });
+      const activeInsight = new TimelineUtils.InsightAIContext.ActiveInsight(lcpPhases, parsedTrace);
+      const context = new InsightContext(activeInsight);
+
+      // Make the first query to trigger the getMainThreadActivity function
+      const responses = await Array.fromAsync(agent.run('test', {selected: context}));
+      const action = responses.find(response => response.type === ResponseType.ACTION);
+      assert.exists(action);
+      assert.strictEqual(action.code, 'getMainThreadActivity()');
+
+      // Trigger another request so that the agent populates the facts.
+      await Array.fromAsync(agent.run('test 2', {selected: context}));
+
+      assert.strictEqual(agent.currentFacts().size, 1);
+      const mainThreadActivityFact = Array.from(agent.currentFacts()).at(0);
+      assert.exists(mainThreadActivityFact);
+
+      const expectedTree = TimelineUtils.InsightAIContext.AIQueries.mainThreadActivity(lcpPhases, parsedTrace);
+      assert.isOk(expectedTree);
+      assert.include(mainThreadActivityFact.text, expectedTree.serialize());
+
+      // Now we make one more request; we do this to ensure that we don't add the same fact again.
+      await Array.fromAsync(agent.run('test 3', {selected: context}));
+
+      assert.strictEqual(agent.currentFacts().size, 1);
+    });
+
+    it('will not send facts from a previous insight if the context changes', async function() {
+      const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-discovery-delay.json.gz');
+      assert.isOk(insights);
+      const [firstNav] = parsedTrace.Meta.mainFrameNavigations;
+      const lcpPhases = getInsightOrError('LCPPhases', insights, firstNav);
+      const renderBlocking = getInsightOrError('RenderBlocking', insights, firstNav);
+      const agent = new PerformanceInsightsAgent({
+        aidaClient: mockAidaClient([
+          [{explanation: '', functionCalls: [{name: 'getMainThreadActivity', args: {}}]}],
+        ])
+      });
+      const lcpPhasesActiveInsight = new TimelineUtils.InsightAIContext.ActiveInsight(lcpPhases, parsedTrace);
+      const lcpContext = new InsightContext(lcpPhasesActiveInsight);
+      const renderBlockingActiveInsight = new TimelineUtils.InsightAIContext.ActiveInsight(renderBlocking, parsedTrace);
+      const renderBlockingContext = new InsightContext(renderBlockingActiveInsight);
+
+      // Populate the function calls for the LCP Context
+      await Array.fromAsync(agent.run('test 1 LCP', {selected: lcpContext}));
+      await Array.fromAsync(agent.run('test 2 LCP', {selected: lcpContext}));
+      assert.strictEqual(agent.currentFacts().size, 1);
+      // Now change the context and send a request.
+      await Array.fromAsync(agent.run('test 1 RenderBlocking', {selected: renderBlockingContext}));
+      // Because the context changed, we should now not have any facts.
+      assert.strictEqual(agent.currentFacts().size, 0);
+    });
+
+    it('will send multiple facts', async function() {
+      const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'lcp-discovery-delay.json.gz');
+      assert.isOk(insights);
+      const [firstNav] = parsedTrace.Meta.mainFrameNavigations;
+      const lcpPhases = getInsightOrError('LCPPhases', insights, firstNav);
+      const agent = new PerformanceInsightsAgent({
+        aidaClient: mockAidaClient([
+          [{explanation: '', functionCalls: [{name: 'getMainThreadActivity', args: {}}]}],
+          [{explanation: '', functionCalls: [{name: 'getNetworkActivitySummary', args: {}}]}], [{explanation: 'done'}]
+        ])
+      });
+      const activeInsight = new TimelineUtils.InsightAIContext.ActiveInsight(lcpPhases, parsedTrace);
+      const context = new InsightContext(activeInsight);
+      // First query to populate the function calls
+      await Array.fromAsync(agent.run('test 1', {selected: context}));
+      // Second query should have two facts
+      await Array.fromAsync(agent.run('test 2', {selected: context}));
+      assert.deepEqual(Array.from(agent.currentFacts(), fact => {
+        return fact.metadata.source;
+      }), ['getMainThreadActivity()', 'getNetworkActivitySummary()']);
     });
   });
 });

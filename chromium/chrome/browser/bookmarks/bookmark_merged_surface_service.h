@@ -15,12 +15,12 @@
 #include "chrome/browser/bookmarks/bookmark_merged_surface_service_observer.h"
 #include "chrome/browser/bookmarks/bookmark_parent_folder.h"
 #include "chrome/browser/bookmarks/bookmark_parent_folder_children.h"
+#include "chrome/browser/bookmarks/permanent_folder_ordering_tracker.h"
 #include "components/bookmarks/browser/bookmark_model_observer.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 #include "components/bookmarks/browser/bookmark_node_data.h"
 #include "components/keyed_service/core/keyed_service.h"
 
-class PermanentFolderOrderingTracker;
 class Browser;
 
 namespace base {
@@ -37,8 +37,10 @@ class ManagedBookmarkService;
 // It maintains the order between local and account bookmark children
 // nodes of permanent bookmark nodes.
 // Merged UI surfaces should use this class for bookmark operations.
-class BookmarkMergedSurfaceService : public KeyedService,
-                                     public bookmarks::BookmarkModelObserver {
+class BookmarkMergedSurfaceService
+    : public KeyedService,
+      public bookmarks::BookmarkModelObserver,
+      public PermanentFolderOrderingTracker::Delegate {
  public:
   // `model` must not be null and must outlive this object.
   // `managed_bookmark_service` may be null.
@@ -93,6 +95,14 @@ class BookmarkMergedSurfaceService : public KeyedService,
   const bookmarks::BookmarkNode* GetDefaultParentForNewNodes(
       const BookmarkParentFolder& folder) const;
 
+  // Returns the node encapuslated in `managed_folder`.
+  // The bookmark model must be loaded prior to calling this function.
+  // Note: `managed_folder` should be a managed folder. This function should
+  // only be used to determine the parent of existing managed nodes in a merged
+  // surfaces, and not for adding new nodes.
+  const bookmarks::BookmarkNode* GetParentForManagedNode(
+      const BookmarkParentFolder& managed_folder) const;
+
   // Moves `node` to `new_parent` at position `index`.
   // If `BookmarkParentFolder` is a permanent bookmark folder:
   // - `index` is expected to be the position across storages.
@@ -131,6 +141,10 @@ class BookmarkMergedSurfaceService : public KeyedService,
   bool IsNodeManaged(const bookmarks::BookmarkNode* node) const;
 
   bookmarks::BookmarkModel* bookmark_model() { return model_; }
+  const bookmarks::BookmarkModel* bookmark_model() const { return model_; }
+  const bookmarks::ManagedBookmarkService* managed_bookmark_service() const {
+    return managed_bookmark_service_;
+  }
 
   // Must be called for trackers to be initialized.
   // `BookmarkModel` also must complete loading for this to complete loading.
@@ -174,6 +188,9 @@ class BookmarkMergedSurfaceService : public KeyedService,
   void BookmarkAllUserNodesRemoved(const std::set<GURL>& removed_urls,
                                    const base::Location& location) override;
 
+  // PermanentFolderOrderingTracker::Delegate:
+  void TrackedOrderingChanged() override;
+
  private:
   class BookmarkModelLoadedObserver;
 
@@ -216,6 +233,8 @@ class BookmarkMergedSurfaceService : public KeyedService,
   // `ids_reassigned`. The full observer must be added after permanent folder
   // trackers are initialized.
   std::unique_ptr<BookmarkModelLoadedObserver> model_loaded_observer_;
+
+  std::unique_ptr<BookmarkMergedSurfaceOrderingStorage> storage_;
 
   ShowMoveStorageDialogCallback show_move_storage_dialog_for_testing_;
 

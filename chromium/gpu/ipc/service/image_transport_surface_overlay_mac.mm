@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <sstream>
+#include <utility>
 #include <variant>
 
 #include "base/command_line.h"
@@ -32,6 +33,14 @@
 #include "gpu/ipc/common/ios/be_layer_hierarchy_transport.h"
 #endif
 
+#if BUILDFLAG(SKIA_USE_DAWN)
+#include "gpu/command_buffer/service/dawn_context_provider.h"
+#endif
+
+#if BUILDFLAG(SKIA_USE_METAL)
+#include "components/viz/common/gpu/metal_context_provider.h"
+#endif
+
 // From ANGLE's EGL/eglext_angle.h. This should be included instead of being
 // redefined here.
 #ifndef EGL_ANGLE_device_metal
@@ -52,9 +61,6 @@ BASE_FEATURE(kAVFoundationOverlays,
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_MAC)
-BASE_FEATURE(kPresentationDelayForInteractiveFrames,
-             "PresentationDelayForInteractiveFrames",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Record the delay from the system CVDisplayLink or CADisplaylink source to
 // CrGpuMain OnVSyncPresentation().
@@ -64,56 +70,44 @@ void RecordVSyncCallbackDelay(base::TimeDelta delay) {
       /*min=*/base::Microseconds(10),
       /*max=*/base::Milliseconds(33), /*bucket_count=*/50);
 }
-
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-//
-// LINT.IfChange(AnimationOrInteractionType)
-enum class AnimationOrInteractionType {
-  kNone = 0,
-  kInteractionOnly = 1,
-  kAnimationOnly = 2,
-  kAnimationAndInteraction = 3,
-  kMaxValue = kAnimationAndInteraction,
-};
-// LINT.ThenChange(//tools/metrics/histograms/enums.xml:FrameHandlingType)
-
-void RecordFrameTypes(bool is_handling_interaction,
-                      bool is_handling_animation,
-                      bool has_prev_pending_frame) {
-  AnimationOrInteractionType type;
-  if (is_handling_interaction && is_handling_animation) {
-    type = AnimationOrInteractionType::kAnimationAndInteraction;
-  } else if (is_handling_interaction) {
-    type = AnimationOrInteractionType::kInteractionOnly;
-  } else if (is_handling_animation) {
-    type = AnimationOrInteractionType::kAnimationOnly;
-  } else {
-    type = AnimationOrInteractionType::kNone;
-  }
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "GPU.Presentation.FrameHandlesAnimationOrInteraction", type);
-
-  // Although the current frame is free of interation and animation, the pending
-  // frame blocks the current frame from being swapped immediately when
-  // VSyncAlignedPresent and kPresentationDelayForInteractiveFrames are enabled.
-  // Note: |num_pending_frames| is always 0 when VSyncAlignedPresent is
-  // disabled.
-  if (type == AnimationOrInteractionType::kNone) {
-    UMA_HISTOGRAM_BOOLEAN(
-        "GPU.Presentation.NonAnimatedOrInteractiveFrameWithPendingFrame",
-        has_prev_pending_frame);
-  }
-}
 #endif  // BUILDFLAG(IS_MAC)
+
+id<MTLDevice> GetMTLDevice(scoped_refptr<SharedContextState> context_state) {
+#if BUILDFLAG(SKIA_USE_DAWN)
+  if (context_state->IsGraphiteDawnMetal()) {
+    CHECK(context_state->dawn_context_provider());
+    return dawn::native::metal::GetMTLDevice(
+        context_state->dawn_context_provider()->GetDevice().Get());
+  }
+#endif
+#if BUILDFLAG(SKIA_USE_METAL)
+  if (context_state->IsGraphiteMetal()) {
+    CHECK(context_state->metal_context_provider());
+    return context_state->metal_context_provider()->GetMTLDevice();
+  }
+#endif
+  if (context_state->GrContextIsGL()) {
+    EGLAttrib angle_device_attrib = 0;
+    if (eglQueryDisplayAttribEXT(context_state->display()->GetDisplay(),
+                                 EGL_DEVICE_EXT, &angle_device_attrib)) {
+      EGLDeviceEXT angle_device =
+          reinterpret_cast<EGLDeviceEXT>(angle_device_attrib);
+      EGLAttrib metal_device_attrib = 0;
+      if (eglQueryDeviceAttribEXT(angle_device, EGL_METAL_DEVICE_ANGLE,
+                                  &metal_device_attrib)) {
+        return (__bridge id)(void*)metal_device_attrib;
+      }
+    }
+  }
+  return nil;
+}
 
 }  // namespace
 
 ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
-    SurfaceHandle surface_handle,
-    DawnContextProvider* dawn_context_provider)
-    : dawn_context_provider_(dawn_context_provider), weak_ptr_factory_(this) {
+    scoped_refptr<SharedContextState> context_state,
+    SurfaceHandle surface_handle)
+    : weak_ptr_factory_(this) {
   static bool av_disabled_at_command_line =
       !base::FeatureList::IsEnabled(kAVFoundationOverlays);
 
@@ -122,7 +116,8 @@ ImageTransportSurfaceOverlayMacEGL::ImageTransportSurfaceOverlayMacEGL(
                           weak_ptr_factory_.GetWeakPtr());
 
   ca_layer_tree_coordinator_ = std::make_unique<ui::CALayerTreeCoordinator>(
-      !av_disabled_at_command_line, std::move(buffer_presented_callback));
+      !av_disabled_at_command_line, std::move(buffer_presented_callback),
+      GetMTLDevice(std::move(context_state)));
 
 #if BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_TVOS)
   // The BELayerHierarchy needs to be created on a thread that supports
@@ -148,9 +143,14 @@ ImageTransportSurfaceOverlayMacEGL::~ImageTransportSurfaceOverlayMacEGL() {
   ca_layer_tree_coordinator_.reset();
 
 #if BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_TVOS)
-  BELayerHierarchy* layer_hierarchy = std::move(layer_hierarchy_);
+  // Capture and retain the BELayerHierarchy in a local __block var before
+  // dropping the member var ref. Do this before dispatch_async() to avoid a
+  // dealloc race between the block and the member var releasing the last ref.
+  __block BELayerHierarchy* layer_hierarchy =
+      std::exchange(layer_hierarchy_, nil);
   dispatch_async(dispatch_get_main_queue(), ^{
     [layer_hierarchy invalidate];
+    layer_hierarchy = nil;
   });
 #endif
 }
@@ -181,37 +181,6 @@ void ImageTransportSurfaceOverlayMacEGL::Present(
   ca_layer_tree_coordinator_->GetPendingCARendererLayerTree()
       ->SetDisplayHDRHeadroom(data.display_hdr_headroom);
 
-  // Query the underlying Metal device, if one exists. This is needed to ensure
-  // synchronization between the display compositor and the HDRCopierLayer.
-  // https://crbug.com/1372898
-  if (gl::GLDisplayEGL* display =
-          gl::GLDisplayEGL::GetDisplayForCurrentContext()) {
-    // With SkiaGraphite, we pass the Graphite-Dawn MTLDevice for creating
-    // CAMetalLayer used to display HDR IOSurfaces. With SkiaGanesh, we pass the
-    // ANGLE MTLDevice instead.
-    if (dawn_context_provider_ &&
-        dawn_context_provider_->backend_type() == wgpu::BackendType::Metal) {
-      id<MTLDevice> metal_device = dawn::native::metal::GetMTLDevice(
-          dawn_context_provider_->GetDevice().Get());
-      ca_layer_tree_coordinator_->GetPendingCARendererLayerTree()
-          ->SetMetalDevice(metal_device);
-    } else {
-      EGLAttrib angle_device_attrib = 0;
-      if (eglQueryDisplayAttribEXT(display->GetDisplay(), EGL_DEVICE_EXT,
-                                   &angle_device_attrib)) {
-        EGLDeviceEXT angle_device =
-            reinterpret_cast<EGLDeviceEXT>(angle_device_attrib);
-        EGLAttrib metal_device_attrib = 0;
-        if (eglQueryDeviceAttribEXT(angle_device, EGL_METAL_DEVICE_ANGLE,
-                                    &metal_device_attrib)) {
-          id<MTLDevice> metal_device = (__bridge id)(void*)metal_device_attrib;
-          ca_layer_tree_coordinator_->GetPendingCARendererLayerTree()
-              ->SetMetalDevice(metal_device);
-        }
-      }
-    }
-  }
-
   ca_layer_tree_coordinator_->Present(std::move(completion_callback),
                                       std::move(presentation_callback));
 
@@ -223,26 +192,27 @@ void ImageTransportSurfaceOverlayMacEGL::Present(
             weak_ptr_factory_.GetWeakPtr()));
   }
 
+  const std::string target_name = features::kTargetForVSync.Get();
+  const bool finch_target_interaction =
+      target_name == features::kTargetForVSyncInteraction;
+  const bool finch_target_animation =
+      target_name == features::kTargetForVSyncAnimation;
+  const bool finch_target_all_frames =
+      target_name == features::kTargetForVSyncAllFrames;
   bool delay_presenetation_until_next_vsync =
-      features::IsVSyncAlignedPresentEnabled();
+      features::IsVSyncAlignedPresentEnabled() &&
+      (finch_target_all_frames ||
+       (finch_target_animation && data.is_handling_animation) ||
+       (finch_target_interaction && data.is_handling_interaction));
 
   // The current frame has been added to
   // ca_layer_tree_coordinator_->NumPendingSwaps() after calling
   // ca_layer_tree_coordinator_->Present(). Check NumPendingSwaps() > 1 to see
   // whether there is any previous pending frame. The current frame must wait in
   // the queue if there is already one before this.
-  if (base::FeatureList::IsEnabled(kPresentationDelayForInteractiveFrames) &&
-      ca_layer_tree_coordinator_->NumPendingSwaps() > 1 &&
-      !data.is_handling_interaction && !data.is_handling_animation) {
-    delay_presenetation_until_next_vsync = false;
-  }
-
   if (features::IsVSyncAlignedPresentEnabled() &&
-      base::FeatureList::IsEnabled(kPresentationDelayForInteractiveFrames)) {
-    bool has_prev_pending_frame =
-        ca_layer_tree_coordinator_->NumPendingSwaps() > 1;
-    RecordFrameTypes(data.is_handling_interaction, data.is_handling_animation,
-                     has_prev_pending_frame);
+      ca_layer_tree_coordinator_->NumPendingSwaps() > 1) {
+    delay_presenetation_until_next_vsync = true;
   }
 
   if (vsync_callback_mac_) {

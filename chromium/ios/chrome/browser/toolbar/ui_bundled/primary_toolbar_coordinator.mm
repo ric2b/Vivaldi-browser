@@ -13,12 +13,13 @@
 #import "ios/chrome/browser/banner_promo/model/default_browser_banner_promo_app_agent.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_controller.h"
 #import "ios/chrome/browser/fullscreen/ui_bundled/fullscreen_ui_updater.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_text_field_ios.h"
+#import "ios/chrome/browser/omnibox/ui/omnibox_text_field_ios.h"
 #import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/guided_tour_commands.h"
 #import "ios/chrome/browser/shared/public/commands/omnibox_commands.h"
 #import "ios/chrome/browser/shared/public/commands/popup_menu_commands.h"
 #import "ios/chrome/browser/shared/public/commands/settings_commands.h"
@@ -65,7 +66,7 @@ using vivaldi::IsVivaldiRunning;
 
   CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
 
-  BOOL isOffTheRecord = self.profile->IsOffTheRecord();
+  BOOL isOffTheRecord = self.isOffTheRecord;
 
   self.viewController = [[PrimaryToolbarViewController alloc] init];
 
@@ -112,7 +113,6 @@ using vivaldi::IsVivaldiRunning;
     _tabGroupIndicatorCoordinator = [[TabGroupIndicatorCoordinator alloc]
         initWithBaseViewController:self.baseViewController
                            browser:self.browser];
-    _tabGroupIndicatorCoordinator.parentViewController = self.viewController;
     _tabGroupIndicatorCoordinator.toolbarHeightDelegate =
         self.toolbarHeightDelegate;
     [_tabGroupIndicatorCoordinator start];
@@ -156,7 +156,7 @@ using vivaldi::IsVivaldiRunning;
 
 // Returns the active banner promo app agent if it is available currently.
 - (DefaultBrowserBannerPromoAppAgent*)activeBannerPromoAppAgent {
-  if (self.profile->IsOffTheRecord()) {
+  if (self.isOffTheRecord) {
     return nil;
   }
 
@@ -164,10 +164,28 @@ using vivaldi::IsVivaldiRunning;
       agentFromApp:self.browser->GetSceneState().profileState.appState];
 }
 
+#pragma mark - GuidedTourCommands
+
+- (void)highlightViewInStep:(GuidedTourStep)step {
+  if (!IsSplitToolbarMode(self.viewController) && step == GuidedTourStepNTP) {
+    [self.viewController IPHHighlightTabGridButton:YES];
+  }
+}
+
+- (void)stepCompleted:(GuidedTourStep)step {
+  if (!IsSplitToolbarMode(self.viewController) && step == GuidedTourStepNTP) {
+    [self.viewController IPHHighlightTabGridButton:NO];
+  }
+}
+
 #pragma mark - ToolbarCommands
 
 - (void)triggerToolbarSlideInAnimation {
   [self.viewController triggerToolbarSlideInAnimationFromBelow:NO];
+}
+
+- (void)indicateLensOverlayVisible:(BOOL)lensOverlayVisible {
+  // NO-OP
 }
 
 #pragma mark - PrimaryToolbarViewControllerDelegate

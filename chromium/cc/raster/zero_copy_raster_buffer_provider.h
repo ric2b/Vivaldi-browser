@@ -14,7 +14,6 @@
 #include "base/memory/weak_ptr.h"
 #include "cc/raster/raster_buffer.h"
 #include "cc/raster/raster_buffer_provider.h"
-#include "cc/trees/raster_capabilities.h"
 
 namespace base {
 namespace trace_event {
@@ -27,7 +26,6 @@ class SharedImageInterface;
 }
 
 namespace cc {
-class LayerTreeFrameSink;
 
 // RasterBuffer for the zero copy upload, which is given to the raster worker
 // threads for raster/upload.
@@ -68,12 +66,8 @@ class ZeroCopyRasterBufferImpl : public RasterBuffer {
 class CC_EXPORT ZeroCopyRasterBufferProvider : public RasterBufferProvider {
  public:
   ZeroCopyRasterBufferProvider(
-      viz::RasterContextProvider* compositor_context_provider,
-      const RasterCapabilities& raster_caps);
-
-  // Constructor used with software compositing.
-  explicit ZeroCopyRasterBufferProvider(LayerTreeFrameSink* frame_sink,
-                                        const RasterCapabilities& raster_caps);
+      const scoped_refptr<gpu::SharedImageInterface>& shared_image_interface,
+      bool is_software);
 
   ZeroCopyRasterBufferProvider(const ZeroCopyRasterBufferProvider&) = delete;
   ~ZeroCopyRasterBufferProvider() override;
@@ -89,8 +83,6 @@ class CC_EXPORT ZeroCopyRasterBufferProvider : public RasterBufferProvider {
       bool depends_on_at_raster_decodes,
       bool depends_on_hardware_accelerated_jpeg_candidates,
       bool depends_on_hardware_accelerated_webp_candidates) override;
-  viz::SharedImageFormat GetFormat() const override;
-  bool IsResourcePremultiplied() const override;
   bool CanPartialRasterIntoProvidedResource() const override;
   bool IsResourceReadyToDraw(
       const ResourcePool::InUsePoolResource& resource) override;
@@ -108,14 +100,7 @@ class CC_EXPORT ZeroCopyRasterBufferProvider : public RasterBufferProvider {
       const;
 
   bool is_software_ = false;
-
-  // Used with the GPU compositor.
-  raw_ptr<viz::RasterContextProvider> compositor_context_provider_;
-
-  // Used with the software compositor.
   scoped_refptr<gpu::SharedImageInterface> shared_image_interface_;
-
-  const viz::SharedImageFormat tile_format_;
 };
 
 }  // namespace cc

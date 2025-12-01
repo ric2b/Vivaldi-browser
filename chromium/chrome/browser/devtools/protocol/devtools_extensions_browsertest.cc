@@ -8,7 +8,7 @@
 #include "chrome/browser/browser_features.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/devtools/protocol/devtools_protocol_test_support.h"
-#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/scoped_test_mv2_enabler.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -18,8 +18,8 @@
 #include "content/public/test/browser_test.h"
 #include "extensions/browser/api/storage/storage_area_namespace.h"
 #include "extensions/browser/api/storage/storage_frontend.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
@@ -69,6 +69,10 @@ class DevToolsExtensionsProtocolTest : public DevToolsProtocolTestBase {
         SendCommandSync(command, std::move(storage_params));
     return get_result;
   }
+
+ private:
+  // TODO(https://crbug.com/40804030): Remove this when updated to use MV3.
+  extensions::ScopedTestMV2Enabler mv2_enabler_;
 };
 
 class DevToolsExtensionsProtocolWithUnsafeDebuggingTest
@@ -98,8 +102,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionsProtocolTest,
       extensions::ExtensionBuilder("unpacked")
           .SetLocation(extensions::mojom::ManifestLocation::kUnpacked)
           .Build();
-  extensions::ExtensionSystem::Get(browser()->profile())
-      ->extension_service()
+  extensions::ExtensionRegistrar::Get(browser()->profile())
       ->AddExtension(extension.get());
 
   std::string id = extension.get()->id();
@@ -172,8 +175,7 @@ IN_PROC_BROWSER_TEST_F(DevToolsExtensionsProtocolWithUnsafeDebuggingTest,
       extensions::ExtensionBuilder("unpacked")
           .SetLocation(extensions::mojom::ManifestLocation::kComponent)
           .Build();
-  extensions::ExtensionSystem::Get(browser()->profile())
-      ->extension_service()
+  extensions::ExtensionRegistrar::Get(browser()->profile())
       ->AddExtension(extension.get());
 
   std::string id = extension.get()->id();

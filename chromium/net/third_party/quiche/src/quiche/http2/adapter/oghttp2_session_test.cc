@@ -371,6 +371,34 @@ TEST(OgHttp2SessionTest, ClientHeaderCompression) {
             wire_sizes[CompressionOption::DISABLE_COMPRESSION]);
 }
 
+TEST(OgHttp2SessionTest, ClientWithMaxDynamicTableSizeZero) {
+  TestVisitor visitor;
+  testing::InSequence seq;
+  EXPECT_CALL(visitor, OnBeforeFrameSent(SETTINGS, 0, _, 0x0));
+  EXPECT_CALL(visitor, OnFrameSent(SETTINGS, 0, _, 0x0, 0));
+  EXPECT_CALL(visitor, OnBeforeFrameSent(HEADERS, _, _, 0x5));
+  EXPECT_CALL(visitor, OnFrameSent(HEADERS, _, _, 0x5, 0));
+
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kClient;
+  // Sets the optional option to zero.
+  options.max_hpack_encoding_table_capacity = 0;
+  OgHttp2Session session(visitor, options);
+
+  constexpr absl::string_view kValue = "toast toast toast feed meeeee";
+  session.SubmitRequest(ToHeaders({{":method", "POST"},
+                                   {":scheme", "http"},
+                                   {":authority", "example.com"},
+                                   {":path", "/this/is/request/one"},
+                                   {"food", kValue},
+                                   {"food", kValue}}),
+                        true, nullptr);
+  int result = session.Send();
+  ASSERT_EQ(result, 0);
+  // The encoder table size should not have grown beyond zero.
+  EXPECT_EQ(session.GetHpackEncoderDynamicTableSize(), 0);
+}
+
 TEST(OgHttp2SessionTest, ClientSubmitRequestWithLargePayload) {
   TestVisitor visitor;
   OgHttp2Session::Options options;
@@ -771,6 +799,32 @@ TEST(OgHttp2SessionTest, ServerEnqueuesSettingsOnce) {
   int result = session.Send();
   EXPECT_EQ(0, result);
   EXPECT_THAT(visitor.data(), EqualsFrames({SpdyFrameType::SETTINGS}));
+}
+
+// Demonstrates that the dynamic table size setting interpreted from the peer
+// won't exceed the hardcoded 64kB upper bound.
+TEST(OgHttp2SessionTest, ServerDynamicTableSizeAboveUpperBound) {
+  TestVisitor visitor;
+  OgHttp2Session::Options options;
+  options.perspective = Perspective::kServer;
+  OgHttp2Session session(visitor, options);
+
+  const std::string frames =
+      TestFrameSequence()
+          .ClientPreface({{HEADER_TABLE_SIZE, 100u * 1024u}})
+          .Serialize();
+  testing::InSequence s;
+
+  // Client preface (empty SETTINGS)
+  EXPECT_CALL(visitor, OnFrameHeader(0, 6, SETTINGS, 0));
+  EXPECT_CALL(visitor, OnSettingsStart());
+  // Although the peer adverised 100kB, the server interprets the setting value
+  // with a 64kB upper bound.
+  EXPECT_CALL(visitor, OnSetting(Http2Setting{HEADER_TABLE_SIZE, 64u * 1024u}));
+  EXPECT_CALL(visitor, OnSettingsEnd());
+
+  const int64_t result = session.ProcessBytes(frames);
+  EXPECT_EQ(frames.size(), static_cast<size_t>(result));
 }
 
 TEST(OgHttp2SessionTest, ServerSubmitResponse) {

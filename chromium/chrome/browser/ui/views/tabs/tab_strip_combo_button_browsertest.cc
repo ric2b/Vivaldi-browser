@@ -6,17 +6,20 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/tab_search_button.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 
 class TabStripComboButtonBrowserTest : public InProcessBrowserTest {
  public:
   TabStripComboButtonBrowserTest() {
-    feature_list_.InitWithFeatures({features::kTabstripComboButton}, {});
+    feature_list_.InitWithFeaturesAndParameters(
+        {{features::kTabstripComboButton,
+          {{"tab_search_toolbar_button", "false"}}}},
+        {});
   }
 
   BrowserView* browser_view() {

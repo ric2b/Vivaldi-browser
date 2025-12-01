@@ -18,6 +18,8 @@
 #include "include/private/base/SkMacros.h"
 #include "include/private/gpu/ganesh/GrTypesPriv.h"
 #include "src/base/SkArenaAlloc.h"
+#include "src/core/SkCPUContextImpl.h"
+#include "src/core/SkCPURecorderImpl.h"
 #include "src/gpu/ganesh/GrAuditTrail.h"
 #include "src/gpu/ganesh/GrCaps.h"
 #include "src/gpu/ganesh/GrContextThreadSafeProxyPriv.h"
@@ -25,6 +27,7 @@
 #include "src/gpu/ganesh/GrProgramDesc.h"
 #include "src/gpu/ganesh/GrProxyProvider.h"
 #include "src/gpu/ganesh/PathRendererChain.h"
+#include "src/gpu/ganesh/SkGaneshRecorder.h"
 #include "src/gpu/ganesh/ops/AtlasTextOp.h"
 #include "src/text/gpu/SubRunAllocator.h"
 #include "src/text/gpu/TextBlobRedrawCoordinator.h"
@@ -53,6 +56,8 @@ GrRecordingContext::GrRecordingContext(sk_sp<GrContextThreadSafeProxy> proxy, bo
         , fAuditTrail(new GrAuditTrail())
         , fArenas(ddlRecording) {
     fProxyProvider = std::make_unique<GrProxyProvider>(this);
+    fCPUContext = std::make_unique<skcpu::ContextImpl>();
+    fRecorder = std::make_unique<SkGaneshRecorder>(this);
 }
 
 GrRecordingContext::~GrRecordingContext() {
@@ -178,6 +183,14 @@ bool GrRecordingContext::colorTypeSupportedAsImage(SkColorType colorType) const 
 
 bool GrRecordingContext::supportsProtectedContent() const {
     return this->caps()->supportsProtectedContent();
+}
+
+std::unique_ptr<skcpu::Recorder> GrRecordingContext::makeCPURecorder() {
+    return std::make_unique<skcpu::RecorderImpl>(fCPUContext.get());
+}
+
+SkRecorder* GrRecordingContext::asRecorder() {
+    return fRecorder.get();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

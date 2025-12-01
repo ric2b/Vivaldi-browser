@@ -129,6 +129,7 @@ tint_add_target(tint_lang_core_type lib
 )
 
 tint_target_add_dependencies(tint_lang_core_type lib
+  tint_api_common
   tint_lang_core
   tint_utils
   tint_utils_containers
@@ -165,6 +166,7 @@ tint_add_target(tint_lang_core_type_test test
   lang/core/type/i32_test.cc
   lang/core/type/i8_test.cc
   lang/core/type/input_attachment_test.cc
+  lang/core/type/is_host_shareable_test.cc
   lang/core/type/manager_test.cc
   lang/core/type/matrix_test.cc
   lang/core/type/multisampled_texture_test.cc
@@ -186,18 +188,9 @@ tint_add_target(tint_lang_core_type_test test
 tint_target_add_dependencies(tint_lang_core_type_test test
   tint_api_common
   tint_lang_core
-  tint_lang_core_constant
   tint_lang_core_type
-  tint_lang_wgsl
-  tint_lang_wgsl_ast
-  tint_lang_wgsl_common
-  tint_lang_wgsl_features
-  tint_lang_wgsl_program
-  tint_lang_wgsl_resolver
-  tint_lang_wgsl_sem
   tint_utils
   tint_utils_containers
-  tint_utils_diagnostic
   tint_utils_ice
   tint_utils_macros
   tint_utils_math

@@ -49,6 +49,8 @@ bool TestTabStripModelDelegate::IsTabStripEditable() {
 
 void TestTabStripModelDelegate::DuplicateContentsAt(int index) {}
 
+void TestTabStripModelDelegate::DuplicateSplit(split_tabs::SplitTabId split) {}
+
 void TestTabStripModelDelegate::MoveToExistingWindow(
     const std::vector<int>& indices,
     int browser_index) {}
@@ -122,6 +124,8 @@ bool TestTabStripModelDelegate::CanGoBack(content::WebContents* web_contents) {
 bool TestTabStripModelDelegate::IsNormalWindow() {
   return true;
 }
+
+void TestTabStripModelDelegate::NewSplitTab(std::vector<int> indices) {}
 
 BrowserWindowInterface* TestTabStripModelDelegate::GetBrowserWindowInterface() {
   return browser_window_interface_;

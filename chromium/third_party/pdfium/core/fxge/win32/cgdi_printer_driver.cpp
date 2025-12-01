@@ -28,16 +28,18 @@
 
 CGdiPrinterDriver::CGdiPrinterDriver(HDC hDC)
     : CGdiDeviceDriver(hDC, DeviceType::kPrinter),
-      m_HorzSize(::GetDeviceCaps(m_hDC, HORZSIZE)),
-      m_VertSize(::GetDeviceCaps(m_hDC, VERTSIZE)) {}
+      horz_size_(::GetDeviceCaps(dc_handle_, HORZSIZE)),
+      vert_size_(::GetDeviceCaps(dc_handle_, VERTSIZE)) {}
 
 CGdiPrinterDriver::~CGdiPrinterDriver() = default;
 
 int CGdiPrinterDriver::GetDeviceCaps(int caps_id) const {
-  if (caps_id == FXDC_HORZ_SIZE)
-    return m_HorzSize;
-  if (caps_id == FXDC_VERT_SIZE)
-    return m_VertSize;
+  if (caps_id == FXDC_HORZ_SIZE) {
+    return horz_size_;
+  }
+  if (caps_id == FXDC_VERT_SIZE) {
+    return vert_size_;
+  }
   return CGdiDeviceDriver::GetDeviceCaps(caps_id);
 }
 
@@ -87,10 +89,12 @@ bool CGdiPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
         return false;
       }
 
-      if (dest_width < 0)
+      if (dest_width < 0) {
         dest_left += dest_width;
-      if (dest_height < 0)
+      }
+      if (dest_height < 0) {
         dest_top += dest_height;
+      }
 
       dest_width = abs(dest_width);
       dest_height = abs(dest_height);
@@ -110,10 +114,12 @@ bool CGdiPrinterDriver::StretchDIBits(RetainPtr<const CFX_DIBBase> bitmap,
       return false;
     }
 
-    if (dest_width < 0)
+    if (dest_width < 0) {
       dest_left += dest_width;
-    if (dest_height < 0)
+    }
+    if (dest_height < 0) {
       dest_top += dest_height;
+    }
 
     dest_width = abs(dest_width);
     dest_height = abs(dest_height);

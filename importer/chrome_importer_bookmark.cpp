@@ -16,10 +16,10 @@
 #include "base/values.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_resources.h"
@@ -43,7 +43,7 @@ class ChromeBookmarkReader {
 
   void LoadFile(const base::FilePath& file);
 
-  const std::vector<ImportedBookmarkEntry>& Bookmarks() const {
+  const std::vector<user_data_importer::ImportedBookmarkEntry>& Bookmarks() const {
     return bookmarks_;
   }
 
@@ -51,7 +51,7 @@ class ChromeBookmarkReader {
   void DecodeNode(const base::Value::Dict& dict);
 
   std::vector<std::u16string> current_folder_;
-  std::vector<ImportedBookmarkEntry> bookmarks_;
+  std::vector<user_data_importer::ImportedBookmarkEntry> bookmarks_;
 };
 
 void ChromeBookmarkReader::LoadFile(const base::FilePath& file) {
@@ -151,7 +151,7 @@ void ChromeBookmarkReader::DecodeNode(const base::Value::Dict& dict) {
     nickname = dict.FindString("Nickname");
   }
 
-  ImportedBookmarkEntry entry;
+  user_data_importer::ImportedBookmarkEntry entry;
   entry.in_toolbar = false;  // on_personal_bar;
   entry.is_folder = is_folder;
   entry.title = name;

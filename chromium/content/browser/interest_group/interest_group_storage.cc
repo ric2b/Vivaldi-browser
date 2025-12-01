@@ -80,6 +80,16 @@ using blink::mojom::ViewOrClickCountsPtr;
 using SellerCapabilitiesType = blink::SellerCapabilitiesType;
 using network::AdAuctionEventRecord;
 
+// Allow lookups using `std::string_view`.
+struct StringViewHasher : public std::hash<std::string_view> {
+  using is_transparent = void;
+};
+
+using InterestGroupsByName = std::unordered_map<std::string,
+                                                StorageInterestGroup,
+                                                StringViewHasher,
+                                                std::equal_to<>>;
+
 // The raw view and click data for a given (provider_origin, eligible_origin)
 // tuple.
 struct ViewClickCountsForProviderAndEligible {
@@ -88,6 +98,10 @@ struct ViewClickCountsForProviderAndEligible {
   ListOfTimestamps uncompacted_click_events;
   ListOfTimestampAndCounts compacted_click_events;
 };
+
+// Reason why a database lookup couldn't produce a result. It could be an
+// error, or just because there is nothing there.
+enum class MissingReason { kNotInDb, kDbError, kDecodeError };
 
 const base::FilePath::CharType kDatabasePath[] =
     FILE_PATH_LITERAL("InterestGroups");
@@ -191,6 +205,18 @@ const int kCompatibleVersionNumber = 33;
 // Latest version of the database that cannot be upgraded to
 // |kCurrentVersionNumber| without razing the database.
 const int kDeprecatedVersionNumber = 5;
+
+// Truncates `in` down to the hour.
+base::Time TruncateToHour(base::Time in) {
+  return base::Time::FromDeltaSinceWindowsEpoch(
+      in.ToDeltaSinceWindowsEpoch().FloorToMultiple(base::Hours(1)));
+}
+
+// Truncates `in` down to the day.
+base::Time TruncateToDay(base::Time in) {
+  return base::Time::FromDeltaSinceWindowsEpoch(
+      in.ToDeltaSinceWindowsEpoch().FloorToMultiple(base::Days(1)));
+}
 
 std::string Serialize(base::ValueView value_view) {
   std::optional<std::string> json_output = base::WriteJson(value_view);
@@ -836,53 +862,6 @@ KAnonKeyType GetKAnonType(std::string_view unhashed_key) {
     return KAnonKeyType::kComponentBid;
   }
   return KAnonKeyType::kAdNameReporting;
-}
-
-std::set<std::string> GetAllKanonKeys(
-    const blink::InterestGroup& interest_group) {
-  std::set<std::string> hashed_keys;
-  if (interest_group.ads.has_value() &&
-      interest_group.bidding_url.has_value()) {
-    for (auto& ad : *interest_group.ads) {
-      hashed_keys.emplace(blink::HashedKAnonKeyForAdNameReporting(
-          interest_group, ad,
-          /*selected_buyer_and_seller_reporting_id=*/std::nullopt));
-      if (base::FeatureList::IsEnabled(
-              blink::features::kFledgeAuctionDealSupport) &&
-          ad.selectable_buyer_and_seller_reporting_ids) {
-        size_t num_selectable_kanon_keys =
-            ad.selectable_buyer_and_seller_reporting_ids->size();
-        if (base::FeatureList::IsEnabled(
-                blink::features::
-                    kFledgeLimitSelectableBuyerAndSellerReportingIdsFetchedFromKAnon) &&
-            blink::features::
-                    kFledgeSelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit
-                        .Get() >= 0) {
-          num_selectable_kanon_keys = std::min(
-              num_selectable_kanon_keys,
-              static_cast<size_t>(
-                  blink::features::
-                      kFledgeSelectableBuyerAndSellerReportingIdsFetchedFromKAnonLimit
-                          .Get()));
-        }
-        for (size_t selectable_idx = 0;
-             selectable_idx < num_selectable_kanon_keys; ++selectable_idx) {
-          hashed_keys.emplace(blink::HashedKAnonKeyForAdNameReporting(
-              interest_group, ad,
-              (*ad.selectable_buyer_and_seller_reporting_ids)[selectable_idx]));
-        }
-      }
-      hashed_keys.emplace(
-          blink::HashedKAnonKeyForAdBid(interest_group, ad.render_url()));
-    }
-  }
-  if (interest_group.ad_components.has_value()) {
-    for (auto& ad : *interest_group.ad_components) {
-      hashed_keys.emplace(
-          blink::HashedKAnonKeyForAdComponentBid(ad.render_url()));
-    }
-  }
-  return hashed_keys;
 }
 
 // Adds indices to the `interest_group` table.
@@ -3761,7 +3740,7 @@ std::optional<InterestGroupKanonUpdateParameter> DoJoinInterestGroup(
   StorageInterestGroup old_group;
   base::Time last_k_anon_updated = base::Time::Min();
   base::flat_set<std::string> positive_kanon_keys;
-  std::set<std::string> all_old_kanon_keys;
+  base::flat_set<std::string> all_old_kanon_keys;
   blink::InterestGroupKey interest_group_key(data.owner, data.name);
   if (DoLoadInterestGroup(db, passkey, interest_group_key, old_group)) {
     if (old_group.interest_group.expiry <= base::Time::Now()) {
@@ -3784,12 +3763,12 @@ std::optional<InterestGroupKanonUpdateParameter> DoJoinInterestGroup(
     } else {
       last_k_anon_updated = old_group.last_k_anon_updated;
       positive_kanon_keys = std::move(old_group.hashed_kanon_keys);
-      all_old_kanon_keys = GetAllKanonKeys(old_group.interest_group);
+      all_old_kanon_keys = old_group.interest_group.GetAllKAnonKeys();
     }
   }
 
   InterestGroupKanonUpdateParameter kanon_update(last_k_anon_updated);
-  std::set<std::string> all_new_kanon_keys = GetAllKanonKeys(data);
+  base::flat_set<std::string> all_new_kanon_keys = data.GetAllKAnonKeys();
   std::set_difference(all_new_kanon_keys.begin(), all_new_kanon_keys.end(),
                       all_old_kanon_keys.begin(), all_old_kanon_keys.end(),
                       std::back_inserter(kanon_update.newly_added_hashed_keys));
@@ -4095,8 +4074,8 @@ std::optional<InterestGroupKanonUpdateParameter> DoUpdateInterestGroup(
   }
 
   blink::InterestGroup& updated_group = storage_interest_group.interest_group;
-  std::set<std::string> pre_existing_k_anon_keys =
-      GetAllKanonKeys(updated_group);
+  base::flat_set<std::string> pre_existing_k_anon_keys =
+      updated_group.GetAllKAnonKeys();
   base::flat_set<std::string> positive_kanon_keys =
       std::move(storage_interest_group.hashed_kanon_keys);
   bool updated_kanon_keys = false;
@@ -4199,7 +4178,7 @@ std::optional<InterestGroupKanonUpdateParameter> DoUpdateInterestGroup(
   InterestGroupKanonUpdateParameter kanon_update(
       storage_interest_group.last_k_anon_updated);
   if (updated_kanon_keys) {
-    std::set<std::string> new_keys = GetAllKanonKeys(updated_group);
+    base::flat_set<std::string> new_keys = updated_group.GetAllKAnonKeys();
     positive_kanon_keys.erase(
         std::remove_if(positive_kanon_keys.begin(), positive_kanon_keys.end(),
                        [&](const std::string& key) -> bool {
@@ -4630,14 +4609,11 @@ void DoUpdateLastKAnonymityReported(sql::Database& db,
 }
 
 // Loads the view and click data for `provider_origin`, `eligible_origin`.
-// Returns std::nullopt on failure, and an empty
-// `ViewClickCountsForProviderAndEligible` if no counts are stored for the given
-// (`provider_origin`, `eligible_origin`) tuple.
-std::optional<ViewClickCountsForProviderAndEligible>
+// Returns data if available, or reason if there isn't otherwise.
+base::expected<ViewClickCountsForProviderAndEligible, MissingReason>
 DoGetViewClickCountsForProviderAndEligible(sql::Database& db,
                                            const url::Origin& provider_origin,
                                            const url::Origin& eligible_origin) {
-  ViewClickCountsForProviderAndEligible result;
   sql::Statement get_counts(
       db.GetCachedStatement(SQL_FROM_HERE,
                             "SELECT uncompacted_view_events,"
@@ -4647,21 +4623,19 @@ DoGetViewClickCountsForProviderAndEligible(sql::Database& db,
                             "FROM view_and_click_events "
                             "WHERE provider_origin=? AND eligible_origin=?"));
   if (!get_counts.is_valid()) {
-    DLOG(ERROR) << "GetViewClickCountsForProviderAndEligible SQL statement did "
-                   "not compile: "
-                << db.GetErrorMessage();
-    return std::nullopt;
+    return base::unexpected(MissingReason::kDbError);
   }
   get_counts.Reset(true);
   get_counts.BindString(0, provider_origin.Serialize());
   get_counts.BindString(1, eligible_origin.Serialize());
   if (!get_counts.Step()) {
-    // No counts stored, return empty counts lists.
-    return result;
+    // No counts stored.
+    return base::unexpected(MissingReason::kNotInDb);
   }
   if (!get_counts.Succeeded()) {
-    return std::nullopt;
+    return base::unexpected(MissingReason::kDbError);
   }
+  ViewClickCountsForProviderAndEligible result;
   if (!result.uncompacted_view_events.ParseFromString(
           get_counts.ColumnStringView(0)) ||
       !result.compacted_view_events.ParseFromString(
@@ -4673,7 +4647,7 @@ DoGetViewClickCountsForProviderAndEligible(sql::Database& db,
     base::UmaHistogramEnumeration(
         "Storage.InterestGroup.ProtoDeserializationResult.ListOfTimestamps",
         InterestGroupStorageProtoSerializationResult::kFailed);
-    return std::nullopt;
+    return base::unexpected(MissingReason::kDecodeError);
   } else {
     base::UmaHistogramEnumeration(
         "Storage.InterestGroup.ProtoDeserializationResult.ListOfTimestamps",
@@ -4689,88 +4663,177 @@ void DoIncrementViewClickCounts(base::Time now,
                                 int32_t count) {
   base::TimeDelta event_age = now - base::Time::FromDeltaSinceWindowsEpoch(
                                         base::Microseconds(int_timestamp));
+  if (event_age > max_window) {
+    return;
+  }
 
-  if (max_window >= base::Hours(1) && event_age <= base::Hours(1)) {
+  if (event_age <= base::Hours(1)) {
     view_or_click_counts->past_hour += count;
   }
-  if (max_window >= base::Days(1) && event_age <= base::Days(1)) {
+  if (event_age <= base::Days(1)) {
     view_or_click_counts->past_day += count;
   }
-  if (max_window >= base::Days(7) && event_age <= base::Days(7)) {
+  if (event_age <= base::Days(7)) {
     view_or_click_counts->past_week += count;
   }
-  if (max_window >= base::Days(30) && event_age <= base::Days(30)) {
+  if (event_age <= base::Days(30)) {
     view_or_click_counts->past_30_days += count;
   }
-  if (max_window >= base::Days(90) && event_age <= base::Days(90)) {
+  if (event_age <= base::Days(90)) {
     view_or_click_counts->past_90_days += count;
   }
   // Older expired events may exist -- maintenance will eventually remove them.
-  // TODO(crbug.com/394108643): Implement click / view removal logic.
 }
 
-// Mutates `group`'s browser signals, filling in loaded view and click counts.
-// Returns true on success, and false on failure.
-[[nodiscard]] bool DoGetViewAndClickCountsForGroup(
-    sql::Database& db,
-    base::Time now,
-    StorageInterestGroup& group) {
-  ViewAndClickCountsPtr& view_and_click_counts =
-      group.bidding_browser_signals->view_and_click_counts;
-  view_and_click_counts = blink::mojom::ViewAndClickCounts::New(
-      /*view_counts=*/blink::mojom::ViewOrClickCounts::New(),
-      /*click_counts=*/blink::mojom::ViewOrClickCounts::New());
-
-  if (!group.interest_group.view_and_click_counts_providers) {
-    return true;
-  }
-
+// Reads in view and click counts from database, and converts them to an
+// aggregated form, just including counts for each window and category,
+// rather than the stored time info.
+//
+// If successful, the value will not be null; entries not in database
+// are represented as unexpected(kNotInDb) instead.
+[[nodiscard]] base::expected<ViewAndClickCountsPtr, MissingReason>
+DoGetViewAndClickCountsSummarized(sql::Database& db,
+                                  base::Time now,
+                                  const url::Origin& provider_origin,
+                                  const url::Origin& eligible_origin) {
   const base::TimeDelta max_window = blink::MaxInterestGroupLifetime();
 
-  for (const url::Origin& provider_origin :
-       *group.interest_group.view_and_click_counts_providers) {
-    std::optional<ViewClickCountsForProviderAndEligible> partial_counts =
-        DoGetViewClickCountsForProviderAndEligible(
-            /*db=*/db,
-            /*provider_origin=*/provider_origin,
-            /*eligible_origin=*/group.interest_group.owner);
-    if (!partial_counts) {
-      return false;
+  base::expected<ViewClickCountsForProviderAndEligible, MissingReason>
+      raw_counts = DoGetViewClickCountsForProviderAndEligible(
+          /*db=*/db,
+          /*provider_origin=*/provider_origin,
+          /*eligible_origin=*/eligible_origin);
+  if (!raw_counts.has_value()) {
+    return base::unexpected(raw_counts.error());
+  }
+
+  ViewAndClickCountsPtr view_and_click_counts =
+      blink::mojom::ViewAndClickCounts::New(
+          /*view_counts=*/blink::mojom::ViewOrClickCounts::New(),
+          /*click_counts=*/blink::mojom::ViewOrClickCounts::New());
+
+  for (int64_t timestamp : raw_counts->uncompacted_view_events.timestamps()) {
+    DoIncrementViewClickCounts(
+        /*now=*/now,
+        /*view_or_click_counts=*/view_and_click_counts->view_counts,
+        /*max_window=*/max_window,
+        /*int_timestamp=*/timestamp, /*count=*/1);
+  }
+  for (ListOfTimestampAndCounts_Entry timestamp_and_count :
+       raw_counts->compacted_view_events.timestamp_and_counts()) {
+    DoIncrementViewClickCounts(
+        /*now=*/now,
+        /*view_or_click_counts=*/view_and_click_counts->view_counts,
+        /*max_window=*/max_window,
+        /*int_timestamp=*/timestamp_and_count.timestamp(),
+        /*count=*/timestamp_and_count.count());
+  }
+  for (int64_t timestamp : raw_counts->uncompacted_click_events.timestamps()) {
+    DoIncrementViewClickCounts(
+        /*now=*/now,
+        /*view_or_click_counts=*/view_and_click_counts->click_counts,
+        /*max_window=*/max_window,
+        /*int_timestamp=*/timestamp, /*count=*/1);
+  }
+  for (ListOfTimestampAndCounts_Entry timestamp_and_count :
+       raw_counts->compacted_click_events.timestamp_and_counts()) {
+    DoIncrementViewClickCounts(
+        /*now=*/now,
+        /*view_or_click_counts=*/view_and_click_counts->click_counts,
+        /*max_window=*/max_window,
+        /*int_timestamp=*/timestamp_and_count.timestamp(),
+        /*count=*/timestamp_and_count.count());
+  }
+  return view_and_click_counts;
+}
+
+void AggregateViewOrClickCounts(const blink::mojom::ViewOrClickCounts& in,
+                                blink::mojom::ViewOrClickCounts& out) {
+  out.past_hour += in.past_hour;
+  out.past_day += in.past_day;
+  out.past_week += in.past_week;
+  out.past_30_days += in.past_30_days;
+  out.past_90_days += in.past_90_days;
+}
+
+void AggregateViewAndClickCounts(const blink::mojom::ViewAndClickCounts& in,
+                                 blink::mojom::ViewAndClickCounts& out) {
+  AggregateViewOrClickCounts(*in.view_counts, *out.view_counts);
+  AggregateViewOrClickCounts(*in.click_counts, *out.click_counts);
+}
+
+// Mutates browser signals for each entry in `interest_groups`, filling
+// in loaded view and click counts.
+//
+// Returns true on success, and false on failure.
+[[nodiscard]] bool DoGetViewAndClickCountsForGroups(
+    sql::Database& db,
+    base::Time now,
+    const url::Origin& owner,
+    InterestGroupsByName& interest_groups_by_name) {
+  std::vector<url::Origin> default_providers = {owner};
+
+  // Figure out which click tables we need.
+  std::set<url::Origin> clickiness_providers;
+  for (auto& [unused_name, storage_group] : interest_groups_by_name) {
+    if (storage_group.interest_group.IsNegativeInterestGroup()) {
+      continue;
+    }
+    if (!storage_group.interest_group.view_and_click_counts_providers ||
+        storage_group.interest_group.view_and_click_counts_providers->empty()) {
+      clickiness_providers.insert(owner);
+      continue;
     }
 
-    for (int64_t timestamp :
-         partial_counts->uncompacted_view_events.timestamps()) {
-      DoIncrementViewClickCounts(
-          /*now=*/now,
-          /*view_or_click_counts=*/view_and_click_counts->view_counts,
-          /*max_window=*/max_window,
-          /*int_timestamp=*/timestamp, /*count=*/1);
+    for (const url::Origin& provider_origin :
+         *storage_group.interest_group.view_and_click_counts_providers) {
+      clickiness_providers.insert(provider_origin);
     }
-    for (ListOfTimestampAndCounts_Entry timestamp_and_count :
-         partial_counts->compacted_view_events.timestamp_and_counts()) {
-      DoIncrementViewClickCounts(
-          /*now=*/now,
-          /*view_or_click_counts=*/view_and_click_counts->view_counts,
-          /*max_window=*/max_window,
-          /*int_timestamp=*/timestamp_and_count.timestamp(),
-          /*count=*/timestamp_and_count.count());
+  }
+
+  // Read all the needed tables into memory.
+  std::map<url::Origin, ViewAndClickCountsPtr> clickiness_summaries;
+  for (auto& provider_origin : clickiness_providers) {
+    base::expected<ViewAndClickCountsPtr, MissingReason> summary =
+        DoGetViewAndClickCountsSummarized(db, now,
+                                          /*provider_origin=*/provider_origin,
+                                          /*eligible_origin=*/owner);
+    if (!summary.has_value()) {
+      switch (summary.error()) {
+        case MissingReason::kNotInDb:
+          continue;
+        case MissingReason::kDbError:
+        case MissingReason::kDecodeError:
+          return false;
+      }
     }
-    for (int64_t timestamp :
-         partial_counts->uncompacted_click_events.timestamps()) {
-      DoIncrementViewClickCounts(
-          /*now=*/now,
-          /*view_or_click_counts=*/view_and_click_counts->click_counts,
-          /*max_window=*/max_window,
-          /*int_timestamp=*/timestamp, /*count=*/1);
+    clickiness_summaries[provider_origin] = std::move(*summary);
+  }
+
+  // Now compose the info for each group.
+  for (const auto& [unused_name, storage_group] : interest_groups_by_name) {
+    storage_group.bidding_browser_signals->view_and_click_counts =
+        blink::mojom::ViewAndClickCounts::New(
+            /*view_counts=*/blink::mojom::ViewOrClickCounts::New(),
+            /*click_counts=*/blink::mojom::ViewOrClickCounts::New());
+    if (storage_group.interest_group.IsNegativeInterestGroup()) {
+      continue;
     }
-    for (ListOfTimestampAndCounts_Entry timestamp_and_count :
-         partial_counts->compacted_click_events.timestamp_and_counts()) {
-      DoIncrementViewClickCounts(
-          /*now=*/now,
-          /*view_or_click_counts=*/view_and_click_counts->click_counts,
-          /*max_window=*/max_window,
-          /*int_timestamp=*/timestamp_and_count.timestamp(),
-          /*count=*/timestamp_and_count.count());
+
+    for (const url::Origin& provider_origin :
+         storage_group.interest_group.view_and_click_counts_providers &&
+                 !storage_group.interest_group.view_and_click_counts_providers
+                      ->empty()
+             ? *storage_group.interest_group.view_and_click_counts_providers
+             : default_providers) {
+      auto it = clickiness_summaries.find(provider_origin);
+      if (it == clickiness_summaries.end()) {
+        continue;
+      }
+
+      AggregateViewAndClickCounts(
+          *(it->second),
+          *storage_group.bidding_browser_signals->view_and_click_counts);
     }
   }
   return true;
@@ -5370,13 +5433,18 @@ DoGetAllNegativeInterestGroupNamesForOwner(sql::Database& db,
   return result;
 }
 
-bool DoGetStoredInterestGroup(sql::Database& db,
-                              StorageInterestGroup& db_interest_group,
-                              const PassKey& passkey,
-                              const blink::InterestGroupKey& group_key,
-                              base::Time now) {
+std::optional<StorageInterestGroup> DoGetStoredInterestGroup(
+    sql::Database& db,
+    const PassKey& passkey,
+    const blink::InterestGroupKey& group_key,
+    base::Time now) {
+  // We need an InterestGroupsByName for DoGetViewAndClickCountsForGroups;
+  // but that doesn't actually look at names.
+  InterestGroupsByName interest_groups_by_name;
+  StorageInterestGroup& db_interest_group = interest_groups_by_name["0"];
+
   if (!DoLoadInterestGroup(db, passkey, group_key, db_interest_group)) {
-    return false;
+    return std::nullopt;
   }
 
   db_interest_group.bidding_browser_signals =
@@ -5384,22 +5452,25 @@ bool DoGetStoredInterestGroup(sql::Database& db,
   if (!GetJoinCount(db, group_key,
                     now - blink::MaxInterestGroupLifetimeForMetadata(),
                     db_interest_group.bidding_browser_signals)) {
-    return false;
+    return std::nullopt;
   }
   if (!GetBidCount(db, group_key,
                    now - blink::MaxInterestGroupLifetimeForMetadata(),
                    db_interest_group.bidding_browser_signals)) {
-    return false;
+    return std::nullopt;
   }
   if (!GetPreviousWins(db, group_key,
                        now - blink::MaxInterestGroupLifetimeForMetadata(),
                        db_interest_group.bidding_browser_signals)) {
-    return false;
+    return std::nullopt;
   }
-  if (!DoGetViewAndClickCountsForGroup(db, now, db_interest_group)) {
-    return false;
+
+  if (!DoGetViewAndClickCountsForGroups(db, now,
+                                        db_interest_group.interest_group.owner,
+                                        interest_groups_by_name)) {
+    return std::nullopt;
   }
-  return true;
+  return std::move(db_interest_group);
 }
 
 std::optional<std::vector<InterestGroupUpdateParameter>>
@@ -5465,14 +5536,7 @@ std::optional<std::vector<StorageInterestGroup>> DoGetInterestGroupsForOwner(
     return std::nullopt;
   }
 
-  // Allow lookups using `std::string_view`.
-  struct StringViewHasher : public std::hash<std::string_view> {
-    using is_transparent = void;
-  };
-
-  std::unordered_map<std::string, StorageInterestGroup, StringViewHasher,
-                     std::equal_to<>>
-      interest_group_by_name;
+  InterestGroupsByName interest_group_by_name;
   {
     TRACE_EVENT("fledge", "load_from_interest_groups_table");
 
@@ -5609,16 +5673,10 @@ std::optional<std::vector<StorageInterestGroup>> DoGetInterestGroupsForOwner(
   }
   {
     TRACE_EVENT("fledge", "load_from_clicks_views_table");
-    // TODO(crbug.com/394108643): For performance, consider loading all of the
-    // view_and_click_counts for a given providing_origin/eligible_origin pair,
-    // and then aggregating across all of the providing_origins for each
-    // interest group with a matching eligible_origin. This prevents having to
-    // load the same records again and again for each interest group of a given
-    // IG owner.
-    for (auto& [unused_name, storage_group] : interest_group_by_name) {
-      if (!DoGetViewAndClickCountsForGroup(db, now, storage_group)) {
-        return std::nullopt;
-      }
+
+    if (!DoGetViewAndClickCountsForGroups(db, now, owner,
+                                          interest_group_by_name)) {
+      return std::nullopt;
     }
   }
   if (!transaction.Commit()) {
@@ -5674,14 +5732,78 @@ DoGetInterestGroupNamesForJoiningOrigin(sql::Database& db,
   return result;
 }
 
+bool DoDeleteViewClickCounts(sql::Database& db) {
+  sql::Statement remove_view_clicks(db.GetCachedStatement(
+      SQL_FROM_HERE, "DELETE FROM view_and_click_events"));
+  if (!remove_view_clicks.is_valid()) {
+    return false;
+  }
+
+  remove_view_clicks.Reset(true);
+  return remove_view_clicks.Run();
+}
+
+bool DoDeleteViewClickCountsForProvider(
+    sql::Database& db,
+    const StoragePartition::StorageKeyMatcherFunction& storage_key_matcher) {
+  std::vector<url::Origin> providers_to_delete;
+
+  sql::Statement load(db.GetCachedStatement(
+      SQL_FROM_HERE,
+      "SELECT DISTINCT provider_origin FROM view_and_click_events"));
+  if (!load.is_valid()) {
+    return false;
+  }
+  load.Reset(true);
+  while (load.Step()) {
+    url::Origin origin = DeserializeOrigin(load.ColumnStringView(0));
+    if (storage_key_matcher.Run(blink::StorageKey::CreateFirstParty(origin))) {
+      providers_to_delete.push_back(std::move(origin));
+    }
+  }
+
+  sql::Statement del(db.GetCachedStatement(
+      SQL_FROM_HERE,
+      "DELETE FROM view_and_click_events WHERE provider_origin=?"));
+  if (!del.is_valid()) {
+    return false;
+  }
+  for (const url::Origin& origin : providers_to_delete) {
+    del.Reset(true);
+    del.BindString(0, origin.Serialize());
+    if (!del.Run()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool DoDeleteInterestGroupData(
     sql::Database& db,
-    StoragePartition::StorageKeyMatcherFunction storage_key_matcher) {
+    StoragePartition::StorageKeyMatcherFunction storage_key_matcher,
+    bool user_initiated_deletion) {
   const base::Time distant_past = base::Time::Min();
   sql::Transaction transaction(&db);
 
   if (!transaction.Begin()) {
     return false;
+  }
+
+  // For view & click events, we generally delete everything even when the user
+  // asked for a subset of sites, since we do not know what top-level site the
+  // events are associated with, so we have to be conservative to make sure to
+  // match everything that may be expected. Doing this for Clear-Site-Data,
+  // however, would let sites hostilely delete clickiness data of others,
+  // so if `user_initiated_deletion` is false, only things provided by that
+  // origin are deleted.
+  if (user_initiated_deletion || storage_key_matcher.is_null()) {
+    if (!DoDeleteViewClickCounts(db)) {
+      return false;
+    }
+  } else {
+    if (!DoDeleteViewClickCountsForProvider(db, storage_key_matcher)) {
+      return false;
+    }
   }
 
   std::vector<url::Origin> affected_origins;
@@ -6061,6 +6183,281 @@ bool ClearExpiredCachedKAnonymityHashes(sql::Database& db, base::Time now) {
   return clear_expired_cache_entries.Run();
 }
 
+// Used by CompactClickiness(). The number of events that occurred at the
+// base::Time in CompactionMap.
+using ClickinessCount = int64_t;
+// Used by CompactClickiness(). The raw integer timestamp stored in the database
+// for clickiness events. Stored as microseconds since the Windows epoch.
+using ClickinessIntTimestamp = int64_t;
+// Used by CompactClickiness(). Temporary storage used during the compaction
+// process.
+using CompactionMap = std::map<base::Time, ClickinessCount>;
+
+// A helper function for ClickinessCompactionRawToMap(), which is itself a
+// helper for CompactClickiness(). For a given raw `int_timestamp` loaded from
+// the database (which is in microseconds since the Windows epoch) and `count`
+// of events at that timestamp, update the count at the compacted time.
+//
+// Events older than 1 hour (determined using `now`) will be grouped by hour,
+// and events older than 1 day will be grouped by day.
+void ClickinessCompactionAddTimestampToMap(base::Time now,
+                                           ClickinessIntTimestamp int_timestamp,
+                                           ClickinessCount count,
+                                           CompactionMap& map) {
+  base::Time timestamp =
+      base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(int_timestamp));
+  base::TimeDelta event_age = now - timestamp;
+  if (event_age <= base::Hours(1)) {
+    // Count can be > 1 here if the clock is rolled back.
+    map[timestamp] += count;
+  } else if (event_age <= base::Days(1)) {
+    map[TruncateToHour(timestamp)] += count;
+  } else if (event_age <= base::Days(90)) {
+    map[TruncateToDay(timestamp)] += count;
+  }
+}
+
+// A helper function for CompactClickiness(). For each compacted and uncompacted
+// events protobuf loaded from the database (`raw`), compact those events into
+// the returned map.
+//
+// Events older than 1 hour (determined using `now`) will be grouped by hour,
+// and events older than 1 day will be grouped by day.
+//
+// ClickinessCompactionMapToRaw() will then convert the returned map back into
+// raw protobuf form that can be written to the database, splitting events into
+// compacted and uncompacted events, with events younger than an hour going into
+// uncompacted events.
+//
+// Returns std::nullopt on error.
+std::optional<CompactionMap> ClickinessCompactionRawToMap(
+    base::Time now,
+    const InterestGroupStorage::ClickinessCompactionRawEvents& raw) {
+  CompactionMap map;
+
+  {
+    // Write raw uncompacted events.
+    ListOfTimestamps uncompacted_events;
+    if (!uncompacted_events.ParseFromString(raw.uncompacted_events)) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoDeserializationResult.ListOfTimestamps",
+          InterestGroupStorageProtoSerializationResult::kFailed);
+      return std::nullopt;
+    }
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoDeserializationResult.ListOfTimestamps",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+    for (ClickinessIntTimestamp int_timestamp :
+         uncompacted_events.timestamps()) {
+      ClickinessCompactionAddTimestampToMap(now, int_timestamp, /*count=*/1,
+                                            map);
+    }
+  }
+
+  {
+    // Add raw compacted events.
+    ListOfTimestampAndCounts compacted_events;
+    if (!compacted_events.ParseFromString(raw.compacted_events)) {
+      base::UmaHistogramEnumeration(
+          "Storage.InterestGroup.ProtoDeserializationResult.ListOfTimestamps",
+          InterestGroupStorageProtoSerializationResult::kFailed);
+      return std::nullopt;
+    }
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoDeserializationResult.ListOfTimestamps",
+        InterestGroupStorageProtoSerializationResult::kSucceeded);
+    for (ListOfTimestampAndCounts_Entry entry :
+         compacted_events.timestamp_and_counts()) {
+      ClickinessCompactionAddTimestampToMap(now, entry.timestamp(),
+                                            /*count=*/entry.count(), map);
+    }
+  }
+
+  return map;
+}
+
+// A helper function for CompactClickiness(). Converts `map` (produced by
+// ClickinessCompactionRawToMap()) back to the raw protobuf form that can be
+// written to the database, splitting events into compacted and uncompacted
+// events, with events younger than an hour going into
+// uncompacted events.
+//
+// Returns std::nullopt on error.
+std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+ClickinessCompactionMapToRaw(base::Time now, const CompactionMap& map) {
+  InterestGroupStorage::ClickinessCompactionRawEvents raw;
+  ListOfTimestamps uncompacted_events;
+  ListOfTimestampAndCounts compacted_events;
+
+  // Populate proto objects.
+  for (const auto& [timestamp, count] : map) {
+    base::TimeDelta event_age = now - timestamp;
+
+    if (event_age <= base::Hours(1)) {
+      for (int i = 0; i < count; i++) {
+        // While (possibly) rare, it's possible for more than one of the same
+        // event to be recorded at the same time.
+        uncompacted_events.add_timestamps(
+            timestamp.ToDeltaSinceWindowsEpoch().InMicroseconds());
+      }
+    } else {
+      ListOfTimestampAndCounts_Entry* entry =
+          compacted_events.add_timestamp_and_counts();
+      entry->set_timestamp(
+          timestamp.ToDeltaSinceWindowsEpoch().InMicroseconds());
+      entry->set_count(count);
+    }
+  }
+
+  // Serialize proto objects to raw strings.
+  if (!uncompacted_events.SerializeToString(&raw.uncompacted_events) ||
+      !compacted_events.SerializeToString(&raw.compacted_events)) {
+    base::UmaHistogramEnumeration(
+        "Storage.InterestGroup.ProtoSerializationResult.ListOfTimestamps",
+        InterestGroupStorageProtoSerializationResult::kFailed);
+    return std::nullopt;
+  }
+
+  base::UmaHistogramEnumeration(
+      "Storage.InterestGroup.ProtoSerializationResult.ListOfTimestamps",
+      InterestGroupStorageProtoSerializationResult::kSucceeded);
+
+  return raw;
+}
+
+// Computation portion of compaction --- takes in raw protobufs from database,
+// and returns compacted portion, unless it fails.
+std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+ComputeCompactClickiness(
+    base::Time now,
+    const InterestGroupStorage::ClickinessCompactionRawEvents& raw) {
+  // Perform the compaction in a std::map. This avoids n^2 performance of
+  // in-place insertions. The raw -> map and map -> raw phases are separate for
+  // better structuring. The map -> raw phase will write events back
+  // to the uncompacted list that are less than an hour old.
+  std::optional<CompactionMap> map = ClickinessCompactionRawToMap(now, raw);
+  if (!map) {
+    return std::nullopt;
+  }
+  return ClickinessCompactionMapToRaw(now, *map);
+}
+
+// To reduce storage utilization for view and click events, compact events older
+// than an hour to store only a per-hour count, and events older than a day to
+// store only a per-day count.
+bool CompactClickiness(sql::Database& db, base::Time now) {
+  sql::Transaction transaction(&db);
+  if (!transaction.Begin()) {
+    return false;
+  }
+  // For each primary key in view_and_click_events (which is the
+  // (provider_origin, eligible_origin) tuple), we load all uncompacted and
+  // compacted view and click events, compact them in memory, then write the
+  // results back to that (provider_origin, eligible_origin).
+
+  sql::Statement get_all_rows_sql(
+      db.GetCachedStatement(SQL_FROM_HERE,
+                            "SELECT provider_origin,"
+                            "eligible_origin,"
+                            "uncompacted_view_events,"
+                            "compacted_view_events,"
+                            "uncompacted_click_events,"
+                            "compacted_click_events "
+                            "FROM view_and_click_events"));
+  if (!get_all_rows_sql.is_valid()) {
+    return false;
+  }
+
+  sql::Statement update_row(
+      db.GetCachedStatement(SQL_FROM_HERE,
+                            "UPDATE view_and_click_events "
+                            "SET uncompacted_view_events=?,"
+                            "compacted_view_events=?,"
+                            "uncompacted_click_events=?,"
+                            "compacted_click_events=? "
+                            "WHERE provider_origin=? AND eligible_origin=?"));
+  if (!update_row.is_valid()) {
+    return false;
+  }
+
+  sql::Statement delete_row(
+      db.GetCachedStatement(SQL_FROM_HERE,
+                            "DELETE FROM view_and_click_events "
+                            "WHERE provider_origin=? AND eligible_origin=?"));
+  if (!delete_row.is_valid()) {
+    return false;
+  }
+
+  // For each (provider_origin, eligible_origin) in view_and_click_events,
+  // compact that (provider_origin, eligible_origin), and write the updated
+  // results:
+  while (get_all_rows_sql.Step()) {
+    update_row.Reset(/*clear_bound_vars=*/true);
+
+    // Read raw compacted and uncompacted events into `raw`, and compact them
+    // for both view and clicks, clearing memory we don't need anymore as
+    // we go to reduce peak memory consumption, avoiding keeping excess copies
+    // of all events in memory.
+    std::string provider_origin(get_all_rows_sql.ColumnStringView(0));
+    std::string eligible_origin(get_all_rows_sql.ColumnStringView(1));
+    // Views
+    std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+        raw_views;
+    {
+      InterestGroupStorage::ClickinessCompactionRawEvents raw;
+      raw.uncompacted_events = get_all_rows_sql.ColumnStringView(2);
+      raw.compacted_events = get_all_rows_sql.ColumnStringView(3);
+      raw_views = ComputeCompactClickiness(now, raw);
+    }
+    if (!raw_views) {
+      return false;
+    }
+
+    // Clicks
+    std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+        raw_clicks;
+    {
+      InterestGroupStorage::ClickinessCompactionRawEvents raw;
+      raw.uncompacted_events = get_all_rows_sql.ColumnStringView(4);
+      raw.compacted_events = get_all_rows_sql.ColumnStringView(5);
+      raw_clicks = ComputeCompactClickiness(now, raw);
+    }
+    if (!raw_clicks) {
+      return false;
+    }
+
+    // Done compacting this (provider_origin, eligible_origin) row.
+    // If something is left, write the results back to the database,
+    // otherwise delete it.
+    if (raw_views->uncompacted_events.empty() &&
+        raw_views->compacted_events.empty() &&
+        raw_clicks->uncompacted_events.empty() &&
+        raw_clicks->compacted_events.empty()) {
+      delete_row.BindString(0, provider_origin);
+      delete_row.BindString(1, eligible_origin);
+      if (!delete_row.Run()) {
+        return false;
+      }
+    } else {
+      update_row.BindString(0, raw_views->uncompacted_events);
+      update_row.BindString(1, raw_views->compacted_events);
+      update_row.BindString(2, raw_clicks->uncompacted_events);
+      update_row.BindString(3, raw_clicks->compacted_events);
+      update_row.BindString(4, provider_origin);
+      update_row.BindString(5, eligible_origin);
+
+      if (!update_row.Run()) {
+        return false;
+      }
+    }
+  }
+  if (!get_all_rows_sql.Succeeded()) {
+    return false;
+  }
+
+  return transaction.Commit();
+}
+
 bool DoSetBiddingAndAuctionServerKeys(sql::Database& db,
                                       const url::Origin& coordinator,
                                       std::string_view serialized_keys,
@@ -6294,6 +6691,9 @@ bool DoPerformDatabaseMaintenance(sql::Database& db,
     return false;
   }
   if (!ClearExpiredCachedKAnonymityHashes(db, now)) {
+    return false;
+  }
+  if (!CompactClickiness(db, now)) {
     return false;
   }
   return transaction.Commit();
@@ -6835,12 +7235,8 @@ std::optional<StorageInterestGroup> InterestGroupStorage::GetInterestGroup(
     return std::nullopt;
   }
 
-  StorageInterestGroup db_interest_group;
-  if (DoGetStoredInterestGroup(*db_, db_interest_group, PassKey(), group_key,
-                               base::Time::Now())) {
-    return db_interest_group;
-  }
-  return std::nullopt;
+  return DoGetStoredInterestGroup(*db_, PassKey(), group_key,
+                                  base::Time::Now());
 }
 
 std::vector<url::Origin> InterestGroupStorage::GetAllInterestGroupOwners() {
@@ -6951,13 +7347,15 @@ void InterestGroupStorage::RemoveInterestGroupsMatchingOwnerAndJoiner(
 }
 
 void InterestGroupStorage::DeleteInterestGroupData(
-    StoragePartition::StorageKeyMatcherFunction storage_key_matcher) {
+    StoragePartition::StorageKeyMatcherFunction storage_key_matcher,
+    bool user_initiated_deletion) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!EnsureDBInitialized()) {
     return;
   }
 
-  if (!DoDeleteInterestGroupData(*db_, storage_key_matcher)) {
+  if (!DoDeleteInterestGroupData(*db_, std::move(storage_key_matcher),
+                                 user_initiated_deletion)) {
     DLOG(ERROR) << "Could not delete interest group data: "
                 << db_->GetErrorMessage();
   }
@@ -7156,6 +7554,37 @@ InterestGroupStorage::CreateWithIdlePeriodForTesting(
 
 void InterestGroupStorage::ResetIdleTimerForTesting() {
   EnsureDBInitialized();
+}
+
+// static
+std::optional<InterestGroupStorage::ClickinessCompactionRawEvents>
+InterestGroupStorage::ComputeCompactClickinessForTesting(
+    base::Time now,
+    const InterestGroupStorage::ClickinessCompactionRawEvents& raw) {
+  return ComputeCompactClickiness(now, raw);
+}
+
+std::optional<bool>
+InterestGroupStorage::CheckViewClickCountsForProviderAndEligibleInDbForTesting(
+    const url::Origin& provider_origin,
+    const url::Origin& eligible_origin) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!EnsureDBInitialized()) {
+    return std::nullopt;
+  }
+
+  auto status = DoGetViewClickCountsForProviderAndEligible(
+      *db_, provider_origin, eligible_origin);
+  if (status.has_value()) {
+    return true;
+  }
+  switch (status.error()) {
+    case MissingReason::kNotInDb:
+      return false;
+    case MissingReason::kDbError:
+    case MissingReason::kDecodeError:
+      return std::nullopt;
+  }
 }
 
 void InterestGroupStorage::DatabaseErrorCallback(int extended_error,

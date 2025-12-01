@@ -14,7 +14,6 @@
 #include "base/check_op.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
@@ -53,12 +52,15 @@ std::optional<RedirectPosition> GetEnforcementRedirectPosition(
     ActivationList list = GetListForThreatTypeAndMetadata(
         results[i].threat_type, results[i].threat_metadata, &warning);
     if (!warning && list != ActivationList::NONE) {
-      if (num_results == 1)
+      if (num_results == 1) {
         return RedirectPosition::kOnly;
-      if (i == 0)
+      }
+      if (i == 0) {
         return RedirectPosition::kFirst;
-      if (i == num_results - 1)
+      }
+      if (i == num_results - 1) {
         return RedirectPosition::kLast;
+      }
       return RedirectPosition::kMiddle;
     }
   }
@@ -68,23 +70,23 @@ std::optional<RedirectPosition> GetEnforcementRedirectPosition(
 }  // namespace
 
 SafeBrowsingPageActivationThrottle::SafeBrowsingPageActivationThrottle(
-    content::NavigationHandle* handle,
+    content::NavigationThrottleRegistry& registry,
     SafeBrowsingPageActivationThrottle::Delegate* delegate,
     scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager)
-    : NavigationThrottle(handle),
+    : NavigationThrottle(registry),
       database_client_(nullptr),
       delegate_(delegate) {
   database_client_.reset(new SubresourceFilterSafeBrowsingClient(
       std::move(database_manager), this,
       base::SingleThreadTaskRunner::GetCurrentDefault()));
 
-  CHECK(IsInSubresourceFilterRoot(handle), base::NotFatalUntil::M129);
+  CHECK(IsInSubresourceFilterRoot(&registry.GetNavigationHandle()));
   CheckCurrentUrl();
-  CHECK(!check_results_.empty(), base::NotFatalUntil::M129);
+  CHECK(!check_results_.empty());
 }
 
-SafeBrowsingPageActivationThrottle::
-    ~SafeBrowsingPageActivationThrottle() = default;
+SafeBrowsingPageActivationThrottle::~SafeBrowsingPageActivationThrottle() =
+    default;
 
 content::NavigationThrottle::ThrottleCheckResult
 SafeBrowsingPageActivationThrottle::WillRedirectRequest() {
@@ -105,16 +107,15 @@ SafeBrowsingPageActivationThrottle::WillProcessResponse() {
   return DEFER;
 }
 
-const char*
-SafeBrowsingPageActivationThrottle::GetNameForLogging() {
+const char* SafeBrowsingPageActivationThrottle::GetNameForLogging() {
   return "SafeBrowsingPageActivationThrottle";
 }
 
 void SafeBrowsingPageActivationThrottle::OnCheckUrlResultOnUI(
     const SubresourceFilterSafeBrowsingClient::CheckResult& result) {
-  CHECK_CURRENTLY_ON(content::BrowserThread::UI, base::NotFatalUntil::M129);
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
   size_t request_id = result.request_id;
-  CHECK_LT(request_id, check_results_.size(), base::NotFatalUntil::M129);
+  CHECK_LT(request_id, check_results_.size());
 
   auto& stored_result = check_results_.at(request_id);
   CHECK(!stored_result.finished);
@@ -140,17 +141,15 @@ SafeBrowsingPageActivationThrottle::ConfigResult::ConfigResult(
       matched_valid_configuration(matched_valid_configuration),
       matched_list(matched_list) {}
 
-SafeBrowsingPageActivationThrottle::ConfigResult::ConfigResult() =
-    default;
+SafeBrowsingPageActivationThrottle::ConfigResult::ConfigResult() = default;
 
 SafeBrowsingPageActivationThrottle::ConfigResult::ConfigResult(
     const ConfigResult&) = default;
 
-SafeBrowsingPageActivationThrottle::ConfigResult::~ConfigResult() =
-    default;
+SafeBrowsingPageActivationThrottle::ConfigResult::~ConfigResult() = default;
 
 void SafeBrowsingPageActivationThrottle::CheckCurrentUrl() {
-  CHECK(database_client_, base::NotFatalUntil::M129);
+  CHECK(database_client_);
   check_results_.emplace_back();
   size_t id = check_results_.size() - 1;
   database_client_->CheckUrl(navigation_handle()->GetURL(), id,
@@ -160,7 +159,7 @@ void SafeBrowsingPageActivationThrottle::CheckCurrentUrl() {
 void SafeBrowsingPageActivationThrottle::NotifyResult() {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("loading"),
                "SafeBrowsingPageActivationThrottle::NotifyResult");
-  CHECK(!check_results_.empty(), base::NotFatalUntil::M129);
+  CHECK(!check_results_.empty());
 
   // Determine which results to consider for safebrowsing/abusive enforcement.
   // We only consider the final check result in a redirect chain.
@@ -172,8 +171,7 @@ void SafeBrowsingPageActivationThrottle::NotifyResult() {
 
   // Get the activation decision with the associated ConfigResult.
   ActivationDecision activation_decision = GetActivationDecision(selection);
-  CHECK_NE(activation_decision, ActivationDecision::UNKNOWN,
-           base::NotFatalUntil::M129);
+  CHECK_NE(activation_decision, ActivationDecision::UNKNOWN);
 
   // Notify the observers of the check results.
   SubresourceFilterObserverManager::FromWebContents(
@@ -218,11 +216,11 @@ void SafeBrowsingPageActivationThrottle::NotifyResult() {
           selection.config.GetActivationState(activation_level));
 }
 
-void SafeBrowsingPageActivationThrottle::
-    LogMetricsOnChecksComplete(ActivationList matched_list,
-                               ActivationDecision decision,
-                               mojom::ActivationLevel level) const {
-  CHECK(HasFinishedAllSafeBrowsingChecks(), base::NotFatalUntil::M129);
+void SafeBrowsingPageActivationThrottle::LogMetricsOnChecksComplete(
+    ActivationList matched_list,
+    ActivationDecision decision,
+    mojom::ActivationLevel level) const {
+  CHECK(HasFinishedAllSafeBrowsingChecks());
 
   base::TimeDelta delay = defer_time_.is_null()
                               ? base::Milliseconds(0)
@@ -234,8 +232,7 @@ void SafeBrowsingPageActivationThrottle::
   ukm::builders::SubresourceFilter builder(source_id);
   builder.SetActivationDecision(static_cast<int64_t>(decision));
   if (level == mojom::ActivationLevel::kDryRun) {
-    CHECK_EQ(ActivationDecision::ACTIVATED, decision,
-             base::NotFatalUntil::M129);
+    CHECK_EQ(ActivationDecision::ACTIVATED, decision);
     builder.SetDryRun(true);
   }
 
@@ -253,8 +250,8 @@ void SafeBrowsingPageActivationThrottle::
                             static_cast<int>(ActivationList::LAST) + 1);
 }
 
-bool SafeBrowsingPageActivationThrottle::
-    HasFinishedAllSafeBrowsingChecks() const {
+bool SafeBrowsingPageActivationThrottle::HasFinishedAllSafeBrowsingChecks()
+    const {
   for (const auto& check_result : check_results_) {
     if (!check_result.finished) {
       return false;
@@ -264,10 +261,9 @@ bool SafeBrowsingPageActivationThrottle::
 }
 
 SafeBrowsingPageActivationThrottle::ConfigResult
-SafeBrowsingPageActivationThrottle::
-    GetHighestPriorityConfiguration(
-        const SubresourceFilterSafeBrowsingClient::CheckResult& result) {
-  CHECK(result.finished, base::NotFatalUntil::M129);
+SafeBrowsingPageActivationThrottle::GetHighestPriorityConfiguration(
+    const SubresourceFilterSafeBrowsingClient::CheckResult& result) {
+  CHECK(result.finished);
   Configuration selected_config;
   bool warning = false;
   bool matched = false;
@@ -296,8 +292,7 @@ SafeBrowsingPageActivationThrottle::
   return ConfigResult(selected_config, warning, matched, matched_list);
 }
 
-ActivationDecision
-SafeBrowsingPageActivationThrottle::GetActivationDecision(
+ActivationDecision SafeBrowsingPageActivationThrottle::GetActivationDecision(
     const ConfigResult& config) {
   if (!config.matched_valid_configuration) {
     return ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET;
@@ -327,10 +322,12 @@ bool SafeBrowsingPageActivationThrottle::
     case ActivationScope::ALL_SITES:
       return true;
     case ActivationScope::ACTIVATION_LIST:
-      if (matched_list == ActivationList::NONE)
+      if (matched_list == ActivationList::NONE) {
         return false;
-      if (conditions.activation_list == matched_list)
+      }
+      if (conditions.activation_list == matched_list) {
         return true;
+      }
 
       if (conditions.activation_list == ActivationList::PHISHING_INTERSTITIAL &&
           matched_list == ActivationList::SOCIAL_ENG_ADS_INTERSTITIAL) {

@@ -12,6 +12,7 @@
 <translation id="1910514478706885609">Yeni vərəq qrupunda açın</translation>
 <translation id="1925021887439448749">Fərdi veb ünvanı daxil et</translation>
 <translation id="2038563949887743358">Kompyuter versiyanı açın</translation>
+<translation id="208033313373016095">Veb səhifələr üçün oxuyucu baxışı</translation>
 <translation id="2149973817440762519">Əlfəcinə düzəliş et</translation>
 <translation id="2306442503286132111">Əlfəcin, <ph name="FOLDER_NAME" /> qovluğunda saxlanıldı</translation>
 <translation id="2433507940547922241">Görünüş</translation>
@@ -29,10 +30,11 @@
           =1{<ph name="BOOKMARKS_COUNT_ONE" /> əlfəcin}
           other{<ph name="BOOKMARKS_COUNT_MANY" /> əlfəcinlər}}</translation>
 <translation id="3076631378407175873">Müəllif Hüquqları <ph name="YEAR" /> Vivaldi Technologies AS aiddir. Bütün hüquqlar qorunur.</translation>
+<translation id="3110967157686007724">Məxfi vərəq</translation>
 <translation id="3232293466644486101">Baxılmış məlumatlarını silin…</translation>
 <translation id="3234355010754616171">Yeni məxfi vərəq</translation>
 <translation id="3237087289225714896">Standart öncədən yükləmə:</translation>
-<translation id="3377025655491224618">Məxfi vərəq</translation>
+<translation id="3478414204555961127">Oxucu baxışı</translation>
 <translation id="3504699618187058974">Vərəqləri qruplaşdırmaq</translation>
 <translation id="3518985090088779359">Qəbul et və irəlilə</translation>
 <translation id="3571177741182643350">Oxunmamış məqalələr - Oflayn əlçatandır:</translation>
@@ -114,11 +116,11 @@ Axtarış qaydalarını tənzimləmək üçün basıb saxlayın. Axtarış vasit
 <translation id="8348430946834215779">Mümkün olduqda HTTPS istifadə edin və onu dəstəkləməyən saytları yükləməzdən əvvəl xəbərdarlıq alın</translation>
 <translation id="8560602726703398413">Əlfəcinlərdə oxuma siyahısını tap</translation>
 <translation id="85991616550051997">Ev səhifəsinə keçin</translation>
+<translation id="8693232767599693749">Oxu rejimini gözdən keşirək?</translation>
 <translation id="8820817407110198400">Əlfəcinlər</translation>
 <translation id="9042893549633094279">Məxfilik və təhlükəsizlik</translation>
 <translation id="9063523880881406963">Komputer versiyasını söndürün</translation>
 <translation id="9080642952018487277">Gizli işləmək</translation>
 <translation id="930124987204876019">Tarixçə, kuki, sayt verilənlərini və keşi silin…</translation>
 <translation id="961856697154696964">Baxdığınız məlumatları silmək</translation>
-<translation id="96681097142096641">Səhifə sadə formada göstərilsin?</translation>
 </translationbundle>

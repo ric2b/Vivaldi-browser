@@ -51,11 +51,12 @@ class IdentityDialogController
   // values at the end. This enum should be kept in sync with FedCmUserAction in
   // tools/metrics/histograms/enums.xml.
   enum class UserAction {
-    kSuccess = 0,
+    // kSuccess = 0,  // Deprecated.
     kIgnored = 1,
     kClosed = 2,
+    kSuccess = 3,
 
-    kMaxValue = kClosed
+    kMaxValue = kSuccess
   };
 
   // content::IdentityRequestDelegate
@@ -67,21 +68,20 @@ class IdentityDialogController
       content::RelyingPartyData rp_data,
       const std::vector<IdentityProviderDataPtr>& identity_provider_data,
       const std::vector<IdentityRequestAccountPtr>& accounts,
-      content::IdentityRequestAccount::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<IdentityRequestAccountPtr>& new_accounts,
       AccountSelectionCallback on_selected,
       LoginToIdPCallback on_add_account,
       DismissCallback dismiss_callback,
       AccountsDisplayedCallback accounts_displayed_callback) override;
-  bool ShowFailureDialog(const std::string& rp_for_display,
+  bool ShowFailureDialog(const content::RelyingPartyData& rp_data,
                          const std::string& idp_for_display,
                          blink::mojom::RpContext rp_context,
                          blink::mojom::RpMode rp_mode,
                          const content::IdentityProviderMetadata& idp_metadata,
                          DismissCallback dismiss_callback,
                          LoginToIdPCallback login_callback) override;
-  bool ShowErrorDialog(const std::string& rp_for_display,
+  bool ShowErrorDialog(const content::RelyingPartyData& rp_data,
                        const std::string& idp_for_display,
                        blink::mojom::RpContext rp_context,
                        blink::mojom::RpMode rp_mode,
@@ -89,11 +89,18 @@ class IdentityDialogController
                        const std::optional<TokenError>& error,
                        DismissCallback dismiss_callback,
                        MoreDetailsCallback more_details_callback) override;
-  bool ShowLoadingDialog(const std::string& rp_for_display,
+  bool ShowLoadingDialog(const content::RelyingPartyData& rp_data,
                          const std::string& idp_for_display,
                          blink::mojom::RpContext rp_context,
                          blink::mojom::RpMode rp_mode,
                          DismissCallback dismiss_callback) override;
+  bool ShowVerifyingDialog(
+      const content::RelyingPartyData& rp_data,
+      const IdentityProviderDataPtr& idp_data,
+      const IdentityRequestAccountPtr& account,
+      Account::SignInMode sign_in_mode,
+      blink::mojom::RpMode rp_mode,
+      AccountsDisplayedCallback accounts_displayed_callback) override;
 
   std::string GetTitle() const override;
   std::optional<std::string> GetSubtitle() const override;
@@ -138,7 +145,6 @@ class IdentityDialogController
       const content::RelyingPartyData& rp_data,
       const std::vector<IdentityProviderDataPtr>& identity_provider_data,
       const std::vector<IdentityRequestAccountPtr>& accounts,
-      Account::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<IdentityRequestAccountPtr>& new_accounts,
       const segmentation_platform::ClassificationResult&
@@ -178,6 +184,8 @@ class IdentityDialogController
   // been navigated to. e.g. Aggregated FedCM clickthrough rate.
   raw_ptr<optimization_guide::OptimizationGuideDecider>
       optimization_guide_decider_{nullptr};
+
+  base::WeakPtrFactory<IdentityDialogController> weak_ptr_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_WEBID_IDENTITY_DIALOG_CONTROLLER_H_

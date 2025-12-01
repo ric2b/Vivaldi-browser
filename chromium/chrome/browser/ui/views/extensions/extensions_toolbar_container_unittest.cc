@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/json/json_reader.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
@@ -283,7 +284,7 @@ TEST_F(ExtensionsToolbarContainerUnitTest, ReloadExtensionFailed) {
   extension_directory.WriteManifest(kManifestWithErrors);
 
   // Reload the extension. It should fail due to the manifest errors.
-  extension_service()->ReloadExtensionWithQuietFailure(extension->id());
+  extension_registrar()->ReloadExtensionWithQuietFailure(extension->id());
   base::RunLoop().RunUntilIdle();
   WaitForAnimation();
 

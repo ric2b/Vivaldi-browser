@@ -81,10 +81,10 @@ bool IsAllowedCustomUiPromo(const base::Feature& promo_feature) {
   // code for your new Custom UI promo.
   //
   // Add the text names of allowlisted rotating promos here:
-  // static constexpr auto kAllowedPromoNames =
-  //     base::MakeFixedFlatSet<std::string_view>({ });
-  // return kAllowedPromoNames.contains(promo_feature.name);
-  return false;
+  static constexpr auto kAllowedPromoNames =
+      base::MakeFixedFlatSet<std::string_view>(
+          {"IPH_ExtensionsZeroStatePromo"});
+  return kAllowedPromoNames.contains(promo_feature.name);
 }
 
 bool IsAllowedLegacyPromo(const base::Feature& promo_feature) {
@@ -101,7 +101,6 @@ bool IsAllowedLegacyPromo(const base::Feature& promo_feature) {
           "IPH_ReadingListDiscovery",
           "IPH_ReadingListInSidePanel",
           "IPH_TabSearch",
-          "IPH_WebUITabStrip",
       });
   return kAllowedPromoNames.contains(promo_feature.name);
 }
@@ -118,12 +117,12 @@ bool IsAllowedToastWithoutScreenreaderText(const base::Feature& promo_feature) {
   //
   // TODO(dfried): Merge legacy promos into this category, eliminating the entry
   // point and promo type entirely.
-  //
-  // Add exceptions here:
-  // static constexpr auto kAllowedPromoNames =
-  //     base::MakeFixedFlatSet<std::string_view>({ });
-  // return kAllowedPromoNames.contains(promo_feature.name);
-  return false;
+
+  // TODO(crbug.com/421471598): Remove this exemption once we have a separate
+  // string for screenreader.
+  static constexpr auto kAllowedPromoNames =
+      base::MakeFixedFlatSet<std::string_view>({"IPH_TabSearchToolbarButton"});
+  return kAllowedPromoNames.contains(promo_feature.name);
 }
 
 bool IsAllowedPreconditionExemption(const base::Feature& promo_feature) {

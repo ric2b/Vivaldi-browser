@@ -5,7 +5,7 @@
 #                      \___/_/\_\ .__/ \__,_|\__|
 #                               |_| XML parser
 #
-# Copyright (c) 2021-2024 Sebastian Pipping <sebastian@pipping.org>
+# Copyright (c) 2021-2025 Sebastian Pipping <sebastian@pipping.org>
 # Copyright (c) 2023      Joyce Brum <joycebrum@google.com>
 # Copyright (c) 2024      Dag-Erling Smørgrav <des@des.dev>
 # Licensed under the MIT license:
@@ -44,9 +44,9 @@ permissions:
 jobs:
   checks:
     name: Ensure realistic minimum CMake version requirement
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332  # v4.1.7
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
     - name: Install ancient CMake
       run: |

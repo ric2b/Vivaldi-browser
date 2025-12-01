@@ -14,6 +14,7 @@ const enum reg_enum nasm_rd_reg64   [16] = {R_RAX,R_RCX,R_RDX,R_RBX,R_RSP,R_RBP,
 const enum reg_enum nasm_rd_reg8    [ 8] = {R_AL,R_CL,R_DL,R_BL,R_AH,R_CH,R_DH,R_BH};
 const enum reg_enum nasm_rd_reg8_rex[16] = {R_AL,R_CL,R_DL,R_BL,R_SPL,R_BPL,R_SIL,R_DIL,R_R8B,R_R9B,R_R10B,R_R11B,R_R12B,R_R13B,R_R14B,R_R15B};
 const enum reg_enum nasm_rd_sreg    [ 8] = {R_ES,R_CS,R_SS,R_DS,R_FS,R_GS,R_SEGR6,R_SEGR7};
+const enum reg_enum nasm_rd_tmmreg  [ 8] = {R_TMM0,R_TMM1,R_TMM2,R_TMM3,R_TMM4,R_TMM5,R_TMM6,R_TMM7};
 const enum reg_enum nasm_rd_treg    [ 8] = {R_TR0,R_TR1,R_TR2,R_TR3,R_TR4,R_TR5,R_TR6,R_TR7};
 const enum reg_enum nasm_rd_xmmreg  [32] = {R_XMM0,R_XMM1,R_XMM2,R_XMM3,R_XMM4,R_XMM5,R_XMM6,R_XMM7,R_XMM8,R_XMM9,R_XMM10,R_XMM11,R_XMM12,R_XMM13,R_XMM14,R_XMM15,R_XMM16,R_XMM17,R_XMM18,R_XMM19,R_XMM20,R_XMM21,R_XMM22,R_XMM23,R_XMM24,R_XMM25,R_XMM26,R_XMM27,R_XMM28,R_XMM29,R_XMM30,R_XMM31};
 const enum reg_enum nasm_rd_ymmreg  [32] = {R_YMM0,R_YMM1,R_YMM2,R_YMM3,R_YMM4,R_YMM5,R_YMM6,R_YMM7,R_YMM8,R_YMM9,R_YMM10,R_YMM11,R_YMM12,R_YMM13,R_YMM14,R_YMM15,R_YMM16,R_YMM17,R_YMM18,R_YMM19,R_YMM20,R_YMM21,R_YMM22,R_YMM23,R_YMM24,R_YMM25,R_YMM26,R_YMM27,R_YMM28,R_YMM29,R_YMM30,R_YMM31};

@@ -81,6 +81,8 @@ class P2pClusterPcpHandlerTest : public testing::Test {
  protected:
   void SetUp() override {
     NEARBY_LOGS(INFO) << "SetUp: begin";
+    NearbyFlags::GetInstance().OverrideBoolFlagValue(
+        config_package_nearby::nearby_connections_feature::kEnableAwdl, true);
     SetBleExtendedAdvertisementsAvailable(true);
     SetDisableBluetoothClassicScanning(true);
     SetBleV2Enabled(true);
@@ -245,6 +247,8 @@ class P2pClusterPcpHandlerTestWithParam
     NearbyFlags::GetInstance().OverrideBoolFlagValue(
         config_package_nearby::nearby_connections_feature::kEnableBleV2,
         ble_v2_enabled);
+    NearbyFlags::GetInstance().OverrideBoolFlagValue(
+        config_package_nearby::nearby_connections_feature::kEnableAwdl, true);
     bool is_disable_bluetooth_scanning = std::get<2>(GetParam());
     NearbyFlags::GetInstance().OverrideBoolFlagValue(
         config_package_nearby::nearby_connections_feature::
@@ -1183,6 +1187,164 @@ TEST_P(P2pClusterPcpHandlerTestWithParam,
   } else {
     EXPECT_FALSE(mediums_a.GetBle().IsAcceptingConnections(service_id_));
   }
+  env_.Stop();
+}
+
+TEST_F(P2pClusterPcpHandlerTest, CanAwdlDiscovery) {
+  std::string endpoint_name{"endpoint_name"};
+
+  env_.Start();
+  Mediums mediums_a;
+  EndpointChannelManager ecm_a;
+  EndpointManager em_a(&ecm_a);
+  InjectedBluetoothDeviceStore ibds_a;
+  BwuManager bwu_a(mediums_a, em_a, ecm_a, {}, {});
+  P2pClusterPcpHandler handler_a(&mediums_a, &em_a, &ecm_a, &bwu_a, ibds_a);
+
+  EXPECT_EQ(handler_a.StartDiscovery(&client_a_, service_id_,
+                                     DiscoveryOptions{
+                                         {Strategy::kP2pCluster,
+                                          BooleanMediumSelector{
+                                              .awdl = true,
+                                          }},
+                                     },
+                                     {}),
+            Status{Status::kSuccess});
+
+  EXPECT_TRUE(mediums_a.GetAwdl().IsDiscovering(service_id_));
+
+  handler_a.StopDiscovery(&client_a_);
+  env_.Stop();
+}
+
+TEST_F(P2pClusterPcpHandlerTest, CanAwdlWifiLanDiscovery) {
+  std::string endpoint_name{"endpoint_name"};
+
+  env_.Start();
+  Mediums mediums_a;
+  EndpointChannelManager ecm_a;
+  EndpointManager em_a(&ecm_a);
+  InjectedBluetoothDeviceStore ibds_a;
+  BwuManager bwu_a(mediums_a, em_a, ecm_a, {}, {});
+  P2pClusterPcpHandler handler_a(&mediums_a, &em_a, &ecm_a, &bwu_a, ibds_a);
+
+  EXPECT_EQ(handler_a.StartDiscovery(&client_a_, service_id_,
+                                     DiscoveryOptions{
+                                         {Strategy::kP2pCluster,
+                                          BooleanMediumSelector{
+                                              .wifi_lan = true,
+                                              .awdl = true,
+                                          }},
+                                     },
+                                     {}),
+            Status{Status::kSuccess});
+
+  EXPECT_TRUE(mediums_a.GetAwdl().IsDiscovering(service_id_));
+  EXPECT_TRUE(mediums_a.GetWifiLan().IsDiscovering(service_id_));
+
+  handler_a.StopDiscovery(&client_a_);
+  env_.Stop();
+}
+
+TEST_F(P2pClusterPcpHandlerTest, CanAwdlAdvertise) {
+  env_.Start();
+  std::string endpoint_name{"endpoint_name"};
+  Mediums mediums_a;
+  EndpointChannelManager ecm_a;
+  EndpointManager em_a(&ecm_a);
+  BwuManager bwu_a(mediums_a, em_a, ecm_a, {}, {});
+  InjectedBluetoothDeviceStore ibds_a;
+  P2pClusterPcpHandler handler_a(&mediums_a, &em_a, &ecm_a, &bwu_a, ibds_a);
+  EXPECT_EQ(
+      handler_a.StartAdvertising(&client_a_, service_id_,
+                                 AdvertisingOptions{{Strategy::kP2pCluster,
+                                                     BooleanMediumSelector{
+                                                         .awdl = true,
+                                                     }}},
+                                 {.endpoint_info = ByteArray{endpoint_name}}),
+      Status{Status::kSuccess});
+  EXPECT_TRUE(mediums_a.GetAwdl().IsAdvertising(service_id_));
+  EXPECT_FALSE(mediums_a.GetWifiLan().IsAdvertising(service_id_));
+  handler_a.StopAdvertising(&client_a_);
+  env_.Stop();
+}
+
+TEST_F(P2pClusterPcpHandlerTest, CanAwdlWifiLanAdvertise) {
+  env_.Start();
+  std::string endpoint_name{"endpoint_name"};
+  Mediums mediums_a;
+  EndpointChannelManager ecm_a;
+  EndpointManager em_a(&ecm_a);
+  BwuManager bwu_a(mediums_a, em_a, ecm_a, {}, {});
+  InjectedBluetoothDeviceStore ibds_a;
+  P2pClusterPcpHandler handler_a(&mediums_a, &em_a, &ecm_a, &bwu_a, ibds_a);
+  EXPECT_EQ(
+      handler_a.StartAdvertising(&client_a_, service_id_,
+                                 AdvertisingOptions{{Strategy::kP2pCluster,
+                                                     BooleanMediumSelector{
+                                                         .wifi_lan = true,
+                                                         .awdl = true,
+                                                     }}},
+                                 {.endpoint_info = ByteArray{endpoint_name}}),
+      Status{Status::kSuccess});
+  EXPECT_TRUE(mediums_a.GetAwdl().IsAdvertising(service_id_));
+  EXPECT_TRUE(mediums_a.GetWifiLan().IsAdvertising(service_id_));
+  handler_a.StopAdvertising(&client_a_);
+  env_.Stop();
+}
+
+TEST_P(P2pClusterPcpHandlerTestWithParam, CanUpdateAwdlDiscoveryOptions) {
+  env_.Start();
+  std::string endpoint_name{"endpoint_name"};
+  Mediums mediums_a;
+  EndpointChannelManager ecm_a;
+  EndpointManager em_a(&ecm_a);
+  BwuManager bwu_a(mediums_a, em_a, ecm_a, {}, {});
+  InjectedBluetoothDeviceStore ibds_a;
+  P2pClusterPcpHandler handler_a(&mediums_a, &em_a, &ecm_a, &bwu_a, ibds_a);
+  discovery_options_.allowed.wifi_lan = true;
+  discovery_options_.allowed.awdl = false;
+  EXPECT_EQ(
+      handler_a.StartDiscovery(&client_a_, service_id_, discovery_options_, {}),
+      Status{Status::kSuccess});
+  EXPECT_TRUE(mediums_a.GetWifiLan().IsDiscovering(service_id_));
+  EXPECT_FALSE(mediums_a.GetAwdl().IsDiscovering(service_id_));
+  discovery_options_.allowed.wifi_lan = false;
+  discovery_options_.allowed.awdl = true;
+  EXPECT_EQ(handler_a.UpdateDiscoveryOptions(&client_a_, service_id_,
+                                             discovery_options_),
+            Status{Status::kSuccess});
+  EXPECT_FALSE(mediums_a.GetWifiLan().IsDiscovering(service_id_));
+  EXPECT_TRUE(mediums_a.GetAwdl().IsDiscovering(service_id_));
+  handler_a.StopDiscovery(&client_a_);
+  env_.Stop();
+}
+
+TEST_P(P2pClusterPcpHandlerTestWithParam, CanUpdateAwdlAdvertisingOptions) {
+  env_.Start();
+  std::string endpoint_name{"endpoint_name"};
+  Mediums mediums_a;
+  EndpointChannelManager ecm_a;
+  EndpointManager em_a(&ecm_a);
+  BwuManager bwu_a(mediums_a, em_a, ecm_a, {}, {});
+  InjectedBluetoothDeviceStore ibds_a;
+  P2pClusterPcpHandler handler_a(&mediums_a, &em_a, &ecm_a, &bwu_a, ibds_a);
+  advertising_options_.allowed.wifi_lan = true;
+  EXPECT_EQ(
+      handler_a.StartAdvertising(&client_a_, service_id_, advertising_options_,
+                                 {.endpoint_info = ByteArray{endpoint_name}}),
+      Status{Status::kSuccess});
+  // EXPECT_EQ(enabled.ble, mediums_a.GetBleV2().IsAdvertising(service_id_));
+  EXPECT_TRUE(mediums_a.GetWifiLan().IsAdvertising(service_id_));
+  EXPECT_FALSE(mediums_a.GetAwdl().IsAdvertising(service_id_));
+  advertising_options_.allowed.wifi_lan = false;
+  advertising_options_.allowed.awdl = true;
+  EXPECT_EQ(handler_a.UpdateAdvertisingOptions(&client_a_, service_id_,
+                                               advertising_options_),
+            Status{Status::kSuccess});
+  EXPECT_FALSE(mediums_a.GetWifiLan().IsAdvertising(service_id_));
+  EXPECT_TRUE(mediums_a.GetAwdl().IsAdvertising(service_id_));
+  handler_a.StopAdvertising(&client_a_);
   env_.Stop();
 }
 

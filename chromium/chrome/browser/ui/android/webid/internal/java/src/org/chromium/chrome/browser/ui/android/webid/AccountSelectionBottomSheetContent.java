@@ -33,7 +33,7 @@ public class AccountSelectionBottomSheetContent implements BottomSheetContent {
      * trigger. Therefore, we are able to show more accounts at once compared to passive mode. And
      * multi IDP UI accounts take more space, so we show even less accounts in that case.
      */
-    private static final float MAX_VISIBLE_ACCOUNTS_PASSIVE_MODE_MULTI_IDP = 1.5f;
+    private static final float MAX_VISIBLE_ACCOUNTS_PASSIVE_MODE_MULTI_IDP = 1.4f;
 
     private static final float MAX_VISIBLE_ACCOUNTS_PASSIVE_MODE_SINGLE_IDP = 2.5f;
 
@@ -235,11 +235,6 @@ public class AccountSelectionBottomSheetContent implements BottomSheetContent {
     @Override
     public boolean skipHalfStateOnScrollingDown() {
         return false;
-    }
-
-    @Override
-    public int getPeekHeight() {
-        return BottomSheetContent.HeightMode.DISABLED;
     }
 
     @Override

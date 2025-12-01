@@ -9,11 +9,13 @@
 #include <string>
 #include <vector>
 
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/android/autocomplete/tab_matcher_android.h"
 #else
@@ -27,6 +29,7 @@ class OnDeviceTailModelService;
 
 namespace content {
 class StoragePartition;
+class WebContents;
 }
 
 namespace unified_consent {
@@ -36,6 +39,9 @@ class UrlKeyedDataCollectionConsentHelper;
 class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
  public:
   explicit ChromeAutocompleteProviderClient(Profile* profile);
+  using WebContentsGetter = base::RepeatingCallback<content::WebContents*()>;
+  ChromeAutocompleteProviderClient(Profile* profile,
+                                   WebContentsGetter web_contents_getter);
 
   ChromeAutocompleteProviderClient(const ChromeAutocompleteProviderClient&) =
       delete;
@@ -88,12 +94,14 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
       const override;
   OnDeviceTailModelService* GetOnDeviceTailModelService() const override;
   ProviderStateService* GetProviderStateService() const override;
+  tab_groups::TabGroupSyncService* GetTabGroupSyncService() const override;
   bool IsOffTheRecord() const override;
   bool IsIncognitoProfile() const override;
   bool IsGuestSession() const override;
   bool SearchSuggestEnabled() const override;
   bool AllowDeletingBrowserHistory() const override;
   bool IsUrlDataCollectionActive() const override;
+  bool IsPersonalizedUrlDataCollectionActive() const override;
   bool IsAuthenticated() const override;
   bool IsSyncActive() const override;
   std::string ProfileUserName() const override;
@@ -114,6 +122,11 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   bool IsSharingHubAvailable() const override;
   bool IsHistoryEmbeddingsEnabled() const override;
   bool IsHistoryEmbeddingsSettingVisible() const override;
+  bool IsLensEnabled() const override;
+  bool AreLensEntrypointsVisible() const override;
+  std::optional<bool> IsPagePaywalled() const override;
+  base::CallbackListSubscription GetLensSuggestInputsWhenReady(
+      LensOverlaySuggestInputsCallback callback) const override;
   base::WeakPtr<AutocompleteProviderClient> GetWeakPtr() override;
 
   // Vivaldi
@@ -122,6 +135,8 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
   void SetFromSearchField(bool from_search_field) override;
   bool GetFromSearchField() override;
   bool VivaldiOnlyKeywordSearch() override;
+  bool IsAddressBarAutocompleteEnabled() override;
+  bool AddressBarOmniboxShowBrowserHistory() override;
 
   // OmniboxAction::Client:
   void OpenSharingHub() override;
@@ -141,16 +156,18 @@ class ChromeAutocompleteProviderClient : public AutocompleteProviderClient {
     storage_partition_ = storage_partition;
   }
 
-  bool StrippedURLsAreEqual(const GURL& url1,
-                            const GURL& url2,
-                            const AutocompleteInput* input) const;
-
  private:
   raw_ptr<Profile> profile_;
+  // Callback to get the current WebContents. In the context of the Omnibox, it
+  // returns the currently active tab's WebContents.
+  // May be a null callback, must be checked before using.
+  WebContentsGetter web_contents_getter_;
   ChromeAutocompleteSchemeClassifier scheme_classifier_;
   std::unique_ptr<OmniboxPedalProvider> pedal_provider_;
   std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>
       url_consent_helper_;
+  std::unique_ptr<unified_consent::UrlKeyedDataCollectionConsentHelper>
+      personalized_url_consent_helper_;
 #if BUILDFLAG(IS_ANDROID)
   TabMatcherAndroid tab_matcher_;
 #else

@@ -85,12 +85,13 @@ MediaGalleriesDialogViews::MediaGalleriesDialogViews(
   SetModalType(ui::mojom::ModalType::kChild);
   SetShowCloseButton(false);
   SetTitle(controller_->GetHeader());
-  SetOwnedByWidget(false);
-  RegisterDeleteDelegateCallback(base::BindOnce(
-      [](MediaGalleriesDialogViews* dialog) {
-        dialog->controller_->DialogFinished(dialog->accepted_);
-      },
-      this));
+  RegisterDeleteDelegateCallback(
+      RegisterDeleteCallbackPassKey(),
+      base::BindOnce(
+          [](MediaGalleriesDialogViews* dialog) {
+            dialog->controller_->DialogFinished(dialog->accepted_);
+          },
+          this));
 
   std::u16string label = controller_->GetAuxiliaryButtonText();
   if (!label.empty()) {

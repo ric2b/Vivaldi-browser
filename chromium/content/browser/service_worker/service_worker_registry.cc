@@ -12,7 +12,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -1082,10 +1081,9 @@ ServiceWorkerRegistry::GetOrCreateRegistration(
     version->set_used_features(std::move(used_features));
     // policy_container_host could be null for registration restored from old DB
     if (data.policy_container_policies) {
-      version->set_policy_container_host(
-          base::MakeRefCounted<PolicyContainerHost>(
-              PolicyContainerPolicies(*data.policy_container_policies,
-                                      /*is_web_secure_context=*/true)));
+      version->SetPolicyContainerHost(base::MakeRefCounted<PolicyContainerHost>(
+          PolicyContainerPolicies(*data.policy_container_policies,
+                                  /*is_web_secure_context=*/true)));
     }
     if (data.router_rules) {
       auto error = version->SetupRouterEvaluator(*data.router_rules);
@@ -1234,7 +1232,7 @@ void ServiceWorkerRegistry::RunFindRegistrationCallbacks(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto iter =
       find_registration_callbacks_.find(std::make_pair(client_url, key));
-  CHECK(iter != find_registration_callbacks_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != find_registration_callbacks_.end());
   std::vector<FindRegistrationCallback> callbacks = std::move(iter->second);
   find_registration_callbacks_.erase(iter);
   for (FindRegistrationCallback& callback : callbacks) {
@@ -1518,14 +1516,8 @@ void ServiceWorkerRegistry::NotifyRegistrationStored(
     const GURL& stored_scope,
     const blink::StorageKey& key,
     StatusCallback callback) {
-  scoped_refptr<ServiceWorkerRegistration> registration =
-      context_->GetLiveRegistration(stored_registration_id);
-  if (registration) {
-    registration->SetStored();
-    registration->set_resources_total_size_bytes(
-        stored_resources_total_size_bytes);
-  }
-  context_->NotifyRegistrationStored(stored_registration_id, stored_scope, key);
+  context_->NotifyRegistrationStored(stored_registration_id, stored_scope, key,
+                                     stored_resources_total_size_bytes);
 
   auto iter = registration_scope_cache_.Get(key);
   if (iter != registration_scope_cache_.end()) {

@@ -22,6 +22,8 @@
 #include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/browser/unscoped_extension_provider_delegate.h"
 #include "components/omnibox/browser/zero_suggest_cache_service.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
+#include "components/saved_tab_groups/test_support/mock_tab_group_sync_service.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -132,6 +134,10 @@ class MockAutocompleteProviderClient
     in_background_state_ = in_background_state;
   }
 
+  tab_groups::TabGroupSyncService* GetTabGroupSyncService() const override {
+    return mock_tab_group_sync_service_.get();
+  }
+
   MOCK_CONST_METHOD0(GetAcceptLanguages, std::string());
   MOCK_CONST_METHOD0(GetEmbedderRepresentationOfAboutScheme, std::string());
   MOCK_METHOD0(GetBuiltinURLs, std::vector<std::u16string>());
@@ -141,10 +147,17 @@ class MockAutocompleteProviderClient
   MOCK_CONST_METHOD0(IsGuestSession, bool());
   MOCK_CONST_METHOD0(SearchSuggestEnabled, bool());
   MOCK_CONST_METHOD0(IsUrlDataCollectionActive, bool());
+  MOCK_CONST_METHOD0(IsPersonalizedUrlDataCollectionActive, bool());
   MOCK_CONST_METHOD0(IsAuthenticated, bool());
   MOCK_CONST_METHOD0(IsSyncActive, bool());
   MOCK_CONST_METHOD0(IsHistoryEmbeddingsEnabled, bool());
   MOCK_CONST_METHOD0(IsHistoryEmbeddingsSettingVisible, bool());
+  MOCK_CONST_METHOD0(IsLensEnabled, bool());
+  MOCK_CONST_METHOD0(AreLensEntrypointsVisible, bool());
+  MOCK_CONST_METHOD0(IsPagePaywalled, std::optional<bool>());
+  MOCK_CONST_METHOD1(GetLensSuggestInputsWhenReady,
+                     base::CallbackListSubscription(
+                         LensOverlaySuggestInputsCallback callback));
 
   MOCK_METHOD6(
       Classify,
@@ -209,6 +222,8 @@ class MockAutocompleteProviderClient
       unscoped_extension_provider_delegate_;
   MockTabMatcher tab_matcher_;
   raw_ptr<signin::IdentityManager> identity_manager_ = nullptr;  // Not owned.
+  std::unique_ptr<tab_groups::MockTabGroupSyncService>
+      mock_tab_group_sync_service_;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_MOCK_AUTOCOMPLETE_PROVIDER_CLIENT_H_

@@ -14,8 +14,8 @@
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
-#include "components/autofill/core/browser/integrators/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/integrators/password_form_classification.h"
+#include "components/autofill/core/browser/integrators/plus_addresses/autofill_plus_address_delegate.h"
 #include "components/plus_addresses/affiliations/plus_address_affiliation_match_helper.h"
 #include "components/plus_addresses/metrics/plus_address_submission_logger.h"
 #include "components/plus_addresses/plus_address_cache.h"
@@ -155,6 +155,9 @@ class PlusAddressServiceImpl : public PlusAddressService,
   bool IsEnabled() const override;
 
  private:
+  // KeyedService.
+  void Shutdown() override;
+
   // signin::IdentityManager::Observer:
   void OnPrimaryAccountChanged(
       const signin::PrimaryAccountChangeEvent& event) override;
@@ -163,6 +166,8 @@ class PlusAddressServiceImpl : public PlusAddressService,
       const GoogleServiceAuthError& error,
       signin_metrics::SourceForRefreshTokenOperation token_operation_source)
       override;
+  void OnIdentityManagerShutdown(
+      signin::IdentityManager* identity_manager) override;
 
   void HandleSignout();
 

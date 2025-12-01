@@ -5,6 +5,8 @@
 #include "components/autofill/core/browser/crowdsourcing/autofill_crowdsourcing_encoding.h"
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <deque>
 #include <optional>
 #include <string>
@@ -15,7 +17,6 @@
 #include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/types/optional_ref.h"
 #include "components/autofill/core/browser/crowdsourcing/randomized_encoder.h"
@@ -35,6 +36,7 @@
 #include "components/autofill/core/common/logging/log_buffer.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/version_info/version_info.h"
+#include "third_party/abseil-cpp/absl/strings/str_format.h"
 
 namespace autofill {
 namespace {
@@ -68,6 +70,7 @@ FieldPrediction::Source ToSafeFieldPredictionSource(
     case FieldPrediction::SOURCE_MANUAL_OVERRIDE:
     case FieldPrediction::SOURCE_AUTOFILL_COMBINED_TYPES:
     case FieldPrediction::SOURCE_AUTOFILL_AI:
+    case FieldPrediction::SOURCE_AUTOFILL_AI_CROWDSOURCING:
       result = source;
       break;
   }
@@ -142,16 +145,15 @@ void InsertParsedOverrides(
 std::string EncodeFieldTypes(const FieldTypeSet& available_field_types) {
   // There are `MAX_VALID_FIELD_TYPE` different field types and 8 bits per byte,
   // so we need ceil(MAX_VALID_FIELD_TYPE / 8) bytes to encode the bit field.
-  const size_t kNumBytes = (MAX_VALID_FIELD_TYPE + 0x7) / 8;
+  constexpr size_t kNumBytes = (MAX_VALID_FIELD_TYPE + 0x7) / 8;
 
   // Pack the types in `available_field_types` into `bit_field`.
-  std::vector<uint8_t> bit_field(kNumBytes, 0);
+  std::array<uint8_t, kNumBytes> bit_field = {};
   for (const auto field_type : available_field_types) {
-    // Set the appropriate bit in the field.  The bit we set is the one
+    // Set the appropriate bit in the field. The bit we set is the one
     // `field_type` % 8 from the left of the byte.
     const size_t byte = field_type / 8;
-    const size_t bit = 0x80 >> (field_type % 8);
-    DCHECK(byte < bit_field.size());
+    const uint8_t bit = 1 << (7 - field_type % 8);
     bit_field[byte] |= bit;
   }
 
@@ -164,9 +166,9 @@ std::string EncodeFieldTypes(const FieldTypeSet& available_field_types) {
 
   // Print all meaningful bytes into a string.
   std::string data_presence;
-  data_presence.reserve(data_end * 2 + 1);
+  data_presence.reserve(data_end * 2);
   for (size_t i = 0; i < data_end; ++i) {
-    base::StringAppendF(&data_presence, "%02x", bit_field[i]);
+    absl::StrAppendFormat(&data_presence, "%02x", bit_field[i]);
   }
 
   return data_presence;
@@ -359,14 +361,13 @@ void PopulateRandomizedFieldMetadata(
 // Helper function for EncodeUploadRequest().
 void EncodeFormFieldsForUpload(
     const FormStructure& form,
-    base::optional_ref<RandomizedEncoder> encoder,
-    const std::map<FieldGlobalId, base::flat_set<std::u16string>>&
-        format_strings,
-    base::span<AutofillField*> upload_fields,
+    base::optional_ref<const RandomizedEncoder> encoder,
+    const std::map<FieldGlobalId, EncodeUploadRequestOptions::Field>& fields,
+    base::span<const AutofillField* const> upload_fields,
     AutofillUploadContents* upload) {
   DCHECK(!IsMalformed(form));
 
-  for (AutofillField* field : upload_fields) {
+  for (const AutofillField* const field : upload_fields) {
     // Don't upload checkable fields.
     if (IsCheckable(field->check_status())) {
       continue;
@@ -377,37 +378,41 @@ void EncodeFormFieldsForUpload(
       continue;
     }
 
+    const EncodeUploadRequestOptions::Field* field_options = nullptr;
+    if (auto it = fields.find(field->global_id()); it != fields.end()) {
+      field_options = &it->second;
+    }
+
     auto* added_field = upload->add_field_data();
     for (auto field_type : field->possible_types()) {
       added_field->add_autofill_type(field_type);
     }
 
-    if (field->generation_type()) {
-      added_field->set_generation_type(field->generation_type());
-      added_field->set_generated_password_changed(
-          field->generated_password_changed());
+    if (field_options && field_options->vote_type) {
+      added_field->set_vote_type(field_options->vote_type);
     }
 
-    if (field->vote_type()) {
-      added_field->set_vote_type(field->vote_type());
+    if (field_options && field_options->initial_value_hash) {
+      added_field->set_initial_value_hash(
+          field_options->initial_value_hash.value());
     }
 
-    if (field->initial_value_hash()) {
-      added_field->set_initial_value_hash(field->initial_value_hash().value());
+    // TODO(crbug.com/40286837): Understand and document why the type is
+    // relevant.
+    if (!field->initial_value().empty() &&
+        ((field->Type().GetStorableType() != NO_SERVER_DATA &&
+          field->Type().GetStorableType() != UNKNOWN_TYPE) ||
+         !field->possible_types().empty())) {
+      added_field->set_initial_value_changed(field->initial_value() !=
+                                             field->value());
     }
 
-    if (field->initial_value_changed().has_value()) {
-      added_field->set_initial_value_changed(
-          field->initial_value_changed().value());
-    }
-
-    if (auto it = format_strings.find(field->global_id());
-        it != format_strings.end()) {
-      for (const std::u16string& format_string : it->second) {
+    if (field_options) {
+      for (const std::u16string& format_string :
+           field_options->format_strings) {
         DCHECK(data_util::IsValidDateFormat(format_string));
         auto* added_format_string = added_field->add_format_string();
-        added_format_string->set_type(
-            AutofillUploadContents_Field_FormatString_Type_DATE);
+        added_format_string->set_type(FormatString_Type_DATE);
         added_format_string->set_format_string(
             base::UTF16ToUTF8(format_string));
       }
@@ -425,20 +430,30 @@ void EncodeFormFieldsForUpload(
           added_field->mutable_randomized_field_metadata());
     }
 
-    if (field->single_username_vote_type()) {
-      added_field->set_single_username_vote_type(
-          field->single_username_vote_type().value());
-    }
+    if (field_options) {
+      if (field_options->generation_type) {
+        added_field->set_generation_type(field_options->generation_type);
+        added_field->set_generated_password_changed(
+            field_options->generated_password_changed);
+      }
 
-    switch (field->is_most_recent_single_username_candidate()) {
-      case IsMostRecentSingleUsernameCandidate::kNotPartOfUsernameFirstFlow:
-        added_field->clear_is_most_recent_single_username_candidate();
-        break;
-      case IsMostRecentSingleUsernameCandidate::kHasIntermediateValuesInBetween:
-        added_field->set_is_most_recent_single_username_candidate(false);
-        break;
-      case IsMostRecentSingleUsernameCandidate::kMostRecentCandidate:
-        added_field->set_is_most_recent_single_username_candidate(true);
+      if (field_options->single_username_vote_type) {
+        added_field->set_single_username_vote_type(
+            field_options->single_username_vote_type.value());
+      }
+
+      switch (field_options->is_most_recent_single_username_candidate) {
+        using enum IsMostRecentSingleUsernameCandidate;
+        case kNotPartOfUsernameFirstFlow:
+          added_field->clear_is_most_recent_single_username_candidate();
+          break;
+        case kHasIntermediateValuesInBetween:
+          added_field->set_is_most_recent_single_username_candidate(false);
+          break;
+        case kMostRecentCandidate:
+          added_field->set_is_most_recent_single_username_candidate(true);
+          break;
+      }
     }
   }
 }
@@ -560,6 +575,7 @@ std::optional<FieldSuggestion> GetFieldSuggestion(
         switch (ToSafeFieldPredictionSource(
             suggestion->predictions().begin()->source())) {
           case FieldPrediction::SOURCE_AUTOFILL_AI:
+          case FieldPrediction::SOURCE_AUTOFILL_AI_CROWDSOURCING:
             return base::FeatureList::IsEnabled(
                        features::kAutofillAiWithDataSchema)
                        ? 2
@@ -681,52 +697,90 @@ base::flat_set<FormSignature> GetFormsForWhichToRunAiModel(
       forms.push_back(queried_form_signatures[i]);
     }
   }
-  return base::MakeFlatSet<FormSignature>(std::move(forms));
+  return base::flat_set<FormSignature>(std::move(forms));
+}
+
+// Checks the list of server predictions and potentially merges predictions for
+// joined types e.g. if the server returned separate predictions for email and
+// loyalty card, those are merged into the EMAIL_OR_LOYALTY_MEMBERSHIP_ID type.
+void MaybeMergeServerPredictions(
+    std::vector<FieldPrediction>& server_predictions) {
+  const auto server_types =
+      DenseSet<FieldType>(server_predictions, [](const FieldPrediction& pred) {
+        return ToSafeFieldType(pred.type(), UNKNOWN_TYPE);
+      });
+
+  if (server_types.contains_all({EMAIL_ADDRESS, LOYALTY_MEMBERSHIP_ID}) &&
+      base::FeatureList::IsEnabled(
+          features::kAutofillEnableEmailOrLoyaltyCardsFilling)) {
+    // Remove email and loyalty card predictions.
+    std::erase_if(server_predictions, [](const FieldPrediction& x) {
+      return x.type() == EMAIL_ADDRESS || x.type() == LOYALTY_MEMBERSHIP_ID;
+    });
+    FieldPrediction email_and_loyalty_card_prediction;
+    email_and_loyalty_card_prediction.set_type(EMAIL_OR_LOYALTY_MEMBERSHIP_ID);
+    email_and_loyalty_card_prediction.set_source(
+        FieldPrediction::SOURCE_AUTOFILL_DEFAULT);
+    email_and_loyalty_card_prediction.set_override(false);
+    server_predictions.insert(server_predictions.begin(),
+                              email_and_loyalty_card_prediction);
+  }
 }
 
 }  // namespace
 
+EncodeUploadRequestOptions::Field::Field() = default;
+EncodeUploadRequestOptions::Field::Field(Field&&) = default;
+EncodeUploadRequestOptions::Field& EncodeUploadRequestOptions::Field::operator=(
+    Field&&) = default;
+EncodeUploadRequestOptions::Field::~Field() = default;
+
+EncodeUploadRequestOptions::EncodeUploadRequestOptions() = default;
+EncodeUploadRequestOptions::EncodeUploadRequestOptions(
+    EncodeUploadRequestOptions&&) = default;
+EncodeUploadRequestOptions&
+EncodeUploadRequestOptions::EncodeUploadRequestOptions::operator=(
+    EncodeUploadRequestOptions&&) = default;
+EncodeUploadRequestOptions::~EncodeUploadRequestOptions() = default;
+
 std::vector<AutofillUploadContents> EncodeUploadRequest(
     const FormStructure& form,
-    base::optional_ref<RandomizedEncoder> encoder,
-    const std::map<FieldGlobalId, base::flat_set<std::u16string>>&
-        format_strings,
-    const FieldTypeSet& available_field_types,
-    std::optional<FormSignature> login_form_signature,
-    bool observed_submission) {
-  DCHECK_EQ(FirstNonCapturedType(form, available_field_types),
+    const EncodeUploadRequestOptions& options) {
+  DCHECK_EQ(FirstNonCapturedType(form, options.available_field_types),
             MAX_VALID_FIELD_TYPE);
 
-  std::string data_present = EncodeFieldTypes(available_field_types);
+  std::string data_present = EncodeFieldTypes(options.available_field_types);
 
   AutofillUploadContents upload;
-  upload.set_submission(observed_submission);
+  upload.set_submission(options.observed_submission);
   upload.set_client_version(
       std::string(version_info::GetProductNameAndVersionForUserAgent()));
   upload.set_form_signature(form.form_signature().value());
+  upload.set_secondary_form_signature(
+      form.alternative_form_signature().value());
   upload.set_autofill_used(false);
   upload.set_data_present(data_present);
   upload.set_has_form_tag(form.is_form_element());
-  if (!form.current_page_language()->empty() && encoder.has_value()) {
+  if (!form.current_page_language()->empty() && options.encoder) {
     upload.set_language(form.current_page_language().value());
   }
 
-  if (form.form_associations().last_address_form_submitted) {
+  if (options.form_associations.last_address_form_submitted) {
     upload.set_last_address_form_submitted(
-        form.form_associations().last_address_form_submitted->value());
+        options.form_associations.last_address_form_submitted->value());
   }
-  if (form.form_associations().second_last_address_form_submitted) {
+  if (options.form_associations.second_last_address_form_submitted) {
     upload.set_second_last_address_form_submitted(
-        form.form_associations().second_last_address_form_submitted->value());
+        options.form_associations.second_last_address_form_submitted->value());
   }
-  if (form.form_associations().last_credit_card_form_submitted) {
+  if (options.form_associations.last_credit_card_form_submitted) {
     upload.set_last_credit_card_form_submitted(
-        form.form_associations().last_credit_card_form_submitted->value());
+        options.form_associations.last_credit_card_form_submitted->value());
   }
 
   auto triggering_event =
-      (form.submission_event() != mojom::SubmissionIndicatorEvent::NONE)
-          ? form.submission_event()
+      (options.submission_event != mojom::SubmissionIndicatorEvent::NONE)
+          ? options.submission_event
           : ToSubmissionIndicatorEvent(form.submission_source());
 
   DCHECK(mojom::IsKnownEnumValue(triggering_event));
@@ -734,24 +788,24 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
       static_cast<AutofillUploadContents_SubmissionIndicatorEvent>(
           triggering_event));
 
-  if (login_form_signature.has_value()) {
-    upload.set_login_form_signature(login_form_signature->value());
+  if (options.login_form_signature.has_value()) {
+    upload.set_login_form_signature(options.login_form_signature->value());
   }
 
   if (IsMalformed(form)) {
     return {};  // Malformed form, skip it.
   }
 
-  if (encoder.has_value()) {
-    PopulateRandomizedFormMetadata(*encoder, form,
+  if (options.encoder) {
+    PopulateRandomizedFormMetadata(*options.encoder, form,
                                    upload.mutable_randomized_form_metadata());
   }
 
   std::vector<AutofillField*> upload_fields(form.fields().size());
   std::ranges::transform(form.fields(), upload_fields.begin(),
                          &std::unique_ptr<AutofillField>::get);
-  EncodeFormFieldsForUpload(form, encoder, format_strings, upload_fields,
-                            &upload);
+  EncodeFormFieldsForUpload(form, options.encoder, options.fields,
+                            upload_fields, &upload);
   std::vector<AutofillUploadContents> uploads = {std::move(upload)};
 
   // Build AutofillUploadContents for the renderer forms that have been
@@ -783,7 +837,7 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
                               (*subform_begin)->renderer_form_id();
                      });
     // SAFETY: The iterators are from the same container.
-    EncodeFormFieldsForUpload(form, encoder, format_strings,
+    EncodeFormFieldsForUpload(form, options.encoder, options.fields,
                               UNSAFE_BUFFERS({subform_begin, subform_end}),
                               &uploads.back());
     subform_begin = subform_end;
@@ -793,7 +847,8 @@ std::vector<AutofillUploadContents> EncodeUploadRequest(
 
 std::pair<AutofillPageQueryRequest, std::vector<FormSignature>>
 EncodeAutofillPageQueryRequest(
-    const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms) {
+    const std::vector<raw_ptr<const FormStructure, VectorExperimental>>&
+        forms) {
   AutofillPageQueryRequest query;
   std::vector<FormSignature> queried_form_signatures;
   queried_form_signatures.reserve(forms.size());
@@ -887,12 +942,11 @@ void ProcessServerPredictionsQueryResponse(
       if (heuristic_type != UNKNOWN_TYPE) {
         heuristics_detected_fillable_field = true;
       }
-      field->set_server_predictions({field_suggestion->predictions().begin(),
-                                     field_suggestion->predictions().end()});
-      if (field_suggestion->has_may_use_prefilled_placeholder()) {
-        field->set_may_use_prefilled_placeholder(
-            field_suggestion->may_use_prefilled_placeholder());
-      }
+      std::vector<FieldPrediction> server_predictions = {
+          field_suggestion->predictions().begin(),
+          field_suggestion->predictions().end()};
+      MaybeMergeServerPredictions(server_predictions);
+      field->set_server_predictions(std::move(server_predictions));
       if (heuristic_type != field->Type().GetStorableType()) {
         query_response_overrode_heuristics = true;
       }
@@ -901,9 +955,16 @@ void ProcessServerPredictionsQueryResponse(
             field_suggestion->password_requirements());
       }
       if (field_suggestion->has_format_string()) {
-        field->set_format_string_unless_overruled(
-            base::UTF8ToUTF16(field_suggestion->format_string()),
-            AutofillField::FormatStringSource::kServer);
+        switch (field_suggestion->format_string().type()) {
+          case FormatString_Type_DATE:
+            field->set_format_string_unless_overruled(
+                base::UTF8ToUTF16(
+                    field_suggestion->format_string().format_string()),
+                AutofillField::FormatStringSource::kServer);
+            break;
+          default:
+            break;
+        }
       }
       ++field_rank_map[field->GetFieldSignature()];
 

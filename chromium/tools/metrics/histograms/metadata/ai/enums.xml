@@ -48,29 +48,12 @@ chromium-metrics-reviews@google.com.
   <int value="16" label="ai.summarizer.create"/>
   <int value="17" label="ai.summarizer.destroy"/>
   <int value="18" label="ai.assistant.countPromptTokens"/>
+  <int value="19" label="AIProofreader.proofread"/>
+  <int value="20" label="AIProofreader.create"/>
+  <int value="21" label="AIProofreader.destroy"/>
 </enum>
 
 <!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_metrics.h:AIAPI) -->
-
-<!-- LINT.IfChange(AIAvailability) -->
-
-<enum name="AIAvailability">
-  <int value="0" label="Unavailable">
-    The model is not available for this device.
-  </int>
-  <int value="1" label="Downloadable">
-    The model is not available on-device, but the device is capable, so creating
-    the model will start the download process (which can take a while).
-  </int>
-  <int value="2" label="Downloading">
-    The mode is not available on-device, but it's being downloaded.
-  </int>
-  <int value="3" label="Available">
-    The model is available on-device and so creating will happen quickly.
-  </int>
-</enum>
-
-<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_availability.h:AIAvailability) -->
 
 <!-- LINT.IfChange(AIModelStreamingResponseStatus) -->
 
@@ -113,6 +96,26 @@ chromium-metrics-reviews@google.com.
 
 <!-- LINT.ThenChange(//third_party/blink/public/mojom/ai/model_streaming_responder.mojom:ModelStreamingResponseStatus) -->
 
+<!-- LINT.IfChange(Availability) -->
+
+<enum name="Availability">
+  <int value="0" label="Unavailable">
+    The model is not available for this device.
+  </int>
+  <int value="1" label="Downloadable">
+    The model is not available on-device, but the device is capable, so creating
+    the model will start the download process (which can take a while).
+  </int>
+  <int value="2" label="Downloading">
+    The model is not available on-device, but it's being downloaded.
+  </int>
+  <int value="3" label="Available">
+    The model is available on-device and so creating will happen quickly.
+  </int>
+</enum>
+
+<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/availability.h:Availability) -->
+
 <!-- LINT.IfChange(LoadTranslateKitResult) -->
 
 <enum name="LoadTranslateKitResult">
@@ -131,6 +134,53 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/services/on_device_translation/translate_kit_client.h:LoadTranslateKitResult) -->
+
+<!-- LINT.IfChange(WritingAssistanceMetricsOptionFormat) -->
+
+<enum name="WritingAssistanceMetricsOptionFormat">
+  <int value="0" label="ai.writingAssistance.createOption.format.plainText"/>
+  <int value="1" label="ai.writingAssistance.createOption.format.asIs"/>
+  <int value="2" label="ai.writingAssistance.createOption.format.markdown"/>
+</enum>
+
+<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_writing_assistance_base.h:WritingAssistanceMetricsOptionFormat) -->
+
+<!-- LINT.IfChange(WritingAssistanceMetricsOptionLength) -->
+
+<enum name="WritingAssistanceMetricsOptionLength">
+  <int value="0" label="ai.writingAssistance.createOption.length.short"/>
+  <int value="1" label="ai.writingAssistance.createOption.length.medium"/>
+  <int value="2" label="ai.writingAssistance.createOption.length.long"/>
+  <int value="3" label="ai.writingAssistance.createOption.length.asIs"/>
+  <int value="4" label="ai.writingAssistance.createOption.length.shorter"/>
+  <int value="5" label="ai.writingAssistance.createOption.length.longer"/>
+</enum>
+
+<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_writing_assistance_base.h:WritingAssistanceMetricsOptionLength) -->
+
+<!-- LINT.IfChange(WritingAssistanceMetricsOptionTone) -->
+
+<enum name="WritingAssistanceMetricsOptionTone">
+  <int value="0" label="ai.writingAssistance.createOption.tone.asIs"/>
+  <int value="1" label="ai.writingAssistance.createOption.tone.neutral"/>
+  <int value="2" label="ai.writingAssistance.createOption.tone.moreFormal"/>
+  <int value="3" label="ai.writingAssistance.createOption.tone.moreCasual"/>
+  <int value="4" label="ai.writingAssistance.createOption.tone.formal"/>
+  <int value="5" label="ai.writingAssistance.createOption.tone.casual"/>
+</enum>
+
+<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_writing_assistance_base.h:WritingAssistanceMetricsOptionTone) -->
+
+<!-- LINT.IfChange(WritingAssistanceMetricsOptionType) -->
+
+<enum name="WritingAssistanceMetricsOptionType">
+  <int value="0" label="ai.writingAssistance.createOption.type.tldr"/>
+  <int value="1" label="ai.writingAssistance.createOption.type.keyPoints"/>
+  <int value="2" label="ai.writingAssistance.createOption.type.teaser"/>
+  <int value="3" label="ai.writingAssistance.createOption.type.headline"/>
+</enum>
+
+<!-- LINT.ThenChange(//third_party/blink/renderer/modules/ai/ai_writing_assistance_base.h:WritingAssistanceMetricsOptionType) -->
 
 </enums>
 

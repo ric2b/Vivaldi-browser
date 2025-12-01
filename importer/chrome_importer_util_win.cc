@@ -16,23 +16,23 @@
 #include "base/values.h"
 #include "base/win/registry.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "importer/chromium_profile_importer.h"
 #include "ui/base/l10n/l10n_util.h"
 
 using base::PathService;
 
-base::FilePath GetProfileDir(importer::ImporterType importerType) {
+base::FilePath GetProfileDir(user_data_importer::ImporterType importerType) {
   base::FilePath profile_path;
   base::FilePath app_data_path;
 
-  if (importerType == importer::TYPE_OPERA_OPIUM ||
-      importerType == importer::TYPE_OPERA_OPIUM_BETA ||
-      importerType == importer::TYPE_OPERA_OPIUM_DEV ||
-      importerType == importer::TYPE_OPERA_GX) {
+  if (importerType == user_data_importer::TYPE_OPERA_OPIUM ||
+      importerType == user_data_importer::TYPE_OPERA_OPIUM_BETA ||
+      importerType == user_data_importer::TYPE_OPERA_OPIUM_DEV ||
+      importerType == user_data_importer::TYPE_OPERA_GX) {
     if (!PathService::Get(base::DIR_ROAMING_APP_DATA, &app_data_path)) {
       return app_data_path.AppendASCII("not-supported");
     }
@@ -42,40 +42,40 @@ base::FilePath GetProfileDir(importer::ImporterType importerType) {
     }
   }
   switch (importerType) {
-    case importer::TYPE_CHROME:
+    case user_data_importer::TYPE_CHROME:
       profile_path = app_data_path.AppendASCII("Google\\Chrome\\User Data");
       break;
-    case importer::TYPE_CHROMIUM:
+    case user_data_importer::TYPE_CHROMIUM:
       profile_path = app_data_path.AppendASCII("Chromium\\User Data");
       break;
-    case importer::TYPE_YANDEX:
+    case user_data_importer::TYPE_YANDEX:
       profile_path =
           app_data_path.AppendASCII("Yandex\\YandexBrowser\\User Data");
       break;
-    case importer::TYPE_OPERA_OPIUM:
+    case user_data_importer::TYPE_OPERA_OPIUM:
       profile_path = app_data_path.AppendASCII("Opera Software\\Opera Stable");
       break;
-    case importer::TYPE_OPERA_OPIUM_BETA:
+    case user_data_importer::TYPE_OPERA_OPIUM_BETA:
       profile_path = app_data_path.AppendASCII("Opera Software\\Opera Beta");
       break;
-    case importer::TYPE_OPERA_OPIUM_DEV:
+    case user_data_importer::TYPE_OPERA_OPIUM_DEV:
       profile_path =
           app_data_path.AppendASCII("Opera Software\\Opera Developer");
       break;
-    case importer::TYPE_VIVALDI:
+    case user_data_importer::TYPE_VIVALDI:
       profile_path = app_data_path.AppendASCII("Vivaldi\\User Data");
       break;
-    case importer::TYPE_BRAVE:
+    case user_data_importer::TYPE_BRAVE:
       profile_path =
           app_data_path.AppendASCII("BraveSoftware\\Brave-Browser\\User Data");
       break;
-    case importer::TYPE_EDGE_CHROMIUM:
+    case user_data_importer::TYPE_EDGE_CHROMIUM:
       profile_path = app_data_path.AppendASCII("Microsoft\\Edge\\User Data");
       break;
-    case importer::TYPE_ARC:
+    case user_data_importer::TYPE_ARC:
       profile_path = app_data_path.AppendASCII("The Browser Company\\Arc\\User Data");
       break;
-    case importer::TYPE_OPERA_GX:
+    case user_data_importer::TYPE_OPERA_GX:
       profile_path = app_data_path.AppendASCII("Opera Software\\Opera GX Stable");
       break;
     default:

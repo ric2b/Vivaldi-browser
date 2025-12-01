@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/toolbar/pinned_toolbar/pinned_toolbar_actions_model.h"
 #include "chrome/browser/ui/toolbar_controller_util.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
@@ -55,7 +56,7 @@ class ToolbarControllerUiTest : public InteractiveFeaturePromoTest {
  public:
   ToolbarControllerUiTest()
       : InteractiveFeaturePromoTest(UseDefaultTrackerAllowingPromos(
-            {feature_engagement::kIPHTabSearchFeature})) {
+            {feature_engagement::kIPHMemorySaverModeFeature})) {
     ToolbarControllerUtil::SetPreventOverflowForTesting(false);
   }
 
@@ -67,6 +68,9 @@ class ToolbarControllerUiTest : public InteractiveFeaturePromoTest {
     PinnedToolbarActionsModel* const actions_model =
         PinnedToolbarActionsModel::Get(browser()->profile());
     actions_model->UpdatePinnedState(kActionShowChromeLabs, false);
+    if (features::HasTabSearchToolbarButton()) {
+      actions_model->UpdatePinnedState(kActionTabSearch, false);
+    }
     views::test::WaitForAnimatingLayoutManager(
         browser_view_->toolbar()->pinned_toolbar_actions_container());
     toolbar_controller_ = const_cast<ToolbarController*>(
@@ -495,7 +499,6 @@ IN_PROC_BROWSER_TEST_F(ToolbarControllerUiTest, MenuMatchesOverflowedElements) {
       Do([this]() { SetBrowserWidth(overflow_threshold_width() - 1); }),
       WaitForShow(kToolbarOverflowButtonElementId),
       PressButton(kToolbarOverflowButtonElementId),
-      WaitForActivate(kToolbarOverflowButtonElementId),
       CheckMenuMatchesOverflowedElements());
 }
 
@@ -680,9 +683,9 @@ IN_PROC_BROWSER_TEST_F(ToolbarControllerUiTest,
                        MAYBE_DoNotShowIphWhenOverflowed) {
   RunTestSequence(
       ResizeRelativeToOverflow(-1),
-      MaybeShowPromo(feature_engagement::kIPHTabSearchFeature,
+      MaybeShowPromo(feature_engagement::kIPHMemorySaverModeFeature,
                      user_education::FeaturePromoResult::kWindowTooSmall),
       ResizeRelativeToOverflow(1),
-      MaybeShowPromo(feature_engagement::kIPHTabSearchFeature),
+      MaybeShowPromo(feature_engagement::kIPHMemorySaverModeFeature),
       PressClosePromoButton());
 }

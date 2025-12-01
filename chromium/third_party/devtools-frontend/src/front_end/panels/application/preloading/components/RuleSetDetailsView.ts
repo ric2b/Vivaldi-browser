@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import {assertNotNullOrUndefined} from '../../../../core/platform/platform.js';
@@ -12,9 +13,7 @@ import * as CodeHighlighter from '../../../../ui/components/code_highlighter/cod
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as RenderCoordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
 import * as TextEditor from '../../../../ui/components/text_editor/text_editor.js';
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStyles from '../../../../ui/legacy/inspectorCommon.css.js';
-import type * as UI from '../../../../ui/legacy/legacy.js';
+import * as UI from '../../../../ui/legacy/legacy.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 
 import ruleSetDetailsViewStyles from './RuleSetDetailsView.css.js';
@@ -64,8 +63,8 @@ export class RuleSetDetailsView extends LegacyWrapper.LegacyWrapper.WrappableCom
       if (this.#data === null) {
         Lit.render(
             html`
-          <style>${ruleSetDetailsViewStyles.cssText}</style>
-          <style>${inspectorCommonStyles.cssText}</style>
+          <style>${ruleSetDetailsViewStyles}</style>
+          <style>${UI.inspectorCommonStyles}</style>
           <div class="placeholder">
             <div class="empty-state">
               <span class="empty-state-header">${i18nString(UIStrings.noElementSelected)}</span>
@@ -83,8 +82,8 @@ export class RuleSetDetailsView extends LegacyWrapper.LegacyWrapper.WrappableCom
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
       Lit.render(html`
-        <style>${ruleSetDetailsViewStyles.cssText}</style>
-        <style>${inspectorCommonStyles.cssText}</style>
+        <style>${ruleSetDetailsViewStyles}</style>
+        <style>${UI.inspectorCommonStyles}</style>
         <div class="content">
           <div class="ruleset-header" id="ruleset-url">${this.#data?.url || SDK.TargetManager.TargetManager.instance().inspectedURL()}</div>
           ${this.#maybeError()}

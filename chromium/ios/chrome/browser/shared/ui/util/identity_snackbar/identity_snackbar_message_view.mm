@@ -5,6 +5,8 @@
 #import "ios/chrome/browser/shared/ui/util/identity_snackbar/identity_snackbar_message_view.h"
 
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/policy/model/management_state.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/identity_snackbar/identity_snackbar_message.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -62,6 +64,12 @@ const CGFloat kHorizontalGap = 16.;
 // The offset between texts.
 const CGFloat kTextOffset = 2.;
 
+bool CanShowManagementMessaging(const ManagementState& management_state) {
+  return management_state.is_profile_managed() ||
+         (AreSeparateProfilesForManagedAccountsEnabled() &&
+          management_state.is_managed());
+}
+
 }  // namespace
 
 @interface MDCSnackbarMessageView (internal)
@@ -103,7 +111,8 @@ const CGFloat kTextOffset = 2.;
     IdentitySnackbarMessage* snackbarMessage =
         (IdentitySnackbarMessage*)message;
     _snackbarMessage = snackbarMessage;
-    BOOL managed = snackbarMessage.managed;
+    BOOL showManagementMessaging =
+        CanShowManagementMessaging(_snackbarMessage.managementState);
 
     // Avatar view.
     _avatarView = [[UIImageView alloc] init];
@@ -131,7 +140,7 @@ const CGFloat kTextOffset = 2.;
                                             kInvertedTextSecondaryColor);
     _emailView = CreateSingleLineLabel(nil, UIFontTextStyleFootnote,
                                        kInvertedTextSecondaryColor);
-    if (managed) {
+    if (showManagementMessaging) {
       [self updateManagedLabels];
     } else {
       _emailView.text = snackbarMessage.email;
@@ -154,7 +163,7 @@ const CGFloat kTextOffset = 2.;
 
     [self addSubview:_textViews];
 
-    UIImage* accountBadge = snackbarMessage.managed
+    UIImage* accountBadge = showManagementMessaging
                                 ? GetEnterpriseIcon()
                                 : GetBrandedGoogleServicesSymbol();
     _accountBadgeView = [[UIImageView alloc] initWithImage:accountBadge];
@@ -223,7 +232,7 @@ const CGFloat kTextOffset = 2.;
     AddSameCenterYConstraint(self, _accountBadgeView);
 
     if (@available(iOS 17, *)) {
-      if (_snackbarMessage.managed) {
+      if (showManagementMessaging) {
         NSArray<UITrait>* traits =
             TraitCollectionSetForTraits(@[ UITraitLayoutDirection.class ]);
         __weak __typeof(self) weakSelf = self;
@@ -273,27 +282,43 @@ const CGFloat kTextOffset = 2.;
 // Reset the 2nd and 3rd labels if the identity is managed. Do nothing if it is
 // not.
 - (void)updateLabels {
-  if (_snackbarMessage.managed) {
+  if (CanShowManagementMessaging(_snackbarMessage.managementState)) {
     [self updateManagedLabels];
   }
 }
 
 // Resets the 2nd and 3rd labels assuming the identity is managed.
 - (void)updateManagedLabels {
-  BOOL useShortLabels =
-      UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone &&
-      UIDeviceOrientationIsPortrait(UIDevice.currentDevice.orientation);
+  BOOL useShortLabels = self.traitCollection.horizontalSizeClass ==
+                        UIUserInterfaceSizeClassCompact;
   NSString* email = _snackbarMessage.email;
-  _emailView.text = useShortLabels
-                        ? email
-                        : l10n_util::GetNSStringF(
-                              IDS_IOS_ENTERPRISE_SWITCH_TO_MANAGED_WIDE_SCREEN,
-                              base::SysNSStringToUTF16(email));
+  if (useShortLabels) {
+    _emailView.text = email;
+  } else if (_snackbarMessage.managementState.is_browser_managed()) {
+    _emailView.text = l10n_util::GetNSStringF(
+        IDS_IOS_ENTERPRISE_SWITCH_TO_MANAGED_BROWSER_WIDE_SCREEN,
+        base::SysNSStringToUTF16(email));
+  } else if (AreSeparateProfilesForManagedAccountsEnabled()) {
+    _emailView.text = l10n_util::GetNSStringF(
+        IDS_IOS_ENTERPRISE_SWITCH_TO_MANAGED_ACCOUNT_WIDE_SCREEN,
+        base::SysNSStringToUTF16(email));
+  } else {
+    _emailView.text = l10n_util::GetNSStringF(
+        IDS_IOS_ENTERPRISE_SWITCH_TO_MANAGED_WIDE_SCREEN,
+        base::SysNSStringToUTF16(email));
+  }
 
-  _managementView.text =
-      useShortLabels ? l10n_util::GetNSString(
-                           IDS_IOS_ENTERPRISE_MANAGED_BY_YOUR_ORGANIZATION)
-                     : nil;
+  if (!useShortLabels) {
+    _managementView.text = nil;
+  } else if (AreSeparateProfilesForManagedAccountsEnabled()) {
+    _managementView.text = l10n_util::GetNSString(
+        _snackbarMessage.managementState.is_browser_managed()
+            ? IDS_IOS_ENTERPRISE_BROWSER_MANAGED
+            : IDS_IOS_ENTERPRISE_ACCOUNT_MANAGED);
+  } else {
+    _managementView.text =
+        l10n_util::GetNSString(IDS_IOS_ENTERPRISE_MANAGED_BY_YOUR_ORGANIZATION);
+  }
   // In case there is no third label, the second might be long. Let’s display it
   // on two lines if needed.
   _emailView.numberOfLines = useShortLabels ? 1 : 2;

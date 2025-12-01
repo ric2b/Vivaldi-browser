@@ -38,22 +38,16 @@ const char kBreadcrumbOverlayJsAlert[] = "#js-alert";
 const char kBreadcrumbOverlayJsConfirm[] = "#js-confirm";
 const char kBreadcrumbOverlayJsPrompt[] = "#js-prompt";
 
-BROWSER_USER_DATA_KEY_IMPL(BreadcrumbManagerBrowserAgent)
-
 BreadcrumbManagerBrowserAgent::BreadcrumbManagerBrowserAgent(Browser* browser)
-    : browser_(browser) {
-  browser_->AddObserver(this);
+    : BrowserUserData(browser) {
   browser_->GetWebStateList()->AddObserver(this);
 
   overlay_observation_.Observe(
       OverlayPresenter::FromBrowser(browser, OverlayModality::kWebContentArea));
 }
 
-BreadcrumbManagerBrowserAgent::~BreadcrumbManagerBrowserAgent() = default;
-
-void BreadcrumbManagerBrowserAgent::BrowserDestroyed(Browser* browser) {
+BreadcrumbManagerBrowserAgent::~BreadcrumbManagerBrowserAgent() {
   browser_->GetWebStateList()->RemoveObserver(this);
-  browser_->RemoveObserver(this);
 }
 
 void BreadcrumbManagerBrowserAgent::PlatformLogEvent(const std::string& event) {

@@ -580,80 +580,6 @@ TEST_F(VideoFrameTest, VideoFrameMonitoring) {
   EXPECT_TRUE(monitor.IsEmpty());
 }
 
-TEST_F(VideoFrameTest, TestExternalAllocatedMemoryIsReportedCorrectlyOnClose) {
-  V8TestingScope scope;
-
-  scoped_refptr<media::VideoFrame> media_frame = CreateBlackMediaVideoFrame(
-      base::Microseconds(1000), media::PIXEL_FORMAT_I420,
-      gfx::Size(112, 208) /* coded_size */,
-      gfx::Size(100, 200) /* visible_size */);
-
-  int64_t initial_external_memory = V8ExternalMemoryAccounterBase::
-      GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate());
-
-  VideoFrame* blink_frame =
-      CreateBlinkVideoFrame(media_frame, scope.GetExecutionContext());
-
-  EXPECT_GT(
-      V8ExternalMemoryAccounterBase::
-          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
-      initial_external_memory);
-
-  // Calling close should decrement externally allocated memory.
-  blink_frame->close();
-
-  EXPECT_EQ(
-      V8ExternalMemoryAccounterBase::
-          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
-      initial_external_memory);
-
-  // Calling close another time should not decrement external memory twice.
-  blink_frame->close();
-
-  EXPECT_EQ(
-      V8ExternalMemoryAccounterBase::
-          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
-      initial_external_memory);
-
-  blink_frame = nullptr;
-  blink::WebHeap::CollectAllGarbageForTesting();
-
-  // Check the destructor does not double decrement the external memory.
-  EXPECT_EQ(
-      V8ExternalMemoryAccounterBase::
-          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
-      initial_external_memory);
-}
-
-TEST_F(VideoFrameTest,
-       TestExternalAllocatedMemoryIsReportedCorrectlyOnDestruction) {
-  V8TestingScope scope;
-
-  scoped_refptr<media::VideoFrame> media_frame = CreateBlackMediaVideoFrame(
-      base::Microseconds(1000), media::PIXEL_FORMAT_I420,
-      gfx::Size(112, 208) /* coded_size */,
-      gfx::Size(100, 200) /* visible_size */);
-
-  int64_t initial_external_memory = V8ExternalMemoryAccounterBase::
-      GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate());
-
-  CreateBlinkVideoFrame(media_frame, scope.GetExecutionContext());
-
-  EXPECT_GT(
-      V8ExternalMemoryAccounterBase::
-          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
-      initial_external_memory);
-
-  blink::WebHeap::CollectAllGarbageForTesting();
-
-  // Check the destructor correctly decrements the reported
-  // externally allocated memory  when close has not been called before.
-  EXPECT_EQ(
-      V8ExternalMemoryAccounterBase::
-          GetTotalAmountOfExternalAllocatedMemoryForTesting(scope.GetIsolate()),
-      initial_external_memory);
-}
-
 TEST_F(VideoFrameTest, MetadataBackgroundBlurIsExposedCorrectly) {
   V8TestingScope scope;
 
@@ -680,6 +606,70 @@ TEST_F(VideoFrameTest, MetadataBackgroundBlurIsExposedCorrectly) {
                 ->backgroundBlur()
                 ->enabled(),
             false);
+}
+
+// Verifies that if the RTP timestamp is set in the media::VideoFrame metadata,
+// it is correctly exposed to JavaScript via the Blink VideoFrame metadata.
+TEST_F(VideoFrameTest, MetadataRtpTimestampExposedCorrectly) {
+  V8TestingScope scope;
+
+  ScopedVideoFrameMetadataRtpTimestampForTest enabled(true);
+
+  scoped_refptr<media::VideoFrame> media_frame =
+      CreateDefaultBlackMediaVideoFrame();
+
+  auto* blink_frame =
+      CreateBlinkVideoFrame(media_frame, scope.GetExecutionContext());
+
+  // RTP timestamp not populated when it isn't present in `media_frame`
+  // netadata.
+  EXPECT_FALSE(
+      blink_frame->metadata(scope.GetExceptionState())->hasRtpTimestamp());
+
+  media::VideoFrameMetadata metadata = media_frame->metadata();
+
+  // Convert microseconds to RTP timestamp (90 kHz clock) and set it in the
+  // metadata.
+  metadata.rtp_timestamp =
+      media_frame->timestamp().InMicroseconds() * 90.0 / 1000.0;
+
+  // Update the frame with the new metadata.
+  media_frame->set_metadata(metadata);
+
+  // RTP timestamp available as a property when it is set in the 'media_frame'
+  // metadata.
+  EXPECT_TRUE(
+      blink_frame->metadata(scope.GetExceptionState())->hasRtpTimestamp());
+
+  // RTP timestamp populated when it is set in the 'media_frame' metadata.
+  EXPECT_EQ(blink_frame->metadata(scope.GetExceptionState())->rtpTimestamp(),
+            *metadata.rtp_timestamp);
+}
+
+// Verifies that when the VideoFrameMetadataRtpTimestamp feature is disabled,
+// the RTP timestamp set in the media::VideoFrame metadata is not exposed to
+// JavaScript via the Blink VideoFrame metadata dictionary.
+TEST_F(VideoFrameTest, MetadataRtpTimestampNotExposedWhenFeatureDisabled) {
+  V8TestingScope scope;
+
+  ScopedVideoFrameMetadataRtpTimestampForTest disabled(false);
+
+  scoped_refptr<media::VideoFrame> media_frame =
+      CreateDefaultBlackMediaVideoFrame();
+
+  auto* blink_frame =
+      CreateBlinkVideoFrame(media_frame, scope.GetExecutionContext());
+
+  media::VideoFrameMetadata metadata = media_frame->metadata();
+  // Convert microseconds to RTP timestamp (90 kHz clock) and set it in the
+  // metadata.
+  metadata.rtp_timestamp =
+      media_frame->timestamp().InMicroseconds() * 90.0 / 1000.0;
+  media_frame->set_metadata(metadata);
+
+  // RTP timestamp should not be exposed when feature is disabled
+  EXPECT_FALSE(
+      blink_frame->metadata(scope.GetExceptionState())->hasRtpTimestamp());
 }
 
 }  // namespace

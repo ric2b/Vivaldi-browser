@@ -11,14 +11,13 @@
 #ifndef MODULES_RTP_RTCP_SOURCE_RTP_PACKET_HISTORY_H_
 #define MODULES_RTP_RTCP_SOURCE_RTP_PACKET_HISTORY_H_
 
+#include <cstddef>
+#include <cstdint>
 #include <deque>
-#include <map>
 #include <memory>
 #include <optional>
-#include <set>
-#include <utility>
-#include <vector>
 
+#include "api/array_view.h"
 #include "api/environment/environment.h"
 #include "api/function_view.h"
 #include "api/units/time_delta.h"
@@ -117,7 +116,7 @@ class RtpPacketHistory {
           encapsulate);
 
   // Cull packets that have been acknowledged as received by the remote end.
-  void CullAcknowledgedPackets(rtc::ArrayView<const uint16_t> sequence_numbers);
+  void CullAcknowledgedPackets(ArrayView<const uint16_t> sequence_numbers);
 
   // Remove all pending packets from the history, but keep storage mode and
   // capacity.

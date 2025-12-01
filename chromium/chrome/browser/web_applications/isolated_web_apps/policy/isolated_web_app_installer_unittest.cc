@@ -25,19 +25,20 @@
 #include "chrome/browser/web_applications/isolated_web_apps/test/policy_test_utils.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/test_iwa_installer_factory.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/test_signed_web_bundle_builder.h"
-#include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/common/chrome_features.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
 #include "components/web_package/test_support/signed_web_bundles/ed25519_key_pair.h"
+#include "components/webapps/isolated_web_apps/update_channel.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ash/constants/ash_paths.h"
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_cache_client.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace web_app {
@@ -386,6 +387,7 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(kUser, kMgs));
 
 #if BUILDFLAG(IS_CHROMEOS)
+// IWA cache installation tests for Managed Guest Session (MGS).
 class IwaMgsCachingInstallerTest : public IwaInstallerBaseTest {
  public:
   IwaMgsCachingInstallerTest() : IwaInstallerBaseTest(kMgs) {}
@@ -398,35 +400,36 @@ class IwaMgsCachingInstallerTest : public IwaInstallerBaseTest {
   void OverrideCacheDir() {
     ASSERT_TRUE(cache_root_dir_.CreateUniqueTempDir());
     cache_root_dir_override_ = std::make_unique<base::ScopedPathOverride>(
-        ash::DIR_DEVICE_LOCAL_ACCOUNT_IWA_CACHE, cache_root_dir_.GetPath());
+        ash::DIR_DEVICE_LOCAL_ACCOUNT_IWA_CACHE, CacheRootPath());
   }
 
-  base::FilePath GetBundleDirPathWithVersion(
-      const web_package::SignedWebBundleId& bundle_id,
-      const base::Version& version) {
-    return cache_root_dir_.GetPath()
-        .AppendASCII(IwaCacheClient::kMgsDirName)
-        .AppendASCII(bundle_id.id())
-        .AppendASCII(version.GetString());
+  base::FilePath GetBundleDirWithVersion(const SignedWebBundleId& bundle_id,
+                                         const base::Version& version) {
+    auto session_cache_dir =
+        IwaCacheClient::GetCacheBaseDirectoryForSessionType(
+            IwaCacheClient::SessionType::kManagedGuestSession, CacheRootPath());
+    return IwaCacheClient::GetCacheDirectoryForBundleWithVersion(
+        session_cache_dir, bundle_id, version);
   }
 
-  base::FilePath GetFullBundlePath(
-      const web_package::SignedWebBundleId& bundle_id,
-      const base::Version& version) {
-    return GetBundleDirPathWithVersion(bundle_id, version)
-        .AppendASCII(kMainSwbnFileName);
+  base::FilePath GetFullBundlePath(const SignedWebBundleId& bundle_id,
+                                   const base::Version& version) {
+    return IwaCacheClient::GetBundleFullName(
+        GetBundleDirWithVersion(bundle_id, version));
   }
 
   void CopyBundleToCache(const web_package::SignedWebBundleId& web_bundle_id,
                          const base::Version& version,
                          const base::FilePath& bundle_to_copy) {
-    ASSERT_TRUE(base::CreateDirectory(
-        GetBundleDirPathWithVersion(web_bundle_id, version)));
+    ASSERT_TRUE(
+        base::CreateDirectory(GetBundleDirWithVersion(web_bundle_id, version)));
     ASSERT_TRUE(base::CopyFile(bundle_to_copy,
                                GetFullBundlePath(web_bundle_id, version)));
   }
 
  protected:
+  const base::FilePath& CacheRootPath() { return cache_root_dir_.GetPath(); }
+
   base::ScopedTempDir cache_root_dir_;
   std::unique_ptr<base::ScopedPathOverride> cache_root_dir_override_;
   base::test::ScopedFeatureList scoped_feature_list_{

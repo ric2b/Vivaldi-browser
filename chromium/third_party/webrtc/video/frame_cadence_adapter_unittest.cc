@@ -10,12 +10,16 @@
 
 #include "video/frame_cadence_adapter.h"
 
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <memory>
+#include <optional>
 #include <utility>
-#include <vector>
 
 #include "absl/functional/any_invocable.h"
+#include "api/field_trials_view.h"
+#include "api/make_ref_counted.h"
 #include "api/metronome/test/fake_metronome.h"
 #include "api/task_queue/default_task_queue_factory.h"
 #include "api/task_queue/task_queue_base.h"
@@ -24,14 +28,16 @@
 #include "api/units/timestamp.h"
 #include "api/video/nv12_buffer.h"
 #include "api/video/video_frame.h"
+#include "api/video_track_source_constraints.h"
 #include "rtc_base/event.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/rate_statistics.h"
 #include "rtc_base/task_queue_for_test.h"
+#include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
+#include "system_wrappers/include/clock.h"
 #include "system_wrappers/include/metrics.h"
 #include "system_wrappers/include/ntp_time.h"
-#include "system_wrappers/include/sleep.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 #include "test/scoped_key_value_config.h"
@@ -53,7 +59,7 @@ using ::testing::Values;
 VideoFrame CreateFrame() {
   return VideoFrame::Builder()
       .set_video_frame_buffer(
-          rtc::make_ref_counted<NV12Buffer>(/*width=*/16, /*height=*/16))
+          make_ref_counted<NV12Buffer>(/*width=*/16, /*height=*/16))
       .build();
 }
 
@@ -61,7 +67,7 @@ VideoFrame CreateFrameWithTimestamps(
     GlobalSimulatedTimeController* time_controller) {
   return VideoFrame::Builder()
       .set_video_frame_buffer(
-          rtc::make_ref_counted<NV12Buffer>(/*width=*/16, /*height=*/16))
+          make_ref_counted<NV12Buffer>(/*width=*/16, /*height=*/16))
       .set_ntp_time_ms(time_controller->GetClock()->CurrentNtpInMilliseconds())
       .set_timestamp_us(time_controller->GetClock()->CurrentTime().us())
       .build();
@@ -1076,7 +1082,7 @@ TEST(FrameCadenceAdapterRealTimeTest, TimestampsDoNotDrift) {
               ++frame_counter;
               // Avoid the first OnFrame and sleep on the second.
               if (frame_counter == 2) {
-                SleepMs(kSleepMs);
+                Thread::SleepMs(kSleepMs);
               } else if (frame_counter == 3) {
                 EXPECT_GE(incoming_frame.ntp_time_ms(),
                           original_ntp_time_ms + kSleepMs);
@@ -1128,7 +1134,7 @@ TEST(FrameCadenceAdapterRealTimeTest, ScheduledRepeatAllowsForSlowEncode) {
           // Avoid the first OnFrame and sleep on the second.
           if (frame_counter == 2) {
             start_time = clock->CurrentTime();
-            SleepMs(kSleepMs);
+            Thread::SleepMs(kSleepMs);
           } else if (frame_counter == 3) {
             TimeDelta diff =
                 clock->CurrentTime() - (*start_time + TimeDelta::Millis(500));
@@ -1289,7 +1295,7 @@ TEST_F(ZeroHertzQueueOverloadTest,
 
 TEST_F(ZeroHertzQueueOverloadTest,
        QueueOverloadIsDisabledForZeroHerzWhenKillSwitchIsEnabled) {
-  webrtc::test::ScopedKeyValueConfig field_trials(
+  test::ScopedKeyValueConfig field_trials(
       field_trials_, "WebRTC-ZeroHertzQueueOverload/Disabled/");
   adapter_.reset();
   adapter_ = CreateAdapter(field_trials, time_controller_.GetClock());

@@ -52,10 +52,10 @@ GpuMemoryBufferImplIOSurface::GpuMemoryBufferImplIOSurface(
     const gfx::Size& size,
     gfx::BufferFormat format,
     DestructionCallback callback,
-    IOSurfaceRef io_surface,
+    base::apple::ScopedCFTypeRef<IOSurfaceRef> io_surface,
     uint32_t lock_flags)
     : GpuMemoryBufferImpl(id, size, format, std::move(callback)),
-      io_surface_(io_surface),
+      io_surface_(std::move(io_surface)),
       lock_flags_(lock_flags) {}
 
 GpuMemoryBufferImplIOSurface::~GpuMemoryBufferImplIOSurface() {}
@@ -91,7 +91,7 @@ GpuMemoryBufferImplIOSurface::CreateFromHandle(
   }
 
   return base::WrapUnique(new GpuMemoryBufferImplIOSurface(
-      handle.id, size, format, std::move(callback), io_surface.release(),
+      handle.id, size, format, std::move(callback), std::move(io_surface),
       LockFlags(usage)));
 }
 
@@ -114,8 +114,8 @@ bool GpuMemoryBufferImplIOSurface::Map() {
   if (map_count_++)
     return true;
 
-  IOReturn status = IOSurfaceLock(io_surface_.get(), lock_flags_, nullptr);
-  DCHECK_NE(status, kIOReturnCannotLock) << " lock_flags_: " << lock_flags_;
+  kern_return_t status = IOSurfaceLock(io_surface_.get(), lock_flags_, nullptr);
+  DCHECK_EQ(status, KERN_SUCCESS) << " lock_flags_: " << lock_flags_;
   return true;
 }
 

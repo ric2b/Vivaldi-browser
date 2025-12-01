@@ -49,6 +49,7 @@ ALLOWED_SPDX_LICENSES = frozenset([
     # go/keep-sorted start case=no
     "blessing",
     "CC0-1.0",
+    "LicenseRef-Public-Domain-Gutenberg",
     "LZMA-SDK-9.22",
     "Unlicense",
     # go/keep-sorted end
@@ -195,6 +196,7 @@ WITH_PERMISSION_ONLY = frozenset([
     # by_exception_only.
     # go/keep-sorted start case=no
     "Commercial",
+    "LicenseRef-MicrosoftEnterpriseWindowsDriverKit",
     "LicenseRef-Play-Core-SDK-TOS",
     "LicenseRef-Unity-Companion-License-1.3",
     "Opus-Patent-BSD-3-Clause",

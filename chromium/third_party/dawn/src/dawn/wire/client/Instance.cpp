@@ -39,8 +39,8 @@
 #include "dawn/wire/client/EventManager.h"
 #include "dawn/wire/client/webgpu.h"
 #include "partition_alloc/pointers/raw_ptr.h"
-#include "tint/lang/wgsl/features/language_feature.h"
-#include "tint/lang/wgsl/features/status.h"
+#include "tint/lang/wgsl/feature_status.h"
+#include "tint/lang/wgsl/language_feature.h"
 
 namespace dawn::wire::client {
 namespace {
@@ -250,10 +250,10 @@ void Instance::GatherWGSLFeatures(const WGPUDawnWireWGSLControl* wgslControl,
                 break;
 
             case tint::wgsl::FeatureStatus::kUnsafeExperimental:
-                enable = wgslControl->enableUnsafe;
+                enable = wgpu::Bool(wgslControl->enableUnsafe);
                 break;
             case tint::wgsl::FeatureStatus::kExperimental:
-                enable = wgslControl->enableExperimental;
+                enable = wgpu::Bool(wgslControl->enableExperimental);
                 break;
 
             case tint::wgsl::FeatureStatus::kShippedWithKillswitch:
@@ -319,7 +319,7 @@ wgpuDawnWireClientGetInstanceCapabilities(WGPUInstanceCapabilities* capabilities
         return WGPUStatus_Error;
     }
 
-    capabilities->timedWaitAnyEnable = false;
+    capabilities->timedWaitAnyEnable = static_cast<WGPUBool>(0);
     capabilities->timedWaitAnyMaxCount = dawn::kTimedWaitAnyMaxCountDefault;
     return WGPUStatus_Success;
 }

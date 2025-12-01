@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "contact/contact_type.h"
 #include "imported_contact_row.h"
 #include "sql/database.h"

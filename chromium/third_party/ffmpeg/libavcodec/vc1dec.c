@@ -422,8 +422,7 @@ static av_cold int vc1_decode_init_alloc_tables(VC1Context *v)
                 return AVERROR(ENOMEM);
     }
 
-    ret = ff_intrax8_common_init(s->avctx, &v->x8,
-                                 s->block, s->block_last_index,
+    ret = ff_intrax8_common_init(s->avctx, &v->x8, s->block,
                                  s->mb_width, s->mb_height);
     if (ret < 0)
         return ret;
@@ -471,13 +470,8 @@ av_cold int ff_vc1_decode_init(AVCodecContext *avctx)
     if (ret < 0)
         return ret;
 
-    s->y_dc_scale_table = ff_wmv3_dc_scale_table;
-    s->c_dc_scale_table = ff_wmv3_dc_scale_table;
-
-    ff_init_scantable(s->idsp.idct_permutation, &s->inter_scantable,
-                      ff_wmv1_scantable[0]);
-    ff_init_scantable(s->idsp.idct_permutation, &s->intra_scantable,
-                      ff_wmv1_scantable[1]);
+    ff_permute_scantable(s->intra_scantable.permutated, ff_wmv1_scantable[1],
+                         s->idsp.idct_permutation);
 
     ret = vc1_decode_init_alloc_tables(v);
     if (ret < 0) {
@@ -1093,7 +1087,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, AVFrame *pict,
         if (v->field_mode && buf_start_second_field) {
             // decode first field
             s->picture_structure = PICT_BOTTOM_FIELD - v->tff;
-            ret = hwaccel->start_frame(avctx, buf_start,
+            ret = hwaccel->start_frame(avctx, avpkt->buf, buf_start,
                                        buf_start_second_field - buf_start);
             if (ret < 0)
                 goto err;
@@ -1148,7 +1142,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, AVFrame *pict,
             }
             v->s.cur_pic.ptr->f->pict_type = v->s.pict_type;
 
-            ret = hwaccel->start_frame(avctx, buf_start_second_field,
+            ret = hwaccel->start_frame(avctx, avpkt->buf, buf_start_second_field,
                                        (buf + buf_size) - buf_start_second_field);
             if (ret < 0)
                 goto err;
@@ -1191,7 +1185,7 @@ static int vc1_decode_frame(AVCodecContext *avctx, AVFrame *pict,
                 goto err;
         } else {
             s->picture_structure = PICT_FRAME;
-            ret = hwaccel->start_frame(avctx, buf_start,
+            ret = hwaccel->start_frame(avctx, avpkt->buf, buf_start,
                                        (buf + buf_size) - buf_start);
             if (ret < 0)
                 goto err;
@@ -1366,14 +1360,12 @@ image:
         if (s->pict_type == AV_PICTURE_TYPE_B || s->low_delay) {
             if ((ret = av_frame_ref(pict, s->cur_pic.ptr->f)) < 0)
                 goto err;
-            if (!v->field_mode)
-                ff_print_debug_info(s, s->cur_pic.ptr, pict);
+            ff_print_debug_info(s, s->cur_pic.ptr, pict);
             *got_frame = 1;
         } else if (s->last_pic.ptr) {
             if ((ret = av_frame_ref(pict, s->last_pic.ptr->f)) < 0)
                 goto err;
-            if (!v->field_mode)
-                ff_print_debug_info(s, s->last_pic.ptr, pict);
+            ff_print_debug_info(s, s->last_pic.ptr, pict);
             *got_frame = 1;
         }
     }

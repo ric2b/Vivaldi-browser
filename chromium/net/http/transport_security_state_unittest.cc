@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "net/http/transport_security_state.h"
 
 #include <stdint.h>
@@ -15,10 +10,12 @@
 #include <array>
 #include <iterator>
 #include <memory>
+#include <ranges>
 #include <string>
 #include <vector>
 
 #include "base/base64.h"
+#include "base/containers/to_vector.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_helpers.h"
 #include "base/json/json_reader.h"
@@ -81,27 +78,29 @@ namespace test3 {
 
 const char kHost[] = "example.test";
 
+// kGoodPath and kBadPath are each a list of the steps in a single path.
 constexpr auto kGoodPath = std::to_array<const char*>({
     "sha256/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     "sha256/fzP+pVAbH0hRoUphJKenIP8+2tD/d2QH9J+kQNieM6Q=",
     "sha256/9vRUVdjloCa4wXUKfDWotV5eUXYD7vu0v0z9SRzQdzg=",
     "sha256/Nn8jk5By4Vkq6BeOVZ7R7AC6XUUBZsWmUbJR1f1Y5FY=",
-    nullptr,
 });
 
 constexpr auto kBadPath = std::to_array<const char*>({
     "sha256/1111111111111111111111111111111111111111111=",
     "sha256/2222222222222222222222222222222222222222222=",
     "sha256/3333333333333333333333333333333333333333333=",
-    nullptr,
 });
 
-class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
+class MockRequireCTDelegate : public RequireCTDelegate {
  public:
-  MOCK_METHOD3(IsCTRequiredForHost,
-               CTRequirementLevel(std::string_view hostname,
-                                  const X509Certificate* chain,
-                                  const HashValueVector& hashes));
+  MOCK_CONST_METHOD3(IsCTRequiredForHost,
+                     CTRequirementLevel(std::string_view hostname,
+                                        const X509Certificate* chain,
+                                        const HashValueVector& hashes));
+
+ protected:
+  ~MockRequireCTDelegate() override = default;
 };
 
 bool operator==(const TransportSecurityState::STSState& lhs,
@@ -119,6 +118,26 @@ bool operator==(const TransportSecurityState::PKPState& lhs,
          lhs.bad_spki_hashes == rhs.bad_spki_hashes &&
          lhs.include_subdomains == rhs.include_subdomains &&
          lhs.domain == rhs.domain;
+}
+
+net::HashValueVector DeserializeHashes(
+    base::span<const char* const> serialized_hashes) {
+  net::HashValueVector result;
+  for (const auto* serialized_hash : serialized_hashes) {
+    net::HashValue h(HASH_VALUE_SHA256);
+    CHECK(h.FromString(std::string_view(serialized_hash)));
+    result.push_back(h);
+  }
+  return result;
+}
+
+std::vector<std::vector<uint8_t>> UnpackRawHashes(
+    const net::HashValueVector& hashes) {
+  std::vector<std::vector<uint8_t>> raws;
+  for (const auto& hash : hashes) {
+    raws.emplace_back(base::ToVector(hash.span()));
+  }
+  return raws;
 }
 
 }  // namespace
@@ -150,15 +169,14 @@ class TransportSecurityStateTest : public ::testing::Test,
 
   static HashValueVector GetSampleSPKIHashes() {
     HashValueVector spki_hashes;
-    HashValue hash(HASH_VALUE_SHA256);
-    memset(hash.data(), 0, hash.size());
+    HashValue hash({});
     spki_hashes.push_back(hash);
     return spki_hashes;
   }
 
   static HashValue GetSampleSPKIHash(uint8_t value) {
     HashValue hash(HASH_VALUE_SHA256);
-    memset(hash.data(), value, hash.size());
+    std::ranges::fill(hash.span(), value);
     return hash;
   }
 
@@ -615,11 +633,11 @@ TEST_F(TransportSecurityStateTest, NewPinsOverride) {
   const base::Time current_time(base::Time::Now());
   const base::Time expiry = current_time + base::Seconds(1000);
   HashValue hash1(HASH_VALUE_SHA256);
-  memset(hash1.data(), 0x01, hash1.size());
+  std::ranges::fill(hash1.span(), 0x01);
   HashValue hash2(HASH_VALUE_SHA256);
-  memset(hash2.data(), 0x02, hash1.size());
+  std::ranges::fill(hash2.span(), 0x02);
   HashValue hash3(HASH_VALUE_SHA256);
-  memset(hash3.data(), 0x03, hash1.size());
+  std::ranges::fill(hash3.span(), 0x03);
 
   state.AddHPKP("example.com", expiry, true, HashValueVector(1, hash1));
 
@@ -724,27 +742,13 @@ TEST_F(TransportSecurityStateTest, LongNames) {
   EXPECT_FALSE(state.GetDynamicPKPState(kLongName, &pkp_state));
 }
 
-static bool AddHash(const std::string& type_and_base64, HashValueVector* out) {
-  HashValue hash;
-  if (!hash.FromString(type_and_base64))
-    return false;
-
-  out->push_back(hash);
-  return true;
-}
-
 TEST_F(TransportSecurityStateTest, PinValidationWithoutRejectedCerts) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(
       features::kStaticKeyPinningEnforcement);
-  HashValueVector good_hashes, bad_hashes;
 
-  for (size_t i = 0; kGoodPath[i]; i++) {
-    EXPECT_TRUE(AddHash(kGoodPath[i], &good_hashes));
-  }
-  for (size_t i = 0; kBadPath[i]; i++) {
-    EXPECT_TRUE(AddHash(kBadPath[i], &bad_hashes));
-  }
+  HashValueVector good_hashes = DeserializeHashes(kGoodPath);
+  HashValueVector bad_hashes = DeserializeHashes(kBadPath);
 
   TransportSecurityState state;
   state.SetPinningListAlwaysTimelyForTesting(true);
@@ -949,8 +953,7 @@ TEST_F(TransportSecurityStateTest, HstsHostBypassList) {
 TEST_F(TransportSecurityStateTest, RequireCTConsultsDelegate) {
   using ::testing::_;
   using ::testing::Return;
-  using CTRequirementLevel =
-      TransportSecurityState::RequireCTDelegate::CTRequirementLevel;
+  using CTRequirementLevel = RequireCTDelegate::CTRequirementLevel;
 
   // Dummy cert to use as the validation chain. The contents do not matter.
   scoped_refptr<X509Certificate> cert =
@@ -966,28 +969,28 @@ TEST_F(TransportSecurityStateTest, RequireCTConsultsDelegate) {
   // date.
   {
     TransportSecurityState state;
-    const TransportSecurityState::CTRequirementsStatus original_status =
-        state.CheckCTRequirements(
-            "www.example.com", true, hashes, cert.get(),
-            ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS);
+    const ct::CTRequirementsStatus original_status = state.CheckCTRequirements(
+        "www.example.com", true, hashes, cert.get(),
+        ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS);
 
-    MockRequireCTDelegate always_require_delegate;
-    EXPECT_CALL(always_require_delegate, IsCTRequiredForHost(_, _, _))
+    scoped_refptr<MockRequireCTDelegate> always_require_delegate =
+        base::MakeRefCounted<MockRequireCTDelegate>();
+    EXPECT_CALL(*always_require_delegate, IsCTRequiredForHost(_, _, _))
         .WillRepeatedly(Return(CTRequirementLevel::REQUIRED));
-    state.SetRequireCTDelegate(&always_require_delegate);
-    EXPECT_EQ(TransportSecurityState::CT_REQUIREMENTS_NOT_MET,
+    state.SetRequireCTDelegate(always_require_delegate);
+    EXPECT_EQ(ct::CTRequirementsStatus::CT_REQUIREMENTS_NOT_MET,
               state.CheckCTRequirements(
                   "www.example.com", true, hashes, cert.get(),
                   ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
-    EXPECT_EQ(TransportSecurityState::CT_REQUIREMENTS_NOT_MET,
+    EXPECT_EQ(ct::CTRequirementsStatus::CT_REQUIREMENTS_NOT_MET,
               state.CheckCTRequirements(
                   "www.example.com", true, hashes, cert.get(),
                   ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
-    EXPECT_EQ(TransportSecurityState::CT_REQUIREMENTS_MET,
+    EXPECT_EQ(ct::CTRequirementsStatus::CT_REQUIREMENTS_MET,
               state.CheckCTRequirements(
                   "www.example.com", true, hashes, cert.get(),
                   ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
-    EXPECT_EQ(TransportSecurityState::CT_REQUIREMENTS_MET,
+    EXPECT_EQ(ct::CTRequirementsStatus::CT_REQUIREMENTS_MET,
               state.CheckCTRequirements(
                   "www.example.com", true, hashes, cert.get(),
                   ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY));
@@ -1003,20 +1006,20 @@ TEST_F(TransportSecurityStateTest, RequireCTConsultsDelegate) {
   // it should indicate CT is not required.
   {
     TransportSecurityState state;
-    const TransportSecurityState::CTRequirementsStatus original_status =
-        state.CheckCTRequirements(
-            "www.example.com", true, hashes, cert.get(),
-            ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS);
+    const ct::CTRequirementsStatus original_status = state.CheckCTRequirements(
+        "www.example.com", true, hashes, cert.get(),
+        ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS);
 
-    MockRequireCTDelegate never_require_delegate;
-    EXPECT_CALL(never_require_delegate, IsCTRequiredForHost(_, _, _))
+    scoped_refptr<MockRequireCTDelegate> never_require_delegate =
+        base::MakeRefCounted<MockRequireCTDelegate>();
+    EXPECT_CALL(*never_require_delegate, IsCTRequiredForHost(_, _, _))
         .WillRepeatedly(Return(CTRequirementLevel::NOT_REQUIRED));
-    state.SetRequireCTDelegate(&never_require_delegate);
-    EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+    state.SetRequireCTDelegate(never_require_delegate);
+    EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
               state.CheckCTRequirements(
                   "www.example.com", true, hashes, cert.get(),
                   ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
-    EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+    EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
               state.CheckCTRequirements(
                   "www.example.com", true, hashes, cert.get(),
                   ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
@@ -1034,8 +1037,7 @@ TEST_F(TransportSecurityStateTest, RequireCTConsultsDelegate) {
 TEST(CTEmergencyDisableTest, CTEmergencyDisable) {
   using ::testing::_;
   using ::testing::Return;
-  using CTRequirementLevel =
-      TransportSecurityState::RequireCTDelegate::CTRequirementLevel;
+  using CTRequirementLevel = RequireCTDelegate::CTRequirementLevel;
 
   // Dummy cert to use as the validation chain. The contents do not matter.
   scoped_refptr<X509Certificate> cert =
@@ -1049,29 +1051,30 @@ TEST(CTEmergencyDisableTest, CTEmergencyDisable) {
   TransportSecurityState state;
   state.SetCTEmergencyDisabled(true);
 
-  MockRequireCTDelegate always_require_delegate;
-  EXPECT_CALL(always_require_delegate, IsCTRequiredForHost(_, _, _))
+  scoped_refptr<MockRequireCTDelegate> always_require_delegate =
+      base::MakeRefCounted<MockRequireCTDelegate>();
+  EXPECT_CALL(*always_require_delegate, IsCTRequiredForHost(_, _, _))
       .WillRepeatedly(Return(CTRequirementLevel::REQUIRED));
-  state.SetRequireCTDelegate(&always_require_delegate);
-  EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+  state.SetRequireCTDelegate(always_require_delegate);
+  EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
             state.CheckCTRequirements(
                 "www.example.com", true, hashes, cert.get(),
                 ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
-  EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+  EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
             state.CheckCTRequirements(
                 "www.example.com", true, hashes, cert.get(),
                 ct::CTPolicyCompliance::CT_POLICY_NOT_DIVERSE_SCTS));
-  EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+  EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
             state.CheckCTRequirements(
                 "www.example.com", true, hashes, cert.get(),
                 ct::CTPolicyCompliance::CT_POLICY_COMPLIES_VIA_SCTS));
-  EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+  EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
             state.CheckCTRequirements(
                 "www.example.com", true, hashes, cert.get(),
                 ct::CTPolicyCompliance::CT_POLICY_BUILD_NOT_TIMELY));
 
   state.SetRequireCTDelegate(nullptr);
-  EXPECT_EQ(TransportSecurityState::CT_NOT_REQUIRED,
+  EXPECT_EQ(ct::CTRequirementsStatus::CT_NOT_REQUIRED,
             state.CheckCTRequirements(
                 "www.example.com", true, hashes, cert.get(),
                 ct::CTPolicyCompliance::CT_POLICY_NOT_ENOUGH_SCTS));
@@ -1609,9 +1612,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsListValidPin) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(
       features::kStaticKeyPinningEnforcement);
-  HashValueVector bad_hashes;
-  for (size_t i = 0; kBadPath[i]; i++)
-    EXPECT_TRUE(AddHash(kBadPath[i], &bad_hashes));
+  HashValueVector bad_hashes = DeserializeHashes(kBadPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1622,15 +1623,9 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsListValidPin) {
 
   // Update the pins list, adding bad_hashes to the accepted hashes for this
   // host.
-  std::vector<std::vector<uint8_t>> accepted_hashes;
-  for (size_t i = 0; kBadPath[i]; i++) {
-    HashValue hash;
-    ASSERT_TRUE(hash.FromString(kBadPath[i]));
-    accepted_hashes.emplace_back(hash.data(), hash.data() + hash.size());
-  }
   TransportSecurityState::PinSet test_pinset(
       /*name=*/"test",
-      /*static_spki_hashes=*/accepted_hashes,
+      /*static_spki_hashes=*/UnpackRawHashes(bad_hashes),
       /*bad_static_spki_hashes=*/{});
   TransportSecurityState::PinSetInfo test_pinsetinfo(
       /*hostname=*/kHost, /*pinset_name=*/"test",
@@ -1646,9 +1641,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsListNotValidPin) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(
       features::kStaticKeyPinningEnforcement);
-  HashValueVector good_hashes;
-  for (size_t i = 0; kGoodPath[i]; i++)
-    EXPECT_TRUE(AddHash(kGoodPath[i], &good_hashes));
+  HashValueVector good_hashes = DeserializeHashes(kGoodPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1659,16 +1652,10 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsListNotValidPin) {
 
   // Update the pins list, adding good_hashes to the rejected hashes for this
   // host.
-  std::vector<std::vector<uint8_t>> rejected_hashes;
-  for (size_t i = 0; kGoodPath[i]; i++) {
-    HashValue hash;
-    ASSERT_TRUE(hash.FromString(kGoodPath[i]));
-    rejected_hashes.emplace_back(hash.data(), hash.data() + hash.size());
-  }
   TransportSecurityState::PinSet test_pinset(
       /*name=*/"test",
       /*static_spki_hashes=*/{},
-      /*bad_static_spki_hashes=*/rejected_hashes);
+      /*bad_static_spki_hashes=*/UnpackRawHashes(good_hashes));
   TransportSecurityState::PinSetInfo test_pinsetinfo(
       /*hostname=*/kHost, /* pinset_name=*/"test",
       /*include_subdomains=*/false);
@@ -1692,9 +1679,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsEmptyList) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(
       features::kStaticKeyPinningEnforcement);
-  HashValueVector bad_hashes;
-  for (size_t i = 0; kBadPath[i]; i++)
-    EXPECT_TRUE(AddHash(kBadPath[i], &bad_hashes));
+  HashValueVector bad_hashes = DeserializeHashes(kBadPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1719,10 +1704,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsIncludeSubdomains) {
   // expected hashes for the tld of this domain. kGoodPath is used here because
   // it's a path that is accepted prior to any updates, and this test will
   // validate it is rejected afterwards.
-  HashValueVector unpinned_hashes;
-  for (size_t i = 0; kGoodPath[i]; i++) {
-    EXPECT_TRUE(AddHash(kGoodPath[i], &unpinned_hashes));
-  }
+  HashValueVector unpinned_hashes = DeserializeHashes(kGoodPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1736,15 +1718,9 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsIncludeSubdomains) {
   // host, relying on include_subdomains for enforcement. The contents of the
   // hashes don't matter as long as they are different from unpinned_hashes,
   // kBadPath is used for convenience.
-  std::vector<std::vector<uint8_t>> accepted_hashes;
-  for (size_t i = 0; kBadPath[i]; i++) {
-    HashValue hash;
-    ASSERT_TRUE(hash.FromString(kBadPath[i]));
-    accepted_hashes.emplace_back(hash.data(), hash.data() + hash.size());
-  }
   TransportSecurityState::PinSet test_pinset(
       /*name=*/"test",
-      /*static_spki_hashes=*/{accepted_hashes},
+      /*static_spki_hashes=*/UnpackRawHashes(DeserializeHashes(kBadPath)),
       /*bad_static_spki_hashes=*/{});
   // The host used in the test is "example.sub.test", so this pinset will only
   // match due to include subdomains.
@@ -1767,10 +1743,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsIncludeSubdomainsTLD) {
   // expected hashes for the tld of this domain. kGoodPath is used here because
   // it's a path that is accepted prior to any updates, and this test will
   // validate it is rejected afterwards.
-  HashValueVector unpinned_hashes;
-  for (size_t i = 0; kGoodPath[i]; i++) {
-    EXPECT_TRUE(AddHash(kGoodPath[i], &unpinned_hashes));
-  }
+  HashValueVector unpinned_hashes = DeserializeHashes(kGoodPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1783,15 +1756,9 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsIncludeSubdomainsTLD) {
   // host, relying on include_subdomains for enforcement. The contents of the
   // hashes don't matter as long as they are different from unpinned_hashes,
   // kBadPath is used for convenience.
-  std::vector<std::vector<uint8_t>> accepted_hashes;
-  for (size_t i = 0; kBadPath[i]; i++) {
-    HashValue hash;
-    ASSERT_TRUE(hash.FromString(kBadPath[i]));
-    accepted_hashes.emplace_back(hash.data(), hash.data() + hash.size());
-  }
   TransportSecurityState::PinSet test_pinset(
       /*name=*/"test",
-      /*static_spki_hashes=*/{accepted_hashes},
+      /*static_spki_hashes=*/UnpackRawHashes(DeserializeHashes(kBadPath)),
       /*bad_static_spki_hashes=*/{});
   // The host used in the test is "example.test", so this pinset will only match
   // due to include subdomains.
@@ -1814,10 +1781,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsDontIncludeSubdomains) {
   // it's a path that is accepted prior to any updates, and this test will
   // validate it is accepted or rejected afterwards depending on whether the
   // domain is an exact match.
-  HashValueVector unpinned_hashes;
-  for (size_t i = 0; kGoodPath[i]; i++) {
-    EXPECT_TRUE(AddHash(kGoodPath[i], &unpinned_hashes));
-  }
+  HashValueVector unpinned_hashes = DeserializeHashes(kGoodPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1830,15 +1794,9 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsDontIncludeSubdomains) {
   // tld of this host, but without include_subdomains set. The contents of the
   // hashes don't matter as long as they are different from unpinned_hashes,
   // kBadPath is used for convenience.
-  std::vector<std::vector<uint8_t>> accepted_hashes;
-  for (size_t i = 0; kBadPath[i]; i++) {
-    HashValue hash;
-    ASSERT_TRUE(hash.FromString(kBadPath[i]));
-    accepted_hashes.emplace_back(hash.data(), hash.data() + hash.size());
-  }
   TransportSecurityState::PinSet test_pinset(
       /*name=*/"test",
-      /*static_spki_hashes=*/{accepted_hashes},
+      /*static_spki_hashes=*/UnpackRawHashes(DeserializeHashes(kBadPath)),
       /*bad_static_spki_hashes=*/{});
   // The host used in the test is "example.test", so this pinset will not match
   // due to include subdomains not being set.
@@ -1862,9 +1820,7 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsListTimestamp) {
   base::test::ScopedFeatureList scoped_feature_list_;
   scoped_feature_list_.InitAndEnableFeature(
       features::kStaticKeyPinningEnforcement);
-  HashValueVector bad_hashes;
-  for (size_t i = 0; kBadPath[i]; i++)
-    EXPECT_TRUE(AddHash(kBadPath[i], &bad_hashes));
+  HashValueVector bad_hashes = DeserializeHashes(kBadPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);
@@ -1879,18 +1835,10 @@ TEST_F(TransportSecurityStateTest, UpdateKeyPinsListTimestamp) {
   // required effect.
   state.SetPinningListAlwaysTimelyForTesting(false);
 
-  // Update the pins list, with bad hashes as rejected, but a timestamp >70 days
-  // old.
-  std::vector<std::vector<uint8_t>> rejected_hashes;
-  for (size_t i = 0; kBadPath[i]; i++) {
-    HashValue hash;
-    ASSERT_TRUE(hash.FromString(kBadPath[i]));
-    rejected_hashes.emplace_back(hash.data(), hash.data() + hash.size());
-  }
   TransportSecurityState::PinSet test_pinset(
       /*name=*/"test",
       /*static_spki_hashes=*/{},
-      /*bad_static_spki_hashes=*/rejected_hashes);
+      /*bad_static_spki_hashes=*/UnpackRawHashes(bad_hashes));
   TransportSecurityState::PinSetInfo test_pinsetinfo(
       /*hostname=*/kHost, /* pinset_name=*/"test",
       /*include_subdomains=*/false);
@@ -1923,9 +1871,7 @@ class TransportSecurityStatePinningKillswitchTest
 };
 
 TEST_F(TransportSecurityStatePinningKillswitchTest, PinningKillswitchSet) {
-  HashValueVector bad_hashes;
-  for (size_t i = 0; kBadPath[i]; i++)
-    EXPECT_TRUE(AddHash(kBadPath[i], &bad_hashes));
+  HashValueVector bad_hashes = DeserializeHashes(kBadPath);
 
   TransportSecurityState state;
   EnableStaticPins(&state);

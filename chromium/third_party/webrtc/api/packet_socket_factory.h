@@ -19,11 +19,8 @@
 #include "api/async_dns_resolver.h"
 #include "rtc_base/async_packet_socket.h"
 #include "rtc_base/socket_address.h"
+#include "rtc_base/ssl_certificate.h"
 #include "rtc_base/system/rtc_export.h"
-namespace rtc {
-class SSLCertificateVerifier;
-class AsyncResolverInterface;
-}  // namespace rtc
 
 namespace webrtc {
 
@@ -37,7 +34,7 @@ struct PacketSocketTcpOptions {
   // An optional custom SSL certificate verifier that an API user can provide to
   // inject their own certificate verification logic (not available to users
   // outside of the WebRTC repo).
-  rtc::SSLCertificateVerifier* tls_cert_verifier = nullptr;
+  SSLCertificateVerifier* tls_cert_verifier = nullptr;
 };
 
 class RTC_EXPORT PacketSocketFactory {
@@ -83,9 +80,11 @@ class RTC_EXPORT PacketSocketFactory {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::PacketSocketFactory;
 using ::webrtc::PacketSocketTcpOptions;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // API_PACKET_SOCKET_FACTORY_H_

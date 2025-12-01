@@ -6,6 +6,7 @@
 
 #include <array>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -134,11 +135,6 @@ class HostContentSettingsMapTest : public testing::Test {
  public:
   HostContentSettingsMapTest()
       : task_environment_(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
-    // TODO(crbug.com/362466866): Instead of disabling the
-    // `kSafetyHubAbusiveNotificationRevocation` feature, find a stable
-    // fix such that the tests still pass when the feature is enabled.
-    feature_list_.InitAndDisableFeature(
-        safe_browsing::kSafetyHubAbusiveNotificationRevocation);
   }
 
   void FastForwardTime(base::TimeDelta delta) {
@@ -486,7 +482,7 @@ TEST_F(HostContentSettingsMapTest, Origins) {
 TEST_F(HostContentSettingsMapTest, Observer) {
   TestingProfile profile;
   // Use ScopedMapNoFactoryTester in order to enable the test to ignore
-  // UnusedSitePermissionsService and
+  // RevokedPermissionsService and
   // ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS.
   ScopedMapNoFactoryTester map_tester(profile);
   HostContentSettingsMap* host_content_settings_map = map_tester.map.get();
@@ -607,19 +603,19 @@ TEST_F(HostContentSettingsMapTest, HostTrimEndingDotCheck) {
 
   EXPECT_TRUE(cookie_settings->IsFullCookieAccessAllowed(
       host_ending_with_dot, site_for_cookies, origin,
-      net::CookieSettingOverrides()));
+      net::CookieSettingOverrides(), /*cookie_partition_key=*/std::nullopt));
   host_content_settings_map->SetContentSettingDefaultScope(
       host_ending_with_dot, GURL(), ContentSettingsType::COOKIES,
       CONTENT_SETTING_DEFAULT);
   EXPECT_TRUE(cookie_settings->IsFullCookieAccessAllowed(
       host_ending_with_dot, site_for_cookies, origin,
-      net::CookieSettingOverrides()));
+      net::CookieSettingOverrides(), /*cookie_partition_key=*/std::nullopt));
   host_content_settings_map->SetContentSettingDefaultScope(
       host_ending_with_dot, GURL(), ContentSettingsType::COOKIES,
       CONTENT_SETTING_BLOCK);
   EXPECT_FALSE(cookie_settings->IsFullCookieAccessAllowed(
       host_ending_with_dot, site_for_cookies, origin,
-      net::CookieSettingOverrides()));
+      net::CookieSettingOverrides(), /*cookie_partition_key=*/std::nullopt));
 
   EXPECT_EQ(CONTENT_SETTING_ALLOW,
             host_content_settings_map->GetContentSetting(

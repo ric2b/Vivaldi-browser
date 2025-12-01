@@ -31,15 +31,14 @@ class SilentWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
         id, extensions::ExtensionRegistry::ENABLED | extensions::ExtensionRegistry::DISABLED |
             extensions::ExtensionRegistry::BLOCKLISTED);
     if (installed_extension) {
-      extensions::ExtensionSystem* system =
-          extensions::ExtensionSystem::Get(profile);
-      extensions::ExtensionService* service = system->extension_service();
-
+      extensions::ExtensionRegistrar* extension_registrar =
+            extensions::ExtensionRegistrar::Get(profile);
+      DCHECK(extension_registrar);
       if (enabled) {
-        service->EnableExtension(id);
+          extension_registrar->EnableExtension(id);
       } else {
-        service->DisableExtension(
-          id, extensions::disable_reason::DISABLE_USER_ACTION);
+        extension_registrar->DisableExtension(
+            id, {extensions::disable_reason::DISABLE_USER_ACTION});
       }
     }
   }
@@ -64,9 +63,11 @@ class SilentWebstoreInstaller : public extensions::WebstoreInstallWithPrompt {
         return;
       }
 
+#if 0
       extensions::ExtensionService* service = system->extension_service();
       service->DisableExtension(
           id(), extensions::disable_reason::DISABLE_USER_ACTION);
+#endif
     }
     extensions::WebstoreInstallWithPrompt::CompleteInstall(result, error);
   }

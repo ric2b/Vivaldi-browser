@@ -63,7 +63,7 @@ static int pkey_dh_keygen(EVP_PKEY_CTX *ctx, EVP_PKEY *pkey) {
     return 0;
   }
 
-  if (ctx->pkey != NULL && !EVP_PKEY_copy_parameters(pkey, ctx->pkey)) {
+  if (ctx->pkey != NULL && !EVP_PKEY_copy_parameters(pkey, ctx->pkey.get())) {
     return 0;
   }
 

@@ -12,16 +12,22 @@
 
 #include <string.h>
 
+#include <cstdint>
+#include <iterator>
 #include <variant>
 #include <vector>
 
 #include "absl/algorithm/container.h"
-#include "modules/include/module_common_types.h"
+#include "api/video/video_codec_type.h"
+#include "api/video/video_frame_type.h"
 #include "modules/include/module_common_types_public.h"
+#include "modules/video_coding/codecs/h264/include/h264_globals.h"
 #include "modules/video_coding/codecs/interface/common_constants.h"
 #include "modules/video_coding/codecs/vp8/include/vp8_globals.h"
+#include "modules/video_coding/codecs/vp9/include/vp9_globals.h"
 #include "modules/video_coding/deprecated/jitter_buffer_common.h"
 #include "modules/video_coding/deprecated/packet.h"
+#include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 
 namespace webrtc {
@@ -48,8 +54,8 @@ VCMSessionInfo::~VCMSessionInfo() {}
 void VCMSessionInfo::UpdateDataPointers(const uint8_t* old_base_ptr,
                                         const uint8_t* new_base_ptr) {
   for (PacketIterator it = packets_.begin(); it != packets_.end(); ++it)
-    if ((*it).dataPtr != NULL) {
-      RTC_DCHECK(old_base_ptr != NULL && new_base_ptr != NULL);
+    if ((*it).dataPtr != nullptr) {
+      RTC_DCHECK(old_base_ptr != nullptr && new_base_ptr != nullptr);
       (*it).dataPtr = new_base_ptr + ((*it).dataPtr - old_base_ptr);
     }
 }
@@ -266,7 +272,7 @@ void VCMSessionInfo::ShiftSubsequentPackets(PacketIterator it,
   // Calculate the total move length and move the data pointers in advance.
   for (; it != packets_.end(); ++it) {
     shift_length += (*it).sizeBytes;
-    if ((*it).dataPtr != NULL)
+    if ((*it).dataPtr != nullptr)
       (*it).dataPtr += steps_to_shift;
   }
   memmove(first_packet_ptr + steps_to_shift, first_packet_ptr, shift_length);
@@ -328,7 +334,7 @@ size_t VCMSessionInfo::DeletePacketData(PacketIterator start,
   for (PacketIterator it = start; it != packet_after_end; ++it) {
     bytes_to_delete += (*it).sizeBytes;
     (*it).sizeBytes = 0;
-    (*it).dataPtr = NULL;
+    (*it).dataPtr = nullptr;
   }
   if (bytes_to_delete > 0)
     ShiftSubsequentPackets(end, -static_cast<int>(bytes_to_delete));

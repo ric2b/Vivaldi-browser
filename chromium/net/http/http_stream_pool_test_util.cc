@@ -9,6 +9,7 @@
 #include "net/base/features.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_stream_pool.h"
+#include "net/http/http_stream_pool_attempt_manager.h"
 #include "net/http/http_stream_pool_group.h"
 #include "net/http/http_stream_pool_job.h"
 #include "net/log/net_log_with_source.h"
@@ -29,14 +30,109 @@ IPEndPoint MakeIPEndPoint(std::string_view addr, uint16_t port = 80) {
 
 }  // namespace
 
+FakeServiceEndpointResolution::FakeServiceEndpointResolution() = default;
+
+FakeServiceEndpointResolution::~FakeServiceEndpointResolution() = default;
+
+FakeServiceEndpointResolution::FakeServiceEndpointResolution(
+    const FakeServiceEndpointResolution&) = default;
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::operator=(
+    const FakeServiceEndpointResolution&) = default;
+
+FakeServiceEndpointResolution&
+FakeServiceEndpointResolution::CompleteStartSynchronously(int rv) {
+  start_result_ = rv;
+  endpoints_crypto_ready_ = true;
+  return *this;
+}
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::set_start_result(
+    int start_result) {
+  start_result_ = start_result;
+  return *this;
+}
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::set_endpoints(
+    std::vector<ServiceEndpoint> endpoints) {
+  endpoints_ = std::move(endpoints);
+  return *this;
+}
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::add_endpoint(
+    ServiceEndpoint endpoint) {
+  endpoints_.emplace_back(std::move(endpoint));
+  return *this;
+}
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::set_aliases(
+    std::set<std::string> aliases) {
+  aliases_ = std::move(aliases);
+  return *this;
+}
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::set_crypto_ready(
+    bool endpoints_crypto_ready) {
+  endpoints_crypto_ready_ = endpoints_crypto_ready;
+  return *this;
+}
+
+FakeServiceEndpointResolution&
+FakeServiceEndpointResolution::set_resolve_error_info(
+    ResolveErrorInfo resolve_error_info) {
+  resolve_error_info_ = resolve_error_info;
+  return *this;
+}
+
+FakeServiceEndpointResolution& FakeServiceEndpointResolution::set_priority(
+    RequestPriority priority) {
+  priority_ = priority;
+  return *this;
+}
+
 FakeServiceEndpointRequest::FakeServiceEndpointRequest() = default;
 
 FakeServiceEndpointRequest::~FakeServiceEndpointRequest() = default;
 
+FakeServiceEndpointRequest& FakeServiceEndpointRequest::set_endpoints(
+    std::vector<ServiceEndpoint> endpoints) {
+  resolution_.set_endpoints(std::move(endpoints));
+  return *this;
+}
+
+FakeServiceEndpointRequest& FakeServiceEndpointRequest::add_endpoint(
+    ServiceEndpoint endpoint) {
+  resolution_.add_endpoint(std::move(endpoint));
+  return *this;
+}
+
+FakeServiceEndpointRequest& FakeServiceEndpointRequest::set_aliases(
+    std::set<std::string> aliases) {
+  resolution_.set_aliases(std::move(aliases));
+  return *this;
+}
+
+FakeServiceEndpointRequest& FakeServiceEndpointRequest::set_crypto_ready(
+    bool endpoints_crypto_ready) {
+  resolution_.set_crypto_ready(endpoints_crypto_ready);
+  return *this;
+}
+
+FakeServiceEndpointRequest& FakeServiceEndpointRequest::set_resolve_error_info(
+    ResolveErrorInfo resolve_error_info) {
+  resolution_.set_resolve_error_info(resolve_error_info);
+  return *this;
+}
+
+FakeServiceEndpointRequest& FakeServiceEndpointRequest::set_priority(
+    RequestPriority priority) {
+  resolution_.set_priority(priority);
+  return *this;
+}
+
 FakeServiceEndpointRequest&
 FakeServiceEndpointRequest::CompleteStartSynchronously(int rv) {
-  start_result_ = rv;
-  endpoints_crypto_ready_ = true;
+  resolution_.CompleteStartSynchronously(rv);
   return *this;
 }
 
@@ -50,7 +146,7 @@ FakeServiceEndpointRequest::CallOnServiceEndpointsUpdated() {
 FakeServiceEndpointRequest&
 FakeServiceEndpointRequest::CallOnServiceEndpointRequestFinished(int rv) {
   CHECK(delegate_);
-  endpoints_crypto_ready_ = true;
+  resolution_.set_crypto_ready(true);
   delegate_->OnServiceEndpointRequestFinished(rv);
   return *this;
 }
@@ -59,24 +155,24 @@ int FakeServiceEndpointRequest::Start(Delegate* delegate) {
   CHECK(!delegate_);
   CHECK(delegate);
   delegate_ = delegate;
-  return start_result_;
+  return resolution_.start_result();
 }
 
 const std::vector<ServiceEndpoint>&
 FakeServiceEndpointRequest::GetEndpointResults() {
-  return endpoints_;
+  return resolution_.endpoints();
 }
 
 const std::set<std::string>& FakeServiceEndpointRequest::GetDnsAliasResults() {
-  return aliases_;
+  return resolution_.aliases();
 }
 
 bool FakeServiceEndpointRequest::EndpointsCryptoReady() {
-  return endpoints_crypto_ready_;
+  return resolution_.endpoints_crypto_ready();
 }
 
 ResolveErrorInfo FakeServiceEndpointRequest::GetResolveErrorInfo() {
-  return resolve_error_info_;
+  return resolution_.resolve_error_info();
 }
 
 const HostCache::EntryStaleness* FakeServiceEndpointRequest::GetStaleInfo()
@@ -90,19 +186,27 @@ bool FakeServiceEndpointRequest::IsStaleWhileRefresing() const {
 
 void FakeServiceEndpointRequest::ChangeRequestPriority(
     RequestPriority priority) {
-  priority_ = priority;
+  resolution_.set_priority(priority);
 }
 
 FakeServiceEndpointResolver::FakeServiceEndpointResolver() = default;
 
 FakeServiceEndpointResolver::~FakeServiceEndpointResolver() = default;
 
-FakeServiceEndpointRequest* FakeServiceEndpointResolver::AddFakeRequest() {
+base::WeakPtr<FakeServiceEndpointRequest>
+FakeServiceEndpointResolver::AddFakeRequest() {
   std::unique_ptr<FakeServiceEndpointRequest> request =
       std::make_unique<FakeServiceEndpointRequest>();
-  FakeServiceEndpointRequest* raw_request = request.get();
+  base::WeakPtr<FakeServiceEndpointRequest> weak_request =
+      request->weak_ptr_factory_.GetWeakPtr();
   requests_.emplace_back(std::move(request));
-  return raw_request;
+  return weak_request;
+}
+
+FakeServiceEndpointResolution&
+FakeServiceEndpointResolver::ConfigureDefaultResolution() {
+  default_resolution_ = FakeServiceEndpointResolution();
+  return *default_resolution_;
 }
 
 void FakeServiceEndpointResolver::OnShutdown() {}
@@ -131,7 +235,15 @@ FakeServiceEndpointResolver::CreateServiceEndpointRequest(
     NetworkAnonymizationKey network_anonymization_key,
     NetLogWithSource net_log,
     ResolveHostParameters parameters) {
-  CHECK(!requests_.empty());
+  if (requests_.empty() && default_resolution_.has_value()) {
+    std::unique_ptr<FakeServiceEndpointRequest> request =
+        std::make_unique<FakeServiceEndpointRequest>();
+    request->resolution_ = *default_resolution_;
+    request->set_priority(parameters.initial_priority);
+    return request;
+  }
+
+  CHECK(!requests_.empty()) << "No FakeServiceEndpoint";
   std::unique_ptr<FakeServiceEndpointRequest> request =
       std::move(requests_.front());
   requests_.pop_front();
@@ -224,8 +336,11 @@ bool FakeStreamSocket::IsConnected() const {
   if (is_connected_override_.has_value()) {
     return *is_connected_override_;
   }
-  if (disconnect_after_is_connected_call_) {
-    is_connected_override_ = false;
+  if (disconnect_after_is_connected_call_count_ > 0) {
+    --disconnect_after_is_connected_call_count_;
+    if (disconnect_after_is_connected_call_count_ == 0) {
+      is_connected_override_ = false;
+    }
   }
   return connected_;
 }
@@ -247,10 +362,10 @@ bool FakeStreamSocket::GetSSLInfo(SSLInfo* ssl_info) {
   return false;
 }
 
-void FakeStreamSocket::DisconnectAfterIsConnectedCall() {
+void FakeStreamSocket::DisconnectAfterIsConnectedCall(int count) {
   connected_ = true;
   is_connected_override_ = std::nullopt;
-  disconnect_after_is_connected_call_ = true;
+  disconnect_after_is_connected_call_count_ = count;
 }
 
 StreamKeyBuilder& StreamKeyBuilder::from_key(const HttpStreamKey& key) {
@@ -275,9 +390,10 @@ HttpStreamKey GroupIdToHttpStreamKey(
                        group_id.disable_cert_network_fetches());
 }
 
-void WaitForAttemptManagerComplete(HttpStreamPool::Group& group) {
+void WaitForAttemptManagerComplete(
+    HttpStreamPool::AttemptManager* attempt_manager) {
   base::RunLoop run_loop;
-  group.SetOnAttemptManagerCompleteCallbackForTesting(run_loop.QuitClosure());
+  attempt_manager->SetOnCompleteCallbackForTesting(run_loop.QuitClosure());
   run_loop.Run();
 }
 

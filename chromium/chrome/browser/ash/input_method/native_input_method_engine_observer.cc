@@ -19,9 +19,11 @@
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversion_utils.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/input_method/assistive_prefs.h"
 #include "chrome/browser/ash/input_method/assistive_suggester_switch.h"
 #include "chrome/browser/ash/input_method/autocorrect_manager.h"
@@ -474,6 +476,8 @@ std::optional<mojom::NamedDomKey> NamedDomKeyToMojom(
       return mojom::NamedDomKey::kAudioVolumeDown;
     case ui::DomKey::AUDIO_VOLUME_UP:
       return mojom::NamedDomKey::kAudioVolumeUp;
+    case ui::DomKey::NUM_LOCK:
+      return mojom::NamedDomKey::kNumLock;
     default:
       return std::nullopt;
   }
@@ -1454,11 +1458,9 @@ void NativeInputMethodEngineObserver::DEPRECATED_ReportSuggestionOpportunity(
       ToUmaSuggestionType(mode));
 }
 
-void NativeInputMethodEngineObserver::ReportHistogramSample(
-    base::Histogram* histogram,
-    uint16_t value) {
-  histogram->Add(base::strict_cast<base::Histogram::Sample32>(value));
-}
+void NativeInputMethodEngineObserver::DEPRECATED_ReportHistogramSample(
+    mojom::BucketedHistogramPtr histogram,
+    uint16_t value) {}
 
 void NativeInputMethodEngineObserver::UpdateQuickSettings(
     mojom::InputMethodQuickSettingsPtr quick_settings) {

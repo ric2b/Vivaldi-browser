@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "device/base/synchronization/one_writer_seqlock.h"
 
@@ -26,7 +22,7 @@ namespace device {
 
 struct TestData {
   // Data copies larger than a cache line.
-  uint32_t buffer[32];
+  std::array<uint32_t, 32> buffer;
 };
 
 class BasicSeqLockTestThread : public base::PlatformThread::Delegate {

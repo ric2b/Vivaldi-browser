@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <atomic>
 
+#include "platform/impl/socket_handle_posix.h"
 #include "util/osp_logging.h"
 #include "util/std_util.h"
 
@@ -16,10 +17,11 @@ SocketHandleWaiter::SocketHandleWaiter(ClockNowFunctionPtr now_function)
     : now_function_(now_function) {}
 
 void SocketHandleWaiter::Subscribe(Subscriber* subscriber,
-                                   SocketHandleRef handle) {
+                                   SocketHandleRef handle,
+                                   uint32_t flags) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (handle_mappings_.find(handle) == handle_mappings_.end()) {
-    handle_mappings_.emplace(handle, SocketSubscription{subscriber});
+    handle_mappings_.emplace(handle, SocketSubscription{subscriber, flags});
   }
 }
 
@@ -105,21 +107,33 @@ void SocketHandleWaiter::ProcessReadyHandles(
 
 Error SocketHandleWaiter::ProcessHandles(Clock::duration timeout) {
   Clock::time_point start_time = now_function_();
-  std::vector<SocketHandleRef> handles;
+  std::vector<HandleWithFlags> handles;
   {
     std::lock_guard<std::mutex> lock(mutex_);
     handles_being_deleted_.clear();
     handle_deletion_block_.notify_all();
     handles.reserve(handle_mappings_.size());
-    for (const auto& pair : handle_mappings_) {
-      handles.push_back(pair.first);
+    for (auto& pair : handle_mappings_) {
+      uint32_t flags = pair.second.flags;
+      // Remove the write flag if there is no pending write.
+      if (flags & kWritable) {
+        const bool has_pending_write =
+            pair.second.subscriber->HasPendingWrite(pair.first);
+        if (!has_pending_write) {
+          flags &= ~kWritable;
+        }
+      }
+      handles.push_back(HandleWithFlags{.handle = pair.first, .flags = flags});
     }
+  }
+  if (handles.empty()) {
+    return Error::Code::kAgain;
   }
 
   Clock::time_point current_time = now_function_();
   Clock::duration remaining_timeout = timeout - (current_time - start_time);
-  ErrorOr<std::vector<ReadyHandle>> changed_handles =
-      AwaitSocketsReadable(handles, remaining_timeout);
+  ErrorOr<std::vector<HandleWithFlags>> changed_handles =
+      AwaitSocketsReady(handles, remaining_timeout);
 
   std::vector<HandleWithSubscription> ready_handles;
   {

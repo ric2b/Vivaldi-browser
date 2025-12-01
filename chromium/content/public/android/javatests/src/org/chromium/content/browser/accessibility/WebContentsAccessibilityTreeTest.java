@@ -1510,12 +1510,28 @@ public class WebContentsAccessibilityTreeTest {
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"enable-blink-features=CanvasDrawElement"})
+    public void test_canvasComplexFallback() {
+        performHtmlTest("canvas-complex-fallback.html");
+    }
+
+    @Test
+    @SmallTest
+    @CommandLineFlags.Add({"enable-blink-features=CanvasDrawElement"})
+    public void test_canvasInteractiveFallback() {
+        performHtmlTest("canvas-interactive-fallback.html");
+    }
+
+    @Test
+    @SmallTest
+    @CommandLineFlags.Add({"enable-blink-features=CanvasDrawElement"})
     public void test_canvasFallback() {
         performHtmlTest("canvas-fallback.html");
     }
 
     @Test
     @SmallTest
+    @CommandLineFlags.Add({"enable-blink-features=CanvasDrawElement"})
     public void test_canvas() {
         performHtmlTest("canvas.html");
     }
@@ -2293,6 +2309,12 @@ public class WebContentsAccessibilityTreeTest {
 
     @Test
     @SmallTest
+    public void test_multi_selectable() {
+        performHtmlTest("multi-selectable.html");
+    }
+
+    @Test
+    @SmallTest
     public void test_navigation() {
         performHtmlTest("navigation.html");
     }
@@ -2615,6 +2637,12 @@ public class WebContentsAccessibilityTreeTest {
     @SmallTest
     public void test_tabindexExposeChildren() {
         performHtmlTest("tabindex-expose-children.html");
+    }
+
+    @Test
+    @SmallTest
+    public void test_tabindexWithLinkChildren() {
+        performHtmlTest("tabindex-with-link-children.html");
     }
 
     @Test

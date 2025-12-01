@@ -298,6 +298,7 @@ bool ShouldStopExtractingAtPseudoElement(
     case CSSSelector::kPseudoPlaceholder:
     case CSSSelector::kPseudoFileSelectorButton:
     case CSSSelector::kPseudoDetailsContent:
+    case CSSSelector::kPseudoPermissionIcon:
     case CSSSelector::kPseudoPicker:
     case CSSSelector::kPseudoWebKitCustomElement:
     case CSSSelector::kPseudoBlinkInternalElement:
@@ -358,6 +359,7 @@ static bool ExtractSelectorValues(const CSSSelector* selector,
         case CSSSelector::kPseudoFocusVisible:
         case CSSSelector::kPseudoPlaceholder:
         case CSSSelector::kPseudoDetailsContent:
+        case CSSSelector::kPseudoPermissionIcon:
         case CSSSelector::kPseudoFileSelectorButton:
         case CSSSelector::kPseudoHost:
         case CSSSelector::kPseudoHostContext:
@@ -880,7 +882,7 @@ void RuleSet::AddViewTransitionRule(StyleRuleViewTransition* rule) {
 }
 
 void RuleSet::AddChildRules(StyleRule* parent_rule,
-                            const HeapVector<Member<StyleRuleBase>>& rules,
+                            base::span<const Member<StyleRuleBase>> rules,
                             const MediaQueryEvaluator& medium,
                             AddRuleFlags add_rule_flags,
                             const ContainerQuery* container_query,

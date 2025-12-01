@@ -45,7 +45,6 @@ namespace v8::internal {
 TQ_OBJECT_CONSTRUCTORS_IMPL(AsmWasmData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmArray)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmCapiFunctionData)
-TQ_OBJECT_CONSTRUCTORS_IMPL(WasmContinuationObject)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmExceptionTag)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmExportedFunctionData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmFunctionData)
@@ -64,6 +63,7 @@ TQ_OBJECT_CONSTRUCTORS_IMPL(WasmResumeData)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmStruct)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmSuspenderObject)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmSuspendingObject)
+TQ_OBJECT_CONSTRUCTORS_IMPL(WasmContinuationObject)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmTableObject)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmTagObject)
 TQ_OBJECT_CONSTRUCTORS_IMPL(WasmTypeInfo)
@@ -231,8 +231,8 @@ PRIMITIVE_ACCESSORS(WasmTrustedInstanceData, break_on_entry, uint8_t,
 
 OPTIONAL_ACCESSORS(WasmTrustedInstanceData, instance_object,
                    Tagged<WasmInstanceObject>, kInstanceObjectOffset)
-ACCESSORS(WasmTrustedInstanceData, native_context, Tagged<Context>,
-          kNativeContextOffset)
+OPTIONAL_ACCESSORS(WasmTrustedInstanceData, native_context, Tagged<Context>,
+                   kNativeContextOffset)
 ACCESSORS(WasmTrustedInstanceData, memory_objects, Tagged<FixedArray>,
           kMemoryObjectsOffset)
 OPTIONAL_ACCESSORS(WasmTrustedInstanceData, untagged_globals_buffer,
@@ -360,13 +360,6 @@ void WasmDispatchTable::set_table_type(wasm::CanonicalValueType type) {
   WriteField(kTableTypeOffset, type.raw_bit_field());
 }
 
-void WasmDispatchTable::clear_entry_padding(int index) {
-  static_assert(kEntryPaddingBytes == 0 || kEntryPaddingBytes == kIntSize);
-  if constexpr (kEntryPaddingBytes != 0) {
-    WriteField<int>(OffsetOf(index) + kEntryPaddingOffset, 0);
-  }
-}
-
 int WasmDispatchTable::length(AcquireLoadTag) const {
   return ACQUIRE_READ_INT32_FIELD(*this, kLengthOffset);
 }
@@ -389,6 +382,7 @@ inline Tagged<Object> WasmDispatchTable::implicit_arg(int index) const {
 inline WasmCodePointer WasmDispatchTable::target(int index) const {
   DCHECK_LT(index, length());
   if (v8_flags.wasm_jitless) return wasm::kInvalidWasmCodePointer;
+  static_assert(sizeof(WasmCodePointer) == sizeof(uint32_t));
   return WasmCodePointer{ReadField<uint32_t>(OffsetOf(index) + kTargetBias)};
 }
 
@@ -710,11 +704,11 @@ ElementType WasmObject::FromNumber(Tagged<Object> value) {
 
   } else if (IsHeapNumber(value)) {
     double double_value = Cast<HeapNumber>(value)->value();
-    if (std::is_same<ElementType, double>::value ||
-        std::is_same<ElementType, float>::value) {
+    if (std::is_same_v<ElementType, double> ||
+        std::is_same_v<ElementType, float>) {
       return static_cast<ElementType>(double_value);
     } else {
-      CHECK(std::is_integral<ElementType>::value);
+      CHECK(std::is_integral_v<ElementType>);
       return static_cast<ElementType>(DoubleToInt32(double_value));
     }
   }
@@ -754,13 +748,15 @@ ObjectSlot WasmStruct::RawField(int raw_offset) {
   return ObjectSlot(RawFieldAddress(raw_offset));
 }
 
-inline Tagged<Map> WasmStruct::get_described_rtt() const {
-  return TaggedField<Map, kHeaderSize>::load(*this);
+void WasmStruct::SetTaggedFieldValue(int raw_offset, Tagged<Object> value,
+                                     WriteBarrierMode mode) {
+  int offset = WasmStruct::kHeaderSize + raw_offset;
+  TaggedField<Object>::store(*this, offset, value);
+  CONDITIONAL_WRITE_BARRIER(*this, offset, value, mode);
 }
 
-void WasmStruct::set_described_rtt(Tagged<Map> rtt) {
-  TaggedField<Object, kHeaderSize>::store(*this, rtt);
-}
+ACCESSORS_CHECKED(WasmStruct, described_rtt, Tagged<Map>, kHeaderSize,
+                  GcSafeType(map())->is_descriptor())
 
 wasm::CanonicalTypeIndex WasmArray::type_index(Tagged<Map> map) {
   DCHECK_EQ(WASM_ARRAY_TYPE, map->instance_type());
@@ -822,12 +818,15 @@ int WasmArray::DecodeElementSizeFromMap(Tagged<Map> map) {
   return map->WasmByte1();
 }
 
+EXTERNAL_POINTER_ACCESSORS(WasmSuspenderObject, stack, wasm::StackMemory*,
+                           kStackOffset, kWasmStackMemoryTag)
+
+EXTERNAL_POINTER_ACCESSORS(WasmContinuationObject, stack, wasm::StackMemory*,
+                           kStackOffset, kWasmStackMemoryTag)
+
 TRUSTED_POINTER_ACCESSORS(WasmTagObject, trusted_data, WasmTrustedInstanceData,
                           kTrustedDataOffset,
                           kWasmTrustedInstanceDataIndirectPointerTag)
-
-EXTERNAL_POINTER_ACCESSORS(WasmContinuationObject, stack, Address, kStackOffset,
-                           kWasmStackMemoryTag)
 
 #include "src/objects/object-macros-undef.h"
 

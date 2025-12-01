@@ -16,7 +16,6 @@
 #include <utility>
 
 #include "base/debug/alias.h"
-#include "base/hash/md5_constexpr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
@@ -86,14 +85,13 @@ const char* IFace::MessageToMethodName_(mojo::Message& message) {
 
 #if !BUILDFLAG(IS_FUCHSIA)
 uint32_t IFace::Method_Sym::IPCStableHash() {
-  // This method's address is used for indetifiying the mojo method name after
+  // This method's address is used for identifiying the mojo method name after
   // symbolization. So each IPCStableHash should have a unique address.
   // We cannot use NO_CODE_FOLDING() here - it relies on the uniqueness of
   // __LINE__ value, which is not unique accross different mojo modules.
   // The code below is very similar to NO_CODE_FOLDING, but it uses a unique
   // hash instead of __LINE__.
-  constexpr uint32_t kHash = base::MD5Hash32Constexpr(
-          "(Impl)golden::IFace::Method");
+  static constexpr uint32_t kHash = 0x8f16d37f;  // IPCStableHash for golden::IFace::Method
   const uint32_t hash = kHash;
   base::debug::Alias(&hash);
   return hash;
@@ -152,6 +150,7 @@ void IFaceProxy::Method(
       ::golden::internal::IFace_Method_Params_Data> params(
           message);
   params.Allocate();
+
   params->param = in_param;
 
 #if defined(ENABLE_IPC_FUZZER)
@@ -220,7 +219,7 @@ bool IFace_Method_ForwardToCallback::Accept(
           internal::IFace_Method_ResponseParams_Data*>(
               message->mutable_payload());
   
-  
+
   // Validation for IFace.0
   bool success = true;
   std::string p_result{};
@@ -271,14 +270,20 @@ void IFace_Method_ProxyToResponder::Run(
   mojo::internal::MessageFragment<
       typename decltype(params->result)::BaseType> result_fragment(
           params.message());
+  
   mojo::internal::Serialize<mojo::StringDataView>(
-      in_result, result_fragment);
+    in_result,
+    result_fragment);
+
   params->result.Set(
       result_fragment.is_null() ? nullptr : result_fragment.data());
-  MOJO_INTERNAL_DLOG_SERIALIZATION_WARNING(
-      params->result.is_null(),
-      mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
-      "null result in ");
+
+  
+  MOJO_INTERNAL_CHECK_SERIALIZATION(
+    mojo::internal::SendValidation::kDefault,
+    !(params->result.is_null()),
+    mojo::internal::VALIDATION_ERROR_UNEXPECTED_NULL_POINTER,
+    "null result in ");
 
 #if defined(ENABLE_IPC_FUZZER)
   message.set_interface_name(IFace::Name_);
@@ -324,7 +329,7 @@ bool IFaceStubDispatch::AcceptWithResponder(
               internal::IFace_Method_Params_Data*>(
                   message->mutable_payload());
       
-      
+
       // Validation for IFace.0
       bool success = true;
       bool p_param{};
@@ -393,6 +398,7 @@ IFaceAsyncWaiter::IFaceAsyncWaiter(
     IFace* proxy) : proxy_(proxy) {}
 
 IFaceAsyncWaiter::~IFaceAsyncWaiter() = default;
+
 
 void IFaceAsyncWaiter::Method(
     bool param, std::string* out_result) {

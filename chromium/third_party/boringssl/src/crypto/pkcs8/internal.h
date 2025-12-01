@@ -74,7 +74,7 @@ struct pbe_suite {
                       const char *pass, size_t pass_len, CBS *param);
 };
 
-#define PKCS5_SALT_LEN 8
+#define PKCS5_SALT_LEN 16
 
 // pkcs5_pbe2_nid_to_cipher returns the |EVP_CIPHER| for |nid| if |nid| is
 // supported with PKCS#5 PBES2, and nullptr otherwise.

@@ -359,7 +359,11 @@ test-zstd test-zstd32 test-zstd-nolegacy test-zstd-dll: datagen
 test-cli-tests: ZSTD = $(PRGDIR)/zstd
 test-cli-tests: zstd datagen
 	file $(ZSTD)
-	./cli-tests/run.py --exec-prefix="$(QEMU_SYS)" --zstd="$(ZSTD)" --datagen=./datagen
+	./cli-tests/run.py --exec-prefix="$(QEMU_SYS)" --zstd="$(ZSTD)" --datagen=./datagen $(CLI_TEST_ARGS)
+
+.PHONY: update-cli-tests
+update-cli-tests: CLI_TEST_ARGS = --set-exact-output
+update-cli-tests: test-cli-tests
 
 .PHONY: test-fullbench
 test-fullbench: fullbench datagen
@@ -443,9 +447,9 @@ test-decodecorpus-cli: decodecorpus
 test-pool: poolTests
 	$(QEMU_SYS) ./poolTests
 
-test-lz4: ZSTD = LD_LIBRARY_PATH=/usr/local/lib $(PRGDIR)/zstd
-test-lz4: ZSTD_LZ4 = LD_LIBRARY_PATH=/usr/local/lib ./lz4
-test-lz4: ZSTD_UNLZ4 = LD_LIBRARY_PATH=/usr/local/lib ./unlz4
+test-lz4: ZSTD = $(PRGDIR)/zstd
+test-lz4: ZSTD_LZ4 = ./lz4
+test-lz4: ZSTD_UNLZ4 = ./unlz4
 test-lz4: zstd decodecorpus datagen
 	[ -f lz4 ] || ln -s $(PRGDIR)/zstd lz4
 	[ -f unlz4 ] || ln -s $(PRGDIR)/zstd unlz4

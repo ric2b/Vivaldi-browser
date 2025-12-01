@@ -148,10 +148,13 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
     del mock_exists
     run_performance_tests.copy_map_file_to_out_dir('file', 'dir')
 
-    mock_copyfile.assert_called_with('file', 'dir/benchmarks_shard_map.json')
+    mock_copyfile.assert_called_with(
+        'file', str(pathlib.Path('dir/benchmarks_shard_map.json')))
   # pylint: enable=no-self-use
 
-  @mock.patch.object(run_performance_tests.CrossbenchTest, 'execute_benchmark')
+  @mock.patch.object(run_performance_tests.CrossbenchTest,
+                     'execute_benchmark',
+                     return_value=0)
   def testCrossbenchTestBenchmarksArg(self, mock_execute_benchmark):
     fake_args = _create_crossbench_args()
     options = run_performance_tests.parse_arguments(fake_args)
@@ -179,7 +182,9 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
     with self.assertRaises(Exception):
       run_performance_tests.CrossbenchTest(options, 'dir').execute()
 
-  @mock.patch.object(run_performance_tests, '_run_benchmarks_on_shardmap')
+  @mock.patch.object(run_performance_tests,
+                     '_run_benchmarks_on_shardmap',
+                     return_value=0)
   @mock.patch.object(os.path, 'dirname')
   @mock.patch.object(run_performance_tests, 'load_map_file')
   def testCrossbenchTestShardMapFile(self, mock_load_map_file, mock_direname,
@@ -200,7 +205,9 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
                                                        expected_options, 'dir',
                                                        [])
 
-  @mock.patch.object(run_performance_tests, '_run_benchmarks_on_shardmap')
+  @mock.patch.object(run_performance_tests,
+                     '_run_benchmarks_on_shardmap',
+                     return_value=0)
   @mock.patch.object(os.path, 'dirname')
   @mock.patch.object(run_performance_tests, 'load_map_string')
   def testCrossbenchTestShardMapString(self, mock_load_map_string,
@@ -333,7 +340,7 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
     expected_dict = {
         'type': 'local',
         'path': local_fileserver,
-        'url': 'http://localhost:8000'
+        'url': 'http://localhost:0'
     }
 
     crosebench_test = run_performance_tests.CrossbenchTest(options, 'dir')
@@ -349,7 +356,7 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
     expected_dict = {
         'type': 'local',
         'path': local_fileserver,
-        'url': 'http://localhost:8000'
+        'url': 'http://localhost:0'
     }
 
     crosebench_test = run_performance_tests.CrossbenchTest(options, 'dir')
@@ -360,10 +367,10 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
   @mock.patch.object(binary_manager, 'FetchPath')
   def testCrossbenchGetDefaultWpr(self, mock_fetch_path):
     mock_fetch_path.return_value = 'wpr_go_path'
-    fake_args = _create_crossbench_args() + ['--wpr']
+    fake_args = _create_crossbench_args() + ['--wpr=fake.wprgo']
     options = run_performance_tests.parse_arguments(fake_args)
     data_dir = run_performance_tests.PAGE_SETS_DATA
-    archive = str(data_dir / 'crossbench_android_speedometer_3.0_000.wprgo')
+    archive = str(data_dir / 'fake.wprgo')
     expected_dict = {
         'type': 'wpr',
         'path': archive,
@@ -393,6 +400,36 @@ class TelemetryCommandGeneratorTest(unittest.TestCase):
     network_dict = json.loads(crosebench_test.network[0].split('=', 1)[1])
     self.assertDictEqual(network_dict, expected_dict)
 
+  @mock.patch.object(run_performance_tests.browser_finder, 'FindBrowser')
+  def testCrossbenchFindBrowserFromEmbedder(self, _):
+    fake_args = (
+        _create_crossbench_args('android-webview-trichrome-google-bundle') +
+        ['--embedder=org.foo.bar'])
+    options = run_performance_tests.parse_arguments(fake_args)
+
+    crossbench_test = run_performance_tests.CrossbenchTest(options, 'dir')
+
+    expected_hjson = crossbench_test.ANDROID_HJSON % 'org.foo.bar'
+    expected_browser = crossbench_test.CHROME_BROWSER % expected_hjson
+    self.assertEqual(crossbench_test.browser, expected_browser)
+
+  def testCrossbenchOfficialBrowser(self):
+    fake_args = _create_crossbench_args()
+    fake_args.append('--official-browser=chrome-stable-1.2.3.4')
+    options = run_performance_tests.parse_arguments(fake_args)
+
+    cb_test = run_performance_tests.CrossbenchTest(options, 'dir')
+    command_list = cb_test._generate_command_list(
+        cb_test.options.benchmarks, cb_test.options.passthrough_args, 'dir')
+
+    self.assertIn('--browser=chrome-stable-1.2.3.4', command_list)
+    # The --official-browser arg should have been removed from command_list.
+    self.assertFalse(
+        [x for x in command_list if x.startswith('--official-browser')])
+    # Crossbench should find the official build of WebDriver, instead of using
+    # a path from us.
+    self.assertFalse([x for x in command_list if x.startswith('--driver-path')])
+
 
 def _create_crossbench_args(browser='./chrome'):
   return [
@@ -402,3 +439,7 @@ def _create_crossbench_args(browser='./chrome'):
       '--benchmark-display-name=speedometer3.crossbench',
       f'--browser={browser}',
   ]
+
+
+if __name__ == '__main__':
+  unittest.main()

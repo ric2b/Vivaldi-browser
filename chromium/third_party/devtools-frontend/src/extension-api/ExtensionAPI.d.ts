@@ -4,8 +4,7 @@
 
 export namespace Chrome {
   export namespace DevTools {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    export interface EventSink<ListenerT extends(...args: any) => void> {
+    export interface EventSink<ListenerT extends(...args: any[]) => void> {
       addListener(listener: ListenerT): void;
       removeListener(listener: ListenerT): void;
     }
@@ -13,6 +12,12 @@ export namespace Chrome {
     export interface Resource {
       readonly url: string;
       readonly type: string;
+
+      /**
+       * For WASM resources the content of the `build_id` custom section. For JavaScript resources the
+       * `debugId` magic comment.
+       */
+      readonly buildId?: string;
 
       getContent(callback: (content: string, encoding: string) => unknown): void;
       setContent(content: string, commit: boolean, callback?: (error?: Object) => unknown): void;

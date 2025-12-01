@@ -4,14 +4,14 @@
 """Base class for WebGL conformance tests."""
 
 from collections.abc import Mapping
+import dataclasses
 import logging
 import json
 import os
 import time
 from typing import Any
 
-import dataclasses  # Built-in, but pylint gives an ordering false positive.
-
+import gpu_path_util
 from gpu_tests import common_browser_args as cba
 from gpu_tests import common_typing as ct
 from gpu_tests import gpu_integration_test
@@ -19,8 +19,6 @@ from gpu_tests import webgl_test_util
 from gpu_tests.util import host_information
 from gpu_tests.util import websocket_server as wss
 from gpu_tests.util import websocket_utils
-
-import gpu_path_util
 
 TEST_PAGE_RELPATH = os.path.join(webgl_test_util.extensions_relpath,
                                  'webgl_test_page.html')
@@ -148,20 +146,20 @@ class WebGLConformanceIntegrationTestBase(
     super()._SetClassVariablesFromOptions(options)
     cls._webgl_version = int(options.webgl_conformance_version.split('.')[0])
     if not cls._conformance_harness_script:
-      with open(
-          os.path.join(gpu_path_util.GPU_TEST_HARNESS_JAVASCRIPT_DIR,
-                       'websocket_heartbeat.js')) as f:
+      with open(os.path.join(gpu_path_util.GPU_TEST_HARNESS_JAVASCRIPT_DIR,
+                             'websocket_heartbeat.js'),
+                encoding='utf-8') as f:
         cls._conformance_harness_script = f.read()
       cls._conformance_harness_script += '\n'
-      with open(
-          os.path.join(gpu_path_util.GPU_TEST_HARNESS_JAVASCRIPT_DIR,
-                       'webgl_conformance_harness_script.js')) as f:
+      with open(os.path.join(gpu_path_util.GPU_TEST_HARNESS_JAVASCRIPT_DIR,
+                             'webgl_conformance_harness_script.js'),
+                encoding='utf-8') as f:
         cls._conformance_harness_script += f.read()
     if not cls._extension_harness_additional_script:
-      with open(
-          os.path.join(
-              gpu_path_util.GPU_TEST_HARNESS_JAVASCRIPT_DIR,
-              'webgl_conformance_extension_harness_additional_script.js')) as f:
+      with open(os.path.join(
+          gpu_path_util.GPU_TEST_HARNESS_JAVASCRIPT_DIR,
+          'webgl_conformance_extension_harness_additional_script.js'),
+                encoding='utf-8') as f:
         cls._extension_harness_additional_script = f.read()
 
   @classmethod
@@ -426,6 +424,11 @@ class WebGLConformanceIntegrationTestBase(
         # Force-enable SharedArrayBuffer to be able to test its
         # support in WEBGL_multi_draw.
         '--enable-blink-features=SharedArrayBuffer',
+        # Disable the noise interventions. This needs to be disabled because the
+        # tests read out the exact pixels values. By adding noise to these pixel
+        # values, these tests will obviously fail. This is intended behavior for
+        # the feature, so this should remain disabled.
+        '--disable-features=CanvasNoise',
     ])
     # Note that the overriding of the default --js-flags probably
     # won't interact well with RestartBrowserIfNecessaryWithArgs, but

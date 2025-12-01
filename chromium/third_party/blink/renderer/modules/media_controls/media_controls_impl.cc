@@ -26,6 +26,8 @@
 
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
 
+#include <array>
+
 #include "base/auto_reset.h"
 #include "media/base/media_switches.h"
 #include "third_party/blink/public/platform/platform.h"
@@ -105,6 +107,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/text/platform_locale.h"
 #include "third_party/blink/renderer/platform/web_test_support.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace blink {
@@ -117,7 +120,7 @@ constexpr int kMinWidthForOverlayPlayButton = 72;
 
 constexpr int kMinScrubbingMessageWidth = 300;
 
-const char* const kStateCSSClasses[8] = {
+const std::array<const char*, 8> kStateCSSClasses = {
     "state-no-source",                 // kNoSource
     "state-no-metadata",               // kNotLoaded
     "state-loading-metadata-paused",   // kLoadingMetadataPaused
@@ -1524,7 +1527,7 @@ void MediaControlsImpl::UpdateOverflowMenuItemCSSClass() const {
       continue;
 
     AtomicString css_class =
-        AtomicString("animated-") + AtomicString::Number(id++);
+        AtomicString(WTF::StrCat({"animated-", AtomicString::Number(id++)}));
     if (!class_list.contains(css_class))
       class_list.setValue(css_class);
   }

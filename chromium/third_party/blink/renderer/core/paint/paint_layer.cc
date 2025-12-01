@@ -62,6 +62,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/anchor_position_scroll_data.h"
@@ -196,6 +197,7 @@ PaintLayer::PaintLayer(LayoutBoxModelObject* layout_object)
       has_filter_that_moves_pixels_(false),
       is_under_svg_hidden_container_(false),
       has_self_painting_layer_descendant_(false),
+      has_backdrop_filter_descendant_(false),
       needs_reorder_overlay_overflow_controls_(false),
       static_inline_edge_(InlineEdge::kInlineStart),
       static_block_edge_(BlockEdge::kBlockStart),
@@ -386,6 +388,7 @@ void PaintLayer::UpdateDescendantDependentFlags() {
     has_stacked_descendant_in_current_stacking_context_ = false;
     has_self_painting_layer_descendant_ = false;
     descendant_needs_check_position_visibility_ = false;
+    has_backdrop_filter_descendant_ = false;
 
     bool can_contain_abs =
         GetLayoutObject().CanContainAbsolutePositionObjects();
@@ -438,6 +441,11 @@ void PaintLayer::UpdateDescendantDependentFlags() {
           has_self_painting_layer_descendant_ ||
           child->HasSelfPaintingLayerDescendant() ||
           child->IsSelfPaintingLayer();
+
+      has_backdrop_filter_descendant_ =
+          has_backdrop_filter_descendant_ ||
+          child->HasBackdropFilterDescendant() ||
+          child->GetLayoutObject().StyleRef().HasNonInitialBackdropFilter();
     }
 
     // See SetInvisibleForPositionVisibility() for explanation for
@@ -497,33 +505,24 @@ void PaintLayer::UpdateDescendantDependentFlags() {
 void PaintLayer::UpdateHasVisibleContent() {
   bool previously_has_visible_content = has_visible_content_;
 
-  if (GetLayoutObject().StyleRef().Visibility() == EVisibility::kVisible) {
+  const LayoutObject& object = GetLayoutObject();
+  if (object.StyleRef().Visibility() == EVisibility::kVisible) {
     has_visible_content_ = true;
   } else {
     // layer may be hidden but still have some visible content, check for this
     has_visible_content_ = false;
-    LayoutObject* r = GetLayoutObject().SlowFirstChild();
+    const LayoutObject* r = object.NextInPreOrder(&object);
     while (r) {
-      if (r->StyleRef().Visibility() == EVisibility::kVisible &&
-          (!r->HasLayer() || !r->EnclosingLayer()->IsSelfPaintingLayer())) {
+      if (r->HasLayer() &&
+          To<LayoutBoxModelObject>(r)->HasSelfPaintingLayer()) {
+        r = r->NextInPreOrderAfterChildren(&object);
+        continue;
+      }
+      if (r->StyleRef().Visibility() == EVisibility::kVisible) {
         has_visible_content_ = true;
         break;
       }
-      LayoutObject* layout_object_first_child = r->SlowFirstChild();
-      if (layout_object_first_child &&
-          (!r->HasLayer() || !r->EnclosingLayer()->IsSelfPaintingLayer())) {
-        r = layout_object_first_child;
-      } else if (r->NextSibling()) {
-        r = r->NextSibling();
-      } else {
-        do {
-          r = r->Parent();
-          if (r == &GetLayoutObject())
-            r = nullptr;
-        } while (r && !r->NextSibling());
-        if (r)
-          r = r->NextSibling();
-      }
+      r = r->NextInPreOrder(&object);
     }
   }
 
@@ -596,14 +595,15 @@ void PaintLayer::UpdateScrollingAfterLayout() {
 PaintLayer* PaintLayer::ContainingLayer() const {
   LayoutObject& layout_object = GetLayoutObject();
   if (layout_object.IsOutOfFlowPositioned()) {
-    // In NG, the containing block chain goes directly from a column spanner to
-    // the multi-column container. Thus, for an OOF nested inside a spanner, we
-    // need to find its containing layer through its containing block to handle
-    // this case correctly. Therefore, we technically only need to take this
-    // path for OOFs inside an NG spanner. However, doing so for all OOF
-    // descendants of a multicol container is reasonable enough.
-    if (layout_object.IsInsideFlowThread())
+    // The containing block chain goes directly from a column spanner to the
+    // multi-column container. Thus, for an OOF nested inside a spanner, we need
+    // to find its containing layer through its containing block to handle this
+    // case correctly. Therefore, we technically only need to take this path for
+    // OOFs inside a spanner. However, doing so for all OOF descendants of a
+    // multicol container is reasonable enough.
+    if (layout_object.IsInsideMulticol()) {
       return SlowContainingLayer(layout_object);
+    }
     auto can_contain_this_layer =
         layout_object.IsFixedPositioned()
             ? &LayoutObject::CanContainFixedPositionObjects
@@ -1133,10 +1133,9 @@ HitTestingTransformState PaintLayer::CreateLocalTransformState(
   HitTestingTransformState transform_state =
       container_transform_state
           ? *container_transform_state
-          : HitTestingTransformState(
-                recursion_data.location.TransformedPoint(),
-                recursion_data.location.TransformedRect(),
-                gfx::QuadF(gfx::RectF(recursion_data.rect)));
+          : HitTestingTransformState(recursion_data.location.TransformedPoint(),
+                                     recursion_data.location.TransformedRect(),
+                                     recursion_data.rect);
 
   if (&transform_container == this) {
     DCHECK(!container_transform_state);
@@ -1915,14 +1914,12 @@ gfx::RectF PaintLayer::BackdropFilterReferenceBox() const {
   return gfx::RectF(GetLayoutBox()->PhysicalBorderBoxRect());
 }
 
-// TODO(crbug.com/402437852) support corner-shape for backdrop filter bounds
-gfx::RRectF PaintLayer::BackdropFilterBounds() const {
-  gfx::RRectF backdrop_filter_bounds(
-      SkRRect(ContouredBorderGeometry::PixelSnappedContouredBorder(
-                  GetLayoutObject().StyleRef(),
-                  PhysicalRect::EnclosingRect(BackdropFilterReferenceBox()))
-                  .AsRoundedRect()));
-  return backdrop_filter_bounds;
+SkPath PaintLayer::BackdropFilterBounds() const {
+  return ContouredBorderGeometry::PixelSnappedContouredBorder(
+             GetLayoutObject().StyleRef(),
+             PhysicalRect::EnclosingRect(BackdropFilterReferenceBox()))
+      .GetPath()
+      .GetSkPath();
 }
 
 bool PaintLayer::HitTestClippedOutByClipPath(
@@ -2323,7 +2320,7 @@ void PaintLayer::UpdateCompositorFilterOperationsForFilter(
 
 void PaintLayer::UpdateCompositorFilterOperationsForBackdropFilter(
     CompositorFilterOperations& operations,
-    gfx::RRectF& backdrop_filter_bounds) {
+    SkPath& backdrop_filter_bounds) {
   const auto& style = GetLayoutObject().StyleRef();
   if (style.BackdropFilter().IsEmpty()) {
     operations.Clear();
@@ -2405,31 +2402,6 @@ bool PaintLayer::ComputeHasFilterThatMovesPixels() const {
   return false;
 }
 
-void InvalidateParentCanvasForPlacedElement(PaintLayer* layer) {
-  // The placed element itself is guaranteed to be the direct descendant of a
-  // canvas and both will have their own paint layers.
-  PaintLayer* child_layer;
-  while (layer) {
-    if (layer->GetLayoutObject().IsCanvas()) {
-      layer->SetNeedsRepaint();
-      Element* placed_element =
-          To<Element>(child_layer->GetLayoutObject().GetNode());
-      To<LayoutHTMLCanvas>(layer->GetLayoutObject())
-          .DidInvalidatePaintForPlacedElement(placed_element);
-      return;
-    }
-    child_layer = layer;
-    layer = layer->Parent();
-  }
-}
-
-static bool IsCanvasDescendant(LayoutObject* layout_object) {
-  return layout_object && layout_object->GetNode() &&
-         layout_object->GetNode()->IsHTMLElement() &&
-         !layout_object->IsCanvas() &&
-         To<HTMLElement>(layout_object->GetNode())->IsInCanvasSubtree();
-}
-
 void PaintLayer::SetNeedsRepaint() {
   if (self_needs_repaint_)
     return;
@@ -2437,12 +2409,6 @@ void PaintLayer::SetNeedsRepaint() {
   // Invalidate as a display item client.
   static_cast<DisplayItemClient*>(this)->Invalidate();
   MarkPaintingContainerChainForNeedsRepaint();
-
-  // If this layer is a descendant of a canvas then it may be part of a placed
-  // element subtree and the canvas itself needs to be invalidated.
-  if (IsCanvasDescendant(layout_object_)) {
-    InvalidateParentCanvasForPlacedElement(this);
-  }
 }
 
 void PaintLayer::SetDescendantNeedsRepaint() {

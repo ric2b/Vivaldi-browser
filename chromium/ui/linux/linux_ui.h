@@ -205,6 +205,10 @@ class COMPONENT_EXPORT(LINUX_UI) LinuxUi {
   virtual WindowFrameAction GetWindowFrameAction(
       WindowFrameActionSource source) = 0;
 
+  // Returns the command line flags that should be copied to subprocesses
+  // to have the same toolkit and version as this process.
+  virtual std::vector<std::string> GetCmdLineFlagsForCopy() const = 0;
+
  protected:
   struct CmdLineArgs {
     CmdLineArgs();
@@ -261,10 +265,12 @@ class COMPONENT_EXPORT(LINUX_UI) LinuxUiTheme {
   LinuxUiTheme& operator=(const LinuxUiTheme&) = delete;
   virtual ~LinuxUiTheme();
 
-  // Returns the LinuxUi instance for the given window.
+  // Returns the LinuxUi instance for the given window, or the default instance
+  // if the window is nullptr.
   static LinuxUiTheme* GetForWindow(aura::Window* window);
 
-  // Returns the LinuxUi instance for the given profile.
+  // Returns the LinuxUi instance for the given profile, or the default instance
+  // if the profile is nullptr.
   static LinuxUiTheme* GetForProfile(Profile* profile);
 
   // Returns the native theme for this toolkit.

@@ -78,6 +78,11 @@ class CORE_EXPORT ViewTransitionSupplement
   ViewTransition* GetTransition(const Element&);
   void ForEachTransition(base::FunctionRef<void(ViewTransition&)>);
 
+  void WillEnterGetComputedStyleScope();
+  void WillExitGetComputedStyleScope();
+
+  void WillUpdateStyleAndLayoutTree();
+
   explicit ViewTransitionSupplement(Document&);
   ~ViewTransitionSupplement() override;
 
@@ -88,6 +93,8 @@ class CORE_EXPORT ViewTransitionSupplement
   void AddPendingRequest(std::unique_ptr<ViewTransitionRequest>) override;
   VectorOf<std::unique_ptr<ViewTransitionRequest>> TakePendingRequests();
   void OnTransitionFinished(ViewTransition* transition) override;
+  void OnSkipTransitionWithPendingCallback(ViewTransition*) override;
+  void OnSkippedTransitionDOMCallback(ViewTransition*) override;
 
   // TODO(https://crbug.com/1422251): Expand this to receive a the full set of
   // @view-transition options.
@@ -145,6 +152,11 @@ class CORE_EXPORT ViewTransitionSupplement
   HeapHashMap<WeakMember<const Element>, Member<ViewTransition>>
       element_transitions_;
 
+  // view-transitions that have been skipped but still have a pending DOM
+  // callback.
+  HeapHashMap<WeakMember<const Element>, Member<ViewTransition>>
+      skipped_with_pending_dom_callback_;
+
   VectorOf<std::unique_ptr<ViewTransitionRequest>> pending_requests_;
 
   mojom::blink::ViewTransitionSameOriginOptIn cross_document_opt_in_ =
@@ -154,6 +166,9 @@ class CORE_EXPORT ViewTransitionSupplement
       viz::ViewTransitionElementResourceId::kInvalidLocalId;
 
   Vector<String> cross_document_types_;
+
+  bool in_get_computed_style_scope_ = false;
+  bool last_update_had_computed_style_scope_ = false;
 };
 
 }  // namespace blink

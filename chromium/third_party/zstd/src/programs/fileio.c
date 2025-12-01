@@ -288,7 +288,7 @@ FIO_prefs_t* FIO_createPreferences(void)
     ret->removeSrcFile = 0;
     ret->memLimit = 0;
     ret->nbWorkers = 1;
-    ret->blockSize = 0;
+    ret->jobSize = 0;
     ret->overlapLog = FIO_OVERLAP_LOG_NOTSET;
     ret->adaptiveMode = 0;
     ret->rsyncable = 0;
@@ -377,10 +377,10 @@ void FIO_setExcludeCompressedFile(FIO_prefs_t* const prefs, int excludeCompresse
 
 void FIO_setAllowBlockDevices(FIO_prefs_t* const prefs, int allowBlockDevices) { prefs->allowBlockDevices = allowBlockDevices; }
 
-void FIO_setBlockSize(FIO_prefs_t* const prefs, int blockSize) {
-    if (blockSize && prefs->nbWorkers==0)
+void FIO_setJobSize(FIO_prefs_t* const prefs, int jobSize) {
+    if (jobSize && prefs->nbWorkers==0)
         DISPLAYLEVEL(2, "Setting block size is useless in single-thread mode \n");
-    prefs->blockSize = blockSize;
+    prefs->jobSize = jobSize;
 }
 
 void FIO_setOverlapLog(FIO_prefs_t* const prefs, int overlapLog){
@@ -538,14 +538,16 @@ static int FIO_removeFile(const char* path)
 }
 
 /** FIO_openSrcFile() :
- *  condition : `srcFileName` must be non-NULL. `prefs` may be NULL.
+ *  condition : `srcFileName` must be non-NULL.
+ *  optional: `prefs` may be NULL.
  * @result : FILE* to `srcFileName`, or NULL if it fails */
 static FILE* FIO_openSrcFile(const FIO_prefs_t* const prefs, const char* srcFileName, stat_t* statbuf)
 {
     int allowBlockDevices = prefs != NULL ? prefs->allowBlockDevices : 0;
     assert(srcFileName != NULL);
     assert(statbuf != NULL);
-    if (!strcmp (srcFileName, stdinmark)) {
+
+    if (!strcmp(srcFileName, stdinmark)) {
         DISPLAYLEVEL(4,"Using stdin for input \n");
         SET_BINARY_MODE(stdin);
         return stdin;
@@ -557,8 +559,10 @@ static FILE* FIO_openSrcFile(const FIO_prefs_t* const prefs, const char* srcFile
         return NULL;
     }
 
+    /* Accept regular files, FIFOs, and process substitution file descriptors */
     if (!UTIL_isRegularFileStat(statbuf)
      && !UTIL_isFIFOStat(statbuf)
+     && !UTIL_isFileDescriptorPipe(srcFileName)  /* Process substitution support */
      && !(allowBlockDevices && UTIL_isBlockDevStat(statbuf))
     ) {
         DISPLAYLEVEL(1, "zstd: %s is not a regular file -- ignored \n",
@@ -581,8 +585,6 @@ FIO_openDstFile(FIO_ctx_t* fCtx, FIO_prefs_t* const prefs,
                 const char* srcFileName, const char* dstFileName,
                 const int mode)
 {
-    int isDstRegFile;
-
     if (prefs->testMode) return NULL;  /* do not open file in test mode */
 
     assert(dstFileName != NULL);
@@ -602,16 +604,7 @@ FIO_openDstFile(FIO_ctx_t* fCtx, FIO_prefs_t* const prefs,
         return NULL;
     }
 
-    isDstRegFile = UTIL_isRegularFile(dstFileName);  /* invoke once */
-    if (prefs->sparseFileSupport == 1) {
-        prefs->sparseFileSupport = ZSTD_SPARSE_DEFAULT;
-        if (!isDstRegFile) {
-            prefs->sparseFileSupport = 0;
-            DISPLAYLEVEL(4, "Sparse File Support is disabled when output is not a file \n");
-        }
-    }
-
-    if (isDstRegFile) {
+    if (UTIL_isRegularFile(dstFileName)) {
         /* Check if destination file already exists */
 #if !defined(_WIN32)
         /* this test does not work on Windows :
@@ -637,6 +630,7 @@ FIO_openDstFile(FIO_ctx_t* fCtx, FIO_prefs_t* const prefs,
     }
 
     {
+        int isDstRegFile;
 #if defined(_WIN32)
         /* Windows requires opening the file as a "binary" file to avoid
          * mangling. This macro doesn't exist on unix. */
@@ -654,8 +648,23 @@ FIO_openDstFile(FIO_ctx_t* fCtx, FIO_prefs_t* const prefs,
             f = fdopen(fd, "wb");
         }
 #endif
+
+        /* Check regular file after opening with O_CREAT */
+        isDstRegFile = UTIL_isFdRegularFile(fd);
+        if (prefs->sparseFileSupport == 1) {
+            prefs->sparseFileSupport = ZSTD_SPARSE_DEFAULT;
+            if (!isDstRegFile) {
+                prefs->sparseFileSupport = 0;
+                DISPLAYLEVEL(4, "Sparse File Support is disabled when output is not a file \n");
+            }
+        }
+
         if (f == NULL) {
-            DISPLAYLEVEL(1, "zstd: %s: %s\n", dstFileName, strerror(errno));
+            if (UTIL_isFileDescriptorPipe(dstFileName)) {
+                DISPLAYLEVEL(1, "zstd: error: no output specified (use -o or -c). \n");
+            } else {
+                DISPLAYLEVEL(1, "zstd: %s: %s\n", dstFileName, strerror(errno));
+            }
         } else {
             /* An increased buffer size can provide a significant performance
              * boost on some platforms. Note that providing a NULL buf with a
@@ -1100,11 +1109,12 @@ static void FIO_adjustParamsForPatchFromMode(FIO_prefs_t* const prefs,
         FIO_setLdmFlag(prefs, 1);
     }
     if (cParams.strategy >= ZSTD_btopt) {
-        DISPLAYLEVEL(3, "[Optimal parser notes] Consider the following to improve patch size at the cost of speed:\n");
-        DISPLAYLEVEL(3, "- Use --single-thread mode in the zstd cli\n");
-        DISPLAYLEVEL(3, "- Set a larger targetLength (e.g. --zstd=targetLength=4096)\n");
-        DISPLAYLEVEL(3, "- Set a larger chainLog (e.g. --zstd=chainLog=%u)\n", ZSTD_CHAINLOG_MAX);
-        DISPLAYLEVEL(3, "Also consider playing around with searchLog and hashLog\n");
+        DISPLAYLEVEL(4, "[Optimal parser notes] Consider the following to improve patch size at the cost of speed:\n");
+        DISPLAYLEVEL(4, "- Set a larger targetLength (e.g. --zstd=targetLength=4096)\n");
+        DISPLAYLEVEL(4, "- Set a larger chainLog (e.g. --zstd=chainLog=%u)\n", ZSTD_CHAINLOG_MAX);
+        DISPLAYLEVEL(4, "- Set a larger LDM hashLog (e.g. --zstd=ldmHashLog=%u)\n", ZSTD_LDM_HASHLOG_MAX);
+        DISPLAYLEVEL(4, "- Set a smaller LDM rateLog (e.g. --zstd=ldmHashRateLog=%u)\n", ZSTD_LDM_HASHRATELOG_MIN);
+        DISPLAYLEVEL(4, "Also consider playing around with searchLog and hashLog\n");
     }
 }
 
@@ -1182,7 +1192,7 @@ static cRess_t FIO_createCResources(FIO_prefs_t* const prefs,
 #ifdef ZSTD_MULTITHREAD
     DISPLAYLEVEL(5,"set nb workers = %u \n", prefs->nbWorkers);
     CHECK( ZSTD_CCtx_setParameter(ress.cctx, ZSTD_c_nbWorkers, prefs->nbWorkers) );
-    CHECK( ZSTD_CCtx_setParameter(ress.cctx, ZSTD_c_jobSize, prefs->blockSize) );
+    CHECK( ZSTD_CCtx_setParameter(ress.cctx, ZSTD_c_jobSize, prefs->jobSize) );
     if (prefs->overlapLog != FIO_OVERLAP_LOG_NOTSET) {
         DISPLAYLEVEL(3,"set overlapLog = %u \n", prefs->overlapLog);
         CHECK( ZSTD_CCtx_setParameter(ress.cctx, ZSTD_c_overlapLog, prefs->overlapLog) );
@@ -2117,7 +2127,7 @@ void FIO_displayCompressionParameters(const FIO_prefs_t* prefs)
     DISPLAY("%s", INDEX(sparseOptions, prefs->sparseFileSupport));
     DISPLAY("%s", prefs->dictIDFlag ? "" : " --no-dictID");
     DISPLAY("%s", INDEX(checkSumOptions, prefs->checksumFlag));
-    DISPLAY(" --block-size=%d", prefs->blockSize);
+    DISPLAY(" --jobsize=%d", prefs->jobSize);
     if (prefs->adaptiveMode)
         DISPLAY(" --adapt=min=%d,max=%d", prefs->minAdaptLevel, prefs->maxAdaptLevel);
     DISPLAY("%s", INDEX(rowMatchFinderOptions, prefs->useRowMatchFinder));

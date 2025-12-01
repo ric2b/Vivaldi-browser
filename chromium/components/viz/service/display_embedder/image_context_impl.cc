@@ -12,6 +12,7 @@
 #include "base/trace_event/trace_event.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
+#include "gpu/command_buffer/service/graphite_shared_context.h"
 #include "gpu/command_buffer/service/shared_context_state.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_factory.h"
 #include "gpu/command_buffer/service/shared_image/shared_image_format_service_utils.h"
@@ -119,29 +120,26 @@ SkColor4f GetFallbackColorForPlane(viz::SharedImageFormat format,
 
 namespace viz {
 
-ImageContextImpl::ImageContextImpl(
-    const gpu::Mailbox& mailbox,
-    const gpu::SyncToken& sync_token,
-    uint32_t texture_target,
-    const gfx::Size& size,
-    SharedImageFormat format,
-    bool maybe_concurrent_reads,
-    const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
-    sk_sp<SkColorSpace> color_space,
-    GrSurfaceOrigin origin,
-    bool is_for_render_pass,
-    bool raw_draw_if_possible)
+ImageContextImpl::ImageContextImpl(const TransferableResource& resource,
+                                   bool maybe_concurrent_reads,
+                                   bool raw_draw_if_possible,
+                                   uint32_t client_id)
+    : ImageContext(resource),
+      maybe_concurrent_reads_(maybe_concurrent_reads),
+      raw_draw_if_possible_(raw_draw_if_possible) {}
+
+ImageContextImpl::ImageContextImpl(const gpu::Mailbox& mailbox,
+                                   const gfx::Size& size,
+                                   SharedImageFormat format,
+                                   sk_sp<SkColorSpace> color_space)
     : ImageContext(mailbox,
-                   sync_token,
-                   texture_target,
+                   gpu::SyncToken(),
+                   /*texture_target=*/GL_TEXTURE_2D,
                    size,
                    format,
-                   ycbcr_info,
                    color_space,
-                   origin),
-      maybe_concurrent_reads_(maybe_concurrent_reads),
-      is_for_render_pass_(is_for_render_pass),
-      raw_draw_if_possible_(raw_draw_if_possible) {}
+                   /*origin=*/kTopLeft_GrSurfaceOrigin),
+      is_for_render_pass_(true) {}
 
 ImageContextImpl::~ImageContextImpl() {
   DeleteFallbackTextures();
@@ -214,7 +212,7 @@ void ImageContextImpl::CreateFallbackImage(
     return;
   }
 
-  if (context_state->graphite_context()) {
+  if (context_state->graphite_shared_context()) {
     if (graphite_ycbcr_info_mismatch_) {
       // It is not possible to allocate a fallback texture if the failure was
       // due to a mismatch in YCBCr info between the promise image and the
@@ -286,7 +284,8 @@ void ImageContextImpl::CreateFallbackImage(
       skgpu::graphite::InsertRecordingInfo info = {};
       info.fRecording = recording.get();
       bool insert_success =
-          fallback_context_state_->graphite_context()->insertRecording(info);
+          fallback_context_state_->graphite_shared_context()->insertRecording(
+              info);
       if (!insert_success) {
         DLOG(ERROR) << "Failed to insert recording";
       }
@@ -309,9 +308,10 @@ void ImageContextImpl::CreateFallbackImage(
   std::vector<sk_sp<GrPromiseImageTexture>> promise_textures;
   for (int plane_index = 0; plane_index < num_planes; plane_index++) {
     DCHECK_NE(formats[plane_index].textureType(), GrTextureType::kExternal);
+    auto plane_size = format().GetPlaneSize(plane_index, size());
     auto fallback_texture =
         fallback_context_state_->gr_context()->createBackendTexture(
-            size().width(), size().height(), formats[plane_index],
+            plane_size.width(), plane_size.height(), formats[plane_index],
             GetFallbackColorForPlane(format(), plane_index),
             skgpu::Mipmapped::kNo, GrRenderable::kYes);
 
@@ -378,7 +378,8 @@ bool ImageContextImpl::BeginAccessIfNecessaryInternal(
   if (representation_scoped_read_access_) {
     CHECK(owned_promise_image_textures_.empty());
     CHECK(!context_state->gr_context() || !promise_image_textures_.empty());
-    CHECK(!context_state->graphite_context() || !graphite_textures_.empty());
+    CHECK(!context_state->graphite_shared_context() ||
+          !graphite_textures_.empty());
     return true;
   }
 
@@ -433,7 +434,7 @@ bool ImageContextImpl::BeginAccessIfNecessaryInternal(
   // Only one promise texture for external sampler case.
   int num_planes =
       format().PrefersExternalSampler() ? 1 : format().NumberOfPlanes();
-  if (context_state->graphite_context()) {
+  if (context_state->graphite_shared_context()) {
 #if BUILDFLAG(IS_ANDROID) && BUILDFLAG(SKIA_USE_DAWN)
     // In the case of video decoding, it is possible for there to be a mismatch
     // between the YCbCr info passed to Viz at the time of creating the promise

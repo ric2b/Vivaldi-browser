@@ -12,7 +12,7 @@ build_webui("build") {
     "result_text.ts",
     "textarea.ts",
   ]
-  non_web_component_files = [
+  ts_files = [
     "animations/animator.ts",
     "animations/app_animator.ts",
     "animations/textarea_animator.ts",
@@ -22,7 +22,6 @@ build_webui("build") {
   icons_html_files = [ "icons.html" ]
   html_to_wrapper_template = "detect"
   ts_composite = true
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_polymer_389737066.json"
   ts_deps = [
     "//third_party/polymer/v3_0:library",
     "//ui/webui/resources/cr_components/color_change_listener:build_ts",

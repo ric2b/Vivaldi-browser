@@ -13,6 +13,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -22,7 +23,6 @@
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/extensions/file_handlers/web_file_handlers_permission_handler.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/views/extensions/web_file_handlers/web_file_handlers_file_launch_dialog.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "content/public/test/browser_test.h"
 #include "extensions/common/extension.h"
@@ -219,9 +219,8 @@ class WebFileHandlersFileLaunchBrowserTest
     views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
                                          "WebFileHandlersFileLaunchDialogView");
     // Set the checkbox to checked.
-    // TODO: handle return value.
-    std::ignore =
-        extensions::file_handlers::SetDefaultRememberSelectionForTesting(true);
+    auto resetter = extensions::WebFileHandlersPermissionHandler::
+        SetRememberSelectionForTesting(true);
 
     // Run the first time.
     {
@@ -272,9 +271,8 @@ class WebFileHandlersFileLaunchBrowserTest
     views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
                                          "WebFileHandlersFileLaunchDialogView");
     // Set the checkbox to checked.
-    // TODO: handle return value.
-    std::ignore =
-        extensions::file_handlers::SetDefaultRememberSelectionForTesting(true);
+    auto resetter = extensions::WebFileHandlersPermissionHandler::
+        SetRememberSelectionForTesting(true);
 
     // Launch for the first time.
     {
@@ -323,9 +321,8 @@ class WebFileHandlersFileLaunchBrowserTest
     views::NamedWidgetShownWaiter waiter(views::test::AnyWidgetTestPasskey{},
                                          "WebFileHandlersFileLaunchDialogView");
     // Set the checkbox to checked.
-    // TODO: handle return value.
-    std::ignore =
-        extensions::file_handlers::SetDefaultRememberSelectionForTesting(true);
+    auto resetter = extensions::WebFileHandlersPermissionHandler::
+        SetRememberSelectionForTesting(true);
 
     // Launch for the first time.
     {

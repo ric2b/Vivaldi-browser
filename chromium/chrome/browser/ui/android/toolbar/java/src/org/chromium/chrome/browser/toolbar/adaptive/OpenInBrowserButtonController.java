@@ -10,9 +10,11 @@ import android.graphics.drawable.Drawable;
 import android.view.View;
 
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.BaseButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.R;
+import org.chromium.chrome.browser.toolbar.optional_button.BaseButtonDataProvider;
 import org.chromium.chrome.browser.user_education.IphCommandBuilder;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightShape;
@@ -24,6 +26,7 @@ import org.chromium.components.feature_engagement.Tracker;
  * Optional toolbar button which opens the current Custom Tab in BrApp. May be used by {@link
  * AdaptiveToolbarButtonController}.
  */
+@NullMarked
 public class OpenInBrowserButtonController extends BaseButtonDataProvider {
 
     private final Runnable mOpenInBrowserRunnable;
@@ -41,7 +44,7 @@ public class OpenInBrowserButtonController extends BaseButtonDataProvider {
     public OpenInBrowserButtonController(
             Context context,
             Drawable buttonDrawable,
-            Supplier<Tab> activeTabSupplier,
+            Supplier<@Nullable Tab> activeTabSupplier,
             Runnable openInBrowserRunnable,
             Supplier<Tracker> trackerSupplier) {
         super(
@@ -53,8 +56,7 @@ public class OpenInBrowserButtonController extends BaseButtonDataProvider {
                 /* supportsTinting= */ true,
                 /* iphCommandBuilder= */ null,
                 AdaptiveToolbarButtonVariant.OPEN_IN_BROWSER,
-                /* tooltipTextResId= */ R.string.menu_open_in_product,
-                /* showBackgroundHighlight= */ true);
+                /* tooltipTextResId= */ R.string.menu_open_in_product);
         setShouldShowOnIncognitoTabs(true);
         mOpenInBrowserRunnable = openInBrowserRunnable;
         mTrackerSupplier = trackerSupplier;

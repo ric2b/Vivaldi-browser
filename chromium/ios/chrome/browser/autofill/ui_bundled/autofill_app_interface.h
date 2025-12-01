@@ -51,6 +51,10 @@ enum CreditCardSaveManagerObserverEvent : int {
 // Saves a sample account profile (address) in the data manager.
 + (void)saveExampleAccountProfile;
 
+// Saves a sample account profile (address) with Home record type in the data
+// manager.
++ (void)saveExampleHomeWorkAccountProfile;
+
 // Returns the name of the sample profile.
 + (NSString*)exampleProfileName;
 
@@ -75,6 +79,11 @@ enum CreditCardSaveManagerObserverEvent : int {
 // No current CVC auth required.
 // Returns the `card.NetworkAndLastFourDigits` of the card used in the UIs.
 + (NSString*)saveMaskedCreditCardEnrolledInVirtualCard;
+
+// Saves a masked credit card which is enrolled in CardInfoRetrieval.
+// No current CVC auth required.
+// Returns the `card.NetworkAndLastFourDigits` of the card used in the UIs.
++ (NSString*)saveMaskedCreditCardEnrolledInCardInfoRetrieval;
 
 // The functions below are helpers for the SaveCardInfobarEGTest that requires
 // observing autofill events in the app process.

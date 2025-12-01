@@ -22,7 +22,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ref.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
 #include "base/power_monitor/power_monitor.h"
@@ -478,8 +477,8 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       // Include list of formats this is tested to work with.
       // See gpu/command_buffer/tests/webgpu_mailbox_unittest.cc
       if (format != viz::SinglePlaneFormat::kBGRA_8888 &&
-// TODO(crbug.com/40823053): Support "rgba8unorm" canvas context format on Mac
-#if !BUILDFLAG(IS_MAC)
+// TODO(crbug.com/40823053): Support "rgba8unorm" canvas context format on Apple
+#if !BUILDFLAG(IS_APPLE)
           format != viz::SinglePlaneFormat::kRGBA_8888 &&
 #endif
           format != viz::SinglePlaneFormat::kRGBA_F16) {
@@ -492,11 +491,55 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       }
 
       const bool is_initialized = representation->IsCleared();
+      // Create a wgpu::Texture to hold the image contents.
+      // It must be internally copyable as this class itself uses the texture as
+      // the dest and source of copies for transfer back and forth between Skia
+      // and Dawn.
+      wgpu::DawnTextureInternalUsageDescriptor internal_usage_desc;
+      internal_usage_desc.internalUsage = internal_usage |
+                                          wgpu::TextureUsage::CopyDst |
+                                          wgpu::TextureUsage::CopySrc;
+      wgpu::TextureDescriptor texture_desc = {
+          .nextInChain = &internal_usage_desc,
+          .usage = usage,
+          .dimension = wgpu::TextureDimension::e2D,
+          .size = {static_cast<uint32_t>(representation->size().width()),
+                   static_cast<uint32_t>(representation->size().height()), 1},
+          .format = ToDawnFormat(representation->format()),
+          .mipLevelCount = 1,
+          .sampleCount = 1,
+          .viewFormatCount = view_formats.size(),
+          .viewFormats =
+              reinterpret_cast<wgpu::TextureFormat*>(view_formats.data()),
+      };
+
+      // CreateTexture() may cause a validation error on an invalid texture
+      // descriptor, but is suppressed here. It will be caught in by the
+      // ValidateTextureDescriptor() call in
+      // GPUCanvasContext::getCurrentTexture() instead.
+      device.PushErrorScope(wgpu::ErrorFilter::Validation);
+      auto texture = device.CreateTexture(&texture_desc);
+      bool error = false;
+      device.PopErrorScope(
+          wgpu::CallbackMode::AllowSpontaneous,
+          [&error](wgpu::PopErrorScopeStatus status, wgpu::ErrorType type,
+                   wgpu::StringView message) {
+            if (type == wgpu::ErrorType::Validation) {
+              error = true;
+            }
+          });
+      auto status = instance.WaitAny(0, nullptr, 0);
+      DCHECK(status == wgpu::WaitStatus::Success);
+      if (error) {
+        // If the CreateTexture() call failed, fail this function so that an
+        // ErrorSharedImageRepresentationAndAccess is created instead.
+        return nullptr;
+      }
       auto result =
           base::WrapUnique(new SharedImageRepresentationAndAccessSkiaFallback(
               std::move(shared_context_state), std::move(representation),
-              std::move(instance), std::move(device), usage, internal_usage,
-              std::move(view_formats)));
+              std::move(instance), std::move(device), std::move(texture), usage,
+              internal_usage));
       if (is_initialized && !result->PopulateFromSkia()) {
         return nullptr;
       }
@@ -532,40 +575,16 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
         std::unique_ptr<SkiaImageRepresentation> representation,
         wgpu::Instance instance,
         wgpu::Device device,
+        wgpu::Texture texture,
         wgpu::TextureUsage usage,
-        wgpu::TextureUsage internal_usage,
-        std::vector<wgpu::TextureFormat> view_formats)
+        wgpu::TextureUsage internal_usage)
         : shared_context_state_(std::move(shared_context_state)),
           representation_(std::move(representation)),
           instance_(std::move(instance)),
           device_(std::move(device)),
+          texture_(std::move(texture)),
           usage_(usage),
-          internal_usage_(internal_usage) {
-      // Create a wgpu::Texture to hold the image contents.
-      // It must be internally copyable as this class itself uses the texture as
-      // the dest and source of copies for transfer back and forth between Skia
-      // and Dawn.
-      wgpu::DawnTextureInternalUsageDescriptor internal_usage_desc;
-      internal_usage_desc.internalUsage = internal_usage |
-                                          wgpu::TextureUsage::CopyDst |
-                                          wgpu::TextureUsage::CopySrc;
-      wgpu::TextureDescriptor texture_desc = {
-          .nextInChain = &internal_usage_desc,
-          .usage = usage,
-          .dimension = wgpu::TextureDimension::e2D,
-          .size = {static_cast<uint32_t>(representation_->size().width()),
-                   static_cast<uint32_t>(representation_->size().height()), 1},
-          .format = ToDawnFormat(representation_->format()),
-          .mipLevelCount = 1,
-          .sampleCount = 1,
-          .viewFormatCount = view_formats.size(),
-          .viewFormats =
-              reinterpret_cast<wgpu::TextureFormat*>(view_formats.data()),
-      };
-
-      texture_ = device_.CreateTexture(&texture_desc);
-      DCHECK(texture_);
-    }
+          internal_usage_(internal_usage) {}
 
     bool ComputeStagingBufferParams(viz::SharedImageFormat format,
                                     const gfx::Size& size,
@@ -642,10 +661,10 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
           success = false;
         }
       } else {
-        DCHECK(shared_context_state_->graphite_context());
+        DCHECK(shared_context_state_->graphite_shared_context());
         DCHECK(shared_context_state_->gpu_main_graphite_recorder());
         if (success && !GraphiteReadPixelsSync(
-                           shared_context_state_->graphite_context(),
+                           shared_context_state_->graphite_shared_context(),
                            shared_context_state_->gpu_main_graphite_recorder(),
                            sk_image.get(), sk_image->imageInfo(), dst_pointer,
                            bytes_per_row, 0, 0)) {
@@ -759,6 +778,7 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       internal_usage_desc.useInternalUsages = true;
       wgpu::CommandEncoderDescriptor command_encoder_desc = {
           .nextInChain = &internal_usage_desc,
+          .label = "WebGPUDecoderImpl::UploadContentsToSkia",
       };
       wgpu::CommandEncoder encoder =
           device_.CreateCommandEncoder(&command_encoder_desc);
@@ -812,10 +832,11 @@ class WebGPUDecoderImpl final : public WebGPUDecoder {
       if (shared_context_state_->gr_context()) {
         skgpu::ganesh::Flush(surface);
       } else {
-        DCHECK(shared_context_state_->graphite_context());
+        DCHECK(shared_context_state_->graphite_shared_context());
         DCHECK(shared_context_state_->gpu_main_graphite_recorder());
-        GraphiteFlushAndSubmit(shared_context_state_->graphite_context(),
-                               shared_context_state_->gpu_main_graphite_recorder());
+        GraphiteFlushAndSubmit(
+            shared_context_state_->graphite_shared_context(),
+            shared_context_state_->gpu_main_graphite_recorder());
       }
       // Transition the image back to the desired end state. This is used for
       // transitioning the image to the external queue for Vulkan/GL interop.
@@ -1126,7 +1147,17 @@ WebGPUDecoderImpl::WebGPUDecoderImpl(
   force_webgpu_compat_ = gpu_preferences.force_webgpu_compat;
   require_enabled_toggles_ = gpu_preferences.enabled_dawn_features_list;
   require_disabled_toggles_ = gpu_preferences.disabled_dawn_features_list;
-  for (std::string f :
+  for (std::string& f :
+       base::SplitString(features::kWebGPUEnabledToggles.Get(), ",",
+                         base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    require_enabled_toggles_.push_back(std::move(f));
+  }
+  for (std::string& f :
+       base::SplitString(features::kWebGPUDisabledToggles.Get(), ",",
+                         base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
+    require_disabled_toggles_.push_back(std::move(f));
+  }
+  for (std::string& f :
        base::SplitString(features::kWebGPUUnsafeFeatures.Get(), ",",
                          base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
     runtime_unsafe_features_.insert(std::move(f));
@@ -1245,6 +1276,8 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
   switch (feature) {
     case wgpu::FeatureName::ChromiumExperimentalTimestampQueryInsidePasses:
     case wgpu::FeatureName::MultiDrawIndirect:
+    case wgpu::FeatureName::TextureCompressionASTCSliced3D:
+    case wgpu::FeatureName::TextureCompressionBCSliced3D:
     case wgpu::FeatureName::Unorm16TextureFormats:
     case wgpu::FeatureName::Snorm16TextureFormats:
       return safety_level_ == webgpu::SafetyLevel::kUnsafe;
@@ -1286,6 +1319,8 @@ bool WebGPUDecoderImpl::IsFeatureExposed(wgpu::FeatureName feature) const {
     }
     case wgpu::FeatureName::SharedBufferMemoryD3D12Resource:
       return safety_level_ == webgpu::SafetyLevel::kUnsafe;
+    case wgpu::FeatureName::ChromiumExperimentalSubgroupMatrix:
+      return safety_level_ == webgpu::SafetyLevel::kUnsafe;
     default:
       return false;
   }
@@ -1312,7 +1347,8 @@ WGPUFuture WebGPUDecoderImpl::RequestAdapterImpl(
       (static_cast<wgpu::FeatureLevel>(options->featureLevel) ==
            wgpu::FeatureLevel::Compatibility &&
        (safety_level_ == webgpu::SafetyLevel::kUnsafe ||
-        safety_level_ == webgpu::SafetyLevel::kSafeExperimental))) {
+        safety_level_ == webgpu::SafetyLevel::kSafeExperimental ||
+        base::FeatureList::IsEnabled(features::kWebGPUCompatibilityMode)))) {
     feature_level = wgpu::FeatureLevel::Compatibility;
   }
 
@@ -1605,7 +1641,7 @@ WebGPUDecoderImpl::CreateQueuedRequestDeviceCallback(
   // the decoder's dtor explicitly resolves all these callbacks.
   return base::BindOnce(
       [](WebGPUDecoderImpl* decoder, wgpu::Adapter adapter,
-         std::unique_ptr<WGPUDeviceDescriptor> descriptor,
+         std::unique_ptr<WGPUDeviceDescriptorDeepCopy> descriptor,
          CallbackInfo callback_info, bool run) {
         if (run) {
           DCHECK(decoder->isolation_key_);
@@ -1752,7 +1788,7 @@ wgpu::Adapter WebGPUDecoderImpl::CreatePreferredAdapter(
     case WebGPUAdapterName::kDefault: {
 #if BUILDFLAG(IS_WIN)
       backend_types = {wgpu::BackendType::D3D12};
-#elif BUILDFLAG(IS_MAC)
+#elif BUILDFLAG(IS_APPLE)
       backend_types = {wgpu::BackendType::Metal};
 #elif BUILDFLAG(IS_LINUX)
       if (shared_context_state_->GrContextIsVulkan() ||
@@ -2217,7 +2253,7 @@ error::Error WebGPUDecoderImpl::HandleAssociateMailboxImmediate(
 
   std::unique_ptr<SharedImageRepresentationAndAccess> representation_and_access;
   auto it = known_device_metadata_.find(device);
-  CHECK(it != known_device_metadata_.end(), base::NotFatalUntil::M130);
+  CHECK(it != known_device_metadata_.end());
   if (it->second.adapterType == wgpu::AdapterType::CPU) {
     representation_and_access = AssociateMailboxUsingSkiaFallback(
         mailbox, flags, device, usage, internal_usage, std::move(view_formats));
@@ -2480,9 +2516,9 @@ bool WebGPUDecoderImpl::ClearSharedImageWithSkia(const Mailbox& mailbox) {
   if (shared_context_state_->gr_context()) {
     skgpu::ganesh::Flush(surface);
   } else {
-    DCHECK(shared_context_state_->graphite_context());
+    DCHECK(shared_context_state_->graphite_shared_context());
     DCHECK(shared_context_state_->gpu_main_graphite_recorder());
-    GraphiteFlushAndSubmit(shared_context_state_->graphite_context(),
+    GraphiteFlushAndSubmit(shared_context_state_->graphite_shared_context(),
                            shared_context_state_->gpu_main_graphite_recorder());
   }
   // Transition the image back to the desired end state. This is used for

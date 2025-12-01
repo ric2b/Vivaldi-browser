@@ -177,8 +177,8 @@ bool NameInfo::SetInfoWithVerificationStatus(const AutofillType& type,
         ? GetRootForType(type.GetStorableType())
               ->SetValueForType(type.GetStorableType(), value, status)
         : GetRootForType(type.GetStorableType())
-              ->SetValueForTypeAndResetSubstructure(type.GetStorableType(),
-                                                    value, status);
+              ->SetValueForType(type.GetStorableType(), value, status,
+                                /*invalidate_child_nodes=*/true);
     return true;
   }
   SetRawInfoWithVerificationStatus(type.GetStorableType(), value, status);
@@ -225,8 +225,9 @@ std::u16string EmailInfo::GetInfo(const AutofillType& type,
 }
 
 std::u16string EmailInfo::GetRawInfo(FieldType type) const {
-  if (type == EMAIL_ADDRESS)
+  if (type == EMAIL_ADDRESS || type == EMAIL_OR_LOYALTY_MEMBERSHIP_ID) {
     return email_;
+  }
 
   return std::u16string();
 }

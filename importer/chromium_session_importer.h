@@ -6,8 +6,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/memory/raw_ptr.h"
 #include "base/files/file_path.h"
-#include "chrome/common/importer/importer_type.h"
 #include "components/sessions/vivaldi_session_service_commands.h"
+#include "components/user_data_importer/common/importer_type.h"
 
 class Profile;
 class ExternalProcessImporterHost;
@@ -21,7 +21,7 @@ class ChromiumSessionImporter {
 
   static sessions::IdToSessionTab GetOpenTabs(
       const base::FilePath& profile_dir,
-      importer::ImporterType importer_type);
+      user_data_importer::ImporterType importer_type);
 
  private:
   const raw_ptr<Profile> profile_;

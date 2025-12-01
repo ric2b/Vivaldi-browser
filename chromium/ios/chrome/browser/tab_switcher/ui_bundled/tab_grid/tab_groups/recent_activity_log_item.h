@@ -7,42 +7,53 @@
 
 #import <UIKit/UIKit.h>
 
-@protocol ShareKitAvatarPrimitive;
+class GURL;
+namespace collaboration::messaging {
+struct MessageAttribution;
+enum class RecentActivityAction;
+}  // namespace collaboration::messaging
 
-// Different type used for RecentActivityLogItem.
-enum class ActivityLogType : NSUInteger {
-  kTabAdded,
-  kTabRemoved,
-  kTabUpdated,
-  kMemberRemoved,
-  kGroupColorChanged,
-  kGroupNameChanged,
-  kUndefined,
-};
+@class FaviconAttributes;
+@protocol ShareKitAvatarPrimitive;
 
 // Represents a log item in a diffable data source. It contains the data of
 // ActivityLogItem obtained from MessagingBackendService.
+// The equality between two objects is based on the id of the
+// `activityMetadata`.
 @interface RecentActivityLogItem : NSObject
 
-// TODO(crbug.com/370897655): Store an ID of the ActivityLogItem struct.
+// When true, all other values should be ignored. This represents an absence of
+// item.
+@property(nonatomic, assign) BOOL emptyItem;
 
-// The type of the activity log.
-@property(nonatomic, assign) ActivityLogType type;
+// Attributes for the favicon.
+@property(nonatomic, strong) FaviconAttributes* attributes;
 
-// The image of a favicon of a page.
-@property(nonatomic, strong) UIImage* favicon;
+// GURL of the favicon.
+@property(nonatomic, assign) GURL faviconURL;
 
-// The object to provide an avatar image.
+// Object that provides an avatar image.
 @property(nonatomic, strong) id<ShareKitAvatarPrimitive> avatarPrimitive;
 
-// The string of a title.
-@property(nonatomic, strong) NSString* title;
+// Title of the item.
+@property(nonatomic, copy) NSString* title;
 
-// The string of a description.
-@property(nonatomic, strong) NSString* actionDescription;
+// Description of the item.
+@property(nonatomic, copy) NSString* actionDescription;
 
-// The string of the timestamp when an action is taken.
-@property(nonatomic, strong) NSString* timestamp;
+// Elapsed time since the action occurred (e.g., "6h ago", "just now").
+@property(nonatomic, copy) NSString* elapsedTime;
+
+// The type of action to be taken when this activity row is clicked.
+// Not to be used by the UI.
+@property(nonatomic, assign)
+    collaboration::messaging::RecentActivityAction action;
+
+// Implicit metadata that will be used to invoke the delegate when the
+// activity row is clicked.
+// Not to be used by the UI.
+@property(nonatomic, assign)
+    collaboration::messaging::MessageAttribution activityMetadata;
 
 @end
 

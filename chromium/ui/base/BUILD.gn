@@ -12,7 +12,6 @@ import("//build/config/locales.gni")
 import("//build/config/ozone.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
-import("//build/util/branding.gni")
 import("//skia/features.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//testing/test.gni")
@@ -28,6 +27,7 @@ if (is_android) {
   import("//build/config/apple/mobile_config.gni")
 } else if (is_mac) {
   import("//build/config/mac/rules.gni")
+  import("//build/util/branding.gni")
 }
 
 build_ime = !is_ios
@@ -197,6 +197,8 @@ component("base") {
     "pointer/touch_ui_controller.cc",
     "pointer/touch_ui_controller.h",
     "resource/allowlist.h",
+    "resource/lottie_resource.cc",
+    "resource/lottie_resource.h",
     "resource/resource_bundle.cc",
     "resource/resource_bundle.h",
     "resource/scoped_startup_resource_bundle.cc",
@@ -408,13 +410,6 @@ component("base") {
       ]
     }
 
-    if (is_linux) {
-      sources += [
-        "linux/xdg_shortcut.cc",
-        "linux/xdg_shortcut.h",
-      ]
-    }
-
     if (is_linux || is_chromeos) {
       sources += [
         "accelerators/menu_label_accelerator_util_linux.cc",
@@ -444,7 +439,7 @@ component("base") {
       sources += [ "pointer/pointer_device_win.cc" ]
     } else if (is_android) {
       sources += [ "pointer/pointer_device_android.cc" ]
-    } else if (is_ios) {
+    } else if (is_ios && target_platform == "iphoneos") {
       sources += [ "pointer/pointer_device_ios.cc" ]
     } else if (is_linux || is_chromeos) {
       sources += [ "pointer/pointer_device_linux.cc" ]
@@ -548,8 +543,10 @@ component("base") {
 
   if (use_blink) {
     deps += [
+      "//cc/paint",
       "//ui/events",
       "//ui/events/devices",
+      "//ui/lottie",
     ]
   }
 
@@ -579,14 +576,7 @@ component("base") {
   }
 
   if (use_glib) {
-    configs += [ "//build/config/linux:glib" ]
-    sources += [
-      "glib/glib_cast.h",
-      "glib/glib_integers.h",
-      "glib/scoped_gobject.h",
-      "glib/scoped_gsignal.cc",
-      "glib/scoped_gsignal.h",
-    ]
+    public_deps += [ "//ui/base/glib" ]
   }
 
   if (is_chromeos || (use_aura && is_linux) || is_fuchsia) {
@@ -1318,10 +1308,7 @@ test("ui_base_unittests") {
 
   if (use_glib) {
     sources += [ "glib/scoped_gsignal_unittest.cc" ]
-  }
-
-  if (is_linux) {
-    sources += [ "linux/xdg_shortcut_unittest.cc" ]
+    deps += [ "//ui/base/glib" ]
   }
 
   if (is_linux && use_dbus) {

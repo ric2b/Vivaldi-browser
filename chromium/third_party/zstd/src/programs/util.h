@@ -184,6 +184,7 @@ int UTIL_fchmod(const int fd, char const* filename, const stat_t* statbuf, mode_
  * compute the needed information.
  */
 
+int UTIL_isFdRegularFile(int fd);
 int UTIL_isRegularFile(const char* infilename);
 int UTIL_isDirectory(const char* infilename);
 int UTIL_isSameFile(const char* file1, const char* file2);
@@ -191,6 +192,7 @@ int UTIL_isSameFileStat(const char* file1, const char* file2, const stat_t* file
 int UTIL_isCompressedFile(const char* infilename, const char *extensionList[]);
 int UTIL_isLink(const char* infilename);
 int UTIL_isFIFO(const char* infilename);
+int UTIL_isFileDescriptorPipe(const char* filename);
 
 /**
  * Returns with the given file descriptor is a console.
@@ -250,13 +252,13 @@ typedef struct
     size_t tableCapacity;
 } FileNamesTable;
 
-/*! UTIL_createFileNamesTable_fromFileName() :
+/*! UTIL_createFileNamesTable_fromFileList() :
  *  read filenames from @inputFileName, and store them into returned object.
  * @return : a FileNamesTable*, or NULL in case of error (ex: @inputFileName doesn't exist).
  *  Note: inputFileSize must be less than 50MB
  */
 FileNamesTable*
-UTIL_createFileNamesTable_fromFileName(const char* inputFileName);
+UTIL_createFileNamesTable_fromFileList(const char* inputFileName);
 
 /*! UTIL_assembleFileNamesTable() :
  *  This function takes ownership of its arguments, @filenames and @buf,

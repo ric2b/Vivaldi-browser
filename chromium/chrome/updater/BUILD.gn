@@ -9,7 +9,6 @@ import("//build/util/process_version.gni")
 import("//chrome/enterprise_companion/branding.gni")
 import("//chrome/updater/apply_updater_branding.gni")
 import("//chrome/updater/branding.gni")
-import("//chrome/updater/zip.gni")
 import("//components/crx_file/crx3.gni")
 import("//testing/test.gni")
 
@@ -349,7 +348,6 @@ if (is_win || is_mac || is_linux) {
         "win/ui/progress_wnd.h",
         "win/ui/ui.cc",
         "win/ui/ui.h",
-        "win/ui/ui_constants.cc",
         "win/ui/ui_constants.h",
         "win/ui/ui_ctls.h",
         "win/ui/ui_util.cc",
@@ -534,7 +532,10 @@ if (is_win || is_mac || is_linux) {
       "constants_prod.cc",
     ]
 
-    public_deps = [ ":public_sources" ]
+    public_deps = [
+      ":public_sources",
+      ":tagging",
+    ]
     deps = [ ":constants_header" ]
 
     visibility = [
@@ -562,7 +563,7 @@ if (is_win || is_mac || is_linux) {
 
   source_set("public_sources") {
     sources = [
-      "constants.cc",
+      "branded_constants.h",
       "constants.h",
       "enum_traits.h",
       "ipc/ipc_support.cc",
@@ -604,7 +605,6 @@ if (is_win || is_mac || is_linux) {
         "win/task_scheduler.h",
         "win/user_info.cc",
         "win/user_info.h",
-        "win/win_constants.cc",
         "win/win_constants.h",
       ]
 
@@ -782,27 +782,6 @@ if (is_win || is_mac || is_linux) {
           deps = [ "//chrome/enterprise_companion/mac:enterprise_companion_bundle_test" ]
         }
       }
-      zip("enterprise_companion_test_crx_contents_zip") {
-        inputs = get_target_outputs(
-                     ":enterprise_companion_test_crx_install_script") +
-                 get_target_outputs(":enterprise_companion_test_crx_exe") +
-                 get_target_outputs(":enterprise_companion_test_crx_pkginfo") +
-                 get_target_outputs(":enterprise_companion_test_crx_plist")
-        base_dir = "$target_gen_dir/enterprise_companion_test_crx_contents/"
-        output = "$target_gen_dir/enterprise_companion_test.zip"
-        deps = [
-          ":enterprise_companion_test_crx_exe",
-          ":enterprise_companion_test_crx_install_script",
-          ":enterprise_companion_test_crx_pkginfo",
-          ":enterprise_companion_test_crx_plist",
-        ]
-
-        if (is_asan) {
-          inputs +=
-              get_target_outputs(":enterprise_companion_test_crx_asan_dylib")
-          deps += [ ":enterprise_companion_test_crx_asan_dylib" ]
-        }
-      }
     }
 
     crx3("enterprise_companion_test_crx") {
@@ -811,10 +790,23 @@ if (is_win || is_mac || is_linux) {
         inputs = [ "$root_build_dir/enterprise_companion_test" ]
         deps = [ "//chrome/enterprise_companion:enterprise_companion_test" ]
       } else if (is_mac) {
-        inputs =
-            get_target_outputs(":enterprise_companion_test_crx_contents_zip")
-        deps = [ ":enterprise_companion_test_crx_contents_zip" ]
-        base_dir = "$target_gen_dir"
+        inputs = get_target_outputs(
+                     ":enterprise_companion_test_crx_install_script") +
+                 get_target_outputs(":enterprise_companion_test_crx_exe") +
+                 get_target_outputs(":enterprise_companion_test_crx_pkginfo") +
+                 get_target_outputs(":enterprise_companion_test_crx_plist")
+        deps = [
+          ":enterprise_companion_test_crx_exe",
+          ":enterprise_companion_test_crx_install_script",
+          ":enterprise_companion_test_crx_pkginfo",
+          ":enterprise_companion_test_crx_plist",
+        ]
+        base_dir = "$target_gen_dir/enterprise_companion_test_crx_contents/"
+        if (is_asan) {
+          inputs +=
+              get_target_outputs(":enterprise_companion_test_crx_asan_dylib")
+          deps += [ ":enterprise_companion_test_crx_asan_dylib" ]
+        }
       } else if (is_win) {
         inputs = [ "$root_build_dir/enterprise_companion_test.exe" ]
         deps = [ "//chrome/enterprise_companion:enterprise_companion_test" ]
@@ -857,9 +849,9 @@ if (is_win || is_mac || is_linux) {
       "app/app_server_unittest.cc",
       "app/app_uninstall_unittest.cc",
       "app/app_utils_unittest.cc",
+      "branded_constants_unittest.cc",
       "certificate_tag_unittest.cc",
       "cleanup_task_unittest.cc",
-      "constants_unittest.cc",
       "device_management/dm_client_unittest.cc",
       "device_management/dm_message_unittest.cc",
       "device_management/dm_policy_builder_for_testing.cc",
@@ -1193,7 +1185,7 @@ if (is_win || is_mac || is_linux) {
 
     if (is_posix) {
       sources += [
-        "app/server/posix/ipc_unittests.cc",
+        "app/server/posix/ipc_unittest.cc",
         "util/posix_util_unittest.cc",
       ]
 

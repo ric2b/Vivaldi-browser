@@ -52,7 +52,6 @@ namespace syncer {
           completionHandler:(void (^)(NSString* errorMessage))completionHandler;
 
 - (void)storeUsername:(NSString*)username
-                  age:(int)age
                 email:(NSString*)recoveryEmailAddress;
 
 - (void)createAccount:(NSString*)password

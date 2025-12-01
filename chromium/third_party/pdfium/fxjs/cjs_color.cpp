@@ -87,21 +87,24 @@ v8::Local<v8::Array> CJS_Color::ConvertPWLColorToArray(CJS_Runtime* pRuntime,
 CFX_Color CJS_Color::ConvertArrayToPWLColor(CJS_Runtime* pRuntime,
                                             v8::Local<v8::Array> array) {
   size_t nArrayLen = pRuntime->GetArrayLength(array);
-  if (nArrayLen == 0)
+  if (nArrayLen == 0) {
     return CFX_Color();
+  }
 
   WideString sSpace =
       pRuntime->ToWideString(pRuntime->GetArrayElement(array, 0));
-  if (sSpace.EqualsASCII("T"))
+  if (sSpace.EqualsASCII("T")) {
     return CFX_Color(CFX_Color::Type::kTransparent);
+  }
 
   float d1 = 0;
   if (nArrayLen > 1) {
     d1 = static_cast<float>(
         pRuntime->ToDouble(pRuntime->GetArrayElement(array, 1)));
   }
-  if (sSpace.EqualsASCII("G"))
+  if (sSpace.EqualsASCII("G")) {
     return CFX_Color(CFX_Color::Type::kGray, d1);
+  }
 
   float d2 = 0;
   float d3 = 0;
@@ -113,145 +116,148 @@ CFX_Color CJS_Color::ConvertArrayToPWLColor(CJS_Runtime* pRuntime,
     d3 = static_cast<float>(
         pRuntime->ToDouble(pRuntime->GetArrayElement(array, 3)));
   }
-  if (sSpace.EqualsASCII("RGB"))
+  if (sSpace.EqualsASCII("RGB")) {
     return CFX_Color(CFX_Color::Type::kRGB, d1, d2, d3);
+  }
 
   float d4 = 0;
   if (nArrayLen > 4) {
     d4 = static_cast<float>(
         pRuntime->ToDouble(pRuntime->GetArrayElement(array, 4)));
   }
-  if (sSpace.EqualsASCII("CMYK"))
+  if (sSpace.EqualsASCII("CMYK")) {
     return CFX_Color(CFX_Color::Type::kCMYK, d1, d2, d3, d4);
+  }
 
   return CFX_Color();
 }
 
 CJS_Color::CJS_Color(v8::Local<v8::Object> pObject, CJS_Runtime* pRuntime)
     : CJS_Object(pObject, pRuntime),
-      m_crTransparent(CFX_Color::Type::kTransparent),
-      m_crBlack(CFX_Color::Type::kGray, 0),
-      m_crWhite(CFX_Color::Type::kGray, 1),
-      m_crRed(CFX_Color::Type::kRGB, 1, 0, 0),
-      m_crGreen(CFX_Color::Type::kRGB, 0, 1, 0),
-      m_crBlue(CFX_Color::Type::kRGB, 0, 0, 1),
-      m_crCyan(CFX_Color::Type::kCMYK, 1, 0, 0, 0),
-      m_crMagenta(CFX_Color::Type::kCMYK, 0, 1, 0, 0),
-      m_crYellow(CFX_Color::Type::kCMYK, 0, 0, 1, 0),
-      m_crDKGray(CFX_Color::Type::kGray, 0.25),
-      m_crGray(CFX_Color::Type::kGray, 0.5),
-      m_crLTGray(CFX_Color::Type::kGray, 0.75) {}
+      transparent_(CFX_Color::Type::kTransparent),
+      black_(CFX_Color::Type::kGray, 0),
+      white_(CFX_Color::Type::kGray, 1),
+      red_(CFX_Color::Type::kRGB, 1, 0, 0),
+      green_(CFX_Color::Type::kRGB, 0, 1, 0),
+      blue_(CFX_Color::Type::kRGB, 0, 0, 1),
+      cyan_(CFX_Color::Type::kCMYK, 1, 0, 0, 0),
+      magenta_(CFX_Color::Type::kCMYK, 0, 1, 0, 0),
+      yellow_(CFX_Color::Type::kCMYK, 0, 0, 1, 0),
+      dkgray_(CFX_Color::Type::kGray, 0.25),
+      gray_(CFX_Color::Type::kGray, 0.5),
+      ltgray_(CFX_Color::Type::kGray, 0.75) {}
 
 CJS_Color::~CJS_Color() = default;
 
 CJS_Result CJS_Color::get_transparent(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crTransparent);
+  return GetPropertyHelper(pRuntime, &transparent_);
 }
 
 CJS_Result CJS_Color::set_transparent(CJS_Runtime* pRuntime,
                                       v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crTransparent);
+  return SetPropertyHelper(pRuntime, vp, &transparent_);
 }
 
 CJS_Result CJS_Color::get_black(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crBlack);
+  return GetPropertyHelper(pRuntime, &black_);
 }
 
 CJS_Result CJS_Color::set_black(CJS_Runtime* pRuntime,
                                 v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crBlack);
+  return SetPropertyHelper(pRuntime, vp, &black_);
 }
 
 CJS_Result CJS_Color::get_white(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crWhite);
+  return GetPropertyHelper(pRuntime, &white_);
 }
 
 CJS_Result CJS_Color::set_white(CJS_Runtime* pRuntime,
                                 v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crWhite);
+  return SetPropertyHelper(pRuntime, vp, &white_);
 }
 
 CJS_Result CJS_Color::get_red(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crRed);
+  return GetPropertyHelper(pRuntime, &red_);
 }
 
 CJS_Result CJS_Color::set_red(CJS_Runtime* pRuntime, v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crRed);
+  return SetPropertyHelper(pRuntime, vp, &red_);
 }
 
 CJS_Result CJS_Color::get_green(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crGreen);
+  return GetPropertyHelper(pRuntime, &green_);
 }
 
 CJS_Result CJS_Color::set_green(CJS_Runtime* pRuntime,
                                 v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crGreen);
+  return SetPropertyHelper(pRuntime, vp, &green_);
 }
 
 CJS_Result CJS_Color::get_blue(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crBlue);
+  return GetPropertyHelper(pRuntime, &blue_);
 }
 
 CJS_Result CJS_Color::set_blue(CJS_Runtime* pRuntime, v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crBlue);
+  return SetPropertyHelper(pRuntime, vp, &blue_);
 }
 
 CJS_Result CJS_Color::get_cyan(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crCyan);
+  return GetPropertyHelper(pRuntime, &cyan_);
 }
 
 CJS_Result CJS_Color::set_cyan(CJS_Runtime* pRuntime, v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crCyan);
+  return SetPropertyHelper(pRuntime, vp, &cyan_);
 }
 
 CJS_Result CJS_Color::get_magenta(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crMagenta);
+  return GetPropertyHelper(pRuntime, &magenta_);
 }
 
 CJS_Result CJS_Color::set_magenta(CJS_Runtime* pRuntime,
                                   v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crMagenta);
+  return SetPropertyHelper(pRuntime, vp, &magenta_);
 }
 
 CJS_Result CJS_Color::get_yellow(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crYellow);
+  return GetPropertyHelper(pRuntime, &yellow_);
 }
 
 CJS_Result CJS_Color::set_yellow(CJS_Runtime* pRuntime,
                                  v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crYellow);
+  return SetPropertyHelper(pRuntime, vp, &yellow_);
 }
 
 CJS_Result CJS_Color::get_dark_gray(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crDKGray);
+  return GetPropertyHelper(pRuntime, &dkgray_);
 }
 
 CJS_Result CJS_Color::set_dark_gray(CJS_Runtime* pRuntime,
                                     v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crDKGray);
+  return SetPropertyHelper(pRuntime, vp, &dkgray_);
 }
 
 CJS_Result CJS_Color::get_gray(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crGray);
+  return GetPropertyHelper(pRuntime, &gray_);
 }
 
 CJS_Result CJS_Color::set_gray(CJS_Runtime* pRuntime, v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crGray);
+  return SetPropertyHelper(pRuntime, vp, &gray_);
 }
 
 CJS_Result CJS_Color::get_light_gray(CJS_Runtime* pRuntime) {
-  return GetPropertyHelper(pRuntime, &m_crLTGray);
+  return GetPropertyHelper(pRuntime, &ltgray_);
 }
 
 CJS_Result CJS_Color::set_light_gray(CJS_Runtime* pRuntime,
                                      v8::Local<v8::Value> vp) {
-  return SetPropertyHelper(pRuntime, vp, &m_crLTGray);
+  return SetPropertyHelper(pRuntime, vp, &ltgray_);
 }
 
 CJS_Result CJS_Color::GetPropertyHelper(CJS_Runtime* pRuntime, CFX_Color* var) {
   v8::Local<v8::Value> array = ConvertPWLColorToArray(pRuntime, *var);
-  if (array.IsEmpty())
+  if (array.IsEmpty()) {
     return CJS_Result::Success(pRuntime->NewArray());
+  }
 
   return CJS_Result::Success(array);
 }
@@ -259,11 +265,13 @@ CJS_Result CJS_Color::GetPropertyHelper(CJS_Runtime* pRuntime, CFX_Color* var) {
 CJS_Result CJS_Color::SetPropertyHelper(CJS_Runtime* pRuntime,
                                         v8::Local<v8::Value> vp,
                                         CFX_Color* var) {
-  if (vp.IsEmpty())
+  if (vp.IsEmpty()) {
     return CJS_Result::Failure(JSMessage::kParamError);
+  }
 
-  if (!vp->IsArray())
+  if (!vp->IsArray()) {
     return CJS_Result::Failure(JSMessage::kTypeError);
+  }
 
   *var = ConvertArrayToPWLColor(pRuntime, pRuntime->ToArray(vp));
   return CJS_Result::Success();
@@ -271,40 +279,46 @@ CJS_Result CJS_Color::SetPropertyHelper(CJS_Runtime* pRuntime,
 
 CJS_Result CJS_Color::convert(CJS_Runtime* pRuntime,
                               pdfium::span<v8::Local<v8::Value>> params) {
-  if (params.size() < 2)
+  if (params.size() < 2) {
     return CJS_Result::Failure(JSMessage::kParamError);
+  }
 
-  if (!fxv8::IsArray(params[0]))
+  if (!fxv8::IsArray(params[0])) {
     return CJS_Result::Failure(JSMessage::kTypeError);
+  }
 
   WideString sDestSpace = pRuntime->ToWideString(params[1]);
   CFX_Color::Type nColorType = CFX_Color::Type::kTransparent;
-  if (sDestSpace.EqualsASCII("T"))
+  if (sDestSpace.EqualsASCII("T")) {
     nColorType = CFX_Color::Type::kTransparent;
-  else if (sDestSpace.EqualsASCII("G"))
+  } else if (sDestSpace.EqualsASCII("G")) {
     nColorType = CFX_Color::Type::kGray;
-  else if (sDestSpace.EqualsASCII("RGB"))
+  } else if (sDestSpace.EqualsASCII("RGB")) {
     nColorType = CFX_Color::Type::kRGB;
-  else if (sDestSpace.EqualsASCII("CMYK"))
+  } else if (sDestSpace.EqualsASCII("CMYK")) {
     nColorType = CFX_Color::Type::kCMYK;
+  }
 
   CFX_Color color =
       ConvertArrayToPWLColor(pRuntime, pRuntime->ToArray(params[0]));
   v8::Local<v8::Value> array =
       ConvertPWLColorToArray(pRuntime, color.ConvertColorType(nColorType));
-  if (array.IsEmpty())
+  if (array.IsEmpty()) {
     return CJS_Result::Success(pRuntime->NewArray());
+  }
 
   return CJS_Result::Success(array);
 }
 
 CJS_Result CJS_Color::equal(CJS_Runtime* pRuntime,
                             pdfium::span<v8::Local<v8::Value>> params) {
-  if (params.size() < 2)
+  if (params.size() < 2) {
     return CJS_Result::Failure(JSMessage::kParamError);
+  }
 
-  if (!fxv8::IsArray(params[0]) || !fxv8::IsArray(params[1]))
+  if (!fxv8::IsArray(params[0]) || !fxv8::IsArray(params[1])) {
     return CJS_Result::Failure(JSMessage::kTypeError);
+  }
 
   CFX_Color color1 =
       ConvertArrayToPWLColor(pRuntime, pRuntime->ToArray(params[0]));

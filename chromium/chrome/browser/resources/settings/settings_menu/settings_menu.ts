@@ -25,7 +25,7 @@ import {loadTimeData} from '../i18n_setup.js';
 import type {MetricsBrowserProxy} from '../metrics_browser_proxy.js';
 import {MetricsBrowserProxyImpl} from '../metrics_browser_proxy.js';
 import type {PageVisibility} from '../page_visibility.js';
-import type {Route, SettingsRoutes} from '../router.js';
+import type {Route} from '../router.js';
 import {RouteObserverMixin, Router} from '../router.js';
 
 import {getTemplate} from './settings_menu.html.js';
@@ -56,56 +56,21 @@ export class SettingsMenuElement extends SettingsMenuElementBase {
        */
       pageVisibility: Object,
 
-      enableAiSettingsPageRefresh_: {
+      showAiPage_: {
         type: Boolean,
-        value: () => loadTimeData.getBoolean('enableAiSettingsPageRefresh'),
-      },
-
-      showAdvancedFeaturesMainControl_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('showAdvancedFeaturesMainControl'),
-      },
-
-      aiPageIcon_: {
-        type: String,
-        computed: 'computeAiPageIcon_(enableAiSettingsPageRefresh_)',
-      },
-
-      aiPageTitle_: {
-        type: String,
-        computed: 'computeAiPageTitle_(enableAiSettingsPageRefresh_)',
+        value: () => loadTimeData.getBoolean('showAiPage'),
       },
     };
   }
 
-  pageVisibility?: PageVisibility;
-  private enableAiSettingsPageRefresh_: boolean;
-  private showAdvancedFeaturesMainControl_: boolean;
-  private routes_: SettingsRoutes;
-  private aiPageIcon_: string;
-  private aiPageTitle_: string;
+  declare pageVisibility?: PageVisibility;
+  declare private showAiPage_: boolean;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
 
-  override ready() {
-    super.ready();
-    this.routes_ = Router.getInstance().getRoutes();
-  }
-
-  private showExperimentalMenuItem_(): boolean {
-    return this.showAdvancedFeaturesMainControl_ &&
+  private showAiPageMenuItem_(): boolean {
+    return this.showAiPage_ &&
         (!this.pageVisibility || this.pageVisibility.ai !== false);
-  }
-
-  private computeAiPageIcon_(): string {
-    return this.enableAiSettingsPageRefresh_ ? 'settings20:magic' :
-                                               'settings20:ai';
-  }
-
-  private computeAiPageTitle_(): string {
-    return loadTimeData.getString(
-        this.enableAiSettingsPageRefresh_ ? 'aiInnovationsPageTitle' :
-                                            'aiPageTitle');
   }
 
   override currentRouteChanged(newRoute: Route) {
@@ -167,10 +132,8 @@ export class SettingsMenuElement extends SettingsMenuElementBase {
   }
 
   private onAiPageClick_() {
-    if (this.enableAiSettingsPageRefresh_) {
-      this.metricsBrowserProxy_.recordAction(
-          'SettingsMenu_AiPageEntryPointClicked');
-    }
+    this.metricsBrowserProxy_.recordAction(
+        'SettingsMenu_AiPageEntryPointClicked');
   }
 }
 

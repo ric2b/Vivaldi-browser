@@ -236,12 +236,10 @@ TlsServerHandshaker::TlsServerHandshaker(
   if (session->connection()->context()->tracer) {
     tls_connection_.EnableInfoCallback();
   }
-#if BORINGSSL_API_VERSION >= 22
   if (!crypto_config->preferred_groups().empty()) {
     SSL_set1_group_ids(ssl(), crypto_config->preferred_groups().data(),
                        crypto_config->preferred_groups().size());
   }
-#endif  // BORINGSSL_API_VERSION
 }
 
 TlsServerHandshaker::~TlsServerHandshaker() { CancelOutstandingCallbacks(); }
@@ -1100,7 +1098,8 @@ void TlsServerHandshaker::OnSelectCertificateDone(
         local_config != nullptr) {
       if (local_config->chain && !local_config->chain->certs.empty()) {
         tls_connection_.SetCertChain(
-            local_config->chain->ToCryptoBuffers().value);
+            local_config->chain->ToCryptoBuffers().value,
+            local_config->chain->trust_anchor_id);
         select_cert_status_ = QUIC_SUCCESS;
       } else {
         QUIC_DLOG(ERROR) << "No certs provided for host '"

@@ -195,7 +195,7 @@ class ServiceWorkerControlleeRequestHandlerTest : public testing::Test {
         registration_.get(), script_url_, blink::mojom::ScriptType::kClassic,
         1L, mojo::PendingRemote<storage::mojom::ServiceWorkerLiveVersionRef>(),
         context()->AsWeakPtr());
-    version_->set_policy_container_host(
+    version_->SetPolicyContainerHost(
         base::MakeRefCounted<PolicyContainerHost>(PolicyContainerPolicies()));
 
     std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> records;
@@ -246,6 +246,7 @@ class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
       const GURL& scope,
       const net::SiteForCookies& site_for_cookies,
       const std::optional<url::Origin>& top_frame_origin,
+      const blink::StorageKey& storage_key,
       const GURL& script_url,
       content::BrowserContext* context) override {
     return AllowServiceWorkerResult::No();

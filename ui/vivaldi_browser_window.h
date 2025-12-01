@@ -335,6 +335,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateDevTools() override;
   void UpdateLoadingAnimations(bool should_animate) override {}
   void SetStarredState(bool is_starred) override {}
+  bool IsTabModalPopupDeprecated() const override;
+  void SetIsTabModalPopupDeprecated(
+      bool is_tab_modal_popup_deprecated) override {}
   void OnActiveTabChanged(content::WebContents* old_contents,
                           content::WebContents* new_contents,
                           int index,
@@ -371,6 +374,9 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void FocusWebContentsPane() override {}
   void ShowAppMenu() override {}
   bool PreHandleMouseEvent(const blink::WebMouseEvent& event) override;
+  void PreHandleDragUpdate(const content::DropData& drop_data,
+                           const gfx::PointF& point) override {}
+  void PreHandleDragExit() override {}
   content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
       const input::NativeWebKeyboardEvent& event) override;
   bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) override;
@@ -383,6 +389,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   bool IsBookmarkBarVisible() const override;
   bool IsBookmarkBarAnimating() const override;
   bool IsTabStripEditable() const override;
+  void SetTabStripNotEditableForTesting() override {}
   bool IsToolbarVisible() const override;
   void ShowUpdateChromeDialog() override {}
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
@@ -424,6 +431,7 @@ class VivaldiBrowserWindow final : public BrowserWindow {
                                     const GURL& url,
                                     gfx::Point pos) override;
   bool IsOnCurrentWorkspace() const override;
+  bool IsVisibleOnScreen() const override;
   void SetTopControlsShownRatio(content::WebContents* web_contents,
                                 float ratio) override {}
   bool DoBrowserControlsShrinkRendererSize(
@@ -459,7 +467,10 @@ class VivaldiBrowserWindow final : public BrowserWindow {
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
                                    SharingDialogData data) override;
-  void SetContentScrimVisibility(bool visible) override {}
+  void SetContentScrimVisibility(bool visible) override {
+    // See BrowserView::SetDevToolsScrimVisibility for example if needed.
+  }
+  void SetDevToolsScrimVisibility(bool visible) override {}
   void ShowHatsDialog(
       const std::string& site_id,
       const std::optional<std::string>& histogram_name,

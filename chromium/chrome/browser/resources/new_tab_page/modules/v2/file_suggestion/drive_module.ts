@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import '../../info_dialog.js';
-import '../../module_header.js';
+import '../module_header.js';
 import './file_suggestion.js';
 
 import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
@@ -46,8 +46,8 @@ export class DriveModuleElement extends DriveModuleElementBase {
     };
   }
 
-  files: File[] = [];
-  protected showInfoDialog_: boolean = false;
+  accessor files: File[] = [];
+  protected accessor showInfoDialog_: boolean = false;
 
   protected getMenuItemGroups_(): MenuItem[][] {
     return [
@@ -82,6 +82,7 @@ export class DriveModuleElement extends DriveModuleElementBase {
 
   protected onDisableButtonClick_() {
     const disableEvent = new CustomEvent('disable-module', {
+      bubbles: true,
       composed: true,
       detail: {
         message: loadTimeData.getStringF(

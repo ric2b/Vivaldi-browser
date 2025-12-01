@@ -57,8 +57,8 @@ WireResult Server::DoAdapterRequestDevice(Known<WGPUAdapter> adapter,
     deviceLostUserdata->future = deviceLostFuture;
 
     WGPUDeviceDescriptor desc = *descriptor;
-    desc.deviceLostCallbackInfo = {nullptr, WGPUCallbackMode_AllowSpontaneous,
-                                   ForwardToServer2<&Server::OnDeviceLost>,
+    desc.deviceLostCallbackInfo = {nullptr, WGPUCallbackMode_AllowProcessEvents,
+                                   ForwardToServer<&Server::OnDeviceLost>,
                                    deviceLostUserdata.release(), nullptr};
     desc.uncapturedErrorCallbackInfo = {
         nullptr,
@@ -71,7 +71,7 @@ WireResult Server::DoAdapterRequestDevice(Known<WGPUAdapter> adapter,
     mProcs.adapterRequestDevice(
         adapter->handle, &desc,
         {nullptr, WGPUCallbackMode_AllowSpontaneous,
-         ForwardToServer2<&Server::OnRequestDeviceCallback>, userdata.release(), nullptr});
+         ForwardToServer<&Server::OnRequestDeviceCallback>, userdata.release(), nullptr});
     return WireResult::Success;
 }
 
@@ -114,26 +114,13 @@ void Server::OnRequestDeviceCallback(RequestDeviceUserdata* data,
     cmd.featuresCount = features.size();
     cmd.features = features.data();
 
-    // Query and report the adapter limits, including DawnExperimentalSubgroupLimits,
-    // DawnExperimentalImmediateDataLimits and DawnTexelCopyBufferRowAlignmentLimits.
-    // Reporting to client.
+    // Query and report the adapter limits, including all known extension limits.
     WGPULimits limits = {};
-
-    // Chained DawnExperimentalSubgroupLimits.
-    // TODO(crbug.com/354751907) Remove this, as it is now in AdapterInfo.
-    WGPUDawnExperimentalSubgroupLimits experimentalSubgroupLimits = {};
-    experimentalSubgroupLimits.chain.sType = WGPUSType_DawnExperimentalSubgroupLimits;
-    limits.nextInChain = &experimentalSubgroupLimits.chain;
-
-    // Chained DawnExperimentalImmediateDataLimits.
-    WGPUDawnExperimentalImmediateDataLimits experimentalImmediateDataLimits = {};
-    experimentalImmediateDataLimits.chain.sType = WGPUSType_DawnExperimentalImmediateDataLimits;
-    experimentalSubgroupLimits.chain.next = &experimentalImmediateDataLimits.chain;
 
     // Chained DawnTexelCopyBufferRowAlignmentLimits.
     WGPUDawnTexelCopyBufferRowAlignmentLimits texelCopyBufferRowAlignmentLimits = {};
     texelCopyBufferRowAlignmentLimits.chain.sType = WGPUSType_DawnTexelCopyBufferRowAlignmentLimits;
-    experimentalImmediateDataLimits.chain.next = &texelCopyBufferRowAlignmentLimits.chain;
+    limits.nextInChain = &texelCopyBufferRowAlignmentLimits.chain;
 
     mProcs.deviceGetLimits(device, &limits);
     cmd.limits = &limits;

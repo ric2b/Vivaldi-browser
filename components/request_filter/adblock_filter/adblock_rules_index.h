@@ -14,6 +14,7 @@
 #include "base/containers/circular_deque.h"
 #include "base/containers/flat_map.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_manager.h"
+#include "components/request_filter/adblock_filter/utils.h"
 #include "content/public/browser/child_process_id.h"
 #include "content/public/browser/render_process_host_observer.h"
 #include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
@@ -49,20 +50,26 @@ class RulesIndex : public content::RenderProcessHostObserver {
   };
 
   struct ActivationResult {
-    enum { MATCH, PARENT, ALWAYS_PASS } type = MATCH;
+    bool from_parent = false;
 
     std::optional<RuleAndSource> rule_and_source;
 
     std::optional<flat::Decision> GetDecision() const {
-      if (type == ALWAYS_PASS)
-        return flat::Decision_PASS;
       if (rule_and_source)
         return rule_and_source->rule->decision();
       return std::nullopt;
     }
   };
-  using ActivationResults =
-      base::flat_map<flat::ActivationType, ActivationResult>;
+  struct ActivationResults {
+    bool document_exception = false;
+    base::flat_map<flat::ActivationType, ActivationResult> by_type;
+
+    std::optional<flat::Decision> GetDocumentDecision() {
+      return document_exception
+                 ? flat::Decision_PASS
+                 : by_type[flat::ActivationType_DOCUMENT].GetDecision();
+    }
+  };
 
   struct FoundModifiers {
     std::map<std::string, RuleAndSource> value_with_decision;
@@ -105,7 +112,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
       const GURL& url,
       const url::Origin& document_origin,
       flat::ResourceType resource_type,
-      bool is_third_party,
+      const PartyMatcher& party_matcher,
       bool disable_generic_rules,
       AdAttributionMatches ad_attribution_matches);
 
@@ -114,7 +121,7 @@ class RulesIndex : public content::RenderProcessHostObserver {
       const GURL& url,
       const url::Origin& document_origin,
       flat::ResourceType resource_type,
-      bool is_third_party,
+      const PartyMatcher& party_matcher,
       bool disable_generic_rules);
 
   std::string GetDefaultStylesheet();

@@ -27,6 +27,8 @@
 
 #include "dawn/native/BindingInfo.h"
 
+#include <algorithm>
+
 #include "dawn/common/MatchVariant.h"
 #include "dawn/native/Adapter.h"
 #include "dawn/native/ChainUtils.h"
@@ -54,22 +56,24 @@ BindingInfoType GetBindingInfoType(const BindingInfo& info) {
 
 void IncrementBindingCounts(BindingCounts* bindingCounts,
                             const UnpackedPtr<BindGroupLayoutEntry>& entry) {
-    bindingCounts->totalCount += 1;
+    uint32_t arraySize = std::max(1u, entry->bindingArraySize);
+
+    bindingCounts->totalCount += arraySize;
 
     uint32_t PerStageBindingCounts::*perStageBindingCountMember = nullptr;
 
     if (entry->buffer.type != wgpu::BufferBindingType::BindingNotUsed) {
-        ++bindingCounts->bufferCount;
+        bindingCounts->bufferCount += arraySize;
         const BufferBindingLayout& buffer = entry->buffer;
 
         if (buffer.minBindingSize == 0) {
-            ++bindingCounts->unverifiedBufferCount;
+            bindingCounts->unverifiedBufferCount += arraySize;
         }
 
         switch (buffer.type) {
             case wgpu::BufferBindingType::Uniform:
                 if (buffer.hasDynamicOffset) {
-                    ++bindingCounts->dynamicUniformBufferCount;
+                    bindingCounts->dynamicUniformBufferCount += arraySize;
                 }
                 perStageBindingCountMember = &PerStageBindingCounts::uniformBufferCount;
                 break;
@@ -79,7 +83,7 @@ void IncrementBindingCounts(BindingCounts* bindingCounts,
             case kInternalReadOnlyStorageBufferBinding:
             case wgpu::BufferBindingType::ReadOnlyStorage:
                 if (buffer.hasDynamicOffset) {
-                    ++bindingCounts->dynamicStorageBufferCount;
+                    bindingCounts->dynamicStorageBufferCount += arraySize;
                 }
                 perStageBindingCountMember = &PerStageBindingCounts::storageBufferCount;
                 break;
@@ -110,7 +114,7 @@ void IncrementBindingCounts(BindingCounts* bindingCounts,
 
     DAWN_ASSERT(perStageBindingCountMember != nullptr);
     for (SingleShaderStage stage : IterateStages(entry->visibility)) {
-        ++(bindingCounts->perStage[stage].*perStageBindingCountMember);
+        (bindingCounts->perStage[stage].*perStageBindingCountMember) += arraySize;
     }
 }
 
@@ -292,37 +296,62 @@ MaybeError ValidateBindingCounts(const CombinedLimits& limits,
     return {};
 }
 
-BufferBindingInfo::BufferBindingInfo() = default;
+// BufferBindingInfo
 
-BufferBindingInfo::BufferBindingInfo(const BufferBindingLayout& apiLayout)
-    : type(apiLayout.type),
-      minBindingSize(apiLayout.minBindingSize),
-      hasDynamicOffset(apiLayout.hasDynamicOffset) {}
+// static
+BufferBindingInfo BufferBindingInfo::From(const BufferBindingLayout& layout) {
+    BufferBindingLayout defaultedLayout = layout.WithTrivialFrontendDefaults();
+    return {{
+        .type = defaultedLayout.type,
+        .minBindingSize = defaultedLayout.minBindingSize,
+        .hasDynamicOffset = defaultedLayout.hasDynamicOffset,
+    }};
+}
 
-TextureBindingInfo::TextureBindingInfo() {}
+// TextureBindingInfo
 
-TextureBindingInfo::TextureBindingInfo(const TextureBindingLayout& apiLayout)
-    : sampleType(apiLayout.sampleType),
-      viewDimension(apiLayout.viewDimension),
-      multisampled(apiLayout.multisampled) {}
+// static
+TextureBindingInfo TextureBindingInfo::From(const TextureBindingLayout& layout) {
+    TextureBindingLayout defaultedLayout = layout.WithTrivialFrontendDefaults();
+    return {{
+        .sampleType = defaultedLayout.sampleType,
+        .viewDimension = defaultedLayout.viewDimension,
+        .multisampled = defaultedLayout.multisampled,
+    }};
+}
 
-StorageTextureBindingInfo::StorageTextureBindingInfo() = default;
+// StorageTextureBindingInfo
 
-StorageTextureBindingInfo::StorageTextureBindingInfo(const StorageTextureBindingLayout& apiLayout)
-    : format(apiLayout.format), viewDimension(apiLayout.viewDimension), access(apiLayout.access) {}
+// static
+StorageTextureBindingInfo StorageTextureBindingInfo::From(
+    const StorageTextureBindingLayout& layout) {
+    StorageTextureBindingLayout defaultedLayout = layout.WithTrivialFrontendDefaults();
+    return {{
+        .format = defaultedLayout.format,
+        .viewDimension = defaultedLayout.viewDimension,
+        .access = defaultedLayout.access,
+    }};
+}
 
-SamplerBindingInfo::SamplerBindingInfo() = default;
+// SamplerBindingInfo
 
-SamplerBindingInfo::SamplerBindingInfo(const SamplerBindingLayout& apiLayout)
-    : type(apiLayout.type) {}
+// static
+SamplerBindingInfo SamplerBindingInfo::From(const SamplerBindingLayout& layout) {
+    SamplerBindingLayout defaultedLayout = layout.WithTrivialFrontendDefaults();
+    return {{
+        .type = defaultedLayout.type,
+    }};
+}
 
-StaticSamplerBindingInfo::StaticSamplerBindingInfo(const StaticSamplerBindingLayout& apiLayout)
-    : sampler(apiLayout.sampler),
-      sampledTextureBinding(BindingNumber{apiLayout.sampledTextureBinding}),
-      isUsedForSingleTextureBinding(apiLayout.sampledTextureBinding < WGPU_LIMIT_U32_UNDEFINED) {}
+// SamplerBindingInfo
 
-InputAttachmentBindingInfo::InputAttachmentBindingInfo() = default;
-InputAttachmentBindingInfo::InputAttachmentBindingInfo(wgpu::TextureSampleType sampleType)
-    : sampleType(sampleType) {}
+// static
+StaticSamplerBindingInfo StaticSamplerBindingInfo::From(const StaticSamplerBindingLayout& layout) {
+    return {
+        .sampler = layout.sampler,
+        .sampledTextureBinding = BindingNumber{layout.sampledTextureBinding},
+        .isUsedForSingleTextureBinding = layout.sampledTextureBinding < WGPU_LIMIT_U32_UNDEFINED,
+    };
+}
 
 }  // namespace dawn::native

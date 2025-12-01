@@ -8,6 +8,7 @@
 #import "base/memory/weak_ptr.h"
 #import "base/scoped_observation.h"
 #import "base/strings/sys_string_conversions.h"
+#import "components/collaboration/public/collaboration_flow_entry_point.h"
 #import "components/collaboration/public/collaboration_service.h"
 #import "components/data_sharing/public/data_sharing_service.h"
 #import "components/data_sharing/public/group_data.h"
@@ -17,6 +18,7 @@
 #import "ios/chrome/browser/collaboration/model/features.h"
 #import "ios/chrome/browser/data_sharing/model/data_sharing_service_observer_bridge.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
+#import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_face_pile_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_manage_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
@@ -37,6 +39,7 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/web/public/web_state.h"
 
+using collaboration::CollaborationServiceShareOrManageEntryPoint;
 using ScopedTabGroupSyncObservation =
     base::ScopedObservation<tab_groups::TabGroupSyncService,
                             tab_groups::TabGroupSyncService::Observer>;
@@ -171,7 +174,8 @@ constexpr CGFloat kFacePileAvatarSize = 20;
     if (tabGroup && IsTabGroupIndicatorEnabled() &&
         HasTabGroupIndicatorVisible()) {
       [_consumer setTabGroupTitle:tabGroup->GetTitle()
-                       groupColor:tabGroup->GetColor()];
+                       groupColor:tab_groups::ColorForTabGroupColorId(
+                                      tabGroup->GetColor())];
       [self updateTabGroupSharingState:tabGroup];
     } else {
       [_consumer setTabGroupTitle:nil groupColor:nil];
@@ -184,7 +188,10 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 #pragma mark - TabGroupIndicatorMutator
 
 - (void)shareGroup {
-  [self.delegate shareOrManageTabGroup:[self currentTabGroup]];
+  [self.delegate
+      shareOrManageTabGroup:[self currentTabGroup]
+                 entryPoint:CollaborationServiceShareOrManageEntryPoint::
+                                kiOSTabGroupIndicatorShare];
 }
 
 - (void)showRecentActivity {
@@ -196,7 +203,10 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 }
 
 - (void)manageGroup {
-  [self.delegate shareOrManageTabGroup:[self currentTabGroup]];
+  [self.delegate
+      shareOrManageTabGroup:[self currentTabGroup]
+                 entryPoint:CollaborationServiceShareOrManageEntryPoint::
+                                kiOSTabGroupIndicatorManage];
 }
 
 - (void)showTabGroupEdition {
@@ -265,12 +275,10 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   if (!tabGroup) {
     return;
   }
-
   if (confirmation) {
-    [_delegate
-        showTabGroupIndicatorConfirmationForAction:TabGroupActionType::
-                                                       kDeleteSharedTabGroup
-                                             group:tabGroup->GetWeakPtr()];
+    [_delegate startLeaveOrDeleteSharedGroup:tabGroup->GetWeakPtr()
+                                   forAction:TabGroupActionType::
+                                                 kDeleteSharedTabGroup];
     return;
   }
   [self takeActionForActionType:TabGroupActionType::kDeleteSharedTabGroup
@@ -278,16 +286,14 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 }
 
 - (void)leaveSharedGroupWithConfirmation:(BOOL)confirmation {
-  DCHECK(IsTabGroupSyncEnabled());
   const TabGroup* tabGroup = [self currentTabGroup];
   if (!tabGroup) {
     return;
   }
   if (confirmation) {
     [_delegate
-        showTabGroupIndicatorConfirmationForAction:TabGroupActionType::
-                                                       kLeaveSharedTabGroup
-                                             group:tabGroup->GetWeakPtr()];
+        startLeaveOrDeleteSharedGroup:tabGroup->GetWeakPtr()
+                            forAction:TabGroupActionType::kLeaveSharedTabGroup];
     return;
   }
   [self takeActionForActionType:TabGroupActionType::kLeaveSharedTabGroup
@@ -432,8 +438,8 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 // shared tab group visible.
 - (void)presentForegroundIPHIfNeeded {
   const TabGroup* tabGroup = [self currentTabGroup];
-  if (!tabGroup || !tab_groups::utils::IsTabGroupShared(
-                       tabGroup, _tabGroupSyncService, _shareKitService)) {
+  if (!tabGroup ||
+      !tab_groups::utils::IsTabGroupShared(tabGroup, _tabGroupSyncService)) {
     return;
   }
   if (_tracker->WouldTriggerHelpUI(
@@ -458,7 +464,7 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 
   // Prevent the face pile from being set up for tab groups that are not shared.
   if (!isShared) {
-    [_consumer setFacePileViewController:nil];
+    [_consumer setFacePileView:nil];
   }
 
   // Configure the face pile.
@@ -468,7 +474,7 @@ constexpr CGFloat kFacePileAvatarSize = 20;
   config.showsEmptyState = NO;
   config.avatarSize = kFacePileAvatarSize;
 
-  [_consumer setFacePileViewController:_shareKitService->FacePile(config)];
+  [_consumer setFacePileView:_shareKitService->FacePileView(config)];
 }
 
 // Closes all tabs in `tabGroup`. If `deleteGroup` is false, the group is closed
@@ -498,8 +504,8 @@ constexpr CGFloat kFacePileAvatarSize = 20;
 
 // Updates the sharing state for the given `tabGroup`.
 - (void)updateTabGroupSharingState:(const TabGroup*)tabGroup {
-  BOOL shared = tab_groups::utils::IsTabGroupShared(
-      tabGroup, _tabGroupSyncService, _shareKitService);
+  BOOL shared =
+      tab_groups::utils::IsTabGroupShared(tabGroup, _tabGroupSyncService);
   if (!shared) {
     [_consumer setSharingState:SharingState::kNotShared];
     return;

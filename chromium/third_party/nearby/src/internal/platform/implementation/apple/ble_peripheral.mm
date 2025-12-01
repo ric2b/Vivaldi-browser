@@ -26,22 +26,16 @@
 namespace nearby {
 namespace apple {
 
-#pragma mark - EmptyBlePeripheral
-
-EmptyBlePeripheral::EmptyBlePeripheral() : unique_id_(0) {}
-
-std::string EmptyBlePeripheral::GetAddress() const { return ""; }
-
-api::ble_v2::BlePeripheral::UniqueId EmptyBlePeripheral::GetUniqueId() const { return unique_id_; }
-
 #pragma mark - BlePeripheral
 
 BlePeripheral::BlePeripheral(id<GNCPeripheral> peripheral)
-    : peripheral_(peripheral), unique_id_(peripheral.identifier.hash) {}
+    : api::ble_v2::BlePeripheral(peripheral.identifier.hash), peripheral_(peripheral) {}
 
-std::string BlePeripheral::GetAddress() const { return ""; }
-
-api::ble_v2::BlePeripheral::UniqueId BlePeripheral::GetUniqueId() const { return unique_id_; }
+api::ble_v2::BlePeripheral& BlePeripheral::DefaultBlePeripheral() {
+  static api::ble_v2::BlePeripheral* default_peripheral =
+      new api::ble_v2::BlePeripheral(0xffffffffffffffff);
+  return *default_peripheral;
+}
 
 id<GNCPeripheral> BlePeripheral::GetPeripheral() const { return peripheral_; }
 

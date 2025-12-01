@@ -12,6 +12,7 @@
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/Log.h"
 #include "src/gpu/graphite/RenderPassDesc.h"
+#include "src/gpu/graphite/TextureFormat.h"
 #include "src/gpu/graphite/TextureProxy.h"
 #include "src/gpu/graphite/UniformManager.h"
 #include "src/gpu/graphite/compute/DispatchGroup.h"
@@ -161,8 +162,10 @@ bool MtlCommandBuffer::onAddRenderPass(const RenderPassDesc& renderPassDesc,
                                        const Texture* colorTexture,
                                        const Texture* resolveTexture,
                                        const Texture* depthStencilTexture,
+                                       SkIPoint resolveOffset,
                                        SkIRect viewport,
                                        const DrawPassList& drawPasses) {
+    SkASSERT(resolveOffset.isZero());
     if (!this->beginRenderPass(renderPassDesc, colorTexture, resolveTexture, depthStencilTexture)) {
         return false;
     }
@@ -246,11 +249,20 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     static_assert(std::size(mtlStoreAction) == kStoreOpCount);
 
     sk_cfp<MTLRenderPassDescriptor*> descriptor([[MTLRenderPassDescriptor alloc] init]);
+    // Validate attachment descs and textures
+    const auto& colorInfo = renderPassDesc.fColorAttachment;
+    const auto& resolveInfo = renderPassDesc.fColorResolveAttachment;
+    const auto& depthStencilInfo = renderPassDesc.fDepthStencilAttachment;
+    SkASSERT(colorTexture ? colorInfo.isCompatible(colorTexture->textureInfo())
+                          : colorInfo.fFormat == TextureFormat::kUnsupported);
+    SkASSERT(resolveTexture ? resolveInfo.isCompatible(resolveTexture->textureInfo())
+                            : resolveInfo.fFormat == TextureFormat::kUnsupported);
+    SkASSERT(depthStencilTexture ? depthStencilInfo.isCompatible(depthStencilTexture->textureInfo())
+                                 : depthStencilInfo.fFormat == TextureFormat::kUnsupported);
+
     // Set up color attachment.
-    auto& colorInfo = renderPassDesc.fColorAttachment;
     bool loadMSAAFromResolve = false;
     if (colorTexture) {
-        // TODO: check Texture matches RenderPassDesc
         auto colorAttachment = (*descriptor).colorAttachments[0];
         colorAttachment.texture = ((const MtlTexture*)colorTexture)->mtlTexture();
         const std::array<float, 4>& clearColor = renderPassDesc.fClearColor;
@@ -258,10 +270,11 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
                 MTLClearColorMake(clearColor[0], clearColor[1], clearColor[2], clearColor[3]);
         colorAttachment.loadAction = mtlLoadAction[static_cast<int>(colorInfo.fLoadOp)];
         colorAttachment.storeAction = mtlStoreAction[static_cast<int>(colorInfo.fStoreOp)];
+
         // Set up resolve attachment
         if (resolveTexture) {
-            SkASSERT(renderPassDesc.fColorResolveAttachment.fStoreOp == StoreOp::kStore);
-            // TODO: check Texture matches RenderPassDesc
+            SkASSERT(resolveInfo.fStoreOp == StoreOp::kStore);
+
             colorAttachment.resolveTexture = ((const MtlTexture*)resolveTexture)->mtlTexture();
             // Inclusion of a resolve texture implies the client wants to finish the
             // renderpass with a resolve.
@@ -274,7 +287,7 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
                 SkASSERT(false);
             }
             // But it also means we have to load the resolve texture into the MSAA color attachment
-            loadMSAAFromResolve = renderPassDesc.fColorResolveAttachment.fLoadOp == LoadOp::kLoad;
+            loadMSAAFromResolve = resolveInfo.fLoadOp == LoadOp::kLoad;
             // TODO: If the color resolve texture is read-only we can use a private (vs. memoryless)
             // msaa attachment that's coupled to the framebuffer and the StoreAndMultisampleResolve
             // action instead of loading as a draw.
@@ -282,11 +295,9 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
     }
 
     // Set up stencil/depth attachment
-    auto& depthStencilInfo = renderPassDesc.fDepthStencilAttachment;
     if (depthStencilTexture) {
-        // TODO: check Texture matches RenderPassDesc
         id<MTLTexture> mtlTexture = ((const MtlTexture*)depthStencilTexture)->mtlTexture();
-        if (MtlFormatIsDepth(mtlTexture.pixelFormat)) {
+        if (TextureFormatHasDepth(depthStencilInfo.fFormat)) {
             auto depthAttachment = (*descriptor).depthAttachment;
             depthAttachment.texture = mtlTexture;
             depthAttachment.clearDepth = renderPassDesc.fClearDepth;
@@ -295,7 +306,7 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
             depthAttachment.storeAction =
                      mtlStoreAction[static_cast<int>(depthStencilInfo.fStoreOp)];
         }
-        if (MtlFormatIsStencil(mtlTexture.pixelFormat)) {
+        if (TextureFormatHasStencil(depthStencilInfo.fFormat)) {
             auto stencilAttachment = (*descriptor).stencilAttachment;
             stencilAttachment.texture = mtlTexture;
             stencilAttachment.clearStencil = renderPassDesc.fClearStencil;
@@ -304,8 +315,6 @@ bool MtlCommandBuffer::beginRenderPass(const RenderPassDesc& renderPassDesc,
             stencilAttachment.storeAction =
                      mtlStoreAction[static_cast<int>(depthStencilInfo.fStoreOp)];
         }
-    } else {
-        SkASSERT(!depthStencilInfo.fTextureInfo.isValid());
     }
 
     fActiveRenderCommandEncoder = MtlRenderCommandEncoder::Make(fSharedContext,
@@ -382,10 +391,28 @@ void MtlCommandBuffer::addDrawPass(const DrawPass* drawPass) {
                 this->bindUniformBuffer(bub->fInfo, bub->fSlot);
                 break;
             }
-            case DrawPassCommands::Type::kBindDrawBuffers: {
-                auto bdb = static_cast<DrawPassCommands::BindDrawBuffers*>(cmdPtr);
-                this->bindDrawBuffers(
-                        bdb->fVertices, bdb->fInstances, bdb->fIndices, bdb->fIndirect);
+            case DrawPassCommands::Type::kBindStaticDataBuffer: {
+                auto bdb = static_cast<DrawPassCommands::BindStaticDataBuffer*>(cmdPtr);
+                this->bindInputBuffer(bdb->fStaticData.fBuffer, bdb->fStaticData.fOffset,
+                                      MtlGraphicsPipeline::kStaticDataBufferIndex);
+                break;
+            }
+            case DrawPassCommands::Type::kBindAppendDataBuffer: {
+                auto bdb = static_cast<DrawPassCommands::BindAppendDataBuffer*>(cmdPtr);
+                this->bindInputBuffer(bdb->fAppendData.fBuffer, bdb->fAppendData.fOffset,
+                                      MtlGraphicsPipeline::kAppendDataBufferIndex);
+                break;
+            }
+            case DrawPassCommands::Type::kBindIndexBuffer: {
+                auto bdb = static_cast<DrawPassCommands::BindIndexBuffer*>(cmdPtr);
+                this->bindIndexBuffer(
+                        bdb->fIndices.fBuffer, bdb->fIndices.fOffset);
+                break;
+            }
+            case DrawPassCommands::Type::kBindIndirectBuffer: {
+                auto bdb = static_cast<DrawPassCommands::BindIndirectBuffer*>(cmdPtr);
+                this->bindIndirectBuffer(
+                        bdb->fIndirect.fBuffer, bdb->fIndirect.fOffset);
                 break;
             }
             case DrawPassCommands::Type::kBindTexturesAndSamplers: {
@@ -520,37 +547,12 @@ void MtlCommandBuffer::bindUniformBuffer(const BindBufferInfo& info, UniformSlot
     fActiveRenderCommandEncoder->setFragmentBuffer(mtlBuffer, info.fOffset, bufferIndex);
 }
 
-void MtlCommandBuffer::bindDrawBuffers(const BindBufferInfo& vertices,
-                                       const BindBufferInfo& instances,
-                                       const BindBufferInfo& indices,
-                                       const BindBufferInfo& indirect) {
-    this->bindVertexBuffers(vertices.fBuffer,
-                            vertices.fOffset,
-                            instances.fBuffer,
-                            instances.fOffset);
-    this->bindIndexBuffer(indices.fBuffer, indices.fOffset);
-    this->bindIndirectBuffer(indirect.fBuffer, indirect.fOffset);
-}
-
-void MtlCommandBuffer::bindVertexBuffers(const Buffer* vertexBuffer,
-                                         size_t vertexOffset,
-                                         const Buffer* instanceBuffer,
-                                         size_t instanceOffset) {
+void MtlCommandBuffer::bindInputBuffer(const Buffer* buffer, size_t offset, uint32_t bindingIndex) {
     SkASSERT(fActiveRenderCommandEncoder);
-
-    if (vertexBuffer) {
-        id<MTLBuffer> mtlBuffer = static_cast<const MtlBuffer*>(vertexBuffer)->mtlBuffer();
-        // Metal requires buffer offsets to be aligned to the data type, which is at most 4 bytes
-        // since we use [[attribute]] to automatically unpack float components into SIMD arrays.
-        SkASSERT((vertexOffset & 0b11) == 0);
-        fActiveRenderCommandEncoder->setVertexBuffer(mtlBuffer, vertexOffset,
-                                                     MtlGraphicsPipeline::kVertexBufferIndex);
-    }
-    if (instanceBuffer) {
-        id<MTLBuffer> mtlBuffer = static_cast<const MtlBuffer*>(instanceBuffer)->mtlBuffer();
-        SkASSERT((instanceOffset & 0b11) == 0);
-        fActiveRenderCommandEncoder->setVertexBuffer(mtlBuffer, instanceOffset,
-                                                     MtlGraphicsPipeline::kInstanceBufferIndex);
+    if (buffer) {
+        id<MTLBuffer> mtlBuffer = static_cast<const MtlBuffer*>(buffer)->mtlBuffer();
+        SkASSERT((offset & 0b11) == 0);
+        fActiveRenderCommandEncoder->setVertexBuffer(mtlBuffer, offset, bindingIndex);
     }
 }
 

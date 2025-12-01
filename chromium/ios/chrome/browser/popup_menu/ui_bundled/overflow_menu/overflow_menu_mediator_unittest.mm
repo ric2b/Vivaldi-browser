@@ -36,6 +36,7 @@
 #import "components/signin/public/identity_manager/identity_test_utils.h"
 #import "components/supervised_user/test_support/supervised_user_signin_test_utils.h"
 #import "components/sync/service/sync_service.h"
+#import "components/sync/service/sync_user_settings.h"
 #import "components/sync/test/mock_sync_service.h"
 #import "components/sync_preferences/pref_service_mock_factory.h"
 #import "components/sync_preferences/pref_service_syncable.h"
@@ -61,6 +62,7 @@
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_test_utils.h"
 #import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
+#import "ios/chrome/browser/settings/ui_bundled/password/password_manager_ui_features.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
@@ -243,12 +245,12 @@ class OverflowMenuMediatorTest : public PlatformTest {
   }
 
  protected:
-  OverflowMenuMediator* CreateMediator(BOOL is_incognito) {
-    orderer_ = [[OverflowMenuOrderer alloc] initWithIsIncognito:is_incognito];
+  OverflowMenuMediator* CreateMediator(BOOL incognito) {
+    orderer_ = [[OverflowMenuOrderer alloc] initWithIsIncognito:incognito];
     orderer_.model = model_;
 
     mediator_ = [[OverflowMenuMediator alloc] init];
-    mediator_.isIncognito = is_incognito;
+    mediator_.incognito = incognito;
     mediator_.menuOrderer = orderer_;
     mediator_.baseViewController = baseViewController_;
     mediator_.localStatePrefs = localStatePrefs_.get();
@@ -258,9 +260,9 @@ class OverflowMenuMediatorTest : public PlatformTest {
   }
 
   OverflowMenuMediator* CreateMediatorWithBrowserPolicyConnector(
-      BOOL is_incognito,
+      BOOL incognito,
       BrowserPolicyConnectorIOS* browser_policy_connector) {
-    CreateMediator(is_incognito);
+    CreateMediator(incognito);
     mediator_.browserPolicyConnector = browser_policy_connector;
     return mediator_;
   }
@@ -461,7 +463,7 @@ class OverflowMenuMediatorTest : public PlatformTest {
 // Tests that the feature engagement tracker get notified when the mediator is
 // disconnected and the tracker wants the notification badge displayed.
 TEST_F(OverflowMenuMediatorTest, TestFeatureEngagementDisconnect) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   EXPECT_CALL(tracker_, ShouldTriggerHelpUI(testing::_))
       .WillRepeatedly(Return(true));
   mediator_.engagementTracker = &tracker_;
@@ -476,7 +478,7 @@ TEST_F(OverflowMenuMediatorTest, TestFeatureEngagementDisconnect) {
 // Tests that the mediator is returning the right number of items and sections
 // for the Tools Menu type.
 TEST_F(OverflowMenuMediatorTest, TestMenuItemsCount) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   mediator_.model = model_;
 
   NSUInteger number_of_action_items = 6;
@@ -521,7 +523,7 @@ TEST_F(OverflowMenuMediatorTest, TestMenuItemsCount) {
 // Tests that the items returned by the mediator are correctly enabled on a
 // WebPage.
 TEST_F(OverflowMenuMediatorTest, TestItemsStatusOnWebPage) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
   mediator_.webStateList = browser_->GetWebStateList();
 
@@ -538,7 +540,7 @@ TEST_F(OverflowMenuMediatorTest, TestItemsStatusOnWebPage) {
 // Tests that the items returned by the mediator are correctly enabled on the
 // NTP.
 TEST_F(OverflowMenuMediatorTest, TestItemsStatusOnNTP) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
   mediator_.webStateList = browser_->GetWebStateList();
 
@@ -558,7 +560,7 @@ TEST_F(OverflowMenuMediatorTest, TestItemsStatusOnNTP) {
 TEST_F(OverflowMenuMediatorTest, TestReadLaterDisabled) {
   const GURL kUrl("https://chromium.test");
   web_state_->SetCurrentURL(kUrl);
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
   mediator_.webStateList = browser_->GetWebStateList();
   mediator_.webContentAreaOverlayPresenter = OverlayPresenter::FromBrowser(
@@ -575,8 +577,7 @@ TEST_F(OverflowMenuMediatorTest, TestReadLaterDisabled) {
       web_state_, OverlayModality::kWebContentArea);
   queue->AddRequest(
       OverlayRequest::CreateWithConfig<JavaScriptAlertDialogRequest>(
-          web_state_, kUrl,
-          /*is_main_frame=*/true, @"message"));
+          web_state_, kUrl, url::Origin::Create(kUrl), @"message"));
   EXPECT_TRUE(HasItem(kToolsMenuReadLater, /*enabled=*/NO));
 
   // Cancel the request and verify that the "Add to Reading List" button is
@@ -587,7 +588,7 @@ TEST_F(OverflowMenuMediatorTest, TestReadLaterDisabled) {
 
 // Tests that the "Text Zoom..." button is disabled on non-HTML pages.
 TEST_F(OverflowMenuMediatorTest, TestTextZoomDisabled) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
   mediator_.webStateList = browser_->GetWebStateList();
 
@@ -613,7 +614,7 @@ TEST_F(OverflowMenuMediatorTest, TestTextZoomDisabled) {
 // Tests that the "Managed by..." item is hidden when none of the policies is
 // set.
 TEST_F(OverflowMenuMediatorTest, TestEnterpriseInfoHidden) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
 
   mediator_.webStateList = browser_->GetWebStateList();
@@ -641,7 +642,7 @@ TEST_F(OverflowMenuMediatorTest, TestEnterpriseInfoShownForUserLevelPolicies) {
   EXPECT_TRUE(authentication_service->HasPrimaryIdentityManaged(
       signin::ConsentLevel::kSignin));
 
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   // Set the objects needed to detect the signed in managed account.
   mediator_.authenticationService =
       AuthenticationServiceFactory::GetForProfile(profile_.get());
@@ -672,7 +673,7 @@ TEST_F(OverflowMenuMediatorTest,
   enterprise_policy_helper->GetPolicyProvider()->UpdateChromePolicy(map);
 
   CreateMediatorWithBrowserPolicyConnector(
-      /*is_incognito=*/NO, connector);
+      /*incognito=*/NO, connector);
 
   SetUpActiveWebState();
 
@@ -689,7 +690,7 @@ TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoHidden) {
   // Sign in unsupervised user.
   SignInPrimaryAccountWithSupervisionStatus(/*is_supervised=*/false);
 
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
 
   mediator_.webStateList = browser_->GetWebStateList();
@@ -705,7 +706,7 @@ TEST_F(OverflowMenuMediatorTest, TestFamilyLinkInfoShown) {
   // Sign in supervised user.
   SignInPrimaryAccountWithSupervisionStatus(/*is_supervised=*/true);
 
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
 
   mediator_.webStateList = browser_->GetWebStateList();
@@ -727,7 +728,7 @@ TEST_F(OverflowMenuMediatorTest, TestBookmarksToolsMenuButtons) {
   web_state_->SetCurrentURL(nonBookmarkedURL);
   SetUpActiveWebState();
 
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpBookmarks();
   bookmark_model_->AddURL(bookmark_model_->mobile_node(), 0,
                           base::SysNSStringToUTF16(@"Test bookmark"),
@@ -760,7 +761,7 @@ TEST_F(OverflowMenuMediatorTest, TestDisableBookmarksButton) {
   web_state_->SetCurrentURL(url);
   SetUpActiveWebState();
 
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   mediator_.webStateList = browser_->GetWebStateList();
 
   // Force model update.
@@ -777,7 +778,7 @@ TEST_F(OverflowMenuMediatorTest, TestDisableBookmarksButton) {
 TEST_F(OverflowMenuMediatorTest, TestWhatsNewEnabled) {
   const GURL kUrl("https://chromium.test");
   web_state_->SetCurrentURL(kUrl);
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   SetUpActiveWebState();
   mediator_.webStateList = browser_->GetWebStateList();
   mediator_.webContentAreaOverlayPresenter = OverlayPresenter::FromBrowser(
@@ -793,7 +794,7 @@ TEST_F(OverflowMenuMediatorTest, TestWhatsNewEnabled) {
 // that bug was never reproduced, but it tests part of the issue.
 TEST_F(OverflowMenuMediatorTest, TestOpenWhatsNewDoesntCrashWithNoTracker) {
   // Create Mediator and DO NOT set the Tracker on it.
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   // Force model update.
   mediator_.model = model_;
@@ -817,7 +818,7 @@ TEST_F(OverflowMenuMediatorTest, TestOpenWhatsNewDoesntCrashWithNoTracker) {
 // positioned at at most kNewDestinationsInsertionIndex when there is an
 // eligible identity error that can be resolved from the Settings menu.
 TEST_F(OverflowMenuMediatorTest, TestEligibleIdentityErrorWhenSyncOff) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   syncer::MockSyncService syncService;
   // Inject eligible identity error in Sync Service.
@@ -839,7 +840,7 @@ TEST_F(OverflowMenuMediatorTest, TestEligibleIdentityErrorWhenSyncOff) {
 // Tests that there is no error badge displayed on the Settings destination when
 // there is no eligible identity error. Sync is OFF.
 TEST_F(OverflowMenuMediatorTest, TestNoEligibleIdentityErrorWhenSyncOff) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   syncer::MockSyncService syncService;
   ON_CALL(syncService, GetUserActionableError())
@@ -859,7 +860,7 @@ TEST_F(OverflowMenuMediatorTest, TestNoEligibleIdentityErrorWhenSyncOff) {
 // an account error that will be indicated in the Settings menu. The account is
 // signed.
 TEST_F(OverflowMenuMediatorTest, TestSyncError) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   syncer::MockSyncService syncService;
   // Inject Sync error in Sync Service.
@@ -878,10 +879,64 @@ TEST_F(OverflowMenuMediatorTest, TestSyncError) {
   EXPECT_EQ(BadgeTypeError, promotedDestination.badge);
 }
 
+// Tests that there is an error badge on the Passwords destination when the
+// Trusted Vault key for preferred data types is missing. The account is signed.
+TEST_F(OverflowMenuMediatorTest,
+       TestTrustedVaultKeyMissingForPreferredDataTypes) {
+  // Enable a flag `kIOSEnablePasswordManagerTrustedVaultWidget` for this test.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kIOSEnablePasswordManagerTrustedVaultWidget);
+
+  CreateMediator(/*incognito=*/NO);
+
+  syncer::MockSyncService syncService;
+  // Mock IsTrustedVaultKeyRequiredForPreferredDataTypes to return true.
+  ON_CALL(*(syncService.GetMockUserSettings()),
+          IsTrustedVaultKeyRequiredForPreferredDataTypes())
+      .WillByDefault(Return(true));
+  mediator_.syncService = &syncService;
+  mediator_.model = model_;
+
+  // Verify that the Passwords destination has the red dot badge to indicate the
+  // error.
+  OverflowMenuDestination* passwordsDestination =
+      GetDestination(kToolsMenuPasswordsId);
+  ASSERT_NE(nil, passwordsDestination);
+  EXPECT_EQ(BadgeTypeError, passwordsDestination.badge);
+}
+
+// Tests that there is no error badge on the Passwords destination when the
+// Trusted Vault key for preferred data types is not missing. The account is
+// signed.
+TEST_F(OverflowMenuMediatorTest,
+       TestNoErrorBadgeWhenTrustedVaultKeyIsNotMissingForPreferredDataTypes) {
+  // Enable a flag `kIOSEnablePasswordManagerTrustedVaultWidget` for this test.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      password_manager::features::kIOSEnablePasswordManagerTrustedVaultWidget);
+
+  CreateMediator(/*incognito=*/NO);
+
+  syncer::MockSyncService syncService;
+  // Mock IsTrustedVaultKeyRequiredForPreferredDataTypes to return false.
+  ON_CALL(*(syncService.GetMockUserSettings()),
+          IsTrustedVaultKeyRequiredForPreferredDataTypes())
+      .WillByDefault(Return(false));
+  mediator_.syncService = &syncService;
+  mediator_.model = model_;
+
+  // Verify that the Passwords destination does not have the error badge.
+  OverflowMenuDestination* passwordsDestination =
+      GetDestination(kToolsMenuPasswordsId);
+  ASSERT_NE(nil, passwordsDestination);
+  EXPECT_EQ(BadgeTypeNone, passwordsDestination.badge);
+}
+
 // Tests that there is no error cue (red dot) displayed on the Settings
 // destination when there is no identity error.
 TEST_F(OverflowMenuMediatorTest, TestNoIdentityError) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   syncer::MockSyncService syncService;
   ON_CALL(syncService, GetUserActionableError())
@@ -902,7 +957,7 @@ TEST_F(OverflowMenuMediatorTest, TestNoIdentityError) {
 TEST_F(OverflowMenuMediatorTest, TestIdentityErrorWithWhatsNewPromo) {
   const GURL kUrl("https://chromium.test");
   web_state_->SetCurrentURL(kUrl);
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   // Show the new label badge for What's New.
   ON_CALL(tracker_, ShouldTriggerHelpUI(testing::Ref(
                         feature_engagement::kIPHWhatsNewUpdatedFeature)))
@@ -934,7 +989,7 @@ TEST_F(OverflowMenuMediatorTest, TestIdentityErrorWithWhatsNewPromo) {
 // Tests that there is blue dot displayed on the Settings destination when there
 // is no identity error.
 TEST_F(OverflowMenuMediatorTest, TestSettingsBlueDotBadge) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   syncer::MockSyncService syncService;
   ON_CALL(syncService, GetUserActionableError())
@@ -955,7 +1010,7 @@ TEST_F(OverflowMenuMediatorTest, TestSettingsBlueDotBadge) {
 // history ranking.
 TEST_F(OverflowMenuMediatorTest,
        TestPromotedDestinationsWhenNoHistoryUsageRanking) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
   // Show the new label badge for What's New.
   ON_CALL(tracker_, ShouldTriggerHelpUI(testing::Ref(
                         feature_engagement::kIPHWhatsNewUpdatedFeature)))
@@ -986,7 +1041,7 @@ TEST_F(OverflowMenuMediatorTest,
 
 // Tests that the actions have the correct longpress items set.
 TEST_F(OverflowMenuMediatorTest, ActionLongpressItems) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   mediator_.model = model_;
 
@@ -1008,7 +1063,7 @@ TEST_F(OverflowMenuMediatorTest, ActionLongpressItems) {
 
 // Tests that the destinations have the correct longpress items set.
 TEST_F(OverflowMenuMediatorTest, DestinationLongpressItems) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   mediator_.model = model_;
 
@@ -1030,7 +1085,7 @@ TEST_F(OverflowMenuMediatorTest, DestinationLongpressItems) {
 // Tests that when a destination becomes hidden during customization, the
 // corresponding action gains a subtitle and a highlight.
 TEST_F(OverflowMenuMediatorTest, DestinationHideShowsActionSubtitle) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   mediator_.model = model_;
 
@@ -1068,7 +1123,7 @@ TEST_F(OverflowMenuMediatorTest, DestinationHideShowsActionSubtitle) {
 // Tests that when the the right metric is recorder when the Password Manager
 // item is tapped.
 TEST_F(OverflowMenuMediatorTest, OpenPasswordsMetricLogged) {
-  CreateMediator(/*is_incognito=*/NO);
+  CreateMediator(/*incognito=*/NO);
 
   mediator_.model = model_;
 

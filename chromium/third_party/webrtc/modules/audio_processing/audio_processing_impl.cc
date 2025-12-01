@@ -11,32 +11,57 @@
 #include "modules/audio_processing/audio_processing_impl.h"
 
 #include <algorithm>
+#include <array>
+#include <atomic>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <optional>
 #include <string>
-#include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "absl/base/nullability.h"
 #include "absl/strings/string_view.h"
 #include "api/array_view.h"
-#include "api/audio/audio_frame.h"
+#include "api/audio/audio_processing.h"
+#include "api/audio/audio_processing_statistics.h"
+#include "api/audio/audio_view.h"
+#include "api/audio/echo_canceller3_config.h"
+#include "api/audio/echo_control.h"
 #include "api/environment/environment.h"
 #include "api/field_trials_view.h"
+#include "api/scoped_refptr.h"
 #include "api/task_queue/task_queue_base.h"
 #include "common_audio/audio_converter.h"
 #include "common_audio/include/audio_util.h"
+#include "modules/audio_processing/aec3/echo_canceller3.h"
 #include "modules/audio_processing/aec_dump/aec_dump_factory.h"
+#include "modules/audio_processing/agc/agc_manager_direct.h"
+#include "modules/audio_processing/agc/gain_control.h"
+#include "modules/audio_processing/agc2/input_volume_controller.h"
+#include "modules/audio_processing/agc2/input_volume_stats_reporter.h"
 #include "modules/audio_processing/audio_buffer.h"
-#include "modules/audio_processing/include/audio_frame_view.h"
+#include "modules/audio_processing/capture_levels_adjuster/capture_levels_adjuster.h"
+#include "modules/audio_processing/echo_control_mobile_impl.h"
+#include "modules/audio_processing/gain_control_impl.h"
+#include "modules/audio_processing/gain_controller2.h"
+#include "modules/audio_processing/high_pass_filter.h"
+#include "modules/audio_processing/include/aec_dump.h"
 #include "modules/audio_processing/logging/apm_data_dumper.h"
+#include "modules/audio_processing/ns/noise_suppressor.h"
+#include "modules/audio_processing/ns/ns_config.h"
+#include "modules/audio_processing/post_filter.h"
+#include "modules/audio_processing/render_queue_item_verifier.h"
+#include "modules/audio_processing/rms_level.h"
 #include "rtc_base/checks.h"
+#include "rtc_base/denormal_disabler.h"
 #include "rtc_base/logging.h"
+#include "rtc_base/swap_queue.h"
+#include "rtc_base/synchronization/mutex.h"
 #include "rtc_base/time_utils.h"
 #include "rtc_base/trace_event.h"
-#include "system_wrappers/include/denormal_disabler.h"
 #include "system_wrappers/include/metrics.h"
 
 #define RETURN_ON_ERR(expr) \
@@ -429,7 +454,7 @@ AudioProcessingImpl::AudioProcessingImpl(
     std::unique_ptr<CustomProcessing> capture_post_processor,
     std::unique_ptr<CustomProcessing> render_pre_processor,
     std::unique_ptr<EchoControlFactory> echo_control_factory,
-    rtc::scoped_refptr<EchoDetector> echo_detector,
+    scoped_refptr<EchoDetector> echo_detector,
     std::unique_ptr<CustomAudioAnalyzer> capture_analyzer)
     : env_(env),
       data_dumper_(new ApmDataDumper(instance_count_.fetch_add(1) + 1)),
@@ -1272,7 +1297,7 @@ int AudioProcessingImpl::ProcessCaptureStreamLocked() {
         *capture_buffer);
   }
 
-  capture_input_rms_.Analyze(rtc::ArrayView<const float>(
+  capture_input_rms_.Analyze(ArrayView<const float>(
       capture_buffer->channels_const()[0],
       capture_nonlocked_.capture_processing_format.num_frames()));
   const bool log_rms = ++capture_rms_interval_counter_ >= 1000;
@@ -1434,9 +1459,8 @@ int AudioProcessingImpl::ProcessCaptureStreamLocked() {
     }
 
     if (submodules_.echo_detector) {
-      submodules_.echo_detector->AnalyzeCaptureAudio(
-          rtc::ArrayView<const float>(capture_buffer->channels()[0],
-                                      capture_buffer->num_frames()));
+      submodules_.echo_detector->AnalyzeCaptureAudio(ArrayView<const float>(
+          capture_buffer->channels()[0], capture_buffer->num_frames()));
     }
 
     // Experimental APM sub-module that analyzes `capture_buffer`.
@@ -1452,11 +1476,15 @@ int AudioProcessingImpl::ProcessCaptureStreamLocked() {
           capture_.applied_input_volume_changed, capture_buffer);
     }
 
+    if (submodules_.post_filter) {
+      submodules_.post_filter->Process(*capture_buffer);
+    }
+
     if (submodules_.capture_post_processor) {
       submodules_.capture_post_processor->Process(capture_buffer);
     }
 
-    capture_output_rms_.Analyze(rtc::ArrayView<const float>(
+    capture_output_rms_.Analyze(ArrayView<const float>(
         capture_buffer->channels_const()[0],
         capture_nonlocked_.capture_processing_format.num_frames()));
     if (log_rms) {
@@ -1516,8 +1544,8 @@ int AudioProcessingImpl::ProcessCaptureStreamLocked() {
   if (!capture_.capture_output_used_last_frame &&
       capture_.capture_output_used) {
     for (size_t ch = 0; ch < capture_buffer->num_channels(); ++ch) {
-      rtc::ArrayView<float> channel_view(capture_buffer->channels()[ch],
-                                         capture_buffer->num_frames());
+      ArrayView<float> channel_view(capture_buffer->channels()[ch],
+                                    capture_buffer->num_frames());
       std::fill(channel_view.begin(), channel_view.end(), 0.f);
     }
   }
@@ -1588,8 +1616,7 @@ int AudioProcessingImpl::AnalyzeReverseStreamLocked(
         formats_.api_format.reverse_input_stream().num_frames();
     const size_t num_channels =
         formats_.api_format.reverse_input_stream().num_channels();
-    aec_dump_->WriteRenderStreamMessage(
-        AudioFrameView<const float>(src, num_channels, channel_size));
+    aec_dump_->WriteRenderStreamMessage(src, num_channels, channel_size);
   }
   render_.render_audio->CopyFrom(src,
                                  formats_.api_format.reverse_input_stream());
@@ -1680,7 +1707,7 @@ int AudioProcessingImpl::set_stream_delay_ms(int delay) {
 }
 
 bool AudioProcessingImpl::GetLinearAecOutput(
-    rtc::ArrayView<std::array<float, 160>> linear_output) const {
+    ArrayView<std::array<float, 160>> linear_output) const {
   MutexLock lock(&mutex_capture_);
   AudioBuffer* linear_aec_buffer = capture_.linear_aec_output.get();
 
@@ -1691,9 +1718,9 @@ bool AudioProcessingImpl::GetLinearAecOutput(
 
     for (size_t ch = 0; ch < linear_aec_buffer->num_channels(); ++ch) {
       RTC_DCHECK_EQ(linear_output[ch].size(), linear_aec_buffer->num_frames());
-      rtc::ArrayView<const float> channel_view =
-          rtc::ArrayView<const float>(linear_aec_buffer->channels_const()[ch],
-                                      linear_aec_buffer->num_frames());
+      ArrayView<const float> channel_view =
+          ArrayView<const float>(linear_aec_buffer->channels_const()[ch],
+                                 linear_aec_buffer->num_frames());
       FloatS16ToFloat(channel_view.data(), channel_view.size(),
                       linear_output[ch].data());
     }
@@ -1786,10 +1813,10 @@ void AudioProcessingImpl::UpdateRecommendedInputVolumeLocked() {
   capture_.recommended_input_volume = capture_.applied_input_volume;
 }
 
-bool AudioProcessingImpl::CreateAndAttachAecDump(
-    absl::string_view file_name,
-    int64_t max_log_size_bytes,
-    absl::Nonnull<TaskQueueBase*> worker_queue) {
+bool AudioProcessingImpl::CreateAndAttachAecDump(absl::string_view file_name,
+                                                 int64_t max_log_size_bytes,
+                                                 TaskQueueBase* absl_nonnull
+                                                     worker_queue) {
   std::unique_ptr<AecDump> aec_dump =
       AecDumpFactory::Create(file_name, max_log_size_bytes, worker_queue);
   if (!aec_dump) {
@@ -1800,10 +1827,10 @@ bool AudioProcessingImpl::CreateAndAttachAecDump(
   return true;
 }
 
-bool AudioProcessingImpl::CreateAndAttachAecDump(
-    FILE* handle,
-    int64_t max_log_size_bytes,
-    absl::Nonnull<TaskQueueBase*> worker_queue) {
+bool AudioProcessingImpl::CreateAndAttachAecDump(FILE* handle,
+                                                 int64_t max_log_size_bytes,
+                                                 TaskQueueBase* absl_nonnull
+                                                     worker_queue) {
   std::unique_ptr<AecDump> aec_dump =
       AecDumpFactory::Create(handle, max_log_size_bytes, worker_queue);
   if (!aec_dump) {
@@ -1895,7 +1922,8 @@ void AudioProcessingImpl::InitializeEchoController() {
       EchoCanceller3Config config;
       std::optional<EchoCanceller3Config> multichannel_config;
       if (use_setup_specific_default_aec3_config_) {
-        multichannel_config = EchoCanceller3::CreateDefaultMultichannelConfig();
+        multichannel_config =
+            EchoCanceller3Config::CreateDefaultMultichannelConfig();
       }
       submodules_.echo_controller = std::make_unique<EchoCanceller3>(
           env_, config, multichannel_config, proc_sample_rate_hz(),
@@ -1913,6 +1941,13 @@ void AudioProcessingImpl::InitializeEchoController() {
     }
 
     capture_nonlocked_.echo_controller_enabled = true;
+
+    if (!env_.field_trials().IsEnabled("WebRTC-PostFilterKillSwitch")) {
+      // Only creates a PostFilter if current sample-rate is high enough to
+      // require a filter.
+      submodules_.post_filter = PostFilter::CreateIfNeeded(
+          proc_sample_rate_hz(), num_proc_channels());
+    }
 
     submodules_.echo_control_mobile.reset();
     aecm_render_signal_queue_.reset();
@@ -2201,8 +2236,10 @@ void AudioProcessingImpl::RecordUnprocessedCaptureStream(
 
   const size_t channel_size = formats_.api_format.input_stream().num_frames();
   const size_t num_channels = formats_.api_format.input_stream().num_channels();
-  aec_dump_->AddCaptureStreamInput(
-      AudioFrameView<const float>(src, num_channels, channel_size));
+  for (size_t ch = 0u; ch < num_channels; ++ch) {
+    aec_dump_->AddCaptureStreamInput(
+        MonoView<const float>(src[ch], channel_size));
+  }
   RecordAudioProcessingState();
 }
 
@@ -2224,8 +2261,11 @@ void AudioProcessingImpl::RecordProcessedCaptureStream(
   const size_t channel_size = formats_.api_format.output_stream().num_frames();
   const size_t num_channels =
       formats_.api_format.output_stream().num_channels();
-  aec_dump_->AddCaptureStreamOutput(AudioFrameView<const float>(
-      processed_capture_stream, num_channels, channel_size));
+  for (size_t ch = 0u; ch < num_channels; ++ch) {
+    aec_dump_->AddCaptureStreamOutput(
+        MonoView<const float>(processed_capture_stream[ch], channel_size));
+  }
+
   aec_dump_->WriteCaptureStreamMessage();
 }
 

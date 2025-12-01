@@ -27,6 +27,12 @@ public class SuggestionsTileView extends TileView {
         super(context, attrs);
     }
 
+    // TileView override.
+    @Override
+    public boolean isDraggable() {
+        return mData.source == TileSource.CUSTOM_LINKS;
+    }
+
     /**
      * Initializes the view using the data held by {@code tile}. This should be called immediately
      * after inflation.
@@ -81,9 +87,5 @@ public class SuggestionsTileView extends TileView {
                     resources.getDimensionPixelSize(R.dimen.tile_view_icon_margin_top_modern);
         }
         mIconView.setLayoutParams(params);
-
-        if (mData.source == TileSource.CUSTOM_LINKS) {
-            setStyleForCustomTile();
-        }
     }
 }

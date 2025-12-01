@@ -7,6 +7,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/public/base/gaia_id_hash.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/sync/base/pref_names.h"
 #include "components/sync/engine/sync_protocol_error.h"
@@ -210,7 +211,6 @@ TEST_F(SyncServiceImplStartupTest, StartFirstTime) {
 
   // Sign in and turn sync on, without marking the first setup as complete.
   SignInWithSyncConsent();
-  sync_service()->SetSyncFeatureRequested();
   std::unique_ptr<SyncSetupInProgressHandle> sync_blocker =
       sync_service()->GetSetupInProgressHandle();
 
@@ -456,12 +456,20 @@ TEST_F(SyncServiceImplStartupTest, ResetSyncViaDashboard) {
 #else
       ACTIVE;
 #endif
+
   EXPECT_EQ(expected_transport_state_after_reset,
             sync_service()->GetTransportState());
-  EXPECT_EQ(
-      BUILDFLAG(IS_CHROMEOS),
-      sync_service()->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
   EXPECT_FALSE(sync_service()->IsSyncFeatureEnabled());
+
+#if BUILDFLAG(IS_CHROMEOS)
+  EXPECT_TRUE(
+      sync_service()->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
+  EXPECT_TRUE(
+      sync_service()->GetUserSettings()->IsSyncFeatureDisabledViaDashboard());
+#else   // BUILDFLAG(IS_CHROMEOS)
+  EXPECT_FALSE(
+      sync_service()->GetUserSettings()->IsInitialSyncFeatureSetupComplete());
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Reset sync again while the sync service is already in transport mode. It
   // should immediately start up again in transport mode.
@@ -470,6 +478,18 @@ TEST_F(SyncServiceImplStartupTest, ResetSyncViaDashboard) {
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(expected_transport_state_after_reset,
             sync_service()->GetTransportState());
+  EXPECT_FALSE(sync_service()->IsSyncFeatureEnabled());
+
+#if BUILDFLAG(IS_CHROMEOS)
+  EXPECT_FALSE(sync_service()->GetActiveDataTypes().Has(BOOKMARKS));
+
+  // On ChromeOS, test clearing the dashboard error, which should start
+  // sync-the-feature and start BOOKMARKS.
+  sync_service()->GetUserSettings()->ClearSyncFeatureDisabledViaDashboard();
+  FastForwardUntilNoTasksRemain();
+  EXPECT_TRUE(sync_service()->IsSyncFeatureActive());
+  EXPECT_TRUE(sync_service()->GetActiveDataTypes().Has(BOOKMARKS));
+#endif  // BUILDFLAG(IS_CHROMEOS)
 }
 
 // ChromeOS does not support sign-in after startup.
@@ -485,7 +505,6 @@ TEST_F(SyncServiceImplStartupTest, HonorsExistingDatatypePrefs) {
 
   CreateSyncService();
   SignInWithSyncConsent();
-  sync_service()->SetSyncFeatureRequested();
   sync_service()->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
 
@@ -562,7 +581,7 @@ TEST_F(SyncServiceImplStartupTest, SwitchManaged) {
   // On ChromeOS Ash, sync-the-feature stays disabled even after the policy is
   // removed, for historic reasons. It is unclear if this behavior is optional,
   // because it is indistinguishable from the sync-reset-via-dashboard case.
-  // It can be resolved by invoking SetSyncFeatureRequested().
+  // It can be resolved by invoking ClearSyncFeatureDisabledViaDashboard().
   EXPECT_TRUE(
       sync_service()->GetUserSettings()->IsSyncFeatureDisabledViaDashboard());
 #else
@@ -636,7 +655,6 @@ TEST_F(SyncServiceImplStartupTest, FullStartupSequenceFirstTime) {
   // Initiate Sync (the feature) setup before the engine initializes itself in
   // transport mode.
   SignInWithSyncConsent();
-  sync_service()->SetSyncFeatureRequested();
   std::unique_ptr<SyncSetupInProgressHandle> setup_in_progress_handle =
       sync_service()->GetSetupInProgressHandle();
 
@@ -777,7 +795,6 @@ TEST_F(SyncServiceImplStartupTest, UserTriggeredStartIsNotDeferredStart) {
   // Sign-in quickly, before the usual delay of a deferred startup. This can
   // happen during FRE.
   SignInWithSyncConsent();
-  sync_service()->SetSyncFeatureRequested();
   sync_service()->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
   FastForwardUntilNoTasksRemain();

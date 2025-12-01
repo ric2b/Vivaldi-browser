@@ -68,6 +68,7 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/synchronization/mutex.h"
 #include "rtc_base/trace_event.h"
+#include "system_wrappers/include/clock.h"
 #include "system_wrappers/include/ntp_time.h"
 
 namespace webrtc {
@@ -230,7 +231,7 @@ RTCPReceiver::RTCPReceiver(const Environment& env,
 
 RTCPReceiver::~RTCPReceiver() {}
 
-void RTCPReceiver::IncomingPacket(rtc::ArrayView<const uint8_t> packet) {
+void RTCPReceiver::IncomingPacket(ArrayView<const uint8_t> packet) {
   if (packet.empty()) {
     RTC_LOG(LS_WARNING) << "Incoming empty RTCP packet";
     return;
@@ -393,7 +394,7 @@ std::vector<ReportBlockData> RTCPReceiver::GetLatestReportBlockData() const {
   return result;
 }
 
-bool RTCPReceiver::ParseCompoundPacket(rtc::ArrayView<const uint8_t> packet,
+bool RTCPReceiver::ParseCompoundPacket(ArrayView<const uint8_t> packet,
                                        PacketInformation* packet_information) {
   MutexLock lock(&rtcp_receiver_lock_);
 

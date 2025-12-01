@@ -144,93 +144,84 @@ net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
     case ModelBasedCapabilityKey::kBlingPrototyping:
       // Used for testing purposes. No real features use this.
       return MISSING_TRAFFIC_ANNOTATION;
-    case ModelBasedCapabilityKey::kFormsAnnotations:
-      return net::DefineNetworkTrafficAnnotation(
-          "forms_annotations_model_execution", R"(
-        semantics {
-          sender: "Autofill Predictions - Forms Annotations"
-          description:
-            "Autofill sends the filled form fields to model execution to "
-            "determine the field types and store them for subsequent "
-            "autofilling of forms."
-          trigger: "User submits a web form."
-          destination: GOOGLE_OWNED_SERVICE
-          data:
-            "User filled form data, title, URL, content of the page, and "
-            "previously saved form entries."
-          internal {
-            contacts {
-              email: "chrome-intelligence-core@google.com"
-            }
-          }
-          user_data {
-            type: ACCESS_TOKEN
-            type: SENSITIVE_URL
-            type: WEB_CONTENT
-            type: USER_CONTENT
-          }
-          last_reviewed: "2024-10-10"
-        }
-        policy {
-          cookies_allowed: NO
-          setting:
-            "Users can control this by signing-in to Chrome, and via the "
-            "'Autofill with AI' setting in the 'Autofill and passwords' "
-            "section."
-          chrome_policy {
-            AutofillPredictionSettings {
-              AutofillPredictionSettings: 2
-            }
-          }
-        })");
-    case ModelBasedCapabilityKey::kFormsPredictions:
-      return net::DefineNetworkTrafficAnnotation(
-          "forms_predictions_model_execution", R"(
-        semantics {
-          sender: "Autofill Predictions - Forms Predictions"
-          description:
-            "Autofill sends the filled form fields, and previously saved form "
-            "entries to model execution to predict and prefill the form "
-            "fields."
-          trigger: "User submits a web form."
-          destination: GOOGLE_OWNED_SERVICE
-          data:
-            "User filled form data, title, URL, content of the page, and "
-            "previously saved form entries"
-          internal {
-            contacts {
-              email: "chrome-intelligence-core@google.com"
-            }
-          }
-          user_data {
-            type: ACCESS_TOKEN
-            type: SENSITIVE_URL
-            type: WEB_CONTENT
-            type: USER_CONTENT
-          }
-          last_reviewed: "2024-10-10"
-        }
-        policy {
-          cookies_allowed: NO
-          setting:
-            "Users can control this by signing-in to Chrome, and via the "
-            "'Autofill with AI' setting in the 'Autofill and passwords' "
-            "section."
-          chrome_policy {
-            AutofillPredictionSettings {
-              AutofillPredictionSettings: 2
-            }
-          }
-        })");
     case ModelBasedCapabilityKey::kFormsClassifications:
-      // TODO(crbug.com/389631477) - Add traffic annotation.
-      return MISSING_TRAFFIC_ANNOTATION;
+      return net::DefineNetworkTrafficAnnotation(
+          "forms_classifications_model_execution", R"(
+    semantics {
+      sender: "AutofillAI - Forms Classifications"
+      description:
+        "Analyze page content to classify the types of form fields and store "
+        "those classifications for subsequent autofilling of forms."
+      trigger: "User encounters a web form on page load and the Autofill "
+               "server has selected the form as relevant for model execution."
+      destination: GOOGLE_OWNED_SERVICE
+      data: "Title, URL, and content of the page."
+      internal {
+        contacts {
+          email: "chrome-intelligence-core@google.com"
+        }
+      }
+      user_data {
+        type: ACCESS_TOKEN
+        type: SENSITIVE_URL
+        type: WEB_CONTENT
+        type: USER_CONTENT
+      }
+      last_reviewed: "2025-04-23"
+    }
+    policy {
+      cookies_allowed: NO
+      setting:
+        "Users can control this by signing-in to Chrome, and via the "
+        "'Autofill with AI' setting in the 'Autofill and passwords' "
+        "section."
+      chrome_policy {
+        AutofillPredictionSettings {
+          AutofillPredictionSettings: 2
+        }
+      }
+    })");
     case ModelBasedCapabilityKey::kEnhancedCalendar:
       // TODO(crbug.com/398296762): Add network traffic annotation.
       return MISSING_TRAFFIC_ANNOTATION;
     case ModelBasedCapabilityKey::kZeroStateSuggestions:
-      // TODO(crbug.com/403003789): Add network traffic annotation.
-      return MISSING_TRAFFIC_ANNOTATION;
+      return net::DefineNetworkTrafficAnnotation(
+          "zero_state_suggestions_model_execution", R"(
+    semantics {
+      sender: "Gemini in Chrome - Zero State Suggestions"
+      description:
+        "Generates contextual suggestions about the current page when Gemini "
+        "in Chrome does not have a query."
+      trigger:
+        "User opens Gemini in Chrome via browser entrypoint, OS entrypoint, or"
+        " hot key."
+      destination: GOOGLE_OWNED_SERVICE
+      data:
+        "Title, URL, and content of the page, which may potentially contain "
+        "user input. The access token is also sent to verify user is of "
+        "sufficient age to use Gemini in Chrome."
+      internal {
+        contacts {
+          email: "chrome-intelligence-core@google.com"
+        }
+      }
+      user_data {
+        type: ACCESS_TOKEN
+        type: SENSITIVE_URL
+        type: WEB_CONTENT
+      }
+      last_reviewed: "2025-05-21"
+    }
+    policy {
+      cookies_allowed: NO
+      setting:
+        "This feature can be disabled via GeminiSettings."
+      chrome_policy {
+        GeminiSettings {
+          GeminiSettings: 1
+        }
+      }
+    })");
     case ModelBasedCapabilityKey::kHistorySearch:
     case ModelBasedCapabilityKey::kHistoryQueryIntent:
     case ModelBasedCapabilityKey::kPromptApi:
@@ -238,6 +229,7 @@ net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
     case ModelBasedCapabilityKey::kPermissionsAi:
     case ModelBasedCapabilityKey::kSummarize:
     case ModelBasedCapabilityKey::kWritingAssistanceApi:
+    case ModelBasedCapabilityKey::kProofreaderApi:
       // On-device only feature.
       NOTREACHED();
   }

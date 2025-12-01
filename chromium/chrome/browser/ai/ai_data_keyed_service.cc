@@ -6,14 +6,19 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 
 #include "base/barrier_callback.h"
 #include "base/base64.h"
+#include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/functional/concurrent_callbacks.h"
 #include "base/functional/concurrent_closures.h"
+#include "base/logging.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/no_destructor.h"
@@ -28,7 +33,9 @@
 #include "chrome/browser/content_extraction/inner_text.h"
 #include "chrome/browser/history_embeddings/history_embeddings_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/core/browser/form_processing/optimization_guide_proto_util.h"
 #include "components/autofill/core/browser/form_structure.h"
@@ -39,9 +46,11 @@
 #include "components/history_embeddings/history_embeddings_service.h"
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 #include "components/optimization_guide/core/optimization_guide_proto_util.h"
+#include "components/optimization_guide/proto/features/actions_data.pb.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "components/optimization_guide/proto/features/model_prototyping.pb.h"
 #include "components/site_engagement/content/site_engagement_service.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -55,12 +64,20 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/rect.h"
 
+#if BUILDFLAG(ENABLE_GLIC)
+#include "chrome/browser/actor/actor_coordinator.h"
+#include "chrome/browser/glic/host/context/glic_page_context_fetcher.h"
+#include "chrome/browser/glic/host/context/glic_tab_data.h"
+#include "chrome/browser/glic/host/glic.mojom.h"
+#include "chrome/common/actor.mojom.h"
+#include "chrome/common/actor/action_result.h"
+#endif
+
 #if !BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/tabs/public/tab_group.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PDF)
@@ -116,6 +133,7 @@ void GetAIPageContentForModelPrototyping(
 
   auto options = optimization_guide::DefaultAIPageContentOptions();
   options->enable_experimental_actionable_data = false;
+  options->include_geometry = false;
   optimization_guide::OnAIPageContentDone callback = base::BindOnce(
       &OnGotAIPageContentForModelPrototyping, std::move(continue_callback));
   optimization_guide::GetAIPageContent(web_contents, std::move(options),
@@ -130,6 +148,7 @@ void GetAIPageContentWithActionableElementsForModelPrototyping(
 
   auto options = optimization_guide::DefaultAIPageContentOptions();
   options->enable_experimental_actionable_data = true;
+  options->include_geometry = true;
   optimization_guide::OnAIPageContentDone callback = base::BindOnce(
       &OnGotAIPageContentWithActionableElementsForModelPrototyping,
       std::move(continue_callback));
@@ -405,7 +424,8 @@ void GetTabDataForModelPrototyping(
   // Get the browser window that contains the web contents the extension is
   // being targeted on. If there isn't a window, or there isn't a tab strip
   // model, return an empty AiData.
-  Browser* browser = chrome::FindBrowserWithTab(web_contents);
+  tabs::TabInterface* tab = tabs::TabInterface::GetFromContents(web_contents);
+  BrowserWindowInterface* browser = tab->GetBrowserWindowInterface();
   if (!browser || !browser->GetTabStripModel()) {
     return concurrent.CreateCallback().Run(std::nullopt);
   }
@@ -667,18 +687,45 @@ void GetModelPrototypingAiData(AiDataKeyedService::AiDataSpecifier specifiers,
       .Done(base::BindOnce(&OnDataCollectionsComplete, std::move(callback),
                            std::move(data)));
 }
+#if BUILDFLAG(ENABLE_GLIC)
+glic::mojom::GetTabContextOptions DefaultOptions() {
+  glic::mojom::GetTabContextOptions options;
+  options.include_annotated_page_content = true;
+  options.include_viewport_screenshot = true;
+  return options;
+}
 
-// Feature to add allow listed extensions remotely.
+#endif  // BUILDFLAG(ENABLE_GLIC)
+
+void RunLater(base::OnceClosure task) {
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE,
+                                                              std::move(task));
+}
+
+// Feature to add allow listed extensions remotely for data collection.
 BASE_FEATURE(kAllowlistedAiDataExtensions,
              "AllowlistedAiDataExtensions",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-const base::FeatureParam<std::string> kAllowlistedExtensions{
+const base::FeatureParam<std::string> kAllowlistedExtensionsForData{
     &kAllowlistedAiDataExtensions, "allowlisted_extension_ids",
     /*default_value=*/""};
 
-const base::FeatureParam<std::string> kBlocklistedExtensions{
+const base::FeatureParam<std::string> kBlocklistedExtensionsForData{
     &kAllowlistedAiDataExtensions, "blocked_extension_ids",
+    /*default_value=*/""};
+
+// Feature to add allow listed extensions remotely for actions.
+BASE_FEATURE(kAllowlistedActionsExtensions,
+             "AllowlistedActionsExtensions",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+const base::FeatureParam<std::string> kAllowlistedExtensionsForActions{
+    &kAllowlistedActionsExtensions, "allowlisted_extension_ids",
+    /*default_value=*/""};
+
+const base::FeatureParam<std::string> kBlocklistedExtensionsForActions{
+    &kAllowlistedActionsExtensions, "blocked_extension_ids",
     /*default_value=*/""};
 
 }  // namespace
@@ -691,6 +738,11 @@ AiDataKeyedService::~AiDataKeyedService() = default;
 const base::Feature&
 AiDataKeyedService::GetAllowlistedAiDataExtensionsFeatureForTesting() {
   return kAllowlistedAiDataExtensions;
+}
+
+const base::Feature&
+AiDataKeyedService::GetAllowlistedActionsExtensionsFeatureForTesting() {
+  return kAllowlistedActionsExtensions;
 }
 
 void AiDataKeyedService::GetAiData(int dom_node_id,
@@ -730,10 +782,15 @@ void AiDataKeyedService::GetAiDataWithSpecifier(
                             std::move(callback));
 }
 
-std::vector<std::string> AiDataKeyedService::GetAllowlistedExtensions() {
-  std::vector<std::string> allowlisted_extensions =
-      base::SplitString(kAllowlistedExtensions.Get(), ",",
+bool AiDataKeyedService::IsExtensionAllowlistedForData(
+    const std::string& extension_id) {
+  std::vector<std::string> blocklisted_extensions =
+      base::SplitString(kBlocklistedExtensionsForData.Get(), ",",
                         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (base::Contains(blocklisted_extensions, extension_id)) {
+    return false;
+  }
+
   static const base::NoDestructor<std::vector<std::string>>
       kHardcodedAllowlistedExtensions({// https://issues.chromium.org/373645534
                                        "hpkopmikdojpadgmioifjjodbmnjjjca",
@@ -741,20 +798,263 @@ std::vector<std::string> AiDataKeyedService::GetAllowlistedExtensions() {
                                        "bgbpcgpcobgjpnpiginpidndjpggappi",
                                        // https://issues.chromium.org/376699519
                                        "eefninhhiifgcimjkmkongegpoaikmhm",
+                                       // https://issues.chromium.org/393435942
+                                       "fjhpgileahdpnmfmaggobehbipojhlce",
                                        // https://issues.chromium.org/403366603
-                                       "abdciamfdmknaeggbnmafmbdfdmhfgfa"});
-  allowlisted_extensions.insert(allowlisted_extensions.end(),
-                                kHardcodedAllowlistedExtensions->begin(),
-                                kHardcodedAllowlistedExtensions->end());
-  std::vector<std::string> blocklisted_extensions =
-      base::SplitString(kBlocklistedExtensions.Get(), ",",
-                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  auto it = std::remove_if(
-      allowlisted_extensions.begin(), allowlisted_extensions.end(),
-      [&](const std::string& extension_id) {
-        return base::Contains(blocklisted_extensions, extension_id);
-      });
-  allowlisted_extensions.erase(it, allowlisted_extensions.end());
+                                       "abdciamfdmknaeggbnmafmbdfdmhfgfa",
+                                       // https://issues.chromium.org/414437025
+                                       "fiamdfnbelfkjlacoaeiclobkdmckaoa"});
+  if (base::Contains(*kHardcodedAllowlistedExtensions, extension_id)) {
+    return true;
+  }
 
-  return allowlisted_extensions;
+  std::vector<std::string> allowlisted_extensions =
+      base::SplitString(kAllowlistedExtensionsForData.Get(), ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (base::Contains(allowlisted_extensions, extension_id)) {
+    return true;
+  }
+
+  return false;
 }
+
+bool AiDataKeyedService::IsExtensionAllowlistedForActions(
+    const std::string& extension_id) {
+  std::vector<std::string> blocklisted_extensions =
+      base::SplitString(kBlocklistedExtensionsForActions.Get(), ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (base::Contains(blocklisted_extensions, extension_id)) {
+    return false;
+  }
+
+  static const base::NoDestructor<std::vector<std::string>>
+      kHardcodedAllowlistedExtensions({});
+  if (base::Contains(*kHardcodedAllowlistedExtensions, extension_id)) {
+    return true;
+  }
+
+  std::vector<std::string> allowlisted_extensions =
+      base::SplitString(kAllowlistedExtensionsForActions.Get(), ",",
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (base::Contains(allowlisted_extensions, extension_id)) {
+    return true;
+  }
+
+  return false;
+}
+
+bool AiDataKeyedService::IsExtensionAllowlistedForStable(
+    const std::string& extension_id) {
+  // Stable channel always requires --experimental-ai-stable-channel flag.
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(::switches::kExperimentalAiStableChannel)) {
+    return false;
+  }
+
+  // And the extension must be on this list.
+  static const base::NoDestructor<std::vector<std::string>>
+      kStableChannelAllowlistedIds({});
+  return base::Contains(*kStableChannelAllowlistedIds, extension_id);
+}
+
+void AiDataKeyedService::StartTask(
+    optimization_guide::proto::BrowserStartTask task,
+    base::OnceCallback<void(optimization_guide::proto::BrowserStartTaskResult)>
+        callback) {
+#if !BUILDFLAG(ENABLE_GLIC)
+  RunLater(base::BindOnce(std::move(callback),
+                          optimization_guide::proto::BrowserStartTaskResult()));
+  return;
+#else
+  if (actor_coordinator_) {
+    VLOG(1) << "Start Task failed: Actor coordinator already exists and only "
+               "one allowed at a time.";
+    optimization_guide::proto::BrowserStartTaskResult result;
+    result.set_status(
+        optimization_guide::proto::BrowserStartTaskResult::OVER_TASK_LIMIT);
+    RunLater(base::BindOnce(std::move(callback), std::move(result)));
+    return;
+  }
+  Profile* profile = Profile::FromBrowserContext(browser_context_);
+  actor_coordinator_ = std::make_unique<actor::ActorCoordinator>(profile);
+  // The GlicKeyedService is normally what sets up the profile for Glic, but
+  // GlicKeyedService is not compabible with system profiles, so we need to
+  // manually register the profile here to make sure that OptimizationGuide is
+  // properly set up.
+  // Note that this function is idempotent, so it is fine to call it multiple
+  // times.
+  actor::ActorCoordinator::RegisterWithProfile(profile);
+  task_needs_navigate_ = true;
+  // TODO(https://crbug.com/407860715): Implement a separate host API to start
+  // a task, and remove action handling here.
+  optimization_guide::proto::BrowserAction dummy_navigate_action;
+  dummy_navigate_action.add_action_information()->mutable_navigate();
+  actor_coordinator_->StartTask(
+      dummy_navigate_action,
+      base::BindOnce(&AiDataKeyedService::OnTaskCreated,
+                     weak_factory_.GetWeakPtr(), std::move(callback), task_id_,
+                     tab_id_),
+      task.has_tab_id() ? std::make_optional(tabs::TabHandle(task.tab_id()))
+                        : std::nullopt);
+#endif  // BUILDFLAG(ENABLE_GLIC)
+}
+
+void AiDataKeyedService::StopTask(int64_t task_id,
+                                  base::OnceCallback<void(bool)> callback) {
+#if !BUILDFLAG(ENABLE_GLIC)
+  RunLater(base::BindOnce(std::move(callback), false));
+  return;
+#else
+  if (task_id != task_id_ || !actor_coordinator_ || !tab_) {
+    VLOG(1)
+        << "Stop Task failed: Task id or tab id does not match current task.";
+    RunLater(base::BindOnce(std::move(callback), false));
+    return;
+  }
+
+  actor_coordinator_.reset();
+  tab_.reset();
+  task_id_ += 1;
+  tab_id_ += 1;
+  RunLater(base::BindOnce(std::move(callback), true));
+#endif  // BUILDFLAG(ENABLE_GLIC)
+}
+
+void AiDataKeyedService::ExecuteAction(
+    optimization_guide::proto::BrowserAction action,
+    base::OnceCallback<void(optimization_guide::proto::BrowserActionResult)>
+        callback) {
+#if !BUILDFLAG(ENABLE_GLIC)
+  RunLater(base::BindOnce(std::move(callback),
+                          optimization_guide::proto::BrowserActionResult()));
+  return;
+#else
+  if (task_id_ != action.task_id() || tab_id_ != action.tab_id()) {
+    VLOG(1) << "Execute Action failed: Task id or tab id does not match "
+               "current task.";
+    optimization_guide::proto::BrowserActionResult result;
+    result.set_action_result(0);
+    RunLater(base::BindOnce(std::move(callback), std::move(result)));
+    return;
+  }
+  if (task_needs_navigate_) {
+    task_needs_navigate_ = false;
+    if (action.action_information_size() != 1 ||
+        !action.action_information(0).has_navigate()) {
+      VLOG(1) << "Execute Action failed: Action is not a navigate action and "
+                 "is the first action in the task.";
+      optimization_guide::proto::BrowserActionResult result;
+      result.set_action_result(0);
+      RunLater(base::BindOnce(std::move(callback), std::move(result)));
+      return;
+    }
+  }
+  actor_coordinator_->Act(
+      std::move(action),
+      base::BindOnce(&AiDataKeyedService::OnActionFinished,
+                     weak_factory_.GetWeakPtr(), std::move(callback), task_id_,
+                     tab_id_));
+#endif  // BUILDFLAG(ENABLE_GLIC)
+}
+
+bool AiDataKeyedService::IsActorCoordinatorActingOnTab(
+    const content::WebContents* tab) const {
+#if BUILDFLAG(ENABLE_GLIC)
+  return actor_coordinator_ && actor_coordinator_->HasTaskForTab(tab);
+#else
+  return false;
+#endif
+}
+
+#if BUILDFLAG(ENABLE_GLIC)
+void AiDataKeyedService::OnTaskCreated(
+    base::OnceCallback<void(optimization_guide::proto::BrowserStartTaskResult)>
+        callback,
+    int task_id,
+    int tab_id,
+    base::WeakPtr<tabs::TabInterface> tab) {
+  optimization_guide::proto::BrowserStartTaskResult result;
+  if (!tab || tab_id_ != tab_id || task_id_ != task_id) {
+    VLOG(1)
+        << "Start Task failed: Tab id or task id does not match current task.";
+    result.set_status(
+        optimization_guide::proto::BrowserStartTaskResult::OVER_TASK_LIMIT);
+    RunLater(base::BindOnce(std::move(callback), std::move(result)));
+    return;
+  }
+  tab_ = tab;
+  result.set_task_id(task_id);
+  result.set_tab_id(tab_id);
+  result.set_status(optimization_guide::proto::BrowserStartTaskResult::SUCCESS);
+  RunLater(base::BindOnce(std::move(callback), std::move(result)));
+}
+
+void AiDataKeyedService::OnActionFinished(
+    base::OnceCallback<void(optimization_guide::proto::BrowserActionResult)>
+        callback,
+    int task_id,
+    int tab_id,
+    actor::mojom::ActionResultPtr action_result) {
+  if (!tab_ || tab_id_ != tab_id || task_id_ != task_id) {
+    VLOG(1) << "Execute Action failed: Tab id or task id does not match "
+               "current task.";
+    optimization_guide::proto::BrowserActionResult result;
+    result.set_action_result(0);
+    RunLater(base::BindOnce(std::move(callback), std::move(result)));
+    return;
+  }
+  // TODO(https://crbug.com/398271171): Remove when the actor coordinator
+  // handles getting a new observation.
+
+  glic::FocusedTabData focused_tab_data{tab_->GetContents()->GetWeakPtr()};
+  glic::FetchPageContext(
+      focused_tab_data, DefaultOptions(),
+      base::BindOnce(&AiDataKeyedService::ConvertToBrowserActionResult,
+                     weak_factory_.GetWeakPtr(), std::move(callback), task_id_,
+                     tab_id_, std::move(action_result)));
+}
+
+void AiDataKeyedService::ConvertToBrowserActionResult(
+    base::OnceCallback<void(optimization_guide::proto::BrowserActionResult)>
+        callback,
+    int task_id,
+    int tab_id,
+    actor::mojom::ActionResultPtr action_result,
+    glic::mojom::GetContextResultPtr context_result) {
+  optimization_guide::proto::BrowserActionResult browser_action_result;
+  if (task_id != task_id_ || tab_id != tab_id_ ||
+      context_result->is_error_reason()) {
+    VLOG(1) << "Execute Action failed: Tab id or task id does not match "
+               "current task.";
+    browser_action_result.set_action_result(0);
+    RunLater(
+        base::BindOnce(std::move(callback), std::move(browser_action_result)));
+    return;
+  }
+  if (context_result->get_tab_context() &&
+      context_result->get_tab_context()->annotated_page_data &&
+      context_result->get_tab_context()
+          ->annotated_page_data->annotated_page_content) {
+    auto apc = context_result->get_tab_context()
+                   ->annotated_page_data->annotated_page_content.value()
+                   .As<optimization_guide::proto::AnnotatedPageContent>();
+    if (apc.has_value()) {
+      auto apc_value = *std::move(apc);
+      browser_action_result.mutable_annotated_page_content()->Swap(&apc_value);
+    }
+  }
+  if (context_result->get_tab_context()->viewport_screenshot &&
+      context_result->get_tab_context()->viewport_screenshot->data.size() !=
+          0) {
+    auto& data = context_result->get_tab_context()->viewport_screenshot->data;
+    browser_action_result.set_screenshot(data.data(), data.size());
+    browser_action_result.set_screenshot_mime_type(
+        context_result->get_tab_context()->viewport_screenshot->mime_type);
+  }
+  browser_action_result.set_task_id(task_id);
+  browser_action_result.set_tab_id(tab_id);
+  browser_action_result.set_action_result(actor::IsOk(*action_result) ? 1 : 0);
+  RunLater(
+      base::BindOnce(std::move(callback), std::move(browser_action_result)));
+}
+#endif  // BUILDFLAG(ENABLE_GLIC)

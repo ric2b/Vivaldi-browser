@@ -61,6 +61,7 @@ typedef void ID3D11Device;
 #define NVENC_HAVE_MULTIPLE_REF_FRAMES
 #define NVENC_HAVE_CUSTREAM_PTR
 #define NVENC_HAVE_GETLASTERRORSTRING
+#define NVENC_HAVE_FILLER_DATA
 #endif
 
 // SDK 10.0 compile time feature checks
@@ -78,6 +79,11 @@ typedef void ID3D11Device;
 #define NVENC_HAVE_SINGLE_SLICE_INTRA_REFRESH
 #endif
 
+// SDK 12.0 compile time feature checks
+#if NVENCAPI_CHECK_VERSION(12, 0)
+#define NVENC_HAVE_HEVC_OUTPUT_RECOVERY_POINT_SEI
+#endif
+
 // SDK 12.1 compile time feature checks
 #if NVENCAPI_CHECK_VERSION(12, 1)
 #define NVENC_NO_DEPRECATED_RC
@@ -91,6 +97,16 @@ typedef void ID3D11Device;
 #define NVENC_HAVE_LOOKAHEAD_LEVEL
 #define NVENC_HAVE_UHQ_TUNING
 #define NVENC_HAVE_UNIDIR_B
+#define NVENC_HAVE_TIME_CODE // added in 12.0, but incomplete until 12.2
+#endif
+
+// SDK 13.0 compile time feature checks
+#if NVENCAPI_CHECK_VERSION(13, 0)
+#define NVENC_HAVE_H264_10BIT_SUPPORT
+#define NVENC_HAVE_422_SUPPORT
+#define NVENC_HAVE_AV1_UHQ_TUNING
+#define NVENC_HAVE_H264_AND_AV1_TEMPORAL_FILTER
+#define NVENC_HAVE_HEVC_AND_AV1_MASTERING_METADATA
 #endif
 
 typedef struct NvencSurface
@@ -151,6 +167,12 @@ enum {
     NV_ENC_H264_PROFILE_BASELINE,
     NV_ENC_H264_PROFILE_MAIN,
     NV_ENC_H264_PROFILE_HIGH,
+#ifdef NVENC_HAVE_H264_10BIT_SUPPORT
+    NV_ENC_H264_PROFILE_HIGH_10,
+#endif
+#ifdef NVENC_HAVE_422_SUPPORT
+    NV_ENC_H264_PROFILE_HIGH_422,
+#endif
     NV_ENC_H264_PROFILE_HIGH_444P,
 };
 
@@ -257,6 +279,8 @@ typedef struct NvencContext
     float quality;
     int aud;
     int bluray_compat;
+    int qmin;
+    int qmax;
     int init_qp_p;
     int init_qp_b;
     int init_qp_i;
@@ -285,6 +309,8 @@ typedef struct NvencContext
     int lookahead_level;
     int unidir_b;
     int split_encode_mode;
+    int mdm, cll;
+    int cbr_padding;
 } NvencContext;
 
 int ff_nvenc_encode_init(AVCodecContext *avctx);

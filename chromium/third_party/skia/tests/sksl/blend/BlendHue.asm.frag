@@ -22,6 +22,8 @@
                OpName %_6_minComp "_6_minComp"
                OpName %_7_maxComp "_7_maxComp"
                OpName %main "main"
+               OpDecorate %blend_color_saturation_Qhh3 RelaxedPrecision
+               OpDecorate %blend_hslc_h4h2h4h4 RelaxedPrecision
                OpDecorate %_kGuardedDivideEpsilon RelaxedPrecision
                OpDecorate %sk_FragColor RelaxedPrecision
                OpDecorate %sk_FragColor Location 0
@@ -33,12 +35,17 @@
                OpDecorate %_UniformBuffer Block
                OpDecorate %16 Binding 0
                OpDecorate %16 DescriptorSet 0
+               OpDecorate %22 RelaxedPrecision
+               OpDecorate %24 RelaxedPrecision
+               OpDecorate %25 RelaxedPrecision
                OpDecorate %26 RelaxedPrecision
                OpDecorate %27 RelaxedPrecision
                OpDecorate %28 RelaxedPrecision
                OpDecorate %29 RelaxedPrecision
                OpDecorate %30 RelaxedPrecision
                OpDecorate %31 RelaxedPrecision
+               OpDecorate %32 RelaxedPrecision
+               OpDecorate %33 RelaxedPrecision
                OpDecorate %34 RelaxedPrecision
                OpDecorate %35 RelaxedPrecision
                OpDecorate %36 RelaxedPrecision
@@ -46,6 +53,9 @@
                OpDecorate %38 RelaxedPrecision
                OpDecorate %39 RelaxedPrecision
                OpDecorate %40 RelaxedPrecision
+               OpDecorate %45 RelaxedPrecision
+               OpDecorate %46 RelaxedPrecision
+               OpDecorate %47 RelaxedPrecision
                OpDecorate %alpha RelaxedPrecision
                OpDecorate %51 RelaxedPrecision
                OpDecorate %52 RelaxedPrecision
@@ -75,10 +85,14 @@
                OpDecorate %86 RelaxedPrecision
                OpDecorate %87 RelaxedPrecision
                OpDecorate %_2_mn RelaxedPrecision
+               OpDecorate %92 RelaxedPrecision
+               OpDecorate %93 RelaxedPrecision
                OpDecorate %94 RelaxedPrecision
                OpDecorate %95 RelaxedPrecision
                OpDecorate %96 RelaxedPrecision
                OpDecorate %_3_mx RelaxedPrecision
+               OpDecorate %98 RelaxedPrecision
+               OpDecorate %99 RelaxedPrecision
                OpDecorate %105 RelaxedPrecision
                OpDecorate %106 RelaxedPrecision
                OpDecorate %109 RelaxedPrecision
@@ -97,10 +111,14 @@
                OpDecorate %128 RelaxedPrecision
                OpDecorate %129 RelaxedPrecision
                OpDecorate %_6_minComp RelaxedPrecision
+               OpDecorate %131 RelaxedPrecision
+               OpDecorate %132 RelaxedPrecision
                OpDecorate %133 RelaxedPrecision
                OpDecorate %134 RelaxedPrecision
                OpDecorate %135 RelaxedPrecision
                OpDecorate %_7_maxComp RelaxedPrecision
+               OpDecorate %137 RelaxedPrecision
+               OpDecorate %138 RelaxedPrecision
                OpDecorate %146 RelaxedPrecision
                OpDecorate %147 RelaxedPrecision
                OpDecorate %148 RelaxedPrecision

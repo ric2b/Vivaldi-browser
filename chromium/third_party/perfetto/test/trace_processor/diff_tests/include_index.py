@@ -30,6 +30,7 @@ from diff_tests.metrics.camera.tests import Camera
 from diff_tests.metrics.chrome.tests import ChromeMetrics
 from diff_tests.metrics.chrome.tests_args import ChromeArgs
 from diff_tests.metrics.chrome.tests_processes import ChromeProcesses
+from diff_tests.metrics.chrome.tests_scroll_jank import ChromeScrollJankMetrics
 from diff_tests.metrics.codecs.tests import Codecs
 from diff_tests.metrics.common.tests import CloneDurationMetrics
 from diff_tests.metrics.frame_timeline.tests import FrameTimeline
@@ -59,6 +60,7 @@ from diff_tests.parser.android.tests_surfaceflinger_layers import SurfaceFlinger
 from diff_tests.parser.android.tests_surfaceflinger_transactions import SurfaceFlingerTransactions
 from diff_tests.parser.android.tests_viewcapture import ViewCapture
 from diff_tests.parser.android.tests_windowmanager import WindowManager
+from diff_tests.parser.art_hprof.tests import ArtHprofParser
 from diff_tests.parser.art_method.tests import ArtMethodParser
 from diff_tests.parser.atrace.tests import Atrace
 from diff_tests.parser.atrace.tests_error_handling import AtraceErrorHandling
@@ -73,6 +75,7 @@ from diff_tests.parser.ftrace.ftrace_crop_tests import FtraceCrop
 from diff_tests.parser.ftrace.kprobes_tests import Kprobes
 from diff_tests.parser.fuchsia.tests import Fuchsia
 from diff_tests.parser.gecko.tests import GeckoParser
+from diff_tests.parser.generic_kernel.tests import GenericKernelParser
 from diff_tests.parser.graphics.tests import GraphicsParser
 from diff_tests.parser.graphics.tests_drm_related_ftrace_events import GraphicsDrmRelatedFtraceEvents
 from diff_tests.parser.graphics.tests_gpu_trace import GraphicsGpuTrace
@@ -94,6 +97,7 @@ from diff_tests.parser.power.tests_linux_sysfs_power import LinuxSysfsPower
 from diff_tests.parser.power.tests_power_rails import PowerPowerRails
 from diff_tests.parser.power.tests_voltage_and_scaling import PowerVoltageAndScaling
 from diff_tests.parser.process_tracking.tests import ProcessTracking
+from diff_tests.parser.profiling.deobfuscation_tests import Deobfuscation
 from diff_tests.parser.profiling.tests import Profiling
 from diff_tests.parser.profiling.tests_heap_graph import ProfilingHeapGraph
 from diff_tests.parser.profiling.tests_heap_profiling import ProfilingHeapProfiling
@@ -116,6 +120,7 @@ from diff_tests.stdlib.android.heap_graph_tests import HeapGraph
 from diff_tests.stdlib.android.heap_profile_tests import HeapProfile
 from diff_tests.stdlib.android.memory import AndroidMemory
 from diff_tests.stdlib.android.startups_tests import Startups
+from diff_tests.stdlib.android.sysui_cujs_test import SystemUICujs
 from diff_tests.stdlib.android.tests import AndroidStdlib
 from diff_tests.stdlib.chrome.chrome_stdlib_testsuites import CHROME_STDLIB_TESTSUITES
 from diff_tests.stdlib.counters.tests import StdlibCounterIntervals
@@ -176,9 +181,11 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       ChromeParser,
       ChromeV8Parser,
       Cros,
+      Deobfuscation,
       Etm,
       Fs,
       Fuchsia,
+      GenericKernelParser,
       GraphicsDrmRelatedFtraceEvents,
       GraphicsGpuTrace,
       GraphicsParser,
@@ -228,6 +235,7 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       Instruments,
       Gzip,
       GeckoParser,
+      ArtHprofParser,
       ArtMethodParser,
       PerfTextParser,
   ]
@@ -238,6 +246,7 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       ChromeArgs,
       ChromeMetrics,
       ChromeProcesses,
+      ChromeScrollJankMetrics,
       Codecs,
       FrameTimeline,
       GraphicsMetrics,
@@ -285,6 +294,7 @@ def fetch_all_diff_tests(index_path: str) -> List['testing.TestCase']:
       SpanJoinRegression,
       SpanJoinSmoke,
       StdlibIntervals,
+      SystemUICujs,
       IntervalsIntersect,
       Startups,
       Timestamps,

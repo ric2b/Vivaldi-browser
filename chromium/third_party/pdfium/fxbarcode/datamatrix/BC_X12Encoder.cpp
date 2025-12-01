@@ -41,15 +41,16 @@ bool CBC_X12Encoder::Encode(CBC_EncoderContext* context) {
   WideString buffer;
   while (context->hasMoreCharacters()) {
     wchar_t c = context->getCurrentChar();
-    context->m_pos++;
-    if (EncodeChar(c, &buffer) <= 0)
+    context->pos_++;
+    if (EncodeChar(c, &buffer) <= 0) {
       return false;
+    }
 
     size_t count = buffer.GetLength();
     if ((count % 3) == 0) {
       WriteNextTriplet(context, &buffer);
       CBC_HighLevelEncoder::Encoding newMode =
-          CBC_HighLevelEncoder::LookAheadTest(context->m_msg, context->m_pos,
+          CBC_HighLevelEncoder::LookAheadTest(context->msg_, context->pos_,
                                               GetEncodingMode());
       if (newMode != GetEncodingMode()) {
         context->SignalEncoderChange(newMode);
@@ -62,18 +63,19 @@ bool CBC_X12Encoder::Encode(CBC_EncoderContext* context) {
 
 bool CBC_X12Encoder::HandleEOD(CBC_EncoderContext* context,
                                WideString* buffer) {
-  if (!context->UpdateSymbolInfo())
+  if (!context->UpdateSymbolInfo()) {
     return false;
+  }
 
   int32_t available =
-      context->m_symbolInfo->data_capacity() - context->getCodewordCount();
+      context->symbol_info_->data_capacity() - context->getCodewordCount();
   size_t count = buffer->GetLength();
   if (count == 2) {
     context->writeCodeword(CBC_HighLevelEncoder::X12_UNLATCH);
-    context->m_pos -= 2;
+    context->pos_ -= 2;
     context->SignalEncoderChange(CBC_HighLevelEncoder::Encoding::ASCII);
   } else if (count == 1) {
-    context->m_pos--;
+    context->pos_--;
     if (available > 1) {
       context->writeCodeword(CBC_HighLevelEncoder::X12_UNLATCH);
     }
@@ -83,19 +85,20 @@ bool CBC_X12Encoder::HandleEOD(CBC_EncoderContext* context,
 }
 
 int32_t CBC_X12Encoder::EncodeChar(wchar_t c, WideString* sb) {
-  if (c == '\r')
+  if (c == '\r') {
     *sb += (wchar_t)'\0';
-  else if (c == '*')
+  } else if (c == '*') {
     *sb += (wchar_t)'\1';
-  else if (c == '>')
+  } else if (c == '>') {
     *sb += (wchar_t)'\2';
-  else if (c == ' ')
+  } else if (c == ' ') {
     *sb += (wchar_t)'\3';
-  else if (FXSYS_IsDecimalDigit(c))
+  } else if (FXSYS_IsDecimalDigit(c)) {
     *sb += (wchar_t)(c - 48 + 4);
-  else if (FXSYS_IsUpperASCII(c))
+  } else if (FXSYS_IsUpperASCII(c)) {
     *sb += (wchar_t)(c - 65 + 14);
-  else
+  } else {
     return 0;
+  }
   return 1;
 }

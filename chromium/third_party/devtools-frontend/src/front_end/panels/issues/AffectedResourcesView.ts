@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
@@ -246,7 +247,7 @@ export abstract class AffectedResourcesView extends UI.TreeOutline.TreeElement {
 
   protected appendSourceLocation(
       element: HTMLElement,
-      sourceLocation: {url: string, scriptId?: Protocol.Runtime.ScriptId, lineNumber: number, columnNumber?: number}|
+      sourceLocation: {url: string, lineNumber: number, scriptId?: Protocol.Runtime.ScriptId, columnNumber?: number}|
       undefined,
       target: SDK.Target.Target|null|undefined): void {
     const sourceCodeLocation = document.createElement('td');

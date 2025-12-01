@@ -32,7 +32,6 @@
 #include <utility>
 
 #include "dawn/common/Assert.h"
-#include "dawn/common/BitSetIterator.h"
 #include "dawn/common/Log.h"
 #include "dawn/native/Pipeline.h"
 #include "dawn/native/TintUtils.h"
@@ -103,7 +102,7 @@ ResultOrError<Ref<ShaderModule>> ShaderModule::Create(
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
     ShaderModuleParseResult* parseResult,
-    OwnedCompilationMessages* compilationMessages) {
+    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
     Ref<ShaderModule> module = AcquireRef(new ShaderModule(device, descriptor, internalExtensions));
     DAWN_TRY(module->Initialize(parseResult, compilationMessages));
     return module;
@@ -114,8 +113,9 @@ ShaderModule::ShaderModule(Device* device,
                            std::vector<tint::wgsl::Extension> internalExtensions)
     : ShaderModuleBase(device, descriptor, std::move(internalExtensions)) {}
 
-MaybeError ShaderModule::Initialize(ShaderModuleParseResult* parseResult,
-                                    OwnedCompilationMessages* compilationMessages) {
+MaybeError ShaderModule::Initialize(
+    ShaderModuleParseResult* parseResult,
+    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
     return InitializeBase(parseResult, compilationMessages);
 }
 
@@ -140,6 +140,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     req.hlsl.disableSymbolRenaming = device->IsToggleEnabled(Toggle::DisableSymbolRenaming);
     req.hlsl.dumpShaders = device->IsToggleEnabled(Toggle::DumpShaders);
     req.hlsl.useTintIR = useTintIR;
+    req.hlsl.tintOptions.remapped_entry_point_name = device->GetIsolatedEntryPointName();
 
     req.bytecode.hasShaderF16Feature = device->HasFeature(Feature::ShaderF16);
     req.bytecode.compileFlags = compileFlags;
@@ -159,7 +160,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
         req.bytecode.dxcShaderProfile = device->GetDxcShaderProfiles()[stage];
     } else {
         req.bytecode.compiler = d3d::Compiler::FXC;
-        req.bytecode.d3dCompile = device->GetFunctions()->d3dCompile;
+        req.bytecode.d3dCompile = std::move(pD3DCompile{device->GetFunctions()->d3dCompile});
         req.bytecode.compilerVersion = D3D_COMPILER_VERSION;
         switch (stage) {
             case SingleShaderStage::Vertex:
@@ -183,7 +184,7 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     tint::hlsl::writer::Bindings bindings;
 
     const BindingInfoArray& moduleBindingInfo = entryPoint.bindings;
-    for (BindGroupIndex group : IterateBitSet(layout->GetBindGroupLayoutsMask())) {
+    for (BindGroupIndex group : layout->GetBindGroupLayoutsMask()) {
         const BindGroupLayout* bgl = ToBackend(layout->GetBindGroupLayout(group));
         const BindingGroupInfoMap& moduleGroupBindingInfo = moduleBindingInfo[group];
 
@@ -320,21 +321,15 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
         }
     }
 
-    std::optional<tint::ast::transform::SubstituteOverride::Config> substituteOverrideConfig;
-    if (!programmableStage.metadata->overrides.empty()) {
-        substituteOverrideConfig = BuildSubstituteOverridesTransformConfig(programmableStage);
-    }
-
-    auto tintProgram = GetTintProgram();
-    req.hlsl.inputProgram = &(tintProgram->program);
+    req.hlsl.shaderModuleHash = GetHash();
+    req.hlsl.inputProgram = UseTintProgram();
     req.hlsl.entryPointName = programmableStage.entryPoint.c_str();
     req.hlsl.stage = stage;
     if (!useTintIR) {
         req.hlsl.firstIndexOffsetRegisterSpace = layout->GetFirstIndexOffsetRegisterSpace();
         req.hlsl.firstIndexOffsetShaderRegister = layout->GetFirstIndexOffsetShaderRegister();
     }
-    req.hlsl.substituteOverrideConfig = std::move(substituteOverrideConfig);
-
+    req.hlsl.substituteOverrideConfig = BuildSubstituteOverridesTransformConfig(programmableStage);
     req.hlsl.tintOptions.disable_robustness = !device->IsRobustnessEnabled();
     req.hlsl.tintOptions.disable_workgroup_init =
         device->IsToggleEnabled(Toggle::DisableWorkgroupInit);
@@ -381,6 +376,8 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
         device->IsToggleEnabled(Toggle::DisablePolyfillsOnIntegerDivisonAndModulo);
     req.hlsl.tintOptions.polyfill_pack_unpack_4x8 =
         device->IsToggleEnabled(Toggle::D3D12PolyFillPackUnpack4x8);
+    req.hlsl.tintOptions.enable_integer_range_analysis =
+        device->IsToggleEnabled(Toggle::EnableIntegerRangeAnalysisInRobustness);
 
     req.hlsl.limits = LimitsForCompilationRequest::Create(device->GetLimits().v1);
     req.hlsl.adapterSupportedLimits =
@@ -388,11 +385,9 @@ ResultOrError<d3d::CompiledShader> ShaderModule::Compile(
     req.hlsl.maxSubgroupSize = device->GetAdapter()->GetPhysicalDevice()->GetSubgroupMaxSize();
 
     CacheResult<d3d::CompiledShader> compiledShader;
-    {
-        ScopedTintICEHandler scopedICEHandler(device);
-        DAWN_TRY_LOAD_OR_RUN(compiledShader, device, std::move(req), d3d::CompiledShader::FromBlob,
-                             d3d::CompileShader, "D3D12.CompileShader");
-    }
+    DAWN_TRY_LOAD_OR_RUN(compiledShader, device, std::move(req),
+                         d3d::CompiledShader::FromValidatedBlob, d3d::CompileShader,
+                         "D3D12.CompileShader");
 
     if (device->IsToggleEnabled(Toggle::DumpShaders)) {
         if (device->IsToggleEnabled(Toggle::UseDXC)) {

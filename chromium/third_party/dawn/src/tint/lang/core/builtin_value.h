@@ -59,6 +59,7 @@ enum class BuiltinValue : uint8_t {
     kPosition,
     kSampleIndex,
     kSampleMask,
+    kSubgroupId,
     kSubgroupInvocationId,
     kSubgroupSize,
     kVertexIndex,
@@ -72,7 +73,8 @@ std::string_view ToString(BuiltinValue value);
 /// @param out the stream to write to
 /// @param value the BuiltinValue
 /// @returns @p out so calls can be chained
-template <typename STREAM, typename = traits::EnableIfIsOStream<STREAM>>
+template <typename STREAM>
+    requires(traits::IsOStream<STREAM>)
 auto& operator<<(STREAM& out, BuiltinValue value) {
     return out << ToString(value);
 }
@@ -86,8 +88,9 @@ constexpr std::string_view kBuiltinValueStrings[] = {
     "clip_distances",         "frag_depth",     "front_facing",
     "global_invocation_id",   "instance_index", "local_invocation_id",
     "local_invocation_index", "num_workgroups", "position",
-    "sample_index",           "sample_mask",    "subgroup_invocation_id",
-    "subgroup_size",          "vertex_index",   "workgroup_id",
+    "sample_index",           "sample_mask",    "subgroup_id",
+    "subgroup_invocation_id", "subgroup_size",  "vertex_index",
+    "workgroup_id",
 };
 
 }  // namespace tint::core

@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -93,7 +95,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
   private resourceTreeModel: SDK.ResourceTreeModel.ResourceTreeModel|null;
   private networkManager: SDK.NetworkManager.NetworkManager|null;
   private readonly inputModel: InputModel|null;
-  private shortcuts: {[x: number]: (arg0?: Event|undefined) => boolean};
+  private shortcuts: Record<number, (arg0?: Event|undefined) => boolean>;
   private scrollOffsetX: number;
   private scrollOffsetY: number;
   private screenZoom: number;
@@ -146,9 +148,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
 
     this.setMinimumSize(150, 150);
 
-    this.shortcuts = {} as {
-      [x: number]: (arg0?: Event|undefined) => boolean,
-    };
+    this.shortcuts = {};
     this.scrollOffsetX = 0;
     this.scrollOffsetY = 0;
     this.screenZoom = 1;
@@ -658,7 +658,7 @@ export class ScreencastView extends UI.Widget.VBox implements SDK.OverlayModel.H
     const size = 32;
     pattern.width = size * 2;
     pattern.height = size * 2;
-    const pctx = pattern.getContext('2d') as CanvasRenderingContext2D;
+    const pctx = pattern.getContext('2d', {willReadFrequently: true}) as CanvasRenderingContext2D;
 
     pctx.fillStyle = 'var(--sys-color-neutral-outline)';
     pctx.fillRect(0, 0, size * 2, size * 2);

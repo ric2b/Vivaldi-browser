@@ -8,7 +8,6 @@
 
 #include "base/containers/contains.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/state_transitions.h"
 #include "third_party/blink/public/common/features.h"
@@ -330,8 +329,7 @@ void DocumentSpeculationRules::AddRuleSet(SpeculationRuleSet* rule_set) {
 
 void DocumentSpeculationRules::RemoveRuleSet(SpeculationRuleSet* rule_set) {
   auto removed = std::ranges::remove(rule_sets_, rule_set);
-  CHECK(!removed.empty(), base::NotFatalUntil::M130)
-      << "rule set was removed without existing";
+  CHECK(!removed.empty()) << "rule set was removed without existing";
   rule_sets_.erase(removed.begin(), removed.end());
   if (rule_set->has_document_rule()) {
     InvalidateAllLinks();
@@ -663,23 +661,19 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
               action == mojom::blink::SpeculationAction::kPrefetch);
 
         Vector<WTF::String> tags;
-        if (RuntimeEnabledFeatures::SpeculationRulesTagEnabled(
-                document.domWindow())) {
-          if (rule->rule_tag()) {
-            tags.push_back(rule->rule_tag());
-          }
-          if (rule->ruleset_tag()) {
-            tags.push_back(rule->ruleset_tag());
-          }
-
-          // Put the default value.
-          if (tags.empty()) {
-            tags.push_back(g_null_atom);
-          } else {
-            // Record that the valid tag is specified by the page.
-            UseCounter::Count(GetSupplementable(),
-                              WebFeature::kSpeculationRulesTags);
-          }
+        if (rule->rule_tag()) {
+          tags.push_back(rule->rule_tag());
+        }
+        if (rule->ruleset_tag()) {
+          tags.push_back(rule->ruleset_tag());
+        }
+        // Put the default value.
+        if (tags.empty()) {
+          tags.push_back(g_null_atom);
+        } else {
+          // Record that the valid tag is specified by the page.
+          UseCounter::Count(GetSupplementable(),
+                            WebFeature::kSpeculationRulesTags);
         }
 
         candidates.push_back(MakeGarbageCollected<SpeculationCandidate>(
@@ -705,19 +699,16 @@ void DocumentSpeculationRules::UpdateSpeculationCandidates() {
           rule_set->prefetch_with_subresources_rules());
     }
 
-    // If kPrerender2 is enabled, collect all prerender speculation rules.
-    if (RuntimeEnabledFeatures::Prerender2Enabled(execution_context)) {
-      push_candidates(mojom::blink::SpeculationAction::kPrerender, rule_set,
-                      rule_set->prerender_rules());
+    push_candidates(mojom::blink::SpeculationAction::kPrerender, rule_set,
+                    rule_set->prerender_rules());
 
-      // Set the flag to evict the cached data of Session Storage when the
-      // document is frozen or unload to avoid reusing old data in the cache
-      // after the session storage has been modified by another renderer
-      // process. See crbug.com/1215680 for more details.
-      LocalFrame* frame = document.GetFrame();
-      if (frame && frame->IsMainFrame()) {
-        frame->SetEvictCachedSessionStorageOnFreezeOrUnload();
-      }
+    // Set the flag to evict the cached data of Session Storage when the
+    // document is frozen or unload to avoid reusing old data in the cache
+    // after the session storage has been modified by another renderer process.
+    // See crbug.com/1215680 for more details.
+    LocalFrame* frame = document.GetFrame();
+    if (frame && frame->IsMainFrame()) {
+      frame->SetEvictCachedSessionStorageOnFreezeOrUnload();
     }
   }
 
@@ -783,8 +774,8 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
   while (!pending_links_.empty()) {
     auto it = pending_links_.begin();
     HTMLAnchorElementBase* link = *it;
-    HeapVector<Member<SpeculationCandidate>>* link_candidates =
-        MakeGarbageCollected<HeapVector<Member<SpeculationCandidate>>>();
+    GCedHeapVector<Member<SpeculationCandidate>>* link_candidates =
+        MakeGarbageCollected<GCedHeapVector<Member<SpeculationCandidate>>>();
     Document& document = *GetSupplementable();
     ExecutionContext* execution_context = document.GetExecutionContext();
     CHECK(execution_context);
@@ -877,10 +868,8 @@ void DocumentSpeculationRules::AddLinkBasedSpeculationCandidates(
             rule_set, rule_set->prefetch_with_subresources_rules());
       }
 
-      if (RuntimeEnabledFeatures::Prerender2Enabled(execution_context)) {
-        push_link_candidates(mojom::blink::SpeculationAction::kPrerender,
-                             rule_set, rule_set->prerender_rules());
-      }
+      push_link_candidates(mojom::blink::SpeculationAction::kPrerender,
+                           rule_set, rule_set->prerender_rules());
     }
 
     if (!link_candidates->empty()) {
@@ -964,7 +953,7 @@ void DocumentSpeculationRules::RemoveLink(HTMLAnchorElementBase* link) {
     return;
   }
   auto it = pending_links_.find(link);
-  CHECK(it != pending_links_.end(), base::NotFatalUntil::M130);
+  CHECK(it != pending_links_.end());
   pending_links_.erase(it);
 }
 

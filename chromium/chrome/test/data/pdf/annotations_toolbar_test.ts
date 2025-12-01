@@ -32,7 +32,7 @@ const tests = [
   },
   function testEnteringAnnotationsModeShowsAnnotations() {
     const toolbar = createToolbar();
-    chrome.test.assertEq(AnnotationMode.NONE, toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.OFF, toolbar.annotationMode);
 
     // Hide annotations.
     toolbar.shadowRoot.querySelector<HTMLElement>(
@@ -46,7 +46,7 @@ const tests = [
   },
   async function testEnteringAnnotationsModeDisablesPresentationMode() {
     const toolbar = createToolbar();
-    chrome.test.assertEq(AnnotationMode.NONE, toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.OFF, toolbar.annotationMode);
 
     toolbar.setAnnotationMode(AnnotationMode.DRAW);
     // This is normally done by the parent in response to the event fired by
@@ -58,7 +58,7 @@ const tests = [
   },
   async function testEnteringAnnotationsModeDisablesTwoUp() {
     const toolbar = createToolbar();
-    chrome.test.assertEq(AnnotationMode.NONE, toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.OFF, toolbar.annotationMode);
 
     toolbar.setAnnotationMode(AnnotationMode.DRAW);
     // This is normally done by the parent in response to the event fired by
@@ -71,12 +71,15 @@ const tests = [
   async function testRotateOrTwoUpViewTriggersDialog() {
     const toolbar = createToolbar();
     toolbar.annotationAvailable = true;
-    toolbar.strings = {'pdfAnnotationsEnabled': true, 'printingEnabled': true};
+    toolbar.strings = {
+      'pdfInk1AnnotationsEnabled': true,
+      'printingEnabled': true,
+    };
     toolbar.rotated = false;
     toolbar.twoUpViewEnabled = false;
 
     await microtasksFinished();
-    chrome.test.assertEq(AnnotationMode.NONE, toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.OFF, toolbar.annotationMode);
 
     // If rotation is enabled clicking the button shows the dialog.
     toolbar.rotated = true;

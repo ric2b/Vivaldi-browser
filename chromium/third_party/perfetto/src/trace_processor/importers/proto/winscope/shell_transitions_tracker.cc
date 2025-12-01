@@ -14,25 +14,117 @@
  * limitations under the License.
  */
 
-#include "shell_transitions_tracker.h"
-#include "perfetto/ext/base/crash_keys.h"
-#include "src/trace_processor/importers/common/process_tracker.h"
-#include "src/trace_processor/storage/metadata.h"
+#include "src/trace_processor/importers/proto/winscope/shell_transitions_tracker.h"
+#include <cstdint>
 #include "src/trace_processor/types/trace_processor_context.h"
-#include "src/trace_processor/util/winscope_proto_mapping.h"
 
 namespace perfetto {
 namespace trace_processor {
+
 ShellTransitionsTracker::ShellTransitionsTracker(TraceProcessorContext* context)
     : context_(context) {}
 
 ShellTransitionsTracker::~ShellTransitionsTracker() = default;
 
-tables::WindowManagerShellTransitionsTable::Id
-ShellTransitionsTracker::InternTransition(int32_t transition_id) {
-  auto pos = transition_id_to_row_mapping_.find(transition_id);
-  if (pos != transition_id_to_row_mapping_.end()) {
-    return pos->second;
+ArgsTracker::BoundInserter ShellTransitionsTracker::AddArgsTo(
+    int32_t transition_id) {
+  auto* transition_info = GetOrInsertTransition(transition_id);
+
+  return transition_info->args_tracker.AddArgsTo(transition_info->row_id);
+}
+
+void ShellTransitionsTracker::SetTimestamp(int32_t transition_id,
+                                           int64_t timestamp_ns) {
+  auto row_ref = GetRowReference(transition_id);
+  if (row_ref.has_value()) {
+    auto row = row_ref.value();
+    row.set_ts(timestamp_ns);
+  }
+}
+
+void ShellTransitionsTracker::SetTimestampIfEmpty(int32_t transition_id,
+                                                  int64_t timestamp_ns) {
+  auto row_ref = GetRowReference(transition_id);
+  if (row_ref.has_value()) {
+    auto row = row_ref.value();
+    if (!row.ts()) {
+      row.set_ts(timestamp_ns);
+    }
+  }
+}
+
+void ShellTransitionsTracker::SetTransitionType(int32_t transition_id,
+                                                int32_t transition_type) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    row.value().set_transition_type(static_cast<uint32_t>(transition_type));
+  }
+}
+
+void ShellTransitionsTracker::SetSendTime(int32_t transition_id,
+                                          int64_t timestamp_ns) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    row.value().set_send_time_ns(timestamp_ns);
+  }
+}
+
+void ShellTransitionsTracker::SetDispatchTime(int32_t transition_id,
+                                              int64_t timestamp_ns) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    row.value().set_dispatch_time_ns(timestamp_ns);
+  }
+}
+
+void ShellTransitionsTracker::TrySetDurationFromFinishTime(
+    int32_t transition_id,
+    int64_t finish_time_ns) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    auto send_time_ns = row->send_time_ns();
+    if (send_time_ns) {
+      row.value().set_duration_ns(finish_time_ns - send_time_ns.value());
+    } else {
+      auto transition = GetOrInsertTransition(transition_id);
+      transition->finish_time_ns = finish_time_ns;
+    }
+  }
+}
+
+void ShellTransitionsTracker::SetHandler(int32_t transition_id,
+                                         int64_t handler) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    row.value().set_handler(handler);
+  }
+}
+
+void ShellTransitionsTracker::SetFlags(int32_t transition_id, int32_t flags) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    row.value().set_flags(static_cast<uint32_t>(flags));
+  }
+}
+
+void ShellTransitionsTracker::SetStatus(int32_t transition_id,
+                                        StringPool::Id status) {
+  auto row = GetRowReference(transition_id);
+  if (row.has_value()) {
+    row.value().set_status(status);
+  }
+}
+
+void ShellTransitionsTracker::Flush() {
+  // The destructor of ArgsTracker will flush the args to the tables.
+  transitions_infos_.clear();
+}
+
+ShellTransitionsTracker::TransitionInfo*
+ShellTransitionsTracker::GetOrInsertTransition(int32_t transition_id) {
+  auto pos = transitions_infos_.find(transition_id);
+  if (pos != transitions_infos_.end()) {
+    return &pos->second;
   }
 
   auto* window_manager_shell_transitions_table =
@@ -42,9 +134,26 @@ ShellTransitionsTracker::InternTransition(int32_t transition_id) {
   row.transition_id = transition_id;
   auto row_id = window_manager_shell_transitions_table->Insert(row).id;
 
-  transition_id_to_row_mapping_.insert({transition_id, row_id});
+  transitions_infos_.insert(
+      {transition_id, TransitionInfo{row_id, ArgsTracker(context_)}});
 
-  return row_id;
+  pos = transitions_infos_.find(transition_id);
+  return &pos->second;
 }
+
+std::optional<tables::WindowManagerShellTransitionsTable::RowReference>
+ShellTransitionsTracker::GetRowReference(int32_t transition_id) {
+  auto pos = transitions_infos_.find(transition_id);
+  if (pos == transitions_infos_.end()) {
+    context_->storage->IncrementStats(
+        stats::winscope_shell_transitions_parse_errors);
+    return std::nullopt;
+  }
+
+  auto* window_manager_shell_transitions_table =
+      context_->storage->mutable_window_manager_shell_transitions_table();
+  return window_manager_shell_transitions_table->FindById(pos->second.row_id);
+}
+
 }  // namespace trace_processor
 }  // namespace perfetto

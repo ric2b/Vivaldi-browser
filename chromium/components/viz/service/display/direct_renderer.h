@@ -41,7 +41,6 @@ class FilterOperations;
 
 namespace gfx {
 class ColorSpace;
-class RRectF;
 }  // namespace gfx
 
 namespace gpu {
@@ -227,10 +226,6 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
     bool scanout_dcomp_surface = false;
   };
 
-  static gfx::RectF QuadVertexRect();
-  static void QuadRectTransform(gfx::Transform* quad_rect_transform,
-                                const gfx::Transform& quad_transform,
-                                const gfx::RectF& quad_rect);
   // Returns a transform that maps the the draw rect (i.e. the render pass
   // output rect) to the device space (i.e. buffer space).
   gfx::AxisTransform2d CalculateTargetToDeviceTransform(
@@ -276,7 +271,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
       AggregatedRenderPassId render_pass_id) const;
   const cc::FilterOperations* BackdropFiltersForPass(
       AggregatedRenderPassId render_pass_id) const;
-  const std::optional<gfx::RRectF> BackdropFilterBoundsForPass(
+  const std::optional<SkPath> BackdropFilterBoundsForPass(
       AggregatedRenderPassId render_pass_id) const;
 
   virtual void SetRenderPassBackingDrawnRect(
@@ -315,9 +310,10 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   virtual void BeginDrawingFrame() = 0;
   virtual void FinishDrawingFrame() = 0;
   // If a pass contains a single tile draw quad and can be drawn without
-  // a render pass (e.g. applying a filter directly to the tile quad)
-  // return that quad, otherwise return null.
-  virtual const DrawQuad* CanPassBeDrawnDirectly(
+  // a render pass (e.g. applying a filter directly to the tile quad) return
+  // that quad. If the render pass itself is empty, but may have backdrop
+  // filters, return nullptr. Otherwise, return nullopt.
+  virtual std::optional<const DrawQuad*> CanPassBeDrawnDirectly(
       const AggregatedRenderPass* pass,
       const RenderPassRequirements& requirements);
   virtual void EnsureScissorTestDisabled() = 0;
@@ -368,11 +364,6 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   // Whether partial swap can be used.
   bool use_partial_swap_ = false;
 
-  // Whether render pass drawn rect functionality can be used. This means we
-  // will be tracking the drawn area of a render pass to determine what needs to
-  // be redrawn every frame.
-  bool use_render_pass_drawn_rect_ = false;
-
   // A map from RenderPass id to the single quad present in and replacing the
   // RenderPass. The DrawQuads are owned by their RenderPasses, which outlive
   // the drawn frame, so it is safe to store these pointers until the end of
@@ -388,7 +379,7 @@ class VIZ_SERVICE_EXPORT DirectRenderer {
   base::flat_map<AggregatedRenderPassId,
                  raw_ptr<cc::FilterOperations, CtnExperimental>>
       render_pass_backdrop_filters_;
-  base::flat_map<AggregatedRenderPassId, std::optional<gfx::RRectF>>
+  base::flat_map<AggregatedRenderPassId, std::optional<SkPath>>
       render_pass_backdrop_filter_bounds_;
   base::flat_map<AggregatedRenderPassId, gfx::Rect>
       backdrop_filter_output_rects_;

@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use crabby_avif::image::*;
+use crabby_avif::utils::writer::y4m::Y4MWriter;
+use crabby_avif::utils::writer::Writer;
 use crabby_avif::*;
 
 use std::env;
@@ -22,11 +24,6 @@ use std::io::BufReader;
 use std::io::Read;
 use std::process::Command;
 use tempfile::NamedTempFile;
-
-#[path = "../examples/writer/mod.rs"]
-mod writer;
-
-use writer::Writer;
 
 // See README.md for instructions on how to set up the dependencies for
 // running the conformance tests.
@@ -109,7 +106,7 @@ fn get_tempfile() -> String {
 }
 
 fn write_y4m(image: &Image) -> String {
-    let mut y4m = writer::y4m::Y4MWriter::default();
+    let mut y4m = Y4MWriter::default();
     let filename = get_tempfile();
     let mut file = File::create(&filename).expect("unable to open output file");
     y4m.write_frame(&mut file, image)
@@ -148,13 +145,14 @@ fn compare_files(file1: &String, file2: &String) -> bool {
     true
 }
 
+#[allow(clippy::zero_prefixed_literal)]
 #[test_case::test_matrix(0usize..172)]
 fn test_conformance(index: usize) {
     let expected_info = &EXPECTED_INFOS[index];
     let filename = get_test_file(expected_info.filename);
     let mut decoder = decoder::Decoder::default();
     decoder.settings.strictness = decoder::Strictness::None;
-    let _ = decoder.set_io_file(&filename).expect("Failed to set IO");
+    decoder.set_io_file(&filename).expect("Failed to set IO");
     let res = decoder.parse();
     assert!(res.is_ok());
     assert_eq!(
@@ -166,7 +164,7 @@ fn test_conformance(index: usize) {
         decoder.io_stats().alpha_obu_size
     );
     let image = decoder.image().expect("image was none");
-    verify_info(expected_info, &image);
+    verify_info(expected_info, image);
     let res = decoder.next_image();
     assert!(res.is_ok());
     let image = decoder.image().expect("image was none");
@@ -174,7 +172,7 @@ fn test_conformance(index: usize) {
     // Link-U 422 files have wrong subsampling in the Avif header(decoded one
     // is right).
     if !filename.contains("Link-U") || !filename.contains("yuv422") {
-        verify_info(expected_info, &image);
+        verify_info(expected_info, image);
     }
 
     // Write y4m.

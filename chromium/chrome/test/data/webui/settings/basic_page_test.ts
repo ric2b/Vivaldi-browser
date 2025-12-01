@@ -525,7 +525,7 @@ suite('Performance', () => {
   });
 });
 
-suite('ExperimentalAdvanced', () => {
+suite('AiSections', () => {
   let page: SettingsBasicPageElement;
 
   function createBasicPage() {
@@ -535,60 +535,62 @@ suite('ExperimentalAdvanced', () => {
     flush();
   }
 
-  test('sectionNotVisible', function() {
-    loadTimeData.overrideValues({showAdvancedFeaturesMainControl: false});
-    resetRouterForTesting();
-
-    createBasicPage();
-    const sectionElement =
-        page.shadowRoot!.querySelector('settings-section[section=ai]');
-    assertFalse(!!sectionElement);
-  });
-
-  test('sectionVisible', function() {
-    loadTimeData.overrideValues({showAdvancedFeaturesMainControl: true});
-    resetRouterForTesting();
-
-    createBasicPage();
-    const sectionElement =
-        page.shadowRoot!.querySelector('settings-section[section=ai]');
-    assertTrue(!!sectionElement);
-  });
-
-  test('infoCardNotVisible', function() {
+  test('showAiPageHidesAiFeaturesSection', function() {
     loadTimeData.overrideValues({
-      showAdvancedFeaturesMainControl: true,
-      enableAiSettingsPageRefresh: false,
+      showAiPage: false,
+      showAiPageAiFeatureSection: true,
     });
     resetRouterForTesting();
 
     createBasicPage();
-    const sectionElement =
-        page.shadowRoot!.querySelector('settings-section[section=aiInfoCard]');
-    assertFalse(!!sectionElement);
-  });
-
-  test('infoCardVisible', function() {
-    loadTimeData.overrideValues({
-      showAdvancedFeaturesMainControl: true,
-      enableAiSettingsPageRefresh: true,
-    });
-    resetRouterForTesting();
-
-    createBasicPage();
-    const sectionElement =
+    const infoCardSectionElement =
         page.shadowRoot!.querySelector<SettingsSectionElement>(
             'settings-section[section=aiInfoCard]');
-    assertTrue(!!sectionElement);
+    assertFalse(!!infoCardSectionElement);
+
+    const aiFeaturesSectionElement =
+        page.shadowRoot!.querySelector('settings-section[section=ai]');
+    assertFalse(!!aiFeaturesSectionElement);
+  });
+
+  test('aiFeaturesSectionNotVisible', function() {
+    loadTimeData.overrideValues({
+      showAiPage: true,
+      showAiPageAiFeatureSection: false,
+    });
+    resetRouterForTesting();
+
+    createBasicPage();
+    const aiFeaturesSectionElement =
+        page.shadowRoot!.querySelector('settings-section[section=ai]');
+    assertFalse(!!aiFeaturesSectionElement);
+  });
+
+  test('aiFeaturesSectionVisible', function() {
+    loadTimeData.overrideValues({
+      showAiPage: true,
+      showAiPageAiFeatureSection: true,
+    });
+    resetRouterForTesting();
+
+    createBasicPage();
+    const aiFeaturesSectionElement =
+        page.shadowRoot!.querySelector('settings-section[section=ai]');
+    assertTrue(!!aiFeaturesSectionElement);
+
+    const infoCardSectionElement =
+        page.shadowRoot!.querySelector<SettingsSectionElement>(
+            'settings-section[section=aiInfoCard]');
+    assertTrue(!!infoCardSectionElement);
     assertEquals(
-        routes.AI.section, sectionElement.getAttribute('nest-under-section'));
+        routes.AI.section,
+        infoCardSectionElement.getAttribute('nest-under-section'));
   });
 
   // <if expr="enable_glic">
   test('AIPageGlicSectionVisible', function() {
     loadTimeData.overrideValues({
-      showAdvancedFeaturesMainControl: true,
-      enableAiSettingsPageRefresh: true,
+      showAiPage: true,
       showGlicSettings: true,
     });
     resetRouterForTesting();
@@ -600,12 +602,19 @@ suite('ExperimentalAdvanced', () => {
     assertTrue(!!sectionElement);
     assertEquals(
         routes.AI.section, sectionElement.getAttribute('nest-under-section'));
+
+    const infoCardSectionElement =
+        page.shadowRoot!.querySelector<SettingsSectionElement>(
+            'settings-section[section=aiInfoCard]');
+    assertTrue(!!infoCardSectionElement);
+    assertEquals(
+        routes.AI.section,
+        infoCardSectionElement.getAttribute('nest-under-section'));
   });
 
   test('AIPageGlicSectionNotVisible', function() {
     loadTimeData.overrideValues({
-      showAdvancedFeaturesMainControl: true,
-      enableAiSettingsPageRefresh: true,
+      showAiPage: true,
       showGlicSettings: false,
     });
     resetRouterForTesting();

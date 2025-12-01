@@ -5,19 +5,18 @@
 
 import collections
 from collections.abc import Iterable
+import dataclasses
 import enum
 import functools
 import json
 import logging
 from typing import Any
 
-import dataclasses  # Built-in, but pylint gives an ordering false positive
+from telemetry.internal.platform import gpu_device
 
 from gpu_tests import common_typing as ct
 from gpu_tests import constants
 from gpu_tests import gpu_helper
-
-from telemetry.internal.platform import gpu_device
 
 
 # These can be changed to enum.StrEnum once Python 3.11+ is used.
@@ -120,7 +119,7 @@ class GpuOverlayConfig:
     if set(self_dict.keys()) != set(other_dict.keys()):
       return False
 
-    return all(self_dict[k] == other_dict[k] for k in self_dict)
+    return all(v == other_dict[k] for k, v in self_dict.items())
 
   def WithDirectComposition(self) -> 'GpuOverlayConfig':
     """Enables direct composition support via software."""
@@ -393,13 +392,16 @@ class GpuOverlayConfig:
     return codec in self._zero_copy_config.supported_codecs
 
 
-BasicDirectCompositionConfig = lambda: (GpuOverlayConfig().
-                                        WithDirectComposition())
-AllHardwareSupportDirectCompositionConfig = lambda: (
-    BasicDirectCompositionConfig()\
-    .WithHardwareNV12Support()\
-    .WithHardwareYUY2Support()\
-    .WithHardwareBGRA8Support())
+def BasicDirectCompositionConfig() -> GpuOverlayConfig:
+  return GpuOverlayConfig().WithDirectComposition()
+
+
+def AllHardwareSupportDirectCompositionConfig() -> GpuOverlayConfig:
+  return BasicDirectCompositionConfig()\
+            .WithHardwareNV12Support()\
+            .WithHardwareYUY2Support()\
+            .WithHardwareBGRA8Support()
+
 
 OVERLAY_CONFIGS = {
     constants.GpuVendor.AMD: {
@@ -415,7 +417,9 @@ OVERLAY_CONFIGS = {
                         ZeroCopyCodec.VP9])),
         0x7480: BasicDirectCompositionConfig()\
                 .WithHardwareNV12Support(supported_rotations=[
-                    VideoRotation.ROT180])\
+                    VideoRotation.ROT90,
+                    VideoRotation.ROT180,
+                    VideoRotation.ROT270])\
                 .WithZeroCopyConfig(ZeroCopyConfig(
                     supports_scaled_video=True,
                     supported_codecs=[
@@ -459,7 +463,9 @@ OVERLAY_CONFIGS = {
                 .WithHardwareNV12Support(driver_conditionals=[
                     DriverConditional('ge', '31.0.15.4601')])\
                 .WithHardwareYUY2Support(driver_conditionals=[
-                    DriverConditional('ge', '31.0.15.4601')])
+                    DriverConditional('ge', '31.0.15.4601')])\
+                .WithHardwareBGRA8Support(driver_conditionals=[
+                    DriverConditional('ge', '32.0.15.7602')])\
                 .WithForceComposedBGRA8(driver_conditionals=[
                     DriverConditional('lt', '31.0.15.4601')])\
                 .WithZeroCopyConfig(ZeroCopyConfig(

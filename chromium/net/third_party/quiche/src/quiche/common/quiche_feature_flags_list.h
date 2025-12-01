@@ -9,6 +9,7 @@
 #if defined(QUICHE_FLAG)
 
 QUICHE_FLAG(bool, quiche_reloadable_flag_enable_h3_origin_frame, false, true, "If true, enables support for parsing HTTP/3 ORIGIN frames.")
+QUICHE_FLAG(bool, quiche_reloadable_flag_enable_tls_trust_anchor_ids, false, false, "When true, QUIC client and server will support TLS Trust Anchor IDs.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_act_upon_invalid_header, true, true, "If true, reject or send error response code upon receiving invalid request or response headers.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_add_stream_info_to_idle_close_detail, false, true, "If true, include stream information in idle timeout connection close detail.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_allow_client_enabled_bbr_v2, true, true, "If true, allow client to enable BBRv2 on server via connection option 'B2ON'.")
@@ -35,6 +36,9 @@ QUICHE_FLAG(bool, quiche_reloadable_flag_quic_enable_server_on_wire_ping, true, 
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_enable_version_rfcv2, false, false, "When true, support RFC9369.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_fin_before_completed_http_headers, false, true, "If true, close the connection with error if FIN is received before finish receiving the whole HTTP headers.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_fix_timeouts, true, true, "If true, postpone setting handshake timeout to infinite to handshake complete.")
+QUICHE_FLAG(bool, quiche_reloadable_flag_quic_heapless_key_derivation, false, false, "If true, QUIC key derivation uses heapless crypto utils.")
+QUICHE_FLAG(bool, quiche_reloadable_flag_quic_heapless_obfuscator, false, true, "If true, generates QUIC initial obfuscators with no heap allocations.")
+QUICHE_FLAG(bool, quiche_reloadable_flag_quic_heapless_static_parser, false, false, "If true, stops parsing immediately on unknown version, to avoid a potential malloc when parsing the connection ID")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_ignore_gquic_probing, true, true, "If true, QUIC server will not respond to gQUIC probing packet(PING + PADDING) but treat it as a regular packet.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_limit_new_streams_per_loop_2, true, true, "If true, when the peer sends connection options \\\'SLP1\\\', \\\'SLP2\\\' and \\\'SLPF\\\', internet facing GFEs will only allow a limited number of new requests to be processed per event loop, and postpone the rest to the following event loops. Also guard QuicConnection to iterate through all decrypters at each encryption level to get cipher id for a request.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_no_path_degrading_before_handshake_confirmed, true, true, "If true, an endpoint does not detect path degrading or blackholing until handshake gets confirmed.")
@@ -53,12 +57,10 @@ QUICHE_FLAG(bool, quiche_reloadable_flag_quic_require_handshake_confirmation, tr
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_test_peer_addr_change_after_normalize, false, false, "If true, QuicConnection::ProcessValidatedPacket will use normalized address to test peer address changes.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_testonly_default_false, false, false, "A testonly reloadable flag that will always default to false.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_testonly_default_true, true, true, "A testonly reloadable flag that will always default to true.")
-QUICHE_FLAG(bool, quiche_reloadable_flag_quic_use_alarm_multiplexer, true, true, "Manages all of the connection alarms via QuicAlarmMultiplexer.")
 QUICHE_FLAG(bool, quiche_reloadable_flag_quic_use_received_client_addresses_cache, true, true, "If true, use a LRU cache to record client addresses of packets received on server's original address.")
 QUICHE_FLAG(bool, quiche_restart_flag_quic_support_release_time_for_gso, false, false, "If true, QuicGsoBatchWriter will support release time if it is available and the process has the permission to do so.")
 QUICHE_FLAG(bool, quiche_restart_flag_quic_testonly_default_false, false, false, "A testonly restart flag that will always default to false.")
 QUICHE_FLAG(bool, quiche_restart_flag_quic_testonly_default_true, true, true, "A testonly restart flag that will always default to true.")
-QUICHE_FLAG(bool, quiche_restart_flag_quic_use_one_map_in_time_wait_list, true, true, "If true, use a single connection ID data map in time wait list manager.")
 
 #endif
 // clang-format on

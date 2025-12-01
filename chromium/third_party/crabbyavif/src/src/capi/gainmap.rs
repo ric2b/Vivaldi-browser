@@ -16,7 +16,7 @@ use super::image::*;
 use super::io::*;
 use super::types::*;
 
-use crate::decoder::gainmap::*;
+use crate::gainmap::*;
 use crate::image::YuvRange;
 use crate::utils::*;
 use crate::*;

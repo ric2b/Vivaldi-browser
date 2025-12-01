@@ -29,7 +29,7 @@ class TlsWriteBuffer {
 
   // Returns a subset of the readable region of data. At time of reading, more
   // data may be available for reading than what is represented in this Span.
-  ByteView GetReadableRegion();
+  ByteView GetReadableRegion() const;
 
   // Marks the provided number of bytes as consumed by the consumer thread.
   void Consume(size_t byte_count);

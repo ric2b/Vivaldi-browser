@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/authentication/ui_bundled/account_settings_presenter.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view_configurator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/cells/signin_promo_view_consumer.h"
+#import "ios/chrome/browser/authentication/ui_bundled/change_profile/change_profile_bookmarks_continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/bookmark_utils_ios.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
@@ -26,8 +27,8 @@
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 
-@interface BookmarkPromoController () <SigninPromoViewConsumer,
-                                       IdentityManagerObserverBridgeDelegate>
+@interface BookmarkPromoController () <IdentityManagerObserverBridgeDelegate,
+                                       SigninPromoViewConsumer>
 
 @end
 
@@ -57,16 +58,20 @@
         std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
                                                                 self);
     _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
-         initWithIdentityManager:identityManager
-           accountManagerService:ChromeAccountManagerServiceFactory::
-                                     GetForProfile(profile)
-                     authService:AuthenticationServiceFactory::GetForProfile(
-                                     profile)
-                     prefService:profile->GetPrefs()
-                     syncService:syncService
-                     accessPoint:signin_metrics::AccessPoint::kBookmarkManager
-                 signinPresenter:signinPresenter
-        accountSettingsPresenter:accountSettingsPresenter];
+                  initWithIdentityManager:identityManager
+                    accountManagerService:ChromeAccountManagerServiceFactory::
+                                              GetForProfile(profile)
+                              authService:AuthenticationServiceFactory::
+                                              GetForProfile(profile)
+                              prefService:profile->GetPrefs()
+                              syncService:syncService
+                              accessPoint:signin_metrics::AccessPoint::
+                                              kBookmarkManager
+                          signinPresenter:signinPresenter
+                 accountSettingsPresenter:accountSettingsPresenter
+        changeProfileContinuationProvider:base::BindRepeating([]() {
+          return CreateChangeProfileBookmarksContinuation();
+        })];
     _signinPromoViewMediator.consumer = self;
     _signinPromoViewMediator.dataTypeToWaitForInitialSync =
         syncer::DataType::BOOKMARKS;
@@ -138,6 +143,12 @@
 
   _signinPromoViewMediator.signinPromoAction = signinPromoAction.value();
   self.shouldShowSigninPromo = YES;
+}
+
+#pragma mark - Property
+
+- (BOOL)signinInProgress {
+  return _signinPromoViewMediator.signinInProgress;
 }
 
 #pragma mark - IdentityManagerObserverBridgeDelegate

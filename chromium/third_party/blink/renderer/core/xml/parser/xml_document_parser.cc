@@ -24,11 +24,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "third_party/blink/renderer/core/xml/parser/xml_document_parser.h"
 
 #include <libxml/parser.h>
@@ -41,6 +36,7 @@
 #include <type_traits>
 
 #include "base/auto_reset.h"
+#include "base/compiler_specific.h"
 #include "base/containers/heap_array.h"
 #include "base/numerics/safe_conversions.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
@@ -88,6 +84,7 @@
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 #include "third_party/blink/renderer/platform/wtf/text/utf8.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
@@ -406,7 +403,6 @@ void XMLDocumentParser::HandleError(XMLErrors::ErrorType type,
 }
 
 void XMLDocumentParser::CreateLeafTextNodeIfNeeded() {
-  is_start_of_new_chunk_ = false;
   if (leaf_text_node_)
     return;
 
@@ -419,7 +415,6 @@ bool XMLDocumentParser::UpdateLeafTextNode() {
   if (IsStopped())
     return false;
 
-  is_start_of_new_chunk_ = false;
   if (!leaf_text_node_)
     return true;
 
@@ -585,15 +580,11 @@ static void SwitchEncoding(xmlParserCtxtPtr ctxt, bool is_8bit) {
 }
 
 static void ParseChunk(xmlParserCtxtPtr ctxt, const String& chunk) {
-  bool is_8bit = chunk.Is8Bit();
   // Reset the encoding for each chunk to reflect if it is Latin-1 or UTF-16.
-  SwitchEncoding(ctxt, is_8bit);
-  if (is_8bit)
-    xmlParseChunk(ctxt, reinterpret_cast<const char*>(chunk.Characters8()),
-                  sizeof(LChar) * chunk.length(), 0);
-  else
-    xmlParseChunk(ctxt, reinterpret_cast<const char*>(chunk.Characters16()),
-                  sizeof(UChar) * chunk.length(), 0);
+  SwitchEncoding(ctxt, chunk.Is8Bit());
+  auto byte_span = base::as_chars(chunk.RawByteSpan());
+  xmlParseChunk(ctxt, byte_span.data(),
+                base::checked_cast<int>(byte_span.size()), 0);
 }
 
 static void FinishParsing(xmlParserCtxtPtr ctxt) {
@@ -777,7 +768,7 @@ scoped_refptr<XMLParserContext> XMLParserContext::CreateMemoryParser(
     return nullptr;
 
   // Copy the sax handler
-  memcpy(parser->sax, handlers, sizeof(xmlSAXHandler));
+  UNSAFE_TODO(memcpy(parser->sax, handlers, sizeof(xmlSAXHandler)));
 
   // Set parser options.
   // XML_PARSE_NODICT: default dictionary option.
@@ -921,7 +912,6 @@ void XMLDocumentParser::DoWrite(const String& parse_string) {
     XMLDocumentParserScope scope(GetDocument());
     base::AutoReset<bool> encoding_scope(&is_currently_parsing8_bit_chunk_,
                                          parse_string.Is8Bit());
-    is_start_of_new_chunk_ = true;
     ParseChunk(context->Context(), parse_string);
 
     // JavaScript (which may be run under the parseChunk callstack) may
@@ -949,7 +939,8 @@ static inline bool HandleNamespaceAttributes(
     AtomicString namespace_q_name = g_xmlns_atom;
     AtomicString namespace_uri = ToAtomicString(ns.uri);
     if (ns.prefix) {
-      namespace_q_name = WTF::g_xmlns_with_colon + ToAtomicString(ns.prefix);
+      namespace_q_name = AtomicString(
+          WTF::StrCat({WTF::g_xmlns_with_colon, ToAtomicString(ns.prefix)}));
     }
     std::optional<QualifiedName> parsed_name = Element::ParseAttributeName(
         xmlns_names::kNamespaceURI, namespace_q_name, exception_state);
@@ -993,8 +984,10 @@ static inline bool HandleElementAttributes(
       }
     }
     AtomicString attr_q_name =
-        attr_prefix.empty() ? ToAtomicString(attr.localname)
-                            : attr_prefix + ":" + ToString(attr.localname);
+        attr_prefix.empty()
+            ? ToAtomicString(attr.localname)
+            : AtomicString(
+                  WTF::StrCat({attr_prefix, ":", ToString(attr.localname)}));
 
     std::optional<QualifiedName> parsed_name =
         Element::ParseAttributeName(attr_uri, attr_q_name, exception_state);
@@ -1043,18 +1036,19 @@ void XMLDocumentParser::StartElementNs(
   bool is_first_element = !saw_first_element_;
   saw_first_element_ = true;
 
-  v8::Isolate* isolate = document_->GetAgent().isolate();
   Vector<Attribute, kAttributePrealloc> prefixed_attributes;
   if (!HandleNamespaceAttributes(prefixed_attributes, namespaces,
-                                 IgnoreException(isolate))) {
+                                 IGNORE_EXCEPTION)) {
     StopParsing();
     return;
   }
 
+  v8::Isolate* isolate = document_->GetAgent().isolate();
   v8::TryCatch try_catch(isolate);
   if (!HandleElementAttributes(prefixed_attributes, attributes,
                                prefix_to_namespace_map_,
-                               PassThroughException(isolate))) {
+                               parsing_fragment_ ? PassThroughException(isolate)
+                                                 : IGNORE_EXCEPTION)) {
     StopParsing();
     if (parsing_fragment_) {
       DCHECK(try_catch.HasCaught());
@@ -1072,8 +1066,11 @@ void XMLDocumentParser::StartElementNs(
   }
 
   QualifiedName q_name(prefix, local_name, adjusted_uri);
-  if (!prefix.empty() && adjusted_uri.empty())
-    q_name = QualifiedName(g_null_atom, prefix + ":" + local_name, g_null_atom);
+  if (!prefix.empty() && adjusted_uri.empty()) {
+    q_name = QualifiedName(g_null_atom,
+                           AtomicString(WTF::StrCat({prefix, ":", local_name})),
+                           g_null_atom);
+  }
 
   // If we are constructing a custom element, then we must run extra steps as
   // described in the HTML spec below. This is similar to the steps in
@@ -1167,7 +1164,7 @@ void XMLDocumentParser::EndElementNs() {
   if (element->IsScriptElement() &&
       !ScriptingContentIsAllowed(GetParserContentPolicy())) {
     PopCurrentNode();
-    n->remove(IgnoreException(document_->GetAgent().isolate()));
+    n->remove(IGNORE_EXCEPTION_FOR_TESTING);
     return;
   }
 
@@ -1231,7 +1228,8 @@ void XMLDocumentParser::GetError(XMLErrors::ErrorType type,
     return;
 
   char formatted_message[1024];
-  vsnprintf(formatted_message, sizeof(formatted_message) - 1, message, args);
+  UNSAFE_TODO(vsnprintf(formatted_message, sizeof(formatted_message) - 1,
+                        message, args));
 
   if (parser_paused_) {
     pending_callbacks_.push_back(std::make_unique<PendingErrorCallback>(
@@ -1296,35 +1294,11 @@ void XMLDocumentParser::CdataBlock(const String& text) {
     return;
   }
 
-  // `is_start_of_new_chunk_` is reset by UpdateLeafTextNode(). If it was set
-  // when we entered this method, this CDATA block appears at the beginning of
-  // the current input chunk.
-  const bool is_start_of_new_chunk = is_start_of_new_chunk_;
   if (!UpdateLeafTextNode())
     return;
 
-  // If the most recent child is already a CDATA node *AND* this is the first
-  // parse event emitted from the current input chunk, we append this text to
-  // the existing node. Otherwise we append a new CDATA node.
-  // TODO(https://crbug.com/36431): Unfortunately, when a CDATA straddles
-  // multiple input chunks, libxml starts to emit CDATA nodes in 300 byte
-  // chunks. The MergeAdjacentCDataSections REF is an attempt to keep these
-  // within a single node. However, this will also merge actual adjacent CDATA
-  // sections into a single node, e.g.: `<![CDATA[foo]]><![CDATA[bar]]>` will
-  // now produce one node. The REF is added to easily reverse in case this
-  // isn't web compatible. Otherwise, we can remove `is_start_of_new_chunk_`
-  // and this REF.
-  CDATASection* cdata_tail =
-      current_node_ ? DynamicTo<CDATASection>(current_node_->lastChild())
-                    : nullptr;
-  if (cdata_tail &&
-      (RuntimeEnabledFeatures::XMLParserMergeAdjacentCDataSectionsEnabled() ||
-       is_start_of_new_chunk)) {
-    cdata_tail->ParserAppendData(text);
-  } else {
-    current_node_->ParserAppendChild(
-        CDATASection::Create(current_node_->GetDocument(), text));
-  }
+  current_node_->ParserAppendChild(
+      CDATASection::Create(current_node_->GetDocument(), text));
 }
 
 void XMLDocumentParser::Comment(const String& text) {
@@ -1506,8 +1480,8 @@ static base::span<const char, N - 1> CopyToEntityBuffer(
     base::span<const char, N> expanded_entity_chars) {
   auto entity_buffer =
       base::as_writable_chars(base::span(g_shared_xhtml_entity_result));
-  entity_buffer.first<N>().copy_from(expanded_entity_chars);
-  return entity_buffer.first<N - 1>();
+  entity_buffer.template first<N>().copy_from(expanded_entity_chars);
+  return entity_buffer.template first<N - 1>();
 }
 
 static base::span<const char> ConvertUTF16EntityToUTF8(
@@ -1641,7 +1615,7 @@ static void IgnorableWhitespaceHandler(void*, const xmlChar*, int) {
 
 void XMLDocumentParser::InitializeParserContext(const std::string& chunk) {
   xmlSAXHandler sax;
-  memset(&sax, 0, sizeof(sax));
+  UNSAFE_TODO(memset(&sax, 0, sizeof(sax)));
 
   // According to http://xmlsoft.org/html/libxml-tree.html#xmlSAXHandler and
   // http://xmlsoft.org/html/libxml-parser.html#fatalErrorSAXFunc the SAX
@@ -1859,8 +1833,10 @@ static void AttributesStartElementNsHandler(void* closure,
                                             int nb_attributes,
                                             int /*nbDefaulted*/,
                                             const xmlChar** libxml_attributes) {
-  if (strcmp(reinterpret_cast<const char*>(xml_local_name), "attrs") != 0)
+  if (UNSAFE_TODO(strcmp(reinterpret_cast<const char*>(xml_local_name),
+                         "attrs")) != 0) {
     return;
+  }
 
   xmlParserCtxtPtr ctxt = static_cast<xmlParserCtxtPtr>(closure);
   AttributeParseState* state =
@@ -1890,7 +1866,7 @@ HashMap<String, String> ParseAttributes(const String& string, bool& attrs_ok) {
   state.got_attributes = false;
 
   xmlSAXHandler sax;
-  memset(&sax, 0, sizeof(sax));
+  UNSAFE_TODO(memset(&sax, 0, sizeof(sax)));
   sax.startElementNs = AttributesStartElementNsHandler;
   sax.initialized = XML_SAX2_MAGIC;
   scoped_refptr<XMLParserContext> parser =

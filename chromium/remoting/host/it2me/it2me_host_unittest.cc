@@ -98,6 +98,7 @@ class HostEventReporterStub : public HostEventReporter {
 class FakeRegisterSupportHostRequest : public RegisterSupportHostRequest {
  public:
   void StartRequest(SignalStrategy* signal_strategy,
+                    std::unique_ptr<net::ClientCertStore> client_cert_store,
                     scoped_refptr<RsaKeyPair> key_pair,
                     const std::string& authorized_helper,
                     std::optional<ChromeOsEnterpriseParams> params,
@@ -112,6 +113,12 @@ class FakeRegisterSupportHostRequest : public RegisterSupportHostRequest {
 std::unique_ptr<HostEventReporter> CreateHostEventReporterStub(
     scoped_refptr<HostStatusMonitor>) {
   return std::make_unique<HostEventReporterStub>();
+}
+
+ChromeOsEnterpriseParams GetDefaultEnterpriseParamsWithRequestOrigin() {
+  ChromeOsEnterpriseParams params;
+  params.request_origin = ChromeOsEnterpriseRequestOrigin::kEnterpriseAdmin;
+  return params;
 }
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -406,7 +413,8 @@ void It2MeHostTest::StartHost() {
   dialog_factory_ = dialog_factory.get();
 
   protocol::IceConfig ice_config;
-  ice_config.stun_servers.push_back(rtc::SocketAddress(kTestStunServer, 100));
+  ice_config.stun_servers.push_back(
+      webrtc::SocketAddress(kTestStunServer, 100));
   ice_config.expiration_time = base::Time::Now() + base::Hours(2);
 
   auto fake_signal_strategy =
@@ -985,9 +993,16 @@ TEST_F(It2MeHostTest, StartHost_DoesNotUseCorpSessionAuthz) {
   ASSERT_FALSE(has_corp_host_status_logger());
 }
 
+TEST_F(It2MeHostTest, AllowRemoteInputSessionPolicyEnabledByDefault) {
+  StartHost();
+
+  EXPECT_TRUE(*get_local_session_policies().allow_remote_input);
+}
+
 #if BUILDFLAG(IS_CHROMEOS)
 TEST_F(It2MeHostTest, ConnectRespectsSuppressDialogsParameter) {
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.suppress_user_dialogs = true;
   StartHost(std::move(params));
 
@@ -997,7 +1012,8 @@ TEST_F(It2MeHostTest, ConnectRespectsSuppressDialogsParameter) {
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsSuppressNotificationsParameter) {
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.suppress_notifications = true;
   StartHost(std::move(params));
 
@@ -1006,7 +1022,8 @@ TEST_F(It2MeHostTest, ConnectRespectsSuppressNotificationsParameter) {
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsTerminateUponInputParameter) {
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.terminate_upon_input = true;
   StartHost(std::move(params));
 
@@ -1020,7 +1037,8 @@ TEST_F(It2MeHostTest, TerminateUponInputDefaultsToFalse) {
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsMaximumSessionDurationParameter) {
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.maximum_session_duration = base::Hours(8);
   StartHost(std::move(params));
 
@@ -1029,11 +1047,30 @@ TEST_F(It2MeHostTest, ConnectRespectsMaximumSessionDurationParameter) {
 }
 
 TEST_F(It2MeHostTest, ConnectRespectsEnableCurtainingParameter) {
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.curtain_local_user_session = true;
   StartHost(std::move(params));
 
   EXPECT_TRUE(*get_local_session_policies().curtain_required);
+}
+
+TEST_F(It2MeHostTest, ConnectRespectsAllowRemoteInputParameter) {
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
+  params.allow_remote_input = false;
+  StartHost(std::move(params));
+
+  EXPECT_FALSE(*get_local_session_policies().allow_remote_input);
+}
+
+TEST_F(It2MeHostTest, ConnectRespectsAllowClipboardSyncParameter) {
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
+  params.allow_clipboard_sync = false;
+  StartHost(std::move(params));
+
+  EXPECT_EQ(*get_local_session_policies().clipboard_size_bytes, 0U);
 }
 
 TEST_F(It2MeHostTest, EnableCurtainingDefaultsToFalse) {
@@ -1046,7 +1083,8 @@ TEST_F(It2MeHostTest, AllowEnterpriseFileTransferWithPolicyEnabled) {
   SetPolicies({{policy::key::kRemoteAccessHostAllowEnterpriseFileTransfer,
                 base::Value(true)}});
 
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.allow_file_transfer = true;
   StartHost(std::move(params));
 
@@ -1057,7 +1095,8 @@ TEST_F(It2MeHostTest, AllowEnterpriseFileTransferWithPolicyDisabled) {
   SetPolicies({{policy::key::kRemoteAccessHostAllowEnterpriseFileTransfer,
                 base::Value(false)}});
 
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.allow_file_transfer = true;
   StartHost(std::move(params));
 
@@ -1077,7 +1116,8 @@ TEST_F(It2MeHostTest,
 TEST_F(It2MeHostTest, AllowEnterpriseFileTransferWithPolicyNotSet) {
   SetPolicies({});
 
-  ChromeOsEnterpriseParams params;
+  ChromeOsEnterpriseParams params(
+      GetDefaultEnterpriseParamsWithRequestOrigin());
   params.allow_file_transfer = true;
   StartHost(std::move(params));
 
@@ -1095,7 +1135,7 @@ TEST_F(It2MeHostTest,
   SetPolicies({{policy::key::kRemoteAccessHostAllowRemoteSupportConnections,
                 base::Value(false)}});
 
-  StartHost(ChromeOsEnterpriseParams());
+  StartHost(GetDefaultEnterpriseParamsWithRequestOrigin());
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
 
   ShutdownHost();
@@ -1107,7 +1147,7 @@ TEST_F(It2MeHostTest, EnterpriseSessionsShouldNotCheckHostDomain) {
   SetPolicies({{policy::key::kRemoteAccessHostDomainList,
                 MakeList({"other-domain.com"})}});
 
-  StartHost(ChromeOsEnterpriseParams());
+  StartHost(GetDefaultEnterpriseParamsWithRequestOrigin());
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
 
   ShutdownHost();
@@ -1122,7 +1162,7 @@ TEST_F(
       {{policy::key::kRemoteAccessHostAllowEnterpriseRemoteSupportConnections,
         base::Value(false)}});
 
-  StartHost(ChromeOsEnterpriseParams());
+  StartHost(GetDefaultEnterpriseParamsWithRequestOrigin());
   ASSERT_EQ(It2MeHostState::kError, last_host_state_);
   ASSERT_EQ(ErrorCode::DISALLOWED_BY_POLICY, last_error_code_);
 }
@@ -1139,7 +1179,7 @@ TEST_F(
 }
 
 TEST_F(It2MeHostTest, EnterpriseSessionsShouldNotDisconnectOnPolicyChange) {
-  StartHost(ChromeOsEnterpriseParams());
+  StartHost(GetDefaultEnterpriseParamsWithRequestOrigin());
   const It2MeHostState initial_state = last_host_state_;
   ASSERT_EQ(initial_state, It2MeHostState::kReceivedAccessCode);
 
@@ -1150,6 +1190,50 @@ TEST_F(It2MeHostTest, EnterpriseSessionsShouldNotDisconnectOnPolicyChange) {
   // change does *not* happen.
   base::RunLoop().RunUntilIdle();
   ASSERT_EQ(last_host_state_, initial_state);
+}
+
+TEST_F(It2MeHostTest, EnterpriseClassManagementSessionsSucceedAsAStudent) {
+  SetPolicies({{policy::key::kRemoteAccessHostAllowRemoteSupportConnections,
+                base::Value(false)},
+               {policy::key::kClassManagementEnabled, base::Value("student")}});
+
+  ChromeOsEnterpriseParams params;
+  params.request_origin = ChromeOsEnterpriseRequestOrigin::kClassManagement;
+  StartHost(params);
+  ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
+}
+
+TEST_F(It2MeHostTest, EnterpriseClassManagementSessionsSucceedAsATeacher) {
+  SetPolicies({{policy::key::kRemoteAccessHostAllowRemoteSupportConnections,
+                base::Value(false)},
+               {policy::key::kClassManagementEnabled, base::Value("teacher")}});
+
+  ChromeOsEnterpriseParams params;
+  params.request_origin = ChromeOsEnterpriseRequestOrigin::kClassManagement;
+  StartHost(params);
+  ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
+}
+
+TEST_F(
+    It2MeHostTest,
+    EnterpriseClassManagementSessionsFailsWhenClassManagementPolicyDisabled) {
+  SetPolicies(
+      {{policy::key::kClassManagementEnabled, base::Value("disabled")}});
+
+  ChromeOsEnterpriseParams params;
+  params.request_origin = ChromeOsEnterpriseRequestOrigin::kClassManagement;
+  StartHost(params);
+  ASSERT_EQ(It2MeHostState::kError, last_host_state_);
+  ASSERT_EQ(ErrorCode::DISALLOWED_BY_POLICY, last_error_code_);
+}
+
+TEST_F(It2MeHostTest,
+       EnterpriseClassManagementSessionsFailsWhenClassManagementPolicyUnset) {
+  ChromeOsEnterpriseParams params;
+  params.request_origin = ChromeOsEnterpriseRequestOrigin::kClassManagement;
+  StartHost(params);
+  ASSERT_EQ(It2MeHostState::kError, last_host_state_);
+  ASSERT_EQ(ErrorCode::DISALLOWED_BY_POLICY, last_error_code_);
 }
 #endif
 

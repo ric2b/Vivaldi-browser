@@ -6,6 +6,7 @@
 
 #include "base/check_deref.h"
 #include "base/no_destructor.h"
+#include "base/strings/stringprintf.h"
 #include "chrome/browser/android/persisted_tab_data/persisted_tab_data_config_android.h"
 #include "chrome/browser/android/persisted_tab_data/persisted_tab_data_storage_android.h"
 #include "chrome/browser/android/tab_android.h"
@@ -142,7 +143,7 @@ void PersistedTabDataAndroid::From(base::WeakPtr<TabAndroid> tab_android,
                 persisted_tab_data_android->RunCallbackOnUIThread(
                     tab_android.get(), user_data_key);
               },
-              tab_android->GetWeakPtr(), std::move(supplier_callback),
+              tab_android->GetTabAndroidWeakPtr(), std::move(supplier_callback),
               user_data_key));
 }
 

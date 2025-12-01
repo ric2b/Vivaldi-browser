@@ -8,7 +8,6 @@
 
 #include "base/check.h"
 #include "base/functional/bind.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -126,17 +125,15 @@ PresentationReceiverWindowView::PresentationReceiverWindowView(
       exclusive_access_manager_(this) {
   SetHasWindowSizeControls(true);
 
-  // TODO(pbos): See if this can retain SetOwnedByWidget(true) and get deleted
-  // through WidgetDelegate::DeleteDelegate(). This requires confirming that
-  // delegate_->WindowClosed() is safe to call before this deletes.
-  SetOwnedByWidget(false);
-  RegisterDeleteDelegateCallback(base::BindOnce(
-      [](PresentationReceiverWindowView* dialog) {
-        auto* const delegate = dialog->delegate_.get();
-        delete dialog;
-        delegate->WindowClosed();
-      },
-      this));
+  RegisterDeleteDelegateCallback(
+      RegisterDeleteCallbackPassKey(),
+      base::BindOnce(
+          [](PresentationReceiverWindowView* dialog) {
+            auto* const delegate = dialog->delegate_.get();
+            delete dialog;
+            delegate->WindowClosed();
+          },
+          this));
 
   DCHECK(frame);
   DCHECK(delegate);
@@ -155,8 +152,7 @@ void PresentationReceiverWindowView::Init() {
   const auto accelerators = GetAcceleratorList();
   const auto fullscreen_accelerator = std::ranges::find(
       accelerators, IDC_FULLSCREEN, &AcceleratorMapping::command_id);
-  CHECK(fullscreen_accelerator != accelerators.end(),
-        base::NotFatalUntil::M130);
+  CHECK(fullscreen_accelerator != accelerators.end());
   fullscreen_accelerator_ = ui::Accelerator(fullscreen_accelerator->keycode,
                                             fullscreen_accelerator->modifiers);
 #endif

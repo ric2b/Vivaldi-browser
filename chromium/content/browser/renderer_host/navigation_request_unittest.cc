@@ -11,6 +11,7 @@
 #include "base/containers/flat_map.h"
 #include "base/functional/bind.h"
 #include "base/i18n/number_formatting.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/public/browser/navigation_throttle.h"
@@ -27,6 +28,7 @@
 #include "content/test/test_content_browser_client.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_web_contents.h"
+#include "net/base/features.h"
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "services/network/public/cpp/content_security_policy/content_security_policy.h"
 #include "services/network/public/cpp/features.h"
@@ -161,8 +163,8 @@ class NavigationRequestTest : public RenderViewHostImplTestHarness {
   // synchronously return |result| on checks by default.
   TestNavigationThrottle* CreateTestNavigationThrottle(
       NavigationThrottle::ThrottleCheckResult result) {
-    TestNavigationThrottle* test_throttle =
-        new TestNavigationThrottle(GetNavigationRequest());
+    TestNavigationThrottle* test_throttle = new TestNavigationThrottle(
+        *GetNavigationRequest()->GetNavigationThrottleRunnerForTesting());
     test_throttle->SetResponseForAllMethods(TestNavigationThrottle::SYNCHRONOUS,
                                             result);
     GetNavigationRequest()->RegisterThrottleForTesting(
@@ -591,13 +593,11 @@ class GetRenderFrameHostOnFailureNavigationThrottle
 };
 
 class ThrottleTestContentBrowserClient : public ContentBrowserClient {
-  std::vector<std::unique_ptr<NavigationThrottle>> CreateThrottlesForNavigation(
-      NavigationHandle* navigation_handle) override {
-    std::vector<std::unique_ptr<NavigationThrottle>> throttle;
-    throttle.push_back(
+  void CreateThrottlesForNavigation(
+      NavigationThrottleRegistry& registry) override {
+    registry.AddThrottle(
         std::make_unique<GetRenderFrameHostOnFailureNavigationThrottle>(
-            navigation_handle));
-    return throttle;
+            &registry.GetNavigationHandle()));
   }
 };
 
@@ -1410,19 +1410,6 @@ TEST_F(NavigationRequestResponseBodyTest, PipeClosed) {
       NavigationRequest::From(navigation->GetNavigationHandle())->state());
   EXPECT_TRUE(was_callback_called());
   EXPECT_EQ(std::string(), response_body());
-}
-
-TEST_F(NavigationRequestTest, ViewTransitionForceEnablesPageSwap) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({blink::features::kViewTransitionOnNavigation},
-                                {});
-
-  GURL main_url = GURL("https://main.com");
-  auto main_navigation =
-      NavigationSimulatorImpl::CreateBrowserInitiated(main_url, contents());
-  main_navigation->Start();
-  ASSERT_TRUE(
-      main_navigation->GetNavigationHandle()->ShouldDispatchPageSwapEvent());
 }
 
 }  // namespace content

@@ -30,12 +30,37 @@ public interface TrackingProtectionDelegate {
     void setDoNotTrack(boolean enabled);
 
     /**
+     * @return whether the IP protection UX is enabled.
+     */
+    boolean isIpProtectionUxEnabled();
+
+    /**
      * @return whether the IP protection is enabled.
      */
     boolean isIpProtectionEnabled();
 
     /** Set the value of the IP protection state. */
     void setIpProtection(boolean enabled);
+
+    /**
+     * @return whether IP protection is disabled for users on enterprise devices.
+     */
+    boolean isIpProtectionDisabledForEnterprise();
+
+    /**
+     * @return whether IP protection is managed.
+     */
+    boolean isIpProtectionManaged();
+
+    /**
+     * @return whether fingerprinting protection is managed.
+     */
+    boolean isFingerprintingProtectionManaged();
+
+    /**
+     * @return whether the fingerprinting protection UX is enabled.
+     */
+    boolean isFingerprintingProtectionUxEnabled();
 
     /**
      * @return whether the fingerprinting protection is enabled.

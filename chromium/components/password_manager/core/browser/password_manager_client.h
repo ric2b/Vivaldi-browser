@@ -101,16 +101,17 @@ class FieldInfoManager;
 #if BUILDFLAG(IS_ANDROID)
 class FirstCctPageLoadPasswordsUkmRecorder;
 #endif  // BUILDFLAG(IS_ANDROID)
+class HttpAuthManager;
 class PasswordChangeServiceInterface;
 class PasswordFeatureManager;
 class PasswordFormManagerForUI;
 class PasswordManagerDriver;
 class PasswordManagerInterface;
 class PasswordManagerMetricsRecorder;
-class HttpAuthManager;
 class PasswordRequirementsService;
 class PasswordReuseManager;
 class PasswordStoreInterface;
+class SmsOtpBackend;
 class WebAuthnCredentialsDelegate;
 struct PasswordForm;
 
@@ -501,6 +502,10 @@ class PasswordManagerClient {
   virtual void NavigateToManagePasswordsPage(ManagePasswordsReferrer referrer) {
   }
 
+  // If PasswordChangeService exists, notifies it of presence of OTP field on
+  // the page.
+  virtual void InformPasswordChangeServiceOfOtpPresent() {}
+
 #if BUILDFLAG(IS_ANDROID)
   virtual void NavigateToManagePasskeysPage(ManagePasswordsReferrer referrer) {}
 #endif
@@ -522,6 +527,8 @@ class PasswordManagerClient {
   // Marks all credentials that have been loaded for this page and have been
   // received via the password sharing feature as notified.
   virtual void MarkSharedCredentialsAsNotified(const GURL& url);
+
+  virtual SmsOtpBackend* GetSmsOtpBackend() const;
 #endif  // BUILDFLAG(IS_ANDROID)
 
   // Returns the Chrome channel for the installation.
@@ -537,6 +544,11 @@ class PasswordManagerClient {
   // Shows the bubble with the details of the `form`.
   virtual void OpenPasswordDetailsBubble(
       const password_manager::PasswordForm& form) = 0;
+
+  // Possibly shows a promo priming the user to engage with password saving,
+  // based on the current URL.
+  virtual void MaybeShowSavePasswordPrimingPromo(const GURL& current_url) = 0;
+
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) ||
         // BUILDFLAG(IS_CHROMEOS)
 

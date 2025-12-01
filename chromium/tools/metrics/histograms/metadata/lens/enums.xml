@@ -107,6 +107,9 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="LVF Shutter Button"/>
   <int value="7" label="LVF Gallery"/>
   <int value="8" label="Context Menu"/>
+  <int value="9" label="Omnibox Page Action"/>
+  <int value="10" label="Omnibox Contextual Suggestion"/>
+  <int value="11" label="Homework action chip"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_invocation_source.h:LensOverlayInvocationSource) -->
@@ -118,6 +121,7 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="WebNavigation"/>
   <int value="1" label="Omnibox"/>
   <int value="2" label="ContextMenu"/>
+  <int value="3" label="ExploreBarTab"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_new_tab_source.h:LensOverlayNewTabSource) -->
@@ -147,6 +151,19 @@ chromium-metrics-reviews@google.com.
 </enum>
 
 <!-- LINT.ThenChange(//components/lens/lens_overlay_metrics.h:LensOverlaySpeedbumpMenuSelection) -->
+
+<!-- LINT.IfChange(LensOverlayTextDirectiveResult) -->
+
+<enum name="LensOverlayTextDirectiveResult">
+  <summary>
+    The result of handling a text directive in the Lens Overlay.
+  </summary>
+  <int value="0" label="Found on page"/>
+  <int value="1" label="Opened in new tab"/>
+  <int value="2" label="Not found on page"/>
+</enum>
+
+<!-- LINT.ThenChange(//components/lens/lens_overlay_metrics.h:LensOverlayTextDirectiveResult) -->
 
 <!-- LINT.IfChange(LensOverlayUserAction) -->
 
@@ -219,6 +236,7 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Medium"/>
   <int value="3" label="Peaking"/>
   <int value="4" label="Consent"/>
+  <int value="5" label="InfoMessage"/>
 </enum>
 
 <!-- LINT.ThenChange(//ios/chrome/browser/lens_overlay/model/lens_overlay_sheet_detent_state.h:SheetDimensionState) -->
@@ -235,9 +253,10 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Result shown"/>
   <int value="2" label="Error page shown (offline)"/>
   <int value="3" label="Error page shown (start query response error)"/>
+  <int value="4" label="Error page shown (protected)"/>
 </enum>
 
-<!-- LINT.ThenChange(//components/lens/lens_overlay_side_panel_result.h:LensOverlaySidePanelResultStatus) -->
+<!-- LINT.ThenChange(//components/lens/lens_overlay_side_panel_result.h:LensOverlaySidePanelResultStatus,//chrome/browser/lens/core/mojom/lens_side_panel.mojom:SidePanelResultStatus) -->
 
 </enums>
 

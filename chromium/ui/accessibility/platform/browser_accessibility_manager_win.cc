@@ -13,17 +13,18 @@
 #include "base/command_line.h"
 #include "base/containers/contains.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/typed_macros.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_variant.h"
 #include "base/win/windows_version.h"
-#include "ui/accessibility/platform/browser_accessibility_win.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
 #include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate_utils_win.h"
 #include "ui/accessibility/platform/ax_platform_node_textprovider_win.h"
 #include "ui/accessibility/platform/ax_platform_tree_manager_delegate.h"
+#include "ui/accessibility/platform/browser_accessibility_win.h"
 #include "ui/accessibility/platform/uia_registrar_win.h"
 #include "ui/base/win/atl_module.h"
 
@@ -1033,7 +1034,7 @@ gfx::Rect BrowserAccessibilityManagerWin::GetViewBoundsInScreenCoordinates()
   // This is because Chromium transforms the screen physical coordinates it
   // receives from Windows into an internal representation of screen physical
   // coordinates adjusted for multiple displays of different resolutions.
-  return display::win::ScreenWin::DIPToScreenRect(GetParentHWND(), bounds);
+  return display::win::GetScreenWin()->DIPToScreenRect(GetParentHWND(), bounds);
 }
 
 void BrowserAccessibilityManagerWin::BeforeAccessibilityEvents() {

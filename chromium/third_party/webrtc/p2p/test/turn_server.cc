@@ -40,7 +40,6 @@
 #include "rtc_base/message_digest.h"
 #include "rtc_base/network/received_packet.h"
 #include "rtc_base/socket.h"
-#include "rtc_base/socket_adapters.h"
 #include "rtc_base/socket_address.h"
 #include "rtc_base/ssl_adapter.h"
 #include "rtc_base/string_encode.h"
@@ -49,7 +48,6 @@
 
 namespace webrtc {
 namespace {
-using ::webrtc::TimeDelta;
 
 // TODO(juberti): Move this all to a future turnmessage.h
 //  static const int IPPROTO_UDP = 17;
@@ -71,28 +69,28 @@ bool IsTurnChannelData(uint16_t msg_type) {
 
 }  // namespace
 
-int GetStunSuccessResponseTypeOrZero(const cricket::StunMessage& req) {
-  const int resp_type = cricket::GetStunSuccessResponseType(req.type());
+int GetStunSuccessResponseTypeOrZero(const StunMessage& req) {
+  const int resp_type = GetStunSuccessResponseType(req.type());
   return resp_type == -1 ? 0 : resp_type;
 }
 
-int GetStunErrorResponseTypeOrZero(const cricket::StunMessage& req) {
-  const int resp_type = cricket::GetStunErrorResponseType(req.type());
+int GetStunErrorResponseTypeOrZero(const StunMessage& req) {
+  const int resp_type = GetStunErrorResponseType(req.type());
   return resp_type == -1 ? 0 : resp_type;
 }
 
 static void InitErrorResponse(int code,
                               absl::string_view reason,
-                              cricket::StunMessage* resp) {
-  resp->AddAttribute(std::make_unique<cricket::StunErrorCodeAttribute>(
-      cricket::STUN_ATTR_ERROR_CODE, code, std::string(reason)));
+                              StunMessage* resp) {
+  resp->AddAttribute(std::make_unique<StunErrorCodeAttribute>(
+      STUN_ATTR_ERROR_CODE, code, std::string(reason)));
 }
 
 TurnServer::TurnServer(TaskQueueBase* thread)
     : thread_(thread),
       nonce_key_(CreateRandomString(kNonceKeySize)),
-      auth_hook_(NULL),
-      redirect_hook_(NULL),
+      auth_hook_(nullptr),
+      redirect_hook_(nullptr),
       enable_otu_nonce_(false) {}
 
 TurnServer::~TurnServer() {
@@ -116,7 +114,7 @@ void TurnServer::AddInternalSocket(AsyncPacketSocket* socket,
   RTC_DCHECK(server_sockets_.end() == server_sockets_.find(socket));
   server_sockets_[socket] = proto;
   socket->RegisterReceivedPacketCallback(
-      [&](rtc::AsyncPacketSocket* socket, const rtc::ReceivedPacket& packet) {
+      [&](AsyncPacketSocket* socket, const ReceivedIpPacket& packet) {
         RTC_DCHECK_RUN_ON(thread_);
         OnInternalPacket(socket, packet);
       });
@@ -125,7 +123,7 @@ void TurnServer::AddInternalSocket(AsyncPacketSocket* socket,
 void TurnServer::AddInternalServerSocket(
     Socket* socket,
     ProtocolType proto,
-    std::unique_ptr<rtc::SSLAdapterFactory> ssl_adapter_factory) {
+    std::unique_ptr<SSLAdapterFactory> ssl_adapter_factory) {
   RTC_DCHECK_RUN_ON(thread_);
 
   RTC_DCHECK(server_listen_sockets_.end() ==
@@ -154,10 +152,10 @@ void TurnServer::AcceptConnection(Socket* server_socket) {
   // Check if someone is trying to connect to us.
   SocketAddress accept_addr;
   Socket* accepted_socket = server_socket->Accept(&accept_addr);
-  if (accepted_socket != NULL) {
+  if (accepted_socket != nullptr) {
     const ServerSocketInfo& info = server_listen_sockets_[server_socket];
     if (info.ssl_adapter_factory) {
-      rtc::SSLAdapter* ssl_adapter =
+      SSLAdapter* ssl_adapter =
           info.ssl_adapter_factory->CreateAdapter(accepted_socket);
       ssl_adapter->StartSSL("");
       accepted_socket = ssl_adapter;
@@ -165,7 +163,7 @@ void TurnServer::AcceptConnection(Socket* server_socket) {
     AsyncStunTCPSocket* tcp_socket = new AsyncStunTCPSocket(accepted_socket);
 
     tcp_socket->SubscribeCloseEvent(this,
-                                    [this](rtc::AsyncPacketSocket* s, int err) {
+                                    [this](AsyncPacketSocket* s, int err) {
                                       OnInternalSocketClose(s, err);
                                     });
     // Finally add the socket so it can start communicating with the client.
@@ -179,7 +177,7 @@ void TurnServer::OnInternalSocketClose(AsyncPacketSocket* socket, int err) {
 }
 
 void TurnServer::OnInternalPacket(AsyncPacketSocket* socket,
-                                  const rtc::ReceivedPacket& packet) {
+                                  const ReceivedIpPacket& packet) {
   RTC_DCHECK_RUN_ON(thread_);
   // Fail if the packet is too small to even contain a channel header.
   if (packet.payload().size() < TURN_CHANNEL_HEADER_SIZE) {
@@ -188,7 +186,7 @@ void TurnServer::OnInternalPacket(AsyncPacketSocket* socket,
   InternalSocketMap::iterator iter = server_sockets_.find(socket);
   RTC_DCHECK(iter != server_sockets_.end());
   TurnServerConnection conn(packet.source_address(), iter->second, socket);
-  uint16_t msg_type = webrtc::GetBE16(packet.payload().data());
+  uint16_t msg_type = GetBE16(packet.payload().data());
   if (!IsTurnChannelData(msg_type)) {
     // This is a STUN message.
     HandleStunMessage(&conn, packet.payload());
@@ -205,10 +203,10 @@ void TurnServer::OnInternalPacket(AsyncPacketSocket* socket,
 }
 
 void TurnServer::HandleStunMessage(TurnServerConnection* conn,
-                                   rtc::ArrayView<const uint8_t> payload) {
+                                   ArrayView<const uint8_t> payload) {
   RTC_DCHECK_RUN_ON(thread_);
-  cricket::TurnMessage msg;
-  rtc::ByteBufferReader buf(payload);
+  TurnMessage msg;
+  ByteBufferReader buf(payload);
   if (!msg.Read(&buf) || (buf.Length() > 0)) {
     RTC_LOG(LS_WARNING) << "Received invalid STUN message";
     return;
@@ -219,12 +217,12 @@ void TurnServer::HandleStunMessage(TurnServerConnection* conn,
   }
 
   // If it's a STUN binding request, handle that specially.
-  if (msg.type() == cricket::STUN_BINDING_REQUEST) {
+  if (msg.type() == STUN_BINDING_REQUEST) {
     HandleBindingRequest(conn, &msg);
     return;
   }
 
-  if (redirect_hook_ != NULL && msg.type() == cricket::STUN_ALLOCATE_REQUEST) {
+  if (redirect_hook_ != nullptr && msg.type() == STUN_ALLOCATE_REQUEST) {
     SocketAddress address;
     if (redirect_hook_->ShouldRedirect(conn->src(), &address)) {
       SendErrorResponseWithAlternateServer(conn, &msg, address);
@@ -243,89 +241,86 @@ void TurnServer::HandleStunMessage(TurnServerConnection* conn,
   }
 
   // Ensure the message is authorized; only needed for requests.
-  if (cricket::IsStunRequestType(msg.type())) {
+  if (IsStunRequestType(msg.type())) {
     if (!CheckAuthorization(conn, &msg, key)) {
       return;
     }
   }
 
-  if (!allocation && msg.type() == cricket::STUN_ALLOCATE_REQUEST) {
+  if (!allocation && msg.type() == STUN_ALLOCATE_REQUEST) {
     HandleAllocateRequest(conn, &msg, key);
   } else if (allocation &&
-             (msg.type() != cricket::STUN_ALLOCATE_REQUEST ||
+             (msg.type() != STUN_ALLOCATE_REQUEST ||
               msg.transaction_id() == allocation->transaction_id())) {
     // This is a non-allocate request, or a retransmit of an allocate.
     // Check that the username matches the previous username used.
-    if (cricket::IsStunRequestType(msg.type()) &&
-        msg.GetByteString(cricket::STUN_ATTR_USERNAME)->string_view() !=
+    if (IsStunRequestType(msg.type()) &&
+        msg.GetByteString(STUN_ATTR_USERNAME)->string_view() !=
             allocation->username()) {
-      SendErrorResponse(conn, &msg, cricket::STUN_ERROR_WRONG_CREDENTIALS,
-                        cricket::STUN_ERROR_REASON_WRONG_CREDENTIALS);
+      SendErrorResponse(conn, &msg, STUN_ERROR_WRONG_CREDENTIALS,
+                        STUN_ERROR_REASON_WRONG_CREDENTIALS);
       return;
     }
     allocation->HandleTurnMessage(&msg);
   } else {
     // Allocation mismatch.
-    SendErrorResponse(conn, &msg, cricket::STUN_ERROR_ALLOCATION_MISMATCH,
-                      cricket::STUN_ERROR_REASON_ALLOCATION_MISMATCH);
+    SendErrorResponse(conn, &msg, STUN_ERROR_ALLOCATION_MISMATCH,
+                      STUN_ERROR_REASON_ALLOCATION_MISMATCH);
   }
 }
 
-bool TurnServer::GetKey(const cricket::StunMessage* msg, std::string* key) {
-  const cricket::StunByteStringAttribute* username_attr =
-      msg->GetByteString(cricket::STUN_ATTR_USERNAME);
+bool TurnServer::GetKey(const StunMessage* msg, std::string* key) {
+  const StunByteStringAttribute* username_attr =
+      msg->GetByteString(STUN_ATTR_USERNAME);
   if (!username_attr) {
     return false;
   }
 
-  return (auth_hook_ != NULL &&
+  return (auth_hook_ != nullptr &&
           auth_hook_->GetKey(std::string(username_attr->string_view()), realm_,
                              key));
 }
 
 bool TurnServer::CheckAuthorization(TurnServerConnection* conn,
-                                    cricket::StunMessage* msg,
+                                    StunMessage* msg,
                                     absl::string_view key) {
   // RFC 5389, 10.2.2.
-  RTC_DCHECK(cricket::IsStunRequestType(msg->type()));
-  const cricket::StunByteStringAttribute* mi_attr =
-      msg->GetByteString(cricket::STUN_ATTR_MESSAGE_INTEGRITY);
-  const cricket::StunByteStringAttribute* username_attr =
-      msg->GetByteString(cricket::STUN_ATTR_USERNAME);
-  const cricket::StunByteStringAttribute* realm_attr =
-      msg->GetByteString(cricket::STUN_ATTR_REALM);
-  const cricket::StunByteStringAttribute* nonce_attr =
-      msg->GetByteString(cricket::STUN_ATTR_NONCE);
+  RTC_DCHECK(IsStunRequestType(msg->type()));
+  const StunByteStringAttribute* mi_attr =
+      msg->GetByteString(STUN_ATTR_MESSAGE_INTEGRITY);
+  const StunByteStringAttribute* username_attr =
+      msg->GetByteString(STUN_ATTR_USERNAME);
+  const StunByteStringAttribute* realm_attr =
+      msg->GetByteString(STUN_ATTR_REALM);
+  const StunByteStringAttribute* nonce_attr =
+      msg->GetByteString(STUN_ATTR_NONCE);
 
   // Fail if no MESSAGE_INTEGRITY.
   if (!mi_attr) {
-    SendErrorResponseWithRealmAndNonce(conn, msg,
-                                       cricket::STUN_ERROR_UNAUTHORIZED,
-                                       cricket::STUN_ERROR_REASON_UNAUTHORIZED);
+    SendErrorResponseWithRealmAndNonce(conn, msg, STUN_ERROR_UNAUTHORIZED,
+                                       STUN_ERROR_REASON_UNAUTHORIZED);
     return false;
   }
 
   // Fail if there is MESSAGE_INTEGRITY but no username, nonce, or realm.
   if (!username_attr || !realm_attr || !nonce_attr) {
-    SendErrorResponse(conn, msg, cricket::STUN_ERROR_BAD_REQUEST,
-                      cricket::STUN_ERROR_REASON_BAD_REQUEST);
+    SendErrorResponse(conn, msg, STUN_ERROR_BAD_REQUEST,
+                      STUN_ERROR_REASON_BAD_REQUEST);
     return false;
   }
 
   // Fail if bad nonce.
   if (!ValidateNonce(nonce_attr->string_view())) {
-    SendErrorResponseWithRealmAndNonce(conn, msg,
-                                       cricket::STUN_ERROR_STALE_NONCE,
-                                       cricket::STUN_ERROR_REASON_STALE_NONCE);
+    SendErrorResponseWithRealmAndNonce(conn, msg, STUN_ERROR_STALE_NONCE,
+                                       STUN_ERROR_REASON_STALE_NONCE);
     return false;
   }
 
   // Fail if bad MESSAGE_INTEGRITY.
   if (key.empty() || msg->ValidateMessageIntegrity(std::string(key)) !=
-                         cricket::StunMessage::IntegrityStatus::kIntegrityOk) {
-    SendErrorResponseWithRealmAndNonce(conn, msg,
-                                       cricket::STUN_ERROR_UNAUTHORIZED,
-                                       cricket::STUN_ERROR_REASON_UNAUTHORIZED);
+                         StunMessage::IntegrityStatus::kIntegrityOk) {
+    SendErrorResponseWithRealmAndNonce(conn, msg, STUN_ERROR_UNAUTHORIZED,
+                                       STUN_ERROR_REASON_UNAUTHORIZED);
     return false;
   }
 
@@ -333,9 +328,8 @@ bool TurnServer::CheckAuthorization(TurnServerConnection* conn,
   TurnServerAllocation* allocation = FindAllocation(conn);
   if (enable_otu_nonce_ && allocation &&
       allocation->last_nonce() == nonce_attr->string_view()) {
-    SendErrorResponseWithRealmAndNonce(conn, msg,
-                                       cricket::STUN_ERROR_STALE_NONCE,
-                                       cricket::STUN_ERROR_REASON_STALE_NONCE);
+    SendErrorResponseWithRealmAndNonce(conn, msg, STUN_ERROR_STALE_NONCE,
+                                       STUN_ERROR_REASON_STALE_NONCE);
     return false;
   }
 
@@ -347,34 +341,34 @@ bool TurnServer::CheckAuthorization(TurnServerConnection* conn,
 }
 
 void TurnServer::HandleBindingRequest(TurnServerConnection* conn,
-                                      const cricket::StunMessage* req) {
-  cricket::StunMessage response(GetStunSuccessResponseTypeOrZero(*req),
-                                req->transaction_id());
+                                      const StunMessage* req) {
+  StunMessage response(GetStunSuccessResponseTypeOrZero(*req),
+                       req->transaction_id());
   // Tell the user the address that we received their request from.
-  auto mapped_addr_attr = std::make_unique<cricket::StunXorAddressAttribute>(
-      cricket::STUN_ATTR_XOR_MAPPED_ADDRESS, conn->src());
+  auto mapped_addr_attr = std::make_unique<StunXorAddressAttribute>(
+      STUN_ATTR_XOR_MAPPED_ADDRESS, conn->src());
   response.AddAttribute(std::move(mapped_addr_attr));
 
   SendStun(conn, &response);
 }
 
 void TurnServer::HandleAllocateRequest(TurnServerConnection* conn,
-                                       const cricket::TurnMessage* msg,
+                                       const TurnMessage* msg,
                                        absl::string_view key) {
   // Check the parameters in the request.
-  const cricket::StunUInt32Attribute* transport_attr =
-      msg->GetUInt32(cricket::STUN_ATTR_REQUESTED_TRANSPORT);
+  const StunUInt32Attribute* transport_attr =
+      msg->GetUInt32(STUN_ATTR_REQUESTED_TRANSPORT);
   if (!transport_attr) {
-    SendErrorResponse(conn, msg, cricket::STUN_ERROR_BAD_REQUEST,
-                      cricket::STUN_ERROR_REASON_BAD_REQUEST);
+    SendErrorResponse(conn, msg, STUN_ERROR_BAD_REQUEST,
+                      STUN_ERROR_REASON_BAD_REQUEST);
     return;
   }
 
   // Only UDP is supported right now.
   int proto = transport_attr->value() >> 24;
   if (proto != IPPROTO_UDP) {
-    SendErrorResponse(conn, msg, cricket::STUN_ERROR_UNSUPPORTED_PROTOCOL,
-                      cricket::STUN_ERROR_REASON_UNSUPPORTED_PROTOCOL);
+    SendErrorResponse(conn, msg, STUN_ERROR_UNSUPPORTED_PROTOCOL,
+                      STUN_ERROR_REASON_UNSUPPORTED_PROTOCOL);
     return;
   }
 
@@ -384,7 +378,7 @@ void TurnServer::HandleAllocateRequest(TurnServerConnection* conn,
   if (alloc) {
     alloc->HandleTurnMessage(msg);
   } else {
-    SendErrorResponse(conn, msg, cricket::STUN_ERROR_SERVER_ERROR,
+    SendErrorResponse(conn, msg, STUN_ERROR_SERVER_ERROR,
                       "Failed to allocate socket");
   }
 }
@@ -392,8 +386,8 @@ void TurnServer::HandleAllocateRequest(TurnServerConnection* conn,
 std::string TurnServer::GenerateNonce(int64_t now) const {
   // Generate a nonce of the form hex(now + HMAC-MD5(nonce_key_, now))
   std::string input(reinterpret_cast<const char*>(&now), sizeof(now));
-  std::string nonce = rtc::hex_encode(input);
-  nonce += rtc::ComputeHmac(rtc::DIGEST_MD5, nonce_key_, input);
+  std::string nonce = hex_encode(input);
+  nonce += ComputeHmac(DIGEST_MD5, nonce_key_, input);
   RTC_DCHECK(nonce.size() == kNonceSize);
 
   return nonce;
@@ -408,16 +402,15 @@ bool TurnServer::ValidateNonce(absl::string_view nonce) const {
   // Decode the timestamp.
   int64_t then;
   char* p = reinterpret_cast<char*>(&then);
-  size_t len = rtc::hex_decode(rtc::ArrayView<char>(p, sizeof(then)),
-                               nonce.substr(0, sizeof(then) * 2));
+  size_t len = hex_decode(ArrayView<char>(p, sizeof(then)),
+                          nonce.substr(0, sizeof(then) * 2));
   if (len != sizeof(then)) {
     return false;
   }
 
   // Verify the HMAC.
   if (nonce.substr(sizeof(then) * 2) !=
-      rtc::ComputeHmac(rtc::DIGEST_MD5, nonce_key_,
-                       std::string(p, sizeof(then)))) {
+      ComputeHmac(DIGEST_MD5, nonce_key_, std::string(p, sizeof(then)))) {
     return false;
   }
 
@@ -436,9 +429,9 @@ TurnServerAllocation* TurnServer::CreateAllocation(TurnServerConnection* conn,
   AsyncPacketSocket* external_socket =
       (external_socket_factory_)
           ? external_socket_factory_->CreateUdpSocket(external_addr_, 0, 0)
-          : NULL;
+          : nullptr;
   if (!external_socket) {
-    return NULL;
+    return nullptr;
   }
 
   // The Allocation takes ownership of the socket.
@@ -449,12 +442,11 @@ TurnServerAllocation* TurnServer::CreateAllocation(TurnServerConnection* conn,
 }
 
 void TurnServer::SendErrorResponse(TurnServerConnection* conn,
-                                   const cricket::StunMessage* req,
+                                   const StunMessage* req,
                                    int code,
                                    absl::string_view reason) {
   RTC_DCHECK_RUN_ON(thread_);
-  cricket::TurnMessage resp(GetStunErrorResponseTypeOrZero(*req),
-                            req->transaction_id());
+  TurnMessage resp(GetStunErrorResponseTypeOrZero(*req), req->transaction_id());
   InitErrorResponse(code, reason, &resp);
 
   RTC_LOG(LS_INFO) << "Sending error response, type=" << resp.type()
@@ -462,13 +454,11 @@ void TurnServer::SendErrorResponse(TurnServerConnection* conn,
   SendStun(conn, &resp);
 }
 
-void TurnServer::SendErrorResponseWithRealmAndNonce(
-    TurnServerConnection* conn,
-    const cricket::StunMessage* msg,
-    int code,
-    absl::string_view reason) {
-  cricket::TurnMessage resp(GetStunErrorResponseTypeOrZero(*msg),
-                            msg->transaction_id());
+void TurnServer::SendErrorResponseWithRealmAndNonce(TurnServerConnection* conn,
+                                                    const StunMessage* msg,
+                                                    int code,
+                                                    absl::string_view reason) {
+  TurnMessage resp(GetStunErrorResponseTypeOrZero(*msg), msg->transaction_id());
   InitErrorResponse(code, reason, &resp);
 
   int64_t timestamp = TimeMillis();
@@ -476,43 +466,40 @@ void TurnServer::SendErrorResponseWithRealmAndNonce(
     timestamp = ts_for_next_nonce_;
     ts_for_next_nonce_ = 0;
   }
-  resp.AddAttribute(std::make_unique<cricket::StunByteStringAttribute>(
-      cricket::STUN_ATTR_NONCE, GenerateNonce(timestamp)));
-  resp.AddAttribute(std::make_unique<cricket::StunByteStringAttribute>(
-      cricket::STUN_ATTR_REALM, realm_));
+  resp.AddAttribute(std::make_unique<StunByteStringAttribute>(
+      STUN_ATTR_NONCE, GenerateNonce(timestamp)));
+  resp.AddAttribute(
+      std::make_unique<StunByteStringAttribute>(STUN_ATTR_REALM, realm_));
   SendStun(conn, &resp);
 }
 
 void TurnServer::SendErrorResponseWithAlternateServer(
     TurnServerConnection* conn,
-    const cricket::StunMessage* msg,
+    const StunMessage* msg,
     const SocketAddress& addr) {
-  cricket::TurnMessage resp(GetStunErrorResponseTypeOrZero(*msg),
-                            msg->transaction_id());
-  InitErrorResponse(cricket::STUN_ERROR_TRY_ALTERNATE,
-                    cricket::STUN_ERROR_REASON_TRY_ALTERNATE_SERVER, &resp);
-  resp.AddAttribute(std::make_unique<cricket::StunAddressAttribute>(
-      cricket::STUN_ATTR_ALTERNATE_SERVER, addr));
+  TurnMessage resp(GetStunErrorResponseTypeOrZero(*msg), msg->transaction_id());
+  InitErrorResponse(STUN_ERROR_TRY_ALTERNATE,
+                    STUN_ERROR_REASON_TRY_ALTERNATE_SERVER, &resp);
+  resp.AddAttribute(
+      std::make_unique<StunAddressAttribute>(STUN_ATTR_ALTERNATE_SERVER, addr));
   SendStun(conn, &resp);
 }
 
-void TurnServer::SendStun(TurnServerConnection* conn,
-                          cricket::StunMessage* msg) {
+void TurnServer::SendStun(TurnServerConnection* conn, StunMessage* msg) {
   RTC_DCHECK_RUN_ON(thread_);
-  rtc::ByteBufferWriter buf;
+  ByteBufferWriter buf;
   // Add a SOFTWARE attribute if one is set.
   if (!software_.empty()) {
-    msg->AddAttribute(std::make_unique<cricket::StunByteStringAttribute>(
-        cricket::STUN_ATTR_SOFTWARE, software_));
+    msg->AddAttribute(std::make_unique<StunByteStringAttribute>(
+        STUN_ATTR_SOFTWARE, software_));
   }
   msg->Write(&buf);
   Send(conn, buf);
 }
 
-void TurnServer::Send(TurnServerConnection* conn,
-                      const rtc::ByteBufferWriter& buf) {
+void TurnServer::Send(TurnServerConnection* conn, const ByteBufferWriter& buf) {
   RTC_DCHECK_RUN_ON(thread_);
-  rtc::PacketOptions options;
+  AsyncSocketPacketOptions options;
   conn->socket()->SendTo(buf.Data(), buf.Length(), conn->src(), options);
 }
 
@@ -524,7 +511,7 @@ void TurnServer::DestroyAllocation(TurnServerAllocation* allocation) {
   // by all allocations.
   // Note: We may not find a socket if it's a TCP socket that was closed, and
   // the allocation is only now timing out.
-  if (iter != server_sockets_.end() && iter->second != webrtc::PROTO_UDP) {
+  if (iter != server_sockets_.end() && iter->second != PROTO_UDP) {
     DestroyInternalSocket(socket);
   }
 
@@ -582,7 +569,7 @@ TurnServerAllocation::TurnServerAllocation(TurnServer* server,
       external_socket_(socket),
       key_(key) {
   external_socket_->RegisterReceivedPacketCallback(
-      [&](rtc::AsyncPacketSocket* socket, const rtc::ReceivedPacket& packet) {
+      [&](AsyncPacketSocket* socket, const ReceivedIpPacket& packet) {
         RTC_DCHECK_RUN_ON(thread_);
         OnExternalPacket(socket, packet);
       });
@@ -600,23 +587,23 @@ std::string TurnServerAllocation::ToString() const {
   return ost.Release();
 }
 
-void TurnServerAllocation::HandleTurnMessage(const cricket::TurnMessage* msg) {
+void TurnServerAllocation::HandleTurnMessage(const TurnMessage* msg) {
   RTC_DCHECK_RUN_ON(thread_);
-  RTC_DCHECK(msg != NULL);
+  RTC_DCHECK(msg != nullptr);
   switch (msg->type()) {
-    case cricket::STUN_ALLOCATE_REQUEST:
+    case STUN_ALLOCATE_REQUEST:
       HandleAllocateRequest(msg);
       break;
-    case cricket::TURN_REFRESH_REQUEST:
+    case TURN_REFRESH_REQUEST:
       HandleRefreshRequest(msg);
       break;
-    case cricket::TURN_SEND_INDICATION:
+    case TURN_SEND_INDICATION:
       HandleSendIndication(msg);
       break;
-    case cricket::TURN_CREATE_PERMISSION_REQUEST:
+    case TURN_CREATE_PERMISSION_REQUEST:
       HandleCreatePermissionRequest(msg);
       break;
-    case cricket::TURN_CHANNEL_BIND_REQUEST:
+    case TURN_CHANNEL_BIND_REQUEST:
       HandleChannelBindRequest(msg);
       break;
     default:
@@ -627,13 +614,12 @@ void TurnServerAllocation::HandleTurnMessage(const cricket::TurnMessage* msg) {
   }
 }
 
-void TurnServerAllocation::HandleAllocateRequest(
-    const cricket::TurnMessage* msg) {
+void TurnServerAllocation::HandleAllocateRequest(const TurnMessage* msg) {
   // Copy the important info from the allocate request.
   transaction_id_ = msg->transaction_id();
-  const cricket::StunByteStringAttribute* username_attr =
-      msg->GetByteString(cricket::STUN_ATTR_USERNAME);
-  RTC_DCHECK(username_attr != NULL);
+  const StunByteStringAttribute* username_attr =
+      msg->GetByteString(STUN_ATTR_USERNAME);
+  RTC_DCHECK(username_attr != nullptr);
   username_ = std::string(username_attr->string_view());
 
   // Figure out the lifetime and start the allocation timer.
@@ -644,16 +630,15 @@ void TurnServerAllocation::HandleAllocateRequest(
                    << lifetime.seconds();
 
   // We've already validated all the important bits; just send a response here.
-  cricket::TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
-                                msg->transaction_id());
+  TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
+                       msg->transaction_id());
 
-  auto mapped_addr_attr = std::make_unique<cricket::StunXorAddressAttribute>(
-      cricket::STUN_ATTR_XOR_MAPPED_ADDRESS, conn_.src());
-  auto relayed_addr_attr = std::make_unique<cricket::StunXorAddressAttribute>(
-      cricket::STUN_ATTR_XOR_RELAYED_ADDRESS,
-      external_socket_->GetLocalAddress());
-  auto lifetime_attr = std::make_unique<cricket::StunUInt32Attribute>(
-      cricket::STUN_ATTR_LIFETIME, lifetime.seconds());
+  auto mapped_addr_attr = std::make_unique<StunXorAddressAttribute>(
+      STUN_ATTR_XOR_MAPPED_ADDRESS, conn_.src());
+  auto relayed_addr_attr = std::make_unique<StunXorAddressAttribute>(
+      STUN_ATTR_XOR_RELAYED_ADDRESS, external_socket_->GetLocalAddress());
+  auto lifetime_attr = std::make_unique<StunUInt32Attribute>(
+      STUN_ATTR_LIFETIME, lifetime.seconds());
   response.AddAttribute(std::move(mapped_addr_attr));
   response.AddAttribute(std::move(relayed_addr_attr));
   response.AddAttribute(std::move(lifetime_attr));
@@ -661,8 +646,7 @@ void TurnServerAllocation::HandleAllocateRequest(
   SendResponse(&response);
 }
 
-void TurnServerAllocation::HandleRefreshRequest(
-    const cricket::TurnMessage* msg) {
+void TurnServerAllocation::HandleRefreshRequest(const TurnMessage* msg) {
   // Figure out the new lifetime.
   TimeDelta lifetime = ComputeLifetime(*msg);
 
@@ -674,23 +658,21 @@ void TurnServerAllocation::HandleRefreshRequest(
                    << ": Refreshed allocation, lifetime=" << lifetime.seconds();
 
   // Send a success response with a LIFETIME attribute.
-  cricket::TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
-                                msg->transaction_id());
+  TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
+                       msg->transaction_id());
 
-  auto lifetime_attr = std::make_unique<cricket::StunUInt32Attribute>(
-      cricket::STUN_ATTR_LIFETIME, lifetime.seconds());
+  auto lifetime_attr = std::make_unique<StunUInt32Attribute>(
+      STUN_ATTR_LIFETIME, lifetime.seconds());
   response.AddAttribute(std::move(lifetime_attr));
 
   SendResponse(&response);
 }
 
-void TurnServerAllocation::HandleSendIndication(
-    const cricket::TurnMessage* msg) {
+void TurnServerAllocation::HandleSendIndication(const TurnMessage* msg) {
   // Check mandatory attributes.
-  const cricket::StunByteStringAttribute* data_attr =
-      msg->GetByteString(cricket::STUN_ATTR_DATA);
-  const cricket::StunAddressAttribute* peer_attr =
-      msg->GetAddress(cricket::STUN_ATTR_XOR_PEER_ADDRESS);
+  const StunByteStringAttribute* data_attr = msg->GetByteString(STUN_ATTR_DATA);
+  const StunAddressAttribute* peer_attr =
+      msg->GetAddress(STUN_ATTR_XOR_PEER_ADDRESS);
   if (!data_attr || !peer_attr) {
     RTC_LOG(LS_WARNING) << ToString() << ": Received invalid send indication";
     return;
@@ -709,20 +691,19 @@ void TurnServerAllocation::HandleSendIndication(
 }
 
 void TurnServerAllocation::HandleCreatePermissionRequest(
-    const cricket::TurnMessage* msg) {
+    const TurnMessage* msg) {
   RTC_DCHECK_RUN_ON(server_->thread_);
   // Check mandatory attributes.
-  const cricket::StunAddressAttribute* peer_attr =
-      msg->GetAddress(cricket::STUN_ATTR_XOR_PEER_ADDRESS);
+  const StunAddressAttribute* peer_attr =
+      msg->GetAddress(STUN_ATTR_XOR_PEER_ADDRESS);
   if (!peer_attr) {
     SendBadRequestResponse(msg);
     return;
   }
 
   if (server_->reject_private_addresses_ &&
-      webrtc::IPIsPrivate(peer_attr->GetAddress().ipaddr())) {
-    SendErrorResponse(msg, cricket::STUN_ERROR_FORBIDDEN,
-                      cricket::STUN_ERROR_REASON_FORBIDDEN);
+      IPIsPrivate(peer_attr->GetAddress().ipaddr())) {
+    SendErrorResponse(msg, STUN_ERROR_FORBIDDEN, STUN_ERROR_REASON_FORBIDDEN);
     return;
   }
 
@@ -733,13 +714,12 @@ void TurnServerAllocation::HandleCreatePermissionRequest(
                    << peer_attr->GetAddress().ToSensitiveString();
 
   // Send a success response.
-  cricket::TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
-                                msg->transaction_id());
+  TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
+                       msg->transaction_id());
   SendResponse(&response);
 }
 
-void TurnServerAllocation::HandleChannelBindRequest(
-    const cricket::TurnMessage* msg) {
+void TurnServerAllocation::HandleChannelBindRequest(const TurnMessage* msg) {
   RTC_DCHECK_RUN_ON(server_->thread_);
   if (server_->reject_bind_requests_) {
     RTC_LOG(LS_ERROR) << "HandleChannelBindRequest: Rejecting bind requests";
@@ -748,10 +728,10 @@ void TurnServerAllocation::HandleChannelBindRequest(
   }
 
   // Check mandatory attributes.
-  const cricket::StunUInt32Attribute* channel_attr =
-      msg->GetUInt32(cricket::STUN_ATTR_CHANNEL_NUMBER);
-  const cricket::StunAddressAttribute* peer_attr =
-      msg->GetAddress(cricket::STUN_ATTR_XOR_PEER_ADDRESS);
+  const StunUInt32Attribute* channel_attr =
+      msg->GetUInt32(STUN_ATTR_CHANNEL_NUMBER);
+  const StunAddressAttribute* peer_attr =
+      msg->GetAddress(STUN_ATTR_XOR_PEER_ADDRESS);
   if (!channel_attr || !peer_attr) {
     SendBadRequestResponse(msg);
     return;
@@ -793,15 +773,14 @@ void TurnServerAllocation::HandleChannelBindRequest(
                    << ", peer=" << peer_attr->GetAddress().ToSensitiveString();
 
   // Send a success response.
-  cricket::TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
-                                msg->transaction_id());
+  TurnMessage response(GetStunSuccessResponseTypeOrZero(*msg),
+                       msg->transaction_id());
   SendResponse(&response);
 }
 
-void TurnServerAllocation::HandleChannelData(
-    rtc::ArrayView<const uint8_t> payload) {
+void TurnServerAllocation::HandleChannelData(ArrayView<const uint8_t> payload) {
   // Extract the channel number from the data.
-  uint16_t channel_id = webrtc::GetBE16(payload.data());
+  uint16_t channel_id = GetBE16(payload.data());
   auto channel = FindChannel(channel_id);
   if (channel != channels_.end()) {
     // Send the data to the peer address.
@@ -815,12 +794,12 @@ void TurnServerAllocation::HandleChannelData(
 }
 
 void TurnServerAllocation::OnExternalPacket(AsyncPacketSocket* socket,
-                                            const rtc::ReceivedPacket& packet) {
+                                            const ReceivedIpPacket& packet) {
   RTC_DCHECK(external_socket_.get() == socket);
   auto channel = FindChannel(packet.source_address());
   if (channel != channels_.end()) {
     // There is a channel bound to this address. Send as a channel message.
-    rtc::ByteBufferWriter buf;
+    ByteBufferWriter buf;
     buf.WriteUInt16(channel->id);
     buf.WriteUInt16(static_cast<uint16_t>(packet.payload().size()));
     buf.Write(ArrayView<const uint8_t>(packet.payload()));
@@ -828,12 +807,11 @@ void TurnServerAllocation::OnExternalPacket(AsyncPacketSocket* socket,
   } else if (!server_->enable_permission_checks_ ||
              HasPermission(packet.source_address().ipaddr())) {
     // No channel, but a permission exists. Send as a data indication.
-    cricket::TurnMessage msg(cricket::TURN_DATA_INDICATION);
-    msg.AddAttribute(std::make_unique<cricket::StunXorAddressAttribute>(
-        cricket::STUN_ATTR_XOR_PEER_ADDRESS, packet.source_address()));
-    msg.AddAttribute(std::make_unique<cricket::StunByteStringAttribute>(
-        cricket::STUN_ATTR_DATA, packet.payload().data(),
-        packet.payload().size()));
+    TurnMessage msg(TURN_DATA_INDICATION);
+    msg.AddAttribute(std::make_unique<StunXorAddressAttribute>(
+        STUN_ATTR_XOR_PEER_ADDRESS, packet.source_address()));
+    msg.AddAttribute(std::make_unique<StunByteStringAttribute>(
+        STUN_ATTR_DATA, packet.payload().data(), packet.payload().size()));
     server_->SendStun(&conn_, &msg);
   } else {
     RTC_LOG(LS_WARNING)
@@ -842,10 +820,8 @@ void TurnServerAllocation::OnExternalPacket(AsyncPacketSocket* socket,
   }
 }
 
-TimeDelta TurnServerAllocation::ComputeLifetime(
-    const cricket::TurnMessage& msg) {
-  if (const cricket::StunUInt32Attribute* attr =
-          msg.GetUInt32(cricket::STUN_ATTR_LIFETIME)) {
+TimeDelta TurnServerAllocation::ComputeLifetime(const TurnMessage& msg) {
+  if (const StunUInt32Attribute* attr = msg.GetUInt32(STUN_ATTR_LIFETIME)) {
     return std::min(TimeDelta::Seconds(static_cast<int>(attr->value())),
                     kDefaultAllocationTimeout);
   }
@@ -886,19 +862,17 @@ TurnServerAllocation::ChannelList::iterator TurnServerAllocation::FindChannel(
                          [&](const Channel& c) { return c.peer == addr; });
 }
 
-void TurnServerAllocation::SendResponse(cricket::TurnMessage* msg) {
+void TurnServerAllocation::SendResponse(TurnMessage* msg) {
   // Success responses always have M-I.
   msg->AddMessageIntegrity(key_);
   server_->SendStun(&conn_, msg);
 }
 
-void TurnServerAllocation::SendBadRequestResponse(
-    const cricket::TurnMessage* req) {
-  SendErrorResponse(req, cricket::STUN_ERROR_BAD_REQUEST,
-                    cricket::STUN_ERROR_REASON_BAD_REQUEST);
+void TurnServerAllocation::SendBadRequestResponse(const TurnMessage* req) {
+  SendErrorResponse(req, STUN_ERROR_BAD_REQUEST, STUN_ERROR_REASON_BAD_REQUEST);
 }
 
-void TurnServerAllocation::SendErrorResponse(const cricket::TurnMessage* req,
+void TurnServerAllocation::SendErrorResponse(const TurnMessage* req,
                                              int code,
                                              absl::string_view reason) {
   server_->SendErrorResponse(&conn_, req, code, reason);
@@ -907,7 +881,7 @@ void TurnServerAllocation::SendErrorResponse(const cricket::TurnMessage* req,
 void TurnServerAllocation::SendExternal(const void* data,
                                         size_t size,
                                         const SocketAddress& peer) {
-  rtc::PacketOptions options;
+  AsyncSocketPacketOptions options;
   external_socket_->SendTo(data, size, peer, options);
 }
 

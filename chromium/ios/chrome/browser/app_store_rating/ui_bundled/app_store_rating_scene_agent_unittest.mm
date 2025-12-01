@@ -143,6 +143,8 @@ class AppStoreRatingSceneAgentTest : public PlatformTest {
   ~AppStoreRatingSceneAgentTest() override {
     ClearDefaultBrowserPromoData();
     local_state()->ClearPref(prefs::kAppStoreRatingPolicyEnabled);
+    [fake_scene_state_ shutdown];
+    fake_scene_state_ = nil;
   }
 
   PrefService* local_state() {
@@ -151,8 +153,8 @@ class AppStoreRatingSceneAgentTest : public PlatformTest {
 
  protected:
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
-  std::unique_ptr<TestProfileIOS> profile_;
   web::WebTaskEnvironment task_environment_;
+  std::unique_ptr<TestProfileIOS> profile_;
   AppStoreRatingSceneAgent* test_scene_agent_;
   std::unique_ptr<MockPromosManager> promos_manager_;
   FakeSceneState* fake_scene_state_;

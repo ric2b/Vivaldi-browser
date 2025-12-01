@@ -11,7 +11,6 @@
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/task/bind_post_task.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -153,7 +152,7 @@ struct ClientResourceProvider::ImportedResource {
         returned_sync_token(resource.sync_token()),
         evicted_callback(std::move(evicted_callback)) {
     // We should never have no ReleaseCallback.
-    DCHECK(this->impl_release_callback || this->main_thread_release_callback);
+    CHECK(this->impl_release_callback || this->main_thread_release_callback);
     // Replace the |resource| id with the local id from this
     // ClientResourceProvider.
     this->resource.id = id;
@@ -267,7 +266,7 @@ void ClientResourceProvider::PrepareSendToParentInternal(
   imports.reserve(export_ids.size());
   for (const ResourceId id : export_ids) {
     auto it = imported_resources_.find(id);
-    CHECK(it != imported_resources_.end(), base::NotFatalUntil::M130);
+    CHECK(it != imported_resources_.end());
     imports.push_back(&it->second);
   }
 
@@ -436,19 +435,22 @@ ResourceId ClientResourceProvider::ImportResource(
     ReleaseCallback main_thread_release_callback,
     ResourceEvictedCallback evicted_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+
+  // Clients are not allowed to import any empty resource.
+  CHECK(!resource.is_empty());
   ResourceId id = id_generator_.GenerateNextId();
   auto result = imported_resources_.emplace(
       id, ImportedResource(id, resource, std::move(impl_release_callback),
                            std::move(main_thread_release_callback),
                            std::move(evicted_callback)));
-  DCHECK(result.second);  // If false, the id was already in the map.
+  CHECK(result.second);  // If false, the id was already in the map.
   return id;
 }
 
 void ClientResourceProvider::RemoveImportedResource(ResourceId id) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   auto it = imported_resources_.find(id);
-  CHECK(it != imported_resources_.end(), base::NotFatalUntil::M130);
+  CHECK(it != imported_resources_.end());
   ImportedResource& imported = it->second;
   imported.marked_for_deletion = true;
   // We clear the callback here, as we will hold onto `imported` until it has
@@ -529,7 +531,7 @@ void ClientResourceProvider::ValidateResource(ResourceId id) const {
 
 bool ClientResourceProvider::InUseByConsumer(ResourceId id) {
   auto it = imported_resources_.find(id);
-  CHECK(it != imported_resources_.end(), base::NotFatalUntil::M130);
+  CHECK(it != imported_resources_.end());
   ImportedResource& imported = it->second;
   return imported.exported_count > 0 || imported.returned_lost;
 }

@@ -34,8 +34,8 @@
 #include "test/gtest.h"
 #include "test/wait_until.h"
 
-using ::cricket::PseudoTcp;
 using ::testing::IsTrue;
+using ::webrtc::PseudoTcp;
 using ::webrtc::ScopedTaskSafety;
 using ::webrtc::TaskQueueBase;
 using ::webrtc::TimeDelta;
@@ -44,18 +44,20 @@ static const int kConnectTimeoutMs = 10000;  // ~3 * default RTO of 3000ms
 static const int kTransferTimeoutMs = 15000;
 static const int kBlockSize = 4096;
 
-class PseudoTcpForTest : public cricket::PseudoTcp {
+class PseudoTcpForTest : public webrtc::PseudoTcp {
  public:
-  PseudoTcpForTest(cricket::IPseudoTcpNotify* notify, uint32_t conv)
-      : PseudoTcp(notify, conv) {}
+  PseudoTcpForTest(webrtc::IPseudoTcpNotify* notify, uint32_t conv)
+      : webrtc::PseudoTcp(notify, conv) {}
 
-  bool isReceiveBufferFull() const { return PseudoTcp::isReceiveBufferFull(); }
+  bool isReceiveBufferFull() const {
+    return webrtc::PseudoTcp::isReceiveBufferFull();
+  }
 
-  void disableWindowScale() { PseudoTcp::disableWindowScale(); }
+  void disableWindowScale() { webrtc::PseudoTcp::disableWindowScale(); }
 };
 
 class PseudoTcpTestBase : public ::testing::Test,
-                          public cricket::IPseudoTcpNotify {
+                          public webrtc::IPseudoTcpNotify {
  public:
   PseudoTcpTestBase()
       : local_(this, 1),
@@ -217,8 +219,8 @@ class PseudoTcpTestBase : public ::testing::Test,
   PseudoTcpForTest remote_;
   ScopedTaskSafety local_timer_;
   ScopedTaskSafety remote_timer_;
-  rtc::MemoryStream send_stream_;
-  rtc::MemoryStream recv_stream_;
+  webrtc::MemoryStream send_stream_;
+  webrtc::MemoryStream recv_stream_;
   bool have_connected_;
   bool have_disconnected_;
   int local_mtu_;
@@ -242,7 +244,7 @@ class PseudoTcpTest : public PseudoTcpTestBase {
       uint8_t ch = static_cast<uint8_t>(i);
       size_t written;
       int error;
-      send_stream_.Write(rtc::MakeArrayView(&ch, 1), written, error);
+      send_stream_.Write(webrtc::MakeArrayView(&ch, 1), written, error);
     }
     send_stream_.Rewind();
     // Prepare the receive stream.
@@ -314,7 +316,7 @@ class PseudoTcpTest : public PseudoTcpTestBase {
         size_t written;
         int error;
         recv_stream_.Write(
-            rtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), received),
+            webrtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), received),
             written, error);
         recv_stream_.GetPosition(&position);
         RTC_LOG(LS_VERBOSE) << "Received: " << position;
@@ -328,9 +330,9 @@ class PseudoTcpTest : public PseudoTcpTestBase {
     do {
       send_stream_.GetPosition(&position);
       int error;
-      if (send_stream_.Read(
-              rtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), kBlockSize),
-              tosend, error) != rtc::SR_EOS) {
+      if (send_stream_.Read(webrtc::MakeArrayView(
+                                reinterpret_cast<uint8_t*>(block), kBlockSize),
+                            tosend, error) != webrtc::SR_EOS) {
         sent = local_.Send(block, tosend);
         UpdateLocalClock();
         if (sent != -1) {
@@ -348,16 +350,16 @@ class PseudoTcpTest : public PseudoTcpTestBase {
   }
 
  private:
-  rtc::MemoryStream send_stream_;
-  rtc::MemoryStream recv_stream_;
+  webrtc::MemoryStream send_stream_;
+  webrtc::MemoryStream recv_stream_;
 };
 
 class PseudoTcpTestPingPong : public PseudoTcpTestBase {
  public:
   PseudoTcpTestPingPong()
       : iterations_remaining_(0),
-        sender_(NULL),
-        receiver_(NULL),
+        sender_(nullptr),
+        receiver_(nullptr),
         bytes_per_send_(0) {}
   void SetBytesPerSend(int bytes) { bytes_per_send_ = bytes; }
   void TestPingPong(int size, int iterations) {
@@ -371,7 +373,7 @@ class PseudoTcpTestPingPong : public PseudoTcpTestBase {
       uint8_t ch = static_cast<uint8_t>(i);
       size_t written;
       int error;
-      send_stream_.Write(rtc::MakeArrayView(&ch, 1), written, error);
+      send_stream_.Write(webrtc::MakeArrayView(&ch, 1), written, error);
     }
     send_stream_.Rewind();
     // Prepare the receive stream.
@@ -443,8 +445,8 @@ class PseudoTcpTestPingPong : public PseudoTcpTestBase {
         size_t written;
         int error;
         recv_stream_.Write(
-            rtc::MakeArrayView(reinterpret_cast<const uint8_t*>(block),
-                               received),
+            webrtc::MakeArrayView(reinterpret_cast<const uint8_t*>(block),
+                                  received),
             written, error);
         recv_stream_.GetPosition(&position);
         RTC_LOG(LS_VERBOSE) << "Received: " << position;
@@ -460,8 +462,8 @@ class PseudoTcpTestPingPong : public PseudoTcpTestBase {
       tosend = bytes_per_send_ ? bytes_per_send_ : sizeof(block);
       int error;
       if (send_stream_.Read(
-              rtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), tosend),
-              tosend, error) != rtc::SR_EOS) {
+              webrtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), tosend),
+              tosend, error) != webrtc::SR_EOS) {
         sent = sender_->Send(block, tosend);
         UpdateLocalClock();
         if (sent != -1) {
@@ -498,7 +500,7 @@ class PseudoTcpTestReceiveWindow : public PseudoTcpTestBase {
       uint8_t ch = static_cast<uint8_t>(i);
       size_t written;
       int error;
-      send_stream_.Write(rtc::MakeArrayView(&ch, 1), written, error);
+      send_stream_.Write(webrtc::MakeArrayView(&ch, 1), written, error);
     }
     send_stream_.Rewind();
 
@@ -558,7 +560,7 @@ class PseudoTcpTestReceiveWindow : public PseudoTcpTestBase {
         size_t written;
         int error;
         recv_stream_.Write(
-            rtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), received),
+            webrtc::MakeArrayView(reinterpret_cast<uint8_t*>(block), received),
             written, error);
         recv_stream_.GetPosition(&position);
         RTC_LOG(LS_VERBOSE) << "Received: " << position;
@@ -585,9 +587,9 @@ class PseudoTcpTestReceiveWindow : public PseudoTcpTestBase {
       send_stream_.GetPosition(&position);
       int error;
       if (send_stream_.Read(
-              rtc::MakeArrayView(reinterpret_cast<uint8_t*>(block),
-                                 sizeof(block)),
-              tosend, error) != rtc::SR_EOS) {
+              webrtc::MakeArrayView(reinterpret_cast<uint8_t*>(block),
+                                    sizeof(block)),
+              tosend, error) != webrtc::SR_EOS) {
         sent = local_.Send(block, tosend);
         UpdateLocalClock();
         if (sent != -1) {
@@ -623,8 +625,8 @@ class PseudoTcpTestReceiveWindow : public PseudoTcpTestBase {
   }
 
  private:
-  rtc::MemoryStream send_stream_;
-  rtc::MemoryStream recv_stream_;
+  webrtc::MemoryStream send_stream_;
+  webrtc::MemoryStream recv_stream_;
 
   std::vector<size_t> send_position_;
   std::vector<size_t> recv_position_;

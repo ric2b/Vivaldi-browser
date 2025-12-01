@@ -1183,7 +1183,7 @@ func (m *clientHelloMsg) unmarshal(data []byte) bool {
 			}
 		case extensionTrustAnchors:
 			// An empty list is allowed here.
-			if !parseTrustAnchors(&body, &m.trustAnchors) {
+			if !parseTrustAnchors(&body, &m.trustAnchors) || len(body) != 0 {
 				return false
 			}
 		}
@@ -1876,7 +1876,8 @@ func (m *serverExtensions) unmarshal(data cryptobyte.String, version uint16) boo
 			if version < VersionTLS13 {
 				return false
 			}
-			if !parseTrustAnchors(&body, &m.trustAnchors) || len(body) != 0 {
+			// The list cannot be empty here. If empty, the peer should have omitted the extension.
+			if !parseTrustAnchors(&body, &m.trustAnchors) || len(m.trustAnchors) == 0 || len(body) != 0 {
 				return false
 			}
 		default:

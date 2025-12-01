@@ -4,48 +4,99 @@
 <translation id="1063263220330818888">Privé zoekopdracht</translation>
 <translation id="1097355661841455597">We horen graag jouw mening.</translation>
 <translation id="1137850887415122856">Stel Touch ID, Face ID of een toegangscode in om jouw privé-tabs te vergrendelen.</translation>
+<translation id="1189137610071296104">Openen in tabgroep</translation>
 <translation id="1310184829257917508">Vraag om links van andere apps in privémodus te openen</translation>
 <translation id="1743244221910283364">Wijzigingen niet doorvoeren</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {tabblad toevoegen aan groep}
+        other {tabbladen toevoegen aan groep}}</translation>
 <translation id="207677936531967364">Nieuwe privétabpagina</translation>
+<translation id="2099591136582442348">Hiermee wordt de groep definitief verwijderd van dit apparaat.</translation>
+<translation id="2181990701313127304">Nieuwe tab in tabgroep</translation>
+<translation id="2351280151183279120">Tabgroep delen</translation>
 <translation id="2353953000228441783">Standaard siteweergave</translation>
 <translation id="2394192052244849643">Plakken en zoeken</translation>
 <translation id="2418705169960294134">Nieuw privé-tabblad</translation>
+<translation id="2565593432251168402">Blijf georganiseerd met tabgroepen</translation>
 <translation id="2783161812871838616">Desktopsite opvragen</translation>
+<translation id="2806957659107692459">Tabgroep aanmaken</translation>
 <translation id="2899836479226240291">Je kunt links automatisch openen in Vivaldi door Vivaldi in te stellen als je standaard browser-app.</translation>
 <translation id="3365529507898144230">Opslaan in Foto's</translation>
 <translation id="3434473769478814796">Plakken en gaan</translation>
 <translation id="3463990832590571933">In privé-tabblad openen</translation>
 <translation id="3473652525653758699">Nieuwe privévenster</translation>
 <translation id="3501504415290398157">Gebruik <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> om je privétabs te ontgrendelen.</translation>
+<translation id="353418192940651934">Tabgroep behouden</translation>
 <translation id="3607792383367580513">Vertalen</translation>
 <translation id="3692650606013198282">Privé openen</translation>
+<translation id="3873885181515160073">Maak een nieuwe tabgroep aan door met een naam en een kleur</translation>
 <translation id="3922395466317605522">Menu aanpassen</translation>
 <translation id="3981599532037327317">${url} in privémodus openen</translation>
 <translation id="398477389655464998">Link naar markering kopiëren</translation>
+<translation id="3993429087389909418">De tabbladen blijven open op dit apparaat, maar de groep wordt verwijderd van alle apparaten aangemeld bij <ph name="USER_EMAIL" />.</translation>
 <translation id="4026745073321351206">🙄 Een probleem ontdekt?</translation>
+<translation id="4216644171369573466">Tabgroep, <ph name="GROUP_TITLE" />, Menu.</translation>
 <translation id="4304713468139749426">Wachtwoordbeheer</translation>
+<translation id="4569525137269575065">Tabgroep sluiten</translation>
 <translation id="473775607612524610">Updaten</translation>
 <translation id="4755216899422789286">URL's in Vivaldi openen</translation>
+<translation id="4772190485302020393">Alle tabbladen en -groepen sluiten</translation>
 <translation id="4802185666270672526">Desktopsite opvragen verbergen</translation>
+<translation id="4828571836982833289">Tabgroep opheffen?</translation>
+<translation id="4838250035189612538">Tabgroep hernoemen</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 tabgroep afgesloten en opgeslagen}
+            other {{count} tabgroepen afgesloten en opgeslagen}}</translation>
+<translation id="5019787757991745254">Tabgroep kleur <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Tabgroep. Ingeklapt.</translation>
 <translation id="5217245356412073535">Je kunt de standaard siteweergave wijzigen in desktop via Instellingen &gt; Website-instellingen</translation>
 <translation id="5271549068863921519">Wachtwoord opslaan</translation>
 <translation id="5317780077021120954">Opslaan</translation>
+<translation id="5385953732213322025">Deze site probeert een applicatie te openen. Hiermee wordt je uit de privémodus gehaald.</translation>
 <translation id="5431239785743546285">Pagina's die je hebt gelezen</translation>
+<translation id="5521301883748677039">Tabgroep verwijderen?</translation>
+<translation id="5544011153887687593">Tab in tabgroep. <ph name="TAB_INDEX_IN_GROUP" /> van <ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Wachtwoord opslaan?</translation>
 <translation id="570209299585559496">Je kunt de standaard siteweergave veranderen in desktop via Instellingen - Website-instellingen</translation>
+<translation id="5719777162751096990">Verplaatsen naar tabgroep</translation>
 <translation id="5962477178930921574">Plakken en zoeken</translation>
+<translation id="6163856768888310791">Groep opheffen</translation>
+<translation id="6168969409902608220">Tabgroep een naam geven</translation>
 <translation id="6233792867654386826">Opent de ingevoerde URL's in Vivaldi.</translation>
+<translation id="6478587527114893588">Tabgroep sluiten.</translation>
+<translation id="6527405730445064713">Tabgroep. Uitgeklapt.</translation>
 <translation id="6532106788206463496">Wijzigingen opslaan</translation>
+<translation id="6666425778700353369">Hiermee wordt de groep verwijderd van alle apparaten aangemeld bij <ph name="USER_EMAIL" />.</translation>
 <translation id="6680416467695217368">Menu aanpassen</translation>
+<translation id="6695835495840050460">Tik "Tab toevoegen aan nieuwe groep"</translation>
+<translation id="6708694844902784277">Tabgroep verwijderen</translation>
 <translation id="6827597288286078054">Privé zoekopdracht</translation>
 <translation id="6851516051005285358">Desktopsite opvragen</translation>
+<translation id="6890907822330704077">Tabgroep, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> tabs.</translation>
 <translation id="7307970171564921489">Ontgrendel privétabs met <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /></translation>
 <translation id="7347289093190902150">Privé openen?</translation>
+<translation id="7363285031331302144">Maak tabgroepen om je geopende tabbladen te ordenen</translation>
+<translation id="7395230742578757172">Openen in nieuwe tabgroep</translation>
+<translation id="7424676799308869002">Tabgroep behouden?</translation>
 <translation id="7498234416455752244">Doorgaan met bewerken</translation>
 <translation id="7549299604720382000">Nieuwe privétab</translation>
+<translation id="7585610907974664408">Nieuwe privétab in tabgroep</translation>
+<translation id="7661319142491611883">Tabgroep uitklappen.</translation>
+<translation id="7706213624515206557">Alle tabs in tabgroep weergeven</translation>
 <translation id="7961015016161918242">Nooit</translation>
 <translation id="8326104954595890674">Nieuwe privétab</translation>
+<translation id="8345989863850359861">Tabblad verwijderen en -groep wissen?</translation>
+<translation id="8407986162266014185">Tabgroep delen</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {tabblad toevoegen aan nieuw groep}
+        other {tabbladen toevoegen aan nieuw groep}}</translation>
+<translation id="8465550436083180511">Tabgroep inklappen.</translation>
+<translation id="8685478989144570078">Tabgroepen</translation>
 <translation id="8756969031206844760">Wachtwoord updaten?</translation>
+<translation id="8852861335827546438">Nieuwe tabgroep</translation>
+<translation id="8951084872625418241">Nieuwe tab in tabgroep</translation>
 <translation id="9042893549633094279">Privacy en beveiliging</translation>
 <translation id="9094033019050270033">Wachtwoord updaten</translation>
+<translation id="944434461715569989">Tabgroep verlaten</translation>
+<translation id="959061183386231608">De tabbladen blijven open op dit apparaat, maar de groep wordt definitief verwijderd.</translation>
 </translationbundle>

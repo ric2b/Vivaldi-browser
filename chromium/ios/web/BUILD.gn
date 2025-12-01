@@ -447,10 +447,7 @@ source_set("ios_web_web_state_js_unittests") {
     "//ui/base:test_support",
   ]
 
-  sources = [
-    "web_state/js/common_js_unittest.mm",
-    "web_state/js/message_js_unittest.mm",
-  ]
+  sources = [ "web_state/js/common_js_unittest.mm" ]
 }
 
 source_set("ios_web_web_state_ui_unittests") {
@@ -479,7 +476,7 @@ source_set("ios_web_web_state_ui_unittests") {
     "//ios/web/test:mojo_bindings",
     "//ios/web/test:test_constants",
     "//ios/web/test:test_support",
-    "//ios/web/test/fakes:fakes",
+    "//ios/web/test/fakes",
     "//ios/web/web_state:web_state_impl_header",
     "//ios/web/web_state/ui",
     "//ios/web/web_state/ui:crw_context_menu_controller",
@@ -631,10 +628,7 @@ optimize_ts("message_js") {
 
   sources = [ "js_messaging/resources/message.ts" ]
 
-  deps = [
-    "//ios/web/public/js_messaging:frame_id",
-    "//ios/web/public/js_messaging:gcrweb",
-  ]
+  deps = [ "//ios/web/public/js_messaging:gcrweb" ]
 }
 
 bundle_data("navigation_resources") {

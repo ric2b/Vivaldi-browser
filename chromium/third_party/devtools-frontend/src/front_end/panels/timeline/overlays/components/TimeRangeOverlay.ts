@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
@@ -8,11 +9,7 @@ import type * as Trace from '../../../../models/trace/trace.js';
 import {html, render} from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
 
-import stylesRaw from './timeRangeOverlay.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssText);
+import timeRangeOverlayStyles from './timeRangeOverlay.css.js';
 
 const UIStrings = {
   /**
@@ -51,10 +48,6 @@ export class TimeRangeOverlay extends HTMLElement {
 
   #rangeContainer: HTMLElement|null = null;
   #labelBox: HTMLElement|null = null;
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [styles];
-  }
 
   constructor(initialLabel: string) {
     super();
@@ -260,6 +253,7 @@ export class TimeRangeOverlay extends HTMLElement {
     // clang-format off
     render(
         html`
+          <style>${timeRangeOverlayStyles}</style>
           <span class="range-container" role="region" aria-label=${i18nString(UIStrings.timeRange)}>
             <span
              class="label-text"

@@ -13,7 +13,7 @@
 #include "rtc_base/time_utils.h"
 #include "test/gtest.h"
 
-namespace cricket {
+namespace webrtc {
 
 TEST(VideoCommonTest, TestCanonicalFourCC) {
   // Canonical fourccs are not changed.
@@ -40,8 +40,8 @@ TEST(VideoCommonTest, TestCanonicalFourCC) {
 // Test conversion between interval and fps
 TEST(VideoCommonTest, TestVideoFormatFps) {
   EXPECT_EQ(VideoFormat::kMinimumInterval, VideoFormat::FpsToInterval(0));
-  EXPECT_EQ(webrtc::kNumNanosecsPerSec / 20, VideoFormat::FpsToInterval(20));
-  EXPECT_EQ(20, VideoFormat::IntervalToFps(webrtc::kNumNanosecsPerSec / 20));
+  EXPECT_EQ(kNumNanosecsPerSec / 20, VideoFormat::FpsToInterval(20));
+  EXPECT_EQ(20, VideoFormat::IntervalToFps(kNumNanosecsPerSec / 20));
   EXPECT_EQ(0, VideoFormat::IntervalToFps(0));
 }
 
@@ -93,4 +93,4 @@ TEST(VideoCommonTest, TestVideoFormatCompare) {
   EXPECT_TRUE(format.IsPixelRateLess(format2));
 }
 
-}  // namespace cricket
+}  // namespace webrtc

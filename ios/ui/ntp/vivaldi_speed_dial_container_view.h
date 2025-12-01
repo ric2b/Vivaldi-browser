@@ -36,7 +36,8 @@
     frequentlyVisited:(BOOL)frequentlyVisited
     topSitesAvailable:(BOOL)topSitesAvailable
      topToolbarHidden:(BOOL)topToolbarHidden
-    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass;
+    verticalSizeClass:(UIUserInterfaceSizeClass)verticalSizeClass
+            wallpaper:(UIImage*)wallpaper;
 
 - (void)reloadLayoutWithStyle:(VivaldiStartPageLayoutStyle)style
                  layoutColumn:(VivaldiStartPageLayoutColumn)column;

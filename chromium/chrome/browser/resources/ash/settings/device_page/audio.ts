@@ -116,17 +116,6 @@ export class SettingsAudioElement extends SettingsAudioElementBase {
         value: false,
       },
 
-      /**
-       * Used by DeepLinkingMixin to focus this page's deep links.
-       */
-      supportedSettingIds: {
-        type: Object,
-        value: () => new Set<Setting>([
-          Setting.kChargingSounds,
-          Setting.kLowBatterySound,
-        ]),
-      },
-
       showAllowAGC: {
         type: Boolean,
         value: loadTimeData.getBoolean('enableForceRespectUiGainsToggle'),
@@ -152,6 +141,12 @@ export class SettingsAudioElement extends SettingsAudioElementBase {
       },
     };
   }
+
+  // DeepLinkingMixin override
+  override supportedSettingIds = new Set<Setting>([
+    Setting.kChargingSounds,
+    Setting.kLowBatterySound,
+  ]);
 
   protected isAllowAGCEnabled: boolean;
   protected showAllowAGC: boolean;
@@ -329,7 +324,7 @@ export class SettingsAudioElement extends SettingsAudioElementBase {
 
   /** Handles updating the mic icon depending on the input mute state. */
   protected getInputIcon_(): string {
-    return this.isInputMuted_ ? 'settings:mic-off' : 'cr:mic';
+    return this.isInputMuted_ ? 'os-settings:mic-off' : 'cr:mic';
   }
 
   /**

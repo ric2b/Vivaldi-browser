@@ -24,7 +24,7 @@
 
 namespace webrtc {
 
-std::unique_ptr<TestStunServer, std::function<void(webrtc::TestStunServer*)>>
+std::unique_ptr<TestStunServer, std::function<void(TestStunServer*)>>
 TestStunServer::Create(SocketServer* ss,
                        const SocketAddress& addr,
                        Thread& network_thread) {
@@ -35,21 +35,20 @@ TestStunServer::Create(SocketServer* ss,
   TestStunServer* server = nullptr;
   network_thread.BlockingCall(
       [&]() { server = new TestStunServer(udp_socket, network_thread); });
-  std::unique_ptr<TestStunServer, std::function<void(webrtc::TestStunServer*)>>
-      result(server, [&](TestStunServer* server) {
+  std::unique_ptr<TestStunServer, std::function<void(TestStunServer*)>> result(
+      server, [&](TestStunServer* server) {
         network_thread.BlockingCall([server]() { delete server; });
       });
   return result;
 }
 
-void TestStunServer::OnBindingRequest(cricket::StunMessage* msg,
+void TestStunServer::OnBindingRequest(StunMessage* msg,
                                       const SocketAddress& remote_addr) {
   RTC_DCHECK_RUN_ON(&network_thread_);
   if (fake_stun_addr_.IsNil()) {
     StunServer::OnBindingRequest(msg, remote_addr);
   } else {
-    cricket::StunMessage response(cricket::STUN_BINDING_RESPONSE,
-                                  msg->transaction_id());
+    StunMessage response(STUN_BINDING_RESPONSE, msg->transaction_id());
     GetStunBindResponse(msg, fake_stun_addr_, &response);
     SendResponse(response, remote_addr);
   }

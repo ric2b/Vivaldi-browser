@@ -16,9 +16,7 @@ export const enum PhysicalDirection {
   TOP_TO_BOTTOM = 'top-to-bottom',
 }
 
-interface DirectionsDict {
-  [key: string]: PhysicalDirection;
-}
+type DirectionsDict = Record<string, PhysicalDirection>;
 
 export interface IconInfo {
   iconName: string;
@@ -250,15 +248,15 @@ function baselineIcon(): IconInfo {
   };
 }
 
-function flexAlignSelfIcon(iconName: string): (styles: ComputedStyles, parentStyles: ComputedStyles) => IconInfo {
-  function getIcon(computedStyles: ComputedStyles, parentComputedStyles: ComputedStyles): IconInfo {
+function flexAlignSelfIcon(iconName: string): (parentStyles: ComputedStyles) => IconInfo {
+  function getIcon(parentComputedStyles: ComputedStyles): IconInfo {
     return flexAlignItemsIcon(iconName)(parentComputedStyles);
   }
   return getIcon;
 }
 
-function gridAlignSelfIcon(iconName: string): (styles: ComputedStyles, parentStyles: ComputedStyles) => IconInfo {
-  function getIcon(computedStyles: ComputedStyles, parentComputedStyles: ComputedStyles): IconInfo {
+function gridAlignSelfIcon(iconName: string): (parentStyles: ComputedStyles) => IconInfo {
+  function getIcon(parentComputedStyles: ComputedStyles): IconInfo {
     return gridAlignItemsIcon(iconName)(parentComputedStyles);
   }
   return getIcon;
@@ -403,7 +401,7 @@ export function findIcon(
     }
   }
   if (isFlexContainer(parentComputedStyles)) {
-    const icon = findFlexItemIcon(text, computedStyles, parentComputedStyles);
+    const icon = findFlexItemIcon(text, parentComputedStyles);
     if (icon) {
       return icon;
     }
@@ -415,7 +413,7 @@ export function findIcon(
     }
   }
   if (isGridContainer(parentComputedStyles)) {
-    const icon = findGridItemIcon(text, computedStyles, parentComputedStyles);
+    const icon = findGridItemIcon(text, parentComputedStyles);
     if (icon) {
       return icon;
     }
@@ -431,11 +429,10 @@ export function findFlexContainerIcon(text: string, computedStyles: ComputedStyl
   return null;
 }
 
-export function findFlexItemIcon(
-    text: string, computedStyles: ComputedStyles|null, parentComputedStyles?: ComputedStyles|null): IconInfo|null {
+export function findFlexItemIcon(text: string, parentComputedStyles?: ComputedStyles|null): IconInfo|null {
   const resolver = flexItemIcons.get(text);
   if (resolver) {
-    return resolver(computedStyles || new Map(), parentComputedStyles || new Map());
+    return resolver(parentComputedStyles || new Map());
   }
   return null;
 }
@@ -448,11 +445,10 @@ export function findGridContainerIcon(text: string, computedStyles: ComputedStyl
   return null;
 }
 
-export function findGridItemIcon(
-    text: string, computedStyles: ComputedStyles|null, parentComputedStyles?: ComputedStyles|null): IconInfo|null {
+export function findGridItemIcon(text: string, parentComputedStyles?: ComputedStyles|null): IconInfo|null {
   const resolver = gridItemIcons.get(text);
   if (resolver) {
-    return resolver(computedStyles || new Map(), parentComputedStyles || new Map());
+    return resolver(parentComputedStyles || new Map());
   }
   return null;
 }

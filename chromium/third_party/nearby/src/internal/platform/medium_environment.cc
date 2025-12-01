@@ -28,11 +28,11 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
-#include "absl/types/optional.h"
 #include "internal/platform/borrowable.h"
 #include "internal/platform/byte_array.h"
 #include "internal/platform/count_down_latch.h"
 #include "internal/platform/feature_flags.h"
+#include "internal/platform/implementation/awdl.h"
 #include "internal/platform/implementation/ble.h"
 #include "internal/platform/implementation/ble_v2.h"
 #include "internal/platform/implementation/bluetooth_adapter.h"
@@ -59,7 +59,7 @@ MediumEnvironment& MediumEnvironment::Instance() {
 
 void MediumEnvironment::Start(EnvironmentConfig config) {
   if (!enabled_.exchange(true)) {
-    NEARBY_LOGS(INFO) << "MediumEnvironment::Start()";
+    LOG(INFO) << "MediumEnvironment::Start()";
     config_ = std::move(config);
     if (config_.use_simulated_clock) {
       MutexLock lock(&mutex_);
@@ -71,7 +71,7 @@ void MediumEnvironment::Start(EnvironmentConfig config) {
 
 void MediumEnvironment::Stop() {
   if (enabled_.exchange(false)) {
-    NEARBY_LOGS(INFO) << "MediumEnvironment::Stop()";
+    LOG(INFO) << "MediumEnvironment::Stop()";
     Sync(false);
     if (config_.use_simulated_clock) {
       MutexLock lock(&mutex_);
@@ -83,7 +83,7 @@ void MediumEnvironment::Stop() {
 
 void MediumEnvironment::Reset() {
   RunOnMediumEnvironmentThread([this]() {
-    NEARBY_LOGS(INFO) << "MediumEnvironment::Reset()";
+    LOG(INFO) << "MediumEnvironment::Reset()";
     bluetooth_adapters_.clear();
     bluetooth_mediums_.clear();
     ble_mediums_.clear();
@@ -93,6 +93,7 @@ void MediumEnvironment::Reset() {
     webrtc_signaling_complete_callback_.clear();
 #endif
     wifi_lan_mediums_.clear();
+    awdl_mediums_.clear();
     {
       MutexLock lock(&mutex_);
       wifi_direct_mediums_.clear();
@@ -106,7 +107,7 @@ void MediumEnvironment::Reset() {
 
 void MediumEnvironment::Sync(bool enable_notifications) {
   enable_notifications_ = enable_notifications;
-  NEARBY_LOGS(INFO) << "MediumEnvironment::sync=" << enable_notifications;
+  LOG(INFO) << "MediumEnvironment::sync=" << enable_notifications;
   int count = 0;
   do {
     CountDownLatch latch(1);
@@ -120,8 +121,7 @@ void MediumEnvironment::Sync(bool enable_notifications) {
     RunOnMediumEnvironmentThread([&latch]() { latch.CountDown(); });
     latch.Await();
   } while (count < job_count_);
-  NEARBY_LOGS(INFO) << "MediumEnvironment::Sync(): done [count=" << count
-                    << "]";
+  LOG(INFO) << "MediumEnvironment::Sync(): done [count=" << count << "]";
 }
 
 const EnvironmentConfig& MediumEnvironment::GetEnvironmentConfig() {
@@ -136,17 +136,15 @@ void MediumEnvironment::OnBluetoothAdapterChangedState(
   RunOnMediumEnvironmentThread([this, &adapter, &adapter_device,
                                 name = std::move(name), enabled, mode,
                                 &latch]() {
-    NEARBY_LOGS(INFO) << "[adapter=" << &adapter
-                      << ", device=" << &adapter_device
-                      << "] update: name=" << ", enabled=" << enabled
-                      << ", mode=" << int32_t(mode);
+    LOG(INFO) << "[adapter=" << &adapter << ", device=" << &adapter_device
+              << "] update: name=" << ", enabled=" << enabled
+              << ", mode=" << int32_t(mode);
     for (auto& medium_info : bluetooth_mediums_) {
       auto& info = medium_info.second;
       // Do not send notification to medium that owns this adapter.
       if (info.adapter == &adapter) continue;
-      NEARBY_LOGS(INFO) << "[adapter=" << &adapter
-                        << ", device=" << &adapter_device
-                        << "] notify: adapter=" << info.adapter;
+      LOG(INFO) << "[adapter=" << &adapter << ", device=" << &adapter_device
+                << "] notify: adapter=" << info.adapter;
       OnBluetoothDeviceStateChanged(info, adapter_device, name, mode, enabled);
     }
     // We don't care if there is an adapter already since all we store is a
@@ -170,9 +168,8 @@ void MediumEnvironment::OnBluetoothDeviceStateChanged(
   if (!enabled_) return;
   auto item = info.devices.find(&device);
   if (item == info.devices.end()) {
-    NEARBY_LOGS(INFO) << "OnBluetoothDeviceStateChanged [device impl="
-                      << &device << "]: new device; notify="
-                      << enable_notifications_.load();
+    LOG(INFO) << "OnBluetoothDeviceStateChanged [device impl=" << &device
+              << "]: new device; notify=" << enable_notifications_.load();
     if (mode == api::BluetoothAdapter::ScanMode::kConnectableDiscoverable &&
         enabled) {
       // New device is turned on, and is in discoverable state.
@@ -187,9 +184,8 @@ void MediumEnvironment::OnBluetoothDeviceStateChanged(
       }
     }
   } else {
-    NEARBY_LOGS(INFO) << "OnBluetoothDeviceStateChanged [device impl="
-                      << &device << "]: existing device; notify="
-                      << enable_notifications_.load();
+    LOG(INFO) << "OnBluetoothDeviceStateChanged [device impl=" << &device
+              << "]: existing device; notify=" << enable_notifications_.load();
     auto& discovered_name = item->second;
     if (mode == api::BluetoothAdapter::ScanMode::kConnectableDiscoverable &&
         enabled) {
@@ -231,11 +227,11 @@ api::BluetoothDevice* MediumEnvironment::FindBluetoothDevice(
   api::BluetoothDevice* device = nullptr;
   CountDownLatch latch(1);
   RunOnMediumEnvironmentThread([this, &device, &latch, &mac_address]() {
-    NEARBY_LOGS(INFO) << " Looking for: " << mac_address;
+    LOG(INFO) << " Looking for: " << mac_address;
     for (auto& item : bluetooth_mediums_) {
       auto* adapter = item.second.adapter;
       if (!adapter) continue;
-      NEARBY_LOGS(INFO) << " Adapter: " << adapter->GetMacAddress();
+      LOG(INFO) << " Adapter: " << adapter->GetMacAddress();
       if (adapter->GetMacAddress() == mac_address) {
         device = bluetooth_adapters_[adapter];
         break;
@@ -248,15 +244,14 @@ api::BluetoothDevice* MediumEnvironment::FindBluetoothDevice(
 }
 
 api::ble_v2::BleMedium* MediumEnvironment::FindBleV2Medium(
-    absl::string_view address) {
+    api::ble_v2::BlePeripheral::UniqueId id) {
   api::ble_v2::BleMedium* device = nullptr;
   CountDownLatch latch(1);
-  NEARBY_LOGS(INFO) << "FindBleV2Medium " << address;
+  LOG(INFO) << "FindBleV2Medium " << id;
   RunOnMediumEnvironmentThread([&]() {
     for (auto& item : ble_v2_mediums_) {
       auto* medium = item.first;
-      auto* peripheral = item.second.ble_peripheral;
-      if (peripheral != nullptr && peripheral->GetAddress() == address) {
+      if (item.second.ble_peripheral_id == id) {
         device = medium;
         break;
       }
@@ -265,29 +260,7 @@ api::ble_v2::BleMedium* MediumEnvironment::FindBleV2Medium(
   });
   latch.Await();
   if (device == nullptr) {
-    NEARBY_LOGS(INFO) << "FindBleV2Medium, not found: " << address;
-  }
-  return device;
-}
-
-api::ble_v2::BleMedium* MediumEnvironment::FindBleV2Medium(uint64_t id) {
-  api::ble_v2::BleMedium* device = nullptr;
-  CountDownLatch latch(1);
-  NEARBY_LOGS(INFO) << "FindBleV2Medium " << id;
-  RunOnMediumEnvironmentThread([&]() {
-    for (auto& item : ble_v2_mediums_) {
-      auto* medium = item.first;
-      auto* peripheral = item.second.ble_peripheral;
-      if (peripheral != nullptr && peripheral->GetUniqueId() == id) {
-        device = medium;
-        break;
-      }
-    }
-    latch.CountDown();
-  });
-  latch.Await();
-  if (device == nullptr) {
-    NEARBY_LOGS(INFO) << "FindBleV2Medium, not found: " << id;
+    LOG(INFO) << "FindBleV2Medium, not found: " << id;
   }
   return device;
 }
@@ -296,20 +269,19 @@ void MediumEnvironment::OnBlePeripheralStateChanged(
     BleMediumContext& info, api::BlePeripheral& peripheral,
     const std::string& service_id, bool fast_advertisement, bool enabled) {
   if (!enabled_) return;
-  NEARBY_LOGS(INFO) << "OnBleServiceStateChanged [peripheral impl="
-                    << &peripheral << "]; context=" << &info
-                    << "; service_id=" << service_id
-                    << "; notify=" << enable_notifications_.load();
+  LOG(INFO) << "OnBleServiceStateChanged [peripheral impl=" << &peripheral
+            << "]; context=" << &info << "; service_id=" << service_id
+            << "; notify=" << enable_notifications_.load();
   if (!enable_notifications_) return;
   if (enabled) {
-    RunOnMediumEnvironmentThread([&info, &peripheral, service_id,
-                                  fast_advertisement]() {
-      NEARBY_LOGS(INFO) << "[Run] OnBleServiceStateChanged [peripheral impl="
-                        << &peripheral << "]; context=" << &info
-                        << "; service_id=" << service_id;
-      info.discovery_callback.peripheral_discovered_cb(peripheral, service_id,
-                                                       fast_advertisement);
-    });
+    RunOnMediumEnvironmentThread(
+        [&info, &peripheral, service_id, fast_advertisement]() {
+          LOG(INFO) << "[Run] OnBleServiceStateChanged [peripheral impl="
+                    << &peripheral << "]; context=" << &info
+                    << "; service_id=" << service_id;
+          info.discovery_callback.peripheral_discovered_cb(
+              peripheral, service_id, fast_advertisement);
+        });
   } else {
     info.discovery_callback.peripheral_lost_cb(peripheral, service_id);
   }
@@ -318,23 +290,22 @@ void MediumEnvironment::OnBlePeripheralStateChanged(
 void MediumEnvironment::OnBleV2PeripheralStateChanged(
     bool enabled, BleV2MediumContext& context, const Uuid& service_id,
     const api::ble_v2::BleAdvertisementData& ble_advertisement_data,
-    api::ble_v2::BlePeripheral& peripheral) {
+    api::ble_v2::BlePeripheral::UniqueId peripheral_id) {
   if (!enabled_) return;
-  NEARBY_LOGS(INFO) << "OnBleServiceStateChanged [peripheral impl="
-                    << &peripheral << "]; medium_context=" << &context
-                    << "; notify=" << enable_notifications_.load();
+  LOG(INFO) << "OnBleServiceStateChanged [peripheral id=" << peripheral_id
+            << "]; medium_context=" << &context
+            << "; notify=" << enable_notifications_.load();
   if (!enable_notifications_) return;
-  NEARBY_LOGS(INFO) << "[Run] OnBleServiceStateChanged [peripheral impl="
-                    << &peripheral << "]; context=" << &context
-                    << "; notify=" << enabled;
+  LOG(INFO) << "[Run] OnBleServiceStateChanged [peripheral id=" << peripheral_id
+            << "]; context=" << &context << "; notify=" << enabled;
 
   for (auto& element : context.scan_callback_map) {
     if (element.first.first == service_id) {
       if (enabled) {
-        element.second.advertisement_found_cb(peripheral,
+        element.second.advertisement_found_cb(peripheral_id,
                                               ble_advertisement_data);
       } else {
-        element.second.advertisement_lost_cb(peripheral);
+        element.second.advertisement_lost_cb(peripheral_id);
       }
     }
   }
@@ -348,10 +319,9 @@ void MediumEnvironment::OnWifiLanServiceStateChanged(
   std::string service_type = service_info.GetServiceType();
   auto item = info.discovered_services.find(service_name);
   if (item == info.discovered_services.end()) {
-    NEARBY_LOGS(INFO) << "OnWifiLanServiceStateChanged; context=" << &info
-                      << "; service_type=" << service_type
-                      << "; enabled=" << enabled
-                      << "; notify=" << enable_notifications_.load();
+    LOG(INFO) << "OnWifiLanServiceStateChanged; context=" << &info
+              << "; service_type=" << service_type << "; enabled=" << enabled
+              << "; notify=" << enable_notifications_.load();
     if (enabled) {
       // Find advertising service with matched service_type. Report it as
       // discovered.
@@ -368,10 +338,67 @@ void MediumEnvironment::OnWifiLanServiceStateChanged(
       }
     }
   } else {
-    NEARBY_LOGS(INFO)
-        << "OnWifiLanServiceStateChanged: exisitng service; context=" << &info
-        << "; service_type=" << service_type << "; enabled=" << enabled
-        << "; notify=" << enable_notifications_.load();
+    LOG(INFO) << "OnWifiLanServiceStateChanged: exisitng service; context="
+              << &info << "; service_type=" << service_type
+              << "; enabled=" << enabled
+              << "; notify=" << enable_notifications_.load();
+    if (enabled) {
+      if (enable_notifications_) {
+        RunOnMediumEnvironmentThread(
+            [&info, service_info = service_info, service_type]() {
+              auto item = info.discovered_callbacks.find(service_type);
+              if (item != info.discovered_callbacks.end()) {
+                item->second.service_discovered_cb(service_info);
+              }
+            });
+      }
+    } else {
+      // Known service is off.
+      // Erase it from the map, and report as lost.
+      if (enable_notifications_) {
+        RunOnMediumEnvironmentThread(
+            [&info, service_info = service_info, service_type]() {
+              auto item = info.discovered_callbacks.find(service_type);
+              if (item != info.discovered_callbacks.end()) {
+                item->second.service_lost_cb(service_info);
+              }
+            });
+      }
+      info.discovered_services.erase(item);
+    }
+  }
+}
+
+void MediumEnvironment::OnAwdlServiceStateChanged(
+    AwdlMediumContext& info, const NsdServiceInfo& service_info, bool enabled) {
+  if (!enabled_) return;
+  std::string service_name = service_info.GetServiceName();
+  std::string service_type = service_info.GetServiceType();
+  auto item = info.discovered_services.find(service_name);
+  if (item == info.discovered_services.end()) {
+    LOG(INFO) << "OnAwdlServiceStateChanged; context=" << &info
+              << "; service_type=" << service_type << "; enabled=" << enabled
+              << "; notify=" << enable_notifications_.load();
+    if (enabled) {
+      // Find advertising service with matched service_type. Report it as
+      // discovered.
+      NsdServiceInfo discovered_service_info(service_info);
+      info.discovered_services.insert({service_name, discovered_service_info});
+      if (enable_notifications_) {
+        RunOnMediumEnvironmentThread(
+            [&info, discovered_service_info, service_type]() {
+              auto item = info.discovered_callbacks.find(service_type);
+              if (item != info.discovered_callbacks.end()) {
+                item->second.service_discovered_cb(discovered_service_info);
+              }
+            });
+      }
+    }
+  } else {
+    LOG(INFO) << "OnAwdlServiceStateChanged: exisitng service; context="
+              << &info << "; service_type=" << service_type
+              << "; enabled=" << enabled
+              << "; notify=" << enable_notifications_.load();
     if (enabled) {
       if (enable_notifications_) {
         RunOnMediumEnvironmentThread(
@@ -416,8 +443,8 @@ void MediumEnvironment::RegisterBluetoothMedium(
                                  }})
                         .first->second;
     auto* owned_adapter = context.adapter;
-    NEARBY_LOGS(INFO) << "Registered: Bluetooth medium=" << &medium
-                      << "; adapter=" << owned_adapter;
+    LOG(INFO) << "Registered: Bluetooth medium=" << &medium
+              << "; adapter=" << owned_adapter;
     for (auto& adapter_device : bluetooth_adapters_) {
       auto& adapter = adapter_device.first;
       auto& device = adapter_device.second;
@@ -439,11 +466,11 @@ void MediumEnvironment::UpdateBluetoothMedium(
         auto& context = item->second;
         context.callback = std::move(callback);
         auto* owned_adapter = context.adapter;
-        NEARBY_LOGS(INFO) << "Updated: this=" << this << "; medium=" << &medium
-                          << "; adapter=" << owned_adapter
-                          << "; name=" << owned_adapter->GetName()
-                          << "; enabled=" << owned_adapter->IsEnabled()
-                          << "; mode=" << int32_t(owned_adapter->GetScanMode());
+        LOG(INFO) << "Updated: this=" << this << "; medium=" << &medium
+                  << "; adapter=" << owned_adapter
+                  << "; name=" << owned_adapter->GetName()
+                  << "; enabled=" << owned_adapter->IsEnabled()
+                  << "; mode=" << int32_t(owned_adapter->GetScanMode());
         for (auto& adapter_device : bluetooth_adapters_) {
           auto& adapter = adapter_device.first;
           auto& device = adapter_device.second;
@@ -463,7 +490,7 @@ void MediumEnvironment::UnregisterBluetoothMedium(
     auto item = bluetooth_mediums_.extract(&medium);
     latch.CountDown();
     if (item.empty()) return;
-    NEARBY_LOGS(INFO) << "Unregistered Bluetooth medium:" << &medium;
+    LOG(INFO) << "Unregistered Bluetooth medium:" << &medium;
   });
   latch.Await();
 }
@@ -472,7 +499,7 @@ void MediumEnvironment::RegisterBleMedium(api::BleMedium& medium) {
   if (!enabled_) return;
   RunOnMediumEnvironmentThread([this, &medium]() {
     ble_mediums_.insert({&medium, BleMediumContext{}});
-    NEARBY_LOGS(INFO) << "Registered: BLE medium:" << &medium;
+    LOG(INFO) << "Registered: BLE medium:" << &medium;
   });
 }
 
@@ -480,32 +507,32 @@ void MediumEnvironment::UpdateBleMediumForAdvertising(
     api::BleMedium& medium, api::BlePeripheral& peripheral,
     const std::string& service_id, bool fast_advertisement, bool enabled) {
   if (!enabled_) return;
-  RunOnMediumEnvironmentThread([this, &medium, &peripheral, service_id,
-                                fast_advertisement, enabled]() {
-    auto item = ble_mediums_.find(&medium);
-    if (item == ble_mediums_.end()) {
-      NEARBY_LOGS(INFO) << "UpdateBleMediumForAdvertising failed. There is no "
-                           "medium registered.";
-      return;
-    }
-    auto& context = item->second;
-    context.ble_peripheral = &peripheral;
-    context.advertising = enabled;
-    context.fast_advertisement = fast_advertisement;
-    NEARBY_LOGS(INFO) << "Update Ble medium for advertising: this=" << this
-                      << "; medium=" << &medium << "; service_id=" << service_id
-                      << "; name=" << peripheral.GetName()
-                      << "; fast_advertisement=" << fast_advertisement
-                      << "; enabled=" << enabled;
-    for (auto& medium_info : ble_mediums_) {
-      auto& local_medium = medium_info.first;
-      auto& info = medium_info.second;
-      // Do not send notification to the same medium.
-      if (local_medium == &medium) continue;
-      OnBlePeripheralStateChanged(info, peripheral, service_id,
-                                  fast_advertisement, enabled);
-    }
-  });
+  RunOnMediumEnvironmentThread(
+      [this, &medium, &peripheral, service_id, fast_advertisement, enabled]() {
+        auto item = ble_mediums_.find(&medium);
+        if (item == ble_mediums_.end()) {
+          LOG(INFO) << "UpdateBleMediumForAdvertising failed. There is no "
+                       "medium registered.";
+          return;
+        }
+        auto& context = item->second;
+        context.ble_peripheral = &peripheral;
+        context.advertising = enabled;
+        context.fast_advertisement = fast_advertisement;
+        LOG(INFO) << "Update Ble medium for advertising: this=" << this
+                  << "; medium=" << &medium << "; service_id=" << service_id
+                  << "; name=" << peripheral.GetName()
+                  << "; fast_advertisement=" << fast_advertisement
+                  << "; enabled=" << enabled;
+        for (auto& medium_info : ble_mediums_) {
+          auto& local_medium = medium_info.first;
+          auto& info = medium_info.second;
+          // Do not send notification to the same medium.
+          if (local_medium == &medium) continue;
+          OnBlePeripheralStateChanged(info, peripheral, service_id,
+                                      fast_advertisement, enabled);
+        }
+      });
 }
 
 void MediumEnvironment::UpdateBleMediumForScanning(
@@ -518,20 +545,17 @@ void MediumEnvironment::UpdateBleMediumForScanning(
        callback = std::move(callback), enabled]() mutable {
         auto item = ble_mediums_.find(&medium);
         if (item == ble_mediums_.end()) {
-          NEARBY_LOGS(INFO)
-              << "UpdateBleMediumFoScanning failed. There is no medium "
-                 "registered.";
+          LOG(INFO) << "UpdateBleMediumFoScanning failed. There is no medium "
+                       "registered.";
           return;
         }
         auto& context = item->second;
         context.discovery_callback = std::move(callback);
-        NEARBY_LOGS(INFO) << "Update Ble medium for scanning: this=" << this
-                          << "; medium=" << &medium
-                          << "; service_id=" << service_id
-                          << "; fast_advertisement_service_uuid="
-                          << absl::BytesToHexString(
-                                 fast_advertisement_service_uuid)
-                          << "; enabled=" << enabled;
+        LOG(INFO) << "Update Ble medium for scanning: this=" << this
+                  << "; medium=" << &medium << "; service_id=" << service_id
+                  << "; fast_advertisement_service_uuid="
+                  << absl::BytesToHexString(fast_advertisement_service_uuid)
+                  << "; enabled=" << enabled;
         for (auto& medium_info : ble_mediums_) {
           auto& local_medium = medium_info.first;
           auto& info = medium_info.second;
@@ -551,20 +575,18 @@ void MediumEnvironment::UpdateBleMediumForAcceptedConnection(
     api::BleMedium& medium, const std::string& service_id,
     BleAcceptedConnectionCallback callback) {
   if (!enabled_) return;
-  RunOnMediumEnvironmentThread(
-      [this, &medium, service_id, callback = std::move(callback)]() mutable {
-        auto item = ble_mediums_.find(&medium);
-        if (item == ble_mediums_.end()) {
-          NEARBY_LOGS(INFO)
-              << "Update Ble medium failed. There is no medium registered.";
-          return;
-        }
-        auto& context = item->second;
-        context.accepted_connection_callback = std::move(callback);
-        NEARBY_LOGS(INFO) << "Update Ble medium for accepted callback: this="
-                          << this << "; medium=" << &medium
-                          << "; service_id=" << service_id;
-      });
+  RunOnMediumEnvironmentThread([this, &medium, service_id,
+                                callback = std::move(callback)]() mutable {
+    auto item = ble_mediums_.find(&medium);
+    if (item == ble_mediums_.end()) {
+      LOG(INFO) << "Update Ble medium failed. There is no medium registered.";
+      return;
+    }
+    auto& context = item->second;
+    context.accepted_connection_callback = std::move(callback);
+    LOG(INFO) << "Update Ble medium for accepted callback: this=" << this
+              << "; medium=" << &medium << "; service_id=" << service_id;
+  });
 }
 
 void MediumEnvironment::UnregisterBleMedium(api::BleMedium& medium) {
@@ -574,7 +596,7 @@ void MediumEnvironment::UnregisterBleMedium(api::BleMedium& medium) {
     auto item = ble_mediums_.extract(&medium);
     latch.CountDown();
     if (item.empty()) return;
-    NEARBY_LOGS(INFO) << "Unregistered BLE medium:" << &medium;
+    LOG(INFO) << "Unregistered BLE medium:" << &medium;
   });
   latch.Await();
 }
@@ -583,96 +605,90 @@ void MediumEnvironment::CallBleAcceptedConnectionCallback(
     api::BleMedium& medium, api::BleSocket& socket,
     const std::string& service_id) {
   if (!enabled_) return;
-  RunOnMediumEnvironmentThread(
-      [this, &medium, &socket, service_id]() {
-        auto item = ble_mediums_.find(&medium);
-        if (item == ble_mediums_.end()) {
-          NEARBY_LOGS(INFO)
-              << "Call AcceptedConnectionCallback failed. There is no medium "
-                 "registered.";
-          return;
-        }
-        auto& info = item->second;
-        if (info.accepted_connection_callback) {
-          info.accepted_connection_callback(socket, service_id);
-        }
-      });
+  RunOnMediumEnvironmentThread([this, &medium, &socket, service_id]() {
+    auto item = ble_mediums_.find(&medium);
+    if (item == ble_mediums_.end()) {
+      LOG(INFO) << "Call AcceptedConnectionCallback failed. There is no medium "
+                   "registered.";
+      return;
+    }
+    auto& info = item->second;
+    if (info.accepted_connection_callback) {
+      info.accepted_connection_callback(socket, service_id);
+    }
+  });
 }
 
 void MediumEnvironment::RegisterBleV2Medium(
-    api::ble_v2::BleMedium& medium, api::ble_v2::BlePeripheral* peripheral) {
+    api::ble_v2::BleMedium& medium,
+    api::ble_v2::BlePeripheral::UniqueId peripheral_id) {
   if (!enabled_) return;
-  RunOnMediumEnvironmentThread([this, &medium, peripheral]() {
+  RunOnMediumEnvironmentThread([this, &medium, peripheral_id]() {
     ble_v2_mediums_.insert(
-        {&medium, BleV2MediumContext{.ble_peripheral = peripheral}});
-    NEARBY_LOGS(INFO) << "Registered: BLE V2 medium:" << &medium;
+        {&medium, BleV2MediumContext{.ble_peripheral_id = peripheral_id}});
+    LOG(INFO) << "Registered: BLE V2 medium:" << &medium;
   });
 }
 
 void MediumEnvironment::UpdateBleV2MediumForAdvertising(
     bool enabled, api::ble_v2::BleMedium& medium,
-    api::ble_v2::BlePeripheral& peripheral,
+    api::ble_v2::BlePeripheral::UniqueId peripheral_id,
     const api::ble_v2::BleAdvertisementData& advertisement_data) {
   if (!enabled_) return;
-  RunOnMediumEnvironmentThread(
-      [this, &medium, &peripheral, advertisement_data = advertisement_data,
-       enabled]() {
-        auto it = ble_v2_mediums_.find(&medium);
-        if (it == ble_v2_mediums_.end()) {
-          NEARBY_LOGS(INFO)
-              << "UpdateBleV2MediumForAdvertising failed. There is no "
-                 "medium registered.";
-          return;
-        }
-        auto& context = it->second;
-        context.ble_peripheral = &peripheral;
-        context.advertising = enabled;
-        context.advertisement_data = advertisement_data;
+  RunOnMediumEnvironmentThread([this, &medium, peripheral_id,
+                                advertisement_data = advertisement_data,
+                                enabled]() {
+    auto it = ble_v2_mediums_.find(&medium);
+    if (it == ble_v2_mediums_.end()) {
+      LOG(INFO) << "UpdateBleV2MediumForAdvertising failed. There is no "
+                   "medium registered.";
+      return;
+    }
+    auto& context = it->second;
+    context.ble_peripheral_id = peripheral_id;
+    context.advertising = enabled;
+    context.advertisement_data = advertisement_data;
 
-        NEARBY_LOGS(INFO) << "UpdateBleV2MediumForAdvertising: this=" << this
-                          << ", medium=" << &medium
-                          << ", medium_context=" << &context
-                          << ", peripheral=" << &peripheral
-                          << ", enabled=" << enabled;
+    LOG(INFO) << "UpdateBleV2MediumForAdvertising: this=" << this
+              << ", medium=" << &medium << ", medium_context=" << &context
+              << ", peripheral id=" << peripheral_id << ", enabled=" << enabled;
 
-        for (auto& medium_info : ble_v2_mediums_) {
-          const api::ble_v2::BleMedium* remote_medium = medium_info.first;
-          BleV2MediumContext& remote_context = medium_info.second;
+    for (auto& medium_info : ble_v2_mediums_) {
+      const api::ble_v2::BleMedium* remote_medium = medium_info.first;
+      BleV2MediumContext& remote_context = medium_info.second;
 
-          // Do not send notification to the same medium.
-          if (remote_medium == &medium) continue;
-          // Do not send notification to the medium that is not scanning.
-          if (!remote_context.scanning) continue;
+      // Do not send notification to the same medium.
+      if (remote_medium == &medium) continue;
+      // Do not send notification to the medium that is not scanning.
+      if (!remote_context.scanning) continue;
 
-          absl::flat_hash_set<Uuid> remote_scanning_service_uuids;
-          for (auto& element : remote_context.scan_callback_map) {
-            remote_scanning_service_uuids.insert(element.first.first);
-          }
+      absl::flat_hash_set<Uuid> remote_scanning_service_uuids;
+      for (auto& element : remote_context.scan_callback_map) {
+        remote_scanning_service_uuids.insert(element.first.first);
+      }
 
-          for (auto& remote_scanning_service_uuid :
-               remote_scanning_service_uuids) {
-            auto const it = context.advertisement_data.service_data.find(
-                remote_scanning_service_uuid);
+      for (auto& remote_scanning_service_uuid : remote_scanning_service_uuids) {
+        auto const it = context.advertisement_data.service_data.find(
+            remote_scanning_service_uuid);
 
-            // Only skip when service data is not found and the medium is
-            // enabled. Mediums that stop advertising (disabled) pass in empty
-            // advertisement data but should still be processed.
-            if (it == context.advertisement_data.service_data.end() && enabled)
-              continue;
+        // Only skip when service data is not found and the medium is
+        // enabled. Mediums that stop advertising (disabled) pass in empty
+        // advertisement data but should still be processed.
+        if (it == context.advertisement_data.service_data.end() && enabled)
+          continue;
 
-            NEARBY_LOGS(INFO)
-                << "UpdateBleV2MediumForAdvertising, found other medium="
-                << remote_medium
-                << ", remote_medium_context=" << &remote_context
-                << ", remote_context.peripheral="
-                << remote_context.ble_peripheral
-                << ". Ready to call OnBleV2PeripheralStateChanged.";
-            OnBleV2PeripheralStateChanged(
-                enabled, remote_context, remote_scanning_service_uuid,
-                context.advertisement_data, *context.ble_peripheral);
-          }
-        }
-      });
+        LOG(INFO) << "UpdateBleV2MediumForAdvertising, found other medium="
+                  << remote_medium
+                  << ", remote_medium_context=" << &remote_context
+                  << ", remote_context.peripheral="
+                  << remote_context.ble_peripheral_id
+                  << ". Ready to call OnBleV2PeripheralStateChanged.";
+        OnBleV2PeripheralStateChanged(
+            enabled, remote_context, remote_scanning_service_uuid,
+            context.advertisement_data, context.ble_peripheral_id);
+      }
+    }
+  });
 }
 
 void MediumEnvironment::UpdateBleV2MediumForScanning(
@@ -687,16 +703,14 @@ void MediumEnvironment::UpdateBleV2MediumForScanning(
                                 enabled]() mutable {
     auto it = ble_v2_mediums_.find(&medium);
     if (it == ble_v2_mediums_.end()) {
-      NEARBY_LOGS(INFO)
-          << "UpdateBleV2MediumForScanning failed. There is no medium "
-             "registered.";
+      LOG(INFO) << "UpdateBleV2MediumForScanning failed. There is no medium "
+                   "registered.";
       return;
     }
     BleV2MediumContext& context = it->second;
-    NEARBY_LOGS(INFO) << "UpdateBleV2MediumForScanning: this=" << this
-                      << ", medium=" << &medium
-                      << ", medium_context=" << &context
-                      << ", enabled=" << enabled;
+    LOG(INFO) << "UpdateBleV2MediumForScanning: this=" << this
+              << ", medium=" << &medium << ", medium_context=" << &context
+              << ", enabled=" << enabled;
     if (enabled) {
       context.scanning = true;
       callback.start_scanning_result(absl::OkStatus());
@@ -717,15 +731,15 @@ void MediumEnvironment::UpdateBleV2MediumForScanning(
               scanning_service_uuid);
           if (it == remote_context.advertisement_data.service_data.end())
             continue;
-          NEARBY_LOGS(INFO)
-              << "UpdateBleV2MediumForScanning, found other medium="
-              << remote_medium << ", remote_medium_context=" << &remote_context
-              << ", scanning_service_uuid="
-              << scanning_service_uuid.Get16BitAsString()
-              << ". Ready to call OnBleV2PeripheralStateChanged.";
+          LOG(INFO) << "UpdateBleV2MediumForScanning, found other medium="
+                    << remote_medium
+                    << ", remote_medium_context=" << &remote_context
+                    << ", scanning_service_uuid="
+                    << scanning_service_uuid.Get16BitAsString()
+                    << ". Ready to call OnBleV2PeripheralStateChanged.";
           OnBleV2PeripheralStateChanged(enabled, context, scanning_service_uuid,
                                         remote_context.advertisement_data,
-                                        *remote_context.ble_peripheral);
+                                        remote_context.ble_peripheral_id);
         }
       }
     } else {
@@ -743,7 +757,7 @@ void MediumEnvironment::UnregisterBleV2Medium(api::ble_v2::BleMedium& medium) {
   RunOnMediumEnvironmentThread([this, &medium]() {
     auto item = ble_v2_mediums_.extract(&medium);
     if (item.empty()) return;
-    NEARBY_LOGS(INFO) << "Unregistered BLE V2 medium:" << &medium;
+    LOG(INFO) << "Unregistered BLE V2 medium:" << &medium;
   });
 }
 std::optional<MediumEnvironment::BleV2MediumStatus>
@@ -781,8 +795,8 @@ void MediumEnvironment::RegisterWebRtcSignalingMessenger(
                                     std::move(complete_callback)}]() mutable {
     webrtc_signaling_message_callback_[self_id] = std::move(message_callback);
     webrtc_signaling_complete_callback_[self_id] = std::move(complete_callback);
-    NEARBY_LOGS(INFO)
-        << "Registered: WebRTC signaling message callback for id = " << self_id;
+    LOG(INFO) << "Registered: WebRTC signaling message callback for id = "
+              << self_id;
   });
 }
 
@@ -794,9 +808,8 @@ void MediumEnvironment::UnregisterWebRtcSignalingMessenger(
         webrtc_signaling_message_callback_.extract(self_id);
     auto complete_callback_item =
         webrtc_signaling_complete_callback_.extract(self_id);
-    NEARBY_LOGS(INFO)
-        << "Unregistered WebRTC signaling message callback for id = "
-        << self_id;
+    LOG(INFO) << "Unregistered WebRTC signaling message callback for id = "
+              << self_id;
   });
 }
 
@@ -807,8 +820,7 @@ void MediumEnvironment::SendWebRtcSignalingMessage(absl::string_view peer_id,
       [this, peer_id{std::string(peer_id)}, message]() {
         auto item = webrtc_signaling_message_callback_.find(peer_id);
         if (item == webrtc_signaling_message_callback_.end()) {
-          NEARBY_LOGS(WARNING)
-              << "No callback registered for peer id = " << peer_id;
+          LOG(WARNING) << "No callback registered for peer id = " << peer_id;
           return;
         }
 
@@ -823,8 +835,7 @@ void MediumEnvironment::SendWebRtcSignalingComplete(absl::string_view peer_id,
       [this, peer_id{std::string(peer_id)}, success]() {
         auto item = webrtc_signaling_complete_callback_.find(peer_id);
         if (item == webrtc_signaling_complete_callback_.end()) {
-          NEARBY_LOGS(WARNING)
-              << "No callback registered for peer id = " << peer_id;
+          LOG(WARNING) << "No callback registered for peer id = " << peer_id;
           return;
         }
 
@@ -872,7 +883,15 @@ void MediumEnvironment::RegisterWifiLanMedium(api::WifiLanMedium& medium) {
   if (!enabled_) return;
   RunOnMediumEnvironmentThread([this, &medium]() {
     wifi_lan_mediums_.insert({&medium, WifiLanMediumContext{}});
-    NEARBY_LOGS(INFO) << "Registered: WifiLan medium:" << &medium;
+    LOG(INFO) << "Registered: WifiLan medium:" << &medium;
+  });
+}
+
+void MediumEnvironment::RegisterAwdlMedium(api::AwdlMedium& medium) {
+  if (!enabled_) return;
+  RunOnMediumEnvironmentThread([this, &medium]() {
+    awdl_mediums_.insert({&medium, AwdlMediumContext{}});
+    LOG(INFO) << "Registered: Awdl medium:" << &medium;
   });
 }
 
@@ -884,11 +903,9 @@ void MediumEnvironment::UpdateWifiLanMediumForAdvertising(
                                 enabled]() {
     std::string service_name = service_info.GetServiceName();
     std::string service_type = service_info.GetServiceType();
-    NEARBY_LOGS(INFO) << "Update WifiLan medium for advertising: this=" << this
-                      << "; medium=" << &medium
-                      << "; service_name=" << service_name
-                      << "; service_type=" << service_type
-                      << ", enabled=" << enabled;
+    LOG(INFO) << "Update WifiLan medium for advertising: this=" << this
+              << "; medium=" << &medium << "; service_name=" << service_name
+              << "; service_type=" << service_type << ", enabled=" << enabled;
     for (auto& medium_info : wifi_lan_mediums_) {
       auto& local_medium = medium_info.first;
       auto& info = medium_info.second;
@@ -907,6 +924,34 @@ void MediumEnvironment::UpdateWifiLanMediumForAdvertising(
   });
 }
 
+void MediumEnvironment::UpdateAwdlMediumForAdvertising(
+    api::AwdlMedium& medium, const NsdServiceInfo& service_info, bool enabled) {
+  if (!enabled_) return;
+  RunOnMediumEnvironmentThread([this, &medium, service_info = service_info,
+                                enabled]() {
+    std::string service_name = service_info.GetServiceName();
+    std::string service_type = service_info.GetServiceType();
+    LOG(INFO) << "Update Awdl medium for advertising: this=" << this
+              << "; medium=" << &medium << "; service_name=" << service_name
+              << "; service_type=" << service_type << ", enabled=" << enabled;
+    for (auto& medium_info : awdl_mediums_) {
+      auto& local_medium = medium_info.first;
+      auto& info = medium_info.second;
+      // Do not send notification to the same medium but update
+      // service info map.
+      if (local_medium == &medium) {
+        if (enabled) {
+          info.advertising_services.insert({service_name, service_info});
+        } else {
+          info.advertising_services.erase(service_name);
+        }
+        continue;
+      }
+      OnAwdlServiceStateChanged(info, service_info, enabled);
+    }
+  });
+}
+
 void MediumEnvironment::UpdateWifiLanMediumForDiscovery(
     api::WifiLanMedium& medium, WifiLanDiscoveredServiceCallback callback,
     const std::string& service_type, bool enabled) {
@@ -915,17 +960,15 @@ void MediumEnvironment::UpdateWifiLanMediumForDiscovery(
                                 service_type, enabled]() mutable {
     auto item = wifi_lan_mediums_.find(&medium);
     if (item == wifi_lan_mediums_.end()) {
-      NEARBY_LOGS(INFO)
-          << "UpdateWifiLanMediumForDiscovery failed. There is no medium "
-             "registered.";
+      LOG(INFO) << "UpdateWifiLanMediumForDiscovery failed. There is no medium "
+                   "registered.";
       return;
     }
     auto& context = item->second;
     context.discovered_callbacks.insert({service_type, std::move(callback)});
-    NEARBY_LOGS(INFO) << "Update WifiLan medium for discovery: this=" << this
-                      << "; medium=" << &medium
-                      << "; service_type=" << service_type
-                      << "; enabled=" << enabled;
+    LOG(INFO) << "Update WifiLan medium for discovery: this=" << this
+              << "; medium=" << &medium << "; service_type=" << service_type
+              << "; enabled=" << enabled;
     for (auto& medium_info : wifi_lan_mediums_) {
       auto& local_medium = medium_info.first;
       auto& info = medium_info.second;
@@ -940,12 +983,52 @@ void MediumEnvironment::UpdateWifiLanMediumForDiscovery(
   });
 }
 
+void MediumEnvironment::UpdateAwdlMediumForDiscovery(
+    api::AwdlMedium& medium, AwdlDiscoveredServiceCallback callback,
+    const std::string& service_type, bool enabled) {
+  if (!enabled_) return;
+  RunOnMediumEnvironmentThread([this, &medium, callback = std::move(callback),
+                                service_type, enabled]() mutable {
+    auto item = awdl_mediums_.find(&medium);
+    if (item == awdl_mediums_.end()) {
+      LOG(INFO) << "UpdateAwdlMediumForDiscovery failed. There is no medium "
+                   "registered.";
+      return;
+    }
+    auto& context = item->second;
+    context.discovered_callbacks.insert({service_type, std::move(callback)});
+    LOG(INFO) << "Update Awdl medium for discovery: this=" << this
+              << "; medium=" << &medium << "; service_type=" << service_type
+              << "; enabled=" << enabled;
+    for (auto& medium_info : awdl_mediums_) {
+      auto& local_medium = medium_info.first;
+      auto& info = medium_info.second;
+      // Do not send notification to the same medium.
+      if (local_medium == &medium) continue;
+      // Search advertising services and send notification.
+      for (auto& advertising_service : info.advertising_services) {
+        auto& service_info = advertising_service.second;
+        OnAwdlServiceStateChanged(context, service_info, /*enabled=*/true);
+      }
+    }
+  });
+}
+
 void MediumEnvironment::UnregisterWifiLanMedium(api::WifiLanMedium& medium) {
   if (!enabled_) return;
   RunOnMediumEnvironmentThread([this, &medium]() {
     auto item = wifi_lan_mediums_.extract(&medium);
     if (item.empty()) return;
-    NEARBY_LOGS(INFO) << "Unregistered WifiLan medium:" << &medium;
+    LOG(INFO) << "Unregistered WifiLan medium:" << &medium;
+  });
+}
+
+void MediumEnvironment::UnregisterAwdlMedium(api::AwdlMedium& medium) {
+  if (!enabled_) return;
+  RunOnMediumEnvironmentThread([this, &medium]() {
+    auto item = awdl_mediums_.extract(&medium);
+    if (item.empty()) return;
+    LOG(INFO) << "Unregistered Awdl medium:" << &medium;
   });
 }
 
@@ -973,13 +1056,37 @@ api::WifiLanMedium* MediumEnvironment::GetWifiLanMedium(
   return result;
 }
 
+api::AwdlMedium* MediumEnvironment::GetAwdlMedium(const std::string& ip_address,
+                                                  int port) {
+  api::AwdlMedium* result = nullptr;
+  CountDownLatch latch(1);
+  RunOnMediumEnvironmentThread([&]() {
+    for (auto& medium_info : awdl_mediums_) {
+      auto* medium_found = medium_info.first;
+      auto& info = medium_info.second;
+      for (auto& advertising_service : info.advertising_services) {
+        auto& service_info = advertising_service.second;
+        if (ip_address == service_info.GetIPAddress() &&
+            port == service_info.GetPort()) {
+          result = medium_found;
+          latch.CountDown();
+          return;
+        }
+      }
+    }
+    latch.CountDown();
+  });
+  latch.Await();
+  return result;
+}
+
 void MediumEnvironment::RegisterWifiDirectMedium(
     api::WifiDirectMedium& medium) {
   if (!enabled_) return;
   RunOnMediumEnvironmentThread([this, &medium]() {
     MutexLock lock(&mutex_);
     wifi_direct_mediums_.insert({&medium, WifiDirectMediumContext{}});
-    NEARBY_LOGS(INFO) << "Registered: WifiDirect medium:" << &medium;
+    LOG(INFO) << "Registered: WifiDirect medium:" << &medium;
   });
 }
 
@@ -993,13 +1100,13 @@ api::WifiDirectMedium* MediumEnvironment::GetWifiDirectMedium(
       if ((info.wifi_direct_credentials->GetSSID() == ssid) ||
           (!ip_address.empty() &&
            (info.wifi_direct_credentials->GetIPAddress() == ip_address))) {
-        NEARBY_LOGS(INFO) << "Found Remote WifiDirect medium=" << medium_found;
+        LOG(INFO) << "Found Remote WifiDirect medium=" << medium_found;
         return medium_found;
       }
     }
   }
 
-  NEARBY_LOGS(INFO) << "Can't find WifiDirect medium!";
+  LOG(INFO) << "Can't find WifiDirect medium!";
   return nullptr;
 }
 
@@ -1019,14 +1126,13 @@ void MediumEnvironment::UpdateWifiDirectMediumForStartOrConnect(
                   : (enabled ? "Connected" : "Disconneced"));
 
         if (wifi_direct_credentials) {
-          NEARBY_LOGS(INFO)
-              << "Update WifiDirect medium for GO: this=" << this
-              << "; medium=" << &medium << role_status
-              << "; ssid=" << wifi_direct_credentials->GetSSID()
-              << "; password=" << wifi_direct_credentials->GetPassword();
+          LOG(INFO) << "Update WifiDirect medium for GO: this=" << this
+                    << "; medium=" << &medium << role_status
+                    << "; ssid=" << wifi_direct_credentials->GetSSID()
+                    << "; password=" << wifi_direct_credentials->GetPassword();
         } else {
-          NEARBY_LOGS(INFO) << "Reset WifiDirect medium for GO: this=" << this
-                            << "; medium=" << &medium << role_status;
+          LOG(INFO) << "Reset WifiDirect medium for GO: this=" << this
+                    << "; medium=" << &medium << role_status;
         }
 
         MutexLock lock(&mutex_);
@@ -1034,7 +1140,7 @@ void MediumEnvironment::UpdateWifiDirectMediumForStartOrConnect(
           auto& local_medium = medium_info.first;
           auto& info = medium_info.second;
           if (local_medium == &medium) {
-            NEARBY_LOGS(INFO) << "Found WifiDirect medium=" << &medium;
+            LOG(INFO) << "Found WifiDirect medium=" << &medium;
             info.is_active = enabled;
             info.is_go = is_go;
             if (enabled) {
@@ -1059,7 +1165,7 @@ void MediumEnvironment::UnregisterWifiDirectMedium(
   RunOnMediumEnvironmentThread([this, &medium]() {
     MutexLock lock(&mutex_);
     wifi_direct_mediums_.extract(&medium);
-    NEARBY_LOGS(INFO) << "Unregistered WifiDirect medium:" << &medium;
+    LOG(INFO) << "Unregistered WifiDirect medium:" << &medium;
   });
 }
 
@@ -1069,7 +1175,7 @@ void MediumEnvironment::RegisterWifiHotspotMedium(
   RunOnMediumEnvironmentThread([this, &medium]() {
     MutexLock lock(&mutex_);
     wifi_hotspot_mediums_.insert({&medium, WifiHotspotMediumContext{}});
-    NEARBY_LOGS(INFO) << "Registered: WifiHotspot medium:" << &medium;
+    LOG(INFO) << "Registered: WifiHotspot medium:" << &medium;
   });
 }
 
@@ -1083,7 +1189,7 @@ api::WifiHotspotMedium* MediumEnvironment::GetWifiHotspotMedium(
       if ((info.hotspot_credentials->GetSSID() == ssid) ||
           (!ip_address.empty() &&
            (info.hotspot_credentials->GetIPAddress() == ip_address))) {
-        NEARBY_LOGS(INFO) << "Found Remote WifiHotspot medium=" << medium_found;
+        LOG(INFO) << "Found Remote WifiHotspot medium=" << medium_found;
         return medium_found;
       }
     }
@@ -1107,13 +1213,13 @@ void MediumEnvironment::UpdateWifiHotspotMediumForStartOrConnect(
                               : (enabled ? "Connected" : "Disconneced"));
 
     if (hotspot_credentials) {
-      NEARBY_LOGS(INFO) << "Update WifiHotspot medium for Hotspot: this="
-                        << this << "; medium=" << &medium << role_status
-                        << "; ssid=" << hotspot_credentials->GetSSID()
-                        << "; password=" << hotspot_credentials->GetPassword();
+      LOG(INFO) << "Update WifiHotspot medium for Hotspot: this=" << this
+                << "; medium=" << &medium << role_status
+                << "; ssid=" << hotspot_credentials->GetSSID()
+                << "; password=" << hotspot_credentials->GetPassword();
     } else {
-      NEARBY_LOGS(INFO) << "Reset WifiHotspot medium for Hotspot: this=" << this
-                        << "; medium=" << &medium << role_status;
+      LOG(INFO) << "Reset WifiHotspot medium for Hotspot: this=" << this
+                << "; medium=" << &medium << role_status;
     }
 
     MutexLock lock(&mutex_);
@@ -1121,7 +1227,7 @@ void MediumEnvironment::UpdateWifiHotspotMediumForStartOrConnect(
       auto& local_medium = medium_info.first;
       auto& info = medium_info.second;
       if (local_medium == &medium) {
-        NEARBY_LOGS(INFO) << "Found WifiHotspot medium=" << &medium;
+        LOG(INFO) << "Found WifiHotspot medium=" << &medium;
         info.is_active = enabled;
         info.is_ap = is_ap;
         if (enabled) {
@@ -1144,7 +1250,7 @@ void MediumEnvironment::UnregisterWifiHotspotMedium(
     MutexLock lock(&mutex_);
     auto item = wifi_hotspot_mediums_.extract(&medium);
     if (item.empty()) return;
-    NEARBY_LOGS(INFO) << "Unregistered WifiHotspot medium:" << &medium;
+    LOG(INFO) << "Unregistered WifiHotspot medium:" << &medium;
   });
 }
 
@@ -1161,23 +1267,24 @@ std::optional<FakeClock*> MediumEnvironment::GetSimulatedClock() {
 }
 
 void MediumEnvironment::RegisterGattServer(
-    api::ble_v2::BleMedium& medium, api::ble_v2::BlePeripheral* peripheral,
+    api::ble_v2::BleMedium& medium,
+    api::ble_v2::BlePeripheral::UniqueId peripheral_id,
     Borrowable<api::ble_v2::GattServer*> gatt_server) {
   if (!enabled_) return;
-  RunOnMediumEnvironmentThread([this, &medium, peripheral, gatt_server]() {
+  RunOnMediumEnvironmentThread([this, &medium, peripheral_id, gatt_server]() {
     auto it = ble_v2_mediums_.find(&medium);
     if (it == ble_v2_mediums_.end()) {
-      NEARBY_LOGS(WARNING) << "Register GattServer failed. There is no medium"
-                              " registered.";
+      LOG(WARNING) << "Register GattServer failed. There is no medium"
+                      " registered.";
       return;
     }
     auto& context = it->second;
     CHECK_EQ(context.gatt_server, nullptr);
     context.gatt_server =
         std::make_unique<Borrowable<api::ble_v2::GattServer*>>(gatt_server);
-    context.ble_peripheral = peripheral;
-    NEARBY_LOGS(INFO) << "Registered: GattServer for "
-                      << peripheral->GetAddress() << " on medium:" << &medium;
+    context.ble_peripheral_id = peripheral_id;
+    LOG(INFO) << "Registered: GattServer for peripheral id:" << peripheral_id
+              << " on medium:" << &medium;
   });
 }
 
@@ -1187,35 +1294,33 @@ void MediumEnvironment::UnregisterGattServer(api::ble_v2::BleMedium& medium) {
   RunOnMediumEnvironmentThread([&]() {
     auto it = ble_v2_mediums_.find(&medium);
     if (it == ble_v2_mediums_.end()) {
-      NEARBY_LOGS(INFO) << "Unregister GattServer failed. There is no "
-                           "medium registered on medium:"
-                        << &medium;
+      LOG(INFO) << "Unregister GattServer failed. There is no "
+                   "medium registered on medium:"
+                << &medium;
       latch.CountDown();
       return;
     }
     auto& context = it->second;
-    NEARBY_LOGS(INFO) << "Unregistered GattServer for "
-                      << context.ble_peripheral->GetAddress()
-                      << " on medium:" << &medium;
+    LOG(INFO) << "Unregistered GattServer for peripheral id:"
+              << context.ble_peripheral_id
+              << " on medium:" << &medium;
     context.gatt_server = nullptr;
-    context.ble_peripheral = nullptr;
+    context.ble_peripheral_id = 0LL;
     latch.CountDown();
   });
   latch.Await();
 }
 
 Borrowable<api::ble_v2::GattServer*> MediumEnvironment::GetGattServer(
-    api::ble_v2::BlePeripheral& peripheral) {
+    api::ble_v2::BlePeripheral::UniqueId peripheral_id) {
   Borrowable<api::ble_v2::GattServer*> result;
   bool found_server = false;
   CountDownLatch latch(1);
   RunOnMediumEnvironmentThread([&]() {
     for (const auto& medium_info : ble_v2_mediums_) {
       const BleV2MediumContext& remote_context = medium_info.second;
-      const api::ble_v2::BlePeripheral* ble_peripheral =
-          remote_context.ble_peripheral;
-      if (remote_context.gatt_server != nullptr && ble_peripheral != nullptr &&
-          (ble_peripheral->GetAddress() == peripheral.GetAddress())) {
+      if (remote_context.gatt_server != nullptr &&
+          remote_context.ble_peripheral_id == peripheral_id) {
         if (remote_context.gatt_server == nullptr) {
           break;
         }
@@ -1227,8 +1332,7 @@ Borrowable<api::ble_v2::GattServer*> MediumEnvironment::GetGattServer(
   });
   latch.Await();
   if (!found_server) {
-    NEARBY_LOGS(INFO) << "GetGattServer failed. No GATT server for "
-                      << peripheral.GetAddress();
+    LOG(INFO) << "GetGattServer failed. No GATT server for " << peripheral_id;
   }
   return result;
 }

@@ -29,9 +29,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeHeader = kItemTypeEnumZero,
   ItemTypeTitle,
   ItemTypeUsername,
-  ItemTypeAge,
   ItemTypeRecoveryEmail,
-  ItemTypeConfirmRecoveryEmail,
   ItemTypeNextButton,
   ItemTypeError,
 };
@@ -45,10 +43,7 @@ BOOL emailIsValid;
 }
 
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* usernameItem;
-@property(nonatomic, strong) VivaldiTableViewTextEditItem* ageItem;
 @property(nonatomic, strong) VivaldiTableViewTextEditItem* recoveryEmailItem;
-@property(nonatomic, strong) VivaldiTableViewTextEditItem*
-    confirmRecoveryEmailItem;
 @property(nonatomic, strong) VivaldiTableViewTextSpinnerButtonItem* nextButton;
 
 @property(nonatomic, copy) NSURLSessionDataTask* task;
@@ -131,20 +126,6 @@ BOOL emailIsValid;
   [model addItem:self.usernameItem
       toSectionWithIdentifier:SectionIdentifierUserDetails];
 
-  self.ageItem =
-      [[VivaldiTableViewTextEditItem alloc] initWithType:ItemTypeAge];
-  self.ageItem.textFieldPlaceholder =
-      l10n_util::GetNSString(IDS_VIVALDI_USER_AGE);
-  self.ageItem.returnKeyType = UIReturnKeyDone;
-  self.ageItem.hideIcon = YES;
-  self.ageItem.textFieldEnabled = YES;
-  self.ageItem.autoCapitalizationType = UITextAutocapitalizationTypeNone;
-  self.ageItem.identifyingIconAccessibilityLabel = l10n_util::GetNSString(
-      IDS_VIVALDI_USER_AGE);
-  self.ageItem.keyboardType = UIKeyboardTypeNumberPad;
-  [model addItem:self.ageItem
-      toSectionWithIdentifier:SectionIdentifierUserDetails];
-
   self.recoveryEmailItem =
       [[VivaldiTableViewTextEditItem alloc] initWithType:ItemTypeRecoveryEmail];
   self.recoveryEmailItem.textFieldPlaceholder =
@@ -158,21 +139,6 @@ BOOL emailIsValid;
   self.recoveryEmailItem.textContentType = UITextContentTypeEmailAddress;
   self.recoveryEmailItem.keyboardType = UIKeyboardTypeEmailAddress;
   [model addItem:self.recoveryEmailItem
-      toSectionWithIdentifier:SectionIdentifierUserDetails];
-
-  self.confirmRecoveryEmailItem = [[VivaldiTableViewTextEditItem alloc]
-      initWithType:ItemTypeConfirmRecoveryEmail];
-  self.confirmRecoveryEmailItem.textFieldPlaceholder =
-      l10n_util::GetNSString(IDS_VIVALDI_CONFIRM_RECOVERY_EMAIL);
-  self.confirmRecoveryEmailItem.hideIcon = YES;
-  self.confirmRecoveryEmailItem.textFieldEnabled = YES;
-  self.confirmRecoveryEmailItem.autoCapitalizationType =
-      UITextAutocapitalizationTypeNone;
-  self.confirmRecoveryEmailItem.identifyingIconAccessibilityLabel =
-      l10n_util::GetNSString(IDS_VIVALDI_CONFIRM_RECOVERY_EMAIL);
-  self.confirmRecoveryEmailItem.textContentType = UITextContentTypeEmailAddress;
-  self.confirmRecoveryEmailItem.keyboardType = UIKeyboardTypeEmailAddress;
-  [model addItem:self.confirmRecoveryEmailItem
       toSectionWithIdentifier:SectionIdentifierUserDetails];
 
   self.nextButton =
@@ -241,12 +207,6 @@ BOOL emailIsValid;
            forControlEvents:UIControlEventEditingChanged];
       break;
     }
-    case ItemTypeConfirmRecoveryEmail: {
-      VivaldiTableViewTextEditCell* editCell =
-          base::apple::ObjCCast<VivaldiTableViewTextEditCell>(cell);
-      editCell.textField.delegate = self;
-      break;
-    }
     case ItemTypeTitle: {
       VivaldiTableViewIllustratedCell* titleCell =
           base::apple::ObjCCast<VivaldiTableViewIllustratedCell>(cell);
@@ -262,14 +222,13 @@ BOOL emailIsValid;
 
 #pragma mark - UITextViewDelegate
 
-- (BOOL)textView:(UITextView*)textView
-    shouldInteractWithURL:(NSURL*)URL
-                  inRange:(NSRange)characterRange
-              interaction:(UITextItemInteraction)interaction {
-  [self.delegate logInLinkPressed];
-
-  // Returns NO as the app is handling the opening of the URL.
-  return NO;
+- (UIAction*)textView:(UITextView*)textView
+    primaryActionForTextItem:(UITextItem*)textItem
+               defaultAction:(UIAction*)defaultAction API_AVAILABLE(ios(17.0)) {
+  __weak __typeof__(self) weakSelf = self;
+  return [UIAction actionWithHandler:^(UIAction* action) {
+    [weakSelf.delegate logInLinkPressed];
+  }];
 }
 
 #pragma mark - UITextFieldDelegate
@@ -385,20 +344,6 @@ BOOL emailIsValid;
   return [test evaluateWithObject:candidate];
 }
 
-// Returns YES if the string is valid number
-- (BOOL)validAge:(NSString*)candidate {
-  if ([candidate length] == 0) {
-    return NO;
-  }
-  NSCharacterSet* numeric_set = [NSCharacterSet decimalDigitCharacterSet];
-  if (![numeric_set
-          isSupersetOfSet:[NSCharacterSet characterSetWithCharactersInString:
-                                              candidate]]) {
-    return NO;
-  }
-  return YES;
-}
-
 - (void)nextButtonPressed:(UIButton*)sender {
   [self runUserInfoValidation];
 }
@@ -406,11 +351,6 @@ BOOL emailIsValid;
 - (void)runUserInfoValidation {
   NSString* errorMessage;
 
-  int age = 0;
-  if ([self validAge:self.ageItem.textFieldValue]) {
-    base::StringToInt(
-      base::SysNSStringToUTF8(self.ageItem.textFieldValue), &age);
-  }
   if (![self validUsername:self.usernameItem.textFieldValue]) {
     errorMessage = l10n_util::GetNSString(IDS_SYNC_USER_NAME_LENGTH_ERROR);
   } else if (!usernameIsValid) {
@@ -428,12 +368,6 @@ BOOL emailIsValid;
       });
     }];
     return;
-  } else if ([self.ageItem.textFieldValue length] == 0) {
-    errorMessage = l10n_util::GetNSString(IDS_SYNC_USER_AGE_EMPTY_ERROR);
-  } else if (age == 0 || age > vUserMaximumValidAge) {
-    errorMessage = l10n_util::GetNSString(IDS_SYNC_USER_INVALID_AGE);
-  } else if (age < vUserMinimumValidAge) {
-    errorMessage = l10n_util::GetNSString(IDS_SYNC_USER_UNDER_AGE);
   } else if (![self validEmail:self.recoveryEmailItem.textFieldValue]) {
     errorMessage = l10n_util::GetNSString(IDS_SYNC_NOT_VALID_EMAIL_ERROR);
   } else if (!emailIsValid) {
@@ -451,9 +385,6 @@ BOOL emailIsValid;
       });
     }];
     return;
-  } else if (![self.recoveryEmailItem.textFieldValue
-      isEqualToString:self.confirmRecoveryEmailItem.textFieldValue]) {
-    errorMessage = l10n_util::GetNSString(IDS_SYNC_EMAIL_MATCH_ERROR);
   }
 
   [self removeErrorCell:SectionIdentifierUserDetails itemType:ItemTypeError];
@@ -463,7 +394,6 @@ BOOL emailIsValid;
   }
 
   [self.delegate nextButtonPressed:self.usernameItem.textFieldValue
-                               age:age
               recoveryEmailAddress:self.recoveryEmailItem.textFieldValue];
 }
 

@@ -10,7 +10,6 @@ import android.view.ViewGroup.LayoutParams;
 
 import org.chromium.base.TraceEvent;
 import org.chromium.build.annotations.NullMarked;
-import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.third_party.android.swiperefresh.SwipeRefreshLayout;
 
@@ -25,10 +24,10 @@ public class PlayerSwipeRefreshHandler implements OverscrollHandler {
     private static final int STOP_REFRESH_ANIMATION_DELAY_MS = 500;
 
     // The modified AppCompat version of the refresh effect.
-    private SwipeRefreshLayout mSwipeRefreshLayout;
+    private final SwipeRefreshLayout mSwipeRefreshLayout;
 
     // A handler to delegate refreshes event to.
-    private Runnable mRefreshCallback;
+    private final Runnable mRefreshCallback;
 
     /*
      * Constructs a new instance of the handler.
@@ -44,7 +43,7 @@ public class PlayerSwipeRefreshHandler implements OverscrollHandler {
                 new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         // Use the same colors as {@link org.chromium.chrome.browser.SwipeRefreshHandler}.
         mSwipeRefreshLayout.setProgressBackgroundColorSchemeColor(
-                ChromeColors.getSurfaceColor(context, R.dimen.default_elevation_2));
+                SemanticColorUtils.getColorSurfaceContainer(context));
         mSwipeRefreshLayout.setColorSchemeColors(
                 SemanticColorUtils.getDefaultControlColorActive(context));
         mSwipeRefreshLayout.setEnabled(true);

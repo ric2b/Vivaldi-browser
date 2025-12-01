@@ -572,12 +572,6 @@ TestNetworkDelegate::OnGetStorageAccessStatus(
   return storage_access_status_;
 }
 
-bool TestNetworkDelegate::OnIsStorageAccessHeaderEnabled(
-    const url::Origin* top_frame_origin,
-    const GURL& url) const {
-  return is_storage_access_header_enabled_;
-}
-
 FilteringTestNetworkDelegate::FilteringTestNetworkDelegate() = default;
 FilteringTestNetworkDelegate::~FilteringTestNetworkDelegate() = default;
 

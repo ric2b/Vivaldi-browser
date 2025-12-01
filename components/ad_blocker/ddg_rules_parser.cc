@@ -164,7 +164,6 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
   RequestFilterRule rule;
   rule.original_rule_text = domain;
   rule.resource_types.set();
-  rule.party.set();
   rule.anchor_type.set(RequestFilterRule::kAnchorHost);
   rule.host = domain;
   rule.pattern = domain;
@@ -274,7 +273,6 @@ void DuckDuckGoRulesParser::ParseRule(
   if (make_request_filter_rule) {
     RequestFilterRule filter_rule;
     filter_rule.original_rule_text = domain + ":" + *pattern;
-    filter_rule.party.set();
     if (!default_ignore || ignore)
       filter_rule.decision = RequestFilterRule::kPass;
     if (default_ignore == false && ignore == false) {
@@ -377,7 +375,6 @@ void DuckDuckGoRulesParser::ParseRule(
   if (make_redirect_rule) {
     RequestFilterRule redirect_rule;
     redirect_rule.original_rule_text = domain + ":" + *pattern;
-    redirect_rule.party.set();
     if (option_domains)
       redirect_rule.included_domains.swap(option_domains.value());
     redirect_rule.resource_types = option_types.value();

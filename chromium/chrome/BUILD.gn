@@ -190,10 +190,7 @@ if (!is_android && !is_mac) {
       if (build_mojo_proxy) {
         data_deps += [ "//mojo/proxy:mojo_proxy" ]
       }
-      deps += [
-        "//components/exo/wayland:test_controller_stub",
-        "//components/exo/wayland:ui_controls_protocol_stub",
-      ]
+      deps += [ "//components/exo/wayland:ui_controls_protocol_stub" ]
     }
 
     if (is_win) {
@@ -381,8 +378,8 @@ if (!is_android && !is_mac) {
 
     data_deps += [
       "//chrome/browser/resources/media/mei_preload:component",
-      "//chrome/browser/web_applications/isolated_web_apps/key_distribution/preload:component",
       "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component",
+      "//components/webapps/isolated_web_apps/preload:component",
       "//third_party/widevine/cdm",
     ]
 
@@ -785,11 +782,15 @@ if (is_win) {
 
         ldflags += [
           # The helper is in Chromium.app/Contents/Frameworks/Chromium Framework.framework/Versions/X/Helpers/Chromium Helper.app/Contents/MacOS
-          # so set rpath up to the base.
-          "-Wl,-rpath,@loader_path/../../../../../../../../../..",
 
-          # ... and up to Contents/Frameworks.
+          # Set up an rpath to the Contents/Frameworks directory so that
+          # Chromium.framework will be found there. This matches the path that
+          # chrome_exe_main_mac.cc uses with `dlopen` and avoids loading the
+          # framework into memory twice.
           "-Wl,-rpath,@executable_path/../../../../../../..",
+
+          # Add an rpath up to the base for all other libraries.
+          "-Wl,-rpath,@loader_path/../../../../../../../../../..",
         ]
       }
 
@@ -1001,13 +1002,15 @@ if (is_win) {
   }
 
   # Add the ANGLE .dylibs in the MODULE_DIR of Chromium.app
-  bundle_data("angle_binaries") {
-    sources = [
-      "$root_out_dir/egl_intermediates/libEGL.dylib",
-      "$root_out_dir/egl_intermediates/libGLESv2.dylib",
-    ]
-    outputs = [ "{{bundle_contents_dir}}/Libraries/{{source_file_part}}" ]
-    public_deps = [ "//ui/gl:angle_library_copy" ]
+  if (!use_static_angle) {
+    bundle_data("angle_binaries") {
+      sources = [
+        "$root_out_dir/egl_intermediates/libEGL.dylib",
+        "$root_out_dir/egl_intermediates/libGLESv2.dylib",
+      ]
+      outputs = [ "{{bundle_contents_dir}}/Libraries/{{source_file_part}}" ]
+      public_deps = [ "//ui/gl:angle_library_copy" ]
+    }
   }
 
   # Add the SwiftShader .dylibs in the MODULE_DIR of Chromium.app
@@ -1206,7 +1209,6 @@ if (is_win) {
     public_deps = [ ":chrome_dll" ]
 
     bundle_deps = [
-      ":angle_binaries",
       ":chrome_framework_helpers",
       ":chrome_framework_plugins",
       ":chrome_framework_resources",
@@ -1214,12 +1216,16 @@ if (is_win) {
       ":swiftshader_binaries",
       ":widevine_cdm_library",
       "//chrome/browser/resources/media/mei_preload:component_bundle",
-      "//chrome/browser/web_applications/isolated_web_apps/key_distribution/preload:component_bundle",
       "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component_bundle",
+      "//components/webapps/isolated_web_apps/preload:component_bundle",
     ]
 
     if (is_chrome_branded) {
       bundle_deps += [ ":preinstalled_apps" ]
+    }
+
+    if (!use_static_angle) {
+      bundle_deps += [ ":angle_binaries" ]
     }
 
     configs += [ ":chrome_dll_symbol_order" ]
@@ -1303,14 +1309,18 @@ if (is_win) {
     _chrome_symbols_sources = [
       "$root_out_dir/$chrome_product_full_name.app/Contents/MacOS/$chrome_product_full_name",
       "$root_out_dir/chrome_crashpad_handler",
-      "$root_out_dir/libEGL.dylib",
-      "$root_out_dir/libGLESv2.dylib",
       "$root_out_dir/libvk_swiftshader.dylib",
       _framework_binary_path,
     ]
     if (build_with_internal_optimization_guide) {
       _chrome_symbols_sources +=
           [ "$root_out_dir/liboptimization_guide_internal.dylib" ]
+    }
+    if (!use_static_angle) {
+      _chrome_symbols_sources += [
+        "$root_out_dir/libEGL.dylib",
+        "$root_out_dir/libGLESv2.dylib",
+      ]
     }
 
     foreach(helper_params, chrome_mac_helpers) {
@@ -1344,13 +1354,17 @@ if (is_win) {
         ":chrome_app",
         ":chrome_framework",
         "//components/crash/core/app:chrome_crashpad_handler",
-        "//third_party/angle:libEGL",
-        "//third_party/angle:libGLESv2",
         "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan",
         dump_syms,
       ]
       if (build_with_internal_optimization_guide) {
         deps += [ "//components/optimization_guide/internal:optimization_guide_internal" ]
+      }
+      if (!use_static_angle) {
+        deps += [
+          "//third_party/angle:libEGL",
+          "//third_party/angle:libGLESv2",
+        ]
       }
 
       foreach(helper_params, chrome_mac_helpers) {
@@ -1369,24 +1383,32 @@ if (is_win) {
         "$root_out_dir/$chrome_framework_name.dSYM",
         "$root_out_dir/$chrome_product_full_name.dSYM",
         "$root_out_dir/chrome_crashpad_handler.dSYM",
-        "$root_out_dir/libEGL.dylib.dSYM",
-        "$root_out_dir/libGLESv2.dylib.dSYM",
         "$root_out_dir/libvk_swiftshader.dylib.dSYM",
       ]
       if (build_with_internal_optimization_guide) {
         _dsyms += [ "$root_out_dir/liboptimization_guide_internal.dylib.dSYM" ]
+      }
+      if (!use_static_angle) {
+        _dsyms += [
+          "$root_out_dir/libEGL.dylib.dSYM",
+          "$root_out_dir/libGLESv2.dylib.dSYM",
+        ]
       }
 
       deps = [
         ":chrome_app",
         ":chrome_framework",
         "//components/crash/core/app:chrome_crashpad_handler",
-        "//third_party/angle:libEGL",
-        "//third_party/angle:libGLESv2",
         "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan",
       ]
       if (build_with_internal_optimization_guide) {
         deps += [ "//components/optimization_guide/internal:optimization_guide_internal" ]
+      }
+      if (!use_static_angle) {
+        deps += [
+          "//third_party/angle:libEGL",
+          "//third_party/angle:libGLESv2",
+        ]
       }
 
       foreach(helper_params, chrome_mac_helpers) {
@@ -1697,8 +1719,6 @@ if (is_linux || is_chromeos) {
   if (!(is_debug && use_debug_fission)) {
     group("linux_symbols") {
       deps = [
-        ":angle_egl_symbols",
-        ":angle_gles_symbols",
         ":chrome_crashpad_symbols",
         ":chrome_symbols",
       ]
@@ -1710,6 +1730,12 @@ if (is_linux || is_chromeos) {
       }
       if (build_with_internal_optimization_guide) {
         deps += [ ":optimization_guide_symbols" ]
+      }
+      if (!use_static_angle) {
+        deps += [
+          ":angle_egl_symbols",
+          ":angle_gles_symbols",
+        ]
       }
     }
     extract_symbols("chrome_symbols") {
@@ -1748,29 +1774,31 @@ if (is_linux || is_chromeos) {
 
       deps = [ "//third_party/swiftshader/src/Vulkan:swiftshader_libvulkan" ]
     }
-    extract_symbols("angle_egl_symbols") {
-      binary = "$root_out_dir/libEGL.so"
+    if (!use_static_angle) {
+      extract_symbols("angle_egl_symbols") {
+        binary = "$root_out_dir/libEGL.so"
 
-      if (current_cpu == "x86") {
-        # GYP used "ia32" so keep that naming for back-compat.
-        symbol_file = "$root_out_dir/angle_libegl.breakpad.ia32"
-      } else {
-        symbol_file = "$root_out_dir/angle_libegl.breakpad.$current_cpu"
+        if (current_cpu == "x86") {
+          # GYP used "ia32" so keep that naming for back-compat.
+          symbol_file = "$root_out_dir/angle_libegl.breakpad.ia32"
+        } else {
+          symbol_file = "$root_out_dir/angle_libegl.breakpad.$current_cpu"
+        }
+
+        deps = [ "//third_party/angle:libEGL" ]
       }
+      extract_symbols("angle_gles_symbols") {
+        binary = "$root_out_dir/libGLESv2.so"
 
-      deps = [ "//third_party/angle:libEGL" ]
-    }
-    extract_symbols("angle_gles_symbols") {
-      binary = "$root_out_dir/libGLESv2.so"
+        if (current_cpu == "x86") {
+          # GYP used "ia32" so keep that naming for back-compat.
+          symbol_file = "$root_out_dir/angle_libgles.breakpad.ia32"
+        } else {
+          symbol_file = "$root_out_dir/angle_libgles.breakpad.$current_cpu"
+        }
 
-      if (current_cpu == "x86") {
-        # GYP used "ia32" so keep that naming for back-compat.
-        symbol_file = "$root_out_dir/angle_libgles.breakpad.ia32"
-      } else {
-        symbol_file = "$root_out_dir/angle_libgles.breakpad.$current_cpu"
+        deps = [ "//third_party/angle:libGLESv2" ]
       }
-
-      deps = [ "//third_party/angle:libGLESv2" ]
     }
     if (!is_chromeos && angle_shared_libvulkan) {
       extract_symbols("angle_libvulkan_symbols") {

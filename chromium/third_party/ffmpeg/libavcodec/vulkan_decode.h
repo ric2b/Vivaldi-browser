@@ -56,6 +56,10 @@ typedef struct FFVulkanDecodeShared {
     VkVideoDecodeCapabilitiesKHR dec_caps;
 
     VkVideoSessionParametersKHR empty_session_params;
+
+    /* Software-defined decoder context */
+    void *sd_ctx;
+    void (*sd_ctx_free)(struct FFVulkanDecodeShared *ctx);
 } FFVulkanDecodeShared;
 
 typedef struct FFVulkanDecodeContext {
@@ -81,11 +85,13 @@ typedef struct FFVulkanDecodeContext {
 typedef struct FFVulkanDecodePicture {
     AVFrame                        *dpb_frame;      /* Only used for out-of-place decoding. */
 
-    VkImageView                     img_view_ref;   /* Image representation view (reference) */
-    VkImageView                     img_view_out;   /* Image representation view (output-only) */
-    VkImageView                     img_view_dest;  /* Set to img_view_out if no layered refs are used */
-    VkImageAspectFlags              img_aspect;     /* Image plane mask bits */
-    VkImageAspectFlags              img_aspect_ref; /* Only used for out-of-place decoding */
+    struct {
+        VkImageView                     ref[AV_NUM_DATA_POINTERS];        /* Image representation view (reference) */
+        VkImageView                     out[AV_NUM_DATA_POINTERS];        /* Image representation view (output-only) */
+        VkImageView                     dst[AV_NUM_DATA_POINTERS];        /* Set to img_view_out if no layered refs are used */
+        VkImageAspectFlags              aspect[AV_NUM_DATA_POINTERS];     /* Image plane mask bits */
+        VkImageAspectFlags              aspect_ref[AV_NUM_DATA_POINTERS]; /* Only used for out-of-place decoding */
+    } view;
 
     VkSemaphore                     sem;
     uint64_t                        sem_value;
@@ -140,6 +146,13 @@ int ff_vk_params_invalidate(AVCodecContext *avctx, int t, const uint8_t *b, uint
 int ff_vk_decode_prepare_frame(FFVulkanDecodeContext *dec, AVFrame *pic,
                                FFVulkanDecodePicture *vkpic, int is_current,
                                int alloc_dpb);
+
+/**
+ * Software-defined decoder version of ff_vk_decode_prepare_frame.
+ */
+int ff_vk_decode_prepare_frame_sdr(FFVulkanDecodeContext *dec, AVFrame *pic,
+                                   FFVulkanDecodePicture *vkpic, int is_current,
+                                   enum FFVkShaderRepFormat rep_fmt, int alloc_dpb);
 
 /**
  * Add slice data to frame.

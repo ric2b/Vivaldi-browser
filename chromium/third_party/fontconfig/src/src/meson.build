@@ -1,4 +1,23 @@
-fc_sources = [
+
+win_export_args = []
+# Define FcPublic appropriately for exports on windows
+if host_machine.system() == 'windows'
+  win_export_args += '-DFcPublic=__declspec(dllexport)'
+  win_export_args += '-DDLL_EXPORT'
+endif
+
+# Factor our pattern manipulation code into its own library
+# to break the depedency cycle:
+# FontConfig pattern handling - Fontations code - FontConfig.
+pattern_sources = [ 'fcpat.c', fcstdint_h.to_list() ]
+pattern_lib = static_library('patternlib_internal',
+                                    pattern_sources,
+                                    include_directories: incbase,
+                                    dependencies: [deps],
+                                    c_args: win_export_args
+                    )
+
+fc_sources = files([
   'fcatomic.c',
   'fccache.c',
   'fccfg.c',
@@ -19,7 +38,6 @@ fc_sources = [
   'fcmatrix.c',
   'fcname.c',
   'fcobjs.c',
-  'fcpat.c',
   'fcrange.c',
   'fcserialize.c',
   'fcstat.c',
@@ -27,24 +45,15 @@ fc_sources = [
   'fcweight.c',
   'fcxml.c',
   'ftglue.c',
-]
+])
 
-# FIXME: obviously fragile, cc.preprocess would be sweet
-cpp = cc.cmd_array()
-if cc.get_argument_syntax() == 'gcc'
-  cpp += ['-E', '-P']
-elif cc.get_argument_syntax() == 'msvc'
-  cpp += ['/EP']
-else
-  error('FIXME: implement cc.preprocess')
-endif
 
-cpp += ['-I', join_paths(meson.current_source_dir(), '..')]
 
-fcobjshash_gperf = custom_target('fcobjshash.gperf',
-  input: 'fcobjshash.gperf.h',
+fcobjshash_h = cc.preprocess('fcobjshash.gperf.h', include_directories: incbase)
+fcobjshash_gperf = custom_target(
+  input: fcobjshash_h,
   output: 'fcobjshash.gperf',
-  command: [python3, files('cutout.py')[0], '@INPUT@', '@OUTPUT@', '@BUILD_ROOT@', cpp],
+  command: ['cutout.py', '@INPUT@', '@OUTPUT@'],
   build_by_default: true,
 )
 
@@ -54,38 +63,10 @@ fcobjshash_h = custom_target('fcobjshash.h',
   command: [gperf, '--pic', '-m', '100', '@INPUT@', '--output-file', '@OUTPUT@']
 )
 
-# Define FcPublic appropriately for exports on windows
-fc_extra_c_args = []
+lib_fontconfig_sources = [fc_sources, alias_headers, ft_alias_headers, fclang_h, fccase_h, fcobjshash_h, fcstdint_h]
+lib_fontconfig_kwargs = {
+  'include_directories': incbase,
+  'dependencies': [deps, math_dep],
+  'link_with': [pattern_lib],
+}
 
-if cc.get_argument_syntax() == 'msvc'
-  fc_extra_c_args += '-DFcPublic=__declspec(dllexport)'
-endif
-
-libfontconfig = library('fontconfig',
-  fc_sources, alias_headers, ft_alias_headers, fclang_h, fccase_h, fcobjshash_h,
-  c_args: c_args + fc_extra_c_args,
-  include_directories: incbase,
-  dependencies: deps,
-  install: true,
-  soversion: soversion,
-  version: libversion,
-  darwin_versions: osxversion,
-)
-
-fontconfig_dep = declare_dependency(link_with: libfontconfig,
-  include_directories: incbase,
-  dependencies: deps,
-)
-
-pkgmod.generate(libfontconfig,
-  description: 'Font configuration and customization library',
-  filebase: 'fontconfig',
-  name: 'Fontconfig',
-  requires: ['freetype2 ' + freetype_req],
-  version: fc_version,
-  variables: [
-    'sysconfdir=@0@'.format(join_paths(prefix, get_option('sysconfdir'))),
-    'localstatedir=@0@'.format(join_paths(prefix, get_option('localstatedir'))),
-    'confdir=@0@'.format(fc_baseconfigdir),
-    'cachedir=@0@'.format(fc_cachedir),
-  ])

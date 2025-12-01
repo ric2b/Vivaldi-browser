@@ -19,6 +19,11 @@ GuideName* const kVoiceSearchButtonGuide = @"kVoiceSearchButtonGuide";
 GuideName* const kFeedIPHNamedGuide = @"kFeedIPHNamedGuide";
 GuideName* const kShareButtonGuide = @"kShareButtonGuide";
 GuideName* const kTabGridBottomToolbarGuide = @"kTabGridBottomToolbarGuide";
+GuideName* const kTabGridPageControlGuide = @"kTabGridPageControlGuide";
+GuideName* const kTabGridPageControlIncognitoGuide =
+    @"kTabGridPageControlIncognitoGuide";
+GuideName* const kTabGridPageControlThirdPanelGuide =
+    @"kTabGridPageControlThirdPanelGuide";
 GuideName* const kAutofillFirstSuggestionGuide =
     @"kAutofillFirstSuggestionGuide";
 GuideName* const kLensKeyboardButtonGuide = @"kLensKeyboardButtonGuide";
@@ -27,6 +32,8 @@ GuideName* const kContextualPanelLargeEntrypointGuide =
     @"kContextualPanelLargeEntrypointGuide";
 GuideName* const kFakeboxLensIconGuide = @"kFakeboxLensIconGuide";
 GuideName* const kLensOverlayEntrypointGuide = @"kLensOverlayEntrypointGuide";
+GuideName* const kNTPIdentityDiscButtonGuide = @"kNTPIdentityDiscButtonGuide";
+GuideName* const kSelectedRegularCellGuide = @"kSelectedRegularCellGuide";
 
 // Vivaldi
 GuideName* const vivaldiBottomOmniboxGuide = @"vivaldiBottomOmniboxGuide";

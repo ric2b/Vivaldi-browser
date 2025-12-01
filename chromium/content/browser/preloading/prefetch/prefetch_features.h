@@ -9,6 +9,10 @@
 #include "base/metrics/field_trial_params.h"
 #include "content/common/content_export.h"
 
+namespace content {
+class BrowserContext;
+}  // namespace content
+
 namespace features {
 
 // This feature was used to launch the prefetch migration from embedder layer to
@@ -91,6 +95,7 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(
 
 // Allow prefetching ServiceWorker-controlled URLs.
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrefetchServiceWorker);
+bool IsPrefetchServiceWorkerEnabled(content::BrowserContext* browser_context);
 
 // If enabled, prefetch caches are cleared when browsing data removal. Please
 // see crbug.com/40262310 for more details.
@@ -103,12 +108,21 @@ CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrefetchBrowsingDataRemoval);
 // https://docs.google.com/document/d/1W0Nk3Nq6NaUXkBppOUC5zyNmhVqMjYShm1bydGYd9qc
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrefetchScheduler);
 
+// Call `PrefetchScheduler::Progress()` synchronously as much as possible.
+CONTENT_EXPORT extern const base::FeatureParam<bool>
+    kPrefetchSchedulerProgressSyncBestEffort;
+
 // Controls params for tests of `PrefetchScheduler`.
 CONTENT_EXPORT BASE_DECLARE_FEATURE(kPrefetchSchedulerTesting);
 CONTENT_EXPORT extern const base::FeatureParam<size_t>
     kPrefetchSchedulerTestingActiveSetSizeLimitForBase;
 CONTENT_EXPORT extern const base::FeatureParam<size_t>
     kPrefetchSchedulerTestingActiveSetSizeLimitForBurst;
+
+// Provide a partial fix for prefetch queueing problem (crbug.com/400233773),
+// without `PrefetchScheduler` feature.
+CONTENT_EXPORT BASE_DECLARE_FEATURE(
+    kPrefetchQueueingPartialFixWithoutScheduler);
 
 }  // namespace features
 

@@ -37,6 +37,20 @@ BASE_DECLARE_FEATURE(kLensOverlayImageContextMenuActions);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlayContextualSearchbox);
 
+// Enables the Lens overlay searchbox for omnibox suggestions. This does the
+// same thing as kLensOverlayContextualSearchbox, but is used to enable the
+// feature from the omnibox contextual suggestions experiment. This relies on
+// the same params as kLensOverlayContextualSearchbox. This flag turns the meta
+// feature on to remove the dependency between the CSB experiment and omnibox
+// experiment.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayContextualSearchboxForOmniboxSuggestions);
+
+// Enables the migration for Lens overlay suggestions URL params, independent
+// of the CSB feature.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlaySuggestionsMigration);
+
 // Enables the Lens overlay optimizations.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlayLatencyOptimizations);
@@ -57,6 +71,19 @@ BASE_DECLARE_FEATURE(kLensOverlaySidePanelOpenInNewTab);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlaySimplifiedSelection);
 
+// Enables the Lens overlay visual selection updates.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayVisualSelectionUpdates);
+
+// Enables the Lens overlay visual selection updates for omnibox suggestions.
+// This does the same thing as kLensOverlayVisualSelectionUpdates, but is used
+// to enable the feature from the omnibox contextual suggestions experiment.
+// This relies on the same params as kLensOverlayVisualSelectionUpdates. This
+// flag turns the meta feature on to remove the dependency between the visual
+// selection ramp up and omnibox experiment.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayVisualSelectionUpdatesForOmniboxSuggestions);
+
 // Enables the Lens overlay updated client context.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlayUpdatedClientContext);
@@ -65,13 +92,37 @@ BASE_DECLARE_FEATURE(kLensOverlayUpdatedClientContext);
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlayMGTInSidePanel);
 
+// Enables the Lens Overlay omnibox entry point.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayOmniboxEntryPoint);
+
 // Enables uploading chunking for the Lens overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlayUploadChunking);
 
+// Enables a new feedback entrypoint in the Lens side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensSearchSidePanelNewFeedback);
+
 // Enables recontextualizing on each query for the Lens overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
 BASE_DECLARE_FEATURE(kLensOverlayRecontextualizeOnQuery);
+
+// Enables a limited scroll to functionality to the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensSearchSidePanelScrollToAPI);
+
+// Enables the Lens overlay simplified selection flow.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayCornerSliders);
+
+// Enables the protected error page in the Lens side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensSearchProtectedPage);
+
+// Enables the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+BASE_DECLARE_FEATURE(kLensOverlayEduActionChip);
 
 // The base URL for Lens.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -118,6 +169,10 @@ extern const base::FeatureParam<bool> kEnableFullscreenSearch;
 // Enable "open in new tab" option in side panel.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern const base::FeatureParam<bool> kLensOverlayEnableOpenInNewTab;
+
+// Whether the EDU action chip should be disabled by glic.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern const base::FeatureParam<bool> kLensOverlayEduActionChipDisabledByGlic;
 
 // The URL for the Lens home page.
 COMPONENT_EXPORT(LENS_FEATURES)
@@ -388,6 +443,11 @@ extern bool UseInnerTextAsContext();
 // when combined with other page content types.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool UseInnerHtmlAsContext();
+
+// Returns whether to send the client context to the cluster info request for
+// contextual suggest.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool SendClientContextToClusterInfoRequestForContextualSuggest();
 
 // Returns whether to include the Annotated Page Content from the underlying
 // page in the inner HTML requests used as page context. Must have
@@ -735,6 +795,51 @@ extern int GetTranslateTextReceivedTimeout();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool GetShouldCopyAsImage();
 
+// Whether to enable the border glow for the visual selection updates. Enabling
+// this will disable the shimmer animation.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableBorderGlow();
+
+// Whether to enable the gradient region stroke for the visual selection
+// updates.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableGradientRegionStroke();
+
+// Whether to enable the white region stroke for the visual selection updates.
+// Note: `GetVisualSelectionUpdatesEnableGradientRegionStroke` takes precedence
+// over this flag. This flag will have no effect if the gradient region stroke
+// is enabled.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableWhiteRegionStroke();
+
+// Whether to enable the region selected glow for the visual selection updates.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableRegionSelectedGlow();
+
+// Whether to enable the gradient super G in the Lens searchbox.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableGradientSuperG();
+
+// Whether to enable the thumbnail in the contextual searchbox.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableCsbThumbnail();
+
+// Whether to enable the motion tweaks in the contextual searchbox.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableCsbMotionTweaks();
+
+// Whether to enable thumbnail sizing tweaks for the visual selection updates.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableThumbnailSizingTweaks();
+
+// Whether to hide the csb ellipsis for the visual selection updates.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesHideCsbEllipsis();
+
+// Whether to enable close button tweaks for the visual selection updates.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool GetVisualSelectionUpdatesEnableCloseButtonTweaks();
+
 // Whether to fix the request id for page content upload requests. When enabled,
 // this will not increment the image upload request ID when the page content
 // upload request is sent.
@@ -769,6 +874,10 @@ extern bool ShouldUseAltLoadingHintWeb();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool ShouldUseAltLoadingHintPdf();
 
+// Whether to enable the summarize hint for contextual suggest.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool ShouldEnableSummarizeHintForContextualSuggest();
+
 // Whether to enable upload chunking in the Lens Overlay.
 COMPONENT_EXPORT(LENS_FEATURES)
 extern bool IsLensOverlayUploadChunkingEnabled();
@@ -789,9 +898,61 @@ bool IsLensOverlayUploadChunkingUseDebugOptionsEnabled();
 COMPONENT_EXPORT(LENS_FEATURES)
 extern int GetLensOverlayUploadChunkRequestTimeoutMs();
 
+// Whether to the new feedback entry point in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool IsLensSearchSidePanelNewFeedbackEnabled();
+
 // Whether to recontextualize on each query.
 COMPONENT_EXPORT(LENS_FEATURES)
 bool ShouldLensOverlayRecontextualizeOnQuery();
+
+// Whether to enable corner sliders for keyboard control.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern bool AreLensOverlayCornerSlidersEnabled();
+
+// The timeout for performing a region search after a slider change event.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern int GetLensOverlaySliderChangedTimeout();
+
+// Whether the protected page for the side panel is enabled.
+COMPONENT_EXPORT(LENS_FEATURES)
+bool IsLensSearchProtectedPageEnabled();
+
+// Whether to enable the limited scroll-to API functionality in the side panel.
+COMPONENT_EXPORT(LENS_FEATURES)
+bool IsLensSearchSidePanelScrollToAPIEnabled();
+
+// Whether to enable the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+bool IsLensOverlayEduActionChipEnabled();
+
+// URL allow filters for the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayEduUrlAllowFilters();
+
+// URL block filters for the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayEduUrlBlockFilters();
+
+// URL path match allow filters for the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayEduUrlPathMatchAllowFilters();
+
+// URL path match block filters for the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayEduUrlPathMatchBlockFilters();
+
+// URL force-allowed match patterns for the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayEduUrlForceAllowedMatchPatterns();
+
+// Hashed domain block filters for the EDU action chip.
+COMPONENT_EXPORT(LENS_FEATURES)
+extern std::string GetLensOverlayEduHashedDomainBlockFilters();
+
+// Whether EDU action chip should be disabled by glic.
+COMPONENT_EXPORT(LENS_FEATURES)
+bool IsLensOverlayEduActionChipDisabledByGlic();
 
 }  // namespace lens::features
 #endif  // COMPONENTS_LENS_LENS_FEATURES_H_

@@ -4,6 +4,8 @@
 
 #include "content/browser/preloading/prerender/prerender_features.h"
 
+#include "content/public/common/content_features.h"
+
 namespace features {
 
 // Allows activation in background tab. For now, this is used only on web
@@ -18,6 +20,12 @@ BASE_FEATURE(kPrerender2AllowActivationInBackground,
 
 // Enables fallback from prerender to prefetch for Speculation Rules.
 // See https://crbug.com/342089123 for more details.
+//
+// Effects:
+//
+// - Use code paths for prefetch/prerender integration. (The effect of
+//   `kPrefetchPrerenderIntegration`).
+// - Trigger prefetch ahead of prerender.
 BASE_FEATURE(kPrerender2FallbackPrefetchSpecRules,
              "Prerender2FallbackPrefetchSpecRules",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -93,5 +101,17 @@ const base::FeatureParam<base::TimeDelta>
     kSuppressesPrerenderingOnSlowNetworkThreshold{
         &kSuppressesPrerenderingOnSlowNetwork,
         "slow_network_threshold_for_prerendering", base::Milliseconds(208)};
+
+// If enabled, disallows non-trustworthy plaintext HTTP prerendering.
+// See https://crbug.com/340895233 for more details.
+BASE_FEATURE(kPrerender2DisallowNonTrustworthyHttp,
+             "Prerender2DisallowNonTrustworthyHttp",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+bool UsePrefetchPrerenderIntegration() {
+  return base::FeatureList::IsEnabled(
+             features::kPrerender2FallbackPrefetchSpecRules) ||
+         base::FeatureList::IsEnabled(features::kPrefetchPrerenderIntegration);
+}
 
 }  // namespace features

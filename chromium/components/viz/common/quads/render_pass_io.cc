@@ -354,6 +354,16 @@ bool RRectFFromDict(const base::Value::Dict& dict, gfx::RRectF* out) {
   return true;
 }
 
+base::Value::BlobStorage SkPathToBlob(const SkPath& path) {
+  base::Value::BlobStorage blob(path.writeToMemory(nullptr));
+  CHECK(path.writeToMemory(blob.data()));
+  return blob;
+}
+
+bool SkPathFromBlob(const base::Value::BlobStorage& blob, SkPath* out) {
+  return out->readFromMemory(blob.data(), blob.size());
+}
+
 base::Value::Dict LinearGradientToDict(
     const gfx::LinearGradient& gradient_mask) {
   base::Value::List steps;
@@ -1087,7 +1097,6 @@ void ContentDrawQuadCommonToDict(const ContentDrawQuadBase* draw_quad,
   DCHECK(dict);
   dict->Set("tex_coord_rect", RectFToDict(draw_quad->tex_coord_rect));
   dict->Set("texture_size", SizeToDict(draw_quad->texture_size));
-  dict->Set("is_premultiplied", draw_quad->is_premultiplied);
   dict->Set("nearest_neighbor", draw_quad->nearest_neighbor);
   dict->Set("force_anti_aliasing_off", draw_quad->force_anti_aliasing_off);
 }
@@ -1242,7 +1251,9 @@ void TextureDrawQuadToDict(const TextureDrawQuad* draw_quad,
                            base::Value::Dict* dict) {
   DCHECK(draw_quad);
   DCHECK(dict);
-  dict->Set("premultiplied_alpha", draw_quad->premultiplied_alpha);
+  // Set premultiplied_alpha to not break backwards-compatibility with unit test
+  // data.
+  dict->Set("premultiplied_alpha", true);
   dict->Set("uv_top_left", PointFToDict(draw_quad->uv_top_left));
   dict->Set("uv_bottom_right", PointFToDict(draw_quad->uv_bottom_right));
   dict->Set("background_color", SkColor4fToDict(draw_quad->background_color));
@@ -1255,16 +1266,8 @@ void TextureDrawQuadToDict(const TextureDrawQuad* draw_quad,
   dict->Set("secure_output_only", draw_quad->secure_output_only);
   dict->Set("protected_video_type",
             ProtectedVideoTypeToString(draw_quad->protected_video_type));
-  dict->Set("resource_size_in_pixels",
-            SizeToDict(draw_quad->overlay_resources.size_in_pixels));
   if (draw_quad->damage_rect.has_value()) {
     dict->Set("damage_rect", RectToDict(draw_quad->damage_rect.value()));
-  }
-  // Conditionally set is_stream_video to not break backwards-compatibility with
-  // unit test data.
-  // Note: is_video_frame is not being saved in dict.
-  if (draw_quad->is_stream_video) {
-    dict->Set("is_stream_video", draw_quad->is_stream_video);
   }
 }
 
@@ -1272,6 +1275,11 @@ void TileDrawQuadToDict(const TileDrawQuad* draw_quad,
                         base::Value::Dict* dict) {
   DCHECK(draw_quad);
   DCHECK(dict);
+
+  // Set is_premultiplied to not break backwards-compatibility with unit test
+  // data.
+  dict->Set("is_premultiplied", true);
+
   ContentDrawQuadCommonToDict(draw_quad, dict);
 }
 
@@ -1431,8 +1439,6 @@ bool TextureDrawQuadFromDict(const base::Value::Dict& dict,
                              TextureDrawQuad* draw_quad) {
   DCHECK(draw_quad);
 
-  std::optional<bool> premultiplied_alpha =
-      dict.FindBool("premultiplied_alpha");
   const base::Value::Dict* uv_top_left = dict.FindDict("uv_top_left");
   const base::Value::Dict* uv_bottom_right = dict.FindDict("uv_bottom_right");
   // TODO(crbug.com/40942150): Update
@@ -1444,12 +1450,9 @@ bool TextureDrawQuadFromDict(const base::Value::Dict& dict,
   std::optional<bool> secure_output_only = dict.FindBool("secure_output_only");
   const std::string* protected_video_type =
       dict.FindString("protected_video_type");
-  const base::Value::Dict* resource_size_in_pixels =
-      dict.FindDict("resource_size_in_pixels");
 
-  if (!premultiplied_alpha || !uv_top_left || !uv_bottom_right ||
-      !vertex_opacity || !nearest_neighbor || !secure_output_only ||
-      !protected_video_type || !resource_size_in_pixels) {
+  if (!uv_top_left || !uv_bottom_right || !vertex_opacity ||
+      !nearest_neighbor || !secure_output_only || !protected_video_type) {
     return false;
   }
   int protected_video_type_index =
@@ -1457,11 +1460,9 @@ bool TextureDrawQuadFromDict(const base::Value::Dict& dict,
   if (protected_video_type_index < 0)
     return false;
   gfx::PointF t_uv_top_left, t_uv_bottom_right;
-  gfx::Size t_resource_size_in_pixels;
   SkColor4f t_background_color;
   if (!PointFFromDict(*uv_top_left, &t_uv_top_left) ||
       !PointFFromDict(*uv_bottom_right, &t_uv_bottom_right) ||
-      !SizeFromDict(*resource_size_in_pixels, &t_resource_size_in_pixels) ||
       !ColorFromDict(dict, "background_color", &t_background_color)) {
     return false;
   }
@@ -1469,12 +1470,9 @@ bool TextureDrawQuadFromDict(const base::Value::Dict& dict,
   ResourceId resource_id = common.resource_id;
   draw_quad->SetAll(
       common.shared_quad_state, common.rect, common.visible_rect,
-      common.needs_blending, resource_id, t_resource_size_in_pixels,
-      premultiplied_alpha.value(), t_uv_top_left, t_uv_bottom_right,
+      common.needs_blending, resource_id, t_uv_top_left, t_uv_bottom_right,
       t_background_color, nearest_neighbor.value(), secure_output_only.value(),
       static_cast<gfx::ProtectedVideoType>(protected_video_type_index));
-
-  draw_quad->is_stream_video = dict.FindBool("is_stream_video").value_or(false);
 
   gfx::Rect t_damage_rect;
   if (damage_rect && RectFromDict(*damage_rect, &t_damage_rect)) {
@@ -1499,8 +1497,7 @@ bool TileDrawQuadFromDict(const base::Value::Dict& dict,
   draw_quad->SetAll(
       common.shared_quad_state, common.rect, common.visible_rect,
       common.needs_blending, resource_id, content_common->tex_coord_rect,
-      content_common->texture_size, content_common->is_premultiplied,
-      content_common->nearest_neighbor,
+      content_common->texture_size, content_common->nearest_neighbor,
       content_common->force_anti_aliasing_off);
   return true;
 }
@@ -1827,7 +1824,7 @@ base::Value::Dict CompositorRenderPassToDict(
   if (ProcessRenderPassField(kRenderPassBackdropFilterBounds) &&
       render_pass.backdrop_filter_bounds) {
     dict.Set("backdrop_filter_bounds",
-             RRectFToDict(render_pass.backdrop_filter_bounds.value()));
+             SkPathToBlob(render_pass.backdrop_filter_bounds.value()));
   }
   if (ProcessRenderPassField(kRenderPassColorSpace)) {
     // CompositorRenderPasses used to have a color space field, but this was
@@ -1927,12 +1924,13 @@ std::unique_ptr<CompositorRenderPass> CompositorRenderPassFromDict(
   }
 
   if (ProcessRenderPassField(kRenderPassBackdropFilterBounds)) {
-    const base::Value::Dict* backdrop_filter_bounds =
-        dict.FindDict("backdrop_filter_bounds");
+    const base::Value::BlobStorage* backdrop_filter_bounds =
+        dict.FindBlob("backdrop_filter_bounds");
     if (backdrop_filter_bounds) {
-      gfx::RRectF bounds;
-      if (!RRectFFromDict(*backdrop_filter_bounds, &bounds))
+      SkPath bounds;
+      if (!SkPathFromBlob(*backdrop_filter_bounds, &bounds)) {
         return nullptr;
+      }
       pass->backdrop_filter_bounds = bounds;
     }
   }

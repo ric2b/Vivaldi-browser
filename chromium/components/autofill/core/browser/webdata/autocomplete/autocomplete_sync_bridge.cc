@@ -142,15 +142,6 @@ class SyncDifferenceTracker {
   std::optional<ModelError> IncorporateRemoteSpecifics(
       const std::string& storage_key,
       const AutofillSpecifics& specifics) {
-    if (!specifics.has_value()) {
-      // A long time ago autofill had a different format, and it's possible we
-      // could encounter some of that legacy data. It is not useful to us,
-      // because an autofill entry with no value will not place any text in a
-      // form for the user. So drop all of these on the floor.
-      DVLOG(1) << "Dropping old-style autofill profile change.";
-      return std::nullopt;
-    }
-
     const AutocompleteEntry remote = CreateAutocompleteEntry(specifics);
     DCHECK_EQ(storage_key, GetStorageKeyFromModel(remote.key()));
 
@@ -355,7 +346,7 @@ std::optional<syncer::ModelError> AutocompleteSyncBridge::MergeFullSyncData(
 
   SyncDifferenceTracker tracker(GetAutocompleteTable());
   for (const auto& change : entity_data) {
-    DCHECK(change->data().specifics.has_autofill());
+    CHECK(IsEntityDataValid(change->data()));
     RETURN_IF_ERROR(tracker.IncorporateRemoteSpecifics(
         change->storage_key(), change->data().specifics.autofill()));
   }
@@ -386,7 +377,7 @@ std::optional<ModelError> AutocompleteSyncBridge::ApplyIncrementalSyncChanges(
     if (change->type() == EntityChange::ACTION_DELETE) {
       RETURN_IF_ERROR(tracker.IncorporateRemoteDelete(change->storage_key()));
     } else {
-      DCHECK(change->data().specifics.has_autofill());
+      CHECK(IsEntityDataValid(change->data()));
       RETURN_IF_ERROR(tracker.IncorporateRemoteSpecifics(
           change->storage_key(), change->data().specifics.autofill()));
     }
@@ -521,7 +512,7 @@ void AutocompleteSyncBridge::LoadMetadata() {
 }
 
 std::string AutocompleteSyncBridge::GetClientTag(
-    const EntityData& entity_data) {
+    const EntityData& entity_data) const {
   DCHECK(entity_data.specifics.has_autofill());
   // Must have the format "autofill_entry|$name|$value" where $name and $value
   // are URL escaped. This is to maintain compatibility with the previous sync
@@ -531,13 +522,23 @@ std::string AutocompleteSyncBridge::GetClientTag(
 }
 
 std::string AutocompleteSyncBridge::GetStorageKey(
-    const EntityData& entity_data) {
+    const EntityData& entity_data) const {
   DCHECK(entity_data.specifics.has_autofill());
   // Marginally more space efficient than GetClientTag() by omitting the
   // kAutocompleteEntryNamespaceTag prefix and using protobuf serialization
   // instead of URL escaping for Unicode characters.
   const AutofillSpecifics specifics = entity_data.specifics.autofill();
   return BuildSerializedStorageKey(specifics.name(), specifics.value());
+}
+
+bool AutocompleteSyncBridge::IsEntityDataValid(
+    const EntityData& entity_data) const {
+  CHECK(entity_data.specifics.has_autofill());
+  // A long time ago autofill had a different format, and it's possible we
+  // could encounter some of that legacy data. It is not useful to us,
+  // because an autofill entry with no value will not place any text in a
+  // form for the user. So drop all of these on the floor.
+  return entity_data.specifics.autofill().has_value();
 }
 
 void AutocompleteSyncBridge::AutocompleteEntriesChanged(

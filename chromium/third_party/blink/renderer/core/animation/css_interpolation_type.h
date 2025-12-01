@@ -20,10 +20,9 @@ class CORE_EXPORT CSSInterpolationType : public InterpolationType {
  public:
   class CSSConversionChecker : public ConversionChecker {
    public:
-    bool IsValid(const InterpolationEnvironment& environment,
+    bool IsValid(const CSSInterpolationEnvironment& environment,
                  const InterpolationValue& underlying) const final {
-      return IsValid(To<CSSInterpolationEnvironment>(environment).GetState(),
-                     underlying);
+      return IsValid(environment.GetState(), underlying);
     }
 
    protected:
@@ -39,7 +38,7 @@ class CORE_EXPORT CSSInterpolationType : public InterpolationType {
   virtual InterpolationValue MaybeConvertInherit(const StyleResolverState&,
                                                  ConversionCheckers&) const = 0;
   virtual InterpolationValue MaybeConvertValue(const CSSValue&,
-                                               const StyleResolverState*,
+                                               const StyleResolverState&,
                                                ConversionCheckers&) const = 0;
   virtual const CSSValue* CreateCSSValue(const InterpolableValue&,
                                          const NonInterpolableValue*,
@@ -66,6 +65,13 @@ class CORE_EXPORT CSSInterpolationType : public InterpolationType {
     return value;
   }
 
+  virtual InterpolationValue MaybeConvertCustomPropertyUnderlyingValue(
+      const CSSValue&) const {
+    NOTREACHED();
+  }
+
+  void Trace(Visitor* v) const override;
+
  protected:
   explicit CSSInterpolationType(PropertyHandle,
                                 const PropertyRegistration* = nullptr);
@@ -75,18 +81,18 @@ class CORE_EXPORT CSSInterpolationType : public InterpolationType {
   }
 
   InterpolationValue MaybeConvertSingle(const PropertySpecificKeyframe&,
-                                        const InterpolationEnvironment&,
+                                        const CSSInterpolationEnvironment&,
                                         const InterpolationValue& underlying,
                                         ConversionCheckers&) const final;
 
   InterpolationValue MaybeConvertUnderlyingValue(
-      const InterpolationEnvironment&) const override;
+      const CSSInterpolationEnvironment&) const override;
   virtual InterpolationValue MaybeConvertStandardPropertyUnderlyingValue(
       const ComputedStyle&) const = 0;
 
   void Apply(const InterpolableValue&,
              const NonInterpolableValue*,
-             InterpolationEnvironment&) const final;
+             CSSInterpolationEnvironment&) const final;
   virtual void ApplyStandardPropertyValue(const InterpolableValue&,
                                           const NonInterpolableValue*,
                                           StyleResolverState&) const = 0;
@@ -94,14 +100,14 @@ class CORE_EXPORT CSSInterpolationType : public InterpolationType {
  private:
   InterpolationValue MaybeConvertSingleInternal(
       const PropertySpecificKeyframe&,
-      const InterpolationEnvironment&,
+      const CSSInterpolationEnvironment&,
       const InterpolationValue& underlying,
       ConversionCheckers&) const;
 
   InterpolationValue MaybeConvertCustomPropertyDeclaration(
       const CSSValue&,
       const TreeScope* keyframe_tree_scope,
-      const InterpolationEnvironment&,
+      const CSSInterpolationEnvironment&,
       ConversionCheckers&) const;
 
   const PropertyRegistration& Registration() const {
@@ -113,7 +119,7 @@ class CORE_EXPORT CSSInterpolationType : public InterpolationType {
                                 const NonInterpolableValue*,
                                 StyleResolverState&) const;
 
-  WeakPersistent<const PropertyRegistration> registration_;
+  WeakMember<const PropertyRegistration> registration_;
 };
 
 }  // namespace blink

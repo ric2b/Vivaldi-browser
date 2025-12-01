@@ -198,19 +198,20 @@ static void LookupForRead(LookupIterator* it, bool is_has_property) {
       case LookupIterator::TRANSITION:
         UNREACHABLE();
       case LookupIterator::JSPROXY:
-      case LookupIterator::WASM_OBJECT:
         return;
+      case LookupIterator::WASM_OBJECT:
+        continue;  // Continue to the prototype, if present.
       case LookupIterator::INTERCEPTOR: {
         // If there is a getter, return; otherwise loop to perform the lookup.
         DirectHandle<JSObject> holder = it->GetHolder<JSObject>();
-        if (!IsUndefined(holder->GetNamedInterceptor()->getter(),
-                         it->isolate())) {
-          return;
-        }
-        if (is_has_property &&
-            !IsUndefined(holder->GetNamedInterceptor()->query(),
-                         it->isolate())) {
-          return;
+        {
+          Tagged<InterceptorInfo> interceptor = holder->GetNamedInterceptor();
+          if (interceptor->has_getter()) {
+            return;
+          }
+          if (is_has_property && interceptor->has_query()) {
+            return;
+          }
         }
         continue;
       }
@@ -218,7 +219,7 @@ static void LookupForRead(LookupIterator* it, bool is_has_property) {
         // ICs know how to perform access checks on global proxies.
         if (it->GetHolder<JSObject>().is_identical_to(
                 it->isolate()->global_proxy()) &&
-            !it->isolate()->global_object()->IsDetached()) {
+            !it->isolate()->global_object()->IsDetached(it->isolate())) {
           continue;
         }
         return;
@@ -474,10 +475,7 @@ MaybeDirectHandle<Object> LoadGlobalIC::Load(Handle<Name> name,
     if (script_contexts->Lookup(str_name, &lookup_result)) {
       DirectHandle<Context> script_context(
           script_contexts->get(lookup_result.context_index), isolate());
-      DirectHandle<Object> result(script_context->get(lookup_result.slot_index),
-                                  isolate());
-
-      if (IsTheHole(*result, isolate())) {
+      if (script_context->IsElementTheHole(lookup_result.slot_index)) {
         // Do not install stubs and stay pre-monomorphic for
         // uninitialized accesses.
         THROW_NEW_ERROR(
@@ -485,7 +483,6 @@ MaybeDirectHandle<Object> LoadGlobalIC::Load(Handle<Name> name,
             NewReferenceError(MessageTemplate::kAccessedUninitializedVariable,
                               name));
       }
-
       bool use_ic =
           (state() != NO_FEEDBACK) && v8_flags.use_ic && update_feedback;
       if (use_ic) {
@@ -505,13 +502,7 @@ MaybeDirectHandle<Object> LoadGlobalIC::Load(Handle<Name> name,
       } else if (state() == NO_FEEDBACK) {
         TraceIC("LoadGlobalIC", name);
       }
-      if (v8_flags.script_context_mutable_heap_number) {
-        return direct_handle(
-            *Context::LoadScriptContextElement(
-                script_context, lookup_result.slot_index, result, isolate()),
-            isolate());
-      }
-      return result;
+      return Context::Get(script_context, lookup_result.slot_index, isolate());
     }
   }
   return LoadIC::Load(global, name, update_feedback);
@@ -783,11 +774,8 @@ void LoadIC::UpdateCaches(LookupIterator* lookup) {
       handler = MaybeObjectHandle(LoadHandler::LoadSlow(isolate()));
     } else {
       TRACE_HANDLER_STATS(isolate(), LoadIC_LoadNonexistentDH);
-      Handle<Smi> smi_handler = LoadHandler::LoadNonExistent(isolate());
-      handler = MaybeObjectHandle(LoadHandler::LoadFullChain(
-          isolate(), lookup_start_object_map(),
-          MaybeObjectDirectHandle(isolate()->factory()->null_value()),
-          smi_handler));
+      handler = MaybeObjectHandle(
+          LoadHandler::LoadNonExistent(isolate(), lookup_start_object_map()));
     }
   } else if (IsLoadGlobalIC() && lookup->state() == LookupIterator::JSPROXY) {
     // If there is proxy just install the slow stub since we need to call the
@@ -1130,7 +1118,6 @@ MaybeObjectHandle LoadIC::ComputeHandler(LookupIterator* lookup) {
     }
 
     case LookupIterator::WASM_OBJECT:
-      return MaybeObjectHandle(LoadHandler::LoadSlow(isolate()));
     case LookupIterator::ACCESS_CHECK:
     case LookupIterator::NOT_FOUND:
     case LookupIterator::TRANSITION:
@@ -1302,7 +1289,8 @@ bool AllowReadingHoleElement(ElementsKind elements_kind) {
 
 KeyedAccessLoadMode GetNewKeyedLoadMode(Isolate* isolate,
                                         DirectHandle<HeapObject> receiver,
-                                        size_t index, bool is_found) {
+                                        size_t index, bool is_found,
+                                        MaybeDirectHandle<Object> result) {
   DirectHandle<Map> receiver_map(Cast<HeapObject>(receiver)->map(), isolate);
   if (!AllowConvertHoleElementToUndefined(isolate, receiver_map)) {
     return KeyedAccessLoadMode::kInBounds;
@@ -1317,6 +1305,18 @@ KeyedAccessLoadMode GetNewKeyedLoadMode(Isolate* isolate,
 
   // In bound access and did not read a hole.
   if (is_found) {
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+    // We can encode undefined in HOLEY_DOUBLE_ELEMENTS, so we always have to
+    // check for those even if we found a value.
+    if (elements_kind == HOLEY_DOUBLE_ELEMENTS) {
+      DirectHandle<Object> result_handle;
+      if (result.ToHandle(&result_handle)) {
+        if (Is<Undefined>(result_handle)) {
+          always_handle_holes = true;
+        }
+      }
+    }
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
     return always_handle_holes ? KeyedAccessLoadMode::kHandleHoles
                                : KeyedAccessLoadMode::kInBounds;
   }
@@ -1364,14 +1364,12 @@ KeyedAccessLoadMode GetUpdatedLoadModeForMap(Isolate* isolate,
 }  // namespace
 
 Handle<Object> KeyedLoadIC::LoadElementHandler(
-    DirectHandle<Map> receiver_map, KeyedAccessLoadMode new_load_mode) {
+    DirectHandle<Map> receiver_map, KeyedAccessLoadMode new_load_mode,
+    MaybeDirectHandle<Map> maybe_transition_target) {
   // Has a getter interceptor, or is any has and has a query interceptor.
   if (receiver_map->has_indexed_interceptor() &&
-      (!IsUndefined(receiver_map->GetIndexedInterceptor()->getter(),
-                    isolate()) ||
-       (IsAnyHas() &&
-        !IsUndefined(receiver_map->GetIndexedInterceptor()->query(),
-                     isolate()))) &&
+      (receiver_map->GetIndexedInterceptor()->has_getter() ||
+       (IsAnyHas() && receiver_map->GetIndexedInterceptor()->has_query())) &&
       !receiver_map->GetIndexedInterceptor()->non_masking()) {
     // TODO(jgruber): Update counter name.
     TRACE_HANDLER_STATS(isolate(), KeyedLoadIC_LoadIndexedInterceptorStub);
@@ -1420,6 +1418,13 @@ Handle<Object> KeyedLoadIC::LoadElementHandler(
       LoadModeHandlesHoles(new_load_mode),
       AllowReadingHoleElement(elements_kind) &&
           AllowConvertHoleElementToUndefined(isolate(), receiver_map));
+  DirectHandle<Map> transition_target;
+  if (is_js_array && maybe_transition_target.ToHandle(&transition_target)) {
+    DCHECK(IsFastElementsKind(elements_kind));
+    return LoadHandler::TransitionAndLoadElement(
+        isolate(), transition_target->elements_kind(), new_load_mode);
+  }
+
   TRACE_HANDLER_STATS(isolate(), KeyedLoadIC_LoadElementDH);
   return LoadHandler::LoadElement(isolate(), elements_kind, is_js_array,
                                   new_load_mode);
@@ -1434,21 +1439,27 @@ void KeyedLoadIC::LoadElementPolymorphicHandlers(
       [](const DirectHandle<Map>& map) { return map->is_deprecated(); }));
 
   for (DirectHandle<Map> receiver_map : *receiver_maps) {
-    // Mark all stable receiver maps that have elements kind transition map
-    // among receiver_maps as unstable because the optimizing compilers may
-    // generate an elements kind transition for this kind of receivers.
-    if (receiver_map->is_stable()) {
       Tagged<Map> tmap = receiver_map->FindElementsKindTransitionedMap(
           isolate(),
           MapHandlesSpan(receiver_maps->begin(), receiver_maps->end()),
           ConcurrencyMode::kSynchronous);
       if (!tmap.is_null()) {
-        receiver_map->NotifyLeafMapLayoutChange(isolate());
+        // Mark all stable receiver maps that have elements kind transition map
+        // among receiver_maps as unstable because the ICs and the optimizing
+        // compilers may perform an elements kind transition for this kind of
+        // receivers.
+        if (receiver_map->is_stable()) {
+          receiver_map->NotifyLeafMapLayoutChange(isolate());
+        }
+        handlers->push_back(MaybeObjectHandle(LoadElementHandler(
+            receiver_map,
+            GetUpdatedLoadModeForMap(isolate(), receiver_map, new_load_mode),
+            handle(tmap, isolate()))));
+      } else {
+        handlers->push_back(MaybeObjectHandle(LoadElementHandler(
+            receiver_map,
+            GetUpdatedLoadModeForMap(isolate(), receiver_map, new_load_mode))));
       }
-    }
-    handlers->push_back(MaybeObjectHandle(LoadElementHandler(
-        receiver_map,
-        GetUpdatedLoadModeForMap(isolate(), receiver_map, new_load_mode))));
   }
 }
 
@@ -1583,7 +1594,7 @@ MaybeDirectHandle<Object> KeyedLoadIC::Load(Handle<JSAny> object,
       IntPtrKeyToSize(maybe_index, Cast<HeapObject>(object), &index)) {
     DirectHandle<HeapObject> receiver = Cast<HeapObject>(object);
     KeyedAccessLoadMode load_mode =
-        GetNewKeyedLoadMode(isolate(), receiver, index, is_found);
+        GetNewKeyedLoadMode(isolate(), receiver, index, is_found, result);
     UpdateLoadElement(receiver, load_mode);
     if (is_vector_set()) {
       TraceIC("LoadIC", key);
@@ -1603,8 +1614,8 @@ bool StoreIC::LookupForWrite(LookupIterator* it, DirectHandle<Object> value,
   // Disable ICs for non-JSObjects for now.
   DirectHandle<Object> object = it->GetReceiver();
   if (IsJSProxy(*object)) return true;
-  if (!IsJSObject(*object)) return false;
-  DirectHandle<JSObject> receiver = Cast<JSObject>(object);
+  if (!IsJSObject(*object) && !IsWasmObject(*object)) return false;
+  DirectHandle<JSReceiver> receiver = Cast<JSReceiver>(object);
   DCHECK(!receiver->map()->is_deprecated());
 
   for (;; it->Next()) {
@@ -1612,15 +1623,14 @@ bool StoreIC::LookupForWrite(LookupIterator* it, DirectHandle<Object> value,
       case LookupIterator::TRANSITION:
         UNREACHABLE();
       case LookupIterator::WASM_OBJECT:
-        return false;
+        continue;  // Continue to the prototype, if present.
       case LookupIterator::JSPROXY:
         return true;
       case LookupIterator::INTERCEPTOR: {
         DirectHandle<JSObject> holder = it->GetHolder<JSObject>();
         Tagged<InterceptorInfo> info = holder->GetNamedInterceptor();
-        if (it->HolderIsReceiverOrHiddenPrototype() ||
-            !IsUndefined(info->getter(), isolate()) ||
-            !IsUndefined(info->query(), isolate())) {
+        if (it->HolderIsReceiverOrHiddenPrototype() || info->has_getter() ||
+            info->has_query()) {
           return true;
         }
         continue;
@@ -1686,7 +1696,7 @@ bool StoreIC::LookupForWrite(LookupIterator* it, DirectHandle<Object> value,
           // cell got invalidated) and handle these stores correctly.
           return false;
         }
-        receiver = it->GetStoreTarget<JSObject>();
+        receiver = it->GetStoreTarget<JSReceiver>();
         if (it->ExtendingNonExtensible(receiver)) return false;
         it->PrepareTransitionToDataProperty(receiver, value, NONE,
                                             store_origin);
@@ -1717,10 +1727,7 @@ MaybeDirectHandle<Object> StoreGlobalIC::Store(Handle<Name> name,
       return TypeError(MessageTemplate::kConstAssign, global, name);
     }
 
-    Tagged<Object> previous_value =
-        script_context->get(lookup_result.slot_index);
-
-    if (IsTheHole(previous_value, isolate())) {
+    if (script_context->IsElementTheHole(lookup_result.slot_index)) {
       // Do not install stubs and stay pre-monomorphic for uninitialized
       // accesses.
       AllowGarbageCollection yes_gc;
@@ -1745,15 +1752,9 @@ MaybeDirectHandle<Object> StoreGlobalIC::Store(Handle<Name> name,
     } else if (state() == NO_FEEDBACK) {
       TraceIC("StoreGlobalIC", name);
     }
-    if (v8_flags.script_context_mutable_heap_number ||
-        v8_flags.const_tracking_let) {
-      AllowGarbageCollection yes_gc;
-      Context::StoreScriptContextAndUpdateSlotProperty(
-          direct_handle(script_context, isolate()), lookup_result.slot_index,
-          value, isolate());
-    } else {
-      script_context->set(lookup_result.slot_index, *value);
-    }
+    AllowGarbageCollection yes_gc;
+    Context::Set(handle(script_context, isolate()), lookup_result.slot_index,
+                 value, isolate());
     return value;
   }
 
@@ -2024,7 +2025,7 @@ MaybeObjectHandle StoreIC::ComputeHandler(LookupIterator* lookup) {
         // ...return a store interceptor Smi handler if there is a setter
         // interceptor and it's not DefineNamedOwnIC or DefineKeyedOwnIC
         // (which should call the definer)...
-        if (!IsUndefined(info->setter(), isolate()) && !IsAnyDefineOwn()) {
+        if (info->has_setter() && !IsAnyDefineOwn()) {
           return MaybeObjectHandle(StoreHandler::StoreInterceptor(isolate()));
         }
         // ...otherwise return a slow-case Smi handler, which invokes the
@@ -2035,8 +2036,7 @@ MaybeObjectHandle StoreIC::ComputeHandler(LookupIterator* lookup) {
       // If the interceptor is a getter/query interceptor on the prototype
       // chain, return an invalidatable slow handler so it can turn fast if the
       // interceptor is masked by a regular property later.
-      DCHECK(!IsUndefined(info->getter(), isolate()) ||
-             !IsUndefined(info->query(), isolate()));
+      DCHECK(info->has_getter() || info->has_query());
       Handle<Object> handler = StoreHandler::StoreThroughPrototype(
           isolate(), lookup_start_object_map(), holder,
           *StoreHandler::StoreSlow(isolate()));
@@ -2045,7 +2045,8 @@ MaybeObjectHandle StoreIC::ComputeHandler(LookupIterator* lookup) {
 
     case LookupIterator::ACCESSOR: {
       // This is currently guaranteed by checks in StoreIC::Store.
-      DirectHandle<JSObject> receiver = Cast<JSObject>(lookup->GetReceiver());
+      DirectHandle<JSReceiver> receiver =
+          Cast<JSReceiver>(lookup->GetReceiver());
       Handle<JSObject> holder =
           indirect_handle(lookup->GetHolder<JSObject>(), isolate());
       DCHECK(!IsAccessCheckNeeded(*receiver) || lookup->name()->IsPrivate());
@@ -3053,10 +3054,7 @@ RUNTIME_FUNCTION(Runtime_StoreGlobalIC_Slow) {
 
     {
       DisallowGarbageCollection no_gc;
-      Tagged<Object> previous_value =
-          script_context->get(lookup_result.slot_index);
-
-      if (IsTheHole(previous_value, isolate)) {
+      if (script_context->IsElementTheHole(lookup_result.slot_index)) {
         AllowGarbageCollection yes_gc;
         THROW_NEW_ERROR_RETURN_FAILURE(
             isolate,
@@ -3064,13 +3062,7 @@ RUNTIME_FUNCTION(Runtime_StoreGlobalIC_Slow) {
                               name));
       }
     }
-    if (v8_flags.script_context_mutable_heap_number ||
-        v8_flags.const_tracking_let) {
-      Context::StoreScriptContextAndUpdateSlotProperty(
-          script_context, lookup_result.slot_index, value, isolate);
-    } else {
-      script_context->set(lookup_result.slot_index, *value);
-    }
+    Context::Set(script_context, lookup_result.slot_index, value, isolate);
     return *value;
   }
 
@@ -3222,7 +3214,7 @@ RUNTIME_FUNCTION(Runtime_ElementsTransitionAndStoreIC_Miss) {
   FeedbackSlotKind kind = vector->GetKind(vector_slot);
 
   if (IsJSObject(*object)) {
-    JSObject::TransitionElementsKind(Cast<JSObject>(object),
+    JSObject::TransitionElementsKind(isolate, Cast<JSObject>(object),
                                      map->elements_kind());
   }
 
@@ -4138,7 +4130,7 @@ RUNTIME_FUNCTION(Runtime_HasElementWithInterceptor) {
     PropertyCallbackArguments arguments(isolate, interceptor->data(), *receiver,
                                         *receiver, Just(kDontThrow));
 
-    if (!IsUndefined(interceptor->query(), isolate)) {
+    if (interceptor->has_query()) {
       DirectHandle<Object> result =
           arguments.CallIndexedQuery(interceptor, index);
       // An exception was thrown in the interceptor. Propagate.
@@ -4152,7 +4144,7 @@ RUNTIME_FUNCTION(Runtime_HasElementWithInterceptor) {
         arguments.AcceptSideEffects();
         return ReadOnlyRoots(isolate).true_value();
       }
-    } else if (!IsUndefined(interceptor->getter(), isolate)) {
+    } else if (interceptor->has_getter()) {
       DirectHandle<Object> result =
           arguments.CallIndexedGetter(interceptor, index);
       // An exception was thrown in the interceptor. Propagate.

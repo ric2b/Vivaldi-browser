@@ -8,9 +8,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.text.TextUtils;
 
-import androidx.annotation.Nullable;
-
 import org.chromium.base.BuildInfo;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -18,7 +18,6 @@ import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
-import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.user_prefs.UserPrefs;
 
@@ -27,6 +26,7 @@ import java.util.List;
 import java.util.Set;
 
 /** Helper class responsible of launching the re-FRE with {@link SigninAndHistorySyncActivity}. */
+@NullMarked
 public final class FullscreenSigninPromoLauncher {
     /**
      * Launches the {@link SigninAndHistoryOptInActivity} if it needs to be displayed.
@@ -60,22 +60,22 @@ public final class FullscreenSigninPromoLauncher {
 
         context.startActivity(intent);
         prefManager.setSigninPromoLastShownVersion(currentMajorVersion);
-        final List<CoreAccountInfo> coreAccountInfos =
-                AccountUtils.getCoreAccountInfosIfFulfilledOrEmpty(
-                        AccountManagerFacadeProvider.getInstance().getCoreAccountInfos());
+        var accounts =
+                AccountUtils.getAccountsIfFulfilledOrEmpty(
+                        AccountManagerFacadeProvider.getInstance().getAccounts());
         prefManager.setSigninPromoLastAccountEmails(
-                new HashSet<>(AccountUtils.toAccountEmails(coreAccountInfos)));
+                new HashSet<>(AccountUtils.toAccountEmails(accounts)));
         return true;
     }
 
     private static boolean shouldLaunchPromo(
             Profile profile, SigninPreferencesManager prefManager, final int currentMajorVersion) {
-        if (BuildInfo.getInstance().isAutomotive) {
-            return false;
-        }
-
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.FORCE_STARTUP_SIGNIN_PROMO)) {
             return true;
+        }
+
+        if (BuildInfo.getInstance().isAutomotive) {
+            return false;
         }
 
         final int lastPromoMajorVersion = prefManager.getSigninPromoLastShownVersion();
@@ -97,19 +97,14 @@ public final class FullscreenSigninPromoLauncher {
 
         final AccountManagerFacade accountManagerFacade =
                 AccountManagerFacadeProvider.getInstance();
-        final List<CoreAccountInfo> coreAccountInfos =
-                AccountUtils.getCoreAccountInfosIfFulfilledOrEmpty(
-                        accountManagerFacade.getCoreAccountInfos());
-        if (coreAccountInfos.isEmpty()) {
+        var accounts =
+                AccountUtils.getAccountsIfFulfilledOrEmpty(accountManagerFacade.getAccounts());
+        if (accounts.isEmpty()) {
             // Don't show if the account list isn't available yet or there are no accounts in it.
             return false;
         }
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.FORCE_DISABLE_EXTENDED_SYNC_PROMOS)) {
-            return false;
-        }
-
-        final List<String> currentAccountEmails = AccountUtils.toAccountEmails(coreAccountInfos);
+        final List<String> currentAccountEmails = AccountUtils.toAccountEmails(accounts);
         final Set<String> previousAccountEmails = prefManager.getSigninPromoLastAccountEmails();
         // Don't show if no new accounts have been added after the last time promo was shown.
         return previousAccountEmails == null

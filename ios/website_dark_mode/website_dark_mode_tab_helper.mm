@@ -20,5 +20,3 @@ void WebsiteDarkModeTabHelper::WebStateDestroyed(web::WebState* web_state) {
   website_dark_mode_agent_ = nil;
   web_state->RemoveObserver(this);
 }
-
-WEB_STATE_USER_DATA_KEY_IMPL(WebsiteDarkModeTabHelper)

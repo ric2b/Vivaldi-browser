@@ -86,6 +86,15 @@ scoped_refptr<CommandBufferHelper> CreateCommandBufferHelper(
   return holder->helper;
 }
 
+#if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+bool ShouldUseDXVADeviceForHEVCRangeExtension(const VideoDecoderConfig& config,
+                                              ComD3D11Device device) {
+  return config.profile() == HEVCPROFILE_REXT &&
+         (base::FeatureList::IsEnabled(kD3D12VideoDecoder) ||
+          SupportsHEVCRangeExtensionDXVAProfile(device));
+}
+#endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
+
 }  // namespace
 
 std::unique_ptr<VideoDecoder> D3D11VideoDecoder::Create(
@@ -168,13 +177,16 @@ bool D3D11VideoDecoder::InitializeAcceleratedDecoder(
     accelerated_video_decoder_ = std::make_unique<AV1Decoder>(
         std::make_unique<D3D11AV1Accelerator>(
             this, media_log_.get(),
-            gpu_workarounds_.use_current_picture_for_av1_invalid_ref),
+            gpu_workarounds_.use_first_valid_ref_for_av1_invalid_ref),
         profile_, config.color_space_info());
 #if BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
   } else if (config.codec() == VideoCodec::kHEVC) {
     DCHECK(base::FeatureList::IsEnabled(kPlatformHEVCDecoderSupport));
+    bool use_dxva_device_for_hevc_rext =
+        ShouldUseDXVADeviceForHEVCRangeExtension(config, device_);
     accelerated_video_decoder_ = std::make_unique<H265Decoder>(
-        std::make_unique<D3D11H265Accelerator>(this, media_log_.get()),
+        std::make_unique<D3D11H265Accelerator>(this, media_log_.get(),
+                                               use_dxva_device_for_hevc_rext),
         profile_, config.color_space_info());
 #endif  // BUILDFLAG(ENABLE_HEVC_PARSER_AND_HW_DECODER)
   } else {
@@ -210,7 +222,7 @@ bool D3D11VideoDecoder::ResetD3DVideoDecoder() {
 
   auto decoder_configurator = D3D11DecoderConfigurator::Create(
       gpu_preferences_, gpu_workarounds_, config_, bit_depth, chroma_sampling_,
-      media_log_.get(), use_shared_handle_);
+      media_log_.get(), use_shared_handle_, device_);
   if (!decoder_configurator) {
     NotifyError(D3D11StatusCode::kDecoderUnsupportedProfile);
     return false;
@@ -302,7 +314,8 @@ D3D11VideoDecoder::CreateD3DVideoDecoderWrapper(
     return nullptr;
   }
   use_single_video_decoder_texture_ =
-      use_single_texture.value() | use_shared_handle_;
+      use_single_texture.value() || use_shared_handle_ ||
+      gpu_workarounds_.disable_decode_into_array_texture;
   if (use_single_video_decoder_texture_) {
     MEDIA_LOG(INFO, media_log_) << "D3D11VideoDecoder is using single textures";
   } else {
@@ -1103,6 +1116,12 @@ D3D11VideoDecoder::GetSupportedVideoDecoderConfigs(
       continue;
 
     const auto& resolution_range = kv.second;
+
+    // TODO(crbug.com/415370683): This should be handled elsewhere.
+    if (resolution_range.min_resolution.IsEmpty()) {
+      continue;
+    }
+
     configs.emplace_back(profile, profile, resolution_range.min_resolution,
                          resolution_range.max_landscape_resolution,
                          /*allow_encrypted=*/false,

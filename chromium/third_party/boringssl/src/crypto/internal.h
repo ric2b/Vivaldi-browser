@@ -103,12 +103,6 @@ typedef __uint128_t uint128_t;
 
 #define OPENSSL_ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 
-#if defined(__clang__) && __clang_major__ >= 5
-#if __has_attribute(fallthrough)
-#define OPENSSL_CAN_USE_ATTR_FALLTHROUGH
-#endif
-#endif
-
 // GCC-like compilers indicate SSE2 with |__SSE2__|. MSVC leaves the caller to
 // know that x86_64 has SSE2, and uses _M_IX86_FP to indicate SSE2 on x86.
 // https://learn.microsoft.com/en-us/cpp/preprocessor/predefined-macros?view=msvc-170
@@ -534,7 +528,7 @@ OPENSSL_EXPORT void CRYPTO_once(CRYPTO_once_t *once, void (*init)(void));
 
 using CRYPTO_atomic_u32 = std::atomic<uint32_t>;
 
-static_assert(sizeof(CRYPTO_atomic_u32) == sizeof(uint32_t), "");
+static_assert(sizeof(CRYPTO_atomic_u32) == sizeof(uint32_t));
 
 inline uint32_t CRYPTO_atomic_load_u32(const CRYPTO_atomic_u32 *val) {
   return val->load(std::memory_order_seq_cst);
@@ -1112,6 +1106,11 @@ extern uint32_t OPENSSL_ia32cap_P[4];
 // calls can be merged by the compiler, at least when indices match.
 OPENSSL_ATTR_CONST uint32_t OPENSSL_get_ia32cap(int idx);
 
+// OPENSSL_adjust_ia32cap adjusts |cap|, which should contain
+// |OPENSSL_ia32cap_P|, based on the environment variable value in |env|. This
+// function is exposed for unit tests.
+void OPENSSL_adjust_ia32cap(uint32_t cap[4], const char *env);
+
 // See Intel manual, volume 2A, table 3-11.
 
 inline int CRYPTO_is_intel_cpu(void) {
@@ -1308,6 +1307,10 @@ inline int CRYPTO_is_VPCLMULQDQ_capable(void) {
 // ARMV8_SHA512 indicates support for hardware SHA-512 instructions.
 #define ARMV8_SHA512 (1 << 6)
 
+#if defined(OPENSSL_STATIC_ARMCAP)
+// We assume |CRYPTO_is_*_capable| already checked static capabilities.
+inline uint32_t OPENSSL_get_armcap(void) { return 0; }
+#else
 // OPENSSL_armcap_P contains ARM CPU capabilities as a bitmask of the above
 // constants. This should only be accessed with |OPENSSL_get_armcap|.
 extern uint32_t OPENSSL_armcap_P;
@@ -1316,6 +1319,7 @@ extern uint32_t OPENSSL_armcap_P;
 // capabilities. It is marked as a const function so duplicate calls can be
 // merged by the compiler.
 OPENSSL_ATTR_CONST uint32_t OPENSSL_get_armcap(void);
+#endif  // OPENSSL_STATIC_ARMCAP
 
 // Normalize some older feature flags to their modern ACLE values.
 // https://developer.arm.com/architectures/system-architectures/software-standards/acle
@@ -1334,10 +1338,9 @@ OPENSSL_ATTR_CONST uint32_t OPENSSL_get_armcap(void);
 // CRYPTO_is_NEON_capable returns true if the current CPU has a NEON unit. If
 // this is known statically, it is a constant inline function.
 inline int CRYPTO_is_NEON_capable(void) {
-#if defined(OPENSSL_STATIC_ARMCAP_NEON) || defined(__ARM_NEON)
+#if (defined(OPENSSL_STATIC_ARMCAP_NEON) || defined(__ARM_NEON)) && \
+    !defined(OPENSSL_NO_STATIC_NEON_FOR_TESTING)
   return 1;
-#elif defined(OPENSSL_STATIC_ARMCAP)
-  return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV7_NEON) != 0;
 #endif
@@ -1346,8 +1349,6 @@ inline int CRYPTO_is_NEON_capable(void) {
 inline int CRYPTO_is_ARMv8_AES_capable(void) {
 #if defined(OPENSSL_STATIC_ARMCAP_AES) || defined(__ARM_FEATURE_AES)
   return 1;
-#elif defined(OPENSSL_STATIC_ARMCAP)
-  return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV8_AES) != 0;
 #endif
@@ -1356,8 +1357,6 @@ inline int CRYPTO_is_ARMv8_AES_capable(void) {
 inline int CRYPTO_is_ARMv8_PMULL_capable(void) {
 #if defined(OPENSSL_STATIC_ARMCAP_PMULL) || defined(__ARM_FEATURE_AES)
   return 1;
-#elif defined(OPENSSL_STATIC_ARMCAP)
-  return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV8_PMULL) != 0;
 #endif
@@ -1368,8 +1367,6 @@ inline int CRYPTO_is_ARMv8_SHA1_capable(void) {
   // are dealt with independently.
 #if defined(OPENSSL_STATIC_ARMCAP_SHA1) || defined(__ARM_FEATURE_SHA2)
   return 1;
-#elif defined(OPENSSL_STATIC_ARMCAP)
-  return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV8_SHA1) != 0;
 #endif
@@ -1380,8 +1377,6 @@ inline int CRYPTO_is_ARMv8_SHA256_capable(void) {
   // are dealt with independently.
 #if defined(OPENSSL_STATIC_ARMCAP_SHA256) || defined(__ARM_FEATURE_SHA2)
   return 1;
-#elif defined(OPENSSL_STATIC_ARMCAP)
-  return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV8_SHA256) != 0;
 #endif
@@ -1391,8 +1386,6 @@ inline int CRYPTO_is_ARMv8_SHA512_capable(void) {
   // There is no |OPENSSL_STATIC_ARMCAP_SHA512|.
 #if defined(__ARM_FEATURE_SHA512)
   return 1;
-#elif defined(OPENSSL_STATIC_ARMCAP)
-  return 0;
 #else
   return (OPENSSL_get_armcap() & ARMV8_SHA512) != 0;
 #endif

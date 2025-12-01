@@ -70,8 +70,7 @@ public class TileView extends FrameLayout {
      * @param icon The icon to display on the tile.
      * @param titleLines The number of text lines to use for the tile title.
      */
-    protected void initialize(
-            String title, boolean showOfflineBadge, Drawable icon, int titleLines) {
+    public void initialize(String title, boolean showOfflineBadge, Drawable icon, int titleLines) {
         setOfflineBadgeVisibility(showOfflineBadge);
         setIconDrawable(icon);
         setTitle(title, titleLines);
@@ -96,11 +95,6 @@ public class TileView extends FrameLayout {
     public void setTitle(String title, int titleLines) {
         mTitleView.setLines(titleLines);
         mTitleView.setText(title);
-    }
-
-    /** Changes the appearance of a tile to indicate that it's a Custom Tile. */
-    protected void setStyleForCustomTile() {
-        mIconBackgroundView.setBackgroundResource(R.drawable.custom_tile_background);
     }
 
     /** Specify the handler that will be invoked when this tile is highlighted by the user. */
@@ -130,5 +124,10 @@ public class TileView extends FrameLayout {
         if (isSelected && mOnFocusViaSelectionListener != null) {
             mOnFocusViaSelectionListener.run();
         }
+    }
+
+    /** Returns whether the tile can be moved using drag-and-drop. */
+    public boolean isDraggable() {
+        return false;
     }
 }

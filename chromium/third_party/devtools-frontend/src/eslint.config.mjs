@@ -3,81 +3,69 @@
 // found in the LICENSE file.
 
 import stylisticPlugin from '@stylistic/eslint-plugin';
-import typescriptPlugin from '@typescript-eslint/eslint-plugin';
-import tsParser from '@typescript-eslint/parser';
 import eslintPlugin from 'eslint-plugin-eslint-plugin';
 import importPlugin from 'eslint-plugin-import';
 import jsdocPlugin from 'eslint-plugin-jsdoc';
 import mochaPlugin from 'eslint-plugin-mocha';
-import rulesdirPlugin from 'eslint-plugin-rulesdir';
+import {defineConfig, globalIgnores} from 'eslint/config';
 import globals from 'globals';
-import { join } from 'path';
+import {join} from 'path';
+import typescriptEslint from 'typescript-eslint';
 
-rulesdirPlugin.RULES_DIR = join(
-  import.meta.dirname,
-  'scripts',
-  'eslint_rules',
-  'lib',
-);
+import rulesdirPlugin from './scripts/eslint_rules/rules-dir.mjs';
 
-/**
- * @type {import('eslint').Linter.Config[]}
- */
-export default [
-  {
-    name: 'Ignore list',
-    ignores: [
-      // Git submodules that are not in third_party
-      'build/',
-      'buildtools/',
+export default defineConfig([
+  globalIgnores([
+    // Git submodules that are not in third_party
+    'build/',
+    'buildtools/',
 
-      // Don't include the common build directory
-      'out/',
-      // Don't include third party code
-      'third_party/',
+    // Don't include the common build directory
+    'out/',
+    // Don't include third party code
+    'third_party/',
 
-      'front_end/diff/diff_match_patch.jD',
-      'front_end/models/javascript_metadata/NativeFunctions.js',
-      // All of these scripts are auto-generated so don't lint them.
-      'front_end/generated/ARIAProperties.js',
-      'front_end/generated/Deprecation.ts',
-      'front_end/generated/InspectorBackendCommands.js',
-      'front_end/generated/protocol-mapping.d.ts',
-      'front_end/generated/protocol-proxy-api.d.ts',
-      'front_end/generated/protocol.ts',
-      // Any third_party addition has its source code checked out into
-      // third_party/X/package, so we ignore that code as it's not code we author or
-      // own.
-      'front_end/third_party/*/package/',
-      // Any JS files are also not authored by devtools-frontend, so we ignore those.
-      'front_end/third_party/**/*',
-      // Lighthouse doesn't have a package/ folder but has other nested folders, so
-      // we ignore any folders within the lighthouse directory.
-      'front_end/third_party/lighthouse/*/',
-      // The CodeMirror bundle file is auto-generated and rolled-up as part of the',
-      // install script, so we don't need to lint it.
-      'front_end/third_party/codemirror.next/bundle.ts',
-      // Lit lib files are auto-generated and rolled up as part of the install script.
-      'front_end/third_party/lit/src/*.ts',
-      // @puppeteer/replay is auto-generated.
-      'front_end/third_party/puppeteer-replay/**/*.ts',
-      // Third party code we did not author for extensions
-      'extensions/cxx_debugging/third_party/**/*',
+    'front_end/diff/diff_match_patch.jD',
+    'front_end/models/javascript_metadata/NativeFunctions.js',
+    // All of these scripts are auto-generated so don't lint them.
+    'front_end/generated/ARIAProperties.js',
+    'front_end/generated/Deprecation.ts',
+    'front_end/generated/InspectorBackendCommands.js',
+    'front_end/generated/protocol-mapping.d.ts',
+    'front_end/generated/protocol-proxy-api.d.ts',
+    'front_end/generated/protocol.ts',
+    // Any third_party addition has its source code checked out into
+    // third_party/X/package, so we ignore that code as it's not code we author or
+    // own.
+    'front_end/third_party/*/package/',
+    // Any JS files are also not authored by devtools-frontend, so we ignore those.
+    'front_end/third_party/**/*',
+    // Lighthouse doesn't have a package/ folder but has other nested folders, so
+    // we ignore any folders within the lighthouse directory.
+    'front_end/third_party/lighthouse/*/',
+    // The CodeMirror bundle file is auto-generated and rolled-up as part of the',
+    // install script, so we don't need to lint it.
+    'front_end/third_party/codemirror.next/bundle.ts',
+    // Lit lib files are auto-generated and rolled up as part of the install script.
+    'front_end/third_party/lit/src/*.ts',
+    // @puppeteer/replay is auto-generated.
+    'front_end/third_party/puppeteer-replay/**/*.ts',
+    // Third party code we did not author for extensions
+    'extensions/cxx_debugging/third_party/**/*',
 
-      '**/node_modules',
-      'scripts/build/typescript/tests',
-      'scripts/migration/**/*.js',
-      'scripts/protocol_typescript/*.js',
-      'scripts/deps/tests/fixtures',
-      'test/**/fixtures/',
-      'test/e2e/**/*.js',
-      'test/shared/**/*.js',
-    ],
-  },
+    '**/node_modules',
+    'scripts/build/typescript/tests',
+    'scripts/migration/**/*.js',
+    'scripts/protocol_typescript/*.js',
+    'scripts/deps/tests/fixtures',
+    'test/**/fixtures/',
+    'test/e2e/**/*.js',
+    'test/shared/**/*.js',
+  ]),
   {
     name: 'JavaScript files',
     plugins: {
-      '@typescript-eslint': typescriptPlugin,
+      '@typescript-eslint': typescriptEslint.plugin,
       '@stylistic': stylisticPlugin,
       '@eslint-plugin': eslintPlugin,
       mocha: mochaPlugin,
@@ -205,7 +193,7 @@ export default [
       radix: 'error',
       'valid-typeof': 'error',
       'no-return-assign': ['error', 'always'],
-      'no-implicit-coercion': ['error', { allow: ['!!'] }],
+      'no-implicit-coercion': ['error', {allow: ['!!']}],
 
       'no-array-constructor': 'error',
 
@@ -312,16 +300,15 @@ export default [
       ecmaVersion: 'latest',
       sourceType: 'module',
 
-      parser: tsParser,
+      parser: typescriptEslint.parser,
       parserOptions: {
         allowAutomaticSingleRunInference: true,
-        projectService: true,
         project: join(
-          import.meta.dirname,
-          'config',
-          'typescript',
-          'tsconfig.eslint.json',
-        ),
+            import.meta.dirname,
+            'config',
+            'typescript',
+            'tsconfig.eslint.json',
+            ),
       },
     },
 
@@ -553,6 +540,8 @@ export default [
       'no-array-constructor': 'off',
       '@typescript-eslint/no-array-constructor': 'error',
 
+      '@typescript-eslint/consistent-indexed-object-style': 'error',
+
       'rulesdir/no-underscored-properties': 'error',
       'rulesdir/inline-type-imports': 'error',
 
@@ -561,12 +550,12 @@ export default [
         {
           // Enforce that any import of models/trace/trace.js names the import Trace.
           modulePath: join(
-            import.meta.dirname,
-            'front_end',
-            'models',
-            'trace',
-            'trace.js',
-          ),
+              import.meta.dirname,
+              'front_end',
+              'models',
+              'trace',
+              'trace.js',
+              ),
           importName: 'Trace',
         },
       ],
@@ -611,11 +600,13 @@ export default [
           allowIIFEs: true,
         },
       ],
+      'rulesdir/no-imperative-dom-api': 'error',
+      'rulesdir/no-lit-render-outside-of-view': 'error',
       'rulesdir/no-importing-images-from-src': 'error',
-      'rulesdir/enforce-bound-render-for-schedule-render': 'error',
       'rulesdir/enforce-custom-event-names': 'error',
       'rulesdir/set-data-type-reference': 'error',
       'rulesdir/no-bound-component-methods': 'error',
+      'rulesdir/no-adopted-style-sheets': 'error',
       'rulesdir/no-customized-builtin-elements': 'error',
       'rulesdir/no-self-closing-custom-element-tagnames': 'error',
       'rulesdir/no-a-tags-in-lit': 'error',
@@ -661,7 +652,7 @@ export default [
       'front_end/**/*.test.ts',
       'test/**/*.ts',
       '**/testing/*.ts',
-      'scripts/eslint_rules/test/**/*.js',
+      'scripts/eslint_rules/test/**/*',
       'extensions/cxx_debugging/e2e/**',
     ],
 
@@ -698,12 +689,17 @@ export default [
       'rulesdir/no-assert-deep-strict-equal': 'error',
       'rulesdir/no-assert-equal': 'error',
       'rulesdir/no-assert-equal-boolean-null-undefined': 'error',
+      'rulesdir/no-imperative-dom-api': 'off',
+      'rulesdir/no-lit-render-outside-of-view': 'off',
       'rulesdir/no-screenshot-test-outside-perf-panel': 'error',
       'rulesdir/prefer-assert-instance-of': 'error',
       'rulesdir/prefer-assert-is-ok': 'error',
       'rulesdir/prefer-assert-length-of': 'error',
+      'rulesdir/prefer-assert-strict-equal': 'error',
+      'rulesdir/prefer-sinon-assert': 'error',
       'rulesdir/prefer-url-string': 'error',
       'rulesdir/trace-engine-test-timeouts': 'error',
+      'rulesdir/no-widget-show-document-body': 'error',
       'rulesdir/enforce-custom-element-definitions-location': 'off',
     },
 
@@ -726,11 +722,6 @@ export default [
         },
         {
           name: 'describeWithMockConnection',
-          type: 'suite',
-          interfaces: ['BDD', 'TDD'],
-        },
-        {
-          name: 'describeWithRealConnection',
           type: 'suite',
           interfaces: ['BDD', 'TDD'],
         },
@@ -774,7 +765,7 @@ export default [
   },
   {
     name: 'EsLint rules test',
-    files: ['scripts/eslint_rules/tests/**/*.js'],
+    files: ['scripts/eslint_rules/tests/**/*'],
     rules: {
       '@eslint-plugin/no-only-tests': 'error',
     },
@@ -797,6 +788,8 @@ export default [
       // We use Lit to help render examples sometimes and we don't use
       // {host: this} as often the `this` is the window.
       'rulesdir/lit-host-this': 'off',
+      'rulesdir/no-imperative-dom-api': 'off',
+      'rulesdir/no-lit-render-outside-of-view': 'off',
     },
   },
   {
@@ -851,4 +844,4 @@ export default [
       'import/no-default-export': 'off',
     },
   },
-];
+]);

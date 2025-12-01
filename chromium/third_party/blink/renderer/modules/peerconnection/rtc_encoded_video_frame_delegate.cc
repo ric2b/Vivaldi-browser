@@ -78,7 +78,7 @@ DOMArrayBuffer* RTCEncodedVideoFrameDelegate::CreateDataBuffer(
 void RTCEncodedVideoFrameDelegate::SetData(const DOMArrayBuffer* data) {
   base::AutoLock lock(lock_);
   if (webrtc_frame_ && data) {
-    webrtc_frame_->SetData(rtc::ArrayView<const uint8_t>(
+    webrtc_frame_->SetData(webrtc::ArrayView<const uint8_t>(
         static_cast<const uint8_t*>(data->Data()), data->ByteLength()));
   }
 }
@@ -115,7 +115,9 @@ std::optional<base::TimeTicks> RTCEncodedVideoFrameDelegate::ReceiveTime()
 std::optional<base::TimeTicks> RTCEncodedVideoFrameDelegate::CaptureTime()
     const {
   base::AutoLock lock(lock_);
-  if (!webrtc_frame_) {
+  if (!webrtc_frame_ ||
+      webrtc_frame_->GetDirection() !=
+          webrtc::TransformableFrameInterface::Direction::kReceiver) {
     return std::nullopt;
   }
   return ConvertToOptionalTimeTicks(webrtc_frame_->CaptureTime(),

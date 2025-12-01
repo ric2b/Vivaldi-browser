@@ -9,14 +9,13 @@
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_selection/account_picker_selection_screen_consumer.h"
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_selection/account_picker_selection_screen_identity_item_configurator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
 
 @interface AccountPickerSelectionScreenMediator () <
-    ChromeAccountManagerServiceObserver,
     IdentityManagerObserverBridgeDelegate>
 
 @end
@@ -26,8 +25,6 @@
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
   // Configurators based on identity list.
   __strong NSArray* _sortedIdentityItemConfigurators;
 }
@@ -45,9 +42,6 @@
         std::make_unique<signin::IdentityManagerObserverBridge>(
             _identityManager, self);
     _accountManagerService = accountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
     _selectedIdentity = selectedIdentity;
     [self loadIdentityItemConfigurators];
   }
@@ -60,7 +54,6 @@
 }
 
 - (void)disconnect {
-  _accountManagerServiceObserver.reset();
   _accountManagerService = nullptr;
   _identityManagerObserver.reset();
   _identityManager = nullptr;
@@ -123,11 +116,19 @@
   configurator.avatar = _accountManagerService->GetIdentityAvatarWithIdentity(
       identity, IdentityAvatarSize::TableViewIcon);
   configurator.selected = [identity isEqual:self.selectedIdentity];
-}
 
-- (void)handleIdentityListChanged {
-  [self loadIdentityItemConfigurators];
-  [self.consumer reloadAllIdentities];
+  if (std::optional<BOOL> isManaged = IsIdentityManaged(identity);
+      isManaged.has_value()) {
+    configurator.managed = isManaged.value();
+    return;
+  }
+  configurator.managed = NO;
+  __weak __typeof(self) weakSelf = self;
+  FetchManagedStatusForIdentity(identity, base::BindOnce(^(bool managed) {
+                                  if (managed) {
+                                    [weakSelf handleIdentityUpdated:identity];
+                                  }
+                                }));
 }
 
 - (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
@@ -143,45 +144,14 @@
   [self.consumer reloadIdentityForIdentityItemConfigurator:configurator];
 }
 
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
-}
-
 #pragma mark -  IdentityManagerObserver
 
 - (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
+  [self loadIdentityItemConfigurators];
+  [self.consumer reloadAllIdentities];
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
   [self handleIdentityUpdated:identity];

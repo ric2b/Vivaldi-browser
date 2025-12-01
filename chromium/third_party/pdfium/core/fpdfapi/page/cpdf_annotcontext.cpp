@@ -16,24 +16,24 @@
 
 CPDF_AnnotContext::CPDF_AnnotContext(RetainPtr<CPDF_Dictionary> pAnnotDict,
                                      IPDF_Page* pPage)
-    : m_pAnnotDict(std::move(pAnnotDict)), m_pPage(pPage) {
-  DCHECK(m_pAnnotDict);
-  DCHECK(m_pPage);
-  DCHECK(m_pPage->AsPDFPage());
+    : annot_dict_(std::move(pAnnotDict)), page_(pPage) {
+  DCHECK(annot_dict_);
+  DCHECK(page_);
+  DCHECK(page_->AsPDFPage());
 }
 
 CPDF_AnnotContext::~CPDF_AnnotContext() = default;
 
 void CPDF_AnnotContext::SetForm(RetainPtr<CPDF_Stream> pStream) {
-  if (!pStream)
+  if (!pStream) {
     return;
+  }
 
   // Reset the annotation matrix to be the identity matrix, since the
   // appearance stream already takes matrix into account.
   pStream->GetMutableDict()->SetMatrixFor("Matrix", CFX_Matrix());
 
-  m_pAnnotForm = std::make_unique<CPDF_Form>(
-      m_pPage->GetDocument(), m_pPage->AsPDFPage()->GetMutableResources(),
-      pStream);
-  m_pAnnotForm->ParseContent();
+  annot_form_ = std::make_unique<CPDF_Form>(
+      page_->GetDocument(), page_->AsPDFPage()->GetMutableResources(), pStream);
+  annot_form_->ParseContent();
 }

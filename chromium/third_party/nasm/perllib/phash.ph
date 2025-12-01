@@ -15,10 +15,11 @@ require 'crc64.ph';
 sub prehash($$$) {
     my($key, $n, $sv) = @_;
     my @c = crc64($sv, $key);
+    my $nmask = ($n << 1) - 2;
 
     # Create a bipartite graph...
-    $k1 = (($c[1] & ($n-1)) << 1) + 0; # low word
-    $k2 = (($c[0] & ($n-1)) << 1) + 1; # high word
+    $k1 = ($c[1] & $nmask) + 0; # low word
+    $k2 = ($c[0] & $nmask) + 1; # high word
 
     return ($k1, $k2);
 }
@@ -101,7 +102,7 @@ sub gen_hash_n($$$$) {
     # Now we need to assign values to each vertex, so that for each
     # edge, the sum of the values for the two vertices give the value
     # for the edge (which is our hash index.)  If we find an impossible
-    # sitation, the graph was cyclic.
+    # situation, the graph was cyclic.
     @nodeval = (undef) x $gsize;
 
     for ($i = 0; $i < $gsize; $i++) {
@@ -145,8 +146,10 @@ sub gen_perfect_hash($) {
 
     # Minimal power of 2 value for N with enough wiggle room.
     # The scaling constant must be larger than 0.5 in order for the
-    # algorithm to ever terminate.
-    my $room = int(scalar(@keys)*0.8);
+    # algorithm to ever terminate. The higher the scaling constant,
+    # the more space does the hash take up, but the less likely is it
+    # that an invalid token will require a string comparison.
+    my $room = int(scalar(@keys)*1.6);
     $n = 1;
     while ($n < $room) {
 	$n <<= 1;

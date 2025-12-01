@@ -68,11 +68,6 @@ constexpr CGFloat kBlueDotStrokeWidth = 2;
 constexpr CGFloat kBlueDotSize = 6 + kBlueDotStrokeWidth * 2;
 constexpr CGFloat kBlueDotInset = 1;
 
-// Returns the default favicon image.
-UIImage* DefaultFavicon() {
-  return DefaultSymbolWithPointSize(kGlobeAmericasSymbol, 14);
-}
-
 }  // namespace
 
 @implementation TabStripTabCell {
@@ -238,16 +233,25 @@ UIImage* DefaultFavicon() {
       NSArray<UITrait>* traits = TraitCollectionSetForTraits(nil);
       [self registerForTraitChanges:traits withAction:@selector(updateColors)];
     }
+
+    [[NSNotificationCenter defaultCenter]
+        addObserver:self
+           selector:@selector(handleFocusUpdate:)
+               name:UIFocusDidUpdateNotification
+             object:nil];
   }
   return self;
 }
 
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter]
+      removeObserver:self
+                name:UIFocusDidUpdateNotification
+              object:nil];
+}
+
 - (void)setFaviconImage:(UIImage*)image {
-  if (!image) {
-    _faviconView.image = DefaultFavicon();
-  } else {
-    _faviconView.image = image;
-  }
+  _faviconView.image = image;
 }
 
 #pragma mark - TabStripCell
@@ -298,7 +302,7 @@ UIImage* DefaultFavicon() {
     _activityIndicator.hidden = NO;
     [_activityIndicator startAnimating];
     _faviconView.hidden = YES;
-    _faviconView.image = DefaultFavicon();
+    _faviconView.image = nil;
   } else {
     _activityIndicator.hidden = YES;
     [_activityIndicator stopAnimating];
@@ -593,9 +597,11 @@ UIImage* DefaultFavicon() {
 // Updates view colors.
 - (void)updateColors {
   BOOL isSelected = self.isSelected;
-
-  if (self.isHighlighted || self.configurationState.cellDragState !=
-                                UICellConfigurationDragStateNone) {
+  if (self.focused) {
+    _selectedBackground.backgroundColor = [UIColor clearColor];
+    _accessibilityContainerView.backgroundColor = [UIColor clearColor];
+  } else if (self.highlighted || self.configurationState.cellDragState !=
+                                     UICellConfigurationDragStateNone) {
     // Before a cell is dragged, it is highlighted.
     // The cell's background color must be updated at this moment, otherwise it
     // will not be applied correctly.
@@ -1023,8 +1029,7 @@ UIImage* DefaultFavicon() {
 
 // Returns a new favicon view.
 - (UIImageView*)createFaviconView {
-  UIImageView* faviconView =
-      [[UIImageView alloc] initWithImage:DefaultFavicon()];
+  UIImageView* faviconView = [[UIImageView alloc] init];
   faviconView.translatesAutoresizingMaskIntoConstraints = NO;
   faviconView.contentMode = UIViewContentModeScaleAspectFit;
   return faviconView;
@@ -1210,6 +1215,8 @@ UIImage* DefaultFavicon() {
   _blueDotView.layer.borderWidth = kBlueDotStrokeWidth;
   _blueDotView.layer.borderColor = TabStripHelper.cellBackgroundColor.CGColor;
   _blueDotView.backgroundColor = [UIColor colorNamed:kBlue600Color];
+  _blueDotView.accessibilityIdentifier =
+      TabStripTabItemConstants.blueDotAccessibilityIdentifier;
   [_accessibilityContainerView addSubview:_blueDotView];
 
   [NSLayoutConstraint activateConstraints:@[
@@ -1228,6 +1235,15 @@ UIImage* DefaultFavicon() {
 // Hides the blue dot view.
 - (void)hideBlueDotView {
   _blueDotView.hidden = YES;
+}
+
+- (void)handleFocusUpdate:(NSNotification*)notification {
+  UIFocusUpdateContext* context =
+      notification.userInfo[UIFocusUpdateContextKey];
+  if (context.nextFocusedView == self ||
+      context.previouslyFocusedView == self) {
+    [self updateColors];
+  }
 }
 
 @end

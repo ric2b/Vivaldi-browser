@@ -65,7 +65,8 @@ enum class InputFormat {
 /// @param out the stream to write to
 /// @param value the InputFormat
 /// @returns @p out so calls can be chained
-template <typename STREAM, typename = traits::EnableIfIsOStream<STREAM>>
+template <typename STREAM>
+    requires(traits::IsOStream<STREAM>)
 auto& operator<<(STREAM& out, InputFormat value) {
     switch (value) {
         case InputFormat::kUnknown:
@@ -112,7 +113,7 @@ tint::Program ReadSpirv(const std::vector<uint32_t>& data, const LoadProgramOpti
     if (opts.use_ir) {
 #if TINT_BUILD_WGSL_WRITER
         // Parse the SPIR-V binary to a core Tint IR module.
-        auto result = tint::spirv::reader::ReadIR(data);
+        auto result = tint::spirv::reader::ReadIR(data, opts.spirv_reader_options);
         if (result != Success) {
             std::cerr << "Failed to parse SPIR-V: " << result.Failure() << "\n";
             exit(1);
@@ -141,21 +142,6 @@ tint::Program ReadSpirv(const std::vector<uint32_t>& data, const LoadProgramOpti
 #endif  // TINT_BUILD_SPV_READER
 
 }  // namespace
-
-void TintInternalCompilerErrorReporter(const InternalCompilerError& err) {
-    auto printer = StyledTextPrinter::Create(stderr);
-    StyledText msg;
-    msg << (style::Error + style::Bold) << err.Error();
-    msg << R"(
-********************************************************************
-*  The tint shader compiler has encountered an unexpected error.   *
-*                                                                  *
-*  Please help us fix this issue by submitting a bug report at     *
-*  crbug.com/tint with the source program that triggered the bug.  *
-********************************************************************
-)";
-    printer->Print(msg);
-}
 
 void PrintWGSL(std::ostream& out, const tint::Program& program) {
 #if TINT_BUILD_WGSL_WRITER

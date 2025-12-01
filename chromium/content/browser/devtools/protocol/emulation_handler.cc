@@ -492,10 +492,23 @@ Response EmulationHandler::SetPressureSourceOverrideEnabled(
 #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
 }
 
+// TODO: Remove obsolete method.
+// `SetPressureStateOverride` will be replaced by SetPressureDataOverride.
+// The method UpdateVirtualPressureSourceState called previously
+// was removed in //content.
 void EmulationHandler::SetPressureStateOverride(
     const Emulation::PressureSource& source,
     const Emulation::PressureState& state,
     std::unique_ptr<SetPressureStateOverrideCallback> callback) {
+  callback->sendFailure(Response::InternalError());
+  return;
+}
+
+void EmulationHandler::SetPressureDataOverride(
+    const Emulation::PressureSource& source,
+    const Emulation::PressureState& state,
+    std::optional<double> own_contribution_estimate,
+    std::unique_ptr<SetPressureDataOverrideCallback> callback) {
   if (!host_) {
     callback->sendFailure(Response::InternalError());
     return;
@@ -520,9 +533,10 @@ void EmulationHandler::SetPressureStateOverride(
         Response::InvalidParams(kPressureSourceIsNotOverridden));
     return;
   }
-  it->second->UpdateVirtualPressureSourceState(
-      mojo_state, base::BindOnce(&SetPressureStateOverrideCallback::sendSuccess,
-                                 std::move(callback)));
+  it->second->UpdateVirtualPressureSourceData(
+      mojo_state, own_contribution_estimate.value_or(0.0),
+      base::BindOnce(&SetPressureDataOverrideCallback::sendSuccess,
+                     std::move(callback)));
 #else
   callback->sendFailure(Response::InternalError());
 #endif  // BUILDFLAG(ENABLE_COMPUTE_PRESSURE)
@@ -546,7 +560,12 @@ Response EmulationHandler::ClearIdleOverride() {
 Response EmulationHandler::SetGeolocationOverride(
     std::optional<double> latitude,
     std::optional<double> longitude,
-    std::optional<double> accuracy) {
+    std::optional<double> accuracy,
+    std::optional<double> altitude,
+    std::optional<double> altitude_accuracy,
+    std::optional<double> heading,
+    std::optional<double> speed
+) {
   if (!host_)
     return Response::InternalError();
 
@@ -557,6 +576,18 @@ Response EmulationHandler::SetGeolocationOverride(
     position->latitude = latitude.value();
     position->longitude = longitude.value();
     position->accuracy = accuracy.value();
+    if (altitude.has_value()) {
+      position->altitude = altitude.value();
+    }
+    if (altitude_accuracy.has_value()) {
+      position->altitude_accuracy = altitude_accuracy.value();
+    }
+    if (heading.has_value()) {
+      position->heading = heading.value();
+    }
+    if (speed.has_value()) {
+      position->speed = speed.value();
+    }
     position->timestamp = base::Time::Now();
     if (!device::ValidateGeoposition(*position)) {
       return Response::ServerError("Invalid geolocation");

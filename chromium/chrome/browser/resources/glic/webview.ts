@@ -4,19 +4,23 @@
 
 import {EventTracker} from '//resources/js/event_tracker.js';
 import {loadTimeData} from '//resources/js/load_time_data.js';
+import type {ChromeEvent} from '/tools/typescript/definitions/chrome_event.js';
 
 import type {BrowserProxyImpl} from './browser_proxy.js';
 import type {Subscriber} from './glic_api/glic_api.js';
-import {GlicApiHost, WebClientState} from './glic_api_impl/glic_api_host.js';
+import {DetailedWebClientState, GlicApiHost, WebClientState} from './glic_api_impl/glic_api_host.js';
 import type {ApiHostEmbedder} from './glic_api_impl/glic_api_host.js';
 import {ObservableValue} from './observable.js';
 import type {ObservableValueReadOnly} from './observable.js';
+import {OneShotTimer} from './timer.js';
 
 export type PageType =
     // A login page.
     'login'
     // A page that should be displayed.
-    |'regular';
+    |'regular'
+    // A error page that should be displayed.
+    |'guestError';
 
 // Calls from the webview to its owner.
 export interface WebviewDelegate {
@@ -66,6 +70,9 @@ export class WebviewPersistentState {
   }
 }
 
+type ChromeEventFunctionType<T> =
+    T extends ChromeEvent<infer ListenerType>? ListenerType : never;
+
 // Creates and manages the <webview> element, and the GlicApiHost which
 // communicates with it.
 export class WebviewController {
@@ -76,6 +83,7 @@ export class WebviewController {
   private eventTracker = new EventTracker();
   private webClientState =
       ObservableValue.withValue(WebClientState.UNINITIALIZED);
+  private oneMinuteTimer = new OneShotTimer(1000 * 60);
 
   constructor(
       private readonly container: HTMLElement,
@@ -99,6 +107,17 @@ export class WebviewController {
     this.onDestroy.push(() => {
       this.webview.request.onBeforeRequest.removeListener(onBeforeRequest);
     });
+    const onBeforeSendHeaders = this.onBeforeSendHeaders.bind(this);
+    this.webview.request.onBeforeSendHeaders.addListener(
+        onBeforeSendHeaders, {
+          types: [ResourceType.MAIN_FRAME],
+          urls: ['<all_urls>'],
+        },
+        ['blocking', 'requestHeaders']);
+    this.onDestroy.push(() => {
+      this.webview.request.onBeforeSendHeaders.removeListener(
+          onBeforeSendHeaders);
+    });
 
     this.webview.id = 'guestFrame';
     this.webview.setAttribute('partition', 'persist:glicpart');
@@ -118,6 +137,15 @@ export class WebviewController {
     this.eventTracker.add(this.webview, 'exit', this.onExit.bind(this));
 
     this.webview.src = this.persistentState.useLoadUrl();
+
+    this.oneMinuteTimer.start(() => {
+      if (this.host) {
+        chrome.metricsPrivate.recordEnumerationValue(
+            'Glic.Host.WebClientState.AtOneMinute',
+            this.host.getDetailedWebClientState(),
+            DetailedWebClientState.MAX_VALUE + 1);
+      }
+    });
   }
 
   getWebClientState(): ObservableValueReadOnly<WebClientState> {
@@ -125,6 +153,13 @@ export class WebviewController {
   }
 
   destroy() {
+    this.oneMinuteTimer.reset();
+    if (this.host) {
+      chrome.metricsPrivate.recordEnumerationValue(
+          'Glic.Host.WebClientState.OnDestroy',
+          this.host.getDetailedWebClientState(),
+          DetailedWebClientState.MAX_VALUE + 1);
+    }
     this.destroyHost(
         this.webClientState.getCurrentValue() === WebClientState.ERROR ?
             WebClientState.ERROR :
@@ -171,13 +206,9 @@ export class WebviewController {
     }
     switch (e.permission) {
       case 'media': {
-        const isMediaAllowed =
-            await this.host.shouldAllowMediaPermissionRequest();
-        if (isMediaAllowed) {
-          e.request.allow();
-        } else {
-          e.request.deny();
-        }
+        // TODO(b/416092165): Block mic requests if the mic permission was not
+        // granted.
+        e.request.allow();
         return;
       }
       case 'geolocation': {
@@ -191,6 +222,7 @@ export class WebviewController {
         return;
       }
     }
+    console.warn(`Webview permission request was denied: ${e.permission}`);
     e.request.deny();
   }
 
@@ -201,6 +233,7 @@ export class WebviewController {
   private onExit(e: any): void {
     if (e.reason !== 'normal') {
       this.destroyHost(WebClientState.ERROR);
+      chrome.metricsPrivate.recordUserAction('GlicSessionWebClientCrash');
       console.warn(`webview exit. reason: ${e.reason}`);
     }
   }
@@ -209,10 +242,15 @@ export class WebviewController {
     if (!isTopLevel) {
       return;
     }
-    if (this.getWebClientState().getCurrentValue() ===
-        WebClientState.RESPONSIVE) {
-      this.persistentState.onCommitAfterConnect(url);
+    if (this.host) {
+      chrome.metricsPrivate.recordEnumerationValue(
+          'Glic.Host.WebClientState.OnCommit',
+          this.host.getDetailedWebClientState(),
+          DetailedWebClientState.MAX_VALUE + 1);
     }
+    const wasResponsive = this.getWebClientState().getCurrentValue() ===
+        WebClientState.RESPONSIVE;
+
     this.destroyHost(WebClientState.UNINITIALIZED);
 
     if (this.webview.contentWindow) {
@@ -230,9 +268,16 @@ export class WebviewController {
 
     // TODO(https://crbug.com/388328847): Remove when login issues are resolved.
     if (url.startsWith('https://login.corp.google.com/') ||
-        url.startsWith('https://accounts.google.com/')) {
+        url.startsWith('https://accounts.google.com/') ||
+        url.startsWith('https://accounts.googlers.com/') ||
+        url.startsWith('https://gaiastaging.corp.google.com/')) {
       this.delegate.webviewPageCommit('login');
+    } else if (new URL(url).pathname.startsWith('/sorry/')) {
+      this.delegate.webviewPageCommit('guestError');
     } else {
+      if (wasResponsive) {
+        this.persistentState.onCommitAfterConnect(url);
+      }
       this.delegate.webviewPageCommit('regular');
     }
   }
@@ -252,13 +297,42 @@ export class WebviewController {
     event.stopPropagation();
   }
 
-  private onBeforeRequest(details: any) {
-    // Allow subframe requests.
-    if (details.frameId !== 0) {
-      return {};
-    }
-    return {cancel: !urlMatchesAllowedOrigin(details.url)};
-  }
+  private onBeforeRequest:
+      ChromeEventFunctionType<typeof chrome.webRequest.onBeforeRequest> =
+          (details) => {
+            // Allow subframe requests.
+            if (details.frameId !== 0) {
+              return {};
+            }
+            return {cancel: !urlMatchesAllowedOrigin(details.url)};
+          };
+
+  // Attaches the X-Glic headers to all main-frame requests.
+  // X-Glic: 1
+  // X-Glic-Chrome-Channel: stable
+  // X-Glic-Chrome-Version: 137.0.1234.0
+  private onBeforeSendHeaders:
+      ChromeEventFunctionType<typeof chrome.webRequest.onBeforeSendHeaders> =
+          (details) => {
+            // Ignore subframe requests.
+            if (details.frameId !== 0) {
+              return {};
+            }
+            const requestHeaders = details.requestHeaders || [];
+            requestHeaders.push({
+              name: 'X-Glic',
+              value: '1',
+            });
+            requestHeaders.push({
+              name: 'X-Glic-Chrome-Version',
+              value: loadTimeData.getString('chromeVersion'),
+            });
+            requestHeaders.push({
+              name: 'X-Glic-Chrome-Channel',
+              value: loadTimeData.getString('chromeChannel'),
+            });
+            return {requestHeaders};
+          };
 }
 
 /**

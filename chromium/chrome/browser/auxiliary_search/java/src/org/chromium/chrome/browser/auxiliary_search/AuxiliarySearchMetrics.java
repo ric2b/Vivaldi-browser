@@ -12,6 +12,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchBackgroundTask.DonateResult;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchController.AuxiliarySearchDataType;
@@ -20,6 +21,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /** This class collects a variety of different Omnibox related metrics. */
+@NullMarked
 public class AuxiliarySearchMetrics {
     // This enum is used to record UMA histograms, and should sync with AuxiliarySearchRequestStatus
     // in enums.xml.
@@ -124,6 +126,11 @@ public class AuxiliarySearchMetrics {
     public static final String HISTOGRAM_QUERYTIME_FAVICONS =
             "Search.AuxiliarySearch.QueryTime.Favicons";
 
+    /** Captures the amount of time spent querying history database for CCTs. */
+    @VisibleForTesting
+    public static final String HISTOGRAM_QUERYTIME_CUSTOM_TABS =
+            "Search.AuxiliarySearch.QueryTime.CustomTabs";
+
     /** Captures the amount of donated tabs. */
     @VisibleForTesting
     public static final String HISTOGRAM_DONATEDCOUNT_TABS =
@@ -152,6 +159,8 @@ public class AuxiliarySearchMetrics {
     /** The maximum position logged in metrics. */
     @VisibleForTesting static final int MAX_POSITION_INDEX = 9;
 
+    // 20 minutes in milliseconds.
+    private static final long MAX_CONTROLLER_CREATION_DELAY_MS = DateUtils.MINUTE_IN_MILLIS * 20L;
     private static final String ENTRY_TYPE_TABS = ".Tabs";
     private static final String ENTRY_TYPE_CUSTOM_TABS = ".CustomTabs";
     private static final String ENTRY_TYPE_TOP_SITES = ".TopSites";
@@ -172,6 +181,13 @@ public class AuxiliarySearchMetrics {
             "Search.AuxiliarySearch.LaunchedFromExternalApp.";
     private static final String HISTOGRAM_TOP_SITE_EXPIRATION_DURATION =
             "Search.AuxiliarySearch.TopSites.ExpirationDuration";
+
+    private static final String HISTOGRAM_TIME_TO_CREATE_CONTROLLER_IN_CUSTOM_TAB =
+            "Search.AuxiliarySearch.TimeToCreateControllerInCustomTab";
+
+    @VisibleForTesting
+    public static final String HISTOGRAM_CUSTOM_TAB_FETCH_RESULTS_COUNT =
+            "Search.AuxiliarySearch.CustomTabFetchResults.Count";
 
     /** Record the amount of time spent deleting content from the auxiliary search. */
     public static void recordDeleteTime(
@@ -244,6 +260,11 @@ public class AuxiliarySearchMetrics {
     /** Record the amount of time for querying tabs and CCTs from the history database. */
     public static void recordQueryHistoryDataTime(long queryTimeInMs) {
         RecordHistogram.recordTimesHistogram(HISTOGRAM_QUERYTIME_HISTORY, queryTimeInMs);
+    }
+
+    /** Record the amount of time for querying CCTs from the history database. */
+    public static void recordQueryCustomTabTime(long queryTimeInMs) {
+        RecordHistogram.recordTimesHistogram(HISTOGRAM_QUERYTIME_CUSTOM_TABS, queryTimeInMs);
     }
 
     /**
@@ -367,8 +388,34 @@ public class AuxiliarySearchMetrics {
         RecordHistogram.recordCustomTimesHistogram(
                 HISTOGRAM_TOP_SITE_EXPIRATION_DURATION,
                 expirationDurationMs,
-                1,
+                /* min= */ 1,
                 DateUtils.DAY_IN_MILLIS,
-                50);
+                /* numBuckets= */ 50);
+    }
+
+    /**
+     * Records the time from CustomTabActivity#onCreate() until AuxiliarySearchController is created
+     * in CustomTabActivity#onDeferredStartup().
+     *
+     * @param timeToCreateControllerMs The time in milliseconds from when the activity is created
+     *     until the AuxiliarySearchController is created.
+     */
+    public static void recordTimeToCreateControllerInCustomTab(long timeToCreateControllerMs) {
+        RecordHistogram.recordCustomTimesHistogram(
+                HISTOGRAM_TIME_TO_CREATE_CONTROLLER_IN_CUSTOM_TAB,
+                timeToCreateControllerMs,
+                /* min= */ 1,
+                MAX_CONTROLLER_CREATION_DELAY_MS,
+                /* numBuckets= */ 50);
+    }
+
+    /**
+     * Records the count of entries obtained from fetching history database initiated by a Custom
+     * Tab.
+     *
+     * @param count The total number of entries returned from fetching history database.
+     */
+    public static void recordCustomTabFetchResultsCount(int count) {
+        RecordHistogram.recordCount100Histogram(HISTOGRAM_CUSTOM_TAB_FETCH_RESULTS_COUNT, count);
     }
 }

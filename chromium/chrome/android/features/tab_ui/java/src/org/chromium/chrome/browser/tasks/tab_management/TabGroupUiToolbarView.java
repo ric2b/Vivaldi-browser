@@ -12,10 +12,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
-import androidx.annotation.Nullable;
 import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.ui.widget.ChromeImageView;
 
@@ -26,6 +27,7 @@ import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 
 /** Toolbar for the bottom tab strip see {@link TabGroupUiCoordinator}. */
+@NullMarked
 public class TabGroupUiToolbarView extends FrameLayout {
     private ChromeImageView mNewTabButton;
     private ChromeImageView mShowGroupDialogButton;
@@ -66,7 +68,9 @@ public class TabGroupUiToolbarView extends FrameLayout {
 
         // Vivaldi
         mThemeColorObserver = (color, shouldAnimate) -> setContentBackgroundColor(color);
-        mTintObserver = (tint, activityFocusTint, useLight) -> setTint(tint);
+        mTintObserver = (tint, activityFocusTint, useLight) -> {
+            if (tint != null) setTint(tint);
+        };
     }
 
     @Override
@@ -145,7 +149,8 @@ public class TabGroupUiToolbarView extends FrameLayout {
         if (ChromeApplicationImpl.isVivaldi() && provider instanceof TopUiThemeColorProvider) {
             if (selector != null && selector.getCurrentTab() != null) {
                 ((TopUiThemeColorProvider) provider).forceUpdateColor(selector.getCurrentTab());
-                setTint(provider.getTint());
+                if (provider.getTint() != null)
+                    setTint(provider.getTint());
             }
         }
     }

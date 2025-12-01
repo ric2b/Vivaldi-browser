@@ -210,6 +210,9 @@ void ff_##name##ToUV_neon(uint8_t *, uint8_t *, const uint8_t *, \
 void ff_##name##ToUV_half_neon(uint8_t *, uint8_t *, const uint8_t *, \
                               const uint8_t *, const uint8_t *, int w, \
                               uint32_t *coeffs, void *)
+#define NEON_INPUT_DOTPROD(name) \
+void ff_##name##ToY_neon_dotprod(uint8_t *dst, const uint8_t *src, const uint8_t *, \
+                                 const uint8_t *, int w, uint32_t *coeffs, void *);
 
 NEON_INPUT(abgr32);
 NEON_INPUT(argb32);
@@ -217,6 +220,8 @@ NEON_INPUT(bgr24);
 NEON_INPUT(bgra32);
 NEON_INPUT(rgb24);
 NEON_INPUT(rgba32);
+NEON_INPUT_DOTPROD(bgra32);
+NEON_INPUT_DOTPROD(rgba32);
 
 void ff_lumRangeFromJpeg8_neon(int16_t *dst, int width,
                                uint32_t coeff, int64_t offset);
@@ -296,6 +301,11 @@ av_cold void ff_sws_init_swscale_aarch64(SwsInternal *c)
             break;
         case AV_PIX_FMT_BGRA:
             c->lumToYV12 = ff_bgra32ToY_neon;
+#if HAVE_DOTPROD
+            if (have_dotprod(cpu_flags)) {
+                c->lumToYV12 = ff_bgra32ToY_neon_dotprod;
+            }
+#endif
             if (c->chrSrcHSubSample)
                 c->chrToYV12 = ff_bgra32ToUV_half_neon;
             else
@@ -310,6 +320,11 @@ av_cold void ff_sws_init_swscale_aarch64(SwsInternal *c)
             break;
         case AV_PIX_FMT_RGBA:
             c->lumToYV12 = ff_rgba32ToY_neon;
+#if HAVE_DOTPROD
+            if (have_dotprod(cpu_flags)) {
+                c->lumToYV12 = ff_rgba32ToY_neon_dotprod;
+            }
+#endif
             if (c->chrSrcHSubSample)
                 c->chrToYV12 = ff_rgba32ToUV_half_neon;
             else

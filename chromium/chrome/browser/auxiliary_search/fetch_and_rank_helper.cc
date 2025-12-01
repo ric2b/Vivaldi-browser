@@ -59,13 +59,36 @@ base::TimeDelta GetDefaultAgeLimit(URLVisitAggregate::URLType url_type) {
   }
 }
 
+// Get the default visit duration limit for the `url_type`.
+std::optional<base::TimeDelta> GetDefaultVisitDurationLimit(
+    URLVisitAggregate::URLType url_type,
+    bool skip_visit_duration_limit = false) {
+  switch (url_type) {
+    case URLVisitAggregate::URLType::kCCTVisit:
+      // Needs to skip visit_duration check in
+      // HistoryURLVisitDataFetcher#OnGotAnnotatedVisits when fetching an open
+      // CCT whose visit_duration is 0. The visit duration will be set to the
+      // history database once the CCT is closed.
+      if (skip_visit_duration_limit) {
+        return std::nullopt;
+      }
+
+      return base::Seconds(
+          chrome::android::kAppIntegrationCCTVisitDurationLimitSecParam.Get());
+    default:
+      return std::nullopt;
+  }
+}
+
 // Returns the maximum count of entries to donate.
 int GetMaxDonationCount() {
   return chrome::android::kAppIntegrationMaxDonationCountParam.Get();
 }
 
 FetchOptions CreateFetchOptionsForTabDonation(
-    const URLVisitAggregate::URLTypeSet& result_sources) {
+    const URLVisitAggregate::URLTypeSet& result_sources,
+    const std::optional<GURL>& custom_tab_url,
+    std::optional<base::Time> begin_time) {
   std::vector<URLVisitAggregatesTransformType> transforms{
       URLVisitAggregatesTransformType::kRecencyFilter,
       URLVisitAggregatesTransformType::kDefaultAppUrlFilter,
@@ -85,9 +108,14 @@ FetchOptions CreateFetchOptionsForTabDonation(
   fetcher_sources.emplace(Fetcher::kHistory,
                           visited_url_ranking::FetchOptions::kOriginSources);
 
-  fetcher_sources.emplace(Fetcher::kTabModel,
-                          visited_url_ranking::FetchOptions::FetchSources(
-                              {visited_url_ranking::URLVisit::Source::kLocal}));
+  // If a URL of Custom Tab is provided, the fetcher only fetches history, not
+  // open Tabs.
+  if (custom_tab_url == std::nullopt) {
+    fetcher_sources.emplace(
+        Fetcher::kTabModel,
+        visited_url_ranking::FetchOptions::FetchSources(
+            {visited_url_ranking::URLVisit::Source::kLocal}));
+  }
 
   // Sets the query duration to match the age limit for the local Tabs. It
   // allows getting the sensitivity scores of all qualified local Tabs.
@@ -101,28 +129,45 @@ FetchOptions CreateFetchOptionsForTabDonation(
       result_map;
   for (URLVisitAggregate::URLType type : result_sources) {
     result_map[type] = visited_url_ranking::FetchOptions::ResultOption{
-        .age_limit = GetDefaultAgeLimit(type)};
+        .age_limit = GetDefaultAgeLimit(type),
+        .visit_duration_limit =
+            GetDefaultVisitDurationLimit(type, begin_time != std::nullopt)};
   }
+
+  // Adjusts the begin time.
+  base::Time new_begin_time =
+      std::max(base::Time::Now() - base::Hours(query_duration),
+               begin_time.value_or(base::Time()));
+
   return FetchOptions(std::move(result_map), std::move(fetcher_sources),
-                      base::Time::Now() - base::Hours(query_duration),
-                      std::move(transforms), GetMaxDonationCount());
+                      new_begin_time, std::move(transforms),
+                      GetMaxDonationCount());
 }
 
-FetchOptions CreateFetchOptions() {
-  URLVisitAggregate::URLTypeSet expected_types = {
-      URLVisitAggregate::URLType::kActiveLocalTab,
-      URLVisitAggregate::URLType::kCCTVisit};
-  return CreateFetchOptionsForTabDonation(expected_types);
+FetchOptions CreateFetchOptions(const std::optional<GURL>& custom_tab_url,
+                                std::optional<base::Time> begin_time) {
+  URLVisitAggregate::URLTypeSet expected_types;
+  if (custom_tab_url == std::nullopt) {
+    expected_types = {URLVisitAggregate::URLType::kActiveLocalTab,
+                      URLVisitAggregate::URLType::kCCTVisit};
+  } else {
+    expected_types = {URLVisitAggregate::URLType::kCCTVisit};
+  }
+  return CreateFetchOptionsForTabDonation(expected_types, custom_tab_url,
+                                          begin_time);
 }
 
 }  // namespace
 
 FetchAndRankHelper::FetchAndRankHelper(
     VisitedURLRankingService* ranking_service,
-    FetchResultCallback entries_callback)
+    FetchResultCallback entries_callback,
+    const std::optional<GURL>& custom_tab_url,
+    std::optional<base::Time> begin_time)
     : ranking_service_(ranking_service),
       entries_callback_(std::move(entries_callback)),
-      fetch_options_(CreateFetchOptions()),
+      custom_tab_url_(custom_tab_url),
+      fetch_options_(CreateFetchOptions(custom_tab_url, begin_time)),
       config_({.key = visited_url_ranking::kTabResumptionRankerKey}) {}
 
 void FetchAndRankHelper::StartFetching() {
@@ -189,8 +234,12 @@ void FetchAndRankHelper::OnRanked(URLVisitsMetadata url_visits_metadata,
             [&](const URLVisitAggregate::HistoryData& history_data) {
               bool is_custom_tab =
                   history_data.last_visited.context_annotations.on_visit
-                      .browser_type ==
-                  history::VisitContextAnnotations::BrowserType::kCustomTab;
+                          .browser_type == history::VisitContextAnnotations::
+                                               BrowserType::kCustomTab ||
+                  history_data.last_app_id != std::nullopt ||
+                  (custom_tab_url_ != std::nullopt &&
+                   custom_tab_url_.value() ==
+                       history_data.last_visited.url_row.url());
               if (!is_custom_tab) {
                 return;
               }
@@ -209,7 +258,8 @@ void FetchAndRankHelper::OnRanked(URLVisitsMetadata url_visits_metadata,
                   history_data.last_app_id
                       ? base::android::ConvertUTF8ToJavaString(
                             env, *history_data.last_app_id)
-                      : nullptr,
+                      : base::android::ConvertUTF8ToJavaString(env,
+                                                               std::string()),
                   std::abs(static_cast<int>(base::Hash(aggregate.url_key)))));
             }},
         fetcher_entry.second);

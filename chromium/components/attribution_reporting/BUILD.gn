@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//mojo/public/tools/bindings/mojom.gni")
+import("//testing/test.gni")
 
 mojom("mojom") {
   sources = [
@@ -11,7 +12,6 @@ mojom("mojom") {
     "registration_eligibility.mojom",
     "source_registration_error.mojom",
     "source_registration_time_config.mojom",
-    "summary_operator.mojom",
     "trigger_data_matching.mojom",
     "trigger_registration_error.mojom",
   ]
@@ -100,8 +100,6 @@ component("attribution_reporting") {
     "source_type.h",
     "suitable_origin.cc",
     "suitable_origin.h",
-    "summary_buckets.cc",
-    "summary_buckets.h",
     "trigger_config.cc",
     "trigger_config.h",
     "trigger_registration.cc",
@@ -177,7 +175,6 @@ source_set("unit_tests") {
     "registration_info_unittest.cc",
     "source_registration_unittest.cc",
     "suitable_origin_unittest.cc",
-    "summary_buckets_unittest.cc",
     "trigger_config_unittest.cc",
     "trigger_registration_unittest.cc",
   ]
@@ -341,16 +338,10 @@ mojom("registration_mojom") {
               "namespace attribution_reporting { class EventReportWindows; }"
         },
         {
-          mojom = "attribution_reporting.mojom.TriggerSpec"
-          cpp = "::attribution_reporting::TriggerSpec"
+          mojom = "attribution_reporting.mojom.TriggerDataSet"
+          cpp = "::attribution_reporting::TriggerDataSet"
           forward_declaration =
-              "namespace attribution_reporting { class TriggerSpec; }"
-        },
-        {
-          mojom = "attribution_reporting.mojom.TriggerSpecs"
-          cpp = "::attribution_reporting::TriggerSpecs"
-          forward_declaration =
-              "namespace attribution_reporting { class TriggerSpecs; }"
+              "namespace attribution_reporting { class TriggerDataSet; }"
         },
         {
           mojom = "attribution_reporting.mojom.SourceAggregatableDebugReportingConfig"

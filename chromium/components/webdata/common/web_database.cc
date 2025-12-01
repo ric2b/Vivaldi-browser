@@ -57,9 +57,9 @@ void LogInitResult(WebDatabaseInitResult result) {
   base::UmaHistogramEnumeration("WebDatabase.InitResult", result);
 }
 
-// Version 134 migrates address Autofill tables to a new format, changing table
-// names. It is thus is no longer compatible with version 133.
-constexpr int kCompatibleVersionNumber = 134;
+// Version 139 migrates valuables tables to a new format, changing the column
+// names. It is thus is no longer compatible with version 138.
+constexpr int kCompatibleVersionNumber = 139;
 
 // Change the version number and possibly the compatibility version of
 // |meta_table_|.
@@ -164,6 +164,7 @@ sql::InitStatus WebDatabase::Init(const base::FilePath& db_name,
     LogInitResult(WebDatabaseInitResult::kCouldNotOpen);
     return sql::INIT_FAILURE;
   }
+  DCHECK(db_.is_open());
 
   // Dummy transaction to check whether the database is writeable and bail
   // early if that's not the case.
@@ -236,7 +237,9 @@ sql::InitStatus WebDatabase::Init(const base::FilePath& db_name,
     LogInitResult(WebDatabaseInitResult::kFailedToCommitInitTransaction);
     return sql::INIT_FAILURE;
   }
+
   LogInitResult(WebDatabaseInitResult::kSuccess);
+  DCHECK(db_.is_open());
   return sql::INIT_OK;
 }
 

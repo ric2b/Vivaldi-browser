@@ -25,16 +25,13 @@
 
 namespace webrtc {
 
-using ::cricket::FakeMediaEngine;
-using ::cricket::MediaEngineInterface;
-
 void EnableFakeMedia(
     PeerConnectionFactoryDependencies& deps,
-    absl::Nonnull<std::unique_ptr<FakeMediaEngine>> fake_media_engine) {
+    absl_nonnull std::unique_ptr<FakeMediaEngine> fake_media_engine) {
   class FakeMediaFactory : public MediaFactory {
    public:
     explicit FakeMediaFactory(
-        absl::Nonnull<std::unique_ptr<FakeMediaEngine>> fake)
+        absl_nonnull std::unique_ptr<FakeMediaEngine> fake)
         : fake_(std::move(fake)) {}
 
     std::unique_ptr<Call> CreateCall(CallConfig config) override {
@@ -50,7 +47,7 @@ void EnableFakeMedia(
     }
 
    private:
-    absl::Nullable<std::unique_ptr<FakeMediaEngine>> fake_;
+    absl_nullable std::unique_ptr<FakeMediaEngine> fake_;
   };
 
   deps.media_factory =
@@ -58,7 +55,7 @@ void EnableFakeMedia(
 }
 
 void EnableFakeMedia(PeerConnectionFactoryDependencies& deps) {
-  EnableFakeMedia(deps, std::make_unique<cricket::FakeMediaEngine>());
+  EnableFakeMedia(deps, std::make_unique<FakeMediaEngine>());
 }
 
 }  // namespace webrtc

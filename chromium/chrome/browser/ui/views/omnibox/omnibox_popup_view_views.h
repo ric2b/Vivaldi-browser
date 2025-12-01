@@ -71,8 +71,6 @@ class OmniboxPopupViewViews : public views::View,
   void GetPopupAccessibleNodeData(ui::AXNodeData* node_data) const override;
   std::u16string_view GetAccessibleButtonTextForResult(
       size_t line) const override;
-  void SetSuggestionGroupVisibility(size_t match_index,
-                                    bool suggestion_group_hidden) override;
 
   // views::View:
   bool OnMouseDragged(const ui::MouseEvent& event) override;
@@ -90,6 +88,8 @@ class OmniboxPopupViewViews : public views::View,
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, ClickOmnibox);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, DeleteSuggestion);
   FRIEND_TEST_ALL_PREFIXES(OmniboxPopupViewViewsTest, SpaceEntersKeywordMode);
+  FRIEND_TEST_ALL_PREFIXES(OmniboxPopupSuggestionGroupHeadersTest,
+                           ShowSuggestionGroupHeadersByPageContext);
   friend class OmniboxPopupViewViewsTest;
   friend class OmniboxSuggestionButtonRowBrowserTest;
   class AutocompletePopupWidget;
@@ -127,6 +127,7 @@ class OmniboxPopupViewViews : public views::View,
   // when its window is destroyed.  This is a WeakPtr because it's possible for
   // the OS to destroy the window and thus delete this object before we're
   // deleted, or without our knowledge.
+  // TODO(crbug.com/40232479): Migrate this to CLIENT_OWNS_WIDGET.
   base::WeakPtr<AutocompletePopupWidget> popup_;
 
   // Timestamp for when the current omnibox popup creation started.

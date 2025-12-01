@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import type * as Platform from '../../core/platform/platform.js';
+import type * as Common from '../common/common.js';
 import type * as Root from '../root/root.js';
 
 export enum Events {
@@ -67,7 +68,7 @@ export const EventDescriptors = [
   [Events.SetInspectedTabId, 'setInspectedTabId', ['tabId']],
   [Events.SetUseSoftMenu, 'setUseSoftMenu', ['useSoftMenu']],
   [Events.ShowPanel, 'showPanel', ['panelName']],
-];
+] as const;
 
 export interface DispatchMessageChunkEvent {
   messageChunk: string;
@@ -137,9 +138,7 @@ export interface SearchCompletedEvent {
 
 export interface DoAidaConversationResult {
   statusCode?: number;
-  headers?: {
-    [x: string]: string,
-  };
+  headers?: Record<string, string>;
   netError?: number;
   netErrorName?: string;
   error?: string;
@@ -200,9 +199,11 @@ export interface KeyDownEvent {
 }
 
 export interface SettingAccessEvent {
-  name: string;
-  numericValue?: number;
-  stringValue?: string;
+  name: number;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  numeric_value?: number;
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  string_value?: number;
 }
 
 // While `EventDescriptors` are used to dynamically dispatch host binding events,
@@ -242,6 +243,8 @@ export interface EventTypes {
 }
 
 export interface InspectorFrontendHostAPI {
+  events: Common.EventTarget.EventTarget<EventTypes>;
+
   connectAutomaticFileSystem(
       fileSystemPath: Platform.DevToolsPath.RawPathString,
       fileSystemUUID: string,
@@ -299,6 +302,10 @@ export interface InspectorFrontendHostAPI {
 
   closeWindow(): void;
 
+  /**
+   * Don't use directly - use {@link CopyToClipboard.copyTextToClipboard} instead.
+   * @deprecated Marked to restrict usage.
+   */
   copyText(text: string|null|undefined): void;
 
   inspectedURLChanged(url: Platform.DevToolsPath.UrlString): void;
@@ -310,9 +317,7 @@ export interface InspectorFrontendHostAPI {
 
   registerPreference(name: string, options: {synced?: boolean}): void;
 
-  getPreferences(callback: (arg0: {
-                   [x: string]: string,
-                 }) => void): void;
+  getPreferences(callback: (arg0: Record<string, string>) => void): void;
 
   getPreference(name: string, callback: (arg0: string) => void): void;
 
@@ -413,9 +418,7 @@ export interface ContextMenuDescriptor {
 }
 export interface LoadNetworkResourceResult {
   statusCode: number;
-  headers?: {
-    [x: string]: string,
-  };
+  headers?: Record<string, string>;
   netError?: number;
   netErrorName?: string;
   urlValid?: boolean;
@@ -464,7 +467,6 @@ export const enum EnumeratedHistogram {
   // LINT.IfChange(EnumeratedHistogram)
   ActionTaken = 'DevTools.ActionTaken',
   PanelShown = 'DevTools.PanelShown',
-  PanelShownInLocation = 'DevTools.PanelShownInLocation',
   SidebarPaneShown = 'DevTools.SidebarPaneShown',
   KeyboardShortcutFired = 'DevTools.KeyboardShortcutFired',
   IssueCreated = 'DevTools.IssueCreated',

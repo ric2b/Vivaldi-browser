@@ -2,23 +2,22 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import dataclasses
 import json
 import logging
 import os
 import time
 from typing import Any
 
+# vpython-provided modules.
 import bs4  # pylint: disable=import-error
 
-import dataclasses  # Built-in, but pylint gives an ordering false positive.
-
+import gpu_path_util
 from gpu_tests import common_typing as ct
 from gpu_tests import skia_gold_integration_test_base as sgitb
 from gpu_tests import webgl_test_util
 from gpu_tests.util import websocket_server as wss
 from gpu_tests.util import websocket_utils
-
-import gpu_path_util
 
 TEST_PAGE_RELPATH = os.path.join(webgl_test_util.extensions_relpath,
                                  'pixel_test_page.html')
@@ -338,7 +337,7 @@ def PageHasViewportInitialScaling(test_path: str) -> float:
   # Some test paths include URL arguments, so strip those off.
   test_path = test_path.split('?', 1)[0]
   filepath = os.path.join(gpu_path_util.CHROMIUM_SRC_DIR, test_path)
-  with open(filepath) as infile:
+  with open(filepath, encoding='utf-8') as infile:
     contents = infile.read()
   soup = bs4.BeautifulSoup(contents, 'html.parser')
   for meta_tag in soup.find_all('meta'):

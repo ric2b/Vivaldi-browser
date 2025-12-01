@@ -806,7 +806,8 @@ TEST_P(GpuImageDecodeCacheTest, GetRasterTaskBeforeStandAloneTaskSameImage) {
   TileTask* raster_decode_task = raster_result.task->dependencies()[0].get();
 
   ImageDecodeCache::TaskResult stand_alone_result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(stand_alone_result.need_unref);
   EXPECT_EQ(stand_alone_result.task->dependencies().size(), 1u);
   EXPECT_EQ(stand_alone_result.task->dependencies()[0].get(),
@@ -835,7 +836,8 @@ TEST_P(GpuImageDecodeCacheTest, GetStandAloneTaskBeforeRasterTaskSameImage) {
       CreateDrawImageInternal(image, CreateMatrix(SkSize::Make(1.5f, 1.5f)));
 
   ImageDecodeCache::TaskResult stand_alone_result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(stand_alone_result.need_unref);
   EXPECT_TRUE(stand_alone_result.task);
 
@@ -875,7 +877,8 @@ TEST_P(GpuImageDecodeCacheTest,
       CreateDrawImageInternal(image, CreateMatrix(SkSize::Make(1.5f, 1.5f)));
 
   ImageDecodeCache::TaskResult stand_alone_result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(stand_alone_result.need_unref);
   EXPECT_TRUE(stand_alone_result.task);
   TileTask* stand_alone_decode_task = stand_alone_result.task.get();
@@ -921,7 +924,8 @@ TEST_P(GpuImageDecodeCacheTest, ExternalDependentRasterTaskCanceled) {
       CreateDrawImageInternal(image, CreateMatrix(SkSize::Make(1.5f, 1.5f)));
 
   ImageDecodeCache::TaskResult stand_alone_result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(stand_alone_result.need_unref);
   EXPECT_TRUE(stand_alone_result.task);
   TileTask* stand_alone_decode_task = stand_alone_result.task.get();
@@ -1171,8 +1175,8 @@ TEST_P(GpuImageDecodeCacheTest, DoesNotCreateATaskForAlreadyUploadedImage2) {
       CreateDrawImageInternal(image, CreateMatrix(SkSize::Make(1.5f, 1.5f)));
   EXPECT_EQ(another_draw_image.frame_index(), PaintImage::kDefaultFrameIndex);
   ImageDecodeCache::TaskResult result2 =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId1,
-                                                    another_draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(
+          kClientId1, another_draw_image, /*speculative*/ false);
   EXPECT_TRUE(result2.need_unref);
   // It must be a valid task.
   EXPECT_TRUE(result2.task);
@@ -1194,8 +1198,8 @@ TEST_P(GpuImageDecodeCacheTest, DoesNotCreateATaskForAlreadyUploadedImage2) {
             PaintImage::kDefaultFrameIndex);
   // Ask for the decode standalone task again.
   ImageDecodeCache::TaskResult result3 =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId1,
-                                                    yet_another_draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(
+          kClientId1, yet_another_draw_image, /*speculative*/ false);
   EXPECT_TRUE(result3.need_unref);
   // It mustn't be created now as we already have image decoded/uploaded.
   EXPECT_FALSE(result3.task);
@@ -2233,8 +2237,7 @@ TEST_P(GpuImageDecodeCacheTest, ShouldAggressivelyFreeResources) {
     EXPECT_GT(cache->GetNumCacheEntriesForTesting(), 0u);
 
     // Tell our cache to aggressively free resources.
-    cache->SetShouldAggressivelyFreeResources(true,
-                                              /*context_lock_acquired=*/false);
+    cache->SetShouldAggressivelyFreeResources(true);
     EXPECT_EQ(0u, cache->GetNumCacheEntriesForTesting());
   }
 
@@ -2255,8 +2258,7 @@ TEST_P(GpuImageDecodeCacheTest, ShouldAggressivelyFreeResources) {
 
   // We now tell the cache to not aggressively free resources. The image may
   // now be cached past its use.
-  cache->SetShouldAggressivelyFreeResources(false,
-                                            /*context_lock_acquired=*/false);
+  cache->SetShouldAggressivelyFreeResources(false);
   {
     ImageDecodeCache::TaskResult result = cache->GetTaskForImageAndRef(
         client_id, draw_image, ImageDecodeCache::TracingInfo());
@@ -2441,7 +2443,8 @@ TEST_P(GpuImageDecodeCacheTest, OutOfRasterDecodeTask) {
                               PaintFlags::FilterQuality::kLow);
 
   ImageDecodeCache::TaskResult result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(result.need_unref);
   EXPECT_TRUE(result.task);
   EXPECT_TRUE(cache->IsInInUseCacheForTesting(draw_image));
@@ -2477,7 +2480,8 @@ TEST_P(GpuImageDecodeCacheTest, OutOfRasterDecodeTaskMultipleClients) {
                                 PaintFlags::FilterQuality::kLow);
 
     ImageDecodeCache::TaskResult result1 =
-        cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId1, draw_image);
+        cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId1, draw_image,
+                                                      /*speculative*/ false);
     EXPECT_TRUE(result1.need_unref);
     EXPECT_TRUE(result1.task);
     EXPECT_TRUE(cache->IsInInUseCacheForTesting(draw_image));
@@ -2486,7 +2490,8 @@ TEST_P(GpuImageDecodeCacheTest, OutOfRasterDecodeTaskMultipleClients) {
         CreateDrawImageInternal(image, matrix, nullptr /* color_space */,
                                 PaintFlags::FilterQuality::kLow);
     ImageDecodeCache::TaskResult result2 =
-        cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId2, draw_image);
+        cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId2, draw_image,
+                                                      /*speculative*/ false);
     EXPECT_TRUE(result2.need_unref);
     EXPECT_TRUE(result2.task);
     EXPECT_TRUE(cache->IsInInUseCacheForTesting(draw_image2));
@@ -2536,7 +2541,8 @@ TEST_P(GpuImageDecodeCacheTest,
                               PaintFlags::FilterQuality::kLow);
 
   ImageDecodeCache::TaskResult result1 =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId1, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId1, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(result1.need_unref);
   EXPECT_TRUE(result1.task);
   EXPECT_TRUE(cache->IsInInUseCacheForTesting(draw_image));
@@ -2548,7 +2554,8 @@ TEST_P(GpuImageDecodeCacheTest,
       CreateDrawImageInternal(image, matrix, nullptr /* color_space */,
                               PaintFlags::FilterQuality::kLow);
   ImageDecodeCache::TaskResult result2 =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId2, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(kClientId2, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(result2.need_unref);
   EXPECT_FALSE(result2.task);
   EXPECT_TRUE(cache->IsInInUseCacheForTesting(draw_image2));
@@ -4192,7 +4199,8 @@ TEST_P(GpuImageDecodeCacheTest, OutOfRasterDecodeForBitmaps) {
   PaintImage image = CreateBitmapImageInternal(GetNormalImageSize());
   DrawImage draw_image = CreateDrawImageInternal(image);
   ImageDecodeCache::TaskResult result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(result.need_unref);
   EXPECT_FALSE(result.task);
   EXPECT_FALSE(result.is_at_raster_decode);
@@ -4585,7 +4593,8 @@ TEST_P(GpuImageDecodeCacheWithAcceleratedDecodesTest,
                        CreateMatrix(SkSize::Make(1.0f, 1.0f)),
                        PaintImage::kDefaultFrameIndex, target_color_params);
   ImageDecodeCache::TaskResult result =
-      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image);
+      cache->GetOutOfRasterDecodeTaskForImageAndRef(client_id, draw_image,
+                                                    /*speculative*/ false);
   EXPECT_TRUE(result.need_unref);
   ASSERT_TRUE(result.task);
   EXPECT_FALSE(result.can_do_hardware_accelerated_decode);

@@ -3,11 +3,11 @@
 #ifndef BROWSER_VIVALDI_RUNTIME_FEATURE_H_
 #define BROWSER_VIVALDI_RUNTIME_FEATURE_H_
 
+#include <optional>
 #include <string_view>
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "content/common/content_export.h"
 
 namespace content {
 class BrowserContext;
@@ -37,20 +37,21 @@ struct Feature {
 using FeatureMap = base::flat_map<std::string, Feature>;
 using EnabledSet = base::flat_set<std::string>;
 
-CONTENT_EXPORT void Init();
+void Init();
 
-CONTENT_EXPORT const FeatureMap& GetAllFeatures();
+const FeatureMap& GetAllFeatures();
 
-CONTENT_EXPORT const EnabledSet* GetEnabled(
-    content::BrowserContext* browser_context);
+std::optional<Feature> GetFeature(std::string_view feature_name);
+
+const EnabledSet* GetEnabled(content::BrowserContext* browser_context);
 
 // Call to check if a named feature is enabled.
-CONTENT_EXPORT bool IsEnabled(content::BrowserContext* browser_context,
-                              std::string_view feature_name);
+bool IsEnabled(content::BrowserContext* browser_context,
+               std::string_view feature_name);
 
-CONTENT_EXPORT bool Enable(content::BrowserContext* browser_context,
-                           std::string_view feature_name,
-                           bool enabled);
+bool Enable(content::BrowserContext* browser_context,
+            std::string_view feature_name,
+            bool enabled);
 
 }  // namespace vivaldi_runtime_feature
 

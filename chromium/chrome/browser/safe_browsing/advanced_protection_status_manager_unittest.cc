@@ -4,10 +4,12 @@
 
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 
+#include "base/command_line.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safe_browsing/core/common/safebrowsing_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
@@ -15,6 +17,7 @@
 
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_android.h"
+#include "chrome/browser/safe_browsing/android/advanced_protection_status_manager_test_util.h"
 #else
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_desktop.h"
 #endif
@@ -29,10 +32,17 @@ typedef AdvancedProtectionStatusManagerDesktop
     AdvancedProtectionStatusManagerPlatform;
 #endif
 
-class AdvancedProtectionStatusManagerTest : public ::testing::Test {
+class AdvancedProtectionStatusManagerTest : public testing::Test {
  public:
   AdvancedProtectionStatusManagerTest() {
     RegisterProfilePrefs(pref_service_.registry());
+  }
+
+  void SetUp() override {
+#if BUILDFLAG(IS_ANDROID)
+    SetAdvancedProtectionStateForTesting(
+        /*is_advanced_protection_requested_by_os=*/false);
+#endif  // BUILDFLAG(IS_ANDROID)
   }
 
   std::unique_ptr<AdvancedProtectionStatusManagerPlatform> BuildManager(

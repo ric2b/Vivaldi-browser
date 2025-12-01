@@ -28,12 +28,10 @@ bool IsInputEventContinuous(const blink::WebInputEvent& event) {
 RenderInputRouterDelegateImpl::RenderInputRouterDelegateImpl(
     scoped_refptr<input::RenderWidgetHostInputEventRouter> rwhier,
     Delegate& delegate,
-    const FrameSinkId& frame_sink_id,
-    const base::UnguessableToken& grouping_id)
+    const FrameSinkId& frame_sink_id)
     : rwhier_(std::move(rwhier)),
       delegate_(delegate),
-      frame_sink_id_(frame_sink_id),
-      grouping_id_(grouping_id) {
+      frame_sink_id_(frame_sink_id) {
   TRACE_EVENT_INSTANT(
       "input", "RenderInputRouterDelegateImpl::RenderInputRouterDelegateImpl",
       "frame_sink_id", frame_sink_id);
@@ -70,9 +68,13 @@ RenderInputRouterDelegateImpl::GetInputEventRouter() {
 
 bool RenderInputRouterDelegateImpl::IsIgnoringWebInputEvents(
     const blink::WebInputEvent& event) const {
-  // TODO(377625588): Implement notifying Viz of WebContentsImpl's ignoring
-  // input events.
-  return is_blocked_;
+  // When browser starts ignoring input events, it calls
+  // RenderWidgetHostViewAndroid::ResetGestureDetection which results in
+  // dropping the rest of the current input sequence. If WebContents ignores
+  // input events according to WebInputEventAuditCallback, it is applicable from
+  // the next input sequence and the current input sequence will not ignore
+  // input events on VizCompositorThread.
+  return false;
 }
 
 bool RenderInputRouterDelegateImpl::PreHandleGestureEvent(
@@ -89,9 +91,9 @@ void RenderInputRouterDelegateImpl::NotifyObserversOfInputEvent(
   auto web_coalesced_event =
       std::make_unique<blink::WebCoalescedInputEvent>(event, ui::LatencyInfo());
 
-  delegate_->NotifyObserversOfInputEvent(frame_sink_id_, grouping_id_,
-                                         std::move(web_coalesced_event),
-                                         dispatched_to_renderer);
+  delegate_->GetRIRDelegateClientRemote(frame_sink_id_)
+      ->NotifyObserversOfInputEvent(std::move(web_coalesced_event),
+                                    dispatched_to_renderer);
 }
 
 void RenderInputRouterDelegateImpl::NotifyObserversOfInputEventAcks(
@@ -104,9 +106,9 @@ void RenderInputRouterDelegateImpl::NotifyObserversOfInputEventAcks(
   auto web_coalesced_event =
       std::make_unique<blink::WebCoalescedInputEvent>(event, ui::LatencyInfo());
 
-  delegate_->NotifyObserversOfInputEventAcks(frame_sink_id_, grouping_id_,
-                                             ack_source, ack_result,
-                                             std::move(web_coalesced_event));
+  delegate_->GetRIRDelegateClientRemote(frame_sink_id_)
+      ->NotifyObserversOfInputEventAcks(ack_source, ack_result,
+                                        std::move(web_coalesced_event));
 }
 
 bool RenderInputRouterDelegateImpl::IsInitializedAndNotDead() {
@@ -123,7 +125,8 @@ input::TouchEmulator* RenderInputRouterDelegateImpl::GetTouchEmulator(
 }
 
 void RenderInputRouterDelegateImpl::OnInvalidInputEventSource() {
-  delegate_->OnInvalidInputEventSource(frame_sink_id_, grouping_id_);
+  delegate_->GetRIRDelegateClientRemote(frame_sink_id_)
+      ->OnInvalidInputEventSource();
 }
 
 std::unique_ptr<PeakGpuMemoryTracker>
@@ -139,14 +142,45 @@ input::StylusInterface* RenderInputRouterDelegateImpl::GetStylusInterface() {
 }
 
 bool RenderInputRouterDelegateImpl::IsHidden() const {
-  // TODO(391135801): Implement hang renderer detection with InputVizard.
-  // Currently, this returns a default value to stop the input event ack timers
-  // from firing unnecessarily.
-  return true;
+  return is_hidden_;
 }
 
-bool RenderInputRouterDelegateImpl::IsRendererProcessBlocked() {
-  return is_blocked_;
+void RenderInputRouterDelegateImpl::OnInputEventAckTimeout(
+    base::TimeTicks ack_timeout_ts) {
+  if (!is_responsive_) {
+    return;
+  }
+  is_responsive_ = false;
+  auto* remote = delegate_->GetRIRDelegateClientRemote(frame_sink_id_);
+  if (!remote) {
+    return;
+  }
+  remote->RendererInputResponsivenessChanged(is_responsive_,
+                                             std::move(ack_timeout_ts));
+}
+
+void RenderInputRouterDelegateImpl::RendererIsResponsive() {
+  if (is_responsive_) {
+    return;
+  }
+  is_responsive_ = true;
+  auto* remote = delegate_->GetRIRDelegateClientRemote(frame_sink_id_);
+  if (!remote) {
+    return;
+  }
+  remote->RendererInputResponsivenessChanged(is_responsive_, std::nullopt);
+}
+
+void RenderInputRouterDelegateImpl::DidOverscroll(
+    blink::mojom::DidOverscrollParamsPtr params) {
+  // |InputRouterImpl::GestureEventHandled| triggers both
+  // |RenderInputRouterDelegateImpl::DidOverscroll| (which sends overscroll
+  // information to the browser process) and
+  // |RenderInputRouterSupportAndroid::GestureEventAck| which calls in
+  // StopFlingingIfNecessary, so the decision to stop any fling due to
+  // overscroll is handled within the Viz process.
+  delegate_->GetRIRDelegateClientRemote(frame_sink_id_)
+      ->StateOnOverscrollTransfer(std::move(params));
 }
 
 }  // namespace viz

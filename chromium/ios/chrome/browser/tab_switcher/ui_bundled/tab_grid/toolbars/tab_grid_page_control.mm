@@ -9,9 +9,12 @@
 #import <algorithm>
 
 #import "base/check_op.h"
+#import "ios/chrome/browser/shared/coordinator/layout_guide/layout_guide_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
+#import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
+#import "ios/chrome/browser/shared/ui/util/util_swift.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -240,8 +243,9 @@ TabGridPage ThirdTabGridPage() {
   UIAccessibilityElement* _regularAccessibilityElement;
   UIAccessibilityElement* _thirdPanelAccessibilityElement;
 
-  // Highlight view for the last control.
+  // Highlighted view and associated icon.
   UIView* _highlightView;
+  UIView* _highlightedIcon;
 
   // Vivaldi
   UIAccessibilityElement* _closedAccessibilityElement;
@@ -455,7 +459,7 @@ TabGridPage ThirdTabGridPage() {
   }
 }
 
-- (void)highlightLastPageControl {
+- (void)highlightPageControlItem:(TabGridPage)page {
   UIView* highlightBackground = [[UIView alloc] init];
   highlightBackground.translatesAutoresizingMaskIntoConstraints = NO;
   highlightBackground.backgroundColor = [UIColor colorNamed:kBlueColor];
@@ -463,16 +467,51 @@ TabGridPage ThirdTabGridPage() {
 
   [self insertSubview:highlightBackground aboveSubview:self.background];
 
+  UILayoutGuide* pageGuide;
   [NSLayoutConstraint activateConstraints:@[
-    [highlightBackground.trailingAnchor
-        constraintEqualToAnchor:self.thirdPanelGuide.trailingAnchor],
     [highlightBackground.topAnchor
         constraintEqualToAnchor:self.sliderView.topAnchor],
     [highlightBackground.bottomAnchor
         constraintEqualToAnchor:self.sliderView.bottomAnchor],
-    [highlightBackground.leadingAnchor
-        constraintEqualToAnchor:self.regularGuide.centerXAnchor],
   ]];
+  switch (page) {
+    case TabGridPageIncognitoTabs:
+      pageGuide = self.incognitoGuide;
+      _highlightedIcon = self.incognitoNotSelectedIcon;
+      [NSLayoutConstraint activateConstraints:@[
+        [highlightBackground.leadingAnchor
+            constraintEqualToAnchor:pageGuide.leadingAnchor],
+        [highlightBackground.trailingAnchor
+            constraintEqualToAnchor:self.regularGuide.centerXAnchor]
+      ]];
+      break;
+    case TabGridPageRemoteTabs:
+    case TabGridPageTabGroups:
+      pageGuide = self.thirdPanelGuide;
+      _highlightedIcon = self.thirdPanelNotSelectedIcon;
+      [NSLayoutConstraint activateConstraints:@[
+        [highlightBackground.leadingAnchor
+            constraintEqualToAnchor:self.regularGuide.centerXAnchor],
+        [highlightBackground.trailingAnchor
+            constraintEqualToAnchor:pageGuide.trailingAnchor]
+      ]];
+      break;
+    case TabGridPageRegularTabs:
+      // Not supported right now.
+      break;
+      // Vivaldi
+    case TabGridPageClosedTabs:
+      pageGuide = self.closedGuide;
+      _highlightedIcon = self.closedNotSelectedIcon;
+      [NSLayoutConstraint activateConstraints:@[
+        [highlightBackground.leadingAnchor
+            constraintEqualToAnchor:self.regularGuide.centerXAnchor],
+        [highlightBackground.trailingAnchor
+            constraintEqualToAnchor:pageGuide.trailingAnchor]
+      ]];
+      break;
+      // End Vivaldi
+  }
 
   highlightBackground.alpha = 0;
   [UIView animateWithDuration:kHighlightAnimationDuration
@@ -480,12 +519,13 @@ TabGridPage ThirdTabGridPage() {
                      highlightBackground.alpha = 1;
                    }];
 
-  self.thirdPanelNotSelectedIcon.tintColor = UIColor.blackColor;
 
   _highlightView = highlightBackground;
+  _highlightedIcon.tintColor = UIColor.blackColor;
 }
 
 - (void)resetLastPageControlHighlight {
+  CHECK(_highlightView);
   UIView* highlightView = _highlightView;
   [UIView animateWithDuration:kHighlightAnimationDuration
       animations:^{
@@ -495,8 +535,7 @@ TabGridPage ThirdTabGridPage() {
         [highlightView removeFromSuperview];
       }];
   _highlightView = nil;
-  self.thirdPanelNotSelectedIcon.tintColor =
-      [UIColor colorNamed:kStaticGrey300Color];
+  _highlightedIcon.tintColor = [UIColor colorNamed:kStaticGrey300Color];
 }
 
 - (CGRect)lastSegmentFrame {
@@ -951,8 +990,14 @@ TabGridPage ThirdTabGridPage() {
   self.regularSelectedLabel = regularSelectedLabel;
 
   self.incognitoHoverView = [self configureHoverView];
+
+  LayoutGuideCenter* center = LayoutGuideCenterForBrowser(nil);
+  [center referenceView:self.incognitoHoverView
+              underName:kTabGridPageControlIncognitoGuide];
   self.regularHoverView = [self configureHoverView];
   self.thirdPanelHoverView = [self configureHoverView];
+  [center referenceView:self.thirdPanelHoverView
+              underName:kTabGridPageControlThirdPanelGuide];
 
   // Vivaldi
   self.closedHoverView = [self configureHoverView];;

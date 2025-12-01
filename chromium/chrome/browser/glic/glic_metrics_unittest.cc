@@ -22,6 +22,7 @@
 #include "chrome/browser/status_icons/status_icon.h"
 #include "chrome/browser/status_icons/status_icon_menu_model.h"
 #include "chrome/browser/status_icons/status_tray.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/scoped_testing_local_state.h"
@@ -43,35 +44,23 @@
 namespace glic {
 namespace {
 
-// This mock is a wrapper around the API in GlicWindowController which is
-// exposed to GlicMetrics. It doesn't do anything.
-class MockWindowController : public GlicWindowController {
+class MockDelegate : public GlicMetrics::Delegate {
  public:
-  MockWindowController(Profile* profile,
-                       signin::IdentityManager* identity_manager,
-                       GlicEnabling* enabling)
-      : GlicWindowController(profile,
-                             identity_manager,
-                             /*service=*/nullptr,
-                             enabling) {}
-  ~MockWindowController() override = default;
+  MockDelegate() = default;
+  ~MockDelegate() override = default;
 
-  bool IsShowing() const override { return showing_; }
-  bool IsAttached() const override { return attached_; }
-  bool showing_ = false;
-  bool attached_ = false;
-};
-
-class MockTabManager : public GlicFocusedTabManager {
- public:
-  MockTabManager(Profile* profile, GlicWindowController& window_controller)
-      : GlicFocusedTabManager(profile, window_controller) {}
-  ~MockTabManager() override = default;
+  bool IsWindowShowing() const override { return showing_; }
+  bool IsWindowAttached() const override { return attached_; }
+  gfx::Size GetWindowSize() const override { return gfx::Size(); }
   FocusedTabData GetFocusedTabData() override {
     return FocusedTabData(contents_ ? contents_->GetWeakPtr() : nullptr);
   }
+
   void SetWebContents(content::WebContents* contents) { contents_ = contents; }
   raw_ptr<content::WebContents> contents_;
+
+  bool showing_ = false;
+  bool attached_ = false;
 };
 
 class MockStatusIcon : public StatusIcon {
@@ -142,18 +131,15 @@ class GlicMetricsTest : public testing::Test {
     enabling_ = std::make_unique<GlicEnabling>(
         profile_, &testing_profile_manager_->profile_manager()
                        ->GetProfileAttributesStorage());
-    controller_ = std::make_unique<MockWindowController>(
-        profile_, identity_env_.identity_manager(), enabling_.get());
-    tab_manager_ = std::make_unique<MockTabManager>(profile_, *controller_);
-
     metrics_ = std::make_unique<GlicMetrics>(profile_, enabling_.get());
-    metrics_->SetControllers(controller_.get(), tab_manager_.get());
+    auto delegate = std::make_unique<MockDelegate>();
+    delegate_ = delegate.get();
+    metrics_->SetDelegateForTesting(std::move(delegate));
   }
 
   void TearDown() override {
+    delegate_ = nullptr;
     metrics_.reset();
-    tab_manager_.reset();
-    controller_.reset();
     enabling_.reset();
     TestingBrowserProcess::GetGlobal()->GetFeatures()->Shutdown();
     profile_ = nullptr;
@@ -163,10 +149,10 @@ class GlicMetricsTest : public testing::Test {
   }
 
   void ExpectEntryPointImpressionLogged(
-      EntryPointImpression entry_point_impression) {
+      EntryPointStatus entry_point_impression) {
     task_environment_.FastForwardBy(base::Minutes(16));
-    histogram_tester_.ExpectTotalCount("Glic.EntryPoint.Impression", 1);
-    histogram_tester_.ExpectBucketCount("Glic.EntryPoint.Impression",
+    histogram_tester_.ExpectTotalCount("Glic.EntryPoint.Status", 1);
+    histogram_tester_.ExpectBucketCount("Glic.EntryPoint.Status",
                                         entry_point_impression,
                                         /*expected_count=*/1);
   }
@@ -188,10 +174,9 @@ class GlicMetricsTest : public testing::Test {
   raw_ptr<TestingProfile> profile_ = nullptr;
   signin::IdentityTestEnvironment identity_env_;
   std::unique_ptr<TestingProfileManager> testing_profile_manager_;
-
+  // Owned by `metrics_`.
+  raw_ptr<MockDelegate> delegate_;
   std::unique_ptr<GlicEnabling> enabling_;
-  std::unique_ptr<MockWindowController> controller_;
-  std::unique_ptr<MockTabManager> tab_manager_;
   std::unique_ptr<GlicMetrics> metrics_;
 };
 
@@ -210,8 +195,8 @@ TEST_F(GlicMetricsTest, Basic) {
 }
 
 TEST_F(GlicMetricsTest, BasicVisible) {
-  controller_->showing_ = true;
-  controller_->attached_ = true;
+  delegate_->showing_ = true;
+  delegate_->attached_ = true;
 
   metrics_->OnGlicWindowOpen(/*attached=*/true,
                              mojom::InvocationSource::kOsButton);
@@ -230,7 +215,7 @@ TEST_F(GlicMetricsTest, BasicVisible) {
 }
 
 TEST_F(GlicMetricsTest, BasicUkm) {
-  controller_->showing_ = true;
+  delegate_->showing_ = true;
   metrics_->OnGlicWindowOpen(/*attached=*/false, mojom::InvocationSource::kFre);
   for (int i = 0; i < 2; ++i) {
     metrics_->OnUserInputSubmitted(mojom::WebClientMode::kText);
@@ -282,9 +267,9 @@ TEST_F(GlicMetricsTest, BasicUkmWithTarget) {
   GURL url("https://www.google.com");
   tester->NavigateAndCommit(url);
 
-  tab_manager_->SetWebContents(web_contents.get());
+  delegate_->SetWebContents(web_contents.get());
 
-  controller_->showing_ = true;
+  delegate_->showing_ = true;
   metrics_->DidRequestContextFromFocusedTab();
   metrics_->OnGlicWindowOpen(/*attached=*/false, mojom::InvocationSource::kFre);
   metrics_->OnUserInputSubmitted(mojom::WebClientMode::kText);
@@ -308,12 +293,12 @@ TEST_F(GlicMetricsTest, BasicUkmWithTarget) {
     EXPECT_EQ(entry->source_id, ukm_id);
   }
 
-  tab_manager_->SetWebContents(nullptr);
+  delegate_->SetWebContents(nullptr);
 }
 
 TEST_F(GlicMetricsTest, SegmentationOsButtonAttachedText) {
-  controller_->showing_ = true;
-  controller_->attached_ = true;
+  delegate_->showing_ = true;
+  delegate_->attached_ = true;
 
   metrics_->OnGlicWindowOpen(/*attached=*/true,
                              mojom::InvocationSource::kOsButton);
@@ -329,8 +314,8 @@ TEST_F(GlicMetricsTest, SegmentationOsButtonAttachedText) {
 }
 
 TEST_F(GlicMetricsTest, Segmentation3DotsMenuDetachedAudio) {
-  controller_->showing_ = true;
-  controller_->attached_ = false;
+  delegate_->showing_ = true;
+  delegate_->attached_ = false;
 
   metrics_->OnGlicWindowOpen(/*attached=*/false,
                              mojom::InvocationSource::kThreeDotsMenu);
@@ -369,12 +354,20 @@ TEST_F(GlicMetricsTest, SessionDuration_LogsError) {
                                       /*expected_count=*/1);
 }
 
-TEST_F(GlicMetricsTest, ImpressionBeforeFre) {
+TEST_F(GlicMetricsTest, ImpressionBeforeFreNotPermittedByPolicy) {
   profile_->GetPrefs()->SetInteger(
       prefs::kGlicCompletedFre,
       static_cast<int>(prefs::FreStatus::kNotStarted));
 
-  ExpectEntryPointImpressionLogged(EntryPointImpression::kBeforeFre);
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kBeforeFreNotEligible);
+}
+
+TEST_F(GlicMetricsTest, ImpressionIncompleteFreNotPermittedByPolicy) {
+  profile_->GetPrefs()->SetInteger(
+      prefs::kGlicCompletedFre,
+      static_cast<int>(prefs::FreStatus::kIncomplete));
+
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kIncompleteFreNotEligible);
 }
 
 // kGeminiSettings is by default enabled, however if we initialize a scoped
@@ -389,6 +382,7 @@ class GlicMetricsFeaturesEnabledTest : public GlicMetricsTest {
         {
             features::kGlic,
             features::kTabstripComboButton,
+            features::kGlicRollout,
         },
         {});
     SetUpProfile();
@@ -406,12 +400,20 @@ class GlicMetricsFeaturesEnabledTest : public GlicMetricsTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionNotPermittedByPolicy) {
+TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionBeforeFre) {
   profile_->GetPrefs()->SetInteger(
-      ::prefs::kGeminiSettings,
-      static_cast<int>(glic::prefs::SettingsPolicyState::kDisabled));
+      prefs::kGlicCompletedFre,
+      static_cast<int>(prefs::FreStatus::kNotStarted));
 
-  ExpectEntryPointImpressionLogged(EntryPointImpression::kNotPermitted);
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kBeforeFreAndEligible);
+}
+
+TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionIncompleteFre) {
+  profile_->GetPrefs()->SetInteger(
+      prefs::kGlicCompletedFre,
+      static_cast<int>(prefs::FreStatus::kIncomplete));
+
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kIncompleteFreAndEligible);
 }
 
 TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreBrowserOnly) {
@@ -419,7 +421,7 @@ TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreBrowserOnly) {
   // kGlicPinnedToTabstrip is true
   // kGlicLauncherEnabled is false
 
-  ExpectEntryPointImpressionLogged(EntryPointImpression::kAfterFreBrowserOnly);
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kAfterFreBrowserOnly);
 }
 
 TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreOsOnly) {
@@ -427,7 +429,7 @@ TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreOsOnly) {
   profile_->GetPrefs()->SetBoolean(prefs::kGlicPinnedToTabstrip, false);
   local_state()->SetBoolean(prefs::kGlicLauncherEnabled, true);
 
-  ExpectEntryPointImpressionLogged(EntryPointImpression::kAfterFreOsOnly);
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kAfterFreOsOnly);
 }
 
 TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreEnabled) {
@@ -435,15 +437,28 @@ TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreEnabled) {
   // kGlicPinnedToTabstrip is true
   local_state()->SetBoolean(prefs::kGlicLauncherEnabled, true);
 
-  ExpectEntryPointImpressionLogged(EntryPointImpression::kAfterFreEnabled);
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kAfterFreBrowserAndOs);
 }
 
-TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreDisabled) {
+TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreDisabledEntrypoints) {
   // kGeminiSettings is enabled
   profile_->GetPrefs()->SetBoolean(prefs::kGlicPinnedToTabstrip, false);
   // kGlicLauncherEnabled is false
 
-  ExpectEntryPointImpressionLogged(EntryPointImpression::kAfterFreDisabled);
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kAfterFreThreeDotOnly);
+}
+
+TEST_F(GlicMetricsFeaturesEnabledTest, ImpressionAfterFreNotPermittedByPolicy) {
+  // kGeminiSettings is enabled
+  // kGlicPinnedToTabstrip is true
+  // kGlicLauncherEnabled is true
+
+  // Disable kGeminiSettings
+  profile_->GetPrefs()->SetInteger(
+      ::prefs::kGeminiSettings,
+      static_cast<int>(glic::prefs::SettingsPolicyState::kDisabled));
+
+  ExpectEntryPointImpressionLogged(EntryPointStatus::kAfterFreNotEligible);
 }
 
 TEST_F(GlicMetricsFeaturesEnabledTest, EnablingChanged) {

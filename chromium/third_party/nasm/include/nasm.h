@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2018 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2022 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -67,6 +67,13 @@ struct compile_time {
 };
 extern struct compile_time official_compile_time;
 
+/* POSIX timestamp if and only if we are not a reproducible build */
+extern bool reproducible;
+static inline int64_t posix_timestamp(void)
+{
+    return reproducible ? 0 : official_compile_time.posix;
+}
+
 #define NO_SEG  INT32_C(-1)     /* null segment value */
 #define SEG_ABS 0x40000000L     /* mask for far-absolute segments */
 
@@ -111,10 +118,11 @@ enum out_type {
     OUT_REL8ADR
 };
 
-enum out_sign {
-    OUT_WRAP,                   /* Undefined signedness (wraps) */
-    OUT_SIGNED,                 /* Value is signed */
-    OUT_UNSIGNED                /* Value is unsigned */
+enum out_flags {
+    OUT_WRAP     = 0,           /* Undefined signedness (wraps) */
+    OUT_SIGNED   = 1,           /* Value is signed */
+    OUT_UNSIGNED = 2,           /* Value is unsigned */
+    OUT_SIGNMASK = 3            /* Mask for signedness bits */
 };
 
 /*
@@ -126,7 +134,7 @@ struct out_data {
     int64_t offset;             /* Offset within segment */
     int32_t segment;            /* Segment written to */
     enum out_type type;         /* See above */
-    enum out_sign sign;         /* See above */
+    enum out_flags flags;       /* See above */
     int inslen;                 /* Length of instruction */
     int insoffs;                /* Offset inside instruction */
     int bits;                   /* Bits mode of compilation */
@@ -154,26 +162,44 @@ typedef void (*ldfunc)(char *label, int32_t segment, int64_t offset,
  * ASCII character values, and zero for end-of-string.
  */
 enum token_type { /* token types, other than chars */
+
+    /* Token values shared between assembler and preprocessor */
+
+    /* Special codes */
     TOKEN_INVALID = -1, /* a placeholder value */
-    TOKEN_EOS = 0,      /* end of string */
-    TOKEN_QMARK = '?',
-    TOKEN_EQ = '=',
-    TOKEN_GT = '>',
-    TOKEN_LT = '<',     /* aliases */
-    TOKEN_ID = 256,     /* identifier */
-    TOKEN_NUM,          /* numeric constant */
-    TOKEN_ERRNUM,       /* malformed numeric constant */
-    TOKEN_STR,          /* string constant */
-    TOKEN_ERRSTR,       /* unterminated string constant */
-    TOKEN_FLOAT,        /* floating-point constant */
-    TOKEN_REG,          /* register name */
-    TOKEN_INSN,         /* instruction name */
-    TOKEN_HERE,         /* $ */
-    TOKEN_BASE,         /* $$ */
-    TOKEN_SIZE,		/* BYTE, WORD, DWORD, QWORD, etc */
-    TOKEN_SPECIAL,      /* REL, FAR, NEAR, STRICT, NOSPLIT, etc */
-    TOKEN_PREFIX,       /* A32, O16, LOCK, REPNZ, TIMES, etc */
-    TOKEN_SHL,          /* << or <<< */
+    TOKEN_BLOCK   = -2, /* used for storage management */
+    TOKEN_FREE    = -3, /* free token marker, use to catch leaks */
+    TOKEN_EOS     = 0,  /* end of string */
+
+    /*
+     * Single-character operators. Enumerated here to keep strict
+     * compilers happy, and for documentation.
+     */
+    TOKEN_WHITESPACE = ' ',     /* Preprocessor use */
+    TOKEN_BOOL_NOT   = '!',
+    TOKEN_AND        = '&',
+    TOKEN_OR         = '|',
+    TOKEN_XOR        = '^',
+    TOKEN_NOT        = '~',
+    TOKEN_MULT       = '*',
+    TOKEN_DIV        = '/',
+    TOKEN_MOD        = '%',
+    TOKEN_LPAR       = '(',
+    TOKEN_RPAR       = ')',
+    TOKEN_PLUS       = '+',
+    TOKEN_MINUS      = '-',
+    TOKEN_COMMA      = ',',
+    TOKEN_LBRACE     = '{',
+    TOKEN_RBRACE     = '}',
+    TOKEN_LBRACKET   = '[',
+    TOKEN_RBRACKET   = ']',
+    TOKEN_QMARK      = '?',
+    TOKEN_EQ         = '=',     /* = or == */
+    TOKEN_GT         = '>',
+    TOKEN_LT         = '<',
+
+    /* Multi-character operators */
+    TOKEN_SHL = 256,    /* << or <<< */
     TOKEN_SHR,          /* >> */
     TOKEN_SAR,          /* >>> */
     TOKEN_SDIV,         /* // */
@@ -185,6 +211,21 @@ enum token_type { /* token types, other than chars */
     TOKEN_DBL_AND,      /* && */
     TOKEN_DBL_OR,       /* || */
     TOKEN_DBL_XOR,      /* ^^ */
+
+    TOKEN_MAX_OPERATOR,
+
+    TOKEN_NUM,          /* numeric constant */
+    TOKEN_ERRNUM,       /* malformed numeric constant */
+    TOKEN_STR,          /* string constant */
+    TOKEN_ERRSTR,       /* unterminated string constant */
+    TOKEN_ID,           /* identifier */
+    TOKEN_FLOAT,        /* floating-point constant */
+    TOKEN_HERE,         /* $, not '$' because it is not an operator */
+    TOKEN_BASE,         /* $$ */
+
+    /* Token values only used by the assembler */
+    TOKEN_START_ASM,
+
     TOKEN_SEG,          /* SEG */
     TOKEN_WRT,          /* WRT */
     TOKEN_FLOATIZE,     /* __?floatX?__ */
@@ -193,18 +234,52 @@ enum token_type { /* token types, other than chars */
     TOKEN_DECORATOR,    /* decorators such as {...} */
     TOKEN_MASM_PTR,     /* __?masm_ptr?__ for the masm package */
     TOKEN_MASM_FLAT,    /* __?masm_flat?__ for the masm package */
-    TOKEN_OPMASK        /* translated token for opmask registers */
+    TOKEN_OPMASK,       /* translated token for opmask registers */
+    TOKEN_SIZE,		/* BYTE, WORD, DWORD, QWORD, etc */
+    TOKEN_SPECIAL,      /* REL, FAR, NEAR, STRICT, NOSPLIT, etc */
+    TOKEN_PREFIX,       /* A32, O16, LOCK, REPNZ, TIMES, etc */
+    TOKEN_REG,          /* register name */
+    TOKEN_INSN,         /* instruction name */
+
+    TOKEN_END_ASM,
+
+    /* Token values only used by the preprocessor */
+
+    TOKEN_START_PP = TOKEN_END_ASM,
+
+    TOKEN_OTHER,           /* % sequence without (current) meaning */
+    TOKEN_PREPROC_ID,      /* Preprocessor ID, e.g. %symbol */
+    TOKEN_MMACRO_PARAM,    /* MMacro parameter, e.g. %1 */
+    TOKEN_LOCAL_SYMBOL,    /* Local symbol, e.g. %%symbol */
+    TOKEN_LOCAL_MACRO,     /* Context-local macro, e.g. %$symbol */
+    TOKEN_ENVIRON,         /* %! */
+    TOKEN_INTERNAL_STR,    /* Unquoted string that should remain so */
+    TOKEN_NAKED_STR,       /* Unquoted string that can be re-quoted */
+    TOKEN_PREPROC_Q,       /* %? */
+    TOKEN_PREPROC_QQ,      /* %?? */
+    TOKEN_PREPROC_SQ,      /* %*? */
+    TOKEN_PREPROC_SQQ,     /* %*?? */
+    TOKEN_PASTE,           /* %+ */
+    TOKEN_COND_COMMA,      /* %, */
+    TOKEN_INDIRECT,        /* %[...] */
+    TOKEN_XDEF_PARAM,      /* Used during %xdefine processing */
+    /* smacro parameters starting here; an arbitrary number. */
+    TOKEN_SMAC_START_PARAMS,    /* MUST BE LAST IN THE LIST!!! */
+    TOKEN_MAX = INT_MAX		/* Keep compiler from reducing the range */
 };
 
+/* Must match the fp_formats[] array in asm/floats.c */
 enum floatize {
     FLOAT_8,
     FLOAT_16,
+    FLOAT_B16,
     FLOAT_32,
     FLOAT_64,
     FLOAT_80M,
     FLOAT_80E,
     FLOAT_128L,
-    FLOAT_128H
+    FLOAT_128H,
+    FLOAT_ERR                   /* Invalid format, MUST BE LAST */
 };
 
 /* Must match the list in string_transform(), in strfunc.c */
@@ -241,6 +316,8 @@ struct tokenval {
     int64_t             t_inttwo;
     enum token_type     t_type;
     int8_t              t_flag;
+    const char		*t_start; /* Pointer to token in input buffer */
+    int			t_len;    /* Length of token in input buffer */
 };
 typedef int (*scanner)(void *private_data, struct tokenval *tv);
 
@@ -343,62 +420,63 @@ enum preproc_mode {
     PP_PREPROC                  /* Preprocessing only */
 };
 
-struct preproc_ops {
-    /*
-     * Called once at the very start of assembly.
-     */
-    void (*init)(void);
-
-    /*
-     * Called at the start of a pass; given a file name, the number
-     * of the pass, an error reporting function, an evaluator
-     * function, and a listing generator to talk to.
-     */
-    void (*reset)(const char *file, enum preproc_mode mode,
-                  struct strlist *deplist);
-
-    /*
-     * Called to fetch a line of preprocessed source. The line
-     * returned has been malloc'ed, and so should be freed after
-     * use.
-     */
-    char *(*getline)(void);
-
-    /* Called at the end of each pass. */
-    void (*cleanup_pass)(void);
-
-    /*
-     * Called at the end of the assembly session,
-     * after cleanup_pass() has been called for the
-     * last pass.
-     */
-    void (*cleanup_session)(void);
-
-    /* Additional macros specific to output format */
-    void (*extra_stdmac)(macros_t *macros);
-
-    /* Early definitions and undefinitions for macros */
-    void (*pre_define)(char *definition);
-    void (*pre_undefine)(char *definition);
-
-    /* Include file from command line */
-    void (*pre_include)(char *fname);
-
-    /* Add a command from the command line */
-    void (*pre_command)(const char *what, char *str);
-
-    /* Include path from command line */
-    void (*include_path)(struct strlist *ipath);
-
-    /* Unwind the macro stack when printing an error message */
-    void (*error_list_macros)(errflags severity);
-
-    /* Return true if an error message should be suppressed */
-    bool (*suppress_error)(errflags severity);
+enum preproc_opt {
+    PP_TRIVIAL  = 1,            /* Only %line or # directives */
+    PP_NOLINE   = 2,            /* Ignore %line and # directives */
+    PP_TASM     = 4             /* TASM compatibility hacks */
 };
 
-extern const struct preproc_ops nasmpp;
-extern const struct preproc_ops preproc_nop;
+/*
+ * Called once at the very start of assembly.
+ */
+void pp_init(enum preproc_opt opt);
+
+/*
+ * Called at the start of a pass; given a file name, the number
+ * of the pass, an error reporting function, an evaluator
+ * function, and a listing generator to talk to.
+ */
+void pp_reset(const char *file, enum preproc_mode mode,
+              struct strlist *deplist);
+
+/*
+ * Called to fetch a line of preprocessed source. The line
+ * returned has been malloc'ed, and so should be freed after
+ * use.
+ */
+char *pp_getline(void);
+
+/* Called at the end of each pass. */
+void pp_cleanup_pass(void);
+
+/*
+ * Called at the end of the assembly session,
+ * after cleanup_pass() has been called for the
+ * last pass.
+ */
+void pp_cleanup_session(void);
+
+/* Additional macros specific to output format */
+void pp_extra_stdmac(macros_t *macros);
+
+/* Early definitions and undefinitions for macros */
+void pp_pre_define(char *definition);
+void pp_pre_undefine(char *definition);
+
+/* Include file from command line */
+void pp_pre_include(char *fname);
+
+/* Add a command from the command line */
+void pp_pre_command(const char *what, char *str);
+
+/* Include path from command line */
+void pp_include_path(struct strlist *ipath);
+
+/* Unwind the macro stack when printing an error message */
+void pp_error_list_macros(errflags severity);
+
+/* Return true if an error message should be suppressed */
+bool pp_suppress_error(errflags severity);
 
 /* List of dependency files */
 extern struct strlist *depend_list;
@@ -447,13 +525,6 @@ static inline bool is_register(int reg)
     return reg >= EXPR_REG_START && reg < REG_ENUM_LIMIT;
 }
 
-enum ccode { /* condition code names */
-    C_A, C_AE, C_B, C_BE, C_C, C_E, C_G, C_GE, C_L, C_LE, C_NA, C_NAE,
-    C_NB, C_NBE, C_NC, C_NE, C_NG, C_NGE, C_NL, C_NLE, C_NO, C_NP,
-    C_NS, C_NZ, C_O, C_P, C_PE, C_PO, C_S, C_Z,
-    C_none = -1
-};
-
 /*
  * token flags
  */
@@ -463,17 +534,6 @@ enum ccode { /* condition code names */
 #define TFLAG_BRDCAST   (1 << 2)    /* broadcasting decorator */
 #define TFLAG_WARN	(1 << 3)    /* warning only, treat as ID */
 #define TFLAG_DUP	(1 << 4)    /* valid ID but also has context-specific use */
-
-static inline uint8_t get_cond_opcode(enum ccode c)
-{
-    static const uint8_t ccode_opcodes[] = {
-        0x7, 0x3, 0x2, 0x6, 0x2, 0x4, 0xf, 0xd, 0xc, 0xe, 0x6, 0x2,
-        0x3, 0x7, 0x3, 0x5, 0xe, 0xc, 0xd, 0xf, 0x1, 0xb, 0x9, 0x5,
-        0x0, 0xa, 0xa, 0xb, 0x8, 0x4
-    };
-
-	return ccode_opcodes[(int)c];
-}
 
 /*
  * REX flags
@@ -543,20 +603,23 @@ enum prefixes { /* instruction prefixes */
     P_XRELEASE,
     P_BND,
     P_NOBND,
+    P_REX,
     P_EVEX,
+    P_VEX,
     P_VEX3,
     P_VEX2,
     PREFIX_ENUM_LIMIT
 };
 
 enum ea_flags { /* special EA flags */
-    EAF_BYTEOFFS    =  1,   /* force offset part to byte size */
-    EAF_WORDOFFS    =  2,   /* force offset part to [d]word size */
-    EAF_TIMESTWO    =  4,   /* really do EAX*2 not EAX+EAX */
-    EAF_REL         =  8,   /* IP-relative addressing */
-    EAF_ABS         = 16,   /* non-IP-relative addressing */
-    EAF_FSGS        = 32,   /* fs/gs segment override present */
-    EAF_MIB         = 64    /* mib operand */
+    EAF_BYTEOFFS    =   1,  /* force offset part to byte size */
+    EAF_WORDOFFS    =   2,  /* force offset part to [d]word size */
+    EAF_TIMESTWO    =   4,  /* really do EAX*2 not EAX+EAX */
+    EAF_REL         =   8,  /* IP-relative addressing */
+    EAF_ABS         =  16,  /* non-IP-relative addressing */
+    EAF_FSGS        =  32,  /* fs/gs segment override present */
+    EAF_MIB         =  64,  /* mib operand */
+    EAF_SIB         = 128   /* SIB encoding obligatory */
 };
 
 enum eval_hint { /* values for `hinttype' */
@@ -568,7 +631,7 @@ enum eval_hint { /* values for `hinttype' */
 
 typedef struct operand { /* operand to an instruction */
     opflags_t       type;       /* type of operand */
-    int             disp_size;  /* 0 means default; 16; 32; 64 */
+    opflags_t       xsize;      /* size flags used in find_match() */
     enum reg_enum   basereg;
     enum reg_enum   indexreg;   /* address registers */
     int             scale;      /* index scale */
@@ -580,6 +643,9 @@ typedef struct operand { /* operand to an instruction */
     int             eaflags;    /* special EA flags */
     int             opflags;    /* see OPFLAG_* defines below */
     decoflags_t     decoflags;  /* decorator flags such as {...} */
+    bool            bcast;      /* broadcast operand */
+    uint8_t         disp_size;  /* 0 means default; 16; 32; 64 */
+    uint8_t         opidx;      /* Operand index */
 } operand;
 
 #define OPFLAG_FORWARD      1   /* operand is a forward reference */
@@ -638,14 +704,15 @@ enum ea_type {
  * the introduction of HLE.
  */
 enum prefix_pos {
-    PPS_WAIT,   /* WAIT (technically not a prefix!) */
-    PPS_REP,    /* REP/HLE prefix */
-    PPS_LOCK,   /* LOCK prefix */
-    PPS_SEG,    /* Segment override prefix */
-    PPS_OSIZE,  /* Operand size prefix */
-    PPS_ASIZE,  /* Address size prefix */
-    PPS_VEX,    /* VEX type */
-    MAXPREFIX   /* Total number of prefix slots */
+    PPS_TIMES = -1,     /* TIMES (not a slot, handled separately) */
+    PPS_WAIT  =  0,   	/* WAIT (technically not a prefix!) */
+    PPS_REP,    	/* REP/HLE prefix */
+    PPS_LOCK,   	/* LOCK prefix */
+    PPS_SEG,    	/* Segment override prefix */
+    PPS_OSIZE,  	/* Operand size prefix */
+    PPS_ASIZE,  	/* Address size prefix */
+    PPS_REX,    	/* REX/VEX type */
+    MAXPREFIX   	/* Total number of prefix slots */
 };
 
 /*
@@ -686,14 +753,12 @@ typedef struct insn { /* an instruction itself */
     char            *label;                 /* the label defined, or NULL */
     int             prefixes[MAXPREFIX];    /* instruction prefixes, if any */
     enum opcode     opcode;                 /* the opcode - not just the string */
-    enum ccode      condition;              /* the condition code, if Jcc/SETcc */
     int             operands;               /* how many operands? 0-3 (more if db et al) */
     int             addr_size;              /* address size */
     operand         oprs[MAX_OPERANDS];     /* the operands, defined as above */
     extop           *eops;                  /* extended operands */
     int             eops_float;             /* true if DD and floating */
     int32_t         times;                  /* repeat count (TIMES prefix) */
-    bool            forw_ref;               /* is there a forward reference? */
     bool            rex_done;               /* REX prefix emitted? */
     int             rex;                    /* Special REX Prefix */
     int             vexreg;                 /* Register encoded in VEX prefix */
@@ -703,7 +768,7 @@ typedef struct insn { /* an instruction itself */
                                             /* EVEX.P2: [z,L'L,b,V',aaa] */
     enum ttypes     evex_tuple;             /* Tuple type for compressed Disp8*N */
     int             evex_rm;                /* static rounding mode for AVX512 (EVEX) */
-    int8_t          evex_brerop;            /* BR/ER/SAE operand position */
+    struct operand *evex_brerop;            /* BR/ER/SAE operand position */
 } insn;
 
 /* Instruction flags type: IF_* flags are defined in insns.h */
@@ -717,7 +782,7 @@ typedef uint64_t iflags_t;
  *
  * DIRR_BADPARAM causes a generic error message to be printed.  Note
  * that it is an error, not a warning, even in the case of pragmas;
- * don't use it where forward compatiblity would be compromised
+ * don't use it where forward compatibility would be compromised
  * (instead consider adding a DIRR_WARNPARAM.)
  */
 enum directive_result {
@@ -909,7 +974,7 @@ struct ofmt {
      * It is allowed to modify the string it is given a pointer to.
      *
      * It is also allowed to specify a default instruction size for
-     * the segment, by setting `*bits' to 16 or 32. Or, if it
+     * the segment, by setting `*bits' to 16, 32 or 64. Or, if it
      * doesn't wish to define a default, it can leave `bits' alone.
      */
     int32_t (*section)(char *name, int *bits);
@@ -1005,6 +1070,7 @@ extern FILE *ofile;
  * interfaces to the functions therein.
  * ------------------------------------------------------------
  */
+struct debug_macro_info;
 
 struct dfmt {
     /*
@@ -1037,6 +1103,36 @@ struct dfmt {
 
     void (*debug_deflabel)(char *name, int32_t segment, int64_t offset,
                            int is_global, char *special);
+
+    /*
+     * debug_smacros - called when an smacro is defined or undefined
+     * during the code-generation pass. The definition string contains
+     * the macro name, any arguments, a single space, and the macro
+     * definition; this is what is expected by e.g. DWARF.
+     *
+     * The definition is provided even for an undef.
+     */
+    void (*debug_smacros)(bool define, const char *def);
+
+    /*
+     * debug_include - called when a file is included or the include
+     * is finished during the code-generation pass.  The filename is
+     * kept by the srcfile system and so can be compared for pointer
+     * equality.
+     *
+     * A filename of NULL means builtin (initial or %use) or command
+     * line statements.
+     */
+    void (*debug_include)(bool start, struct src_location outer,
+                          struct src_location inner);
+
+    /*
+     * debug_mmacros - called once at the end with a definition for each
+     * non-.nolist macro that has been invoked at least once in the program,
+     * and the corresponding address ranges. See dbginfo.h.
+     */
+    void (*debug_mmacros)(const struct debug_macro_info *);
+
     /*
      * debug_directive - called whenever a DEBUG directive other than 'LINE'
      * is encountered. 'directive' contains the first parameter to the
@@ -1146,6 +1242,7 @@ enum decorator_tokens {
     BRC_1TO4,
     BRC_1TO8,
     BRC_1TO16,
+    BRC_1TO32,
     BRC_RN,
     BRC_RD,
     BRC_RU,
@@ -1166,8 +1263,8 @@ enum decorator_tokens {
  * ..........................1..... broadcast
  * .........................1...... static rounding
  * ........................1....... SAE
- * ......................11........ broadcast element size
- * ....................11.......... number of broadcast elements
+ * ....................1111........ broadcast element size
+ * .................111............ number of broadcast elements
  */
 #define OP_GENVAL(val, bits, shift)     (((val) & ((UINT64_C(1) << (bits)) - 1)) << (shift))
 
@@ -1229,23 +1326,25 @@ enum decorator_tokens {
 /*
  * Broadcasting element size.
  *
- * Bits: 8 - 9
+ * Bits: 8 - 11
  */
 #define BRSIZE_SHIFT            (8)
-#define BRSIZE_BITS             (2)
+#define BRSIZE_BITS             (4)
 #define BRSIZE_MASK             OP_GENMASK(BRSIZE_BITS, BRSIZE_SHIFT)
 #define GEN_BRSIZE(bit)         OP_GENBIT(bit, BRSIZE_SHIFT)
 
-#define BR_BITS32               GEN_BRSIZE(0)
-#define BR_BITS64               GEN_BRSIZE(1)
+#define BR_BITS8		GEN_BRSIZE(0) /* For potential future use */
+#define BR_BITS16               GEN_BRSIZE(1)
+#define BR_BITS32               GEN_BRSIZE(2)
+#define BR_BITS64               GEN_BRSIZE(3)
 
 /*
  * Number of broadcasting elements
  *
- * Bits: 10 - 11
+ * Bits: 12 - 14
  */
-#define BRNUM_SHIFT             (10)
-#define BRNUM_BITS              (2)
+#define BRNUM_SHIFT             (12)
+#define BRNUM_BITS              (3)
 #define BRNUM_MASK              OP_GENMASK(BRNUM_BITS, BRNUM_SHIFT)
 #define VAL_BRNUM(val)          OP_GENVAL(val, BRNUM_BITS, BRNUM_SHIFT)
 
@@ -1253,13 +1352,24 @@ enum decorator_tokens {
 #define BR_1TO4                 VAL_BRNUM(1)
 #define BR_1TO8                 VAL_BRNUM(2)
 #define BR_1TO16                VAL_BRNUM(3)
+#define BR_1TO32                VAL_BRNUM(4)
+#define BR_1TO64                VAL_BRNUM(5) /* For potential future use */
 
 #define MASK                    OPMASK_MASK             /* Opmask (k1 ~ 7) can be used */
 #define Z                       Z_MASK
+#define B16                     (BRDCAST_MASK|BR_BITS16) /* {1to32} : broadcast 16b * 32 to zmm(512b) */
 #define B32                     (BRDCAST_MASK|BR_BITS32) /* {1to16} : broadcast 32b * 16 to zmm(512b) */
 #define B64                     (BRDCAST_MASK|BR_BITS64) /* {1to8}  : broadcast 64b *  8 to zmm(512b) */
 #define ER                      STATICRND_MASK          /* ER(Embedded Rounding) == Static rounding mode */
 #define SAE                     SAE_MASK                /* SAE(Suppress All Exception) */
+
+/*
+ * Broadcast flags (BR_BITS*) to sizes (BITS*)
+ */
+static inline opflags_t brsize_to_size(opflags_t brbits)
+{
+    return (brbits & BRSIZE_MASK) << (SIZE_SHIFT - BRSIZE_SHIFT);
+}
 
 /*
  * Global modes

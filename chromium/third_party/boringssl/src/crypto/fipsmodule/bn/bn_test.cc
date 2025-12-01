@@ -2793,7 +2793,7 @@ TEST_F(BNTest, ArithmeticABI) {
     CHECK_ABI(bn_mul_add_words, r.data(), a.data(), num, 42);
 
     r.resize(2 * num);
-    CHECK_ABI(bn_sqr_words, r.data(), a.data(), num);
+    CHECK_ABI(bn_sqr_add_words, r.data(), a.data(), num);
 
     if (num == 4) {
       CHECK_ABI(bn_mul_comba4, r.data(), a.data(), b.data());

@@ -8,7 +8,7 @@ GEN_INCLUDE(['../testing/chromevox_e2e_test_base.js']);
 // E2E tests for PrimaryTts.
 
 /** Test fixture. */
-ChromeVoxBackgroundTtsTest = class extends ChromeVoxE2ETest {
+ChromeVoxMV2BackgroundTtsTest = class extends ChromeVoxE2ETest {
   /** @override */
   async setUpDeferred() {
     await super.setUpDeferred();
@@ -26,7 +26,7 @@ ChromeVoxBackgroundTtsTest = class extends ChromeVoxE2ETest {
   }
 };
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Preprocess', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'Preprocess', function() {
   const preprocess = tts.preprocess.bind(tts);
 
   // Punctuation.
@@ -86,7 +86,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Preprocess', function() {
   assertEquals('space', preprocess('\u00a0'));
 });
 
-TEST_F('ChromeVoxBackgroundTtsTest', 'UpdateVoice', function() {
+TEST_F('ChromeVoxMV2BackgroundTtsTest', 'UpdateVoice', function() {
   const voices = [
     {lang: 'zh-CN', voiceName: 'Chinese'},
     {lang: 'zh-TW', voiceName: 'Chinese (Taiwan)'},
@@ -146,7 +146,7 @@ TEST_F('ChromeVoxBackgroundTtsTest', 'UpdateVoice', function() {
 
 // This test only works if Google tts is installed. Run it locally.
 TEST_F(
-    'ChromeVoxBackgroundTtsTest', 'DISABLED_EmptyStringCallsCallbacks',
+    'ChromeVoxMV2BackgroundTtsTest', 'DISABLED_EmptyStringCallsCallbacks',
     function() {
       let startCalls = 0;
       let endCalls = 0;
@@ -169,7 +169,7 @@ TEST_F(
     });
 
 AX_TEST_F(
-    'ChromeVoxBackgroundTtsTest', 'CapitalizeSingleLettersAfterNumbers',
+    'ChromeVoxMV2BackgroundTtsTest', 'CapitalizeSingleLettersAfterNumbers',
     function() {
       const preprocess = tts.preprocess.bind(tts);
 
@@ -186,24 +186,25 @@ AX_TEST_F(
           preprocess('Please do the shopping at 3 a thing came up at work'));
     });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'AnnounceCapitalLetters', function() {
-  const preprocess = tts.preprocess.bind(tts);
+AX_TEST_F(
+    'ChromeVoxMV2BackgroundTtsTest', 'AnnounceCapitalLetters', function() {
+      const preprocess = tts.preprocess.bind(tts);
 
-  assertEquals('A', preprocess('A'));
+      assertEquals('A', preprocess('A'));
 
-  // Only announce capital for solo capital letters.
-  SettingsManager.set('capitalStrategy', 'announceCapitals');
-  assertEquals('Cap A', preprocess('A'));
-  assertEquals('Cap Z', preprocess('Z'));
-  assertEquals('Cap Ａ', preprocess('Ａ'));
-  assertEquals('Cap Б', preprocess('Б'));
+      // Only announce capital for solo capital letters.
+      SettingsManager.set('capitalStrategy', 'announceCapitals');
+      assertEquals('Cap A', preprocess('A'));
+      assertEquals('Cap Z', preprocess('Z'));
+      assertEquals('Cap Ａ', preprocess('Ａ'));
+      assertEquals('Cap Б', preprocess('Б'));
 
-  // Do not announce capital for the following inputs.
-  assertEquals('BB', preprocess('BB'));
-  assertEquals('A.', preprocess('A.'));
-});
+      // Do not announce capital for the following inputs.
+      assertEquals('BB', preprocess('BB'));
+      assertEquals('A.', preprocess('A.'));
+    });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'PunctuationMode', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'PunctuationMode', function() {
   const PUNCTUATION_ECHO_NONE = '0';
   const PUNCTUATION_ECHO_SOME = '1';
   const PUNCTUATION_ECHO_ALL = '2';
@@ -253,7 +254,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'PunctuationMode', function() {
       lastSpokenTextString);
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'NumberReadingStyle', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'NumberReadingStyle', function() {
   let lastSpokenTextString = '';
   tts.speakUsingQueue_ = function(utterance, _) {
     lastSpokenTextString = utterance.textString;
@@ -292,7 +293,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'NumberReadingStyle', function() {
       'An unanswered call lasts for ３ ０ seconds.', lastSpokenTextString);
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'SplitLongText', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'SplitLongText', function() {
   const spokenTextStrings = [];
   tts.speakUsingQueue_ = function(utterance, _) {
     spokenTextStrings.push(utterance.textString);
@@ -307,7 +308,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'SplitLongText', function() {
   assertEquals(2, spokenTextStrings.length);
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'SplitUntilSmall', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'SplitUntilSmall', function() {
   const split = PrimaryTts.splitUntilSmall;
 
   // A single delimiter.
@@ -348,7 +349,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'SplitUntilSmall', function() {
   assertEqualsJSON(['a'], split('a', 'b'));
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Phonetics', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'Phonetics', function() {
   let spokenStrings = [];
   tts.speakUsingQueue_ = (utterance, ...rest) => {
     spokenStrings.push(utterance.textString);
@@ -417,7 +418,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Phonetics', function() {
   assertEquals(1, spokenStrings.length);
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'PitchChanges', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'PitchChanges', function() {
   const preprocess = tts.preprocess.bind(tts);
   const props = {relativePitch: -0.3};
   SettingsManager.set('usePitchChanges', true);
@@ -428,7 +429,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'PitchChanges', function() {
   assertFalse(props.hasOwnProperty('relativePitch'));
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'InterjectUtterances', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'InterjectUtterances', function() {
   // Fake out setTimeout for our purposes.
   let lastSetTimeoutCallback;
   setTimeout = (callback, delay) => {
@@ -526,7 +527,7 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'InterjectUtterances', function() {
   ]);
 });
 
-AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Mute', function() {
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'Mute', function() {
   // Fake out setTimeout for our purposes.
   let lastSetTimeoutCallback;
   setTimeout = (callback, delay) => {
@@ -556,18 +557,139 @@ AX_TEST_F('ChromeVoxBackgroundTtsTest', 'Mute', function() {
   this.expectUtteranceQueueIsLike([]);
 });
 
-TEST_F('ChromeVoxBackgroundTtsTest', 'ResetTtsSettingsClearsVoice', function() {
-  this.newCallback(async () => {
-    ChromeVox.tts.ttsEngines_[0].currentVoice = '';
-    CommandHandlerInterface.instance.onCommand('resetTextToSpeechSettings');
-    await new Promise(r => {
-      ChromeVox.tts.speak = textString => {
-        if (textString === 'Reset text to speech settings to default values') {
-          r();
-        }
-      };
+TEST_F(
+    'ChromeVoxMV2BackgroundTtsTest', 'ResetTtsSettingsClearsVoice', function() {
+      this.newCallback(async () => {
+        ChromeVox.tts.ttsEngines_[0].currentVoice = '';
+        CommandHandlerInterface.instance.onCommand('resetTextToSpeechSettings');
+        await new Promise(r => {
+          ChromeVox.tts.speak = textString => {
+            if (textString ===
+                'Reset text to speech settings to default values') {
+              r();
+            }
+          };
+        });
+        assertEquals(
+            constants.SYSTEM_VOICE, ChromeVox.tts.ttsEngines_[0].currentVoice);
+      })();
     });
-    assertEquals(
-        constants.SYSTEM_VOICE, ChromeVox.tts.ttsEngines_[0].currentVoice);
-  })();
+
+// Ensures that punctuation marks and symbols can be pluralized.
+AX_TEST_F('ChromeVoxMV2BackgroundTtsTest', 'Pluralization', function() {
+  const preprocess = tts.preprocess.bind(tts);
+
+  assertEquals('exclamation', preprocess('!'));
+  assertEquals('3 exclamations', preprocess('!!!'));
+
+  // Note that we don't cover the case for multiple spaces or tabs because
+  // preprocess will condense multiple spaces.
+  assertEquals('space', preprocess(' '));
+
+  // Backticks are omitted from pluralization logic at the preprocess layer.
+  assertEquals('backtick', preprocess('`'));
+  assertEquals('backtick backtick backtick', preprocess('```'));
+
+  // Tildes are omitted from pluralization logic at the preprocess layer.
+  assertEquals('tilde', preprocess('~'));
+  assertEquals('tilde tilde tilde', preprocess('~~~'));
+
+  assertEquals('at', preprocess('@'));
+  assertEquals('3 at signs', preprocess('@@@'));
+
+  assertEquals('pound', preprocess('#'));
+  assertEquals('3 pound signs', preprocess('###'));
+
+  assertEquals('dollar', preprocess('$'));
+  assertEquals('3 dollar signs', preprocess('$$$'));
+
+  assertEquals('percent', preprocess('%'));
+  assertEquals('3 percent signs', preprocess('%%%'));
+
+  assertEquals('caret', preprocess('^'));
+  assertEquals('3 carets', preprocess('^^^'));
+
+  assertEquals('ampersand', preprocess('&'));
+  assertEquals('3 ampersands', preprocess('&&&'));
+
+  assertEquals('asterisk', preprocess('*'));
+  assertEquals('3 asterisks', preprocess('***'));
+
+  assertEquals('open paren', preprocess('('));
+  assertEquals('3 open parens', preprocess('((('));
+
+  assertEquals('close paren', preprocess(')'));
+  assertEquals('3 close parens', preprocess(')))'));
+
+  assertEquals('dash', preprocess('-'));
+  assertEquals('3 dashes', preprocess('---'));
+
+  assertEquals('underscore', preprocess('_'));
+  assertEquals('3 underscores', preprocess('___'));
+
+  assertEquals('equal', preprocess('='));
+  assertEquals('3 equal signs', preprocess('==='));
+
+  assertEquals('plus', preprocess('+'));
+  assertEquals('3 plus signs', preprocess('+++'));
+
+  assertEquals('left bracket', preprocess('['));
+  assertEquals('3 left brackets', preprocess('[[['));
+
+  assertEquals('right bracket', preprocess(']'));
+  assertEquals('3 right brackets', preprocess(']]]'));
+
+  assertEquals('left brace', preprocess('{'));
+  assertEquals('3 left braces', preprocess('{{{'));
+
+  assertEquals('right brace', preprocess('}'));
+  assertEquals('3 right braces', preprocess('}}}'));
+
+  assertEquals('pipe', preprocess('|'));
+  assertEquals('3 vertical pipes', preprocess('|||'));
+
+  assertEquals('semicolon', preprocess(';'));
+  assertEquals('3 semicolons', preprocess(';;;'));
+
+  assertEquals('colon', preprocess(':'));
+  assertEquals('3 colons', preprocess(':::'));
+
+  // Commas are omitted from pluralization logic at the preprocess layer.
+  assertEquals('comma', preprocess(','));
+  assertEquals(',,,', preprocess(',,,'));
+
+  assertEquals('dot', preprocess('.'));
+  assertEquals('..', preprocess('..'));
+  assertEquals('ellipsis', preprocess('...'));
+  assertEquals('4 dots', preprocess('....'));
+
+  assertEquals('less than', preprocess('<'));
+  assertEquals('3 less than signs', preprocess('<<<'));
+
+  assertEquals('greater than', preprocess('>'));
+  assertEquals('3 greater than signs', preprocess('>>>'));
+
+  assertEquals('slash', preprocess('/'));
+  assertEquals('3 slashes', preprocess('///'));
+
+  assertEquals('question mark', preprocess('?'));
+  assertEquals('3 question marks', preprocess('???'));
+
+  assertEquals('quote', preprocess('"'));
+  assertEquals('3 quotes', preprocess('"""'));
+
+  assertEquals('apostrophe', preprocess('\''));
+  assertEquals('3 apostrophes', preprocess('\'\'\''));
+
+  assertEquals('backslash', preprocess('\\'));
+  assertEquals('3 backslashes', preprocess('\\\\\\'));
+
+  assertEquals('bullet', preprocess('\u2022'));
+  assertEquals('3 bullets', preprocess('\u2022\u2022\u2022'));
+
+  assertEquals('white bullet', preprocess('\u25e6'));
+  assertEquals('3 white bullets', preprocess('\u25e6\u25e6\u25e6'));
+
+  assertEquals('square bullet', preprocess('\u25a0'));
+  assertEquals('3 square bullets', preprocess('\u25a0\u25a0\u25a0'));
 });

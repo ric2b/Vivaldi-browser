@@ -50,7 +50,7 @@ public:
                                             UniquePaintParamsID,
                                             bool useStorageBuffers,
                                             skgpu::Swizzle writeSwizzle,
-                                            DstReadStrategy dstReadStrategyIfRequired,
+                                            DstReadStrategy dstReadStrategy,
                                             skia_private::TArray<SamplerDesc>* outDescs = nullptr);
 
     const ShaderCodeDictionary* shaderCodeDictionary() const {
@@ -60,7 +60,7 @@ public:
         return fRuntimeEffectDictionary;
     }
 
-    const char* ssboIndex() const { return fSsboIndex; }
+    const char* shadingSsboIndex() const { return fShadingSsboIndex; }
 
     DstReadStrategy dstReadStrategy() const { return fDstReadStrategy; }
     const skgpu::BlendInfo& blendInfo() const { return fBlendInfo; }
@@ -90,8 +90,9 @@ private:
                             const RenderStep*,
                             bool useStorageBuffers);
 
-    // Determines fNumFragmentTexturesAndSamplers, fHasPaintUniforms, fHasGradientBuffer, and if a
-    // valid SamplerDesc ptr is passed in, any immutable sampler SamplerDescs.
+    // Determines fNumFragmentTexturesAndSamplers, fHasPaintUniforms, fHasGradientBuffer,
+    // fHasSsboIndicesVarying, and if a valid SamplerDesc ptr is passed in, any immutable
+    // sampler SamplerDescs.
     void generateFragmentSkSL(const Caps*,
                               const ShaderCodeDictionary*,
                               const RenderStep*,
@@ -113,7 +114,7 @@ private:
 
     const ShaderCodeDictionary* fShaderCodeDictionary;
     const RuntimeEffectDictionary* fRuntimeEffectDictionary;
-    const char* fSsboIndex;
+    const char* fShadingSsboIndex;
 
     // De-compressed shader tree from a PaintParamsKey. There can be 1 or 2 root nodes, the first
     // being the paint effects (rooted with a BlendCompose for the final paint blend) and the
@@ -137,7 +138,9 @@ private:
     int fNumFragmentTexturesAndSamplers = 0;
     bool fHasStepUniforms = false;
     bool fHasPaintUniforms = false;
+    bool fHasLiftedPaintUniforms = false;
     bool fHasGradientBuffer = false;
+    bool fHasSsboIndicesVarying = false;
 };
 
 }  // namespace skgpu::graphite

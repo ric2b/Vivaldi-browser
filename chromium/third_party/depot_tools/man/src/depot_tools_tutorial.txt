@@ -124,8 +124,8 @@ code, including msysgit and python.
 * If you see strange errors with the file system on the first run of gclient,
   you may want to link:http://tortoisesvn.tigris.org/faq.html#cantmove2[disable
   Windows Indexing].
-* After running gclient open a command prompt and type `where python` and confirm that
-  the depot_tools python.bat comes ahead of any copies of python.exe. Failing to ensure
+* After running gclient open a command prompt and type `where python3` and confirm that
+  the depot_tools python3.bat comes ahead of any copies of python3.exe. Failing to ensure
   this can lead to overbuilding when using gn - see
   link:https://issues.chromium.org/issues/41253477[crbug.com/41253477].
 =====
@@ -151,6 +151,9 @@ TL;DR
 -----
 [postsubs="quotes"]
 ----
+[white]**$** # Set up auth in Git config:
+[white]**$ git cl creds-check --global**
+
 [white]**$** # get the code
 [white]**$** # In an empty directory:
 [white]**$ fetch {chromium,...}**
@@ -172,6 +175,15 @@ TL;DR
 
 GETTING THE CODE
 ----------------
+
+Unless you plan on only fetching code anonymously, you'll need to set
+up your auth config in Git.  Run this:
+
+[subs="quotes"]
+----
+[white]**$ git cl creds-check --global**
+----
+
 Pick an empty directory and run one of the following:
 
 [subs="quotes"]

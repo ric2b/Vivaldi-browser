@@ -41,10 +41,9 @@ action clear_item {
 }
 
 action add_item {
-	buffer->add_info (info);
+	buffer->add_info_and_pos (info, pos);
 	if (unlikely (!buffer->successful))
 	  return false;
-	buffer->pos[buffer->len - 1] = pos;
 	*end_ptr = p;
 }
 
@@ -86,14 +85,15 @@ glyph_item	=
 		offsets?
 		advances?
 		glyphflags?
+		( '|' | ']')
 	)
 	>clear_item
 	%add_item
 	;
 
-glyphs = glyph_item (space* '|' space* glyph_item)* space*;
+glyphs = '['? glyph_item* ;
 
-main := space* glyphs;
+main := glyphs;
 
 }%%
 
@@ -104,27 +104,10 @@ _hb_buffer_deserialize_text_glyphs (hb_buffer_t *buffer,
 				    const char **end_ptr,
 				    hb_font_t *font)
 {
-  const char *p = buf, *pe = buf + buf_len, *eof = pe, *orig_pe = pe;
+  const char *p = buf, *pe = buf + buf_len, *eof = pe;
 
   /* Ensure we have positions. */
   (void) hb_buffer_get_glyph_positions (buffer, nullptr);
-
-  while (p < pe && ISSPACE (*p))
-    p++;
-  if (p < pe && *p == (buffer->len ? '|' : '['))
-    *end_ptr = ++p;
-
-  const char *end = strchr ((char *) p, ']');
-  if (end)
-    pe = eof = end;
-  else
-  {
-    end = strrchr ((char *) p, '|');
-    if (end)
-      pe = eof = end;
-    else
-      pe = eof = p;
-  }
 
   const char *tok = nullptr;
   int cs;
@@ -134,13 +117,6 @@ _hb_buffer_deserialize_text_glyphs (hb_buffer_t *buffer,
     write init;
     write exec;
   }%%
-
-  if (pe < orig_pe && *pe == ']')
-  {
-    pe++;
-    if (p == pe)
-      p++;
-  }
 
   *end_ptr = p;
 

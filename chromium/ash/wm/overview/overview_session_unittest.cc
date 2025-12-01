@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "ash/wm/overview/overview_session.h"
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <string>
@@ -109,6 +105,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/user_action_tester.h"
+#include "base/test/run_until.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chromeos/ui/base/app_types.h"
@@ -1450,38 +1447,52 @@ TEST_P(OverviewSessionTest, ClickModalWindowParent) {
   EXPECT_TRUE(wm::IsActiveWindow(child.get()));
 }
 
-// Verifies bubble transient windows hide in Overview, reappear on Overview
-// exit.
-TEST_P(OverviewSessionTest, HideBubbleTransient) {
+// Verifies bubble transient windows stay visible in Overview, regardless
+// of anchored or not.
+TEST_P(OverviewSessionTest, DoNotHideBubbleTransient) {
   std::unique_ptr<aura::Window> window(
       CreateAppWindow(gfx::Rect(0, 0, 300, 300)));
+  enum BubbleType {
+    kAnchored,
+    kNotAnchored,
+  };
+  for (auto anchor :
+       {views::BubbleBorder::TOP_RIGHT, views::BubbleBorder::NONE}) {
+    SCOPED_TRACE(anchor == views::BubbleBorder::NONE ? "No Anchor"
+                                                     : "Anchored");
+    // Create a bubble widget that's anchored to frame.
+    views::View* anchor_view = anchor == views::BubbleBorder::NONE
+                                   ? nullptr
+                                   : NonClientFrameViewAsh::Get(window.get());
+    auto bubble_delegate = std::make_unique<views::BubbleDialogDelegateView>(
+        views::BubbleDialogDelegateView::CreatePassKey(), anchor_view, anchor);
 
-  // Create a bubble widget that's anchored to frame.
-  auto bubble_delegate = std::make_unique<views::BubbleDialogDelegateView>(
-      views::BubbleDialogDelegateView::CreatePassKey(),
-      NonClientFrameViewAsh::Get(window.get()), views::BubbleBorder::TOP_RIGHT);
+    // The line below is essential to make sure that the bubble doesn't get
+    // closed when entering overview.
+    bubble_delegate->set_close_on_deactivate(false);
+    bubble_delegate->set_parent_window(window.get());
+    views::Widget* bubble_widget(views::BubbleDialogDelegateView::CreateBubble(
+        std::move(bubble_delegate)));
+    aura::Window* bubble_window = bubble_widget->GetNativeWindow();
+    ASSERT_TRUE(window_util::AsBubbleDialogDelegate(bubble_window));
 
-  // The line below is essential to make sure that the bubble doesn't get closed
-  // when entering overview.
-  bubble_delegate->set_close_on_deactivate(false);
-  bubble_delegate->set_parent_window(window.get());
-  views::Widget* bubble_widget(views::BubbleDialogDelegateView::CreateBubble(
-      std::move(bubble_delegate)));
-  aura::Window* bubble_window = bubble_widget->GetNativeWindow();
-  ASSERT_TRUE(window_util::AsBubbleDialogDelegate(bubble_window));
+    bubble_widget->Show();
+    EXPECT_TRUE(wm::HasTransientAncestor(bubble_window, window.get()));
 
-  bubble_widget->Show();
-  EXPECT_TRUE(wm::HasTransientAncestor(bubble_window, window.get()));
+    // bubble transient windows should be visible in Overview mode.
+    ToggleOverview();
+    ASSERT_TRUE(IsInOverviewSession());
+    EXPECT_TRUE(bubble_window->IsVisible());
 
-  // Hides bubble transient windows on entering Overview mode.
-  ToggleOverview();
-  ASSERT_TRUE(IsInOverviewSession());
-  EXPECT_FALSE(bubble_window->IsVisible());
+    // Re-shows bubble transient windows on exiting Overview mode.
+    ToggleOverview();
+    ASSERT_FALSE(IsInOverviewSession());
+    EXPECT_TRUE(bubble_window->IsVisible());
 
-  // Re-shows bubble transient windows on exiting Overview mode.
-  ToggleOverview();
-  ASSERT_FALSE(IsInOverviewSession());
-  EXPECT_TRUE(bubble_window->IsVisible());
+    auto weak_widget_ptr = bubble_widget->GetWeakPtr();
+    bubble_widget->Close();
+    ASSERT_TRUE(base::test::RunUntil([&]() { return !weak_widget_ptr; }));
+  }
 }
 
 // Tests that windows remain on the display they are currently on in overview
@@ -1942,31 +1953,15 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPosition) {
 
   display::Screen* screen = display::Screen::GetScreen();
 
-  // The expected y of the label will be the screen minus the shelf and desks
-  // bar.
-  auto get_expected_y = [&screen]() -> int {
-    const int display_height = screen->GetPrimaryDisplay().bounds().height();
-    const int grid_y = kDeskBarZeroStateHeight;
-    int grid_height = display_height - ShelfConfig::Get()->shelf_size() -
-                      kDeskBarZeroStateHeight;
-    return grid_y + grid_height / 2;
-  };
-
-  // Verify that originally the label is in the center of the workspace. For
-  // forest, the padding calculations are much more complicated and we need to
-  // account for the birch bar, so we just check that the widget is roughly
-  // centered vertically.
+  // The padding calculations are complicated and we need to account for the
+  // birch bar, so we just check that the widget is roughly centered vertically.
   gfx::Point no_windows_centerpoint =
       no_windows_widget->GetWindowBoundsInScreen().CenterPoint();
-  if (features::IsForestFeatureEnabled()) {
-    EXPECT_EQ(200, no_windows_centerpoint.x());
-    EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
-    EXPECT_LT(no_windows_centerpoint.y(),
-              screen->GetPrimaryDisplay().bounds().height() -
-                  ShelfConfig::Get()->shelf_size());
-  } else {
-    EXPECT_EQ(gfx::Point(200, get_expected_y()), no_windows_centerpoint);
-  }
+  EXPECT_EQ(200, no_windows_centerpoint.x());
+  EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
+  EXPECT_LT(no_windows_centerpoint.y(),
+            screen->GetPrimaryDisplay().bounds().height() -
+                ShelfConfig::Get()->shelf_size());
 
   // Verify that after rotating the display, the label is centered in the
   // workspace.
@@ -1976,15 +1971,11 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPosition) {
       display::Display::RotationSource::ACTIVE);
   no_windows_centerpoint =
       no_windows_widget->GetWindowBoundsInScreen().CenterPoint();
-  if (features::IsForestFeatureEnabled()) {
-    EXPECT_EQ(150, no_windows_centerpoint.x());
-    EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
-    EXPECT_LT(no_windows_centerpoint.y(),
-              screen->GetPrimaryDisplay().bounds().height() -
-                  ShelfConfig::Get()->shelf_size());
-  } else {
-    EXPECT_EQ(gfx::Point(150, get_expected_y()), no_windows_centerpoint);
-  }
+  EXPECT_EQ(150, no_windows_centerpoint.x());
+  EXPECT_GT(no_windows_centerpoint.y(), kDeskBarZeroStateHeight);
+  EXPECT_LT(no_windows_centerpoint.y(),
+            screen->GetPrimaryDisplay().bounds().height() -
+                ShelfConfig::Get()->shelf_size());
 }
 
 // Tests that toggling overview on removes any resize shadows that may have been
@@ -2035,12 +2026,6 @@ TEST_P(OverviewSessionTest, OverviewGridBounds) {
   Shelf* shelf = Shelf::ForWindow(Shell::GetPrimaryRootWindow());
   const gfx::Rect shelf_bounds = shelf->GetIdealBounds();
   EXPECT_FALSE(GetGridBounds().Intersects(shelf_bounds));
-
-  if (!features::IsForestFeatureEnabled()) {
-    const gfx::Rect hotseat_bounds =
-        shelf->hotseat_widget()->GetWindowBoundsInScreen();
-    EXPECT_FALSE(GetGridBounds().Intersects(hotseat_bounds));
-  }
 }
 
 TEST_P(OverviewSessionTest, NoWindowsIndicatorPositionSplitview) {
@@ -3359,48 +3344,21 @@ TEST_P(OverviewSessionTest, AccessibilityFocusAnnotator) {
   auto* item_widget2 = GetOverviewItemForWindow(window2.get())->item_widget();
   auto* item_widget3 = GetOverviewItemForWindow(window3.get())->item_widget();
 
-  // With this flag enabled, there are is no saved desk save desk container.
-  if (features::IsForestFeatureEnabled()) {
-    // Order should be [focus_widget, item_widget1, item_widget2, item_widget3,
-    // desk_widget, save_widget].
-    CheckA11yOverrides("focus", focus_widget, desk_widget, item_widget1);
-    CheckA11yOverrides("item1", item_widget1, focus_widget, item_widget2);
-    CheckA11yOverrides("item2", item_widget2, item_widget1, item_widget3);
-    CheckA11yOverrides("item3", item_widget3, item_widget2, desk_widget);
-    CheckA11yOverrides("desk", desk_widget, item_widget3, focus_widget);
-
-    // Remove `window2`. The new order should be [focus_widget, item_widget1,
-    // item_widget3, desk_widget, save_widget].
-    window2.reset();
-    CheckA11yOverrides("focus", focus_widget, desk_widget, item_widget1);
-    CheckA11yOverrides("item1", item_widget1, focus_widget, item_widget3);
-    CheckA11yOverrides("item3", item_widget3, item_widget1, desk_widget);
-    CheckA11yOverrides("desk", desk_widget, item_widget3, focus_widget);
-    return;
-  }
-
-  SavedDeskSaveDeskButton* save_button =
-      OverviewGridTestApi(grid).GetSaveDeskForLaterButton();
-  ASSERT_TRUE(save_button);
-  views::Widget* save_widget = save_button->GetWidget();
-
   // Order should be [focus_widget, item_widget1, item_widget2, item_widget3,
   // desk_widget, save_widget].
-  CheckA11yOverrides("focus", focus_widget, save_widget, item_widget1);
+  CheckA11yOverrides("focus", focus_widget, desk_widget, item_widget1);
   CheckA11yOverrides("item1", item_widget1, focus_widget, item_widget2);
   CheckA11yOverrides("item2", item_widget2, item_widget1, item_widget3);
   CheckA11yOverrides("item3", item_widget3, item_widget2, desk_widget);
-  CheckA11yOverrides("desk", desk_widget, item_widget3, save_widget);
-  CheckA11yOverrides("save", save_widget, desk_widget, focus_widget);
+  CheckA11yOverrides("desk", desk_widget, item_widget3, focus_widget);
 
   // Remove `window2`. The new order should be [focus_widget, item_widget1,
   // item_widget3, desk_widget, save_widget].
   window2.reset();
-  CheckA11yOverrides("focus", focus_widget, save_widget, item_widget1);
+  CheckA11yOverrides("focus", focus_widget, desk_widget, item_widget1);
   CheckA11yOverrides("item1", item_widget1, focus_widget, item_widget3);
   CheckA11yOverrides("item3", item_widget3, item_widget1, desk_widget);
-  CheckA11yOverrides("desk", desk_widget, item_widget3, save_widget);
-  CheckA11yOverrides("save", save_widget, desk_widget, focus_widget);
+  CheckA11yOverrides("desk", desk_widget, item_widget3, focus_widget);
 }
 
 // Tests that accessibility overrides are set as expected on overview related
@@ -4026,27 +3984,13 @@ class FloatOverviewSessionTest : public OverviewTestBase {
   // it is not true on any of the root windows.
   bool IsFloatContainerNormalStacked() const {
     for (aura::Window* root : Shell::GetAllRootWindows()) {
-      if (features::IsForestFeatureEnabled()) {
-        // The float container should be the top-most child of the
-        // `ShutdownScreenshotContainer` when the feature `ForestFeature` is
-        // enabled.
-        auto* shutdown_screenshot_container =
-            root->GetChildById(kShellWindowId_ShutdownScreenshotContainer);
-        EXPECT_EQ(root->GetChildById(kShellWindowId_FloatContainer),
-                  shutdown_screenshot_container->children().back());
-      } else {
-        // The float container should above the always on top container and
-        // below the app list container when the `ForestFeature` is not enabled.
-        if (!window_util::IsStackedBelow(
-                root->GetChildById(kShellWindowId_AlwaysOnTopContainer),
-                root->GetChildById(kShellWindowId_FloatContainer))) {
-          return false;
-        }
-        if (!window_util::IsStackedBelow(
-                root->GetChildById(kShellWindowId_FloatContainer),
-                root->GetChildById(kShellWindowId_AppListContainer))) {
-          return false;
-        }
+      // The float container should be the top-most child of the
+      // `ShutdownScreenshotContainer`.
+      auto* shutdown_screenshot_container =
+          root->GetChildById(kShellWindowId_ShutdownScreenshotContainer);
+      if (root->GetChildById(kShellWindowId_FloatContainer) !=
+          shutdown_screenshot_container->children().back()) {
+        return false;
       }
     }
 
@@ -5036,10 +4980,6 @@ TEST_F(TabletModeOverviewSessionTest, CheckWindowActivateOnTap) {
 }
 
 TEST_F(TabletModeOverviewSessionTest, LayoutValidAfterRotation) {
-  if (!features::IsForestFeatureEnabled()) {
-    return;
-  }
-
   UpdateDisplay("1366x768");
   display::test::ScopedSetInternalDisplayId set_internal(
       Shell::Get()->display_manager(),
@@ -5321,22 +5261,22 @@ TEST_F(TabletModeOverviewSessionTest, NoNudgingWhenLastItemOnPreviousRowDrops) {
   // item dropping down from the first row to the second row. Create the windows
   // backward so the the window indexs match the order seen in overview, as
   // overview windows are ordered by MRU.
-  const int kWindows = 5;
-  std::unique_ptr<aura::Window> windows[kWindows];
+  constexpr int kWindows = 5;
+  std::array<std::unique_ptr<aura::Window>, kWindows> windows;
   for (int i = kWindows - 1; i >= 0; --i)
     windows[i] = CreateTestWindow();
 
   ToggleOverview();
   ASSERT_TRUE(GetOverviewController()->InOverviewSession());
 
-  OverviewItemBase* items[kWindows];
-  gfx::RectF item_bounds[kWindows];
+  std::array<OverviewItemBase*, kWindows> items;
+  std::array<gfx::RectF, kWindows> item_bounds;
   for (int i = 0; i < kWindows; ++i) {
     items[i] = GetOverviewItemForWindow(windows[i].get());
     item_bounds[i] = items[i]->target_bounds();
   }
 
-  // Drag the forth item past the drag to swipe threshold. None of the other
+  // Drag the fourth item past the drag to swipe threshold. None of the other
   // window bounds should change, as none of them should be nudged, because
   // deleting the fourth item will cause the third item to drop down from the
   // first row to the second.
@@ -9574,11 +9514,7 @@ TEST_F(SplitViewOverviewSessionInClamshellTestMultiDisplayOnly,
 // layer stacked below the wallpaper.
 class OverviewWallpaperTest : public OverviewTestBase {
  public:
-  OverviewWallpaperTest() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kForestFeature},
-        /*disabled_features=*/{});
-  }
+  OverviewWallpaperTest() = default;
   OverviewWallpaperTest(const OverviewWallpaperTest&) = delete;
   OverviewWallpaperTest& operator=(const OverviewWallpaperTest&) = delete;
   ~OverviewWallpaperTest() override = default;
@@ -9616,9 +9552,6 @@ class OverviewWallpaperTest : public OverviewTestBase {
       EXPECT_EQ(in_overview, !wallpaper_view_layer->clip_rect().IsEmpty());
     }
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Test that the wallpaper layer's clipping (with rounded corners) is applied

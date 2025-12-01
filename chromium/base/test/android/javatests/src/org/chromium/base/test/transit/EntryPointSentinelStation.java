@@ -6,21 +6,20 @@ package org.chromium.base.test.transit;
 
 import android.app.Activity;
 
+import org.chromium.build.annotations.NullMarked;
+
 /**
  * The first station in all Public Transit tests.
  *
  * <p>No Transition is made to enter this Station; it's a sentinel for the first transition to
  * happen from a non-null origin Station.
  */
+@NullMarked
 public class EntryPointSentinelStation extends Station<Activity> {
 
     public EntryPointSentinelStation() {
         super(null);
     }
-
-    @Override
-    @SuppressWarnings("MissingSuperCall")
-    public void declareElements(Elements.Builder elements) {}
 
     /**
      * Set this station as the entry point for Public Transit tests. Only EntryPoints should call

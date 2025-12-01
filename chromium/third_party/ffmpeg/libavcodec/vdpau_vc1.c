@@ -32,6 +32,7 @@
 #include "vdpau_internal.h"
 
 static int vdpau_vc1_start_frame(AVCodecContext *avctx,
+                                 const AVBufferRef *buffer_ref,
                                  const uint8_t *buffer, uint32_t size)
 {
     VC1Context * const v  = avctx->priv_data;
@@ -92,7 +93,7 @@ static int vdpau_vc1_start_frame(AVCodecContext *avctx,
     info->multires          = v->multires;
     info->syncmarker        = v->resync_marker;
     info->rangered          = v->rangered | (v->rangeredfrm << 1);
-    info->maxbframes        = v->s.max_b_frames;
+    info->maxbframes        = v->max_b_frames;
     info->deblockEnable     = v->postprocflag & 1;
     info->pquant            = v->pq;
 
@@ -116,7 +117,7 @@ static int vdpau_vc1_decode_slice(AVCodecContext *avctx,
     return 0;
 }
 
-static int vdpau_vc1_init(AVCodecContext *avctx)
+static av_cold int vdpau_vc1_init(AVCodecContext *avctx)
 {
     VdpDecoderProfile profile;
 

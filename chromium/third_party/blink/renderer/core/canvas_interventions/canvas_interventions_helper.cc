@@ -14,15 +14,24 @@
 #include "base/time/time.h"
 #include "third_party/blink/public/common/fingerprinting_protection/canvas_noise_token.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-shared.h"
+#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_enums.h"
 #include "third_party/blink/renderer/core/canvas_interventions/noise_hash.h"
 #include "third_party/blink/renderer/core/canvas_interventions/noise_helper.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_host.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
-#include "third_party/blink/renderer/platform/mojo/mojo_binding_context.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_feature_state/runtime_feature_state_override_context.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
+#include "third_party/blink/renderer/platform/wtf/casting.h"
+#include "third_party/blink/renderer/platform/wtf/hash_traits.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
 #include "ui/gfx/skia_span_util.h"
@@ -39,7 +48,7 @@ namespace {
 //   4) the CanvasInterventions RuntimeEnabledFeature is force enabled for
 //      testing.
 bool ShouldApplyNoise(CanvasRenderingContext* rendering_context,
-                      RasterMode raster_mode,
+                      scoped_refptr<StaticBitmapImage>& snapshot,
                       ExecutionContext* execution_context) {
   CanvasNoiseReason noise_reason = CanvasNoiseReason::kAllConditionsMet;
   if (!rendering_context) {
@@ -51,12 +60,17 @@ bool ShouldApplyNoise(CanvasRenderingContext* rendering_context,
   if (rendering_context && !rendering_context->IsRenderingContext2D()) {
     noise_reason |= CanvasNoiseReason::kNo2d;
   }
-  if (!(raster_mode == RasterMode::kGPU ||
-        RuntimeEnabledFeatures::CanvasInterventionsOnCpuForTestingEnabled())) {
+  if (!snapshot->IsTextureBacked()) {
     noise_reason |= CanvasNoiseReason::kNoGpu;
   }
   if (!execution_context) {
     noise_reason |= CanvasNoiseReason::kNoExecutionContext;
+  }
+  // Check if all heuristics have matched so far (excluding whether the feature
+  // is enabled).
+  if (noise_reason == CanvasNoiseReason::kAllConditionsMet) {
+    UseCounter::Count(execution_context,
+                      WebFeature::kCanvasReadbackNoiseMatchesHeuristics);
   }
   if (execution_context &&
       !execution_context->GetRuntimeFeatureStateOverrideContext()
@@ -65,14 +79,30 @@ bool ShouldApplyNoise(CanvasRenderingContext* rendering_context,
   }
 
   // When all conditions are met, none of the other reasons are possible.
-  static constexpr int exclusive_max =
-      static_cast<int>(CanvasNoiseReason::kMaxValue) << 1;
+  constexpr int exclusive_max = static_cast<int>(CanvasNoiseReason::kMaxValue)
+                                << 1;
 
-  UMA_HISTOGRAM_EXACT_LINEAR(
-      "FingerprintingProtection.CanvasNoise.InterventionReason",
-      static_cast<int>(noise_reason), exclusive_max);
+  UMA_HISTOGRAM_EXACT_LINEAR(kNoiseReasonMetricName,
+                             static_cast<int>(noise_reason), exclusive_max);
 
   return noise_reason == CanvasNoiseReason::kAllConditionsMet;
+}
+
+String GetDomainFromSecurityOrigin(const SecurityOrigin* security_origin) {
+  const SecurityOrigin* precursor_origin =
+      security_origin->GetOriginOrPrecursorOriginIfOpaque();
+  if (precursor_origin->IsOpaque()) {
+    return String::Format(
+        "opaque || %u",
+        WTF::GetHash(scoped_refptr<const SecurityOrigin>(precursor_origin)));
+  }
+  // RegistrableDomain() returns null in a couple of cases, such as URLs with IP
+  // addresses. In these cases we can safely return the host.
+  String domain = precursor_origin->RegistrableDomain();
+  if (!domain.IsNull()) {
+    return domain;
+  }
+  return precursor_origin->Host();
 }
 
 }  // namespace
@@ -85,12 +115,11 @@ const char CanvasInterventionsHelper::kSupplementName[] =
 bool CanvasInterventionsHelper::MaybeNoiseSnapshot(
     CanvasRenderingContext* rendering_context,
     ExecutionContext* execution_context,
-    scoped_refptr<StaticBitmapImage>& snapshot,
-    RasterMode raster_mode) {
+    scoped_refptr<StaticBitmapImage>& snapshot) {
   base::TimeTicks start_time = base::TimeTicks::Now();
   CHECK(snapshot);
 
-  if (!ShouldApplyNoise(rendering_context, raster_mode, execution_context)) {
+  if (!ShouldApplyNoise(rendering_context, snapshot, execution_context)) {
     return false;
   }
 
@@ -98,8 +127,8 @@ bool CanvasInterventionsHelper::MaybeNoiseSnapshot(
   // of all channels, including the alpha channel.
   auto info = SkImageInfo::Make(
       snapshot->GetSize().width(), snapshot->GetSize().height(),
-      snapshot->GetSkColorType(), kUnpremul_SkAlphaType,
-      snapshot->GetSkColorSpace());
+      viz::ToClosestSkColorType(snapshot->GetSharedImageFormat()),
+      kUnpremul_SkAlphaType, snapshot->GetColorSpace().ToSkColorSpace());
   SkBitmap bm;
   if (!bm.tryAllocPixels(info)) {
     return false;
@@ -118,17 +147,36 @@ bool CanvasInterventionsHelper::MaybeNoiseSnapshot(
   base::span<uint8_t> modify_pixels =
       gfx::SkPixmapToWritableSpan(pixmap_to_noise);
 
-  auto token_hash = NoiseHash(CanvasNoiseToken::Get(),
-                              execution_context->GetSecurityOrigin()
-                                  ->GetOriginOrPrecursorOriginIfOpaque()
-                                  ->RegistrableDomain()
-                                  .Utf8());
+  // TODO(crbug.com/377325952): Extend domain part to follow the general
+  // partitioning properties.
+  String noise_domain;
+  if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+    Frame& top_frame = window->GetFrame()->Tree().Top();
+    noise_domain = GetDomainFromSecurityOrigin(
+        top_frame.GetSecurityContext()->GetSecurityOrigin());
+  } else if (auto* worker = DynamicTo<WorkerGlobalScope>(execution_context)) {
+    noise_domain =
+        GetDomainFromSecurityOrigin(worker->top_level_frame_security_origin());
+  } else {
+    NOTREACHED();
+  }
+
+  // TODO(crbug.com/392627601): Use the token that is piped down from the
+  // browser.
+  auto token_hash = NoiseHash(CanvasNoiseToken::Get(), noise_domain);
   NoisePixels(token_hash, modify_pixels, pixmap_to_noise.width(),
               pixmap_to_noise.height());
 
   auto noised_image = bm.asImage();
   snapshot = blink::UnacceleratedStaticBitmapImage::Create(
-      std::move(noised_image), snapshot->CurrentFrameOrientation());
+      std::move(noised_image), snapshot->Orientation());
+
+  constexpr int canvas_op_exclusive_max =
+      static_cast<int>(CanvasOperationType::kMaxValue) << 1;
+  UMA_HISTOGRAM_EXACT_LINEAR(
+      kCanvasOperationMetricName,
+      static_cast<int>(rendering_context->GetCanvasTriggerOperations()),
+      canvas_op_exclusive_max);
 
   execution_context->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
       mojom::blink::ConsoleMessageSource::kIntervention,
@@ -140,12 +188,12 @@ bool CanvasInterventionsHelper::MaybeNoiseSnapshot(
 
   base::TimeDelta elapsed_time = base::TimeTicks::Now() - start_time;
 
-  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(
-      "FingerprintingProtection.CanvasNoise.NoiseDuration", elapsed_time,
-      base::Microseconds(50), base::Milliseconds(10), 50);
-  UMA_HISTOGRAM_COUNTS_1M(
-      "FingerprintingProtection.CanvasNoise.NoisedCanvasSize",
-      pixmap_to_noise.width() * pixmap_to_noise.height());
+  UMA_HISTOGRAM_CUSTOM_MICROSECONDS_TIMES(kNoiseDurationMetricName,
+                                          elapsed_time, base::Microseconds(50),
+                                          base::Milliseconds(50), 50);
+  UMA_HISTOGRAM_COUNTS_1M(kCanvasSizeMetricName,
+                          pixmap_to_noise.width() * pixmap_to_noise.height());
+  UseCounter::Count(execution_context, WebFeature::kCanvasReadbackNoise);
   auto* helper = CanvasInterventionsHelper::From(execution_context);
   helper->IncrementNoisedCanvasReadbacks();
 

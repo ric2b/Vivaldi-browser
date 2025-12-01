@@ -124,7 +124,8 @@ ShouldThrow GetShouldThrow(Isolate* isolate, Maybe<ShouldThrow> should_throw);
 // allocation of the C++ vtable.
 // There must only be a single data member in Object: the Address ptr,
 // containing the tagged heap pointer that this Object instance refers to.
-// For a design overview, see https://goo.gl/Ph4CGz.
+// For a design overview, see:
+// https://docs.google.com/document/d/1_w49sakC1XM1OptjTurBDqO86NE16FH8LwbeUAtrbCo
 class Object : public AllStatic {
  public:
   enum class Conversion {
@@ -729,9 +730,6 @@ V8_INLINE bool IsWasmObject(T obj, Isolate* = nullptr) {
 
 V8_INLINE bool IsJSObjectThatCanBeTrackedAsPrototype(Tagged<Object> obj);
 V8_INLINE bool IsJSObjectThatCanBeTrackedAsPrototype(Tagged<HeapObject> obj);
-
-V8_INLINE bool IsJSApiWrapperObject(Tagged<HeapObject> obj);
-V8_INLINE bool IsJSApiWrapperObject(Tagged<Map> map);
 
 #define DECL_STRUCT_PREDICATE(NAME, Name, name) \
   V8_INLINE bool Is##Name(Tagged<Object> obj);  \

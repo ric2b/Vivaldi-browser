@@ -10,6 +10,7 @@ import {
   $$,
   assertNotNullOrUndefined,
   clickElement,
+  drainFrontendTaskQueue,
   enableExperiment,
   getBrowserAndPages,
   goToResource,
@@ -194,7 +195,7 @@ describe('The Memory Panel', function() {
   });
 
   // Flaky on win and linux
-  it.skip('[crbug.com/1363150] Correctly shows multiple retainer paths for an object', async () => {
+  it.skip('[crbug.com/40238574] Correctly shows multiple retainer paths for an object', async () => {
     await goToResource('memory/multiple-retainers.html');
     await navigateToMemoryTab();
     await takeHeapSnapshot();
@@ -262,7 +263,7 @@ describe('The Memory Panel', function() {
   });
 
   // Flaky test causing build failures
-  it.skip('[crbug.com/1239550] Shows the correct output for a detached iframe', async () => {
+  it.skip('[crbug.com/40193901] Shows the correct output for a detached iframe', async () => {
     await goToResource('memory/detached-iframe.html');
     await navigateToMemoryTab();
     await takeHeapSnapshot();
@@ -513,9 +514,9 @@ describe('The Memory Panel', function() {
     await waitForRetainerChain([
       '{y}',
       '{d}',
-      `{${'#'.repeat(130)}, ...}`,
+      `{${'#'.repeat(130)}, …}`,
       '{b, irrelevantProperty, <symbol also irrelevant>, "}"}',
-      '{a, extraProp0, extraProp1, extraProp2, extraProp3, ..., extraProp6, extraProp7, extraProp8, extraProp9}',
+      '{a, extraProp0, extraProp1, extraProp2, extraProp3, …, extraProp6, extraProp7, extraProp8, extraProp9}',
       'Window',
     ]);
     await clickOnContextMenuForRetainer('b', 'Ignore this retainer');
@@ -534,10 +535,10 @@ describe('The Memory Panel', function() {
     await waitForSearchResultNumber(2);
     await setFilterDropdown('Objects retained by detached DOM nodes');
     await getCategoryRow('ObjectRetainedByDetachedDom');
-    assert.isTrue(!(await getCategoryRow('ObjectRetainedByBothDetachedDomAndConsole', false)));
+    assert.isNotOk(await getCategoryRow('ObjectRetainedByBothDetachedDomAndConsole', false));
     await setFilterDropdown('Objects retained by DevTools Console');
     await getCategoryRow('ObjectRetainedByConsole');
-    assert.isTrue(!(await getCategoryRow('ObjectRetainedByBothDetachedDomAndConsole', false)));
+    assert.isNotOk(await getCategoryRow('ObjectRetainedByBothDetachedDomAndConsole', false));
   });
 
   it('Groups HTML elements by tag name', async () => {
@@ -560,8 +561,8 @@ describe('The Memory Panel', function() {
     await setClassFilter('{a, b, c, d, ');
     // Objects should be grouped by interface if there are at least two matching instances.
     assert.strictEqual(2, await getCountFromCategoryRowWithName('{a, b, c, d, p, q, r}'));
-    assert.isTrue(!(await getCategoryRow('{a, b, c, d, e}', /* wait:*/ false)));
-    const {frontend, target} = await getBrowserAndPages();
+    assert.isNotOk(await getCategoryRow('{a, b, c, d, e}', /* wait:*/ false));
+    const {frontend, target} = getBrowserAndPages();
     await target.bringToFront();
     await target.click('button#update');
     await frontend.bringToFront();
@@ -573,15 +574,16 @@ describe('The Memory Panel', function() {
     // so the comparison should report only one new object of the following type, not two.
     assert.strictEqual(1, await getAddedCountFromComparisonRowWithName('{a, b, c, d, e}'));
     // Only one of these objects remains, so it's no longer a category.
-    assert.isTrue(!(await getCategoryRow('{a, b, c, d, p, q, r}', /* wait:*/ false)));
+    assert.isNotOk(await getCategoryRow('{a, b, c, d, p, q, r}', /* wait:*/ false));
   });
 
-  // Failing with crbug.com/361078921
-  it.skip('[crbug.com/361078921]: Groups objects by constructor location', async () => {
+  it('Groups objects by constructor location', async () => {
     await goToResource('memory/duplicated-names.html');
     await navigateToMemoryTab();
     await takeHeapSnapshot();
     await waitForNonEmptyHeapSnapshotData();
+    // TODO: filtering does not work while UI is rendering snapshot.
+    await drainFrontendTaskQueue();
     await setClassFilter('DuplicatedClassName');
     let rows = await waitForMany('tr.data-grid-data-grid-node', 3);
     assert.strictEqual(30, await getCountFromCategoryRow(rows[0]));
@@ -589,12 +591,13 @@ describe('The Memory Panel', function() {
     assert.strictEqual(2, await getCountFromCategoryRow(rows[2]));
     await focusTableRow(rows[0]);
     await expandFocusedRow();
-    const {frontend, target} = await getBrowserAndPages();
+    // TODO: pressing arrowDown does not work while UI is rendering.
+    await drainFrontendTaskQueue();
+    const {frontend, target} = getBrowserAndPages();
     await frontend.keyboard.press('ArrowDown');
     await clickOnContextMenuForRetainer('x', 'Reveal in Summary view');
     await waitUntilRetainerChainSatisfies(
         retainerChain => retainerChain.length > 0 && retainerChain[0].propertyName === 'a');
-
     await target.bringToFront();
     await target.click('button#update');
     await frontend.bringToFront();

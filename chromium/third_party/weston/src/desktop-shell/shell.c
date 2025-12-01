@@ -2148,8 +2148,8 @@ fade_out_done(struct weston_view_animation *animation, void *data)
 
 	if (weston_view_is_mapped(shsurf->wview_anim_fade)) {
 		weston_view_unmap(shsurf->wview_anim_fade);
-		wl_event_loop_add_idle(loop, fade_out_done_idle_cb, shsurf);
 	}
+	wl_event_loop_add_idle(loop, fade_out_done_idle_cb, shsurf);
 }
 
 struct shell_surface *

@@ -12,9 +12,8 @@
 #include "chrome/browser/ui/autofill/autofill_suggestion_controller_test_base.h"
 #include "chrome/browser/ui/autofill/test_autofill_keyboard_accessory_controller_autofill_client.h"
 #include "components/autofill/core/browser/data_manager/addresses/address_data_manager.h"
+#include "components/autofill/core/browser/data_model/addresses/autofill_profile_test_api.h"
 #include "components/autofill/core/browser/suggestions/suggestion_hiding_reason.h"
-#include "components/password_manager/core/browser/features/password_features.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -253,6 +252,44 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
                 IDS_AUTOFILL_DELETE_PROFILE_SUGGESTION_CONFIRMATION_BODY));
 }
 
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       GetRemovalConfirmationText_AutofillProfile_Home) {
+  AutofillProfile profile = test::GetFullProfile();
+  test_api(profile).set_record_type(AutofillProfile::RecordType::kAccountHome);
+
+  personal_data().address_data_manager().AddProfile(profile);
+
+  ShowSuggestions(manager(),
+                  {test::CreateAutofillSuggestion(
+                      SuggestionType::kAddressEntry, u"Autofill home profile",
+                      Suggestion::AutofillProfilePayload(
+                          Suggestion::Guid(profile.guid())))});
+
+  EXPECT_CALL(*client().popup_view(), ConfirmDeletion).Times(0);
+  EXPECT_FALSE(client().popup_controller(manager()).RemoveSuggestion(
+      /*index=*/0,
+      AutofillMetrics::SingleEntryRemovalMethod::kKeyboardAccessory));
+}
+
+TEST_F(AutofillKeyboardAccessoryControllerImplTest,
+       GetRemovalConfirmationText_AutofillProfile_Work) {
+  AutofillProfile profile = test::GetFullProfile();
+  test_api(profile).set_record_type(AutofillProfile::RecordType::kAccountWork);
+
+  personal_data().address_data_manager().AddProfile(profile);
+
+  ShowSuggestions(manager(),
+                  {test::CreateAutofillSuggestion(
+                      SuggestionType::kAddressEntry, u"Autofill work profile",
+                      Suggestion::AutofillProfilePayload(
+                          Suggestion::Guid(profile.guid())))});
+
+  EXPECT_CALL(*client().popup_view(), ConfirmDeletion).Times(0);
+  EXPECT_FALSE(client().popup_controller(manager()).RemoveSuggestion(
+      /*index=*/0,
+      AutofillMetrics::SingleEntryRemovalMethod::kKeyboardAccessory));
+}
+
 // Tests that a call to `RemoveSuggestion()` leads to a deletion confirmation
 // dialog and, on accepting that dialog, to the deletion of the suggestion and
 // the a11y announcement that it was deleted.
@@ -276,9 +313,6 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest, RemoveAfterConfirmation) {
 
 TEST_F(AutofillKeyboardAccessoryControllerImplTest,
        AcceptPwdSuggestionInvokesAccessLossWarningAndroid) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
 
   // Calls are accepted immediately.
@@ -299,9 +333,6 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
 
 TEST_F(AutofillKeyboardAccessoryControllerImplTest,
        AcceptUsernameSuggestionInvokesAccessLossWarningAndroid) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
 
   // Calls are accepted immediately.
@@ -321,31 +352,7 @@ TEST_F(AutofillKeyboardAccessoryControllerImplTest,
 }
 
 TEST_F(AutofillKeyboardAccessoryControllerImplTest,
-       AcceptPwdSuggestionNoAccessLossWarningIfDisabledAndroid) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
-  ShowSuggestions(manager(), {SuggestionType::kPasswordEntry});
-
-  // Calls are accepted immediately.
-  EXPECT_CALL(manager().external_delegate(), DidAcceptSuggestion);
-  EXPECT_CALL(*client().access_loss_warning_bridge(),
-              ShouldShowAccessLossNoticeSheet(profile()->GetPrefs(),
-                                              /*called_at_startup=*/false))
-      .WillRepeatedly(Return(true));
-  EXPECT_CALL(*client().access_loss_warning_bridge(),
-              MaybeShowAccessLossNoticeSheet)
-      .Times(0);
-  task_environment()->FastForwardBy(base::Milliseconds(500));
-  client().popup_controller(manager()).AcceptSuggestion(0);
-}
-
-TEST_F(AutofillKeyboardAccessoryControllerImplTest,
        AcceptAddressNoPwdAccessLossWarningAndroid) {
-  base::test::ScopedFeatureList scoped_feature_list(
-      password_manager::features::
-          kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning);
   ShowSuggestions(manager(), {SuggestionType::kAddressEntry});
 
   // Calls are accepted immediately.

@@ -694,30 +694,33 @@ class PresubmitUnittest(PresubmitTestsBase):
         fake_error = 'Missing LGTM'
         fake_error_items = '["!", "!!", "!!!"]'
         fake_error_long_text = "Error long text..."
+        fake_error_locations = '[output_api.PresubmitResultLocation(file_path="path/to/file")]'
         fake_error2 = 'This failed was found in file fake.py'
         fake_error2_items = '["!!!", "!!", "!"]'
         fake_error2_long_text = " Error long text" * 3
         fake_warning = 'Line 88 is more than 80 characters.'
         fake_warning_items = '["W", "w"]'
         fake_warning_long_text = 'Warning long text...'
+        fake_warning_locations = (
+            '['
+            'output_api.PresubmitResultLocation(file_path="path/to/foo", start_line=1, end_line=1), '
+            'output_api.PresubmitResultLocation(file_path="path/to/bar", start_line=4, start_col=5, end_line=6, end_col=7)'
+            ']')
         fake_notify = 'This is a dry run'
         fake_notify_items = '["N"]'
         fake_notify_long_text = 'Notification long text...'
-        always_fail_presubmit_script = ("""\n
+        always_fail_presubmit_script = (f"""\n
 def CheckChangeOnUpload(input_api, output_api):
   output_api.more_cc = ['me@example.com']
   return [
-    output_api.PresubmitError("%s",%s, "%s"),
-    output_api.PresubmitError("%s",%s, "%s"),
-    output_api.PresubmitPromptWarning("%s",%s, "%s"),
-    output_api.PresubmitNotifyResult("%s",%s, "%s")
+    output_api.PresubmitError("{fake_error}", {fake_error_items}, "{fake_error_long_text}", {fake_error_locations}),
+    output_api.PresubmitError("{fake_error2}", {fake_error2_items}, "{fake_error2_long_text}"),
+    output_api.PresubmitPromptWarning("{fake_warning}", {fake_warning_items}, "{fake_warning_long_text}", {fake_warning_locations}),
+    output_api.PresubmitNotifyResult("{fake_notify}", {fake_notify_items}, "{fake_notify_long_text}")
   ]
 def CheckChangeOnCommit(input_api, output_api):
   raise Exception("Test error")
-""" % (fake_error, fake_error_items, fake_error_long_text, fake_error2,
-        fake_error2_items, fake_error2_long_text, fake_warning,
-        fake_warning_items, fake_warning_long_text, fake_notify,
-        fake_notify_items, fake_notify_long_text))
+""")
 
         os.path.isfile.return_value = False
         os.listdir.side_effect = [[], ['PRESUBMIT.py']]
@@ -732,24 +735,54 @@ def CheckChangeOnCommit(input_api, output_api):
                 'message': fake_notify,
                 'items': json.loads(fake_notify_items),
                 'fatal': False,
-                'long_text': fake_notify_long_text
+                'long_text': fake_notify_long_text,
+                'locations': [],
             }],
             'errors': [{
-                'message': fake_error,
-                'items': json.loads(fake_error_items),
-                'fatal': True,
-                'long_text': fake_error_long_text
+                'message':
+                fake_error,
+                'items':
+                json.loads(fake_error_items),
+                'fatal':
+                True,
+                'long_text':
+                fake_error_long_text,
+                'locations': [{
+                    'file_path': 'path/to/file',
+                    'start_line': 0,
+                    'start_col': 0,
+                    'end_line': 0,
+                    'end_col': 0,
+                }],
             }, {
                 'message': fake_error2,
                 'items': json.loads(fake_error2_items),
                 'fatal': True,
-                'long_text': fake_error2_long_text
+                'long_text': fake_error2_long_text,
+                'locations': [],
             }],
             'warnings': [{
-                'message': fake_warning,
-                'items': json.loads(fake_warning_items),
-                'fatal': False,
-                'long_text': fake_warning_long_text
+                'message':
+                fake_warning,
+                'items':
+                json.loads(fake_warning_items),
+                'fatal':
+                False,
+                'long_text':
+                fake_warning_long_text,
+                'locations': [{
+                    'file_path': 'path/to/foo',
+                    'start_line': 1,
+                    'start_col': 0,
+                    'end_line': 1,
+                    'end_col': 0,
+                }, {
+                    'file_path': 'path/to/bar',
+                    'start_line': 4,
+                    'start_col': 5,
+                    'end_line': 6,
+                    'end_col': 7,
+                }],
             }],
             'more_cc': ['me@example.com'],
         }
@@ -1444,14 +1477,13 @@ class InputApiUnittest(PresubmitTestsBase):
                 self.assertEqual(results[i].LocalPath(),
                                  presubmit.normpath(item[1][i]))
             # Same number of expected results.
-            self.assertEqual(
-                sorted([f.LocalPath().replace(os.sep, '/') for f in results]),
-                sorted(item[1]))
+            self.assertEqual(sorted([f.UnixLocalPath() for f in results]),
+                             sorted(item[1]))
 
     def testDefaultOverrides(self):
         input_api = presubmit.InputApi(self.fake_change, './PRESUBMIT.py',
                                        False, None, False)
-        self.assertEqual(len(input_api.DEFAULT_FILES_TO_CHECK), 26)
+        self.assertEqual(len(input_api.DEFAULT_FILES_TO_CHECK), 27)
         self.assertEqual(len(input_api.DEFAULT_FILES_TO_SKIP), 12)
 
         input_api.DEFAULT_FILES_TO_CHECK = (r'.+\.c$', )
@@ -1791,6 +1823,42 @@ class AffectedFileUnittest(PresubmitTestsBase):
         output = list(filter(lambda x: x.IsTestableFile(), files))
         self.assertEqual(2, len(output))
         self.assertEqual(files[:2], output[:2])
+
+    def testGetUnixLocalPath(self):
+        # If current platform already uses Unix-style paths,
+        # there is nothing to test
+        if os.path.sep == '/':
+            return
+
+        # If path separator is not forward slash, then we are on Windows and
+        # which uses backward slash
+        self.assertEqual('\\', os.path.sep)
+
+        cases = [('foo/blat.txt', 'foo/blat.txt'),
+                 ('foo\\blat.txt', 'foo/blat.txt'),
+                 ('C:\\development\\src\\chrome\\VERSION',
+                  'C:/development/src/chrome/VERSION')]
+        for path, expectedUnixLocalPath in cases:
+            unixLocalPath = presubmit.GitAffectedFile(path, 'M',
+                                                      self.fake_root_dir,
+                                                      None).UnixLocalPath()
+            self.assertEqual(expectedUnixLocalPath, unixLocalPath)
+
+    def testGetExtension(self):
+        cases = [('foo/blat.txt', '.txt'), ('net/features.gni', '.gni'),
+                 ('archive.tar.gz', '.gz'), ('sub/archive.tar.gz', '.gz'),
+                 ('.hidden', ''), ('sub/.hidden', ''), ('OWNERS', '')]
+
+        # If current platform uses Windows-style paths, check them too
+        if os.path.sep != '/':
+            cases.append(('foo\\blat.txt', '.txt'))
+            cases.append(('C:\\development\\src\\chrome\\VERSION', ''))
+            cases.append(('C:\\development\\src\\.hidden', ''))
+
+        for path, expectedExtension in cases:
+            extension = presubmit.GitAffectedFile(path, 'M', self.fake_root_dir,
+                                                  None).Extension()
+            self.assertEqual(expectedExtension, extension)
 
 
 class ChangeUnittest(PresubmitTestsBase):
@@ -2761,6 +2829,21 @@ the current line as well!
         license_text = None
         self._LicenseCheck(text, license_text, False, None, new_file=True)
 
+    def testCheckLicenseNewXMLFilePass(self):
+        # Check that XML-style comments in license text are supported.
+        current_year = int(time.strftime('%Y'))
+        text = (
+            '<?xml version="1.0" encoding="utf-8"?>\n'
+            '<!--\n'
+            'Copyright %d The Chromium Authors\n'
+            'Use of this source code is governed by a BSD-style license that '
+            'can be\n'
+            'found in the LICENSE file.\n'
+            '-->\n'
+            '<root/>\n' % current_year)
+        license_text = None
+        self._LicenseCheck(text, license_text, False, None, new_file=True)
+
     def testCannedCheckTreeIsOpenOpen(self):
         input_api = self.MockInputApi(None, True)
         input_api.urllib_request.urlopen(
@@ -2958,15 +3041,17 @@ the current line as well!
         })
 
         dirmd_bin = 'dirmd.bat' if input_api.is_windows else 'dirmd'
-        expected_cmd = [
-            dirmd_bin, 'validate', 'DIR_METADATA', 'a/DIR_METADATA',
-            'a/b/OWNERS'
+        expected_args = [
+            'validate', 'DIR_METADATA', 'a/DIR_METADATA', 'a/b/OWNERS'
         ]
 
         commands = presubmit_canned_checks.CheckDirMetadataFormat(
             input_api, presubmit.OutputApi)
         self.assertEqual(1, len(commands))
-        self.assertEqual(expected_cmd, commands[0].cmd)
+
+        command = commands[0].cmd
+        self.assertTrue(command[0].endswith(dirmd_bin))
+        self.assertEqual(expected_args, command[1:])
 
     def testCheckNoNewMetadataInOwners(self):
         input_api = self.GetInputApiWithFiles({

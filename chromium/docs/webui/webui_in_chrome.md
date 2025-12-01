@@ -117,7 +117,7 @@ export class HelloWorldAppElement extends CrLitElement {
     };
   }
 
-  protected message_: string = loadTimeData.getString('message');
+  protected accessor message_: string = loadTimeData.getString('message');
 }
 
 declare global {
@@ -141,7 +141,7 @@ build_webui("build") {
 
   static_files = [ "hello_world.html", "hello_world.css" ]
 
-  non_web_component_files = [ "app.ts", "app.html.ts" ]
+  ts_files = [ "app.ts", "app.html.ts" ]
   css_files = [ "app.css" ]
 
   # Enable the proper webui_context_type depending on whether implementing
@@ -269,9 +269,7 @@ HelloWorldUI::HelloWorldUI(content::WebUI* web_ui)
       chrome::kChromeUIHelloWorldHost);
 
   // Add required resources.
-  webui::SetupWebUIDataSource(
-      source,
-      base::span(kHelloWorldResources),
+  webui::SetupWebUIDataSource(source, kHelloWorldResources,
       IDR_HELLO_WORLD_HELLO_WORLD_HTML);
 
   // As a demonstration of passing a variable for JS to use we pass in some
@@ -468,16 +466,14 @@ In the snippet below:
 HelloWorldUI::HelloWorldUI(content::WebUI* web_ui)
     : content::WebUIController(web_ui) {
   // ...
-  webui::SetupWebUIDataSource(
-      source,
-      base::span(kHelloWorldResources),
+  webui::SetupWebUIDataSource(source, kHelloWorldResources,
       IDR_HELLO_WORLD_HELLO_WORLD_CONTAINER_HTML);
 }
 ```
 
-`kHelloWorldResources` and `kHelloWorldResourcesSize` come from from the
-imported grit-generated files, as configured by the build target, and reference
-the files listed in it so they can be served out of the given host name.
+`kHelloWorldResources` comes from from the imported grit-generated
+files, as configured by the build target, and reference the files listed
+in it so they can be served out of the given host name.
 For example, they would contain values like:
 
 ```cpp
@@ -505,8 +501,7 @@ HelloWorldUI::HelloWorldUI(content::WebUI* web_ui) {
   source->AddResourcePaths(kResources);
 
   // Add all shared resources from bar_shared
-  source->AddResourcePaths(
-      base::span(kBarSharedResources));
+  source->AddResourcePaths(kBarSharedResources);
 }
 ```
 

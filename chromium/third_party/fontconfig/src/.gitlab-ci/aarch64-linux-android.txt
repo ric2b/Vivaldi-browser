@@ -1,0 +1,25 @@
+[constants]
+ndk_path        = '/android/ndk'
+toolchain_path  = ndk_path + '/toolchains/llvm/prebuilt/linux-x86_64/bin'
+toolchain   = toolchain_path + '/aarch64-linux-android'
+api         = '28'
+
+[host_machine]
+system      = 'android'
+cpu_family  = 'aarch64'
+cpu         = 'aarch64'
+endian      = 'little'
+
+[properties]
+sys_root        = ndk_path + '/sysroot'
+
+[binaries]
+c           = toolchain + api + '-clang'
+cpp         = toolchain + api + '-clang++'
+ar          = toolchain_path + '/llvm-ar'
+strip       = toolchain_path + '/llvm-strip'
+c_ld        = toolchain_path + '/ld'
+cpp_ld      = toolchain_path + '/ld'
+
+[built-in options]
+c_args          = ['-Wno-pointer-bool-conversion']

@@ -4,7 +4,8 @@
  * found in the LICENSE file.
  */
 
-:host {
+:host,
+.widget {
   display: inline;
 }
 
@@ -28,8 +29,18 @@
   }
 }
 
+.node-link.disabled {
+  .node-label-name,
+  .node-label-class,
+  .node-label-pseudo,
+  .node-label-name .dynamic-link,
+  .node-label-id {
+    color: var(--sys-color-state-disabled);
+  }
+}
+
 .node-label-name {
-  color: var(--sys-color-token-property-special);
+  color: var(--sys-color-token-tag);
 
   .dynamic-link & {
     color: var(--text-link);

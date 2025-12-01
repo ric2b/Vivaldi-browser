@@ -162,9 +162,7 @@ void VotesUploader::OnAutofillDriverStateChanged(
     case kInactive:
       if (old_state == kActive) {
         // Case (1): The frame has become inactive (i.e., entered bfcache).
-        if (base::FeatureList::IsEnabled(features::kAutofillVoteWhenInactive)) {
-          delayed_flush_queued_votes_for_frame(driver.GetFrameToken());
-        }
+        delayed_flush_queued_votes_for_frame(driver.GetFrameToken());
       }
       break;
     case kActive:
@@ -208,32 +206,33 @@ bool VotesUploader::MaybeStartVoteUploadProcess(
           .payments_data_manager()
           .GetCreditCards();
 
-  if (profiles.empty() && credit_cards.empty()) {
+  base::span<const EntityInstance> entities;
+  if (EntityDataManager* edm = client_->GetEntityDataManager()) {
+    entities = edm->GetEntityInstances();
+  }
+
+  std::vector<LoyaltyCard> loyalty_cards;
+  if (ValuablesDataManager* valuables_data_manager =
+          client_->GetValuablesDataManager()) {
+    loyalty_cards = base::ToVector(valuables_data_manager->GetLoyaltyCards(),
+                                   [](LoyaltyCard card) { return card; });
+  }
+
+  if (profiles.empty() && credit_cards.empty() && entities.empty() &&
+      loyalty_cards.empty()) {
     return false;
   }
 
-  if (form->field_count() * (profiles.size() + credit_cards.size()) >=
+  if (form->field_count() * (profiles.size() + credit_cards.size() +
+                             entities.size() + loyalty_cards.size()) >=
       kMaxTypeMatchingCalls) {
     return false;
   }
 
-  // Copy the profile and credit card data, so that it can be accessed on a
-  // separate thread.
-  std::vector<AutofillProfile> copied_profiles = base::ToVector(
-      profiles, [](const AutofillProfile* profile) { return *profile; });
-  std::vector<CreditCard> copied_credit_cards = base::ToVector(
-      credit_cards, [](const CreditCard* card) { return *card; });
-
+  FormStructure::FormAssociations form_associations;
   if (form->IsAutofillable()) {
-    // Associate the form signatures of recently submitted
-    // address/credit card forms to `submitted_form`, if it is an
-    // address/credit card form itself. This information is attached to
-    // the vote.
-    if (std::optional<FormStructure::FormAssociations> associations =
-            client_->GetFormDataImporter()->GetFormAssociations(
-                form->form_signature())) {
-      form->set_form_associations(*associations);
-    }
+    form_associations = client_->GetFormDataImporter()->GetFormAssociations(
+        form->form_signature());
   }
 
   // Annotate the form with the source language of the page.
@@ -242,46 +241,53 @@ bool VotesUploader::MaybeStartVoteUploadProcess(
   // Determine |ADDRESS_HOME_STATE| as a possible types for the fields in the
   // |form| with the help of |AlternativeStateNameMap|.
   // |AlternativeStateNameMap| can only be accessed on the main UI thread.
-  PreProcessStateMatchingTypes(*client_, copied_profiles, *form);
+  std::set<FieldGlobalId> fields_that_match_state =
+      PreProcessStateMatchingTypes(profiles, *form, client_->GetAppLocale());
 
   task_runner().PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(
           [](const std::vector<AutofillProfile>& profiles,
              const std::vector<CreditCard>& credit_cards,
+             const std::vector<EntityInstance>& entities,
+             const std::vector<LoyaltyCard>& loyalty_cards,
              const std::u16string& last_unlocked_credit_card_cvc,
              const std::string& app_locale, bool observed_submission,
              std::unique_ptr<FormStructure> form,
-             std::unique_ptr<RandomizedEncoder> randomized_encoder) {
-            DeterminePossibleFieldTypesForUpload(profiles, credit_cards,
-                                                 last_unlocked_credit_card_cvc,
-                                                 app_locale, *form);
+             std::optional<RandomizedEncoder> randomized_encoder,
+             FormStructure::FormAssociations form_associations,
+             std::set<FieldGlobalId> fields_that_match_state) {
+            DeterminePossibleFieldTypesForUpload(
+                profiles, credit_cards, entities, loyalty_cards,
+                fields_that_match_state, last_unlocked_credit_card_cvc,
+                app_locale, *form);
 
-            FieldTypeSet non_empty_types;
-            for (const AutofillProfile& profile : profiles) {
-              profile.GetNonEmptyTypes(app_locale, &non_empty_types);
-            }
-            for (const CreditCard& card : credit_cards) {
-              card.GetNonEmptyTypes(app_locale, &non_empty_types);
-            }
-            // As CVC is not stored, treat it separately.
-            if (!last_unlocked_credit_card_cvc.empty() ||
-                non_empty_types.contains(CREDIT_CARD_NUMBER)) {
-              non_empty_types.insert(CREDIT_CARD_VERIFICATION_CODE);
+            EncodeUploadRequestOptions options;
+            options.encoder = std::move(randomized_encoder);
+            options.form_associations = std::move(form_associations);
+            options.observed_submission = observed_submission;
+            options.available_field_types = DetermineAvailableFieldTypes(
+                profiles, credit_cards, entities, loyalty_cards,
+                last_unlocked_credit_card_cvc, app_locale);
+            for (auto& [field_id, format_strings] :
+                 DeterminePossibleFormatStringsForUpload(form->fields())) {
+              options.fields[field_id].format_strings =
+                  std::move(format_strings);
             }
 
             std::vector<AutofillUploadContents> upload_contents =
-                EncodeUploadRequest(
-                    *form, randomized_encoder.get(),
-                    DeterminePossibleFormatStringsForUpload(form->fields()),
-                    non_empty_types,
-                    /*login_form_signature=*/std::nullopt, observed_submission);
+                EncodeUploadRequest(*form, options);
             return std::pair(std::move(form), std::move(upload_contents));
           },
-          std::move(copied_profiles), std::move(copied_credit_cards),
+          // Beware not to bind std::vector<T*> or base::span<T> because this
+          // function is called asynchronously.
+          base::ToVector(profiles, [](const auto* ptr) { return *ptr; }),
+          base::ToVector(credit_cards, [](const auto* ptr) { return *ptr; }),
+          base::ToVector(entities), std::move(loyalty_cards),
           last_unlocked_credit_card_cvc, client_->GetAppLocale(),
           observed_submission, std::move(form),
-          RandomizedEncoder::Create(client_->GetPrefs())),
+          RandomizedEncoder::Create(client_->GetPrefs()),
+          std::move(form_associations), std::move(fields_that_match_state)),
       base::BindOnce(&VotesUploader::OnFieldTypesDetermined,
                      weak_ptr_factory_.GetWeakPtr(),
                      initial_interaction_timestamp, base::TimeTicks::Now(),

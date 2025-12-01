@@ -8,23 +8,25 @@
 
 #include <memory>
 #include <optional>
-#include <variant>
 
 #include "base/callback_list.h"
 #include "base/check_deref.h"
 #include "base/check_is_test.h"
 #include "base/command_line.h"
 #include "base/debug/dump_without_crashing.h"
+#include "base/debug/stack_trace.h"
 #include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
+#include "base/not_fatal_until.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/version.h"
+#include "base/version_info/version_info.h"
 #include "components/country_codes/country_codes.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/policy/core/common/policy_service.h"
@@ -106,17 +108,14 @@ SearchEngineType GetDefaultSearchEngineType(
 
 // Returns true if all search engine choice prefs are set.
 bool IsSearchEngineChoiceCompleted(const PrefService& prefs) {
-  return prefs.HasPrefPath(
-             prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp) &&
-         prefs.HasPrefPath(
-             prefs::kDefaultSearchProviderChoiceScreenCompletionVersion);
+  return GetChoiceCompletionMetadata(prefs).has_value();
 }
 
 void MarkSearchEngineChoiceCompleted(PrefService& prefs) {
-  prefs.SetInt64(prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp,
-                 base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds());
-  prefs.SetString(prefs::kDefaultSearchProviderChoiceScreenCompletionVersion,
-                  version_info::GetVersionNumber());
+  SetChoiceCompletionMetadata(prefs, ChoiceCompletionMetadata{
+                                         .timestamp = base::Time::Now(),
+                                         .version = version_info::GetVersion(),
+                                     });
 }
 
 // Returns true if the version is valid and can be compared to the current
@@ -153,7 +152,99 @@ void LogSearchRepromptKeyHistograms(RepromptResult result, bool is_wildcard) {
   }
 }
 
-CountryId GetVariationsCountryId(
+bool ShouldRepromptFromFeatureParams(
+    const base::Version& persisted_choice_version,
+    const CountryId& profile_country_id) {
+  // Check parameters from `switches::kSearchEngineChoiceTriggerRepromptParams`.
+  const std::string reprompt_params =
+      switches::kSearchEngineChoiceTriggerRepromptParams.Get();
+  if (reprompt_params == switches::kSearchEngineChoiceNoRepromptString) {
+    base::UmaHistogramEnumeration(kSearchEngineChoiceRepromptHistogram,
+                                  RepromptResult::kNoReprompt);
+    return false;
+  }
+
+  std::optional<base::Value::Dict> reprompt_params_json =
+      base::JSONReader::ReadDict(reprompt_params);
+  // Not a valid JSON.
+  if (!reprompt_params_json) {
+    base::UmaHistogramEnumeration(kSearchEngineChoiceRepromptHistogram,
+                                  RepromptResult::kInvalidDictionary);
+    return false;
+  }
+
+  const base::Version& current_version = version_info::GetVersion();
+  const std::string wildcard_string("*");
+  // Explicit country key takes precedence over the wildcard.
+  for (const std::string& key :
+       {std::string(profile_country_id.CountryCode()), wildcard_string}) {
+    bool is_wildcard = key == wildcard_string;
+    const std::string* reprompt_version_string =
+        reprompt_params_json->FindString(key);
+    if (!reprompt_version_string) {
+      // No version string for this country. Fallback to the wildcard.
+      LogSearchRepromptKeyHistograms(RepromptResult::kNoDictionaryKey,
+                                     is_wildcard);
+      continue;
+    }
+
+    base::Version reprompt_version(*reprompt_version_string);
+    if (!IsValidVersionFormat(reprompt_version)) {
+      // The version is ill-formatted.
+      LogSearchRepromptKeyHistograms(RepromptResult::kInvalidVersion,
+                                     is_wildcard);
+      break;
+    }
+
+    // Do not reprompt if the current version is too old, to avoid endless
+    // reprompts.
+    if (current_version < reprompt_version) {
+      LogSearchRepromptKeyHistograms(RepromptResult::kChromeTooOld,
+                                     is_wildcard);
+      break;
+    }
+
+    if (persisted_choice_version >= reprompt_version) {
+      // No need to reprompt, the choice is recent enough.
+      LogSearchRepromptKeyHistograms(RepromptResult::kRecentChoice,
+                                     is_wildcard);
+      break;
+    }
+
+    // Wipe the choice to force a reprompt.
+    LogSearchRepromptKeyHistograms(RepromptResult::kReprompt, is_wildcard);
+    return true;
+  }
+
+  return false;
+}
+
+// Writes the histogram that tracks choice screen completion date in a specific
+// format: YYYYMM (of type int).
+void RecordChoiceScreenCompletionDate(PrefService& profile_prefs) {
+  std::optional<base::Time> timestamp =
+      GetChoiceScreenCompletionTimestamp(profile_prefs);
+  if (!timestamp.has_value()) {
+    return;
+  }
+
+  // Take year and month in local time.
+  base::Time::Exploded exploded;
+  timestamp->LocalExplode(&exploded);
+
+  // Expected value space is 12 samples / year.
+  base::UmaHistogramSparse(kSearchEngineChoiceCompletedOnMonthHistogram,
+                           exploded.year * 100 + exploded.month);
+}
+
+}  // namespace
+
+// -- SearchEngineChoiceService::Client ---------------------------------------
+
+SearchEngineChoiceService::Client::~Client() = default;
+
+// static
+CountryId SearchEngineChoiceService::Client::GetVariationsLatestCountry(
     variations::VariationsService* variations_service) {
 #if BUILDFLAG(IS_FUCHSIA)
   // We can't add a dependency from Fuchsia to
@@ -166,47 +257,23 @@ CountryId GetVariationsCountryId(
 #endif
 }
 
-}  // namespace
+// -- SearchEngineChoiceService -----------------------------------------------
 
 SearchEngineChoiceService::SearchEngineChoiceService(
+    std::unique_ptr<Client> client,
     PrefService& profile_prefs,
     PrefService* local_state,
     regional_capabilities::RegionalCapabilitiesService& regional_capabilities,
-    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
-    bool is_profile_eligbile_for_dse_guest_propagation,
-    CountryId variations_country_id)
-    : profile_prefs_(profile_prefs),
+    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver)
+    : client_(std::move(client)),
+      profile_prefs_(profile_prefs),
       local_state_(local_state),
       regional_capabilities_service_(regional_capabilities),
-      prepopulate_data_resolver_(prepopulate_data_resolver),
-      variations_country_id_(variations_country_id) {
-#if BUILDFLAG(IS_IOS) || BUILDFLAG(IS_ANDROID)
-  // No guest mode on IOS or Android.
-  CHECK(!is_profile_eligible_for_dse_guest_propagation_);
-#endif
-  is_profile_eligible_for_dse_guest_propagation_ =
-      is_profile_eligbile_for_dse_guest_propagation &&
-      base::FeatureList::IsEnabled(
-          switches::kSearchEngineChoiceGuestExperience) &&
-      regional_capabilities_service_->IsInEeaCountry();
-
+      prepopulate_data_resolver_(prepopulate_data_resolver) {
   ProcessPendingChoiceScreenDisplayState();
   PreprocessPrefsForReprompt();
+  RecordChoiceScreenCompletionDate(profile_prefs);
 }
-
-SearchEngineChoiceService::SearchEngineChoiceService(
-    PrefService& profile_prefs,
-    PrefService* local_state,
-    regional_capabilities::RegionalCapabilitiesService& regional_capabilities,
-    TemplateURLPrepopulateData::Resolver& prepopulate_data_resolver,
-    bool is_profile_eligible_for_dse_guest_propagation,
-    variations::VariationsService* variations_service)
-    : SearchEngineChoiceService(profile_prefs,
-                                local_state,
-                                regional_capabilities,
-                                prepopulate_data_resolver,
-                                is_profile_eligible_for_dse_guest_propagation,
-                                GetVariationsCountryId(variations_service)) {}
 
 SearchEngineChoiceService::~SearchEngineChoiceService() = default;
 
@@ -289,7 +356,8 @@ SearchEngineChoiceService::GetDynamicChoiceScreenConditions(
   }
   CHECK(default_search_engine);
 
-  if (default_search_engine->GetEngineType(
+  if (!IsSearchEngineChoiceInvalid(profile_prefs_.get()) &&
+      default_search_engine->GetEngineType(
           template_url_service.search_terms_data()) != SEARCH_ENGINE_GOOGLE) {
     return SearchEngineChoiceScreenConditions::kHasNonGoogleSearchEngine;
   }
@@ -354,6 +422,8 @@ void SearchEngineChoiceService::RecordChoiceMade(
     ChoiceMadeLocation choice_location,
     TemplateURLService* template_url_service) {
   CHECK_NE(choice_location, ChoiceMadeLocation::kOther);
+
+  ClearSearchEngineChoiceInvalidation(*profile_prefs_);
 
   // Don't modify the pref if the user is not in the EEA region.
   if (!regional_capabilities_service_->IsInEeaCountry()) {
@@ -424,7 +494,7 @@ void SearchEngineChoiceService::MaybeRecordChoiceScreenDisplayState(
                      : "no")
               : "no value");
 
-      NOTREACHED(base::NotFatalUntil::M138);
+      NOTREACHED(base::NotFatalUntil::M141);
       caller_trace_key.Clear();
     }
   }
@@ -435,7 +505,7 @@ void SearchEngineChoiceService::MaybeRecordChoiceScreenDisplayState(
         display_state.selected_engine_index.value());
   }
 
-  if (display_state.country_id != variations_country_id_) {
+  if (display_state.country_id != client_->GetVariationsCountry()) {
     // Not recording if adding position data, which can be used as a proxy for
     // the profile country, would add new hard to control location info to a
     // logs session.
@@ -459,6 +529,31 @@ void SearchEngineChoiceService::MaybeRecordChoiceScreenDisplayState(
 }
 
 void SearchEngineChoiceService::PreprocessPrefsForReprompt() {
+  base::expected<ChoiceCompletionMetadata, ChoiceCompletionMetadata::ParseError>
+      completion_metadata = GetChoiceCompletionMetadata(profile_prefs_.get());
+  if (!completion_metadata.has_value()) {
+    switch (completion_metadata.error()) {
+      case ChoiceCompletionMetadata::ParseError::kAbsent:
+        // No choice has been made at all, so there is nothing to reset.
+        return;
+      case ChoiceCompletionMetadata::ParseError::kMissingVersion:
+        WipeSearchEngineChoicePrefs(
+            profile_prefs_.get(),
+            SearchEngineChoiceWipeReason::kMissingMetadataVersion);
+        return;
+      case ChoiceCompletionMetadata::ParseError::kInvalidVersion:
+        WipeSearchEngineChoicePrefs(
+            profile_prefs_.get(),
+            SearchEngineChoiceWipeReason::kInvalidMetadataVersion);
+        return;
+      case ChoiceCompletionMetadata::ParseError::kOther:
+        WipeSearchEngineChoicePrefs(
+            profile_prefs_.get(),
+            SearchEngineChoiceWipeReason::kInvalidMetadata);
+        return;
+    }
+  }
+
   // Allow re-triggering the choice screen for testing the screen itself.
   // This flag is deliberately only clearing the prefs instead of more
   // forcefully triggering the screen because this allows to more easily test
@@ -472,90 +567,26 @@ void SearchEngineChoiceService::PreprocessPrefsForReprompt() {
     return;
   }
 
-  // Check parameters from `switches::kSearchEngineChoiceTriggerRepromptParams`.
-  const std::string reprompt_params =
-      switches::kSearchEngineChoiceTriggerRepromptParams.Get();
-  if (reprompt_params == switches::kSearchEngineChoiceNoRepromptString) {
-    base::UmaHistogramEnumeration(kSearchEngineChoiceRepromptHistogram,
-                                  RepromptResult::kNoReprompt);
-    return;
+  if (base::FeatureList::IsEnabled(
+          switches::kInvalidateSearchEngineChoiceOnDeviceRestoreDetection) &&
+      client_->DoesChoicePredateDeviceRestore(completion_metadata.value())) {
+    if (switches::kInvalidateChoiceOnRestoreIsRetroactive.Get() ||
+        client_->IsDeviceRestoreDetectedInCurrentSession()) {
+      WipeSearchEngineChoicePrefs(
+          profile_prefs_.get(), SearchEngineChoiceWipeReason::kDeviceRestored);
+      return;
+    }
   }
 
-  std::optional<base::Value::Dict> reprompt_params_json =
-      base::JSONReader::ReadDict(reprompt_params);
-  // Not a valid JSON.
-  if (!reprompt_params_json) {
-    base::UmaHistogramEnumeration(kSearchEngineChoiceRepromptHistogram,
-                                  RepromptResult::kInvalidDictionary);
-    return;
-  }
-
-  // If existing prefs are missing or have a wrong format, force a reprompt.
-  if (!profile_prefs_->HasPrefPath(
-          prefs::kDefaultSearchProviderChoiceScreenCompletionVersion)) {
+  if (ShouldRepromptFromFeatureParams(
+          completion_metadata->version,
+          regional_capabilities_service_->GetCountryId().GetRestricted(
+              regional_capabilities::CountryAccessKey(
+                  regional_capabilities::CountryAccessReason::
+                      kSearchEngineChoiceServiceReprompting)))) {
     WipeSearchEngineChoicePrefs(
         profile_prefs_.get(),
-        SearchEngineChoiceWipeReason::kMissingChoiceVersion);
-    return;
-  }
-
-  base::Version choice_version(profile_prefs_->GetString(
-      prefs::kDefaultSearchProviderChoiceScreenCompletionVersion));
-  if (!IsValidVersionFormat(choice_version)) {
-    WipeSearchEngineChoicePrefs(
-        profile_prefs_.get(),
-        SearchEngineChoiceWipeReason::kInvalidChoiceVersion);
-    return;
-  }
-
-  const base::Version& current_version = version_info::GetVersion();
-  CountryId country_id =
-      regional_capabilities_service_->GetCountryId().GetRestricted(
-          regional_capabilities::CountryAccessKey(
-              regional_capabilities::CountryAccessReason::
-                  kSearchEngineChoiceServiceReprompting));
-  const std::string wildcard_string("*");
-  // Explicit country key takes precedence over the wildcard.
-  for (const std::string& key :
-       {std::string(country_id.CountryCode()), wildcard_string}) {
-    bool is_wildcard = key == wildcard_string;
-    const std::string* reprompt_version_string =
-        reprompt_params_json->FindString(key);
-    if (!reprompt_version_string) {
-      // No version string for this country. Fallback to the wildcard.
-      LogSearchRepromptKeyHistograms(RepromptResult::kNoDictionaryKey,
-                                     is_wildcard);
-      continue;
-    }
-
-    base::Version reprompt_version(*reprompt_version_string);
-    if (!IsValidVersionFormat(reprompt_version)) {
-      // The version is ill-formatted.
-      LogSearchRepromptKeyHistograms(RepromptResult::kInvalidVersion,
-                                     is_wildcard);
-      break;
-    }
-
-    // Do not reprompt if the current version is too old, to avoid endless
-    // reprompts.
-    if (current_version < reprompt_version) {
-      LogSearchRepromptKeyHistograms(RepromptResult::kChromeTooOld,
-                                     is_wildcard);
-      break;
-    }
-
-    if (choice_version >= reprompt_version) {
-      // No need to reprompt, the choice is recent enough.
-      LogSearchRepromptKeyHistograms(RepromptResult::kRecentChoice,
-                                     is_wildcard);
-      break;
-    }
-
-    // Wipe the choice to force a reprompt.
-    LogSearchRepromptKeyHistograms(RepromptResult::kReprompt, is_wildcard);
-    WipeSearchEngineChoicePrefs(profile_prefs_.get(),
-                                SearchEngineChoiceWipeReason::kReprompt);
-    return;
+        SearchEngineChoiceWipeReason::kFinchBasedReprompt);
   }
 }
 
@@ -621,14 +652,22 @@ void SearchEngineChoiceService::ClearCountryIdCacheForTesting() {
   regional_capabilities_service_->ClearCountryIdCacheForTesting();  // IN-TEST
 }
 
-bool SearchEngineChoiceService::IsProfileEligibleForDseGuestPropagation()
-    const {
-  return is_profile_eligible_for_dse_guest_propagation_;
+SearchEngineChoiceService::Client&
+SearchEngineChoiceService::GetClientForTesting() {
+  CHECK_IS_TEST();
+  return *client_.get();
+}
+
+bool SearchEngineChoiceService::IsDsePropagationAllowedForGuest() const {
+  if (client_->IsProfileEligibleForDseGuestPropagation()) {
+    return regional_capabilities_service_->IsInEeaCountry();
+  }
+  return false;
 }
 
 std::optional<int>
 SearchEngineChoiceService::GetSavedSearchEngineBetweenGuestSessions() const {
-  if (!IsProfileEligibleForDseGuestPropagation()) {
+  if (!IsDsePropagationAllowedForGuest()) {
     return std::nullopt;
   }
   if (local_state_->HasPrefPath(
@@ -648,7 +687,7 @@ void SearchEngineChoiceService::SetSavedSearchEngineBetweenGuestSessions(
          prepopulated_id <=
              TemplateURLPrepopulateData::kMaxPrepopulatedEngineID));
 #endif  // Vivaldi
-  CHECK(IsProfileEligibleForDseGuestPropagation());
+  CHECK(IsDsePropagationAllowedForGuest());
 
   if (prepopulated_id == GetSavedSearchEngineBetweenGuestSessions()) {
     return;

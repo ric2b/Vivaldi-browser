@@ -13,6 +13,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.flags.ActivityType;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBridge;
 import org.chromium.chrome.browser.profiles.ProfileProvider;
 import org.chromium.chrome.browser.tab.SadTab;
@@ -31,7 +32,6 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.GURL;
 
 import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 // Vivaldi
 import org.vivaldi.browser.tabmodel.VivaldiTabModelOrderControllerImpl;
@@ -44,9 +44,6 @@ import org.vivaldi.browser.tabmodel.VivaldiTabModelOrderControllerImpl;
 public class TabModelSelectorImpl extends TabModelSelectorBase implements TabModelDelegate {
     public static final int CUSTOM_TABS_SELECTOR_INDEX = -1;
 
-    /** Flag set to false when the asynchronous loading of tabs is finished. */
-    private final AtomicBoolean mSessionRestoreInProgress = new AtomicBoolean(true);
-
     // Type of the Activity for this tab model. Used by sync to determine how to handle restore
     // on cold start.
     private final @ActivityType int mActivityType;
@@ -56,8 +53,8 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
     private final Context mContext;
     private final @Nullable ModalDialogManager mModalDialogManager;
 
-    private boolean mIsUndoSupported;
-    private NextTabPolicySupplier mNextTabPolicySupplier;
+    private final boolean mIsUndoSupported;
+    private final NextTabPolicySupplier mNextTabPolicySupplier;
     private TabContentManager mTabContentManager;
     private RecentlyClosedBridge mRecentlyClosedBridge;
     private Tab mVisibleTab;
@@ -99,14 +96,15 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
     @Override
     public void markTabStateInitialized() {
-        if (!mSessionRestoreInProgress.getAndSet(false)) return;
+        if (isTabStateInitialized()) return;
         super.markTabStateInitialized();
 
-        // This is the first time we set |mSessionRestoreInProgress|, so we need to broadcast.
-        TabModelImpl model = (TabModelImpl) getModel(false);
-
+        TabModelJniBridge model = (TabModelJniBridge) getModel(false);
         if (model != null) {
-            model.broadcastSessionRestoreComplete();
+            model.completeInitialization();
+            if (!ChromeFeatureList.isEnabled(ChromeFeatureList.HEADLESS_TAB_MODEL)) {
+                model.broadcastSessionRestoreComplete();
+            }
         } else {
             assert false : "Normal tab model is null after tab state loaded.";
         }
@@ -388,6 +386,6 @@ public class TabModelSelectorImpl extends TabModelSelectorBase implements TabMod
 
     @Override
     public boolean isSessionRestoreInProgress() {
-        return mSessionRestoreInProgress.get();
+        return !isTabStateInitialized();
     }
 }

@@ -434,8 +434,6 @@ cc_component("cc") {
     "trees/proxy_main.h",
     "trees/raster_capabilities.cc",
     "trees/raster_capabilities.h",
-    "trees/raster_context_provider_wrapper.cc",
-    "trees/raster_context_provider_wrapper.h",
     "trees/render_frame_metadata.cc",
     "trees/render_frame_metadata.h",
     "trees/render_frame_metadata_observer.h",
@@ -470,7 +468,7 @@ cc_component("cc") {
 
   public_deps = [
     "//cc/base",
-    "//cc/mojom:layer_type",
+    "//cc/mojom:layer_trees",
     "//cc/paint",
     "//components/viz/common",
     "//skia",
@@ -755,7 +753,6 @@ cc_test("cc_unittests") {
     "base/tiling_data_unittest.cc",
     "base/unique_notifier_unittest.cc",
     "benchmarks/micro_benchmark_controller_unittest.cc",
-    "debug/rendering_stats_unittest.cc",
     "input/browser_controls_offset_manager_unittest.cc",
     "input/hit_test_opaqueness_unittest.cc",
     "input/main_thread_scrolling_reason_unittest.cc",

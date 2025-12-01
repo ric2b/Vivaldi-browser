@@ -9,6 +9,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.junit.Assert.assertEquals;
 
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 
 import androidx.test.core.app.ApplicationProvider;
 import androidx.test.filters.SmallTest;
@@ -26,12 +27,12 @@ import org.chromium.base.task.TaskTraits;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataBridge;
 import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.password_manager.PasswordManagerTestHelper;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -72,14 +73,6 @@ public class ChromeSiteSettingsDelegateTest {
 
     ChromeSiteSettingsDelegate mSiteSettingsDelegate;
 
-    public ChromeSiteSettingsDelegateTest() {
-        // This test suite relies on the real password store. However, that can only store
-        // passwords if the device it runs on has the required min GMS Core version.
-        // To ensure the tests don't depend on the device configuration, set up a fake GMS
-        // Core version instead.
-        PasswordManagerTestHelper.setUpPwmRequiredMinGmsVersion();
-    }
-
     @Before
     public void setUp() throws Exception {
         clearBrowsingData(BrowsingDataType.SITE_DATA, TimePeriod.LAST_HOUR);
@@ -89,6 +82,9 @@ public class ChromeSiteSettingsDelegateTest {
     // This is a regression test for crbug.com/1077716.
     @Test
     @SmallTest
+    @DisableIf.Build(
+            sdk_is_greater_than = Build.VERSION_CODES.TIRAMISU,
+            message = "crbug.com/396752397")
     public void testFallbackFaviconLoads() throws TimeoutException {
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {

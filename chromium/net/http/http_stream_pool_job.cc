@@ -23,9 +23,11 @@
 #include "net/log/net_log_source_type.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/proxy_resolution_service.h"
+#include "net/quic/quic_http_stream.h"
 #include "net/socket/connection_attempts.h"
 #include "net/socket/next_proto.h"
 #include "net/socket/stream_socket.h"
+#include "net/spdy/spdy_http_stream.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_info.h"
 #include "net/third_party/quiche/src/quiche/quic/core/quic_versions.h"
@@ -83,10 +85,10 @@ HttpStreamPool::Job::Job(Delegate* delegate,
                          const NetLogWithSource& request_net_log,
                          size_t num_streams)
     : delegate_(delegate),
-      group_(group),
-      quic_version_(CalculateQuicVersion(quic_version, group_)),
+      attempt_manager_(group->EnsureAttemptManager()),
+      quic_version_(CalculateQuicVersion(quic_version, group)),
       allowed_alpns_(
-          CalculateAllowedAlpns(delegate_, group_, expected_protocol)),
+          CalculateAllowedAlpns(delegate_, group, expected_protocol)),
       request_net_log_(request_net_log),
       job_net_log_(
           NetLogWithSource::Make(request_net_log.net_log(),
@@ -97,7 +99,7 @@ HttpStreamPool::Job::Job(Delegate* delegate,
         expected_protocol != NextProto::kProtoHTTP11);
   job_net_log_.BeginEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_ALIVE, [&] {
     base::Value::Dict dict;
-    dict.Set("stream_key", group_->stream_key().ToValue());
+    dict.Set("stream_key", group->stream_key().ToValue());
     dict.Set("quic_version", quic::ParsedQuicVersionToString(quic_version));
     base::Value::List allowed_alpn_list;
     for (const auto alpn : allowed_alpns_) {
@@ -114,21 +116,23 @@ HttpStreamPool::Job::Job(Delegate* delegate,
 }
 
 HttpStreamPool::Job::~Job() {
-  CHECK(group_);
+  CHECK(attempt_manager_);
 
   // Record histograms only when `this` has a result. If `this` doesn't have a
   // result that means JobController destroyed `this` since another job
   // completed.
   if (result_.has_value()) {
-    const std::string_view suffix = *result_ == OK ? "Success" : "Failure";
-    base::UmaHistogramTimes(
-        base::StrCat({"Net.HttpStreamPool.JobCompleteTime.", suffix}),
-        base::TimeTicks::Now() - create_time_);
-    base::UmaHistogramTimes(
-        base::StrCat({"Net.HttpStreamPool.JobCreateToResumeTime.", suffix}),
-        CreateToResumeTime());
-
-    if (*result_ != OK) {
+    constexpr std::string_view kCompleteTimeHistogramName =
+        "Net.HttpStreamPool.JobCompleteTime2.";
+    base::TimeDelta complete_time = base::TimeTicks::Now() - create_time_;
+    if (*result_ == OK) {
+      const std::string_view protocol = NegotiatedProtocolToHistogramSuffix(
+          negotiated_protocol_.value_or(NextProto::kProtoUnknown));
+      base::UmaHistogramTimes(
+          base::StrCat({kCompleteTimeHistogramName, protocol}), complete_time);
+    } else {
+      base::UmaHistogramTimes(
+          base::StrCat({kCompleteTimeHistogramName, "Failure"}), complete_time);
       base::UmaHistogramSparse("Net.HttpStreamPool.JobErrorCode", -*result_);
     }
   }
@@ -146,49 +150,31 @@ HttpStreamPool::Job::~Job() {
     return dict;
   });
 
-  // `group_` may be deleted after this call.
-  group_.ExtractAsDangling()->OnJobComplete(this);
+  // `attempt_manager_` may be deleted after this call.
+  attempt_manager_.ExtractAsDangling()->OnJobComplete(this);
 }
 
 void HttpStreamPool::Job::Start() {
-  CHECK(group_);
+  CHECK(attempt_manager_);
+  CHECK(!attempt_manager_->is_shutting_down());
 
-  if (!group_->CanStartJob(this)) {
-    job_net_log_.BeginEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_PAUSED);
-    group_->net_log().AddEventReferencingSource(
-        NetLogEventType::HTTP_STREAM_POOL_GROUP_JOB_PAUSED,
-        job_net_log_.source());
-    return;
+  if (IsPreconnect()) {
+    attempt_manager_->Preconnect(this);
+  } else {
+    attempt_manager_->RequestStream(this);
   }
-
-  StartInternal();
-}
-
-void HttpStreamPool::Job::Resume() {
-  resume_time_ = base::TimeTicks::Now();
-  job_net_log_.EndEvent(NetLogEventType::HTTP_STREAM_POOL_JOB_PAUSED);
-  group_->net_log().AddEvent(
-      NetLogEventType::HTTP_STREAM_POOL_GROUP_JOB_RESUMED, [&] {
-        base::Value::Dict dict;
-        base::TimeDelta elapsed = resume_time_ - create_time_;
-        dict.Set("elapsed_ms", elapsed.InMillisecondsF());
-        job_net_log_.source().AddToEventParameters(dict);
-        return dict;
-      });
-
-  StartInternal();
 }
 
 LoadState HttpStreamPool::Job::GetLoadState() const {
-  if (!attempt_manager()) {
+  if (!attempt_manager_) {
     return LOAD_STATE_IDLE;
   }
-  return attempt_manager()->GetLoadState();
+  return attempt_manager_->GetLoadState();
 }
 
 void HttpStreamPool::Job::SetPriority(RequestPriority priority) {
-  if (attempt_manager()) {
-    attempt_manager()->SetJobPriority(this, priority);
+  if (attempt_manager_) {
+    attempt_manager_->SetJobPriority(this, priority);
   }
 }
 
@@ -204,6 +190,7 @@ void HttpStreamPool::Job::OnStreamReady(std::unique_ptr<HttpStream> stream,
   CHECK(delegate_);
   CHECK(!result_.has_value());
   CHECK(!negotiated_protocol_);
+  CHECK(attempt_manager_);
 
   int result = OK;
   if (!allowed_alpns_.Has(negotiated_protocol)) {
@@ -224,8 +211,10 @@ void HttpStreamPool::Job::OnStreamReady(std::unique_ptr<HttpStream> stream,
 
   result_ = OK;
   negotiated_protocol_ = negotiated_protocol;
-  group_->http_network_session()->proxy_resolution_service()->ReportSuccess(
-      delegate_->proxy_info());
+  attempt_manager_->group()
+      ->http_network_session()
+      ->proxy_resolution_service()
+      ->ReportSuccess(delegate_->proxy_info());
   delegate_->OnStreamReady(this, std::move(stream), negotiated_protocol);
 }
 
@@ -262,27 +251,10 @@ void HttpStreamPool::Job::OnPreconnectComplete(int status) {
   delegate_->OnPreconnectComplete(this, status);
 }
 
-base::TimeDelta HttpStreamPool::Job::CreateToResumeTime() const {
-  if (resume_time_.is_null()) {
-    return base::TimeDelta();
-  }
-  return resume_time_ - create_time_;
-}
-
-HttpStreamPool::AttemptManager* HttpStreamPool::Job::attempt_manager() const {
-  CHECK(group_);
-  return group_->attempt_manager();
-}
-
-void HttpStreamPool::Job::StartInternal() {
-  CHECK(attempt_manager());
-  CHECK(!attempt_manager()->is_failing());
-
-  if (IsPreconnect()) {
-    attempt_manager()->Preconnect(this);
-  } else {
-    attempt_manager()->StartJob(this, request_net_log_);
-  }
+void HttpStreamPool::Job::CallOnPreconnectCompleteLater(int status) {
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&Job::OnPreconnectComplete,
+                                weak_ptr_factory_.GetWeakPtr(), status));
 }
 
 }  // namespace net

@@ -7,9 +7,8 @@
 #include "base/containers/contains.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/values.h"
-#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/managed_installation_mode.h"
-#include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/supervised_user_browser_utils.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -17,13 +16,17 @@
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/supervised_user/core/browser/supervised_user_preferences.h"
-#include "components/supervised_user/core/common/features.h"
 #include "components/supervised_user/core/common/pref_names.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/permissions/permission_set.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
+#endif
 
 namespace extensions {
 namespace {
@@ -109,10 +112,7 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
 
   // Check if parent approval is needed for a supervised user to install
   // a new extension.
-  if (base::FeatureList::IsEnabled(
-          supervised_user::
-              kExposedParentalControlNeededForExtensionInstallation) &&
-      !registry->GetInstalledExtension(extension_id) &&
+  if (!registry->GetInstalledExtension(extension_id) &&
       supervised_user::AreExtensionsPermissionsEnabled(profile) &&
       !supervised_user::SupervisedUserCanSkipExtensionParentApprovals(
           profile) &&
@@ -168,6 +168,7 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
     }
   }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   // Check if the extension is using an unsupported manifest version.
   ManifestV2ExperimentManager* mv2_experiment_manager =
       ManifestV2ExperimentManager::Get(profile);
@@ -183,6 +184,7 @@ ExtensionInstallStatus GetWebstoreExtensionInstallStatus(
     // be installable.
     return kDeprecatedManifestVersion;
   }
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
   // If an installed extension is disabled due to policy, return kCanRequest or
   // kRequestPending instead of kDisabled.

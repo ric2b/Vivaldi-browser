@@ -20,11 +20,11 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/content_settings/core/browser/private_network_settings.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/permission_result.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -283,57 +283,6 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, WebUsbAllowDevicesForUrls) {
   EXPECT_FALSE(context->HasDevicePermission(kTestOrigin, device_info));
 }
 
-IN_PROC_BROWSER_TEST_F(PolicyTest, ShouldAllowInsecurePrivateNetworkRequests) {
-  const auto* settings_map =
-      HostContentSettingsMapFactory::GetForProfile(browser()->profile());
-
-  // By default, we should block requests.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map, url::Origin::Create(GURL("http://bleep.com"))));
-
-  PolicyMap policies;
-  SetPolicy(&policies, key::kInsecurePrivateNetworkRequestsAllowed,
-            base::Value(false));
-  UpdateProviderPolicy(policies);
-
-  // Explicitly-disallowing is the same as not setting the policy.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map, url::Origin::Create(GURL("http://bleep.com"))));
-
-  base::Value::List allowlist;
-  allowlist.Append(base::Value("http://bleep.com"));
-  allowlist.Append(base::Value("http://woohoo.com:1234"));
-  SetPolicy(&policies, key::kInsecurePrivateNetworkRequestsAllowedForUrls,
-            base::Value(std::move(allowlist)));
-  UpdateProviderPolicy(policies);
-
-  // Domain is not the in allowlist.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map, url::Origin::Create(GURL("http://default.com"))));
-
-  // Path does not matter, only the origin.
-  EXPECT_TRUE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map, url::Origin::Create(GURL("http://bleep.com/heyo"))));
-
-  // Scheme matters: https is not http.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map, url::Origin::Create(GURL("https://bleep.com"))));
-
-  // Port is checked too.
-  EXPECT_TRUE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map,
-      url::Origin::Create(GURL("http://woohoo.com:1234/index.html"))));
-
-  // The wrong port does not match (default is 80).
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map, url::Origin::Create(GURL("http://woohoo.com/index.html"))));
-
-  // Opaque origins never match the allowlist.
-  EXPECT_FALSE(content_settings::ShouldAllowInsecurePrivateNetworkRequests(
-      settings_map,
-      url::Origin::Create(GURL("http://bleep.com")).DeriveNewOpaqueOrigin()));
-}
-
 class ScrollToTextFragmentPolicyTest
     : public PolicyTest,
       public ::testing::WithParamInterface<bool> {
@@ -394,12 +343,14 @@ class SensorsPolicyTest : public PolicyTest {
                         blink::mojom::PermissionStatus status) {
     content::PermissionController* permission_controller =
         browser()->profile()->GetPermissionController();
-    EXPECT_EQ(
-        permission_controller
-            ->GetPermissionResultForOriginWithoutContext(
-                blink::PermissionType::SENSORS, url::Origin::Create(GURL(url)))
-            .status,
-        status);
+    EXPECT_EQ(permission_controller
+                  ->GetPermissionResultForOriginWithoutContext(
+                      content::PermissionDescriptorUtil::
+                          CreatePermissionDescriptorForPermissionType(
+                              blink::PermissionType::SENSORS),
+                      url::Origin::Create(GURL(url)))
+                  .status,
+              status);
   }
 
   void AllowUrl(const char* url) {
@@ -793,6 +744,12 @@ class SmartCardConnectPolicyTest : public PolicyTest {
     UpdateProviderPolicy(policies_);
   }
 
+  void SetSmartCardConnectBlockedByDefault() {
+    SetPolicy(&policies_, key::kDefaultSmartCardConnectSetting,
+              base::Value(CONTENT_SETTING_BLOCK));
+    UpdateProviderPolicy(policies_);
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
   PolicyMap policies_;
@@ -825,12 +782,12 @@ IN_PROC_BROWSER_TEST_F(SmartCardConnectPolicyTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SmartCardConnectPolicyTest,
-                       SmartCardConnectBlockedForWildcard) {
+                       SmartCardConnectBlockedByDefault) {
   ASSERT_EQ(std::make_pair(CONTENT_SETTING_ASK,
                            content_settings::SettingSource::kUser),
             GetSmartCardConnectContentSetting(GetTestingUrl()));
 
-  SetSmartCardConnectBlockedFor("*");
+  SetSmartCardConnectBlockedByDefault();
 
   ASSERT_EQ(std::make_pair(CONTENT_SETTING_BLOCK,
                            content_settings::SettingSource::kPolicy),
@@ -851,6 +808,19 @@ IN_PROC_BROWSER_TEST_F(SmartCardConnectPolicyTest,
             GetSmartCardConnectContentSetting(GetTestingUrl()));
 
   SetSmartCardConnectAllowedFor("*");
+
+  ASSERT_EQ(std::make_pair(CONTENT_SETTING_ASK,
+                           content_settings::SettingSource::kUser),
+            GetSmartCardConnectContentSetting(GetTestingUrl()));
+}
+
+IN_PROC_BROWSER_TEST_F(SmartCardConnectPolicyTest,
+                       SmartCardConnectCannotBeBlockedForWildcard) {
+  ASSERT_EQ(std::make_pair(CONTENT_SETTING_ASK,
+                           content_settings::SettingSource::kUser),
+            GetSmartCardConnectContentSetting(GetTestingUrl()));
+
+  SetSmartCardConnectBlockedFor("*");
 
   ASSERT_EQ(std::make_pair(CONTENT_SETTING_ASK,
                            content_settings::SettingSource::kUser),

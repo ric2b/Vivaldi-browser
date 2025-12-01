@@ -148,7 +148,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
   void SetWindowIcons(const gfx::ImageSkia& window_icon,
                       const gfx::ImageSkia& app_icon) override;
   void InitModalType(ui::mojom::ModalType modal_type) override;
-  void SetColorMode(ui::ColorProviderKey::ColorMode color_mode) override;
+  void OnWidgetThemeChanged(ui::ColorProviderKey::ColorMode color_mode) override;
   gfx::Rect GetWindowBoundsInScreen() const override;
   gfx::Rect GetClientAreaBoundsInScreen() const override;
   gfx::Rect GetRestoredBounds() const override;
@@ -166,6 +166,7 @@ class VIEWS_EXPORT DesktopNativeWidgetAura
             const gfx::Rect& restore_bounds) override;
   void Hide() override;
   bool IsVisible() const override;
+  bool IsVisibleOnScreen() const override;
   void Activate() override;
   void Deactivate() override;
   bool IsActive() const override;

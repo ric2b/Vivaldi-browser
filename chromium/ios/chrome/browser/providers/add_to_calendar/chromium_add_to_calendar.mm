@@ -6,11 +6,8 @@
 
 namespace ios::provider {
 
-void PresentAddToCalendar(
-    UIViewController* presenting_view_controller,
-    AddToCalendarIntegrationProvider provider,
-    base::WeakPtr<web::WebState> web_state,
-    std::unique_ptr<optimization_guide::proto::EnhancedCalendarResponse>
-        enhanced_calendar_response) {}
+void PresentAddToCalendar(UIViewController* presenting_view_controller,
+                          web::WebState* web_state,
+                          EnhancedCalendarConfiguration* config) {}
 
 }  // namespace ios::provider

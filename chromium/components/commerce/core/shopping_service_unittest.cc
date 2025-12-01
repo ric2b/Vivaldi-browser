@@ -3,10 +3,6 @@
 // found in the LICENSE file.
 
 #include "components/optimization_guide/core/optimization_guide_proto_util.h"
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include <array>
 #include <string>
@@ -22,7 +18,6 @@
 #include "components/commerce/core/commerce_utils.h"
 #include "components/commerce/core/feature_utils.h"
 #include "components/commerce/core/mock_account_checker.h"
-#include "components/commerce/core/mock_tab_restore_service.h"
 #include "components/commerce/core/pref_names.h"
 #include "components/commerce/core/proto/shopping_page_types.pb.h"
 #include "components/commerce/core/shopping_service.h"
@@ -39,6 +34,7 @@
 #include "components/power_bookmarks/core/proto/shopping_specifics.pb.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/search/ntp_features.h"
+#include "components/sessions/core/mock_tab_restore_service.h"
 #include "components/sessions/core/serialized_navigation_entry.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/public/base/consent_level.h"

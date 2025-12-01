@@ -30,19 +30,19 @@
 
 namespace webrtc {
 
-// This implementation wraps a cricket::SctpTransport, and takes
+// This implementation wraps a webrtc::SctpTransport, and takes
 // ownership of it.
 // This object must be constructed and updated on the networking thread,
-// the same thread as the one the cricket::SctpTransportInternal object
+// the same thread as the one the webrtc::SctpTransportInternal object
 // lives on.
 class SctpTransport : public SctpTransportInterface,
                       public DataChannelTransportInterface {
  public:
-  SctpTransport(std::unique_ptr<cricket::SctpTransportInternal> internal,
-                rtc::scoped_refptr<DtlsTransport> dtls_transport);
+  SctpTransport(std::unique_ptr<SctpTransportInternal> internal,
+                scoped_refptr<DtlsTransport> dtls_transport);
 
   // SctpTransportInterface
-  rtc::scoped_refptr<DtlsTransportInterface> dtls_transport() const override;
+  scoped_refptr<DtlsTransportInterface> dtls_transport() const override;
   SctpTransportInformation Information() const override;
   void RegisterObserver(SctpTransportObserverInterface* observer) override;
   void UnregisterObserver() override;
@@ -51,7 +51,7 @@ class SctpTransport : public SctpTransportInterface,
   RTCError OpenChannel(int channel_id, PriorityValue priority) override;
   RTCError SendData(int channel_id,
                     const SendDataParams& params,
-                    const rtc::CopyOnWriteBuffer& buffer) override;
+                    const CopyOnWriteBuffer& buffer) override;
   RTCError CloseChannel(int channel_id) override;
   void SetDataSink(DataChannelSink* sink) override;
   bool IsReadyToSend() const override;
@@ -61,19 +61,19 @@ class SctpTransport : public SctpTransportInterface,
 
   // Internal functions
   void Clear();
-  // Initialize the cricket::SctpTransport. This can be called from
+  // Initialize the webrtc::SctpTransport. This can be called from
   // the signaling thread.
   void Start(const SctpOptions& options);
 
   // TODO(https://bugs.webrtc.org/10629): Move functions that need
   // internal() to be functions on the SctpTransport interface,
   // and make the internal() function private.
-  cricket::SctpTransportInternal* internal() {
+  SctpTransportInternal* internal() {
     RTC_DCHECK_RUN_ON(owner_thread_);
     return internal_sctp_transport_.get();
   }
 
-  const cricket::SctpTransportInternal* internal() const {
+  const SctpTransportInternal* internal() const {
     RTC_DCHECK_RUN_ON(owner_thread_);
     return internal_sctp_transport_.get();
   }
@@ -87,19 +87,18 @@ class SctpTransport : public SctpTransportInterface,
   void OnAssociationChangeCommunicationUp();
   void OnInternalClosingProcedureStartedRemotely(int sid);
   void OnInternalClosingProcedureComplete(int sid);
-  void OnDtlsStateChange(cricket::DtlsTransportInternal* transport,
+  void OnDtlsStateChange(DtlsTransportInternal* transport,
                          DtlsTransportState state);
 
   // NOTE: `owner_thread_` is the thread that the SctpTransport object is
   // constructed on. In the context of PeerConnection, it's the network thread.
   Thread* const owner_thread_;
   SctpTransportInformation info_ RTC_GUARDED_BY(owner_thread_);
-  std::unique_ptr<cricket::SctpTransportInternal> internal_sctp_transport_
+  std::unique_ptr<SctpTransportInternal> internal_sctp_transport_
       RTC_GUARDED_BY(owner_thread_);
   SctpTransportObserverInterface* observer_ RTC_GUARDED_BY(owner_thread_) =
       nullptr;
-  rtc::scoped_refptr<DtlsTransport> dtls_transport_
-      RTC_GUARDED_BY(owner_thread_);
+  scoped_refptr<DtlsTransport> dtls_transport_ RTC_GUARDED_BY(owner_thread_);
 };
 
 }  // namespace webrtc

@@ -9,15 +9,12 @@
 
 #include "mojo/public/cpp/bindings/sync_handle_registry.h"
 
-#include <algorithm>
-#include <map>
 #include <utility>
 
 #include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/containers/contains.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/not_fatal_until.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/threading/sequence_local_storage_slot.h"
@@ -154,7 +151,7 @@ bool SyncHandleRegistry::Wait(const bool* should_stop[], size_t count) {
 
     if (ready_event) {
       const auto iter = events_.find(ready_event);
-      CHECK(iter != events_.end(), base::NotFatalUntil::M130);
+      CHECK(iter != events_.end());
 
       {
         base::AutoReset<bool> in_nested_wait(&in_nested_wait_, true);

@@ -8,6 +8,7 @@ import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_D
 import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_POSITION_END;
 import static androidx.browser.customtabs.CustomTabsIntent.ACTIVITY_SIDE_SHEET_ROUNDED_CORNERS_POSITION_NONE;
 import static androidx.browser.customtabs.CustomTabsIntent.CLOSE_BUTTON_POSITION_DEFAULT;
+import static androidx.browser.customtabs.CustomTabsIntent.OPEN_IN_BROWSER_STATE_OFF;
 
 import android.app.PendingIntent;
 import android.content.ComponentName;
@@ -19,10 +20,15 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Px;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsIntent.CloseButtonPosition;
+import androidx.browser.customtabs.CustomTabsIntent.OpenInBrowserState;
+import androidx.browser.customtabs.ExperimentalOpenInBrowser;
+import androidx.browser.trusted.FileHandlingData;
+import androidx.browser.trusted.LaunchHandlerClientMode;
 import androidx.browser.trusted.TrustedWebActivityDisplayMode;
 import androidx.browser.trusted.sharing.ShareData;
 import androidx.browser.trusted.sharing.ShareTarget;
 
+import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ActivityType;
@@ -48,7 +54,8 @@ public abstract class BrowserServicesIntentDataProvider {
         CustomTabsUiType.MINIMAL_UI_WEBAPP,
         CustomTabsUiType.OFFLINE_PAGE,
         CustomTabsUiType.AUTH_TAB,
-        CustomTabsUiType.NETWORK_BOUND_TAB
+        CustomTabsUiType.NETWORK_BOUND_TAB,
+        CustomTabsUiType.POPUP
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CustomTabsUiType {
@@ -61,6 +68,7 @@ public abstract class BrowserServicesIntentDataProvider {
         int READ_LATER = 6;
         int AUTH_TAB = 7;
         int NETWORK_BOUND_TAB = 8;
+        int POPUP = 9;
     }
 
     // The type of Disclosure for TWAs to use.
@@ -98,6 +106,40 @@ public abstract class BrowserServicesIntentDataProvider {
         int INCOGNITO = 1;
         // An off-the-record profile without references to incognito mode.
         int EPHEMERAL = 2;
+    }
+
+    /**
+     * Defines whether the page title on the toolbar should be Visible, Hidden, or Visible only in
+     * Desktop Mode.
+     */
+    @IntDef({TitleVisibility.HIDDEN, TitleVisibility.VISIBLE, TitleVisibility.VISIBLE_IN_DESKTOP})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TitleVisibility {
+        // Always hide
+        int HIDDEN = 0;
+        // Always show
+        int VISIBLE = 1;
+        // Only show in Desktop Mode
+        int VISIBLE_IN_DESKTOP = 2;
+    }
+
+    /**
+     * Converts from AndroidX's {@link CustomTabsIntent} values of title bar visibility to {@link
+     * TitleVisibility}.
+     *
+     * @see CustomTabsIntent.EXTRA_TITLE_VISIBILITY_STATE
+     */
+    public static @TitleVisibility int customTabIntentTitleBarVisibility(
+            int intentValue, boolean isTWA) {
+        switch (intentValue) {
+            case CustomTabsIntent.NO_TITLE:
+                if (isTWA) return TitleVisibility.VISIBLE_IN_DESKTOP;
+                else return TitleVisibility.HIDDEN;
+            case CustomTabsIntent.SHOW_PAGE_TITLE:
+                return TitleVisibility.VISIBLE;
+            default:
+                return TitleVisibility.HIDDEN;
+        }
     }
 
     /**
@@ -232,8 +274,8 @@ public abstract class BrowserServicesIntentDataProvider {
     /**
      * @return The title visibility state for the toolbar.
      */
-    public int getTitleVisibilityState() {
-        return CustomTabsIntent.NO_TITLE;
+    public @TitleVisibility int getTitleVisibilityState() {
+        return TitleVisibility.HIDDEN;
     }
 
     /**
@@ -396,8 +438,11 @@ public abstract class BrowserServicesIntentDataProvider {
         return getActivityType() == ActivityType.WEB_APK;
     }
 
-    /** Returns {@link TrustedWebActivityDisplayMode} supplied in the intent. */
-    public @Nullable TrustedWebActivityDisplayMode getTwaDisplayMode() {
+    /**
+     * Returns {@link TrustedWebActivityDisplayMode} supplied in the intent. This a raw display mode
+     * that's not altered in any way.
+     */
+    public @Nullable TrustedWebActivityDisplayMode getProvidedTwaDisplayMode() {
         return null;
     }
 
@@ -681,6 +726,60 @@ public abstract class BrowserServicesIntentDataProvider {
 
     /** Return the https redirect URL path for AuthTab. */
     public @Nullable String getAuthRedirectPath() {
+        return null;
+    }
+
+    /** Return the client mode for Launch Handler API. */
+    public @LaunchHandlerClientMode.ClientMode int getLaunchHandlerClientMode() {
+        return LaunchHandlerClientMode.AUTO;
+    }
+
+    /**
+     * Return {@link FileHandlingData} which contains the URIs of the opened files for Launch
+     * Handler API.
+     */
+    public @Nullable FileHandlingData getFileHandlingData() {
+        return null;
+    }
+
+    /**
+     * Calculates the closest supported display mode to the provided one. To get provided display
+     * mode use {@link WebappExtras#displayMode} or {@link #getProvidedTwaDisplayMode()}.
+     *
+     * <p>A caller is guaranteed of the following fallback chain: <lo>
+     * <li>Fullscreen
+     * <li>Standalone
+     * <li>Minimal UI
+     * <li>Browser </lo>
+     *
+     * @return {@link DisplayMode} that the browser should be running PWA in.
+     */
+    public @DisplayMode.EnumType int getResolvedDisplayMode() {
+        return DisplayMode.BROWSER;
+    }
+
+    /**
+     * Returns the desired developer options for Open in Browser button in the custom tab's toolbar.
+     *
+     * @return {@link OpenInBrowserState} the desired settings for the Open in Browser button.
+     */
+    @ExperimentalOpenInBrowser
+    public @OpenInBrowserState int getOpenInBrowserButtonState() {
+        return OPEN_IN_BROWSER_STATE_OFF;
+    }
+
+    /**
+     * @return the TWA startup timestamp associated with an intent in the uptimeMillis timebase, or
+     *     null.
+     */
+    public @Nullable Long getTwaStartupUptimeMillis() {
+        return null;
+    }
+
+    /**
+     * @return the version of android_browser_helper, or null.
+     */
+    public @Nullable Integer getAndroidBrowserHelperVersion() {
         return null;
     }
 

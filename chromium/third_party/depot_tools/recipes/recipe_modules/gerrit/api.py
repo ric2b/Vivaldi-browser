@@ -37,6 +37,7 @@ class GerritApi(recipe_api.RecipeApi):
                    body=None,
                    accept_statuses=None,
                    name=None,
+                   verbose=False,
                    **kwargs):
     """Call an arbitrary Gerrit API that returns a JSON response.
 
@@ -54,12 +55,20 @@ class GerritApi(recipe_api.RecipeApi):
     if accept_statuses:
       args.extend(
           ['--accept_status', ','.join(str(i) for i in accept_statuses)])
+    if verbose:
+      args.append('--verbose')
 
     step_name = name or 'call_raw_api (%s)' % path
     step_result = self(step_name, args, **kwargs)
     return step_result.json.output
 
-  def create_gerrit_branch(self, host, project, branch, commit, **kwargs):
+  def create_gerrit_branch(self,
+                           host,
+                           project,
+                           branch,
+                           commit,
+                           verbose=False,
+                           **kwargs):
     """Creates a new branch from given project and commit
 
     Returns:
@@ -76,12 +85,20 @@ class GerritApi(recipe_api.RecipeApi):
     allow_existent_branch = kwargs.pop('allow_existent_branch', False)
     if allow_existent_branch:
       args.append('--allow-existent-branch')
+    if verbose:
+      args.append('--verbose')
     step_name = 'create_gerrit_branch (%s %s)' % (project, branch)
     step_result = self(step_name, args, **kwargs)
     ref = step_result.json.output.get('ref')
     return ref
 
-  def create_gerrit_tag(self, host, project, tag, commit, **kwargs):
+  def create_gerrit_tag(self,
+                        host,
+                        project,
+                        tag,
+                        commit,
+                        verbose=False,
+                        **kwargs):
     """Creates a new tag at the given commit.
 
     Returns:
@@ -95,6 +112,8 @@ class GerritApi(recipe_api.RecipeApi):
         '--commit', commit,
         '--json_file', self.m.json.output()
     ]
+    if verbose:
+      args.append('--verbose')
     step_name = 'create_gerrit_tag (%s %s)' % (project, tag)
     step_result = self(step_name, args, **kwargs)
     ref = step_result.json.output.get('ref')
@@ -102,7 +121,7 @@ class GerritApi(recipe_api.RecipeApi):
 
   # TODO(machenbach): Rename to get_revision? And maybe above to
   # create_ref?
-  def get_gerrit_branch(self, host, project, branch, **kwargs):
+  def get_gerrit_branch(self, host, project, branch, verbose=False, **kwargs):
     """Gets a branch from given project and commit
 
     Returns:
@@ -115,6 +134,8 @@ class GerritApi(recipe_api.RecipeApi):
         '--branch', branch,
         '--json_file', self.m.json.output()
     ]
+    if verbose:
+      args.append('--verbose')
     step_name = 'get_gerrit_branch (%s %s)' % (project, branch)
     step_result = self(step_name, args, **kwargs)
     revision = step_result.json.output.get('revision')
@@ -125,18 +146,21 @@ class GerritApi(recipe_api.RecipeApi):
                              change,
                              patchset,
                              timeout=None,
-                             step_test_data=None):
+                             step_test_data=None,
+                             verbose=True):
     """Gets the description for a given CL and patchset.
 
     Args:
       host: URL of Gerrit host to query.
       change: The change number.
       patchset: The patchset number.
+      verbose: Whether to enable verbose logging.
 
     Returns:
       The description corresponding to given CL and patchset.
     """
-    ri = self.get_revision_info(host, change, patchset, timeout, step_test_data)
+    ri = self.get_revision_info(host, change, patchset, timeout, step_test_data,
+                                verbose)
     return ri['commit']['message']
 
   def get_revision_info(self,
@@ -144,7 +168,8 @@ class GerritApi(recipe_api.RecipeApi):
                         change,
                         patchset,
                         timeout=None,
-                        step_test_data=None):
+                        step_test_data=None,
+                        verbose=True):
     """
     Returns the info for a given patchset of a given change.
 
@@ -152,6 +177,7 @@ class GerritApi(recipe_api.RecipeApi):
       host: Gerrit host to query.
       change: The change number.
       patchset: The patchset number.
+      verbose: Whether to enable verbose logging.
 
     Returns:
       A dict for the target revision as documented here:
@@ -169,7 +195,8 @@ class GerritApi(recipe_api.RecipeApi):
                            o_params=['ALL_REVISIONS', 'ALL_COMMITS'],
                            limit=1,
                            timeout=timeout,
-                           step_test_data=step_test_data)
+                           step_test_data=step_test_data,
+                           verbose=verbose)
     cl = cls[0] if len(cls) == 1 else {'revisions': {}}
     for ri in cl['revisions'].values():
       # TODO(tandrii): add support for patchset=='current'.
@@ -180,8 +207,15 @@ class GerritApi(recipe_api.RecipeApi):
         'Error querying for CL description: host:%r change:%r; patchset:%r' % (
             host, change, patchset))
 
-  def get_changes(self, host, query_params, start=None, limit=None,
-                  o_params=None, step_test_data=None, **kwargs):
+  def get_changes(self,
+                  host,
+                  query_params,
+                  start=None,
+                  limit=None,
+                  o_params=None,
+                  step_test_data=None,
+                  verbose=True,
+                  **kwargs):
     """Queries changes for the given host.
 
     Args:
@@ -194,6 +228,7 @@ class GerritApi(recipe_api.RecipeApi):
       * o_params: A list of additional output specifiers, as documented here:
           https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
       * step_test_data: Optional mock test data for the underlying gerrit client.
+      * verbose: Whether to enable verbose logging.
 
     Returns:
       A list of change dicts as documented here:
@@ -201,7 +236,6 @@ class GerritApi(recipe_api.RecipeApi):
     """
     args = [
         'changes',
-        '--verbose',
         '--host', host,
         '--json_file', self.m.json.output()
     ]
@@ -213,6 +247,8 @@ class GerritApi(recipe_api.RecipeApi):
       args += ['-p', '%s=%s' % (k, v)]
     for v in (o_params or []):
       args += ['-o', v]
+    if verbose:
+      args.append('--verbose')
     if not step_test_data:
       step_test_data = lambda: self.test_api.get_one_change_response_data()
 
@@ -223,7 +259,12 @@ class GerritApi(recipe_api.RecipeApi):
         **kwargs
     ).json.output
 
-  def get_related_changes(self, host, change, revision='current', step_test_data=None):
+  def get_related_changes(self,
+                          host,
+                          change,
+                          revision='current',
+                          step_test_data=None,
+                          verbose=False):
     """Queries related changes for a given host, change, and revision.
 
     Args:
@@ -236,6 +277,7 @@ class GerritApi(recipe_api.RecipeApi):
           https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#revision-id
           This defaults to current, which names the most recent patch set.
       * step_test_data: Optional mock test data for the underlying gerrit client.
+      * verbose: Whether to enable verbose logging.
 
     Returns:
       A related changes dictionary as documented here:
@@ -253,14 +295,21 @@ class GerritApi(recipe_api.RecipeApi):
         '--json_file',
         self.m.json.output(),
     ]
+    if verbose:
+      args.append('--verbose')
     if not step_test_data:
       step_test_data = lambda: self.test_api.get_related_changes_response_data()
 
     return self('relatedchanges', args,
                 step_test_data=step_test_data).json.output
 
-  def abandon_change(self, host, change, message=None, name=None,
-                     step_test_data=None):
+  def abandon_change(self,
+                     host,
+                     change,
+                     message=None,
+                     name=None,
+                     step_test_data=None,
+                     verbose=False):
     args = [
         'abandon',
         '--host', host,
@@ -269,6 +318,8 @@ class GerritApi(recipe_api.RecipeApi):
     ]
     if message:
       args.extend(['--message', message])
+    if verbose:
+      args.append('--verbose')
     if not step_test_data:
       step_test_data = lambda: self.test_api.get_one_change_response_data(
           status='ABANDONED', _number=str(change))
@@ -279,8 +330,13 @@ class GerritApi(recipe_api.RecipeApi):
         step_test_data=step_test_data,
     ).json.output
 
-  def restore_change(self, host, change, message=None, name=None,
-                     step_test_data=None):
+  def restore_change(self,
+                     host,
+                     change,
+                     message=None,
+                     name=None,
+                     step_test_data=None,
+                     verbose=False):
     args = [
         'restore',
         '--host', host,
@@ -289,6 +345,8 @@ class GerritApi(recipe_api.RecipeApi):
     ]
     if message:
       args.extend(('--message', message))
+    if verbose:
+      args.append('--verbose')
     if not step_test_data:
       step_test_data = lambda: self.test_api.get_one_change_response_data(
           status='NEW', _number=str(change))
@@ -305,12 +363,15 @@ class GerritApi(recipe_api.RecipeApi):
                        label_name,
                        label_value,
                        name=None,
-                       step_test_data=None):
+                       step_test_data=None,
+                       verbose=False):
     args = [
         'setlabel', '--host', host, '--change',
         int(change), '--json_file',
         self.m.json.output(), '-l', label_name, label_value
     ]
+    if verbose:
+      args.append('--verbose')
     return self(
         name or 'setlabel',
         args,
@@ -325,7 +386,9 @@ class GerritApi(recipe_api.RecipeApi):
       revision: str | int = 'current',
       automatic_attention_set_update: Optional[bool] = None,
       step_name: str = None,
-      step_test_data: Callable[[], StepTestData] | None = None) -> None:
+      step_test_data: Callable[[], StepTestData] | None = None,
+      verbose: bool = False,
+  ) -> None:
     """Add a message to a change at given revision.
 
     Args:
@@ -341,6 +404,7 @@ class GerritApi(recipe_api.RecipeApi):
       * step_name: Optional step name.
       * step_test_data: Optional mock test data for the underlying gerrit
           client.
+      * verbose: Whether to enable verbose logging.
     """
     args = [
         'addmessage', '--host', host, '--change',
@@ -353,6 +417,8 @@ class GerritApi(recipe_api.RecipeApi):
           '--automatic-attention-set-update' if automatic_attention_set_update
           else '--no-automatic-attention-set-update'
       ]
+    if verbose:
+      args.append('--verbose')
     if not step_test_data:
       step_test_data = lambda: self.m.json.test_api.output({})
     return self(
@@ -366,7 +432,8 @@ class GerritApi(recipe_api.RecipeApi):
                    project,
                    from_branch,
                    to_branch,
-                   step_test_data=None):
+                   step_test_data=None,
+                   verbose=False):
     args = [
         'movechanges', '--host', host, '-p',
         'project=%s' % project, '-p',
@@ -374,6 +441,8 @@ class GerritApi(recipe_api.RecipeApi):
         to_branch, '--json_file',
         self.m.json.output()
     ]
+    if verbose:
+      args.append('--verbose')
 
     if not step_test_data:
       step_test_data = lambda: self.test_api.get_one_change_response_data(
@@ -396,7 +465,8 @@ class GerritApi(recipe_api.RecipeApi):
                    submit=False,
                    submit_later=False,
                    step_test_data_create_change=None,
-                   step_test_data_submit_change=None):
+                   step_test_data_submit_change=None,
+                   verbose=False):
     """Update a set of files by creating and submitting a Gerrit CL.
 
     Args:
@@ -417,6 +487,8 @@ class GerritApi(recipe_api.RecipeApi):
            create gerrit change.
       * step_test_data_submit_change: Optional mock test data for the step
           submit gerrit change.
+      * verbose: Whether to enable verbose logging.
+
 
     Returns:
       A ChangeInfo dictionary as documented here:
@@ -426,7 +498,7 @@ class GerritApi(recipe_api.RecipeApi):
     """
     assert len(new_contents_by_file_path
                ) > 0, 'The dict of file paths should not be empty.'
-    command = [
+    create_command = [
         'createchange',
         '--host',
         host,
@@ -440,14 +512,16 @@ class GerritApi(recipe_api.RecipeApi):
         self.m.json.output(),
     ]
     for p in params:
-      command.extend(['-p', p])
+      create_command.extend(['-p', p])
     for cc in cc_list:
-      command.extend(['--cc', cc])
+      create_command.extend(['--cc', cc])
+    if verbose:
+      create_command.append('--verbose')
     step_test_data = step_test_data_create_change or (
         lambda: self.test_api.update_files_response_data())
 
     step_result = self('create change at (%s %s)' % (project, branch),
-                       command,
+                       create_command,
                        step_test_data=step_test_data)
     change = int(step_result.json.output.get('_number'))
     step_result.presentation.links['change %d' %
@@ -458,7 +532,7 @@ class GerritApi(recipe_api.RecipeApi):
         _file = self.m.path.mkstemp()
         self.m.file.write_raw('store the new content for %s' % path, _file,
                               content)
-        self('edit file %s' % path, [
+        edit_file_command = [
             'changeedit',
             '--host',
             host,
@@ -468,15 +542,21 @@ class GerritApi(recipe_api.RecipeApi):
             path,
             '--file',
             _file,
-        ])
+        ]
+        if verbose:
+          edit_file_command.append('--verbose')
+        self('edit file %s' % path, edit_file_command)
 
-    self('publish edit', [
+    publish_command = [
         'publishchangeedit',
         '--host',
         host,
         '--change',
         change,
-    ])
+    ]
+    if verbose:
+      publish_command.append('--verbose')
+    self('publish edit', publish_command)
 
     # Make sure the new patchset is propagated to Gerrit backend.
     with self.m.step.nest('verify the patchset exists on CL %d' % change):
@@ -494,15 +574,18 @@ class GerritApi(recipe_api.RecipeApi):
             self.m.time.sleep((2**retries) * 10)
 
     if submit or submit_later:
-      self('set Bot-Commit+1 for change %d' % change, [
+      set_bot_commit_command = [
           'setbotcommit',
           '--host',
           host,
           '--change',
           change,
-      ])
+      ]
+      if verbose:
+        set_bot_commit_command.append('--verbose')
+      self('set Bot-Commit+1 for change %d' % change, set_bot_commit_command)
     if submit:
-      submit_cmd = [
+      submit_command = [
           'submitchange',
           '--host',
           host,
@@ -511,9 +594,11 @@ class GerritApi(recipe_api.RecipeApi):
           '--json_file',
           self.m.json.output(),
       ]
+      if verbose:
+        submit_command.append('--verbose')
       step_test_data = step_test_data_submit_change or (
           lambda: self.test_api.update_files_response_data(status='MERGED'))
       step_result = self('submit change %d' % change,
-                         submit_cmd,
+                         submit_command,
                          step_test_data=step_test_data)
     return step_result.json.output

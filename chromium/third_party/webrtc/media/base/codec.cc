@@ -19,6 +19,7 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/strings/match.h"
+#include "absl/strings/str_cat.h"
 #include "api/audio_codecs/audio_format.h"
 #include "api/media_types.h"
 #include "api/rtp_parameters.h"
@@ -34,7 +35,7 @@
 #include "rtc_base/string_encode.h"
 #include "rtc_base/strings/string_builder.h"
 
-namespace cricket {
+namespace webrtc {
 
 FeedbackParams::FeedbackParams() = default;
 FeedbackParams::~FeedbackParams() = default;
@@ -109,9 +110,16 @@ Codec::Codec(Type type,
       name(name),
       clockrate(clockrate),
       bitrate(0),
-      channels(channels) {}
+      channels(channels) {
+  RTC_DCHECK_GT(clockrate, 0);
+}
 
-Codec::Codec(Type type) : Codec(type, kIdNotSet, "", 0) {}
+Codec::Codec(Type type)
+    : Codec(type,
+            kIdNotSet,
+            "",
+            type == Type::kVideo ? kDefaultVideoClockRateHz
+                                 : kDefaultAudioClockRateHz) {}
 
 Codec::Codec(const webrtc::SdpAudioFormat& c)
     : Codec(Type::kAudio, kIdNotSet, c.name, c.clockrate_hz, c.num_channels) {
@@ -150,7 +158,7 @@ bool Codec::MatchesRtpCodec(const webrtc::RtpCodec& codec_capability) const {
          codec_parameters.kind == codec_capability.kind &&
          codec_parameters.num_channels == codec_capability.num_channels &&
          codec_parameters.clock_rate == codec_capability.clock_rate &&
-         (codec_parameters.name == cricket::kRtxCodecName ||
+         (codec_parameters.name == kRtxCodecName ||
           codec_parameters.parameters == codec_capability.parameters);
 }
 
@@ -166,7 +174,7 @@ bool Codec::GetParam(const std::string& key, int* out) const {
   webrtc::CodecParameterMap::const_iterator iter = params.find(key);
   if (iter == params.end())
     return false;
-  return rtc::FromString(iter->second, out);
+  return webrtc::FromString(iter->second, out);
 }
 
 void Codec::SetParam(const std::string& key, const std::string& value) {
@@ -174,7 +182,7 @@ void Codec::SetParam(const std::string& key, const std::string& value) {
 }
 
 void Codec::SetParam(const std::string& key, int value) {
-  params[key] = rtc::ToString(value);
+  params[key] = absl::StrCat(value);
 }
 
 bool Codec::RemoveParam(const std::string& key) {
@@ -264,7 +272,7 @@ bool Codec::ValidateCodecFormat() const {
 std::string Codec::ToString() const {
   char buf[256];
 
-  rtc::SimpleStringBuilder sb(buf);
+  SimpleStringBuilder sb(buf);
   switch (type) {
     case Type::kAudio: {
       sb << "AudioCodec[" << id << ":" << name << ":" << clockrate << ":"
@@ -284,7 +292,8 @@ std::string Codec::ToString() const {
 }
 
 Codec CreateAudioRtxCodec(int rtx_payload_type, int associated_payload_type) {
-  Codec rtx_codec = CreateAudioCodec(rtx_payload_type, kRtxCodecName, 0, 1);
+  Codec rtx_codec = CreateAudioCodec(rtx_payload_type, kRtxCodecName,
+                                     kDefaultAudioClockRateHz, 1);
   rtx_codec.SetParam(kCodecParamAssociatedPayloadType, associated_payload_type);
   return rtx_codec;
 }
@@ -358,7 +367,7 @@ void AddH264ConstrainedBaselineProfileToSupportedFormats(
   // profile.
   for (auto it = supported_formats->cbegin(); it != supported_formats->cend();
        ++it) {
-    if (it->name == cricket::kH264CodecName) {
+    if (it->name == kH264CodecName) {
       const std::optional<webrtc::H264ProfileLevelId> profile_level_id =
           webrtc::ParseSdpForH264ProfileLevelId(it->parameters);
       if (profile_level_id &&
@@ -367,7 +376,7 @@ void AddH264ConstrainedBaselineProfileToSupportedFormats(
         webrtc::SdpVideoFormat cbp_format = *it;
         webrtc::H264ProfileLevelId cbp_profile = *profile_level_id;
         cbp_profile.profile = webrtc::H264Profile::kProfileConstrainedBaseline;
-        cbp_format.parameters[cricket::kH264FmtpProfileLevelId] =
+        cbp_format.parameters[kH264FmtpProfileLevelId] =
             *webrtc::H264ProfileLevelIdToString(cbp_profile);
         cbr_supported_formats.push_back(cbp_format);
       }
@@ -425,4 +434,4 @@ Codec CreateVideoCodec(int id, const webrtc::SdpVideoFormat& sdp) {
   return c;
 }
 
-}  // namespace cricket
+}  // namespace webrtc

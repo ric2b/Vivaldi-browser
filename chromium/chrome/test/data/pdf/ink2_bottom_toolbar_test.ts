@@ -7,7 +7,7 @@ import type {InkColorSelectorElement, InkSizeSelectorElement, ViewerBottomToolba
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
 import {isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
 
-import {assertAnnotationBrush, assertSelectedSize, getBrushSelector, getColorButtons, getRequiredElement, getSizeButtons, setGetAnnotationBrushReply, setupMockMetricsPrivate, setupTestMockPluginForInk} from './test_util.js';
+import {assertAnnotationBrush, assertSelectedSize, clickDropdownButton, getBrushSelector, getColorButtons, getRequiredElement, getSizeButtons, setGetAnnotationBrushReply, setupMockMetricsPrivate, setupTestMockPluginForInk} from './test_util.js';
 
 const viewer = document.body.querySelector('pdf-viewer')!;
 const mockPlugin = setupTestMockPluginForInk();
@@ -32,13 +32,6 @@ async function clickColorButton(index: number) {
   await microtasksFinished();
 }
 
-async function clickDropdownButton(
-    dropdown: ViewerBottomToolbarDropdownElement) {
-  const dropdownButton = getRequiredElement(dropdown, 'cr-button');
-  dropdownButton.click();
-  await microtasksFinished();
-}
-
 function assertDropdownSizeIcon(expected: string) {
   const bottomToolbar = getBottomToolbar();
   const actual =
@@ -50,7 +43,7 @@ function assertDropdownSizeIcon(expected: string) {
 function assertDropdownColorFillColor(expected: string) {
   const bottomToolbar = getBottomToolbar();
   const styles =
-      getComputedStyle(getRequiredElement(bottomToolbar, '#color-chip'));
+      getComputedStyle(getRequiredElement(bottomToolbar, '.color-chip'));
   chrome.test.assertEq(expected, styles.getPropertyValue('background-color'));
 }
 
@@ -67,8 +60,8 @@ chrome.test.runTests([
 
     // No toolbars initially.
     const drawToolbarQuery = 'viewer-bottom-toolbar';
-    const textToolbarQuery = `div[toolbar-name="${AnnotationMode.TEXT}"]`;
-    chrome.test.assertEq(AnnotationMode.NONE, viewer.$.toolbar.annotationMode);
+    const textToolbarQuery = 'viewer-text-bottom-toolbar';
+    chrome.test.assertEq(AnnotationMode.OFF, viewer.$.toolbar.annotationMode);
     chrome.test.assertFalse(
         !!viewer.shadowRoot.querySelector(drawToolbarQuery));
     chrome.test.assertFalse(
@@ -97,9 +90,9 @@ chrome.test.runTests([
     mockMetricsPrivate.assertCount(UserAction.OPEN_INK2_BOTTOM_TOOLBAR, 1);
 
     // No annotation mode removes both toolbars from the DOM.
-    viewer.$.toolbar.setAnnotationMode(AnnotationMode.NONE);
+    viewer.$.toolbar.setAnnotationMode(AnnotationMode.OFF);
     await microtasksFinished();
-    chrome.test.assertEq(AnnotationMode.NONE, viewer.$.toolbar.annotationMode);
+    chrome.test.assertEq(AnnotationMode.OFF, viewer.$.toolbar.annotationMode);
     chrome.test.assertFalse(
         !!viewer.shadowRoot.querySelector(drawToolbarQuery));
     chrome.test.assertFalse(
@@ -143,7 +136,7 @@ chrome.test.runTests([
         bottomToolbar, 'ink-size-selector');
     const sizeButtons = getSizeButtons(sizeSelector);
     assertSelectedSize(sizeButtons, /*buttonIndex=*/ 2);
-    assertDropdownSizeIcon('pdf:pen-size-3');
+    assertDropdownSizeIcon('pdf-ink:pen-size-3');
     sizeButtons[0]!.click();
     await microtasksFinished();
 
@@ -152,7 +145,7 @@ chrome.test.runTests([
       color: {r: 0, g: 0, b: 0},
       size: 1,
     });
-    assertDropdownSizeIcon('pdf:pen-size-1');
+    assertDropdownSizeIcon('pdf-ink:pen-size-1');
 
     // Change the pen color to '#fdd663'.
     await clickColorButton(/*index=*/ 6);
@@ -206,7 +199,7 @@ chrome.test.runTests([
       color: {r: 242, g: 139, b: 130},
       size: 8,
     });
-    assertDropdownSizeIcon('pdf:highlighter-size-3');
+    assertDropdownSizeIcon('pdf-ink:highlighter-size-3');
 
     // Change the highlighter size.
     await clickDropdownButton(bottomToolbar.$.size);
@@ -224,7 +217,7 @@ chrome.test.runTests([
       color: {r: 242, g: 139, b: 130},
       size: 16,
     });
-    assertDropdownSizeIcon('pdf:highlighter-size-5');
+    assertDropdownSizeIcon('pdf-ink:highlighter-size-5');
 
     // Change the highlighter color to '#34a853'.
     await clickColorButton(/*index=*/ 2);

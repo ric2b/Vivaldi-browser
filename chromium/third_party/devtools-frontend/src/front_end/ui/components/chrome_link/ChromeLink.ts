@@ -1,6 +1,7 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
@@ -22,19 +23,19 @@ declare global {
 // (for which regular <x-link>s do not work).
 export class ChromeLink extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
   #href = '';
 
   connectedCallback(): void {
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   set href(href: Platform.DevToolsPath.UrlString) {
-    if (!Common.ParsedURL.schemeIs(href, 'chrome:')) {
+    if (!Common.ParsedURL.schemeIs(href, 'chrome:') &&
+        !Common.ParsedURL.schemeIs(href, 'vivaldi:') ) {
       throw new Error('ChromeLink href needs to start with \'chrome://\'');
     }
     this.#href = href;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   // Navigating to a chrome:// link via a normal anchor doesn't work, so we "navigate"
@@ -62,7 +63,7 @@ export class ChromeLink extends HTMLElement {
       /* x-link doesn't work with custom click/keydown handlers */
       /* eslint-disable rulesdir/no-a-tags-in-lit */
       html`
-        <style>${chromeLinkStyles.cssText}</style>
+        <style>${chromeLinkStyles}</style>
         <a href=${this.#href} class="link" target="_blank"
           jslog=${VisualLogging.link().track({click: true}).context(jslogContext)}
           @click=${this.#handleClick}><slot></slot></a>

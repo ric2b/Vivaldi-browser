@@ -35,6 +35,7 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/prefs/browser_prefs.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -45,6 +46,7 @@
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service_factory.h"
 #import "ios/chrome/browser/signin/model/fake_authentication_service_delegate.h"
+#import "ios/chrome/browser/signin/model/fake_refresh_access_token_error.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity_manager.h"
 #import "ios/chrome/browser/signin/model/identity_manager_factory.h"
@@ -108,12 +110,8 @@ class AuthenticationServiceTestBase : public PlatformTest {
   explicit AuthenticationServiceTestBase(
       bool separate_profiles_for_managed_accounts_enabled) {
     if (separate_profiles_for_managed_accounts_enabled) {
-      // Note: kUseAccountListFromIdentityManager is a prerequisite of
-      // kSeparateProfilesForManagedAccounts.
-      scoped_feature_list_.InitWithFeatures(
-          /*enabled_features=*/{kUseAccountListFromIdentityManager,
-                                kSeparateProfilesForManagedAccounts},
-          /*disabled_features=*/{});
+      scoped_feature_list_.InitAndEnableFeature(
+          kSeparateProfilesForManagedAccounts);
     } else {
       scoped_feature_list_.InitAndDisableFeature(
           kSeparateProfilesForManagedAccounts);
@@ -194,16 +192,32 @@ class AuthenticationServiceTestBase : public PlatformTest {
       id<SystemIdentity> identity,
       uint32_t* invocation_counter = nullptr,
       bool is_identity_blocked = false) {
-    return fake_system_identity_manager()->CreateRefreshAccessTokenFailure(
-        identity,
-        base::BindRepeating(
-            [](uint32_t* counter, bool is_blocked, HandleMDMCallback callback) {
-              if (counter) {
-                ++*counter;
-              }
-              std::move(callback).Run(is_blocked);
-            },
-            invocation_counter, is_identity_blocked));
+    auto mdm_callback = base::BindRepeating(
+        [](uint32_t* counter, bool is_blocked, HandleMDMCallback callback) {
+          if (counter) {
+            ++*counter;
+          }
+          std::move(callback).Run(is_blocked);
+        },
+        invocation_counter, is_identity_blocked);
+    id<RefreshAccessTokenError> mdm_error = [[FakeRefreshAccessTokenError alloc]
+        initWithIdentity:identity
+                callback:std::move(mdm_callback)];
+    GetAccessTokenCallback callback = base::BindRepeating(
+        [](id<RefreshAccessTokenError> mdm_error,
+           SystemIdentityManager::AccessTokenCallback cb)
+            -> id<RefreshAccessTokenError> {
+          NSError* get_token_error =
+              [NSError errorWithDomain:@"com.google.HTTPStatus"
+                                  code:-1
+                              userInfo:nil];
+          std::move(cb).Run(std::nullopt, get_token_error);
+          return mdm_error;
+        },
+        mdm_error);
+    fake_system_identity_manager()->SetGetAccessTokenCallback(
+        CoreAccountId::FromGaiaId(GaiaId(identity.gaiaID)), callback);
+    return mdm_error;
   }
 
   void SetCachedMDMInfo(id<SystemIdentity> identity,
@@ -251,15 +265,11 @@ class AuthenticationServiceTestBase : public PlatformTest {
 
   // Returns the n-th identity on the device, identified by `index`.
   id<SystemIdentity> identity(NSUInteger index) {
-    if (IsUseAccountListFromIdentityManagerEnabled()) {
-      std::vector<AccountInfo> accountInfos =
-          identity_manager()->GetAccountsOnDevice();
-      CHECK_LT(index, accountInfos.size());
-      return account_manager_->GetIdentityOnDeviceWithGaiaID(
-          accountInfos[index].gaia);
-    } else {
-      return [account_manager_->GetAllIdentities() objectAtIndex:index];
-    }
+    std::vector<AccountInfo> accountInfos =
+        identity_manager()->GetAccountsOnDevice();
+    CHECK_LT(index, accountInfos.size());
+    return account_manager_->GetIdentityOnDeviceWithGaiaID(
+        accountInfos[index].gaia);
   }
 
   // Sets a restricted pattern.
@@ -765,7 +775,8 @@ TEST_P(AuthenticationServiceTest, ShowMDMErrorDialog) {
 
 TEST_P(AuthenticationServiceTest, SigninDisallowedCrash) {
   // Disable sign-in.
-  profile_->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
+  local_state()->SetBoolean(prefs::kSigninAllowedOnDevice, false);
+  EXPECT_EQ(profile_->GetPrefs()->GetBoolean(prefs::kSigninAllowed), false);
 
   // Attempt to sign in, and verify there is a crash.
   EXPECT_CHECK_DEATH(authentication_service()->SignIn(
@@ -803,7 +814,8 @@ TEST_P(AuthenticationServiceTest, TestGetServiceStatus) {
   EXPECT_EQ(AuthenticationService::ServiceStatus::SigninAllowed,
             authentication_service()->GetServiceStatus());
 
-  profile_->GetPrefs()->SetBoolean(prefs::kSigninAllowed, false);
+  local_state()->SetBoolean(prefs::kSigninAllowedOnDevice, false);
+  EXPECT_EQ(profile_->GetPrefs()->GetBoolean(prefs::kSigninAllowed), false);
   // Expect sign-in disabled by user.
   EXPECT_EQ(AuthenticationService::ServiceStatus::SigninDisabledByUser,
             authentication_service()->GetServiceStatus());
@@ -828,7 +840,8 @@ TEST_P(AuthenticationServiceTest, TestGetServiceStatus) {
   // Expect onServiceStatus notification called.
   EXPECT_EQ(3, observer_test.GetOnServiceStatusChangedCounter());
 
-  profile_->GetPrefs()->SetBoolean(prefs::kSigninAllowed, true);
+  local_state()->SetBoolean(prefs::kSigninAllowedOnDevice, true);
+  EXPECT_EQ(profile_->GetPrefs()->GetBoolean(prefs::kSigninAllowed), true);
   // Expect sign-in to be still forced by policy.
   EXPECT_EQ(AuthenticationService::ServiceStatus::SigninForcedByPolicy,
             authentication_service()->GetServiceStatus());

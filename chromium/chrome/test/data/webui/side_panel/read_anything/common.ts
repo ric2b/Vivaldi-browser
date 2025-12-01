@@ -4,7 +4,7 @@
 import type {CrActionMenuElement} from '//resources/cr_elements/cr_action_menu/cr_action_menu.js';
 import type {CrLazyRenderLitElement} from '//resources/cr_elements/cr_lazy_render/cr_lazy_render_lit.js';
 import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import {MetricsBrowserProxyImpl, playFromSelectionTimeout, ReadAnythingLogger} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {MetricsBrowserProxyImpl, NodeStore, playFromSelectionTimeout, ReadAnythingLogger, ToolbarEvent, VoiceLanguageController} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {MockTimer} from 'chrome-untrusted://webui-test/mock_timer.js';
 import {microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
@@ -40,7 +40,7 @@ export function stubAnimationFrame() {
 export function playFromSelectionWithMockTimer(app: AppElement): void {
   const mockTimer = new MockTimer();
   mockTimer.install();
-  app.playSpeech();
+  emitEvent(app, ToolbarEvent.PLAY_PAUSE);
   mockTimer.tick(playFromSelectionTimeout);
   mockTimer.uninstall();
 }
@@ -62,30 +62,28 @@ export function createSpeechErrorEvent(
       'type', {utterance: utterance, error: errorCode});
 }
 
-export function setupBasicSpeech(
-    app: AppElement, speech: TestSpeechBrowserProxy) {
-  app.enabledLangs = ['en'];
+export function setupBasicSpeech(speech: TestSpeechBrowserProxy) {
+  VoiceLanguageController.getInstance().enableLang('en');
   createAndSetVoices(
-      app, speech, [{lang: 'en', name: 'Google Basic', default: true}]);
+      speech, [{lang: 'en', name: 'Google Basic', default: true}]);
 }
 
 // Creates SpeechSynthesisVoices and sets them on the given
 // TestSpeechBrowserProxy.
 export function createAndSetVoices(
-    app: AppElement, speech: TestSpeechBrowserProxy,
+    speech: TestSpeechBrowserProxy,
     overrides: Array<Partial<SpeechSynthesisVoice>>) {
   const voices: SpeechSynthesisVoice[] = [];
   overrides.forEach(partialVoice => {
     voices.push(createSpeechSynthesisVoice(partialVoice));
   });
-  setVoices(app, speech, voices);
+  setVoices(speech, voices);
 }
 
 export function setVoices(
-    app: AppElement, speech: TestSpeechBrowserProxy,
-    voices: SpeechSynthesisVoice[]) {
+    speech: TestSpeechBrowserProxy, voices: SpeechSynthesisVoice[]) {
   speech.setVoices(voices);
-  app.onVoicesChanged();
+  VoiceLanguageController.getInstance().onVoicesChanged();
 }
 
 export function createSpeechSynthesisVoice(
@@ -116,4 +114,13 @@ export function setSimpleAxTreeWithText(text: string) {
     ],
   };
   chrome.readingMode.setContentForTesting(axTree, [2]);
+}
+
+export function setSimpleNodeStoreWithText(text: string) {
+  const id = 2;
+  chrome.readingMode.getCurrentText = () => [id];
+  chrome.readingMode.getTextContent = () => text;
+  chrome.readingMode.getCurrentTextStartIndex = () => 0;
+  chrome.readingMode.getCurrentTextEndIndex = () => text.length;
+  NodeStore.getInstance().setDomNode(document.createTextNode(text), id);
 }

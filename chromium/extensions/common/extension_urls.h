@@ -19,7 +19,7 @@ class Origin;
 
 namespace extensions {
 
-// Determine whether or not a source came from an extension. |source| can link
+// Determine whether or not a source came from an extension. `source` can link
 // to a page or a script, and can be external (e.g., "http://www.google.com"),
 // extension-related (e.g., "chrome-extension://<extension_id>/background.js"),
 // or internal (e.g., "event_bindings" or "schemaUtils").
@@ -35,6 +35,7 @@ namespace extension_urls {
 extern const char kChromeWebstoreBaseURL[];
 extern const char kChromeWebstoreUpdateURL[];
 extern const char kNewChromeWebstoreBaseURL[];
+extern const char kExtensionsDocsWhatsNewURL[];
 
 // Various utm attribution sources for web store URLs.
 // From the sub-menu item in the extension menu inside the 3-dot menu.
@@ -49,6 +50,9 @@ extern const char kExtensionsSidebarUtmSource[];
 // slash. Do not use this as a prefix/extent for the store.
 GURL GetWebstoreLaunchURL();
 GURL GetNewWebstoreLaunchURL();
+
+// Returns the URL to the Chrome Web Store's "What's New" page for extensions.
+GURL GetDocsWhatsNewURL();
 
 // Returns a url with a utm_source query param value of `utm_source_value`
 // appended.
@@ -77,8 +81,8 @@ GURL GetDefaultWebstoreUpdateUrl();
 // have been overridden by a command line flag for testing purposes.
 GURL GetWebstoreUpdateUrl();
 
-// Returns the url to visit to report abuse for the given |extension_id|
-// and |referrer_id|.
+// Returns the url to visit to report abuse for the given `extension_id`
+// and `referrer_id`.
 GURL GetWebstoreReportAbuseUrl(const extensions::ExtensionId& extension_id,
                                const std::string& referrer_id);
 

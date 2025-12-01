@@ -628,8 +628,8 @@ constexpr angle::PackedEnumMap<RenderPassClosureReason, const char *> kRenderPas
      "Render pass closed due to non-render-pass read of image that was used in render pass"},
     {RenderPassClosureReason::ImageUseThenOutOfRPWrite,
      "Render pass closed due to non-render-pass write of image that was used in render pass"},
-    {RenderPassClosureReason::XfbWriteThenComputeRead,
-     "Render pass closed due to compute read of buffer previously used as transform feedback "
+    {RenderPassClosureReason::XfbWriteThenUniformBufferRead,
+     "Render pass closed due to read of buffer previously used as transform feedback "
      "output in render pass"},
     {RenderPassClosureReason::XfbWriteThenIndirectDispatchBuffer,
      "Render pass closed due to indirect dispatch buffer previously used as transform feedback "
@@ -1256,10 +1256,6 @@ void ContextVk::onDestroy(const gl::Context *context)
     mOutsideRenderPassCommands->releaseCommandPool();
     mRenderPassCommands->releaseCommandPool();
 
-    // Detach functions are only used for ring buffer allocators.
-    mOutsideRenderPassCommands->detachAllocator();
-    mRenderPassCommands->detachAllocator();
-
     mRenderer->recycleOutsideRenderPassCommandBufferHelper(&mOutsideRenderPassCommands);
     mRenderer->recycleRenderPassCommandBufferHelper(&mRenderPassCommands);
 
@@ -1389,10 +1385,9 @@ angle::Result ContextVk::initialize(const angle::ImageLoadContext &imageLoadCont
         this, &mCommandPools.renderPassPool, mRenderer->getQueueFamilyIndex(),
         getProtectionType()));
     ANGLE_TRY(mRenderer->getOutsideRenderPassCommandBufferHelper(
-        this, &mCommandPools.outsideRenderPassPool, &mOutsideRenderPassCommandsAllocator,
-        &mOutsideRenderPassCommands));
-    ANGLE_TRY(mRenderer->getRenderPassCommandBufferHelper(
-        this, &mCommandPools.renderPassPool, &mRenderPassCommandsAllocator, &mRenderPassCommands));
+        this, &mCommandPools.outsideRenderPassPool, &mOutsideRenderPassCommands));
+    ANGLE_TRY(mRenderer->getRenderPassCommandBufferHelper(this, &mCommandPools.renderPassPool,
+                                                          &mRenderPassCommands));
 
     // Allocate queueSerial index and generate queue serial for commands.
     ANGLE_TRY(allocateQueueSerialIndex());
@@ -1547,8 +1542,6 @@ angle::Result ContextVk::finish(const gl::Context *context)
 
     ANGLE_TRY(finishImpl(RenderPassClosureReason::GLFinish));
 
-    syncObjectPerfCounters(mRenderer->getCommandQueuePerfCounters());
-
     if (!mCurrentWindowSurface || singleBufferedFlush)
     {
         ANGLE_TRY(onFramebufferBoundary(context));
@@ -1700,8 +1693,7 @@ angle::Result ContextVk::setupIndexedDraw(const gl::Context *context,
                 mRenderer->hasResourceUseFinished(bufferHelper.getResourceUse()))
             {
                 uint8_t *src = nullptr;
-                ANGLE_TRY(
-                    bufferVk->mapImpl(this, GL_MAP_READ_BIT, reinterpret_cast<void **>(&src)));
+                ANGLE_TRY(bufferVk->mapForReadAccessOnly(this, reinterpret_cast<void **>(&src)));
                 // Note: bufferOffset is not added here because mapImpl already adds it.
                 src += reinterpret_cast<uintptr_t>(indices);
                 const size_t byteCount = static_cast<size_t>(elementArrayBuffer->getSize()) -
@@ -1709,7 +1701,7 @@ angle::Result ContextVk::setupIndexedDraw(const gl::Context *context,
                 BufferBindingDirty bindingDirty;
                 ANGLE_TRY(vertexArrayVk->convertIndexBufferCPU(this, indexType, byteCount, src,
                                                                &bindingDirty));
-                ANGLE_TRY(bufferVk->unmapImpl(this));
+                ANGLE_TRY(bufferVk->unmapReadAccessOnly(this));
             }
             else
             {
@@ -4657,7 +4649,8 @@ gl::GraphicsResetStatus ContextVk::getResetStatus()
 
 angle::Result ContextVk::insertEventMarker(GLsizei length, const char *marker)
 {
-    insertEventMarkerImpl(GL_DEBUG_SOURCE_APPLICATION, marker);
+    // Use length because marker does not have to be null-terminated.
+    insertEventMarkerImpl(GL_DEBUG_SOURCE_APPLICATION, std::string(marker, length).c_str());
     return angle::Result::Continue;
 }
 
@@ -4683,7 +4676,8 @@ void ContextVk::insertEventMarkerImpl(GLenum source, const char *marker)
 
 angle::Result ContextVk::pushGroupMarker(GLsizei length, const char *marker)
 {
-    return pushDebugGroupImpl(GL_DEBUG_SOURCE_APPLICATION, 0, marker);
+    // Use length because marker does not have to be null-terminated.
+    return pushDebugGroupImpl(GL_DEBUG_SOURCE_APPLICATION, 0, std::string(marker, length).c_str());
 }
 
 angle::Result ContextVk::popGroupMarker()
@@ -4813,6 +4807,23 @@ angle::Result ContextVk::handleNoopDrawEvent()
 {
     // Even though this draw call is being no-op'd, we still must handle the dirty event log
     return handleDirtyEventLogImpl(mRenderPassCommandBuffer);
+}
+
+angle::Result ContextVk::handleNoopMultiDrawEvent()
+{
+    // Normally, when a draw call is no-op'd by the front-end, the objects are not synced.  This is
+    // important because no draw call will follow.  In particular, FramebufferVk::syncState picks up
+    // deferred clears with the assumption that the following call to the backend will handle them.
+    // In the case of multi-draw, FramebufferVk::syncState is always called, but all the individual
+    // draw calls (as issued by |MULTI_DRAW_BLOCK()|) may be no-op'd.  In that case, the deferred
+    // clears are left in FramebufferVk, which is invalid.
+    //
+    // This call is made in case all draw calls of multi-draw are no-op'd, so deferred clears can be
+    // handled.
+    FramebufferVk *framebufferVk = vk::GetImpl(mState.getDrawFramebuffer());
+    framebufferVk->restageDeferredClearsAfterNoopDraw(this);
+
+    return handleNoopDrawEvent();
 }
 
 angle::Result ContextVk::handleGraphicsEventLog(GraphicsEventCmdBuf queryEventType)
@@ -5893,7 +5904,7 @@ angle::Result ContextVk::syncState(const gl::Context *context,
                 iter.setLaterBit(gl::state::DIRTY_BIT_ATOMIC_COUNTER_BUFFER_BINDING);
                 break;
             case gl::state::DIRTY_BIT_UNIFORM_BUFFER_BINDINGS:
-                ANGLE_TRY(invalidateCurrentShaderUniformBuffers(command));
+                ANGLE_TRY(invalidateCurrentShaderUniformBuffers());
                 break;
             case gl::state::DIRTY_BIT_ATOMIC_COUNTER_BUFFER_BINDING:
                 ANGLE_TRY(invalidateCurrentShaderResources(command));
@@ -6211,21 +6222,6 @@ void ContextVk::updateSurfaceRotationDrawFramebuffer(const gl::State &glState,
     const SurfaceRotation rotation =
         getSurfaceRotationImpl(glState.getDrawFramebuffer(), currentDrawSurface);
     mCurrentRotationDrawFramebuffer = rotation;
-
-    if (!getFeatures().preferDriverUniformOverSpecConst.enabled)
-    {
-        const bool isRotatedAspectRatio = IsRotatedAspectRatio(rotation);
-        // Update spec consts
-        if (isRotatedAspectRatio != mGraphicsPipelineDesc->getSurfaceRotation())
-        {
-            // surface rotation are specialization constants, which affects program compilation.
-            // When rotation changes, we need to update GraphicsPipelineDesc so that the correct
-            // pipeline program object will be retrieved.
-            mGraphicsPipelineDesc->updateSurfaceRotation(&mGraphicsPipelineTransition,
-                                                         isRotatedAspectRatio);
-            invalidateCurrentGraphicsPipeline();
-        }
-    }
 }
 
 void ContextVk::updateSurfaceRotationReadFramebuffer(const gl::State &glState,
@@ -6401,9 +6397,9 @@ angle::Result ContextVk::invalidateCurrentShaderResources(gl::Command command)
     }
 
     // Take care of read-after-write hazards that require implicit synchronization.
-    if (hasUniformBuffers && command == gl::Command::Dispatch)
+    if (hasUniformBuffers)
     {
-        ANGLE_TRY(endRenderPassIfComputeReadAfterTransformFeedbackWrite());
+        ANGLE_TRY(endRenderPassIfUniformBufferReadAfterTransformFeedbackWrite());
     }
 
     // Take care of implicit layout transition by compute program access-after-read.
@@ -6427,7 +6423,7 @@ angle::Result ContextVk::invalidateCurrentShaderResources(gl::Command command)
     return angle::Result::Continue;
 }
 
-angle::Result ContextVk::invalidateCurrentShaderUniformBuffers(gl::Command command)
+angle::Result ContextVk::invalidateCurrentShaderUniformBuffers()
 {
     const gl::ProgramExecutable *executable = mState.getProgramExecutable();
     ASSERT(executable);
@@ -6443,11 +6439,8 @@ angle::Result ContextVk::invalidateCurrentShaderUniformBuffers(gl::Command comma
             mGraphicsDirtyBits |= kUniformBuffersAndDescSetDirtyBits;
         }
 
-        if (command == gl::Command::Dispatch)
-        {
-            // Take care of read-after-write hazards that require implicit synchronization.
-            ANGLE_TRY(endRenderPassIfComputeReadAfterTransformFeedbackWrite());
-        }
+        // Take care of read-after-write hazards that require implicit synchronization.
+        ANGLE_TRY(endRenderPassIfUniformBufferReadAfterTransformFeedbackWrite());
     }
     return angle::Result::Continue;
 }
@@ -7420,7 +7413,6 @@ angle::Result ContextVk::initImageAllocation(vk::ImageHelper *imageHelper,
     {
         ANGLE_TRY(imageHelper->initializeNonZeroMemory(this, hasProtectedContent, outputFlags,
                                                        outputSize));
-        imageHelper->getImage().getHandle();
     }
 
     return angle::Result::Continue;
@@ -7873,6 +7865,8 @@ angle::Result ContextVk::finishImpl(RenderPassClosureReason renderPassClosureRea
             ANGLE_TRY(synchronizeCpuGpuTime());
         }
     }
+
+    syncObjectPerfCounters(mRenderer->getCommandQueuePerfCounters());
 
     return angle::Result::Continue;
 }
@@ -8966,7 +8960,7 @@ angle::Result ContextVk::flushCommandBuffersIfNecessary(const vk::CommandBufferA
     return angle::Result::Continue;
 }
 
-angle::Result ContextVk::endRenderPassIfComputeReadAfterTransformFeedbackWrite()
+angle::Result ContextVk::endRenderPassIfUniformBufferReadAfterTransformFeedbackWrite()
 {
     // Similar to flushCommandBuffersIfNecessary(), but using uniform buffers currently bound and
     // used by the current (compute) program.  This is to handle read-after-write hazards where the
@@ -8977,7 +8971,7 @@ angle::Result ContextVk::endRenderPassIfComputeReadAfterTransformFeedbackWrite()
     }
 
     const gl::ProgramExecutable *executable = mState.getProgramExecutable();
-    ASSERT(executable && executable->hasLinkedShaderStage(gl::ShaderType::Compute));
+    ASSERT(executable);
 
     // Uniform buffers:
     const std::vector<gl::InterfaceBlock> &blocks = executable->getUniformBlocks();
@@ -8996,7 +8990,8 @@ angle::Result ContextVk::endRenderPassIfComputeReadAfterTransformFeedbackWrite()
         vk::BufferHelper &buffer = vk::GetImpl(bufferBinding.get())->getBuffer();
         if (buffer.writtenByCommandBuffer(mCurrentTransformFeedbackQueueSerial))
         {
-            return flushCommandsAndEndRenderPass(RenderPassClosureReason::XfbWriteThenComputeRead);
+            return flushCommandsAndEndRenderPass(
+                RenderPassClosureReason::XfbWriteThenUniformBufferRead);
         }
     }
 

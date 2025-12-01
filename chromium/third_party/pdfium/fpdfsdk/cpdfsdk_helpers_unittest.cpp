@@ -4,9 +4,10 @@
 
 #include "fpdfsdk/cpdfsdk_helpers.h"
 
+#include <algorithm>
+
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/fx_memcpy_wrappers.h"
-#include "core/fxcrt/stl_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -24,26 +25,26 @@ TEST(CPDFSDKHelpersTest, NulTerminateMaybeCopyAndReturnLength) {
 
     // Buffer should not change if declared length is too short.
     char buf[kExpectedToBeCopiedLen + 1];
-    fxcrt::Fill(buf, 0x42);
-    ASSERT_EQ(kExpectedToBeCopiedLen + 1,
-              NulTerminateMaybeCopyAndReturnLength(
-                  to_be_copied,
-                  pdfium::make_span(buf).first(kExpectedToBeCopiedLen)));
-    for (char c : buf)
+    std::ranges::fill(buf, 0x42);
+    ASSERT_EQ(
+        kExpectedToBeCopiedLen + 1,
+        NulTerminateMaybeCopyAndReturnLength(
+            to_be_copied, pdfium::span(buf).first(kExpectedToBeCopiedLen)));
+    for (char c : buf) {
       EXPECT_EQ(0x42, c);
+    }
 
     // Buffer should copy over if long enough.
-    ASSERT_EQ(kExpectedToBeCopiedLen + 1,
-              NulTerminateMaybeCopyAndReturnLength(to_be_copied,
-                                                   pdfium::make_span(buf)));
+    ASSERT_EQ(kExpectedToBeCopiedLen + 1, NulTerminateMaybeCopyAndReturnLength(
+                                              to_be_copied, pdfium::span(buf)));
     EXPECT_EQ(to_be_copied, ByteString(buf));
   }
   {
     // Empty ByteString should still copy NUL terminator.
     const ByteString empty;
     char buf[1];
-    ASSERT_EQ(1u, NulTerminateMaybeCopyAndReturnLength(empty,
-                                                       pdfium::make_span(buf)));
+    ASSERT_EQ(1u,
+              NulTerminateMaybeCopyAndReturnLength(empty, pdfium::span(buf)));
     EXPECT_EQ(empty, ByteString(buf));
   }
 }

@@ -20,15 +20,28 @@ class TestSelectURLFencedFrameConfigObserverImpl
   TestSelectURLFencedFrameConfigObserverImpl();
   ~TestSelectURLFencedFrameConfigObserverImpl() override;
 
-  void OnSharedStorageAccessed(const base::Time& access_time,
+  GlobalRenderFrameHostId AssociatedFrameHostId() const override;
+  bool ShouldReceiveAllSharedStorageReports() const override;
+
+  void OnSharedStorageAccessed(base::Time access_time,
                                AccessScope scope,
                                AccessMethod method,
-                               FrameTreeNodeId main_frame_id,
+                               GlobalRenderFrameHostId main_frame_id,
                                const std::string& owner_origin,
                                const SharedStorageEventParams& params) override;
-  void OnUrnUuidGenerated(const GURL& urn_uuid) override;
-  void OnConfigPopulated(
+  void OnSharedStorageSelectUrlUrnUuidGenerated(const GURL& urn_uuid) override;
+  void OnSharedStorageSelectUrlConfigPopulated(
       const std::optional<FencedFrameConfig>& config) override;
+
+  void OnSharedStorageWorkletOperationExecutionFinished(
+      base::Time finished_time,
+      base::TimeDelta execution_time,
+      AccessMethod method,
+      int operation_id,
+      int worklet_ordinal_id,
+      const base::UnguessableToken& worklet_devtools_token,
+      GlobalRenderFrameHostId main_frame_id,
+      const std::string& owner_origin) override;
 
   const std::optional<GURL>& GetUrnUuid() const;
   const std::optional<FencedFrameConfig>& GetConfig() const;

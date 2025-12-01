@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/values_equivalent.h"
 #include "third_party/blink/renderer/core/animation/basic_shape_interpolation_functions.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/css/css_value_list.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
@@ -44,8 +45,8 @@ const BasicShape* GetBasicShape(const CSSProperty& property,
       }
       const auto& shape = offset_path_operation->GetBasicShape();
 
-      // Path and Ray shapes are handled by PathInterpolationType and
-      // RayInterpolationType.
+      // Path, Shape and Ray shapes are handled by PathInterpolationType,
+      // ShapeInterpolationType and RayInterpolationType.
       if (shape.GetType() == BasicShape::kStylePathType ||
           shape.GetType() == BasicShape::kStyleRayType ||
           shape.GetType() == BasicShape::kStyleShapeType) {
@@ -162,7 +163,7 @@ InterpolationValue CSSBasicShapeInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSBasicShapeInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState*,
+    const StyleResolverState&,
     ConversionCheckers&) const {
   if (!value.IsBaseValueList()) {
     return basic_shape_interpolation_functions::MaybeConvertCSSValue(
@@ -207,7 +208,7 @@ void CSSBasicShapeInterpolationType::Composite(
   if (!basic_shape_interpolation_functions::ShapesAreCompatible(
           *underlying_value_owner.Value().non_interpolable_value,
           *value.non_interpolable_value)) {
-    underlying_value_owner.Set(*this, value);
+    underlying_value_owner.Set(this, value);
     return;
   }
 

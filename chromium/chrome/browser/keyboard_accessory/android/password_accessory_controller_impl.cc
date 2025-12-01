@@ -13,7 +13,6 @@
 #include "base/base64.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
-#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
@@ -40,9 +39,9 @@
 #include "chrome/browser/plus_addresses/plus_address_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/chrome_security_state_tab_helper.h"
-#include "chrome/browser/ui/android/plus_addresses/all_plus_addresses_bottom_sheet_controller.h"
-#include "chrome/browser/ui/android/plus_addresses/plus_addresses_helper.h"
+#include "chrome/browser/ui/android/autofill/autofill_fallback_surface_launcher.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
+#include "chrome/browser/ui/plus_addresses/android/all_plus_addresses_bottom_sheet_controller.h"
 #include "chrome/browser/webauthn/android/webauthn_request_delegate_android.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/content/browser/content_autofill_client.h"
@@ -52,14 +51,11 @@
 #include "components/device_reauth/device_authenticator.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/core/browser/credential_cache.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/origin_credential_store.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_driver.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/webauthn_credentials_delegate.h"
-#include "components/password_manager/core/common/password_manager_features.h"
-#include "components/plus_addresses/features.h"
 #include "components/plus_addresses/grit/plus_addresses_strings.h"
 #include "components/plus_addresses/plus_address_service.h"
 #include "components/plus_addresses/plus_address_types.h"
@@ -482,7 +478,7 @@ void PasswordAccessoryControllerImpl::OnOptionSelected(
       GetManualFillingController()->Hide();
       return;
     case autofill::AccessoryAction::MANAGE_PLUS_ADDRESS_FROM_PASSWORD_SHEET:
-      plus_addresses::ShowManagePlusAddressesPage(GetWebContents());
+      autofill::ShowManagePlusAddressesPage(GetWebContents());
       base::RecordAction(base::UserMetricsAction(
           "PlusAddresses.ManageOptionOnPasswordManualFallbackSelected"));
       return;
@@ -879,19 +875,16 @@ void PasswordAccessoryControllerImpl::FillSelection(
           plus_addresses::hats::SurveyType::kFilledPlusAddressViaManualFallack);
     }
   }
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::
-              kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning)) {
-    Profile* profile =
-        Profile::FromBrowserContext(GetWebContents().GetBrowserContext());
-    if (profile && access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
-                       profile->GetPrefs(), /*called_at_startup=*/false)) {
-      access_loss_warning_bridge_->MaybeShowAccessLossNoticeSheet(
-          profile->GetPrefs(), GetWebContents().GetTopLevelNativeWindow(),
-          profile, /*called_at_startup=*/false,
-          password_manager_android_util::PasswordAccessLossWarningTriggers::
-              kKeyboardAcessorySheet);
-    }
+
+  Profile* profile =
+      Profile::FromBrowserContext(GetWebContents().GetBrowserContext());
+  if (profile && access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
+                     profile->GetPrefs(), /*called_at_startup=*/false)) {
+    access_loss_warning_bridge_->MaybeShowAccessLossNoticeSheet(
+        profile->GetPrefs(), GetWebContents().GetTopLevelNativeWindow(),
+        profile, /*called_at_startup=*/false,
+        password_manager_android_util::PasswordAccessLossWarningTriggers::
+            kKeyboardAcessorySheet);
   }
 }
 

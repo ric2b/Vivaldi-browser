@@ -7,11 +7,15 @@
 
 #include "base/callback_list.h"
 #include "base/functional/callback.h"
+#include "base/functional/callback_forward.h"
+#include "base/functional/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/ui/views/location_bar/icon_label_bubble_view.h"
 #include "chrome/browser/ui/views/page_action/page_action_model_observer.h"
+#include "chrome/browser/ui/views/page_action/page_action_triggers.h"
 #include "ui/actions/actions.h"
+#include "ui/base/interaction/element_identifier.h"
 #include "ui/events/event.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/views/view.h"
@@ -29,7 +33,8 @@ class PageActionView : public IconLabelBubbleView,
   METADATA_HEADER(PageActionView, IconLabelBubbleView)
  public:
   PageActionView(actions::ActionItem* action_item,
-                 const PageActionViewParams& params);
+                 const PageActionViewParams& params,
+                 ui::ElementIdentifier element_identifier);
   PageActionView(const PageActionView&) = delete;
   PageActionView& operator=(const PageActionView&) = delete;
   ~PageActionView() override;
@@ -68,6 +73,7 @@ class PageActionView : public IconLabelBubbleView,
   void NotifyClick(const ui::Event& event) override;
   gfx::Size GetMinimumSize() const override;
   bool IsBubbleShowing() const override;
+  bool IsTriggerableEvent(const ui::Event& event) override;
 
   actions::ActionId GetActionId() const;
 
@@ -103,6 +109,11 @@ class PageActionView : public IconLabelBubbleView,
   // Client-provided callbacks for changes to chip state.
   base::RepeatingCallbackList<void(PageActionView*)>
       chip_visibility_changed_callbacks_;
+
+  // Used to record click event histogram. It's initialized to base::DoNothing()
+  // for testing purpose.
+  base::RepeatingCallback<void(PageActionTrigger)> click_callback_ =
+      base::DoNothing();
 };
 
 }  // namespace page_actions

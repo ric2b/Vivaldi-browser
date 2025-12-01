@@ -25,7 +25,6 @@ import org.chromium.chrome.browser.browsing_data.BrowsingDataType;
 import org.chromium.chrome.browser.browsing_data.TimePeriod;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.browser.password_manager.PasswordManagerTestHelper;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -40,6 +39,7 @@ import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.components.content_settings.CookieControlsMode;
 import org.chromium.components.content_settings.CookieControlsObserver;
+import org.chromium.components.content_settings.CookieControlsState;
 import org.chromium.components.content_settings.PrefNames;
 import org.chromium.components.user_prefs.UserPrefs;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
@@ -55,7 +55,7 @@ public class CookieControlsBridgeTest {
     public static final String COOKIE_CONTROLS_BATCH_NAME = "cookie_controls";
 
     private class TestCallbackHandler implements CookieControlsObserver {
-        private CallbackHelper mHelper;
+        private final CallbackHelper mHelper;
 
         public TestCallbackHandler(CallbackHelper helper) {
             mHelper = helper;
@@ -63,13 +63,12 @@ public class CookieControlsBridgeTest {
 
         @Override
         public void onStatusChanged(
-                boolean controlsVisible,
-                boolean protectionsOn,
+                @CookieControlsState int controlsState,
                 @CookieControlsEnforcement int enforcement,
                 @CookieBlocking3pcdStatus int blockingStatus,
                 long expiration) {
-            mCookieControlsVisible = controlsVisible;
-            mThirdPartyCookiesBlocked = protectionsOn;
+            mCookieControlsVisible = controlsState != CookieControlsState.HIDDEN;
+            mThirdPartyCookiesBlocked = controlsState == CookieControlsState.BLOCKED3PC;
             mEnforcement = enforcement;
             mExpiration = expiration;
             mHelper.notifyCalled();
@@ -99,14 +98,6 @@ public class CookieControlsBridgeTest {
     private int mEnforcement;
     private long mExpiration;
     private boolean mShouldHighlight;
-
-    public CookieControlsBridgeTest() {
-        // This test suite relies on the real password store. However, that can only store
-        // passwords if the device it runs on has the required min GMS Core version.
-        // To ensure the tests don't depend on the device configuration, set up a fake GMS
-        // Core version instead.
-        PasswordManagerTestHelper.setUpPwmRequiredMinGmsVersion();
-    }
 
     @Before
     public void setUp() throws Exception {

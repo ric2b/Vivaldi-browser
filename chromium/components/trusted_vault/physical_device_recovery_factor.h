@@ -13,8 +13,8 @@
 #include "components/trusted_vault/local_recovery_factor.h"
 #include "components/trusted_vault/proto/local_trusted_vault.pb.h"
 #include "components/trusted_vault/standalone_trusted_vault_storage.h"
-#include "components/trusted_vault/trusted_vault_connection.h"
 #include "components/trusted_vault/trusted_vault_histograms.h"
+#include "components/trusted_vault/trusted_vault_throttling_connection.h"
 #include "google_apis/gaia/gaia_id.h"
 
 namespace trusted_vault {
@@ -26,28 +26,28 @@ namespace trusted_vault {
 // StandaloneTrustedVaultBackendTest).
 class PhysicalDeviceRecoveryFactor : public LocalRecoveryFactor {
  public:
-  // `storage` must not be null and must outlive this object.
+  // `storage` and `connection` must not be null and must outlive this object.
+  // `storage` must contain a vault for `primary_account` when calling any
+  // method of this class.
   // TODO(crbug.com/405381481): Refactor / remove the usage of
   // StandaloneTrustedVaultStorage in this class.
-  PhysicalDeviceRecoveryFactor(StandaloneTrustedVaultStorage* storage,
-                               std::optional<CoreAccountInfo> primary_account);
+  PhysicalDeviceRecoveryFactor(SecurityDomainId security_domain_id,
+                               StandaloneTrustedVaultStorage* storage,
+                               TrustedVaultThrottlingConnection* connection,
+                               CoreAccountInfo primary_account);
   PhysicalDeviceRecoveryFactor(const PhysicalDeviceRecoveryFactor&) = delete;
   PhysicalDeviceRecoveryFactor& operator=(PhysicalDeviceRecoveryFactor&) =
       delete;
   ~PhysicalDeviceRecoveryFactor() override;
 
-  void AttemptRecovery(TrustedVaultConnection* connection,
-                       bool connection_requests_throttled,
-                       AttemptRecoveryCallback cb,
-                       AttemptRecoveryFailureCallback failure_cb) override;
+  LocalRecoveryFactorType GetRecoveryFactorType() const override;
 
+  void AttemptRecovery(AttemptRecoveryCallback cb) override;
+
+  bool IsRegistered() override;
   void MarkAsNotRegistered() override;
 
-  void ClearRegistrationAttemptInfo(const GaiaId& gaia_id) override;
-
-  TrustedVaultDeviceRegistrationStateForUMA MaybeRegister(
-      TrustedVaultConnection* connection,
-      bool connection_requests_throttled,
+  TrustedVaultRecoveryFactorRegistrationStateForUMA MaybeRegister(
       RegisterCallback cb) override;
 
  private:
@@ -57,14 +57,19 @@ class PhysicalDeviceRecoveryFactor : public LocalRecoveryFactor {
                         TrustedVaultDownloadKeysStatus status,
                         const std::vector<std::vector<uint8_t>>& new_vault_keys,
                         int last_vault_key_version);
+  void FulfillRecoveryWithFailure(
+      TrustedVaultDownloadKeysStatusForUMA status_for_uma,
+      AttemptRecoveryCallback cb);
 
   void OnRegistered(RegisterCallback cb,
                     bool had_local_keys,
                     TrustedVaultRegistrationStatus status,
                     int key_version);
 
+  const SecurityDomainId security_domain_id_;
   const raw_ptr<StandaloneTrustedVaultStorage> storage_;
-  const std::optional<CoreAccountInfo> primary_account_;
+  const raw_ptr<TrustedVaultThrottlingConnection> connection_;
+  const CoreAccountInfo primary_account_;
 
   // Destroying this will cancel the ongoing request.
   std::unique_ptr<TrustedVaultConnection::Request> ongoing_request_;

@@ -20,7 +20,6 @@
 #include "url/gurl.h"
 
 class GURL;
-class PrefService;
 
 namespace supervised_user {
 
@@ -29,6 +28,7 @@ enum class FilteringBehaviorReason {
   DEFAULT = 0,
   ASYNC_CHECKER = 1,
   MANUAL = 2,
+  FILTER_DISABLED = 3,
 };
 
 // Details degarding how a particular filtering classification was arrived at.
@@ -99,9 +99,6 @@ std::string FamilyRoleToString(kidsmanagement::FamilyRole role);
 
 // Strips user-specific tokens in a URL to generalize it.
 GURL NormalizeUrl(const GURL& url);
-
-// Check if web filtering prefs are set to default values.
-bool AreWebFilterPrefsDefault(const PrefService& pref_service);
 
 // Given a list of records that map to the supervision state of primary
 // accounts on the user's device, emits metrics that reflect the FamilyLink

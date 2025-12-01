@@ -462,6 +462,7 @@ Hi ha <ph name="DEVICECOUNT" /> dispositius connectats.</translation>
 <translation id="2530896289327917474">Activa o desactiva la navegació amb cursor de text</translation>
 <translation id="2531025035050312891">dispositiu lent</translation>
 <translation id="2531107890083353124">Mentre arrossegues la pestanya, prem <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Arrossega o prem la barra espaiadora per seleccionar l'àrea que vols capturar</translation>
 <translation id="2545334090614121435">Estàs provant d'utilitzar Inici? Utilitza:</translation>
 <translation id="254900897760075745">Copia el contingut seleccionat al porta-retalls</translation>
 <translation id="2549711466868162843">Millora la il·luminació</translation>
@@ -581,7 +582,6 @@ Si no, el ratolí tàctil integrat es tornarà a activar d'aquí a <ph name="TIM
 <translation id="2949420361496057765">Prem <ph name="MODIFIER" /> i fes clic en un enllaç</translation>
 <translation id="2957159466053076448">Pots desactivar aquestes funcions en qualsevol moment a Configuració. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Àudio del dispositiu</translation>
-<translation id="2960314608273155470">Mode de captura, l'opció predeterminada és <ph name="TYPE" /> <ph name="SOURCE" />. Prem la tecla de tabulació per navegar amb el teclat.</translation>
 <translation id="2961963223658824723">S'ha produït un error. Torna-ho a provar d'aquí a uns quants segons.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Vols activar l'accés al micròfon?</translation>
@@ -761,6 +761,7 @@ Si no, el ratolí tàctil integrat es tornarà a activar d'aquí a <ph name="TIM
 <translation id="3552189655002856821">La Wi-Fi està desactivada</translation>
 <translation id="3554215588514239132">Mostra o amaga el tauler d'eines per a desenvolupadors</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> s'ha fixat</translation>
+<translation id="3554928024630051016">Per afegir dispositius USB addicionals, prova de suprimir-ne un i, a continuació, connecta'n un de nou</translation>
 <translation id="3558768885091059911">Vols activar l'accés a la càmera i al micròfon?</translation>
 <translation id="3560174576767922131">Grava un vídeo</translation>
 <translation id="3563775809269155755">Activa el punt d'accés Wi‑Fi</translation>
@@ -868,6 +869,7 @@ Connecta el dispositiu a l'alimentació.</translation>
 <translation id="3861651314799684201">Prem Retorn per gravar la pantalla completa</translation>
 <translation id="3870197372373144624">Prova d'apagar el dispositiu.</translation>
 <translation id="3879748587602334249">Gestor de baixades</translation>
+<translation id="3884007280698606545">S'ha arribat al límit d'USB</translation>
 <translation id="3886872229787704059">Obert avui</translation>
 <translation id="3891340733213178823">Premeu Ctrl+Maj+Q dues vegades per tancar la sessió.</translation>
 <translation id="3892148308691398805">Copia el text</translation>
@@ -1440,6 +1442,7 @@ No hi ha cap dispositiu connectat.</translation>
 <translation id="5672890847723042801">Utilitats</translation>
 <translation id="5673434351075758678">Després de sincronitzar la configuració, canvia <ph name="FROM_LOCALE" /> per <ph name="TO_LOCALE" />.</translation>
 <translation id="5675363643668471212">Objecte de prestatge</translation>
+<translation id="5677022547882470786">Arrossega o prem la barra espaiadora per seleccionar l'àrea que vols cercar</translation>
 <translation id="5677928146339483299">Bloquejat</translation>
 <translation id="5678564054339031017">Mostra la setmana següent</translation>
 <translation id="5679050765726761783">S'ha connectat un adaptador de baixa potència</translation>
@@ -1485,6 +1488,7 @@ No hi ha cap dispositiu connectat.</translation>
 <translation id="5788127256798019331">Fitxers de Play</translation>
 <translation id="5788535737706478207">Torna a obrir la darrera pestanya o finestra que s'ha tancat</translation>
 <translation id="5790085346892983794">Amb èxit</translation>
+<translation id="5791926618942305301">A la captura de pantalla, estableix en <ph name="TYPE" /> <ph name="SOURCE" />. Prem el tabulador per triar el tipus de captura. Prem Retorn per capturar. Per seleccionar l'àrea de captura, estableix en captura de pantalla parcial. Si encara no està activa, prem la barra espaiadora per seleccionar la regió.</translation>
 <translation id="579415080077680903">Silenci</translation>
 <translation id="5802516411616338943">Obre la configuració ràpida</translation>
 <translation id="5804651031882187592">Desactiva l'opció de configuració Bloqueja la SIM</translation>
@@ -1641,6 +1645,7 @@ No hi ha cap dispositiu connectat.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> es pot tornar a afegir més endavant amb un permís dels pares.</translation>
 <translation id="6291221004442998378">No s'està carregant</translation>
 <translation id="6298183524022479114">Personalitza aquest dispositiu a l'aplicació</translation>
+<translation id="6304076460080088478">Tanca o minimitza les finestres d'incògnit per cercar el que hi ha en pantalla amb Google Lens</translation>
 <translation id="6309219492973062892">Toca les icones 1-8 del prestatge o fes-hi clic</translation>
 <translation id="6315170314923504164">Veu</translation>
 <translation id="6319058840130157106">Retrocedeix entre l'extrem inferior dret, el menú d'aplicacions, la barra d'adreces, la barra d'adreces d'interès, el lloc web que està obert i les baixades</translation>
@@ -1769,6 +1774,7 @@ Instal·lació nova</translation>
 <translation id="6700713906295497288">Botó del menú d'IME</translation>
 <translation id="6704073473590541209">Ansa de l'extrem dret seleccionada; utilitza les tecles de fletxa per moure-la</translation>
 <translation id="6706742084323792866">Fixa el teclat</translation>
+<translation id="6709719156428404245">Arrossega o prem la barra espaiadora per seleccionar l'àrea que vols gravar</translation>
 <translation id="6710213216561001401">Anterior</translation>
 <translation id="6723839937902243910">Bateria</translation>
 <translation id="672609503628871915">Novetats</translation>

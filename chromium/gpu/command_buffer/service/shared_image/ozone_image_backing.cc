@@ -13,7 +13,6 @@
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/not_fatal_until.h"
 #include "base/numerics/checked_math.h"
 #include "build/build_config.h"
 #include "components/viz/common/gpu/vulkan_context_provider.h"
@@ -128,26 +127,22 @@ bool OzoneImageBacking::IsImportedFromExo() {
 }
 
 gfx::GpuMemoryBufferHandle OzoneImageBacking::GetGpuMemoryBufferHandle() {
-  gfx::GpuMemoryBufferHandle handle;
-  handle.type = gfx::GpuMemoryBufferType::NATIVE_PIXMAP;
-  handle.native_pixmap_handle = pixmap_->ExportHandle();
-  return handle;
+  return gfx::GpuMemoryBufferHandle(pixmap_->ExportHandle());
 }
 
 gfx::GpuMemoryBufferHandle
 OzoneImageBacking::GetSinglePlaneGpuMemoryBufferHandle(uint32_t index) {
-  gfx::GpuMemoryBufferHandle gmb_handle = GetGpuMemoryBufferHandle();
+  gfx::NativePixmapHandle native_pixmap_handle = pixmap_->ExportHandle();
 #if BUILDFLAG(IS_FUCHSIA)
   NOTREACHED() << "Cannot get single plane from GPU memory buffer";
 #else
-  DCHECK(gmb_handle.native_pixmap_handle.modifier == 0);
-  auto& planes = gmb_handle.native_pixmap_handle.planes;
+  DCHECK(native_pixmap_handle.modifier == 0);
+  auto& planes = native_pixmap_handle.planes;
   CHECK(!planes.empty());
   DCHECK(index < planes.size());
-  gfx::NativePixmapPlane plane = std::move(planes[index]);
-  planes.clear();
-  planes.push_back(std::move(plane));
-  return gmb_handle;
+  planes[0] = std::move(planes[index]);
+  planes.resize(1);
+  return gfx::GpuMemoryBufferHandle(std::move(native_pixmap_handle));
 #endif  // BUILDFLAG(IS_FUCHSIA)
 }
 
@@ -478,7 +473,7 @@ std::unique_ptr<VulkanImageRepresentation> OzoneImageBacking::ProduceVulkan(
 
   viz::SharedImageFormat image_format = format();
   gfx::Size image_size = size();
-  gfx::GpuMemoryBufferHandle gmb_handle = GetGpuMemoryBufferHandle();
+  gfx::NativePixmapHandle native_pixmap_handle = pixmap_->ExportHandle();
   if (needs_detiling && image_format == viz::MultiPlaneFormat::kP010) {
     // This buffer is actually an MT2T buffer. MT2T is a 10-bit pixel format
     // that only occupies 1.25 bytes per element. We plumb it as P010 since
@@ -496,21 +491,22 @@ std::unique_ptr<VulkanImageRepresentation> OzoneImageBacking::ProduceVulkan(
         gfx::Size(image_size.width(), image_size.height() * kMT2TBppNumerator /
                                           kMT2TBppDenominator);
     base::CheckedNumeric<uint32_t> stride =
-        gmb_handle.native_pixmap_handle.planes[0].stride;
+        native_pixmap_handle.planes[0].stride;
     stride *= kMT2TBppDenominator;
     stride /= kMT2TBppNumerator;
     if (!stride.IsValid()) {
       return nullptr;
     }
-    gmb_handle.native_pixmap_handle.planes[0].stride = stride.ValueOrDie();
-    gmb_handle.native_pixmap_handle.planes[1].stride =
-        gmb_handle.native_pixmap_handle.planes[0].stride;
-    gmb_handle.native_pixmap_handle.planes[0].size = image_size.GetArea();
-    gmb_handle.native_pixmap_handle.planes[1].offset = image_size.GetArea();
-    gmb_handle.native_pixmap_handle.planes[1].size = image_size.GetArea() / 2;
+    native_pixmap_handle.planes[0].stride = stride.ValueOrDie();
+    native_pixmap_handle.planes[1].stride =
+        native_pixmap_handle.planes[0].stride;
+    native_pixmap_handle.planes[0].size = image_size.GetArea();
+    native_pixmap_handle.planes[1].offset = image_size.GetArea();
+    native_pixmap_handle.planes[1].size = image_size.GetArea() / 2;
   }
   auto vulkan_image = vulkan_impl.CreateImageFromGpuMemoryHandle(
-      vulkan_device_queue, std::move(gmb_handle), image_size,
+      vulkan_device_queue,
+      gfx::GpuMemoryBufferHandle(std::move(native_pixmap_handle)), image_size,
       image_format.PrefersExternalSampler()
           ? ToVkFormatExternalSampler(image_format)
           : ToVkFormatSinglePlanar(image_format),
@@ -612,8 +608,8 @@ bool OzoneImageBacking::UploadFromMemoryGraphite(
   auto recording = context_state_->gpu_main_graphite_recorder()->snap();
   skgpu::graphite::InsertRecordingInfo info;
   info.fRecording = recording.get();
-  context_state_->graphite_context()->insertRecording(info);
-  context_state_->graphite_context()->submit();
+  context_state_->graphite_shared_context()->insertRecording(info);
+  context_state_->graphite_shared_context()->submit();
 
   if (written && !IsCleared()) {
     SetCleared();
@@ -763,8 +759,7 @@ void OzoneImageBacking::OnGLContextWillDestroy(gl::GLContext* context) {
 void OzoneImageBacking::OnGLContextLostOrDestroy(gl::GLContext* context,
                                                  bool mark_context_lost) {
   auto it = per_context_cached_textures_holders_.find(context);
-  CHECK(it != per_context_cached_textures_holders_.end(),
-        base::NotFatalUntil::M130);
+  CHECK(it != per_context_cached_textures_holders_.end());
 
   // Given the TextureHolder can be used by N contexts (the contexts are
   // compatible with the original one that was used to create the holder), the

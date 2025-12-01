@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import '../../ui/components/icon_button/icon_button.js';
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as SDK from '../../core/sdk/sdk.js';
@@ -10,9 +12,10 @@ import * as Persistence from '../../models/persistence/persistence.js';
 import type * as Workspace from '../../models/workspace/workspace.js';
 import type * as Diff from '../../third_party/diff/diff.js';
 import * as DiffView from '../../ui/components/diff_view/diff_view.js';
-import * as IconButton from '../../ui/components/icon_button/icon_button.js';
-import * as UI from '../../ui/legacy/legacy.js';
+import {Directives, html, type TemplateResult} from '../../ui/lit/lit.js';
 import * as Snippets from '../snippets/snippets.js';
+
+const {ref, styleMap, ifDefined} = Directives;
 
 const UIStrings = {
   /**
@@ -62,76 +65,47 @@ export class PanelUtils {
     return false;
   }
 
-  static createIconElement(iconData: {iconName: string, color: string}, title: string): HTMLElement {
-    const iconElement = document.createElement('div');
-    iconElement.title = title;
-    const url = new URL(`../../Images/${iconData.iconName}.svg`, import.meta.url).toString();
-    iconElement.style.setProperty('mask', `url('${url}')  no-repeat center /99%`);
-    iconElement.style.setProperty('background-color', iconData.color);
-    return iconElement;
-  }
-
-  static getIconForNetworkRequest(request: SDK.NetworkRequest.NetworkRequest): HTMLElement {
+  static getIconForNetworkRequest(request: SDK.NetworkRequest.NetworkRequest): TemplateResult {
     let type = request.resourceType();
-    let iconElement: HTMLElement;
 
     if (PanelUtils.isFailedNetworkRequest(request)) {
-      let iconData = undefined;
+      let iconName: string;
+      let color: string;
       // Failed prefetch network requests are displayed as warnings instead of errors.
       if (request.resourceType() === Common.ResourceType.resourceTypes.Prefetch) {
-        iconData = {
-          iconName: 'warning-filled',
-          color: 'var(--icon-warning)',
-        };
+        iconName = 'warning-filled';
+        color = 'var(--icon-warning)';
       } else {
-        iconData = {
-          iconName: 'cross-circle-filled',
-          color: 'var(--icon-error)',
-        };
+        iconName = 'cross-circle-filled';
+        color = 'var(--icon-error)';
       }
 
-      iconElement = PanelUtils.createIconElement(iconData, type.title());
-      iconElement.classList.add('icon');
-
-      return iconElement;
+      return html`<devtools-icon
+          class="icon" name=${iconName} title=${type.title()}
+          style=${styleMap({color})}></devtools-icon>`;
     }
 
     if (request.hasThirdPartyCookiePhaseoutIssue()) {
-      const iconData = {
-        iconName: 'warning-filled',
-        color: 'var(--icon-warning)',
-      };
-      iconElement = this.createIconElement(iconData, i18nString(UIStrings.thirdPartyPhaseout));
-      iconElement.classList.add('icon');
-
-      return iconElement;
+      return html`<devtools-icon
+          class="icon" name="warning-filled" title=${i18nString(UIStrings.thirdPartyPhaseout)}
+          style="color:var(--icon-warning)"></devtools-icon>`;
     }
 
-    const isHeaderOverriden = request.hasOverriddenHeaders();
-    const isContentOverriden = request.hasOverriddenContent;
-    if (isHeaderOverriden || isContentOverriden) {
-      const iconData = {
-        iconName: 'document',
-        color: 'var(--icon-default)',
-      };
-
+    const isHeaderOverridden = request.hasOverriddenHeaders();
+    const isContentOverridden = request.hasOverriddenContent;
+    if (isHeaderOverridden || isContentOverridden) {
       let title: Common.UIString.LocalizedString;
-      if (isHeaderOverriden && isContentOverriden) {
+      if (isHeaderOverridden && isContentOverridden) {
         title = i18nString(UIStrings.requestContentHeadersOverridden);
-      } else if (isContentOverriden) {
+      } else if (isContentOverridden) {
         title = i18nString(UIStrings.requestContentOverridden);
       } else {
         title = i18nString(UIStrings.requestHeadersOverridden);
       }
 
-      const iconChildElement = this.createIconElement(iconData, title);
-      iconChildElement.classList.add('icon');
-
-      iconElement = document.createElement('div');
-      iconElement.classList.add('network-override-marker');
-      iconElement.appendChild(iconChildElement);
-
-      return iconElement;
+      return html`<div class="network-override-marker"
+        ><devtools-icon class="icon" name="document" title=${title}></devtools-icon
+      ></div>`;
     }
 
     // Pick icon based on MIME type in the following cases:
@@ -153,36 +127,24 @@ export class PanelUtils {
     }
 
     if (type === Common.ResourceType.resourceTypes.Image) {
-      const previewImage = document.createElement('img');
-      previewImage.classList.add('image-network-icon-preview');
-      previewImage.alt = request.resourceType().title();
-      void request.populateImageSource((previewImage));
-
-      iconElement = document.createElement('div');
-      iconElement.classList.add('image', 'icon');
-      iconElement.appendChild(previewImage);
-
-      return iconElement;
+      return html`<div class="image icon"
+        ><img class="image-network-icon-preview" alt=${request.resourceType().title()}
+            ${ref(e => request.populateImageSource(e as HTMLImageElement))}
+      ></div>`;
     }
 
     // Exclude Manifest here because it has mimeType:application/json but it has its own icon
     if (type !== Common.ResourceType.resourceTypes.Manifest &&
         Common.ResourceType.ResourceType.simplifyContentType(request.mimeType) === 'application/json') {
-      const iconData = {
-        iconName: 'file-json',
-        color: 'var(--icon-file-script)',
-      };
-      iconElement = this.createIconElement(iconData, request.resourceType().title());
-      iconElement.classList.add('icon');
-
-      return iconElement;
+      return html`<devtools-icon
+          class="icon" name="file-json" title=${request.resourceType().title()}
+          style="color:var(--icon-file-script)"></devtools-icon>`;
     }
 
     // Others
-    const iconData = PanelUtils.iconDataForResourceType(type);
-    iconElement = this.createIconElement(iconData, request.resourceType().title());
-    iconElement.classList.add('icon');
-    return iconElement;
+    const {iconName, color} = PanelUtils.iconDataForResourceType(type);
+    return html`<devtools-icon class="icon" name=${iconName} title=${request.resourceType().title()}
+        style=${styleMap({color})}></devtools-icon>`;
   }
 
   static iconDataForResourceType(resourceType: Common.ResourceType.ResourceType): {iconName: string, color: string} {
@@ -207,7 +169,8 @@ export class PanelUtils {
     if (resourceType.name() === Common.ResourceType.resourceTypes.Wasm.name()) {
       return {iconName: 'file-wasm', color: 'var(--icon-default)'};
     }
-    if (resourceType.name() === Common.ResourceType.resourceTypes.WebSocket.name()) {
+    if (resourceType.name() === Common.ResourceType.resourceTypes.WebSocket.name() ||
+        resourceType.name() === Common.ResourceType.resourceTypes.DirectSocket.name()) {
       return {iconName: 'file-websocket', color: 'var(--icon-default)'};
     }
     if (resourceType.name() === Common.ResourceType.resourceTypes.Media.name()) {
@@ -225,10 +188,7 @@ export class PanelUtils {
     return {iconName: 'file-generic', color: 'var(--icon-default)'};
   }
 
-  static getIconForSourceFile(uiSourceCode: Workspace.UISourceCode.UISourceCode, options: {
-    width?: number,
-    height?: number,
-  } = {}): IconButton.FileSourceIcon.FileSourceIcon {
+  static getIconForSourceFile(uiSourceCode: Workspace.UISourceCode.UISourceCode): TemplateResult {
     const binding = Persistence.Persistence.PersistenceImpl.instance().binding(uiSourceCode);
     const networkPersistenceManager = Persistence.NetworkPersistenceManager.NetworkPersistenceManager.instance();
     let iconType = 'document';
@@ -247,21 +207,12 @@ export class PanelUtils {
       iconType = 'snippet';
     }
 
-    const icon = new IconButton.FileSourceIcon.FileSourceIcon(iconType);
-    icon.data = {
-      contentType: uiSourceCode.contentType().name(),
-      hasDotBadge,
-      isDotPurple,
-      width: options.width,
-      height: options.height,
-    };
-
-    if (binding) {
-      UI.Tooltip.Tooltip.install(
-          icon, Persistence.PersistenceUtils.PersistenceUtils.tooltipForUISourceCode(uiSourceCode));
-    }
-
-    return icon;
+    const title =
+        binding ? Persistence.PersistenceUtils.PersistenceUtils.tooltipForUISourceCode(uiSourceCode) : undefined;
+    // clang-format off
+    return html`<devtools-file-source-icon name=${iconType} title=${ifDefined(title)}
+      .data=${{contentType: uiSourceCode.contentType().name(), hasDotBadge, isDotPurple, iconType}}></devtools-file-source-icon>`;
+    // clang-format on
   }
 
   static async formatCSSChangesFromDiff(diff: Diff.Diff.DiffArray): Promise<string> {

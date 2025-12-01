@@ -11,8 +11,6 @@
 #include "components/optimization_guide/core/optimization_guide_model_executor.h"
 #include "services/on_device_model/public/cpp/capabilities.h"
 
-class AIManager;
-
 // A base class for tasks which create an on-device session.
 class CreateOnDeviceSessionTask
     : public AIContextBoundObject,
@@ -28,13 +26,6 @@ class CreateOnDeviceSessionTask
       delete;
 
   bool IsPending() const { return state_ == State::kPending; }
-
-  void set_override_session(
-      std::unique_ptr<
-          optimization_guide::OptimizationGuideModelExecutor::Session>
-          override_session) {
-    override_session_ = std::move(override_session);
-  }
 
   // Starts the process of creating an on-device model session.
   // It may succeed or fail immediately, or it may move into the `kPending`
@@ -88,6 +79,9 @@ class CreateOnDeviceSessionTask
       optimization_guide::ModelBasedCapabilityKey feature,
       optimization_guide::OnDeviceModelEligibilityReason reason) override;
 
+  void OnGetEligibility(
+      optimization_guide::OnDeviceModelEligibilityReason eligibility);
+
   std::unique_ptr<optimization_guide::OptimizationGuideModelExecutor::Session>
   StartSession();
 
@@ -100,49 +94,7 @@ class CreateOnDeviceSessionTask
   const raw_ptr<content::BrowserContext> browser_context_;
   const optimization_guide::ModelBasedCapabilityKey feature_;
   State state_ = CreateOnDeviceSessionTask::State::kNotStarted;
-  // TODO(crbug.com/385173789): Remove hacky multimodal prototype workarounds.
-  std::unique_ptr<optimization_guide::OptimizationGuideModelExecutor::Session>
-      override_session_;
-};
-
-// Implementation of the `CreateOnDeviceSessionTask` base class for
-// `AILanguageModel`.
-class CreateLanguageModelOnDeviceSessionTask
-    : public CreateOnDeviceSessionTask {
- public:
-  CreateLanguageModelOnDeviceSessionTask(
-      AIManager& ai_manager,
-      AIContextBoundObjectSet& context_bound_object_set,
-      content::BrowserContext* browser_context,
-      optimization_guide::SamplingParams sampling_params,
-      on_device_model::Capabilities capabilities,
-      base::OnceCallback<
-          void(std::unique_ptr<
-               optimization_guide::OptimizationGuideModelExecutor::Session>)>
-          completion_callback);
-  ~CreateLanguageModelOnDeviceSessionTask() override;
-
-  CreateLanguageModelOnDeviceSessionTask(
-      const CreateLanguageModelOnDeviceSessionTask&) = delete;
-  CreateLanguageModelOnDeviceSessionTask& operator=(
-      const CreateLanguageModelOnDeviceSessionTask&) = delete;
-
- protected:
-  // `CreateOnDeviceSessionTask` implementation.
-  void OnFinish(std::unique_ptr<
-                optimization_guide::OptimizationGuideModelExecutor::Session>
-                    session) override;
-
-  void UpdateSessionConfigParams(
-      optimization_guide::SessionConfigParams* config_params) override;
-
- private:
-  const optimization_guide::SamplingParams sampling_params_;
-  const on_device_model::Capabilities capabilities_;
-  base::OnceCallback<void(
-      std::unique_ptr<
-          optimization_guide::OptimizationGuideModelExecutor::Session>)>
-      completion_callback_;
+  base::WeakPtrFactory<CreateOnDeviceSessionTask> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_AI_AI_CREATE_ON_DEVICE_SESSION_TASK_H_

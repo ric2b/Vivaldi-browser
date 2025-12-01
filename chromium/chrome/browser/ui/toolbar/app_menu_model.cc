@@ -26,6 +26,7 @@
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/defaults.h"
+#include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
@@ -111,7 +112,6 @@
 #include "components/saved_tab_groups/public/features.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/user_education/common/feature_promo/feature_promo_controller.h"
@@ -125,6 +125,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/profiling.h"
 #include "content/public/common/url_constants.h"
+#include "extensions/common/extension_features.h"
 #include "media/base/media_switches.h"
 #include "ui/base/accelerators/menu_label_accelerator_util.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -507,15 +508,9 @@ ProfileSubMenuModel::ProfileSubMenuModel(
     }
   }
 
-  if (switches::IsImprovedSigninUIOnDesktopEnabled()) {
-    BuildManageGoogleAccountRow(profile);
-    BuildCustomizeProfileRow(profile);
-    BuildCloseProfileRow(profile);
-  } else {
-    BuildCustomizeProfileRow(profile);
-    BuildCloseProfileRow(profile);
-    BuildManageGoogleAccountRow(profile);
-  }
+  BuildManageGoogleAccountRow(profile);
+  BuildCustomizeProfileRow(profile);
+  BuildCloseProfileRow(profile);
 
   bool needs_separator = false;
   const bool is_guest_mode_enabled = profiles::IsGuestModeEnabled(*profile);
@@ -544,11 +539,6 @@ ProfileSubMenuModel::ProfileSubMenuModel(
       other_profiles_.insert({menu_id, profile_entry->GetPath()});
     }
 
-    if (is_guest_mode_enabled &&
-        !switches::IsImprovedSigninUIOnDesktopEnabled()) {
-      needs_separator = true;
-      BuildGuestProfileRow(profile);
-    }
     if (needs_separator) {
       AddSeparator(ui::NORMAL_SEPARATOR);
     }
@@ -558,8 +548,7 @@ ProfileSubMenuModel::ProfileSubMenuModel(
                                        IDS_ADD_NEW_PROFILE,
                                        kAccountAddChromeRefreshIcon);
     }
-    if (switches::IsImprovedSigninUIOnDesktopEnabled() &&
-        is_guest_mode_enabled) {
+    if (is_guest_mode_enabled) {
       BuildGuestProfileRow(profile);
     }
 
@@ -655,11 +644,8 @@ bool ProfileSubMenuModel::BuildSyncSection() {
 }
 
 void ProfileSubMenuModel::BuildGuestProfileRow(Profile* profile) {
-  AddItemWithStringIdAndVectorIcon(
-      this, IDC_OPEN_GUEST_PROFILE, IDS_OPEN_GUEST_PROFILE,
-      switches::IsImprovedSigninUIOnDesktopEnabled()
-          ? kAccountBoxIcon
-          : vector_icons::kAccountCircleChromeRefreshIcon);
+  AddItemWithStringIdAndVectorIcon(this, IDC_OPEN_GUEST_PROFILE,
+                                   IDS_OPEN_GUEST_PROFILE, kAccountBoxIcon);
   SetElementIdentifierAt(GetIndexOfCommandId(IDC_OPEN_GUEST_PROFILE).value(),
                          AppMenuModel::kProfileOpenGuestItem);
 }
@@ -947,9 +933,6 @@ void ToolsMenuModel::Build(Browser* browser) {
       kReadingModeMenuItem);
 
   AddSeparator(ui::NORMAL_SEPARATOR);
-  if (!features::IsExtensionMenuInRootAppMenu()) {
-    AddItemWithStringId(IDC_MANAGE_EXTENSIONS, IDS_SHOW_EXTENSIONS);
-  }
 
   AddItemWithStringIdAndVectorIcon(this, IDC_PERFORMANCE, IDS_SHOW_PERFORMANCE,
                                    kPerformanceIcon);
@@ -1191,7 +1174,6 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       break;
     // Extensions menu.
     case IDC_EXTENSIONS_SUBMENU_MANAGE_EXTENSIONS:
-      CHECK(features::IsExtensionMenuInRootAppMenu());
       // Logging the original histograms for experiment comparison purposes.
       if (!uma_action_recorded_) {
         base::UmaHistogramMediumTimes(
@@ -1200,12 +1182,18 @@ void AppMenuModel::LogMenuMetrics(int command_id) {
       LogMenuAction(MENU_ACTION_MANAGE_EXTENSIONS);
       break;
     case IDC_EXTENSIONS_SUBMENU_VISIT_CHROME_WEB_STORE:
-      CHECK(features::IsExtensionMenuInRootAppMenu());
       if (!uma_action_recorded_) {
         base::UmaHistogramMediumTimes(
             "WrenchMenu.TimeToAction.VisitChromeWebStore", delta);
       }
       LogMenuAction(MENU_ACTION_VISIT_CHROME_WEB_STORE);
+      break;
+    case IDC_FIND_EXTENSIONS:
+      if (!uma_action_recorded_) {
+        base::UmaHistogramMediumTimes("WrenchMenu.TimeToAction.FindExtensions",
+                                      delta);
+      }
+      LogMenuAction(MENU_ACTION_FIND_EXTENSIONS);
       break;
     // Recent tabs menu.
     case IDC_RESTORE_TAB:
@@ -1905,8 +1893,15 @@ void AppMenuModel::Build() {
         kTabGroupsMenuItem);
   }
 
-  if (features::IsExtensionMenuInRootAppMenu()) {
-    // Extensions sub menu.
+  // Extensions sub menu.
+  if (base::FeatureList::IsEnabled(features::kExtensionsCollapseMainMenu) &&
+      !extensions::ui_util::HasManageableExtensions(browser_->profile())) {
+    AddItemWithStringIdAndVectorIcon(this, IDC_FIND_EXTENSIONS,
+                                     IDS_FIND_EXTENSIONS,
+                                     vector_icons::kExtensionChromeRefreshIcon);
+    SetElementIdentifierAt(GetIndexOfCommandId(IDC_FIND_EXTENSIONS).value(),
+                           ExtensionsMenuModel::kVisitChromeWebStoreMenuItem);
+  } else {
     sub_menus_.push_back(std::make_unique<ExtensionsMenuModel>(this, browser_));
     AddSubMenuWithStringIdAndVectorIcon(
         this, IDC_EXTENSIONS_SUBMENU, IDS_EXTENSIONS_SUBMENU,
@@ -1914,6 +1909,7 @@ void AppMenuModel::Build() {
     SetElementIdentifierAt(GetIndexOfCommandId(IDC_EXTENSIONS_SUBMENU).value(),
                            kExtensionsMenuItem);
   }
+
   AddItemWithStringIdAndVectorIcon(this, IDC_CLEAR_BROWSING_DATA,
                                    IDS_CLEAR_BROWSING_DATA,
                                    kTrashCanRefreshIcon);
@@ -1925,11 +1921,14 @@ void AppMenuModel::Build() {
   AddItemWithStringIdAndVectorIcon(this, IDC_PRINT, IDS_PRINT, kPrintMenuIcon);
 
 #if BUILDFLAG(ENABLE_GLIC)
-  if (glic::GlicEnabling::IsProfileEligible(browser_->profile())) {
+  if (glic::GlicEnabling::IsEnabledForProfile(browser_->profile())) {
     AddItemWithStringIdAndVectorIcon(this, IDC_OPEN_GLIC,
                                      IDS_GLIC_THREE_DOT_MENU_ITEM,
                                      glic::GlicVectorIconManager::GetVectorIcon(
                                          IDR_GLIC_BUTTON_VECTOR_ICON));
+    SetIsNewFeatureAt(GetIndexOfCommandId(IDC_OPEN_GLIC).value(),
+                      browser()->window()->MaybeShowNewBadgeFor(
+                          features::kGlicAppMenuNewBadge));
   }
 #endif
 
@@ -2088,7 +2087,7 @@ bool AppMenuModel::AddDefaultBrowserMenuItems() {
   if ((app_menu_icon_controller_ &&
        app_menu_icon_controller_->GetTypeAndSeverity().type ==
            AppMenuIconController::IconType::DEFAULT_BROWSER_PROMPT) ||
-      (DefaultBrowserPromptManager::GetInstance()->get_show_app_menu_item())) {
+      (DefaultBrowserPromptManager::GetInstance()->show_app_menu_item())) {
     AddItemWithIcon(
         IDC_SET_BROWSER_AS_DEFAULT,
         l10n_util::GetStringUTF16(IDS_SET_BROWSER_AS_DEFAULT_MENU_ITEM),

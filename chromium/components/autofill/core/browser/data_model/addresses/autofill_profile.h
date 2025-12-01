@@ -309,11 +309,6 @@ class AutofillProfile : public FormGroup {
   // Returns true if all calls yielded true.
   bool FinalizeAfterImport();
 
-  // Returns true if the profile contains any structured data. This can be any
-  // name type but the full name, or for addresses, the street name or house
-  // number.
-  bool HasStructuredData() const;
-
   // Returns a constant reference to the |name_| field.
   const NameInfo& GetNameInfo() const { return name_; }
 
@@ -350,11 +345,6 @@ class AutofillProfile : public FormGroup {
   // and with `record_type` kAccount. Additional kAccount-specific metadata is
   // set.
   AutofillProfile ConvertToAccountProfile() const;
-
-  // Converts a kAccount(Home|Work) address back to a regular kAccount address.
-  // This is necessary to resolve inconsistencies between server and client, to
-  // ensure that only a single H/W address can exist each.
-  AutofillProfile DowngradeToAccountProfile() const;
 
   // Checks for non-empty setting-inaccessible fields and returns all that were
   // found.
@@ -444,8 +434,6 @@ class AutofillProfile : public FormGroup {
   int last_modifier_id_ = 0;
 
   // Stores information about the quality of this profile's stored types.
-  // Only used when `kAutofillTrackProfileTokenQuality` is enabled.
-  // TODO(crbug.com/40271999): Clean-up comment.
   ProfileTokenQuality token_quality_;
 
   UsageHistoryInformation usage_history_information_;

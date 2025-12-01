@@ -11,7 +11,6 @@ source_set("sync_integration_testsupport"){
   deps = [
     "//chrome/browser",
     "//components/invalidation/impl",
-    "//components/reading_list/features:flags",
     "//components/sync/protocol",
     "//components/sync:test_support",
     "//skia",
@@ -31,7 +30,6 @@ source_set("fake_server"){
     "fake_server/notes_entity_builder.h",
   ]
   deps = [
-    "//components/reading_list/features:flags",
     "//components/sync/base",
     "//components/sync/protocol",
     "//url",

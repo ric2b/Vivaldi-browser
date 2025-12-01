@@ -9,7 +9,6 @@
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
-#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/trace_event/trace_event.h"
 #include "base/unguessable_token.h"
@@ -23,6 +22,7 @@
 
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
 #include "services/audio/output_device_mixer.h"
+#include "services/audio/system_loopback_listener.h"
 #endif
 
 namespace audio {
@@ -37,6 +37,15 @@ std::unique_ptr<OutputDeviceMixerManager> MaybeCreateOutputDeviceMixerManager(
 
   return std::make_unique<OutputDeviceMixerManager>(
       audio_manager, base::BindRepeating(&OutputDeviceMixer::Create));
+}
+
+std::unique_ptr<SystemLoopbackListener> MaybeCreateSystemLoopbackListener(
+    media::AudioManager* audio_manager) {
+  if (!media::IsSystemLoopbackAsAecReferenceEnabled()) {
+    return nullptr;
+  }
+
+  return std::make_unique<SystemLoopbackListener>(audio_manager);
 }
 #endif  // BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
 
@@ -56,6 +65,8 @@ StreamFactory::StreamFactory(
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
       output_device_mixer_manager_(
           MaybeCreateOutputDeviceMixerManager(audio_manager)),
+      system_loopback_listener_(
+          MaybeCreateSystemLoopbackListener(audio_manager)),
 #endif
       loopback_worker_thread_("Loopback Worker", kReatimeThreadPeriod) {
 }
@@ -95,7 +106,11 @@ void StreamFactory::CreateInputStream(
       std::move(stream_receiver), std::move(client), std::move(observer),
       std::move(pending_log), audio_manager_, aecdump_recording_manager_,
 #if BUILDFLAG(CHROME_WIDE_ECHO_CANCELLATION)
-      output_device_mixer_manager_.get(), std::move(processing_config),
+      system_loopback_listener_
+          ? static_cast<DeviceOutputListener*>(system_loopback_listener_.get())
+          : static_cast<DeviceOutputListener*>(
+                output_device_mixer_manager_.get()),
+      std::move(processing_config),
 #else
       nullptr, nullptr,
 #endif
@@ -279,7 +294,7 @@ void StreamFactory::DestroyLoopbackStream(LoopbackStream* stream) {
 
   const auto it =
       std::ranges::find_if(loopback_streams_, base::MatchesUniquePtr(stream));
-  CHECK(it != loopback_streams_.end(), base::NotFatalUntil::M130);
+  CHECK(it != loopback_streams_.end());
   loopback_streams_.erase(it);
 
   // If all LoopbackStreams have ended, stop and join the worker thread.

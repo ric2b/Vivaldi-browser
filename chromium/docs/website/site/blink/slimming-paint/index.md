@@ -6,10 +6,9 @@ page_name: slimming-paint
 title: Slimming Paint (a.k.a. Redesigning Painting and Compositing)
 ---
 
-## Slimming Paint is a [Paint team](/teams/paint-team) project to re-implement the Blink&lt;-&gt;cc picture recording API to work in terms of a global display list rather than a tree of cc::Layers (~aka GraphicsLayer in Blink terminology). It will result in a drastic simplification of the way that composited layers are represented in Blink and cc, which in turn will yield improved performance, correctness and flexibility.
+Slimming Paint was a project to re-implement the Blink&lt;-&gt;cc picture recording API to work in terms of a global display list rather than a tree of cc::Layers (~aka GraphicsLayer in Blink terminology). It was completed in several phases from 2015 to 2021.
 
-To get a sense of the extent of this rewrite, one side-effect will be the
-deletion of the code in core/rendering/compositing/.
+The project simplified compositing (following launch, 22,000 lines of c++ were removed),  fixed correctness ([fundamental compositing bug](https://crbug.com/40364303)), improved performance (total chrome CPU usage -1.3%, 3.5%+ improvement to 99th percentile scroll update, 2.2%+ improvement to 95th percentile input delay), and led to a more flexible architecture which has been built upon by many other projects (e.g., [HitTestOpaqueness](https://crbug.com/40062957), [RasterInducingScroll](https://docs.google.com/document/d/1ZaQQtcDC0EAkldXJp0h3sBvV9wyR4le048Al1RtIUZw/preview)).
 
 ## Phases
 
@@ -30,7 +29,7 @@ blink instead of re-generating them in cc ([Status: launched in
 M75](https://crbug.com/836884))
 
 [CompositeAfterPaint](https://docs.google.com/document/d/114ie7KJY3e850ZmGh4YfNq8Vq10jGrunZJpaG6trWsQ/edit)
-- compositing decisions made after paint.
+- compositing decisions made after paint ([Status: launched in M94](https://crbug.com/40081744))
 
 ## Presentations
 
@@ -85,28 +84,31 @@ discussions and related projects.
 
 ## Resources and Design Docs
 
+The [BlinkNG](https://developer.chrome.com/docs/chromium/blinkng) blogpost has a high-level overview of how slimming paint fits into the overall rendering architecture.
+
 [core/paint/README.md](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/renderer/core/paint/README.md)
+
+[platform/graphics/paint/README.md](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/renderer/platform/graphics/paint/README.md)
 
 [Slimming paint
 invalidation](https://docs.google.com/document/d/1M669yu7nsF9Wrkm7nQFi3Pp2r-QmCMqm4K7fPPo-doA)
 
 [Representation and implementation of display lists in
-Blink](https://docs.google.com/document/d/1fWvFIY41BJHtB4qBHw3_IZYqScurID4KmE2_a6Be0J4/edit?usp=sharing)
+Blink](https://docs.google.com/document/d/1fWvFIY41BJHtB4qBHw3_IZYqScurID4KmE2_a6Be0J4/preview?usp=sharing)
 
 [Layerization based on display
-lists](https://docs.google.com/a/google.com/document/d/1L6vb9JEPFoyt6eNjVla2AbzSUTGyQT93tQKgE3f1EMc/edit)
+lists](https://docs.google.com/a/google.com/document/d/1L6vb9JEPFoyt6eNjVla2AbzSUTGyQT93tQKgE3f1EMc/preview)
 
 [Blink paintlist update algorithm
-details](https://docs.google.com/document/d/1bvEdFo9avr11S-2k1-gT1opdYWnPWga68CK3MdoYV7k/edit?usp=sharing)
+details](https://docs.google.com/document/d/1bvEdFo9avr11S-2k1-gT1opdYWnPWga68CK3MdoYV7k/preview?usp=sharing)
 
-==[Bounding Rectangle Strategy for Slimming
-Paint](https://docs.google.com/a/chromium.org/document/d/12G3rfM3EkLYDCRcO1EpEObfeoU24Sqof9S0sPHgELU4/edit?usp=sharing)==
+[Bounding Rectangle Strategy for Slimming
+Paint](https://docs.google.com/a/chromium.org/document/d/12G3rfM3EkLYDCRcO1EpEObfeoU24Sqof9S0sPHgELU4/preview?usp=sharing)
 
 [Slimming Paint for UI
-Compositor](https://docs.google.com/a/chromium.org/document/d/1Oxa3E-ymCqY2-7AlMrL1GEqAtyFE__0PRzhg9EEZt7Y/edit)
+Compositor](https://docs.google.com/a/chromium.org/document/d/1Oxa3E-ymCqY2-7AlMrL1GEqAtyFE__0PRzhg9EEZt7Y/preview)
 
-[Display Item
-Debugging](https://docs.google.com/a/chromium.org/document/d/1XDz2paww41UjviZam1iTThS9XKx0KRcmzI83QuNLeR8/edit#)
+[Debugging blink objects](https://docs.google.com/document/d/1vgQY11pxRQUDAufxSsc2xKyQCKGPftZ5wZnjY2El4w8/preview) has information about inspecting the datastructures introduced by slimming paint.
 
 Some out of date/historical docs are
 [here](/blink/slimming-paint/historical-documents).

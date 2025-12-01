@@ -9,7 +9,7 @@ MAC_VERSION = "Mac-13"
 WINDOWS_VERSION = "Windows-10"
 REF = "refs/heads/main"
 
-RECLIENT_PROPERTY = "$build/reclient"
+SISO_PROPERTY = "$build/siso"
 
 # Use LUCI Scheduler BBv2 names and add Scheduler realms configs.
 lucicfg.enable_experiment("crbug.com/1182002")
@@ -112,8 +112,8 @@ luci.console_view(
     repo = REPO_URL,
 )
 
-_reclient = struct(
-    instance = struct(
+_siso = struct(
+    project = struct(
         DEFAULT_TRUSTED = "rbe-chromium-trusted",
         DEFAULT_UNTRUSTED = "rbe-chromium-untrusted",
     ),
@@ -180,10 +180,13 @@ def get_properties(
         properties["have_libvpx"] = True
     if chromium:
         properties["builder_group"] = "client.openscreen.chromium"
-        properties[RECLIENT_PROPERTY] = {
-            "instance": _reclient.instance.DEFAULT_UNTRUSTED,
+        properties[SISO_PROPERTY] = {
+            "configs": ["builder"],
+            "enable_cloud_monitoring": True,
+            "enable_cloud_profiler": True,
+            "enable_cloud_trace": True,
             "metrics_project": "chromium-reclient-metrics",
-            "scandeps_server": True,
+            "project": _siso.project.DEFAULT_UNTRUSTED,
         }
 
     if is_presubmit:
@@ -310,10 +313,9 @@ def try_and_ci_builders(name, properties, os = "Ubuntu-22.04", cpu = "x86-64"):
 
     ci_properties = dict(properties)
     ci_properties["is_ci"] = True
-    RECLIENT_PROPERTY = "$build/reclient"
-    if RECLIENT_PROPERTY in ci_properties:
-        ci_properties[RECLIENT_PROPERTY] = dict(ci_properties[RECLIENT_PROPERTY])
-        ci_properties[RECLIENT_PROPERTY]["instance"] = _reclient.instance.DEFAULT_TRUSTED
+    if SISO_PROPERTY in ci_properties:
+        ci_properties[SISO_PROPERTY] = dict(ci_properties[SISO_PROPERTY])
+        ci_properties[SISO_PROPERTY]["project"] = _siso.project.DEFAULT_TRUSTED
     ci_builder(name, ci_properties, os, cpu)
 
 # BUILDER CONFIGURATIONS

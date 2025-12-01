@@ -971,43 +971,6 @@
         ]
       },
       {
-        "name": "onTabIsDetached",
-        "type": "function",
-        "description": "Fired when a tab that is moved out of a window detaches from the source-window. This is used to make sure two WebViews don't try to use the same WebContents.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "tabId",
-            "minimum": 0,
-            "description": "Tab id used for Tabstrip WebContents retrieval."
-          },
-          {
-            "type": "integer",
-            "name": "windowId",
-            "minimum": 0,
-            "description": "Target WindowId that the message is intended. As in not the window it is detached from, but the window it is attached to."
-          }
-        ]
-      },
-      {
-        "name": "onTabIsAttached",
-        "type": "function",
-        "description": "Fired when a WebContents is attached to an embedder. This is used to make sure two WebViews don't try to use the same WebContents.",
-        "parameters": [
-          {
-            "type": "integer",
-            "name": "tabId",
-            "minimum": 0,
-            "description": "Tab id used for Tabstrip WebContents retrieval."
-          },
-          {
-            "type": "integer",
-            "name": "windowId",
-            "description": "WindowId of the embedder."
-          }
-        ]
-      },
-      {
         "name": "onMouseGestureDetection",
         "type": "function",
         "description": "Fires when we detect a possible start of a mouse-gesture related event",

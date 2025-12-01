@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/views/autofill/popup/popup_row_view.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_utils.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
+#include "chrome/browser/ui/webid/identity_ui_utils.h"
 #include "components/autofill/core/browser/filling/filling_product.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
@@ -69,6 +70,10 @@ constexpr int kIconSize = 16;
 constexpr int kChromeRefreshIconSize = 20;
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 constexpr int kGooglePayLogoWidth = 40;
+// The icon size used in the suggestion dropdown for displaying the Google
+// Wallet icon in the "Manage loyalty cards" entry and in all loyalty cards
+// submenu entries.
+constexpr int kGoogleWalletIconSize = 20;
 #endif
 
 // The additional height of the row in case it has two lines of text.
@@ -136,6 +141,8 @@ std::u16string GetIconAccessibleName(Suggestion::Icon icon) {
     case Suggestion::Icon::kGoogleMonochrome:
     case Suggestion::Icon::kGooglePasswordManager:
     case Suggestion::Icon::kGooglePay:
+    case Suggestion::Icon::kGoogleWallet:
+    case Suggestion::Icon::kGoogleWalletMonochrome:
     case Suggestion::Icon::kHome:
     case Suggestion::Icon::kHttpsInvalid:
     case Suggestion::Icon::kHttpWarning:
@@ -190,7 +197,7 @@ std::unique_ptr<views::ImageView> ConvertModelToImageView(
 // leading and trailing icons is contained.
 std::unique_ptr<views::TableLayoutView> CreateSuggestionContentTable(
     std::unique_ptr<views::Label> main_text_label,
-    std::vector<std::unique_ptr<views::Label>> minor_text_labels,
+    std::vector<std::unique_ptr<views::View>> minor_text_labels,
     std::unique_ptr<views::Label> description_label,
     std::vector<std::unique_ptr<views::View>> subtext_views) {
   const bool kHasTwoColumns = !!description_label;
@@ -258,10 +265,11 @@ std::unique_ptr<views::TableLayoutView> CreateSuggestionContentTable(
 std::optional<ui::ImageModel> GetIconImageModelFromIcon(Suggestion::Icon icon) {
   switch (icon) {
     case Suggestion::Icon::kNoIcon:
-      // TODO(crbug.com/381994105): Implement Home/Work icons.
-    case Suggestion::Icon::kHome:
-    case Suggestion::Icon::kWork:
       return std::nullopt;
+    case Suggestion::Icon::kHome:
+      return ImageModelFromVectorIcon(vector_icons::kHomeIcon, kIconSize);
+    case Suggestion::Icon::kWork:
+      return ImageModelFromVectorIcon(vector_icons::kWorkIcon, kIconSize);
     case Suggestion::Icon::kAccount:
       return ImageModelFromVectorIcon(kAccountCircleIcon, kIconSize);
     case Suggestion::Icon::kClear:
@@ -354,6 +362,20 @@ std::optional<ui::ImageModel> GetIconImageModelFromIcon(Suggestion::Icon icon) {
 #else
       return ImageModelFromVectorIcon(kCreditCardIcon, kIconSize);
 #endif
+    case Suggestion::Icon::kGoogleWallet:
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      return ImageModelFromVectorIcon(vector_icons::kGoogleWalletIcon,
+                                      kGoogleWalletIconSize);
+#else
+      return std::nullopt;
+#endif
+    case Suggestion::Icon::kGoogleWalletMonochrome:
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+      return ImageModelFromVectorIcon(vector_icons::kGoogleWalletMonochromeIcon,
+                                      kGoogleWalletIconSize);
+#else
+      return std::nullopt;
+#endif
     case Suggestion::Icon::kIban:
     case Suggestion::Icon::kCreate:
     case Suggestion::Icon::kOfferTag:
@@ -424,9 +446,13 @@ std::unique_ptr<views::ImageView> GetIconImageView(
 
   if (auto* icon = std::get_if<gfx::Image>(&suggestion.custom_icon);
       icon && !icon->IsEmpty()) {
-    std::optional<ui::ImageModel> image_model =
-        ImageModelFromImageSkia(icon->AsImageSkia());
-    return ConvertModelToImageView(image_model,
+    gfx::ImageSkia image = icon->AsImageSkia();
+    if (std::holds_alternative<Suggestion::IdentityCredentialPayload>(
+            suggestion.payload)) {
+      image = webid::CreateCircleCroppedImage(
+          image, webid::kDesiredAvatarSizeInAutofillDropdown);
+    }
+    return ConvertModelToImageView(ImageModelFromImageSkia(image),
                                    suggestion.HasDeactivatedStyle());
   }
   std::unique_ptr<views::ImageView> icon_image_view =
@@ -477,7 +503,7 @@ void AddSpacerWithSize(views::BoxLayoutView& view,
 void AddSuggestionContentToView(
     const Suggestion& suggestion,
     std::unique_ptr<views::Label> main_text_label,
-    std::vector<std::unique_ptr<views::Label>> minor_text_labels,
+    std::vector<std::unique_ptr<views::View>> minor_text_labels,
     std::unique_ptr<views::Label> description_label,
     std::vector<std::unique_ptr<views::View>> subtext_views,
     std::unique_ptr<views::View> icon,

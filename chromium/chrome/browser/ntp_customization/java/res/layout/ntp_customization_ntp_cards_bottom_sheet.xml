@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-Copyright 2025 The Chromium Authors.
+Copyright 2025 The Chromium Authors. All rights reserved.
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file.
 -->
@@ -13,13 +13,15 @@ found in the LICENSE file.
     android:layout_height="wrap_content"
     android:paddingBottom="@dimen/ntp_customization_bottom_sheet_layout_padding_bottom">
 
+    <include layout="@layout/ntp_customization_drag_handle_bar" />
+
     <ImageView
         android:id="@+id/back_button"
         android:layout_height="@dimen/ntp_customization_back_button_clickable_size"
         android:layout_width="@dimen/ntp_customization_back_button_clickable_size"
         android:padding="@dimen/ntp_customization_back_button_padding"
         android:layout_marginStart="@dimen/ntp_customization_back_button_padding"
-        android:importantForAccessibility="no"
+        android:contentDescription="@string/back"
         android:src="@drawable/btn_back"
         app:tint="@macro/default_icon_color"
         app:layout_constraintTop_toTopOf="@id/bottom_sheet_title"
@@ -33,11 +35,11 @@ found in the LICENSE file.
         android:gravity="start"
         android:textAppearance="@style/TextAppearance.Headline.Primary"
         android:text="@string/home_modules_configuration"
-        android:layout_marginStart="@dimen/ntp_customization_discover_feed_margin_top"
-        android:layout_marginTop="@dimen/ntp_customization_back_button_margin"
+        android:layout_marginStart="@dimen/ntp_customization_ntp_cards_title_margin"
+        android:layout_marginTop="@dimen/ntp_customization_bottom_sheet_layout_padding_bottom"
         android:layout_marginEnd="@dimen/ntp_customization_bottom_sheet_layout_padding_bottom"
-        app:layout_constraintStart_toEndOf="@id/back_button"
-        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/drag_handle_bar"
         app:layout_constraintEnd_toEndOf="parent" />
 
     <org.chromium.chrome.browser.ntp_customization.ntp_cards.NtpCardsListContainerView

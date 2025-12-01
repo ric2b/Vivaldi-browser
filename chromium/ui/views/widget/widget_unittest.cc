@@ -165,9 +165,7 @@ class WidgetTestBubbleDialogDelegateView : public BubbleDialogDelegateView {
 
  public:
   explicit WidgetTestBubbleDialogDelegateView(View* anchor)
-      : BubbleDialogDelegateView(anchor, BubbleBorder::NONE) {
-    SetOwnedByWidget(false);
-  }
+      : BubbleDialogDelegateView(anchor, BubbleBorder::NONE) {}
   ~WidgetTestBubbleDialogDelegateView() override = default;
 
   bool ShouldShowCloseButton() const override {
@@ -1133,7 +1131,7 @@ TEST_F(WidgetOwnsNativeWidgetTest, WidgetDelegateView) {
                                 Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.native_widget = CreatePlatformNativeWidgetImpl(
       widget.get(), kStubCapture, &state()->native_widget_deleted);
-  params.delegate = new WidgetDelegateView();
+  params.delegate = new WidgetDelegateView(WidgetDelegateView::CreatePassKey());
   widget->Init(std::move(params));
 
   // Allow the Widget to go out of scope. There should be no crash or
@@ -3642,6 +3640,7 @@ TEST_F(DesktopWidgetTest, LockPaintAsActiveAndCloseParent) {
   params.parent = parent->GetNativeView();
   delegate->InitWidget(std::move(params));
   delegate->RegisterDeleteDelegateCallback(
+      WidgetDelegate::RegisterDeleteCallbackPassKey(),
       base::DoNothingWithBoundArgs(delegate->GetWidget()->LockPaintAsActive()));
   base::WeakPtr<Widget> child = delegate->GetWidget()->GetWeakPtr();
   child->ShowInactive();
@@ -5794,6 +5793,23 @@ TEST_F(WidgetTest, ChildWidgetNotifiesObserverWhenReparented) {
 
   child_widget.reset();
   EXPECT_EQ(observer_2.child_widget(), nullptr);
+}
+
+TEST_F(WidgetTest, NativeWidgetNotifiedOfWidgetDestructionForClientOwnsWidget) {
+  auto widget = std::make_unique<Widget>();
+  Widget::InitParams params = CreateParams(
+      Widget::InitParams::CLIENT_OWNS_WIDGET, Widget::InitParams::TYPE_WINDOW);
+
+  auto native_widget =
+      std::make_unique<testing::NiceMock<MockNativeWidget>>(widget.get());
+  ON_CALL(*native_widget, CreateNonClientFrameView).WillByDefault([]() {
+    return std::make_unique<NonClientFrameView>();
+  });
+  params.native_widget = native_widget.get();
+  widget->Init(std::move(params));
+
+  EXPECT_CALL(*native_widget, ClientDestroyedWidget());
+  widget.reset();
 }
 
 // Parameterized test that verifies the behavior of SetAspectRatio with respect

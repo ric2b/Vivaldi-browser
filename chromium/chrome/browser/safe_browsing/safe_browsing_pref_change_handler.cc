@@ -205,7 +205,7 @@ void SafeBrowsingPrefChangeHandler::DidAddTab(TabAndroid* tab,
   RetryStateCallback();
 }
 
-void SafeBrowsingPrefChangeHandler::OnTabModelAdded() {
+void SafeBrowsingPrefChangeHandler::OnTabModelAdded(TabModel* tab_model) {
   if (observed_tab_model_) {
     return;
   }
@@ -215,7 +215,7 @@ void SafeBrowsingPrefChangeHandler::OnTabModelAdded() {
   AddTabModelObserver();
 }
 
-void SafeBrowsingPrefChangeHandler::OnTabModelRemoved() {
+void SafeBrowsingPrefChangeHandler::OnTabModelRemoved(TabModel* tab_model) {
   RemoveTabModelObserver();
 }
 

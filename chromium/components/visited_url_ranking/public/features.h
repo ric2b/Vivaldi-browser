@@ -21,6 +21,10 @@ BASE_DECLARE_FEATURE(kVisitedURLRankingService);
 extern const base::FeatureParam<bool>
     kVisitedURLRankingHistoryFetcherDiscardZeroDurationVisits;
 
+// Parameter determining if the actions used to train the model should
+// continue to be sent to the segmentation service.
+extern const base::FeatureParam<bool> kVisitedURLRankingRecordActions;
+
 // Parameter determining the fetch option's default query duration in hours.
 extern const char kVisitedURLRankingFetchDurationInHoursParam[];
 
@@ -130,6 +134,23 @@ extern const base::FeatureParam<bool> kGroupSuggestionEnableSwitchBetween;
 // Parameter determining whether to enable the similar source heuristics.
 extern const base::FeatureParam<bool> kGroupSuggestionEnableSimilarSource;
 
+// Parameter determining whether to enable the same origin heuristics.
+extern const base::FeatureParam<bool> kGroupSuggestionEnableSameOrigin;
+
+// Parameter determining whether to show group suggestions only in tab switcher.
+extern const base::FeatureParam<bool> kGroupSuggestionEnableTabSwitcherOnly;
+
+// Parameter determining whether to check group visibility.
+extern const base::FeatureParam<bool> kGroupSuggestionEnableVisibilityCheck;
+
+// Parameter determining whether to trigger group suggestions calculation on
+// page loads.
+extern const base::FeatureParam<bool>
+    kGroupSuggestionTriggerCalculationOnPageLoad;
+
+// Parameter determining the age threshold for suggestion throttling.
+extern const base::FeatureParam<base::TimeDelta>
+    kGroupSuggestionThrottleAgeLimit;
 }  // namespace visited_url_ranking::features
 
 #endif  // COMPONENTS_VISITED_URL_RANKING_PUBLIC_FEATURES_H_

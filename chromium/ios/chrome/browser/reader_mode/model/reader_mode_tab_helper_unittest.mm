@@ -4,34 +4,19 @@
 
 #import "ios/chrome/browser/reader_mode/model/reader_mode_tab_helper.h"
 
-#import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
-#import "base/test/scoped_feature_list.h"
-#import "base/test/scoped_mock_clock_override.h"
-#import "components/dom_distiller/core/extraction_utils.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
 #import "components/ukm/test_ukm_recorder.h"
+#import "ios/chrome/browser/dom_distiller/model/distiller_service_factory.h"
 #import "ios/chrome/browser/reader_mode/model/constants.h"
-#import "ios/chrome/browser/reader_mode/model/features.h"
-#import "ios/chrome/browser/reader_mode/model/reader_mode_java_script_feature.h"
+#import "ios/chrome/browser/reader_mode/model/reader_mode_test.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
-#import "ios/web/public/js_messaging/web_frame.h"
-#import "ios/web/public/js_messaging/web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
-#import "ios/web/public/test/fakes/fake_web_client.h"
-#import "ios/web/public/test/fakes/fake_web_frame.h"
-#import "ios/web/public/test/fakes/fake_web_frames_manager.h"
 #import "ios/web/public/test/fakes/fake_web_state.h"
-#import "ios/web/public/test/scoped_testing_web_client.h"
-#import "ios/web/public/test/web_state_test_util.h"
 #import "ios/web/public/test/web_task_environment.h"
 #import "services/metrics/public/cpp/ukm_builders.h"
-#import "testing/platform_test.h"
-#import "third_party/dom_distiller_js/dom_distiller.pb.h"
+#import "testing/gmock/include/gmock/gmock.h"
 
-using base::test::ios::kWaitForJSCompletionTimeout;
-using base::test::ios::kWaitForPageLoadTimeout;
-using base::test::ios::WaitUntilConditionOrTimeout;
 using IOS_ReaderMode_Distiller_Latency =
     ukm::builders::IOS_ReaderMode_Distiller_Latency;
 using IOS_ReaderMode_Distiller_Result =
@@ -39,50 +24,50 @@ using IOS_ReaderMode_Distiller_Result =
 using IOS_ReaderMode_Heuristic_Result =
     ukm::builders::IOS_ReaderMode_Heuristic_Result;
 
-class ReaderModeTabHelperTest : public PlatformTest {
+// Mock implementation of ReaderModeTabHelper::Observer using gMock.
+class MockReaderModeTabHelperObserver : public ReaderModeTabHelper::Observer {
  public:
-  ReaderModeTabHelperTest()
-      : web_client_(std::make_unique<web::FakeWebClient>()) {}
+  MockReaderModeTabHelperObserver() = default;
+  ~MockReaderModeTabHelperObserver() override = default;
 
+  MOCK_METHOD(void,
+              ReaderModeWebStateDidBecomeAvailable,
+              (ReaderModeTabHelper * tab_helper),
+              (override));
+  MOCK_METHOD(void,
+              ReaderModeWebStateWillBecomeUnavailable,
+              (ReaderModeTabHelper * tab_helper),
+              (override));
+  MOCK_METHOD(void,
+              ReaderModeTabHelperDestroyed,
+              (ReaderModeTabHelper * tab_helper),
+              (override));
+};
+
+class ReaderModeTabHelperTest : public ReaderModeTest {
+ public:
   void SetUp() override {
-    PlatformTest::SetUp();
+    ReaderModeTest::SetUp();
 
-    profile_ = TestProfileIOS::Builder().Build();
+    web_state_ = CreateWebState();
 
-    web::WebState::CreateParams params(profile_.get());
-    web_state_ = web::WebState::Create(params);
-    web_state_->GetView();
-    web_state_->SetKeepRenderProcessAlive(true);
-
-    web::FakeWebClient* web_client =
-        static_cast<web::FakeWebClient*>(web_client_.Get());
-    web_client->SetJavaScriptFeatures(
-        {ReaderModeJavaScriptFeature::GetInstance()});
-
-    ReaderModeTabHelper::CreateForWebState(web_state_.get());
+    // Configure the web state resources.
+    CreateTabHelperForWebState(web_state());
     ukm::InitializeSourceUrlRecorderForWebState(web_state());
   }
 
   void TearDown() override { test_ukm_recorder_.Purge(); }
 
-  void WaitForMainFrame() {
-    EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForJSCompletionTimeout, ^bool {
-      web::WebFramesManager* frames_manager =
-          web_state()->GetPageWorldWebFramesManager();
-      return frames_manager->GetMainWebFrame() != nullptr;
-    }));
+  void CreateTabHelperForWebState(web::WebState* web_state) {
+    ReaderModeTabHelper::CreateForWebState(
+        web_state, DistillerServiceFactory::GetForProfile(profile()));
   }
 
   ReaderModeTabHelper* reader_mode_tab_helper() {
     return ReaderModeTabHelper::FromWebState(web_state());
   }
 
-  void LoadWebpage() {
-    GURL test_url("https://test.url/");
-    web::test::LoadHtml(@"<html><body>Content</body></html>", test_url,
-                        web_state());
-    WaitForMainFrame();
-  }
+  web::FakeWebState* web_state() { return web_state_.get(); }
 
   // Expects the recorded distiller latency UKM event entries to have
   // `expected_count` elements.
@@ -93,184 +78,266 @@ class ReaderModeTabHelperTest : public PlatformTest {
             .GetEntriesByName(IOS_ReaderMode_Distiller_Latency::kEntryName)
             .size());
   }
-  // Expects the recorded distiller result UKM event entries to have
-  // `expected_count` elements.
-  void ExpectDistillerResultEntriesCount(size_t expected_count) {
-    EXPECT_EQ(expected_count,
-              test_ukm_recorder_
-                  .GetEntriesByName(IOS_ReaderMode_Distiller_Result::kEntryName)
-                  .size());
+  // Returns the distiller results from the UKM recorder.
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>>
+  GetDistillerResultEntries() {
+    return test_ukm_recorder_.GetEntriesByName(
+        IOS_ReaderMode_Distiller_Result::kEntryName);
   }
-  // Expects the recorded heuristic result UKM event entries to have
-  // `expected_count` elements.
-  void ExpectHeuristicResultEntriesCount(size_t expected_count) {
-    EXPECT_EQ(expected_count,
-              test_ukm_recorder_
-                  .GetEntriesByName(IOS_ReaderMode_Heuristic_Result::kEntryName)
-                  .size());
+
+  // Returns the heuristic results from the UKM recorder.
+  std::vector<raw_ptr<const ukm::mojom::UkmEntry, VectorExperimental>>
+  GetHeuristicResultEntries() {
+    return test_ukm_recorder_.GetEntriesByName(
+        IOS_ReaderMode_Heuristic_Result::kEntryName);
   }
 
  protected:
-  web::WebState* web_state() { return web_state_.get(); }
+  std::unique_ptr<web::FakeWebState> web_state_;
 
-  web::ScopedTestingWebClient web_client_;
-  web::WebTaskEnvironment task_environment_{
-      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
-  std::unique_ptr<TestProfileIOS> profile_;
-  base::test::ScopedFeatureList scoped_feature_list_;
-  std::unique_ptr<web::WebState> web_state_;
   base::HistogramTester histogram_tester_;
   ukm::TestAutoSetUkmRecorder test_ukm_recorder_;
 };
 
-// Tests that the TabHelper that triggers Reader Mode heuristics records
-// metrics on page load.
-TEST_F(ReaderModeTabHelperTest, TriggerHeuristicOnPageLoaded) {
-  scoped_feature_list_.InitAndEnableFeatureWithParameters(
-      kEnableReaderModeDistillerHeuristic,
-      {
-          {kReaderModeDistillerPageLoadProbabilityName, "1.0"},
-          {kReaderModeDistillerPageLoadDelayDurationStringName, "0"},
-      });
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
-  LoadWebpage();
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 1);
-  ExpectHeuristicResultEntriesCount(1u);
-}
-
-// Tests that a misconfigured page load probability does not trigger a
-// heuristic.
-TEST_F(ReaderModeTabHelperTest, TriggerHeuristicMisconfiguredProbabilityLow) {
-  scoped_feature_list_.InitAndEnableFeatureWithParameters(
-      kEnableReaderModeDistillerHeuristic,
-      {
-          {kReaderModeDistillerPageLoadProbabilityName, "0.0"},
-          {kReaderModeDistillerPageLoadDelayDurationStringName, "0"},
-      });
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
-  LoadWebpage();
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
-}
-
-// Tests that a misconfigured page load probability does not trigger a
-// heuristic.
-TEST_F(ReaderModeTabHelperTest, TriggerHeuristicMisconfiguredProbabilityHigh) {
-  scoped_feature_list_.InitAndEnableFeatureWithParameters(
-      kEnableReaderModeDistillerHeuristic,
-      {
-          {kReaderModeDistillerPageLoadProbabilityName, "1.1"},
-          {kReaderModeDistillerPageLoadDelayDurationStringName, "0"},
-      });
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
-  LoadWebpage();
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
-}
-
 // Tests that multiple navigations before the trigger heuristic delay only
 // records metrics from the latest navigation.
 TEST_F(ReaderModeTabHelperTest, TriggerHeuristicSkippedOnNewNavigation) {
-  scoped_feature_list_.InitAndEnableFeatureWithParameters(
-      kEnableReaderModeDistillerHeuristic,
-      {
-          {kReaderModeDistillerPageLoadProbabilityName, "1.0"},
-          {kReaderModeDistillerPageLoadDelayDurationStringName, "10s"},
-      });
+  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
+  ASSERT_EQ(0u, GetHeuristicResultEntries().size());
+
+  GURL test_url("https://test.url/");
+  SetReaderModeState(web_state(), test_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "");
+  LoadWebpage(web_state(), test_url);
+  task_environment()->RunUntilIdle();
+
+  // There is no change in the recorded metrics.
+  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
+  ASSERT_EQ(0u, GetHeuristicResultEntries().size());
+
+  LoadWebpage(web_state(), test_url);
+  WaitForReaderModeContentReady();
+
+  // The metrics for the navigation are recorded.
+  ASSERT_EQ(1u, GetHeuristicResultEntries().size());
+  auto heuristic_entries = GetHeuristicResultEntries();
+  ASSERT_EQ(1u, heuristic_entries.size());
+  const auto* entry = heuristic_entries[0].get();
+  test_ukm_recorder_.ExpectEntryMetric(
+      entry, IOS_ReaderMode_Heuristic_Result::kResultName,
+      static_cast<int64_t>(ReaderModeHeuristicResult::kReaderModeEligible));
+}
+
+// Tests that trigger heuristic is canceled after a web state is destroyed.
+TEST_F(ReaderModeTabHelperTest, WebStateDestructionCancelsHeuristic) {
+  GURL test_url("https://test.url/");
+  SetReaderModeState(web_state(), test_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "");
+  LoadWebpage(web_state(), test_url);
+  task_environment()->RunUntilIdle();
+
+  // Destroy the web state.
+  web_state_.reset();
+  WaitForReaderModeContentReady();
 
   histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
-  LoadWebpage();
-  // Wait for asynchronous activity from page load to stop before advancing the
-  // clock.
-  task_environment_.RunUntilIdle();
-  task_environment_.AdvanceClock(base::Seconds(1));
+}
 
+// Tests that reader mode is not supported on NTP.
+TEST_F(ReaderModeTabHelperTest, ReaderModeNotSupportedOnNtp) {
+  GURL ntp_url("chrome://newtab");
+  SetReaderModeState(web_state(), ntp_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "");
+
+  LoadWebpage(web_state(), ntp_url);
+  WaitForReaderModeContentReady();
+
+  ASSERT_FALSE(reader_mode_tab_helper()->CurrentPageSupportsReaderMode());
+}
+
+// Tests that reader mode is not supported on pages that are not html.
+TEST_F(ReaderModeTabHelperTest, ReaderModeNotSupportedOnNonHTML) {
+  GURL test_url("https://test.url/");
+  SetReaderModeState(web_state(), test_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "");
+  LoadWebpage(web_state(), test_url);
+  web_state()->SetContentIsHTML(false);
+  WaitForReaderModeContentReady();
+
+  ASSERT_FALSE(reader_mode_tab_helper()->CurrentPageSupportsReaderMode());
+}
+
+// Tests that reader mode page eligibility supports same-page navigations.
+TEST_F(ReaderModeTabHelperTest, ReaderModeEligibleForSamePageNavigation) {
+  GURL test_url("https://test.url/ref");
+  SetReaderModeState(web_state(), test_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "");
+
+  LoadWebpage(web_state(), test_url);
+  WaitForReaderModeContentReady();
+
+  // Start same page navigation.
+  GURL test_url_with_ref("https://test.url/ref#");
+  web::FakeNavigationContext navigation_context;
+  navigation_context.SetIsSameDocument(true);
+  navigation_context.SetHasCommitted(true);
+  web_state()->OnNavigationStarted(&navigation_context);
+  web_state()->LoadSimulatedRequest(test_url_with_ref,
+                                    @"<html><body>Content</body></html>");
+  web_state()->OnNavigationFinished(&navigation_context);
+
+  ASSERT_TRUE(reader_mode_tab_helper()->CurrentPageSupportsReaderMode());
+}
+
+// Tests that
+// ReaderModeTabHelper::FetchLastCommittedUrlEligibilityResult calls
+// its completion once the page Reader mode eligibility has been determined.
+TEST_F(ReaderModeTabHelperTest, FetchLastCommittedUrlEligibilityResult) {
+  GURL test_url("https://test.url/ref");
+  SetReaderModeState(web_state(), test_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "");
+
+  LoadWebpage(web_state(), test_url);
+  __block std::optional<bool>
+      current_page_supports_reader_mode_completion_result;
+  reader_mode_tab_helper()->FetchLastCommittedUrlEligibilityResult(
+      base::BindOnce(^(std::optional<bool> current_page_supports_reader_mode) {
+        current_page_supports_reader_mode_completion_result =
+            std::move(current_page_supports_reader_mode);
+      }));
+  EXPECT_FALSE(current_page_supports_reader_mode_completion_result.has_value());
+  WaitForReaderModeContentReady();
+  ASSERT_TRUE(current_page_supports_reader_mode_completion_result.has_value());
+  EXPECT_TRUE(current_page_supports_reader_mode_completion_result.value());
+}
+
+// Tests that ReaderModeTabHelper observers are notified when the Reader mode
+// WebState becomes available, unavailable, and when the tab helper is
+// destroyed.
+TEST_F(ReaderModeTabHelperTest, NotifiesObservers) {
+  MockReaderModeTabHelperObserver mock_observer;
+  reader_mode_tab_helper()->AddObserver(&mock_observer);
+
+  // Set a non-empty DOM Distiller result.
+  GURL test_url("https://test.url/");
+  LoadWebpage(web_state(), test_url);
+  SetReaderModeState(web_state(), test_url,
+                     ReaderModeHeuristicResult::kReaderModeEligible, "Content");
+
+  // Initially, no observer methods should be called.
+  WaitForReaderModeContentReady();
+
+  // When SetActive(true) is called and distillation completes,
+  // ReaderModeWebStateDidBecomeAvailable should be called.
+  EXPECT_CALL(mock_observer,
+              ReaderModeWebStateDidBecomeAvailable(reader_mode_tab_helper()));
+  reader_mode_tab_helper()->SetActive(true);
+  WaitForReaderModeContentReady();
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  // When SetActive(false) is called,
+  // ReaderModeWebStateWillBecomeUnavailable should be called.
+  EXPECT_CALL(mock_observer, ReaderModeWebStateWillBecomeUnavailable(
+                                 reader_mode_tab_helper()));
+  reader_mode_tab_helper()->SetActive(false);
+  testing::Mock::VerifyAndClearExpectations(&mock_observer);
+
+  // When the tab helper is destroyed, ReaderModeTabHelperDestroyed should be
+  // called.
+  EXPECT_CALL(mock_observer,
+              ReaderModeTabHelperDestroyed(reader_mode_tab_helper()))
+      .WillOnce(
+          testing::Invoke([&mock_observer](ReaderModeTabHelper* tab_helper) {
+            tab_helper->RemoveObserver(&mock_observer);
+          }));
+  ReaderModeTabHelper::RemoveFromWebState(web_state_.get());
+}
+
+class ReaderModeTabHelperWithEligibilityTest
+    : public ReaderModeTabHelperTest,
+      public ::testing::WithParamInterface<ReaderModeHeuristicResult> {
+ protected:
+  ReaderModeHeuristicResult GetEligibility() { return GetParam(); }
+};
+
+// Tests that metrics are recorded correctly when the trigger heuristic runs
+// on page load and returns a result.
+TEST_P(ReaderModeTabHelperWithEligibilityTest, TriggerHeuristicOnPageLoad) {
   histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 0);
-  ExpectHeuristicResultEntriesCount(0u);
+  ASSERT_EQ(0u, GetHeuristicResultEntries().size());
 
-  LoadWebpage();
-  task_environment_.RunUntilIdle();
-  task_environment_.AdvanceClock(base::Seconds(20));
+  ReaderModeHeuristicResult eligibility = GetEligibility();
+  GURL test_url("https://test.url/");
+  SetReaderModeState(web_state(), test_url, eligibility, "");
 
-  ASSERT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
-    task_environment_.RunUntilIdle();
-    return histogram_tester_.GetAllSamples(kReaderModeHeuristicResultHistogram)
-                   .size() == 1 &&
-           test_ukm_recorder_
-                   .GetEntriesByName(
-                       IOS_ReaderMode_Heuristic_Result::kEntryName)
-                   .size() == 1u;
-  }));
+  LoadWebpage(web_state(), test_url);
+  WaitForReaderModeContentReady();
+
+  ASSERT_EQ(eligibility == ReaderModeHeuristicResult::kReaderModeEligible,
+            reader_mode_tab_helper()->CurrentPageSupportsReaderMode());
+
+  ASSERT_THAT(
+      histogram_tester_.GetAllSamples(kReaderModeHeuristicResultHistogram),
+      BucketsAre(base::Bucket(eligibility, 1)));
+  auto heuristic_entries = GetHeuristicResultEntries();
+  ASSERT_EQ(1u, heuristic_entries.size());
+  const auto* entry = heuristic_entries[0].get();
+  test_ukm_recorder_.ExpectEntryMetric(
+      entry, IOS_ReaderMode_Heuristic_Result::kResultName,
+      static_cast<int64_t>(eligibility));
 }
 
 // Tests that histograms related to distillation results are recorded after the
 // JavaScript execution.
-TEST_F(ReaderModeTabHelperTest, TriggerDistillerJs) {
-  scoped_feature_list_.InitWithFeaturesAndParameters(
-      /*enabled_features=*/
-      {{kEnableReaderModeDistillerHeuristic,
-        {
-            {kReaderModeDistillerPageLoadProbabilityName, "1.0"},
-            {kReaderModeDistillerPageLoadDelayDurationStringName, "0"},
-        }},
-       {kEnableReaderModeDistiller, {}}},
-      /*disabled_features=*/{});
+TEST_P(ReaderModeTabHelperWithEligibilityTest, TriggerDistillationOnActive) {
+  GURL test_url("https://test.url/");
+  SetReaderModeState(web_state(), test_url, GetParam(), "");
 
-  auto test_web_state = std::make_unique<web::FakeWebState>();
-  auto frames_manager = std::make_unique<web::FakeWebFramesManager>();
-  web::FakeWebFramesManager* frames_manager_ptr = frames_manager.get();
-  test_web_state->SetWebFramesManager(
-      std::make_unique<web::FakeWebFramesManager>());
-  test_web_state->SetWebFramesManager(web::ContentWorld::kIsolatedWorld,
-                                      std::move(frames_manager));
-  const GURL test_url = GURL("https://test.url/");
-  test_web_state->SetVisibleURL(test_url);
+  LoadWebpage(web_state(), test_url);
+  WaitForReaderModeContentReady();
 
-  // Use a fake web frame to return a custom result after JS execution.
-  auto main_frame = web::FakeWebFrame::CreateMainWebFrame(test_url);
-  web::FakeWebFrame* main_frame_ptr = main_frame.get();
-  frames_manager_ptr->AddWebFrame(std::move(main_frame));
+  // The user explicitly requests distillation independent of the Reader Mode
+  // eligibility.
+  reader_mode_tab_helper()->SetActive(true);
+  task_environment()->RunUntilIdle();
 
-  ReaderModeTabHelper::CreateForWebState(test_web_state.get());
-  ukm::InitializeSourceUrlRecorderForWebState(test_web_state.get());
-
-  // Record committed navigation so the UKM URL recorder works.
-  web::FakeNavigationContext navigation_context;
-  navigation_context.SetHasCommitted(true);
-  test_web_state->OnNavigationStarted(&navigation_context);
-  test_web_state->OnNavigationFinished(&navigation_context);
-
-  // Recreate DOM distiller script with empty result on execution.
-  dom_distiller::proto::DomDistillerOptions options;
-  std::u16string script =
-      base::UTF8ToUTF16(dom_distiller::GetDistillerScriptWithOptions(options));
-  base::Value empty_value;
-  main_frame_ptr->AddResultForExecutedJs(&empty_value, script);
-
-  ReaderModeTabHelper::FromWebState(test_web_state.get())
-      ->HandleReaderModeHeuristicResult(
-          test_url, ReaderModeHeuristicResult::kReaderModeEligible);
-  task_environment_.RunUntilIdle();
-
-  histogram_tester_.ExpectTotalCount(kReaderModeHeuristicResultHistogram, 1);
-  ExpectHeuristicResultEntriesCount(1u);
-  histogram_tester_.ExpectTotalCount(
-      kReaderModeHeuristicClassificationHistogram, 1);
-  histogram_tester_.ExpectTotalCount(kReaderModeDistillerLatencyHistogram, 1);
-  histogram_tester_.ExpectTotalCount(kReaderModeAmpClassificationHistogram, 1);
+  histogram_tester_.ExpectTotalCount(kReaderModeDistillerLatencyHistogram, 1u);
+  histogram_tester_.ExpectTotalCount(kReaderModeAmpClassificationHistogram, 1u);
   ExpectDistillerLatencyEntriesCount(1u);
-  ExpectDistillerResultEntriesCount(1u);
+  // The metrics for the navigation are recorded.
+  ASSERT_EQ(1u, GetDistillerResultEntries().size());
+  auto distiller_entries = GetDistillerResultEntries();
+  ASSERT_EQ(1u, distiller_entries.size());
+  const auto* entry = distiller_entries[0].get();
+  // With the default empty content page is always not distillable.
+  test_ukm_recorder_.ExpectEntryMetric(
+      entry, IOS_ReaderMode_Distiller_Result::kResultName,
+      static_cast<int64_t>(ReaderModeDistillerResult::kPageIsNotDistillable));
 }
 
-// TODO(crbug.com/399378832): Add tests for individual heuristic values that
-// are not dependent on the model implementation.
+std::string TestParametersReaderModeHeuristicResultToString(
+    testing::TestParamInfo<ReaderModeHeuristicResult> info) {
+  switch (info.param) {
+    case ReaderModeHeuristicResult::kMalformedResponse:
+      return "MalformedResponse";
+    case ReaderModeHeuristicResult::kReaderModeEligible:
+      return "ReaderModeEligible";
+    case ReaderModeHeuristicResult::kReaderModeNotEligibleContentOnly:
+      return "ReaderModeNotEligibleContentOnly";
+    case ReaderModeHeuristicResult::kReaderModeNotEligibleContentLength:
+      return "ReaderModeNotEligibleContentLength";
+    case ReaderModeHeuristicResult::kReaderModeNotEligibleContentAndLength:
+      return "ReaderModeNotEligibleContentAndLength";
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    ReaderModeTabHelperWithEligibilityTest,
+    ::testing::Values(
+        ReaderModeHeuristicResult::kMalformedResponse,
+        ReaderModeHeuristicResult::kReaderModeEligible,
+        ReaderModeHeuristicResult::kReaderModeNotEligibleContentOnly,
+        ReaderModeHeuristicResult::kReaderModeNotEligibleContentLength,
+        ReaderModeHeuristicResult::kReaderModeNotEligibleContentAndLength),
+    TestParametersReaderModeHeuristicResultToString);

@@ -133,6 +133,9 @@ message VmInfo {
   // service providers (camera, CRAS, etc).
   string permission_token = 5;
 
+  // VmType is assumed to be no larger than 99 (e.g. in
+  // concierge::service.cc::GetDiskImageVmTYpe), if VmTYpe ever exceeds 99
+  // please fix assertion elsewhere.
   enum VmType {
     // Default value indicating an unknown or custom VM.
     UNKNOWN = 0;
@@ -1076,6 +1079,10 @@ message VmDiskInfo {
 
   // The available space on the disk, or 0 if unknown.
   uint64 available_space = 8;
+
+  // VM type of the disk image (mainly used to distinguish baguette and
+  // crostini).
+  VmInfo.VmType vm_type = 9;
 }
 
 // Response to ListVmDisks {

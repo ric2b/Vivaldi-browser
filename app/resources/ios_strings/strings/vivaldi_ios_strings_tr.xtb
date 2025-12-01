@@ -4,45 +4,99 @@
 <translation id="1063263220330818888">Özel Arama</translation>
 <translation id="1097355661841455597">Düşüncelerinizi duymak isteriz.</translation>
 <translation id="1137850887415122856">Özel sekmelerinizi kilitlemek için Touch ID, Face ID veya Parola ayarlayın.</translation>
+<translation id="1189137610071296104">Sekme Yığınında Aç</translation>
 <translation id="1310184829257917508">Diğer Uygulamalardan Bağlantıları Gizli Olarak Açmayı İsteyin</translation>
+<translation id="1743244221910283364">Değişiklikleri sil</translation>
+<translation id="2010481384079864967">{count, plural,
+=1 {Sekmeyi Yığına Ekle}
+other {Sekmeleri Yığına Ekle}}</translation>
 <translation id="207677936531967364">Yeni Özel Sekme Sayfası</translation>
+<translation id="2099591136582442348">Bu işlem yığını cihazınızdan kalıcı olarak silecektir.</translation>
+<translation id="2181990701313127304">Yığında yeni sekme</translation>
+<translation id="2351280151183279120">Yığını paylaş</translation>
 <translation id="2353953000228441783">Varsayılan site görünümü</translation>
 <translation id="2394192052244849643">Yapıştır ve Ara</translation>
 <translation id="2418705169960294134">Yeni Özel sekmesi</translation>
+<translation id="2565593432251168402">Sekme yığınları oluşturarak düzenli kalın</translation>
 <translation id="2783161812871838616">Masaüstü Sitesi İste</translation>
+<translation id="2806957659107692459">Yığın oluştur</translation>
 <translation id="2899836479226240291">Vivaldi'yi Varsayılan Tarayıcı Uygulamanız yaparak bağlantıları otomatik olarak açabilirsiniz.</translation>
 <translation id="3365529507898144230">Fotoğraflara kaydet</translation>
 <translation id="3434473769478814796">Yapıştır ve Git</translation>
 <translation id="3463990832590571933">Yeni Özel sekmede aç</translation>
 <translation id="3473652525653758699">Yeni Özel Pencere</translation>
 <translation id="3501504415290398157">Özel sekmelerinizin kilidini açmak için <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> kullanın.</translation>
+<translation id="353418192940651934">Yığını Tut</translation>
 <translation id="3607792383367580513">Çevir</translation>
 <translation id="3692650606013198282">Özel Olarak Aç</translation>
+<translation id="3873885181515160073">Yeni sekme yığınınızı bir ad ve renk vererek oluşturun</translation>
 <translation id="3922395466317605522">Menüyü Özelleştir</translation>
 <translation id="3981599532037327317">${url} adresini Özel olarak açın</translation>
 <translation id="398477389655464998">Bağlantıyı Vurguya Kopyala</translation>
+<translation id="3993429087389909418">Sekmeler bu cihazda açık kalacak ancak yığın, <ph name="USER_EMAIL" /> adresine giriş yapılmış tüm cihazlardan silinecek.</translation>
 <translation id="4026745073321351206">🙄 Bir sorun mu fark ettiniz?</translation>
+<translation id="4216644171369573466">Sekme yığını, <ph name="GROUP_TITLE" />, Menü.</translation>
 <translation id="4304713468139749426">Şifre Yöneticisi</translation>
+<translation id="4569525137269575065">Yığını Kapat</translation>
 <translation id="473775607612524610">Güncelle</translation>
 <translation id="4755216899422789286">URL'leri Vivaldi'de aç</translation>
+<translation id="4772190485302020393">Tüm Sekmeleri ve Yığınları Kapat</translation>
 <translation id="4802185666270672526">Masaüstü Sitesi İste Seçeneğini Gizle</translation>
+<translation id="4828571836982833289">Sekme yığınını kaldır?</translation>
+<translation id="4838250035189612538">Yığının Adını Değiştir</translation>
+<translation id="4873540827942947151">{count, plural,
+=1 {1 sekme yığını kapatıldı ve kaydedildi}
+other {{count} sekme yığını kapatıldı ve kaydedildi}}</translation>
+<translation id="5019787757991745254">Sekme yığını rengi <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Sekme yığını. Daraltılmış.</translation>
 <translation id="5217245356412073535">Varsayılan site görünümünü Ayarlar &gt; İçerik ayarları'ndan masaüstüne değiştirebilirsiniz</translation>
 <translation id="5271549068863921519">Şifreyi kaydet</translation>
 <translation id="5317780077021120954">Kaydet</translation>
+<translation id="5385953732213322025">Bu site bir uygulamayı açmaya çalışıyor. Bu sizi Özel moddan çıkaracaktır.</translation>
 <translation id="5431239785743546285">Okuduğunuz sayfalar</translation>
+<translation id="5521301883748677039">Yığını sil?</translation>
+<translation id="5544011153887687593">Sekme yığını sekmesi. <ph name="TAB_INDEX_IN_GROUP" /> / <ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Şifre kaydedilsin mi?</translation>
 <translation id="570209299585559496">Varsayılan site görünümünü ayarlardan masaüstüne, ardından içerik ayarlarına giderek değiştirebilirsiniz</translation>
+<translation id="5719777162751096990">Sekme Yığınına Taşı</translation>
 <translation id="5962477178930921574">Yapıştır ve Ara</translation>
+<translation id="6163856768888310791">Yığını ayır</translation>
+<translation id="6168969409902608220">Yığın adı</translation>
 <translation id="6233792867654386826">Girilen URL'leri Vivaldi'de açar.</translation>
+<translation id="6478587527114893588">Yığını kapatın.</translation>
+<translation id="6527405730445064713">Sekme yığını. Genişletilmiş.</translation>
+<translation id="6532106788206463496">Değişiklikleri kaydet</translation>
+<translation id="6666425778700353369">Bu, yığını <ph name="USER_EMAIL" /> adresine giriş yapmış tüm cihazlardan silecektir.</translation>
 <translation id="6680416467695217368">Menüyü Özelleştir</translation>
+<translation id="6695835495840050460">"Yeni Yığına Sekme Ekle" öğesine dokunun</translation>
+<translation id="6708694844902784277">Yığını Sil</translation>
 <translation id="6827597288286078054">Özel Arama</translation>
 <translation id="6851516051005285358">Masaüstü Sitesi İste</translation>
+<translation id="6890907822330704077">Sekme yığını, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> sekmeleri.</translation>
 <translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> İle Özel Sekmelerin Kilidini Açın</translation>
 <translation id="7347289093190902150">Özelde Aç?</translation>
+<translation id="7363285031331302144">Açık sekmelerinizi düzenlemek için sekme yığınları oluşturun</translation>
+<translation id="7395230742578757172">Yeni Sekmede Yığın Aç</translation>
+<translation id="7424676799308869002">Yığını tut?</translation>
+<translation id="7498234416455752244">Düzenlemeye devam et</translation>
 <translation id="7549299604720382000">Yeni Özel Sekme</translation>
+<translation id="7585610907974664408">Yığında yeni Özel sekme</translation>
+<translation id="7661319142491611883">Sekme yığınını genişlet.</translation>
+<translation id="7706213624515206557">Sekme yığınındaki tüm sekmeleri göster</translation>
 <translation id="7961015016161918242">Hiçbir Zaman</translation>
 <translation id="8326104954595890674">Yeni Özel Sekme</translation>
+<translation id="8345989863850359861">Sekmeyi kaldır ve yığını sil?</translation>
+<translation id="8407986162266014185">Yığını Paylaş</translation>
+<translation id="8412536526999793719">{count, plural,
+=1 {Yeni Yığına Sekme Ekle}
+other {Yeni Yığına Sekmeler Ekle}}</translation>
+<translation id="8465550436083180511">Sekme yığınını daralt.</translation>
+<translation id="8685478989144570078">Sekme yığınları</translation>
 <translation id="8756969031206844760">Şifre güncellensin mi?</translation>
+<translation id="8852861335827546438">Yeni Sekme Yığını</translation>
+<translation id="8951084872625418241">Yığında Yeni Sekme</translation>
 <translation id="9042893549633094279">Gizlilik ve güvenlik</translation>
 <translation id="9094033019050270033">Şifreyi güncelle</translation>
+<translation id="944434461715569989">Yığın Bırak</translation>
+<translation id="959061183386231608">Bu cihazda sekmeler açık kalacak ancak yığın kalıcı olarak silinecek.</translation>
 </translationbundle>

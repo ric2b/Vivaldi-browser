@@ -42,7 +42,7 @@ build_webui("build") {
     "$root_gen_dir/components/commerce/core/mojom/shopping_service.mojom-webui.ts",
   ]
 
-  non_web_component_files = [
+  ts_files = [
     "app.html.ts",
     "app.ts",
     "buying_options_section.html.ts",
@@ -86,7 +86,6 @@ build_webui("build") {
   html_to_wrapper_template = "detect"
 
   ts_composite = true
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_definitions = [
     "//tools/typescript/definitions/chrome_send.d.ts",
     "//tools/typescript/definitions/metrics_private.d.ts",

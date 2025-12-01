@@ -5,6 +5,9 @@
 	path = chrome/installer/mac/third_party/xz/xz
 	url = ../deps/xz.git
 	gclient-condition = checkout_mac
+[submodule "third_party/compiler-rt/src"]
+	path = third_party/compiler-rt/src
+	url = ../../external/github.com/llvm/llvm-project/compiler-rt.git
 [submodule "third_party/libc++/src"]
 	path = third_party/libc++/src
 	url = ../../external/github.com/llvm/llvm-project/libcxx.git
@@ -90,6 +93,9 @@
 [submodule "third_party/dom_distiller_js/dist"]
 	path = third_party/dom_distiller_js/dist
 	url = ../dom-distiller/dist.git
+[submodule "third_party/dragonbox/src"]
+	path = third_party/dragonbox/src
+	url = ../../external/github.com/jk-jeon/dragonbox.git
 [submodule "third_party/eigen3/src"]
 	path = third_party/eigen3/src
 	url = ../../external/gitlab.com/libeigen/eigen.git
@@ -180,9 +186,6 @@
 [submodule "third_party/nearby/src"]
 	path = third_party/nearby/src
 	url = ../../external/github.com/google/nearby-connections.git
-[submodule "third_party/beto-core/src"]
-	path = third_party/beto-core/src
-	url = ../../beto-core/beto-core.git
 [submodule "third_party/securemessage/src"]
 	path = third_party/securemessage/src
 	url = ../../external/github.com/google/securemessage.git

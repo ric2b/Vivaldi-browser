@@ -24,9 +24,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
 #include "chrome/browser/ui/tabs/tab_menu_model.h"
@@ -45,6 +45,7 @@
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/tab_group.h"
 #include "content/public/common/drop_data.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "ui/aura/window_delegate.h"
@@ -93,6 +94,10 @@ class WebUIBackgroundContextMenu : public ui::SimpleMenuModel::Delegate,
         accelerator_provider_(accelerator_provider) {}
   ~WebUIBackgroundContextMenu() override = default;
 
+  bool IsCommandIdEnabled(int command_id) const override {
+    return chrome::IsCommandEnabled(browser_, command_id);
+  }
+
   void ExecuteCommand(int command_id, int event_flags) override {
     chrome::ExecuteCommand(browser_, command_id);
   }
@@ -115,7 +120,7 @@ class WebUITabContextMenu : public ui::SimpleMenuModel::Delegate,
                       const ui::AcceleratorProvider* accelerator_provider,
                       int tab_index)
       : TabMenuModel(this,
-                     browser->tab_menu_model_delegate(),
+                     browser->GetFeatures().tab_menu_model_delegate(),
                      browser->tab_strip_model(),
                      tab_index),
         browser_(browser),

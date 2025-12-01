@@ -1,9 +1,9 @@
 # FIXME: fontconfig should probably get its own image
 # In the meantime, the latest GStreamer image tag can be found here:
-# https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/.gitlab-image-tags.yml#L10
+# https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/.gitlab-image-tags.yml#L18
 .build meson windows:
-  image: "registry.freedesktop.org/gstreamer/gstreamer/amd64/windows:2022-09-23.0-main"
-  stage: "test"
+  image: "registry.freedesktop.org/gstreamer/gstreamer/amd64/windows:2024-11-12.0-main"
+  stage: "distro"
   tags:
     - "docker"
     - "windows"
@@ -19,7 +19,11 @@
     #   -Dbar=disabled
   before_script:
     # Make sure meson is up to date, so we don't need to rebuild the image with each release
-    - pip3 install -U meson certifi
+    - pip3 install -U meson>=1.6.1 certifi tomli requests
+    # Test Rust availability. As of 11/25/2024, according to
+    # https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/ci/docker/windows/Dockerfile
+    # Rust 1.82 is already installed.
+    - rustc --version
   script:
     # For some reason, options are separated by newline instead of space, so we
     # have to replace them first.
@@ -31,9 +35,9 @@
       SET CERT_PATH=$(python -m certifi) &&
       SET SSL_CERT_FILE=$(python -m certifi) &&
       SET REQUESTS_CA_BUNDLE=$(python -m certifi) &&
-      meson build $env:MESON_ARGS &&
-      ninja -C build &&
-      ninja -C build test"
+      meson setup -Dxml-backend=expat $env:MESON_ARGS build &&
+      meson compile --verbose -C build &&
+      meson test -C build"
   artifacts:
     name: fontconfig-$CI_COMMIT_SHA-$CI_JOB_ID
     when: always
@@ -41,20 +45,24 @@
       - build-*/meson-logs/*txt
       - prefix-*
 
-meson vs2019 amd64:
-  extends: ".build meson windows"
-  variables:
-    ARCH: "amd64"
 
 meson vs2019 x86:
   extends: ".build meson windows"
   variables:
     ARCH: "x86"
+    MESON_ARGS: "-Dfontations=disabled"
 
-meson macos:
-  stage: "test"
+# A Windows Fontations build would currently require
+# libclang and llvm installation which is a several hundred megabyte download.
+# Skip that configuration for now.
+
+.meson macos test:
+  stage: "distro"
+  # See https://gitlab.freedesktop.org/gstreamer/gstreamer/-/blob/main/.gitlab-ci.yml
+  # As of 2024-11-21, this is a Mac OS 15 Sequia image on Apple silicon.
+  image: "registry.freedesktop.org/gstreamer/gstreamer/macos-arm64/15-sequoia:2024-10-28.0"
   tags:
-    - gst-macos-11.1
+    - gst-mac-arm
   artifacts:
     name: "${CI_JOB_NAME}_${CI_COMMIT_SHA}"
     expire_in: "5 days"
@@ -64,19 +72,35 @@ meson macos:
   before_script:
     - pip3 install --upgrade pip
     # Make sure meson is up to date
-    - pip3 install -U meson
+    - pip3 install -U 'meson>=1.6.1'
+    # For Python < 3.11 we need tomli for Rust build support
+    - pip3 install -U tomli
     # Need to install certificates for python
     - pip3 install --upgrade certifi
-    # Anther way t install certificates
-    - open /Applications/Python\ 3.8/Install\ Certificates.command
     # Get ninja
-    - curl -L -o ninja-mac.zip https://github.com/ninja-build/ninja/releases/download/v1.10.0/ninja-mac.zip
-    - unzip ninja-mac.zip
-    - sudo cp ninja /usr/local/bin
+    - pip3 install --upgrade ninja
+    # Install rust
+    - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    - . "$HOME/.cargo/env"
+    # Test Rust availability.
+    - rustup update
+    - cargo install bindgen-cli
+    - rustc --version
+    - bindgen --version
   script:
-    - CERT_PATH=$(python3 -m certifi) && export SSL_CERT_FILE=${CERT_PATH} && export REQUESTS_CA_BUNDLE=${CERT_PATH} && meson build
-    - ninja -C build
-    - ninja -C build test
+    - CERT_PATH=$(python3 -m certifi) && export SSL_CERT_FILE=${CERT_PATH} && export REQUESTS_CA_BUNDLE=${CERT_PATH} && meson setup -Diconv=enabled $MESON_FONTATIONS_ARG build
+    - meson compile --verbose -C build
+    - meson test -C build
+
+meson macos test:
+  extends: ".meson macos test"
+  variables:
+    MESON_FONTATIONS_ARG: "-Dfontations=disabled"
+
+meson macos test fontations:
+  extends: ".meson macos test"
+  variables:
+    MESON_FONTATIONS_ARG: "-Dfontations=enabled"
 
 # msys infrastructure is a bit broken, disable for now
 meson msys2:
@@ -97,46 +121,3 @@ meson msys2:
     - C:\msys64\usr\bin\bash -c "meson build $env:MESON_ARGS &&
       ninja -C build &&
       ninja -C build test"
-
-meson android arm64 fedora:
-  # See https://gitlab.freedesktop.org/gstreamer/gst-ci/container_registry/164 for current images
-  image: "registry.freedesktop.org/gstreamer/gst-ci/amd64/android-fedora:2020-10-22.0-master"
-  stage: "test"
-  artifacts:
-    name: "${CI_JOB_NAME}_${CI_COMMIT_SHA}"
-    expire_in: "5 days"
-    when: "always"
-    paths:
-      - "build/meson-logs/*.txt"
-  before_script:
-    - dnf install -y python3-pip gcc ninja-build gperf
-    - pip3 install --user meson
-  script:
-    - export PATH="$HOME/.local/bin:$PATH"
-    - |
-      cat > android-cross-file.txt <<EOF
-      [constants]
-      ndk_path    = '/android/ndk'
-      toolchain   = ndk_path + '/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android'
-      api         = '28'
-
-      [host_machine]
-      system      = 'android'
-      cpu_family  = 'aarch64'
-      cpu         = 'aarch64'
-      endian      = 'little'
-
-      [properties]
-      sys_root        = ndk_path + '/sysroot'
-      c_args          = ['-Wno-pointer-bool-conversion']
-      c_link_args     = ['-fuse-ld=gold']
-      cpp_link_args   = ['-fuse-ld=gold']
-
-      [binaries]
-      c           = toolchain + api + '-clang'
-      cpp         = toolchain + api + '-clang++'
-      ar          = toolchain + '-ar'
-      strip       = toolchain + '-strip'
-      EOF
-    - meson setup --werror --cross-file android-cross-file.txt build
-    - meson compile --verbose -C build

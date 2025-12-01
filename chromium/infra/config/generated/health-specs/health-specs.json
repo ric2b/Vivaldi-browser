@@ -1457,27 +1457,6 @@
           }
         ]
       },
-      "android-cronet-mainline-clang-x86-dbg": {
-        "contact_team_email": "cronet-team@google.com",
-        "problem_specs": [
-          {
-            "name": "Unhealthy",
-            "period_days": 7,
-            "score": 5,
-            "thresholds": {
-              "_default": "_default"
-            }
-          },
-          {
-            "name": "Low Value",
-            "period_days": 90,
-            "score": 1,
-            "thresholds": {
-              "_default": "_default"
-            }
-          }
-        ]
-      },
       "android-cronet-x64-dbg": {
         "contact_team_email": "cronet-team@google.com",
         "problem_specs": [
@@ -2362,7 +2341,49 @@
           }
         ]
       },
-      "mac14-tests-dbg": {
+      "mac15-arm64-rel-tests": {
+        "contact_team_email": "bling-engprod@google.com",
+        "problem_specs": [
+          {
+            "name": "Unhealthy",
+            "period_days": 7,
+            "score": 5,
+            "thresholds": {
+              "_default": "_default"
+            }
+          },
+          {
+            "name": "Low Value",
+            "period_days": 90,
+            "score": 1,
+            "thresholds": {
+              "_default": "_default"
+            }
+          }
+        ]
+      },
+      "mac15-tests-dbg": {
+        "contact_team_email": "bling-engprod@google.com",
+        "problem_specs": [
+          {
+            "name": "Unhealthy",
+            "period_days": 7,
+            "score": 5,
+            "thresholds": {
+              "_default": "_default"
+            }
+          },
+          {
+            "name": "Low Value",
+            "period_days": 90,
+            "score": 1,
+            "thresholds": {
+              "_default": "_default"
+            }
+          }
+        ]
+      },
+      "mac15-x64-rel-tests": {
         "contact_team_email": "bling-engprod@google.com",
         "problem_specs": [
           {

@@ -49,13 +49,13 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/observer_list.h"
 #include "base/process/process_handle.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/supports_user_data.h"
 #include "base/system/sys_info.h"
 #include "base/task/single_thread_task_runner.h"
@@ -194,7 +194,6 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/tracing/public/cpp/trace_startup.h"
 #include "skia/ext/switches.h"
-#include "storage/browser/database/database_tracker.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/common/features.h"
@@ -219,7 +218,6 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/child_process_binding_types.h"
 #include "content/browser/font_unique_name_lookup/font_unique_name_lookup_service.h"
-#include "content/browser/web_database/web_database_host_impl.h"
 #include "media/audio/android/audio_manager_android.h"
 #include "third_party/blink/public/mojom/android_font_lookup/android_font_lookup.mojom.h"
 #endif
@@ -239,7 +237,7 @@
 #include "content/public/browser/oop_video_decoder_factory.h"
 #endif
 
-#if BUILDFLAG(IS_APPLE)
+#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_IOS_TVOS)
 #include "content/browser/child_process_task_port_provider_mac.h"
 #endif
 
@@ -693,6 +691,12 @@ const void* const kEmptySiteProcessCountTrackerKey =
 // flag, enables the browser to track and reuse free and empty renderer
 // processes to optimize process creation and navigation performance.
 bool IsEmptyRendererProcessesReuseAllowed() {
+  // In single-process mode (run_renderer_in_process()), there's no separate
+  // renderer process to track for reuse. This logic is therefore skipped
+  // to prevent issues and because reuse is not applicable.
+  if (RenderProcessHost::run_renderer_in_process()) {
+    return false;
+  }
   return base::FeatureList::IsEnabled(
       features::kTrackEmptyRendererProcessesForReuse);
 }
@@ -730,7 +734,7 @@ class SiteProcessCountTracker : public base::SupportsUserData::Data,
   void DecrementSiteProcessCount(const SiteInfo& site_info,
                                  ChildProcessId render_process_host_id) {
     auto result = map_.find(site_info);
-    CHECK(result != map_.end(), base::NotFatalUntil::M130);
+    CHECK(result != map_.end());
     ChildProcessIdCountMap& counts_per_process = result->second;
 
     --counts_per_process[render_process_host_id];
@@ -1303,6 +1307,18 @@ static RenderProcessHost* FindEmptyBackgroundHostForReuse(
   return nullptr;
 }
 
+bool IsRendererUnresponsive(RenderProcessHost* render_process_host) {
+  bool is_unresponsive = false;
+  render_process_host->ForEachRenderFrameHost(
+      [&is_unresponsive](RenderFrameHost* render_frame_host) {
+        if (render_frame_host->GetRenderWidgetHost()
+                ->IsCurrentlyUnresponsive()) {
+          is_unresponsive = true;
+        }
+      });
+  return is_unresponsive;
+}
+
 }  // namespace
 
 RenderProcessHostImpl::IOThreadHostImpl::IOThreadHostImpl(
@@ -1352,6 +1368,11 @@ size_t RenderProcessHostImpl::GetPlatformMaxRendererProcessCount() {
   }
   return limit;
 }
+
+// static
+bool RenderProcessHostImpl::IsPlatformProcessLimitUnknownForTesting() {
+  return GetPlatformProcessLimit() == kUnknownPlatformProcessLimit;
+}
 #endif
 
 // static
@@ -1368,8 +1389,15 @@ size_t RenderProcessHost::GetMaxRendererProcessCount() {
   // On Android we don't maintain a limit of renderer process hosts - we are
   // happy with keeping a lot of these, as long as the number of live renderer
   // processes remains reasonable, and on Android the OS takes care of that.
-  return std::numeric_limits<size_t>::max();
+  // This has shown to have adversarial effects, so we fall back to desktop
+  // behavior for desktop-like form factors.
+  if (base::FeatureList::IsEnabled(features::kRendererProcessLimitOnAndroid)) {
+    return features::kRendererProcessLimitOnAndroidCount.Get();
+  } else {
+    return std::numeric_limits<size_t>::max();
+  }
 #else
+
   // On other platforms, calculate the maximum number of renderer process hosts
   // according to the amount of installed memory as reported by the OS, along
   // with some hard-coded limits. The calculation assumes that the renderers
@@ -1771,6 +1799,7 @@ bool RenderProcessHostImpl::Init() {
 
   if (run_renderer_in_process()) {
     DCHECK(g_renderer_main_thread_factory);
+    CHECK(!in_process_renderer_);
     // Crank up a thread and run the initialization there.  With the way that
     // messages flow between the browser and renderer, this thread is required
     // to prevent a deadlock in single-process mode.  Since the primordial
@@ -1874,7 +1903,7 @@ void RenderProcessHostImpl::EnableSendQueue() {
 
 void RenderProcessHostImpl::MaybeNotifyVizOfRendererBlockStateChanged(
     bool blocked) {
-  if (!input::IsTransferInputToVizSupported()) {
+  if (!input::InputUtils::IsTransferInputToVizSupported()) {
     return;
   }
 
@@ -2502,19 +2531,6 @@ void RenderProcessHostImpl::BindVideoEncoderMetricsProvider(
   media::MojoVideoEncoderMetricsProviderService::Create(ukm::NoURLSourceId(),
                                                         std::move(receiver));
 }
-
-#if BUILDFLAG(IS_ANDROID)
-void RenderProcessHostImpl::BindWebDatabaseHostImpl(
-    mojo::PendingReceiver<blink::mojom::WebDatabaseHost> receiver) {
-  storage::DatabaseTracker* db_tracker =
-      storage_partition_impl_->GetDatabaseTracker();
-  DCHECK(db_tracker);
-  db_tracker->task_runner()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&WebDatabaseHostImpl::Create, GetDeprecatedID(),
-                     base::WrapRefCounted(db_tracker), std::move(receiver)));
-}
-#endif  // BULDFLAG(IS_ANDROID)
 
 void RenderProcessHostImpl::BindAecDumpManager(
     mojo::PendingReceiver<blink::mojom::AecDumpManager> receiver) {
@@ -3468,7 +3484,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       switches::kDisableSkiaRuntimeOpts,
       switches::kDisableSpeechAPI,
       switches::kDisableThreadedCompositing,
-      switches::kDisableTouchDragDrop,
       switches::kDisableV8IdleTasks,
       switches::kDisableVideoCaptureUseGpuMemoryBuffer,
       switches::kDisableWebGLImageChromium,
@@ -3488,7 +3503,6 @@ void RenderProcessHostImpl::PropagateBrowserCommandLineToRenderer(
       switches::kEnablePluginPlaceholderTesting,
       switches::kEnablePreciseMemoryInfo,
       switches::kEnableSkiaBenchmarking,
-      switches::kEnableTouchDragDrop,
       switches::kEnableUnsafeWebGPU,
       switches::kEnableViewport,
       switches::kEnableVtune,
@@ -4247,6 +4261,8 @@ void RenderProcessHostImpl::PopulateTerminationInfoRendererFields(
     ChildProcessTerminationInfo* info) {
   info->renderer_has_visible_clients = VisibleClientCount() > 0;
   info->renderer_was_subframe = GetFrameDepth() > 0;
+  info->has_spare_renderer =
+      SpareRenderProcessHostManagerImpl::Get().HasSpareRenderer();
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -4424,7 +4440,7 @@ void RenderProcessHostImpl::UnregisterCreationObserver(
       // Chrome OS and Android unit tests trigger the thread uninitialized case.
       !BrowserThread::IsThreadInitialized(BrowserThread::UI));
   auto iter = std::ranges::find(GetAllCreationObservers(), observer);
-  CHECK(iter != GetAllCreationObservers().end(), base::NotFatalUntil::M130);
+  CHECK(iter != GetAllCreationObservers().end());
   GetAllCreationObservers().erase(iter);
 }
 
@@ -4635,8 +4651,11 @@ bool RenderProcessHostImpl::MayReuseAndIsSuitable(
     RenderProcessHost* host,
     const IsolationContext& isolation_context,
     const SiteInfo& site_info) {
+  // Don't check for renderer responsiveness in single-process mode - even if
+  // it's unresponsive we can't create another one and trying will crash us.
   return host->MayReuseHost() &&
-         IsSuitableHost(host, isolation_context, site_info);
+         IsSuitableHost(host, isolation_context, site_info) &&
+         (run_renderer_in_process() || !IsRendererUnresponsive(host));
 }
 
 // static
@@ -5294,13 +5313,13 @@ uint64_t RenderProcessHostImpl::GetPrivateMemoryFootprint() {
   auto dump = memory_instrumentation::mojom::RawOSMemDump::New();
   dump->platform_private_footprint =
       memory_instrumentation::mojom::PlatformPrivateFootprint::New();
-#if BUILDFLAG(IS_APPLE)
+#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_IOS_TVOS)
   bool success = memory_instrumentation::OSMetrics::FillOSMemoryDump(
-      GetProcess().Handle(), ChildProcessTaskPortProvider::GetInstance(),
+      GetProcess().Handle(), {}, ChildProcessTaskPortProvider::GetInstance(),
       dump.get());
 #else
   bool success = memory_instrumentation::OSMetrics::FillOSMemoryDump(
-      GetProcess().Handle(), dump.get());
+      GetProcess().Handle(), {}, dump.get());
 #endif
 
   // Failed to get private memory for the process, e.g. the process has died.
@@ -5435,7 +5454,8 @@ void RenderProcessHostImpl::UpdateProcessPriority() {
   // tasks executing at lowered priority ahead of it or simply by not being
   // swiftly scheduled by the OS per the low process priority
   // (http://crbug.com/398103).
-  if (!run_renderer_in_process()) {
+  if (!run_renderer_in_process() &&
+      GetContentClient()->browser()->IsRendererProcessPriorityEnabled()) {
     DCHECK(child_process_launcher_.get());
     DCHECK(!child_process_launcher_->IsStarting());
 #if BUILDFLAG(IS_ANDROID)
@@ -5538,7 +5558,7 @@ void RenderProcessHostImpl::OnProcessLaunched() {
     // Not all platforms launch processes in the same backgrounded state. Make
     // sure |priority_.visible| reflects this platform's initial process
     // state.
-#if BUILDFLAG(IS_APPLE)
+#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_IOS_TVOS)
     priority_.visible = child_process_launcher_->GetProcess().GetPriority(
                             ChildProcessTaskPortProvider::GetInstance()) ==
                         base::Process::Priority::kUserBlocking;

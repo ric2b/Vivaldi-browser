@@ -22,9 +22,10 @@
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
-#include "third_party/blink/public/web/web_frame.h"
-#include "url/gurl.h"
 #include "url/origin.h"
+
+// Vivaldi
+#include "third_party/blink/public/web/web_frame.h"
 
 namespace blink {
 class WebFrame;

@@ -6,10 +6,12 @@
 
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "components/google/core/common/google_util.h"
 #include "components/policy/core/common/policy_pref_names.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/supervised_user/core/browser/proto/kidsmanagement_messages.pb.h"
 #include "components/supervised_user/core/browser/supervised_user_utils.h"
@@ -135,12 +137,16 @@ void RegisterFamilyPrefs(PrefService& pref_service,
 }
 
 void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  // The default pref store should hold values that configure default browsing
+  // behavior.
   registry->RegisterStringPref(prefs::kSupervisedUserId, std::string());
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualHosts);
   registry->RegisterDictionaryPref(prefs::kSupervisedUserManualURLs);
   registry->RegisterIntegerPref(prefs::kDefaultSupervisedUserFilteringBehavior,
                                 static_cast<int>(FilteringBehavior::kAllow));
-  registry->RegisterBooleanPref(prefs::kSupervisedUserSafeSites, true);
+  registry->RegisterBooleanPref(
+      prefs::kSupervisedUserSafeSites,
+      !base::FeatureList::IsEnabled(kAlignSafeSitesValueWithBrowserDefault));
   for (const char* pref : kCustodianInfoPrefs) {
     registry->RegisterStringPref(pref, std::string());
   }
@@ -181,6 +187,11 @@ bool IsChildAccountStatusKnown(const PrefService& pref_service) {
 #endif
 
 bool IsSafeSitesEnabled(const PrefService& pref_service) {
+  if (base::FeatureList::IsEnabled(kDecoupleSafeSitesFromMainSwitch) &&
+      base::FeatureList::IsEnabled(kAlignSafeSitesValueWithBrowserDefault)) {
+    return pref_service.GetBoolean(prefs::kSupervisedUserSafeSites);
+  }
+
   return supervised_user::IsSubjectToParentalControls(pref_service) &&
          pref_service.GetBoolean(prefs::kSupervisedUserSafeSites);
 }
@@ -192,11 +203,74 @@ bool IsSubjectToParentalControls(const PrefService& pref_service) {
 bool IsGoogleSafeSearchEnforced(const PrefService& pref_service) {
   return pref_service.GetBoolean(policy::policy_prefs::kForceGoogleSafeSearch);
 }
-
 void SetGoogleSafeSearch(PrefService& pref_service,
                          GoogleSafeSearchStateStatus status) {
   pref_service.SetBoolean(policy::policy_prefs::kForceGoogleSafeSearch,
                           static_cast<bool>(status));
+}
+
+namespace {
+void CheckEligibilityForContentFilters(PrefService& pref_service) {
+  CHECK(!IsSubjectToParentalControls(pref_service))
+      << "Users who are subject to Family Link parental controls cannot "
+         "disable browser content filters";
+}
+}  // namespace
+
+void EnableBrowserContentFilters(PrefService& pref_service) {
+  CheckEligibilityForContentFilters(pref_service);
+  pref_service.SetInteger(
+      policy::policy_prefs::kIncognitoModeAvailability,
+      static_cast<int>(policy::IncognitoModeAvailability::kDisabled));
+  // TODO(http://crbug.com/405419755): Enable safe sites to classify navigation.
+}
+void DisableBrowserContentFilters(PrefService& pref_service) {
+  CheckEligibilityForContentFilters(pref_service);
+  // Reset the setting to default.
+  pref_service.ClearPref(policy::policy_prefs::kIncognitoModeAvailability);
+}
+void EnableSearchContentFilters(PrefService& pref_service) {
+  CheckEligibilityForContentFilters(pref_service);
+  pref_service.SetBoolean(policy::policy_prefs::kForceGoogleSafeSearch, true);
+}
+void DisableSearchContentFilters(PrefService& pref_service) {
+  CheckEligibilityForContentFilters(pref_service);
+  // Reset the setting to default.
+  pref_service.ClearPref(policy::policy_prefs::kForceGoogleSafeSearch);
+}
+
+ParentalControlsState::ParentalControlsState(
+    PrefService& service,
+    base::RepeatingClosure on_parental_controls_enabled,
+    base::RepeatingClosure on_parental_controls_disabled)
+    : pref_service_(service),
+      value_(IsSubjectToParentalControls(service)),
+      on_parental_controls_enabled_(on_parental_controls_enabled),
+      on_parental_controls_disabled_(on_parental_controls_disabled) {
+  registrar_.Init(&service);
+  // base::Unretained is safe, because `this` owns `registrar_`.
+  registrar_.Add(
+      prefs::kSupervisedUserId,
+      base::BindRepeating(&ParentalControlsState::OnSupervisedUserIdChanged,
+                          base::Unretained(this)));
+}
+ParentalControlsState::~ParentalControlsState() = default;
+
+void ParentalControlsState::OnSupervisedUserIdChanged() {
+  bool new_value = IsSubjectToParentalControls(pref_service_.get());
+  if (new_value == value_) {
+    return;
+  }
+  value_ = new_value;
+  Notify();
+}
+
+void ParentalControlsState::Notify() {
+  if (value_) {
+    on_parental_controls_enabled_.Run();
+  } else {
+    on_parental_controls_disabled_.Run();
+  }
 }
 
 }  // namespace supervised_user

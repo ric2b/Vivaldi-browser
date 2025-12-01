@@ -32,8 +32,6 @@
 
 #include "hb.hh"
 #include "hb-unicode.hh"
-#include "hb-bit-set.hh"
-#include "hb-set-digest.hh"
 
 
 static_assert ((sizeof (hb_glyph_info_t) == 20), "");
@@ -183,19 +181,19 @@ struct hb_buffer_t
     allocated_var_bits = 0;
   }
 
-  __attribute__((always_inline))
+  HB_ALWAYS_INLINE
   hb_glyph_info_t &cur (unsigned int i = 0) { return info[idx + i]; }
-  __attribute__((always_inline))
+  HB_ALWAYS_INLINE
   hb_glyph_info_t cur (unsigned int i = 0) const { return info[idx + i]; }
 
-  __attribute__((always_inline))
+  HB_ALWAYS_INLINE
   hb_glyph_position_t &cur_pos (unsigned int i = 0) { return pos[idx + i]; }
-  __attribute__((always_inline))
+  HB_ALWAYS_INLINE
   hb_glyph_position_t cur_pos (unsigned int i = 0) const { return pos[idx + i]; }
 
-  __attribute__((always_inline))
+  HB_ALWAYS_INLINE
   hb_glyph_info_t &prev ()      { return out_info[out_len ? out_len - 1 : 0]; }
-  __attribute__((always_inline))
+  HB_ALWAYS_INLINE
   hb_glyph_info_t prev () const { return out_info[out_len ? out_len - 1 : 0]; }
 
   template <typename set_t>
@@ -231,6 +229,8 @@ struct hb_buffer_t
   HB_INTERNAL void add (hb_codepoint_t  codepoint,
 			unsigned int    cluster);
   HB_INTERNAL void add_info (const hb_glyph_info_t &glyph_info);
+  HB_INTERNAL void add_info_and_pos (const hb_glyph_info_t &glyph_info,
+				     const hb_glyph_position_t &glyph_pos);
 
   void reverse_range (unsigned start, unsigned end)
   {

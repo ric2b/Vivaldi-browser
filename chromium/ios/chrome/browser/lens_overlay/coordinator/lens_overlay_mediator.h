@@ -12,7 +12,7 @@
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_bottom_sheet_presentation_delegate.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_result_consumer.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_toolbar_mutator.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/omnibox_focus_delegate.h"
+#import "ios/chrome/browser/omnibox/ui/omnibox_focus_delegate.h"
 #import "ios/public/provider/chrome/browser/lens/lens_overlay_api.h"
 
 @protocol ApplicationCommands;
@@ -24,6 +24,7 @@ class LensOmniboxClient;
 @class OmniboxCoordinator;
 class PrefService;
 class TemplateURLService;
+class WebStateList;
 
 /// Main mediator for Lens Overlay.
 /// Manages data flow between Selection, Omnibox and Results.
@@ -68,8 +69,8 @@ class TemplateURLService;
 /// Number of tabs opened by the lens overlay during this session.
 @property(nonatomic, assign, readonly) NSInteger generatedTabCount;
 
-- (instancetype)initWithProfilePrefs:(const PrefService*)profilePrefs
-                         isIncognito:(BOOL)isIncognito
+- (instancetype)initWithWebStateList:(WebStateList*)webStateList
+                        profilePrefs:(const PrefService*)profilePrefs
     NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 

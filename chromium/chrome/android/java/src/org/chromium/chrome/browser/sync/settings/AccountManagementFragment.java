@@ -50,8 +50,7 @@ import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.GAIAServiceType;
-import org.chromium.components.signin.SigninFeatureMap;
-import org.chromium.components.signin.SigninFeatures;
+import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SignoutReason;
@@ -146,11 +145,16 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
     }
 
     @Override
+    public void onStart() {
+        super.onStart();
+        update();
+    }
+
+    @Override
     public void onResume() {
         super.onResume();
         IdentityServicesProvider.get().getSigninManager(getProfile()).addSignInStateObserver(this);
         mProfileDataCache.addObserver(this);
-        update();
     }
 
     @Override
@@ -172,10 +176,10 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
                 IdentityServicesProvider.get()
                         .getIdentityManager(getProfile())
                         .getPrimaryAccountInfo(ConsentLevel.SIGNIN);
-        List<CoreAccountInfo> coreAccountInfos =
-                AccountUtils.getCoreAccountInfosIfFulfilledOrEmpty(
-                        AccountManagerFacadeProvider.getInstance().getCoreAccountInfos());
-        if (mSignedInCoreAccountInfo == null || coreAccountInfos.isEmpty()) {
+        List<AccountInfo> accounts =
+                AccountUtils.getAccountsIfFulfilledOrEmpty(
+                        AccountManagerFacadeProvider.getInstance().getAccounts());
+        if (mSignedInCoreAccountInfo == null || accounts.isEmpty()) {
             // The AccountManagementFragment can only be shown when the user is signed in. If the
             // user is signed out, exit the fragment.
             SettingsNavigationFactory.createSettingsNavigation().finishCurrentSettings(this);
@@ -190,9 +194,7 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         addPreferencesFromResource(R.xml.account_management_preferences);
         configureSignOutSwitch();
         configureChildAccountPreferences();
-        AccountManagerFacadeProvider.getInstance()
-                .getCoreAccountInfos()
-                .then(this::updateAccountsList);
+        AccountManagerFacadeProvider.getInstance().getAccounts().then(this::updateAccountsList);
     }
 
     /**
@@ -276,12 +278,12 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         }
     }
 
-    private void updateAccountsList(List<CoreAccountInfo> coreAccountInfos) {
+    private void updateAccountsList(List<AccountInfo> accounts) {
         // This method is called asynchronously on accounts fetched from AccountManagerFacade.
         // Make sure the fragment is alive before updating preferences.
         if (!isResumed()) return;
 
-        setAccountBadges(coreAccountInfos);
+        setAccountBadges(accounts);
 
         PreferenceCategory accountsCategory = findPreference(PREF_ACCOUNTS_CATEGORY);
         if (accountsCategory == null) {
@@ -297,9 +299,9 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         accountsCategory.addPreference(createManageYourGoogleAccountPreference());
         accountsCategory.addPreference(createDividerPreference(R.layout.horizontal_divider));
 
-        for (CoreAccountInfo coreAccountInfo : coreAccountInfos) {
-            if (!mSignedInCoreAccountInfo.equals(coreAccountInfo)) {
-                accountsCategory.addPreference(createAccountPreference(coreAccountInfo));
+        for (CoreAccountInfo account : accounts) {
+            if (!mSignedInCoreAccountInfo.equals(account)) {
+                accountsCategory.addPreference(createAccountPreference(account));
             }
         }
         accountsCategory.addPreference(createAddAccountPreference());
@@ -402,50 +404,29 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         return getPreferenceManager().getContext();
     }
 
-    private void setAccountBadges(List<CoreAccountInfo> coreAccountInfos) {
-        for (CoreAccountInfo coreAccountInfo : coreAccountInfos) {
-            if (SigninFeatureMap.isEnabled(
-                    SigninFeatures.FORCE_SUPERVISED_SIGNIN_WITH_CAPABILITIES)) {
-                AccountManagerFacadeProvider.getInstance()
-                        .checkIsSubjectToParentalControls(
-                                coreAccountInfo,
-                                (isChild, childAccount) -> {
-                                    Context context = getContext();
-                                    if (isChild && context != null) {
-                                        mProfileDataCache.setBadge(
-                                                childAccount.getEmail(),
-                                                ProfileDataCache
-                                                        .createDefaultSizeChildAccountBadgeConfig(
-                                                                context,
-                                                                R.drawable.ic_account_child_20dp));
-                                    }
-                                });
-
-            } else {
-                AccountManagerFacadeProvider.getInstance()
-                        .checkChildAccountStatus(
-                                coreAccountInfo,
-                                (isChild, childAccount) -> {
-                                    Context context = getContext();
-                                    if (isChild && context != null) {
-                                        mProfileDataCache.setBadge(
-                                                childAccount.getEmail(),
-                                                ProfileDataCache
-                                                        .createDefaultSizeChildAccountBadgeConfig(
-                                                                context,
-                                                                R.drawable.ic_account_child_20dp));
-                                    }
-                                });
-            }
+    private void setAccountBadges(List<AccountInfo> accounts) {
+        for (CoreAccountInfo account : accounts) {
+            AccountManagerFacadeProvider.getInstance()
+                    .checkIsSubjectToParentalControls(
+                            account,
+                            (isChild, childAccount) -> {
+                                Context context = getContext();
+                                if (isChild && context != null) {
+                                    mProfileDataCache.setBadge(
+                                            childAccount.getEmail(),
+                                            ProfileDataCache
+                                                    .createDefaultSizeChildAccountBadgeConfig(
+                                                            context,
+                                                            R.drawable.ic_account_child_20dp));
+                                }
+                            });
         }
     }
 
     // ProfileDataCache.Observer implementation:
     @Override
     public void onProfileDataUpdated(String accountEmail) {
-        AccountManagerFacadeProvider.getInstance()
-                .getCoreAccountInfos()
-                .then(this::updateAccountsList);
+        AccountManagerFacadeProvider.getInstance().getAccounts().then(this::updateAccountsList);
     }
 
     // SignInStateObserver implementation:
@@ -588,5 +569,10 @@ public class AccountManagementFragment extends ChromeBaseSettingsFragment
         if (df != null) {
             df.dismiss();
         }
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

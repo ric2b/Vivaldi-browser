@@ -20,12 +20,14 @@
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/bookmarks/ui_bundled/home/bookmarks_coordinator.h"
 #import "ios/chrome/browser/browser_container/ui_bundled/browser_container_view_controller.h"
+#import "ios/chrome/browser/browser_view/model/browser_view_visibility_notifier_browser_agent.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_controller+private.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/key_commands_provider.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/safe_area_provider.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/tab_consumer.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/tab_events_mediator.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_browser_agent.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_large_icon_service_factory.h"
@@ -59,6 +61,7 @@
 #import "ios/chrome/browser/shared/public/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/shared/public/commands/help_commands.h"
 #import "ios/chrome/browser/shared/public/commands/lens_commands.h"
+#import "ios/chrome/browser/shared/public/commands/page_action_menu_commands.h"
 #import "ios/chrome/browser/shared/public/commands/page_info_commands.h"
 #import "ios/chrome/browser/shared/public/commands/qr_scanner_commands.h"
 #import "ios/chrome/browser/shared/public/commands/quick_delete_commands.h"
@@ -157,6 +160,9 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     PagePlaceholderBrowserAgent::CreateForBrowser(browser_.get());
     StartSurfaceRecentTabBrowserAgent::CreateForBrowser(browser_.get());
     OmniboxPositionBrowserAgent::CreateForBrowser(browser_.get());
+    BrowserViewVisibilityNotifierBrowserAgent::CreateForBrowser(browser_.get());
+    FullscreenController::CreateForBrowser(browser_.get());
+    DiscoverFeedVisibilityBrowserAgent::CreateForBrowser(browser_.get());
 
     WebUsageEnablerBrowserAgent::FromBrowser(browser_.get())
         ->SetWebUsageEnabled(true);
@@ -206,6 +212,11 @@ class BrowserViewControllerTest : public BlockCleanupTest {
     id mock_help_handler = OCMProtocolMock(@protocol(HelpCommands));
     [dispatcher startDispatchingToTarget:mock_help_handler
                              forProtocol:@protocol(HelpCommands)];
+
+    id page_action_menu_handler =
+        OCMProtocolMock(@protocol(PageActionMenuCommands));
+    [dispatcher startDispatchingToTarget:page_action_menu_handler
+                             forProtocol:@protocol(PageActionMenuCommands)];
 
     // Set up Applicationhander and SettingsHandler mocks.
     mock_application_handler_ = OCMProtocolMock(@protocol(ApplicationCommands));

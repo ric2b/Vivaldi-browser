@@ -19,6 +19,7 @@
 #include "third_party/blink/renderer/core/css/css_font_style_range_value.h"
 #include "third_party/blink/renderer/core/css/css_font_variation_value.h"
 #include "third_party/blink/renderer/core/css/css_function_value.h"
+#include "third_party/blink/renderer/core/css/css_gap_decoration_property_utils.h"
 #include "third_party/blink/renderer/core/css/css_grid_auto_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_integer_repeat_value.h"
 #include "third_party/blink/renderer/core/css/css_grid_template_areas_value.h"
@@ -390,6 +391,41 @@ void AppendValuesForMaskClipAndOrigin(CSSValueList* result_list,
     result_list->Append(*CSSIdentifierValue::Create(origin));
     result_list->Append(*CSSIdentifierValue::Create(clip));
   }
+}
+
+// Returns a list for a <gap-rule>. A <gap-rule> is defined as:
+// [ <line-width> || <line-style> || <color> ]. The computed value serialization
+// should follow the shortest serialization principle, making it consistent with
+// the specified serialization.
+CSSValueList* GetValueListForGapRule(const CSSValue& width_value,
+                                     const CSSValue& style_value,
+                                     const CSSValue& color_value) {
+  CSSValueList* result_list = CSSValueList::CreateSpaceSeparated();
+
+  if (const auto* ident_value = DynamicTo<CSSIdentifierValue>(width_value);
+      !(ident_value && ident_value->GetValueID() == CSSValueID::kMedium) &&
+      !width_value.IsInitialValue()) {
+    result_list->Append(width_value);
+  }
+
+  if (const auto* ident_value = DynamicTo<CSSIdentifierValue>(style_value);
+      !(ident_value && ident_value->GetValueID() == CSSValueID::kNone) &&
+      !style_value.IsInitialValue()) {
+    result_list->Append(style_value);
+  }
+  if (const auto* ident_value = DynamicTo<CSSIdentifierValue>(color_value);
+      !(ident_value &&
+        ident_value->GetValueID() == CSSValueID::kCurrentcolor) &&
+      !color_value.IsInitialValue()) {
+    result_list->Append(color_value);
+  }
+
+  if (result_list->length() == 0) {
+    const CSSValue* default_width =
+        CSSIdentifierValue::Create(CSSValueID::kMedium);
+    result_list->Append(*default_width);
+  }
+  return result_list;
 }
 
 }  // namespace
@@ -1398,7 +1434,9 @@ CSSValue* ComputedStyleUtils::ValueForFontVariationSettings(
     const FontVariationAxis& variation_axis = variation_settings->at(i);
     cssvalue::CSSFontVariationValue* variation_value =
         MakeGarbageCollected<cssvalue::CSSFontVariationValue>(
-            variation_axis.TagString(), variation_axis.Value());
+            variation_axis.TagString(),
+            MakeGarbageCollected<CSSNumericLiteralValue>(
+                variation_axis.Value(), CSSPrimitiveValue::UnitType::kNumber));
     list->Append(*variation_value);
   }
   return list;
@@ -2142,7 +2180,7 @@ CSSValue* ComputedStyleUtils::ValueForGridPosition(
   return list;
 }
 
-CSSValue* ComputedStyleUtils::ValueForMasonrySlack(
+CSSValue* ComputedStyleUtils::ValueForItemTolerance(
     const std::optional<Length>& slack_length,
     const ComputedStyle& style) {
   return slack_length ? ZoomAdjustedPixelValueForLength(*slack_length, style)
@@ -2541,25 +2579,45 @@ CSSValue* ComputedStyleUtils::ValueForAnimationTriggerRangeEndList(
       animation_data, style, Length::Percent(100.0));
 }
 
+CSSValue* ComputedStyleUtils::ValueForAnimationRangeOrAuto(
+    const TimelineOffsetOrAuto& offset,
+    const ComputedStyle& style,
+    const Length& default_offset) {
+  if (offset.IsAuto()) {
+    return MakeGarbageCollected<CSSIdentifierValue>(CSSValueID::kAuto);
+  }
+  return ValueForAnimationRange(offset.GetTimelineOffset(), style,
+                                default_offset);
+}
+
+CSSValue* ComputedStyleUtils::ValueForAnimationTriggerExitRangeList(
+    const Vector<TimelineOffsetOrAuto>& range_list,
+    const CSSAnimationData* animation_data,
+    const ComputedStyle& style,
+    const Length& default_offset) {
+  return CreateAnimationValueList(range_list, &ValueForAnimationRangeOrAuto,
+                                  style, default_offset);
+}
+
 CSSValue* ComputedStyleUtils::ValueForAnimationTriggerExitRangeStartList(
     const CSSAnimationData* animation_data,
     const ComputedStyle& style) {
-  return ValueForAnimationRangeList(
-      animation_data ? animation_data->TriggerExitRangeStartList()
-                     : Vector<std::optional<
-                           TimelineOffset>>{CSSAnimationData::
-                                                InitialTriggerExitRangeStart()},
+  return ValueForAnimationTriggerExitRangeList(
+      animation_data
+          ? animation_data->TriggerExitRangeStartList()
+          : Vector<TimelineOffsetOrAuto>{CSSAnimationData::
+                                             InitialTriggerExitRangeStart()},
       animation_data, style, Length::Percent(0.0));
 }
 
 CSSValue* ComputedStyleUtils::ValueForAnimationTriggerExitRangeEndList(
     const CSSAnimationData* animation_data,
     const ComputedStyle& style) {
-  return ValueForAnimationRangeList(
-      animation_data ? animation_data->TriggerExitRangeEndList()
-                     : Vector<std::optional<
-                           TimelineOffset>>{CSSAnimationData::
-                                                InitialTriggerExitRangeEnd()},
+  return ValueForAnimationTriggerExitRangeList(
+      animation_data
+          ? animation_data->TriggerExitRangeEndList()
+          : Vector<TimelineOffsetOrAuto>{CSSAnimationData::
+                                             InitialTriggerExitRangeEnd()},
       animation_data, style, Length::Percent(100.0));
 }
 
@@ -2777,14 +2835,14 @@ CSSValue* ComputedStyleUtils::ValueForCornerShape(
   if (superellipse == Superellipse::Scoop()) {
     return CSSIdentifierValue::Create(CSSValueID::kScoop);
   }
-  if (superellipse == Superellipse::Straight()) {
-    return CSSIdentifierValue::Create(CSSValueID::kStraight);
+  if (superellipse == Superellipse::Square()) {
+    return CSSIdentifierValue::Create(CSSValueID::kSquare);
   }
   if (superellipse == Superellipse::Squircle()) {
     return CSSIdentifierValue::Create(CSSValueID::kSquircle);
   }
   return MakeGarbageCollected<cssvalue::CSSSuperellipseValue>(
-      *CSSNumericLiteralValue::Create(superellipse.Exponent(),
+      *CSSNumericLiteralValue::Create(superellipse.Parameter(),
                                       CSSPrimitiveValue::UnitType::kNumber));
 }
 
@@ -3186,6 +3244,21 @@ CSSValueID ValueForQuoteType(const QuoteType quote_type) {
   NOTREACHED();
 }
 
+namespace {
+
+CSSValue* CounterValueFromCounterData(const ContentData& content_data) {
+  const auto& counter = To<CounterContentData>(content_data);
+  auto* identifier =
+      MakeGarbageCollected<CSSCustomIdentValue>(counter.Identifier());
+  auto* separator = MakeGarbageCollected<CSSStringValue>(counter.Separator());
+  auto* list_style =
+      MakeGarbageCollected<CSSCustomIdentValue>(counter.ListStyle());
+  return MakeGarbageCollected<cssvalue::CSSCounterValue>(identifier, list_style,
+                                                         separator);
+}
+
+}  // namespace
+
 CSSValue* ComputedStyleUtils::ValueForContentData(const ComputedStyle& style,
                                                   bool allow_visited_style,
                                                   CSSValuePhase value_phase) {
@@ -3198,22 +3271,15 @@ CSSValue* ComputedStyleUtils::ValueForContentData(const ComputedStyle& style,
 
   CSSValueList* outer_list = CSSValueList::CreateSlashSeparated();
   CSSValueList* list = CSSValueList::CreateSpaceSeparated();
-
   // Alternative text optionally specified after a forward slash appearing after
   // the last content list item.
-  CSSStringValue* alt_text = nullptr;
+  CSSValueList* alt_list = CSSValueList::CreateSpaceSeparated();
   for (const ContentData* content_data = style.GetContentData(); content_data;
        content_data = content_data->Next()) {
-    if (content_data->IsCounter()) {
-      const CounterContentData& counter = To<CounterContentData>(*content_data);
-      auto* identifier =
-          MakeGarbageCollected<CSSCustomIdentValue>(counter.Identifier());
-      auto* separator =
-          MakeGarbageCollected<CSSStringValue>(counter.Separator());
-      auto* list_style =
-          MakeGarbageCollected<CSSCustomIdentValue>(counter.ListStyle());
-      list->Append(*MakeGarbageCollected<cssvalue::CSSCounterValue>(
-          identifier, list_style, separator));
+    if (content_data->IsAltCounter()) {
+      alt_list->Append(*CounterValueFromCounterData(*content_data));
+    } else if (content_data->IsCounter()) {
+      list->Append(*CounterValueFromCounterData(*content_data));
     } else if (content_data->IsImage()) {
       const StyleImage* image = To<ImageContentData>(content_data)->GetImage();
       DCHECK(image);
@@ -3226,9 +3292,8 @@ CSSValue* ComputedStyleUtils::ValueForContentData(const ComputedStyle& style,
       const QuoteType quote_type = To<QuoteContentData>(content_data)->Quote();
       list->Append(*CSSIdentifierValue::Create(ValueForQuoteType(quote_type)));
     } else if (content_data->IsAltText()) {
-      alt_text = MakeGarbageCollected<CSSStringValue>(
-          To<AltTextContentData>(content_data)->ConcatenateAltText());
-      break;
+      alt_list->Append(*MakeGarbageCollected<CSSStringValue>(
+          To<AltTextContentData>(content_data)->GetText()));
     } else {
       NOTREACHED();
     }
@@ -3236,8 +3301,8 @@ CSSValue* ComputedStyleUtils::ValueForContentData(const ComputedStyle& style,
   DCHECK(list->length());
 
   outer_list->Append(*list);
-  if (alt_text) {
-    outer_list->Append(*alt_text);
+  if (alt_list->length()) {
+    outer_list->Append(*alt_list);
   }
   return outer_list;
 }
@@ -3415,7 +3480,7 @@ const CSSValue* ComputedStyleUtils::ValueForSVGPaint(
     case SVGPaintType::kUriColor: {
       CSSValueList* values = CSSValueList::CreateSpaceSeparated();
       values->Append(*MakeGarbageCollected<cssvalue::CSSURIValue>(
-          CSSUrlData(paint.GetUrl())));
+          *MakeGarbageCollected<CSSUrlData>(paint.GetUrl())));
       values->Append(
           paint.type == SVGPaintType::kUriNone
               ? *CSSIdentifierValue::Create(CSSValueID::kNone)
@@ -3425,7 +3490,7 @@ const CSSValue* ComputedStyleUtils::ValueForSVGPaint(
     }
     case SVGPaintType::kUri:
       return MakeGarbageCollected<cssvalue::CSSURIValue>(
-          CSSUrlData(paint.GetUrl()));
+          *MakeGarbageCollected<CSSUrlData>(paint.GetUrl()));
     case SVGPaintType::kContextFill:
       return CSSIdentifierValue::Create(CSSValueID::kContextFill);
     case SVGPaintType::kContextStroke:
@@ -3437,7 +3502,7 @@ CSSValue* ComputedStyleUtils::ValueForSVGResource(
     const StyleSVGResource* resource) {
   if (resource) {
     return MakeGarbageCollected<cssvalue::CSSURIValue>(
-        CSSUrlData(resource->Url()));
+        *MakeGarbageCollected<CSSUrlData>(resource->Url()));
   }
   return CSSIdentifierValue::Create(CSSValueID::kNone);
 }
@@ -3612,7 +3677,7 @@ CSSValue* ComputedStyleUtils::ValueForFilter(
     switch (filter_operation->GetType()) {
       case FilterOperation::OperationType::kReference:
         list->Append(*MakeGarbageCollected<cssvalue::CSSURIValue>(
-            CSSUrlData(AtomicString(
+            *MakeGarbageCollected<CSSUrlData>(AtomicString(
                 To<ReferenceFilterOperation>(filter_operation)->Url()))));
         continue;
       case FilterOperation::OperationType::kGrayscale:
@@ -3839,6 +3904,160 @@ CSSValueList* ComputedStyleUtils::ValuesForShorthandProperty(
   return list;
 }
 
+CSSValueList* ComputedStyleUtils::ValueForGapDecorationRuleShorthand(
+    const StylePropertyShorthand& shorthand,
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase,
+    CSSGapDecorationPropertyDirection direction) {
+  // If the CSSGapDecorations feature is not enabled, fallback to legacy
+  // behavior of handling the shorthand since values are stored as single
+  // values and not lists.
+  if (!RuntimeEnabledFeatures::CSSGapDecorationEnabled()) {
+    const CSSValue* width_value =
+        shorthand.properties()[0]->CSSValueFromComputedStyle(
+            style, layout_object, allow_visited_style, value_phase);
+    const CSSValue* style_value =
+        shorthand.properties()[1]->CSSValueFromComputedStyle(
+            style, layout_object, allow_visited_style, value_phase);
+    const CSSValue* color_value =
+        shorthand.properties()[2]->CSSValueFromComputedStyle(
+            style, layout_object, allow_visited_style, value_phase);
+
+    return GetValueListForGapRule(*width_value, *style_value, *color_value);
+  }
+
+  CHECK_EQ(shorthand.length(), 3u);
+  CHECK(shorthand.properties()[0]->IDEquals(
+      CSSGapDecorationUtils::GetLonghandProperty(
+          direction, CSSGapDecorationPropertyType::kWidth)));
+  CHECK(shorthand.properties()[1]->IDEquals(
+      CSSGapDecorationUtils::GetLonghandProperty(
+          direction, CSSGapDecorationPropertyType::kStyle)));
+  CHECK(shorthand.properties()[2]->IDEquals(
+      CSSGapDecorationUtils::GetLonghandProperty(
+          direction, CSSGapDecorationPropertyType::kColor)));
+
+  const CSSValueList* width_values = DynamicTo<CSSValueList>(
+      shorthand.properties()[0]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase));
+  const CSSValueList* style_values = DynamicTo<CSSValueList>(
+      shorthand.properties()[1]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase));
+  const CSSValueList* color_values = DynamicTo<CSSValueList>(
+      shorthand.properties()[2]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase));
+
+  const size_t count = width_values->length();
+
+  // If the longhands differ in length, return nullptr.
+  // Constructing a shorthand from misaligned longhands is non-trivial and
+  // currently not supported.
+  //
+  // TODO(crbug.com/416535734): Figure out a way to handle cases where we
+  // need to construct the shorthand from individual separate longhands that
+  // don't align.
+  if (count != style_values->length() || count != color_values->length()) {
+    return nullptr;
+  }
+
+  CSSValueList* result = CSSValueList::CreateCommaSeparated();
+
+  for (size_t i = 0; i < count; ++i) {
+    const auto* style_repeat_value =
+        DynamicTo<cssvalue::CSSRepeatValue>(style_values->Item(i));
+    const auto* color_repeat_value =
+        DynamicTo<cssvalue::CSSRepeatValue>(color_values->Item(i));
+    // If this segment was a repeat() value originally, we need to unpack
+    // its sub-values and rebuild the original repeat(<integer>|auto,
+    // <gap-rule>#). For example: repeat(2, 3px) repeat(2, solid) repeat(2, red)
+    // should return repeat(2, 3px solid red).
+    if (const auto* width_repeat_value =
+            DynamicTo<cssvalue::CSSRepeatValue>(width_values->Item(i))) {
+      // Return nullptr if values don't align.
+      //
+      // TODO(crbug.com/416535734): Figure out a way to handle cases where we
+      // need to construct the shorthand from individual separate longhands that
+      // don't align.
+      if (!style_repeat_value || !color_repeat_value) {
+        return nullptr;
+      }
+
+      const bool is_auto_repeat_value = width_repeat_value->IsAutoRepeatValue();
+      // Return nullptr if values don't align.
+      //
+      // TODO(crbug.com/416535734): Figure out a way to handle cases where we
+      // need to construct the shorthand from individual separate longhands that
+      // don't align.
+      if (is_auto_repeat_value != style_repeat_value->IsAutoRepeatValue() ||
+          is_auto_repeat_value != color_repeat_value->IsAutoRepeatValue()) {
+        return nullptr;
+      }
+
+      const CSSPrimitiveValue* repetitions = nullptr;
+      if (!is_auto_repeat_value) {
+        repetitions = width_repeat_value->Repetitions();
+        // Return nullptr if values don't align.
+        //
+        // TODO(crbug.com/416535734): Figure out a way to handle cases where we
+        // need to construct the shorthand from individual separate longhands
+        // that don't align.
+        if (!base::ValuesEquivalent(repetitions,
+                                    style_repeat_value->Repetitions()) ||
+            !base::ValuesEquivalent(repetitions,
+                                    color_repeat_value->Repetitions())) {
+          return nullptr;
+        }
+      }
+
+      // Reconstruct each <gap-rule> as "width style color" triplets.
+      CSSValueList* repeated_gap_rules = CSSValueList::CreateCommaSeparated();
+      wtf_size_t rules_count = width_repeat_value->Values().length();
+
+      // Return nullptr if values don't align.
+      //
+      // TODO(crbug.com/416535734): Figure out a way to handle cases where we
+      // need to construct the shorthand from individual separate longhands that
+      // don't align.
+      if (rules_count != style_repeat_value->Values().length() ||
+          rules_count != color_repeat_value->Values().length()) {
+        return nullptr;
+      }
+
+      for (size_t j = 0; j < rules_count; ++j) {
+        CSSValueList* gap_rule =
+            GetValueListForGapRule(width_repeat_value->Values().Item(j),
+                                   style_repeat_value->Values().Item(j),
+                                   color_repeat_value->Values().Item(j));
+        repeated_gap_rules->Append(*gap_rule);
+      }
+
+      CSSValue* repeater_gap_rule =
+          MakeGarbageCollected<cssvalue::CSSRepeatValue>(repetitions,
+                                                         *repeated_gap_rules);
+      result->Append(*repeater_gap_rule);
+    } else {
+      // A simple gap rule, just append width, style and color values.
+
+      // Return nullptr if values don't align.
+      //
+      // TODO(crbug.com/416535734): Figure out a way to handle cases where we
+      // need to construct the shorthand from individual separate longhands
+      // that don't align.
+      if (style_repeat_value || color_repeat_value) {
+        return nullptr;
+      }
+
+      CSSValueList* gap_rule = GetValueListForGapRule(
+          width_values->Item(i), style_values->Item(i), color_values->Item(i));
+      result->Append(*gap_rule);
+    }
+  }
+
+  return result;
+}
+
 CSSValuePair* ComputedStyleUtils::ValuesForGapShorthand(
     const StylePropertyShorthand& shorthand,
     const ComputedStyle& style,
@@ -4014,6 +4233,31 @@ CSSValueList* ComputedStyleUtils::ValuesForGridTemplateShorthand(
           ? template_column_values
           : template_columns_computed,
       template_area_values);
+}
+
+const CSSValue* ComputedStyleUtils::ValuesForBidirectionalGapRuleShorthand(
+    const StylePropertyShorthand& shorthand,
+    const ComputedStyle& style,
+    const LayoutObject* layout_object,
+    bool allow_visited_style,
+    CSSValuePhase value_phase) {
+  DCHECK_EQ(shorthand.length(), 2u);
+  const CSSValue* column_rule_property =
+      shorthand.properties()[0]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase);
+  const CSSValue* row_rule_property =
+      shorthand.properties()[1]->CSSValueFromComputedStyle(
+          style, layout_object, allow_visited_style, value_phase);
+
+  // The `rule-*` shorthand is bi-directional, so the values should be
+  // equivalent.
+  //
+  // https://drafts.csswg.org/css-gaps-1/#rule-bi-directional
+  if (!base::ValuesEquivalent(column_rule_property, row_rule_property)) {
+    return nullptr;
+  }
+
+  return column_rule_property;
 }
 
 CSSValueList* ComputedStyleUtils::ValuesForSidesShorthand(
@@ -4523,6 +4767,44 @@ CSSValue* ComputedStyleUtils::ValueForPositionTryFallbacks(
     fallback_list->Append(*fallback_value);
   }
   return fallback_list;
+}
+
+CSSValue* ComputedStyleUtils::ValueForFitText(const ComputedStyle& style,
+                                              const FitText& fit_text) {
+  CSSValueList* list = CSSValueList::CreateSpaceSeparated();
+  CSSValueID target_id;
+  switch (fit_text.Target()) {
+    case FitTextTarget::kNone:
+      target_id = CSSValueID::kNone;
+      break;
+    case FitTextTarget::kPerLine:
+      target_id = CSSValueID::kPerLine;
+      break;
+    case FitTextTarget::kConsistent:
+      target_id = CSSValueID::kConsistent;
+      break;
+  }
+  list->Append(*CSSIdentifierValue::Create(target_id));
+
+  switch (fit_text.Method()) {
+    case FitTextMethod::kScale:
+      // The default value.
+      break;
+    case FitTextMethod::kFontSize:
+      list->Append(*CSSIdentifierValue::Create(CSSValueID::kFontSize));
+      break;
+    case FitTextMethod::kScaleInline:
+      list->Append(*CSSIdentifierValue::Create(CSSValueID::kScaleInline));
+      break;
+    case FitTextMethod::kLetterSpacing:
+      list->Append(*CSSIdentifierValue::Create(CSSValueID::kLetterSpacing));
+      break;
+  }
+
+  if (auto size = fit_text.SizeLimit()) {
+    list->Append(*ZoomAdjustedPixelValue(*size, style));
+  }
+  return list;
 }
 
 }  // namespace blink

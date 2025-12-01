@@ -91,7 +91,7 @@ class MoqtSessionPeer {
                                              track.get());
     session->subscribe_by_name_.try_emplace(subscribe.full_track_name,
                                             track.get());
-    session->upstream_by_id_.try_emplace(subscribe.subscribe_id,
+    session->upstream_by_id_.try_emplace(subscribe.request_id,
                                          std::move(track));
   }
 
@@ -102,8 +102,10 @@ class MoqtSessionPeer {
     MoqtSubscribe subscribe;
     subscribe.full_track_name = publisher->GetTrackName();
     subscribe.track_alias = track_alias;
-    subscribe.subscribe_id = subscribe_id;
-    subscribe.start = FullSequence(start_group, start_object);
+    subscribe.request_id = subscribe_id;
+    subscribe.forward = true;
+    subscribe.filter_type = MoqtFilterType::kAbsoluteStart;
+    subscribe.start = Location(start_group, start_object);
     subscribe.subscriber_priority = 0x80;
     session->published_subscriptions_.emplace(
         subscribe_id, std::make_unique<MoqtSession::PublishedSubscription>(
@@ -113,7 +115,7 @@ class MoqtSessionPeer {
   }
 
   static bool InSubscriptionWindow(MoqtObjectListener* subscription,
-                                   FullSequence sequence) {
+                                   Location sequence) {
     return static_cast<MoqtSession::PublishedSubscription*>(subscription)
         ->InWindow(sequence);
   }
@@ -143,23 +145,16 @@ class MoqtSessionPeer {
     return session->RemoteTrackByAlias(track_alias);
   }
 
-  static void set_next_subscribe_id(MoqtSession* session, uint64_t id) {
-    session->next_subscribe_id_ = id;
+  static void set_next_request_id(MoqtSession* session, uint64_t id) {
+    session->next_request_id_ = id;
   }
 
-  static void set_peer_max_subscribe_id(MoqtSession* session, uint64_t id) {
-    session->peer_max_subscribe_id_ = id;
+  static void set_next_incoming_request_id(MoqtSession* session, uint64_t id) {
+    session->next_incoming_request_id_ = id;
   }
 
-  static MockFetchTask* AddFetch(MoqtSession* session, uint64_t fetch_id) {
-    auto fetch_task = std::make_unique<MockFetchTask>();
-    MockFetchTask* return_ptr = fetch_task.get();
-    auto published_fetch = std::make_unique<MoqtSession::PublishedFetch>(
-        fetch_id, session, std::move(fetch_task));
-    session->incoming_fetches_.emplace(fetch_id, std::move(published_fetch));
-    // Add the fetch to the pending stream queue.
-    session->UpdateQueuedSendOrder(fetch_id, std::nullopt, 0);
-    return return_ptr;
+  static void set_peer_max_request_id(MoqtSession* session, uint64_t id) {
+    session->peer_max_request_id_ = id;
   }
 
   static MoqtSession::PublishedFetch* GetFetch(MoqtSession* session,
@@ -171,12 +166,12 @@ class MoqtSessionPeer {
     return it->second.get();
   }
 
-  static void ValidateSubscribeId(MoqtSession* session, uint64_t id) {
-    session->ValidateSubscribeId(id);
+  static void ValidateRequestId(MoqtSession* session, uint64_t id) {
+    session->ValidateRequestId(id);
   }
 
-  static FullSequence LargestSentForSubscription(MoqtSession* session,
-                                                 uint64_t subscribe_id) {
+  static Location LargestSentForSubscription(MoqtSession* session,
+                                             uint64_t subscribe_id) {
     return *session->published_subscriptions_[subscribe_id]->largest_sent();
   }
 
@@ -189,10 +184,10 @@ class MoqtSessionPeer {
         std::nullopt,
         std::nullopt,
         FullTrackName{"foo", "bar"},
-        FullSequence{0, 0},
+        Location{0, 0},
         4,
         std::nullopt,
-        MoqtSubscribeParameters(),
+        VersionSpecificParameters(),
     };
     std::unique_ptr<MoqtFetchTask> task;
     auto [it, success] = session->upstream_by_id_.try_emplace(
@@ -204,7 +199,7 @@ class MoqtSessionPeer {
     UpstreamFetch* fetch = static_cast<UpstreamFetch*>(it->second.get());
     // Initialize the fetch task
     fetch->OnFetchResult(
-        FullSequence{4, 10}, absl::OkStatus(),
+        Location{4, 10}, absl::OkStatus(),
         [=, session_ptr = session, fetch_id = fetch_message.fetch_id]() {
           session_ptr->CancelFetch(fetch_id);
         });
@@ -252,7 +247,7 @@ class MoqtSessionPeer {
   }
 
   static bool SubgroupHasBeenReset(MoqtObjectListener* subscription,
-                                   FullSequence sequence) {
+                                   Location sequence) {
     sequence.object = 0;
     return static_cast<MoqtSession::PublishedSubscription*>(subscription)
         ->reset_subgroups()

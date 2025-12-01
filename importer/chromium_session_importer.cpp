@@ -18,7 +18,7 @@ namespace session_importer {
 
 sessions::IdToSessionTab ChromiumSessionImporter::GetOpenTabs(
     const base::FilePath& profile_dir,
-    importer::ImporterType importer_type) {
+    user_data_importer::ImporterType importer_type) {
   sessions::SessionContent content;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner =
@@ -31,7 +31,7 @@ sessions::IdToSessionTab ChromiumSessionImporter::GetOpenTabs(
 
   auto unfiltered_cmds = backend->ReadLastSessionCommands().commands;
   auto commands = sessions::VivaldiFilterImportedTabsSessionCommands(
-      unfiltered_cmds, importer_type == importer::TYPE_VIVALDI);
+      unfiltered_cmds, importer_type == user_data_importer::TYPE_VIVALDI);
 
   sessions::GroupIdToSessionTabGroup tab_groups;
   sessions::VivaldiCreateTabsAndWindows(commands, &content.tabs, &tab_groups,

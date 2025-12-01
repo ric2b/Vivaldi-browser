@@ -11,7 +11,10 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 
+import org.chromium.base.AndroidInfo;
+import org.chromium.base.ApkInfo;
 import org.chromium.base.ContextUtils;
+import org.chromium.base.DeviceInfo;
 import org.chromium.base.Log;
 import org.chromium.base.TraceEvent;
 import org.chromium.build.annotations.NullMarked;
@@ -57,14 +60,16 @@ public class ChildProcessLauncher {
 
         /**
          * Called before setup is called on the connection.
-         * @param connectionBundle the bundle passed to the {@link ChildProcessService} in the
-         * setup call. Clients can add their own extras to the bundle.
+         *
+         * @param childProcessArgs the aidl parcelable passed to the {@link ChildProcessService} in
+         *     the setup call.
          */
-        public void onBeforeConnectionSetup(Bundle connectionBundle) {}
+        public void onBeforeConnectionSetup(IChildProcessArgs childProcessArgs) {}
 
         /**
          * Called when the connection was successfully established, meaning the setup call on the
          * service was successful.
+         *
          * @param connection the connection over which the setup call was made.
          */
         public void onConnectionEstablished(ChildProcessConnection connection) {}
@@ -95,7 +100,7 @@ public class ChildProcessLauncher {
     private final Delegate mDelegate;
 
     private final String[] mCommandLine;
-    private final FileDescriptorInfo[] mFilesToBeMapped;
+    private final IFileDescriptorInfo[] mFilesToBeMapped;
 
     // The allocator used to create the connection.
     private final ChildConnectionAllocator mConnectionAllocator;
@@ -126,7 +131,7 @@ public class ChildProcessLauncher {
             Handler launcherHandler,
             Delegate delegate,
             String[] commandLine,
-            FileDescriptorInfo[] filesToBeMapped,
+            IFileDescriptorInfo[] filesToBeMapped,
             ChildConnectionAllocator connectionAllocator,
             @Nullable List<IBinder> clientInterfaces,
             @Nullable IBinder binderBox) {
@@ -258,10 +263,10 @@ public class ChildProcessLauncher {
                         onServiceConnected(connection);
                     }
                 };
-        Bundle connectionBundle = createConnectionBundle();
-        mDelegate.onBeforeConnectionSetup(connectionBundle);
+        IChildProcessArgs connectionArgs = createConnectionArgs();
+        mDelegate.onBeforeConnectionSetup(connectionArgs);
         mConnection.setupConnection(
-                connectionBundle,
+                connectionArgs,
                 getClientInterfaces(),
                 getBinderBox(),
                 connectionCallback,
@@ -280,7 +285,7 @@ public class ChildProcessLauncher {
 
         // Proactively close the FDs rather than waiting for the GC to do it.
         try {
-            for (FileDescriptorInfo fileInfo : mFilesToBeMapped) {
+            for (IFileDescriptorInfo fileInfo : mFilesToBeMapped) {
                 fileInfo.fd.close();
             }
         } catch (IOException ioe) {
@@ -306,11 +311,14 @@ public class ChildProcessLauncher {
         return mLauncherHandler.getLooper() == Looper.myLooper();
     }
 
-    private Bundle createConnectionBundle() {
-        Bundle bundle = new Bundle();
-        bundle.putStringArray(ChildProcessConstants.EXTRA_COMMAND_LINE, mCommandLine);
-        bundle.putParcelableArray(ChildProcessConstants.EXTRA_FILES, mFilesToBeMapped);
-        return bundle;
+    private IChildProcessArgs createConnectionArgs() {
+        IChildProcessArgs args = new IChildProcessArgs();
+        args.commandLine = mCommandLine;
+        args.fileDescriptorInfos = mFilesToBeMapped;
+        args.apkInfo = ApkInfo.getAidlInfo();
+        args.androidInfo = AndroidInfo.getAidlInfo();
+        args.deviceInfo = DeviceInfo.getAidlInfo();
+        return args;
     }
 
     private void onChildProcessDied() {

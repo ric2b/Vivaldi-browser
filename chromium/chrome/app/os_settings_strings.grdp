@@ -704,6 +704,9 @@
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DISABLE_PERSONALIZED_SUGGESTIONS" desc="The label for the setting toggle to enable or disable the personalized conversions and custom user dictionaries for Japanese. The original string in Japanese is '学習機能、入力履歴からのサジェスト機能、ユーザ辞書機能を無効にする'.">
     Disable personalized conversions and suggestions as well as user dictionary
   </message>
+  <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_DEFAULT_NAME" desc="This is the default name for a new Japanese dictionary. The number value is a number like 1,2,3,4, etc. In Japanese, this string should in the format: ユーザー辞書 1">
+   User Dictionary <ph name="number">$1</ph>
+  </message>
   <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_NAME" desc="Label for the text box of the Japanese user settings which allows them to change the name of their custom dictionary for Japanese input.">
     Name
   </message>
@@ -724,6 +727,15 @@
   </message>
   <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_EXPORT" desc="Button to export a Japanese dictionary to a file on the device. In Japanese, this text should be: エクスポート">
     Export
+  </message>
+  <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_ENTRY_DELETED" desc="This text is an announcement made to screen readers that a dictionary entry has been deleted. This occurs aftere the delete button is pressed and deletion is successful.">
+   Entry deleted
+  </message>
+  <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_ENTRY_POSITION" desc="This text is mainly for screen readers to differentiate between different entries inside a dictionary, by referring to the entry and its position in the list of entries inside the dictionary. The number value will be a number like 1,2,3,etc">
+   Entry <ph name="number">$1</ph>
+  </message>
+  <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_DELETE_ENTRY" desc="Button to delete an entry into a Japanese dictionary. In Japanese, this text should be: この単語を削除">
+    Delete entry
   </message>
   <message name="IDS_OS_SETTINGS_LANGUAGES_JAPANESE_DICTIONARY_NEW_ENTRY" desc="Button to add a new entry into a Japanese dictionary. In Japanese, this text should be: 単語を追加">
     New entry
@@ -778,6 +790,30 @@
   </message>
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_KOREAN_SYLLABLE_INPUT">
     Input a syllable at a time
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_CLEAR_PERSONALIZATION_DATA" desc="Label for a heading/button to clear persionalized data from the Japanese IME">
+   Clear personalization data
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DELETE_DICTIONARY" desc="Label for a dialog for users to confirm deletion of a user dictionary">
+   Delete this dictionary
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DELETE_DICTIONARY_DETAIL" desc="More detail confirming that the user wants to delete a particular user dictionary">
+   <ph name="dictionary">$1</ph> will be permanently deleted. This action can't be undone.
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DELETE_DICTIONARY_BUTTON_LABEL" desc="Accessible name for button that will delete user a user dictionary in the Japanese IME.">
+   Delete dictionary
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DELETE_DICTIONARY_BUTTON" desc="Button that will confirm deletion of user dictionary in Japanese IME">
+   Delete
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DELETE_ITEMS" desc="Label for a form for users to select the type of personalized data they wany to Delete">
+   Delete the following items:
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_CONVERSATION_HISTORY" desc="One of the types of personalization data that can be cleared from the Japanese IME">
+   Conversation history
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_SUGGESTION_HISTORY" desc="One of the types of personalization data that can be cleared from the Japanese IME">
+   Suggestion history
   </message>
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_INPUT_MODE" desc="The label for the Input Mode section of the Japanese keyboad settings. As an example, it could be set to have a value of Romaji or Kana. In Japanese, this string should be 'ローマ字入力・かな入力'.">
    Input mode
@@ -845,9 +881,6 @@
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_KEYMAP_STYLE" desc="The label for Japanese keyboard settings dropdown within the settings page to set the keymap style for the Japanese keyboard. The available dropdown values are 'Custom keymap', 'ATOK', 'MS-IME', 'Kotoeri', and 'ChromeOS'. In Japanese, this string should be 'キー設定の選択'.">
     Keymap style
   </message>
-  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_KEYMAP_STYLE_CUSTOM" desc="The label for Japanese settings page to set the keymap style to use a Custom keymap. This is 'Custom Keymap' in Japanese. In Japanese, this string should be 'カスタム'.">
-    Custom keymap
-  </message>
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_KEYMAP_STYLE_ATOK" translateable="false">
     ATOK
   </message>
@@ -859,6 +892,9 @@
   </message>
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_KEYMAP_STYLE_CHROMEOS" translateable="false">
     ChromeOS
+  </message>
+  <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_DICTIONARY" desc="Heading on the settings page where users can modify their custom user dictionary for the Japanese IME">
+    Dictionaries
   </message>
   <message name="IDS_SETTINGS_INPUT_METHOD_OPTIONS_JAPANESE_MANAGE_USER_DICTIONARY" desc="Label on the settings page which if the user clicks on, will bring up the Japaneses dictionary management page. There are multiple dictionary which the user can modify.">
     Manage user dictionaries
@@ -2912,10 +2948,10 @@ Press an assigned switch or key to remove assignment.
     Manage USB devices
   </message>
   <message name="IDS_SETTINGS_GUEST_OS_SHARED_USB_DEVICES_DESCRIPTION" desc="Description for managing shared USB devices.">
-    Let Android apps access USB devices on this Chromebook
+    Give Android apps control over USB devices on this Chromebook
   </message>
   <message name="IDS_SETTINGS_GUEST_OS_SHARED_USB_DEVICES_EXTRA_DESCRIPTION" desc="Extra description for managing shared USB devices.">
-    Only supported devices are shown.
+    Only supported devices are shown. USB devices will no longer be available to native apps until disconnected.
   </message>
   <message name="IDS_SETTINGS_GUEST_OS_SHARED_USB_DEVICES_LIST_EMPTY_MESSAGE" desc="Message shown when there are no available USB devices.">
     Available USB devices will appear here.
@@ -3001,7 +3037,7 @@ Press an assigned switch or key to remove assignment.
     Remove
   </message>
   <message name="IDS_SETTINGS_CROSTINI_SHARED_USB_DEVICES_DESCRIPTION" desc="Description for managing shared USB devices.">
-    Give Linux apps permission to access USB devices.
+    Give Linux apps control over USB devices.
   </message>
   <message name="IDS_SETTINGS_CROSTINI_ARC_ADB_TITLE" desc="Title of ARC ADB sideloading section.">
     Develop Android apps
@@ -3256,7 +3292,7 @@ Press an assigned switch or key to remove assignment.
     Managed Development Environment (<ph name="GENERAL_NAME">$1<ex>HappyVm</ex></ph>)
   </message>
   <message name="IDS_SETTINGS_BRUSCHETTA_SHARED_USB_DEVICES_DESCRIPTION" desc="Description for managing shared USB devices.">
-    Give <ph name="SPECIFIC_NAME">$1<ex>HappyVm</ex></ph> permission to access USB devices.
+    Give <ph name="SPECIFIC_NAME">$1<ex>HappyVm</ex></ph> control over USB devices.
   </message>
   <message name="IDS_SETTINGS_BRUSCHETTA_SHARED_PATHS_INSTRUCTIONS_LOCATE" desc="Instructions for how to locate shared folders in Bruschetta..">
     Shared folders are available in <ph name="SPECIFIC_NAME">$1<ex>HappyVm</ex></ph> at <ph name="BASE_DIR">$2<ex>/mnt/chromeos</ex></ph>.
@@ -3312,7 +3348,7 @@ Press an assigned switch or key to remove assignment.
     Manage Play app links
   </message>
   <message name="IDS_SETTINGS_APPS_ARC_VM_SHARED_USB_DEVICES_DESCRIPTION" desc="Description for managing shared USB devices. Do not translate 'ARCVM'.">
-    Let Android apps access USB devices on this Chromebook. Permission will be requested each time you plug in a USB device. Individual Android apps will ask for additional permissions.
+    Give Android apps control over USB devices on this Chromebook. Permission will be requested each time you plug in a USB device. Individual Android apps will ask for additional permissions.
   </message>
   <message name="IDS_OS_SETTINGS_OPEN_GOOGLE_PLAY" desc="Label for launching Google Play Store.">
     Open Google Play
@@ -4346,6 +4382,9 @@ Press an assigned switch or key to remove assignment.
   <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_ADVANCED_CONFIG_SELECT_DRIVER" desc="Label for the file selector to manually select a PPD file from the user's file system.">
     Alternatively, select printer PPD. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
+  <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_MANAGED_PRINTER_PPD" desc="Label for the text box displaying a path to the used PPD file for the active printer.">
+    Printer PPD
+  </message>
   <message name="IDS_SETTINGS_PRINTING_CUPS_PRINTER_SELECT_DRIVER" desc="Label for the file selector to manually select a PPD file from the user's file system.">
     or select PPD. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
@@ -5168,7 +5207,7 @@ Press an assigned switch or key to remove assignment.
     Subscription is installed on this device only and not synced with other devices under your account. <ph name="LINK_BEGIN">&lt;a&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_SETTINGS_INTERNET_PASSPOINT_SUBSCRIPTION_EXPIRATION" desc="Label of the subscription expiration date.">
-    Expiry date
+    Expiration date
   </message>
   <message name="IDS_SETTINGS_INTERNET_PASSPOINT_SOURCE" desc="Label of the source that installed the Passpoint subscription.">
     Passpoint provider
@@ -6839,7 +6878,7 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
     Couldn't unshare because an application is using this folder. The folder will be unshared when Parallels Desktop is next shut down.
   </message>
   <message name="IDS_SETTINGS_APPS_PLUGIN_VM_SHARED_USB_DEVICES_DESCRIPTION" desc="Description for managing shared USB devices. Do not translate 'Parallels Desktop'.">
-    Give Parallels Desktop permission to access USB devices.
+    Give Parallels Desktop control over USB devices.
   </message>
 
   <!-- Storage -->
@@ -6928,18 +6967,18 @@ Press &amp; hold keyboard keys to see accent marks and special characters. This 
   <!-- Privacy Page -->
   <if expr="reven">
     <message name="IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_TITLE" desc="The label of the checkbox to enable/disable crash and user metrics logging in ChromeOS Flex.">
-      Send crash reports and diagnostic and usage data to ChromeOS Flex
+      Send crash reports as well as diagnostic and usage data to ChromeOS Flex
     </message>
     <message name="IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_DESCRIPTION" desc="The description of the checkbox to enable/disable crash and user metrics logging in ChromeOS Flex for user of the device.">
-      Help improve ChromeOS Flex features and performance. Data is aggregated and highly protected.
+      Help improve Chrome and ChromeOS Flex features and performance. Personal information is removed when collecting this data.
     </message>
   </if>
   <if expr="not reven">
     <message name="IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_TITLE" desc="The label of the checkbox to enable/disable crash and user metrics logging in ChromeOS.">
-      Send crash reports and diagnostic and usage data to ChromeOS
+      Send crash reports as well as diagnostic and usage data to ChromeOS
     </message>
     <message name="IDS_OS_SETTINGS_ENABLE_LOGGING_TOGGLE_DESCRIPTION" desc="The description of the checkbox to enable/disable crash and user metrics logging in ChromeOS for user of the device.">
-      Help improve ChromeOS features and performance. Data is aggregated and highly protected.
+      Help improve Chrome and ChromeOS features and performance. Personal information is removed when collecting this data.
     </message>
   </if>
   <message name="IDS_OS_SETTINGS_PRIVACY_TITLE" desc="Name of the privacy settings page.">

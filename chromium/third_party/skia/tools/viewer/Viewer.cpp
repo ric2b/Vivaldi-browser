@@ -610,6 +610,9 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
     skwindow::GraphiteTestOptions gto;
     CommonFlags::SetTestOptions(&gto.fTestOptions);
     gto.fPriv.fPathRendererStrategy = get_path_renderer_strategy_type(FLAGS_pathstrategy[0]);
+    if (FLAGS_msaa <= 0) {
+        gto.fTestOptions.fContextOptions.fInternalMultisampleCount = 1;
+    }
     paramsBuilder.graphiteTestOptions(gto);
 #endif
     fWindow->setRequestedDisplayParams(paramsBuilder.build());
@@ -758,7 +761,7 @@ Viewer::Viewer(int argc, char** argv, void* platformData)
         fSaveToSKP = true;
         fWindow->inval();
     });
-    fCommands.addCommand('&', "Overlays", "Show slide dimensios", [this]() {
+    fCommands.addCommand('&', "Overlays", "Show slide dimensions", [this]() {
         fShowSlideDimensions = !fShowSlideDimensions;
         fWindow->inval();
     });
@@ -1870,8 +1873,27 @@ void Viewer::drawSlide(SkSurface* surface) {
         for (int y = 0; y < fWindow->height(); y += tileH) {
             for (int x = 0; x < fWindow->width(); x += tileW) {
                 SkAutoCanvasRestore acr(slideCanvas, true);
-                slideCanvas->clipRect(SkRect::MakeXYWH(x, y, tileW, tileH));
-                fSlides[fCurrentSlide]->draw(slideCanvas);
+
+                SkSurfaceProps props;
+                if (!slideCanvas->getProps(&props)) {
+                    props = fWindow->getRequestedDisplayParams()->surfaceProps();
+                }
+
+                SkImageInfo info = SkImageInfo::Make(
+                        tileW, tileH, colorType, kPremul_SkAlphaType, colorSpace);
+                sk_sp<SkSurface> tileSurface = Window::kRaster_BackendType == this->fBackendType
+                                           ? SkSurfaces::Raster(info, &props)
+                                           : slideCanvas->makeSurface(info, &props);
+                SkCanvas* tileCanvas = tileSurface->getCanvas();
+                tileCanvas->setMatrix(slideCanvas->getLocalToDevice());
+                tileCanvas->translate(-x, -y);
+                fSlides[fCurrentSlide]->draw(tileCanvas);
+
+                sk_sp<SkImage> tileImage = tileSurface->makeImageSnapshot();
+                SkPaint paint;
+                paint.setBlendMode(SkBlendMode::kSrc);
+                SkSamplingOptions sampling;
+                slideCanvas->drawImage(tileImage, x, y, sampling, &paint);
             }
         }
 

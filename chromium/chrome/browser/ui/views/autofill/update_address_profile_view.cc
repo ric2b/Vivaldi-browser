@@ -36,19 +36,18 @@ namespace {
 constexpr int kIconSize = 16;
 constexpr int kValuesLabelWidth = 190;
 
-const gfx::VectorIcon& GetVectorIconForType(FieldType type) {
-  switch (type) {
-    case NAME_FULL:
-    case ALTERNATIVE_FULL_NAME:
+base::optional_ref<const gfx::VectorIcon> GetVectorIconForType(FieldType type) {
+  switch (GetAddressUIComponentIconTypeForFieldType(type)) {
+    case AddressUIComponentIconType::kNoIcon:
+      return std::nullopt;
+    case AddressUIComponentIconType::kName:
       return kAccountCircleIcon;
-    case ADDRESS_HOME_ADDRESS:
+    case AddressUIComponentIconType::kAddress:
       return vector_icons::kLocationOnIcon;
-    case EMAIL_ADDRESS:
+    case AddressUIComponentIconType::kEmail:
       return vector_icons::kEmailIcon;
-    case PHONE_HOME_WHOLE_NUMBER:
+    case AddressUIComponentIconType::kPhone:
       return vector_icons::kCallIcon;
-    default:
-      NOTREACHED();
   }
 }
 
@@ -67,7 +66,7 @@ std::unique_ptr<views::View> CreateValuesView(
       .SetDefault(
           views::kMarginsKey,
           gfx::Insets::VH(ChromeLayoutProvider::Get()->GetDistanceMetric(
-                              DISTANCE_CONTROL_LIST_VERTICAL),
+                              views::DISTANCE_CONTROL_LIST_VERTICAL),
                           0));
 
   for (const ProfileValueDifference& diff_entry : diff) {
@@ -96,8 +95,13 @@ std::unique_ptr<views::View> CreateValuesView(
     label_view->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
 
     auto icon_view = std::make_unique<views::ImageView>();
-    icon_view->SetImage(ui::ImageModel::FromVectorIcon(
-        GetVectorIconForType(diff_entry.type), icon_color, kIconSize));
+    base::optional_ref<const gfx::VectorIcon> icon_ref =
+        GetVectorIconForType(diff_entry.type);
+
+    if (icon_ref.has_value()) {
+      icon_view->SetImage(
+          ui::ImageModel::FromVectorIcon(*icon_ref, icon_color, kIconSize));
+    }
 
     // The container aligns the icon vertically in the middle of the first label
     // line, the icon size is expected to be smaller than the label height.
@@ -197,7 +201,7 @@ UpdateAddressProfileView::UpdateAddressProfileView(
       .SetCollapseMargins(true)
       .SetDefault(views::kMarginsKey,
                   gfx::Insets::VH(layout_provider->GetDistanceMetric(
-                                      DISTANCE_CONTROL_LIST_VERTICAL),
+                                      views::DISTANCE_CONTROL_LIST_VERTICAL),
                                   0));
 
   std::vector<ProfileValueDifference> profile_diff = GetProfileDifferenceForUi(

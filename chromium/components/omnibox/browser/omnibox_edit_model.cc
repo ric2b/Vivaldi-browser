@@ -29,6 +29,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/dom_distiller/core/url_constants.h"
 #include "components/dom_distiller/core/url_utils.h"
+#include "components/grit/components_scaled_resources.h"
 #include "components/history_embeddings/history_embeddings_features.h"
 #include "components/navigation_metrics/navigation_metrics.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
@@ -48,6 +49,7 @@
 #include "components/omnibox/browser/omnibox_event_global_tracker.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_log.h"
+#include "components/omnibox/browser/omnibox_logging_utils.h"
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
 #include "components/omnibox/browser/omnibox_navigation_observer.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
@@ -73,6 +75,7 @@
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image.h"
@@ -226,95 +229,6 @@ size_t CountNumberOfIPv4Parts(const std::u16string& text,
   return parts;
 }
 
-// This function provides a logging implementation that aligns with the original
-// definition of the `DEPRECATED_UMA_HISTOGRAM_MEDIUM_TIMES()` macro, which is
-// currently being used to log the `FocusToOpenTimeAnyPopupState3` Omnibox
-// metric.
-void LogHistogramMediumTimes(const std::string& histogram_name,
-                             base::TimeDelta elapsed) {
-  base::UmaHistogramCustomTimes(histogram_name, elapsed, base::Milliseconds(10),
-                                base::Minutes(3), 50);
-}
-
-void LogFocusToOpenTime(base::TimeDelta elapsed,
-                        bool is_zero_prefix,
-                        PageClassification page_classification,
-                        AutocompleteMatch& match,
-                        size_t action_index) {
-  LogHistogramMediumTimes("Omnibox.FocusToOpenTimeAnyPopupState3", elapsed);
-
-  std::string summarized_result_type;
-  switch (OmniboxMetricsProvider::GetClientSummarizedResultType(
-      match.GetOmniboxEventResultType(action_index))) {
-    case ClientSummarizedResultType::kSearch:
-      summarized_result_type = "SEARCH";
-      break;
-    case ClientSummarizedResultType::kUrl:
-      summarized_result_type = "URL";
-      break;
-    default:
-      summarized_result_type = "OTHER";
-      break;
-  }
-
-  LogHistogramMediumTimes(
-      base::StrCat(
-          {"Omnibox.FocusToOpenTimeAnyPopupState3.BySummarizedResultType.",
-           summarized_result_type}),
-      elapsed);
-
-  const std::string page_context =
-      OmniboxEventProto::PageClassification_Name(page_classification);
-  LogHistogramMediumTimes(
-      base::StrCat({"Omnibox.FocusToOpenTimeAnyPopupState3.ByPageContext.",
-                    page_context}),
-      elapsed);
-
-  LogHistogramMediumTimes(
-      base::StrCat(
-          {"Omnibox.FocusToOpenTimeAnyPopupState3.BySummarizedResultType.",
-           summarized_result_type, ".ByPageContext.", page_context}),
-      elapsed);
-
-  if (is_zero_prefix) {
-    LogHistogramMediumTimes("Omnibox.FocusToOpenTimeAnyPopupState3.ZeroSuggest",
-                            elapsed);
-    LogHistogramMediumTimes(
-        base::StrCat({"Omnibox.FocusToOpenTimeAnyPopupState3.ZeroSuggest."
-                      "BySummarizedResultType.",
-                      summarized_result_type}),
-        elapsed);
-    LogHistogramMediumTimes(
-        base::StrCat(
-            {"Omnibox.FocusToOpenTimeAnyPopupState3.ZeroSuggest.ByPageContext.",
-             page_context}),
-        elapsed);
-    LogHistogramMediumTimes(
-        base::StrCat({"Omnibox.FocusToOpenTimeAnyPopupState3.ZeroSuggest."
-                      "BySummarizedResultType.",
-                      summarized_result_type, ".ByPageContext.", page_context}),
-        elapsed);
-  } else {
-    LogHistogramMediumTimes(
-        "Omnibox.FocusToOpenTimeAnyPopupState3.TypedSuggest", elapsed);
-    LogHistogramMediumTimes(
-        base::StrCat({"Omnibox.FocusToOpenTimeAnyPopupState3.TypedSuggest."
-                      "BySummarizedResultType.",
-                      summarized_result_type}),
-        elapsed);
-    LogHistogramMediumTimes(
-        base::StrCat({"Omnibox.FocusToOpenTimeAnyPopupState3.TypedSuggest."
-                      "ByPageContext.",
-                      page_context}),
-        elapsed);
-    LogHistogramMediumTimes(
-        base::StrCat({"Omnibox.FocusToOpenTimeAnyPopupState3.TypedSuggest."
-                      "BySummarizedResultType.",
-                      summarized_result_type, ".ByPageContext.", page_context}),
-        elapsed);
-  }
-}
-
 }  // namespace
 
 // OmniboxEditModel::State ----------------------------------------------------
@@ -365,6 +279,7 @@ void OmniboxEditModel::set_popup_view(OmniboxPopupView* popup_view) {
 
   // Clear/reset popup-related state.
   rich_suggestion_bitmaps_.clear();
+  icon_bitmaps_.clear();
   old_focused_url_ = GURL();
   popup_selection_ = OmniboxPopupSelection(OmniboxPopupSelection::kNoMatch,
                                            OmniboxPopupSelection::NORMAL);
@@ -713,6 +628,24 @@ ui::ImageModel OmniboxEditModel::GetSuperGIcon(int image_size,
 #endif
 }
 
+gfx::Image OmniboxEditModel::GetAgentspaceIcon(bool dark_mode) const {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  if (dark_mode) {
+    // For dark mode, per Agentspace branding, use `SK_ColorWhite` over the
+    // monochrome logo.
+    return controller_->client()->GetSizedIcon(
+        vector_icons::kGoogleAgentspaceMonochromeLogoIcon, SK_ColorWHITE);
+  } else {
+    return controller_->client()->GetSizedIcon(
+        ui::ResourceBundle::GetSharedInstance()
+            .GetImageNamed(IDR_GOOGLE_AGENTSPACE_LOGO)
+            .ToSkBitmap());
+  }
+#else
+  return gfx::Image();
+#endif
+}
+
 void OmniboxEditModel::UpdateInput(bool has_selected_text,
                                    bool prevent_inline_autocomplete) {
   bool changed_to_user_input_in_progress = SetInputInProgressNoNotify(true);
@@ -879,6 +812,12 @@ void OmniboxEditModel::EnterKeywordMode(
   DCHECK(template_url);
   controller_->StopAutocomplete(/*clear_result=*/false);
 
+  if (keyword_ != template_url->keyword()) {
+    // Note, this is not the only place that keyword mode can be entered, but
+    // it would be better to make it so than to add extra notification calls
+    // elsewhere. At present, the method is only meaningfully used for exit.
+    controller_->client()->OnKeywordModeChanged(true, template_url->keyword());
+  }
   SetKeyword(template_url->keyword());
   SetKeywordPlaceholder(placeholder_text);
   is_keyword_hint_ = false;
@@ -937,15 +876,7 @@ void OmniboxEditModel::OpenSelection(OmniboxPopupSelection selection,
   const AutocompleteMatch& match =
       autocomplete_controller()->result().match_at(selection.line);
 
-  if (selection.state == OmniboxPopupSelection::FOCUSED_BUTTON_HEADER) {
-    DCHECK(match.suggestion_group_id.has_value());
-
-    const bool current_visibility =
-        controller_->IsSuggestionGroupHidden(match.suggestion_group_id.value());
-    controller_->SetSuggestionGroupHidden(match.suggestion_group_id.value(),
-                                          !current_visibility);
-  } else if (selection.state ==
-             OmniboxPopupSelection::FOCUSED_BUTTON_THUMBS_UP) {
+  if (selection.state == OmniboxPopupSelection::FOCUSED_BUTTON_THUMBS_UP) {
     UpdateFeedbackOnMatch(selection.line, FeedbackType::kThumbsUp);
   } else if (selection.state ==
              OmniboxPopupSelection::FOCUSED_BUTTON_THUMBS_DOWN) {
@@ -1797,9 +1728,10 @@ bool OmniboxEditModel::IsStarredMatch(const AutocompleteMatch& match) const {
 // Android and iOS have their own platform-specific icon logic.
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 gfx::Image OmniboxEditModel::GetMatchIcon(const AutocompleteMatch& match,
-                                          SkColor vector_icon_color) const {
+                                          SkColor vector_icon_color,
+                                          bool dark_mode) const {
   if (!match.icon_url.is_empty()) {
-    const SkBitmap* bitmap = GetPopupRichSuggestionBitmap(match.icon_url);
+    const SkBitmap* bitmap = GetIconBitmap(match.icon_url);
     if (bitmap) {
       return controller_->client()->GetSizedIcon(bitmap);
     }
@@ -1824,11 +1756,20 @@ gfx::Image OmniboxEditModel::GetMatchIcon(const AutocompleteMatch& match,
   // code. In order to apply custom styling to the icon (e.g. colors), we ignore
   // this favicon in favor of using a vector icon which has better styling
   // support.
-  if (!AutocompleteMatch::IsSearchType(match.type) &&
-      match.type != AutocompleteMatchType::DOCUMENT_SUGGESTION &&
-      match.type != AutocompleteMatchType::HISTORY_CLUSTER &&
-      match.type != AutocompleteMatchType::HISTORY_EMBEDDINGS_ANSWER &&
-      !AutocompleteMatch::IsStarterPackType(match.type)) {
+  // Enterprise search aggregator people suggestions are another unique case.
+  // These suggestions should use the Agentspace icon if available. Otherwise,
+  // they should use the vector icon instead of the favicon.
+  if (match.enterprise_search_aggregator_type ==
+      AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE) {
+    gfx::Image agentspace_icon = GetAgentspaceIcon(dark_mode);
+    if (!agentspace_icon.IsEmpty()) {
+      return agentspace_icon;
+    }
+  } else if (!AutocompleteMatch::IsSearchType(match.type) &&
+             match.type != AutocompleteMatchType::DOCUMENT_SUGGESTION &&
+             match.type != AutocompleteMatchType::HISTORY_CLUSTER &&
+             match.type != AutocompleteMatchType::HISTORY_EMBEDDINGS_ANSWER &&
+             !AutocompleteMatch::IsStarterPackType(match.type)) {
     // Because the Views UI code calls GetMatchIcon in both the layout and
     // painting code, we may generate multiple `OnFaviconFetched` callbacks,
     // all run one after another. This seems to be harmless as the callback
@@ -1890,6 +1831,18 @@ gfx::Image OmniboxEditModel::GetMatchIconIfExtension(
              : controller_->client()->GetSizedIcon(extension_icon);
 }
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+
+std::u16string OmniboxEditModel::GetSuggestionGroupHeaderText(
+    const std::optional<omnibox::GroupId>& suggestion_group_id) const {
+  bool force_hide_row_header =
+      OmniboxFieldTrial::IsHideSuggestionGroupHeadersEnabledInContext(
+          autocomplete_controller()->input().current_page_classification());
+
+  return suggestion_group_id.has_value() && !force_hide_row_header
+             ? autocomplete_controller()->result().GetHeaderForSuggestionGroup(
+                   suggestion_group_id.value())
+             : u"";
+}
 
 bool OmniboxEditModel::PopupIsOpen() const {
   return popup_view_ && popup_view_->IsOpen();
@@ -1966,15 +1919,9 @@ void OmniboxEditModel::SetPopupSelection(OmniboxPopupSelection new_selection,
                           controller_->client()->IsHistoryEmbeddingsEnabled(),
                           &keyword, &keyword_placeholder, &is_keyword_hint);
 
-  if (popup_selection_.state == OmniboxPopupSelection::FOCUSED_BUTTON_HEADER) {
-    // If the new selection is a Header, the temporary text is an empty string.
-    OnPopupDataChanged(std::u16string(),
-                       /*is_temporary_text=*/true, std::u16string(), keyword,
-                       keyword_placeholder, is_keyword_hint, std::u16string(),
-                       AutocompleteMatch());
-  } else if (old_selection.line != popup_selection_.line ||
-             (old_selection.state != OmniboxPopupSelection::KEYWORD_MODE &&
-              new_selection.state != OmniboxPopupSelection::KEYWORD_MODE)) {
+  if (old_selection.line != popup_selection_.line ||
+      (old_selection.state != OmniboxPopupSelection::KEYWORD_MODE &&
+       new_selection.state != OmniboxPopupSelection::KEYWORD_MODE)) {
     // Don't update the edit model if entering or leaving keyword mode; doing so
     // breaks keyword mode. Updating when there is no line change is necessary
     // because omnibox text changes when:
@@ -2076,7 +2023,7 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
     // screen reader with the header ("Summary") and then the answer in
     // `description`, and finally the URL details in `contents` (includes date).
     return AutocompleteMatchType::ToAccessibilityLabel(
-        match,
+        match, GetSuggestionGroupHeaderText(match.suggestion_group_id),
         base::StrCat({
             match.history_embeddings_answer_header_text,
             match.description,
@@ -2089,17 +2036,8 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
   int additional_message_id = 0;
   std::u16string additional_message;
   // This switch statement should be updated when new selection types are added.
-  static_assert(OmniboxPopupSelection::LINE_STATE_MAX_VALUE == 8);
+  static_assert(OmniboxPopupSelection::LINE_STATE_MAX_VALUE == 7);
   switch (popup_selection_.state) {
-    case OmniboxPopupSelection::FOCUSED_BUTTON_HEADER: {
-      bool group_hidden = controller_->IsSuggestionGroupHidden(
-          match.suggestion_group_id.value());
-      int message_id = group_hidden ? IDS_ACC_HEADER_SHOW_SUGGESTIONS_BUTTON
-                                    : IDS_ACC_HEADER_HIDE_SUGGESTIONS_BUTTON;
-      return l10n_util::GetStringFUTF16(
-          message_id, controller_->GetHeaderForSuggestionGroup(
-                          match.suggestion_group_id.value()));
-    }
     case OmniboxPopupSelection::NORMAL: {
       int available_actions_count = 0;
       if (OmniboxPopupSelection(line, OmniboxPopupSelection::KEYWORD_MODE)
@@ -2155,6 +2093,15 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
           controller_->client()->GetTemplateURLService(), false);
       std::u16string replacement_string =
           turl ? turl->short_name() : match.contents;
+      // For featured search engines, we also want to add the shortcut name.
+      if (AutocompleteMatch::IsFeaturedSearchType(match.type)) {
+        int message_id = (turl && turl->starter_pack_id() ==
+                                      TemplateURLStarterPackData::kGemini)
+                             ? IDS_ACC_ASK_KEYWORD_MODE_WITH_SHORTCUT
+                             : IDS_ACC_KEYWORD_MODE_WITH_SHORTCUT;
+        return l10n_util::GetStringFUTF16(message_id, match.keyword,
+                                          replacement_string);
+      }
       int message_id = (turl && turl->starter_pack_id() ==
                                     TemplateURLStarterPackData::kGemini)
                            ? IDS_ACC_ASK_KEYWORD_MODE
@@ -2181,7 +2128,8 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
       return base::StrCat(
           {match_text, u" ",
            AutocompleteMatchType::ToAccessibilityLabel(
-               match, match.iph_link_text, line, 0,
+               match, GetSuggestionGroupHeaderText(match.suggestion_group_id),
+               match.iph_link_text, line, 0,
                l10n_util::GetStringUTF16(IDS_ACC_OMNIBOX_IPH_LINK_SELECTED),
                label_prefix_length)});
     default:
@@ -2200,8 +2148,8 @@ std::u16string OmniboxEditModel::GetPopupAccessibilityLabelForCurrentSelection(
 
   // If there's a button focused, we don't want the "n of m" message announced.
   return AutocompleteMatchType::ToAccessibilityLabel(
-      match, match_text, line, total_matches, additional_message,
-      label_prefix_length);
+      match, GetSuggestionGroupHeaderText(match.suggestion_group_id),
+      match_text, line, total_matches, additional_message, label_prefix_length);
 }
 
 std::u16string
@@ -2226,7 +2174,9 @@ OmniboxEditModel::MaybeGetPopupAccessibilityLabelForIPHSuggestion() {
       auto next_selection = popup_selection_.GetNextSelection(
           autocomplete_controller()->result(), GetPrefService(),
           controller_->client()->GetTemplateURLService(),
-          OmniboxPopupSelection::kForward, OmniboxPopupSelection::kStateOrLine);
+          OmniboxPopupSelection::kForward, OmniboxPopupSelection::kStateOrLine,
+          OmniboxFieldTrial::IsHideSuggestionGroupHeadersEnabledInContext(
+              GetPageClassification()));
       if (next_selection.line == next_line &&
           next_selection.state ==
               OmniboxPopupSelection::FOCUSED_BUTTON_REMOVE_SUGGESTION) {
@@ -2303,14 +2253,21 @@ const SkBitmap* OmniboxEditModel::GetPopupRichSuggestionBitmap(
       std::ranges::find_if(autocomplete_controller()->result(),
                            [&image_url](const AutocompleteMatch& result_match) {
                              return (!result_match.ImageUrl().is_empty() &&
-                                     result_match.ImageUrl() == image_url) ||
-                                    (!result_match.icon_url.is_empty() &&
-                                     result_match.icon_url == image_url);
+                                     result_match.ImageUrl() == image_url);
                            });
   return iter == autocomplete_controller()->result().end()
              ? nullptr
              : GetPopupRichSuggestionBitmap(std::distance(
                    autocomplete_controller()->result().begin(), iter));
+}
+
+const SkBitmap* OmniboxEditModel::GetIconBitmap(const GURL& icon_url) const {
+  DCHECK(popup_view_);
+  auto iter = icon_bitmaps_.find(icon_url);
+  if (iter == icon_bitmaps_.end()) {
+    return nullptr;
+  }
+  return &iter->second;
 }
 
 void OmniboxEditModel::SetPopupRichSuggestionBitmap(int result_index,
@@ -2320,13 +2277,11 @@ void OmniboxEditModel::SetPopupRichSuggestionBitmap(int result_index,
   popup_view_->UpdatePopupAppearance();
 }
 
-void OmniboxEditModel::SetPopupSuggestionGroupVisibility(
-    size_t match_index,
-    bool suggestion_group_hidden) {
-  if (PopupIsOpen()) {
-    popup_view_->SetSuggestionGroupVisibility(match_index,
-                                              suggestion_group_hidden);
-  }
+void OmniboxEditModel::SetIconBitmap(const GURL& icon_url,
+                                     const SkBitmap& bitmap) {
+  DCHECK(popup_view_ && !icon_url.is_empty());
+  icon_bitmaps_[icon_url] = bitmap;
+  popup_view_->UpdatePopupAppearance();
 }
 
 void OmniboxEditModel::SetAutocompleteInput(AutocompleteInput input) {
@@ -2387,7 +2342,9 @@ void OmniboxEditModel::StepPopupSelection(
   const OmniboxPopupSelection old_selection = GetPopupSelection();
   OmniboxPopupSelection new_selection = old_selection.GetNextSelection(
       autocomplete_controller()->result(), GetPrefService(),
-      controller_->client()->GetTemplateURLService(), direction, step);
+      controller_->client()->GetTemplateURLService(), direction, step,
+      OmniboxFieldTrial::IsHideSuggestionGroupHeadersEnabledInContext(
+          GetPageClassification()));
   if (kIsDesktop) {
     if (old_selection.IsChangeToKeyword(new_selection)) {
       ClearKeyword();
@@ -2653,9 +2610,10 @@ void OmniboxEditModel::OpenMatch(OmniboxPopupSelection selection,
     elapsed_time_since_user_focused_omnibox = now - last_omnibox_focus_;
     // Only record focus to open time when a focus actually happened (as
     // opposed to, say, dragging a link onto the omnibox).
-    LogFocusToOpenTime(elapsed_time_since_user_focused_omnibox,
-                       input_.IsZeroSuggest(), GetPageClassification(), match,
-                       selection.IsAction() ? selection.action_index : -1);
+    omnibox::LogFocusToOpenTime(
+        elapsed_time_since_user_focused_omnibox, input_.IsZeroSuggest(),
+        GetPageClassification(), match,
+        selection.IsAction() ? selection.action_index : -1);
   }
 
   // In some unusual cases, we ignore autocomplete_controller()->result() and
@@ -2695,12 +2653,7 @@ void OmniboxEditModel::OpenMatch(OmniboxPopupSelection selection,
       completed_length, elapsed_time_since_last_change_to_default_match,
       dropdown_ignored ? fake_single_entry_result
                        : autocomplete_controller()->result(),
-      destination_url, is_incognito,
-      match.zero_prefix_suggestions_shown_in_session,
-      match.zero_prefix_search_suggestions_shown_in_session,
-      match.zero_prefix_url_suggestions_shown_in_session,
-      match.typed_search_suggestions_shown_in_session,
-      match.typed_url_suggestions_shown_in_session);
+      destination_url, is_incognito, input_.IsZeroSuggest(), match.session);
 // Check disabled on iOS as the platform shows a default suggestion on focus
 // (crbug.com/40061502).
 #if !BUILDFLAG(IS_IOS)
@@ -2813,30 +2766,6 @@ void OmniboxEditModel::OpenMatch(OmniboxPopupSelection selection,
                        controller_->client()->AsWeakPtr()),
         match_selection_timestamp, disposition);
     action->Execute(context);
-
-    // Actions aren't generally able to change omnibox state, but it may be
-    // worth considering an extension to OmniboxAction::ExecutionContext
-    // if more action types want to enter keyword modes, close the popup, etc.
-    if (action->ActionId() ==
-            OmniboxActionId::CONTEXTUAL_SEARCH_ASK_ABOUT_PAGE ||
-        action->ActionId() ==
-            OmniboxActionId::CONTEXTUAL_SEARCH_SELECT_REGION) {
-      if (const TemplateURL* page_turl =
-              controller_->client()
-                  ->GetTemplateURLService()
-                  ->FindStarterPackTemplateURL(
-                      TemplateURLStarterPackData::kPage)) {
-        EnterKeywordMode(
-            OmniboxEventProto::SELECT_SUGGESTION, page_turl,
-            l10n_util::GetStringUTF16(IDS_OMNIBOX_PAGE_SCOPE_PLACEHOLDER_TEXT));
-        if (action->ActionId() ==
-                OmniboxActionId::CONTEXTUAL_SEARCH_SELECT_REGION &&
-            view_) {
-          view_->CloseOmniboxPopup();
-        }
-        return;
-      }
-    }
   }
 
   if (disposition != WindowOpenDisposition::NEW_BACKGROUND_TAB && view_) {

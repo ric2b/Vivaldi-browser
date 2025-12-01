@@ -163,9 +163,10 @@ static const SSL_CIPHER *choose_cipher(SSL_HANDSHAKE *hs,
   // comment about |in_group_flags| in the |SSLCipherPreferenceList|
   // struct.
   const bool *in_group_flags;
-  // group_min contains the minimal index so far found in a group, or -1 if no
-  // such value exists yet.
-  int group_min = -1;
+  // best_index contains the index of the best matching cipher suite found so
+  // far, indexed into |allow|. If |best_index| is |SIZE_MAX|, no matching
+  // cipher suite has been found yet.
+  size_t best_index = SIZE_MAX;
 
   const SSLCipherPreferenceList *server_pref =
       hs->config->cipher_list ? hs->config->cipher_list.get()
@@ -176,12 +177,13 @@ static const SSL_CIPHER *choose_cipher(SSL_HANDSHAKE *hs,
     allow = client_pref;
   } else {
     prio = client_pref;
-    in_group_flags = NULL;
+    in_group_flags = nullptr;
     allow = server_pref->ciphers.get();
   }
 
   for (size_t i = 0; i < sk_SSL_CIPHER_num(prio); i++) {
     const SSL_CIPHER *c = sk_SSL_CIPHER_value(prio, i);
+    const bool in_group = in_group_flags != nullptr && in_group_flags[i];
 
     size_t cipher_index;
     if (  // Check if the cipher is supported for the current version.
@@ -192,27 +194,22 @@ static const SSL_CIPHER *choose_cipher(SSL_HANDSHAKE *hs,
         (c->algorithm_auth & mask_a) &&  //
         // Check the cipher is in the |allow| list.
         sk_SSL_CIPHER_find(allow, &cipher_index, c)) {
-      if (in_group_flags != NULL && in_group_flags[i]) {
-        // This element of |prio| is in a group. Update the minimum index found
-        // so far and continue looking.
-        if (group_min == -1 || (size_t)group_min > cipher_index) {
-          group_min = cipher_index;
-        }
-      } else {
-        if (group_min != -1 && (size_t)group_min < cipher_index) {
-          cipher_index = group_min;
-        }
-        return sk_SSL_CIPHER_value(allow, cipher_index);
+      // Within a group, |allow|'s preference order applies.
+      if (best_index == SIZE_MAX || best_index > cipher_index) {
+        best_index = cipher_index;
       }
     }
 
-    if (in_group_flags != NULL && !in_group_flags[i] && group_min != -1) {
-      // We are about to leave a group, but we found a match in it, so that's
-      // our answer.
-      return sk_SSL_CIPHER_value(allow, group_min);
+    // We are about to leave a (possibly singleton) group, but we found a match
+    // in it, so that's our answer.
+    if (!in_group && best_index != SIZE_MAX) {
+      return sk_SSL_CIPHER_value(allow, best_index);
     }
   }
 
+  // The final cipher suite must end a group, so, if we found a match, we must
+  // have returned early above.
+  assert(best_index == SIZE_MAX);
   OPENSSL_PUT_ERROR(SSL, SSL_R_NO_SHARED_CIPHER);
   return nullptr;
 }

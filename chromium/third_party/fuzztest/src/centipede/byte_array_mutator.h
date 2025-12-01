@@ -28,12 +28,12 @@
 #include "./centipede/mutation_input.h"
 #include "./common/defs.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 // A simple class representing an array of up to kMaxEntrySize bytes.
 class DictEntry {
  public:
-  static constexpr uint8_t kMaxEntrySize = 15;
+  static constexpr uint8_t kMaxEntrySize = 16;
 
   explicit DictEntry(ByteSpan bytes)
       : bytes_{},  // initialize bytes_ to all zeros
@@ -41,7 +41,7 @@ class DictEntry {
     if (size_ > kMaxEntrySize) __builtin_trap();
     memcpy(bytes_, bytes.data(), bytes.size());
   }
-  absl::Nonnull<const uint8_t *> begin() const { return bytes_; }
+  const uint8_t *absl_nonnull begin() const { return bytes_; }
   const uint8_t *end() const { return bytes_ + size_; }
   size_t size() const { return size_; }
   bool operator<(const DictEntry &other) const {
@@ -250,6 +250,6 @@ extern const KnobId knob_mutate_or_crossover;
 // overwriting.
 extern const KnobId knob_cross_over_insert_or_overwrite;
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_BYTE_ARRAY_MUTATOR_H_

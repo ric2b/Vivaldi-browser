@@ -26,8 +26,10 @@
 
 #include "absl/base/no_destructor.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/flags/marshalling.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -40,7 +42,7 @@
 #include "./common/status_macros.h"
 #include "./fuzztest/internal/configuration.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 size_t ComputeTimeoutPerBatch(size_t timeout_per_input, size_t batch_size) {
@@ -335,4 +337,15 @@ void Environment::UpdateBinaryHashIfEmpty() {
   }
 }
 
-}  // namespace centipede
+std::vector<std::string> Environment::CreateFlags() const {
+  std::vector<std::string> flags;
+#define CENTIPEDE_FLAG(_TYPE, NAME, _DEFAULT, _DESC)                        \
+  if (NAME != Default().NAME) {                                             \
+    flags.push_back(absl::StrCat("--" #NAME "=", absl::UnparseFlag(NAME))); \
+  }
+#include "./centipede/centipede_flags.inc"
+#undef CENTIPEDE_FLAG
+  return flags;
+}
+
+}  // namespace fuzztest::internal

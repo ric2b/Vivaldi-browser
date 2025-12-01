@@ -79,12 +79,14 @@ class Trigger {
       }
       result.Set(rules_json::kResourceType, std::move(resource_type));
     }
-    if (!load_type_.all() && !load_type_.none()) {
+    if (load_type_) {
       base::Value::List load_type;
-      if (load_type_.test(RequestFilterRule::kFirstParty))
-        load_type.Append(base::Value(rules_json::kFirstParty));
-      if (load_type_.test(RequestFilterRule::kThirdParty))
+      if (*load_type_ == RequestFilterRule::kThirdParty ||
+          *load_type_ == RequestFilterRule::kStrictThirdParty) {
         load_type.Append(base::Value(rules_json::kThirdParty));
+      } else {
+        load_type.Append(base::Value(rules_json::kFirstParty));
+      }
       result.Set(rules_json::kLoadType, std::move(load_type));
     }
     base::Value::List load_context;
@@ -121,7 +123,7 @@ class Trigger {
     resource_type_ = type;
   }
 
-  void set_load_type(std::bitset<RequestFilterRule::kPartyCount> load_type) {
+  void set_load_type(std::optional<RequestFilterRule::Party> load_type) {
     load_type_ = load_type;
   }
 
@@ -148,7 +150,7 @@ class Trigger {
   std::string url_filter_;
   bool case_sensitive_;
   std::bitset<RequestFilterRule::kTypeCount> resource_type_;
-  std::bitset<RequestFilterRule::kPartyCount> load_type_;
+  std::optional<RequestFilterRule::Party> load_type_;
   LoadContext load_context_;
   std::vector<std::string> top_url_filter_;
   bool top_url_filter_is_excluding_;
@@ -585,11 +587,6 @@ void CompilePlainRequestFilter(const RequestFilterRule& rule,
     return;
   }
 
-  if (!rule.ad_domains_and_query_triggers.empty()) {
-    // No possibility to support this on iOS.
-    return;
-  }
-
   CompileRuleWithDomains(rule.decision, rule.included_domains,
                          rule.excluded_domains, compiled_request_filter_rules,
                          std::move(trigger), Action::BlockAction());
@@ -602,6 +599,17 @@ void CompileRequestFilterRule(
     base::Value::Dict& compiled_request_filter_rules,
     base::Value::Dict& compiled_cosmetic_filter_rules,
     base::Value::List& partner_list_allowed_documents) {
+  if (!rule.ad_domains_and_query_triggers.empty()) {
+    // No possibility to support this on iOS.
+    return;
+  }
+
+  if (rule.bad_filter) {
+    // It might be possible to implement this, but it might be expensive and
+    // won't work for all rules.
+    return;
+  }
+
   static const std::bitset<RequestFilterRule::kTypeCount> subdocument_type =
       (1 << RequestFilterRule::kSubDocument);
   std::optional<std::string> url_filter = GetRegexFromRule(rule);

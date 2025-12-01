@@ -10,36 +10,52 @@
 
 #include "include/core/SkImage.h"
 #include "include/core/SkRefCnt.h"
-#include "include/core/SkShader.h"
-#include "include/gpu/graphite/ContextOptions.h"
+#include "include/core/SkSize.h"
+#include "include/core/SkSpan.h"
+#include "include/core/SkTypes.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
-#include "include/gpu/graphite/Recorder.h"
+#include "include/gpu/graphite/Recorder.h"  // IWYU pragma: keep
 #include "include/private/base/SingleOwner.h"
+#include "include/private/base/SkThreadAnnotations.h"
 
 #if defined(GPU_TEST_UTILS)
 #include "include/private/base/SkMutex.h"
 #endif
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
+#include <vector>
 
+class SkColorInfo;
+class SkSurface;
+enum SkYUVColorSpace : int;
 class SkColorSpace;
-class SkRuntimeEffect;
 class SkTraceMemoryDump;
+struct SkIRect;
+struct SkImageInfo;
+
+namespace skcpu {
+class ContextImpl;
+class Recorder;
+}  // namespace skcpu
+
+namespace skgpu {
+enum class BackendApi : unsigned int;
+enum class GpuStatsFlags : uint32_t;
+}
 
 namespace skgpu::graphite {
 
 class BackendTexture;
 class Buffer;
 class ClientMappedBufferManager;
-class Context;
 class ContextPriv;
-class GlobalCache;
-class PaintOptions;
+struct ContextOptions;
 class PrecompileContext;
 class QueueManager;
-class Recording;
 class ResourceProvider;
 class SharedContext;
 class TextureProxy;
@@ -56,6 +72,7 @@ public:
     BackendApi backend() const;
 
     std::unique_ptr<Recorder> makeRecorder(const RecorderOptions& = {});
+    std::unique_ptr<skcpu::Recorder> makeCPURecorder();
 
     /** Creates a helper object that can be moved to a different thread and used
      *  for precompilation.
@@ -291,6 +308,12 @@ private:
     friend class ContextCtorAccessor;
 
     struct PixelTransferResult {
+        PixelTransferResult();
+        PixelTransferResult(const PixelTransferResult&);
+        PixelTransferResult(PixelTransferResult&&);
+        PixelTransferResult& operator=(const PixelTransferResult&);
+        ~PixelTransferResult();
+
         using ConversionFn = void(void* dst, const void* mappedBuffer);
         // If null then the transfer could not be performed. Otherwise this buffer will contain
         // the pixel data when the transfer is complete.
@@ -357,6 +380,7 @@ private:
     std::unique_ptr<ResourceProvider> fResourceProvider;
     std::unique_ptr<QueueManager> fQueueManager;
     std::unique_ptr<ClientMappedBufferManager> fMappedBufferManager;
+    std::unique_ptr<const skcpu::ContextImpl> fCPUContext;
 
     // In debug builds we guard against improper thread handling. This guard is passed to the
     // ResourceCache for the Context.

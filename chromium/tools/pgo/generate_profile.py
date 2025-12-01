@@ -308,7 +308,10 @@ def run_benchmark(benchmark_args: List[str], args: OptionsNamespace):
             _android_browser_installed = True
 
         if args.android_hostname:
-            cmd += [f"--android={args.android_hostname}"]
+            cmd += [
+                "--connect-to-device-over-network",
+                f"--device={args.android_hostname}",
+            ]
 
         _LOGGER.debug(
             f"Running benchmark on Android with command: {' '.join(cmd)}")
@@ -496,6 +499,14 @@ def main():
             '--also-run-disabled-tests',
             '--story-tag-filter=motionmark_fixed_2_seconds',
         ])
+        if platform == 'mobile':
+            benchmarks.append([
+                f'rendering.{platform}',
+                '--also-run-disabled-tests',
+                '--story-tag-filter=motionmark_fixed_2_seconds',
+                '--extra-browser-args=--enable-features=DefaultPassthroughCommandDecoder',
+            ])
+
 
     fail_count = run_benchmarks(benchmarks, args)
     if fail_count:

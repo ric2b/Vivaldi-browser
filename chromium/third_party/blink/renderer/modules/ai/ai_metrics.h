@@ -20,7 +20,8 @@ class AIMetrics {
     kSummarizer = 3,
     kTranslator = 4,
     kLanguageDetector = 5,
-    kMaxValue = kLanguageDetector,
+    kProofreader = 6,
+    kMaxValue = kProofreader,
   };
   // LINT.ThenChange(//tools/metrics/histograms/metadata/ai/histograms.xml:SessionType)
 
@@ -50,13 +51,16 @@ class AIMetrics {
     kSummarizerCreate = 16,
     kSummarizerDestroy = 17,
     kSessionCountPromptTokens = 18,
+    kProofreaderProofread = 19,
+    kProofreaderCreate = 20,
+    kProofreaderDestroy = 21,
 
-    kMaxValue = kSessionCountPromptTokens,
+    kMaxValue = kProofreaderDestroy,
   };
   // LINT.ThenChange(//tools/metrics/histograms/metadata/ai/enums.xml:AIAPI)
 
   static std::string GetAIAPIUsageMetricName(AISessionType session_type);
-  static std::string GetAIAvailabilityMetricName(AISessionType session_type);
+  static std::string GetAvailabilityMetricName(AISessionType session_type);
   static std::string GetAISessionRequestSizeMetricName(
       AISessionType session_type);
   static std::string GetAISessionResponseStatusMetricName(

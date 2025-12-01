@@ -61,7 +61,7 @@ GURL ConvertUserDataToGURL(NSString* urlString) {
 // Known rule source handler.
 @property(nonatomic, assign) KnownRuleSourcesHandler* ruleSourceHandler;
 // Helper class for the manager
-@property(nonatomic, assign) VivaldiATBManagerHelper* managerHelper;
+@property(nonatomic, strong) VivaldiATBManagerHelper* managerHelper;
 
 @end
 

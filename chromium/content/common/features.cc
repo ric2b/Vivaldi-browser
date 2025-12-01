@@ -29,6 +29,45 @@ BASE_FEATURE(kAndroidDragDropOopif,
              "AndroidDragDropOopif",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Synchronously continuing with navigation can lead to trying to start another
+// navigation synchronously while the first navigation is still being processed
+// on the stack. This results in re-entrancy which is unsafe and triggers a
+// CHECK.
+//
+// Embedders like Android WebView cannot guarantee that re-entrancy would never
+// occur - in particular, there are existing Android WebView apps that do the
+// problematic sync navigation. Hence Android WebView entirely disables this
+// feature via
+// ContentBrowserClient::SupportsAvoidUnnecessaryBeforeUnloadCheckSync().
+//
+// The eventual goal of this feature flag is to make it possible to continue
+// navigation synchronously for some platforms
+// (See: https://crbug.com/396998476).
+//
+// There are several modes that are described in the
+// AvoidUnnecessaryBeforeUnloadCheckSyncMode enum in the header file.
+BASE_FEATURE(kAvoidUnnecessaryBeforeUnloadCheckSync,
+             "AvoidUnnecessaryBeforeUnloadCheckSync",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+constexpr base::FeatureParam<AvoidUnnecessaryBeforeUnloadCheckSyncMode>::Option
+    kAvoidUnnecessaryBeforeUnloadCheckSyncModeOption[] = {
+        {AvoidUnnecessaryBeforeUnloadCheckSyncMode::kDumpWithoutCrashing,
+         "DumpWithoutCrashing"},
+        {AvoidUnnecessaryBeforeUnloadCheckSyncMode::kWithSendBeforeUnload,
+         "WithSendBeforeUnload"},
+        {AvoidUnnecessaryBeforeUnloadCheckSyncMode::kWithoutSendBeforeUnload,
+         "WithoutSendBeforeUnload"},
+};
+
+BASE_FEATURE_ENUM_PARAM(
+    AvoidUnnecessaryBeforeUnloadCheckSyncMode,
+    kAvoidUnnecessaryBeforeUnloadCheckSyncMode,
+    &kAvoidUnnecessaryBeforeUnloadCheckSync,
+    "AvoidUnnecessaryBeforeUnloadCheckSyncMode",
+    AvoidUnnecessaryBeforeUnloadCheckSyncMode::kDumpWithoutCrashing,
+    &kAvoidUnnecessaryBeforeUnloadCheckSyncModeOption);
+
 // Enables controlling the time to live for pages in the BackForwardCache.
 // The time to live is defined by the param 'time_to_live_seconds'; if this
 // param is not specified then this feature is ignored and the default is used.
@@ -81,6 +120,13 @@ BASE_FEATURE(kCanvas2DImageChromium,
              base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 );
+
+// When enabled, CDP method Page.captureScreenshot will increment
+// the LocalSurfaceId instead of waiting for ForceRedraw to complete.
+// This should avoid a possible stall due to frames not being presented.
+BASE_FEATURE(kCDPScreenshotNewSurface,
+             "CDPScreenshotNewSurface",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // When enabled, code cache does not use a browsing_data filter for deletions.
 BASE_FEATURE(kCodeCacheDeletionWithoutFilter,
@@ -137,17 +183,11 @@ BASE_FEATURE(kExperimentalContentSecurityPolicyFeatures,
              "ExperimentalContentSecurityPolicyFeatures",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Allow specifying subsets of "name", "picture", "email" in the fields API.
-// Requires FedCmAuthz to be enabled.
-BASE_FEATURE(kFedCmFlexibleFields,
-             "FedCmFlexibleFields",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Whether to support the newer syntax for the "Use Other Account"
 // and account labels features.
 BASE_FEATURE(kFedCmUseOtherAccountAndLabelsNewSyntax,
              "FedCmUseOtherAccountAndLabelsNewSyntax",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables sending SameSite=Lax cookies in credentialed FedCM requests
 // (accounts endpoint, ID assertion endpoint and disconnect endpoint).
@@ -239,7 +279,7 @@ BASE_FEATURE(kGroupNIKByJoiningOrigin,
 // https://crbug.com/369342694.
 BASE_FEATURE(kRemoveRendererProcessLimit,
              "RemoveRendererProcessLimit",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // A feature flag for the memory-backed code cache.
 BASE_FEATURE(kInMemoryCodeCache,
@@ -260,6 +300,24 @@ BASE_FEATURE(kIOSurfaceCapturer,
              "IOSurfaceCapturer",
              base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
+
+// If enabled, set a soft limit on the number of renderer processes on
+// Android, after which Chrome will reuse existing processes when possible.
+// This diverges from current Clank behavior, where we do not set any upper
+// bound and instead delegate that to the system. 42 is approximated from
+// 8GBs ((8192 - 1024) / (16384 / 96)), and has nothing to do with Douglas
+// Adams' book. 1GB is a carve-out for integrated GPU VRAM.
+#if BUILDFLAG(IS_ANDROID)
+BASE_FEATURE(kRendererProcessLimitOnAndroid,
+             "RendererProcessLimitOnAndroid",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE_PARAM(size_t,
+                   kRendererProcessLimitOnAndroidCount,
+                   &kRendererProcessLimitOnAndroid,
+                   "count",
+                   42u);
+#endif  // BUILDFLAG(IS_ANDROID)
 
 // If this feature is enabled, media-device enumerations use a cache that is
 // invalidated upon notifications sent by base::SystemMonitor. If disabled, the
@@ -329,7 +387,7 @@ BASE_FEATURE(kPrerenderMoreCorrectSpeculativeRFHCreation,
 // RenderProcessHost even when there is a priority override.
 BASE_FEATURE(kPriorityOverridePendingViews,
              "PriorityOverridePendingViews",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Enables exposure of the core milestone 1 (M1) APIs in the renderer without an
 // origin trial token: Attribution Reporting, FLEDGE, Topics.
@@ -364,6 +422,29 @@ BASE_FEATURE(kProcessReuseOnPrerenderCOOPSwap,
 #endif
 );
 
+// Causes the browser to progressively enable accessibility for WebContents as
+// they are unhidden and, optionally, disable accessibility some time after they
+// become hidden.
+BASE_FEATURE(kProgressiveAccessibility,
+             "ProgressiveAccessibility",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+namespace {
+
+constexpr base::FeatureParam<ProgressiveAccessibilityMode>::Option
+    kProgressiveAccessibilityModeOptions[] = {
+        {ProgressiveAccessibilityMode::kOnlyEnable, "only_enable"},
+        {ProgressiveAccessibilityMode::kDisableOnHide, "disable_on_hide"}};
+
+}  // namespace
+
+BASE_FEATURE_ENUM_PARAM(ProgressiveAccessibilityMode,
+                        kProgressiveAccessibilityModeParam,
+                        &kProgressiveAccessibility,
+                        "progressive_accessibility_mode",
+                        ProgressiveAccessibilityMode::kOnlyEnable,
+                        &kProgressiveAccessibilityModeOptions);
+
 // Causes hidden tabs with crashed subframes to be marked for reload, meaning
 // that if a user later switches to that tab, the current page will be
 // reloaded.  This will hide crashed subframes from the user at the cost of
@@ -390,12 +471,7 @@ BASE_FEATURE(kRestrictOrientationLockToPhones,
 
 BASE_FEATURE(kServiceWorkerAvoidMainThreadForInitialization,
              "ServiceWorkerAvoidMainThreadForInitialization",
-#if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // The set of ServiceWorker to bypass while making navigation request.
 // They are represented by a comma separated list of HEX encoded SHA256 hash of
@@ -450,7 +526,7 @@ BASE_FEATURE(kSkipEarlyCommitPendingForCrashedFrame,
 // Skip granting access to the data path if it has already been set.
 BASE_FEATURE(kSkipGrantAccessToDataPathIfAlreadySet,
              "SkipGrantAccessToDataPathIfAlreadySet",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -511,6 +587,11 @@ BASE_FEATURE(kWebOTPAssertionFeaturePolicy,
 // Flag guard for fix for crbug.com/40942531.
 BASE_FEATURE(kLimitCrossOriginNonActivatedPaintHolding,
              "LimitCrossOriginNonActivatedPaintHolding",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Kill switch for post OOP-C cleanup crbug.com/391648152
+BASE_FEATURE(kDisallowRasterInterfaceWithoutSkiaBackend,
+             "DisallowRasterInterfaceWithoutSkiaBackend",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Please keep features in alphabetical order.

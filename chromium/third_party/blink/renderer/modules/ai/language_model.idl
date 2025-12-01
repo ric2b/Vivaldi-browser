@@ -9,13 +9,18 @@ dictionary LanguageModelCloneOptions {
 };
 
 dictionary LanguageModelPromptOptions {
+  object responseConstraint;
+  AbortSignal signal;
+};
+
+dictionary LanguageModelAppendOptions {
   AbortSignal signal;
 };
 
 [
-  Exposed=(Window,Worker),
-  SecureContext,
-  RuntimeEnabled=AIPromptAPI
+  Exposed(Window AIPromptAPI, Worker AIPromptAPIForWorkers),
+  RuntimeEnabled=AIPromptAPI,
+  SecureContext
 ]
 interface LanguageModel : EventTarget {
   [
@@ -31,7 +36,7 @@ interface LanguageModel : EventTarget {
     CallWith=ScriptState,
     RaisesException
   ]
-  static Promise<AIAvailability> availability(
+  static Promise<Availability> availability(
     optional LanguageModelCreateCoreOptions options = {}
   );
   [
@@ -46,7 +51,7 @@ interface LanguageModel : EventTarget {
     RaisesException
   ]
   Promise<DOMString> prompt(
-    LanguageModelPromptInput input,
+    LanguageModelPrompt input,
     optional LanguageModelPromptOptions options = {}
   );
   [
@@ -55,8 +60,17 @@ interface LanguageModel : EventTarget {
     RaisesException
   ]
   ReadableStream promptStreaming(
-    LanguageModelPromptInput input,
+    LanguageModelPrompt input,
     optional LanguageModelPromptOptions options = {}
+  );
+  [
+    MeasureAs=LanguageModel_Append,
+    CallWith=ScriptState,
+    RaisesException
+  ]
+  Promise<undefined> append(
+    LanguageModelPrompt input,
+    optional LanguageModelAppendOptions options = {}
   );
 
   [
@@ -65,7 +79,7 @@ interface LanguageModel : EventTarget {
     RaisesException
   ]
   Promise<double> measureInputUsage(
-    LanguageModelPromptInput input,
+    LanguageModelPrompt input,
     optional LanguageModelPromptOptions options = {}
   );
 

@@ -31,6 +31,11 @@ inline constexpr char kSyncInitialSyncFeatureSetupComplete[] =
     "sync.has_setup_completed";
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
+// A boolean representing whether or not configuration has completed at least
+// once since the legacy sync-the-feature was turned on.
+inline constexpr char kFirstSyncCompletedInFullSyncMode[] =
+    "sync.first_full_sync_completed";
+
 // Boolean specifying whether to automatically sync all data types (including
 // future ones, as they're added).  If this is true, the following preferences
 // (kSyncBookmarks, kSyncPasswords, etc.) can all be ignored.
@@ -81,7 +86,6 @@ inline constexpr char kSyncPreferences[] = "sync.preferences";
 inline constexpr char kSyncProductComparison[] = "sync.product_comparison";
 inline constexpr char kSyncReadingList[] = "sync.reading_list";
 inline constexpr char kSyncSavedTabGroups[] = "sync.saved_tab_groups";
-inline constexpr char kSyncSharedTabGroupData[] = "sync.shared_tab_group_data";
 inline constexpr char kSyncTabs[] = "sync.tabs";
 inline constexpr char kSyncThemes[] = "sync.themes";
 
@@ -149,13 +153,6 @@ inline constexpr char kSyncToSigninMigrationState[] =
 // sync-the-feature disabled.
 inline constexpr char kFirstTimeTriedToMigrateSyncFeaturePausedToSignin[] =
     "sync.first_time_tried_to_migrate_sync_feature_paused_to_signin";
-
-#if BUILDFLAG(IS_ANDROID)
-// Name of a boolean pref recording whether the WEB_APK data went through a
-// one-off wipe to fix crbug.com/361771496.
-inline constexpr char kWipedWebAPkDataForMigration[] =
-    "sync.wiped_web_apk_data_for_migration";
-#endif  // BUILDFLAG(IS_ANDROID)
 
 }  // namespace internal
 }  // namespace syncer::prefs

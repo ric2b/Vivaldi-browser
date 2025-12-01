@@ -25,8 +25,8 @@ rolldeps() {
 
 rollbazel() {
   STEP="roll-bazel" &&
-  sed -i'' -e "s!commit = \"${HB_PREVIOUS_REV}\",!commit = \"${HB_NEXT_REV}\",!" bazel/deps.bzl &&
-  git add bazel/deps.bzl
+  sed -i'' -e "s!\"${HB_PREVIOUS_REV}\",!\"${HB_NEXT_REV}\",!" bazel/deps.json &&
+  git add bazel/deps.json
 }
 
 rolldepsgen() {
@@ -84,6 +84,12 @@ check_all_files_are_categorized() {
   )
 }
 
+update_bazel_patch() {
+  STEP="Update Bazel patch" &&
+  python3 tools/generate_patches.py "${HB_BUILD_DIR}/config-override.h" config-override.h > bazel/external/harfbuzz/config_files.patch &&
+  git add bazel/external/harfbuzz/config_files.patch
+}
+
 commit() {
   STEP="commit" &&
   HB_PREVIOUS_REV_SHORT=$(expr substr "${HB_PREVIOUS_REV}" 1 8) &&
@@ -102,5 +108,6 @@ rolldeps "$@" &&
 rollbazel &&
 rolldepsgen &&
 check_all_files_are_categorized &&
+update_bazel_patch &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

@@ -1,6 +1,0 @@
-target/
-/.idea
-/*.mdb
-/auth_token.txt
-.DS_Store
-presence/cmake-build-debug

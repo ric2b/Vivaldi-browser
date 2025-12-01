@@ -10,7 +10,6 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -20,8 +19,7 @@ import static org.mockito.Mockito.when;
 import android.content.Context;
 import android.content.res.Resources;
 
-import androidx.test.filters.SmallTest;
-
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -37,6 +35,8 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.TimeUtils;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchController.AuxiliarySearchHostType;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchEntry;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchProvider.MetaDataVersion;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -53,6 +53,7 @@ import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.url.GURL;
 import org.chromium.url.JUnitTestGURLs;
 
+import java.io.File;
 import java.util.HashSet;
 import java.util.List;
 
@@ -87,11 +88,21 @@ public class AuxiliarySearchProviderUnitTest {
 
         when(mContext.getResources()).thenReturn(mResources);
         mAuxiliarySearchProvider =
-                new AuxiliarySearchProvider(mContext, mProfile, mTabModelSelector);
+                new AuxiliarySearchProvider(
+                        mContext, mProfile, mTabModelSelector, AuxiliarySearchHostType.CTA);
         mMockNormalTabModel = new MockTabModel(mProfile, null);
         doReturn(mMockNormalTabModel).when(mTabModelSelector).getModel(false);
 
         BackgroundTaskSchedulerFactory.setSchedulerForTesting(mBackgroundTaskScheduler);
+    }
+
+    @After
+    public void tearDown() {
+        File tabDonateFile = AuxiliarySearchUtils.getTabDonateFile(mContext);
+        if (tabDonateFile.exists()) {
+            boolean deleteResult = tabDonateFile.delete();
+            assertTrue(deleteResult);
+        }
     }
 
     private Tab createTab(int index, long timestamp) {
@@ -129,7 +140,6 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testGetTabsByMinimalAccessTime() {
         long now = System.currentTimeMillis();
         List<Tab> tabList =
@@ -153,7 +163,6 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
     public void configuredTabsAgeCannotBeZero() {
         FeatureOverrides.overrideParam(
                 ChromeFeatureList.ANDROID_APP_INTEGRATION,
@@ -161,7 +170,8 @@ public class AuxiliarySearchProviderUnitTest {
                 0);
         // Recreate provider to update the finch parameter.
         mAuxiliarySearchProvider =
-                new AuxiliarySearchProvider(mContext, mProfile, mTabModelSelector);
+                new AuxiliarySearchProvider(
+                        mContext, mProfile, mTabModelSelector, AuxiliarySearchHostType.CTA);
 
         assertNotEquals(0L, mAuxiliarySearchProvider.getTabsMaxAgeMs());
         assertEquals(
@@ -170,7 +180,6 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
     public void configuredTabsAge() {
         FeatureOverrides.overrideParam(
                 ChromeFeatureList.ANDROID_APP_INTEGRATION,
@@ -178,12 +187,12 @@ public class AuxiliarySearchProviderUnitTest {
                 10);
         // Recreate provider to update the finch parameter.
         mAuxiliarySearchProvider =
-                new AuxiliarySearchProvider(mContext, mProfile, mTabModelSelector);
+                new AuxiliarySearchProvider(
+                        mContext, mProfile, mTabModelSelector, AuxiliarySearchHostType.CTA);
         assertEquals(10 * 60 * 60 * 1000, mAuxiliarySearchProvider.getTabsMaxAgeMs());
     }
 
     @Test
-    @SmallTest
     @EnableFeatures(ChromeFeatureList.ANDROID_APP_INTEGRATION_WITH_FAVICON)
     public void testScheduleBackgroundTask() {
         long expectedWindowStartTimeMs = 10;
@@ -201,7 +210,6 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testSaveAndReadDonationMetadataAsync_V1() {
         @MetaDataVersion int metaDataVersion = MetaDataVersion.V1;
         long now = TimeUtils.uptimeMillis();
@@ -223,7 +231,6 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testSaveAndReadDonationMetadataAsync_V2() {
         @MetaDataVersion int metaDataVersion = MetaDataVersion.MULTI_TYPE_V2;
         long now = TimeUtils.uptimeMillis();
@@ -250,7 +257,6 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
     public void testSaveAndReadDonationMetadataAsync_V2_TopSite() {
         @MetaDataVersion int metaDataVersion = MetaDataVersion.MULTI_TYPE_V2;
         long now = TimeUtils.uptimeMillis();
@@ -278,13 +284,63 @@ public class AuxiliarySearchProviderUnitTest {
     }
 
     @Test
-    @SmallTest
-    public void testSetObserver() {
-        AuxiliarySearchProvider.Observer observer = mock(AuxiliarySearchProvider.Observer.class);
-        mAuxiliarySearchProvider.setObserver(observer);
+    public void testSaveAndReadDonationMetadataAsync_V2_CustomTabs() {
+        @MetaDataVersion int metaDataVersion = MetaDataVersion.MULTI_TYPE_V2;
+        long now = TimeUtils.uptimeMillis();
+        // The entries include 3 elements, and the second and third ones will be saved to the
+        // metadata file. This is because testSaveAndReadDonationMetadataAsyncImpl() sets the
+        // starting index to 1.
+        List<AuxiliarySearchDataEntry> entries =
+                AuxiliarySearchTestHelper.createAuxiliarySearchDataEntries_CustomTabs(now);
+
+        testSaveAndReadDonationMetadataAsyncImpl(
+                entries,
+                metaDataVersion,
+                (entryList) -> {
+                    assertEquals(2, entryList.size());
+
+                    AuxiliarySearchDataEntry entry = (AuxiliarySearchDataEntry) entryList.get(0);
+                    assertEquals(AuxiliarySearchEntryType.CUSTOM_TAB, entry.type);
+                    assertEquals(Tab.INVALID_TAB_ID, entry.tabId);
+                    assertEquals(JUnitTestGURLs.URL_2, entry.url);
+                    assertEquals(AuxiliarySearchTestHelper.TITLE_2, entry.title);
+                    assertEquals(now, entry.lastActiveTime);
+                    // Verifies the case with an empty string as app id.
+                    assertEquals("", entry.appId);
+                    assertEquals(AuxiliarySearchTestHelper.VISIT_ID_2, entry.visitId);
+                    assertEquals(0, entry.score);
+
+                    // Verifies the case with an non-empty app id.
+                    entry = (AuxiliarySearchDataEntry) entryList.get(1);
+                    assertEquals(AuxiliarySearchTestHelper.APP_ID_2, entry.appId);
+                });
+    }
+
+    @Test
+    public void testCreationViaCTABackgroundTask() {
+        mAuxiliarySearchProvider =
+                new AuxiliarySearchProvider(
+                        mContext,
+                        mProfile,
+                        mTabModelSelector,
+                        AuxiliarySearchHostType.BACKGROUND_TASK);
+        assertTrue(mAuxiliarySearchProvider.isAuxiliarySearchBridgeNullForTesting());
+    }
+
+    @Test
+    public void testGetCustomTabsAsync() {
+        mAuxiliarySearchProvider =
+                new AuxiliarySearchProvider(
+                        mContext, mProfile, mTabModelSelector, AuxiliarySearchHostType.CUSTOM_TAB);
+        assertFalse(mAuxiliarySearchProvider.isAuxiliarySearchBridgeNullForTesting());
+
+        long beginTime = 10;
+        Callback<@Nullable List<AuxiliarySearchDataEntry>> callback = mock(Callback.class);
+        GURL url = JUnitTestGURLs.URL_1;
+        mAuxiliarySearchProvider.getCustomTabsAsync(url, beginTime, callback);
 
         verify(mMockAuxiliarySearchBridgeJni)
-                .setObserverAndTrigger(eq(FAKE_NATIVE_PROVIDER), any(AuxiliarySearchBridge.class));
+                .getCustomTabs(eq(FAKE_NATIVE_PROVIDER), eq(url), eq(beginTime), eq(callback));
     }
 
     private <T> void testSaveAndReadDonationMetadataAsyncImpl(

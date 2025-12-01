@@ -4,7 +4,10 @@
 
 #include "chrome/browser/ui/lens/lens_permission_bubble_controller.h"
 
+#include <memory>
+
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -13,6 +16,8 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/lens/lens_overlay_theme_utils.h"
+#include "chrome/browser/ui/tabs/public/tab_dialog_manager.h"
+#include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
@@ -22,7 +27,7 @@
 #include "components/lens/lens_overlay_permission_utils.h"
 #include "components/lens/lens_permission_user_action.h"
 #include "components/prefs/pref_service.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/common/referrer.h"
@@ -36,6 +41,7 @@
 #include "ui/base/window_open_disposition.h"
 #include "ui/base/window_open_disposition_utils.h"
 #include "ui/compositor/layer.h"
+#include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/widget/widget.h"
 
@@ -55,7 +61,7 @@ LensPermissionBubbleController::LensPermissionBubbleController(
 
 LensPermissionBubbleController::~LensPermissionBubbleController() {
   if (HasOpenDialogWidget()) {
-    dialog_widget_->CloseWithReason(views::Widget::ClosedReason::kUnspecified);
+    CloseDialogWidget(views::Widget::ClosedReason::kUnspecified);
   }
 }
 
@@ -82,18 +88,17 @@ void LensPermissionBubbleController::RequestPermission(
         prefs::kLensSharingPageContentEnabled,
         base::BindRepeating(
             &LensPermissionBubbleController::OnPermissionPreferenceUpdated,
-            weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+            weak_ptr_factory_.GetWeakPtr()));
   } else {
     pref_observer_.Add(
         prefs::kLensSharingPageScreenshotEnabled,
         base::BindRepeating(
             &LensPermissionBubbleController::OnPermissionPreferenceUpdated,
-            weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+            weak_ptr_factory_.GetWeakPtr()));
   }
 
-  // Show a tab-modal dialog and keep a reference to its widget.
-  dialog_widget_ = constrained_window::ShowWebModal(
-      CreateLensPermissionDialogModel(), web_contents);
+  dialog_widget_ = ShowDialogWidget(std::move(callback), web_contents);
+
   // Clip layers to root layer bounds so that they don't render outside of the
   // dialog boundary when the dialog is small.
   // TODO(crbug.com/358379367): this should live in the framework and should
@@ -102,8 +107,59 @@ void LensPermissionBubbleController::RequestPermission(
   dialog_widget_->GetLayer()->SetMasksToBounds(true);
 }
 
+std::unique_ptr<views::Widget> LensPermissionBubbleController::ShowDialogWidget(
+    RequestPermissionCallback callback,
+    content::WebContents* web_contents) {
+  // The widget will own `model_host` through DialogDelegate.
+  views::BubbleDialogModelHost* model_host =
+      views::BubbleDialogModelHost::CreateModal(
+          CreateLensPermissionDialogModel(std::move(callback)),
+          ui::mojom::ModalType::kChild)
+          .release();
+  model_host->SetOwnershipOfNewWidget(
+      views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+
+  std::unique_ptr<views::Widget> widget =
+      tab_interface_->GetTabFeatures()
+          ->tab_dialog_manager()
+          ->CreateShowDialogAndBlockTabInteraction(model_host);
+  widget->MakeCloseSynchronous(
+      base::BindOnce(&LensPermissionBubbleController::CloseDialogWidget,
+                     base::Unretained(this)));
+
+  views::View* focused_view = model_host->GetInitiallyFocusedView();
+  CHECK(focused_view);
+  focused_view->RequestFocus();
+
+  return widget;
+}
+
+void LensPermissionBubbleController::CloseDialogWidget(
+    views::Widget::ClosedReason reason) {
+  switch (reason) {
+    case views::Widget::ClosedReason::kAcceptButtonClicked:
+      RecordPermissionUserAction(LensPermissionUserAction::kAcceptButtonPressed,
+                                 invocation_source_);
+      break;
+    case views::Widget::ClosedReason::kCancelButtonClicked:
+      RecordPermissionUserAction(LensPermissionUserAction::kCancelButtonPressed,
+                                 invocation_source_);
+      break;
+    case views::Widget::ClosedReason::kEscKeyPressed:
+      RecordPermissionUserAction(LensPermissionUserAction::kEscKeyPressed,
+                                 invocation_source_);
+      break;
+    case views::Widget::ClosedReason::kUnspecified:
+    case views::Widget::ClosedReason::kCloseButtonClicked:
+    case views::Widget::ClosedReason::kLostFocus:
+      break;
+  }
+  dialog_widget_.reset();
+}
+
 std::unique_ptr<ui::DialogModel>
-LensPermissionBubbleController::CreateLensPermissionDialogModel() {
+LensPermissionBubbleController::CreateLensPermissionDialogModel(
+    RequestPermissionCallback callback) {
   ui::DialogModelLabel::TextReplacement link = ui::DialogModelLabel::CreateLink(
       IDS_LENS_PERMISSION_BUBBLE_DIALOG_LEARN_MORE_LINK,
       base::BindRepeating(
@@ -132,24 +188,18 @@ LensPermissionBubbleController::CreateLensPermissionDialogModel() {
       .AddOkButton(
           base::BindOnce(
               &LensPermissionBubbleController::OnPermissionDialogAccept,
-              weak_ptr_factory_.GetWeakPtr()),
+              weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
           ui::DialogModel::Button::Params()
               .SetLabel(l10n_util::GetStringUTF16(
                   IDS_LENS_PERMISSION_BUBBLE_DIALOG_CONTINUE_BUTTON))
               .SetId(kLensPermissionDialogOkButtonElementId)
               .SetStyle(ui::ButtonStyle::kProminent))
-      .AddCancelButton(
-          base::BindOnce(
-              &LensPermissionBubbleController::OnPermissionDialogCancel,
-              weak_ptr_factory_.GetWeakPtr()),
-          ui::DialogModel::Button::Params()
-              .SetLabel(l10n_util::GetStringUTF16(
-                  IDS_LENS_PERMISSION_BUBBLE_DIALOG_CANCEL_BUTTON))
-              .SetId(kLensPermissionDialogCancelButtonElementId)
-              .SetStyle(ui::ButtonStyle::kTonal))
-      .SetCloseActionCallback(base::BindOnce(
-          &LensPermissionBubbleController::OnPermissionDialogClose,
-          weak_ptr_factory_.GetWeakPtr()))
+      .AddCancelButton(base::DoNothing(),
+                       ui::DialogModel::Button::Params()
+                           .SetLabel(l10n_util::GetStringUTF16(
+                               IDS_LENS_PERMISSION_BUBBLE_DIALOG_CANCEL_BUTTON))
+                           .SetId(kLensPermissionDialogCancelButtonElementId)
+                           .SetStyle(ui::ButtonStyle::kTonal))
       .Build();
 }
 
@@ -167,53 +217,27 @@ void LensPermissionBubbleController::OnHelpCenterLinkClicked(
                                     WindowOpenDisposition::NEW_BACKGROUND_TAB));
 }
 
-void LensPermissionBubbleController::OnPermissionDialogAccept() {
-  RecordPermissionUserAction(LensPermissionUserAction::kAcceptButtonPressed,
-                             invocation_source_);
-  base::WeakPtr<LensPermissionBubbleController>
-      lens_permission_bubble_controller = weak_ptr_factory_.GetWeakPtr();
-  pref_service_->SetBoolean(prefs::kLensSharingPageScreenshotEnabled, true);
-  // TODO(crbug.com/401029609): Rethink permission bubble lifetime.
-  // Must check WeakPtr in case CloseUISync() is called in
-  // LensOverlayController. This happens if the LensOverlayController cannot
-  // successfully take a screenshot of the page. If CloseUISync() is called,
-  // LensPermissionBubbleController gets reset before the following.
-  if (lens_permission_bubble_controller.get() &&
-      lens::features::IsLensOverlayContextualSearchboxEnabled()) {
+void LensPermissionBubbleController::OnPermissionDialogAccept(
+    RequestPermissionCallback callback) {
+  // Pref observer is used to close background dialogs on other tabs. Observing
+  // the prefs is no longer necessary when the dialog is being closed because
+  // the user accepted the dialog.
+  pref_observer_.Reset();
+  if (lens::features::IsLensOverlayContextualSearchboxEnabled()) {
     pref_service_->SetBoolean(prefs::kLensSharingPageContentEnabled, true);
   }
-  if (lens_permission_bubble_controller.get()) {
-    dialog_widget_ = nullptr;
-  }
+  pref_service_->SetBoolean(prefs::kLensSharingPageScreenshotEnabled, true);
+  // Must close dialog widget before running callback. This ensures that the
+  // overlay can show (it can't if there is another modal is showing).
+  CloseDialogWidget(views::Widget::ClosedReason::kAcceptButtonClicked);
+  callback.Run();
 }
 
-void LensPermissionBubbleController::OnPermissionDialogCancel() {
-  RecordPermissionUserAction(LensPermissionUserAction::kCancelButtonPressed,
-                             invocation_source_);
-  dialog_widget_ = nullptr;
-}
-
-void LensPermissionBubbleController::OnPermissionDialogClose() {
-  if (dialog_widget_->closed_reason() ==
-      views::Widget::ClosedReason::kEscKeyPressed) {
-    RecordPermissionUserAction(LensPermissionUserAction::kEscKeyPressed,
-                               invocation_source_);
+void LensPermissionBubbleController::OnPermissionPreferenceUpdated() {
+  if (HasOpenDialogWidget()) {
+    CloseDialogWidget(views::Widget::ClosedReason::kAcceptButtonClicked);
   }
-  dialog_widget_ = nullptr;
-}
-
-void LensPermissionBubbleController::OnPermissionPreferenceUpdated(
-    RequestPermissionCallback callback) {
-  // If sharing page content pref is enabled, the screenshot pref will also be
-  // enabled. Only need to check for the latter when a pref gets updated.
-  if (CanSharePageScreenshotWithLensOverlay(pref_service_)) {
-    if (HasOpenDialogWidget()) {
-      dialog_widget_->CloseWithReason(
-          views::Widget::ClosedReason::kAcceptButtonClicked);
-    }
-    pref_observer_.Reset();
-    callback.Run();
-  }
+  pref_observer_.Reset();
 }
 
 void LensPermissionBubbleController::TabWillDetach(
@@ -221,8 +245,7 @@ void LensPermissionBubbleController::TabWillDetach(
     tabs::TabInterface::DetachReason reason) {
   if (reason == tabs::TabInterface::DetachReason::kDelete &&
       HasOpenDialogWidget()) {
-    dialog_widget_->Close();
-    dialog_widget_ = nullptr;
+    CloseDialogWidget(views::Widget::ClosedReason::kUnspecified);
   }
 }
 

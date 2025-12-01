@@ -18,11 +18,13 @@ import android.widget.TextView;
 
 import androidx.core.widget.ImageViewCompat;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.bookmarks.ShoppingAccessoryViewProperties.PriceInfo;
-import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 
 /** View for the shopping price chip. */
+@NullMarked
 public class ShoppingAccessoryView extends FrameLayout {
     private ViewGroup mContainer;
     private ImageView mPriceTrackedIcon;
@@ -33,10 +35,10 @@ public class ShoppingAccessoryView extends FrameLayout {
     // Used for the original price when there's a price drop.
     private TextView mOriginalPriceText;
 
-    private PriceInfo mInfo;
+    private @Nullable PriceInfo mInfo;
 
     /** Constructor for inflating from XML. */
-    public ShoppingAccessoryView(Context context, AttributeSet attrs) {
+    public ShoppingAccessoryView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
     }
 
@@ -103,8 +105,7 @@ public class ShoppingAccessoryView extends FrameLayout {
                 mContainer
                         .getBackground()
                         .setColorFilter(
-                                ChromeColors.getSurfaceColor(
-                                        getContext(), R.dimen.default_elevation_2),
+                                SemanticColorUtils.getColorSurfaceContainer(getContext()),
                                 PorterDuff.Mode.SRC_ATOP);
             }
 

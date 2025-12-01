@@ -1,6 +1,8 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 /*
  * Copyright (C) 2006, 2007, 2008 Apple Inc.  All rights reserved.
@@ -114,7 +116,7 @@ const UIStrings = {
   /**
    *@description Text describing how to navigate the dock side menu
    */
-  dockSideNaviation: 'Use left and right arrow keys to navigate the options',
+  dockSideNavigation: 'Use left and right arrow keys to navigate the options',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('entrypoints/main/MainImpl.ts', UIStrings);
 const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
@@ -148,7 +150,7 @@ export class MainImpl {
       new Promise<Root.Runtime.HostConfig>(resolve => {
         Host.InspectorFrontendHost.InspectorFrontendHostInstance.getHostConfig(resolve);
       }),
-      new Promise<{[key: string]: string}>(
+      new Promise<Record<string, string>>(
           resolve => Host.InspectorFrontendHost.InspectorFrontendHostInstance.getPreferences(resolve)),
     ]);
 
@@ -225,7 +227,7 @@ export class MainImpl {
     }
   }
 
-  createSettings(prefs: {[x: string]: string}): void {
+  createSettings(prefs: Record<string, string>): void {
     this.#initializeExperiments();
     let storagePrefix = '';
     if (Host.Platform.isCustomDevtoolsFrontend()) {
@@ -314,7 +316,7 @@ export class MainImpl {
     // Full Accessibility Tree
     Root.Runtime.experiments.register(
         'full-accessibility-tree', 'Enable full accessibility tree view in the Elements panel', undefined,
-        'https://developer.chrome.com/blog/new-in-devtools-90/#accesibility-tree',
+        'https://developer.chrome.com/blog/new-in-devtools-90/#accessibility-tree',
         'https://g.co/devtools/a11y-tree-feedback');
 
     // Font Editor
@@ -345,14 +347,6 @@ export class MainImpl {
         Root.Runtime.ExperimentName.JUST_MY_CODE, 'Hide ignore-listed code in Sources tree view');
 
     Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
-        'Redesign of the filter bar in the Network panel',
-        false,
-        'https://goo.gle/devtools-network-filter-redesign',
-        'https://crbug.com/1500573',
-    );
-
-    Root.Runtime.experiments.register(
         Root.Runtime.ExperimentName.TIMELINE_SHOW_POST_MESSAGE_EVENTS,
         'Performance panel: show postMessage dispatch and handling flows',
     );
@@ -362,21 +356,9 @@ export class MainImpl {
         'Performance panel: enable experimental performance insights',
     );
 
-    Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS,
-        'Performance panel: enable dimming unrelated events in performance insights and search results',
-    );
-
-    Root.Runtime.experiments.register(
-        Root.Runtime.ExperimentName.TIMELINE_ALTERNATIVE_NAVIGATION,
-        'Performance panel: enable a switch to an alternative timeline navigation option',
-    );
-
     Root.Runtime.experiments.enableExperimentsByDefault([
-      Root.Runtime.ExperimentName.NETWORK_PANEL_FILTER_BAR_REDESIGN,
-      Root.Runtime.ExperimentName.TIMELINE_ALTERNATIVE_NAVIGATION,
-      Root.Runtime.ExperimentName.TIMELINE_DIM_UNRELATED_EVENTS,
       Root.Runtime.ExperimentName.FULL_ACCESSIBILITY_TREE,
+      Root.Runtime.ExperimentName.HIGHLIGHT_ERRORS_ELEMENTS_PANEL,
       ...(Root.Runtime.Runtime.queryParam('isChromeForTesting') ? ['protocol-monitor'] : []),
     ]);
 
@@ -406,7 +388,7 @@ export class MainImpl {
     MainImpl.time('Main._createAppUI');
 
     // Request filesystems early, we won't create connections until callback is fired. Things will happen in parallel.
-    Persistence.IsolatedFileSystemManager.IsolatedFileSystemManager.instance();
+    const isolatedFileSystemManager = Persistence.IsolatedFileSystemManager.IsolatedFileSystemManager.instance();
 
     const defaultThemeSetting = 'systemPreferred';
     const themeSetting = Common.Settings.Settings.instance().createSetting('ui-theme', defaultThemeSetting);
@@ -481,9 +463,8 @@ export class MainImpl {
     self.Extensions.extensionServer = Extensions.ExtensionServer.ExtensionServer.instance({forceNew: true});
 
     new Persistence.FileSystemWorkspaceBinding.FileSystemWorkspaceBinding(
-        Persistence.IsolatedFileSystemManager.IsolatedFileSystemManager.instance(),
-        Workspace.Workspace.WorkspaceImpl.instance());
-    Persistence.IsolatedFileSystemManager.IsolatedFileSystemManager.instance().addPlatformFileSystem(
+        isolatedFileSystemManager, Workspace.Workspace.WorkspaceImpl.instance());
+    isolatedFileSystemManager.addPlatformFileSystem(
         'snippet://' as Platform.DevToolsPath.UrlString, new Snippets.ScriptSnippetFileSystem.SnippetFileSystem());
 
     Persistence.Persistence.PersistenceImpl.instance({
@@ -507,11 +488,17 @@ export class MainImpl {
       targetManager,
     });
 
-    Persistence.AutomaticFileSystemManager.AutomaticFileSystemManager.instance({
+    const automaticFileSystemManager = Persistence.AutomaticFileSystemManager.AutomaticFileSystemManager.instance({
       forceNew: true,
       hostConfig: Root.Runtime.hostConfig,
       inspectorFrontendHost: Host.InspectorFrontendHost.InspectorFrontendHostInstance,
       projectSettingsModel,
+    });
+    Persistence.AutomaticFileSystemWorkspaceBinding.AutomaticFileSystemWorkspaceBinding.instance({
+      forceNew: true,
+      automaticFileSystemManager,
+      isolatedFileSystemManager,
+      workspace: Workspace.Workspace.WorkspaceImpl.instance(),
     });
 
     AutofillManager.AutofillManager.AutofillManager.instance();
@@ -560,14 +547,14 @@ export class MainImpl {
 
     const value = Root.Runtime.Runtime.queryParam('loadTimelineFromURL');
     if (value !== null) {
-      // Only import Timeline if neeeded. If this was a static import, every load of devtools
+      // Only import Timeline if needed. If this was a static import, every load of devtools
       // would request and evaluate the Timeline panel dep tree, slowing down the UI's load.
       const Timeline = await import('../../panels/timeline/timeline.js');
       Timeline.TimelinePanel.LoadTimelineHandler.instance().handleQueryParam(value);
     }
 
     // Initialize ARIAUtils.alert Element
-    UI.ARIAUtils.getOrCreateAlertElements();
+    UI.ARIAUtils.getOrCreateAlertElement();
     UI.DockController.DockController.instance().announceDockLocation();
 
     // Allow UI cycles to repaint prior to creating connection.
@@ -818,14 +805,14 @@ export class MainMenuItem implements UI.Toolbar.Provider {
       dockItemElement.setAttribute(
           'jslog', `${VisualLogging.item('dock-side').track({keydown: 'ArrowDown|ArrowLeft|ArrowRight'})}`);
       dockItemElement.tabIndex = -1;
-      UI.ARIAUtils.setLabel(dockItemElement, UIStrings.dockSide + UIStrings.dockSideNaviation);
-      const [toggleDockSideShorcut] =
+      UI.ARIAUtils.setLabel(dockItemElement, UIStrings.dockSide + UIStrings.dockSideNavigation);
+      const [toggleDockSideShortcut] =
           UI.ShortcutRegistry.ShortcutRegistry.instance().shortcutsForAction('main.toggle-dock');
 
       // clang-format off
       render(html`
         <span class="dockside-title"
-              title=${i18nString(UIStrings.placementOfDevtoolsRelativeToThe, {PH1: toggleDockSideShorcut.title()})}>
+              title=${i18nString(UIStrings.placementOfDevtoolsRelativeToThe, {PH1: toggleDockSideShortcut.title()})}>
           ${i18nString(UIStrings.dockSide)}
         </span>
         <devtools-toolbar @mousedown=${(event: Event) => event.consume()}>

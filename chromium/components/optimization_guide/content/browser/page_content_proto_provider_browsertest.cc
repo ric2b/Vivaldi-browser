@@ -5,6 +5,7 @@
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
 
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/test_future.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/optimization_guide/core/optimization_guide_features.h"
@@ -20,6 +21,7 @@
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/request_handler_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/blink/public/common/features_generated.h"
 #include "ui/display/display_switches.h"
 
 namespace optimization_guide {
@@ -51,6 +53,12 @@ void AssertRectsEqual(const optimization_guide::proto::BoundingRect& proto_rect,
   EXPECT_EQ(proto_rect.y(), rect.y());
 }
 
+void AssertSizesEqual(const optimization_guide::proto::BoundingSize& proto_size,
+                      gfx::Size size) {
+  EXPECT_EQ(proto_size.width(), size.width());
+  EXPECT_EQ(proto_size.height(), size.height());
+}
+
 void AssertRectsEqual(const optimization_guide::proto::BoundingRect& a,
                       const optimization_guide::proto::BoundingRect& b) {
   EXPECT_EQ(a.width(), b.width());
@@ -71,6 +79,15 @@ void AssertValidOrigin(
     EXPECT_TRUE(actual.IsSameOriginWith(expected))
         << "actual: " << actual << ", expected: " << expected;
   }
+}
+
+blink::mojom::AIPageContentOptionsPtr GetAIPageContentOptions() {
+  auto request = blink::mojom::AIPageContentOptions::New();
+  request->include_geometry = true;
+  request->on_critical_path = true;
+  request->include_hidden_searchable_content = true;
+
+  return request;
 }
 
 class PageContentProtoProviderBrowserTest : public content::ContentBrowserTest {
@@ -116,14 +133,16 @@ class PageContentProtoProviderBrowserTest : public content::ContentBrowserTest {
   }
 
   const proto::AnnotatedPageContent& page_content() { return *page_content_; }
-  const AIPageContentMetadata& metadata() { return *metadata_; }
+  const optimization_guide::mojom::PageMetadata& metadata() {
+    return *metadata_;
+  }
   const base::flat_map<std::string, content::WeakDocumentPtr>&
   document_identifiers() {
     return document_identifiers_;
   }
 
   void LoadData(blink::mojom::AIPageContentOptionsPtr request =
-                    DefaultAIPageContentOptions()) {
+                    GetAIPageContentOptions()) {
     base::RunLoop run_loop;
     GetAIPageContent(
         web_contents(), std::move(request),
@@ -161,7 +180,7 @@ class PageContentProtoProviderBrowserTest : public content::ContentBrowserTest {
  private:
   std::unique_ptr<net::EmbeddedTestServer> https_server_;
   std::optional<proto::AnnotatedPageContent> page_content_;
-  std::optional<AIPageContentMetadata> metadata_;
+  optimization_guide::mojom::PageMetadataPtr metadata_;
   base::flat_map<std::string, content::WeakDocumentPtr> document_identifiers_;
 };
 
@@ -230,11 +249,56 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   EXPECT_EQ(main_frame_origin.value(), iframe_origin.value());
 }
 
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, ScrollerInfo) {
+  const gfx::Size window_bounds(web_contents()->GetSize());
+
+  LoadPage(https_server()->GetURL("a.com", "/scroller.html"));
+
+  const auto& root = page_content().root_node();
+  EXPECT_TRUE(root.content_attributes().has_interaction_info());
+  EXPECT_TRUE(root.content_attributes().interaction_info().has_scroller_info());
+
+  const auto& root_scroller =
+      root.content_attributes().interaction_info().scroller_info();
+  AssertSizesEqual(
+      root_scroller.scrolling_bounds(),
+      gfx::Size(window_bounds.width() + 50, window_bounds.height() + 30));
+  AssertRectsEqual(root_scroller.visible_area(), gfx::Rect(window_bounds));
+
+  ASSERT_EQ(root.children_nodes().size(), 1);
+  const auto& child = root.children_nodes().at(0);
+  EXPECT_TRUE(child.content_attributes().has_interaction_info());
+  EXPECT_TRUE(
+      child.content_attributes().interaction_info().has_scroller_info());
+
+  const auto& sub_scroller =
+      child.content_attributes().interaction_info().scroller_info();
+  AssertSizesEqual(
+      sub_scroller.scrolling_bounds(),
+      gfx::Size(2 * window_bounds.width(), 3 * window_bounds.height()));
+  AssertRectsEqual(
+      sub_scroller.visible_area(),
+      gfx::Rect(200, 100, window_bounds.width(), window_bounds.height()));
+
+  EXPECT_TRUE(sub_scroller.user_scrollable_horizontal());
+  EXPECT_TRUE(sub_scroller.user_scrollable_vertical());
+}
+
 class PageContentProtoProviderBrowserTestActionableElements
     : public PageContentProtoProviderBrowserTest {
  public:
   PageContentProtoProviderBrowserTestActionableElements()
       : features_(features::kAnnotatedPageContentWithActionableElements) {}
+
+  const optimization_guide::proto::ContentNode& ContentRootNode() {
+    EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
+    const auto& html = page_content().root_node().children_nodes().at(0);
+
+    EXPECT_EQ(html.children_nodes().size(), 1);
+    const auto& body = html.children_nodes().at(0);
+
+    return body;
+  }
 
  private:
   base::test::ScopedFeatureList features_;
@@ -242,14 +306,79 @@ class PageContentProtoProviderBrowserTestActionableElements
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
                        AIPageContent) {
-  LoadPage(https_server()->GetURL("/simple.html"));
+  LoadPage(https_server()->GetURL("/actionable_elements.html"));
   EXPECT_EQ(page_content().version(),
             optimization_guide::proto::
                 ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
   EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
-  AssertHasText(page_content().root_node(), "Non empty simple page\n\n");
-  EXPECT_TRUE(
-      page_content().root_node().content_attributes().has_interaction_info());
+  const auto& child = page_content().root_node().children_nodes().at(0);
+  EXPECT_TRUE(child.content_attributes().has_interaction_info());
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
+                       ForLabel) {
+  LoadPage(https_server()->GetURL("/for_label.html"));
+  EXPECT_EQ(page_content().version(),
+            optimization_guide::proto::
+                ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
+
+  EXPECT_EQ(ContentRootNode().children_nodes().size(), 2);
+
+  const auto& input = ContentRootNode().children_nodes()[0];
+  ASSERT_TRUE(input.content_attributes().has_interaction_info());
+  EXPECT_TRUE(input.content_attributes().interaction_info().is_clickable());
+
+  const auto& label = ContentRootNode().children_nodes()[1];
+  ASSERT_TRUE(label.content_attributes().has_interaction_info());
+  EXPECT_TRUE(label.content_attributes().interaction_info().is_clickable());
+  EXPECT_EQ(label.content_attributes().label_for_dom_node_id(),
+            input.content_attributes().common_ancestor_dom_node_id());
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
+                       LabelNotActionable) {
+  LoadPage(https_server()->GetURL("/label_not_actionable.html"));
+  EXPECT_EQ(page_content().version(),
+            optimization_guide::proto::
+                ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
+
+  EXPECT_EQ(ContentRootNode().children_nodes().size(), 2);
+
+  const auto& input = ContentRootNode().children_nodes()[0];
+  ASSERT_TRUE(input.content_attributes().has_interaction_info());
+  EXPECT_TRUE(input.content_attributes().interaction_info().is_clickable());
+
+  const auto& label = ContentRootNode().children_nodes()[1];
+  EXPECT_FALSE(label.content_attributes().has_interaction_info());
+  EXPECT_EQ(label.content_attributes().label_for_dom_node_id(),
+            input.content_attributes().common_ancestor_dom_node_id());
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
+                       AriaRole) {
+  LoadPage(https_server()->GetURL("/aria_role.html"));
+  EXPECT_EQ(page_content().version(),
+            optimization_guide::proto::
+                ANNOTATED_PAGE_CONTENT_VERSION_ONLY_ACTIONABLE_ELEMENTS_1_0);
+
+  EXPECT_EQ(ContentRootNode().children_nodes().size(), 1);
+  const auto& button = ContentRootNode().children_nodes()[0];
+  ASSERT_TRUE(button.content_attributes().has_interaction_info());
+  EXPECT_TRUE(button.content_attributes().interaction_info().is_clickable());
+  EXPECT_EQ(button.content_attributes().aria_role(),
+            optimization_guide::proto::AXRole::AX_ROLE_BUTTON);
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestActionableElements,
+                       ZOrder) {
+  LoadPage(https_server()->GetURL("/simple.html"));
+
+  EXPECT_EQ(page_content()
+                .root_node()
+                .content_attributes()
+                .interaction_info()
+                .document_scoped_z_order(),
+            1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
@@ -273,6 +402,7 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
 
   auto request = blink::mojom::AIPageContentOptions::New();
   request->on_critical_path = false;
+  request->include_geometry = true;
   LoadData(std::move(request));
 
   EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
@@ -292,6 +422,28 @@ IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest,
   // TODO(crbug.com/382558422): Propagate image source URLs, this should be
   // a.com.
   EXPECT_TRUE(image_data.security_origin().value().empty());
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, SVG) {
+  LoadPage(https_server()->GetURL("/svg.html"));
+
+  EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
+
+  const auto& svg = page_content().root_node().children_nodes().at(0);
+  ASSERT_TRUE(svg.content_attributes().has_svg_data());
+  EXPECT_EQ(svg.content_attributes().svg_data().inner_text(),
+            "Hello SVG Text!");
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, Canvas) {
+  LoadPage(https_server()->GetURL("/canvas.html"));
+
+  EXPECT_EQ(page_content().root_node().children_nodes().size(), 1);
+
+  const auto& canvas = page_content().root_node().children_nodes().at(0);
+  ASSERT_TRUE(canvas.content_attributes().has_canvas_data());
+  EXPECT_EQ(canvas.content_attributes().canvas_data().layout_width(), 200);
+  EXPECT_EQ(canvas.content_attributes().canvas_data().layout_height(), 300);
 }
 
 namespace {
@@ -418,6 +570,7 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
                        LatencyMetricsNotOnCriticalPath) {
   base::HistogramTester tester;
 
+
   LoadPage(https_server()->GetURL(
                "a.com", base::StringPrintf(
                             "/paragraph_iframe_partially_offscreen.html%s",
@@ -428,6 +581,7 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestSiteIsolation,
   request->on_critical_path = false;
   LoadData(std::move(request));
   content::FetchHistogramsFromChildProcesses();
+
 
   ASSERT_EQ(page_content().root_node().children_nodes().size(), 1);
 
@@ -677,22 +831,22 @@ IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
   EXPECT_EQ(metadata().frame_metadata.size(), 3u);
 
   const auto& main_frame_metadata = metadata().frame_metadata[0];
-  EXPECT_EQ(main_frame_metadata.url.host(), "a.com");
-  EXPECT_EQ(main_frame_metadata.meta_tags.size(), 1u);
-  EXPECT_EQ(main_frame_metadata.meta_tags[0].name, "author");
-  EXPECT_EQ(main_frame_metadata.meta_tags[0].content, "George");
+  EXPECT_EQ(main_frame_metadata->url.host(), "a.com");
+  EXPECT_EQ(main_frame_metadata->meta_tags.size(), 1u);
+  EXPECT_EQ(main_frame_metadata->meta_tags[0]->name, "author");
+  EXPECT_EQ(main_frame_metadata->meta_tags[0]->content, "George");
 
   const auto& child_frame_metadata1 = metadata().frame_metadata[1];
-  EXPECT_EQ(child_frame_metadata1.url.host(), "a.com");
-  EXPECT_EQ(child_frame_metadata1.meta_tags.size(), 1u);
-  EXPECT_EQ(child_frame_metadata1.meta_tags[0].name, "author");
-  EXPECT_EQ(child_frame_metadata1.meta_tags[0].content, "Gary");
+  EXPECT_EQ(child_frame_metadata1->url.host(), "a.com");
+  EXPECT_EQ(child_frame_metadata1->meta_tags.size(), 1u);
+  EXPECT_EQ(child_frame_metadata1->meta_tags[0]->name, "author");
+  EXPECT_EQ(child_frame_metadata1->meta_tags[0]->content, "Gary");
 
   const auto& child_frame_metadata2 = metadata().frame_metadata[2];
-  EXPECT_EQ(child_frame_metadata2.url.host(), "a.com");
-  EXPECT_EQ(child_frame_metadata2.meta_tags.size(), 1u);
-  EXPECT_EQ(child_frame_metadata2.meta_tags[0].name, "author");
-  EXPECT_EQ(child_frame_metadata2.meta_tags[0].content, "Gary");
+  EXPECT_EQ(child_frame_metadata2->url.host(), "a.com");
+  EXPECT_EQ(child_frame_metadata2->meta_tags.size(), 1u);
+  EXPECT_EQ(child_frame_metadata2->meta_tags[0]->name, "author");
+  EXPECT_EQ(child_frame_metadata2->meta_tags[0]->content, "Gary");
 }
 
 IN_PROC_BROWSER_TEST_P(PageContentProtoProviderBrowserTestMultiProcess,
@@ -809,6 +963,59 @@ IN_PROC_BROWSER_TEST_F(ScaledPageContentProtoProviderBrowserTest, ScaleSizes) {
   EXPECT_EQ(page_content().viewport_geometry().width(), window_bounds.width());
   EXPECT_EQ(page_content().viewport_geometry().height(),
             window_bounds.height());
+}
+
+bool ContainsRole(const optimization_guide::proto::ContentNode& node,
+                  optimization_guide::proto::AnnotatedRole role) {
+  for (const auto& r : node.content_attributes().annotated_roles()) {
+    if (r == role) {
+      return true;
+    }
+  }
+  return false;
+}
+
+class PageContentProtoProviderBrowserTestPaidContentDisabled
+    : public PageContentProtoProviderBrowserTest {
+ public:
+ PageContentProtoProviderBrowserTestPaidContentDisabled() {
+    features_.InitAndDisableFeature(
+        blink::features::kAIPageContentPaidContentAnnotation);
+  }
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTest, PaidContent) {
+  LoadPage(https_server()->GetURL("/paid_content.html"));
+
+  // The page contains paid content.
+  EXPECT_TRUE(page_content()
+                  .main_frame_data()
+                  .paid_content_metadata()
+                  .contains_paid_content());
+
+  auto& nodes = page_content().root_node().children_nodes();
+  EXPECT_EQ(nodes.size(), 2);
+  EXPECT_FALSE(ContainsRole(
+      nodes[0], optimization_guide::proto::ANNOTATED_ROLE_PAID_CONTENT));
+  EXPECT_TRUE(ContainsRole(
+      nodes[1], optimization_guide::proto::ANNOTATED_ROLE_PAID_CONTENT));
+}
+
+IN_PROC_BROWSER_TEST_F(PageContentProtoProviderBrowserTestPaidContentDisabled,
+                       PaidContentDisabled) {
+  LoadPage(https_server()->GetURL("/paid_content.html"));
+
+  // If the feature has been disabled, there should be no paid content metadata.
+  EXPECT_FALSE(page_content().main_frame_data().has_paid_content_metadata());
+
+  auto& nodes = page_content().root_node().children_nodes();
+  EXPECT_EQ(nodes.size(), 2);
+  EXPECT_FALSE(ContainsRole(
+      nodes[0], optimization_guide::proto::ANNOTATED_ROLE_PAID_CONTENT));
+  EXPECT_FALSE(ContainsRole(
+      nodes[1], optimization_guide::proto::ANNOTATED_ROLE_PAID_CONTENT));
 }
 
 }  // namespace

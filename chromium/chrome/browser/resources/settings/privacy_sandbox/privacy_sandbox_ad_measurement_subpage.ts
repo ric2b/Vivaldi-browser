@@ -4,6 +4,7 @@
 
 import '/shared/settings/prefs/prefs.js';
 import '../controls/settings_toggle_button.js';
+import '../icons.html.js';
 import '../settings_columned_section.css.js';
 import '../settings_shared.css.js';
 
@@ -51,7 +52,7 @@ export class SettingsPrivacySandboxAdMeasurementSubpageElement extends
     };
   }
 
-  private shouldShowV2_: boolean;
+  declare private shouldShowV2_: boolean;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
 

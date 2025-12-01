@@ -34,3 +34,21 @@ void Browser::DoBeforeUnloadFired(content::WebContents* web_contents,
 void Browser::DoCloseContents(content::WebContents* source) {
   CloseContents(source);
 }
+
+content::WebContents* Browser::AddNewContentsVivaldi(
+    content::WebContents* source,
+    std::unique_ptr<content::WebContents> new_contents,
+    const GURL& target_url,
+    WindowOpenDisposition disposition,
+    const blink::mojom::WindowFeatures& window_features,
+    bool user_gesture,
+    bool* was_blocked) {
+  return AddNewContents(source, std::move(new_contents), target_url,
+                        disposition, window_features, user_gesture,
+                        was_blocked);
+}
+
+// Overrides WebContentsDelegate::IsWebApp.
+bool Browser::IsWebApp() {
+  return is_type_app();
+}

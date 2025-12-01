@@ -77,6 +77,7 @@ public:
         const uint32_t fCompilationID = 0;
         const bool fFromPrecompile = false;
         bool fWasUsed = false;
+        uint16_t fEpoch = 0;   // the last epoch in which this Pipeline was touched
     };
 
     const PipelineInfo& getPipelineInfo() const {
@@ -86,6 +87,14 @@ public:
 
     void markUsed() { fPipelineInfo.fWasUsed = true; }
     bool wasUsed() const { return fPipelineInfo.fWasUsed; }
+
+    void markEpoch(uint16_t epoch) { fPipelineInfo.fEpoch = epoch; }
+    uint16_t epoch() const { return fPipelineInfo.fEpoch; }
+
+    // GraphicsPipeline compiles can take a while. If the underlying compilation is performed
+    // asynchronously, we may create a GraphicsPipeline object that later "fails" and need to remove
+    // it from the GlobalCache.
+    virtual bool didAsyncCompilationFail() const { return false; }
 
 protected:
     GraphicsPipeline(const SharedContext*, const PipelineInfo&);

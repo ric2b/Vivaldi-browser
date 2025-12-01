@@ -679,7 +679,8 @@ int HttpProxyConnectJob::DoSpdyProxyCreateStream() {
         common_connect_job_params()
             ->spdy_session_pool->CreateAvailableSessionFromSocket(
                 key, nested_connect_job_->PassSocket(),
-                nested_connect_job_->connect_timing(), net_log());
+                nested_connect_job_->connect_timing(), net_log(),
+                SpdySessionInitiator::kHttpProxyConnectJob);
     nested_connect_job_.reset();
     if (!spdy_session_result.has_value()) {
       return spdy_session_result.error();
@@ -767,6 +768,7 @@ int HttpProxyConnectJob::DoQuicProxyCreateSession() {
       /*require_dns_https_alpn=*/false, ssl_config.GetCertVerifyFlags(),
       GURL("https://" + proxy_server.ToString()), net_log(),
       &quic_net_error_details_, MultiplexedSessionCreationInitiator::kUnknown,
+      /*management_config=*/std::nullopt,
       /*failed_on_default_network_callback=*/CompletionOnceCallback(),
       base::BindOnce(&HttpProxyConnectJob::OnIOComplete,
                      base::Unretained(this)));

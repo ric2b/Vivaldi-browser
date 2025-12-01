@@ -20,7 +20,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
@@ -633,10 +632,16 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::OnHeadersReceived(
       TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
       "for_cors_preflight", for_cors_preflight_);
 
+  auto parsed_headers = base::MakeRefCounted<net::HttpResponseHeaders>(headers);
   if (!current_request_uses_header_client_) {
     std::move(callback).Run(net::OK, std::nullopt, std::nullopt);
 
-    if (for_cors_preflight_) {
+    // Do not finish proxied preflight requests that require proxy auth.
+    // The request is not finished yet, give control back to network service
+    // which will start authentication process.
+    const int status_code = parsed_headers->response_code();
+    if (for_cors_preflight_ &&
+        status_code != net::HTTP_PROXY_AUTHENTICATION_REQUIRED) {
       // CORS preflight is supported only when "extraHeaders" is specified.
       // Deletes |this|.
       factory_->RemoveRequest(network_service_request_id_, request_id_);
@@ -646,8 +651,7 @@ void WebRequestProxyingURLLoaderFactory::InProgressRequest::OnHeadersReceived(
 
   on_headers_received_callback_ = std::move(callback);
   current_response_ = network::mojom::URLResponseHead::New();
-  current_response_->headers =
-      base::MakeRefCounted<net::HttpResponseHeaders>(headers);
+  current_response_->headers = std::move(parsed_headers);
   current_response_->remote_endpoint = remote_endpoint;
   HandleResponseOrRedirectHeaders(
       base::BindOnce(&InProgressRequest::ContinueToHandleOverrideHeaders,
@@ -1529,6 +1533,9 @@ void WebRequestProxyingURLLoaderFactory::StartProxying(
     scoped_refptr<base::SequencedTaskRunner> navigation_response_task_runner) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  TRACE_EVENT("extensions",
+              "WebRequestProxyingURLLoaderFactory::StartProxying");
+
   auto proxy = std::make_unique<WebRequestProxyingURLLoaderFactory>(
       browser_context, render_process_id, frame_routing_id, view_routing_id,
       request_id_generator, std::move(navigation_ui_data),
@@ -1597,7 +1604,7 @@ void WebRequestProxyingURLLoaderFactory::OnLoaderCreated(
   }
 
   auto request_it = requests_.find(it->second);
-  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
+  CHECK(request_it != requests_.end());
   request_it->second->OnLoaderCreated(std::move(receiver));
 }
 
@@ -1637,7 +1644,7 @@ void WebRequestProxyingURLLoaderFactory::HandleAuthRequest(
   }
 
   auto request_it = requests_.find(it->second);
-  CHECK(request_it != requests_.end(), base::NotFatalUntil::M130);
+  CHECK(request_it != requests_.end());
   request_it->second->HandleAuthRequest(auth_info, std::move(response_headers),
                                         std::move(callback));
 }

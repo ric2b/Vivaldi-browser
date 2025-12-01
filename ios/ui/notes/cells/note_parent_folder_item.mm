@@ -123,6 +123,13 @@
 
   [self applyContentSizeCategoryStyles];
 
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+        @[ UITraitPreferredContentSizeCategory.class ]);
+    [self registerForTraitChanges:traits
+                       withAction:@selector(applyContentSizeCategoryStyles)];
+  }
+
   return self;
 }
 
@@ -138,14 +145,6 @@
 - (NSString*)accessibilityHint {
   return l10n_util::GetNSString(
       IDS_VIVALDI_NOTE_EDIT_PARENT_FOLDER_BUTTON_HINT);
-}
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (self.traitCollection.preferredContentSizeCategory !=
-      previousTraitCollection.preferredContentSizeCategory) {
-    [self applyContentSizeCategoryStyles];
-  }
 }
 
 - (void)applyContentSizeCategoryStyles {

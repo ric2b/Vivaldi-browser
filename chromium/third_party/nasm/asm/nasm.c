@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2020 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2024 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -76,7 +76,7 @@ static void parse_cmdline(int, char **, int);
 static void assemble_file(const char *, struct strlist *);
 static bool skip_this_pass(errflags severity);
 static void usage(void);
-static void help(FILE *);
+static void help(FILE *out, const char *what);
 
 struct error_format {
     const char *beforeline;     /* Before line number, if present */
@@ -131,8 +131,7 @@ struct optimization optimizing =
     { MAX_OPTIMIZE, OPTIM_ALL_ENABLED }; /* number of optimization passes to take */
 static int cmd_sb = 16;    /* by default */
 
-iflag_t cpu;
-static iflag_t cmd_cpu;
+iflag_t cpu, cmd_cpu;
 
 struct location location;
 bool in_absolute;                 /* Flag we are in ABSOLUTE seg */
@@ -143,9 +142,8 @@ static struct RAA *offsets;
 static struct SAA *forwrefs;    /* keep track of forward references */
 static const struct forwrefinfo *forwref;
 
-static const struct preproc_ops *preproc;
 static struct strlist *include_path;
-bool pp_noline;                 /* Ignore %line directives */
+static enum preproc_opt ppopt;
 
 #define OP_NORMAL           (1U << 0)
 #define OP_PREPROCESS       (1U << 1)
@@ -308,29 +306,29 @@ static void define_macros(void)
 
     if (oct->have_local) {
         strftime(temp, sizeof temp, "__?DATE?__=\"%Y-%m-%d\"", &oct->local);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
         strftime(temp, sizeof temp, "__?DATE_NUM?__=%Y%m%d", &oct->local);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
         strftime(temp, sizeof temp, "__?TIME?__=\"%H:%M:%S\"", &oct->local);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
         strftime(temp, sizeof temp, "__?TIME_NUM?__=%H%M%S", &oct->local);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
     }
 
     if (oct->have_gm) {
         strftime(temp, sizeof temp, "__?UTC_DATE?__=\"%Y-%m-%d\"", &oct->gm);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
         strftime(temp, sizeof temp, "__?UTC_DATE_NUM?__=%Y%m%d", &oct->gm);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
         strftime(temp, sizeof temp, "__?UTC_TIME?__=\"%H:%M:%S\"", &oct->gm);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
         strftime(temp, sizeof temp, "__?UTC_TIME_NUM?__=%H%M%S", &oct->gm);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
     }
 
     if (oct->have_posix) {
         snprintf(temp, sizeof temp, "__?POSIX_TIME?__=%"PRId64, oct->posix);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
     }
 
     /*
@@ -340,20 +338,20 @@ static void define_macros(void)
      */
     snprintf(temp, sizeof(temp), "__?OUTPUT_FORMAT?__=%s",
              ofmt_alias ? ofmt_alias->shortname : ofmt->shortname);
-    preproc->pre_define(temp);
+    pp_pre_define(temp);
 
     /*
      * Output-format specific macros.
      */
     if (ofmt->stdmac)
-        preproc->extra_stdmac(ofmt->stdmac);
+        pp_extra_stdmac(ofmt->stdmac);
 
     /*
      * Debug format, if any
      */
     if (dfmt != &null_debug_form) {
         snprintf(temp, sizeof(temp), "__?DEBUG_FORMAT?__=%s", dfmt->shortname);
-        preproc->pre_define(temp);
+        pp_pre_define(temp);
     }
 }
 
@@ -368,9 +366,9 @@ static void define_macros(void)
  */
 static void preproc_init(struct strlist *ipath)
 {
-    preproc->init();
+    pp_init(ppopt);
     define_macros();
-    preproc->include_path(ipath);
+    pp_include_path(ipath);
 }
 
 static void emit_dependencies(struct strlist *list)
@@ -535,8 +533,8 @@ int main(int argc, char **argv)
 
     timestamp();
 
-    iflag_set_default_cpu(&cpu);
-    iflag_set_default_cpu(&cmd_cpu);
+    set_cpu(NULL);
+    cmd_cpu = cpu;
 
     set_default_limits();
 
@@ -560,7 +558,6 @@ int main(int argc, char **argv)
     offsets = raa_init();
     forwrefs = saa_init((int32_t)sizeof(struct forwrefinfo));
 
-    preproc = &nasmpp;
     operating_mode = OP_NORMAL;
 
     parse_cmdline(argc, argv, 1);
@@ -585,6 +582,11 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Have we enabled TASM mode? */
+    if (tasm_compatible_mode) {
+        ppopt |= PP_TASM;
+        nasm_ctype_tasm_mode();
+    }
     preproc_init(include_path);
 
     parse_cmdline(argc, argv, 2);
@@ -627,13 +629,13 @@ int main(int argc, char **argv)
             char *line;
 
             if (depend_missing_ok)
-                preproc->include_path(NULL);    /* "assume generated" */
+                pp_include_path(NULL);    /* "assume generated" */
 
-            preproc->reset(inname, PP_DEPS, depend_list);
+            pp_reset(inname, PP_DEPS, depend_list);
             ofile = NULL;
-            while ((line = preproc->getline()))
+            while ((line = pp_getline()))
                 nasm_free(line);
-            preproc->cleanup_pass();
+            pp_cleanup_pass();
             reset_warnings();
     } else if (operating_mode & OP_PREPROCESS) {
             char *line;
@@ -656,9 +658,9 @@ int main(int argc, char **argv)
             location.known = false;
 
             _pass_type = PASS_PREPROC;
-            preproc->reset(inname, PP_PREPROC, depend_list);
+            pp_reset(inname, PP_PREPROC, depend_list);
 
-            while ((line = preproc->getline())) {
+            while ((line = pp_getline())) {
                 /*
                  * We generate %line directives if needed for later programs
                  */
@@ -703,7 +705,7 @@ int main(int argc, char **argv)
 
             nasm_free(quoted_file_name);
 
-            preproc->cleanup_pass();
+            pp_cleanup_pass();
             reset_warnings();
             if (ofile)
                 fclose(ofile);
@@ -738,7 +740,7 @@ int main(int argc, char **argv)
         }
     }
 
-    preproc->cleanup_session();
+    pp_cleanup_session();
 
     if (depend_list && !terminate_after_phase)
         emit_dependencies(depend_list);
@@ -759,8 +761,10 @@ int main(int argc, char **argv)
 /*
  * Get a parameter for a command line option.
  * First arg must be in the form of e.g. -f...
+ *
+ * get_param() errors on a missing argument; get_opt_param() does not.
  */
-static char *get_param(char *p, char *q, bool *advance)
+static char *get_opt_param(char *p, char *q, bool *advance)
 {
     *advance = false;
     if (p[2]) /* the parameter's in the option */
@@ -769,8 +773,14 @@ static char *get_param(char *p, char *q, bool *advance)
         *advance = true;
         return q;
     }
-    nasm_nonfatalf(ERR_USAGE, "option `-%c' requires an argument", p[1]);
     return NULL;
+}
+static char *get_param(char *p, char *q, bool *advance)
+{
+    char *r = get_opt_param(p, q, advance);
+    if (!r)
+        nasm_nonfatalf(ERR_USAGE, "option `-%c' requires an argument", p[1]);
+    return r;
 }
 
 /*
@@ -823,8 +833,7 @@ static char *quote_for_pmake(const char *str)
     }
 
     /* Convert N backslashes at the end of filename to 2N backslashes */
-    if (nbs)
-        n += nbs;
+    n += nbs;
 
     os = q = nasm_malloc(n);
 
@@ -833,10 +842,10 @@ static char *quote_for_pmake(const char *str)
         switch (*p) {
         case ' ':
         case '\t':
-            while (nbs--)
-                *q++ = '\\';
+            q = mempset(q, '\\', nbs);
             *q++ = '\\';
             *q++ = *p;
+            nbs = 0;
             break;
         case '$':
             *q++ = *p;
@@ -858,9 +867,8 @@ static char *quote_for_pmake(const char *str)
             break;
         }
     }
-    while (nbs--)
-        *q++ = '\\';
 
+    q = mempset(q, '\\', nbs);
     *q = '\0';
 
     return os;
@@ -948,6 +956,7 @@ enum text_options {
     OPT_KEEP_ALL,
     OPT_NO_LINE,
     OPT_DEBUG,
+    OPT_REPRODUCIBLE,
     OPT_MACHO_MIN_OS
 };
 enum need_arg {
@@ -965,7 +974,7 @@ struct textargs {
 static const struct textargs textopts[] = {
     {"v", OPT_VERSION, ARG_NO, 0},
     {"version", OPT_VERSION, ARG_NO, 0},
-    {"help",     OPT_HELP,  ARG_NO, 0},
+    {"help",     OPT_HELP,  ARG_MAYBE, 0},
     {"abort-on-panic", OPT_ABORT_ON_PANIC, ARG_NO, 0},
     {"prefix",   OPT_MANGLE, ARG_YES, LM_GPREFIX},
     {"postfix",  OPT_MANGLE, ARG_YES, LM_GSUFFIX},
@@ -980,6 +989,7 @@ static const struct textargs textopts[] = {
     {"keep-all", OPT_KEEP_ALL, ARG_NO, 0},
     {"no-line",  OPT_NO_LINE, ARG_NO, 0},
     {"debug",    OPT_DEBUG, ARG_MAYBE, 0},
+    {"reproducible", OPT_REPRODUCIBLE, ARG_NO, 0},
     {"macho-min-os", OPT_MACHO_MIN_OS, ARG_YES, 0},
     {NULL, OPT_BOGUS, ARG_NO, 0}
 };
@@ -1075,19 +1085,19 @@ static bool process_arg(char *p, char *q, int pass)
         case 'p':       /* pre-include */
         case 'P':
             if (pass == 2)
-                preproc->pre_include(param);
+                pp_pre_include(param);
             break;
 
         case 'd':       /* pre-define */
         case 'D':
             if (pass == 2)
-                preproc->pre_define(param);
+                pp_pre_define(param);
             break;
 
         case 'u':       /* un-define */
         case 'U':
             if (pass == 2)
-                preproc->pre_undefine(param);
+                pp_pre_undefine(param);
             break;
 
         case 'i':       /* include search path */
@@ -1122,12 +1132,17 @@ static bool process_arg(char *p, char *q, int pass)
 
         case 'X':       /* specify error reporting format */
             if (pass == 1) {
-                if (!nasm_stricmp("vc", param) || !nasm_stricmp("msvc", param) || !nasm_stricmp("ms", param))
+                if (!nasm_stricmp("vc", param) ||
+                    !nasm_stricmp("msvc", param) ||
+                    !nasm_stricmp("ms", param))
                     errfmt = &errfmt_msvc;
-                else if (!nasm_stricmp("gnu", param) || !nasm_stricmp("gcc", param))
+                else if (!nasm_stricmp("gnu", param) ||
+                         !nasm_stricmp("gcc", param))
                     errfmt = &errfmt_gnu;
                 else
-                    nasm_fatalf(ERR_USAGE, "unrecognized error reporting format `%s'", param);
+                    nasm_fatalf(ERR_USAGE,
+                                "unrecognized error reporting format `%s'",
+                                param);
             }
             break;
 
@@ -1140,21 +1155,20 @@ static bool process_arg(char *p, char *q, int pass)
             break;
 
         case 'h':
-            help(stdout);
+        case '?':
+            help(stdout, get_opt_param(p, q, &advance));
             exit(0);    /* never need usage message here */
             break;
 
         case 'y':
             /* legacy option */
-            dfmt_list(stdout);
+            help(stdout, "-F");
             exit(0);
             break;
 
         case 't':
-            if (pass == 2) {
+            if (pass == 1)
                 tasm_compatible_mode = true;
-                nasm_ctype_tasm_mode();
-            }
             break;
 
         case 'v':
@@ -1169,7 +1183,7 @@ static bool process_arg(char *p, char *q, int pass)
 
         case 'a':       /* assemble only - don't preprocess */
             if (pass == 1)
-                preproc = &preproc_nop;
+                ppopt |= PP_TRIVIAL;
             break;
 
         case 'w':
@@ -1320,15 +1334,15 @@ static bool process_arg(char *p, char *q, int pass)
                     break;
                 case OPT_INCLUDE:
                     if (pass == 2)
-                        preproc->pre_include(q);
+                        pp_pre_include(q);
                     break;
                 case OPT_PRAGMA:
                     if (pass == 2)
-                        preproc->pre_command("pragma", param);
+                        pp_pre_command("%pragma", param);
                     break;
                 case OPT_BEFORE:
                     if (pass == 2)
-                        preproc->pre_command(NULL, param);
+                        pp_pre_command(NULL, param);
                     break;
                 case OPT_LIMIT:
                     if (pass == 1)
@@ -1338,10 +1352,14 @@ static bool process_arg(char *p, char *q, int pass)
                     keep_all = true;
                     break;
                 case OPT_NO_LINE:
-                    pp_noline = true;
+                    ppopt |= PP_NOLINE;
                     break;
                 case OPT_DEBUG:
-                    debug_nasm = param ? strtoul(param, NULL, 10) : debug_nasm+1;
+                    debug_nasm = param ?
+                        strtoul(param, NULL, 10) : debug_nasm+1;
+                    break;
+                case OPT_REPRODUCIBLE:
+                    reproducible = true;
                     break;
                 case OPT_MACHO_MIN_OS:
                     if (pass == 2) {
@@ -1361,7 +1379,10 @@ static bool process_arg(char *p, char *q, int pass)
                     }
                     break;
                 case OPT_HELP:
-                    help(stdout);
+                    /* Allow --help topic without *requiring* topic */
+                    if (!param)
+                        param = q;
+                    help(stdout, param);
                     exit(0);
                 default:
                     panic();
@@ -1571,10 +1592,8 @@ static void forward_refs(insn *instruction)
     int i;
     struct forwrefinfo *fwinf;
 
-    instruction->forw_ref = false;
-
     if (!optimizing.level)
-        return;                 /* For -O0 don't bother */
+        return;                 /* For -O1 don't bother */
 
     if (!forwref)
         return;
@@ -1582,7 +1601,6 @@ static void forward_refs(insn *instruction)
     if (forwref->lineno != globallineno)
         return;
 
-    instruction->forw_ref = true;
     do {
         instruction->oprs[forwref->operand].opflags |= OPFLAG_FORWARD;
         forwref = saa_rstruct(forwrefs);
@@ -1712,9 +1730,8 @@ static void assemble_file(const char *fname, struct strlist *depend_list)
         cpu = cmd_cpu;
         if (listname) {
             if (pass_final() || list_on_every_pass()) {
-                active_list_options = list_options;
                 lfmt->init(listname);
-            } else if (active_list_options) {
+            } else if (list_active()) {
                 /*
                  * Looks like we used the list engine on a previous pass,
                  * but now it is turned off, presumably via %pragma -p
@@ -1722,7 +1739,6 @@ static void assemble_file(const char *fname, struct strlist *depend_list)
                 lfmt->cleanup();
                 if (!keep_all)
                     remove(listname);
-                active_list_options = 0;
             }
         }
 
@@ -1739,11 +1755,11 @@ static void assemble_file(const char *fname, struct strlist *depend_list)
             location.known = true;
         ofmt->reset();
         switch_segment(ofmt->section(NULL, &globalbits));
-        preproc->reset(fname, PP_NORMAL, pass_final() ? depend_list : NULL);
+        pp_reset(fname, PP_NORMAL, depend_list);
 
         globallineno = 0;
 
-        while ((line = preproc->getline())) {
+        while ((line = pp_getline())) {
             if (++globallineno > nasm_limit[LIMIT_LINES])
                 nasm_fatal("overall line count exceeds the maximum %"PRId64"\n",
                            nasm_limit[LIMIT_LINES]);
@@ -1763,9 +1779,9 @@ static void assemble_file(const char *fname, struct strlist *depend_list)
 
         end_of_line:
             nasm_free(line);
-        }                       /* end while (line = preproc->getline... */
+        }                       /* end while (line = pp_getline... */
 
-        preproc->cleanup_pass();
+        pp_cleanup_pass();
 
         /* We better not be having an error hold still... */
         nasm_assert(!errhold_stack);
@@ -1864,11 +1880,11 @@ static bool skip_this_pass(errflags severity)
         return false;
 
     /*
-     * ERR_LISTMSG messages are always skipped; the list file
-     * receives them anyway as this function is not consulted
-     * for sending to the list file.
+     * ERR_LISTMSG and ERR_NOTE messages are always skipped; the list
+     * file receives them anyway as this function is not consulted for
+     * sending to the list file.
      */
-    if (type == ERR_LISTMSG)
+    if (type <= ERR_NOTE)
         return true;
 
     /*
@@ -1898,8 +1914,8 @@ static bool is_suppressed(errflags severity)
     if (!(warning_state[warn_index(severity)] & WARN_ST_ENABLED))
         return true;
 
-    if (preproc && !(severity & ERR_PP_LISTMACRO))
-        return preproc->suppress_error(severity);
+    if (!(severity & ERR_PP_LISTMACRO))
+        return pp_suppress_error(severity);
 
     return false;
 }
@@ -1932,10 +1948,31 @@ static errflags true_error_type(errflags severity)
 /*
  * The various error type prefixes
  */
-static const char * const error_pfx_table[ERR_MASK+1] = {
-    ";;; ", "debug: ", "info: ", "warning: ",
-        "error: ", "fatal: ", "critical: ", "panic: "
-};
+static inline const char *error_pfx(errflags severity)
+{
+    switch (severity & ERR_MASK) {
+    case ERR_LISTMSG:
+        return ";;; ";
+    case ERR_NOTE:
+        return "note: ";
+    case ERR_DEBUG:
+        return "debug: ";
+    case ERR_INFO:
+        return "info: ";
+    case ERR_WARNING:
+        return "warning: ";
+    case ERR_NONFATAL:
+        return "error: ";
+    case ERR_FATAL:
+        return "fatal: ";
+    case ERR_CRITICAL:
+        return "critical: ";
+    case ERR_PANIC:
+        return "panic: ";
+    default:
+        return "internal error: ";
+    }
+}
 static const char no_file_name[] = "nasm"; /* What to print if no file name */
 
 /*
@@ -2008,7 +2045,7 @@ fatal_func nasm_verror_critical(errflags severity, const char *fmt, va_list args
     if (!where.filename)
         where.filename = no_file_name;
 
-    fputs(error_pfx_table[severity], error_file);
+    fputs(error_pfx(severity), error_file);
     fputs(where.filename, error_file);
     if (where.lineno) {
         fprintf(error_file, "%s%"PRId32"%s",
@@ -2132,8 +2169,7 @@ void nasm_verror(errflags severity, const char *fmt, va_list args)
         return;
 
     if (!(severity & (ERR_HERE|ERR_PP_LISTMACRO)))
-        if (preproc)
-            preproc->error_list_macros(severity);
+        pp_error_list_macros(severity);
 }
 
 /*
@@ -2151,7 +2187,7 @@ static void nasm_issue_error(struct nasm_errtext *et)
     if (severity & ERR_NO_SEVERITY)
         pfx = "";
     else
-        pfx = error_pfx_table[true_type];
+        pfx = error_pfx(true_type);
 
     *warnsuf = 0;
     if ((severity & (ERR_MASK|ERR_HERE|ERR_PP_LISTMACRO)) == ERR_WARNING) {
@@ -2178,8 +2214,7 @@ static void nasm_issue_error(struct nasm_errtext *et)
             here = where.filename ? " here" : " in an unknown location";
         }
 
-        if (warn_list && true_type < ERR_NONFATAL &&
-            !(pass_first() && (severity & ERR_PASS1))) {
+        if (warn_list && true_type < ERR_NONFATAL) {
             /*
              * Buffer up warnings until we either get an error
              * or we are on the code-generation pass.
@@ -2239,143 +2274,314 @@ done:
 
 static void usage(void)
 {
-    fprintf(error_file, "Type %s -h for help.\n", _progname);
+    fprintf(error_file,
+            "Usage: %s [-@ response_file] [options...] [--] filename\n"
+            "   For additional help:\n"
+            "       %s -h [run|topics|all|-option]\n",
+            _progname, _progname);
 }
 
-static void help(FILE *out)
+enum help_with {
+    HW_ALL   = 0,
+    HW_OPT   = 1,
+    HW_ERR   = 2,
+    HW_LIMIT = 3
+};
+
+static inline bool help_is(int with, int h) {
+    return with == HW_ALL || with == h;
+}
+static inline bool help_opt(int with)
+{
+    return help_is(with, HW_OPT);
+}
+static inline bool help_optor(int with, int h)
+{
+    return help_opt(with) || with == h;
+}
+
+static void help(FILE *out, const char *what)
 {
     int i;
+    int with;
 
-    fprintf(out,
-            "Usage: %s [-@ response_file] [options...] [--] filename\n"
-            "       %s -v (or --v)\n",
-            _progname, _progname);
-    fputs(
-        "\n"
-        "Options (values in brackets indicate defaults):\n"
-        "\n"
-        "    -h            show this text and exit (also --help)\n"
-        "    -v (or --v)   print the NASM version number and exit\n"
-        "    -@ file       response file; one command line option per line\n"
-        "\n"
-        "    -o outfile    write output to outfile\n"
-        "    --keep-all    output files will not be removed even if an error happens\n"
-        "\n"
-        "    -Xformat      specifiy error reporting format (gnu or vc)\n"
-        "    -s            redirect error messages to stdout\n"
-        "    -Zfile        redirect error messages to file\n"
-        "\n"
-        "    -M            generate Makefile dependencies on stdout\n"
-        "    -MG           d:o, missing files assumed generated\n"
-        "    -MF file      set Makefile dependency file\n"
-        "    -MD file      assemble and generate dependencies\n"
-        "    -MT file      dependency target name\n"
-        "    -MQ file      dependency target name (quoted)\n"
-        "    -MP           emit phony targets\n"
-        "\n"
-        "    -f format     select output file format\n"
-        , out);
-    ofmt_list(ofmt, out);
-    fputs(
-        "\n"
-        "    -g            generate debugging information\n"
-        "    -F format     select a debugging format (output format dependent)\n"
-        "    -gformat      same as -g -F format\n"
-        , out);
-    dfmt_list(out);
-    fputs(
-        "\n"
-        "    -l listfile   write listing to a list file\n"
-        "    -Lflags...    add optional information to the list file\n"
-        "       -Lb        show builtin macro packages (standard and %use)\n"
-        "       -Ld        show byte and repeat counts in decimal, not hex\n"
-        "       -Le        show the preprocessed output\n"
-        "       -Lf        ignore .nolist (force output)\n"
-        "       -Lm        show multi-line macro calls with expanded parmeters\n"
-        "       -Lp        output a list file every pass, in case of errors\n"
-        "       -Ls        show all single-line macro definitions\n"
-        "       -Lw        flush the output after every line\n"
-        "       -L+        enable all listing options (very verbose!)\n"
-        "\n"
-        "    -Oflags...    optimize opcodes, immediates and branch offsets\n"
-        "       -O0        no optimization\n"
-        "       -O1        minimal optimization\n"
-        "       -Ox        multipass optimization (default)\n"
-        "       -Ov        display the number of passes executed at the end\n"
-        "    -t            assemble in limited SciTech TASM compatible mode\n"
-        "\n"
-        "    -E (or -e)    preprocess only (writes output to stdout by default)\n"
-        "    -a            don't preprocess (assemble only)\n"
-        "    -Ipath        add a pathname to the include file path\n"
-        "    -Pfile        pre-include a file (also --include)\n"
-        "    -Dmacro[=str] pre-define a macro\n"
-        "    -Umacro       undefine a macro\n"
-        "   --pragma str   pre-executes a specific %%pragma\n"
-        "   --before str   add line (usually a preprocessor statement) before the input\n"
-        "   --no-line      ignore %line directives in input\n"
-        "\n"
-        "   --prefix str   prepend the given string to the names of all extern,\n"
-        "                  common and global symbols (also --gprefix)\n"
-        "   --suffix str   append the given string to the names of all extern,\n"
-        "                  common and global symbols (also --gprefix)\n"
-        "   --lprefix str  prepend the given string to local symbols\n"
-        "   --lpostfix str append the given string to local symbols\n"
-        "\n"
-        "   --macho-min-os minos minimum os version for mach-o format(example: macos-11.0)\n"
-        "\n"
-        "    -w+x          enable warning x (also -Wx)\n"
-        "    -w-x          disable warning x (also -Wno-x)\n"
-        "    -w[+-]error   promote all warnings to errors (also -Werror)\n"
-        "    -w[+-]error=x promote warning x to errors (also -Werror=x)\n"
-        , out);
+#define SEE(x) (with == HW_OPT ? " (see -h " x ")" : "")
 
-    fprintf(out, "       %-20s %s\n",
-            warning_name[WARN_IDX_ALL], warning_help[WARN_IDX_ALL]);
+    with = HW_ERR;
 
-    for (i = 1; i < WARN_IDX_ALL; i++) {
-        const char *me   = warning_name[i];
-        const char *prev = warning_name[i-1];
-        const char *next = warning_name[i+1];
+    if (!what || !*what || !strcmp(what, "-") || !strcmp(what, "--") ||
+        !nasm_stricmp(what, "opt") ||
+        !nasm_stricmp(what, "run") ||
+        !nasm_stricmp(what, "cmd")) {
+        with = HW_OPT;
+    } else if (!nasm_stricmp(what, "all")) {
+        with = HW_ALL;
+    } else if (!nasm_strnicmp(what, "--limit", 7) ||
+               !nasm_strnicmp(what, "limit", 5)) {
+        with = HW_LIMIT;
+    } else if (!nasm_stricmp(what, "--help") ||
+               !nasm_stricmp(what, "help") ||
+               !nasm_stricmp(what, "list") ||
+               !nasm_stricmp(what, "topics") ||
+               !nasm_stricmp(what, "index")) {
+        with = 'h';
+    } else if ((what[0] == '-' && what[1] && !what[2]) ||
+               (what[0] && !what[1])) {
+        with = what[0] == '-' ? what[1] : what[0];
+        switch (with) {
+        case 'h':
+        case 'X':
+        case 'L':
+        case 'f':
+        case 'F':
+        case 'O':
+        case 'w':
+        case 'M':
+            break;
+        case 'g':
+            with = 'F';
+            break;
+        case 'W':
+            with = 'w';
+            break;
+        case '?':
+            with = 'h';
+            break;
+        case '*':
+            with = HW_ALL;
+            break;
+        default:
+            with = HW_ERR;
+            break;
+        }
+    }
 
-        if (prev) {
-            int prev_len = strlen(prev);
-            const char *dash = me;
+    if (with == HW_ERR) {
+        fprintf(out, "Sorry, no help available for `%s'\n", what);
+        return;
+    }
 
-            while ((dash = strchr(dash+1, '-'))) {
-                int prefix_len = dash - me; /* Not including final dash */
-                if (strncmp(next, me, prefix_len+1)) {
-                    /* Only one or last option with this prefix */
-                    break;
-                }
-                if (prefix_len >= prev_len ||
-                    strncmp(prev, me, prefix_len) ||
-                    (prev[prefix_len] != '-' && prev[prefix_len] != '\0')) {
-                    /* This prefix is different from the previous option */
-                    fprintf(out, "       %-20.*s all warnings prefixed with \"%.*s\"\n",
-                            prefix_len, me, prefix_len+1, me);
+    if (help_opt(with)) {
+        fprintf(out,
+                "Usage: %s [-@ response_file] [options...] [--] filename\n"
+                "  Options:\n"
+                "    -v (or --v)    print the NASM version number and exit\n"
+                "    -@ file        response file; one command line option per line\n",
+                _progname);
+    }
+    if (help_optor(with, 'h')) {
+        fputs(
+            "    -h             list command line options and exit (also --help)\n"
+            , out);
+        if (with == HW_OPT) {
+            fputs(
+                "    -h -opt        show additional help for option \"-opt\"\n"
+                , out);
+        }
+        fputs(
+            "    -h all         show all available command line help\n"
+            "    -h topics      show list of help topics (also -h list)\n"
+            , out);
+    }
+    if (help_is(with, 'h')) {
+        fputs(
+            "    -h -X          show list of error message formats\n"
+            "    -h -M          show list of dependency generation options\n"
+            "    -h -f          show list of object code output formats\n"
+            "    -h -F          show list of debug information formats\n"
+            "    -h -L          show list of list file option flags\n"
+            "    -h -O          show list of optimization flags\n"
+            "    -h -w          show list of warning classes and defaults\n"
+            "    -h --limit     show list of resource limits and defaults\n"
+            , out);
+    }
+    if (help_opt(with)) {
+        fputs(
+            "    -o outfile     write output to outfile\n"
+            "    --keep-all     output files will not be removed even if an error happens\n"
+            , out);
+    }
+    if (help_optor(with, 'X')) {
+        fprintf(out,
+                "    -Xformat       specify error reporting format%s\n",
+                SEE("-X"));
+    }
+    if (help_is(with, 'X')) {
+        fputs(
+            "    -Xgnu          report errors in GNU format (default)\n"
+            "    -Xgcc          alias for -Xgnu\n"
+            "    -Xvc           report errors in Visual Studio format\n"
+            "    -Xmsvc         alias for -Xvc\n"
+            "    -Xms           alias for -Xvc\n"
+            , out);
+    }
+    if (help_opt(with)) {
+        fputs(
+            "    -s             redirect error messages to stdout\n"
+            "    -Zfile         redirect error messages to file\n"
+            , out);
+    }
+    if (help_optor(with, 'M')) {
+        fprintf(out,
+                "    -M...          generate Makefile dependencies%s\n",
+                with == HW_OPT
+                ? " (see -h -M)"
+                : " (multiple options permitted):");
+    }
+    if (help_is(with, 'M')) {
+        fputs(
+            "    -M             generate Makefile dependencies on stdout\n"
+            "    -MG            d:o, missing files assumed generated\n"
+            "    -MF file       set Makefile dependency file\n"
+            "    -MD file       assemble and generate dependencies\n"
+            "    -MT file       dependency target name\n"
+            "    -MQ file       dependency target name (quoted)\n"
+            "    -MP            emit phony targets\n"
+            "    -MW            generate output in Watcom wmake syntax\n"
+            , out);
+    }
+    if (help_optor(with, 'f')) {
+        fprintf(out,
+                "    -f format      select output file format%s\n",
+                SEE("-f"));
+    }
+    if (help_is(with, 'f')) {
+        ofmt_list(ofmt, out);
+    }
+    if (help_optor(with, 'F')) {
+        fprintf(out,
+                "    -g             generate debugging information\n"
+                "    -F format      select a debugging format%s\n"
+                "    -gformat       same as -g -F format\n",
+                SEE("-F"));
+    }
+    if (help_is(with, 'F')) {
+        dfmt_list(out);
+    }
+    if (help_optor(with, 'L')) {
+        fprintf(out,
+                "    -l listfile    write listing to a list file\n"
+                "    -Lflags...     add information to the list file%s\n",
+                SEE("-L"));
+    }
+    if (help_is(with, 'L')) {
+        fputs(
+            "       -Lb         show builtin macro packages (standard and %use)\n"
+            "       -Ld         show byte and repeat counts in decimal, not hex\n"
+            "       -Le         show the preprocessed output\n"
+            "       -Lf         ignore .nolist (force output)\n"
+            "       -Lm         show multi-line macro calls with expanded parameters\n"
+            "       -Lp         output a list file every pass, in case of errors\n"
+            "       -Ls         show all single-line macro definitions\n"
+            "       -Lw         flush the output after every line (very slow!)\n"
+            "       -L+         enable all listing options except -Lw (very verbose!)\n"
+            , out);
+    }
+    if (help_optor(with, 'O')) {
+        fprintf(out,
+                "    -Oflags...     select optimization%s\n", SEE("-O"));
+    }
+    if (help_is(with, 'O')) {
+        fputs(
+            "       -O0       no optimization\n"
+            "       -O1       minimal optimization\n"
+            "       -Ox       multipass optimization (default, recommended)\n"
+            "       -Ov       display the number of passes executed at the end\n"
+            , out);
+    }
+    if (help_opt(with)) {
+        fputs(
+            "    -t             assemble in limited SciTech TASM compatible mode\n"
+            "    -E (or -e)     preprocess only (writes output to stdout by default)\n"
+            "    -a             don't preprocess (assemble only)\n"
+            "    -Ipath         add a pathname to the include file path\n"
+            "    -Pfile         pre-include a file (also --include)\n"
+            "    -Dmacro[=str]  pre-define a macro\n"
+            "    -Umacro        undefine a macro\n"
+            , out);
+    }
+    if (help_optor(with, 'w')) {
+        fprintf(out,
+                "    -w+x           enable warning x %s(also -Wx)\n"
+                "    -w-x           disable warning x (also -Wno-x)\n"
+                "    -w[+-]error    promote all warnings to errors (also -Werror)\n"
+                "    -w[+-]error=x  promote warning x to errors (also -Werror=x)\n",
+                SEE("-w"));
+    }
+    if (help_is(with, 'w')) {
+        fputs("      Defaults in brackets:\n", out);
+
+        fprintf(out, "       %-20s %s\n",
+                warning_name[WARN_IDX_ALL], warning_help[WARN_IDX_ALL]);
+
+        for (i = 1; i < WARN_IDX_ALL; i++) {
+            static const char nl_indent[] =
+                "\n                            ";
+            const char *me   = warning_name[i];
+            const char *prev = warning_name[i-1];
+            const char *next = warning_name[i+1];
+
+            if (prev) {
+                int prev_len = strlen(prev);
+                const char *dash = me;
+
+                while ((dash = strchr(dash+1, '-'))) {
+                    int prefix_len = dash - me; /* Not including final dash */
+                    if (strncmp(next, me, prefix_len+1)) {
+                        /* Only one or last option with this prefix */
+                        break;
+                    }
+                    if (prefix_len >= prev_len ||
+                        strncmp(prev, me, prefix_len) ||
+                        (prev[prefix_len] != '-' && prev[prefix_len] != '\0')) {
+                        /* This prefix is different from the previous option */
+                        fprintf(out, "       %-20.*s%sall warnings prefixed with \"%.*s\"\n",
+                                prefix_len, me,
+                                prefix_len > 19 ? nl_indent : " ",
+                                prefix_len+1, me);
+                    }
                 }
             }
-        }
 
-        fprintf(out, "       %-20s %s%s\n",
-                warning_name[i], warning_help[i],
-                (warning_default[i] & WARN_ST_ERROR) ? " [error]" :
-                (warning_default[i] & WARN_ST_ENABLED) ? " [on]" : " [off]");
-    }
-
-    fputs(
-        "\n"
-        "   --limit-X val  set execution limit X\n"
-        , out);
-
-
-    for (i = 0; i <= LIMIT_MAX; i++) {
-        fprintf(out, "       %-20s %s [",
-                limit_info[i].name, limit_info[i].help);
-        if (nasm_limit[i] < LIMIT_MAX_VAL) {
-            fprintf(out, "%"PRId64"]\n", nasm_limit[i]);
-        } else {
-            fputs("unlimited]\n", out);
+            fprintf(out, "       %-20s%s%s%s\n",
+                    warning_name[i],
+                    strlen(warning_name[i]) > 19 ? nl_indent : " ",
+                    warning_help[i],
+                    (warning_default[i] & WARN_ST_ERROR) ? " [error]" :
+                    (warning_default[i] & WARN_ST_ENABLED) ? " [on]" : " [off]");
         }
     }
+    if (help_opt(with)) {
+        fputs(
+            "    --pragma str   pre-executes a specific %pragma\n"
+            "    --before str   add line (usually a preprocessor statement) before the input\n"
+            "    --no-line      ignore %line directives in input\n"
+            "    --prefix str   prepend the given string to the names of all extern,\n"
+            "                   common and global symbols (also --gprefix)\n"
+            "    --suffix str   append the given string to the names of all extern,\n"
+            "                   common and global symbols (also --gprefix)\n"
+            "    --lprefix str  prepend the given string to local symbols\n"
+            "    --lpostfix str append the given string to local symbols\n"
+            "    --reproducible attempt to produce run-to-run identical output\n"
+            "    --macho-min-os minos minimum os version for mach-o format(example: macos-11.0)\n"
+            , out);
+    }
+    if (help_optor(with, HW_LIMIT)) {
+        fprintf(out, "    --limit-X val  set execution limit X%s\n",
+                SEE("--limit"));
+    }
+    if (help_is(with, HW_LIMIT)) {
+        fputs("      Defaults in brackets:\n", out);
+
+        for (i = 0; i <= LIMIT_MAX; i++) {
+            fprintf(out, "       %-20s %s [",
+                    limit_info[i].name, limit_info[i].help);
+            if (nasm_limit[i] < LIMIT_MAX_VAL) {
+                fprintf(out, "%"PRId64"]\n", nasm_limit[i]);
+            } else {
+                fputs("unlimited]\n", out);
+            }
+        }
+    }
+#undef SEE
 }

@@ -64,6 +64,7 @@ COMPONENT_EXPORT(GOOGLE_APIS) extern const char kCryptAuthOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kDriveOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS)
 extern const char kExperimentsAndConfigsOAuth2Scope[];
+COMPONENT_EXPORT(GOOGLE_APIS) extern const char kClientChannelOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kDriveReadOnlyOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS) extern const char kAssistantOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS)
@@ -87,6 +88,8 @@ COMPONENT_EXPORT(GOOGLE_APIS)
 extern const char kCloudSearchQueryOAuth2Scope[];
 COMPONENT_EXPORT(GOOGLE_APIS)
 extern const char kDiscoveryEngineCompleteQueryOAuth2Scope[];
+COMPONENT_EXPORT(GOOGLE_APIS)
+extern const char kGeminiOAuth2Scope[];
 
 // OAuth 2 scopes for Google Tasks API.
 // https://developers.google.com/identity/protocols/oauth2/scopes#tasks

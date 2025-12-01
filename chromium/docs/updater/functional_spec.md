@@ -361,6 +361,18 @@ process is determined by command-line arguments:
         *   If --browser-version is specified, --recover can be omitted.
     *  --sessionid=...
         *   Specifies the sesionid associated with this recovery attempt.
+*   --force-install
+    * This switch does the following:
+      * Force-installs the metainstaller that is run with this switch and makes
+        it the active `updater`.
+      * Installs the application(s) that are implicitly specified in the tagged
+        metainstaller, or explicitly specified using the `--install` or
+        `--handoff` parameters.
+*   `RUNFORCEINSTALL` (for MSI installers)
+    * Allows running an MSI metainstaller with the `--force-install` option.
+    * In addition, if the MSI is tagged, this also installs the application(s)
+      that are implicitly specified in the tag.
+    * For example, `msiexec /i GoogleChrome.msi RUNFORCEINSTALL=1`.
 *   --test
     *   Exit immediately with no error.
 *   --healthcheck
@@ -967,6 +979,12 @@ Note the device must have a valid DM token for the downloaded CBCM policies to
 be effective.
 
 ### Enterprise Policies
+Some updater behavior can be controlled by enterprise policies. Policies are
+only respected on devices that are "domain-joined", enrolled in Chrome
+Enterprise Core, or (on macOS) managed by MDM. A device is "domain-joined" if
+it is on Windows and enrolled in an Active Directory domain or Azure Active
+Directory domain, or it is on macOS and joined to a domain via MCX.
+
 Enterprise policies can prevent the installation of applications:
 
 * A per-application setting may specify whether an application is installable.

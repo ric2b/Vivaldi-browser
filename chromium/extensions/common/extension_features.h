@@ -7,6 +7,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "extensions/buildflags/buildflags.h"
 
 namespace extensions_features {
 
@@ -78,12 +79,32 @@ BASE_DECLARE_FEATURE(kApiEnterpriseReportingPrivateOnDataMaskingRulesTriggered);
 // requested host permissions by default.
 BASE_DECLARE_FEATURE(kAllowWithholdingExtensionPermissionsOnInstall);
 
+#if BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
+// Blocks installing extensions on Desktop Android (experimental). This feature
+// is available only for Desktop Android builds.
+// This feature should not be added to fieldtrial_testing_config.json, even
+// though it may be enabled via Finch, since that would enable it on ToT for
+// bots, and we don't want that.
+BASE_DECLARE_FEATURE(kBlockInstallingExtensionsOnDesktopAndroid);
+#endif  // BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
+
 // When enabled, then bad_message::ReceivedBadMessage will be called when
 // browser receives an IPC from a content script and the IPC that unexpectedly
 // claims to act on behalf of a given extension id, (i.e. even if the browser
 // process things that renderer process never run content scripts from the
 // extension).
 BASE_DECLARE_FEATURE(kCheckingNoExtensionIdInExtensionIpcs);
+
+// If enabled, defers the execution of WebRequestAPI call of
+// `ResetURLLoaderFactories()` to when there's no extension service worker
+// registrations in flight, to avoid disrupting the worker(s) registration(s).
+BASE_DECLARE_FEATURE(kDeferResetURLLoaderFactories);
+
+// If enabled, `ResetURLLoaderFactories()` will not reset extensions'
+// service workers URLLoaderFactories used for fetching scripts and
+// sub-resources. This avoids disrupting the worker(s) registration(s)
+// when they are in flight.
+BASE_DECLARE_FEATURE(kSkipResetServiceWorkerURLLoaderFactories);
 
 // If enabled, <webview>s will be allowed to request permission from an
 // embedding Chrome App to request access to Human Interface Devices.
@@ -120,9 +141,6 @@ extern const base::FeatureParam<std::string>
 // This will be removed once the ExtensionManifestV2Availability enterprise
 // policy is no longer supported.
 BASE_DECLARE_FEATURE(kAllowLegacyMV2Extensions);
-
-// IsValidSourceUrl enforcement for ExtensionHostMsg_OpenChannelToExtension IPC.
-BASE_DECLARE_FEATURE(kExtensionSourceUrlEnforcement);
 
 // Controls whether server-side redirects are subject to extensions' web
 // accessible resource restrictions.
@@ -206,7 +224,7 @@ BASE_DECLARE_FEATURE(kWinRejectDotSpaceSuffixFilePaths);
 // matching condition.
 BASE_DECLARE_FEATURE(kDeclarativeNetRequestResponseHeaderMatching);
 
-// Enables a relaxed rule count for "safe" dynqmic or session scoped rules above
+// Enables a relaxed rule count for "safe" dynamic or session scoped rules above
 // the current limit. If disabled, all dynamic and session scoped rules are
 // treated as "safe" but the rule limit's value will be the stricter "unsafe"
 // limit.
@@ -237,6 +255,9 @@ BASE_DECLARE_FEATURE(kSilentDebuggerExtensionAPI);
 // TODO(https://crbug.com/334991035): Remove this feature after we're confident
 // nothing breaks.
 BASE_DECLARE_FEATURE(kRemoveCoreSiteInstance);
+
+// Disables loading extensions via the `--load-extension` command line switch.
+BASE_DECLARE_FEATURE(kDisableLoadExtensionCommandLineSwitch);
 
 // Changes the chrome.userScript API to be enabled by a per-extension toggle
 // rather than the developer mode toggle on chrome://extensions.

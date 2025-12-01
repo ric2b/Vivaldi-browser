@@ -11,6 +11,8 @@
 #include "base/functional/callback_forward.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -129,6 +131,8 @@ class TestBounceDetectorDelegate : public BtmBounceDetectorDelegate {
                              CookieOperation op,
                              bool http_cookie) override {}
 
+  bool Are3PcsGenerallyEnabled() const override { return false; }
+
   // Get the (committed) URL that the SourceId was generated for.
   const std::string& URLForSourceId(ukm::SourceId source_id) {
     return url_by_source_id_[source_id];
@@ -164,13 +168,13 @@ class TestBounceDetectorDelegate : public BtmBounceDetectorDelegate {
 
  private:
   void RecordBounce(
-      const GURL& url,
-      bool has_3pc_exception,
-      const GURL& final_url,
-      base::Time time,
-      bool stateful,
+      const BtmRedirectInfo& redirect,
+      const BtmRedirectChainInfo& chain,
       base::RepeatingCallback<void(const GURL&)> increment_bounce_callback) {
-    recorded_bounces_.insert(std::make_tuple(url, time, stateful));
+    bool stateful = redirect.access_type > BtmDataAccessType::kRead;
+
+    recorded_bounces_.insert(
+        std::make_tuple(redirect.redirecting_url.url, redirect.time, stateful));
     if (stateful) {
       stateful_bounce_count_++;
     }
@@ -762,13 +766,13 @@ TEST_F(BtmBounceDetectorTest,
 }
 
 TEST_F(BtmBounceDetectorTest,
-       ReportRedirectorsInChain_OmitNonStatefulRedirects) {
+       ReportRedirectorsInChain_IncludingNonStatefulRedirects) {
   // Visit initial page on a.test and access cookies via JS.
   NavigateTo("http://a.test", kWithUserGesture);
   AccessClientCookie(CookieOperation::kChange);
 
-  // Navigate with a click (not a redirect) to b.test, which S-redirects to
-  // c.test (which doesn't access cookies).
+  // Navigate with a click (not a redirect) to b.test, which accesses cookies,
+  // then S-redirects to c.test (which doesn't access cookies).
   StartNavigation("http://b.test", kWithUserGesture)
       .AccessCookie(CookieOperation::kChange)
       .RedirectTo("http://c.test")
@@ -778,15 +782,16 @@ TEST_F(BtmBounceDetectorTest,
   // Navigate without a click (i.e. by C-redirecting) to d.test (which doesn't
   // access cookies).
   NavigateTo("http://d.test", kNoUserGesture);
-  EXPECT_THAT(GetReportedSites(), testing::ElementsAre("b.test"));
+  EXPECT_THAT(GetReportedSites(), testing::ElementsAre("b.test", "c.test"));
 
-  // Navigate without a click (i.e. by C-redirecting) to e.test, which
-  // S-redirects to f.test.
+  // Navigate without a click (i.e. by C-redirecting) to e.test, which accesses
+  // cookies, then S-redirects to f.test.
   StartNavigation("http://e.test", kNoUserGesture)
       .AccessCookie(CookieOperation::kChange)
       .RedirectTo("http://f.test")
       .Finish(true);
-  EXPECT_THAT(GetReportedSites(), testing::ElementsAre("b.test", "e.test"));
+  EXPECT_THAT(GetReportedSites(),
+              testing::ElementsAre("b.test", "c.test", "d.test, e.test"));
 }
 
 // This test verifies that sites in a redirect chain that are the same as the
@@ -969,7 +974,7 @@ TEST_F(BtmBounceDetectorTest, Histograms_UKM) {
   EndPendingRedirectChain();
 
   std::vector<ukm::TestUkmRecorder::HumanReadableUkmEntry> ukm_entries =
-      ukm_recorder.GetEntries("DIPS.Redirect", GetAllRedirectMetrics());
+      ukm_recorder.GetEntries("BTM.Redirect", GetAllRedirectMetrics());
   ASSERT_EQ(2u, ukm_entries.size());
 
   EXPECT_THAT(URLForNavigationSourceId(ukm_entries[0].source_id),
@@ -1117,6 +1122,10 @@ BtmRedirectInfoPtr MakeClientRedirect(
       /*web_authn_assertion_request_succeeded*/ has_web_authn_assertion);
 }
 
+Btm3PcSettingsCallback GetAre3pcsAllowedCallback() {
+  return base::BindRepeating([] { return false; });
+}
+
 MATCHER_P(HasUrl, url, "") {
   *result_listener << "whose url is " << arg->redirecting_url.url;
   return ExplainMatchResult(Eq(url), arg->redirecting_url.url, result_listener);
@@ -1154,7 +1163,7 @@ TEST(BtmRedirectContextTest, OneAppend) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
   context.AppendCommitted(
@@ -1168,6 +1177,7 @@ TEST(BtmRedirectContextTest, OneAppend) {
   EXPECT_THAT(chains[0].first,
               AllOf(HasInitialUrl("http://a.test/"),
                     HasFinalUrl("http://d.test/"), HasLength(2u)));
+  EXPECT_FALSE(chains[0].first->are_3pcs_generally_enabled);
   EXPECT_THAT(chains[0].second,
               ElementsAre(HasUrl("http://b.test/"), HasUrl("http://c.test/")));
 }
@@ -1176,7 +1186,7 @@ TEST(BtmRedirectContextTest, TwoAppends_NoClientRedirect) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
   context.AppendCommitted(
@@ -1207,7 +1217,7 @@ TEST(BtmRedirectContextTest, TwoAppends_WithClientRedirect) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
   context.AppendCommitted(
@@ -1243,7 +1253,7 @@ TEST(BtmRedirectContextTest, OnlyClientRedirects) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
   context.AppendCommitted(MakeUrlAndId("http://a.test/"), {},
@@ -1269,7 +1279,7 @@ TEST(BtmRedirectContextTest, OverflowMaxChain_TrimsFromFront) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   context.AppendCommitted(MakeUrlAndId("http://a.test/"), {},
                           MakeUrlAndId("http://c.test/"), false);
@@ -1321,7 +1331,7 @@ TEST(BtmRedirectContextTest, Uncommitted_NoClientRedirects) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
   context.AppendCommitted(
@@ -1363,7 +1373,7 @@ TEST(BtmRedirectContextTest, Uncommitted_IncludingClientRedirects) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
   context.AppendCommitted(
@@ -1407,7 +1417,7 @@ TEST(BtmRedirectContextTest, NoRedirects) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(chains.size(), 0u);
 
@@ -1437,7 +1447,7 @@ TEST(BtmRedirectContextTest, AddLateCookieAccess) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
 
   context.AppendCommitted(
@@ -1506,124 +1516,12 @@ TEST(BtmRedirectContextTest, AddLateCookieAccess) {
                         HasBtmDataAccessType(BtmDataAccessType::kRead))));
 }
 
-TEST(BtmRedirectContextTest, GetRedirectHeuristicURLs_NoRequirements) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      content_settings::features::kTpcdHeuristicsGrants,
-      {{"TpcdRedirectHeuristicRequireABAFlow", "false"}});
-
-  UrlAndSourceId first_party_url = MakeUrlAndId("http://a.test/");
-  UrlAndSourceId current_interaction_url = MakeUrlAndId("http://b.test/");
-  GURL no_current_interaction_url("http://c.test/");
-
-  std::vector<ChainPair> chains;
-  BtmRedirectContext context(
-      base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
-      /*redirect_prefix_count=*/0);
-
-  context.AppendCommitted(first_party_url,
-                          {MakeServerRedirects({"http://c.test"})},
-                          current_interaction_url, false);
-  context.AppendCommitted(
-      MakeClientRedirect("http://b.test/", BtmDataAccessType::kNone,
-                         /*has_sticky_activation=*/true),
-      {}, first_party_url, false);
-
-  ASSERT_EQ(context.size(), 2u);
-
-  std::map<std::string, std::pair<GURL, bool>>
-      sites_to_url_and_current_interaction = context.GetRedirectHeuristicURLs(
-          first_party_url.url, std::nullopt,
-          /*require_current_interaction=*/false);
-  EXPECT_THAT(
-      sites_to_url_and_current_interaction,
-      testing::UnorderedElementsAre(
-          std::pair<std::string, std::pair<GURL, bool>>(
-              "b.test", std::make_pair(current_interaction_url.url, true)),
-          std::pair<std::string, std::pair<GURL, bool>>(
-              "c.test", std::make_pair(no_current_interaction_url, false))));
-}
-
-TEST(BtmRedirectContextTest, GetRedirectHeuristicURLs_RequireABAFlow) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      content_settings::features::kTpcdHeuristicsGrants,
-      {{"TpcdRedirectHeuristicRequireABAFlow", "true"}});
-
-  UrlAndSourceId first_party_url = MakeUrlAndId("http://a.test/");
-  GURL aba_url("http://b.test/");
-  GURL no_aba_url("http://c.test/");
-
-  std::vector<ChainPair> chains;
-  BtmRedirectContext context(
-      base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
-      /*redirect_prefix_count=*/0);
-
-  context.AppendCommitted(
-      first_party_url,
-      {MakeServerRedirects({"http://b.test", "http://c.test"})},
-      first_party_url, false);
-
-  ASSERT_EQ(context.size(), 2u);
-
-  std::set<std::string> allowed_sites = {GetSiteForBtm(aba_url)};
-
-  std::map<std::string, std::pair<GURL, bool>>
-      sites_to_url_and_current_interaction = context.GetRedirectHeuristicURLs(
-          first_party_url.url, allowed_sites,
-          /*require_current_interaction=*/false);
-  EXPECT_THAT(sites_to_url_and_current_interaction,
-              testing::UnorderedElementsAre(
-                  std::pair<std::string, std::pair<GURL, bool>>(
-                      "b.test", std::make_pair(aba_url, false))));
-}
-
-TEST(BtmRedirectContextTest,
-     GetRedirectHeuristicURLs_RequireCurrentInteraction) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeatureWithParameters(
-      content_settings::features::kTpcdHeuristicsGrants,
-      {{"TpcdRedirectHeuristicRequireABAFlow", "false"}});
-
-  UrlAndSourceId first_party_url = MakeUrlAndId("http://a.test/");
-  UrlAndSourceId current_interaction_url = MakeUrlAndId("http://b.test/");
-  GURL no_current_interaction_url("http://c.test/");
-
-  std::vector<ChainPair> chains;
-  BtmRedirectContext context(
-      base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
-      /*redirect_prefix_count=*/0);
-
-  context.AppendCommitted(first_party_url,
-                          {MakeServerRedirects({"http://c.test"})},
-                          current_interaction_url, false);
-  context.AppendCommitted(
-      MakeClientRedirect("http://b.test/", BtmDataAccessType::kNone,
-                         /*has_sticky_activation=*/false, true),
-      {}, first_party_url, false);
-
-  ASSERT_EQ(context.size(), 2u);
-
-  std::map<std::string, std::pair<GURL, bool>>
-      sites_to_url_and_current_interaction = context.GetRedirectHeuristicURLs(
-          first_party_url.url, std::nullopt,
-          /*require_current_interaction=*/true);
-  EXPECT_THAT(
-      sites_to_url_and_current_interaction,
-      testing::UnorderedElementsAre(
-          std::pair<std::string, std::pair<GURL, bool>>(
-              "b.test", std::make_pair(current_interaction_url.url, true))));
-}
-
 TEST(BtmRedirectContextTest,
      GetServerRedirectsSinceLastPrimaryPageChangeNoRedirects) {
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   ASSERT_EQ(context.size(), 0u);
 
@@ -1638,7 +1536,7 @@ TEST(BtmRedirectContextTest,
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   context.AppendCommitted(
       MakeClientRedirect("http://a.test/", BtmDataAccessType::kNone, false,
@@ -1657,7 +1555,7 @@ TEST(BtmRedirectContextTest,
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   context.AppendCommitted(
       MakeUrlAndId("http://a.test/"),
@@ -1681,7 +1579,7 @@ TEST(
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   context.AppendCommitted(MakeUrlAndId("http://a.test"),
                           {MakeServerRedirects({"http://b.test"})},
@@ -1704,7 +1602,7 @@ TEST(
   std::vector<ChainPair> chains;
   BtmRedirectContext context(
       base::BindRepeating(AppendChainPair, std::ref(chains)), base::DoNothing(),
-      UrlAndSourceId(),
+      GetAre3pcsAllowedCallback(), UrlAndSourceId(),
       /*redirect_prefix_count=*/0);
   context.AppendCommitted(MakeUrlAndId("http://a.test/"),
                           {MakeServerRedirects({"http://b.test/"})},

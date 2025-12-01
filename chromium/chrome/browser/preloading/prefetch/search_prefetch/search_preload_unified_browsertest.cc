@@ -38,12 +38,14 @@
 #include "content/public/browser/preloading.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/preloading_test_util.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/test_navigation_observer.h"
+#include "net/base/features.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -167,7 +169,8 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
     )";
     base::StringPairs headers = {
         {"Content-Length", base::NumberToString(content.length())},
-        {"content-type", "text/html"}};
+        {"content-type", "text/html"},
+        {"No-Vary-Search", "params=(\"pf\" \"gs_lcrp\")"}};
     bool is_invalid_response_body =
         request.GetURL().spec().find("invalid_content") != std::string::npos;
 
@@ -333,32 +336,6 @@ class SearchPreloadUnifiedBrowserTest : public PlatformBrowserTest,
         ui::PageTransitionFromInt(ui::PAGE_TRANSITION_GENERATED |
                                   ui::PAGE_TRANSITION_FROM_ADDRESS_BAR));
     observer.Wait();
-  }
-
-  void WaitForActivatedPageLoaded() {
-    // TODO(crbug.com/40256454):
-    // `content::WaitForLoadStop(GetActiveWebContents())` would end before the
-    // page actually finishes loading. This is the workaround to ensure that the
-    // page is fully loaded.
-    std::string script_string = R"(
-      function get_inner_html () {
-        if(document.documentElement){
-          return document.documentElement.innerHTML;
-        }
-        return "";
-      }
-      get_inner_html();
-    )";
-    while (true) {
-      std::string inner_html =
-          content::EvalJs(GetActiveWebContents(), script_string)
-              .ExtractString();
-      if (base::Contains(inner_html, "PREFETCH")) {
-        break;
-      }
-      base::RunLoop run_loop;
-      run_loop.RunUntilIdle();
-    }
   }
 
   content::test::PrerenderTestHelper& prerender_helper() {
@@ -1004,29 +981,6 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest, ChunkedResponseBody) {
   DispatchDelayedResponseTask();
   content::WaitForLoadStop(GetActiveWebContents());
 
-  // TODO(crbug.com/40256454):
-  // `content::WaitForLoadStop(GetActiveWebContents())` would end before the
-  // page actually finishes loading. This is the workaround to ensure that the
-  // page is fully loaded.
-  std::string script_string = R"(
-      function get_inner_html () {
-        if(document.documentElement){
-          return document.documentElement.innerHTML;
-        }
-        return "";
-      }
-      get_inner_html();
-    )";
-  while (true) {
-    std::string inner_html =
-        content::EvalJs(GetActiveWebContents(), script_string).ExtractString();
-    if (base::Contains(inner_html, "PREFETCH")) {
-      break;
-    }
-    base::RunLoop run_loop;
-    run_loop.RunUntilIdle();
-  }
-
   // Prerender should not retry the request.
   EXPECT_EQ(0, prerender_helper().GetRequestCount(expected_prerender_url));
   EXPECT_EQ(1, prerender_helper().GetRequestCount(expected_prefetch_url));
@@ -1244,29 +1198,48 @@ IN_PROC_BROWSER_TEST_F(HoldbackSearchPreloadUnifiedBrowserTest,
 // Disables BFCache for testing back forward navigation can reuse the HTTP
 // Cache.
 class HTTPCacheSearchPreloadUnifiedBrowserTest
-    : public SearchPreloadUnifiedBrowserTest {
+    : public testing::WithParamInterface<bool>,
+      public SearchPreloadUnifiedBrowserTest {
  public:
   HTTPCacheSearchPreloadUnifiedBrowserTest() {
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {
-            {kSearchPrefetchServicePrefetching,
-             {{"max_attempts_per_caching_duration", "3"},
-              {"cache_size", "4"},
-              {"device_memory_threshold_MB", "0"}}},
-        },
-        // Disable BackForwardCache to ensure that the page is not restored from
-        // the cache.
-        /*disabled_features=*/{features::kBackForwardCache,
-                               net::features::kHttpCacheNoVarySearch,
-                               kSearchPrefetchWithNoVarySearchDiskCache});
+    std::vector<base::test::FeatureRefAndParams> enabled_features = {
+        {kSearchPrefetchServicePrefetching,
+         {{"max_attempts_per_caching_duration", "3"},
+          {"cache_size", "4"},
+          {"device_memory_threshold_MB", "0"}}}};
+    std::vector<base::test::FeatureRef> disabled_features = {};
+    if (GetParam()) {
+      enabled_features.emplace_back(base::test::FeatureRefAndParams(
+          kSearchPrefetchWithNoVarySearchDiskCache, {}));
+      enabled_features.emplace_back(base::test::FeatureRefAndParams(
+          net::features::kHttpCacheNoVarySearch, {{"max_entries", "10"}}));
+    } else {
+      disabled_features.push_back(kSearchPrefetchWithNoVarySearchDiskCache);
+      disabled_features.push_back(net::features::kHttpCacheNoVarySearch);
+    }
+    scoped_feature_list_.InitWithFeaturesAndParameters(enabled_features,
+                                                       disabled_features);
+  }
+
+  void SetUpOnMainThread() override {
+    // Disable back/forward cache to ensure that it doesn't get preserved in the
+    // back/forward cache.
+    content::DisableBackForwardCacheForTesting(
+        GetActiveWebContents(),
+        content::BackForwardCache::TEST_REQUIRES_NO_CACHING);
+    SearchPreloadUnifiedBrowserTest::SetUpOnMainThread();
   }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
+INSTANTIATE_TEST_SUITE_P(All,
+                         HTTPCacheSearchPreloadUnifiedBrowserTest,
+                         testing::Bool());
+
 // Test back or forward navigations can use the HTTP Cache.
-IN_PROC_BROWSER_TEST_F(HTTPCacheSearchPreloadUnifiedBrowserTest,
+IN_PROC_BROWSER_TEST_P(HTTPCacheSearchPreloadUnifiedBrowserTest,
                        BackwardHitHttpCache) {
   base::HistogramTester histogram_tester;
   const GURL kInitialUrl = embedded_test_server()->GetURL("/empty.html");
@@ -1290,9 +1263,9 @@ IN_PROC_BROWSER_TEST_F(HTTPCacheSearchPreloadUnifiedBrowserTest,
         GetSearchUrl(prerender_query, UrlType::kPrerender);
     ChangeAutocompleteResult(search_query, prerender_query,
                              PrerenderHint::kEnabled, PrefetchHint::kEnabled);
-    registry_observer.WaitForTrigger(expected_prerender_url);
     WaitUntilStatusChangesTo(GetCanonicalSearchURL(expected_prefetch_url),
                              {SearchPrefetchStatus::kCanBeServed});
+    registry_observer.WaitForTrigger(expected_prerender_url);
     // No prerender requests went through network, so there should be only one
     // request and it is with the prefetch flag attached.
     EXPECT_EQ(1, prerender_helper().GetRequestCount(expected_prefetch_url));
@@ -1323,11 +1296,15 @@ IN_PROC_BROWSER_TEST_F(HTTPCacheSearchPreloadUnifiedBrowserTest,
   EXPECT_EQ(0, prerender_helper().GetRequestCount(expected_prerender_url_1));
   EXPECT_EQ(1, prerender_helper().GetRequestCount(expected_prefetch_url_1));
 
-  histogram_tester.ExpectUniqueSample(
-      "Omnibox.SearchPrefetch.CacheAliasFallbackReason",
-      CacheAliasSearchPrefetchURLLoader::FallbackReason::kNoFallback, 1);
-  histogram_tester.ExpectTotalCount(
-      "Omnibox.SearchPrefetch.CacheAliasElapsedTimeToFallback", 0);
+  if (!GetParam()) {
+    // If NoVarySearch is enabled, we do not use
+    // CacheAliasSearchPrefetchURLLoader so it does not record anything.
+    histogram_tester.ExpectUniqueSample(
+        "Omnibox.SearchPrefetch.CacheAliasFallbackReason",
+        CacheAliasSearchPrefetchURLLoader::FallbackReason::kNoFallback, 1);
+    histogram_tester.ExpectTotalCount(
+        "Omnibox.SearchPrefetch.CacheAliasElapsedTimeToFallback", 0);
+  }
 }
 
 // Tests the started prerender is destroyed after prefetch request expired.
@@ -1748,7 +1725,8 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
       GetCanonicalSearchURL(expected_prerender_url), run_loop.QuitClosure());
   NavigateToPrerenderedResult(expected_prerender_url);
   run_loop.Run();
-  WaitForActivatedPageLoaded();
+  content::WaitForLoadStop(GetActiveWebContents());
+
   histogram_tester.ExpectBucketCount(
       "Omnibox.SearchPreload.ResponseDataReaderFinalStatus.Prerender",
       StreamingSearchPrefetchURLLoader::ResponseReader::
@@ -1811,7 +1789,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
                                                         expected_prerender_url);
   NavigateToPrerenderedResult(expected_prerender_url);
   prerender_observer.WaitForActivation();
-  WaitForActivatedPageLoaded();
+  content::WaitForLoadStop(GetActiveWebContents());
 
   // No prerender requests went through network.
   EXPECT_EQ(1, prerender_helper().GetRequestCount(expected_prefetch_url));
@@ -2052,7 +2030,7 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
 
   // 6. And then we can dispatch the result.
   DispatchDelayedResponseTask();
-  WaitForActivatedPageLoaded();
+  content::WaitForLoadStop(GetActiveWebContents());
 
   // Flush metrics.
   ASSERT_TRUE(content::NavigateToURL(GetActiveWebContents(), kInitialUrl));
@@ -2370,7 +2348,8 @@ IN_PROC_BROWSER_TEST_F(SearchPreloadUnifiedBrowserTest,
 
   // 7.  Navigate to the prerendered page in the same tab.
   NavigateToPrerenderedResult(expected_prerender_url);
-  WaitForActivatedPageLoaded();
+  content::WaitForLoadStop(GetActiveWebContents());
+
 
   // Both of them loaded full content.
   std::string inner_html = content::EvalJs(GetActiveWebContents(),

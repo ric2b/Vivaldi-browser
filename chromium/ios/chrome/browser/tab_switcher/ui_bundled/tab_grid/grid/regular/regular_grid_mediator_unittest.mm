@@ -7,7 +7,6 @@
 #import "base/containers/contains.h"
 #import "base/memory/raw_ptr.h"
 #import "base/test/scoped_feature_list.h"
-#import "components/collaboration/test_support/mock_collaboration_service.h"
 #import "components/collaboration/test_support/mock_messaging_backend_service.h"
 #import "components/data_sharing/public/features.h"
 #import "components/policy/core/common/policy_pref_names.h"
@@ -15,10 +14,10 @@
 #import "components/saved_tab_groups/test_support/saved_tab_group_test_utils.h"
 #import "components/sessions/core/tab_restore_service.h"
 #import "components/sync_preferences/testing_pref_service_syncable.h"
-#import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
 #import "ios/chrome/browser/collaboration/model/messaging/messaging_backend_service_bridge.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
+#import "ios/chrome/browser/saved_tab_groups/model/tab_group_service.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_tab_restore_service_factory.h"
 #import "ios/chrome/browser/share_kit/model/test_share_kit_service.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -58,7 +57,6 @@ class RegularGridMediatorTest : public GridMediatorTestClass {
         /*enabled_features=*/
         {
             kTabGroupSync,
-            kTabGroupsIPad,
             kTabGroupIndicator,
             data_sharing::features::kDataSharingFeature,
         },
@@ -66,19 +64,14 @@ class RegularGridMediatorTest : public GridMediatorTestClass {
 
     GridMediatorTestClass::SetUp();
     mode_holder_ = [[TabGridModeHolder alloc] init];
-    tab_group_sync_service_ =
-        std::make_unique<tab_groups::FakeTabGroupSyncService>();
-    share_kit_service_ =
-        std::make_unique<TestShareKitService>(nullptr, nullptr, nullptr);
-    collaboration_service_ =
-        std::make_unique<collaboration::MockCollaborationService>();
+    share_kit_service_ = std::make_unique<TestShareKitService>(
+        nullptr, nullptr, nullptr, tab_group_service_);
 
     mediator_ = [[TestRegularGridMediator alloc]
-          initWithModeHolder:mode_holder_
-         tabGroupSyncService:tab_group_sync_service_.get()
-             shareKitService:share_kit_service_.get()
-        collaborationService:collaboration_service_.get()
-            messagingService:&messaging_backend_];
+         initWithModeHolder:mode_holder_
+        tabGroupSyncService:tab_group_sync_service_.get()
+            shareKitService:share_kit_service_.get()
+           messagingService:&messaging_backend_];
     mediator_.consumer = consumer_;
     mediator_.browser = browser_.get();
     mediator_.toolbarsMutator = fake_toolbars_mediator_;
@@ -96,10 +89,7 @@ class RegularGridMediatorTest : public GridMediatorTestClass {
  protected:
   base::test::ScopedFeatureList scoped_feature_list_;
   TestRegularGridMediator* mediator_ = nullptr;
-  std::unique_ptr<tab_groups::FakeTabGroupSyncService> tab_group_sync_service_;
   std::unique_ptr<ShareKitService> share_kit_service_;
-  std::unique_ptr<collaboration::MockCollaborationService>
-      collaboration_service_;
   raw_ptr<sessions::TabRestoreService> tab_restore_service_ = nullptr;
   TabGridModeHolder* mode_holder_;
   collaboration::messaging::MockMessagingBackendService messaging_backend_;
@@ -253,9 +243,8 @@ TEST_F(RegularGridMediatorTest, TestToolbarsNormalModeWithoutWebstates) {
   EXPECT_FALSE(fake_toolbars_mediator_.configuration.cancelSearchButton);
 }
 
-// Tests that `facePileViewControllerForItem` returns an UIViewController when
-// the group is shared.
-TEST_F(RegularGridMediatorTest, FacePileViewControllerForItem) {
+// Tests that `facePileViewForItem` returns an UIView when the group is shared.
+TEST_F(RegularGridMediatorTest, FacePileViewForItem) {
   // Set a saved tab group.
   tab_groups::TabGroupId tab_group_id = tab_groups::TabGroupId::GenerateNew();
   const TabGroup* local_group = browser_->GetWebStateList()->CreateGroup(
@@ -267,15 +256,14 @@ TEST_F(RegularGridMediatorTest, FacePileViewControllerForItem) {
       tab_group_sync_service_->GetGroup(group.saved_guid()).has_value());
 
   GridItemIdentifier* group_item_id =
-      [GridItemIdentifier groupIdentifier:local_group
-                         withWebStateList:browser_->GetWebStateList()];
-  EXPECT_FALSE([mediator_ facePileViewControllerForItem:group_item_id]);
+      [GridItemIdentifier groupIdentifier:local_group];
+  EXPECT_EQ(nil, [mediator_ facePileViewForItem:group_item_id]);
 
   // Share the group.
   tab_group_sync_service_->MakeTabGroupShared(
       group.local_group_id().value(), "collaboration",
       tab_groups::TabGroupSyncService::TabGroupSharingCallback());
-  EXPECT_TRUE([mediator_ facePileViewControllerForItem:group_item_id]);
+  EXPECT_NE(nil, [mediator_ facePileViewForItem:group_item_id]);
 }
 
 // Tests that `-activityLabelDataForGroup:` returns the data for a specific tab
@@ -283,6 +271,8 @@ TEST_F(RegularGridMediatorTest, FacePileViewControllerForItem) {
 TEST_F(RegularGridMediatorTest, ActivityLabelDataForGroupAfterStartup) {
   // Create a saved tab group.
   tab_groups::TabGroupId tab_group_id = tab_groups::TabGroupId::GenerateNew();
+  browser_->GetWebStateList()->CreateGroup(
+      {2}, tab_groups::test::CreateTabGroupVisualData(), tab_group_id);
   tab_groups::SavedTabGroup group = tab_groups::test::CreateTestSavedTabGroup();
   group.SetLocalGroupId(tab_group_id);
   tab_group_sync_service_->AddGroup(group);
@@ -292,10 +282,15 @@ TEST_F(RegularGridMediatorTest, ActivityLabelDataForGroupAfterStartup) {
   // Create a fake message.
   collaboration::messaging::PersistentMessage message;
   collaboration::messaging::TabGroupMessageMetadata metadata;
+  metadata.local_tab_group_id = tab_group_id;
+  message.attribution.tab_metadata =
+      std::make_optional(collaboration::messaging::TabMessageMetadata());
+  message.attribution.tab_group_metadata = std::make_optional(metadata);
   metadata.local_tab_group_id = std::make_optional(tab_group_id);
   message.type =
-      collaboration::messaging::PersistentNotificationType::DIRTY_TAB_GROUP;
-  message.attribution.tab_group_metadata = std::make_optional(metadata);
+      collaboration::messaging::PersistentNotificationType::DIRTY_TAB;
+  message.collaboration_event =
+      collaboration::messaging::CollaborationEvent::TAB_UPDATED;
 
   // The activity label data should be nil before the messaging service backend
   // is initialized.
@@ -303,7 +298,12 @@ TEST_F(RegularGridMediatorTest, ActivityLabelDataForGroupAfterStartup) {
   EXPECT_EQ(nil, [mediator_ activityLabelDataForGroup:tab_group_id]);
 
   ON_CALL(messaging_backend_, IsInitialized).WillByDefault(Return(true));
-  ON_CALL(messaging_backend_, GetMessages(_))
+  ON_CALL(
+      messaging_backend_,
+      GetMessagesForGroup(
+          tab_groups::EitherGroupID(tab_group_id),
+          std::make_optional(
+              collaboration::messaging::PersistentNotificationType::DIRTY_TAB)))
       .WillByDefault(Return(std::vector{message}));
 
   // Fake the initialization of the service.
@@ -319,6 +319,15 @@ TEST_F(RegularGridMediatorTest, ActivityLabelDataForGroupAfterStartup) {
       [mediator_
           activityLabelDataForGroup:tab_groups::TabGroupId::GenerateNew()]);
 
+  // Simulate the tab message being removed.
+  ON_CALL(
+      messaging_backend_,
+      GetMessagesForGroup(
+          tab_groups::EitherGroupID(tab_group_id),
+          std::make_optional(
+              collaboration::messaging::PersistentNotificationType::DIRTY_TAB)))
+      .WillByDefault(
+          Return(std::vector<collaboration::messaging::PersistentMessage>{}));
   // Fake the update of the service.
   [mediator_ hidePersistentMessage:message];
 
@@ -332,6 +341,8 @@ TEST_F(RegularGridMediatorTest,
        ActivityLabelDataForGroupAfterDisplayAPICalled) {
   // Create a saved tab group.
   tab_groups::TabGroupId tab_group_id = tab_groups::TabGroupId::GenerateNew();
+  browser_->GetWebStateList()->CreateGroup(
+      {2}, tab_groups::test::CreateTabGroupVisualData(), tab_group_id);
   tab_groups::SavedTabGroup group = tab_groups::test::CreateTestSavedTabGroup();
   group.SetLocalGroupId(tab_group_id);
   tab_group_sync_service_->AddGroup(group);
@@ -369,4 +380,49 @@ TEST_F(RegularGridMediatorTest,
 
   // The activity label data should be nil.
   EXPECT_EQ(nil, [mediator_ activityLabelDataForGroup:tab_group_id]);
+}
+
+// Tests that `-activityLabelDataForGroup:` returns the data for a specific tab
+// group after simulating a tab removed.
+TEST_F(RegularGridMediatorTest, ActivityLabelDataForGroupAfterTabRemoved) {
+  // Create a saved tab group.
+  tab_groups::TabGroupId tab_group_id = tab_groups::TabGroupId::GenerateNew();
+  browser_->GetWebStateList()->CreateGroup(
+      {2}, tab_groups::test::CreateTabGroupVisualData(), tab_group_id);
+  tab_groups::SavedTabGroup group = tab_groups::test::CreateTestSavedTabGroup();
+  group.SetLocalGroupId(tab_group_id);
+  tab_group_sync_service_->AddGroup(group);
+  EXPECT_TRUE(
+      tab_group_sync_service_->GetGroup(group.saved_guid()).has_value());
+
+  ON_CALL(messaging_backend_, IsInitialized).WillByDefault(Return(true));
+
+  // Create a fake message.
+  collaboration::messaging::PersistentMessage message;
+  collaboration::messaging::TabGroupMessageMetadata metadata;
+  metadata.local_tab_group_id = tab_group_id;
+  message.attribution.tab_metadata =
+      std::make_optional(collaboration::messaging::TabMessageMetadata());
+  message.attribution.tab_group_metadata = std::make_optional(metadata);
+  metadata.local_tab_group_id = std::make_optional(tab_group_id);
+  message.type =
+      collaboration::messaging::PersistentNotificationType::TOMBSTONED;
+  message.collaboration_event =
+      collaboration::messaging::CollaborationEvent::TAB_REMOVED;
+
+  // The activity label data should be nil for another group.
+  EXPECT_EQ(nil, [mediator_ activityLabelDataForGroup:tab_group_id]);
+
+  ON_CALL(messaging_backend_,
+          GetMessagesForGroup(
+              tab_groups::EitherGroupID(tab_group_id),
+              std::make_optional(collaboration::messaging::
+                                     PersistentNotificationType::TOMBSTONED)))
+      .WillByDefault(Return(std::vector{message}));
+
+  // Fake the update of the service.
+  [mediator_ hidePersistentMessage:message];
+
+  // The activity label data should be nil.
+  EXPECT_NE(nil, [mediator_ activityLabelDataForGroup:tab_group_id]);
 }

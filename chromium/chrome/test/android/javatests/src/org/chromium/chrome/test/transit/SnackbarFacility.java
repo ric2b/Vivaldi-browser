@@ -9,14 +9,16 @@ import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.containsString;
 
-import static org.chromium.base.test.transit.ViewSpec.viewSpec;
+import android.view.View;
 
 import androidx.annotation.Nullable;
 
-import org.chromium.base.test.transit.Elements;
+import org.hamcrest.Matcher;
+
 import org.chromium.base.test.transit.Facility;
 import org.chromium.base.test.transit.Station;
-import org.chromium.base.test.transit.ViewSpec;
+import org.chromium.base.test.transit.ViewElement;
+import org.chromium.base.test.transit.ViewElementMatchesCondition;
 import org.chromium.chrome.test.R;
 
 /**
@@ -25,41 +27,30 @@ import org.chromium.chrome.test.R;
  * @param <HostStationT> the Station where the Snackbar appears
  */
 public class SnackbarFacility<HostStationT extends Station<?>> extends Facility<HostStationT> {
-    public static final ViewSpec SNACKBAR_MESSAGE = viewSpec(withId(R.id.snackbar_message));
-    public static final ViewSpec SNACKBAR_BUTTON = viewSpec(withId(R.id.snackbar_button));
     public static final String NO_BUTTON = "__NO_BUTTON__";
 
-    private final String mExpectedMessageSubstring;
-    private final String mExpectedButtonText;
+    public ViewElement<View> messageElement;
+    public ViewElement<View> buttonElement;
 
     public SnackbarFacility(
             @Nullable String expectedMessageSubstring, @Nullable String expectedButtonText) {
-        super();
-        mExpectedMessageSubstring = expectedMessageSubstring;
-        mExpectedButtonText = expectedButtonText;
-    }
-
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        if (mExpectedMessageSubstring != null) {
-            ViewSpec messageSpec =
-                    viewSpec(
-                            withText(containsString(mExpectedMessageSubstring)),
-                            SNACKBAR_MESSAGE.getViewMatcher());
-            elements.declareView(messageSpec);
-        } else {
-            elements.declareView(SNACKBAR_MESSAGE);
+        messageElement = declareView(withId(R.id.snackbar_message));
+        if (expectedMessageSubstring != null) {
+            declareEnterCondition(
+                    new ViewElementMatchesCondition(
+                            messageElement, withText(containsString(expectedMessageSubstring))));
         }
 
-        if (mExpectedButtonText != null) {
-            if (mExpectedButtonText.equals(NO_BUTTON)) {
-                elements.declareNoView(SNACKBAR_BUTTON);
-            } else {
-                ViewSpec messageSpec = SNACKBAR_BUTTON.and(withText(mExpectedButtonText));
-                elements.declareView(messageSpec);
-            }
+        Matcher<View> buttonSpec = withId(R.id.snackbar_button);
+        if (NO_BUTTON.equals(expectedButtonText)) {
+            declareNoView(buttonSpec);
         } else {
-            elements.declareView(SNACKBAR_BUTTON);
+            buttonElement = declareView(buttonSpec);
+            if (expectedButtonText != null) {
+                declareEnterCondition(
+                        new ViewElementMatchesCondition(
+                                buttonElement, withText(expectedButtonText)));
+            }
         }
     }
 }

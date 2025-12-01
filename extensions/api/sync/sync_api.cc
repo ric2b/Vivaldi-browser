@@ -303,7 +303,6 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
     // - Cookies is in the works. We don't know yet if it will be relevant.
     if (data_type == syncer::UserSelectableType::kThemes ||
         data_type == syncer::UserSelectableType::kSavedTabGroups ||
-        data_type == syncer::UserSelectableType::kSharedTabGroupData ||
         data_type == syncer::UserSelectableType::kPayments ||
         data_type == syncer::UserSelectableType::kProductComparison ||
         data_type == syncer::UserSelectableType::kCookies) {
@@ -384,18 +383,6 @@ void SyncAPI::Shutdown() {
 
 void SyncAPI::SyncSetupComplete() {
   sync_setup_handle_.reset();
-}
-
-ExtensionFunction::ResponseAction SyncStartFunction::Run() {
-  SyncService* sync_service = SyncServiceFactory::GetForProfile(
-      Profile::FromBrowserContext(browser_context()));
-
-  if (!sync_service)
-    return RespondNow(NoArguments());
-
-  sync_service->SetSyncFeatureRequested();
-
-  return RespondNow(NoArguments());
 }
 
 ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {

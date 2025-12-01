@@ -225,6 +225,33 @@ TEST_F(UnzipTest, UnzipGoodArchive) {
   EXPECT_FALSE(some_files_empty);
 }
 
+TEST_F(UnzipTest, UnzipGoodArchiveWithExtraBytes) {
+  EXPECT_TRUE(DoUnzip(GetArchivePath("good_archive_prefixed.zip"), unzip_dir_));
+  bool some_files_empty = false;
+  EXPECT_EQ(8, CountFiles(unzip_dir_, &some_files_empty));
+  EXPECT_FALSE(some_files_empty);
+}
+
+TEST_F(UnzipTest, UnzipBadArchiveHang) {
+  // Don't hang trying to open this bad archive.
+  EXPECT_FALSE(DoUnzip(GetArchivePath("bad_archive_hang.zip"), unzip_dir_));
+  EXPECT_EQ(0, CountFiles(unzip_dir_));
+}
+
+TEST_F(UnzipTest, UnzipZip64) {
+  EXPECT_TRUE(DoUnzip(GetArchivePath("good_zip64.zip"), unzip_dir_));
+  bool some_files_empty = false;
+  EXPECT_EQ(1, CountFiles(unzip_dir_, &some_files_empty));
+  EXPECT_FALSE(some_files_empty);
+}
+
+TEST_F(UnzipTest, UnzipZip64WithExtraBytes) {
+  EXPECT_TRUE(DoUnzip(GetArchivePath("good_zip64_prefixed.zip"), unzip_dir_));
+  bool some_files_empty = false;
+  EXPECT_EQ(1, CountFiles(unzip_dir_, &some_files_empty));
+  EXPECT_FALSE(some_files_empty);
+}
+
 TEST_F(UnzipTest, UnzipWithFilter) {
   EXPECT_TRUE(DoUnzip(GetArchivePath("good_archive.zip"), unzip_dir_,
                       base::BindRepeating([](const base::FilePath& path) {
@@ -349,6 +376,9 @@ TEST_F(UnzipTest, DecodeXz_Success) {
   base::FilePath out = unzip_dir_.AppendASCII("out");
   ASSERT_TRUE(DoDecodeXz(GetArchivePath("file1.xz"), out));
   EXPECT_EQ(ReadFileToBytes(out), ReadFileToBytes(GetArchivePath("file1")));
+  ASSERT_TRUE(base::DeleteFile(out));
+  ASSERT_TRUE(DoDecodeXz(GetArchivePath("bd646.xz"), out));
+  EXPECT_EQ(ReadFileToBytes(out), ReadFileToBytes(GetArchivePath("bd646")));
 }
 
 TEST_F(UnzipTest, DecodeXz_DontReplaceExistingOutfile) {

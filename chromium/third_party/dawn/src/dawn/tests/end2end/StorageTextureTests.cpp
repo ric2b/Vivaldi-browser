@@ -744,7 +744,7 @@ TEST_P(StorageTextureTests, WriteonlyStorageTextureInFragmentShader) {
     // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 4 OpenGLES
     DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsQualcomm());
 
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     for (wgpu::TextureFormat format : utils::kAllTextureFormats) {
         if (!utils::TextureFormatSupportsStorageTexture(format, device, IsCompatibilityMode())) {
@@ -1085,7 +1085,7 @@ fn doTest() -> bool {
 // Verify that the texture is correctly cleared to 0 before its first usage as a write-only storage
 // storage texture in a render pass.
 TEST_P(StorageTextureZeroInitTests, WriteonlyStorageTextureClearsToZeroInRenderPass) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     // Prepare the write-only storage texture.
     wgpu::Texture writeonlyStorageTexture = CreateTexture(
@@ -1170,7 +1170,7 @@ fn main(@builtin(local_invocation_id) local_id: vec3<u32>,) {
 
 // Verify read-write storage texture can work correctly in fragment shaders.
 TEST_P(ReadWriteStorageTextureTests, ReadWriteStorageTextureInFragmentShader) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     std::array<uint32_t, kWidth * kHeight> inputData;
     std::array<uint32_t, kWidth * kHeight> expectedData;
@@ -1290,10 +1290,7 @@ fn main() {
 
 // Verify read-only storage texture can work correctly in vertex shaders.
 TEST_P(ReadWriteStorageTextureTests, ReadOnlyStorageTextureInVertexShader) {
-    // TODO(crbug.com/dawn/2295): diagnose this failure on Pixel 6 OpenGLES
-    DAWN_SUPPRESS_TEST_IF(IsOpenGLES() && IsAndroid() && IsARM());
-
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInVertexStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageTexturesInVertexStage < 1);
 
     constexpr wgpu::TextureFormat kStorageTextureFormat = wgpu::TextureFormat::R32Uint;
     const std::vector<uint8_t> kInitialTextureData = GetExpectedData(kStorageTextureFormat);
@@ -1341,7 +1338,7 @@ struct FragmentInput {
 
 // Verify read-only storage texture can work correctly in fragment shaders.
 TEST_P(ReadWriteStorageTextureTests, ReadOnlyStorageTextureInFragmentShader) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageTexturesInFragmentStage < 1);
 
     constexpr wgpu::TextureFormat kStorageTextureFormat = wgpu::TextureFormat::R32Uint;
     const std::vector<uint8_t> kInitialTextureData = GetExpectedData(kStorageTextureFormat);
@@ -1614,7 +1611,7 @@ TEST_P(ReadWriteStorageTextureTests, ReadMipLevel2AsBothTextureBindingAndStorage
 // STORAGE_BINDING at the same time.
 TEST_P(ReadWriteStorageTextureTests, ReadMipLevel1AndWriteLevel2AtTheSameTime) {
     // Compat mode doesn't support different views of the same texture
-    DAWN_SUPPRESS_TEST_IF(IsCompatibilityMode());
+    DAWN_TEST_UNSUPPORTED_IF(IsCompatibilityMode());
 
     wgpu::ShaderModule csModule = utils::CreateShaderModule(device, R"(
         @binding(0) @group(0) var<storage, read_write> buf : array<vec4u>;
@@ -1711,6 +1708,134 @@ TEST_P(ReadWriteStorageTextureTests, ReadMipLevel1AndWriteLevel2AtTheSameTime) {
         static uint8_t expectedData[]{64, 128, 192, 255};
         EXPECT_BUFFER_U8_RANGE_EQ(expectedData, resultBuffer, 0, 4);
     }
+}
+
+// Test for crbug.com/417296309 which observed a failure on Apple Silicon.
+// This ensures that we insert a memory fence in between reads and writes to a read-write storage
+// texture to prevent reordering of memory operations within an invocation.
+TEST_P(ReadWriteStorageTextureTests, ReadWriteStorageTexture_WriteAfterReadHazard) {
+    // The texture dimensions need to be fairly large in order to reliably trigger a failure when
+    // no fence is present.
+    constexpr uint32_t kWidth = 1024;
+    constexpr uint32_t kHeight = 1024;
+    constexpr uint32_t kDepth = 64;
+
+    wgpu::Texture readWriteStorageTexture =
+        CreateTexture(wgpu::TextureFormat::R32Uint, wgpu::TextureUsage::StorageBinding,
+                      {kWidth, kHeight, kDepth}, wgpu::TextureDimension::e3D);
+
+    wgpu::BufferDescriptor bufferDesc;
+    bufferDesc.size = sizeof(uint32_t);
+    bufferDesc.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Storage;
+    wgpu::Buffer buffer = device.CreateBuffer(&bufferDesc);
+
+    std::ostringstream sstream;
+    sstream << R"(
+@group(0) @binding(0) var rwImage : texture_storage_3d<r32uint, read_write>;
+@group(0) @binding(1) var<storage, read_write> buffer : atomic<u32>;
+
+// The reordering appears to be somewhat dependent on the value that is used in the condition.
+const kSpecialValue = 42;
+
+@compute @workgroup_size(4, 4, 4)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  // We read a value from the texture.
+  // The texture is zero-initialized, so this value should be a zero.
+  let value = textureLoad(rwImage, gid).x;
+
+  // We then write a special value back to the texture.
+  textureStore(rwImage, gid, vec4(kSpecialValue));
+
+  // We then conditionally increment an atomic counter if the value that we read does not match the
+  // special value that we just wrote.
+  // This condition should be true for every single invocation, since they all read zero.
+  if (value != kSpecialValue) {
+    atomicAdd(&buffer, 1u);
+  }
+})";
+
+    wgpu::ComputePipeline pipeline = CreateComputePipeline(sstream.str().c_str());
+    wgpu::BindGroup bindGroup = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                     {
+                                                         {0, readWriteStorageTexture.CreateView()},
+                                                         {1, buffer},
+                                                     });
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::ComputePassEncoder computePassEncoder = encoder.BeginComputePass();
+    computePassEncoder.SetBindGroup(0, bindGroup);
+    computePassEncoder.SetPipeline(pipeline);
+    computePassEncoder.DispatchWorkgroups(kWidth / 4, kHeight / 4, kDepth / 4);
+    computePassEncoder.End();
+    wgpu::CommandBuffer commandBuffer = encoder.Finish();
+    queue.Submit(1, &commandBuffer);
+
+    // The counter should have be incremented once for every invocation.
+    EXPECT_BUFFER_U32_EQ(kWidth * kHeight * kDepth, buffer, 0);
+}
+
+// Test related to crbug.com/417296309 which observed a failure on Apple Silicon.
+// This ensures that we insert a memory fence in between writes and reads to a read-write storage
+// texture to prevent reordering of memory operations within an invocation.
+TEST_P(ReadWriteStorageTextureTests, ReadWriteStorageTexture_ReadAfterWriteHazard) {
+    // The texture dimensions need to be fairly large in order to reliably trigger a failure when
+    // no fence is present.
+    constexpr uint32_t kWidth = 1024;
+    constexpr uint32_t kHeight = 1024;
+    constexpr uint32_t kDepth = 64;
+
+    wgpu::Texture readWriteStorageTexture =
+        CreateTexture(wgpu::TextureFormat::R32Uint, wgpu::TextureUsage::StorageBinding,
+                      {kWidth, kHeight, kDepth}, wgpu::TextureDimension::e3D);
+
+    wgpu::BufferDescriptor bufferDesc;
+    bufferDesc.size = sizeof(uint32_t);
+    bufferDesc.usage = wgpu::BufferUsage::CopySrc | wgpu::BufferUsage::Storage;
+    wgpu::Buffer buffer = device.CreateBuffer(&bufferDesc);
+
+    std::ostringstream sstream;
+    sstream << R"(
+@group(0) @binding(0) var rwImage : texture_storage_3d<r32uint, read_write>;
+@group(0) @binding(1) var<storage, read_write> buffer : atomic<u32>;
+
+// The reordering appears to be somewhat dependent on the value that is used in the condition.
+const kSpecialValue = 42;
+
+@compute @workgroup_size(4, 4, 4)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  // We write a special value back to the texture, which is zero-initialized.
+  textureStore(rwImage, gid, vec4(kSpecialValue));
+
+  // We then read a value from the texture.
+  // This should be the special value that we just wrote.
+  let value = textureLoad(rwImage, gid).x;
+
+  // We then conditionally increment an atomic counter if the value that we read matches the special
+  // value that we just wrote.
+  // This condition should be true for every single invocation.
+  if (value == kSpecialValue) {
+    atomicAdd(&buffer, 1u);
+  }
+})";
+
+    wgpu::ComputePipeline pipeline = CreateComputePipeline(sstream.str().c_str());
+    wgpu::BindGroup bindGroup = utils::MakeBindGroup(device, pipeline.GetBindGroupLayout(0),
+                                                     {
+                                                         {0, readWriteStorageTexture.CreateView()},
+                                                         {1, buffer},
+                                                     });
+
+    wgpu::CommandEncoder encoder = device.CreateCommandEncoder();
+    wgpu::ComputePassEncoder computePassEncoder = encoder.BeginComputePass();
+    computePassEncoder.SetBindGroup(0, bindGroup);
+    computePassEncoder.SetPipeline(pipeline);
+    computePassEncoder.DispatchWorkgroups(kWidth / 4, kHeight / 4, kDepth / 4);
+    computePassEncoder.End();
+    wgpu::CommandBuffer commandBuffer = encoder.Finish();
+    queue.Submit(1, &commandBuffer);
+
+    // The counter should have be incremented once for every invocation.
+    EXPECT_BUFFER_U32_EQ(kWidth * kHeight * kDepth, buffer, 0);
 }
 
 DAWN_INSTANTIATE_TEST(ReadWriteStorageTextureTests,

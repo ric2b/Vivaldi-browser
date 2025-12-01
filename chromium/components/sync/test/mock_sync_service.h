@@ -47,7 +47,6 @@ class MockSyncService : public SyncService {
               (),
               (override));
 #endif  // BUILDFLAG(IS_ANDROID)
-  MOCK_METHOD(void, SetSyncFeatureRequested, (), (override));
   MOCK_METHOD(DisableReasonSet, GetDisableReasons, (), (const override));
   MOCK_METHOD(TransportState, GetTransportState, (), (const override));
   MOCK_METHOD(UserActionableError,
@@ -147,7 +146,8 @@ class MockSyncService : public SyncService {
               (const override));
   MOCK_METHOD(void,
               GetTypesWithUnsyncedData,
-              (DataTypeSet, base::OnceCallback<void(DataTypeSet)>),
+              (DataTypeSet,
+               base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)>),
               (const override));
   MOCK_METHOD(
       void,

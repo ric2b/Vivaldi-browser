@@ -62,7 +62,7 @@ RtpTransceiverInit JavaToNativeRtpTransceiverInit(
 
 ScopedJavaLocalRef<jobject> NativeToJavaRtpTransceiver(
     JNIEnv* env,
-    rtc::scoped_refptr<RtpTransceiverInterface> transceiver) {
+    scoped_refptr<RtpTransceiverInterface> transceiver) {
   if (!transceiver) {
     return nullptr;
   }
@@ -182,7 +182,7 @@ jboolean JNI_RtpTransceiver_SetDirection(
   RtpTransceiverDirection direction = static_cast<RtpTransceiverDirection>(
       Java_RtpTransceiverDirection_getNativeIndex(jni,
                                                   j_rtp_transceiver_direction));
-  webrtc::RTCError error =
+  RTCError error =
       reinterpret_cast<RtpTransceiverInterface*>(j_rtp_transceiver_pointer)
           ->SetDirectionWithError(direction);
   if (!error.ok()) {

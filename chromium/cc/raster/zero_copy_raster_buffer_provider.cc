@@ -9,21 +9,21 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/traced_value.h"
+#include "cc/base/features.h"
 #include "cc/resources/resource_pool.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/client/client_resource_provider.h"
-#include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/platform_color.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
 #include "gpu/command_buffer/client/client_shared_image.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_trace_utils.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
-#include "gpu/ipc/client/client_shared_image_interface.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "url/gurl.h"
 
@@ -151,14 +151,12 @@ void ZeroCopyRasterBufferImpl::Playback(
     return;
   }
 
-  size_t stride = is_software_ ? 0u : mapping->Stride(0);
-
   // TODO(danakj): Implement partial raster with raster_dirty_rect for GPU
   // compositing.
   RasterBufferProvider::PlaybackToMemory(
       mapping->GetMemoryForPlane(0).data(), backing_->format(),
-      backing_->size(), stride, raster_source, raster_full_rect, playback_rect,
-      transform, backing_->color_space(), playback_settings);
+      backing_->size(), mapping->Stride(0), raster_source, raster_full_rect,
+      playback_rect, transform, backing_->color_space(), playback_settings);
 }
 
 bool ZeroCopyRasterBufferImpl::SupportsBackgroundThreadPriority() const {
@@ -166,17 +164,10 @@ bool ZeroCopyRasterBufferImpl::SupportsBackgroundThreadPriority() const {
 }
 
 ZeroCopyRasterBufferProvider::ZeroCopyRasterBufferProvider(
-    viz::RasterContextProvider* compositor_context_provider,
-    const RasterCapabilities& raster_caps)
-    : compositor_context_provider_(compositor_context_provider),
-      tile_format_(raster_caps.tile_format) {}
-
-ZeroCopyRasterBufferProvider::ZeroCopyRasterBufferProvider(
-    LayerTreeFrameSink* frame_sink,
-    const RasterCapabilities& raster_caps)
-    : is_software_(true),
-      shared_image_interface_(frame_sink->shared_image_interface()),
-      tile_format_(raster_caps.tile_format) {
+    const scoped_refptr<gpu::SharedImageInterface>& shared_image_interface,
+    bool is_software)
+    : is_software_(is_software),
+      shared_image_interface_(shared_image_interface) {
   CHECK(shared_image_interface_)
       << "SharedImageInterface is null in ZeroCopyRasterBufferProvider ctor!";
 }
@@ -191,34 +182,26 @@ ZeroCopyRasterBufferProvider::AcquireBufferForRaster(
     bool depends_on_at_raster_decodes,
     bool depends_on_hardware_accelerated_jpeg_candidates,
     bool depends_on_hardware_accelerated_webp_candidates) {
-  if (is_software_) {
-    bool resource_has_previous_content =
+  bool resource_has_previous_content = false;
+  if (is_software_ ||
+      base::FeatureList::IsEnabled(
+          features::kZeroCopyRBPPartialRasterWithGpuCompositor)) {
+    resource_has_previous_content =
         resource_content_id && resource_content_id == previous_content_id;
-    return std::make_unique<ZeroCopyRasterBufferImpl>(
-        resource, shared_image_interface_, resource_has_previous_content,
-        /*is_software=*/true);
   }
 
   return std::make_unique<ZeroCopyRasterBufferImpl>(
-      resource,
-      base::WrapRefCounted(
-          compositor_context_provider_->SharedImageInterface()),
-      /*resource_has_previous_content=*/false, /*is_software=*/false);
+      resource, shared_image_interface_, resource_has_previous_content,
+      is_software_);
 }
 
 void ZeroCopyRasterBufferProvider::Flush() {}
 
-viz::SharedImageFormat ZeroCopyRasterBufferProvider::GetFormat() const {
-  return tile_format_;
-}
-
-bool ZeroCopyRasterBufferProvider::IsResourcePremultiplied() const {
-  return true;
-}
-
 bool ZeroCopyRasterBufferProvider::CanPartialRasterIntoProvidedResource()
     const {
-  return is_software_;
+  return is_software_ ||
+         base::FeatureList::IsEnabled(
+             features::kZeroCopyRBPPartialRasterWithGpuCompositor);
 }
 
 bool ZeroCopyRasterBufferProvider::IsResourceReadyToDraw(

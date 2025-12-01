@@ -22,18 +22,22 @@
 @property(nonatomic, readwrite) BOOL userVerificationRequired;
 
 // The relying party identifier for this request.
-@property(strong, nonatomic, readwrite) NSString* relyingPartyIdentifier;
+@property(copy, nonatomic, readwrite) NSString* relyingPartyIdentifier;
 
 // A list of allowed credential IDs for this request. An empty list means all
 // credentials are allowed.
 @property(strong, nonatomic, readwrite) NSArray<NSData*>* allowedCredentials;
+
+// A list of excluded credentials for this request. An empty list means no
+// credentials are excluded.
+@property(strong, nonatomic, readwrite) NSArray<NSData*>* excludedCredentials;
 
 // Whether at least one signing algorithm is supported by the relying party.
 // Unused by assertion requests.
 @property(nonatomic, readwrite) BOOL algorithmIsSupported;
 
 // The user name of the passkey credential.
-@property(strong, nonatomic, readwrite) NSString* userName;
+@property(copy, nonatomic, readwrite) NSString* userName;
 
 // The user handle of the passkey credential.
 @property(strong, nonatomic, readwrite) NSData* userHandle;
@@ -60,6 +64,7 @@
         passkeyCredentialRequestParameters.relyingPartyIdentifier;
     self.allowedCredentials =
         passkeyCredentialRequestParameters.allowedCredentials;
+    self.excludedCredentials = nil;
     self.algorithmIsSupported = NO;
     self.userName = nil;
     self.userHandle = nil;
@@ -107,8 +112,18 @@
     self.userName = identity.userName;
     self.userHandle = identity.userHandle;
     self.allowedCredentials = nil;
+    self.excludedCredentials = nil;
 
     if (@available(iOS 18.0, *)) {
+      if (passkeyCredentialRequest.excludedCredentials.count) {
+        NSMutableArray<NSData*>* excludedCredentials = [NSMutableArray array];
+        for (ASAuthorizationPlatformPublicKeyCredentialDescriptor* credential in
+                 passkeyCredentialRequest.excludedCredentials) {
+          [excludedCredentials addObject:credential.credentialID];
+        }
+        self.excludedCredentials = [excludedCredentials copy];
+      }
+
       if (IsPasskeyPRFEnabled()) {
         _prf = [PRFData fromRequest:passkeyCredentialRequest];
       }
@@ -185,6 +200,10 @@
 }
 
 - (BOOL)hasMatchingPassword:(NSArray<id<Credential>>*)credentials {
+  if (!credentials.count) {
+    return NO;
+  }
+
   NSUInteger credentialIndex = [credentials indexOfObjectPassingTest:^BOOL(
                                                 id<Credential> credential,
                                                 NSUInteger idx, BOOL* stop) {
@@ -193,6 +212,35 @@
            [credential.serviceName isEqualToString:self.relyingPartyIdentifier];
   }];
   return credentialIndex != NSNotFound;
+}
+
+- (BOOL)hasExcludedPasskey:(NSArray<id<Credential>>*)credentials {
+  if (!credentials.count || !self.excludedCredentials.count) {
+    return NO;
+  }
+
+  NSUInteger credentialIndex = [credentials indexOfObjectPassingTest:^BOOL(
+                                                id<Credential> credential,
+                                                NSUInteger idx, BOOL* stop) {
+    return credential.isPasskey &&
+           [credential.rpId isEqualToString:self.relyingPartyIdentifier] &&
+           [self.excludedCredentials containsObject:credential.credentialId];
+  }];
+  return credentialIndex != NSNotFound;
+}
+
+#pragma mark - PasskeyRequestDetails (Testing)
+
+- (instancetype)initWithURL:(NSString*)url
+                   username:(NSString*)username
+        excludedCredentials:(NSArray<NSData*>*)excludedCredentials {
+  self = [super init];
+  if (self) {
+    self.relyingPartyIdentifier = url;
+    self.userName = username;
+    self.excludedCredentials = excludedCredentials;
+  }
+  return self;
 }
 
 @end

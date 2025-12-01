@@ -103,6 +103,7 @@ bool TestCaptureModeDelegate::Uses24HourFormat() const {
 }
 
 void TestCaptureModeDelegate::CheckCaptureModeInitRestrictionByDlp(
+    bool shutting_down,
     OnCaptureModeDlpRestrictionChecked callback) {
   std::move(callback).Run(/*proceed=*/is_allowed_by_dlp_);
 }
@@ -246,30 +247,15 @@ void TestCaptureModeDelegate::SendLensWebRegionSearch(
     ash::OnSearchUrlFetchedCallback search_callback,
     ash::OnTextDetectionComplete text_callback,
     base::OnceCallback<void()> error_callback) {
+  if (force_lens_web_error_) {
+    std::move(error_callback).Run();
+    return;
+  }
+
   std::move(search_callback).Run(GURL("https://lens.google.com/"));
   if (!lens_detected_text_.empty()) {
     std::move(text_callback).Run(lens_detected_text_);
   }
-}
-
-void TestCaptureModeDelegate::SendRegionSearch(
-    const SkBitmap& image,
-    const gfx::Rect& region,
-    ash::OnSearchUrlFetchedCallback search_callback,
-    ash::OnTextDetectionComplete text_callback) {
-  if (!lens_detected_text_.empty()) {
-    std::move(text_callback).Run(lens_detected_text_);
-  }
-  std::move(search_callback).Run(GURL("kTestUrl"));
-}
-
-void TestCaptureModeDelegate::SendMultimodalSearch(
-    const SkBitmap& image,
-    const gfx::Rect& region,
-    const std::string& text,
-    ash::OnSearchUrlFetchedCallback callback) {
-  ++num_multimodal_search_requests_;
-  std::move(callback).Run(GURL("kTestUrl"));
 }
 
 void TestCaptureModeDelegate::DeleteRemoteFile(

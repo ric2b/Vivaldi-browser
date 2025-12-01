@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-import {exists} from '../../base/utils';
+import {AreaSelection, AreaSelectionAggregator} from '../../public/selection';
 import {ColumnDef, Sorting} from '../../public/aggregation';
-import {AreaSelection} from '../../public/selection';
-import {Engine} from '../../trace_processor/engine';
 import {CPU_SLICE_TRACK_KIND} from '../../public/track_kinds';
-import {AreaSelectionAggregator} from '../../public/selection';
+import {Engine} from '../../trace_processor/engine';
+import {exists} from '../../base/utils';
 
 export class WattsonThreadSelectionAggregator
   implements AreaSelectionAggregator
@@ -39,8 +38,8 @@ export class WattsonThreadSelectionAggregator
     const cpusCsv = `(` + selectedCpus.join() + `)`;
     engine.query(`
       INCLUDE PERFETTO MODULE viz.summary.threads_w_processes;
-      INCLUDE PERFETTO MODULE wattson.curves.idle_attribution;
-      INCLUDE PERFETTO MODULE wattson.curves.estimates;
+      INCLUDE PERFETTO MODULE wattson.cpu.idle_attribution;
+      INCLUDE PERFETTO MODULE wattson.estimates;
 
       CREATE OR REPLACE PERFETTO TABLE wattson_plugin_ui_selection_window AS
       SELECT

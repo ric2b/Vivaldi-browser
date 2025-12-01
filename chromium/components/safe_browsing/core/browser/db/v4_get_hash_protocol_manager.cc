@@ -13,7 +13,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_split.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
@@ -210,15 +209,6 @@ FullHashInfo::FullHashInfo(const FullHashStr& full_hash,
 FullHashInfo::FullHashInfo(const FullHashInfo& other) = default;
 
 FullHashInfo::~FullHashInfo() = default;
-
-bool FullHashInfo::operator==(const FullHashInfo& other) const {
-  return full_hash == other.full_hash && list_id == other.list_id &&
-         positive_expiry == other.positive_expiry && metadata == other.metadata;
-}
-
-bool FullHashInfo::operator!=(const FullHashInfo& other) const {
-  return !operator==(other);
-}
 
 // V4GetHashProtocolManager implementation --------------------------------
 
@@ -801,8 +791,7 @@ void V4GetHashProtocolManager::OnURLLoaderCompleteInternal(
     int response_code,
     const std::string& data) {
   auto it = pending_hash_requests_.find(url_loader);
-  CHECK(it != pending_hash_requests_.end(), base::NotFatalUntil::M130)
-      << "Request not found";
+  CHECK(it != pending_hash_requests_.end()) << "Request not found";
   RecordHttpResponseOrErrorCode("SafeBrowsing.V4GetHash.Network.Result",
                                 net_error, response_code);
 

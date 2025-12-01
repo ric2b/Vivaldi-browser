@@ -147,10 +147,8 @@ class MockMediaResource : public MediaResource {
   ~MockMediaResource() override;
 
   // MediaResource implementation.
-  MOCK_CONST_METHOD0(GetType, MediaResource::Type());
   MOCK_METHOD0(GetAllStreams, std::vector<DemuxerStream*>());
   MOCK_METHOD1(GetFirstStream, DemuxerStream*(DemuxerStream::Type type));
-  MOCK_CONST_METHOD0(GetMediaUrlParams, const MediaUrlParams&());
 };
 
 class MockDemuxer : public Demuxer {
@@ -195,14 +193,9 @@ class MockDemuxer : public Demuxer {
               (),
               (const, override));
   MOCK_METHOD(void,
-              OnEnabledAudioTracksChanged,
-              (const std::vector<MediaTrack::Id>&,
-               base::TimeDelta,
-               TrackChangeCB),
-              (override));
-  MOCK_METHOD(void,
-              OnSelectedVideoTrackChanged,
-              (const std::vector<MediaTrack::Id>&,
+              OnTracksChanged,
+              (DemuxerStream::Type,
+               const std::vector<MediaTrack::Id>&,
                base::TimeDelta,
                TrackChangeCB),
               (override));

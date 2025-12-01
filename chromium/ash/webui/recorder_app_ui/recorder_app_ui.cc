@@ -25,6 +25,7 @@
 #include "ash/webui/recorder_app_ui/resources/grit/recorder_app_resources_map.h"
 #include "ash/webui/recorder_app_ui/url_constants.h"
 #include "base/feature_list.h"
+#include "base/strings/string_number_conversions.h"
 #include "chromeos/ash/components/audio/cras_audio_handler.h"
 #include "chromeos/ash/components/mojo_service_manager/connection.h"
 #include "chromeos/constants/devicetype.h"
@@ -69,6 +70,29 @@ std::string_view SodaInstallerErrorCodeToString(
       return "kNeedsReboot";
     case speech::SodaInstaller::ErrorCode::kUnspecifiedError:
       return "kUnspecifiedError";
+  }
+}
+
+recorder_app::mojom::ModelStateType SodaErrorCodeToModelStateType(
+    speech::SodaInstaller::ErrorCode error) {
+  switch (error) {
+    case speech::SodaInstaller::ErrorCode::kNeedsReboot:
+      return recorder_app::mojom::ModelStateType::kNeedsReboot;
+    case speech::SodaInstaller::ErrorCode::kUnspecifiedError:
+      return recorder_app::mojom::ModelStateType::kError;
+  }
+}
+
+recorder_app::mojom::ModelStateType LoadModelResultToModelStateType(
+    on_device_model::mojom::LoadModelResult result) {
+  switch (result) {
+    case on_device_model::mojom::LoadModelResult::kSuccess:
+      return recorder_app::mojom::ModelStateType::kInstalled;
+    case on_device_model::mojom::LoadModelResult::kGpuBlocked:
+    case on_device_model::mojom::LoadModelResult::kFailedToLoadLibrary:
+      return recorder_app::mojom::ModelStateType::kError;
+    case on_device_model::mojom::LoadModelResult::kCrosNeedReboot:
+      return recorder_app::mojom::ModelStateType::kNeedsReboot;
   }
 }
 
@@ -270,6 +294,7 @@ void RecorderAppUI::AddModelMonitor(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!CanUseGenerativeAi()) {
+    LOG(WARNING) << "GenAI can't be used";
     // TODO(pihsun): Return a dedicate error when GenAI can't be used.
     std::move(callback).Run(recorder_app::mojom::ModelState{
         recorder_app::mojom::ModelStateType::kUnavailable, std::nullopt}
@@ -280,6 +305,7 @@ void RecorderAppUI::AddModelMonitor(
   EnsureOnDeviceModelService();
 
   if (!on_device_model_service_) {
+    LOG(WARNING) << "ChromeOS OnDeviceModelService is unavailable";
     std::move(callback).Run(recorder_app::mojom::ModelState{
         recorder_app::mojom::ModelStateType::kUnavailable, std::nullopt}
                                 .Clone());
@@ -357,15 +383,11 @@ void RecorderAppUI::LoadModelResultCallback(
     on_device_model::mojom::LoadModelResult result) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  // TODO: b/366335321 - Propagate need-reboot error from on-device model
-  // service to UI side.
   if (result != on_device_model::mojom::LoadModelResult::kSuccess) {
-    UpdateModelState(
-        model_id, {recorder_app::mojom::ModelStateType::kError, std::nullopt});
-  } else {
-    UpdateModelState(model_id, {recorder_app::mojom::ModelStateType::kInstalled,
-                                std::nullopt});
+    LOG(ERROR) << "Failed to load model: " << model_id << ", error: " << result;
   }
+  UpdateModelState(model_id,
+                   {LoadModelResultToModelStateType(result), std::nullopt});
   std::move(callback).Run(result);
 }
 
@@ -376,6 +398,7 @@ void RecorderAppUI::LoadModel(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!CanUseGenerativeAi()) {
+    LOG(ERROR) << "Could not load GenAI model when GenAI can't be used";
     // TODO(pihsun): Return a dedicate error when GenAI can't be used.
     std::move(callback).Run(
         on_device_model::mojom::LoadModelResult::kFailedToLoadLibrary);
@@ -385,6 +408,8 @@ void RecorderAppUI::LoadModel(
   EnsureOnDeviceModelService();
 
   if (!on_device_model_service_) {
+    LOG(ERROR) << "Could not load GenAI model when ChromeOS "
+                  "OnDeviceModelService is unavailable";
     std::move(callback).Run(
         on_device_model::mojom::LoadModelResult::kFailedToLoadLibrary);
   }
@@ -491,6 +516,8 @@ void RecorderAppUI::GetPlatformModelStateCallback(
     case on_device_model::mojom::PlatformModelState::kInvalidModelDescriptor:
     case on_device_model::mojom::PlatformModelState::
         kInvalidBaseModelDescriptor:
+      LOG(WARNING) << "GenAI model: " << model_id
+                   << " is unavailable. Model state: " << state;
       UpdateModelState(
           model_id,
           {recorder_app::mojom::ModelStateType::kUnavailable, std::nullopt});
@@ -665,7 +692,7 @@ void RecorderAppUI::OnSodaInstallError(
   LOG(ERROR) << "Failed to install Soda library DLC with error "
              << SodaInstallerErrorCodeToString(error_code);
   UpdateSodaState(language_code,
-                  {recorder_app::mojom::ModelStateType::kError, std::nullopt});
+                  {SodaErrorCodeToModelStateType(error_code), std::nullopt});
 }
 
 void RecorderAppUI::OnSodaProgress(speech::LanguageCode language_code,
@@ -703,6 +730,8 @@ void RecorderAppUI::LoadSpeechRecognizer(
   CHECK(language_code != speech::LanguageCode::kNone);
 
   if (!IsSodaAvailable(language_code)) {
+    LOG(ERROR) << "Could not load recognizer for " << language
+               << " when SODA is not available";
     // TODO(pihsun): Returns different error when soda is not available.
     std::move(callback).Run(false);
     return;
@@ -710,6 +739,8 @@ void RecorderAppUI::LoadSpeechRecognizer(
 
   auto* soda_installer = speech::SodaInstaller::GetInstance();
   if (!soda_installer->IsSodaInstalled(language_code)) {
+    LOG(ERROR) << "Could not load recognizer for " << language
+               << " when SODA is not installed";
     // TODO(pihsun): Returns different error when soda is not installed.
     std::move(callback).Run(false);
     return;

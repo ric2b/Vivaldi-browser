@@ -1,16 +1,14 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
+
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Trace from '../../../models/trace/trace.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as Lit from '../../../ui/lit/lit.js';
 
-import stylesRaw from './interactionBreakdown.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssText);
+import interactionBreakdownStyles from './interactionBreakdown.css.js';
 
 const {html} = Lit;
 
@@ -33,19 +31,14 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 
 export class InteractionBreakdown extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
   #entry: Trace.Types.Events.SyntheticInteractionPair|null = null;
-
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [styles];
-  }
 
   set entry(entry: Trace.Types.Events.SyntheticInteractionPair) {
     if (entry === this.#entry) {
       return;
     }
     this.#entry = entry;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #render(): void {
@@ -56,7 +49,8 @@ export class InteractionBreakdown extends HTMLElement {
     const mainThreadTime = i18n.TimeUtilities.formatMicroSecondsAsMillisFixed(this.#entry.mainThreadHandling);
     const presentationDelay = i18n.TimeUtilities.formatMicroSecondsAsMillisFixed(this.#entry.presentationDelay);
     Lit.render(
-        html`<ul class="breakdown">
+        html`<style>${interactionBreakdownStyles}</style>
+             <ul class="breakdown">
                      <li data-entry="input-delay">${i18nString(UIStrings.inputDelay)}<span class="value">${
             inputDelay}</span></li>
                      <li data-entry="processing-duration">${

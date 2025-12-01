@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.feed;
 
 import org.chromium.base.TraceEvent;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.feed.ScrollListener.ScrollState;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
@@ -25,6 +26,7 @@ import org.chromium.components.feature_engagement.TriggerState;
  * the feed visible. The goal of conditions (2) and (3) is to show the IPH when the signals are
  * that the user wants to interact with the feed are strong.
  */
+@NullMarked
 public class HeaderIphScrollListener implements ScrollListener {
     private static final float MIN_SCROLL_FRACTION = 0.1f;
     private static final float MAX_HEADER_POS_FRACTION = 0.35f;
@@ -33,8 +35,8 @@ public class HeaderIphScrollListener implements ScrollListener {
     private final ScrollableContainerDelegate mScrollableContainerDelegate;
     private final Runnable mShowIPHRunnable;
 
-    private float mMinScrollFraction;
-    private float mHeaderMaxPosFraction;
+    private final float mMinScrollFraction;
+    private final float mHeaderMaxPosFraction;
 
     HeaderIphScrollListener(
             FeedBubbleDelegate delegate,

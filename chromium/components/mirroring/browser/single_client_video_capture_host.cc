@@ -7,12 +7,15 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
-#include "base/not_fatal_until.h"
 #include "base/token.h"
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/video_effects/public/cpp/buildflags.h"
+
+#if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
 #include "services/video_effects/public/mojom/video_effects_processor.mojom.h"
+#endif
 
 using media::VideoFrameConsumerFeedbackObserver;
 
@@ -105,7 +108,9 @@ void SingleClientVideoCaptureHost::Start(
                         std::unique_ptr<DeviceLauncherCallbacks>) {},
                      std::move(device_launcher),
                      std::move(device_launcher_callbacks)),
+#if BUILDFLAG(ENABLE_VIDEO_EFFECTS)
       mojo::PendingRemote<video_effects::mojom::VideoEffectsProcessor>{},
+#endif
       mojo::PendingRemote<media::mojom::ReadonlyVideoEffectsManager>{});
 }
 
@@ -233,7 +238,7 @@ void SingleClientVideoCaptureHost::OnFrameReadyInBuffer(
   DVLOG(3) << __func__ << ": buffer_id=" << frame.buffer_id;
   DCHECK(observer_);
   const auto id_iter = id_map_.find(frame.buffer_id);
-  CHECK(id_iter != id_map_.end(), base::NotFatalUntil::M130);
+  CHECK(id_iter != id_map_.end());
   const int buffer_context_id = id_iter->second;
   const auto insert_result = buffer_context_map_.emplace(
       std::make_pair(buffer_context_id,
@@ -250,7 +255,7 @@ void SingleClientVideoCaptureHost::OnBufferRetired(int buffer_id) {
   DVLOG(3) << __func__ << ": buffer_id=" << buffer_id;
 
   const auto id_iter = id_map_.find(buffer_id);
-  CHECK(id_iter != id_map_.end(), base::NotFatalUntil::M130);
+  CHECK(id_iter != id_map_.end());
   const int buffer_context_id = id_iter->second;
   id_map_.erase(id_iter);
   if (buffer_context_map_.find(buffer_context_id) ==

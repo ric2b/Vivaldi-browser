@@ -68,6 +68,7 @@ s/Git/depot_tools
 H
 18
 i
+MAN1_TXT += depot_tools_gerrit_auth.txt
 MAN1_TXT += depot_tools_tutorial.txt
 MAN1_TXT += depot_tools.txt
 .

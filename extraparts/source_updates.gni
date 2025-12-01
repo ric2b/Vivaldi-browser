@@ -1,4 +1,5 @@
 import("//build/config/chrome_build.gni")
+import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/testing/testing.gni")
 
 _main_dll_targets = []
@@ -21,6 +22,12 @@ foreach(_target, _main_dll_targets) {
         "//vivaldi/browser/win/vivaldi_running_dlg.h",
         "//vivaldi/browser/win/vivaldi_running_dlg.cc",
       ]
+    }
+    if (vivaldi_v8_context_snapshot) {
+      if (!defined(defines)) {
+        defines = []
+      }
+      defines += [ "VIVALDI_V8_CONTEXT_SNAPSHOT" ]
     }
     deps += [
       "//vivaldi/components:adverse_adblocking",

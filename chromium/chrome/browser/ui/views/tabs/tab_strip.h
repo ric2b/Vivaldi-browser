@@ -16,7 +16,6 @@
 #include "base/memory/raw_ref.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_types.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
@@ -57,6 +56,10 @@ class TabGroupId;
 namespace ui {
 class ListSelectionModel;
 }
+
+namespace tabs {
+enum class TabAlert;
+}  // namespace tabs
 
 // A View that represents the TabStripModel. The TabStrip has the
 // following responsibilities:
@@ -120,7 +123,7 @@ class TabStrip : public views::View,
   // Returns information about tabs at given indices.
   bool IsTabCrashed(int tab_index) const;
   bool TabHasNetworkError(int tab_index) const;
-  std::optional<TabAlertState> GetTabAlertState(int tab_index) const;
+  std::optional<tabs::TabAlert> GetTabAlertState(int tab_index) const;
 
   // Updates the loading animations displayed by tabs in the tabstrip to the
   // next frame. The `elapsed_time` parameter is shared between tabs and used to
@@ -179,8 +182,15 @@ class TabStrip : public views::View,
   // Destroys the views associated with a recently deleted tab group.
   void OnGroupClosed(const tab_groups::TabGroupId& group);
 
-  void SetSplit(int split_index,
-                std::optional<split_tabs::SplitTabId> split_id);
+  // Updates the tab slot view split state and animates to bounds.
+  void OnSplitCreated(const std::vector<int>& split_indices,
+                      split_tabs::SplitTabId split_id);
+
+  // Updates the tab slot view split state and animates to bounds.
+  void OnSplitRemoved(const std::vector<int>& split_indices);
+
+  // Updates the tab slot view split state and animates to bounds.
+  void OnSplitContentsChanged(const std::vector<int>& split_indices);
 
   // Returns whether or not strokes should be drawn around and under the tabs.
   bool ShouldDrawStrokes() const;
@@ -330,7 +340,6 @@ class TabStrip : public views::View,
   void ShiftGroupLeft(const tab_groups::TabGroupId& group) override;
   void ShiftGroupRight(const tab_groups::TabGroupId& group) override;
   const Browser* GetBrowser() const override;
-  int GetInactiveTabWidth() const override;
   bool IsFrameCondensed() const override;
 #if BUILDFLAG(IS_CHROMEOS)
   bool IsLockedForOnTask() override;
@@ -354,6 +363,7 @@ class TabStrip : public views::View,
       gfx::Point loc_in_local_coords) override;
   views::View* GetViewForDrop() override;
 
+  void SetTabStripNotEditableForTesting();
   TabHoverCardController* hover_card_controller_for_testing() {
     return hover_card_controller_.get();
   }
@@ -391,9 +401,6 @@ class TabStrip : public views::View,
 
   // Returns whether the window background behind the tabstrip is transparent.
   bool TitlebarBackgroundIsTransparent() const;
-
-  // Returns the current width of the active tab.
-  int GetActiveTabWidth() const;
 
   // Returns the last tab in the strip that's actually visible.  This will be
   // the actual last tab unless the strip is in the overflow node_data.
@@ -435,10 +442,6 @@ class TabStrip : public views::View,
   // Screen-reader-only announcements that depend on tab group titles.
   void AnnounceTabAddedToGroup(tab_groups::TabGroupId group_id);
   void AnnounceTabRemovedFromGroup(tab_groups::TabGroupId group_id);
-
-  // For metrics on the best size for tab scrolling, log if the different
-  // sizes would trigger tab scrolling
-  void LogTabWidthsForTabScrolling();
 
   // -- Member Variables ------------------------------------------------------
 
@@ -508,6 +511,9 @@ class TabStrip : public views::View,
   float radial_highlight_opacity_ = 1.0f;
 
   SkColor separator_color_ = gfx::kPlaceholderColor;
+
+  // If true simulates a non-editable tab strip for testing.
+  bool tab_strip_not_editable_for_testing_ = false;
 
   base::CallbackListSubscription paint_as_active_subscription_;
 

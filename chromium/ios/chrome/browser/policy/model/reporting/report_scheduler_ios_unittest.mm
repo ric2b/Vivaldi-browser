@@ -73,7 +73,9 @@ class MockReportUploader : public ReportUploader {
   ~MockReportUploader() override = default;
 
   MOCK_METHOD3(SetRequestAndUpload,
-               void(ReportType, ReportRequestQueue, ReportCallback));
+               void(const ReportGenerationConfig& config,
+                    ReportRequestQueue,
+                    ReportCallback));
 };
 
 class ReportSchedulerIOSTest : public PlatformTest {
@@ -108,7 +110,7 @@ class ReportSchedulerIOSTest : public PlatformTest {
     params.delegate = report_delegate_factory_.GetReportSchedulerDelegate();
     params.report_generator = std::move(generator_ptr_);
     scheduler_ = std::make_unique<ReportScheduler>(std::move(params));
-    scheduler_->SetReportUploaderForTesting(std::move(uploader_ptr_));
+    scheduler_->QueueReportUploaderForTesting(std::move(uploader_ptr_));
   }
 
   void SetLastUploadInHour(base::TimeDelta gap) {
@@ -202,7 +204,9 @@ TEST_F(ReportSchedulerIOSTest, UploadReportSucceeded) {
   EXPECT_CALL_SetupRegistration();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kSuccess));
 
   CreateScheduler();
@@ -223,7 +227,9 @@ TEST_F(ReportSchedulerIOSTest, UploadReportTransientError) {
   EXPECT_CALL_SetupRegistration();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kTransientError));
 
   CreateScheduler();
@@ -244,7 +250,9 @@ TEST_F(ReportSchedulerIOSTest, UploadReportPersistentError) {
   EXPECT_CALL_SetupRegistrationWithSetDMToken();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kPersistentError));
 
   CreateScheduler();
@@ -299,7 +307,9 @@ TEST_F(ReportSchedulerIOSTest, TimerDelayWithLastUploadTimestamp) {
   EXPECT_CALL_SetupRegistration();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kSuccess));
 
   CreateScheduler();
@@ -319,7 +329,9 @@ TEST_F(ReportSchedulerIOSTest, TimerDelayWithoutLastUploadTimestamp) {
   EXPECT_CALL_SetupRegistration();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kSuccess));
 
   CreateScheduler();
@@ -340,7 +352,9 @@ TEST_F(ReportSchedulerIOSTest, TimerDelayUpdate) {
   EXPECT_CALL_SetupRegistration();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kSuccess));
 
   CreateScheduler();
@@ -406,7 +420,9 @@ TEST_F(ReportSchedulerIOSTest, ReportingIsDisabledWhileNewReportIsPosted) {
   EXPECT_CALL_SetupRegistration();
   EXPECT_CALL(*generator_, OnGenerate(ReportType::kFull, _))
       .WillOnce(WithArgs<1>(ScheduleGeneratorCallback(1)));
-  EXPECT_CALL(*uploader_, SetRequestAndUpload(ReportType::kFull, _, _))
+  EXPECT_CALL(*uploader_,
+              SetRequestAndUpload(
+                  ReportGenerationConfig(ReportTrigger::kTriggerTimer), _, _))
       .WillOnce(RunOnceCallback<2>(ReportUploader::kSuccess));
 
   CreateScheduler();

@@ -6,7 +6,10 @@ package org.chromium.chrome.browser.omnibox;
 
 import static org.hamcrest.core.IsEqual.equalTo;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -15,16 +18,19 @@ import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.InputConnection;
 
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.InOrder;
+import org.mockito.Mock;
 import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Callback;
 import org.chromium.base.ThreadUtils;
@@ -37,8 +43,9 @@ import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.ReusedCtaTransitTestRule;
+import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.components.omnibox.OmniboxFeatures;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -63,22 +70,25 @@ import java.util.concurrent.atomic.AtomicReference;
 @UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @Batch(Batch.PER_CLASS)
 public class UrlBarTest {
-    public static @ClassRule ChromeTabbedActivityTestRule sActivityTestRule =
-            new ChromeTabbedActivityTestRule();
+    public static final String EXAMPLE_STRING = "example string";
     private UrlBar mUrlBar;
+    public ReusedCtaTransitTestRule<WebPageStation> mActivityTestRule =
+            ChromeTransitTestRules.blankPageStartReusedActivityRule();
     private OmniboxTestUtils mOmnibox;
+    private WebPageStation mStartingPage;
 
-    @BeforeClass
-    public static void setUpClass() throws Exception {
-        sActivityTestRule.startMainActivityWithURL(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
-        // Needed to make sure all the necessary ChromeFeatureFlags are populated.
-        sActivityTestRule.waitForDeferredStartup();
-    }
+    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
+
+    @Mock private Runnable mListener;
 
     @Before
     public void setUpTest() throws Exception {
-        mOmnibox = new OmniboxTestUtils(sActivityTestRule.getActivity());
-        mUrlBar = sActivityTestRule.getActivity().findViewById(R.id.url_bar);
+        mStartingPage = mActivityTestRule.start();
+        // Needed to make sure all the necessary ChromeFeatureFlags are populated.
+        mActivityTestRule.getActivityTestRule().waitForDeferredStartup();
+
+        mOmnibox = new OmniboxTestUtils(mStartingPage.getActivity());
+        mUrlBar = mStartingPage.urlBarElement.get();
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
 
         // Start with an empty Omnibox and disable all automatic features.
@@ -664,7 +674,7 @@ public class UrlBarTest {
     @Test
     @SmallTest
     public void testAutocompleteUpdatedOnDefocus() throws InterruptedException {
-        sActivityTestRule.loadUrl(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
+        mActivityTestRule.loadUrl(ContentUrlConstants.ABOUT_BLANK_DISPLAY_URL);
         mOmnibox.requestFocus();
         mOmnibox.typeText("test", false);
         mOmnibox.clearFocus();
@@ -859,5 +869,30 @@ public class UrlBarTest {
                     mUrlBar.onTextContextMenuItem(android.R.id.paste);
                 });
         verify(listener).run();
+    }
+
+    @Test
+    @SmallTest
+    // Added to prevent regression of crbug.com/410642190
+    public void notify_typingStarted_beforeTextChange() {
+        // Setup.
+        AutocompleteEditTextModelBase model = spy(mUrlBar.getModelForTesting());
+        mUrlBar.setModelForTesting(model);
+        InOrder inOrder = inOrder(mListener, model);
+
+        mOmnibox.clearFocus();
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        mUrlBar.setTypingStartedListener(mListener);
+        mOmnibox.requestFocus();
+        verifyNoInteractions(mListener);
+        clearInvocations(model);
+
+        // Set text and wait for listeners to be called.
+        mUrlBar.onTextChanged(EXAMPLE_STRING, 0, 0, EXAMPLE_STRING.length());
+
+        // Verify that the typing started listener is called before model.onTextChanged is called.
+        inOrder.verify(mListener).run();
+        inOrder.verify(model, times(1))
+                .onTextChanged(EXAMPLE_STRING, 0, 0, EXAMPLE_STRING.length());
     }
 }

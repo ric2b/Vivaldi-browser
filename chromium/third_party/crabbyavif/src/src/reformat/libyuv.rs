@@ -139,6 +139,7 @@ enum ConversionFunction {
     YUVToRGBMatrixHighBitDepth(YUVToRGBMatrixHighBitDepth),
     YUVAToRGBMatrixHighBitDepth(YUVAToRGBMatrixHighBitDepth),
     P010ToRGBMatrix(P010ToRGBMatrix, ARGBToABGR),
+    YUVToAB30Matrix(YUVToRGBMatrixHighBitDepth, ARGBToABGR),
     NVToARGBMatrix(NVToARGBMatrix),
 }
 
@@ -169,8 +170,14 @@ fn find_conversion_function(
             // What Android considers to be NV21 is actually NV12 in libyuv.
             Some(ConversionFunction::NVToARGBMatrix(NV12ToARGBMatrix))
         }
+        (_, 8, Format::Rgb565, PixelFormat::AndroidNv12) => {
+            Some(ConversionFunction::NVToARGBMatrix(NV12ToRGB565Matrix))
+        }
         (_, 16, Format::Rgba1010102, PixelFormat::AndroidP010) => Some(
             ConversionFunction::P010ToRGBMatrix(P010ToAR30Matrix, AR30ToAB30),
+        ),
+        (_, 10, Format::Rgba1010102, PixelFormat::Yuv420) => Some(
+            ConversionFunction::YUVToAB30Matrix(I010ToAR30Matrix, AR30ToAB30),
         ),
         (_, 16, Format::Rgba, PixelFormat::AndroidP010) => Some(
             ConversionFunction::P010ToRGBMatrix(P010ToARGBMatrix, ARGBToABGR),
@@ -366,7 +373,10 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
         return Err(AvifError::NotImplemented);
     }
     if rgb.depth == 10
-        && (image.yuv_format != PixelFormat::AndroidP010 || rgb.format != Format::Rgba1010102)
+        && (!matches!(
+            image.yuv_format,
+            PixelFormat::AndroidP010 | PixelFormat::Yuv420
+        ) || rgb.format != Format::Rgba1010102)
     {
         return Err(AvifError::NotImplemented);
     }
@@ -385,42 +395,9 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
     } else {
         FilterMode_kFilterNone
     };
-    let mut plane_u8: [*const u8; 4] = ALL_PLANES
-        .iter()
-        .map(|x| {
-            if image.has_plane(*x) {
-                image.planes[x.as_usize()].unwrap_ref().ptr()
-            } else {
-                std::ptr::null()
-            }
-        })
-        .collect::<Vec<*const u8>>()
-        .try_into()
-        .unwrap();
-    let plane_u16: [*const u16; 4] = ALL_PLANES
-        .iter()
-        .map(|x| {
-            if image.has_plane(*x) {
-                image.planes[x.as_usize()].unwrap_ref().ptr16()
-            } else {
-                std::ptr::null()
-            }
-        })
-        .collect::<Vec<*const u16>>()
-        .try_into()
-        .unwrap();
-    let mut plane_row_bytes: [i32; 4] = ALL_PLANES
-        .iter()
-        .map(|x| {
-            if image.has_plane(*x) {
-                i32_from_u32(image.plane_data(*x).unwrap().row_bytes).unwrap_or_default()
-            } else {
-                0
-            }
-        })
-        .collect::<Vec<i32>>()
-        .try_into()
-        .unwrap();
+    let mut plane_u8 = image.plane_ptrs();
+    let plane_u16 = image.plane16_ptrs();
+    let mut plane_row_bytes = image.plane_row_bytes()?;
     let rgb_row_bytes = i32_from_u32(rgb.row_bytes)?;
     let width = i32_from_u32(image.width)?;
     let height = i32_from_u32(image.height)?;
@@ -435,7 +412,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                     plane_row_bytes[0] / 2,
                     plane_u16[1],
                     plane_row_bytes[1] / 2,
-                    rgb.pixels(),
+                    rgb.pixels_mut(),
                     rgb_row_bytes,
                     matrix,
                     width,
@@ -445,9 +422,38 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                     // It is okay to use the same pointer as source and destination for this
                     // conversion.
                     func2(
-                        rgb.pixels(),
+                        rgb.pixels_mut(),
                         rgb_row_bytes,
-                        rgb.pixels(),
+                        rgb.pixels_mut(),
+                        rgb_row_bytes,
+                        width,
+                        height,
+                    )
+                } else {
+                    result
+                }
+            }
+            ConversionFunction::YUVToAB30Matrix(func1, func2) => {
+                let result = func1(
+                    plane_u16[0],
+                    plane_row_bytes[0] / 2,
+                    plane_u16[1],
+                    plane_row_bytes[1] / 2,
+                    plane_u16[2],
+                    plane_row_bytes[2] / 2,
+                    rgb.pixels_mut(),
+                    rgb_row_bytes,
+                    matrix,
+                    width,
+                    height,
+                );
+                if result == 0 {
+                    // It is okay to use the same pointer as source and destination for this
+                    // conversion.
+                    func2(
+                        rgb.pixels_mut(),
+                        rgb_row_bytes,
+                        rgb.pixels_mut(),
                         rgb_row_bytes,
                         width,
                         height,
@@ -463,7 +469,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[u_plane_index] / 2,
                 plane_u16[v_plane_index],
                 plane_row_bytes[v_plane_index] / 2,
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -479,7 +485,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[v_plane_index] / 2,
                 plane_u16[3],
                 plane_row_bytes[3] / 2,
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -494,7 +500,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[u_plane_index] / 2,
                 plane_u16[v_plane_index],
                 plane_row_bytes[v_plane_index] / 2,
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -509,7 +515,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[v_plane_index] / 2,
                 plane_u16[3],
                 plane_row_bytes[3] / 2,
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -531,30 +537,8 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
         let mut image8 = image::Image::default();
         if image.depth > 8 {
             downshift_to_8bit(image, &mut image8, conversion_function.is_yuva())?;
-            plane_u8 = ALL_PLANES
-                .iter()
-                .map(|x| {
-                    if image8.has_plane(*x) {
-                        image8.planes[x.as_usize()].unwrap_ref().ptr()
-                    } else {
-                        std::ptr::null()
-                    }
-                })
-                .collect::<Vec<*const u8>>()
-                .try_into()
-                .unwrap();
-            plane_row_bytes = ALL_PLANES
-                .iter()
-                .map(|x| {
-                    if image8.has_plane(*x) {
-                        i32_from_u32(image8.plane_data(*x).unwrap().row_bytes).unwrap_or_default()
-                    } else {
-                        0
-                    }
-                })
-                .collect::<Vec<i32>>()
-                .try_into()
-                .unwrap();
+            plane_u8 = image8.plane_ptrs();
+            plane_row_bytes = image8.plane_row_bytes()?;
         }
         result = match conversion_function {
             ConversionFunction::NVToARGBMatrix(func) => func(
@@ -562,7 +546,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[0],
                 plane_u8[1],
                 plane_row_bytes[1],
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -571,7 +555,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
             ConversionFunction::YUV400ToRGBMatrix(func) => func(
                 plane_u8[0],
                 plane_row_bytes[0],
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -584,7 +568,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[u_plane_index],
                 plane_u8[v_plane_index],
                 plane_row_bytes[v_plane_index],
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -600,7 +584,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[v_plane_index],
                 plane_u8[3],
                 plane_row_bytes[3],
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -615,7 +599,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[u_plane_index],
                 plane_u8[v_plane_index],
                 plane_row_bytes[v_plane_index],
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -630,7 +614,7 @@ pub(crate) fn yuv_to_rgb(image: &image::Image, rgb: &mut rgb::Image) -> AvifResu
                 plane_row_bytes[v_plane_index],
                 plane_u8[3],
                 plane_row_bytes[3],
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 rgb_row_bytes,
                 matrix,
                 width,
@@ -702,18 +686,18 @@ pub(crate) fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<
     let result = unsafe {
         if multiply {
             ARGBAttenuate(
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 i32_from_u32(rgb.row_bytes)?,
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 i32_from_u32(rgb.row_bytes)?,
                 i32_from_u32(rgb.width)?,
                 i32_from_u32(rgb.height)?,
             )
         } else {
             ARGBUnattenuate(
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 i32_from_u32(rgb.row_bytes)?,
-                rgb.pixels(),
+                rgb.pixels_mut(),
                 i32_from_u32(rgb.row_bytes)?,
                 i32_from_u32(rgb.width)?,
                 i32_from_u32(rgb.height)?,
@@ -730,9 +714,9 @@ pub(crate) fn process_alpha(rgb: &mut rgb::Image, multiply: bool) -> AvifResult<
 pub(crate) fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifResult<()> {
     let res = unsafe {
         HalfFloatPlane(
-            rgb.pixels() as *const u16,
+            rgb.pixels_mut() as *const u16,
             i32_from_u32(rgb.row_bytes)?,
-            rgb.pixels() as *mut u16,
+            rgb.pixels_mut() as *mut u16,
             i32_from_u32(rgb.row_bytes)?,
             scale,
             i32_from_u32(rgb.width * rgb.channel_count())?,
@@ -743,5 +727,137 @@ pub(crate) fn convert_to_half_float(rgb: &mut rgb::Image, scale: f32) -> AvifRes
         Ok(())
     } else {
         Err(AvifError::InvalidArgument)
+    }
+}
+
+#[rustfmt::skip]
+type RGBToY = unsafe extern "C" fn(*const u8, c_int, *mut u8, c_int, c_int, c_int) -> c_int;
+#[rustfmt::skip]
+type RGBToYUV = unsafe extern "C" fn(
+    *const u8, c_int, *mut u8, c_int, *mut u8, c_int, *mut u8, c_int, c_int, c_int,
+) -> c_int;
+
+#[derive(Debug)]
+enum RGBToYUVConversionFunction {
+    RGBToY(RGBToY),
+    RGBToYUV(RGBToYUV),
+}
+
+fn rgb_to_yuv_conversion_function(
+    rgb: &rgb::Image,
+    image: &mut image::Image,
+) -> AvifResult<RGBToYUVConversionFunction> {
+    if image.depth != 8
+        || rgb.depth != 8
+        || !matches!(
+            image.matrix_coefficients,
+            MatrixCoefficients::Bt470bg | MatrixCoefficients::Bt601
+        )
+    {
+        return Err(AvifError::NotImplemented);
+    }
+    // TODO: b/410088660 - Implement 2-step RGB conversion for functions which aren't directly
+    // available in libyuv.
+    match (image.yuv_format, image.yuv_range, rgb.format) {
+        (PixelFormat::Yuv400, YuvRange::Limited, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToY(ARGBToI400))
+        }
+        (PixelFormat::Yuv400, YuvRange::Full, Format::Rgb) => {
+            Ok(RGBToYUVConversionFunction::RGBToY(RAWToJ400))
+        }
+        (PixelFormat::Yuv400, YuvRange::Full, Format::Rgba) => {
+            Ok(RGBToYUVConversionFunction::RGBToY(ABGRToJ400))
+        }
+        (PixelFormat::Yuv400, YuvRange::Full, Format::Bgr) => {
+            Ok(RGBToYUVConversionFunction::RGBToY(RGB24ToJ400))
+        }
+        (PixelFormat::Yuv400, YuvRange::Full, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToY(ARGBToJ400))
+        }
+        (PixelFormat::Yuv400, YuvRange::Full, Format::Abgr) => {
+            Ok(RGBToYUVConversionFunction::RGBToY(RGBAToJ400))
+        }
+        (PixelFormat::Yuv420, YuvRange::Limited, Format::Rgb) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(RAWToI420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Limited, Format::Rgba) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ABGRToI420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Limited, Format::Argb) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(BGRAToI420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Limited, Format::Bgr) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(RGB24ToI420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Limited, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToI420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Limited, Format::Abgr) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(RGBAToI420))
+        }
+        (PixelFormat::Yuv422, YuvRange::Limited, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToI422))
+        }
+        (PixelFormat::Yuv444, YuvRange::Limited, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToI444))
+        }
+        (PixelFormat::Yuv420, YuvRange::Full, Format::Rgb) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(RAWToJ420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Full, Format::Rgba) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ABGRToJ420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Full, Format::Bgr) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(RGB24ToJ420))
+        }
+        (PixelFormat::Yuv420, YuvRange::Full, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToJ420))
+        }
+        (PixelFormat::Yuv422, YuvRange::Full, Format::Rgba) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ABGRToJ422))
+        }
+        (PixelFormat::Yuv422, YuvRange::Full, Format::Bgra) => {
+            Ok(RGBToYUVConversionFunction::RGBToYUV(ARGBToJ422))
+        }
+        _ => Err(AvifError::NotImplemented),
+    }
+}
+
+#[cfg_attr(feature = "disable_cfi", no_sanitize(cfi))]
+pub(crate) fn rgb_to_yuv(rgb: &rgb::Image, image: &mut image::Image) -> AvifResult<()> {
+    let conversion_function = rgb_to_yuv_conversion_function(rgb, image)?;
+    let plane_u8 = image.plane_ptrs_mut();
+    let plane_row_bytes = image.plane_row_bytes()?;
+    let width = i32_from_u32(image.width)?;
+    let height = i32_from_u32(image.height)?;
+    let rgb_row_bytes = i32_from_u32(rgb.row_bytes)?;
+    let result = unsafe {
+        match conversion_function {
+            RGBToYUVConversionFunction::RGBToY(func) => func(
+                rgb.pixels(),
+                rgb_row_bytes,
+                plane_u8[0],
+                plane_row_bytes[0],
+                width,
+                height,
+            ),
+            RGBToYUVConversionFunction::RGBToYUV(func) => func(
+                rgb.pixels(),
+                rgb_row_bytes,
+                plane_u8[0],
+                plane_row_bytes[0],
+                plane_u8[1],
+                plane_row_bytes[1],
+                plane_u8[2],
+                plane_row_bytes[2],
+                width,
+                height,
+            ),
+        }
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(AvifError::ReformatFailed)
     }
 }

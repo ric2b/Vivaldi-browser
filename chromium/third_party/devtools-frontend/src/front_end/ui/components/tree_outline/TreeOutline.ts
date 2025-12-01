@@ -1,6 +1,7 @@
 // Copyright (c) 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Platform from '../../../core/platform/platform.js';
 import * as Lit from '../../lit/lit.js';
@@ -129,6 +130,10 @@ export class TreeOutline<TreeNodeDataType> extends HTMLElement {
   }
 
   attributeChangedCallback(name: 'nowrap'|'toplevelbordercolor', oldValue: string|null, newValue: string|null): void {
+    if (oldValue === newValue) {
+      return;
+    }
+
     switch (name) {
       case 'nowrap': {
         this.#setNodeKeyNoWrapCSSVariable(newValue);
@@ -521,8 +526,8 @@ export class TreeOutline<TreeNodeDataType> extends HTMLElement {
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
       Lit.render(html`
-      <style>${treeOutlineStyles.cssText}</style>
-      <style>${CodeHighlighter.codeHighlighterStyles.cssText}</style>
+      <style>${treeOutlineStyles}</style>
+      <style>${CodeHighlighter.codeHighlighterStyles}</style>
       <div class="wrapping-container">
         <ul role="tree" @keydown=${this.#onTreeKeyDown}>
           ${this.#treeData.map((topLevelNode, index) => {

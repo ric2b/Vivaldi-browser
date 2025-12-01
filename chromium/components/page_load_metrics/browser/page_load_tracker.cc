@@ -686,6 +686,7 @@ void PageLoadTracker::FailedProvisionalLoad(
   failed_provisional_load_info_ = std::make_unique<FailedProvisionalLoadInfo>(
       failed_load_time - navigation_handle->NavigationStart(),
       navigation_handle->GetNetErrorCode(),
+      navigation_handle->GetNetExtendedErrorCode(),
       navigation_handle->GetNavigationDiscardReason().value());
 }
 
@@ -977,8 +978,8 @@ void PageLoadTracker::MediaStartedPlaying(
 }
 
 bool PageLoadTracker::IsPageMainFrame(content::RenderFrameHost* rfh) const {
-  DCHECK(page_main_frame_);
-  return rfh == page_main_frame_;
+  DCHECK(page_main_frame_id_);
+  return rfh->GetGlobalId() == page_main_frame_id_;
 }
 
 void PageLoadTracker::OnTimingChanged() {
@@ -1489,7 +1490,7 @@ void PageLoadTracker::AddCustomUserTimings(
 }
 
 void PageLoadTracker::SetPageMainFrame(content::RenderFrameHost* rfh) {
-  page_main_frame_ = rfh;
+  page_main_frame_id_ = rfh->GetGlobalId();
 }
 
 base::WeakPtr<PageLoadTracker> PageLoadTracker::GetWeakPtr() {

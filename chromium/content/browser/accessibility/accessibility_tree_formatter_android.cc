@@ -27,7 +27,6 @@ namespace {
 // clang-format off
 const char* const BOOL_ATTRIBUTES[] = {
     "checkable",
-    "checked",
     "clickable",
     "collapsed",
     "collection",
@@ -58,8 +57,11 @@ const char* const BOOL_ATTRIBUTES[] = {
 const char* const STRING_ATTRIBUTES[] = {
     "name",
     "hint",
+    "tooltip_text",
     "state_description",
     "container_title",
+    "content_description",
+    "supplemental_description",
 };
 
 const char* const INT_ATTRIBUTES[] = {
@@ -79,6 +81,8 @@ const char* const INT_ATTRIBUTES[] = {
     "text_change_added_count",
     "text_change_removed_count",
     "selection_mode",
+    "expanded_state",
+    "checked",
 };
 
 const char* const ACTION_ATTRIBUTES[] = {
@@ -165,7 +169,6 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
 
   // Bool attributes.
   dict->Set("checkable", android_node->IsCheckable());
-  dict->Set("checked", android_node->IsChecked());
   dict->Set("clickable", android_node->IsClickable());
   dict->Set("collapsed", android_node->IsCollapsed());
   dict->Set("collection", android_node->IsCollection());
@@ -195,9 +198,13 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   // String attributes.
   dict->Set("name", android_node->GetTextContentUTF16());
   dict->Set("hint", android_node->GetHint());
+  dict->Set("tooltip_text", android_node->GetTooltipText());
   dict->Set("role_description", android_node->GetRoleDescription());
   dict->Set("state_description", android_node->GetStateDescription());
   dict->Set("container_title", android_node->GetContainerTitle());
+  dict->Set("content_description", android_node->GetContentDescription());
+  dict->Set("supplemental_description",
+            android_node->GetSupplementalDescription());
 
   // Int attributes.
   dict->Set("item_index", android_node->GetItemIndex());
@@ -218,6 +225,8 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->Set("text_change_removed_count",
             android_node->GetTextChangeRemovedCount());
   dict->Set("selection_mode", android_node->GetSelectionMode());
+  dict->Set("expanded_state", android_node->ExpandedState());
+  dict->Set("checked", android_node->GetChecked());
 
   // Actions.
   dict->Set("action_expand", android_node->IsCollapsed());

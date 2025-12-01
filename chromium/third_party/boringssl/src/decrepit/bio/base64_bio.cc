@@ -468,7 +468,7 @@ static long b64_ctrl(BIO *b, int cmd, long num, void *ptr) {
   return ret;
 }
 
-static long b64_callback_ctrl(BIO *b, int cmd, bio_info_cb fp) {
+static long b64_callback_ctrl(BIO *b, int cmd, BIO_info_cb *fp) {
   if (b->next_bio == NULL) {
     return 0;
   }

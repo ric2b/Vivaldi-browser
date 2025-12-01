@@ -1590,17 +1590,7 @@ TEST_F(ContentSecurityPolicyTest, AllowFencedFrameOpaqueURL) {
   }
 }
 
-class SpeculationRulesHeaderContentSecurityPolicyTest
-    : public base::test::WithFeatureOverride,
-      public ContentSecurityPolicyTest {
- public:
-  SpeculationRulesHeaderContentSecurityPolicyTest()
-      : base::test::WithFeatureOverride(
-            features::kExemptSpeculationRulesHeaderFromCSP) {}
-};
-
-TEST_P(SpeculationRulesHeaderContentSecurityPolicyTest,
-       ExemptSpeculationRulesFromHeader) {
+TEST_F(ContentSecurityPolicyTest, ExemptSpeculationRulesFromHeader) {
   KURL speculation_rules_url("http://example.com/rules.json");
   csp = MakeGarbageCollected<ContentSecurityPolicy>();
   csp->BindToDelegate(execution_context->GetContentSecurityPolicyDelegate());
@@ -1608,77 +1598,13 @@ TEST_P(SpeculationRulesHeaderContentSecurityPolicyTest,
       "script-src 'strict-dynamic'", ContentSecurityPolicyType::kEnforce,
       ContentSecurityPolicySource::kHTTP, *secure_origin));
 
-  EXPECT_EQ(
-      base::FeatureList::IsEnabled(
-          features::kExemptSpeculationRulesHeaderFromCSP),
-      csp->AllowRequest(mojom::blink::RequestContextType::SPECULATION_RULES,
-                        network::mojom::RequestDestination::kSpeculationRules,
-                        network::mojom::RequestMode::kCors,
-                        speculation_rules_url, String(), IntegrityMetadataSet(),
-                        kParserInserted, speculation_rules_url,
-                        ResourceRequest::RedirectStatus::kNoRedirect,
-                        ReportingDisposition::kSuppressReporting));
+  EXPECT_TRUE(csp->AllowRequest(
+      mojom::blink::RequestContextType::SPECULATION_RULES,
+      network::mojom::RequestDestination::kSpeculationRules,
+      network::mojom::RequestMode::kCors, speculation_rules_url, String(),
+      IntegrityMetadataSet(), kParserInserted, speculation_rules_url,
+      ResourceRequest::RedirectStatus::kNoRedirect,
+      ReportingDisposition::kSuppressReporting));
 }
 
-INSTANTIATE_FEATURE_OVERRIDE_TEST_SUITE(
-    SpeculationRulesHeaderContentSecurityPolicyTest);
-
-class RequireSRIForContentSecurityPolicyTest
-    : public ContentSecurityPolicyTest {
- public:
-  RequireSRIForContentSecurityPolicyTest() = default;
-
- private:
-  base::test::ScopedFeatureList feature_list_{
-      network::features::kCSPRequireSRIFor};
-};
-
-TEST_F(RequireSRIForContentSecurityPolicyTest, NoRequireSRIFor) {
-  KURL url("http://example.com/rules.js");
-  csp = MakeGarbageCollected<ContentSecurityPolicy>();
-  csp->BindToDelegate(execution_context->GetContentSecurityPolicyDelegate());
-  csp->AddPolicies(ParseContentSecurityPolicies(
-      "script-src 'strict-dynamic'", ContentSecurityPolicyType::kEnforce,
-      ContentSecurityPolicySource::kHTTP, *secure_origin));
-
-  EXPECT_TRUE(csp->AllowRequestWithoutIntegrity(
-      mojom::blink::RequestContextType::SCRIPT,
-      network::mojom::RequestDestination::kScript, url,
-      ReportingDisposition::kSuppressReporting,
-      ContentSecurityPolicy::CheckHeaderType::kCheckAll));
-}
-
-TEST_F(RequireSRIForContentSecurityPolicyTest, RequireSRIFor) {
-  KURL url("http://example.com/rules.js");
-  csp = MakeGarbageCollected<ContentSecurityPolicy>();
-  csp->BindToDelegate(execution_context->GetContentSecurityPolicyDelegate());
-  csp->AddPolicies(ParseContentSecurityPolicies(
-      "script-src 'strict-dynamic', require-sri-for 'script'",
-      ContentSecurityPolicyType::kEnforce, ContentSecurityPolicySource::kHTTP,
-      *secure_origin));
-
-  EXPECT_FALSE(csp->AllowRequestWithoutIntegrity(
-      mojom::blink::RequestContextType::SCRIPT,
-      network::mojom::RequestDestination::kScript, url,
-      ReportingDisposition::kReport,
-      ContentSecurityPolicy::CheckHeaderType::kCheckAll));
-  EXPECT_EQ(1u, csp->violation_reports_sent_.size());
-}
-
-TEST_F(RequireSRIForContentSecurityPolicyTest, RequireSRIForNoReport) {
-  KURL url("http://example.com/rules.js");
-  csp = MakeGarbageCollected<ContentSecurityPolicy>();
-  csp->BindToDelegate(execution_context->GetContentSecurityPolicyDelegate());
-  csp->AddPolicies(ParseContentSecurityPolicies(
-      "script-src 'strict-dynamic', require-sri-for 'script'",
-      ContentSecurityPolicyType::kEnforce, ContentSecurityPolicySource::kHTTP,
-      *secure_origin));
-
-  EXPECT_FALSE(csp->AllowRequestWithoutIntegrity(
-      mojom::blink::RequestContextType::SCRIPT,
-      network::mojom::RequestDestination::kScript, url,
-      ReportingDisposition::kSuppressReporting,
-      ContentSecurityPolicy::CheckHeaderType::kCheckAll));
-  EXPECT_EQ(0u, csp->violation_reports_sent_.size());
-}
 }  // namespace blink

@@ -91,8 +91,8 @@ bool VerifyOutputFrameBitexactness(size_t frame_length,
   return true;
 }
 
-bool VerifyOutputFrameBitexactness(rtc::ArrayView<const float> reference,
-                                   rtc::ArrayView<const float> frame,
+bool VerifyOutputFrameBitexactness(ArrayView<const float> reference,
+                                   ArrayView<const float> frame,
                                    int offset) {
   for (size_t k = 0; k < frame.size(); ++k) {
     int reference_index = static_cast<int>(k) + offset;
@@ -191,11 +191,11 @@ void RunAecInStereo(AudioBuffer& buffer,
                     EchoCanceller3& aec3,
                     float channel_0_value,
                     float channel_1_value) {
-  rtc::ArrayView<float> data_channel_0(&buffer.channels()[0][0],
-                                       buffer.num_frames());
+  ArrayView<float> data_channel_0(&buffer.channels()[0][0],
+                                  buffer.num_frames());
   std::fill(data_channel_0.begin(), data_channel_0.end(), channel_0_value);
-  rtc::ArrayView<float> data_channel_1(&buffer.channels()[1][0],
-                                       buffer.num_frames());
+  ArrayView<float> data_channel_1(&buffer.channels()[1][0],
+                                  buffer.num_frames());
   std::fill(data_channel_1.begin(), data_channel_1.end(), channel_1_value);
   aec3.AnalyzeRender(&buffer);
   aec3.AnalyzeCapture(&buffer);
@@ -205,8 +205,8 @@ void RunAecInStereo(AudioBuffer& buffer,
 void RunAecInSMono(AudioBuffer& buffer,
                    EchoCanceller3& aec3,
                    float channel_0_value) {
-  rtc::ArrayView<float> data_channel_0(&buffer.channels()[0][0],
-                                       buffer.num_frames());
+  ArrayView<float> data_channel_0(&buffer.channels()[0][0],
+                                  buffer.num_frames());
   std::fill(data_channel_0.begin(), data_channel_0.end(), channel_0_value);
   aec3.AnalyzeRender(&buffer);
   aec3.AnalyzeCapture(&buffer);
@@ -221,7 +221,7 @@ class EchoCanceller3Tester {
       : sample_rate_hz_(sample_rate_hz),
         num_bands_(NumBandsForRate(sample_rate_hz_)),
         frame_length_(160),
-        fullband_frame_length_(rtc::CheckedDivExact(sample_rate_hz_, 100)),
+        fullband_frame_length_(CheckedDivExact(sample_rate_hz_, 100)),
         capture_buffer_(fullband_frame_length_ * 100,
                         1,
                         fullband_frame_length_ * 100,
@@ -316,9 +316,8 @@ class EchoCanceller3Tester {
     constexpr size_t kNumFullBlocksPerFrame = 160 / kBlockSize;
     constexpr size_t kExpectedNumBlocksToProcess =
         (kNumFramesToProcess * 160) / kBlockSize;
-    std::unique_ptr<testing::StrictMock<webrtc::test::MockBlockProcessor>>
-        block_processor_mock(
-            new StrictMock<webrtc::test::MockBlockProcessor>());
+    std::unique_ptr<testing::StrictMock<test::MockBlockProcessor>>
+        block_processor_mock(new StrictMock<test::MockBlockProcessor>());
     EXPECT_CALL(*block_processor_mock, BufferRender(_))
         .Times(kExpectedNumBlocksToProcess);
     EXPECT_CALL(*block_processor_mock, UpdateEchoLeakageStatus(_)).Times(0);
@@ -393,9 +392,8 @@ class EchoCanceller3Tester {
       EchoLeakageTestVariant leakage_report_variant) {
     constexpr size_t kExpectedNumBlocksToProcess =
         (kNumFramesToProcess * 160) / kBlockSize;
-    std::unique_ptr<testing::StrictMock<webrtc::test::MockBlockProcessor>>
-        block_processor_mock(
-            new StrictMock<webrtc::test::MockBlockProcessor>());
+    std::unique_ptr<testing::StrictMock<test::MockBlockProcessor>>
+        block_processor_mock(new StrictMock<test::MockBlockProcessor>());
     EXPECT_CALL(*block_processor_mock, BufferRender(_))
         .Times(kExpectedNumBlocksToProcess);
     EXPECT_CALL(*block_processor_mock, ProcessCapture(_, _, _, _))
@@ -482,9 +480,8 @@ class EchoCanceller3Tester {
     const size_t kNumFullBlocksPerFrame = 160 / kBlockSize;
     const size_t kExpectedNumBlocksToProcess =
         (kNumFramesToProcess * 160) / kBlockSize;
-    std::unique_ptr<testing::StrictMock<webrtc::test::MockBlockProcessor>>
-        block_processor_mock(
-            new StrictMock<webrtc::test::MockBlockProcessor>());
+    std::unique_ptr<testing::StrictMock<test::MockBlockProcessor>>
+        block_processor_mock(new StrictMock<test::MockBlockProcessor>());
     EXPECT_CALL(*block_processor_mock, BufferRender(_))
         .Times(kExpectedNumBlocksToProcess);
     EXPECT_CALL(*block_processor_mock, UpdateEchoLeakageStatus(_)).Times(0);

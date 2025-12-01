@@ -14,7 +14,6 @@ void TakePointerIntoContainer(int* into_container) {
   into_container[UnsafeIndex()] = 13;
 }
 
-// TODO: no rewriting is done here. Investigate.
 // Expected rewrite:
 // void TakePointerIntoCharContainer(base::span<char> into_container) {
 void TakePointerIntoCharContainer(char* into_container) {
@@ -31,16 +30,18 @@ int main() {
   TakePointerIntoContainer(&vector[0]);
 
   // Expected rewrite:
-  // TakePointerIntoContainer(base::span<int>(vector).subspan(2));
+  // TakePointerIntoContainer(base::span<int>(vector).subspan(2u));
   TakePointerIntoContainer(&vector[2]);
 
   int cached_index = UnsafeIndex();
   // Expected rewrite:
-  // TakePointerIntoContainer(base::span<int>(vector).subspan(cached_index));
+  // TakePointerIntoContainer(base::span<int>(vector).subspan(
+  //     base::checked_cast<size_t>(cached_index)));
   TakePointerIntoContainer(&vector[cached_index]);
 
   // Expected rewrite:
-  // TakePointerIntoContainer(base::span<int>(vector).subspan(UnsafeIndex()));
+  // TakePointerIntoContainer(base::span<int>(vector).subspan(
+  //     base::checked_cast<size_t>(UnsafeIndex())));
   TakePointerIntoContainer(&vector[UnsafeIndex()]);
 
   // Also test basic rewrite functionality on `std::array`.
@@ -51,7 +52,7 @@ int main() {
   TakePointerIntoContainer(&array[0]);
 
   // Expected rewrite:
-  // TakePointerIntoContainer(base::span<int>(array).subspan(2));
+  // TakePointerIntoContainer(base::span<int>(array).subspan(2u));
   TakePointerIntoContainer(&array[2]);
 
   // TODO: no rewriting is done here. Investigate.

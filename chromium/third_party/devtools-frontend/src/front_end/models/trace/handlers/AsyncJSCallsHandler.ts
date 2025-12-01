@@ -9,12 +9,19 @@ import {data as flowsHandlerData} from './FlowsHandler.js';
 import {data as rendererHandlerData} from './RendererHandler.js';
 
 const schedulerToRunEntryPoints = new Map<Types.Events.Event, Types.Events.Event[]>();
+
+const taskScheduleForTaskRunEvent =
+    new Map<Types.Events.DebuggerAsyncTaskRun, Types.Events.DebuggerAsyncTaskScheduled>();
 const asyncCallToScheduler =
     new Map<Types.Events.SyntheticProfileCall, {taskName: string, scheduler: Types.Events.Event}>();
+
+const runEntryPointToScheduler = new Map<Types.Events.Event, {taskName: string, scheduler: Types.Events.Event}>();
 
 export function reset(): void {
   schedulerToRunEntryPoints.clear();
   asyncCallToScheduler.clear();
+  taskScheduleForTaskRunEvent.clear();
+  runEntryPointToScheduler.clear();
 }
 
 export function handleEvent(_: Types.Events.Event): void {
@@ -25,33 +32,67 @@ export async function finalize(): Promise<void> {
   const {entryToNode} = rendererHandlerData();
   // Process async task flows
   for (const flow of flows) {
-    const asyncTaskScheduled = flow.at(0);
-    if (!asyncTaskScheduled || !Types.Events.isDebuggerAsyncTaskScheduled(asyncTaskScheduled)) {
+    let maybeAsyncTaskScheduled = flow.at(0);
+    if (!maybeAsyncTaskScheduled) {
       continue;
     }
-    const taskName = asyncTaskScheduled.args.taskName;
+    if (Types.Events.isDebuggerAsyncTaskRun(maybeAsyncTaskScheduled)) {
+      // Sometimes a AsyncTaskRun event run can incorrectly appear as
+      // initiated by another AsyncTaskRun from Perfetto's flows
+      // perspective.
+      // For example, in this snippet:
+      //
+      // const myTask = console.createTask('hola'); // creates an AsyncTaskSchedule
+      // myTask.run(something); // creates an AsyncTaskRun
+      // myTask.run(somethingElse); // creates an AsyncTaskRun
+      //
+      // or also in this one
+      //
+      // setInterval(something); // creates multiple connected AsyncTaskRun.
+      //
+      // Because the flow id is created based on the task's memory address,
+      // the three events will end up belonging to the same flow (even if
+      // in the frontend we receive it as pairs), and elements in a flow
+      // are connected to their immediately consecutive neighbor.
+      //
+      // To ensure we use the right Schedule event, if the "initiating"
+      // portion of the flow is a Run event, we look for any corresponding
+      // Schedule event that we might have found before.
+      maybeAsyncTaskScheduled = taskScheduleForTaskRunEvent.get(maybeAsyncTaskScheduled);
+    }
+    if (!maybeAsyncTaskScheduled || !Types.Events.isDebuggerAsyncTaskScheduled(maybeAsyncTaskScheduled)) {
+      continue;
+    }
+    const taskName = maybeAsyncTaskScheduled.args.taskName;
     const asyncTaskRun = flow.at(1);
     if (!asyncTaskRun || !Types.Events.isDebuggerAsyncTaskRun(asyncTaskRun)) {
       // Unexpected flow shape, ignore.
       continue;
     }
-    const asyncCaller = findNearestJSAncestor(asyncTaskScheduled, entryToNode);
-    if (!asyncCaller) {
-      // Unexpected async call trace data shape, ignore.
-      continue;
-    }
+    // Cache the Schedule event for this Run for future reference.
+    taskScheduleForTaskRunEvent.set(asyncTaskRun, maybeAsyncTaskScheduled);
+
+    // Get the JS call scheduled the task.
+    const asyncCaller = findNearestJSAncestor(maybeAsyncTaskScheduled, entryToNode);
+
+    // Get the trace entrypoint for the scheduled task (e.g. FunctionCall, etc.).
     const asyncEntryPoint = findFirstJsInvocationForAsyncTaskRun(asyncTaskRun, entryToNode);
-    if (!asyncEntryPoint) {
+
+    // Store the async relationship between traces to be shown with initiator arrows.
+    // Default to the AsyncTask events in case the JS entrypoints aren't found.
+    runEntryPointToScheduler.set(
+        asyncEntryPoint || asyncTaskRun, {taskName, scheduler: asyncCaller || maybeAsyncTaskScheduled});
+    if (!asyncCaller || !asyncEntryPoint) {
       // Unexpected async call trace data shape, ignore.
       continue;
     }
-    // Set scheduler -> schedulee mapping.
-    // The schedulee being the JS entrypoint
+    // Set scheduler -> scheduled mapping.
+    // The scheduled being the JS entrypoint
     const entryPoints = Platform.MapUtilities.getWithDefault(schedulerToRunEntryPoints, asyncCaller, () => []);
     entryPoints.push(asyncEntryPoint);
 
-    // Set schedulee -> scheduler mapping.
-    // The schedulees being the JS calls (instead of the entrypoints as
+    // Set scheduled -> scheduler mapping.
+    // The scheduled being the JS calls (instead of the entrypoints as
     // above, for usage ergonomics).
     const scheduledProfileCalls = findFirstJSCallsForAsyncTaskRun(asyncTaskRun, entryToNode);
     for (const call of scheduledProfileCalls) {
@@ -173,10 +214,24 @@ export function data(): {
   // For example given a timeout callback run event, returns its
   // setTimeout call event.
   asyncCallToScheduler: typeof asyncCallToScheduler,
+  // Given a trace event, returns its corresponding async parent trace
+  // event caused by an async js call. This can be used as a fallback
+  // for cases where a corresponding JS call is not found at either
+  // end of the async task scheduling pair (e.g. due to sampling data
+  // incompleteness).
+  // In the StackTraceForEvent helper, as we move up the call tree,
+  // this is used to jump to an async parent stack from a
+  // non-profile call trace event in cases where a profile call wasn't
+  // found before. In theory we should make the jump from the scheduled
+  // profile  call using `asyncCallToScheduler`, but its possible that
+  // the the call information isn't available to us as a consequence of
+  // missing samples.
+  runEntryPointToScheduler: typeof runEntryPointToScheduler,
 } {
   return {
     schedulerToRunEntryPoints,
     asyncCallToScheduler,
+    runEntryPointToScheduler,
   };
 }
 

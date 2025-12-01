@@ -31,8 +31,8 @@ Release schedule
 We are planning to remove support for SHA-1 certificates in Chrome 56, which
 will be released to the stable channel [around the end of January
 2017](/developers/calendar). The removal will follow the [Chrome release
-process](/getting-involved/dev-channel), moving from Dev to Beta to Stable;
-there won't be a date-based change in behaviour.
+process](https://chromium.googlesource.com/chromium/src/+/HEAD/docs/process/release_cycle.md),
+moving from Dev to Beta to Stable; there won't be a date-based change in behaviour.
 
 Website operators are urged [to check](https://www.ssllabs.com/ssltest/) for the
 use of SHA-1 certificates and immediately contact their CA for a SHA-256 based

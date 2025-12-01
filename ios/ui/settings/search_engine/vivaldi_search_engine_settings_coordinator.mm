@@ -10,7 +10,8 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiSearchEngineSettingsCoordinator ()
+@interface VivaldiSearchEngineSettingsCoordinator () <
+    VivaldiSearchEngineSettingsViewControllerPresentationDelegate>
 // View controller for the setting.
 @property(nonatomic, strong)
     VivaldiSearchEngineSettingsViewController* viewController;
@@ -52,6 +53,7 @@
           initWithProfile:self.browser->GetProfile()];
   self.mediator.consumer = self.viewController;
   self.viewController.delegate = self.mediator;
+  self.viewController.presentationDelegate = self;
 
   // Add Done button
   UIBarButtonItem* doneItem =
@@ -77,6 +79,13 @@
   [self stop];
   [self.baseNavigationController dismissViewControllerAnimated:YES
                                                     completion:nil];
+}
+
+#pragma mark - VivaldiSearchEngineSettingsViewControllerPresentationDelegate
+- (void)searchEngineSettingsViewControllerWasRemoved:
+      (VivaldiSearchEngineSettingsViewController*)controller {
+  DCHECK_EQ(self.viewController, controller);
+  [self stop];
 }
 
 @end

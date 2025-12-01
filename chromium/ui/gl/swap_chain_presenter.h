@@ -32,7 +32,7 @@ class SwapChainPresenter : public base::PowerStateObserver {
  public:
   SwapChainPresenter(DCLayerTree* layer_tree,
                      Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device,
-                     Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device);
+                     Microsoft::WRL::ComPtr<IDCompositionDevice3> dcomp_device);
 
   SwapChainPresenter(const SwapChainPresenter&) = delete;
   SwapChainPresenter& operator=(const SwapChainPresenter&) = delete;
@@ -115,7 +115,7 @@ class SwapChainPresenter : public base::PowerStateObserver {
   // This changes over time based on stats recorded in |presentation_history|.
   DXGI_FORMAT GetSwapChainFormat(gfx::ProtectedVideoType protected_video_type,
                                  bool use_hdr_swap_chain,
-                                 bool use_p010_sdr_swap_chain);
+                                 bool use_p010_for_sdr_swap_chain);
 
   // Perform a blit using video processor from given input texture to swap chain
   // backbuffer. |input_texture| is the input texture (array), and |input_level|
@@ -317,7 +317,7 @@ class SwapChainPresenter : public base::PowerStateObserver {
   gfx::Size staging_texture_size_;
 
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
-  Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device_;
+  Microsoft::WRL::ComPtr<IDCompositionDesktopDevice> dcomp_device_;
   Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain_;
 
   // Handle returned by DCompositionCreateSurfaceHandle() used to create YUV

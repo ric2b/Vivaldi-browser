@@ -18,7 +18,6 @@
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
@@ -38,6 +37,7 @@
 
 #if BUILDFLAG(IS_LINUX)
 #include "content/public/common/content_switches.h"
+#include "ui/linux/linux_ui.h"
 #endif
 
 #if BUILDFLAG(IS_WIN)
@@ -878,14 +878,19 @@ PrintBackendServiceManager::GetServiceFromBundle(
             << (sandboxed ? "sandboxed" : "unsandboxed") << " for `"
             << remote_id << "`";
 
+    std::vector<std::string> extra_switches;
+#if BUILDFLAG(IS_LINUX)
+    if (auto* linux_ui = ui::LinuxUi::instance()) {
+      extra_switches = linux_ui->GetCmdLineFlagsForCopy();
+    }
+    extra_switches.push_back(switches::kMessageLoopTypeUi);
+#endif
     mojo::Remote<T>& host = bundle->host;
     content::ServiceProcessHost::Launch(
         host.BindNewPipeAndPassReceiver(),
         content::ServiceProcessHost::Options()
             .WithDisplayName(IDS_UTILITY_PROCESS_PRINT_BACKEND_SERVICE_NAME)
-#if BUILDFLAG(IS_LINUX)
-            .WithExtraCommandLineSwitches({switches::kMessageLoopTypeUi})
-#endif
+            .WithExtraCommandLineSwitches(std::move(extra_switches))
             .Pass());
     host->BindBackend(service.BindNewPipeAndPassReceiver());
 
@@ -1359,12 +1364,12 @@ void PrintBackendServiceManager::ServiceCallbackDone(
     const base::UnguessableToken& saved_callback_id,
     X... data) {
   auto found_callback_map = saved_callbacks.find(remote_id);
-  CHECK(found_callback_map != saved_callbacks.end(), base::NotFatalUntil::M130);
+  CHECK(found_callback_map != saved_callbacks.end());
 
   SavedCallbacks<T...>& callback_map = found_callback_map->second;
 
   auto callback_entry = callback_map.find(saved_callback_id);
-  CHECK(callback_entry != callback_map.end(), base::NotFatalUntil::M130);
+  CHECK(callback_entry != callback_map.end());
   auto callback = std::move(callback_entry->second);
   callback_map.erase(callback_entry);
 

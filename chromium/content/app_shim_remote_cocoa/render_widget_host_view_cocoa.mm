@@ -34,6 +34,7 @@
 #include "content/common/features.h"
 #include "content/public/browser/browser_accessibility_state.h"
 #import "content/public/browser/render_widget_host_view_mac_delegate.h"
+#include "content/public/browser/scoped_accessibility_mode.h"
 #include "content/public/common/content_features.h"
 #include "skia/ext/skia_utils_mac.h"
 #include "third_party/blink/public/common/features.h"
@@ -365,6 +366,7 @@ void ExtractUnderlines(NSAttributedString* string,
   BOOL _shouldRequestTextSubstitutions;
   BOOL _substitutionWasApplied;
   bool _sonomaAccessibilityRefinementsAreActive;
+  std::unique_ptr<content::ScopedAccessibilityMode> _basic_accessibility_mode;
 }
 
 @synthesize markedRange = _markedRange;
@@ -2101,16 +2103,16 @@ void ExtractUnderlines(NSAttributedString* string,
 
 - (NSAccessibilityRole)accessibilityRole {
   if (_sonomaAccessibilityRefinementsAreActive) {
-    content::BrowserAccessibilityState* accessibility_state =
-        content::BrowserAccessibilityState::GetInstance();
-
     // When an AT asks the application object for its role, we activate
     // nativeAPI accessibility support. If the AT descends into the AX tree
-    // and arrives here (the web contents container), activate basic support
-    // so that the AT can descend further into the web content.
-    if (!accessibility_state->GetAccessibilityMode().has_mode(
-            ui::kAXModeBasic.flags())) {
-      accessibility_state->AddAccessibilityModeFlags(ui::kAXModeBasic);
+    // and arrives here (the web contents container), activate basic support for
+    // all web content in the process so that the AT can descend further into
+    // any web content it needs.
+    if (!_basic_accessibility_mode) {
+      _basic_accessibility_mode =
+          content::BrowserAccessibilityState::GetInstance()
+              ->CreateScopedModeForProcess(ui::kAXModeBasic |
+                                           ui::AXMode::kFromPlatform);
     }
   }
 
@@ -2444,9 +2446,10 @@ extern NSString* NSTextInputReplacementRangeAttributeName;
   if ([self isHandlingKeyDown] && !_isReconversionTriggered) {
     _setMarkedTextReplacementRange = gfx::Range(replacementRange);
   } else {
-    _host->ImeSetComposition(_markedText, _imeTextSpans,
-                             gfx::Range(replacementRange), newSelRange.location,
-                             NSMaxRange(newSelRange));
+    _host->ImeSetComposition(
+        _markedText, _imeTextSpans,
+        gfx::Range::FromPossiblyInvalidNSRange(replacementRange),
+        newSelRange.location, NSMaxRange(newSelRange));
   }
 
   [[self inputContext] invalidateCharacterCoordinates];

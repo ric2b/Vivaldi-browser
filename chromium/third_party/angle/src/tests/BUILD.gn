@@ -377,6 +377,15 @@ if (is_win || is_linux || is_chromeos || is_android || is_fuchsia || is_apple) {
       # Need to bundle the libraries inside the .app.
       deps += [ "$angle_root:angle" ]
     }
+
+    if (angle_enable_wgpu) {
+      deps += [
+        "${angle_dawn_dir}/include/dawn:headers",
+        "${angle_dawn_dir}/src/dawn:proc",
+        "${angle_dawn_dir}/src/dawn/native",
+      ]
+      defines += [ "ANGLE_ENABLE_WGPU" ]
+    }
   }
 }
 
@@ -1346,10 +1355,7 @@ if (build_angle_deqp_tests && !is_fuchsia) {
     if (is_android) {
       include_dirs += [ "$deqp_path/framework/platform/android" ]
 
-      _android_api = android64_ndk_api_level
-      if (!angle_64bit_current_cpu) {
-        _android_api = android32_ndk_api_level
-      }
+      _android_api = android_ndk_api_level
 
       defines += [ "DE_ANDROID_API=" + "${_android_api}" ]
     }

@@ -120,10 +120,21 @@ public class ScrimManager {
      *     to this to subsequently interact with the resulting scrim.
      */
     public void showScrim(PropertyModel model) {
+        showScrim(model, true);
+    }
+
+    /**
+     * Shows a new scrim.
+     *
+     * @param model Contains information about the scrim to show. Callers should retain a reference
+     *     to this to subsequently interact with the resulting scrim.
+     * @param animate Whether the scrim should animate.
+     */
+    public void showScrim(PropertyModel model, boolean animate) {
         ScrimCoordinator coordinator = new ScrimCoordinator(mContext, mParent);
         mModelToScrim.put(model, coordinator);
         mScrimVisibilitySupplier.set(true);
-        coordinator.showScrim(model);
+        coordinator.showScrim(model, animate);
 
         coordinator.addObserver(mOnScrimVisibilityChanged);
         coordinator.getStatusBarColorSupplier().addObserver(mOnStatusBarColorChanged);
@@ -266,7 +277,8 @@ public class ScrimManager {
         }
     }
 
-    public @Nullable ScrimView getViewForTesting(PropertyModel model) {
+    public @Nullable ScrimView getViewForTesting(@Nullable PropertyModel model) {
+        if (model == null) return null;
         @Nullable ScrimCoordinator coordinator = mModelToScrim.get(model);
         if (coordinator == null) return null;
         return coordinator.getViewForTesting();
@@ -279,7 +291,8 @@ public class ScrimManager {
         }
     }
 
-    public boolean areAnimationsRunningForTesting(PropertyModel model) {
+    public boolean areAnimationsRunningForTesting(@Nullable PropertyModel model) {
+        if (model == null) return false;
         @Nullable ScrimCoordinator coordinator = mModelToScrim.get(model);
         if (coordinator == null) return false;
         return coordinator.areAnimationsRunningForTesting();

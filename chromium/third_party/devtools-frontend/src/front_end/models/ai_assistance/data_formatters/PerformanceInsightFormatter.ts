@@ -117,25 +117,31 @@ ${this.#links()}`;
       // Note that we expect every trace + LCP to have TTFB + Render delay, but
       // very old traces are missing the data, so we have to code defensively
       // in case the phases are not present.
-      const phaseBulletPoints: Array<{name: string, value: string}> = [];
+      const phaseBulletPoints: Array<{name: string, value: string, percentage: string}> = [];
       if (phases?.ttfb) {
-        phaseBulletPoints.push({name: 'Time to first byte', value: formatMilli(phases.ttfb)});
+        const percentage = (phases.ttfb / lcpMs * 100).toFixed(1);
+        phaseBulletPoints.push({name: 'Time to first byte', value: formatMilli(phases.ttfb), percentage});
       }
       if (phases?.loadDelay) {
-        phaseBulletPoints.push({name: 'Load delay', value: formatMilli(phases.loadDelay)});
+        const percentage = (phases.loadDelay / lcpMs * 100).toFixed(1);
+        phaseBulletPoints.push({name: 'Resource load delay', value: formatMilli(phases.loadDelay), percentage});
       }
       if (phases?.loadTime) {
-        phaseBulletPoints.push({name: 'Load time', value: formatMilli(phases.loadTime)});
+        const percentage = (phases.loadTime / lcpMs * 100).toFixed(1);
+        phaseBulletPoints.push({name: 'Resource load duration', value: formatMilli(phases.loadTime), percentage});
       }
       if (phases?.renderDelay) {
-        phaseBulletPoints.push({name: 'Render delay', value: formatMilli(phases.renderDelay)});
+        const percentage = (phases.renderDelay / lcpMs * 100).toFixed(1);
+        phaseBulletPoints.push({name: 'Element render delay', value: formatMilli(phases.renderDelay), percentage});
       }
 
       return `${this.#lcpMetricSharedContext()}
 
-We can break this time down into the ${phaseBulletPoints.length} phases that combine to make up the LCP time:
+We can break this time down into the ${phaseBulletPoints.length} phases that combine to make the LCP time:
 
-${phaseBulletPoints.map(phase => `- ${phase.name}: ${phase.value}`).join('\n')}`;
+${
+          phaseBulletPoints.map(phase => `- ${phase.name}: ${phase.value} (${phase.percentage}% of total LCP time)`)
+              .join('\n')}`;
     }
 
     if (Trace.Insights.Models.LCPDiscovery.isLCPDiscovery(this.#insight)) {
@@ -167,6 +173,10 @@ ${checklistBulletPoints.map(point => `- ${point.name}: ${point.passed ? 'PASSED'
     if (Trace.Insights.Models.RenderBlocking.isRenderBlocking(this.#insight)) {
       const requestSummary = this.#insight.renderBlockingRequests.map(
           r => TraceEventFormatter.networkRequest(r, this.#parsedTrace, {verbose: false}));
+
+      if (requestSummary.length === 0) {
+        return 'There are no network requests that are render blocking.';
+      }
 
       return `Here is a list of the network requests that were render blocking on this page and their duration:
 
@@ -223,13 +233,40 @@ ${checklistBulletPoints.map(point => `- ${point.name}: ${point.passed ? 'PASSED'
       return inpInfoForEvent;
     }
 
+    if (Trace.Insights.Models.CLSCulprits.isCLSCulprits(this.#insight)) {
+      const {worstCluster, shifts} = this.#insight;
+      if (!worstCluster) {
+        return '';
+      }
+
+      const baseTime = this.#parsedTrace.Meta.traceBounds.min;
+
+      const clusterTimes = {
+        start: worstCluster.ts - baseTime,
+        end: worstCluster.ts + worstCluster.dur - baseTime,
+      } as const;
+
+      const shiftsFormatted = worstCluster.events.map((layoutShift, index) => {
+        return TraceEventFormatter.layoutShift(layoutShift, index, this.#parsedTrace, shifts.get(layoutShift));
+      });
+
+      return `The worst layout shift cluster was the cluster that started at ${
+          formatMicro(clusterTimes.start)} and ended at ${formatMicro(clusterTimes.end)}, with a duration of ${
+          formatMicro(worstCluster.dur)}.
+The score for this cluster is ${worstCluster.clusterCumulativeScore.toFixed(4)}.
+
+Layout shifts in this cluster:
+${shiftsFormatted.join('\n')}`;
+    }
+
     return '';
   }
 
   #links(): string {
     switch (this.#insight.insightKey) {
       case 'CLSCulprits':
-        return '';
+        return `- https://wdeb.dev/articles/cls
+- https://web.dev/articles/optimize-cls`;
       case 'DocumentLatency':
         return '- https://web.dev/articles/optimize-ttfb';
       case 'DOMSize':
@@ -276,7 +313,10 @@ ${checklistBulletPoints.map(point => `- ${point.name}: ${point.passed ? 'PASSED'
   #description(): string {
     switch (this.#insight.insightKey) {
       case 'CLSCulprits':
-        return '';
+        return `Cumulative Layout Shifts (CLS) is a measure of the largest burst of layout shifts for every unexpected layout shift that occurs during the lifecycle of a page. This is a Core Web Vital and the thresholds for categorizing a score are:
+- Good: 0.1 or less
+- Needs improvement: more than 0.1 and less than or equal to 0.25
+- Bad: over 0.25`;
       case 'DocumentLatency':
         return `This insight checks that the first request is responded to promptly. We use the following criteria to check this:
 1. Was the initial request redirected?
@@ -312,7 +352,7 @@ The sum of these three phases is the total latency. It is important to optimize 
 
 It is important that all of these checks pass to minimize the delay between the initial page load and the LCP resource being loaded.`;
       case 'LCPPhases':
-        return 'This insight is used to analyze the time spent that contributed to the final LCP time and identify which of the 4 phases (or 2 if there was no LCP resource) are contributing most to the delay in rendering the LCP element. For this insight it can be useful to get a list of all network requests that happened before the LCP time and look for slow requests. You can also look for main thread activity during the phases, in particular the load delay and render delay phases.';
+        return 'This insight is used to analyze the time spent that contributed to the final LCP time and identify which of the 4 phases (or 2 if there was no LCP resource) are contributing most to the delay in rendering the LCP element.';
       case 'NetworkDependencyTree':
         return '';
       case 'RenderBlocking':
@@ -339,6 +379,42 @@ export interface NetworkRequestFormatOptions {
 }
 
 export class TraceEventFormatter {
+  static layoutShift(
+      shift: Trace.Types.Events.SyntheticLayoutShift, index: number, parsedTrace: Trace.Handlers.Types.ParsedTrace,
+      rootCauses?: Trace.Insights.Models.CLSCulprits.LayoutShiftRootCausesData): string {
+    const baseTime = parsedTrace.Meta.traceBounds.min;
+
+    const potentialRootCauses: string[] = [];
+    if (rootCauses) {
+      rootCauses.iframeIds.forEach(id => potentialRootCauses.push(`An iframe (id: ${id} was injected into the page)`));
+      rootCauses.fontRequests.forEach(req => {
+        potentialRootCauses.push(`A font that was loaded over the network (${req.args.data.url}).`);
+      });
+      // TODO(b/413285103): use the nice strings for non-composited animations.
+      // The code for this lives in TimelineUIUtils but that cannot be used
+      // within models. We should move it and then expose the animations info
+      // more nicely.
+      rootCauses.nonCompositedAnimations.forEach(_ => {
+        potentialRootCauses.push('A non composited animation.');
+      });
+      rootCauses.unsizedImages.forEach(img => {
+        // TODO(b/413284569): if we store a nice human readable name for this
+        // image in the trace metadata, we can do something much nicer here.
+        const url = img.paintImageEvent.args.data.url;
+        const nodeName = img.paintImageEvent.args.data.nodeName;
+        const extraText = url ? `url: ${url}` : `id: ${img.backendNodeId}`;
+        potentialRootCauses.push(`An unsized image (${nodeName}) (${extraText}).`);
+      });
+    }
+    const rootCauseText = potentialRootCauses.length ?
+        `- Potential root causes:\n  - ${potentialRootCauses.join('\n  - ')}` :
+        '- No potential root causes identified';
+
+    return `### Layout shift ${index + 1}:
+- Start time: ${formatMicro(shift.ts - baseTime)}
+- Score: ${shift.args.data?.weighted_score_delta.toFixed(4)}
+${rootCauseText}`;
+  }
   /**
    * This is the data passed to a network request when the Performance Insights
    * agent is asking for information. It is a slimmed down version of the
@@ -365,21 +441,20 @@ export class TraceEventFormatter {
     const baseTime = navigationForEvent?.ts ?? parsedTrace.Meta.traceBounds.min;
 
     // Gets all the timings for this request, relative to the base time.
-    // Note that this is the start time, not total time. E.g. "queueing: X"
+    // Note that this is the start time, not total time. E.g. "queuedAt: X"
     // means that the request was queued at Xms, not that it queued for Xms.
     const startTimesForLifecycle = {
-      start: request.ts - baseTime,
-      queueing: syntheticData.downloadStart - baseTime,
-      requestSent: syntheticData.sendStartTime - baseTime,
-      downloadComplete: syntheticData.finishTime - baseTime,
-      processingComplete: request.ts + request.dur - baseTime,
+      queuedAt: request.ts - baseTime,
+      requestSentAt: syntheticData.sendStartTime - baseTime,
+      downloadCompletedAt: syntheticData.finishTime - baseTime,
+      processingCompletedAt: request.ts + request.dur - baseTime,
     } as const;
 
     const mainThreadProcessingDuration =
-        startTimesForLifecycle.processingComplete - startTimesForLifecycle.downloadComplete;
+        startTimesForLifecycle.processingCompletedAt - startTimesForLifecycle.downloadCompletedAt;
+    const downloadTime = syntheticData.finishTime - syntheticData.downloadStart;
 
     const renderBlocking = Trace.Helpers.Network.isSyntheticNetworkRequestEventRenderBlocking(request);
-
     const initiator = parsedTrace.NetworkRequests.eventToInitiator.get(request);
 
     const priorityLines = [];
@@ -399,20 +474,20 @@ export class TraceEventFormatter {
 
     if (!options.verbose) {
       return `${titlePrefix}: ${url}
-- Start time: ${formatMicro(startTimesForLifecycle.start)}
+- Start time: ${formatMicro(startTimesForLifecycle.queuedAt)}
 - Duration: ${formatMicro(request.dur)}
 - MIME type: ${mimeType}${renderBlocking ? '\n- This request was render blocking' : ''}`;
     }
 
     return `${titlePrefix}: ${url}
 Timings:
-- Start time: ${formatMicro(startTimesForLifecycle.start)}
-- Queued at: ${formatMicro(startTimesForLifecycle.queueing)}
-- Request sent at: ${formatMicro(startTimesForLifecycle.requestSent)}
-- Download complete at: ${formatMicro(startTimesForLifecycle.downloadComplete)}
-- Completed at: ${formatMicro(startTimesForLifecycle.processingComplete)}
+- Queued at: ${formatMicro(startTimesForLifecycle.queuedAt)}
+- Request sent at: ${formatMicro(startTimesForLifecycle.requestSentAt)}
+- Download complete at: ${formatMicro(startTimesForLifecycle.downloadCompletedAt)}
+- Main thread processing completed at: ${formatMicro(startTimesForLifecycle.processingCompletedAt)}
 Durations:
-- Main thread processing duration: ${formatMicro(mainThreadProcessingDuration)}
+- Download time: ${formatMicro(downloadTime)}
+- Main thread processing time: ${formatMicro(mainThreadProcessingDuration)}
 - Total duration: ${formatMicro(request.dur)}${initiator ? `\nInitiator: ${initiator.args.data.url}` : ''}
 Redirects:${redirects.length ? '\n' + redirects.join('\n') : ' no redirects'}
 Status code: ${statusCode}
@@ -420,6 +495,6 @@ MIME Type: ${mimeType}
 ${priorityLines.join('\n')}
 Render blocking: ${renderBlocking ? 'Yes' : 'No'}
 From a service worker: ${fromServiceWorker ? 'Yes' : 'No'}
-${NetworkRequestFormatter.formatHeaders('Response headers', responseHeaders, true)}`;
+${NetworkRequestFormatter.formatHeaders('Response headers', responseHeaders ?? [], true)}`;
   }
 }

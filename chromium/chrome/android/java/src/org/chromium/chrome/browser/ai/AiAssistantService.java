@@ -54,6 +54,10 @@ import java.lang.annotation.RetentionPolicy;
 import java.time.Duration;
 import java.util.Optional;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
 /*
  * Service to interact with an AI assistant, used to invoke an assistant UI to summarize web pages
  * and/or ask questions about it. System-specific integration is handled with the SystemAiProvider
@@ -165,6 +169,12 @@ public class AiAssistantService {
      * @return True if the tab is eligible for the AI assistant UI, false otherwise.
      */
     public boolean canShowAiForTab(Context context, Tab tab) {
+        // Vivaldi VAB-11219
+        if (BuildConfig.IS_VIVALDI
+                && VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                        "reader_for_accessibility", true)) {
+            return true;
+        } // End Vivaldi
         if (!ChromeFeatureList.isEnabled(
                 ChromeFeatureList.ADAPTIVE_BUTTON_IN_TOP_TOOLBAR_PAGE_SUMMARY)) {
             return false;

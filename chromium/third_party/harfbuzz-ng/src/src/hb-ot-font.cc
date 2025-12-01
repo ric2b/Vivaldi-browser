@@ -34,7 +34,6 @@
 #include "hb-font.hh"
 #include "hb-machinery.hh"
 #include "hb-ot-face.hh"
-#include "hb-outline.hh"
 
 #include "hb-ot-cmap-table.hh"
 #include "hb-ot-glyf-table.hh"
@@ -42,7 +41,7 @@
 #include "hb-ot-cff1-table.hh"
 #include "hb-ot-hmtx-table.hh"
 #include "hb-ot-post-table.hh"
-#include "hb-ot-stat-table.hh" // Just so we compile it; unused otherwise.
+#include "hb-ot-stat-table.hh"
 #include "hb-ot-var-varc-table.hh"
 #include "hb-ot-vorg-table.hh"
 #include "OT/Color/CBDT/CBDT.hh"
@@ -78,8 +77,8 @@ struct hb_ot_font_t
 #endif
 
   /* h_advance caching */
-  mutable hb_atomic_int_t cached_coords_serial;
-  mutable hb_atomic_ptr_t<hb_ot_font_advance_cache_t> advance_cache;
+  mutable hb_atomic_t<int> cached_coords_serial;
+  mutable hb_atomic_t<hb_ot_font_advance_cache_t *> advance_cache;
 };
 
 static hb_ot_font_t *
@@ -205,8 +204,6 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
   const hb_ot_face_t *ot_face = ot_font->ot_face;
   const OT::hmtx_accelerator_t &hmtx = *ot_face->hmtx;
 
-  hb_position_t *orig_first_advance = first_advance;
-
 #if !defined(HB_NO_VAR) && !defined(HB_NO_OT_FONT_ADVANCE_CACHE)
   const OT::HVAR &HVAR = *hmtx.var_table;
   const OT::ItemVariationStore &varStore = &HVAR + HVAR.varStore;
@@ -280,18 +277,6 @@ hb_ot_get_glyph_h_advances (hb_font_t* font, void* font_data,
 #if !defined(HB_NO_VAR) && !defined(HB_NO_OT_FONT_ADVANCE_CACHE)
   OT::ItemVariationStore::destroy_cache (varStore_cache);
 #endif
-
-  if (font->x_strength && !font->embolden_in_place)
-  {
-    /* Emboldening. */
-    hb_position_t x_strength = font->x_scale >= 0 ? font->x_strength : -font->x_strength;
-    first_advance = orig_first_advance;
-    for (unsigned int i = 0; i < count; i++)
-    {
-      *first_advance += *first_advance ? x_strength : 0;
-      first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
-    }
-  }
 }
 
 #ifndef HB_NO_VERTICAL
@@ -307,8 +292,6 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
   const hb_ot_font_t *ot_font = (const hb_ot_font_t *) font_data;
   const hb_ot_face_t *ot_face = ot_font->ot_face;
   const OT::vmtx_accelerator_t &vmtx = *ot_face->vmtx;
-
-  hb_position_t *orig_first_advance = first_advance;
 
   if (vmtx.has_data ())
   {
@@ -341,18 +324,6 @@ hb_ot_get_glyph_v_advances (hb_font_t* font, void* font_data,
     {
       *first_advance = advance;
       first_glyph = &StructAtOffsetUnaligned<hb_codepoint_t> (first_glyph, glyph_stride);
-      first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
-    }
-  }
-
-  if (font->y_strength && !font->embolden_in_place)
-  {
-    /* Emboldening. */
-    hb_position_t y_strength = font->y_scale >= 0 ? font->y_strength : -font->y_strength;
-    first_advance = orig_first_advance;
-    for (unsigned int i = 0; i < count; i++)
-    {
-      *first_advance += *first_advance ? y_strength : 0;
       first_advance = &StructAtOffsetUnaligned<hb_position_t> (first_advance, advance_stride);
     }
   }
@@ -392,7 +363,8 @@ hb_ot_get_glyph_v_origin (hb_font_t *font,
   }
 
   hb_glyph_extents_t extents = {0};
-  if (ot_face->glyf->get_extents (font, glyph, &extents))
+
+  if (hb_font_get_glyph_extents (font, glyph, &extents))
   {
     const OT::vmtx_accelerator_t &vmtx = *ot_face->vmtx;
     int tsb = 0;
@@ -405,7 +377,7 @@ hb_ot_get_glyph_v_origin (hb_font_t *font,
     hb_font_extents_t font_extents;
     font->get_h_extents_with_fallback (&font_extents);
     hb_position_t advance = font_extents.ascender - font_extents.descender;
-    int diff = advance - -extents.height;
+    hb_position_t diff = advance - -extents.height;
     *y = extents.y_bearing + (diff >> 1);
     return true;
   }
@@ -428,6 +400,9 @@ hb_ot_get_glyph_extents (hb_font_t *font,
   const hb_ot_font_t *ot_font = (const hb_ot_font_t *) font_data;
   const hb_ot_face_t *ot_face = ot_font->ot_face;
 
+#ifndef HB_NO_VAR_COMPOSITES
+  if (ot_face->VARC->get_extents (font, glyph, extents)) return true;
+#endif
 #if !defined(HB_NO_OT_FONT_BITMAP) && !defined(HB_NO_COLOR)
   if (ot_face->sbix->get_extents (font, glyph, extents)) return true;
   if (ot_face->CBDT->get_extents (font, glyph, extents)) return true;
@@ -518,35 +493,17 @@ hb_ot_draw_glyph (hb_font_t *font,
 		  hb_draw_funcs_t *draw_funcs, void *draw_data,
 		  void *user_data)
 {
-  bool embolden = font->x_strength || font->y_strength;
-  hb_outline_t outline;
-
-  { // Need draw_session to be destructed before emboldening.
-    hb_draw_session_t draw_session (embolden ? hb_outline_recording_pen_get_funcs () : draw_funcs,
-				    embolden ? &outline : draw_data, font->slant_xy);
+  hb_draw_session_t draw_session (draw_funcs, draw_data, font->slant_xy);
 #ifndef HB_NO_VAR_COMPOSITES
-    if (!font->face->table.VARC->get_path (font, glyph, draw_session))
+  if (!font->face->table.VARC->get_path (font, glyph, draw_session))
 #endif
-    // Keep the following in synch with VARC::get_path_at()
-    if (!font->face->table.glyf->get_path (font, glyph, draw_session))
+  // Keep the following in synch with VARC::get_path_at()
+  if (!font->face->table.glyf->get_path (font, glyph, draw_session))
 #ifndef HB_NO_CFF
-    if (!font->face->table.cff2->get_path (font, glyph, draw_session))
-    if (!font->face->table.cff1->get_path (font, glyph, draw_session))
+  if (!font->face->table.cff2->get_path (font, glyph, draw_session))
+  if (!font->face->table.cff1->get_path (font, glyph, draw_session))
 #endif
-    {}
-  }
-
-  if (embolden)
-  {
-    float x_shift = font->embolden_in_place ? 0 : (float) font->x_strength / 2;
-    float y_shift = (float) font->y_strength / 2;
-    if (font->x_scale < 0) x_shift = -x_shift;
-    if (font->y_scale < 0) y_shift = -y_shift;
-    outline.embolden (font->x_strength, font->y_strength,
-		      x_shift, y_shift);
-
-    outline.replay (draw_funcs, draw_data);
-  }
+  {}
 }
 #endif
 
@@ -568,14 +525,11 @@ hb_ot_paint_glyph (hb_font_t *font,
   if (font->face->table.sbix->paint_glyph (font, glyph, paint_funcs, paint_data)) return;
 #endif
 #endif
-#ifndef HB_NO_VAR_COMPOSITES
-  if (font->face->table.VARC->paint_glyph (font, glyph, paint_funcs, paint_data, foreground)) return;
-#endif
-  if (font->face->table.glyf->paint_glyph (font, glyph, paint_funcs, paint_data, foreground)) return;
-#ifndef HB_NO_CFF
-  if (font->face->table.cff2->paint_glyph (font, glyph, paint_funcs, paint_data, foreground)) return;
-  if (font->face->table.cff1->paint_glyph (font, glyph, paint_funcs, paint_data, foreground)) return;
-#endif
+
+  // Outline glyph
+  paint_funcs->push_clip_glyph (paint_data, glyph, font);
+  paint_funcs->color (paint_data, true, foreground);
+  paint_funcs->pop_clip (paint_data);
 }
 #endif
 

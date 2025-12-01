@@ -1158,11 +1158,6 @@ crbug.com/1046784 [ Linux ] http/tests/devtools/elements/edit/set-outer-html.js 
 crbug.com/1046784 [ Mac11 Release ] http/tests/devtools/elements/edit/set-outer-html.js [ Slow ]
 crbug.com/1046784 [ Mac12 ] http/tests/devtools/elements/edit/set-outer-html.js [ Slow ]
 crbug.com/1046784 [ Release Win ] http/tests/devtools/elements/edit/set-outer-html.js [ Slow ]
-crbug.com/1046784 [ Debug ] http/tests/devtools/network/failed-request-response-mimetype.js [ Slow ]
-crbug.com/1046784 [ Linux Release ] http/tests/devtools/network/failed-request-response-mimetype.js [ Slow ]
-crbug.com/1046784 [ Mac11 Release ] http/tests/devtools/network/failed-request-response-mimetype.js [ Slow ]
-crbug.com/1046784 [ Mac12 Release ] http/tests/devtools/network/failed-request-response-mimetype.js [ Slow ]
-crbug.com/1046784 [ Release Win ] http/tests/devtools/network/failed-request-response-mimetype.js [ Slow ]
 crbug.com/1046784 [ Linux ] http/tests/devtools/elements/selected-element-changes-execution-context.js [ Slow ]
 crbug.com/1046784 [ Mac11 Release ] http/tests/devtools/elements/selected-element-changes-execution-context.js [ Slow ]
 crbug.com/1046784 [ Mac12 ] http/tests/devtools/elements/selected-element-changes-execution-context.js [ Slow ]
@@ -1353,7 +1348,6 @@ crbug.com/1493194 external/wpt/css/cssom/insert-dir-rule-in-iframe-crash.html [ 
 
 # Slow Private Network Access tests
 crbug.com/626703 [ Mac12 ] external/wpt/fetch/private-network-access/mixed-content-fetch.tentative.https.window.html [ Slow ]
-crbug.com/1484710 virtual/fenced-frame-mparch/external/wpt/fetch/private-network-access/fenced-frame-subresource-fetch.tentative.https.window.html?include=from-public [ Slow ]
 
 # Gardener 2023-10-26
 crbug.com/1496281 [ Debug Linux ] external/wpt/html/semantics/embedded-content/bfcache/embedded-js.html [ Slow ]
@@ -1454,3 +1448,12 @@ crbug.com/332938942 [ Mac ] editing/selection/mouse/mouse-selection-sideways-lr.
 crbug.com/332938942 [ Mac ] editing/selection/mouse/mouse-selection-sideways-rl.html [ Slow ]
 crbug.com/332938942 [ Mac ] editing/selection/mouse/mouse-selection-vertical-lr.html [ Slow ]
 crbug.com/332938942 [ Mac ] editing/selection/mouse/mouse-selection-vertical-rl.html [ Slow ]
+
+crbug.com/407795725 http/tests/inspector-protocol/tracing/frame-postmessage.js [ Slow ]
+
+crbug.com/413283544 [ Linux ] external/wpt/css/selectors/focus-visible-003.html [ Slow ]
+
+crbug.com/378014598 external/wpt/nav-tracking-mitigations/* [ Slow ]
+
+# Gardener 2025-05-02
+crbug.com/387598611 fast/overflow/scrollbar-drag-origin.html [ Slow ]

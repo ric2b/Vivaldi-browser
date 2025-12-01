@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ro">
-<translation id="2277224997687551299">Editare nume grup</translation>
+<translation id="1062777154504442433">File suprapuse noi</translation>
+<translation id="1625440863545383011">Scoateți fila și ieșiți din filele suprapuse</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Filă de semne de carte}
           other {File de semne de carte}
         }</translation>
 <translation id="2947471979790858922">Activitatea dumneavoastră în aceste file private va fi eliminată de pe acest dispozitiv</translation>
+<translation id="3298614730029636660">Ieșiți din filele suprapuse</translation>
+<translation id="354698175756845966">Editați culoarea filelor suprapuse</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Puteți găsi filele dumneavoastră închise în Filele Recente din meniul principal Vivaldi. Fila dumneavoastră privată nu va fi disponibilă.}
         other {Puteți găsi filele dumneavoastră închise în Filele Recente din meniul principal Vivaldi. Cele # file private nu vor fi disponibile.}}</translation>
-<translation id="4460014764210899310">Degrupează</translation>
 <translation id="4871187110787939393">Închideți toate filele private?</translation>
 <translation id="5494920125229734069">Selectare totală</translation>
-<translation id="6744956528665271406">Editare culoare grup</translation>
+<translation id="6807841890213931603">Scoateți fila și ștergeți filele suprapuse</translation>
+<translation id="750227952939161636">Filele suprapuse sunt salvate și actualizate pe toate dispozitivele conectate</translation>
+<translation id="7640137753339219124">Ștergeți filele suprapuse</translation>
+<translation id="7653857400289671414">Filele suprapuse sunt salvate automat</translation>
+<translation id="8440938071054361204">Editați numele filelor suprapuse</translation>
+<translation id="8602902357364871325">Închideți filele suprapuse</translation>
+<translation id="8851621822786801079">Scoateți din filele suprapuse</translation>
 </translationbundle>

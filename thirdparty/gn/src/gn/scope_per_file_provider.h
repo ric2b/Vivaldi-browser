@@ -16,8 +16,12 @@ class ScopePerFileProvider : public Scope::ProgrammaticProvider {
  public:
   // allow_target_vars allows the target-related variables to get resolved.
   // When allow_target_vars is unset, the target-related values will be
-  // undefined to GN script.
-  ScopePerFileProvider(Scope* scope, bool allow_target_vars);
+  // undefined to GN script. When dotfile_scope is set, only the values
+  // safe to reference in a dotfile will be resolved. At the moment that
+  // is just gn_version.
+  ScopePerFileProvider(Scope* scope,
+                       bool allow_target_vars,
+                       bool dotfile_scope = false);
   ~ScopePerFileProvider() override;
 
   // ProgrammaticProvider implementation.
@@ -35,6 +39,7 @@ class ScopePerFileProvider : public Scope::ProgrammaticProvider {
   const Value* GetTargetOutDir();
 
   bool allow_target_vars_;
+  bool dotfile_scope_;
 
   // All values are lazily created.
   std::unique_ptr<Value> current_toolchain_;

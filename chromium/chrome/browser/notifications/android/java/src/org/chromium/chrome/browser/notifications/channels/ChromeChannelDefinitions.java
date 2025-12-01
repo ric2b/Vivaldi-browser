@@ -4,10 +4,7 @@
 
 package org.chromium.chrome.browser.notifications.channels;
 
-import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.os.Build.VERSION;
-import android.os.Build.VERSION_CODES;
 import android.text.TextUtils;
 
 import androidx.annotation.StringDef;
@@ -15,8 +12,6 @@ import androidx.annotation.StringDef;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.notifications.R;
-import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
-import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
 import org.chromium.components.browser_ui.notifications.channels.ChannelDefinitions;
 
 import java.lang.annotation.Retention;
@@ -51,7 +46,7 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
     static final int CHANNELS_VERSION = 4;
 
     private static class LazyHolder {
-        private static ChromeChannelDefinitions sInstance = new ChromeChannelDefinitions();
+        private static final ChromeChannelDefinitions sInstance = new ChromeChannelDefinitions();
     }
 
     public static ChromeChannelDefinitions getInstance() {
@@ -93,11 +88,12 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
         ChannelId.WEBAPPS,
         ChannelId.WEBAPPS_QUIET,
         ChannelId.WEBRTC_CAM_AND_MIC,
-        ChannelId.PRICE_DROP,
+        ChannelId.PRICE_DROP, // Deprecated, use PRICE_DROP_DEFAULT.
         ChannelId.PRICE_DROP_DEFAULT,
         ChannelId.SECURITY_KEY,
         ChannelId.BLUETOOTH,
-        ChannelId.USB
+        ChannelId.USB,
+        ChannelId.SERIAL
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ChannelId {
@@ -131,6 +127,7 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
         String SECURITY_KEY = "security_key";
         String BLUETOOTH = "bluetooth";
         String USB = "usb";
+        String SERIAL = "serial";
     }
 
     @StringDef({ChannelGroupId.GENERAL, ChannelGroupId.SITES})
@@ -317,35 +314,11 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
             // Not added to startup channels because we want this channel to be created on the first
             // use.
             map.put(
-                    ChannelId.PRICE_DROP,
-                    PredefinedChannel.create(
-                            ChannelId.PRICE_DROP,
-                            R.string.notification_category_price_drop,
-                            NotificationManager.IMPORTANCE_DEFAULT,
-                            ChannelGroupId.GENERAL));
-            // TODO(crbug.com/40244973): Make the new channel's behavior consistent with the old
-            // channel's if it's created and modified by the user. Clean this up after one or two
-            // milestones.
-            int priceDropDefaultChannelImportance = NotificationManager.IMPORTANCE_DEFAULT;
-            if (VERSION.SDK_INT >= VERSION_CODES.O) {
-                NotificationManagerProxy notificationManager =
-                        NotificationManagerProxyImpl.getInstance();
-                NotificationChannel priceDropChannel =
-                        notificationManager.getNotificationChannel(ChannelId.PRICE_DROP);
-                if (priceDropChannel != null) {
-                    startup.add(ChannelId.PRICE_DROP_DEFAULT);
-                    if (priceDropChannel.getImportance() != NotificationManager.IMPORTANCE_LOW) {
-                        priceDropDefaultChannelImportance = priceDropChannel.getImportance();
-                    }
-                    notificationManager.deleteNotificationChannel(ChannelId.PRICE_DROP);
-                }
-            }
-            map.put(
                     ChannelId.PRICE_DROP_DEFAULT,
                     PredefinedChannel.create(
                             ChannelId.PRICE_DROP_DEFAULT,
                             R.string.notification_category_price_drop,
-                            priceDropDefaultChannelImportance,
+                            NotificationManager.IMPORTANCE_DEFAULT,
                             ChannelGroupId.GENERAL));
 
             // The security key notification channel will only appear for users
@@ -375,6 +348,16 @@ public class ChromeChannelDefinitions extends ChannelDefinitions {
                     PredefinedChannel.create(
                             ChannelId.USB,
                             R.string.notification_category_usb,
+                            NotificationManager.IMPORTANCE_LOW,
+                            ChannelGroupId.GENERAL));
+
+            // The serial notification channel will only appear for users
+            // who are targeted for this feature.
+            map.put(
+                    ChannelId.SERIAL,
+                    PredefinedChannel.create(
+                            ChannelId.SERIAL,
+                            R.string.notification_category_serial,
                             NotificationManager.IMPORTANCE_LOW,
                             ChannelGroupId.GENERAL));
 

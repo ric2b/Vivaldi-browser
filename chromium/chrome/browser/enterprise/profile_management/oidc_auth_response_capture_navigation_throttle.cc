@@ -113,7 +113,7 @@ std::unique_ptr<URLMatcher> CreateEnrollmentHeaderUrlMatcher() {
         profile_management::features::kOidcAuthAdditionalUrls.Get(), ",",
         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-    for (std::string url : urls) {
+    for (const std::string& url : urls) {
       allowed_urls.push_back(url);
     }
   }
@@ -147,7 +147,7 @@ std::unique_ptr<URLMatcher> CreateOidcEnrollmentUrlMatcher() {
         profile_management::features::kOidcAuthAdditionalHosts.Get(), ",",
         base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
 
-    for (std::string host : hosts) {
+    for (const std::string& host : hosts) {
       allowed_hosts.push_back(host);
     }
   }
@@ -188,23 +188,20 @@ void RecordUntrustedRedirectChain(
 namespace profile_management {
 
 // static
-std::unique_ptr<OidcAuthResponseCaptureNavigationThrottle>
-OidcAuthResponseCaptureNavigationThrottle::MaybeCreateThrottleFor(
-    content::NavigationHandle* navigation_handle) {
+void OidcAuthResponseCaptureNavigationThrottle::MaybeCreateAndAdd(
+    content::NavigationThrottleRegistry& registry) {
   if (base::FeatureList::IsEnabled(
           profile_management::features::kOidcAuthProfileManagement) &&
-      navigation_handle->IsInMainFrame()) {
-    return std::make_unique<OidcAuthResponseCaptureNavigationThrottle>(
-        navigation_handle);
+      registry.GetNavigationHandle().IsInPrimaryMainFrame()) {
+    registry.AddThrottle(
+        std::make_unique<OidcAuthResponseCaptureNavigationThrottle>(registry));
   }
-
-  return nullptr;
 }
 
 OidcAuthResponseCaptureNavigationThrottle::
     OidcAuthResponseCaptureNavigationThrottle(
-        content::NavigationHandle* navigation_handle)
-    : content::NavigationThrottle(navigation_handle) {}
+        content::NavigationThrottleRegistry& registry)
+    : content::NavigationThrottle(registry) {}
 
 OidcAuthResponseCaptureNavigationThrottle::
     ~OidcAuthResponseCaptureNavigationThrottle() = default;

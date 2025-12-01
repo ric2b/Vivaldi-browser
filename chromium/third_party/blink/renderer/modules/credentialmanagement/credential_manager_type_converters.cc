@@ -313,7 +313,7 @@ TypeConverter<blink::AuthenticationExtensionsPaymentOutputs*,
   if (!payment_response->browser_bound_signature.empty()) {
     auto* browser_bound_signature =
         blink::AuthenticationExtensionsPaymentBrowserBoundSignature::Create();
-    browser_bound_signature->setSignatureOutput(blink::DOMArrayBuffer::Create(
+    browser_bound_signature->setSignature(blink::DOMArrayBuffer::Create(
         std::move(payment_response->browser_bound_signature)));
     payment_outputs->setBrowserBoundSignature(browser_bound_signature);
   }
@@ -1040,10 +1040,6 @@ TypeConverter<RpMode, blink::V8IdentityCredentialRequestOptionsMode>::Convert(
     case blink::V8IdentityCredentialRequestOptionsMode::Enum::kPassive:
       return RpMode::kPassive;
     case blink::V8IdentityCredentialRequestOptionsMode::Enum::kActive:
-      return RpMode::kActive;
-    case blink::V8IdentityCredentialRequestOptionsMode::Enum::kWidget:
-      return RpMode::kPassive;
-    case blink::V8IdentityCredentialRequestOptionsMode::Enum::kButton:
       return RpMode::kActive;
   }
 }

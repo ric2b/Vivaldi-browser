@@ -28,13 +28,13 @@
 #include "sync/vivaldi_hash_util.h"
 #include "ui/base/models/tree_node_iterator.h"
 
-using syncer::EntityData;
-using syncer::UpdateResponseData;
-using syncer::UpdateResponseDataList;
-
 namespace sync_notes {
 
 namespace {
+
+using syncer::EntityData;
+using syncer::UpdateResponseData;
+using syncer::UpdateResponseDataList;
 
 static const size_t kInvalidIndex = -1;
 
@@ -421,9 +421,22 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   return node;
 }
 
+// static
+NoteModelMerger::RemoteTreeNode
+NoteModelMerger::RemoteTreeNode::BuildForTesting(
+    syncer::UpdateResponseData update,
+    std::vector<RemoteTreeNode> children) {
+  RemoteTreeNode node;
+  node.update_ = std::move(update);
+  node.children_ = std::move(children);
+  return node;
+}
+
 NoteModelMerger::NoteModelMerger(UpdateResponseDataList updates,
                                  NoteModelView* notes_model,
-                                 SyncedNoteTracker* note_tracker)
+                                 SyncedNoteTracker* note_tracker,
+                                 syncer::PreviouslySyncingGaiaIdInfoForMetrics
+                                     previously_syncing_gaia_id_info)
     : notes_model_(notes_model),
       note_tracker_(note_tracker),
       remote_forest_(BuildRemoteForest(std::move(updates), note_tracker)),

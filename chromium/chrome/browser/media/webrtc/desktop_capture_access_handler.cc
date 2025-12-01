@@ -378,7 +378,8 @@ void DesktopCaptureAccessHandler::HandleRequest(
             system_permission_settings::SystemPermission::kAllowed) {
       std::move(pending_request->callback)
           .Run(blink::mojom::StreamDevicesSet(),
-               blink::mojom::MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED,
+               blink::mojom::MediaStreamRequestResult::
+                   PERMISSION_DENIED_BY_SYSTEM,
                /*ui=*/nullptr);
       return;
     }
@@ -433,9 +434,10 @@ void DesktopCaptureAccessHandler::HandleRequest(
       system_media_permissions::CheckSystemScreenCapturePermission() !=
           system_permission_settings::SystemPermission::kAllowed) {
     std::move(pending_request->callback)
-        .Run(blink::mojom::StreamDevicesSet(),
-             blink::mojom::MediaStreamRequestResult::SYSTEM_PERMISSION_DENIED,
-             /*ui=*/nullptr);
+        .Run(
+            blink::mojom::StreamDevicesSet(),
+            blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED_BY_SYSTEM,
+            /*ui=*/nullptr);
     return;
   }
 #endif
@@ -683,10 +685,7 @@ void DesktopCaptureAccessHandler::AcceptRequest(
   std::unique_ptr<content::MediaStreamUI> ui = GetDevicesForDesktopCapture(
       pending_request->request, web_contents, media_id, capture_audio,
       pending_request->request.disable_local_echo,
-      // TODO(crbug.com/40244027): Support suppressLocalAudioPlayback for the
-      // extension API as well. If this happens as a result of merging
-      // DesktopCaptureAccessHandler and DisplayMediaAccessHandler, that's fine.
-      /*suppress_local_audio_playback=*/false,
+      /*suppress_local_audio_playback=*/false, /*restrict_own_audio=*/false,
       pending_request->should_display_notification,
       pending_request->application_title,
       pending_request->request.captured_surface_control_active, stream_devices);

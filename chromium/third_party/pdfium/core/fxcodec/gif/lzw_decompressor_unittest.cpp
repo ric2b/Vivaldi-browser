@@ -7,12 +7,12 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <algorithm>
 #include <array>
 #include <iterator>
 
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
-#include "core/fxcrt/stl_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -38,9 +38,9 @@ TEST(LZWDecompressor, ExtractData) {
     *decompressed = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     *(decompressor->DecompressedNextForTest()) = decompressed->size();
     uint8_t dest_buf[20];
-    fxcrt::Fill(dest_buf, 0xff);
-    EXPECT_EQ(0u, decompressor->ExtractDataForTest(
-                      pdfium::make_span(dest_buf).first(0u)));
+    std::ranges::fill(dest_buf, 0xff);
+    EXPECT_EQ(
+        0u, decompressor->ExtractDataForTest(pdfium::span(dest_buf).first(0u)));
     EXPECT_THAT(dest_buf, Each(static_cast<uint8_t>(-1)));
     EXPECT_EQ(10u, *(decompressor->DecompressedNextForTest()));
     for (size_t i = 0; i < *(decompressor->DecompressedNextForTest()); ++i) {
@@ -54,15 +54,15 @@ TEST(LZWDecompressor, ExtractData) {
     *decompressed = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     *(decompressor->DecompressedNextForTest()) = decompressed->size();
     std::array<uint8_t, 20> dest_buf;
-    fxcrt::Fill(dest_buf, 0xff);
-    EXPECT_EQ(5u, decompressor->ExtractDataForTest(
-                      pdfium::make_span(dest_buf).first(5u)));
+    std::ranges::fill(dest_buf, 0xff);
+    EXPECT_EQ(
+        5u, decompressor->ExtractDataForTest(pdfium::span(dest_buf).first(5u)));
     size_t i = 0;
     for (; i < 5; ++i) {
       EXPECT_EQ(9 - i, dest_buf[i]);
     }
-    EXPECT_THAT(pdfium::span(dest_buf).first(5), ElementsAre(9, 8, 7, 6, 5));
-    EXPECT_THAT(pdfium::span(dest_buf).subspan(5),
+    EXPECT_THAT(pdfium::span(dest_buf).first<5u>(), ElementsAre(9, 8, 7, 6, 5));
+    EXPECT_THAT(pdfium::span(dest_buf).subspan<5u>(),
                 Each(static_cast<uint8_t>(-1)));
     EXPECT_EQ(5u, *(decompressor->DecompressedNextForTest()));
     for (i = 0; i < *(decompressor->DecompressedNextForTest()); ++i) {
@@ -76,11 +76,11 @@ TEST(LZWDecompressor, ExtractData) {
     *decompressed = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     *(decompressor->DecompressedNextForTest()) = decompressed->size();
     uint8_t dest_buf[20];
-    fxcrt::Fill(dest_buf, 0xff);
+    std::ranges::fill(dest_buf, 0xff);
     EXPECT_EQ(10u, decompressor->ExtractDataForTest(dest_buf));
-    EXPECT_THAT(pdfium::span(dest_buf).first(10),
+    EXPECT_THAT(pdfium::span(dest_buf).first<10u>(),
                 ElementsAre(9, 8, 7, 6, 5, 4, 3, 2, 1, 0));
-    EXPECT_THAT(pdfium::span(dest_buf).subspan(10),
+    EXPECT_THAT(pdfium::span(dest_buf).subspan<10u>(),
                 Each(static_cast<uint8_t>(-1)));
     EXPECT_EQ(0u, *(decompressor->DecompressedNextForTest()));
   }
@@ -201,14 +201,14 @@ TEST(LZWDecompressor, MultipleDecodes) {
 
   static constexpr uint8_t kExpectedScanline[] = {0x00, 0x00, 0x00, 0x00};
   uint8_t output_data[std::size(kExpectedScanline)];
-  fxcrt::Fill(output_data, 0xff);
+  std::ranges::fill(output_data, 0xff);
   uint32_t output_size = std::size(output_data);
   EXPECT_EQ(LZWDecompressor::Status::kInsufficientDestSize,
             UNSAFE_TODO(decompressor->Decode(output_data, &output_size)));
   EXPECT_EQ(std::size(kExpectedScanline), output_size);
   EXPECT_THAT(output_data, ElementsAreArray(kExpectedScanline));
 
-  fxcrt::Fill(output_data, 0xff);
+  std::ranges::fill(output_data, 0xff);
   output_size = std::size(output_data);
   EXPECT_EQ(LZWDecompressor::Status::kSuccess,
             UNSAFE_TODO(decompressor->Decode(output_data, &output_size)));

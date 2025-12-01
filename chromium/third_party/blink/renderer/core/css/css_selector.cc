@@ -379,6 +379,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
       return kPseudoIdFileSelectorButton;
     case kPseudoDetailsContent:
       return kPseudoIdDetailsContent;
+    case kPseudoPermissionIcon:
+      return kPseudoIdPermissionIcon;
     case kPseudoPicker:
       // NOTE: When we support more than one argument to ::picker() we will
       // need to refactor something here (possibly the callers of this method)
@@ -431,6 +433,7 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoFutureCue:
     case kPseudoHas:
     case kPseudoHasInterest:
+    case kPseudoHasPartialInterest:
     case kPseudoHasSlotted:
     case kPseudoHasDatalist:
     case kPseudoHorizontal:
@@ -490,6 +493,8 @@ PseudoId CSSSelector::GetPseudoId(PseudoType type) {
     case kPseudoState:
     case kPseudoTarget:
     case kPseudoTargetCurrent:
+    case kPseudoTargetOfInterest:
+    case kPseudoTargetOfPartialInterest:
     case kPseudoUnknown:
     case kPseudoUnparsed:
     case kPseudoUserInvalid:
@@ -615,6 +620,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"grammar-error", CSSSelector::kPseudoGrammarError},
     {"granted", CSSSelector::kPseudoPermissionGranted},
     {"has-interest", CSSSelector::kPseudoHasInterest},
+    {"has-partial-interest", CSSSelector::kPseudoHasPartialInterest},
     {"has-slotted", CSSSelector::kPseudoHasSlotted},
     {"horizontal", CSSSelector::kPseudoHorizontal},
     {"host", CSSSelector::kPseudoHost},
@@ -639,6 +645,7 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"out-of-range", CSSSelector::kPseudoOutOfRange},
     {"past", CSSSelector::kPseudoPastCue},
     {"paused", CSSSelector::kPseudoPaused},
+    {"permission-icon", CSSSelector::kPseudoPermissionIcon},
     {"picker-icon", CSSSelector::kPseudoPickerIcon},
     {"picture-in-picture", CSSSelector::kPseudoPictureInPicture},
     {"placeholder", CSSSelector::kPseudoPlaceholder},
@@ -660,6 +667,8 @@ constexpr static NameToPseudoStruct kPseudoTypeWithoutArgumentsMap[] = {
     {"start", CSSSelector::kPseudoStart},
     {"target", CSSSelector::kPseudoTarget},
     {"target-current", CSSSelector::kPseudoTargetCurrent},
+    {"target-of-interest", CSSSelector::kPseudoTargetOfInterest},
+    {"target-of-partial-interest", CSSSelector::kPseudoTargetOfPartialInterest},
     {"target-text", CSSSelector::kPseudoTargetText},
     {"user-invalid", CSSSelector::kPseudoUserInvalid},
     {"user-valid", CSSSelector::kPseudoUserValid},
@@ -717,18 +726,15 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     pseudo_type_map = std::begin(kPseudoTypeWithoutArgumentsMap);
     pseudo_type_map_end = std::end(kPseudoTypeWithoutArgumentsMap);
   }
-  const NameToPseudoStruct* match = std::lower_bound(
-      pseudo_type_map, pseudo_type_map_end, name,
-      [](const NameToPseudoStruct& entry, const AtomicString& name) -> bool {
-        DCHECK(name.Is8Bit());
-        DCHECK(entry.string);
-        // If strncmp returns 0, then either the keys are equal, or |name| sorts
-        // before |entry|.
-        return UNSAFE_TODO(
-                   strncmp(entry.string,
-                           reinterpret_cast<const char*>(name.Characters8()),
-                           name.length())) < 0;
-      });
+  DCHECK(name.Is8Bit());
+  std::string_view latin1_name = base::as_string_view(name.Span8());
+  const NameToPseudoStruct* match =
+      std::lower_bound(pseudo_type_map, pseudo_type_map_end, latin1_name,
+                       [](const NameToPseudoStruct& entry,
+                          const std::string_view& latin1_name) -> bool {
+                         DCHECK(entry.string);
+                         return std::string_view(entry.string) < latin1_name;
+                       });
   if (match == pseudo_type_map_end || match->string != name.GetString()) {
     return CSSSelector::kPseudoUnknown;
   }
@@ -798,7 +804,10 @@ CSSSelector::PseudoType CSSSelector::NameToPseudoType(
     return CSSSelector::kPseudoUnknown;
   }
 
-  if (match->type == CSSSelector::kPseudoHasInterest &&
+  if ((match->type == CSSSelector::kPseudoHasInterest ||
+       match->type == CSSSelector::kPseudoHasPartialInterest ||
+       match->type == CSSSelector::kPseudoTargetOfInterest ||
+       match->type == CSSSelector::kPseudoTargetOfPartialInterest) &&
       !RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
           document ? document->GetExecutionContext() : nullptr)) {
     return CSSSelector::kPseudoUnknown;
@@ -921,6 +930,11 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
         bits_.set<PseudoTypeField>(kPseudoUnknown);
       }
       break;
+    case kPseudoPermissionIcon:
+      if (Match() != kPseudoElement) {
+        bits_.set<PseudoTypeField>(kPseudoUnknown);
+      }
+      break;
     case kPseudoBlinkInternalElement:
       if (Match() != kPseudoElement || mode != kUASheetMode) {
         bits_.set<PseudoTypeField>(kPseudoUnknown);
@@ -974,6 +988,7 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoFutureCue:
     case kPseudoHas:
     case kPseudoHasInterest:
+    case kPseudoHasPartialInterest:
     case kPseudoHasSlotted:
     case kPseudoHorizontal:
     case kPseudoHost:
@@ -1023,6 +1038,8 @@ void CSSSelector::UpdatePseudoType(const AtomicString& value,
     case kPseudoState:
     case kPseudoTarget:
     case kPseudoTargetCurrent:
+    case kPseudoTargetOfInterest:
+    case kPseudoTargetOfPartialInterest:
     case kPseudoUnknown:
     case kPseudoUnparsed:
     case kPseudoUserInvalid:
@@ -1562,12 +1579,10 @@ bool CSSSelector::HasLinkOrVisited() const {
         pseudo == CSSSelector::kPseudoVisited) {
       return true;
     }
-    if (const CSSSelectorList* list = current->SelectorList()) {
-      for (const CSSSelector* sub_selector = list->First(); sub_selector;
-           sub_selector = CSSSelectorList::Next(*sub_selector)) {
-        if (sub_selector->HasLinkOrVisited()) {
-          return true;
-        }
+    for (const CSSSelector* sub_selector = current->SelectorListOrParent();
+         sub_selector; sub_selector = CSSSelectorList::Next(*sub_selector)) {
+      if (sub_selector->HasLinkOrVisited()) {
+        return true;
       }
     }
   }
@@ -1628,7 +1643,8 @@ bool CSSSelector::IsTreeAbidingPseudoElement() const {
 
 /* static */ bool CSSSelector::IsElementBackedPseudoElement(
     CSSSelector::PseudoType pseudo) {
-  return pseudo == kPseudoDetailsContent || pseudo == kPseudoPicker;
+  return pseudo == kPseudoDetailsContent || pseudo == kPseudoPicker ||
+         pseudo == kPseudoPermissionIcon;
 }
 
 bool CSSSelector::IsElementBackedPseudoElement() const {
@@ -1678,6 +1694,7 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoWebKitCustomElement:
     case kPseudoBlinkInternalElement:
     case kPseudoDetailsContent:
+    case kPseudoPermissionIcon:
     case kPseudoViewTransition:
     case kPseudoViewTransitionGroup:
     case kPseudoViewTransitionImagePair:
@@ -1718,6 +1735,7 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoFocusWithin:
     case kPseudoFullPageMedia:
     case kPseudoHasInterest:
+    case kPseudoHasPartialInterest:
     case kPseudoHasSlotted:
     case kPseudoHover:
     case kPseudoIndeterminate:
@@ -1736,6 +1754,8 @@ bool CSSSelector::IsAllowedAfterPart() const {
     case kPseudoSelectorFragmentAnchor:
     case kPseudoState:
     case kPseudoTarget:
+    case kPseudoTargetOfInterest:
+    case kPseudoTargetOfPartialInterest:
     case kPseudoUserInvalid:
     case kPseudoUserValid:
     case kPseudoValid:
@@ -1850,6 +1870,16 @@ bool CSSSelector::IsOrContainsHostPseudoClass() const {
     }
   }
   return false;
+}
+
+bool CSSSelector::IsDeeplyHostPseudoClass() const {
+  if ((GetPseudoType() == kPseudoIs || GetPseudoType() == kPseudoWhere ||
+       GetPseudoType() == kPseudoParent) &&
+      SelectorListOrParent() &&
+      CSSSelectorList::IsSingleComplexSelector(*SelectorListOrParent())) {
+    return SelectorListOrParent()->IsDeeplyHostPseudoClass();
+  }
+  return IsHostPseudoClass();
 }
 
 template <typename Functor>

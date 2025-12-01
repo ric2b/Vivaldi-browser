@@ -9,8 +9,9 @@
 
 #include "base/notreached.h"
 #include "base/supports_user_data.h"
-#include "components/optimization_guide/content/browser/ai_page_content_metadata.h"
 #include "components/optimization_guide/content/browser/page_content_proto_provider.h"
+#include "components/optimization_guide/content/mojom/ai_page_content_metadata.mojom.h"
+#include "components/optimization_guide/core/optimization_guide_proto_util.h"
 #include "components/optimization_guide/proto/features/common_quality_data.pb.h"
 #include "third_party/blink/public/mojom/content_extraction/ai_page_content.mojom.h"
 #include "third_party/blink/public/mojom/forms/form_control_type.mojom-shared.h"
@@ -50,6 +51,10 @@ optimization_guide::proto::ContentAttributeType ConvertAttributeType(
       return optimization_guide::proto::CONTENT_ATTRIBUTE_ANCHOR;
     case blink::mojom::AIPageContentAttributeType::kImage:
       return optimization_guide::proto::CONTENT_ATTRIBUTE_IMAGE;
+    case blink::mojom::AIPageContentAttributeType::kSVG:
+      return optimization_guide::proto::CONTENT_ATTRIBUTE_SVG;
+    case blink::mojom::AIPageContentAttributeType::kCanvas:
+      return optimization_guide::proto::CONTENT_ATTRIBUTE_CANVAS;
     case blink::mojom::AIPageContentAttributeType::kForm:
       return optimization_guide::proto::CONTENT_ATTRIBUTE_FORM;
     case blink::mojom::AIPageContentAttributeType::kFormControl:
@@ -110,6 +115,12 @@ void AddDocumentIdentifier(content::GlobalRenderFrameHostToken frame_token,
       serialized_server_token);
 }
 
+void ConvertSize(const gfx::Size& mojom_size,
+                 optimization_guide::proto::BoundingSize* proto_size) {
+  proto_size->set_width(mojom_size.width());
+  proto_size->set_height(mojom_size.height());
+}
+
 void ConvertRect(const gfx::Rect& mojom_rect,
                  optimization_guide::proto::BoundingRect* proto_rect) {
   proto_rect->set_x(mojom_rect.x());
@@ -128,14 +139,27 @@ void ConvertGeometry(const blink::mojom::AIPageContentGeometry& mojom_geometry,
       mojom_geometry.is_fixed_or_sticky_position);
 }
 
+void ConvertScrollerInfo(
+    const blink::mojom::AIPageContentScrollerInfo& mojom_scroller_info,
+    optimization_guide::proto::ScrollerInfo* proto_scroller_info) {
+  ConvertSize(mojom_scroller_info.scrolling_bounds,
+              proto_scroller_info->mutable_scrolling_bounds());
+  ConvertRect(mojom_scroller_info.visible_area,
+              proto_scroller_info->mutable_visible_area());
+  proto_scroller_info->set_user_scrollable_horizontal(
+      mojom_scroller_info.user_scrollable_horizontal);
+  proto_scroller_info->set_user_scrollable_vertical(
+      mojom_scroller_info.user_scrollable_vertical);
+}
+
 void ConvertNodeInteractionInfo(
     const blink::mojom::AIPageContentNodeInteractionInfo&
         mojom_node_interaction_info,
     optimization_guide::proto::InteractionInfo* proto_interaction_info) {
-  proto_interaction_info->set_scrolls_overflow_x(
-      mojom_node_interaction_info.scrolls_overflow_x);
-  proto_interaction_info->set_scrolls_overflow_y(
-      mojom_node_interaction_info.scrolls_overflow_y);
+  if (mojom_node_interaction_info.scroller_info) {
+    ConvertScrollerInfo(*mojom_node_interaction_info.scroller_info,
+                        proto_interaction_info->mutable_scroller_info());
+  }
   proto_interaction_info->set_is_selectable(
       mojom_node_interaction_info.is_selectable);
   proto_interaction_info->set_is_editable(
@@ -150,6 +174,11 @@ void ConvertNodeInteractionInfo(
       mojom_node_interaction_info.is_draggable);
   proto_interaction_info->set_is_clickable(
       mojom_node_interaction_info.is_clickable);
+
+  if (mojom_node_interaction_info.document_scoped_z_order) {
+    proto_interaction_info->set_document_scoped_z_order(
+        *mojom_node_interaction_info.document_scoped_z_order);
+  }
 }
 
 void ConvertPoint(const gfx::Point& mojom_point,
@@ -237,6 +266,20 @@ void ConvertImageInfo(
         *mojom_image_info.source_origin,
         proto_image_info->mutable_security_origin());
   }
+}
+
+void ConvertSVGData(const blink::mojom::AIPageContentSVGData& mojom_svg_data,
+                    optimization_guide::proto::SVGData* proto_svg_data) {
+  if (mojom_svg_data.inner_text) {
+    proto_svg_data->set_inner_text(*mojom_svg_data.inner_text);
+  }
+}
+
+void ConvertCanvasData(
+    const blink::mojom::AIPageContentCanvasData& mojom_canvas_data,
+    optimization_guide::proto::CanvasData* proto_canvas_data) {
+  proto_canvas_data->set_layout_width(mojom_canvas_data.layout_size.width());
+  proto_canvas_data->set_layout_height(mojom_canvas_data.layout_size.height());
 }
 
 optimization_guide::proto::AnchorRel ConvertAnchorRel(
@@ -436,6 +479,20 @@ bool ConvertAttributes(
     }
     ConvertImageInfo(*mojom_attributes.image_info,
                      proto_attributes->mutable_image_data());
+  } else if (mojom_attributes.svg_data) {
+    if (mojom_attributes.attribute_type !=
+        blink::mojom::AIPageContentAttributeType::kSVG) {
+      return false;
+    }
+    ConvertSVGData(*mojom_attributes.svg_data,
+                   proto_attributes->mutable_svg_data());
+  } else if (mojom_attributes.canvas_data) {
+    if (mojom_attributes.attribute_type !=
+        blink::mojom::AIPageContentAttributeType::kCanvas) {
+      return false;
+    }
+    ConvertCanvasData(*mojom_attributes.canvas_data,
+                      proto_attributes->mutable_canvas_data());
   } else if (mojom_attributes.anchor_data) {
     if (mojom_attributes.attribute_type !=
         blink::mojom::AIPageContentAttributeType::kAnchor) {
@@ -472,25 +529,39 @@ bool ConvertAttributes(
     ConvertTableRowData(*mojom_attributes.table_row_data,
                         proto_attributes->mutable_table_row_data());
   }
+  if (mojom_attributes.label) {
+    proto_attributes->set_label(*mojom_attributes.label);
+  }
 
   for (const auto& annotated_role : mojom_attributes.annotated_roles) {
     proto_attributes->add_annotated_roles(ConvertAnnotatedRole(annotated_role));
   }
+
+  if (mojom_attributes.aria_role) {
+    proto_attributes->set_aria_role(AXRoleToProto(*mojom_attributes.aria_role));
+  }
+
+  if (mojom_attributes.label_for_dom_node_id) {
+    proto_attributes->set_label_for_dom_node_id(
+        *mojom_attributes.label_for_dom_node_id);
+  }
+
   return true;
 }
 
 void ConvertFrameMetadata(
     GURL url,
     const blink::mojom::AIPageContentFrameData& mojom_frame_data,
-    AIPageContentMetadata& metadata) {
-  FrameMetadata frame_metadata;
-  frame_metadata.url = url;
+    optimization_guide::mojom::PageMetadata& metadata) {
+
+  auto frame_metadata = optimization_guide::mojom::FrameMetadata::New();
+  frame_metadata->url = url;
 
   for (const auto& mojom_meta_tag : mojom_frame_data.meta_data) {
-    MetaTag meta_tag;
-    meta_tag.name = mojom_meta_tag->name;
-    meta_tag.content = mojom_meta_tag->content;
-    frame_metadata.meta_tags.push_back(std::move(meta_tag));
+    auto meta_tag = optimization_guide::mojom::MetaTag::New();
+    meta_tag->name = mojom_meta_tag->name;
+    meta_tag->content = mojom_meta_tag->content;
+    frame_metadata->meta_tags.push_back(std::move(meta_tag));
   }
   metadata.frame_metadata.push_back(std::move(frame_metadata));
 }
@@ -499,7 +570,7 @@ void ConvertFrameData(
     const RenderFrameInfo& render_frame_info,
     const blink::mojom::AIPageContentFrameData& mojom_frame_data,
     optimization_guide::proto::FrameData* proto_frame_data,
-    AIPageContentMetadata& metadata,
+    optimization_guide::mojom::PageMetadata& metadata,
     FrameTokenSet& frame_token_set) {
   ConvertFrameMetadata(render_frame_info.url, mojom_frame_data, metadata);
   SecurityOriginSerializer::Serialize(
@@ -537,7 +608,7 @@ void ConvertIframeData(
     const RenderFrameInfo& render_frame_info,
     const blink::mojom::AIPageContentIframeData& mojom_iframe_data,
     const blink::mojom::AIPageContentFrameData& mojom_local_frame_data,
-    AIPageContentMetadata& metadata,
+    optimization_guide::mojom::PageMetadata& metadata,
     FrameTokenSet& frame_token_set,
     optimization_guide::proto::IframeData* proto_iframe_data) {
   proto_iframe_data->set_likely_ad_frame(mojom_iframe_data.likely_ad_frame);
@@ -552,7 +623,7 @@ bool ConvertNode(content::GlobalRenderFrameHostToken source_frame_token,
                  const AIPageContentMap& page_content_map,
                  FrameTokenSet& frame_token_set,
                  GetRenderFrameInfo get_render_frame_info,
-                 AIPageContentMetadata& metadata,
+                 optimization_guide::mojom::PageMetadata& metadata,
                  optimization_guide::proto::ContentNode* proto_node) {
   const auto& mojom_attributes = *mojom_node.content_attributes;
   if (!ConvertAttributes(mojom_attributes,
@@ -659,10 +730,10 @@ bool ConvertAIPageContentToProto(
 
   ConvertFrameData(*render_frame_info, *main_frame_page_content.frame_data,
                    page_content_result.proto.mutable_main_frame_data(),
-                   page_content_result.metadata, frame_token_set);
+                   *page_content_result.metadata, frame_token_set);
   if (!ConvertNode(main_frame_token, *main_frame_page_content.root_node,
                    page_content_map, frame_token_set, get_render_frame_info,
-                   page_content_result.metadata,
+                   *page_content_result.metadata,
                    page_content_result.proto.mutable_root_node())) {
     return false;
   }

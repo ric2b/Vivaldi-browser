@@ -75,6 +75,7 @@
 <translation id="1809939268435598390">Eliminar carpeta</translation>
 <translation id="1813686536470127172">Otras carpetas</translation>
 <translation id="1828800626900562968">Presiona "+" para crear una nueva pestaña.</translation>
+<translation id="1852679645333476285">Permitir la reproducción de contenido en segundo plano</translation>
 <translation id="1861262398884155592">Esta carpeta está vacío</translation>
 <translation id="1871058849247304245">Nivel de zoom para <ph name="HOST" /></translation>
 <translation id="1921508034244765766">Vivaldi está lento, se bloquea o entibia el dispositivo</translation>
@@ -174,7 +175,6 @@ bloqueado</translation>
 <translation id="3270930591809084274">Pestañas sincronizadas</translation>
 <translation id="3285898158753554866">Copiar lo traducido</translation>
 <translation id="3335772982573114336">Nota nueva</translation>
-<translation id="3337207574172839542">Permitir las sugerencias de búsqueda</translation>
 <translation id="33451081266695216">Conexión limitada por el servidor.</translation>
 <translation id="3346386541263128307">Las direcciones de correo deben coincidir.</translation>
 <translation id="3363375699928395745">Escribir título</translation>
@@ -341,6 +341,7 @@ bloqueado</translation>
 <translation id="5094376253685335202">Activar la sincronización</translation>
 <translation id="5116316489033177455">Sincronizar marcadores y accesos rápidos</translation>
 <translation id="5122095890854520072">Letón <ph name="ORIGIN" /></translation>
+<translation id="5128025282874907098">El 100% de tus donaciones irán al desarrollo de Vivaldi y nuestra lucha por una mejor navegación.</translation>
 <translation id="5153806174841856652">Error al iniciar sesión</translation>
 <translation id="5160018607418677056"><ph name="BEGIN_LINK" />Reenviar Código<ph name="END_LINK" /></translation>
 <translation id="5166345991950198590">Mostrar Sitios Más Visitados</translation>
@@ -402,11 +403,14 @@ bloqueado</translation>
  Abre ajustes para solucionarlo.</translation>
 <translation id="604930981600990598">¡Traducción copiada!</translation>
 <translation id="6052689967593623141">Vivaldi puede generar una comisión si realizas una compra en uno de estos enlaces. Esto ayuda al desarrollo de Vivaldi y mantiene al navegador independiente. ¡Gracias por tu apoyo!</translation>
+<translation id="6056094614114332761">Sugerencias de campo de dirección</translation>
 <translation id="6077943432358741146">Acceso rápido</translation>
 <translation id="6079696972035130497">Ilimitado</translation>
+<translation id="6093557041367452381">Muestra el historial escrito cuando el campo de dirección está enfocado en la página de inicio.</translation>
 <translation id="6110857187283700804">Tu entrada se envió a tu proveedor de búsqueda para sugerencias. Esto está desactivado en ventanas privadas.</translation>
 <translation id="614539368862754027"><ph name="NUMBER_OF_SELECTED_NOTES" /> notas movidas</translation>
 <translation id="6147094071357011481">Las pestañas cerradas recientemente no están disponibles</translation>
+<translation id="6171727814244883097">Una forma más fácil de apoyarnos</translation>
 <translation id="6177301865411451337">El servicio de sincronización de Vivaldi puede que tenga problemas. Recibe actualizaciones del servidor en: <ph name="BEGIN_LINK" />VivaldiStatus.com<ph name="END_LINK" /></translation>
 <translation id="6180515952840978051">Tengo dificultades para guardar una página como acceso rápido</translation>
 <translation id="6193995664633100765">Indio <ph name="ORIGIN" /></translation>
@@ -415,6 +419,7 @@ bloqueado</translation>
 <translation id="6257488392933423163">Ver como HTML</translation>
 <translation id="6275978505813092431">Introducir imagen</translation>
 <translation id="6329717714920146925">Páginas web (solo vista)</translation>
+<translation id="6346549829676591152">Activar el historial de búsqueda</translation>
 <translation id="6365929278691047681">Alemán <ph name="ORIGIN" /></translation>
 <translation id="638249699236255123">La disposición de la página se bloquea o se ve extraña</translation>
 <translation id="6383855939619098095">Es difícil personalizar la página de inicio de Vivaldi</translation>
@@ -481,6 +486,7 @@ bloqueado</translation>
 <translation id="711946737922560234">Introducir enlace</translation>
 <translation id="7120229714826964836">Compartir página</translation>
 <translation id="713792263829536729">Los servicios de streaming no funcionan correctamente</translation>
+<translation id="7142332680286898952">Mostrar el historial escrito</translation>
 <translation id="7158507293261405349">Agregar Nuevo grupo</translation>
 <translation id="7173114856073700355">Abrir ajustes</translation>
 <translation id="718052827125696482">La pantalla no rota apropiadamente</translation>
@@ -506,7 +512,6 @@ bloqueado</translation>
 <translation id="7393145587390257456">El bloqueador de anuncios no funciona bien</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7417521636956146248">Los motores de búsqueda se restablecerán a los valores predeterminados, además de tus motores de búsqueda personalizados.</translation>
-<translation id="7418655219500602072">Prioridades del campo de dirección</translation>
 <translation id="7451784507428459503">Lois videos de YouTube no se reproducen o tienen problemas</translation>
 <translation id="7454640759045234067">Rastreadores bloqueados</translation>
 <translation id="7461899062138731833">FUENTES</translation>
@@ -542,6 +547,7 @@ bloqueado</translation>
 <translation id="7801111502975417831">Quiero poder reproducir videos en segundo plano</translation>
 <translation id="7801204999757211519">¿Ya tienes una cuenta? <ph name="BEGIN_LINK" />Inicia sesión ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">¿Crear un nuevo grupo?</translation>
+<translation id="7862984977194621600">Activar sugerencias de búsqueda</translation>
 <translation id="7870765213383950011">Primer grupo</translation>
 <translation id="7914995060146784406">Editar nota</translation>
 <translation id="7925340978147141704">Mostrar contraseña</translation>
@@ -575,6 +581,7 @@ bloqueado</translation>
 <translation id="8284356787013856231">Permiso para abrir el archivo rechazado</translation>
 <translation id="8289933454364510719">Superior o inferior</translation>
 <translation id="8304044605002588416">Personalizar el botón de la página de inicio</translation>
+<translation id="8304538706952727936">Libérate de las Grandes Tecnologías</translation>
 <translation id="8323167517179506834">Escribir URL</translation>
 <translation id="8326104954595890674">Pestaña privada nueva</translation>
 <translation id="8329813750766387010">Actualizada: <ph name="DATE" /></translation>

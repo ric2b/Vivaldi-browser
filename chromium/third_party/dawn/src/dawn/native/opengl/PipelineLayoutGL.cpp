@@ -27,7 +27,6 @@
 
 #include "dawn/native/opengl/PipelineLayoutGL.h"
 
-#include "dawn/common/BitSetIterator.h"
 #include "dawn/common/MatchVariant.h"
 #include "dawn/native/BindGroupLayoutInternal.h"
 #include "dawn/native/opengl/DeviceGL.h"
@@ -43,7 +42,7 @@ PipelineLayout::PipelineLayout(Device* device,
     GLuint ssboIndex = 0;
     GLuint storageTextureIndex = 0;
 
-    for (BindGroupIndex group : IterateBitSet(GetBindGroupLayoutsMask())) {
+    for (BindGroupIndex group : GetBindGroupLayoutsMask()) {
         const BindGroupLayoutInternalBase* bgl = GetBindGroupLayout(group);
         mIndexInfo[group].resize(bgl->GetBindingCount());
 
@@ -91,9 +90,12 @@ PipelineLayout::PipelineLayout(Device* device,
 
     mNumSamplers = samplerIndex;
     mNumSampledTextures = sampledTextureIndex;
+    mNumSSBO = ssboIndex;
 
-    // Set internal uniform binding as the next unused uboIndex.
-    mInternalUniformBinding = uboIndex;
+    // Set internal uniform bindings as the next unused uboIndex.
+    mInternalTextureBuiltinsUniformBinding = uboIndex;
+    uboIndex++;
+    mInternalArrayLengthUniformBinding = uboIndex;
 }
 
 const PipelineLayout::BindingIndexInfo& PipelineLayout::GetBindingIndexInfo() const {
@@ -112,8 +114,16 @@ size_t PipelineLayout::GetNumSampledTextures() const {
     return mNumSampledTextures;
 }
 
-GLuint PipelineLayout::GetInternalUniformBinding() const {
-    return mInternalUniformBinding;
+size_t PipelineLayout::GetNumSSBO() const {
+    return mNumSSBO;
+}
+
+GLuint PipelineLayout::GetInternalTextureBuiltinsUniformBinding() const {
+    return mInternalTextureBuiltinsUniformBinding;
+}
+
+GLuint PipelineLayout::GetInternalArrayLengthUniformBinding() const {
+    return mInternalArrayLengthUniformBinding;
 }
 
 }  // namespace dawn::native::opengl

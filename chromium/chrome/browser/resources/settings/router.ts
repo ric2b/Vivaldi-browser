@@ -23,7 +23,6 @@ export interface SettingsRoutes {
   AUTOFILL_AI: Route;
   BASIC: Route;
   CAPTIONS: Route;
-  CERTIFICATES: Route;
   CHROME_CLEANUP: Route;
   CLEAR_BROWSER_DATA: Route;
   COMPARE: Route;
@@ -35,6 +34,7 @@ export interface SettingsRoutes {
   GEMINI: Route;
   GLIC_SECTION: Route;
   HISTORY_SEARCH: Route;
+  INCOGNITO_TRACKING_PROTECTIONS: Route;
   INCOMPATIBLE_APPLICATIONS: Route;
   LANGUAGES: Route;
   MANAGE_PROFILE: Route;
@@ -55,8 +55,8 @@ export interface SettingsRoutes {
   RESET: Route;
   RESET_DIALOG: Route;
   SAFETY_HUB: Route;
-  SEARCH: Route;
-  SEARCH_ENGINES: Route;
+  // SEARCH: Route;
+  // SEARCH_ENGINES: Route;
   SECURITY: Route;
   SECURITY_KEYS: Route;
   SECURITY_KEYS_PHONES: Route;
@@ -115,7 +115,6 @@ export interface SettingsRoutes {
   SYNC: Route;
   SYNC_ADVANCED: Route;
   SYSTEM: Route;
-  TRACKING_PROTECTION: Route;
   TRIGGERED_RESET_DIALOG: Route;
 
   // <if expr="not chromeos_ash">

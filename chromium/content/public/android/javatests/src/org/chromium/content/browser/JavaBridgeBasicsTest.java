@@ -30,6 +30,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.ref.WeakReference;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 /**
@@ -162,7 +163,7 @@ public class JavaBridgeBasicsTest {
                                 mActivityTestRule
                                         .getJavascriptInjector()
                                         .addPossiblyUnsafeInterface(
-                                                new Object(), "testObject", null);
+                                                new Object(), "testObject", null, List.of("*"));
                             }
                         });
         Assert.assertEquals("undefined", executeJavaScriptAndGetStringResult("typeof testObject"));
@@ -200,7 +201,8 @@ public class JavaBridgeBasicsTest {
                                                     }
                                                 },
                                                 "testObject",
-                                                null);
+                                                null,
+                                                List.of("*"));
                             }
                         });
         mActivityTestRule.executeJavaScript("testObject.method()");
@@ -716,7 +718,7 @@ public class JavaBridgeBasicsTest {
     @Feature({"AndroidWebView", "Android-JavaBridge"})
     public void testBlockingUiThreadDoesNotBlockCallsFromJs() {
         class TestObject {
-            private CountDownLatch mLatch;
+            private final CountDownLatch mLatch;
 
             public TestObject() {
                 mLatch = new CountDownLatch(1);
@@ -872,7 +874,7 @@ public class JavaBridgeBasicsTest {
                         return getClass();
                     }
 
-                    public String field = "foo";
+                    public final String field = "foo";
                 },
                 "testObject",
                 null);
@@ -1205,7 +1207,7 @@ public class JavaBridgeBasicsTest {
                 return mValue;
             }
 
-            private int mValue;
+            private final int mValue;
         }
         mActivityTestRule.injectObjectAndReload(new Test(13), "testObject");
         Assert.assertEquals("13", executeJavaScriptAndGetStringResult("testObject.getValue()"));
@@ -1221,7 +1223,7 @@ public class JavaBridgeBasicsTest {
     @Feature({"AndroidWebView", "Android-JavaBridge"})
     public void testMethodCalledOnAnotherInstance() throws Throwable {
         class TestObject {
-            private int mIndex;
+            private final int mIndex;
 
             TestObject(int index) {
                 mIndex = index;
@@ -1251,7 +1253,7 @@ public class JavaBridgeBasicsTest {
     @Feature({"AndroidWebView", "Android-JavaBridge"})
     public void testWebViewAfterRenderViewSwapped() throws Throwable {
         class TestObject {
-            private int mIndex;
+            private final int mIndex;
 
             TestObject(int index) {
                 mIndex = index;

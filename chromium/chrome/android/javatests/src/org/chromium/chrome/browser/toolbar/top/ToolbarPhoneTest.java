@@ -62,10 +62,12 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider.ControlsPosition;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
@@ -77,11 +79,11 @@ import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
-import org.chromium.chrome.browser.toolbar.ButtonData;
-import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButton;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonDataImpl;
 import org.chromium.chrome.browser.toolbar.optional_button.OptionalButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone.VisualState;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuCoordinator;
@@ -103,6 +105,13 @@ import org.chromium.ui.test.util.ViewUtils;
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @Restriction(DeviceFormFactor.PHONE)
+// TODO(crbug.com/419289558): Re-enable color surface feature flags
+@DisableFeatures({
+    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE,
+    ChromeFeatureList.ANDROID_THEME_MODULE
+})
 public class ToolbarPhoneTest {
     @Rule public final MockitoRule mMockitoRule = MockitoJUnit.rule();
 
@@ -118,7 +127,7 @@ public class ToolbarPhoneTest {
     @Mock OptionalButtonCoordinator mOptionalButtonCoordinator;
     @Mock private SearchEngineUtils mSearchEngineUtils;
 
-    private Canvas mCanvas = new Canvas();
+    private final Canvas mCanvas = new Canvas();
     private ToolbarPhone mToolbar;
     private View mToolbarButtonsContainer;
     private MenuButton mMenuButton;
@@ -239,8 +248,7 @@ public class ToolbarPhoneTest {
                                     null,
                                     false,
                                     AdaptiveToolbarButtonVariant.UNKNOWN,
-                                    0,
-                                    false));
+                                    0));
                     // Make sure the button is visible in the beginning of the test.
                     assertEquals(true, realMenuButtonCoordinator.isVisible());
 
@@ -349,8 +357,7 @@ public class ToolbarPhoneTest {
                         null,
                         true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
-                        0,
-                        false);
+                        0);
 
         // Show a button, this will inflate the optional button view and create its coordinator.
         ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
@@ -394,8 +401,7 @@ public class ToolbarPhoneTest {
                         null,
                         true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
-                        0,
-                        false);
+                        0);
 
         // Show a button, this will inflate the optional button view and create its coordinator.
         ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
@@ -439,8 +445,7 @@ public class ToolbarPhoneTest {
                         null,
                         true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
-                        0,
-                        false);
+                        0);
 
         // Show a button, this will inflate the optional button view and create its coordinator.
         ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
@@ -589,8 +594,7 @@ public class ToolbarPhoneTest {
                         null,
                         true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
-                        0,
-                        false);
+                        0);
         ThreadUtils.runOnUiThreadBlocking(() -> mToolbar.updateOptionalButton(buttonData));
         verify(mOptionalButtonCoordinator).updateButton(buttonData, false);
 
@@ -688,6 +692,7 @@ public class ToolbarPhoneTest {
 
     @Test
     @LargeTest
+    @DisableFeatures(OmniboxFeatureList.OMNIBOX_MOBILE_PARITY_UPDATE)
     public void testNtpAnimation_onGTSExit() {
         // Load NTP
         mActivityTestRule.loadUrl(UrlConstants.NTP_URL);

@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
 #include "base/test/mock_callback.h"
@@ -67,20 +68,18 @@ gfx::GpuMemoryBufferHandle CreatePixmapHandle(const gfx::Size& size,
   auto data = std::vector<uint8_t>(
       VideoFrame::AllocationSize(*video_pixel_format, size));
 
-  gfx::GpuMemoryBufferHandle handle;
-  handle.type = gfx::NATIVE_PIXMAP;
-
-  static base::AtomicSequenceNumber buffer_id_generator;
-  handle.id = gfx::GpuMemoryBufferId(buffer_id_generator.GetNext());
-
+  gfx::NativePixmapHandle native_pixmap_handle;
   for (size_t i = 0; i < VideoFrame::NumPlanes(*video_pixel_format); i++) {
     const gfx::Size plane_size_in_bytes =
         VideoFrame::PlaneSize(*video_pixel_format, i, size);
-    handle.native_pixmap_handle.planes.emplace_back(
-        plane_size_in_bytes.width(), 0, plane_size_in_bytes.GetArea(),
-        GetDummyFD());
+    native_pixmap_handle.planes.emplace_back(plane_size_in_bytes.width(), 0,
+                                             plane_size_in_bytes.GetArea(),
+                                             GetDummyFD());
   }
-  handle.native_pixmap_handle.modifier = gfx::NativePixmapHandle::kNoModifier;
+  native_pixmap_handle.modifier = gfx::NativePixmapHandle::kNoModifier;
+  gfx::GpuMemoryBufferHandle handle(std::move(native_pixmap_handle));
+  static base::AtomicSequenceNumber buffer_id_generator;
+  handle.id = gfx::GpuMemoryBufferId(buffer_id_generator.GetNext());
   return handle;
 }
 
@@ -129,6 +128,12 @@ class MockSharedImageInterface : public gpu::SharedImageInterface {
                scoped_refptr<gpu::ClientSharedImage>(
                    const gpu::SharedImageInfo& si_info,
                    gfx::GpuMemoryBufferHandle buffer_handle));
+  MOCK_METHOD4(
+      CreateSharedImageForMLTensor,
+      scoped_refptr<gpu::ClientSharedImage>(std::string debug_label,
+                                            viz::SharedImageFormat format,
+                                            const gfx::Size& size,
+                                            gpu::SharedImageUsageSet usage));
   MOCK_METHOD1(CreateSharedImageForSoftwareCompositor,
                scoped_refptr<gpu::ClientSharedImage>(
                    const gpu::SharedImageInfo& si_info));

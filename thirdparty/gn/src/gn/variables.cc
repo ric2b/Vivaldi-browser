@@ -16,7 +16,10 @@ const char kGnVersion_HelpShort[] = "gn_version: [number] The version of gn.";
 const char kGnVersion_Help[] =
     R"(gn_version: [number] The version of gn.
 
-  Corresponds to the number printed by `gn --version`.
+  Corresponds to the number printed by `gn --version`. This variable is
+  only variable available in the dotfile (all the rest are missing
+  because the dotfile has to be parsed before args.gn or anything else
+  is processed).
 
 Example
 

@@ -8,10 +8,13 @@
 #include <set>
 
 #include "base/base64.h"
+#include "base/containers/extend.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/affiliations/core/browser/affiliation_utils.h"
+#include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/integrators/identity_credential/identity_credential_delegate.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/password_manager/content/common/web_ui_constants.h"
 #include "components/password_manager/core/browser/features/password_features.h"
@@ -309,9 +312,11 @@ void RecordPendingStatePromoHistogram(FillingReauthPromoShown sample) {
 
 PasswordSuggestionGenerator::PasswordSuggestionGenerator(
     PasswordManagerDriver* password_manager_driver,
-    PasswordManagerClient* password_client)
+    PasswordManagerClient* password_client,
+    autofill::AutofillClient* autofill_client)
     : password_manager_driver_(password_manager_driver),
-      password_client_{password_client} {}
+      password_client_{password_client},
+      autofill_client_{autofill_client} {}
 
 std::vector<Suggestion> PasswordSuggestionGenerator::GetSuggestionsForDomain(
     base::optional_ref<const autofill::PasswordFormFillData> fill_data,
@@ -319,7 +324,8 @@ std::vector<Suggestion> PasswordSuggestionGenerator::GetSuggestionsForDomain(
     const std::u16string& username_filter,
     OffersGeneration offers_generation,
     ShowPasswordSuggestions show_password_suggestions,
-    ShowWebAuthnCredentials show_webauthn_credentials) const {
+    ShowWebAuthnCredentials show_webauthn_credentials,
+    ShowIdentityCredentials show_identity_credentials) const {
   std::vector<Suggestion> suggestions;
 
   // Add WebAuthn credentials suitable for an ongoing request if available.
@@ -351,6 +357,15 @@ std::vector<Suggestion> PasswordSuggestionGenerator::GetSuggestionsForDomain(
             return suggestion;
           });
     }
+  }
+
+  // Add federated identity credentials.
+  const autofill::IdentityCredentialDelegate* identity_credential_delegate =
+      autofill_client_->GetIdentityCredentialDelegate();
+  if (show_identity_credentials && identity_credential_delegate) {
+    base::Extend(suggestions,
+                 identity_credential_delegate->GetVerifiedAutofillSuggestions(
+                     autofill::FieldType::PASSWORD));
   }
 
   if (!fill_data.has_value() && !uses_passkeys && suggestions.empty()) {

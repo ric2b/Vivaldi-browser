@@ -150,5 +150,3 @@ void BackgroundAudioTabHelper::BackgroundAudioPrefChanged() {
   web_state_->GetNavigationManager()->Reload(web::ReloadType::NORMAL,
                                              /*check_for_repost=*/true);
 }
-
-WEB_STATE_USER_DATA_KEY_IMPL(BackgroundAudioTabHelper)

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/extensions/component_loader.h"
 
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -24,9 +25,8 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/component_extensions_allowlist/allowlist.h"
+#include "chrome/browser/extensions/component_loader_factory.h"
 #include "chrome/browser/extensions/data_deleter.h"
-#include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/extensions/profile_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/channel_info.h"
@@ -43,6 +43,7 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/constants.h"
@@ -64,6 +65,7 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/keyboard/ui/grit/keyboard_resources.h"
 #include "base/system/sys_info.h"
+#include "chrome/browser/chromeos/extensions/component_extension_content_settings/component_extension_content_settings_allowlist.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/site_instance.h"
@@ -186,13 +188,22 @@ ComponentLoader::ComponentExtensionInfo::operator=(
 
 ComponentLoader::ComponentExtensionInfo::~ComponentExtensionInfo() = default;
 
-ComponentLoader::ComponentLoader(ExtensionSystem* extension_system,
-                                 Profile* profile)
+// static
+ComponentLoader* ComponentLoader::Get(content::BrowserContext* context) {
+  return ComponentLoaderFactory::GetForBrowserContext(context);
+}
+
+ComponentLoader::ComponentLoader(Profile* profile)
     : profile_(profile),
-      extension_system_(extension_system),
+      extension_system_(ExtensionSystem::Get(profile_)),
       ignore_allowlist_for_testing_(false) {}
 
 ComponentLoader::~ComponentLoader() = default;
+
+void ComponentLoader::Shutdown() {
+  profile_ = nullptr;
+  extension_system_ = nullptr;
+}
 
 void ComponentLoader::LoadAll() {
   TRACE_EVENT0("browser,startup", "ComponentLoader::LoadAll");
@@ -315,8 +326,8 @@ void ComponentLoader::Load(const ComponentExtensionInfo& info) {
   }
 
   CHECK_EQ(info.extension_id, extension->id()) << extension->name();
-  extension_system_->extension_service()->AddComponentExtension(
-      extension.get());
+  auto* registrar = ExtensionRegistrar::Get(profile_);
+  registrar->AddComponentExtension(extension.get());
 }
 
 void ComponentLoader::Remove(const base::FilePath& root_directory) {
@@ -585,11 +596,18 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     Add(IDR_ECHO_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("/usr/share/chromeos-assets/echo")));
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+    std::initializer_list<ContentSettingsType> system_permissions = {
+        ContentSettingsType::FILE_SYSTEM_READ_GUARD,
+        ContentSettingsType::FILE_SYSTEM_WRITE_GUARD};
+
     AddComponentFromDirWithManifestFilename(
         base::FilePath("/usr/share/chromeos-assets/quickoffice"),
         extension_misc::kQuickOfficeComponentExtensionId,
         extensions::kManifestFilename, extensions::kManifestFilename,
-        base::DoNothing());
+        base::BindOnce(&ComponentLoader::GrantPermissions,
+                       weak_factory_.GetWeakPtr(),
+                       extension_misc::kQuickOfficeComponentExtensionId,
+                       std::move(system_permissions)));
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
@@ -644,8 +662,8 @@ void ComponentLoader::
 
 void ComponentLoader::UnloadComponent(ComponentExtensionInfo* component) {
   if (extension_system_->is_ready()) {
-    extension_system_->extension_service()->RemoveComponentExtension(
-        component->extension_id);
+    auto* registrar = ExtensionRegistrar::Get(profile_);
+    registrar->RemoveComponentExtension(component->extension_id);
   }
 }
 
@@ -734,7 +752,10 @@ void ComponentLoader::AddChromeOsSpeechSynthesisExtensions() {
 
   if (!Exists(extension_misc::kEspeakSpeechSynthesisExtensionId)) {
     AddComponentFromDir(
-        base::FilePath(extension_misc::kEspeakSpeechSynthesisExtensionPath),
+        base::FilePath(
+            ::features::IsAccessibilityManifestV3EnabledForEspeakNGTts()
+                ? extension_misc::kEspeakManifestV3SpeechSynthesisExtensionPath
+                : extension_misc::kEspeakSpeechSynthesisExtensionPath),
         extension_misc::kEspeakSpeechSynthesisExtensionId,
         base::BindRepeating(
             &ComponentLoader::FinishLoadSpeechSynthesisExtension,
@@ -750,6 +771,22 @@ void ComponentLoader::FinishLoadSpeechSynthesisExtension(
   extensions::ProcessManager::Get(profile_)->WakeEventPage(extension_id,
                                                            base::DoNothing());
 }
+
+// TODO(crbug.com/413451043): move permission granting for component extensions
+// to ComponentExtensionContentSettingsAllowlist.
+void ComponentLoader::GrantPermissions(
+    const ExtensionId& extension_id,
+    std::initializer_list<ContentSettingsType> permissions) {
+  CHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  auto* component_extension_content_settings_allowlist =
+      ComponentExtensionContentSettingsAllowlist::Get(profile_);
+  const url::Origin host_origin = url::Origin::Create(GURL(base::StrCat(
+      {kExtensionScheme, url::kStandardSchemeSeparator, extension_id})));
+  component_extension_content_settings_allowlist
+      ->RegisterAutoGrantedPermissions(host_origin, std::move(permissions));
+}
+
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace extensions

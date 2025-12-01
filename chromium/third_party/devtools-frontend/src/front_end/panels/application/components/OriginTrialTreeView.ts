@@ -1,6 +1,8 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 import '../../../ui/components/tree_outline/tree_outline.js';
@@ -97,7 +99,7 @@ export class Badge extends HTMLElement {
 
     Lit.render(
         html`
-      <style>${badgeStyles.cssText}</style>
+      <style>${badgeStyles}</style>
       ${this.#adorner}
     `,
         this.#shadow, {host: this});
@@ -304,7 +306,7 @@ export class OriginTrialTokenRows extends HTMLElement {
 
     Lit.render(
         html`
-      <style>${originTrialTokenRowsStyles.cssText}</style>
+      <style>${originTrialTokenRowsStyles}</style>
       <div class="content">
         ${tokenDetailRows}
       </div>
@@ -330,7 +332,7 @@ export class OriginTrialTreeView extends HTMLElement {
     if (!trials.length) {
       Lit.render(
           html`
-    <style>${originTrialTreeViewStyles.cssText}</style>
+    <style>${originTrialTreeViewStyles}</style>
     <span class="status-badge">
       <devtools-icon
           .data=${{
@@ -349,7 +351,7 @@ export class OriginTrialTreeView extends HTMLElement {
 
     Lit.render(
         html`
-      <style>${originTrialTreeViewStyles.cssText}</style>
+      <style>${originTrialTreeViewStyles}</style>
       <devtools-tree-outline .data=${{
           tree: trials.map(constructOriginTrialTree),
           defaultRenderer,

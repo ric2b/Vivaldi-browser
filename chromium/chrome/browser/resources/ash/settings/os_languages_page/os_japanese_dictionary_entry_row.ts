@@ -9,6 +9,7 @@
 import 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
 
 import type {CrInputElement} from 'chrome://resources/ash/common/cr_elements/cr_input/cr_input.js';
+import {I18nMixin} from 'chrome://resources/ash/common/cr_elements/i18n_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import type {JapaneseDictionaryEntry} from '../mojom-webui/user_data_japanese_dictionary.mojom-webui.js';
@@ -28,7 +29,10 @@ interface OsJapaneseDictionaryEntryRowElement {
   };
 }
 
-class OsJapaneseDictionaryEntryRowElement extends PolymerElement {
+export type EntryDeletedCustomEvent = CustomEvent<{isLastEntry: boolean}>;
+
+class OsJapaneseDictionaryEntryRowElement extends I18nMixin
+(PolymerElement) {
   // LINT.IfChange(JpPosType)
   private readonly posTypeOptions_: DropdownOption[] = [
     {value: JpPosType.kNoPos, label: '品詞なし'},
@@ -102,11 +106,17 @@ class OsJapaneseDictionaryEntryRowElement extends PolymerElement {
       locallyAdded: {
         type: Boolean,
       },
+      isLastEntry: {
+        type: Boolean,
+      },
     };
   }
 
   // Whether the entry needs to be added to the storage.
   locallyAdded = false;
+
+  // Whether this entry is the last entry in the dictionary.
+  isLastEntry = false;
 
   // The ID of the Japanese User Dictionary that the entry is part of.
   dictId: bigint;
@@ -145,11 +155,20 @@ class OsJapaneseDictionaryEntryRowElement extends PolymerElement {
   }
 
   private async deleteEntry_(): Promise<void> {
+    if (this.locallyAdded) {
+      this.dispatchEntryDeletedEvent_();
+      // Clear this local entry by just syncing to mozc dictionary.
+      // This will cause a UI refresh.
+      this.dispatchSavedEvent_();
+      return;
+    }
+
     const dictionarySaved =
         (await UserDataServiceProvider.getRemote()
              .deleteJapaneseDictionaryEntry(this.dictId, this.index))
             .status.success;
     if (dictionarySaved) {
+      this.dispatchEntryDeletedEvent_();
       this.dispatchSavedEvent_();
     }
   }
@@ -193,6 +212,20 @@ class OsJapaneseDictionaryEntryRowElement extends PolymerElement {
     this.dispatchEvent(
         new CustomEvent('dictionary-saved', {bubbles: true, composed: true}));
   }
+
+  private dispatchEntryDeletedEvent_(): void {
+    this.dispatchEvent(new CustomEvent('dictionary-entry-deleted', {
+      bubbles: true,
+      composed: true,
+      detail: {isLastEntry: this.isLastEntry},
+    }));
+  }
+
+
+  private i18nEntryDescription_(): string {
+    // +1 to the index so that it starts at "1" instead of 0.
+    return this.i18n('japaneseDictionaryEntryPosition', this.index + 1);
+  }
 }
 
 customElements.define(
@@ -209,5 +242,6 @@ declare global {
 declare global {
   interface HTMLElementEventMap {
     ['dictionary-saved']: CustomEvent;
+    ['dictionary-entry-deleted']: EntryDeletedCustomEvent;
   }
 }

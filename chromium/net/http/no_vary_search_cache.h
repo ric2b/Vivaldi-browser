@@ -81,21 +81,21 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
     base::WeakPtr<QueryString> query_string_;
   };
 
-  // An interface for observing changes to the NoVarySearchCache. Only
-  // insertions and refreshes via MaybeInsert() and erasures via Erase() are
-  // reported to this interface. Evictions are implicit, and modifications via
-  // ClearData() are expected to be followed by persisting a fresh copy of the
-  // database.
-  class NET_EXPORT_PRIVATE Observer {
+  // An interface for receiving notifications about changes to the
+  // NoVarySearchCache. Only insertions and refreshes via MaybeInsert() and
+  // erasures via Erase() are reported to this interface. Evictions are
+  // implicit, and modifications via ClearData() are expected to be followed by
+  // persisting a fresh copy of the database.
+  class NET_EXPORT_PRIVATE Journal {
    public:
-    Observer() = default;
+    Journal() = default;
 
-    Observer(const Observer&) = delete;
-    Observer& operator=(const Observer&) = delete;
+    Journal(const Journal&) = delete;
+    Journal& operator=(const Journal&) = delete;
 
     // Called when an entry is inserted or refreshed by the MaybeInsert()
     // method. Not called when MaybeInsert() results in no changes to the
-    // database.
+    // database. Also called by MergeFrom() for each merged entry.
     virtual void OnInsert(const std::string& base_url_cache_key,
                           const HttpNoVarySearchData& nvs_data,
                           const std::optional<std::string>& query,
@@ -107,8 +107,8 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
                          const std::optional<std::string>& query) = 0;
 
    protected:
-    // Observer objects are never deleted via a base class pointer.
-    virtual ~Observer();
+    // Journal objects are never deleted via a base class pointer.
+    virtual ~Journal();
   };
 
   struct LookupResult {
@@ -164,23 +164,23 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
   // nothing if the entry no longer exists.
   void Erase(EraseHandle handle);
 
-  // Set an Observer to be notified about subsequent changes to the cache. This
-  // object does not take ownership of the Observer. Calling the method again
-  // will replace the observer. The method can be called with nullptr to stop
-  // observing.
-  void SetObserver(Observer* observer);
+  // Set a Journal to be notified about subsequent changes to the cache. This
+  // object does not take ownership of the Journal. Calling the method again
+  // will replace the journal. The method can be called with nullptr to stop
+  // being notified.
+  void SetJournal(Journal* journal);
 
   // Adds the specified entry to the cache as if by MaybeInsert(), evicting an
   // older entry if the cache is full. The entry is treated as if newly used for
   // the purposes of eviction. For use when replaying journalled entries. The
-  // arguments are expected to match a previous call to Observer::OnInsert()
+  // arguments are expected to match a previous call to Journal::OnInsert()
   // from a different instance of NoVarySearchCache, but with the same settings
   // for cache partitioning. It can also be called with other valid arguments
   // for testing. If a valid base URL cannot be extracted from
   // `base_url_cache_key`, or `query` contains an invalid character, the call is
   // ignored. This will never happen if the arguments are unchanged from a call
-  // to Observer::OnInsert() with the same partitioning. A valid base URL does
-  // not contain a query or a fragment. Observer methods are not called.
+  // to Journal::OnInsert() with the same partitioning. A valid base URL does
+  // not contain a query or a fragment. Journal methods are not called.
   void ReplayInsert(std::string base_url_cache_key,
                     HttpNoVarySearchData nvs_data,
                     std::optional<std::string> query,
@@ -188,25 +188,30 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
 
   // Removes the specified entry from the cache as if by Erase(). For use when
   // replaying journalled entries. The arguments are expected to match a
-  // previous call to Observer::OnErase from a different instance of
+  // previous call to Journal::OnErase from a different instance of
   // NoVarySearchCache, with the same settings for cache partitioning
   // base::Features. If `query` is not found the call silently
-  // does nothing. Observer methods are not called.
+  // does nothing. Journal methods are not called.
   void ReplayErase(const std::string& base_url_cache_key,
                    const HttpNoVarySearchData& nvs_data,
                    const std::optional<std::string>& query);
 
   // Merge entries from `newer` in order from the least-recently-used to the
   // most-recently-used, treating them as newly used. Less recently-used entries
-  // will be evicted if necessary to avoid exceeding the maximum size. Observer
-  // methods are not called.
+  // will be evicted if necessary to avoid exceeding the maximum size.
+  // Journal::OnInsert() is called as if the entries were newly inserted (but
+  // with the original update_time).
   void MergeFrom(const NoVarySearchCache& newer);
 
   // Returns the size (number of stored original query strings) of the cache.
-  size_t GetSizeForTesting() const;
+  size_t size() const { return size_; }
+
+  // Return the maximum size for the cache. Attempting to add more than this
+  // many entries will result in older entries being evicted.
+  size_t max_size() const { return max_size_; }
 
   // Returns true if the top-level map is empty. This should be equivalent to
-  // GetSizeForTesting() == 0 in the absence of bugs.
+  // size() == 0 in the absence of bugs.
   bool IsTopLevelMapEmptyForTesting() const;
 
  private:
@@ -267,14 +272,14 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
   void EraseQuery(QueryString* query_string);
 
   // Inserts `query` or marks it as used in the cache. evicting an older entry
-  // if necessary to make space. `observer` is notified if set.
+  // if necessary to make space. `journal` is notified if set.
   void DoInsert(const GURL& url,
                 const GURL& base_url,
                 std::string base_url_cache_key,
                 HttpNoVarySearchData nvs_data,
                 std::optional<std::string_view> query,
                 base::Time update_time,
-                Observer* observer);
+                Journal* journal);
 
   // A convenience method for callers that do not have the original URL handy.
   // Reconstructs the original URL and then calls DoInsert().
@@ -283,7 +288,7 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
                                  HttpNoVarySearchData nvs_data,
                                  std::optional<std::string> query,
                                  base::Time update_time,
-                                 Observer* observer);
+                                 Journal* journal);
 
   // Scans all the QueryStrings in `data_map` to find ones in the range
   // [delete_begin, delete_end) and appends them to `matches`. `data_map` is
@@ -323,7 +328,7 @@ class NET_EXPORT_PRIVATE NoVarySearchCache {
   const size_t max_size_;
 
   // An object to be notified about changes to this cache.
-  raw_ptr<Observer> observer_ = nullptr;
+  raw_ptr<Journal> journal_ = nullptr;
 };
 
 template <>

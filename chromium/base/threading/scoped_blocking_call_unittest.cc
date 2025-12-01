@@ -2,13 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "base/threading/scoped_blocking_call.h"
 
+#include <array>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -506,8 +503,8 @@ TEST_F(ScopedBlockingCallIOJankMonitoringTest, MultiThreadedOverlapped) {
 
   TestWaitableEvent next_task_is_blocked(WaitableEvent::ResetPolicy::AUTOMATIC);
 
-  TestWaitableEvent resume_thread[kNumJankyTasks] = {};
-  TestWaitableEvent exited_blocking_scope[kNumJankyTasks] = {};
+  std::array<TestWaitableEvent, kNumJankyTasks> resume_thread = {};
+  std::array<TestWaitableEvent, kNumJankyTasks> exited_blocking_scope = {};
 
   auto blocking_task = BindLambdaForTesting([&](int task_index) {
     {
@@ -573,8 +570,8 @@ TEST_F(ScopedBlockingCallIOJankMonitoringTest, MultiThreadedOverlappedWindows) {
 
   TestWaitableEvent next_task_is_blocked(WaitableEvent::ResetPolicy::AUTOMATIC);
 
-  TestWaitableEvent resume_thread[kNumJankyTasks] = {};
-  TestWaitableEvent exited_blocking_scope[kNumJankyTasks] = {};
+  std::array<TestWaitableEvent, kNumJankyTasks> resume_thread = {};
+  std::array<TestWaitableEvent, kNumJankyTasks> exited_blocking_scope = {};
 
   auto blocking_task = BindLambdaForTesting([&](int task_index) {
     {

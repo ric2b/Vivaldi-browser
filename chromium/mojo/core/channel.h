@@ -5,9 +5,12 @@
 #ifndef MOJO_CORE_CHANNEL_H_
 #define MOJO_CORE_CHANNEL_H_
 
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/compiler_specific.h"
+#include "base/containers/heap_array.h"
 #include "base/containers/span.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
@@ -66,7 +69,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
   struct Message;
 
   using MessagePtr = std::unique_ptr<Message>;
-  using AlignedBuffer = std::unique_ptr<char>;
+  using AlignedBuffer = base::HeapArray<char>;
 
   // A message to be written to a channel.
   struct MOJO_SYSTEM_IMPL_EXPORT Message {
@@ -236,8 +239,10 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
         HandlePolicy handle_policy,
         base::ProcessHandle from_process = base::kNullProcessHandle);
 
-    virtual const void* data() const = 0;
-    virtual void* mutable_data() const = 0;
+    const void* data() const { return data_span().data(); }
+    void* mutable_data() { return mutable_data_span().data(); }
+    virtual base::span<const char> data_span() const = 0;
+    virtual base::span<char> mutable_data_span() = 0;
 
     size_t data_num_bytes() const { return size_; }
 
@@ -247,18 +252,23 @@ class MOJO_SYSTEM_IMPL_EXPORT Channel
 
     const void* extra_header() const;
     void* mutable_extra_header();
+    base::span<char> mutable_extra_header_span();
     size_t extra_header_size() const;
 
     void* mutable_payload();
+    base::span<char> mutable_payload_span();
     const void* payload() const;
+    base::span<const char> payload_span() const;
     size_t payload_size() const;
 
     size_t num_handles() const;
     bool has_handles() const;
 
     bool is_legacy_message() const;
-    LegacyHeader* legacy_header() const;
-    Header* header() const;
+    LegacyHeader* legacy_header();
+    const LegacyHeader* legacy_header() const;
+    Header* header();
+    const Header* header() const;
 
     // Note: SetHandles() and TakeHandles() invalidate any previous value of
     // handles().

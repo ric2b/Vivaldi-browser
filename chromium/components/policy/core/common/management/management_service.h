@@ -13,6 +13,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
+#include "base/observer_list.h"
 #include "base/sequence_checker.h"
 #include "components/policy/policy_export.h"
 #include "components/prefs/persistent_pref_store.h"
@@ -22,6 +23,10 @@
 
 class PrefService;
 class PrefRegistrySimple;
+
+namespace gfx {
+class Image;
+}
 
 namespace ui {
 class ImageModel;
@@ -99,6 +104,12 @@ class POLICY_EXPORT ManagementStatusProvider {
 // This class must be used on the main thread at all times.
 class POLICY_EXPORT ManagementService {
  public:
+  // Observers observing updates to the enterprise custom or default work label.
+  class POLICY_EXPORT Observer : public base::CheckedObserver {
+   public:
+    virtual void OnEnterpriseLabelUpdated() = 0;
+  };
+
   explicit ManagementService(
       std::vector<std::unique_ptr<ManagementStatusProvider>> providers);
   virtual ~ManagementService();
@@ -117,6 +128,7 @@ class POLICY_EXPORT ManagementService {
   virtual void RefreshCache(CacheRefreshCallback callback);
 
   virtual ui::ImageModel* GetManagementIconForProfile();
+  virtual gfx::Image* GetManagementIconForBrowser();
 
   // Returns true if `authority` is are actively managed.
   bool HasManagementAuthority(EnterpriseManagementAuthority authority);
@@ -139,10 +151,17 @@ class POLICY_EXPORT ManagementService {
     return management_authorities_for_testing_;
   }
 
+  // Add / remove observers.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
   void SetManagementAuthoritiesForTesting(int management_authorities);
   void ClearManagementAuthoritiesForTesting();
   void SetManagementStatusProviderForTesting(
       std::vector<std::unique_ptr<ManagementStatusProvider>> providers);
+  virtual void TriggerPolicyStatusChangedForTesting() {}
+  virtual void SetBrowserManagementIconForTesting(
+      const gfx::Image& management_icon) {}
 
   static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
@@ -154,6 +173,8 @@ class POLICY_EXPORT ManagementService {
   void AddManagementStatusProvider(
       std::unique_ptr<ManagementStatusProvider> provider);
 
+  void NotifyEnterpriseLabelUpdated();
+
   const std::vector<std::unique_ptr<ManagementStatusProvider>>&
   management_status_providers() {
     return management_status_providers_;
@@ -164,6 +185,7 @@ class POLICY_EXPORT ManagementService {
   // managed entity.
   int GetManagementAuthorities();
 
+  base::ObserverList<ManagementService::Observer> observers_;
   std::optional<int> management_authorities_for_testing_;
   std::vector<std::unique_ptr<ManagementStatusProvider>>
       management_status_providers_;

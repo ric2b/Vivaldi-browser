@@ -28,28 +28,19 @@ class ContextualSearchFulfillmentAction : public OmniboxAction {
   bool is_zero_prefix_suggestion_;
 };
 
-class ContextualSearchSelectRegionAction : public OmniboxAction {
+class ContextualSearchOpenLensAction : public OmniboxAction {
  public:
-  ContextualSearchSelectRegionAction();
+  ContextualSearchOpenLensAction();
 
   // OmniboxAction:
   OmniboxActionId ActionId() const override;
   void Execute(ExecutionContext& context) const override;
+#if defined(SUPPORT_PEDALS_VECTOR_ICONS)
+  const gfx::VectorIcon& GetVectorIcon() const override;
+#endif
 
  protected:
-  ~ContextualSearchSelectRegionAction() override;
-};
-
-class ContextualSearchAskAboutPageAction : public OmniboxAction {
- public:
-  ContextualSearchAskAboutPageAction();
-
-  // OmniboxAction:
-  OmniboxActionId ActionId() const override;
-  void Execute(ExecutionContext& context) const override;
-
- protected:
-  ~ContextualSearchAskAboutPageAction() override;
+  ~ContextualSearchOpenLensAction() override;
 };
 
 #endif  // COMPONENTS_OMNIBOX_BROWSER_ACTIONS_CONTEXTUAL_SEARCH_ACTION_H_

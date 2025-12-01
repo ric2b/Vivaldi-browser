@@ -1144,11 +1144,12 @@ bool xnn_subgraph_rewrite_for_fp16(xnn_subgraph_t subgraph)
       } else if (xnn_value_is_external(value)) {
         assert(value->datatype == xnn_datatype_fp32);
         assert(value->fp16_id != XNN_INVALID_VALUE_ID);
-        struct xnn_value* fp16_value = &subgraph->values[value->fp16_id];
         value->producer = XNN_INVALID_NODE_ID;
         value->num_consumers = 0;
         value->first_consumer = XNN_INVALID_NODE_ID;
-        xnn_log_debug("FP16 rewrite: created FP16 tensor #%" PRIu32 " for FP32 tensor #%" PRIu32, fp16_value->id, n);
+        xnn_log_debug("FP16 rewrite: created FP16 tensor #%" PRIu32
+                      " for FP32 tensor #%" PRIu32,
+                      subgraph->values[value->fp16_id].id, n);
       } else {
         switch (value->datatype) {
           case xnn_datatype_fp32:
@@ -1295,6 +1296,23 @@ static bool has_clamp(const struct xnn_node* node)
   }
 }
 
+// Can we reorder the use of a value from the producer to the consumer?
+// We can if no nodes betwen the producer and the consumer use the value.
+static bool can_reorder_use(xnn_subgraph_t subgraph, uint32_t value_id,
+                            uint32_t producer_id, uint32_t consumer_id) {
+  assert(producer_id < consumer_id);
+  for (uint32_t i = producer_id + 1; i < consumer_id; i++) {
+    const struct xnn_node* node = &subgraph->nodes[i];
+    for (uint32_t j = 0; j < node->num_inputs; j++) {
+      if (node->inputs[j] == value_id) return false;
+    }
+    for (uint32_t j = 0; j < node->num_outputs; j++) {
+      if (node->outputs[j] == value_id) return false;
+    }
+  }
+  return true;
+}
+
 enum xnn_status xnn_subgraph_fusion(
     xnn_subgraph_t subgraph)
 {
@@ -1423,7 +1441,8 @@ enum xnn_status xnn_subgraph_fusion(
       // E.g. ---> (N1) --- value ---> (Copy) ---> v1
       // If value is persistent or external, fusing copy upstream into N1 will skip the write to value, N1 will write to
       // v1 instead, which is wrong.
-      if (consumer->type == xnn_node_type_copy && xnn_value_is_valid(value) && xnn_value_is_internal(value)) {
+      if (consumer->type == xnn_node_type_copy && xnn_value_is_valid(value) && xnn_value_is_internal(value) &&
+          can_reorder_use(subgraph, consumer->outputs[0], producer_id, consumer_id)) {
         xnn_log_info(
           "value %d fuse Copy Node #%" PRIu32 " into upstream %s Node #%" PRIu32, value->id, consumer->id,
           xnn_node_type_to_string(producer->type), producer->id);
@@ -1440,7 +1459,8 @@ enum xnn_status xnn_subgraph_fusion(
       // Try to fuse copy downstream.
       // E.g. --- v1 ---> (copy) --- value ---> (n2)
       // If value is external or persistent, we cannot simply remove the copy, since we need to write to value.
-      if (producer->type == xnn_node_type_copy && xnn_value_is_valid(value) && xnn_value_is_internal(value)) {
+      if (producer->type == xnn_node_type_copy && xnn_value_is_valid(value) && xnn_value_is_internal(value) &&
+          can_reorder_use(subgraph, producer->inputs[0], producer_id, consumer_id)) {
         // We need to check that value is valid here because value could have been cleared by a previous optimization,
         // this can happen if we have a chain of Copy(s), e.g.:
         // ---v1--> (Copy1) ---v2--> (Copy2) ---v3--> (Copy3) ---v4-->
@@ -1551,7 +1571,10 @@ void xnn_subgraph_optimize_dynamic_quantization_ops(xnn_subgraph_t subgraph) {
                      xnn_init_qp8_f32_qc8w_gemm_config() != NULL) {
             pack_activations = true;
           } else if ((weights_type == xnn_weights_type_qb4w) &&
-                     xnn_init_qp8_f32_qb4w_gemm_config() != NULL) {
+                     xnn_init_qp8_f32_qb4w_gemm_config() != NULL &&
+                     // The `qp8_f32_qb4w` GEMMs currently only accept unsigned
+                     // weights.
+                     filter->quantization.zero_point == 8) {
             pack_activations = true;
           }
         }
@@ -1698,6 +1721,11 @@ enum xnn_status xnn_subgraph_optimize(
       xnn_log_error("failed to force FP16 inference: subgraph is incompatible with FP16 operators");
       return xnn_status_unsupported_parameter;
     }
+    if (fp16_rewrite_succeeded) {
+      // Re-run xnn_subgraph_analyze_consumers_and_producers since fp16 re-write
+      // inserts nodes and changes producers/consumers.
+      xnn_subgraph_analyze_consumers_and_producers(subgraph);
+    }
   }
 
   #if XNN_ENABLE_SPARSE
@@ -1745,8 +1773,12 @@ enum xnn_status xnn_delete_subgraph(
 enum xnn_node_type xnn_reduce_operator_to_node_type(enum xnn_reduce_operator type)
 {
   switch (type) {
+    case xnn_reduce_max:
+      return xnn_node_type_static_reduce_max;
     case xnn_reduce_mean:
       return xnn_node_type_static_mean;
+    case xnn_reduce_min:
+      return xnn_node_type_static_reduce_min;
     case xnn_reduce_sum:
       return xnn_node_type_static_sum;
     default:
@@ -1759,6 +1791,10 @@ enum xnn_reduce_operator xnn_node_type_to_reduce_operator(enum xnn_node_type typ
   switch (type) {
     case xnn_node_type_static_mean:
       return xnn_reduce_mean;
+    case xnn_node_type_static_reduce_max:
+      return xnn_reduce_max;
+    case xnn_node_type_static_reduce_min:
+      return xnn_reduce_min;
     case xnn_node_type_static_sum:
       return xnn_reduce_sum;
     default:

@@ -220,7 +220,8 @@ class MockCompositorFrameSink : public viz::mojom::CompositorFrameSink {
   MOCK_METHOD1(SetPreferredFrameInterval, void(base::TimeDelta));
   MOCK_METHOD1(InitializeCompositorFrameSinkType,
                void(viz::mojom::CompositorFrameSinkType));
-  MOCK_METHOD1(BindLayerContext, void(viz::mojom::PendingLayerContextPtr));
+  MOCK_METHOD2(BindLayerContext,
+               void(viz::mojom::PendingLayerContextPtr, bool));
   MOCK_METHOD1(SetThreads, void(const std::vector<viz::Thread>&));
 
  private:
@@ -288,9 +289,8 @@ class AsyncLayerTreeFrameSinkSimpleTest : public testing::TestWithParam<bool> {
 
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details,
-                    bool frame_ack,
                     std::vector<viz::ReturnedResource> resources) {
-    layer_tree_frame_sink_->OnBeginFrame(args, timing_details, frame_ack,
+    layer_tree_frame_sink_->OnBeginFrame(args, timing_details,
                                          std::move(resources));
   }
 
@@ -460,7 +460,7 @@ class AsyncLayerTreeFrameSinkMetricsRefactorTest
     timing_details.presentation_feedback.timestamp = base::TimeTicks::Now();
     timing_details_map[++frame_token_] = timing_details;
     SetNeedsBeginFrame();
-    OnBeginFrame(args, timing_details_map, false,
+    OnBeginFrame(args, timing_details_map,
                  std::vector<viz::ReturnedResource>());
     return args;
   }
@@ -615,7 +615,7 @@ TEST_F(AsyncLayerTreeFrameSinkBeginFrameTest,
   // Connected after first compositor frame.
   EXPECT_FALSE(
       layer_tree_frame_sink_->use_internal_begin_frame_source_for_testing());
-  client_remote_->OnBeginFrame(args1, empty_details, false,
+  client_remote_->OnBeginFrame(args1, empty_details,
                                std::vector<viz::ReturnedResource>());
   task_runner_->RunUntilIdle();
   // Client should receive 1st viz begin frame.
@@ -632,7 +632,7 @@ TEST_F(AsyncLayerTreeFrameSinkBeginFrameTest,
   EXPECT_TRUE(
       layer_tree_frame_sink_->use_internal_begin_frame_source_for_testing());
 
-  client_remote_->OnBeginFrame(args2, test_details, false,
+  client_remote_->OnBeginFrame(args2, test_details,
                                std::vector<viz::ReturnedResource>());
   task_runner_->RunUntilIdle();
   // Proceed timing details.
@@ -656,7 +656,7 @@ TEST_F(AsyncLayerTreeFrameSinkBeginFrameTest,
   // Should drop 3rd begin frame within last internal begin frame's interval.
   EXPECT_CALL(*mock_compositor_frame_sink_,
               DidNotProduceFrame(viz::BeginFrameAck(args3, false)));
-  client_remote_->OnBeginFrame(args3, empty_details, false,
+  client_remote_->OnBeginFrame(args3, empty_details,
                                std::vector<viz::ReturnedResource>());
   task_runner_->RunUntilIdle();
   EXPECT_EQ(
@@ -665,7 +665,7 @@ TEST_F(AsyncLayerTreeFrameSinkBeginFrameTest,
 
   // 4th viz begin frame.
   task_runner_->FastForwardBy(viz::BeginFrameArgs::DefaultInterval());
-  client_remote_->OnBeginFrame(args4, empty_details, false,
+  client_remote_->OnBeginFrame(args4, empty_details,
                                std::vector<viz::ReturnedResource>());
   task_runner_->RunUntilIdle();
   // Client should receive 4th begin frame.

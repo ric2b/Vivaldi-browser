@@ -19,7 +19,6 @@ libangle_common_headers = [
   "src/common/PackedGLEnums_autogen.h",
   "src/common/PackedCLEnums_autogen.h",
   "src/common/PoolAlloc.h",
-  "src/common/RingBufferAllocator.h",
   "src/common/SimpleMutex.h",
   "src/common/SynchronizedValue.h",
   "src/common/WorkerThread.h",
@@ -76,7 +75,6 @@ libangle_common_sources = libangle_common_headers + [
                             "src/common/PackedEnums.cpp",
                             "src/common/PackedGLEnums_autogen.cpp",
                             "src/common/PoolAlloc.cpp",
-                            "src/common/RingBufferAllocator.cpp",
                             "src/common/SimpleMutex.cpp",
                             "src/common/WorkerThread.cpp",
                             "src/common/aligned_memory.cpp",
@@ -319,7 +317,6 @@ libangle_headers = [
   "src/libANGLE/Uniform.h",
   "src/libANGLE/VaryingPacking.h",
   "src/libANGLE/Version.h",
-  "src/libANGLE/Version.inc",
   "src/libANGLE/VertexArray.h",
   "src/libANGLE/VertexAttribute.h",
   "src/libANGLE/VertexAttribute.inc",
@@ -328,7 +325,6 @@ libangle_headers = [
   "src/libANGLE/cl_types.h",
   "src/libANGLE/context_private_call.inl.h",
   "src/libANGLE/context_private_call_autogen.h",
-  "src/libANGLE/entry_points_utils.cpp",
   "src/libANGLE/entry_points_utils.h",
   "src/libANGLE/features.h",
   "src/libANGLE/formatutils.h",
@@ -633,7 +629,7 @@ if (angle_enable_cl) {
   ]
 }
 
-libglesv2_sources = [
+libglesv2_entry_point_sources = [
   "src/libGLESv2/egl_context_lock_autogen.h",
   "src/libGLESv2/egl_context_lock_impl.h",
   "src/libGLESv2/egl_ext_stubs.cpp",
@@ -659,9 +655,10 @@ libglesv2_sources = [
   "src/libGLESv2/entry_points_gles_ext_autogen.h",
   "src/libGLESv2/global_state.cpp",
   "src/libGLESv2/global_state.h",
-  "src/libGLESv2/libGLESv2_autogen.cpp",
   "src/libGLESv2/resource.h",
 ]
+
+libglesv2_sources = [ "src/libGLESv2/libGLESv2_autogen.cpp" ]
 
 libglesv2_cl_sources = [
   "src/libGLESv2/cl_dispatch_table.cpp",

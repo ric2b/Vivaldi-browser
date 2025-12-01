@@ -75,15 +75,6 @@ namespace {
 
 constexpr char kAddressComponentsDefaultLocality[] = "en-US";
 
-// Stores the data types that are relevant for the structured address/name.
-constexpr DenseSet kStructuredDataTypes = {NAME_FIRST,
-                                           NAME_MIDDLE,
-                                           NAME_LAST,
-                                           NAME_LAST_FIRST,
-                                           NAME_LAST_SECOND,
-                                           ADDRESS_HOME_STREET_NAME,
-                                           ADDRESS_HOME_HOUSE_NUMBER};
-
 // Like |AutofillType::GetStorableType()|, but also returns |NAME_FULL| for
 // first, middle, and last name field types, and groups phone number types
 // similarly.
@@ -357,6 +348,8 @@ AutofillProfile AutofillProfile::CreateFromJavaObject(
   std::vector<int> field_types =
       Java_AutofillProfile_getFieldTypes(env, jprofile);
 
+  std::vector<std::tuple<FieldType, std::u16string, VerificationStatus>>
+      modified_fields;
   for (int int_field_type : field_types) {
     FieldType field_type = ToSafeFieldType(int_field_type, NO_SERVER_DATA);
     CHECK(field_type != NO_SERVER_DATA);
@@ -364,9 +357,22 @@ AutofillProfile AutofillProfile::CreateFromJavaObject(
         Java_AutofillProfile_getInfoStatus(env, jprofile, field_type);
     std::u16string value =
         Java_AutofillProfile_getInfo(env, jprofile, field_type);
-    if (value.empty()) {
-      continue;
+
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillFixEmptyFieldAndroidSettingsBug)) {
+      if (value != profile.GetInfo(field_type, app_locale) ||
+          status != profile.GetVerificationStatus(field_type)) {
+        modified_fields.emplace_back(field_type, value, status);
+      }
+    } else {
+      if (!value.empty()) {
+        modified_fields.emplace_back(field_type, value, status);
+      }
     }
+  }
+
+  for (const auto& field_data : modified_fields) {
+    const auto& [field_type, value, status] = field_data;
     // TODO(crbug.com/40278253): Reconcile usage of GetInfo and GetRawInfo
     // below.
     if (field_type == NAME_FULL || field_type == ADDRESS_HOME_COUNTRY) {
@@ -555,7 +561,7 @@ int AutofillProfile::Compare(const AutofillProfile& profile) const {
 
   // When adding field types, ensure that they don't need to be added here and
   // update the last checked value.
-  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 187,
+  static_assert(FieldType::MAX_VALID_FIELD_TYPE == 190,
                 "New field type needs to be reviewed for inclusion in the "
                 "profile comparison logic.");
 
@@ -1202,6 +1208,7 @@ FormGroup* AutofillProfile::MutableFormGroupForType(FieldType type) {
     case FieldTypeGroup::kStandaloneCvcField:
     case FieldTypeGroup::kUnfillable:
     case FieldTypeGroup::kAutofillAi:
+    case FieldTypeGroup::kLoyaltyCard:
       return nullptr;
   }
   NOTREACHED();
@@ -1234,12 +1241,6 @@ bool AutofillProfile::FinalizeAfterImport() {
   return success;
 }
 
-bool AutofillProfile::HasStructuredData() const {
-  return std::ranges::any_of(kStructuredDataTypes, [this](FieldType type) {
-    return !this->GetRawInfo(type).empty();
-  });
-}
-
 AutofillProfile AutofillProfile::ConvertToAccountProfile() const {
   DCHECK_EQ(record_type(), RecordType::kLocalOrSyncable);
   AutofillProfile account_profile = *this;
@@ -1250,14 +1251,6 @@ AutofillProfile AutofillProfile::ConvertToAccountProfile() const {
   // Initial creator and last modifier are unused for kLocalOrSyncable profiles.
   account_profile.initial_creator_id_ = kInitialCreatorOrModifierChrome;
   account_profile.last_modifier_id_ = kInitialCreatorOrModifierChrome;
-  return account_profile;
-}
-
-AutofillProfile AutofillProfile::DowngradeToAccountProfile() const {
-  CHECK(record_type() == RecordType::kAccountHome ||
-        record_type() == RecordType::kAccountWork);
-  AutofillProfile account_profile = *this;
-  account_profile.record_type_ = RecordType::kAccount;
   return account_profile;
 }
 

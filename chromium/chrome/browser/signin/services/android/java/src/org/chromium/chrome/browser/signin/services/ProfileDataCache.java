@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.signin.services;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
@@ -123,7 +125,7 @@ public class ProfileDataCache implements AccountInfoService.Observer {
     // * Else if there is a default config, use that
     // * Else do not display a badge.
     private @Nullable BadgeConfig mDefaultBadgeConfig;
-    private Map<String, BadgeConfig> mPerAccountBadgeConfig = new HashMap<>();
+    private final Map<String, BadgeConfig> mPerAccountBadgeConfig = new HashMap<>();
     private final Drawable mPlaceholderImage;
     private final ObserverList<Observer> mObservers = new ObserverList<>();
     private final Map<String, DisplayableProfileData> mCachedProfileData = new HashMap<>();
@@ -239,9 +241,10 @@ public class ProfileDataCache implements AccountInfoService.Observer {
      *     given account or a {@link DisplayableProfileData} with a placeholder image and null full
      *     and given name.
      */
-    public DisplayableProfileData getProfileDataOrDefault(String accountEmail) {
+    public DisplayableProfileData getProfileDataOrDefault(@Nullable String accountEmail) {
         DisplayableProfileData profileData = mCachedProfileData.get(accountEmail);
         if (profileData == null) {
+            assumeNonNull(accountEmail);
             return new DisplayableProfileData(
                     accountEmail,
                     mPlaceholderImage,
@@ -351,8 +354,7 @@ public class ProfileDataCache implements AccountInfoService.Observer {
     }
 
     private void populateCache(AccountInfoService accountInfoService) {
-        Promise<List<CoreAccountInfo>> accountsPromise =
-                AccountManagerFacadeProvider.getInstance().getCoreAccountInfos();
+        var accountsPromise = AccountManagerFacadeProvider.getInstance().getAccounts();
         if (accountsPromise.isFulfilled()) {
             populateCacheForAllAccounts(accountInfoService, accountsPromise.getResult());
         } else {
@@ -364,9 +366,9 @@ public class ProfileDataCache implements AccountInfoService.Observer {
     }
 
     private void populateCacheForAllAccounts(
-            AccountInfoService accountInfoService, List<CoreAccountInfo> accounts) {
-        for (CoreAccountInfo coreAccountInfo : accounts) {
-            populateCacheForAccount(accountInfoService, coreAccountInfo.getEmail());
+            AccountInfoService accountInfoService, List<AccountInfo> accounts) {
+        for (CoreAccountInfo account : accounts) {
+            populateCacheForAccount(accountInfoService, account.getEmail());
         }
     }
 

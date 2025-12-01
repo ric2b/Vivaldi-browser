@@ -185,11 +185,13 @@ class WTF_EXPORT StringImpl {
     return hash_and_flags_.load(std::memory_order_relaxed) & kIs8Bit;
   }
 
-  ALWAYS_INLINE const LChar* Characters8() const {
+  // Use Span8() instead.
+  UNSAFE_BUFFER_USAGE ALWAYS_INLINE const LChar* Characters8() const {
     DCHECK(Is8Bit());
     return reinterpret_cast<const LChar*>(this + 1);
   }
-  ALWAYS_INLINE const UChar* Characters16() const {
+  // Use Span16() instead.
+  UNSAFE_BUFFER_USAGE ALWAYS_INLINE const UChar* Characters16() const {
     DCHECK(!Is8Bit());
     return reinterpret_cast<const UChar*>(this + 1);
   }
@@ -201,6 +203,10 @@ class WTF_EXPORT StringImpl {
     DCHECK(!Is8Bit());
     return CharacterBuffer<UChar>();
   }
+  ALWAYS_INLINE base::span<const uint16_t> SpanUint16() const {
+    DCHECK(!Is8Bit());
+    return CharacterBuffer<uint16_t>();
+  }
   ALWAYS_INLINE const void* Bytes() const {
     return reinterpret_cast<const void*>(this + 1);
   }
@@ -208,6 +214,9 @@ class WTF_EXPORT StringImpl {
     return {reinterpret_cast<const uint8_t*>(this + 1),
             CharactersSizeInBytes()};
   }
+  // Create a new std::u16string based on this.
+  // The character content is always copied.
+  std::u16string ToU16String() const;
 
   template <typename CharType>
   ALWAYS_INLINE const CharType* GetCharacters() const;
@@ -609,8 +618,6 @@ class WTF_EXPORT StringImpl {
   // Calculates the kContainsOnlyAscii and kIsLowerAscii flags. Returns
   // a bitfield with those 2 values.
   unsigned ComputeASCIIFlags() const;
-
-  std::u16string ToU16String() const;
 
 #if DCHECK_IS_ON()
   std::string AsciiForDebugging() const;

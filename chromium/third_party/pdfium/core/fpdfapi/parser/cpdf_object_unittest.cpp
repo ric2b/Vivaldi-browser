@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 #include <string>
 #include <utility>
@@ -25,7 +26,6 @@
 #include "core/fpdfapi/parser/cpdf_string.h"
 #include "core/fxcrt/compiler_specific.h"
 #include "core/fxcrt/data_vector.h"
-#include "core/fxcrt/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -66,19 +66,19 @@ class PDFObjectsTest : public testing::Test {
     // Name object.
     auto name_obj = pdfium::MakeRetain<CPDF_Name>(nullptr, "space");
     // Array object.
-    m_ArrayObj = pdfium::MakeRetain<CPDF_Array>();
-    m_ArrayObj->InsertNewAt<CPDF_Number>(0, 8902);
-    m_ArrayObj->InsertNewAt<CPDF_Name>(1, "address");
+    array_obj_ = pdfium::MakeRetain<CPDF_Array>();
+    array_obj_->InsertNewAt<CPDF_Number>(0, 8902);
+    array_obj_->InsertNewAt<CPDF_Name>(1, "address");
     // Dictionary object.
-    m_DictObj = pdfium::MakeRetain<CPDF_Dictionary>();
-    m_DictObj->SetNewFor<CPDF_Boolean>("bool", false);
-    m_DictObj->SetNewFor<CPDF_Number>("num", 0.23f);
+    dict_obj_ = pdfium::MakeRetain<CPDF_Dictionary>();
+    dict_obj_->SetNewFor<CPDF_Boolean>("bool", false);
+    dict_obj_->SetNewFor<CPDF_Number>("num", 0.23f);
     // Stream object.
     static constexpr char kContents[] = "abcdefghijklmnopqrstuvwxyz";
     auto pNewDict = pdfium::MakeRetain<CPDF_Dictionary>();
-    m_StreamDictObj = pNewDict;
-    m_StreamDictObj->SetNewFor<CPDF_String>("key1", L" test dict");
-    m_StreamDictObj->SetNewFor<CPDF_Number>("key2", -1);
+    stream_dict_obj_ = pNewDict;
+    stream_dict_obj_->SetNewFor<CPDF_String>("key1", L" test dict");
+    stream_dict_obj_->SetNewFor<CPDF_Number>("key2", -1);
     auto stream_obj = pdfium::MakeRetain<CPDF_Stream>(
         DataVector<uint8_t>(std::begin(kContents),
                             UNSAFE_TODO(std::end(kContents) - 1)),
@@ -89,37 +89,39 @@ class PDFObjectsTest : public testing::Test {
     CPDF_Object* objs[] = {
         boolean_false_obj.Get(), boolean_true_obj.Get(), number_int_obj.Get(),
         number_float_obj.Get(),  str_reg_obj.Get(),      str_spec_obj.Get(),
-        name_obj.Get(),          m_ArrayObj.Get(),       m_DictObj.Get(),
+        name_obj.Get(),          array_obj_.Get(),       dict_obj_.Get(),
         stream_obj.Get(),        null_obj.Get()};
-    m_DirectObjTypes = {
+    direct_obj_types_ = {
         CPDF_Object::kBoolean, CPDF_Object::kBoolean, CPDF_Object::kNumber,
         CPDF_Object::kNumber,  CPDF_Object::kString,  CPDF_Object::kString,
         CPDF_Object::kName,    CPDF_Object::kArray,   CPDF_Object::kDictionary,
         CPDF_Object::kStream,  CPDF_Object::kNullobj};
     for (auto* obj : objs) {
-      m_DirectObjs.emplace_back(obj);
+      direct_objs_.emplace_back(obj);
     }
     // Indirect references to indirect objects.
-    m_ObjHolder = std::make_unique<CPDF_IndirectObjectHolder>();
-    m_IndirectObjNums = {
-        m_ObjHolder->AddIndirectObject(boolean_true_obj->Clone()),
-        m_ObjHolder->AddIndirectObject(number_int_obj->Clone()),
-        m_ObjHolder->AddIndirectObject(str_spec_obj->Clone()),
-        m_ObjHolder->AddIndirectObject(name_obj->Clone()),
-        m_ObjHolder->AddIndirectObject(m_ArrayObj->Clone()),
-        m_ObjHolder->AddIndirectObject(m_DictObj->Clone()),
-        m_ObjHolder->AddIndirectObject(stream_obj->Clone())};
-    for (uint32_t objnum : m_IndirectObjNums) {
-      m_RefObjs.emplace_back(
-          pdfium::MakeRetain<CPDF_Reference>(m_ObjHolder.get(), objnum));
+    obj_holder_ = std::make_unique<CPDF_IndirectObjectHolder>();
+    indirect_obj_nums_ = {
+        obj_holder_->AddIndirectObject(boolean_true_obj->Clone()),
+        obj_holder_->AddIndirectObject(number_int_obj->Clone()),
+        obj_holder_->AddIndirectObject(str_spec_obj->Clone()),
+        obj_holder_->AddIndirectObject(name_obj->Clone()),
+        obj_holder_->AddIndirectObject(array_obj_->Clone()),
+        obj_holder_->AddIndirectObject(dict_obj_->Clone()),
+        obj_holder_->AddIndirectObject(stream_obj->Clone())};
+    for (uint32_t objnum : indirect_obj_nums_) {
+      ref_objs_.emplace_back(
+          pdfium::MakeRetain<CPDF_Reference>(obj_holder_.get(), objnum));
     }
   }
 
   bool Equal(const CPDF_Object* obj1, const CPDF_Object* obj2) {
-    if (obj1 == obj2)
+    if (obj1 == obj2) {
       return true;
-    if (!obj1 || !obj2 || obj1->GetType() != obj2->GetType())
+    }
+    if (!obj1 || !obj2 || obj1->GetType() != obj2->GetType()) {
       return false;
+    }
     switch (obj1->GetType()) {
       case CPDF_Object::kBoolean:
         return obj1->GetInteger() == obj2->GetInteger();
@@ -132,8 +134,9 @@ class PDFObjectsTest : public testing::Test {
       case CPDF_Object::kArray: {
         const CPDF_Array* array1 = obj1->AsArray();
         const CPDF_Array* array2 = obj2->AsArray();
-        if (array1->size() != array2->size())
+        if (array1->size() != array2->size()) {
           return false;
+        }
         for (size_t i = 0; i < array1->size(); ++i) {
           if (!Equal(array1->GetObjectAt(i).Get(),
                      array2->GetObjectAt(i).Get())) {
@@ -145,12 +148,15 @@ class PDFObjectsTest : public testing::Test {
       case CPDF_Object::kDictionary: {
         const CPDF_Dictionary* dict1 = obj1->AsDictionary();
         const CPDF_Dictionary* dict2 = obj2->AsDictionary();
-        if (dict1->size() != dict2->size())
+        if (dict1->size() != dict2->size()) {
           return false;
+        }
         CPDF_DictionaryLocker locker1(dict1);
         for (const auto& item : locker1) {
-          if (!Equal(item.second.Get(), dict2->GetObjectFor(item.first).Get()))
+          if (!Equal(item.second.Get(),
+                     dict2->GetObjectFor(item.first.AsStringView()).Get())) {
             return false;
+          }
         }
         return true;
       }
@@ -160,8 +166,9 @@ class PDFObjectsTest : public testing::Test {
         RetainPtr<const CPDF_Stream> stream1(obj1->AsStream());
         RetainPtr<const CPDF_Stream> stream2(obj2->AsStream());
         // Compare dictionaries.
-        if (!Equal(stream1->GetDict().Get(), stream2->GetDict().Get()))
+        if (!Equal(stream1->GetDict().Get(), stream2->GetDict().Get())) {
           return false;
+        }
 
         auto streamAcc1 =
             pdfium::MakeRetain<CPDF_StreamAcc>(std::move(stream1));
@@ -173,8 +180,9 @@ class PDFObjectsTest : public testing::Test {
         pdfium::span<const uint8_t> span2 = streamAcc2->GetSpan();
 
         // Compare sizes.
-        if (span1.size() != span2.size())
+        if (span1.size() != span2.size()) {
           return false;
+        }
 
         return UNSAFE_TODO(memcmp(span1.data(), span2.data(), span2.size())) ==
                0;
@@ -187,140 +195,141 @@ class PDFObjectsTest : public testing::Test {
   }
 
  protected:
-  // m_ObjHolder needs to be declared first and destructed last since it also
-  // refers to some objects in m_DirectObjs.
-  std::unique_ptr<CPDF_IndirectObjectHolder> m_ObjHolder;
-  std::vector<RetainPtr<CPDF_Object>> m_DirectObjs;
-  std::vector<int> m_DirectObjTypes;
-  std::vector<RetainPtr<CPDF_Object>> m_RefObjs;
-  RetainPtr<CPDF_Dictionary> m_DictObj;
-  RetainPtr<CPDF_Dictionary> m_StreamDictObj;
-  RetainPtr<CPDF_Array> m_ArrayObj;
-  std::vector<uint32_t> m_IndirectObjNums;
+  // obj_holder_ needs to be declared first and destructed last since it also
+  // refers to some objects in direct_objs_.
+  std::unique_ptr<CPDF_IndirectObjectHolder> obj_holder_;
+  std::vector<RetainPtr<CPDF_Object>> direct_objs_;
+  std::vector<int> direct_obj_types_;
+  std::vector<RetainPtr<CPDF_Object>> ref_objs_;
+  RetainPtr<CPDF_Dictionary> dict_obj_;
+  RetainPtr<CPDF_Dictionary> stream_dict_obj_;
+  RetainPtr<CPDF_Array> array_obj_;
+  std::vector<uint32_t> indirect_obj_nums_;
 };
 
 TEST_F(PDFObjectsTest, GetString) {
-  static constexpr auto direct_obj_results = fxcrt::ToArray<const char*>(
+  static constexpr auto direct_obj_results = std::to_array<const char*>(
       {"false", "true", "1245", "9.0034504", "A simple test", "\t\n", "space",
        "", "", "", ""});
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    EXPECT_EQ(direct_obj_results[i], m_DirectObjs[i]->GetString());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_results[i], direct_objs_[i]->GetString());
   }
 
   // Check indirect references.
-  static constexpr auto indirect_obj_results = fxcrt::ToArray<const char*>(
-      {"true", "1245", "\t\n", "space", "", "", ""});
-  for (size_t i = 0; i < m_RefObjs.size(); ++i) {
-    EXPECT_EQ(indirect_obj_results[i], m_RefObjs[i]->GetString());
+  static constexpr auto indirect_obj_results =
+      std::to_array<const char*>({"true", "1245", "\t\n", "space", "", "", ""});
+  for (size_t i = 0; i < ref_objs_.size(); ++i) {
+    EXPECT_EQ(indirect_obj_results[i], ref_objs_[i]->GetString());
   }
 }
 
 TEST_F(PDFObjectsTest, GetUnicodeText) {
-  static constexpr auto direct_obj_results = fxcrt::ToArray<const wchar_t*>(
+  static constexpr auto direct_obj_results = std::to_array<const wchar_t*>(
       {L"", L"", L"", L"", L"A simple test", L"\t\n", L"space", L"", L"",
        L"abcdefghijklmnopqrstuvwxyz", L""});
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    EXPECT_EQ(direct_obj_results[i], m_DirectObjs[i]->GetUnicodeText());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_results[i], direct_objs_[i]->GetUnicodeText());
   }
 
   // Check indirect references.
-  for (const auto& it : m_RefObjs) {
+  for (const auto& it : ref_objs_) {
     EXPECT_EQ(L"", it->GetUnicodeText());
   }
 }
 
 TEST_F(PDFObjectsTest, GetNumber) {
   static constexpr auto direct_obj_results =
-      fxcrt::ToArray<const float>({0, 0, 1245, 9.00345f, 0, 0, 0, 0, 0, 0, 0});
+      std::to_array<const float>({0, 0, 1245, 9.00345f, 0, 0, 0, 0, 0, 0, 0});
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    EXPECT_EQ(direct_obj_results[i], m_DirectObjs[i]->GetNumber());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_results[i], direct_objs_[i]->GetNumber());
   }
 
   // Check indirect references.
   static constexpr auto indirect_obj_results =
-      fxcrt::ToArray<const float>({0, 1245, 0, 0, 0, 0, 0});
-  for (size_t i = 0; i < m_RefObjs.size(); ++i)
-    EXPECT_EQ(indirect_obj_results[i], m_RefObjs[i]->GetNumber());
+      std::to_array<const float>({0, 1245, 0, 0, 0, 0, 0});
+  for (size_t i = 0; i < ref_objs_.size(); ++i) {
+    EXPECT_EQ(indirect_obj_results[i], ref_objs_[i]->GetNumber());
+  }
 }
 
 TEST_F(PDFObjectsTest, GetInteger) {
   static constexpr auto direct_obj_results =
-      fxcrt::ToArray<const int>({0, 1, 1245, 9, 0, 0, 0, 0, 0, 0, 0});
+      std::to_array<const int>({0, 1, 1245, 9, 0, 0, 0, 0, 0, 0, 0});
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    EXPECT_EQ(direct_obj_results[i], m_DirectObjs[i]->GetInteger());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_results[i], direct_objs_[i]->GetInteger());
   }
 
   // Check indirect references.
   static constexpr auto indirect_obj_results =
-      fxcrt::ToArray<const int>({1, 1245, 0, 0, 0, 0, 0});
-  for (size_t i = 0; i < m_RefObjs.size(); ++i) {
-    EXPECT_EQ(indirect_obj_results[i], m_RefObjs[i]->GetInteger());
+      std::to_array<const int>({1, 1245, 0, 0, 0, 0, 0});
+  for (size_t i = 0; i < ref_objs_.size(); ++i) {
+    EXPECT_EQ(indirect_obj_results[i], ref_objs_[i]->GetInteger());
   }
 }
 
 TEST_F(PDFObjectsTest, GetDict) {
-  const auto direct_obj_results = fxcrt::ToArray<const CPDF_Dictionary*>(
+  const auto direct_obj_results = std::to_array<const CPDF_Dictionary*>(
       {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-       m_DictObj.Get(), m_StreamDictObj.Get(), nullptr});
+       dict_obj_.Get(), stream_dict_obj_.Get(), nullptr});
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    EXPECT_EQ(direct_obj_results[i], m_DirectObjs[i]->GetDict());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_results[i], direct_objs_[i]->GetDict());
   }
 
-  const auto indirect_obj_results = fxcrt::ToArray<const CPDF_Dictionary*>(
-      {nullptr, nullptr, nullptr, nullptr, nullptr, m_DictObj.Get(),
-       m_StreamDictObj.Get()});
+  const auto indirect_obj_results = std::to_array<const CPDF_Dictionary*>(
+      {nullptr, nullptr, nullptr, nullptr, nullptr, dict_obj_.Get(),
+       stream_dict_obj_.Get()});
   // Check indirect references.
-  for (size_t i = 0; i < m_RefObjs.size(); ++i) {
-    EXPECT_TRUE(Equal(indirect_obj_results[i], m_RefObjs[i]->GetDict().Get()));
+  for (size_t i = 0; i < ref_objs_.size(); ++i) {
+    EXPECT_TRUE(Equal(indirect_obj_results[i], ref_objs_[i]->GetDict().Get()));
   }
 }
 
 TEST_F(PDFObjectsTest, GetNameFor) {
-  m_DictObj->SetNewFor<CPDF_String>("string", "ium");
-  m_DictObj->SetNewFor<CPDF_Name>("name", "Pdf");
+  dict_obj_->SetNewFor<CPDF_String>("string", "ium");
+  dict_obj_->SetNewFor<CPDF_Name>("name", "Pdf");
 
-  EXPECT_EQ("", m_DictObj->GetNameFor("invalid"));
-  EXPECT_EQ("", m_DictObj->GetNameFor("bool"));
-  EXPECT_EQ("", m_DictObj->GetNameFor("num"));
-  EXPECT_EQ("", m_DictObj->GetNameFor("string"));
-  EXPECT_EQ("Pdf", m_DictObj->GetNameFor("name"));
+  EXPECT_EQ("", dict_obj_->GetNameFor("invalid"));
+  EXPECT_EQ("", dict_obj_->GetNameFor("bool"));
+  EXPECT_EQ("", dict_obj_->GetNameFor("num"));
+  EXPECT_EQ("", dict_obj_->GetNameFor("string"));
+  EXPECT_EQ("Pdf", dict_obj_->GetNameFor("name"));
 
-  EXPECT_EQ("", m_DictObj->GetByteStringFor("invalid"));
-  EXPECT_EQ("false", m_DictObj->GetByteStringFor("bool"));
-  EXPECT_EQ(".23", m_DictObj->GetByteStringFor("num"));
-  EXPECT_EQ("ium", m_DictObj->GetByteStringFor("string"));
-  EXPECT_EQ("Pdf", m_DictObj->GetByteStringFor("name"));
+  EXPECT_EQ("", dict_obj_->GetByteStringFor("invalid"));
+  EXPECT_EQ("false", dict_obj_->GetByteStringFor("bool"));
+  EXPECT_EQ(".23", dict_obj_->GetByteStringFor("num"));
+  EXPECT_EQ("ium", dict_obj_->GetByteStringFor("string"));
+  EXPECT_EQ("Pdf", dict_obj_->GetByteStringFor("name"));
 }
 
 TEST_F(PDFObjectsTest, GetArray) {
-  const auto direct_obj_results = fxcrt::ToArray<const CPDF_Array*>(
+  const auto direct_obj_results = std::to_array<const CPDF_Array*>(
       {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
-       m_ArrayObj.Get(), nullptr, nullptr, nullptr});
+       array_obj_.Get(), nullptr, nullptr, nullptr});
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    EXPECT_EQ(direct_obj_results[i], m_DirectObjs[i]->AsArray());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_results[i], direct_objs_[i]->AsArray());
   }
 
   // Check indirect references.
-  for (const auto& it : m_RefObjs) {
+  for (const auto& it : ref_objs_) {
     EXPECT_FALSE(it->AsArray());
   }
 }
 
 TEST_F(PDFObjectsTest, Clone) {
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    RetainPtr<CPDF_Object> obj = m_DirectObjs[i]->Clone();
-    EXPECT_TRUE(Equal(m_DirectObjs[i].Get(), obj.Get()));
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    RetainPtr<CPDF_Object> obj = direct_objs_[i]->Clone();
+    EXPECT_TRUE(Equal(direct_objs_[i].Get(), obj.Get()));
   }
 
   // Check indirect references.
-  for (const auto& it : m_RefObjs) {
+  for (const auto& it : ref_objs_) {
     RetainPtr<CPDF_Object> obj = it->Clone();
     EXPECT_TRUE(Equal(it.Get(), obj.Get()));
   }
@@ -328,102 +337,106 @@ TEST_F(PDFObjectsTest, Clone) {
 
 TEST_F(PDFObjectsTest, GetType) {
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i)
-    EXPECT_EQ(m_DirectObjTypes[i], m_DirectObjs[i]->GetType());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_obj_types_[i], direct_objs_[i]->GetType());
+  }
 
   // Check indirect references.
-  for (const auto& it : m_RefObjs)
+  for (const auto& it : ref_objs_) {
     EXPECT_EQ(CPDF_Object::kReference, it->GetType());
+  }
 }
 
 TEST_F(PDFObjectsTest, GetDirect) {
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i)
-    EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->GetDirect());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->GetDirect());
+  }
 
   // Check indirect references.
-  for (size_t i = 0; i < m_RefObjs.size(); ++i)
-    EXPECT_EQ(m_IndirectObjNums[i], m_RefObjs[i]->GetDirect()->GetObjNum());
+  for (size_t i = 0; i < ref_objs_.size(); ++i) {
+    EXPECT_EQ(indirect_obj_nums_[i], ref_objs_[i]->GetDirect()->GetObjNum());
+  }
 }
 
 TEST_F(PDFObjectsTest, SetString) {
   // Check for direct objects.
-  static constexpr auto set_values = fxcrt::ToArray<const char*>(
+  static constexpr auto set_values = std::to_array<const char*>(
       {"true", "fake", "3.125f", "097", "changed", "", "NewName"});
-  static constexpr auto expected = fxcrt::ToArray<const char*>(
+  static constexpr auto expected = std::to_array<const char*>(
       {"true", "false", "3.125", "97", "changed", "", "NewName"});
   for (size_t i = 0; i < std::size(set_values); ++i) {
-    m_DirectObjs[i]->SetString(set_values[i]);
-    EXPECT_EQ(expected[i], m_DirectObjs[i]->GetString());
+    direct_objs_[i]->SetString(set_values[i]);
+    EXPECT_EQ(expected[i], direct_objs_[i]->GetString());
   }
 }
 
 TEST_F(PDFObjectsTest, IsTypeAndAsType) {
   // Check for direct objects.
-  for (size_t i = 0; i < m_DirectObjs.size(); ++i) {
-    if (m_DirectObjTypes[i] == CPDF_Object::kArray) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsArray());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsArray());
+  for (size_t i = 0; i < direct_objs_.size(); ++i) {
+    if (direct_obj_types_[i] == CPDF_Object::kArray) {
+      EXPECT_TRUE(direct_objs_[i]->IsArray());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsArray());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsArray());
-      EXPECT_FALSE(m_DirectObjs[i]->AsArray());
+      EXPECT_FALSE(direct_objs_[i]->IsArray());
+      EXPECT_FALSE(direct_objs_[i]->AsArray());
     }
 
-    if (m_DirectObjTypes[i] == CPDF_Object::kBoolean) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsBoolean());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsBoolean());
+    if (direct_obj_types_[i] == CPDF_Object::kBoolean) {
+      EXPECT_TRUE(direct_objs_[i]->IsBoolean());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsBoolean());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsBoolean());
-      EXPECT_FALSE(m_DirectObjs[i]->AsBoolean());
+      EXPECT_FALSE(direct_objs_[i]->IsBoolean());
+      EXPECT_FALSE(direct_objs_[i]->AsBoolean());
     }
 
-    if (m_DirectObjTypes[i] == CPDF_Object::kName) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsName());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsName());
+    if (direct_obj_types_[i] == CPDF_Object::kName) {
+      EXPECT_TRUE(direct_objs_[i]->IsName());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsName());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsName());
-      EXPECT_FALSE(m_DirectObjs[i]->AsName());
+      EXPECT_FALSE(direct_objs_[i]->IsName());
+      EXPECT_FALSE(direct_objs_[i]->AsName());
     }
 
-    if (m_DirectObjTypes[i] == CPDF_Object::kNumber) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsNumber());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsNumber());
+    if (direct_obj_types_[i] == CPDF_Object::kNumber) {
+      EXPECT_TRUE(direct_objs_[i]->IsNumber());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsNumber());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsNumber());
-      EXPECT_FALSE(m_DirectObjs[i]->AsNumber());
+      EXPECT_FALSE(direct_objs_[i]->IsNumber());
+      EXPECT_FALSE(direct_objs_[i]->AsNumber());
     }
 
-    if (m_DirectObjTypes[i] == CPDF_Object::kString) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsString());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsString());
+    if (direct_obj_types_[i] == CPDF_Object::kString) {
+      EXPECT_TRUE(direct_objs_[i]->IsString());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsString());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsString());
-      EXPECT_FALSE(m_DirectObjs[i]->AsString());
+      EXPECT_FALSE(direct_objs_[i]->IsString());
+      EXPECT_FALSE(direct_objs_[i]->AsString());
     }
 
-    if (m_DirectObjTypes[i] == CPDF_Object::kDictionary) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsDictionary());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsDictionary());
+    if (direct_obj_types_[i] == CPDF_Object::kDictionary) {
+      EXPECT_TRUE(direct_objs_[i]->IsDictionary());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsDictionary());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsDictionary());
-      EXPECT_FALSE(m_DirectObjs[i]->AsDictionary());
+      EXPECT_FALSE(direct_objs_[i]->IsDictionary());
+      EXPECT_FALSE(direct_objs_[i]->AsDictionary());
     }
 
-    if (m_DirectObjTypes[i] == CPDF_Object::kStream) {
-      EXPECT_TRUE(m_DirectObjs[i]->IsStream());
-      EXPECT_EQ(m_DirectObjs[i].Get(), m_DirectObjs[i]->AsStream());
+    if (direct_obj_types_[i] == CPDF_Object::kStream) {
+      EXPECT_TRUE(direct_objs_[i]->IsStream());
+      EXPECT_EQ(direct_objs_[i].Get(), direct_objs_[i]->AsStream());
     } else {
-      EXPECT_FALSE(m_DirectObjs[i]->IsStream());
-      EXPECT_FALSE(m_DirectObjs[i]->AsStream());
+      EXPECT_FALSE(direct_objs_[i]->IsStream());
+      EXPECT_FALSE(direct_objs_[i]->AsStream());
     }
 
-    EXPECT_FALSE(m_DirectObjs[i]->IsReference());
-    EXPECT_FALSE(m_DirectObjs[i]->AsReference());
+    EXPECT_FALSE(direct_objs_[i]->IsReference());
+    EXPECT_FALSE(direct_objs_[i]->AsReference());
   }
   // Check indirect references.
-  for (size_t i = 0; i < m_RefObjs.size(); ++i) {
-    EXPECT_TRUE(m_RefObjs[i]->IsReference());
-    EXPECT_EQ(m_RefObjs[i].Get(), m_RefObjs[i]->AsReference());
+  for (size_t i = 0; i < ref_objs_.size(); ++i) {
+    EXPECT_TRUE(ref_objs_[i]->IsReference());
+    EXPECT_EQ(ref_objs_[i].Get(), ref_objs_[i]->AsReference());
   }
 }
 
@@ -432,7 +445,7 @@ TEST_F(PDFObjectsTest, MakeReferenceGeneric) {
   original_obj->SetObjNum(42);
   ASSERT_FALSE(original_obj->IsInline());
 
-  auto ref_obj = original_obj->MakeReference(m_ObjHolder.get());
+  auto ref_obj = original_obj->MakeReference(obj_holder_.get());
 
   ASSERT_TRUE(ref_obj->IsReference());
   EXPECT_EQ(original_obj->GetObjNum(),
@@ -443,11 +456,11 @@ TEST_F(PDFObjectsTest, KeyForCache) {
   std::set<uint64_t> key_set;
 
   // Check all direct objects inserted without collision.
-  for (const auto& direct : m_DirectObjs) {
+  for (const auto& direct : direct_objs_) {
     EXPECT_TRUE(key_set.insert(direct->KeyForCache()).second);
   }
   // Check indirect objects inserted without collision.
-  for (const auto& pair : *m_ObjHolder) {
+  for (const auto& pair : *obj_holder_) {
     EXPECT_TRUE(key_set.insert(pair.second->KeyForCache()).second);
   }
 
@@ -457,7 +470,7 @@ TEST_F(PDFObjectsTest, KeyForCache) {
 
 TEST(PDFArrayTest, GetMatrix) {
   using Row = std::array<float, 6>;
-  static constexpr auto elems = fxcrt::ToArray<const Row>({
+  static constexpr auto elems = std::to_array<const Row>({
       {{0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f}},
       {{1, 2, 3, 4, 5, 6}},
       {{2.3f, 4.05f, 3, -2, -3, 0.0f}},
@@ -476,7 +489,7 @@ TEST(PDFArrayTest, GetMatrix) {
 
 TEST(PDFArrayTest, GetRect) {
   using Row = std::array<float, 4>;
-  static constexpr auto elems = fxcrt::ToArray<const Row>({
+  static constexpr auto elems = std::to_array<const Row>({
       {{0.0f, 0.0f, 0.0f, 0.0f}},
       {{1, 2, 5, 6}},
       {{2.3f, 4.05f, -3, 0.0f}},
@@ -497,7 +510,7 @@ TEST(PDFArrayTest, GetTypeAt) {
   {
     // Boolean array.
     static constexpr auto vals =
-        fxcrt::ToArray<const bool>({true, false, false, true, true});
+        std::to_array<const bool>({true, false, false, true, true});
     auto arr = pdfium::MakeRetain<CPDF_Array>();
     for (size_t i = 0; i < vals.size(); ++i) {
       arr->InsertNewAt<CPDF_Boolean>(i, vals[i]);
@@ -515,7 +528,7 @@ TEST(PDFArrayTest, GetTypeAt) {
   }
   {
     // Integer array.
-    static constexpr auto vals = fxcrt::ToArray<const int>(
+    static constexpr auto vals = std::to_array<const int>(
         {10, 0, -345, 2089345456, -1000000000, 567, 93658767});
     auto arr = pdfium::MakeRetain<CPDF_Array>();
     for (size_t i = 0; i < vals.size(); ++i) {
@@ -535,15 +548,15 @@ TEST(PDFArrayTest, GetTypeAt) {
   }
   {
     // Float array.
-    static constexpr auto vals = fxcrt::ToArray<const float>(
+    static constexpr auto vals = std::to_array<const float>(
         {0.0f, 0, 10, 10.0f, 0.0345f, 897.34f, -2.5f, -1.0f, -345.0f, -0.0f});
     auto arr = pdfium::MakeRetain<CPDF_Array>();
     for (size_t i = 0; i < vals.size(); ++i) {
       arr->InsertNewAt<CPDF_Number>(i, vals[i]);
     }
     static constexpr auto expected_str =
-        fxcrt::ToArray<const char*>({"0", "0", "10", "10", ".034499999",
-                                     "897.34003", "-2.5", "-1", "-345", "0"});
+        std::to_array<const char*>({"0", "0", "10", "10", ".034499999",
+                                    "897.34003", "-2.5", "-1", "-345", "0"});
     for (size_t i = 0; i < vals.size(); ++i) {
       TestArrayAccessors(arr.Get(), i,     // Array and index.
                          expected_str[i],  // String value.
@@ -557,7 +570,7 @@ TEST(PDFArrayTest, GetTypeAt) {
   }
   {
     // String and name array
-    static constexpr auto vals = fxcrt::ToArray<const char*>(
+    static constexpr auto vals = std::to_array<const char*>(
         {"this", "adsde$%^", "\r\t", "\"012", ".", "EYREW", "It is a joke :)"});
     auto string_array = pdfium::MakeRetain<CPDF_Array>();
     auto name_array = pdfium::MakeRetain<CPDF_Array>();
@@ -587,8 +600,9 @@ TEST(PDFArrayTest, GetTypeAt) {
   {
     // Null element array.
     auto arr = pdfium::MakeRetain<CPDF_Array>();
-    for (size_t i = 0; i < 3; ++i)
+    for (size_t i = 0; i < 3; ++i) {
       arr->InsertNewAt<CPDF_Null>(i);
+    }
     for (size_t i = 0; i < 3; ++i) {
       TestArrayAccessors(arr.Get(), i,  // Array and index.
                          "",            // String value.
@@ -716,12 +730,12 @@ TEST(PDFArrayTest, GetTypeAt) {
         DataVector<uint8_t>(std::begin(kData), std::end(kData)), stream_dict);
     arr->InsertNewAt<CPDF_Reference>(13, &object_holder,
                                      stream_val->GetObjNum());
-    static constexpr auto expected_str = fxcrt::ToArray<const char*>(
+    static constexpr auto expected_str = std::to_array<const char*>(
         {"true", "false", "0", "-1234", "2345", ".050000001", "",
          "It is a test!", "NAME", "test", "", "", "", ""});
-    static constexpr auto expected_int = fxcrt::ToArray<const int>(
+    static constexpr auto expected_int = std::to_array<const int>(
         {1, 0, 0, -1234, 2345, 0, 0, 0, 0, 0, 0, 0, 0, 0});
-    static constexpr auto expected_float = fxcrt::ToArray<const float>(
+    static constexpr auto expected_float = std::to_array<const float>(
         {0, 0, 0, -1234, 2345, 0.05f, 0, 0, 0, 0, 0, 0, 0, 0});
     for (size_t i = 0; i < arr->size(); ++i) {
       EXPECT_EQ(expected_str[i], arr->GetByteStringAt(i));
@@ -737,17 +751,18 @@ TEST(PDFArrayTest, GetTypeAt) {
         EXPECT_EQ(stream_val, arr->GetStreamAt(i));
       } else {
         EXPECT_FALSE(arr->GetStreamAt(i));
-        if (i == 12)
+        if (i == 12) {
           EXPECT_EQ(dict_val, arr->GetDictAt(i));
-        else
+        } else {
           EXPECT_FALSE(arr->GetDictAt(i));
+        }
       }
     }
   }
 }
 
 TEST(PDFArrayTest, AddNumber) {
-  static constexpr auto vals = fxcrt::ToArray<const float>(
+  static constexpr auto vals = std::to_array<const float>(
       {1.0f, -1.0f, 0, 0.456734f, 12345.54321f, 0.5f, 1000, 0.000045f});
   auto arr = pdfium::MakeRetain<CPDF_Array>();
   for (size_t i = 0; i < vals.size(); ++i) {
@@ -760,7 +775,7 @@ TEST(PDFArrayTest, AddNumber) {
 }
 
 TEST(PDFArrayTest, AddInteger) {
-  static constexpr auto vals = fxcrt::ToArray<const int>(
+  static constexpr auto vals = std::to_array<const int>(
       {0, 1, 934435456, 876, 10000, -1, -24354656, -100});
   auto arr = pdfium::MakeRetain<CPDF_Array>();
   for (size_t i = 0; i < vals.size(); ++i) {
@@ -774,8 +789,8 @@ TEST(PDFArrayTest, AddInteger) {
 
 TEST(PDFArrayTest, AddStringAndName) {
   static constexpr auto kVals =
-      fxcrt::ToArray<const char*>({"", "a", "ehjhRIOYTTFdfcdnv", "122323",
-                                   "$#%^&**", " ", "This is a test.\r\n"});
+      std::to_array<const char*>({"", "a", "ehjhRIOYTTFdfcdnv", "122323",
+                                  "$#%^&**", " ", "This is a test.\r\n"});
   auto string_array = pdfium::MakeRetain<CPDF_Array>();
   auto name_array = pdfium::MakeRetain<CPDF_Array>();
   for (const char* val : kVals) {
@@ -799,9 +814,9 @@ TEST(PDFArrayTest, AddReferenceAndGetObjectAt) {
       pdfium::MakeRetain<CPDF_String>(nullptr, "Adsfdsf 343434 %&&*\n");
   auto name_obj = pdfium::MakeRetain<CPDF_Name>(nullptr, "Title:");
   auto null_obj = pdfium::MakeRetain<CPDF_Null>();
-  auto indirect_objs = fxcrt::ToArray<RetainPtr<CPDF_Object>>(
+  auto indirect_objs = std::to_array<RetainPtr<CPDF_Object>>(
       {boolean_obj, int_obj, float_obj, str_obj, name_obj, null_obj});
-  auto obj_nums = fxcrt::ToArray<int>({2, 4, 7, 2345, 799887, 1});
+  auto obj_nums = std::to_array<int>({2, 4, 7, 2345, 799887, 1});
   auto arr = pdfium::MakeRetain<CPDF_Array>();
   auto arr1 = pdfium::MakeRetain<CPDF_Array>();
   // Create two arrays of references by different AddReference() APIs.
@@ -813,8 +828,9 @@ TEST(PDFArrayTest, AddReferenceAndGetObjectAt) {
                                     indirect_objs[i]->GetObjNum());
   }
   // Check indirect objects.
-  for (size_t i = 0; i < std::size(obj_nums); ++i)
+  for (size_t i = 0; i < std::size(obj_nums); ++i) {
     EXPECT_EQ(indirect_objs[i], holder->GetOrParseIndirectObject(obj_nums[i]));
+  }
   // Check arrays.
   EXPECT_EQ(arr->size(), arr1->size());
   for (size_t i = 0; i < arr->size(); ++i) {

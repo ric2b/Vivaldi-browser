@@ -606,13 +606,15 @@ void PageHandler::DidDetachInterstitialPage() {
 }
 
 void PageHandler::DidRunJavaScriptDialog(const GURL& url,
+                                         const base::UnguessableToken& frame_id,
                                          const std::u16string& message,
                                          const std::u16string& default_prompt,
                                          JavaScriptDialogType dialog_type,
                                          bool has_non_devtools_handlers,
                                          JavaScriptDialogCallback callback) {
-  if (!enabled_)
+  if (!enabled_) {
     return;
+  }
   DCHECK(pending_dialog_.is_null());
   pending_dialog_ = std::move(callback);
   std::string type = Page::DialogTypeEnum::Alert;
@@ -620,29 +622,37 @@ void PageHandler::DidRunJavaScriptDialog(const GURL& url,
     type = Page::DialogTypeEnum::Confirm;
   if (dialog_type == JAVASCRIPT_DIALOG_TYPE_PROMPT)
     type = Page::DialogTypeEnum::Prompt;
-  frontend_->JavascriptDialogOpening(url.spec(), base::UTF16ToUTF8(message),
-                                     type, has_non_devtools_handlers,
-                                     base::UTF16ToUTF8(default_prompt));
+  frontend_->JavascriptDialogOpening(
+      url.spec(), frame_id.ToString(), base::UTF16ToUTF8(message), type,
+      has_non_devtools_handlers, base::UTF16ToUTF8(default_prompt));
 }
 
-void PageHandler::DidRunBeforeUnloadConfirm(const GURL& url,
-                                            bool has_non_devtools_handlers,
-                                            JavaScriptDialogCallback callback) {
-  if (!enabled_)
+void PageHandler::DidRunBeforeUnloadConfirm(
+    const GURL& url,
+    const base::UnguessableToken& frame_id,
+    bool has_non_devtools_handlers,
+    JavaScriptDialogCallback callback) {
+  if (!enabled_) {
     return;
+  }
   DCHECK(pending_dialog_.is_null());
   pending_dialog_ = std::move(callback);
-  frontend_->JavascriptDialogOpening(url.spec(), std::string(),
+  frontend_->JavascriptDialogOpening(url.spec(), frame_id.ToString(),
+                                     std::string(),
                                      Page::DialogTypeEnum::Beforeunload,
                                      has_non_devtools_handlers, std::string());
 }
 
-void PageHandler::DidCloseJavaScriptDialog(bool success,
-                                           const std::u16string& user_input) {
-  if (!enabled_)
+void PageHandler::DidCloseJavaScriptDialog(
+    const base::UnguessableToken& frame_id,
+    bool success,
+    const std::u16string& user_input) {
+  if (!enabled_) {
     return;
+  }
   pending_dialog_.Reset();
-  frontend_->JavascriptDialogClosed(success, base::UTF16ToUTF8(user_input));
+  frontend_->JavascriptDialogClosed(frame_id.ToString(), success,
+                                    base::UTF16ToUTF8(user_input));
 }
 
 Response PageHandler::Enable(
@@ -1369,6 +1379,17 @@ void PageHandler::CaptureScreenshot(
         gfx::ScaleToRoundedSize(requested_image_size, scale);
   }
 
+  // TODO(crbug.com/377715191): this should check RenderWidgetHostViewBase
+  // instead, but there is no easy way to do this today. Once that's possible,
+  // this check should move inside RenderWidetHostImpl::GetSnapshotFromBrowser.
+  if (base::FeatureList::IsEnabled(features::kCDPScreenshotNewSurface)) {
+    if (auto* wc = WebContentsImpl::FromRenderFrameHostImpl(host_)) {
+      // When view is completely hidden, capturing a surface snapshot
+      // will stall because the surface is never presented.
+      CHECK(wc->GetPageVisibilityState() != PageVisibilityState::kHidden);
+    }
+  }
+
   widget_host->GetSnapshotFromBrowser(
       base::BindOnce(&PageHandler::ScreenshotCaptured,
                      weak_factory_.GetWeakPtr(), std::move(pending_request)),
@@ -1850,8 +1871,12 @@ Page::BackForwardCacheNotRestoredReason NotRestoredReasonToProtocol(
     case Reason::kWebViewDocumentStartJavascriptChanged:
       return Page::BackForwardCacheNotRestoredReasonEnum::
           WebViewDocumentStartJavascriptChanged;
-    case Reason::kCacheLimitPruned:
-      return Page::BackForwardCacheNotRestoredReasonEnum::CacheLimitPruned;
+    case Reason::kCacheLimitPrunedOnModerateMemoryPressure:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          CacheLimitPrunedOnModerateMemoryPressure;
+    case Reason::kCacheLimitPrunedOnCriticalMemoryPressure:
+      return Page::BackForwardCacheNotRestoredReasonEnum::
+          CacheLimitPrunedOnCriticalMemoryPressure;
     case Reason::kBlocklistedFeatures:
       // Blocklisted features should be handled separately and be broken down
       // into sub reasons.
@@ -1939,8 +1964,6 @@ Page::BackForwardCacheNotRestoredReason BlocklistedFeatureToProtocol(
           OutstandingNetworkRequestXHR;
     case WebSchedulerTrackedFeature::kPrinting:
       return Page::BackForwardCacheNotRestoredReasonEnum::Printing;
-    case WebSchedulerTrackedFeature::kWebDatabase:
-      return Page::BackForwardCacheNotRestoredReasonEnum::WebDatabase;
     case WebSchedulerTrackedFeature::kPictureInPicture:
       return Page::BackForwardCacheNotRestoredReasonEnum::PictureInPicture;
     case WebSchedulerTrackedFeature::kSpeechRecognizer:
@@ -2151,7 +2174,8 @@ Page::BackForwardCacheNotRestoredReasonType MapNotRestoredReasonToType(
     case Reason::kWebViewMessageListenerInjected:
     case Reason::kWebViewSafeBrowsingAllowlistChanged:
     case Reason::kWebViewDocumentStartJavascriptChanged:
-    case Reason::kCacheLimitPruned:
+    case Reason::kCacheLimitPrunedOnModerateMemoryPressure:
+    case Reason::kCacheLimitPrunedOnCriticalMemoryPressure:
       return Page::BackForwardCacheNotRestoredReasonTypeEnum::Circumstantial;
     case Reason::kCacheControlNoStore:
     case Reason::kCacheControlNoStoreCookieModified:
@@ -2178,7 +2202,6 @@ Page::BackForwardCacheNotRestoredReasonType MapBlocklistedFeatureToType(
     case WebSchedulerTrackedFeature::kSharedWorker:
     case WebSchedulerTrackedFeature::kWebHID:
     case WebSchedulerTrackedFeature::kWebShare:
-    case WebSchedulerTrackedFeature::kWebDatabase:
     case WebSchedulerTrackedFeature::kPaymentManager:
     case WebSchedulerTrackedFeature::kKeyboardLock:
     case WebSchedulerTrackedFeature::kWebOTPService:

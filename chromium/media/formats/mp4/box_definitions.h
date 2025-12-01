@@ -371,10 +371,6 @@ struct MEDIA_EXPORT ElementaryStreamDescriptor : Box {
 #if BUILDFLAG(USE_PROPRIETARY_CODECS)
   AAC aac;
 #endif
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) // FEATURE_EXTRA_DATA
-  // We need this data in extra_data in platform_media
-  std::vector<uint8_t> data;
-#endif
 };
 
 struct MEDIA_EXPORT FlacSpecificBox : Box {

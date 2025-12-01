@@ -6,9 +6,9 @@
 #include <vector>
 
 #include "base/values.h"
-#include "chrome/common/importer/importer_data_types.h"
-#include "chrome/common/importer/importer_type.h"
-#include "chrome/common/importer/importer_url_row.h"
+#include "components/user_data_importer/common/importer_data_types.h"
+#include "components/user_data_importer/common/importer_type.h"
+#include "components/user_data_importer/common/importer_url_row.h"
 #include "chrome/utility/importer/importer.h"
 #include "components/password_manager/core/browser/password_form.h"
 
@@ -17,10 +17,10 @@ class ImportedNoteEntry;
 class ChromiumImporter : public Importer {
  public:
   ChromiumImporter();
-  void ImportPasswords(importer::ImporterType importer_type);
+  void ImportPasswords(user_data_importer::ImporterType importer_type);
 
   // Importer
-  void StartImport(const importer::SourceProfile& source_profile,
+  void StartImport(const user_data_importer::SourceProfile& source_profile,
                    uint16_t items,
                    ImporterBridge* bridge) override;
 
@@ -35,14 +35,14 @@ class ChromiumImporter : public Importer {
   void ImportBookMarks();
   void ImportHistory();
   void ImportExtensions();
-  void ImportTabs(importer::ImporterType importer_type);
+  void ImportTabs(user_data_importer::ImporterType importer_type);
 
   bool ReadAndParseSignons(const base::FilePath& sqlite_file,
-                           std::vector<importer::ImportedPasswordForm>* forms,
-                           importer::ImporterType importer_type);
+      std::vector<user_data_importer::ImportedPasswordForm>* forms,
+      user_data_importer::ImporterType importer_type);
 
   bool ReadAndParseHistory(const base::FilePath& sqlite_file,
-                           std::vector<ImporterURLRow>* forms);
+      std::vector<user_data_importer::ImporterURLRow>* forms);
 };
 
 #endif  // IMPORTER_CHROMIUM_IMPORTER_H_

@@ -15,6 +15,7 @@
 #include "base/files/file_util.h"
 #include "base/functional/callback_helpers.h"
 #include "base/memory/ref_counted.h"
+#include "base/strings/strcat.h"
 #include "base/task/task_runner.h"
 #include "base/threading/scoped_blocking_call.h"
 #include "chrome/browser/browser_process.h"
@@ -61,10 +62,10 @@ std::string GetBundleIdentifierForShim(const std::string& app_id,
     std::string normalized_profile_path;
     base::ReplaceChars(profile_path.BaseName().value(), " ", "-",
                        &normalized_profile_path);
-    return base::apple::BaseBundleID() + std::string(".app.") +
-           normalized_profile_path + "-" + app_id;
+    return base::StrCat({base::apple::BaseBundleID(), ".app.",
+                         normalized_profile_path, "-", app_id});
   }
-  return base::apple::BaseBundleID() + std::string(".app.") + app_id;
+  return base::StrCat({base::apple::BaseBundleID(), ".app.", app_id});
 }
 
 bool UseAdHocSigningForWebAppShims() {
@@ -76,6 +77,15 @@ bool UseAdHocSigningForWebAppShims() {
     if (!base::FeatureList::IsEnabled(
             features::kUseAdHocSigningForWebAppShims)) {
       return false;
+    }
+
+    // An explicitly enabled (via command line or chrome://flags) feature flag
+    // also takes precedence over any enterprise policy, to allow testing the
+    // behavior even if the enterprise policy is set to disabled.
+    if (base::FeatureList::GetInstance()->IsFeatureOverriddenFromCommandLine(
+            features::kUseAdHocSigningForWebAppShims.name,
+            base::FeatureList::OVERRIDE_ENABLE_FEATURE)) {
+      return true;
     }
 
     // The browser's local_state can be null in tests. In that case there is no

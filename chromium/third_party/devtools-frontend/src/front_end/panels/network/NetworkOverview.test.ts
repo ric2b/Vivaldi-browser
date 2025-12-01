@@ -5,6 +5,7 @@
 import type * as Common from '../../core/common/common.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
+import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {createTarget} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as RenderCoordinator from '../../ui/components/render_coordinator/render_coordinator.js';
@@ -39,11 +40,10 @@ describeWithMockConnection('NetworkOverview', () => {
     };
     networkOverview.setCalculator(
         calculator as unknown as PerfUI.TimelineOverviewCalculator.TimelineOverviewCalculator);
-    networkOverview.markAsRoot();
-    networkOverview.show(document.body);
+    renderElementIntoDOM(networkOverview);
     const resourceTreeModel = target.model(SDK.ResourceTreeModel.ResourceTreeModel);
     assert.exists(resourceTreeModel);
-    assert.isFalse(calculator.computePosition.called);
+    sinon.assert.notCalled(calculator.computePosition);
     resourceTreeModel.dispatchEventToListeners(
         event,
         ...[{loadTime: 42}] as Common.EventTarget.EventPayloadToRestParameters<SDK.ResourceTreeModel.EventTypes, T>);

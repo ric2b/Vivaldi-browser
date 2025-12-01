@@ -12,11 +12,13 @@ import android.widget.ImageButton;
 import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** A binder that binds model changes to view state. */
+@NullMarked
 class ReloadButtonViewBinder {
     /**
      * Reflects model property change based on they key on the view.
@@ -53,9 +55,8 @@ class ReloadButtonViewBinder {
             button.setAlpha(model.get(ReloadButtonProperties.ALPHA));
         } else if (key == ReloadButtonProperties.TINT_LIST) {
             ImageViewCompat.setImageTintList(button, model.get(ReloadButtonProperties.TINT_LIST));
-        } else if (key == ReloadButtonProperties.BACKGROUND_HIGHLIGHT_RESOURCE) {
-            button.setBackgroundResource(
-                    model.get(ReloadButtonProperties.BACKGROUND_HIGHLIGHT_RESOURCE));
+        } else if (key == ReloadButtonProperties.BACKGROUND_HIGHLIGHT) {
+            button.setBackground(model.get(ReloadButtonProperties.BACKGROUND_HIGHLIGHT));
         } else if (key == ReloadButtonProperties.LONG_CLICK_LISTENER) {
             final var listener = model.get(ReloadButtonProperties.LONG_CLICK_LISTENER);
             button.setOnLongClickListener(

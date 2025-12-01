@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/barrier_closure.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
@@ -21,6 +22,7 @@
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/observer_list.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -237,6 +239,26 @@ const char* ContentSettingToString(ContentSetting setting) {
   }
 }
 
+void CheckContentTypeRegistration(ContentSettingsType content_type) {
+  if (!content_settings::ContentSettingsRegistry::GetInstance()->Get(
+          content_type)) {
+    static auto* const type_key = base::debug::AllocateCrashKeyString(
+        "content_settings-content_type", base::debug::CrashKeySize::Size32);
+    base::debug::SetCrashKeyString(
+        type_key, base::NumberToString(static_cast<int>(content_type)));
+
+    static auto* const histogram_key = base::debug::AllocateCrashKeyString(
+        "content_settings-histogram_value", base::debug::CrashKeySize::Size32);
+    base::debug::SetCrashKeyString(
+        histogram_key,
+        base::NumberToString(
+            content_settings_uma_util::ContentSettingTypeToHistogramValue(
+                content_type)));
+
+    CHECK(false);
+  }
+}
+
 struct ContentSettingEntry {
   ContentSettingsType type;
   ContentSettingsPattern primary_pattern;
@@ -396,10 +418,7 @@ ContentSetting HostContentSettingsMap::GetContentSetting(
     const GURL& secondary_url,
     ContentSettingsType content_type,
     content_settings::SettingInfo* info) const {
-  SCOPED_CRASH_KEY_NUMBER("content_settings", "content_type",
-                          static_cast<int>(content_type));
-  CHECK(content_settings::ContentSettingsRegistry::GetInstance()->Get(
-      content_type));
+  CheckContentTypeRegistration(content_type);
   const base::Value value =
       GetWebsiteSetting(primary_url, secondary_url, content_type, info);
   return content_settings::ValueToContentSetting(value);
@@ -409,10 +428,7 @@ ContentSetting HostContentSettingsMap::GetUserModifiableContentSetting(
     const GURL& primary_url,
     const GURL& secondary_url,
     ContentSettingsType content_type) const {
-  SCOPED_CRASH_KEY_NUMBER("content_settings", "content_type",
-                          static_cast<int>(content_type));
-  CHECK(content_settings::ContentSettingsRegistry::GetInstance()->Get(
-      content_type));
+  CheckContentTypeRegistration(content_type);
   const base::Value value =
       GetWebsiteSettingInternal(primary_url, secondary_url, content_type,
                                 ProviderFilter::kUserModifiable, nullptr);
@@ -1283,5 +1299,14 @@ void HostContentSettingsMap::DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun(
         base::BindOnce(&HostContentSettingsMap::
                            DeleteNearlyExpiredSettingsAndMaybeScheduleNextRun,
                        base::Unretained(this), content_setting_type));
+  }
+}
+
+void HostContentSettingsMap::EnsureSettingsUpToDate(
+    base::OnceClosure callback) {
+  base::RepeatingClosure barrier_closure = base::BarrierClosure(
+      user_modifiable_providers_.size(), std::move(callback));
+  for (auto&& provider : user_modifiable_providers_) {
+    provider->EnsureUpdatedSettings(barrier_closure);
   }
 }

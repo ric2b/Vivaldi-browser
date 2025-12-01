@@ -14,7 +14,6 @@
 #include "base/test/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/signin/reauth_result.h"
 #include "chrome/browser/signin/web_signin_interceptor.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
@@ -254,6 +253,14 @@ IN_PROC_BROWSER_TEST_F(SignInViewControllerBrowserTest,
       browser()
           ->signin_view_controller()
           ->GetModalDialogWebContentsForTesting());
+
+  // Before sending key events, make sure paint-holding does not drop input
+  // events.
+  content::SimulateEndOfPaintHoldingOnPrimaryMainFrame(
+      browser()
+          ->signin_view_controller()
+          ->GetModalDialogWebContentsForTesting());
+
   ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_RETURN,
                                               /*control=*/false,
                                               /*shift=*/false, /*alt=*/false,

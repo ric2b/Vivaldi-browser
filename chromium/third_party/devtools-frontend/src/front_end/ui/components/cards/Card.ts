@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import {html, nothing, render} from '../../lit/lit.js';
 
@@ -85,7 +86,7 @@ export class Card extends HTMLElement {
   #render(): void {
     render(
         html`
-        <style>${cardStyles.cssText}</style>
+        <style>${cardStyles}</style>
         <div id="card">
           <div id="heading">
             <slot name="heading-prefix"></slot>

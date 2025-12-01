@@ -5,6 +5,9 @@
 #ifndef CHROME_BROWSER_ASH_BOCA_ON_TASK_ON_TASK_SYSTEM_WEB_APP_MANAGER_IMPL_H_
 #define CHROME_BROWSER_ASH_BOCA_ON_TASK_ON_TASK_SYSTEM_WEB_APP_MANAGER_IMPL_H_
 
+#include <optional>
+
+#include "ash/webui/boca_ui/url_constants.h"
 #include "base/functional/callback_forward.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -30,7 +33,8 @@ class OnTaskSystemWebAppManagerImpl : public OnTaskSystemWebAppManager {
 
   // OnTaskSystemWebAppManager:
   void LaunchSystemWebAppAsync(
-      base::OnceCallback<void(bool)> callback) override;
+      base::OnceCallback<void(bool)> callback,
+      const GURL& url = GURL(kChromeBocaAppUntrustedIndexURL)) override;
   void CloseSystemWebAppWindow(SessionID window_id) override;
   SessionID GetActiveSystemWebAppWindowID() override;
   void SetPinStateForSystemWebAppWindow(bool pinned,
@@ -63,7 +67,15 @@ class OnTaskSystemWebAppManagerImpl : public OnTaskSystemWebAppManager {
 
   void EnableOrDisableCommandsForTabSwitch(SessionID window_id, bool enabled);
 
+  void PauseCameraInput(bool paused);
+
+  void PauseMicrophoneInput(bool paused);
+
   raw_ptr<Profile> profile_;
+
+  std::optional<bool> was_camera_disabled_;
+
+  std::optional<bool> was_microphone_disabled_;
 
   raw_ptr<LockedSessionWindowTracker> window_tracker_for_testing_;
 

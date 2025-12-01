@@ -12,6 +12,7 @@
 #define API_AUDIO_ECHO_CANCELLER3_FACTORY_H_
 
 #include <memory>
+#include <optional>
 
 #include "absl/base/nullability.h"
 #include "api/audio/echo_canceller3_config.h"
@@ -30,8 +31,14 @@ class RTC_EXPORT EchoCanceller3Factory : public EchoControlFactory {
   // configuration.
   explicit EchoCanceller3Factory(const EchoCanceller3Config& config);
 
+  // Factory producing EchoCanceller3 instances with the specified
+  // configuration and multichannel configuration.
+  EchoCanceller3Factory(
+      const EchoCanceller3Config& config,
+      std::optional<EchoCanceller3Config> multichannel_config);
+
   // Creates an EchoCanceller3 with a specified channel count and sampling rate.
-  absl::Nonnull<std::unique_ptr<EchoControl>> Create(
+  absl_nonnull std::unique_ptr<EchoControl> Create(
       const Environment& env,
       int sample_rate_hz,
       int num_render_channels,
@@ -39,6 +46,7 @@ class RTC_EXPORT EchoCanceller3Factory : public EchoControlFactory {
 
  private:
   const EchoCanceller3Config config_;
+  const std::optional<EchoCanceller3Config> multichannel_config_;
 };
 }  // namespace webrtc
 

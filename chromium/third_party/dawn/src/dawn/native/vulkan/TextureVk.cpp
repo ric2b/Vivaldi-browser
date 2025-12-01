@@ -791,7 +791,7 @@ bool IsSampleCountSupported(const dawn::native::vulkan::Device* device,
         DAWN_UNREACHABLE();
     }
 
-    return properties.sampleCounts & imageCreateInfo.samples;
+    return (properties.sampleCounts & imageCreateInfo.samples) != 0u;
 }
 
 Texture::Texture(Device* device, const UnpackedPtr<TextureDescriptor>& descriptor)
@@ -1342,7 +1342,7 @@ MaybeError InternalTexture::Initialize(VkImageUsageFlags extraUsages) {
         !(createInfo.usage & VK_IMAGE_USAGE_STORAGE_BIT)) {
         createInfoChain.Add(&imageFormatListInfo, VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO);
         viewFormats.push_back(VulkanImageFormat(device, GetFormat().format));
-        for (FormatIndex i : IterateBitSet(GetViewFormats())) {
+        for (FormatIndex i : GetViewFormats()) {
             const Format& viewFormat = device->GetValidInternalFormat(i);
             viewFormats.push_back(VulkanImageFormat(device, viewFormat.format));
         }
@@ -1785,7 +1785,7 @@ MaybeError ExternalVkImageTexture::Initialize(const ExternalImageDescriptorVk* d
         if (device->GetDeviceInfo().HasExt(DeviceExt::ImageFormatList)) {
             createInfoChain.Add(&imageFormatListInfo,
                                 VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO);
-            for (FormatIndex i : IterateBitSet(GetViewFormats())) {
+            for (FormatIndex i : GetViewFormats()) {
                 const Format& viewFormat = device->GetValidInternalFormat(i);
                 viewFormats.push_back(VulkanImageFormat(device, viewFormat.format));
             }

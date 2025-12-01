@@ -621,26 +621,14 @@ SearchEnginesGetSwitchPromptDataFunction::Run() {
 
 ExtensionFunction::ResponseAction
 SearchEnginesAcknowledgeSwitchPromptFunction::Run() {
-  std::optional<vivaldi::search_engines::AcknowledgeSwitchPrompt::Params>
-      params(vivaldi::search_engines::AcknowledgeSwitchPrompt::Params::Create(
-          args()));
-
-  EXTENSION_FUNCTION_VALIDATE(params);
-
   auto* prefs = Profile::FromBrowserContext(browser_context())->GetPrefs();
   if (!prefs) {
     return RespondNow(Error("PrefService is not valid for profile."));
   }
 
-  if (params->seen_dialog) {
-    SearchEnginesManagersFactory::GetInstance()
-        ->GetSearchEnginesPromptManager()
-        ->MarkCurrentPromptAsSeen(prefs);
-  } else {
-    SearchEnginesManagersFactory::GetInstance()
-        ->GetSearchEnginesPromptManager()
-        ->IgnoreCurrentPromptVersion(prefs);
-  }
+  SearchEnginesManagersFactory::GetInstance()
+      ->GetSearchEnginesPromptManager()
+      ->MarkCurrentPromptAsSeen(prefs);
 
   return RespondNow(NoArguments());
 }

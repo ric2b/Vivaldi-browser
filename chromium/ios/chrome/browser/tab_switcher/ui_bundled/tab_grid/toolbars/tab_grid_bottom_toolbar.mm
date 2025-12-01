@@ -9,6 +9,7 @@
 #import "base/metrics/user_metrics.h"
 #import "base/metrics/user_metrics_action.h"
 #import "base/strings/sys_string_conversions.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/features.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -16,10 +17,13 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_new_tab_button.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbar_background.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbar_scrolling_background.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbars_grid_delegate.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/toolbars/tab_grid_toolbars_utils.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
+#import "ui/base/device_form_factor.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Vivaldi
@@ -35,7 +39,6 @@ using vivaldi::IsVivaldiRunning;
   UIBarButtonItem* _spaceItem;
   NSArray<NSLayoutConstraint*>* _compactConstraints;
   NSArray<NSLayoutConstraint*>* _floatingConstraints;
-  NSLayoutConstraint* _largeNewTabButtonBottomAnchor;
   TabGridNewTabButton* _smallNewTabButton;
   TabGridNewTabButton* _largeNewTabButton;
   UIBarButtonItem* _doneButton;
@@ -46,10 +49,10 @@ using vivaldi::IsVivaldiRunning;
   UIBarButtonItem* _shareButton;
   BOOL _undoActive;
   BOOL _scrolledToEdge;
-  UIView* _scrolledBackgroundView;
+  TabGridToolbarBackground* _backgroundView;
+  TabGridToolbarScrollingBackground* _scrollBackgroundView;
   // Configures the responder following the receiver in the responder chain.
   UIResponder* _followingNextResponder;
-  UIView* _scrolledToBottomBackgroundView;
 
   // TODO(crbug.com/398183785): Remove once we got feedback.
   UIBarButtonItem* _sendFeedbackGroupButton;
@@ -73,10 +76,18 @@ using vivaldi::IsVivaldiRunning;
 #pragma mark - UIView
 
 - (void)didMoveToSuperview {
-  if (_scrolledBackgroundView) {
-    [self.superview.bottomAnchor
-        constraintEqualToAnchor:_scrolledBackgroundView.bottomAnchor]
-        .active = YES;
+  if (IsIOSSoftLockEnabled()) {
+    if (_scrollBackgroundView) {
+      [self.superview.bottomAnchor
+          constraintEqualToAnchor:_scrollBackgroundView.bottomAnchor]
+          .active = YES;
+    }
+  } else {
+    if (_backgroundView) {
+      [self.superview.bottomAnchor
+          constraintEqualToAnchor:_backgroundView.bottomAnchor]
+          .active = YES;
+    }
   }
   [super didMoveToSuperview];
 }
@@ -168,6 +179,11 @@ using vivaldi::IsVivaldiRunning;
   _closeAllOrUndoButton.enabled = enabled;
 }
 
+- (void)setIncognitoBackgroundHidden:(BOOL)hidden {
+  [_scrollBackgroundView hideIncognitoToolbarBackground:hidden];
+  [self updateBackgroundVisibility];
+}
+
 - (void)useUndoCloseAll:(BOOL)useUndo {
   _closeAllOrUndoButton.enabled = YES;
   if (useUndo) {
@@ -219,6 +235,12 @@ using vivaldi::IsVivaldiRunning;
   _scrolledToEdge = scrolledToEdge;
 
   [self updateBackgroundVisibility];
+}
+
+- (void)setBackgroundContentOffset:(CGPoint)backgroundContentOffset
+                          animated:(BOOL)animated {
+  [_scrollBackgroundView setContentOffset:backgroundContentOffset
+                                 animated:animated];
 }
 
 #pragma mark Close Tabs
@@ -392,18 +414,37 @@ using vivaldi::IsVivaldiRunning;
   _largeNewTabButton.translatesAutoresizingMaskIntoConstraints = NO;
   _largeNewTabButton.page = self.page;
 
-  CGFloat floatingButtonVerticalInset = kTabGridFloatingButtonVerticalInset;
+  // Try to force the button to be aligned with the safe area. Lower priority to
+  // avoid clashing with the constraints with the actual sides when there is no
+  // safe area.
+  NSLayoutConstraint* largeButtonTrailingSafeAreaConstraint =
+      [_largeNewTabButton.trailingAnchor
+          constraintEqualToAnchor:self.safeAreaLayoutGuide.trailingAnchor];
+  largeButtonTrailingSafeAreaConstraint.priority = UILayoutPriorityDefaultHigh;
+  NSLayoutConstraint* largeButtonBottomSafeAreaConstraint =
+      [_largeNewTabButton.bottomAnchor
+          constraintEqualToAnchor:self.safeAreaLayoutGuide.bottomAnchor];
+  largeButtonBottomSafeAreaConstraint.priority = UILayoutPriorityDefaultHigh;
 
-  _largeNewTabButtonBottomAnchor = [_largeNewTabButton.bottomAnchor
-      constraintEqualToAnchor:self.safeAreaLayoutGuide.bottomAnchor
-                     constant:-floatingButtonVerticalInset];
+  CGFloat largeButtonHorizontalInset =
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET
+          ? kTabGridFloatingButtonInsetIPad
+          : kTabGridFloatingButtonInset;
+  CGFloat largeButtonVerticalInset =
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET
+          ? kTabGridFloatingButtonInsetIPad
+          : kTabGridFloatingButtonInset;
 
   _floatingConstraints = @[
     [_largeNewTabButton.topAnchor constraintEqualToAnchor:self.topAnchor],
-    _largeNewTabButtonBottomAnchor,
+    [_largeNewTabButton.bottomAnchor
+        constraintLessThanOrEqualToAnchor:self.bottomAnchor
+                                 constant:-largeButtonVerticalInset],
+    largeButtonBottomSafeAreaConstraint,
     [_largeNewTabButton.trailingAnchor
-        constraintEqualToAnchor:self.trailingAnchor
-                       constant:-kTabGridFloatingButtonHorizontalInset],
+        constraintLessThanOrEqualToAnchor:self.trailingAnchor
+                                 constant:-largeButtonHorizontalInset],
+    largeButtonTrailingSafeAreaConstraint,
   ];
 
   _newTabButtonItem.title = _largeNewTabButton.accessibilityLabel;
@@ -426,8 +467,6 @@ using vivaldi::IsVivaldiRunning;
     [self updateBackgroundVisibility];
     return;
   }
-  _largeNewTabButtonBottomAnchor.constant =
-      -kTabGridFloatingButtonVerticalInset;
 
   if (self.mode == TabGridMode::kSelection) {
     [NSLayoutConstraint deactivateConstraints:_floatingConstraints];
@@ -501,8 +540,7 @@ using vivaldi::IsVivaldiRunning;
 
 // Returns YES if the `_largeNewTabButton` is showing on the toolbar.
 - (BOOL)isShowingFloatingButton {
-  return _largeNewTabButton.superview &&
-         _largeNewTabButtonBottomAnchor.isActive;
+  return _largeNewTabButton.superview;
 }
 
 // Returns YES if should use compact bottom toolbar layout.
@@ -517,22 +555,22 @@ using vivaldi::IsVivaldiRunning;
 // middle/scrolled to the top states.
 - (void)createScrolledBackgrounds {
   _scrolledToEdge = YES;
-
-  // Background when the content is scrolled to the middle.
-  _scrolledBackgroundView = CreateTabGridOverContentBackground();
-  _scrolledBackgroundView.hidden = YES;
-  _scrolledBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-  [self addSubview:_scrolledBackgroundView];
-  AddSameConstraintsToSides(
-      self, _scrolledBackgroundView,
-      LayoutSides::kLeading | LayoutSides::kTop | LayoutSides::kTrailing);
-
-  // Background when the content is scrolled to the top.
-  _scrolledToBottomBackgroundView = CreateTabGridScrolledToEdgeBackground();
-  _scrolledToBottomBackgroundView.translatesAutoresizingMaskIntoConstraints =
-      NO;
-  [self addSubview:_scrolledToBottomBackgroundView];
-  AddSameConstraints(_scrolledBackgroundView, _scrolledToBottomBackgroundView);
+  if (IsIOSSoftLockEnabled()) {
+    _scrollBackgroundView = [[TabGridToolbarScrollingBackground alloc] init];
+    _scrollBackgroundView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:_scrollBackgroundView];
+    AddSameConstraintsToSides(
+        self, _scrollBackgroundView,
+        LayoutSides::kLeading | LayoutSides::kTop | LayoutSides::kTrailing);
+  } else {
+    _backgroundView =
+        [[TabGridToolbarBackground alloc] initWithFrame:self.frame];
+    _backgroundView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:_backgroundView];
+    AddSameConstraintsToSides(
+        self, _backgroundView,
+        LayoutSides::kLeading | LayoutSides::kTop | LayoutSides::kTrailing);
+  }
 
   // A non-nil UIImage has to be added in the background of the toolbar to avoid
   // having an additional blur effect.
@@ -543,11 +581,22 @@ using vivaldi::IsVivaldiRunning;
 
 // Updates the visibility of the backgrounds based on the state of the TabGrid.
 - (void)updateBackgroundVisibility {
-  _scrolledToBottomBackgroundView.hidden =
+  BOOL scrolledToBottomHidden =
       _hideScrolledToEdgeBackground ||
       ([self isShowingFloatingButton] || !_scrolledToEdge);
-  _scrolledBackgroundView.hidden =
+  BOOL scrolledBackgroundViewHidden =
       [self isShowingFloatingButton] || _scrolledToEdge;
+  if (IsIOSSoftLockEnabled()) {
+    [_scrollBackgroundView
+            updateBackgroundsForPage:self.page
+                scrolledToEdgeHidden:scrolledToBottomHidden
+        scrolledBackgroundViewHidden:scrolledBackgroundViewHidden];
+  } else {
+    [_backgroundView setScrolledOverContentBackgroundViewHidden:
+                         scrolledBackgroundViewHidden];
+    [_backgroundView
+        setScrolledToEdgeBackgroundViewHidden:scrolledToBottomHidden];
+  }
 }
 
 #pragma mark - Public

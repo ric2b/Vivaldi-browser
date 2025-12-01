@@ -19,7 +19,6 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
-import org.chromium.content.browser.webid.IdentityCredentialsDelegate;
 import org.chromium.content_public.browser.webid.DigitalIdentityRequestStatusForMetrics;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -127,13 +126,13 @@ public class DigitalIdentityProvider {
         sCredentials
                 .create(assumeNonNull(window.getActivity().get()), origin, request)
                 .then(
-                        data -> {
+                        response -> {
                             if (mDigitalIdentityProvider != 0) {
                                 DigitalIdentityProviderJni.get()
                                         .onReceive(
                                                 mDigitalIdentityProvider,
-                                                null,
-                                                data,
+                                                response.mProtocol,
+                                                response.mData,
                                                 DigitalIdentityRequestStatusForMetrics.SUCCESS);
                             }
                         },

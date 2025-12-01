@@ -34,14 +34,8 @@ class ChromeExtensionTestNotificationObserver
 
   ~ChromeExtensionTestNotificationObserver() override;
 
-  // Waits for the number of visible page actions to change to |count|.
+  // Waits for the number of visible page actions to change to `count`.
   bool WaitForPageActionVisibilityChangeTo(int count);
-
-  // Waits for extension to be idle.
-  bool WaitForExtensionIdle(const ExtensionId& extension_id);
-
-  // Waits for extension to be not idle.
-  bool WaitForExtensionNotIdle(const ExtensionId& extension_id);
 
  private:
   content::BrowserContext* GetBrowserContext();

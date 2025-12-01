@@ -76,6 +76,12 @@ constexpr static const uint32_t AVIF_COLOR_PRIMARIES_DCI_P3 = 12;
 
 constexpr static const uint32_t AVIF_TRANSFER_CHARACTERISTICS_SMPTE2084 = 16;
 
+constexpr static const uint32_t AVIF_ADD_IMAGE_FLAG_NONE = 0;
+
+constexpr static const uint32_t AVIF_ADD_IMAGE_FLAG_FORCE_KEYFRAME = (1 << 0);
+
+constexpr static const uint32_t AVIF_ADD_IMAGE_FLAG_SINGLE = (1 << 1);
+
 enum AndroidMediaCodecOutputColorFormat : int32_t {
     ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_YUV420_FLEXIBLE = 2135033992,
     ANDROID_MEDIA_CODEC_OUTPUT_COLOR_FORMAT_P010 = 54,
@@ -277,6 +283,8 @@ enum avifResult {
 
 struct Decoder;
 
+struct Encoder;
+
 using avifBool = int;
 
 using avifStrictFlags = uint32_t;
@@ -477,6 +485,38 @@ struct Extent {
 
 using avifExtent = Extent;
 
+struct IFraction {
+    int32_t n;
+    int32_t d;
+};
+
+struct avifScalingMode {
+    IFraction horizontal;
+    IFraction vertical;
+};
+
+struct avifEncoder {
+    avifCodecChoice codecChoice;
+    int32_t maxThreads;
+    int32_t speed;
+    int32_t keyframeInterval;
+    uint64_t timescale;
+    int32_t repetitionCount;
+    uint32_t extraLayerCount;
+    int32_t quality;
+    int32_t qualityAlpha;
+    int32_t tileRowsLog2;
+    int32_t tileColsLog2;
+    avifBool autoTiling;
+    avifScalingMode scalingMode;
+    avifIOStats ioStats;
+    int32_t qualityGainMap;
+    Box<Encoder> rust_encoder;
+    bool rust_encoder_initialized;
+};
+
+using avifAddImageFlags = uint32_t;
+
 using avifPlanesFlags = uint32_t;
 
 struct CropRect {
@@ -566,6 +606,27 @@ avifResult crabby_avifDecoderNthImageMaxExtent(const avifDecoder *decoder,
 
 avifBool crabby_avifPeekCompatibleFileType(const avifROData *input);
 
+avifEncoder *crabby_avifEncoderCreate();
+
+void crabby_avifEncoderDestroy(avifEncoder *encoder);
+
+avifResult crabby_avifEncoderWrite(avifEncoder *encoder,
+                                   const avifImage *image,
+                                   avifRWData *output);
+
+avifResult crabby_avifEncoderAddImage(avifEncoder *encoder,
+                                      const avifImage *image,
+                                      uint64_t durationInTimescales,
+                                      avifAddImageFlags addImageFlags);
+
+avifResult crabby_avifEncoderAddImageGrid(avifEncoder *encoder,
+                                          uint32_t gridCols,
+                                          uint32_t gridRows,
+                                          const avifImage *const *cellImages,
+                                          avifAddImageFlags addImageFlags);
+
+avifResult crabby_avifEncoderFinish(avifEncoder *encoder, avifRWData *output);
+
 avifImage *crabby_avifImageCreateEmpty();
 
 avifImage *crabby_avifImageCreate(uint32_t width,
@@ -634,6 +695,13 @@ const char *crabby_avifResultToString(avifResult res);
 
 avifBool crabby_avifCropRectConvertCleanApertureBox(avifCropRect *cropRect,
                                                     const avifCleanApertureBox *clap,
+                                                    uint32_t imageW,
+                                                    uint32_t imageH,
+                                                    avifPixelFormat yuvFormat,
+                                                    avifDiagnostics *_diag);
+
+avifBool crabby_avifCleanApertureBoxConvertCropRect(avifCleanApertureBox *clap,
+                                                    const avifCropRect *cropRect,
                                                     uint32_t imageW,
                                                     uint32_t imageH,
                                                     avifPixelFormat yuvFormat,

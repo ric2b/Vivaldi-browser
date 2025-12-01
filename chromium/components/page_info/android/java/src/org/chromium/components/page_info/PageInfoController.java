@@ -92,7 +92,7 @@ public class PageInfoController
     @ContentSettingsType.EnumType
     public static final int NO_HIGHLIGHTED_PERMISSION = ContentSettingsType.DEFAULT;
 
-    private Context mContext;
+    private final Context mContext;
     private final WindowAndroid mWindowAndroid;
     private final WebContents mWebContents;
     private final PageInfoControllerDelegate mDelegate;
@@ -101,27 +101,27 @@ public class PageInfoController
     private long mNativePageInfoController;
 
     // The main PageInfo view.
-    private PageInfoView mView;
+    private final PageInfoView mView;
 
     // The view inside the popup.
-    private PageInfoContainer mContainer;
+    private final PageInfoContainer mContainer;
 
     // The dialog the view is placed in.
     private @Nullable PageInfoDialog mDialog;
 
     // The full URL from the URL bar, which is copied to the user's clipboard when they select 'Copy
     // URL'.
-    private GURL mFullUrl;
+    private final GURL mFullUrl;
 
     // Whether or not this page is an internal chrome page (e.g. the
     // chrome://settings page).
-    private boolean mIsInternalPage;
+    private final boolean mIsInternalPage;
 
     // The security level of the page (a valid ConnectionSecurityLevel).
-    private @ConnectionSecurityLevel int mSecurityLevel;
+    private final @ConnectionSecurityLevel int mSecurityLevel;
 
     // Observer for dismissing dialog if web contents get destroyed, navigate etc.
-    private WebContentsObserver mWebContentsObserver;
+    private final WebContentsObserver mWebContentsObserver;
 
     // A task that should be run once the page info popup is animated out and dismissed. Null if no
     // task is pending.
@@ -137,20 +137,16 @@ public class PageInfoController
     private @Nullable PageInfoSubpageController mCurrentSubpageController;
 
     // The controller for the connection section of the page info.
-    private PageInfoConnectionController mConnectionController;
+    private final PageInfoConnectionController mConnectionController;
 
     // The controller for the permissions section of the page info.
-    private PageInfoPermissionsController mPermissionsController;
+    private final PageInfoPermissionsController mPermissionsController;
 
     // The controller for the cookies section of the page info.
-    private @Nullable PageInfoCookiesController mCookiesController;
-
-    // The controller for the tracking protection section for the 100% 3PCD launch UI.
-    private @Nullable PageInfoTrackingProtectionLaunchController
-            mTrackingProtectionLaunchController;
+    private final @Nullable PageInfoCookiesController mCookiesController;
 
     // All subpage controllers.
-    private Collection<PageInfoSubpageController> mSubpageControllers;
+    private final Collection<PageInfoSubpageController> mSubpageControllers;
 
     // Vivaldi
     private static Runnable sDismissPopup = () -> {};
@@ -266,6 +262,9 @@ public class PageInfoController
         mDelegate.initOfflinePageUiParams(viewParams, this::runAfterDismiss);
         viewParams.httpsImageCompressionMessageShown = mDelegate.isHttpsImageCompressionApplied();
         mView = new PageInfoView(mContext, viewParams);
+        if (BuildConfig.IS_VIVALDI && isSheet()) // Vivaldi VAB-11228
+            mView.setBackgroundColor(Color.TRANSPARENT);
+        else
         if (isSheet()) mView.setBackgroundColor(Color.WHITE);
         mDelegate.getFavicon(
                 mFullUrl,
@@ -298,27 +297,10 @@ public class PageInfoController
                         mDelegate,
                         pageInfoHighlight.getHighlightedPermission());
         mSubpageControllers.add(mPermissionsController);
-        if (mDelegate.showTrackingProtectionActFeaturesUi()) {
-            mTrackingProtectionLaunchController =
-                    new PageInfoTrackingProtectionLaunchController(
-                            this, mView.getCookiesRowView(), mDelegate);
-            mSubpageControllers.add(mTrackingProtectionLaunchController);
-        } else {
-            mCookiesController =
-                    new PageInfoCookiesController(this, mView.getCookiesRowView(), mDelegate);
-            mSubpageControllers.add(mCookiesController);
-        }
-
-        if (source == OpenedFromSource.WEBAPK_SNACKBAR
-                && mDelegate.showTrackingProtectionActFeaturesUi()) {
-            assumeNonNull(mTrackingProtectionLaunchController);
-            mContainer.showPage(
-                    mTrackingProtectionLaunchController.createViewForSubpage(mContainer),
-                    null,
-                    null);
-        } else {
-            mContainer.showPage(mView, null, null);
-        }
+        mCookiesController =
+                new PageInfoCookiesController(this, mView.getCookiesRowView(), mDelegate);
+        mSubpageControllers.add(mCookiesController);
+        mContainer.showPage(mView, null, null);
 
         // TODO(crbug.com/40746014): Setup forget this site button after history delete is
         // implemented.
@@ -376,8 +358,9 @@ public class PageInfoController
                 };
 
         mDialog = dialog;
-        if (!BuildConfig.IS_VIVALDI) // Vivaldi
-        dialog.show();
+        if (mNativePageInfoController != 0 && !BuildConfig.IS_VIVALDI) { // Vivaldi
+            dialog.show();
+        }
     }
 
     private void destroy() {
@@ -389,9 +372,6 @@ public class PageInfoController
         mDialog = null;
         if (mCookiesController != null) {
             mCookiesController.destroy();
-        }
-        if (mTrackingProtectionLaunchController != null) {
-            mTrackingProtectionLaunchController.destroy();
         }
     }
 
@@ -529,12 +509,6 @@ public class PageInfoController
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
     public @Nullable PageInfoCookiesController getCookiesController() {
         return mCookiesController;
-    }
-
-    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-    public @Nullable
-            PageInfoTrackingProtectionLaunchController getTrackingProtectionLaunchController() {
-        return mTrackingProtectionLaunchController;
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)

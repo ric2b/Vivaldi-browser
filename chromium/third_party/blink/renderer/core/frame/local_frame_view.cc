@@ -248,10 +248,6 @@ constexpr int kCommitDelayDefaultInMs = 500;  // 30 frames @ 60hz
 // returning.
 static const unsigned kMaxUpdatePluginsIterations = 2;
 
-// The number of |InvalidationDisallowedScope| class instances. Used to ensure
-// that no more than one instance of this class exists at any given time.
-int LocalFrameView::InvalidationDisallowedScope::instance_count_ = 0;
-
 LocalFrameView::LocalFrameView(LocalFrame& frame)
     : LocalFrameView(frame, gfx::Rect()) {
   Show();
@@ -1978,14 +1974,10 @@ LocalFrameView::InvalidationDisallowedScope::InvalidationDisallowedScope(
                      .LocalFrameRoot()
                      .View()
                      ->invalidation_disallowed_,
-                true) {
-  DCHECK_EQ(instance_count_, 0);
-  ++instance_count_;
-}
+                true) {}
 
-LocalFrameView::InvalidationDisallowedScope::~InvalidationDisallowedScope() {
-  --instance_count_;
-}
+LocalFrameView::InvalidationDisallowedScope::~InvalidationDisallowedScope() =
+    default;
 
 void LocalFrameView::ScheduleVisualUpdateForVisualOverflowIfNeeded() {
   LocalFrame& local_frame_root = GetFrame().LocalFrameRoot();
@@ -2997,8 +2989,7 @@ void LocalFrameView::PushPaintArtifactToCompositor(bool repainted) {
   StackScrollTranslationVector scroll_translation_nodes;
   ForAllNonThrottledLocalFrameViews(
       [&scroll_translation_nodes](LocalFrameView& frame_view) {
-        if (RuntimeEnabledFeatures::
-                ScrollableAreasWithScrollNodeOptimizationEnabled()) {
+        if (RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
           for (const auto& area :
                frame_view.scrollable_areas_with_scroll_node_) {
             const auto* paint_properties =
@@ -3551,7 +3542,6 @@ void LocalFrameView::ServiceScrollAnimations(base::TimeTicks start_time) {
 
     if (SVGDocumentExtensions::ServiceSmilOnAnimationFrame(*document))
       GetPage()->Animator().SetHasSmilAnimation();
-    SVGDocumentExtensions::ServiceWebAnimationsOnAnimationFrame(*document);
     document->GetDocumentAnimations().UpdateAnimationTimingForAnimationFrame();
   }
 }
@@ -3597,7 +3587,7 @@ void LocalFrameView::RemoveAnimatingScrollableArea(
 
 void LocalFrameView::AddScrollableArea(
     PaintLayerScrollableArea& scrollable_area) {
-  CHECK(RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled());
+  CHECK(RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled());
   scrollable_areas_.insert(scrollable_area.GetScrollElementId(),
                            scrollable_area);
 }
@@ -3613,14 +3603,14 @@ void LocalFrameView::RemoveScrollableArea(
 
 void LocalFrameView::AddUserScrollableArea(
     PaintLayerScrollableArea& scrollable_area) {
-  CHECK(!RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled());
+  CHECK(!RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled());
   scrollable_areas_.insert(scrollable_area.GetScrollElementId(),
                            &scrollable_area);
 }
 
 void LocalFrameView::RemoveUserScrollableArea(
     PaintLayerScrollableArea& scrollable_area) {
-  CHECK(!RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled());
+  CHECK(!RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled());
   scrollable_areas_.erase(scrollable_area.GetScrollElementId());
   RemoveScrollableAreaWithScrollNode(scrollable_area);
 }
@@ -3776,7 +3766,7 @@ void LocalFrameView::DidChangeScrollOffset() {
 
 ScrollableArea* LocalFrameView::ScrollableAreaWithElementId(
     const CompositorElementId& id) {
-  if (!RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled()) {
+  if (!RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
     // Check for the layout viewport, which may not be in scrollable_areas_
     // if it is styled overflow: hidden.  (Other overflow: hidden elements won't
     // have composited scrolling layers per crbug.com/784053, so we don't have
@@ -3958,7 +3948,9 @@ void LocalFrameView::Paint(GraphicsContext& context,
           Document::kNotPaintingPreview) {
     paint_preview.emplace(
         *GetFrame().GetDocument(),
-        owner_layout_object->GetDocument().GetPaintPreviewState());
+        owner_layout_object->GetDocument().GetPaintPreviewState(),
+        owner_layout_object->GetDocument()
+            .AreScrollbarsAllowedInPaintPreview());
     // When capturing a Paint Preview we want to capture scrollable embedded
     // content separately. Paint should stop here and ask the browser to
     // coordinate painting such frames as a separate task.
@@ -5089,6 +5081,13 @@ void LocalFrameView::AddPendingStickyUpdate(PaintLayerScrollableArea* object) {
         GCedHeapHashSet<Member<PaintLayerScrollableArea>>>();
   }
   pending_sticky_updates_->insert(object);
+}
+
+void LocalFrameView::RemovePendingStickyUpdate(
+    PaintLayerScrollableArea* object) {
+  if (pending_sticky_updates_) {
+    pending_sticky_updates_->erase(object);
+  }
 }
 
 bool LocalFrameView::HasPendingStickyUpdate(

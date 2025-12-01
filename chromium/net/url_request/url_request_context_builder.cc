@@ -12,6 +12,7 @@
 
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "base/task/sequenced_task_runner.h"
@@ -20,6 +21,7 @@
 #include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "net/base/cache_type.h"
+#include "net/base/features.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_delegate_impl.h"
 #include "net/cert/cert_verifier.h"
@@ -38,6 +40,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_server_properties_manager.h"
+#include "net/http/no_vary_search_cache_storage_file_operations.h"
 #include "net/http/transport_security_persister.h"
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log.h"
@@ -247,12 +250,12 @@ void URLRequestContextBuilder::SetHttpServerProperties(
   http_server_properties_ = std::move(http_server_properties);
 }
 
-void URLRequestContextBuilder::SetCreateHttpTransactionFactoryCallback(
-    CreateHttpTransactionFactoryCallback
-        create_http_network_transaction_factory) {
-  http_transaction_factory_.reset();
-  create_http_network_transaction_factory_ =
-      std::move(create_http_network_transaction_factory);
+void URLRequestContextBuilder::SetWrapHttpNetworkLayerCallback(
+    WrapHttpNetworkLayerCallback wrap_http_network_layer_callback) {
+  // Can't set both a wrapper callback and a factory directly for testing.
+  CHECK(!http_transaction_factory_for_testing_);
+  wrap_http_network_layer_callback_ =
+      std::move(wrap_http_network_layer_callback);
 }
 
 #if BUILDFLAG(ENABLE_DEVICE_BOUND_SESSIONS)
@@ -535,15 +538,20 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
       http_network_session_params_, network_session_context));
 
   std::unique_ptr<HttpTransactionFactory> http_transaction_factory;
-  if (http_transaction_factory_) {
-    http_transaction_factory = std::move(http_transaction_factory_);
-  } else if (!create_http_network_transaction_factory_.is_null()) {
-    http_transaction_factory =
-        std::move(create_http_network_transaction_factory_)
-            .Run(context->http_network_session());
+  if (http_transaction_factory_for_testing_) {
+    // Use the factory provided for testing, bypassing default creation and
+    // wrapping.
+    http_transaction_factory = std::move(http_transaction_factory_for_testing_);
   } else {
-    http_transaction_factory =
+    // Create the default network layer.
+    auto network_layer =
         std::make_unique<HttpNetworkLayer>(context->http_network_session());
+    // If a wrapper callback exists, use it; otherwise, use the default layer.
+    http_transaction_factory =
+        wrap_http_network_layer_callback_
+            ? std::move(wrap_http_network_layer_callback_)
+                  .Run(std::move(network_layer))
+            : std::move(network_layer);
   }
 
   if (enable_shared_dictionary_) {
@@ -551,6 +559,8 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
         std::make_unique<SharedDictionaryNetworkTransactionFactory>(
             std::move(http_transaction_factory), enable_shared_zstd_);
   }
+
+  std::unique_ptr<NoVarySearchCacheStorageFileOperations> file_operations;
 
   if (http_cache_enabled_) {
     std::unique_ptr<HttpCache::BackendFactory> http_cache_backend;
@@ -575,6 +585,10 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
           DISK_CACHE, backend_type, http_cache_params_.file_operations_factory,
           http_cache_params_.path, http_cache_params_.max_size,
           http_cache_params_.reset_cache);
+      if (base::FeatureList::IsEnabled(features::kHttpCacheNoVarySearch)) {
+        file_operations = NoVarySearchCacheStorageFileOperations::Create(
+            http_cache_params_.path);
+      }
     } else {
       http_cache_backend =
           HttpCache::DefaultBackend::InMemory(http_cache_params_.max_size);
@@ -585,7 +599,8 @@ std::unique_ptr<URLRequestContext> URLRequestContextBuilder::Build() {
 #endif
 
     http_transaction_factory = std::make_unique<HttpCache>(
-        std::move(http_transaction_factory), std::move(http_cache_backend));
+        std::move(http_transaction_factory), std::move(http_cache_backend),
+        std::move(file_operations));
   }
   context->set_http_transaction_factory(std::move(http_transaction_factory));
 

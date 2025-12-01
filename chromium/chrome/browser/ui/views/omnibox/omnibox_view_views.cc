@@ -21,6 +21,7 @@
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -57,6 +58,7 @@
 #include "components/omnibox/browser/omnibox_edit_model.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
+#include "components/omnibox/browser/omnibox_text_util.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/security_state/core/security_state.h"
@@ -112,6 +114,10 @@
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "ui/base/cocoa/appkit_utils.h"
+#endif
 
 #if BUILDFLAG(IS_WIN)
 #include "chrome/browser/browser_process.h"
@@ -925,7 +931,8 @@ void OmniboxViewViews::SetAccessibilityLabel(const std::u16string& display_text,
     // case, and |match| is a synthetically generated match. In that case,
     // bypass OmniboxPopupModel and get the label from our synthetic |match|.
     friendly_suggestion_text_ = AutocompleteMatchType::ToAccessibilityLabel(
-        match, display_text, OmniboxPopupSelection::kNoMatch,
+        match, /*header_text=*/u"", display_text,
+        OmniboxPopupSelection::kNoMatch,
         controller()->autocomplete_controller()->result().size(),
         std::u16string(), &friendly_suggestion_text_prefix_length_);
   } else {
@@ -1143,17 +1150,46 @@ bool OmniboxViewViews::IsItemForCommandIdDynamic(int command_id) const {
 std::u16string OmniboxViewViews::GetLabelForCommandId(int command_id) const {
   DCHECK_EQ(IDC_PASTE_AND_GO, command_id);
 
-  // Don't paste-and-go data that was marked by its originator as confidential.
-  constexpr size_t kMaxSelectionTextLength = 50;
+  // If the originator marked the clipboard data as confidential, then
+  // paste-and-go is unavailable, so use a menu label that doesn't contain
+  // clipboard data. (The menu command is disabled in
+  // `OmniboxViewViews::IsCommandIdEnabled()`.)
+  //
+  // On the Mac, if Pasteboard Privacy is enabled, then programmatic access to
+  // the clipboard is either prohibited or will prompt the user, and we can't
+  // inline the contents of the clipboard into the label.
+  //
+  // If we were to attempt to access the clipboard contents to inline it into
+  // the label, the result would be a glitched out user window (see the
+  // screenshot attached to https://crbug.com/417683820#comment3). That's super
+  // bad.
+  //
+  // Therefore, take the less bad approach as done below, where if accessing the
+  // clipboard could block, we just turn "paste and go" into a generic menu
+  // item.
+  //
+  // The best approach would actually be to use -[NSPasteboard
+  // detectPatternsForPatterns:completionHandler:] to select a specific menu
+  // string that matches what's on the clipboard, in order to convey to the user
+  // what will happen. The usage of `/components/open_from_clipboard` might be
+  // useful. This behavior should be patterned after what Chrome iOS does, which
+  // has to work under similar restrictions. TODO(https://crbug.com/419266152):
+  // Switch to this better approach.
+  if (IsClipboardDataMarkedAsConfidential()
+#if BUILDFLAG(IS_MAC)
+      || ui::PasteMightBlockWithPrivacyAlert()
+#endif
+  )
+    return l10n_util::GetStringUTF16(IDS_PASTE_AND_GO_EMPTY);
+
   const std::u16string clipboard_text =
-      IsClipboardDataMarkedAsConfidential()
-          ? std::u16string()
-          : GetClipboardText(/*notify_if_restricted=*/false);
+      GetClipboardText(/*notify_if_restricted=*/false);
 
   if (clipboard_text.empty()) {
     return l10n_util::GetStringUTF16(IDS_PASTE_AND_GO_EMPTY);
   }
 
+  constexpr size_t kMaxSelectionTextLength = 50;
   std::u16string selection_text = gfx::TruncateString(
       clipboard_text, kMaxSelectionTextLength, gfx::WORD_BREAK);
 
@@ -1210,8 +1246,10 @@ bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
   // Show on-focus suggestions if either:
   //  - The textfield doesn't already have focus.
   //  - Or if the textfield is empty, to cover the NTP ZeroSuggest case.
-  if (event.IsOnlyLeftMouseButton() && (!HasFocus() || GetText().empty())) {
-    model()->StartZeroSuggestRequest();
+  if (!base::FeatureList::IsEnabled(omnibox::kShowPopupOnMouseReleased)) {
+    if (event.IsOnlyLeftMouseButton() && (!HasFocus() || GetText().empty())) {
+      model()->StartZeroSuggestRequest();
+    }
   }
 
   const bool handled = views::Textfield::OnMousePressed(event);
@@ -1296,6 +1334,21 @@ void OmniboxViewViews::OnMouseReleased(const ui::MouseEvent& event) {
     // Select all in the reverse direction so as not to scroll the caret
     // into view and shift the contents jarringly.
     SelectAll(true);
+  }
+  // When the user has released the left mouse button only, show on-focus
+  // suggestions if `select_all_on_mouse_release_` is true (or if the textfield
+  // is empty, to cover the NTP ZeroSuggest case).
+  //
+  // Note that ZeroSuggest is run on mouse release rather than on mouse press in
+  // order to delay the omnibox text shift (due to presenting the popup) until
+  // after the mouse events are handled. Otherwise, when a small, unintentional
+  // drag is detected, the mouse cursor might end up a few characters distant
+  // from the original click position, leading to selection of some characters
+  // rather than the whole-URL selection the user intended.
+  if (base::FeatureList::IsEnabled(omnibox::kShowPopupOnMouseReleased) &&
+      event.IsOnlyLeftMouseButton() &&
+      (select_all_on_mouse_release_ || GetText().empty())) {
+    model()->StartZeroSuggestRequest();
   }
   select_all_on_mouse_release_ = false;
 
@@ -1514,13 +1567,47 @@ void OmniboxViewViews::OnBlur() {
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
   if (command_id == Textfield::kPaste) {
-    return !GetReadOnly() &&
-           !GetClipboardText(/*notify_if_restricted=*/false).empty();
+    return !GetReadOnly() && CanGetClipboardText();
   }
   if (command_id == IDC_PASTE_AND_GO) {
-    return !GetReadOnly() && !IsClipboardDataMarkedAsConfidential() &&
-           model()->CanPasteAndGo(
-               GetClipboardText(/*notify_if_restricted=*/false));
+    if (GetReadOnly()) {
+      return false;
+    }
+
+    // If the originator marked the clipboard data as confidential, then
+    // paste-and-go is unavailable, so disable the menu command. (The menu label
+    // is set to be generic in `GetLabelForCommandId()`.)
+    if (IsClipboardDataMarkedAsConfidential()) {
+      return false;
+    }
+
+#if BUILDFLAG(IS_MAC)
+    // On the Mac, if Pasteboard Privacy is enabled, then programmatic access to
+    // the clipboard is either prohibited or will prompt the user, and we can't
+    // use the actual clipboard text to make decisions about enabling the menu
+    // command.
+    //
+    // Therefore, for now, go with a general check for if there is a
+    // probably-valid item on the clipboard to use for paste-and-go, with a
+    // cheat of using a constant string to ensure that all the other
+    // requirements for paste-and-go are fulfilled.
+    //
+    // TODO(https://crbug.com/419266152): Switch to a better approach of using
+    // -[NSPasteboard detectPatternsForPatterns:completionHandler:] to actually
+    // know if there are valid values on the clipboard to enable paste-and-go
+    // with confidence.
+    if (ui::PasteMightBlockWithPrivacyAlert()) {
+      if (CanGetClipboardText()) {
+        constexpr char16_t kSomeValidText[] = u"validtext";
+        return model()->CanPasteAndGo(kSomeValidText);
+      } else {
+        return false;
+      }
+    }
+#endif
+
+    return model()->CanPasteAndGo(
+        GetClipboardText(/*notify_if_restricted=*/false));
   }
 
   // These menu items are only shown when they are valid.
@@ -1539,7 +1626,7 @@ OmniboxPopupView* OmniboxViewViews::GetPopupViewForTesting() const {
 }
 
 std::u16string OmniboxViewViews::GetSelectionClipboardText() const {
-  return SanitizeTextForPaste(Textfield::GetSelectionClipboardText());
+  return omnibox::SanitizeTextForPaste(Textfield::GetSelectionClipboardText());
 }
 
 void OmniboxViewViews::DoInsertChar(char16_t ch) {
@@ -1574,8 +1661,7 @@ bool OmniboxViewViews::IsTextEditCommandEnabled(
     case ui::TextEditCommand::MOVE_DOWN:
       return !GetReadOnly();
     case ui::TextEditCommand::PASTE:
-      return !GetReadOnly() &&
-             !GetClipboardText(show_rejection_ui_if_any_).empty();
+      return !GetReadOnly() && CanGetClipboardText();
     default:
       return Textfield::IsTextEditCommandEnabled(command);
   }
@@ -2048,10 +2134,10 @@ void OmniboxViewViews::PerformDrop(
   if (std::optional<ui::OSExchangeData::UrlInfo> url_result =
           data.GetURLAndTitle(ui::FilenameToURLPolicy::CONVERT_FILENAMES);
       url_result.has_value()) {
-    text = StripJavascriptSchemas(base::UTF8ToUTF16(url_result->url.spec()));
+    text = omnibox::StripJavascriptSchemas(base::UTF8ToUTF16(url_result->url.spec()));
   } else if (const std::optional<std::u16string> text_result = data.GetString();
              text_result.has_value()) {
-    text = StripJavascriptSchemas(base::CollapseWhitespace(*text_result, true));
+    text = omnibox::StripJavascriptSchemas(base::CollapseWhitespace(*text_result, true));
   } else {
     output_drag_op = DragOperation::kNone;
     return;

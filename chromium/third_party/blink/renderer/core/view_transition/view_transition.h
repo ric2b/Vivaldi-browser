@@ -51,6 +51,8 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
 
     virtual void AddPendingRequest(std::unique_ptr<ViewTransitionRequest>) = 0;
     virtual void OnTransitionFinished(ViewTransition*) = 0;
+    virtual void OnSkipTransitionWithPendingCallback(ViewTransition*) = 0;
+    virtual void OnSkippedTransitionDOMCallback(ViewTransition*) = 0;
   };
 
   // Creates and starts a same-document ViewTransition initiated using the
@@ -203,6 +205,10 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
            style_tracker_->IsTransitionElement(*document_->documentElement());
   }
 
+  void RecalcTransitionPseudoTreeStyle() const;
+
+  void RebuildTransitionPseudoLayoutTree() const;
+
   // In physical pixels. See comments on equivalent methods in
   // ViewTransitionStyleTracker for info.
   gfx::Size GetSnapshotRootSize() const;
@@ -274,6 +280,15 @@ class CORE_EXPORT ViewTransition : public GarbageCollected<ViewTransition>,
   void NotifySkippedTransitionDOMCallbackScheduled();
   void NotifyInvokeDOMChangeCallback();
   bool PendingDomCallback();
+
+  // Notifies the view transition object when we start or stop style processing
+  // for getComputedStyle.
+  void WillEnterGetComputedStyleScope();
+  void WillExitGetComputedStyleScope();
+
+  // If this transition is in a phase that has non-web exposed view transition
+  // pseudo elements, then this invalidates the style for those pseudo elements.
+  void InvalidateInternalPseudoStyle();
 
  private:
   friend class ViewTransitionTest;

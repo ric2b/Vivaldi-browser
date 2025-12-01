@@ -61,9 +61,9 @@ PdfNavigationThrottle::WillProcessResponse() {
 }
 
 PdfNavigationThrottle::PdfNavigationThrottle(
-    content::NavigationHandle* navigation_handle,
+    content::NavigationThrottleRegistry& registry,
     std::unique_ptr<PdfStreamDelegate> stream_delegate)
-    : content::NavigationThrottle(navigation_handle),
+    : content::NavigationThrottle(registry),
       stream_delegate_(std::move(stream_delegate)) {
   DCHECK(stream_delegate_);
 }
@@ -159,10 +159,8 @@ PdfNavigationThrottle::WillStartRequest() {
             // `MimeHandlerViewGuest` navigates its embedder for calls to
             // `WebContents::OpenURL()`, so use `LoadURLWithParams()` directly
             // instead.
-            content::WebContents::FromRenderFrameHost(embedder_frame)
-                ->GetController()
-                .LoadURLWithParams(
-                    content::NavigationController::LoadURLParams(new_params));
+            embedder_frame->GetController().LoadURLWithParams(
+                content::NavigationController::LoadURLParams(new_params));
 
             // Note that we don't need to register the stream's URL loader as a
             // subresource, as `MimeHandlerViewGuest::ReadyToCommitNavigation()`

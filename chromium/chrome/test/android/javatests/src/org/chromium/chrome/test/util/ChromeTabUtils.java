@@ -38,7 +38,6 @@ import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorSupplier;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.TabTitleObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.RenderWidgetHostView;
@@ -91,9 +90,9 @@ public class ChromeTabUtils {
      * with either scenario #2 *or* #3, so we have to keep watching for a call to onCrash.
      */
     private static class TabPageLoadedObserver extends EmptyTabObserver {
-        private CallbackHelper mCallback;
-        private String mExpectedUrl;
-        private CountDownLatch mLoadStoppedLatch;
+        private final CallbackHelper mCallback;
+        private final String mExpectedUrl;
+        private final CountDownLatch mLoadStoppedLatch;
 
         public TabPageLoadedObserver(
                 CallbackHelper loadCompleteCallback,
@@ -357,8 +356,8 @@ public class ChromeTabUtils {
      * or opens a new foreground tab (popup), and may not become interactable.
      */
     private static class TabPageInteractableObserver extends EmptyTabObserver {
-        private Tab mTab;
-        private CallbackHelper mCallback;
+        private final Tab mTab;
+        private final CallbackHelper mCallback;
 
         public TabPageInteractableObserver(Tab tab, CallbackHelper interactableCallback) {
             mTab = tab;
@@ -816,27 +815,25 @@ public class ChromeTabUtils {
     }
 
     /**
-     * Long presses the view, selects an item from the context menu, and
-     * asserts that a new tab is opened and is incognito if expectIncognito is true.
-     * For use in testing long-press context menu options that open new tabs.
+     * Long presses the view, selects an item from the context menu, and asserts that a new tab is
+     * opened and is incognito if expectIncognito is true. For use in testing long-press context
+     * menu options that open new tabs.
      *
-     * @param testRule The {@link ChromeTabbedActivityTestRule} used to retrieve the currently
-     *                 running activity.
+     * @param activity The {@link ChromeTabbedActivity}
      * @param view The {@link View} to long press.
      * @param contextMenuItemId The context menu item to select on the view.
      * @param expectIncognito Whether the opened tab is expected to be incognito.
      * @param expectedUrl The expected url for the new tab.
      */
     public static void invokeContextMenuAndOpenInANewTab(
-            ChromeTabbedActivityTestRule testRule,
+            ChromeTabbedActivity activity,
             View view,
             int contextMenuItemId,
             boolean expectIncognito,
             final String expectedUrl)
             throws ExecutionException {
         final CallbackHelper createdCallback = new CallbackHelper();
-        final TabModel tabModel =
-                testRule.getActivity().getTabModelSelector().getModel(expectIncognito);
+        final TabModel tabModel = activity.getTabModelSelector().getModel(expectIncognito);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     tabModel.addObserver(
@@ -859,7 +856,7 @@ public class ChromeTabUtils {
                 InstrumentationRegistry.getInstrumentation(), view);
         Assert.assertTrue(
                 InstrumentationRegistry.getInstrumentation()
-                        .invokeContextMenuAction(testRule.getActivity(), contextMenuItemId, 0));
+                        .invokeContextMenuAction(activity, contextMenuItemId, 0));
 
         try {
             createdCallback.waitForCallback(0);
@@ -868,9 +865,9 @@ public class ChromeTabUtils {
         }
 
         if (expectIncognito) {
-            Assert.assertTrue(testRule.getActivity().getTabModelSelector().isIncognitoSelected());
+            Assert.assertTrue(activity.getTabModelSelector().isIncognitoSelected());
         } else {
-            Assert.assertFalse(testRule.getActivity().getTabModelSelector().isIncognitoSelected());
+            Assert.assertFalse(activity.getTabModelSelector().isIncognitoSelected());
         }
     }
 

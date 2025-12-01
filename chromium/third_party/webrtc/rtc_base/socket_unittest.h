@@ -25,7 +25,7 @@ namespace webrtc {
 // socketserver, and call the SocketTest test methods.
 class SocketTest : public ::testing::Test {
  protected:
-  explicit SocketTest(rtc::SocketFactory* socket_factory)
+  explicit SocketTest(SocketFactory* socket_factory)
       : kIPv4Loopback(INADDR_LOOPBACK),
         kIPv6Loopback(in6addr_loopback),
         socket_factory_(socket_factory) {}
@@ -101,7 +101,7 @@ class SocketTest : public ::testing::Test {
   void UdpSocketRecvTimestampUseRtcEpoch(const IPAddress& loopback);
   void SocketSendRecvWithEcn(const IPAddress& loopback);
 
-  rtc::SocketFactory* socket_factory_;
+  SocketFactory* socket_factory_;
 };
 
 // For unbound sockets, GetLocalAddress / GetRemoteAddress return AF_UNSPEC
@@ -112,9 +112,11 @@ bool IsUnspecOrEmptyIP(const IPAddress& address);
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::IsUnspecOrEmptyIP;
 using ::webrtc::SocketTest;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_SOCKET_UNITTEST_H_

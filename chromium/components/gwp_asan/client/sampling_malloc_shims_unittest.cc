@@ -67,6 +67,10 @@ constexpr size_t kLoopIterations = 100;
 
 constexpr int kSuccess = 0;
 constexpr int kFailure = 1;
+constexpr int kSamplingMaxSize = 16;
+
+static constexpr size_t kMaxMetadata = 2048;
+static constexpr size_t kMaxRequestedSlots = 8192;
 
 class SamplingMallocShimsTest : public base::MultiProcessTest {
  public:
@@ -75,14 +79,31 @@ class SamplingMallocShimsTest : public base::MultiProcessTest {
     allocator_shim::InitializeAllocatorShim();
 #endif  // BUILDFLAG(IS_APPLE)
     crash_reporter::InitializeCrashKeys();
-    InstallMallocHooks(
+    CHECK(InstallMallocHooks(
         AllocatorSettings{
-            .max_allocated_pages = AllocatorState::kMaxMetadata,
-            .num_metadata = AllocatorState::kMaxMetadata,
-            .total_pages = AllocatorState::kMaxRequestedSlots,
+            .max_allocated_pages = kMaxMetadata,
+            .num_metadata = kMaxMetadata,
+            .total_pages = kMaxRequestedSlots,
             .sampling_frequency = kSamplingFrequency,
+            .sampling_min_size = 1,
+            .sampling_max_size = std::numeric_limits<int>::max(),
         },
-        base::DoNothing());
+        base::DoNothing()));
+  }
+
+  static void multiprocessTestSetupWithSamplingMaxSize() {
+#if BUILDFLAG(IS_APPLE)
+    allocator_shim::InitializeAllocatorShim();
+#endif  // BUILDFLAG(IS_APPLE)
+    crash_reporter::InitializeCrashKeys();
+    CHECK(InstallMallocHooks(
+        AllocatorSettings{.max_allocated_pages = kMaxMetadata,
+                          .num_metadata = kMaxMetadata,
+                          .total_pages = kMaxRequestedSlots,
+                          .sampling_frequency = kSamplingFrequency,
+                          .sampling_min_size = 1,
+                          .sampling_max_size = kSamplingMaxSize},
+        base::DoNothing()));
   }
 
  protected:
@@ -315,20 +336,20 @@ TEST_F(SamplingMallocShimsTest, AlignedRealloc) {
 MULTIPROCESS_TEST_MAIN_WITH_SETUP(
     BatchFree,
     SamplingMallocShimsTest::multiprocessTestSetup) {
-  void* ptrs[AllocatorState::kMaxMetadata + 1];
-  for (size_t i = 0; i < AllocatorState::kMaxMetadata; i++) {
+  void* ptrs[kMaxMetadata + 1];
+  for (size_t i = 0; i < kMaxMetadata; i++) {
     ptrs[i] = GetMallocGpaForTesting().Allocate(16);
     CHECK(ptrs[i]);
   }
   // Check that all GPA allocations were consumed.
   CHECK_EQ(GetMallocGpaForTesting().Allocate(16), nullptr);
 
-  ptrs[AllocatorState::kMaxMetadata] =
+  ptrs[kMaxMetadata] =
       malloc_zone_malloc(malloc_default_zone(), 16);
-  CHECK(ptrs[AllocatorState::kMaxMetadata]);
+  CHECK(ptrs[kMaxMetadata]);
 
   malloc_zone_batch_free(malloc_default_zone(), ptrs,
-                         AllocatorState::kMaxMetadata + 1);
+                         kMaxMetadata + 1);
 
   // Check that GPA allocations were freed.
   CHECK(GetMallocGpaForTesting().Allocate(16));
@@ -339,7 +360,31 @@ MULTIPROCESS_TEST_MAIN_WITH_SETUP(
 TEST_F(SamplingMallocShimsTest, BatchFree) {
   runTest("BatchFree");
 }
+
 #endif  // BUILDFLAG(IS_APPLE) && !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+
+MULTIPROCESS_TEST_MAIN_WITH_SETUP(
+    SamplingRange,
+    SamplingMallocShimsTest::multiprocessTestSetupWithSamplingMaxSize) {
+  for (size_t i = 0; i < kLoopIterations; i++) {
+    unsigned char* alloc =
+        static_cast<unsigned char*>(malloc(kSamplingMaxSize * 2));
+    CHECK_NE(alloc, nullptr);
+
+    if (GetMallocGpaForTesting().PointerIsMine(alloc)) {
+      free(alloc);
+      return kFailure;
+    }
+
+    free(alloc);
+  }
+
+  return kSuccess;
+}
+
+TEST_F(SamplingMallocShimsTest, SamplingRange) {
+  runTest("SamplingRange");
+}
 
 }  // namespace
 

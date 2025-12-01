@@ -19,6 +19,7 @@
     "<all_urls>",
     "chrome://favicon/",
     "chrome://game/",
+    "chrome://privacy-report/",
     "chrome://theme/",
     "chrome://vivaldi-data/",
     "chrome://vivaldi-webui/"
@@ -62,6 +63,7 @@
     "cookies",
     "devtoolsPrivate",
     "directMatch",
+    "dnsOverHttpsPrivate",
     "downloads",
     "downloads.open",
     "downloads.shelf",
@@ -124,7 +126,6 @@
         "name": "storage",
         "accessible_resources": [
           "saga/saga.html",
-          "components/chat/chat.html",
           "components/mail/mail.html",
           "components/welcome/welcome.html",
           "components/experiments/experiments.html",

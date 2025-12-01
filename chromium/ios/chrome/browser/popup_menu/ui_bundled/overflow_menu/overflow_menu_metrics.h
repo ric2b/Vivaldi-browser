@@ -92,7 +92,9 @@ enum class IOSOverflowMenuAction {
   kLensOverlay = 16,
   kAIPrototype = 17,
   kSetTabReminder = 18,
-  kMaxValue = kSetTabReminder,
+  kReaderMode = 19,
+  kAskGLIC = 20,
+  kMaxValue = kAskGLIC,
 };
 // LINT.ThenChange(overflow_menu_constants.h:actionType)
 

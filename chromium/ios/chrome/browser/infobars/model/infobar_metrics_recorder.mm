@@ -133,6 +133,26 @@ const char kInfobarEnhancedSafeBrowsingModalEventHistogram[] =
 const char kInfobarEnhancedSafeBrowsingBadgeTappedHistogram[] =
     "Mobile.Messages.Badge.Tapped.InfobarTypeEnhancedSafeBrowsing";
 
+// Histogram names for the non modal sign-in promo banner.
+const char kInfobarTypeSigninBannerEventHistogram[] =
+    "Mobile.Messages.Banner.Event.InfobarTypeSignin";
+const char kInfobarTypeSigninBannerDismissTypeHistogram[] =
+    "Mobile.Messages.Banner.Dismiss.InfobarTypeSignin";
+const char kInfobarTypeSigninModalEventHistogram[] =
+    "Mobile.Messages.Modal.Event.InfobarTypeSignin";
+const char kInfobarTypeSigninBadgeTappedHistogram[] =
+    "Mobile.Messages.Badge.Tapped.InfobarTypeSignin";
+
+// Histogram names for collaboration group banner.
+const char kInfobarCollaborationGroupBannerEventHistogram[] =
+    "Mobile.Messages.Banner.Event.kInfobarCollaborationGroup";
+const char kInfobarCollaborationGroupBannerDismissTypeHistogram[] =
+    "Mobile.Messages.Banner.Dismiss.kInfobarCollaborationGroup";
+const char kInfobarCollaborationGroupModalEventHistogram[] =
+    "Mobile.Messages.Modal.Event.kInfobarCollaborationGroup";
+const char kInfobarCollaborationGroupBadgeTappedHistogram[] =
+    "Mobile.Messages.Badge.Tapped.kInfobarCollaborationGroup";
+
 }  // namespace
 
 @interface InfobarMetricsRecorder ()
@@ -190,6 +210,13 @@ const char kInfobarEnhancedSafeBrowsingBadgeTappedHistogram[] =
       UMA_HISTOGRAM_ENUMERATION(
           kInfobarEnhancedSafeBrowsingBannerEventHistogram, event);
       break;
+    case InfobarType::kInfobarTypeSignin:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarTypeSigninBannerEventHistogram, event);
+      break;
+    case InfobarType::kInfobarTypeCollaborationGroup:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarCollaborationGroupBannerEventHistogram,
+                                event);
+      break;
   }
 }
 
@@ -236,6 +263,14 @@ const char kInfobarEnhancedSafeBrowsingBadgeTappedHistogram[] =
       UMA_HISTOGRAM_ENUMERATION(
           kInfobarEnhancedSafeBrowsingBannerDismissTypeHistgram, dismissType);
       break;
+    case InfobarType::kInfobarTypeSignin:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarTypeSigninBannerDismissTypeHistogram,
+                                dismissType);
+      break;
+    case InfobarType::kInfobarTypeCollaborationGroup:
+      UMA_HISTOGRAM_ENUMERATION(
+          kInfobarCollaborationGroupBannerDismissTypeHistogram, dismissType);
+      break;
   }
 }
 
@@ -281,6 +316,13 @@ const char kInfobarEnhancedSafeBrowsingBadgeTappedHistogram[] =
       UMA_HISTOGRAM_ENUMERATION(kInfobarEnhancedSafeBrowsingModalEventHistogram,
                                 event);
       break;
+    case InfobarType::kInfobarTypeSignin:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarTypeSigninModalEventHistogram, event);
+      break;
+    case InfobarType::kInfobarTypeCollaborationGroup:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarCollaborationGroupModalEventHistogram,
+                                event);
+      break;
   }
 }
 
@@ -320,6 +362,13 @@ const char kInfobarEnhancedSafeBrowsingBadgeTappedHistogram[] =
     case InfobarType::kInfobarTypeEnhancedSafeBrowsing:
       UMA_HISTOGRAM_ENUMERATION(
           kInfobarEnhancedSafeBrowsingBadgeTappedHistogram, state);
+      break;
+    case InfobarType::kInfobarTypeSignin:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarTypeSigninBadgeTappedHistogram, state);
+      break;
+    case InfobarType::kInfobarTypeCollaborationGroup:
+      UMA_HISTOGRAM_ENUMERATION(kInfobarCollaborationGroupBadgeTappedHistogram,
+                                state);
       break;
   }
 }

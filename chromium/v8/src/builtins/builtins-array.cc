@@ -95,7 +95,7 @@ void MatchArrayElementsKindToArguments(Isolate* isolate,
     // Use a short-lived HandleScope to avoid creating several copies of the
     // elements handle which would cause issues when left-trimming later-on.
     HandleScope scope(isolate);
-    JSObject::TransitionElementsKind(array, target_kind);
+    JSObject::TransitionElementsKind(isolate, array, target_kind);
   }
 }
 
@@ -185,7 +185,7 @@ V8_WARN_UNUSED_RESULT MaybeDirectHandle<Object> SetLengthProperty(
     if (!JSArray::HasReadOnlyLength(array)) {
       DCHECK_LE(length, kMaxUInt32);
       MAYBE_RETURN_NULL(
-          JSArray::SetLength(array, static_cast<uint32_t>(length)));
+          JSArray::SetLength(isolate, array, static_cast<uint32_t>(length)));
       return receiver;
     }
   }
@@ -235,7 +235,7 @@ V8_WARN_UNUSED_RESULT MaybeDirectHandle<Map> GetReplacedElementsKindsMap(
     Tagged<Context> native_context = map->map()->native_context();
     if (native_context->GetInitialJSArrayMap(origin_kind) == map) {
       Tagged<Object> maybe_target_map =
-          native_context->get(Context::ArrayMapIndex(target_kind));
+          native_context->GetNoCell(Context::ArrayMapIndex(target_kind));
       if (Tagged<Map> target_map; TryCast<Map>(maybe_target_map, &target_map)) {
         map->NotifyLeafMapLayoutChange(isolate);
         return direct_handle(target_map, isolate);
@@ -311,19 +311,21 @@ V8_WARN_UNUSED_RESULT bool TryFastArrayFill(
               .ToHandle(&new_map)) {
         DirectHandle<FixedArrayBase> elements(array->elements(), isolate);
         if (IsDoubleElementsKind(origin_kind) !=
-            IsDoubleElementsKind(target_kind)) {
-          // Reallocate the elements if doubleness doesn't match.
+                IsDoubleElementsKind(target_kind) ||
+            elements->IsCowArray()) {
+          // Reallocate the elements if doubleness doesn't match or the array is
+          // copy-on-write.
           if (IsDoubleElementsKind(target_kind)) {
             elements = isolate->factory()->NewFixedDoubleArray(end);
           } else {
             elements = isolate->factory()->NewFixedArrayWithZeroes(end);
           }
         }
-        JSObject::SetMapAndElements(array, new_map, elements);
+        JSObject::SetMapAndElements(isolate, array, new_map, elements);
         if (IsMoreGeneralElementsKindTransition(origin_kind, target_kind)) {
           // Transition through the allocation site as well if present, but
           // only if this is a forward transition.
-          JSObject::UpdateAllocationSite(array, target_kind);
+          JSObject::UpdateAllocationSite(isolate, array, target_kind);
         }
         did_transition_map = true;
       }
@@ -331,12 +333,12 @@ V8_WARN_UNUSED_RESULT bool TryFastArrayFill(
 
     if (!did_transition_map) {
       target_kind = GetMoreGeneralElementsKind(origin_kind, target_kind);
-      JSObject::TransitionElementsKind(array, target_kind);
+      JSObject::TransitionElementsKind(isolate, array, target_kind);
     }
   }
 
   ElementsAccessor* accessor = array->GetElementsAccessor();
-  accessor->Fill(array, value, start, end).Check();
+  accessor->Fill(isolate, array, value, start, end).Check();
 
   // It's possible the JSArray's 'length' property was assigned to after the
   // length was loaded due to user code during argument coercion of the start
@@ -347,7 +349,7 @@ V8_WARN_UNUSED_RESULT bool TryFastArrayFill(
   // need to ensure the JSArray's length is correctly set in case the user
   // assigned a smaller value.
   if (Object::NumberValue(array->length()) < end) {
-    CHECK(accessor->SetLength(array, end).FromJust());
+    CHECK(accessor->SetLength(isolate, array, end).FromJust());
   }
 
   return true;
@@ -496,7 +498,7 @@ BUILTIN(ArrayPush) {
   ElementsAccessor* accessor = array->GetElementsAccessor();
   uint32_t new_length;
   MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-      isolate, new_length, accessor->Push(array, &args, to_add));
+      isolate, new_length, accessor->Push(isolate, array, &args, to_add));
   return *isolate->factory()->NewNumberFromUint((new_length));
 }
 
@@ -579,7 +581,7 @@ BUILTIN(ArrayPop) {
   if (IsJSArrayFastElementMovingAllowed(isolate, *array)) {
     // Fast Elements Path
     ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-        isolate, result, array->GetElementsAccessor()->Pop(array));
+        isolate, result, array->GetElementsAccessor()->Pop(isolate, array));
   } else {
     // Use Slow Lookup otherwise
     uint32_t new_length = len - 1;
@@ -596,7 +598,7 @@ BUILTIN(ArrayPop) {
     }
     bool set_len_ok;
     MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-        isolate, set_len_ok, JSArray::SetLength(array, new_length));
+        isolate, set_len_ok, JSArray::SetLength(isolate, array, new_length));
   }
 
   return *result;
@@ -704,8 +706,8 @@ BUILTIN(ArrayShift) {
 
   if (CanUseFastArrayShift(isolate, receiver)) {
     DirectHandle<JSArray> array = Cast<JSArray>(receiver);
-    RETURN_RESULT_OR_FAILURE(isolate,
-                             array->GetElementsAccessor()->Shift(array));
+    RETURN_RESULT_OR_FAILURE(
+        isolate, array->GetElementsAccessor()->Shift(isolate, array));
   }
 
   return GenericArrayShift(isolate, receiver, length);
@@ -735,7 +737,7 @@ BUILTIN(ArrayUnshift) {
   ElementsAccessor* accessor = array->GetElementsAccessor();
   uint32_t new_length;
   MAYBE_ASSIGN_RETURN_FAILURE_ON_EXCEPTION(
-      isolate, new_length, accessor->Unshift(array, &args, to_add));
+      isolate, new_length, accessor->Unshift(isolate, array, &args, to_add));
   return Smi::FromInt(new_length);
 }
 
@@ -855,7 +857,8 @@ class ArrayConcatVisitor {
     DirectHandle<Number> length =
         isolate_->factory()->NewNumber(static_cast<double>(index_offset_));
     DirectHandle<Map> map = JSObject::GetElementsTransitionMap(
-        array, fast_elements() ? HOLEY_ELEMENTS : DICTIONARY_ELEMENTS);
+        isolate_, array,
+        fast_elements() ? HOLEY_ELEMENTS : DICTIONARY_ELEMENTS);
     {
       DisallowGarbageCollection no_gc;
       Tagged<JSArray> raw = *array;
@@ -1109,7 +1112,7 @@ void CollectElementIndices(Isolate* isolate, DirectHandle<JSObject> object,
       Tagged<JSObject> raw_object = *object;
       ElementsAccessor* accessor = object->GetElementsAccessor();
       for (uint32_t i = 0; i < range; i++) {
-        if (accessor->HasElement(raw_object, i, elements)) {
+        if (accessor->HasElement(isolate, raw_object, i, elements)) {
           indices->push_back(i);
         }
       }
@@ -1129,7 +1132,7 @@ void CollectElementIndices(Isolate* isolate, DirectHandle<JSObject> object,
       }
       ElementsAccessor* accessor = object->GetElementsAccessor();
       for (; i < range; i++) {
-        if (accessor->HasElement(*object, i)) {
+        if (accessor->HasElement(isolate, *object, i)) {
           indices->push_back(i);
         }
       }
@@ -1147,7 +1150,7 @@ void CollectElementIndices(Isolate* isolate, DirectHandle<JSObject> object,
       for (uint32_t i = 0; i < length; i++) {
         // JSSharedArrays are created non-resizable and do not have holes.
         SLOW_DCHECK(object->GetElementsAccessor()->HasElement(
-            *object, i, object->elements()));
+            isolate, *object, i, object->elements()));
         indices->push_back(i);
       }
       if (length == range) return;
@@ -1281,12 +1284,7 @@ bool IterateElements(Isolate* isolate, DirectHandle<JSReceiver> receiver,
       int fast_length = static_cast<int>(length);
       DCHECK(fast_length <= elements->length());
       FOR_WITH_HANDLE_SCOPE(isolate, int, j = 0, j, j < fast_length, j++, {
-        if (!elements->is_the_hole(j)) {
-          double double_value = elements->get_scalar(j);
-          DirectHandle<Object> element_value =
-              isolate->factory()->NewNumber(double_value);
-          if (!visitor->visit(j, element_value)) return false;
-        } else {
+        if (elements->is_the_hole(j)) {
           Maybe<bool> maybe = JSReceiver::HasElement(isolate, array, j);
           if (maybe.IsNothing()) return false;
           if (maybe.FromJust()) {
@@ -1298,6 +1296,17 @@ bool IterateElements(Isolate* isolate, DirectHandle<JSReceiver> receiver,
                 JSReceiver::GetElement(isolate, array, j), false);
             if (!visitor->visit(j, element_value)) return false;
           }
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+        } else if (elements->is_undefined(j)) {
+          DirectHandle<Object> element_value =
+              isolate->factory()->undefined_value();
+          if (!visitor->visit(j, element_value)) return false;
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+        } else {
+          double double_value = elements->get_scalar(j);
+          DirectHandle<Object> element_value =
+              isolate->factory()->NewNumber(double_value);
+          if (!visitor->visit(j, element_value)) return false;
         }
       });
       break;
@@ -1469,17 +1478,33 @@ Tagged<Object> Slow_ArrayConcat(BuiltinArguments* args,
               Tagged<FixedDoubleArray> elements =
                   Cast<FixedDoubleArray>(array->elements());
               for (uint32_t k = 0; k < length; k++) {
-                if (elements->is_the_hole(k)) {
-                  // TODO(jkummerow/verwaest): We could be a bit more clever
-                  // here: Check if there are no elements/getters on the
-                  // prototype chain, and if so, allow creation of a holey
-                  // result array.
-                  // Same thing below (holey smi case).
-                  failure = true;
-                  break;
+                const bool is_hole = elements->is_the_hole(k);
+                if (is_hole
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                    || elements->is_undefined(k)
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                ) {
+                  if (Protectors::IsNoElementsIntact(isolate)) {
+                    // If we do not have elements on the prototype chain,
+                    // we can generate a HOLEY_DOUBLE_ELEMENTS.
+                    kind = HOLEY_DOUBLE_ELEMENTS;
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                    if (is_hole) {
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                      double_storage->set_the_hole(j);
+#ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                    } else {
+                      double_storage->set_undefined(j);
+                    }
+#endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
+                  } else {
+                    failure = true;
+                    break;
+                  }
+                } else {
+                  double double_value = elements->get_scalar(k);
+                  double_storage->set(j, double_value);
                 }
-                double double_value = elements->get_scalar(k);
-                double_storage->set(j, double_value);
                 j++;
               }
               break;
@@ -1491,11 +1516,19 @@ Tagged<Object> Slow_ArrayConcat(BuiltinArguments* args,
               for (uint32_t k = 0; k < length; k++) {
                 Tagged<Object> element = elements->get(k);
                 if (element == the_hole) {
-                  failure = true;
-                  break;
+                  if (Protectors::IsNoElementsIntact(isolate)) {
+                    // If we do not have elements on the prototype chain,
+                    // we can generate a HOLEY_DOUBLE_ELEMENTS.
+                    kind = HOLEY_DOUBLE_ELEMENTS;
+                    double_storage->set_the_hole(j);
+                  } else {
+                    failure = true;
+                    break;
+                  }
+                } else {
+                  int32_t int_value = Smi::ToInt(element);
+                  double_storage->set(j, int_value);
                 }
-                int32_t int_value = Smi::ToInt(element);
-                double_storage->set(j, int_value);
                 j++;
               }
               break;

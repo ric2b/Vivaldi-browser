@@ -32,8 +32,8 @@
 
 #include "base/check_op.h"
 #include "base/memory/raw_ptr_exclusion.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/numerics/checked_math.h"
-#include "base/task/single_thread_task_runner.h"
 #include "device/vr/public/mojom/vr_service.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_graphics_context_3d_provider.h"
@@ -46,12 +46,11 @@
 #include "third_party/blink/renderer/core/layout/content_change_type.h"
 #include "third_party/blink/renderer/core/typed_arrays/array_buffer_view_helpers.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
-#include "third_party/blink/renderer/modules/webgl/webgl_extension_name.h"
+#include "third_party/blink/renderer/modules/webgl/webgl_context_object_support.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_texture.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_uniform_location.h"
 #include "third_party/blink/renderer/modules/webgl/webgl_vertex_array_object_base.h"
 #include "third_party/blink/renderer/platform/bindings/name_client.h"
-#include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/drawing_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/extensions_3d_util.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgl_image_conversion.h"
@@ -60,19 +59,11 @@
 #include "third_party/blink/renderer/platform/scheduler/public/frame_or_worker_scheduler.h"
 #include "third_party/blink/renderer/platform/timer.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-#include "third_party/khronos/GLES2/gl2.h"
-#include "third_party/khronos/GLES3/gl31.h"
 #include "third_party/skia/include/core/SkData.h"
 
 namespace cc {
 class Layer;
 }
-
-namespace gpu {
-namespace gles2 {
-class GLES2Interface;
-}
-}  // namespace gpu
 
 namespace media {
 class PaintCanvasVideoRenderer;
@@ -84,6 +75,7 @@ class AcceleratedStaticBitmapImage;
 class CanvasResourceProvider;
 class EXTDisjointTimerQuery;
 class EXTDisjointTimerQueryWebGL2;
+class Element;
 class ExceptionState;
 class HTMLCanvasElement;
 class HTMLImageElement;
@@ -103,8 +95,6 @@ class WebGLCompressedTextureETC1;
 class WebGLCompressedTexturePVRTC;
 class WebGLCompressedTextureS3TC;
 class WebGLCompressedTextureS3TCsRGB;
-class WebGLContextGroup;
-class WebGLContextObject;
 class WebGLDebugShaders;
 class WebGLDrawBuffers;
 class WebGLExtension;
@@ -112,6 +102,7 @@ class WebGLFramebuffer;
 class WebGLObject;
 class WebGLProgram;
 class WebGLRenderbuffer;
+class WebGLRenderingContextBase;
 class WebGLShader;
 class WebGLShaderPrecisionFormat;
 class WebGLVertexArrayObjectBase;
@@ -136,9 +127,10 @@ class ScopedRGBEmulationColorMask {
   const bool requires_emulation_;
 };
 
-class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
-                                                 public CanvasRenderingContext,
-                                                 public DrawingBuffer::Client {
+class MODULES_EXPORT WebGLRenderingContextBase
+    : public WebGLContextObjectSupport,
+      public CanvasRenderingContext,
+      public DrawingBuffer::Client {
  public:
   WebGLRenderingContextBase(const WebGLRenderingContextBase&) = delete;
   WebGLRenderingContextBase& operator=(const WebGLRenderingContextBase&) =
@@ -427,6 +419,15 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
                   ImageBitmap*,
                   ExceptionState&);
 
+  void texElement2D(ScriptState* script_state,
+                    GLenum target,
+                    GLint level,
+                    GLint internalformat,
+                    GLenum format,
+                    GLenum type,
+                    Element* element,
+                    ExceptionState& exception_state);
+
   void texParameterf(GLenum target, GLenum pname, GLfloat param);
   void texParameteri(GLenum target, GLenum pname, GLint param);
 
@@ -562,8 +563,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   void LoseContext(LostContextMode) override;
   void ForceLostContext(LostContextMode, AutoRecoveryMethod);
   void ForceRestoreContext();
-  void LoseContextImpl(LostContextMode, AutoRecoveryMethod);
-  uint32_t NumberOfContextLosses() const;
 
   // Utilities to restore GL state to match the rendering context's
   // saved state. Use these after contextGL()-based state changes that
@@ -576,12 +575,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   void RestoreProgram();
   void RestoreActiveTexture();
 
-  gpu::gles2::GLES2Interface* ContextGL() const {
-    DrawingBuffer* d = GetDrawingBuffer();
-    if (!d)
-      return nullptr;
-    return d->ContextGL();
-  }
   const gpu::Capabilities& ContextGLCapabilities() const {
     // This should only be called in contexts where ContextGL() is guaranteed
     // to exist.
@@ -597,14 +590,14 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
     return d->ContextProvider()->SharedImageInterface();
   }
 
-  WebGLContextGroup* ContextGroup() const { return context_group_.Get(); }
   Extensions3DUtil* ExtensionsUtil();
 
   void Reshape(int width, int height) override;
 
   void MarkLayerComposited() override;
 
-  sk_sp<SkData> PaintRenderingResultsToDataArray(SourceDrawingBuffer) override;
+  scoped_refptr<StaticBitmapImage> GetRGBAUnacceleratedStaticBitmapImage(
+      SourceDrawingBuffer source_buffer) override;
 
   unsigned MaxVertexAttribs() const { return max_vertex_attribs_; }
 
@@ -665,13 +658,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
       ::partition_alloc::internal::MaxDirectMapped();
 
  protected:
-  // WebGL object types.
-  friend class WebGLContextObject;
-  friend class WebGLObject;
-  friend class WebGLQuery;
-  friend class WebGLTimerQueryEXT;
-  friend class WebGLVertexArrayObjectBase;
-
   // Implementation helpers.
   friend class ScopedPixelLocalStorageInterrupt;
   friend class ScopedDrawingBufferBinder;
@@ -697,6 +683,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   friend class WebGLCompressedTexturePVRTC;
   friend class WebGLCompressedTextureS3TC;
   friend class WebGLCompressedTextureS3TCsRGB;
+  friend class WebGLContextFactory;
   friend class WebGLDebugShaders;
   friend class WebGLDrawBuffers;
   friend class WebGLDrawInstancedBaseVertexBaseInstance;
@@ -723,7 +710,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   bool IsComposited() const override { return true; }
   bool UsingSwapChain() const override;
   void PageVisibilityChanged() override;
-  bool PaintRenderingResultsToCanvas(SourceDrawingBuffer) override;
+  CanvasResourceProvider* PaintRenderingResultsToCanvas(
+      SourceDrawingBuffer) override;
   bool CopyRenderingResultsToVideoFrame(
       WebGraphicsContext3DVideoFramePool*,
       SourceDrawingBuffer,
@@ -787,8 +775,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
 
   void OnErrorMessage(const char*, int32_t id);
 
-  scoped_refptr<base::SingleThreadTaskRunner> GetContextTaskRunner();
-
   // Query if depth_stencil buffer is supported.
   bool IsDepthStencilSupported() { return is_depth_stencil_supported_; }
 
@@ -834,8 +820,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   // to the back-buffer of m_context.
   scoped_refptr<DrawingBuffer> drawing_buffer_;
 
-  Member<WebGLContextGroup> context_group_;
-
   LostContextMode context_lost_mode_ = kNotLostContext;
   AutoRecoveryMethod auto_recovery_method_ = kManual;
   // Dispatches a context lost event once it is determined that one is needed.
@@ -847,7 +831,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
       dispatch_context_lost_event_timer_;
   bool restore_allowed_ = false;
   HeapTaskRunnerTimer<WebGLRenderingContextBase> restore_timer_;
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
 
   bool destruction_in_progress_ = false;
   bool marked_canvas_dirty_;
@@ -910,8 +893,13 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
 
    private:
     void BubbleToFront(wtf_size_t idx);
+    const wtf_size_t capacity_;
     const CacheType type_;
     Vector<std::unique_ptr<CanvasResourceProvider>> resource_providers_;
+    // The returned CanvasResourceProvider may have a different format from the
+    // one requested (e.g, BGRA vs RGBA). Ensure this doesn't cause cache
+    // misses by recording also the requested format.
+    Vector<viz::SharedImageFormat> requested_formats_;
   };
   LRUCanvasResourceProviderCache generated_image_cache_{
       4, LRUCanvasResourceProviderCache::CacheType::kImage};
@@ -1071,10 +1059,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
 
   bool ExtensionSupportedAndAllowed(const ExtensionTracker*);
   WebGLExtension* EnableExtensionIfSupported(const String& name);
-
-  inline bool ExtensionEnabled(WebGLExtensionName name) {
-    return extension_enabled_[name];
-  }
 
   bool TimerQueryExtensionsEnabled();
 
@@ -1254,6 +1238,20 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
     GLint unpack_skip_rows = 0;
     GLint unpack_skip_images = 0;
 
+    // Returns sub rect of the source based on `unpack_*` params above. This
+    // rect is always in top-left coordinate space.
+    gfx::Rect GetSourceRect(gfx::Size source_size) const;
+
+    // Returns GrSurfaceOrigin of the destination texture for this operation.
+    // Note, that textures don't have persistent orientation (e.g unlike
+    // SharedImages), so this value doesn't affect the data in the texture
+    // before the operation, only operation itself. This is helper because
+    // everything else operates in terms of GrSurfaceOrigin.
+    GrSurfaceOrigin GetDestinationOrigin() const;
+
+    // Returns desired alpha type of the uploaded data.
+    SkAlphaType GetDestinationAlphaType() const;
+
     // The source's height for 3D copies. If we are doing a 3D copy, then we
     // interpret the 2D source as 3D by treating it as vertical sequence of
     // images with this height.
@@ -1268,9 +1266,7 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   virtual void GetCurrentUnpackState(TexImageParams& params);
 
   // Upload `image` to the specified texture.
-  void TexImageSkImage(TexImageParams params,
-                       sk_sp<SkImage> image,
-                       bool image_has_flip_y);
+  void TexImageSkImage(TexImageParams params, sk_sp<SkImage> image);
 
   // Call the underlying Tex[Sub]Image{2D|3D} function. Always replace
   // `params.internalformat` with the result from ConvertTexInternalFormat.
@@ -1282,7 +1278,6 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   // using TexImageSkImage.
   void TexImageStaticBitmapImage(TexImageParams params,
                                  StaticBitmapImage* image,
-                                 bool image_has_flip_y,
                                  bool allow_copy_via_gpu);
   template <typename T>
   gfx::Rect GetTextureSourceSize(T* texture_source) {
@@ -1900,6 +1895,10 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
                                       HTMLImageElement*,
                                       ExceptionState&);
 
+  void DrawElementImage(scoped_refptr<Image> image,
+                        TexImageParams params,
+                        ExceptionState& exception_state);
+
   void TexImageHelperCanvasRenderingContextHost(const SecurityOrigin*,
                                                 TexImageParams params,
                                                 CanvasRenderingContextHost*,
@@ -1948,6 +1947,9 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
                                 Platform::ContextType context_type,
                                 Platform::GraphicsInfo* graphics_info);
 
+  CanvasResourceProvider* PaintRenderingResultsToCanvasInternal(
+      SourceDrawingBuffer source_buffer,
+      bool& resource_provider_was_updated);
   void TexImageHelperMediaVideoFrame(
       TexImageParams,
       WebGLTexture*,
@@ -1986,6 +1988,13 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   // ExtenralCanvasResource.
   bool PushFrameNoCopy();
 
+  // Returns true if the given element can be used in a texElement2D call.
+  // Return false and adds relevant exceptions to `exception_state` if that's
+  // not the case.
+  bool IsDrawElementEligible(Element* element,
+                             GLenum target,
+                             ExceptionState& exception_state);
+
   static bool webgl_context_limits_initialized_;
   static unsigned max_active_webgl_contexts_;
   static unsigned max_active_webgl_contexts_on_worker_;
@@ -2006,6 +2015,8 @@ class MODULES_EXPORT WebGLRenderingContextBase : public ScriptWrappable,
   int number_of_user_allocated_multisampled_renderbuffers_;
 
   bool has_been_drawn_to_ = false;
+
+  uint32_t number_of_context_losses_ = 0;
 
   // Tracks if the context has ever called glBeginPixelLocalStorageANGLE. If it
   // has, we need to start using the pixel local storage interrupt mechanism

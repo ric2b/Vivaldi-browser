@@ -56,14 +56,14 @@ RUNTIME_FUNCTION(Runtime_TypedArrayCopyElements) {
   size_t length;
   CHECK(TryNumberToSize(args[2], &length));
   ElementsAccessor* accessor = target->GetElementsAccessor();
-  return accessor->CopyElements(source, target, length, 0);
+  return accessor->CopyElements(isolate, source, target, length, 0);
 }
 
 RUNTIME_FUNCTION(Runtime_TypedArrayGetBuffer) {
   HandleScope scope(isolate);
   DCHECK_EQ(1, args.length());
   DirectHandle<JSTypedArray> holder = args.at<JSTypedArray>(0);
-  return *holder->GetBuffer();
+  return *holder->GetBuffer(isolate);
 }
 
 RUNTIME_FUNCTION(Runtime_GrowableSharedArrayBufferByteLength) {
@@ -217,7 +217,7 @@ RUNTIME_FUNCTION(Runtime_TypedArraySet) {
   size_t offset;
   CHECK(TryNumberToSize(args[3], &offset));
   ElementsAccessor* accessor = target->GetElementsAccessor();
-  return accessor->CopyElements(source, target, length, offset);
+  return accessor->CopyElements(isolate, source, target, length, offset);
 }
 
 RUNTIME_FUNCTION(Runtime_ArrayBufferMaxByteLength) {

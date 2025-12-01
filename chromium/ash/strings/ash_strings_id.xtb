@@ -462,6 +462,7 @@ Berikut ini beberapa hal yang dapat Anda coba untuk memulai.</translation>
 <translation id="2530896289327917474">Mengaktifkan atau menonaktifkan penjelajahan dengan keyboard</translation>
 <translation id="2531025035050312891">perangkat lambat</translation>
 <translation id="2531107890083353124">Saat menyeret tab, tekan <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Tarik atau tekan Spasi untuk memilih area yang akan diambil gambar</translation>
 <translation id="2545334090614121435">Mencoba menggunakan Home? Gunakan</translation>
 <translation id="254900897760075745">Salin konten yang dipilih ke papan klip</translation>
 <translation id="2549711466868162843">Koreksi pencahayaan</translation>
@@ -581,7 +582,6 @@ Jika tidak, touchpad bawaan akan diaktifkan kembali dalam <ph name="TIMEOUT_SECO
 <translation id="2949420361496057765">Tekan <ph name="MODIFIER" />, lalu klik link</translation>
 <translation id="2957159466053076448">Anda dapat menonaktifkan fitur ini kapan saja di Setelan. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Audio perangkat</translation>
-<translation id="2960314608273155470">Mode Tangkapan Layar, opsi defaultnya adalah <ph name="TYPE" /> <ph name="SOURCE" />. Tekan tab untuk menavigasi dengan keyboard.</translation>
 <translation id="2961963223658824723">Terjadi error. Coba lagi dalam beberapa detik.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Aktifkan akses mikrofon?</translation>
@@ -761,6 +761,7 @@ Jika tidak, touchpad bawaan akan diaktifkan kembali dalam <ph name="TIMEOUT_SECO
 <translation id="3552189655002856821">Wi-Fi dinonaktifkan</translation>
 <translation id="3554215588514239132">Tampilkan atau sembunyikan panel Developer Tools</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> telah dipasangi pin</translation>
+<translation id="3554928024630051016">Untuk menambahkan perangkat USB tambahan, coba lepaskan salah satu perangkat lebih dulu, lalu colokkan perangkat baru</translation>
 <translation id="3558768885091059911">Aktifkan akses kamera dan mikrofon?</translation>
 <translation id="3560174576767922131">Rekam video</translation>
 <translation id="3563775809269155755">Aktifkan hotspot</translation>
@@ -868,6 +869,7 @@ Hubungkan perangkat ke sumber listrik.</translation>
 <translation id="3861651314799684201">Tekan Enter untuk merekam dalam layar penuh</translation>
 <translation id="3870197372373144624">Coba matikan perangkat.</translation>
 <translation id="3879748587602334249">Pengelola download</translation>
+<translation id="3884007280698606545">Batas USB tercapai</translation>
 <translation id="3886872229787704059">Dibuka hari ini</translation>
 <translation id="3891340733213178823">Tekan Ctrl+Shift+Q dua kali untuk keluar.</translation>
 <translation id="3892148308691398805">Salin teks</translation>
@@ -1440,6 +1442,7 @@ Tidak ada perangkat yang terhubung.</translation>
 <translation id="5672890847723042801">Utilitas</translation>
 <translation id="5673434351075758678">Dari "<ph name="FROM_LOCALE" />" ke "<ph name="TO_LOCALE" />" setelah menyinkronkan setelan Anda.</translation>
 <translation id="5675363643668471212">Item rak</translation>
+<translation id="5677022547882470786">Tarik atau tekan Spasi untuk memilih area yang akan ditelusuri</translation>
 <translation id="5677928146339483299">Diblokir</translation>
 <translation id="5678564054339031017">Tampilkan minggu berikutnya</translation>
 <translation id="5679050765726761783">Adaptor daya rendah terhubung</translation>
@@ -1485,6 +1488,7 @@ Tidak ada perangkat yang terhubung.</translation>
 <translation id="5788127256798019331">File Play</translation>
 <translation id="5788535737706478207">Buka kembali tab atau jendela yang terakhir ditutup</translation>
 <translation id="5790085346892983794">Berhasil</translation>
+<translation id="5791926618942305301">Di screenshot, setel ke <ph name="TYPE" /> <ph name="SOURCE" />. Tekan tab untuk memilih jenis pengambilan screenshot. Tekan enter untuk mengambil screenshot. Untuk memilih area pengambilan screenshot, setel ke screenshot sebagian. Jika belum aktif, tekan spasi untuk memilih area.</translation>
 <translation id="579415080077680903">Senyapkan</translation>
 <translation id="5802516411616338943">Buka Setelan Cepat</translation>
 <translation id="5804651031882187592">Nonaktifkan setelan "Kunci SIM"</translation>
@@ -1641,6 +1645,7 @@ Tidak ada perangkat yang terhubung.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> dapat ditambahkan ulang nanti dengan izin orang tua.</translation>
 <translation id="6291221004442998378">Tidak mengisi daya</translation>
 <translation id="6298183524022479114">Sesuaikan perangkat ini di aplikasi</translation>
+<translation id="6304076460080088478">Tutup atau minimalkan jendela Samaran untuk menelusuri layar dengan Google Lens</translation>
 <translation id="6309219492973062892">Klik atau ketuk ikon rak 1-8</translation>
 <translation id="6315170314923504164">Suara</translation>
 <translation id="6319058840130157106">Bergerak mundur antara pojok kanan bawah, Peluncur, kolom URL, kolom bookmark, situs yang terbuka, dan download</translation>
@@ -1769,6 +1774,7 @@ Baru diinstal</translation>
 <translation id="6700713906295497288">Tombol menu IME</translation>
 <translation id="6704073473590541209">Tuas tepi kanan dipilih, gunakan tombol panah untuk memindahkan</translation>
 <translation id="6706742084323792866">Sematkan keyboard</translation>
+<translation id="6709719156428404245">Tarik atau tekan Spasi untuk memilih area yang akan direkam</translation>
 <translation id="6710213216561001401">Sebelumnya</translation>
 <translation id="6723839937902243910">Daya</translation>
 <translation id="672609503628871915">Lihat apa saja yang baru</translation>

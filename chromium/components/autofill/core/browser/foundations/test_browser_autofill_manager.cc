@@ -7,6 +7,7 @@
 #include "base/check_deref.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/types/optional_ref.h"
 #include "components/autofill/core/browser/crowdsourcing/test_votes_uploader.h"
 #include "components/autofill/core/browser/data_manager/test_personal_data_manager.h"
 #include "components/autofill/core/browser/field_types.h"
@@ -16,6 +17,7 @@
 #include "components/autofill/core/browser/foundations/browser_autofill_manager_test_api.h"
 #include "components/autofill/core/browser/foundations/test_autofill_driver.h"
 #include "components/autofill/core/browser/foundations/test_autofill_manager_waiter.h"
+#include "components/autofill/core/browser/payments/test/mock_bnpl_manager.h"
 #include "components/autofill/core/browser/single_field_fillers/mock_single_field_fill_router.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
@@ -31,6 +33,17 @@ TestBrowserAutofillManager::TestBrowserAutofillManager(AutofillDriver* driver)
 }
 
 TestBrowserAutofillManager::~TestBrowserAutofillManager() = default;
+
+testing::NiceMock<MockBnplManager>*
+TestBrowserAutofillManager::GetPaymentsBnplManager() {
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || \
+    BUILDFLAG(IS_CHROMEOS)
+  return &mock_bnpl_manager_;
+#else
+  return nullptr;
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS)
+}
 
 void TestBrowserAutofillManager::OnLanguageDetermined(
     const translate::LanguageDetectionDetails& details) {
@@ -79,9 +92,10 @@ void TestBrowserAutofillManager::OnAskForValuesToFill(
     const FormData& form,
     const FieldGlobalId& field_id,
     const gfx::Rect& caret_bounds,
-    AutofillSuggestionTriggerSource trigger_source) {
+    AutofillSuggestionTriggerSource trigger_source,
+    base::optional_ref<const PasswordSuggestionRequest> password_request) {
   AutofillManager::OnAskForValuesToFill(form, field_id, caret_bounds,
-                                        trigger_source);
+                                        trigger_source, password_request);
   ASSERT_TRUE(waiter_.Wait(0));
 }
 
@@ -168,12 +182,13 @@ void TestBrowserAutofillManager::ClearFormStructures() {
 void TestBrowserAutofillManager::OnAskForValuesToFillTest(
     const FormData& form,
     const FieldGlobalId& field_id,
-    AutofillSuggestionTriggerSource trigger_source) {
+    AutofillSuggestionTriggerSource trigger_source,
+    const std::optional<PasswordSuggestionRequest>& password_request) {
   gfx::PointF p =
       CHECK_DEREF(form.FindFieldByGlobalId(field_id)).bounds().origin();
   gfx::Rect caret_bounds(gfx::Point(p.x(), p.y()), gfx::Size(0, 10));
-  BrowserAutofillManager::OnAskForValuesToFill(form, field_id, caret_bounds,
-                                               trigger_source);
+  BrowserAutofillManager::OnAskForValuesToFill(
+      form, field_id, caret_bounds, trigger_source, password_request);
   ASSERT_TRUE(waiter_.Wait(0));
 }
 

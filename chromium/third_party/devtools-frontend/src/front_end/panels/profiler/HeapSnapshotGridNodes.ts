@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
@@ -202,8 +204,8 @@ export class HeapSnapshotGridNode extends
   getHash(): number {
     throw new Error('Not implemented.');
   }
-  createChildNode(_item: HeapSnapshotModel.HeapSnapshotModel.Node|
-                  HeapSnapshotModel.HeapSnapshotModel.Edge): HeapSnapshotGridNode {
+  createChildNode(_item: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      HeapSnapshotGridNode {
     throw new Error('Not implemented.');
   }
 
@@ -331,8 +333,8 @@ export class HeapSnapshotGridNode extends
     return this.provider().sortAndRewind(this.comparator());
   }
 
-  childHashForEntity(entity: HeapSnapshotModel.HeapSnapshotModel.Node|
-                     HeapSnapshotModel.HeapSnapshotModel.Edge): number {
+  childHashForEntity(entity: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      number {
     if ('edgeIndex' in entity) {
       return entity.edgeIndex;
     }
@@ -855,8 +857,8 @@ export class HeapSnapshotObjectNode extends HeapSnapshotGenericObjectNode {
     return null;
   }
 
-  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|
-                           HeapSnapshotModel.HeapSnapshotModel.Edge): HeapSnapshotObjectNode {
+  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      HeapSnapshotObjectNode {
     return new HeapSnapshotObjectNode(
         this.dataGridInternal, this.snapshot, (item as HeapSnapshotModel.HeapSnapshotModel.Edge), this);
   }
@@ -933,8 +935,8 @@ export class HeapSnapshotRetainingObjectNode extends HeapSnapshotObjectNode {
     return this.snapshot.createRetainingEdgesProvider(this.snapshotNodeIndex);
   }
 
-  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|
-                           HeapSnapshotModel.HeapSnapshotModel.Edge): HeapSnapshotRetainingObjectNode {
+  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      HeapSnapshotRetainingObjectNode {
     return new HeapSnapshotRetainingObjectNode(
         this.dataGridInternal, this.snapshot, (item as HeapSnapshotModel.HeapSnapshotModel.Edge), this);
   }
@@ -1059,8 +1061,8 @@ export class HeapSnapshotInstanceNode extends HeapSnapshotGenericObjectNode {
     return this.baseSnapshotOrSnapshot.createEdgesProvider(this.snapshotNodeIndex);
   }
 
-  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|
-                           HeapSnapshotModel.HeapSnapshotModel.Edge): HeapSnapshotObjectNode {
+  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      HeapSnapshotObjectNode {
     return new HeapSnapshotObjectNode(
         this.dataGridInternal, this.baseSnapshotOrSnapshot, (item as HeapSnapshotModel.HeapSnapshotModel.Edge), null);
   }
@@ -1172,8 +1174,8 @@ export class HeapSnapshotConstructorNode extends HeapSnapshotGridNode {
     return cell;
   }
 
-  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|
-                           HeapSnapshotModel.HeapSnapshotModel.Edge): HeapSnapshotInstanceNode {
+  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      HeapSnapshotInstanceNode {
     return new HeapSnapshotInstanceNode(
         this.dataGridInternal, (this.dataGridInternal.snapshot as HeapSnapshotProxy),
         (item as HeapSnapshotModel.HeapSnapshotModel.Node), false);
@@ -1329,8 +1331,8 @@ export class HeapSnapshotDiffNode extends HeapSnapshotGridNode {
     return cell;
   }
 
-  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|
-                           HeapSnapshotModel.HeapSnapshotModel.Edge): HeapSnapshotInstanceNode {
+  override createChildNode(item: HeapSnapshotModel.HeapSnapshotModel.Node|HeapSnapshotModel.HeapSnapshotModel.Edge):
+      HeapSnapshotInstanceNode {
     const dataGrid = (this.dataGridInternal as HeapSnapshotDiffDataGrid);
     if (item.isAddedNotRemoved) {
       if (dataGrid.snapshot === null) {
@@ -1415,7 +1417,7 @@ export class AllocationGridNode extends HeapSnapshotGridNode {
         await (this.dataGridInternal.snapshot as HeapSnapshotProxy).allocationNodeCallers(this.allocationNode.id);
 
     const callersChain = callers.nodesWithSingleCaller;
-    let parentNode: AllocationGridNode = (this as AllocationGridNode);
+    let parentNode: AllocationGridNode = this;
     const dataGrid = (this.dataGridInternal as AllocationDataGrid);
     for (const caller of callersChain) {
       const child = new AllocationGridNode(dataGrid, caller);

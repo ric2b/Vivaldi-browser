@@ -8,7 +8,7 @@
 #include <jni.h>
 
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "cc/resources/ui_resource_client.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/transform.h"
@@ -72,6 +72,9 @@ class DecorationTitle {
   bool is_rtl_;
 
   raw_ptr<ui::ResourceManager> resource_manager_;
+
+ private:
+  bool needs_refresh_ = true;
 
   // Vivaldi
   float title_offset_;

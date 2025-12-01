@@ -334,25 +334,20 @@ if ($output eq 'h') {
     }
     print F "\n};\n\n";
 
-    print F "#define UNUSED_HASH_ENTRY (65536/3)\n\n";
+    print F "#define INVALID_HASH_ENTRY (65536/3)\n\n";
 
     printf F "static const int16_t %s_hashvals[%d] = ", $name, $n*2;
     $c = '{';
-    for (my $i = 0; $i < $n; $i++) {
-	my $h = ${$g}[$i*2+0];
-	print F "$c\n    ", defined($h) ? $h : 'UNUSED_HASH_ENTRY';
-	$c = ',';
-    }
-    for (my $i = 0; $i < $n; $i++) {
-	my $h = ${$g}[$i*2+1];
-	print F "$c\n    ", defined($h) ? $h : 'UNUSED_HASH_ENTRY';
+    for (my $i = 0; $i < $n*2; $i++) {
+	my $h = ${$g}[$i];
+	print F "$c\n    ", defined($h) ? $h : 'INVALID_HASH_ENTRY';
 	$c = ',';
     }
     print F "\n};\n\n";
 
     print F "const struct perfect_hash ${name}_hash = {\n";
     printf F "    UINT64_C(0x%08x%08x),\n", $$sv[0], $$sv[1]; # crcinit
-    printf F "    UINT32_C(0x%x),\n", $n-1;		      # hashmask
+    printf F "    UINT32_C(0x%x),\n", ($n-1) << 1;	      # hashmask
     printf F "    UINT32_C(%u),\n", $tbllen;		      # tbllen
     printf F "    %d,\n", $tbloffs;			      # tbloffs
     printf F "    (%s),\n", $errval;			      # errval

@@ -32,6 +32,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /** Implementation of {@link BookmarkOpener} which relies on intents. */
 @NullMarked
 public class BookmarkOpenerImpl implements BookmarkOpener {
@@ -73,6 +76,11 @@ public class BookmarkOpenerImpl implements BookmarkOpener {
     @Override
     public boolean openBookmarkInCurrentTab(BookmarkId id, boolean incognito) {
         if (id == null) return false;
+        // VAB-11250
+        if (BuildConfig.IS_VIVALDI && !mBookmarkModelSupplier.hasValue()) {
+            assert false;
+            return false;
+        }
         BookmarkItem item = mBookmarkModelSupplier.get().getBookmarkById(id);
         if (item == null) return false;
         maybeMarkReadingListItemAsRead(item);

@@ -117,7 +117,6 @@ void ReplaceSharedElementWithTexture(
       /*visible_rect=*/shared_element_quad.visible_rect,
       /*needs_blending=*/shared_element_quad.needs_blending,
       /*resource_id=*/resource_id,
-      /*premultiplied_alpha=*/true,
       /*uv_top_left=*/gfx::PointF(0, 0),
       /*uv_bottom_right=*/gfx::PointF(1, 1),
       /*background_color=*/SkColors::kTransparent,
@@ -158,7 +157,8 @@ SurfaceAnimationManager::SurfaceAnimationManager(
                      weak_factory_.GetMutableWeakPtr(),
                      std::move(sequence_id_finished_callback));
   saved_frame_.RequestCopyOfOutput(surface, std::move(copy_finished_callback));
-  empty_resource_ids_ = saved_frame_.GetEmptyResourceIds();
+  empty_resource_ids_ = saved_frame_.GetEmptyResourceIds(
+      surface->GetActiveFrame().render_pass_list);
   if (saved_frame_.IsValid() && !directive.maybe_cross_frame_sink()) {
     ImportTextures();
   }

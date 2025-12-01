@@ -103,6 +103,12 @@ class FromGwsAbandonedPageLoadMetricsObserverBrowserTest
     return url;
   }
 
+  GURL url_non_srp_error() {
+    GURL url(current_test_server()->GetURL("a.test", "/error"));
+    EXPECT_FALSE(page_load_metrics::IsGoogleSearchResultUrl(url));
+    return url;
+  }
+
   GURL GetTargetURLForMilestone(NavigationMilestone milestone) override {
     if (milestone ==
         NavigationMilestone::kFirstRedirectResponseLoaderCallback) {
@@ -120,6 +126,14 @@ class FromGwsAbandonedPageLoadMetricsObserverBrowserTest
     return http_response;
   }
 
+  std::unique_ptr<net::test_server::HttpResponse> DefaultNetErrorHandler(
+      const net::test_server::HttpRequest& request) {
+    auto http_response =
+        std::make_unique<net::test_server::BasicHttpResponse>();
+    http_response->set_code(net::HttpStatusCode::HTTP_INTERNAL_SERVER_ERROR);
+    return http_response;
+  }
+
   void SetUpOnMainThread() override {
     current_test_server()->RegisterDefaultHandler(
         base::BindRepeating(&net::test_server::HandlePrefixedRequest, "/search",
@@ -129,6 +143,12 @@ class FromGwsAbandonedPageLoadMetricsObserverBrowserTest
         base::BindRepeating(
             &FromGwsAbandonedPageLoadMetricsObserverBrowserTest::
                 DefaultRedirectHandler,
+            base::Unretained(this))));
+    current_test_server()->RegisterDefaultHandler(base::BindRepeating(
+        &net::test_server::HandlePrefixedRequest, "/error",
+        base::BindRepeating(
+            &FromGwsAbandonedPageLoadMetricsObserverBrowserTest::
+                DefaultNetErrorHandler,
             base::Unretained(this))));
     GWSAbandonedPageLoadMetricsObserverBrowserTest::SetUpOnMainThread();
   }
@@ -724,12 +744,12 @@ IN_PROC_BROWSER_TEST_F(FromGwsAbandonedPageLoadMetricsObserverBrowserTest,
       for (NavigationMilestone milestone : all_throttleable_milestones()) {
         content::TestNavigationThrottleInserter throttle_inserter(
             web_contents(),
-            base::BindLambdaForTesting([&](content::NavigationHandle* handle)
-                                           -> std::unique_ptr<
-                                               content::NavigationThrottle> {
-              if (handle->GetURL() != url_non_srp_2() &&
-                  handle->GetURL() != url_non_srp_redirect()) {
-                return nullptr;
+            base::BindLambdaForTesting([&](content::NavigationThrottleRegistry&
+                                               registry) -> void {
+              auto& handle = registry.GetNavigationHandle();
+              if (handle.GetURL() != url_non_srp_2() &&
+                  handle.GetURL() != url_non_srp_redirect()) {
+                return;
               }
               content::TestNavigationThrottle::ThrottleMethod method =
                   content::TestNavigationThrottle::WILL_START_REQUEST;
@@ -741,9 +761,9 @@ IN_PROC_BROWSER_TEST_F(FromGwsAbandonedPageLoadMetricsObserverBrowserTest,
                 method = content::TestNavigationThrottle::WILL_PROCESS_RESPONSE;
               }
               auto throttle =
-                  std::make_unique<content::TestNavigationThrottle>(handle);
+                  std::make_unique<content::TestNavigationThrottle>(registry);
               throttle->SetResponse(method, synchrony, action);
-              return throttle;
+              registry.AddThrottle(std::move(throttle));
             }));
         TestNavigationAbandonment(
             AbandonReason::kInternalCancellation, milestone,
@@ -770,12 +790,12 @@ IN_PROC_BROWSER_TEST_F(FromGwsAbandonedPageLoadMetricsObserverBrowserTest,
   for (NavigationMilestone milestone : all_throttleable_milestones()) {
     content::TestNavigationThrottleInserter throttle_inserter(
         web_contents(),
-        base::BindLambdaForTesting([&](content::NavigationHandle* handle)
-                                       -> std::unique_ptr<
-                                           content::NavigationThrottle> {
-          if (handle->GetURL() != url_non_srp_2() &&
-              handle->GetURL() != url_non_srp_redirect()) {
-            return nullptr;
+        base::BindLambdaForTesting([&](content::NavigationThrottleRegistry&
+                                           registry) -> void {
+          auto& handle = registry.GetNavigationHandle();
+          if (handle.GetURL() != url_non_srp_2() &&
+              handle.GetURL() != url_non_srp_redirect()) {
+            return;
           }
           content::TestNavigationThrottle::ThrottleMethod method =
               content::TestNavigationThrottle::WILL_START_REQUEST;
@@ -787,14 +807,14 @@ IN_PROC_BROWSER_TEST_F(FromGwsAbandonedPageLoadMetricsObserverBrowserTest,
             method = content::TestNavigationThrottle::WILL_PROCESS_RESPONSE;
           }
           auto throttle =
-              std::make_unique<content::TestNavigationThrottle>(handle);
+              std::make_unique<content::TestNavigationThrottle>(registry);
           throttle->SetResponse(
               method, content::TestNavigationThrottle::SYNCHRONOUS,
               milestone ==
                       NavigationMilestone::kNonRedirectResponseLoaderCallback
                   ? content::NavigationThrottle::BLOCK_RESPONSE
                   : content::NavigationThrottle::BLOCK_REQUEST);
-          return throttle;
+          registry.AddThrottle(std::move(throttle));
         }));
     TestNavigationAbandonment(
         AbandonReason::kErrorPage, milestone,
@@ -834,6 +854,40 @@ IN_PROC_BROWSER_TEST_F(FromGwsAbandonedPageLoadMetricsObserverBrowserTest,
           },
           web_contents()),
       std::nullopt, base::OnceCallback<void()>());
+}
+
+// Test navigations that are cancelled because of the server error. We should
+// record the net::Error if the cancelation is from the network error.
+IN_PROC_BROWSER_TEST_F(FromGwsAbandonedPageLoadMetricsObserverBrowserTest,
+                       CancelledByServerError) {
+  // Navigate to SRP page.
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url_srp()));
+
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  // Navigate to a redirected non-SRP page.
+  EXPECT_FALSE(content::NavigateToURL(web_contents(), url_non_srp_error()));
+
+  // Navigate to a non-SRP page to flush.
+  EXPECT_TRUE(content::NavigateToURL(web_contents(), url_non_srp()));
+
+  auto ukm_entries =
+      ukm_recorder.GetEntriesByName("Navigation.FromGoogleSearch.Abandoned");
+  const ukm::mojom::UkmEntry* ukm_entry = ukm_entries[0].get();
+  ukm_recorder.ExpectEntrySourceHasUrl(ukm_entry, url_non_srp_error());
+
+  ukm_recorder.ExpectEntryMetric(ukm_entry, "Net.ErrorCode",
+                                 -net::ERR_HTTP_RESPONSE_CODE_FAILURE);
+
+  ukm_recorder.ExpectEntryMetric(ukm_entry, "AbandonReason",
+                                 static_cast<int>(AbandonReason::kErrorPage));
+  ukm_recorder.ExpectEntryMetric(
+      ukm_entry, "LastMilestoneBeforeAbandon",
+      static_cast<int>(
+          NavigationMilestone::kNonRedirectResponseLoaderCallback));
+
+  CheckTimingInformationMetrics(
+      ukm_recorder, NavigationMilestone::kNonRedirectResponseLoaderCallback,
+      url_non_srp_error(), url_non_srp_error());
 }
 
 class FromGwsAbandonedPageLoadMetricsObserverWithImpressionBrowserTest

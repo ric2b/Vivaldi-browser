@@ -63,8 +63,10 @@ class ValuableSyncBridge : public base::SupportsUserData::Data,
       StorageKeyList storage_keys) override;
   std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;
   bool IsEntityDataValid(const syncer::EntityData& entity_data) const override;
-  std::string GetClientTag(const syncer::EntityData& entity_data) override;
-  std::string GetStorageKey(const syncer::EntityData& entity_data) override;
+  std::string GetClientTag(
+      const syncer::EntityData& entity_data) const override;
+  std::string GetStorageKey(
+      const syncer::EntityData& entity_data) const override;
   void ApplyDisableSyncChanges(std::unique_ptr<syncer::MetadataChangeList>
                                    delete_metadata_change_list) override;
   sync_pb::EntitySpecifics TrimAllSupportedFieldsFromRemoteSpecifics(
@@ -74,6 +76,11 @@ class ValuableSyncBridge : public base::SupportsUserData::Data,
   // Synchronously load sync metadata from the `ValuablesTable` and pass it to
   // the processor.
   void LoadMetadata();
+
+  // Sets the Wallet data from `entity_data` to this client and records metrics
+  // about added/deleted data. Returns a ModelError if any errors occured.
+  std::optional<syncer::ModelError> SetSyncData(
+      const syncer::EntityChangeList& entity_data);
 
   bool SyncMetadataCacheContainsSupportedFields(
       const syncer::EntityMetadataMap& metadata_map) const;

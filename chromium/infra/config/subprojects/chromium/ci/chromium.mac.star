@@ -607,6 +607,57 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
+    name = "mac15-arm64-rel-tests",
+    branch_selector = branches.selector.MAC_BRANCHES,
+    description_html = "Runs MacOS 15 tests on ARM machines",
+    triggered_by = ["ci/mac-arm64-rel"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_arch = builder_config.target_arch.ARM,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_mac_gtests",
+            "chromium_mac_rel_isolated_scripts",
+        ],
+        mixins = [
+            # Only run selected test suites on CQ. https://crbug.com/1234525.
+            "ci_only",
+            "mac_15_arm64",
+        ],
+        per_test_modifications = {
+            "browser_tests": targets.remove(
+                reason = "https://crbug.com/1406364",
+            ),
+            "interactive_ui_tests": targets.mixin(
+                ci_only = False,
+                swarming = targets.swarming(
+                    shards = 7,
+                ),
+            ),
+        },
+    ),
+    tree_closing = False,
+    console_view_entry = consoles.console_view_entry(
+        category = "release|arm64",
+        short_name = "15",
+    ),
+    contact_team_email = "bling-engprod@google.com",
+)
+
+ci.thin_tester(
     name = "Mac11 Tests",
     branch_selector = branches.selector.MAC_BRANCHES,
     triggered_by = ["ci/Mac Builder"],
@@ -863,9 +914,9 @@ ci.thin_tester(
 )
 
 ci.thin_tester(
-    name = "mac14-tests-dbg",
+    name = "mac15-tests-dbg",
     branch_selector = branches.selector.MAC_BRANCHES,
-    description_html = "Runs Mac 14 tests with debug config.",
+    description_html = "Runs Mac 15 tests with debug config.",
     triggered_by = ["ci/Mac Builder (dbg)"],
     builder_spec = builder_config.builder_spec(
         execution_mode = builder_config.execution_mode.TEST,
@@ -890,7 +941,7 @@ ci.thin_tester(
             "chromium_dbg_isolated_scripts",
         ],
         mixins = [
-            "mac_14_x64",
+            "mac_15_x64",
         ],
         per_test_modifications = {
             "blink_web_tests": targets.mixin(
@@ -907,14 +958,8 @@ ci.thin_tester(
                 ),
             ),
             "browser_tests": targets.remove(
-                reason = "TODO(crbug.com/338402345): Enable if there is enough capacity after Mac 14 upgrades.",
+                reason = "https://crbug.com/1406364",
             ),
-            # "browser_tests": targets.mixin(
-            #     # crbug.com/1196416
-            #     args = [
-            #         "--test-launcher-filter-file=../../testing/buildbot/filters/mac.mac-rel.browser_tests.filter",
-            #     ],
-            # ),
             "content_browsertests": targets.mixin(
                 # https://crbug.com/1279504
                 swarming = targets.swarming(
@@ -952,7 +997,7 @@ ci.thin_tester(
     gardener_rotations = args.ignore_default(None),
     console_view_entry = consoles.console_view_entry(
         category = "debug",
-        short_name = "14",
+        short_name = "15",
     ),
     cq_mirrors_console_view = "mirrors",
     contact_team_email = "bling-engprod@google.com",
@@ -1047,6 +1092,97 @@ ci.thin_tester(
     console_view_entry = consoles.console_view_entry(
         category = "mac",
         short_name = "14",
+    ),
+    contact_team_email = "bling-engprod@google.com",
+)
+
+ci.thin_tester(
+    name = "mac15-x64-rel-tests",
+    branch_selector = branches.selector.MAC_BRANCHES,
+    description_html = "Runs default MacOS 15 tests on CI.",
+    triggered_by = ["ci/Mac Builder"],
+    builder_spec = builder_config.builder_spec(
+        execution_mode = builder_config.execution_mode.TEST,
+        gclient_config = builder_config.gclient_config(
+            config = "chromium",
+        ),
+        chromium_config = builder_config.chromium_config(
+            config = "chromium",
+            apply_configs = [
+                "mb",
+            ],
+            build_config = builder_config.build_config.RELEASE,
+            target_bits = 64,
+            target_platform = builder_config.target_platform.MAC,
+        ),
+    ),
+    targets = targets.bundle(
+        targets = [
+            "chromium_mac_gtests_no_nacl",
+            "chromium_mac_rel_isolated_scripts",
+            "gtests_once",
+        ],
+        mixins = [
+            "mac_15_x64",
+            "isolate_profile_data",
+        ],
+        per_test_modifications = {
+            "blink_web_tests": targets.mixin(
+                swarming = targets.swarming(
+                    dimensions = {
+                        "gpu": None,
+                    },
+                    shards = 12,
+                ),
+            ),
+            "blink_wpt_tests": targets.mixin(
+                swarming = targets.swarming(
+                    dimensions = {
+                        "gpu": None,
+                    },
+                    shards = 6,
+                ),
+            ),
+            "browser_tests": targets.mixin(
+                ci_only = True,
+                swarming = targets.swarming(
+                    # crbug.com/1361887
+                    shards = 20,
+                ),
+            ),
+            "content_browsertests": targets.mixin(
+                # Only retry the individual failed tests instead of rerunning
+                # entire shards.
+                # crbug.com/1475852
+                retry_only_failed_tests = True,
+                swarming = targets.swarming(
+                    shards = 12,
+                ),
+            ),
+            "interactive_ui_tests": targets.mixin(
+                swarming = targets.swarming(
+                    shards = 6,
+                ),
+            ),
+            "sync_integration_tests": targets.mixin(
+                ci_only = True,
+                swarming = targets.swarming(
+                    shards = 4,
+                ),
+            ),
+            "telemetry_perf_unittests": targets.mixin(
+                ci_only = True,
+            ),
+            "unit_tests": targets.mixin(
+                swarming = targets.swarming(
+                    shards = 2,
+                ),
+            ),
+        },
+    ),
+    console_view_entry = consoles.console_view_entry(
+        category = "mac",
+        short_name = "15",
     ),
     contact_team_email = "bling-engprod@google.com",
 )

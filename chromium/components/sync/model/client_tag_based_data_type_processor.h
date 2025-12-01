@@ -28,6 +28,7 @@
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_error.h"
 #include "components/sync/model/processor_entity_tracker.h"
+#include "google_apis/gaia/gaia_id.h"
 
 namespace sync_pb {
 class DataTypeState;
@@ -86,7 +87,7 @@ class ClientTagBasedDataTypeProcessor : public DataTypeProcessor,
   void OnModelStarting(DataTypeSyncBridge* bridge) override;
   void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) override;
   bool IsTrackingMetadata() const override;
-  std::string TrackedAccountId() const override;
+  GaiaId TrackedGaiaId() const override;
   std::string TrackedCacheGuid() const override;
   void ReportError(const ModelError& error) override;
   std::optional<ModelError> GetError() const override;
@@ -132,7 +133,7 @@ class ClientTagBasedDataTypeProcessor : public DataTypeProcessor,
   void OnSyncStarting(const DataTypeActivationRequest& request,
                       StartCallback callback) override;
   void OnSyncStopping(SyncStopMetadataFate metadata_fate) override;
-  void HasUnsyncedData(base::OnceCallback<void(bool)> callback) override;
+  void GetUnsyncedDataCount(base::OnceCallback<void(size_t)> callback) override;
   void GetAllNodesForDebugging(AllNodesCallback callback) override;
   void GetTypeEntitiesCountForDebugging(
       base::OnceCallback<void(const TypeEntitiesCount&)> callback)

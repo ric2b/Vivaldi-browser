@@ -415,8 +415,7 @@
 - (void)removeBrowsingDataForTimePeriod:(browsing_data::TimePeriod)timePeriod
                              removeMask:(BrowsingDataRemoveMask)removeMask
                         completionBlock:(ProceduralBlock)completionBlock {
-  CHECK(timePeriod != browsing_data::TimePeriod::LAST_15_MINUTES,
-        base::NotFatalUntil::M130);
+  CHECK(timePeriod != browsing_data::TimePeriod::LAST_15_MINUTES);
   Browser* browser = self.browser;
   ProfileIOS* profile = self.profile;
   PrefService* prefService = self.prefService;
@@ -629,7 +628,7 @@
   }
   NSArray* timeRangeItems = [self.tableViewModel
       itemsInSectionWithIdentifier:SectionIdentifierTimeRange];
-  CHECK_EQ(timeRangeItems.count, 1u, base::NotFatalUntil::M130);
+  CHECK_EQ(timeRangeItems.count, 1u);
   TableViewDetailIconItem* timeRangeItem = timeRangeItems[0];
   CHECK([timeRangeItem isKindOfClass:[TableViewDetailIconItem class]]);
   if (!timeRangeItem.detailText) {
@@ -679,7 +678,7 @@
                             view:itemView
         forceSnackbarOverToolbar:NO
                       withSource:signout_source_metric
-                      completion:^(BOOL success) {
+                      completion:^(BOOL success, SceneState* scene_state) {
                         [weakSelf handleAuthenticationOperationDidFinish];
                       }];
   _signoutCoordinator.showUnavailableFeatureDialogHeader = YES;

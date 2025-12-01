@@ -538,6 +538,8 @@ enum DeviceType {
   TABLET = 2;
   LAPTOP = 3;
   CAR = 4;
+  FOLDABLE = 5;
+  XR = 6;
 }
 
 // TODO(fdi): may eventually include windows, iOS, etc.
@@ -836,6 +838,7 @@ enum AttachmentSourceType {
   ATTACHMENT_SOURCE_SELECT_FILES_BUTTON = 3;
   ATTACHMENT_SOURCE_PASTE = 4;
   ATTACHMENT_SOURCE_SELECT_FOLDERS_BUTTON = 5;
+  ATTACHMENT_SOURCE_SHARE_ACTIVATION = 6;
 }
 
 // The action to interact with preferences.

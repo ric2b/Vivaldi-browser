@@ -28,9 +28,12 @@
                  completion:(void (^)(BOOL))completion;
 
 /// Responds to a search image with Lens request by creating a new Lens UI with
-/// the given image. The completion is called once the UI is presented.
+/// the given image. The overlay will be shown over the specified
+/// initial presentation base.
+/// The completion is called once the UI is presented.
 - (void)searchWithLensImageMetadata:(id<LensImageMetadata>)metadata
                          entrypoint:(LensOverlayEntrypoint)entrypoint
+            initialPresentationBase:(UIViewController*)initialPresentationBase
                          completion:(void (^)(BOOL))completion;
 
 /// Display the lens overlay, if it exists.
@@ -42,6 +45,15 @@
 /// Destroy lens overlay (called e.g. in response to memory pressure).
 - (void)destroyLensUI:(BOOL)animated
                reason:(lens::LensOverlayDismissalSource)dismissalSource;
+
+/// Destroy lens overlay (called e.g. in response to memory pressure).
+/// Completion is called when the Lens Overlay is destroyed.
+- (void)destroyLensUI:(BOOL)animated
+               reason:(lens::LensOverlayDismissalSource)dismissalSource
+           completion:(void (^)())completion;
+
+/// Prepares for a tab change that is about to happen in the background.
+- (void)prepareLensUIForBackgroundTabChange;
 
 @end
 

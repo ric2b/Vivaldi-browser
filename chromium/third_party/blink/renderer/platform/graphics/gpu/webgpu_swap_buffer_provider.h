@@ -43,6 +43,12 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
     virtual void OnTextureTransferred() = 0;
     virtual void InitializeLayer(cc::Layer* layer) = 0;
     virtual void SetNeedsCompositingUpdate() = 0;
+    // Check whether GPUDevice is destroyed. wgpu::Device doesn't have interface
+    // to check device destroyed state.
+    // TODO(crbug.com/370694819): Move device destroy fallback logics from
+    // renderer process to gpu process so that we can detect device destroy
+    // immediately.
+    virtual bool IsGPUDeviceDestroyed() = 0;
   };
 
   WebGPUSwapBufferProvider(
@@ -58,6 +64,7 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
 
   viz::SharedImageFormat Format() const;
   wgpu::TextureFormat TextureFormat() const { return format_; }
+  wgpu::TextureUsage TextureUsage() const { return usage_; }
   gfx::Size Size() const;
   cc::Layer* CcLayer();
   void Neuter();
@@ -91,8 +98,6 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
       SourceDrawingBuffer src_buffer,
       const gfx::ColorSpace& dst_color_space,
       WebGraphicsContext3DVideoFramePool::FrameReadyCallback callback);
-
-  scoped_refptr<WebGPUMailboxTexture> GetLastWebGPUMailboxTexture() const;
 
   base::WeakPtr<WebGraphicsContext3DProviderWrapper> GetContextProviderWeakPtr()
       const;
@@ -143,9 +148,11 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
     ~SwapBuffer() override;
   };
 
-  void MailboxReleased(scoped_refptr<SwapBuffer> swap_buffer,
-                       const gpu::SyncToken& sync_token,
-                       bool lost_resource);
+  static void MailboxReleased(base::WeakPtr<WebGPUSwapBufferProvider> provider,
+                              base::PlatformThreadRef thread_ref,
+                              scoped_refptr<SwapBuffer> swap_buffer,
+                              const gpu::SyncToken& sync_token,
+                              bool lost_resource);
 
   // This method will dissociate current Dawn Texture (produced by
   // GetNewTexture()) from the mailbox so that the mailbox can be used by other
@@ -170,11 +177,12 @@ class PLATFORM_EXPORT WebGPUSwapBufferProvider
   // Pool of SwapBuffers which manages creation, release and recycling of
   // SwapBuffer resources.
   std::unique_ptr<gpu::SharedImagePool<SwapBuffer>> swap_buffer_pool_;
-  scoped_refptr<SwapBuffer> last_swap_buffer_;
   scoped_refptr<SwapBuffer> current_swap_buffer_;
 
   scoped_refptr<gpu::ClientSharedImage> front_buffer_shared_image_;
   gpu::SyncToken front_buffer_sync_token_;
+
+  base::WeakPtrFactory<WebGPUSwapBufferProvider> weak_ptr_factory_{this};
 };
 
 }  // namespace blink

@@ -22,7 +22,7 @@
 #include "quiche/quic/moqt/moqt_publisher.h"
 #include "quiche/quic/moqt/moqt_subscribe_windows.h"
 #include "quiche/common/platform/api/quiche_bug_tracker.h"
-#include "quiche/common/platform/api/quiche_mem_slice.h"
+#include "quiche/common/quiche_mem_slice.h"
 
 namespace moqt {
 
@@ -33,28 +33,36 @@ void MoqtOutgoingQueue::AddObject(quiche::QuicheMemSlice payload, bool key) {
            "flag.";
     return;
   }
-
-  if (key) {
-    if (!queue_.empty()) {
-      AddRawObject(MoqtObjectStatus::kEndOfGroup, quiche::QuicheMemSlice());
-    }
-
-    if (queue_.size() == kMaxQueuedGroups) {
-      queue_.erase(queue_.begin());
-      for (MoqtObjectListener* listener : listeners_) {
-        listener->OnGroupAbandoned(current_group_id_ - kMaxQueuedGroups + 1);
-      }
-    }
-    queue_.emplace_back();
-    ++current_group_id_;
+  if (closed_) {
+    QUICHE_BUG(MoqtOutgoingQueue_AddObject_closed)
+        << "Trying to send objects on a closed queue.";
+    return;
   }
 
+  if (key) {
+    OpenNewGroup();
+  }
   AddRawObject(MoqtObjectStatus::kNormal, std::move(payload));
+}
+
+void MoqtOutgoingQueue::OpenNewGroup() {
+  if (!queue_.empty()) {
+    AddRawObject(MoqtObjectStatus::kEndOfGroup, quiche::QuicheMemSlice());
+  }
+
+  if (queue_.size() == kMaxQueuedGroups) {
+    queue_.erase(queue_.begin());
+    for (MoqtObjectListener* listener : listeners_) {
+      listener->OnGroupAbandoned(current_group_id_ - kMaxQueuedGroups + 1);
+    }
+  }
+  queue_.emplace_back();
+  ++current_group_id_;
 }
 
 void MoqtOutgoingQueue::AddRawObject(MoqtObjectStatus status,
                                      quiche::QuicheMemSlice payload) {
-  FullSequence sequence{current_group_id_, queue_.back().size()};
+  Location sequence{current_group_id_, queue_.back().size()};
   bool fin = forwarding_preference_ == MoqtForwardingPreference::kSubgroup &&
              status == MoqtObjectStatus::kEndOfGroup;
   queue_.back().push_back(
@@ -67,9 +75,9 @@ void MoqtOutgoingQueue::AddRawObject(MoqtObjectStatus status,
 }
 
 std::optional<PublishedObject> MoqtOutgoingQueue::GetCachedObject(
-    FullSequence sequence) const {
+    Location sequence) const {
   if (sequence.group < first_group_in_queue()) {
-    return PublishedObject{FullSequence{sequence.group, sequence.object},
+    return PublishedObject{Location{sequence.group, sequence.object},
                            MoqtObjectStatus::kGroupDoesNotExist,
                            publisher_priority_, quiche::QuicheMemSlice(),
                            clock_->ApproximateNow()};
@@ -86,9 +94,9 @@ std::optional<PublishedObject> MoqtOutgoingQueue::GetCachedObject(
   return CachedObjectToPublishedObject(group[sequence.object]);
 }
 
-std::vector<FullSequence> MoqtOutgoingQueue::GetCachedObjectsInRange(
-    FullSequence start, FullSequence end) const {
-  std::vector<FullSequence> sequences;
+std::vector<Location> MoqtOutgoingQueue::GetCachedObjectsInRange(
+    Location start, Location end) const {
+  std::vector<Location> sequences;
   SubscribeWindow window(start, end.group, end.object);
   for (const Group& group : queue_) {
     for (const CachedObject& object : group) {
@@ -101,34 +109,37 @@ std::vector<FullSequence> MoqtOutgoingQueue::GetCachedObjectsInRange(
 }
 
 absl::StatusOr<MoqtTrackStatusCode> MoqtOutgoingQueue::GetTrackStatus() const {
+  if (closed_) {
+    return MoqtTrackStatusCode::kFinished;
+  }
   if (queue_.empty()) {
     return MoqtTrackStatusCode::kNotYetBegun;
   }
   return MoqtTrackStatusCode::kInProgress;
 }
 
-FullSequence MoqtOutgoingQueue::GetLargestSequence() const {
+Location MoqtOutgoingQueue::GetLargestLocation() const {
   if (queue_.empty()) {
-    QUICHE_BUG(MoqtOutgoingQueue_GetLargestSequence_not_begun)
-        << "Calling GetLargestSequence() on a track that hasn't begun";
-    return FullSequence{0, 0};
+    QUICHE_BUG(MoqtOutgoingQueue_GetLargestLocation_not_begun)
+        << "Calling GetLargestLocation() on a track that hasn't begun";
+    return Location{0, 0};
   }
-  return FullSequence{current_group_id_, queue_.back().size() - 1};
+  return Location{current_group_id_, queue_.back().size() - 1};
 }
 
 std::unique_ptr<MoqtFetchTask> MoqtOutgoingQueue::Fetch(
-    FullSequence start, uint64_t end_group, std::optional<uint64_t> end_object,
+    Location start, uint64_t end_group, std::optional<uint64_t> end_object,
     MoqtDeliveryOrder order) {
   if (queue_.empty()) {
     return std::make_unique<MoqtFailedFetch>(
         absl::NotFoundError("No objects available on the track"));
   }
 
-  FullSequence end = FullSequence(
+  Location end = Location(
       end_group, end_object.value_or(std::numeric_limits<uint64_t>::max()));
-  FullSequence first_available_object = FullSequence(first_group_in_queue(), 0);
-  FullSequence last_available_object =
-      FullSequence(current_group_id_, queue_.back().size() - 1);
+  Location first_available_object = Location(first_group_in_queue(), 0);
+  Location last_available_object =
+      Location(current_group_id_, queue_.back().size() - 1);
 
   if (end < first_available_object) {
     return std::make_unique<MoqtFailedFetch>(
@@ -139,9 +150,9 @@ std::unique_ptr<MoqtFetchTask> MoqtOutgoingQueue::Fetch(
         absl::NotFoundError("All of the requested objects are in the future"));
   }
 
-  FullSequence adjusted_start = std::max(start, first_available_object);
-  FullSequence adjusted_end = std::min(end, last_available_object);
-  std::vector<FullSequence> objects =
+  Location adjusted_start = std::max(start, first_available_object);
+  Location adjusted_end = std::min(end, last_available_object);
+  std::vector<Location> objects =
       GetCachedObjectsInRange(adjusted_start, adjusted_end);
   if (order == MoqtDeliveryOrder::kDescending) {
     absl::c_reverse(objects);
@@ -191,6 +202,18 @@ MoqtOutgoingQueue::FetchTask::GetNextObjectInner(PublishedObject& object) {
   object = *std::move(result);
   objects_.pop_front();
   return kSuccess;
+}
+
+void MoqtOutgoingQueue::Close() {
+  if (closed_) {
+    QUICHE_BUG(MoqtOutgoingQueue_Close_twice)
+        << "Trying to close an outgoing queue that is already closed.";
+    return;
+  }
+  closed_ = true;
+
+  OpenNewGroup();
+  AddRawObject(MoqtObjectStatus::kEndOfTrack, {});
 }
 
 }  // namespace moqt

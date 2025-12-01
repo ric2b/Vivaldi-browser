@@ -6,6 +6,7 @@
 
 #include "base/json/json_writer.h"
 #include "base/strings/escape.h"
+#include "base/strings/stringprintf.h"
 
 namespace autofill::payments {
 
@@ -38,7 +39,7 @@ std::string GetBnplPaymentInstrumentForFetchingVcnRequest::GetRequestUrlPath() {
 
 std::string
 GetBnplPaymentInstrumentForFetchingVcnRequest::GetRequestContentType() {
-  return "application/json/x-www-form-urlencoded";
+  return "application/x-www-form-urlencoded";
 }
 
 std::string GetBnplPaymentInstrumentForFetchingVcnRequest::GetRequestContent() {

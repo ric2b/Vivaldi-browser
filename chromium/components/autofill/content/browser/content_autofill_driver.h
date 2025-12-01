@@ -241,9 +241,8 @@ class ContentAutofillDriver : public AutofillDriver,
   void RendererShouldTriggerSuggestions(
       const FieldGlobalId& field_id,
       AutofillSuggestionTriggerSource trigger_source) override;
-  void SendTypePredictionsToRenderer(
-      base::span<const raw_ptr<FormStructure, VectorExperimental>> forms)
-      override;
+  void SendTypePredictionsToRenderer(const FormStructure& form) override;
+  void ExposeDomNodeIDs() override;
 
   // Group (1c): browser -> renderer events, directed to to this driver's main
   // driver (see comment above).
@@ -274,11 +273,12 @@ class ContentAutofillDriver : public AutofillDriver,
 
   // Group (2b): renderer -> browser events, routed (see comment above).
   // mojom::AutofillDriver:
-  void AskForValuesToFill(
-      const FormData& form,
-      FieldRendererId field_id,
-      const gfx::Rect& caret_bounds,
-      AutofillSuggestionTriggerSource trigger_source) override;
+  void AskForValuesToFill(const FormData& form,
+                          FieldRendererId field_id,
+                          const gfx::Rect& caret_bounds,
+                          AutofillSuggestionTriggerSource trigger_source,
+                          const std::optional<PasswordSuggestionRequest>&
+                              password_request) override;
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override;
   void FocusOnFormField(const FormData& form,

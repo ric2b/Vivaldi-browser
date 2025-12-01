@@ -67,7 +67,7 @@
 <translation id="2144536955299248197">憑證檢視者：<ph name="CERTIFICATE_NAME" /></translation>
 <translation id="2148892889047469596">投放分頁</translation>
 <translation id="2150139952286079145">搜尋印表機</translation>
-<translation id="215753907730220065">結束全螢幕</translation>
+<translation id="215753907730220065">退出全螢幕模式</translation>
 <translation id="2158475082070321257">複製圈選文字的連結</translation>
 <translation id="2177950615300672361">無痕模式下的分頁：<ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">原生用戶端模組：<ph name="NEXE_NAME" /></translation>
@@ -327,7 +327,7 @@
 <translation id="6315493146179903667">全部移至最上層</translation>
 <translation id="6326855256003666642">Keepalive 數量</translation>
 <translation id="6374469231428023295">再試一次</translation>
-<translation id="6398765197997659313">結束全螢幕模式</translation>
+<translation id="6398765197997659313">退出全螢幕模式</translation>
 <translation id="6406303162637086258">模擬瀏覽器重新啟動</translation>
 <translation id="6445450263907939268">如果您不想套用這些變更，可以還原為先前的設定。</translation>
 <translation id="6447842834002726250">Cookie</translation>

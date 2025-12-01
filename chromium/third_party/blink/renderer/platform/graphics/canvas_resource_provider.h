@@ -217,8 +217,8 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   // CanvasResourceProviderSharedImage overrides these methods as part of
   // implementing resource recycling.
-  virtual void OnResourceReturnedFromCompositor(
-      scoped_refptr<CanvasResource>&&) {}
+  virtual void OnResourceRefReturned(
+      scoped_refptr<CanvasResourceSharedImage>&&) {}
   virtual void SetResourceRecyclingEnabled(bool) {}
   virtual void ClearUnusedResources() {}
 
@@ -228,6 +228,8 @@ class PLATFORM_EXPORT CanvasResourceProvider
   // Returns true iff the resource provider is (a) using a GPU channel for
   // software SharedImages and (b) that channel has been lost.
   virtual bool IsSoftwareSharedImageGpuChannelLost() const;
+  static void NotifyGpuContextLostTask(base::WeakPtr<CanvasResourceProvider>);
+
   virtual bool WritePixels(const SkImageInfo& orig_info,
                            const void* pixels,
                            size_t row_bytes,
@@ -296,7 +298,7 @@ class PLATFORM_EXPORT CanvasResourceProvider
 
   ResourceProviderType GetType() const { return type_; }
 
-  void OnDestroyResource();
+  virtual void OnDestroyResource() {}
 
   virtual void OnAcquireRecyclableCanvasResource() {}
   virtual void OnDestroyRecyclableCanvasResource(
@@ -329,23 +331,20 @@ class PLATFORM_EXPORT CanvasResourceProvider
   // `completion_sync_token` which will satisfy after the image copy completes.
   // In practice, this API can be used to replace a resource with the contents
   // of an AcceleratedStaticBitmapImage or with a WebGPUMailboxTexture.
-  bool OverwriteImage(const scoped_refptr<gpu::ClientSharedImage>& shared_image,
-                      const gfx::Rect& copy_rect,
-                      const gpu::SyncToken& ready_sync_token,
-                      gpu::SyncToken& completion_sync_token);
-
-  struct UnusedResource {
-    UnusedResource(base::TimeTicks last_use,
-                   scoped_refptr<CanvasResource> resource)
-        : last_use(last_use), resource(std::move(resource)) {}
-    base::TimeTicks last_use;
-    scoped_refptr<CanvasResource> resource;
-  };
+  virtual bool OverwriteImage(
+      const scoped_refptr<gpu::ClientSharedImage>& shared_image,
+      const gfx::Rect& copy_rect,
+      const gpu::SyncToken& ready_sync_token,
+      gpu::SyncToken& completion_sync_token) {
+    return false;
+  }
 
   virtual bool HasUnusedResourcesForTesting() const { return false; }
-  bool unused_resources_reclaim_timer_is_running_for_testing() const {
-    return unused_resources_reclaim_timer_.IsRunning();
+  virtual bool unused_resources_reclaim_timer_is_running_for_testing() const {
+    return false;
   }
+  virtual int NumInflightResourcesForTesting() const { return 0; }
+
   constexpr static base::TimeDelta kUnusedResourceExpirationTime =
       base::Seconds(5);
 
@@ -398,21 +397,6 @@ class PLATFORM_EXPORT CanvasResourceProvider
   void OnMemoryDump(base::trace_event::ProcessMemoryDump*) override;
 
   CanvasResourceHost* resource_host() { return resource_host_; }
-
-  // Returns whether `resource` is usable. Returns true by default, but
-  // subclasses may override this to do implementation-specific checks.
-  // Unusable resources will be dropped when returned rather than put back into
-  // the cache.
-  virtual bool IsResourceUsable(CanvasResource* resource) { return true; }
-
-  // IsResourceUsable() must be true for `resource`.
-  void RegisterUnusedResource(scoped_refptr<CanvasResource>&& resource);
-
-  // TODO(crbug.com/352263194): Move these fields inside of
-  // CanvasResourceProviderSharedImage.
-  int num_inflight_resources_ = 0;
-  int max_inflight_resources_ = 0;
-  base::OneShotTimer unused_resources_reclaim_timer_;
 
  private:
   friend class FlushForImageListener;

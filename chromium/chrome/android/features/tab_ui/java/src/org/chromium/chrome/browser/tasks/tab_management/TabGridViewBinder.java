@@ -39,6 +39,8 @@ import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActio
 import org.chromium.chrome.browser.tasks.tab_management.TabListMediator.TabActionListener;
 import org.chromium.chrome.browser.tasks.tab_management.TabProperties.TabActionState;
 import org.chromium.chrome.tab_ui.R;
+import org.chromium.components.browser_ui.util.motion.MotionEventInfo;
+import org.chromium.components.browser_ui.util.motion.OnPeripheralClickListener;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.widget.ChromeImageView;
@@ -197,6 +199,8 @@ class TabGridViewBinder {
             TabActionListener tabActionListener = data == null ? null : data.tabActionListener;
             setNullableClickListener(
                     tabActionListener, view.fastFindViewById(R.id.action_button), model);
+            setNullablePeripheralClickListener(
+                    tabActionListener, view.fastFindViewById(R.id.action_button), model);
 
             boolean showOverflowButton =
                     data == null ? false : data.type == TabActionButtonType.OVERFLOW;
@@ -258,12 +262,19 @@ class TabGridViewBinder {
 
     private static void bindSelectableTabProperties(
             PropertyModel model, ViewLookupCachingFrameLayout view, PropertyKey propertyKey) {
-        final int tabId = model.get(TabProperties.TAB_ID);
-
         if (TabProperties.TAB_SELECTION_DELEGATE == propertyKey) {
+            TabListEditorItemSelectionId itemId;
+            if (model.containsKey(TabProperties.TAB_GROUP_SYNC_ID)) {
+                String syncId = model.get(TabProperties.TAB_GROUP_SYNC_ID);
+                itemId = TabListEditorItemSelectionId.createTabGroupSyncId(syncId);
+            } else {
+                int tabId = model.get(TabProperties.TAB_ID);
+                itemId = TabListEditorItemSelectionId.createTabId(tabId);
+            }
+
             ((TabGridView) view)
                     .setSelectionDelegate(model.get(TabProperties.TAB_SELECTION_DELEGATE));
-            ((TabGridView) view).setItem(tabId);
+            ((TabGridView) view).setItem(itemId);
         } else if (TabProperties.IS_SELECTED == propertyKey
                 || TabProperties.TAB_ACTION_BUTTON_DATA == propertyKey) {
             updateColorForSelectionToggleButton(
@@ -284,10 +295,39 @@ class TabGridViewBinder {
             view.setOnClickListener(null);
         } else {
             view.setOnClickListener(
-                    v -> {
-                        listener.run(v, propertyModel.get(TabProperties.TAB_ID));
-                    });
+                    v ->
+                            runTabActionListener(
+                                    listener, v, propertyModel, /* triggeringMotion= */ null));
         }
+    }
+
+    /**
+     * Sets an {@link OnPeripheralClickListener} on the given view to intercept clicks from
+     * peripherals.
+     *
+     * <p>Note that this method cannot replace {@link #setNullableClickListener(TabActionListener,
+     * View, PropertyModel)} as an {@link android.view.View.OnClickListener} is needed to handle
+     * clicks not from peripherals, accessibility actions, and the "confirm" key event.
+     *
+     * @param tabActionListener the {@link TabActionListener} to run when a click is detected.
+     * @param view the View to receive clicks.
+     * @param propertyModel contains data to determine how to run the {@link TabActionListener}.
+     */
+    static void setNullablePeripheralClickListener(
+            @Nullable TabActionListener tabActionListener,
+            @NonNull View view,
+            @NonNull PropertyModel propertyModel) {
+        if (tabActionListener == null) {
+            view.setOnTouchListener(null);
+            return;
+        }
+
+        view.setOnTouchListener(
+                new OnPeripheralClickListener(
+                        view,
+                        triggeringMotion ->
+                                runTabActionListener(
+                                        tabActionListener, view, propertyModel, triggeringMotion)));
     }
 
     static void setNullableLongClickListener(
@@ -299,9 +339,23 @@ class TabGridViewBinder {
         } else {
             view.setOnLongClickListener(
                     v -> {
-                        listener.run(v, propertyModel.get(TabProperties.TAB_ID));
+                        runTabActionListener(
+                                listener, v, propertyModel, /* triggeringMotion= */ null);
                         return true;
                     });
+        }
+    }
+
+    private static void runTabActionListener(
+            @NonNull TabActionListener tabActionListener,
+            @NonNull View view,
+            @NonNull PropertyModel propertyModel,
+            @Nullable MotionEventInfo triggeringMotion) {
+        if (propertyModel.containsKey(TabProperties.TAB_GROUP_SYNC_ID)) {
+            tabActionListener.run(
+                    view, propertyModel.get(TabProperties.TAB_GROUP_SYNC_ID), triggeringMotion);
+        } else {
+            tabActionListener.run(view, propertyModel.get(TabProperties.TAB_ID), triggeringMotion);
         }
     }
 

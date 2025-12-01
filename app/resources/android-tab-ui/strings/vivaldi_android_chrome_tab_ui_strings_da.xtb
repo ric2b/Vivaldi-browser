@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="da">
-<translation id="2277224997687551299">Rediger gruppenavn</translation>
+<translation id="1062777154504442433">Ny fanestak</translation>
+<translation id="1625440863545383011">Fjern fane og forlad stak</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Bogmærk fane}
           other {Bogmærk faner}
         }</translation>
 <translation id="2947471979790858922">Din aktivitet i disse private faner fjernes fra denne enhed</translation>
+<translation id="3298614730029636660">Forlad stak</translation>
+<translation id="354698175756845966">Rediger stakfarve</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Du kan finde dine lukkede faner i Seneste faner under Vivaldi-hovedmenuen. Din private fane er ikke tilgængelig.}
         other {Du kan finde dine lukkede faner i Seneste faner under Vivaldi-hovedmenuen. Dine # private faner er ikke tilgængelige.}}</translation>
-<translation id="4460014764210899310">Ophæv gruppe</translation>
 <translation id="4871187110787939393">Luk alle private faner?</translation>
 <translation id="5494920125229734069">Vælg alle</translation>
-<translation id="6744956528665271406">Rediger gruppefarve</translation>
+<translation id="6807841890213931603">Fjern fane og slet stak</translation>
+<translation id="750227952939161636">Dine fanestakke gemmes og opdateres automatisk mellem alle dine indloggede enheder</translation>
+<translation id="7640137753339219124">Slet stak</translation>
+<translation id="7653857400289671414">Dine fanestakke gemmes automatisk</translation>
+<translation id="8440938071054361204">Rediger staknavn</translation>
+<translation id="8602902357364871325">Luk stak</translation>
+<translation id="8851621822786801079">Fjern fra stak</translation>
 </translationbundle>

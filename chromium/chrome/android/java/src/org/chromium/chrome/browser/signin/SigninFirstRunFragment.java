@@ -23,6 +23,7 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 import androidx.fragment.app.Fragment;
 
+import org.chromium.base.BuildInfo;
 import org.chromium.base.Promise;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.task.PostTask;
@@ -78,7 +79,8 @@ public class SigninFirstRunFragment extends Fragment
                         mModalDialogManager,
                         this,
                         PrivacyPreferencesManagerImpl.getInstance(),
-                        new FullscreenSigninConfig(),
+                        new FullscreenSigninConfig(
+                                /* shouldDisableSignin= */ BuildInfo.getInstance().isAutomotive),
                         SigninAccessPoint.START_PAGE);
 
         if (getPageDelegate().isLaunchedFromCct()) {
@@ -124,7 +126,9 @@ public class SigninFirstRunFragment extends Fragment
 
     @Override
     public View onCreateView(
-            LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+            LayoutInflater inflater,
+            @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
         mFragmentView = new FrameLayout(getActivity());
         mMainView = inflateFragmentView(inflater, getActivity());
         mFragmentView.addView(mMainView);

@@ -99,31 +99,29 @@
 
 #pragma mark - UITextViewDelegate
 
-// Handle taps on the UITextView links and call the corresponding actions.
-- (BOOL)textView:(UITextView*)textView
-    shouldInteractWithURL:(NSURL*)URL
-         inRange:(NSRange)characterRange
-        interaction:(UITextItemInteraction)interaction {
+- (UIAction*)textView:(UITextView*)textView
+primaryActionForTextItem:(UITextItem*)textItem
+        defaultAction:(UIAction*) defaultAction {
+  __weak __typeof__(self) weakSelf = self;
+  return [UIAction actionWithHandler:^(UIAction* action) {
+    __strong __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) return;
+    NSString *URLString = [textItem.link absoluteString];
 
-  NSString *URLString = [URL absoluteString];
-
-  if (URLString == vVivaldiTermsOfServiceUrl) {
-    if (self.onTermsDidTap) {
-      self.onTermsDidTap(URL,
-          l10n_util::GetNSString(
-              IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_LICENSE_TITLE));
+    if (URLString == vVivaldiTermsOfServiceUrl) {
+      if (self.onTermsDidTap) {
+        self.onTermsDidTap(textItem.link,
+            l10n_util::GetNSString(
+                IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_LICENSE_TITLE));
+      }
+    } else if (URLString == vVivaldiCommunityPrivacyUrl) {
+      if (self.onPrivacyPolicyDidTap) {
+        self.onPrivacyPolicyDidTap(textItem.link,
+            l10n_util::GetNSString(
+                  IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_PRIVACY_TITLE));
+      }
     }
-  } else if (URLString == vVivaldiCommunityPrivacyUrl) {
-    if (self.onPrivacyPolicyDidTap) {
-      self.onPrivacyPolicyDidTap(URL,
-          l10n_util::GetNSString(
-                IDS_VIVALDI_IOS_ONBOARDING_START_AGREEMENT_PRIVACY_TITLE));
-    }
-  }
-
-  // Prevent default action (opening the URL) as we handle it
-  // on the callback
-  return NO;
+  }];
 }
 
 @end

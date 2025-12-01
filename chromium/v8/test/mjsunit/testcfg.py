@@ -84,7 +84,7 @@ class TestCase(testcase.D8TestCase):
     source = self.get_source()
 
     files_list = []  # List of file names to append to command arguments.
-    files_match = FILES_PATTERN.search(source);
+    files_match = FILES_PATTERN.search(source)
     # Accept several lines of 'Files:'.
     while True:
       if files_match:
@@ -127,13 +127,13 @@ class TestCase(testcase.D8TestCase):
     return self._source_flags
 
   def _get_files_params(self):
-    files = list(self._source_files)
+    files = []
     if not self.test_config.no_harness:
       files += self._mjsunit_files
+    files += list(self._source_files)
     files += self._files_suffix
     if self.test_config.isolates:
       files += ['--isolate'] + files
-
     return files
 
   def _get_cmd_env(self):

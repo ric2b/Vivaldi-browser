@@ -162,7 +162,7 @@ void ChromeTailoredSecurityService::DidAddTab(TabAndroid* tab,
   TailoredSecurityTimestampUpdateCallback();
 }
 
-void ChromeTailoredSecurityService::OnTabModelAdded() {
+void ChromeTailoredSecurityService::OnTabModelAdded(TabModel* tab_model) {
   if (observed_tab_model_) {
     return;
   }
@@ -170,7 +170,7 @@ void ChromeTailoredSecurityService::OnTabModelAdded() {
   AddTabModelObserver();
 }
 
-void ChromeTailoredSecurityService::OnTabModelRemoved() {
+void ChromeTailoredSecurityService::OnTabModelRemoved(TabModel* tab_model) {
   if (!observed_tab_model_) {
     return;
   }

@@ -48,10 +48,11 @@ WideString GetLowerCaseElementAttributeOrDefault(
     const WideString& wsName,
     const WideString& wsDefaultValue) {
   WideString ws = pElement->GetAttribute(wsName);
-  if (ws.IsEmpty())
+  if (ws.IsEmpty()) {
     ws = wsDefaultValue;
-  else
+  } else {
     ws.MakeLower();
+  }
   return ws;
 }
 
@@ -62,28 +63,30 @@ CXFA_TextParser::CXFA_TextParser() = default;
 CXFA_TextParser::~CXFA_TextParser() = default;
 
 void CXFA_TextParser::Reset() {
-  m_mapXMLNodeToParseContext.clear();
-  m_bParsed = false;
+  map_xmlnode_to_parse_context_.clear();
+  parsed_ = false;
 }
 
 void CXFA_TextParser::InitCSSData(CXFA_TextProvider* pTextProvider) {
-  if (!pTextProvider)
+  if (!pTextProvider) {
     return;
-
-  if (!m_pSelector) {
-    m_pSelector = std::make_unique<CFX_CSSStyleSelector>();
-
-    CXFA_Font* font = pTextProvider->GetFontIfExists();
-    m_pSelector->SetDefaultFontSize(font ? font->GetFontSize() : 10.0f);
   }
 
-  if (m_cssInitialized)
-    return;
+  if (!selector_) {
+    selector_ = std::make_unique<CFX_CSSStyleSelector>();
 
-  m_cssInitialized = true;
+    CXFA_Font* font = pTextProvider->GetFontIfExists();
+    selector_->SetDefaultFontSize(font ? font->GetFontSize() : 10.0f);
+  }
+
+  if (css_initialized_) {
+    return;
+  }
+
+  css_initialized_ = true;
   auto uaSheet = LoadDefaultSheetStyle();
-  m_pSelector->SetUAStyleSheet(std::move(uaSheet));
-  m_pSelector->UpdateStyleIndex();
+  selector_->SetUAStyleSheet(std::move(uaSheet));
+  selector_->UpdateStyleIndex();
 }
 
 std::unique_ptr<CFX_CSSStyleSheet> CXFA_TextParser::LoadDefaultSheetStyle() {
@@ -99,8 +102,9 @@ std::unique_ptr<CFX_CSSStyleSheet> CXFA_TextParser::LoadDefaultSheetStyle() {
       "sub{vertical-align:-15em;font-size:.66em}";
   WideString ws = WideString::FromASCII(kStyle);
   auto sheet = std::make_unique<CFX_CSSStyleSheet>();
-  if (!sheet->LoadBuffer(ws.AsStringView()))
+  if (!sheet->LoadBuffer(ws.AsStringView())) {
     return nullptr;
+  }
 
   return sheet;
 }
@@ -108,7 +112,7 @@ std::unique_ptr<CFX_CSSStyleSheet> CXFA_TextParser::LoadDefaultSheetStyle() {
 RetainPtr<CFX_CSSComputedStyle> CXFA_TextParser::CreateRootStyle(
     CXFA_TextProvider* pTextProvider) {
   CXFA_Para* para = pTextProvider->GetParaIfExists();
-  auto pStyle = m_pSelector->CreateComputedStyle(nullptr);
+  auto pStyle = selector_->CreateComputedStyle(nullptr);
   float fLineHeight = 0;
   float fFontSize = 10;
 
@@ -159,12 +163,14 @@ RetainPtr<CFX_CSSComputedStyle> CXFA_TextParser::CreateRootStyle(
     letterSpacing.Set(CFX_CSSLengthUnit::Point, font->GetLetterSpacing());
     pStyle->SetLetterSpacing(letterSpacing);
     Mask<CFX_CSSTEXTDECORATION> dwDecoration;
-    if (font->GetLineThrough() > 0)
+    if (font->GetLineThrough() > 0) {
       dwDecoration |= CFX_CSSTEXTDECORATION::kLineThrough;
-    if (font->GetUnderline() > 1)
+    }
+    if (font->GetUnderline() > 1) {
       dwDecoration |= CFX_CSSTEXTDECORATION::kDouble;
-    else if (font->GetUnderline() > 0)
+    } else if (font->GetUnderline() > 0) {
       dwDecoration |= CFX_CSSTEXTDECORATION::kUnderline;
+    }
 
     pStyle->SetTextDecoration(dwDecoration);
   }
@@ -175,55 +181,62 @@ RetainPtr<CFX_CSSComputedStyle> CXFA_TextParser::CreateRootStyle(
 
 RetainPtr<CFX_CSSComputedStyle> CXFA_TextParser::CreateStyle(
     const CFX_CSSComputedStyle* pParentStyle) {
-  auto pNewStyle = m_pSelector->CreateComputedStyle(pParentStyle);
+  auto pNewStyle = selector_->CreateComputedStyle(pParentStyle);
   DCHECK(pNewStyle);
-  if (!pParentStyle)
+  if (!pParentStyle) {
     return pNewStyle;
+  }
 
   Mask<CFX_CSSTEXTDECORATION> dwDecoration = pParentStyle->GetTextDecoration();
   float fBaseLine = 0;
-  if (pParentStyle->GetVerticalAlign() == CFX_CSSVerticalAlign::Number)
+  if (pParentStyle->GetVerticalAlign() == CFX_CSSVerticalAlign::Number) {
     fBaseLine = pParentStyle->GetNumberVerticalAlign();
+  }
 
   pNewStyle->SetTextDecoration(dwDecoration);
   pNewStyle->SetNumberVerticalAlign(fBaseLine);
 
   const CFX_CSSRect* pRect = pParentStyle->GetMarginWidth();
-  if (pRect)
+  if (pRect) {
     pNewStyle->SetMarginWidth(*pRect);
+  }
   return pNewStyle;
 }
 
 RetainPtr<CFX_CSSComputedStyle> CXFA_TextParser::ComputeStyle(
     const CFX_XMLNode* pXMLNode,
     RetainPtr<const CFX_CSSComputedStyle> pParentStyle) {
-  auto it = m_mapXMLNodeToParseContext.find(pXMLNode);
-  if (it == m_mapXMLNodeToParseContext.end())
+  auto it = map_xmlnode_to_parse_context_.find(pXMLNode);
+  if (it == map_xmlnode_to_parse_context_.end()) {
     return nullptr;
+  }
 
   Context* pContext = it->second.get();
-  if (!pContext)
+  if (!pContext) {
     return nullptr;
+  }
 
   pContext->SetParentStyle(pParentStyle);
 
   auto tagProvider = ParseTagInfo(pXMLNode);
-  if (tagProvider->m_bContent)
+  if (tagProvider->content_) {
     return nullptr;
+  }
 
   auto pStyle = CreateStyle(pParentStyle);
-  m_pSelector->ComputeStyle(pContext->GetDecls(),
-                            tagProvider->GetAttribute(L"style"),
-                            tagProvider->GetAttribute(L"align"), pStyle.Get());
+  selector_->ComputeStyle(pContext->GetDecls(),
+                          tagProvider->GetAttribute(L"style"),
+                          tagProvider->GetAttribute(L"align"), pStyle.Get());
   return pStyle;
 }
 
 void CXFA_TextParser::DoParse(const CFX_XMLNode* pXMLContainer,
                               CXFA_TextProvider* pTextProvider) {
-  if (!pXMLContainer || !pTextProvider || m_bParsed)
+  if (!pXMLContainer || !pTextProvider || parsed_) {
     return;
+  }
 
-  m_bParsed = true;
+  parsed_ = true;
   InitCSSData(pTextProvider);
   auto pRootStyle = CreateRootStyle(pTextProvider);
   ParseRichText(pXMLContainer, pRootStyle.Get());
@@ -231,33 +244,35 @@ void CXFA_TextParser::DoParse(const CFX_XMLNode* pXMLContainer,
 
 void CXFA_TextParser::ParseRichText(const CFX_XMLNode* pXMLNode,
                                     const CFX_CSSComputedStyle* pParentStyle) {
-  if (!pXMLNode)
+  if (!pXMLNode) {
     return;
+  }
 
   auto tagProvider = ParseTagInfo(pXMLNode);
-  if (!tagProvider->m_bTagAvailable)
+  if (!tagProvider->tag_available_) {
     return;
+  }
 
   RetainPtr<CFX_CSSComputedStyle> pNewStyle;
   if (!(tagProvider->GetTagName().EqualsASCII("body") &&
         tagProvider->GetTagName().EqualsASCII("html"))) {
     auto pTextContext = std::make_unique<Context>();
     CFX_CSSDisplay eDisplay = CFX_CSSDisplay::Inline;
-    if (!tagProvider->m_bContent) {
-      auto declArray =
-          m_pSelector->MatchDeclarations(tagProvider->GetTagName());
+    if (!tagProvider->content_) {
+      auto declArray = selector_->MatchDeclarations(tagProvider->GetTagName());
       pNewStyle = CreateStyle(pParentStyle);
-      m_pSelector->ComputeStyle(declArray, tagProvider->GetAttribute(L"style"),
-                                tagProvider->GetAttribute(L"align"),
-                                pNewStyle.Get());
+      selector_->ComputeStyle(declArray, tagProvider->GetAttribute(L"style"),
+                              tagProvider->GetAttribute(L"align"),
+                              pNewStyle.Get());
 
-      if (!declArray.empty())
+      if (!declArray.empty()) {
         pTextContext->SetDecls(std::move(declArray));
+      }
 
       eDisplay = pNewStyle->GetDisplay();
     }
     pTextContext->SetDisplay(eDisplay);
-    m_mapXMLNodeToParseContext[pXMLNode] = std::move(pTextContext);
+    map_xmlnode_to_parse_context_[pXMLNode] = std::move(pTextContext);
   }
 
   for (CFX_XMLNode* pXMLChild = pXMLNode->GetFirstChild(); pXMLChild;
@@ -294,16 +309,17 @@ std::unique_ptr<CXFA_TextParser::TagProvider> CXFA_TextParser::ParseTagInfo(
   if (pXMLElement) {
     WideString wsName = pXMLElement->GetLocalTagName();
     tagProvider->SetTagName(wsName);
-    tagProvider->m_bTagAvailable = TagValidate(wsName);
+    tagProvider->tag_available_ = TagValidate(wsName);
     WideString wsValue = pXMLElement->GetAttribute(L"style");
-    if (!wsValue.IsEmpty())
+    if (!wsValue.IsEmpty()) {
       tagProvider->SetAttribute(L"style", wsValue);
+    }
 
     return tagProvider;
   }
   if (pXMLNode->GetType() == CFX_XMLNode::Type::kText) {
-    tagProvider->m_bTagAvailable = true;
-    tagProvider->m_bContent = true;
+    tagProvider->tag_available_ = true;
+    tagProvider->content_ = true;
   }
   return tagProvider;
 }
@@ -317,15 +333,17 @@ XFA_AttributeValue CXFA_TextParser::GetVAlign(
 float CXFA_TextParser::GetTabInterval(
     const CFX_CSSComputedStyle* pStyle) const {
   WideString wsValue;
-  if (pStyle && pStyle->GetCustomStyle(L"tab-interval", &wsValue))
+  if (pStyle && pStyle->GetCustomStyle(L"tab-interval", &wsValue)) {
     return CXFA_Measurement(wsValue.AsStringView()).ToUnit(XFA_Unit::Pt);
+  }
   return 36;
 }
 
 int32_t CXFA_TextParser::CountTabs(const CFX_CSSComputedStyle* pStyle) const {
   WideString wsValue;
-  if (pStyle && pStyle->GetCustomStyle(L"xfa-tab-count", &wsValue))
+  if (pStyle && pStyle->GetCustomStyle(L"xfa-tab-count", &wsValue)) {
     return wsValue.GetInteger();
+  }
   return 0;
 }
 
@@ -373,8 +391,9 @@ RetainPtr<CFGAS_GEFont> CXFA_TextParser::GetFont(
 
 float CXFA_TextParser::GetFontSize(CXFA_TextProvider* pTextProvider,
                                    const CFX_CSSComputedStyle* pStyle) const {
-  if (pStyle)
+  if (pStyle) {
     return pStyle->GetFontSize();
+  }
 
   CXFA_Font* font = pTextProvider->GetFontIfExists();
   return font ? font->GetFontSize() : 10;
@@ -385,12 +404,13 @@ int32_t CXFA_TextParser::GetHorScale(CXFA_TextProvider* pTextProvider,
                                      const CFX_XMLNode* pXMLNode) const {
   if (pStyle) {
     WideString wsValue;
-    if (pStyle->GetCustomStyle(L"xfa-font-horizontal-scale", &wsValue))
+    if (pStyle->GetCustomStyle(L"xfa-font-horizontal-scale", &wsValue)) {
       return wsValue.GetInteger();
+    }
 
     while (pXMLNode) {
-      auto it = m_mapXMLNodeToParseContext.find(pXMLNode);
-      if (it != m_mapXMLNodeToParseContext.end()) {
+      auto it = map_xmlnode_to_parse_context_.find(pXMLNode);
+      if (it != map_xmlnode_to_parse_context_.end()) {
         Context* pContext = it->second.get();
         if (pContext && pContext->GetParentStyle() &&
             pContext->GetParentStyle()->GetCustomStyle(
@@ -410,8 +430,9 @@ int32_t CXFA_TextParser::GetVerScale(CXFA_TextProvider* pTextProvider,
                                      const CFX_CSSComputedStyle* pStyle) const {
   if (pStyle) {
     WideString wsValue;
-    if (pStyle->GetCustomStyle(L"xfa-font-vertical-scale", &wsValue))
+    if (pStyle->GetCustomStyle(L"xfa-font-vertical-scale", &wsValue)) {
       return wsValue.GetInteger();
+    }
   }
 
   CXFA_Font* font = pTextProvider->GetFontIfExists();
@@ -422,14 +443,17 @@ int32_t CXFA_TextParser::GetUnderline(
     CXFA_TextProvider* pTextProvider,
     const CFX_CSSComputedStyle* pStyle) const {
   CXFA_Font* font = pTextProvider->GetFontIfExists();
-  if (!pStyle)
+  if (!pStyle) {
     return font ? font->GetUnderline() : 0;
+  }
 
   const Mask<CFX_CSSTEXTDECORATION> dwDecoration = pStyle->GetTextDecoration();
-  if (dwDecoration & CFX_CSSTEXTDECORATION::kDouble)
+  if (dwDecoration & CFX_CSSTEXTDECORATION::kDouble) {
     return 2;
-  if (dwDecoration & CFX_CSSTEXTDECORATION::kUnderline)
+  }
+  if (dwDecoration & CFX_CSSTEXTDECORATION::kUnderline) {
     return 1;
+  }
   return 0;
 }
 
@@ -459,8 +483,9 @@ int32_t CXFA_TextParser::GetLinethrough(
 
 FX_ARGB CXFA_TextParser::GetColor(CXFA_TextProvider* pTextProvider,
                                   const CFX_CSSComputedStyle* pStyle) const {
-  if (pStyle)
+  if (pStyle) {
     return pStyle->GetColor();
+  }
 
   CXFA_Font* font = pTextProvider->GetFontIfExists();
   return font ? font->GetColor() : 0xFF000000;
@@ -469,12 +494,14 @@ FX_ARGB CXFA_TextParser::GetColor(CXFA_TextProvider* pTextProvider,
 float CXFA_TextParser::GetBaseline(CXFA_TextProvider* pTextProvider,
                                    const CFX_CSSComputedStyle* pStyle) const {
   if (pStyle) {
-    if (pStyle->GetVerticalAlign() == CFX_CSSVerticalAlign::Number)
+    if (pStyle->GetVerticalAlign() == CFX_CSSVerticalAlign::Number) {
       return pStyle->GetNumberVerticalAlign();
+    }
   } else {
     CXFA_Font* font = pTextProvider->GetFontIfExists();
-    if (font)
+    if (font) {
       return font->GetBaselineShift();
+    }
   }
   return 0;
 }
@@ -488,16 +515,18 @@ float CXFA_TextParser::GetLineHeight(CXFA_TextProvider* pTextProvider,
     fLineHeight = pStyle->GetLineHeight();
   } else {
     CXFA_Para* para = pTextProvider->GetParaIfExists();
-    if (para)
+    if (para) {
       fLineHeight = para->GetLineHeight();
+    }
   }
 
   if (bFirst) {
     float fFontSize = GetFontSize(pTextProvider, pStyle);
-    if (fLineHeight < 0.1f)
+    if (fLineHeight < 0.1f) {
       fLineHeight = fFontSize;
-    else
+    } else {
       fLineHeight = std::min(fLineHeight, fFontSize);
+    }
   } else if (fLineHeight < 0.1f) {
     fLineHeight = GetFontSize(pTextProvider, pStyle) * 1.2f;
   }
@@ -508,43 +537,50 @@ float CXFA_TextParser::GetLineHeight(CXFA_TextProvider* pTextProvider,
 std::optional<WideString> CXFA_TextParser::GetEmbeddedObj(
     const CXFA_TextProvider* pTextProvider,
     const CFX_XMLNode* pXMLNode) {
-  if (!pXMLNode)
+  if (!pXMLNode) {
     return std::nullopt;
+  }
 
   const CFX_XMLElement* pElement = ToXMLElement(pXMLNode);
-  if (!pElement)
+  if (!pElement) {
     return std::nullopt;
+  }
 
   WideString wsAttr = pElement->GetAttribute(L"xfa:embed");
-  if (wsAttr.IsEmpty())
+  if (wsAttr.IsEmpty()) {
     return std::nullopt;
+  }
 
-  if (wsAttr[0] == L'#')
+  if (wsAttr[0] == L'#') {
     wsAttr.Delete(0);
+  }
 
   WideString ws =
       GetLowerCaseElementAttributeOrDefault(pElement, L"xfa:embedType", L"som");
-  if (!ws.EqualsASCII("uri"))
+  if (!ws.EqualsASCII("uri")) {
     return std::nullopt;
+  }
 
   ws = GetLowerCaseElementAttributeOrDefault(pElement, L"xfa:embedMode",
                                              L"formatted");
-  if (!(ws.EqualsASCII("raw") || ws.EqualsASCII("formatted")))
+  if (!(ws.EqualsASCII("raw") || ws.EqualsASCII("formatted"))) {
     return std::nullopt;
+  }
 
   return pTextProvider->GetEmbeddedObj(wsAttr);
 }
 
 CXFA_TextParser::Context* CXFA_TextParser::GetParseContextFromMap(
     const CFX_XMLNode* pXMLNode) {
-  auto it = m_mapXMLNodeToParseContext.find(pXMLNode);
-  return it != m_mapXMLNodeToParseContext.end() ? it->second.get() : nullptr;
+  auto it = map_xmlnode_to_parse_context_.find(pXMLNode);
+  return it != map_xmlnode_to_parse_context_.end() ? it->second.get() : nullptr;
 }
 
 bool CXFA_TextParser::GetTabstops(const CFX_CSSComputedStyle* pStyle,
                                   CXFA_TextTabstopsContext* pTabstopContext) {
-  if (!pStyle || !pTabstopContext)
+  if (!pStyle || !pTabstopContext) {
     return false;
+  }
 
   WideString wsValue;
   if (!pStyle->GetCustomStyle(L"xfa-tab-stops", &wsValue) &&
@@ -573,8 +609,9 @@ bool CXFA_TextParser::GetTabstops(const CFX_CSSComputedStyle* pStyle,
           wsAlign = WideStringView(spTabStops.subspan(iLast, iCur - iLast));
           eStatus = TabStopStatus::StartLeader;
           iCur++;
-          while (iCur < spTabStops.size() && spTabStops[iCur] <= ' ')
+          while (iCur < spTabStops.size() && spTabStops[iCur] <= ' ') {
             iCur++;
+          }
           iLast = iCur;
         } else {
           iCur++;
@@ -592,12 +629,14 @@ bool CXFA_TextParser::GetTabstops(const CFX_CSSComputedStyle* pStyle,
               iCount++;
             } else if (ch == ')') {
               iCount--;
-              if (iCount == 0)
+              if (iCount == 0) {
                 break;
+              }
             }
           }
-          while (iCur < spTabStops.size() && spTabStops[iCur] <= ' ')
+          while (iCur < spTabStops.size() && spTabStops[iCur] <= ' ') {
             iCur++;
+          }
 
           iLast = iCur;
           eStatus = TabStopStatus::Location;
@@ -640,7 +679,7 @@ CXFA_TextParser::Context::~Context() = default;
 
 void CXFA_TextParser::Context::SetParentStyle(
     RetainPtr<const CFX_CSSComputedStyle> style) {
-  m_pParentStyle = std::move(style);
+  parent_style_ = std::move(style);
 }
 
 void CXFA_TextParser::Context::SetDecls(

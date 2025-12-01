@@ -462,6 +462,7 @@ Det här är några saker du kan testa för att komma igång.</translation>
 <translation id="2530896289327917474">Aktivera eller inaktivera textmarkörläge</translation>
 <translation id="2531025035050312891">långsam enhet</translation>
 <translation id="2531107890083353124">Tryck på <ph name="KEY_ONE" /> medan du drar fliken</translation>
+<translation id="2532199152994248594">Dra eller tryck på mellanslag för att välja ett område att ta en bild av</translation>
 <translation id="2545334090614121435">Försöker du använda Home-tangenten? Använd</translation>
 <translation id="254900897760075745">Kopiera markerat innehåll till Urklipp</translation>
 <translation id="2549711466868162843">Bättre ljus</translation>
@@ -581,7 +582,6 @@ Annars aktiveras den inbyggda styrplattan igen om <ph name="TIMEOUT_SECONDS" />.
 <translation id="2949420361496057765">Tryck på <ph name="MODIFIER" /> och klicka på en länk</translation>
 <translation id="2957159466053076448">Du kan när som helst inaktivera dessa funktioner i inställningarna. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Ljud på enheten</translation>
-<translation id="2960314608273155470">Läge för skärmbild/skärminspelning, standard är <ph name="SOURCE" /> <ph name="TYPE" />. Tryck på tabb om du vill navigera med tangentbordet.</translation>
 <translation id="2961963223658824723">Ett fel har uppstått. Försök igen om några sekunder.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Vill du aktivera mikrofonåtkomst?</translation>
@@ -761,6 +761,7 @@ Annars aktiveras den inbyggda styrplattan igen om <ph name="TIMEOUT_SECONDS" />.
 <translation id="3552189655002856821">wifi är inaktiverat</translation>
 <translation id="3554215588514239132">Visa eller dölj panelen för utvecklarverktyg</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> har fästs</translation>
+<translation id="3554928024630051016">Om du vill lägga till ytterligare USB-enheter kan du testa att ta bort en och sedan ansluta en ny</translation>
 <translation id="3558768885091059911">Vill du aktivera åtkomst till kameran och mikrofonen?</translation>
 <translation id="3560174576767922131">Spela in video</translation>
 <translation id="3563775809269155755">Aktivera surfzon</translation>
@@ -868,6 +869,7 @@ Anslut enheten till en strömkälla.</translation>
 <translation id="3861651314799684201">Tryck på retur för att spela in hela skärmen</translation>
 <translation id="3870197372373144624">Testa att stänga av enheten.</translation>
 <translation id="3879748587602334249">Nedladdningshanterare</translation>
+<translation id="3884007280698606545">USB-gränsen har nåtts</translation>
 <translation id="3886872229787704059">Öppnades i dag</translation>
 <translation id="3891340733213178823">Tryck på Ctrl+Skift+Q två gånger om du vill logga ut.</translation>
 <translation id="3892148308691398805">Kopiera text</translation>
@@ -1440,6 +1442,7 @@ Inga enheter är anslutna.</translation>
 <translation id="5672890847723042801">Verktyg</translation>
 <translation id="5673434351075758678">Från <ph name="FROM_LOCALE" /> till <ph name="TO_LOCALE" /> efter synkronisering av inställningarna.</translation>
 <translation id="5675363643668471212">Hyllobjekt</translation>
+<translation id="5677022547882470786">Dra eller tryck på mellanslag för att välja ett sökområde</translation>
 <translation id="5677928146339483299">Blockerat</translation>
 <translation id="5678564054339031017">Visa nästa vecka</translation>
 <translation id="5679050765726761783">En nätadapter med låg effekt upptäcktes</translation>
@@ -1485,6 +1488,7 @@ Inga enheter är anslutna.</translation>
 <translation id="5788127256798019331">Play-filer</translation>
 <translation id="5788535737706478207">Öppna den senast stängda fliken eller det senast stängda fönstret igen</translation>
 <translation id="5790085346892983794">Klart</translation>
+<translation id="5791926618942305301">Ange <ph name="SOURCE" /> <ph name="TYPE" /> under Skärmbild/skärminspelning. Tryck på Tabb för att välja typ av skärmbild/skärminspelning. Tryck på Retur för ta en skärmbild eller spela in. Om du vill välja ett område för skärmbild/skärminspelning kan du använda Ta en skärmbild av en del av skärmen. Om funktionen inte redan är aktiv trycker du på mellanslag för att välja område.</translation>
 <translation id="579415080077680903">Ljudlös</translation>
 <translation id="5802516411616338943">Öppna Snabbinställningar</translation>
 <translation id="5804651031882187592">Inaktivera inställningen Lås SIM</translation>
@@ -1641,6 +1645,7 @@ Inga enheter är anslutna.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> kan läggas till igen senare med en förälders tillstånd.</translation>
 <translation id="6291221004442998378">Laddar inte</translation>
 <translation id="6298183524022479114">Anpassa enheten i appen</translation>
+<translation id="6304076460080088478">Stäng eller minimera inkognitofönster för att söka på skärmen med Google Lens</translation>
 <translation id="6309219492973062892">Klicka eller tryck på hyllikon 1–8</translation>
 <translation id="6315170314923504164">Mikrofon</translation>
 <translation id="6319058840130157106">Flytta bakåt mellan det nedre högra hörnet, Appstartaren, adressfältet, bokmärkesfältet, webbplatsen som är öppen och nedladdningar</translation>
@@ -1769,6 +1774,7 @@ Nyligen installerad</translation>
 <translation id="6700713906295497288">IME-menyknapp</translation>
 <translation id="6704073473590541209">Du har valt handtaget för höger kant – använd piltangenterna för att flytta det</translation>
 <translation id="6706742084323792866">Fäst tangentbord</translation>
+<translation id="6709719156428404245">Dra eller tryck på mellanslag för att välja ett område att spela in</translation>
 <translation id="6710213216561001401">Föregående</translation>
 <translation id="6723839937902243910">Batteri</translation>
 <translation id="672609503628871915">Kolla nyheterna</translation>

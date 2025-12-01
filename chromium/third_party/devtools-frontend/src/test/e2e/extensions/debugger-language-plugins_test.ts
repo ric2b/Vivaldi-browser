@@ -104,7 +104,7 @@ describe('The Debugger Language Plugins', () => {
     await extension.evaluate(() => {
       // A simple plugin that resolves to a single source file
       class SingleFilePlugin {
-        async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
+        async addRawModule(_rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const fileUrl = new URL('/source_file.c', rawModule.url || symbols);
           return [fileUrl.href];
         }
@@ -501,10 +501,6 @@ describe('The Debugger Language Plugins', () => {
         /* allowFileAccess */ true);
     await extension.evaluate(() => {
       class MissingInfoPlugin {
-        private modules = new Map<string, {
-          rawLocationRange?: Chrome.DevTools.RawLocationRange,
-          sourceLocations?: Chrome.DevTools.SourceLocation[],
-        }>();
         async addRawModule() {
           return {missingSymbolFiles: ['test.wasm']};
         }
@@ -989,7 +985,7 @@ describe('The Debugger Language Plugins', () => {
         constructor() {
         }
 
-        async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
+        async addRawModule(_rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           const sourceFileURL = new URL('can_access_wasm_data.wat', rawModule.url || symbols).href;
           return [sourceFileURL];
         }
@@ -1010,7 +1006,7 @@ describe('The Debugger Language Plugins', () => {
     const locationLabels =
         WasmLocationLabels.load('extensions/can_access_wasm_data.wat', 'extensions/can_access_wasm_data.wasm');
     await locationLabels.setBreakpointInWasmAndRun(
-        'BREAK(can_access_wasm_data)', 'window.Module.instance.exports.exported_func(4)');
+        'BREAK(can_access_wasm_data)', 'window.Module.instance.exports.exported_func(4n)');
 
     const mem = await extension.evaluate(async () => {
       const buffer = await chrome.devtools.languageServices.getWasmLinearMemory(0, 10, 0n);
@@ -1024,8 +1020,14 @@ describe('The Debugger Language Plugins', () => {
     const global = await extension.evaluate(() => chrome.devtools.languageServices.getWasmGlobal(0, 0n));
     assert.deepEqual(global, {type: 'i32', value: 0xdad});
 
-    const local = await extension.evaluate(() => chrome.devtools.languageServices.getWasmLocal(0, 0n));
-    assert.deepEqual(local, {type: 'i32', value: 4});
+    const local = await extension.evaluate(async () => {
+      const {type, value} = (await chrome.devtools.languageServices.getWasmLocal(0, 0n)) as
+          Exclude<Chrome.DevTools.WasmValue, Chrome.DevTools.ForeignObject>;
+      // Page#evaluate can't return bigint property values.
+      return {type, value: `${value}`, valueType: typeof value};
+    });
+
+    assert.deepEqual(local, {type: 'i64', value: '4', valueType: 'bigint'});
 
     const local2 = await extension.evaluate(() => chrome.devtools.languageServices.getWasmLocal(1, 0n));
     assert.deepEqual(local2, {type: 'i32', value: 0});
@@ -1060,7 +1062,7 @@ describe('The Debugger Language Plugins', () => {
     await extension.evaluate(() => {
       // A simple plugin that resolves to a single source file
       class DWARFSymbolsWithSingleFilePlugin {
-        async addRawModule(rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
+        async addRawModule(_rawModuleId: string, symbols: string, rawModule: Chrome.DevTools.RawModule) {
           if (symbols !== 'foobar81') {
             return [];
           }

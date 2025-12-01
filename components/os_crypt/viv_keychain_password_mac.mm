@@ -16,26 +16,17 @@ std::string KeychainPassword::GetPassword(
   // Vivaldi function to access the keychain for other apps, not Vivaldi Safe
   // Storage, e.g. for other chromium based browsers
 
-  UInt32 password_length = 0;
-  void* password_data = NULL;
-  OSStatus error = keychain_->FindGenericPassword(service_name.size(),
-                                                 service_name.data(),
-                                                 account_name.size(),
-                                                 account_name.data(),
-                                                 &password_length,
-                                                 &password_data,
-                                                 NULL);
+  auto password = keychain_->FindGenericPassword(service_name, account_name);
 
-  if (error == noErr) {
-    std::string password =
-    std::string(static_cast<char*>(password_data), password_length);
-    keychain_->ItemFreeContent(password_data);
-    return password;
-  } else if (error == errSecItemNotFound) {
-    // The requested account has no passwords in keychain, we can stop
-    return std::string();
-  } else {
-    OSSTATUS_DLOG(ERROR, error) << "Keychain lookup failed";
-    return std::string();
+  if (password.has_value()) {
+    return std::string(base::as_string_view(*password));
   }
+
+  if (password.error() != errSecItemNotFound) {
+    OSSTATUS_DLOG(ERROR, password.error()) << "Keychain lookup failed";
+  }
+
+  // Either error was encountered OR
+  // The requested account has no passwords in keychain, we can stop
+  return std::string();
 }

@@ -16,7 +16,6 @@
 #import "ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/set_up_list_item_view_data.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
-#import "ios/chrome/browser/segmentation_platform/model/segmented_default_browser_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/crossfade_label.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -84,47 +83,34 @@ struct ViewConfig {
   if (self) {
     _type = data.type;
     _complete = data.complete;
-
     if (data.compactLayout) {
       // ViewConfig for a compact layout.
       int syncString =
           IDS_IOS_SET_UP_LIST_SIGN_IN_SYNC_SHORT_DESCRIPTION_NO_SYNC;
-      int notificationsString =
-          IsIOSTipsNotificationsEnabled()
-              ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION
-              : IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_SHORT_DESCRIPTION;
       int defaultBrowserString =
-          IsSegmentedDefaultBrowserPromoEnabled()
-              ? GetSetUpListDefaultBrowserDescriptionStringID(data.userSegment)
-              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SHORT_DESCRIPTION;
+          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SHORT_DESCRIPTION;
       _config = {
           YES,
           NO,
           syncString,
           defaultBrowserString,
           IDS_IOS_SET_UP_LIST_AUTOFILL_SHORT_DESCRIPTION,
-          notificationsString,
+          IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION,
           UIFontTextStyleFootnote,
           UIFontTextStyleCaption2,
           kCompactTextSpacing,
       };
     } else if (data.heroCellMagicStackLayout) {
       int syncString = IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL;
-      int notificationsString =
-          IsIOSTipsNotificationsEnabled()
-              ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION
-              : IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION;
       int defaultBrowserString =
-          IsSegmentedDefaultBrowserPromoEnabled()
-              ? GetSetUpListDefaultBrowserDescriptionStringID(data.userSegment)
-              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_MAGIC_STACK_DESCRIPTION;
+          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_MAGIC_STACK_DESCRIPTION;
       _config = {
           NO,
           YES,
           syncString,
           defaultBrowserString,
           IDS_IOS_SET_UP_LIST_AUTOFILL_MAGIC_STACK_DESCRIPTION,
-          notificationsString,
+          IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION,
           UIFontTextStyleSubheadline,
           UIFontTextStyleFootnote,
           kTextSpacing,
@@ -132,21 +118,15 @@ struct ViewConfig {
     } else {
       // Normal ViewConfig.
       int syncString = IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL;
-      int notificationsString =
-          IsIOSTipsNotificationsEnabled()
-              ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION
-              : IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION;
       int defaultBrowserString =
-          IsSegmentedDefaultBrowserPromoEnabled()
-              ? GetSetUpListDefaultBrowserDescriptionStringID(data.userSegment)
-              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_DESCRIPTION;
+          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_DESCRIPTION;
       _config = {
           NO,
           NO,
           syncString,
           defaultBrowserString,
           IDS_IOS_SET_UP_LIST_AUTOFILL_DESCRIPTION,
-          notificationsString,
+          IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION,
           UIFontTextStyleSubheadline,
           UIFontTextStyleFootnote,
           kTextSpacing,
@@ -168,17 +148,6 @@ struct ViewConfig {
   return [NSString
       stringWithFormat:@"%@, %@", [self titleText], [self descriptionText]];
 }
-
-#pragma mark - UITraitEnvironment
-
-#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-  if (@available(iOS 17, *)) {
-    return;
-  }
-}
-#endif
 
 #pragma mark - Public methods
 
@@ -318,10 +287,10 @@ struct ViewConfig {
   label.translatesAutoresizingMaskIntoConstraints = NO;
   label.numberOfLines = 0;
   label.lineBreakMode = NSLineBreakByWordWrapping;
-  label.font =
-      _config.hero_layout
-          ? CreateDynamicFont(UIFontTextStyleFootnote, UIFontWeightSemibold)
-          : [UIFont preferredFontForTextStyle:_config.title_font];
+  label.font = _config.hero_layout
+                   ? PreferredFontForTextStyle(UIFontTextStyleFootnote,
+                                               UIFontWeightSemibold)
+                   : PreferredFontForTextStyle(_config.title_font);
   label.adjustsFontForContentSizeCategory = YES;
   if (_complete) {
     label.textColor = [UIColor colorNamed:kTextSecondaryColor];
@@ -374,15 +343,7 @@ struct ViewConfig {
     case SetUpListItemType::kAutofill:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_AUTOFILL_TITLE);
     case SetUpListItemType::kNotifications:
-      return IsIOSTipsNotificationsEnabled()
-                 ? l10n_util::GetNSString(
-                       IDS_IOS_SET_UP_LIST_NOTIFICATIONS_TITLE)
-                 : l10n_util::GetNSString(
-                       IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_TITLE);
-    case SetUpListItemType::kDocking:
-      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_DOCK_CHROME_TITLE);
-    case SetUpListItemType::kAddressBar:
-      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ADDRESS_BAR_TITLE);
+      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_NOTIFICATIONS_TITLE);
     case SetUpListItemType::kAllSet:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_TITLE);
     case SetUpListItemType::kFollow:
@@ -402,12 +363,6 @@ struct ViewConfig {
       return l10n_util::GetNSString(_config.autofill_description);
     case SetUpListItemType::kNotifications:
       return l10n_util::GetNSString(_config.notifications_description);
-    case SetUpListItemType::kDocking:
-      return l10n_util::GetNSString(
-          IDS_IOS_SET_UP_LIST_DOCK_CHROME_LONG_DESCRIPTION);
-    case SetUpListItemType::kAddressBar:
-      return l10n_util::GetNSString(
-          IDS_IOS_SET_UP_LIST_ADDRESS_BAR_SHORT_DESCRIPTION);
     case SetUpListItemType::kAllSet:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_DESCRIPTION);
     case SetUpListItemType::kFollow:
@@ -426,10 +381,6 @@ struct ViewConfig {
       return set_up_list::kAutofillItemID;
     case SetUpListItemType::kNotifications:
       return set_up_list::kContentNotificationItemID;
-    case SetUpListItemType::kDocking:
-      return set_up_list::kDockingItemID;
-    case SetUpListItemType::kAddressBar:
-      return set_up_list::kAddressBarItemID;
     case SetUpListItemType::kAllSet:
       return set_up_list::kAllSetItemID;
     case SetUpListItemType::kFollow:

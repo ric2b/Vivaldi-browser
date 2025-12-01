@@ -10,46 +10,63 @@
 
 #include <stdio.h>
 
+#include <cstdint>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <memory>
+#include <sstream>  // no-presubmit-check TODO(webrtc:8982)
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
 #include "api/environment/environment.h"
 #include "api/environment/environment_factory.h"
 #include "api/field_trials.h"
+#include "api/field_trials_view.h"
 #include "api/media_types.h"
+#include "api/rtp_parameters.h"
 #include "api/task_queue/task_queue_base.h"
+#include "api/task_queue/task_queue_factory.h"
 #include "api/test/video/function_video_decoder_factory.h"
-#include "api/transport/field_trial_based_config.h"
+#include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
+#include "api/video/encoded_image.h"
 #include "api/video/video_codec_type.h"
-#include "api/video_codecs/video_decoder.h"
+#include "api/video/video_sink_interface.h"
+#include "api/video_codecs/video_decoder_factory.h"
 #include "call/call.h"
-#include "common_video/libyuv/include/webrtc_libyuv.h"
+#include "call/call_config.h"
+#include "call/flexfec_receive_stream.h"
+#include "call/video_receive_stream.h"
 #include "media/engine/internal_decoder_factory.h"
 #include "modules/rtp_rtcp/include/rtp_header_extension_map.h"
-#include "modules/rtp_rtcp/source/rtp_dependency_descriptor_extension.h"
 #include "modules/rtp_rtcp/source/rtp_packet.h"
 #include "modules/rtp_rtcp/source/rtp_packet_received.h"
 #include "modules/rtp_rtcp/source/rtp_util.h"
+#include "modules/video_coding/include/video_error_codes.h"
 #include "modules/video_coding/utility/ivf_file_writer.h"
 #include "rtc_base/checks.h"
-#include "rtc_base/string_to_number.h"
+#include "rtc_base/copy_on_write_buffer.h"
+#include "rtc_base/event.h"
+#include "rtc_base/logging.h"
 #include "rtc_base/strings/json.h"
+#include "rtc_base/system/file_wrapper.h"
+#include "rtc_base/thread.h"
 #include "system_wrappers/include/clock.h"
-#include "system_wrappers/include/sleep.h"
 #include "test/call_config_utils.h"
 #include "test/encoder_settings.h"
 #include "test/fake_decoder.h"
 #include "test/gtest.h"
 #include "test/null_transport.h"
 #include "test/rtp_file_reader.h"
-#include "test/run_loop.h"
 #include "test/run_test.h"
-#include "test/test_video_capturer.h"
 #include "test/testsupport/frame_writer.h"
 #include "test/time_controller/simulated_time_controller.h"
 #include "test/video_renderer.h"
@@ -199,15 +216,15 @@ namespace {
 
 const uint32_t kReceiverLocalSsrc = 0x123456;
 
-class NullRenderer : public rtc::VideoSinkInterface<VideoFrame> {
+class NullRenderer : public VideoSinkInterface<VideoFrame> {
  public:
   void OnFrame(const VideoFrame& frame) override {}
 };
 
-class FileRenderPassthrough : public rtc::VideoSinkInterface<VideoFrame> {
+class FileRenderPassthrough : public VideoSinkInterface<VideoFrame> {
  public:
   FileRenderPassthrough(const std::string& basename,
-                        rtc::VideoSinkInterface<VideoFrame>* renderer)
+                        VideoSinkInterface<VideoFrame>* renderer)
       : basename_(basename), renderer_(renderer), file_(nullptr), count_(0) {}
 
   ~FileRenderPassthrough() override {
@@ -223,16 +240,16 @@ class FileRenderPassthrough : public rtc::VideoSinkInterface<VideoFrame> {
     if (basename_.empty())
       return;
 
-    std::stringstream filename;
-    filename << basename_ << count_++ << "_" << video_frame.rtp_timestamp()
-             << ".jpg";
+    std::string filename;
+    absl::Format(&filename, "%s%zu_%u.jpg", basename_, count_++,
+                 video_frame.rtp_timestamp());
 
-    test::JpegFrameWriter frame_writer(filename.str());
+    test::JpegFrameWriter frame_writer(filename);
     RTC_CHECK(frame_writer.WriteFrame(video_frame, 100));
   }
 
   const std::string basename_;
-  rtc::VideoSinkInterface<VideoFrame>* const renderer_;
+  VideoSinkInterface<VideoFrame>* const renderer_;
   FILE* file_;
   size_t count_;
 };
@@ -300,7 +317,7 @@ class DecoderIvfFileWriter : public test::FakeDecoder {
 // has been finished.
 struct StreamState {
   test::NullTransport transport;
-  std::vector<std::unique_ptr<rtc::VideoSinkInterface<VideoFrame>>> sinks;
+  std::vector<std::unique_ptr<VideoSinkInterface<VideoFrame>>> sinks;
   std::vector<VideoReceiveStreamInterface*> receive_streams;
   std::vector<FlexfecReceiveStream*> flexfec_streams;
   std::unique_ptr<VideoDecoderFactory> decoder_factory;
@@ -343,14 +360,14 @@ std::unique_ptr<StreamState> ConfigureFromFile(const std::string& config_path,
       decoder = test::CreateMatchingDecoder(decoder.payload_type,
                                             decoder.video_format.name);
     }
-    // Create a window for this config.
-    std::stringstream window_title;
-    window_title << "Playback Video (" << config_count++ << ")";
     if (absl::GetFlag(FLAGS_disable_preview)) {
       stream_state->sinks.emplace_back(std::make_unique<NullRenderer>());
     } else {
+      // Create a window for this config.
+      std::string window_title;
+      absl::Format(&window_title, "Playback Video (%zu)", config_count++);
       stream_state->sinks.emplace_back(test::VideoRenderer::Create(
-          window_title.str().c_str(), absl::GetFlag(FLAGS_render_width),
+          window_title.c_str(), absl::GetFlag(FLAGS_render_width),
           absl::GetFlag(FLAGS_render_height)));
     }
     // Create a receive stream for this config.
@@ -369,14 +386,14 @@ std::unique_ptr<StreamState> ConfigureFromFlags(
   auto stream_state = std::make_unique<StreamState>();
   // Create the video renderers. We must add both to the stream state to keep
   // them from deallocating.
-  std::stringstream window_title;
-  window_title << "Playback Video (" << rtp_dump_path << ")";
-  std::unique_ptr<rtc::VideoSinkInterface<VideoFrame>> playback_video;
+  std::unique_ptr<VideoSinkInterface<VideoFrame>> playback_video;
   if (absl::GetFlag(FLAGS_disable_preview)) {
     playback_video = std::make_unique<NullRenderer>();
   } else {
+    std::string window_title;
+    absl::Format(&window_title, "Playback Video (%s)", rtp_dump_path);
     playback_video.reset(test::VideoRenderer::Create(
-        window_title.str().c_str(), absl::GetFlag(FLAGS_render_width),
+        window_title.c_str(), absl::GetFlag(FLAGS_render_width),
         absl::GetFlag(FLAGS_render_height)));
   }
   auto file_passthrough = std::make_unique<FileRenderPassthrough>(
@@ -594,7 +611,7 @@ class RtpReplayer final {
       if (!rtp_reader_->NextPacket(&packet)) {
         break;
       }
-      rtc::CopyOnWriteBuffer packet_buffer(
+      CopyOnWriteBuffer packet_buffer(
           packet.original_length > 0 ? packet.original_length : packet.length);
       memcpy(packet_buffer.MutableData(), packet.data, packet.length);
       if (packet.length < packet.original_length) {
@@ -685,7 +702,7 @@ class RtpReplayer final {
     if (time_sim_) {
       time_sim_->AdvanceTime(TimeDelta::Millis(duration_ms));
     } else if (duration_ms > 0) {
-      SleepMs(duration_ms);
+      Thread::SleepMs(duration_ms);
     }
   }
 

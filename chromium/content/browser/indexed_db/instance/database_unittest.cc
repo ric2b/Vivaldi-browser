@@ -59,9 +59,26 @@ namespace content::indexed_db {
 namespace {
 constexpr int64_t kTestObjectStoreId = 1001;
 constexpr int64_t kTestIndexId = 2002;
+constexpr char kTestForceCloseMessage[] =
+    "The database's connection is force-closed.";
 
 // Contains a record's keys and value that tests use to populate the database.
 struct TestIDBRecord {
+  TestIDBRecord(IndexedDBKey primary_key,
+                const IndexedDBValue& value,
+                std::optional<IndexedDBKey> index_key)
+      : primary_key(std::move(primary_key)),
+        value(value.Clone()),
+        index_key(std::move(index_key)) {}
+
+  TestIDBRecord(const TestIDBRecord& other) {
+    primary_key = other.primary_key.Clone();
+    value = other.value.Clone();
+    if (other.index_key) {
+      index_key = other.index_key->Clone();
+    }
+  }
+
   IndexedDBKey primary_key;
   IndexedDBValue value;
   // Optional. Tests may skip index creation.
@@ -250,12 +267,14 @@ void ExpectEqualsIDBReturnValuePtr(
 // `external_objects` is not set and remains empty.
 blink::mojom::IDBReturnValuePtr CreateIDBReturnValuePtr(
     const std::string& bits,
-    IndexedDBKey primary_key = {},
+    const IndexedDBKey* primary_key = nullptr,
     IndexedDBKeyPath key_path = {}) {
   blink::mojom::IDBReturnValuePtr result = blink::mojom::IDBReturnValue::New();
   result->value = blink::mojom::IDBValue::New();
   result->value->bits.assign(bits.begin(), bits.end());
-  result->primary_key = std::move(primary_key);
+  if (primary_key) {
+    result->primary_key = primary_key->Clone();
+  }
   result->key_path = std::move(key_path);
   return result;
 }
@@ -291,8 +310,7 @@ class DatabaseTest : public ::testing::Test {
 
     bucket_context_->InitBackingStoreIfNeeded(true);
     db_ = bucket_context_->AddDatabase(
-        u"db", std::make_unique<Database>(u"db", *bucket_context_,
-                                          Database::Identifier()));
+        u"db", std::make_unique<Database>(u"db", *bucket_context_));
   }
 
   void TearDown() override { db_ = nullptr; }
@@ -349,11 +367,11 @@ TEST_F(DatabaseTest, ConnectionLifecycle) {
   db_ = nullptr;
 
   EXPECT_TRUE(request1.connection());
-  request1.connection()->CloseAndReportForceClose();
+  request1.connection()->CloseAndReportForceClose(kTestForceCloseMessage);
   EXPECT_FALSE(request1.connection()->IsConnected());
 
   EXPECT_TRUE(request2.connection());
-  request2.connection()->CloseAndReportForceClose();
+  request2.connection()->CloseAndReportForceClose(kTestForceCloseMessage);
   EXPECT_FALSE(request2.connection()->IsConnected());
 
   RunPostedTasks();
@@ -385,7 +403,7 @@ TEST_F(DatabaseTest, ForcedClose) {
   base::RunLoop run_loop;
   EXPECT_CALL(database_callbacks, ForcedClose)
       .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
-  request.connection()->CloseAndReportForceClose();
+  request.connection()->CloseAndReportForceClose(kTestForceCloseMessage);
   run_loop.Run();
 }
 
@@ -448,7 +466,7 @@ TEST_F(DatabaseTest, PendingDelete) {
   EXPECT_EQ(db_->ActiveOpenDeleteCount(), 1UL);
   EXPECT_EQ(db_->PendingOpenDeleteCount(), 0UL);
 
-  db_->ForceCloseAndRunTasks();
+  db_->ForceCloseAndRunTasks(kTestForceCloseMessage);
   db_ = nullptr;
 
   run_loop.Run();
@@ -514,7 +532,7 @@ TEST_F(DatabaseTest, OpenDeleteClear) {
   EXPECT_CALL(database_callbacks2, ForcedClose);
   EXPECT_CALL(database_callbacks3, ForcedClose);
 
-  db_->ForceCloseAndRunTasks();
+  db_->ForceCloseAndRunTasks(kTestForceCloseMessage);
   db_ = nullptr;
   database_callbacks1.FlushForTesting();
 
@@ -546,7 +564,7 @@ TEST_F(DatabaseTest, ForceDelete) {
                               run_loop.QuitClosure());
   RunPostedTasks();
   EXPECT_FALSE(run_loop.AnyQuitCalled());
-  db_->ForceCloseAndRunTasks();
+  db_->ForceCloseAndRunTasks(kTestForceCloseMessage);
   db_ = nullptr;
   run_loop.Run();
   EXPECT_FALSE(db_);
@@ -589,7 +607,7 @@ TEST_F(DatabaseTest, ForceCloseWhileOpenPending) {
   EXPECT_EQ(db_->ActiveOpenDeleteCount(), 1UL);
   EXPECT_EQ(db_->PendingOpenDeleteCount(), 0UL);
 
-  db_->ForceCloseAndRunTasks();
+  db_->ForceCloseAndRunTasks(kTestForceCloseMessage);
   db_ = nullptr;
   RunPostedTasks();
   EXPECT_FALSE(db_);
@@ -635,7 +653,7 @@ TEST_F(DatabaseTest, ForceCloseWhileOpenAndDeletePending) {
   EXPECT_EQ(db_->ActiveOpenDeleteCount(), 1UL);
   EXPECT_EQ(db_->PendingOpenDeleteCount(), 1UL);
 
-  db_->ForceCloseAndRunTasks();
+  db_->ForceCloseAndRunTasks(kTestForceCloseMessage);
   db_ = nullptr;
   run_loop.Run();
 }
@@ -666,9 +684,11 @@ class DatabaseOperationTest : public DatabaseTest {
     EXPECT_TRUE(request_.connection());
     transaction_ = request_.connection()->CreateVersionChangeTransaction(
         transaction_id, /*scope=*/std::set<int64_t>(),
-        new FakeTransaction(commit_success_,
-                            blink::mojom::IDBTransactionMode::VersionChange,
-                            bucket_context_->backing_store()->AsWeakPtr()));
+        std::make_unique<FakeTransaction>(
+            commit_success_,
+            db_->backing_store_db()->CreateTransaction(
+                blink::mojom::IDBTransactionDurability::Relaxed,
+                blink::mojom::IDBTransactionMode::VersionChange)));
 
     std::vector<PartitionedLockManager::PartitionedLockRequest> lock_requests =
         {{GetDatabaseLockId(db_->metadata().name),
@@ -690,41 +710,45 @@ class DatabaseOperationTest : public DatabaseTest {
   // After setup, calls `Database::GetAllOperation` with `get_all_parameters`.
   // Verifies that the results match `expected_results`.
   void TestGetAll(
-      const TestDatabaseParameters& database_parameters,
-      const TestGetAllParameters& get_all_parameters,
+      TestDatabaseParameters database_parameters,
+      TestGetAllParameters get_all_parameters,
       base::span<const blink::mojom::IDBRecordPtr> expected_results) {
     // Create the object store.
     ASSERT_EQ(0u, db_->metadata().object_stores.size());
     const auto& object_store_parameters =
         database_parameters.object_store_parameters;
     const int64_t store_id = object_store_parameters.object_store_id;
-    Status status = db_->CreateObjectStoreOperation(
+    Status status = transaction_->BackingStoreTransaction()->CreateObjectStore(
         store_id, object_store_parameters.name,
         object_store_parameters.key_path,
-        object_store_parameters.auto_increment, transaction_);
+        object_store_parameters.auto_increment);
     EXPECT_TRUE(status.ok()) << status.ToString();
     EXPECT_EQ(1u, db_->metadata().object_stores.size());
 
     // Optionally, create an index when the test provides a valid index id.
-    const auto& index_parameters = database_parameters.index_parameters;
-    const int64_t index_id = index_parameters.index_id;
+    const blink::IndexedDBIndexMetadata index(
+        database_parameters.index_parameters.name,
+        database_parameters.index_parameters.index_id,
+        database_parameters.index_parameters.key_path,
+        database_parameters.index_parameters.unique,
+        database_parameters.index_parameters.multi_entry);
+    const int64_t index_id = index.id;
     const bool has_index =
-        (index_id != blink::IndexedDBIndexMetadata::kInvalidId);
+        index_id != blink::IndexedDBIndexMetadata::kInvalidId;
     if (has_index) {
-      status = db_->CreateIndexOperation(
-          store_id, index_parameters.index_id, index_parameters.name,
-          index_parameters.key_path, index_parameters.unique,
-          index_parameters.multi_entry, transaction_);
+      status =
+          transaction_->BackingStoreTransaction()->CreateIndex(store_id, index);
     }
     EXPECT_TRUE(status.ok()) << status.ToString();
 
     // Populate the object store and optionally the index with the provided
     // records.
-    for (const TestIDBRecord& record : database_parameters.records) {
+    for (TestIDBRecord& record : database_parameters.records) {
       std::vector<IndexedDBIndexKeys> index_keys;
       ASSERT_EQ(record.index_key.has_value(), has_index);
       if (has_index) {
-        IndexedDBIndexKeys index_key{index_id, {*record.index_key}};
+        IndexedDBIndexKeys index_key{index_id, {}};
+        index_key.keys.emplace_back(std::move(*record.index_key));
         index_keys.emplace_back(std::move(index_key));
       }
 
@@ -734,16 +758,12 @@ class DatabaseOperationTest : public DatabaseTest {
 
       // Set in-flight memory to a reasonably large number to prevent underflow
       // in `PutOperation`
-      transaction_->in_flight_memory() += 1000;
+      transaction_->in_flight_memory_ += 1000;
 
-      auto put_params = std::make_unique<Database::PutOperationParams>();
-      put_params->object_store_id = store_id;
-      put_params->value = record.value;
-      put_params->key = std::make_unique<IndexedDBKey>(record.primary_key);
-      put_params->put_mode = blink::mojom::IDBPutMode::AddOnly;
-      put_params->callback = callback.Get();
-      put_params->index_keys = std::move(index_keys);
-      status = db_->PutOperation(std::move(put_params), transaction_);
+      status = transaction_->DoPut(
+          store_id, record.value.Clone(), std::move(record.primary_key),
+          blink::mojom::IDBPutMode::AddOnly, std::move(index_keys),
+          callback.Get(), transaction_);
       EXPECT_TRUE(status.ok()) << status.ToString();
     }
 
@@ -757,15 +777,11 @@ class DatabaseOperationTest : public DatabaseTest {
             transaction_->AsWeakPtr(), std::move(get_all_callback));
     result_sink_wrapper->UseDedicatedReceiverForTesting();
 
-    std::unique_ptr<blink::IndexedDBKeyRange> key_range =
-        std::make_unique<blink::IndexedDBKeyRange>(
-            get_all_parameters.key_range);
-
-    status = db_->GetAllOperation(store_id, index_id, std::move(key_range),
-                                  get_all_parameters.result_type,
-                                  get_all_parameters.max_count,
-                                  get_all_parameters.direction,
-                                  std::move(result_sink_wrapper), transaction_);
+    status = db_->GetAllOperation(
+        store_id, index_id, std::move(get_all_parameters.key_range),
+        get_all_parameters.result_type, get_all_parameters.max_count,
+        get_all_parameters.direction, std::move(result_sink_wrapper),
+        transaction_);
     EXPECT_TRUE(status.ok()) << status.ToString();
 
     result_sink.WaitForResults();
@@ -814,9 +830,9 @@ class DatabaseOperationTest : public DatabaseTest {
 TEST_F(DatabaseOperationTest, CreateObjectStore) {
   EXPECT_EQ(0ULL, db_->metadata().object_stores.size());
   const int64_t store_id = 1001;
-  Status s =
-      db_->CreateObjectStoreOperation(store_id, u"store", IndexedDBKeyPath(),
-                                      /*auto_increment=*/false, transaction_);
+  Status s = transaction_->BackingStoreTransaction()->CreateObjectStore(
+      store_id, u"store", IndexedDBKeyPath(),
+      /*auto_increment=*/false);
   EXPECT_TRUE(s.ok());
   transaction_->SetCommitFlag();
   transaction_ = nullptr;
@@ -828,15 +844,16 @@ TEST_F(DatabaseOperationTest, CreateObjectStore) {
 TEST_F(DatabaseOperationTest, CreateIndex) {
   EXPECT_EQ(0ULL, db_->metadata().object_stores.size());
   const int64_t store_id = 1001;
-  Status s =
-      db_->CreateObjectStoreOperation(store_id, u"store", IndexedDBKeyPath(),
-                                      /*auto_increment=*/false, transaction_);
+  Status s = transaction_->BackingStoreTransaction()->CreateObjectStore(
+      store_id, u"store", IndexedDBKeyPath(),
+      /*auto_increment=*/false);
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(1ULL, db_->metadata().object_stores.size());
   const int64_t index_id = 2002;
-  s = db_->CreateIndexOperation(store_id, index_id, u"index",
-                                IndexedDBKeyPath(), /*unique=*/false,
-                                /*multi_entry=*/false, transaction_);
+  s = transaction_->BackingStoreTransaction()->CreateIndex(
+      store_id, blink::IndexedDBIndexMetadata(
+                    u"index", index_id, IndexedDBKeyPath(), /*unique=*/false,
+                    /*multi_entry=*/false));
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(
       1ULL,
@@ -865,9 +882,9 @@ class DatabaseOperationAbortTest : public DatabaseOperationTest {
 TEST_F(DatabaseOperationAbortTest, CreateObjectStore) {
   EXPECT_EQ(0ULL, db_->metadata().object_stores.size());
   const int64_t store_id = 1001;
-  Status s =
-      db_->CreateObjectStoreOperation(store_id, u"store", IndexedDBKeyPath(),
-                                      /*auto_increment=*/false, transaction_);
+  Status s = transaction_->BackingStoreTransaction()->CreateObjectStore(
+      store_id, u"store", IndexedDBKeyPath(),
+      /*auto_increment=*/false);
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(1ULL, db_->metadata().object_stores.size());
   db_ = nullptr;
@@ -880,15 +897,16 @@ TEST_F(DatabaseOperationAbortTest, CreateObjectStore) {
 TEST_F(DatabaseOperationAbortTest, CreateIndex) {
   EXPECT_EQ(0ULL, db_->metadata().object_stores.size());
   const int64_t store_id = 1001;
-  Status s =
-      db_->CreateObjectStoreOperation(store_id, u"store", IndexedDBKeyPath(),
-                                      /*auto_increment=*/false, transaction_);
+  Status s = transaction_->BackingStoreTransaction()->CreateObjectStore(
+      store_id, u"store", IndexedDBKeyPath(),
+      /*auto_increment=*/false);
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(1ULL, db_->metadata().object_stores.size());
   const int64_t index_id = 2002;
-  s = db_->CreateIndexOperation(store_id, index_id, u"index",
-                                IndexedDBKeyPath(), /*unique=*/false,
-                                /*multi_entry=*/false, transaction_);
+  s = transaction_->BackingStoreTransaction()->CreateIndex(
+      store_id, blink::IndexedDBIndexMetadata(
+                    u"index", index_id, IndexedDBKeyPath(), /*unique=*/false,
+                    /*multi_entry=*/false));
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(
       1ULL,
@@ -904,32 +922,25 @@ TEST_F(DatabaseOperationTest, CreatePutDelete) {
   EXPECT_EQ(0ULL, db_->metadata().object_stores.size());
   const int64_t store_id = 1001;
 
-  Status s =
-      db_->CreateObjectStoreOperation(store_id, u"store", IndexedDBKeyPath(),
-                                      /*auto_increment=*/false, transaction_);
+  Status s = transaction_->BackingStoreTransaction()->CreateObjectStore(
+      store_id, u"store", IndexedDBKeyPath(),
+      /*auto_increment=*/false);
   EXPECT_TRUE(s.ok());
   EXPECT_EQ(1ULL, db_->metadata().object_stores.size());
 
-  IndexedDBValue value("value1", {});
-  std::unique_ptr<IndexedDBKey> key(std::make_unique<IndexedDBKey>("key"));
-  std::vector<IndexedDBIndexKeys> index_keys;
   base::MockCallback<blink::mojom::IDBTransaction::PutCallback> callback;
 
   // Set in-flight memory to a reasonably large number to prevent underflow in
   // `PutOperation`
-  transaction_->in_flight_memory() += 1000;
+  transaction_->in_flight_memory_ += 1000;
 
-  auto put_params = std::make_unique<Database::PutOperationParams>();
-  put_params->object_store_id = store_id;
-  put_params->value = value;
-  put_params->key = std::move(key);
-  put_params->put_mode = blink::mojom::IDBPutMode::AddOnly;
-  put_params->callback = callback.Get();
-  put_params->index_keys = index_keys;
-  s = db_->PutOperation(std::move(put_params), transaction_);
+  s = transaction_->DoPut(
+      store_id, IndexedDBValue("value1", {}), IndexedDBKey("key"),
+      blink::mojom::IDBPutMode::AddOnly, std::vector<IndexedDBIndexKeys>(),
+      callback.Get(), transaction_);
   EXPECT_TRUE(s.ok());
 
-  s = db_->DeleteObjectStoreOperation(store_id, transaction_);
+  s = transaction_->BackingStoreTransaction()->DeleteObjectStore(store_id);
   EXPECT_TRUE(s.ok());
 
   EXPECT_EQ(0ULL, db_->metadata().object_stores.size());
@@ -1654,13 +1665,10 @@ TEST_F(DatabaseOperationTest, ObjectStoreGetAllKeysWithInvalidObjectStoreId) {
 
   TestGetAllParameters get_all_parameters;
 
-  std::unique_ptr<blink::IndexedDBKeyRange> key_range =
-      std::make_unique<blink::IndexedDBKeyRange>(get_all_parameters.key_range);
-
   Status status = db_->GetAllOperation(
       kTestObjectStoreId,
       /*index_id=*/blink::IndexedDBIndexMetadata::kInvalidId,
-      std::move(key_range), get_all_parameters.result_type,
+      std::move(get_all_parameters.key_range), get_all_parameters.result_type,
       get_all_parameters.max_count, get_all_parameters.direction,
       std::move(result_sink_wrapper), transaction_);
   ASSERT_TRUE(status.IsInvalidArgument()) << status.ToString();
@@ -1680,9 +1688,9 @@ TEST_F(DatabaseOperationTest, ObjectStoreGetAllKeysWithInvalidObjectStoreId) {
 TEST_F(DatabaseOperationTest, IndexGetAllKeysWithInvalidIndexId) {
   // Create an object store.
   ASSERT_EQ(0u, db_->metadata().object_stores.size());
-  Status status = db_->CreateObjectStoreOperation(
+  Status status = transaction_->BackingStoreTransaction()->CreateObjectStore(
       kTestObjectStoreId, u"store", IndexedDBKeyPath(),
-      /*auto_increment=*/false, transaction_);
+      /*auto_increment=*/false);
   ASSERT_TRUE(status.ok()) << status.ToString();
   ASSERT_EQ(1u, db_->metadata().object_stores.size());
 
@@ -1699,11 +1707,8 @@ TEST_F(DatabaseOperationTest, IndexGetAllKeysWithInvalidIndexId) {
 
   TestGetAllParameters get_all_parameters;
 
-  std::unique_ptr<blink::IndexedDBKeyRange> key_range =
-      std::make_unique<blink::IndexedDBKeyRange>(get_all_parameters.key_range);
-
   status = db_->GetAllOperation(
-      kTestObjectStoreId, kTestIndexId, std::move(key_range),
+      kTestObjectStoreId, kTestIndexId, std::move(get_all_parameters.key_range),
       get_all_parameters.result_type, get_all_parameters.max_count,
       get_all_parameters.direction, std::move(result_sink_wrapper),
       transaction_);
@@ -1734,9 +1739,9 @@ TEST_F(DatabaseOperationTest,
     const std::string primary_key = base::StringPrintf("key%zu", i);
     const std::string value = base::StringPrintf("value%zu", i);
 
-    database_records.push_back({IndexedDBKey{primary_key},
-                                {value, /*external_objects=*/{}},
-                                /*index_key=*/std::nullopt});
+    database_records.emplace_back(IndexedDBKey{primary_key},
+                                  IndexedDBValue{value, {}},
+                                  /*index_key=*/std::nullopt);
 
     expected_results.emplace_back(
         blink::mojom::IDBRecord::New(IndexedDBKey{primary_key},
@@ -1779,21 +1784,21 @@ TEST_F(DatabaseOperationTest, IndexGetAllRecordsWithAutoIncrementingKeys) {
 
   const blink::mojom::IDBRecordPtr expected_results[] = {
       blink::mojom::IDBRecord::New(
-          /*primary_key=*/expected_generated_keys[2],
+          /*primary_key=*/expected_generated_keys[2].Clone(),
           /*value=*/
-          CreateIDBReturnValuePtr("value3", expected_generated_keys[2],
+          CreateIDBReturnValuePtr("value3", &expected_generated_keys[2],
                                   object_store_key_path),
           /*index_key=*/IndexedDBKey{"index_key1"}),
       blink::mojom::IDBRecord::New(
-          /*primary_key=*/expected_generated_keys[1],
+          /*primary_key=*/expected_generated_keys[1].Clone(),
           /*value=*/
-          CreateIDBReturnValuePtr("value2", expected_generated_keys[1],
+          CreateIDBReturnValuePtr("value2", &expected_generated_keys[1],
                                   object_store_key_path),
           /*index_key=*/IndexedDBKey{"index_key2"}),
       blink::mojom::IDBRecord::New(
-          /*primary_key=*/expected_generated_keys[0],
+          /*primary_key=*/expected_generated_keys[0].Clone(),
           /*value=*/
-          CreateIDBReturnValuePtr("value1", expected_generated_keys[0],
+          CreateIDBReturnValuePtr("value1", &expected_generated_keys[0],
                                   object_store_key_path),
           /*index_key=*/IndexedDBKey{"index_key3"}),
   };

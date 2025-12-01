@@ -59,15 +59,15 @@ export async function getMarkdownContent(): Promise<Marked.Marked.Token[][]> {
   return splitMarkdownAst;
 }
 
-export class ReleaseNoteView extends UI.Widget.VBox {
+export class ReleaseNoteView extends UI.Panel.Panel {
   #view: View;
 
-  constructor(element?: HTMLElement, view: View = (input, _output, target) => {
-    this.registerRequiredCSS(releaseNoteViewStyles);
+  constructor(view: View = (input, _output, target) => {
     const releaseNote = input.getReleaseNote();
     const markdownContent = input.markdownContent;
     // clang-format off
     render(html`
+      <style>${releaseNoteViewStyles}</style>
       <div class="whatsnew" jslog=${VisualLogging.section().context('release-notes')}>
         <div class="whatsnew-content">
           <div class="header">
@@ -102,11 +102,10 @@ export class ReleaseNoteView extends UI.Widget.VBox {
           </div>
         </div>
       </div>
-    `, target, {host: this});
+    `, target, {host: input});
     // clang-format on
   }) {
-    super(true, undefined, element);
-    this.element.setAttribute('jslog', `${VisualLogging.panel().context('whats-new')}`);
+    super('whats-new', true);
     this.#view = view;
     this.requestUpdate();
   }

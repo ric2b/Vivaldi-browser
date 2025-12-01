@@ -45,6 +45,10 @@ export function getNonResolvedURL(
     return entry.args.data.url as Platform.DevToolsPath.UrlString;
   }
 
+  if (Types.Events.isParseAuthorStyleSheetEvent(entry) && entry.args) {
+    return entry.args.data.stylesheetUrl as Platform.DevToolsPath.UrlString;
+  }
+
   if (entry.args?.data?.stackTrace && entry.args.data.stackTrace.length > 0) {
     return entry.args.data.stackTrace[0].url as Platform.DevToolsPath.UrlString;
   }
@@ -71,6 +75,16 @@ export function getNonResolvedURL(
   // For all other events, try to see if the URL is provided, else return null.
   if (entry.args?.data?.url) {
     return entry.args.data.url as Platform.DevToolsPath.UrlString;
+  }
+
+  // Many events don't have a url, but are associated with a request. Use the
+  // request's url.
+  const requestId = (entry.args?.data as {requestId?: string})?.requestId;
+  if (parsedTrace && requestId) {
+    const url = parsedTrace.NetworkRequests.byId.get(requestId)?.args.data.url;
+    if (url) {
+      return url as Platform.DevToolsPath.UrlString;
+    }
   }
 
   return null;

@@ -256,9 +256,8 @@ class ParseContext {
     const net::SchemefulSite& primary = primary_result.site();
 
     std::vector<std::pair<net::SchemefulSite, net::FirstPartySetEntry>>
-        set_entries(
-            {{primary, net::FirstPartySetEntry(primary, net::SiteType::kPrimary,
-                                               std::nullopt)}});
+        set_entries({{primary, net::FirstPartySetEntry(
+                                   primary, net::SiteType::kPrimary)}});
 
     for (const SubsetDescriptor& descriptor : {
              SubsetDescriptor{
@@ -417,19 +416,8 @@ class ParseContext {
         validator.Update(site, entry.primary());
       }
     }
-    const auto do_updates_for_alias = [&](const std::vector<SingleSet>& sets,
-                                          const net::SchemefulSite& site) {
-      for (const auto& set : sets) {
-        const auto* entry = base::FindOrNull(set, site);
-        if (entry) {
-          validator.Update(site, entry->primary());
-        }
-      }
-    };
-    for (const auto& [alias, canonical] : lists.aliases) {
-      do_updates_for_alias(lists.additions, alias);
-      do_updates_for_alias(lists.replacements, alias);
-    }
+    // We do not need to perform updates on the aliases explicitly because they
+    // are already included in lists.replacements and lists.additions.
 
     // Since we just removed some keys, we have to double-check that there are
     // no invalid sets (e.g. singletons).
@@ -483,12 +471,7 @@ class ParseContext {
           static_cast<int>(index) < descriptor.size_limit.value()) {
         set_entries.emplace_back(
             site_result.site(),
-            net::FirstPartySetEntry(
-                primary, descriptor.site_type,
-                descriptor.size_limit.has_value()
-                    ? std::make_optional(
-                          net::FirstPartySetEntry::SiteIndex(index))
-                    : std::nullopt));
+            net::FirstPartySetEntry(primary, descriptor.site_type));
       }
       // Continue parsing even after we've reached the size limit (if there is
       // one), in order to surface malformed input domains as errors.

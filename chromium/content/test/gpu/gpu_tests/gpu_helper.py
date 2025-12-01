@@ -4,12 +4,12 @@
 
 import os
 import re
-import unittest.mock as mock
+from unittest import mock
+
+from telemetry.internal.platform import gpu_info as tgi
 
 from gpu_tests import constants
 from gpu_tests.util import host_information
-
-from telemetry.internal.platform import gpu_info as tgi
 
 # This set must be the union of the driver tags used in WebGL and WebGL2
 # expectations files.
@@ -28,7 +28,7 @@ EXPECTATIONS_DRIVER_TAGS = frozenset([
 
 # Driver tag format: VENDOR_OPERATION_VERSION
 DRIVER_TAG_MATCHER = re.compile(
-    r'^([a-z\d]+)_(eq|ne|ge|gt|le|lt)_([a-z\d\.]+)$')
+    r'^(amd|intel|mesa|nvidia)_(eq|ne|ge|gt|le|lt)_([a-z\d\.]+)$')
 
 REMOTE_BROWSER_TYPES = [
     'android-chromium',

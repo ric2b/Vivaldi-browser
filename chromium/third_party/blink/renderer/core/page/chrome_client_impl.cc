@@ -1073,9 +1073,15 @@ viz::FrameSinkId ChromeClientImpl::GetFrameSinkId(LocalFrame* frame) {
 
 void ChromeClientImpl::RequestDecode(LocalFrame* frame,
                                      const cc::DrawImage& image,
-                                     base::OnceCallback<void(bool)> callback) {
+                                     base::OnceCallback<void(bool)> callback,
+                                     bool speculative) {
   FrameWidget* widget = frame->GetWidgetForLocalRoot();
-  widget->RequestDecode(image, std::move(callback));
+  widget->RequestDecode(image, std::move(callback), speculative);
+}
+
+bool ChromeClientImpl::SpeculativeDecodeRequestInFlight(
+    LocalFrame* frame) const {
+  return frame->GetWidgetForLocalRoot()->SpeculativeDecodeRequestInFlight();
 }
 
 void ChromeClientImpl::NotifyPresentationTime(LocalFrame& frame,

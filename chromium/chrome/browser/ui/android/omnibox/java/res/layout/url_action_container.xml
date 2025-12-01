@@ -67,8 +67,11 @@ found in the LICENSE file.
             android:id="@+id/reload_button"
             style="@style/LocationBarActionButton"
             android:layout_width="32dp"
-            android:src="@drawable/toolbar_reload"
+            android:src="@drawable/toolbar_reload_stop"
             android:visibility="visible"
-            android:contentDescription="@string/accessibility_toolbar_btn_qrcode" />
+            android:layout_gravity="center"
+            android:layout_marginEnd="@dimen/reload_button_margin"
+            android:contentDescription="@string/accessibility_btn_refresh"
+            android:tooltipText="@string/accessibility_btn_refresh" />
     </LinearLayout>
 </merge>

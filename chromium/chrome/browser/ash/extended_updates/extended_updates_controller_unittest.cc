@@ -20,9 +20,10 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/extended_updates/extended_updates_notification.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/ash/ownership/fake_owner_settings_service.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash.h"
 #include "chrome/browser/ash/ownership/owner_settings_service_ash_factory.h"
-#include "chrome/browser/ash/settings/device_settings_test_helper.h"
+#include "chrome/browser/ash/settings/scoped_test_device_settings_service.h"
 #include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_tester.h"
@@ -83,6 +84,10 @@ class ExtendedUpdatesControllerTest : public ChromeAshTestBase {
     test_clock_.SetNow(GetTime(kTimeNow));
     controller()->SetClockForTesting(&test_clock_);
 
+    subscription_ = FakeOwnerSettingsService::SetUpTestingFactory(
+        cros_settings_.device_settings(),
+        ash::OwnerSettingsServiceAshFactory::GetInstance()->GetOwnerKeyUtil());
+
     ASSERT_TRUE(profile_manager_.SetUp());
     profile_ = profile_manager_.CreateTestingProfile(
         TestingProfile::kDefaultProfileUserName);
@@ -103,6 +108,8 @@ class ExtendedUpdatesControllerTest : public ChromeAshTestBase {
 
   void TearDown() override {
     controller()->SetClockForTesting(base::DefaultClock::GetInstance());
+
+    subscription_ = {};
 
     ChromeAshTestBase::TearDown();
   }
@@ -172,10 +179,11 @@ class ExtendedUpdatesControllerTest : public ChromeAshTestBase {
 
   user_manager::TypedScopedUserManager<ash::FakeChromeUserManager>
       fake_user_manager_;
+  base::CallbackListSubscription subscription_;
   TestingProfileManager profile_manager_;
   base::test::ScopedFeatureList feature_list_{
       features::kExtendedUpdatesOptInFeature};
-  ScopedDeviceSettingsTestHelper device_settings_helper_;
+  ScopedTestDeviceSettingsService device_settings_service_;
   ScopedTestingCrosSettings cros_settings_;
   ash::ScopedStubInstallAttributes test_install_attributes_;
   std::unique_ptr<NotificationDisplayServiceTester>

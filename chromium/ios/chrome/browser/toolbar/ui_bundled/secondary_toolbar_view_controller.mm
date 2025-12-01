@@ -65,6 +65,17 @@ using vivaldi::IsVivaldiRunning;
                name:UIKeyboardWillShowNotification
              object:nil];
   }
+
+  if (IsVivaldiRunning()) {
+    if (@available(iOS 17, *)) {
+      NSArray<UITrait>* traits = TraitCollectionSetForTraits(@[
+        UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class
+      ]);
+      [self registerForTraitChanges:traits
+                         withAction:@selector(updateToolbarButtonsTintColor)];
+    }
+  } // End Vivaldi
+
 }
 
 - (void)disconnect {
@@ -293,10 +304,15 @@ using vivaldi::IsVivaldiRunning;
   [self updateForFullscreenProgress:1];
 }
 
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
   [super traitCollectionDidChange:previousTraitCollection];
+  if (@available(iOS 17, *)) {
+    return;
+  }
   [self updateToolbarButtonsTintColor];
 }
+#endif
 // End Vivaldi
 
 @end

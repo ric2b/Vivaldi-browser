@@ -9,6 +9,7 @@
 #import "base/test/ios/wait_util.h"
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/scoped_feature_list.h"
+#import "base/test/test_timeouts.h"
 #import "components/collaboration/test_support/mock_messaging_backend_service.h"
 #import "components/data_sharing/public/features.h"
 #import "components/favicon/core/favicon_service.h"
@@ -23,8 +24,8 @@
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
 #import "ios/chrome/browser/history/model/history_service_factory.h"
-#import "ios/chrome/browser/share_kit/model/share_kit_service.h"
-#import "ios/chrome/browser/share_kit/model/share_kit_service_factory.h"
+#import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
+#import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list.h"
 #import "ios/chrome/browser/shared/model/browser/browser_list_factory.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
@@ -44,8 +45,8 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/fake_tab_strip_consumer.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/coordinator/fake_tab_strip_handler.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/swift.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_strip/ui/tab_strip_tab_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_switcher_item.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/web_state_tab_switcher_item.h"
 #import "ios/chrome/browser/url_loading/model/fake_url_loading_delegate.h"
 #import "ios/chrome/browser/url_loading/model/scene_url_loading_service.h"
 #import "ios/chrome/browser/url_loading/model/test_scene_url_loading_service.h"
@@ -106,12 +107,7 @@ class TabStripMediatorTest : public PlatformTest {
  public:
   TabStripMediatorTest() {
     feature_list_.InitWithFeatures(
-        {
-            kTabGroupsIPad,
-            kTabGroupSync,
-            data_sharing::features::kDataSharingFeature,
-        },
-        {});
+        {kTabGroupSync, data_sharing::features::kDataSharingFeature}, {});
     TestProfileIOS::Builder profile_builder;
     profile_builder.AddTestingFactory(
         ios::FaviconServiceFactory::GetInstance(),
@@ -119,6 +115,9 @@ class TabStripMediatorTest : public PlatformTest {
     profile_builder.AddTestingFactory(
         ios::HistoryServiceFactory::GetInstance(),
         ios::HistoryServiceFactory::GetDefaultFactory());
+    profile_builder.AddTestingFactory(
+        tab_groups::TabGroupSyncServiceFactory::GetInstance(),
+        tab_groups::TabGroupSyncServiceFactory::GetDefaultFactory());
 
     tab_group_sync_service_ = std::make_unique<
         ::testing::NiceMock<tab_groups::MockTabGroupSyncService>>();
@@ -148,8 +147,6 @@ class TabStripMediatorTest : public PlatformTest {
     tab_strip_handler_ = [[FakeTabStripHandler alloc] init];
 
     consumer_ = [[FakeTabStripConsumer alloc] init];
-
-    share_kit_service_ = ShareKitServiceFactory::GetForProfile(profile_.get());
   }
 
   ~TabStripMediatorTest() override { [mediator_ disconnect]; }
@@ -166,7 +163,7 @@ class TabStripMediatorTest : public PlatformTest {
                                        browserList:browser_list
                                   messagingService:&messaging_backend_
                               collaborationService:nil
-                                   shareKitService:share_kit_service_];
+                                     faviconLoader:nil];
 
     mediator_.profile = profile_.get();
     mediator_.webStateList = web_state_list_;
@@ -217,7 +214,6 @@ class TabStripMediatorTest : public PlatformTest {
   raw_ptr<UrlLoadingBrowserAgent> loader_;
   FakeURLLoadingDelegate* url_loading_delegate_;
   collaboration::messaging::MockMessagingBackendService messaging_backend_;
-  raw_ptr<ShareKitService> share_kit_service_;
 };
 
 // Tests that the mediator correctly populates the consumer at startup and after
@@ -276,7 +272,7 @@ TEST_F(TabStripMediatorTest, ConsumerPopulated) {
   EXPECT_EQ(web_state_list_->GetWebStateAt(0)->GetUniqueIdentifier(),
             consumer_.items[1].tabSwitcherItem.identifier);
   EXPECT_EQ(group_0, consumer_.itemParents[consumer_.items[1]].tabGroup);
-  EXPECT_NSEQ(group_0->GetColor(),
+  EXPECT_NSEQ(tab_groups::ColorForTabGroupColorId(group_0->GetColor()),
               consumer_.itemData[consumer_.items[1]].groupStrokeColor);
   EXPECT_EQ(web_state_list_->GetWebStateAt(1)->GetUniqueIdentifier(),
             consumer_.items[2].tabSwitcherItem.identifier);
@@ -315,8 +311,10 @@ TEST_F(TabStripMediatorTest, TabStripItemDataUpdated) {
 
   const TabGroup* group_0 = builder.GetTabGroupForIdentifier('0');
   const TabGroup* group_1 = builder.GetTabGroupForIdentifier('1');
-  const auto group_0_color = group_0->GetColor();
-  const auto group_1_color = group_1->GetColor();
+  const UIColor* group_0_color =
+      tab_groups::ColorForTabGroupColorId(group_0->GetColor());
+  const UIColor* group_1_color =
+      tab_groups::ColorForTabGroupColorId(group_1->GetColor());
 
   ASSERT_EQ(10ul, consumer_.items.count);
   TabStripItemIdentifier* item_a = consumer_.items[0];
@@ -449,7 +447,8 @@ TEST_F(TabStripMediatorTest, TabStripItemDataUpdated) {
                                         builder.GetWebStateForIdentifier('h'))},
                                    {}, TabGroupId::GenerateNew());
   builder.SetTabGroupIdentifier(group_2, '2');
-  UIColor* group_2_color = group_2->GetColor();
+  UIColor* group_2_color =
+      tab_groups::ColorForTabGroupColorId(group_2->GetColor());
   ASSERT_EQ(builder.GetWebStateListDescription(),
             "a b | [ 2 c* d f g h ] [ 0 e ]");
   EXPECT_NSEQ(consumer_.itemData[item_c].groupStrokeColor, group_2_color);
@@ -469,7 +468,7 @@ TEST_F(TabStripMediatorTest, TabStripItemDataUpdated) {
   TabStripItemIdentifier* item_2 = consumer_.items[2];
   web_state_list_->UpdateGroupVisualData(
       group_2, {u"Updated Group Name", tab_groups::TabGroupColorId::kRed});
-  group_2_color = group_2->GetColor();
+  group_2_color = tab_groups::ColorForTabGroupColorId(group_2->GetColor());
   EXPECT_NSEQ(consumer_.itemData[item_2].groupStrokeColor, group_2_color);
   EXPECT_NSEQ(consumer_.itemData[item_c].groupStrokeColor, group_2_color);
   EXPECT_NSEQ(consumer_.itemData[item_d].groupStrokeColor, group_2_color);
@@ -717,7 +716,7 @@ TEST_F(TabStripMediatorTest, ActivateTab) {
   ASSERT_EQ(1, web_state_list_->active_index());
   ASSERT_EQ(2, web_state_list_->count());
 
-  TabSwitcherItem* item = [[WebStateTabSwitcherItem alloc]
+  TabSwitcherItem* item = [[TabStripTabItem alloc]
       initWithWebState:web_state_list_->GetWebStateAt(0)];
 
   [mediator_ activateItem:item];
@@ -738,7 +737,7 @@ TEST_F(TabStripMediatorTest, CloseTab) {
   ASSERT_EQ(1, web_state_list_->active_index());
   ASSERT_EQ(2, web_state_list_->count());
 
-  TabSwitcherItem* item = [[WebStateTabSwitcherItem alloc]
+  TabSwitcherItem* item = [[TabStripTabItem alloc]
       initWithWebState:web_state_list_->GetWebStateAt(1)];
   [mediator_ closeItem:item];
 
@@ -767,7 +766,7 @@ TEST_F(TabStripMediatorTest, RemoveTabFromGroup) {
   ASSERT_EQ(4, web_state_list_->count());
   EXPECT_EQ(2, group->range().count());
 
-  TabSwitcherItem* item = [[WebStateTabSwitcherItem alloc]
+  TabSwitcherItem* item = [[TabStripTabItem alloc]
       initWithWebState:web_state_list_->GetWebStateAt(1)];
   [mediator_ removeItemFromGroup:item];
 
@@ -798,7 +797,7 @@ TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptPinned) {
   EXPECT_CALL(*tab_group_sync_service_, RemoveGroup(tab_group_id)).Times(0);
 
   TabSwitcherItem* item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:web_state_to_keep];
+      [[TabStripTabItem alloc] initWithWebState:web_state_to_keep];
   [mediator_ closeAllItemsExcept:item];
 
   ASSERT_EQ("a b* |", builder.GetWebStateListDescription());
@@ -827,7 +826,7 @@ TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptNonActive) {
   EXPECT_CALL(*tab_group_sync_service_, RemoveGroup(tab_group_id)).Times(0);
 
   TabSwitcherItem* item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:web_state_to_keep];
+      [[TabStripTabItem alloc] initWithWebState:web_state_to_keep];
   [mediator_ closeAllItemsExcept:item];
 
   ASSERT_EQ("a b | d*", builder.GetWebStateListDescription());
@@ -856,7 +855,7 @@ TEST_F(TabStripMediatorTest, CloseAllNonPinnedTabsExceptActive) {
   EXPECT_CALL(*tab_group_sync_service_, RemoveGroup(tab_group_id)).Times(0);
 
   TabSwitcherItem* item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:web_state_to_keep];
+      [[TabStripTabItem alloc] initWithWebState:web_state_to_keep];
   [mediator_ closeAllItemsExcept:item];
 
   ASSERT_EQ("a b | f*", builder.GetWebStateListDescription());
@@ -881,7 +880,7 @@ TEST_F(TabStripMediatorTest, CloseTabsExceptGroupedTab) {
   EXPECT_CALL(*tab_group_sync_service_, RemoveGroup(tab_group_id)).Times(0);
 
   TabSwitcherItem* item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:web_state_to_keep];
+      [[TabStripTabItem alloc] initWithWebState:web_state_to_keep];
   [mediator_ closeAllItemsExcept:item];
 
   ASSERT_EQ("a b | [ 1 g* ]", builder.GetWebStateListDescription());
@@ -959,7 +958,7 @@ TEST_F(TabStripMediatorTest, CreateNewGroupWithItem) {
   const int web_state_index = 1;
   web::WebState* web_state = web_state_list_->GetWebStateAt(web_state_index);
   TabSwitcherItem* tab_switcher_item =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:web_state];
+      [[TabStripTabItem alloc] initWithWebState:web_state];
   [mediator_ createNewGroupWithItem:tab_switcher_item];
   EXPECT_EQ(std::set<web::WebStateID>{tab_switcher_item.identifier},
             tab_strip_handler_.identifiersForTabGroupCreation);
@@ -978,9 +977,7 @@ TEST_F(TabStripMediatorTest, CollapseExpandGroup) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({1, 2}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* group_item =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* group_item = [[TabGroupItem alloc] initWithTabGroup:group];
   TabStripItemIdentifier* group_item_identifier =
       [TabStripItemIdentifier groupIdentifier:group_item];
 
@@ -1019,9 +1016,7 @@ TEST_F(TabStripMediatorTest, RenameGroup) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* groupItem =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* groupItem = [[TabGroupItem alloc] initWithTabGroup:group];
 
   InitializeMediator();
 
@@ -1036,9 +1031,7 @@ TEST_F(TabStripMediatorTest, AddTabInGroupFromGroup) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* groupItem =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* groupItem = [[TabGroupItem alloc] initWithTabGroup:group];
 
   InitializeMediator();
 
@@ -1063,9 +1056,7 @@ TEST_F(TabStripMediatorTest, AddTabInGroupOutsideOfGroup) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* groupItem =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* groupItem = [[TabGroupItem alloc] initWithTabGroup:group];
 
   InitializeMediator();
 
@@ -1093,9 +1084,7 @@ TEST_F(TabStripMediatorTest, UngroupTabs) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* groupItem =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* groupItem = [[TabGroupItem alloc] initWithTabGroup:group];
 
   InitializeMediator();
 
@@ -1117,9 +1106,7 @@ TEST_F(TabStripMediatorTest, DeleteGroup) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* groupItem =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* groupItem = [[TabGroupItem alloc] initWithTabGroup:group];
 
   InitializeMediator();
 
@@ -1141,9 +1128,7 @@ TEST_F(TabStripMediatorTest, CloseGroup) {
   AddWebState();
   const TabGroup* group =
       web_state_list_->CreateGroup({0, 1}, {}, TabGroupId::GenerateNew());
-  TabGroupItem* groupItem =
-      [[TabGroupItem alloc] initWithTabGroup:group
-                                webStateList:web_state_list_];
+  TabGroupItem* groupItem = [[TabGroupItem alloc] initWithTabGroup:group];
 
   InitializeMediator();
 
@@ -1176,7 +1161,7 @@ TEST_F(TabStripMediatorTest, AddTabToGroup) {
 
   web::WebState* web_state_1 = web_state_list_->GetWebStateAt(1);
   TabSwitcherItem* item_for_web_state_1 =
-      [[WebStateTabSwitcherItem alloc] initWithWebState:web_state_1];
+      [[TabStripTabItem alloc] initWithWebState:web_state_1];
   [mediator_ addItem:item_for_web_state_1 toGroup:group];
 
   // Check model is updated.
@@ -1737,4 +1722,25 @@ TEST_F(TabStripMediatorTest, TabStripItemHasNotificationDot) {
   EXPECT_EQ(consumer_.itemData[consumer_.items[1]].hasNotificationDot, YES);
   EXPECT_EQ(consumer_.itemData[consumer_.items[2]].hasNotificationDot, NO);
   EXPECT_EQ(consumer_.itemData[consumer_.items[3]].hasNotificationDot, NO);
+}
+
+// Tests that `fetchTabSnapshotAndFavicon:completion:` is calling `completion`
+// once.
+TEST_F(TabStripMediatorTest, FetchTabSnapshotAndFavicon) {
+  auto fake_web_state = std::make_unique<web::FakeWebState>();
+  web::FakeWebState* web_state = fake_web_state.get();
+  SnapshotTabHelper::CreateForWebState(web_state);
+  TabStripTabItem* item = [[TabStripTabItem alloc] initWithWebState:web_state];
+  __block int completion_block_called = 0;
+  auto completion_block = ^(TabSwitcherItem* inner_item,
+                            TabSnapshotAndFavicon* tab_snapshot_and_favicon) {
+    completion_block_called++;
+    ASSERT_LE(completion_block_called, 1);
+  };
+  InitializeMediator();
+  [mediator_ fetchTabSnapshotAndFavicon:item completion:completion_block];
+  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
+      TestTimeouts::action_timeout(), ^bool() {
+        return completion_block_called == 1;
+      }));
 }

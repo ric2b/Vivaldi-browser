@@ -5,6 +5,11 @@
 #ifndef CRYPTO_HASH_H_
 #define CRYPTO_HASH_H_
 
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <string_view>
+
 #include "base/containers/span.h"
 #include "base/notreached.h"
 #include "crypto/crypto_export.h"
@@ -14,24 +19,29 @@ namespace crypto::hash {
 
 inline constexpr size_t kSha1Size = 20;
 inline constexpr size_t kSha256Size = 32;
+inline constexpr size_t kSha384Size = 48;
 inline constexpr size_t kSha512Size = 64;
 
 // Unless your code needs to be generic over HashKind, use one of these
 // kind-specific functions:
 CRYPTO_EXPORT std::array<uint8_t, kSha1Size> Sha1(
     base::span<const uint8_t> data);
+CRYPTO_EXPORT std::array<uint8_t, kSha1Size> Sha1(std::string_view data);
 
 CRYPTO_EXPORT std::array<uint8_t, kSha256Size> Sha256(
     base::span<const uint8_t> data);
+CRYPTO_EXPORT std::array<uint8_t, kSha256Size> Sha256(std::string_view data);
 
 CRYPTO_EXPORT std::array<uint8_t, kSha512Size> Sha512(
     base::span<const uint8_t> data);
+CRYPTO_EXPORT std::array<uint8_t, kSha512Size> Sha512(std::string_view data);
 
 // If you do need to be generic, you can use the Hash() function and pass a
 // HashKind instead.
 enum HashKind {
   kSha1,
   kSha256,
+  kSha384,
   kSha512,
 };
 
@@ -41,6 +51,8 @@ inline constexpr size_t DigestSizeForHashKind(HashKind k) {
       return kSha1Size;
     case kSha256:
       return kSha256Size;
+    case kSha384:
+      return kSha384Size;
     case kSha512:
       return kSha512Size;
   }
@@ -51,6 +63,9 @@ inline constexpr size_t DigestSizeForHashKind(HashKind k) {
 // digest; use DigestSizeForHashKind() if your HashKind is variable.
 CRYPTO_EXPORT void Hash(HashKind kind,
                         base::span<const uint8_t> data,
+                        base::span<uint8_t> digest);
+CRYPTO_EXPORT void Hash(HashKind kind,
+                        std::string_view data,
                         base::span<uint8_t> digest);
 
 // A streaming hasher interface. Calling Finish() resets the hash context to the
@@ -65,6 +80,7 @@ class CRYPTO_EXPORT Hasher {
   ~Hasher();
 
   void Update(base::span<const uint8_t> data);
+  void Update(std::string_view data);
 
   // The digest span must be the right size.
   void Finish(base::span<uint8_t> digest);

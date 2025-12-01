@@ -18,7 +18,7 @@
 #include "components/autofill/core/browser/ui/payments/autofill_error_dialog_view.h"
 #include "components/autofill/core/browser/ui/payments/autofill_progress_dialog_controller.h"
 #include "components/constrained_window/constrained_window_views.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/base/mojom/ui_base_types.mojom-shared.h"
@@ -127,9 +127,8 @@ AutofillProgressDialogViews::AutofillProgressDialogViews(
     : controller_(controller) {
   // Set the ownership of the delegate, not the View. The View is owned by the
   // Widget as a child view.
-  // TODO(crbug.com/338254375): Remove the following two lines once this is the
-  // default state for widgets and the delegates.
-  SetOwnedByWidget(false);
+  // TODO(crbug.com/338254375): Remove the following line once this is the
+  // default state for widgets.
   SetOwnershipOfNewWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
 
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kCancel));
@@ -205,7 +204,7 @@ void AutofillProgressDialogViews::Dismiss(bool show_confirmation_before_closing,
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
         FROM_HERE,
         base::BindOnce(&AutofillProgressDialogViews::CloseWidget,
-                       base::Unretained(this)),
+                       weak_ptr_factory_.GetWeakPtr()),
         kDelayBeforeDismissingProgressDialog);
     return;
   }

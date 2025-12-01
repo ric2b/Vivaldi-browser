@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -123,7 +124,7 @@ const UIStrings = {
    * @description Tooltip text that appears when hovering over the largeicon load button in the
    * Network Panel. This action prompts the user to select a HAR file to upload to DevTools.
    */
-  importHarFile: 'Import `HAR` file...',
+  importHarFile: 'Import `HAR` file…',
   /**
    * @description Tooltip text that appears when hovering over the download button in the Network
    * panel, when the setting to allow generating HAR files with sensitive data is enabled. HAR is
@@ -142,14 +143,14 @@ const UIStrings = {
    * the Network panel, when the setting to allow generating HAR files with sensitive data is
    * enabled.
    */
-  exportHarSanitized: 'Export `HAR` (sanitized)...',
+  exportHarSanitized: 'Export `HAR` (sanitized)…',
   /**
    * @description Context menu item in the context menu for the download button of the Network panel,
    * which is only available when the Network setting to allow generating HAR with sensitive data
    * is active. HAR is a file format (HTTP Archive) and should not be translated. This action
    * triggers the download of a HAR file with sensitive data included.
    */
-  exportHarWithSensitiveData: 'Export `HAR` (with sensitive data)...',
+  exportHarWithSensitiveData: 'Export `HAR` (with sensitive data)…',
   /**
    *@description Text for throttling the network
    */
@@ -158,7 +159,7 @@ const UIStrings = {
    *@description Text in Network Panel to tell the user to reload the page to capture screenshots.
    *@example {Ctrl + R} PH1
    */
-  hitSToReloadAndCaptureFilmstrip: 'Hit {PH1} to reload and capture filmstrip.',
+  hitSToReloadAndCaptureFilmstrip: 'Press {PH1} to reload and capture filmstrip.',
   /**
    * @description A context menu item that is shown for resources in other panels
    * to open them in the Network panel.
@@ -175,11 +176,11 @@ const UIStrings = {
   /**
    *@description Text in Network Panel that is displayed whilst the recording is in progress.
    */
-  recordingFrames: 'Recording frames...',
+  recordingFrames: 'Recording frames…',
   /**
    *@description Text in Network Panel that is displayed when frames are being fetched.
    */
-  fetchingFrames: 'Fetching frames...',
+  fetchingFrames: 'Fetching frames…',
   /**
    * @description Text of a button in the Network panel's toolbar that open Network Conditions panel in the drawer.
    */
@@ -872,8 +873,8 @@ export class RequestIdRevealer implements Common.Revealer.Revealer<NetworkForwar
 export class NetworkLogWithFilterRevealer implements
     Common.Revealer
         .Revealer<Extensions.ExtensionServer.RevealableNetworkRequestFilter|NetworkForward.UIFilter.UIRequestFilter> {
-  reveal(request: Extensions.ExtensionServer.RevealableNetworkRequestFilter|
-         NetworkForward.UIFilter.UIRequestFilter): Promise<void> {
+  reveal(request: Extensions.ExtensionServer.RevealableNetworkRequestFilter|NetworkForward.UIFilter.UIRequestFilter):
+      Promise<void> {
     if ('filters' in request) {
       return NetworkPanel.revealAndFilter(request.filters);
     }
@@ -956,7 +957,7 @@ export class FilmStripRecorder implements Trace.TracingManager.TracingManagerCli
 
     this.tracingManager = tracingManager;
     this.resourceTreeModel = this.tracingManager.target().model(SDK.ResourceTreeModel.ResourceTreeModel);
-    void this.tracingManager.start(this, '-*,disabled-by-default-devtools.screenshot', '');
+    void this.tracingManager.start(this, '-*,disabled-by-default-devtools.screenshot');
 
     Host.userMetrics.actionTaken(Host.UserMetrics.Action.FilmStripStartedRecording);
   }

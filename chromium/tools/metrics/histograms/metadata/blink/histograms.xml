@@ -121,7 +121,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Accessibility.ModeFlag" enum="AccessibilityModeFlagEnum"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>kevers@chromium.org</owner>
   <owner>chrome-a11y-core@chromium.org</owner>
   <summary>
@@ -144,7 +144,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Accessibility.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-12-08">
   <owner>ikilpatrick@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -223,7 +223,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Animate.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-06-01">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -242,7 +242,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Animation.CompositedAnimationFailureReason"
-    enum="CompositorAnimationsFailureReason" expires_after="2025-07-27">
+    enum="CompositorAnimationsFailureReason" expires_after="2025-09-28">
   <owner>smcgruer@chromium.org</owner>
   <owner>animations-dev@chromium.org</owner>
   <summary>
@@ -274,7 +274,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.2DLayerBridge.Compression.DecompressionTime"
-    units="ms" expires_after="2025-09-14">
+    units="ms" expires_after="2025-11-16">
   <owner>lizeb@chromium.org</owner>
   <owner>jpgravel@chromium.org</owner>
   <summary>
@@ -284,7 +284,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.2DLayerBridge.Compression.Ratio" units="%"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>lizeb@chromium.org</owner>
   <owner>jpgravel@chromium.org</owner>
   <summary>
@@ -304,7 +304,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.2DLayerBridge.Compression.ThreadTime" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>lizeb@chromium.org</owner>
   <owner>jpgravel@chromium.org</owner>
   <summary>
@@ -325,7 +325,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.2DPrintingAsVector" enum="BooleanSuccess"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>fserb@chromium.org</owner>
   <owner>aaronhk@chromium.org</owner>
   <summary>
@@ -355,7 +355,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.GetImageData.WillReadFrequently"
-    enum="BooleanWillReadFrequently" expires_after="2025-08-10">
+    enum="BooleanWillReadFrequently" expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>junov@chromium.org</owner>
   <summary>
@@ -364,7 +364,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.GPUFallbackToCPU"
-    enum="CanvasGPUFallbackToCPUScenario" expires_after="2025-08-10">
+    enum="CanvasGPUFallbackToCPUScenario" expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>Logs the occurrences of canvas fallback from GPU to CPU.</summary>
@@ -380,7 +380,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.HibernationEvents" enum="CanvasHibernationEvent"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>
@@ -390,7 +390,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.MaximumInflightResources"
-    units="canvas resources" expires_after="2025-08-10">
+    units="canvas resources" expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>
@@ -431,7 +431,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.RasterDuration{BlinkCanvasRasterDurationType}"
-    units="microseconds" expires_after="2025-08-03">
+    units="microseconds" expires_after="2025-10-05">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>
@@ -482,7 +482,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.ResourceProviderType"
-    enum="CanvasResourceProviderType" expires_after="2025-08-10">
+    enum="CanvasResourceProviderType" expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>Records the type of resource provider used for a canvas.</summary>
@@ -498,7 +498,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.SqrtNumberOfPixels" units="sqrt(pixels)"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>
@@ -522,7 +522,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.ToBlob.InitialEncodingDelay.{Type}"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>
@@ -554,7 +554,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.ToBlob.ScaledDuration{BlinkCanvasToBlobType}"
-    units="microseconds/sqrt(pixels)" expires_after="2025-08-10">
+    units="microseconds/sqrt(pixels)" expires_after="2025-10-12">
   <owner>fserb@chromium.org</owner>
   <owner>aaronhk@chromium.org</owner>
   <summary>
@@ -579,7 +579,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.ToBlob.TotalEncodingDelay.{Type}"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-10-12">
   <owner>aaronhk@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <summary>
@@ -614,7 +614,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.ToDataURLCompressionRatio.PNG"
-    units="encoded bytes per 100 image bytes" expires_after="2025-08-10">
+    units="encoded bytes per 100 image bytes" expires_after="2025-10-12">
   <owner>lukasza@chromium.org</owner>
   <owner>danieldilan@google.com</owner>
   <owner>fmalita@chromium.org</owner>
@@ -633,7 +633,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.Canvas.ToDataURLScaledDuration{BlinkCanvasToDataURLMimeType}"
-    units="microseconds/sqrt(pixels)" expires_after="2025-08-10">
+    units="microseconds/sqrt(pixels)" expires_after="2025-10-12">
   <owner>fserb@chromium.org</owner>
   <owner>aaronhk@chromium.org</owner>
   <summary>
@@ -668,7 +668,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Canvas.WebGLANGLEImplementation"
-    enum="WebGLANGLEImplementation" expires_after="2025-08-10">
+    enum="WebGLANGLEImplementation" expires_after="2025-10-12">
   <owner>zmo@chromium.org</owner>
   <owner>webgl-team@google.com</owner>
   <summary>
@@ -689,7 +689,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.CommitDocumentLoaderTime" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -699,7 +699,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.CompositingCommit.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-17">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -719,7 +719,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.CompositingInputs.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-07-27">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -763,7 +763,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.ContentDocumentUpdate.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -839,8 +839,38 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Blink.CookiesTime.AblationDelay2" units="ms"
+    expires_after="2025-10-26">
+  <owner>elkurin@chromium.org</owner>
+  <owner>chrome-owp-storage@google.com</owner>
+  <summary>
+    Time (in ms) added to Cookies operation with IPC call from the CookieJar
+    used for ablation study purpose. This is incremented to 2 because the
+    Blink.CookiesTime.AblationDelay metrics also includes the metrics for the
+    operation without IPC call.
+  </summary>
+</histogram>
+
+<histogram name="Blink.CookiesTime.{IpcNeeded}" units="ms"
+    expires_after="2025-10-26">
+  <owner>elkurin@chromium.org</owner>
+  <owner>chrome-owp-storage@google.com</owner>
+  <summary>
+    Measures the time it takes to perform a Cookies operation with or without
+    IPC call from the CookieJar. IPC call can be skipped in case where the
+    cookie string is taken successfully and has not changed. In such case, the
+    metrics is recorded for the time to check shared memory and other tasks. The
+    metrics should be separated by whether it needs IPC as it extremely affects
+    the time.
+  </summary>
+  <token key="IpcNeeded">
+    <variant name="IpcNeeded"/>
+    <variant name="IpcNotNeeded"/>
+  </token>
+</histogram>
+
 <histogram name="Blink.CSSStyleSheetResource.ParseTime" units="microseconds"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>gjc@chromium.org</owner>
   <owner>loading-dev@chromium.org</owner>
   <owner>blink-network-dev@chromium.org</owner>
@@ -853,7 +883,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.CullRect.UpdateTime" units="microseconds"
-    expires_after="2025-06-22">
+    expires_after="2025-09-22">
   <owner>pdr@chromium.org</owner>
   <owner>wangxianzhu@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
@@ -865,7 +895,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImage.AvifDensity.Count.{ImageArea}"
-    units="0.01 bits per pixel" expires_after="2025-09-14">
+    units="0.01 bits per pixel" expires_after="2025-11-16">
   <owner>wtc@google.com</owner>
   <owner>jzern@google.com</owner>
   <owner>
@@ -905,7 +935,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImage.AvifDensity.KiBWeighted2"
-    units="0.01 bits per pixel" expires_after="2025-09-14">
+    units="0.01 bits per pixel" expires_after="2025-11-16">
   <owner>wtc@google.com</owner>
   <owner>jzern@google.com</owner>
   <owner>
@@ -921,7 +951,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImage.JpegDensity.Count.{ImageArea}"
-    units="0.01 bits per pixel" expires_after="2025-09-14">
+    units="0.01 bits per pixel" expires_after="2025-11-16">
   <owner>wtc@google.com</owner>
   <owner>jzern@google.com</owner>
   <owner>src/third_party/blink/renderer/platform/image-decoders/OWNERS</owner>
@@ -958,7 +988,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImage.JpegDensity.KiBWeighted"
-    units="0.01 bits per pixel" expires_after="2025-08-10">
+    units="0.01 bits per pixel" expires_after="2025-10-12">
   <owner>jyrki@google.com</owner>
   <owner>compression-dev@google.com</owner>
   <summary>
@@ -971,7 +1001,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImage.WebPDensity.Count.{ImageArea}"
-    units="0.01 bits per pixel" expires_after="2025-09-14">
+    units="0.01 bits per pixel" expires_after="2025-11-16">
   <owner>wtc@google.com</owner>
   <owner>jzern@google.com</owner>
   <owner>src/third_party/blink/renderer/platform/image-decoders/OWNERS</owner>
@@ -1023,7 +1053,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImage.WebPFileFormat" enum="WebPFileFormat"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>mcasas@chromium.org</owner>
   <owner>andrescj@chromium.org</owner>
   <summary>
@@ -1033,7 +1063,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DecodedImageType" enum="DecodedImageType"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>urvang@chromium.org</owner>
   <summary>
     Image codec inferred during decode. The histogram is incremented when enough
@@ -1043,7 +1073,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DigitalIdentityRequest.InterstitialClosedReason"
-    enum="DigitalIdentityInterstitialClosedReason" expires_after="2025-06-01">
+    enum="DigitalIdentityInterstitialClosedReason" expires_after="2025-12-01">
   <owner>mamir@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1053,7 +1083,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.DigitalIdentityRequest.Status"
-    enum="DigitalIdentityRequestStatus" expires_after="2025-06-01">
+    enum="DigitalIdentityRequestStatus" expires_after="2025-12-01">
   <owner>mamir@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1084,9 +1114,22 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Blink.Document.CompleteURLTime" units="microseconds"
+    expires_after="2025-08-19">
+  <owner>nidhijaju@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Time taken to resolve a non-null URL in Document::CompleteURLWithOverride.
+    This is recorded each time a URL is resolved, and can happen multiple times
+    per navigation.
+
+    This histogram only records metrics on machines with high-resolution clocks.
+  </summary>
+</histogram>
+
 <histogram
     name="Blink.DocumentLoader.CommitNavigationToStartLoadingResponse.Time.OutermostMainFrame.NewNavigation.IsHTTPOrHTTPS"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1098,7 +1141,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.DocumentLoader.CreateParserPostCommit.Time.OutermostMainFrame.NewNavigation.IsHTTPOrHTTPS"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1108,7 +1151,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Blink.EffectiveZoom" units="%" expires_after="2025-08-24">
+<histogram name="Blink.EffectiveZoom" units="%" expires_after="2025-10-26">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -1132,7 +1175,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Experimental.Cookies.CacheLookupResult2"
-    enum="CookieCacheLookupResult" expires_after="2025-08-24">
+    enum="CookieCacheLookupResult" expires_after="2025-10-26">
   <owner>olivierli@chromium.org</owner>
   <owner>woa-performance@google</owner>
   <summary>
@@ -1146,7 +1189,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Experimental.Cookies.FirstCookieRequest"
-    enum="FirstCookieRequest" expires_after="2025-08-24">
+    enum="FirstCookieRequest" expires_after="2025-10-26">
   <owner>aattar@google.com</owner>
   <owner>chrome-catan@google</owner>
   <summary>
@@ -1160,7 +1203,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Experimental.Cookies.IpcNeeded" enum="BooleanYesNo"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>lizeb@google.com</owner>
   <owner>clank-performance-team@google</owner>
   <summary>
@@ -1170,7 +1213,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AccountChosenPosition.Desktop" units="count"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1181,7 +1224,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AccountLabel.NumMatchingAccounts"
-    enum="FedCmNumAccounts" expires_after="2025-08-12">
+    enum="FedCmNumAccounts" expires_after="2025-10-12">
   <owner>cbiesinger@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1191,14 +1234,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AccountsDialogShown" enum="BooleanHit"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>Records a 1 each time an accounts dialog is shown.</summary>
 </histogram>
 
 <histogram name="Blink.FedCm.AccountsRequestSent" enum="BooleanHit"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1207,7 +1250,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AccountsSize.Raw" units="accounts"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1218,7 +1261,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AccountsSize.ReadyToShow" units="accounts"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1240,7 +1283,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.ApprovedClientsExistence" enum="Boolean"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1250,7 +1293,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.ApprovedClientsSize" units="clients"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1299,7 +1342,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AutoReauthn.ReturningAccounts"
-    enum="FedCmNumAccounts" expires_after="2025-08-12">
+    enum="FedCmNumAccounts" expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
@@ -1312,7 +1355,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.AutoReauthn.Succeeded" enum="Boolean"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
@@ -1343,7 +1386,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Button.AccountChooserResult"
-    enum="FedCmAccountChooserResult" expires_after="2025-08-12">
+    enum="FedCmAccountChooserResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1356,7 +1399,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Button.DisclosureDialogResult"
-    enum="FedCmDisclosureDialogResult" expires_after="2025-08-12">
+    enum="FedCmDisclosureDialogResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1369,7 +1412,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Button.LoadingDialogResult"
-    enum="FedCmLoadingDialogResult" expires_after="2025-08-12">
+    enum="FedCmLoadingDialogResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1383,7 +1426,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Button.LoadingStatePopupInteraction"
-    enum="FedCmPopupInteraction" expires_after="2025-08-12">
+    enum="FedCmPopupInteraction" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1394,7 +1437,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Button.UseOtherAccountPopupInteraction"
-    enum="FedCmPopupInteraction" expires_after="2025-08-12">
+    enum="FedCmPopupInteraction" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1405,7 +1448,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.CancelReason" enum="FedCmCancelReason"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1418,7 +1461,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.ClosedSheetType.Android" enum="FedCmSheetType"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1429,7 +1472,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.ClosedSheetType.Desktop" enum="FedCmSheetType"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1460,7 +1503,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.ContinueOn.PopupWindowResult"
-    enum="FedCmContinueOnPopupResult" expires_after="2025-08-12">
+    enum="FedCmContinueOnPopupResult" expires_after="2025-10-12">
   <owner>cbiesinger@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1472,7 +1515,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.ContinueOn.PopupWindowStatus"
-    enum="FedCmContinueOnPopupStatus" expires_after="2025-08-12">
+    enum="FedCmContinueOnPopupStatus" expires_after="2025-10-12">
   <owner>cbiesinger@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1505,7 +1548,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Error.ErrorDialogResult"
-    enum="FedCmErrorDialogResult" expires_after="2025-08-12">
+    enum="FedCmErrorDialogResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1535,7 +1578,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Error.TokenResponseType"
-    enum="FedCmTokenResponseType" expires_after="2025-08-12">
+    enum="FedCmTokenResponseType" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1545,7 +1588,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.FrameType" enum="FedCmRequesterFrameType"
-    expires_after="2025-08-12">
+    expires_after="2025-10-19">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1557,7 +1600,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.HasSigninAccount" enum="BooleanYesNo"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1570,7 +1613,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.IdentityProvidersCount" units="count"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1582,7 +1625,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.IdpSigninRequestInitiatedByUser"
-    enum="BooleanYesNo" expires_after="2025-08-12">
+    enum="BooleanYesNo" expires_after="2025-10-12">
   <owner>cbiesinger@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1594,7 +1637,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.IdpSigninStatus.ClosePopupWindowReason"
-    enum="FedCmClosePopupWindowReason" expires_after="2025-08-12">
+    enum="FedCmClosePopupWindowReason" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1617,7 +1660,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.IdpSigninStatus.MismatchDialogResult"
-    enum="FedCmMismatchDialogResult" expires_after="2025-08-12">
+    enum="FedCmMismatchDialogResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1627,7 +1670,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.IdpSigninStatus.PopupWindowResult"
-    enum="FedCmPopupWindowResult" expires_after="2025-08-12">
+    enum="FedCmPopupWindowResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1660,7 +1703,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.IsSignInUser" enum="Boolean"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1694,7 +1737,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.LifecycleStateFailureReason"
-    enum="FedCmLifecycleStateFailureReason" expires_after="2025-08-12">
+    enum="FedCmLifecycleStateFailureReason" expires_after="2025-11-16">
   <owner>cbiesinger@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1714,14 +1757,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.MismatchDialogShown" enum="BooleanHit"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>Records a 1 each time a mismatch dialog is shown.</summary>
 </histogram>
 
 <histogram name="Blink.FedCm.MismatchDialogType" enum="FedCmMismatchDialogType"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1733,7 +1776,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.MultipleRequestsFromDifferentIdPs" enum="Boolean"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1744,7 +1787,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.MultipleRequestsRpMode"
-    enum="FedCmMultipleRequestsRpMode" expires_after="2025-08-12">
+    enum="FedCmMultipleRequestsRpMode" expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1793,7 +1836,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.RpContext" enum="FedCmRpContext"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1803,7 +1846,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.RpMode" enum="FedCmRpMode"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1846,7 +1889,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.SignInStatusSetToSignout.NetError"
-    enum="NetErrorCodes" expires_after="2025-08-12">
+    enum="NetErrorCodes" expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1857,7 +1900,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.SignUp.PrivacyPolicyClicked" enum="BooleanHit"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1867,7 +1910,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.SignUp.TermsOfServiceClicked" enum="BooleanHit"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1894,7 +1937,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Status.Disconnect" enum="FedCmDisconnectStatus"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1904,7 +1947,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Status.IdpSigninMatch"
-    enum="FedCmIdpSigninMatchStatus" expires_after="2025-08-12">
+    enum="FedCmIdpSigninMatchStatus" expires_after="2025-10-12">
   <owner>cbiesinger@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1917,7 +1960,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Status.MediationRequirement"
-    enum="CredentialManagerMediationRequirement" expires_after="2025-08-12">
+    enum="CredentialManagerMediationRequirement" expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1928,7 +1971,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Status.RequestIdToken"
-    enum="FedCmRequestIdTokenStatus" expires_after="2025-08-12">
+    enum="FedCmRequestIdTokenStatus" expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1937,7 +1980,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Status.SignInStateMatch"
-    enum="FedCmSignInStateMatchStatus" expires_after="2025-08-12">
+    enum="FedCmSignInStateMatchStatus" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1947,7 +1990,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.AccountsDialogShownDuration2" units="ms"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -1963,7 +2006,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.CancelOnDialog" units="ms"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2001,7 +2044,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.ContinueOnDialog" units="ms"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2048,7 +2091,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.MismatchDialogShownDuration" units="ms"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2061,7 +2104,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.ShowAccountsDialog" units="ms"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2071,7 +2114,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.ShowAccountsDialogBreakdown.AccountsFetch"
-    units="ms" expires_after="2025-08-12">
+    units="ms" expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2083,7 +2126,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.FedCm.Timing.ShowAccountsDialogBreakdown.ClientMetadataFetch"
-    units="ms" expires_after="2025-08-12">
+    units="ms" expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2097,7 +2140,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.FedCm.Timing.ShowAccountsDialogBreakdown.WellKnownAndConfigFetch"
-    units="ms" expires_after="2025-08-12">
+    units="ms" expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2108,7 +2151,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.Timing.TurnaroundTime" units="ms"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2136,7 +2179,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.UseOtherAccountResult"
-    enum="FedCmUseOtherAccountResult" expires_after="2025-08-12">
+    enum="FedCmUseOtherAccountResult" expires_after="2025-10-12">
   <owner>npm@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2182,7 +2225,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.VerifyingDialogResult"
-    enum="FedCmVerifyingDialogResult" expires_after="2025-08-12">
+    enum="FedCmVerifyingDialogResult" expires_after="2025-10-12">
   <owner>tanzachary@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2203,7 +2246,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FedCm.WebContentsVisible" enum="Boolean"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -2213,7 +2256,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FencedFrame.BeaconReportingHttpResult"
-    enum="FencedFrameBeaconReportingResult" expires_after="2025-08-24">
+    enum="FencedFrameBeaconReportingResult" expires_after="2025-10-26">
   <owner>averge@chromium.org</owner>
   <owner>gtanzer@chromium.org</owner>
   <owner>chrome-fenced-frames-core@google.com</owner>
@@ -2230,7 +2273,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FencedFrame.CreationOrNavigationOutcome"
-    enum="FencedFrameCreationOutcome" expires_after="2025-08-24">
+    enum="FencedFrameCreationOutcome" expires_after="2025-10-26">
   <owner>shivanisha@chromium.org</owner>
   <owner>dom@chromium.org</owner>
   <owner>lbrady@google.com</owner>
@@ -2337,7 +2380,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Fetch.RequestResourceTime2{SchemeOrPreload}"
-    units="microseconds" expires_after="2025-09-07">
+    units="microseconds" expires_after="2025-11-09">
   <owner>cduvall@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -2360,7 +2403,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.FetchQueuedPreloadsTime.{FrameType}.{IsInitial}"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -2394,7 +2437,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Fonts.DecodeTime" units="microseconds"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>gjc@chromium.org</owner>
   <owner>blink-network-dev@chromium.org</owner>
   <summary>
@@ -2418,7 +2461,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Fonts.FontServiceThread.MatchFamilyNameTime"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-10-26">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2430,7 +2473,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Fonts.FontServiceThread.OpenStreamTime"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-10-26">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2441,7 +2484,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Fonts.VariableFontsRatio"
-    enum="WebFontInstantiationResult" expires_after="2025-08-24">
+    enum="WebFontInstantiationResult" expires_after="2025-10-26">
   <owner>drott@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -2453,7 +2496,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.ForcedStyleAndLayout.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-17">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -2486,7 +2529,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HandleInputEvents.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-03">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -2505,7 +2548,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.History.VisitedLinks.IsLinkStyledAsVisited"
-    enum="Boolean" expires_after="2025-08-24">
+    enum="Boolean" expires_after="2025-10-26">
   <owner>kyraseevers@chromium.org</owner>
   <owner>janiceliu@chromium.org</owner>
   <summary>
@@ -2516,7 +2559,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.History.VisitedLinks.IsSaltFromNavigationThrottle"
-    enum="Boolean" expires_after="2025-08-24">
+    enum="Boolean" expires_after="2025-10-26">
   <owner>kyraseevers@chromium.org</owner>
   <owner>janiceliu@chromium.org</owner>
   <summary>
@@ -2529,7 +2572,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.HitTestDocumentUpdate.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-03">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -2617,7 +2660,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HTMLFastPathParser.TotalParseTime2" units="microseconds"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>sky@chromium.org</owner>
   <owner>tebbi@chromium.org</owner>
   <owner>dom-dev@google.com</owner>
@@ -2683,7 +2726,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HTMLParsing.ChunkCount4" units="chunks"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>masonf@chromium.org</owner>
   <owner>dom-dev@google.com</owner>
   <summary>
@@ -2712,7 +2755,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HTMLParsing.ParsingTimeMax4" units="microseconds"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>masonf@chromium.org</owner>
   <owner>dom-dev@google.com</owner>
   <summary>
@@ -2742,7 +2785,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HTMLParsing.ParsingTimeTotal4" units="microseconds"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>masonf@chromium.org</owner>
   <owner>dom-dev@google.com</owner>
   <summary>
@@ -2757,7 +2800,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HTMLParsing.PreloadRequestCount" units="count"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2767,6 +2810,18 @@ chromium-metrics-reviews@google.com.
 
     This histogram does not record metrics on machines with low-resolution
     clocks.
+  </summary>
+</histogram>
+
+<histogram name="Blink.HTMLParsing.ResumedByUserTiming" enum="Boolean"
+    expires_after="2025-08-07">
+  <owner>sisidovski@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Records whether the parser yield is resumed by the user timing signal via
+    performance.mark(), or resumed by the scheduled timeout.
+
+    This is measured for the experiment in crbug.com/416543903.
   </summary>
 </histogram>
 
@@ -2825,7 +2880,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.HTMLParsing.TokensParsedTotal4" units="tokens"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>masonf@chromium.org</owner>
   <owner>dom-dev@google.com</owner>
   <summary>
@@ -2834,6 +2889,18 @@ chromium-metrics-reviews@google.com.
 
     This histogram does not record metrics on machines with low-resolution
     clocks.
+  </summary>
+</histogram>
+
+<histogram name="Blink.HTMLParsing.YieldedCountByUserTiming" units="count"
+    expires_after="2025-08-07">
+  <owner>sisidovski@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The count how many times the parser is yielded by the signal from the site.
+    This is triggered via performance.mark().
+
+    This is measured for the experiment in crbug.com/416543903.
   </summary>
 </histogram>
 
@@ -2848,6 +2915,18 @@ chromium-metrics-reviews@google.com.
 
     This histogram does not record metrics on machines with low-resolution
     clocks.
+  </summary>
+</histogram>
+
+<histogram name="Blink.HTMLParsing.YieldedTimeByUserTiming" units="ms"
+    expires_after="2025-08-07">
+  <owner>sisidovski@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The time between when the parser has been paused by the signal from the site
+    and when it's resumed. Both pause and resume signals are triggered via
+    performance.mark(). This is measured for the experiment in
+    crbug.com/416543903.
   </summary>
 </histogram>
 
@@ -2912,7 +2991,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.ImplCompositorCommit.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -2979,7 +3058,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.JavascriptDocumentUpdate.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -3050,7 +3129,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Layout.SVGImage.TotalTime.InOutermostMainFrame"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-10-12">
   <owner>chikamune@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3078,7 +3157,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Layout.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-17">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -3120,7 +3199,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.BoostImagePriorityReason"
-    enum="BoostImagePriorityReason" expires_after="2025-08-31">
+    enum="BoostImagePriorityReason" expires_after="2025-11-02">
   <owner>chikamune@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3134,7 +3213,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.CrossOriginLcpImage" enum="Boolean"
-    expires_after="2025-09-09">
+    expires_after="2025-11-09">
   <owner>alexnj@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3166,7 +3245,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.DeferUnusedPreload.DeferredResourceCount"
-    units="count" expires_after="2025-08-24">
+    units="count" expires_after="2025-10-26">
   <owner>sisidovski@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3183,7 +3262,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.DeferUnusedPreload.DeferredResource{Trigger}"
-    enum="ResourceType" expires_after="2025-08-24">
+    enum="ResourceType" expires_after="2025-10-26">
   <owner>sisidovski@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3198,7 +3277,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.DeferUnusedPreload.PredictionFailed{Trigger}"
-    enum="ResourceType" expires_after="2025-09-14">
+    enum="ResourceType" expires_after="2025-11-16">
   <owner>sisidovski@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3215,7 +3294,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.LCPP.DeferUnusedPreload.UnusedAtDeferredLoadTiming{Trigger}"
-    enum="Boolean" expires_after="2025-08-24">
+    enum="Boolean" expires_after="2025-10-26">
   <owner>sisidovski@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3256,7 +3335,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.LCPElementLocatorSize" units="bytes"
-    expires_after="2025-08-17">
+    expires_after="2025-10-19">
   <owner>kouhei@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3332,7 +3411,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.LCPP.NavigationToStartPreload.MainFrame.{SubresourceType}.Time"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>chikamune@chromium.org</owner>
   <owner>yyanagisawa@chromium.org</owner>
   <owner>kouhei@chromium.org</owner>
@@ -3348,7 +3427,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PotentiallyLCPResourcePriorityBoosts2"
-    units="count" expires_after="2025-06-22">
+    units="count" expires_after="2025-09-28">
   <owner>kouhei@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3367,9 +3446,24 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Blink.LCPP.PreconnectCount" units="count"
+    expires_after="2026-05-09">
+  <owner>yoichio@chromium.org</owner>
+  <owner>
+    src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
+  </owner>
+  <summary>
+    Counts the number of actual preconncted origins for image element.
+
+    The metric is emitted as LCP Critical Path Predictor finalizes LCP candidate
+    dependencies.
+  </summary>
+</histogram>
+
 <histogram name="Blink.LCPP.PreconnectPredictionCount" units="count"
-    expires_after="2025-07-27">
+    expires_after="2026-05-09">
   <owner>alexnj@chromium.org</owner>
+  <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
   </owner>
@@ -3382,8 +3476,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PreconnectPredictionMatchCount" units="count"
-    expires_after="2025-09-09">
+    expires_after="2026-05-09">
   <owner>alexnj@chromium.org</owner>
+  <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
   </owner>
@@ -3399,8 +3494,9 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PreconnectPredictionMatchPercent" units="%"
-    expires_after="2025-09-09">
+    expires_after="2026-05-09">
   <owner>alexnj@chromium.org</owner>
+  <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
   </owner>
@@ -3443,7 +3539,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PrefetchSubresource.Count.{Site}" units="count"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3462,7 +3558,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PrefetchSubresource.DBBroken" enum="BooleanEnabled"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3492,7 +3588,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PrewarmHttpDiskCache.{PrewarmMethod}.CacheExists"
-    enum="BooleanExists" expires_after="2025-08-24">
+    enum="BooleanExists" expires_after="2025-10-26">
   <owner>chikamune@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3510,7 +3606,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PrewarmHttpDiskCacheURL.Count" units="count"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>chikamune@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3522,7 +3618,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PrewarmHttpDiskCacheURL.Count.SameSiteRatio"
-    units="%" expires_after="2025-09-07">
+    units="%" expires_after="2025-11-09">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3536,7 +3632,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.PrewarmHttpDiskCacheURL.Count.{Site}" units="count"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>yoichio@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3570,7 +3666,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlHitCountForPagesWithFonts"
-    units="count" expires_after="2025-06-29">
+    units="count" expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3586,7 +3682,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlMatchCount" units="count"
-    expires_after="2025-06-01">
+    expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3601,7 +3697,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlMatchCountForPagesWithFonts"
-    units="count" expires_after="2025-04-27">
+    units="count" expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3618,7 +3714,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlPredictionHitPercent" units="%"
-    expires_after="2025-06-29">
+    expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3634,7 +3730,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlPredictionHitPercentInRecordedFonts"
-    units="%" expires_after="2025-06-29">
+    units="%" expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3651,7 +3747,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlPredictionMatchPercent" units="%"
-    expires_after="2025-08-24">
+    expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3666,7 +3762,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlReenterCountForPagesWithFonts"
-    units="count" expires_after="2025-04-27">
+    units="count" expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3682,7 +3778,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlReenterPercentInRecordedFonts"
-    units="%" expires_after="2025-06-29">
+    units="%" expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3699,7 +3795,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.LCPP.RecordedFontUrlsMaxLength" units="bytes"
-    expires_after="2025-08-10">
+    expires_after="2025-10-01">
   <owner>yyanagisawa@chromium.org</owner>
   <owner>
     src/third_party/blink/renderer/core/lcp_critical_path_predictor/OWNERS
@@ -3755,8 +3851,19 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Blink.LinkHeader.LoadLinksFromHeaderMode"
+    enum="LoadLinksFromHeaderMode" expires_after="2025-08-09">
+  <owner>tnak@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Counts usage of Link header in HTTP responces to subresource fetches. This
+    histogram are recorded when a HTTP responce with Link headers is received.
+    For details, see PreloadHelper::LoadLinksFromHeader().
+  </summary>
+</histogram>
+
 <histogram name="Blink.MainFrame.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-17">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -3875,7 +3982,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.MemoryCache.RevalidationPolicy.{ResourceType}"
-    enum="RevalidationPolicy" expires_after="2025-08-10">
+    enum="RevalidationPolicy" expires_after="2025-10-12">
   <owner>hiroshige@chromium.org</owner>
   <owner>gjc@chromium.org</owner>
   <owner>loading-dev@chromium.org</owner>
@@ -3933,7 +4040,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Network.ParseDataURLTime{Type}{CharacterCount}"
-    units="microseconds" expires_after="2025-09-14">
+    units="microseconds" expires_after="2025-11-16">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -4014,7 +4121,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Paint.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-17">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -4033,7 +4140,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.ParseStyleSheet.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-07-13">
+    units="microseconds" expires_after="2025-12-08">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -4053,7 +4160,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.PermissionElement.InvalidStyleReason"
-    enum="PermissionElementInvalidStyleReason" expires_after="2025-08-10">
+    enum="PermissionElementInvalidStyleReason" expires_after="2025-10-12">
   <owner>tungnh@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -4075,7 +4182,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Blink.PermissionElement.UserInteractionDeniedReason"
     enum="PermissionElementUserInteractionDeniedReason"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>tungnh@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -4155,7 +4262,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.PrePaint.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -4175,7 +4282,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.PrepareToStopParsingTime" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -4185,7 +4292,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Blink.PumpTokenizerTime" units="ms" expires_after="2025-08-24">
+<histogram name="Blink.PumpTokenizerTime" units="ms" expires_after="2025-10-26">
   <owner>nidhijaju@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -4217,7 +4324,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.ResourceRequest.CompletionDelay2" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>horo@chromium.org</owner>
   <owner>net-dev@chromium.org</owner>
   <summary>
@@ -4252,7 +4359,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.ResourceRequest.ResponseDelay2" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>horo@chromium.org</owner>
   <owner>net-dev@chromium.org</owner>
   <summary>
@@ -4263,7 +4370,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.ResourceRequest.StartDelay2" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>horo@chromium.org</owner>
   <owner>net-dev@chromium.org</owner>
   <summary>
@@ -4620,7 +4727,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.ScanAndPreloadTime.{FrameType}.{IsInitial}" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -4646,7 +4753,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.ScanAndPreloadTime2{Task}.{FrameType}.{IsInitial}"
-    units="microseconds" expires_after="2025-08-03">
+    units="microseconds" expires_after="2025-10-05">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -4777,7 +4884,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.ServiceDocumentUpdate.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -4797,6 +4904,16 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Blink.SetCookieTime.AblationDelay" units="ms"
+    expires_after="2025-10-26">
+  <owner>elkurin@chromium.org</owner>
+  <owner>chrome-owp-storage@google.com</owner>
+  <summary>
+    Time (in ms) added to SetCookie operation from the CookieJar used for
+    ablation study purpose.
+  </summary>
+</histogram>
+
 <histogram name="Blink.Sms.BackendAvailability"
     enum="WebOTPBackendAvailability" expires_after="2025-08-12">
   <owner>yigu@chromium.org</owner>
@@ -4808,7 +4925,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Sms.Receive.CrossDeviceFailure"
-    enum="WebOTPCrossDeviceFailure" expires_after="2025-08-10">
+    enum="WebOTPCrossDeviceFailure" expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
   <summary>
@@ -4829,7 +4946,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Sms.Receive.Outcome" enum="WebOTPServiceOutcome"
-    expires_after="2025-08-12">
+    expires_after="2025-10-12">
   <owner>yigu@chromium.org</owner>
   <owner>goto@chromium.org</owner>
   <owner>web-identity-eng@google.com</owner>
@@ -4959,7 +5076,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.Style.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>
@@ -4978,7 +5095,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.SVGImage.DataChanged" units="microseconds"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <owner>chikamune@chromium.org</owner>
@@ -4994,8 +5111,31 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Blink.ThrottleFrameRate.AllowedBySecurity.API" enum="Boolean"
+    expires_after="2025-12-31">
+  <owner>gjc@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Whether the frame rate throttling feature is allowed by the security check.
+    Recorded each time the link blocking=&quot;full-frame-rate&quot; API is
+    triggered.
+  </summary>
+</histogram>
+
+<histogram
+    name="Blink.ThrottleFrameRate.AllowedBySecurity.DocumentInitialization"
+    enum="Boolean" expires_after="2025-12-31">
+  <owner>gjc@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Whether the frame rate throttling feature is allowed by the security check.
+    Recorded each time the browser attempts to throttle the frame rate when the
+    document is initialized and the corresponding feature is enabled.
+  </summary>
+</histogram>
+
 <histogram name="Blink.UpdateViewportIntersection.RemoteFrameNeedsUpdate"
-    enum="BooleanYesNo" expires_after="2025-08-24">
+    enum="BooleanYesNo" expires_after="2025-10-26">
   <owner>lizeb@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -5006,7 +5146,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.UpdateViewportIntersection.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-17">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -5027,6 +5167,24 @@ chromium-metrics-reviews@google.com.
   <token key="BlinkUpdateTimeSuffixes" variants="BlinkUpdateTimeSuffixes">
     <variant name=""/>
   </token>
+</histogram>
+
+<histogram name="Blink.UseCounter.AboutBlankOrSrcdoc.Features"
+    enum="FeatureObserver" expires_after="2025-10-07">
+  <owner>wjmaclean@chromium.org</owner>
+  <owner>feature-control@chromium.org</owner>
+  <summary>
+    Count of how many about:blank and about:srcdoc pages use various features
+    across all frames in the page. This histogram has the same semantics as
+    &quot;Blink.UseCounter.Features&quot;, but applies only to `about:blank` and
+    `about:srcdoc` URLs (which that histogram does not include). Metrics are
+    emitted either at the time a document commits, or via
+    UseCounterImpl::ReportMeasurement(), depending on which feature is involved.
+    For example, SandboxedSrcdocFrameResolvesRelativeURL reports at most once
+    per PageVisit, and only when the feature is activated.
+
+    Refer to &quot;Blink.UseCounter.Features&quot; for more details.
+  </summary>
 </histogram>
 
 <histogram name="Blink.UseCounter.AnimatedCSSProperties"
@@ -5158,7 +5316,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.UseCounter.FeaturePolicy.Header"
-    enum="FeaturePolicyFeature" expires_after="2025-09-14">
+    enum="FeaturePolicyFeature" expires_after="2025-11-16">
   <owner>iclelland@chromium.org</owner>
   <owner>feature-control@chromium.org</owner>
   <summary>
@@ -5191,7 +5349,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.UseCounter.File.Features" enum="FeatureObserver"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>yhirano@chromium.org</owner>
   <owner>mkwst@chromium.org</owner>
   <summary>
@@ -5325,7 +5483,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Blink.UserDrivenDocumentUpdate.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-10">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -5348,7 +5506,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.VisualUpdateDelay.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-04-13">
+    units="microseconds" expires_after="2025-12-08">
   <owner>szager@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -5362,7 +5520,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.WaitForCommit.UpdateTime{BlinkUpdateTimeSuffixes}"
-    units="microseconds" expires_after="2025-08-24">
+    units="microseconds" expires_after="2025-12-08">
   <owner>pdr@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -5457,7 +5615,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.{CookieOperation}Time" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -5465,7 +5623,6 @@ chromium-metrics-reviews@google.com.
     CookieJar. Logged on every operation from the CookieJar.
   </summary>
   <token key="CookieOperation">
-    <variant name="Cookies"/>
     <variant name="CookiesEnabled"/>
     <variant name="SetCookie"/>
   </token>
@@ -5510,7 +5667,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Blink.{Host}.{Heap}.{Context}" units="KB"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>junov@chromium.org</owner>
   <owner>fserb@chromium.org</owner>
   <owner>aaronhk@chromium.org</owner>

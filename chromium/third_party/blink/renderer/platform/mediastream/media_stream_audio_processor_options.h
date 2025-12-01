@@ -12,6 +12,21 @@
 
 namespace blink {
 
+// Returns whether system noise suppression is allowed to be used regardless of
+// whether the noise suppression constraint is set, or whether a browser-based
+// AEC is active. This is currently the default on at least MacOS but is not
+// allowed for ChromeOS or Windows setups. On Windows, the system effects AEC,
+// NS and AGC always come as a "package" and it it not possible to enable or
+// disable the system NS independently. TODO(crbug.com/417413190): delete if not
+// relevant any more.
+constexpr bool IsIndependentSystemNsAllowed() {
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
+  return false;
+#else
+  return true;
+#endif
+}
+
 // Simple struct with audio-processing properties.
 struct PLATFORM_EXPORT AudioProcessingProperties {
   enum class EchoCancellationType {
@@ -36,20 +51,11 @@ struct PLATFORM_EXPORT AudioProcessingProperties {
   // Disables properties that are enabled by default.
   void DisableDefaultProperties();
 
-  // Returns whether echo cancellation is enabled.
-  bool EchoCancellationEnabled() const;
-
-  // Returns whether WebRTC-provided echo cancellation is enabled.
-  bool EchoCancellationIsWebRtcProvided() const;
-
   bool HasSameReconfigurableSettings(
       const AudioProcessingProperties& other) const;
 
   bool HasSameNonReconfigurableSettings(
       const AudioProcessingProperties& other) const;
-
-  // Returns if AGC is enabled in either WebRTC or system.
-  bool GainControlEnabled() const;
 
   // Converts this struct to an equivalent media::AudioProcessingSettings.
   media::AudioProcessingSettings ToAudioProcessingSettings(
@@ -62,15 +68,6 @@ struct PLATFORM_EXPORT AudioProcessingProperties {
   // counterparts.
   bool system_gain_control_activated = false;
   bool system_noise_suppression_activated = false;
-
-  // Used for an experiment for forcing certain system-level
-  // noise suppression functionalities to be off. In contrast to
-  // `system_noise_suppression_activated` the system-level noise suppression
-  // referred to does not correspond to something that can replace the browser
-  // counterpart. I.e., the browser counterpart should be on, even if
-  // `disable_hw_noise_suppression` is false.
-  // TODO(crbug.com/405165917): can this member now be removed?
-  bool disable_hw_noise_suppression = false;
 
   bool auto_gain_control = true;
   bool noise_suppression = true;

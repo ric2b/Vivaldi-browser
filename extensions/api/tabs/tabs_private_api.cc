@@ -29,6 +29,7 @@
 #include "chrome/browser/ui/performance_controls/memory_saver_utils.h"
 #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
+#include "chrome/browser/ui/tabs/alert/tab_alert.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
@@ -190,56 +191,56 @@ class JSDialogObserver : public javascript_dialogs::AppModalDialogObserver {
 };
 
 static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
-    const std::vector<TabAlertState>& states) {
+    const std::vector<tabs::TabAlert>& states) {
   std::vector<tabs_private::TabAlertState> types;
 
   for (auto status : states) {
     switch (status) {
-      case TabAlertState::MEDIA_RECORDING:
+      case tabs::TabAlert::MEDIA_RECORDING:
         types.push_back(tabs_private::TabAlertState::kRecording);
         break;
-      case TabAlertState::TAB_CAPTURING:
+      case tabs::TabAlert::TAB_CAPTURING:
         types.push_back(tabs_private::TabAlertState::kCapturing);
         break;
-      case TabAlertState::AUDIO_PLAYING:
+      case tabs::TabAlert::AUDIO_PLAYING:
         types.push_back(tabs_private::TabAlertState::kPlaying);
         break;
-      case TabAlertState::AUDIO_MUTING:
+      case tabs::TabAlert::AUDIO_MUTING:
         types.push_back(tabs_private::TabAlertState::kMuting);
         break;
-      case TabAlertState::BLUETOOTH_CONNECTED:
+      case tabs::TabAlert::BLUETOOTH_CONNECTED:
         types.push_back(tabs_private::TabAlertState::kBluetooth);
         break;
-      case TabAlertState::USB_CONNECTED:
+      case tabs::TabAlert::USB_CONNECTED:
         types.push_back(tabs_private::TabAlertState::kUsb);
         break;
-      case TabAlertState::PIP_PLAYING:
+      case tabs::TabAlert::PIP_PLAYING:
         types.push_back(tabs_private::TabAlertState::kPip);
         break;
-      case TabAlertState::DESKTOP_CAPTURING:
+      case tabs::TabAlert::DESKTOP_CAPTURING:
         types.push_back(
             tabs_private::TabAlertState::kDesktopCapturing);
         break;
-      case TabAlertState::VR_PRESENTING_IN_HEADSET:
+      case tabs::TabAlert::VR_PRESENTING_IN_HEADSET:
         types.push_back(tabs_private::TabAlertState::kVrPresentingInHeadset);
         break;
-      case TabAlertState::SERIAL_CONNECTED:
+      case tabs::TabAlert::SERIAL_CONNECTED:
         types.push_back(
             tabs_private::TabAlertState::kSerialConnected);
         break;
-      case TabAlertState::BLUETOOTH_SCAN_ACTIVE:
+      case tabs::TabAlert::BLUETOOTH_SCAN_ACTIVE:
         types.push_back(tabs_private::TabAlertState::kBluetoothScan);
         break;
-      case TabAlertState::HID_CONNECTED:
+      case tabs::TabAlert::HID_CONNECTED:
         types.push_back(tabs_private::TabAlertState::kHidConnected);
         break;
-      case TabAlertState::AUDIO_RECORDING:
+      case tabs::TabAlert::AUDIO_RECORDING:
         types.push_back(tabs_private::TabAlertState::kAudioRecording);
         break;
-      case TabAlertState::VIDEO_RECORDING:
+      case tabs::TabAlert::VIDEO_RECORDING:
         types.push_back(tabs_private::TabAlertState::kVideoRecording);
         break;
-      case TabAlertState::GLIC_ACCESSING:
+      case tabs::TabAlert::GLIC_ACCESSING:
         types.push_back(tabs_private::TabAlertState::kCapturing);
         break;
     }
@@ -596,30 +597,6 @@ void VivaldiPrivateTabObserver::OnPermissionAccessed(
                             tabs_private::OnPermissionAccessed::Create(
                                 tab_id, type_name, origin, setting),
                             web_contents()->GetBrowserContext());
-}
-
-void VivaldiPrivateTabObserver::WebContentsDidDetach() {
-  int tab_id =
-      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
-  VivaldiBrowserComponentWrapper::GetInstance()
-      ->HandleDetachedTabForWebPanel(tab_id);
-  ::vivaldi::BroadcastEvent(
-      tabs_private::OnTabIsDetached::kEventName,
-      tabs_private::OnTabIsDetached::Create(
-          tab_id, VivaldiBrowserComponentWrapper::GetInstance()->
-                      GetWindowIdOfTab(web_contents())),
-      web_contents()->GetBrowserContext());
-}
-
-void VivaldiPrivateTabObserver::WebContentsDidAttach() {
-  int tab_id =
-      VivaldiBrowserComponentWrapper::GetInstance()->GetTabId(web_contents());
-  ::vivaldi::BroadcastEvent(
-      tabs_private::OnTabIsAttached::kEventName,
-      tabs_private::OnTabIsAttached::Create(
-          tab_id, VivaldiBrowserComponentWrapper::GetInstance()
-                      ->GetWindowIdOfTab(web_contents())),
-      web_contents()->GetBrowserContext());
 }
 
 void VivaldiPrivateTabObserver::BeforeUnloadFired(bool proceed) {

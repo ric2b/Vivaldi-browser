@@ -164,7 +164,7 @@ Do not hand edit.
 
 ### x86_64 (64-bit)
 
-Compiled from [Linux 4.14.0 headers][linux-headers].
+Compiled from [Linux 5.4.0 headers][linux-headers].
 
 | NR | syscall name | references | %rax | arg0 (%rdi) | arg1 (%rsi) | arg2 (%rdx) | arg3 (%r10) | arg4 (%r8) | arg5 (%r9) |
 |:---:|---|:---:|:---:|---|---|---|---|---|---|
@@ -245,7 +245,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="x86_64_74"></a> [74](#x86_64_74) | fsync | [man/](https://man7.org/linux/man-pages/man2/fsync.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsync\b) | 0x4a | unsigned int fd | - | - | - | - | - |
 | <a name="x86_64_75"></a> [75](#x86_64_75) | fdatasync | [man/](https://man7.org/linux/man-pages/man2/fdatasync.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfdatasync\b) | 0x4b | unsigned int fd | - | - | - | - | - |
 | <a name="x86_64_76"></a> [76](#x86_64_76) | truncate | [man/](https://man7.org/linux/man-pages/man2/truncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\btruncate\b) | 0x4c | const char \*path | long length | - | - | - | - |
-| <a name="x86_64_77"></a> [77](#x86_64_77) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x4d | unsigned int fd | unsigned long length | - | - | - | - |
+| <a name="x86_64_77"></a> [77](#x86_64_77) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x4d | unsigned int fd | off\_t length | - | - | - | - |
 | <a name="x86_64_78"></a> [78](#x86_64_78) | getdents | [man/](https://man7.org/linux/man-pages/man2/getdents.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bgetdents\b) | 0x4e | unsigned int fd | struct linux\_dirent \*dirent | unsigned int count | - | - | - |
 | <a name="x86_64_79"></a> [79](#x86_64_79) | getcwd | [man/](https://man7.org/linux/man-pages/man2/getcwd.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bgetcwd\b) | 0x4f | char \*buf | unsigned long size | - | - | - | - |
 | <a name="x86_64_80"></a> [80](#x86_64_80) | chdir | [man/](https://man7.org/linux/man-pages/man2/chdir.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bchdir\b) | 0x50 | const char \*filename | - | - | - | - | - |
@@ -380,7 +380,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="x86_64_209"></a> [209](#x86_64_209) | io_submit | [man/](https://man7.org/linux/man-pages/man2/io_submit.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_submit\b) | 0xd1 | aio\_context\_t | long | struct iocb \* \* | - | - | - |
 | <a name="x86_64_210"></a> [210](#x86_64_210) | io_cancel | [man/](https://man7.org/linux/man-pages/man2/io_cancel.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_cancel\b) | 0xd2 | aio\_context\_t ctx\_id | struct iocb \*iocb | struct io\_event \*result | - | - | - |
 | <a name="x86_64_211"></a> [211](#x86_64_211) | get_thread_area | [man/](https://man7.org/linux/man-pages/man2/get_thread_area.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bget_thread_area\b) | 0xd3 | ? | ? | ? | ? | ? | ? |
-| <a name="x86_64_212"></a> [212](#x86_64_212) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0xd4 | u64 cookie64 | char \*buf | size\_t len | - | - | - |
+| <a name="x86_64_212"></a> [212](#x86_64_212) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0xd4 | ? | ? | ? | ? | ? | ? |
 | <a name="x86_64_213"></a> [213](#x86_64_213) | epoll_create | [man/](https://man7.org/linux/man-pages/man2/epoll_create.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_create\b) | 0xd5 | int size | - | - | - | - | - |
 | <a name="x86_64_214"></a> [214](#x86_64_214) | epoll_ctl_old | [man/](https://man7.org/linux/man-pages/man2/epoll_ctl_old.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_ctl_old\b) | 0xd6 | ? | ? | ? | ? | ? | ? |
 | <a name="x86_64_215"></a> [215](#x86_64_215) | epoll_wait_old | [man/](https://man7.org/linux/man-pages/man2/epoll_wait_old.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_wait_old\b) | 0xd7 | ? | ? | ? | ? | ? | ? |
@@ -436,7 +436,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="x86_64_265"></a> [265](#x86_64_265) | linkat | [man/](https://man7.org/linux/man-pages/man2/linkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blinkat\b) | 0x109 | int olddfd | const char \*oldname | int newdfd | const char \*newname | int flags | - |
 | <a name="x86_64_266"></a> [266](#x86_64_266) | symlinkat | [man/](https://man7.org/linux/man-pages/man2/symlinkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsymlinkat\b) | 0x10a | const char \* oldname | int newdfd | const char \* newname | - | - | - |
 | <a name="x86_64_267"></a> [267](#x86_64_267) | readlinkat | [man/](https://man7.org/linux/man-pages/man2/readlinkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\breadlinkat\b) | 0x10b | int dfd | const char \*path | char \*buf | int bufsiz | - | - |
-| <a name="x86_64_268"></a> [268](#x86_64_268) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x10c | int dfd | const char \* filename | umode\_t mode | - | - | - |
+| <a name="x86_64_268"></a> [268](#x86_64_268) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x10c | int dfd | const char \*filename | umode\_t mode | - | - | - |
 | <a name="x86_64_269"></a> [269](#x86_64_269) | faccessat | [man/](https://man7.org/linux/man-pages/man2/faccessat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfaccessat\b) | 0x10d | int dfd | const char \*filename | int mode | - | - | - |
 | <a name="x86_64_270"></a> [270](#x86_64_270) | pselect6 | [man/](https://man7.org/linux/man-pages/man2/pselect6.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpselect6\b) | 0x10e | int | fd\_set \* | fd\_set \* | fd\_set \* | struct \_\_kernel\_timespec \* | void \* |
 | <a name="x86_64_271"></a> [271](#x86_64_271) | ppoll | [man/](https://man7.org/linux/man-pages/man2/ppoll.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bppoll\b) | 0x10f | struct pollfd \* | unsigned int | struct \_\_kernel\_timespec \* | const sigset\_t \* | size\_t | - |
@@ -471,7 +471,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="x86_64_300"></a> [300](#x86_64_300) | fanotify_init | [man/](https://man7.org/linux/man-pages/man2/fanotify_init.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_init\b) | 0x12c | unsigned int flags | unsigned int event\_f\_flags | - | - | - | - |
 | <a name="x86_64_301"></a> [301](#x86_64_301) | fanotify_mark | [man/](https://man7.org/linux/man-pages/man2/fanotify_mark.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_mark\b) | 0x12d | int fanotify\_fd | unsigned int flags | u64 mask | int fd | const char \*pathname | - |
 | <a name="x86_64_302"></a> [302](#x86_64_302) | prlimit64 | [man/](https://man7.org/linux/man-pages/man2/prlimit64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bprlimit64\b) | 0x12e | pid\_t pid | unsigned int resource | const struct rlimit64 \*new\_rlim | struct rlimit64 \*old\_rlim | - | - |
-| <a name="x86_64_303"></a> [303](#x86_64_303) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x12f | int dfd | const char \*name | struct file\_handle \*handle | int \*mnt\_id | int flag | - |
+| <a name="x86_64_303"></a> [303](#x86_64_303) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x12f | int dfd | const char \*name | struct file\_handle \*handle | void \*mnt\_id | int flag | - |
 | <a name="x86_64_304"></a> [304](#x86_64_304) | open_by_handle_at | [man/](https://man7.org/linux/man-pages/man2/open_by_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_by_handle_at\b) | 0x130 | int mountdirfd | struct file\_handle \*handle | int flags | - | - | - |
 | <a name="x86_64_305"></a> [305](#x86_64_305) | clock_adjtime | [man/](https://man7.org/linux/man-pages/man2/clock_adjtime.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_adjtime\b) | 0x131 | clockid\_t which\_clock | struct \_\_kernel\_timex \*tx | - | - | - | - |
 | <a name="x86_64_306"></a> [306](#x86_64_306) | syncfs | [man/](https://man7.org/linux/man-pages/man2/syncfs.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsyncfs\b) | 0x132 | int fd | - | - | - | - | - |
@@ -501,7 +501,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="x86_64_330"></a> [330](#x86_64_330) | pkey_alloc | [man/](https://man7.org/linux/man-pages/man2/pkey_alloc.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpkey_alloc\b) | 0x14a | unsigned long flags | unsigned long init\_val | - | - | - | - |
 | <a name="x86_64_331"></a> [331](#x86_64_331) | pkey_free | [man/](https://man7.org/linux/man-pages/man2/pkey_free.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpkey_free\b) | 0x14b | int pkey | - | - | - | - | - |
 | <a name="x86_64_332"></a> [332](#x86_64_332) | statx | [man/](https://man7.org/linux/man-pages/man2/statx.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bstatx\b) | 0x14c | int dfd | const char \*path | unsigned flags | unsigned mask | struct statx \*buffer | - |
-| <a name="x86_64_333"></a> [333](#x86_64_333) | *not implemented* | | 0x14d ||
+| <a name="x86_64_333"></a> [333](#x86_64_333) | io_pgetevents | [man/](https://man7.org/linux/man-pages/man2/io_pgetevents.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_pgetevents\b) | 0x14d | aio\_context\_t ctx\_id | long min\_nr | long nr | struct io\_event \*events | struct \_\_kernel\_timespec \*timeout | const struct \_\_aio\_sigset \*sig |
 | <a name="x86_64_334"></a> [334](#x86_64_334) | rseq | [man/](https://man7.org/linux/man-pages/man2/rseq.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\brseq\b) | 0x14e | struct rseq \*rseq | uint32\_t rseq\_len | int flags | uint32\_t sig | - | - |
 | <a name="x86_64_335"></a> [335](#x86_64_335) | *not implemented* | | 0x14f ||
 | <a name="x86_64_336"></a> [336](#x86_64_336) | *not implemented* | | 0x150 ||
@@ -592,18 +592,18 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="x86_64_421"></a> [421](#x86_64_421) | *not implemented* | | 0x1a5 ||
 | <a name="x86_64_422"></a> [422](#x86_64_422) | *not implemented* | | 0x1a6 ||
 | <a name="x86_64_423"></a> [423](#x86_64_423) | *not implemented* | | 0x1a7 ||
-| <a name="x86_64_424"></a> [424](#x86_64_424) | *not implemented* | | 0x1a8 ||
+| <a name="x86_64_424"></a> [424](#x86_64_424) | pidfd_send_signal | [man/](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_send_signal\b) | 0x1a8 | int pidfd | int sig | siginfo\_t \*info | unsigned int flags | - | - |
 | <a name="x86_64_425"></a> [425](#x86_64_425) | io_uring_setup | [man/](https://man7.org/linux/man-pages/man2/io_uring_setup.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_setup\b) | 0x1a9 | u32 entries | struct io\_uring\_params \*p | - | - | - | - |
 | <a name="x86_64_426"></a> [426](#x86_64_426) | io_uring_enter | [man/](https://man7.org/linux/man-pages/man2/io_uring_enter.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_enter\b) | 0x1aa | unsigned int fd | u32 to\_submit | u32 min\_complete | u32 flags | const void \*argp | size\_t argsz |
-| <a name="x86_64_427"></a> [427](#x86_64_427) | *not implemented* | | 0x1ab ||
-| <a name="x86_64_428"></a> [428](#x86_64_428) | *not implemented* | | 0x1ac ||
-| <a name="x86_64_429"></a> [429](#x86_64_429) | *not implemented* | | 0x1ad ||
-| <a name="x86_64_430"></a> [430](#x86_64_430) | *not implemented* | | 0x1ae ||
-| <a name="x86_64_431"></a> [431](#x86_64_431) | *not implemented* | | 0x1af ||
-| <a name="x86_64_432"></a> [432](#x86_64_432) | *not implemented* | | 0x1b0 ||
-| <a name="x86_64_433"></a> [433](#x86_64_433) | *not implemented* | | 0x1b1 ||
+| <a name="x86_64_427"></a> [427](#x86_64_427) | io_uring_register | [man/](https://man7.org/linux/man-pages/man2/io_uring_register.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_register\b) | 0x1ab | unsigned int fd | unsigned int op | void \*arg | unsigned int nr\_args | - | - |
+| <a name="x86_64_428"></a> [428](#x86_64_428) | open_tree | [man/](https://man7.org/linux/man-pages/man2/open_tree.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_tree\b) | 0x1ac | int dfd | const char \*path | unsigned flags | - | - | - |
+| <a name="x86_64_429"></a> [429](#x86_64_429) | move_mount | [man/](https://man7.org/linux/man-pages/man2/move_mount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmove_mount\b) | 0x1ad | int from\_dfd | const char \*from\_path | int to\_dfd | const char \*to\_path | unsigned int ms\_flags | - |
+| <a name="x86_64_430"></a> [430](#x86_64_430) | fsopen | [man/](https://man7.org/linux/man-pages/man2/fsopen.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsopen\b) | 0x1ae | const char \*fs\_name | unsigned int flags | - | - | - | - |
+| <a name="x86_64_431"></a> [431](#x86_64_431) | fsconfig | [man/](https://man7.org/linux/man-pages/man2/fsconfig.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsconfig\b) | 0x1af | int fs\_fd | unsigned int cmd | const char \*key | const void \*value | int aux | - |
+| <a name="x86_64_432"></a> [432](#x86_64_432) | fsmount | [man/](https://man7.org/linux/man-pages/man2/fsmount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsmount\b) | 0x1b0 | int fs\_fd | unsigned int flags | unsigned int ms\_flags | - | - | - |
+| <a name="x86_64_433"></a> [433](#x86_64_433) | fspick | [man/](https://man7.org/linux/man-pages/man2/fspick.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfspick\b) | 0x1b1 | int dfd | const char \*path | unsigned int flags | - | - | - |
 | <a name="x86_64_434"></a> [434](#x86_64_434) | pidfd_open | [man/](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_open\b) | 0x1b2 | pid\_t pid | unsigned int flags | - | - | - | - |
-| <a name="x86_64_435"></a> [435](#x86_64_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*cl_args | size_t size | - | - | - | - |
+| <a name="x86_64_435"></a> [435](#x86_64_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*uargs | size\_t size | - | - | - | - |
 | <a name="x86_64_436"></a> [436](#x86_64_436) | close_range | [man/](https://man7.org/linux/man-pages/man2/close_range.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclose_range\b) | 0x1b4 | unsigned int fd | unsigned int max\_fd | unsigned int flags | - | - | - |
 | <a name="x86_64_437"></a> [437](#x86_64_437) | *not implemented* | | 0x1b5 ||
 | <a name="x86_64_438"></a> [438](#x86_64_438) | *not implemented* | | 0x1b6 ||
@@ -611,7 +611,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 
 ### arm (32-bit/EABI)
 
-Compiled from [Linux 4.14.0 headers][linux-headers].
+Compiled from [Linux 5.4.0 headers][linux-headers].
 
 | NR | syscall name | references | %r7 | arg0 (%r0) | arg1 (%r1) | arg2 (%r2) | arg3 (%r3) | arg4 (%r4) | arg5 (%r5) |
 |:---:|---|:---:|:---:|---|---|---|---|---|---|
@@ -708,7 +708,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_90"></a> [90](#arm_90) | *not implemented* | | 0x5a ||
 | <a name="arm_91"></a> [91](#arm_91) | munmap | [man/](https://man7.org/linux/man-pages/man2/munmap.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmunmap\b) | 0x5b | unsigned long addr | size\_t len | - | - | - | - |
 | <a name="arm_92"></a> [92](#arm_92) | truncate | [man/](https://man7.org/linux/man-pages/man2/truncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\btruncate\b) | 0x5c | const char \*path | long length | - | - | - | - |
-| <a name="arm_93"></a> [93](#arm_93) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x5d | unsigned int fd | unsigned long length | - | - | - | - |
+| <a name="arm_93"></a> [93](#arm_93) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x5d | unsigned int fd | off\_t length | - | - | - | - |
 | <a name="arm_94"></a> [94](#arm_94) | fchmod | [man/](https://man7.org/linux/man-pages/man2/fchmod.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmod\b) | 0x5e | unsigned int fd | umode\_t mode | - | - | - | - |
 | <a name="arm_95"></a> [95](#arm_95) | fchown | [man/](https://man7.org/linux/man-pages/man2/fchown.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchown\b) | 0x5f | unsigned int fd | uid\_t user | gid\_t group | - | - | - |
 | <a name="arm_96"></a> [96](#arm_96) | getpriority | [man/](https://man7.org/linux/man-pages/man2/getpriority.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bgetpriority\b) | 0x60 | int which | int who | - | - | - | - |
@@ -864,7 +864,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_246"></a> [246](#arm_246) | io_submit | [man/](https://man7.org/linux/man-pages/man2/io_submit.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_submit\b) | 0xf6 | aio\_context\_t | long | struct iocb \* \* | - | - | - |
 | <a name="arm_247"></a> [247](#arm_247) | io_cancel | [man/](https://man7.org/linux/man-pages/man2/io_cancel.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_cancel\b) | 0xf7 | aio\_context\_t ctx\_id | struct iocb \*iocb | struct io\_event \*result | - | - | - |
 | <a name="arm_248"></a> [248](#arm_248) | exit_group | [man/](https://man7.org/linux/man-pages/man2/exit_group.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bexit_group\b) | 0xf8 | int error\_code | - | - | - | - | - |
-| <a name="arm_249"></a> [249](#arm_249) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0xf9 | u64 cookie64 | char \*buf | size\_t len | - | - | - |
+| <a name="arm_249"></a> [249](#arm_249) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0xf9 | ? | ? | ? | ? | ? | ? |
 | <a name="arm_250"></a> [250](#arm_250) | epoll_create | [man/](https://man7.org/linux/man-pages/man2/epoll_create.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_create\b) | 0xfa | int size | - | - | - | - | - |
 | <a name="arm_251"></a> [251](#arm_251) | epoll_ctl | [man/](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_ctl\b) | 0xfb | int epfd | int op | int fd | struct epoll\_event \*event | - | - |
 | <a name="arm_252"></a> [252](#arm_252) | epoll_wait | [man/](https://man7.org/linux/man-pages/man2/epoll_wait.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_wait\b) | 0xfc | int epfd | struct epoll\_event \*events | int maxevents | int timeout | - | - |
@@ -948,7 +948,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_330"></a> [330](#arm_330) | linkat | [man/](https://man7.org/linux/man-pages/man2/linkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blinkat\b) | 0x14a | int olddfd | const char \*oldname | int newdfd | const char \*newname | int flags | - |
 | <a name="arm_331"></a> [331](#arm_331) | symlinkat | [man/](https://man7.org/linux/man-pages/man2/symlinkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsymlinkat\b) | 0x14b | const char \* oldname | int newdfd | const char \* newname | - | - | - |
 | <a name="arm_332"></a> [332](#arm_332) | readlinkat | [man/](https://man7.org/linux/man-pages/man2/readlinkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\breadlinkat\b) | 0x14c | int dfd | const char \*path | char \*buf | int bufsiz | - | - |
-| <a name="arm_333"></a> [333](#arm_333) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x14d | int dfd | const char \* filename | umode\_t mode | - | - | - |
+| <a name="arm_333"></a> [333](#arm_333) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x14d | int dfd | const char \*filename | umode\_t mode | - | - | - |
 | <a name="arm_334"></a> [334](#arm_334) | faccessat | [man/](https://man7.org/linux/man-pages/man2/faccessat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfaccessat\b) | 0x14e | int dfd | const char \*filename | int mode | - | - | - |
 | <a name="arm_335"></a> [335](#arm_335) | pselect6 | [man/](https://man7.org/linux/man-pages/man2/pselect6.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpselect6\b) | 0x14f | int | fd\_set \* | fd\_set \* | fd\_set \* | struct \_\_kernel\_timespec \* | void \* |
 | <a name="arm_336"></a> [336](#arm_336) | ppoll | [man/](https://man7.org/linux/man-pages/man2/ppoll.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bppoll\b) | 0x150 | struct pollfd \* | unsigned int | struct \_\_kernel\_timespec \* | const sigset\_t \* | size\_t | - |
@@ -986,7 +986,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_367"></a> [367](#arm_367) | fanotify_init | [man/](https://man7.org/linux/man-pages/man2/fanotify_init.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_init\b) | 0x16f | unsigned int flags | unsigned int event\_f\_flags | - | - | - | - |
 | <a name="arm_368"></a> [368](#arm_368) | fanotify_mark | [man/](https://man7.org/linux/man-pages/man2/fanotify_mark.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_mark\b) | 0x170 | int fanotify\_fd | unsigned int flags | u64 mask | int fd | const char \*pathname | - |
 | <a name="arm_369"></a> [369](#arm_369) | prlimit64 | [man/](https://man7.org/linux/man-pages/man2/prlimit64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bprlimit64\b) | 0x171 | pid\_t pid | unsigned int resource | const struct rlimit64 \*new\_rlim | struct rlimit64 \*old\_rlim | - | - |
-| <a name="arm_370"></a> [370](#arm_370) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x172 | int dfd | const char \*name | struct file\_handle \*handle | int \*mnt\_id | int flag | - |
+| <a name="arm_370"></a> [370](#arm_370) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x172 | int dfd | const char \*name | struct file\_handle \*handle | void \*mnt\_id | int flag | - |
 | <a name="arm_371"></a> [371](#arm_371) | open_by_handle_at | [man/](https://man7.org/linux/man-pages/man2/open_by_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_by_handle_at\b) | 0x173 | int mountdirfd | struct file\_handle \*handle | int flags | - | - | - |
 | <a name="arm_372"></a> [372](#arm_372) | clock_adjtime | [man/](https://man7.org/linux/man-pages/man2/clock_adjtime.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_adjtime\b) | 0x174 | clockid\_t which\_clock | struct \_\_kernel\_timex \*tx | - | - | - | - |
 | <a name="arm_373"></a> [373](#arm_373) | syncfs | [man/](https://man7.org/linux/man-pages/man2/syncfs.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsyncfs\b) | 0x175 | int fd | - | - | - | - | - |
@@ -1015,8 +1015,8 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_396"></a> [396](#arm_396) | pkey_free | [man/](https://man7.org/linux/man-pages/man2/pkey_free.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpkey_free\b) | 0x18c | int pkey | - | - | - | - | - |
 | <a name="arm_397"></a> [397](#arm_397) | statx | [man/](https://man7.org/linux/man-pages/man2/statx.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bstatx\b) | 0x18d | int dfd | const char \*path | unsigned flags | unsigned mask | struct statx \*buffer | - |
 | <a name="arm_398"></a> [398](#arm_398) | rseq | [man/](https://man7.org/linux/man-pages/man2/rseq.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\brseq\b) | 0x18e | struct rseq \*rseq | uint32\_t rseq\_len | int flags | uint32\_t sig | - | - |
-| <a name="arm_399"></a> [399](#arm_399) | *not implemented* | | 0x18f ||
-| <a name="arm_400"></a> [400](#arm_400) | *not implemented* | | 0x190 ||
+| <a name="arm_399"></a> [399](#arm_399) | io_pgetevents | [man/](https://man7.org/linux/man-pages/man2/io_pgetevents.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_pgetevents\b) | 0x18f | aio\_context\_t ctx\_id | long min\_nr | long nr | struct io\_event \*events | struct \_\_kernel\_timespec \*timeout | const struct \_\_aio\_sigset \*sig |
+| <a name="arm_400"></a> [400](#arm_400) | migrate_pages | [man/](https://man7.org/linux/man-pages/man2/migrate_pages.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmigrate_pages\b) | 0x190 | pid\_t pid | unsigned long maxnode | const unsigned long \*from | const unsigned long \*to | - | - |
 | <a name="arm_401"></a> [401](#arm_401) | kexec_file_load | [man/](https://man7.org/linux/man-pages/man2/kexec_file_load.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bkexec_file_load\b) | 0x191 | int kernel\_fd | int initrd\_fd | unsigned long cmdline\_len | const char \*cmdline\_ptr | unsigned long flags | - |
 | <a name="arm_402"></a> [402](#arm_402) | *not implemented* | | 0x192 ||
 | <a name="arm_403"></a> [403](#arm_403) | clock_gettime64 | [man/](https://man7.org/linux/man-pages/man2/clock_gettime64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_gettime64\b) | 0x193 | ? | ? | ? | ? | ? | ? |
@@ -1040,18 +1040,18 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_421"></a> [421](#arm_421) | rt_sigtimedwait_time64 | [man/](https://man7.org/linux/man-pages/man2/rt_sigtimedwait_time64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\brt_sigtimedwait_time64\b) | 0x1a5 | ? | ? | ? | ? | ? | ? |
 | <a name="arm_422"></a> [422](#arm_422) | futex_time64 | [man/](https://man7.org/linux/man-pages/man2/futex_time64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfutex_time64\b) | 0x1a6 | ? | ? | ? | ? | ? | ? |
 | <a name="arm_423"></a> [423](#arm_423) | sched_rr_get_interval_time64 | [man/](https://man7.org/linux/man-pages/man2/sched_rr_get_interval_time64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsched_rr_get_interval_time64\b) | 0x1a7 | ? | ? | ? | ? | ? | ? |
-| <a name="arm_424"></a> [424](#arm_424) | *not implemented* | | 0x1a8 ||
+| <a name="arm_424"></a> [424](#arm_424) | pidfd_send_signal | [man/](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_send_signal\b) | 0x1a8 | int pidfd | int sig | siginfo\_t \*info | unsigned int flags | - | - |
 | <a name="arm_425"></a> [425](#arm_425) | io_uring_setup | [man/](https://man7.org/linux/man-pages/man2/io_uring_setup.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_setup\b) | 0x1a9 | u32 entries | struct io\_uring\_params \*p | - | - | - | - |
 | <a name="arm_426"></a> [426](#arm_426) | io_uring_enter | [man/](https://man7.org/linux/man-pages/man2/io_uring_enter.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_enter\b) | 0x1aa | unsigned int fd | u32 to\_submit | u32 min\_complete | u32 flags | const void \*argp | size\_t argsz |
-| <a name="arm_427"></a> [427](#arm_427) | *not implemented* | | 0x1ab ||
-| <a name="arm_428"></a> [428](#arm_428) | *not implemented* | | 0x1ac ||
-| <a name="arm_429"></a> [429](#arm_429) | *not implemented* | | 0x1ad ||
-| <a name="arm_430"></a> [430](#arm_430) | *not implemented* | | 0x1ae ||
-| <a name="arm_431"></a> [431](#arm_431) | *not implemented* | | 0x1af ||
-| <a name="arm_432"></a> [432](#arm_432) | *not implemented* | | 0x1b0 ||
-| <a name="arm_433"></a> [433](#arm_433) | *not implemented* | | 0x1b1 ||
+| <a name="arm_427"></a> [427](#arm_427) | io_uring_register | [man/](https://man7.org/linux/man-pages/man2/io_uring_register.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_register\b) | 0x1ab | unsigned int fd | unsigned int op | void \*arg | unsigned int nr\_args | - | - |
+| <a name="arm_428"></a> [428](#arm_428) | open_tree | [man/](https://man7.org/linux/man-pages/man2/open_tree.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_tree\b) | 0x1ac | int dfd | const char \*path | unsigned flags | - | - | - |
+| <a name="arm_429"></a> [429](#arm_429) | move_mount | [man/](https://man7.org/linux/man-pages/man2/move_mount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmove_mount\b) | 0x1ad | int from\_dfd | const char \*from\_path | int to\_dfd | const char \*to\_path | unsigned int ms\_flags | - |
+| <a name="arm_430"></a> [430](#arm_430) | fsopen | [man/](https://man7.org/linux/man-pages/man2/fsopen.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsopen\b) | 0x1ae | const char \*fs\_name | unsigned int flags | - | - | - | - |
+| <a name="arm_431"></a> [431](#arm_431) | fsconfig | [man/](https://man7.org/linux/man-pages/man2/fsconfig.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsconfig\b) | 0x1af | int fs\_fd | unsigned int cmd | const char \*key | const void \*value | int aux | - |
+| <a name="arm_432"></a> [432](#arm_432) | fsmount | [man/](https://man7.org/linux/man-pages/man2/fsmount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsmount\b) | 0x1b0 | int fs\_fd | unsigned int flags | unsigned int ms\_flags | - | - | - |
+| <a name="arm_433"></a> [433](#arm_433) | fspick | [man/](https://man7.org/linux/man-pages/man2/fspick.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfspick\b) | 0x1b1 | int dfd | const char \*path | unsigned int flags | - | - | - |
 | <a name="arm_434"></a> [434](#arm_434) | pidfd_open | [man/](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_open\b) | 0x1b2 | pid\_t pid | unsigned int flags | - | - | - | - |
-| <a name="arm_435"></a> [435](#arm_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*cl_args | size_t size | - | - | - | - |
+| <a name="arm_435"></a> [435](#arm_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*uargs | size\_t size | - | - | - | - |
 | <a name="arm_436"></a> [436](#arm_436) | close_range | [man/](https://man7.org/linux/man-pages/man2/close_range.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclose_range\b) | 0x1b4 | unsigned int fd | unsigned int max\_fd | unsigned int flags | - | - | - |
 | <a name="arm_437"></a> [437](#arm_437) | *not implemented* | | 0x1b5 ||
 | <a name="arm_438"></a> [438](#arm_438) | *not implemented* | | 0x1b6 ||
@@ -1061,10 +1061,11 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="arm_983043"></a> [983043](#arm_983043) | ARM_usr26 | [man/](https://man7.org/linux/man-pages/man2/ARM_usr26.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bARM_usr26\b) | 0xf0003 | ? | ? | ? | ? | ? | ? |
 | <a name="arm_983044"></a> [983044](#arm_983044) | ARM_usr32 | [man/](https://man7.org/linux/man-pages/man2/ARM_usr32.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bARM_usr32\b) | 0xf0004 | ? | ? | ? | ? | ? | ? |
 | <a name="arm_983045"></a> [983045](#arm_983045) | ARM_set_tls | [man/](https://man7.org/linux/man-pages/man2/ARM_set_tls.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bARM_set_tls\b) | 0xf0005 | ? | ? | ? | ? | ? | ? |
+| <a name="arm_983046"></a> [983046](#arm_983046) | ARM_get_tls | [man/](https://man7.org/linux/man-pages/man2/ARM_get_tls.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bARM_get_tls\b) | 0xf0006 | ? | ? | ? | ? | ? | ? |
 
 ### arm64 (64-bit)
 
-Compiled from [Linux 4.14.0 headers][linux-headers].
+Compiled from [Linux 5.4.0 headers][linux-headers].
 
 | NR | syscall name | references | %x8 | arg0 (%x0) | arg1 (%x1) | arg2 (%x2) | arg3 (%x3) | arg4 (%x4) | arg5 (%x5) |
 |:---:|---|:---:|:---:|---|---|---|---|---|---|
@@ -1086,7 +1087,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="aarch64_15"></a> [15](#aarch64_15) | lremovexattr | [man/](https://man7.org/linux/man-pages/man2/lremovexattr.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blremovexattr\b) | 0x0f | const char \*path | const char \*name | - | - | - | - |
 | <a name="aarch64_16"></a> [16](#aarch64_16) | fremovexattr | [man/](https://man7.org/linux/man-pages/man2/fremovexattr.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfremovexattr\b) | 0x10 | int fd | const char \*name | - | - | - | - |
 | <a name="aarch64_17"></a> [17](#aarch64_17) | getcwd | [man/](https://man7.org/linux/man-pages/man2/getcwd.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bgetcwd\b) | 0x11 | char \*buf | unsigned long size | - | - | - | - |
-| <a name="aarch64_18"></a> [18](#aarch64_18) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0x12 | u64 cookie64 | char \*buf | size\_t len | - | - | - |
+| <a name="aarch64_18"></a> [18](#aarch64_18) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0x12 | ? | ? | ? | ? | ? | ? |
 | <a name="aarch64_19"></a> [19](#aarch64_19) | eventfd2 | [man/](https://man7.org/linux/man-pages/man2/eventfd2.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\beventfd2\b) | 0x13 | unsigned int count | int flags | - | - | - | - |
 | <a name="aarch64_20"></a> [20](#aarch64_20) | epoll_create1 | [man/](https://man7.org/linux/man-pages/man2/epoll_create1.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_create1\b) | 0x14 | int flags | - | - | - | - | - |
 | <a name="aarch64_21"></a> [21](#aarch64_21) | epoll_ctl | [man/](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_ctl\b) | 0x15 | int epfd | int op | int fd | struct epoll\_event \*event | - | - |
@@ -1114,14 +1115,14 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="aarch64_43"></a> [43](#aarch64_43) | statfs | [man/](https://man7.org/linux/man-pages/man2/statfs.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bstatfs\b) | 0x2b | const char \* path | struct statfs \*buf | - | - | - | - |
 | <a name="aarch64_44"></a> [44](#aarch64_44) | fstatfs | [man/](https://man7.org/linux/man-pages/man2/fstatfs.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfstatfs\b) | 0x2c | unsigned int fd | struct statfs \*buf | - | - | - | - |
 | <a name="aarch64_45"></a> [45](#aarch64_45) | truncate | [man/](https://man7.org/linux/man-pages/man2/truncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\btruncate\b) | 0x2d | const char \*path | long length | - | - | - | - |
-| <a name="aarch64_46"></a> [46](#aarch64_46) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x2e | unsigned int fd | unsigned long length | - | - | - | - |
+| <a name="aarch64_46"></a> [46](#aarch64_46) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x2e | unsigned int fd | off\_t length | - | - | - | - |
 | <a name="aarch64_47"></a> [47](#aarch64_47) | fallocate | [man/](https://man7.org/linux/man-pages/man2/fallocate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfallocate\b) | 0x2f | int fd | int mode | loff\_t offset | loff\_t len | - | - |
 | <a name="aarch64_48"></a> [48](#aarch64_48) | faccessat | [man/](https://man7.org/linux/man-pages/man2/faccessat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfaccessat\b) | 0x30 | int dfd | const char \*filename | int mode | - | - | - |
 | <a name="aarch64_49"></a> [49](#aarch64_49) | chdir | [man/](https://man7.org/linux/man-pages/man2/chdir.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bchdir\b) | 0x31 | const char \*filename | - | - | - | - | - |
 | <a name="aarch64_50"></a> [50](#aarch64_50) | fchdir | [man/](https://man7.org/linux/man-pages/man2/fchdir.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchdir\b) | 0x32 | unsigned int fd | - | - | - | - | - |
 | <a name="aarch64_51"></a> [51](#aarch64_51) | chroot | [man/](https://man7.org/linux/man-pages/man2/chroot.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bchroot\b) | 0x33 | const char \*filename | - | - | - | - | - |
 | <a name="aarch64_52"></a> [52](#aarch64_52) | fchmod | [man/](https://man7.org/linux/man-pages/man2/fchmod.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmod\b) | 0x34 | unsigned int fd | umode\_t mode | - | - | - | - |
-| <a name="aarch64_53"></a> [53](#aarch64_53) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x35 | int dfd | const char \* filename | umode\_t mode | - | - | - |
+| <a name="aarch64_53"></a> [53](#aarch64_53) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x35 | int dfd | const char \*filename | umode\_t mode | - | - | - |
 | <a name="aarch64_54"></a> [54](#aarch64_54) | fchownat | [man/](https://man7.org/linux/man-pages/man2/fchownat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchownat\b) | 0x36 | int dfd | const char \*filename | uid\_t user | gid\_t group | int flag | - |
 | <a name="aarch64_55"></a> [55](#aarch64_55) | fchown | [man/](https://man7.org/linux/man-pages/man2/fchown.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchown\b) | 0x37 | unsigned int fd | uid\_t user | gid\_t group | - | - | - |
 | <a name="aarch64_56"></a> [56](#aarch64_56) | openat | [man/](https://man7.org/linux/man-pages/man2/openat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopenat\b) | 0x38 | int dfd | const char \*filename | int flags | umode\_t mode | - | - |
@@ -1332,7 +1333,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="aarch64_261"></a> [261](#aarch64_261) | prlimit64 | [man/](https://man7.org/linux/man-pages/man2/prlimit64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bprlimit64\b) | 0x105 | pid\_t pid | unsigned int resource | const struct rlimit64 \*new\_rlim | struct rlimit64 \*old\_rlim | - | - |
 | <a name="aarch64_262"></a> [262](#aarch64_262) | fanotify_init | [man/](https://man7.org/linux/man-pages/man2/fanotify_init.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_init\b) | 0x106 | unsigned int flags | unsigned int event\_f\_flags | - | - | - | - |
 | <a name="aarch64_263"></a> [263](#aarch64_263) | fanotify_mark | [man/](https://man7.org/linux/man-pages/man2/fanotify_mark.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_mark\b) | 0x107 | int fanotify\_fd | unsigned int flags | u64 mask | int fd | const char \*pathname | - |
-| <a name="aarch64_264"></a> [264](#aarch64_264) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x108 | int dfd | const char \*name | struct file\_handle \*handle | int \*mnt\_id | int flag | - |
+| <a name="aarch64_264"></a> [264](#aarch64_264) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x108 | int dfd | const char \*name | struct file\_handle \*handle | void \*mnt\_id | int flag | - |
 | <a name="aarch64_265"></a> [265](#aarch64_265) | open_by_handle_at | [man/](https://man7.org/linux/man-pages/man2/open_by_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_by_handle_at\b) | 0x109 | int mountdirfd | struct file\_handle \*handle | int flags | - | - | - |
 | <a name="aarch64_266"></a> [266](#aarch64_266) | clock_adjtime | [man/](https://man7.org/linux/man-pages/man2/clock_adjtime.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_adjtime\b) | 0x10a | clockid\_t which\_clock | struct \_\_kernel\_timex \*tx | - | - | - | - |
 | <a name="aarch64_267"></a> [267](#aarch64_267) | syncfs | [man/](https://man7.org/linux/man-pages/man2/syncfs.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsyncfs\b) | 0x10b | int fd | - | - | - | - | - |
@@ -1360,20 +1361,21 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="aarch64_289"></a> [289](#aarch64_289) | pkey_alloc | [man/](https://man7.org/linux/man-pages/man2/pkey_alloc.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpkey_alloc\b) | 0x121 | unsigned long flags | unsigned long init\_val | - | - | - | - |
 | <a name="aarch64_290"></a> [290](#aarch64_290) | pkey_free | [man/](https://man7.org/linux/man-pages/man2/pkey_free.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpkey_free\b) | 0x122 | int pkey | - | - | - | - | - |
 | <a name="aarch64_291"></a> [291](#aarch64_291) | statx | [man/](https://man7.org/linux/man-pages/man2/statx.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bstatx\b) | 0x123 | int dfd | const char \*path | unsigned flags | unsigned mask | struct statx \*buffer | - |
-| <a name="aarch64_292"></a> [292](#aarch64_292) | *not implemented* | | 0x124 ||
+| <a name="aarch64_292"></a> [292](#aarch64_292) | io_pgetevents | [man/](https://man7.org/linux/man-pages/man2/io_pgetevents.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_pgetevents\b) | 0x124 | aio\_context\_t ctx\_id | long min\_nr | long nr | struct io\_event \*events | struct \_\_kernel\_timespec \*timeout | const struct \_\_aio\_sigset \*sig |
 | <a name="aarch64_293"></a> [293](#aarch64_293) | rseq | [man/](https://man7.org/linux/man-pages/man2/rseq.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\brseq\b) | 0x125 | struct rseq \*rseq | uint32\_t rseq\_len | int flags | uint32\_t sig | - | - |
 | <a name="aarch64_294"></a> [294](#aarch64_294) | kexec_file_load | [man/](https://man7.org/linux/man-pages/man2/kexec_file_load.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bkexec_file_load\b) | 0x126 | int kernel\_fd | int initrd\_fd | unsigned long cmdline\_len | const char \*cmdline\_ptr | unsigned long flags | - |
+| <a name="aarch64_424"></a> [424](#aarch64_424) | pidfd_send_signal | [man/](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_send_signal\b) | 0x1a8 | int pidfd | int sig | siginfo\_t \*info | unsigned int flags | - | - |
 | <a name="aarch64_425"></a> [425](#aarch64_425) | io_uring_setup | [man/](https://man7.org/linux/man-pages/man2/io_uring_setup.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_setup\b) | 0x1a9 | u32 entries | struct io\_uring\_params \*p | - | - | - | - |
 | <a name="aarch64_426"></a> [426](#aarch64_426) | io_uring_enter | [man/](https://man7.org/linux/man-pages/man2/io_uring_enter.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_enter\b) | 0x1aa | unsigned int fd | u32 to\_submit | u32 min\_complete | u32 flags | const void \*argp | size\_t argsz |
-| <a name="aarch64_427"></a> [427](#aarch64_427) | *not implemented* | | 0x1ab ||
-| <a name="aarch64_428"></a> [428](#aarch64_428) | *not implemented* | | 0x1ac ||
-| <a name="aarch64_429"></a> [429](#aarch64_429) | *not implemented* | | 0x1ad ||
-| <a name="aarch64_430"></a> [430](#aarch64_430) | *not implemented* | | 0x1ae ||
-| <a name="aarch64_431"></a> [431](#aarch64_431) | *not implemented* | | 0x1af ||
-| <a name="aarch64_432"></a> [432](#aarch64_432) | *not implemented* | | 0x1b0 ||
-| <a name="aarch64_433"></a> [433](#aarch64_433) | *not implemented* | | 0x1b1 ||
+| <a name="aarch64_427"></a> [427](#aarch64_427) | io_uring_register | [man/](https://man7.org/linux/man-pages/man2/io_uring_register.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_register\b) | 0x1ab | unsigned int fd | unsigned int op | void \*arg | unsigned int nr\_args | - | - |
+| <a name="aarch64_428"></a> [428](#aarch64_428) | open_tree | [man/](https://man7.org/linux/man-pages/man2/open_tree.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_tree\b) | 0x1ac | int dfd | const char \*path | unsigned flags | - | - | - |
+| <a name="aarch64_429"></a> [429](#aarch64_429) | move_mount | [man/](https://man7.org/linux/man-pages/man2/move_mount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmove_mount\b) | 0x1ad | int from\_dfd | const char \*from\_path | int to\_dfd | const char \*to\_path | unsigned int ms\_flags | - |
+| <a name="aarch64_430"></a> [430](#aarch64_430) | fsopen | [man/](https://man7.org/linux/man-pages/man2/fsopen.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsopen\b) | 0x1ae | const char \*fs\_name | unsigned int flags | - | - | - | - |
+| <a name="aarch64_431"></a> [431](#aarch64_431) | fsconfig | [man/](https://man7.org/linux/man-pages/man2/fsconfig.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsconfig\b) | 0x1af | int fs\_fd | unsigned int cmd | const char \*key | const void \*value | int aux | - |
+| <a name="aarch64_432"></a> [432](#aarch64_432) | fsmount | [man/](https://man7.org/linux/man-pages/man2/fsmount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsmount\b) | 0x1b0 | int fs\_fd | unsigned int flags | unsigned int ms\_flags | - | - | - |
+| <a name="aarch64_433"></a> [433](#aarch64_433) | fspick | [man/](https://man7.org/linux/man-pages/man2/fspick.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfspick\b) | 0x1b1 | int dfd | const char \*path | unsigned int flags | - | - | - |
 | <a name="aarch64_434"></a> [434](#aarch64_434) | pidfd_open | [man/](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_open\b) | 0x1b2 | pid\_t pid | unsigned int flags | - | - | - | - |
-| <a name="aarch64_435"></a> [435](#aarch64_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*cl_args | size_t size | - | - | - | - |
+| <a name="aarch64_435"></a> [435](#aarch64_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*uargs | size\_t size | - | - | - | - |
 | <a name="aarch64_436"></a> [436](#aarch64_436) | close_range | [man/](https://man7.org/linux/man-pages/man2/close_range.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclose_range\b) | 0x1b4 | unsigned int fd | unsigned int max\_fd | unsigned int flags | - | - | - |
 | <a name="aarch64_437"></a> [437](#aarch64_437) | *not implemented* | | 0x1b5 ||
 | <a name="aarch64_438"></a> [438](#aarch64_438) | *not implemented* | | 0x1b6 ||
@@ -1381,7 +1383,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 
 ### x86 (32-bit)
 
-Compiled from [Linux 4.14.0 headers][linux-headers].
+Compiled from [Linux 5.4.0 headers][linux-headers].
 
 | NR | syscall name | references | %eax | arg0 (%ebx) | arg1 (%ecx) | arg2 (%edx) | arg3 (%esi) | arg4 (%edi) | arg5 (%ebp) |
 |:---:|---|:---:|:---:|---|---|---|---|---|---|
@@ -1478,7 +1480,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_90"></a> [90](#i686_90) | mmap | [man/](https://man7.org/linux/man-pages/man2/mmap.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmmap\b) | 0x5a | ? | ? | ? | ? | ? | ? |
 | <a name="i686_91"></a> [91](#i686_91) | munmap | [man/](https://man7.org/linux/man-pages/man2/munmap.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmunmap\b) | 0x5b | unsigned long addr | size\_t len | - | - | - | - |
 | <a name="i686_92"></a> [92](#i686_92) | truncate | [man/](https://man7.org/linux/man-pages/man2/truncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\btruncate\b) | 0x5c | const char \*path | long length | - | - | - | - |
-| <a name="i686_93"></a> [93](#i686_93) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x5d | unsigned int fd | unsigned long length | - | - | - | - |
+| <a name="i686_93"></a> [93](#i686_93) | ftruncate | [man/](https://man7.org/linux/man-pages/man2/ftruncate.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bftruncate\b) | 0x5d | unsigned int fd | off\_t length | - | - | - | - |
 | <a name="i686_94"></a> [94](#i686_94) | fchmod | [man/](https://man7.org/linux/man-pages/man2/fchmod.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmod\b) | 0x5e | unsigned int fd | umode\_t mode | - | - | - | - |
 | <a name="i686_95"></a> [95](#i686_95) | fchown | [man/](https://man7.org/linux/man-pages/man2/fchown.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchown\b) | 0x5f | unsigned int fd | uid\_t user | gid\_t group | - | - | - |
 | <a name="i686_96"></a> [96](#i686_96) | getpriority | [man/](https://man7.org/linux/man-pages/man2/getpriority.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bgetpriority\b) | 0x60 | int which | int who | - | - | - | - |
@@ -1638,7 +1640,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_250"></a> [250](#i686_250) | fadvise64 | [man/](https://man7.org/linux/man-pages/man2/fadvise64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfadvise64\b) | 0xfa | int fd | loff\_t offset | size\_t len | int advice | - | - |
 | <a name="i686_251"></a> [251](#i686_251) | *not implemented* | | 0xfb ||
 | <a name="i686_252"></a> [252](#i686_252) | exit_group | [man/](https://man7.org/linux/man-pages/man2/exit_group.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bexit_group\b) | 0xfc | int error\_code | - | - | - | - | - |
-| <a name="i686_253"></a> [253](#i686_253) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0xfd | u64 cookie64 | char \*buf | size\_t len | - | - | - |
+| <a name="i686_253"></a> [253](#i686_253) | lookup_dcookie | [man/](https://man7.org/linux/man-pages/man2/lookup_dcookie.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blookup_dcookie\b) | 0xfd | ? | ? | ? | ? | ? | ? |
 | <a name="i686_254"></a> [254](#i686_254) | epoll_create | [man/](https://man7.org/linux/man-pages/man2/epoll_create.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_create\b) | 0xfe | int size | - | - | - | - | - |
 | <a name="i686_255"></a> [255](#i686_255) | epoll_ctl | [man/](https://man7.org/linux/man-pages/man2/epoll_ctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_ctl\b) | 0xff | int epfd | int op | int fd | struct epoll\_event \*event | - | - |
 | <a name="i686_256"></a> [256](#i686_256) | epoll_wait | [man/](https://man7.org/linux/man-pages/man2/epoll_wait.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bepoll_wait\b) | 0x100 | int epfd | struct epoll\_event \*events | int maxevents | int timeout | - | - |
@@ -1691,7 +1693,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_303"></a> [303](#i686_303) | linkat | [man/](https://man7.org/linux/man-pages/man2/linkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\blinkat\b) | 0x12f | int olddfd | const char \*oldname | int newdfd | const char \*newname | int flags | - |
 | <a name="i686_304"></a> [304](#i686_304) | symlinkat | [man/](https://man7.org/linux/man-pages/man2/symlinkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsymlinkat\b) | 0x130 | const char \* oldname | int newdfd | const char \* newname | - | - | - |
 | <a name="i686_305"></a> [305](#i686_305) | readlinkat | [man/](https://man7.org/linux/man-pages/man2/readlinkat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\breadlinkat\b) | 0x131 | int dfd | const char \*path | char \*buf | int bufsiz | - | - |
-| <a name="i686_306"></a> [306](#i686_306) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x132 | int dfd | const char \* filename | umode\_t mode | - | - | - |
+| <a name="i686_306"></a> [306](#i686_306) | fchmodat | [man/](https://man7.org/linux/man-pages/man2/fchmodat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfchmodat\b) | 0x132 | int dfd | const char \*filename | umode\_t mode | - | - | - |
 | <a name="i686_307"></a> [307](#i686_307) | faccessat | [man/](https://man7.org/linux/man-pages/man2/faccessat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfaccessat\b) | 0x133 | int dfd | const char \*filename | int mode | - | - | - |
 | <a name="i686_308"></a> [308](#i686_308) | pselect6 | [man/](https://man7.org/linux/man-pages/man2/pselect6.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpselect6\b) | 0x134 | int | fd\_set \* | fd\_set \* | fd\_set \* | struct \_\_kernel\_timespec \* | void \* |
 | <a name="i686_309"></a> [309](#i686_309) | ppoll | [man/](https://man7.org/linux/man-pages/man2/ppoll.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bppoll\b) | 0x135 | struct pollfd \* | unsigned int | struct \_\_kernel\_timespec \* | const sigset\_t \* | size\_t | - |
@@ -1726,7 +1728,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_338"></a> [338](#i686_338) | fanotify_init | [man/](https://man7.org/linux/man-pages/man2/fanotify_init.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_init\b) | 0x152 | unsigned int flags | unsigned int event\_f\_flags | - | - | - | - |
 | <a name="i686_339"></a> [339](#i686_339) | fanotify_mark | [man/](https://man7.org/linux/man-pages/man2/fanotify_mark.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfanotify_mark\b) | 0x153 | int fanotify\_fd | unsigned int flags | u64 mask | int fd | const char \*pathname | - |
 | <a name="i686_340"></a> [340](#i686_340) | prlimit64 | [man/](https://man7.org/linux/man-pages/man2/prlimit64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bprlimit64\b) | 0x154 | pid\_t pid | unsigned int resource | const struct rlimit64 \*new\_rlim | struct rlimit64 \*old\_rlim | - | - |
-| <a name="i686_341"></a> [341](#i686_341) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x155 | int dfd | const char \*name | struct file\_handle \*handle | int \*mnt\_id | int flag | - |
+| <a name="i686_341"></a> [341](#i686_341) | name_to_handle_at | [man/](https://man7.org/linux/man-pages/man2/name_to_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bname_to_handle_at\b) | 0x155 | int dfd | const char \*name | struct file\_handle \*handle | void \*mnt\_id | int flag | - |
 | <a name="i686_342"></a> [342](#i686_342) | open_by_handle_at | [man/](https://man7.org/linux/man-pages/man2/open_by_handle_at.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_by_handle_at\b) | 0x156 | int mountdirfd | struct file\_handle \*handle | int flags | - | - | - |
 | <a name="i686_343"></a> [343](#i686_343) | clock_adjtime | [man/](https://man7.org/linux/man-pages/man2/clock_adjtime.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_adjtime\b) | 0x157 | clockid\_t which\_clock | struct \_\_kernel\_timex \*tx | - | - | - | - |
 | <a name="i686_344"></a> [344](#i686_344) | syncfs | [man/](https://man7.org/linux/man-pages/man2/syncfs.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsyncfs\b) | 0x158 | int fd | - | - | - | - | - |
@@ -1770,7 +1772,7 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_382"></a> [382](#i686_382) | pkey_free | [man/](https://man7.org/linux/man-pages/man2/pkey_free.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpkey_free\b) | 0x17e | int pkey | - | - | - | - | - |
 | <a name="i686_383"></a> [383](#i686_383) | statx | [man/](https://man7.org/linux/man-pages/man2/statx.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bstatx\b) | 0x17f | int dfd | const char \*path | unsigned flags | unsigned mask | struct statx \*buffer | - |
 | <a name="i686_384"></a> [384](#i686_384) | arch_prctl | [man/](https://man7.org/linux/man-pages/man2/arch_prctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\barch_prctl\b) | 0x180 | ? | ? | ? | ? | ? | ? |
-| <a name="i686_385"></a> [385](#i686_385) | *not implemented* | | 0x181 ||
+| <a name="i686_385"></a> [385](#i686_385) | io_pgetevents | [man/](https://man7.org/linux/man-pages/man2/io_pgetevents.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_pgetevents\b) | 0x181 | aio\_context\_t ctx\_id | long min\_nr | long nr | struct io\_event \*events | struct \_\_kernel\_timespec \*timeout | const struct \_\_aio\_sigset \*sig |
 | <a name="i686_386"></a> [386](#i686_386) | rseq | [man/](https://man7.org/linux/man-pages/man2/rseq.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\brseq\b) | 0x182 | struct rseq \*rseq | uint32\_t rseq\_len | int flags | uint32\_t sig | - | - |
 | <a name="i686_387"></a> [387](#i686_387) | *not implemented* | | 0x183 ||
 | <a name="i686_388"></a> [388](#i686_388) | *not implemented* | | 0x184 ||
@@ -1778,16 +1780,16 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_390"></a> [390](#i686_390) | *not implemented* | | 0x186 ||
 | <a name="i686_391"></a> [391](#i686_391) | *not implemented* | | 0x187 ||
 | <a name="i686_392"></a> [392](#i686_392) | *not implemented* | | 0x188 ||
-| <a name="i686_393"></a> [393](#i686_393) | *not implemented* | | 0x189 ||
-| <a name="i686_394"></a> [394](#i686_394) | *not implemented* | | 0x18a ||
-| <a name="i686_395"></a> [395](#i686_395) | *not implemented* | | 0x18b ||
-| <a name="i686_396"></a> [396](#i686_396) | *not implemented* | | 0x18c ||
-| <a name="i686_397"></a> [397](#i686_397) | *not implemented* | | 0x18d ||
-| <a name="i686_398"></a> [398](#i686_398) | *not implemented* | | 0x18e ||
-| <a name="i686_399"></a> [399](#i686_399) | *not implemented* | | 0x18f ||
-| <a name="i686_400"></a> [400](#i686_400) | *not implemented* | | 0x190 ||
-| <a name="i686_401"></a> [401](#i686_401) | *not implemented* | | 0x191 ||
-| <a name="i686_402"></a> [402](#i686_402) | *not implemented* | | 0x192 ||
+| <a name="i686_393"></a> [393](#i686_393) | semget | [man/](https://man7.org/linux/man-pages/man2/semget.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsemget\b) | 0x189 | key\_t key | int nsems | int semflg | - | - | - |
+| <a name="i686_394"></a> [394](#i686_394) | semctl | [man/](https://man7.org/linux/man-pages/man2/semctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsemctl\b) | 0x18a | int semid | int semnum | int cmd | unsigned long arg | - | - |
+| <a name="i686_395"></a> [395](#i686_395) | shmget | [man/](https://man7.org/linux/man-pages/man2/shmget.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bshmget\b) | 0x18b | key\_t key | size\_t size | int flag | - | - | - |
+| <a name="i686_396"></a> [396](#i686_396) | shmctl | [man/](https://man7.org/linux/man-pages/man2/shmctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bshmctl\b) | 0x18c | int shmid | int cmd | struct shmid\_ds \*buf | - | - | - |
+| <a name="i686_397"></a> [397](#i686_397) | shmat | [man/](https://man7.org/linux/man-pages/man2/shmat.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bshmat\b) | 0x18d | int shmid | char \*shmaddr | int shmflg | - | - | - |
+| <a name="i686_398"></a> [398](#i686_398) | shmdt | [man/](https://man7.org/linux/man-pages/man2/shmdt.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bshmdt\b) | 0x18e | char \*shmaddr | - | - | - | - | - |
+| <a name="i686_399"></a> [399](#i686_399) | msgget | [man/](https://man7.org/linux/man-pages/man2/msgget.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmsgget\b) | 0x18f | key\_t key | int msgflg | - | - | - | - |
+| <a name="i686_400"></a> [400](#i686_400) | msgsnd | [man/](https://man7.org/linux/man-pages/man2/msgsnd.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmsgsnd\b) | 0x190 | int msqid | struct msgbuf \*msgp | size\_t msgsz | int msgflg | - | - |
+| <a name="i686_401"></a> [401](#i686_401) | msgrcv | [man/](https://man7.org/linux/man-pages/man2/msgrcv.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmsgrcv\b) | 0x191 | int msqid | struct msgbuf \*msgp | size\_t msgsz | long msgtyp | int msgflg | - |
+| <a name="i686_402"></a> [402](#i686_402) | msgctl | [man/](https://man7.org/linux/man-pages/man2/msgctl.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmsgctl\b) | 0x192 | int msqid | int cmd | struct msqid\_ds \*buf | - | - | - |
 | <a name="i686_403"></a> [403](#i686_403) | clock_gettime64 | [man/](https://man7.org/linux/man-pages/man2/clock_gettime64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_gettime64\b) | 0x193 | ? | ? | ? | ? | ? | ? |
 | <a name="i686_404"></a> [404](#i686_404) | clock_settime64 | [man/](https://man7.org/linux/man-pages/man2/clock_settime64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_settime64\b) | 0x194 | ? | ? | ? | ? | ? | ? |
 | <a name="i686_405"></a> [405](#i686_405) | clock_adjtime64 | [man/](https://man7.org/linux/man-pages/man2/clock_adjtime64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclock_adjtime64\b) | 0x195 | ? | ? | ? | ? | ? | ? |
@@ -1809,18 +1811,18 @@ Compiled from [Linux 4.14.0 headers][linux-headers].
 | <a name="i686_421"></a> [421](#i686_421) | rt_sigtimedwait_time64 | [man/](https://man7.org/linux/man-pages/man2/rt_sigtimedwait_time64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\brt_sigtimedwait_time64\b) | 0x1a5 | ? | ? | ? | ? | ? | ? |
 | <a name="i686_422"></a> [422](#i686_422) | futex_time64 | [man/](https://man7.org/linux/man-pages/man2/futex_time64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfutex_time64\b) | 0x1a6 | ? | ? | ? | ? | ? | ? |
 | <a name="i686_423"></a> [423](#i686_423) | sched_rr_get_interval_time64 | [man/](https://man7.org/linux/man-pages/man2/sched_rr_get_interval_time64.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bsched_rr_get_interval_time64\b) | 0x1a7 | ? | ? | ? | ? | ? | ? |
-| <a name="i686_424"></a> [424](#i686_424) | *not implemented* | | 0x1a8 ||
+| <a name="i686_424"></a> [424](#i686_424) | pidfd_send_signal | [man/](https://man7.org/linux/man-pages/man2/pidfd_send_signal.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_send_signal\b) | 0x1a8 | int pidfd | int sig | siginfo\_t \*info | unsigned int flags | - | - |
 | <a name="i686_425"></a> [425](#i686_425) | io_uring_setup | [man/](https://man7.org/linux/man-pages/man2/io_uring_setup.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_setup\b) | 0x1a9 | u32 entries | struct io\_uring\_params \*p | - | - | - | - |
 | <a name="i686_426"></a> [426](#i686_426) | io_uring_enter | [man/](https://man7.org/linux/man-pages/man2/io_uring_enter.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_enter\b) | 0x1aa | unsigned int fd | u32 to\_submit | u32 min\_complete | u32 flags | const void \*argp | size\_t argsz |
-| <a name="i686_427"></a> [427](#i686_427) | *not implemented* | | 0x1ab ||
-| <a name="i686_428"></a> [428](#i686_428) | *not implemented* | | 0x1ac ||
-| <a name="i686_429"></a> [429](#i686_429) | *not implemented* | | 0x1ad ||
-| <a name="i686_430"></a> [430](#i686_430) | *not implemented* | | 0x1ae ||
-| <a name="i686_431"></a> [431](#i686_431) | *not implemented* | | 0x1af ||
-| <a name="i686_432"></a> [432](#i686_432) | *not implemented* | | 0x1b0 ||
-| <a name="i686_433"></a> [433](#i686_433) | *not implemented* | | 0x1b1 ||
+| <a name="i686_427"></a> [427](#i686_427) | io_uring_register | [man/](https://man7.org/linux/man-pages/man2/io_uring_register.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bio_uring_register\b) | 0x1ab | unsigned int fd | unsigned int op | void \*arg | unsigned int nr\_args | - | - |
+| <a name="i686_428"></a> [428](#i686_428) | open_tree | [man/](https://man7.org/linux/man-pages/man2/open_tree.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bopen_tree\b) | 0x1ac | int dfd | const char \*path | unsigned flags | - | - | - |
+| <a name="i686_429"></a> [429](#i686_429) | move_mount | [man/](https://man7.org/linux/man-pages/man2/move_mount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bmove_mount\b) | 0x1ad | int from\_dfd | const char \*from\_path | int to\_dfd | const char \*to\_path | unsigned int ms\_flags | - |
+| <a name="i686_430"></a> [430](#i686_430) | fsopen | [man/](https://man7.org/linux/man-pages/man2/fsopen.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsopen\b) | 0x1ae | const char \*fs\_name | unsigned int flags | - | - | - | - |
+| <a name="i686_431"></a> [431](#i686_431) | fsconfig | [man/](https://man7.org/linux/man-pages/man2/fsconfig.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsconfig\b) | 0x1af | int fs\_fd | unsigned int cmd | const char \*key | const void \*value | int aux | - |
+| <a name="i686_432"></a> [432](#i686_432) | fsmount | [man/](https://man7.org/linux/man-pages/man2/fsmount.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfsmount\b) | 0x1b0 | int fs\_fd | unsigned int flags | unsigned int ms\_flags | - | - | - |
+| <a name="i686_433"></a> [433](#i686_433) | fspick | [man/](https://man7.org/linux/man-pages/man2/fspick.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bfspick\b) | 0x1b1 | int dfd | const char \*path | unsigned int flags | - | - | - |
 | <a name="i686_434"></a> [434](#i686_434) | pidfd_open | [man/](https://man7.org/linux/man-pages/man2/pidfd_open.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bpidfd_open\b) | 0x1b2 | pid\_t pid | unsigned int flags | - | - | - | - |
-| <a name="i686_435"></a> [435](#i686_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*cl_args | size_t size | - | - | - | - |
+| <a name="i686_435"></a> [435](#i686_435) | clone3 | [man/](https://man7.org/linux/man-pages/man2/clone3.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclone3\b) | 0x1b3 | struct clone\_args \*uargs | size\_t size | - | - | - | - |
 | <a name="i686_436"></a> [436](#i686_436) | close_range | [man/](https://man7.org/linux/man-pages/man2/close_range.2.html) [cs/](https://source.chromium.org/search?ss=chromiumos&q=f:third_party/kernel+SYSCALL_DEFINE[^,]*\bclose_range\b) | 0x1b4 | unsigned int fd | unsigned int max\_fd | unsigned int flags | - | - | - |
 | <a name="i686_437"></a> [437](#i686_437) | *not implemented* | | 0x1b5 ||
 | <a name="i686_438"></a> [438](#i686_438) | *not implemented* | | 0x1b6 ||
@@ -1835,6 +1837,7 @@ Consult the [Random Names](#naming) section for common gotchas.
 |---|:---:|:---:|:---:|:---:|
 | ARM_breakpoint | - | 983041 | - | - |
 | ARM_cacheflush | - | 983042 | - | - |
+| ARM_get_tls | - | 983046 | - | - |
 | ARM_set_tls | - | 983045 | - | - |
 | ARM_usr26 | - | 983043 | - | - |
 | ARM_usr32 | - | 983044 | - | - |
@@ -1875,6 +1878,7 @@ Consult the [Random Names](#naming) section for common gotchas.
 | clock_settime | 227 | 262 | 112 | 264 |
 | clock_settime64 | - | 404 | - | 404 |
 | clone | 56 | 120 | 220 | 120 |
+| clone3 | 435 | 435 | 435 | 435 |
 | close | 3 | 6 | 57 | 6 |
 | close_range | 436 | 436 | 436 | 436 |
 | connect | 42 | 283 | 203 | 362 |
@@ -1920,7 +1924,11 @@ Consult the [Random Names](#naming) section for common gotchas.
 | flock | 73 | 143 | 32 | 143 |
 | fork | 57 | 2 | - | 2 |
 | fremovexattr | 199 | 237 | 16 | 237 |
+| fsconfig | 431 | 431 | 431 | 431 |
 | fsetxattr | 190 | 228 | 7 | 228 |
+| fsmount | 432 | 432 | 432 | 432 |
+| fsopen | 430 | 430 | 430 | 430 |
+| fspick | 433 | 433 | 433 | 433 |
 | fstat | 5 | 108 | 80 | 108 |
 | fstat64 | - | 197 | - | 197 |
 | fstatat64 | - | 327 | - | 300 |
@@ -1982,10 +1990,12 @@ Consult the [Random Names](#naming) section for common gotchas.
 | io_cancel | 210 | 247 | 3 | 249 |
 | io_destroy | 207 | 244 | 1 | 246 |
 | io_getevents | 208 | 245 | 4 | 247 |
+| io_pgetevents | 333 | 399 | 292 | 385 |
 | io_pgetevents_time64 | - | 416 | - | 416 |
 | io_setup | 206 | 243 | 0 | 245 |
 | io_submit | 209 | 246 | 2 | 248 |
 | io_uring_enter | 426 | 426 | 426 | 426 |
+| io_uring_register | 427 | 427 | 427 | 427 |
 | io_uring_setup | 425 | 425 | 425 | 425 |
 | ioctl | 16 | 54 | 29 | 54 |
 | ioperm | 173 | - | - | 101 |
@@ -2017,7 +2027,7 @@ Consult the [Random Names](#naming) section for common gotchas.
 | mbind | 237 | 319 | 235 | 274 |
 | membarrier | 324 | 389 | 283 | 375 |
 | memfd_create | 319 | 385 | 279 | 356 |
-| migrate_pages | 256 | - | 238 | 294 |
+| migrate_pages | 256 | 400 | 238 | 294 |
 | mincore | 27 | 219 | 232 | 218 |
 | mkdir | 83 | 39 | - | 39 |
 | mkdirat | 258 | 323 | 34 | 296 |
@@ -2030,6 +2040,7 @@ Consult the [Random Names](#naming) section for common gotchas.
 | mmap2 | - | 192 | - | 192 |
 | modify_ldt | 154 | - | - | 123 |
 | mount | 165 | 21 | 40 | 21 |
+| move_mount | 429 | 429 | 429 | 429 |
 | move_pages | 279 | 344 | 239 | 317 |
 | mprotect | 10 | 125 | 226 | 125 |
 | mpx | - | - | - | 56 |
@@ -2042,10 +2053,10 @@ Consult the [Random Names](#naming) section for common gotchas.
 | mq_timedsend_time64 | - | 418 | - | 418 |
 | mq_unlink | 241 | 275 | 181 | 278 |
 | mremap | 25 | 163 | 216 | 163 |
-| msgctl | 71 | 304 | 187 | - |
-| msgget | 68 | 303 | 186 | - |
-| msgrcv | 70 | 302 | 188 | - |
-| msgsnd | 69 | 301 | 189 | - |
+| msgctl | 71 | 304 | 187 | 402 |
+| msgget | 68 | 303 | 186 | 399 |
+| msgrcv | 70 | 302 | 188 | 401 |
+| msgsnd | 69 | 301 | 189 | 400 |
 | msync | 26 | 144 | 227 | 144 |
 | munlock | 150 | 151 | 229 | 151 |
 | munlockall | 152 | 153 | 231 | 153 |
@@ -2062,6 +2073,7 @@ Consult the [Random Names](#naming) section for common gotchas.
 | olduname | - | - | - | 109 |
 | open | 2 | 5 | - | 5 |
 | open_by_handle_at | 304 | 371 | 265 | 342 |
+| open_tree | 428 | 428 | 428 | 428 |
 | openat | 257 | 322 | 56 | 295 |
 | pause | 34 | 29 | - | 29 |
 | pciconfig_iobase | - | 271 | - | - |
@@ -2070,7 +2082,7 @@ Consult the [Random Names](#naming) section for common gotchas.
 | perf_event_open | 298 | 364 | 241 | 336 |
 | personality | 135 | 136 | 92 | 136 |
 | pidfd_open | 434 | 434 | 434 | 434 |
-| clone3 | 435 | 435 | 435 | 435 |
+| pidfd_send_signal | 424 | 424 | 424 | 424 |
 | pipe | 22 | 42 | - | 42 |
 | pipe2 | 293 | 359 | 59 | 331 |
 | pivot_root | 155 | 218 | 41 | 217 |
@@ -2144,8 +2156,8 @@ Consult the [Random Names](#naming) section for common gotchas.
 | seccomp | 317 | 383 | 277 | 354 |
 | security | 185 | - | - | - |
 | select | 23 | - | - | 82 |
-| semctl | 66 | 300 | 191 | - |
-| semget | 64 | 299 | 190 | - |
+| semctl | 66 | 300 | 191 | 394 |
+| semget | 64 | 299 | 190 | 393 |
 | semop | 65 | 298 | 193 | - |
 | semtimedop | 220 | 312 | 192 | - |
 | semtimedop_time64 | - | 420 | - | 420 |
@@ -2189,10 +2201,10 @@ Consult the [Random Names](#naming) section for common gotchas.
 | setuid32 | - | 213 | - | 213 |
 | setxattr | 188 | 226 | 5 | 226 |
 | sgetmask | - | - | - | 68 |
-| shmat | 30 | 305 | 196 | - |
-| shmctl | 31 | 308 | 195 | - |
-| shmdt | 67 | 306 | 197 | - |
-| shmget | 29 | 307 | 194 | - |
+| shmat | 30 | 305 | 196 | 397 |
+| shmctl | 31 | 308 | 195 | 396 |
+| shmdt | 67 | 306 | 197 | 398 |
+| shmget | 29 | 307 | 194 | 395 |
 | shutdown | 48 | 293 | 210 | 373 |
 | sigaction | - | 67 | - | 67 |
 | sigaltstack | 131 | 186 | 132 | 186 |

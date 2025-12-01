@@ -35,6 +35,8 @@ import org.chromium.base.Log;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.variations.LoadSeedResult;
 
 import java.io.File;
@@ -75,6 +77,7 @@ import java.util.concurrent.TimeoutException;
  *    before AwFeatureListCreator::SetUpFieldTrials() runs.
  */
 @JNINamespace("android_webview")
+@NullMarked
 public class VariationsSeedLoader {
     private static final String TAG = "VariationsSeedLoader";
 
@@ -114,8 +117,9 @@ public class VariationsSeedLoader {
     private static long sCachedSeedFreshness;
     private static long sCachedAppSeedFreshness;
 
-    private FutureTask<SeedLoadResult> mLoadTask;
-    private SeedServerCallback mSeedServerCallback = new SeedServerCallback();
+    @Nullable private FutureTask<SeedLoadResult> mLoadTask;
+    private final SeedServerCallback mSeedServerCallback = new SeedServerCallback();
+    private boolean mPostedServiceConnected;
 
     private static void recordLoadSeedResult(@LoadSeedResult int result) {
         RecordHistogram.recordEnumeratedHistogram(
@@ -338,8 +342,8 @@ public class VariationsSeedLoader {
     // Connects to VariationsSeedServer service. Sends a file descriptor for our local copy of the
     // seed to the service, to which the service will write a new seed.
     private class SeedServerConnection extends ServiceConnectionDelayRecorder {
-        private ParcelFileDescriptor mNewSeedFd;
-        private long mOldSeedDate;
+        private final ParcelFileDescriptor mNewSeedFd;
+        private final long mOldSeedDate;
 
         public SeedServerConnection(ParcelFileDescriptor newSeedFd, long oldSeedDate) {
             mNewSeedFd = newSeedFd;
@@ -372,17 +376,28 @@ public class VariationsSeedLoader {
 
         @Override
         public void onServiceConnectedImpl(ComponentName name, IBinder service) {
-            try {
-                if (mNewSeedFd.getFd() >= 0) {
-                    IVariationsSeedServer.Stub.asInterface(service)
-                            .getSeed(mNewSeedFd, mOldSeedDate, mSeedServerCallback);
-                }
-            } catch (RemoteException e) {
-                Log.e(TAG, "Faild requesting seed", e);
-            } finally {
-                ContextUtils.getApplicationContext().unbindService(this);
-                VariationsUtils.closeSafely(mNewSeedFd);
+            if (mPostedServiceConnected) {
+                // Only post this task once.
+                return;
             }
+            // onServiceConnected is called on the app's main thread. Punt this back to the
+            // background thread as this work is not time critical.
+            mPostedServiceConnected = true;
+            PostTask.postTask(
+                    TaskTraits.BEST_EFFORT_MAY_BLOCK,
+                    () -> {
+                        try {
+                            if (mNewSeedFd.getFd() >= 0) {
+                                IVariationsSeedServer.Stub.asInterface(service)
+                                        .getSeed(mNewSeedFd, mOldSeedDate, mSeedServerCallback);
+                            }
+                        } catch (RemoteException e) {
+                            Log.e(TAG, "Faild requesting seed", e);
+                        } finally {
+                            ContextUtils.getApplicationContext().unbindService(this);
+                            VariationsUtils.closeSafely(mNewSeedFd);
+                        }
+                    });
         }
 
         @Override
@@ -471,6 +486,7 @@ public class VariationsSeedLoader {
         long start = SystemClock.elapsedRealtime();
         try {
             try {
+                assert mLoadTask != null : "startVariationsInit should be called first.";
                 SeedLoadResult loadResult =
                         mLoadTask.get(getSeedLoadTimeoutMillis(), TimeUnit.MILLISECONDS);
                 maybeRecordSeedFileTime(loadResult.mSeedFileTime);

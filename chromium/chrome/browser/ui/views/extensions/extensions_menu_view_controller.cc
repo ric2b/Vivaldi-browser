@@ -13,6 +13,7 @@
 #include "base/notreached.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
+#include "chrome/browser/extensions/permissions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/permissions/site_permissions_helper.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -444,8 +445,7 @@ void ExtensionsMenuViewController::OnExtensionToggleSelected(
   // Otherwise, extension has one-time access and we need to clear tab
   // permissions (e.g extension with activeTab was granted one-time access).
   DCHECK_EQ(current_site_access, PermissionsManager::UserSiteAccess::kOnClick);
-  extensions::TabHelper::FromWebContents(web_contents)
-      ->active_tab_permission_granter()
+  extensions::ActiveTabPermissionGranter::FromWebContents(web_contents)
       ->ClearActiveExtensionAndNotify(extension_id);
 
   auto* action_runner =
@@ -983,7 +983,7 @@ void ExtensionsMenuViewController::SwitchToPage(
 void ExtensionsMenuViewController::PopulateMainPage(
     ExtensionsMenuMainPageView* main_page) {
   // TODO(crbug.com/40879945): We should update the subheader here since it
-  // despends in `toolbar_model_`.
+  // depends on `toolbar_model_`.
   std::vector<std::string> sorted_ids = SortExtensionsByName(*toolbar_model_);
   for (size_t i = 0; i < sorted_ids.size(); ++i) {
     InsertMenuItemMainPage(main_page, sorted_ids[i], i);

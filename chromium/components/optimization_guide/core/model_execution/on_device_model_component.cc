@@ -84,6 +84,27 @@ void LogInstallCriteria(
 
 }  // namespace
 
+std::ostream& operator<<(std::ostream& out, OnDeviceModelStatus status) {
+  switch (status) {
+    case OnDeviceModelStatus::kReady:
+      return out << "Ready";
+    case OnDeviceModelStatus::kNotEligible:
+      return out << "Not Eligible";
+    case OnDeviceModelStatus::kInstallNotComplete:
+      return out << "Install Not Complete";
+    case OnDeviceModelStatus::kModelInstallerNotRegisteredForUnknownReason:
+      return out << "Model Installer Not Registered For Unknown Reason";
+    case OnDeviceModelStatus::kModelInstalledTooLate:
+      return out << "Model Installed Too Late";
+    case OnDeviceModelStatus::kNotReadyForUnknownReason:
+      return out << "Not Ready For Unknown Reason";
+    case OnDeviceModelStatus::kInsufficientDiskSpace:
+      return out << "Insufficient Disk Space";
+    case OnDeviceModelStatus::kNoOnDeviceFeatureUsed:
+      return out << "No On-device Feature Used";
+  }
+}
+
 OnDeviceBaseModelSpec::OnDeviceBaseModelSpec() = default;
 OnDeviceBaseModelSpec::OnDeviceBaseModelSpec(
     const std::string& model_name,
@@ -96,6 +117,13 @@ OnDeviceBaseModelSpec::OnDeviceBaseModelSpec(
 OnDeviceBaseModelSpec::~OnDeviceBaseModelSpec() = default;
 OnDeviceBaseModelSpec::OnDeviceBaseModelSpec(const OnDeviceBaseModelSpec&) =
     default;
+
+bool OnDeviceBaseModelSpec::operator==(
+    const OnDeviceBaseModelSpec& other) const {
+  return model_name == other.model_name &&
+         model_version == other.model_version &&
+         supported_performance_hints == other.supported_performance_hints;
+}
 
 void OnDeviceModelComponentStateManager::UninstallComplete() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -129,21 +157,36 @@ OnDeviceModelComponentStateManager::GetOnDeviceModelStatus() {
   return OnDeviceModelStatus::kModelInstallerNotRegisteredForUnknownReason;
 }
 
-const OnDeviceModelComponentStateManager::RegistrationCriteria*
-OnDeviceModelComponentStateManager::GetRegistrationCriteria() {
+OnDeviceModelComponentStateManager::DebugState
+OnDeviceModelComponentStateManager::GetDebugState() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return registration_criteria_.get();
-}
-
-int64_t OnDeviceModelComponentStateManager::GetDiskBytesAvailableForModel() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return disk_space_available_;
+  DebugState debug;
+  debug.criteria_ = registration_criteria_.get();
+  debug.disk_space_available_ = disk_space_available_;
+  debug.status_ = GetOnDeviceModelStatus();
+  debug.has_override_ = !!switches::GetOnDeviceModelExecutionOverride();
+  debug.state_ = state_.get();
+  return debug;
 }
 
 bool OnDeviceModelComponentStateManager::IsLowTierDevice() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return IsPerformanceClassCompatible(
       features::kLowTierPerformanceClassListForOnDeviceModel.Get(),
+      PerformanceClassFromPref(*local_state_));
+}
+
+bool OnDeviceModelComponentStateManager::SupportsImageInput() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return IsPerformanceClassCompatible(
+      features::kPerformanceClassListForImageInput.Get(),
+      PerformanceClassFromPref(*local_state_));
+}
+
+bool OnDeviceModelComponentStateManager::SupportsAudioInput() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return IsPerformanceClassCompatible(
+      features::kPerformanceClassListForAudioInput.Get(),
       PerformanceClassFromPref(*local_state_));
 }
 
@@ -169,17 +212,18 @@ void OnDeviceModelComponentStateManager::OnDeviceEligibleFeatureUsed(
     LogInstallCriteria(*registration_criteria_, "AtAttemptedUse");
   }
 
-  BeginUpdateRegistration();
+  BeginUpdateRegistration(base::DoNothing());
 }
 
 void OnDeviceModelComponentStateManager::DevicePerformanceClassChanged(
+    base::OnceClosure complete,
     OnDeviceModelPerformanceClass performance_class) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   UpdatePerformanceClassPref(local_state_, performance_class);
   local_state_->SetString(
       model_execution::prefs::localstate::kOnDevicePerformanceClassVersion,
       version_info::GetVersionNumber());
-  BeginUpdateRegistration();
+  BeginUpdateRegistration(std::move(complete));
 }
 
 bool OnDeviceModelComponentStateManager::NeedsPerformanceClassUpdate() {
@@ -205,7 +249,7 @@ void OnDeviceModelComponentStateManager::OnStartup() {
                                                      .Set("name", "override")));
     return;
   }
-  BeginUpdateRegistration();
+  BeginUpdateRegistration(base::DoNothing());
 }
 
 void OnDeviceModelComponentStateManager::InstallerRegistered() {
@@ -221,16 +265,19 @@ bool OnDeviceModelComponentStateManager::IsInstallerRegistered() {
   return state_ != nullptr;
 }
 
-void OnDeviceModelComponentStateManager::BeginUpdateRegistration() {
+void OnDeviceModelComponentStateManager::BeginUpdateRegistration(
+    base::OnceClosure complete) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (switches::GetOnDeviceModelExecutionOverride()) {
+    std::move(complete).Run();
     return;
   }
   delegate_->GetFreeDiskSpace(
       delegate_->GetInstallDirectory(),
       base::BindOnce(
           &OnDeviceModelComponentStateManager::CompleteUpdateRegistration,
-          GetWeakPtr()));
+          GetWeakPtr())
+          .Then(std::move(complete)));
 }
 
 void OnDeviceModelComponentStateManager::CompleteUpdateRegistration(

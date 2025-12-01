@@ -31,7 +31,7 @@
 #include "./common/defs.h"
 #include "./common/test_util.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 // A mock for CentipedeCallbacks.
@@ -69,7 +69,7 @@ class MinimizerMock : public CentipedeCallbacks {
 // Factory that creates/destroys MinimizerMock.
 class MinimizerMockFactory : public CentipedeCallbacksFactory {
  public:
-  absl::Nonnull<CentipedeCallbacks *> create(const Environment &env) override {
+  CentipedeCallbacks *absl_nonnull create(const Environment &env) override {
     return new MinimizerMock(env);
   }
   void destroy(CentipedeCallbacks *cb) override { delete cb; }
@@ -110,4 +110,4 @@ TEST(MinimizeTest, MinimizeTest) {
 }
 
 }  // namespace
-}  // namespace centipede
+}  // namespace fuzztest::internal

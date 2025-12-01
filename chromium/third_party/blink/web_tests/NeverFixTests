@@ -1,4 +1,4 @@
-# tags: [ Android Fuchsia Linux Mac Mac11 Mac11-arm64 Mac12 Mac12-arm64 Mac13 Mac13-arm64 Mac14 Mac14-arm64 Mac15 Mac15-arm64 Win Win10.20h2 Win11 Win11-arm64 iOS17-simulator ]
+# tags: [ Android Fuchsia Linux Mac Mac11 Mac11-arm64 Mac12 Mac12-arm64 Mac13 Mac13-arm64 Mac14 Mac14-arm64 Mac15 Mac15-arm64 Win Win10.20h2 Win11 Win11-arm64 iOS18-simulator ]
 # tags: [ Release Debug ]
 # results: [ Skip Pass ]
 
@@ -34,19 +34,19 @@
 # Chrome Win/Linux/iOS doesn't support emacs key-bindings.
 [ Win ] editing/pasteboard/emacs-cntl-y-001.html [ Skip ]
 [ Linux ] editing/pasteboard/emacs-cntl-y-001.html [ Skip ]
-[ iOS17-simulator ] editing/pasteboard/emacs-cntl-y-001.html [ Skip ]
+[ iOS18-simulator ] editing/pasteboard/emacs-cntl-y-001.html [ Skip ]
 [ Win ] editing/pasteboard/emacs-ctrl-a-k-y.html [ Skip ]
 [ Linux ] editing/pasteboard/emacs-ctrl-a-k-y.html [ Skip ]
-[ iOS17-simulator ] editing/pasteboard/emacs-ctrl-a-k-y.html [ Skip ]
+[ iOS18-simulator ] editing/pasteboard/emacs-ctrl-a-k-y.html [ Skip ]
 [ Win ] editing/pasteboard/emacs-ctrl-k-with-move.html [ Skip ]
 [ Linux ] editing/pasteboard/emacs-ctrl-k-with-move.html [ Skip ]
-[ iOS17-simulator ] editing/pasteboard/emacs-ctrl-k-with-move.html [ Skip ]
+[ iOS18-simulator ] editing/pasteboard/emacs-ctrl-k-with-move.html [ Skip ]
 [ Win ] editing/pasteboard/emacs-ctrl-k-y-001.html [ Skip ]
 [ Linux ] editing/pasteboard/emacs-ctrl-k-y-001.html [ Skip ]
-[ iOS17-simulator ] editing/pasteboard/emacs-ctrl-k-y-001.html [ Skip ]
+[ iOS18-simulator ] editing/pasteboard/emacs-ctrl-k-y-001.html [ Skip ]
 [ Win ] editing/input/emacs-ctrl-o.html [ Skip ]
 [ Linux ] editing/input/emacs-ctrl-o.html [ Skip ]
-[ iOS17-simulator ] editing/input/emacs-ctrl-o.html [ Skip ]
+[ iOS18-simulator ] editing/input/emacs-ctrl-o.html [ Skip ]
 [ Win ] fast/events/inputevents/inputevent-yank.html [ Skip ]
 [ Linux ] fast/events/inputevents/inputevent-yank.html [ Skip ]
 
@@ -100,7 +100,7 @@
 [ Mac ] dark-mode/colors/select-popup.html [ Skip ]
 
 # IOS's popup behavior is different.
-[ iOS17-simulator ] fast/forms/select-popup/* [ Skip ]
+[ iOS18-simulator ] fast/forms/select-popup/* [ Skip ]
 
 # These tests are specific to Windows and Linux.
 [ Mac ] fast/forms/calendar-picker/date-open-picker-with-f4-key.html [ Skip ]
@@ -295,11 +295,6 @@ external/wpt/encrypted-media/drm-invalid-license.https.html [ Skip ]
 external/wpt/encrypted-media/drm-keystatuses.https.html [ Skip ]
 external/wpt/encrypted-media/drm-keystatuses-multiple-sessions.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-onencrypted.https.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-destroy-persistent-license.https.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-persistent-license-events.https.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-persistent-license.https.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-retrieve-destroy-persistent-license.https.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-retrieve-persistent-license.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-clear-encrypted.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-encrypted-clear.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-encrypted-clear-sources.https.html [ Skip ]
@@ -310,8 +305,8 @@ external/wpt/encrypted-media/drm-mp4-playback-temporary-multikey.https.html [ Sk
 external/wpt/encrypted-media/drm-mp4-playback-temporary-multikey-sequential.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-multikey-sequential-readyState.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-multisession.https.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-temporary-playduration-keystatus.html [ Skip ]
-external/wpt/encrypted-media/drm-mp4-playback-temporary-playduration.html [ Skip ]
+external/wpt/encrypted-media/drm-mp4-playback-temporary-playduration-keystatus.https.html [ Skip ]
+external/wpt/encrypted-media/drm-mp4-playback-temporary-playduration.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-setMediaKeys-after-src.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-setMediaKeys-after-update.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-playback-temporary-setMediaKeys-immediately.https.html [ Skip ]
@@ -334,13 +329,6 @@ external/wpt/encrypted-media/drm-mp4-unique-origin.https.html [ Skip ]
 external/wpt/encrypted-media/drm-mp4-waiting-for-a-key.https.html [ Skip ]
 external/wpt/encrypted-media/drm-not-callable-after-createsession.https.html [ Skip ]
 external/wpt/encrypted-media/drm-temporary-license-type.https.html [ Skip ]
-
-# Chromium's implementation of ClearKey doesn't support persistent licenses.
-external/wpt/encrypted-media/clearkey-mp4-playback-destroy-persistent-license.https.html [ Skip ]
-external/wpt/encrypted-media/clearkey-mp4-playback-persistent-license-events.https.html [ Skip ]
-external/wpt/encrypted-media/clearkey-mp4-playback-persistent-license.https.html [ Skip ]
-external/wpt/encrypted-media/clearkey-mp4-playback-retrieve-destroy-persistent-license.https.html [ Skip ]
-external/wpt/encrypted-media/clearkey-mp4-playback-retrieve-persistent-license.https.html [ Skip ]
 
 # content_shell doesn't support MP4 files by default.
 external/wpt/encrypted-media/clearkey-mp4-playback-temporary-clear-encrypted-segmented.https.html [ Skip ]
@@ -524,37 +512,20 @@ external/wpt/css/css-flexbox/interactive/flexbox_interactive_order-transitions-2
 external/wpt/css/css-flexbox/interactive/flexbox_interactive_order-transitions.html [ Skip ]
 external/wpt/css/css-flexbox/interactive/flexbox_interactive_paged-overflow-2.html [ Skip ]
 external/wpt/css/css-flexbox/interactive/flexbox_interactive_paged-overflow.html [ Skip ]
-external/wpt/css/css-fonts/font-family-name-000.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-001.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-002.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-003.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-004.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-005.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-006.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-007.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-008.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-009.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-010.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-011.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-012.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-013.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-014.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-015.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-016.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-017.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-018.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-019.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-020.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-021.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-022.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-023.xht [ Skip ]
-external/wpt/css/css-fonts/font-family-name-024.xht [ Skip ]
+
+# Tests that require the CSSTest fonts to be installed, which we're not likely
+# to be able to install on Mac and Windows test bots.
+[ Mac ] external/wpt/css/css-fonts/font-family-name-* [ Skip ]
+[ Mac ] external/wpt/css/css-fonts/test-synthetic-bold.html [ Skip ]
+[ Mac ] external/wpt/css/css-fonts/test-synthetic-italic.html [ Skip ]
+[ Win ] external/wpt/css/css-fonts/font-family-name-* [ Skip ]
+[ Win ] external/wpt/css/css-fonts/test-synthetic-bold.html [ Skip ]
+[ Win ] external/wpt/css/css-fonts/test-synthetic-italic.html [ Skip ]
+
 external/wpt/css/css-fonts/font-size-adjust-003.xht [ Skip ]
 external/wpt/css/css-fonts/font-weight-bolder-001.xht [ Skip ]
 external/wpt/css/css-fonts/font-weight-lighter-001.xht [ Skip ]
 external/wpt/css/css-fonts/font-weight-normal-001.xht [ Skip ]
-external/wpt/css/css-fonts/test-synthetic-bold.xht [ Skip ]
-external/wpt/css/css-fonts/test-synthetic-italic.xht [ Skip ]
 external/wpt/css/css-text-decor/text-decoration-line-014.xht [ Skip ]
 external/wpt/css/css-ui/canvas-cursor-001.html [ Skip ]
 external/wpt/css/css-ui/canvas-cursor-002.html [ Skip ]
@@ -1651,9 +1622,6 @@ crbug.com/691944 external/wpt/service-workers/service-worker/update-after-oneday
 crbug.com/1224804 virtual/not-site-per-process/external/wpt/wasm/serialization/module/window-similar-but-cross-origin-success.sub.html [ Skip ]
 crbug.com/1224804 virtual/not-site-per-process/external/wpt/wasm/serialization/module/window-domain-success.sub.html [ Skip ]
 
-# Since enabling the multi IDP flag affects existing tests, we only enable the flag in the virtual multi IDP test suite
-crbug.com/1373766 external/wpt/credential-management/fedcm-multi-idp/* [ Skip ]
-
 # This test is run in its own content_shell invocation via a VirtualTestSuite to
 # isolate it from other tests, because it makes a huge memory allocation that
 # tends to cause OOM if run after other tests. The non-VirtualTestSuite version
@@ -1904,7 +1872,7 @@ external/wpt/infrastructure/* [ Skip ]
 # Web Bluetooth Emulation is not supported on Android, Fuchsia and iOS due to binary size constraints.
 crbug.com/342191615 [ Android ] inspector-protocol/bluetooth/* [ Skip ]
 crbug.com/342191615 [ Fuchsia ] inspector-protocol/bluetooth/* [ Skip ]
-crbug.com/342191615 [ iOS17-simulator ] inspector-protocol/bluetooth/* [ Skip ]
+crbug.com/342191615 [ iOS18-simulator ] inspector-protocol/bluetooth/* [ Skip ]
 
 # These html5lib parser tests always time out.
 html5lib/generated/run-foreign-fragment-data.html [ Skip ]
@@ -1923,3 +1891,9 @@ virtual/view-transition-mpa-serialization/external/wpt/css/css-view-transitions/
 
 # Servo browser specific
 external/wpt/html/webappapis/animation-frames/spurious-frame-callbacks-optimization.html [ Skip ]
+
+# Clipboardchange is not yet supported on these platforms.
+crbug.com/41442253 [ Android ] external/wpt/clipboard-apis/async-navigator-clipboard-change-event.tentative.https.html [ Skip ]
+crbug.com/41442253 [ Fuchsia ] external/wpt/clipboard-apis/async-navigator-clipboard-change-event.tentative.https.html [ Skip ]
+crbug.com/41442253 [ Mac ] external/wpt/clipboard-apis/async-navigator-clipboard-change-event.tentative.https.html [ Skip ]
+crbug.com/41442253 [ iOS18-simulator ] external/wpt/clipboard-apis/async-navigator-clipboard-change-event.tentative.https.html [ Skip ]

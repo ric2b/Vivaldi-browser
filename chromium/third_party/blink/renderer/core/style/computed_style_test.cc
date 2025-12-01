@@ -42,6 +42,7 @@
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/core/testing/null_execution_context.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 #include "third_party/blink/renderer/platform/testing/task_environment.h"
 #include "third_party/blink/renderer/platform/transforms/scale_transform_operation.h"
 #include "ui/base/ui_base_features.h"
@@ -2324,4 +2325,92 @@ TEST_F(ComputedStyleTest, HasEnvSafeAreaInsetBottom) {
   EXPECT_TRUE(StyleForElement("t6").HasEnvSafeAreaInsetBottom());
 }
 
+TEST_F(ComputedStyleTest, CursorInheritance) {
+  Document& document = GetDocument();
+  document.body()->setInnerHTML(R"HTML(
+    <style>
+      #parent {
+        cursor: pointer;
+      }
+      #child-no-inherit {
+        cursor: pointer;
+      }
+      #outer {
+      cursor: initial;
+    }
+    </style>
+    <div id="parent">
+      <div id="child-no-inherit"></div>
+      <div id="child-inherit"></div>
+    </div>
+    <div id="outer"></div>
+  )HTML");
+  document.View()->UpdateAllLifecyclePhasesForTest();
+
+  const auto& parent = StyleForElement("parent");
+  EXPECT_EQ(parent.Cursor(), ECursor::kPointer);
+  EXPECT_FALSE(parent.CursorIsInherited());
+
+  const auto& child_no_inherit = StyleForElement("child-no-inherit");
+  EXPECT_EQ(child_no_inherit.Cursor(), ECursor::kPointer);
+  EXPECT_FALSE(child_no_inherit.CursorIsInherited());
+
+  const auto& child_inherit = StyleForElement("child-inherit");
+  EXPECT_EQ(child_inherit.Cursor(), ECursor::kPointer);
+  EXPECT_TRUE(child_inherit.CursorIsInherited());
+
+  const auto& outer = StyleForElement("outer");
+  EXPECT_EQ(outer.Cursor(), ECursor::kAuto);
+  EXPECT_FALSE(outer.CursorIsInherited());
+}
+
+TEST_F(ComputedStyleTest, HasGapRule) {
+  ScopedCSSGapDecorationForTest scoped_gap_decoration(true);
+  Document& document = GetDocument();
+  document.body()->setInnerHTML(R"HTML(
+    <style>
+      #multi-col {
+        columns: 4;
+        column-rule-style: solid;
+        row-rule-style: solid;
+      }
+      #grid {
+        display: grid;
+        grid-template: repeat(3, 1fr) / repeat(2, 1fr);
+        column-rule-style: solid;
+        row-rule-style: solid;
+      }
+      #flex {
+        display: flex;
+        column-rule-style: solid;
+        row-rule-style: solid;
+      }
+      #no-rule {
+        column-rule-style: solid;
+        row-rule-style: solid;
+      }
+    </style>
+    <div id="multi-col"></div>
+    <div id="grid"></div>
+    <div id="flex"></div>
+    <div id="no-rule"></div>
+  )HTML");
+  document.View()->UpdateAllLifecyclePhasesForTest();
+
+  const auto& multi_col = StyleForElement("multi-col");
+  EXPECT_TRUE(multi_col.HasColumnRule());
+  EXPECT_TRUE(multi_col.HasRowRule());
+
+  const auto& grid = StyleForElement("grid");
+  EXPECT_TRUE(grid.HasColumnRule());
+  EXPECT_TRUE(grid.HasRowRule());
+
+  const auto& flex = StyleForElement("flex");
+  EXPECT_TRUE(flex.HasColumnRule());
+  EXPECT_TRUE(flex.HasRowRule());
+
+  const auto& no_rule = StyleForElement("no-rule");
+  EXPECT_FALSE(no_rule.HasColumnRule());
+  EXPECT_FALSE(no_rule.HasRowRule());
+}
 }  // namespace blink

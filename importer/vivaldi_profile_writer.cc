@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_tabrestore.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/vivaldi_bookmark_kit.h"

@@ -28,14 +28,21 @@
 #ifndef SRC_TINT_LANG_CORE_IR_ANALYSIS_INTEGER_RANGE_ANALYSIS_H_
 #define SRC_TINT_LANG_CORE_IR_ANALYSIS_INTEGER_RANGE_ANALYSIS_H_
 
+#include <cstdint>
 #include <memory>
 #include <variant>
 
 namespace tint::core::ir {
+class Access;
 class Binary;
+class Constant;
 class Function;
 class FunctionParam;
+class Let;
+class Load;
 class Loop;
+class Module;
+class Value;
 class Var;
 }  // namespace tint::core::ir
 
@@ -66,8 +73,9 @@ struct IntegerRangeAnalysisImpl;
 class IntegerRangeAnalysis {
   public:
     /// Constructor
-    /// @param func the function to cache analyses for
-    explicit IntegerRangeAnalysis(Function* func);
+    /// @module ir_module the ir module to cache analyses for
+    explicit IntegerRangeAnalysis(Module* ir_module);
+
     ~IntegerRangeAnalysis();
 
     /// Returns the integer range info of a given parameter with given index, if it is an integer
@@ -80,6 +88,36 @@ class IntegerRangeAnalysis {
     /// parameter is a scalar, then `index` must be zero.
     /// @returns the integer range info
     const IntegerRangeInfo* GetInfo(const FunctionParam* param, uint32_t index = 0);
+
+    /// Returns the integer range info of a given variable if it is an integer variable and it has a
+    /// meaningful range. Returns nullptr otherwise.
+    /// @param var the variable to get information about
+    /// @returns the integer range info
+    const IntegerRangeInfo* GetInfo(const Var* var);
+
+    /// Returns the integer range info of a given `Load` variable if it is an integer variable and
+    /// it has a meaningful range. Returns nullptr otherwise.
+    const IntegerRangeInfo* GetInfo(const Load* load_var);
+
+    /// Returns the integer range info of a given `Access` variable if it is an integer variable and
+    /// it has a meaningful range. Returns nullptr otherwise.
+    const IntegerRangeInfo* GetInfo(const Access* access);
+
+    /// Returns the integer range info of a given `Let` variable if it is an integer variable and it
+    /// has a meaningful range. Returns nullptr otherwise.
+    const IntegerRangeInfo* GetInfo(const Let* let);
+
+    /// Returns the integer range info of a given `Constant` if it is an integer.
+    /// Returns nullptr otherwise.
+    const IntegerRangeInfo* GetInfo(const Constant* constant);
+
+    /// Returns the integer range info of a given `Value` variable if it is an integer variable and
+    /// it has a meaningful range. Returns nullptr otherwise.
+    const IntegerRangeInfo* GetInfo(const Value* value);
+
+    /// Returns the integer range info of a given `Binary` variable if it is an integer variable and
+    /// it has a meaningful range. Returns nullptr otherwise.
+    const IntegerRangeInfo* GetInfo(const Binary* binary);
 
     /// Note: This function is only for tests.
     /// Returns the pointer of the loop control variable in the given loop when its initializer
@@ -102,11 +140,33 @@ class IntegerRangeAnalysis {
     /// - The third instruction is to store the value of the temporary variable into the loop
     ///   control variable.
     /// - The fourth instruction is `next_iteration`.
-    /// @param loop the Loop variable to investigate
+    /// @param loop the Loop variable to investigate.
+    /// @param loop_control_variable the loop control variable to investigate.
     /// @returns the pointer of the binary operation that updates the loop control variable in the
     /// continuing block of the given loop if the loop meets all the requirements, return nullptr
     /// otherwise.
     const Binary* GetBinaryToUpdateLoopControlVariableInContinuingBlockForTest(
+        const Loop* loop,
+        const Var* loop_control_variable);
+
+    /// Note: This function is only for tests
+    /// Returns the pointer of the binary operation that compares the loop control variable with its
+    /// limitations in the body block of the loop if the loop meets the below requirements:
+    /// - The loop control variable is only used as the parameter of the load instruction.
+    /// - The first instruction is to load the loop control variable into a temporary variable.
+    /// - The second instruction is to compare the temporary variable with a constant value and save
+    ///   the result to a boolean variable.
+    /// - The second instruction cannot be a comparison that will never return true.
+    /// - The third instruction is an `ifelse` expression that uses the boolean variable got in the
+    ///   second instruction as the condition.
+    // - The true block of the above `ifelse` expression doesn't contain `exit_loop`.
+    // - The false block of the above `ifelse` expression only contains `exit_loop`.
+    /// @param loop the Loop variable to investigate.
+    /// @param loop_control_variable the loop control variable to investigate.
+    /// @returns the pointer of the binary operation that compares the loop control variable with
+    /// its limitations in the body block of the loop if the loop meets the below requirements,
+    /// return nullptr otherwise.
+    const Binary* GetBinaryToCompareLoopControlVariableInLoopBodyForTest(
         const Loop* loop,
         const Var* loop_control_variable);
 

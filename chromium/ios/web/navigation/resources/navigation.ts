@@ -82,7 +82,7 @@ History.prototype.pushState = function(
     stateObject: object, pageTitle: string, pageUrl: string|URL): void {
   messageQueue.queueNavigationEventMessage({
     'command': 'willChangeState',
-    'frame_id': gCrWeb.message.getFrameId(),
+    'frame_id': gCrWeb.getFrameId(),
   });
 
   // JSONStringify throws an exception when given a cyclical object. This
@@ -104,7 +104,7 @@ History.prototype.pushState = function(
     'stateObject': serializedState,
     'baseUrl': document.baseURI,
     'pageUrl': pageUrl.toString(),
-    'frame_id': gCrWeb.message.getFrameId(),
+    'frame_id': gCrWeb.getFrameId(),
   });
 };
 
@@ -112,7 +112,7 @@ History.prototype.replaceState = function(
     stateObject: object, pageTitle: string, pageUrl: string|URL): void {
   messageQueue.queueNavigationEventMessage({
     'command': 'willChangeState',
-    'frame_id': gCrWeb.message.getFrameId(),
+    'frame_id': gCrWeb.getFrameId(),
   });
 
   // JSONStringify throws an exception when given a cyclical object. This
@@ -136,6 +136,6 @@ History.prototype.replaceState = function(
     'stateObject': serializedState,
     'baseUrl': document.baseURI,
     'pageUrl': pageUrl.toString(),
-    'frame_id': gCrWeb.message.getFrameId(),
+    'frame_id': gCrWeb.getFrameId(),
   });
 };

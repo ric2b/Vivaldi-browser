@@ -415,7 +415,6 @@ static int encode_superframe(AVCodecContext *avctx, AVPacket *avpkt,
         error = encode_frame(s, s->coefs, avpkt->data, avpkt->size, total_gain++);
     if (error > 0) {
         av_log(avctx, AV_LOG_ERROR, "Invalid input data or requested bitrate too low, cannot encode\n");
-        avpkt->size = 0;
         return AVERROR(EINVAL);
     }
     av_assert0((put_bits_count(&s->pb) & 7) == 0);
@@ -425,7 +424,7 @@ static int encode_superframe(AVCodecContext *avctx, AVPacket *avpkt,
         put_bits(&s->pb, 8, 'N');
 
     flush_put_bits(&s->pb);
-    av_assert0(put_bits_ptr(&s->pb) - s->pb.buf == avctx->block_align);
+    av_assert0(put_bytes_output(&s->pb) == avctx->block_align);
 
     if (frame->pts != AV_NOPTS_VALUE)
         avpkt->pts = frame->pts - ff_samples_to_time_base(avctx, avctx->initial_padding);
@@ -446,8 +445,7 @@ const FFCodec ff_wmav1_encoder = {
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_superframe),
     .close          = ff_wma_end,
-    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
-                                                      AV_SAMPLE_FMT_NONE },
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP),
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
 #endif
@@ -462,8 +460,7 @@ const FFCodec ff_wmav2_encoder = {
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_superframe),
     .close          = ff_wma_end,
-    .p.sample_fmts  = (const enum AVSampleFormat[]) { AV_SAMPLE_FMT_FLTP,
-                                                      AV_SAMPLE_FMT_NONE },
+    CODEC_SAMPLEFMTS(AV_SAMPLE_FMT_FLTP),
     .caps_internal  = FF_CODEC_CAP_INIT_CLEANUP,
 };
 #endif

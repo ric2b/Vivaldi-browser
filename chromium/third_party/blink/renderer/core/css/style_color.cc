@@ -130,13 +130,15 @@ StyleColor::UnresolvedRelativeColor::UnresolvedRelativeColor(
     const CSSValue& channel0,
     const CSSValue& channel1,
     const CSSValue& channel2,
-    const CSSValue* alpha)
+    const CSSValue* alpha,
+    const CSSLengthResolver& length_resolver)
     : UnresolvedColorFunction(UnresolvedColorFunction::Type::kRelativeColor),
       origin_color_(origin_color.color_or_unresolved_color_function_),
       origin_color_type_(ResolveColorOperandType(origin_color)),
       color_interpolation_space_(color_interpolation_space) {
   auto to_channel =
-      [](const CSSValue& value) -> scoped_refptr<const CalculationValue> {
+      [&length_resolver](
+          const CSSValue& value) -> scoped_refptr<const CalculationValue> {
     if (const CSSNumericLiteralValue* numeric =
             DynamicTo<CSSNumericLiteralValue>(value)) {
       if (numeric->IsPercentage()) {
@@ -161,8 +163,7 @@ StyleColor::UnresolvedRelativeColor::UnresolvedRelativeColor(
                                                 Length::ValueRange::kAll);
     } else if (const CSSMathFunctionValue* function =
                    DynamicTo<CSSMathFunctionValue>(value)) {
-      return function->ToCalcValue(
-          CSSToLengthConversionData(/*element=*/nullptr));
+      return function->ToCalcValue(length_resolver);
     } else {
       NOTREACHED();
     }
@@ -296,13 +297,8 @@ Color StyleColor::UnresolvedRelativeColor::Resolve(
       /*is_legacy_syntax=*/false, color_interpolation_space_, params,
       param_alpha);
 
-  Color result = Color::FromColorSpace(color_interpolation_space_, params[0],
-                                       params[1], params[2], param_alpha);
-  if (Color::IsLegacyColorSpace(result.GetColorSpace()) &&
-      !RuntimeEnabledFeatures::CSSRelativeColorPreserveNoneEnabled()) {
-    result.ConvertToColorSpace(Color::ColorSpace::kSRGB);
-  }
-  return result;
+  return Color::FromColorSpace(color_interpolation_space_, params[0], params[1],
+                               params[2], param_alpha);
 }
 
 bool StyleColor::UnresolvedRelativeColor::operator==(
@@ -353,15 +349,6 @@ Color StyleColor::Resolve(const Color& current_color,
                             /*is_in_web_app_scope=*/false);
   }
   return GetColor();
-}
-
-Color StyleColor::ResolveWithAlpha(Color current_color,
-                                   mojom::blink::ColorScheme color_scheme,
-                                   int alpha,
-                                   bool* is_current_color) const {
-  Color color = Resolve(current_color, color_scheme, is_current_color);
-  // TODO(crbug.com/1333988) This looks unfriendly to CSS Color 4.
-  return Color(color.Red(), color.Green(), color.Blue(), alpha);
 }
 
 StyleColor StyleColor::ResolveSystemColor(

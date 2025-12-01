@@ -22,7 +22,7 @@
 <translation id="125220115284141797">Padrões</translation>
 <translation id="1257336506558170607">Exportar certificado selecionado</translation>
 <translation id="1297175357211070620">Destino</translation>
-<translation id="1303101771013849280">Arquivo HTML com Favoritos</translation>
+<translation id="1303101771013849280">Arquivo HTML com Marcadores</translation>
 <translation id="1358741672408003399">Ortografia e gramática</translation>
 <translation id="1430915738399379752">Imprimir</translation>
 <translation id="1451375123200651445">Página da Web, arquivo único</translation>
@@ -416,6 +416,9 @@ Mantenha o seu arquivo de chave privada em um local seguro. Você precisará del
 <translation id="8004582292198964060">Navegador</translation>
 <translation id="8018313076035239964">Controle quais informações os sites podem usar e quais conteúdos eles podem exibir</translation>
 <translation id="8071432093239591881">Imprimir como imagem</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# favorito}
+        other {# marcadores}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" /> KB</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1{Baixando arquivo} other {Baixando arquivos}}</translation>

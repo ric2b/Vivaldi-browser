@@ -132,12 +132,21 @@ class OmniboxPopupViewViews::AutocompletePopupWidget final
         base::BindOnce(&AutocompletePopupWidget::Close, AsWeakPtr())));
   }
 
-  void OnNativeWidgetDestroying() override {
-    // End all our animations immediately, as our closing animation may trigger
-    // a Close call which will be invalid once the native widget is gone.
-    GetLayer()->GetAnimator()->AbortAllAnimations();
+  void OnWidgetDestroying(views::Widget* widget) override {
+    // ThemeCopyingWidget observation is set on the role_model widget, which in
+    // the case of `AutocompletePopupWidget` is the hosting parent widget.
+    CHECK_NE(widget, this);
+    ThemeCopyingWidget::OnWidgetDestroying(widget);
 
-    ThemeCopyingWidget::OnNativeWidgetDestroying();
+    // In the case the host widget is destroyed, close the popup widget
+    // synchronously. This is necessary as the popup widget's contents view has
+    // dependencies on the hosting widget's BrowserView (see
+    // `SetPopupContentsView()` above). Since the popup widget is owned by its
+    // NativeWidget there is a risk of dangling pointers if it is not destroyed
+    // synchronously with its parent.
+    // TODO(crbug.com/40232479): Once this is migrated to CLIENT_OWNS_WIDGET
+    // this will no longer be necessary.
+    CloseNow();
   }
 
   void OnMouseEvent(ui::MouseEvent* event) override {
@@ -207,7 +216,7 @@ OmniboxPopupViewViews::OmniboxPopupViewViews(OmniboxViewViews* omnibox_view,
   }
 
   // The contents is owned by the LocationBarView.
-  set_owned_by_client();
+  set_owned_by_client(OwnedByClientPassKey());
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
@@ -232,7 +241,13 @@ OmniboxPopupViewViews::~OmniboxPopupViewViews() {
 gfx::Image OmniboxPopupViewViews::GetMatchIcon(
     const AutocompleteMatch& match,
     SkColor vector_icon_color) const {
-  return model()->GetMatchIcon(match, vector_icon_color);
+  bool dark_mode = false;
+  auto* color_provider = GetColorProvider();
+  if (color_provider) {
+    dark_mode = color_utils::IsDark(
+        color_provider->GetColor(kColorOmniboxResultsBackground));
+  }
+  return model()->GetMatchIcon(match, vector_icon_color, dark_mode);
 }
 
 void OmniboxPopupViewViews::SetSelectedIndex(size_t index) {
@@ -337,9 +352,6 @@ void OmniboxPopupViewViews::UpdatePopupAppearance() {
   // we have enough row views.
   const size_t result_size = autocomplete_controller->result().size();
   std::u16string previous_row_header = u"";
-  const bool force_hide_row_header =
-      OmniboxFieldTrial::IsHideSuggestionGroupHeadersEnabledInContext(
-          model()->GetPageClassification());
   for (size_t i = 0; i < result_size; ++i) {
     // Create child views lazily.  Since especially the first result view may
     // be expensive to create due to loading font data, this saves time and
@@ -354,19 +366,11 @@ void OmniboxPopupViewViews::UpdatePopupAppearance() {
 
     const AutocompleteMatch& match = GetMatchAtIndex(i);
     std::u16string current_row_header =
-        match.suggestion_group_id.has_value() && !force_hide_row_header
-            ? autocomplete_controller->result().GetHeaderForSuggestionGroup(
-                  match.suggestion_group_id.value())
-            : u"";
-    const bool row_hidden = controller()->IsSuggestionHidden(match);
-    const bool group_hidden = match.suggestion_group_id.has_value() &&
-                              controller()->IsSuggestionGroupHidden(
-                                  match.suggestion_group_id.value());
+        model()->GetSuggestionGroupHeaderText(match.suggestion_group_id);
     // Show the header if it's distinct from the previous match's header.
     if (!current_row_header.empty() &&
         current_row_header != previous_row_header) {
-      // Set toggle state of the header based on whether the group is hidden.
-      row_view->ShowHeader(current_row_header, group_hidden);
+      row_view->ShowHeader(current_row_header);
     } else {
       row_view->HideHeader();
     }
@@ -374,12 +378,8 @@ void OmniboxPopupViewViews::UpdatePopupAppearance() {
 
     OmniboxResultView* const result_view = row_view->result_view();
     result_view->SetMatch(match);
-    // Set visibility of the result view based on whether the group is hidden.
-    // If the row header has been force-hidden (e.g. via an experiment), then
-    // the result view should always be shown (as the user has no way to
-    // toggle group visibility in this case).
-    result_view->SetVisible((!group_hidden && !row_hidden) ||
-                            force_hide_row_header);
+    // Set visibility of the result view based on whether the row is hidden.
+    result_view->SetVisible(!controller()->IsSuggestionHidden(match));
     result_view->UpdateAccessibilityProperties();
 
     const SkBitmap* bitmap = model()->GetPopupRichSuggestionBitmap(i);
@@ -657,25 +657,6 @@ size_t OmniboxPopupViewViews::GetIndexForPoint(const gfx::Point& point) const {
   return OmniboxPopupSelection::kNoMatch;
 }
 
-void OmniboxPopupViewViews::SetSuggestionGroupVisibility(
-    size_t match_index,
-    bool suggestion_group_hidden) {
-  if (OmniboxHeaderView* header_view = header_view_at(match_index)) {
-    header_view->SetSuggestionGroupVisibility(suggestion_group_hidden);
-  }
-  if (OmniboxResultView* result_view = result_view_at(match_index)) {
-    result_view->SetVisible(!suggestion_group_hidden);
-  }
-
-  // This is necssary for the popup to actually resize to accommodate newly
-  // shown or hidden matches.
-  if (popup_) {
-    popup_->SetTargetBounds(GetTargetBounds());
-  }
-
-  InvalidateLayout();
-}
-
 void OmniboxPopupViewViews::UpdateAccessibleStates() const {
   if (IsOpen()) {
     GetViewAccessibility().SetIsExpanded();
@@ -708,9 +689,17 @@ void OmniboxPopupViewViews::UpdateAccessibleActiveDescendantForInvokingView() {
   if (!omnibox_view_) {
     return;
   }
-  size_t selected_line = GetSelection().line;
-  if (IsOpen() && selected_line != OmniboxPopupSelection::kNoMatch) {
-    if (OmniboxResultView* result_view = result_view_at(selected_line)) {
+
+  // This logic aims to update the "active descendant" accessibility
+  // property of the omnibox text field (`omnibox_view_`).
+  //
+  // This property tells assistive technologies (like screen readers) which
+  // element within the popup should be considered the currently "active" or
+  // "focused" item, even though the actual keyboard focus remains on the
+  // text field.
+  OmniboxPopupSelection selection = GetSelection();
+  if (IsOpen() && selection.line != OmniboxPopupSelection::kNoMatch) {
+    if (OmniboxResultView* result_view = result_view_at(selection.line)) {
       omnibox_view_->GetViewAccessibility().SetActiveDescendant(*result_view);
     } else {
       omnibox_view_->GetViewAccessibility().ClearActiveDescendant();

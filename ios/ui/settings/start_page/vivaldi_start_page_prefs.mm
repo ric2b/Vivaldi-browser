@@ -52,7 +52,7 @@ static PrefService *_localPrefService = nil;
 
 + (void)registerLocalStatePrefs:(PrefRegistrySimple*)registry {
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageOpenWithItem,
-                                VivaldiStartPageStartItemTypeFirstGroup);
+                                VivaldiStartPageStartItemTypeLastVisited);
   registry->RegisterIntegerPref(vivaldiprefs::kVivaldiStartPageLastVisitedGroup,
                                 0);
   registry->RegisterBooleanPref(vivaldiprefs::kVivaldiStartPageShowAddButton,
@@ -114,6 +114,8 @@ static PrefService *_localPrefService = nil;
       return VivaldiStartPageLayoutStyleSmall;
     case 3:
       return VivaldiStartPageLayoutStyleList;
+    case 4:
+      return VivaldiStartPageLayoutStyleIcon;
     default:
       return VivaldiStartPageLayoutStyleSmall;
   }

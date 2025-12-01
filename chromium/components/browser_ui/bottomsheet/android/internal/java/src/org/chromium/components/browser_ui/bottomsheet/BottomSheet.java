@@ -101,7 +101,7 @@ class BottomSheet extends FrameLayout
     private ViewGroup mSheetContainer;
 
     /** For detecting scroll and fling events on the bottom sheet. */
-    private BottomSheetSwipeDetector mGestureDetector;
+    private final BottomSheetSwipeDetector mGestureDetector;
 
     /** The animator used to move the sheet to a fixed state when released by the user. */
     private @Nullable ValueAnimator mSettleAnimator;
@@ -152,7 +152,7 @@ class BottomSheet extends FrameLayout
     /** Whether the sheet is currently open. */
     private boolean mIsSheetOpen;
 
-    /** Whether {@link #destroy()} has been called. **/
+    /** Whether {@link #destroy()} has been called. */
     private boolean mIsDestroyed;
 
     /** The ratio in the range [0, 1] that the browser controls are hidden. */
@@ -175,7 +175,7 @@ class BottomSheet extends FrameLayout
      */
     public static class ShadowLayerView extends View {
         /** The length of the shadow in any direction. */
-        private int mShadowLength;
+        private final int mShadowLength;
 
         /** Constructor to inflate from XML. */
         public ShadowLayerView(Context context, AttributeSet atts) {
@@ -322,12 +322,10 @@ class BottomSheet extends FrameLayout
         onAppHeaderHeightChanged(appHeaderHeight);
         setBottomMargin(bottomMargin);
 
-        mToolbarHolder =
-                (TouchRestrictingFrameLayout) findViewById(R.id.bottom_sheet_toolbar_container);
+        mToolbarHolder = findViewById(R.id.bottom_sheet_toolbar_container);
         mToolbarHolder.setBottomSheet(this);
 
-        mBottomSheetContentContainer =
-                (TouchRestrictingFrameLayout) findViewById(R.id.bottom_sheet_content);
+        mBottomSheetContentContainer = findViewById(R.id.bottom_sheet_content);
         mBottomSheetContentContainer.setBottomSheet(this);
 
         mContainerWidth = mSheetContainer.getWidth();

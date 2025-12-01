@@ -17,6 +17,7 @@
 #include "chromeos/ash/components/boca/on_task/on_task_blocklist.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_helper.h"
 #include "chromeos/ash/components/browser_context_helper/browser_context_types.h"
+#include "components/google/core/common/google_util.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/navigation_controller.h"
@@ -67,11 +68,16 @@ bool IsChromeWebStoreURL(const GURL& url) {
          (url.host() == extension_urls::GetNewWebstoreLaunchURL().host());
 }
 
+bool IsBocaAppHostURL(const GURL& url) {
+  return (url.SchemeIs(content::kChromeUIUntrustedScheme) &&
+          url.host() == boca::kChromeBocaAppHost);
+}
+
 }  // namespace
 
 OnTaskLockedSessionNavigationThrottle::OnTaskLockedSessionNavigationThrottle(
-    content::NavigationHandle* navigation_handle)
-    : content::NavigationThrottle(navigation_handle) {}
+    content::NavigationThrottleRegistry& registry)
+    : content::NavigationThrottle(registry) {}
 
 OnTaskLockedSessionNavigationThrottle::
     ~OnTaskLockedSessionNavigationThrottle() = default;
@@ -81,18 +87,18 @@ const char* OnTaskLockedSessionNavigationThrottle::GetNameForLogging() {
 }
 
 // static
-std::unique_ptr<content::NavigationThrottle>
-OnTaskLockedSessionNavigationThrottle::MaybeCreateThrottleFor(
-    content::NavigationHandle* handle) {
+void OnTaskLockedSessionNavigationThrottle::MaybeCreateAndAdd(
+    content::NavigationThrottleRegistry& registry) {
+  content::NavigationHandle& handle = registry.GetNavigationHandle();
   if (!ash::boca_util::IsEnabled(
           ash::BrowserContextHelper::Get()->GetUserByBrowserContext(
-              handle->GetWebContents()->GetBrowserContext()))) {
-    return nullptr;
+              handle.GetWebContents()->GetBrowserContext()))) {
+    return;
   }
 
   LockedSessionWindowTracker* const window_tracker =
       LockedSessionWindowTrackerFactory::GetForBrowserContext(
-          handle->GetWebContents()->GetBrowserContext());
+          handle.GetWebContents()->GetBrowserContext());
   // We do not need to create the throttle when we are not currently observing a
   // window that needs to be in locked mode, or if the navigation throttle is
   // not ready to start (where we are adding new tabs), or if the navigation is
@@ -101,27 +107,28 @@ OnTaskLockedSessionNavigationThrottle::MaybeCreateThrottleFor(
   // we are not navigating to a new page).
   if (!window_tracker || !window_tracker->browser() ||
       !window_tracker->can_start_navigation_throttle()) {
-    return nullptr;
+    return;
   }
 
-  if (!handle->IsInOutermostMainFrame()) {
-    return nullptr;
+  if (!handle.IsInOutermostMainFrame()) {
+    return;
   }
 
-  if (handle->IsSameDocument()) {
-    return nullptr;
+  if (handle.IsSameDocument()) {
+    return;
   }
 
   Browser* const content_browser =
-      LockedSessionWindowTracker::GetBrowserWithTab(handle->GetWebContents());
+      LockedSessionWindowTracker::GetBrowserWithTab(handle.GetWebContents());
 
   // Ensure we only apply the nav throttle on OnTask SWA navigations.
   if (content_browser && (content_browser != window_tracker->browser() &&
                           !content_browser->is_type_app_popup())) {
-    return nullptr;
+    return;
   }
-  window_tracker->ObserveWebContents(handle->GetWebContents());
-  return base::WrapUnique(new OnTaskLockedSessionNavigationThrottle(handle));
+  window_tracker->ObserveWebContents(handle.GetWebContents());
+  registry.AddThrottle(
+      base::WrapUnique(new OnTaskLockedSessionNavigationThrottle(registry)));
 }
 
 void OnTaskLockedSessionNavigationThrottle::MaybeShowBlockedURLToast() {
@@ -152,6 +159,16 @@ bool OnTaskLockedSessionNavigationThrottle::MaybeProceedForOneLevelDeep(
   if (!window_tracker) {
     return false;
   }
+
+  // Google search sometimes redirects to the captcha page. We let this
+  // navigation proceed by default.
+  if (google_util::IsGoogleDomainUrl(
+          url, google_util::SubdomainPermission::DISALLOW_SUBDOMAIN,
+          google_util::PortPermission::ALLOW_NON_STANDARD_PORTS) &&
+      url.path_piece().starts_with("/sorry/")) {
+    return true;
+  }
+
   OnTaskBlocklist* const on_task_blocklist =
       window_tracker->on_task_blocklist();
   if (!on_task_blocklist->CanPerformOneLevelNavigation(tab)) {
@@ -169,14 +186,11 @@ bool OnTaskLockedSessionNavigationThrottle::
   // an exception), blob urls, non-boca app chrome urls, and other local
   // schemes.
   const GURL& url = navigation_handle()->GetURL();
-  bool is_boca_app_host_url =
-      (url.SchemeIs(content::kChromeUIUntrustedScheme) &&
-       url.host() == boca::kChromeBocaAppHost);
   return (navigation_handle()->IsDownload() ||
           (navigation_handle()->GetRequestMethod() !=
                net::HttpRequestHeaders::kGetMethod &&
            !navigation_handle()->IsFormSubmission()) ||
-          (!url.SchemeIsHTTPOrHTTPS() && !is_boca_app_host_url) ||
+          (!url.SchemeIsHTTPOrHTTPS() && !IsBocaAppHostURL(url)) ||
           IsChromeWebStoreURL(url));
 }
 
@@ -223,7 +237,20 @@ OnTaskLockedSessionNavigationThrottle::CheckRestrictions() {
     MaybeShowBlockedURLToast();
     return CANCEL;
   }
+
+  // Allow redirects triggered as separate navigation requests to go through.
+  if (navigation_handle()->GetRedirectChain().size() > 1) {
+    return PROCEED;
+  }
   const GURL& url = navigation_handle()->GetURL();
+
+  // There is no nav restriction associated with the home tab so the blocklist
+  // may enforce nav restrictions based on the previous active tab. We allow all
+  // requests to the home URL to go through for now.
+  // TODO(crbug.com/413468168) - Associate a nav restriction with the home tab.
+  if (IsBocaAppHostURL(url)) {
+    return PROCEED;
+  }
 
   // Checks if the query is the end of an OAuth login. If so, then we want
   // to let these pass.
@@ -339,7 +366,7 @@ OnTaskLockedSessionNavigationThrottle::CheckRestrictions() {
             on_task_blocklist->one_level_deep_original_url()[original_tab_id];
       }
       if (source_url.is_valid()) {
-        if (url.DomainIs(source_url.host())) {
+        if (OnTaskBlocklist::IsURLInDomain(url, source_url)) {
           // Same domain navigation.
           on_task_blocklist->MaybeSetURLRestrictionLevel(
               navigation_handle()->GetWebContents(), url,

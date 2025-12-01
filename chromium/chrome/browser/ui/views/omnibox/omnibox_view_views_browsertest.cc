@@ -13,6 +13,7 @@
 
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -155,11 +156,14 @@ class OmniboxViewViewsTest : public InProcessBrowserTest {
   void Click(ui_controls::MouseButton button,
              const gfx::Point& press_location,
              const gfx::Point& release_location) {
-    ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(press_location));
+    auto browser_window = browser()->window()->GetNativeWindow();
+    ASSERT_TRUE(
+        ui_test_utils::SendMouseMoveSync(press_location, browser_window));
     ASSERT_TRUE(ui_test_utils::SendMouseEventsSync(button, ui_controls::DOWN));
 
     if (press_location != release_location) {
-      ASSERT_TRUE(ui_test_utils::SendMouseMoveSync(release_location));
+      ASSERT_TRUE(
+          ui_test_utils::SendMouseMoveSync(release_location, browser_window));
     }
     ASSERT_TRUE(ui_test_utils::SendMouseEventsSync(button, ui_controls::UP));
   }
@@ -543,7 +547,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, CloseOmniboxPopupOnTextDrag) {
   results.AppendMatches(matches);
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
-      triggered_feature_service());
+      triggered_feature_service(), /*is_lens_active=*/false,
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -591,7 +596,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, MaintainCursorAfterFocusCycle) {
   results.AppendMatches(matches);
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
-      triggered_feature_service());
+      triggered_feature_service(), /*is_lens_active=*/false,
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -696,7 +702,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, FriendlyAccessibleLabel) {
   results.AppendMatches(matches);
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
-      triggered_feature_service());
+      triggered_feature_service(), /*is_lens_active=*/false,
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   chrome::FocusLocationBar(browser());
@@ -796,7 +803,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsTest, AccessiblePopup) {
   results.AppendMatches(matches);
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
-      triggered_feature_service());
+      triggered_feature_service(), /*is_lens_active=*/false,
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -954,7 +962,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, AccessibleOmnibox) {
   results.AppendMatches(matches);
   results.SortAndCull(
       input, TemplateURLServiceFactory::GetForProfile(browser()->profile()),
-      triggered_feature_service());
+      triggered_feature_service(), /*is_lens_active=*/false,
+      /*can_show_contextual_suggestions=*/false, /*mia_enabled=*/false);
 
   // The omnibox popup should open with suggestions displayed.
   autocomplete_controller->NotifyChanged();
@@ -1043,9 +1052,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewViewsUIATest, GetSelectionAndBounds) {
   int range_end_offset = offsets[selection_range.end()];
 
   int left_bound =
-      display::win::ScreenWin::DIPToScreenRect(
-          HWNDForView(omnibox_view_views),
-          gfx::Rect(range_start_offset + bounds_in_screen.x(), 0, 0, 0))
+      display::win::GetScreenWin()
+          ->DIPToScreenRect(
+              HWNDForView(omnibox_view_views),
+              gfx::Rect(range_start_offset + bounds_in_screen.x(), 0, 0, 0))
           .x();
 
   // Adust `textfield_rect` to account for the border.

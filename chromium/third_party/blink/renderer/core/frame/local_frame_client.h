@@ -190,6 +190,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
           should_check_main_world_content_security_policy,
       mojo::PendingRemote<mojom::blink::BlobURLToken>,
       base::TimeTicks input_start_time,
+      base::TimeTicks actual_navigation_start,
       const String& href_translate,
       const std::optional<Impression>& impression,
       const LocalFrameToken* initiator_frame_token,
@@ -395,16 +396,13 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
     return v8::Local<v8::Object>();
   }
 
-  // Returns a new WebWorkerFetchContext for a dedicated worker (in the
-  // non-PlzDedicatedWorker case) or worklet.
-  virtual scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext() {
+  // Returns a new WebWorkerFetchContext for worklets.
+  virtual scoped_refptr<WebWorkerFetchContext> CreateWorkletFetchContext() {
     return nullptr;
   }
 
-  // Returns a new WebWorkerFetchContext for PlzDedicatedWorker.
-  // (https://crbug.com/906991)
-  virtual scoped_refptr<WebWorkerFetchContext>
-  CreateWorkerFetchContextForPlzDedicatedWorker(
+  // Returns a new WebWorkerFetchContext for dedicated workers.
+  virtual scoped_refptr<WebWorkerFetchContext> CreateWorkerFetchContext(
       WebDedicatedWorkerHostFactoryClient*) {
     return nullptr;
   }

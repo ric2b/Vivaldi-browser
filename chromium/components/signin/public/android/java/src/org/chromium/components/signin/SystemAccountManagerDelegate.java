@@ -39,11 +39,16 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.components.signin.base.GaiaId;
 import org.chromium.components.signin.metrics.FetchAccountCapabilitiesFromSystemLibraryResult;
+import org.chromium.google_apis.gaia.GoogleServiceAuthError;
+import org.chromium.google_apis.gaia.GoogleServiceAuthErrorState;
 
 import java.io.IOException;
 
 // Vivaldi
+import org.chromium.base.PackageUtils;
 import org.chromium.build.BuildConfig;
+import com.google.android.gms.common.GooglePlayServicesUtil;
+
 /**
  * Default implementation of {@link AccountManagerDelegate} which delegates all calls to the
  * Android account manager.
@@ -94,6 +99,12 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
 
     @Override
     public Account[] getAccountsSynchronous() throws AccountManagerDelegateException {
+        // Vivaldi
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD &&
+                !PackageUtils.isPackageInstalled(
+                        GooglePlayServicesUtil.GOOGLE_PLAY_STORE_PACKAGE)) {
+            return new Account[] {};
+        }
         if (!isGooglePlayServicesAvailable()) {
             throw new AccountManagerDelegateException("Can't use Google Play Services");
         }
@@ -125,11 +136,15 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
             // This case includes a UserRecoverableNotifiedException, but most clients will have
             // their own retry mechanism anyway.
             throw new AuthException(
-                    AuthException.NONTRANSIENT,
                     "Error while getting token for scope '" + authTokenScope + "'",
-                    ex);
+                    ex,
+                    new GoogleServiceAuthError(
+                            GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
         } catch (IOException ex) {
-            throw new AuthException(AuthException.TRANSIENT, ex);
+            throw new AuthException(
+                    "Error while getting token for scope '" + authTokenScope + "'",
+                    ex,
+                    new GoogleServiceAuthError(GoogleServiceAuthErrorState.CONNECTION_FAILED));
         }
     }
 
@@ -138,9 +153,16 @@ public class SystemAccountManagerDelegate implements AccountManagerDelegate {
         try {
             GoogleAuthUtil.clearToken(ContextUtils.getApplicationContext(), authToken);
         } catch (GoogleAuthException ex) {
-            throw new AuthException(AuthException.NONTRANSIENT, ex);
+            throw new AuthException(
+                    "Error while invalidating access token",
+                    ex,
+                    new GoogleServiceAuthError(
+                            GoogleServiceAuthErrorState.INVALID_GAIA_CREDENTIALS));
         } catch (IOException ex) {
-            throw new AuthException(AuthException.TRANSIENT, ex);
+            throw new AuthException(
+                    "Error while invalidating access token",
+                    ex,
+                    new GoogleServiceAuthError(GoogleServiceAuthErrorState.CONNECTION_FAILED));
         }
     }
 

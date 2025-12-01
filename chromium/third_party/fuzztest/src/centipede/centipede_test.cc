@@ -42,6 +42,7 @@
 #include "./centipede/feature.h"
 #include "./centipede/mutation_input.h"
 #include "./centipede/runner_result.h"
+#include "./centipede/stop.h"
 #include "./centipede/util.h"
 #include "./centipede/workdir.h"
 #include "./common/defs.h"
@@ -49,7 +50,7 @@
 #include "./common/logging.h"
 #include "./common/test_util.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 using ::testing::AllOf;
@@ -58,7 +59,9 @@ using ::testing::Each;
 using ::testing::HasSubstr;
 using ::testing::IsEmpty;
 using ::testing::IsSupersetOf;
+using ::testing::Le;
 using ::testing::Not;
+using ::testing::SizeIs;
 
 // A mock for CentipedeCallbacks.
 class CentipedeMock : public CentipedeCallbacks {
@@ -136,7 +139,7 @@ class CentipedeMock : public CentipedeCallbacks {
 class MockFactory : public CentipedeCallbacksFactory {
  public:
   explicit MockFactory(CentipedeCallbacks &cb) : cb_(cb) {}
-  absl::Nonnull<CentipedeCallbacks *> create(const Environment &env) override {
+  CentipedeCallbacks *absl_nonnull create(const Environment &env) override {
     return &cb_;
   }
   void destroy(CentipedeCallbacks *cb) override { EXPECT_EQ(cb, &cb_); }
@@ -451,6 +454,25 @@ TEST_F(CentipedeWithTemporaryLocalDir, MutateViaExternalBinary) {
       EXPECT_THAT(result.mutants(), AllOf(IsSupersetOf(all_expected_mutants),
                                           Each(Not(IsEmpty()))));
     }
+  }
+
+  // Test with a max_len of 10
+  {
+    Environment env;
+    env.max_len = 10;
+    MutateCallbacks callbacks(env);
+    const MutationResult result = callbacks.MutateViaExternalBinary(
+        binary_with_custom_mutator, GetMutationInputRefsFromDataInputs(inputs),
+        10000);
+    EXPECT_EQ(result.exit_code(), EXIT_SUCCESS);
+    EXPECT_TRUE(result.has_custom_mutator());
+    EXPECT_THAT(result.mutants(), AllOf(IsSupersetOf(all_expected_mutants),
+                                        Each(Not(IsEmpty()))));
+    EXPECT_THAT(result.mutants(),
+                AllOf(IsSupersetOf(all_expected_mutants), Each(Not(IsEmpty())),
+                      // The byte_array_mutator may insert up to 20 bytes to an
+                      // input, which may push the size over the max_len.
+                      Each(SizeIs(Le(30)))));
   }
 
   // Test with crossover disabled.
@@ -804,11 +826,11 @@ class UndetectedCrashingInputMock : public CentipedeCallbacks {
           //  that Centipede engine *expects* to have been read from *the
           //  current BatchResult* by the *particular* implementation of
           //  `CentipedeCallbacks` (and `DefaultCentipedeCallbacks` fits the
-          //  bill). `Centipede::ReportCrash()` then uses this value as a hint
-          //  for the crashing input's index, and in our case saves the batch's
-          //  inputs from 0 up to and including the crasher to a subdir. See the
-          //  bug for details. All of this is horribly convoluted and misplaced
-          //  here. Implement a cleaner solution.
+          //  bill). `fuzztest::internal::ReportCrash()` then uses this value as
+          //  a hint for the crashing input's index, and in our case saves the
+          //  batch's inputs from 0 up to and including the crasher to a subdir.
+          //  See the bug for details. All of this is horribly convoluted and
+          //  misplaced here. Implement a cleaner solution.
           batch_result.num_outputs_read() =
               crashing_input_idx_ % env_.batch_size;
           res = false;
@@ -1027,6 +1049,7 @@ class SetupFailureCallbacks : public CentipedeCallbacks {
 
   bool Execute(std::string_view binary, const std::vector<ByteArray> &inputs,
                BatchResult &batch_result) override {
+    ++execute_count_;
     batch_result.ClearAndResize(inputs.size());
     batch_result.exit_code() = EXIT_FAILURE;
     batch_result.failure_description() = "SETUP FAILURE: something went wrong";
@@ -1037,9 +1060,14 @@ class SetupFailureCallbacks : public CentipedeCallbacks {
                                 size_t num_mutants) override {
     return {num_mutants, {0}};
   }
+
+  int execute_count() const { return execute_count_; }
+
+ private:
+  int execute_count_ = 0;
 };
 
-TEST(Centipede, AbortsOnSetupFailure) {
+TEST(Centipede, ReturnsFailureOnSetupFailure) {
   TempDir temp_dir{test_info_->name()};
   Environment env;
   env.log_level = 0;  // Disable most of the logging in the test.
@@ -1048,8 +1076,46 @@ TEST(Centipede, AbortsOnSetupFailure) {
   env.require_pc_table = false;  // No PC table here.
   SetupFailureCallbacks mock(env);
   MockFactory factory(mock);
-  EXPECT_DEATH(CentipedeMain(env, factory),
-               "Terminating Centipede due to setup failure in the test.");
+  EXPECT_EQ(CentipedeMain(env, factory), EXIT_FAILURE);
+  EXPECT_EQ(mock.execute_count(), 1);
+}
+
+class SkippedTestCallbacks : public CentipedeCallbacks {
+ public:
+  using CentipedeCallbacks::CentipedeCallbacks;
+
+  bool Execute(std::string_view binary, const std::vector<ByteArray> &inputs,
+               BatchResult &batch_result) override {
+    ++execute_count_;
+    batch_result.ClearAndResize(inputs.size());
+    batch_result.exit_code() = EXIT_FAILURE;
+    batch_result.failure_description() =
+        "SKIPPED TEST: test skipped on purpose";
+    return false;
+  }
+
+  std::vector<ByteArray> Mutate(const std::vector<MutationInputRef> &inputs,
+                                size_t num_mutants) override {
+    return {num_mutants, {0}};
+  }
+
+  int execute_count() const { return execute_count_; }
+
+ private:
+  int execute_count_ = 0;
+};
+
+TEST(Centipede, ReturnsSuccessOnSkippedTest) {
+  TempDir temp_dir{test_info_->name()};
+  Environment env;
+  env.log_level = 0;  // Disable most of the logging in the test.
+  env.workdir = temp_dir.path();
+  env.batch_size = 7;            // Just some small number.
+  env.require_pc_table = false;  // No PC table here.
+  SkippedTestCallbacks mock(env);
+  MockFactory factory(mock);
+  EXPECT_EQ(CentipedeMain(env, factory), EXIT_SUCCESS);
+  EXPECT_EQ(mock.execute_count(), 1);
 }
 
 TEST_F(CentipedeWithTemporaryLocalDir, UsesProvidedCustomMutator) {
@@ -1076,6 +1142,8 @@ TEST_F(CentipedeWithTemporaryLocalDir, FailsOnMisbehavingCustomMutator) {
   CentipedeDefaultCallbacks callbacks(env);
 
   const std::vector<ByteArray> inputs = {{1}, {2}, {3}, {4}, {5}, {6}};
+  // Previous stop condition could interfere here.
+  ClearEarlyStopRequestAndSetStopTime(absl::InfiniteFuture());
   EXPECT_DEATH(callbacks.Mutate(GetMutationInputRefsFromDataInputs(inputs),
                                 inputs.size()),
                "Custom mutator failed");
@@ -1104,7 +1172,6 @@ TEST_F(CentipedeWithTemporaryLocalDir, HangingFuzzTargetExitsAfterTimeout) {
   const std::vector<ByteArray> inputs = {{0}};
   CentipedeDefaultCallbacks callbacks(env);
 
-  env.force_abort_timeout = absl::Seconds(1);
   env.timeout_per_batch = 1;
   env.fork_server = false;
 
@@ -1113,4 +1180,4 @@ TEST_F(CentipedeWithTemporaryLocalDir, HangingFuzzTargetExitsAfterTimeout) {
 }
 
 }  // namespace
-}  // namespace centipede
+}  // namespace fuzztest::internal

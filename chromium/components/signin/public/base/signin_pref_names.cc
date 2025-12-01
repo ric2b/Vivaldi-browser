@@ -75,6 +75,12 @@ const char kGoogleServicesLastSyncingUsername[] =
 const char kGoogleServicesLastSignedInUsername[] =
     "google.services.last_signed_in_username";
 
+// Holds a copy of what `kGoogleServicesLastSyncingGaiaId` contained before it
+// was updated to contain the latest value, which happens when the Sync consent
+// is granted.
+const char kGoogleServicesSecondLastSyncingGaiaId[] =
+    "google.services.second_last_gaia_id";
+
 // Device id scoped to single signin. This device id will be regenerated if user
 // signs out and signs back in. When refresh token is requested for this user it
 // will be annotated with this device id.
@@ -139,6 +145,14 @@ const char kHistorySyncSuccessiveDeclineCount[] =
 // Android, but has a separate implementation there which doesn't use this pref.
 const char kRestrictAccountsToPatterns[] =
     "signin.restrict_accounts_to_patterns";
+
+// Boolean that represent whether signin is allowed by the user. It is also used
+// to synchronize kSigninAllowed across profiles. This is used to
+// ensure that all profiles respect the setting while `kSigninAllowed` only
+// applies to a single profile. This is the UX we want on iOS since there are
+// multi profiles but not exposed to the user, so we should treat this setting
+// as affecting all profiles.
+const char kSigninAllowedOnDevice[] = "signin.allowed_on_device";
 #endif  // BUILDFLAG(IS_IOS)
 
 // Boolean which indicates if the user is allowed to sign into Chrome on the

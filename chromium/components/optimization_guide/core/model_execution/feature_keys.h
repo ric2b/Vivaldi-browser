@@ -11,6 +11,7 @@
 
 #include "base/notreached.h"
 #include "components/optimization_guide/proto/model_execution.pb.h"
+#include "components/optimization_guide/public/mojom/model_broker.mojom-shared.h"
 
 namespace optimization_guide {
 
@@ -30,10 +31,6 @@ enum class ModelBasedCapabilityKey {
   kSummarize = proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_SUMMARIZE,
   kFormsClassifications = proto::ModelExecutionFeature::
       MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS,
-  kFormsPredictions =
-      proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS,
-  kFormsAnnotations =
-      proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_FORMS_ANNOTATIONS,
   kHistoryQueryIntent = proto::ModelExecutionFeature::
       MODEL_EXECUTION_FEATURE_HISTORY_QUERY_INTENT,
   kBlingPrototyping =
@@ -44,6 +41,8 @@ enum class ModelBasedCapabilityKey {
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_SCAM_DETECTION,
   kPermissionsAi =
       proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PERMISSIONS_AI,
+  kProofreaderApi =
+      proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PROOFREADER_API,
   kWritingAssistanceApi = proto::ModelExecutionFeature::
       MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API,
   kEnhancedCalendar =
@@ -73,10 +72,6 @@ inline std::ostream& operator<<(std::ostream& out,
       return out << "Summarize";
     case ModelBasedCapabilityKey::kFormsClassifications:
       return out << "FormsClassifications";
-    case ModelBasedCapabilityKey::kFormsPredictions:
-      return out << "FormsPredictions";
-    case ModelBasedCapabilityKey::kFormsAnnotations:
-      return out << "FormsAnnotations";
     case ModelBasedCapabilityKey::kHistoryQueryIntent:
       return out << "HistoryQueryIntent";
     case ModelBasedCapabilityKey::kBlingPrototyping:
@@ -87,6 +82,8 @@ inline std::ostream& operator<<(std::ostream& out,
       return out << "ScamDetection";
     case ModelBasedCapabilityKey::kPermissionsAi:
       return out << "PermissionsAi";
+    case ModelBasedCapabilityKey::kProofreaderApi:
+      return out << "ProofreaderApi";
     case ModelBasedCapabilityKey::kWritingAssistanceApi:
       return out << "WritingAssistanceApi";
     case ModelBasedCapabilityKey::kEnhancedCalendar:
@@ -97,8 +94,8 @@ inline std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
-inline constexpr std::array<ModelBasedCapabilityKey, 19>
-    kAllModelBasedCapabilityKeys = {
+inline constexpr auto kAllModelBasedCapabilityKeys =
+    std::to_array<ModelBasedCapabilityKey>({
         ModelBasedCapabilityKey::kCompose,
         ModelBasedCapabilityKey::kTabOrganization,
         ModelBasedCapabilityKey::kWallpaperSearch,
@@ -108,17 +105,16 @@ inline constexpr std::array<ModelBasedCapabilityKey, 19>
         ModelBasedCapabilityKey::kHistorySearch,
         ModelBasedCapabilityKey::kSummarize,
         ModelBasedCapabilityKey::kFormsClassifications,
-        ModelBasedCapabilityKey::kFormsPredictions,
-        ModelBasedCapabilityKey::kFormsAnnotations,
         ModelBasedCapabilityKey::kHistoryQueryIntent,
         ModelBasedCapabilityKey::kBlingPrototyping,
         ModelBasedCapabilityKey::kPasswordChangeSubmission,
         ModelBasedCapabilityKey::kScamDetection,
         ModelBasedCapabilityKey::kPermissionsAi,
+        ModelBasedCapabilityKey::kProofreaderApi,
         ModelBasedCapabilityKey::kWritingAssistanceApi,
         ModelBasedCapabilityKey::kEnhancedCalendar,
         ModelBasedCapabilityKey::kZeroStateSuggestions,
-};
+    });
 
 // A "real" feature implemented by a model-based capability.
 // These will have their own prefs / settings / policies etc.
@@ -133,14 +129,14 @@ enum class UserVisibleFeatureKey {
       static_cast<int>(ModelBasedCapabilityKey::kPasswordChangeSubmission),
 };
 
-inline constexpr std::array<UserVisibleFeatureKey, 5>
-    kAllUserVisibleFeatureKeys = {
+inline constexpr auto kAllUserVisibleFeatureKeys =
+    std::to_array<UserVisibleFeatureKey>({
         UserVisibleFeatureKey::kCompose,
         UserVisibleFeatureKey::kTabOrganization,
         UserVisibleFeatureKey::kWallpaperSearch,
         UserVisibleFeatureKey::kHistorySearch,
         UserVisibleFeatureKey::kPasswordChangeSubmission,
-};
+    });
 
 inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
     UserVisibleFeatureKey key) {
@@ -155,6 +151,46 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
       return ModelBasedCapabilityKey::kHistorySearch;
     case UserVisibleFeatureKey::kPasswordChangeSubmission:
       return ModelBasedCapabilityKey::kPasswordChangeSubmission;
+  }
+}
+
+inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
+    mojom::ModelBasedCapabilityKey key) {
+  switch (key) {
+    case mojom::ModelBasedCapabilityKey::kCompose:
+      return ModelBasedCapabilityKey::kCompose;
+    case mojom::ModelBasedCapabilityKey::kTabOrganization:
+      return ModelBasedCapabilityKey::kTabOrganization;
+    case mojom::ModelBasedCapabilityKey::kWallpaperSearch:
+      return ModelBasedCapabilityKey::kWallpaperSearch;
+    case mojom::ModelBasedCapabilityKey::kTest:
+      return ModelBasedCapabilityKey::kTest;
+    case mojom::ModelBasedCapabilityKey::kTextSafety:
+      return ModelBasedCapabilityKey::kTextSafety;
+    case mojom::ModelBasedCapabilityKey::kPromptApi:
+      return ModelBasedCapabilityKey::kPromptApi;
+    case mojom::ModelBasedCapabilityKey::kHistorySearch:
+      return ModelBasedCapabilityKey::kHistorySearch;
+    case mojom::ModelBasedCapabilityKey::kFormsClassifications:
+      return ModelBasedCapabilityKey::kFormsClassifications;
+    case mojom::ModelBasedCapabilityKey::kSummarize:
+      return ModelBasedCapabilityKey::kSummarize;
+    case mojom::ModelBasedCapabilityKey::kHistoryQueryIntent:
+      return ModelBasedCapabilityKey::kHistoryQueryIntent;
+    case mojom::ModelBasedCapabilityKey::kBlingPrototyping:
+      return ModelBasedCapabilityKey::kBlingPrototyping;
+    case mojom::ModelBasedCapabilityKey::kPasswordChangeSubmission:
+      return ModelBasedCapabilityKey::kPasswordChangeSubmission;
+    case mojom::ModelBasedCapabilityKey::kScamDetection:
+      return ModelBasedCapabilityKey::kScamDetection;
+    case mojom::ModelBasedCapabilityKey::kPermissionsAi:
+      return ModelBasedCapabilityKey::kPermissionsAi;
+    case mojom::ModelBasedCapabilityKey::kWritingAssistanceApi:
+      return ModelBasedCapabilityKey::kWritingAssistanceApi;
+    case mojom::ModelBasedCapabilityKey::kEnhancedCalendar:
+      return ModelBasedCapabilityKey::kEnhancedCalendar;
+    case mojom::ModelBasedCapabilityKey::kZeroStateSuggestions:
+      return ModelBasedCapabilityKey::kZeroStateSuggestions;
   }
 }
 
@@ -178,12 +214,6 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
     case proto::ModelExecutionFeature::
         MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS:
       return ModelBasedCapabilityKey::kFormsClassifications;
-    case proto::ModelExecutionFeature::
-        MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS:
-      return ModelBasedCapabilityKey::kFormsPredictions;
-    case proto::ModelExecutionFeature::
-        MODEL_EXECUTION_FEATURE_FORMS_ANNOTATIONS:
-      return ModelBasedCapabilityKey::kFormsAnnotations;
     case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_SUMMARIZE:
       return ModelBasedCapabilityKey::kSummarize;
     case proto::ModelExecutionFeature::
@@ -199,6 +229,8 @@ inline ModelBasedCapabilityKey ToModelBasedCapabilityKey(
       return ModelBasedCapabilityKey::kScamDetection;
     case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PERMISSIONS_AI:
       return ModelBasedCapabilityKey::kPermissionsAi;
+    case proto::ModelExecutionFeature::MODEL_EXECUTION_FEATURE_PROOFREADER_API:
+      return ModelBasedCapabilityKey::kProofreaderApi;
     case proto::ModelExecutionFeature::
         MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API:
       return ModelBasedCapabilityKey::kWritingAssistanceApi;
@@ -238,12 +270,6 @@ inline proto::ModelExecutionFeature ToModelExecutionFeatureProto(
     case ModelBasedCapabilityKey::kFormsClassifications:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_FORMS_CLASSIFICATIONS;
-    case ModelBasedCapabilityKey::kFormsPredictions:
-      return proto::ModelExecutionFeature::
-          MODEL_EXECUTION_FEATURE_FORMS_PREDICTIONS;
-    case ModelBasedCapabilityKey::kFormsAnnotations:
-      return proto::ModelExecutionFeature::
-          MODEL_EXECUTION_FEATURE_FORMS_ANNOTATIONS;
     case ModelBasedCapabilityKey::kHistoryQueryIntent:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_HISTORY_QUERY_INTENT;
@@ -259,6 +285,9 @@ inline proto::ModelExecutionFeature ToModelExecutionFeatureProto(
     case ModelBasedCapabilityKey::kPermissionsAi:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_PERMISSIONS_AI;
+    case ModelBasedCapabilityKey::kProofreaderApi:
+      return proto::ModelExecutionFeature::
+          MODEL_EXECUTION_FEATURE_PROOFREADER_API;
     case ModelBasedCapabilityKey::kWritingAssistanceApi:
       return proto::ModelExecutionFeature::
           MODEL_EXECUTION_FEATURE_WRITING_ASSISTANCE_API;

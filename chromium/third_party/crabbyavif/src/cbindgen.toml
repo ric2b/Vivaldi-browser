@@ -31,6 +31,7 @@ struct avifIO;
 "MatrixCoefficients" = "avifMatrixCoefficients"
 "PixelFormat" = "avifPixelFormat"
 "ProgressiveState" = "avifProgressiveState"
+"ScalingMode" = "avifScalingMode"
 "Source" = "avifDecoderSource"
 "YuvRange" = "avifRange"
 "TransferCharacteristics" = "avifTransferCharacteristics"

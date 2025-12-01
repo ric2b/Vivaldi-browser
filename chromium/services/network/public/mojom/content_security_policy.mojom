@@ -69,6 +69,13 @@ struct CSPSourceList {
   array<CSPSource> sources;
   array<string> nonces;
   array<CSPHashSource> hashes;
+  // Hashes of URLs allowed. Only valid for script-src-v2 directive.
+  // TODO(crbug.com/414459670): Split this struct into per-directive structs.
+  // Not all directives support all of the sources in this struct.
+  array<CSPHashSource> url_hashes;
+  // Hashes of scripts allowed to be loaded via eval. Only valid for
+  // script-src-v2 directive.
+  array<CSPHashSource> eval_hashes;
 
   // Wildcard hosts and 'self' aren't stored in |sources|, but as attributes
   // on the source list itself.
@@ -104,10 +111,10 @@ enum CSPDirectiveName {
   ObjectSrc,
   ReportTo,
   ReportURI,
-  RequireSRIFor,
   RequireTrustedTypesFor,
   Sandbox,
   ScriptSrc,
+  ScriptSrcV2,
   ScriptSrcAttr,
   ScriptSrcElem,
   StyleSrc,
@@ -117,11 +124,6 @@ enum CSPDirectiveName {
   TrustedTypes,
   UpgradeInsecureRequests,
   WorkerSrc,
-};
-
-enum CSPRequireSRIFor {
-  None,
-  Script,
 };
 
 enum CSPRequireTrustedTypesFor {
@@ -181,8 +183,6 @@ struct ContentSecurityPolicy {
 
   // Set of reporting endpoints to which violation reports are sent.
   array<string> report_endpoints;
-
-  CSPRequireSRIFor require_sri_for = CSPRequireSRIFor.None;
 
   // The parsed value of the directive 'require-trusted-types-for'.
   // https://w3c.github.io/trusted-types/dist/spec/#require-trusted-types-for-csp-directive

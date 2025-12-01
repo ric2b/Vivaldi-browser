@@ -89,6 +89,13 @@
             {"name": "xr compatible", "type": "bool"}
         ]
     },
+    "request adapter WebGPU backend options": {
+        "category": "structure",
+        "chained": "in",
+        "chain roots": ["request adapter options"],
+        "tags": ["dawn", "native"],
+        "members": []
+    },
     "request adapter callback": {
         "category": "callback function",
         "args": [
@@ -263,6 +270,15 @@
             {"name": "store data function", "type": "dawn store cache data function", "default": "nullptr"},
             {"name": "function userdata", "type": "void *", "default": "nullptr"}
         ]
+    },
+    "dawn device allocator control": {
+      "tags": ["dawn"],
+      "category": "structure",
+      "chained": "in",
+      "chain roots": ["device descriptor"],
+      "members": [
+          {"name": "allocator heap block size", "type": "size_t", "default": 0}
+      ]
     },
     "dawn WGSL blocklist": {
         "tags": ["dawn", "native"],
@@ -492,6 +508,7 @@
         "members": [
             {"name": "binding", "type": "uint32_t"},
             {"name": "visibility", "type": "shader stage"},
+            {"name": "binding array size", "type": "uint32_t", "default": 0},
             {"name": "buffer", "type": "buffer binding layout", "default": "zero"},
             {"name": "sampler", "type": "sampler binding layout", "default": "zero"},
             {"name": "texture", "type": "texture binding layout", "default": "zero"},
@@ -1059,6 +1076,7 @@
             },
             {
                 "name": "set immediate data",
+                "tags": ["dawn"],
                 "args": [
                     {"name": "offset", "type": "uint32_t"},
                     {"name": "data", "type": "void", "annotation": "const*", "length": "size"},
@@ -1573,6 +1591,7 @@
             {"name": "max compute workgroup size y", "type": "uint32_t", "default": "limit u32 undefined"},
             {"name": "max compute workgroup size z", "type": "uint32_t", "default": "limit u32 undefined"},
             {"name": "max compute workgroups per dimension", "type": "uint32_t", "default": "limit u32 undefined"},
+            {"name": "max immediate size", "type": "uint32_t", "default": "limit u32 undefined"},
             {"name": "max storage buffers in vertex stage", "type": "uint32_t", "default": "limit u32 undefined"},
             {"name": "max storage textures in vertex stage", "type": "uint32_t", "default": "limit u32 undefined"},
             {"name": "max storage buffers in fragment stage", "type": "uint32_t", "default": "limit u32 undefined"},
@@ -1588,25 +1607,6 @@
             {"name": "subgroup max size", "type": "uint32_t", "default": "limit u32 undefined"}
         ]
     },
-    "dawn experimental subgroup limits": {
-        "category": "structure",
-        "chained": "out",
-        "chain roots": ["limits"],
-        "tags": ["dawn"],
-        "members": [
-            {"name": "min subgroup size", "type": "uint32_t", "default": "limit u32 undefined"},
-            {"name": "max subgroup size", "type": "uint32_t", "default": "limit u32 undefined"}
-        ]
-    },
-    "dawn experimental immediate data limits": {
-        "category": "structure",
-        "chained": "out",
-        "chain roots": ["limits"],
-        "tags": ["dawn"],
-        "members": [
-            {"name": "max immediate data range byte size", "type": "uint32_t", "default": "limit u32 undefined"}
-        ]
-    },
     "dawn texel copy buffer row alignment limits": {
         "category": "structure",
         "chained": "out",
@@ -1614,6 +1614,15 @@
         "tags": ["dawn"],
         "members": [
             {"name": "min texel copy buffer row alignment", "type": "uint32_t", "default": "limit u32 undefined"}
+        ]
+    },
+    "dawn host mapped pointer limits": {
+        "category": "structure",
+        "chained": "out",
+        "chain roots": ["limits"],
+        "tags": ["dawn"],
+        "members": [
+            {"name": "host mapped pointer alignment", "type": "uint32_t", "default": "limit u32 undefined"}
         ]
     },
     "supported features": {
@@ -2248,10 +2257,10 @@
             {"value": 2, "name": "depth32 float stencil8"},
             {"value": 3, "name": "timestamp query"},
             {"value": 4, "name": "texture compression BC"},
-            {"value": 5, "name": "texture compression BC sliced 3D", "tags": ["emscripten", "upstream"]},
+            {"value": 5, "name": "texture compression BC sliced 3D"},
             {"value": 6, "name": "texture compression ETC2"},
             {"value": 7, "name": "texture compression ASTC"},
-            {"value": 8, "name": "texture compression ASTC sliced 3D", "tags": ["emscripten", "upstream"]},
+            {"value": 8, "name": "texture compression ASTC sliced 3D"},
             {"value": 9, "name": "indirect first instance"},
             {"value": 10, "name": "shader f16"},
             {"value": 11, "name": "RG11B10 ufloat renderable"},
@@ -2268,61 +2277,60 @@
             {"value": 2, "name": "dawn native", "tags": ["dawn", "native"]},
             {"value": 3, "name": "chromium experimental timestamp query inside passes", "tags": ["dawn"]},
             {"value": 4, "name": "implicit device synchronization", "tags": ["dawn", "native"]},
-            {"value": 5, "name": "chromium experimental immediate data", "tags": ["dawn"]},
             {"value": 6, "name": "transient attachments", "tags": ["dawn"]},
             {"value": 7, "name": "MSAA render to single sampled", "tags": ["dawn"]},
-            {"value": 8, "name": "subgroups f16", "tags": ["dawn", "emscripten", "deprecated"]},
-            {"value": 9, "name": "D3D11 multithread protected", "tags": ["dawn", "native"]},
-            {"value": 10, "name": "ANGLE texture sharing", "tags": ["dawn", "native"]},
-            {"value": 11, "name": "pixel local storage coherent", "tags": ["dawn"]},
-            {"value": 12, "name": "pixel local storage non coherent", "tags": ["dawn"]},
-            {"value": 13, "name": "unorm16 texture formats", "tags": ["dawn", "emscripten"], "jsrepr": "'chromium-experimental-unorm16-texture-formats'"},
-            {"value": 14, "name": "snorm16 texture formats", "tags": ["dawn", "emscripten"], "jsrepr": "'chromium-experimental-snorm16-texture-formats'"},
-            {"value": 15, "name": "multi planar format extended usages", "tags": ["dawn"]},
-            {"value": 16, "name": "multi planar format p010", "tags": ["dawn"]},
-            {"value": 17, "name": "host mapped pointer", "tags": ["dawn"]},
-            {"value": 18, "name": "multi planar render targets", "tags": ["dawn"]},
-            {"value": 19, "name": "multi planar format nv12a", "tags": ["dawn"]},
-            {"value": 20, "name": "framebuffer fetch", "tags": ["dawn"]},
-            {"value": 21, "name": "buffer map extended usages", "tags": ["dawn"]},
-            {"value": 22, "name": "adapter properties memory heaps", "tags": ["dawn"]},
-            {"value": 23, "name": "adapter properties D3D", "tags": ["dawn"]},
-            {"value": 24, "name": "adapter properties vk", "tags": ["dawn"]},
-            {"value": 25, "name": "r8 unorm storage", "tags": ["dawn"]},
-            {"value": 26, "name": "dawn format capabilities", "tags": ["dawn"]},
-            {"value": 27, "name": "dawn drm format capabilities", "tags": ["dawn"]},
-            {"value": 28, "name": "norm16 texture formats", "tags": ["dawn"]},
-            {"value": 29, "name": "multi planar format nv16", "tags": ["dawn"]},
-            {"value": 30, "name": "multi planar format nv24", "tags": ["dawn"]},
-            {"value": 31, "name": "multi planar format p210", "tags": ["dawn"]},
-            {"value": 32, "name": "multi planar format p410", "tags": ["dawn"]},
+            {"value": 8, "name": "D3D11 multithread protected", "tags": ["dawn", "native"]},
+            {"value": 9, "name": "ANGLE texture sharing", "tags": ["dawn", "native"]},
+            {"value": 10, "name": "pixel local storage coherent", "tags": ["dawn"]},
+            {"value": 11, "name": "pixel local storage non coherent", "tags": ["dawn"]},
+            {"value": 12, "name": "unorm16 texture formats", "tags": ["dawn", "emscripten"], "jsrepr": "'chromium-experimental-unorm16-texture-formats'"},
+            {"value": 13, "name": "snorm16 texture formats", "tags": ["dawn", "emscripten"], "jsrepr": "'chromium-experimental-snorm16-texture-formats'"},
+            {"value": 14, "name": "multi planar format extended usages", "tags": ["dawn"]},
+            {"value": 15, "name": "multi planar format p010", "tags": ["dawn"]},
+            {"value": 16, "name": "host mapped pointer", "tags": ["dawn"]},
+            {"value": 17, "name": "multi planar render targets", "tags": ["dawn"]},
+            {"value": 18, "name": "multi planar format nv12a", "tags": ["dawn"]},
+            {"value": 19, "name": "framebuffer fetch", "tags": ["dawn"]},
+            {"value": 20, "name": "buffer map extended usages", "tags": ["dawn"]},
+            {"value": 21, "name": "adapter properties memory heaps", "tags": ["dawn"]},
+            {"value": 22, "name": "adapter properties D3D", "tags": ["dawn"]},
+            {"value": 23, "name": "adapter properties vk", "tags": ["dawn"]},
+            {"value": 24, "name": "r8 unorm storage", "tags": ["dawn"]},
+            {"value": 25, "name": "dawn format capabilities", "tags": ["dawn"]},
+            {"value": 26, "name": "dawn drm format capabilities", "tags": ["dawn"]},
+            {"value": 27, "name": "norm16 texture formats", "tags": ["dawn"]},
+            {"value": 28, "name": "multi planar format nv16", "tags": ["dawn"]},
+            {"value": 29, "name": "multi planar format nv24", "tags": ["dawn"]},
+            {"value": 30, "name": "multi planar format p210", "tags": ["dawn"]},
+            {"value": 31, "name": "multi planar format p410", "tags": ["dawn"]},
 
-            {"value": 33, "name": "shared texture memory vk dedicated allocation", "tags": ["dawn", "native"]},
-            {"value": 34, "name": "shared texture memory a hardware buffer", "tags": ["dawn", "native"]},
-            {"value": 35, "name": "shared texture memory dma buf", "tags": ["dawn", "native"]},
-            {"value": 36, "name": "shared texture memory opaque FD", "tags": ["dawn", "native"]},
-            {"value": 37, "name": "shared texture memory zircon handle", "tags": ["dawn", "native"]},
-            {"value": 38, "name": "shared texture memory DXGI shared handle", "tags": ["dawn", "native"]},
-            {"value": 39, "name": "shared texture memory D3D11 texture 2D", "tags": ["dawn", "native"]},
-            {"value": 40, "name": "shared texture memory IO surface", "tags": ["dawn", "native"]},
-            {"value": 41, "name": "shared texture memory EGL image", "tags": ["dawn", "native"]},
-            {"value": 42, "name": "shared fence vk semaphore opaque FD", "tags": ["dawn", "native"]},
-            {"value": 43, "name": "shared fence sync FD", "tags": ["dawn", "native"]},
-            {"value": 44, "name": "shared fence vk semaphore zircon handle", "tags": ["dawn", "native"]},
-            {"value": 45, "name": "shared fence DXGI shared handle", "tags": ["dawn", "native"]},
-            {"value": 46, "name": "shared fence MTL shared event", "tags": ["dawn", "native"]},
-            {"value": 47, "name": "shared buffer memory D3D12 resource", "tags": ["dawn", "native"]},
-            {"value": 48, "name": "static samplers", "tags": ["dawn"]},
-            {"value": 49, "name": "y cb cr vulkan samplers", "tags": ["dawn"]},
-            {"value": 50, "name": "shader module compilation options", "tags": ["dawn"]},
+            {"value": 32, "name": "shared texture memory vk dedicated allocation", "tags": ["dawn", "native"]},
+            {"value": 33, "name": "shared texture memory a hardware buffer", "tags": ["dawn", "native"]},
+            {"value": 34, "name": "shared texture memory dma buf", "tags": ["dawn", "native"]},
+            {"value": 35, "name": "shared texture memory opaque FD", "tags": ["dawn", "native"]},
+            {"value": 36, "name": "shared texture memory zircon handle", "tags": ["dawn", "native"]},
+            {"value": 37, "name": "shared texture memory DXGI shared handle", "tags": ["dawn", "native"]},
+            {"value": 38, "name": "shared texture memory D3D11 texture 2D", "tags": ["dawn", "native"]},
+            {"value": 39, "name": "shared texture memory IO surface", "tags": ["dawn", "native"]},
+            {"value": 40, "name": "shared texture memory EGL image", "tags": ["dawn", "native"]},
+            {"value": 41, "name": "shared fence vk semaphore opaque FD", "tags": ["dawn", "native"]},
+            {"value": 42, "name": "shared fence sync FD", "tags": ["dawn", "native"]},
+            {"value": 43, "name": "shared fence vk semaphore zircon handle", "tags": ["dawn", "native"]},
+            {"value": 44, "name": "shared fence DXGI shared handle", "tags": ["dawn", "native"]},
+            {"value": 45, "name": "shared fence MTL shared event", "tags": ["dawn", "native"]},
+            {"value": 46, "name": "shared buffer memory D3D12 resource", "tags": ["dawn", "native"]},
+            {"value": 47, "name": "static samplers", "tags": ["dawn"]},
+            {"value": 48, "name": "y cb cr vulkan samplers", "tags": ["dawn"]},
+            {"value": 49, "name": "shader module compilation options", "tags": ["dawn"]},
 
-            {"value": 51, "name": "dawn load resolve texture", "tags": ["dawn"]},
-            {"value": 52, "name": "dawn partial load resolve texture", "tags": ["dawn"]},
-            {"value": 53, "name": "multi draw indirect", "tags": ["dawn", "emscripten"], "jsrepr": "'chromium-experimental-multi-draw-indirect'"},
-            {"value": 55, "name": "dawn texel copy buffer row alignment", "tags": ["dawn"]},
-            {"value": 56, "name": "flexible texture views", "tags": ["dawn"]},
-            {"value": 57, "name": "chromium experimental subgroup matrix", "tags": ["dawn"]},
-            {"value": 58, "name": "shared fence EGL sync", "tags": ["dawn", "native"]}
+            {"value": 50, "name": "dawn load resolve texture", "tags": ["dawn"]},
+            {"value": 51, "name": "dawn partial load resolve texture", "tags": ["dawn"]},
+            {"value": 52, "name": "multi draw indirect", "tags": ["dawn", "emscripten"], "jsrepr": "'chromium-experimental-multi-draw-indirect'"},
+            {"value": 53, "name": "dawn texel copy buffer row alignment", "tags": ["dawn"]},
+            {"value": 54, "name": "flexible texture views", "tags": ["dawn"]},
+            {"value": 55, "name": "chromium experimental subgroup matrix", "tags": ["dawn"]},
+            {"value": 56, "name": "shared fence EGL sync", "tags": ["dawn", "native"]},
+            {"value": 57, "name": "dawn device allocator control", "tags": ["dawn"]}
         ]
     },
     "filter mode": {
@@ -2637,7 +2645,7 @@
             {"name": "label", "type": "string view", "optional": true},
             {"name": "bind group layout count", "type": "size_t"},
             {"name": "bind group layouts", "type": "bind group layout", "annotation": "const*", "length": "bind group layout count", "optional": true},
-            {"name": "immediate data range byte size", "type": "uint32_t", "default": 0}
+            {"name": "immediate size", "type": "uint32_t", "default": 0}
         ]
     },
     "pipeline layout pixel local storage": {
@@ -2951,6 +2959,7 @@
             },
             {
                 "name": "set immediate data",
+                "tags": ["dawn"],
                 "args": [
                     {"name": "offset", "type": "uint32_t"},
                     {"name": "data", "type": "void", "annotation": "const*", "length": "size"},
@@ -3051,6 +3060,20 @@
         "members": [
             {"name": "x", "type": "uint32_t"},
             {"name": "y", "type": "uint32_t"},
+            {"name": "width", "type": "uint32_t"},
+            {"name": "height", "type": "uint32_t"}
+        ]
+    },
+    "render pass descriptor resolve rect": {
+        "category": "structure",
+        "tags": ["dawn"],
+        "chained": "in",
+        "chain roots": ["render pass descriptor"],
+        "members": [
+            {"name": "colorOffsetX", "type": "uint32_t"},
+            {"name": "colorOffsetY", "type": "uint32_t"},
+            {"name": "resolveOffsetX", "type": "uint32_t"},
+            {"name": "resolveOffsetY", "type": "uint32_t"},
             {"name": "width", "type": "uint32_t"},
             {"name": "height", "type": "uint32_t"}
         ]
@@ -3257,6 +3280,7 @@
             },
             {
                 "name": "set immediate data",
+                "tags": ["dawn"],
                 "args": [
                     {"name": "offset", "type": "uint32_t"},
                     {"name": "data", "type": "void", "annotation": "const*", "length": "size"},
@@ -3706,7 +3730,16 @@
             {"name": "core window", "type": "void", "annotation": "*"}
         ]
     },
-    "surface descriptor from windows swap chain panel": {
+    "surface descriptor from windows UWP swap chain panel": {
+        "category": "structure",
+        "chained": "in",
+        "chain roots": ["surface descriptor"],
+        "tags": ["dawn"],
+        "members": [
+            {"name": "swap chain panel", "type": "void", "annotation": "*"}
+        ]
+    },
+    "surface descriptor from windows WinUI swap chain panel": {
         "category": "structure",
         "chained": "in",
         "chain roots": ["surface descriptor"],
@@ -3773,7 +3806,7 @@
             {"value": 0, "name": "surface descriptor from windows core window", "tags": ["dawn"]},
             {"value": 1, "name": "external texture binding entry", "tags": ["dawn"]},
             {"value": 2, "name": "external texture binding layout", "tags": ["dawn"]},
-            {"value": 3, "name": "surface descriptor from windows swap chain panel", "tags": ["dawn"]},
+            {"value": 3, "name": "surface descriptor from windows UWP swap chain panel", "tags": ["dawn"]},
             {"value": 4, "name": "dawn texture internal usage descriptor", "tags": ["dawn"]},
             {"value": 5, "name": "dawn encoder internal usage descriptor", "tags": ["dawn"]},
             {"value": 6, "name": "dawn instance descriptor", "tags": ["dawn", "native"]},
@@ -3789,54 +3822,57 @@
             {"value": 16, "name": "render pass pixel local storage", "tags": ["dawn"]},
             {"value": 17, "name": "pipeline layout pixel local storage", "tags": ["dawn"]},
             {"value": 18, "name": "buffer host mapped pointer", "tags": ["dawn"]},
-            {"value": 19, "name": "dawn experimental subgroup limits", "tags": ["dawn"]},
-            {"value": 20, "name": "adapter properties memory heaps", "tags": ["dawn"]},
-            {"value": 21, "name": "adapter properties D3D", "tags": ["dawn"]},
-            {"value": 22, "name": "adapter properties vk", "tags": ["dawn"]},
-            {"value": 23, "name": "dawn wire WGSL control", "tags": ["dawn"]},
-            {"value": 24, "name": "dawn WGSL blocklist", "tags": ["dawn", "native"]},
-            {"value": 25, "name": "dawn drm format capabilities", "tags": ["dawn"]},
-            {"value": 26, "name": "shader module compilation options", "tags": ["dawn"]},
-            {"value": 27, "name": "color target state expand resolve texture dawn", "tags": ["dawn"]},
-            {"value": 28, "name": "render pass descriptor expand resolve rect", "tags": ["dawn"]},
+            {"value": 19, "name": "adapter properties memory heaps", "tags": ["dawn"]},
+            {"value": 20, "name": "adapter properties D3D", "tags": ["dawn"]},
+            {"value": 21, "name": "adapter properties vk", "tags": ["dawn"]},
+            {"value": 22, "name": "dawn wire WGSL control", "tags": ["dawn"]},
+            {"value": 23, "name": "dawn WGSL blocklist", "tags": ["dawn", "native"]},
+            {"value": 24, "name": "dawn drm format capabilities", "tags": ["dawn"]},
+            {"value": 25, "name": "shader module compilation options", "tags": ["dawn"]},
+            {"value": 26, "name": "color target state expand resolve texture dawn", "tags": ["dawn"]},
+            {"value": 27, "name": "render pass descriptor expand resolve rect", "tags": ["dawn"]},
 
-            {"value": 29, "name": "shared texture memory vk dedicated allocation descriptor", "tags": ["dawn", "native"]},
-            {"value": 30, "name": "shared texture memory a hardware buffer descriptor", "tags": ["dawn", "native"]},
-            {"value": 31, "name": "shared texture memory dma buf descriptor", "tags": ["dawn", "native"]},
-            {"value": 32, "name": "shared texture memory opaque FD descriptor", "tags": ["dawn", "native"]},
-            {"value": 33, "name": "shared texture memory zircon handle descriptor", "tags": ["dawn", "native"]},
-            {"value": 34, "name": "shared texture memory DXGI shared handle descriptor", "tags": ["dawn", "native"]},
-            {"value": 35, "name": "shared texture memory D3D11 texture 2D descriptor", "tags": ["dawn", "native"]},
-            {"value": 36, "name": "shared texture memory IO surface descriptor", "tags": ["dawn", "native"]},
-            {"value": 37, "name": "shared texture memory EGL image descriptor", "tags": ["dawn", "native"]},
-            {"value": 38, "name": "shared texture memory initialized begin state", "tags": ["dawn", "native"]},
-            {"value": 39, "name": "shared texture memory initialized end state", "tags": ["dawn", "native"]},
-            {"value": 40, "name": "shared texture memory vk image layout begin state", "tags": ["dawn", "native"]},
-            {"value": 41, "name": "shared texture memory vk image layout end state", "tags": ["dawn", "native"]},
-            {"value": 42, "name": "shared texture memory D3D swapchain begin state", "tags": ["dawn", "native"]},
-            {"value": 43, "name": "shared fence vk semaphore opaque FD descriptor", "tags": ["dawn", "native"]},
-            {"value": 44, "name": "shared fence vk semaphore opaque FD export info", "tags": ["dawn", "native"]},
-            {"value": 45, "name": "shared fence sync FD descriptor", "tags": ["dawn", "native"]},
-            {"value": 46, "name": "shared fence sync FD export info", "tags": ["dawn", "native"]},
-            {"value": 47, "name": "shared fence vk semaphore zircon handle descriptor", "tags": ["dawn", "native"]},
-            {"value": 48, "name": "shared fence vk semaphore zircon handle export info", "tags": ["dawn", "native"]},
-            {"value": 49, "name": "shared fence DXGI shared handle descriptor", "tags": ["dawn", "native"]},
-            {"value": 50, "name": "shared fence DXGI shared handle export info", "tags": ["dawn", "native"]},
-            {"value": 51, "name": "shared fence MTL shared event descriptor", "tags": ["dawn", "native"]},
-            {"value": 52, "name": "shared fence MTL shared event export info", "tags": ["dawn", "native"]},
-            {"value": 53, "name": "shared buffer memory D3D12 resource descriptor", "tags": ["dawn", "native"]},
-            {"value": 54, "name": "static sampler binding layout", "tags": ["dawn"]},
-            {"value": 55, "name": "y cb cr vk descriptor", "tags": ["dawn"]},
-            {"value": 56, "name": "shared texture memory a hardware buffer properties", "tags": ["dawn", "native"]},
-            {"value": 57, "name": "a hardware buffer properties", "tags": ["dawn", "native"]},
-            {"value": 58, "name": "dawn experimental immediate data limits", "tags": ["dawn"]},
-            {"value": 59, "name": "dawn texel copy buffer row alignment limits", "tags": ["dawn"]},
-            {"value": 60, "name": "adapter properties subgroup matrix configs", "tags": ["dawn"]},
-            {"value": 61, "name": "shared fence EGL sync descriptor", "tags": ["dawn", "native"]},
-            {"value": 62, "name": "shared fence EGL sync export info", "tags": ["dawn", "native"]},
-            {"value": 63, "name": "dawn injected invalid s type", "tags": ["dawn"]},
-            {"value": 64, "name": "dawn compilation message utf16", "tags": ["dawn", "emscripten"]},
-            {"value": 65, "name": "dawn fake buffer OOM for testing", "tags": ["dawn"]}
+            {"value": 28, "name": "shared texture memory vk dedicated allocation descriptor", "tags": ["dawn", "native"]},
+            {"value": 29, "name": "shared texture memory a hardware buffer descriptor", "tags": ["dawn", "native"]},
+            {"value": 30, "name": "shared texture memory dma buf descriptor", "tags": ["dawn", "native"]},
+            {"value": 31, "name": "shared texture memory opaque FD descriptor", "tags": ["dawn", "native"]},
+            {"value": 32, "name": "shared texture memory zircon handle descriptor", "tags": ["dawn", "native"]},
+            {"value": 33, "name": "shared texture memory DXGI shared handle descriptor", "tags": ["dawn", "native"]},
+            {"value": 34, "name": "shared texture memory D3D11 texture 2D descriptor", "tags": ["dawn", "native"]},
+            {"value": 35, "name": "shared texture memory IO surface descriptor", "tags": ["dawn", "native"]},
+            {"value": 36, "name": "shared texture memory EGL image descriptor", "tags": ["dawn", "native"]},
+            {"value": 37, "name": "shared texture memory initialized begin state", "tags": ["dawn", "native"]},
+            {"value": 38, "name": "shared texture memory initialized end state", "tags": ["dawn", "native"]},
+            {"value": 39, "name": "shared texture memory vk image layout begin state", "tags": ["dawn", "native"]},
+            {"value": 40, "name": "shared texture memory vk image layout end state", "tags": ["dawn", "native"]},
+            {"value": 41, "name": "shared texture memory D3D swapchain begin state", "tags": ["dawn", "native"]},
+            {"value": 42, "name": "shared fence vk semaphore opaque FD descriptor", "tags": ["dawn", "native"]},
+            {"value": 43, "name": "shared fence vk semaphore opaque FD export info", "tags": ["dawn", "native"]},
+            {"value": 44, "name": "shared fence sync FD descriptor", "tags": ["dawn", "native"]},
+            {"value": 45, "name": "shared fence sync FD export info", "tags": ["dawn", "native"]},
+            {"value": 46, "name": "shared fence vk semaphore zircon handle descriptor", "tags": ["dawn", "native"]},
+            {"value": 47, "name": "shared fence vk semaphore zircon handle export info", "tags": ["dawn", "native"]},
+            {"value": 48, "name": "shared fence DXGI shared handle descriptor", "tags": ["dawn", "native"]},
+            {"value": 49, "name": "shared fence DXGI shared handle export info", "tags": ["dawn", "native"]},
+            {"value": 50, "name": "shared fence MTL shared event descriptor", "tags": ["dawn", "native"]},
+            {"value": 51, "name": "shared fence MTL shared event export info", "tags": ["dawn", "native"]},
+            {"value": 52, "name": "shared buffer memory D3D12 resource descriptor", "tags": ["dawn", "native"]},
+            {"value": 53, "name": "static sampler binding layout", "tags": ["dawn"]},
+            {"value": 54, "name": "y cb cr vk descriptor", "tags": ["dawn"]},
+            {"value": 55, "name": "shared texture memory a hardware buffer properties", "tags": ["dawn", "native"]},
+            {"value": 56, "name": "a hardware buffer properties", "tags": ["dawn", "native"]},
+            {"value": 58, "name": "dawn texel copy buffer row alignment limits", "tags": ["dawn"]},
+            {"value": 59, "name": "adapter properties subgroup matrix configs", "tags": ["dawn"]},
+            {"value": 60, "name": "shared fence EGL sync descriptor", "tags": ["dawn", "native"]},
+            {"value": 61, "name": "shared fence EGL sync export info", "tags": ["dawn", "native"]},
+            {"value": 62, "name": "dawn injected invalid s type", "tags": ["dawn"]},
+            {"value": 63, "name": "dawn compilation message utf16", "tags": ["dawn", "emscripten"]},
+            {"value": 64, "name": "dawn fake buffer OOM for testing", "tags": ["dawn"]},
+            {"value": 65, "name": "surface descriptor from windows WinUI swap chain panel", "tags": ["dawn"]},
+            {"value": 66, "name": "dawn device allocator control", "tags": ["dawn"]},
+            {"value": 67, "name": "dawn host mapped pointer limits", "tags": ["dawn"]},
+            {"value": 68, "name": "render pass descriptor resolve rect", "tags": ["dawn"]},
+            {"value": 69, "name": "request adapter WebGPU backend options", "tags": ["dawn", "native"]}
         ]
     },
     "texture": {

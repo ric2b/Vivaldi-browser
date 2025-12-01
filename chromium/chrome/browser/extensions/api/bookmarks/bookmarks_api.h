@@ -31,8 +31,9 @@ class FilePath;
 }
 
 namespace bookmarks {
-class BookmarkNode;
 class BookmarkModel;
+class BookmarkNode;
+class BookmarkPermanentNode;
 class ManagedBookmarkService;
 }  // namespace bookmarks
 
@@ -76,6 +77,8 @@ class BookmarkEventRouter : public bookmarks::BookmarkModelObserver {
   void BookmarkNodeFaviconChanged(const bookmarks::BookmarkNode* node) override;
   void BookmarkNodeChildrenReordered(
       const bookmarks::BookmarkNode* node) override;
+  void BookmarkPermanentNodeVisibilityChanged(
+      const bookmarks::BookmarkPermanentNode* node) override;
   void ExtensiveBookmarkChangesBeginning() override;
   void ExtensiveBookmarkChangesEnded() override;
 
@@ -238,7 +241,7 @@ class BookmarksCreateFunction : public BookmarksFunction {
 
  private:
   // Helper to create a bookmark node from a CreateDetails object. If a node
-  // can't be created based on the given details, sets |error| and returns
+  // can't be created based on the given details, sets `error` and returns
   // nullptr.
   const bookmarks::BookmarkNode* CreateBookmarkNode(
       bookmarks::BookmarkModel* model,

@@ -22,7 +22,7 @@
 #include "gtest/gtest.h"
 #include "absl/base/nullability.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 template <typename T>
@@ -36,8 +36,8 @@ std::vector<uint8_t> IntPairToByteVector(T a, T b) {
   return res;
 }
 
-std::vector<uint8_t> TwoArraysToByteVector(absl::Nonnull<const uint8_t *> a,
-                                           absl::Nonnull<const uint8_t *> b,
+std::vector<uint8_t> TwoArraysToByteVector(const uint8_t *absl_nonnull a,
+                                           const uint8_t *absl_nonnull b,
                                            size_t size) {
   std::vector<uint8_t> res;
   res.insert(res.begin(), a, a + size);
@@ -119,4 +119,4 @@ TEST(CmpTrace, T1) {
 }
 
 }  // namespace
-}  // namespace centipede
+}  // namespace fuzztest::internal

@@ -16,7 +16,6 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
@@ -29,6 +28,7 @@
 #include "components/history/core/browser/history_database.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_classification.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
@@ -375,7 +375,9 @@ HistoryURLProviderParams::HistoryURLProviderParams(
     const TemplateURL* default_search_provider,
     const SearchTermsData* search_terms_data,
     bool allow_deleting_browser_history,
-    const TemplateURL* starter_pack_engine)
+    const TemplateURL* starter_pack_engine,
+    bool autocomplete_enabled,
+    bool show_browser_history)
     : origin_task_runner(base::SequencedTaskRunner::GetCurrentDefault()),
       input(input),
       input_before_fixup(input_before_fixup),
@@ -390,7 +392,10 @@ HistoryURLProviderParams::HistoryURLProviderParams(
               : nullptr),
       search_terms_data(SearchTermsData::MakeSnapshot(search_terms_data)),
       allow_deleting_browser_history(allow_deleting_browser_history),
-      starter_pack_engine(starter_pack_engine) {}
+      starter_pack_engine(starter_pack_engine),
+      autocomplete_enabled(autocomplete_enabled),
+      show_browser_history(show_browser_history)
+{}
 
 HistoryURLProviderParams::~HistoryURLProviderParams() = default;
 
@@ -431,8 +436,7 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   // re-run the query from scratch and ignore `minimal_changes`.
 
   // Cancel any in-progress query.
-  Stop(true, false);
-
+  Stop(AutocompleteStopReason::kClobbered);
   if (input.IsZeroSuggest() ||
       (input.type() == metrics::OmniboxInputType::EMPTY)) {
     return;
@@ -483,11 +487,13 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
         {autocomplete_input.text().length(), ACMatchClassification::URL});
   }
 
+  bool autocomplete_enabled = client()->IsAddressBarAutocompleteEnabled();
+  bool show_browser_history = client()->AddressBarOmniboxShowBrowserHistory();
+
   what_you_typed_match.relevance = CalculateRelevance(WHAT_YOU_TYPED, 0);
   // Boost URL_WHAT_YOU_TYPED item if autocomplete is disabled to place it
   // on top of dropdown.
-  if (!client()->GetPrefs()->GetBoolean(
-          vivaldiprefs::kAddressBarAutocompleteEnabled)) {
+  if (!autocomplete_enabled) {
     what_you_typed_match.relevance = what_you_typed_match.relevance + 1000;
   }
   if (autocomplete_input.InKeywordMode()) {
@@ -502,15 +508,6 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   // them, it's not what the user wants, and just adds noise.
   if (fixed_up_input.type() != metrics::OmniboxInputType::QUERY)
     matches_.push_back(what_you_typed_match);
-
-#if defined(VIVALDI_BUILD)
-  PrefService* prefs = client()->GetPrefs();
-  auto show_history =
-      prefs->GetBoolean(vivaldiprefs::kAddressBarOmniboxShowBrowserHistory);
-  if (!show_history) {
-    return;
-  }
-#endif
 
   // We'll need the history service to run both passes, so try to obtain it.
   history::HistoryService* const history_service =
@@ -535,7 +532,8 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   std::unique_ptr<HistoryURLProviderParams> params(new HistoryURLProviderParams(
       fixed_up_input, autocomplete_input, trim_http, what_you_typed_match,
       default_search_provider, search_terms_data,
-      client()->AllowDeletingBrowserHistory(), starter_pack_engine));
+      client()->AllowDeletingBrowserHistory(), starter_pack_engine,
+      autocomplete_enabled, show_browser_history));
 
   // Pass 1: Get the in-memory URL database, and use it to find and promote
   // the inline autocomplete match, if any.
@@ -557,7 +555,8 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
 
   // Pass 2: Ask the history service to call us back on the history thread,
   // where we can read the full on-disk DB.
-  if (search_url_database_ && !autocomplete_input.omit_asynchronous_matches()) {
+  if (search_url_database_ && !autocomplete_input.omit_asynchronous_matches() &&
+      show_browser_history) {
     done_ = false;
     params_ = params.release();  // This object will be destroyed in
                                  // QueryComplete() once we're done with it.
@@ -566,10 +565,8 @@ void HistoryURLProvider::Start(const AutocompleteInput& input,
   }
 }
 
-void HistoryURLProvider::Stop(bool clear_cached_results,
-                              bool due_to_user_inactivity) {
-  AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
-
+void HistoryURLProvider::Stop(AutocompleteStopReason stop_reason) {
+  AutocompleteProvider::Stop(stop_reason);
   if (params_)
     params_->cancel_flag.Set();
 }
@@ -652,7 +649,8 @@ void HistoryURLProvider::DoAutocomplete(history::HistoryBackend* backend,
                            ? provider_max_matches_in_keyword_mode_
                            : provider_max_matches_;
 
-  if (search_url_database_) {
+  if (search_url_database_ &&
+      params->show_browser_history) {
     const URLPrefixes& prefixes = URLPrefix::GetURLPrefixes();
     for (const auto& prefix : prefixes) {
       if (params->cancel_flag.IsSet())
@@ -785,10 +783,7 @@ void HistoryURLProvider::PromoteMatchesIfNecessary(
     return;
   if (params.promote_type == HistoryURLProviderParams::FRONT_HISTORY_MATCH) {
     const int no_autocomplete_boost =
-        client()->GetPrefs()->GetBoolean(
-            vivaldiprefs::kAddressBarAutocompleteEnabled)
-            ? 0
-            : 1000;
+        params.autocomplete_enabled ? 0 : 1000;
     matches_.push_back(HistoryMatchToACMatch(
         params, 0,
         CalculateRelevance(INLINE_AUTOCOMPLETE, 0) + no_autocomplete_boost,
@@ -1118,9 +1113,8 @@ size_t HistoryURLProvider::RemoveSubsequentMatchesOf(
   // keep this one since it is rated the highest.
   history::HistoryMatches::iterator first(std::ranges::find_first_of(
       *matches, remove, history::HistoryMatch::EqualsGURL));
-  CHECK(first != matches->end(), base::NotFatalUntil::M130)
-      << "We should have always found at least the "
-         "original URL.";
+  CHECK(first != matches->end()) << "We should have always found at least the "
+                                    "original URL.";
 
   // Find any following occurrences of any URL in the redirect chain, these
   // should be deleted.

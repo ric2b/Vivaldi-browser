@@ -20,14 +20,16 @@
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/document_service_internal.h"
 #include "content/public/browser/render_frame_host.h"
+#include "net/cookies/cookie_setting_override.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace content {
 
 namespace {
 auto& GetDocumentTokenMap() {
-  static base::NoDestructor<std::unordered_map<
-      blink::DocumentToken, RenderFrameHostImpl*, blink::DocumentToken::Hasher>>
+  static base::NoDestructor<
+      absl::flat_hash_map<blink::DocumentToken, RenderFrameHostImpl*>>
       map;
   return *map;
 }
@@ -116,6 +118,16 @@ void DocumentAssociatedData::RunPostPrerenderingActivationSteps() {
     std::move(post_prerendering_activation_callbacks_.front()).Run();
     post_prerendering_activation_callbacks_.pop();
   }
+}
+
+void DocumentAssociatedData::PutCookieSettingOverride(
+    net::CookieSettingOverride cookie_setting_override) {
+  cookie_setting_overrides_.Put(cookie_setting_override);
+}
+
+void DocumentAssociatedData::RemoveCookieSettingOverride(
+    net::CookieSettingOverride cookie_setting_override) {
+  cookie_setting_overrides_.Remove(cookie_setting_override);
 }
 
 }  // namespace content

@@ -22,6 +22,8 @@
 #include "base/time/time.h"
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_crypter.h"
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_fetcher.h"
+#include "components/ip_protection/common/probabilistic_reveal_token_test_consumer.h"
+#include "components/ip_protection/common/probabilistic_reveal_token_test_issuer.h"
 #include "net/base/net_errors.h"
 #include "services/network/public/cpp/network_switches.h"
 #include "sql/database.h"
@@ -29,23 +31,10 @@
 #include "sql/test/test_helpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/private-join-and-compute/src/crypto/context.h"
-#include "third_party/private-join-and-compute/src/crypto/ec_group.h"
-#include "third_party/private-join-and-compute/src/crypto/ec_point.h"
-#include "third_party/private-join-and-compute/src/crypto/elgamal.h"
 
 namespace ip_protection {
 
 namespace {
-
-using ::private_join_and_compute::Context;
-using ::private_join_and_compute::ECGroup;
-using ::private_join_and_compute::ECPoint;
-using ::private_join_and_compute::ElGamalDecrypter;
-using ::private_join_and_compute::ElGamalEncrypter;
-using ::private_join_and_compute::elgamal::Ciphertext;
-using ::private_join_and_compute::elgamal::PrivateKey;
-using ::private_join_and_compute::elgamal::PublicKey;
 
 constexpr char kGetTokensResultHistogram[] =
     "NetworkService.IpProtection.GetProbabilisticRevealTokensResult";
@@ -57,129 +46,14 @@ constexpr char kInitialTokenAvailableHistogram[] =
 constexpr char kSubsequentTokenAvailableHistogram[] =
     "NetworkService.IpProtection."
     "IsProbabilisticRevealTokenAvailableOnSubsequentRequest";
+constexpr char kRandomizationTimeHistogram[] =
+    "NetworkService.IpProtection.ProbabilisticRevealTokenRandomizationTime";
 
-// Mocks PRT issuer server capabilities, used to create/decrypt tokens for
-// tests.
-class MockIssuer {
- public:
-  static absl::StatusOr<std::unique_ptr<MockIssuer>> Create(
-      uint64_t private_key,
-      size_t num_tokens,
-      base::Time expiration,
-      base::Time next_start,
-      int32_t num_tokens_with_signal) {
-    auto context = std::make_unique<Context>();
-    std::unique_ptr<ECGroup> group;
-    {
-      ASSIGN_OR_RETURN(ECGroup local_group,
-                       ECGroup::Create(NID_X9_62_prime256v1, context.get()));
-      group = std::make_unique<ECGroup>(std::move(local_group));
-    }
+constexpr size_t kPlaintextSize = 29;
 
-    std::unique_ptr<ElGamalEncrypter> encrypter;
-    std::string serialized_public_key;
-    {
-      ASSIGN_OR_RETURN(ECPoint g, group->GetFixedGenerator());
-      ASSIGN_OR_RETURN(ECPoint y, g.Mul(context->CreateBigNum(private_key)));
-      ASSIGN_OR_RETURN(serialized_public_key, y.ToBytesCompressed());
-      encrypter = std::make_unique<ElGamalEncrypter>(
-          group.get(),
-          std::make_unique<PublicKey>(PublicKey{std::move(g), std::move(y)}));
-    }
 
-    auto decrypter =
-        std::make_unique<ElGamalDecrypter>(std::make_unique<PrivateKey>(
-            PrivateKey{context->CreateBigNum(private_key)}));
-
-    std::vector<ProbabilisticRevealToken> tokens;
-    tokens.reserve(num_tokens);
-    for (std::size_t i = 0; i < num_tokens; ++i) {
-      ASSIGN_OR_RETURN(
-          ECPoint plaintext_point,
-          group->GetPointByHashingToCurveSha256(
-              "awesome-probabilistic-reveal-token-" + base::NumberToString(i)));
-      ASSIGN_OR_RETURN(Ciphertext ciphertext,
-                       encrypter->Encrypt(plaintext_point));
-      ASSIGN_OR_RETURN(std::string u_compressed,
-                       ciphertext.u.ToBytesCompressed());
-      ASSIGN_OR_RETURN(std::string e_compressed,
-                       ciphertext.e.ToBytesCompressed());
-      tokens.emplace_back(1, std::move(u_compressed), std::move(e_compressed),
-                          std::string(8, '0'));
-    }
-    return base::WrapUnique<MockIssuer>(new MockIssuer(
-        std::move(context), std::move(group), std::move(encrypter),
-        std::move(decrypter), std::move(serialized_public_key),
-        std::move(tokens), expiration, next_start, num_tokens_with_signal));
-  }
-
-  const std::vector<ProbabilisticRevealToken>& Tokens() const {
-    return tokens_;
-  }
-
-  void SetTokens(std::vector<ProbabilisticRevealToken> tokens) {
-    tokens_ = std::move(tokens);
-  }
-
-  std::string GetSerializedPublicKey() const { return serialized_public_key_; }
-
-  // Decrypt given token, serialize returned point, and base64 encode.
-  absl::StatusOr<std::string> DecryptSerializeEncode(
-      const ProbabilisticRevealToken& token) {
-    ASSIGN_OR_RETURN(ECPoint u, group_->CreateECPoint(token.u));
-    ASSIGN_OR_RETURN(ECPoint e, group_->CreateECPoint(token.e));
-    Ciphertext ciphertext{std::move(u), std::move(e)};
-    ASSIGN_OR_RETURN(ECPoint point, decrypter_->Decrypt(ciphertext));
-    ASSIGN_OR_RETURN(std::string serialized_point, point.ToBytesCompressed());
-    return base::Base64Encode(serialized_point);
-  }
-
-  absl::StatusOr<std::vector<std::string>> DecryptSerializeEncode(
-      const std::vector<ProbabilisticRevealToken>& tokens) {
-    std::vector<std::string> encoded;
-    for (const auto& t : tokens) {
-      ASSIGN_OR_RETURN(std::string sp, DecryptSerializeEncode(t));
-      encoded.push_back(std::move(sp));
-    }
-    return encoded;
-  }
-
-  base::Time Expiration() const { return expiration_; }
-  base::Time NextStart() const { return next_start_; }
-  int32_t NumTokensWithSignal() const { return num_tokens_with_signal_; }
-
- private:
-  MockIssuer(std::unique_ptr<Context> context,
-             std::unique_ptr<ECGroup> group,
-             std::unique_ptr<ElGamalEncrypter> encrypter,
-             std::unique_ptr<ElGamalDecrypter> decrypter,
-             std::string serialized_public_key,
-             std::vector<ProbabilisticRevealToken> tokens,
-             base::Time expiration,
-             base::Time next_start,
-             int32_t num_tokens_with_signal)
-      : context_(std::move(context)),
-        group_(std::move(group)),
-        encrypter_(std::move(encrypter)),
-        decrypter_(std::move(decrypter)),
-        serialized_public_key_(std::move(serialized_public_key)),
-        tokens_(std::move(tokens)),
-        expiration_(expiration),
-        next_start_(next_start),
-        num_tokens_with_signal_(num_tokens_with_signal) {}
-  std::unique_ptr<const Context> context_;
-  std::unique_ptr<const ECGroup> group_;
-  std::unique_ptr<const ElGamalEncrypter> encrypter_;
-  std::unique_ptr<const ElGamalDecrypter> decrypter_;
-  const std::string serialized_public_key_;
-  std::vector<ProbabilisticRevealToken> tokens_;
-  const base::Time expiration_;
-  const base::Time next_start_;
-  const int32_t num_tokens_with_signal_;
-};
-
-// Mocks a PRT fetcher. Uses MockIssuer for successful fetches with valid tokens
-// and SetResponse to mock error results.
+// Mocks a PRT fetcher. Uses ProbabilisticRevealTokenTestIssuer for successful
+// fetches with valid tokens and SetResponse to mock error results.
 class MockFetcher : public IpProtectionProbabilisticRevealTokenFetcher {
  public:
   MockFetcher() = default;
@@ -203,11 +77,28 @@ class MockFetcher : public IpProtectionProbabilisticRevealTokenFetcher {
                          size_t num_tokens,
                          base::Time expiration,
                          base::Time next_start,
-                         int32_t num_tokens_with_signal) {
-    ASSIGN_OR_RETURN(issuer_,
-                     MockIssuer::Create(private_key, num_tokens, expiration,
-                                        next_start, num_tokens_with_signal));
-
+                         int32_t num_tokens_with_signal,
+                         std::string epoch_id) {
+    {
+      auto maybe_issuer =
+          ProbabilisticRevealTokenTestIssuer::Create(private_key);
+      if (!maybe_issuer.has_value()) {
+        return maybe_issuer.error();
+      }
+      issuer_ = std::move(maybe_issuer.value());
+      // Issue and store tokens in issuer_.
+      std::vector<std::string> plaintexts(num_tokens, "");
+      for (std::size_t i = 0; i < num_tokens; ++i) {
+        std::string p = "awesome-prt-" + base::NumberToString(i);
+        plaintexts[i] = p + std::string(kPlaintextSize - p.size(), '-');
+      }
+      base::expected<GetProbabilisticRevealTokenResponse, absl::Status>
+          maybe_response = issuer_->Issue(plaintexts, expiration, next_start,
+                                          num_tokens_with_signal, epoch_id);
+      if (!maybe_response.has_value()) {
+        return maybe_response.error();
+      }
+    }
     TryGetProbabilisticRevealTokensOutcome outcome;
     outcome.tokens = issuer_->Tokens();
     outcome.public_key = issuer_->GetSerializedPublicKey();
@@ -215,6 +106,7 @@ class MockFetcher : public IpProtectionProbabilisticRevealTokenFetcher {
     outcome.next_epoch_start_time_seconds =
         next_start.InSecondsFSinceUnixEpoch();
     outcome.num_tokens_with_signal = num_tokens_with_signal;
+    outcome.epoch_id = std::move(epoch_id);
     SetResponse({std::move(outcome)},
                 TryGetProbabilisticRevealTokensResult{
                     TryGetProbabilisticRevealTokensStatus::kSuccess, net::OK,
@@ -224,13 +116,13 @@ class MockFetcher : public IpProtectionProbabilisticRevealTokenFetcher {
 
   size_t NumCalls() const { return num_calls_; }
 
-  MockIssuer* Issuer() { return issuer_.get(); }
+  ProbabilisticRevealTokenTestIssuer* Issuer() { return issuer_.get(); }
 
  private:
   std::optional<TryGetProbabilisticRevealTokensOutcome> outcome_;
   TryGetProbabilisticRevealTokensResult result_;
   size_t num_calls_ = 0;
-  std::unique_ptr<MockIssuer> issuer_;
+  std::unique_ptr<ProbabilisticRevealTokenTestIssuer> issuer_;
 };
 
 }  // namespace
@@ -248,7 +140,8 @@ class IpProtectionProbabilisticRevealTokenManagerTest : public testing::Test {
                             /*num_tokens=*/27,
                             /*expiration=*/base::Time::Now() + base::Hours(8),
                             /*next_start=*/base::Time::Now() + base::Hours(4),
-                            /*num_tokens_with_signal=*/7);
+                            /*num_tokens_with_signal=*/7,
+                            /*epoch_id=*/"epoch_id");
     ASSERT_TRUE(status.ok());
     fetcher_ptr_ = fetcher_.get();
     ASSERT_TRUE(temp_dir_.CreateUniqueTempDir());
@@ -268,17 +161,31 @@ class IpProtectionProbabilisticRevealTokenManagerTest : public testing::Test {
                  size_t num_tokens,
                  base::Time expiration,
                  base::Time next_start,
-                 size_t num_tokens_with_signal) {
-    auto status = fetcher_ptr_->SetIssuer(private_key, num_tokens, expiration,
-                                          next_start, num_tokens_with_signal);
+                 size_t num_tokens_with_signal,
+                 std::string epoch_id) {
+    auto status =
+        fetcher_ptr_->SetIssuer(private_key, num_tokens, expiration, next_start,
+                                num_tokens_with_signal, std::move(epoch_id));
     ASSERT_TRUE(status.ok());
+  }
+
+  // Deserialize a given prt serialized using
+  // `IpProtectionProbabilisticRevealTokenManager::SerializePrt()`.
+  void Deserialize(const std::string& serialized_prt,
+                   ProbabilisticRevealToken& token_out,
+                   std::string& epoch_id_out) {
+    std::optional<ProbabilisticRevealTokenTestConsumer> consumer =
+        ProbabilisticRevealTokenTestConsumer::MaybeCreate(serialized_prt);
+    ASSERT_TRUE(consumer) << "Deserializing PRT failed";
+    token_out = consumer->Token();
+    epoch_id_out = consumer->EpochId();
   }
 
   // Decrypt given token, serialize returned point, and base64 encode.
   std::string DecryptSerializeEncode(const ProbabilisticRevealToken& token) {
     auto maybe_serialized_point =
         fetcher_ptr_->Issuer()->DecryptSerializeEncode(token);
-    EXPECT_TRUE(maybe_serialized_point.ok());
+    EXPECT_TRUE(maybe_serialized_point.has_value());
     return std::move(maybe_serialized_point.value());
   }
 
@@ -286,7 +193,7 @@ class IpProtectionProbabilisticRevealTokenManagerTest : public testing::Test {
       const std::vector<ProbabilisticRevealToken>& tokens) {
     auto maybe_serialized_points =
         fetcher_ptr_->Issuer()->DecryptSerializeEncode(tokens);
-    EXPECT_TRUE(maybe_serialized_points.ok());
+    EXPECT_TRUE(maybe_serialized_points.has_value());
     return std::move(maybe_serialized_points.value());
   }
 
@@ -341,7 +248,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   const base::Time next_start = base::Time::Now() + base::Hours(4);
   SetIssuer(/*private_key=*/12345,
             /*num_tokens=*/10, expiration, next_start,
-            /*num_tokens_with_signal=*/3);
+            /*num_tokens_with_signal=*/3, "epoch_id");
 
   manager_ = std::make_unique<IpProtectionProbabilisticRevealTokenManager>(
       std::move(fetcher_), DataDirectory());
@@ -410,16 +317,20 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   const std::string top_level = "awe-page.ex";
   const std::string third_party = "tp.ex";
 
-  auto maybe_token = manager_->GetToken(top_level, third_party);
-  ASSERT_TRUE(maybe_token.has_value());
-  const ProbabilisticRevealToken token1 = maybe_token.value();
+  std::optional<std::string> serialized_token =
+      manager_->GetToken(top_level, third_party);
+  ASSERT_TRUE(serialized_token.has_value());
+  const std::string token1 = serialized_token.value();
 
   for (int i = 0; i < 5; ++i) {
-    maybe_token = manager_->GetToken(top_level, third_party);
-    ASSERT_TRUE(maybe_token.has_value());
-    const ProbabilisticRevealToken token2 = maybe_token.value();
+    serialized_token = manager_->GetToken(top_level, third_party);
+    ASSERT_TRUE(serialized_token.has_value());
+    const std::string token2 = serialized_token.value();
     EXPECT_EQ(token1, token2);
   }
+
+  // The token will only be randomized once for the same first/third party pair.
+  histogram_tester_.ExpectTotalCount(kRandomizationTimeHistogram, 1);
 }
 
 // Test whether GetToken() returns the randomized versions of the same
@@ -434,15 +345,28 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
 
   const std::string top_level = "awe-page.ex";
 
-  auto maybe_token = manager_->GetToken(top_level, "tp.ex");
-  ASSERT_TRUE(maybe_token.has_value());
-  const ProbabilisticRevealToken token_ex = maybe_token.value();
+  std::optional<std::string> serialized_token_ex =
+      manager_->GetToken(top_level, "tp.ex");
+  ASSERT_TRUE(serialized_token_ex.has_value());
 
-  maybe_token = manager_->GetToken(top_level, "tp.com");
-  ASSERT_TRUE(maybe_token.has_value());
-  const ProbabilisticRevealToken token_com = maybe_token.value();
+  std::optional<std::string> serialized_token_com =
+      manager_->GetToken(top_level, "tp.com");
+  ASSERT_TRUE(serialized_token_com.has_value());
 
-  EXPECT_NE(token_ex, token_com);
+  EXPECT_NE(serialized_token_ex.value(), serialized_token_com.value());
+
+  // The token will be randomized for each distinct first/third party pair.
+  histogram_tester_.ExpectTotalCount(kRandomizationTimeHistogram, 2);
+
+  ProbabilisticRevealToken token_ex;
+  std::string epoch_id_ex;
+  Deserialize(serialized_token_ex.value(), token_ex, epoch_id_ex);
+
+  ProbabilisticRevealToken token_com;
+  std::string epoch_id_com;
+  Deserialize(serialized_token_com.value(), token_com, epoch_id_com);
+
+  EXPECT_EQ(epoch_id_ex, epoch_id_com);
 
   // When decrypted, both tokens should return the same point.
   auto serialized_point_ex = DecryptSerializeEncode(token_ex);
@@ -455,9 +379,11 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
 TEST_F(IpProtectionProbabilisticRevealTokenManagerTest, RefetchSuccess) {
   const base::Time first_batch_expiration = base::Time::Now() + base::Hours(8);
   const base::Time first_batch_next_start = base::Time::Now() + base::Hours(4);
+  const std::string epoch_id_1 = std::string(8, '1');
   SetIssuer(/*private_key=*/12345,
             /*num_tokens=*/10, first_batch_expiration, first_batch_next_start,
-            /*num_tokens_with_signal=*/3);
+            /*num_tokens_with_signal=*/3,
+            /*epoch_id=*/epoch_id_1);
   const std::vector<ProbabilisticRevealToken> first_batch_tokens =
       fetcher_ptr_->Issuer()->Tokens();
 
@@ -475,10 +401,17 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest, RefetchSuccess) {
   // check that GetToken() returns a token that is in the batch
   // by decrypting token returned by `GetToken()` and checking whether
   // it is in decrypted `first_batch_tokens`.
-  auto first_batch_points = DecryptSerializeEncode(first_batch_tokens);
-  auto maybe_token = manager_->GetToken("a", "b");
-  ASSERT_TRUE(maybe_token.has_value());
-  auto point = DecryptSerializeEncode(maybe_token.value());
+  std::vector<std::string> first_batch_points =
+      DecryptSerializeEncode(first_batch_tokens);
+  std::optional<std::string> serialized_token = manager_->GetToken("a", "b");
+  ASSERT_TRUE(serialized_token.has_value());
+
+  ProbabilisticRevealToken token;
+  std::string epoch_id;
+  Deserialize(serialized_token.value(), token, epoch_id);
+  EXPECT_EQ(epoch_id, epoch_id_1);
+
+  std::string point = DecryptSerializeEncode(token);
   EXPECT_THAT(first_batch_points, testing::Contains(point))
       << "GetToken() returned a token that is not in the current batch.";
 
@@ -490,11 +423,13 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest, RefetchSuccess) {
       TryGetProbabilisticRevealTokensStatus::kSuccess, 1);
   histogram_tester_.ExpectTotalCount(kGetTokensRequestTimeHistogram, 1);
 
+  const std::string epoch_id_2 = std::string(8, '2');
   SetIssuer(/*private_key=*/77777,
             /*num_tokens=*/27,
             /*expiration=*/base::Time::Now() + base::Hours(16),
             /*next_start==*/base::Time::Now() + base::Hours(8),
-            /*num_tokens_with_signal=*/12);
+            /*num_tokens_with_signal=*/12,
+            /*epoch_id=*/epoch_id_2);
   const std::vector<ProbabilisticRevealToken> second_batch_tokens =
       fetcher_ptr_->Issuer()->Tokens();
 
@@ -504,10 +439,13 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest, RefetchSuccess) {
   // by decrypting token returned by `GetToken()` and checking whether
   // it is in decrypted `second_batch_tokens`.
   EXPECT_TRUE(manager_->IsTokenAvailable());
-  auto second_batch_points = DecryptSerializeEncode(second_batch_tokens);
-  maybe_token = manager_->GetToken("a", "b");
-  ASSERT_TRUE(maybe_token.has_value());
-  point = DecryptSerializeEncode(maybe_token.value());
+  std::vector<std::string> second_batch_points =
+      DecryptSerializeEncode(second_batch_tokens);
+  serialized_token = manager_->GetToken("a", "b");
+  ASSERT_TRUE(serialized_token.has_value());
+  Deserialize(serialized_token.value(), token, epoch_id);
+  EXPECT_EQ(epoch_id, epoch_id_2);
+  point = DecryptSerializeEncode(token);
   EXPECT_THAT(second_batch_points, testing::Contains(point))
       << "GetToken() returned a token that is not in the current batch.";
   histogram_tester_.ExpectUniqueSample(
@@ -572,7 +510,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest, PassedNextEpochStart) {
   const base::Time next_start = base::Time::Now() - base::Seconds(1);
   SetIssuer(/*private_key=*/137,
             /*num_tokens=*/12, expiration, next_start,
-            /*num_tokens_with_signal=*/5);
+            /*num_tokens_with_signal=*/5, "epoch_id");
 
   manager_ = std::make_unique<IpProtectionProbabilisticRevealTokenManager>(
       std::move(fetcher_), DataDirectory());
@@ -608,6 +546,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   outcome.next_epoch_start_time_seconds =
       (base::Time::Now() + base::Hours(4)).InSecondsFSinceUnixEpoch();
   outcome.num_tokens_with_signal = 1;
+  outcome.epoch_id = std::string(8, '1');
   SetResponse({std::move(outcome)},
               TryGetProbabilisticRevealTokensResult{
                   TryGetProbabilisticRevealTokensStatus::kSuccess, net::OK,
@@ -630,10 +569,11 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   // First response is valid.
   const base::Time expiration = base::Time::Now() + base::Hours(8);
   const base::Time next_start = base::Time::Now() + base::Hours(4);
+  const std::string epoch_id_1 = std::string(8, '1');
   SetIssuer(
       /*private_key=*/4455,
       /*num_tokens=*/10, expiration, next_start,
-      /*num_tokens_with_signal=*/3);
+      /*num_tokens_with_signal=*/3, epoch_id_1);
   const std::vector<ProbabilisticRevealToken> first_batch_tokens =
       fetcher_ptr_->Issuer()->Tokens();
 
@@ -681,9 +621,15 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   // `first_batch_tokens`.
   EXPECT_TRUE(manager_->IsTokenAvailable());
   auto first_batch_points = DecryptSerializeEncode(first_batch_tokens);
-  auto maybe_token = manager_->GetToken("a", "b");
-  ASSERT_TRUE(maybe_token.has_value());
-  auto point = DecryptSerializeEncode(maybe_token.value());
+  auto serialized_token = manager_->GetToken("a", "b");
+  ASSERT_TRUE(serialized_token.has_value());
+
+  ProbabilisticRevealToken token;
+  std::string epoch_id;
+  Deserialize(serialized_token.value(), token, epoch_id);
+  EXPECT_EQ(epoch_id, epoch_id_1);
+
+  auto point = DecryptSerializeEncode(token);
   EXPECT_THAT(first_batch_points, testing::Contains(point))
       << "GetToken() returned a token that is not in the current batch.";
 
@@ -714,7 +660,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   const base::Time next_start = base::Time::Now() + base::Hours(4);
   SetIssuer(/*private_key=*/12345,
             /*num_tokens=*/10, expiration, next_start,
-            /*num_tokens_with_signal=*/3);
+            /*num_tokens_with_signal=*/3, "epoch_id");
 
   manager_ = std::make_unique<IpProtectionProbabilisticRevealTokenManager>(
       std::move(fetcher_), DataDirectory());
@@ -743,7 +689,7 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   const base::Time next_start = base::Time::Now() + base::Hours(4);
   SetIssuer(/*private_key=*/12345,
             /*num_tokens=*/10, expiration, next_start,
-            /*num_tokens_with_signal=*/3);
+            /*num_tokens_with_signal=*/3, "epoch_id");
 
   manager_ = std::make_unique<IpProtectionProbabilisticRevealTokenManager>(
       std::move(fetcher_), DataDirectory());
@@ -762,6 +708,25 @@ TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
   // Expect that the database does not exist.
   sql::Database db(sql::test::kTestTag);
   EXPECT_FALSE(db.Open(DbPath()));
+}
+
+TEST_F(IpProtectionProbabilisticRevealTokenManagerTest,
+       SerializationFailsWhenWrongEpochIdSize) {
+  SetIssuer(/*private_key=*/12345,
+            /*num_tokens=*/27,
+            /*expiration=*/base::Time::Now() + base::Hours(8),
+            /*next_start=*/base::Time::Now() + base::Hours(4),
+            /*num_tokens_with_signal=*/7,
+            /*epoch_id=*/"epoch_id_wrong_size");
+
+  manager_ = std::make_unique<IpProtectionProbabilisticRevealTokenManager>(
+      std::move(fetcher_), DataDirectory());
+  manager_->RequestTokens();
+  task_environment_.FastForwardBy(base::TimeDelta());
+
+  // Expect that tokens are available, but they fail to serialize.
+  EXPECT_TRUE(manager_->IsTokenAvailable());
+  EXPECT_FALSE(manager_->GetToken("a", "b"));
 }
 
 }  // namespace ip_protection

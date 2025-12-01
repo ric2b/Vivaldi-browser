@@ -33,6 +33,8 @@ std::optional<KioskAppLaunchError::Error> s_last_error = std::nullopt;
 
 }  // namespace
 
+const char kKioskLaunchErrorHistogram[] = "Kiosk.Launch.Error";
+
 // static
 std::string KioskAppLaunchError::GetErrorMessage(Error error) {
   switch (error) {
@@ -71,6 +73,9 @@ std::string KioskAppLaunchError::GetErrorMessage(Error error) {
     case Error::kExtensionsPolicyInvalid:
       return l10n_util::GetStringUTF8(
           IDS_KIOSK_APP_ERROR_EXTENSIONS_POLICY_INVALID);
+    case Error::kChromeAppDeprecated:
+      return l10n_util::GetStringUTF8(
+          IDS_KIOSK_APP_ERROR_UNABLE_TO_LAUNCH_CHROME_APP);
   }
 
   NOTREACHED() << "Unknown kiosk app launch error, error="
@@ -129,7 +134,7 @@ void KioskAppLaunchError::RecordMetricAndClear() {
 
   std::optional<int> error = dict_update->FindInt(kKeyLaunchError);
   if (error) {
-    base::UmaHistogramEnumeration("Kiosk.Launch.Error",
+    base::UmaHistogramEnumeration(kKioskLaunchErrorHistogram,
                                   static_cast<Error>(*error));
   }
 

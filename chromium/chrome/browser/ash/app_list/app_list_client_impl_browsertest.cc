@@ -31,6 +31,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -1743,6 +1744,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplAssistantNewEntryPointTest, Eligible) {
           ash::assistant::AssistantBrowserDelegate::Get());
   ASSERT_TRUE(delegate);
   delegate->OverrideEntryPointIdForTesting(app_id);
+  delegate->SetGoogleChromeBuildForTesting();
 
   AppListClientImpl* client = AppListClientImpl::GetInstance();
   ASSERT_TRUE(client);
@@ -1769,6 +1771,7 @@ IN_PROC_BROWSER_TEST_F(AppListClientImplAssistantNewEntryPointTest, Name) {
           ash::assistant::AssistantBrowserDelegate::Get());
   ASSERT_TRUE(delegate);
   delegate->OverrideEntryPointIdForTesting(app_id);
+  delegate->SetGoogleChromeBuildForTesting();
 
   base::test::TestFuture<bool> eligibility_future;
   client->GetAssistantNewEntryPointEligibility(

@@ -1,6 +1,6 @@
-### [New performance insights](perf-insights)
-The Performance > Insights tab gets new insights: duplicated JavaScript, modern HTTP, and use efficient cache lifetimes.
-### [Click events to keep them highlighted in Performance](click-to-highlight)
-Click items in Summary, Bottom-up, Call tree, and Event log tables to keep the corresponding events highlighted in the trace and dim the rest.
-### [Filter cookies in Privacy and security](cookies-filter)
-The cookies table in the 'Privacy and security' panel gets a filter, so you can quickly find the cookie you want to inspect.
+### [Preconnected origins in 'Network dependency tree' insight](preconnect)
+The 'Network dependency tree' insight now shows you a list of used or unused preconnected origins and preconnect candidates, if any.
+### [Server response and redirection times in 'Document request latency' insight](doc-req-latency-times)
+The 'Document request latency' insight now shows you server response time and, if any, redirection time.
+### [Geolocation accuracy parameter in Sensors](geo-accuracy)
+The Sensors panel now lets you set accuracy in geolocation emulation, so you can test the handling of different levels of GPS accuracy.

@@ -5,8 +5,9 @@
 #import "ios/chrome/browser/authentication/ui_bundled/cells/table_view_account_item.h"
 
 #import "base/apple/foundation_util.h"
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/settings/ui_bundled/cells/settings_cells_constants.h"
-#import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
@@ -45,7 +46,7 @@ constexpr CGFloat kEnterpriseIconPointSize = 20;
            withStyler:(ChromeTableViewStyler*)styler {
   [super configureCell:cell withStyler:styler];
 
-  CHECK(self.image, base::NotFatalUntil::M123);
+  CHECK(self.image);
   cell.imageView.image = self.image;
   cell.textLabel.text = self.text;
   cell.detailTextLabel.text = self.detailText;
@@ -74,6 +75,23 @@ constexpr CGFloat kEnterpriseIconPointSize = 20;
     accessoryImage.tintColor =
         [accessoryImage.tintColor colorWithAlphaComponent:0.5];
   }
+
+  // When not set, the screen readers will read this cell as "text, detailText".
+  // Add a custom accessibility label for managed accounts to append "managed by
+  // your organization" so that the screen readers read this cell as "text,
+  // detailText, managed by your organization".
+  if (AreSeparateProfilesForManagedAccountsEnabled() && self.managed) {
+    cell.accessibilityLabel =
+        self.text && self.detailText
+            ? l10n_util::GetNSStringF(
+                  IDS_IOS_SIGNIN_ACCOUNT_PICKER_CHOOSE_ACCOUNT_ITEM_DESCRIPTION_WITH_NAME_AND_EMAIL_MANAGED,
+                  base::SysNSStringToUTF16(self.text),
+                  base::SysNSStringToUTF16(self.detailText))
+            : l10n_util::GetNSStringF(
+                  IDS_IOS_SIGNIN_ACCOUNT_PICKER_CHOOSE_ACCOUNT_ITEM_DESCRIPTION_WITH_EMAIL_MANAGED,
+                  base::SysNSStringToUTF16(self.text ? self.text
+                                                     : self.detailText));
+  }
 }
 
 @end
@@ -89,6 +107,9 @@ constexpr CGFloat kEnterpriseIconPointSize = 20;
   UIView* _statusContainerView;
 
   UIImageView* _managementIconView;
+
+  NSLayoutConstraint* _managementIconTrailingNoStatusMarginConstraint;
+  NSLayoutConstraint* _managementIconTrailingWithStatusMarginConstraint;
 }
 
 @synthesize imageView = _imageView;
@@ -162,6 +183,14 @@ constexpr CGFloat kEnterpriseIconPointSize = 20;
   verticalCenteringView.translatesAutoresizingMaskIntoConstraints = NO;
   [contentView addSubview:verticalCenteringView];
 
+  _managementIconTrailingNoStatusMarginConstraint =
+      [_managementIconView.trailingAnchor
+          constraintEqualToAnchor:contentView.trailingAnchor
+                         constant:-kTableViewHorizontalSpacing];
+  _managementIconTrailingWithStatusMarginConstraint =
+      [_managementIconView.trailingAnchor
+          constraintEqualToAnchor:_statusContainerView.leadingAnchor
+                         constant:-kTableViewVerticalSpacing];
   [NSLayoutConstraint activateConstraints:@[
     // Set leading anchors.
     [_imageView.leadingAnchor
@@ -214,9 +243,7 @@ constexpr CGFloat kEnterpriseIconPointSize = 20;
     [_statusContainerView.trailingAnchor
         constraintEqualToAnchor:contentView.trailingAnchor
                        constant:-kTableViewHorizontalSpacing],
-    [_managementIconView.trailingAnchor
-        constraintEqualToAnchor:_statusContainerView.leadingAnchor
-                       constant:-kTableViewHorizontalSpacing],
+    _managementIconTrailingNoStatusMarginConstraint,
     [_detailTextLabel.trailingAnchor
         constraintLessThanOrEqualToAnchor:_managementIconView.leadingAnchor
                                  constant:
@@ -246,10 +273,14 @@ constexpr CGFloat kEnterpriseIconPointSize = 20;
 - (void)setStatusView:(UIView*)statusView {
   _statusContainerView.hidden = statusView == nil;
   if (statusView == nil) {
+    _managementIconTrailingWithStatusMarginConstraint.active = NO;
+    _managementIconTrailingNoStatusMarginConstraint.active = YES;
     _statusView = nil;
     // Hide the status view but don’t delete it so that constraints still holds.
     return;
   }
+  _managementIconTrailingWithStatusMarginConstraint.active = YES;
+  _managementIconTrailingNoStatusMarginConstraint.active = NO;
   [_statusView removeFromSuperview];
   _statusView = statusView;
   [_statusContainerView addSubview:statusView];

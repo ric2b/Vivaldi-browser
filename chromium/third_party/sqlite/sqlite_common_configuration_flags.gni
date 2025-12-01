@@ -3,9 +3,6 @@
 sqlite_common_configuration_flags = [
   "SQLITE_ENABLE_FTS5", # Vivaldi
 
-  # New unicode61 tokenizer with built-in tables.
-  "SQLITE_DISABLE_FTS3_UNICODE",
-
   # Chrome does not enable fts4, disable extra code.
   "SQLITE_DISABLE_FTS4_DEFERRED",
   "SQLITE_ENABLE_ICU",

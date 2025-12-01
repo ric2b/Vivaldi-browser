@@ -121,6 +121,8 @@ struct Bindings {
     /// The binding points that will be ignored by the rebustness transform.
     std::vector<BindingPoint> ignored_by_robustness_transform;
 
+    bool operator==(const Bindings& other) const = default;
+
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(Bindings,
                  uniform,
@@ -145,6 +147,8 @@ struct ArrayLengthFromUniformOptions {
     /// The mapping from the storage buffer binding points in WGSL binding-point space to the index
     /// into the uniform buffer where the length of the buffer is stored.
     std::unordered_map<BindingPoint, uint32_t> bindpoint_to_size_index;
+
+    bool operator==(const ArrayLengthFromUniformOptions& other) const = default;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(ArrayLengthFromUniformOptions, ubo_binding, bindpoint_to_size_index);
@@ -178,6 +182,8 @@ struct PixelLocalOptions {
     /// The bind group index of all pixel local storage attachments
     uint32_t group_index = 0;
 
+    bool operator==(const PixelLocalOptions& other) const = default;
+
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(PixelLocalOptions, attachments, group_index);
 };
@@ -208,6 +214,9 @@ struct Options {
 
     /// Set to `true` to disable software robustness that prevents out-of-bounds accesses.
     bool disable_robustness = false;
+
+    /// Set to `true` to enable integer range analysis in robustness transform.
+    bool enable_integer_range_analysis = false;
 
     /// Set to `true` to disable workgroup memory zero initialization
     bool disable_workgroup_init = false;
@@ -242,17 +251,32 @@ struct Options {
     /// The binding point to use for information passed via root constants.
     std::optional<BindingPoint> root_constant_binding_point;
 
+    /// Immediate binding point info
+    std::optional<BindingPoint> immediate_binding_point;
+
+    /// The offset of the first_index_offset push constant.
+    std::optional<uint32_t> first_index_offset;
+
+    /// The offset of the first_instance_offset push constant.
+    std::optional<uint32_t> first_instance_offset;
+
+    /// Offsets of num_workgroups push constant.
+    std::optional<uint32_t> num_workgroups_start_offset;
+
     /// The bindings
     Bindings bindings;
 
     /// Pixel local configuration
     PixelLocalOptions pixel_local;
 
+    bool operator==(const Options& other) const = default;
+
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(Options,
                  remapped_entry_point_name,
                  strip_all_names,
                  disable_robustness,
+                 enable_integer_range_analysis,
                  disable_workgroup_init,
                  truncate_interstage_variables,
                  polyfill_reflect_vec2_f32,
@@ -263,6 +287,10 @@ struct Options {
                  array_length_from_uniform,
                  interstage_locations,
                  root_constant_binding_point,
+                 immediate_binding_point,
+                 first_index_offset,
+                 first_instance_offset,
+                 num_workgroups_start_offset,
                  bindings,
                  pixel_local);
 };

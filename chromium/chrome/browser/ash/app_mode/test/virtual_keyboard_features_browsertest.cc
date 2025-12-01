@@ -101,7 +101,6 @@ class VirtualKeyboardFeaturesTest
           std::tuple<KioskMixin::Config, TestParam>> {
  public:
   VirtualKeyboardFeaturesTest() = default;
-
   VirtualKeyboardFeaturesTest(const VirtualKeyboardFeaturesTest&) = delete;
   VirtualKeyboardFeaturesTest& operator=(const VirtualKeyboardFeaturesTest&) =
       delete;

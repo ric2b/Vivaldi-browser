@@ -1,14 +1,22 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sl">
-<translation id="2277224997687551299">Uredi ime skupine</translation>
+<translation id="1062777154504442433">Nov sklad zavihkov</translation>
+<translation id="1625440863545383011">Odstrani zavihek in zapusti sklad</translation>
 <translation id="2330212241471632770">{TABS_COUNT,plural, =1{Dodaj zavihek med zaznamke}one{Dodaj zavihke med zaznamke}two{Dodaj zavihke med zaznamke}few{Dodaj zavihke med zaznamke}other{Dodaj zavihke med zaznamke}}</translation>
 <translation id="2947471979790858922">Vaša dejavnost v teh zasebnih zavihkih bo odstranjena iz te naprave</translation>
+<translation id="3298614730029636660">Zapusti sklad</translation>
+<translation id="354698175756845966">Uredi barvo sklada</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Svoje zaprte zavihke najdete v Nedavnih zavihkih v glavnem meniju Vivaldi. Vaš zasebni zavihek ne bo na voljo.}
         other {Zaprte zavihke lahko najdete v Nedavnih zavihkih v glavnem meniju Vivaldi. Vaših # zasebnih zavihkov ne bo na voljo.}}</translation>
-<translation id="4460014764210899310">Razdruži</translation>
 <translation id="4871187110787939393">Zapreti vse zasebne zavihke?</translation>
 <translation id="5494920125229734069">Izberi vse</translation>
-<translation id="6744956528665271406">Uredi barvo skupine</translation>
+<translation id="6807841890213931603">Odstrani zavihek in izbriši sklad</translation>
+<translation id="750227952939161636">Vaši skladi zavihkov se samodejno shranjujejo in posodabljajo v vseh napravah, v katerih ste prijavljeni</translation>
+<translation id="7640137753339219124">Izbriši sklad</translation>
+<translation id="7653857400289671414">Vaši skladi zavihkov se samodejno shranijo</translation>
+<translation id="8440938071054361204">Uredi ime sklada</translation>
+<translation id="8602902357364871325">Zapri sklad</translation>
+<translation id="8851621822786801079">Odstrani iz sklada</translation>
 </translationbundle>

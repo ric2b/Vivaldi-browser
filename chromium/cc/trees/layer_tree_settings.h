@@ -33,17 +33,20 @@ class CC_EXPORT LayerTreeSettings {
   // If true, this tree doesn't draw itself. Instead upon activation it pushes
   // differential updates to a remote (GPU-side) display tree which is drawn
   // using tile resources prepared by this tree.
-  bool UseLayerContextForDisplay() const;
+  bool TreesInVizInClientProcess() const;
 
   // If true, the remote display tree handles its own composited animations.
-  // This can only be true when UseLayerContextForDisplay() is also true.
+  // This can only be true when TreesInVizInClientProcess() is also true.
   bool UseLayerContextForAnimations() const;
 
   // If true, this is a GPU-side display tree receiving updates from a remote
   // client via the LayerContext API. Such trees do no raster work of their own
   // and submit compositor frames directly within Viz using tiles rastered by
   // the remote client.
-  bool is_display_tree = false;
+  bool trees_in_viz_in_viz_process = false;
+
+  // If true, the client requested display tree draw mode to be GPU.
+  bool display_tree_draw_mode_is_gpu = false;
 
   bool single_thread_proxy_scheduler = true;
   bool main_frame_before_activation_enabled = false;
@@ -113,7 +116,6 @@ class CC_EXPORT LayerTreeSettings {
           /*for_renderer=*/false);
   int max_preraster_distance_in_screen_pixels = 1000;
   bool use_rgba_4444 = false;
-  bool unpremultiply_and_dither_low_bit_depth_tiles = false;
 
   // If set to true, the compositor may selectively defer image decodes to the
   // Image Decode Service and raster tiles without images until the decode is
@@ -223,10 +225,6 @@ class CC_EXPORT LayerTreeSettings {
 
   // Whether to disable the frame rate limit in the scheduler.
   bool disable_frame_rate_limit = false;
-
-  // Enables shared image cache for gpu.
-  // TODO(crbug.com/40243842): not ready to be used by renderer cc instance yet.
-  bool enable_shared_image_cache_for_gpu = false;
 
   // Maximum size for buffers allocated for rendering when GPU compositing is
   // disabled. This size is equivalent to the max texture size in GPU mode.

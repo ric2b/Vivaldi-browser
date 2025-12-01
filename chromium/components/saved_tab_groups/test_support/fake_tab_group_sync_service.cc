@@ -26,7 +26,9 @@ FakeTabGroupSyncService::FakeTabGroupSyncService() = default;
 FakeTabGroupSyncService::~FakeTabGroupSyncService() = default;
 
 void FakeTabGroupSyncService::SetTabGroupSyncDelegate(
-    std::unique_ptr<TabGroupSyncDelegate> delegate) {}
+    std::unique_ptr<TabGroupSyncDelegate> delegate) {
+  delegate_ = std::move(delegate);
+}
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 void FakeTabGroupSyncService::SaveGroup(SavedTabGroup group) {
@@ -402,6 +404,17 @@ void FakeTabGroupSyncService::RecordTabGroupEvent(
   // No op.
 }
 
+void FakeTabGroupSyncService::UpdateArchivalStatus(const base::Uuid& sync_id,
+                                                   bool archival_status) {
+  // No op.
+}
+
+void FakeTabGroupSyncService::UpdateTabLastSeenTime(const base::Uuid& group_id,
+                                                    const base::Uuid& tab_id,
+                                                    TriggerSource source) {
+  // No op.
+}
+
 TabGroupSyncMetricsLogger*
 FakeTabGroupSyncService::GetTabGroupSyncMetricsLogger() {
   return nullptr;
@@ -437,6 +450,9 @@ std::unique_ptr<std::vector<SavedTabGroup>>
 FakeTabGroupSyncService::TakeSharedTabGroupsAvailableAtStartupForMessaging() {
   return std::make_unique<std::vector<SavedTabGroup>>();
 }
+
+void FakeTabGroupSyncService::OnLastTabClosed(
+    const SavedTabGroup& saved_tab_group) {}
 
 void FakeTabGroupSyncService::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);

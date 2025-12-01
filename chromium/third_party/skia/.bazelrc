@@ -30,6 +30,7 @@ build --extra_toolchains=//toolchain:clang_linux_x64_toolchain
 build --extra_toolchains=//toolchain:clang_mac_x64_toolchain
 build --extra_toolchains=//toolchain:clang_mac_arm64_toolchain
 build --extra_toolchains=//toolchain:clang_host_mac_x64_target_mac_arm64_toolchain
+build --extra_toolchains=//toolchain:clang_host_mac_arm64_target_mac_x64_toolchain
 build --extra_toolchains=//toolchain:clang_windows_x64_toolchain
 build --extra_toolchains=//toolchain:linux_amd64_ndk_arm64_toolchain
 build --extra_toolchains=//toolchain:linux_amd64_ndk_arm32_toolchain
@@ -43,7 +44,7 @@ build --ui_event_filters=-debug
 # with "fatal error: invalid function symbol table" unless we disable cgo via the below flag.
 # Reference:
 # https://github.com/bazelbuild/rules_go/blob/d74d9ab34e8789e6a55a2d9caf0e2b3c63202e04/go/modes.rst#build-settings.
-build --@io_bazel_rules_go//go/config:pure
+build --@rules_go//go/config:pure
 
 # =============================================================================
 # Alias to build configurations below. This makes configuring things from

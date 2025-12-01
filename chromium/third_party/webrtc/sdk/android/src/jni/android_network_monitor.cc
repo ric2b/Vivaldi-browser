@@ -433,7 +433,7 @@ void AndroidNetworkMonitor::OnNetworkConnected_n(
   }
 
   network_info_by_handle_[network_info.handle] = network_info;
-  for (const rtc::IPAddress& address : network_info.ip_addresses) {
+  for (const IPAddress& address : network_info.ip_addresses) {
     network_handle_by_address_[address] = network_info.handle;
   }
   network_handle_by_if_name_[network_info.interface_name] = network_info.handle;
@@ -451,7 +451,7 @@ AndroidNetworkMonitor::FindNetworkHandleFromAddressOrName(
     for (auto const& iter : network_info_by_handle_) {
       const std::vector<IPAddress>& addresses = iter.second.ip_addresses;
       auto address_it = std::find_if(addresses.begin(), addresses.end(),
-                                     [ip_address](rtc::IPAddress address) {
+                                     [ip_address](IPAddress address) {
                                        return AddressMatch(ip_address, address);
                                      });
       if (address_it != addresses.end()) {
@@ -478,11 +478,11 @@ std::optional<NetworkHandle> AndroidNetworkMonitor::FindNetworkHandleFromIfname(
   }
 
   if (bind_using_ifname_) {
-    for (auto const& iter : network_handle_by_if_name_) {
+    for (auto const& c_iter : network_handle_by_if_name_) {
       // Use substring match so that e.g if_name="v4-wlan0" is matched
       // agains iter="wlan0"
-      if (if_name.find(iter.first) != absl::string_view::npos) {
-        return std::make_optional(iter.second);
+      if (if_name.find(c_iter.first) != absl::string_view::npos) {
+        return std::make_optional(c_iter.second);
       }
     }
   }
@@ -499,7 +499,7 @@ void AndroidNetworkMonitor::OnNetworkDisconnected_n(NetworkHandle handle) {
   }
 
   const auto& network_info = iter->second;
-  for (const rtc::IPAddress& address : network_info.ip_addresses) {
+  for (const IPAddress& address : network_info.ip_addresses) {
     network_handle_by_address_.erase(address);
   }
 

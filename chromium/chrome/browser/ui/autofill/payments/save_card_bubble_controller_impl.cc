@@ -81,16 +81,6 @@ SaveCardBubbleController* SaveCardBubbleController::GetOrCreate(
   return SaveCardBubbleControllerImpl::FromWebContents(web_contents);
 }
 
-// static
-SaveCardBubbleController* SaveCardBubbleController::Get(
-    content::WebContents* web_contents) {
-  if (!web_contents) {
-    return nullptr;
-  }
-
-  return SaveCardBubbleControllerImpl::FromWebContents(web_contents);
-}
-
 void SaveCardBubbleControllerImpl::OfferLocalSave(
     const CreditCard& card,
     payments::PaymentsAutofillClient::SaveCreditCardOptions options,
@@ -158,7 +148,7 @@ void SaveCardBubbleControllerImpl::OfferUploadSave(
 
   // Reset legal_message_lines for CVC only upload as there is no legal message
   // for this case.
-  // TODO(crbug.com/40931101): Refactor ConfirmSaveCreditCardToCloud to change
+  // TODO(crbug.com/40931101): Refactor ShowSaveCreditCardToCloud to change
   // legal_message_lines_ to optional.
   if (current_bubble_type_ == BubbleType::UPLOAD_CVC_SAVE) {
     legal_message_lines_.clear();

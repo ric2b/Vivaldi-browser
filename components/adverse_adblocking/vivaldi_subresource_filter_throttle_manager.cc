@@ -52,12 +52,12 @@ VivaldiSubresourceFilterAdblockingThrottleManager::
 void VivaldiSubresourceFilterAdblockingThrottleManager::
     MaybeAppendNavigationThrottles(
         content::NavigationHandle* navigation_handle,
-        std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles,
+        content::NavigationThrottleRegistry& registry,
         bool done_mainframe) {
   if (navigation_handle->IsInMainFrame()) {
     std::unique_ptr<VivaldiSubresourceFilterAdblockingThrottle> throttle(
         new VivaldiSubresourceFilterAdblockingThrottle(navigation_handle));
-    throttles->push_back(std::move(throttle));
+    registry.AddThrottle(std::move(throttle));
   }
 
   auto* throttle_manager =
@@ -65,6 +65,5 @@ void VivaldiSubresourceFilterAdblockingThrottleManager::
           FromNavigationHandle(*navigation_handle);
 
   if (throttle_manager)
-    throttle_manager->MaybeAppendNavigationThrottles(navigation_handle,
-                                                     throttles, true);
+    throttle_manager->MaybeCreateAndAddNavigationThrottles(registry, true);
 }

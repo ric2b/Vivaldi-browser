@@ -10,7 +10,8 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiStartPageQuickSettingsCoordinator () {
+@interface VivaldiStartPageQuickSettingsCoordinator ()<
+  UIAdaptivePresentationControllerDelegate> {
   // The browser where the settings are being displayed.
   Browser* _browser;
 }
@@ -55,6 +56,7 @@
 
   UINavigationController* navController =
       [[UINavigationController alloc] initWithRootViewController:controller];
+  navController.presentationController.delegate = self;
 
   // Add Done button
   UIBarButtonItem* doneItem =
@@ -104,5 +106,12 @@
   [self stop];
   [self.baseViewController dismissViewControllerAnimated:YES completion:nil];
 }
+
+#pragma mark - UIAdaptivePresentationControllerDelegate
+- (void)presentationControllerDidDismiss:
+    (UIPresentationController*)presentationController {
+  [self stop];
+}
+
 
 @end

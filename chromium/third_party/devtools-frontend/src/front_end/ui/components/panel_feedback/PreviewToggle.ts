@@ -1,19 +1,15 @@
 // Copyright (c) 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/legacy.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Root from '../../../core/root/root.js';
 import {html, nothing, render} from '../../../ui/lit/lit.js';
-import * as Input from '../input/input.js';
 
-import previewToggleStylesRaw from './previewToggle.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const previewToggleStyles = new CSSStyleSheet();
-previewToggleStyles.replaceSync(previewToggleStylesRaw.cssText);
+import previewToggleStyles from './previewToggle.css.js';
 
 export interface PreviewToggleData {
   name: string;
@@ -52,10 +48,6 @@ export class PreviewToggle extends HTMLElement {
   #experiment = '';
   #onChangeCallback?: (checked: boolean) => void;
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [Input.checkboxStyles, previewToggleStyles];
-  }
-
   set data(data: PreviewToggleData) {
     this.#name = data.name;
     this.#helperText = data.helperText;
@@ -72,17 +64,20 @@ export class PreviewToggle extends HTMLElement {
     // clang-format off
     render(
       html`
+      <style>${previewToggleStyles}</style>
       <div class="container">
-        <label class="experiment-preview">
-          <input type="checkbox" ?checked=${checked} @change=${this.#checkboxChanged} aria-label=${this.#name} />
-          <devtools-icon .data=${{
-            iconName: 'experiment',
-            width: '16px',
-            height: '16px',
-            color: 'var(--icon-default)',
-          }}>
+          <devtools-checkbox
+            ?checked=${checked}
+            @change=${this.#checkboxChanged}
+            aria-label=${this.#name} />
+            <devtools-icon .data=${{
+              iconName: 'experiment',
+              width: '16px',
+              height: '16px',
+              color: 'var(--icon-default)',
+            }}>
           </devtools-icon>${this.#name}
-        </label>
+          </devtools-checkbox>
         <div class="spacer"></div>
         ${this.#feedbackURL && !this.#helperText
           ? html`<div class="feedback"><x-link class="x-link" href=${this.#feedbackURL}>${i18nString(UIStrings.shortFeedbackLink)}</x-link></div>`

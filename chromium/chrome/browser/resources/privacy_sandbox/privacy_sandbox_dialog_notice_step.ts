@@ -57,13 +57,14 @@ export class PrivacySandboxDialogNoticeStepElement extends
     };
   }
 
-  private expanded_: boolean;
-  private siteSuggestedAdsLearnMoreExpanded_: boolean;
-  private adMeasurementLearnMoreExpanded_: boolean;
-  private hideNoticePage_: boolean;
+  declare private expanded_: boolean;
+  declare private siteSuggestedAdsLearnMoreExpanded_: boolean;
+  declare private adMeasurementLearnMoreExpanded_: boolean;
+  declare private hideNoticePage_: boolean;
 
   private onNoticeSiteSuggestedAdsLearnMoreExpanded_(
       newValue: boolean, oldValue: boolean) {
+    this.loadPrivacyPolicyOnExpand(newValue, oldValue);
     this.onNoticeSiteSuggestedAdsLearnMoreExpandedChanged(newValue, oldValue);
   }
 
@@ -76,14 +77,6 @@ export class PrivacySandboxDialogNoticeStepElement extends
 
   private onPrivacyPolicyLinkClicked_() {
     this.hideNoticePage_ = true;
-  }
-
-  private getSettingsButtonsClass_() {
-    return this.equalizedButtons() ? 'tonal-button' : '';
-  }
-
-  private getAckButtonsClass_() {
-    return this.equalizedButtons() ? 'tonal-button' : 'action-button';
   }
 }
 

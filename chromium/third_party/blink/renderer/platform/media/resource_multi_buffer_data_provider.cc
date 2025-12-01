@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "third_party/blink/renderer/platform/media/resource_multi_buffer_data_provider.h"
 
@@ -15,6 +11,7 @@
 
 #include "base/containers/contains.h"
 #include "base/location.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -70,12 +67,15 @@ ResourceMultiBufferDataProvider::ResourceMultiBufferDataProvider(
   DCHECK_GE(pos, 0);
 }
 
-ResourceMultiBufferDataProvider::~ResourceMultiBufferDataProvider() = default;
+ResourceMultiBufferDataProvider::~ResourceMultiBufferDataProvider() {
+  base::UmaHistogramCustomCounts("Media.Network.TotalBytesReceived.SRC",
+                                 total_bytes_received_, 1024, 1073741824, 100);
+}
 
 void ResourceMultiBufferDataProvider::Start() {
   DVLOG(1) << __func__ << " @ " << byte_pos();
-  if (invalidated_ ||
-      (url_data_->length() > 0 && byte_pos() >= url_data_->length())) {
+
+  if (url_data_->length() > 0 && byte_pos() >= url_data_->length()) {
     task_runner_->PostTask(
         FROM_HERE, WTF::BindOnce(&ResourceMultiBufferDataProvider::Terminate,
                                  weak_factory_.GetWeakPtr()));
@@ -120,9 +120,12 @@ void ResourceMultiBufferDataProvider::Start() {
     }
   }
 
-  active_loader_ =
-      url_data_->url_index()->fetch_context()->CreateUrlLoader(options);
-  active_loader_->LoadAsynchronously(request, this);
+  if (auto url_index = url_data_->url_index()) {
+    active_loader_ = url_index->fetch_context()->CreateUrlLoader(options);
+    active_loader_->LoadAsynchronously(request, this);
+  } else {
+    url_data_->Fail();
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -161,8 +164,21 @@ scoped_refptr<media::DataBuffer> ResourceMultiBufferDataProvider::Read() {
 }
 
 void ResourceMultiBufferDataProvider::SetDeferred(bool deferred) {
-  if (active_loader_)
+  if (active_loader_) {
     active_loader_->SetDefersLoading(deferred);
+  }
+
+  if (deferred) {
+    if (!cleanup_timer_.IsRunning()) {
+      // Note: Timeout chosen based arbitrarily.
+      cleanup_timer_.Start(
+          FROM_HERE, base::Seconds(1),
+          WTF::BindOnce(&ResourceMultiBufferDataProvider::SetStale,
+                        weak_factory_.GetWeakPtr()));
+    }
+  } else {
+    cleanup_timer_.Stop();
+  }
 }
 
 /////////////////////////////////////////////////////////////////////////////
@@ -224,6 +240,11 @@ void ResourceMultiBufferDataProvider::DidReceiveResponse(
            << response.HttpStatusCode();
 #endif
   DCHECK(active_loader_);
+
+  if (!url_data_->url_index()) {
+    url_data_->Fail();
+    return;  // "this" may be deleted now.
+  }
 
   scoped_refptr<UrlData> destination_url_data(url_data_.get());
 
@@ -300,7 +321,6 @@ void ResourceMultiBufferDataProvider::DidReceiveResponse(
       do_fail = true;
     }
   } else {
-    destination_url_data->set_range_supported();
     if (content_length != kPositionNotSpecified) {
       destination_url_data->set_length(content_length + byte_pos());
     }
@@ -389,6 +409,8 @@ void ResourceMultiBufferDataProvider::DidReceiveData(
   DCHECK(active_loader_);
   DCHECK_GT(data.size(), 0u);
 
+  total_bytes_received_ += data.size();
+
   auto bytes_data = base::as_bytes(data);
   if (bytes_to_discard_) {
     const auto discard_length =
@@ -432,6 +454,11 @@ void ResourceMultiBufferDataProvider::DidFinishLoading() {
   DCHECK(active_loader_.get());
   DCHECK(!Available());
 
+  if (!url_data_->url_index()) {
+    url_data_->Fail();
+    return;  // "this" may be deleted now.
+  }
+
   // We're done with the loader.
   active_loader_.reset();
 
@@ -440,7 +467,7 @@ void ResourceMultiBufferDataProvider::DidFinishLoading() {
 
   // This request reports something smaller than what we've seen in the past,
   // Maybe it's transient error?
-  if (!invalidated_ && url_data_->length() != kPositionNotSpecified &&
+  if (url_data_->length() != kPositionNotSpecified &&
       size < url_data_->length()) {
     if (retries_ < kMaxRetries) {
       DVLOG(1) << " Partial data received.... @ pos = " << size;
@@ -459,10 +486,7 @@ void ResourceMultiBufferDataProvider::DidFinishLoading() {
 
   url_data_->set_length(size);
   fifo_.push_back(media::DataBuffer::CreateEOSBuffer());
-
-  if (url_data_->url_index()) {
-    url_data_->url_index()->TryInsert(url_data_.get());
-  }
+  url_data_->url_index()->TryInsert(url_data_.get());
 
   DCHECK(Available());
   url_data_->multibuffer()->OnDataProviderEvent(this);
@@ -475,7 +499,7 @@ void ResourceMultiBufferDataProvider::DidFail(const WebURLError& error) {
   DCHECK(active_loader_.get());
   active_loader_.reset();
 
-  if (!invalidated_ && retries_ < kMaxRetries && pos_ != 0) {
+  if (url_data_->url_index() && retries_ < kMaxRetries && pos_ != 0) {
     retries_++;
     task_runner_->PostDelayedTask(
         FROM_HERE,
@@ -490,8 +514,8 @@ void ResourceMultiBufferDataProvider::DidFail(const WebURLError& error) {
   }
 }
 
-void ResourceMultiBufferDataProvider::Invalidate() {
-  invalidated_ = true;
+bool ResourceMultiBufferDataProvider::IsStale() const {
+  return is_stale_;
 }
 
 bool ResourceMultiBufferDataProvider::ParseContentRange(
@@ -580,6 +604,11 @@ bool ResourceMultiBufferDataProvider::VerifyPartialResponse(
   bytes_to_discard_ = byte_pos() - first_byte_position;
 
   return true;
+}
+
+void ResourceMultiBufferDataProvider::SetStale() {
+  is_stale_ = true;
+  url_data_->multibuffer()->OnDataProviderEvent(this);
 }
 
 }  // namespace blink

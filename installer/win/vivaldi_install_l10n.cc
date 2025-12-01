@@ -59,7 +59,10 @@ void NormalizeLanguageCode(std::wstring& code) {
   }
   // The variant part should be be either two upper case letters if this is a c
   // country variant, or use the Name case for longer non-country names.
-  if (dash != std::wstring::npos && dash + 3 <= code.length()) {
+  if (dash != std::wstring::npos && code.length() > dash + 3) {
+    // Do nothing for post dash longer than 2, assume correct capitalization
+    // Reason: ca-valencia and sr-Latn have different normalized capitalizations
+  } else if (dash != std::wstring::npos && dash + 3 <= code.length()) {
     code[dash + 1] = base::ToUpperASCII(code[dash + 1]);
     if (dash + 3 == code.length()) {
       // The variant is country.

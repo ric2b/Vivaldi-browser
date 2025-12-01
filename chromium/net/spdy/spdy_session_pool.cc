@@ -12,7 +12,6 @@
 #include "base/containers/contains.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/types/expected.h"
 #include "base/values.h"
@@ -154,12 +153,14 @@ int SpdySessionPool::CreateAvailableSessionFromSocketHandle(
     std::unique_ptr<StreamSocketHandle> stream_socket_handle,
     const NetLogWithSource& net_log,
     const MultiplexedSessionCreationInitiator session_creation_initiator,
-    base::WeakPtr<SpdySession>* session) {
+    base::WeakPtr<SpdySession>* session,
+    SpdySessionInitiator spdy_session_initiator) {
   TRACE_EVENT0(NetTracingCategory(),
                "SpdySessionPool::CreateAvailableSessionFromSocketHandle");
 
   std::unique_ptr<SpdySession> new_session =
-      CreateSession(key, net_log.net_log(), session_creation_initiator);
+      CreateSession(key, net_log.net_log(), session_creation_initiator,
+                    spdy_session_initiator);
   std::set<std::string> dns_aliases =
       stream_socket_handle->socket()->GetDnsAliases();
 
@@ -181,12 +182,14 @@ SpdySessionPool::CreateAvailableSessionFromSocket(
     const SpdySessionKey& key,
     std::unique_ptr<StreamSocket> socket_stream,
     const LoadTimingInfo::ConnectTiming& connect_timing,
-    const NetLogWithSource& net_log) {
+    const NetLogWithSource& net_log,
+    SpdySessionInitiator spdy_session_initiator) {
   TRACE_EVENT0(NetTracingCategory(),
                "SpdySessionPool::CreateAvailableSessionFromSocket");
 
   std::unique_ptr<SpdySession> new_session = CreateSession(
-      key, net_log.net_log(), MultiplexedSessionCreationInitiator::kUnknown);
+      key, net_log.net_log(), MultiplexedSessionCreationInitiator::kUnknown,
+      spdy_session_initiator);
   std::set<std::string> dns_aliases = socket_stream->GetDnsAliases();
 
   new_session->InitializeWithSocket(std::move(socket_stream), connect_timing,
@@ -334,8 +337,7 @@ OnHostResolutionCallbackResult SpdySessionPool::OnHostResolutionComplete(
 
         auto available_session_it = LookupAvailableSessionByKey(alias_key);
         // It shouldn't be in the aliases table if it doesn't exist!
-        CHECK(available_session_it != available_sessions_.end(),
-              base::NotFatalUntil::M130);
+        CHECK(available_session_it != available_sessions_.end());
 
         SpdySessionKey::CompareForAliasingResult compare_result =
             alias_key.CompareForAliasing(key);
@@ -607,7 +609,7 @@ void SpdySessionPool::RemoveRequestForSpdySession(SpdySessionRequest* request) {
   DCHECK_EQ(this, request->spdy_session_pool());
 
   auto iter = spdy_session_request_map_.find(request->key());
-  CHECK(iter != spdy_session_request_map_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != spdy_session_request_map_.end());
 
   // Resume all pending requests if it is the blocking request, which is either
   // being canceled, or has completed.
@@ -706,7 +708,8 @@ void SpdySessionPool::CloseCurrentSessionsHelper(Error error,
 std::unique_ptr<SpdySession> SpdySessionPool::CreateSession(
     const SpdySessionKey& key,
     NetLog* net_log,
-    const MultiplexedSessionCreationInitiator session_creation_initiator) {
+    const MultiplexedSessionCreationInitiator session_creation_initiator,
+    SpdySessionInitiator spdy_session_initiator) {
   UMA_HISTOGRAM_ENUMERATION("Net.SpdySessionGet", IMPORTED_FROM_SOCKET,
                             SPDY_SESSION_GET_MAX);
 
@@ -733,7 +736,8 @@ std::unique_ptr<SpdySession> SpdySessionPool::CreateSession(
       session_max_queued_capped_frames_, initial_settings_,
       enable_http2_settings_grease_, greased_http2_frame_,
       http2_end_stream_with_data_frame_, enable_priority_update_, time_func_,
-      network_quality_estimator_, net_log, session_creation_initiator);
+      network_quality_estimator_, net_log, session_creation_initiator,
+      spdy_session_initiator);
 }
 
 base::expected<base::WeakPtr<SpdySession>, int> SpdySessionPool::InsertSession(

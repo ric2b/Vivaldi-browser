@@ -22,7 +22,10 @@
 #import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWFrameworkServerSocket+Internal.h"
 #import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWFrameworkServerSocket.h"
 #import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWFrameworkSocket.h"
+#import "internal/platform/implementation/apple/Mediums/WiFiCommon/GNCNWParameters.h"
 #import "GoogleToolboxForMac/GTMLogger.h"
+
+NS_ASSUME_NONNULL_BEGIN
 
 // An arbitrary timeout that should be pretty lenient.
 NSTimeInterval const GNCConnectionTimeoutInSeconds = 2;
@@ -60,6 +63,14 @@ NSDictionary<NSString *, NSString *> *GNCTXTRecordForBrowseResult(nw_browse_resu
   return txtRecords;
 }
 
+@interface GNCNWFramework ()
+- (nullable GNCNWFrameworkSocket *)internalConnectToEndpoint:(nw_endpoint_t)endpoint
+                                                 PSKIdentity:(nullable NSData *)PSKIdentity
+                                             PSKSharedSecret:(nullable NSData *)PSKSharedSecret
+                                           includePeerToPeer:(BOOL)includePeerToPeer
+                                                       error:(NSError **)error;
+@end
+
 @implementation GNCNWFramework {
   // Holds a weak reference to a server socket that is retrievable by port. This allows us to stop
   // advertisements for a given port without taking a strong reference. This keeps the ownership
@@ -73,6 +84,9 @@ NSDictionary<NSString *, NSString *> *GNCTXTRecordForBrowseResult(nw_browse_resu
   // service type. We maintain ownership of the browser's lifetime, so we can maintain a strong
   // reference.
   NSMutableDictionary<NSString *, nw_browser_t> *_serviceBrowsers;
+
+  // The dispatch queue used for all callbacks.
+  dispatch_queue_t _dispatchQueue;
 }
 
 - (instancetype)init {
@@ -80,6 +94,7 @@ NSDictionary<NSString *, NSString *> *GNCTXTRecordForBrowseResult(nw_browse_resu
     _includePeerToPeer = NO;
     _serverSockets = [NSMapTable strongToWeakObjectsMapTable];
     _serviceBrowsers = [[NSMutableDictionary alloc] init];
+    _dispatchQueue = dispatch_queue_create("GNCNWFramework", DISPATCH_QUEUE_SERIAL);
   }
   return self;
 }
@@ -99,17 +114,44 @@ static GNCNWFramework *gInstance = nil;
   return gInstance;
 }
 
-- (BOOL) isListeningForAnyService {
+- (BOOL)isListeningForAnyService {
   return _serverSockets.count > 0;
 }
 
-- (BOOL) isDiscoveringAnyService {
+- (BOOL)isDiscoveringAnyService {
   return _serviceBrowsers.count > 0;
 }
 
-- (GNCNWFrameworkServerSocket *)listenForServiceOnPort:(NSInteger)port error:(NSError **)error {
+- (nullable GNCNWFrameworkServerSocket *)listenForServiceOnPort:(NSInteger)port
+                                              includePeerToPeer:(BOOL)includePeerToPeer
+                                                          error:(NSError **)error {
+  GTMLoggerInfo(@"[GNCNWFramework] Listen on port: %ld with includePeerToPeer: %@.", (long)port,
+                (includePeerToPeer ? @"true" : @"false"));
   GNCNWFrameworkServerSocket *serverSocket = [[GNCNWFrameworkServerSocket alloc] initWithPort:port];
+  _includePeerToPeer = includePeerToPeer;
   BOOL success = [serverSocket startListeningWithError:error includePeerToPeer:_includePeerToPeer];
+  if (success) {
+    [_serverSockets setObject:serverSocket forKey:@(serverSocket.port)];
+    return serverSocket;
+  }
+  return nil;
+}
+
+- (nullable GNCNWFrameworkServerSocket *)listenForServiceWithPSKIdentity:(NSData *)PSKIdentity
+                                                         PSKSharedSecret:(NSData *)PSKSharedSecret
+                                                                    port:(NSInteger)port
+                                                       includePeerToPeer:(BOOL)includePeerToPeer
+                                                                   error:
+                                                                       (NSError **_Nullable)error {
+  GTMLoggerInfo(
+      @"[GNCNWFramework] Listen on port: %ld with includePeerToPeer: %@, and PSKIdentity: %@.",
+      (long)port, (includePeerToPeer ? @"true" : @"false"), PSKIdentity);
+  GNCNWFrameworkServerSocket *serverSocket = [[GNCNWFrameworkServerSocket alloc] initWithPort:port];
+  _includePeerToPeer = includePeerToPeer;
+  BOOL success = [serverSocket startListeningWithPSKIdentity:PSKIdentity
+                                             PSKSharedSecret:PSKSharedSecret
+                                           includePeerToPeer:_includePeerToPeer
+                                                       error:error];
   if (success) {
     [_serverSockets setObject:serverSocket forKey:@(serverSocket.port)];
     return serverSocket;
@@ -136,6 +178,7 @@ static GNCNWFramework *gInstance = nil;
 - (BOOL)startDiscoveryForServiceType:(NSString *)serviceType
                  serviceFoundHandler:(ServiceUpdateHandler)serviceFoundHandler
                   serviceLostHandler:(ServiceUpdateHandler)serviceLostHandler
+                   includePeerToPeer:(BOOL)includePeerToPeer
                                error:(NSError **)error {
   if ([_serviceBrowsers objectForKey:serviceType] != nil) {
     if (error != nil) {
@@ -148,16 +191,18 @@ static GNCNWFramework *gInstance = nil;
 
   // Create a parameters object configured to support TCP. TLS MUST be disabled for Nearby to
   // function properly.
-  nw_parameters_t parameters =
-      nw_parameters_create_secure_tcp(/*tls*/ NW_PARAMETERS_DISABLE_PROTOCOL,
-                                      /*tcp*/ NW_PARAMETERS_DEFAULT_CONFIGURATION);
-  nw_parameters_set_include_peer_to_peer(parameters, _includePeerToPeer);
+  _includePeerToPeer = includePeerToPeer;
+  nw_parameters_t parameters = GNCBuildNonTLSParameters(/*includePeerToPeer=*/_includePeerToPeer);
+  if (!parameters) {
+    GTMLoggerError(@"[GNCNWFramework] Failed to create NW parameters.");
+    return NO;
+  }
   nw_browse_descriptor_t descriptor =
       nw_browse_descriptor_create_bonjour_service([serviceType UTF8String], /*domain=*/nil);
   nw_browse_descriptor_set_include_txt_record(descriptor, YES);
   nw_browser_t browser = nw_browser_create(descriptor, parameters);
 
-  nw_browser_set_queue(browser, dispatch_get_main_queue());
+  nw_browser_set_queue(browser, _dispatchQueue);
 
   nw_browser_set_browse_results_changed_handler(browser, ^(nw_browse_result_t old_result,
                                                            nw_browse_result_t new_result,
@@ -276,35 +321,76 @@ static GNCNWFramework *gInstance = nil;
   nw_browser_cancel(browser);
 }
 
-- (GNCNWFrameworkSocket *)connectToServiceName:(NSString *)serviceName
-                                   serviceType:(NSString *)serviceType
-                                         error:(NSError **)error {
+- (nullable GNCNWFrameworkSocket *)connectToServiceName:(NSString *)serviceName
+                                            serviceType:(NSString *)serviceType
+                                                  error:(NSError **)error {
+  GTMLoggerInfo(@"[GNCNWFramework] Connect to service {serviceName:%@, serviceType:%@, "
+                @"includePeerToPeer:%@}.",
+                serviceName, serviceType, (_includePeerToPeer ? @"true" : @"false"));
   nw_endpoint_t endpoint = nw_endpoint_create_bonjour_service([serviceName UTF8String],
                                                               [serviceType UTF8String], "local");
-  return [self connectToEndpoint:endpoint includePeerToPeer:_includePeerToPeer error:error];
+  return [self internalConnectToEndpoint:endpoint
+                             PSKIdentity:nil
+                         PSKSharedSecret:nil
+                       includePeerToPeer:_includePeerToPeer
+                                   error:error];
 }
 
-- (GNCNWFrameworkSocket *)connectToHost:(GNCIPv4Address *)host
-                                   port:(NSInteger)port
-                                  error:(NSError **)error {
+- (nullable GNCNWFrameworkSocket *)connectToServiceName:(NSString *)serviceName
+                                            serviceType:(NSString *)serviceType
+                                            PSKIdentity:(NSData *)PSKIdentity
+                                        PSKSharedSecret:(NSData *)PSKSharedSecret
+                                                  error:(NSError **_Nullable)error {
+  GTMLoggerInfo(@"[GNCNWFramework] Connect to service {serviceName:%@, serviceType:%@, "
+                @"includePeerToPeer:%@}.",
+                serviceName, serviceType, (_includePeerToPeer ? @"true" : @"false"));
+  nw_endpoint_t endpoint = nw_endpoint_create_bonjour_service([serviceName UTF8String],
+                                                              [serviceType UTF8String], "local");
+  return [self internalConnectToEndpoint:endpoint
+                             PSKIdentity:PSKIdentity
+                         PSKSharedSecret:PSKSharedSecret
+                       includePeerToPeer:_includePeerToPeer
+                                   error:error];
+}
+
+- (nullable GNCNWFrameworkSocket *)connectToHost:(GNCIPv4Address *)host
+                                            port:(NSInteger)port
+                               includePeerToPeer:(BOOL)includePeerToPeer
+                                           error:(NSError **)error {
+  GTMLoggerInfo(@"[GNCNWFramework] Connect to host {host:%s, port:%ld}.",
+                host.dottedRepresentation.UTF8String, (long)port);
   nw_endpoint_t endpoint =
       nw_endpoint_create_host(host.dottedRepresentation.UTF8String, @(port).stringValue.UTF8String);
-  return [self connectToEndpoint:endpoint includePeerToPeer:(BOOL)NO error:error];
+  return [self internalConnectToEndpoint:endpoint
+                             PSKIdentity:nil
+                         PSKSharedSecret:nil
+                       includePeerToPeer:(BOOL)includePeerToPeer
+                                   error:error];
 }
 
-- (GNCNWFrameworkSocket *)connectToEndpoint:(nw_endpoint_t)endpoint
-                          includePeerToPeer:(BOOL)includePeerToPeer
-                                      error:(NSError **)error {
+// MARK: - Private Methods (Implementation)
+
+- (nullable GNCNWFrameworkSocket *)internalConnectToEndpoint:(nw_endpoint_t)endpoint
+                                                 PSKIdentity:(nullable NSData *)PSKIdentity
+                                             PSKSharedSecret:(nullable NSData *)PSKSharedSecret
+                                           includePeerToPeer:(BOOL)includePeerToPeer
+                                                       error:(NSError **)error {
   NSCondition *condition = [[NSCondition alloc] init];
   [condition lock];
 
   __block nw_connection_state_t blockResult = nw_connection_state_invalid;
   __block NSError *blockError = nil;
 
+  _includePeerToPeer = includePeerToPeer;
   nw_parameters_t parameters =
-      nw_parameters_create_secure_tcp(/*tls*/ NW_PARAMETERS_DISABLE_PROTOCOL,
-                                      /*tcp*/ NW_PARAMETERS_DEFAULT_CONFIGURATION);
-  nw_parameters_set_include_peer_to_peer(parameters, includePeerToPeer);
+      (PSKIdentity == nil || PSKSharedSecret == nil)
+          ? GNCBuildNonTLSParameters(/*includePeerToPeer=*/_includePeerToPeer)
+          : GNCBuildTLSParameters(/*PSK=*/PSKSharedSecret, /*identity=*/PSKIdentity,
+                                  /*includePeerToPeer=*/_includePeerToPeer);
+  if (!parameters) {
+    GTMLoggerError(@"[GNCNWFramework] Failed to create NW parameters.");
+    return nil;
+  }
   nw_connection_t connection = nw_connection_create(endpoint, parameters);
   nw_connection_set_queue(connection, dispatch_get_main_queue());
   nw_connection_set_state_changed_handler(
@@ -341,6 +427,7 @@ static GNCNWFramework *gInstance = nil;
     *error = blockError;
   }
 
+  GTMLoggerInfo(@"[GNCNWFramework] Connect to endpoint result %@", @(blockResult));
   switch (blockResult) {
     case nw_connection_state_invalid:
     case nw_connection_state_waiting:
@@ -354,3 +441,5 @@ static GNCNWFramework *gInstance = nil;
 }
 
 @end
+
+NS_ASSUME_NONNULL_END

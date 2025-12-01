@@ -27,7 +27,17 @@ fn main() {
 
     let build_target = std::env::var("TARGET").unwrap();
     if !build_target.contains("android") {
-        panic!("Not an android target: {build_target}");
+        println!("cargo::warning=Not an android target: {build_target}");
+        // Define CRABBYAVIF_ANDROID_NDK_MEDIA_BINDINGS_RS to avoid src/lib.rs
+        // complaining about either undefined env!() or non-literal string.
+        // Point to an empty file as a no-op.
+        println!(
+            "cargo:rustc-env=CRABBYAVIF_ANDROID_NDK_MEDIA_BINDINGS_RS={}",
+            PathBuf::from(&PathBuf::from(env!("CARGO_MANIFEST_DIR")))
+                .join(path_buf(&["src", "empty.rs"]))
+                .display()
+        );
+        return;
     };
 
     // Generate bindings.
@@ -37,7 +47,7 @@ fn main() {
     let host_tag = "linux-x86_64"; // TODO: Support windows and mac.
     let sysroot = format!(
         "{}/toolchains/llvm/prebuilt/{}/sysroot/",
-        env!("ANDROID_NDK_ROOT"),
+        option_env!("ANDROID_NDK_ROOT").unwrap(),
         host_tag
     );
     let mut bindings = bindgen::Builder::default()

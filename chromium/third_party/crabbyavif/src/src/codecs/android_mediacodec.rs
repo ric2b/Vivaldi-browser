@@ -14,11 +14,13 @@
 
 use crate::codecs::Decoder;
 use crate::codecs::DecoderConfig;
+use crate::decoder::CodecChoice;
+use crate::decoder::GridImageHelper;
 use crate::image::Image;
 use crate::image::YuvRange;
-use crate::internal_utils::pixels::*;
 use crate::internal_utils::stream::IStream;
 use crate::internal_utils::*;
+use crate::utils::pixels::*;
 use crate::*;
 
 use ndk_sys::bindings::*;
@@ -268,12 +270,15 @@ impl MediaFormat {
             color_format: self.color_format()?.into(),
             ..Default::default()
         };
+        // Clippy suggests using an iterator with an enumerator which does not seem more readable
+        // than using explicit indices.
+        #[allow(clippy::needless_range_loop)]
         for plane_index in 0usize..3 {
             plane_info.offset[plane_index] = isize_from_u32(planes[plane_index].mOffset)?;
             plane_info.row_stride[plane_index] = u32_from_i32(planes[plane_index].mRowInc)?;
             plane_info.column_stride[plane_index] = u32_from_i32(planes[plane_index].mColInc)?;
         }
-        return Ok(plane_info);
+        Ok(plane_info)
     }
 }
 
@@ -378,8 +383,10 @@ pub struct MediaCodec {
 impl MediaCodec {
     const AV1_MIME: &str = "video/av01";
     const HEVC_MIME: &str = "video/hevc";
+    const MAX_RETRIES: u32 = 100;
+    const TIMEOUT: u32 = 10000;
 
-    fn initialize_impl(&mut self) -> AvifResult<()> {
+    fn initialize_impl(&mut self, low_latency: bool) -> AvifResult<()> {
         let config = self.config.unwrap_ref();
         if self.codec_index >= self.codec_initializers.len() {
             return Err(AvifError::NoCodecAvailable);
@@ -405,15 +412,19 @@ impl MediaCodec {
                 format,
                 AMEDIAFORMAT_KEY_COLOR_FORMAT,
                 if config.depth == 8 {
+                    // For 8-bit images, always use Yuv420Flexible.
                     AndroidMediaCodecOutputColorFormat::Yuv420Flexible
                 } else {
-                    AndroidMediaCodecOutputColorFormat::P010
+                    // For all other images, use whatever format is requested.
+                    config.android_mediacodec_output_color_format
                 } as i32,
             );
-            // low-latency is documented but isn't exposed as a constant in the NDK:
-            // https://developer.android.com/reference/android/media/MediaFormat#KEY_LOW_LATENCY
-            c_str!(low_latency, low_latency_tmp, "low-latency");
-            AMediaFormat_setInt32(format, low_latency, 1);
+            if low_latency {
+                // low-latency is documented but isn't exposed as a constant in the NDK:
+                // https://developer.android.com/reference/android/media/MediaFormat#KEY_LOW_LATENCY
+                c_str!(low_latency_str, low_latency_tmp, "low-latency");
+                AMediaFormat_setInt32(format, low_latency_str, 1);
+            }
             AMediaFormat_setInt32(
                 format,
                 AMEDIAFORMAT_KEY_MAX_INPUT_SIZE,
@@ -428,6 +439,10 @@ impl MediaCodec {
                     codec_specific_data.len(),
                 );
             }
+            // For video codecs, 0 is the highest importance (higher the number lesser the
+            // importance). To make codec for images less important, give it a value more than 0.
+            c_str!(importance, importance_tmp, "importance");
+            AMediaFormat_setInt32(format, importance, 1);
         }
 
         let codec = match &self.codec_initializers[self.codec_index] {
@@ -465,126 +480,15 @@ impl MediaCodec {
         Ok(())
     }
 
-    fn get_next_image_impl(
-        &mut self,
-        payload: &[u8],
-        _spatial_id: u8,
+    fn output_buffer_to_image(
+        &self,
+        buffer: *mut u8,
         image: &mut Image,
         category: Category,
     ) -> AvifResult<()> {
-        if self.codec.is_none() {
-            self.initialize_impl()?;
-        }
-        let codec = self.codec.unwrap();
-        if self.output_buffer_index.is_some() {
-            // Release any existing output buffer.
-            unsafe {
-                AMediaCodec_releaseOutputBuffer(codec, self.output_buffer_index.unwrap(), false);
-            }
-        }
-        let mut retry_count = 0;
-        unsafe {
-            while retry_count < 100 {
-                retry_count += 1;
-                let input_index = AMediaCodec_dequeueInputBuffer(codec, 10000);
-                if input_index >= 0 {
-                    let mut input_buffer_size: usize = 0;
-                    let input_buffer = AMediaCodec_getInputBuffer(
-                        codec,
-                        input_index as usize,
-                        &mut input_buffer_size as *mut _,
-                    );
-                    if input_buffer.is_null() {
-                        return Err(AvifError::UnknownError(format!(
-                            "input buffer at index {input_index} was null"
-                        )));
-                    }
-                    let hevc_whole_nal_units = self.hevc_whole_nal_units(payload)?;
-                    let codec_payload = match &hevc_whole_nal_units {
-                        Some(hevc_payload) => hevc_payload,
-                        None => payload,
-                    };
-                    if input_buffer_size < codec_payload.len() {
-                        return Err(AvifError::UnknownError(format!(
-                        "input buffer (size {input_buffer_size}) was not big enough. required size: {}",
-                        codec_payload.len()
-                    )));
-                    }
-                    ptr::copy_nonoverlapping(
-                        codec_payload.as_ptr(),
-                        input_buffer,
-                        codec_payload.len(),
-                    );
-
-                    if AMediaCodec_queueInputBuffer(
-                        codec,
-                        usize_from_isize(input_index)?,
-                        /*offset=*/ 0,
-                        codec_payload.len(),
-                        /*pts=*/ 0,
-                        /*flags=*/ 0,
-                    ) != media_status_t_AMEDIA_OK
-                    {
-                        return Err(AvifError::UnknownError("".into()));
-                    }
-                    break;
-                } else if input_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
-                    continue;
-                } else {
-                    return Err(AvifError::UnknownError(format!(
-                        "got input index < 0: {input_index}"
-                    )));
-                }
-            }
-        }
-        let mut buffer: Option<*mut u8> = None;
-        let mut buffer_size: usize = 0;
-        let mut buffer_info = AMediaCodecBufferInfo::default();
-        retry_count = 0;
-        while retry_count < 100 {
-            retry_count += 1;
-            unsafe {
-                let output_index =
-                    AMediaCodec_dequeueOutputBuffer(codec, &mut buffer_info as *mut _, 10000);
-                if output_index >= 0 {
-                    let output_buffer = AMediaCodec_getOutputBuffer(
-                        codec,
-                        usize_from_isize(output_index)?,
-                        &mut buffer_size as *mut _,
-                    );
-                    if output_buffer.is_null() {
-                        return Err(AvifError::UnknownError("output buffer is null".into()));
-                    }
-                    buffer = Some(output_buffer);
-                    self.output_buffer_index = Some(usize_from_isize(output_index)?);
-                    break;
-                } else if output_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED as isize {
-                    continue;
-                } else if output_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED as isize {
-                    let format = AMediaCodec_getOutputFormat(codec);
-                    if format.is_null() {
-                        return Err(AvifError::UnknownError("output format was null".into()));
-                    }
-                    self.format = Some(MediaFormat { format });
-                    continue;
-                } else if output_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
-                    continue;
-                } else {
-                    return Err(AvifError::UnknownError(format!(
-                        "mediacodec dequeue_output_buffer failed: {output_index}"
-                    )));
-                }
-            }
-        }
-        if buffer.is_none() {
-            return Err(AvifError::UnknownError(
-                "did not get buffer from mediacodec".into(),
-            ));
-        }
         if self.format.is_none() {
             return Err(AvifError::UnknownError("format is none".into()));
         }
-        let buffer = buffer.unwrap();
         let format = self.format.unwrap_ref();
         image.width = format.width()? as u32;
         image.height = format.height()? as u32;
@@ -594,7 +498,6 @@ impl MediaCodec {
         image.yuv_format = plane_info.pixel_format();
         match category {
             Category::Alpha => {
-                // TODO: make sure alpha plane matches previous alpha plane.
                 image.row_bytes[3] = plane_info.row_stride[0];
                 image.planes[3] = Some(Pixels::from_raw_pointer(
                     unsafe { buffer.offset(plane_info.offset[0]) },
@@ -642,6 +545,223 @@ impl MediaCodec {
         Ok(())
     }
 
+    fn enqueue_payload(&self, input_index: isize, payload: &[u8], flags: u32) -> AvifResult<()> {
+        let codec = self.codec.unwrap();
+        let mut input_buffer_size: usize = 0;
+        let input_buffer = unsafe {
+            AMediaCodec_getInputBuffer(
+                codec,
+                input_index as usize,
+                &mut input_buffer_size as *mut _,
+            )
+        };
+        if input_buffer.is_null() {
+            return Err(AvifError::UnknownError(format!(
+                "input buffer at index {input_index} was null"
+            )));
+        }
+        let hevc_whole_nal_units = self.hevc_whole_nal_units(payload)?;
+        let codec_payload = match &hevc_whole_nal_units {
+            Some(hevc_payload) => hevc_payload,
+            None => payload,
+        };
+        if input_buffer_size < codec_payload.len() {
+            return Err(AvifError::UnknownError(format!(
+                "input buffer (size {input_buffer_size}) was not big enough. required size: {}",
+                codec_payload.len()
+            )));
+        }
+        unsafe {
+            ptr::copy_nonoverlapping(codec_payload.as_ptr(), input_buffer, codec_payload.len());
+
+            if AMediaCodec_queueInputBuffer(
+                codec,
+                usize_from_isize(input_index)?,
+                /*offset=*/ 0,
+                codec_payload.len(),
+                /*pts=*/ 0,
+                flags,
+            ) != media_status_t_AMEDIA_OK
+            {
+                return Err(AvifError::UnknownError("".into()));
+            }
+        }
+        Ok(())
+    }
+
+    fn get_next_image_impl(
+        &mut self,
+        payload: &[u8],
+        _spatial_id: u8,
+        image: &mut Image,
+        category: Category,
+    ) -> AvifResult<()> {
+        if self.codec.is_none() {
+            self.initialize_impl(/*low_latency=*/ true)?;
+        }
+        let codec = self.codec.unwrap();
+        if self.output_buffer_index.is_some() {
+            // Release any existing output buffer.
+            unsafe {
+                AMediaCodec_releaseOutputBuffer(codec, self.output_buffer_index.unwrap(), false);
+            }
+        }
+        let mut retry_count = 0;
+        unsafe {
+            while retry_count < Self::MAX_RETRIES {
+                retry_count += 1;
+                let input_index = AMediaCodec_dequeueInputBuffer(codec, Self::TIMEOUT as _);
+                if input_index >= 0 {
+                    self.enqueue_payload(input_index, payload, 0)?;
+                    break;
+                } else if input_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
+                    continue;
+                } else {
+                    return Err(AvifError::UnknownError(format!(
+                        "got input index < 0: {input_index}"
+                    )));
+                }
+            }
+        }
+        let mut buffer: Option<*mut u8> = None;
+        let mut buffer_size: usize = 0;
+        let mut buffer_info = AMediaCodecBufferInfo::default();
+        retry_count = 0;
+        while retry_count < Self::MAX_RETRIES {
+            retry_count += 1;
+            unsafe {
+                let output_index = AMediaCodec_dequeueOutputBuffer(
+                    codec,
+                    &mut buffer_info as *mut _,
+                    Self::TIMEOUT as _,
+                );
+                if output_index >= 0 {
+                    let output_buffer = AMediaCodec_getOutputBuffer(
+                        codec,
+                        usize_from_isize(output_index)?,
+                        &mut buffer_size as *mut _,
+                    );
+                    if output_buffer.is_null() {
+                        return Err(AvifError::UnknownError("output buffer is null".into()));
+                    }
+                    buffer = Some(output_buffer);
+                    self.output_buffer_index = Some(usize_from_isize(output_index)?);
+                    break;
+                } else if output_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED as isize {
+                    continue;
+                } else if output_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED as isize {
+                    let format = AMediaCodec_getOutputFormat(codec);
+                    if format.is_null() {
+                        return Err(AvifError::UnknownError("output format was null".into()));
+                    }
+                    self.format = Some(MediaFormat { format });
+                    continue;
+                } else if output_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
+                    continue;
+                } else {
+                    return Err(AvifError::UnknownError(format!(
+                        "mediacodec dequeue_output_buffer failed: {output_index}"
+                    )));
+                }
+            }
+        }
+        if buffer.is_none() {
+            return Err(AvifError::UnknownError(
+                "did not get buffer from mediacodec".into(),
+            ));
+        }
+        self.output_buffer_to_image(buffer.unwrap(), image, category)?;
+        Ok(())
+    }
+
+    fn get_next_image_grid_impl(
+        &mut self,
+        payloads: &[Vec<u8>],
+        grid_image_helper: &mut GridImageHelper,
+    ) -> AvifResult<()> {
+        if self.codec.is_none() {
+            self.initialize_impl(/*low_latency=*/ false)?;
+        }
+        let codec = self.codec.unwrap();
+        let mut retry_count = 0;
+        let mut payloads_iter = payloads.iter().peekable();
+        unsafe {
+            while !grid_image_helper.is_grid_complete()? {
+                // Queue as many inputs as we possibly can, then block on dequeuing outputs. After
+                // getting each output, come back and queue the inputs again to keep the decoder as
+                // busy as possible.
+                while payloads_iter.peek().is_some() {
+                    let input_index = AMediaCodec_dequeueInputBuffer(codec, 0);
+                    if input_index < 0 {
+                        if retry_count >= Self::MAX_RETRIES {
+                            return Err(AvifError::UnknownError("max retries exceeded".into()));
+                        }
+                        break;
+                    }
+                    let payload = payloads_iter.next().unwrap();
+                    self.enqueue_payload(
+                        input_index,
+                        payload,
+                        if payloads_iter.peek().is_some() {
+                            0
+                        } else {
+                            AMEDIACODEC_BUFFER_FLAG_END_OF_STREAM as u32
+                        },
+                    )?;
+                }
+                loop {
+                    let mut buffer_info = AMediaCodecBufferInfo::default();
+                    let output_index = AMediaCodec_dequeueOutputBuffer(
+                        codec,
+                        &mut buffer_info as *mut _,
+                        Self::TIMEOUT as _,
+                    );
+                    if output_index == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED as isize {
+                        continue;
+                    } else if output_index == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED as isize {
+                        let format = AMediaCodec_getOutputFormat(codec);
+                        if format.is_null() {
+                            return Err(AvifError::UnknownError("output format was null".into()));
+                        }
+                        self.format = Some(MediaFormat { format });
+                        continue;
+                    } else if output_index == AMEDIACODEC_INFO_TRY_AGAIN_LATER as isize {
+                        retry_count += 1;
+                        if retry_count >= Self::MAX_RETRIES {
+                            return Err(AvifError::UnknownError("max retries exceeded".into()));
+                        }
+                        break;
+                    } else if output_index < 0 {
+                        return Err(AvifError::UnknownError("".into()));
+                    } else {
+                        let mut buffer_size: usize = 0;
+                        let output_buffer = AMediaCodec_getOutputBuffer(
+                            codec,
+                            usize_from_isize(output_index)?,
+                            &mut buffer_size as *mut _,
+                        );
+                        if output_buffer.is_null() {
+                            return Err(AvifError::UnknownError("output buffer is null".into()));
+                        }
+                        let mut cell_image = Image::default();
+                        self.output_buffer_to_image(
+                            output_buffer,
+                            &mut cell_image,
+                            grid_image_helper.category,
+                        )?;
+                        grid_image_helper.copy_from_cell_image(&mut cell_image)?;
+                        if !grid_image_helper.is_grid_complete()? {
+                            // The last output buffer will be released when the codec is dropped.
+                            AMediaCodec_releaseOutputBuffer(codec, output_index as _, false);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn drop_impl(&mut self) {
         if self.codec.is_some() {
             if self.output_buffer_index.is_some() {
@@ -665,6 +785,10 @@ impl MediaCodec {
 }
 
 impl Decoder for MediaCodec {
+    fn codec(&self) -> CodecChoice {
+        CodecChoice::MediaCodec
+    }
+
     fn initialize(&mut self, config: &DecoderConfig) -> AvifResult<()> {
         self.codec_initializers = get_codec_initializers(config);
         self.config = Some(config.clone());
@@ -682,6 +806,26 @@ impl Decoder for MediaCodec {
     ) -> AvifResult<()> {
         while self.codec_index < self.codec_initializers.len() {
             let res = self.get_next_image_impl(payload, spatial_id, image, category);
+            if res.is_ok() {
+                return Ok(());
+            }
+            // Drop the current codec and try the next one.
+            self.drop_impl();
+            self.codec_index += 1;
+        }
+        Err(AvifError::UnknownError(
+            "all the codecs failed to extract an image".into(),
+        ))
+    }
+
+    fn get_next_image_grid(
+        &mut self,
+        payloads: &[Vec<u8>],
+        _spatial_id: u8,
+        grid_image_helper: &mut GridImageHelper,
+    ) -> AvifResult<()> {
+        while self.codec_index < self.codec_initializers.len() {
+            let res = self.get_next_image_grid_impl(payloads, grid_image_helper);
             if res.is_ok() {
                 return Ok(());
             }

@@ -24,6 +24,11 @@ std::map<SignalKey, FeatureQuery> DefaultBrowserPromo::GetInputs() {
            .tensor_length = 1,
            .fill_policy = proto::CustomInput::FILL_FROM_INPUT_CONTEXT,
            .name = kHasDefaultBrowserPromoShownInOtherSurface})},
+      {kIsUserSignedIn,
+       FeatureQuery::FromCustomInput(MetadataWriter::CustomInput{
+           .tensor_length = 1,
+           .fill_policy = proto::CustomInput::FILL_FROM_INPUT_CONTEXT,
+           .name = kIsUserSignedIn})},
       {kShouldShowNonRoleManagerDefaultBrowserPromo,
        FeatureQuery::FromCustomInput(MetadataWriter::CustomInput{
            .tensor_length = 1,
@@ -54,19 +59,27 @@ CardSelectionInfo::ShowResult DefaultBrowserPromo::ComputeCardResult(
     return result;
   }
 
-  std::optional<float> resultForShouldShowNonRoleManagerDefaultBrowserPromo =
-      signals.GetSignal(kShouldShowNonRoleManagerDefaultBrowserPromo);
-  std::optional<float> resultForHasDefaultBrowserPromoShownInOtherSurface =
-      signals.GetSignal(kHasDefaultBrowserPromoShownInOtherSurface);
+  std::optional<float> result_for_is_user_signed_in =
+      signals.GetSignal(kIsUserSignedIn);
+  std::optional<float>
+      result_for_should_show_non_role_manager_default_browser_promo =
+          signals.GetSignal(kShouldShowNonRoleManagerDefaultBrowserPromo);
+  std::optional<float>
+      result_for_has_default_browser_promo_shown_in_other_surface =
+          signals.GetSignal(kHasDefaultBrowserPromoShownInOtherSurface);
 
-  if (!resultForShouldShowNonRoleManagerDefaultBrowserPromo.has_value() ||
-      !resultForHasDefaultBrowserPromoShownInOtherSurface.has_value()) {
+  if (!result_for_is_user_signed_in.has_value() ||
+      !result_for_should_show_non_role_manager_default_browser_promo
+           .has_value() ||
+      !result_for_has_default_browser_promo_shown_in_other_surface
+           .has_value()) {
     result.position = EphemeralHomeModuleRank::kNotShown;
     return result;
   }
 
-  if (*resultForShouldShowNonRoleManagerDefaultBrowserPromo &&
-      !*resultForHasDefaultBrowserPromoShownInOtherSurface) {
+  if (*result_for_is_user_signed_in &&
+      *result_for_should_show_non_role_manager_default_browser_promo &&
+      !*result_for_has_default_browser_promo_shown_in_other_surface) {
     result.position = EphemeralHomeModuleRank::kLast;
     return result;
   }
@@ -75,7 +88,8 @@ CardSelectionInfo::ShowResult DefaultBrowserPromo::ComputeCardResult(
   return result;
 }
 
-bool DefaultBrowserPromo::IsEnabled(int impression_count) {
+bool DefaultBrowserPromo::IsEnabled(bool is_in_enabled_cards_set,
+                                    int impression_count) {
   std::optional<CardSelectionInfo::ShowResult> forced_result =
       GetForcedEphemeralModuleShowResult();
 
@@ -85,7 +99,8 @@ bool DefaultBrowserPromo::IsEnabled(int impression_count) {
     return true;
   }
 
-  if (!base::FeatureList::IsEnabled(features::kEducationalTipModule)) {
+  if (!base::FeatureList::IsEnabled(features::kEducationalTipModule) ||
+      !is_in_enabled_cards_set) {
     return false;
   }
 

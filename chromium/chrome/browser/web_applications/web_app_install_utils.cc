@@ -31,7 +31,6 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -45,6 +44,7 @@
 #include "chrome/browser/web_applications/os_integration/web_app_file_handler_manager.h"
 #include "chrome/browser/web_applications/policy/pre_redirection_url_observer.h"
 #include "chrome/browser/web_applications/scope_extension_info.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
@@ -737,6 +737,11 @@ void UpdateWebAppInfoFromManifest(const blink::mojom::Manifest& manifest,
 
   if (manifest.scope.is_valid())
     web_app_info->scope = manifest.scope;
+  // Ensure scope is derived if empty after processing manifest.
+  if (web_app_info->scope.is_empty()) {
+    web_app_info->scope = web_app_info->start_url().GetWithoutFilename();
+  }
+  CHECK(!web_app_info->scope.is_empty());
 
   if (manifest.has_theme_color) {
     web_app_info->theme_color =
@@ -1075,9 +1080,6 @@ WebAppManagement::Type ConvertInstallSurfaceToWebAppSource(
 
     case webapps::WebappInstallSource::MICROSOFT_365_SETUP:
       return WebAppManagement::kOneDriveIntegration;
-
-    case webapps::WebappInstallSource::COUNT:
-      NOTREACHED();
   }
 }
 
@@ -1106,7 +1108,13 @@ void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
 
   web_app.SetDescription(base::UTF16ToUTF8(web_app_info.description));
   web_app.SetLaunchQueryParams(web_app_info.launch_query_params);
-  web_app.SetScope(web_app_info.scope);
+  if (web_app_info.scope.is_valid()) {
+    web_app.SetScope(web_app_info.scope);
+  } else {
+    web_app.SetScope(web_app_info.start_url().GetWithoutFilename());
+  }
+  CHECK(!web_app.scope().is_empty());
+
   DCHECK(!web_app_info.theme_color.has_value() ||
          SkColorGetA(*web_app_info.theme_color) == SK_AlphaOPAQUE);
   web_app.SetThemeColor(web_app_info.theme_color);
@@ -1127,8 +1135,8 @@ void SetWebAppManifestFields(const WebAppInstallInfo& web_app_info,
   sync_pb::WebAppSpecifics sync_proto = web_app.sync_proto();
   // Sync proto has already been initialized by setting the start_url and/or
   // manifest_id above.
-  CHECK(sync_proto.has_start_url(), base::NotFatalUntil::M126);
-  CHECK(sync_proto.has_relative_manifest_id(), base::NotFatalUntil::M126);
+  CHECK(sync_proto.has_start_url());
+  CHECK(sync_proto.has_relative_manifest_id());
   sync_proto.set_name(base::UTF16ToUTF8(web_app_info.title));
   sync_proto.clear_theme_color();
   if (web_app_info.theme_color.has_value()) {

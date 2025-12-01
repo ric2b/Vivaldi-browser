@@ -20,59 +20,69 @@ constexpr float kDefaultPosition = 0.5f;
 }  // namespace
 
 CPDF_IconFit::CPDF_IconFit(RetainPtr<const CPDF_Dictionary> pDict)
-    : m_pDict(std::move(pDict)) {}
+    : dict_(std::move(pDict)) {}
 
 CPDF_IconFit::CPDF_IconFit(const CPDF_IconFit& that) = default;
 
 CPDF_IconFit::~CPDF_IconFit() = default;
 
 CPDF_IconFit::ScaleMethod CPDF_IconFit::GetScaleMethod() const {
-  if (!m_pDict)
+  if (!dict_) {
     return ScaleMethod::kAlways;
+  }
 
-  ByteString csSW = m_pDict->GetByteStringFor("SW", "A");
-  if (csSW == "B")
+  ByteString csSW = dict_->GetByteStringFor("SW", "A");
+  if (csSW == "B") {
     return ScaleMethod::kBigger;
-  if (csSW == "S")
+  }
+  if (csSW == "S") {
     return ScaleMethod::kSmaller;
-  if (csSW == "N")
+  }
+  if (csSW == "N") {
     return ScaleMethod::kNever;
+  }
   return ScaleMethod::kAlways;
 }
 
 bool CPDF_IconFit::IsProportionalScale() const {
-  return !m_pDict || m_pDict->GetByteStringFor("S", "P") != "A";
+  return !dict_ || dict_->GetByteStringFor("S", "P") != "A";
 }
 
 CFX_PointF CPDF_IconFit::GetIconBottomLeftPosition() const {
   float fLeft = kDefaultPosition;
   float fBottom = kDefaultPosition;
-  if (!m_pDict)
+  if (!dict_) {
     return {fLeft, fBottom};
+  }
 
-  RetainPtr<const CPDF_Array> pA = m_pDict->GetArrayFor("A");
-  if (!pA)
+  RetainPtr<const CPDF_Array> pA = dict_->GetArrayFor("A");
+  if (!pA) {
     return {fLeft, fBottom};
+  }
 
   size_t dwCount = pA->size();
-  if (dwCount > 0)
+  if (dwCount > 0) {
     fLeft = pA->GetFloatAt(0);
-  if (dwCount > 1)
+  }
+  if (dwCount > 1) {
     fBottom = pA->GetFloatAt(1);
+  }
   return {fLeft, fBottom};
 }
 
 bool CPDF_IconFit::GetFittingBounds() const {
-  return m_pDict && m_pDict->GetBooleanFor("FB", false);
+  return dict_ && dict_->GetBooleanFor("FB", false);
 }
 
 CFX_PointF CPDF_IconFit::GetIconPosition() const {
-  if (!m_pDict)
+  if (!dict_) {
     return CFX_PointF();
+  }
 
-  RetainPtr<const CPDF_Array> pA = m_pDict->GetArrayFor("A");
-  if (!pA)
+  RetainPtr<const CPDF_Array> pA = dict_->GetArrayFor("A");
+  if (!pA) {
     return CFX_PointF();
+  }
 
   size_t dwCount = pA->size();
   return {dwCount > 0 ? pA->GetFloatAt(0) : 0.0f,
@@ -93,16 +103,20 @@ CFX_VectorF CPDF_IconFit::GetScale(const CFX_SizeF& image_size,
       fVScale = fPlateHeight / std::max(fImageHeight, 1.0f);
       break;
     case CPDF_IconFit::ScaleMethod::kBigger:
-      if (fPlateWidth < fImageWidth)
+      if (fPlateWidth < fImageWidth) {
         fHScale = fPlateWidth / std::max(fImageWidth, 1.0f);
-      if (fPlateHeight < fImageHeight)
+      }
+      if (fPlateHeight < fImageHeight) {
         fVScale = fPlateHeight / std::max(fImageHeight, 1.0f);
+      }
       break;
     case CPDF_IconFit::ScaleMethod::kSmaller:
-      if (fPlateWidth > fImageWidth)
+      if (fPlateWidth > fImageWidth) {
         fHScale = fPlateWidth / std::max(fImageWidth, 1.0f);
-      if (fPlateHeight > fImageHeight)
+      }
+      if (fPlateHeight > fImageHeight) {
         fVScale = fPlateHeight / std::max(fImageHeight, 1.0f);
+      }
       break;
     case CPDF_IconFit::ScaleMethod::kNever:
       break;

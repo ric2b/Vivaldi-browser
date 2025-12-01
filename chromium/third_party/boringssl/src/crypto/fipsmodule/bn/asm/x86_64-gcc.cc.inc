@@ -76,19 +76,17 @@
 #undef mul_add
 
 // "m"(a), "+m"(r)	is the way to favor DirectPath µ-code;
-// "g"(0)		let the compiler to decide where does it
-//			want to keep the value of zero;
 #define mul_add(r, a, word, carry)                                         \
   do {                                                                     \
     BN_ULONG high, low;                                                    \
     __asm__("mulq %3" : "=a"(low), "=d"(high) : "a"(word), "m"(a) : "cc"); \
-    __asm__("addq %2,%0; adcq %3,%1"                                       \
+    __asm__("addq %2,%0; adcq $0,%1"                                       \
             : "+r"(carry), "+d"(high)                                      \
-            : "a"(low), "g"(0)                                             \
+            : "a"(low)                                                     \
             : "cc");                                                       \
-    __asm__("addq %2,%0; adcq %3,%1"                                       \
+    __asm__("addq %2,%0; adcq $0,%1"                                       \
             : "+m"(r), "+d"(high)                                          \
-            : "r"(carry), "g"(0)                                           \
+            : "r"(carry)                                                   \
             : "cc");                                                       \
     (carry) = high;                                                        \
   } while (0)
@@ -97,15 +95,31 @@
   do {                                                                     \
     BN_ULONG high, low;                                                    \
     __asm__("mulq %3" : "=a"(low), "=d"(high) : "a"(word), "g"(a) : "cc"); \
-    __asm__("addq %2,%0; adcq %3,%1"                                       \
+    __asm__("addq %2,%0; adcq $0,%1"                                       \
             : "+r"(carry), "+d"(high)                                      \
-            : "a"(low), "g"(0)                                             \
+            : "a"(low)                                                     \
             : "cc");                                                       \
     (r) = (carry);                                                         \
     (carry) = high;                                                        \
   } while (0)
-#undef sqr
-#define sqr(r0, r1, a) __asm__("mulq %2" : "=a"(r0), "=d"(r1) : "a"(a) : "cc");
+
+// r0:r1:carry = r0:r1 + a^2 + carry:0
+#define sqr_add(r0, r1, a, carry)                               \
+  do {                                                          \
+    BN_ULONG high, low;                                         \
+    /* lo:hi = a^2 */                                           \
+    __asm__("mulq %2" : "=a"(low), "=d"(high) : "a"(a) : "cc"); \
+    /* carry:hi = lo:hi + carry:0 = a^2 + carry */              \
+    __asm__("addq %2,%0; adcq $0,%1"                            \
+            : "+r"(carry), "+d"(high)                           \
+            : "a"(low)                                          \
+            : "cc");                                            \
+    /* r0:r1:carry = carry:hi + r0:r1 */                        \
+    __asm__("addq %2,%0; adcq %3,%1; movq $0, %2; adcq $0, %2"  \
+            : "+m"(r0), "+m"(r1), "+r"(carry)                   \
+            : "d"(high)                                         \
+            : "cc");                                            \
+  } while (0)
 
 BN_ULONG bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num,
                           BN_ULONG w) {
@@ -171,30 +185,31 @@ BN_ULONG bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num,
   return c1;
 }
 
-void bn_sqr_words(BN_ULONG *r, const BN_ULONG *a, size_t n) {
+void bn_sqr_add_words(BN_ULONG *r, const BN_ULONG *a, size_t n) {
   if (n == 0) {
     return;
   }
 
+  BN_ULONG carry = 0;
   while (n & ~3) {
-    sqr(r[0], r[1], a[0]);
-    sqr(r[2], r[3], a[1]);
-    sqr(r[4], r[5], a[2]);
-    sqr(r[6], r[7], a[3]);
+    sqr_add(r[0], r[1], a[0], carry);
+    sqr_add(r[2], r[3], a[1], carry);
+    sqr_add(r[4], r[5], a[2], carry);
+    sqr_add(r[6], r[7], a[3], carry);
     a += 4;
     r += 8;
     n -= 4;
   }
   if (n) {
-    sqr(r[0], r[1], a[0]);
+    sqr_add(r[0], r[1], a[0], carry);
     if (--n == 0) {
       return;
     }
-    sqr(r[2], r[3], a[1]);
+    sqr_add(r[2], r[3], a[1], carry);
     if (--n == 0) {
       return;
     }
-    sqr(r[4], r[5], a[2]);
+    sqr_add(r[4], r[5], a[2], carry);
   }
 }
 
@@ -219,7 +234,7 @@ BN_ULONG bn_add_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
       "	dec	%1		\n"
       "	jnz	1b		\n"
       "	sbbq	%0,%0		\n"
-      : "=&r"(ret), "+c"(n), "+r"(i)
+      : "=&r"(ret), "+&c"(n), "+&r"(i)
       : "r"(rp), "r"(ap), "r"(bp)
       : "cc", "memory");
 
@@ -247,7 +262,7 @@ BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
       "	dec	%1		\n"
       "	jnz	1b		\n"
       "	sbbq	%0,%0		\n"
-      : "=&r"(ret), "+c"(n), "+r"(i)
+      : "=&r"(ret), "+&c"(n), "+&r"(i)
       : "r"(rp), "r"(ap), "r"(bp)
       : "cc", "memory");
 
@@ -265,9 +280,9 @@ BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
   do {                                                               \
     BN_ULONG t1, t2;                                                 \
     __asm__("mulq %3" : "=a"(t1), "=d"(t2) : "a"(a), "m"(b) : "cc"); \
-    __asm__("addq %3,%0; adcq %4,%1; adcq %5,%2"                     \
-            : "+r"(c0), "+r"(c1), "+r"(c2)                           \
-            : "r"(t1), "r"(t2), "g"(0)                               \
+    __asm__("addq %3,%0; adcq %4,%1; adcq $0,%2"                     \
+            : "+&r"(c0), "+r"(c1), "+r"(c2)                          \
+            : "r"(t1), "r"(t2)                                       \
             : "cc");                                                 \
   } while (0)
 
@@ -275,9 +290,9 @@ BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
   do {                                                            \
     BN_ULONG t1, t2;                                              \
     __asm__("mulq %2" : "=a"(t1), "=d"(t2) : "a"((a)[i]) : "cc"); \
-    __asm__("addq %3,%0; adcq %4,%1; adcq %5,%2"                  \
-            : "+r"(c0), "+r"(c1), "+r"(c2)                        \
-            : "r"(t1), "r"(t2), "g"(0)                            \
+    __asm__("addq %3,%0; adcq %4,%1; adcq $0,%2"                  \
+            : "+&r"(c0), "+r"(c1), "+r"(c2)                       \
+            : "r"(t1), "r"(t2)                                    \
             : "cc");                                              \
   } while (0)
 
@@ -285,13 +300,13 @@ BN_ULONG bn_sub_words(BN_ULONG *rp, const BN_ULONG *ap, const BN_ULONG *bp,
   do {                                                               \
     BN_ULONG t1, t2;                                                 \
     __asm__("mulq %3" : "=a"(t1), "=d"(t2) : "a"(a), "m"(b) : "cc"); \
-    __asm__("addq %3,%0; adcq %4,%1; adcq %5,%2"                     \
-            : "+r"(c0), "+r"(c1), "+r"(c2)                           \
-            : "r"(t1), "r"(t2), "g"(0)                               \
+    __asm__("addq %3,%0; adcq %4,%1; adcq $0,%2"                     \
+            : "+&r"(c0), "+r"(c1), "+r"(c2)                          \
+            : "r"(t1), "r"(t2)                                       \
             : "cc");                                                 \
-    __asm__("addq %3,%0; adcq %4,%1; adcq %5,%2"                     \
-            : "+r"(c0), "+r"(c1), "+r"(c2)                           \
-            : "r"(t1), "r"(t2), "g"(0)                               \
+    __asm__("addq %3,%0; adcq %4,%1; adcq $0,%2"                     \
+            : "+&r"(c0), "+r"(c1), "+r"(c2)                          \
+            : "r"(t1), "r"(t2)                                       \
             : "cc");                                                 \
   } while (0)
 

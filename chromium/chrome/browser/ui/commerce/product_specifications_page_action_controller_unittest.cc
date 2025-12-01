@@ -8,6 +8,7 @@
 #include <optional>
 
 #include "base/run_loop.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_callback.h"
 #include "base/test/scoped_feature_list.h"
@@ -476,7 +477,6 @@ TEST_P(ProductSpecificationsPageActionControllerUnittest, IconExecute) {
   std::vector<base::test::FeatureRef> enabled_features = {
       commerce::kProductSpecifications};
   if (GetParam()) {
-    enabled_features.push_back(toast_features::kToastFramework);
     enabled_features.push_back(commerce::kCompareConfirmationToast);
   }
   test_features.InitWithFeatures(enabled_features, /*disabled_features*/ {});

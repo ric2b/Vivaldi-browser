@@ -47,7 +47,6 @@ class RequestFilter {
   // Types are sorted by order of priority. Higher value = higher priority;
   enum Type {
     kAdBlock = 0,
-    kPingBlock = 1,
   };
 
   enum CancelDecision { kAllow = 0, kCancel, kPreventCancel };

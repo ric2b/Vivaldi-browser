@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "content/browser/preloading/prefetch/prefetch_features.h"
+#include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/browser_context.h"
+#include "content/public/common/content_client.h"
 #include "base/feature_list.h"
 
 namespace features {
@@ -13,12 +16,7 @@ BASE_FEATURE(kPrefetchUseContentRefactor,
 
 BASE_FEATURE(kPrefetchReusable,
              "PrefetchReusable",
-#if BUILDFLAG(IS_ANDROID)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // 4MiB, 2**20 * 4.
 const base::FeatureParam<int> kPrefetchReusableBodySizeLimit{
@@ -78,6 +76,12 @@ BASE_FEATURE(kPrefetchServiceWorker,
              "PrefetchServiceWorker",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+bool IsPrefetchServiceWorkerEnabled(content::BrowserContext* browser_context) {
+  return base::FeatureList::IsEnabled(kPrefetchServiceWorker) &&
+         content::GetContentClient()->browser()->IsPrefetchWithServiceWorkerAllowed(
+             browser_context);
+}
+
 BASE_FEATURE(kPrefetchBrowsingDataRemoval,
              "PrefetchBrowsingDataRemoval",
              base::FEATURE_ENABLED_BY_DEFAULT);
@@ -85,6 +89,8 @@ BASE_FEATURE(kPrefetchBrowsingDataRemoval,
 BASE_FEATURE(kPrefetchScheduler,
              "PrefetchScheduler",
              base::FEATURE_DISABLED_BY_DEFAULT);
+const base::FeatureParam<bool> kPrefetchSchedulerProgressSyncBestEffort{
+    &kPrefetchScheduler, "kPrefetchSchedulerProgressSyncBestEffort", true};
 
 BASE_FEATURE(kPrefetchSchedulerTesting,
              "PrefetchSchedulerTesting",
@@ -97,5 +103,9 @@ const base::FeatureParam<size_t>
     kPrefetchSchedulerTestingActiveSetSizeLimitForBurst{
         &kPrefetchSchedulerTesting,
         "kPrefetchSchedulerTestingActiveSetSizeLimitForBurst", 1};
+
+BASE_FEATURE(kPrefetchQueueingPartialFixWithoutScheduler,
+             "PrefetchQueueingPartialFixWithoutScheduler",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 }  // namespace features

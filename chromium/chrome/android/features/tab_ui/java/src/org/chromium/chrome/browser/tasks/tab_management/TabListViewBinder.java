@@ -40,6 +40,10 @@ import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.widget.ViewLookupCachingFrameLayout;
 
+// Vivaldi
+import org.chromium.components.embedder_support.util.UrlConstants;
+import org.vivaldi.browser.common.VivaldiUrlConstants;
+
 /** {@link org.chromium.ui.modelutil.SimpleRecyclerViewMcp.ViewBinder} for tab List. */
 class TabListViewBinder {
     /**
@@ -126,6 +130,8 @@ class TabListViewBinder {
             view.setForeground(isSelected ? drawable : null);
         } else if (TabProperties.URL_DOMAIN == propertyKey) {
             String domain = model.get(TabProperties.URL_DOMAIN);
+            // Note(david@vivaldi.com): We display the Vivaldi url in case of NTP.
+            domain = domain.replace(UrlConstants.NTP_URL, VivaldiUrlConstants.NTP_NON_NATIVE_URL);
             ((TextView) view.findViewById(R.id.description)).setText(domain);
         } else if (TabProperties.TAB_GROUP_COLOR_VIEW_PROVIDER == propertyKey) {
             @Nullable
@@ -255,7 +261,7 @@ class TabListViewBinder {
         TabListView tabListView = (TabListView) view;
         if (TabProperties.TAB_SELECTION_DELEGATE == propertyKey) {
             tabListView.setSelectionDelegate(model.get(TabProperties.TAB_SELECTION_DELEGATE));
-            tabListView.setItem(tabId);
+            tabListView.setItem(TabListEditorItemSelectionId.createTabId(tabId));
         } else if (TabProperties.IS_SELECTED == propertyKey
                 || TabProperties.TAB_ACTION_BUTTON_DATA == propertyKey) {
             boolean isSelected = model.get(TabProperties.IS_SELECTED);

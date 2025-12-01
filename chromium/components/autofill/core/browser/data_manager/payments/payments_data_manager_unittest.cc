@@ -34,13 +34,12 @@
 #include "components/autofill/core/browser/data_manager/personal_data_manager_test_utils.h"
 #include "components/autofill/core/browser/data_model/payments/bank_account.h"
 #include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
-#include "components/autofill/core/browser/data_model/payments/credit_card_art_image.h"
 #include "components/autofill/core/browser/data_model/payments/credit_card_benefit_test_api.h"
 #include "components/autofill/core/browser/data_model/payments/ewallet.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/foundations/test_autofill_client.h"
-#include "components/autofill/core/browser/integrators/mock_autofill_optimization_guide.h"
+#include "components/autofill/core/browser/integrators/optimization_guide/mock_autofill_optimization_guide.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
 #include "components/autofill/core/browser/metrics/payments/mandatory_reauth_metrics.h"
 #include "components/autofill/core/browser/payments/constants.h"
@@ -49,6 +48,7 @@
 #include "components/autofill/core/browser/suggestions/suggestion.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/autofill/core/browser/ui/autofill_image_fetcher_base.h"
+#include "components/autofill/core/browser/ui/mock_autofill_image_fetcher.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
@@ -264,30 +264,11 @@ class PaymentsDataManagerHelper : public PaymentsDataManagerTestBase {
   std::unique_ptr<PaymentsDataManager> payments_data_manager_;
 };
 
-class MockAutofillImageFetcher : public AutofillImageFetcherBase {
- public:
-  MOCK_METHOD(
-      void,
-      FetchImagesForURLs,
-      (base::span<const GURL> card_art_urls,
-       base::span<const AutofillImageFetcherBase::ImageSize> image_sizes,
-       base::OnceCallback<void(
-           const std::vector<std::unique_ptr<CreditCardArtImage>>&)> callback),
-      (override));
-  MOCK_METHOD(void,
-              FetchPixAccountImages,
-              (base::span<const GURL> card_art_urls),
-              (override));
-#if BUILDFLAG(IS_ANDROID)
-  MOCK_METHOD(base::android::ScopedJavaLocalRef<jobject>,
-              GetOrCreateJavaImageFetcher,
-              (),
-              (override));
-#endif
-};
 class PaymentsDataManagerTest : public PaymentsDataManagerHelper,
                                 public testing::Test {
  public:
+  long kCleanupForCrbug411681430LongTimestamp = 1747828800;
+
   PaymentsDataManagerTest() {
     scoped_feature_list_.InitWithFeatures(
         /*enabled_features=*/{features::kAutofillEnableBuyNowPayLaterSyncing},
@@ -739,6 +720,54 @@ TEST_F(PaymentsDataManagerTest, UpdateLocalCvc) {
   ASSERT_EQ(payments_data_manager().GetLocalCreditCards().size(), 1U);
   EXPECT_EQ(payments_data_manager().GetLocalCreditCards()[0]->cvc(), kNewCvc);
 }
+
+#if !BUILDFLAG(IS_IOS)
+// Test that clean up for crbug.com/411681430 is working as expected.
+TEST_F(PaymentsDataManagerTest, CleanupForCrbug411681430Test) {
+  base::test::ScopedFeatureList features(
+      features::kAutofillEnableCvcStorageAndFilling);
+
+  AdvanceClock(kArbitraryTime - base::Time::Now());
+  // Add a credit card with older timestamp to the database.
+  CreditCard credit_card_1(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                           test::kEmptyOrigin);
+  test::SetCreditCardInfo(&credit_card_1, "John Doe",
+                          "4111111111111111" /* Visa */, "01", "2999", "1",
+                          u"123");
+  payments_data_manager().AddCreditCard(credit_card_1);
+  WaitForOnPaymentsDataChanged();
+
+  AdvanceClock((base::Time::FromSecondsSinceUnixEpoch(
+                   kCleanupForCrbug411681430LongTimestamp + 1)) -
+               base::Time::Now());
+  // Add another credit card with timestamp later than
+  // `kCleanupForCrbug411681430` timestamp to the database.
+  CreditCard credit_card_2(base::Uuid::GenerateRandomV4().AsLowercaseString(),
+                           test::kEmptyOrigin);
+  test::SetCreditCardInfo(&credit_card_2, "John Doe",
+                          "378282246310005" /* AmEx */, "01", "2999", "1",
+                          u"0000");
+  payments_data_manager().AddCreditCard(credit_card_2);
+  WaitForOnPaymentsDataChanged();
+
+  ASSERT_EQ(payments_data_manager().GetLocalCreditCards().size(), 2U);
+  EXPECT_FALSE(payments_data_manager().GetLocalCreditCards()[0]->cvc().empty());
+  EXPECT_FALSE(payments_data_manager().GetLocalCreditCards()[1]->cvc().empty());
+
+  prefs::SetPaymentCvcStorage(prefs_.get(), false);
+  ResetPaymentsDataManager();
+
+  ASSERT_EQ(payments_data_manager().GetLocalCreditCards().size(), 2U);
+  EXPECT_TRUE(payments_data_manager()
+                  .GetCreditCardByGUID(credit_card_1.guid())
+                  ->cvc()
+                  .empty());
+  EXPECT_FALSE(payments_data_manager()
+                   .GetCreditCardByGUID(credit_card_2.guid())
+                   ->cvc()
+                   .empty());
+}
+#endif  // !BUILDFLAG(IS_IOS)
 
 // Test that verify add, update, remove server cvc function working as expected.
 TEST_F(PaymentsDataManagerTest, ServerCvc) {
@@ -2075,7 +2104,7 @@ TEST_F(PaymentsDataManagerTest,
   ASSERT_TRUE(GetServerDataTable()->SetMaskedBankAccounts(
       {bank_account1, bank_account2}));
 
-  EXPECT_CALL(mock_image_fetcher, FetchPixAccountImages);
+  EXPECT_CALL(mock_image_fetcher, FetchPixAccountImagesForURLs);
 
   // We need to call `Refresh()` to ensure that the BankAccounts are loaded
   // again from the WebDatabase which triggers the call to fetch icons from
@@ -2296,7 +2325,7 @@ TEST_F(PaymentsDataManagerTest, EwalletAccountsIconsFetched_DatabaseUpdated) {
   ASSERT_TRUE(
       GetServerDataTable()->SetPaymentInstruments({payment_instrument}));
 
-  EXPECT_CALL(mock_image_fetcher, FetchImagesForURLs);
+  EXPECT_CALL(mock_image_fetcher, FetchCreditCardArtImagesForURLs);
 
   // We need to call `Refresh()` to ensure that the eWallet payment instruments
   // are loaded again from the WebDatabase which triggers the call to fetch
@@ -2460,7 +2489,7 @@ TEST_F(PaymentsDataManagerTest, GetLinkedBnplIssuers) {
 
   ASSERT_EQ(linked_bnpl_issuers.size(), 1U);
   EXPECT_EQ(linked_bnpl_issuers[0],
-            BnplIssuer(instrument_id, issuer_id,
+            BnplIssuer(instrument_id, ConvertToBnplIssuerIdEnum(issuer_id),
                        /*eligible_price_ranges=*/
                        {BnplIssuer::EligiblePriceRange(
                            currency, /*price_lower_bound=*/min_price_in_micros,
@@ -2660,32 +2689,6 @@ TEST_F(PaymentsDataManagerTest,
 }
 
 #if !BUILDFLAG(IS_IOS)
-TEST_F(PaymentsDataManagerTest, AddAndGetCreditCardArtImage) {
-  gfx::Image expected_image = gfx::test::CreateImage(40, 24);
-  std::unique_ptr<CreditCardArtImage> credit_card_art_image =
-      std::make_unique<CreditCardArtImage>(GURL("https://www.example.com"),
-                                           expected_image);
-  std::vector<std::unique_ptr<CreditCardArtImage>> images;
-  images.push_back(std::move(credit_card_art_image));
-  test_api(payments_data_manager()).OnCardArtImagesFetched(std::move(images));
-
-  const gfx::Image* actual_image =
-      payments_data_manager().GetCreditCardArtImageForUrl(
-          GURL("https://www.example.com"));
-  ASSERT_TRUE(actual_image);
-  EXPECT_TRUE(gfx::test::AreImagesEqual(expected_image, *actual_image));
-
-  // TODO(crbug.com/40210242): Look into integrating with
-  // PaymentsDataManagerMock and checking that
-  // PaymentsDataManager::FetchImagesForUrls() does not get triggered when
-  // PaymentsDataManager::GetCachedCardArtImageForUrl() is called.
-  const gfx::Image* cached_image =
-      payments_data_manager().GetCachedCardArtImageForUrl(
-          GURL("https://www.example.com"));
-  ASSERT_TRUE(cached_image);
-  EXPECT_TRUE(gfx::test::AreImagesEqual(expected_image, *cached_image));
-}
-
 TEST_F(PaymentsDataManagerTest,
        TestNoImageFetchingAttemptForCardsWithInvalidCardArtUrls) {
   base::HistogramTester histogram_tester;
@@ -2701,7 +2704,7 @@ TEST_F(PaymentsDataManagerTest, ProcessCardArtUrlChanges) {
   test_api(payments_data_manager()).SetImageFetcher(&mock_image_fetcher);
   auto wait_for_fetch_images_for_url = [&] {
     base::RunLoop run_loop;
-    EXPECT_CALL(mock_image_fetcher, FetchImagesForURLs)
+    EXPECT_CALL(mock_image_fetcher, FetchCreditCardArtImagesForURLs)
         .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
     run_loop.Run();
   };
@@ -2732,18 +2735,20 @@ TEST_F(PaymentsDataManagerTest, ProcessCardArtUrlChanges) {
 // 1. Whether the benefits toggle is turned on or off.
 // 2. Whether the American Express benefits flag is enabled.
 // 3. Whether the BMO benefits flag is enabled.
+// 4. Whether the Curinos flat rate benefits flag is enabled.
 class PaymentsDataManagerStartupBenefitsTest
     : public PaymentsDataManagerHelper,
       public testing::Test,
-      public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
+      public testing::WithParamInterface<std::tuple<bool, bool, bool, bool>> {
  public:
   PaymentsDataManagerStartupBenefitsTest() {
     feature_list_.InitWithFeatureStates(
         /*feature_states=*/
         {{features::kAutofillEnableCardBenefitsForAmericanExpress,
           AreAmericanExpressBenefitsEnabled()},
-         {features::kAutofillEnableCardBenefitsForBmo,
-          AreBmoBenefitsEnabled()}});
+         {features::kAutofillEnableCardBenefitsForBmo, AreBmoBenefitsEnabled()},
+         {features::kAutofillEnableFlatRateCardBenefitsFromCurinos,
+          AreCurinosFlatRateBenefitsEnabled()}});
     SetUpTest();
   }
 
@@ -2754,6 +2759,9 @@ class PaymentsDataManagerStartupBenefitsTest
     return std::get<1>(GetParam());
   }
   bool AreBmoBenefitsEnabled() const { return std::get<2>(GetParam()); }
+  bool AreCurinosFlatRateBenefitsEnabled() const {
+    return std::get<3>(GetParam());
+  }
 
  private:
   base::test::ScopedFeatureList feature_list_;
@@ -2762,6 +2770,7 @@ class PaymentsDataManagerStartupBenefitsTest
 INSTANTIATE_TEST_SUITE_P(,
                          PaymentsDataManagerStartupBenefitsTest,
                          testing::Combine(testing::Bool(),
+                                          testing::Bool(),
                                           testing::Bool(),
                                           testing::Bool()));
 
@@ -2772,7 +2781,8 @@ TEST_P(PaymentsDataManagerStartupBenefitsTest,
   prefs::SetPaymentCardBenefits(prefs_.get(), IsBenefitsPrefTurnedOn());
   base::HistogramTester histogram_tester;
   ResetPaymentsDataManager();
-  if (!AreAmericanExpressBenefitsEnabled() && !AreBmoBenefitsEnabled()) {
+  if (!AreAmericanExpressBenefitsEnabled() && !AreBmoBenefitsEnabled() &&
+      !AreCurinosFlatRateBenefitsEnabled()) {
     histogram_tester.ExpectTotalCount(
         "Autofill.PaymentMethods.CardBenefitsIsEnabled.Startup", 0);
   } else {
@@ -3569,7 +3579,7 @@ TEST_F(PaymentsDataManagerTest,
   // Must match the BnplCreationOption in the payment instrument creation
   // option.
   std::vector<BnplIssuer> want_bnpl_issuers = {BnplIssuer(
-      /*instrument_id=*/std::nullopt, std::string(kBnplAffirmIssuerId),
+      /*instrument_id=*/std::nullopt, BnplIssuer::IssuerId::kBnplAffirm,
       {BnplIssuer::EligiblePriceRange(/*currency= */ "USD",
                                       /*price_lower_bound=*/50,
                                       /*price_upper_bound=*/200)})};
@@ -3936,6 +3946,38 @@ TEST_F(
   EXPECT_EQ(1U, payments_data_manager().GetLinkedBnplIssuers().size());
   EXPECT_EQ(2U, payments_data_manager().GetEwalletAccounts().size());
 }
+
+TEST_F(PaymentsDataManagerTest, ShouldShowBnplSettings) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableBuyNowPayLater};
+  prefs_.get()->SetBoolean(prefs::kAutofillHasSeenBnpl, true);
+  EXPECT_TRUE(payments_data_manager().ShouldShowBnplSettings());
+
+  prefs_.get()->SetBoolean(prefs::kAutofillHasSeenBnpl, false);
+  EXPECT_FALSE(payments_data_manager().ShouldShowBnplSettings());
+}
+
+TEST_F(PaymentsDataManagerTest,
+       ShouldShowBnplSettings_BnplNotSeenButLinkedIssuerPresent) {
+  base::test::ScopedFeatureList feature_list{
+      features::kAutofillEnableBuyNowPayLater};
+  prefs_.get()->SetBoolean(prefs::kAutofillHasSeenBnpl, false);
+  test_api(payments_data_manager())
+      .AddBnplIssuer(test::GetTestLinkedBnplIssuer());
+
+  EXPECT_TRUE(payments_data_manager().ShouldShowBnplSettings());
+}
+
+TEST_F(PaymentsDataManagerTest, ShouldShowBnplSettings_FlagOff) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndDisableFeature(features::kAutofillEnableBuyNowPayLater);
+  prefs_.get()->SetBoolean(prefs::kAutofillHasSeenBnpl, true);
+  EXPECT_FALSE(payments_data_manager().ShouldShowBnplSettings());
+
+  prefs_.get()->SetBoolean(prefs::kAutofillHasSeenBnpl, false);
+  EXPECT_FALSE(payments_data_manager().ShouldShowBnplSettings());
+}
+
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) ||
         // BUILDFLAG(IS_CHROMEOS)
 

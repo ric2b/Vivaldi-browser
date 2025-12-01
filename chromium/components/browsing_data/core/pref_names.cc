@@ -73,6 +73,7 @@ void RegisterBrowserUserPrefs(user_prefs::PrefRegistrySyncable* registry) {
 
 #if BUILDFLAG(IS_ANDROID)
   registry->RegisterBooleanPref(kCloseTabs, false);
+  registry->RegisterBooleanPref(kAdsTrackerBlocker, false); // Vivaldi VAB-11363
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_IOS)

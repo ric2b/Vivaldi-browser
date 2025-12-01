@@ -39,15 +39,18 @@
 #include "dawn/common/MutexProtected.h"
 #include "dawn/common/NonMovable.h"
 #include "dawn/common/Ref.h"
+#include "dawn/common/WeakRef.h"
 #include "dawn/native/Error.h"
 #include "dawn/native/Forward.h"
 #include "dawn/native/IntegerTypes.h"
 #include "dawn/native/SystemEvent.h"
+#include "dawn/native/WaitListEvent.h"
 #include "partition_alloc/pointers/raw_ptr.h"
 
 namespace dawn::native {
 
 struct InstanceDescriptor;
+class QueueBase;
 
 // Subcomponent of the Instance which tracks callback events for the Future-based callback
 // entrypoints. All events from this instance (regardless of whether from an adapter, device, queue,
@@ -102,8 +105,11 @@ class EventManager final : NonMovable {
 };
 
 struct QueueAndSerial {
-    Ref<QueueBase> queue;
+    WeakRef<QueueBase> queue;
     ExecutionSerial completionSerial;
+
+    // Returns the most recently completed serial on |queue|. Otherwise, returns |completionSerial|.
+    ExecutionSerial GetCompletedSerial() const;
 };
 
 // Base class for the objects that back WGPUFutures. TrackedEvent is responsible for the lifetime
@@ -116,7 +122,58 @@ struct QueueAndSerial {
 // to any TrackedEvents. Any which are not ref'd elsewhere (in order to be `Spontaneous`ly
 // completed) will be cleaned up at that time.
 class EventManager::TrackedEvent : public RefCounted {
+  public:
+    // Subclasses must implement this to complete the event (if not completed) with
+    // EventCompletionType::Shutdown.
+    ~TrackedEvent() override;
+
+    Future GetFuture() const;
+
+    bool IsProgressing() const { return mIsProgressing; }
+
+    bool IsReadyToComplete() const;
+
+    const QueueAndSerial* GetIfQueueAndSerial() const {
+        return std::get_if<QueueAndSerial>(&mCompletionData);
+    }
+
+    Ref<SystemEvent> GetIfSystemEvent() const {
+        if (auto* event = std::get_if<Ref<SystemEvent>>(&mCompletionData)) {
+            return *event;
+        }
+        return nullptr;
+    }
+
+    Ref<WaitListEvent> GetIfWaitListEvent() const {
+        if (auto* event = std::get_if<Ref<WaitListEvent>>(&mCompletionData)) {
+            return *event;
+        }
+        return nullptr;
+    }
+
+    // Events may be one of three types:
+    // - A queue and the ExecutionSerial after which the event will be completed.
+    //   Used for queue completion.
+    // - A SystemEvent which will be signaled usually by the OS / GPU driver. It stores a boolean
+    //   that we can check instead of polling with the OS, or it can be transformed lazily into a
+    //   SystemEventReceiver.
+    // - A WaitListEvent which will be signaled from our code, usually on a separate thread. It also
+    //   stores an atomic boolean that we can check instead of waiting synchronously, or it can be
+    //   transformed into a SystemEventReceiver for asynchronous waits.
+    // The queue ref creates a temporary ref cycle
+    // (Queue->Device->Instance->EventManager->TrackedEvent). This is OK because the instance will
+    // clear out the EventManager on shutdown.
+    // TODO(crbug.com/dawn/2067): This is a bit fragile. Is it possible to remove the ref cycle?
   protected:
+    friend class EventManager;
+
+    using CompletionData = std::variant<QueueAndSerial, Ref<SystemEvent>, Ref<WaitListEvent>>;
+
+    // Create an event from a WaitListEvent that can be signaled and waited-on in user-space only in
+    // the current process. Note that events like RequestAdapter and RequestDevice complete
+    // immediately in dawn native, and may use an already-completed event.
+    TrackedEvent(wgpu::CallbackMode callbackMode, Ref<WaitListEvent> completionEvent);
+
     // Create an event from a SystemEvent. Note that events like RequestAdapter and
     // RequestDevice complete immediately in dawn native, and may use an already-completed event.
     TrackedEvent(wgpu::CallbackMode callbackMode, Ref<SystemEvent> completionEvent);
@@ -126,33 +183,17 @@ class EventManager::TrackedEvent : public RefCounted {
                  QueueBase* queue,
                  ExecutionSerial completionSerial);
 
-    struct Completed {};
     // Create a TrackedEvent that is already completed.
+    struct Completed {};
     TrackedEvent(wgpu::CallbackMode callbackMode, Completed tag);
 
-  public:
-    // Subclasses must implement this to complete the event (if not completed) with
-    // EventCompletionType::Shutdown.
-    ~TrackedEvent() override;
+    // Some SystemEvents may be non-progressing, i.e. DeviceLost. We tag these events so that we can
+    // correctly return whether there is progressing work when users are polling.
+    struct NonProgressing {};
+    TrackedEvent(wgpu::CallbackMode callbackMode, NonProgressing tag);
 
-    Future GetFuture() const;
+    void SetReadyToComplete();
 
-    // Events may be one of two types:
-    // - A queue and the ExecutionSerial after which the event will be completed.
-    //   Used for queue completion.
-    // - A SystemEvent which will be signaled from our code, usually on a separate thread.
-    //   It stores a boolean that we can check instead of polling with the OS, or it can be
-    //   transformed lazily into a SystemEventReceiver. Used for async pipeline creation, and Metal
-    //   queue completion.
-    // The queue ref creates a temporary ref cycle
-    // (Queue->Device->Instance->EventManager->TrackedEvent). This is OK because the instance will
-    // clear out the EventManager on shutdown.
-    // TODO(crbug.com/dawn/2067): This is a bit fragile. Is it possible to remove the ref cycle?
-    using CompletionData = std::variant<QueueAndSerial, Ref<SystemEvent>>;
-
-    const CompletionData& GetCompletionData() const;
-
-  protected:
     void EnsureComplete(EventCompletionType);
     virtual void Complete(EventCompletionType) = 0;
 
@@ -164,9 +205,8 @@ class EventManager::TrackedEvent : public RefCounted {
 #endif
 
   private:
-    friend class EventManager;
-
     CompletionData mCompletionData;
+    const bool mIsProgressing = true;
     // Callback has been called.
     std::atomic<bool> mCompleted = false;
 };

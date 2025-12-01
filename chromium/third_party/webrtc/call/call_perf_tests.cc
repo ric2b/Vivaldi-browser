@@ -90,9 +90,9 @@ using webrtc::test::DriftingClock;
 namespace webrtc {
 namespace {
 
-using ::webrtc::test::GetGlobalMetricsLogger;
-using ::webrtc::test::ImprovementDirection;
-using ::webrtc::test::Unit;
+using test::GetGlobalMetricsLogger;
+using test::ImprovementDirection;
+using test::Unit;
 
 enum : int {  // The first valid value is 1.
   kTransportSequenceNumberExtensionId = 1,
@@ -135,7 +135,7 @@ class CallPerfTest : public test::CallTest {
 };
 
 class VideoRtcpAndSyncObserver : public test::RtpRtcpObserver,
-                                 public rtc::VideoSinkInterface<VideoFrame> {
+                                 public VideoSinkInterface<VideoFrame> {
   static const int kInSyncThresholdMs = 50;
   static const int kStartupTimeMs = 2000;
   static const int kMinRunTimeMs = 30000;
@@ -235,10 +235,9 @@ void CallPerfTest::TestAudioVideoSync(FecMode fec,
 
   SendTask(task_queue(), [&]() {
     metrics::Reset();
-    rtc::scoped_refptr<AudioDeviceModule> fake_audio_device =
+    scoped_refptr<AudioDeviceModule> fake_audio_device =
         TestAudioDeviceModule::Create(
-            &env().task_queue_factory(),
-            TestAudioDeviceModule::CreatePulsedNoiseCapturer(256, 48000),
+            env(), TestAudioDeviceModule::CreatePulsedNoiseCapturer(256, 48000),
             TestAudioDeviceModule::CreateDiscardRenderer(48000),
             audio_rtp_speed);
     EXPECT_EQ(0, fake_audio_device->Init());
@@ -452,8 +451,8 @@ TEST_F(CallPerfTest, ReceivesCpuOveruseAndUnderuse) {
     // OnSinkWantsChanged is called when FrameGeneratorCapturer::AddOrUpdateSink
     // is called.
     // TODO(sprang): Add integration test for maintain-framerate mode?
-    void OnSinkWantsChanged(rtc::VideoSinkInterface<VideoFrame>* /* sink */,
-                            const rtc::VideoSinkWants& wants) override {
+    void OnSinkWantsChanged(VideoSinkInterface<VideoFrame>* /* sink */,
+                            const VideoSinkWants& wants) override {
       RTC_LOG(LS_INFO) << "OnSinkWantsChanged fps:" << wants.max_framerate_fps
                        << " max_pixel_count " << wants.max_pixel_count
                        << " target_pixel_count"
@@ -534,7 +533,7 @@ TEST_F(CallPerfTest, ReceivesCpuOveruseAndUnderuse) {
     } test_phase_;
 
    private:
-    rtc::VideoSinkWants last_wants_;
+    VideoSinkWants last_wants_;
   } test;
 
   RunBaseTest(&test);
@@ -569,7 +568,7 @@ void CallPerfTest::TestMinTransmitBitrate(bool pad_to_min_bitrate) {
 
    private:
     // TODO(holmer): Run this with a timer instead of once per packet.
-    Action OnSendRtp(rtc::ArrayView<const uint8_t> /* packet */) override {
+    Action OnSendRtp(ArrayView<const uint8_t> /* packet */) override {
       task_queue_->PostTask(SafeTask(task_safety_flag_, [this]() {
         VideoSendStream::Stats stats = send_stream_->GetStats();
 
@@ -629,7 +628,7 @@ void CallPerfTest::TestMinTransmitBitrate(bool pad_to_min_bitrate) {
     int num_bitrate_observations_in_range_;
     SamplesStatsCounter bitrate_kbps_list_;
     TaskQueueBase* task_queue_;
-    rtc::scoped_refptr<PendingTaskSafetyFlag> task_safety_flag_;
+    scoped_refptr<PendingTaskSafetyFlag> task_safety_flag_;
   } test(pad_to_min_bitrate, task_queue());
 
   fake_encoder_max_bitrate_ = kMaxEncodeBitrateKbps;
@@ -667,7 +666,7 @@ TEST_F(CallPerfTest, MAYBE_KeepsHighBitrateWhenReconfiguringSender) {
         const FieldTrialsView& /*field_trials*/,
         int frame_width,
         int frame_height,
-        const webrtc::VideoEncoderConfig& encoder_config) override {
+        const VideoEncoderConfig& encoder_config) override {
       std::vector<VideoStream> streams =
           test::CreateVideoStreams(frame_width, frame_height, encoder_config);
       streams[0].min_bitrate_bps = 50000;
@@ -739,7 +738,7 @@ TEST_F(CallPerfTest, MAYBE_KeepsHighBitrateWhenReconfiguringSender) {
           bitrate_allocator_factory_.get();
       encoder_config->max_bitrate_bps = 2 * kReconfigureThresholdKbps * 1000;
       encoder_config->video_stream_factory =
-          rtc::make_ref_counted<VideoStreamFactory>();
+          make_ref_counted<VideoStreamFactory>();
 
       encoder_config_ = encoder_config->Copy();
     }
@@ -960,8 +959,8 @@ void CallPerfTest::TestEncodeFramerate(VideoEncoderFactory* encoder_factory,
       frame_generator_capturer->ChangeResolution(640, 360);
     }
 
-    void OnSinkWantsChanged(rtc::VideoSinkInterface<VideoFrame>* /* sink */,
-                            const rtc::VideoSinkWants& /* wants */) override {}
+    void OnSinkWantsChanged(VideoSinkInterface<VideoFrame>* /* sink */,
+                            const VideoSinkWants& /* wants */) override {}
 
     void ModifySenderBitrateConfig(
         BitrateConstraints* bitrate_config) override {
@@ -1021,7 +1020,7 @@ void CallPerfTest::TestEncodeFramerate(VideoEncoderFactory* encoder_factory,
       }
     }
 
-    Action OnSendRtp(rtc::ArrayView<const uint8_t> /* packet */) override {
+    Action OnSendRtp(ArrayView<const uint8_t> /* packet */) override {
       const Timestamp now = clock_->CurrentTime();
       if (now - last_getstats_time_ > kMinGetStatsInterval) {
         last_getstats_time_ = now;

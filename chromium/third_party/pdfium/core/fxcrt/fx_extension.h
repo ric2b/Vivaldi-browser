@@ -25,10 +25,11 @@
 
 #define FX_INVALID_OFFSET static_cast<uint32_t>(-1)
 
-#define FX_IsOdd(a) ((a)&1)
+#define FX_IsOdd(a) ((a) & 1)
 
 float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen);
 
+// PRECONDITIONS: `dstStr` and `srcStr` must point to `count` valid wchars.
 UNSAFE_BUFFER_USAGE wchar_t* FXSYS_wcsncpy(wchar_t* dstStr,
                                            const wchar_t* srcStr,
                                            size_t count);
@@ -86,15 +87,17 @@ inline bool FXSYS_IsWideHexDigit(wchar_t c) {
 }
 
 inline int FXSYS_HexCharToInt(char c) {
-  if (!FXSYS_IsHexDigit(c))
+  if (!FXSYS_IsHexDigit(c)) {
     return 0;
+  }
   char upchar = FXSYS_ToUpperASCII(c);
   return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
 }
 
 inline int FXSYS_WideHexCharToInt(wchar_t c) {
-  if (!FXSYS_IsWideHexDigit(c))
+  if (!FXSYS_IsWideHexDigit(c)) {
     return 0;
+  }
   char upchar = toupper(static_cast<char>(c));
   return upchar > '9' ? upchar - 'A' + 10 : upchar - '0';
 }
@@ -134,10 +137,12 @@ bool FXSYS_SafeEQ(const T& lhs, const T& rhs) {
 
 template <typename T>
 bool FXSYS_SafeLT(const T& lhs, const T& rhs) {
-  if (isnan(lhs) && isnan(rhs))
+  if (isnan(lhs) && isnan(rhs)) {
     return false;
-  if (isnan(lhs) || isnan(rhs))
+  }
+  if (isnan(lhs) || isnan(rhs)) {
     return isnan(lhs) < isnan(rhs);
+  }
   return lhs < rhs;
 }
 

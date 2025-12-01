@@ -19,7 +19,7 @@ build_webui("build") {
     "shared_style.css",
   ]
 
-  non_web_component_files = [
+  ts_files = [
     "app.html.ts",
     "app.ts",
     "commerce_internals_api_proxy.ts",
@@ -43,7 +43,6 @@ build_webui("build") {
     "$root_gen_dir/components/commerce/core/mojom/shopping_service.mojom-webui.ts",
   ]
 
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",
     "//ui/webui/resources/cr_components/commerce:build_ts",

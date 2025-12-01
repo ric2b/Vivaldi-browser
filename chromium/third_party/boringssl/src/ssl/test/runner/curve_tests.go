@@ -23,7 +23,6 @@ var testCurves = []struct {
 	name string
 	id   CurveID
 }{
-	{"P-224", CurveP224},
 	{"P-256", CurveP256},
 	{"P-384", CurveP384},
 	{"P-521", CurveP521},
@@ -39,7 +38,7 @@ func isPqGroup(r CurveID) bool {
 }
 
 func isECDHGroup(r CurveID) bool {
-	return r == CurveP224 || r == CurveP256 || r == CurveP384 || r == CurveP521
+	return r == CurveP256 || r == CurveP384 || r == CurveP521
 }
 
 func isX25519Group(r CurveID) bool {
@@ -278,7 +277,7 @@ func addCurveTests() {
 				TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
 				TLS_RSA_WITH_AES_128_GCM_SHA256,
 			},
-			CurvePreferences: []CurveID{CurveP224},
+			CurvePreferences: []CurveID{21 /* P-224 */},
 		},
 		expectations: connectionExpectations{
 			cipher: TLS_RSA_WITH_AES_128_GCM_SHA256,

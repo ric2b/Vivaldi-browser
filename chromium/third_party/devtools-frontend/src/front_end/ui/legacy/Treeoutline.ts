@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
@@ -37,12 +38,12 @@ import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import type * as Buttons from '../components/buttons/buttons.js';
 import type * as IconButton from '../components/icon_button/icon_button.js';
+import {render, type TemplateResult} from '../lit/lit.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
 
 import * as ARIAUtils from './ARIAUtils.js';
 import {type Config, InplaceEditor} from './InplaceEditor.js';
 import {Keys} from './KeyboardShortcut.js';
-import * as ThemeSupport from './theme_support/theme_support.js';
 import {Tooltip} from './Tooltip.js';
 import treeoutlineStyles from './treeoutline.css.js';
 import {
@@ -414,9 +415,9 @@ export class TreeOutlineInShadow extends TreeOutline {
     }
   }
 
-  registerRequiredCSS(...cssFiles: Array<{cssText: string}>): void {
+  registerRequiredCSS(...cssFiles: Array<string&{_tag: 'CSS-in-JS'}>): void {
     for (const cssFile of cssFiles) {
-      ThemeSupport.ThemeSupport.instance().appendStyle(this.shadowRoot, cssFile);
+      Platform.DOMUtilities.appendStyle(this.shadowRoot, cssFile);
     }
   }
 
@@ -797,7 +798,7 @@ export class TreeElement {
     }
   }
 
-  setLeadingIcons(icons: IconButton.Icon.Icon[]|IconButton.FileSourceIcon.FileSourceIcon[]): void {
+  setLeadingIcons(icons: IconButton.Icon.Icon[]|TemplateResult[]): void {
     if (!this.leadingIconsElement && !icons.length) {
       return;
     }
@@ -808,10 +809,8 @@ export class TreeElement {
       this.listItemNode.insertBefore(this.leadingIconsElement, this.titleElement);
       this.ensureSelection();
     }
-    this.leadingIconsElement.removeChildren();
-    for (const icon of icons) {
-      this.leadingIconsElement.appendChild(icon);
-    }
+    // eslint-disable-next-line rulesdir/no-lit-render-outside-of-view
+    render(icons, this.leadingIconsElement);
   }
 
   get tooltip(): string {
@@ -842,7 +841,8 @@ export class TreeElement {
       this.collapse();
       ARIAUtils.unsetExpandable(this.listItemNode);
     } else {
-      VisualLogging.registerLoggable(this.expandLoggable, `${VisualLogging.expand()}`, this.listItemNode);
+      VisualLogging.registerLoggable(
+          this.expandLoggable, `${VisualLogging.expand()}`, this.listItemNode, new DOMRect(0, 0, 16, 16));
       ARIAUtils.setExpanded(this.listItemNode, false);
     }
   }

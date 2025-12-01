@@ -17,7 +17,7 @@
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/android/chrome_jni_headers/ChromeBackupAgentImpl_jni.h"
 
-static_assert(14 + 1 /* notes */ == static_cast<int>(syncer::UserSelectableType::kLastType),
+static_assert(13 + 1 /* notes */ == static_cast<int>(syncer::UserSelectableType::kLastType),
               "When adding a new selectable type, add its pref to"
               "BoolPrefBackupSerializer if the type exists on Android");
 
@@ -36,6 +36,5 @@ void JNI_ChromeBackupAgentImpl_MigrateGlobalDataTypePrefsToAccount(
     const base::android::JavaParamRef<jobject>& j_gaia_id) {
   syncer::SyncPrefs sync_prefs(pref_service);
   sync_prefs.MigrateGlobalDataTypePrefsToAccount(
-      pref_service,
-      signin::GaiaIdHash::FromGaiaId(ConvertFromJavaGaiaId(env, j_gaia_id)));
+      pref_service, ConvertFromJavaGaiaId(env, j_gaia_id));
 }

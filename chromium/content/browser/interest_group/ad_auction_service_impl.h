@@ -23,6 +23,8 @@
 #include "content/browser/interest_group/auction_runner.h"
 #include "content/browser/interest_group/auction_worklet_manager.h"
 #include "content/browser/interest_group/bidding_and_auction_serializer.h"
+#include "content/browser/interest_group/dwa_auction_metrics.h"
+#include "content/browser/interest_group/interest_group_auction.h"
 #include "content/browser/interest_group/interest_group_auction_reporter.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/content_browser_client.h"
@@ -247,6 +249,10 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   // `auction_metrics_recorder_manager_`.
   AuctionMetricsRecorderManager auction_metrics_recorder_manager_;
 
+  // Keeps track of metrics associated with each seller across the auction
+  // run.
+  DwaAuctionMetricsManager dwa_auction_metrics_manager_;
+
   // This must be before `auctions_`, since auctions may own references to
   // worklets it manages.
   AuctionWorkletManager auction_worklet_manager_;
@@ -271,6 +277,7 @@ class CONTENT_EXPORT AdAuctionServiceImpl final
   bool has_logged_extended_private_aggregation_web_feature_ = false;
   bool has_logged_private_aggregation_enable_debug_mode_web_feature_ = false;
   bool has_logged_private_aggregation_filtering_id_web_feature_ = false;
+  bool has_logged_private_aggregation_error_reporting_web_feature_ = false;
 
   // Track the state of GetInterestGroupAdAuctionData calls. One request will be
   // handled at a time (the first in the queue). The first

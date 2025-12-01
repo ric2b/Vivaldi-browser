@@ -536,6 +536,26 @@ ExtensionFunction::ResponseAction UtilitiesPrintFunction::Run() {
   return RespondNow(NoArguments());
 }
 
+// This function is meant for code that clears cache and next reloads the page
+// in inspect mode (reloading does not happen here). It may be useful for other
+// tasks, but behavior should not be tweaked as we expect same behavior as
+// chrome for this combined action.
+ExtensionFunction::ResponseAction UtilitiesClearCacheFunction::Run() {
+  namespace Results = vivaldi::utilities::ClearCache::Results;
+  using vivaldi::utilities::ClearCache::Params;
+
+  std::optional<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  Browser* browser = ::vivaldi::FindBrowserByWindowId(params->window_id);
+  if (!browser) {
+    return RespondNow(Error("No Browser instance."));
+  }
+
+  chrome::ClearCache(browser);
+  return RespondNow(ArgumentList(Results::Create()));
+}
+
 ExtensionFunction::ResponseAction
 UtilitiesClearAllRecentlyClosedSessionsFunction::Run() {
   namespace Results =
@@ -1064,10 +1084,10 @@ ExtensionFunction::ResponseAction UtilitiesGetEnvVarsFunction::Run() {
 
   // read the environment variables into a object with additional properties
   for (const auto& key : params->keys) {
-    std::string value;
+    auto value = env->GetVar(key);
 
-    if (env->GetVar(key, &value)) {
-      response.additional_properties.emplace(key, value);
+    if (value.has_value()) {
+      response.additional_properties.emplace(key, value.value());
     }
   }
 
@@ -1604,11 +1624,19 @@ ExtensionFunction::ResponseAction UtilitiesCanShowWhatsNewPageFunction::Run() {
                               ->GetString(vivaldiprefs::kStartupLastSeenVersion)
                               .empty());
 
-  std::string version = ::vivaldi::GetVivaldiVersionString();
+  const std::string version = ::vivaldi::GetVivaldiVersionString();
+  const base::Version last_seen_version = base::Version(
+      profile->GetPrefs()->GetString(vivaldiprefs::kStartupLastSeenVersion));
+  // The main version only changes if we had a valid version before in the
+  // profile (we don't want to show the What's New page to new users)
   const bool major_version_changed =
-      ::vivaldi::version::HasMajorVersionChanged(profile->GetPrefs());
+      last_seen_version.IsValid() &&
+      ::vivaldi::version::HasMajorVersionChanged(last_seen_version);
+  // Save version as last seen version on any change, or if
+  // last_seen_version is invalid.
   const bool version_changed =
-      ::vivaldi::version::HasVersionChanged(profile->GetPrefs());
+      !last_seen_version.IsValid() ||
+      ::vivaldi::version::HasVersionChanged(last_seen_version);
   if (version_changed) {
     profile->GetPrefs()->SetString(vivaldiprefs::kStartupLastSeenVersion,
                                    version);
@@ -2562,7 +2590,7 @@ UtilitiesAcknowledgeCrashedSessionFunction::Run() {
     extension_service->DisableUserExtensionsExcept(std::vector<std::string>());
   }
 
-  extension_service->UnblockAllExtensions();
+  extensions::ExtensionRegistrar::Get(profile)->UnblockAllExtensions();
 
   {
     // When user doesn't want to restore we still need to take crash lock to ACK

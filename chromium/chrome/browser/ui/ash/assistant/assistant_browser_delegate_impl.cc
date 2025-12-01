@@ -9,6 +9,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/web_app_id_constants.h"
 #include "ash/public/cpp/assistant/assistant_interface_binder.h"
 #include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
 #include "ash/public/cpp/network_config_service.h"
@@ -45,7 +46,6 @@
 #include "chromeos/ash/services/assistant/public/cpp/features.h"
 #include "chromeos/ash/services/assistant/public/mojom/assistant_audio_decoder.mojom.h"
 #include "chromeos/services/assistant/public/shared/constants.h"
-#include "chromeos/services/assistant/public/shared/new_entry_point_constants.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/audio_service.h"
@@ -91,7 +91,9 @@ enum class AssistantNewEntryPointEligibility {
   kNotEligibleFlagOff = 3,
   // Not eligible because the new entry point is not installed.
   kNotEligibleNotInstalled = 4,
-  kMaxValue = kNotEligibleNotInstalled,
+  // Not eligible because the build is not Google Chrome.
+  kNotEligibleNonGoogleChrome = 5,
+  kMaxValue = kNotEligibleNonGoogleChrome,
 };
 // LINT.ThenChange(/tools/metrics/histograms/enums.xml:AssistantNewEntryPointEligibility)
 
@@ -111,6 +113,8 @@ AssistantNewEntryPointEligibility ToHistogramEnum(
       return AssistantNewEntryPointEligibility::kNotEligibleFlagOff;
     case AssistantBrowserDelegate::Error::kNewEntryPointNotFound:
       return AssistantNewEntryPointEligibility::kNotEligibleNotInstalled;
+    case AssistantBrowserDelegate::Error::kNonGoogleChromeBuild:
+      return AssistantNewEntryPointEligibility::kNotEligibleNonGoogleChrome;
   }
 
   CHECK(false) << "Invalid error value is specified";
@@ -126,12 +130,21 @@ base::expected<bool, AssistantBrowserDelegate::Error> ToEligibilityBool(
   static constexpr auto non_transient_error =
       base::MakeFixedFlatSet<AssistantBrowserDelegate::Error>(
           {AssistantBrowserDelegate::Error::kNewEntryPointNotEnabled,
-           AssistantBrowserDelegate::Error::kNewEntryPointNotFound});
+           AssistantBrowserDelegate::Error::kNewEntryPointNotFound,
+           AssistantBrowserDelegate::Error::kNonGoogleChromeBuild});
   if (non_transient_error.contains(maybe_web_app.error())) {
     return false;
   }
 
   return base::unexpected(maybe_web_app.error());
+}
+
+bool IsGoogleChrome() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  return true;
+#else
+  return false;
+#endif
 }
 
 }  // namespace
@@ -177,11 +190,6 @@ void AssistantBrowserDelegateImpl::MaybeInit(Profile* profile) {
   device_actions_ = std::make_unique<DeviceActions>(
       std::make_unique<DeviceActionsDelegateImpl>());
 
-  service_ = std::make_unique<ash::assistant::Service>(
-      profile->GetURLLoaderFactory()->Clone(),
-      IdentityManagerFactory::GetForProfile(profile), profile->GetPrefs());
-  service_->Init();
-
   assistant_setup_ = std::make_unique<AssistantSetup>();
 }
 
@@ -197,8 +205,6 @@ void AssistantBrowserDelegateImpl::OnAppTerminating() {
   if (!initialized_) {
     return;
   }
-
-  ash::assistant::AssistantService::Get()->Shutdown();
 }
 
 void AssistantBrowserDelegateImpl::InitializeNewEntryPointFor(
@@ -326,11 +332,16 @@ AssistantBrowserDelegateImpl::GetWebAppRegistrarForNewEntryPoint() {
 
 base::expected<const web_app::WebApp*, AssistantBrowserDelegate::Error>
 AssistantBrowserDelegateImpl::ResolveNewEntryPointIfEligible() {
+  if (!IsGoogleChrome() && !is_google_chrome_override_for_testing_) {
+    return base::unexpected(
+        AssistantBrowserDelegate::Error::kNonGoogleChromeBuild);
+  }
+
   ASSIGN_OR_RETURN(const web_app::WebAppRegistrar* web_app_registrar,
                    GetWebAppRegistrarForNewEntryPoint());
 
   std::string app_id = entry_point_id_for_testing_.empty()
-                           ? chromeos::assistant::kEntryPointId
+                           ? ash::kGeminiAppId
                            : entry_point_id_for_testing_;
   const web_app::WebApp* web_app = web_app_registrar->GetAppById(app_id);
   if (!web_app) {
@@ -379,10 +390,6 @@ void AssistantBrowserDelegateImpl::OpenNewEntryPoint() {
           apps::LaunchSource::kUnknown));
 }
 
-int AssistantBrowserDelegateImpl::GetNewEntryPointIconResourceId() {
-  return chromeos::assistant::kIconResourceId;
-}
-
 std::optional<std::string>
 AssistantBrowserDelegateImpl::GetNewEntryPointName() {
   ASSIGN_OR_RETURN(
@@ -412,6 +419,13 @@ void AssistantBrowserDelegateImpl::OverrideEntryPointIdForTesting(
     const std::string& test_entry_point_id) {
   CHECK_IS_TEST();
   entry_point_id_for_testing_ = test_entry_point_id;
+}
+
+void AssistantBrowserDelegateImpl::SetGoogleChromeBuildForTesting() {
+  CHECK_IS_TEST();
+  CHECK(!is_google_chrome_override_for_testing_)
+      << "Already marked as google chrome";
+  is_google_chrome_override_for_testing_ = true;
 }
 
 void AssistantBrowserDelegateImpl::OnExtendedAccountInfoUpdated(

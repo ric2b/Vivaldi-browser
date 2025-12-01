@@ -332,14 +332,6 @@ struct TurboshaftAdapter : public turboshaft::OperationMatcher {
     return graph_->OperationIndices(*block);
   }
 
-  bool IsPhi(turboshaft::OpIndex node) const {
-    return graph_->Get(node).Is<turboshaft::PhiOp>();
-  }
-  MachineRepresentation phi_representation_of(turboshaft::OpIndex node) const {
-    DCHECK(IsPhi(node));
-    const turboshaft::PhiOp& phi = graph_->Get(node).Cast<turboshaft::PhiOp>();
-    return phi.rep.machine_representation();
-  }
   bool IsRetain(turboshaft::OpIndex node) const {
     return graph_->Get(node).Is<turboshaft::RetainOp>();
   }
@@ -383,76 +375,6 @@ struct TurboshaftAdapter : public turboshaft::OperationMatcher {
 
     bool traps_on_null;
     return LoadView(graph_, node).is_protected(&traps_on_null);
-  }
-
-  int value_input_count(turboshaft::OpIndex node) const {
-    return graph_->Get(node).input_count;
-  }
-  turboshaft::OpIndex input_at(turboshaft::OpIndex node, size_t index) const {
-    return graph_->Get(node).input(index);
-  }
-  base::Vector<const turboshaft::OpIndex> inputs(
-      turboshaft::OpIndex node) const {
-    return graph_->Get(node).inputs();
-  }
-  turboshaft::Opcode opcode(turboshaft::OpIndex node) const {
-    return graph_->Get(node).opcode;
-  }
-  bool is_exclusive_user_of(turboshaft::OpIndex user,
-                            turboshaft::OpIndex value) const {
-    DCHECK(user.valid());
-    DCHECK(value.valid());
-    const turboshaft::Operation& value_op = graph_->Get(value);
-    const turboshaft::Operation& user_op = graph_->Get(user);
-    size_t use_count = base::count_if(
-        user_op.inputs(),
-        [value](turboshaft::OpIndex input) { return input == value; });
-    if (V8_UNLIKELY(use_count == 0)) {
-      // We have a special case here:
-      //
-      //         value
-      //           |
-      // TruncateWord64ToWord32
-      //           |
-      //         user
-      //
-      // If emitting user performs the truncation implicitly, we end up calling
-      // CanCover with value and user such that user might have no (direct) uses
-      // of value. There are cases of other unnecessary operations that can lead
-      // to the same situation (e.g. bitwise and, ...). In this case, we still
-      // cover if value has only a single use and this is one of the direct
-      // inputs of user, which also only has a single use (in user).
-      // TODO(nicohartmann@): We might generalize this further if we see use
-      // cases.
-      if (!value_op.saturated_use_count.IsOne()) return false;
-      for (auto input : user_op.inputs()) {
-        const turboshaft::Operation& input_op = graph_->Get(input);
-        const size_t indirect_use_count = base::count_if(
-            input_op.inputs(),
-            [value](turboshaft::OpIndex input) { return input == value; });
-        if (indirect_use_count > 0) {
-          return input_op.saturated_use_count.IsOne();
-        }
-      }
-      return false;
-    }
-    if (value_op.Is<turboshaft::ProjectionOp>()) {
-      // Projections always have a Tuple use, but it shouldn't count as a use as
-      // far as is_exclusive_user_of is concerned, since no instructions are
-      // emitted for the TupleOp, which is just a Turboshaft "meta operation".
-      // We thus increase the use_count by 1, to attribute the TupleOp use to
-      // the current operation.
-      use_count++;
-    }
-    DCHECK_LE(use_count, graph_->Get(value).saturated_use_count.Get());
-    return (value_op.saturated_use_count.Get() == use_count) &&
-           !value_op.saturated_use_count.IsSaturated();
-  }
-
-  uint32_t id(turboshaft::OpIndex node) const { return node.id(); }
-  static turboshaft::OpIndex value(turboshaft::OptionalOpIndex node) {
-    DCHECK(node.valid());
-    return node.value();
   }
 
  private:

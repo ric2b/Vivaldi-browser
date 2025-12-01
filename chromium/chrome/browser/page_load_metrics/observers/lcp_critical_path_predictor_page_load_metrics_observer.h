@@ -11,7 +11,12 @@
 #include "components/page_load_metrics/browser/page_load_metrics_observer.h"
 #include "content/public/browser/page_user_data.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
+#include "third_party/blink/public/mojom/lcp_critical_path_predictor/lcp_critical_path_predictor.mojom.h"
 #include "url/origin.h"
+
+namespace predictors {
+class ResourcePrefetchPredictor;
+}  // namespace predictors
 
 namespace internal {
 
@@ -66,7 +71,7 @@ enum class LCPPPredictResult {
 
 // Since histogram counts only positive numbers but the indexes origin 0,
 // add 1 for offset.
-const int kLCPIndexHistogramOffset = 1;
+inline constexpr int kLCPIndexHistogramOffset = 1;
 
 void MaybeReportConfidenceUMAsForTesting(
     const GURL& commit_url,
@@ -113,12 +118,10 @@ class LcpCriticalPathPredictorPageLoadMetricsObserver
       const LcpCriticalPathPredictorPageLoadMetricsObserver&) = delete;
   ~LcpCriticalPathPredictorPageLoadMetricsObserver() override;
 
-  void OnLcpUpdated(const std::optional<std::string>& lcp_element_locator,
-                    bool is_image_element,
-                    std::optional<uint32_t> predicted_lcp_index);
+  void OnLcpUpdated(blink::mojom::LcpElementPtr);
   void SetLcpInfluencerScriptUrls(
       const std::vector<GURL>& lcp_influencer_scripts);
-  void SetPreconnectOrigins(const std::vector<GURL>& origins);
+  void AddPreconnectOrigin(const url::Origin& origin);
   void SetUnusedPreloads(const std::vector<GURL>& unused_preloads);
   // Append fetched font URLs to the list to be passed to LCPP.
   void AppendFetchedFontUrl(const GURL& font_url, bool hit);
@@ -126,6 +129,9 @@ class LcpCriticalPathPredictorPageLoadMetricsObserver
       const GURL& subresource_url,
       const base::TimeDelta& subresource_load_start,
       network::mojom::RequestDestination request_destination);
+
+  void OnLcpTimingPredictedForTesting(
+      const std::optional<std::string>& element_locator);
 
  private:
   // PageLoadMetricsObserver implementation:
@@ -143,6 +149,7 @@ class LcpCriticalPathPredictorPageLoadMetricsObserver
   PageLoadMetricsObserver::ObservePolicy FlushMetricsOnAppEnterBackground(
       const page_load_metrics::mojom::PageLoadTiming& timing) override;
   void RecordTimingHistograms();
+  predictors::ResourcePrefetchPredictor* GetPredictor();
   void FinalizeLCP();
   void OnFirstContentfulPaintInPage(
       const page_load_metrics::mojom::PageLoadTiming& timing) override;
@@ -169,6 +176,8 @@ class LcpCriticalPathPredictorPageLoadMetricsObserver
   // LCPCriticalPathPredictorNavigationTimeHint.
   // std::nullopt value means the LCP didn't hit any of `lcp_element_locators`.
   std::vector<std::optional<uint32_t>> predicted_lcp_indexes_;
+
+  bool is_testing_ = false;
 
   base::WeakPtrFactory<LcpCriticalPathPredictorPageLoadMetricsObserver>
       weak_factory_{this};

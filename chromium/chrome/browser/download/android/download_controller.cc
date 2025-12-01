@@ -24,7 +24,6 @@
 #include "chrome/browser/android/profile_key_startup_accessor.h"
 #include "chrome/browser/android/profile_key_util.h"
 #include "chrome/browser/android/tab_android.h"
-#include "chrome/browser/download/android/dangerous_download_infobar_delegate.h"
 #include "chrome/browser/download/android/download_manager_service.h"
 #include "chrome/browser/download/android/download_utils.h"
 #include "chrome/browser/download/android/new_navigation_observer.h"
@@ -47,6 +46,7 @@
 #include "components/pdf/common/constants.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
@@ -65,6 +65,10 @@
 #include "ui/base/device_form_factor.h"
 #include "ui/base/page_transition_types.h"
 #include "url/android/gurl_android.h"
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "components/safe_browsing/content/common/file_type_policies.h"
+#endif
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
 #include "chrome/android/chrome_jni_headers/DownloadController_jni.h"
@@ -424,6 +428,14 @@ void DownloadController::StartAndroidDownloadInternal(
                                 std::string(),  // referrer_charset
                                 std::string(),  // suggested_name
                                 info.original_mime_type, default_file_name_);
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+  // Log the SBClientDownloadExtensions enum value for the Android download.
+  int64_t uma_value = safe_browsing::FileTypePolicies::GetInstance()
+                          ->UmaValueForUTF16FilenameUnsafe(file_name);
+  base::UmaHistogramSparse("Download.AndroidDownload.FileExtension", uma_value);
+#endif
+
   ScopedJavaLocalRef<jobject> jurl =
       url::GURLAndroid::FromNativeGURL(env, info.url);
   ScopedJavaLocalRef<jobject> jreferer =
@@ -542,9 +554,6 @@ void DownloadController::OnDangerousDownload(download::DownloadItem* item) {
 void DownloadController::EnableVerifyAppsDone(
     download::DownloadItem* item,
     safe_browsing::VerifyAppsEnabledResult result) {
-  base::UmaHistogramEnumeration(
-      "SBClientDownload.AndroidAppVerificationPromptResult2", result);
-
   if (app_verification_prompt_download_ != nullptr) {
     app_verification_prompt_download_ = nullptr;
     OnDownloadComplete(item);

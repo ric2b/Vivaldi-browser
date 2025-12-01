@@ -148,7 +148,7 @@ no_check_targets = [
 
 exec_script_allowlist =
     build_dotfile_settings.exec_script_allowlist +
-    angle_dotfile_settings.exec_script_whitelist +
+    angle_dotfile_settings.exec_script_allowlist +
     [
       # Allowlist entries for //build should go into
       # //build/dotfile_settings.gni instead, so that they can be shared
@@ -156,13 +156,7 @@ exec_script_allowlist =
       # in the Chromium repo outside of //build.
       "//build_overrides/build.gni",
 
-      "//chrome/android/webapk/shell_apk/prepare_upload_dir/BUILD.gn",
       "//chrome/version.gni",
-
-      # TODO(dgn): Layer violation but breaks the build otherwise, see
-      # https://crbug.com/474506.
-      "//clank/java/BUILD.gn",
-      "//clank/native/BUILD.gn",
 
       "//google_apis/BUILD.gn",
       "//printing/BUILD.gn",

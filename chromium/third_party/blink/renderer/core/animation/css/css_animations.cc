@@ -48,15 +48,15 @@
 #include "third_party/blink/renderer/core/animation/css/css_keyframe_effect_model.h"
 #include "third_party/blink/renderer/core/animation/css/css_transition.h"
 #include "third_party/blink/renderer/core/animation/css_default_interpolation_type.h"
-#include "third_party/blink/renderer/core/animation/css_interpolation_types_map.h"
+#include "third_party/blink/renderer/core/animation/css_interpolation_environment.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/animation/inert_effect.h"
 #include "third_party/blink/renderer/core/animation/interpolable_length.h"
 #include "third_party/blink/renderer/core/animation/interpolation.h"
-#include "third_party/blink/renderer/core/animation/interpolation_environment.h"
 #include "third_party/blink/renderer/core/animation/interpolation_type.h"
+#include "third_party/blink/renderer/core/animation/interpolation_types_map.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect.h"
 #include "third_party/blink/renderer/core/animation/keyframe_effect_model.h"
 #include "third_party/blink/renderer/core/animation/timing.h"
@@ -1572,10 +1572,10 @@ AnimationTrigger* CSSAnimations::ComputeTrigger(
   const std::optional<TimelineOffset>& new_end_offset =
       CSSAnimationData::GetRepeated(data->TriggerRangeEndList(),
                                     animation_index);
-  const std::optional<TimelineOffset>& new_exit_start_offset =
+  const TimelineOffsetOrAuto& new_exit_start_offset =
       CSSAnimationData::GetRepeated(data->TriggerExitRangeStartList(),
                                     animation_index);
-  const std::optional<TimelineOffset>& new_exit_end_offset =
+  const TimelineOffsetOrAuto& new_exit_end_offset =
       CSSAnimationData::GetRepeated(data->TriggerExitRangeEndList(),
                                     animation_index);
 
@@ -2513,7 +2513,7 @@ void CSSAnimations::CalculateTransitionUpdateForPropertyHandle(
     return;
   }
 
-  CSSInterpolationTypesMap map(registry, state.animating_element.GetDocument());
+  InterpolationTypesMap map(registry, state.animating_element.GetDocument());
   CSSInterpolationEnvironment old_environment(map, *state.before_change_style,
                                               after_change_style);
   CSSInterpolationEnvironment new_environment(map, after_change_style,
@@ -2523,9 +2523,9 @@ void CSSAnimations::CalculateTransitionUpdateForPropertyHandle(
   InterpolationValue end = nullptr;
   bool discrete_interpolation = true;
 
-  for (const auto& interpolation_type : map.Get(property)) {
+  for (const auto& interpolation_type : *map.Get(property)) {
     start = interpolation_type->MaybeConvertUnderlyingValue(old_environment);
-    transition_type = interpolation_type.get();
+    transition_type = interpolation_type.Get();
     if (!start) {
       continue;
     }
@@ -2624,7 +2624,7 @@ void CSSAnimations::CalculateTransitionUpdateForPropertyHandle(
   TransitionKeyframe* start_keyframe =
       MakeGarbageCollected<TransitionKeyframe>(property);
   start_keyframe->SetValue(MakeGarbageCollected<TypedInterpolationValue>(
-      *transition_type, start.interpolable_value->Clone(),
+      transition_type, start.interpolable_value->Clone(),
       start.non_interpolable_value));
   start_keyframe->SetOffset(0);
   keyframes.push_back(start_keyframe);
@@ -2632,7 +2632,7 @@ void CSSAnimations::CalculateTransitionUpdateForPropertyHandle(
   TransitionKeyframe* end_keyframe =
       MakeGarbageCollected<TransitionKeyframe>(property);
   end_keyframe->SetValue(MakeGarbageCollected<TypedInterpolationValue>(
-      *transition_type, end.interpolable_value->Clone(),
+      transition_type, end.interpolable_value->Clone(),
       end.non_interpolable_value));
   end_keyframe->SetOffset(1);
   keyframes.push_back(end_keyframe);
@@ -3175,17 +3175,6 @@ bool IsFontAffectingPropertyHandle(const PropertyHandle& property) {
   return property.GetCSSProperty().AffectsFont();
 }
 
-// TODO(alancutter): CSS properties and presentation attributes may have
-// identical effects. By grouping them in the same set we introduce a bug where
-// arbitrary hash iteration will determine the order the apply in and thus which
-// one "wins". We should be more deliberate about the order of application in
-// the case of effect collisions.
-// Example: Both 'color' and 'svg-color' set the color on ComputedStyle but are
-// considered distinct properties in the ActiveInterpolationsMap.
-bool IsCSSPropertyHandle(const PropertyHandle& property) {
-  return property.IsCSSProperty() || property.IsPresentationAttribute();
-}
-
 bool IsLineHeightPropertyHandle(const PropertyHandle& property) {
   return property == PropertyHandle(GetCSSPropertyLineHeight());
 }
@@ -3201,7 +3190,7 @@ void AdoptActiveAnimationInterpolations(
     const HeapHashSet<Member<const Animation>>* suppressed_animations) {
   ActiveInterpolationsMap interpolations(EffectStack::ActiveInterpolations(
       effect_stack, new_animations, suppressed_animations,
-      KeyframeEffect::kDefaultPriority, IsCSSPropertyHandle));
+      KeyframeEffect::kDefaultPriority));
   update.AdoptActiveInterpolationsForAnimations(interpolations);
 }
 
@@ -3244,8 +3233,7 @@ void CSSAnimations::CalculateTransitionActiveInterpolations(
   if (update.NewTransitions().empty() &&
       update.CancelledTransitions().empty()) {
     active_interpolations_for_transitions = EffectStack::ActiveInterpolations(
-        effect_stack, nullptr, nullptr, KeyframeEffect::kTransitionPriority,
-        IsCSSPropertyHandle);
+        effect_stack, nullptr, nullptr, KeyframeEffect::kTransitionPriority);
   } else {
     HeapVector<Member<const InertEffect>> new_transitions;
     for (const auto& entry : update.NewTransitions())
@@ -3256,7 +3244,7 @@ void CSSAnimations::CalculateTransitionActiveInterpolations(
 
     active_interpolations_for_transitions = EffectStack::ActiveInterpolations(
         effect_stack, &new_transitions, &cancelled_animations,
-        KeyframeEffect::kTransitionPriority, IsCSSPropertyHandle);
+        KeyframeEffect::kTransitionPriority);
   }
 
   const ActiveInterpolationsMap& animations =

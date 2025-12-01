@@ -6,6 +6,7 @@ The notarization module manages uploading artifacts for notarization, polling
 for results, and stapling Apple Notary notarization tickets.
 """
 
+import asyncio
 import collections
 import enum
 import os
@@ -47,7 +48,8 @@ class Invoker(invoker.Base):
     def notary_args(self):
         return self._notary_args
 
-    def submit(self, path, config):
+    async def submit(self, path, config):
+        # Submit the notarization.
         command = [
             'xcrun',
             'notarytool',
@@ -57,17 +59,38 @@ class Invoker(invoker.Base):
             '--output-format',
             'plist',
         ] + self.notary_args
-
-        output = commands.run_command_output(command)
+        output = await commands.run_command_output_async(command)
         try:
-            plist = plistlib.loads(output)
-            return plist['id']
+            uuid = plistlib.loads(output)['id']
         except:
             raise NotarizationError(
                 'xcrun notarytool returned output that could not be parsed: {}'
                 .format(output))
+        logger.info('Submitted %s for notarization, request UUID: %s.', path,
+                    uuid)
 
-    def get_result(self, uuid, config):
+        # Wait for notarization to complete.
+        while True:
+            result = await self.get_result(uuid, config)
+            if result.status == Status.IN_PROGRESS:
+                await asyncio.sleep(5)
+                continue
+            elif result.status == Status.SUCCESS:
+                logger.info('Successfully notarized request %s. Log file: %s',
+                            uuid, result.log_file)
+                return
+            else:
+                logger.error(
+                    'Failed to notarize request %s.\n'
+                    'Output:\n%s\n'
+                    'Log file:\n%s', uuid, result.output, result.log_file)
+                raise NotarizationError(
+                    'Notarization request {} failed with status: "{}".'.format(
+                        uuid,
+                        result.status_string,
+                    ))
+
+    async def get_result(self, uuid, config):
         command = [
             'xcrun',
             'notarytool',
@@ -76,7 +99,7 @@ class Invoker(invoker.Base):
             '--output-format',
             'plist',
         ] + self.notary_args
-        output = commands.run_command_output(command)
+        output = await commands.run_command_output_async(command)
 
         plist = plistlib.loads(output)
         status = plist['status']
@@ -87,30 +110,25 @@ class Invoker(invoker.Base):
         # notarytool does not provide log file URLs, so instead try to fetch
         # the log on failure.
         try:
-            log = self._get_log(uuid, config).decode('utf8')
+            log = (await self._get_log(uuid, config)).decode('utf8')
         except Exception as e:
             logger.error('Failed to get the notarization log data', e)
             log = None
         return NotarizationResult(Status.ERROR, status, output, log)
 
-    def _get_log(self, uuid, config):
+    async def _get_log(self, uuid, config):
         command = ['xcrun', 'notarytool', 'log', uuid] + self.notary_args
-        return commands.run_command_output(command)
+        return await commands.run_command_output_async(command)
 
 
-def submit(path, config):
-    """Submits an artifact to Apple for notarization.
+async def submit(path, config):
+    """Submits an artifact to Apple for notarization and awaits its success.
 
     Args:
         path: The path to the artifact that will be uploaded for notarization.
         config: The |config.CodeSignConfig| for the artifact.
-
-    Returns:
-        A UUID from the notary service that represents the request.
     """
-    uuid = config.invoker.notarizer.submit(path, config)
-    logger.info('Submitted %s for notarization, request UUID: %s.', path, uuid)
-    return uuid
+    await config.invoker.notarizer.submit(path, config)
 
 
 class Status(enum.Enum):
@@ -125,66 +143,6 @@ notarization request.
 """
 NotarizationResult = collections.namedtuple(
     'NotarizationResult', ['status', 'status_string', 'output', 'log_file'])
-
-
-def wait_for_results(uuids, config):
-    """Waits for results from the notarization service. This iterates the list
-    of UUIDs and checks the status of each one. For each successful result, the
-    function yields to the caller. If a request failed, this raises a
-    NotarizationError. If no requests are ready, this operation blocks and
-    retries until a result is ready. After a certain amount of time, the
-    operation will time out with a NotarizationError if no results are
-    produced.
-
-    Args:
-        uuids: List of UUIDs to check for results. The list must not be empty.
-        config: The |config.CodeSignConfig| object.
-
-    Yields:
-        The UUID of a successful notarization request.
-    """
-    assert len(uuids)
-
-    wait_set = set(uuids)
-
-    sleep_time_seconds = 5
-    total_sleep_time_seconds = 0
-
-    while len(wait_set) > 0:
-        for uuid in list(wait_set):
-            result = config.invoker.notarizer.get_result(uuid, config)
-            if result.status == Status.IN_PROGRESS:
-                continue
-            elif result.status == Status.SUCCESS:
-                logger.info('Successfully notarized request %s. Log file: %s',
-                            uuid, result.log_file)
-                wait_set.remove(uuid)
-                yield uuid
-            else:
-                logger.error(
-                    'Failed to notarize request %s.\n'
-                    'Output:\n%s\n'
-                    'Log file:\n%s', uuid, result.output, result.log_file)
-                raise NotarizationError(
-                    'Notarization request {} failed with status: "{}".'.format(
-                        uuid,
-                        result.status_string,
-                    ))
-
-        if len(wait_set) > 0:
-            # Do not wait more than 60 minutes for all the operations to
-            # complete.
-            if total_sleep_time_seconds < 60 * 60:
-                # No results were available, so wait and try again in some
-                # number of seconds. Do not wait more than 1 minute for any
-                # iteration.
-                time.sleep(sleep_time_seconds)
-                total_sleep_time_seconds += sleep_time_seconds
-                sleep_time_seconds = min(sleep_time_seconds * 2, 60)
-            else:
-                raise NotarizationError(
-                    'Timed out waiting for notarization requests: {}'.format(
-                        wait_set))
 
 
 def staple_bundled_parts(parts, paths):

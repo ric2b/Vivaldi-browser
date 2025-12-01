@@ -23,6 +23,7 @@
 #include "net/dns/public/resolve_error_info.h"
 #include "net/log/net_log_with_source.h"
 #include "services/network/public/cpp/resolve_host_client_base.h"
+#include "services/network/public/mojom/connection_change_observer_client.mojom.h"
 #include "services/network/public/mojom/host_resolver.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "url/gurl.h"
@@ -170,7 +171,8 @@ void SimpleNetworkHintsHandlerImpl::Preconnect(const url::SchemeHostPort& url,
           /*num_streams=*/1, url.GetURL(),
           allow_credentials ? network::mojom::CredentialsMode::kInclude
                             : network::mojom::CredentialsMode::kOmit,
-          network_anonymization_key, net::MutableNetworkTrafficAnnotationTag());
+          network_anonymization_key, net::MutableNetworkTrafficAnnotationTag(),
+          /*keepalive_config=*/std::nullopt, mojo::NullRemote());
 }
 
 }  // namespace network_hints

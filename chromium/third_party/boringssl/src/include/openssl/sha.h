@@ -26,6 +26,8 @@ extern "C" {
 // The SHA family of hash functions (SHA-1 and SHA-2).
 
 
+// SHA-1.
+
 // SHA_CBLOCK is the block size of SHA-1.
 #define SHA_CBLOCK 64
 
@@ -139,6 +141,7 @@ OPENSSL_EXPORT void SHA256_TransformBlocks(uint32_t state[8],
                                            const uint8_t *data,
                                            size_t num_blocks);
 
+
 // SHA-384.
 
 // SHA384_CBLOCK is the block size of SHA-384.
@@ -197,6 +200,7 @@ OPENSSL_EXPORT uint8_t *SHA512(const uint8_t *data, size_t len,
 // from |block|.
 OPENSSL_EXPORT void SHA512_Transform(SHA512_CTX *sha,
                                      const uint8_t block[SHA512_CBLOCK]);
+
 
 // SHA-512-256
 //

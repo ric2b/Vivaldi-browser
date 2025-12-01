@@ -155,6 +155,7 @@ L'etichetta è personalizzabile tramite la policy <ph name="ENTERPRISE_CUSTOM_LA
 <translation id="1100840127293327071">Non selezionare l'opzione per mantenere i dati di navigazione esistenti per impostazione predefinita</translation>
 <translation id="1105572260329131950">Vengono usate icone predefinite per le connessioni sicure</translation>
 <translation id="1105711894873068933">Dopo la disattivazione di <ph name="LACROS_NAME" />, tutti i dati utente vengono rimossi all'accesso successivo.</translation>
+<translation id="1106342730891876476">Impostazioni di condivisione</translation>
 <translation id="1107538157073168076">Disattiva estensione Insights</translation>
 <translation id="1110426799149444997">Disattiva la ricerca per sezione di <ph name="GOOGLE_LENS_PRODUCT_NAME" />.</translation>
 <translation id="1111324374369583989">Non visualizzare la schermata di impostazione delle dimensioni di visualizzazione durante l'accesso</translation>
@@ -187,11 +188,6 @@ Se la policy viene impostata su Attivata, gli utenti possono utilizzare l'hardwa
       Consente di stabilire il periodo di tempo che deve trascorrere prima della visualizzazione del salvaschermo nella schermata di accesso dei dispositivi in modalità retail.
 
       Il valore della norma deve essere specificato in millisecondi.</translation>
-<translation id="1141534298047883088">L'impostazione della policy specifica se i dispositivi degli utenti selezionati devono trovarsi su una rete gestita per far parte del corso <ph name="CLASS_TOOLS_NAME" />.
-
-   Se il valore viene impostato su true, dovranno trovarsi su una rete gestita.
-
-   Se il valore viene impostato su false o se la policy non viene configurata, gli utenti potranno partecipare senza trovarsi su una rete gestita.</translation>
 <translation id="1143257335984030879">Questa policy consente di stabilire la disponibilità della funzionalità della lista della spesa.
       Se viene attivata, agli utenti verrà presentata una UI per monitorare il prezzo del prodotto visualizzato nella pagina corrente. Il prodotto monitorato verrà mostrato nel riquadro laterale dei preferiti.
       Se questa policy viene impostata su Enabled o se non viene configurata, la funzionalità della lista della spesa sarà a disposizione degli utenti.
@@ -516,6 +512,11 @@ Se impostata su ChiediInUnaScheda, quando l'autenticazione dell'utente scade, ap
       Questa policy viene applicata per ignorare l'utilizzo della memoria e la modalità ad alta efficienza.
       Viene eseguito l'unload della pagina ignorata e le risorse della pagina vengono recuperate completamente. La scheda a cui è associata la pagina rimane nella tabstrip, ma se viene resa visibile viene attivato un ricaricamento completo.
       </translation>
+<translation id="1385786866699557535">L'URL di un'immagine che verrà utilizzata come badge aziendale per un browser gestito. L'URL deve indirizzare a un'immagine.
+
+Si consiglia di utilizzare la favicon (ad esempio https://www.google.com/favicon.ico) o un'icona di dimensioni non inferiori a 48 x 48 px.
+
+Tieni presente che questa policy viene applicata solo ai browser gestiti, quindi non avrà alcun effetto per gli utenti gestiti su browser non gestiti.</translation>
 <translation id="1386369130542976774">Specifica intervalli settimanali in cui non è possibile utilizzare i dispositivi ChromeOS</translation>
 <translation id="138847842893090358">Indica lo stato di aggiornamento del sistema operativo</translation>
 <translation id="1389138080311956934">Risparmio di memoria massimo.</translation>
@@ -554,6 +555,12 @@ Se la policy non viene configurata, i link vengono aperti per impostazione prede
 <translation id="1417888712677507140">Blocca le finestre di dialogo JavaScript attivate da un diverso frame secondario di origine.</translation>
 <translation id="1418387035898607074">Salta i controlli di Navigazione sicura per i file scaricati da fonti attendibili</translation>
 <translation id="1419020637569060510">Aggiungi limitazioni all'utilizzo di un account gestito come account secondario su ChromeOS</translation>
+<translation id="1423359855587524289">Se la policy viene attivata o se non viene configurata, l'app può utilizzare
+l'autorizzazione delle notifiche "temporanee" di iOS per presentare le notifiche nel
+Centro notifiche di iOS.
+
+Se la policy viene disattivata, l'app non utilizzerà notifiche
+temporanee.</translation>
 <translation id="142346659686073702">Consenti agli utenti non affiliati di usare Crostini</translation>
 <translation id="1423900783955065155">Questa policy consente di stabilire se una pagina con l'intestazione <ph name="CACHE_CONTROL_NO_STORE_NAME" /> può essere memorizzata o meno nella cache back-forward. L'impostazione del sito web per questa intestazione potrebbe non prevedere il ripristino della pagina dalla cache back-forward perché alcune informazioni sensibili potrebbero essere ancora visualizzate dopo il ripristino, anche se non sono più accessibili.
 
@@ -920,7 +927,6 @@ Nota: questa policy influirà solo sull'interfaccia utente e ChromeOS manterrà 
 
       Nota: esistono impostazioni separate per l'alimentazione CA e la batteria.</translation>
 <translation id="1607734317623618500">L'app web kiosk è in grado di funzionare offline</translation>
-<translation id="1608268562678058028">Impedisci agli insegnanti di inviare e fissare i contenuti sugli schermi degli studenti</translation>
 <translation id="1608755754295374538">URL a cui verrà concesso l'accesso ai dispositivi di acquisizione audio senza richieste</translation>
 <translation id="1608901087213748889">Consente di attivare un'azione quando il computer è inattivo.
 
@@ -959,14 +965,6 @@ La soglia minima è di 1 minuto.
 <translation id="1639468541408865385">Attiva cache di autenticazione HTTP con ambito globale</translation>
 <translation id="1639673466479276550">Attiva il salvaschermo nella schermata di accesso.</translation>
 <translation id="1640824698339859203">Attiva il servizio SSO mobile e trasferisci le autenticazioni del web service dell'utente sul nuovo dispositivo</translation>
-<translation id="1641117061932613266">Attiva il servizio <ph name="PRODUCT_NAME" /> V2</translation>
-<translation id="1641394008743444477">Consente di impostare un elenco di funzionalità di <ph name="PRODUCT_OS_NAME" /> da disattivare.
-
-      Se una qualsiasi di queste funzionalità viene disattivata, l'utente non può accedervi dall'UI e la vede contrassegnata come "disattivata dall'amministratore". L'esperienza utente delle funzionalità disattivate è decisa da <ph name="SYSTEM_FEATURES_DISABLE_MODE" />
-
-      Se la policy non viene configurata, tutte le funzionalità di <ph name="PRODUCT_OS_NAME" /> vengono attivate per impostazione predefinita e l'utente le può utilizzare.
-
-      Nota: al momento la funzionalità di scansione è disattivata per impostazione predefinita tramite un flag funzionalità. Se l'utente attiva la funzionalità tramite il flag funzionalità, questa può comunque essere disattivata dalla policy.</translation>
 <translation id="1643642938972654829">Consenti l'accesso alla pagina di test delle policy</translation>
 <translation id="1644373745741524038">Per motivi di sicurezza,
 l'API web <ph name="REQUEST_FULLSCREEN_API_NAME" />
@@ -986,11 +984,13 @@ Le origini che corrispondono a pattern delle policy sia bloccati sia consentiti 
 Le origini non specificate dalla policy o dalle impostazioni utente richiederanno la precedente
 attivazione dall'utente per chiamare questa API.</translation>
 <translation id="1645793986494086629">Schema:</translation>
+<translation id="1647420986475965896">Impostazioni per i suggerimenti di AI Mode nella barra degli indirizzi e nella casella di ricerca della pagina Nuova scheda</translation>
 <translation id="1647558381546345298">La configurazione della policy consente di impostare le dimensioni della cache utilizzate da <ph name="PRODUCT_NAME" /> per archiviare sul disco i file multimediali memorizzati nella cache, a prescindere dal fatto che gli utenti abbiano specificato o meno il flag --media-cache-size. Il valore specificato in questa policy non è un limite rigido, ma un suggerimento per il sistema di memorizzazione nella cache. Tutti i valori inferiori ad alcuni megabyte vengono arrotondati.
 
       Se il valore della policy viene impostato su 0, vengono utilizzate le dimensioni della cache predefinite e gli utenti non possono apportare modifiche.
 
       Se la policy non viene configurata, vengono utilizzate le dimensioni della cache predefinite e gli utenti possono apportare modifiche con il flag --media-cache-size.</translation>
+<translation id="1647775511451132916">Disattiva i controlli con il volto nella schermata di accesso</translation>
 <translation id="1648816843164517573">Elenco di nomi che eviteranno il controllo delle policy HSTS</translation>
 <translation id="1651197070942919276">Non consentire al dispositivo di eseguire macchine virtuali</translation>
 <translation id="1651216316133158002">Questa policy consente agli amministratori di specificare le app che fungono da gestori predefiniti per le rispettive estensioni dei file
@@ -1093,9 +1093,6 @@ Questa policy è una soluzione alternativa temporanea qualora le aziende
 riscontrino danni a causa di questa modifica. L'ultima versione supportata di questa
 policy era la versione 121. È stata rimossa nella versione 122.</translation>
 <translation id="1714790754501130659">Il nome utente per l'autenticazione dei servizi di sistema per il proxy web remoto.</translation>
-<translation id="171511968762040550">Se la policy è impostata su True o se non viene configurata, gli utenti possono aggiungere, rimuovere o modificare i preferiti.
-
-      Se la policy è impostata su False, gli utenti non possono aggiungere, rimuovere o modificare i preferiti, ma possono comunque utilizzare quelli esistenti.</translation>
 <translation id="1715151459541210849">Attiva la funzione di accessibilità di dettatura</translation>
 <translation id="1716468109214130396">Impedisci l'avvio di Chrome se non hai effettuato la registrazione a Chrome Browser Cloud Management</translation>
 <translation id="1719033799014769396">Disattiva i report sulla modalità di avvio del dispositivo</translation>
@@ -1107,6 +1104,7 @@ policy era la versione 121. È stata rimossa nella versione 122.</translation>
 
       Nota: questa impostazione sostituirà <ph name="REMOTE_ACCESS_HOST_DOMAIN_POLICY_NAME" />, se presente.</translation>
 <translation id="172374442286684480">Consenti a tutti i siti di impostare i dati locali</translation>
+<translation id="1725541103767528536">Consenti la compilazione automatica con l'AI senza migliorare i modelli di AI.</translation>
 <translation id="1729169799290004131">La configurazione della policy consente di specificare la percentuale di luminosità dello schermo, che comporta la disattivazione delle funzionalità di luminosità automatica. Il valore iniziale di luminosità dello schermo viene regolato il base al valore della policy, ma gli utenti possono modificarlo.
 
       Se la policy non viene configurata, i controlli o le funzionalità di luminosità automatica dello schermo dell'utente rimangono invariati.
@@ -1144,7 +1142,6 @@ policy era la versione 121. È stata rimossa nella versione 122.</translation>
 <translation id="1768225118528727376">Concedi l'autorizzazione per la gestione delle finestre su questi siti</translation>
 <translation id="1770071413238151235">Formato dell'orologio di 12 ore</translation>
 <translation id="1771024053220392089">Disattiva Supporto dei browser precedenti</translation>
-<translation id="177528603307243880">Non abilitare l'integrazione di Gemini.</translation>
 <translation id="1781356041596378058">Questa norma controlla anche l'accesso alle Opzioni sviluppatore di Android. Se la norma viene impostata su true, gli utenti non possono accedere alle Opzioni sviluppatore. Se la norma viene impostata su false o non viene impostata, gli utenti possono accedere alle Opzioni sviluppatore toccando sette volte il numero di build nell'app Impostazioni di Android.</translation>
 <translation id="1781720543185538098">Specifica se i sondaggi <ph name="PRODUCT_NAME" /> all'interno del prodotto vengono mostrati agli utenti.</translation>
 <translation id="1787790976045065845">Questa policy viene applicata soltanto se la policy <ph name="SECURITY_TOKEN_SESSION_BEHAVIOR_POLICY_NAME" /> è impostata su <ph name="SECURITY_TOKEN_SESSION_BEHAVIOR_LOCK" /> o <ph name="SECURITY_TOKEN_SESSION_BEHAVIOR_LOGOUT" /> e un utente che effettua l'autenticazione tramite smart card rimuove quest'ultima. Consente inoltre di specificare per quanti secondi viene visualizzata una notifica che informa l'utente dell'azione imminente. Questa notifica blocca lo schermo. L'azione viene compiuta soltanto allo scadere della notifica. L'utente può impedire l'azione inserendo di nuovo la smart card prima della scadenza della notifica. Se questa policy viene impostata su 0, non viene visualizzata alcuna notifica e l'azione viene compiuta immediatamente.</translation>
@@ -1254,9 +1251,6 @@ Questa norma viene rispettata soltanto se la norma "DefaultSearchProviderEnabled
 <translation id="1858775210076906272">Configurazione precompilata Kerberos</translation>
 <translation id="1861206724856734193">Consente di configurare un elenco di regole per la prevenzione della fuga di dati.</translation>
 <translation id="1862267110714201519">Disattiva la funzionalità di finestre nascoste.</translation>
-<translation id="1865129144973895592">Questa policy consente di riattivare temporaneamente un insieme di eventi della piattaforma deprecato e rimosso chiamato eventi Mutazione.
-Se questa policy viene attivata, gli eventi Mutazione continueranno a essere attivati, anche se sono stati disattivati per impostazione predefinita per i normali utenti web. Se questa policy viene disattivata o se non viene configurata, questi eventi potrebbero non essere attivati.
-Questa policy è una soluzione alternativa temporanea e verrà rimossa nella versione M135.</translation>
 <translation id="1865417998205858223">Autorizzazioni chiave</translation>
 <translation id="1865867000796030567">Se la policy viene impostata su Attivata, il valore della chiave manifest <ph name="REQUIRED_PLATFORM_VERSION" /> dell'app kiosk con avvio automatico senza ritardo viene utilizzato come prefisso di versione di destinazione con aggiornamento automatico.
 
@@ -1306,6 +1300,7 @@ Questa policy viene sempre applicata per <ph name="PRODUCT_OS_NAME" />.</transla
 Se questa policy viene impostata, non sarà necessario creare un nuovo profilo separato per gli accessi agli account dai domini elencati.
 
 Questa policy può essere impostata su una stringa vuota in modo che tutti gli accessi all'account debbano creare un nuovo profilo separato.</translation>
+<translation id="1895556874918666335">Non utilizzare la funzionalità di condivisione dei gruppi di schede.</translation>
 <translation id="1895698360618946084">Configura la funzionalità di integrazione di <ph name="CLASS_TOOLS_NAME" /> di Google Classroom</translation>
 <translation id="1897095538209040086">Se la policy viene attivata o se non viene configurata, <ph name="PRODUCT_NAME" /> tiene aperta almeno una scheda dopo il passaggio a un browser alternativo.
 
@@ -1538,7 +1533,6 @@ Se viene disattivata, Traduzione dal Vivo sarà sempre disattivata.
 Se configuri questa policy come obbligatoria, gli utenti non potranno modificarla o eseguire il relativo override.
 
 Se questa policy non viene configurata, inizialmente Traduzione dal Vivo sarà disattivata, ma l'utente potrà attivarla in qualsiasi momento.</translation>
-<translation id="2083696311760456171">Non consentire la previsione di compilazione automatica.</translation>
 <translation id="20838788335877967">Disattiva la generazione di report sulle informazioni di identificazione dell'utente</translation>
 <translation id="208566302163036794">Blocca le funzionalità disattivate</translation>
 <translation id="2086040449830622332">Attiva sandbox LPAC di stampa</translation>
@@ -1572,6 +1566,12 @@ Se questa policy non viene configurata, inizialmente Traduzione dal Vivo sarà d
         </translation>
 <translation id="2112656109118682849">Consenti agli utenti di attivare/disattivare la visualizzazione delle informazioni di sistema nella schermata di accesso</translation>
 <translation id="2113068765175018713">Limita il tempo di attività del dispositivo riavviandolo automaticamente</translation>
+<translation id="211386002920955760">Controlla se un utente aziendale può accedere alla funzionalità di condivisione dei gruppi di schede in Chrome.
+
+La funzionalità di condivisione dei gruppi di schede consente agli utenti di condividere e collaborare in gruppi di schede.
+
+Se la policy è impostata su 0 o se non viene impostata, indica che i gruppi di schede possono essere condivisi.
+Se la policy è impostata su 1, indica che i gruppi di schede non possono essere condivisi.</translation>
 <translation id="2116169546538119304"> Questa policy è deprecata, configura le policy di Kerberos in modo da riutilizzare la password di accesso.</translation>
 <translation id="2117990069872855599">L'URL da cui è possibile scaricare l'immagine dell'avatar.</translation>
 <translation id="2124881675920287921">Questa policy è stata ritirata in M82 e rimossa in M85; usa la policy <ph name="SAFE_BROWSING_EXTENDED_REPORTING_ENABLED_POLICY_NAME" />. Disattivare <ph name="SAFE_BROWSING_EXTENDED_REPORTING_OPT_IN_ALLOWED_POLICY_NAME" /> equivale a disattivare <ph name="SAFE_BROWSING_EXTENDED_REPORTING_ENABLED_POLICY_NAME" />. Attivare <ph name="SAFE_BROWSING_EXTENDED_REPORTING_OPT_IN_ALLOWED_POLICY_NAME" /> o non configurare questa impostazione equivale a non configurare <ph name="SAFE_BROWSING_EXTENDED_REPORTING_ENABLED_POLICY_NAME" />.
@@ -1668,6 +1668,7 @@ Se questa policy non viene configurata, equivale ad attivarla per gli utenti nor
 <translation id="2168397434410358693">Ritardo inattività in caso di utilizzo di CA</translation>
 <translation id="217013996107840632">Parametri della riga di comando per cambiare il browser alternativo.</translation>
 <translation id="2170233653554726857">Attiva ottimizzazione WPAD</translation>
+<translation id="2172201084331314152">Configura la videocamera, le impostazioni del browser, le impostazioni del sistema operativo, nonché le funzionalità di scansione, Web Store, canvas, Esplora, Crosh, Galleria, Terminal, Registratore, processi di stampa, key_shortcuts, Gmail, google_docs, google_slides, google_sheets, google_drive, google_keep, google_calendar, google_chat, YouTube, google_maps, Calcolatrice e text_editor da disattivare</translation>
 <translation id="2174946221763588594">Consente di stabilire se i siti visitati dagli utenti possono creare sessioni di realtà aumentata immersive usando l'<ph name="WEBXR_API_NAME" />.
 
       Se questa policy non viene configurata o se viene attivata, l'<ph name="WEBXR_API_NAME" /> accetterà <ph name="WEBXR_AR_SESSION_ENUM_VALUE" /> durante la creazione delle sessioni, consentendo così agli utenti di vivere esperienze di realtà aumentata.
@@ -1696,6 +1697,25 @@ Se questa policy non viene configurata, equivale ad attivarla per gli utenti nor
 <translation id="2180795125410219364">Le impostazioni di Inizio/Fine sono disattivate</translation>
 <translation id="2180958780733364832">Controlla l'uso della modalità headless</translation>
 <translation id="2182291258410176649">L'utente decide se abilitare il backup e il ripristino</translation>
+<translation id="2182945089357619926">Questa policy consente agli amministratori di impostare un aggregatore di ricerca aziendale designato che fornirà consigli e risultati di ricerca nella barra degli indirizzi quando viene attivato da una parola chiave specifica. Gli utenti possono avviare una ricerca digitando nella barra degli indirizzi la parola chiave specificata nel campo <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> con o senza il prefisso @ (ad es. <ph name="SHORTCUT_EXAMPLE_SEARCH_AGGREGATOR_SETTINGS" />) e premendo la barra spaziatrice o il tasto Tab.
+
+I seguenti campi sono obbligatori: <ph name="NAME_SEARCH_AGGREGATOR_SETTINGS_FIELD" />, <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" />, <ph name="SEARCH_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" />, <ph name="SUGGEST_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" />.
+
+Il campo <ph name="NAME_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> corrisponde al nome del motore di ricerca mostrato all'utente nella barra degli indirizzi.
+
+Il campo <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> corrisponde alla parola chiave inserita dall'utente per attivare la ricerca. La scorciatoia può includere parole e caratteri semplici, ma non può includere spazi o iniziare con il simbolo @. Le scorciatoie devono essere univoche.
+
+Il campo <ph name="SEARCH_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica l'URL in cui cercare. Inserisci l'indirizzo web della pagina dei risultati del motore di ricerca e usa <ph name="SEARCH_TERM_MARKER" /> al posto della query.
+
+Il campo <ph name="SUGGEST_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica l'URL che fornisce suggerimenti di ricerca. Verrà eseguita una richiesta POST e la query dell'utente verrà inserita nei parametri POST sotto la chiave <ph name="SEARCH_SUGGEST_POST_PARAMS_QUERY_KEY" />.
+
+Il campo <ph name="ICON_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica l'URL di un'immagine che verrà utilizzata nei suggerimenti di ricerca. Se questo campo non viene impostato, verrà utilizzata un'icona predefinita. Consigliamo di utilizzare una favicon (ad esempio <ph name="ICON_URL_EXAMPLE" />). Formati di file immagine supportati: JPEG, PNG e ICO.
+
+Il campo <ph name="REQUIRE_SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica se la barra degli indirizzi <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> è obbligatoria per visualizzare i suggerimenti di ricerca. Se questo campo non viene configurato, la barra degli indirizzi <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> non sarà obbligatoria.
+
+Su <ph name="MS_WIN_NAME" />, questa policy è disponibile soltanto per le istanze che sono aggiunte a un dominio <ph name="MS_AD_NAME" />, aggiunte a <ph name="MS_AAD_NAME" /> o registrate in <ph name="CHROME_ENTERPRISE_CORE_NAME" />.
+
+Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istanze che sono gestite tramite MDM, aggiunte a un dominio tramite MCX o registrate in <ph name="CHROME_ENTERPRISE_CORE_NAME" />.</translation>
 <translation id="2183338188392346527">Non segnalare i contatori del tempo di esecuzione del dispositivo</translation>
 <translation id="2187372280917024033">Il modello URI del resolver DNS over HTTPS desiderato. Per specificare diversi resolver DNS over HTTPS, separa i modelli URI corrispondenti con gli spazi. Questa policy è molto simile a <ph name="DOH_TEMPLATES_POLICY_NAME" /> e la sostituirà se verrà specificato.
 A differenza della policy <ph name="DOH_TEMPLATES_POLICY_NAME" />, questa policy consente di specificare le informazioni sull'identità.
@@ -1740,6 +1760,7 @@ Se configuri questa policy, la policy <ph name="PRIVACY_SANDBOX_PROMPT_ENABLED_P
 Se viene impostata su Disattivata, gli utenti non possono utilizzare questa funzionalità.
 
       Se la policy viene configurata, gli utenti non possono modificarla in <ph name="PRODUCT_NAME" />. Se non viene configurata, è consentito il controllo della divulgazione delle credenziali, ma l'utente può disattivarlo.</translation>
+<translation id="220834508664708052">Consenti la compilazione automatica con l'AI e migliora i modelli di AI.</translation>
 <translation id="2208976000652006649">Parametri per l'URL di ricerca che utilizza POST</translation>
 <translation id="2212011154693551439">La pagina della cronologia di Chrome organizzata in gruppi sarà visibile all'indirizzo chrome://history/grouped per impostazione predefinita.</translation>
 <translation id="2212207215880394506">Non consentire l'editing di foto con AI generativa.</translation>
@@ -1809,11 +1830,6 @@ Se questa policy non viene configurata o se viene disattivata, il trasferimento 
 <translation id="2246565294817797392">Blocca cookie troncati</translation>
 <translation id="2246621891161157804">Consenti a Chrome di bloccare le navigazioni verso protocolli esterni all'interno di iframe con sandbox</translation>
 <translation id="224750967938323855">Non mostrare il consenso alla sincronizzazione durante l'accesso</translation>
-<translation id="2250738397312289836">La configurazione della policy specifica se gli insegnanti selezionati possono inviare e fissare contenuti sugli schermi degli studenti.
-
-  Se il valore viene impostato su true o se la policy non viene configurata, potranno inviare e fissare i contenuti.
-
-  Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="2252400912879027343">WebSQL in contesti non sicuri rimarrà disponibile fino alla versione M109, dopodiché non sarà disponibile a partire dalla versione M110.</translation>
 <translation id="225340736558643885">Attiva avvisi per moduli non sicuri</translation>
 <translation id="2258126710006312594">Consenti l'accesso remoto agli utenti per trasferire file da/verso l'host</translation>
@@ -1950,6 +1966,7 @@ Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istan
 
       Se la policy viene impostata su Disattivata, questa funzionalità non è disponibile.</translation>
 <translation id="2342066287156668839">Attiva la quota permanente.</translation>
+<translation id="2344033063256716138">Configura le policy per controllare se l'utente è autorizzato ad accedere a funzionalità e dati condivisi.</translation>
 <translation id="2345547870894930157">Attiva DNS over HTTPS senza fallback non sicuro</translation>
 <translation id="2347695338560092641">Driver di stampa out-of-process consentiti</translation>
 <translation id="234856189825555040">Questa policy consente di stabilire se i plug-in <ph name="PEPPER_NAME" /> possono usare il nuovo decodificatore per comunicare con i decodificatori hardware anziché il decodificatore video precedente.
@@ -2053,6 +2070,9 @@ Se questa policy non viene impostata, la Schermata sulla privacy verrà inizialm
 <translation id="2421779938235645781">Il colore della retroilluminazione della tastiera corrisponde allo sfondo corrente</translation>
 <translation id="2423255396068675416">Se la policy viene impostata su Attivata o se non viene configurata, gli utenti possono eseguire <ph name="PRODUCT_CROSTINI_NAME" />, finché <ph name="VIRTUAL_MACHINES_ALLOWED_POLICY_NAME" /> e <ph name="CROSTINI_ALLOWED_POLICY_NAME" /> sono impostate su Attivata. Se la policy viene impostata su Disattivata, <ph name="PRODUCT_CROSTINI_NAME" /> viene disattivata per l'utente. Impostando la policy su Disattivata, questa viene applicata all'avvio di nuovi container <ph name="PRODUCT_CROSTINI_NAME" />, non a quelli già in esecuzione.</translation>
 <translation id="2423654977291507457">Disattiva integrazioni</translation>
+<translation id="2424141395604579502">Se la policy viene impostata su True o se non viene configurata, gli utenti possono aggiungere, rimuovere, modificare o caricare i preferiti.
+
+      Se viene impostata su False, gli utenti non possono aggiungere, rimuovere, modificare o caricare i preferiti, ma possono comunque utilizzare quelli esistenti.</translation>
 <translation id="242521047682347997">Non consentire agli utenti di sincronizzare i messaggi SMS tra il telefono e Chromebook</translation>
 <translation id="2426782419955104525">Consente di attivare la funzione Instant di <ph name="PRODUCT_NAME" /> e di impedire agli utenti di modificare l'impostazione.
 
@@ -2167,6 +2187,12 @@ Se la policy non viene configurata, <ph name="POLICY_VALUE_VISIBLE" /> è la sel
 <translation id="2506865562891982662">Consenti agli utenti di selezionare i dispositivi di trasmissione con un codice di accesso o un codice QR dal menu di <ph name="PRODUCT_NAME" />.</translation>
 <translation id="2509748672176727116">L'utente potrà eseguire acquisizioni di pacchetti di rete</translation>
 <translation id="2509919237512982967">Usa i controlli modulo legacy fino alla versione M84.</translation>
+<translation id="2512531606818417084">Questa policy è temporanea e non sarà più valida a partire dalla versione M137.
+
+Questa funzionalità consente l'utilizzo di "zstd" nell'intestazione della richiesta Accept-Encoding e supporta la decompressione dei contenuti web <ph name="ZSTANDARD_SHORTNAME" />compressi.
+
+Se la policy viene attivata o se non viene configurata, <ph name="PRODUCT_NAME" /> accetterà i contenuti web compressi con <ph name="ZSTANDARD_SHORTNAME" />.
+Se la policy viene disattivata, la funzionalità di codifica dei contenuti di <ph name="ZSTANDARD_SHORTNAME" /> viene disattivata.</translation>
 <translation id="2512972020817284317">Viene attivata l'unione delle policy relative al cloud a livello di utente.</translation>
 <translation id="2515699738406900920">Disponibilità del selettore profilo all'avvio</translation>
 <translation id="2517466659416174529">Consenti il blocco delle schede in secondo piano</translation>
@@ -2271,6 +2297,11 @@ Se la policy viene attivata, i log saranno mantenuti nel file di log di sistema 
 Se la policy viene disattivata o se non viene configurata, i log non possono essere aggiunti al file di log di sistema. Ciò significa che i log non verranno mantenuti tra le sessioni.</translation>
 <translation id="2586117300379904732">Consenti wakelock per la gestione dell'alimentazione</translation>
 <translation id="2586231026319371211">L'ora nel formato di tempo reale di 24 ore locale.</translation>
+<translation id="2587264090076722817">La configurazione della policy consente di specificare quali app web isolate (IWA) possono connettersi alle smart card utilizzando l'API web Smart Card senza richiedere all'utente l'autorizzazione.
+
+Questa policy esegue l'override del comportamento di <ph name="DEFAULT_SMART_CARD_CONNECT_POLICY_NAME" /> ed è soggetto all'override da parte di <ph name="SMART_CARD_CONNECT_BLOCKED_FOR_URLS_POLICY_NAME" />.
+
+Per impostazione predefinita, le IWA che specificano le autorizzazioni per le smart card all'interno del manifest possono connettersi alle smart card a condizione che l'utente conceda l'autorizzazione in modo interattivo per ogni lettore.</translation>
 <translation id="2587719089023392205">Imposta <ph name="PRODUCT_NAME" /> come browser predefinito</translation>
 <translation id="2588252329503406673">La configurazione della policy consente di impostare il comportamento di <ph name="PRODUCT_OS_NAME" /> quando non viene rilevata alcuna attività utente per un determinato periodo di tempo durante la visualizzazione della schermata di accesso. La policy consente di controllare diverse impostazioni. Per conoscere la semantica e gli intervalli di valori di ognuna di esse, consulta le relative policy che controllano la gestione dell'alimentazione all'interno di una sessione.
 
@@ -2320,8 +2351,16 @@ NOTA: le modifiche apportate a questa policy verranno applicate soltanto ai proc
       Se la policy non viene configurata, <ph name="GET_ALL_SCREENS_MEDIA_NAME" /> non è disponibile per alcuna applicazione web.
 Per migliorare la privacy, questa policy non supporterà gli aggiornamenti a metà sessione del valore della policy, pertanto le modifiche verranno applicate solo dopo che l'utente si è disconnesso e ha eseguito nuovamente l'accesso.
 L'utente avrà la certezza che, dopo l'accesso, le altre app non saranno in grado di acquisire le schermate, se ciò non era già stato consentito all'inizio della sessione.</translation>
+<translation id="2614156176932194496">Impostazioni per le integrazioni di AI Mode di Google nella barra degli indirizzi e nella casella di ricerca della pagina Nuova scheda.</translation>
 <translation id="2615240493030733717">Segnala informazioni sul fuso orario</translation>
 <translation id="2619258867868873629">La destinazione "Salva come PDF" e la destinazione "Salva su Google Drive" sui dispositivi <ph name="PRODUCT_OS_NAME" /></translation>
+<translation id="262035875928535253">Configura l'elenco di domini in cui <ph name="PRODUCT_NAME" /> deve disattivare <ph name="PASSWORD_MANAGER_NAME" />. Ciò significa che i workflow di salvataggio e compilazione verranno disattivati, in modo che le password di questi siti web non possano essere salvate o compilate automaticamente nei moduli web.
+
+Se un dominio è presente nell'elenco, <ph name="PASSWORD_MANAGER_NAME" /> verrà disattivato per quel dominio.
+
+Se un dominio non è presente nell'elenco, <ph name="PASSWORD_MANAGER_NAME" /> sarà disponibile per il dominio.
+
+Se la policy non viene configurata, <ph name="PASSWORD_MANAGER_NAME" /> sarà disponibile per tutti i domini.</translation>
 <translation id="2621290137818374425">La configurazione della policy consente di disattivare i requisiti relativi alle informative di Certificate Transparency per i nomi host negli URL specificati. Anche se rilevare certificati emessi in modo scorretto diventa più difficile, gli host possono continuare a utilizzare certificati che altrimenti non verrebbero ritenuti attendibili, in quanto non resi pubblici in modo appropriato.
 
       Se la policy non viene configurata e se i certificati che richiedono informative tramite Certificate Transparency non vengono comunicati, <ph name="PRODUCT_NAME" /> non ritiene attendibili questi certificati.
@@ -2363,6 +2402,7 @@ Il sistema eseguirà una query sui record AAAA soltanto quando può essere conne
 <translation id="2652747206827086936">Disattiva la scheda File di SharePoint e OneDrive nella pagina Nuova scheda</translation>
 <translation id="2656559539624760733">Non utilizzare Chrome Root Store.</translation>
 <translation id="2658653824183107970">Usa l'implementazione <ph name="CORS" /> legacy anziché la nuova implementazione <ph name="CORS" /></translation>
+<translation id="2659581762274047663">Attiva il servizio <ph name="PRODUCT_NAME" /></translation>
 <translation id="2660846099862559570">Non utilizzare mai un proxy</translation>
 <translation id="2661628029848851543">Sono consentiti tutti gli utilizzi degli account gestiti</translation>
 <translation id="2664391398878045611">Nella pagina Nuova scheda non verrà mostrata la comunicazione dell'area centrale, anche se è disponibile</translation>
@@ -2384,6 +2424,7 @@ Il sistema eseguirà una query sui record AAAA soltanto quando può essere conne
 <translation id="268695908564263739">Questa policy attiva o disattiva l'impostazione della modalità ad alta efficienza. Questa impostazione fa sì che le schede vengano chiuse dopo un certo periodo di tempo in background per recuperare memoria.
       Se questa policy non è impostata, l'utente finale può controllare questa impostazione all'indirizzo chrome://settings/performance.
       </translation>
+<translation id="2687600966277668971">Impossibile inviare il precaricamento di SpeculationRules agli URL controllati da ServiceWorkers (comportamento legacy).</translation>
 <translation id="2691668238491124549">Se questa policy viene impostata (come consigliato), le lingue consigliate per una sessione gestita vengono spostate in cima all'elenco, nell'ordine di visualizzazione nella policy. La prima lingua consigliata è preselezionata.
 
       Se la policy non viene impostata, viene preselezionata la lingua attuale dell'interfaccia utente.
@@ -2406,6 +2447,16 @@ Il sistema eseguirà una query sui record AAAA soltanto quando può essere conne
 <translation id="2702682139813393777">Forza l'avvio degli host di messaggistica nativi di Windows tramite cmd.exe</translation>
 <translation id="270582584528242502">Non mostrare una finestra di dialogo di avviso quando l'utente sta tentando di uscire</translation>
 <translation id="2706708761587205154">Consenti la stampa solo con PIN</translation>
+<translation id="2706972066112233185">Questa policy consente di stabilire la visibilità della sezione dei consigli in AI Mode nella barra degli indirizzi e nella casella di ricerca della pagina Nuova scheda.
+
+Questa funzionalità è disponibile per tutti gli utenti che usano Google come motore di ricerca predefinito, a meno che non venga disattivata da questa policy.
+
+Se la policy non viene configurata, il relativo comportamento viene determinato dalla policy <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
+
+Se la policy viene impostata su 0 - Attivata o se non viene configurata, la funzionalità sarà disponibile per gli utenti. Se viene impostata su 1 - Disattivata, la funzionalità non sarà disponibile.
+
+0 = Consente di utilizzare la funzionalità
+1 = Non consente di utilizzare la funzionalità.</translation>
 <translation id="2707733461906745082">Separazione profilo</translation>
 <translation id="2707873794476722903">Navigazione sicura è attiva in modalità standard.</translation>
 <translation id="2709516037105925701">Compilazione automatica</translation>
@@ -2445,17 +2496,6 @@ Il sistema eseguirà una query sui record AAAA soltanto quando può essere conne
       Se la policy non viene configurata per un sito, la policy di <ph name="DEFAULT_LOCAL_FONTS_SETTING_POLICY_NAME" /> viene applicata al sito, se configurata, altrimenti l'autorizzazione seguirà le impostazioni predefinite del browser e consentirà agli utenti di scegliere se concedere o meno l'autorizzazione per ciascun sito.</translation>
 <translation id="272712253546233296">Consenti agli insegnanti di visualizzare gli schermi degli studenti da remoto.</translation>
 <translation id="2727844239611930002">Consenti a <ph name="PRODUCT_NAME" /> di stabilire se mostrare o meno la richiesta di <ph name="PRIVACY_SANDBOX_NAME" />.</translation>
-<translation id="2729889068935597630">Questa policy definisce l'impostazione predefinita per tutte le funzionalità di AI generativa incluse. Ad esempio, se questa policy viene impostata sul valore 1, 1 sarà l'impostazione predefinita per tutte le funzionalità di AI generativa incluse. Non inciderà sui valori delle policy impostate manualmente. Per un elenco delle funzionalità incluse, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.
-
-0 = Consente di utilizzare la funzionalità e permette al contempo a Google di utilizzare i dati pertinenti per migliorare i propri modelli di AI. A seconda della funzionalità, tra i dati pertinenti sono inclusi prompt, input, output, materiali originali e feedback scritto. Potrebbero anche essere esaminati da persone per migliorare i modelli di AI. 0 è il valore predefinito, ad eccezione dei casi riportati di seguito.
-
-1 = Consente di utilizzare la funzionalità, ma non consente a Google di migliorare i modelli utilizzando i contenuti degli utenti (inclusi prompt, input, output, materiali originali e feedback scritto). 1 è il valore predefinito per gli utenti aziendali gestiti da <ph name="GOOGLE_ADMIN_CONSOLE_PRODUCT_NAME" /> e per gli account Education gestiti da <ph name="GOOGLE_WORKSPACE_PRODUCT_NAME" />.
-
-2 = Non consente di utilizzare la funzionalità.
-
-Se una funzionalità inclusa non ha un valore di policy equivalente, verrà utilizzato il valore più alto più vicino. Consulta la documentazione relativa a questa funzionalità per ulteriori dettagli su come interagisce con i valori in questa policy.
-
-Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI generativa, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
 <translation id="2730200383593984228">Consenti a utenti non affiliati di utilizzare app per Android</translation>
 <translation id="2730419309754848345">Stampa PDF come immagine predefinita</translation>
 <translation id="2730644640965800157">Se la policy viene attivata, viene disattivata la sincronizzazione di <ph name="GOOGLE_DRIVE_NAME" /> nell'app File di <ph name="PRODUCT_OS_NAME" />. Nessun dato viene caricato su Drive.
@@ -2499,12 +2539,12 @@ Se la policy viene disattivata o se non viene configurata, gli utenti possono tr
 <translation id="2760947619380644513">Consenti agli utenti che accedono da remoto di aprire gli URL lato host nel browser client locale</translation>
 <translation id="2761483219396643566">Ritardo avviso inattività in caso di utilizzo della batteria</translation>
 <translation id="2764750330785898947">Attiva il supporto della codifica dei contenuti <ph name="ZSTANDARD_SHORTNAME" /></translation>
+<translation id="2764833421824025037">Non consentire alle origini delle app web isolate di connettersi ai lettori di smart card</translation>
 <translation id="2764964245640818227">Controlla se il visualizzatore PDF in <ph name="PRODUCT_NAME" /> può aggiungere annotazioni nei PDF.
 
       Quando questa policy non è impostata o è impostata su true, il visualizzatore PDF può aggiungere annotazioni nei PDF.
 
       Quando questa policy è impostata su false, il visualizzatore PDF non può aggiungere annotazioni sui PDF.</translation>
-<translation id="2769199041812510302">URL logo aziendale</translation>
 <translation id="2769952903507981510">Configura il nome di dominio richiesto per gli host di accesso remoto</translation>
 <translation id="2770376586681635746">Consente di stabilire se gli utenti possono o meno aggiungere account Kerberos.
 
@@ -2645,7 +2685,6 @@ Questa policy può essere impostata soltanto come policy relativa agli utenti cl
           È possibile inviare più override; viene applicata la voce valida più recente.</translation>
 <translation id="2901725272378498025">Attiva gli avvisi sulla sicurezza per i flag della riga di comando</translation>
 <translation id="2905984450136807296">Durata dei dati di autenticazione nella cache</translation>
-<translation id="2906532308470098188">Consenti la previsione di compilazione automatica e migliora i modelli di AI.</translation>
 <translation id="2906874737073861391">Elenco di estensioni AppPack</translation>
 <translation id="2908277604670530363">Numero massimo di connessioni simultanee al server proxy</translation>
 <translation id="2912366658685903301">Configura il colore del tema del browser</translation>
@@ -2736,6 +2775,11 @@ L'opzione dell'algoritmo chiave <ph name="EC_KEY_ALGORITHM_VALUE_NAME" /> è sup
 <translation id="2962972237615992440">Viene disattivato il proxy <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="2963292398266537394">Disattiva la dettatura</translation>
 <translation id="2964373560810620158">Impedisci agli utenti di usare il browser <ph name="LACROS_NAME" /></translation>
+<translation id="2965240371261684039">La configurazione della policy specifica se gli insegnanti selezionati possono visualizzare gli schermi degli studenti da remoto.
+
+Se il valore viene impostato su true o se la policy non viene configurata, possono visualizzare gli schermi degli studenti.
+
+Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="2968177167006045252">Consenti ai siti di utilizzare la policy SharedArrayBuffers</translation>
 <translation id="2969489219271682844">Non mostrare notifiche quando vengono rilevati dispositivi USB</translation>
 <translation id="2969568582351417848">Disattiva gli avvisi relativi al download basati sulle estensioni dei tipi di file per tipi di file specifici sui domini</translation>
@@ -2795,6 +2839,17 @@ Se il valore è impostato su <ph name="ENABLED_ENUM_VALUE" />, le entità vengon
 Se il valore viene impostato su <ph name="DISABLED_ENUM_VALUE" />, le entità non vengono rilevate e non sono utilizzabili.
 Se il valore è impostato su <ph name="LONGPRESSONLY_ENUM_VALUE" />, le entità vengono rilevate e sono utilizzabili solo mediante la pressione prolungata.</translation>
 <translation id="3010907817113180883">Frequenza del rilevamento dell'heartbeat dell'attività del dispositivo in millisecondi.</translation>
+<translation id="3015732569734756809">Quando i controlli con il volto sono attivi, puoi usare la testa per controllare il cursore del mouse e usare
+le espressioni facciali per eseguire azioni di sistema. In questo modo puoi controllare il dispositivo
+senza usare le mani.
+
+Se questa policy viene impostata su true, i controlli con il volto saranno sempre attivi nella schermata di accesso.
+
+Se viene impostata su false, i controlli con il volto saranno sempre disattivati nella schermata di accesso.
+
+Se configuri questa policy, gli utenti non potranno modificarla o eseguirne l'override.
+
+Se la policy non viene configurata, inizialmente il controllo con il volto sarà disattivato nella schermata di accesso, ma l'utente potrà attivarlo in qualsiasi momento.</translation>
 <translation id="3016585641676676461">Blocca lo schermo intero automatico su questi siti</translation>
 <translation id="3017578958356048910">Il visualizzatore PDF può aggiungere annotazioni nei PDF</translation>
 <translation id="3020623128585817424">Disattiva il controllo del browser predefinito all'avvio</translation>
@@ -2882,6 +2937,7 @@ Questa norma viene rispettata soltanto se viene attivata la norma "DefaultSearch
 <translation id="305106159605171619">Riduzione dello user agent disattivata e non attivata da Field-Trials o Origin-Trials.</translation>
 <translation id="3053265701996417839">Microsoft Windows 7</translation>
 <translation id="3057459316145779761">Non consentire l'utilizzo di Chrome for Testing</translation>
+<translation id="3059687162224942925">Attiva la notifica di gestione nel piè di pagina della pagina Nuova scheda</translation>
 <translation id="3060608694980129910">Questo criterio consente di controllare il reporting su cloud di <ph name="PRODUCT_NAME" /> relativo agli indicatori di sicurezza per uno specifico profilo gestito.
 
 Se questo criterio viene impostato su Enabled, segnala al server di gestione dispositivi indicatori di sicurezza relativi al dispositivo, al browser e al profilo.
@@ -2984,6 +3040,7 @@ Per informazioni dettagliate sui pattern <ph name="URL_LABEL" /> validi, visita 
 Se la policy è impostata su Attivata, il menu Accessibilità mobile verrà mostrato sempre.
 
 Se la policy è impostata su Disattivata o non è impostata, il menu Accessibilità mobile non verrà mai mostrato.</translation>
+<translation id="312646755999968569">Disabilita TLS 1.3 Early Data</translation>
 <translation id="3126748868885248792">Il pulsante destro è il principale</translation>
 <translation id="3128072319047570212">Impostazioni keygen</translation>
 <translation id="3131703464330936425">Non consentire il roaming dei dati mobili</translation>
@@ -3000,12 +3057,34 @@ Se la policy è impostata su Disattivata o non è impostata, il menu Accessibili
 <translation id="3143203373436771188">Quando si accede a documenti Office gestiti da <ph name="BASIC_EDITOR_NAME" />, aprili in <ph name="BASIC_EDITOR_NAME" /></translation>
 <translation id="3144173889708944482">Se per la policy <ph name="DEVICE_PRINTERS_ACCESS_MODE_POLICY_NAME" /> viene scelta l'opzione <ph name="PRINTERS_BLOCKLIST" />, la configurazione della policy <ph name="DEVICE_PRINTERS_BLOCKLIST_POLICY_NAME" /> consente di specificare le stampanti che gli utenti non possono usare. Gli utenti avranno a disposizione tutte le stampanti, tranne quelle i cui ID sono elencati in questa policy. Gli ID devono corrispondere ai campi <ph name="ID_FIELD" /> o <ph name="GUID_FIELD" /> del file specificato nella policy <ph name="DEVICE_PRINTERS_POLICY_NAME" />.</translation>
 <translation id="3146711617256415776">Non consentire le voci di sintesi vocale di rete migliorate durante l'utilizzo di Seleziona per ascoltare</translation>
+<translation id="315013437951136266">Attiva la funzionalità <ph name="IP_PROTECTION_NAME" />.</translation>
 <translation id="3150351525324499342">Non mostrare l'icona <ph name="PRODUCT_NAME" /> nella barra degli strumenti per impostazione predefinita, ma lascia la scelta agli utenti</translation>
 <translation id="3152135410085709340">Consenti l'accesso ai file locali per gli URL file:// su questi siti nel visualizzatore PDF</translation>
 <translation id="3152425128389603870">Rendi disponibile la modalità Desktop unificato e attivala per impostazione predefinita</translation>
 <translation id="3159375329008977062">L'utente è abilitato a importare/esportare contenitori Crostini tramite l'interfaccia</translation>
 <translation id="3163167792874598128">Se la policy non viene configurata o se viene impostata su Enabled, la promozione di valutazione dell'App Store potrebbe essere mostrata all'utente al massimo una volta all'anno.
 Se viene impostata su Disabled, la promozione di valutazione dell'App Store non verrà mostrata all'utente.</translation>
+<translation id="3163880369487075383">Questa policy consente di stabilire se è possibile cancellare window.name per le navigazioni
+cross-site di primo livello che determinano la creazione di un nuovo gruppo di contesto di navigazione
+quando la variante ClearCrossSiteCrossBrowsingContextGroupWindowName è abilitata.
+
+La variante ClearCrossSiteCrossBrowsingContextGroupWindowName controlla se
+il valore di window.name verrà cancellato per le navigazioni cross-site di primo livello. Alcuni esempi di
+queste navigazioni sono: un utente che si sposta su un nuovo sito tramite la omnibox o
+fa clic su un link a un nuovo sito che utilizza "target='_blank'
+rel='noopener'". In questi casi, la cancellazione di window.name impedisce che le informazioni
+vengano potenzialmente divulgate tra siti tramite la proprietà window.name, migliorando la privacy
+degli utenti. La policy ClearWindowNameForNewBrowsingContextGroup è attiva per
+ripristinare il comportamento precedente. Quando la
+variante ClearCrossSiteCrossBrowsingContextGroupWindowName viene attivata,
+se questa policy viene attivata o se non viene configurata, la proprietà window.name verrà eliminata per le navigazioni idonee. Se viene disattivata, window.name non verrà cancellato.
+
+Se devi usare la policy per disabilitare la cancellazione di window.name nelle
+navigazioni idonee, segnala un bug su
+<ph name="BUG_URL" />
+spiegando il tuo caso d'uso. La policy sarà valida
+fino alla versione 142 di
+<ph name="PRODUCT_NAME" />.</translation>
 <translation id="3164531087779621747">Modalità di stampa PostScript</translation>
 <translation id="3165808775394012744">Queste norme sono incluse qui in modo che sia più facile rimuoverle.</translation>
 <translation id="3166210414652928099">Consenti all'utente di usare app Android di fonti non attendibili</translation>
@@ -3243,8 +3322,6 @@ Se la policy viene impostata su true o non viene configurata, le app web verrann
       Se viene impostata su Disattivata, la sicurezza e la stabilità di <ph name="PRODUCT_NAME" /> diminuiranno, poiché verrà ridotta la sandbox usata dai processi del renderer. Disattivala solo se si verificano dei problemi di compatibilità con software di terze parti che devono essere eseguiti all'interno dei processi del renderer.
 
       Nota: scopri di più sulle policy relative alla mitigazione dei processi (https://chromium.googlesource.com/chromium/src/+/HEAD/docs/design/sandbox.md#Process-mitigation-policies).</translation>
-<translation id="3338041636115991551">Se ArcEnabled è impostato su True, ARC viene attivato per l'utente, a meno che la modalità temporanea o l'accesso simultaneo siano attivi durante la sessione utente. Se la policy è impostata su False o non è configurata, gli utenti aziendali non possono utilizzare ARC.
-Questa policy consente di controllare soltanto <ph name="ARC_VM" /> su <ph name="PRODUCT_NAME" />. Per <ph name="PRODUCT_OS_FLEX_NAME" />, consulta la policy <ph name="DEVICE_FLEX_ARC_PRELOAD_ENABLED_POLICY_NAME" /> per ulteriori dettagli.</translation>
 <translation id="3338431256935927407">Consente di gestire le impostazioni relative alla funzionalità Cloud Upload.</translation>
 <translation id="3339271789059866414">Consente di configurare la disponibilità del servizio proxy di sistema e le credenziali proxy dei servizi di sistema.
       Se la policy non viene impostata, il servizio proxy di sistema non sarà disponibile.</translation>
@@ -3320,13 +3397,6 @@ Per questa policy è possibile definire al massimo 1000 voci.
 Se la policy non viene impostata, non è possibile navigare nel browser se è attiva la VPN sempre attiva in modalità con restrizioni e la VPN non è connessa.</translation>
 <translation id="3405997282295704902">Non consentire agli utenti di utilizzare <ph name="PRODUCT_NAME" /></translation>
 <translation id="3406122462682235653">Non chiedere all'utente (il download inizia immediatamente)</translation>
-<translation id="3408078762098350617">Consente di controllare l'esperienza utente delle funzionalità disattivate elencate nella policy <ph name="SYSTEM_FEATURES_DISABLE_LIST_POLICY_NAME" />.
-
-      Se la policy viene impostata su "blocked", le funzionalità disattivate non saranno utilizzabili, ma rimarranno visibili per gli utenti.
-
-      Se la policy viene impostata su "hidden", le funzionalità disattivate saranno inutilizzabili e non visibili per gli utenti.
-
-      Se la policy non viene configurata o presenta un valore non valido, la modalità di disattivazione delle funzionalità di sistema sarà "blocked".</translation>
 <translation id="3411947169047929182">Controlla la configurazione correlata a WebRTC</translation>
 <translation id="341285788698114069">Questa policy consente di stabilire la priorità del processo audio su Windows.
       Se la policy viene attivata, il processo audio verrà eseguito con priorità sopra la norma.
@@ -3413,11 +3483,6 @@ Se la policy non viene configurata, <ph name="DEFAULT_DIRECT_SOCKETS_SETTING_POL
 I pattern URL non devono essere in conflitto con <ph name="DIRECT_SOCKETS_ALLOWED_FOR_URLS_POLICY_NAME" />. Nessuna policy ha la precedenza se un URL presenta corrispondenze con entrambi.
 
 Visita la pagina https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns per informazioni dettagliate sui pattern URL validi. <ph name="WILDCARD_VALUE" /> non è un valore accettato per questa policy.</translation>
-<translation id="3475567950961265791">La configurazione della policy specifica se gli insegnanti selezionati possono visualizzare gli schermi degli studenti da remoto.
-
-   Se il valore viene impostato su true o se la policy non viene configurata, possono visualizzare gli schermi degli studenti.
-
-   Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="3478024346823118645">Cancella dati utente all'uscita</translation>
 <translation id="3478406829037689272">Attiva le analisi approfondite dei download di Navigazione sicura</translation>
 <translation id="3480403794500220210">Consenti agli insegnanti di utilizzare l'elenco degli studenti di Google Classroom.</translation>
@@ -3526,6 +3591,11 @@ Se questa policy viene configurata, <ph name="DEVELOPER_TOOLS_AVAILABILITY_POLIC
       Se la policy non viene configurata, non sarà applicata alcuna limitazione.</translation>
 <translation id="3531084733660068324">Impostazioni della supervisione dei genitori</translation>
 <translation id="3532827558833318911">Cancella l'accesso con password</translation>
+<translation id="353291262171579310">Questa policy consente di stabilire la visibilità dell'avviso di gestione nel piè di pagina della pagina Nuova scheda. Per impostazione predefinita, il piè di pagina della pagina Nuova Scheda mostra le informazioni quando il browser è gestito da un'organizzazione (indicata dall'icona a forma di edificio e dalla dicitura "Gestito da [nome di dominio]"). Puoi personalizzare questo comportamento utilizzando le policy <ph name="ENTERPRISE_CUSTOM_LABEL_FOR_BROWSER" /> e <ph name="ENTERPRISE_LOGO_URL_FOR_BROWSER" />.
+
+Se questa policy non viene impostata o se viene impostata su true, nei browser gestiti verrà visualizzata una notifica "Gestito da…" con un'icona.
+
+Se questa policy viene impostata su false, l'avviso di gestione verrà nascosto.</translation>
 <translation id="353611922042274900">Mostra sempre le informazioni di sistema nella schermata di accesso</translation>
 <translation id="3536263244905016305">Disattiva l'ottimizzazione WPAD (Web Proxy Auto-Discovery)</translation>
 <translation id="3539103206548425861">Se la policy viene configurata, la riproduzione video automatica (senza il consenso dell'utente) con contenuti audio è consentita in <ph name="PRODUCT_NAME" />. Se la policy <ph name="AUTOPLAY_ALLOWED_POLICY_NAME" /> viene impostata su true, tale policy non ha effetto. Se la policy <ph name="AUTOPLAY_ALLOWED_POLICY_NAME" /> viene impostata su false, l'insieme di pattern URL in tale policy possono comunque essere riprodotti. Se la policy viene modificata mentre <ph name="PRODUCT_NAME" /> è in esecuzione, viene applicata solo alle nuove schede aperte.
@@ -3707,6 +3777,7 @@ Le connessioni che non superano il controllo non andranno a buon fine e restitui
 <translation id="3663124775601519286">Se la policy viene impostata su Attivata o se non viene configurata, l'utilizzo dell'API Translator in <ph name="PRODUCT_NAME" /> è consentito.
 
       Se viene impostata su Disattivata, l'utilizzo dell'API Translator non è consentito.</translation>
+<translation id="366494444808132420">Consenti le integrazioni di Gemini.</translation>
 <translation id="3665437376055221832">Richiedi la selezione da parte dell'utente quando nessun certificato corrisponde alla selezione automatica.</translation>
 <translation id="3667467644216039144">Consente di configurare un elenco dei tipi di dati di navigazione che dovrebbero essere eliminati alla chiusura di tutte le finestre del browser da parte dell'utente.
 
@@ -3951,6 +4022,7 @@ Tieni presente che questa policy non ha alcun effetto se <ph name="ENTERPRISE_PR
       Se la norma non è specificata, l'URL di recupero del numero di inizializzazione delle varianti non verrà modificato.</translation>
 <translation id="3863409707075047163">Versione SSL minima attivata</translation>
 <translation id="3864129983143201415">Configura le lingue consentite in una sessione utente</translation>
+<translation id="386502146112362869">Non consentire le integrazioni di Gemini.</translation>
 <translation id="3866249974567520381">Descrizione</translation>
 <translation id="3866481716008450417">Disattiva l'avvio automatico della riautenticazione online.</translation>
 <translation id="386723261607812952">Imposta il tipo di lente d'ingrandimento sulla schermata di accesso</translation>
@@ -4005,6 +4077,7 @@ Tieni presente che questa policy non ha alcun effetto se <ph name="ENTERPRISE_PR
 
  Se la policy non viene configurata oppure se viene impostato un valore vuoto o non valido, non verrà aggiunto un ulteriore valore <ph name="CLIENT_INFO_IPP_ATTRIBUTE" /> alle richieste di processi di stampa.
 </translation>
+<translation id="3895626555961466729">Consenti i suggerimenti di AI Mode.</translation>
 <translation id="3896591584655529057">Attiva il salvataggio delle passkey utilizzando Gestore delle password</translation>
 <translation id="3896751141670591496">Se la policy viene attivata o se non viene configurata, vengono mostrati avvisi di sicurezza quando flag della riga di comando potenzialmente pericolosi vengono utilizzati per avviare Chrome.
 
@@ -4066,12 +4139,6 @@ La policy può essere combinata con <ph name="POLICY_CLOUD_POLICY_OVERRIDES_PLAT
           Se questa policy non viene impostata, inizialmente i tasti permanenti sono disattivati nella schermata di accesso, ma l'utente può attivarli in qualsiasi momento.</translation>
 <translation id="3927291637826333102">Consenti acquisizione schermate desktop, schede e finestre in base a queste origini</translation>
 <translation id="3928726028264020458">Attiva i report sulle informazioni VPD del dispositivo</translation>
-<translation id="3929433884360648086">Questa funzionalità consente l'utilizzo di "zstd" nell'intestazione della richiesta Accept-Encoding e supporta la decompressione dei contenuti web <ph name="ZSTANDARD_SHORTNAME" />compressi.
-
-Se la policy viene attivata o se non viene configurata, <ph name="PRODUCT_NAME" /> accetterà i contenuti web compressi con <ph name="ZSTANDARD_SHORTNAME" />.
-Se la policy viene disattivata, la funzionalità di codifica dei contenuti di <ph name="ZSTANDARD_SHORTNAME" /> viene disattivata.
-
-Questa policy è stata pensata per essere temporanea e verrà rimossa in futuro.</translation>
 <translation id="3935592079035695061">Millisecondi dalla mezzanotte.</translation>
 <translation id="3941289958028934630">Disattiva la funzione di lettura vocale nella schermata di accesso</translation>
 <translation id="3943930334592166130">Questa policy controlla se all'utente viene richiesto di selezionare un certificato client quando più certificati corrispondono a <ph name="AUTO_SELECT_CERTIFICATE_FOR_URLS_POLICY_NAME" />.
@@ -4116,6 +4183,11 @@ possono essere inviati i report aziendali.
 [1] https://www.w3.org/TR/reporting-1/#endpoint</translation>
 <translation id="398294729592983401">Consenti agli utenti di attivare o disattivare l'impostazione Protezione dal fingerprinting di <ph name="PRIVACY_SANDBOX_NAME" /> sul proprio dispositivo.</translation>
 <translation id="3983162212222338509">La risoluzione DNS di sistema può essere essere eseguita nel processo di rete, all'esterno del processo di rete o parzialmente all'interno e all'esterno, a seconda della configurazione del sistema e dei flag funzionalità.</translation>
+<translation id="3986500787181481802">Questa policy consente di controllare un'etichetta personalizzata utilizzata per indicare un browser gestito. Per i browser gestiti, questa etichetta verrà mostrata in un disclaimer relativo alla gestione in un piè di pagina nella pagina Nuova scheda. L'etichetta personalizzata non viene tradotta.
+
+Quando questa policy viene applicata, le stringhe che superano i 16 caratteri verranno troncate con "…". Non utilizzare nomi estesi.
+
+Tieni presente che questa policy viene applicata solo ai browser gestiti, quindi non avrà alcun effetto per gli utenti gestiti su browser non gestiti.</translation>
 <translation id="3986700049001404598">Consenti agli utenti di terminare i processi con il Task Manager di Chrome</translation>
 <translation id="398884292557092447">Se la policy viene impostata su true o se non viene configurata, gli utenti possono controllare i suggerimenti di compilazione automatica per le carte di credito nella UI.
 
@@ -4197,6 +4269,7 @@ Equivale alla policy <ph name="RELATED_WEBSITE_SETS_ENABLED_POLICY_NAME" />.
 È possibile utilizzare entrambe le policy, ma a breve questa verrà ritirata, quindi è preferibile usare la policy <ph name="RELATED_WEBSITE_SETS_ENABLED_POLICY_NAME" />.
 Entrambe hanno lo stesso effetto sul comportamento del browser.</translation>
 <translation id="4016700865356669962">Se la policy viene impostata su Attivata, gli utenti possono usare i modelli di layout di scrivanie.  Se la policy viene impostata su Disattivata o se non viene configurata, questi modelli non saranno disponibili.</translation>
+<translation id="4018536413833147396">Consenti agli utenti di attivare o disattivare l'impostazione <ph name="IP_PROTECTION_NAME" /> sul loro dispositivo. La funzionalità verrà attivata per impostazione predefinita.</translation>
 <translation id="4020682745012723568">Le app Android non possono accedere ai cookie trasferiti al profilo dell'utente.</translation>
 <translation id="4021684548211845008">Disattiva i suoni in modalità Niente distrazioni.</translation>
 <translation id="4025500273782820766">Consenti agli utenti di selezionare "Consenti sempre" quando viene mostrata una finestra di dialogo relativa a un protocollo esterno per non ricevere più messaggi di conferma in futuro</translation>
@@ -4216,6 +4289,7 @@ La policy viene applicata sia all'URL a cui l'utente accede sia agli iframe. La 
 <translation id="4051723201852944592">Attiva Copertura finestra</translation>
 <translation id="4052529125939620019">Carica l'estensione del componente CryptoToken all'avvio</translation>
 <translation id="4053157306171963473">Disattiva i report sul tempo di attività del dispositivo</translation>
+<translation id="4056842786707010434">Scegli se consentire la cancellazione di window.name per le navigazioni cross-site di primo livello che generano un nuovo gruppo di contesti di navigazione.</translation>
 <translation id="4056910949759281379">Disabilita protocollo SPDY</translation>
 <translation id="4057442294431066708">Questa policy consente di stabilire l'opzione della scorciatoia selezionata per la rimappatura degli eventi a
 F11/F12 nella pagina secondaria per rimappare i tasti. Queste impostazioni si applicano solo alle
@@ -4364,6 +4438,15 @@ Se la policy viene impostata su <ph name="DISABLE_UNPUBLISHED" /> (1), le estens
 
           Se questa policy non viene impostata, inizialmente la funzione di lettura vocale è disattivata nella schermata di accesso, ma l'utente può attivarla in qualsiasi momento.</translation>
 <translation id="4173974507809462880">Visualizza la schermata della direzione di scorrimento sul touchpad durante l'accesso</translation>
+<translation id="4175770453187201981">Questo criterio controlla le integrazioni di AI Mode di Google nella barra degli indirizzi e nella casella di ricerca della pagina Nuova scheda.
+
+Per accedere a questa funzionalità, è necessario impostare Google come motore di ricerca predefinito dell'utente.
+
+0/non impostato = la funzionalità sarà disponibile per gli utenti.
+
+1 = la funzionalità non sarà disponibile per gli utenti.
+
+Se la policy non viene configurata, il relativo comportamento viene determinato dalla policy <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.</translation>
 <translation id="417956245902013347">Consente di attivare la funzione di accessibilità di evidenziazione del cursore di testo nella schermata di accesso.
 
           Se questa policy è impostata su true, l'evidenziazione del cursore di testo sarà sempre attivata sulla schermata di accesso.
@@ -4398,6 +4481,11 @@ Nota: il blocco degli URL interni chrome://* e chrome-untrusted://* può causare
 
       Nelle sessioni kiosk non sono previsti periodi di tolleranza e non vengono inviate notifiche relative al riavvio.
 </translation>
+<translation id="4186619317169045904">La configurazione della policy consente di specificare quali app web isolate (IWA) non potranno connettersi ai lettori di smart card (non verrà nemmeno chiesto agli utenti di concedere l'autorizzazione).
+
+Questa policy esegue l'override del comportamento di <ph name="DEFAULT_SMART_CARD_CONNECT_POLICY_NAME" /> e <ph name="SMART_CARD_CONNECT_ALLOWED_FOR_URLS_POLICY_NAME" />.
+
+Per impostazione predefinita, le IWA che specificano le autorizzazioni per le smart card all'interno del manifest possono connettersi alle smart card a condizione che l'utente conceda l'autorizzazione in modo interattivo per ogni lettore.</translation>
 <translation id="4187576366596772431">Blocca l'API WebHID su questi siti</translation>
 <translation id="4188427466177877986">Se la policy non viene configurata o se viene attivata, gli utenti potranno monitorare i propri pacchetti su <ph name="PRODUCT_NAME" /> tramite la pagina Nuova scheda.
 Se viene disattivata, gli utenti non possono monitorare i loro pacchetti su <ph name="PRODUCT_NAME" /> tramite la pagina Nuova scheda.
@@ -4424,6 +4512,7 @@ Deprecato: la funzionalità di tracciamento delle spedizioni è disattivata dall
 <translation id="4189872355465413041">Applicazioni di sistema</translation>
 <translation id="4190316993598857632">Abilita la modifica dei preferiti</translation>
 <translation id="4192388905594723944">URL per la convalida del token di autenticazione del client di accesso remoto</translation>
+<translation id="4195119404667420672">Il precaricamento di SpeculationRules può essere inviato agli URL controllati da ServiceWorkers.</translation>
 <translation id="4195698007674066525">Imposta una tastiera numerica come predefinita per l'inserimento delle password</translation>
 <translation id="4203055629055264833">Se la policy viene impostata su Enabled o se non viene configurata, gli utenti possono visualizzare la pagina di risultati più recente del motore di ricerca predefinito in un riquadro laterale attivando un'icona nella barra degli strumenti.
 
@@ -4457,6 +4546,7 @@ Se è impostata anche la policy <ph name="DOH_TEMPLATES_POLICY_NAME" />, viene p
 I domini devono essere indicati sotto forma di nome di dominio completo (FQDN) o come suffissi di dominio indicati utilizzando come prefisso il carattere jolly speciale "*".
 
 I domini con formato errato verranno ignorati.</translation>
+<translation id="4238777612788632629">Riavvia rapidamente se obsoleta</translation>
 <translation id="4239720644496144453">La cache non viene utilizzata per le app Android. Se più utenti installano la stessa app Android, questa viene scaricata per ogni utente.</translation>
 <translation id="4242583077375244471">Se questa policy viene attivata, <ph name="PRODUCT_NAME" /> eseguirà la verifica dei certificati dei server mediante lo strumento di verifica dei certificati integrato con Chrome Root Store usato come fonte di attendibilità pubblica.
 
@@ -4477,11 +4567,6 @@ dello strumento di verifica dei certificati e dei certificati radice forniti dal
 <translation id="4245159233848584683">Se la policy viene impostata su Attivata o non viene configurata e se un account locale del dispositivo è configurato per l'accesso automatico senza ritardo, quando un dispositivo è offline <ph name="PRODUCT_OS_NAME" /> mostra una richiesta di configurazione della rete.
 
 Se la policy viene impostata su Disattivata, viene visualizzato invece un messaggio di errore.</translation>
-<translation id="424605961245122145">La configurazione della policy specifica se gli insegnanti possono comunicare con gli studenti utilizzando l'elenco degli studenti di Google Classroom. Vedi <ph name="GOOGLE_CLASSROOM_LINK" />.
-
-    Se il valore viene impostato su true o se la policy non viene configurata, potranno utilizzare l'elenco degli studenti di Google Classroom.
-
-    Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="4248277954659222481">Consenti la riproduzione automatica dei contenuti multimediali per una lista consentita di pattern URL</translation>
 <translation id="4250680216510889253">No</translation>
 <translation id="4251370222792468420">Chrome tenta di eseguire l'upgrade di alcuni tipi di sottorisorse di contenuto misto (HTTP su un sito HTTPS) su iOS.
@@ -4509,11 +4594,6 @@ Questa policy è stata utilizzata per disattivare l'upgrade automatico dei conte
 
       Tieni presente che questa funzionalità è supportata soltanto nell'ambiente di rete interno di Google.</translation>
 <translation id="4269859918103560644">Consenti all'utente di decidere</translation>
-<translation id="4271245613154024710">La configurazione della policy consente di specificare quali app web isolate (IWA) possono connettersi alle smart card utilizzando l'API web Smart Card senza richiedere all'utente l'autorizzazione. Questa policy non accetta caratteri jolly.
-
-Viene eseguito l'override di questa policy da <ph name="POLICY_NAME" />; in particolare, se il valore di una lista bloccata è <ph name="ALL_ISOLATED_WEB_APPS" />, nessuna IWA potrà connettersi ai lettori di smart card (non verrà nemmeno chiesto agli utenti di concedere l'autorizzazione), ad eccezione di quelle elencate in questa policy.
-
-Per impostazione predefinita, le IWA che specificano le autorizzazioni per le smart card all'interno del manifest possono connettersi alle smart card a condizione che l'utente conceda l'autorizzazione in modo interattivo per ogni lettore.</translation>
 <translation id="4274691295133617461">Se la policy viene impostata su 3, i siti web possono richiedere l'accesso di lettura di file e directory nel file system del sistema operativo host tramite l'API file system. Se la policy viene impostata su 2, l'accesso viene negato.
 
       Se non viene configurata, i siti web possono richiedere l'accesso, ma gli utenti possono modificare l'impostazione.</translation>
@@ -4554,7 +4634,6 @@ L'impostazione di <ph name="CHROME_OS_RELEASE_CHANNEL_POLICY_NAME" /> ha effetto
       Se la policy viene impostata su Disabled o se non viene configurata, la modalità di ricarica avanzata della batteria rimane disattivata.
 
       Gli utenti non possono modificare questa impostazione.</translation>
-<translation id="4307479555111916927">Imposta un'etichetta aziendale personalizzata</translation>
 <translation id="4309091698378414920">Attiva l'evidenziazione del cursore</translation>
 <translation id="4311141497190183490">Se la policy viene impostata su 1, i siti possono tracciare la posizione fisica dell'utente come stato predefinito. Se la policy viene impostata su 2, il tracciamento viene negato per impostazione predefinita. Puoi impostare la policy per chiedere ogni volta che un sito vuole tracciare la posizione fisica degli utenti.
 
@@ -4562,27 +4641,6 @@ Se la policy non viene configurata, si applica la policy <ph name="ASK_GEOLOCATI
 <translation id="4311195029067684288">Full</translation>
 <translation id="4311662690937656540">Applica in modo forzato gli accessi online nelle schermate di accesso e di blocco</translation>
 <translation id="4313767483634435271">Indirizzo MAC designato del dock del dispositivo</translation>
-<translation id="4313778862255986189">Questa è una funzionalità beta. Poiché si tratta di una funzionalità in fase di sviluppo, disponibile per i nostri trusted tester, tieni presente che potrebbe subire modifiche e aggiornamenti.
-
-Questa policy consente agli amministratori di impostare un aggregatore di ricerca aziendale designato che fornirà consigli e risultati di ricerca nella barra degli indirizzi quando viene attivato da una parola chiave specifica. Gli utenti possono avviare una ricerca digitando nella barra degli indirizzi la parola chiave specificata nel campo <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> con o senza il prefisso @ (ad es. <ph name="SHORTCUT_EXAMPLE_SEARCH_AGGREGATOR_SETTINGS" />) e premendo la barra spaziatrice o il tasto Tab.
-
-I seguenti campi sono obbligatori: <ph name="NAME_SEARCH_AGGREGATOR_SETTINGS_FIELD" />, <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" />, <ph name="SEARCH_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" />, <ph name="SUGGEST_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" />.
-
-Il campo <ph name="NAME_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> corrisponde al nome del motore di ricerca mostrato all'utente nella barra degli indirizzi.
-
-Il campo <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> corrisponde alla parola chiave inserita dall'utente per attivare la ricerca. La scorciatoia può includere parole e caratteri semplici, ma non può includere spazi o iniziare con il simbolo @. Le scorciatoie devono essere univoche.
-
-Il campo <ph name="SEARCH_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica l'URL in cui cercare. Inserisci l'indirizzo web della pagina dei risultati del motore di ricerca e usa <ph name="SEARCH_TERM_MARKER" /> al posto della query.
-
-Il campo <ph name="SUGGEST_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica l'URL che fornisce suggerimenti di ricerca. Se <ph name="SUGGEST_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> contiene <ph name="SEARCH_TERM_MARKER" />, Chrome otterrà i suggerimenti di ricerca tramite una richiesta GET all'URL sostituendo <ph name="SEARCH_TERM_MARKER" /> con la query di ricerca dell'utente. In caso contrario, verrà eseguita una richiesta POST e la query dell'utente verrà inserita nei parametri POST sotto la chiave <ph name="SEARCH_SUGGEST_POST_PARAMS_QUERY_KEY" />.
-
-Il campo <ph name="ICON_URL_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica l'URL di un'immagine che verrà utilizzata nei suggerimenti di ricerca. Se questo campo non viene impostato, verrà utilizzata un'icona predefinita. Consigliamo di utilizzare una favicon (ad esempio <ph name="ICON_URL_EXAMPLE" />). Formati di file immagine supportati: JPEG, PNG e ICO.
-
-Il campo <ph name="REQUIRE_SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> specifica se la barra degli indirizzi <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> è obbligatoria per visualizzare i suggerimenti di ricerca. Se questo campo non viene impostato, la barra degli indirizzi <ph name="SHORTCUT_SEARCH_AGGREGATOR_SETTINGS_FIELD" /> non è obbligatoria.
-
-Su <ph name="MS_WIN_NAME" />, questa policy è disponibile soltanto per le istanze che sono aggiunte a un dominio <ph name="MS_AD_NAME" />, aggiunte a <ph name="MS_AAD_NAME" /> o registrate in <ph name="CHROME_ENTERPRISE_CORE_NAME" />.
-
-Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istanze che sono gestite tramite MDM, aggiunte a un dominio tramite MCX o registrate in <ph name="CHROME_ENTERPRISE_CORE_NAME" />.</translation>
 <translation id="4314538398999793073">Disattiva ricerca CNAME durante l'autenticazione Kerberos</translation>
 <translation id="4320592646346933548">Wi-Fi</translation>
 <translation id="43213511254881626">Questa policy consente di stabilire se il gestore delle password integrato può eliminare le password non decifrabili dal relativo database. Questa operazione è necessaria per ripristinare la funzionalità completa del gestore delle password integrato, ma potrebbe comportare la perdita definitiva dei dati. I valori delle password non decifrabili non diventeranno decifrabili da soli e, se è possibile correggerli, in genere sono necessarie azioni complesse da parte dell'utente.
@@ -4699,6 +4757,7 @@ Questa policy è stata rimossa nella versione M112.</translation>
 
       Questa policy richiede una configurazione aggiuntiva per essere applicata. Visita https://support.google.com/chrome/a?p=chrome_enterprise_connector_policies_setting per maggiori informazioni.</translation>
 <translation id="4402887080007986374">La versione valida dei Termini di servizio dell'account della scuola</translation>
+<translation id="4405712318246131640">Non consentire le integrazioni di AI Mode.</translation>
 <translation id="4408428864159735559">Elenco di condivisioni di file di rete preconfigurate.</translation>
 <translation id="4410236409016356088">Attiva la limitazione della larghezza di banda della rete</translation>
 <translation id="4410361389637971319">Consenti alle origini delle app web isolate di utilizzare Direct Sockets</translation>
@@ -4831,6 +4890,7 @@ Questa policy non ha effetto se viene attivata, lasciata vuota o se non viene co
 
       Il valore della policy deve essere specificato in giorni.</translation>
 <translation id="4525328580251166229">Consente di gestire le policy relative al sottosistema Bruschetta.</translation>
+<translation id="4528981768990874684">Disattiva la funzionalità <ph name="IP_PROTECTION_NAME" />.</translation>
 <translation id="453031441196755904">Questa norma è obsoleta.</translation>
 <translation id="4531706050939927436">L'installazione di app Android può essere imposta dalla Console d'amministrazione Google tramite Google Play. Questa norma non viene utilizzata.</translation>
 <translation id="4534500438517478692">Nome della limitazione di Android:</translation>
@@ -5041,6 +5101,19 @@ L'impostazione di <ph name="CHROME_OS_RELEASE_CHANNEL_POLICY_NAME" /> ha effetto
 <translation id="4650044303940238102">Impostazioni dei caratteri locali</translation>
 <translation id="4650759511838826572">Disabilita schemi di protocollo dell'URL</translation>
 <translation id="465099050592230505">URL del web store dell'azienda (obsoleta)</translation>
+<translation id="4652388001247121058">Il precaricamento di SpeculationRules può essere inviato agli URL controllati da
+ServiceWorkers. Tuttavia, il codice legacy non lo ha consentito e ha annullato le richieste di
+precaricamento. Questa policy consente di controllare il comportamento.
+
+Se questa policy viene attivata o se non viene configurata, il precaricamento di SpeculationRules
+viene inviato agli URL controllati da ServiceWorkers (se il flag funzionalità PrefetchServiceWorker è
+attivato). Questo è il comportamento predefinito attuale ed è in linea con le
+specifiche.
+
+Se questa policy viene disattivata, il precaricamento di SpeculationRules
+non viene inviato agli URL controllati da ServiceWorkers. Questo è il comportamento legacy.
+
+Questa policy è stata pensata per essere temporanea e verrà rimossa in futuro.</translation>
 <translation id="4653465451589191309">Se la policy viene impostata su Attivata o se non viene configurata, gli utenti possono gestire (disconnettere o modificare) le connessioni VPN. Se la connessione VPN viene creata tramite un'app VPN, l'UI all'interno dell'app non viene influenzata. Pertanto, gli utenti potrebbero comunque essere in grado di utilizzare l'app per modificare la connessione VPN. Utilizza questa policy con la funzionalità VPN sempre attiva; in questo modo l'amministratore può decidere di stabilire una connessione VPN all'avvio di un dispositivo.
 
       Se la policy viene impostata su Disattivata, vengono disattivate le interfacce utente di <ph name="PRODUCT_OS_NAME" /> che consentirebbero all'utente di disconnettere o modificare le connessioni VPN.</translation>
@@ -5186,7 +5259,6 @@ Se la policy <ph name="CONTEXTUAL_GOOGLE_INTEGRATIONS_ENABLED" /> viene attivata
 Se questa policy non viene configurata, verranno attivati tutti i servizi.
 
 In caso contrario, verranno attivati solo i servizi selezionati.</translation>
-<translation id="4758335997982239449">Attiva la funzionalità di protezione IP di <ph name="PRIVACY_SANDBOX_NAME" />.</translation>
 <translation id="4767059955897420757">Se la policy non viene configurata o se viene attivata, all'utente potrebbe essere mostrata la promozione dell'estensione fornitore di credenziali.
 Se viene disattivata, all'utente non viene mostrata la promozione dell'estensione fornitore di credenziali.</translation>
 <translation id="4768446404233019970">Attiva le suite di crittografia 3DES in TLS</translation>
@@ -5218,6 +5290,21 @@ Se viene disattivata, all'utente non viene mostrata la promozione dell'estension
 <translation id="4789450349513792856">Blocca popup su questi siti</translation>
 <translation id="4790391579868456557">Usa cookie essenziali e non essenziali nella ricerca.</translation>
 <translation id="4790588245699320140">Permetti all'Assistente Google di accedere al contesto dello schermo</translation>
+<translation id="4799820756794591883">TLS 1.3 Early Data è un'estensione di TLS 1.3 per inviare una richiesta HTTP contemporaneamente al TLS handshake.
+
+      Se la policy non viene configurata, <ph name="PRODUCT_NAME" /> seguirà la procedura di implementazione predefinita per TLS 1.3 Early Data.
+
+      Se viene abilitata, <ph name="PRODUCT_NAME" /> abiliterà TLS 1.3 Early Data.
+
+      Se viene disabilitata, <ph name="PRODUCT_NAME" /> non abiliterà TLS 1.3 Early Data.
+
+      Se la funzionalità viene abilitata, <ph name="PRODUCT_NAME" /> potrebbe utilizzare o meno TLS 1.3 Early Data, a seconda del supporto del server.
+
+      TLS 1.3 Early Data è un protocollo consolidato. I server TLS, i middlebox e il software per la sicurezza esistenti dovrebbero gestire o rifiutare TLS 1.3 Early Data senza interrompere la connessione.
+
+      Tuttavia, i dispositivi che non implementano correttamente TLS potrebbero non funzionare correttamente e disconnettersi quando è in uso TLS 1.3 Early Data. In questo caso, gli amministratori dovrebbero contattare il fornitore per risolvere il problema.
+
+      Questa policy è una misura temporanea per controllare la funzionalità e verrà rimossa in seguito. Potrebbe essere abilitata per consentirti di testare i problemi e disabilitata durante la risoluzione di questi ultimi.</translation>
 <translation id="4800438168909332958">Consente di attivare la funzionalità di cancellazione dell'eco per l'audio di sistema (AEC). La funzionalità AEC di sistema è un sistema di cancellazione dell'eco acustico, ovvero un modulo di elaborazione audio che rimuove la riproduzione dell'audio di sistema (eco) dal segnale del microfono.
 Questa policy è temporanea e verrà rimossa non appena verrà lanciata la funzionalità di cancellazione dell'eco per l'audio di sistema.
 
@@ -5247,7 +5334,6 @@ Se la policy viene impostata su False, verrà utilizzato il comportamento predef
 <translation id="4826326557828204741">Azione da compiere quando il ritardo di inattività viene raggiunto durante l'utilizzo della batteria</translation>
 <translation id="4826701474986856664">Visualizza la schermata del sensore della presenza di persone durante l'accesso</translation>
 <translation id="4826977043372474305">Le credenziali Wi-Fi del kiosk sono memorizzate a livello di kiosk</translation>
-<translation id="4827191685269660892">Configura la funzionalità di invio di contenuti di <ph name="CLASS_TOOLS_NAME" /></translation>
 <translation id="4827727182370777723">Impostazione predefinita dell'autorizzazione per i caratteri locali</translation>
 <translation id="482803100714220060">Mostra URL completi</translation>
 <translation id="4832852360828533362">Report su dispositivi e utenti</translation>
@@ -5569,11 +5655,6 @@ Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istan
 <translation id="5041315457555330432">Consenti a <ph name="PRODUCT_NAME" /> di connettersi solo a dispositivi su indirizzi IP privati, a meno che la funzionalità CastAllowAllIPs non sia attiva.</translation>
 <translation id="504689994545234073">Attiva l'archiviazione locale dei file degli utenti</translation>
 <translation id="5048890362473520096">Attiva sandbox LPAC per i servizi di stampa</translation>
-<translation id="5049989450078943331">Se questo criterio viene impostato su True, le app di Chrome possono continuare a essere eseguite in una sessione Kiosk, indipendentemente dall'abilitazione predefinita delle app di Chrome.
-
-Se il criterio non viene configurato o se viene impostato su False, verrà usato il comportamento predefinito definito sul dispositivo.
-
-Se si tenta di avviare un'app Chrome disabilitata, all'utente viene mostrato un messaggio che spiega perché l'app non è stata avviata e che suggerisce di contattare il reparto IT.</translation>
 <translation id="5055474681190962362">Il giorno del mese [1-31] in cui dovrebbe essere eseguito il riavvio, nel fuso orario locale del dispositivo. Questa policy viene usata soltanto se il valore della policy "frequency" è "MONTHLY". Se questo numero supera il numero di giorni massimo presente in un mese specifico, verrà scelto l'ultimo giorno del mese.</translation>
 <translation id="5055513974503523022">Sfondo AI generativa per videoconferenze consente agli utenti di esprimersi utilizzando le funzionalità di AI generativa per creare sfondi personalizzati per le videoconferenze su <ph name="PRODUCT_OS_NAME" />.
 
@@ -5708,6 +5789,7 @@ Se la policy non viene configurata o se viene disattivata, i dati e i cookie pot
 
 Se questa norma non viene impostata viene utilizzata la riga di comando predefinita.</translation>
 <translation id="5151099177901233471">Attiva i report sulle informazioni relative al fuso orario del dispositivo</translation>
+<translation id="5151163911478747031">Disattiva l'attribuzione dell'estensione nel piè di pagina della pagina Nuova scheda</translation>
 <translation id="5152393033264257734">Consenti controlli dell'intercettazione DNS e barre di informazioni "http://intranetsite/" alternative</translation>
 <translation id="5152787786897382519">Chromium e Google Chrome hanno alcuni gruppi di policy che dipendono gli uni dagli altri per fornire il controllo di una funzionalità. Questi insiemi sono rappresentati dai seguenti gruppi di policy. Dato che le policy possono avere diverse origini, vengono applicati soltanto i valori provenienti dall'origine con la priorità massima. I valori dello stesso gruppo provenienti da un'origine con priorità inferiore vengono ignorati. L'ordine di priorità è definito in <ph name="POLICY_PRIORITY_DOC_URL" />.</translation>
 <translation id="5153187201534281749">Icona degli esperimenti del browser nella barra degli strumenti</translation>
@@ -5796,6 +5878,7 @@ NOTA: le modifiche apportate a questa policy verranno applicate soltanto ai proc
 <translation id="5194683382395300627">Consenti l'utilizzo di <ph name="ASSISTANT_PRODUCT_NAME" /> sul Web, ad esempio per attivare la modifica automatica delle password</translation>
 <translation id="5196630732055960309">Consenti l'API File Handling su queste app web</translation>
 <translation id="5205352023880027050">Non attivare la funzionalità EphemeralNetworkPolicies.</translation>
+<translation id="5205385499831960279">Applica limitazioni alle richieste agli endpoint della rete locale</translation>
 <translation id="5206454085187851382">Se per la policy <ph name="PRINTERS_BULK_ACCESS_MODE_POLICY_NAME" /> viene selezionata l'opzione <ph name="PRINTERS_ALLOWLIST" />, la configurazione della policy <ph name="PRINTERS_BULK_ALLOWLIST_POLICY_NAME" /> consente di specificare le stampanti che possono essere utilizzate dagli utenti. Soltanto le stampanti con ID corrispondenti ai valori specificati in questa policy saranno a disposizione degli utenti. Gli ID devono corrispondere ai campi <ph name="ID_FIELD" /> o <ph name="GUID_FIELD" /> del file specificato nella policy <ph name="PRINTERS_BULK_CONFIGURATION_POLICY_NAME" />.</translation>
 <translation id="5207543664699568887">Consente di configurare se <ph name="PRODUCT_NAME" /> utilizzerà notifiche di sistema su Linux.
 
@@ -6036,7 +6119,7 @@ Gli account gestiti non sono idonei a far parte di un gruppo Famiglia o a crearl
 <translation id="5334404204520035180">Controlla l'utilizzo dell'API WebPrinting</translation>
 <translation id="5334501839642146593">Non inviare mai le metriche a Google</translation>
 <translation id="5335910979215357815">Attiva l'API Save and Share per il controllo di <ph name="PRODUCT_OS_NAME" /> di terze parti.</translation>
-<translation id="5336553997833306150">Impostazioni dell'aggregatore di ricerca aziendale (beta)</translation>
+<translation id="5337869685871558036">Consenti il precaricamento di SpeculationRules per gli URL controllati da ServiceWorkers</translation>
 <translation id="5339096331970464266">Attiva la tastiera virtuale di accessibilità</translation>
 <translation id="5340008866815063393">Attiva la generazione di report sui dati delle policy</translation>
 <translation id="5345892164332459671">Disattiva il servizio SSO mobile e non trasferire le autenticazioni del web service dell'utente su un nuovo dispositivo</translation>
@@ -6089,6 +6172,11 @@ A partire dalla versione 92 di <ph name="PRODUCT_NAME" />, questa policy è supp
 <translation id="5373552304217872025">Se la policy viene impostata su true o se non viene configurata, <ph name="PRODUCT_NAME" /> e <ph name="LACROS_NAME" /> consentono l'aggiunta di una nuova persona da Gestione utenti.
 
       Se viene impostata su false, <ph name="PRODUCT_NAME" /> e <ph name="LACROS_NAME" /> non consentono l'aggiunta di una nuova persona da Gestione utenti.</translation>
+<translation id="5376712696238639532">La configurazione della policy specifica se gli insegnanti possono utilizzare la funzionalità per le didascalie.
+
+Se il valore viene impostato su true o se la policy non viene configurata, gli insegnanti selezionati potranno aggiungere sottotitoli della propria voce e inviare la trascrizione agli studenti.
+
+Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="5377606826822211923">Controlla l'utilizzo delle app Android di fonti non attendibili per l'utente</translation>
 <translation id="5377826248281933035">Questa policy fornisce un elenco di siti che gli utenti possono cercare rapidamente utilizzando le scorciatoie nella barra degli indirizzi. Gli utenti possono avviare una ricerca digitando nella barra degli indirizzi la scorciatoia o @scorciatoia (ad esempio @lavoro) e premendo la barra spaziatrice o il tasto Tab.
 
@@ -6201,6 +6289,7 @@ le scorciatoie basate sul tasto Ricerca saranno quelle predefinite.</translation
 
       Nota: il supporto dell'isolamento verrà migliorato per tutti i siti su Android, ma al momento potrebbe causare problemi di prestazioni, specialmente sui dispositivi di fascia bassa. Questa policy viene applicata solo a Chrome su dispositivi Android con più di 1 GB di RAM. Per isolare siti specifici limitando l'impatto sulle prestazioni per gli utenti, utilizza <ph name="ISOLATE_ORIGINS_ANDROID_POLICY_NAME" /> con un elenco di siti che vuoi isolare.  Per applicare la policy a piattaforme non Androd, utilizza <ph name="SITE_PER_PROCESS_POLICY_NAME" />.</translation>
 <translation id="5443719869259235874">Estensioni a cui è consentito ignorare le finestre di dialogo di conferma durante l'accesso agli scanner tramite l'API chrome.documentScan</translation>
+<translation id="5444394237376528726">URL logo aziendale per un browser gestito</translation>
 <translation id="5445596354079213552">Questa policy viene applicata soltanto se il dispositivo ha raggiunto la scadenza dell'aggiornamento automatico e non rispetta la versione minima consentita di <ph name="PRODUCT_OS_NAME" /> impostata tramite la policy <ph name="DEVICE_MINIMUM_VERSION_POLICY_NAME" />.
 
       Se la policy viene impostata su una stringa non vuota:
@@ -6219,15 +6308,7 @@ le scorciatoie basate sul tasto Ricerca saranno quelle predefinite.</translation
       </translation>
 <translation id="5448022937220253000">Scegli cosa fare con i dati utente dopo la disattivazione di <ph name="LACROS_NAME" /></translation>
 <translation id="5449690328792750354">L'API Event.path sarà disponibile.</translation>
-<translation id="5450507908812118425">La configurazione della policy consente di specificare quali app web isolate (IWA) non potranno connettersi ai lettori di smart card (non verrà nemmeno chiesto agli utenti di concedere l'autorizzazione). Questa policy accetta i caratteri jolly. Ad esempio, <ph name="ALL_ISOLATED_WEB_APPS" /> bloccherà l'accesso per tutte le IWA.
-
-Viene eseguito l'override di questa policy da <ph name="POLICY_NAME" />; in particolare, se il valore di una lista bloccata è <ph name="ALL_ISOLATED_WEB_APPS" />, nessuna IWA potrà connettersi ai lettori di smart card (non verrà nemmeno chiesto agli utenti di concedere l'autorizzazione), ad eccezione di quelle elencate in <ph name="POLICY_NAME" />.
-
-Per impostazione predefinita, le IWA che specificano le autorizzazioni per le smart card all'interno del manifest possono connettersi alle smart card a condizione che l'utente conceda l'autorizzazione in modo interattivo per ogni lettore.</translation>
 <translation id="5452024130413254050">Consente di stabilire se le VM che utilizzano questa configurazione hanno accesso a un vTPM; il valore predefinito è false e, se la policy non viene configurata, viene usato il valore <ph name="FORCE_SHUTDOWN_IF_MORE_RESTRICTED" />.</translation>
-<translation id="5454128917282602937">Quando un utente passa da un dispositivo <ph name="PRODUCT_OS_NAME" /> a un altro dello stesso tipo, il servizio <ph name="PRODUCT_NAME" /> V2 avvia le finestre del browser e delle app del dispositivo precedente su quello nuovo.
-Se la policy viene impostata su Enabled, le finestre del browser e delle app verranno avviate automaticamente al momento dell'accesso dall'ultimo dispositivo <ph name="PRODUCT_OS_NAME" /> utilizzato dall'utente corrente.
-Se la policy viene impostata su Disabled o se non viene configurata, gli elementi da avviare al momento dell'accesso verranno determinati in base alle impostazioni di ripristino totale.</translation>
 <translation id="5455609857202311243">Ignora l'approvazione della policy KDC durante l'autenticazione HTTP</translation>
 <translation id="5455888515928026628">Durante l'accesso tramite la schermata di blocco, <ph name="PRODUCT_OS_NAME" /> può eseguire l'autenticazione con un server (online) o utilizzando una password memorizzata nella cache (offline).
 
@@ -6247,13 +6328,6 @@ Se la policy viene impostata su Disabled o se non viene configurata, gli element
 <translation id="545817252640069915">Attiva l'intercettazione dell'accesso</translation>
 <translation id="5460797984317417682">Attiva avviso schermo intero</translation>
 <translation id="5462898272514237681">Controlla l'accesso di <ph name="PRODUCT_OS_NAME" /> ai Servizi di geolocalizzazione di Google</translation>
-<translation id="5464786290880338716">Una policy per controllare se la funzionalità di protezione IP di <ph name="PRIVACY_SANDBOX_NAME" /> deve essere attivata o meno.
-
-Se la policy viene disattivata, la funzionalità di protezione IP verrà disattivata e gli utenti non potranno attivarla tramite le impostazioni della UI.
-Se la policy viene attivata, la funzionalità di protezione IP verrà attivata e gli utenti non potranno disattivarla tramite le impostazioni della UI.
-Se la policy non viene configurata, la funzionalità di protezione IP verrà disattivata per gli utenti il cui browser o dispositivo viene gestito e non potranno attivare la funzionalità tramite le impostazioni della UI. Gli utenti su browser e dispositivi non gestiti potranno attivare o disattivare la funzionalità di protezione IP sul proprio dispositivo tramite le impostazioni della UI.
-
-Nota: il comportamento della funzionalità di protezione IP per gli utenti aziendali potrebbe variare nel tempo se la policy viene attivata o se non viene configurata e la funzionalità viene attivata tramite le impostazioni della UI.</translation>
 <translation id="5464816904705580310">Configurazione delle impostazioni per gli utenti gestiti.</translation>
 <translation id="5466596281866046569">Segnala informazioni sulle applicazioni</translation>
 <translation id="5467175549232776406">La pagina di test delle policy è accessibile</translation>
@@ -6422,6 +6496,7 @@ Nota: questa policy non viene applicata alle modalità ospite o di navigazione i
 <translation id="5576376485226897323">Disattiva il reporting su cloud degli indicatori di sicurezza degli utenti</translation>
 <translation id="5576377426850850084">Utilizza l'autenticazione NTLM</translation>
 <translation id="5577475143148445339">Contiene il numero di giorni e la percentuale del parco di dispositivi che dovrebbe essere aggiornata una volta trascorso il periodo indicato.</translation>
+<translation id="5579179012798142131">Se ArcEnabled è impostata su True, ARC viene attivato per l'utente, a meno che la modalità temporanea o l'accesso simultaneo siano attivi durante la sessione utente. Se la policy è impostata su False o non è configurata, gli utenti aziendali non possono utilizzare ARC.</translation>
 <translation id="5582429816116769246">Consente di controllare se gli utenti possono accedere alle stampanti non aziendali.
 
       Se la policy viene impostata su True o se non viene configurata, gli utenti possono aggiungere, configurare e utilizzare le proprie stampanti native.
@@ -6454,6 +6529,22 @@ Un dominio rimosso dalla policy non può accedere agli URL file:// nel Visualizz
 Se la policy non viene configurata, tutti i domini non possono accedere agli URL file:// nel Visualizzatore PDF.</translation>
 <translation id="5585424654425017599">Consenti integrazioni</translation>
 <translation id="5586942249556966598">Non fare niente</translation>
+<translation id="5595355842329604596">Questa policy definisce l'impostazione predefinita per tutte le funzionalità di AI generativa incluse. Ad esempio, se questa policy viene impostata sul valore 1, 1 sarà l'impostazione predefinita per tutte le funzionalità di AI generativa incluse. Non inciderà sui valori delle policy impostate manualmente. Questa impostazione definisce i valori predefiniti per <ph name="GEMINI_SETTINGS_POLICY_NAME" /> e le funzionalità dell'AI generativa di Chrome incluse. Per un elenco delle funzionalità incluse, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.
+
+0 = Consente di utilizzare la funzionalità e permette al contempo a Google di utilizzare i dati pertinenti per migliorare i propri modelli di AI. A seconda della funzionalità, tra i dati pertinenti sono inclusi prompt, input, output, materiali originali e feedback scritto. Potrebbero anche essere esaminati da persone per migliorare i modelli di AI. 0 è il valore predefinito, ad eccezione dei casi riportati di seguito.
+
+1 = Consente di utilizzare la funzionalità, ma non consente a Google di migliorare i modelli utilizzando i contenuti degli utenti (inclusi prompt, input, output, materiali originali e feedback scritto). 1 è il valore predefinito per gli utenti aziendali gestiti da <ph name="GOOGLE_ADMIN_CONSOLE_PRODUCT_NAME" /> e per gli account Education gestiti da <ph name="GOOGLE_WORKSPACE_PRODUCT_NAME" />.
+
+2 = Non consente di utilizzare la funzionalità.
+
+Se una funzionalità di Chrome inclusa non ha un valore di policy equivalente, verrà utilizzato il valore più alto più vicino. Alcune policy, ad esempio <ph name="GEMINI_SETTINGS_POLICY_NAME" />, supportano solo gli stati Consentito e Non consentito. Se la policy <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" /> viene impostata su 0 o 1, questa funzionalità sarà consentita. Se la policy viene impostata su 2, questa funzionalità non sarà consentita. Consulta la documentazione relativa a ciascuna funzionalità per ulteriori dettagli su come interagisce con i valori in questa policy.
+
+Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI generativa, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
+<translation id="5597542113049786516">Questa policy consente di stabilire se una pagina può utilizzare le API AI integrate (ad esempio <ph name="LANGUAGE_MODEL_API_NAME" />, <ph name="SUMMARIZATION_API_NAME" />, <ph name="WRITER_API_NAME" /> e <ph name="REWRITER_API_NAME" />).
+
+Se la policy viene attivata o se non viene configurata, le API possono essere utilizzate.
+
+Se la policy viene disattivata, il tentativo di utilizzo delle API restituirà un errore.</translation>
 <translation id="5598417829613725146">Canvas (supportata dalla versione 90)</translation>
 <translation id="5598821717813911176">Questa policy consente di specificare le estensioni a cui è consentito ignorare le finestre di dialogo di conferma quando utilizzano le funzioni <ph name="GET_SCANNER_LIST_FUNCTION" /> e <ph name="START_SCAN_FUNCTION" /> di <ph name="DOCUMENTSCAN_API" />.
 
@@ -6464,7 +6555,15 @@ Se la policy non viene configurata o se viene impostato un elenco vuoto, all'ute
 <translation id="5601503069213153581">PIN</translation>
 <translation id="5605676983184673391">Consenti l'esecuzione di app di Chrome nelle sessioni kiosk.</translation>
 <translation id="5607021831414604820">Attiva i report sullo stato di archiviazione del dispositivo</translation>
+<translation id="5607808178576647930">Consenti le integrazioni di AI Mode.</translation>
 <translation id="5608114828230655271">Comportamento predefinito del dispositivo</translation>
+<translation id="5609294254185484756">Consente di controllare l'esperienza utente delle funzionalità disattivate elencate nella policy <ph name="SYSTEM_FEATURES_DISABLE_LIST_POLICY_NAME" /> per le sessioni Ospite gestite (MGS).
+
+      Se la policy viene bloccata, le funzionalità disattivate non saranno utilizzabili, ma rimarranno visibili per gli utenti.
+
+      Se viene nascosta, le funzionalità disattivate saranno inutilizzabili e non visibili per gli utenti.
+
+      Se non viene configurata o presenta un valore non valido, la modalità di disattivazione delle funzionalità di sistema sarà bloccata in MGS e nascosta nelle sessioni utente.</translation>
 <translation id="561001683838346956">Questa policy è stata rimossa nella versione 124 di <ph name="PRODUCT_NAME" />. A partire da quella versione, gli hash non sicuri sono sempre non consentiti. Nelle versioni precedenti, questa policy controllava se il browser consentiva hash non sicuri precedenti durante la procedura di TLS handshake.
 
       Se questa policy non viene configurata, <ph name="PRODUCT_NAME" /> segue la procedura di implementazione predefinita per non consentire gli hash non sicuri. Se la policy viene attivata, <ph name="PRODUCT_NAME" /> consente l'uso di hash non sicuri da parte di un server durante la negoziazione di un TLS handshake. Se viene disattivata, <ph name="PRODUCT_NAME" /> non consente l'uso di hash non sicuri da parte di un server durante la negoziazione di un TLS handshake.</translation>
@@ -6534,6 +6633,11 @@ Se viene configurata per il kiosk <ph name="PRODUCT_OS_NAME" />, questa policy c
 <translation id="5638334542697444045">Non consentire agli utenti di utilizzare il tethering istantaneo</translation>
 <translation id="5639454129004500060">Se viene configurata, questa policy contiene informazioni per scaricare il file di un modello di scrivania da fornire all'utente corrente.
       Se non viene configurata, nell'elenco di modelli di scrivanie non sarà incluso alcun modello di scrivania preconfigurato.  Se la policy <ph name="DESK_TEMPLATES_ENABLED_POLICY_NAME" /> non viene impostata su true, questa policy non ha alcun effetto.</translation>
+<translation id="5640279444357526593">Consente di specificare la durata minima della release oltre la quale le notifiche di riavvio sono più aggressive. La durata viene calcolata a partire dall'ultima volta che la versione attualmente in esecuzione è stata pubblicata ai client.
+
+Se è necessario riavviare il browser o il dispositivo per finalizzare un aggiornamento in attesa e la versione corrente è obsoleta da più del numero di giorni specificato da questa impostazione, viene eseguito l'override della policy <ph name="RELAUNCH_NOTIFICATION_PERIOD_POLICY_NAME" /> con impostazione su 2 ore. Se la policy <ph name="RELAUNCH_NOTIFICATION_POLICY_NAME" /> viene impostata su 1 (obbligatorio), gli utenti saranno costretti a riavviare o ricominciare alla fine del periodo.
+
+Se non viene configurata o se la durata della release non può essere determinata, la policy <ph name="RELAUNCH_NOTIFICATION_PERIOD_POLICY_NAME" /> verrà utilizzata per tutti gli aggiornamenti.</translation>
 <translation id="5644038505105689131">Origine immagine schermata di accesso salvaschermo dispositivo.</translation>
 <translation id="5645779841392247734">Consenti i cookie in questi siti</translation>
 <translation id="5646234199535103501">Policy di configurazione per il connettore OnBulkDataEntry di Chrome Enterprise</translation>
@@ -6602,6 +6706,7 @@ L'intervallo di ricaricamento massimo è di una settimana (10.080 minuti).
 
 La policy riguarda i flussi di autenticazione di accesso e della schermata di blocco.</translation>
 <translation id="5676740747107495269">Mostra le opzioni di accessibilità nel menu della barra delle applicazioni nella schermata di accesso</translation>
+<translation id="5679082773290670847">Abilita TLS 1.3 Early Data</translation>
 <translation id="5679540979548648200">Impedisci agli utenti di questo dispositivo di utilizzare il processo sideload ADB e forza la funzione Powerwash del dispositivo se tale processo è stato attivato in precedenza</translation>
 <translation id="5681258683432554972">Impostazione popup predefiniti</translation>
 <translation id="5683494457096171405">Le scorciatoie con il tasto Ricerca vengono inviate all'app prima di essere gestite dal sistema operativo solo quando l'app attiva è a schermo intero.</translation>
@@ -6677,6 +6782,7 @@ Su <ph name="MS_WIN_NAME" />, questa policy è disponibile soltanto per le istan
 
       Nota: il fattore di regolazione minimo deve essere 100%.</translation>
 <translation id="5740636973289452345">Attiva la generazione di report sulle informazioni relative a estensioni e plug-in</translation>
+<translation id="5740716956489996914">Usa il comportamento predefinito quando determini se i siti web possono effettuare richieste agli endpoint della rete locale</translation>
 <translation id="5741110260062082926">Disattiva Orca</translation>
 <translation id="5746149754419996562">Consente la presenza di widget Glanceables su <ph name="PRODUCT_OS_NAME" />. In particolare, i widget accessibili tramite il chip di data nella barra delle app.
 Se questa policy viene attivata, i Glanceables sono attivati su <ph name="PRODUCT_OS_NAME" />.
@@ -6798,6 +6904,7 @@ Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI ge
 
       Se la policy viene impostata su Disattivata o se non viene configurata, i log di sistema non vengono segnalati.</translation>
 <translation id="5861856285460256766">Configurazione codice di accesso genitori</translation>
+<translation id="5864898931148094192">Controlla la visibilità dell'attribuzione dell'estensione nella pagina Nuova scheda</translation>
 <translation id="5868414965372171132">Configurazione di rete a livello di utente</translation>
 <translation id="5868454276721377379">Quando un utente passa da un dispositivo <ph name="PRODUCT_OS_NAME" /> a un altro, il servizio SSO mobile ripristina lo stato dell'autenticazione dell'utente nel web service dal dispositivo precedente a quello nuovo. Ciò si ottiene trasferendo i cookie dell'utente tra i dispositivi.
 
@@ -6848,6 +6955,9 @@ gli utenti non potranno modificarla o eseguirne l'override.</translation>
 <translation id="5883754873839596178">La configurazione della policy consente di specificare il numero massimo di connessioni simultanee al server proxy. Alcuni server proxy non riescono a gestire un numero elevato di connessioni contemporanee per client, ma è sufficiente impostare la policy su un numero inferiore per risolvere questo problema. Il valore deve essere inferiore a 100 e superiore a 6. Alcune app web sono note per richiedere molte connessioni con Hanging-GET, pertanto impostare un valore inferiore a 32 potrebbe causare interruzioni di rete del browser se sono aperte troppe app web di questo tipo. È sconsigliato utilizzare un valore inferiore a quello predefinito.
 
       Se la policy non viene configurata, viene utilizzato il valore predefinito 32.</translation>
+<translation id="5886280631293123880">Questa policy consente di riattivare temporaneamente un insieme di eventi della piattaforma deprecato e rimosso chiamato eventi Mutazione.
+Se questa policy viene attivata, gli eventi Mutazione continueranno a essere attivati, anche se sono stati disattivati per impostazione predefinita per i normali utenti web. Se questa policy viene disattivata o se non viene configurata, questi eventi potrebbero non essere attivati.
+Questa policy è una soluzione alternativa temporanea e non sarà più valida nella versione M137.</translation>
 <translation id="5887414688706570295">Consente di configurare il prefisso TalkGadget che verrà utilizzato dagli host di accesso remoto e impedisce agli utenti di modificarlo.
 
           Se specificato, questo prefisso viene anteposto al nome TalkGadget di base per creare un nome di dominio completo per TalkGadget. Il nome TalkGadget di base del dominio è "Talkgadget.google.com".
@@ -6875,7 +6985,6 @@ Se la policy viene impostata su EnabledFocusSoundsOnly, l'audio verrà attivato 
 
 Se la policy viene disattivata, l'audio verrà disattivato in modalità Niente distrazioni.</translation>
 <translation id="5890063326284543943">Controlla l'utilizzo dell'API Serial</translation>
-<translation id="5893223274510346852">Disattiva la funzionalità di protezione IP di <ph name="PRIVACY_SANDBOX_NAME" />.</translation>
 <translation id="5893303508158298667">Se la policy <ph name="REMOTE_ACCESS_HOST_FIREWALL_TRAVERSAL_POLICY_NAME" /> è impostata su Attivata e la policy <ph name="REMOTE_ACCESS_HOST_ALLOW_RELAYED_CONNECTION_POLICY_NAME" /> viene impostata su Attivata o non viene configurata, viene consentito l'utilizzo di client remoti per usare relay server per collegarsi al computer quando non è disponibile una connessione diretta, ad esempio a causa di limitazioni del firewall.
 
       Se la policy viene impostata su Disattivata, non viene disattivato l'accesso remoto, ma sono consentite soltanto connessioni dalla stessa rete (non da NAT Traversal o relay).</translation>
@@ -6926,6 +7035,11 @@ Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istan
 <translation id="5917897389577978190">Gmail (supportato a partire dalla versione 135)</translation>
 <translation id="592036544845479336">Riattiva eventi Mutazione deprecati/rimossi</translation>
 <translation id="5921713479449475707">Permetti download di aggiornamento automatico tramite HTTP</translation>
+<translation id="5923084443277419535">Il parser HTML sta per essere modificato per consentire l'inserimento di tag HTML aggiuntivi all'interno dell'elemento &lt;select&gt;. Questa policy consente di utilizzare il comportamento del parser HTML precedente fino alla versione M138.
+
+Se la policy viene abilitata o se non viene configurata, il parser HTML consente l'uso di tag aggiuntivi all'interno dell'elemento &lt;select&gt;.
+
+Se viene disabilitata, il parser HTML limita i tag che possono essere inseriti all'interno dell'elemento &lt;select&gt;.</translation>
 <translation id="5925405187134730827">Questa policy è deprecata perché la funzionalità che controlla non è mai stata lanciata. Usa invece <ph name="ENTERPRISE_PROFILE_BADGE_TOOLBAR_SETTINGS" />.
 
 Se la policy non viene configurata o se viene impostata su <ph name="DISPLAY_MANAGEMENT_LABEL_PERMAMENT_VALUE" /> (valore 0), accanto all'avatar della barra degli strumenti viene visualizzata l'etichetta Lavoro o Scuola.
@@ -7082,6 +7196,13 @@ Questa policy è stata ritirata a partire dalla versione M124.</translation>
 <translation id="604243460476563291">Disattiva il trasferimento di file nelle connessioni di assistenza da remoto da parte degli amministratori aziendali</translation>
 <translation id="6042629184389251062">La raccolta di metriche con chiave URL non è consentita</translation>
 <translation id="6046615715547751255">Non consentire i controlli di reporting granulare</translation>
+<translation id="6047041034696466581">Questa policy consente di stabilire se nel piè di pagina della pagina Nuova scheda viene visualizzata un'attribuzione dell'estensione che modifica la pagina Nuova scheda.
+
+Per impostazione predefinita, se un'estensione ha sostituito la pagina Nuova scheda standard, nel piè di pagina viene visualizzato un messaggio che attribuisce questa modifica all'estensione specifica. Questa attribuzione include in genere un link all'estensione pertinente nel Chrome Web Store.
+
+Se questa policy non viene impostata o viene impostata su true, l'attribuzione dell'estensione sarà visibile nel piè di pagina della pagina Nuova scheda quando un'estensione ne ha il controllo.
+
+Se questa policy viene impostata su false, l'attribuzione dell'estensione nel piè di pagina della pagina Nuova scheda verrà soppressa.</translation>
 <translation id="6048199181629830227">Attiva la gestione della variazione dei picchi energetici</translation>
 <translation id="6048690591359317353">Non consentire all'utente di disconnettere o modificare manualmente una VPN</translation>
 <translation id="6049117606554031363">Attiva i report sullo stato della scheda del dispositivo</translation>
@@ -7095,6 +7216,11 @@ Questa policy è stata ritirata a partire dalla versione M124.</translation>
       Se la policy non viene configurata (se l'impostazione è supportata dal dispositivo), viene applicata la modalità di ricarica standard della batteria e gli utenti non possono modificarlo.
 
       Nota: se viene selezionata la modalità di ricarica personalizzata della batteria, vengono specificate anche le policy <ph name="DEVICE_BATTERY_CHARGE_CUSTOM_START_CHARGING_POLICY_NAME" /> e <ph name="DEVICE_BATTERY_CHARGE_CUSTOM_STOP_CHARGING_POLICY_NAME" />.</translation>
+<translation id="6059888872220654118">La configurazione della policy specifica se gli insegnanti possono comunicare con gli studenti utilizzando l'elenco degli studenti di Google Classroom. Vedi <ph name="GOOGLE_CLASSROOM_LINK" />.
+
+Se il valore viene impostato su true o se la policy non viene configurata, potranno utilizzare l'elenco degli studenti di Google Classroom.
+
+Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="6066761914755798079">Se la policy <ph name="DEFAULT_SEARCH_PROVIDER_ENABLED_POLICY_NAME" /> è attiva, l'assegnazione di un valore alla policy <ph name="DEFAULT_SEARCH_PROVIDER_SUGGEST_URL_POLICY_NAME" /> consente di specificare l'URL del motore di ricerca per fornire suggerimenti per le ricerche. L'URL dovrebbe includere la stringa <ph name="SEARCH_TERM_MARKER" />, sostituita nella query dai termini di ricerca degli utenti.
 
       Puoi specificare l'URL di ricerca di Google come: <ph name="GOOGLE_SUGGEST_SEARCH_URL" />.</translation>
@@ -7145,6 +7271,7 @@ Se la policy <ph name="SAFE_BROWSING_PROTECTION_LEVEL_POLICY_NAME" /> viene conf
 Su <ph name="MS_WIN_NAME" />, questa policy è disponibile soltanto per le istanze che sono aggiunte a un dominio <ph name="MS_AD_NAME" />, aggiunte a <ph name="MS_AAD_NAME" /> o registrate in <ph name="CHROME_ENTERPRISE_CORE_NAME" />.
 
 Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istanze che sono gestite tramite MDM, aggiunte a un dominio tramite MCX o registrate in <ph name="CHROME_ENTERPRISE_CORE_NAME" />.</translation>
+<translation id="6106258663605167373">Disattiva la notifica di gestione nel piè di pagina della pagina Nuova scheda</translation>
 <translation id="610892566190435199">Attiva i report sullo stato di alimentazione del dispositivo</translation>
 <translation id="6111936128861357925">Attiva il gioco del dinosauro</translation>
 <translation id="6118226055960302400">Ripristina il comportamento permissivo.</translation>
@@ -7223,6 +7350,7 @@ Il salvaschermo del dispositivo mostra le immagini a cui fa riferimento la polic
       Se la policy non viene configurata, gli utenti potranno decidere se attivare o disattivare la funzionalità.</translation>
 <translation id="6173712557351728099">Consenti agli utenti di attivare o disattivare il Wi-Fi</translation>
 <translation id="6178075938488052838">Questa norma consente di stabilire chi può avviare una sessione di <ph name="PRODUCT_OS_NAME" />. Non impedisce agli utenti di accedere ad altri Account Google su Android. Se invece vuoi impedirlo, configura la norma <ph name="ACCOUNT_TYPES_WITH_MANAGEMENT_DISABLED_CLOUDDPC_POLICY_NAME" /> specifica per Android nell'ambito della norma <ph name="ARC_POLICY_POLICY_NAME" />.</translation>
+<translation id="617829127527171373">Impostazioni di condivisione del gruppo di schede</translation>
 <translation id="6181304954168534748">L'hash SHA-256 del modello di scrivania.</translation>
 <translation id="6181618732396778048">Non consentire a nessun sito di richiedere l'accesso di scrittura di file e directory</translation>
 <translation id="6181783961196084973">Il valore dell'opzione di attivazione/disattivazione della raccolta di attività nelle app. Se la policy viene impostata su true, l'attività nelle app dell'utente verrà segnalata al server per poter essere visualizzata nell'app <ph name="PRODUCT_NAME" /> del figlio e del genitore. Se la policy viene impostata su false, la funzionalità Limiti di utilizzo per app rimarrà disponibile, ma non verranno segnalati dati al server, che quindi non verranno visualizzati in <ph name="PRODUCT_NAME" />.</translation>
@@ -7419,6 +7547,7 @@ Questa policy è stata rimossa nella versione 126 di <ph name="PRODUCT_NAME" />.
 <translation id="627672037430076089">Impedisci le connessioni di assistenza da remoto a questo computer</translation>
 <translation id="6277314550042130537">Utilizza l'approvazione della policy KDC durante l'autenticazione HTTP</translation>
 <translation id="6278428485366576908">Tema</translation>
+<translation id="6278479274273370668">Gli utenti possono avviare gli aggiornamenti firmware</translation>
 <translation id="6279010879606347019">Se la policy viene attivata, la pagina Nuova scheda viene impostata come home page dell'utente e l'eventuale URL della home page specificato viene ignorato. Se viene disattivata, la home page dell'utente non sarà mai la pagina Nuova scheda, a meno che chrome://newtab venga impostato come URL della home page dell'utente.
 
 Se la policy viene impostata, gli utenti non possono cambiare il tipo di home page in <ph name="PRODUCT_NAME" />. Se non viene configurata, l'utente può decidere se impostare o meno la pagina Nuova scheda come home page.
@@ -7436,10 +7565,18 @@ Su <ph name="MAC_OS_NAME" />, questa policy è disponibile soltanto per le istan
 Le origini devono corrispondere alle applicazioni web con installazione forzata tramite la policy <ph name="WEB_APP_INSTALL_FORCE_LIST_POLICY_NAME" /> o <ph name="ISOLATED_WEB_APP_INSTALL_FORCE_LIST_POLICY_NAME" /> (dalla versione 125) o configurate come app kiosk. Per le specifiche dell'API Device Attributes, visita la pagina https://wicg.github.io/WebApiDevice/device_attributes.
 
 Per informazioni dettagliate sui pattern <ph name="URL_LABEL" /> validi (dalla versione 127), visita la pagina https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. <ph name="WILDCARD_VALUE" /> non è un valore accettato per questa policy.</translation>
+<translation id="6286385444341934784">Questa impostazione consente le integrazioni delle app Gemini.
+
+0/non impostata = l'integrazione di Gemini sarà disponibile per gli utenti.
+
+1 = L'integrazione di Gemini non sarà disponibile per gli utenti.
+
+Se la policy non viene configurata, il relativo comportamento viene determinato dalla policy <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
+
+Per scoprire di più, consulta le note di rilascio di Chrome Enterprise (https://support.google.com/chrome/a/answer/7679408).</translation>
 <translation id="6287128640500683781">Consenti a qualsiasi utente di accedere</translation>
 <translation id="6287310684159482272">Impostazioni dei cookie</translation>
 <translation id="6287742528823584153">Attiva il servizio <ph name="PRODUCT_NAME" /> e avvia la scrivania remota all'accesso</translation>
-<translation id="6288152932495466841">Avvisa gli utenti in caso di versioni del browser superate</translation>
 <translation id="6299147100249359151">Consenti il rilevamento dell'ambito delle policy.</translation>
 <translation id="6299554629216555326">Impostazioni di gestione delle finestre</translation>
 <translation id="6302021021024941085">Disattiva gli strumenti per la risoluzione dei problemi relativi a Kiosk.</translation>
@@ -7590,6 +7727,7 @@ verrà usata soltanto la risoluzione della posizione basata sull'<ph name="IP" /
 <translation id="6368011194414932347">Configura l'URL della pagina iniziale</translation>
 <translation id="6368403635025849609">Consenti JavaScript su questi siti</translation>
 <translation id="6368671810229507360">WebRTC</translation>
+<translation id="6370742079247037704">Non consentire l'utilizzo delle API AI integrate.</translation>
 <translation id="6371005337713685988">Impostazioni di insiemi di siti web correlati</translation>
 <translation id="6371561334154580937">Mostra finestra di dialogo di disconnessione nell'ultima finestra chiusa.</translation>
 <translation id="6372105930898423193">Consente di riattivare la funzionalità AppCache anche se è disattivata per impostazione predefinita.</translation>
@@ -7615,12 +7753,20 @@ Vedi l'elenco di variabili che puoi utilizzare (https://www.chromium.org/adminis
 
 Se la policy non viene configurata, significa che <ph name="PRODUCT_OS_NAME" /> utilizza la directory "Download" predefinita per archiviare le acquisizioni schermo e gli utenti possono modificarla.</translation>
 <translation id="6377031865393559909">Gli utenti possono usare i modelli di scrivanie</translation>
+<translation id="6377570995433636383">Specifica se applicare limitazioni alle richieste agli endpoint della rete locale</translation>
 <translation id="6378076389057087301">Specifica se l'attività audio incide sulla gestione dell'alimentazione</translation>
 <translation id="6378393933102834628">Se la policy è impostata su True, la scorciatoia per le app viene visualizzata. Se la policy è impostata su False, tale scorciatoia non viene mai visualizzata.
 
       Se la policy è configurata, gli utenti non possono apportare modifiche. Se non è configurata, gli utenti possono decidere se mostrare o nascondere la scorciatoia per le app dal menu contestuale della barra dei Preferiti.</translation>
 <translation id="638003144128412430">Disattiva i report sulle informazioni relative al fuso orario del dispositivo</translation>
 <translation id="6382209369210116232">Disattiva le estensioni non pubblicate</translation>
+<translation id="6382287177674997281">Questa policy consente agli utenti di avviare qualsiasi tipo di aggiornamento firmware.
+
+      Se la policy viene attivata, gli utenti (ad es. il proprietario del dispositivo) possono avviare aggiornamenti firmware.
+
+      Se la policy viene disattivata o se non viene configurata, gli utenti non possono applicare gli aggiornamenti firmware.
+
+      Questa policy si applica al firmware per gli aggiornamenti firmware delle periferiche esterne e dei componenti interni per i dispositivi <ph name="PRODUCT_OS_FLEX_NAME" />. Questa policy non influisce sugli aggiornamenti firmware dei componenti interni per i dispositivi <ph name="PRODUCT_OS_NAME" />.</translation>
 <translation id="6382351416269252693">Consente di impostare un elenco di pattern URL per i siti che specifica i siti a cui viene negata automaticamente l'autorizzazione per i caratteri locali. Ciò limiterà la capacità dei siti di vedere le informazioni sui caratteri locali.
 
       Per informazioni dettagliate sui pattern URL di siti validi, visita la pagina https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. I caratteri jolly (<ph name="WILDCARD_VALUE" />) sono consentiti. Questa policy ha corrispondenze basate soltanto sull'origine, pertanto qualsiasi percorso nel pattern URL viene ignorato.
@@ -7647,6 +7793,23 @@ Le funzionalità di AI generativa di DevTools includono:
 
 Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI generativa, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
 <translation id="6394350458541421998">La norma non è più supportata a partire dalla versione 29 di <ph name="PRODUCT_OS_NAME" />. Utilizza la norma PresentationScreenDimDelayScale.</translation>
+<translation id="6397424663361748439">Una policy per controllare se la funzionalità <ph name="IP_PROTECTION_NAME" /> di <ph name="PRIVACY_SANDBOX_NAME" /> deve essere attivata o meno.
+
+<ph name="IP_PROTECTION_NAME" /> è una funzionalità che limita la disponibilità dell'indirizzo IP originale di un utente per determinate richieste di rete di terze parti effettuate durante la navigazione in modalità di navigazione in incognito, migliorando le protezioni contro il monitoraggio tra siti durante le sessioni di navigazione in incognito.
+
+Se la policy viene disattivata, la funzionalità <ph name="IP_PROTECTION_NAME" /> verrà disattivata e gli utenti non potranno attivarla tramite le impostazioni della UI.
+Se la policy viene attivata, la funzionalità <ph name="IP_PROTECTION_NAME" /> verrà attivata e gli utenti non potranno disattivarla tramite le impostazioni della UI.
+Se la policy non viene configurata, la funzionalità <ph name="IP_PROTECTION_NAME" /> verrà attivata per impostazione predefinita e gli utenti potranno controllarla sul proprio dispositivo tramite le impostazioni della UI.
+
+Alcune considerazioni sul fatto che le aziende debbano o meno disattivare <ph name="IP_PROTECTION_NAME" />:
+- Le ricerche DNS non verranno eseguite per le richieste trasferite al proxy, il che potrebbe influire sul monitoraggio o sul filtro basato su DNS.
+- Le applicazioni aziendali potrebbero non funzionare correttamente se usate in modalità di navigazione in incognito, in quanto si basano su richieste a domini (o a sottodomini di questi) in Masked Domain List (<ph name="MASKED_DOMAIN_LIST_URL" />) e richiedono che queste richieste provengano da intervalli di indirizzi IP specifici.
+- Il traffico potrebbe non essere trasferito al proxy in modalità di navigazione in incognito in determinate condizioni, ad esempio quando gli utenti avviano la modalità di navigazione in incognito da un profilo Chrome a cui non hanno eseguito l'accesso. In generale, la funzionalità richiede che l'utente abbia eseguito l'accesso a Chrome con un Account Google personale quando avvia la modalità di navigazione in incognito.
+- L'elenco dei domini in Masked Domain List può cambiare nel tempo e le nuove versioni vengono automaticamente trasferite agli utenti. Per maggiori informazioni su Masked Domain List, consulta: <ph name="MASKED_DOMAIN_LIST_CRITERIA_URL" />.
+
+Per maggiori informazioni su <ph name="IP_PROTECTION_NAME" />, consulta: <ph name="IP_PROTECTION_README_URL" />.
+
+La funzionalità <ph name="IP_PROTECTION_NAME" /> verrà lanciata non prima della versione M139.</translation>
 <translation id="6397588391180665797">Consente di segnalare eventi di configurazione di rete degli utenti su dispositivi registrati.
 
       Se la policy viene impostata su False, le informazioni non vengono segnalate.
@@ -7982,6 +8145,7 @@ Nota: se il dispositivo viene riavviato o se l'utente esce, la cache viene svuot
 <translation id="6583473893541367102">Se la policy viene configurata, verrà specificato l'elenco di URL i cui pattern vengono confrontati con l'origine di sicurezza dell'URL richiedente. Una corrispondenza assicura l'accesso ai dispositivi per l'acquisizione video senza richieste
 
       Per informazioni dettagliate sui pattern <ph name="URL_LABEL" /> validi, visita la pagina https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. Tieni presente, tuttavia, che il pattern "*", che corrisponde a qualsiasi URL, non è supportato da questa policy.</translation>
+<translation id="6583517553738784213">Disattiva i controlli con il volto</translation>
 <translation id="6584122839583172231">Le impostazioni di F12 usano la scorciatoia che contiene i tasti di modifica Ctrl e Maiusc</translation>
 <translation id="6584541828182430328">Disattiva avviso schermo intero</translation>
 <translation id="6588634282328239769">Visualizza l'URL completo</translation>
@@ -8032,24 +8196,6 @@ Le modifiche alla policy vengono applicate solo mentre ARC non è in esecuzione,
 <translation id="66265932317331474">Segnala informazioni sulla CPU</translation>
 <translation id="6628120204569232711">Segnala lo stato di archiviazione</translation>
 <translation id="662991036483361836">Impedisci agli utenti di attivare la Condivisione nelle vicinanze</translation>
-<translation id="6631596163623348534">Questa policy consente di stabilire se gli URL dei blob vengono partizionati durante il recupero e la navigazione.
-Se questa policy viene attivata o se non viene configurata, gli URL dei blob verranno partizionati.
-Se questa policy viene disattivata, gli URL dei blob non verranno partizionati.
-
-Se il partizionamento dello spazio di archiviazione viene disattivato per una determinata origine di primo livello da
-<ph name="THIRD_PARTY_STORAGE_PARTITIONING_BLOCKED_FOR_ORIGINS_POLICY_NAME" />
-o <ph name="DEFAULT_THIRD_PARTY_STORAGE_PARTITIONING_SETTING_POLICY_NAME" />,
-anche gli URL dei BLOB non verranno partizionati.
-
-Se devi usare la policy, invia una segnalazione di bug su crbug.com spiegando il tuo
-caso d'uso e aggiungendo in copia per conoscenza {janiceliu, awillia}@chromium.org. La policy sarà valida fino alla versione 140 di
-<ph name="PRODUCT_NAME" />,
-dopodiché la vecchia implementazione verrà rimossa.
-
-NOTA: le modifiche apportate a questa
-policy verranno applicate soltanto ai processi del renderer appena avviati mentre il browser è in esecuzione.
-
-Visita la pagina https://developers.google.com/privacy-sandbox/cookies/storage-partitioning per informazioni dettagliate sul partizionamento dello spazio di archiviazione di terze parti.</translation>
 <translation id="663685822663765995">Limita la modalità di stampa a colori</translation>
 <translation id="6640355849038068978">Se questa impostazione viene attivata, gli utenti potranno avviare l'applicazione Eche, ad esempio facendo clic su una notifica di Phone Hub.
 
@@ -8259,11 +8405,6 @@ Il browser rimuoverà automaticamente i dati dei tipi selezionati che sono antec
 I dati scaduti vengono eliminati 15 secondi dopo l'avvio del browser, dopodiché ogni 30 minuti mentre il browser è in esecuzione.
 
 Fino a Chrome 114, questa policy richiedeva l'impostazione della policy <ph name="SYNC_DISABLED_POLICY_NAME" /> su true. A partire da Chrome 115, la configurazione di questa policy disattiva la sincronizzazione per i rispettivi tipi di dati se "<ph name="CHROME_SYNC_NAME" />" non viene disattivato impostando la policy <ph name="SYNC_DISABLED_POLICY_NAME" /> e non viene disattivata <ph name="BROWSER_SIGNIN_POLICY_NAME" />.</translation>
-<translation id="6762635531429930846">Specifica l'età minima della release oltre la quale le notifiche di riavvio sono più aggressive. La durata viene calcolata a partire dall'ultima volta che la versione attualmente in esecuzione è stata pubblicata ai client.
-
-Se è in attesa una nuova versione, è necessario riavviare il browser o il dispositivo e la versione corrente è stata sostituita per più del numero di giorni specificato da questa impostazione, la policy <ph name="RELAUNCH_NOTIFICATION_PERIOD_POLICY_NAME" /> viene forzata su 2 ore. Se la policy <ph name="RELAUNCH_NOTIFICATION_POLICY_NAME" /> viene impostata su 1 (obbligatorio), gli utenti saranno costretti a riavviare o ricominciare alla fine del periodo.
-
-Se non viene configurata o se l'età della release non può essere determinata, la policy <ph name="RELAUNCH_NOTIFICATION_PERIOD_POLICY_NAME" /> verrà utilizzata per tutti gli aggiornamenti.</translation>
 <translation id="6763023079133439068">Consenti i certificati privi di un'estensione subjectAlternativeName se sono stati emessi da trust anchor locali</translation>
 <translation id="6766216162565713893">Consenti ai siti di chiedere all'utente di concedere l'accesso a un dispositivo Bluetooth nelle vicinanze.</translation>
 <translation id="6770454900105963262">Segnala informazioni sulle sessioni kiosk attive</translation>
@@ -8300,6 +8441,7 @@ Su <ph name="MS_WIN_NAME" />, questa policy è disponibile soltanto per le istan
       Se viene impostata su Disattivata, l'icona delle funzionalità sperimentali del browser viene rimossa dalla barra degli strumenti.
 
       chrome://flags e qualsiasi altro metodo per attivare e disattivare le funzionalità del browser continueranno a comportarsi come previsto a prescindere dall'attivazione o meno di questa policy.</translation>
+<translation id="6794273802619210652">Attiva la funzione di accessibilità controlli con il volto</translation>
 <translation id="6795485990775913659">Consenti la stampa solo senza PIN</translation>
 <translation id="6796215185873669533">Usa per impostazione predefinita le impostazioni del browser per la versione della stringa user agent.</translation>
 <translation id="6800181452282128474">Non inviare query a Quirks Server</translation>
@@ -8419,6 +8561,21 @@ Se la policy non viene configurata per un sito, la policy di <ph name="DEFAULT_W
 
 Sostituisce la policy <ph name="WINDOW_PLACEMENT_ALLOWED_FOR_URLS_POLICY_NAME" /> obsoleta.</translation>
 <translation id="6894178810167845842">URL della pagina Nuova scheda</translation>
+<translation id="6895437634974956885">L'integrità della batteria può essere influenzata da fattori quali ricariche complete frequenti e ricariche prolungate. Questa policy offre tre opzioni per ottimizzare il comportamento di ricarica e attenuare questi fattori, prolungando così la durata della batteria.
+
+Se la policy non viene configurata, gli utenti possono usare il pulsante di attivazione/disattivazione della ricarica adattiva per attivare/disattivare la ricarica adattiva.
+
+Se la policy viene impostata su 1 - Standard o se non viene configurata, la batteria viene caricata normalmente fino al 100%. Questa operazione disattiva le ricariche adattiva e limitata.
+
+Se la policy viene impostata su 2 - Adaptive, il dispositivo apprende le tue abitudini di ricarica e ritarda la ricarica al 100% fino a quando non è necessario. Questo aiuta a prolungare l'integrità della batteria.
+
+Se la policy viene impostata su 3 - Limited, la batteria si ricarica solo fino a circa l'80% per massimizzare la durata.
+
+Se la policy <ph name="DEVICE_POWER_BATTERY_CHARGING_OPTIMIZATION_POLICY_NAME" /> è impostata, ha la precedenza sulla policy <ph name="DEVICE_POWER_ADAPTIVE_CHARGING_ENABLED_POLICY_NAME" />.
+
+Se la policy <ph name="DEVICE_POWER_BATTERY_CHARGING_OPTIMIZATION_POLICY_NAME" /> non viene configurata, la policy <ph name="DEVICE_POWER_ADAPTIVE_CHARGING_ENABLED_POLICY_NAME" /> controlla se la funzionalità di ricarica adattiva è attivata o disattivata.
+
+<ph name="DEVICE_POWER_ADAPTIVE_CHARGING_ENABLED_POLICY_NAME" /> verrà deprecata.</translation>
 <translation id="6897730193187922386">Elimina messaggi relativi al ritiro di <ph name="CLOUD_PRINT_NAME" /></translation>
 <translation id="6899705656741990703">Rileva automaticamente impostazioni proxy</translation>
 <translation id="6901462246839613666">Abilita la visualizzazione dei contenuti promozionali</translation>
@@ -8673,7 +8830,6 @@ Le voci non valide vengono ignorate.</translation>
 <translation id="7047495632846973438">Specifica se le policy relative alle autorizzazioni dell'acquisizione del display vengono controllate o saltate.</translation>
 <translation id="7055022222176591388">Non consentire il plug-in <ph name="FLASH_PLUGIN_NAME" /> obsoleto</translation>
 <translation id="7056040036973126753">I dati relativi all'attendibilità dei domini potrebbero essere inviati a Google in base alla policy Metriche utente di Chrome (UMA)</translation>
-<translation id="7056873645513072903">Impostazioni per la policy AutofillPredictionSettings</translation>
 <translation id="7062803946218028349">Consenti l'attivazione di Phone Hub</translation>
 <translation id="7066292150801784098">Disattiva l'interazione degli utenti remoti con finestre con privilegi più elevati nelle sessioni di assistenza remota</translation>
 <translation id="706669471845501145">Consenti la visualizzazione di notifiche desktop da parte dei siti</translation>
@@ -8716,7 +8872,6 @@ Se la policy viene impostata, l'elenco dei valori predefiniti viene esteso con i
 
       Se la policy è impostata su False o non è configurata, le informazioni non vengono segnalate.
       Se è impostata su True, le informazioni sulla ventola del dispositivo vengono segnalate.</translation>
-<translation id="7094859984356280614">Abilita l'integrazione di Gemini.</translation>
 <translation id="710003290625031750">Descrizione estesa dello schema:</translation>
 <translation id="7101550508196914704">Non mostrare la scorciatoia applicazioni nella barra dei Preferiti</translation>
 <translation id="7105084505972468353">Se questa policy viene impostata, consente di controllare il tipo di lente d'ingrandimento che viene attivato.
@@ -8750,6 +8905,13 @@ il gestore delle password integrato.
 Questa policy non influisce sui gestori delle password di terze parti che utilizzano
 API di accessibilità.</translation>
 <translation id="7114169791477667553">Disattiva il provider di ricerca predefinito</translation>
+<translation id="7115006197937836557">Consente di impostare un elenco di funzionalità di <ph name="PRODUCT_OS_NAME" /> da disattivare.
+
+      Se una qualsiasi di queste funzionalità viene disattivata, l'utente non può accedervi dalla UI. Nelle sessioni utente, le funzionalità disattivate sono nascoste nella UI. L'esperienza utente delle funzionalità disattivate nelle sessioni Ospite gestite (MGS) è decisa da <ph name="SYSTEM_FEATURES_DISABLE_MODE" />; per impostazione predefinita, gli utenti le vedranno come "disattivate dall'amministratore".
+
+      Se la policy non viene configurata, tutte le funzionalità di <ph name="PRODUCT_OS_NAME" /> verranno attivate per impostazione predefinita e l'utente le potrà utilizzare.
+
+      Nota: al momento la funzionalità di scansione è disattivata per impostazione predefinita tramite un flag funzionalità. Se l'utente attiva la funzionalità tramite il flag funzionalità, questa potrà comunque essere disattivata dalla policy.</translation>
 <translation id="7115684775550072082">Mantieni solo gli spazi vuoti per i tipi MIME di testo e XML</translation>
 <translation id="7119538491527883595">Spazio di archiviazione dei dati utente locale</translation>
 <translation id="7121046543122812054">Questa policy è deprecata. Potresti usare la policy <ph name="BROWSER_SIGNIN_POLICY_NAME" />.
@@ -8853,7 +9015,6 @@ certificato con un SPKI (SubjectPublicKeyInfo) corrispondente sarà ritenuto att
 <translation id="7177293255621000064">L'impostazione della policy su True rende tutti i tipi di supporti di archiviazione esterni (unità flash USB, dischi rigidi esterni, schede di memoria SD e di altro tipo, memorie ottiche) non disponibili nel browser di file. L'impostazione della policy su False o la mancata impostazione implica che gli utenti possano utilizzare spazi di archiviazione esterni sul loro dispositivo.
 
       Nota: la policy non interessa Google Drive e la memoria interna. Gli utenti possono comunque accedere ai file salvati nella cartella Download.</translation>
-<translation id="7177645313697913767">Consenti agli utenti di attivare o disattivare l'impostazione Protezione IP di <ph name="PRIVACY_SANDBOX_NAME" /> sul proprio dispositivo se il browser e il dispositivo non sono gestiti.</translation>
 <translation id="7177857088692019405">Sblocco rapido</translation>
 <translation id="7179157174254421614">Se la policy <ph name="SYSTEM_TIMEZONE_POLICY_NAME" /> non disattiva il rilevamento automatico del fuso orario, questa policy consente di definire il metodo di rilevamento automatico del fuso orario, che non può essere cambiato dagli utenti.
 
@@ -8870,17 +9031,6 @@ Nota: se utilizzi questa policy per risolvere automaticamente il fuso orario, no
 
       Se la policy è impostata su False, gli utenti, le app e le estensioni non possono utilizzare la modalità a schermo intero.</translation>
 <translation id="718126088895133062">Questa policy consente di specificare l'ID utente della licenza <ph name="PLUGIN_VM_NAME" /> di questo dispositivo.</translation>
-<translation id="7184152751828902217">L'integrità della batteria può essere influenzata da fattori quali ricariche complete frequenti e ricariche prolungate. Questa policy offre tre opzioni per ottimizzare il comportamento di ricarica e attenuare questi fattori, prolungando così la durata della batteria.
-
-Se la policy viene impostata su 1 - Standard o se non viene configurata, la batteria viene caricata normalmente fino al 100%. Questa operazione disattiva le ricariche adattiva e limitata.
-
-Se la policy viene impostata su 2 - Adaptive, il dispositivo apprende le tue abitudini di ricarica e ritarda la ricarica al 100% fino a quando non è necessario. Questo aiuta a prolungare l'integrità della batteria.
-
-Se la policy viene impostata su 3 - Limited, la batteria si ricarica solo fino a circa l'80% per massimizzare la durata.
-
-Questa policy sostituisce <ph name="DEVICE_POWER_ADAPTIVE_CHARGING_ENABLED_POLICY_NAME" />.
-
-Le policy <ph name="DEVICE_POWER_BATTERY_CHARGING_OPTIMIZATION_POLICY_NAME" /> e <ph name="DEVICE_POWER_ADAPTIVE_CHARGING_ENABLED_POLICY_NAME" /> hanno sempre la precedenza sulle impostazioni utente.</translation>
 <translation id="7185078796915954712">TLS 1.3</translation>
 <translation id="7185630966939835143">Usa un servizio web di Google per correggere gli errori ortografici</translation>
 <translation id="7187248416163189586">Disattiva i report sulle informazioni relative alla retroilluminazione del dispositivo</translation>
@@ -8949,6 +9099,8 @@ Il supporto di questa impostazione delle policy terminerà con <ph name="PRODUCT
 
       Se la policy non viene configurata, si applica la policy <ph name="ASK_WINDOW_PLACEMENT_POLICY_NAME" />, ma gli utenti possono cambiare l'impostazione.</translation>
 <translation id="7238335422094660594">Attiva il provider di <ph name="UIA_NAME" />.</translation>
+<translation id="7241007908714447207">Consenti alle origini delle app web isolate di chiedere di connettersi ai lettori di smart card.</translation>
+<translation id="7241016798422122577">Attiva i controlli con il volto nella schermata di accesso</translation>
 <translation id="7242191282517459095">YouTube (supportato dalla versione 135)</translation>
 <translation id="7244600351241637530">Se questa impostazione viene attivata, gli utenti che hanno già attivato Phone Hub possono visualizzare e scaricare su ChromeOS foto e video recenti acquisiti sul proprio telefono.
 
@@ -9100,6 +9252,7 @@ Se questa policy viene impostata su False, viene attivato il comportamento prece
 <translation id="7366637365754181686">Attiva il reporting su cloud degli indicatori di sicurezza utente</translation>
 <translation id="7366948865469126526">Disattiva conversione unità di Risposte rapide</translation>
 <translation id="7367734504783638685">Sincronizzazione delle password tra fornitori di servizi SSO di terze parti e dispositivi Chrome</translation>
+<translation id="7372818045062294211">Consenti all'app di utilizzare l'autorizzazione delle notifiche temporanee</translation>
 <translation id="7372831798009983116">Attiva la funzione di accessibilità di clic automatico</translation>
 <translation id="7373200034079131670">Riavvia all'uscita dell'utente se si avvia Android o una VM.</translation>
 <translation id="7374784840090523241">Imposta come predefinita la creazione di passkey in altri spazi di archiviazione, ad esempio il profilo <ph name="PRODUCT_NAME" />.</translation>
@@ -9197,7 +9350,6 @@ Visita la pagina https://developers.google.com/privacy-sandbox/cookies/storage-p
 
       Se la policy non viene configurata, viene applicato l'intervallo predefinito di 3 minuti.</translation>
 <translation id="7469554574977894907">Attiva suggerimenti di ricerca</translation>
-<translation id="7471938371309017725">Configura la videocamera, le impostazioni del browser, le impostazioni del sistema operativo, nonché le funzionalità di scansione, Web Store, canvas, Esplora, Crosh, Galleria, Terminal e Registratore da disattivare</translation>
 <translation id="7472547030234093862">Specifica i domini da risolvere tramite DNS over HTTPS</translation>
 <translation id="747275827471712187">Ripristina il comportamento <ph name="ATTRIBUTE_SAMESITE_NAME" /> precedente per i cookie su questi siti</translation>
 <translation id="7476030153540156377">Scegli se attivare o meno la funzionalità di protezione IP di <ph name="PRIVACY_SANDBOX_NAME" />.</translation>
@@ -9359,6 +9511,7 @@ Se la policy viene lasciata vuota, non sono consentite eccezioni a <ph name="FLO
           Se la policy viene impostata su False o se non viene configurata, gli utenti non avranno a disposizione la funzionalità di invio automatico del PIN nella schermata di blocco e di accesso.
 
           Se la policy viene configurata, gli utenti non avranno la possibilità di attivare la funzionalità.</translation>
+<translation id="7612030083959326401">Configura l'elenco di domini per i quali la funzionalità <ph name="PASSWORD_MANAGER_NAME" /> (salvataggio e compilazione) verrà disattivata</translation>
 <translation id="7612059745454194563">Non consentire la visualizzazione della promozione dell'estensione fornitore di credenziali</translation>
 <translation id="7612157962821894603">Contrassegni a livello di sistema da applicare all'avvio di <ph name="PRODUCT_NAME" /></translation>
 <translation id="7613115815080726221">Il periodo di tempo, in millisecondi, senza input dell'utente trascorso il quale viene compiuta l'azione stabilita per l'inattività.</translation>
@@ -9393,6 +9546,7 @@ Se la policy viene lasciata vuota, non sono consentite eccezioni a <ph name="FLO
 <translation id="7635106595080609261">La mancata configurazione o l'impostazione della policy su Attivata consente a Chrome di mostrare finestre di dialogo di selezione dei file che gli utenti possono aprire.
 
       Se la policy viene impostata su Disattivata, quando gli utenti eseguono delle azioni che comportano l'apertura di una finestra di dialogo di selezione dei file, come importare preferiti, caricare file e salvare link, viene visualizzato un messaggio. Il browser presuppone che l'utente abbia fatto clic su Annulla nella finestra di dialogo di selezione dei file.</translation>
+<translation id="7637522465980672147">Attiva i controlli con il volto</translation>
 <translation id="7638300388094655454">Google Cast</translation>
 <translation id="7638764766629234761">Consenti l'uso delle notifiche di sistema</translation>
 <translation id="7642740497103044368">Se la policy viene impostata su Attivata, è possibile unire le policy associate a un account gestito alle policy a livello di macchina.
@@ -9428,6 +9582,13 @@ Se configuri questa policy, la policy <ph name="PRIVACY_SANDBOX_PROMPT_ENABLED_P
       Se non è impostata, non sortisce alcun effetto e non viene forzato alcun riavvio all'uscita dell'utente. Lo stesso accade se è impostata su Mai.
       Questa policy ha effetto solo per gli utenti non affiliati.
       </translation>
+<translation id="7677404053000857459">La configurazione della policy consente di specificare se le app web isolate potranno connettersi ai lettori di smart card per impostazione predefinita.
+
+Se la policy viene impostata su 3 o se non viene configurata, le origini delle app web isolate potranno chiedere l'autorizzazione a connettersi ai lettori di smart card. Se non viene configurata, gli utenti potranno modificare questa impostazione.
+
+Se viene impostata su 2, le origini delle app web isolate non potranno connettersi ai lettori di smart card.
+
+È possibile eseguire l'override di questa policy per origini di app web isolate specifiche utilizzando le policy <ph name="SMART_CARD_CONNECT_ALLOWED_FOR_URLS_POLICY_NAME" /> e <ph name="SMART_CARD_CONNECT_BLOCKED_FOR_URLS_POLICY_NAME" />.</translation>
 <translation id="7679483888150212009">Tieni presente che questa policy è obsoleta e verrà rimossa nella versione 85 di <ph name="PRODUCT_OS_NAME" />. Usa la policy <ph name="POWER_MANAGEMENT_IDLE_SETTINGS_POLICY_NAME" />.
 
           Consente di specificare il periodo di tempo senza input utente trascorso il quale lo schermo viene oscurato quando viene usata la corrente alternata.
@@ -9447,6 +9608,7 @@ Se configuri questa policy, la policy <ph name="PRIVACY_SANDBOX_PROMPT_ENABLED_P
 <translation id="768925347918758827">Stati Uniti.</translation>
 <translation id="7696412993033202071">URL lancio app di autenticazione esterne</translation>
 <translation id="7696534428021833264">Attiva la scheda File di SharePoint e OneDrive nella pagina Nuova scheda</translation>
+<translation id="7699644797467448158">Cancella window.name quando la navigazione è di primo livello, cross-site e scambia BrowsingContextGroup.</translation>
 <translation id="7701341006446125684">Imposta le dimensioni della cache di app ed estensioni (in byte)</translation>
 <translation id="7703041979684393741">Non consentire la raccolta di log eventi WebRTC dai servizi Google</translation>
 <translation id="770339941914297201">Nuovo comportamento: le app di Chrome Kiosk verranno aggiornate solo utilizzando l'URL di aggiornamento dalla policy</translation>
@@ -9592,11 +9754,6 @@ Se questa policy viene impostata su false o se non viene configurata, <ph name="
 Per maggiori informazioni sulla policy <ph name="IEEM_SITELIST_POLICY" /> di Internet Explorer: https://docs.microsoft.com/internet-explorer/ie11-deploy-guide/what-is-enterprise-mode</translation>
 <translation id="7791215522423893512">Non consentire agli utenti di acquisire screenshot o registrazioni video</translation>
 <translation id="7792796937016596423">L'utente non potrà eseguire acquisizioni di pacchetti di rete</translation>
-<translation id="7795648856511126914">Il parser HTML sta per essere modificato per consentire l'inserimento di tag HTML aggiuntivi all'interno dell'elemento &lt;select&gt;. Questa policy consente di utilizzare il comportamento del parser HTML precedente fino alla versione M136.
-
-Se la policy viene attivata o se non viene configurata, il parser HTML consente l'uso di tag aggiuntivi all'interno dell'elemento &lt;select&gt;.
-
-Se viene disattivata, il parser HTML limita i tag che possono essere inseriti all'interno dell'elemento &lt;select&gt;.</translation>
 <translation id="7798441698807517880">Questa policy è stata rimossa dalla versione 89 di <ph name="PRODUCT_NAME" /> perché<ph name="FLASH_PLUGIN_NAME" /> è stata ritirata.
 
       Se la policy viene impostata su True, vengono eseguiti tutti i contenuti <ph name="FLASH_PLUGIN_NAME" /> incorporati nei siti web che consentono <ph name="FLASH_PLUGIN_NAME" />, inclusi i contenuti di altre origini o contenuti ridotti.
@@ -9654,6 +9811,7 @@ Nota: se specificato, <ph name="DEVICE_LOGIN_SCREEN_SCREEN_MAGNIFIER_TYPE_POLICY
 <translation id="7850846808758624237">Se la policy viene impostata su Attivata, la home page del precedente browser predefinito verrà importata alla prima esecuzione. Se la policy viene impostata su Disattivata o se non viene configurata, la home page non verrà importata alla prima esecuzione.
 
       Gli utenti possono attivare una finestra di dialogo per l'importazione e la casella di controllo della home page verrà selezionata o deselezionata in modo che corrisponda al valore della policy.</translation>
+<translation id="7851136002849497798">Consenti alle pagine di utilizzare le API AI integrate.</translation>
 <translation id="7851455107499999468">Questa policy controlla un'etichetta utilizzata per identificare un profilo a cui è stato eseguito l'accesso. Questa etichetta verrà visualizzata in varie posizioni per aiutare gli utenti a identificare il profilo, ad esempio accanto all'icona del profilo nella barra degli strumenti.
 Questa etichetta verrà utilizzata anche come nome predefinito per i nuovi profili che possono essere modificati dagli utenti.
 
@@ -9849,6 +10007,7 @@ Questa policy è stata pensata per essere temporanea e verrà rimossa in futuro.
 <translation id="7999818120028621358">Attiva la generazione di rapporti sugli eventi di prevenzione di fughe di dati</translation>
 <translation id="8001701200415781021">Limita gli Account Google che è possibile impostare come account principali del browser in <ph name="PRODUCT_NAME" /></translation>
 <translation id="8004582292198964060">Browser</translation>
+<translation id="8004783248014515857">Imposta un'etichetta aziendale personalizzata per un browser gestito</translation>
 <translation id="8005143535239983809">Questa policy consente di stabilire se il browser può o meno memorizzare automaticamente le password sui siti web e salvarle nel gestore delle password integrato. Non consente di limitare l'accesso o di modificare i contenuti delle password salvate nel gestore delle password e potenzialmente sincronizzate nel profilo dell'Account Google e su <ph name="ANDROID_NAME" />.
 
 Se la policy viene attivata, gli utenti possono impostare <ph name="PRODUCT_NAME" /> in modo che memorizzi le password e le fornisca all'accesso successivo a un sito.
@@ -9979,6 +10138,7 @@ Questa policy non avrà alcun effetto se la policy <ph name="SCREENSAVER_LOCK_SC
       Se l'impostazione viene attivata o non viene configurata, i siti web possono controllare se l'utente ha salvato dei metodi di pagamento.</translation>
 <translation id="8118665053362250806">Imposta le dimensioni della cache su disco di supporto</translation>
 <translation id="8123648898339555150">Consenti la memorizzazione nella cache back-forward delle pagine con l'intestazione <ph name="CACHE_CONTROL_NO_STORE_NAME" />.</translation>
+<translation id="812369175049698774">Consenti agli utenti di avviare gli aggiornamenti firmware</translation>
 <translation id="8124468781472887384">Norma di accesso alla configurazione delle stampanti per i dispositivi.</translation>
 <translation id="8128192446158421884">URL su cui è applicabile AutoOpenFileTypes</translation>
 <translation id="8131046602440880289">Consenti le voci di sintesi vocale di rete migliorate durante l'utilizzo di Seleziona per ascoltare</translation>
@@ -10074,6 +10234,11 @@ Se questa policy non viene impostata, la Schermata sulla privacy viene inizialme
 
       Nota: se il componente aggiuntivo Supporto dei browser precedenti per <ph name="IE_PRODUCT_NAME" /> non è installato, questa policy non ha effetto.</translation>
 <translation id="8179161412673077784">Impedisci ai siti con esperienze intrusive di aprirsi in nuove schede o finestre</translation>
+<translation id="8179547841987088070">La configurazione della policy specifica se i dispositivi degli utenti selezionati devono trovarsi su una rete gestita per far parte del corso <ph name="CLASS_TOOLS_NAME" />.
+
+Se il valore viene impostato su true o se la policy non viene configurata, dovranno trovarsi su una rete gestita.
+
+Se viene impostata su false, gli utenti potranno partecipare senza trovarsi su una rete gestita.</translation>
 <translation id="8183108371184777472">Impedisci l'avvio della finestra del browser</translation>
 <translation id="8185312100223853315">Etichetta del profilo</translation>
 <translation id="8186911565834244165">Consenti il feedback degli utenti</translation>
@@ -10151,6 +10316,7 @@ L'utente deve consentire esplicitamente l'esecuzione in modalità di navigazione
 Se un'estensione specificata in questa policy non viene installata, la navigazione in incognito viene bloccata.
 
 Questa policy viene applicata alla modalità di navigazione in incognito. Ciò significa che la modalità deve essere attivata nel browser. Se la modalità di navigazione in incognito viene disattivata tramite la policy <ph name="INCOGNITO_MODE_AVAILABILITY" />, questa policy non ha effetto.</translation>
+<translation id="8218485948330739485">Abilita TLS 1.3 Early Data</translation>
 <translation id="8219813789911069300">Blocca download dannosi (opzione consigliata).</translation>
 <translation id="8220023426952118761">La velocità di download desiderata, in kbit/s.</translation>
 <translation id="8220156281401380422">Configura lista consentita di messaggi nativi</translation>
@@ -10323,6 +10489,7 @@ Se questa norma non viene impostata, le pagine saranno sottoposte a scansione pe
       <ph name="TAB_CAPTURE_ALLOWED_BY_ORIGINS_POLICY_NAME" />,
       <ph name="SAME_ORIGIN_TAB_CAPTURE_ALLOWED_BY_ORIGINS_POLICY_NAME" />.
       </translation>
+<translation id="8309511882585098865">Non consentire i consigli di AI Mode.</translation>
 <translation id="8310392396850884147">Le intestazioni delle richieste CORS senza caratteri jolly sono supportate.</translation>
 <translation id="8312129124898414409">Consente di stabilire se consentire o meno l'utilizzo della generazione di chiavi sui siti web. L'utilizzo della generazione di chiavi può essere consentito o negato per tutti i siti web.
 
@@ -10333,6 +10500,17 @@ Se questa norma non viene impostata, le pagine saranno sottoposte a scansione pe
 <translation id="8319678975002906774">Imposta valori Managed Configuration per siti web corrispondenti a origini specifiche</translation>
 <translation id="8320149248919453401">Modalità di carica della batteria</translation>
 <translation id="8320576119308783142">Mostra la tastiera sullo schermo quando opportuno.</translation>
+<translation id="8321089199245028304">Attiva la funzione di accessibilità controlli con il volto. Quando i controlli con il volto sono attivi,
+puoi usare la testa per controllare il cursore del mouse e usare le espressioni facciali per eseguire
+azioni di sistema. In questo modo puoi controllare il dispositivo senza usare le mani.
+
+Se la policy viene attivata, i controlli con il volto saranno sempre attivi.
+
+Se la policy viene disattivata, i controlli con il volto saranno sempre disattivati.
+
+Se imposti questa policy, gli utenti non potranno modificarla o ignorarla.
+
+Se la policy non viene configurata, inizialmente i controlli con il volto sono disattivati, ma l'utente può attivarli in qualsiasi momento.</translation>
 <translation id="8327651196906278510">Consenti acquisizione schede in base a queste origini</translation>
 <translation id="8329434144708110">Vengono attivati i flussi di autenticazione per la sincronizzazione delle password con fornitori di servizi SSO</translation>
 <translation id="8329984337216493753">Questa norma è attiva soltanto in modalità retail.
@@ -10403,11 +10581,29 @@ I certificati devono essere codificati in base64.</translation>
 <translation id="8381774264911275515">Disattiva il trasferimento dei cookie SSO SAML nella sessione utente durante l'accesso</translation>
 <translation id="8382184662529825177">Attiva l'utilizzo dell'attestazione remota per la protezione dei contenuti per il dispositivo</translation>
 <translation id="838870586332499308">Attiva roaming dati</translation>
+<translation id="8389925503559691525">Questa policy consente di stabilire se gli URL dei blob vengono partizionati durante il recupero e la navigazione.
+Se questa policy viene attivata o se non viene configurata, gli URL dei blob verranno partizionati.
+Se questa policy viene disattivata, gli URL dei blob non verranno partizionati.
+
+Se il partizionamento dello spazio di archiviazione viene disattivato per una determinata origine di primo livello da
+<ph name="THIRD_PARTY_STORAGE_PARTITIONING_BLOCKED_FOR_ORIGINS_POLICY_NAME" />
+o <ph name="DEFAULT_THIRD_PARTY_STORAGE_PARTITIONING_SETTING_POLICY_NAME" />,
+anche gli URL dei BLOB non verranno partizionati.
+
+Se devi usare la policy, invia una segnalazione di bug all'indirizzo
+<ph name="BUG_URL" />
+spiegando il tuo caso d'uso. La policy sarà valida fino alla versione 143 di
+<ph name="PRODUCT_NAME" />,
+dopodiché la vecchia implementazione verrà rimossa.
+
+NOTA: le modifiche apportate a questa policy verranno applicate soltanto ai processi del renderer appena avviati mentre il browser è in esecuzione.
+
+Visita la pagina https://developers.google.com/privacy-sandbox/cookies/storage-partitioning
+per informazioni dettagliate sul partizionamento dello spazio di archiviazione di terze parti.</translation>
 <translation id="8392478748777481636">Questa policy è stata deprecata e non è supportata. Utilizza la policy <ph name="EXTENSION_INSTALL_BLOCKLIST_POLICY_NAME" />.</translation>
 <translation id="8393850527597048037">Solo policy piattaforma</translation>
 <translation id="8395350646076131800">Timeout di inattività della schermata di blocco utente del salvaschermo.</translation>
 <translation id="8395749934754392549">Consente di gestire le impostazioni relative al container Android (ARC) e alle app Android.</translation>
-<translation id="8397522492225967301">Consenti agli insegnanti di inviare e fissare i contenuti sugli schermi degli studenti</translation>
 <translation id="8398952282584132331">Attiva Schermata sulla privacy</translation>
 <translation id="8399825694820904218">Se per la policy viene impostato un numero, <ph name="PRODUCT_NAME" /> mostra un messaggio relativo al numero di millisecondi impostato, quindi apre un browser alternativo.
 
@@ -10439,11 +10635,6 @@ Se questa policy viene impostata su <ph name="PROVISION_MANAGED_CLIENT_CERTIFICA
       Se la policy non viene configurata, l'API Event.path sarà nello stato predefinito: disponibile prima della versione M109 e non disponibile nelle versioni M109-114.
 
       Questa policy verrà rimossa nelle versioni successive alla versione 115 di Chrome.</translation>
-<translation id="8413397475489512035">La configurazione della policy specifica se gli insegnanti possono utilizzare la funzionalità per le didascalie.
-
-   Se il valore viene impostato su true o se la policy non viene configurata, gli insegnanti selezionati potranno aggiungere sottotitoli della propria voce e inviare la trascrizione agli studenti.
-
-   Se il valore viene impostato su false, non potranno accedere alla funzionalità.</translation>
 <translation id="841395160262233331">L'Avvio app/il tasto Ricerca non sarà in grado di modificare il comportamento dei tasti funzione e questa impostazione non sarà modificabile dagli utenti.</translation>
 <translation id="8415953438346821074">Se attivi questa impostazione, le impostazioni memorizzate nei profili <ph name="PRODUCT_NAME" />, come i preferiti, i dati della compilazione automatica, le password e così via, saranno scritte anche in un file memorizzato nella cartella del profilo utente Roaming o in una posizione specificata dall'amministratore tramite la policy <ph name="ROAMING_PROFILE_LOCATION_POLICY_NAME" />. Se attivi la policy, viene disattivata la sincronizzazione nel cloud.
 
@@ -10457,6 +10648,7 @@ Se questa policy viene impostata su <ph name="PROVISION_MANAGED_CLIENT_CERTIFICA
 <translation id="8421202694245456861">Configura la funzionalità per i sottotitoli di <ph name="CLASS_TOOLS_NAME" /></translation>
 <translation id="8422658829373743789">Gestisci il nuovo comportamento per l'esecuzione di eventi sui controlli dei moduli disattivati</translation>
 <translation id="8423237137411858515">Mantieni i file locali in modalità di sola lettura</translation>
+<translation id="8424056332208748750">Non consentire all'app di utilizzare l'autorizzazione delle notifiche temporanee</translation>
 <translation id="8424255554404582727">Imposta la rotazione predefinita dello schermo, riapplicata a ogni riavvio</translation>
 <translation id="8426231401662877819">Ruota lo schermo in senso orario di 90°</translation>
 <translation id="8426326725481825773">Questa policy determina il comportamento della rimappatura dei tasti Inizio/Fine
@@ -10599,6 +10791,7 @@ Il rollback alla versione 106 o precedente di <ph name="PRODUCT_OS_NAME" /> non 
 <translation id="8520064498689833152">Viene forzato l'uso almeno del livello medio di SafeSearch nella Ricerca Google e nella Modalità con restrizioni di YouTube</translation>
 <translation id="8520950040439618600">Consenti metodi di autenticazione con PIN e accoppiamento per gli host di accesso remoto</translation>
 <translation id="8524334245528364388">URL per un file JSON con un elenco di server di stampa.</translation>
+<translation id="8525282442896658040">Consente all'app di utilizzare l'autorizzazione delle notifiche temporanee su iOS</translation>
 <translation id="8525526490824335042">Container Linux</translation>
 <translation id="8526745614158856826">La configurazione della policy consente di elencare i siti a cui viene concessa automaticamente l'autorizzazione di accesso a tutti i dispositivi disponibili.
 
@@ -10626,6 +10819,7 @@ Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI ge
 <translation id="8544375438507658205">Renderer HTML predefinito per <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="8544465954173828789">Consente la sincronizzazione di messaggi SMS dal telefono al Chromebook</translation>
 <translation id="8549906780629620346">Attiva recupero dell'account</translation>
+<translation id="855182606166519378">Gli utenti non possono avviare gli aggiornamenti firmware</translation>
 <translation id="855291439519960768">Disattiva la funzionalità di protezione dal fingerprinting di <ph name="PRIVACY_SANDBOX_NAME" />.</translation>
 <translation id="8553491595730354263">Consente all'host di accesso remoto di usare le autenticazioni con PIN e accoppiamento quando le connessioni client vengono accettate</translation>
 <translation id="8553955290407912156">Se la policy viene configurata, puoi elencare i pattern URL che specificano i siti che non possono chiedere agli utenti l'autorizzazione di accesso a un dispositivo HID.
@@ -10663,6 +10857,7 @@ Se la policy non viene configurata, il relativo comportamento viene determinato 
 
 Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI generativa, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
 <translation id="8566842294717252664">Nascondi il Web Store nella pagina Nuova scheda e in Avvio applicazioni</translation>
+<translation id="8567697114274003779">Imposta un'etichetta aziendale personalizzata per un profilo gestito</translation>
 <translation id="8571119890730528225">Disattiva il partizionamento dello spazio di archiviazione di terze parti.</translation>
 <translation id="8571314270766672278">Esegui il rollback e il reset del dispositivo con un downgrade del canale, prova a mantenere la registrazione</translation>
 <translation id="8571871284943706125">Segnala eventi di sessioni CRD su dispositivi registrati per utenti affiliati.
@@ -11031,6 +11226,7 @@ Se questa policy viene impostata su True, il modello di ricarica adattiva viene 
 Se questa policy viene impostata su False o se non viene configurata, il modello di ricarica adattiva non influisce sulla procedura di ricarica.
 
 Nota: questa policy non ha effetto se viene configurata DevicePowerBatteryChargingOptimization.</translation>
+<translation id="883025651704099882">Attiva l'attribuzione dell'estensione nel piè di pagina della pagina Nuova scheda</translation>
 <translation id="8830717323204407209">Consente agli utenti di visualizzare la promozione dell'estensione fornitore di credenziali</translation>
 <translation id="8832829916385857156">La pagina Nuova scheda mostra le schede se sono disponibili contenuti</translation>
 <translation id="8833109046074170275">Autenticazione tramite il flusso GAIA predefinito</translation>
@@ -11095,6 +11291,8 @@ Questo è utile quando l'amministratore sa che probabilmente gli utenti del disp
           Se imposti questa policy, gli utenti non potranno modificarla o ignorarla.
 
           Se questa policy non viene impostata, inizialmente la funzione di clic automatico è disattivata nella schermata di accesso, ma l'utente può attivarla in qualsiasi momento.</translation>
+<translation id="8872418152024227539">Controlla l'utilizzo dell'API web Smart Card</translation>
+<translation id="8872527536500358952">Utilizza la funzionalità di condivisione dei gruppi di schede.</translation>
 <translation id="8873089107816226072">Questa policy consente di specificare il fuso orario di un dispositivo e di disattivare la regolazione automatica del fuso orario in base alla località, sostituendo la policy <ph name="SYSTEM_TIMEZONE_AUTOMATIC_DETECTION_POLICY_NAME" />. Gli utenti non possono cambiare il fuso orario.
 
       Sui nuovi dispositivi è impostato il fuso orario della costa del Pacifico degli Stati Uniti. Il formato del valore segue quello dei nomi nello IANA Time Zone Database (https://en.wikipedia.org/wiki/Tz_database). Se viene inserito un valore non valido, per la policy viene usato il fuso orario GMT.
@@ -11160,11 +11358,13 @@ Questa policy consente di controllare <ph name="ARC_VM" /> soltanto su <ph name=
 <translation id="8908294717014659003">Consente di stabilire se i siti web possono accedere ai dispositivi di acquisizione dei contenuti multimediali. L'accesso ai dispositivi di acquisizione dei contenuti multimediali può essere consentito per impostazione predefinita oppure l'utente può visualizzare una richiesta ogni volta che un sito web vuole accedere ai dispositivi di acquisizione dei contenuti multimediali.
 
           Se questa norma non viene impostata, verrà utilizzata la norma "PromptOnAccess" e l'utente sarà in grado di modificarla.</translation>
+<translation id="8909400095164640684">Impostazioni dell'aggregatore di ricerca aziendale</translation>
 <translation id="8911348623012274122">Imposta un limite di memoria per le istanze di Chrome</translation>
 <translation id="8911736066340032670">Consente di segnalare informazioni relative al display, come la frequenza di aggiornamento, e alla grafica, ad esempio la versione del driver.
 
       Se la policy viene impostata su false o non viene impostata, gli stati relativi a display e grafica non vengono segnalati. Se viene impostata su true, gli stati relativi a display e grafica vengono segnalati.</translation>
 <translation id="891435090623616439">codificato sotto forma di stringa JSON; per informazioni dettagliate, visita la pagina <ph name="COMPLEX_POLICIES_URL" /></translation>
+<translation id="8916106787085606382">Non cancellare window.name quando la navigazione è di primo livello, cross-site e sostituisce BrowsingContextGroup.</translation>
 <translation id="8917070657147922192">Consenti agli utenti di gestire i certificati CA installati.</translation>
 <translation id="8919100556245407184">Il periodo di tempo, in giorni, dopo il post di scadenza dell'aggiornamento automatico trascorso il quale l'utente viene disconnesso dall'account se la versione di <ph name="PRODUCT_OS_NAME" /> è precedente a quella specificata nella policy <ph name="CHROMEOS_VERSION_PROPERTY_NAME" />.</translation>
 <translation id="8919369436496201075">Consenti al dispositivo di ricevere aggiornamenti LTS</translation>
@@ -11238,11 +11438,6 @@ Se non viene configurata, verrà utilizzato il nuovo comportamento, esattamente 
 <translation id="8956312248048980644">Consente per impostazione predefinita il clustering di agenti in base all'origine.</translation>
 <translation id="8963464192296208229">Le impostazioni di F11 usano la scorciatoia che contiene il tasto di modifica Alt</translation>
 <translation id="8966888925105658202">Non consentire alle origini delle app web isolate di comunicare con gli endpoint di rete privata nell'API Direct Sockets</translation>
-<translation id="8967548037699118811">Abilita l'integrazione dell'app Gemini
-
-0/non impostato = l'integrazione di Gemini sarà disponibile per gli utenti
-
-1 = l'integrazione di Gemini non sarà disponibile per gli utenti</translation>
 <translation id="8970205333161758602">Eliminazione del messaggio di richiesta di turndown di <ph name="PRODUCT_FRAME_NAME" /></translation>
 <translation id="8973579598359969188">Scegli se è possibile o meno mostrare la richiesta di <ph name="PRIVACY_SANDBOX_NAME" /> ai tuoi utenti</translation>
 <translation id="8974457039656761249">Controlla la funzionalità di scrittura predittiva sulla tastiera fisica</translation>
@@ -11286,7 +11481,11 @@ Se questa policy viene disattivata, tutte le integrazioni verranno disattivate.<
       Se lo stesso pattern URL esiste sia in questa policy sia nella policy <ph name="SENSORS_BLOCKED_FOR_URLS_POLICY_NAME" />, quest'ultima ha la priorità e l'accesso ai sensori di movimento o di luce verrà bloccato.
 
       Per informazioni dettagliate sui pattern <ph name="URL_LABEL" /> validi, visita la pagina https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. I caratteri jolly (<ph name="WILDCARD_VALUE" />) sono consentiti.</translation>
-<translation id="900032518062285306">Consenti la previsione di compilazione automatica senza migliorare i modelli di AI.</translation>
+<translation id="9002299469625801504">Se questa policy viene impostata su Attivata, ogni volta che dovrebbe essere visualizzato un avviso in <ph name="DEV_TOOLS_NAME" /> a causa di controlli <ph name="LOCAL_NETWORK_ACCCESS" /> non riusciti, la richiesta principale verrà bloccata.
+
+Se questa policy viene impostata su Disattivata o se non viene configurata, le richieste di <ph name="LOCAL_NETWORK_ACCESS" /> useranno la gestione predefinita di queste richieste.
+
+Visita la pagina https://github.com/explainers-by-googlers/local-network-access per conoscere le limitazioni relative a <ph name="LOCAL_NETWORK_ACCESS" />.</translation>
 <translation id="9003823644527627017">Configura VM Bruschetta su <ph name="PRODUCT_OS_NAME" /></translation>
 <translation id="9004469022085379212">Se la policy viene attivata, al dispositivo viene consentito di eseguire macchine virtuali su <ph name="PRODUCT_OS_NAME" />. Le policy <ph name="VIRTUAL_MACHINES_ALLOWED_POLICY_NAME" /> e <ph name="CROSTINI_ALLOWED_POLICY_NAME" /> devono essere attivate per utilizzare <ph name="PRODUCT_CROSTINI_NAME" />. Se la policy viene disattivata, significa che il dispositivo non può eseguire macchine virtuali. Tramite la disattivazione della policy, questa viene applicata all'avvio di nuove macchine virtuali, non a quelle già in esecuzione.
 
@@ -11319,6 +11518,7 @@ Nota: al momento verrà presa in considerazione solo la prima voce. Le estension
       Se una lingua è inclusa sia in questa policy sia nella policy <ph name="SPELLCHECK_LANGUAGE_POLICY_NAME" />, quest'ultima ha la priorità e verrà attivata la lingua per il controllo ortografico.
 
       Le lingue attualmente supportate sono: af, bg, ca, cs, da, de, el, en-AU, en-CA, en-GB, en-US, es, es-419, es-AR, es-ES, es-MX, es-US, et, fa, fo, fr, he, hi, hr, hu, id, it, ko, lt, lv, nb, nl, pl, pt-BR, pt-PT, ro, ru, sh, sk, sl, sq, sr, sv, ta, tg, tr, uk, vi.</translation>
+<translation id="900867836818807386">Impostazioni per la compilazione automatica con l'AI</translation>
 <translation id="9009119876570708617">Questa policy è stata rimossa a partire dalla versione M85. Usa la policy <ph name="POLICY_NAME" /> per consentire i contenuti non sicuri per singolo sito.
        Questa policy consente di stabilire il trattamento dei contenuti misti (contenuti HTTP in siti HTTPS) nel browser.
        Se la policy viene impostata su true o non viene impostata, viene eseguito l'upgrade automatico a HTTPS dei contenuti misti di audio e video (vale a dire che l'URL viene riscritto come HTTPS, senza una riserva se la risorsa non è disponibile tramite HTTPS) e nella barra degli URL viene mostrato un avviso "Non sicuro" per i contenuti misti delle immagini.
@@ -11406,6 +11606,18 @@ Se la policy non viene configurata, per impostazione predefinita <ph name="PRODU
       Se questa policy non è impostata, la selezione automatica non avviene per nessun sito.
 
       Per informazioni dettagliate sui pattern URL validi, visita la pagina https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns.</translation>
+<translation id="9061455386353325110">Specifica se gli utenti possono consentire a <ph name="PRODUCT_NAME" /> di utilizzare l'AI generativa per comprendere meglio i moduli e offrire aiuto nella compilazione di più campi.
+
+0 = Consente di utilizzare la funzionalità e permette al contempo a Google di utilizzare i dati pertinenti per migliorare i propri modelli di AI. A seconda della funzionalità, tra i dati pertinenti sono inclusi prompt, input, output, materiali originali e feedback scritto. 0 è il valore predefinito, ad eccezione dei casi riportati di seguito.
+
+1 = Consente di utilizzare la funzionalità, ma non consente a Google di migliorare i modelli utilizzando i contenuti degli utenti (inclusi prompt, input, output, materiali originali e feedback scritto). 1 è il valore predefinito per gli utenti aziendali gestiti da <ph name="GOOGLE_ADMIN_CONSOLE_PRODUCT_NAME" /> e per gli account Education gestiti da <ph name="GOOGLE_WORKSPACE_PRODUCT_NAME" />.
+
+2 = Non consente di utilizzare la funzionalità.
+
+Se la policy non viene configurata, il relativo comportamento viene determinato dalla policy <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
+
+Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI generativa, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
+<translation id="9061609750723054419">Controlla la visibilità dell'avviso di gestione nella pagina Nuova scheda per i browser gestiti</translation>
 <translation id="9063485115966829754">Il visualizzatore PDF utilizza l'architettura GuestView.</translation>
 <translation id="9066311316566875681">Il modello URI del resolver DNS over HTTPS desiderato. Per specificare diversi resolver DNS over HTTPS, separa i modelli URI corrispondenti con gli spazi.
 
@@ -11440,6 +11652,7 @@ Nota: se il dispositivo viene riavviato, la cache viene svuotata. Anche i dati r
       Se la policy viene impostata su Disattivata, i dispositivi registrati non registrano e non segnalano i tempi di attività.</translation>
 <translation id="9076477053438828079">Mostra sempre nomi e foto degli utenti</translation>
 <translation id="9077227880520270584">Timer accesso automatico all'account locale del dispositivo</translation>
+<translation id="9079158199923156713">URL logo aziendale per un profilo gestito</translation>
 <translation id="9079531125758468956">Disabilita l'importazione dei preferiti alla prima esecuzione</translation>
 <translation id="9084038227968802480">Attiva la segnalazione dell'heartbeat dell'attività del dispositivo</translation>
 <translation id="9084985621503260744">Specifica se l'attività video incide sulla gestione dell'alimentazione</translation>
@@ -11462,17 +11675,6 @@ Se non viene configurata, si applica la policy <ph name="ASK_NOTIFICATIONS_POLIC
 <translation id="9107664925383184344">Periodo di tempo (giorni)</translation>
 <translation id="910929592571075861">Non partizionare gli URL dei blob durante il recupero e la navigazione.</translation>
 <translation id="9110194749335632373">Impedisci le connessioni di accesso da remoto da parte degli amministratori aziendali a questo computer</translation>
-<translation id="9110198768621013941">Attiva la policy AutofillPredictionSettings.
-
-0 = Consente di utilizzare la funzionalità e permette al contempo a Google di utilizzare i dati pertinenti per migliorare i propri modelli di AI. A seconda della funzionalità, tra i dati pertinenti sono inclusi prompt, input, output, materiali originali e feedback scritto. Potrebbero anche essere esaminati da persone per migliorare i modelli di AI. 0 è il valore predefinito, ad eccezione dei casi riportati di seguito.
-
-1 = Consente di utilizzare la funzionalità, ma non consente a Google di migliorare i modelli utilizzando i contenuti degli utenti (inclusi prompt, input, output, materiali originali e feedback scritto). 1 è il valore predefinito per gli utenti aziendali gestiti da <ph name="GOOGLE_ADMIN_CONSOLE_PRODUCT_NAME" /> e per gli account Education gestiti da <ph name="GOOGLE_WORKSPACE_PRODUCT_NAME" />.
-
-2 = Non consente di utilizzare la funzionalità.
-
-Se la policy non viene configurata, il relativo comportamento viene determinato dalla policy <ph name="GEN_AI_DEFAULT_SETTINGS_POLICY_NAME" />.
-
-Per ulteriori informazioni sulla gestione dei dati per le funzionalità di AI generativa, visita la pagina https://support.google.com/chrome/a?p=generative_ai_settings.</translation>
 <translation id="9110251436602897914">Segnala informazioni sulle periferiche collegate al dispositivo</translation>
 <translation id="9110485853581788150">Un elenco di certificati che <ph name="PRODUCT_NAME" /> non considera attendibili né non attendibili,
 ma che possono essere usati come suggerimenti per la creazione di percorsi. I certificati devono essere codificati in base64.</translation>
@@ -11492,6 +11694,7 @@ Questa policy ha effetto soltanto se la policy <ph name="FULL_RESTORE_ENABLED_NA
 <translation id="9123464369663964441">Consenti agli utenti di aggiungere eccezioni per consentire contenuti misti</translation>
 <translation id="9124770007620653639">Non inviare mai a Google dati relativi all'attendibilità dei domini</translation>
 <translation id="9126331659955304300">Consenti la selezione di avatar degli utenti da file system locale, fotocamera e profilo Google</translation>
+<translation id="9126694586349976283">Consenti l'utilizzo delle API AI integrate.</translation>
 <translation id="9128095645860384292">Consente di impostare un elenco di pattern URL che specificano i siti non autorizzati a eseguire JavaScript con il compilatore JIT (Just In Time) attivato.
 
           Se JIT di JavaScript viene disattivato, <ph name="PRODUCT_NAME" /> potrebbe eseguire il rendering dei contenuti web più lentamente e disattivare inoltre alcune parti di JavaScript, incluso WebAssembly. Se JIT di JavaScript viene disattivato, <ph name="PRODUCT_NAME" /> potrebbe essere in grado di eseguire il rendering dei contenuti web in una configurazione più sicura.
@@ -11517,6 +11720,11 @@ Questa policy ha effetto soltanto se la policy <ph name="FULL_RESTORE_ENABLED_NA
 <translation id="9135095804754272364">Mostra una notifica quando viene rilevato un dispositivo USB</translation>
 <translation id="9136212796239682721">Disattiva l'UI del fumetto dei download</translation>
 <translation id="9136399279941091445">Intervalli di orari di minore attività quando vengono rilasciate le policy del dispositivo specificate</translation>
+<translation id="9138686056337842869">Se questa policy viene impostata su True, le app di Chrome possono continuare a essere eseguite in una sessione kiosk, indipendentemente dall'abilitazione predefinita delle app di Chrome.
+
+Se non viene configurata o se viene impostata su False, verrà usato il comportamento predefinito definito sul dispositivo.
+
+Se si tenta di avviare un'app di Chrome disabilitata, all'utente viene mostrato un messaggio che spiega perché l'app non è stata avviata e che suggerisce di contattare il reparto IT.</translation>
 <translation id="9139775903828905867">Controlla la scorciatoia utilizzata per attivare F11</translation>
 <translation id="9140064482233876338">Policy ritirata nella versione M69. Usa invece la policy OverrideSecurityRestrictionsOnInsecureOrigin.
 
@@ -11588,6 +11796,7 @@ Questa policy non ha effetto se la policy <ph name="METRICS_REPORTING_ENABLED_PO
 L'impostazione predefinita è RollbackDisabled.</translation>
 <translation id="9197740283131855199">Percentuale di regolazione del ritardo di oscuramento dello schermo se l'utente diventa attivo dopo l'oscuramento</translation>
 <translation id="9200828125069750521">Parametri per l'URL dell'immagine che utilizza POST</translation>
+<translation id="9202520409249547230">Non consentire la compilazione automatica con l'AI.</translation>
 <translation id="9204863016826119209">Le chiavi aziendali possono essere utilizzate dalle app per Android installate ed elencate in questa policy.</translation>
 <translation id="9206472508136116830">Non consentire il rilevamento condivisioni NetBIOS</translation>
 <translation id="9207596996305971030">Gli eventi di accesso/uscita non vengono segnalati</translation>

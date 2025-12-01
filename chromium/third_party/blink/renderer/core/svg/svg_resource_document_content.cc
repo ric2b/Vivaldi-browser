@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_document_cache.h"
 #include "third_party/blink/renderer/core/svg/svg_resource_document_observer.h"
+#include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_parameters.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
@@ -231,7 +232,11 @@ SVGResourceTarget* SVGResourceDocumentContent::GetResourceTarget(
     return nullptr;
   }
   auto* svg_target =
-      DynamicTo<SVGElement>(document->getElementById(element_id));
+      element_id.empty() &&
+              RuntimeEnabledFeatures::
+                  AllowSvgUseToReferenceExternalDocumentRootEnabled()
+          ? DynamicTo<SVGSVGElement>(document->documentElement())
+          : DynamicTo<SVGElement>(document->getElementById(element_id));
   if (!svg_target) {
     return nullptr;
   }

@@ -327,13 +327,6 @@ Timing::Delay CSSToStyleMap::MapAnimationDelayStart(StyleResolverState& state,
   return MapAnimationTimingDelay(state.CssToLengthConversionData(), value);
 }
 
-Timing::Delay CSSToStyleMap::MapAnimationDelayEnd(const CSSValue& value) {
-  // Note: using default length resolver here, as this function is only
-  // called from the serialization code.
-  return MapAnimationTimingDelay(CSSToLengthConversionData(/*element=*/nullptr),
-                                 value);
-}
-
 Timing::Delay CSSToStyleMap::MapAnimationDelayEnd(StyleResolverState& state,
                                                   const CSSValue& value) {
   return MapAnimationTimingDelay(state.CssToLengthConversionData(), value);
@@ -429,7 +422,8 @@ StyleTimeline CSSToStyleMap::MapAnimationTimeline(StyleResolverState& state,
   }
   if (auto* custom_ident = DynamicTo<CSSCustomIdentValue>(value)) {
     return StyleTimeline(MakeGarbageCollected<ScopedCSSName>(
-        custom_ident->Value(), custom_ident->GetTreeScope()));
+        custom_ident->ComputeIdent(state.CssToLengthConversionData()),
+        custom_ident->GetTreeScope()));
   }
   if (value.IsViewValue()) {
     const auto& view_value = To<cssvalue::CSSViewValue>(value);
@@ -825,16 +819,24 @@ std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerRangeEnd(
   return MapAnimationRange(state, value, 100);
 }
 
-std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerExitRangeStart(
+TimelineOffsetOrAuto CSSToStyleMap::MapAnimationTriggerExitRangeStart(
     StyleResolverState& state,
     const CSSValue& value) {
-  return MapAnimationRange(state, value, 0);
+  if (auto* ident = DynamicTo<CSSIdentifierValue>(value);
+      ident && ident->GetValueID() == CSSValueID::kAuto) {
+    return TimelineOffsetOrAuto();
+  }
+  return TimelineOffsetOrAuto(MapAnimationRange(state, value, 0));
 }
 
-std::optional<TimelineOffset> CSSToStyleMap::MapAnimationTriggerExitRangeEnd(
+TimelineOffsetOrAuto CSSToStyleMap::MapAnimationTriggerExitRangeEnd(
     StyleResolverState& state,
     const CSSValue& value) {
-  return MapAnimationRange(state, value, 100);
+  if (auto* ident = DynamicTo<CSSIdentifierValue>(value);
+      ident && ident->GetValueID() == CSSValueID::kAuto) {
+    return TimelineOffsetOrAuto();
+  }
+  return TimelineOffsetOrAuto(MapAnimationRange(state, value, 100));
 }
 
 }  // namespace blink

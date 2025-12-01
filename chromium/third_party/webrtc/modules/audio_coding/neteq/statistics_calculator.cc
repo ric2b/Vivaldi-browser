@@ -13,9 +13,11 @@
 #include <string.h>  // memset
 
 #include <algorithm>
+#include <cstdint>
 
 #include "absl/strings/string_view.h"
-#include "modules/audio_coding/neteq/delay_manager.h"
+#include "api/neteq/neteq.h"
+#include "api/neteq/tick_timer.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/numerics/safe_conversions.h"
 #include "system_wrappers/include/metrics.h"
@@ -286,7 +288,7 @@ void StatisticsCalculator::IncreaseCounter(size_t num_samples, int fs_hz) {
     return;
   }
   const int time_step_ms =
-      rtc::CheckedDivExact(static_cast<int>(1000 * num_samples), fs_hz);
+      CheckedDivExact(static_cast<int>(1000 * num_samples), fs_hz);
   delayed_packet_outage_counter_.AdvanceClock(time_step_ms);
   excess_buffer_delay_.AdvanceClock(time_step_ms);
   buffer_full_counter_.AdvanceClock(time_step_ms);

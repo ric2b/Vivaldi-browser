@@ -32,7 +32,6 @@
 
 #include "absl/container/inlined_vector.h"
 #include "dawn/common/Assert.h"
-#include "dawn/common/BitSetIterator.h"
 #include "dawn/native/AttachmentState.h"
 #include "dawn/native/BlitColorToColorWithDraw.h"
 #include "dawn/native/CommandEncoder.h"
@@ -186,7 +185,7 @@ MaybeError RenderPassWorkaroundsHelper::ApplyOnPostEncoding(
     if (mTempResolveTargetsMask.any()) {
         std::vector<TemporaryResolveAttachment> temporaryResolveAttachments;
 
-        for (auto index : IterateBitSet(mTempResolveTargetsMask)) {
+        for (auto index : mTempResolveTargetsMask) {
             TextureViewBase* resolveTarget = cmd->colorAttachments[index].resolveTarget.Get();
             TextureViewBase* temporaryResolveView = mTempResolveTargets[index].view.Get();
 
@@ -219,15 +218,29 @@ MaybeError RenderPassWorkaroundsHelper::ApplyOnPostEncoding(
         cmd->attachmentState->GetExpandResolveInfo().attachmentsToExpandResolve.any() &&
         device->CanTextureLoadResolveTargetInTheSameRenderpass();
 
+    std::optional<RenderPassDescriptorResolveRect> expandResolveRect;
+    if (auto* legacyResolveRect =
+            renderPassDescriptor.Get<RenderPassDescriptorExpandResolveRect>()) {
+        RenderPassDescriptorResolveRect rect;
+        rect.colorOffsetX = legacyResolveRect->x;
+        rect.colorOffsetY = legacyResolveRect->y;
+        rect.resolveOffsetX = legacyResolveRect->x;
+        rect.resolveOffsetY = legacyResolveRect->y;
+        rect.width = legacyResolveRect->width;
+        rect.height = legacyResolveRect->height;
+        expandResolveRect = rect;
+
+    } else if (auto* resolveRect = renderPassDescriptor.Get<RenderPassDescriptorResolveRect>()) {
+        expandResolveRect = *resolveRect;
+    }
     // Handle partial resolve. This identifies passes where there are MSAA color attachments with
     // wgpu::LoadOp::ExpandResolveTexture. If that's the case then the resolves are deferred by
     // removing the resolve targets and forcing the storeOp to Store. After the pass has ended an
     // new pass is recorded for each resolve target that resolves it separately.
-    if (mShouldApplyExpandResolveEmulation &&
-        renderPassDescriptor.Get<RenderPassDescriptorExpandResolveRect>()) {
+    if (expandResolveRect) {
         std::vector<TemporaryResolveAttachment> temporaryResolveAttachments;
 
-        for (auto i : IterateBitSet(cmd->attachmentState->GetColorAttachmentsMask())) {
+        for (auto i : cmd->attachmentState->GetColorAttachmentsMask()) {
             auto& attachmentInfo = cmd->colorAttachments[i];
             TextureViewBase* resolveTarget = attachmentInfo.resolveTarget.Get();
             if (attachmentInfo.loadOp == wgpu::LoadOp::ExpandResolveTexture) {
@@ -241,28 +254,26 @@ MaybeError RenderPassWorkaroundsHelper::ApplyOnPostEncoding(
             }
         }
         for (auto& deferredResolve : temporaryResolveAttachments) {
-            passEndOperations.emplace_back(
-                [device, encoder,
-                 rect = *renderPassDescriptor.Get<RenderPassDescriptorExpandResolveRect>(),
-                 deferredResolve]() -> MaybeError {
-                    // Do partial resolve first in one render pass.
-                    DAWN_TRY(ResolveMultisampleWithDraw(
-                        device, encoder, {rect.x, rect.y, rect.width, rect.height},
-                        deferredResolve.copySrc.Get(), deferredResolve.copyDst.Get()));
+            passEndOperations.emplace_back([device, encoder, resolveRect = *expandResolveRect,
+                                            deferredResolve]() -> MaybeError {
+                // Do partial resolve first in one render pass.
+                DAWN_TRY(ResolveMultisampleWithDraw(device, encoder, resolveRect,
+                                                    deferredResolve.copySrc.Get(),
+                                                    deferredResolve.copyDst.Get()));
 
-                    switch (deferredResolve.storeOp) {
-                        case wgpu::StoreOp::Store:
-                            // 'Store' has been handled in the main render pass already.
-                            break;
-                        case wgpu::StoreOp::Discard:
-                            // Handle 'Discard', tagging the subresource as uninitialized.
-                            DiscardWithRenderPass(encoder, deferredResolve.copySrc.Get());
-                            break;
-                        default:
-                            DAWN_UNREACHABLE();
-                    }
-                    return {};
-                });
+                switch (deferredResolve.storeOp) {
+                    case wgpu::StoreOp::Store:
+                        // 'Store' has been handled in the main render pass already.
+                        break;
+                    case wgpu::StoreOp::Discard:
+                        // Handle 'Discard', tagging the subresource as uninitialized.
+                        DiscardWithRenderPass(encoder, deferredResolve.copySrc.Get());
+                        break;
+                    default:
+                        DAWN_UNREACHABLE();
+                }
+                return {};
+            });
         }
     }
 
@@ -278,7 +289,7 @@ MaybeError RenderPassWorkaroundsHelper::ApplyOnPostEncoding(
 
         // This workaround needs to apply if there are multiple MSAA color targets (checked above)
         // and at least one resolve target.
-        for (auto i : IterateBitSet(cmd->attachmentState->GetColorAttachmentsMask())) {
+        for (auto i : cmd->attachmentState->GetColorAttachmentsMask()) {
             if (cmd->colorAttachments[i].resolveTarget.Get() != nullptr) {
                 splitResolvesIntoSeparatePasses = true;
                 break;
@@ -288,7 +299,7 @@ MaybeError RenderPassWorkaroundsHelper::ApplyOnPostEncoding(
         if (splitResolvesIntoSeparatePasses) {
             std::vector<TemporaryResolveAttachment> temporaryResolveAttachments;
 
-            for (auto i : IterateBitSet(cmd->attachmentState->GetColorAttachmentsMask())) {
+            for (auto i : cmd->attachmentState->GetColorAttachmentsMask()) {
                 auto& attachmentInfo = cmd->colorAttachments[i];
                 TextureViewBase* resolveTarget = attachmentInfo.resolveTarget.Get();
                 if (resolveTarget != nullptr) {

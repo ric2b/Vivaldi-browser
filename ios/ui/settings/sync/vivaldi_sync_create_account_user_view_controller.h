@@ -16,7 +16,6 @@
     (VivaldiSyncCreateAccountUserViewController*)controller;
 
 - (void)nextButtonPressed:(NSString*)username
-                      age:(int)age
      recoveryEmailAddress:(NSString*)recoveryEmailAddress;
 
 - (void)logInLinkPressed;

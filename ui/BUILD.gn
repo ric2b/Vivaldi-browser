@@ -16,6 +16,8 @@ static_library("ui") {
     "webui/vivaldi_web_ui_controller_factory.h",
     "webui/game_ui.cc",
     "webui/game_ui.h",
+    "webui/privacy_report_ui.cc",
+    "webui/privacy_report_ui.h",
   ]
   if (is_win) {
     sources += [
@@ -38,6 +40,7 @@ static_library("ui") {
     "//content/public/browser",
     "//skia",
     "//vivaldi/prefs:prefs_files_generator",
+    "//ui/webui/resources/js:build_ts",
   ]
   if (!is_android) {
     sources += [
@@ -65,6 +68,10 @@ static_library("ui") {
       "//extensions/browser",
       "//ui/views",
       "//vivaldi/extensions/schema",
+    ]
+  } else {
+    sources += [
+      "web_ui_native_call_utils.h"
     ]
   }
   if (is_mac) {

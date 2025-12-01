@@ -68,6 +68,7 @@ import org.chromium.components.autofill_public.ViewType;
 import org.chromium.components.embedder_support.util.WebResourceResponseInfo;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
+import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
 
@@ -243,8 +244,8 @@ public class AwAutofillTest extends AwParameterizedTest {
         private static final int TOTAL_CONTROLS = 1; // text1
 
         private int mCnt;
-        private AwAutofillTest mTest;
-        private TestWebServer mWebServer;
+        private final AwAutofillTest mTest;
+        private final TestWebServer mWebServer;
 
         public AwAutofillSessionUMATestHelper(AwAutofillTest test, TestWebServer webServer) {
             mTest = test;
@@ -367,10 +368,10 @@ public class AwAutofillTest extends AwParameterizedTest {
     private EmbeddedTestServer mEmbeddedServer;
     private AwTestContainerView mTestContainerView;
     private AwAutofillTestClient mContentsClient;
-    private CallbackHelper mCallbackHelper = new CallbackHelper();
+    private final CallbackHelper mCallbackHelper = new CallbackHelper();
     private AwContents mAwContents;
-    private ConcurrentLinkedQueue<Integer> mEventQueue = new ConcurrentLinkedQueue<>();
-    private TestValues mTestValues = new TestValues();
+    private final ConcurrentLinkedQueue<Integer> mEventQueue = new ConcurrentLinkedQueue<>();
+    private final TestValues mTestValues = new TestValues();
     private int mSubmissionSource;
     private TestAutofillManagerWrapper mTestAutofillManagerWrapper;
     private AwAutofillSessionUMATestHelper mUMATestHelper;
@@ -2906,10 +2907,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({
-        "enable-features=AutofillFixValueSemantics",
-        "disable-features=AutofillServerCommunication"
-    })
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testServerPredictionArrivesAfterAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -3003,10 +3001,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({
-        "enable-features=AutofillFixValueSemantics",
-        "disable-features=AutofillServerCommunication"
-    })
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testServerPredictionPrimaryTypeArrivesAfterAutofillStart() throws Throwable {
         loadHTML(
                 """
@@ -3095,10 +3090,7 @@ public class AwAutofillTest extends AwParameterizedTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView"})
-    @CommandLineFlags.Add({
-        "enable-features=AutofillFixValueSemantics",
-        "disable-features=AutofillServerCommunication"
-    })
+    @CommandLineFlags.Add({"disable-features=AutofillServerCommunication"})
     public void testServerPredictionArrivesBeforeCallbackRegistered() throws Throwable {
         loadHTML(
                 """
@@ -3538,6 +3530,9 @@ public class AwAutofillTest extends AwParameterizedTest {
         mRule.loadUrlSync(
                 mTestContainerView.getAwContents(), mContentsClient.getOnPageFinishedHelper(), url);
         done.waitForCallback(callCount);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> WebContentsUtils.simulateEndOfPaintHolding(mAwContents.getWebContents()));
     }
 
     private void reloadSync() throws Exception {

@@ -130,7 +130,6 @@ BOOL subscribeToNewsletter;
       [[VivaldiTableViewIllustratedItem alloc] initWithType:ItemTypeTitle];
   title.image = [UIImage imageNamed:kVivaldiIcon];
   title.title = l10n_util::GetNSString(IDS_VIVALDI_SYNC_CREATE_ACCOUNT_TITLE);
-
   [model addItem:title
       toSectionWithIdentifier:SectionIdentifierHeader];
 
@@ -151,7 +150,6 @@ BOOL subscribeToNewsletter;
       IDS_VIVALDI_ACCOUNT_PASSWORD);
   self.passwordItem.textContentType = UITextContentTypePassword;
   self.passwordItem.keyboardType = UIKeyboardTypeDefault;
-
   [model addItem:self.passwordItem
       toSectionWithIdentifier:SectionIdentifierUserDetails];
 
@@ -361,20 +359,22 @@ heightForHeaderInSection:(NSInteger)section {
 
 #pragma mark - UITextViewDelegate
 
-- (BOOL)textView:(UITextView*)textView
-    shouldInteractWithURL:(NSURL*)URL
-                  inRange:(NSRange)characterRange
-              interaction:(UITextItemInteraction)interaction {
-  NSString* URLString = URL.absoluteString;
-  if (URLString == vVivaldiTermsOfServiceUrl) {
-    [self.modalPageHandler showModalPage:URL
-          title:l10n_util::GetNSString(IDS_VIVALDI_TOS_TITLE)];
-  } else if (URLString == vVivaldiCommunityPrivacyUrl) {
-    [self.modalPageHandler showModalPage:URL
-          title:l10n_util::GetNSString(IDS_VIVALDI_PRIVACY_TITLE)];
-  }
-  // Return NO, we don't want to try to open the URL
-  return NO;
+- (UIAction*)textView:(UITextView*) textView
+primaryActionForTextItem:(UITextItem*)textItem
+        defaultAction:(UIAction*) defaultAction {
+  __weak __typeof__(self) weakSelf = self;
+  return [UIAction actionWithHandler:^(UIAction* action) {
+    __strong __typeof(self) strongSelf = weakSelf;
+    if (!strongSelf) return;
+    NSString* URLString = textItem.link.absoluteString;
+    if (URLString == vVivaldiTermsOfServiceUrl) {
+      [self.modalPageHandler showModalPage:textItem.link
+            title:l10n_util::GetNSString(IDS_VIVALDI_TOS_TITLE)];
+    } else if (URLString == vVivaldiCommunityPrivacyUrl) {
+      [self.modalPageHandler showModalPage:textItem.link
+            title:l10n_util::GetNSString(IDS_VIVALDI_PRIVACY_TITLE)];
+    }
+  }];
 }
 
 #pragma mark - Private Methods

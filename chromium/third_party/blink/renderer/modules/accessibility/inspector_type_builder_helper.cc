@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/identifiers_factory.h"
 #include "third_party/blink/renderer/core/inspector/protocol/accessibility.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_object-inl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 
@@ -603,10 +604,8 @@ void AccessibilityChildrenFromAttribute(const AXObject& ax_object,
   if (!ax_object.GetElement()) {
     return;
   }
-  HeapVector<Member<Element>>* elements =
-      ax_object.GetElement()->GetAttrAssociatedElements(
-          attribute,
-          /*resolve_reference_target=*/true);
+  GCedHeapVector<Member<Element>>* elements =
+      ax_object.GetElement()->GetAttrAssociatedElements(attribute);
   if (!elements) {
     return;
   }
@@ -925,7 +924,7 @@ std::unique_ptr<AXNode> BuildProtocolAXNodeForUnignoredAXObject(
           .build();
   auto properties = std::make_unique<protocol::Array<AXProperty>>();
   ui::AXNodeData node_data;
-  ax_object.Serialize(&node_data, ui::kAXModeComplete);
+  ax_object.Serialize(&node_data, ui::kAXModeInspector);
   node_object->setRole(CreateRoleNameValue(node_data.role));
   node_object->setChromeRole(CreateInternalRoleValue(node_data.role));
   FillLiveRegionProperties(ax_object, node_data, *(properties.get()));

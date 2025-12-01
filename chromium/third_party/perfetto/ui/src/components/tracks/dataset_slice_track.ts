@@ -23,18 +23,18 @@ import {Slice} from '../../public/track';
 import {DatasetSchema, SourceDataset} from '../../trace_processor/dataset';
 import {ColumnType, LONG, NUM} from '../../trace_processor/query_result';
 import {getColorForSlice} from '../colorizer';
-import {generateSqlWithInternalLayout} from '../sql_utils/layout';
 import {formatDuration} from '../time_utils';
 import {
   BASE_ROW,
   BaseRow,
   BaseSliceTrack,
-  OnSliceOverArgs,
   SLICE_FLAGS_INCOMPLETE,
   SLICE_FLAGS_INSTANT,
   SliceLayout,
 } from './base_slice_track';
 import {Point2D, Size2D} from '../../base/geom';
+import {exists} from '../../base/utils';
+import {removeFalsyValues} from '../../base/array_utils';
 
 export interface InstantStyle {
   /**
@@ -92,6 +92,9 @@ export interface DatasetSliceTrackAttrs<T extends DatasetSchema> {
    *   width corresponds to the duration of the slice.
    * - `depth` (NUM): Depth of each event, used for vertical arrangement. Higher
    *   depth values are rendered lower down on the track.
+   * - `layer` (NUM): This layer value influences the mipmap function. Slices in
+   *   different layers will be mipmapped independency of each other, and the
+   *   buckets of higher layers will be rendered on top of lower layers.
    */
   readonly dataset: SourceDataset<T>;
 
@@ -127,21 +130,6 @@ export interface DatasetSliceTrackAttrs<T extends DatasetSchema> {
   readonly instantStyle?: InstantStyle;
 
   /**
-   * This function can optionally be used to override the query that is
-   * generated for querying the slices rendered on the track. This is typically
-   * used to provide a non-standard depth value, but can be used as an escape
-   * hatch to completely override the query if required.
-   *
-   * The returned query must be in the form of a select statement or table name
-   * with the following columns:
-   * - id: NUM
-   * - ts: LONG
-   * - dur: LONG
-   * - depth: NUM
-   */
-  queryGenerator?(dataset: SourceDataset): string;
-
-  /**
    * An optional function to override the color scheme for each event.
    * If omitted, the default slice color scheme is used.
    */
@@ -156,9 +144,9 @@ export interface DatasetSliceTrackAttrs<T extends DatasetSchema> {
 
   /**
    * An optional function to override the tooltip content for each event. If
-   * omitted, the title & slice duration will be used.
+   * omitted, the title will be used instead.
    */
-  tooltip?(row: T): string[];
+  tooltip?(slice: SliceWithRow<T>): m.Children;
 
   /**
    * An optional callback to customize the details panel for events on this
@@ -210,7 +198,7 @@ export class DatasetSliceTrack<T extends ROW_SCHEMA> extends BaseSliceTrack<
       attrs.initialMaxDepth,
       attrs.instantStyle?.width,
     );
-    const {dataset, queryGenerator} = attrs;
+    const {dataset} = attrs;
 
     // This is the minimum viable implementation that the source dataset must
     // implement for the track to work properly. Typescript should enforce this
@@ -218,12 +206,11 @@ export class DatasetSliceTrack<T extends ROW_SCHEMA> extends BaseSliceTrack<
     // Better to error out early.
     assertTrue(this.attrs.dataset.implements(rowSchema));
 
-    this.sqlSource =
-      queryGenerator?.(dataset) ?? this.generateRenderQuery(dataset);
+    this.sqlSource = this.generateRenderQuery(dataset);
     this.rootTableName = attrs.rootTableName;
   }
 
-  rowToSlice(row: BaseRow & T): SliceWithRow<T> {
+  override rowToSlice(row: BaseRow & T): SliceWithRow<T> {
     const slice = this.rowToSliceBase(row);
     const title = this.getTitle(row);
     const color = this.getColor(row, title);
@@ -245,26 +232,34 @@ export class DatasetSliceTrack<T extends ROW_SCHEMA> extends BaseSliceTrack<
 
   // Generate a query to use for generating slices to be rendered
   private generateRenderQuery(dataset: SourceDataset<T>) {
-    if (dataset.implements({dur: LONG, depth: NUM})) {
-      // Both depth and dur provided, we can use the dataset as-is.
+    const hasLayer = dataset.implements({layer: NUM});
+    const hasDepth = dataset.implements({depth: NUM});
+    const hasDur = dataset.implements({dur: LONG});
+
+    const cols = removeFalsyValues([
+      // If we have no layer, assume flat layering.
+      !hasLayer && '0 as layer',
+
+      // If we have dur but no depth, automatically calculate layout.
+      !hasDepth &&
+        hasDur &&
+        `
+          internal_layout(ts, dur) OVER (
+            ORDER BY ts ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+          ) AS depth
+        `,
+
+      // If we have no dur or depth, use a flat layout.
+      !hasDepth && !hasDur && '0 as depth',
+
+      // If no dur, assume instant slices.
+      !hasDur && '0 as dur',
+    ]);
+
+    if (cols.length === 0) {
       return dataset.query();
-    } else if (dataset.implements({depth: NUM})) {
-      // Depth provided but no dur, assume each event is an instant event by
-      // hard coding dur to 0.
-      return `select 0 as dur, * from (${dataset.query()})`;
-    } else if (dataset.implements({dur: LONG})) {
-      // Dur provided but no depth, automatically calculate the depth using
-      // internal_layout().
-      return generateSqlWithInternalLayout({
-        columns: ['*'],
-        source: dataset.query(),
-        ts: 'ts',
-        dur: 'dur',
-        orderByClause: 'ts',
-      });
     } else {
-      // No depth nor dur provided, use 0 for both.
-      return `select 0 as dur, 0 as depth, * from (${dataset.query()})`;
+      return `select ${cols.join(', ')}, * from (${dataset.query()})`;
     }
   }
 
@@ -282,28 +277,6 @@ export class DatasetSliceTrack<T extends ROW_SCHEMA> extends BaseSliceTrack<
 
   override getSqlSource(): string {
     return this.sqlSource;
-  }
-
-  override getJoinSqlSource(): string {
-    // This is a little performance optimization. Internally BST joins the
-    // results of the mipmap table query with the sqlSource in order to get the
-    // original ts, dur and id. However this sqlSource can sometimes be a
-    // contrived, slow query, usually to calculate the depth (e.g. something
-    // based on experimental_slice_layout).
-    //
-    // We don't actually need a depth value at this point, so calculating it is
-    // worthless. We only need ts, id, and dur. We don't even need this query to
-    // be correctly filtered, as we are merely joining on this table. We do
-    // however need it to be fast.
-    //
-    // In conclusion, if the dataset source has a dur column present (ts, and id
-    // are mandatory), then we can take a shortcut and just use this much
-    // simpler query to join on.
-    if (this.attrs.dataset.implements({dur: LONG})) {
-      return this.attrs.dataset.src;
-    } else {
-      return this.sqlSource;
-    }
   }
 
   getDataset() {
@@ -360,26 +333,10 @@ export class DatasetSliceTrack<T extends ROW_SCHEMA> extends BaseSliceTrack<
     return this.attrs.shellButtons?.();
   }
 
-  onSliceOver(args: OnSliceOverArgs<SliceWithRow<T>>) {
-    const {title, dur, flags} = args.slice;
-    let duration;
-    if (flags & SLICE_FLAGS_INCOMPLETE) {
-      duration = 'Incomplete';
-    } else if (flags & SLICE_FLAGS_INSTANT) {
-      duration = 'Instant';
-    } else {
-      duration = formatDuration(this.trace, dur);
-    }
-    if (title) {
-      args.tooltip = [`${title} - [${duration}]`];
-    } else {
-      args.tooltip = [`[${duration}]`];
-    }
-
-    args.tooltip = this.attrs.tooltip?.(args.slice.row) ?? args.tooltip;
+  override renderTooltipForSlice(slice: SliceWithRow<T>): m.Children {
+    return this.attrs.tooltip?.(slice) ?? renderTooltip(this.trace, slice);
   }
 
-  // Override the drawChevron function.
   protected override drawChevron(
     ctx: CanvasRenderingContext2D,
     x: number,
@@ -396,5 +353,34 @@ export class DatasetSliceTrack<T extends ROW_SCHEMA> extends BaseSliceTrack<
     } else {
       super.drawChevron(ctx, x, y, h);
     }
+  }
+}
+
+// Most tooltips follow a predictable formula. This function extracts the
+// duration and title from the slice and formats them in a standard way,
+// allowing some optional overrides to be passed.
+export function renderTooltip<T>(
+  trace: Trace,
+  slice: SliceWithRow<T>,
+  opts: {readonly title?: string; readonly extras?: m.Children} = {},
+) {
+  const durationFormatted = formatDurationForTooltip(trace, slice);
+  const {title = slice.title, extras} = opts;
+
+  return [
+    m('', exists(durationFormatted) && m('b', durationFormatted), ' ', title),
+    extras,
+  ];
+}
+
+// Given a slice, format the duration of the slice for a tooltip.
+function formatDurationForTooltip(trace: Trace, slice: Slice) {
+  const {dur, flags} = slice;
+  if (flags & SLICE_FLAGS_INCOMPLETE) {
+    return '[Incomplete]';
+  } else if (flags & SLICE_FLAGS_INSTANT) {
+    return undefined;
+  } else {
+    return formatDuration(trace, dur);
   }
 }

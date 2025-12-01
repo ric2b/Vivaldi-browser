@@ -358,9 +358,9 @@ void LocalFrameClientImpl::Detached(FrameDetachType type) {
   // place at this point since we are no longer associated with the Page.
   web_frame_->SetClient(nullptr);
 
-  DetachReason detach_reason = (type == FrameDetachType::kSwap)
-                                   ? DetachReason::kNavigation
-                                   : DetachReason::kFrameDeletion;
+  DetachReason detach_reason = (type == FrameDetachType::kRemove)
+                                   ? DetachReason::kFrameDeletion
+                                   : DetachReason::kNavigation;
   client->WillDetach(detach_reason);
 
   // We only notify the browser process when the frame is being detached for
@@ -403,8 +403,6 @@ std::optional<KURL> LocalFrameClientImpl::DispatchWillSendRequest(
 void LocalFrameClientImpl::DispatchDidDispatchDOMContentLoadedEvent() {
   if (web_frame_->Client())
     web_frame_->Client()->DidDispatchDOMContentLoadedEvent();
-
-  web_frame_->DidDispatchDOMContentLoadedEvent();
 }
 
 void LocalFrameClientImpl::DispatchDidLoadResourceFromMemoryCache(
@@ -616,6 +614,7 @@ void LocalFrameClientImpl::BeginNavigation(
         should_check_main_world_content_security_policy,
     mojo::PendingRemote<mojom::blink::BlobURLToken> blob_url_token,
     base::TimeTicks input_start_time,
+    base::TimeTicks actual_navigation_start,
     const String& href_translate,
     const std::optional<Impression>& impression,
     const LocalFrameToken* initiator_frame_token,
@@ -648,6 +647,7 @@ void LocalFrameClientImpl::BeginNavigation(
       should_check_main_world_content_security_policy;
   navigation_info->blob_url_token = std::move(blob_url_token);
   navigation_info->input_start = input_start_time;
+  navigation_info->actual_navigation_start = actual_navigation_start;
   navigation_info->initiator_frame_token =
       base::OptionalFromPtr(initiator_frame_token);
   navigation_info->initiator_navigation_state_keep_alive_handle =
@@ -1220,17 +1220,16 @@ v8::Local<v8::Object> LocalFrameClientImpl::GetScriptableObject(
 }
 
 scoped_refptr<WebWorkerFetchContext>
-LocalFrameClientImpl::CreateWorkerFetchContext() {
+LocalFrameClientImpl::CreateWorkletFetchContext() {
   DCHECK(web_frame_->Client());
-  return web_frame_->Client()->CreateWorkerFetchContext();
+  return web_frame_->Client()->CreateWorkletFetchContext();
 }
 
 scoped_refptr<WebWorkerFetchContext>
-LocalFrameClientImpl::CreateWorkerFetchContextForPlzDedicatedWorker(
+LocalFrameClientImpl::CreateWorkerFetchContext(
     WebDedicatedWorkerHostFactoryClient* factory_client) {
   DCHECK(web_frame_->Client());
-  return web_frame_->Client()->CreateWorkerFetchContextForPlzDedicatedWorker(
-      factory_client);
+  return web_frame_->Client()->CreateWorkerFetchContext(factory_client);
 }
 
 std::unique_ptr<WebContentSettingsClient>

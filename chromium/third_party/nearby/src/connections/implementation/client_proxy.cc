@@ -72,6 +72,7 @@ namespace connections {
 
 namespace {
 using ::location::nearby::analytics::proto::ConnectionsLog;
+using ::location::nearby::connections::MediumRole;
 using ::location::nearby::connections::OsInfo;
 
 constexpr char kEndpointIdChars[] = {
@@ -89,6 +90,8 @@ bool IsFeatureUseStableEndpointIdEnabled() {
 ClientProxy::ClientProxy(::nearby::analytics::EventLogger* event_logger)
     : client_id_(Prng().NextInt64()) {
   NEARBY_LOGS(INFO) << "ClientProxy ctor event_logger=" << event_logger;
+  is_dct_enabled_ = NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableDct);
   analytics_recorder_ =
       std::make_unique<analytics::AnalyticsRecorder>(event_logger);
   error_code_recorder_ = std::make_unique<ErrorCodeRecorder>(
@@ -959,6 +962,11 @@ std::optional<OsInfo> ClientProxy::GetRemoteOsInfo(
   return std::nullopt;
 }
 
+void ClientProxy::SetLocalOsType(
+    const location::nearby::connections::OsInfo::OsType& os_type) {
+  local_os_info_.set_type(os_type);
+}
+
 void ClientProxy::SetRemoteOsInfo(absl::string_view endpoint_id,
                                   const OsInfo& remote_os_info) {
   ConnectionPair* item = LookupConnection(endpoint_id);
@@ -1033,7 +1041,8 @@ void ClientProxy::OnPayload(const std::string& endpoint_id, Payload payload) {
     if (item != nullptr) {
       NEARBY_LOGS(INFO) << "ClientProxy [reporting onPayloadReceived]: client="
                         << GetClientId() << "; endpoint_id=" << endpoint_id
-                        << " ; payload_id=" << payload.GetId();
+                        << " ; payload {id:" << payload.GetId()
+                        << ", type:" << payload.GetType() << "}";
       item->second.payload_cb(endpoint_id, std::move(payload));
     }
   }
@@ -1310,17 +1319,7 @@ void ClientProxy::SetWebRtcNonCellular(bool webrtc_non_cellular) {
       webrtc_non_cellular_ = webrtc_non_cellular;
 }
 
-bool ClientProxy::IsDctEnabled() const {
-  if (api::ImplementationPlatform::GetCurrentOS() != api::OSName::kApple) {
-    return false;
-  }
-
-#if defined(NC_IOS_SDK)
-  return true;
-#else
-  return false;
-#endif
-}
+bool ClientProxy::IsDctEnabled() const { return is_dct_enabled_; }
 
 uint8_t ClientProxy::GetDctDedup() const { return dct_dedup_; }
 
@@ -1342,6 +1341,15 @@ void ClientProxy::UpdateDctDeviceName(absl::string_view device_name) {
   } else {
     dct_endpoint_id_.clear();
   }
+}
+
+std::optional<MediumRole> ClientProxy::GetMediumRole(
+    absl::string_view endpoint_id) const {
+  const ConnectionPair* item = LookupConnection(endpoint_id);
+  if (item != nullptr) {
+    return item->first.connection_options.connection_info.medium_role;
+  }
+  return std::nullopt;
 }
 
 std::optional<std::string> ClientProxy::GetEndpointIdForDct() const {

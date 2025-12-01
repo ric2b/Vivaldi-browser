@@ -15,6 +15,9 @@
 #import "components/segmentation_platform/embedder/home_modules/tips_manager/signal_constants.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
+#import "ios/chrome/browser/first_run/ui_bundled/best_features/ui/best_features_item.h"
+#import "ios/chrome/browser/first_run/ui_bundled/features.h"
+#import "ios/chrome/browser/first_run/ui_bundled/welcome_back/model/welcome_back_prefs.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_account_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/ios_chrome_profile_password_store_factory.h"
 #import "ios/chrome/browser/passwords/model/password_controller_delegate.h"
@@ -31,6 +34,10 @@
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 #import "ios/web/public/web_state.h"
 #import "services/network/public/cpp/shared_url_loader_factory.h"
+
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+// End Vivaldi
 
 using PasswordSuggestionBottomSheetExitReason::kCouldNotPresent;
 using PasswordSuggestionBottomSheetExitReason::kDismissal;
@@ -116,6 +123,32 @@ using PasswordSuggestionBottomSheetExitReason::kUsePasswordSuggestion;
   // If the bottom sheet has no suggestion to show, stop the presentation right
   // away.
   if (![self.mediator hasSuggestions]) {
+
+    if (vivaldi::IsVivaldiRunning()) {
+      // Important note(prio@vivaldi.com): Ref VIB-1218
+      // There is a case where if any webpage has a single input field and for
+      // that domain Password Manager contains a saved password without username
+      // AKA single username inputfield without any username saved on PM, the
+      // app does not respond to that input field. A good example is BankID
+      // login field from Norway. Because, the listeners can not find any
+      // relevant suggestions for the URL as there is no username
+      // but still asked for the bottom sheet from AutofillBottomSheetTabHelper.
+      // Therefore, when no suggestions available we disable the bottom sheet
+      // and refocus the original input field that triggered the sheet in the
+      // first place.
+
+      // Note that Chromium is also fixing this issue by introducing new
+      // sheet presentation logic which is under `IOSPasswordBottomSheetV2` flag
+      // but disabled by default for Chromium.
+      // However they seem to be using this on Chrome already in production but
+      // behaviour is not still correct there too as in this specific case user
+      // needs to tap twice to activate the input field where our patch allows
+      // activating input field in single tap which is expected. Regardless, we
+      // have to keep an eye on their feature flag, and if all works with that
+      // in the future we can remove this patch.
+      [self.mediator disableBottomSheet];
+    } // End Vivaldi
+
     // Cleanup the coordinator if it couldn't be started.
     [self.browserCoordinatorCommandsHandler dismissPasswordSuggestions];
     // Do not add any logic past this point in this specific context since the
@@ -239,6 +272,12 @@ using PasswordSuggestionBottomSheetExitReason::kUsePasswordSuggestion;
     tipsManager->NotifySignal(
         segmentation_platform::tips_manager::signals::kUsedPasswordAutofill);
   }
+
+  // Notify Welcome Back to remove Save and Autofill Passwords from the eligible
+  // features.
+  if (first_run::IsWelcomeBackInFirstRunEnabled()) {
+    MarkWelcomeBackFeatureUsed(BestFeaturesItemType::kSaveAndAutofillPasswords);
+  }
 }
 
 - (void)secondaryButtonTapped {
@@ -310,7 +349,7 @@ using PasswordSuggestionBottomSheetExitReason::kUsePasswordSuggestion;
 - (void)dismissSoftKeyboard {
   web::WebState* activeWebState =
       self.browser->GetWebStateList()->GetActiveWebState();
-  CHECK(activeWebState, base::NotFatalUntil::M135);
+  CHECK(activeWebState);
   if (activeWebState) {
     [activeWebState->GetView() endEditing:NO];
   }

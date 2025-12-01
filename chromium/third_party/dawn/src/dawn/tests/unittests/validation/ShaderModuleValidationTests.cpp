@@ -822,7 +822,6 @@ const struct WGSLExtensionInfo kExtensions[] = {
     {"clip_distances", false, {"clip-distances"}, {}},
     {"dual_source_blending", false, {"dual-source-blending"}, {}},
     {"subgroups", false, {"subgroups"}, {}},
-    {"subgroups_f16", false, {"shader-f16", "subgroups", "subgroups-f16"}, {"f16", "subgroups"}},
     {"chromium_experimental_pixel_local", true, {"pixel-local-storage-coherent"}, {}},
     {"chromium_disable_uniformity_analysis", true, {}, {}},
     {"chromium_internal_graphite", true, {}, {}},
@@ -831,7 +830,7 @@ const struct WGSLExtensionInfo kExtensions[] = {
 
     // Currently the following WGSL extensions are not enabled under any situation.
     /*
-    {"chromium_experimental_push_constant", true, {}},
+    {"chromium_experimental_immediate", true, {}},
     {"chromium_internal_relaxed_uniform_layout", true, {}},
     */
 };

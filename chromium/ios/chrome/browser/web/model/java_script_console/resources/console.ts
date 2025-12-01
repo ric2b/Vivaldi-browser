@@ -20,7 +20,7 @@ function sendConsoleMessage(logLevel: LogLevel, originalArgs: unknown[]) {
   } catch (err) {
   }
   sendWebKitMessage('ConsoleMessageHandler', {
-    'sender_frame': gCrWeb.message.getFrameId(),
+    'sender_frame': gCrWeb.getFrameId(),
     'log_level': logLevel,
     'message': message,
     'url': document.location.href,

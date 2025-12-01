@@ -694,6 +694,22 @@
         ]
       },
       {
+        "name": "clearCache",
+        "type": "function",
+        "description": "Clears browser cache.",
+        "parameters": [
+          {
+            "name": "windowId",
+            "type": "integer"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+          ]
+        }
+      },
+      {
         "name": "clearAllRecentlyClosedSessions",
         "type": "function",
         "description": "Clears the list of recently closed tabs and/or windows.",

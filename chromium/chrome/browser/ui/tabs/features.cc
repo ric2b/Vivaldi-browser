@@ -6,7 +6,7 @@
 
 #include "base/feature_list.h"
 #include "chrome/browser/buildflags.h"
-#include "chrome/common/chrome_features.h"
+#include "chrome/browser/ui/ui_features.h"
 
 namespace tabs {
 
@@ -36,8 +36,14 @@ BASE_FEATURE(kScrollableTabStripOverflow,
              base::FEATURE_DISABLED_BY_DEFAULT);
 const char kScrollableTabStripOverflowModeName[] = "tabScrollOverflow";
 
+BASE_FEATURE(kTabGroupHome, "TabGroupHome", base::FEATURE_DISABLED_BY_DEFAULT);
+
 BASE_FEATURE(kTabSearchPositionSetting,
              "TabSearchPositionSetting",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kTabGroupShortcuts,
+             "TabGroupShortcuts",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool CanShowTabSearchPositionSetting() {
@@ -52,6 +58,10 @@ bool CanShowTabSearchPositionSetting() {
 #else
   return false;
 #endif
+}
+
+bool AreTabGroupShortcutsEnabled() {
+  return base::FeatureList::IsEnabled(kTabGroupShortcuts);
 }
 
 }  // namespace tabs

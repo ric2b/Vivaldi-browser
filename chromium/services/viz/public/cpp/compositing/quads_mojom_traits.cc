@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "services/viz/public/cpp/compositing/quads_mojom_traits.h"
 
@@ -159,12 +155,10 @@ bool StructTraits<viz::mojom::TextureQuadStateDataView, viz::DrawQuad>::Read(
     viz::DrawQuad* out) {
   auto* quad = static_cast<viz::TextureDrawQuad*>(out);
 
-  if (!data.ReadResourceId(&quad->resource_id) ||
-      !data.ReadResourceSizeInPixels(&quad->overlay_resources.size_in_pixels)) {
+  if (!data.ReadResourceId(&quad->resource_id)) {
     return false;
   }
 
-  quad->premultiplied_alpha = data.premultiplied_alpha();
   gfx::ProtectedVideoType protected_video_type =
       gfx::ProtectedVideoType::kClear;
   viz::OverlayPriority overlay_priority_hint = viz::OverlayPriority::kLow;
@@ -183,7 +177,6 @@ bool StructTraits<viz::mojom::TextureQuadStateDataView, viz::DrawQuad>::Read(
 
   quad->nearest_neighbor = data.nearest_neighbor();
   quad->secure_output_only = data.secure_output_only();
-  quad->is_stream_video = data.is_stream_video();
   quad->is_video_frame = data.is_video_frame();
   quad->force_rgbx = data.force_rgbx();
 
@@ -204,7 +197,6 @@ bool StructTraits<viz::mojom::TileQuadStateDataView, viz::DrawQuad>::Read(
     return false;
   }
 
-  quad->is_premultiplied = data.is_premultiplied();
   quad->nearest_neighbor = data.nearest_neighbor();
   quad->force_anti_aliasing_off = data.force_anti_aliasing_off();
   return true;

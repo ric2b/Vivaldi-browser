@@ -36,6 +36,7 @@ template <typename MatrixType, typename MemberOp, int Direction>
 class PartialReduxExpr;
 
 namespace internal {
+
 template <typename MatrixType, typename MemberOp, int Direction>
 struct traits<PartialReduxExpr<MatrixType, MemberOp, Direction> > : traits<MatrixType> {
   typedef typename MemberOp::result_type Scalar;
@@ -63,12 +64,8 @@ class PartialReduxExpr : public internal::dense_xpr_base<PartialReduxExpr<Matrix
   EIGEN_DEVICE_FUNC explicit PartialReduxExpr(const MatrixType& mat, const MemberOp& func = MemberOp())
       : m_matrix(mat), m_functor(func) {}
 
-  EIGEN_DEVICE_FUNC EIGEN_CONSTEXPR Index rows() const EIGEN_NOEXCEPT {
-    return (Direction == Vertical ? 1 : m_matrix.rows());
-  }
-  EIGEN_DEVICE_FUNC EIGEN_CONSTEXPR Index cols() const EIGEN_NOEXCEPT {
-    return (Direction == Horizontal ? 1 : m_matrix.cols());
-  }
+  EIGEN_DEVICE_FUNC constexpr Index rows() const noexcept { return (Direction == Vertical ? 1 : m_matrix.rows()); }
+  EIGEN_DEVICE_FUNC constexpr Index cols() const noexcept { return (Direction == Horizontal ? 1 : m_matrix.cols()); }
 
   EIGEN_DEVICE_FUNC typename MatrixType::Nested nestedExpression() const { return m_matrix; }
 

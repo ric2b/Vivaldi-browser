@@ -22,13 +22,6 @@ chromium-metrics-reviews@google.com.
 
 <histogram_suffixes_list>
 
-<histogram_suffixes name="AccessorySheetType" separator=".">
-  <suffix name="Addresses" label="Address suggestions."/>
-  <suffix name="CreditCards" label="Payment suggestions."/>
-  <suffix name="Passwords" label="Password suggestions and generation."/>
-  <affected-histogram name="KeyboardAccessory.AccessorySheetTriggered"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="AdapterDecision" separator="." ordering="prefix,2">
   <suffix name="BrightnessChange" label=""/>
   <suffix name="NoBrightnessChange" label=""/>
@@ -148,45 +141,6 @@ chromium-metrics-reviews@google.com.
       name="PageLoad.Clients.Ads.Visible.Bytes.FullPage.Network"/>
   <affected-histogram
       name="PageLoad.Clients.Ads.Visible.Bytes.FullPage.Total2"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="AdsPageLoadMetricVisibilityType" separator="."
-    ordering="prefix">
-  <suffix name="Clients.Ads" label="Includes all ad iframes."/>
-  <suffix name="Clients.Ads.NonVisible"
-      label="Only includes ad frames that have a display: none style, or have
-             an area less than or equal to 16 pixels."/>
-  <suffix name="Clients.Ads.Visible"
-      label="Only includes ad frames that have a display != none style and
-             have an area greater than 16 pixels."/>
-  <affected-histogram
-      name="PageLoad.AdPaintTiming.NavigationToFirstContentfulPaint3"/>
-  <affected-histogram
-      name="PageLoad.AdPaintTiming.TopFrameNavigationToFirstContentfulPaint"/>
-  <affected-histogram name="PageLoad.Bytes"/>
-  <affected-histogram name="PageLoad.Cpu"/>
-  <affected-histogram
-      name="PageLoad.FrameCounts.AdFrames.PerFrame.CreativeOriginStatus"/>
-  <affected-histogram
-      name="PageLoad.FrameCounts.AdFrames.PerFrame.CreativeOriginStatusWithThrottling"/>
-  <affected-histogram
-      name="PageLoad.FrameCounts.AdFrames.PerFrame.OriginStatus"/>
-  <affected-histogram
-      name="PageLoad.FrameCounts.AdFrames.PerFrame.UserActivation"/>
-  <affected-histogram name="PageLoad.FrameCounts.AdFrames.Total"/>
-  <affected-histogram name="PageLoad.HeavyAds.ComputedTypeWithThresholdNoise"/>
-  <affected-histogram name="PageLoad.HeavyAds.InterventionType2"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="AnimationLoop" separator=".">
-  <suffix name="FirstAnimationLoop"
-      label="Measurement taken on the first animation loop."/>
-  <suffix name="SecondAnimationLoop"
-      label="Measurement taken on the second animation loop."/>
-  <suffix name="ThirdToFifthAnimationLoop"
-      label="Measurements taken on the third, fourth, and fifth animation
-             loop."/>
-  <affected-histogram name="AnimatedImage.NumOfFramesSkipped"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="AutofillAddressFormType" separator=".">
@@ -323,39 +277,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="Root" label="Root's SPKI"/>
   <affected-histogram name="CertificateType2.BR"/>
   <affected-histogram name="CertificateType2.NonBR"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ChromeOS_USBDeviceClass" separator=".">
-  <suffix name="App"
-      label="A device with only the application specific interface class."/>
-  <suffix name="Audio" label="An audio device."/>
-  <suffix name="AV" label="An audio/video device."/>
-  <suffix name="Card" label="A smart card reader."/>
-  <suffix name="Comm" label="A communication device."/>
-  <suffix name="Health" label="A personal healthcare device."/>
-  <suffix name="HID" label="A human-interface device."/>
-  <suffix name="Hub" label="A USB hub."/>
-  <suffix name="Image" label="A still image capture device."/>
-  <suffix name="Misc" label="A device with only the misc. interface class."/>
-  <suffix name="Other" label="All devices not covered by the other groups."/>
-  <suffix name="Phys" label="A physical device."/>
-  <suffix name="Print" label="A printer."/>
-  <suffix name="Sec" label="A security device (e.g. fingerprint reader)."/>
-  <suffix name="Storage" label="A storage device."/>
-  <suffix name="Vendor"
-      label="A device with only the vendor specific interface class."/>
-  <suffix name="Video" label="A video device."/>
-  <suffix name="Wireless" label="A wireless controller device."/>
-  <affected-histogram name="ChromeOS.USB.DeviceAttached.Recognized"/>
-  <affected-histogram name="ChromeOS.USB.DeviceAttached.Unrecognized"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ChromeOS_USBDeviceRecognized" separator=".">
-  <suffix base="true" name="Recognized"
-      label="A device that was already added to the list of trusted devices."/>
-  <suffix base="true" name="Unrecognized"
-      label="A device that was not in the list of trusted devices yet."/>
-  <affected-histogram name="ChromeOS.USB.DeviceAttached"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="ContentSetting" separator=".">
@@ -497,67 +418,11 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="FirstUserAction.BackgroundTimeNewTask"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="GridTabSwitcherAnimationType" separator=".">
-  <suffix name="Expand" label="Grid to Tab"/>
-  <suffix name="Shrink" label="Tab to Grid"/>
-  <affected-histogram
-      name="Android.GridTabSwitcher.Animation.FirstFrameLatency"/>
-  <affected-histogram name="Android.GridTabSwitcher.Animation.TotalDuration"/>
-  <affected-histogram name="GridTabSwitcher.FramePerSecond"/>
-  <affected-histogram name="GridTabSwitcher.MaxFrameInterval"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="HiddenWhileFlushing" separator=".">
   <suffix name="HiddenWhileFlushing"
       label="Tab hidden while flushing FCP value."/>
   <affected-histogram
       name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="IMEAutoCorrect" separator=".">
-  <suffix name="AC0" label="The auto-correct level is 0"/>
-  <suffix name="AC1" label="The auto-correct level is 1"/>
-  <suffix name="AC2" label="The auto-correct level is 2"/>
-  <affected-histogram name="InputMethod.Commit.Index.FR"/>
-  <affected-histogram name="InputMethod.Commit.Index.US"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="LeakDetectionDialogType" separator=".">
-  <suffix name="Change" label="The user is asked to change their password"/>
-  <suffix name="ChangeAutomatically"
-      label="The user is asked to let Chrome automatically change their
-             password for the current site."/>
-  <suffix name="Checkup"
-      label="The user is asked to visit the Password Checkup"/>
-  <suffix name="CheckupAndChange"
-      label="The user is asked to visit the Password Checkup and change their
-             password"/>
-  <affected-histogram
-      name="PasswordManager.LeakDetection.DialogDismissalReason"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="MixedContentDownloadDownloadSecurity" separator=".">
-  <suffix name="DownloadInsecure" label=""/>
-  <suffix name="DownloadSecure" label=""/>
-  <affected-histogram
-      name="Download.InsecureBlocking.Extensions.InitiatorInferredInsecure"/>
-  <affected-histogram
-      name="Download.InsecureBlocking.Extensions.InitiatorInferredSecure"/>
-  <affected-histogram
-      name="Download.InsecureBlocking.Extensions.InitiatorInsecure"/>
-  <affected-histogram
-      name="Download.InsecureBlocking.Extensions.InitiatorSecure"/>
-  <affected-histogram
-      name="Download.InsecureBlocking.Extensions.InitiatorUnknown"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="MixedContentDownloadInitiatorSecurity" separator=".">
-  <suffix base="true" name="InitiatorInferredInsecure" label=""/>
-  <suffix base="true" name="InitiatorInferredSecure" label=""/>
-  <suffix base="true" name="InitiatorInsecure" label=""/>
-  <suffix base="true" name="InitiatorSecure" label=""/>
-  <suffix base="true" name="InitiatorUnknown" label=""/>
-  <affected-histogram name="Download.InsecureBlocking.Extensions"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="NavigationFrameType" separator=".">
@@ -982,20 +847,6 @@ chromium-metrics-reviews@google.com.
       name="PageLoad.PaintTiming.NavigationToFirstContentfulPaint"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="PasswordAccountStorageUsageLevel" separator=".">
-  <suffix name="NotUsingAccountStorage"
-      label="The user is not using the account-scoped password storage.
-             Either they're not signed in, or they haven't opted in to the
-             account storage."/>
-  <suffix name="Syncing"
-      label="The user has enabled Sync, so the account-scoped password
-             storage is not being used."/>
-  <suffix name="UsingAccountStorage"
-      label="The user is signed in and has opted in to the account storage."/>
-  <affected-histogram name="PasswordManager.FillingAssistance"/>
-  <affected-histogram name="PasswordManager.SavedPasswordIsGenerated"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="PasswordProtectionTriggerForAnyPasswordEntry"
     separator=".">
   <suffix name="AnyPasswordEntry"
@@ -1146,184 +997,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="PasswordProtection.Verdict"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="PasswordSecurityOrigin" separator=".">
-  <suffix name="InsecureOrigin"
-      label="The recording took place on an insecure origin."/>
-  <suffix name="MixedForm"
-      label="The recording took place on a secure origin, but the form action
-             was an insecure origin."/>
-  <suffix name="SecureOrigin"
-      label="The recording took place on a secure origin."/>
-  <affected-histogram name="PasswordManager.FillingAssistance"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PermissionRequestGesture" separator=".">
-  <suffix name="Gesture" label="With user gesture"/>
-  <suffix name="NoGesture" label="Without user gesture"/>
-  <affected-histogram name="Permissions.Prompt.Accepted"/>
-  <affected-histogram name="Permissions.Prompt.AcceptedOnce"/>
-  <affected-histogram name="Permissions.Prompt.Denied"/>
-  <affected-histogram name="Permissions.Prompt.Shown"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PermissionRequestTypes" separator=".">
-  <suffix name="AR" label="AR permission"/>
-  <suffix name="AudioAndVideoCapture" label="Mic+Camera permission"/>
-  <suffix name="AudioCapture" label="Microphone permission"/>
-  <suffix name="CapturedSurfaceControl"
-      label="Captured Surface Control permission"/>
-  <suffix name="Geolocation" label="Geolocation permission"/>
-  <suffix name="HandTracking" label="Hand tracking permission"/>
-  <suffix name="KeyboardAndPointerLock"
-      label="Keyboard and pointer lock permission"/>
-  <suffix name="KeyboardLock" label="Keyboard lock permission"/>
-  <suffix name="LocalNetworkAccess" label="Local network access permission"/>
-  <suffix name="MidiSysEx" label="Midi SysEx permission"/>
-  <suffix name="MultipleDownload" label="Multiple downloads permission"/>
-  <suffix name="Nfc" label="NFC permission"/>
-  <suffix name="Notifications" label="Notification permission"/>
-  <suffix name="PointerLock" label="Pointer lock permission"/>
-  <suffix name="ProtectedMedia" label="Protected media permission"/>
-  <suffix name="PushMessaging" label="Push messaging permission"/>
-  <suffix name="Quota" label="Quota permission"/>
-  <suffix name="RegisterProtocolHandler"
-      label="registerProtocolHandler permission"/>
-  <suffix name="SecurityKeyAttestation" label="Security Key attestation"/>
-  <suffix name="SmartCard" label="Smart card connection permission"/>
-  <suffix name="SpeakerSelection" label="Speaker Selection permission"/>
-  <suffix name="StorageAccess" label="Storage Access API permission"/>
-  <suffix name="TopLevelStorageAccess"
-      label="Top-level Storage Access API permission"/>
-  <suffix name="VideoCapture" label="Camera permission"/>
-  <suffix name="VR" label="VR permission"/>
-  <suffix name="WebAppInstallation" label="Web app installation permission"/>
-  <suffix name="WebPrinting" label="Web Printing permission"/>
-  <suffix name="WindowPlacement" label="Window Management permission"/>
-  <affected-histogram name="Permissions.Engagement.Accepted"/>
-  <affected-histogram name="Permissions.Engagement.AcceptedOnce"/>
-  <affected-histogram name="Permissions.Engagement.Denied"/>
-  <affected-histogram name="Permissions.Engagement.Dismissed"/>
-  <affected-histogram name="Permissions.Engagement.Ignored"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PermissionTypes" separator=".">
-  <suffix name="AR" label="AR permission actions"/>
-  <suffix name="AudioCapture" label="Microphone permission actions"/>
-  <suffix name="CameraPanTiltZoom" label="Camera movements permission actions"/>
-  <suffix name="ClipboardReadWrite" label="Clipboard permission actions"/>
-  <suffix name="DisplayCapture" label="Display capture permission actions"/>
-  <suffix name="Geolocation" label="Geolocation permission actions"/>
-  <suffix name="IdleDetection" label="Idle detection permission actions"/>
-  <suffix name="KeyboardAndPointerLock"
-      label="Keyboard and pointer lock permission"/>
-  <suffix name="KeyboardLock" label="Keyboard lock permission"/>
-  <suffix name="LocalFonts" label="Local fonts permission actions"/>
-  <suffix name="LocalNetworkAccess"
-      label="Local network access permission actions"/>
-  <suffix name="MidiSysEx" label="Midi SysEx permsision actions"/>
-  <suffix name="Nfc" label="Nfc permsision actions"/>
-  <suffix name="Notifications" label="Notification permission actions"/>
-  <suffix name="PaymentHandler" label="Payment Handler permission actions"/>
-  <suffix name="PointerLock" label="Pointer lock permission"/>
-  <suffix name="ProtectedMedia" label="Protected media permission actions"/>
-  <suffix name="PushMessaging" label="Push messaging permission actions"/>
-  <suffix name="StorageAccess" label="Storage Access API permission actions"/>
-  <suffix name="TopLevelStorageAccess"
-      label="Top-level Storage Access API permission actions"/>
-  <suffix name="VideoCapture" label="Camera permission actions"/>
-  <suffix name="VR" label="VR permission actions"/>
-  <suffix name="WebAppInstallation"
-      label="Web app installation permission actions"/>
-  <suffix name="WindowPlacement" label="Window Management permission actions"/>
-  <affected-histogram name="Permissions.Action"/>
-  <affected-histogram name="Permissions.DSE.AutoPermissionRevertTransition"/>
-  <affected-histogram name="Permissions.DSE.EffectiveSetting"/>
-  <affected-histogram name="Permissions.MissingOSLevelPermission.Action"/>
-  <affected-histogram name="Permissions.MissingOSLevelPermission.ShouldShow"/>
-  <affected-histogram name="Permissions.Prompt.Accepted.PriorDismissCount2"/>
-  <affected-histogram name="Permissions.Prompt.Accepted.PriorIgnoreCount2"/>
-  <affected-histogram
-      name="Permissions.Prompt.AcceptedOnce.PriorDismissCount2"/>
-  <affected-histogram name="Permissions.Prompt.AcceptedOnce.PriorIgnoreCount2"/>
-  <affected-histogram name="Permissions.Prompt.Denied.PriorDismissCount2"/>
-  <affected-histogram name="Permissions.Prompt.Denied.PriorIgnoreCount2"/>
-  <affected-histogram name="Permissions.Prompt.Dismissed.PriorDismissCount2"/>
-  <affected-histogram name="Permissions.Prompt.Dismissed.PriorIgnoreCount2"/>
-  <affected-histogram name="Permissions.Prompt.Ignored.PriorDismissCount2"/>
-  <affected-histogram name="Permissions.Prompt.Ignored.PriorIgnoreCount2"/>
-  <affected-histogram name="Permissions.Revocation.ElapsedTimeSinceGrant"/>
-  <affected-histogram name="Permissions.Usage.ElapsedTimeSinceGrant"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PlatformMeminfoPercentage" separator="">
-  <suffix name="infoActive" label="Active memory."/>
-  <suffix name="infoActiveAnon"
-      label="Active anonymous memory (data segments)."/>
-  <suffix name="infoActiveFile"
-      label="Active file-backed memory (executables, ...)."/>
-  <suffix name="infoAnonPages" label="Anonymous memory (executables, ...)."/>
-  <suffix name="infoBuffers" label="Buffer cache (executables, ...)."/>
-  <suffix name="infoCached"
-      label="size of file-backed memory minus swap and buffer cache."/>
-  <suffix name="infoInactive" label="Inactive memory."/>
-  <suffix name="infoInactiveAnon"
-      label="Inactive anonymous memory (data segments)."/>
-  <suffix name="infoInactiveFile" label="Inactive file-backed memory."/>
-  <suffix name="infoMapped" label="Mapped memory."/>
-  <suffix name="infoMemFree"
-      label="Free memory. Logged from ChromeOS; previously logged from
-             Chromecast from M53 through M97."/>
-  <suffix name="infoSwapUsedPercent" label="Used swap memory."/>
-  <affected-histogram name="Platform.Mem"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PlatformMeminfoSize" separator="">
-  <suffix name="FileTotal" label="Size of file memory (active + inactive)."/>
-  <suffix name="MemFreeDerived" label="Size derived from free+buffers+cached."/>
-  <suffix name="MemTotal" label="Size of total installed memory."/>
-  <suffix name="MemUsedDerived"
-      label="Size of &quot;Total - FreeDerived&quot; memory."/>
-  <suffix name="ProcessDataTotal"
-      label="Size of process data (active + inactive + swap)."/>
-  <suffix name="Shmem" label="Size of shared memory."/>
-  <suffix name="Slab" label="Size of slab memory."/>
-  <suffix name="SwapUsed" label="Size of used swap memory."/>
-  <suffix name="Unevictable" label="Size of unevictable memory."/>
-  <affected-histogram name="Platform.Meminfo"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PNaClTranslatorTypes" separator=".">
-  <suffix name="" label="All translator types"/>
-  <suffix name="LLC" label="LLC-based translator"/>
-  <suffix name="Subzero" label="Subzero-based translator"/>
-  <affected-histogram name="NaCl.Options.PNaCl.OptLevel"/>
-  <affected-histogram name="NaCl.Perf.PNaClCache.IsHit"/>
-  <affected-histogram name="NaCl.Perf.PNaClLoadTime.CompileKBPerSec"/>
-  <affected-histogram name="NaCl.Perf.PNaClLoadTime.CompileTime"/>
-  <affected-histogram name="NaCl.Perf.PNaClLoadTime.LoadCompiler"/>
-  <affected-histogram
-      name="NaCl.Perf.PNaClLoadTime.PctCompiledWhenFullyDownloaded"/>
-  <affected-histogram name="NaCl.Perf.PNaClLoadTime.TotalUncachedKBPerSec"/>
-  <affected-histogram name="NaCl.Perf.PNaClLoadTime.TotalUncachedTime"/>
-  <affected-histogram name="NaCl.Perf.Size.PexeNexeSizePct"/>
-  <affected-histogram name="NaCl.Perf.Size.PNaClTranslatedNexe"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="PowerConsumptionSources" separator=".">
-  <suffix name="CPU" label="Instantaneous power used by the CPU."/>
-  <suffix name="GPU0"
-      label="Instantaneous power used by the first dedicated GPU, if any."/>
-  <suffix name="GPU1"
-      label="Instantaneous power used by the second dedicated GPU, if any."/>
-  <suffix name="GPUi"
-      label="Instantaneous power used by the integrated GPU, if any."/>
-  <suffix name="Total"
-      label="Instantaneous power used by the whole system. May be less useful
-             than other power metrics because it includes peripherals like
-             the display backlight."/>
-  <affected-histogram name="Power.Mac"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="PowerConsumptionTimes" separator=".">
   <suffix name="All" label="Sampled once per minute."/>
   <suffix name="DuringStartup"
@@ -1351,45 +1024,6 @@ chromium-metrics-reviews@google.com.
   <suffix name="websame"
       label="Link triggered prerender, rel=prerender, same domain."/>
   <affected-histogram name="Prerender.FinalStatus"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ProcessMemoryType" separator=".">
-  <suffix name="Anon" label="Measures anonymous RSS."/>
-  <suffix name="File" label="Measures file RSS."/>
-  <suffix name="Shmem" label="Measures shmem RSS."/>
-  <suffix name="Swap" label="Measures swap in use."/>
-  <suffix name="Total" label="Measures total RSS."/>
-  <affected-histogram name="Platform.Memory.ARC"/>
-  <affected-histogram name="Platform.Memory.Browser"/>
-  <affected-histogram name="Platform.Memory.Daemons"/>
-  <affected-histogram name="Platform.Memory.Gpu"/>
-  <affected-histogram name="Platform.Memory.Renderers"/>
-  <affected-histogram name="Platform.Memory.VMs"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ProfileStateGroup" separator="_">
-  <suffix name="ActiveMultiProfile"
-      label="Recorded only for users with &gt;=2 active profiles; recorded
-             for all their profiles."/>
-  <suffix name="All" label="Recorded for every profile of every user."/>
-  <suffix name="AllManagedDevice"
-      label="Recorded for every profile of every user on managed devices."/>
-  <suffix name="AllUnmanagedDevice"
-      label="Recorded for every profile of every user on unmanaged devices."/>
-  <suffix name="LatentMultiProfile"
-      label="Recorded only for users with &gt;=2 profiles but only one
-             active; recorded for all their profiles."/>
-  <suffix name="LatentMultiProfileActive"
-      label="Recorded only for users with &gt;=2 profiles but only one
-             active; recorded only for the one active profile."/>
-  <suffix name="LatentMultiProfileOthers"
-      label="Recorded only for users with &gt;=2 profiles but only one
-             active; recorded only for the non-active profiles."/>
-  <suffix name="SingleProfile" label="Recorded only for single-profile users."/>
-  <suffix name="UponDeletion" label="Recorded for a profile upon its deletion"/>
-  <affected-histogram name="Profile.State.LastUsed"/>
-  <affected-histogram name="Profile.State.SyncEnabled"/>
-  <affected-histogram name="Profile.State.UnconsentedPrimaryAccountType"/>
 </histogram_suffixes>
 
 <histogram_suffixes name="QuicConnectionType" separator="">
@@ -1501,20 +1135,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Sharing.SendMessageResult.Windows"/>
 </histogram_suffixes>
 
-<histogram_suffixes name="SharingPulseInterval" separator=".">
-  <suffix name="PulseIntervalLong" label="Long pulse interval"/>
-  <suffix name="PulseIntervalMedium" label="Medium pulse interval"/>
-  <suffix name="PulseIntervalShort" label="Short pulse interval"/>
-  <affected-histogram name="Sharing.SendMessageResult"/>
-  <affected-histogram name="Sharing.SendMessageResult.Android"/>
-  <affected-histogram name="Sharing.SendMessageResult.ChromeOS"/>
-  <affected-histogram name="Sharing.SendMessageResult.iOS"/>
-  <affected-histogram name="Sharing.SendMessageResult.Linux"/>
-  <affected-histogram name="Sharing.SendMessageResult.Mac"/>
-  <affected-histogram name="Sharing.SendMessageResult.Unknown"/>
-  <affected-histogram name="Sharing.SendMessageResult.Windows"/>
-</histogram_suffixes>
-
 <histogram_suffixes name="StartupTemperature" separator=".">
   <suffix name="ColdStartup"
       label="Startup was cold (mostly hard faults). Threshold updated Jan
@@ -1532,124 +1152,6 @@ chromium-metrics-reviews@google.com.
   <affected-histogram name="Startup.FirstWebContents.NonEmptyPaint3"/>
   <affected-histogram name="Startup.LoadTime.ApplicationStartToChromeMain"/>
   <affected-histogram name="Startup.LoadTime.ProcessCreateToApplicationStart"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="TabletOrClamshellMode" separator=".">
-  <suffix name="ClamshellMode" label="Clamshell Mode Enabled"/>
-  <suffix name="TabletMode" label="Tablet Mode Enabled"/>
-  <affected-histogram name="Apps.AppListContinueTaskOpenType"/>
-  <affected-histogram name="Apps.AppListFolderNameLength"/>
-  <affected-histogram name="Apps.AppListPageSwitcherSource"/>
-  <affected-histogram name="Apps.AppListSearchResultOpenTypeV2"/>
-  <affected-histogram name="Apps.ContextMenuExecuteCommand.FromApp"/>
-  <affected-histogram name="Apps.ContextMenuExecuteCommand.NotFromApp"/>
-  <affected-histogram
-      name="Apps.PaginationTransition.DragScroll.PresentationTime"/>
-  <affected-histogram
-      name="Apps.PaginationTransition.DragScroll.PresentationTime.MaxLatency"/>
-  <affected-histogram name="Ash.LoginAnimation.Jank"/>
-  <affected-histogram name="Ash.LoginAnimation.Smoothness"/>
-  <affected-histogram name="Ash.Overview.AnimationSmoothness.Close"/>
-  <affected-histogram name="Ash.Overview.WindowDrag.PresentationTime"/>
-  <affected-histogram name="Ash.TabDrag.PresentationTime"/>
-  <affected-histogram name="Ash.TabDrag.PresentationTime.MaxLatency"/>
-  <affected-histogram name="Ash.UnlockAnimation.Smoothness"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ThreadPoolName" separator=".">
-  <suffix base="true" name="Browser"
-      label="ThreadPool for the browser process."/>
-  <suffix base="true" name="ContentChild"
-      label="ThreadPools for various instantiations of content::ChildProcess."/>
-  <suffix base="true" name="GPU" label="ThreadPool for the gpu process."/>
-  <suffix base="true" name="Renderer"
-      label="ThreadPools for renderer processes."/>
-  <affected-histogram name="ThreadPool.UnnecessaryWakeup"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="ThreadPoolWorkerGroup" separator=".">
-  <suffix name="Background"
-      label="Applies to the Background priority worker group."/>
-  <suffix name="Foreground"
-      label="Applies to the Foreground priority worker group."/>
-  <affected-histogram name="ThreadPool.UnnecessaryWakeup.Browser"/>
-  <affected-histogram name="ThreadPool.UnnecessaryWakeup.ContentChild"/>
-  <affected-histogram name="ThreadPool.UnnecessaryWakeup.GPU"/>
-  <affected-histogram name="ThreadPool.UnnecessaryWakeup.Renderer"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="TrustTokenOperationType" separator=".">
-  <suffix name="Issuance" label="Trust token issuance"/>
-  <suffix name="Redemption" label="Trust token redemption"/>
-  <suffix name="Signing" label="SRR attachment and outgoing request signing"/>
-  <affected-histogram name="Net.TrustTokens.NetErrorForFetchFailure"/>
-  <affected-histogram
-      name="Net.TrustTokens.NetErrorForTrustTokenOperation.Failure"/>
-  <affected-histogram
-      name="Net.TrustTokens.NetErrorForTrustTokenOperation.Success"/>
-  <affected-histogram name="Net.TrustTokens.OperationOutcome"/>
-  <affected-histogram name="Net.TrustTokens.RequestHelperFactoryOutcome"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="WebAppSystemAppInternalName" separator=".">
-  <suffix name="Boca" label="Boca"/>
-  <suffix name="Camera" label="Camera"/>
-  <suffix name="ConnectivityDiagnostics" label="Connectivity Diagnostics"/>
-  <suffix name="Crosh" label="Crosh"/>
-  <suffix name="DemoMode" label="DemoMode"/>
-  <suffix name="Diagnostics" label="Diagnostics"/>
-  <suffix name="Eche" label="Eche"/>
-  <suffix name="FaceML" label="Face ML (Deprecated)"/>
-  <suffix name="FirmwareUpdate" label="FirmwareUpdate"/>
-  <suffix name="Graduation" label="Graduation"/>
-  <suffix name="Help" label="Help"/>
-  <suffix name="Mall" label="App Mall"/>
-  <suffix name="Media" label="Media"/>
-  <suffix name="OSFeedback" label="OSFeedback"/>
-  <suffix name="OsFlags" label="OsFlags"/>
-  <suffix name="OSSettings" label="OS Settings"/>
-  <suffix name="Personalization" label="Personalization"/>
-  <suffix name="PrintManagement" label="PrintManagement"/>
-  <suffix name="PrintPreviewCrOS" label="Print Preview CrOS"/>
-  <suffix name="Projector" label="Projector"/>
-  <suffix name="Recorder" label="Recorder"/>
-  <suffix name="Sample" label="Sample"/>
-  <suffix name="Sanitize" label="Sanitize"/>
-  <suffix name="Scanning" label="Scanning"/>
-  <suffix name="ShimlessRMA" label="Shimless RMA"/>
-  <suffix name="ShortcutCustomization" label="ShortcutCustomization"/>
-  <suffix name="Terminal" label="Terminal"/>
-  <suffix name="VcBackground" label="VC Background"/>
-  <affected-histogram name="Webapp.InstallResult.System.Apps"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="WebAppSystemHistogramGroup" separator=".">
-  <suffix base="true" name="Apps" label="Per-Application"/>
-  <suffix base="true" name="Profiles" label="Per-Profile"/>
-  <affected-histogram name="Webapp.InstallResult.System"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="WebAppSystemProfileCategory" separator=".">
-  <suffix name="Ephemeral" label="Guest or incognito"/>
-  <suffix name="Kiosk" label="Kioso app"/>
-  <suffix name="Other" label="Other"/>
-  <suffix name="Primary" label="Regular user"/>
-  <suffix name="SigninOrLockScreen" label="Sign in or lockscreen"/>
-  <affected-histogram name="Webapp.InstallResult.System.Profiles"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="WebappType" separator=".">
-  <suffix name="Default" label="Default-installed app"/>
-  <suffix name="Policy" label="Policy-installed app"/>
-  <suffix name="Sync" label="Sync-installed app"/>
-  <suffix base="true" name="System" label="System-installed app"/>
-  <affected-histogram name="Webapp.InstallResult"/>
-</histogram_suffixes>
-
-<histogram_suffixes name="WebSocketErrorCodesVariants" separator="_">
-  <suffix name="Localhost" label=""/>
-  <suffix name="NotLocalhost" label=""/>
-  <affected-histogram name="Net.WebSocket.ErrorCodes"/>
 </histogram_suffixes>
 
 </histogram_suffixes_list>

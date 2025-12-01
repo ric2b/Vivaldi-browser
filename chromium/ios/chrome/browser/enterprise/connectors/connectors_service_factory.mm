@@ -32,9 +32,7 @@ ConnectorsServiceFactory::~ConnectorsServiceFactory() = default;
 std::unique_ptr<KeyedService> ConnectorsServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* browser_state) const {
   auto* profile = ProfileIOS::FromBrowserState(browser_state);
-  return std::make_unique<ConnectorsService>(
-      profile->IsOffTheRecord(), profile->GetPrefs(),
-      profile->GetUserCloudPolicyManager());
+  return std::make_unique<ConnectorsService>(profile);
 }
 
 }  // namespace enterprise_connectors

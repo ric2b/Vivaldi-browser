@@ -10,18 +10,20 @@
 #include "base/memory/raw_ptr.h"
 #include "base/observer_list_types.h"
 #include "chrome/browser/glic/glic_keyed_service.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
+#include "services/network/public/cpp/network_connection_tracker.h"
 
 class Profile;
 
 namespace glic {
 
-// GlicProfileManager is a GlobalFeature that is responsible for determining
-// which profile to use for launching the glic panel and for ensuring just one
-// panel is shown across all profiles.
-class GlicProfileManager {
+// GlicProfileManager is a GlobalFeature that manages multi-profile Glic state.
+// Among other things it is used for determining which profile to launch from an
+// OS Entry point and ensuring that just one panel is shown across all profiles.
+class GlicProfileManager : public ProfileManagerObserver {
  public:
   GlicProfileManager();
-  ~GlicProfileManager();
+  ~GlicProfileManager() override;
 
   class Observer : public base::CheckedObserver {
    public:
@@ -44,6 +46,9 @@ class GlicProfileManager {
   // Called by GlicKeyedService.
   void OnServiceShutdown(GlicKeyedService* glic);
 
+  // Called by GlobalFeatures.
+  void Shutdown();
+
   // Called when the web client for the GlicWindowController or the FRE
   // controller will be torn down.
   void OnLoadingClientForService(GlicKeyedService* glic);
@@ -52,11 +57,17 @@ class GlicProfileManager {
   // respective web clients are being torn down.
   void OnUnloadingClientForService(GlicKeyedService* glic);
 
-  // True if the given profile should be considered for preloading.
-  bool ShouldPreloadForProfile(Profile* profile) const;
+  using ShouldPreloadCallback = base::OnceCallback<void(Profile*, bool)>;
 
-  // True if the given profile should be considered for preloading the FRE.
-  bool ShouldPreloadFreForProfile(Profile* profile) const;
+  // Callback will be invoked with true if the given profile should be
+  // considered for preloading.
+  void ShouldPreloadForProfile(Profile* profile,
+                               ShouldPreloadCallback callback);
+
+  // Callback will be invoked with true if the given profile should be
+  // considered for preloading the FRE.
+  void ShouldPreloadFreForProfile(Profile* profile,
+                                  ShouldPreloadCallback callback);
 
   // Returns the active Glic service, nullptr if there is none.
   GlicKeyedService* GetLastActiveGlic() const;
@@ -72,11 +83,18 @@ class GlicProfileManager {
 
   bool IsShowing() const;
 
+  // ProfileManagerObserver:
+  void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
+
   // Static in order to permit setting forced values before the manager is
   // constructed.
-  static void ForceProfileForLaunchForTesting(Profile* profile);
+  static void ForceProfileForLaunchForTesting(std::optional<Profile*> profile);
   static void ForceMemoryPressureForTesting(
-      base::MemoryPressureMonitor::MemoryPressureLevel* level);
+      std::optional<base::MemoryPressureMonitor::MemoryPressureLevel> level);
+  static void ForceConnectionTypeForTesting(
+      std::optional<network::mojom::ConnectionType> type);
+
+  base::WeakPtr<GlicProfileManager> GetWeakPtr();
 
  private:
   // Callback from ProfilePicker::Show().
@@ -87,7 +105,7 @@ class GlicProfileManager {
   // Checks whether preloading is possible for the profile for either the fre
   // or the glic panel (i.e., this excludes specific checks for those two
   // surfaces).
-  bool CanPreloadForProfile(Profile* profile) const;
+  void CanPreloadForProfile(Profile* profile, ShouldPreloadCallback callback);
 
   bool IsLastActiveGlicProfile(Profile* profile) const;
   bool IsLastLoadedGlicProfile(Profile* profile) const;

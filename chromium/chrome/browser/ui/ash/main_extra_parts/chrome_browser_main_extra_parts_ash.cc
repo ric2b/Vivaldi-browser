@@ -11,6 +11,7 @@
 #include "ash/constants/ash_switches.h"
 #include "ash/display/refresh_rate_controller.h"
 #include "ash/public/cpp/new_window_delegate.h"
+#include "ash/public/cpp/projector/projector_controller.h"
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/quick_pair/keyed_service/quick_pair_mediator.h"
@@ -34,6 +35,7 @@
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 #include "chrome/browser/ash/auth/active_session_fingerprint_client_impl.h"
 #include "chrome/browser/ash/boca/boca_app_client_impl.h"
+#include "chrome/browser/ash/browser_delegate/browser_controller_impl.h"
 #include "chrome/browser/ash/geolocation/system_geolocation_source.h"
 #include "chrome/browser/ash/growth/campaigns_manager_client_impl.h"
 #include "chrome/browser/ash/growth/campaigns_manager_session.h"
@@ -58,6 +60,7 @@
 #include "chrome/browser/chromeos/tablet_mode/tablet_mode_page_behavior.h"
 #include "chrome/browser/enterprise/connectors/device_trust/attestation/ash/ash_attestation_cleanup_manager.h"
 #include "chrome/browser/exo_parts.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/accessibility/accessibility_controller_client.h"
@@ -209,7 +212,8 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
   ash::NetworkConnect::Initialize(network_connect_delegate_.get());
 
   cast_config_controller_media_router_ =
-      std::make_unique<CastConfigControllerMediaRouter>();
+      std::make_unique<CastConfigControllerMediaRouter>(
+          g_browser_process->GetFeatures()->application_locale_storage());
 
   // This controller MUST be initialized before the UI (AshShellInit) is
   // constructed. The video conferencing views will observe and have their own
@@ -258,8 +262,8 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
       ash::input_method::InputMethodManager::Get());
   ime_controller_client_->Init();
 
-  in_session_auth_dialog_client_ =
-      std::make_unique<InSessionAuthDialogClient>();
+  in_session_auth_dialog_client_ = std::make_unique<InSessionAuthDialogClient>(
+      g_browser_process->local_state());
 
   in_session_auth_token_provider_ =
       std::make_unique<ash::InSessionAuthTokenProviderImpl>();
@@ -322,8 +326,12 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
 
   boca_client_ = std::make_unique<ash::boca::BocaAppClientImpl>();
 
-  projector_app_client_ = std::make_unique<ProjectorAppClientImpl>();
-  projector_client_ = std::make_unique<ProjectorClientImpl>();
+  projector_app_client_ = std::make_unique<ProjectorAppClientImpl>(
+      g_browser_process->local_state(),
+      g_browser_process->GetFeatures()->application_locale_storage());
+  projector_client_ = std::make_unique<ProjectorClientImpl>(
+      g_browser_process->GetFeatures()->application_locale_storage(),
+      ash::ProjectorController::Get());
 
   desks_client_ = std::make_unique<DesksClient>();
 
@@ -370,11 +378,10 @@ void ChromeBrowserMainExtraPartsAsh::PreProfileInit() {
 
   read_write_cards_manager_ =
       std::make_unique<chromeos::ReadWriteCardsManagerImpl>(
+          g_browser_process->GetFeatures()->application_locale_storage(),
           g_browser_process->shared_url_loader_factory());
 
-  if (base::FeatureList::IsEnabled(ash::features::kReadaheadForLogin)) {
-    login_readahead_performer_.emplace(ash::SessionManagerClient::Get());
-  }
+  login_readahead_performer_.emplace(ash::SessionManagerClient::Get());
 }
 
 void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
@@ -444,8 +451,11 @@ void ChromeBrowserMainExtraPartsAsh::PostProfileInit(Profile* profile,
 
   if (ash::features::IsGraduationEnabled()) {
     graduation_manager_ =
-        std::make_unique<ash::graduation::GraduationManagerImpl>();
+        std::make_unique<ash::graduation::GraduationManagerImpl>(
+            g_browser_process->GetFeatures()->application_locale_storage());
   }
+
+  browser_controller_ = std::make_unique<ash::BrowserControllerImpl>();
 
   if (ash::features::IsWelcomeExperienceEnabled()) {
     peripherals_app_delegate_ =

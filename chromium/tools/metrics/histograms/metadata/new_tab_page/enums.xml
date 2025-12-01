@@ -31,12 +31,37 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="HTTP cache hit"/>
 </enum>
 
+<enum name="BottomSheetType">
+  <summary/>
+  <int value="0" label="Main Bottom Sheet"/>
+  <int value="1" label="New Tab Page Cards Bottom Sheet"/>
+  <int value="2" label="Discover Feed Bottom Sheet"/>
+</enum>
+
+<enum name="Entry">
+  <summary/>
+  <int value="0" label="App Menu"/>
+  <int value="1" label="Customization button in toolbar"/>
+</enum>
+
 <enum name="FailToShowHomeSurfaceReason">
   <int value="0" label="Fail to create a NTP Tab"/>
   <int value="1" label="Fail to find a NTP Tab"/>
   <int value="2" label="Not a native page"/>
   <int value="3" label="Not a NTP native page"/>
   <int value="4" label="The native page is frozen"/>
+</enum>
+
+<enum name="FooterCustomizeChromeEntryPoint">
+  <int value="0" label="Customize Chrome button clicked."/>
+  <int value="1" label="NTP URL has customize chrome parameters."/>
+  <int value="2" label="Wallpaper search button clicked."/>
+</enum>
+
+<enum name="FooterElement">
+  <int value="0" label="Other Element"/>
+  <int value="1" label="Customize Chrome Button"/>
+  <int value="2" label="Extension name"/>
 </enum>
 
 <enum name="ItemSuggestRequestResult">
@@ -528,6 +553,7 @@ chromium-metrics-reviews@google.com.
   <int value="14" label="Open Payments Settings"/>
   <int value="15" label="[Deprecated] Open History Search Settings"/>
   <int value="16" label="Open Glic"/>
+  <int value="17" label="Open Glic settings"/>
 </enum>
 
 <!-- LINT.ThenChange(//ui/webui/resources/js/browser_command/browser_command.mojom:Command) -->
@@ -548,6 +574,45 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="Module is shown and expanded"/>
   <int value="1" label="Module is shown and collapsed"/>
 </enum>
+
+<!-- LINT.IfChange(TabLaunchType) -->
+
+<enum name="TabLaunchType">
+  <int value="0" label="From Link"/>
+  <int value="1" label="From External App"/>
+  <int value="2" label="From Chrome Ui"/>
+  <int value="3" label="From Restore"/>
+  <int value="4" label="From Longpress Foreground"/>
+  <int value="5" label="From Longpress Background"/>
+  <int value="6" label="From Reparenting"/>
+  <int value="7" label="From Launcher Shortcut"/>
+  <int value="8" label="From Speculative Background Creation"/>
+  <int value="9" label="From Browser Actions"/>
+  <int value="10" label="From Launch New Incognito Tab"/>
+  <int value="11" label="From Startup"/>
+  <int value="12" label="From Start Surface"/>
+  <int value="13" label="From Tab Group Ui"/>
+  <int value="14" label="From Longpress Background In Group"/>
+  <int value="15" label="From App Widget"/>
+  <int value="16" label="From Longpress Incognito"/>
+  <int value="17" label="From Recent Tabs"/>
+  <int value="18" label="From Reading List"/>
+  <int value="19" label="From Tab Switcher Ui"/>
+  <int value="20" label="From Restore Tabs Ui"/>
+  <int value="21" label="From Omnibox"/>
+  <int value="22" label="Unset"/>
+  <int value="23" label="From Sync Background"/>
+  <int value="24" label="From Recent Tabs Foreground"/>
+  <int value="25" label="From Collaboration Background In Group"/>
+  <int value="26" label="From Bookmark Bar Background"/>
+  <int value="27" label="From Reparenting Background"/>
+  <int value="28" label="From History Navigation Background"/>
+  <int value="29" label="From History Navigation Foreground"/>
+  <int value="30" label="From Longpress Foreground In Group"/>
+  <int value="31" label="Size"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/ui/android/tab_model/tab_model.h:TabLaunchType) -->
 
 <enum name="TypeOfDeletedMostVisitedApp">
   <summary>

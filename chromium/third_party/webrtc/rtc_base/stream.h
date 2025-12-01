@@ -75,10 +75,10 @@ class RTC_EXPORT StreamInterface {
   //  SR_EOS: the end-of-stream has been reached, or the stream is in the
   //    SS_CLOSED state.
 
-  virtual StreamResult Read(rtc::ArrayView<uint8_t> buffer,
+  virtual StreamResult Read(ArrayView<uint8_t> buffer,
                             size_t& read,
                             int& error) = 0;
-  virtual StreamResult Write(rtc::ArrayView<const uint8_t> data,
+  virtual StreamResult Write(ArrayView<const uint8_t> data,
                              size_t& written,
                              int& error) = 0;
 
@@ -151,6 +151,7 @@ class RTC_EXPORT StreamInterface {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::SE_CLOSE;
 using ::webrtc::SE_OPEN;
@@ -168,5 +169,6 @@ using ::webrtc::StreamInterface;
 using ::webrtc::StreamResult;
 using ::webrtc::StreamState;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_STREAM_H_

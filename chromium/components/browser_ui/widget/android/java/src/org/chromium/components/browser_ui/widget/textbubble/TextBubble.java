@@ -508,7 +508,7 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
 
     /**
      * @return A supplier which notifies of changes of text bubbles count.
-     * */
+     */
     public static ObservableSupplier<Integer> getCountSupplier() {
         return sCountSupplier;
     }
@@ -517,7 +517,7 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
      * @param onTouchListener A callback for all touch events being dispatched to the bubble.
      * @see PopupWindow#setTouchInterceptor(OnTouchListener)
      */
-    public void setTouchInterceptor(OnTouchListener onTouchListener) {
+    public void setTouchInterceptor(@Nullable OnTouchListener onTouchListener) {
         mPopupWindow.setTouchInterceptor(onTouchListener);
     }
 
@@ -632,7 +632,7 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
             }
 
             if (mSnoozeRunnable != null) {
-                Button snoozeButton = (Button) view.findViewById(R.id.button_snooze);
+                Button snoozeButton = view.findViewById(R.id.button_snooze);
                 snoozeButton.setVisibility(View.VISIBLE);
                 snoozeButton.setOnClickListener(
                         v -> {
@@ -640,7 +640,7 @@ public class TextBubble implements AnchoredPopupWindow.LayoutObserver {
                             mDismissRunnable.run();
                         });
             } else if (mSnoozeDismissRunnable != null) {
-                Button dismissButton = (Button) view.findViewById(R.id.button_dismiss);
+                Button dismissButton = view.findViewById(R.id.button_dismiss);
                 dismissButton.setVisibility(View.VISIBLE);
                 dismissButton.setOnClickListener(
                         v -> {

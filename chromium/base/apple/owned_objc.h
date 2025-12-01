@@ -6,6 +6,7 @@
 #define BASE_APPLE_OWNED_OBJC_H_
 
 #include <memory>
+#include <string>
 
 #include "base/base_export.h"
 #include "build/blink_buildflags.h"
@@ -66,7 +67,8 @@
     explicit operator bool() const;                          \
     /* Comparisons. */                                       \
     bool operator==(const classname& other) const;           \
-    bool operator!=(const classname& other) const;           \
+    /* Logging (to allow CHECK_EQ, etc). */                  \
+    std::string ToString() const;                            \
     /* Objective-C-only constructor and getter. */           \
     OWNED_TYPE_DECL_OBJC_ADDITIONS(classname, objctype)      \
                                                              \

@@ -53,6 +53,9 @@ String TimelineOffset::TimelineRangeNameToString(
 
     case NamedRange::kExitCrossing:
       return "exit-crossing";
+
+    case NamedRange::kScroll:
+      return "scroll";
   }
 }
 
@@ -95,7 +98,7 @@ std::optional<TimelineOffset> TimelineOffset::Create(
 
   const CSSValue* value = css_parsing_utils::ConsumeAnimationRange(
       stream, *document.ElementSheet().Contents()->ParserContext(),
-      /* default_offset_percent */ default_percent);
+      /* default_offset_percent */ default_percent, /*allow_auto=*/false);
 
   if (!value || !stream.AtEnd()) {
     ThrowExceptionForInvalidTimelineOffset(exception_state);
@@ -163,10 +166,20 @@ std::optional<TimelineOffset> TimelineOffset::Create(
       return std::nullopt;
     }
 
+    // px and percentage values can only be constructed in typed OM using
+    // expressions which are resolvable at parse time. There are no CSS.sign,
+    // CSS.siblingIndex, or CSS.siblingCount which could be used to construct
+    // expressions that would return no value for GetValueIfKnown() below.
+    // When such constructs are specified and implemented the CHECKs below will
+    // trigger and this code needs to handle those cases.
     if (css_value->IsPx()) {
-      parsed_offset = Length::Fixed(css_value->GetDoubleValue());
+      std::optional<double> number = css_value->GetValueIfKnown();
+      CHECK(number.has_value());
+      parsed_offset = Length::Fixed(number.value());
     } else if (css_value->IsPercentage()) {
-      parsed_offset = Length::Percent(css_value->GetDoubleValue());
+      std::optional<double> number = css_value->GetValueIfKnown();
+      CHECK(number.has_value());
+      parsed_offset = Length::Percent(number.value());
     } else {
       DCHECK(!css_value->IsResolvableBeforeLayout());
       parsed_offset = TimelineOffset::ResolveLength(element, css_value);
@@ -247,6 +260,27 @@ CSSValue* TimelineOffset::ParseOffset(Document* document, String css_text) {
   }
 
   return value;
+}
+
+/* static */
+TimelineOffsetOrAuto TimelineOffsetOrAuto::Create(
+    Element* element,
+    const V8UnionStringOrTimelineRangeOffset* range_offset,
+    double default_percent,
+    ExceptionState& exception_state) {
+  if (range_offset->IsString()) {
+    String offset_string = range_offset->GetAsString();
+    CSSParserTokenStream stream(offset_string);
+    stream.ConsumeWhitespace();
+
+    if (css_parsing_utils::ConsumeIdent<CSSValueID::kAuto>(stream) &&
+        stream.AtEnd()) {
+      return TimelineOffsetOrAuto();
+    }
+  }
+
+  return TimelineOffsetOrAuto(TimelineOffset::Create(
+      element, range_offset, default_percent, exception_state));
 }
 
 }  // namespace blink

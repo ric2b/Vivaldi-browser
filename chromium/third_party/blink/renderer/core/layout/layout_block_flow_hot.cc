@@ -30,7 +30,7 @@ bool LayoutBlockFlow::CreatesNewFormattingContext() const {
     return true;
   }
 
-  if (RuntimeEnabledFeatures::CanvasPlaceElementEnabled() &&
+  if (RuntimeEnabledFeatures::CanvasDrawElementEnabled() &&
       Parent()->IsCanvas()) {
     return true;
   }
@@ -65,11 +65,20 @@ void LayoutBlockFlow::StyleDidChange(StyleDifference diff,
   NOT_DESTROYED();
   LayoutBlock::StyleDidChange(diff, old_style);
 
-  if (diff.NeedsFullLayout() || !old_style)
-    CreateOrDestroyMultiColumnFlowThreadIfNeeded(old_style);
+  if (diff.NeedsFullLayout() || !old_style) {
+    UpdateForMulticol(old_style);
+  }
   if (old_style) {
+    // TODO(crbug.com/357648037): Remove this path once GapDecorations is
+    // enabled by default.
     if (LayoutMultiColumnFlowThread* flow_thread = MultiColumnFlowThread()) {
-      if (!StyleRef().ColumnRuleEquivalent(*old_style)) {
+      // Don't go down this route when gap decorations is enabled. This is
+      // because this is intended solely for forceful invalidation of column
+      // rules. However, with the `invalidate: paint` setting in
+      // css_properties.json and the new approach of painting gap decorations
+      // using `GapGeometry`, this won't be needed.
+      if (!RuntimeEnabledFeatures::CSSGapDecorationEnabled() &&
+          !StyleRef().ColumnRuleEquivalent(*old_style)) {
         // Column rules are painted by anonymous column set children of the
         // multicol container. We need to notify them.
         flow_thread->ColumnRuleStyleDidChange();

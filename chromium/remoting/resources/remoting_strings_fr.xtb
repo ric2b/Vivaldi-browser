@@ -9,7 +9,7 @@
 <translation id="1480046233931937785">Remerciements</translation>
 <translation id="1520828917794284345">Ajuster le bureau à la taille du client</translation>
 <translation id="1546934824884762070">Une erreur inattendue s'est produite. Veuillez signaler le problème aux développeurs.</translation>
-<translation id="1697532407822776718">Vous êtes prêt !</translation>
+<translation id="1697532407822776718">Tout est prêt !</translation>
 <translation id="1742469581923031760">Connexion en cours…</translation>
 <translation id="177040763384871009">Pour autoriser les liens sélectionnés sur l'appareil à distance à s'ouvrir dans le navigateur client, vous devez remplacer le navigateur Web du système par "<ph name="URL_FORWARDER_NAME" />".</translation>
 <translation id="177096447311351977">Version de l'IP pour le client : <ph name="CLIENT_GAIA_IDENTIFIER" /> adresse IP = "<ph name="CLIENT_IP_ADDRESS_AND_PORT" />" adresse IP de l'hôte = "<ph name="HOST_IP_ADDRESS_AND_PORT" />" channel='<ph name="CHANNEL_TYPE" />' connection='<ph name="CONNECTION_TYPE" />'.</translation>
@@ -93,6 +93,7 @@ Si la case "<ph name="SERVICE_SCRIPT_NAME" />" est déjà cochée, décochez-la,
 <translation id="4987330545941822761">Le Bureau à distance Chrome ne peut pas déterminer le navigateur à utiliser pour ouvrir les URL localement. Sélectionnez une option de la liste ci-dessous.</translation>
 <translation id="5064360042339518108"><ph name="HOSTNAME" /> (hors connexion)</translation>
 <translation id="507204348399810022">Voulez-vous vraiment désactiver les connexions à distance à <ph name="HOSTNAME" /> ?</translation>
+<translation id="5095424396646120601">Rapports d'erreur</translation>
 <translation id="5170982930780719864">ID d'hôte incorrect.</translation>
 <translation id="5204575267916639804">Questions fréquentes</translation>
 <translation id="5222676887888702881">Déconnexion</translation>

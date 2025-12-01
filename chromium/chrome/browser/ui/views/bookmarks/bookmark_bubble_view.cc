@@ -18,6 +18,7 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
+#include "chrome/browser/signin/chrome_signin_client.h"
 #include "chrome/browser/signin/signin_promo_util.h"
 #include "chrome/browser/ui/bookmarks/bookmark_editor.h"
 #include "chrome/browser/ui/bookmarks/recently_used_folders_combo_model.h"
@@ -28,6 +29,7 @@
 #include "chrome/browser/ui/views/commerce/price_tracking_email_dialog_view.h"
 #include "chrome/browser/ui/views/commerce/price_tracking_view.h"
 #include "chrome/browser/ui/views/commerce/shopping_collection_iph_view.h"
+#include "chrome/browser/ui/views/location_bar/star_view.h"
 #include "chrome/grit/branded_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -332,7 +334,14 @@ void BookmarkBubbleView::ShowBubble(views::View* anchor_view,
                                     Browser* browser,
                                     const GURL& url,
                                     bool already_bookmarked) {
+  // The only point where the star view can properly observe the bubble dialog
+  // delegate's widget is in this function, that's why star view is observing
+  // the widget from here after its creation.
+  auto* star_view = static_cast<StarView*>(highlighted_button);
   if (bookmark_bubble_) {
+    if (star_view) {
+      star_view->OnBubbleWidgetChanged(bookmark_bubble_->GetWidget());
+    }
     return;
   }
   Profile* profile = browser->profile();
@@ -463,6 +472,9 @@ void BookmarkBubbleView::ShowBubble(views::View* anchor_view,
         web_contents, signin_metrics::AccessPoint::kBookmarkBubble,
         syncer::LocalDataItemModel::DataId(bookmark_node->id()),
         ui::ButtonStyle::kDefault));
+
+    ChromeSigninClient::
+        MaybeAddUserToBookmarksBubblePromoShownSyntheticFieldTrial();
 #endif
   }
 
@@ -474,6 +486,10 @@ void BookmarkBubbleView::ShowBubble(views::View* anchor_view,
 
   bookmark_bubble_->GetBubbleFrameView()->SetProperty(
       views::kElementIdentifierKey, kBookmarkBubbleFrameViewId);
+
+  if (star_view) {
+    star_view->OnBubbleWidgetChanged(bookmark_bubble_->GetWidget());
+  }
 }
 
 // static

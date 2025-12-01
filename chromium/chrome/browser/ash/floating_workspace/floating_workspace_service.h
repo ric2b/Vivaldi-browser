@@ -34,7 +34,6 @@
 #include "components/sync/service/sync_service_observer.h"
 #include "components/sync_device_info/device_info_sync_service.h"
 #include "components/sync_device_info/device_info_tracker.h"
-#include "ui/message_center/public/cpp/notification.h"
 
 class Profile;
 
@@ -46,33 +45,15 @@ struct SyncedSession;
 
 namespace ash {
 
-extern const char kNotificationForNoNetworkConnection[];
-extern const char kNotificationForSyncErrorOrTimeOut[];
-extern const char kNotificationForRestoreAfterError[];
-extern const char kNotificationForProgressStatus[];
-
-// The restore from error notification button index.
-enum class RestoreFromErrorNotificationButtonIndex {
-  kRestore = 0,
-  kCancel,
-};
-
-// The notification type for floating workspace service.
-enum class FloatingWorkspaceServiceNotificationType {
-  kUnknown = 0,
-  kNoNetworkConnection,
-  kSyncErrorOrTimeOut,
-  kRestoreAfterError,
-  kProgressStatus,
-  kSafeMode
-};
+// How long do we wait before showing the network screen in case there is no
+// connection.
+inline constexpr base::TimeDelta kFwsNetworkScreenDelay = base::Seconds(2);
 
 // A keyed service to support floating workspace. Note that a periodical
 // task `CaptureAndUploadActiveDesk` will be dispatched during service
 // initialization.
 class FloatingWorkspaceService
     : public KeyedService,
-      public message_center::NotificationObserver,
       public syncer::SyncServiceObserver,
       public apps::AppRegistryCache::Observer,
       public apps::AppRegistryCacheWrapper::Observer,
@@ -113,12 +94,9 @@ class FloatingWorkspaceService
   void OnStateChanged(syncer::SyncService* sync) override;
   void OnSyncShutdown(syncer::SyncService* sync) override;
 
-  // message_center::NotificationObserver overrides:
-  void Click(const std::optional<int>& button_index,
-             const std::optional<std::u16string>& reply) override;
-
   // ash::SessionObserver overrides:
   void OnActiveUserSessionChanged(const AccountId& account_id) override;
+  void OnFirstSessionReady() override;
   void OnLockStateChanged(bool locked) override;
 
   // ash::LogoutConfirmationController::Observer:
@@ -141,8 +119,6 @@ class FloatingWorkspaceService
   void OnDeviceInfoChange() override;
   void OnDeviceInfoShutdown() override;
 
-  void MaybeCloseNotification();
-
   std::vector<const ash::DeskTemplate*> GetFloatingWorkspaceTemplateEntries();
 
   // Setups the convenience pointers to the dependent services and observers.
@@ -162,6 +138,9 @@ class FloatingWorkspaceService
   // Upload captured desk to chrome sync and record the randomly generated
   // UUID key to `floating_workspace_template_uuid_`.
   void CaptureAndUploadActiveDesk();
+
+  // Prevents floating workspace service from restoring the session.
+  void StopRestoringSession();
 
  protected:
   std::unique_ptr<DeskTemplate> previously_captured_desk_template_;
@@ -197,13 +176,6 @@ class FloatingWorkspaceService
   // Start and Stop capturing and uploading the active desks.
   void StartCaptureAndUploadActiveDesk();
   void StopCaptureAndUploadActiveDesk();
-
-  // Start and stop the progress bar notification.
-  void MaybeStartProgressBarNotification();
-  void StopProgressBarNotification();
-
-  // Handles the updating of progress bar notification.
-  void HandleProgressBarStatus();
 
   // Stops the progress bar and resumes the latest floating workspace. This is
   // called when the app cache is ready and sync data is available.
@@ -255,17 +227,6 @@ class FloatingWorkspaceService
   // an std::nullopt if there is no floating workspace uuid that is associated
   // with the current device.
   std::optional<base::Uuid> GetFloatingWorkspaceUuidForCurrentDevice();
-  // When sync passes an error status to floating workspace service,
-  // floating workspace service should send notification to user asking
-  // whether to restore the most recent FWS desk from local storage.
-  void HandleSyncError();
-
-  // When floating workspace service waited long enough but no desk is
-  // restored floating workspace service should send notification to user
-  // asking whether to restore the most recent FWS desk from local storage.
-  void MaybeHandleDownloadTimeOut();
-
-  void SendNotification(const std::string& id);
 
   // Performs garbage collection of stale floating workspace templates. A
   // floating workspace template is considered stale if it's older than 30
@@ -285,14 +246,10 @@ class FloatingWorkspaceService
   // initialized.
   bool AreRequiredAppTypesInitialized();
 
-  // Once network state or sync feature active state changes have been detected,
-  // handle the internet connectivity notification appropriately based on
-  // connection.
-  void OnNetworkStateOrSyncServiceStateChanged();
+  void UpdateUiStateIfNeeded();
 
-  // Initial task start. This involves checking the network connectivity upon
-  // log in and sending a notification if no network is connected or start
-  // posting a task for waiting for sync server downloads to complete.
+  // Initial task start. This includes checking the network connectivity upon
+  // login and setting the appropriate state for startup UI.
   void InitiateSigninTask();
 
   // Returns true if we should exclude the `floating_workspace_template` from
@@ -316,6 +273,13 @@ class FloatingWorkspaceService
   void LaunchWhenAppCacheIsReady();
 
   void LaunchWhenDeskTemplatesAreReadyOnFirstSync();
+
+  // When there is no connection, we slightly delay showing the network screen,
+  // because on startup ChromeOS might be connecting to a new network, and we
+  // want to avoid showing the network screen for a few seconds only for it to
+  // immediately go away.
+  void ScheduleShowingNetworkScreen();
+  void MaybeShowNetworkScreen();
 
   // When syncing for the very first time, Chrome can assume that all Chrome
   // Sync data for a given Sync type is downloaded once corresponding Sync
@@ -372,10 +336,6 @@ class FloatingWorkspaceService
   // mode.
   std::optional<base::Time> timestamp_before_suspend_;
 
-  // The in memory cache of the latest workspace desk datatype download status.
-  std::optional<syncer::SyncService::DataTypeDownloadStatus>
-      download_status_cache_;
-
   // Timer used for periodic capturing and uploading.
   base::RepeatingTimer timer_;
 
@@ -400,8 +360,6 @@ class FloatingWorkspaceService
   // populated when we first capture a floating workspace template.
   std::optional<base::Uuid> floating_workspace_uuid_;
 
-  std::unique_ptr<message_center::Notification> notification_;
-  std::string progress_notification_id_;
 
   // The in memory cache of the floating workspace that should be restored
   // after downloading latest updates. Saved in case the user delays resuming

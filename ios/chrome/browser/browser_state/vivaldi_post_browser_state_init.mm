@@ -8,9 +8,11 @@
 #import "browser/vivaldi_default_bookmarks.h"
 #import "components/bookmarks/browser/bookmark_model.h"
 #import "components/keyed_service/core/service_access_type.h"
+#import "components/search_engines/default_search_engine_observer.h"
 #import "ios/ad_blocker/adblock_rule_service_factory.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
+#import "ios/chrome/browser/search_engines/model/template_url_service_factory.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/notes/notes_factory.h"
@@ -93,5 +95,8 @@ void PostBrowserStateInit(ProfileIOS* profile) {
 
   VivaldiIOSTranslateService::Initialize();
   VivaldiIOSTranslateClient::LoadTranslationScript();
+  vivaldi::DefaultSearchEngineObserver::Create(
+      ios::TemplateURLServiceFactory::GetForProfile(profile),
+      profile->GetPrefs());
 }
 }  // namespace vivaldi

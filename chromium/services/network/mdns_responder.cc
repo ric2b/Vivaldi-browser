@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "services/network/mdns_responder.h"
 
 #include <algorithm>
@@ -21,7 +16,6 @@
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/rand_util.h"
 #include "base/strings/stringprintf.h"
@@ -184,8 +178,7 @@ std::vector<uint8_t> CreateNsecRdata(const net::IPAddress& addr,
   // type AAAA;
   // X octet(s) for Bitmap, 0x40 for type A and 0x00000008 for type AAAA.
   std::vector<uint8_t> rdata;
-  std::string next_domain_name =
-      net::CreateNamePointer(containing_nsec_rr_offset);
+  auto next_domain_name = net::CreateNamePointer(containing_nsec_rr_offset);
   DCHECK_EQ(2u, next_domain_name.size());
   rdata.insert(rdata.end(), next_domain_name.begin(), next_domain_name.end());
   if (addr.IsIPv4()) {
@@ -365,7 +358,7 @@ scoped_refptr<net::IOBufferWithSize> CreateResolutionResponse(
   DCHECK(response.io_buffer() != nullptr);
   auto buf =
       base::MakeRefCounted<net::IOBufferWithSize>(response.io_buffer_size());
-  memcpy(buf->data(), response.io_buffer()->data(), response.io_buffer_size());
+  buf->span().copy_from(response.io_buffer()->first(response.io_buffer_size()));
   return buf;
 }
 
@@ -383,7 +376,7 @@ scoped_refptr<net::IOBufferWithSize> CreateNegativeResponse(
   DCHECK(response.io_buffer() != nullptr);
   auto buf =
       base::MakeRefCounted<net::IOBufferWithSize>(response.io_buffer_size());
-  memcpy(buf->data(), response.io_buffer()->data(), response.io_buffer_size());
+  buf->span().copy_from(response.io_buffer()->first(response.io_buffer_size()));
   return buf;
 }
 
@@ -405,7 +398,7 @@ CreateResponseToMdnsNameGeneratorServiceQuery(
   DCHECK(response.io_buffer() != nullptr);
   auto buf =
       base::MakeRefCounted<net::IOBufferWithSize>(response.io_buffer_size());
-  memcpy(buf->data(), response.io_buffer()->data(), response.io_buffer_size());
+  buf->span().copy_from(response.io_buffer()->first(response.io_buffer_size()));
   return buf;
 }
 
@@ -941,7 +934,7 @@ bool MdnsResponderManager::Send(scoped_refptr<net::IOBufferWithSize> buf,
 
 void MdnsResponderManager::OnMojoConnectionError(MdnsResponder* responder) {
   auto it = responders_.find(responder);
-  CHECK(it != responders_.end(), base::NotFatalUntil::M130);
+  CHECK(it != responders_.end());
   responders_.erase(it);
 }
 
@@ -1021,7 +1014,7 @@ void MdnsResponderManager::OnSocketHandlerReadError(uint16_t socket_handler_id,
   // We should not remove the socket handler for a non-fatal error.
   DCHECK(IsFatalError(result));
   auto it = socket_handler_by_id_.find(socket_handler_id);
-  CHECK(it != socket_handler_by_id_.end(), base::NotFatalUntil::M130);
+  CHECK(it != socket_handler_by_id_.end());
   // It is safe to remove the handler in error since the handler has exited the
   // read loop and is done with |OnRead|.
   socket_handler_by_id_.erase(it);

@@ -12,12 +12,15 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/buildflags.h"
 #include "ui/webui/game_ui.h"
+#include "ui/webui/privacy_report_ui.h"
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
 #endif
+
+#include "browser/vivaldi_runtime_feature.h"
 
 using content::WebUI;
 using content::WebUIController;
@@ -49,6 +52,15 @@ WebUIFactoryFunction GetVivaldiWebUIFactoryFunction(WebUI* web_ui,
     return &NewVivaldiWebUI<GameUI>;
 #endif
 
+  const auto feature =
+      vivaldi_runtime_feature::GetFeature("new_privacy_report");
+  // Feature is enabled or inactive for OS (e.g. Android)
+  if (vivaldi_runtime_feature::IsEnabled(profile, "new_privacy_report") ||
+      (feature && feature->inactive)) {
+    if (url.host() == vivaldi::kVivaldiPrivacyReportHost) {
+      return &NewVivaldiWebUI<PrivacyReportUI>;
+    }
+  }
   return NULL;
 }
 
@@ -113,6 +125,11 @@ base::RefCountedMemory* VivaldiWebUIControllerFactory::GetFaviconResourceBytes(
   if (page_url.host() == vivaldi::kVivaldiGameHost) {
     return ui::ResourceBundle::GetSharedInstance()
         .LoadDataResourceBytesForScale(IDR_VIVALDI_GAME_FAVICON, scale_factor);
+  }
+  if (page_url.host() == vivaldi::kVivaldiPrivacyReportHost) {
+    return ui::ResourceBundle::GetSharedInstance()
+        .LoadDataResourceBytesForScale(IDR_VIVALDI_PRIVACY_REPORT_FAVICON,
+                                       scale_factor);
   }
   return nullptr;
 }

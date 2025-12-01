@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -177,7 +178,7 @@ const UIStrings = {
   /**
    *@description Text to save content as a specific file type
    */
-  saveAs: 'Save as...',
+  saveAs: 'Save as…',
   /**
    *@description Text to copy Console log to clipboard
    */
@@ -635,7 +636,7 @@ export class ConsoleView extends UI.Widget.VBox implements
     this.buildHiddenCache(0, this.consoleMessages.slice());
   }
 
-  private setImmediatelyFilterMessagesForTest(): void {
+  protected setImmediatelyFilterMessagesForTest(): void {
     this.immediatelyFilterMessagesForTest = true;
   }
 

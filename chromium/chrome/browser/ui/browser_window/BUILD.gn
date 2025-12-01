@@ -38,8 +38,10 @@ source_set("impl") {
     "//chrome/browser/ui:ui_features",
     "//chrome/browser/ui/commerce",
     "//chrome/browser/ui/lens",
+    "//chrome/browser/ui/tabs/tab_strip_api",
     "//chrome/browser/ui/toasts",
     "//chrome/browser/ui/views/download",
+    "//chrome/browser/ui/views/new_tab_footer",
     "//chrome/browser/ui/views/side_panel",
     "//chrome/browser/ui/views/toolbar",
     "//components/collaboration/public:public",
@@ -48,7 +50,12 @@ source_set("impl") {
     "//components/lens:features",
     "//components/profile_metrics",
     "//components/saved_tab_groups/public",
+    "//components/search",
   ]
+
+  if (is_win || is_mac) {
+    deps += [ "//chrome/browser/ui/pdf/infobar" ]
+  }
 
   if (enable_glic) {
     deps += [ "//chrome/browser/glic" ]

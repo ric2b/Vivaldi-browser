@@ -139,7 +139,10 @@ void InitializePlatformOverlaySettings(GPUInfo* gpu_info,
           gpu::FORCE_RGB10A2_OVERLAY_SUPPORT),
       .check_ycbcr_studio_g22_left_p709_for_nv12_support =
           gpu_feature_info.IsWorkaroundEnabled(
-              gpu::CHECK_YCBCR_STUDIO_G22_LEFT_P709_FOR_NV12_SUPPORT)};
+              gpu::CHECK_YCBCR_STUDIO_G22_LEFT_P709_FOR_NV12_SUPPORT),
+      .disable_dcomp_texture =
+          gpu_feature_info.IsWorkaroundEnabled(gpu::DISABLE_DCOMP_TEXTURE),
+  };
   SetDirectCompositionOverlayWorkarounds(workarounds);
 
   DCHECK(gpu_info);
@@ -551,13 +554,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   gpu_info_.passthrough_cmd_decoder =
       gpu_preferences_.use_passthrough_cmd_decoder;
 #else
-  // If gl is disabled passthrough/validating command decoder doesn't matter. If
-  // it's not ensure that passthrough command decoder is supported as it's our
-  // only option.
-  if (!gl_disabled) {
-    gpu_info_.passthrough_cmd_decoder = true;
-    gpu_preferences_.use_passthrough_cmd_decoder = true;
-  }
+  // Use passthrough command decoder if validating was not compiled.
+  gpu_info_.passthrough_cmd_decoder = true;
+  gpu_preferences_.use_passthrough_cmd_decoder = true;
 #endif  // BUILDFLAG(ENABLE_VALIDATING_COMMAND_DECODER)
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -1018,6 +1017,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
     gl_use_swiftshader_ = true;
   }
 #endif  // IS_LINUX || (IS_CHROMEOS && !IS_CHROMEOS_DEVICE)
+  gpu_info_.gl_implementation_parts = gl::GetGLImplementationParts();
 
   if (!gl_disabled && !gl_use_swiftshader_) {
     CollectContextGraphicsInfo(&gpu_info_);
@@ -1157,11 +1157,8 @@ void GpuInit::SaveHardwareGpuInfoAndGpuFeatureInfo() {
 }
 
 void GpuInit::AdjustInfoToSwiftShader() {
-  gpu_info_.passthrough_cmd_decoder = false;
   gpu_feature_info_ = ComputeGpuFeatureInfoForSoftwareGL();
   CollectContextGraphicsInfo(&gpu_info_);
-
-  DCHECK_EQ(gpu_info_.passthrough_cmd_decoder, false);
 }
 
 scoped_refptr<gl::GLSurface> GpuInit::TakeDefaultOffscreenSurface() {

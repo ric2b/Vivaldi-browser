@@ -41,8 +41,8 @@ TestAudioDevice::TestAudioDevice(
       rendering_(false),
       capturing_(false) {
   auto good_sample_rate = [](int sr) {
-    return sr == 8000 || sr == 16000 || sr == 32000 || sr == 44100 ||
-           sr == 48000;
+    return sr == 8000 || sr == 16000 || sr == 24000 || sr == 32000 ||
+           sr == 44100 || sr == 48000;
   };
 
   if (renderer_) {
@@ -184,7 +184,7 @@ void TestAudioDevice::ProcessAudio() {
     size_t samples_out = samples_per_channel * renderer_->NumChannels();
     RTC_CHECK_LE(samples_out, playout_buffer_.size());
     const bool keep_rendering = renderer_->Render(
-        rtc::ArrayView<const int16_t>(playout_buffer_.data(), samples_out));
+        ArrayView<const int16_t>(playout_buffer_.data(), samples_out));
     if (!keep_rendering) {
       rendering_ = false;
     }

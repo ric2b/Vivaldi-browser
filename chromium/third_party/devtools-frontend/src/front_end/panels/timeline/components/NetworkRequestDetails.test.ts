@@ -94,24 +94,59 @@ describeWithMockConnection('NetworkRequestDetails', () => {
         [
           [
             'Server timing',
-            'Time',
             'Description',
-          ],
-          [
-            'Secondleveltask1',
-            '904.2932819999987',
-            'Description of second level task 1',
+            'Time',
           ],
           [
             'Topleveltask1',
-            '1004.2932819999987',
             'Description of top level task 1',
+            '1004.2932819999987',
+          ],
+          [
+            'Secondleveltask1',
+            'Description of second level task 1',
+            '904.2932819999987',
           ],
           [
             'Topleveltask2',
-            '1000.0925859999988',
             '-',
+            '1000.0925859999988',
           ],
+        ],
+    );
+  });
+
+  it('renders the redirect details for a network event', async function() {
+    const {parsedTrace} = await TraceLoader.traceEngine(this, 'many-redirects.json.gz');
+    const entityMapper = new Timeline.Utils.EntityMapper.EntityMapper(parsedTrace);
+    const networkRequests = parsedTrace.NetworkRequests.byTime;
+    const htmlRequest = networkRequests.find(request => {
+      return request.args.data.url === 'http://localhost:10200/redirects-final.html';
+    });
+    if (!htmlRequest) {
+      throw new Error('Could not find expected network request.');
+    }
+
+    const details =
+        new TimelineComponents.NetworkRequestDetails.NetworkRequestDetails(new Components.Linkifier.Linkifier());
+    await details.setData(
+        parsedTrace, htmlRequest, Timeline.TargetForEvent.targetForEvent(parsedTrace, htmlRequest), entityMapper);
+
+    if (!details.shadowRoot) {
+      throw new Error('Could not find expected element to test.');
+    }
+
+    const titleSwatch: HTMLElement|null = details.shadowRoot.querySelector('.network-request-details-title div');
+    assert.strictEqual(titleSwatch?.style.backgroundColor, 'rgb(76, 141, 246)');
+
+    const rowData = getRedirectDetailsElement(details.shadowRoot);
+    assert.deepEqual(
+        rowData,
+        [
+          'Redirects ' +
+              'http://localhost:10200/online-only.html?delay=1000&redirect_count=3&redirect=%2Fredirects-final.html ' +
+              'http://localhost:10200/online-only.html?delay=1000&redirect_count=2&redirect=%2Fredirects-final.html ' +
+              'http://localhost:10200/online-only.html?delay=1000&redirect_count=1&redirect=%2Fredirects-final.html',
         ],
     );
   });
@@ -141,4 +176,9 @@ function getServerTimingDataDetailsElement(details: ShadowRoot) {
         row.push(current);
         return result;
       }, []);
+}
+
+function getRedirectDetailsElement(details: ShadowRoot) {
+  return Array.from(details.querySelectorAll<HTMLDivElement>('.redirect-details'))
+      .map(row => cleanTextContent(row.innerText));
 }

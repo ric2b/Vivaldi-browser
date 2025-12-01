@@ -46,7 +46,7 @@ bool CPDF_PageOrganizer::InitDestDoc() {
     info->SetNewFor<CPDF_String>("Producer", "PDFium");
   }
 
-  if (root->GetByteStringFor("Type", ByteString()).IsEmpty()) {
+  if (root->GetByteStringFor("Type", ByteStringView()).IsEmpty()) {
     root->SetNewFor<CPDF_Name>("Type", "Catalog");
   }
 
@@ -59,7 +59,7 @@ bool CPDF_PageOrganizer::InitDestDoc() {
     pages = dest()->NewIndirect<CPDF_Dictionary>();
     root->SetNewFor<CPDF_Reference>("Pages", dest(), pages->GetObjNum());
   }
-  if (pages->GetByteStringFor("Type", ByteString()).IsEmpty()) {
+  if (pages->GetByteStringFor("Type", ByteStringView()).IsEmpty()) {
     pages->SetNewFor<CPDF_Name>("Type", "Pages");
   }
 
@@ -165,7 +165,7 @@ uint32_t CPDF_PageOrganizer::GetNewObjId(CPDF_Reference* ref) {
 bool CPDF_PageOrganizer::CopyInheritable(
     RetainPtr<CPDF_Dictionary> dest_page_dict,
     RetainPtr<const CPDF_Dictionary> src_page_dict,
-    const ByteString& key) {
+    ByteStringView key) {
   if (dest_page_dict->KeyExist(key)) {
     return true;
   }
@@ -176,14 +176,14 @@ bool CPDF_PageOrganizer::CopyInheritable(
     return false;
   }
 
-  dest_page_dict->SetFor(key, inheritable->Clone());
+  dest_page_dict->SetFor(ByteString(key), inheritable->Clone());
   return true;
 }
 
 // static
 RetainPtr<const CPDF_Object> CPDF_PageOrganizer::PageDictGetInheritableTag(
     RetainPtr<const CPDF_Dictionary> dict,
-    const ByteString& src_tag) {
+    ByteStringView src_tag) {
   if (!dict || src_tag.IsEmpty()) {
     return nullptr;
   }

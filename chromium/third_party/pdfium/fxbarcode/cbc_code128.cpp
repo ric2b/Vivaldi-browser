@@ -33,23 +33,25 @@ CBC_Code128::~CBC_Code128() = default;
 
 bool CBC_Code128::Encode(WideStringView contents) {
   auto* pWriter = GetOnedCode128Writer();
-  if (!pWriter->CheckContentValidity(contents))
+  if (!pWriter->CheckContentValidity(contents)) {
     return false;
+  }
 
   WideString content(contents);
-  if (contents.GetLength() % 2 && pWriter->GetType() == BC_TYPE::kCode128C)
+  if (contents.GetLength() % 2 && pWriter->GetType() == BC_TYPE::kCode128C) {
     content += '0';
+  }
 
-  m_renderContents = pWriter->FilterContents(content.AsStringView());
-  ByteString byteString = m_renderContents.ToUTF8();
-  return pWriter->RenderResult(m_renderContents.AsStringView(),
+  render_contents_ = pWriter->FilterContents(content.AsStringView());
+  ByteString byteString = render_contents_.ToUTF8();
+  return pWriter->RenderResult(render_contents_.AsStringView(),
                                pWriter->Encode(byteString));
 }
 
 bool CBC_Code128::RenderDevice(CFX_RenderDevice* device,
                                const CFX_Matrix& matrix) {
   return GetOnedCode128Writer()->RenderDeviceResult(
-      device, matrix, m_renderContents.AsStringView());
+      device, matrix, render_contents_.AsStringView());
 }
 
 BC_TYPE CBC_Code128::GetType() {
@@ -57,5 +59,5 @@ BC_TYPE CBC_Code128::GetType() {
 }
 
 CBC_OnedCode128Writer* CBC_Code128::GetOnedCode128Writer() {
-  return static_cast<CBC_OnedCode128Writer*>(m_pBCWriter.get());
+  return static_cast<CBC_OnedCode128Writer*>(bc_writer_.get());
 }

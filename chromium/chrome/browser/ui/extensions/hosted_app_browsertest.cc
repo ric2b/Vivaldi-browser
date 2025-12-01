@@ -25,6 +25,7 @@
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_service_test.h"
 #include "chrome/browser/chrome_content_browser_client.h"
+#include "chrome/browser/extensions/browsertest_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/preloading/prerender/prerender_utils.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu_test_util.h"
@@ -182,14 +183,6 @@ bool TryToLoadImage(const content::ToRenderFrameHost& adapter,
   return content::EvalJs(adapter, script).ExtractBool();
 }
 
-// On Lacros, due to the wayland async UI flow, when a test switches between
-// multiple active browsers, BrowserList::GetLastActive() may not return
-// the right browser due to the race. See details in b/325634285.
-// However, ui_test_utils::WaitUntilBrowserBecomeActive works reliably by using
-// WidgetActivationWaiter to wait for the browser widget to become active.
-// Therefore, we use different approach to wait and verify the expected browser
-// to become the active or last active browser in test.
-
 // TODO(b/342491793): On Mac, the expected browser window (to be activated) is
 // occasionally deactivated after being activated. So the test will fail
 // (correctly) and become flaky if we use WidgetActivationWaiter to wait for the
@@ -275,7 +268,8 @@ class HostedOrWebAppTest : public extensions::ExtensionBrowserTest,
     app_id_ = app->id();
 
     // Launch app in a window.
-    app_browser_ = LaunchAppBrowser(app);
+    app_browser_ =
+        extensions::browsertest_util::LaunchAppBrowser(profile(), app);
     ASSERT_TRUE(app_browser_);
     ASSERT_TRUE(app_browser_ != browser());
   }
@@ -450,6 +444,11 @@ IN_PROC_BROWSER_TEST_P(HostedOrWebAppTest, MAYBE_CtrlClickLink) {
 #else
             ctrl_key = blink::WebInputEvent::Modifiers::kControlKey;
 #endif
+
+            // Before sending a click, end paint-holding to enable input event
+            // processing.
+            content::SimulateEndOfPaintHoldingOnPrimaryMainFrame(app_contents);
+
             content::SimulateMouseClick(app_contents, ctrl_key,
                                         blink::WebMouseEvent::Button::kLeft);
             url_observer.Wait();

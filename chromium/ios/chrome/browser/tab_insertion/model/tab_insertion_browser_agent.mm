@@ -24,8 +24,6 @@ Params::Params() = default;
 Params::~Params() = default;
 }  // namespace TabInsertion
 
-BROWSER_USER_DATA_KEY_IMPL(TabInsertionBrowserAgent)
-
 namespace {
 
 // Returns whether `index` is valid for insertion in `browser`.
@@ -48,9 +46,7 @@ bool MustCreateRealizedWebState(
 }  // namespace
 
 TabInsertionBrowserAgent::TabInsertionBrowserAgent(Browser* browser)
-    : browser_(browser) {
-  DCHECK(browser_);
-}
+    : BrowserUserData(browser) {}
 
 TabInsertionBrowserAgent::~TabInsertionBrowserAgent() = default;
 

@@ -19,6 +19,8 @@
 #include "components/safe_browsing/content/browser/notification_content_detection/test_model_observer_tracker.h"
 #include "components/safe_browsing/content/browser/notification_content_detection/test_notification_content_detection_model.h"
 #include "components/safe_browsing/core/common/features.h"
+#include "components/site_engagement/content/site_engagement_service.h"
+#include "components/user_prefs/user_prefs.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -50,6 +52,23 @@ struct NotificationContentDetectionModelTestCase {
   std::string expected_input;
 };
 
+class TestSiteEngagementServiceProvider
+    : public site_engagement::SiteEngagementService::ServiceProvider {
+ public:
+  explicit TestSiteEngagementServiceProvider(
+      content::BrowserContext* browser_context)
+      : site_engagement_service_(browser_context) {}
+  virtual ~TestSiteEngagementServiceProvider() = default;
+
+  site_engagement::SiteEngagementService* GetSiteEngagementService(
+      content::BrowserContext* browser_context) override {
+    return &site_engagement_service_;
+  }
+
+ private:
+  site_engagement::SiteEngagementService site_engagement_service_;
+};
+
 }  // namespace
 
 class NotificationContentDetectionModelTest : public testing::Test {
@@ -67,9 +86,20 @@ class NotificationContentDetectionModelTest : public testing::Test {
             model_observer_tracker_.get(),
             base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()}),
             &browser_context_);
+    // Set up site engagement service.
+    user_prefs::UserPrefs::Set(&browser_context_, &pref_service_);
+    site_engagement::SiteEngagementService::RegisterProfilePrefs(
+        pref_service_.registry());
+    service_provider_ =
+        std::make_unique<TestSiteEngagementServiceProvider>(&browser_context_);
+    site_engagement::SiteEngagementService::SetServiceProvider(
+        service_provider_.get());
   }
 
   void TearDown() override {
+    site_engagement::SiteEngagementService::ClearServiceProvider(
+        service_provider_.get());
+    service_provider_.reset();
     notification_content_detection_model_.reset();
     model_observer_tracker_.reset();
   }
@@ -102,6 +132,8 @@ class NotificationContentDetectionModelTest : public testing::Test {
   std::unique_ptr<TestModelObserverTracker> model_observer_tracker_;
   std::unique_ptr<TestNotificationContentDetectionModel>
       notification_content_detection_model_;
+  TestingPrefServiceSimple pref_service_;
+  std::unique_ptr<TestSiteEngagementServiceProvider> service_provider_;
   base::HistogramTester histogram_tester_;
   content::BrowserTaskEnvironment task_environment_;
   content::TestBrowserContext browser_context_;
@@ -160,7 +192,12 @@ TEST_F(NotificationContentDetectionModelTest, LogNotificationSuspiciousScore) {
       action->title = action_title;
       notification_data.actions.push_back(std::move(action));
     }
-    EXPECT_CALL(model_verdict_callback_, Run(_)).Times(1);
+    EXPECT_CALL(
+        model_verdict_callback_,
+        Run(_, testing::Eq(
+                   "{\"is-origin-allowlisted-by-user\":false,\"is-origin-on-"
+                   "global-cache-list\":false,\"suspicious-score\":59.0}")))
+        .Times(1);
     notification_content_detection_model()->Execute(
         notification_data, GURL("url"), /*is_allowlisted_by_user=*/false,
         /*did_match_allowlist=*/false, model_verdict_callback_.Get());
@@ -177,7 +214,12 @@ TEST_F(NotificationContentDetectionModelTest,
   SendModelToNotificationContentDetectionModel();
 
   blink::PlatformNotificationData notification_data;
-  EXPECT_CALL(model_verdict_callback_, Run(_)).Times(1);
+  EXPECT_CALL(
+      model_verdict_callback_,
+      Run(_,
+          testing::Eq("{\"is-origin-allowlisted-by-user\":false,\"is-origin-on-"
+                      "global-cache-list\":false,\"suspicious-score\":59.0}")))
+      .Times(1);
   notification_content_detection_model()->Execute(
       notification_data, GURL("url"), /*is_allowlisted_by_user=*/false,
       /*did_match_allowlist=*/false, model_verdict_callback_.Get());
@@ -209,7 +251,11 @@ TEST_F(NotificationContentDetectionModelWithShownWarningsTest,
   SetUpFeatureWithSuspiciousThresholdValue("100");
 
   blink::PlatformNotificationData notification_data;
-  EXPECT_CALL(model_verdict_callback_, Run(/*is_suspicious=*/false)).Times(1);
+  EXPECT_CALL(model_verdict_callback_,
+              Run(/*is_suspicious=*/false,
+                  testing::Eq("{\"is-origin-allowlisted-by-user\":false,\"is-"
+                              "origin-on-global-cache-list\":false}")))
+      .Times(1);
   notification_content_detection_model()->Execute(
       notification_data, GURL("url"), /*is_allowlisted_by_user=*/false,
       /*did_match_allowlist=*/false, model_verdict_callback_.Get());
@@ -223,7 +269,12 @@ TEST_F(NotificationContentDetectionModelWithShownWarningsTest,
   SendModelToNotificationContentDetectionModel();
 
   blink::PlatformNotificationData notification_data;
-  EXPECT_CALL(model_verdict_callback_, Run(/*is_suspicious=*/false)).Times(1);
+  EXPECT_CALL(
+      model_verdict_callback_,
+      Run(/*is_suspicious=*/false,
+          testing::Eq("{\"is-origin-allowlisted-by-user\":false,\"is-origin-on-"
+                      "global-cache-list\":false,\"suspicious-score\":59.0}")))
+      .Times(1);
   notification_content_detection_model()->Execute(
       notification_data, GURL("url"), /*is_allowlisted_by_user=*/false,
       /*did_match_allowlist=*/false, model_verdict_callback_.Get());
@@ -237,7 +288,12 @@ TEST_F(NotificationContentDetectionModelWithShownWarningsTest,
   SendModelToNotificationContentDetectionModel();
 
   blink::PlatformNotificationData notification_data;
-  EXPECT_CALL(model_verdict_callback_, Run(/*is_suspicious=*/true)).Times(1);
+  EXPECT_CALL(
+      model_verdict_callback_,
+      Run(/*is_suspicious=*/true,
+          testing::Eq("{\"is-origin-allowlisted-by-user\":false,\"is-origin-on-"
+                      "global-cache-list\":false,\"suspicious-score\":59.0}")))
+      .Times(1);
   notification_content_detection_model()->Execute(
       notification_data, GURL("url"), /*is_allowlisted_by_user=*/false,
       /*did_match_allowlist=*/false, model_verdict_callback_.Get());
@@ -251,7 +307,12 @@ TEST_F(NotificationContentDetectionModelWithShownWarningsTest,
   SendModelToNotificationContentDetectionModel();
 
   blink::PlatformNotificationData notification_data;
-  EXPECT_CALL(model_verdict_callback_, Run(/*is_suspicious=*/false)).Times(1);
+  EXPECT_CALL(
+      model_verdict_callback_,
+      Run(/*is_suspicious=*/false,
+          testing::Eq("{\"is-origin-allowlisted-by-user\":true,\"is-origin-on-"
+                      "global-cache-list\":false,\"suspicious-score\":59.0}")))
+      .Times(1);
   notification_content_detection_model()->Execute(
       notification_data, GURL("url"), /*is_allowlisted_by_user=*/true,
       /*did_match_allowlist=*/false, model_verdict_callback_.Get());

@@ -16,10 +16,10 @@
 #import "components/sync/service/sync_user_settings.h"
 #import "ios/chrome/browser/authentication/ui_bundled/enterprise/enterprise_utils.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/consistency_promo_signin/consistency_default_account/consistency_default_account_consumer.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_context_style.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/model/system_identity.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -126,7 +126,6 @@ NSString* GetPromoLabelString(
     case signin_metrics::AccessPoint::kReauthInfoBar:
     case signin_metrics::AccessPoint::kAccountConsistencyService:
     case signin_metrics::AccessPoint::kSearchCompanion:
-    case signin_metrics::AccessPoint::kPasswordMigrationWarningAndroid:
     case signin_metrics::AccessPoint::kSaveToDriveIos:
     case signin_metrics::AccessPoint::kSaveToPhotosIos:
     case signin_metrics::AccessPoint::kChromeSigninInterceptBubble:
@@ -150,6 +149,15 @@ NSString* GetPromoLabelString(
     case signin_metrics::AccessPoint::kGlicLaunchButton:
     case signin_metrics::AccessPoint::kHistoryPage:
     case signin_metrics::AccessPoint::kCollaborationJoinTabGroup:
+    case signin_metrics::AccessPoint::kHistorySyncOptinExpansionPillOnStartup:
+    case signin_metrics::AccessPoint::kWidget:
+    case signin_metrics::AccessPoint::kCollaborationLeaveOrDeleteTabGroup:
+    case signin_metrics::AccessPoint::
+        kHistorySyncOptinExpansionPillOnInactivity:
+    case signin_metrics::AccessPoint::kHistorySyncEducationalTip:
+    case signin_metrics::AccessPoint::kManagedProfileAutoSigninIos:
+    case signin_metrics::AccessPoint::kNonModalSigninPasswordPromo:
+    case signin_metrics::AccessPoint::kNonModalSigninBookmarkPromo:
       // Nothing prevents instantiating ConsistencyDefaultAccountViewController
       // with an arbitrary entry point, API-wise. In doubt, no label is a good,
       // generic default that fits all entry points.
@@ -160,12 +168,9 @@ NSString* GetPromoLabelString(
 }  // namespace
 
 @interface ConsistencyDefaultAccountMediator () <
-    ChromeAccountManagerServiceObserver,
     IdentityManagerObserverBridgeDelegate> {
   std::unique_ptr<signin::IdentityManagerObserverBridge>
       _identityManagerObserver;
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
   signin_metrics::AccessPoint _accessPoint;
   raw_ptr<syncer::SyncService> _syncService;
 }
@@ -177,12 +182,15 @@ NSString* GetPromoLabelString(
 @implementation ConsistencyDefaultAccountMediator {
   raw_ptr<signin::IdentityManager> _identityManager;
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
+  // Used to customize content on screen.
+  SigninContextStyle _contextStyle;
 }
 
 - (instancetype)
     initWithIdentityManager:(signin::IdentityManager*)identityManager
       accountManagerService:(ChromeAccountManagerService*)accountManagerService
                 syncService:(syncer::SyncService*)syncService
+               contextStyle:(SigninContextStyle)contextStyle
                 accessPoint:(signin_metrics::AccessPoint)accessPoint {
   if ((self = [super init])) {
     CHECK(identityManager);
@@ -192,14 +200,12 @@ NSString* GetPromoLabelString(
     _identityManager = identityManager;
     _accountManagerService = accountManagerService;
     _syncService = syncService;
+    _contextStyle = contextStyle;
     _accessPoint = accessPoint;
 
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(
             _identityManager, self);
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
   }
   return self;
 }
@@ -215,7 +221,6 @@ NSString* GetPromoLabelString(
   _accountManagerService = nullptr;
   _syncService = nullptr;
   _identityManagerObserver.reset();
-  _accountManagerServiceObserver.reset();
 }
 
 #pragma mark - Properties
@@ -233,11 +238,23 @@ NSString* GetPromoLabelString(
       disabledTypes.Put(type);
     }
   }
+
   NSString* labelText = GetPromoLabelString(
       _accessPoint,
       _syncService->HasDisableReason(
           syncer::SyncService::DISABLE_REASON_ENTERPRISE_POLICY),
       disabledTypes);
+  switch (_contextStyle) {
+    case SigninContextStyle::kCollaborationJoinTabGroup:
+      NOTREACHED() << "kCollaborationShareTabGroup style should be presented "
+                      "in a full screen signin screen.";
+    case SigninContextStyle::kCollaborationShareTabGroup:
+      labelText = l10n_util::GetNSString(
+          IDS_IOS_SIGNIN_GROUP_COLLABORATION_HALF_SHEET_SUBTITLE);
+      break;
+    case SigninContextStyle::kDefault:
+      break;
+  }
   [_consumer setLabelText:labelText];
 
   NSString* skipButtonText =
@@ -290,10 +307,6 @@ NSString* GetPromoLabelString(
                                         managed:isManaged];
 }
 
-- (void)handleIdentityListChanged {
-  [self selectSelectedIdentity];
-}
-
 - (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
   if ([self.selectedIdentity isEqual:identity]) {
     [self updateSelectedIdentityUI];
@@ -320,45 +333,14 @@ NSString* GetPromoLabelString(
                                 }));
   return NO;
 }
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityListChanged {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onAccountsOnDeviceChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
-}
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
-}
 
 #pragma mark -  IdentityManagerObserver
 
 - (void)onAccountsOnDeviceChanged {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityListChanged` instead.
-    return;
-  }
-  [self handleIdentityListChanged];
+  [self selectSelectedIdentity];
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
   [self handleIdentityUpdated:identity];

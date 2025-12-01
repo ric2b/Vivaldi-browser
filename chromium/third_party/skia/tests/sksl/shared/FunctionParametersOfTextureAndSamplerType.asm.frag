@@ -13,6 +13,10 @@
                OpName %helper_h4TZ_aSampledTexture "helper_h4TZ_aSampledTexture"
                OpName %helper_h4TZ_aSecondSampledTexture "helper_h4TZ_aSecondSampledTexture"
                OpName %main "main"
+               OpDecorate %helpers_helper_h4ZT_aSampledTexture RelaxedPrecision
+               OpDecorate %helpers_helper_h4ZT_aSecondSampledTexture RelaxedPrecision
+               OpDecorate %helper_h4TZ_aSampledTexture RelaxedPrecision
+               OpDecorate %helper_h4TZ_aSecondSampledTexture RelaxedPrecision
                OpDecorate %sk_FragColor RelaxedPrecision
                OpDecorate %sk_FragColor Location 0
                OpDecorate %sk_FragColor Index 0
@@ -25,7 +29,9 @@
                OpDecorate %aSecondSampledTexture Binding 3
                OpDecorate %aSecondSampledTexture DescriptorSet 0
                OpDecorate %c Location 1
+               OpDecorate %25 RelaxedPrecision
                OpDecorate %26 RelaxedPrecision
+               OpDecorate %30 RelaxedPrecision
                OpDecorate %31 RelaxedPrecision
       %float = OpTypeFloat 32
     %v4float = OpTypeVector %float 4

@@ -45,6 +45,7 @@
 #include "third_party/blink/public/web/web_plugin.h"
 #include "third_party/blink/public/web/web_text_check_client.h"
 #include "third_party/blink/renderer/core/annotation/annotation_agent_container_impl.h"
+#include "third_party/blink/renderer/core/annotation/annotation_agent_impl.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
@@ -96,6 +97,7 @@
 #include "third_party/blink/renderer/core/svg/svg_a_element.h"
 #include "third_party/blink/renderer/platform/bindings/script_regexp.h"
 #include "third_party/blink/renderer/platform/exported/wrapped_resource_response.h"
+#include "third_party/blink/renderer/platform/graphics/dom_node_id.h"
 #include "third_party/blink/renderer/platform/wtf/text/character_visitor.h"
 
 #if !BUILDFLAG(IS_ANDROID) && defined(VIVALDI_BUILD)
@@ -428,7 +430,7 @@ bool ContextMenuController::ShouldShowContextMenuFromTouch(
          !data.link_url.is_empty() ||
          data.media_type == mojom::blink::ContextMenuDataMediaType::kImage ||
          data.media_type == mojom::blink::ContextMenuDataMediaType::kVideo ||
-         data.is_editable || data.opened_from_highlight ||
+         data.is_editable || data.annotation_type ||
          !data.selected_text.empty();
 }
 
@@ -511,8 +513,19 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
       source_type == kMenuSourceLongTap) {
     for (Node* node = result.InnerNode(); node; node = node->parentNode()) {
       if (HTMLElement* element = DynamicTo<HTMLElement>(node);
-          element && element->interestTargetElement()) {
+          element && element->InterestTargetElement()) {
+        auto* context = element->GetDocument().GetExecutionContext();
+        CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+            context));
         data.opened_from_interest_target = true;
+        if (RuntimeEnabledFeatures::
+                HTMLInterestTargetContextMenuItemOnlyEnabled(context)) {
+          data.interest_target_node_id = element->NodeID();
+        } else {
+          static_assert(kInvalidDOMNodeId == 0,
+                        "The Android Java code assumes 0 === invalid");
+          data.interest_target_node_id = kInvalidDOMNodeId;
+        }
         break;
       }
     }
@@ -709,8 +722,9 @@ bool ContextMenuController::ShowContextMenu(LocalFrame* frame,
   if (result.InnerNodeFrame()) {
     result.InnerNodeFrame()->View()->UpdateAllLifecyclePhasesExceptPaint(
         DocumentUpdateReason::kHitTest);
-    if (TextFragmentHandler::IsOverTextFragment(result)) {
-      data.opened_from_highlight = true;
+    if (std::optional<mojom::blink::AnnotationType> annotation =
+            AnnotationAgentImpl::IsOverAnnotation(result)) {
+      data.annotation_type = annotation;
     }
   }
 

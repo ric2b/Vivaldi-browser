@@ -268,7 +268,7 @@ class VideoReceiveStreamInterface : public MediaReceiveStreamInterface {
     Transport* rtcp_send_transport = nullptr;
 
     // Must always be set.
-    rtc::VideoSinkInterface<VideoFrame>* renderer = nullptr;
+    VideoSinkInterface<VideoFrame>* renderer = nullptr;
 
     // Expected delay needed by the renderer, i.e. the frame will be delivered
     // this many milliseconds, if possible, earlier than the ideal render time.
@@ -286,12 +286,12 @@ class VideoReceiveStreamInterface : public MediaReceiveStreamInterface {
     // An optional custom frame decryptor that allows the entire frame to be
     // decrypted in whatever way the caller choses. This is not required by
     // default.
-    rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor;
+    scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor;
 
     // Per PeerConnection cryptography options.
     CryptoOptions crypto_options;
 
-    rtc::scoped_refptr<webrtc::FrameTransformerInterface> frame_transformer;
+    scoped_refptr<webrtc::FrameTransformerInterface> frame_transformer;
   };
 
   // TODO(pbos): Add info on currently-received codec to Stats.

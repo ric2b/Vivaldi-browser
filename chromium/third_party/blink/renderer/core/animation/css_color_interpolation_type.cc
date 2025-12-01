@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/animation/color_property_functions.h"
 #include "third_party/blink/renderer/core/animation/interpolable_color.h"
 #include "third_party/blink/renderer/core/animation/interpolable_value.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_color.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
 #include "third_party/blink/renderer/core/css/resolver/style_builder_converter.h"
@@ -277,19 +278,18 @@ enum InterpolableColorPairIndex : unsigned {
 
 InterpolationValue CSSColorInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState* state,
+    const StyleResolverState& state,
     ConversionCheckers& conversion_checkers) const {
   if (CssProperty().PropertyID() == CSSPropertyID::kColor) {
     auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
     if (identifier_value &&
         identifier_value->GetValueID() == CSSValueID::kCurrentcolor) {
-      DCHECK(state);
-      return MaybeConvertInherit(*state, conversion_checkers);
+      return MaybeConvertInherit(state, conversion_checkers);
     }
   }
 
   InterpolableColor* interpolable_color =
-      MaybeCreateInterpolableColor(value, state);
+      MaybeCreateInterpolableColor(value, &state);
   if (!interpolable_color) {
     return nullptr;
   }
@@ -366,6 +366,22 @@ CSSColorInterpolationType::MaybeConvertStandardPropertyUnderlyingValue(
       ColorPropertyFunctions::GetUnvisitedColor(CssProperty(), style),
       ColorPropertyFunctions::GetVisitedColor(CssProperty(), style),
       style.UsedColorScheme(), /*color_provider=*/nullptr);
+}
+
+InterpolationValue
+CSSColorInterpolationType::MaybeConvertCustomPropertyUnderlyingValue(
+    const CSSValue& value) const {
+  InterpolableColor* interpolable_color =
+      MaybeCreateInterpolableColor(value, /*state=*/nullptr);
+  if (!interpolable_color) {
+    return nullptr;
+  }
+
+  auto* color_pair =
+      MakeGarbageCollected<InterpolableList>(kInterpolableColorPairIndexCount);
+  color_pair->Set(kUnvisited, interpolable_color->Clone());
+  color_pair->Set(kVisited, interpolable_color);
+  return InterpolationValue(color_pair);
 }
 
 void CSSColorInterpolationType::ApplyStandardPropertyValue(

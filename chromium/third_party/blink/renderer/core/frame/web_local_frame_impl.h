@@ -32,7 +32,9 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FRAME_WEB_LOCAL_FRAME_IMPL_H_
 
 #include <memory>
+#include <optional>
 #include <set>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -313,7 +315,7 @@ class CORE_EXPORT WebLocalFrameImpl final
       const WebAssociatedURLLoaderOptions&) override;
   void DeprecatedStopLoading() override;
   gfx::PointF GetScrollOffset() const override;
-  void SetScrollOffset(const gfx::PointF&) override;
+  bool SetScrollOffset(const gfx::PointF&) override;
   gfx::Size DocumentSize() const override;
   bool HasVisibleContent() const override;
   gfx::Rect VisibleContentRect() const override;
@@ -331,7 +333,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   bool CapturePaintPreview(const gfx::Rect& bounds,
                            cc::PaintCanvas* canvas,
                            bool include_linked_destinations,
-                           bool skip_accelerated_content) override;
+                           bool skip_accelerated_content,
+                           bool allow_scrollbars) override;
   WebPerformanceMetricsForReporting PerformanceMetricsForReporting()
       const override;
   WebPerformanceMetricsForNestedContexts PerformanceMetricsForNestedContexts()
@@ -528,7 +531,6 @@ class CORE_EXPORT WebLocalFrameImpl final
   void SetFindEndstateFocusAndSelection();
 
   void DidCommitLoad();
-  void DidDispatchDOMContentLoadedEvent();
   void DidFailLoad(const ResourceError&, WebHistoryCommitType);
   void DidFinish();
   void DidFinishLoadForPrinting();
@@ -586,6 +588,9 @@ class CORE_EXPORT WebLocalFrameImpl final
                                bool discard_duplicates) override;
 
   void AddInspectorIssueImpl(mojom::blink::InspectorIssueCode code) override;
+  void AddUserReidentificationIssueImpl(
+      std::optional<std::string> devtools_request_id,
+      const WebURL& affected_request_url) override;
   void AddGenericIssueImpl(mojom::blink::GenericIssueErrorType error_type,
                            int violating_node_id) override;
   void AddGenericIssueImpl(mojom::blink::GenericIssueErrorType error_type,
@@ -659,10 +664,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   mojom::blink::BackForwardCacheNotRestoredReasonsPtr ConvertNotRestoredReasons(
       const mojom::BackForwardCacheNotRestoredReasonsPtr& reasons_struct);
 
-  // If true, requests compositor warm-up when the page is under prerendering.
-  // Please see crbug.com/41496019 for more details.
-  bool ShouldWarmUpCompositorOnPrerenderFromThisPoint(
-      features::Prerender2WarmUpCompositorTriggerPoint trigger_point);
+  // Returns whether we should perform compositor warm-up.
+  bool ShouldWarmUpCompositor();
 
   WebLocalFrameClient* client_;
 

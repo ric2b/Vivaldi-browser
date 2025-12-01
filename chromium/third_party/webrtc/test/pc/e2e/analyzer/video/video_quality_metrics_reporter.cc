@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/flags/flag.h"
 #include "absl/strings/string_view.h"
 #include "api/numerics/samples_stats_counter.h"
 #include "api/scoped_refptr.h"
@@ -32,13 +33,14 @@
 #include "rtc_base/synchronization/mutex.h"
 #include "system_wrappers/include/clock.h"
 #include "test/pc/e2e/metric_metadata_keys.h"
+#include "test/test_flags.h"
 
 namespace webrtc {
 namespace webrtc_pc_e2e {
 namespace {
 
-using ::webrtc::test::ImprovementDirection;
-using ::webrtc::test::Unit;
+using test::ImprovementDirection;
+using test::Unit;
 
 SamplesStatsCounter BytesPerSecondToKbps(const SamplesStatsCounter& counter) {
   return counter * 0.008;
@@ -62,7 +64,7 @@ void VideoQualityMetricsReporter::Start(
 
 void VideoQualityMetricsReporter::OnStatsReports(
     absl::string_view pc_label,
-    const rtc::scoped_refptr<const RTCStatsReport>& report) {
+    const scoped_refptr<const RTCStatsReport>& report) {
   RTC_CHECK(start_time_)
       << "Please invoke Start(...) method before calling OnStatsReports(...)";
 
@@ -136,11 +138,12 @@ void VideoQualityMetricsReporter::StopAndReportResults() {
 void VideoQualityMetricsReporter::ReportVideoBweResults(
     const std::string& peer_name,
     const VideoBweStats& video_bwe_stats) {
-  std::string test_case_name = test_case_name_ + "/" + peer_name;
-  // TODO(bugs.webrtc.org/14757): Remove kExperimentalTestNameMetadataKey.
+  std::string test_case_name =
+      !absl::GetFlag(FLAGS_isolated_script_test_perf_output).empty()
+          ? test_case_name_ + "/" + peer_name
+          : test_case_name_;
   std::map<std::string, std::string> metric_metadata{
-      {MetricMetadataKey::kPeerMetadataKey, peer_name},
-      {MetricMetadataKey::kExperimentalTestNameMetadataKey, test_case_name_}};
+      {MetricMetadataKey::kPeerMetadataKey, peer_name}};
 
   metrics_logger_->LogMetric(
       "available_send_bandwidth", test_case_name,

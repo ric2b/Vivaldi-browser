@@ -79,7 +79,12 @@ export class FakeReadingMode {
   // TTS voice language preferences saved in database
   savedLanguagePref: Set<string> = new Set<string>();
 
+  // If the speech tree has been initialized.
+  isSpeechTreeInitialized: boolean = false;
+
   private maxNodeId: number = 5;
+
+  fetchedImages: number[] = [];
 
   // Returns whether the reading highlight is currently on.
   isHighlightOn(): boolean {
@@ -185,7 +190,7 @@ export class FakeReadingMode {
 
   // Called when a user toggles a switch in the language menu
   onLanguagePrefChange(lang: string, enabled: boolean) {
-    if(enabled) {
+    if (enabled) {
       this.savedLanguagePref.add(lang);
     } else {
       this.savedLanguagePref.delete(lang);
@@ -303,7 +308,9 @@ export class FakeReadingMode {
   //       },
   //     ],
   //   };
-  setContentForTesting(_snapshotLite: Object, _contentNodeIds: number[]) {}
+  setContentForTesting(_snapshotLite: Object, contentNodeIds: number[]) {
+    this.isSpeechTreeInitialized = contentNodeIds.length > 0;
+  }
 
   // Set the theme. Used by tests only.
   setThemeForTesting(
@@ -388,6 +395,17 @@ export class FakeReadingMode {
   // Signal that the page language has changed.
   languageChanged(): void {}
 
+  // Gets the accessible text boundary for the given string
+  getAccessibleBoundary(_text: string, _maxSpeechLength: number): number {
+    return 0;
+  }
+
+  // Requests the image in the form of bitmap. onImageDownloaded will be
+  // called when the image has been downloaded.
+  requestImageData(nodeId: number): void {
+    this.fetchedImages.push(nodeId);
+  }
+
   // Returns the index of the next sentence of the given text, such that the
   // next sentence is equivalent to text.substr(0, <returned_index>).
   // If the sentence exceeds the maximum text length, the sentence will be
@@ -405,7 +423,20 @@ export class FakeReadingMode {
     return '';
   }
 
-  // Begins processing the speech segments on the current page to be used by
-  // Read Aloud.
-  preprocessTextForSpeech() {}
+  // Returns a list of node ids and ranges (start and length) associated with
+  // the index within the given text segment. The intended use is for
+  // highlighting the ranges. Note that a highlight can span over multiple
+  // nodes in certain cases. If the `phrases` argument is `true`, the text
+  // ranges for the containing phrase are returned, otherwise the text ranges
+  // for the word are returned.
+  //
+  // For example, for a segment of text composed of two nodes:
+  // Node 1: "Hello, this is a "
+  // Node 2: "segment of text."
+  // An index of "20" will return the node id associated with node 2, a start
+  // index of 0, and a length of 8 (covering the word "segment ").
+  getHighlightForCurrentSegmentIndex(_index: number, _phrases: boolean):
+      Array<{nodeId: number, start: number, length: number}> {
+    return [];
+  }
 }

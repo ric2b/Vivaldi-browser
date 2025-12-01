@@ -87,7 +87,6 @@ class CONTENT_EXPORT FrameTree {
     NodeIterator& AdvanceSkippingChildren();
 
     bool operator==(const NodeIterator& rhs) const;
-    bool operator!=(const NodeIterator& rhs) const { return !(*this == rhs); }
 
     FrameTreeNode* operator*() { return current_node_; }
 
@@ -413,14 +412,22 @@ class CONTENT_EXPORT FrameTree {
   // temporarily created for |source| in cross-SiteInstanceGroup cases (to allow
   // a remote-to-local swap to the new RenderFrameHost in |source|), but the
   // subtree rooted at source is skipped.
+  //
   // |source_new_browsing_context_state| is the BrowsingContextState used by the
   // speculative frame host, which may differ from the BrowsingContextState in
   // |source| during cross-origin cross- browsing-instance navigations.
+  //
+  // |navigation_metrics_token| is a token identifying the navigation for which
+  // these proxies are being created, if any. It allows metrics code and trace
+  // events to tie together different IPCs and events pertaining to a particular
+  // navigation. It's nullopt for non-navigation cases such as creating proxies
+  // for a new subframe.
   void CreateProxiesForSiteInstanceGroup(
       FrameTreeNode* source,
       SiteInstanceGroup* site_instance_group,
       const scoped_refptr<BrowsingContextState>&
-          source_new_browsing_context_state);
+          source_new_browsing_context_state,
+      const std::optional<base::UnguessableToken>& navigation_metrics_token);
 
   // Convenience accessor for the main frame's RenderFrameHostImpl.
   RenderFrameHostImpl* GetMainFrame() const;
@@ -667,9 +674,6 @@ class CONTENT_EXPORT FrameTree {
   const Type type_;
 
   FrameTreeNodeId focused_frame_tree_node_id_;
-
-  // Overall load progress.
-  double load_progress_;
 
   // Whether the initial empty page has been accessed by another page, making it
   // unsafe to show the pending URL. Usually false unless another window tries

@@ -143,6 +143,34 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Import with section union"/>
 </enum>
 
+<enum name="AutofillAiModelExecutionStatus">
+  <int value="0"
+      label="One or more field indices returned by the model are out of
+             bounds or duplicates."/>
+  <int value="1" label="The server returned an error or timed out."/>
+  <int value="2"
+      label="The server replied with the wrong response proto type."/>
+  <int value="3" label="The model returned a result, but it was empty"/>
+  <int value="4" label="The model returned a valid, non-empty result."/>
+</enum>
+
+<enum name="AutofillAiOptInFunnelEvents">
+  <int value="0" label="IPH was shown"/>
+  <int value="1" label="FFR was shown"/>
+  <int value="2" label="The FFR learn more button was clicked"/>
+  <int value="3" label="FFR was accepted"/>
+</enum>
+
+<enum name="AutofillAiSaveOrUpdatePromptResult">
+  <int value="0" label="The prompt was for closed due to an unknown reason"/>
+  <int value="1" label="The prompt was accepted"/>
+  <int value="2" label="The user clicked the cancel button"/>
+  <int value="3"
+      label="The user closed the prompt (via the close button or the ESC)"/>
+  <int value="4" label="The user did not interact with the prompt"/>
+  <int value="5" label="The prompt was closed due to losing focus"/>
+</enum>
+
 <enum name="AutofillAlternativeNameFieldValueCharacterSet">
   <int value="0" label="Katakana"/>
   <int value="1" label="Hiragana"/>
@@ -842,6 +870,11 @@ Called by update_autofill_enums.py.-->
   <int value="11904"
       label="VEHICLE_PLATE_STATE: Not autofilled or autofilled value edited"/>
   <int value="11905" label="VEHICLE_PLATE_STATE: Autofilled value accepted"/>
+  <int value="12096"
+      label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID: Not autofilled or autofilled
+             value edited"/>
+  <int value="12097"
+      label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID: Autofilled value accepted"/>
 </enum>
 
 <enum name="AutofillDeveloperEngagement">
@@ -1151,6 +1184,8 @@ Called by update_autofill_enums.py.-->
   <int value="2961" label="VEHICLE_YEAR: accepted"/>
   <int value="2976" label="VEHICLE_PLATE_STATE: edited"/>
   <int value="2977" label="VEHICLE_PLATE_STATE: accepted"/>
+  <int value="3024" label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID: edited"/>
+  <int value="3025" label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID: accepted"/>
 </enum>
 
 <enum name="AutofillErrorDialogType">
@@ -1988,6 +2023,7 @@ Called by update_autofill_enums.py.-->
   <int value="184" label="DRIVERS_LICENSE_ISSUE_DATE"/>
   <int value="185" label="VEHICLE_YEAR"/>
   <int value="186" label="VEHICLE_PLATE_STATE"/>
+  <int value="189" label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID"/>
 </enum>
 
 <enum name="AutofillFilledCardInformationBubbleFieldClicked">
@@ -2270,6 +2306,27 @@ Called by update_autofill_enums.py.-->
   <int value="0" label="Shown"/>
   <int value="1" label="Done button pressed"/>
   <int value="2" label="Manage cards button pressed"/>
+</enum>
+
+<enum name="AutofillManagerMethod">
+  <summary>
+    Describes which method of Android Autofill's AutofillManager was called.
+    Ordered alphabetically.
+  </summary>
+  <int value="1" label="cancel"/>
+  <int value="2" label="commit"/>
+  <int value="3" label="getAutofillServiceComponentName"/>
+  <int value="4" label="isAutofillSupported"/>
+  <int value="5" label="isEnabled"/>
+  <int value="6" label="notifyValueChanged"/>
+  <int value="7" label="notifyViewEntered"/>
+  <int value="8" label="notifyViewExited"/>
+  <int value="9" label="notifyViewVisibilityChanged"/>
+  <int value="10" label="notifyVirtualViewsReady"/>
+  <int value="11" label="registerCallback"/>
+  <int value="12" label="requestAutofill"/>
+  <int value="13" label="showAutofillDialog"/>
+  <int value="14" label="unregisterCallback"/>
 </enum>
 
 <enum name="AutofillManuallyAddedAddressSurface">
@@ -2638,6 +2695,7 @@ Called by update_autofill_enums.py.-->
   <int value="9" label="DependentLocality"/>
   <int value="11" label="Company"/>
   <int value="12" label="AdminLevel2"/>
+  <int value="13" label="AlternativeName"/>
 </enum>
 
 <enum name="AutofillSharedStorageServerCardDataSetResult">
@@ -2666,9 +2724,19 @@ Called by update_autofill_enums.py.-->
 </enum>
 
 <enum name="AutofillSilentUpdatesProfileImportType">
-  <int value="0" label="Unspecified"/>
-  <int value="1" label="SilentUpdateForIncompleteProfile"/>
-  <int value="2" label="UnusableIncompleteProfile"/>
+  <int value="0" label="ImportTypeUnspecified"/>
+  <int value="1" label="NewProfile"/>
+  <int value="2" label="DuplicateImport"/>
+  <int value="3" label="SilentUpdate"/>
+  <int value="4" label="ConfirmableMerge"/>
+  <int value="5" label="SuppressedNewProfile"/>
+  <int value="6" label="ConfirmableMergeAndSilentUpdate"/>
+  <int value="7" label="SuppressedConfirmableMerge"/>
+  <int value="8" label="SuppressedConfirmableMergeAndSilentUpdate"/>
+  <int value="9" label="SilentUpdateForIncompleteProfile"/>
+  <int value="10" label="UnusableIncompleteProfile"/>
+  <int value="11" label="ProfileMigration"/>
+  <int value="12" label="ProfileMigrationAndSilentUpdate"/>
 </enum>
 
 <enum name="AutofillSingleEntryRemovalMethod">
@@ -2979,9 +3047,61 @@ Called by update_autofill_enums.py.-->
   <int value="301" label="RemoveEntityInstance: Failure"/>
   <int value="310" label="RemoveEntityInstancesModifiedBetween: Success"/>
   <int value="311" label="RemoveEntityInstancesModifiedBetween: Failure"/>
+  <int value="312" label="CleanupForCrbug411681430: Success"/>
+  <int value="313" label="CleanupForCrbug411681430: Failure"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/autofill/core/browser/webdata/autofill_webdata_backend_impl.cc:Result) -->
+
+<!-- LINT.IfChange(BnplFormEvent) -->
+
+<enum name="BnplFormEvent">
+  <int value="0" label="Suggestions shown"/>
+  <int value="1" label="A Buy Now Pay Later suggestion was shown"/>
+  <int value="2" label="Suggestion accepted"/>
+  <int value="3" label="Form filled with Affirm VCN"/>
+  <int value="4" label="Form filled with Zip VCN"/>
+  <int value="5" label="Form filled with Afterpay VCN"/>
+  <int value="6" label="Form submitted with Affirm VCN"/>
+  <int value="7" label="Form submitted with Zip VCN"/>
+  <int value="8" label="Form submitted with Afterpay VCN"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/autofill/core/browser/metrics/payments/bnpl_metrics.h:BnplFormEvent) -->
+
+<!-- LINT.IfChange(BnplIssuerId) -->
+
+<enum name="BnplIssuerId">
+  <int value="0" label="Affirm"/>
+  <int value="1" label="Zip"/>
+  <int value="2" label="Afterpay"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/autofill/core/browser/data_model/payments/bnpl_issuer.h:IssuerId) -->
+
+<!-- LINT.IfChange(BnplPopupWindowResult) -->
+
+<enum name="BnplPopupWindowResult">
+  <int value="0" label="Success"/>
+  <int value="1" label="Failure"/>
+  <int value="2" label="User closed before finishing"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/autofill/core/browser/payments/payments_window_manager.h:BnplFlowResult) -->
+
+<enum name="BnplSuggestionNotShownReason">
+  <int value="0" label="Amount extraction failure"/>
+  <int value="1" label="Checkout amount not supported"/>
+</enum>
+
+<!-- LINT.IfChange(BnplTosDialogResult) -->
+
+<enum name="BnplTosDialogResult">
+  <int value="0" label="The cancel button was pressed"/>
+  <int value="1" label="The accept button was pressed"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/autofill/core/browser/metrics/payments/bnpl_metrics.h:BnplTosDialogResult) -->
 
 <enum name="BooleanAutofillAddressSuggestionOnTypingAcceptance">
   <int value="0" label="Not accepted"/>
@@ -3464,6 +3584,8 @@ Called by update_autofill_enums.py.-->
   <int value="741" label="VEHICLE_YEAR: Accepted"/>
   <int value="744" label="VEHICLE_PLATE_STATE: Ignored"/>
   <int value="745" label="VEHICLE_PLATE_STATE: Accepted"/>
+  <int value="756" label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID: Ignored"/>
+  <int value="757" label="EMAIL_OR_LOYALTY_MEMBERSHIP_ID: Accepted"/>
 </enum>
 
 <!-- LINT.IfChange(FormSubmissionOutcomeIOS) -->
@@ -3480,6 +3602,8 @@ Called by update_autofill_enums.py.-->
   <int value="5" label="Missing href"/>
   <int value="6" label="Missing form data"/>
   <int value="7" label="Form extraction failure"/>
+  <int value="8" label="Renderer error"/>
+  <int value="9" label="Unparsed renderer error"/>
 </enum>
 
 <!-- LINT.ThenChange(//components/autofill/ios/form_util/form_activity_tab_helper.mm:FormSubmissionOutcomeIOS) -->
@@ -3616,8 +3740,6 @@ Called by update_autofill_enums.py.-->
       label="&lt;label&gt; for attribute linked to a control element inside a
              shadow DOM via its name attribute"/>
   <int value="15" label="Succeeding DOM node overlaying the input"/>
-  <int value="16"
-      label="The text of a &lt;select&gt; element's first &lt;option&gt;"/>
 </enum>
 
 <!-- LINT.IfChange(InvalidSubmittedFormReasonIOS) -->
@@ -3792,9 +3914,19 @@ Called by update_autofill_enums.py.-->
   <int value="4" label="TimedOut"/>
   <int value="5" label="LinkCLicked"/>
   <int value="6" label="Ignored"/>
+  <int value="7" label="NotShown"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/autofill/ios/browser/credit_card_save_metrics_ios.h:SaveCreditCardPromptResultIOS) -->
+
+<!-- LINT.IfChange(SelectBnplIssuerDialogResult) -->
+
+<enum name="SelectBnplIssuerDialogResult">
+  <int value="0" label="The cancel button was pressed"/>
+  <int value="1" label="An issuer was selected"/>
+</enum>
+
+<!-- LINT.ThenChange(/components/autofill/core/browser/metrics/payments/bnpl_metrics.h:SelectBnplIssuerDialogResult) -->
 
 <!-- LINT.IfChange(SuggestionType) -->
 
@@ -3876,6 +4008,7 @@ Called by update_autofill_enums.py.-->
   <int value="66" label="Identity Credentials"/>
   <int value="67" label="Loyalty card entry"/>
   <int value="68" label="Manage Loyalty Cards information"/>
+  <int value="69" label="Home and Work address suggestion"/>
 </enum>
 
 <!-- LINT.ThenChange(/components/autofill/core/browser/suggestions/suggestion_type.h:SuggestionType) -->
@@ -3887,6 +4020,13 @@ Called by update_autofill_enums.py.-->
   <int value="2" label="Manage payment settings option selected"/>
   <int value="3" label="Scan new card option selected"/>
   <int value="4" label="Bottom sheet dismissed"/>
+</enum>
+
+<enum name="TouchToFill.Iban.Outcome">
+  <int value="0"
+      label="IBAN selected from the sheet (either local or server one)"/>
+  <int value="1" label="Manage payment settings option selected"/>
+  <int value="2" label="Bottom sheet dismissed"/>
 </enum>
 
 <enum name="TouchToFill.PaymentMethod.TriggerOutcome">

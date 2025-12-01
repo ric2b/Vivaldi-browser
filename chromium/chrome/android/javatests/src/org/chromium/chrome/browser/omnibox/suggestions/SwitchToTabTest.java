@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions;
 
+import static org.chromium.base.test.util.Batch.PER_CLASS;
 import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 import static org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper.moveActivityToFront;
 import static org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper.waitForSecondChromeTabbedActivity;
@@ -26,6 +27,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
@@ -42,8 +44,10 @@ import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
+import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
@@ -55,22 +59,25 @@ import org.chromium.net.test.ServerCertificate;
 import java.util.List;
 
 /** Tests of the Switch To Tab feature. */
+@Batch(PER_CLASS)
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class SwitchToTabTest {
     @Rule
-    public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    public FreshCtaTransitTestRule mActivityTestRule =
+            ChromeTransitTestRules.freshChromeTabbedActivityRule();
 
     private static final int INVALID_INDEX = -1;
     private static final long SEARCH_ACTIVITY_MAX_TIME_TO_POLL = 10000L;
 
     private EmbeddedTestServer mTestServer;
+    private WebPageStation mStartingPage;
     private OmniboxTestUtils mOmnibox;
 
     @Before
     public void setUp() throws InterruptedException {
-        mActivityTestRule.startMainActivityOnBlankPage();
-        mOmnibox = new OmniboxTestUtils(mActivityTestRule.getActivity());
+        mStartingPage = mActivityTestRule.startOnBlankPage();
+        mOmnibox = new OmniboxTestUtils(mStartingPage.getActivity());
     }
 
     /**

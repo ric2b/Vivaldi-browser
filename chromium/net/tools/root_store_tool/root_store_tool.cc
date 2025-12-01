@@ -197,6 +197,18 @@ void WriteTrustAnchors(
     // End struct
     *string_to_write += "};\n";
 
+    if (!anchor.trust_anchor_id().empty()) {
+      base::StringAppendF(string_to_write,
+                          "constexpr uint8_t k%sTrustAnchorID%d[] = {",
+                          cert_name_prefix, i);
+      // Convert each character to hex representation, escaped.
+      for (auto c : anchor.trust_anchor_id()) {
+        base::StringAppendF(string_to_write, "0x%02xu,",
+                            static_cast<uint8_t>(c));
+      }
+      *string_to_write += "};\n";
+    }
+
     if (anchor.constraints_size() > 0) {
       int constraint_num = 0;
       for (const auto& constraint : anchor.constraints()) {
@@ -275,15 +287,58 @@ bool WriteRootCppFile(const RootStore& root_store,
   WriteTrustAnchors(root_store.additional_certs(), "Additional",
                     &string_to_write);
 
-  // Assemble list of trust anchors
+  // Assemble list of trust anchors.
   string_to_write += "constexpr ChromeRootCertInfo kChromeRootCertList[] = {\n";
   for (int i = 0; i < root_store.trust_anchors_size(); i++) {
     const auto& anchor = root_store.trust_anchors(i);
+    if (anchor.has_tls_trust_anchor()) {
+      // Anchors in |trust_anchors| are not supposed to have |tls_trust_anchor|
+      // set, because they are definitionally TLS trust anchors.
+      return false;
+    }
     base::StringAppendF(&string_to_write, "    {kChromeRootCert%d, ", i);
     if (anchor.constraints_size() > 0) {
       base::StringAppendF(&string_to_write, "kChromeRootConstraints%d", i);
     } else {
       string_to_write += "{}";
+    }
+
+    base::StringAppendF(
+        &string_to_write,
+        ", /*enforce_anchor_expiry=*/%s, /*enforce_anchor_constraints=*/%s",
+        anchor.enforce_anchor_expiry() ? "true" : "false",
+        anchor.enforce_anchor_constraints() ? "true" : "false");
+
+    if (anchor.trust_anchor_id().empty()) {
+      string_to_write += ", {}";
+    } else {
+      base::StringAppendF(&string_to_write, ", kChromeRootTrustAnchorID%d", i);
+    }
+    string_to_write += "},\n";
+  }
+  // Append additional_certs as TLS trust anchors, if they are marked as such.
+  for (int i = 0; i < root_store.additional_certs_size(); i++) {
+    const auto& anchor = root_store.additional_certs(i);
+    if (!anchor.tls_trust_anchor()) {
+      continue;
+    }
+    base::StringAppendF(&string_to_write, "    {kAdditionalCert%d, ", i);
+    if (anchor.constraints_size() > 0) {
+      base::StringAppendF(&string_to_write, "kAdditionalConstraints%d", i);
+    } else {
+      string_to_write += "{}";
+    }
+
+    base::StringAppendF(
+        &string_to_write,
+        ", /*enforce_anchor_expiry=*/%s, /*enforce_anchor_constraints=*/%s",
+        anchor.enforce_anchor_expiry() ? "true" : "false",
+        anchor.enforce_anchor_constraints() ? "true" : "false");
+
+    if (anchor.trust_anchor_id().empty()) {
+      string_to_write += ", {}";
+    } else {
+      base::StringAppendF(&string_to_write, ", kAdditionalTrustAnchorID%d", i);
     }
     string_to_write += "},\n";
   }

@@ -81,3 +81,10 @@ wheel: <
   name: "infra/python/wheels/parameterized-py2_py3"
   version: "version:0.8.1"
 >
+
+# Used by:
+#   web-tests PRESUBMIT.py
+wheel: <
+  name: "infra/python/wheels/hjson-py2_py3"
+  version: "version:3.1.0"
+>

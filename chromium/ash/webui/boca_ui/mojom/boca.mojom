@@ -8,6 +8,7 @@ import "chromeos/services/network_config/public/mojom/network_types.mojom";
 import "url/mojom/url.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/values.mojom";
+import "skia/public/mojom/bitmap.mojom";
 
 // Refer ///depot/google3/google/internal/chrome/cros/edu/schooltools/v1/
 // For detailed type definition.
@@ -210,6 +211,8 @@ enum StudentStatusDetail {
   kNotAddedConfiguredAsTeacher = 7,
   // Student not added due to feature not enabled in policy.
   kNotAddedNotConfigured = 8,
+  // Student signed into multiple devices.
+  kMultipleDeviceSignedIn = 9,
 };
 
 struct StudentActivity {
@@ -258,21 +261,31 @@ enum UpdateSessionError{
 };
 
 enum RemoveStudentError{
-  // Invalid access code.
+  // Invalid request state.
   kInvalid,
-  // Network failure.
+  // HTTP request failure.
+  kHTTPError,
+};
+
+enum RenotifyStudentError{
+  // Invalid request state.
+  kInvalid,
+  // HTTP request failure.
   kHTTPError,
 };
 
 enum AddStudentsError{
   // Invalid access code.
   kInvalid,
-  // Network failure.
+  // HTTP request failure.
   kHTTPError,
 };
 
 enum SubmitAccessCodeError {
+  // Code is invalid.
   kInvalid,
+  // Enforce managed network.
+  kNetworkRestriction,
 };
 
 enum ViewStudentScreenError {
@@ -285,6 +298,29 @@ enum EndViewScreenSessionError {
 
 enum SetViewScreenSessionActiveError {
   kHTTPError,
+};
+
+enum SpeechRecognitionInstallState {
+  kUnknown = 0,
+  kSystemLanguageUnsupported = 1,
+  kInProgress = 2,
+  kFailed = 3,
+  kReady = 4,
+};
+
+enum CreateSessionError {
+  // HTTP request failure.
+  kHTTPError,
+  // Enforce manged network.
+  kNetworkRestriction,
+};
+
+enum CrdConnectionState {
+  kUnknown = 0,
+  kConnecting = 1,
+  kConnected = 2,
+  kDisconnected = 3,
+  kFailed = 4,
 };
 
 // Implemented by browser process for page chrome-untrusted://boca-app/
@@ -303,7 +339,7 @@ interface PageHandler {
   // Fetch a list of assignments for the courses.
   ListAssignments(string course_id) => (array<Assignment> assignments);
   // Create a session with `config`.
-  CreateSession(Config config) => (bool success);
+  CreateSession(Config config) => (CreateSessionError? error);
   // Retrieves the current session.
   GetSession() => (SessionResult result);
   // End session.
@@ -312,9 +348,11 @@ interface PageHandler {
   ExtendSessionDuration(mojo_base.mojom.TimeDelta extended_duration)
   => (UpdateSessionError? error);
   // Remove student from session.
-  RemoveStudent(string id) => (RemoveStudentError? error);
+  RemoveStudent(string student_id) => (RemoveStudentError? error);
+  // Resend notification to student to join session.
+  RenotifyStudent(string student_id) => (RenotifyStudentError? error);
   // Add students to a session.
-  AddStudents(array<string> ids) => (AddStudentsError? error);
+  AddStudents(array<Identity> students) => (AddStudentsError? error);
   // Update OnTask config.
   UpdateOnTaskConfig(OnTaskConfig on_task_config)
   => (UpdateSessionError? error);
@@ -348,6 +386,11 @@ interface PageHandler {
   OpenFeedbackDialog() => ();
   // Refresh the workbook for students.
   RefreshWorkbook() => ();
+  // Gets SODA installation status.
+  GetSpeechRecognitionInstallationStatus()
+    => (SpeechRecognitionInstallState state);
+  // Notifies the client to start the Spotlight session.
+  StartSpotlight(string crd_connection_code) => ();
 };
 
 // Implemented by renderer process. There is an implementation in the browser
@@ -362,6 +405,14 @@ interface Page {
   OnActiveNetworkStateChanged(array<NetworkInfo> active_networks);
   // Notifies app when local captions is turned off from chrome.
   OnLocalCaptionDisabled();
+  // Notifies when Soda Installation has succeeded or failed.
+  OnSpeechRecognitionInstallStateUpdated(SpeechRecognitionInstallState state);
+  // Notifies app when session captions is turned off from chrome.
+  OnSessionCaptionDisabled(bool is_error);
+  // Notifies when Spotlight frame data has been received.
+  OnFrameDataReceived(skia.mojom.BitmapN32 frame_data);
+  // Notifies app when Spotlight CRD session has ended.
+  OnSpotlightCrdSessionStatusUpdated(CrdConnectionState state);
 };
 
 // Implemented in browser process to set up the communication between the Page

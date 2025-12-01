@@ -38,7 +38,7 @@ def _set_signal_handler(local_dev_server_path, build_id):
         global _is_canceled
         _is_canceled = True
         # Cancel the pending build tasks if user CTRL+c early.
-        print('Canceling pending build_server tasks', file=sys.stderr)
+        print('🛑 Canceling pending build_server tasks', file=sys.stderr)
         subprocess.run([local_dev_server_path, '--cancel-build', build_id])
         original_sigint_handler(signum, frame)
 
@@ -51,6 +51,10 @@ def _start_server(local_dev_server_path):
 
 
 def _set_tty_env():
+    # If the caller explicitly set this environment variable, just use it
+    # instead of failing.
+    if "AUTONINJA_STDOUT_NAME" in os.environ:
+        return True
     stdout_name = os.readlink('/proc/self/fd/1')
     # Anonymous pipes can't be opened. These look like "pipe:[394765110]".
     ret = os.path.exists(stdout_name)

@@ -72,8 +72,9 @@ UntrustworthyContextMenuParams ContextMenuParamsBuilder::Build(
   params.frame_charset = data.frame_encoding;
   params.referrer_policy = data.referrer_policy;
   params.suggested_filename = base::UTF8ToUTF16(data.suggested_filename);
-  params.opened_from_highlight = data.opened_from_highlight;
+  params.annotation_type = data.annotation_type;
   params.opened_from_interest_target = data.opened_from_interest_target;
+  params.interest_target_node_id = data.interest_target_node_id;
 
   params.vivaldi_keyword_url = data.vivaldi_keyword_url;
   params.vivaldi_input_type = data.vivaldiInputType;

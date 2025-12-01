@@ -10,10 +10,9 @@
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/model/web_state_list/active_web_state_observation_forwarder.h"
 
-BROWSER_USER_DATA_KEY_IMPL(DeviceSharingBrowserAgent)
-
 DeviceSharingBrowserAgent::DeviceSharingBrowserAgent(Browser* browser)
-    : browser_(browser),
+    : BrowserUserData(browser),
+      browser_(browser),
       is_incognito_(browser->GetProfile()->IsOffTheRecord()),
       active_web_state_observer_(
           std::make_unique<ActiveWebStateObservationForwarder>(

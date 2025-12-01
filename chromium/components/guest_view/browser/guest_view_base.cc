@@ -598,7 +598,7 @@ std::unique_ptr<WebContents> GuestViewBase::CreateNewGuestWindow(
     return nullptr;
 
   return GetGuestViewManager()->CreateGuestWithWebContentsParams(
-      GetViewType(), owner_rfh(), create_params);
+      std::string(GetViewType()), owner_rfh(), create_params);
 }
 
 void GuestViewBase::DidAttach() {

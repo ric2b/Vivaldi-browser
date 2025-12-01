@@ -11,7 +11,10 @@
 #ifndef RTC_BASE_PHYSICAL_SOCKET_SERVER_H_
 #define RTC_BASE_PHYSICAL_SOCKET_SERVER_H_
 
+#include <cstddef>
+
 #include "api/async_dns_resolver.h"
+#include "api/transport/ecn_marking.h"
 #include "api/units/time_delta.h"
 #include "rtc_base/socket.h"
 #include "rtc_base/socket_address.h"
@@ -147,7 +150,7 @@ class RTC_EXPORT PhysicalSocketServer : public SocketServer {
   // Kept as a member variable just for efficiency.
   std::vector<uint64_t> current_dispatcher_keys_;
   Signaler* signal_wakeup_;  // Assigned in constructor only
-  rtc::RecursiveCriticalSection crit_;
+  RecursiveCriticalSection crit_;
 #if defined(WEBRTC_WIN)
   const WSAEVENT socket_ev_;
 #endif
@@ -308,6 +311,7 @@ class SocketDispatcher : public Dispatcher, public PhysicalSocket {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::DE_ACCEPT;
 using ::webrtc::DE_CLOSE;
@@ -320,5 +324,6 @@ using ::webrtc::PhysicalSocket;
 using ::webrtc::PhysicalSocketServer;
 using ::webrtc::SocketDispatcher;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_PHYSICAL_SOCKET_SERVER_H_

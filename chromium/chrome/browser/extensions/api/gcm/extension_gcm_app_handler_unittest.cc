@@ -28,7 +28,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/gcm/gcm_api.h"
 #include "chrome/browser/extensions/crx_installer.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/extensions/updater/extension_updater.h"
@@ -53,6 +52,7 @@
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/extension.h"
@@ -172,12 +172,7 @@ class Waiter {
 class FakeExtensionGCMAppHandler : public ExtensionGCMAppHandler {
  public:
   FakeExtensionGCMAppHandler(Profile* profile, Waiter* waiter)
-      : ExtensionGCMAppHandler(profile),
-        waiter_(waiter),
-        unregistration_result_(gcm::GCMClient::UNKNOWN_ERROR),
-        delete_id_result_(instance_id::InstanceID::UNKNOWN_ERROR),
-        app_handler_count_drop_to_zero_(false) {
-  }
+      : ExtensionGCMAppHandler(profile), waiter_(waiter) {}
 
   FakeExtensionGCMAppHandler(const FakeExtensionGCMAppHandler&) = delete;
   FakeExtensionGCMAppHandler& operator=(const FakeExtensionGCMAppHandler&) =
@@ -225,9 +220,10 @@ class FakeExtensionGCMAppHandler : public ExtensionGCMAppHandler {
 
  private:
   raw_ptr<Waiter> waiter_;
-  gcm::GCMClient::Result unregistration_result_;
-  instance_id::InstanceID::Result delete_id_result_;
-  bool app_handler_count_drop_to_zero_;
+  gcm::GCMClient::Result unregistration_result_ = gcm::GCMClient::UNKNOWN_ERROR;
+  instance_id::InstanceID::Result delete_id_result_ =
+      instance_id::InstanceID::UNKNOWN_ERROR;
+  bool app_handler_count_drop_to_zero_ = false;
 };
 
 class ExtensionGCMAppHandlerTest : public testing::Test {
@@ -256,10 +252,7 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
   }
 
   ExtensionGCMAppHandlerTest()
-      : task_environment_(content::BrowserTaskEnvironment::REAL_IO_THREAD),
-        extension_service_(nullptr),
-        registration_result_(gcm::GCMClient::UNKNOWN_ERROR),
-        unregistration_result_(gcm::GCMClient::UNKNOWN_ERROR) {
+      : task_environment_(content::BrowserTaskEnvironment::REAL_IO_THREAD) {
     // Allow unpacked extensions without developer mode for testing.
     scoped_feature_list_.InitAndDisableFeature(
         extensions_features::kExtensionDisableUnsupportedDeveloper);
@@ -298,7 +291,6 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
         temp_dir_.GetPath().Append(FILE_PATH_LITERAL("Extensions"));
     extension_system->CreateExtensionService(
         base::CommandLine::ForCurrentProcess(), extensions_install_dir, false);
-    extension_service_ = extension_system->Get(profile())->extension_service();
 
     // Create GCMProfileService that talks with fake GCMClient.
     gcm::GCMProfileServiceFactory::GetInstance()->SetTestingFactoryAndUse(
@@ -342,8 +334,12 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
     return extension;
   }
 
-  void LoadExtension(const Extension* extension) {
-    extension_service_->AddExtension(extension);
+  ExtensionRegistrar* extension_registrar() {
+    return ExtensionRegistrar::Get(profile());
+  }
+
+  void LoadExtension(scoped_refptr<const Extension> extension) {
+    extension_registrar()->AddExtension(extension);
   }
 
   void InstallerDone(const std::optional<CrxInstallError>& error) {
@@ -381,16 +377,16 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
   }
 
   void DisableExtension(const Extension* extension) {
-    extension_service_->DisableExtension(extension->id(),
-                                         disable_reason::DISABLE_USER_ACTION);
+    extension_registrar()->DisableExtension(
+        extension->id(), {disable_reason::DISABLE_USER_ACTION});
   }
 
   void EnableExtension(const Extension* extension) {
-    extension_service_->EnableExtension(extension->id());
+    extension_registrar()->EnableExtension(extension->id());
   }
 
   void UninstallExtension(const Extension* extension) {
-    extension_service_->UninstallExtension(
+    extension_registrar()->UninstallExtension(
         extension->id(), extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
   }
 
@@ -434,8 +430,6 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
   std::unique_ptr<content::InProcessUtilityThreadHelper>
       in_process_utility_thread_helper_;
   std::unique_ptr<TestingProfile> profile_;
-  raw_ptr<ExtensionService, DanglingUntriaged>
-      extension_service_;  // Not owned.
   base::ScopedTempDir temp_dir_;
 
   // This is needed to create extension service under CrOS.
@@ -446,15 +440,15 @@ class ExtensionGCMAppHandlerTest : public testing::Test {
 
   Waiter waiter_;
   std::unique_ptr<FakeExtensionGCMAppHandler> gcm_app_handler_;
-  gcm::GCMClient::Result registration_result_;
-  gcm::GCMClient::Result unregistration_result_;
+  gcm::GCMClient::Result registration_result_ = gcm::GCMClient::UNKNOWN_ERROR;
+  gcm::GCMClient::Result unregistration_result_ = gcm::GCMClient::UNKNOWN_ERROR;
 };
 
 TEST_F(ExtensionGCMAppHandlerTest, AddAndRemoveAppHandler) {
   scoped_refptr<const Extension> extension(CreateExtension());
 
   // App handler is added when extension is loaded.
-  LoadExtension(extension.get());
+  LoadExtension(extension);
   waiter()->PumpUILoop();
   EXPECT_TRUE(HasAppHandlers(extension->id()));
 
@@ -476,7 +470,7 @@ TEST_F(ExtensionGCMAppHandlerTest, AddAndRemoveAppHandler) {
 
 TEST_F(ExtensionGCMAppHandlerTest, UnregisterOnExtensionUninstall) {
   scoped_refptr<const Extension> extension(CreateExtension());
-  LoadExtension(extension.get());
+  LoadExtension(extension);
 
   // Kick off registration.
   std::vector<std::string> sender_ids;
@@ -499,7 +493,7 @@ TEST_F(ExtensionGCMAppHandlerTest, UpdateExtensionWithGcmPermissionKept) {
   scoped_refptr<const Extension> extension(CreateExtension());
 
   // App handler is added when the extension is loaded.
-  LoadExtension(extension.get());
+  LoadExtension(extension);
   waiter()->PumpUILoop();
   EXPECT_TRUE(HasAppHandlers(extension->id()));
 
@@ -514,7 +508,7 @@ TEST_F(ExtensionGCMAppHandlerTest, UpdateExtensionWithGcmPermissionRemoved) {
   scoped_refptr<const Extension> extension(CreateExtension());
 
   // App handler is added when the extension is loaded.
-  LoadExtension(extension.get());
+  LoadExtension(extension);
   waiter()->PumpUILoop();
   EXPECT_TRUE(HasAppHandlers(extension->id()));
 

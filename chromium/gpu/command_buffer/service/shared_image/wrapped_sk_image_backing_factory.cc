@@ -82,7 +82,7 @@ WrappedSkImageBackingFactory::WrappedSkImageBackingFactory(
     scoped_refptr<SharedContextState> context_state)
     : SharedImageBackingFactory(GetSupportedUsage(context_state.get())),
       context_state_(std::move(context_state)),
-      use_graphite_(context_state_->graphite_context()),
+      use_graphite_(context_state_->graphite_shared_context()),
       is_drdc_enabled_(
           features::IsDrDcEnabled() &&
           !context_state_->feature_info()->workarounds().disable_drdc),
@@ -189,11 +189,7 @@ bool WrappedSkImageBackingFactory::IsSupported(
     }
   }
 
-  if (format == viz::SinglePlaneFormat::kLUMINANCE_8) {
-    // WrappedSkImage does not support LUMINANCE_8. See
-    // https://crbug.com/1252502 for details.
-    return false;
-  } else if (format == viz::SinglePlaneFormat::kALPHA_8) {
+  if (format == viz::SinglePlaneFormat::kALPHA_8) {
     // For ALPHA8 skia will pick format depending on context version and
     // extensions available and we'll have to match that format when we record
     // DDLs. To avoid matching logic here, fallback to other backings (e.g

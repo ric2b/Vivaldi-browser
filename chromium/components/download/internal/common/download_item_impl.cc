@@ -28,6 +28,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/check_is_test.h"
 #include "base/files/file_util.h"
 #include "base/format_macros.h"
 #include "base/functional/bind.h"
@@ -486,12 +487,14 @@ DownloadItemImpl::DownloadItemImpl(
     DownloadItemImplDelegate* delegate,
     uint32_t download_id,
     const base::FilePath& path,
+    const base::FilePath& display_name,
     const GURL& url,
     const std::string& mime_type,
     DownloadJob::CancelRequestCallback cancel_request_callback)
     : request_info_(url),
       guid_(base::Uuid::GenerateRandomV4().AsLowercaseString()),
       download_id_(download_id),
+      display_name_(display_name),
       mime_type_(mime_type),
       original_mime_type_(mime_type),
       start_tick_(base::TimeTicks::Now()),
@@ -814,6 +817,15 @@ const std::string& DownloadItemImpl::GetGuid() const {
 
 DownloadItem::DownloadState DownloadItemImpl::GetState() const {
   return InternalToExternalState(state_);
+}
+
+void DownloadItemImpl::SetStateForTesting(DownloadItem::DownloadState state) {
+  CHECK_IS_TEST();
+  state_ = ExternalToInternalState(state);
+}
+
+void DownloadItemImpl::SetDownloadUrlForTesting(GURL url) {
+  request_info_.url_chain.push_back(url);
 }
 
 DownloadInterruptReason DownloadItemImpl::GetLastReason() const {
@@ -1458,6 +1470,15 @@ void DownloadItemImpl::MarkAsComplete() {
 
   DCHECK(AllDataSaved());
   destination_info_.end_time = base::Time::Now();
+#if BUILDFLAG(IS_ANDROID)
+  if (GetTargetFilePath().IsContentUri()) {
+    GetDownloadTaskRunner()->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            base::IgnoreResult(&DownloadCollectionBridge::PublishDownload),
+            GetTargetFilePath()));
+  }
+#endif
   TransitionTo(COMPLETE_INTERNAL);
   UpdateObservers();
 }

@@ -192,6 +192,8 @@ component("cpp") {
 # need to depend on mojom_ip_address does not depend on the entire cpp_base.
 component("ip_address_mojom_support") {
   sources = [
+    "address_family_mojom_traits.cc",
+    "address_family_mojom_traits.h",
     "address_list_mojom_traits.cc",
     "address_list_mojom_traits.h",
     "alternate_protocol_usage_mojom_traits.cc",
@@ -227,6 +229,35 @@ component("host_resolver_mojom_support") {
   ]
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
   defines = [ "IS_NETWORK_CPP_HOST_RESOLVER_IMPL" ]
+}
+
+component("integrity_policy") {
+  sources = [
+    "integrity_policy.cc",
+    "integrity_policy.h",
+    "integrity_policy_mojom_traits.cc",
+    "integrity_policy_mojom_traits.h",
+    "integrity_policy_parser.cc",
+    "integrity_policy_parser.h",
+  ]
+  deps = [
+    ":flags_and_switches",
+    "//net",
+    "//services/network/public/mojom:mojom_integrity_policy_shared",
+  ]
+  defines = [ "IS_NETWORK_CPP_INTEGRITY_POLICY_IMPL" ]
+}
+
+component("fetch_retry_options") {
+  sources = [
+    "fetch_retry_options.cc",
+    "fetch_retry_options.h",
+  ]
+  deps = [
+    "//net",
+    "//services/network/public/mojom:url_loader_base_shared",
+  ]
+  defines = [ "IS_NETWORK_CPP_FETCH_RETRY_OPTIONS_IMPL" ]
 }
 
 component("cookies_mojom_support") {
@@ -578,6 +609,8 @@ component("cpp_base") {
     ":crash_keys",
     ":cross_origin_embedder_policy",
     ":document_isolation_policy",
+    ":fetch_retry_options",
+    ":integrity_policy",
     ":ip_address_mojom_support",
     ":network_param_mojom_support",
     ":proxy_config_mojom_support",
@@ -694,6 +727,7 @@ source_set("tests") {
     "header_util_unittest.cc",
     "host_resolver_mojom_traits_unittest.cc",
     "initiator_lock_compatibility_unittest.cc",
+    "integrity_policy_parser_unittest.cc",
     "ip_address_mojom_traits_unittest.cc",
     "ip_address_space_util_unittest.cc",
     "is_potentially_trustworthy_unittest.cc",

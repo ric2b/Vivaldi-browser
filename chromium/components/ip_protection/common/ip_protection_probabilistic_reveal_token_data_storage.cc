@@ -5,9 +5,12 @@
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_data_storage.h"
 
 #include <optional>
+#include <string>
 
 #include "base/base64.h"
+#include "base/base64url.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/numerics/byte_conversions.h"
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_fetcher.h"
@@ -22,7 +25,7 @@
 namespace {
 
 // Version number of the database.
-const int kCurrentVersionNumber = 3;
+const int kCurrentVersionNumber = 5;
 
 // clang-format off
 static constexpr char kCreateProbabilisticRevealTokensTableSql[] =
@@ -30,15 +33,16 @@ static constexpr char kCreateProbabilisticRevealTokensTableSql[] =
       "version INTEGER NOT NULL,"
       "u BLOB NOT NULL,"
       "e BLOB NOT NULL,"
-      "epoch_id INTEGER NOT NULL,"
+      "epoch_id TEXT NOT NULL,"
       "expiration INTEGER NOT NULL,"
       "num_tokens_with_signal INTEGER NOT NULL,"
-      "public_key TEXT NOT NULL)";
+      "public_key TEXT NOT NULL,"
+      "batch_size INTEGER NOT NULL)";
 
 static constexpr char kInsertProbabilisticRevealTokenSql[] =
   "INSERT INTO tokens("
-      "version,u,e,epoch_id,expiration,num_tokens_with_signal,public_key) "
-      "VALUES(?,?,?,?,?,?,?)";
+      "version,u,e,epoch_id,expiration,num_tokens_with_signal,public_key,batch_size) "
+      "VALUES(?,?,?,?,?,?,?,?)";
 // clang-format on
 
 }  // namespace
@@ -184,22 +188,30 @@ void IpProtectionProbabilisticRevealTokenDataStorage::StoreTokenOutcome(
           << "InsertProbabilisticRevealToken SQL statement did not compile.";
       return;
     }
-    CHECK_EQ(token.epoch_id.size(), 8u);
+    CHECK_EQ(outcome.epoch_id.size(), 8u);
 
     statement.BindInt64(0, token.version);
     statement.BindBlob(1, token.u);
     statement.BindBlob(2, token.e);
-    statement.BindInt64(3, base::U64FromBigEndian(
-                               base::as_byte_span(token.epoch_id).first<8u>()));
+
+    statement.BindString(3, base64url_encode(outcome.epoch_id));
     statement.BindInt64(4, outcome.expiration_time_seconds);
     statement.BindInt64(5, outcome.num_tokens_with_signal);
-    statement.BindString(6, base::Base64Encode(outcome.public_key));
+    statement.BindString(6, base64url_encode(outcome.public_key));
+    statement.BindInt64(7, outcome.tokens.size());
 
     if (!statement.Run()) {
       DLOG(ERROR) << "Could not insert Probabilistic Reveal Token: "
                   << db_.GetErrorMessage();
     }
   }
+}
+
+std::string IpProtectionProbabilisticRevealTokenDataStorage::base64url_encode(
+    std::string x) {
+  std::string result;
+  base::Base64UrlEncode(x, base::Base64UrlEncodePolicy::OMIT_PADDING, &result);
+  return result;
 }
 
 }  // namespace ip_protection

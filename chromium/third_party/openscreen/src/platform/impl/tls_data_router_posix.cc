@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "platform/impl/socket_handle_waiter.h"
 #include "platform/impl/stream_socket_posix.h"
 #include "platform/impl/tls_connection_posix.h"
 #include "util/osp_logging.h"
@@ -30,7 +31,9 @@ void TlsDataRouterPosix::RegisterConnection(TlsConnectionPosix* connection) {
     connections_.push_back(connection);
   }
 
-  waiter_->Subscribe(this, connection->socket_handle());
+  // We care about both read and write events
+  waiter_->Subscribe(this, connection->socket_handle(),
+                     SocketHandleWaiter::kReadWriteFlags);
 }
 
 void TlsDataRouterPosix::DeregisterConnection(TlsConnectionPosix* connection) {
@@ -60,7 +63,9 @@ void TlsDataRouterPosix::RegisterAcceptObserver(
     accept_socket_mappings_[socket_ptr] = observer;
   }
 
-  waiter_->Subscribe(this, socket_ptr->socket_handle());
+  // We care about both read and write events
+  waiter_->Subscribe(this, socket_ptr->socket_handle(),
+                     SocketHandleWaiter::kReadWriteFlags);
 }
 
 void TlsDataRouterPosix::DeregisterAcceptObserver(SocketObserver* observer) {
@@ -106,13 +111,30 @@ void TlsDataRouterPosix::ProcessReadyHandle(
         if (flags & SocketHandleWaiter::Flags::kReadable) {
           connection->TryReceiveMessage();
         }
-        if (flags & SocketHandleWaiter::Flags::kWriteable) {
+        if (flags & SocketHandleWaiter::Flags::kWritable) {
           connection->SendAvailableBytes();
         }
         return;
       }
     }
   }
+}
+
+bool TlsDataRouterPosix::HasPendingWrite(
+    SocketHandleWaiter::SocketHandleRef handle) {
+  {
+    std::lock_guard<std::mutex> lock(connections_mutex_);
+    for (TlsConnectionPosix* connection : connections_) {
+      if (connection->socket_handle() == handle) {
+        return connection->HasPendingWrite();
+      }
+    }
+  }
+
+  // If we don't have the socket in the connections list, it's either
+  // an accept socket or a socket in the process of being destroyed. In either
+  // case, this is not an error and we can safely report no pending writes.
+  return false;
 }
 
 bool TlsDataRouterPosix::HasTimedOut(Clock::time_point start_time,

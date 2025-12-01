@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">کیرٹ براؤزنگ کو آن یا آف کریں</translation>
 <translation id="2531025035050312891">آلہ سست</translation>
 <translation id="2531107890083353124">ٹیب کو گھسیٹنے کے دوران <ph name="KEY_ONE" /> دبائیں</translation>
+<translation id="2532199152994248594">کیپچر کرنے کے لیے کوئی ایریا منتخب کرنے کے لیے گھسیٹیں یا اسپیس دبائیں</translation>
 <translation id="2545334090614121435">‏‫Home استعمال کرنے کی کوشش کر رہے ہیں؟ استعمال کریں</translation>
 <translation id="254900897760075745">منتخب کردہ مواد کو کلپ بورڈ میں کاپی کریں</translation>
 <translation id="2549711466868162843">لائٹنگ کو بہترین بنائیں</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765"><ph name="MODIFIER" /> دبائیں اور کسی لنک پر کلک کریں</translation>
 <translation id="2957159466053076448">آپ ترتیبات میں کسی بھی وقت ان خصوصیات کو آف کر سکتے ہیں۔ <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">آلہ کا آڈیو</translation>
-<translation id="2960314608273155470">کیپچر وضع، <ph name="SOURCE" /> <ph name="TYPE" /> ڈیفالٹ موڈ ہے۔ کی بورڈ نیویگیشن کے لیے ٹیب دبائیں۔</translation>
 <translation id="2961963223658824723">کچھ غلط ہو گیا۔ چند سیکنڈ میں دوبارہ کوشش کریں۔</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">مائیکروفون تک رسائی آن کریں؟</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">‏Wi-Fi آف ہے</translation>
 <translation id="3554215588514239132">ڈویلپر ٹولز پینل دکھائیں یا چھپائیں</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> کو پن کر دیا گیا</translation>
+<translation id="3554928024630051016">‏کوئی اضافی USB آلہ شامل کرنے کیلئے، ایک آلے کو نکال کر اور پھر نئے آلے کو پلگ ان کر کے آزمائیں</translation>
 <translation id="3558768885091059911">کیمرے اور مائیکروفون تک رسائی آن کریں؟</translation>
 <translation id="3560174576767922131">ویڈیو ریکارڈ کریں</translation>
 <translation id="3563775809269155755">ہاٹ اسپاٹ فعال کریں</translation>
@@ -868,6 +869,7 @@
 <translation id="3861651314799684201">فُل اسکرین ریکارڈ کرنے کے لیے اینٹر دبائیں</translation>
 <translation id="3870197372373144624">اپنے آلے کو شٹ ڈاؤن کرنے کی کوشش کریں۔</translation>
 <translation id="3879748587602334249">ڈاؤن لوڈ مینیجر</translation>
+<translation id="3884007280698606545">‏‫USB کی حد تک پہنچ گئے ہیں</translation>
 <translation id="3886872229787704059">آج کھولا گیا</translation>
 <translation id="3891340733213178823">‏سائن آؤٹ کرنے کیلئے Ctrl+Shift+Q کو دو بار دبائیں۔</translation>
 <translation id="3892148308691398805">ٹیکسٹ کاپی کریں</translation>
@@ -1440,6 +1442,7 @@
 <translation id="5672890847723042801">یوٹیلیٹیز</translation>
 <translation id="5673434351075758678">‏آپ کی ترتیبات کی مطابقت پذیری کے بعد '<ph name="FROM_LOCALE" />' سے '‎'‎<ph name="TO_LOCALE" />‎ میں۔</translation>
 <translation id="5675363643668471212">شیلف آئٹم</translation>
+<translation id="5677022547882470786">‏تلاش کرنے کے لیے کوئی ایریا منتخب کرنے کے لیے Space کو گھسیٹیں یا دبائیں</translation>
 <translation id="5677928146339483299">مسدود کردہ</translation>
 <translation id="5678564054339031017">اگلا ہفتہ دکھائیں</translation>
 <translation id="5679050765726761783">کم پاور ایڈاپٹر منسلک ہوگیا</translation>
@@ -1485,6 +1488,7 @@
 <translation id="5788127256798019331">‏Play فائلز</translation>
 <translation id="5788535737706478207">آخری بند کردہ ٹیب یا ونڈو پھر سے کھولیں</translation>
 <translation id="5790085346892983794">کامیاب</translation>
+<translation id="5791926618942305301">‏اسکرین کیپچر میں، <ph name="TYPE" /> <ph name="SOURCE" /> پر سیٹ کریں۔ کیپچر کی قسم منتخب کرنے کے لیے ٹیب کو دبائیں۔ کیپچر کرنے کے لیے Enter دبائیں۔ کیپچر ایریا کو منتخب کرنے کے لیے، جزوی اسکرین شاٹ پر سیٹ کریں۔ اگر پہلے سے فعال نہیں ہے تو، علاقہ منتخب کرنے کے لیے space دبائیں۔</translation>
 <translation id="579415080077680903">خاموش کریں</translation>
 <translation id="5802516411616338943">فوری ترتیبات کھولیں</translation>
 <translation id="5804651031882187592">‏"SIM کو مقفل کریں" کی ترتیب آف کریں</translation>
@@ -1641,6 +1645,7 @@
 <translation id="6288235558961782912">والد/والدہ کی اجازت سے <ph name="USER_EMAIL_ADDRESS" /> بعد میں دوبارہ شامل کیا جا سکتا ہے۔</translation>
 <translation id="6291221004442998378">چارج نہیں ہو رہا ہے</translation>
 <translation id="6298183524022479114">ایپ میں اس آلہ کو حسب ضرورت بنائیں</translation>
+<translation id="6304076460080088478">‏‫Google لینز کے ساتھ اپنی اسکرین کو تلاش کرنے کے لیے پوشیدگی ونڈوز کو بند یا چھوٹا کریں</translation>
 <translation id="6309219492973062892">شیلف آئیکنز ‏1-8 پر کلک کریں یا تھپتھپائیں</translation>
 <translation id="6315170314923504164">آواز</translation>
 <translation id="6319058840130157106">نیچے دائیں کونے، لانچر، ایڈریس بار، بُک مارکس بار، کھلی ہوئی ویب سائٹ اور ڈاؤن لوڈز کے درمیان پیچھے کی طرف منتقل ہوں</translation>
@@ -1768,6 +1773,7 @@
 <translation id="6700713906295497288">‏IME مینیو بٹن</translation>
 <translation id="6704073473590541209">دائیں کنارے کا ہینڈل منتخب کیا گیا، منتقل کرنے کے لیے تیر والی کلیدوں کا استعمال کریں</translation>
 <translation id="6706742084323792866">کی بورڈ کو پن کریں</translation>
+<translation id="6709719156428404245">ریکارڈ کرنے کے لیے کوئی ایریا منتخب کرنے کے لیے گھسیٹیں یا اسپیس دبائیں</translation>
 <translation id="6710213216561001401">گزشتہ</translation>
 <translation id="6723839937902243910">پاور</translation>
 <translation id="672609503628871915">دیکھیں کہ نیا کیا ہے</translation>

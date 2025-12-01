@@ -9,7 +9,8 @@
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiStartPageSettingsCoordinator () {
+@interface VivaldiStartPageSettingsCoordinator ()
+    <VivaldiStartPageSettingsViewControllerPresentationDelegate> {
   // The browser where the settings are being displayed.
   Browser* _browser;
 }
@@ -55,9 +56,11 @@
                                       ->GetPrefs()];
   self.mediator.consumer = self.viewController;
 
+  self.viewController.consumer = self.mediator;
+  self.viewController.presentationDelegate = self;
+
   [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
-  self.viewController.consumer = self.mediator;
 }
 
 - (void)stop {
@@ -65,6 +68,13 @@
   self.viewController = nil;
   [self.mediator disconnect];
   self.mediator = nil;
+}
+
+#pragma mark - VivaldiStartPageSettingsViewControllerPresentationDelegate
+- (void)startPageSettingsViewControllerWasRemoved:
+    (VivaldiStartPageSettingsViewController*)controller {
+  DCHECK_EQ(self.viewController, controller);
+  [self stop];
 }
 
 @end

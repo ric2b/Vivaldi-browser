@@ -34,7 +34,6 @@ import org.chromium.chrome.browser.price_tracking.PriceDropNotificationManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsNavigationFactory;
 import org.chromium.chrome.browser.signin.SigninAndHistorySyncActivityLauncherImpl;
-import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.settings.ManageSyncSettings;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.BasicNativePage;
@@ -194,14 +193,6 @@ public class BookmarkManagerCoordinator
 
         mModalDialogManager =
                 new ModalDialogManager(new AppModalPresenter(context), ModalDialogType.APP);
-        BookmarkMoveSnackbarManager moveSnackbarManager =
-                new BookmarkMoveSnackbarManager(
-                        context,
-                        mProfile,
-                        mBookmarkModel,
-                        snackbarManager,
-                        IdentityServicesProvider.get()
-                                .getIdentityManager(profile.getOriginalProfile()));
 
         // Using OneshotSupplier as an alternative to a 2-step initialization process.
         OneshotSupplierImpl<BookmarkDelegate> bookmarkDelegateSupplier =
@@ -221,9 +212,9 @@ public class BookmarkManagerCoordinator
                         mBookmarkUiPrefs,
                         mModalDialogManager,
                         this::onEndSearch,
-                        moveSnackbarManager,
                         () -> IncognitoUtils.isIncognitoModeEnabled(profile),
-                        bookmarkManagerOpener);
+                        bookmarkManagerOpener,
+                        /* nextFocusableView= */ mMainView.findViewById(R.id.list_content));
         mSelectableListLayout.configureWideDisplayStyle();
 
         final @BookmarkRowDisplayPref int displayPref =
@@ -263,7 +254,6 @@ public class BookmarkManagerCoordinator
                         mSnackbarManager,
                         this::canShowSigninPromo,
                         onScrollListenerConsumer,
-                        moveSnackbarManager,
                         bookmarkManagerOpener,
                         priceDropNotificationManager);
         mPromoHeaderManager = mMediator.getPromoHeaderManager();
@@ -479,7 +469,9 @@ public class BookmarkManagerCoordinator
     }
 
     View buildEmptyStateView(ViewGroup parent) {
-        return inflate(parent, R.layout.empty_state_view);
+        ViewGroup emptyStateView = (ViewGroup) inflate(parent, R.layout.empty_state_view);
+        emptyStateView.setTouchscreenBlocksFocus(true);
+        return emptyStateView;
     }
 
     boolean canShowSigninPromo() {
@@ -605,9 +597,17 @@ public class BookmarkManagerCoordinator
 
     /** Vivaldi **/
     public boolean isCurrentTrashFolder() {
-        if (mBookmarkModel.isBookmarkModelLoaded())
+        if (mBookmarkModel.isBookmarkModelLoaded()) {
             return mBookmarkModel.getTrashFolderId().equals(mMediator.getCurrentFolder());
-        else return false;
+        }
+        return false;
+    }
+
+    public boolean isCurrentInsideTrashFolder() {
+        if (mBookmarkModel.isBookmarkModelLoaded()) {
+            return mBookmarkModel.isInsideTrashFolder(mMediator.getCurrentFolder());
+        }
+        return false;
     }
     public void openSearchUI() {}
     public BookmarkModel getModel() { return mBookmarkModel; }

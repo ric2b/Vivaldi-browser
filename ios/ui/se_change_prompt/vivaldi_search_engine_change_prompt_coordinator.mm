@@ -2,6 +2,7 @@
 
 #import "ios/ui/se_change_prompt/vivaldi_search_engine_change_prompt_coordinator.h"
 
+#import "base/strings/sys_string_conversions.h"
 #import "components/search_engines/template_url.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/profile/profile_state.h"
@@ -11,36 +12,55 @@
 #import "ios/ui/se_change_prompt/search_engine_change_prompt_swift.h"
 #import "ios/ui/se_change_prompt/vivaldi_search_engine_change_prompt_mediator.h"
 
-@interface VivaldiSearchEngineChangePromptCoordinator() {
-  const TemplateURL* _recommendedProvider;
-  const TemplateURL* _currentProvider;
+// Finds a search engine provider by partner ID and short name.
+static TemplateURL* FindProvider(const std::vector<TemplateURL*>& providers,
+                                 int64_t partnerId,
+                                 NSString* shortName) {
+  const std::u16string short_name = base::SysNSStringToUTF16(shortName);
 
-  /// Forces the device orientation in portrait mode.
-  std::unique_ptr<ScopedForcePortraitOrientation> _scopedForceOrientation;
+  auto it =
+      std::find_if(providers.begin(), providers.end(), [&](TemplateURL* p) {
+        return p && p->id() == partnerId && p->short_name() == short_name;
+      });
+
+  return (it == providers.end()) ? nullptr : *it;
 }
 
-// View provider for the settings page.
+namespace {
+NSString* customDetentIdentifier = @"VivaldiSearchEnginePromptDetent";
+}
+
+@interface VivaldiSearchEngineChangePromptCoordinator () {
+  // Available search engine providers.
+  std::vector<TemplateURL*> _providers;
+
+  // Forces device orientation in portrait mode.
+  std::unique_ptr<ScopedForcePortraitOrientation> _scopedForceOrientation;
+
+  // Custom sheet detent identifier for dynamic height.
+  UISheetPresentationControllerDetentIdentifier _customDetentIdentifier;
+}
+
+@property(nonatomic, assign) VivaldiSearchEngineChangePromptType promptType;
 @property(nonatomic, strong)
     VivaldiSearchEngineChangePromptViewProvider* viewProvider;
-// View controller for the setting page.
 @property(nonatomic, strong) UIViewController* controller;
-// Mediator for the setting
 @property(nonatomic, strong) VivaldiSearchEngineChangePromptMediator* mediator;
-// Navigation controller where settings controller is presented
 @property(nonatomic, strong) UINavigationController* navigationController;
+
 @end
 
 @implementation VivaldiSearchEngineChangePromptCoordinator
 
-- (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                                   browser:(Browser*)browser
-                    recommendedProvider:(const TemplateURL*)recommendedProvider
-                        currentProvider:(const TemplateURL*)currentProvider {
-  self = [super initWithBaseViewController:viewController
-                                   browser:browser];
+- (instancetype)
+    initWithBaseViewController:(UIViewController*)viewController
+                       browser:(Browser*)browser
+                     providers:(const std::vector<TemplateURL*>)providers
+                    promptType:(VivaldiSearchEngineChangePromptType)promptType {
+  self = [super initWithBaseViewController:viewController browser:browser];
   if (self) {
-    _recommendedProvider = recommendedProvider;
-    _currentProvider = currentProvider;
+    _promptType = promptType;
+    _providers = providers;
   }
   return self;
 }
@@ -49,74 +69,162 @@
 
 - (void)start {
   [self lockOrientationInPortrait:YES];
-
-  VivaldiSearchEngineChangePromptViewProvider* viewProvider =
-      [[VivaldiSearchEngineChangePromptViewProvider alloc] init];
-  self.viewProvider = viewProvider;
-  self.controller = [self.viewProvider makeViewController];
-  self.controller.modalInPresentation = true;
-  self.mediator =
-      [[VivaldiSearchEngineChangePromptMediator alloc]
-          initWithRecommendedProvider:_recommendedProvider
-              currentProvider:_currentProvider];
-  self.mediator.consumer = self.viewProvider;
-
-  UINavigationController* navigationController =
-      [[UINavigationController alloc]
-          initWithRootViewController:self.controller];
-  self.navigationController = navigationController;
-
-  UISheetPresentationController* sheetPc =
-      navigationController.sheetPresentationController;
-  sheetPc.detents = @[UISheetPresentationControllerDetent.mediumDetent];
-  sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
-  sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
-
-  [self.baseViewController presentViewController:navigationController
-                                        animated:YES
-                                      completion:nil];
-
+  [self setupViewProvider];
+  [self setupMediator];
+  [self configureSheetPresentation];
+  [self presentViewController];
   [self observeTapEvents];
 }
 
 - (void)stop {
   [super stop];
   [self lockOrientationInPortrait:NO];
+  [self cleanupResources];
+}
 
+#pragma mark - Private Setup Methods
+
+- (void)setupViewProvider {
+  self.viewProvider =
+      [[VivaldiSearchEngineChangePromptViewProvider alloc] init];
+  self.controller =
+      [self.viewProvider makeViewControllerWithPresentingViewControllerTrait:
+            self.baseViewController.traitCollection];
+  self.controller.modalInPresentation = true;
+}
+
+- (void)setupMediator {
+  self.mediator = [[VivaldiSearchEngineChangePromptMediator alloc]
+      initWithProviders:_providers
+             promptType:_promptType];
+  self.mediator.consumer = self.viewProvider;
+}
+
+- (void)configureSheetPresentation {
+
+  UISheetPresentationController* sheetPc =
+      self.controller.sheetPresentationController;
+
+  // Create dynamic height resolver based on content.
+  auto detentResolver = ^CGFloat(
+      id<UISheetPresentationControllerDetentResolutionContext> context) {
+    return self.viewProvider.contentHeight;
+  };
+
+  UISheetPresentationControllerDetent* initialDetent =
+      [UISheetPresentationControllerDetent
+          customDetentWithIdentifier:customDetentIdentifier
+                            resolver:detentResolver];
+
+  sheetPc.detents = @[ initialDetent ];
+  sheetPc.prefersScrollingExpandsWhenScrolledToEdge = NO;
+  sheetPc.widthFollowsPreferredContentSizeWhenEdgeAttached = YES;
+
+  [self setupHeightChangeHandler];
+}
+
+- (void)setupHeightChangeHandler {
+  __weak __typeof(self) weakSelf = self;
+  self.viewProvider.heightDidChange = ^(CGFloat newHeight) {
+    __strong __typeof(weakSelf) strongSelf = weakSelf;
+    if (strongSelf && strongSelf.controller.sheetPresentationController) {
+      // Animate sheet height changes when content size changes.
+      [strongSelf.controller.sheetPresentationController invalidateDetents];
+      [strongSelf.controller.sheetPresentationController animateChanges:^{
+        strongSelf.controller.sheetPresentationController
+            .selectedDetentIdentifier = customDetentIdentifier;
+      }];
+    }
+  };
+}
+
+- (void)presentViewController {
+  [self.baseViewController presentViewController:self.controller
+                                        animated:YES
+                                      completion:nil];
+}
+
+- (void)cleanupResources {
   [self.mediator disconnect];
   self.mediator = nil;
-
   self.viewProvider = nil;
   self.controller = nil;
   self.navigationController = nil;
-
-  _recommendedProvider = nullptr;
-  _currentProvider = nullptr;
+  _providers.clear();
 }
 
-#pragma mark - Private
+#pragma mark - Event Handling
+
 - (void)observeTapEvents {
   __weak __typeof(self) weakSelf = self;
 
-  [self.viewProvider observeUseRecommendedProviderTapEvent:^{
-    __strong __typeof(weakSelf) strongSelf = weakSelf;
-    if (strongSelf) {
-      [strongSelf.baseViewController dismissViewControllerAnimated:YES
-                                                        completion:^{
-        [strongSelf.delegate
-            coordinatorDidCloseWithRecommendedProvider:
-                strongSelf->_recommendedProvider];
-      }];
-    }
-  }];
+  [self observeConfirmChoiceEvent:weakSelf];
+  [self observeDonateNowEvent:weakSelf];
+  [self observeNoThanksEvent:weakSelf];
+}
 
-  [self.viewProvider observeUseCurrentProviderTapEvent:^{
-    [weakSelf.baseViewController dismissViewControllerAnimated:YES
-                                                      completion:^{
-      [weakSelf.delegate coordinatorDidCloseWithCurrentProvider];
-    }];
+- (void)observeConfirmChoiceEvent:
+    (__weak __typeof(VivaldiSearchEngineChangePromptCoordinator*))weakSelf {
+  [self.viewProvider
+      observeConfirmChoiceTapEvent:^(
+          VivaldiSearchEngineChangePromptPartnerItem* _Nullable selectedPartner) {
+        __strong __typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || !selectedPartner)
+          return;
+
+        [strongSelf.baseViewController
+            dismissViewControllerAnimated:YES
+                               completion:^{
+                                 __strong __typeof(weakSelf) innerSelf =
+                                     weakSelf;
+                                 if (!innerSelf)
+                                   return;
+
+                                 // Find the selected provider and notify
+                                 // delegate.
+                                 TemplateURL* provider =
+                                     FindProvider(innerSelf->_providers,
+                                                  selectedPartner.partnerId,
+                                                  selectedPartner.shortName);
+
+                                 if (provider) {
+                                   [innerSelf.delegate
+                                       coordinatorDidCloseWithSelectingPartner:
+                                           provider];
+                                 } else {
+                                   // Fallback: should never happen.
+                                   [innerSelf.delegate
+                                           coordinatorDidCloseWithNoThanks];
+                                 }
+                               }];
+      }];
+}
+
+- (void)observeDonateNowEvent:
+    (__weak __typeof(VivaldiSearchEngineChangePromptCoordinator*))weakSelf {
+  [self.viewProvider observeDonateNowTapEvent:^{
+    [weakSelf.baseViewController
+        dismissViewControllerAnimated:YES
+                           completion:^{
+                             [weakSelf.delegate
+                                     coordinatorDidCloseWithDonateNow];
+                           }];
   }];
 }
+
+- (void)observeNoThanksEvent:
+    (__weak __typeof(VivaldiSearchEngineChangePromptCoordinator*))weakSelf {
+  [self.viewProvider observeNoThanksTapEvent:^{
+    [weakSelf.baseViewController
+        dismissViewControllerAnimated:YES
+                           completion:^{
+                             [weakSelf
+                                     .delegate coordinatorDidCloseWithNoThanks];
+                           }];
+  }];
+}
+
+#pragma mark - Orientation Management
 
 - (void)lockOrientationInPortrait:(BOOL)portraitLock {
   AppState* appState = self.browser->GetSceneState().profileState.appState;

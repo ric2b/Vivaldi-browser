@@ -25,18 +25,18 @@ describeWithEnvironment('PerformanceInsightFormatter', () => {
       const expected = `## Insight Title: LCP by phase
 
 ## Insight Summary:
-This insight is used to analyze the time spent that contributed to the final LCP time and identify which of the 4 phases (or 2 if there was no LCP resource) are contributing most to the delay in rendering the LCP element. For this insight it can be useful to get a list of all network requests that happened before the LCP time and look for slow requests. You can also look for main thread activity during the phases, in particular the load delay and render delay phases.
+This insight is used to analyze the time spent that contributed to the final LCP time and identify which of the 4 phases (or 2 if there was no LCP resource) are contributing most to the delay in rendering the LCP element.
 
 ## Detailed analysis:
 The Largest Contentful Paint (LCP) time for this navigation was 129.21 ms.
 The LCP resource was fetched from \`${insight.lcpRequest.args.data.url}\`.
 
-We can break this time down into the 4 phases that combine to make up the LCP time:
+We can break this time down into the 4 phases that combine to make the LCP time:
 
-- Time to first byte: 7.94 ms
-- Load delay: 33.16 ms
-- Load time: 14.70 ms
-- Render delay: 73.41 ms
+- Time to first byte: 7.94 ms (6.1% of total LCP time)
+- Resource load delay: 33.16 ms (25.7% of total LCP time)
+- Resource load duration: 14.70 ms (11.4% of total LCP time)
+- Element render delay: 73.41 ms (56.8% of total LCP time)
 
 ## External resources:
 - https://web.dev/articles/lcp
@@ -55,16 +55,16 @@ We can break this time down into the 4 phases that combine to make up the LCP ti
       const expected = `## Insight Title: LCP by phase
 
 ## Insight Summary:
-This insight is used to analyze the time spent that contributed to the final LCP time and identify which of the 4 phases (or 2 if there was no LCP resource) are contributing most to the delay in rendering the LCP element. For this insight it can be useful to get a list of all network requests that happened before the LCP time and look for slow requests. You can also look for main thread activity during the phases, in particular the load delay and render delay phases.
+This insight is used to analyze the time spent that contributed to the final LCP time and identify which of the 4 phases (or 2 if there was no LCP resource) are contributing most to the delay in rendering the LCP element.
 
 ## Detailed analysis:
 The Largest Contentful Paint (LCP) time for this navigation was 106.48 ms.
 The LCP is text based and was not fetched from the network.
 
-We can break this time down into the 2 phases that combine to make up the LCP time:
+We can break this time down into the 2 phases that combine to make the LCP time:
 
-- Time to first byte: 6.12 ms
-- Render delay: 100.37 ms
+- Time to first byte: 6.12 ms (5.7% of total LCP time)
+- Element render delay: 100.37 ms (94.3% of total LCP time)
 
 ## External resources:
 - https://web.dev/articles/lcp
@@ -74,6 +74,28 @@ We can break this time down into the 2 phases that combine to make up the LCP ti
   });
 
   describe('Render blocking requests', () => {
+    it('tells the LLM if there are no render blocking requests', async function() {
+      const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'bad-document-request-latency.json.gz');
+      assert.isOk(insights);
+      const firstNav = getFirstOrError(parsedTrace.Meta.navigationsByNavigationId.values());
+      const insight = getInsightOrError('RenderBlocking', insights, firstNav);
+      const formatter = new PerformanceInsightFormatter(new ActiveInsight(insight, parsedTrace));
+      const output = formatter.formatInsight();
+
+      const expected = `## Insight Title: Render blocking requests
+
+## Insight Summary:
+This insight identifies network requests that were render blocking. Render blocking requests are impactful because they are deemed critical to the page and therefore the browser stops rendering the page until it has dealt with these resources. For this insight make sure you fully inspect the details of each render blocking network request and prioritize your suggestions to the user based on the impact of each render blocking request.
+
+## Detailed analysis:
+There are no network requests that are render blocking.
+
+## External resources:
+- https://web.dev/articles/lcp
+- https://web.dev/articles/optimize-lcp`;
+      assert.strictEqual(output, expected);
+    });
+
     it('serializes the correct details', async function() {
       const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'render-blocking-requests.json.gz');
       assert.isOk(insights);
@@ -195,6 +217,60 @@ The result of the checks for this insight are:
     });
   });
 
+  describe('CLS', () => {
+    it('serializes the correct details', async function() {
+      const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'layout-shifts-root-causes.json.gz');
+      assert.isOk(insights);
+      const firstNav = getFirstOrError(parsedTrace.Meta.navigationsByNavigationId.values());
+      const insight = getInsightOrError('CLSCulprits', insights, firstNav);
+      const formatter = new PerformanceInsightFormatter(new ActiveInsight(insight, parsedTrace));
+      const output = formatter.formatInsight();
+      const expected = `## Insight Title: Layout shift culprits
+
+## Insight Summary:
+Cumulative Layout Shifts (CLS) is a measure of the largest burst of layout shifts for every unexpected layout shift that occurs during the lifecycle of a page. This is a Core Web Vital and the thresholds for categorizing a score are:
+- Good: 0.1 or less
+- Needs improvement: more than 0.1 and less than or equal to 0.25
+- Bad: over 0.25
+
+## Detailed analysis:
+The worst layout shift cluster was the cluster that started at 471.76 ms and ended at 3,342.83 ms, with a duration of 2,871.07 ms.
+The score for this cluster is 0.7656.
+
+Layout shifts in this cluster:
+### Layout shift 1:
+- Start time: 471.76 ms
+- Score: 0.0003
+- Potential root causes:
+  - A font that was loaded over the network (https://fonts.gstatic.com/s/specialgothicexpandedone/v2/IurO6Zxk74-YaYk1r3HOet4g75ENmBxUmOK61tA0Iu5QmJF_.woff2).
+### Layout shift 2:
+- Start time: 857.25 ms
+- Score: 0.0844
+- Potential root causes:
+  - An iframe (id: 8AF3A9ADB81CA7B35302D07E0B591104 was injected into the page)
+### Layout shift 3:
+- Start time: 1,352.45 ms
+- Score: 0.0068
+- Potential root causes:
+  - An unsized image (IMG) (url: http://localhost:8000/unsized-image.png).
+### Layout shift 4:
+- Start time: 1,537.46 ms
+- Score: 0.3344
+- Potential root causes:
+  - An unsized image (IMG) (url: http://localhost:8000/unsized-image.png).
+### Layout shift 5:
+- Start time: 2,342.83 ms
+- Score: 0.3396
+- No potential root causes identified
+
+## External resources:
+- https://wdeb.dev/articles/cls
+- https://web.dev/articles/optimize-cls`;
+
+      assert.strictEqual(output, expected);
+    });
+  });
+
   describe('INP by phase', () => {
     it('serializes the correct details', async function() {
       const {parsedTrace, insights} = await TraceLoader.traceEngine(this, 'one-second-interaction.json.gz');
@@ -264,13 +340,13 @@ The longest interaction on the page was a \`click\` which had a total duration o
       const output = TraceEventFormatter.networkRequest(request, parsedTrace, {verbose: true});
       const expected = `## Network request: https://fonts.googleapis.com/css2?family=Poppins:ital,wght@1,800
 Timings:
-- Start time: 37.62 ms
-- Queued at: 43.24 ms
+- Queued at: 37.62 ms
 - Request sent at: 41.71 ms
 - Download complete at: 48.04 ms
-- Completed at: 51.55 ms
+- Main thread processing completed at: 51.55 ms
 Durations:
-- Main thread processing duration: 3.51 ms
+- Download time: 4.79 ms
+- Main thread processing time: 3.51 ms
 - Total duration: 13.93 ms
 Initiator: https://chromedevtools.github.io/performance-stories/lcp-large-image/index.html
 Redirects: no redirects

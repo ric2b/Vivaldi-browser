@@ -26,7 +26,6 @@
 #include <openssl/bytestring.h>
 #include <openssl/crypto.h>
 #include <openssl/err.h>
-#include <openssl/lhash.h>
 #include <openssl/mem.h>
 #include <openssl/rand.h>
 
@@ -580,7 +579,7 @@ SSL_CONFIG::SSL_CONFIG(SSL *ssl_arg)
       jdk11_workaround(false),
       quic_use_legacy_codepoint(false),
       permute_extensions(false),
-      alps_use_new_codepoint(false) {
+      alps_use_new_codepoint(true) {
   assert(ssl);
 }
 

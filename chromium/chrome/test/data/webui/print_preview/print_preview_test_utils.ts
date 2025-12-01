@@ -2,13 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {CapabilitiesResponse, Cdd, ColorOption, DpiOption, DuplexOption, ExtensionDestinationInfo, LocalDestinationInfo, MediaSizeCapability, MediaSizeOption, MediaTypeOption, NativeInitialSettings, PageOrientationOption} from 'chrome://print/print_preview.js';
-import {DEFAULT_MAX_COPIES, Destination, DestinationOrigin, DestinationStore, GooglePromotedDestinationId, MeasurementSystemUnitType, VendorCapabilityValueType} from 'chrome://print/print_preview.js';
+import type {CapabilitiesResponse, Cdd, ColorOption, DocumentSettings, DpiOption, DuplexOption, ExtensionDestinationInfo, LocalDestinationInfo, MediaSizeCapability, MediaSizeOption, NativeInitialSettings, PageOrientationOption} from 'chrome://print/print_preview.js';
+import {createDocumentSettings as createDefaultDocumentSettings, DEFAULT_MAX_COPIES, Destination, DestinationOrigin, DestinationStore, GooglePromotedDestinationId, MeasurementSystemUnitType, VendorCapabilityValueType} from 'chrome://print/print_preview.js';
 import type {CrInputElement} from 'chrome://resources/cr_elements/cr_input/cr_input.js';
-import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import {assertEquals} from 'chrome://webui-test/chai_assert.js';
 import {eventToPromise} from 'chrome://webui-test/test_util.js';
 
@@ -24,7 +24,6 @@ export function getDefaultInitialSettings(isPdf: boolean = false):
     documentTitle: 'title',
     documentHasSelection: true,
     shouldPrintSelectionOnly: false,
-    previewIsFromArc: false,
     printerName: 'FooDevice',
     serializedAppStateStr: null,
     serializedDefaultDestinationSelectionRulesStr: null,
@@ -32,6 +31,11 @@ export function getDefaultInitialSettings(isPdf: boolean = false):
     uiLocale: 'en-us',
     unitType: MeasurementSystemUnitType.IMPERIAL,
   };
+}
+
+export function createDocumentSettings(
+    ...overrides: Array<Partial<DocumentSettings>>): DocumentSettings {
+  return Object.assign(createDefaultDocumentSettings(), ...overrides);
 }
 
 export function getCddTemplate(
@@ -86,43 +90,8 @@ export function getCddTemplate(
               width_microns: 215900,
               height_microns: 215900,
               custom_display_name: 'CUSTOM_SQUARE',
-              has_borderless_variant: true,
-            },
-            {
-              name: 'LEGAL',
-              width_microns: 215900,
-              height_microns: 355600,
-              custom_display_name: 'Legal',
-              imageable_area_left_microns: 5000,
-              imageable_area_bottom_microns: 5000,
-              imageable_area_right_microns: 5000,
-              imageable_area_top_microns: 5000,
-              has_borderless_variant: false,
-            },
-            {
-              name: '4x6',
-              width_microns: 101600,
-              height_microns: 152400,
-              custom_display_name: '4 x 6 in',
-              imageable_area_left_microns: 0,
-              imageable_area_bottom_microns: 0,
-              imageable_area_right_microns: 101600,
-              imageable_area_top_microns: 152400,
             },
           ] as MediaSizeOption[],
-        },
-        media_type: {
-          option: [
-            {
-              vendor_id: 'stationery',
-              custom_display_name: 'Plain',
-              is_default: true,
-            },
-            {
-              vendor_id: 'photographic',
-              custom_display_name: 'Photo',
-            },
-          ] as MediaTypeOption[],
         },
       },
     },
@@ -384,7 +353,7 @@ export async function triggerInputEvent(
   return await eventToPromise('input-change', parentElement);
 }
 
-const TestListenerElementBase = WebUiListenerMixin(PolymerElement);
+const TestListenerElementBase = WebUiListenerMixinLit(CrLitElement);
 class TestListenerElement extends TestListenerElementBase {
   static get is() {
     return 'test-listener-element';

@@ -93,7 +93,7 @@ void ScreenCapturerFuchsia::CaptureFrame() {
     return;
   }
 
-  int64_t capture_start_time_nanos = rtc::TimeNanos();
+  int64_t capture_start_time_nanos = webrtc::TimeNanos();
 
   zx::event event;
   zx::event dup;
@@ -148,8 +148,8 @@ void ScreenCapturerFuchsia::CaptureFrame() {
                       << release_result.err();
   }
 
-  int capture_time_ms = (rtc::TimeNanos() - capture_start_time_nanos) /
-                        rtc::kNumNanosecsPerMillisec;
+  int capture_time_ms = (webrtc::TimeNanos() - capture_start_time_nanos) /
+                        webrtc::kNumNanosecsPerMillisec;
   frame->set_capture_time_ms(capture_time_ms);
   callback_->OnCaptureResult(Result::SUCCESS, std::move(frame));
 }
@@ -387,7 +387,7 @@ void ScreenCapturerFuchsia::SetupBuffers() {
     const zx::vmo& virt_mem =
         buffer_collection_info_.buffers()[buffer_index].vmo();
     virtual_memory_mapped_addrs_[buffer_index] = nullptr;
-    auto status = zx::vmar::root_self()->map(
+    status = zx::vmar::root_self()->map(
         ZX_VM_PERM_READ, /*vmar_offset*/ 0, virt_mem,
         /*vmo_offset*/ 0, virt_mem_bytes,
         reinterpret_cast<uintptr_t*>(

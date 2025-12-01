@@ -57,7 +57,7 @@ void OmniboxService::StartSearch(
 
   if (input.clear_state_before_searching) {
     controller_->RemoveObserver(this);
-    controller_->Stop(true /* clear_result */);
+    controller_->Stop(AutocompleteStopReason::kClobbered);
     controller_->AddObserver(this);
   }
 

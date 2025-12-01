@@ -10,6 +10,10 @@
 #import "components/feature_engagement/public/tracker.h"
 #import "components/keyed_service/core/service_access_type.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
+#import "components/sync/service/sync_service_utils.h"
+#import "components/trusted_vault/trusted_vault_server_constants.h"
+#import "ios/chrome/browser/authentication/ui_bundled/trusted_vault_reauthentication/trusted_vault_reauthentication_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/trusted_vault_reauthentication/trusted_vault_reauthentication_coordinator_delegate.h"
 #import "ios/chrome/browser/favicon/model/favicon_loader.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
@@ -55,6 +59,7 @@
     PasswordsSettingsCommands,
     PasswordManagerViewControllerPresentationDelegate,
     ReauthenticationCoordinatorDelegate,
+    TrustedVaultReauthenticationCoordinatorDelegate,
     WidgetPromoInstructionsCoordinatorDelegate>
 
 // Main view controller for this coordinator.
@@ -102,6 +107,10 @@
   // Whether local authentication failed for a child coordinator and thus the
   // whole Password Manager UI is being dismissed.
   BOOL _authDidFailForChildCoordinator;
+
+  // Displays the Trusted Vault reauthentication dialog.
+  TrustedVaultReauthenticationCoordinator*
+      _trustedVaultReauthenticationCoordinator;
 }
 
 @synthesize baseNavigationController = _baseNavigationController;
@@ -376,6 +385,23 @@
   [self.widgetPromoInstructionsCoordinator start];
 }
 
+- (void)performReauthenticationForRetrievingTrustedVaultKey {
+  trusted_vault::SecurityDomainId securityDomainID =
+      trusted_vault::SecurityDomainId::kChromeSync;
+  syncer::TrustedVaultUserActionTriggerForUMA trigger =
+      syncer::TrustedVaultUserActionTriggerForUMA::kPasswordManagerSettings;
+  CHECK(!_trustedVaultReauthenticationCoordinator, base::NotFatalUntil::M145);
+  _trustedVaultReauthenticationCoordinator =
+      [[TrustedVaultReauthenticationCoordinator alloc]
+          initWithBaseViewController:self.passwordsViewController
+                             browser:self.browser
+                              intent:SigninTrustedVaultDialogIntentFetchKeys
+                    securityDomainID:securityDomainID
+                             trigger:trigger];
+  _trustedVaultReauthenticationCoordinator.delegate = self;
+  [_trustedVaultReauthenticationCoordinator start];
+}
+
 #pragma mark - PasswordCheckupCoordinatorDelegate
 
 - (void)passwordCheckupCoordinatorDidRemove:
@@ -475,6 +501,7 @@
 
 - (void)willPushReauthenticationViewController {
   [self dismissActionSheetCoordinator];
+  [self dismissTrustedVaultReauthenticationCoordinator];
 }
 
 #pragma mark - WidgetPromoInstructionsCoordinatorDelegate
@@ -488,7 +515,36 @@
   [self restartReauthCoordinator];
 }
 
+#pragma mark - TrustedVaultReauthenticationCoordinatorDelegate
+
+- (void)trustedVaultReauthenticationCoordinatorWantsToBeStopped:
+    (TrustedVaultReauthenticationCoordinator*)coordinator {
+  CHECK_EQ(coordinator, _trustedVaultReauthenticationCoordinator);
+  [self.mediator displayOrHideTrustedVaultPasswordManagerWidgetPromo];
+  [self dismissTrustedVaultReauthenticationCoordinator];
+}
+
 #pragma mark - Private
+
+// Returns a coordinator that displays the Trusted Vault reauthentication
+// dialog. This method is being used for the testing purposes.
+// TODO(crbug.com/417667093): Remove this after adding EarlGrey tests of the
+// Trusted Vault GPM management UI widget.
+- (TrustedVaultReauthenticationCoordinator*)
+    trustedVaultReauthenticationCoordinator {
+  return _trustedVaultReauthenticationCoordinator;
+}
+
+// Sets a coordinator for displaying the Trusted Vault reauthentication
+// dialog. This method is being used for the testing purposes.
+// TODO(crbug.com/417667093): Remove this after adding EarlGrey tests of the
+// Trusted Vault GPM management UI widget.
+- (void)setTrustedVaultReauthenticationCoordinator:
+    (TrustedVaultReauthenticationCoordinator*)
+        trustedVaultReauthenticationCoordinator {
+  _trustedVaultReauthenticationCoordinator =
+      trustedVaultReauthenticationCoordinator;
+}
 
 // Starts reauthCoordinator.
 // - authOnStart: Pass `YES` to cover password manager with an empty view
@@ -545,6 +601,12 @@
 - (void)dismissActionSheetCoordinator {
   [self.actionSheetCoordinator stop];
   self.actionSheetCoordinator = nil;
+}
+
+- (void)dismissTrustedVaultReauthenticationCoordinator {
+  [_trustedVaultReauthenticationCoordinator stop];
+  _trustedVaultReauthenticationCoordinator.delegate = nil;
+  _trustedVaultReauthenticationCoordinator = nil;
 }
 
 @end

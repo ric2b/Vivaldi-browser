@@ -97,20 +97,17 @@ const UIStrings = {
    */
   refreshEventListeners: 'Refresh event listeners',
   /**
-   * @description Title of a setting under the Elements category in Settings. Whether words should be
-   * wrapped around at the end of lines or not.
+   * @description Title of a setting under the Elements category in Settings. If
+   *              this option is on, the Elements panel will automatically wrap
+   *              long lines in the DOM tree and try to avoid showing a horizontal
+   *              scrollbar if possible.
    */
   wordWrap: 'Word wrap',
   /**
-   * @description Title of a setting under the Elements category. Whether words should be wrapped
-   * around at the end of lines or not when showing DOM elements.
+   * @description Title of an action in the Elements panel that toggles the 'Word
+   *              wrap' setting.
    */
-  enableDomWordWrap: 'Enable `DOM` word wrap',
-  /**
-   * @description Title of a setting under the Elements category. Whether words should be wrapped
-   * around at the end of lines or not when showing DOM elements.
-   */
-  disableDomWordWrap: 'Disable `DOM` word wrap',
+  toggleWordWrap: 'Toggle word wrap',
   /**
    * @description Title of a setting under the Elements category. Whether to show/hide code comments in HTML.
    */
@@ -137,10 +134,15 @@ const UIStrings = {
    */
   showCSSDocumentationTooltip: 'Show CSS documentation tooltip',
   /**
-   *@description A context menu item (command) in the Elements panel that copy the styles of
+   * @description A context menu item (command) in the Elements panel that copy the styles of
    * the HTML element.
    */
   copyStyles: 'Copy styles',
+  /**
+   * @description A context menu item (command) in the Elements panel that toggles the view between
+   * the element and a11y trees.
+   */
+  toggleA11yTree: 'Toggle accessibility tree',
   /**
    * @description Title of a setting under the Elements category. Whether to show/hide hide
    * the shadow DOM nodes of HTML elements that are built into the browser (e.g. the <input> element).
@@ -367,6 +369,24 @@ UI.ActionRegistration.registerActionExtension({
 });
 
 UI.ActionRegistration.registerActionExtension({
+  actionId: 'elements.toggle-a11y-tree',
+  category: UI.ActionRegistration.ActionCategory.ELEMENTS,
+  title: i18nLazyString(UIStrings.toggleA11yTree),
+  async loadActionDelegate() {
+    const Elements = await loadElementsModule();
+    return new Elements.ElementsPanel.ElementsActionDelegate();
+  },
+  contextTypes() {
+    return maybeRetrieveContextTypes(Elements => [Elements.ElementsPanel.ElementsPanel]);
+  },
+  bindings: [
+    {
+      shortcut: 'A',
+    },
+  ],
+});
+
+UI.ActionRegistration.registerActionExtension({
   actionId: 'elements.undo',
   category: UI.ActionRegistration.ActionCategory.ELEMENTS,
   title: i18nLazyString(UIStrings.undo),
@@ -490,17 +510,26 @@ Common.Settings.registerSettingExtension({
   title: i18nLazyString(UIStrings.wordWrap),
   settingName: 'dom-word-wrap',
   settingType: Common.Settings.SettingType.BOOLEAN,
-  options: [
+  defaultValue: true,
+});
+
+UI.ActionRegistration.registerActionExtension({
+  category: UI.ActionRegistration.ActionCategory.ELEMENTS,
+  actionId: 'elements.toggle-word-wrap',
+  async loadActionDelegate() {
+    const Elements = await loadElementsModule();
+    return new Elements.ElementsPanel.ElementsActionDelegate();
+  },
+  title: i18nLazyString(UIStrings.toggleWordWrap),
+  contextTypes() {
+    return maybeRetrieveContextTypes(Elements => [Elements.ElementsPanel.ElementsPanel]);
+  },
+  bindings: [
     {
-      value: true,
-      title: i18nLazyString(UIStrings.enableDomWordWrap),
-    },
-    {
-      value: false,
-      title: i18nLazyString(UIStrings.disableDomWordWrap),
+      shortcut: 'Alt+Z',
+      keybindSets: [UI.ActionRegistration.KeybindSet.VS_CODE],
     },
   ],
-  defaultValue: true,
 });
 
 Common.Settings.registerSettingExtension({

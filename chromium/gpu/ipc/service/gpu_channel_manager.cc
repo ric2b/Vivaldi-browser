@@ -72,11 +72,6 @@
 #include "gpu/vulkan/vulkan_fence_helper.h"
 #endif
 
-#if BUILDFLAG(IS_MAC)
-#include "gpu/ipc/service/built_in_shader_cache_loader.h"
-#include "gpu/ipc/service/built_in_shader_cache_writer.h"
-#endif
-
 namespace gpu {
 
 namespace {
@@ -122,13 +117,13 @@ void TrimD3DResources(const scoped_refptr<SharedContextState>& context_state) {
 }
 #endif
 
-void APIENTRY CrashReportOnGLErrorDebugCallback(GLenum source,
-                                                GLenum type,
-                                                GLuint id,
-                                                GLenum severity,
-                                                GLsizei length,
-                                                const GLchar* message,
-                                                const GLvoid* user_param) {
+void GL_APIENTRY CrashReportOnGLErrorDebugCallback(GLenum source,
+                                                   GLenum type,
+                                                   GLuint id,
+                                                   GLenum severity,
+                                                   GLsizei length,
+                                                   const GLchar* message,
+                                                   const GLvoid* user_param) {
   if (type == GL_DEBUG_TYPE_ERROR && source == GL_DEBUG_SOURCE_API &&
       user_param) {
     // Note: log_message cannot contain any user data. The error strings
@@ -442,26 +437,8 @@ gles2::ProgramCache* GpuChannelManager::program_cache() {
 
     // Use the EGL blob cache extension for the passthrough decoder.
     if (use_passthrough_cmd_decoder()) {
-      gles2::PassthroughProgramCache::ValueAddedHook* value_add_hook = nullptr;
-#if BUILDFLAG(IS_MAC)
-      if (base::FeatureList::IsEnabled(
-              features::kWriteMetalShaderCacheToDisk)) {
-        shader_cache_writer_ = std::make_unique<BuiltInShaderCacheWriter>();
-        value_add_hook = shader_cache_writer_.get();
-      }
-#endif
-      std::unique_ptr<gles2::PassthroughProgramCache> cache =
-          std::make_unique<gles2::PassthroughProgramCache>(
-              gpu_preferences_.gpu_program_cache_size, disable_disk_cache,
-              value_add_hook);
-#if BUILDFLAG(IS_MAC)
-      auto entries = BuiltInShaderCacheLoader::TakeEntries();
-      for (auto& entry : *entries) {
-        cache->Set(std::move(entry.key), std::move(entry.value),
-                   gles2::ProgramCache::CacheProgramCallback());
-      }
-#endif
-      program_cache_ = std::move(cache);
+      program_cache_ = std::make_unique<gles2::PassthroughProgramCache>(
+          gpu_preferences_.gpu_program_cache_size, disable_disk_cache);
     } else {
       program_cache_ = std::make_unique<gles2::MemoryProgramCache>(
           gpu_preferences_.gpu_program_cache_size, disable_disk_cache,
@@ -822,7 +799,7 @@ void GpuChannelManager::OnBackgroundCleanup() {
 
   SkGraphics::PurgeAllCaches();
 }
-#endif
+#endif  // BUILDFLAG(IS_ANDROID)
 
 void GpuChannelManager::OnApplicationBackgrounded() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
@@ -889,11 +866,18 @@ void GpuChannelManager::HandleMemoryPressure(
     shared_context_state_->PurgeMemory(memory_pressure_level);
   }
 
-  if (gr_shader_cache_)
+  if (gr_shader_cache_) {
     gr_shader_cache_->PurgeMemory(memory_pressure_level);
+  }
+#if BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
+  if (dawn_caching_interface_factory()) {
+    dawn_caching_interface_factory()->PurgeMemory(memory_pressure_level);
+  }
+#endif  // BUILDFLAG(USE_DAWN) || BUILDFLAG(SKIA_USE_DAWN)
+
 #if BUILDFLAG(IS_WIN)
   TrimD3DResources(shared_context_state_);
-#endif
+#endif  // BUILDFLAG(IS_WIN)
 }
 
 scoped_refptr<SharedContextState> GpuChannelManager::GetSharedContextState(

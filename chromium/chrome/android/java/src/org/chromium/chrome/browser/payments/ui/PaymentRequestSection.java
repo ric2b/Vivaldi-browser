@@ -168,7 +168,7 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
 
         // Set the styling of the view.
         mUnfocusedBackgroundColor = ChromeSemanticColorUtils.getPaymentRequestBg(context);
-        mFocusedBackgroundColor = SemanticColorUtils.getDefaultBgColorElev1(context);
+        mFocusedBackgroundColor = SemanticColorUtils.getColorSurfaceContainerLow(context);
         mLargeSpacing =
                 getResources().getDimensionPixelSize(R.dimen.editor_dialog_section_large_spacing);
         mVerticalSpacing =
@@ -547,7 +547,7 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
         private final List<TextView> mLineItemAmountsForTest = new ArrayList<>();
 
         /** The runnable used to fade out the mUpdatedView. */
-        private Runnable mFadeOutRunnable =
+        private final Runnable mFadeOutRunnable =
                 new Runnable() {
                     @Override
                     public void run() {
@@ -560,7 +560,7 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
                 };
 
         /** The Handler used to post the mFadeOutRunnables. */
-        private Handler mHandler = new Handler();
+        private final Handler mHandler = new Handler();
 
         public LineItemBreakdownSection(
                 Context context, String sectionName, SectionDelegate delegate, String updatedText) {
@@ -1272,10 +1272,11 @@ public abstract class PaymentRequestSection extends LinearLayout implements View
 
         /** Updates the View to account for the new {@link SectionInformation} being passed in. */
         public void update(SectionInformation information) {
+            assert information != null : "Section information should not be null";
             mSectionInformation = information;
-            EditableOption selectedItem = information.getSelectedItem();
+            EditableOption selectedItem = mSectionInformation.getSelectedItem();
             updateSelectedItem(selectedItem);
-            updateOptionList(information, selectedItem);
+            updateOptionList(mSectionInformation, selectedItem);
             updateControlLayout();
         }
 

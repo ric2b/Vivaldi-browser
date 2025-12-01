@@ -87,32 +87,16 @@ std::string GetAudioProcesingPropertiesLogString(
       };
   auto str = base::StringPrintf(
       "echo_cancellation_type: %s, "
-      "disable_hw_ns: %s, "
       "auto_gain_control: %s, "
       "noise_suppression: %s, "
       "system_gain_control: %s, "
       "system_noise_suppression: %s",
       aec_to_string(properties.echo_cancellation_type),
-      base::ToString(properties.disable_hw_noise_suppression).c_str(),
       base::ToString(properties.auto_gain_control).c_str(),
       base::ToString(properties.noise_suppression).c_str(),
       base::ToString(properties.system_gain_control_activated).c_str(),
       base::ToString(properties.system_noise_suppression_activated).c_str());
   return str;
-}
-
-// Returns whether system noise suppression is allowed to be used regardless of
-// whether the noise suppression constraint is set, or whether a browser-based
-// AEC is active. This is currently the default on at least MacOS but is not
-// allowed for ChromeOS or Windows setups. On Windows. the system effects AEC,
-// NS and AGC always come as a "package" and it it not possible to enable or
-// disable the system NS independently.
-constexpr bool IsIndependentSystemNsAllowed() {
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
-  return false;
-#else
-  return true;
-#endif
 }
 
 void LogInputDeviceParametersToUma(
@@ -211,171 +195,88 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
 
   SendLogMessage(GetEnsureSourceIsStartedLogString(device()));
 
-  blink::MediaStreamDevice modified_device(device());
-  bool device_is_modified = false;
+  int device_effects = device().input.effects();
 
-  // Disable system echo cancellation if available but not requested by
-  // |audio_processing_properties_|. Also disable any system noise suppression
-  // and automatic gain control to avoid those causing issues for the echo
-  // cancellation.
-  if (audio_processing_properties_.echo_cancellation_type !=
-          EchoCancellationType::kEchoCancellationSystem &&
-      device().input.effects() & media::AudioParameters::ECHO_CANCELLER) {
-    modified_device.input.set_effects(modified_device.input.effects() &
-                                      ~media::AudioParameters::ECHO_CANCELLER);
-    if (!IsIndependentSystemNsAllowed()) {
-      modified_device.input.set_effects(
-          modified_device.input.effects() &
-          ~media::AudioParameters::NOISE_SUPPRESSION);
-    }
-    modified_device.input.set_effects(
-        modified_device.input.effects() &
-        ~media::AudioParameters::AUTOMATIC_GAIN_CONTROL);
-    device_is_modified = true;
-    SendLogMessage(StringPrintf(
-        "%s() => (AEC: modified system effect mask from [%s] to [%s])",
-        __func__, EffectsToString(device().input.effects()),
-        EffectsToString(modified_device.input.effects())));
-  }
-// On Windows we can only modify system NS and AGC support if system AEC was
-// supported but disabled via a constraint.
+  if (audio_processing_properties_.echo_cancellation_type ==
+      EchoCancellationType::kEchoCancellationSystem) {
+    // On Windows we can only disable platform NS and AGC effects if platform
+    // AEC effect is disabled.
 #if !BUILDFLAG(IS_WIN)
-  // Optionally disable system noise suppression.
-  if (device().input.effects() & media::AudioParameters::NOISE_SUPPRESSION) {
-    // Disable noise suppression on the device if the properties explicitly
-    // specify to do so.
-    bool disable_system_noise_suppression =
-        audio_processing_properties_.disable_hw_noise_suppression;
+    // Platform echo cancellation is requested.
+    // TODO(crbug.com/405165917): CHECK(device_effects &
+    // media::AudioParameters::ECHO_CANCELLER);
 
+    // Disable platform NS effect if it's not requested.
+    if (!audio_processing_properties_.noise_suppression) {
+      if (!IsIndependentSystemNsAllowed()) {
+        // Special case for NS. TODO(crbug.com/417413190): Rethink.
+        device_effects &= ~media::AudioParameters::NOISE_SUPPRESSION;
+      }
+    }
+
+    // Disable platform AGC effect if not requested.
+    if (!audio_processing_properties_.auto_gain_control) {
+      device_effects &= ~media::AudioParameters::AUTOMATIC_GAIN_CONTROL;
+    }
+#endif
+  } else {
+    // No platform processing if platform AEC is not requested.
+    device_effects &= ~media::AudioParameters::ECHO_CANCELLER;
+    device_effects &= ~media::AudioParameters::AUTOMATIC_GAIN_CONTROL;
     if (!IsIndependentSystemNsAllowed()) {
-      // Disable noise suppression on the device if browser-based echo
-      // cancellation is active since that otherwise breaks the AEC.
-      const bool browser_based_aec_active =
-          audio_processing_properties_.echo_cancellation_type ==
-          AudioProcessingProperties::EchoCancellationType::
-              kEchoCancellationAec3;
-      disable_system_noise_suppression =
-          disable_system_noise_suppression || browser_based_aec_active;
-
-      // Disable noise suppression on the device if the constraints
-      // dictate that.
-      disable_system_noise_suppression =
-          disable_system_noise_suppression ||
-          !audio_processing_properties_.noise_suppression;
-    }
-
-    if (disable_system_noise_suppression) {
-      blink::MediaStreamDevice device_before_ns_mods(modified_device);
-      modified_device.input.set_effects(
-          modified_device.input.effects() &
-          ~media::AudioParameters::NOISE_SUPPRESSION);
-      device_is_modified = true;
-      SendLogMessage(StringPrintf(
-          "%s() => (NS: modified system effect mask from [%s] to [%s])",
-          __func__, EffectsToString(device_before_ns_mods.input.effects()),
-          EffectsToString(modified_device.input.effects())));
+      // Special case for NS. TODO(crbug.com/417413190): Rethink.
+      device_effects &= ~media::AudioParameters::NOISE_SUPPRESSION;
     }
   }
-
-  // Optionally disable system automatic gain control.
-  if (device().input.effects() &
-      media::AudioParameters::AUTOMATIC_GAIN_CONTROL) {
-    blink::MediaStreamDevice device_before_agc_mods(modified_device);
-    // Disable automatic gain control on the device if browser-based echo
-    // cancellation is actrive since that otherwise breaks the AEC.
-    const bool browser_based_aec_active =
-        audio_processing_properties_.echo_cancellation_type ==
-        AudioProcessingProperties::EchoCancellationType::kEchoCancellationAec3;
-    bool disable_system_automatic_gain_control = browser_based_aec_active;
-
-    // Disable automatic gain control on the device if the constraints
-    // dictates that.
-    disable_system_automatic_gain_control =
-        disable_system_automatic_gain_control ||
-        !audio_processing_properties_.auto_gain_control;
-
-    if (disable_system_automatic_gain_control) {
-      modified_device.input.set_effects(
-          modified_device.input.effects() &
-          ~media::AudioParameters::AUTOMATIC_GAIN_CONTROL);
-      device_is_modified = true;
-      SendLogMessage(StringPrintf(
-          "%s() => (AGC: modified system effect mask from [%s] to [%s])",
-          __func__, EffectsToString(device_before_agc_mods.input.effects()),
-          EffectsToString(modified_device.input.effects())));
-    }
-  }
-#endif  // #if !BUILDFLAG(IS_WIN)
-
 #if BUILDFLAG(IS_CHROMEOS)
   if (base::FeatureList::IsEnabled(media::kCrOSSystemVoiceIsolationOption) &&
-      device().input.effects() &
-          media::AudioParameters::VOICE_ISOLATION_SUPPORTED) {
-    // Disable voice isolation on the device if browser-based echo
-    // cancellation is, since that otherwise breaks the AEC.
-    const bool browser_based_aec_active =
-        audio_processing_properties_.echo_cancellation_type ==
-        AudioProcessingProperties::EchoCancellationType::kEchoCancellationAec3;
-    const bool disable_system_voice_isolation_due_to_browser_aec =
-        browser_based_aec_active;
-
-    if (disable_system_voice_isolation_due_to_browser_aec ||
+      device_effects & media::AudioParameters::VOICE_ISOLATION_SUPPORTED) {
+    if (audio_processing_properties_.echo_cancellation_type ==
+            AudioProcessingProperties::EchoCancellationType::
+                kEchoCancellationAec3 ||
         audio_processing_properties_.voice_isolation ==
             AudioProcessingProperties::VoiceIsolationType::
                 kVoiceIsolationDisabled) {
-      // Force voice isolation to be disabled.
-      modified_device.input.set_effects(
-          modified_device.input.effects() |
-          media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION);
-
-      modified_device.input.set_effects(
-          modified_device.input.effects() &
-          ~media::AudioParameters::VOICE_ISOLATION);
+      // Force voice isolation effect to be disabled if disabled in the
+      // properties, or if browser-based AEC is enabled (platform voice
+      // isolation would break browser-based AEC).
+      device_effects |=
+          media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION;
+      device_effects &= ~media::AudioParameters::VOICE_ISOLATION;
     } else if (audio_processing_properties_.voice_isolation ==
                AudioProcessingProperties::VoiceIsolationType::
                    kVoiceIsolationEnabled) {
-      // Force voice isolation to be enabled.
-      modified_device.input.set_effects(
-          modified_device.input.effects() |
-          media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION);
+      // No browser-based AEC involved; voice isolation is enabled in the
+      // properties: force voice isolation to be enabled in the effects.
+      device_effects |=
+          media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION;
 
-      modified_device.input.set_effects(
-          modified_device.input.effects() |
-          media::AudioParameters::VOICE_ISOLATION);
+      device_effects |= media::AudioParameters::VOICE_ISOLATION;
     } else {
       // Turn off voice isolation control.
-      modified_device.input.set_effects(
-          modified_device.input.effects() &
-          ~media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION);
-    }
-
-    if ((modified_device.input.effects() &
-         media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION) !=
-            (device().input.effects() &
-             media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION) ||
-        (modified_device.input.effects() &
-         media::AudioParameters::VOICE_ISOLATION) ||
-        (device().input.effects() & media::AudioParameters::VOICE_ISOLATION)) {
-      device_is_modified = true;
+      device_effects &=
+          ~media::AudioParameters::CLIENT_CONTROLLED_VOICE_ISOLATION;
     }
   }
-#endif
 
-#if BUILDFLAG(IS_CHROMEOS)
   if (base::FeatureList::IsEnabled(media::kIgnoreUiGains)) {
     // Ignore UI Gains if AGC is running in either browser or system
-    if (audio_processing_properties_.GainControlEnabled()) {
-      modified_device.input.set_effects(
-          modified_device.input.effects() |
-          media::AudioParameters::IGNORE_UI_GAINS);
-      device_is_modified = true;
+    if (audio_processing_properties_.auto_gain_control) {
+      device_effects |= media::AudioParameters::IGNORE_UI_GAINS;
     }
   }
 #endif
 
-  if (device_is_modified)
-    SetDevice(modified_device);
+  if (device_effects != device().input.effects()) {
+    SendLogMessage(
+        StringPrintf("%s() => (Modified system effect mask from [%s] to [%s])",
+                     __func__, EffectsToString(device().input.effects()),
+                     EffectsToString(device_effects)));
 
+    blink::MediaStreamDevice modified_device(device());
+    modified_device.input.set_effects(device_effects);
+    SetDevice(modified_device);
+  }
   // Create the audio processor.
 
   DCHECK(dependency_factory_);
@@ -446,7 +347,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
 
     // Create a proxy to the audio processor in the audio service.
     audio_processor_proxy_ =
-        new rtc::RefCountedObject<AudioServiceAudioProcessorProxy>();
+        new webrtc::RefCountedObject<AudioServiceAudioProcessorProxy>();
 
     // The output format of this ProcessedLocalAudioSource is the audio capture
     // format.
@@ -468,7 +369,7 @@ bool ProcessedLocalAudioSource::EnsureSourceIsStarted() {
                 CrossThreadUnretained(this)));
 
     media_stream_audio_processor_ =
-        new rtc::RefCountedObject<MediaStreamAudioProcessor>(
+        new webrtc::RefCountedObject<MediaStreamAudioProcessor>(
             std::move(processing_callback), audio_processing_settings,
             audio_capture_params, rtc_audio_device);
 

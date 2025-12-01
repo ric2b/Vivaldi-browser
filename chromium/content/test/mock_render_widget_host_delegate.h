@@ -44,6 +44,7 @@ class MockRenderWidgetHostDelegate
       KeyboardEventProcessingResult result) {
     pre_handle_keyboard_event_result_ = result;
   }
+
   void CreateInputEventRouter();
 
   void FlushInkRenderer() { delegated_ink_point_renderer_.FlushForTesting(); }

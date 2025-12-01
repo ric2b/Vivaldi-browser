@@ -13,6 +13,11 @@
 #include "util/EGLWindow.h"
 #include "util/test_utils.h"
 
+#if defined(ANGLE_ENABLE_WGPU)
+#    include <dawn/native/DawnNative.h>
+#    include <webgpu/webgpu.h>
+#endif
+
 #include "common/android_util.h"
 
 #if defined(ANGLE_PLATFORM_ANDROID) && __ANDROID_API__ >= 29
@@ -50,6 +55,8 @@ constexpr char kEGLAndroidImageNativeBufferExt[] = "EGL_ANDROID_image_native_buf
 constexpr char kEGLImageStorageExt[]             = "GL_EXT_EGL_image_storage";
 constexpr char kEGLImageStorageCompressionExt[]  = "GL_EXT_EGL_image_storage_compression";
 constexpr char kTextureStorageCompressionExt[]   = "GL_EXT_texture_storage_compression";
+constexpr char kWebGPUDeviceExt[]                = "EGL_ANGLE_device_webgpu";
+constexpr char kWebGPUTextureExt[]               = "EGL_ANGLE_webgpu_texture_client_buffer";
 constexpr EGLint kDefaultAttribs[]               = {
     EGL_IMAGE_PRESERVED,
     EGL_TRUE,
@@ -325,6 +332,26 @@ void main()
 })";
     }
 
+    const char *getFetchYUVVS() const
+    {
+        return R"(#version 300 es
+#extension GL_OES_EGL_image_external_essl3 : enable
+precision highp float;
+uniform samplerExternalOES tex;
+in vec4 position;
+out vec4 color;
+
+void main()
+{
+    gl_Position = position;
+    vec2 texcoord = (position.xy * 0.5) + 0.5;
+    texcoord.y = 1.0 - texcoord.y;
+    ivec2 fetchcoord = ivec2(texcoord * vec2(textureSize(tex, 0)));
+    fetchcoord = min(fetchcoord, textureSize(tex, 0) - ivec2(1.0));
+    color = texelFetch(tex, fetchcoord, 0);
+})";
+    }
+
     const char *getPassThroughFS() const
     {
         return R"(#version 300 es
@@ -350,6 +377,23 @@ out vec4 color;
 void main()
 {
     color = texture(tex, texcoord);
+})";
+    }
+
+    const char *getFetchYUVFS() const
+    {
+        return R"(#version 300 es
+#extension GL_OES_EGL_image_external_essl3 : enable
+precision highp float;
+uniform samplerExternalOES tex;
+in vec2 texcoord;
+out vec4 color;
+
+void main()
+{
+    ivec2 fetchcoord = ivec2(texcoord * vec2(textureSize(tex, 0)));
+    fetchcoord = min(fetchcoord, textureSize(tex, 0) - ivec2(1.0));
+    color = texelFetch(tex, fetchcoord, 0);
 })";
     }
 
@@ -437,6 +481,19 @@ void main()
             ASSERT_NE(0u, mRenderYUVProgram) << "shader compilation failed.";
 
             mRenderYUVUniformLocation = glGetUniformLocation(mRenderYUVProgram, "u_color");
+        }
+
+        if (IsGLExtensionEnabled(kExternalESSL3Ext))
+        {
+            mFetchYUVProgram = CompileProgram(getVSESSL3(), getFetchYUVFS());
+            ASSERT_NE(0u, mFetchYUVProgram) << "shader compilation failed.";
+
+            mFetchYUVUniformLocation = glGetUniformLocation(mFetchYUVProgram, "tex");
+
+            mFetchYUVVSProgram = CompileProgram(getFetchYUVVS(), getPassThroughFS());
+            ASSERT_NE(0u, mFetchYUVVSProgram) << "shader compilation failed.";
+
+            mFetchYUVVSUniformLocation = glGetUniformLocation(mFetchYUVVSProgram, "tex");
         }
 
         if (IsGLExtensionEnabled(kEGLImageStorageExt))
@@ -568,7 +625,7 @@ void main()
                                        GLenum format,
                                        GLenum type,
                                        const EGLint *attribs,
-                                       void *data,
+                                       const void *data,
                                        GLTexture &sourceTexture,
                                        EGLImageKHR *outSourceImage)
     {
@@ -601,7 +658,7 @@ void main()
                                             GLenum format,
                                             GLenum type,
                                             const EGLint *attribs,
-                                            uint8_t *data,
+                                            const uint8_t *data,
                                             size_t dataStride,
                                             EGLenum imageTarget,
                                             GLTexture &sourceTexture,
@@ -641,16 +698,26 @@ void main()
                                        GLenum format,
                                        GLenum type,
                                        const EGLint *attribs,
-                                       void *data,
+                                       const void *data,
                                        GLTexture &sourceTexture,
                                        EGLImageKHR *outSourceImage)
     {
         // Create a source 3D texture
         glBindTexture(GL_TEXTURE_3D, sourceTexture);
 
-        glTexImage3D(GL_TEXTURE_3D, 0, format, static_cast<GLsizei>(width),
-                     static_cast<GLsizei>(height), static_cast<GLsizei>(depth), 0, format, type,
-                     data);
+        if (getClientMajorVersion() < 3)
+        {
+            ASSERT_TRUE(IsGLExtensionEnabled("GL_OES_texture_3D"));
+            glTexImage3DOES(GL_TEXTURE_3D, 0, format, static_cast<GLsizei>(width),
+                            static_cast<GLsizei>(height), static_cast<GLsizei>(depth), 0, format,
+                            type, data);
+        }
+        else
+        {
+            glTexImage3D(GL_TEXTURE_3D, 0, format, static_cast<GLsizei>(width),
+                         static_cast<GLsizei>(height), static_cast<GLsizei>(depth), 0, format, type,
+                         data);
+        }
 
         // Disable mipmapping
         glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -1024,6 +1091,66 @@ void main()
         *outSourceImage = image;
     }
 
+#if defined(ANGLE_ENABLE_WGPU)
+    const DawnProcTable &getWebGPUProcs() { return dawn::native::GetProcs(); }
+
+    WGPUDevice getWebGPUDevice()
+    {
+        EXPECT_TRUE(IsEGLClientExtensionEnabled("EGL_EXT_device_query"));
+        EGLAttrib eglDevice = 0;
+        EXPECT_EGL_TRUE(
+            eglQueryDisplayAttribEXT(getEGLWindow()->getDisplay(), EGL_DEVICE_EXT, &eglDevice));
+        EXPECT_TRUE(IsEGLDeviceExtensionEnabled(reinterpret_cast<EGLDeviceEXT>(eglDevice),
+                                                kWebGPUDeviceExt));
+
+        EGLAttrib wgpuDevice = 0;
+        EXPECT_TRUE(eglQueryDeviceAttribEXT(reinterpret_cast<EGLDeviceEXT>(eglDevice),
+                                            EGL_WEBGPU_DEVICE_ANGLE, &wgpuDevice));
+
+        return reinterpret_cast<WGPUDevice>(wgpuDevice);
+    }
+
+    void createEGLImageWebGPUTextureClientBufferSource(const WGPUTextureDescriptor &desc,
+                                                       const EGLint *attribsImage,
+                                                       const std::vector<GLubyte> &data,
+                                                       uint32_t bytesPerRow,
+                                                       WGPUTexture *outSourceWebGPUTexture,
+                                                       EGLImageKHR *outSourceImage)
+    {
+        const DawnProcTable &wgpu = getWebGPUProcs();
+
+        WGPUDevice device   = getWebGPUDevice();
+        WGPUTexture texture = wgpu.deviceCreateTexture(device, &desc);
+
+        EGLImageKHR image = eglCreateImageKHR(getEGLWindow()->getDisplay(), EGL_NO_CONTEXT,
+                                              EGL_WEBGPU_TEXTURE_ANGLE, texture, attribsImage);
+        ASSERT_EGL_SUCCESS();
+
+        if (!data.empty())
+        {
+            WGPUQueue queue = wgpu.deviceGetQueue(device);
+
+            WGPUTexelCopyTextureInfo copyDest = WGPU_TEXEL_COPY_TEXTURE_INFO_INIT;
+            copyDest.texture                  = texture;
+            copyDest.mipLevel                 = 0;
+            copyDest.origin                   = {0, 0, 0};
+
+            WGPUTexelCopyBufferLayout dataLayout = WGPU_TEXEL_COPY_BUFFER_LAYOUT_INIT;
+            dataLayout.bytesPerRow               = bytesPerRow;
+
+            wgpu.queueWriteTexture(queue, &copyDest, data.data(), data.size(), &dataLayout,
+                                   &desc.size);
+
+            wgpu.queueRelease(queue);
+        }
+
+        wgpu.deviceRelease(device);
+
+        *outSourceWebGPUTexture = texture;
+        *outSourceImage         = image;
+    }
+#endif  // defined(ANGLE_ENABLE_WGPU)
+
     void createEGLImageTargetRenderbuffer(EGLImageKHR image, GLuint targetRenderbuffer)
     {
         // Create a target texture from the image
@@ -1184,6 +1311,18 @@ void main()
     {
         verifyResultsTexture(texture, data, GL_TEXTURE_EXTERNAL_OES, mTextureYUVVSProgram,
                              mTextureYUVVSUniformLocation);
+    }
+
+    void verifyResultsExternalYUVFetch(GLuint texture, const GLubyte data[4])
+    {
+        verifyResultsTexture(texture, data, GL_TEXTURE_EXTERNAL_OES, mFetchYUVProgram,
+                             mFetchYUVUniformLocation);
+    }
+
+    void verifyResultsExternalYUVFetchVS(GLuint texture, const GLubyte data[4])
+    {
+        verifyResultsTexture(texture, data, GL_TEXTURE_EXTERNAL_OES, mFetchYUVVSProgram,
+                             mFetchYUVVSUniformLocation);
     }
 
     void verifyResultsRenderbuffer(GLuint renderbuffer, GLubyte referenceColor[4])
@@ -1456,6 +1595,24 @@ void main()
         return IsEGLDisplayExtensionEnabled(getEGLWindow()->getDisplay(), kCubemapExt);
     }
 
+    bool hasWebGPUDeviceExt() const
+    {
+        if (!IsEGLClientExtensionEnabled("EGL_EXT_device_query"))
+        {
+            return false;
+        }
+        EGLAttrib device = 0;
+        EXPECT_EGL_TRUE(
+            eglQueryDisplayAttribEXT(getEGLWindow()->getDisplay(), EGL_DEVICE_EXT, &device));
+        return IsEGLDeviceExtensionEnabled(reinterpret_cast<EGLDeviceEXT>(device),
+                                           kWebGPUDeviceExt);
+    }
+
+    bool hasWebGPUTextureExt() const
+    {
+        return IsEGLDisplayExtensionEnabled(getEGLWindow()->getDisplay(), kWebGPUTextureExt);
+    }
+
     angle::VulkanPerfCounters getPerfCounters()
     {
         ASSERT(IsVulkan());
@@ -1630,6 +1787,11 @@ void main()
     GLuint mTextureYUVVSProgram        = 0;
     GLint mTextureYUVVSUniformLocation = -1;
 
+    GLuint mFetchYUVProgram          = 0;
+    GLint mFetchYUVUniformLocation   = -1;
+    GLuint mFetchYUVVSProgram        = 0;
+    GLint mFetchYUVVSUniformLocation = -1;
+
     GLuint mRenderYUVProgram        = 0;
     GLint mRenderYUVUniformLocation = -1;
 
@@ -1706,6 +1868,29 @@ TEST_P(ImageTest, ANGLEExtensionAvailability)
         EXPECT_FALSE(has2DTextureExt());
         EXPECT_FALSE(has3DTextureExt());
         EXPECT_FALSE(hasRenderbufferExt());
+    }
+    else if (IsWebGPU())
+    {
+        EXPECT_TRUE(hasOESExt());
+        EXPECT_TRUE(hasBaseExt());
+        EXPECT_TRUE(hasExternalExt());
+        if (getClientMajorVersion() >= 3)
+        {
+            EXPECT_TRUE(hasExternalESSL3Ext());
+        }
+        else
+        {
+            EXPECT_FALSE(hasExternalESSL3Ext());
+        }
+        EXPECT_TRUE(has2DTextureExt());
+        EXPECT_FALSE(hasCubemapExt());
+        EXPECT_FALSE(has3DTextureExt());
+        EXPECT_TRUE(hasRenderbufferExt());
+        EXPECT_TRUE(hasWebGPUDeviceExt());
+        EXPECT_TRUE(hasWebGPUTextureExt());
+#if !defined(ANGLE_ENABLE_WGPU)
+        FAIL() << "ANGLE_ENABLE_WGPU not defined when running on WebGPU backend";
+#endif
     }
     else
     {
@@ -3245,6 +3430,90 @@ TEST_P(ImageTest, ImageSiblingAsSourceTarget)
     eglDestroyImageKHR(window->getDisplay(), image2);
 }
 
+#if defined(ANGLE_ENABLE_WGPU)
+// Testing source WebGPU Texture EGL image, target 2D texture
+TEST_P(ImageTest, SourceWebGPUTextureTarget2D)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+    ANGLE_SKIP_TEST_IF(!hasWebGPUDeviceExt() || !hasWebGPUTextureExt());
+
+    const DawnProcTable &wgpu = getWebGPUProcs();
+
+    std::vector<GLubyte> data = {190, 128, 238, 255};
+    uint32_t dataBytesPerRow  = 4;
+
+    WGPUTextureDescriptor desc = WGPU_TEXTURE_DESCRIPTOR_INIT;
+    desc.usage                 = WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst |
+                 WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
+    desc.dimension = WGPUTextureDimension_2D;
+    desc.size      = {1, 1, 1};
+    desc.format    = WGPUTextureFormat_RGBA8Unorm;
+
+    const EGLint attribs[] = {EGL_NONE};
+
+    // Create the Image
+    WGPUTexture source;
+    EGLImageKHR image;
+    createEGLImageWebGPUTextureClientBufferSource(desc, attribs, data, dataBytesPerRow, &source,
+                                                  &image);
+
+    // Create a texture target to bind the egl image
+    GLTexture target;
+    createEGLImageTargetTexture2D(image, target);
+
+    // Use texture target bound to egl image as source and render to framebuffer
+    // Verify that the target texture has the expected color
+    verifyResults2D(target, getExpected2DColorForAttribList(attribs));
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+    wgpu.textureRelease(source);
+}
+
+// Testing source WebGPU Texture EGL image, target 2D renderbuffer
+TEST_P(ImageTest, SourceWebGPUTextureRenderbuffer)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+    ANGLE_SKIP_TEST_IF(!hasWebGPUDeviceExt() || !hasWebGPUTextureExt());
+
+    const DawnProcTable &wgpu = getWebGPUProcs();
+
+    std::vector<GLubyte> data = {190, 128, 238, 255};
+    uint32_t dataBytesPerRow  = 4;
+
+    WGPUTextureDescriptor desc = WGPU_TEXTURE_DESCRIPTOR_INIT;
+    desc.usage                 = WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst |
+                 WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
+    desc.dimension = WGPUTextureDimension_2D;
+    desc.size      = {1, 1, 1};
+    desc.format    = WGPUTextureFormat_RGBA8Unorm;
+
+    const EGLint attribs[] = {EGL_NONE};
+
+    // Create the Image
+    WGPUTexture source;
+    EGLImageKHR image;
+    createEGLImageWebGPUTextureClientBufferSource(desc, attribs, data, dataBytesPerRow, &source,
+                                                  &image);
+
+    // Create a renderbuffer target to bind the egl image
+    GLRenderbuffer target;
+    createEGLImageTargetRenderbuffer(image, target);
+
+    // Use renderbuffer target bound to egl image as source and render to framebuffer
+    // Verify that the target renderbuffer has the expected color
+    verifyResultsRenderbuffer(target, getExpected2DColorForAttribList(attribs));
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+    wgpu.textureRelease(source);
+}
+#endif  // defined(ANGLE_ENABLE_WGPU)
+
 // Testing source AHB EGL image, target 2D texture and delete when in use
 // If refcounted correctly, the test should pass without issues
 TEST_P(ImageTest, SourceAHBTarget2DEarlyDelete)
@@ -4208,6 +4477,82 @@ TEST_P(ImageTestES3, SourceYUVAHBTargetExternalYUVSampleVS)
 
     GLubyte pixelColor[4] = {197, 128, 192, 255};
     verifyResultsExternalYUVVS(target, pixelColor);
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+    destroyAndroidHardwareBuffer(source);
+}
+
+// Test texelFetch from a YUV AHB using samplerExternalOES in the fragment shader
+TEST_P(ImageTestES3, SourceYUVAHBTargetExternalYUVFetchSamplerExternalOES)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt() ||
+                       !hasExternalESSL3Ext());
+    ANGLE_SKIP_TEST_IF(!hasAndroidImageNativeBufferExt() || !hasAndroidHardwareBufferSupport());
+    ANGLE_SKIP_TEST_IF(!hasAhbLockPlanesSupport());
+
+    // 3 planes of data
+    GLubyte dataY[4]  = {7, 51, 197, 231};
+    GLubyte dataCb[1] = {
+        128,
+    };
+    GLubyte dataCr[1] = {
+        192,
+    };
+
+    // Create the Image
+    AHardwareBuffer *source;
+    EGLImageKHR image;
+    createEGLImageAndroidHardwareBufferSource(
+        2, 2, 1, AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420, kDefaultAHBUsage, kDefaultAttribs,
+        {{dataY, 1}, {dataCb, 1}, {dataCr, 1}}, &source, &image);
+
+    // Create a texture target to bind the egl image
+    GLTexture target;
+    createEGLImageTargetTextureExternal(image, target);
+
+    GLubyte pixelRGBColor[4] = {255, 159, 212, 255};
+    verifyResultsExternalYUVFetch(target, pixelRGBColor);
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+    destroyAndroidHardwareBuffer(source);
+}
+
+// Test texelFetch from a YUV AHB using samplerExternalOES in the vertex shader
+TEST_P(ImageTestES3, SourceYUVAHBTargetExternalYUVFetchVSSamplerExternalOES)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt() ||
+                       !hasExternalESSL3Ext());
+    ANGLE_SKIP_TEST_IF(!hasAndroidImageNativeBufferExt() || !hasAndroidHardwareBufferSupport());
+    ANGLE_SKIP_TEST_IF(!hasAhbLockPlanesSupport());
+
+    // 3 planes of data
+    GLubyte dataY[4]  = {7, 51, 197, 231};
+    GLubyte dataCb[1] = {
+        128,
+    };
+    GLubyte dataCr[1] = {
+        192,
+    };
+
+    // Create the Image
+    AHardwareBuffer *source;
+    EGLImageKHR image;
+    createEGLImageAndroidHardwareBufferSource(
+        2, 2, 1, AHARDWAREBUFFER_FORMAT_Y8Cb8Cr8_420, kDefaultAHBUsage, kDefaultAttribs,
+        {{dataY, 1}, {dataCb, 1}, {dataCr, 1}}, &source, &image);
+
+    // Create a texture target to bind the egl image
+    GLTexture target;
+    createEGLImageTargetTextureExternal(image, target);
+
+    GLubyte pixelRGBColor[4] = {255, 159, 212, 255};
+    verifyResultsExternalYUVFetchVS(target, pixelRGBColor);
 
     // Clean up
     eglDestroyImageKHR(window->getDisplay(), image);
@@ -7002,6 +7347,7 @@ void ImageTest::SourceRenderbufferTargetTexture_helper(const EGLint *attribs)
     glClearColor(kSrgbColor[0] / 255.0f, kSrgbColor[1] / 255.0f, kSrgbColor[2] / 255.0f,
                  kSrgbColor[3] / 255.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     ASSERT_GL_NO_ERROR();
 
     // Create the target
@@ -7047,6 +7393,7 @@ void ImageTest::SourceRenderbufferTargetTextureExternal_helper(const EGLint *att
     glClearColor(kSrgbColor[0] / 255.0f, kSrgbColor[1] / 255.0f, kSrgbColor[2] / 255.0f,
                  kSrgbColor[3] / 255.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     ASSERT_GL_NO_ERROR();
 
     // Create the target
@@ -7699,6 +8046,83 @@ TEST_P(ImageTest, AHBUpdatedExternalTexture)
 
     // Expect that the target have the update data
     verifyResults2D(targetTexture2, updateData);
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+    destroyAndroidHardwareBuffer(source);
+}
+
+// Check that the texture is successfully updated using PBO.
+TEST_P(ImageTest, AHBUpdatedUnpackBuffer)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+    ANGLE_SKIP_TEST_IF(!hasAndroidImageNativeBufferExt() || !hasAndroidHardwareBufferSupport());
+    ANGLE_SKIP_TEST_IF(!hasAhbLockPlanesSupport());
+
+    GLubyte originalData[4 * 4] = {
+        0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
+        0x00, 0x00, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF,
+    };
+
+    static const unsigned char pbo[] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF, 0xFF,
+        0xFF, 0xFF, 0x7F, 0x7F, 0xFF, 0x00, 0xFF, 0x00, 0xFF, 0xFF, 0x00, 0xFF,
+        0xFF, 0xFF, 0x7F, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0x00,
+    };
+    GLubyte resultData[4 * 4] = {
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0x0F, 0xFF, 0xFF, 0xFF, 0x0F, 0xFF, 0xFF,
+    };
+    const uint32_t bytesPerPixel = 4;
+
+    // Create the Image
+    AHardwareBuffer *source;
+    EGLImageKHR image;
+    createEGLImageAndroidHardwareBufferSource(2, 2, 1, AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM,
+                                              kDefaultAHBUsage, kDefaultAttribs,
+                                              {{originalData, bytesPerPixel}}, &source, &image);
+
+    // Create target
+    GLTexture targetTexture;
+    createEGLImageTargetTexture2D(image, targetTexture);
+
+    // Expect that both the target have the original data
+    verifyResults2D(targetTexture, originalData);
+
+    GLBuffer buf;
+    glBindBuffer(GL_PIXEL_UNPACK_BUFFER, buf);
+    glPixelStorei(GL_UNPACK_ROW_LENGTH, 1);
+    glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+    glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    glBufferData(GL_PIXEL_UNPACK_BUFFER, sizeof(pbo), NULL, GL_DYNAMIC_DRAW);
+    glBufferSubData(GL_PIXEL_UNPACK_BUFFER, 0, sizeof(pbo), pbo);
+    EXPECT_GL_NO_ERROR();
+
+    // Update the data of the source
+    glBindTexture(GL_TEXTURE_2D, targetTexture);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 2, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 1, 0, 1, 2, GL_RGBA, GL_UNSIGNED_BYTE, 0);
+
+    // Set sync object and flush the GL commands
+    EGLSyncKHR fence = eglCreateSyncKHR(window->getDisplay(), EGL_SYNC_FENCE_KHR, NULL);
+    ASSERT_NE(fence, EGL_NO_SYNC_KHR);
+    glFlush();
+
+    // Wait that the flush command is finished
+    EGLint result = eglClientWaitSyncKHR(window->getDisplay(), fence, 0, 1000000000);
+    ASSERT_EQ(result, EGL_CONDITION_SATISFIED_KHR);
+    ASSERT_EGL_TRUE(eglDestroySyncKHR(window->getDisplay(), fence));
+
+    // Delete the EGL image
+    eglDestroyImageKHR(window->getDisplay(), image);
+
+    // Access the android hardware buffer directly to check the data is updated
+    verifyResultAHB(source, {{resultData, bytesPerPixel}});
 
     // Clean up
     eglDestroyImageKHR(window->getDisplay(), image);
@@ -9316,8 +9740,248 @@ TEST_P(ImageTestES3, DmaBufNegativeValidation)
     }
 }
 
+// Test redefining the source GL texture
+TEST_P(ImageTestES3, RedefineSourceTexture)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+
+    const GLColor originalColor = GLColor::yellow;
+    const std::vector<GLColor> updateColor(4, GLColor::blue);
+
+    // Create the Image
+    GLTexture source;
+    EGLImageKHR image;
+    createEGLImage2DTextureSource(1, 1, GL_RGBA, GL_UNSIGNED_BYTE, kDefaultAttribs,
+                                  originalColor.data(), source, &image);
+
+    // Create texture & bind to Image
+    GLTexture target;
+    createEGLImageTargetTexture2D(image, target);
+
+    // Verify that the target texture has the expected color, makes sure everything is synced and
+    // |texture| is fully set up.
+    verifyResults2D(target, originalColor.data());
+
+    // Change the source texture.  The size is changed to make sure a new image is definitely
+    // created for the texture.
+    glBindTexture(GL_TEXTURE_2D, source);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, updateColor.data());
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_BASE_LEVEL, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
+
+    // Make sure source is fully set up.
+    verifyResults2D(source, updateColor[0].data());
+
+    // Make sure the target still points to the old image.
+    verifyResults2D(target, originalColor.data());
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+
+    ASSERT_EGL_SUCCESS();
+    ASSERT_GL_NO_ERROR();
+}
+
+// Test fully overwriting the source GL texture
+TEST_P(ImageTestES3, RewriteSourceTexture)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+
+    const GLColor originalColor = GLColor::yellow;
+    const GLColor updateColor   = GLColor::blue;
+
+    // Create the Image
+    GLTexture source;
+    EGLImageKHR image;
+    createEGLImage2DTextureSource(1, 1, GL_RGBA, GL_UNSIGNED_BYTE, kDefaultAttribs,
+                                  originalColor.data(), source, &image);
+
+    // Create texture & bind to Image
+    GLTexture target;
+    createEGLImageTargetTexture2D(image, target);
+
+    // Verify that the target texture has the expected color, makes sure everything is synced and
+    // |texture| is fully set up.
+    verifyResults2D(target, originalColor.data());
+
+    // Upload new data to source texture such that it's completely overwritten.
+    glBindTexture(GL_TEXTURE_2D, source);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, updateColor.data());
+
+    // Make sure the target sees the update written to the source texture.
+    verifyResults2D(target, updateColor.data());
+
+    // For completeness, check source too
+    verifyResults2D(source, updateColor.data());
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+
+    ASSERT_EGL_SUCCESS();
+    ASSERT_GL_NO_ERROR();
+}
+
+// Test using the source GL texture as a storage image.  Internally, the Vulkan backend recreates
+// the Texture's image backing.
+TEST_P(ImageTestES31, UseSourceTextureAsStorageImage)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+
+    const GLColor originalColor = GLColor::yellow;
+
+    // Create the Image, use glTexStorage2D for storage image use later.
+    GLTexture source;
+    glBindTexture(GL_TEXTURE_2D, source);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 1, 1);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, originalColor.data());
+
+    EGLImageKHR image =
+        eglCreateImageKHR(window->getDisplay(), window->getContext(), EGL_GL_TEXTURE_2D_KHR,
+                          reinterpretHelper<EGLClientBuffer>(source), kDefaultAttribs);
+    ASSERT_EGL_SUCCESS();
+
+    // Create texture & bind to Image
+    GLTexture target;
+    createEGLImageTargetTexture2D(image, target);
+
+    // Verify that the target texture has the expected color, makes sure everything is synced and
+    // |texture| is fully set up.
+    verifyResults2D(target, originalColor.data());
+
+    // Use the source texture as a storage image
+    const char kCS[] = R"(#version 310 es
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+layout(rgba8) uniform highp writeonly image2D img;
+void main()
+{
+    imageStore(img, ivec2(0, 0), vec4(0, 0, 1, 1));
+})";
+
+    ANGLE_GL_COMPUTE_PROGRAM(program, kCS);
+    glUseProgram(program);
+
+    glBindImageTexture(0, source, 0, GL_FALSE, 0, GL_WRITE_ONLY, GL_RGBA8);
+    glDispatchCompute(1, 1, 1);
+    EXPECT_GL_NO_ERROR();
+
+    // Make sure the target sees the update written to the source texture.
+    glMemoryBarrier(GL_TEXTURE_FETCH_BARRIER_BIT);
+    verifyResults2D(target, GLColor::blue.data());
+
+    // For completeness, check source too
+    verifyResults2D(source, GLColor::blue.data());
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+
+    ASSERT_EGL_SUCCESS();
+    ASSERT_GL_NO_ERROR();
+}
+
+// Test overwriting the base level and calling glGenerateMipmap on the source GL texture while the
+// texture is in use.
+TEST_P(ImageTestES3, ImmutableTextureOverwriteBaseLevelAndGenerateMipmapWhileInUse)
+{
+    EGLWindow *window = getEGLWindow();
+
+    ANGLE_SKIP_TEST_IF(!hasOESExt() || !hasBaseExt() || !has2DTextureExt());
+
+    constexpr char kVS[] = R"(#version 300 es
+out vec2 texcoord;
+in vec4 position;
+void main()
+{
+    gl_Position = vec4(position.xy, 0.0, 1.0);
+    texcoord = (position.xy * 0.5) + 0.5;
+})";
+
+    constexpr char kFS[] = R"(#version 300 es
+precision highp float;
+uniform sampler2D tex;
+in vec2 texcoord;
+out vec4 fragColor;
+void main()
+{
+    vec4 test = vec4(0.8, 0.8, 0.8, 0.8);
+    for (int i = 0; i < 500; i++)
+    {
+        test = sqrt(test);
+    }
+    fragColor = texture(tex, texcoord * test.xy);
+})";
+
+    constexpr uint32_t kWidth  = 16;
+    constexpr uint32_t kHeight = 24;
+    const std::vector<GLColor> originalColor(kWidth * kHeight, GLColor::yellow);
+    const std::vector<GLColor> updateColor1(kWidth * kHeight, GLColor::red);
+    const std::vector<GLColor> updateColor2(kWidth * kHeight, GLColor::green);
+    const std::vector<GLColor> updateColor3(kWidth * kHeight, GLColor::blue);
+    const std::vector<GLColor> *updateColors[] = {&updateColor1, &updateColor2, &updateColor3};
+
+    // Create the Image, use glTexStorage2D for glGenerateMipmap not to orphan the EGL image.
+    GLTexture source;
+    glBindTexture(GL_TEXTURE_2D, source);
+    glTexStorage2D(GL_TEXTURE_2D, 5, GL_RGBA8, kWidth, kHeight);
+    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kWidth, kHeight, GL_RGBA, GL_UNSIGNED_BYTE,
+                    originalColor.data());
+
+    EGLImageKHR image =
+        eglCreateImageKHR(window->getDisplay(), window->getContext(), EGL_GL_TEXTURE_2D_KHR,
+                          reinterpretHelper<EGLClientBuffer>(source), kDefaultAttribs);
+    ASSERT_EGL_SUCCESS();
+
+    // Create texture & bind to Image
+    GLTexture target;
+    createEGLImageTargetTexture2D(image, target);
+
+    // Verify that the target texture has the expected color, makes sure everything is synced and
+    // |texture| is fully set up.
+    verifyResults2D(target, originalColor[0].data());
+
+    ANGLE_GL_PROGRAM(program, kVS, kFS);
+    glBindTexture(GL_TEXTURE_2D, source);
+
+    // Use the source texture in an expensive draw call.  Then completely overwrite the base level,
+    // then generate mipmap.  Do this multiple times, for any "redefines base level then generates
+    // mipmap" tracking heuristics that might trigger recreating the backing image of the texture to
+    // make sure the target texture still points to the same backing image.
+    for (uint32_t i = 0; i < 13; ++i)
+    {
+        for (const auto *updateColor : updateColors)
+        {
+            drawQuad(program, "position", 0.0f);
+
+            glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kWidth, kHeight, GL_RGBA, GL_UNSIGNED_BYTE,
+                            updateColor->data());
+            glGenerateMipmap(GL_TEXTURE_2D);
+        }
+    }
+
+    // http://anglebug.com/410584007
+    ANGLE_SKIP_TEST_IF(getEGLWindow()->isFeatureEnabled(Feature::AllowGenerateMipmapWithCompute));
+
+    // Make sure the target sees the update written to the source texture.
+    verifyResults2D(target, updateColor3[0].data());
+
+    // For completeness, check source too
+    verifyResults2D(source, updateColor3[0].data());
+
+    // Clean up
+    eglDestroyImageKHR(window->getDisplay(), image);
+
+    ASSERT_EGL_SUCCESS();
+    ASSERT_GL_NO_ERROR();
+}
+
 ANGLE_INSTANTIATE_TEST_ES2_AND_ES3_AND(ImageTest,
-                                       ES3_VULKAN().enable(Feature::AllocateNonZeroMemory));
+                                       ES3_VULKAN().enable(Feature::AllocateNonZeroMemory),
+                                       ES2_WEBGPU());
 
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(ImageTestES3);
 ANGLE_INSTANTIATE_TEST_ES3_AND(ImageTestES3, ES3_VULKAN().enable(Feature::AllocateNonZeroMemory));

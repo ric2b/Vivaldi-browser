@@ -28,7 +28,6 @@ if (use_fuzzing_engine_with_lpm) {
       "//chrome/common:constants",
       "//chromeos/ash/components/attestation",
       "//chromeos/ash/components/install_attributes",
-      "//components/exo/wayland:test_controller_stub",
       "//components/exo/wayland:ui_controls_protocol_stub",
       "//components/policy:generated",
       "//components/policy/core/browser",
@@ -63,8 +62,9 @@ if (use_fuzzing_engine_with_lpm) {
       "$root_gen_dir/components/policy/proto",
     ]
 
-    proto_deps = [ "//components/policy/proto/fuzzer" ]
-
-    link_deps = [ "//components/policy/proto/fuzzer" ]
+    proto_library_deps = [
+      "//components/policy/proto/fuzzer:chrome_device_policy_full_runtime_proto",
+      "//components/policy/proto/fuzzer:cloud_policy_full_runtime_proto",
+    ]
   }
 }

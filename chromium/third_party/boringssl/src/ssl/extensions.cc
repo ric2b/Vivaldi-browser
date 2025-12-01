@@ -45,18 +45,6 @@ BSSL_NAMESPACE_BEGIN
 static bool ssl_check_clienthello_tlsext(SSL_HANDSHAKE *hs);
 static bool ssl_check_serverhello_tlsext(SSL_HANDSHAKE *hs);
 
-static int compare_uint16_t(const void *p1, const void *p2) {
-  uint16_t u1 = *((const uint16_t *)p1);
-  uint16_t u2 = *((const uint16_t *)p2);
-  if (u1 < u2) {
-    return -1;
-  } else if (u1 > u2) {
-    return 1;
-  } else {
-    return 0;
-  }
-}
-
 // Per http://tools.ietf.org/html/rfc5246#section-7.4.1.4, there may not be
 // more than one extension of the same type in a ClientHello or ServerHello.
 // This function does an initial scan over the extensions block to filter those
@@ -100,8 +88,7 @@ static bool tls1_check_duplicate_extensions(const CBS *cbs) {
   assert(CBS_len(&extensions) == 0);
 
   // Sort the extensions and make sure there are no duplicates.
-  qsort(extension_types.data(), extension_types.size(), sizeof(uint16_t),
-        compare_uint16_t);
+  std::sort(extension_types.begin(), extension_types.end());
   for (size_t i = 1; i < num_extensions; i++) {
     if (extension_types[i - 1] == extension_types[i]) {
       return false;
@@ -2694,24 +2681,26 @@ static bool ext_trust_anchors_parse_clienthello(SSL_HANDSHAKE *hs,
 
 static bool ext_trust_anchors_add_serverhello(SSL_HANDSHAKE *hs, CBB *out) {
   SSL *const ssl = hs->ssl;
-  const auto &creds = hs->config->cert->credentials;
-  if (ssl_protocol_version(ssl) < TLS1_3_VERSION ||
-      // Check if any credentials have trust anchor IDs.
-      std::none_of(creds.begin(), creds.end(), [](const auto &cred) {
-        return !cred->trust_anchor_id.empty();
-      })) {
+  if (ssl_protocol_version(ssl) < TLS1_3_VERSION) {
     return true;
   }
-  CBB contents, list;
-  if (!CBB_add_u16(out, TLSEXT_TYPE_trust_anchors) ||  //
-      !CBB_add_u16_length_prefixed(out, &contents) ||  //
+
+  const size_t old_len = CBB_len(out);
+  CBB contents, list, child;
+  if (!CBB_add_u16(out, TLSEXT_TYPE_trust_anchors) ||
+      !CBB_add_u16_length_prefixed(out, &contents) ||
       !CBB_add_u16_length_prefixed(&contents, &list)) {
     return false;
   }
-  for (const auto &cred : creds) {
+  for (const auto &cred : hs->config->cert->credentials) {
     if (!cred->trust_anchor_id.empty()) {
-      CBB child;
-      if (!CBB_add_u8_length_prefixed(&list, &child) ||  //
+      uint16_t unused_sigalg;
+      if (!ssl_check_tls13_credential_ignoring_issuer(hs, cred.get(),
+                                                      &unused_sigalg)) {
+        ERR_clear_error();
+        continue;
+      }
+      if (!CBB_add_u8_length_prefixed(&list, &child) ||
           !CBB_add_bytes(&child, cred->trust_anchor_id.data(),
                          cred->trust_anchor_id.size()) ||
           !CBB_flush(&list)) {
@@ -2719,7 +2708,17 @@ static bool ext_trust_anchors_add_serverhello(SSL_HANDSHAKE *hs, CBB *out) {
       }
     }
   }
-  return CBB_flush(out);
+
+  bool empty = CBB_len(&list) == 0;
+  if (!CBB_flush(out)) {
+    return false;
+  }
+
+  // Don't send the extension if it would have been empty.
+  if (empty) {
+    CBB_discard(out, CBB_len(out) - old_len);
+  }
+  return true;
 }
 
 static bool ext_trust_anchors_parse_serverhello(SSL_HANDSHAKE *hs,
@@ -3057,8 +3056,7 @@ static bool cert_compression_parse_clienthello(SSL_HANDSHAKE *hs,
     }
   }
 
-  qsort(given_alg_ids.data(), given_alg_ids.size(), sizeof(uint16_t),
-        compare_uint16_t);
+  std::sort(given_alg_ids.begin(), given_alg_ids.end());
   for (size_t i = 1; i < num_given_alg_ids; i++) {
     if (given_alg_ids[i - 1] == given_alg_ids[i]) {
       return false;

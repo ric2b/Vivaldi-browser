@@ -14,6 +14,7 @@
 #include "ios/chrome/browser/discover_feed/model/feed_constants.h"
 #include "ios/chrome/browser/discover_feed/model/feed_model_configuration.h"
 
+enum class BrowserViewVisibilityState;
 @class FeedMetricsRecorder;
 
 // A browser-context keyed service that is used to keep the Discover Feed data
@@ -56,6 +57,12 @@ class DiscoverFeedService : public DiscoverFeedRefresher, public KeyedService {
   // `feed_view_controller` will no longer be used.
   virtual void RemoveFeedViewController(
       UIViewController* feed_view_controller) = 0;
+
+  // Informs the service that the Discover content visibility state has changed.
+  virtual void UpdateFeedViewVisibilityState(
+      UICollectionView* collection_view,
+      BrowserViewVisibilityState current_state,
+      BrowserViewVisibilityState previous_state) = 0;
 
   // Updates the feed's theme to match the user's theme (light/dark).
   virtual void UpdateTheme() = 0;

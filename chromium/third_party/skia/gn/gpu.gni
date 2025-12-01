@@ -330,6 +330,7 @@ skia_ganesh_private = [
   "$_src/gpu/ganesh/PathRenderer.h",
   "$_src/gpu/ganesh/PathRendererChain.cpp",
   "$_src/gpu/ganesh/PathRendererChain.h",
+  "$_src/gpu/ganesh/SkGaneshRecorder.h",
   "$_src/gpu/ganesh/SkGr.cpp",
   "$_src/gpu/ganesh/SkGr.h",
   "$_src/gpu/ganesh/StencilClip.h",
@@ -545,6 +546,7 @@ skia_ganesh_private = [
   "$_src/gpu/ganesh/tessellate/StrokeTessellator.cpp",
   "$_src/gpu/ganesh/tessellate/StrokeTessellator.h",
   "$_src/gpu/ganesh/tessellate/VertexChunkPatchAllocator.h",
+  "$_src/gpu/ganesh/text/GaneshVertexFiller.cpp",
   "$_src/gpu/ganesh/text/GrAtlasManager.cpp",
   "$_src/gpu/ganesh/text/GrAtlasManager.h",
 ]

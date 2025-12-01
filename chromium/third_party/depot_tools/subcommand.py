@@ -42,9 +42,15 @@ Explanation:
 import difflib
 import sys
 import textwrap
+import optparse
+
+from collections.abc import Callable
+from typing import NoReturn
+
+CommandFunction = Callable[[optparse.OptionParser, list[str]], int]
 
 
-def usage(more):
+def usage(more: str) -> Callable[[CommandFunction], CommandFunction]:
     """Adds a 'usage_more' property to a CMD function."""
     def hook(fn):
         fn.usage_more = more
@@ -53,7 +59,7 @@ def usage(more):
     return hook
 
 
-def epilog(text):
+def epilog(text: str) -> Callable[[CommandFunction], CommandFunction]:
     """Adds an 'epilog' property to a CMD function.
 
     It will be shown in the epilog. Usually useful for examples.
@@ -65,7 +71,7 @@ def epilog(text):
     return hook
 
 
-def CMDhelp(parser, args):
+def CMDhelp(parser: optparse.OptionParser, args: list[str]) -> NoReturn:
     """Prints list of commands or help for a specific command."""
     # This is the default help implementation. It can be disabled or overridden
     # if wanted.
@@ -85,13 +91,14 @@ def _get_color_module():
         'third_party.colorama')
 
 
-def _function_to_name(name):
+def _function_to_name(name: str) -> str:
     """Returns the name of a CMD function."""
     return name[3:].replace('_', '-')
 
 
 class CommandDispatcher(object):
-    def __init__(self, module):
+
+    def __init__(self, module: str):
         """module is the name of the main python module where to look for
         commands.
 
@@ -104,7 +111,7 @@ class CommandDispatcher(object):
         """
         self.module = sys.modules[module]
 
-    def enumerate_commands(self):
+    def enumerate_commands(self) -> dict[str, CommandFunction]:
         """Returns a dict of command and their handling function.
 
         The commands must be in the '__main__' modules. To import a command
@@ -124,7 +131,7 @@ class CommandDispatcher(object):
         cmds.setdefault('help', CMDhelp)
         return cmds
 
-    def find_nearest_command(self, name_asked):
+    def find_nearest_command(self, name_asked: str) -> CommandFunction | None:
         """Retrieves the function to handle a command as supplied by the user.
 
         It automatically tries to guess the _intended command_ by handling typos
@@ -157,7 +164,7 @@ class CommandDispatcher(object):
 
         return commands[hamming_commands[0][1]]
 
-    def _gen_commands_list(self):
+    def _gen_commands_list(self) -> str:
         """Generates the short list of supported commands."""
         commands = self.enumerate_commands()
         docs = sorted(
@@ -179,7 +186,8 @@ class CommandDispatcher(object):
                         (green, length, cmd_name, reset, doc)
                         for cmd_name, doc in docs))
 
-    def _add_command_usage(self, parser, command):
+    def _add_command_usage(self, parser: optparse.OptionParser,
+                           command: CommandFunction) -> None:
         """Modifies an OptionParser object with the function's documentation."""
         cmd_name = _function_to_name(command.__name__)
         if cmd_name == 'help':
@@ -211,7 +219,7 @@ class CommandDispatcher(object):
         parser.set_usage('usage: %%prog %s [options]%s' % (cmd_name, extra))
 
     @staticmethod
-    def _create_command_summary(cmd_name, command):
+    def _create_command_summary(cmd_name: str, command: CommandFunction) -> str:
         """Creates a oneliner summary from the command's docstring."""
         if cmd_name != _function_to_name(command.__name__):
             # Skip aliases. For example using at module level:
@@ -223,7 +231,7 @@ class CommandDispatcher(object):
             return line
         return (line[0].lower() + line[1:]).strip()
 
-    def execute(self, parser, args):
+    def execute(self, parser: optparse.OptionParser, args: list[str]) -> int:
         """Dispatches execution to the right command.
 
         Fallbacks to 'help' if not disabled.
@@ -231,8 +239,8 @@ class CommandDispatcher(object):
         # Unconditionally disable format_description() and format_epilog().
         # Technically, a formatter should be used but it's not worth (yet) the
         # trouble.
-        parser.format_description = lambda _: parser.description or ''
-        parser.format_epilog = lambda _: parser.epilog or ''
+        parser.format_description = lambda formatter: parser.description or ''
+        parser.format_epilog = lambda formatter: parser.epilog or ''
 
         if args:
             if args[0] in ('-h', '--help') and len(args) > 1:

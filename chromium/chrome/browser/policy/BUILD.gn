@@ -154,6 +154,7 @@ source_set("test_support") {
 
   deps = [
     "//base",
+    "//chrome/browser/lifetime:termination_notification",
     "//chrome/test:test_support",
     "//components/policy/core/common",
     "//components/policy/core/common:common_constants",
@@ -227,7 +228,6 @@ source_set("policy_specific_browser_tests") {
     "test/force_permission_policy_unload_default_enabled_policy_browsertest.cc",
     "test/hsts_policy_browsertest.cc",
     "test/keyboard_focusable_scollers_policy_browsertest.cc",
-    "test/mutation_events_policy_browsertest.cc",
     "test/network_prediction_policy_browsertest.cc",
     "test/policy_statistics_collector_browsertest.cc",
     "test/proxy_policies_browsertest.cc",
@@ -258,6 +258,7 @@ source_set("policy_specific_browser_tests") {
     "//components/proxy_config",
     "//components/safe_browsing/core/common",
     "//components/security_interstitials/content:security_interstitial_page",
+    "//components/site_isolation",
     "//components/unified_consent",
     "//content/test:test_support",
     "//testing/gmock",
@@ -285,6 +286,7 @@ source_set("policy_specific_browser_tests") {
       "test/automatic_fullscreen_policy_browsertest.cc",
       "test/autoplay_policy_browsertest.cc",
       "test/bookmark_bar_enabled_browsertest.cc",
+      "test/clear_window_name_for_new_browsing_context_group_browsertest.cc",
       "test/component_updater_policy_browsertest.cc",
       "test/data_url_policy_browsertest.cc",
       "test/developer_tools_policy_browsertest.cc",
@@ -302,13 +304,13 @@ source_set("policy_specific_browser_tests") {
       "test/web_rtc_local_ips_allowed_urls_policy_browsertest.cc",
       "test/web_rtc_text_log_collection_allowed_policy_browsertest.cc",
       "test/window_management_policy_browsertest.cc",
-      "test/zstd_content_encoding_policy_browsertest.cc",
     ]
 
     deps += [
       "//chrome/browser/autofill",
       "//chrome/browser/content_settings:content_settings_factory",
       "//chrome/browser/devtools:test_support",
+      "//chrome/browser/profiles",
       "//chrome/browser/profiles:profile",
       "//chrome/browser/task_manager",
       "//components/autofill/content/browser:test_support",
@@ -336,6 +338,10 @@ source_set("policy_specific_browser_tests") {
   if (!is_chromeos) {
     sources += [ "test/variation_restrict_parameter_policy_browsertest.cc" ]
     deps += [ "//components/variations/service" ]
+  }
+
+  if (is_android) {
+    deps += [ "//chrome/browser/safe_browsing/android:test_support" ]
   }
 
   if (enable_on_device_translation) {
@@ -450,6 +456,7 @@ source_set("browser_tests") {
       "//chrome/browser/ash/policy/handlers",
       "//chrome/browser/ash/system_web_apps/apps/personalization_app",
       "//chrome/browser/ash/system_web_apps/test_support",
+      "//chrome/browser/ash/test:test_support",
       "//chrome/browser/ui/ash/keyboard",
       "//chromeos/ash/components/audio",
       "//chromeos/ash/components/cryptohome",

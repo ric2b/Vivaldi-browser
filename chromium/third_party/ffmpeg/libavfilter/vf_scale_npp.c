@@ -85,9 +85,6 @@ static const char *const var_names[] = {
     "dar",
     "n",
     "t",
-#if FF_API_FRAME_PKT
-    "pos",
-#endif
     "main_w",
     "main_h",
     "main_a",
@@ -95,9 +92,6 @@ static const char *const var_names[] = {
     "main_dar", "mdar",
     "main_n",
     "main_t",
-#if FF_API_FRAME_PKT
-    "main_pos",
-#endif
     NULL
 };
 
@@ -111,9 +105,6 @@ enum var_name {
     VAR_DAR,
     VAR_N,
     VAR_T,
-#if FF_API_FRAME_PKT
-    VAR_POS,
-#endif
     VAR_S2R_MAIN_W,
     VAR_S2R_MAIN_H,
     VAR_S2R_MAIN_A,
@@ -121,9 +112,6 @@ enum var_name {
     VAR_S2R_MAIN_DAR, VAR_S2R_MDAR,
     VAR_S2R_MAIN_N,
     VAR_S2R_MAIN_T,
-#if FF_API_FRAME_PKT
-    VAR_S2R_MAIN_POS,
-#endif
     VARS_NB
 };
 
@@ -160,6 +148,7 @@ typedef struct NPPScaleContext {
 
     int force_original_aspect_ratio;
     int force_divisible_by;
+    int reset_sar;
 
     int interp_algo;
 
@@ -214,11 +203,7 @@ static int check_exprs(AVFilterContext* ctx)
          vars_w[VAR_S2R_MAIN_DAR] || vars_h[VAR_S2R_MAIN_DAR] ||
          vars_w[VAR_S2R_MDAR]     || vars_h[VAR_S2R_MDAR]     ||
          vars_w[VAR_S2R_MAIN_N]   || vars_h[VAR_S2R_MAIN_N]   ||
-         vars_w[VAR_S2R_MAIN_T]   || vars_h[VAR_S2R_MAIN_T]
-#if FF_API_FRAME_PKT
-         || vars_w[VAR_S2R_MAIN_POS] || vars_h[VAR_S2R_MAIN_POS]
-#endif
-         )) {
+         vars_w[VAR_S2R_MAIN_T]   || vars_h[VAR_S2R_MAIN_T])) {
         av_log(ctx, AV_LOG_ERROR, "Expressions with scale2ref_npp variables are not valid in scale_npp filter.\n");
         return AVERROR(EINVAL);
     }
@@ -226,15 +211,8 @@ static int check_exprs(AVFilterContext* ctx)
     if (scale->eval_mode == EVAL_MODE_INIT &&
         (vars_w[VAR_N]            || vars_h[VAR_N]           ||
          vars_w[VAR_T]            || vars_h[VAR_T]           ||
-#if FF_API_FRAME_PKT
-         vars_w[VAR_POS]          || vars_h[VAR_POS]         ||
-#endif
          vars_w[VAR_S2R_MAIN_N]   || vars_h[VAR_S2R_MAIN_N]  ||
-         vars_w[VAR_S2R_MAIN_T]   || vars_h[VAR_S2R_MAIN_T]
-#if FF_API_FRAME_PKT
-         || vars_w[VAR_S2R_MAIN_POS] || vars_h[VAR_S2R_MAIN_POS]
-#endif
-         ) ) {
+         vars_w[VAR_S2R_MAIN_T]   || vars_h[VAR_S2R_MAIN_T])) {
         av_log(ctx, AV_LOG_ERROR, "Expressions with frame variables 'n', 't', are not valid in init eval_mode.\n");
         return AVERROR(EINVAL);
     }
@@ -650,14 +628,19 @@ static int config_props(AVFilterLink *outlink)
                             outlink->src->inputs[1] :
                             outlink->src->inputs[0];
     NPPScaleContext *s = ctx->priv;
+    double w_adj = 1.0;
     int ret;
 
     if ((ret = nppscale_eval_dimensions(ctx)) < 0)
         goto fail;
 
+    if (s->reset_sar)
+        w_adj = IS_SCALE2REF(ctx) ? s->var_values[VAR_S2R_MAIN_SAR] :
+                                    s->var_values[VAR_SAR];
+
     ff_scale_adjust_dimensions(inlink, &s->w, &s->h,
                                s->force_original_aspect_ratio,
-                               s->force_divisible_by);
+                               s->force_divisible_by, w_adj);
 
     if (s->w > INT_MAX || s->h > INT_MAX ||
         (s->h * inlink->w) > INT_MAX ||
@@ -674,7 +657,9 @@ static int config_props(AVFilterLink *outlink)
     av_log(ctx, AV_LOG_VERBOSE, "w:%d h:%d -> w:%d h:%d\n",
            inlink->w, inlink->h, outlink->w, outlink->h);
 
-    if (inlink->sample_aspect_ratio.num)
+    if (s->reset_sar)
+        outlink->sample_aspect_ratio = (AVRational){1, 1};
+    else if (inlink->sample_aspect_ratio.num)
         outlink->sample_aspect_ratio = av_mul_q((AVRational){outlink->h*inlink->w,
                                                              outlink->w*inlink->h},
                                                 inlink->sample_aspect_ratio);
@@ -813,16 +798,8 @@ static int nppscale_scale(AVFilterLink *link, AVFrame *out, AVFrame *in)
         av_expr_count_vars(s->h_pexpr, vars_h, VARS_NB);
 
         if (s->eval_mode == EVAL_MODE_FRAME && !frame_changed && !IS_SCALE2REF(ctx) &&
-            !(vars_w[VAR_N] || vars_w[VAR_T]
-#if FF_API_FRAME_PKT
-              || vars_w[VAR_POS]
-#endif
-              ) &&
-            !(vars_h[VAR_N] || vars_h[VAR_T]
-#if FF_API_FRAME_PKT
-              || vars_h[VAR_POS]
-#endif
-              ) && s->w && s->h)
+            !(vars_w[VAR_N] || vars_w[VAR_T]) &&
+            !(vars_h[VAR_N] || vars_h[VAR_T]) && s->w && s->h)
             goto scale;
 
         if (s->eval_mode == EVAL_MODE_INIT) {
@@ -843,19 +820,9 @@ static int nppscale_scale(AVFilterLink *link, AVFrame *out, AVFrame *in)
         if (IS_SCALE2REF(ctx)) {
             s->var_values[VAR_S2R_MAIN_N] = inl->frame_count_out;
             s->var_values[VAR_S2R_MAIN_T] = TS2T(in->pts, link->time_base);
-#if FF_API_FRAME_PKT
-FF_DISABLE_DEPRECATION_WARNINGS
-            s->var_values[VAR_S2R_MAIN_POS] = in->pkt_pos == -1 ? NAN : in->pkt_pos;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
         } else {
             s->var_values[VAR_N] = inl->frame_count_out;
             s->var_values[VAR_T] = TS2T(in->pts, link->time_base);
-#if FF_API_FRAME_PKT
-FF_DISABLE_DEPRECATION_WARNINGS
-            s->var_values[VAR_POS] = in->pkt_pos == -1 ? NAN : in->pkt_pos;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
         }
 
         link->format = in->format;
@@ -977,11 +944,6 @@ static int nppscale_filter_frame_ref(AVFilterLink *link, AVFrame *in)
     if (scale->eval_mode == EVAL_MODE_FRAME) {
         scale->var_values[VAR_N] = inl->frame_count_out;
         scale->var_values[VAR_T] = TS2T(in->pts, link->time_base);
-#if FF_API_FRAME_PKT
-FF_DISABLE_DEPRECATION_WARNINGS
-        scale->var_values[VAR_POS] = in->pkt_pos == -1 ? NAN : in->pkt_pos;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
     }
 
     return ff_filter_frame(outlink, in);
@@ -1019,6 +981,7 @@ static const AVOption options[] = {
     { "decrease", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 1 }, 0, 0, FLAGS, .unit = "force_oar" },
     { "increase", NULL, 0, AV_OPT_TYPE_CONST, {.i64 = 2 }, 0, 0, FLAGS, .unit = "force_oar" },
     { "force_divisible_by", "enforce that the output resolution is divisible by a defined integer when force_original_aspect_ratio is used", OFFSET(force_divisible_by), AV_OPT_TYPE_INT, { .i64 = 1 }, 1, 256, FLAGS },
+    { "reset_sar", "reset SAR to 1 and scale to square pixels if scaling proportionally", OFFSET(reset_sar), AV_OPT_TYPE_BOOL, { .i64 = 0}, 0, 1, FLAGS },
     { "eval", "specify when to evaluate expressions", OFFSET(eval_mode), AV_OPT_TYPE_INT, { .i64 = EVAL_MODE_INIT }, 0, EVAL_MODE_NB-1, FLAGS, .unit = "eval" },
          { "init",  "eval expressions once during initialization",          0, AV_OPT_TYPE_CONST, { .i64 = EVAL_MODE_INIT  }, 0, 0, FLAGS, .unit = "eval" },
          { "frame", "eval expressions during initialization and per-frame", 0, AV_OPT_TYPE_CONST, { .i64 = EVAL_MODE_FRAME }, 0, 0, FLAGS, .unit = "eval" },

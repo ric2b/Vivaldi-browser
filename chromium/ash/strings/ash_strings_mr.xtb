@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">कॅरेट ब्राउझिंग सुरू किंवा बंद करा</translation>
 <translation id="2531025035050312891">डिव्हाइसचा वेग कमी</translation>
 <translation id="2531107890083353124">टॅब ड्रॅग करताना <ph name="KEY_ONE" /> प्रेस करा</translation>
+<translation id="2532199152994248594">कॅप्चर करण्यासाठी भाग निवडण्याकरिता ड्रॅग करा किंवा स्पेस प्रेस करा</translation>
 <translation id="2545334090614121435">होम वापरण्याचा प्रयत्न करत आहात का? वापरा</translation>
 <translation id="254900897760075745">निवडलेला आशय क्लिपबोर्डवर कॉपी करा</translation>
 <translation id="2549711466868162843">लायटिंगमध्ये सुधारणा करा</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765"><ph name="MODIFIER" /> प्रेस करा आणि लिंकवर क्लिक करा</translation>
 <translation id="2957159466053076448">तुम्ही सेटिंग्ज मध्ये कधीही ही वैशिष्ट्ये बंद करू शकता. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">डिव्हाइस ऑडिओ</translation>
-<translation id="2960314608273155470">कॅप्चर मोड, <ph name="SOURCE" /> <ph name="TYPE" /> हा डीफॉल्ट आहे. कीबोर्ड नेव्हिगेशनसाठी टॅब प्रेस करा.</translation>
 <translation id="2961963223658824723">काहीतरी चूक झाली. काही सेकंदांनी पुन्हा प्रयत्न करा.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">मायक्रोफोनचा अ‍ॅक्सेस सुरू करायचा आहे का?</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">वाय-फाय बंद केले आहे</translation>
 <translation id="3554215588514239132">डेव्हलपर टूल पॅनल दाखवा किंवा लपवा</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> पिन केला गेला</translation>
+<translation id="3554928024630051016">अतिरिक्त USB डिव्हाइस जोडण्यासाठी, एक काढून टाकण्याचा प्रयत्न करा आणि नंतर नवीन प्लग-इन करा</translation>
 <translation id="3558768885091059911">कॅमेरा आणि मायक्रोफोनचा अ‍ॅक्सेस सुरू करायचा का?</translation>
 <translation id="3560174576767922131">व्हिडिओ रेकॉर्ड करा</translation>
 <translation id="3563775809269155755">हॉटस्पॉट सुरू करा</translation>
@@ -868,6 +869,7 @@
 <translation id="3861651314799684201">फुल स्क्रीन रेकॉर्ड करण्यासाठी एंटर प्रेस करा</translation>
 <translation id="3870197372373144624">तुमचे डिव्हाइस बंद करून पहा.</translation>
 <translation id="3879748587602334249">डाउनलोड व्यवस्थापक</translation>
+<translation id="3884007280698606545">USB ची मर्यादा गाठली आहे</translation>
 <translation id="3886872229787704059">आज उघडलेली</translation>
 <translation id="3891340733213178823">साइन आउट करण्यासाठी Ctrl+Shift+Q दोनदा प्रेस करा.</translation>
 <translation id="3892148308691398805">मजकूर कॉपी करा</translation>
@@ -1440,6 +1442,7 @@
 <translation id="5672890847723042801">उपयुक्तता</translation>
 <translation id="5673434351075758678">तुमच्या सेटिंग्ज सिंक केल्यानंतर "<ph name="FROM_LOCALE" />" पासून "<ph name="TO_LOCALE" />" पर्यंत.</translation>
 <translation id="5675363643668471212">शेल्‍फ आयटम</translation>
+<translation id="5677022547882470786">शोधण्यासाठी भाग निवडण्यासाठी स्पेस ड्रॅग करा किंवा प्रेस करा</translation>
 <translation id="5677928146339483299">ब्लॉक केले</translation>
 <translation id="5678564054339031017">पुढील आठवडा दाखवा</translation>
 <translation id="5679050765726761783">कमी पॉवरचे अडॅप्टर कनेक्ट केले</translation>
@@ -1485,6 +1488,7 @@
 <translation id="5788127256798019331">Play फाइल</translation>
 <translation id="5788535737706478207">याआधी बंद केलेला टॅब किंवा विंडो पुन्हा उघडा</translation>
 <translation id="5790085346892983794">यशस्वी</translation>
+<translation id="5791926618942305301">स्‍क्रीन कॅप्‍चरमध्ये, <ph name="SOURCE" /> <ph name="TYPE" /> वर सेट करा. कॅप्चरचा प्रकार निवडण्यासाठी टॅब प्रेस करा. कॅप्चर करण्यासाठी एंटर प्रेस करा. कॅप्चर करायचे असलेले भाग निवडण्यासाठी, आंशिक स्क्रीनशॉट सेट करा. आधीपासून अ‍ॅक्टिव्ह केले नसल्यास, प्रदेश निवडण्यासाठी स्पेस प्रेस करा.</translation>
 <translation id="579415080077680903">सायलंस</translation>
 <translation id="5802516411616338943">क्विक सेटिंग्ज उघडा</translation>
 <translation id="5804651031882187592">"सिम लॉक करा" सेटिंग बंद करा</translation>
@@ -1641,6 +1645,7 @@
 <translation id="6288235558961782912">पालकाच्या परवानगीने <ph name="USER_EMAIL_ADDRESS" /> नंतर पुन्हा जोडता येईल.</translation>
 <translation id="6291221004442998378">चार्ज होत नाही</translation>
 <translation id="6298183524022479114">ॲपमध्ये हे डिव्हाइस कस्टमाइझ करा</translation>
+<translation id="6304076460080088478">Google Lens वापरून तुमच्या स्क्रीनवर शोधण्यासाठी गुप्त विंडो बंद करा किंवा कमी करा</translation>
 <translation id="6309219492973062892">शेल्फ आयकन १-८ वर क्लिक किंवा टॅप करा</translation>
 <translation id="6315170314923504164">व्हॉइस</translation>
 <translation id="6319058840130157106">तळाकडील उजवा कोपरा, लाँचर, अ‍ॅड्रेस बार, बुकमार्क बार, उघडी असलेली वेबसाइट आणि डाउनलोड यांदरम्यान मागच्या दिशेने हलवा</translation>
@@ -1769,6 +1774,7 @@
 <translation id="6700713906295497288">IME मेनू बटण</translation>
 <translation id="6704073473590541209">उजव्या कडेचे हँडल निवडले आहे, हलवण्यासाठी ॲरो की वापरा</translation>
 <translation id="6706742084323792866">कीबोर्ड पिन करा</translation>
+<translation id="6709719156428404245">रेकॉर्ड करण्यासाठी भाग निवडण्याकरिता ड्रॅग करा किंवा स्पेस प्रेस करा</translation>
 <translation id="6710213216561001401">मागील</translation>
 <translation id="6723839937902243910">पॉवर</translation>
 <translation id="672609503628871915">नवीन काय ते पहा</translation>

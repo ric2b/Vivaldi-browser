@@ -28,7 +28,7 @@ CPDF_AllStates& CPDF_AllStates::operator=(const CPDF_AllStates& that) = default;
 CPDF_AllStates::~CPDF_AllStates() = default;
 
 void CPDF_AllStates::SetDefaultStates() {
-  m_GraphicStates.SetDefaultStates();
+  graphic_states_.SetDefaultStates();
 }
 
 void CPDF_AllStates::SetLineDash(const CPDF_Array* pArray, float phase) {
@@ -41,8 +41,9 @@ void CPDF_AllStates::ProcessExtGS(const CPDF_Dictionary* pGS,
   CPDF_DictionaryLocker locker(pGS);
   for (const auto& it : locker) {
     RetainPtr<CPDF_Object> pObject = it.second->GetMutableDirect();
-    if (!pObject)
+    if (!pObject) {
       continue;
+    }
 
     uint32_t key = it.first.GetID();
     switch (key) {
@@ -62,12 +63,14 @@ void CPDF_AllStates::ProcessExtGS(const CPDF_Dictionary* pGS,
         break;
       case FXBSTR_ID('D', 0, 0, 0): {
         const CPDF_Array* pDash = pObject->AsArray();
-        if (!pDash)
+        if (!pDash) {
           break;
+        }
 
         RetainPtr<const CPDF_Array> pArray = pDash->GetArrayAt(0);
-        if (!pArray)
+        if (!pArray) {
           break;
+        }
 
         SetLineDash(pArray.Get(), pDash->GetFloatAt(1));
         break;
@@ -77,8 +80,9 @@ void CPDF_AllStates::ProcessExtGS(const CPDF_Dictionary* pGS,
         break;
       case FXBSTR_ID('F', 'o', 'n', 't'): {
         const CPDF_Array* pFont = pObject->AsArray();
-        if (!pFont)
+        if (!pFont) {
           break;
+        }
 
         mutable_text_state().SetFontSize(pFont->GetFloatAt(1));
         mutable_text_state().SetFont(
@@ -106,9 +110,9 @@ void CPDF_AllStates::ProcessExtGS(const CPDF_Dictionary* pGS,
       case FXBSTR_ID('S', 'M', 'a', 's'): {
         RetainPtr<CPDF_Dictionary> pMaskDict = ToDictionary(pObject);
         mutable_general_state().SetSoftMask(pMaskDict);
-        if (pMaskDict)
-          mutable_general_state().SetSMaskMatrix(
-              pParser->GetCurStates()->m_CTM);
+        if (pMaskDict) {
+          mutable_general_state().SetSMaskMatrix(pParser->GetCurStates()->ctm_);
+        }
         break;
       }
       case FXBSTR_ID('C', 'A', 0, 0):
@@ -121,8 +125,9 @@ void CPDF_AllStates::ProcessExtGS(const CPDF_Dictionary* pGS,
         break;
       case FXBSTR_ID('O', 'P', 0, 0):
         mutable_general_state().SetStrokeOP(!!pObject->GetInteger());
-        if (!pGS->KeyExist("op"))
+        if (!pGS->KeyExist("op")) {
           mutable_general_state().SetFillOP(!!pObject->GetInteger());
+        }
         break;
       case FXBSTR_ID('o', 'p', 0, 0):
         mutable_general_state().SetFillOP(!!pObject->GetInteger());
@@ -169,29 +174,29 @@ void CPDF_AllStates::ProcessExtGS(const CPDF_Dictionary* pGS,
 }
 
 void CPDF_AllStates::ResetTextPosition() {
-  m_TextLinePos = CFX_PointF();
-  m_TextPos = CFX_PointF();
+  text_line_pos_ = CFX_PointF();
+  text_pos_ = CFX_PointF();
 }
 
 CFX_PointF CPDF_AllStates::GetTransformedTextPosition() const {
-  return m_CTM.Transform(m_TextMatrix.Transform(
-      CFX_PointF(m_TextPos.x, m_TextPos.y + m_TextRise)));
+  return ctm_.Transform(text_matrix_.Transform(
+      CFX_PointF(text_pos_.x, text_pos_.y + text_rise_)));
 }
 
 void CPDF_AllStates::MoveTextPoint(const CFX_PointF& point) {
-  m_TextLinePos += point;
-  m_TextPos = m_TextLinePos;
+  text_line_pos_ += point;
+  text_pos_ = text_line_pos_;
 }
 
 void CPDF_AllStates::MoveTextToNextLine() {
-  m_TextLinePos.y -= m_TextLeading;
-  m_TextPos = m_TextLinePos;
+  text_line_pos_.y -= text_leading_;
+  text_pos_ = text_line_pos_;
 }
 
 void CPDF_AllStates::IncrementTextPositionX(float value) {
-  m_TextPos.x += value;
+  text_pos_.x += value;
 }
 
 void CPDF_AllStates::IncrementTextPositionY(float value) {
-  m_TextPos.y += value;
+  text_pos_.y += value;
 }

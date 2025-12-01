@@ -40,7 +40,7 @@ void IdleDetectionPermissionContext::UpdateTabContext(
 }
 
 void IdleDetectionPermissionContext::DecidePermission(
-    permissions::PermissionRequestData request_data,
+    std::unique_ptr<permissions::PermissionRequestData> request_data,
     permissions::BrowserPermissionCallback callback) {
   // Idle detection permission is always denied in incognito. To prevent sites
   // from using that to detect whether incognito mode is active, we deny after a
@@ -51,7 +51,7 @@ void IdleDetectionPermissionContext::DecidePermission(
   // allowing the permission.
   if (browser_context()->IsOffTheRecord()) {
     content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-        request_data.id.global_render_frame_host_id());
+        request_data->id.global_render_frame_host_id());
 
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(rfh);
@@ -62,12 +62,20 @@ void IdleDetectionPermissionContext::DecidePermission(
     VisibilityTimerTabHelper::FromWebContents(web_contents)
         ->PostTaskAfterVisibleDelay(
             FROM_HERE,
-            base::BindOnce(&IdleDetectionPermissionContext::NotifyPermissionSet,
-                           weak_factory_.GetWeakPtr(), request_data.id,
-                           request_data.requesting_origin,
-                           request_data.embedding_origin, std::move(callback),
-                           /*persist=*/true, CONTENT_SETTING_BLOCK,
-                           /*is_one_time=*/false, /*is_final_decision=*/true),
+            base::BindOnce(
+                [](base::WeakPtr<IdleDetectionPermissionContext> context,
+                   std::unique_ptr<permissions::PermissionRequestData>
+                       request_data,
+                   permissions::BrowserPermissionCallback callback) {
+                  if (context) {
+                    context->NotifyPermissionSet(
+                        *request_data, std::move(callback),
+                        /*persist=*/true, CONTENT_SETTING_BLOCK,
+                        /*is_one_time=*/false, /*is_final_decision=*/true);
+                  }
+                },
+                weak_factory_.GetWeakPtr(), std::move(request_data),
+                std::move(callback)),
             base::Seconds(delay_seconds));
     return;
   }

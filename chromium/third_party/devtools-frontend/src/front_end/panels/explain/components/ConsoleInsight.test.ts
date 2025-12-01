@@ -4,6 +4,7 @@
 
 import * as Common from '../../../core/common/common.js';
 import * as Host from '../../../core/host/host.js';
+import type * as Platform from '../../../core/platform/platform.js';
 import {
   dispatchClickEvent,
   getCleanTextContentFromElements,
@@ -121,7 +122,7 @@ describeWithEnvironment('ConsoleInsight', () => {
       settingType: Common.Settings.SettingType.BOOLEAN,
       defaultValue: true,
       disabledCondition: () => {
-        return {disabled: true, reasons: ['disabled for test']};
+        return {disabled: true, reasons: ['disabled for test' as Platform.UIString.LocalizedString]};
       },
     });
     component = new Explain.ConsoleInsight(
@@ -189,10 +190,10 @@ describeWithEnvironment('ConsoleInsight', () => {
         'Generating a response took too long. Please try again.');
   });
 
-  const reportsRating = (positive: boolean) => async () => {
+  const reportsRating = (positive: boolean, disallowLogging: boolean) => async () => {
     updateHostConfig({
       aidaAvailability: {
-        disallowLogging: false,
+        disallowLogging,
       },
     });
     const actionTaken = sinon.stub(Host.userMetrics, 'actionTaken');
@@ -206,28 +207,37 @@ describeWithEnvironment('ConsoleInsight', () => {
       composed: true,
     });
 
-    assert(aidaClient.registerClientEvent.calledOnce);
+    sinon.assert.calledOnce(aidaClient.registerClientEvent);
     sinon.assert.match(aidaClient.registerClientEvent.firstCall.firstArg, sinon.match({
       corresponding_aida_rpc_global_id: 0,
+      disable_user_content_logging: disallowLogging,
       do_conversation_client_event: {
         user_feedback: {sentiment: positive ? 'POSITIVE' : 'NEGATIVE'},
       },
     }));
-    assert(actionTaken.calledWith(
-        positive ? Host.UserMetrics.Action.InsightRatedPositive : Host.UserMetrics.Action.InsightRatedNegative));
+    sinon.assert.calledWith(
+        actionTaken,
+        positive ? Host.UserMetrics.Action.InsightRatedPositive : Host.UserMetrics.Action.InsightRatedNegative);
 
     dispatchClickEvent(component.shadowRoot!.querySelector(`.rating [data-rating=${positive}]`)!, {
       bubbles: true,
       composed: true,
     });
     // Can only rate once.
-    assert(aidaClient.registerClientEvent.calledOnce);
+    sinon.assert.calledOnce(aidaClient.registerClientEvent);
   };
 
-  it('reports positive rating', reportsRating(true));
-  it('reports negative rating', reportsRating(false));
+  describe('without logging', () => {
+    it('reports positive rating', reportsRating(true, true));
+    it('reports negative rating', reportsRating(false, true));
+  });
 
-  it('has no thumbs up/down buttons if logging is disabled', async () => {
+  describe('with logging', () => {
+    it('reports positive rating', reportsRating(true, false));
+    it('reports negative rating', reportsRating(false, false));
+  });
+
+  it('has thumbs up/down buttons if logging is disabled', async () => {
     updateHostConfig({
       aidaAvailability: {
         disallowLogging: true,
@@ -241,9 +251,9 @@ describeWithEnvironment('ConsoleInsight', () => {
     renderElementIntoDOM(component);
     await drainMicroTasks();
     const thumbsUpButton = component.shadowRoot!.querySelector('.rating [data-rating="true"]');
-    assert.isNull(thumbsUpButton);
+    assert.isNotNull(thumbsUpButton);
     const thumbsDownButton = component.shadowRoot!.querySelector('.rating [data-rating="false"]');
-    assert.isNull(thumbsDownButton);
+    assert.isNotNull(thumbsDownButton);
   });
 
   it('report if the user is not logged in', async () => {
@@ -365,6 +375,79 @@ describeWithEnvironment('ConsoleInsight', () => {
     assert.isFalse(directCitations[0].classList.contains('highlighted'));
     const link = markdownView!.shadowRoot?.querySelector('sup button') as HTMLElement;
     link.click();
+    assert.isTrue(details?.hasAttribute('open'));
+    assert.isTrue(directCitations[0].classList.contains('highlighted'));
+  });
+
+  it('displays direct citations in code blocks', async () => {
+    function getAidaClientWithMetadata() {
+      return {
+        async *
+            fetch() {
+              yield {
+                explanation: `before
+
+\`\`\`\`\`
+const foo = document.querySelector('.some-class');
+\`\`\`\`\`
+
+after
+`,
+                metadata: {
+                  rpcGlobalId: 0,
+                  attributionMetadata: {
+                    attributionAction: Host.AidaClient.RecitationAction.CITE,
+                    citations: [
+                      {
+                        startIndex: 20,
+                        endIndex: 25,
+                        uri: 'https://www.wiki.test/directSource',
+                        sourceType: Host.AidaClient.CitationSourceType.WORLD_FACTS,
+                      },
+                      {
+                        startIndex: 30,
+                        endIndex: 38,
+                        uri: 'https://www.world-fact.test/',
+                        sourceType: Host.AidaClient.CitationSourceType.WORLD_FACTS,
+                      },
+                    ],
+                  },
+                  factualityMetadata: {
+                    facts: [
+                      {sourceUri: 'https://www.firstSource.test/someInfo'},
+                    ],
+                  },
+                },
+                completed: true,
+              };
+            },
+        registerClientEvent: sinon.spy(),
+      };
+    }
+
+    component = new Explain.ConsoleInsight(
+        getTestPromptBuilder(), getAidaClientWithMetadata(), Host.AidaClient.AidaAccessPreconditions.AVAILABLE);
+    renderElementIntoDOM(component);
+    await drainMicroTasks();
+
+    const markdownView = component.shadowRoot!.querySelector('devtools-markdown-view');
+    const codeBlock = markdownView!.shadowRoot!.querySelector('devtools-code-block');
+    const citations = codeBlock!.shadowRoot!.querySelectorAll('button.citation');
+    assert.lengthOf(citations, 2);
+    assert.strictEqual(citations[0].textContent, '[1]');
+    assert.strictEqual(citations[1].textContent, '[2]');
+
+    const details = component.shadowRoot!.querySelector('details');
+    const directCitations = details!.querySelectorAll('ol x-link');
+    assert.lengthOf(directCitations, 2);
+    assert.strictEqual(directCitations[0].textContent?.trim(), 'https://www.wiki.test/directSource');
+    assert.strictEqual(directCitations[0].getAttribute('href'), 'https://www.wiki.test/directSource');
+    assert.strictEqual(directCitations[1].textContent?.trim(), 'https://www.world-fact.test/');
+    assert.strictEqual(directCitations[1].getAttribute('href'), 'https://www.world-fact.test/');
+
+    assert.isFalse(details?.hasAttribute('open'));
+    assert.isFalse(directCitations[0].classList.contains('highlighted'));
+    (citations[0] as HTMLElement).click();
     assert.isTrue(details?.hasAttribute('open'));
     assert.isTrue(directCitations[0].classList.contains('highlighted'));
   });

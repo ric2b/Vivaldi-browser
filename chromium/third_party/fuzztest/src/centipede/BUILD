@@ -41,8 +41,8 @@ cc_binary(
         ":centipede_interface",
         ":config_file",
         ":environment_flags",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/log:flags",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/log:flags",
     ],
 )
 
@@ -61,10 +61,10 @@ cc_binary(
         ":seed_corpus_maker_flags",
         ":seed_corpus_maker_proto_lib",
         ":util",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:remote_file",
     ],
 )
@@ -75,13 +75,13 @@ cc_binary(
     deps = [
         ":config_init",
         ":rusage_profiler",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
@@ -131,11 +131,11 @@ cc_library(
         ":pc_info",
         ":thread_pool",
         ":util",
-        "@com_google_absl//absl/container:node_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/container:node_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:logging",
     ],
 )
@@ -158,7 +158,7 @@ cc_library(
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         ":rolling_hash",
-        "@com_google_absl//absl/base:core_headers",  # exception, ok to depend on here.
+        "@abseil-cpp//absl/base:core_headers",  # exception, ok to depend on here.
     ],
 )
 
@@ -168,8 +168,8 @@ cc_library(
     hdrs = ["pc_info.h"],
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:defs",
     ],
 )
@@ -180,7 +180,7 @@ cc_library(
     hdrs = ["knobs.h"],
     # Avoid non-trivial dependencies here, as this library will be linked to target binaries.
     deps = [
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:defs",
     ],
 )
@@ -209,13 +209,13 @@ cc_library(
     visibility = EXTENDED_API_VISIBILITY,
     deps = [
         ":feature",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
         "@com_google_fuzztest//common:logging",
@@ -229,8 +229,8 @@ cc_library(
     hdrs = ["config_util.h"],
     visibility = EXTENDED_API_VISIBILITY,
     deps = [
-        "@com_google_absl//absl/flags:reflection",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/flags:reflection",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
@@ -241,13 +241,13 @@ cc_library(
     visibility = EXTENDED_API_VISIBILITY,
     deps = [
         ":config_util",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/base:log_severity",
-        "@com_google_absl//absl/flags:config",
-        "@com_google_absl//absl/flags:parse",
-        "@com_google_absl//absl/log:globals",
-        "@com_google_absl//absl/log:initialize",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/base:log_severity",
+        "@abseil-cpp//absl/flags:config",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/log:globals",
+        "@abseil-cpp//absl/log:initialize",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
@@ -260,13 +260,13 @@ cc_library(
         ":config_init",
         ":config_util",
         ":util",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/flags:parse",
-        "@com_google_absl//absl/flags:reflection",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/flags:parse",
+        "@abseil-cpp//absl/flags:reflection",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
     ],
@@ -276,10 +276,10 @@ cc_library(
     name = "thread_pool",
     hdrs = ["thread_pool.h"],
     deps = [
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/synchronization",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/functional:any_invocable",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/synchronization",
     ],
 )
 
@@ -289,11 +289,11 @@ cc_library(
     hdrs = ["rusage_stats.h"],
     visibility = ["//visibility:public"],
     deps = [
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
     ],
 )
 
@@ -305,14 +305,14 @@ cc_library(
     deps = [
         ":periodic_action",
         ":rusage_stats",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
     ],
 )
 
@@ -322,13 +322,13 @@ cc_library(
     hdrs = ["resource_pool.h"],
     deps = [
         ":rusage_stats",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
     ],
 )
 
@@ -337,10 +337,10 @@ cc_library(
     srcs = ["periodic_action.cc"],
     hdrs = ["periodic_action.h"],
     deps = [
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/functional:any_invocable",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
     ],
 )
 
@@ -357,15 +357,15 @@ cc_library(
     deps = [
         ":environment",
         ":workdir",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/container:btree",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
     ],
@@ -384,10 +384,10 @@ cc_library(
         ":thread_pool",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/synchronization",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/synchronization",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
         "@com_google_fuzztest//common:logging",
@@ -408,10 +408,10 @@ cc_library(
         ":feature",
         ":pc_info",
         ":workdir",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
@@ -429,7 +429,7 @@ cc_library(
         ],
     }),
     visibility = PUBLIC_API_VISIBILITY,
-    deps = ["@com_google_absl//absl/base:nullability"],
+    deps = ["@abseil-cpp//absl/base:nullability"],
     # don't add any dependencies.
 )
 
@@ -496,7 +496,7 @@ cc_library(
         ":execution_metadata",
         ":knobs",
         ":mutation_input",
-        "@com_google_absl//absl/base:nullability",
+        "@abseil-cpp//absl/base:nullability",
         "@com_google_fuzztest//common:defs",
     ],
 )
@@ -517,11 +517,11 @@ cc_library(
         ":feature",
         ":pc_info",
         ":symbol_table",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
     ],
@@ -542,11 +542,11 @@ cc_library(
         ":command",
         ":pc_info",
         ":util",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
@@ -567,9 +567,9 @@ cc_library(
     deps = [
         ":control_flow",
         ":pc_info",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:logging",
     ],
 )
@@ -582,9 +582,9 @@ cc_library(
         ":control_flow",
         ":feature",
         ":util",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:logging",
     ],
 )
@@ -602,9 +602,9 @@ cc_library(
         ":feature",
         ":feature_set",
         ":util",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
@@ -620,15 +620,15 @@ cc_library(
     deps = [
         ":stop",
         ":util",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
     ],
 )
@@ -647,9 +647,9 @@ cc_library(
         ":pc_info",
         ":symbol_table",
         ":util",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:remote_file",
     ],
 )
@@ -676,12 +676,12 @@ cc_library(
         ":shared_memory_blob_sequence",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
@@ -697,11 +697,11 @@ cc_library(
         ":feature",
         ":rusage_profiler",
         ":util",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/time",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
@@ -721,7 +721,7 @@ cc_library(
         ],
     }),
     visibility = PUBLIC_API_VISIBILITY,
-    deps = ["@com_google_absl//absl/time"],
+    deps = ["@abseil-cpp//absl/time"],
 )
 
 cc_library(
@@ -734,14 +734,20 @@ cc_library(
     }),
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
+        ":centipede_flags",
         ":environment",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
     ],
+)
+
+cc_library(
+    name = "centipede_flags",
+    textual_hdrs = ["centipede_flags.inc"],
 )
 
 cc_library(
@@ -774,16 +780,16 @@ cc_library(
         ":symbol_table",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
@@ -821,17 +827,17 @@ cc_library(
         ":thread_pool",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/cleanup",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/cleanup",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:bazel",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
@@ -857,15 +863,17 @@ cc_library(
     }),
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
+        ":centipede_flags",
         ":feature",
         ":knobs",
         ":util",
-        "@com_google_absl//absl/base:no_destructor",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:no_destructor",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/flags:marshalling",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
@@ -890,13 +898,13 @@ cc_library(
         ":thread_pool",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
@@ -917,10 +925,10 @@ cc_library(
         ":mutation_input",
         ":runner_result",
         ":stop",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
     ],
@@ -935,8 +943,8 @@ cc_library(
         ":execution_metadata",
         ":knobs",
         ":mutation_input",
-        "@com_google_absl//absl/random",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/random",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//fuzztest:domain_core",
         "@com_google_fuzztest//fuzztest:table_of_recent_compares",
@@ -955,7 +963,7 @@ cc_library(
     name = "runner_fork_server",
     srcs = ["runner_fork_server.cc"],
     visibility = PUBLIC_API_VISIBILITY,
-    deps = ["@com_google_absl//absl/base:nullability"],
+    deps = ["@abseil-cpp//absl/base:nullability"],
     alwayslink = 1,  # Otherwise the linker drops the fork server.
 )
 
@@ -1054,9 +1062,10 @@ RUNNER_LINKOPTS = [
 
 # WARNING: be careful with more deps here. Use only the most trivial ones.
 RUNNER_DEPS = [
-    "@com_google_absl//absl/types:span",
-    "@com_google_absl//absl/base:core_headers",
-    "@com_google_absl//absl/numeric:bits",
+    "@abseil-cpp//absl/base:nullability",
+    "@abseil-cpp//absl/types:span",
+    "@abseil-cpp//absl/base:core_headers",
+    "@abseil-cpp//absl/numeric:bits",
 ]
 
 # A fuzz target needs to link with this library in order to run with Centipede.
@@ -1072,7 +1081,7 @@ cc_library(
     linkopts = RUNNER_LINKOPTS,
     linkstatic = True,  # Must be linked statically even when dynamic_mode=on.
     visibility = ["//visibility:public"],
-    deps = RUNNER_DEPS + ["@com_google_absl//absl/base:nullability"],
+    deps = RUNNER_DEPS,
 )
 
 # Same as :centipede_runner_no_main, except it can be sanitized to avoid false
@@ -1086,7 +1095,7 @@ cc_library(
     linkopts = RUNNER_LINKOPTS,
     linkstatic = True,  # Must be linked statically even when dynamic_mode=on.
     visibility = ["//visibility:public"],
-    deps = RUNNER_DEPS + ["@com_google_absl//absl/base:nullability"],
+    deps = RUNNER_DEPS,
 )
 
 # Same as :centipede_runner_no_main but as a DSO. Experimental.
@@ -1097,7 +1106,7 @@ cc_binary(
     linkopts = RUNNER_LINKOPTS,
     linkshared = 1,
     visibility = ["//visibility:public"],
-    deps = RUNNER_DEPS + ["@com_google_absl//absl/base:nullability"],
+    deps = RUNNER_DEPS,
 )
 
 # A full self-contained library archive that external clients should link to
@@ -1111,7 +1120,7 @@ cc_library(
     linkopts = RUNNER_LINKOPTS,
     linkstatic = True,  # Must be linked statically even when dynamic_mode=on.
     visibility = ["//visibility:public"],
-    deps = RUNNER_DEPS + ["@com_google_absl//absl/base:nullability"],
+    deps = RUNNER_DEPS,
 )
 
 # Utilities for seed corpus generation.
@@ -1127,15 +1136,15 @@ cc_library(
         ":thread_pool",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/random",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/random",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
@@ -1153,14 +1162,14 @@ cc_library(
         ":seed_corpus_config_cc_proto",
         ":seed_corpus_maker_lib",
         ":workdir",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/status:statusor",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:status_macros",
-        "@com_google_protobuf//:protobuf",
+        "@protobuf",
     ],
 )
 
@@ -1169,7 +1178,7 @@ cc_library(
     name = "seed_corpus_maker_flags",
     srcs = ["seed_corpus_maker_flags.cc"],
     hdrs = ["seed_corpus_maker_flags.h"],
-    deps = ["@com_google_absl//absl/flags:flag"],
+    deps = ["@abseil-cpp//absl/flags:flag"],
 )
 
 ################################################################################
@@ -1183,10 +1192,10 @@ cc_library(
     visibility = PUBLIC_API_VISIBILITY,
     deps = [
         ":environment",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/strings:str_format",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
         "@com_google_fuzztest//common:logging",
     ],
 )
@@ -1204,7 +1213,7 @@ cc_library(
         ":mutation_input",
         ":runner_result",
         ":util",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:defs",
     ],
 )
@@ -1232,7 +1241,7 @@ cc_test(
         ":pc_info",
         ":symbol_table",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1241,10 +1250,10 @@ cc_test(
     srcs = ["environment_test.cc"],
     deps = [
         ":environment",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//fuzztest:configuration",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1254,7 +1263,7 @@ cc_test(
     deps = [
         ":environment",
         ":workdir",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1263,7 +1272,7 @@ cc_test(
     srcs = ["pc_info_test.cc"],
     deps = [
         ":pc_info",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1273,7 +1282,7 @@ cc_test(
     deps = [
         ":feature",
         ":rolling_hash",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1282,7 +1291,7 @@ cc_test(
     srcs = ["symbol_table_test.cc"],
     deps = [
         ":symbol_table",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1294,11 +1303,11 @@ cc_test(
         ":feature",
         ":thread_pool",
         ":util",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/log",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1311,8 +1320,8 @@ cc_test(
         ":config_util",
         ":environment_flags",
         "@com_google_fuzztest//common:logging",
-        "@com_google_googletest//:gtest_main",
-        "@com_google_absl//absl/flags:flag",
+        "@googletest//:gtest_main",
+        "@abseil-cpp//absl/flags:flag",
     ],
 )
 
@@ -1321,9 +1330,9 @@ cc_test(
     srcs = ["config_file_test.cc"],
     deps = [
         ":config_file",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
         # Defines FLAGS_flagfile.
-        "@com_google_absl//absl/flags:parse",  # buildcleaner:keep
+        "@abseil-cpp//absl/flags:parse",  # buildcleaner:keep
     ],
 )
 
@@ -1335,13 +1344,13 @@ cc_test(
     deps = [
         ":rusage_stats",
         ":thread_pool",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1355,12 +1364,12 @@ cc_test(
         ":feature",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/flags:reflection",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/flags:reflection",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1373,10 +1382,10 @@ cc_test(
     deps = [
         ":rusage_profiler",
         ":rusage_stats",
-        "@com_google_absl//absl/flags:flag",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/time",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/time",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1387,15 +1396,15 @@ cc_test(
         ":environment",
         ":stats",
         ":util",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/log:log_entry",
-        "@com_google_absl//absl/log:log_sink",
-        "@com_google_absl//absl/log:log_sink_registry",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/log:log_entry",
+        "@abseil-cpp//absl/log:log_sink",
+        "@abseil-cpp//absl/log:log_sink_registry",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1409,10 +1418,10 @@ cc_test(
         ":runner_result",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:nullability",
+        "@abseil-cpp//absl/base:nullability",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1430,11 +1439,11 @@ cc_test(
         ":environment",
         ":symbol_table",
         ":test_coverage_util",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1443,7 +1452,7 @@ cc_test(
     srcs = ["shared_memory_blob_sequence_test.cc"],
     deps = [
         ":shared_memory_blob_sequence",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1454,7 +1463,7 @@ cc_test(
         ":execution_metadata",
         ":shared_memory_blob_sequence",
         "@com_google_fuzztest//common:defs",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1468,7 +1477,7 @@ cc_test(
         ":shared_memory_blob_sequence",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1478,7 +1487,7 @@ cc_test(
     deps = [
         ":mutation_input",
         "@com_google_fuzztest//common:defs",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1490,9 +1499,10 @@ cc_test(
         ":execution_metadata",
         ":knobs",
         ":mutation_input",
-        "@com_google_absl//absl/container:flat_hash_set",
+        ":runner_cmp_trace",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@com_google_fuzztest//common:defs",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1501,7 +1511,7 @@ cc_test(
     srcs = ["feature_test.cc"],
     deps = [
         ":feature",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1510,7 +1520,7 @@ cc_test(
     srcs = ["foreach_nonzero_test.cc"],
     deps = [
         ":foreach_nonzero",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1522,10 +1532,10 @@ cc_test(
         ":fuzztest_mutator",
         ":knobs",
         ":mutation_input",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1534,10 +1544,10 @@ cc_test(
     srcs = ["knobs_test.cc"],
     deps = [
         ":knobs",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/types:span",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1547,7 +1557,7 @@ cc_test(
     deps = [
         ":pc_info",
         ":reverse_pc_table",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1556,10 +1566,10 @@ cc_test(
     srcs = ["callstack_test.cc"],
     deps = [
         ":callstack",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@com_google_fuzztest//common:defs",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1569,7 +1579,7 @@ cc_test(
     deps = [
         ":feature",
         ":feature_set",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1582,12 +1592,12 @@ cc_test(
         ":feature",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/types:span",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/types:span",
         "@com_google_fuzztest//common:blob_file",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1605,7 +1615,7 @@ cc_test(
         ":util",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1614,7 +1624,7 @@ cc_binary(
     srcs = ["command_test_helper.cc"],
     deps = [
         ":runner_fork_server",
-        "@com_google_absl//absl/base:nullability",
+        "@abseil-cpp//absl/base:nullability",
     ],
 )
 
@@ -1626,11 +1636,11 @@ cc_test(
         ":command",
         ":stop",
         ":util",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1639,8 +1649,8 @@ cc_test(
     srcs = ["runner_cmp_trace_test.cc"],
     deps = [
         ":runner_cmp_trace",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/base:nullability",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1658,12 +1668,12 @@ cc_test(
         ":pc_info",
         ":symbol_table",
         ":thread_pool",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1674,9 +1684,9 @@ cc_test(
         ":call_graph",
         ":control_flow",
         ":pc_info",
-        "@com_google_absl//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@com_google_fuzztest//common:logging",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1685,7 +1695,7 @@ cc_test(
     srcs = ["runner_flags_test.cc"],
     deps = [
         ":runner_flags",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1696,13 +1706,13 @@ cc_test(
         ":feature",
         ":seed_corpus_maker_lib",
         ":workdir",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:remote_file",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1715,10 +1725,10 @@ cc_test(
         ":seed_corpus_maker_lib",
         ":seed_corpus_maker_proto_lib",
         ":workdir",
-        "@com_google_absl//absl/strings",
+        "@abseil-cpp//absl/strings",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1741,9 +1751,9 @@ cc_test(
         ":test_coverage_util",
         ":thread_pool",
         ":util",
-        "@com_google_absl//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1754,11 +1764,11 @@ cc_test(
         ":resource_pool",
         ":rusage_stats",
         ":thread_pool",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/status",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1767,10 +1777,10 @@ cc_test(
     srcs = ["periodic_action_test.cc"],
     deps = [
         ":periodic_action",
-        "@com_google_absl//absl/synchronization",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:logging",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1780,8 +1790,8 @@ cc_test(
     deps = [
         ":feature",
         ":thread_pool",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/base:core_headers",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1791,8 +1801,8 @@ cc_test(
     deps = [
         ":feature",
         ":thread_pool",
-        "@com_google_absl//absl/base:core_headers",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/base:core_headers",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1801,8 +1811,8 @@ cc_test(
     srcs = ["hashed_ring_buffer_test.cc"],
     deps = [
         ":feature",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1811,8 +1821,8 @@ cc_test(
     srcs = ["int_utils_test.cc"],
     deps = [
         ":int_utils",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_googletest//:gtest_main",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@googletest//:gtest_main",
     ],
 )
 
@@ -1842,19 +1852,20 @@ cc_test(
         ":feature",
         ":mutation_input",
         ":runner_result",
+        ":stop",
         ":util",
         ":workdir",
-        "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/container:flat_hash_set",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/log:check",
-        "@com_google_absl//absl/strings",
-        "@com_google_absl//absl/time",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
         "@com_google_fuzztest//common:defs",
         "@com_google_fuzztest//common:hash",
         "@com_google_fuzztest//common:logging",
         "@com_google_fuzztest//common:test_util",
-        "@com_google_googletest//:gtest_main",
+        "@googletest//:gtest_main",
     ],
 )
 

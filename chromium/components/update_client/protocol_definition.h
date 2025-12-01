@@ -32,8 +32,11 @@ inline constexpr int kEventInstall = 2;
 inline constexpr int kEventUpdate = 3;
 inline constexpr int kEventUninstall = 4;
 inline constexpr int kEventDownload = 14;
+inline constexpr int kEventXz = 60;
+inline constexpr int kEventZucchini = 61;
 inline constexpr int kEventPuff = 62;
 inline constexpr int kEventCrx3 = 63;
+inline constexpr int kEventUnknown = 64;
 
 // Event result codes as described in //docs/updater/protocol_4.md.
 inline constexpr int kEventResultError = 0;

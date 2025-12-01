@@ -16,7 +16,6 @@
 #import "components/sync_preferences/testing_pref_service_syncable.h"
 #import "ios/chrome/browser/default_browser/model/utils.h"
 #import "ios/chrome/browser/default_browser/model/utils_test_support.h"
-#import "ios/chrome/browser/ntp/model/features.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_delegate.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
@@ -232,7 +231,6 @@ TEST_F(SetUpListTest, BuildListWithAutofill) {
 TEST_F(SetUpListTest, BuildListWithNotifications_Tips) {
   [PushNotificationUtil
       updateAuthorizationStatusPref:UNAuthorizationStatusAuthorized];
-  feature_list_.InitAndEnableFeature(kIOSTipsNotifications);
   SetTipsNotificationsEnabled(false);
   BuildSetUpList();
   ExpectListToInclude(SetUpListItemType::kNotifications, NO);
@@ -277,57 +275,6 @@ TEST_F(SetUpListTest, BuildListWithNotifications_Content) {
 }
 
 // Tests that the SetUpList uses the correct criteria when including the
-// Docking item.
-TEST_F(SetUpListTest, BuildListWithDocking) {
-  feature_list_.InitAndEnableFeatureWithParameters(
-      set_up_list::kSetUpListInFirstRun,
-      {{set_up_list::kSetUpListInFirstRunParam, "1"}});
-  SetItemState(SetUpListItemType::kDocking, SetUpListItemState::kNotComplete);
-  BuildSetUpList();
-  ExpectListToInclude(SetUpListItemType::kDocking, NO);
-
-  SetItemState(SetUpListItemType::kDocking,
-               SetUpListItemState::kCompleteInList);
-  BuildSetUpList();
-  ExpectListToInclude(SetUpListItemType::kDocking, YES);
-  EXPECT_EQ(GetItemState(SetUpListItemType::kDocking),
-            SetUpListItemState::kCompleteInList);
-
-  SetItemState(SetUpListItemType::kDocking,
-               SetUpListItemState::kCompleteNotInList);
-  BuildSetUpList();
-  ExpectListToNotInclude(SetUpListItemType::kDocking);
-  EXPECT_EQ(GetItemState(SetUpListItemType::kDocking),
-            SetUpListItemState::kCompleteNotInList);
-}
-
-// Tests that the SetUpList uses the correct criteria when including the
-// Address Bar item.
-TEST_F(SetUpListTest, BuildListWithAddressBar) {
-  feature_list_.InitAndEnableFeatureWithParameters(
-      set_up_list::kSetUpListInFirstRun,
-      {{set_up_list::kSetUpListInFirstRunParam, "1"}});
-  SetItemState(SetUpListItemType::kAddressBar,
-               SetUpListItemState::kNotComplete);
-  BuildSetUpList();
-  ExpectListToInclude(SetUpListItemType::kAddressBar, NO);
-
-  SetItemState(SetUpListItemType::kAddressBar,
-               SetUpListItemState::kCompleteInList);
-  BuildSetUpList();
-  ExpectListToInclude(SetUpListItemType::kAddressBar, YES);
-  EXPECT_EQ(GetItemState(SetUpListItemType::kAddressBar),
-            SetUpListItemState::kCompleteInList);
-
-  SetItemState(SetUpListItemType::kAddressBar,
-               SetUpListItemState::kCompleteNotInList);
-  BuildSetUpList();
-  ExpectListToNotInclude(SetUpListItemType::kAddressBar);
-  EXPECT_EQ(GetItemState(SetUpListItemType::kAddressBar),
-            SetUpListItemState::kCompleteNotInList);
-}
-
-// Tests that the SetUpList uses the correct criteria when including the
 // Follow item.
 TEST_F(SetUpListTest, BuildListWithFollow) {
   BuildSetUpList();
@@ -354,7 +301,6 @@ TEST_F(SetUpListTest, ObservesPrefs) {
 // complete.
 TEST_F(SetUpListTest, AllItemsComplete) {
   base::HistogramTester histogram_tester;
-  feature_list_.InitAndEnableFeature(kIOSTipsNotifications);
   BuildSetUpList();
   EXPECT_FALSE([set_up_list_ allItemsComplete]);
   histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
@@ -376,7 +322,6 @@ TEST_F(SetUpListTest, AllItemsComplete) {
 
 TEST_F(SetUpListTest, RecordsAllItemsCompleteOnce) {
   base::HistogramTester histogram_tester;
-  feature_list_.InitAndEnableFeature(kIOSTipsNotifications);
   BuildSetUpList();
   histogram_tester.ExpectBucketCount("IOS.SetUpList.AllItemsCompleted", true,
                                      0);
@@ -410,7 +355,6 @@ TEST_F(SetUpListTest, Disable) {
 
 // Tests that the Set Up List item order is correct with kMagicStack enabled.
 TEST_F(SetUpListTest, MagicStackItemOrder) {
-  feature_list_.InitWithFeatures({kIOSTipsNotifications}, {});
   BuildSetUpList();
 
   EXPECT_EQ(GetItemIndex(SetUpListItemType::kDefaultBrowser), 0u);

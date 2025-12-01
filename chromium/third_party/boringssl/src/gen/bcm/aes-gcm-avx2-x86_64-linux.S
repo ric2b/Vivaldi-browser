@@ -64,14 +64,10 @@ _CET_ENDBR
 
 
 	vpclmulqdq	$0x00,%xmm3,%xmm3,%xmm0
-	vpclmulqdq	$0x01,%xmm3,%xmm3,%xmm1
-	vpclmulqdq	$0x10,%xmm3,%xmm3,%xmm2
-	vpxor	%xmm2,%xmm1,%xmm1
-	vpclmulqdq	$0x01,%xmm0,%xmm6,%xmm2
+	vpclmulqdq	$0x11,%xmm3,%xmm3,%xmm5
+	vpclmulqdq	$0x01,%xmm0,%xmm6,%xmm1
 	vpshufd	$0x4e,%xmm0,%xmm0
 	vpxor	%xmm0,%xmm1,%xmm1
-	vpxor	%xmm2,%xmm1,%xmm1
-	vpclmulqdq	$0x11,%xmm3,%xmm3,%xmm5
 	vpclmulqdq	$0x01,%xmm1,%xmm6,%xmm0
 	vpshufd	$0x4e,%xmm1,%xmm1
 	vpxor	%xmm1,%xmm5,%xmm5

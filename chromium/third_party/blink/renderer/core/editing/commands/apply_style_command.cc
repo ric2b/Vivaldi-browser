@@ -288,8 +288,10 @@ void ApplyStyleCommand::ApplyBlockStyle(EditingStyle* style,
       visible_end.DeepEquivalent().ParentAnchoredEquivalent());
 
   const TextIteratorBehavior behavior =
-      TextIteratorBehavior::AllVisiblePositionsRangeLengthBehavior();
-
+      RuntimeEnabledFeatures::EnterInOpenShadowRootsEnabled()
+          ? TextIteratorBehavior::
+                AllVisiblePositionsIncludingShadowRootRangeLengthBehavior()
+          : TextIteratorBehavior::AllVisiblePositionsRangeLengthBehavior();
   const int start_index = TextIterator::RangeLength(start_range, behavior);
   const int end_index = TextIterator::RangeLength(end_range, behavior);
 
@@ -2063,17 +2065,20 @@ float ApplyStyleCommand::ComputedFontSize(Node* node) {
   }
 
   auto* style = MakeGarbageCollected<CSSComputedStyleDeclaration>(element);
-  if (!style)
+  if (!style) {
     return 0;
+  }
 
-  const auto* value = To<CSSPrimitiveValue>(
+  const auto* value = DynamicTo<CSSPrimitiveValue>(
       style->GetPropertyCSSValue(CSSPropertyID::kFontSize));
-  if (!value)
+  if (!value) {
     return 0;
+  }
 
   // TODO(yosin): We should have printer for |CSSPrimitiveValue::UnitType|.
   DCHECK(value->IsPx());
-  return value->GetFloatValue();
+  std::optional<double> font_size = value->GetValueIfKnown();
+  return font_size.value_or(0);
 }
 
 void ApplyStyleCommand::JoinChildTextNodes(ContainerNode* node,

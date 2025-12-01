@@ -281,15 +281,17 @@ namespace enterprise_connectors {
 class LinuxKeyRotationCommand;
 }  // namespace enterprise_connectors
 namespace extensions {
-// TODO(https://crbug.com/356905053): Remove DesktopAndroidExtensionSystem
-// from here once ExtensionService is enabled for desktop android.
-class DesktopAndroidExtensionSystem;
 class InstalledLoader;
 class UnpackedInstaller;
 }  // namespace extensions
 namespace font_service::internal {
 class MappedFontFile;
 }
+
+namespace gfx {
+class WUCBackdrop;
+}
+
 namespace gl {
 struct GLImplementationParts;
 namespace init {
@@ -618,7 +620,6 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class cronet::CronetPrefsManager;
   friend class crypto::ScopedAllowBlockingForNSS;  // http://crbug.com/59847
   friend class drive::FakeDriveService;
-  friend class extensions::DesktopAndroidExtensionSystem;
   friend class extensions::InstalledLoader;
   friend class extensions::UnpackedInstaller;
   friend class font_service::internal::MappedFontFile;
@@ -659,6 +660,7 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class base::win::OSInfo;
   friend class content::SlowWebPreferenceCache;  // http://crbug.com/1262162
   friend class media::GpuMojoMediaClientWin;     // https://crbug.com/360642944
+  friend class gfx::WUCBackdrop;
 #endif
 #if BUILDFLAG(IS_IOS)
   friend class ::BrowserStateDirectoryBuilder;

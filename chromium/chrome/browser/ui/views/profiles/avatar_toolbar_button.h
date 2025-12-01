@@ -32,6 +32,10 @@ enum class AvatarDelayType {
   kNameGreeting,
   // Delay for the SigninPending mode to show the "Verify it's you" text.
   kSigninPendingText,
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  // Delay for the History Sync Opt-in entry point.
+  kHistorySyncOptin,
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 };
 
 // This class takes care the Profile Avatar Button.
@@ -60,16 +64,18 @@ class AvatarToolbarButton : public ToolbarButton {
 
   void UpdateText();
 
-  // Expands the pill to show the intercept text.
-  // Returns a callback to be used when the shown text should be hidden.
-  [[nodiscard]] base::ScopedClosureRunner ShowExplicitText(
+  // Sets the button state to show the provided text with the provided
+  // accessibility label and action.
+  //
+  // If the `explicit_action` is set, it will override the default action of the
+  // button, otherwise the default action will be used.
+  //
+  // Returns a callback to be used when the button state should be reset, i.e.
+  // shown text should be hidden and the explicit action should stop being used.
+  [[nodiscard]] base::ScopedClosureRunner SetExplicitButtonState(
       const std::u16string& text,
-      std::optional<std::u16string> accessibility_label);
-
-  // Changes the button pressed action.
-  // Returns a callback to be used when the new action should stop being used.
-  [[nodiscard]] base::ScopedClosureRunner SetExplicitButtonAction(
-      base::RepeatingClosure explicit_closure);
+      std::optional<std::u16string> accessibility_label,
+      std::optional<base::RepeatingClosure> explicit_action);
 
   // Returns whether the button currently has a explicit action already set.
   bool HasExplicitButtonAction() const;
@@ -100,6 +106,9 @@ class AvatarToolbarButton : public ToolbarButton {
 
   // Returns true if a text is set and is visible.
   bool IsLabelPresentAndVisible() const;
+
+  // Updates the action button based on the current state.
+  void UpdateButtonAction();
 
   // ToolbarButton:
   void OnMouseExited(const ui::MouseEvent& event) override;
@@ -160,9 +169,6 @@ class AvatarToolbarButton : public ToolbarButton {
   // and whether the chip is expanded.
   void UpdateInkdrop();
 
-  // Used as a callback to reset the explicit button action.
-  void ResetButtonAction();
-
   void UpdateAccessibilityLabel();
 
   // Lists of observers.
@@ -183,13 +189,8 @@ class AvatarToolbarButton : public ToolbarButton {
   // Setting this to true will stop the button reaction but the button will
   // remain in active state, not affecting it's UI in any way.
   bool button_action_disabled_ = false;
-  // Explicit button action set by external calls.
+  // Explicit button action set by external calls or internal state changes.
   base::RepeatingClosure explicit_button_pressed_action_;
-  // Internal pointer to the current explicit closure. This is used to
-  // invalidate an existing reset callback if an explicit action is being set
-  // while an existing already exists. Priority to the last call.
-  raw_ptr<base::ScopedClosureRunner> reset_button_action_button_closure_ptr_ =
-      nullptr;
 
   base::WeakPtrFactory<AvatarToolbarButton> weak_ptr_factory_{this};
 };

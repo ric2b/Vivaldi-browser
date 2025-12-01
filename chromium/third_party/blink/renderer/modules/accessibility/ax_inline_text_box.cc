@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/layout/inline/offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/layout_text.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_block_flow_iterator.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_object-inl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_position.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_range.h"
@@ -398,10 +399,12 @@ void AXInlineTextBox::SerializeMarkerAttributes(
     // offsets.
     const auto start_position = AXPosition::FromPosition(
         Position(*ParentObject()->GetNode(), marker->StartOffset()),
-        TextAffinity::kDownstream, AXPositionAdjustmentBehavior::kMoveLeft);
+        AXObjectCache(), TextAffinity::kDownstream,
+        AXPositionAdjustmentBehavior::kMoveLeft);
     const auto end_position = AXPosition::FromPosition(
         Position(*ParentObject()->GetNode(), marker->EndOffset()),
-        TextAffinity::kDownstream, AXPositionAdjustmentBehavior::kMoveRight);
+        AXObjectCache(), TextAffinity::kDownstream,
+        AXPositionAdjustmentBehavior::kMoveRight);
     if (!start_position.IsValid() || !end_position.IsValid())
       continue;
 
@@ -455,10 +458,6 @@ void AXInlineTextBox::Init(AXObject* parent) {
   // necessary to again recompute this part of the tree.
   parent_ = parent;
   UpdateCachedAttributeValuesIfNeeded(false);
-
-#if DCHECK_IS_ON()
-  is_initialized_ = true;
-#endif
 }
 
 void AXInlineTextBox::Detach() {
@@ -622,11 +621,6 @@ AXObject* AXInlineTextBox::NeighboringOnLineWithAXBlockFlowIterator(
              ? nullptr
          : direction == Direction::kNext ? ParentObject()->NextOnLine()
                                          : ParentObject()->PreviousOnLine();
-}
-
-bool AXInlineTextBox::ComputeIsOffScreen() const {
-  CHECK(parent_);
-  return parent_->ComputeIsOffScreen();
 }
 
 }  // namespace blink

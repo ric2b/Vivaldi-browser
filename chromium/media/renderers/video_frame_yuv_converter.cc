@@ -2,12 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "media/renderers/video_frame_yuv_converter.h"
+
+#include <array>
 
 #include "components/viz/common/gpu/raster_context_provider.h"
 #include "components/viz/common/resources/shared_image_format.h"
@@ -40,11 +38,8 @@ bool IsPixelFormatSupportedForYuvSharedImageConversion(
     case PIXEL_FORMAT_YV12:
     case PIXEL_FORMAT_I422:
     case PIXEL_FORMAT_I444:
-    case PIXEL_FORMAT_YUV420P9:
     case PIXEL_FORMAT_YUV420P10:
-    case PIXEL_FORMAT_YUV422P9:
     case PIXEL_FORMAT_YUV422P10:
-    case PIXEL_FORMAT_YUV444P9:
     case PIXEL_FORMAT_YUV444P10:
     case PIXEL_FORMAT_YUV420P12:
     case PIXEL_FORMAT_YUV422P12:
@@ -73,7 +68,7 @@ bool IsPixelFormatSupportedForYuvSharedImageConversion(
   }
 }
 
-void ConvertYuvVideoFrameToRgbSharedImage(
+gpu::SyncToken ConvertYuvVideoFrameToRgbSharedImage(
     const VideoFrame* video_frame,
     viz::RasterContextProvider* raster_context_provider,
     const gpu::Mailbox& dest_mailbox,
@@ -136,13 +131,13 @@ void ConvertYuvVideoFrameToRgbSharedImage(
   if (status == VideoFrameSharedImageCache::Status::kMatchedVideoFrameId) {
     // Since the video frame id matches, no need to upload pixels or copy shared
     // image again.
-    return;
+    return dest_sync_token;
   }
 
   ri->WaitSyncTokenCHROMIUM(si_sync_token.GetConstData());
   const viz::SharedImageFormat si_format = src_shared_image->format();
   constexpr SkAlphaType kPlaneAlphaType = kUnpremul_SkAlphaType;
-  SkPixmap pixmaps[SkYUVAInfo::kMaxPlanes] = {};
+  std::array<SkPixmap, SkYUVAInfo::kMaxPlanes> pixmaps = {};
 
   for (int plane = 0; plane < si_format.NumberOfPlanes(); ++plane) {
     SkColorType color_type = viz::ToClosestSkColorType(si_format, plane);
@@ -167,7 +162,7 @@ void ConvertYuvVideoFrameToRgbSharedImage(
       SkYUVAInfo(video_size, plane_config, subsampling, color_space);
 
   SkYUVAPixmaps yuv_pixmap =
-      SkYUVAPixmaps::FromExternalPixmaps(yuva_info, pixmaps);
+      SkYUVAPixmaps::FromExternalPixmaps(yuva_info, pixmaps.data());
   ri->WritePixelsYUV(src_shared_image->mailbox(), yuv_pixmap);
 
   ri->CopySharedImage(src_shared_image->mailbox(), dest_mailbox, 0, 0,
@@ -178,6 +173,7 @@ void ConvertYuvVideoFrameToRgbSharedImage(
   ri->GenUnverifiedSyncTokenCHROMIUM(ri_sync_token.GetData());
 
   shared_image_cache->UpdateSyncToken(ri_sync_token);
+  return ri_sync_token;
 }
 
 }  // namespace media::internals

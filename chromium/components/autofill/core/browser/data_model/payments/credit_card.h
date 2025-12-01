@@ -20,6 +20,7 @@
 #include "components/autofill/core/browser/data_model/usage_history_information.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/suggestions/suggestion.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "url/gurl.h"
 
 namespace autofill {
@@ -80,6 +81,16 @@ class CreditCard : public FormGroup {
     kIssuerUnknown = 0,
     kGoogle = 1,
     kExternalIssuer = 2,
+  };
+
+  // The source of the card benefits. This must stay in sync with the proto
+  // enum in autofill_specifics.proto.
+  enum class BenefitSource {
+    kSourceUnknown = 0,
+    kSourceAmex = 1,
+    kSourceBmo = 2,
+    kSourceCurinos = 3,
+    kMaxValue = kSourceCurinos,
   };
 
   // Whether the card has been enrolled in the virtual card feature. This must
@@ -159,6 +170,15 @@ class CreditCard : public FormGroup {
   static std::u16string GetObfuscatedStringForCardDigits(
       int obfuscation_length,
       const std::u16string& digits);
+
+  // Conversion between benefit source enum and benefit source in string.
+  // Benefit source in string can be fully migrated to the enum after
+  // feature flag `AutofillEnableCardBenefitsSourceSync` is default-enabled
+  // and cleaned up.
+  static std::string_view GetBenefitSourceStringFromEnum(
+      BenefitSource benefit_source_enum);
+  static BenefitSource GetEnumFromBenefitSourceString(
+      std::string_view benefit_source);
 
   CreditCard(const std::string& guid, const std::string& origin);
 
@@ -518,6 +538,19 @@ class CreditCard : public FormGroup {
     product_terms_url_ = product_terms_url;
   }
 
+  // TODO(crbug.com/416338314): Remove kAutofillEnableCardBenefitsSourceSync
+  // once this flag is enabled by default and no drawbacks occur.
+  const std::string& benefit_source() const {
+    return base::FeatureList::IsEnabled(
+               features::kAutofillEnableCardBenefitsSourceSync)
+               ? benefit_source_
+               : issuer_id_;
+  }
+
+  void set_benefit_source(std::string_view benefit_source) {
+    benefit_source_ = std::string(benefit_source);
+  }
+
   const std::u16string& cvc() const { return cvc_; }
   void clear_cvc() { cvc_.clear(); }
   void set_cvc(const std::u16string& cvc) { cvc_ = cvc; }
@@ -631,6 +664,7 @@ class CreditCard : public FormGroup {
 
   // The issuer id of the card. This is set for server cards only (both actual
   // cards and virtual cards).
+  // TODO(crbug.com/412749171): Change issuer_id_ to use an enum.
   std::string issuer_id_;
 
   // For masked server cards, this is the ID assigned by the server to uniquely
@@ -661,6 +695,10 @@ class CreditCard : public FormGroup {
   // The URL for issuer terms of service to be displayed on the settings
   // page.
   GURL product_terms_url_;
+
+  // The source of the card benefits. This is set for server cards with
+  // benefits available only (both actual cards and virtual cards).
+  std::string benefit_source_;
 
   // The card verification code of the card. May be empty.
   std::u16string cvc_;

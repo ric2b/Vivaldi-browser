@@ -70,7 +70,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.Tab.LoadUrlResult;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
-import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.favicon.LargeIconBridgeJni;
@@ -149,7 +149,7 @@ public class AutocompleteMediatorUnitTest {
     private AutocompleteResult mAutocompleteResult;
     private ModelList mSuggestionModels;
     private ObservableSupplierImpl<TabWindowManager> mTabWindowManagerSupplier;
-    private Activity mActivity = Robolectric.buildActivity(Activity.class).setup().get();
+    private final Activity mActivity = Robolectric.buildActivity(Activity.class).setup().get();
 
     // Interface abstracting calls to CachedZeroSuggestionsManager, making interactions with that
     // more idiomatic.

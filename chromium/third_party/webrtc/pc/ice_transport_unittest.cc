@@ -30,7 +30,7 @@ namespace webrtc {
 class IceTransportTest : public ::testing::Test {
  protected:
   IceTransportTest()
-      : socket_server_(rtc::CreateDefaultSocketServer()),
+      : socket_server_(CreateDefaultSocketServer()),
         main_thread_(socket_server_.get()) {}
 
   SocketServer* socket_server() const { return socket_server_.get(); }
@@ -42,17 +42,16 @@ class IceTransportTest : public ::testing::Test {
 
 TEST_F(IceTransportTest, CreateNonSelfDeletingTransport) {
   auto cricket_transport =
-      std::make_unique<cricket::FakeIceTransport>("name", 0, nullptr);
+      std::make_unique<FakeIceTransport>("name", 0, nullptr);
   auto ice_transport =
-      rtc::make_ref_counted<IceTransportWithPointer>(cricket_transport.get());
+      make_ref_counted<IceTransportWithPointer>(cricket_transport.get());
   EXPECT_EQ(ice_transport->internal(), cricket_transport.get());
   ice_transport->Clear();
   EXPECT_NE(ice_transport->internal(), cricket_transport.get());
 }
 
 TEST_F(IceTransportTest, CreateSelfDeletingTransport) {
-  cricket::FakePortAllocator port_allocator(CreateEnvironment(),
-                                            socket_server());
+  FakePortAllocator port_allocator(CreateEnvironment(), socket_server());
   IceTransportInit init;
   init.set_port_allocator(&port_allocator);
   auto ice_transport = CreateIceTransport(std::move(init));

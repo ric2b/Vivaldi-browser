@@ -119,6 +119,9 @@ template("nasm_assemble") {
       args += invoker.nasm_flags
     }
 
+    # Avoids writing time-of-compile timestamps into built objects.
+    args += [ "--reproducible" ]
+
     # User defined include dirs go first.
     if (defined(invoker.include_dirs)) {
       foreach(include, invoker.include_dirs) {
@@ -149,9 +152,7 @@ template("nasm_assemble") {
     }
 
     # Output file.
-    outputs = [
-      "$target_out_dir/$source_set_name/{{source_name_part}}.o",
-    ]
+    outputs = [ "$target_out_dir/$source_set_name/{{source_name_part}}.o" ]
     args += [
       "-MD",
       rebase_path(outputs[0] + ".d", root_build_dir),
@@ -180,8 +181,6 @@ template("nasm_assemble") {
     # Do not publicize any header to remove build dependency.
     public = []
 
-    deps = [
-      ":$action_name",
-    ]
+    deps = [ ":$action_name" ]
   }
 }

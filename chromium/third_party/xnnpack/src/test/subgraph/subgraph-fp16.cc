@@ -596,8 +596,9 @@ TEST(SUBGRAPH_FP16, fully_connected_qd8_f16_qc8w) {
   const uint32_t fully_connected_out_id = 4;
   tester.AddInputTensorF32({5, 3}, input_id)
       .AddDynamicallyQuantizedTensor({5, 3}, converted_input_id, /*flags=*/0)
-      .AddStaticTensorQS8({2, 3}, TensorType::kDense, &kernel_scale[0],
-                          filter_id, /*flags=*/0, static_filter_data)
+      .AddStaticTensorQS8({2, 3}, /*channel_dim=*/0, TensorType::kDense,
+                          &kernel_scale[0], filter_id, /*flags=*/0,
+                          static_filter_data)
       .AddStaticTensorF32({2}, TensorType::kDense, bias_id, /*flags=*/0,
                           &bias[0])
       .AddOutputTensorF32({5, 2}, fully_connected_out_id)
@@ -625,8 +626,9 @@ TEST(SUBGRAPH_FP16, fully_connected_qd8_f16_qc8w) {
 
   reference_tester.AddInputTensorF32({5, 3}, input_id)
       .AddDynamicallyQuantizedTensor({5, 3}, converted_input_id, /*flags=*/0)
-      .AddStaticTensorQS8({2, 3}, TensorType::kDense, &kernel_scale[0],
-                          filter_id, /*flags=*/0, static_filter_data)
+      .AddStaticTensorQS8({2, 3}, /*channel_dim=*/0, TensorType::kDense,
+                          &kernel_scale[0], filter_id, /*flags=*/0,
+                          static_filter_data)
       .AddStaticTensorF32({2}, TensorType::kDense, bias_id, /*flags=*/0,
                           &bias[0])
       .AddOutputTensorF32({5, 2}, fully_connected_out_id)
@@ -640,7 +642,7 @@ TEST(SUBGRAPH_FP16, fully_connected_qd8_f16_qc8w) {
   xnnpack::ReplicableRandomDevice rng;
   auto f32rng = std::bind(std::uniform_real_distribution<float>(-1.f, 1.f),
                           std::ref(rng));
-  xnnpack::Buffer<float> input(15 + XNN_EXTRA_BYTES / sizeof(float));
+  xnnpack::Buffer<float> input(15, xnnpack::XnnExtraBytes);
   std::generate(input.begin(), input.end(), std::ref(f32rng));
   xnnpack::Buffer<float> reference_output(10), output(10);
   ASSERT_EQ(tester.NumNodes(), 4);
@@ -1149,8 +1151,7 @@ TEST(SUBGRAPH_FP16_BATCH_MATRIX_MULTIPLY, with_non_static_value) {
   //                  |
   //               external
   //               output[2]
-  tester
-      .AddInputTensorF32({1, 2, 2, 3}, 0)
+  tester.AddInputTensorF32({1, 2, 2, 3}, 0)
       .AddInputTensorF32({1, 1, 1, 3}, 1)
       .AddOutputTensorF32({1, 2, 2, 3}, 2)
       .AddBatchMatrixMultiply(0, 1, 2, 0)

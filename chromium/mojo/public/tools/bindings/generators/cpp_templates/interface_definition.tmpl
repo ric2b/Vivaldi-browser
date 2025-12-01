@@ -8,7 +8,7 @@
 {%- set qualified_class_name = ("::" ~ namespace_as_string_with_variant if namespace_as_string_with_variant) ~ "::" ~ class_name %}
 
 {%- macro alloc_params(struct, params, message, method_number, is_response) %}
-  {# Allow people to search for deserialization error strings #}
+{#   Allow people to search for deserialization error strings #}
   // Validation for {{class_name}}.{{method_number}}
   bool success = true;
 {%-   for param in struct.packed.packed_fields_in_ordinal_order %}
@@ -185,13 +185,18 @@ class {{class_name}}_{{method.name}}_HandleSyncResponse
  public:
   {{class_name}}_{{method.name}}_HandleSyncResponse(
       bool* result
-{%-       for param in method.response_parameters -%}
+{%-       if method.result_response != None %}
+{%-         set param = method.response_parameters[0] %}
+      , {{interface_macros.result_response_to_expected(method.result_response)}}* out_{{param.name}})
+{%-       else %}
+{%-         for param in method.response_parameters -%}
       , {{param.kind|cpp_wrapper_call_type}}* out_{{param.name}}
-{%-       endfor %})
+{%-         endfor %})
+{%-       endif  %}
       : result_(result)
-{%-       for param in method.response_parameters -%}
+{%-     for param in method.response_parameters -%}
         , out_{{param.name}}_(out_{{param.name}})
-{%-       endfor %} {
+{%-     endfor %} {
     DCHECK(!*result_);
   }
 
@@ -201,21 +206,22 @@ class {{class_name}}_{{method.name}}_HandleSyncResponse
   bool Accept(mojo::Message* message) override;
  private:
   bool* result_;
+{%-     if method.result_response != None %}
+{%-       set param = method.response_parameters[0] %}
+  {{interface_macros.result_response_to_expected(method.result_response)}}* out_{{param.name}}_;
+{%-     else -%}
 {%-       for param in method.response_parameters %}
   {{param.kind|cpp_wrapper_call_type}}* out_{{param.name}}_;
 {%-       endfor -%}
+{%-     endif -%}
 };
-{%-     endif %}
+{%-   endif %}
 
 class {{class_name}}_{{method.name}}_ForwardToCallback
     : public mojo::MessageReceiver {
  public:
   {{class_name}}_{{method.name}}_ForwardToCallback(
-{%-     if method.result_response != None %}
-      {{class_name}}::{{method.name}}ResultCallback callback
-{%-     else %}
       {{class_name}}::{{method.name}}Callback callback
-{%-     endif %}
       ) : callback_(std::move(callback)) {
   }
 
@@ -224,11 +230,7 @@ class {{class_name}}_{{method.name}}_ForwardToCallback
 
   bool Accept(mojo::Message* message) override;
  private:
-{%-     if method.result_response != None %}
-  {{class_name}}::{{method.name}}ResultCallback callback_;
-{%-     else %}
   {{class_name}}::{{method.name}}Callback callback_;
-{%-     endif %}
 };
 {%-   endif %}
 {%- endfor %}
@@ -257,6 +259,7 @@ class {{class_name}}_{{method.name}}_ForwardToCallback
 {%-   set params_description =
           "%s.%s request"|format(interface.name, method.name) %}
 {%-   set message_typename = "%s_%s_Message"|format(proxy_name, method.name) %}
+{%-   set send_validation = method.send_validation %}
 
 {%-   if method.sync %}
 bool {{proxy_name}}::{{method.name}}(
@@ -289,7 +292,7 @@ bool {{proxy_name}}::{{method.name}}(
                                         "kFlags")}}
 {{interface_macros.build_serialized_message(
     message_name, method, "param_%s", params_struct, params_description,
-    "kFlags", "message")}}
+    "kFlags", "message", send_validation)}}
 
 #if defined(ENABLE_IPC_FUZZER)
   message.set_interface_name({{class_name}}::Name_);
@@ -344,7 +347,7 @@ void {{proxy_name}}::{{method.name}}(
                                        "kFlags")}}
 {{interface_macros.build_serialized_message(
     message_name, method, "in_%s", params_struct, params_description,
-    "kFlags", "message", True)}}
+    "kFlags", "message", method.send_validation, True)}}
 
 #if defined(ENABLE_IPC_FUZZER)
   message.set_interface_name({{class_name}}::Name_);
@@ -382,7 +385,7 @@ class {{class_name}}_{{method.name}}_ProxyToResponder : public ::mojo::internal:
  public:
 {%-      if method.result_response != None -%}
 {%        set response_type = method.response_parameters[0].kind %}
-  static {{class_name}}::{{method.name}}ResultCallback CreateCallback(
+  static {{class_name}}::{{method.name}}Callback CreateCallback(
       ::mojo::Message& message,
       std::unique_ptr<mojo::MessageReceiverWithStatus> responder) {
     std::unique_ptr<{{class_name}}_{{method.name}}_ProxyToResponder> proxy(
@@ -486,7 +489,7 @@ void {{class_name}}_{{method.name}}_ProxyToResponder::Run(
                                        "false", "kFlags")}}
 {{interface_macros.build_serialized_message(
     message_name, method, "in_%s", response_params_struct,
-    response_params_description, "kFlags", "message")}}
+    response_params_description, "kFlags", "message", method.send_validation)}}
 
 #if defined(ENABLE_IPC_FUZZER)
   message.set_interface_name({{class_name}}::Name_);
@@ -517,9 +520,18 @@ bool {{class_name}}_{{method.name}}_HandleSyncResponse::Accept(
 {%-       set desc = class_name~"::"~method.name~" response" %}
   {{alloc_params(method.response_param_struct, "params", "message", method.sequential_ordinal, "true")}}
 
-{%-       for param in method.response_parameters %}
+{%-       if method.result_response != None %}
+{%-         set param = method.response_parameters[0] -%}
+    if (p_result->is_success()) {
+      *out_{{param.name}}_ = base::ok(std::move(p_result->get_success()));
+    } else {
+      *out_{{param.name}}_ = base::unexpected(std::move(p_result->get_failure()));
+    }
+{%-       else %}
+{%-         for param in method.response_parameters %}
   *out_{{param.name}}_ = std::move(p_{{param.name}});
-{%-       endfor %}
+{%-         endfor %}
+{%-       endif %}
   *result_ = true;
   return true;
 }

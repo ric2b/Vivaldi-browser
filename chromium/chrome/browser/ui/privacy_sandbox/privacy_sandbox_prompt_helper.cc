@@ -6,6 +6,7 @@
 
 #include "base/hash/hash.h"
 #include "base/metrics/histogram_functions.h"
+#include "chrome/browser/privacy_sandbox/notice/desktop_entrypoint_handlers_helper.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_queue_manager.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service.h"
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_service_factory.h"
@@ -16,12 +17,14 @@
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
+#include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/privacy_sandbox/privacy_sandbox_prompt.h"
 #include "chrome/browser/ui/profiles/profile_customization_bubble_sync_controller.h"
 #include "chrome/common/extensions/chrome_manifest_url_handlers.h"
 #include "chrome/common/webui_url_constants.h"
 #include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "components/sync/service/sync_service.h"
+#include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -29,7 +32,8 @@
 
 namespace {
 constexpr char kPrivacySandboxPromptHelperEventHistogram[] =
-    "Settings.PrivacySandbox.PromptHelperEvent";
+    "Settings.PrivacySandbox.PromptHelperEvent2";
+constexpr int kMinRequiredDialogHeight = 100;
 
 // Gets the type of prompt that should be displayed for |profile|, this includes
 // the possibility of no prompt being required.
@@ -136,8 +140,7 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
   // Check whether the navigation target is a suitable prompt location. The
   // navigation URL, rather than the visible or committed URL, is required to
   // distinguish between different types of NTPs.
-  if (!PrivacySandboxService::IsUrlSuitableForPrompt(
-          navigation_handle->GetURL())) {
+  if (!privacy_sandbox::IsUrlSuitableForPrompt(navigation_handle->GetURL())) {
     base::UmaHistogramEnumeration(
         kPrivacySandboxPromptHelperEventHistogram,
         SettingsPrivacySandboxPromptHelperEvent::kUrlNotSuitable);
@@ -152,30 +155,6 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
           SettingsPrivacySandboxPromptHelperEvent::kSyncSetupInProgress);
       return;
     }
-  }
-
-  // `SearchEngineChoiceDialogService` may need to suppress this dialog to avoid
-  // dialog conflicts and too frequent promos.
-  // TODO(crbug.com/370804492): When we add DMA notice to queue, put this behind
-  // flag / remove.
-  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
-      SearchEngineChoiceDialogServiceFactory::GetForProfile(profile());
-  if (search_engine_choice_dialog_service &&
-      search_engine_choice_dialog_service->CanSuppressPrivacySandboxPromo()) {
-    base::UmaHistogramEnumeration(kPrivacySandboxPromptHelperEventHistogram,
-                                  SettingsPrivacySandboxPromptHelperEvent::
-                                      kSearchEngineChoiceDialogShown);
-    if (auto* privacy_sandbox_service =
-            PrivacySandboxServiceFactory::GetForProfile(profile())) {
-      privacy_sandbox::PrivacySandboxQueueManager& queue_manager =
-          privacy_sandbox_service->GetPrivacySandboxNoticeQueueManager();
-
-      queue_manager.MaybeUnqueueNotice();
-      // Set suppress queue to prevent queueing after DMA notice is
-      // shown.
-      queue_manager.SetSuppressQueue(true);
-    }
-    return;
   }
 
   auto* browser =
@@ -215,7 +194,10 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
   // to its minimum width, so checking the height is enough here. Other non
   // normal tabbed browsers will be exlcuded in a later check.
   const bool is_window_height_too_small =
-      !CanWindowHeightFitPrivacySandboxPrompt(browser);
+      browser->window()
+          ->GetWebContentsModalDialogHost()
+          ->GetMaximumDialogSize()
+          .height() < kMinRequiredDialogHeight;
   // If the windows height is too small, it is difficult to read or interact
   // with the dialog. The dialog is blocking modal, that is why we want to
   // prevent it from showing if there isn't enough space.
@@ -262,7 +244,7 @@ void PrivacySandboxPromptHelper::DidFinishNavigation(
       browser->tab_strip_model()->GetIndexOfWebContents(
           navigation_handle->GetWebContents()));
 
-  ShowPrivacySandboxPrompt(browser, GetRequiredPromptType(profile()));
+  PrivacySandboxDialog::Show(browser, GetRequiredPromptType(profile()));
   base::UmaHistogramEnumeration(
       kPrivacySandboxPromptHelperEventHistogram,
       SettingsPrivacySandboxPromptHelperEvent::kPromptShown);
@@ -281,7 +263,18 @@ bool PrivacySandboxPromptHelper::ProfileRequiresPrompt(Profile* profile) {
   bool eligible = GetRequiredPromptType(profile) !=
                   PrivacySandboxService::PromptType::kNone;
 
-#if !BUILDFLAG(IS_ANDROID)
+  // TODO(crbug.com/370804492): When we add DMA notice to queue, put this behind
+  // flag / remove.
+  SearchEngineChoiceDialogService* search_engine_choice_dialog_service =
+      SearchEngineChoiceDialogServiceFactory::GetForProfile(profile);
+  if (search_engine_choice_dialog_service &&
+      search_engine_choice_dialog_service->CanSuppressPrivacySandboxPromo()) {
+    base::UmaHistogramEnumeration(kPrivacySandboxPromptHelperEventHistogram,
+                                  SettingsPrivacySandboxPromptHelperEvent::
+                                      kSearchEngineChoiceDialogShown);
+    eligible = false;
+  }
+
   if (auto* privacy_sandbox_service =
           PrivacySandboxServiceFactory::GetForProfile(profile)) {
     privacy_sandbox::PrivacySandboxQueueManager& queue_manager =
@@ -294,7 +287,6 @@ bool PrivacySandboxPromptHelper::ProfileRequiresPrompt(Profile* profile) {
     eligible ? queue_manager.MaybeQueueNotice()
              : queue_manager.MaybeUnqueueNotice();
   }
-#endif  // !BUILDFLAG(IS_ANDROID)
 
   return eligible;
 }

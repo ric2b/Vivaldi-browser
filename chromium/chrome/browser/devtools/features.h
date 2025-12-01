@@ -47,6 +47,7 @@ extern const base::FeatureParam<DevToolsFreestylerExecutionMode>
     kDevToolsFreestylerExecutionMode;
 extern const base::FeatureParam<bool> kDevToolsFreestylerPatching;
 extern const base::FeatureParam<bool> kDevToolsFreestylerMultimodal;
+extern const base::FeatureParam<bool> kDevToolsFreestylerMultimodalUploadInput;
 extern const base::FeatureParam<bool> kDevToolsFreestylerFunctionCalling;
 
 BASE_DECLARE_FEATURE(kDevToolsAiAssistanceNetworkAgent);
@@ -89,9 +90,13 @@ BASE_DECLARE_FEATURE(kDevToolsCssValueTracing);
 
 BASE_DECLARE_FEATURE(kDevToolsAiGeneratedTimelineLabels);
 
+BASE_DECLARE_FEATURE(kDevToolsNewPermissionDialog);
+
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 BASE_DECLARE_FEATURE(kDevToolsDebuggingRestrictions);
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+BASE_DECLARE_FEATURE(kDevToolsVerticalDrawer);
 
 }  // namespace features
 

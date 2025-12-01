@@ -22,13 +22,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/timer/elapsed_timer.h"
+#include "base/types/to_address.h"
 #include "components/safe_browsing/core/browser/db/prefix_iterator.h"
 #include "components/safe_browsing/core/browser/db/v4_rice.h"
 #include "components/safe_browsing/core/browser/db/v4_store.pb.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/proto/webui.pb.h"
-#include "crypto/secure_hash.h"
-#include "crypto/sha2.h"
+#include "crypto/hash.h"
 #include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
 
@@ -469,7 +469,7 @@ ApplyUpdateResult V4Store::ProcessUpdate(
       }
       raw_removals = &rice_removals;
     } else {
-      NOTREACHED() << "Unexpected compression_type type: " << compression_type;
+      return UNEXPECTED_COMPRESSION_TYPE_REMOVALS_FAILURE;
     }
   }
   if (raw_removals) {
@@ -523,18 +523,21 @@ void V4Store::ApplyUpdate(
   V4StorePtr new_store(new V4Store(task_runner_, store_path_, file_size_),
                        V4StoreDeleter(task_runner_));
   ApplyUpdateResult apply_update_result;
-  std::string metric;
+  std::optional<std::string> metric;
+  ApplyUpdateType apply_update_type;
   if (response->response_type() == ListUpdateResponse::PARTIAL_UPDATE) {
     metric = kProcessPartialUpdate;
+    apply_update_type = ApplyUpdateType::kPartial;
     apply_update_result = new_store->ProcessPartialUpdateAndWriteToDisk(
-        metric, hash_prefix_map_->view(), std::move(response));
+        metric.value(), hash_prefix_map_->view(), std::move(response));
   } else if (response->response_type() == ListUpdateResponse::FULL_UPDATE) {
+    apply_update_type = ApplyUpdateType::kFull;
     metric = kProcessFullUpdate;
-    apply_update_result =
-        new_store->ProcessFullUpdateAndWriteToDisk(metric, std::move(response));
+    apply_update_result = new_store->ProcessFullUpdateAndWriteToDisk(
+        metric.value(), std::move(response));
   } else {
-    NOTREACHED() << "Failure: Unexpected response type: "
-                 << response->response_type();
+    apply_update_type = ApplyUpdateType::kInvalid;
+    apply_update_result = UNEXPECTED_RESPONSE_TYPE_FAILURE;
   }
 
   if (apply_update_result == APPLY_UPDATE_SUCCESS) {
@@ -551,8 +554,13 @@ void V4Store::ApplyUpdate(
   // Record the state of the update to be shown in the Safe Browsing page.
   last_apply_update_result_ = apply_update_result;
 
-  RecordApplyUpdateResult(metric, apply_update_result, store_path_);
-  RecordApplyUpdateDuration(metric, thread_timer.Elapsed(), store_path_);
+  base::UmaHistogramEnumeration("SafeBrowsing.V4ProcessUpdate.UpdateType",
+                                apply_update_type);
+  if (metric.has_value()) {
+    RecordApplyUpdateResult(metric.value(), apply_update_result, store_path_);
+    RecordApplyUpdateDuration(metric.value(), thread_timer.Elapsed(),
+                              store_path_);
+  }
 
   // Posting the task should be the last thing to do in this function.
   // Otherwise, the posted task can end up running in parallel. If that
@@ -601,7 +609,7 @@ ApplyUpdateResult V4Store::UpdateHashPrefixMapFromAdditions(
                                                 raw_hashes_size, additions_map);
       }
     } else {
-      NOTREACHED() << "Unexpected compression_type type: " << compression_type;
+      return UNEXPECTED_COMPRESSION_TYPE_ADDITIONS_FAILURE;
     }
 
     if (apply_update_result != APPLY_UPDATE_SUCCESS) {
@@ -629,10 +637,10 @@ ApplyUpdateResult V4Store::AddUnlumpedHashes(
     const size_t raw_hashes_length,
     std::unordered_map<PrefixSize, HashPrefixes>* additions_map) {
   if (prefix_size < kMinHashPrefixLength) {
-    NOTREACHED();
+    return PREFIX_SIZE_TOO_SMALL_FAILURE;
   }
   if (prefix_size > kMaxHashPrefixLength) {
-    NOTREACHED();
+    return PREFIX_SIZE_TOO_LARGE_FAILURE;
   }
   if (raw_hashes_length % prefix_size != 0) {
     return ADDITIONS_SIZE_UNEXPECTED_FAILURE;
@@ -688,7 +696,7 @@ ApplyUpdateResult V4Store::MergeUpdate(
 
   bool calculate_checksum = !expected_checksum.empty();
   if (calculate_checksum &&
-      (expected_checksum.size() != crypto::kSHA256Length)) {
+      (expected_checksum.size() != crypto::hash::kSha256Size)) {
     return CHECKSUM_MISMATCH_FAILURE;
   }
 
@@ -711,8 +719,7 @@ ApplyUpdateResult V4Store::MergeUpdate(
   // At least one of the maps still has elements that need to be merged into the
   // new store.
 
-  std::unique_ptr<crypto::SecureHash> checksum_ctx(
-      crypto::SecureHash::Create(crypto::SecureHash::SHA256));
+  crypto::hash::Hasher checksum_ctx(crypto::hash::HashKind::kSha256);
 
   // Keep track of the number of elements picked from the old map. This is used
   // to determine which elements to drop based on the raw_removals. Note that
@@ -751,8 +758,7 @@ ApplyUpdateResult V4Store::MergeUpdate(
                                  next_smallest_prefix_old);
 
         if (calculate_checksum) {
-          checksum_ctx->Update(next_smallest_prefix_old.data(),
-                               next_smallest_prefix_size);
+          checksum_ctx.Update(next_smallest_prefix_old);
         }
       } else {
         // Element not added to new map. Move the removals iterator forward.
@@ -772,8 +778,7 @@ ApplyUpdateResult V4Store::MergeUpdate(
                                next_smallest_prefix_additions);
 
       if (calculate_checksum) {
-        checksum_ctx->Update(next_smallest_prefix_additions.data(),
-                             next_smallest_prefix_size);
+        checksum_ctx.Update(next_smallest_prefix_additions);
       }
 
       // Update the iterator map, which means that we have merged one hash
@@ -793,21 +798,17 @@ ApplyUpdateResult V4Store::MergeUpdate(
   }
 
   if (calculate_checksum) {
-    std::array<char, crypto::kSHA256Length> checksum;
-    checksum_ctx->Finish(checksum.data(), checksum.size());
-    for (size_t i = 0; i < crypto::kSHA256Length; i++) {
-      if (checksum[i] != expected_checksum[i]) {
+    std::array<uint8_t, crypto::hash::kSha256Size> checksum;
+    checksum_ctx.Finish(checksum);
+    auto expected = base::as_byte_span(expected_checksum);
+    if (expected != checksum) {
 #if DCHECK_IS_ON()
-        std::string checksum_b64 =
-            base::Base64Encode(base::as_byte_span(checksum));
-        std::string expected_checksum_b64 =
-            base::Base64Encode(expected_checksum);
-        DVLOG(1) << "Failure: Checksum mismatch: calculated: " << checksum_b64
-                 << "; expected: " << expected_checksum_b64
-                 << "; store: " << *this;
+      std::string checksum_b64 = base::Base64Encode(checksum);
+      std::string expected_b64 = base::Base64Encode(expected);
+      DVLOG(1) << "Failure: Checksum mismatch: calculated: " << checksum_b64
+               << "; expected: " << expected_b64 << "; store: " << *this;
 #endif
-        return CHECKSUM_MISMATCH_FAILURE;
-      }
+      return CHECKSUM_MISMATCH_FAILURE;
     }
   }
 
@@ -979,13 +980,37 @@ bool V4Store::VerifyChecksum() {
   bool has_unmerged = GetNextSmallestUnmergedPrefix(map_view, iterator_map,
                                                     &next_smallest_prefix);
 
-  std::unique_ptr<crypto::SecureHash> checksum_ctx(
-      crypto::SecureHash::Create(crypto::SecureHash::SHA256));
+  crypto::hash::Hasher checksum_ctx(crypto::hash::HashKind::kSha256);
   while (has_unmerged) {
+#if DCHECK_IS_ON()
     // This is expensive (see https://crbug.com/373928217), but it's
     // useful to validate that the DB hasn't changed to debug
     // https://crbug.com/390144275
-    DCHECK_EQ(map_view.size(), hash_prefix_map_->view().size());
+    const HashPrefixMapView recomputed_map_view = hash_prefix_map_->view();
+
+    for (const auto& iterator_pair : iterator_map) {
+      PrefixSize prefix_size = iterator_pair.first;
+      HashPrefixesView::const_iterator start = iterator_pair.second;
+
+      HashPrefixesView hash_prefixes = map_view.at(prefix_size);
+      HashPrefixesView recomputed_hash_prefixes =
+          recomputed_map_view.at(prefix_size);
+
+      // Both regions should be the same.
+      DCHECK_EQ(hash_prefixes.data(), recomputed_hash_prefixes.data());
+      DCHECK_EQ(hash_prefixes.size(), recomputed_hash_prefixes.size());
+
+      // And the iterator map should be pointing into the region and
+      // properly aligned.
+      DCHECK_LE(base::to_address(recomputed_hash_prefixes.begin()),
+                base::to_address(start));
+      DCHECK_LE(base::to_address(start),
+                base::to_address(recomputed_hash_prefixes.end()));
+      DCHECK_EQ(
+          std::distance(recomputed_hash_prefixes.begin(), start) % prefix_size,
+          0u);
+    }
+#endif
 
     PrefixSize next_smallest_prefix_size = next_smallest_prefix.size();
 
@@ -993,33 +1018,28 @@ bool V4Store::VerifyChecksum() {
     // prefix of size |next_smallest_prefix_size| from hash_prefix_map_.
     iterator_map[next_smallest_prefix_size] += next_smallest_prefix_size;
 
-    checksum_ctx->Update(next_smallest_prefix.data(),
-                         next_smallest_prefix_size);
+    checksum_ctx.Update(next_smallest_prefix);
 
     // Find the next smallest unmerged element in the map.
     has_unmerged = GetNextSmallestUnmergedPrefix(map_view, iterator_map,
                                                  &next_smallest_prefix);
   }
 
-  std::array<char, crypto::kSHA256Length> checksum;
-  checksum_ctx->Finish(checksum.data(), checksum.size());
-  for (size_t i = 0; i < crypto::kSHA256Length; i++) {
-    if (checksum[i] != expected_checksum_[i]) {
-      RecordApplyUpdateResult(kReadFromDisk, CHECKSUM_MISMATCH_FAILURE,
-                              store_path_);
+  std::array<uint8_t, crypto::hash::kSha256Size> checksum;
+  checksum_ctx.Finish(checksum);
+  auto expected = base::as_byte_span(expected_checksum_);
+  if (expected != checksum) {
+    RecordApplyUpdateResult(kReadFromDisk, CHECKSUM_MISMATCH_FAILURE,
+                            store_path_);
 #if DCHECK_IS_ON()
-      std::string checksum_b64 =
-          base::Base64Encode(base::as_byte_span(checksum));
-      std::string expected_checksum_b64 =
-          base::Base64Encode(expected_checksum_);
-      DVLOG(1) << "Failure: Checksum mismatch: calculated: " << checksum_b64
-               << "; expected: " << expected_checksum_b64
-               << "; store: " << *this;
+    std::string checksum_b64 = base::Base64Encode(base::as_byte_span(checksum));
+    std::string expected_checksum_b64 = base::Base64Encode(expected_checksum_);
+    DVLOG(1) << "Failure: Checksum mismatch: calculated: " << checksum_b64
+             << "; expected: " << expected_checksum_b64 << "; store: " << *this;
 #endif
-      RecordVerifyChecksumDuration(kReadFromDisk, thread_timer.Elapsed(),
-                                   store_path_);
-      return false;
-    }
+    RecordVerifyChecksumDuration(kReadFromDisk, thread_timer.Elapsed(),
+                                 store_path_);
+    return false;
   }
 
   RecordVerifyChecksumDuration(kReadFromDisk, thread_timer.Elapsed(),

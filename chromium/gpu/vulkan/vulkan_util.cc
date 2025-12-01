@@ -66,17 +66,18 @@ bool IsDeviceBlocked(std::string_view field, std::string_view block_list) {
 
 int GetEMUIVersion() {
   const auto* build_info = base::android::BuildInfo::GetInstance();
-  std::string_view manufacturer(build_info->manufacturer());
 
   // TODO(crbug.com/40136096): check Honor devices as well.
-  if (manufacturer != "HUAWEI")
+  if (build_info->manufacturer() != "HUAWEI") {
     return -1;
+  }
 
   // Huawei puts EMUI version in the build version incremental.
   // Example: 11.0.0.130C00
   int version = 0;
-  if (sscanf(build_info->version_incremental(), "%d.", &version) != 1)
+  if (sscanf(build_info->version_incremental().c_str(), "%d.", &version) != 1) {
     return -1;
+  }
 
   return version;
 }
@@ -105,7 +106,7 @@ bool IsBlockedByBuildInfo() {
   return false;
 }
 
-BASE_FEATURE(kVulkanV2, "VulkanV2", base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kVulkanV2, "VulkanV2", base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kVulkanV3, "VulkanV3", base::FEATURE_DISABLED_BY_DEFAULT);
 
 bool IsDeviceBlockedByFeatureParams(const GPUInfo& gpu_info,
@@ -237,7 +238,15 @@ bool IsVulkanV1EnabledForMali(const GPUInfo& gpu_info) {
 }
 
 // Everything that passed 2022 deQP tests.
-bool IsVulkanV2EnabledForMali(const GPUInfo& gpu_info) {
+bool IsVulkanV2EnabledForMali(
+    const GPUInfo& gpu_info,
+    const VulkanPhysicalDeviceProperties& device_properties) {
+  // Mali-G57 have problems initializing Vulkan even with 2022 deQP tests
+  // passed, devices that init successfully show performance regression.
+  if (base::StartsWith(device_properties.device_name, "Mali-G57")) {
+    return false;
+  }
+
   // For V2 we MediaTek is allowed.
   return ShouldBypassMediatekBlock(gpu_info);
 }
@@ -523,7 +532,7 @@ bool CheckVulkanCompatibilities(
     }
 
     return IsVulkanV1EnabledForMali(gpu_info) ||
-           IsVulkanV2EnabledForMali(gpu_info);
+           IsVulkanV2EnabledForMali(gpu_info, device_properties);
   }
 
   if (device_properties.vendor_id == kVendorQualcomm) {
@@ -546,6 +555,12 @@ bool CheckVulkanCompatibilities(
   // because of performance, and stability (crbug.com/1479335).
   if (device_properties.vendor_id == kVendorGoogle &&
       device_properties.device_id == kDeviceSwiftShader) {
+    return false;
+  }
+
+  // Some android x86 devices (e.g older gpu on auto devices) don't report
+  // format support correctly. See crbug.com/379205391
+  if (device_properties.vendor_id == kVendorIntel) {
     return false;
   }
 

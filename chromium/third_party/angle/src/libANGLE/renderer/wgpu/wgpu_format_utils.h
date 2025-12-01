@@ -9,7 +9,7 @@
 #ifndef LIBANGLE_RENDERER_WGPU_WGPU_FORMAT_UTILS_H_
 #define LIBANGLE_RENDERER_WGPU_WGPU_FORMAT_UTILS_H_
 
-#include <dawn/webgpu_cpp.h>
+#include <webgpu/webgpu.h>
 
 #include "libANGLE/formatutils.h"
 #include "libANGLE/renderer/Format.h"
@@ -33,10 +33,10 @@ struct BufferFormatInitInfo final
     bool VertexLoadRequiresConversion;
 };
 
-wgpu::TextureFormat GetWgpuTextureFormatFromFormatID(angle::FormatID formatID);
-angle::FormatID GetFormatIDFromWgpuTextureFormat(wgpu::TextureFormat wgpuFormat);
-wgpu::VertexFormat GetWgpuVertexFormatFromFormatID(angle::FormatID formatID);
-angle::FormatID GetFormatIDFromWgpuBufferFormat(wgpu::VertexFormat wgpuFormat);
+WGPUTextureFormat GetWgpuTextureFormatFromFormatID(angle::FormatID formatID);
+angle::FormatID GetFormatIDFromWgpuTextureFormat(WGPUTextureFormat wgpuFormat);
+WGPUVertexFormat GetWgpuVertexFormatFromFormatID(angle::FormatID formatID);
+angle::FormatID GetFormatIDFromWgpuBufferFormat(WGPUVertexFormat wgpuFormat);
 
 // Describes a WebGPU format. WebGPU has separate formats for images and vertex buffers, this class
 // describes both.
@@ -64,13 +64,13 @@ class Format final : private angle::NonCopyable
         return mTextureLoadFunctions(type);
     }
 
-    wgpu::TextureFormat getActualWgpuTextureFormat() const
+    WGPUTextureFormat getActualWgpuTextureFormat() const
     {
         return GetWgpuTextureFormatFromFormatID(mActualImageFormatID);
     }
     angle::FormatID getActualImageFormatID() const { return mActualImageFormatID; }
 
-    wgpu::VertexFormat getActualWgpuVertexFormat() const
+    WGPUVertexFormat getActualWgpuVertexFormat() const
     {
         return GetWgpuVertexFormatFromFormatID(mActualBufferFormatID);
     }
@@ -137,6 +137,8 @@ class FormatTable final : angle::NonCopyable
     {
         return mFormatData[static_cast<size_t>(formatID)];
     }
+
+    const Format *findClosestTextureFormat(WGPUTextureFormat wgpuFormat) const;
 
   private:
     // The table data is indexed by angle::FormatID.

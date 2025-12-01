@@ -53,6 +53,7 @@
 #include "src/gpu/ganesh/GrThreadSafeCache.h"
 #include "src/gpu/ganesh/GrYUVATextureProxies.h"
 #include "src/gpu/ganesh/SkGr.h"
+#include "src/gpu/ganesh/SurfaceDrawContext.h"
 #include "src/gpu/ganesh/SurfaceFillContext.h"
 #include "src/gpu/ganesh/effects/GrBicubicEffect.h"
 #include "src/gpu/ganesh/effects/GrTextureEffect.h"
@@ -74,15 +75,7 @@ class SkMatrix;
 class SkSurfaceProps;
 enum SkColorType : int;
 
-#if defined(SK_USE_LEGACY_BLUR_GANESH)
-#include "include/core/SkPoint.h"
-#include "include/core/SkScalar.h"
-#include "src/core/SkSpecialImage.h"
-#include "src/gpu/ganesh/GrBlurUtils.h"
-#include "src/gpu/ganesh/SurfaceDrawContext.h"
-#else
 class SkSpecialImage;
-#endif
 
 namespace skgpu::ganesh {
 
@@ -527,13 +520,17 @@ std::unique_ptr<GrFragmentProcessor> raster_as_fp(GrRecordingContext* rContext,
                              domain);
 }
 
-std::unique_ptr<GrFragmentProcessor> AsFragmentProcessor(GrRecordingContext* rContext,
+std::unique_ptr<GrFragmentProcessor> AsFragmentProcessor(SurfaceDrawContext* sdc,
                                                          const SkImage* img,
                                                          SkSamplingOptions sampling,
                                                          const SkTileMode tileModes[2],
                                                          const SkMatrix& m,
                                                          const SkRect* subset,
                                                          const SkRect* domain) {
+    if (!sdc) {
+        return {};
+    }
+    GrRecordingContext* rContext = sdc->recordingContext();
     if (!rContext) {
         return {};
     }
@@ -556,7 +553,7 @@ std::unique_ptr<GrFragmentProcessor> AsFragmentProcessor(GrRecordingContext* rCo
                             domain);
     } else if (ib->isGaneshBacked()) {
         auto gb = static_cast<const SkImage_GaneshBase*>(img);
-        return gb->asFragmentProcessor(rContext, sampling, tileModes, m, subset, domain);
+        return gb->asFragmentProcessor(sdc, sampling, tileModes, m, subset, domain);
     } else if (ib->isLazyGenerated()) {
         // TODO: If the CPU data is extracted as planes return a FP that reconstructs the image from
         // the planes.
@@ -726,11 +723,7 @@ namespace {
 
 class GaneshBackend :
         public Backend,
-#if defined(SK_USE_LEGACY_BLUR_GANESH)
-        private SkBlurEngine::Algorithm,
-#else
         private SkShaderBlurAlgorithm,
-#endif
         private SkBlurEngine {
 public:
 
@@ -801,63 +794,6 @@ public:
         return this;
     }
 
-#if defined(SK_USE_LEGACY_BLUR_GANESH)
-    // NOTE: When SK_USE_LEGACY_BLUR_GANESH is defined, `useLegacyFilterResultBlur()` returns true,
-    // so FilterResult::blur() will resolve all tiling in the original image space before calling
-    // into this function that routes to GrBlurUtils::GaussianBlur to perform the rescaling and
-    // blurring. It is possible ot restore original GrBlurUtils performance by just having
-    // `useLegacyFilterResultBlur()` return false but still reporting a max sigma of infinity and
-    // advertising support for all tile modes.
-    //
-    // Since all clients are currently rebased on the intermediate "legacy" blur approach, the ideal
-    // step would be to just migrate them to the SkShaderBlurAlgorithm variant instead of first
-    // going back to pure GrBlurUtils. But if needed for cherry-picking to old releases, the
-    // original GrBlurUtils behavior can be achieved quikly.
-
-    // SkBlurEngine::Algorithm
-    float maxSigma() const override {
-        // GrBlurUtils handles resizing at the moment
-        return SK_ScalarInfinity;
-    }
-
-    bool supportsOnlyDecalTiling() const override { return false; }
-
-    sk_sp<SkSpecialImage> blur(SkSize sigma,
-                               sk_sp<SkSpecialImage> input,
-                               const SkIRect& srcRect,
-                               SkTileMode tileMode,
-                               const SkIRect& dstRect) const override {
-        GrSurfaceProxyView inputView = SkSpecialImages::AsView(fContext.get(), input);
-        if (!inputView.proxy()) {
-            return nullptr;
-        }
-        SkASSERT(inputView.asTextureProxy());
-
-        // Update srcRect and dstRect to be relative to the underlying texture proxy of 'input'.
-        auto proxyOffset = input->subset().topLeft() - srcRect.topLeft();
-        auto sdc = GrBlurUtils::GaussianBlur(
-                fContext.get(),
-                std::move(inputView),
-                SkColorTypeToGrColorType(input->colorType()),
-                input->alphaType(),
-                sk_ref_sp(input->getColorSpace()),
-                dstRect.makeOffset(proxyOffset),
-                srcRect.makeOffset(proxyOffset),
-                sigma.width(),
-                sigma.height(),
-                tileMode);
-        if (!sdc) {
-            return nullptr;
-        }
-
-        return SkSpecialImages::MakeDeferredFromGpu(fContext.get(),
-                                                    SkIRect::MakeSize(dstRect.size()),
-                                                    kNeedNewImageUniqueID_SpecialImage,
-                                                    sdc->readSurfaceView(),
-                                                    sdc->colorInfo(),
-                                                    this->surfaceProps());
-    }
-#else
     bool useLegacyFilterResultBlur() const override { return false; }
 
     // SkShaderBlurAlgorithm
@@ -872,8 +808,6 @@ public:
                                              this->surfaceProps(),
                                              skgpu::ganesh::Device::InitContents::kUninit);
     }
-
-#endif
 
 private:
     sk_sp<GrRecordingContext> fContext;

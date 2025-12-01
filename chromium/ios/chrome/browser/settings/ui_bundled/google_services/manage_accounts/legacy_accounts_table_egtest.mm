@@ -75,6 +75,7 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
   AppLaunchConfiguration config = [super appConfigurationForTestCase];
 
   config.features_disabled.push_back(kIdentityDiscAccountMenu);
+  config.features_disabled.push_back(kSeparateProfilesForManagedAccounts);
 
   return config;
 }
@@ -491,23 +492,19 @@ constexpr base::TimeDelta kSyncOperationTimeout = base::Seconds(10);
 - (void)testSignOutWithManagedAccount {
   // Sign In `fakeManagedIdentity`.
   FakeSystemIdentity* fakeIdentity = [FakeSystemIdentity fakeManagedIdentity];
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
-    [SigninEarlGrey
-        signinWithFakeManagedIdentityInPersonalProfile:fakeIdentity];
-  } else {
-    [SigninEarlGrey signinWithFakeIdentity:fakeIdentity];
-  }
+  [SigninEarlGrey signinWithFakeManagedIdentityInPersonalProfile:fakeIdentity];
 
   [BookmarkEarlGrey
       setupStandardBookmarksInStorage:BookmarkStorageType::kLocalOrSyncable];
 
-  [SigninEarlGreyUI signOutWithClearDataConfirmation:
-                        !AreSeparateProfilesForManagedAccountsEnabled()];
+  [SigninEarlGreyUI
+      signOutWithClearDataConfirmation:
+          ![SigninEarlGrey areSeparateProfilesForManagedAccountsEnabled]];
 
   // Open the Bookmarks screen on the Tools menu.
   [BookmarkEarlGreyUI openBookmarks];
 
-  if (!AreSeparateProfilesForManagedAccountsEnabled()) {
+  if (![SigninEarlGrey areSeparateProfilesForManagedAccountsEnabled]) {
     [BookmarkEarlGreyUI openMobileBookmarks];
     // Assert that the empty state background is absent.
     [BookmarkEarlGreyUI verifyEmptyBackgroundIsAbsent];

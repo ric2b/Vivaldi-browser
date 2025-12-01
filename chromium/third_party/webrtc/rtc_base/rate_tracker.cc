@@ -11,11 +11,13 @@
 #include "rtc_base/rate_tracker.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 
 #include "rtc_base/checks.h"
 #include "rtc_base/time_utils.h"
 
-namespace rtc {
+namespace webrtc {
 
 static const int64_t kTimeUnset = -1;
 
@@ -62,7 +64,7 @@ double RateTracker::ComputeRateForInterval(
     buckets_to_skip = bucket_count_ - current_bucket_;
     milliseconds_to_skip = 0;
     available_interval_milliseconds =
-        webrtc::TimeDiff(current_time, initialization_time_milliseconds_);
+        TimeDiff(current_time, initialization_time_milliseconds_);
     // Let one bucket interval pass after initialization before reporting.
     if (available_interval_milliseconds < bucket_milliseconds_) {
       return 0.0;
@@ -100,7 +102,7 @@ double RateTracker::ComputeTotalRate() const {
   }
   return static_cast<double>(total_sample_count_ * 1000) /
          static_cast<double>(
-             webrtc::TimeDiff(current_time, initialization_time_milliseconds_));
+             TimeDiff(current_time, initialization_time_milliseconds_));
 }
 
 int64_t RateTracker::TotalSampleCount() const {
@@ -137,7 +139,7 @@ void RateTracker::AddSamplesAtTime(int64_t current_time_ms,
 }
 
 int64_t RateTracker::Time() const {
-  return webrtc::TimeMillis();
+  return TimeMillis();
 }
 
 void RateTracker::EnsureInitialized() {
@@ -155,4 +157,4 @@ size_t RateTracker::NextBucketIndex(size_t bucket_index) const {
   return (bucket_index + 1u) % (bucket_count_ + 1u);
 }
 
-}  // namespace rtc
+}  // namespace webrtc

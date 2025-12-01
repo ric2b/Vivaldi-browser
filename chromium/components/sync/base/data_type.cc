@@ -9,6 +9,7 @@
 #include "base/containers/fixed_flat_map.h"
 #include "base/logging.h"
 #include "base/notreached.h"
+#include "components/sync/base/features.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 
 namespace syncer {
@@ -614,6 +615,21 @@ DataType GetDataTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   return UNSPECIFIED;
 }
 
+DataTypeSet AlwaysPreferredUserTypes() {
+  DataTypeSet types = {DEVICE_INFO,          USER_CONSENTS,
+                       PLUS_ADDRESS,         PLUS_ADDRESS_SETTING,
+                       PRIORITY_PREFERENCES, SECURITY_EVENTS,
+                       SEND_TAB_TO_SELF,     SUPERVISED_USER_SETTINGS,
+                       SHARING_MESSAGE};
+  // TODO(crbug.com/412602018): Mark AlwaysPreferredUserTypes() method as
+  // constexpr when removing the feature flag.
+  if (!base::FeatureList::IsEnabled(
+          kSyncSupportAlwaysSyncingPriorityPreferences)) {
+    types.Remove(PRIORITY_PREFERENCES);
+  }
+  return types;
+}
+
 DataTypeSet EncryptableUserTypes() {
   static_assert(55+ 1 /* notes */ == syncer::GetNumDataTypes(),
                 "If adding an unencryptable type, remove from "
@@ -1162,6 +1178,10 @@ const char* DataTypeToStableLowerCaseString(DataType data_type) {
   // WARNING: existing strings must not be changed without migration, they
   // are persisted!
   NOTREACHED();
+}
+
+std::ostream& operator<<(std::ostream& out, DataType data_type) {
+  return out << DataTypeToDebugString(data_type);
 }
 
 std::ostream& operator<<(std::ostream& out, DataTypeSet data_type_set) {

@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
@@ -87,11 +89,10 @@ export class Toolbar extends HTMLElement {
   private items: ToolbarItem[] = [];
   enabled = true;
   private compactLayout = false;
-  private mutationObserver = new MutationObserver(this.onItemsChange.bind(this));
 
   constructor() {
     super();
-    this.#shadowRoot.createChild('style').textContent = toolbarStyles.cssText;
+    this.#shadowRoot.createChild('style').textContent = toolbarStyles;
     this.#shadowRoot.createChild('slot');
   }
 
@@ -849,7 +850,7 @@ export class ToolbarFilter extends ToolbarInput {
   }
 }
 
-class ToolbarInputElement extends HTMLElement {
+export class ToolbarInputElement extends HTMLElement {
   static observedAttributes = ['value'];
 
   item!: ToolbarInput;
@@ -904,7 +905,7 @@ class ToolbarInputElement extends HTMLElement {
     return [...options].map((({value}) => value)).filter(value => value.startsWith(prefix)).map(text => ({text}));
   }
 
-  attributeChangedCallback(name: string, oldValue: string, newValue: string): void {
+  attributeChangedCallback(name: string, _oldValue: string, newValue: string): void {
     if (name === 'value') {
       if (this.item && this.item.value() !== newValue) {
         this.item.setValue(newValue, true);
@@ -929,12 +930,10 @@ export namespace ToolbarInput {
 }
 
 export class ToolbarToggle extends ToolbarButton {
-  private readonly untoggledGlyph: string|undefined;
   private readonly toggledGlyph: string|undefined;
 
   constructor(title: string, glyph?: string, toggledGlyph?: string, jslogContext?: string, toggleOnClick?: boolean) {
     super(title, glyph, '');
-    this.untoggledGlyph = glyph;
     this.toggledGlyph = toggledGlyph ? toggledGlyph : glyph;
     this.setToggledIcon(this.toggledGlyph || '');
     this.setToggleType(Buttons.Button.ToggleType.PRIMARY);
@@ -1070,7 +1069,7 @@ export class ToolbarMenuButton extends ToolbarItem<ToolbarButton.EventTypes> {
     const contextMenu = new ContextMenu(event, {
       useSoftMenu: this.useSoftMenu,
       keepOpen: this.keepOpen,
-      x: this.element.getBoundingClientRect().left,
+      x: this.element.getBoundingClientRect().right,
       y: this.element.getBoundingClientRect().top + this.element.offsetHeight,
       // Without adding a delay, pointer events will be un-ignored too early, and a single click causes
       // the context menu to be closed and immediately re-opened on Windows (https://crbug.com/339560549).
@@ -1241,9 +1240,9 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
     super(null, accessibleName, undefined, setting.name);
     this.optionsInternal = options;
     this.setting = setting;
-    this.element.addEventListener('change', this.valueChanged.bind(this), false);
+    this.element.addEventListener('change', this.onSelectValueChange.bind(this), false);
     this.setOptions(options);
-    setting.addChangeListener(this.settingChanged, this);
+    setting.addChangeListener(this.onDevToolsSettingChanged, this);
   }
 
   setOptions(options: Option[]): void {
@@ -1263,7 +1262,29 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
     return this.optionsInternal[this.selectedIndex()].value;
   }
 
-  private settingChanged(): void {
+  override select(option: Element): void {
+    const index = Array.prototype.indexOf.call(this.element, option);
+    this.setSelectedIndex(index);
+  }
+
+  override setSelectedIndex(index: number): void {
+    super.setSelectedIndex(index);
+    const option = this.optionsInternal.at(index);
+    if (option) {
+      this.setTitle(option.label);
+    }
+  }
+
+  /**
+   * Note: wondering why there are two event listeners and what the difference is?
+   * It is because this combo box <select> is backed by a Devtools setting and
+   * at any time there could be multiple instances of these elements that are
+   * backed by the same setting. So they have to listen to two things:
+   * 1. When the setting is changed via a different method.
+   * 2. When the value of the select is changed, triggering a change to the setting.
+   */
+
+  private onDevToolsSettingChanged(): void {
     if (this.muteSettingListener) {
       return;
     }
@@ -1277,7 +1298,10 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
     }
   }
 
-  private valueChanged(_event: Event): void {
+  /**
+   * Run when the user interacts with the <select> element.
+   */
+  private onSelectValueChange(_event: Event): void {
     const option = this.optionsInternal[this.selectedIndex()];
     this.muteSettingListener = true;
     this.setting.set(option.value);
@@ -1286,41 +1310,33 @@ export class ToolbarSettingComboBox extends ToolbarComboBox {
 }
 
 export class ToolbarCheckbox extends ToolbarItem<void> {
-  inputElement: HTMLInputElement;
-
   constructor(
       text: Common.UIString.LocalizedString, tooltip?: Common.UIString.LocalizedString,
       listener?: ((arg0: MouseEvent) => void), jslogContext?: string) {
-    super(CheckboxLabel.create(text));
-    this.inputElement = (this.element as CheckboxLabel).checkboxElement;
+    super(CheckboxLabel.create(text, undefined, undefined, jslogContext));
     if (tooltip) {
-      // install on the checkbox
-      Tooltip.install(this.inputElement, tooltip);
-      Tooltip.install((this.element as CheckboxLabel).textElement, tooltip);
+      Tooltip.install(this.element, tooltip);
     }
     if (listener) {
-      this.inputElement.addEventListener('click', listener, false);
-    }
-    if (jslogContext) {
-      this.inputElement.setAttribute('jslog', `${VisualLogging.toggle().track({change: true}).context(jslogContext)}`);
+      this.element.addEventListener('click', listener, false);
     }
   }
 
   checked(): boolean {
-    return this.inputElement.checked;
+    return (this.element as CheckboxLabel).checked;
   }
 
   setChecked(value: boolean): void {
-    this.inputElement.checked = value;
+    (this.element as CheckboxLabel).checked = value;
   }
 
   override applyEnabledState(enabled: boolean): void {
     super.applyEnabledState(enabled);
-    this.inputElement.disabled = !enabled;
+    (this.element as CheckboxLabel).disabled = !enabled;
   }
 
   setIndeterminate(indeterminate: boolean): void {
-    this.inputElement.indeterminate = indeterminate;
+    (this.element as CheckboxLabel).indeterminate = indeterminate;
   }
 }
 
@@ -1329,7 +1345,7 @@ export class ToolbarSettingCheckbox extends ToolbarCheckbox {
       setting: Common.Settings.Setting<boolean>, tooltip?: Common.UIString.LocalizedString,
       alternateTitle?: Common.UIString.LocalizedString) {
     super(alternateTitle || setting.title(), tooltip, undefined, setting.name);
-    bindCheckbox(this.inputElement, setting);
+    bindCheckbox(this.element as CheckboxLabel, setting);
   }
 }
 

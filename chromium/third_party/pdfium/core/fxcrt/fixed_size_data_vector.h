@@ -22,10 +22,9 @@ namespace fxcrt {
 // accessible using spans.
 // It can either initialize its data with zeros, or leave its data
 // uninitialized.
-template <typename T,
-          typename = std::enable_if_t<std::is_arithmetic<T>::value ||
-                                      std::is_enum<T>::value ||
-                                      IsFXDataPartitionException<T>::value>>
+template <typename T>
+  requires(std::is_arithmetic<T>::value || std::is_enum<T>::value ||
+           IsFXDataPartitionException<T>::value)
 class FixedSizeDataVector {
  public:
   FixedSizeDataVector() = default;
@@ -104,20 +103,22 @@ class FixedSizeDataVector {
   // Explicit access to data via span.
   pdfium::span<T> span() {
     // SAFETY: size_ describes size of data_.
-    return UNSAFE_BUFFERS(pdfium::make_span(data_.get(), size_));
+    return UNSAFE_BUFFERS(pdfium::span(data_.get(), size_));
   }
   pdfium::span<const T> span() const {
     // SAFETY: size_ describes size of data_.
-    return UNSAFE_BUFFERS(pdfium::make_span(data_.get(), size_));
+    return UNSAFE_BUFFERS(pdfium::span(data_.get(), size_));
   }
 
   // Convenience methods to slice the vector into spans.
-  pdfium::span<T> subspan(size_t offset,
-                          size_t count = pdfium::dynamic_extent) {
+  pdfium::span<T> subspan(size_t offset) { return span().subspan(offset); }
+  pdfium::span<const T> subspan(size_t offset) const {
+    return span().subspan(offset);
+  }
+  pdfium::span<T> subspan(size_t offset, size_t count) {
     return span().subspan(offset, count);
   }
-  pdfium::span<const T> subspan(size_t offset,
-                                size_t count = pdfium::dynamic_extent) const {
+  pdfium::span<const T> subspan(size_t offset, size_t count) const {
     return span().subspan(offset, count);
   }
 
@@ -130,6 +131,7 @@ class FixedSizeDataVector {
   pdfium::span<const T> last(size_t count) const { return span().last(count); }
 
  private:
+  // PRECONDITIONS: `ptr` must point to `size` consecutive T elements.
   UNSAFE_BUFFER_USAGE FixedSizeDataVector(T* ptr, size_t size)
       : data_(ptr), size_(size) {}
 

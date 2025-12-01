@@ -27,6 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/components/report_view/report_view.js';
 import '../../ui/legacy/legacy.js';
@@ -257,12 +258,12 @@ export class IDBDataView extends UI.View.SimpleView {
   private clearingObjectStore: boolean;
   private pageSize: number;
   private skipCount: number;
-  private entries: Entry[];
+  // Used in Web Tests
+  protected entries: Entry[];
   private objectStore!: ObjectStore;
   private index!: Index|null;
   private keyInput!: UI.Toolbar.ToolbarInput;
   private dataGrid!: DataGrid.DataGrid.DataGridImpl<unknown>;
-  private previouslySelectedNode?: DataGrid.DataGrid.DataGridNode<unknown>;
   private lastPageSize!: number;
   private lastSkipCount!: number;
   private pageBackButton!: UI.Toolbar.ToolbarButton;
@@ -376,7 +377,6 @@ export class IDBDataView extends UI.View.SimpleView {
     dataGrid.setStriped(true);
     dataGrid.addEventListener(DataGrid.DataGrid.Events.SELECTED_NODE, () => {
       this.updateToolbarEnablement();
-      this.updateSelectionColor();
     }, this);
     return dataGrid;
   }
@@ -556,7 +556,6 @@ export class IDBDataView extends UI.View.SimpleView {
       this.pageForwardButton.setEnabled(hasMore);
       this.needsRefresh.setVisible(false);
       this.updateToolbarEnablement();
-      this.updateSelectionColor();
       this.updatedDataForTests();
     }
 
@@ -641,32 +640,13 @@ export class IDBDataView extends UI.View.SimpleView {
     const empty = !this.dataGrid || this.dataGrid.rootNode().children.length === 0;
     this.deleteSelectedButton.setEnabled(!empty && this.dataGrid.selectedNode !== null);
   }
-
-  private updateSelectionColor(): void {
-    if (this.previouslySelectedNode) {
-      this.previouslySelectedNode.element().querySelectorAll('.source-code').forEach(element => {
-        const shadowRoot = element.shadowRoot;
-        shadowRoot?.adoptedStyleSheets.pop();
-      });
-    }
-    this.previouslySelectedNode = this.dataGrid.selectedNode ?? undefined;
-    this.dataGrid.selectedNode?.element().querySelectorAll('.source-code').forEach(element => {
-      const shadowRoot = element.shadowRoot;
-      const sheet = new CSSStyleSheet();
-      sheet.replaceSync('::selection {background-color: var(--sys-color-state-focus-select); color: currentColor;}');
-      shadowRoot?.adoptedStyleSheets.push(sheet);
-    });
-  }
 }
 
 export class IDBDataGridNode extends DataGrid.DataGrid.DataGridNode<unknown> {
   override selectable: boolean;
   valueObjectPresentation: ObjectUI.ObjectPropertiesSection.ObjectPropertiesSection|null;
-  constructor(data: {
-    // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    [x: string]: any,
-  }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  constructor(data: Record<string, any>) {
     super(data, false);
     this.selectable = true;
     this.valueObjectPresentation = null;

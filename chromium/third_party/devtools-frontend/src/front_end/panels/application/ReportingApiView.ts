@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
@@ -49,7 +50,7 @@ export class ReportingApiView extends UI.SplitWidget.SplitWidget {
     const networkManager = mainTarget?.model(SDK.NetworkManager.NetworkManager);
     this.#emptyWidget = new UI.EmptyWidget.EmptyWidget(
         i18nString(UIStrings.noReportOrEndpoint), i18nString(UIStrings.reportingApiDescription));
-    this.#emptyWidget.appendLink(REPORTING_API_EXPLANATION_URL);
+    this.#emptyWidget.link = REPORTING_API_EXPLANATION_URL;
     this.setMainWidget(this.#emptyWidget);
     if (networkManager) {
       networkManager.addEventListener(

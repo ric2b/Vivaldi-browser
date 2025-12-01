@@ -52,17 +52,22 @@ cached data during commits to the server (more details in the
 To implement this solution, a Sync datatype owner should follow these steps:
 1. Override [`TrimAllSupportedFieldsFromRemoteSpecifics`][TRSFC] function (see this
    [`section`](#trimming)).
-2. [Optional] Add DCHECK to local updates flow (see this [`section`](#safety-check)).
-3. Include unsupported fields in local changes (see this
+1. [Optional] Add DCHECK to local updates flow (see this [`section`](#safety-check)).
+1. Include unsupported fields in local changes (see this
    [`section`](#local-update-flow)).
-4. Redownload the data on browser upgrade (see this [`section`](#browser-upgrade-flow)).
-5. [Optional] Add sync integration test (see this [`section`](#integration-test)).
+1. Redownload the data on browser upgrade (see this [`section`](#browser-upgrade-flow)).
+1. [Optional] Add a `version` field to proto in the same milestone.
+1. [Optional] Add sync integration test (see this [`section`](#integration-test)).
 
 The result of these steps is that:
 * Local updates will carry over unsupported fields received previously from the
   Server.
 * Initial sync will be triggered if upgrading the client to a more modern
   version causes an unsupported field to be newly supported.
+* Modern clients may use the `version` field to discard some fields which were
+  populated by the client which carried over them as unsupported fields (for
+  cases where the carry-over-value behavior is not desired and the feature
+  should rather remain unset or populated differently).
 
 [TRSFC]: https://cs.chromium.org/chromium/src/components/sync/model/data_type_sync_bridge.h?q=f:components%2Fsync%2Fmodel%2Fdata_type_sync_bridge.h%20TrimAllSupportedFieldsFromRemoteSpecifics%20-f:(%5Eout)&ss=chromium%2Fchromium%2Fsrc
 
@@ -105,6 +110,11 @@ sync_pb::EntitySpecifics DataSpecificBridge::TrimAllSupportedFieldsFromRemoteSpe
  {...}
  trimmed_entity_specifics.clear_username();
  trimmed_entity_specifics.clear_password();
+ sync_pb::SpecificsSubmessage* submessage = trimmed_entity_specifics.mutable_submessage();
+ mutable_submessage->clear_field();
+ if (mutable_submessage->ByteSizeLong() == 0u) {
+   trimmed_entity_specifics.clear_submessage();
+ }
  {...}
  return trimmed_entity_specifics;
 }
@@ -136,10 +146,12 @@ code that does the following steps:
 1. Query cached [`sync_pb::EntitySpecifics`][EntitySpecifics] from the
    [`DataTypeLocalChangeProcessor`][DataTypeLocalChangeProcessor]
    ([`Passwords example`][PasswordCacheQuery]).
-2. Use the cached proto as a base for a commit and fill it with the supported
+1. Use the cached proto as a base for a commit and fill it with the supported
    fields from the local proto representation
    ([`Passwords example`][PasswordProtoMerge]).
-3. Commit the merged proto to the server
+   *  Make it sure that all known fields are explicitly cleared or set to avoid
+      preserving known fields in some corner cases.
+1. Commit the merged proto to the server
    ([`Passwords example`][PasswordMergeCommit]).
 
 [DataTypeLocalChangeProcessor]: https://cs.chromium.org/chromium/src/components/sync/model/data_type_local_change_processor.h
@@ -211,3 +223,11 @@ trim single child fields or the top level field if none of the child fields are
 populated (Passwords notes [`example`][NotesExample]).
 
 [NotesExample]: https://source.chromium.org/chromium/chromium/src/+/main:components/password_manager/core/browser/sync/password_proto_utils.cc;l=29-64;drc=0495165c40e1bfad00d7a84474cfb8025e6d4a7c
+
+### Versioning
+Having a version field may help to detect which client populated a new field and
+whether it supported it. However, if it's not added from the beginning, then
+those clients would populate the version as well.
+
+It's important to add a version field and clear it when trimming fields but it
+doesn't have to be populated while it's not used.

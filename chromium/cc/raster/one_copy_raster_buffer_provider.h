@@ -15,7 +15,6 @@
 #include "cc/raster/raster_buffer.h"
 #include "cc/raster/raster_buffer_provider.h"
 #include "cc/raster/staging_buffer_pool.h"
-#include "cc/trees/raster_capabilities.h"
 #include "components/viz/client/client_resource_provider.h"
 #include "gpu/command_buffer/common/sync_token.h"
 
@@ -32,13 +31,14 @@ class StagingBufferPool;
 class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
  public:
   OneCopyRasterBufferProvider(
+      scoped_refptr<gpu::SharedImageInterface> sii,
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       viz::RasterContextProvider* compositor_context_provider,
       viz::RasterContextProvider* worker_context_provider,
       int max_copy_texture_chromium_size,
       bool use_partial_raster,
       int max_staging_buffer_usage_in_bytes,
-      const RasterCapabilities& raster_caps);
+      bool is_overlay_candidate);
   OneCopyRasterBufferProvider(const OneCopyRasterBufferProvider&) = delete;
   ~OneCopyRasterBufferProvider() override;
 
@@ -53,8 +53,6 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
       bool depends_on_at_raster_decodes,
       bool depends_on_hardware_accelerated_jpeg_candidates,
       bool depends_on_hardware_accelerated_webp_candidates) override;
-  viz::SharedImageFormat GetFormat() const override;
-  bool IsResourcePremultiplied() const override;
   bool CanPartialRasterIntoProvidedResource() const override;
   bool IsResourceReadyToDraw(
       const ResourcePool::InUsePoolResource& resource) override;
@@ -136,15 +134,11 @@ class CC_EXPORT OneCopyRasterBufferProvider : public RasterBufferProvider {
                                     bool mailbox_texture_is_overlay_candidate,
                                     const gpu::SyncToken& sync_token);
 
+  const scoped_refptr<gpu::SharedImageInterface> sii_;
   const raw_ptr<viz::RasterContextProvider> compositor_context_provider_;
   const raw_ptr<viz::RasterContextProvider> worker_context_provider_;
   const int max_bytes_per_copy_operation_;
   const bool use_partial_raster_;
-
-  // Context lock must be acquired when accessing this member.
-  int bytes_scheduled_since_last_flush_;
-
-  const viz::SharedImageFormat tile_format_;
   const bool tile_overlay_candidate_;
 
   StagingBufferPool staging_pool_;

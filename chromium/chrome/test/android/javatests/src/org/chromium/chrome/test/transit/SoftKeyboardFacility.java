@@ -6,7 +6,6 @@ package org.chromium.chrome.test.transit;
 
 import androidx.test.espresso.Espresso;
 
-import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.Facility;
 import org.chromium.base.test.transit.Station;
 import org.chromium.base.test.transit.Transition;
@@ -15,12 +14,12 @@ import org.chromium.ui.test.transit.SoftKeyboardElement;
 
 /** Represents the soft keyboard shown, expecting it to hide after exiting the Facility. */
 public class SoftKeyboardFacility extends Facility<Station<?>> {
-    private SoftKeyboardElement mSoftKeyboardElement;
+    public SoftKeyboardElement softKeyboardElement;
 
     @Override
-    public void declareElements(Elements.Builder elements) {
-        mSoftKeyboardElement =
-                elements.declareElement(new SoftKeyboardElement(mHostStation.getActivityElement()));
+    public void declareExtraElements() {
+        softKeyboardElement =
+                declareElement(new SoftKeyboardElement(mHostStation.getActivityElement()));
     }
 
     /**
@@ -32,18 +31,19 @@ public class SoftKeyboardFacility extends Facility<Station<?>> {
      * @param viewElementsToSettle the ViewElements to wait to stop moving
      */
     public void close(ViewElement... viewElementsToSettle) {
-        assertSuppliersCanBeUsed();
+        assertInPhase(Phase.ACTIVE);
 
-        if (mSoftKeyboardElement.get()) {
+        if (softKeyboardElement.get()) {
             // Keyboard was expected to be shown
 
             // If this fails, the keyboard was closed before, but not by this facility.
             recheckActiveConditions();
             Transition.TransitionOptions.Builder options = Transition.newOptions();
-            for (ViewElement viewElement : viewElementsToSettle) {
+            options.withRetry();
+            for (ViewElement<?> viewElement : viewElementsToSettle) {
                 options.withCondition(viewElement.createSettleCondition());
             }
-            mHostStation.exitFacilitySync(this, options.build(), Espresso::pressBack);
+            mHostStation.exitFacilitySync(this, options.build(), Espresso::closeSoftKeyboard);
         } else {
             // Keyboard was not expected to be shown
             mHostStation.exitFacilitySync(this, /* trigger= */ null);

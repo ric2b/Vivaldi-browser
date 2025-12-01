@@ -416,6 +416,9 @@ Ruajeni çelësin në vend të sigurt. Do ju duhet kur të krijoni versione të 
 <translation id="8004582292198964060">Shfletuesi</translation>
 <translation id="8018313076035239964">Kontrolloni informacionet që mund të përdorin uebsajtet ose materialet që ju shfaqen</translation>
 <translation id="8071432093239591881">Printoj si imazh</translation>
+<translation id="8118448640060360549">{EXTENSIONS_COUNT, plural,
+        =1 {# faqe interesante}
+        other {# faqe interesante}}</translation>
 <translation id="8135557862853121765"><ph name="NUM_KILOBYTES" />K</translation>
 <translation id="8212008074015601248">{NUM_DOWNLOAD, plural,
         =1 {Shkarkimi vijon} other {Shkarkimet vijojnë}}</translation>

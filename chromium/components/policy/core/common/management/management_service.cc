@@ -119,6 +119,10 @@ ui::ImageModel* ManagementService::GetManagementIconForProfile() {
   return nullptr;
 }
 
+gfx::Image* ManagementService::GetManagementIconForBrowser() {
+  return nullptr;
+}
+
 bool ManagementService::HasManagementAuthority(
     EnterpriseManagementAuthority authority) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -201,6 +205,14 @@ bool ManagementService::IsBrowserManaged() {
              policy::EnterpriseManagementAuthority::COMPUTER_LOCAL);
 }
 
+void ManagementService::AddObserver(Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void ManagementService::RemoveObserver(Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 void ManagementService::SetManagementStatusProvider(
     std::vector<std::unique_ptr<ManagementStatusProvider>> providers) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -211,6 +223,12 @@ void ManagementService::AddManagementStatusProvider(
     std::unique_ptr<ManagementStatusProvider> provider) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   management_status_providers_.push_back(std::move(provider));
+}
+
+void ManagementService::NotifyEnterpriseLabelUpdated() {
+  for (auto& observer : observers_) {
+    observer.OnEnterpriseLabelUpdated();
+  }
 }
 
 }  // namespace policy

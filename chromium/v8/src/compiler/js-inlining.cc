@@ -692,7 +692,7 @@ Reduction JSInliner::ReduceJSCall(Node* node) {
       MakeRef(broker(), info_->shared_info());
 
   SharedFunctionInfo::Inlineability inlineability =
-      shared_info->GetInlineability(broker());
+      shared_info->GetInlineability(CodeKind::TURBOFAN_JS, broker());
   if (inlineability != SharedFunctionInfo::kIsInlineable) {
     // The function is no longer inlineable. The only way this can happen is if
     // the function had its optimization disabled in the meantime, e.g. because
@@ -950,8 +950,10 @@ Reduction JSInliner::ReduceJSCall(Node* node) {
   // Insert inlined extra arguments if required. The callees formal parameter
   // count have to match the number of arguments passed to the call.
   int parameter_count = bytecode_array.parameter_count_without_receiver();
-  DCHECK_EQ(parameter_count,
-            shared_info->internal_formal_parameter_count_without_receiver());
+  DCHECK_EQ(
+      parameter_count,
+      shared_info
+          ->internal_formal_parameter_count_without_receiver_deprecated());
   DCHECK_EQ(parameter_count, start.FormalParameterCountWithoutReceiver());
   if (call.argument_count() != parameter_count) {
     frame_state = CreateArtificialFrameState(

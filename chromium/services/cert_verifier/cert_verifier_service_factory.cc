@@ -18,7 +18,7 @@
 #include "base/task/thread_pool.h"
 #include "base/types/optional_util.h"
 #include "build/build_config.h"
-#include "crypto/sha2.h"
+#include "crypto/hash.h"
 #include "mojo/public/cpp/bindings/callback_helpers.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -41,6 +41,7 @@
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
 #include "components/certificate_transparency/chrome_ct_policy_enforcer.h"
+#include "components/certificate_transparency/chrome_require_ct_delegate.h"
 #include "services/network/public/mojom/ct_log_info.mojom.h"
 #endif
 
@@ -84,10 +85,20 @@ internal::CertVerifierServiceImpl* GetNewCertVerifierImpl(
     UpdateCertVerifierInstanceParams(
         creation_params->initial_additional_certificates, &instance_params);
   }
+#if BUILDFLAG(IS_CT_SUPPORTED)
+  scoped_refptr<certificate_transparency::ChromeRequireCTDelegate>
+      require_ct_delegate = base::MakeRefCounted<
+          certificate_transparency::ChromeRequireCTDelegate>();
+  if (creation_params->ct_policy) {
+    require_ct_delegate->UpdateCTPolicies(
+        creation_params->ct_policy->excluded_hosts,
+        creation_params->ct_policy->excluded_spkis);
+  }
+  instance_params.require_ct_delegate = std::move(require_ct_delegate);
+#endif
 
   std::unique_ptr<net::CertVerifierWithUpdatableProc> cert_verifier =
-      CreateCertVerifier(creation_params.get(), cert_net_fetcher, impl_params,
-                         instance_params);
+      CreateCertVerifier(cert_net_fetcher, impl_params, instance_params);
 
   // As an optimization, if the CertNetFetcher isn't used by the CertVerifier,
   // shut it down immediately.
@@ -208,7 +219,8 @@ void ComputeCTLogInfo(
     std::vector<std::pair<std::string, base::Time>>* disqualified_logs,
     std::map<std::string, certificate_transparency::LogInfo>* log_info) {
   for (const auto& log : log_list) {
-    std::string log_id = crypto::SHA256HashString(log->public_key);
+    std::string log_id(
+        base::as_string_view(crypto::hash::Sha256(log->public_key)));
     if (log->disqualified_at) {
       disqualified_logs->emplace_back(log_id, log->disqualified_at.value());
     }
@@ -316,7 +328,19 @@ void CertVerifierServiceFactoryImpl::UpdateCtLogList(
 
   std::move(callback).Run();
 }
-#endif
+
+void CertVerifierServiceFactoryImpl::DisableCtEnforcement(
+    DisableCtEnforcementCallback callback) {
+  // Clear the ct_policy_enforcer, which will cause a DefaultCTPolicyEnforcer
+  // to be used, which disables CT enforcement. If UpdateCtLogList is called
+  // later, CT enforcement will be re-enabled.
+  proc_params_.ct_policy_enforcer.reset();
+
+  UpdateVerifierServices();
+
+  std::move(callback).Run();
+}
+#endif  // BUILDFLAG(IS_CT_SUPPORTED)
 
 void CertVerifierServiceFactoryImpl::OnCRLSetParsed(
     scoped_refptr<net::CRLSet> parsed_crl_set) {
@@ -363,7 +387,7 @@ void CertVerifierServiceFactoryImpl::UpdateChromeRootStore(
     return;
   }
 
-  if (root_store_data->anchors().empty()) {
+  if (root_store_data->trust_anchors().empty()) {
     LOG(ERROR) << "parsed root store contained no anchors";
     return;
   }
@@ -382,7 +406,7 @@ void CertVerifierServiceFactoryImpl::GetChromeRootStoreInfo(
   InitializeRootStoreDataIfNecessary();
   info_ptr->version = proc_params_.root_store_data->version();
 
-  for (const auto& anchor : proc_params_.root_store_data->anchors()) {
+  for (const auto& anchor : proc_params_.root_store_data->trust_anchors()) {
     if (!IsAnchorTrustedOnThisChromeVersion(anchor)) {
       continue;
     }

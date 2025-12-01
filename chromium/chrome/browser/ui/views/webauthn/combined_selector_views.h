@@ -35,6 +35,7 @@ class CombinedSelectorRadioButton : public views::RadioButton {
 
  private:
   void GetRadioButtonsInList(int group, Views* views);
+  bool SkipDefaultKeyEventProcessing(const ui::KeyEvent& event) override;
 
   raw_ptr<Delegate> delegate_;
   const int index_;
@@ -77,6 +78,9 @@ class CombinedSelectorRowView : public views::TableLayoutView {
 
   // views::TableLayoutView:
   void RequestFocus() override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
+
 
   raw_ptr<views::View> radio_button_;
   RadioStatus radio_status_;

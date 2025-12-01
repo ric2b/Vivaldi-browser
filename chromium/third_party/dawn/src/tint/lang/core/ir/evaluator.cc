@@ -39,7 +39,7 @@ namespace tint::core::ir {
 namespace eval {
 
 diag::Result<core::ir::Constant*> Eval(core::ir::Builder& b, core::ir::Instruction* inst) {
-    return Eval(b, inst->Result(0));
+    return Eval(b, inst->Result());
 }
 
 diag::Result<core::ir::Constant*> Eval(core::ir::Builder& b, core::ir::Value* val) {
@@ -112,7 +112,7 @@ Evaluator::EvalResult Evaluator::EvalBitcast(core::ir::Bitcast* bc) {
         return nullptr;
     }
 
-    auto r = const_eval_.bitcast(bc->Result(0)->Type(), Vector{val.Get()}, SourceOf(bc));
+    auto r = const_eval_.bitcast(bc->Result()->Type(), Vector{val.Get()}, SourceOf(bc));
     if (r != Success) {
         return Failure();
     }
@@ -133,21 +133,26 @@ Evaluator::EvalResult Evaluator::EvalAccess(core::ir::Access* a) {
             return val;
         }
         // Check if the value could be evaluated
-        if (!val.Get()) {
-            return nullptr;
-        }
-        TINT_ASSERT(val.Get()->Is<core::constant::Value>());
+        constexpr uint32_t kDefaultConstIndex = 0;
+        uint32_t index_const = kDefaultConstIndex;
+        if (val.Get()) {
+            TINT_ASSERT(val.Get()->Is<core::constant::Value>());
 
-        auto res = const_eval_.Index(obj, access_obj_type, val.Get(), SourceOf(a));
-        if (res != Success) {
-            return Failure();
+            auto res = const_eval_.Index(obj, access_obj_type, val.Get(), SourceOf(a));
+            if (res != Success) {
+                return Failure();
+            }
+            index_const = val.Get()->ValueAs<u32>();
+            obj = res.Get();
+        } else {
+            // No constant array evaluation possible for non-const (dynamic) indices. Only
+            // validation of bounds is possible at this stage.
+            obj = nullptr;
         }
 
         // Index element to type to support type nested access.
-        access_obj_type = access_obj_type->Element(val.Get()->ValueAs<u32>());
+        access_obj_type = access_obj_type->Element(index_const);
         TINT_ASSERT(access_obj_type);
-
-        obj = res.Get();
     }
     return obj;
 }
@@ -155,7 +160,7 @@ Evaluator::EvalResult Evaluator::EvalAccess(core::ir::Access* a) {
 Evaluator::EvalResult Evaluator::EvalConstruct(core::ir::Construct* c) {
     auto table = core::intrinsic::Table<core::intrinsic::Dialect>(b_.ir.Types(), b_.ir.symbols);
 
-    auto result_ty = c->Result(0)->Type();
+    auto result_ty = c->Result()->Type();
 
     Vector<const core::type::Type*, 4> arg_types;
     arg_types.Reserve(c->Args().Length());
@@ -239,7 +244,7 @@ Evaluator::EvalResult Evaluator::EvalConvert(core::ir::Convert* c) {
     if (!val.Get()) {
         return nullptr;
     }
-    auto r = const_eval_.Convert(c->Result(0)->Type(), val.Get(), SourceOf(c));
+    auto r = const_eval_.Convert(c->Result()->Type(), val.Get(), SourceOf(c));
     if (r != Success) {
         return Failure();
     }
@@ -295,7 +300,7 @@ Evaluator::EvalResult Evaluator::EvalSwizzle(core::ir::Swizzle* s) {
         return nullptr;
     }
 
-    auto r = const_eval_.Swizzle(s->Result(0)->Type(), val.Get(), s->Indices());
+    auto r = const_eval_.Swizzle(s->Result()->Type(), val.Get(), s->Indices());
     if (r != Success) {
         return Failure();
     }
@@ -327,7 +332,7 @@ Evaluator::EvalResult Evaluator::EvalUnary(core::ir::CoreUnary* u) {
         return nullptr;
     }
 
-    auto r = (const_eval_.*const_eval_fn)(u->Result(0)->Type(), Vector{val.Get()}, SourceOf(u));
+    auto r = (const_eval_.*const_eval_fn)(u->Result()->Type(), Vector{val.Get()}, SourceOf(u));
     if (r != Success) {
         return Failure();
     }
@@ -374,7 +379,7 @@ Evaluator::EvalResult Evaluator::EvalBinary(core::ir::CoreBinary* cb) {
         return nullptr;
     }
 
-    auto r = (const_eval_.*const_eval_fn)(cb->Result(0)->Type(), Vector{lhs.Get(), rhs.Get()},
+    auto r = (const_eval_.*const_eval_fn)(cb->Result()->Type(), Vector{lhs.Get(), rhs.Get()},
                                           SourceOf(cb));
     if (r != Success) {
         return Failure();
@@ -418,7 +423,7 @@ Evaluator::EvalResult Evaluator::EvalCoreBuiltinCall(core::ir::CoreBuiltinCall* 
         return nullptr;
     }
 
-    auto r = (const_eval_.*const_eval_fn)(c->Result(0)->Type(), args, SourceOf(c));
+    auto r = (const_eval_.*const_eval_fn)(c->Result()->Type(), args, SourceOf(c));
     if (r != Success) {
         return Failure();
     }

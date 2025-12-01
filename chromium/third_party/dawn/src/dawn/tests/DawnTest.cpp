@@ -29,11 +29,13 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdio>
 #include <fstream>
 #include <iomanip>
 #include <regex>
 #include <set>
 #include <sstream>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -480,8 +482,21 @@ void DawnTestEnvironment::SelectPreferredAdapterProperties(const native::Instanc
          {wgpu::FeatureLevel::Core, wgpu::FeatureLevel::Compatibility}) {
         wgpu::RequestAdapterOptions adapterOptions;
         adapterOptions.featureLevel = featureLevel;
+
+        auto adapters = instance->EnumerateAdapters(&adapterOptions);
+
+        // Include enumerating WebGPU-on-WebGPU backends.
+        wgpu::RequestAdapterWebGPUBackendOptions webgpuBackendOptions = {};
+        adapterOptions.nextInChain = &webgpuBackendOptions;
+
+        {
+            auto webgpuBackendAdapters = instance->EnumerateAdapters(&adapterOptions);
+            adapters.insert(adapters.end(), std::make_move_iterator(webgpuBackendAdapters.begin()),
+                            std::make_move_iterator(webgpuBackendAdapters.end()));
+        }
+
         // TODO(347047627): Use a webgpu.h version of enumerateAdapters
-        for (const native::Adapter& nativeAdapter : instance->EnumerateAdapters(&adapterOptions)) {
+        for (const native::Adapter& nativeAdapter : adapters) {
             wgpu::Adapter adapter = wgpu::Adapter(nativeAdapter.Get());
             wgpu::AdapterInfo info;
             adapter.GetInfo(&info);
@@ -739,10 +754,17 @@ DawnTestBase::DawnTestBase(const AdapterTestParam& param) : mParam(param) {
 
         wgpu::RequestAdapterOptions adapterOptions;
         adapterOptions.nextInChain = &deviceTogglesHelper.togglesDesc;
-        adapterOptions.backendType = gCurrentTest->mParam.adapterProperties.backendType;
         adapterOptions.featureLevel = gCurrentTest->mParam.adapterProperties.compatibilityMode
                                           ? wgpu::FeatureLevel::Compatibility
                                           : wgpu::FeatureLevel::Core;
+
+        wgpu::RequestAdapterWebGPUBackendOptions webgpuBackendOptions = {};
+        if (gCurrentTest->mParam.adapterProperties.backendType == wgpu::BackendType::WebGPU) {
+            adapterOptions.backendType = wgpu::BackendType::Undefined;
+            adapterOptions.nextInChain = &webgpuBackendOptions;
+        } else {
+            adapterOptions.backendType = gCurrentTest->mParam.adapterProperties.backendType;
+        }
 
         // Find the adapter that exactly matches our adapter properties.
         // TODO(347047627): Use a webgpu.h version of enumerateAdapters
@@ -846,6 +868,10 @@ bool DawnTestBase::IsNull() const {
     return mParam.adapterProperties.backendType == wgpu::BackendType::Null;
 }
 
+bool DawnTestBase::IsWebGPUOnWebGPU() const {
+    return mParam.adapterProperties.backendType == wgpu::BackendType::WebGPU;
+}
+
 bool DawnTestBase::IsOpenGL() const {
     return mParam.adapterProperties.backendType == wgpu::BackendType::OpenGL;
 }
@@ -893,16 +919,16 @@ bool DawnTestBase::IsSwiftshader() const {
 }
 
 bool DawnTestBase::IsANGLE() const {
-    return !mParam.adapterProperties.name.find("ANGLE");
+    return mParam.adapterProperties.name.find("ANGLE") == 0u;
 }
 
 bool DawnTestBase::IsANGLESwiftShader() const {
-    return !mParam.adapterProperties.name.find("ANGLE") &&
+    return (mParam.adapterProperties.name.find("ANGLE") == 0u) &&
            (mParam.adapterProperties.name.find("SwiftShader") != std::string::npos);
 }
 
 bool DawnTestBase::IsANGLED3D11() const {
-    return !mParam.adapterProperties.name.find("ANGLE") &&
+    return (mParam.adapterProperties.name.find("ANGLE") == 0u) &&
            (mParam.adapterProperties.name.find("Direct3D11") != std::string::npos);
 }
 
@@ -1212,9 +1238,10 @@ wgpu::Device DawnTestBase::CreateDevice(std::string isolationKey) {
     DAWN_ASSERT(apiDevice);
 
     // The loss of the device is expected to happen at the end of the test so add it directly.
-    EXPECT_CALL(mDeviceLostCallback,
-                Call(CHandleIs(apiDevice.Get()), wgpu::DeviceLostReason::Destroyed, _))
-        .Times(AtMost(1));
+    // We don't know if the device will be dropped or Destroy()ed, so we can't check device=null.
+    EXPECT_CALL(mDeviceLostCallback, Call(_, wgpu::DeviceLostReason::Destroyed, _))
+        .Times(AtMost(1))
+        .RetiresOnSaturation();
 
     apiDevice.SetLoggingCallback([](wgpu::LoggingType type, wgpu::StringView message) {
         std::string_view view = {message.data, message.length};
@@ -1248,9 +1275,9 @@ void DawnTestBase::SetUp() {
     WGPUInstanceDescriptor instanceDesc = {};
     WGPUDawnWireWGSLControl wgslControl;
     wgslControl.chain.sType = WGPUSType_DawnWireWGSLControl;
-    wgslControl.enableExperimental = true;
-    wgslControl.enableTesting = true;
-    wgslControl.enableUnsafe = true;
+    wgslControl.enableExperimental = 1u;
+    wgslControl.enableTesting = 1u;
+    wgslControl.enableUnsafe = 1u;
     instanceDesc.nextInChain = &wgslControl.chain;
     wgslControl.chain.next = nullptr;
     instance = mWireHelper->RegisterInstance(gTestEnv->GetInstance()->Get(), &instanceDesc);
@@ -1875,14 +1902,6 @@ void DawnTestBase::ResolveDeferredExpectationsNow() {
     for (size_t i = 0; i < mReadbackSlots.size(); ++i) {
         mReadbackSlots[i].buffer.Unmap();
     }
-}
-
-bool utils::RGBA8::operator==(const utils::RGBA8& other) const {
-    return r == other.r && g == other.g && b == other.b && a == other.a;
-}
-
-bool utils::RGBA8::operator!=(const utils::RGBA8& other) const {
-    return !(*this == other);
 }
 
 bool utils::RGBA8::operator<=(const utils::RGBA8& other) const {

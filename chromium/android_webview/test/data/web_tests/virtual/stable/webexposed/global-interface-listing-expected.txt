@@ -1,10 +1,5 @@
 This test documents all interface attributes and methods on the global window object and element instances.
 [INTERFACES]
-interface AICreateMonitor : EventTarget
-    attribute @@toStringTag
-    getter ondownloadprogress
-    method constructor
-    setter ondownloadprogress
 interface AbortController
     attribute @@toStringTag
     getter signal
@@ -3798,6 +3793,7 @@ interface HTMLIFrameElement : HTMLElement
     getter align
     getter allow
     getter allowFullscreen
+    getter allowPaymentRequest
     getter contentDocument
     getter contentWindow
     getter credentialless
@@ -3823,6 +3819,7 @@ interface HTMLIFrameElement : HTMLElement
     setter align
     setter allow
     setter allowFullscreen
+    setter allowPaymentRequest
     setter credentialless
     setter csp
     setter frameBorder
@@ -5004,6 +5001,7 @@ interface ImageData
     getter colorSpace
     getter data
     getter height
+    getter pixelFormat
     getter width
     method constructor
 interface ImageDecoder
@@ -5053,6 +5051,14 @@ interface InputEvent : UIEvent
     getter isComposing
     method constructor
     method getTargetRanges
+interface IntegrityViolationReportBody : ReportBody
+    attribute @@toStringTag
+    getter blockedURL
+    getter destination
+    getter documentURL
+    getter reportOnly
+    method constructor
+    method toJSON
 interface IntersectionObserver
     attribute @@toStringTag
     getter delay
@@ -6328,6 +6334,62 @@ interface Path2D
     method quadraticCurveTo
     method rect
     method roundRect
+interface PaymentAddress
+    attribute @@toStringTag
+    getter addressLine
+    getter city
+    getter country
+    getter dependentLocality
+    getter organization
+    getter phone
+    getter postalCode
+    getter recipient
+    getter region
+    getter sortingCode
+    method constructor
+    method toJSON
+interface PaymentMethodChangeEvent : PaymentRequestUpdateEvent
+    attribute @@toStringTag
+    getter methodDetails
+    getter methodName
+    method constructor
+interface PaymentRequest : EventTarget
+    attribute @@toStringTag
+    getter id
+    getter onpaymentmethodchange
+    getter onshippingaddresschange
+    getter onshippingoptionchange
+    getter shippingAddress
+    getter shippingOption
+    getter shippingType
+    method abort
+    method canMakePayment
+    method constructor
+    method hasEnrolledInstrument
+    method show
+    setter onpaymentmethodchange
+    setter onshippingaddresschange
+    setter onshippingoptionchange
+interface PaymentRequestUpdateEvent : Event
+    attribute @@toStringTag
+    method constructor
+    method updateWith
+interface PaymentResponse : EventTarget
+    attribute @@toStringTag
+    getter details
+    getter methodName
+    getter onpayerdetailchange
+    getter payerEmail
+    getter payerName
+    getter payerPhone
+    getter requestId
+    getter shippingAddress
+    getter shippingOption
+    method complete
+    method constructor
+    method retry
+    method toJSON
+    setter onpayerdetailchange
 interface Performance : EventTarget
     attribute @@toStringTag
     getter eventCounts
@@ -6609,6 +6671,11 @@ interface ProtectedAudience
     attribute @@toStringTag
     method constructor
     method queryFeatureSupport
+interface QuotaExceededError : DOMException
+    attribute @@toStringTag
+    getter quota
+    getter requested
+    method constructor
 interface RTCCertificate
     attribute @@toStringTag
     getter expires
@@ -7007,7 +7074,6 @@ interface Request
     getter referrer
     getter referrerPolicy
     getter signal
-    getter targetAddressSpace
     getter url
     method arrayBuffer
     method blob
@@ -8302,6 +8368,7 @@ interface Selection
     getter anchorOffset
     getter baseNode
     getter baseOffset
+    getter direction
     getter extentNode
     getter extentOffset
     getter focusNode
@@ -8318,6 +8385,7 @@ interface Selection
     method deleteFromDocument
     method empty
     method extend
+    method getComposedRanges
     method getRangeAt
     method modify
     method removeAllRanges
@@ -8982,7 +9050,9 @@ interface VideoFrame
     getter displayHeight
     getter displayWidth
     getter duration
+    getter flip
     getter format
+    getter rotation
     getter timestamp
     getter visibleRect
     method allocationSize

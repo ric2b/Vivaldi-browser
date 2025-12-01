@@ -10,9 +10,11 @@
 
 #include "rtc_base/cpu_time.h"
 
+#include <cstdint>
+
 #include "rtc_base/platform_thread.h"
+#include "rtc_base/thread.h"
 #include "rtc_base/time_utils.h"
-#include "system_wrappers/include/sleep.h"
 #include "test/gtest.h"
 
 // Only run these tests on non-instrumented builds, because timing on
@@ -33,15 +35,15 @@ const int kWorkingThreads = 2;
 void WorkingFunction(int64_t* counter) {
   *counter = 0;
   int64_t stop_cpu_time =
-      rtc::GetThreadCpuTimeNanos() +
+      webrtc::GetThreadCpuTimeNanos() +
       kProcessingTimeMillisecs * webrtc::kNumNanosecsPerMillisec;
-  while (rtc::GetThreadCpuTimeNanos() < stop_cpu_time) {
+  while (webrtc::GetThreadCpuTimeNanos() < stop_cpu_time) {
     (*counter)++;
   }
 }
 }  // namespace
 
-namespace rtc {
+namespace webrtc {
 
 // A minimal test which can be run on instrumented builds, so that they're at
 // least exercising the code to check for memory leaks/etc.
@@ -61,9 +63,9 @@ TEST(CpuTimeTest, MAYBE_TEST(TwoThreads)) {
   int64_t thread_start_time_nanos = GetThreadCpuTimeNanos();
   int64_t counter1;
   int64_t counter2;
-  auto thread1 = webrtc::PlatformThread::SpawnJoinable(
+  auto thread1 = PlatformThread::SpawnJoinable(
       [&counter1] { WorkingFunction(&counter1); }, "Thread1");
-  auto thread2 = webrtc::PlatformThread::SpawnJoinable(
+  auto thread2 = PlatformThread::SpawnJoinable(
       [&counter2] { WorkingFunction(&counter2); }, "Thread2");
   thread1.Finalize();
   thread2.Finalize();
@@ -78,25 +80,25 @@ TEST(CpuTimeTest, MAYBE_TEST(TwoThreads)) {
   // Therefore GetThreadCpuTime is not a wall clock.
   EXPECT_LE(thread_duration_nanos,
             (kProcessingTimeMillisecs - kAllowedErrorMillisecs) *
-                webrtc::kNumNanosecsPerMillisec);
+                kNumNanosecsPerMillisec);
   // Total process time is at least twice working threads' CPU time.
   // Therefore process and thread times are correctly related.
   EXPECT_GE(process_duration_nanos,
             kWorkingThreads *
                 (kProcessingTimeMillisecs - kAllowedErrorMillisecs) *
-                webrtc::kNumNanosecsPerMillisec);
+                kNumNanosecsPerMillisec);
 }
 
 TEST(CpuTimeTest, MAYBE_TEST(Sleeping)) {
   int64_t process_start_time_nanos = GetProcessCpuTimeNanos();
-  webrtc::SleepMs(kProcessingTimeMillisecs);
+  Thread::SleepMs(kProcessingTimeMillisecs);
   int64_t process_duration_nanos =
       GetProcessCpuTimeNanos() - process_start_time_nanos;
   // Sleeping should not introduce any additional CPU time.
   // Therefore GetProcessCpuTime is not a wall clock.
   EXPECT_LE(process_duration_nanos,
             (kProcessingTimeMillisecs - kAllowedErrorMillisecs) *
-                webrtc::kNumNanosecsPerMillisec);
+                kNumNanosecsPerMillisec);
 }
 
-}  // namespace rtc
+}  // namespace webrtc

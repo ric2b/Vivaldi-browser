@@ -85,6 +85,7 @@ content::WebContents* SearchResultsView::OpenURLFromTab(
 }
 
 bool SearchResultsView::IsWebContentsCreationOverridden(
+    content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
     content::mojom::WindowContainerType window_container_type,
     const GURL& opener_url,
@@ -133,6 +134,11 @@ void SearchResultsView::OnWebContentsFocused(
   auto* controller = CaptureModeController::Get();
   if (controller->IsActive()) {
     controller->capture_mode_session()->ClearPseudoFocus();
+    // The session focus cycler may have set a different a11y override window
+    // when the web contents take focus, so we'll need to set it back to the
+    // panel for screenreaders like ChromeVox to work properly.
+    controller->capture_mode_session()
+        ->SetA11yOverrideWindowToSearchResultsPanel();
   }
 
   AshWebViewImpl::OnWebContentsFocused(render_widget_host);

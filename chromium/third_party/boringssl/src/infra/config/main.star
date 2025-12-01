@@ -393,10 +393,6 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
-            # Newer versions of the Android NDK make NEON-only builds by
-            # default. We rely on making NEON-optional builds for some of our
-            # test coverage, but see https://crbug.com/boringssl/454.
-            "ANDROID_ARM_NEON": "FALSE",
             "ANDROID_PLATFORM": "android-18",
         },
     },
@@ -412,12 +408,14 @@ both_builders(
         "android": True,
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
-            # Newer versions of the Android NDK make NEON-only builds by
-            # default. We rely on making NEON-optional builds for some of our
-            # test coverage, but see https://crbug.com/boringssl/454.
-            "ANDROID_ARM_NEON": "FALSE",
             "ANDROID_PLATFORM": "android-18",
             "CMAKE_BUILD_TYPE": "Release",
+            # Although Android now requires NEON support, on one builder, we
+            # ignore the |__ARM_NEON| preprocessor option, to keep testing
+            # non-NEON codepaths. This matters because there are a few non-NEON
+            # assembly functions that would otherwise be untested.
+            "CMAKE_C_FLAGS": "-DOPENSSL_NO_STATIC_NEON_FOR_TESTING=1",
+            "CMAKE_CXX_FLAGS": "-DOPENSSL_NO_STATIC_NEON_FOR_TESTING=1",
         },
     },
 )
@@ -450,10 +448,6 @@ both_builders(
         "cmake_args": {
             "ANDROID_ABI": "armeabi-v7a",
             "ANDROID_ARM_MODE": "arm",
-            # Newer versions of the Android NDK make NEON-only builds by
-            # default. We rely on making NEON-optional builds for some of our
-            # test coverage, but see https://crbug.com/boringssl/454.
-            "ANDROID_ARM_NEON": "FALSE",
             "ANDROID_PLATFORM": "android-18",
             "CMAKE_BUILD_TYPE": "Release",
         },

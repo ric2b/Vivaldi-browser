@@ -148,6 +148,16 @@ inline constexpr char kKeyTriggeredRuleInfo[] = "triggeredRuleInfo";
 inline constexpr char kKeyUrlCategory[] = "urlCategory";
 inline constexpr char kKeyAction[] = "action";
 inline constexpr char kKeyHasWatermarking[] = "hasWatermarking";
+inline constexpr char kKeyReason[] = "reason";
+inline constexpr char kKeyNetErrorCode[] = "netErrorCode";
+inline constexpr char kKeyUserName[] = "userName";
+inline constexpr char kKeyIsPhishingUrl[] = "isPhishingUrl";
+inline constexpr char kKeyReferrers[] = "referrers";
+
+enum EnterpriseRealTimeUrlCheckMode {
+  REAL_TIME_CHECK_DISABLED = 0,
+  REAL_TIME_CHECK_FOR_MAINFRAME_ENABLED = 1,
+};
 
 }  // namespace enterprise_connectors
 

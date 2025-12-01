@@ -67,6 +67,7 @@ namespace wgpu::interop {
 // Primitive JavaScript types
 ////////////////////////////////////////////////////////////////////////////////
 using Object = Napi::Object;
+using Event = Napi::Object;
 using ArrayBuffer = Napi::ArrayBuffer;
 using Int8Array = Napi::TypedArrayOf<int8_t>;
 using Int16Array = Napi::TypedArrayOf<int16_t>;
@@ -828,6 +829,8 @@ Napi::Value CatchExceptionIntoPromise(Napi::Env env, F&& f) {
     deferred.Reject(error.Value());
     return deferred.Promise();
 }
+
+void ChainPrototype(Napi::Value baseClassValue, Napi::Function derivedClassConstructor);
 
 }  // namespace wgpu::interop
 

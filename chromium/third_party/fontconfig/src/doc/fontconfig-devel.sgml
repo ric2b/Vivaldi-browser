@@ -7,6 +7,7 @@
 <!ENTITY fcconstant SYSTEM "fcconstant.sgml">
 <!ENTITY fcdircache SYSTEM "fcdircache.sgml">
 <!ENTITY fcfile SYSTEM "fcfile.sgml">
+<!ENTITY fcfontations SYSTEM "fcfontations.sgml">
 <!ENTITY fcfontset SYSTEM "fcfontset.sgml">
 <!ENTITY fcformat SYSTEM "fcformat.sgml">
 <!ENTITY fcfreetype SYSTEM "fcfreetype.sgml">
@@ -497,6 +498,14 @@ rasterization mechanism for fonts, it does provide some convenience
 functions.
     </para>
     &fcfreetype;
+  </sect2>
+  <sect2><title>Fontations specific functions</title>
+    <para>
+For font indexing, an alternative backend based on the Fontations set
+of font libraries is in development. The indexing functions are exposed
+as Fontations specific functions.
+    </para>
+    &fcfontations;
   </sect2>
   <sect2><title>FcValue</title>
     <para>

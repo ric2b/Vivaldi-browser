@@ -6,6 +6,7 @@
 
 #include <stdlib.h>
 
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -139,9 +140,10 @@ std::string GetDesktopName(base::Environment* env) {
   // is always "google-chrome", regardless of the channel (channels are built
   // in to snapd, switching between them or doing parallel installs does not
   // require distinct application names).
-  std::string snap_name;
-  if (env->GetVar("SNAP_NAME", &snap_name) && snap_name == "google-chrome")
+  std::string snap_name = env->GetVar("SNAP_NAME").value_or(std::string());
+  if (snap_name == "google-chrome") {
     return "google-chrome.desktop";
+  }
   version_info::Channel product_channel(GetChannel());
   switch (product_channel) {
     case version_info::Channel::CANARY:
@@ -155,8 +157,7 @@ std::string GetDesktopName(base::Environment* env) {
       return "google-chrome.desktop";
   }
 #elif defined(VIVALDI_BUILD)
-  std::string modifier;
-  env->GetVar("CHROME_VERSION_EXTRA", &modifier);
+  std::string modifier = env->GetVar("CHROME_VERSION_EXTRA").value_or(std::string());
   if (modifier == "snapshot") {
     return "vivaldi-snapshot.desktop";
   } else if (modifier == "beta") {
@@ -168,9 +169,10 @@ std::string GetDesktopName(base::Environment* env) {
   // Allow $CHROME_DESKTOP to override the built-in value, so that development
   // versions can set themselves as the default without interfering with
   // non-official, packaged versions using the built-in value.
-  std::string name;
-  if (env->GetVar("CHROME_DESKTOP", &name) && !name.empty())
-    return name;
+  std::optional<std::string> name = env->GetVar("CHROME_DESKTOP");
+  if (name.has_value() && !name.value().empty()) {
+    return name.value();
+  }
   return "chromium-browser.desktop";
 #endif
 }

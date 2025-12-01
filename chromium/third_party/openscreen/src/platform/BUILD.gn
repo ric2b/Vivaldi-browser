@@ -268,6 +268,7 @@ openscreen_source_set("unittests") {
     if (is_posix) {
       sources += [
         "impl/logging_unittest.cc",
+        "impl/platform_client_posix_unittest.cc",
         "impl/scoped_pipe_unittest.cc",
         "impl/socket_address_posix_unittest.cc",
         "impl/socket_handle_waiter_posix_unittest.cc",

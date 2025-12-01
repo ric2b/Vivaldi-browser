@@ -6,7 +6,7 @@ import type {CrButtonElement, Destination, NativeInitialSettings, PrintPreviewAp
 import {MeasurementSystemUnitType, NativeLayerImpl, PluginProxyImpl, State, whenReady} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import {waitBeforeNextRender} from 'chrome://webui-test/polymer_test_util.js';
+import {microtasksFinished} from 'chrome://webui-test/test_util.js';
 
 import {NativeLayerStub} from './native_layer_stub.js';
 import {getCddTemplate, getDefaultMediaSize, getDefaultOrientation} from './print_preview_test_utils.js';
@@ -25,7 +25,6 @@ suite('InvalidSettingsTest', function() {
     unitType: MeasurementSystemUnitType.IMPERIAL,
     previewModifiable: true,
     destinationsManaged: false,
-    previewIsFromArc: false,
     documentTitle: 'title',
     documentHasSelection: true,
     shouldPrintSelectionOnly: false,
@@ -58,14 +57,14 @@ suite('InvalidSettingsTest', function() {
 
     page = document.createElement('print-preview-app');
     document.body.appendChild(page);
-    page.$.documentInfo.init(true, false, 'title', false);
+    page.$.documentInfo.init(true, 'title', false);
   }
 
   // Tests that when a printer cannot be communicated with correctly the
   // preview area displays an invalid printer error message and printing
   // is disabled. Verifies that the user can recover from this error by
   // selecting a different, valid printer.
-  test('invalid settings error', function() {
+  test('invalid settings error', async function() {
     createPage();
     const barDevice = getCddTemplate('BarDevice');
     nativeLayer.setLocalDestinationCapabilities(barDevice);
@@ -82,21 +81,20 @@ suite('InvalidSettingsTest', function() {
     // Get references to relevant elements.
     const previewAreaEl = page.$.previewArea;
     const overlay =
-        previewAreaEl.shadowRoot!.querySelector('.preview-area-overlay-layer')!;
+        previewAreaEl.shadowRoot.querySelector('.preview-area-overlay-layer')!;
     const messageEl =
-        previewAreaEl.shadowRoot!.querySelector('.preview-area-message')!;
-    const sidebar = page.shadowRoot!.querySelector('print-preview-sidebar')!;
+        previewAreaEl.shadowRoot.querySelector('.preview-area-message')!;
+    const sidebar = page.shadowRoot.querySelector('print-preview-sidebar')!;
     let printButton: CrButtonElement;
-    const destinationSettings = sidebar.shadowRoot!.querySelector(
-        'print-preview-destination-settings')!;
+    const destinationSettings =
+        sidebar.shadowRoot.querySelector('print-preview-destination-settings')!;
 
-    return waitBeforeNextRender(page)
+    return microtasksFinished()
         .then(() => {
           const parentElement =
-              sidebar.shadowRoot!.querySelector('print-preview-button-strip')!;
-          printButton =
-              parentElement.shadowRoot!.querySelector<CrButtonElement>(
-                  '.action-button')!;
+              sidebar.shadowRoot.querySelector('print-preview-button-strip')!;
+          printButton = parentElement.shadowRoot.querySelector<CrButtonElement>(
+              '.action-button')!;
 
           return Promise.all([
             whenReady(),
@@ -141,8 +139,9 @@ suite('InvalidSettingsTest', function() {
           // Wait for the preview to be updated.
           return nativeLayer.whenCalled('getPreview');
         })
-        .then(function() {
+        .then(async function() {
           // Message should be gone.
+          await microtasksFinished();
           assertTrue(overlay.classList.contains('invisible'));
           assertFalse(messageEl.textContent!.includes(expectedMessage));
 

@@ -21,7 +21,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
 #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
 #include "ui/ozone/platform/wayland/host/xdg_session.h"
-#include "ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.h"
+#include "ui/ozone/platform/wayland/host/xdg_toplevel.h"
 #include "ui/ozone/public/platform_session_manager.h"
 
 namespace ui {
@@ -110,6 +110,15 @@ std::optional<std::string> XdgSessionManager::RestoreSession(
                     : std::nullopt;
   sessions_.push_back(std::move(session));
   return result;
+}
+
+void XdgSessionManager::RemoveWindow(const std::string& session_id,
+                                     const int32_t window_id) {
+  if (auto* session = GetSession(session_id)) {
+    session->RemoveToplevel(window_id);
+    return;
+  }
+  DLOG(WARNING) << "No session found for id=" << session_id;
 }
 
 XdgSession* XdgSessionManager::GetSession(const std::string& session_id) const {

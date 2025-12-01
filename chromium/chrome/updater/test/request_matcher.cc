@@ -21,7 +21,7 @@
 #include "base/test/bind.h"
 #include "base/values.h"
 #include "base/version.h"
-#include "chrome/updater/constants.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/test/http_request.h"
 #include "chrome/updater/update_service.h"
 #include "chrome/updater/updater_scope.h"
@@ -229,7 +229,7 @@ Matcher GetMultipartContentMatcher(
     const std::vector<FormExpectations>& form_expections) {
   return base::BindLambdaForTesting([form_expections](
                                         const HttpRequest& request) {
-    constexpr char kMultifpartBoundaryPrefix[] =
+    static constexpr char kMultifpartBoundaryPrefix[] =
         "multipart/form-data; boundary=";
     if (!request.headers.contains("Content-Type")) {
       ADD_FAILURE() << "Content-Type header not found, which is expected "

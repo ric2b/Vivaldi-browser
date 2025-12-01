@@ -50,6 +50,14 @@ typedef struct ASVEncContext {
     int q_intra_matrix[64];
 } ASVEncContext;
 
+enum {
+    ASV1_MAX_BLOCK_SIZE = 8 + 10 * FFMAX(2 /* skip */, 5 /* ccp */ + 4 * 11 /* level */) + 5,
+    ASV1_MAX_MB_SIZE    = 6 * ASV1_MAX_BLOCK_SIZE,
+    ASV2_MAX_BLOCK_SIZE = 4 + 8 + 16 * (6 /* ccp */ + 4 * 13 /* level */),
+    ASV2_MAX_MB_SIZE    = 6 * ASV2_MAX_BLOCK_SIZE,
+    MAX_MB_SIZE         = (FFMAX(ASV1_MAX_MB_SIZE, ASV2_MAX_MB_SIZE) + 7) / 8
+};
+
 static inline void asv1_put_level(PutBitContext *pb, int level)
 {
     unsigned int index = level + 3;
@@ -177,8 +185,6 @@ static inline void asv2_encode_block(ASVEncContext *a, int16_t block[64])
     }
 }
 
-#define MAX_MB_SIZE (30 * 16 * 16 * 3 / 2 / 8)
-
 static inline int encode_mb(ASVEncContext *a, int16_t block[6][64])
 {
     int i;
@@ -271,8 +277,8 @@ static int encode_frame(AVCodecContext *avctx, AVPacket *pkt,
         return ret;
     }
 
-    if ((ret = ff_alloc_packet(avctx, pkt, c->mb_height * c->mb_width * MAX_MB_SIZE +
-                               FF_INPUT_BUFFER_MIN_SIZE)) < 0)
+    ret = ff_alloc_packet(avctx, pkt, c->mb_height * c->mb_width * MAX_MB_SIZE + 3);
+    if (ret < 0)
         return ret;
 
     init_put_bits(&a->pb, pkt->data, pkt->size);
@@ -365,8 +371,7 @@ const FFCodec ff_asv1_encoder = {
     .priv_data_size = sizeof(ASVEncContext),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_frame),
-    .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
-                                                     AV_PIX_FMT_NONE },
+    CODEC_PIXFMTS(AV_PIX_FMT_YUV420P),
     .color_ranges   = AVCOL_RANGE_MPEG,
 };
 #endif
@@ -381,8 +386,7 @@ const FFCodec ff_asv2_encoder = {
     .priv_data_size = sizeof(ASVEncContext),
     .init           = encode_init,
     FF_CODEC_ENCODE_CB(encode_frame),
-    .p.pix_fmts     = (const enum AVPixelFormat[]) { AV_PIX_FMT_YUV420P,
-                                                     AV_PIX_FMT_NONE },
+    CODEC_PIXFMTS(AV_PIX_FMT_YUV420P),
     .color_ranges   = AVCOL_RANGE_MPEG,
 };
 #endif

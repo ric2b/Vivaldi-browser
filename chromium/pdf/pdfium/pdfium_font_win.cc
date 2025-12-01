@@ -4,6 +4,7 @@
 
 #include "pdf/pdfium/pdfium_font_win.h"
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,7 +14,6 @@
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
@@ -60,13 +60,6 @@ std::string GetSubstFont(const std::string& face) {
   return face;
 }
 
-// Kill switch in case this goes horribly wrong.
-// TODO(crbug.com/381126164): Remove after this lands safely in a Stable
-// release.
-BASE_FEATURE(kPdfEnumFontsWin,
-             "PdfEnumFontsWin",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // Maps font description and charset to `FontId` as requested by PDFium, with
 // `FontId` as an opaque type that PDFium works with. Based on the `FontId`,
 // PDFium can read from the font files using GetFontData(). Properly frees the
@@ -82,10 +75,6 @@ class SkiaFontMapper {
   ~SkiaFontMapper() = delete;
 
   void EnumFonts(FPDF_SYSFONTINFO* sysfontinfo, void* mapper) {
-    if (!base::FeatureList::IsEnabled(kPdfEnumFontsWin)) {
-      return;
-    }
-
     const int count = manager_->countFamilies();
     for (int i = 0; i < count; ++i) {
       SkString family;
@@ -210,7 +199,7 @@ class SkiaFontMapper {
     }
 
     // Finally, try some hacks that fix edge cases & mis-spellings.
-    return FinalFixups(subst_face, style);
+    return FinalFixups(subst_face, style, charset, pitch);
   }
 
   sk_sp<SkTypeface> GetShiftJISPreference(const std::string& face,
@@ -311,7 +300,9 @@ class SkiaFontMapper {
 
   // Put any last-gasp hacks into this method.
   sk_sp<SkTypeface> FinalFixups(const std::string& face,
-                                const SkFontStyle& style) {
+                                const SkFontStyle& style,
+                                int charset,
+                                int pitch_family) {
     // Some fonts are specified with weights that Skia can't provide.
     // pdf.js/tests/issue5801.pdf specifies ArialBlack but a weight of 390.
     // Commonly seen patterns: `ArialBlack` `Arial Black` & `Arial-Black`.
@@ -334,6 +325,16 @@ class SkiaFontMapper {
         0) {
       return manager_->matchFamilyStyle(with_spaces.c_str(), style);
     }
+
+    // Similar logic exists in PDFium's CFX_FolderFontInfo::FindFont(). Not used
+    // in pdfium_font_linux.cc, where the Font Service's fallback mechanism will
+    // do the same thing.
+    static constexpr char kDefaultFixedPitchFont[] = "Courier New";
+    if (charset == FXFONT_ANSI_CHARSET &&
+        (pitch_family & FXFONT_FF_FIXEDPITCH)) {
+      return manager_->matchFamilyStyle(kDefaultFixedPitchFont, style);
+    }
+
     return nullptr;
   }
 

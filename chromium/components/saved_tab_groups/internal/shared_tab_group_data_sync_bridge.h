@@ -77,8 +77,10 @@ class SharedTabGroupDataSyncBridge : public syncer::DataTypeSyncBridge {
   std::unique_ptr<syncer::DataBatch> GetDataForCommit(
       StorageKeyList storage_keys) override;
   std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;
-  std::string GetClientTag(const syncer::EntityData& entity_data) override;
-  std::string GetStorageKey(const syncer::EntityData& entity_data) override;
+  std::string GetClientTag(
+      const syncer::EntityData& entity_data) const override;
+  std::string GetStorageKey(
+      const syncer::EntityData& entity_data) const override;
   bool SupportsGetClientTag() const override;
   bool SupportsGetStorageKey() const override;
   bool SupportsIncrementalUpdates() const override;
@@ -141,7 +143,8 @@ class SharedTabGroupDataSyncBridge : public syncer::DataTypeSyncBridge {
       syncer::DataTypeStore::WriteBatch& write_batch,
       const std::set<base::Uuid>& tab_ids_with_pending_model_update,
       const syncer::CollaborationMetadata& collaboration_metadata,
-      base::Time creation_time);
+      base::Time creation_time,
+      base::Time modification_time);
 
   // Removes all data assigned to `storage_key` from local storage
   // (SavedTabGroupModel, and DataTypeStore). If a group is removed, all its
@@ -212,6 +215,19 @@ class SharedTabGroupDataSyncBridge : public syncer::DataTypeSyncBridge {
   std::optional<syncer::ModelError> ResolveTabsMissingGroups(
       syncer::MetadataChangeList& metadata_change_list);
 
+  // Converts a `group` to a `SharedTabGroupDataSpecifics` proto. The returned
+  // specifics also contains unsupported fields that are stored in sync
+  // metadata.
+  sync_pb::SharedTabGroupDataSpecifics SharedTabGroupToSpecifics(
+      const SavedTabGroup& group) const;
+
+  // Converts a `tab` to a `SharedTabGroupDataSpecifics` proto. The returned
+  // specifics also contains unsupported fields that are stored in sync
+  // metadata.
+  sync_pb::SharedTabGroupDataSpecifics SharedTabGroupTabToSpecifics(
+      const SavedTabGroupTab& tab,
+      sync_pb::UniquePosition unique_position) const;
+
   SEQUENCE_CHECKER(sequence_checker_);
 
   // In charge of actually persisting changes to disk, or loading previous data.
@@ -247,7 +263,8 @@ class SharedTabGroupDataSyncBridge : public syncer::DataTypeSyncBridge {
   struct TabMissingGroup {
     TabMissingGroup(sync_pb::SharedTabGroupDataSpecifics specifics,
                     syncer::CollaborationMetadata collaboration_metadata,
-                    base::Time creation_time);
+                    base::Time creation_time,
+                    base::Time modification_time);
     TabMissingGroup(const TabMissingGroup&);
     TabMissingGroup& operator=(const TabMissingGroup&);
     TabMissingGroup(TabMissingGroup&&);
@@ -257,6 +274,7 @@ class SharedTabGroupDataSyncBridge : public syncer::DataTypeSyncBridge {
     sync_pb::SharedTabGroupDataSpecifics specifics;
     syncer::CollaborationMetadata collaboration_metadata;
     base::Time creation_time;
+    base::Time modification_time;
   };
   std::map<base::Uuid, TabMissingGroup> tabs_missing_groups_;
 

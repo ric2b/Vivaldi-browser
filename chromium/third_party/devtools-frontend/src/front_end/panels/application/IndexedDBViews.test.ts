@@ -170,13 +170,13 @@ describeWithLocale.skip('[crbug.com/1473557]: IDBDatabaseView', () => {
     assert.strictEqual(buttons[0].textContent?.trim(), 'Delete database');
     const showDialog = sinon.stub(UI.UIUtils.ConfirmDialog, 'show').resolves(true);
     buttons[0].click();
-    assert.isTrue(showDialog.calledOnce);
+    sinon.assert.calledOnce(showDialog);
     await new Promise(resolve => setTimeout(resolve, 0));
-    assert.isTrue(model.deleteDatabase.calledOnceWithExactly(databaseId));
+    sinon.assert.calledOnceWithExactly(model.deleteDatabase, databaseId);
 
     assert.instanceOf(buttons[1], HTMLElement);
     assert.strictEqual(buttons[1].textContent?.trim(), 'Refresh database');
     buttons[1].click();
-    assert.isTrue(model.refreshDatabase.calledOnceWithExactly(databaseId));
+    sinon.assert.calledOnceWithExactly(model.refreshDatabase, databaseId);
   });
 });

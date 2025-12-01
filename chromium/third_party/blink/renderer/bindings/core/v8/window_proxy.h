@@ -149,6 +149,9 @@ class CORE_EXPORT WindowProxy : public GarbageCollected<WindowProxy> {
 
   void InitializeIfNeeded();
 
+  // Vivaldi VB-113263
+  bool NeedInitialize() const;
+
   void ClearForClose();
   void ClearForNavigation();
   void ClearForSwap();

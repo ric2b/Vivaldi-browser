@@ -11,6 +11,7 @@
 #include <limits>
 #include <ostream>
 
+#include "include/cppgc/macros.h"
 #include "include/v8-internal.h"
 #include "src/base/atomic-utils.h"
 #include "src/base/build_config.h"
@@ -255,11 +256,12 @@ const size_t kShortBuiltinCallsOldSpaceSizeThreshold = size_t{2} * GB;
 #define V8_EXTERNAL_CODE_SPACE_BOOL false
 #endif
 
-// Support for builtin jump table disassembly.
-#if defined(V8_ENABLE_BUILTIN_JUMP_TABLE_SWITCH) && defined(ENABLE_DISASSEMBLER)
-#define V8_BUILTIN_JUMP_TABLE_INFO_BOOL true
+// Support for jump table disassembly.
+#if defined(ENABLE_DISASSEMBLER) && \
+    (defined(V8_TARGET_ARCH_ARM64) || defined(V8_TARGET_ARCH_X64))
+#define V8_JUMP_TABLE_INFO_BOOL true
 #else
-#define V8_BUILTIN_JUMP_TABLE_INFO_BOOL false
+#define V8_JUMP_TABLE_INFO_BOOL false
 #endif
 
 // V8_HEAP_USE_PTHREAD_JIT_WRITE_PROTECT controls how V8 sets permissions for
@@ -313,16 +315,6 @@ const size_t kShortBuiltinCallsOldSpaceSizeThreshold = size_t{2} * GB;
 #define V8_HEAP_USE_PKU_JIT_WRITE_PROTECT false
 #endif
 
-// Enable hardware features to make the sandbox memory temporarily inaccessible.
-// This is currently only used with pkeys and in debug mode.
-// TODO(sroettger): add a gn arg to toggle this once we enable it in non-debug
-//                  builds.
-#if V8_HAS_PKU_JIT_WRITE_PROTECT && defined(V8_ENABLE_SANDBOX) && defined(DEBUG)
-#define V8_ENABLE_SANDBOX_HARDWARE_SUPPORT true
-#else
-#define V8_ENABLE_SANDBOX_HARDWARE_SUPPORT false
-#endif
-
 // Determine whether tagged pointers are 8 bytes (used in Torque layouts for
 // choosing where to insert padding).
 #if V8_TARGET_ARCH_64_BIT && !defined(V8_COMPRESS_POINTERS)
@@ -358,6 +350,8 @@ const size_t kShortBuiltinCallsOldSpaceSizeThreshold = size_t{2} * GB;
 #else
 #define V8_EXPERIMENTAL_UNDEFINED_DOUBLE_BOOL false
 #endif
+
+#define V8_STACK_ALLOCATED CPPGC_STACK_ALLOCATED
 
 // Superclass for classes only using static method functions.
 // The subclass of AllStatic cannot be instantiated at all.
@@ -802,7 +796,7 @@ enum class StoreOrigin { kMaybeKeyed, kNamed };
 
 enum class TypeofMode { kInside, kNotInside };
 
-enum class ContextKind { kDefault, kScriptContext };
+enum class ContextMode { kNoContextCells, kHasContextCells };
 
 // Whether floating point registers should be saved (and restored).
 enum class SaveFPRegsMode { kIgnore, kSave };
@@ -868,6 +862,7 @@ constexpr int kNoDeoptimizationId = -1;
 //   code is executed.
 enum class DeoptimizeKind : uint8_t {
   kEager,
+  kLazyAfterFastCall,
   kLazy,
 };
 constexpr DeoptimizeKind kFirstDeoptimizeKind = DeoptimizeKind::kEager;
@@ -883,6 +878,8 @@ constexpr const char* ToString(DeoptimizeKind kind) {
       return "Eager";
     case DeoptimizeKind::kLazy:
       return "Lazy";
+    case DeoptimizeKind::kLazyAfterFastCall:
+      return "LazyAfterfastCall";
   }
 }
 inline std::ostream& operator<<(std::ostream& os, DeoptimizeKind kind) {
@@ -1420,6 +1417,22 @@ inline std::ostream& operator<<(std::ostream& os, AllocationType type) {
   return os << ToString(type);
 }
 
+class AllocationHint final {
+ public:
+  AllocationHint() = default;
+
+  constexpr V8_WARN_UNUSED_RESULT AllocationHint WithMayGrow() const {
+    return AllocationHint(true);
+  }
+
+  bool MayGrow() const { return may_grow_; }
+
+ private:
+  constexpr explicit AllocationHint(bool may_grow) : may_grow_(may_grow) {}
+
+  bool may_grow_ = false;
+};
+
 // Reason for a garbage collection.
 //
 // These values are persisted to logs. Entries should not be renumbered and
@@ -1453,9 +1466,10 @@ enum class GarbageCollectionReason : int {
   kMeasureMemory = 24,
   kBackgroundAllocationFailure = 25,
   kFinalizeConcurrentMinorMS = 26,
-  kCppHeapAllocationFailure = 27,
-  kFrozen = 28,
-  kIdleContextDisposal = 29,
+  kFinalizeMinorMSForMajorGC = 27,
+  kCppHeapAllocationFailure = 28,
+  kFrozen = 29,
+  kIdleContextDisposal = 30,
 
   NUM_REASONS,
 };
@@ -1520,6 +1534,8 @@ constexpr const char* ToString(GarbageCollectionReason reason) {
       return "background allocation failure";
     case GarbageCollectionReason::kFinalizeConcurrentMinorMS:
       return "finalize concurrent MinorMS";
+    case GarbageCollectionReason::kFinalizeMinorMSForMajorGC:
+      return "finalize MinorMS for major GC";
     case GarbageCollectionReason::kCppHeapAllocationFailure:
       return "CppHeap allocation failure";
     case GarbageCollectionReason::kFrozen:
@@ -1545,7 +1561,7 @@ inline constexpr bool IsSharedAllocationType(AllocationType kind) {
          kind == AllocationType::kSharedMap;
 }
 
-enum AllocationAlignment {
+enum AllocationAlignment : uint8_t {
   // The allocated address is kTaggedSize aligned (this is default for most of
   // the allocations).
   kTaggedAligned,
@@ -1559,7 +1575,7 @@ enum AllocationAlignment {
 // allocation alignment inconsistency is fixed. For now we keep using
 // tagged aligned (not double aligned) access since all our supported platforms
 // allow tagged-aligned access to doubles and full words.
-#define USE_ALLOCATION_ALIGNMENT_BOOL false
+#define USE_ALLOCATION_ALIGNMENT_HEAP_NUMBER_BOOL false
 
 enum class AccessMode { ATOMIC, NON_ATOMIC };
 
@@ -1952,8 +1968,8 @@ constexpr uint32_t kUndefinedNanLower32 = 0xFFFE7FFF;
 constexpr uint32_t kHoleNanUpper32 = 0xFFF7FFFF;
 constexpr uint32_t kHoleNanLower32 = 0xFFF7FFFF;
 #ifdef V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
-constexpr uint32_t kUndefinedNanUpper32 = 0xFFFFFFFF;
-constexpr uint32_t kUndefinedNanLower32 = 0xFFFFFFFF;
+constexpr uint32_t kUndefinedNanUpper32 = 0xFFF6FFFF;
+constexpr uint32_t kUndefinedNanLower32 = 0xFFF6FFFF;
 #endif  // V8_ENABLE_EXPERIMENTAL_UNDEFINED_DOUBLE
 #endif
 
@@ -2681,19 +2697,19 @@ inline KeyedAccessLoadMode CreateKeyedAccessLoadMode(bool handle_oob,
 
 inline KeyedAccessLoadMode GeneralizeKeyedAccessLoadMode(
     KeyedAccessLoadMode mode1, KeyedAccessLoadMode mode2) {
-  using T = std::underlying_type<KeyedAccessLoadMode>::type;
+  using T = std::underlying_type_t<KeyedAccessLoadMode>;
   return static_cast<KeyedAccessLoadMode>(static_cast<T>(mode1) |
                                           static_cast<T>(mode2));
 }
 
 inline bool LoadModeHandlesOOB(KeyedAccessLoadMode load_mode) {
-  using T = std::underlying_type<KeyedAccessLoadMode>::type;
+  using T = std::underlying_type_t<KeyedAccessLoadMode>;
   return (static_cast<T>(load_mode) &
           static_cast<T>(KeyedAccessLoadMode::kHandleOOB)) != 0;
 }
 
 inline bool LoadModeHandlesHoles(KeyedAccessLoadMode load_mode) {
-  using T = std::underlying_type<KeyedAccessLoadMode>::type;
+  using T = std::underlying_type_t<KeyedAccessLoadMode>;
   return (static_cast<T>(load_mode) &
           static_cast<T>(KeyedAccessLoadMode::kHandleHoles)) != 0;
 }
@@ -2897,6 +2913,22 @@ constexpr uint64_t kInvalidWasmSignatureHash = ~uint64_t{0};
 
 enum class CallJumpMode { kCall, kTailCall };
 
+constexpr int kPreallocatedNumberStringTableSize = 100;
+
+enum class SilenceNanMode {
+  kSilenceUndefined,
+  kPreserveUndefined,
+};
+
+inline std::ostream& operator<<(std::ostream& os, SilenceNanMode mode) {
+  switch (mode) {
+    case SilenceNanMode::kSilenceUndefined:
+      return os << "SilenceUndefined";
+    case SilenceNanMode::kPreserveUndefined:
+      return os << "PreserveUndefined";
+  }
+}
+
 }  // namespace internal
 
 // Tag dispatching support for atomic loads and stores.
@@ -2910,6 +2942,8 @@ static constexpr RelaxedLoadTag kRelaxedLoad;
 static constexpr ReleaseStoreTag kReleaseStore;
 static constexpr RelaxedStoreTag kRelaxedStore;
 static constexpr SeqCstAccessTag kSeqCstAccess;
+
+static constexpr int kAdd_LhsIsStringConstant_Internalize_CacheSlotOffset = 1;
 
 }  // namespace v8
 

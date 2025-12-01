@@ -6,8 +6,10 @@ import * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
 import * as SDK from '../../core/sdk/sdk.js';
 import type * as Protocol from '../../generated/protocol.js';
+import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {describeWithEnvironment} from '../../testing/EnvironmentHelpers.js';
 import * as Diff from '../../third_party/diff/diff.js';
+import {render} from '../../ui/lit/lit.js';
 
 import * as PanelUtils from './utils.js';
 
@@ -75,20 +77,24 @@ describeWithEnvironment('panels/utils', () => {
   });
 
   describe('getIconForNetworkRequest', () => {
+    function renderIcon(request: SDK.NetworkRequest.NetworkRequest): HTMLElement {
+      const container = document.createElement('div');
+      renderElementIntoDOM(container);
+      render(PanelUtils.PanelUtils.getIconForNetworkRequest(request), container);
+      assert.instanceOf(container.firstElementChild, HTMLElement);
+      return container.firstElementChild;
+    }
+
     it('creates an error red icon for request with status code 404', async () => {
       const request = SDK.NetworkRequest.NetworkRequest.create(
           'requestId' as Protocol.Network.RequestId, urlString`https://www.example.com`, urlString``, null, null, null);
       request.statusCode = 404;
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('cross-circle-filled', iconImage);
 
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('cross-circle-filled.svg")', iconImage);
-
-      const backgroundColorOfIcon = iconStyle.backgroundColor.toString();
+      const backgroundColorOfIcon = iconElement.style.color.toString();
       assert.strictEqual(backgroundColorOfIcon, 'var(--icon-error)');
     });
 
@@ -99,15 +105,11 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Document);
       request.mimeType = 'text/html';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-document', iconImage);
 
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-document.svg")', iconImage);
-
-      const backgroundColorOfIcon = iconStyle.backgroundColor.toString();
+      const backgroundColorOfIcon = iconElement.style.color.toString();
       assert.strictEqual(backgroundColorOfIcon, 'var(--icon-file-document)');
     });
 
@@ -118,13 +120,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Media);
       request.mimeType = 'audio/mpeg';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-media.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-media', iconImage);
     });
 
     it('show wasm icon', async () => {
@@ -134,13 +132,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Wasm);
       request.mimeType = 'application/wasm';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-wasm.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-wasm', iconImage);
     });
 
     it('show websocket icon', async () => {
@@ -150,13 +144,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.WebSocket);
       request.mimeType = '';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-websocket.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-websocket', iconImage);
     });
 
     it('shows fetch icon', async () => {
@@ -166,13 +156,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Fetch);
       request.mimeType = '';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-fetch-xhr.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-fetch-xhr', iconImage);
     });
 
     it('shows xhr icon', async () => {
@@ -182,13 +168,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.XHR);
       request.mimeType = 'application/octet-stream';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-fetch-xhr.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-fetch-xhr', iconImage);
     });
 
     it('mime win: show image preview icon for xhr-image', async () => {
@@ -198,7 +180,7 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.XHR);
       request.mimeType = 'image/svg+xml';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
+      const iconElement = renderIcon(request);
       const imagePreview = iconElement.querySelector('.image-network-icon-preview') as HTMLImageElement;
 
       assert.instanceOf(iconElement, HTMLDivElement);
@@ -212,13 +194,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Fetch);
       request.mimeType = 'text/html';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-document.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-document', iconImage);
     });
 
     it('mime win: show generic icon for preflight-text', async () => {
@@ -228,13 +206,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Preflight);
       request.mimeType = 'text/plain';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-generic.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-generic', iconImage);
     });
 
     it('mime win: show script icon for other-javascript)', async () => {
@@ -244,13 +218,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Other);
       request.mimeType = 'application/javascript';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-script.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-script', iconImage);
     });
 
     it('mime win: shows json icon for fetch-json', async () => {
@@ -260,13 +230,9 @@ describeWithEnvironment('panels/utils', () => {
       request.setResourceType(Common.ResourceType.resourceTypes.Fetch);
       request.mimeType = 'application/json';
 
-      const iconElement = PanelUtils.PanelUtils.getIconForNetworkRequest(request);
-
-      const iconStyle = iconElement.style;
-      const indexOfIconImage = iconStyle.webkitMaskImage.indexOf('Images/') + 7;
-      const iconImage = iconStyle.webkitMaskImage.substring(indexOfIconImage);
-
-      assert.strictEqual('file-json.svg")', iconImage);
+      const iconElement = renderIcon(request);
+      const iconImage = iconElement.getAttribute('name');
+      assert.strictEqual('file-json', iconImage);
     });
   });
 });

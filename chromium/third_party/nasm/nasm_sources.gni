@@ -1,10 +1,9 @@
-# Copyright 2018 The Chromium Authors
+# Copyright (c) 2018 The Chromium Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
 # This file is created by generate_nasm_sources.py. Do not edit manually.
 
-ndisasm_sources = [ "disasm/ndisasm.c" ]
 nasmlib_sources = [
   "asm/assemble.c",
   "asm/directbl.c",
@@ -19,7 +18,6 @@ nasmlib_sources = [
   "asm/parser.c",
   "asm/pptok.c",
   "asm/pragma.c",
-  "asm/preproc-nop.c",
   "asm/preproc.c",
   "asm/quote.c",
   "asm/rdstrnum.c",
@@ -28,15 +26,13 @@ nasmlib_sources = [
   "asm/stdscan.c",
   "asm/strfunc.c",
   "asm/tokhash.c",
-  "asm/warnings.c",
   "common/common.c",
-  "disasm/disasm.c",
-  "disasm/sync.c",
   "macros/macros.c",
   "nasmlib/alloc.c",
   "nasmlib/asprintf.c",
   "nasmlib/badenum.c",
   "nasmlib/bsi.c",
+  "nasmlib/crc32.c",
   "nasmlib/crc64.c",
   "nasmlib/file.c",
   "nasmlib/filename.c",
@@ -45,6 +41,7 @@ nasmlib_sources = [
   "nasmlib/md5c.c",
   "nasmlib/mmap.c",
   "nasmlib/nctype.c",
+  "nasmlib/numstr.c",
   "nasmlib/path.c",
   "nasmlib/perfhash.c",
   "nasmlib/raa.c",
@@ -72,7 +69,6 @@ nasmlib_sources = [
   "output/outlib.c",
   "output/outmacho.c",
   "output/outobj.c",
-  "output/outrdf2.c",
   "stdlib/snprintf.c",
   "stdlib/strlcpy.c",
   "stdlib/strnlen.c",
@@ -88,5 +84,8 @@ nasmlib_sources = [
   "x86/regflags.c",
   "x86/regs.c",
   "x86/regvals.c",
+  "asm/warnings.c",
+  "asm/warnings_c.h",
+  "include/warnings.h",
 ]
 nasm_sources = [ "asm/nasm.c" ]

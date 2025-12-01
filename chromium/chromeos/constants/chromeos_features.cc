@@ -80,9 +80,6 @@ BASE_FEATURE(kDisableSystemBlur,
              "DisableSystemBlur",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// Enables the desk profiles feature.
-BASE_FEATURE(kDeskProfiles, "DeskProfiles", base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Disable idle sockets closing on memory pressure for NetworkContexts that
 // belong to Profiles. It only applies to Profiles because the goal is to
 // improve perceived performance of web browsing within the ChromeOS user
@@ -109,6 +106,11 @@ BASE_FEATURE(kEssentialSearch,
              "EssentialSearch",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
+// Feature flag used to enable external display event telemetry.
+BASE_FEATURE(kExternalDisplayEventTelemetry,
+             "ExternalDisplayEventTelemetry",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Feature flag used to gate preinstallation of the Gemini app.
 BASE_FEATURE(kGeminiAppPreinstall,
              "GeminiAppPreinstall",
@@ -123,6 +125,11 @@ BASE_FEATURE(kKioskHeartbeatsViaERP,
 BASE_FEATURE(kMagicBoostRevamp,
              "MagicBoostRevamp",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables the new Magic Boost Consent Flow For Quick Answers.
+BASE_FEATURE(kMagicBoostRevampForQuickAnswers,
+             "MagicBoostRevampForQuickAnswers",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // Controls enabling / disabling the mahi feature.
 BASE_FEATURE(kMahi, "Mahi", base::FEATURE_ENABLED_BY_DEFAULT);
@@ -163,7 +170,7 @@ BASE_FEATURE(kMahiSummarizeSelected,
 // Controls whether NotebookLM is preinstalled.
 BASE_FEATURE(kNotebookLmAppPreinstall,
              "NotebookLmAppPreinstall",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Kill switch to disable the new guest profile implementation on CrOS that is
 // consistent with desktop chrome.
@@ -316,7 +323,13 @@ const base::FeatureParam<std::string> kMicrosoft365ScopeExtensionsDomains{
 
     // The OneDrive Business domain (for the extension to match
     // https://<customer>-my.sharepoint.com).
-    "https://sharepoint.com"};
+    "https://sharepoint.com,"
+
+    // The new branding for Microsoft 365 web apps. Word, PowerPoint and Excel
+    // can be accessed under https://word.cloud.microsoft/,
+    // https://powerpoint.cloud.microsoft/ and https://excel.cloud.microsoft/
+    // respectively.
+    "https://cloud.microsoft"};
 
 // Controls whether the PWA manifest on Microsoft 365 Urls should be overridden
 // with a static PWA manifest id.
@@ -354,6 +367,23 @@ BASE_FEATURE(kFileSystemProviderCloudFileSystem,
 // Enables a content cache in CloudFileSystem for FileSystemProvider extensions.
 BASE_FEATURE(kFileSystemProviderContentCache,
              "FileSystemProviderContentCache",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Enables hiding apps disabled by SystemFeaturesDisableList policy by default
+// in user sessions.
+BASE_FEATURE(kSystemFeaturesDisableListHidden,
+             "SystemFeaturesDisableListHidden",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Enables pinning the NotebookLM preinstalled app to the shelf.
+BASE_FEATURE(kNotebookLmAppShelfPin,
+             "NotebookLmAppShelfPin",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Resets the act of pinning the NotebookLM preinstalled app to the shelf, used
+// for manual testing.
+BASE_FEATURE(kNotebookLmAppShelfPinReset,
+             "NotebookLmAppShelfPinReset",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 const char kRoundedWindowsRadius[] = "window_radius";
@@ -398,10 +428,6 @@ bool IsDataMigrationEnabled() {
   return base::FeatureList::IsEnabled(kDataMigration);
 }
 
-bool IsDeskProfilesEnabled() {
-  return base::FeatureList::IsEnabled(kDeskProfiles);
-}
-
 bool IsEssentialSearchEnabled() {
   return base::FeatureList::IsEnabled(kEssentialSearch);
 }
@@ -419,6 +445,10 @@ bool IsFileSystemProviderContentCacheEnabled() {
   return base::FeatureList::IsEnabled(kFileSystemProviderContentCache);
 }
 
+bool IsSystemFeaturesDisableListHiddenEnabled() {
+  return base::FeatureList::IsEnabled(kSystemFeaturesDisableListHidden);
+}
+
 bool IsGeminiAppPreinstallFeatureManagementEnabled() {
   return base::FeatureList::IsEnabled(kFeatureManagementGeminiAppPreinstall);
 }
@@ -429,6 +459,10 @@ bool IsGeminiAppPreinstallEnabled() {
 
 bool IsMagicBoostRevampEnabled() {
   return base::FeatureList::IsEnabled(kMagicBoostRevamp);
+}
+
+bool IsMagicBoostRevampForQuickAnswersEnabled() {
+  return base::FeatureList::IsEnabled(kMagicBoostRevampForQuickAnswers);
 }
 
 bool IsMahiEnabled() {
@@ -540,7 +574,8 @@ bool IsRoundedWindowsEnabled() {
 }
 
 bool IsSystemBlurEnabled() {
-  return !base::FeatureList::IsEnabled(kDisableSystemBlur);
+  static bool disable_blur = base::FeatureList::IsEnabled(kDisableSystemBlur);
+  return !disable_blur;
 }
 
 bool IsPkcs12ToChapsDualWriteEnabled() {

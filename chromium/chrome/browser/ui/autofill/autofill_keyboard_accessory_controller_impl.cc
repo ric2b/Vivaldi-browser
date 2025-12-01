@@ -33,10 +33,7 @@
 #include "components/autofill/core/browser/suggestions/suggestion_type.h"
 #include "components/autofill/core/browser/ui/autofill_suggestion_delegate.h"
 #include "components/autofill/core/browser/ui/popup_open_enums.h"
-#include "components/autofill/core/common/autofill_features.h"
-#include "components/password_manager/core/browser/features/password_features.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
@@ -282,23 +279,20 @@ void AutofillKeyboardAccessoryControllerImpl::AcceptSuggestion(int index) {
     // after accepting passwords.
     return;
   }
-  if (base::FeatureList::IsEnabled(
-          password_manager::features::
-              kUnifiedPasswordManagerLocalPasswordsAndroidAccessLossWarning)) {
-    Profile* profile =
-        Profile::FromBrowserContext(web_contents_->GetBrowserContext());
-    if (!access_loss_warning_bridge_) {
-      access_loss_warning_bridge_ =
-          std::make_unique<PasswordAccessLossWarningBridgeImpl>();
-    }
-    if (profile && access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
-                       profile->GetPrefs(), /*called_at_startup=*/false)) {
-      access_loss_warning_bridge_->MaybeShowAccessLossNoticeSheet(
-          profile->GetPrefs(), web_contents_->GetTopLevelNativeWindow(),
-          profile, /*called_at_startup=*/false,
-          password_manager_android_util::PasswordAccessLossWarningTriggers::
-              kKeyboardAcessoryBar);
-    }
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents_->GetBrowserContext());
+  if (!access_loss_warning_bridge_) {
+    access_loss_warning_bridge_ =
+        std::make_unique<PasswordAccessLossWarningBridgeImpl>();
+  }
+  if (profile && access_loss_warning_bridge_->ShouldShowAccessLossNoticeSheet(
+                     profile->GetPrefs(), /*called_at_startup=*/false)) {
+    access_loss_warning_bridge_->MaybeShowAccessLossNoticeSheet(
+        profile->GetPrefs(), web_contents_->GetTopLevelNativeWindow(), profile,
+        /*called_at_startup=*/false,
+        password_manager_android_util::PasswordAccessLossWarningTriggers::
+            kKeyboardAcessoryBar);
   }
 }
 
@@ -365,6 +359,7 @@ void AutofillKeyboardAccessoryControllerImpl::OnDeletionDialogClosed(
     case FillingProduct::kPlusAddresses:
     case FillingProduct::kAutofillAi:
     case FillingProduct::kLoyaltyCard:
+    case FillingProduct::kIdentityCredential:
       break;
   }
 
@@ -567,6 +562,16 @@ bool AutofillKeyboardAccessoryControllerImpl::GetRemovalConfirmationText(
             pdm->address_data_manager().GetProfileByGUID(
                 std::get<Suggestion::AutofillProfilePayload>(payload)
                     .guid.value())) {
+      // Home & Work addresses can't be deleted through the chrome UI.
+      switch (profile->record_type()) {
+        case AutofillProfile::RecordType::kAccountHome:
+        case AutofillProfile::RecordType::kAccountWork:
+          return false;
+        case AutofillProfile::RecordType::kLocalOrSyncable:
+        case AutofillProfile::RecordType::kAccount:
+          break;
+      }
+
       if (title) {
         std::u16string street_address = profile->GetRawInfo(ADDRESS_HOME_CITY);
         if (!street_address.empty()) {

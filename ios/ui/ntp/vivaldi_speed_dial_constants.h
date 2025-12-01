@@ -37,10 +37,16 @@ extern const CGSize vSpeedDialItemFaviconSizeRegularLayout;
 extern const CGSize vSpeedDialItemFaviconSizeSmallLayout;
 // Speed Dial item favicon size for layout 'Small' on tablet.
 extern const CGSize vSpeedDialItemFaviconSizeSmallLayoutTablet;
+// Speed Dial item favicon size for layout 'Icon'
+extern const CGSize vSpeedDialItemFaviconSizeIconLayout;
+// Speed Dial item favicon size for layout 'Icon' on tablet.
+extern const CGSize vSpeedDialItemFaviconSizeIconLayoutTablet;
 // Speed Dial item favicon size for layout 'List'
 extern const CGSize vSpeedDialItemFaviconSizeListLayout;
 // Speed Dial favicon corner radius
 extern const CGFloat vSpeedDialFaviconCornerRadius;
+// Speed Dial favicon corner radius for icon layout
+extern const CGFloat vSpeedDialIconLayoutFaviconCornerRadius;
 
 
 #pragma mark - COLORS
@@ -52,6 +58,8 @@ extern NSString* vNTPSpeedDialContainerbackgroundColor;
 extern NSString* vNTPSpeedDialCellBackgroundColor;
 // Color for the new tab page speed dial domain/website name text
 extern NSString* vNTPSpeedDialDomainTextColor;
+extern NSString* vNTPSpeedDialDomainTextColorDark;
+extern NSString* vNTPSpeedDialDomainTextColorLight;
 
 #pragma mark - ICONS
 // Image name for add new speed dial

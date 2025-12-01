@@ -31,6 +31,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_CSS_MATH_EXPRESSION_NODE_H_
 
 #include <optional>
+#include <unordered_map>
 
 #include "base/check_op.h"
 #include "base/containers/enum_set.h"
@@ -90,6 +91,70 @@ using CalculationResultCategorySet =
     base::EnumSet<CalculationResultCategory,
                   CalculationResultCategory::kCalcNumber,
                   CalculationResultCategory::kCalcOther>;
+
+class CSSMathType final {
+  DISALLOW_NEW();
+
+  // https://drafts.css-houdini.org/css-typed-om-1/#cssnumericvalue-base-type
+  enum BaseType : uint8_t {
+    kPercent,
+    kLength,
+    kAngle,
+    kTime,
+    kFrequency,
+    kResolution,
+    kFlex,
+    kNumTypes
+  };
+
+ public:
+  CSSMathType() = default;
+  // https://drafts.css-houdini.org/css-typed-om-1/#cssnumericvalue-create-a-type
+  CORE_EXPORT explicit CSSMathType(CalculationResultCategory category);
+
+  CSSMathType(const CSSMathType&) = default;
+  CSSMathType(CSSMathType&&) = default;
+
+  static CSSMathType InvalidType();
+
+  CORE_EXPORT bool IsValid() const;
+  CORE_EXPORT CalculationResultCategory Type() const;
+
+  friend bool operator==(const CSSMathType& lhs,
+                         const CSSMathType& rhs) = default;
+  // https://drafts.css-houdini.org/css-typed-om-1/#cssnumericvalue-add-two-types
+  CORE_EXPORT friend CSSMathType operator+(CSSMathType type1,
+                                           CSSMathType type2);
+  // https://drafts.css-houdini.org/css-typed-om-1/#cssnumericvalue-multiply-two-types
+  CORE_EXPORT friend CSSMathType operator*(CSSMathType type1,
+                                           CSSMathType type2);
+  CORE_EXPORT friend CSSMathType operator/(CSSMathType type1,
+                                           CSSMathType type2);
+  CORE_EXPORT CSSMathType operator-() const;
+
+ private:
+  using BaseTypePowers =
+      std::array<int8_t, static_cast<size_t>(BaseType::kNumTypes)>;
+  using PercentageHint = std::optional<BaseType>;
+
+  explicit CSSMathType(bool);
+  CSSMathType(BaseTypePowers types_map, PercentageHint percentage_hint);
+
+  static CalculationResultCategory BaseTypeToCalculationCategory(
+      BaseType base_type);
+  static BaseType CalculationCategoryToBaseType(
+      CalculationResultCategory catergory);
+
+  // https://drafts.css-houdini.org/css-typed-om-1/#apply-the-percent-hint
+  void ApplyHint(BaseType hint);
+
+  // To represent "failure" in terms of the spec.
+  const bool is_valid_ = true;
+  // https://drafts.css-houdini.org/css-typed-om-1/#cssnumericvalue-create-a-type
+  BaseTypePowers base_type_powers_{};
+  // https://drafts.css-houdini.org/css-typed-om-1/#cssnumericvalue-percent-hint
+  PercentageHint percentage_hint_;
+};
 
 class CORE_EXPORT CSSMathExpressionNode
     : public GarbageCollected<CSSMathExpressionNode> {
@@ -206,6 +271,15 @@ class CORE_EXPORT CSSMathExpressionNode
   // conversion* (e.g., 1px + 1em needs type conversion to resolve).
   // Returns |UnitType::kUnknown| if type conversion is required.
   virtual CSSPrimitiveValue::UnitType ResolvedUnitType() const = 0;
+
+  CSSPrimitiveValue::UnitType ResolvedUnitTypeForSimplification() const {
+    CSSPrimitiveValue::UnitType unit_type = ResolvedUnitType();
+    if (unit_type == CSSPrimitiveValue::UnitType::kInteger) {
+      return CSSPrimitiveValue::UnitType::kNumber;
+    } else {
+      return unit_type;
+    }
+  }
 
   bool IsNestedCalc() const { return is_nested_calc_; }
   void SetIsNestedCalc() { is_nested_calc_ = true; }
@@ -582,7 +656,8 @@ class CORE_EXPORT CSSMathExpressionOperation final
   // calc(0.5 * calc-size(auto, size)) is not valid syntax, but this lets the
   // animation code pass that multiplication to this function and have it turn
   // into calc-size(auto, 0.5 * size).
-  static CSSMathExpressionNode* CreateArithmeticOperationAndSimplifyCalcSize(
+  static const CSSMathExpressionNode*
+  CreateArithmeticOperationAndSimplifyCalcSize(
       const CSSMathExpressionNode* left_side,
       const CSSMathExpressionNode* right_side,
       CSSMathOperator op);
@@ -590,6 +665,9 @@ class CORE_EXPORT CSSMathExpressionOperation final
   static CSSMathExpressionNode* CreateSignRelatedFunction(
       Operands&& operands,
       CSSValueID function_id);
+
+  static CSSMathExpressionNode* CreateInvertFunction(
+      const CSSMathExpressionNode* operand);
 
   static CSSMathExpressionNode* CreateCalcSizeOperation(
       const CSSMathExpressionNode* left_side,
@@ -652,6 +730,7 @@ class CORE_EXPORT CSSMathExpressionOperation final
            operator_ == CSSMathOperator::kMediaProgress ||
            operator_ == CSSMathOperator::kContainerProgress;
   }
+  bool IsInvert() const { return operator_ == CSSMathOperator::kInvert; }
 
   // TODO(crbug.com/1284199): Check other math functions too.
   bool IsMathFunction() const final {

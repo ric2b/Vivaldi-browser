@@ -57,6 +57,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyWithInvalidCodeSnippetIDTest, reporter, co
                                    CtsEnforcement::kApiLevel_202404) {
     SkArenaAlloc arena{256};
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
+    const Caps* caps = context->priv().caps();
 
     // A builder without any data is invalid. The Builder and the PaintParamKeys can include
     // invalid IDs without themselves becoming invalid. Normally adding an invalid ID triggers an
@@ -79,7 +80,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyWithInvalidCodeSnippetIDTest, reporter, co
                                  (int32_t) BuiltInCodeSnippetID::kFixedBlend_Src};
     SkSpan<const int32_t> invalidKeySpan{invalidKeyData, std::size(invalidKeyData)*sizeof(int32_t)};
     const PaintParamsKey* fakeKey = reinterpret_cast<const PaintParamsKey*>(&invalidKeySpan);
-    REPORTER_ASSERT(reporter, fakeKey->getRootNodes(dict, &arena).empty());
+    REPORTER_ASSERT(reporter, fakeKey->getRootNodes(caps, dict, &arena, 0).empty());
 }
 
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyEqualityChecksSnippetID, reporter, context,
@@ -101,19 +102,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(KeyEqualityChecksSnippetID, reporter, context
 DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderInfoDetectsFixedFunctionBlend, reporter, context,
                                    CtsEnforcement::kApiLevel_202404) {
     ShaderCodeDictionary* dict = context->priv().shaderCodeDictionary();
-
-    // For determining the DstReadStrategy, pass in reasonable render target texture properties.
     const Caps* caps = context->priv().caps();
-
-    // Use reasonable render target texture information to query Caps for the DstReadStrategy to use
-    // should a dst read be required by any of the paints encountered.
-    // TODO(b/390458117): Once the TextureInfo argument is removed from getDstReadStrategy, this is
-    // no longer necessary.
-    DstReadStrategy dstReadStrategy = caps->getDstReadStrategy(
-            caps->getDefaultSampledTextureInfo(SkColorType::kRGBA_8888_SkColorType,
-                                               skgpu::Mipmapped::kNo,
-                                               skgpu::Protected::kNo,
-                                               skgpu::Renderable::kYes));
 
     for (int bm = 0; bm <= (int) SkBlendMode::kLastCoeffMode; ++bm) {
         PaintParamsKeyBuilder builder(dict);
@@ -124,7 +113,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderInfoDetectsFixedFunctionBlend, reporter
 
         const RenderStep* renderStep = &context->priv().rendererProvider()->nonAABounds()->step(0);
         bool dstReadRequired =
-                IsDstReadRequired(caps, static_cast<SkBlendMode>(bm), renderStep->coverage());
+                !CanUseHardwareBlending(caps, static_cast<SkBlendMode>(bm), renderStep->coverage());
 
         // ShaderInfo expects to receive a concrete determination of dstReadStrategy based upon
         // whether a dst read is needed. Therefore, we need to decide whether to pass in the
@@ -137,7 +126,7 @@ DEF_GRAPHITE_TEST_FOR_ALL_CONTEXTS(ShaderInfoDetectsFixedFunctionBlend, reporter
                                  paintID,
                                  /*useStorageBuffers=*/false,
                                  skgpu::Swizzle::RGBA(),
-                                 dstReadRequired ? dstReadStrategy
+                                 dstReadRequired ? caps->getDstReadStrategy()
                                                  : DstReadStrategy::kNoneRequired);
 
         SkBlendMode expectedBM = static_cast<SkBlendMode>(bm);

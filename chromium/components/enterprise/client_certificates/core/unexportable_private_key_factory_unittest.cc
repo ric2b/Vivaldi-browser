@@ -24,6 +24,8 @@ void ValidatePrivateKey(scoped_refptr<PrivateKey> key,
   ASSERT_TRUE(loaded_key);
   EXPECT_NE(key, loaded_key);
   EXPECT_EQ(key->GetAlgorithm(), loaded_key->GetAlgorithm());
+  EXPECT_EQ(key->GetSource(), loaded_key->GetSource());
+  EXPECT_EQ(key->GetSource(), PrivateKeySource::kUnexportableKey);
   ASSERT_THAT(key->GetSubjectPublicKeyInfo(),
               testing::ElementsAreArray(loaded_key->GetSubjectPublicKeyInfo()));
   ASSERT_TRUE(key->GetSSLPrivateKey());

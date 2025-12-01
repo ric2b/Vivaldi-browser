@@ -34,16 +34,16 @@ public class AppHeaderStateUnitTest {
     }
 
     @Test
-    public void testWithTopPadding() {
-        // Top padding: 2
+    public void testWithTopOffset() {
+        // Top offset: 2
         // Left padding: 10
         // Right padding: 20
-        // Height: 50
+        // Caption controls height: 48
         var appHeader = new AppHeaderState(new Rect(0, 0, 100, 50), new Rect(10, 2, 80, 50), true);
         assertTrue("AppHeaderState is valid.", appHeader.isValid());
         assertEquals("Left padding is wrong.", 10, appHeader.getLeftPadding());
         assertEquals("Right padding is wrong.", 20, appHeader.getRightPadding());
-        assertEquals("Height is wrong.", 48, appHeader.getAppHeaderHeight());
+        assertEquals("Height is wrong.", 50, appHeader.getAppHeaderHeight());
         assertTrue("AppHeaderState should be in DW mode.", appHeader.isInDesktopWindow());
     }
 
@@ -98,11 +98,11 @@ public class AppHeaderStateUnitTest {
                 "isInDesktopWindow make the 2 state different.",
                 new AppHeaderState(new Rect(), new Rect(), true),
                 new AppHeaderState(new Rect(), new Rect(), false));
-
         assertNotEquals(
                 "isInDesktopWindow make the 2 state different.",
                 new AppHeaderState(new Rect(0, 0, 10, 10), new Rect(), true),
                 new AppHeaderState(new Rect(0, 0, 10, 10), new Rect(), false));
+
         assertNotEquals(
                 "widestUnoccludedRects are different.",
                 new AppHeaderState(new Rect(0, 0, 10, 10), new Rect(0, 0, 1, 1), true),

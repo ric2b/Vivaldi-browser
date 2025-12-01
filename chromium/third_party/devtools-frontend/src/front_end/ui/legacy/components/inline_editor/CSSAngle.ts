@@ -1,13 +1,14 @@
 // Copyright (c) 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import './CSSAngleEditor.js';
 import './CSSAngleSwatch.js';
 
 import * as Lit from '../../../lit/lit.js';
 
-import cssAngleStylesRaw from './cssAngle.css.js';
+import cssAngleStyles from './cssAngle.css.js';
 import {
   type Angle,
   AngleUnit,
@@ -18,10 +19,6 @@ import {
   roundAngleByUnit,
 } from './CSSAngleUtils.js';
 import {ValueChangedEvent} from './InlineEditorUtils.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const cssAngleStyles = new CSSStyleSheet();
-cssAngleStyles.replaceSync(cssAngleStylesRaw.cssText);
 
 const {render, html} = Lit;
 const styleMap = Lit.Directives.styleMap;
@@ -74,10 +71,6 @@ export class CSSAngle extends HTMLElement {
   private popoverStyleTop = '';
   private popoverStyleLeft = '';
   private onMinifyingAction = this.minify.bind(this);
-
-  connectedCallback(): void {
-    this.shadow.adoptedStyleSheets = [cssAngleStyles];
-  }
 
   set data(data: CSSAngleData) {
     const parsedResult = parseText(data.angleText);
@@ -230,6 +223,7 @@ export class CSSAngle extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
+      <style>${cssAngleStyles}</style>
       <div class="css-angle" @focusout=${this.minify} @keydown=${this.onKeydown} tabindex="-1">
         <div class="preview">
           <devtools-css-angle-swatch

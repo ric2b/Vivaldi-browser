@@ -26,6 +26,8 @@ std::string_view GetAISessionTypeName(AIMetrics::AISessionType session_type) {
       return "Translator";
     case AIMetrics::AISessionType::kLanguageDetector:
       return "LanguageDetector";
+    case AIMetrics::AISessionType::kProofreader:
+      return "Proofreader";
   }
   NOTREACHED();
 }
@@ -38,7 +40,7 @@ std::string AIMetrics::GetAIAPIUsageMetricName(AISessionType session_type) {
 }
 
 // static
-std::string AIMetrics::GetAIAvailabilityMetricName(AISessionType session_type) {
+std::string AIMetrics::GetAvailabilityMetricName(AISessionType session_type) {
   return base::StrCat(
       {"AI.", GetAISessionTypeName(session_type), ".AvailabilityV2"});
 }

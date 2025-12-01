@@ -213,15 +213,13 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("FirstSuggestion")
                         .setSubLabel("")
-                        .setItemTag("")
-                        .setSuggestionType(SuggestionType.AUTOCOMPLETE_ENTRY)
+                        .setSuggestionType(SuggestionType.LOYALTY_CARD_ENTRY)
                         .setFeatureForIph("")
                         .build();
         AutofillSuggestion suggestion2 =
                 new AutofillSuggestion.Builder()
                         .setLabel("SecondSuggestion")
                         .setSubLabel("")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.AUTOCOMPLETE_ENTRY)
                         .setFeatureForIph("")
                         .build();
@@ -239,9 +237,11 @@ public class KeyboardAccessoryControllerTest {
                 is(R.string.password_generation_accessory_button));
         assertThat(mModel.get(BAR_ITEMS).get(1), instanceOf(AutofillBarItem.class));
         AutofillBarItem autofillBarItem1 = (AutofillBarItem) mModel.get(BAR_ITEMS).get(1);
+        assertThat(autofillBarItem1.getViewType(), is(BarItem.Type.LOYALTY_CARD_SUGGESTION));
         assertThat(autofillBarItem1.getSuggestion(), is(suggestion1));
         assertThat(mModel.get(BAR_ITEMS).get(2), instanceOf(AutofillBarItem.class));
         AutofillBarItem autofillBarItem2 = (AutofillBarItem) mModel.get(BAR_ITEMS).get(2);
+        assertThat(autofillBarItem2.getViewType(), is(BarItem.Type.SUGGESTION));
         assertThat(autofillBarItem2.getSuggestion(), is(suggestion2));
         assertThat(mModel.get(BAR_ITEMS).get(3).getAction(), is(credManAction));
         assertThat(mModel.get(BAR_ITEMS).get(3).getCaptionId(), is(R.string.select_passkey));
@@ -319,7 +319,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("Suggestion")
                         .setSubLabel("")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.AUTOCOMPLETE_ENTRY)
                         .setFeatureForIph("")
                         .build();
@@ -369,7 +368,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("John")
                         .setSubLabel("Main Str")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.ADDRESS_ENTRY)
                         .setFeatureForIph("")
                         .build();
@@ -394,7 +392,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("John")
                         .setSubLabel("4828 ****")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.CREDIT_CARD_ENTRY)
                         .setFeatureForIph("")
                         .build();
@@ -419,7 +416,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("John")
                         .setSubLabel("4828 ****")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.CREDIT_CARD_ENTRY)
                         .setFeatureForIph(
                                 FeatureConstants.KEYBOARD_ACCESSORY_PAYMENT_VIRTUAL_CARD_FEATURE)
@@ -447,7 +443,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("John")
                         .setSubLabel("****")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.PASSWORD_ENTRY)
                         .setFeatureForIph("")
                         .build();
@@ -455,7 +450,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("Eva")
                         .setSubLabel("*******")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.PASSWORD_ENTRY)
                         .setFeatureForIph("")
                         .build();
@@ -480,7 +474,6 @@ public class KeyboardAccessoryControllerTest {
                 new AutofillSuggestion.Builder()
                         .setLabel("John")
                         .setSubLabel("Man Str")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.ADDRESS_ENTRY)
                         .setFeatureForIph(
                                 FeatureConstants

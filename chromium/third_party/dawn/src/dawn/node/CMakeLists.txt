@@ -90,6 +90,8 @@ add_subdirectory(binding)
 add_subdirectory(interop)
 
 add_library(dawn_node SHARED
+    "ManualConstructors.cpp"
+    "ManualConstructors.h"
     "Module.cpp"
 )
 common_compile_options(dawn_node)
@@ -100,7 +102,7 @@ set_target_properties(dawn_node PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
     RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
     LIBRARY_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}"
-    CXX_STANDARD 17
+    CXX_STANDARD 20
 )
 target_link_libraries(dawn_node dawn_node_binding dawn_node_interop dawn_native dawncpp dawn_proc
                       libtint)

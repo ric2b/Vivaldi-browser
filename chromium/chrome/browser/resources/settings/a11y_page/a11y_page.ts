@@ -21,7 +21,6 @@ import '../settings_page/settings_subpage.js';
 // <if expr="is_win or is_linux or is_macosx">
 import './ax_annotations_section.js';
 // </if>
-
 // <if expr="is_win or is_macosx">
 import './live_caption_section.js';
 
@@ -119,6 +118,16 @@ export class SettingsA11yPageElement extends SettingsA11yPageElementBase {
         value: false,
       },
 
+      /**
+       * Whether to show the AxTreeFixing subpage.
+       */
+      showAxTreeFixingSection_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean('axTreeFixingEnabled');
+        },
+      },
+
       // <if expr="is_win or is_linux or is_macosx">
       /**
        * Whether to show the AxAnnotations subpage.
@@ -170,14 +179,6 @@ export class SettingsA11yPageElement extends SettingsA11yPageElementBase {
 
       // <if expr="not is_chromeos">
 
-      /** Whether the toast refinements feature is enabled. */
-      isToastRefinementsEnabled_: {
-        type: Boolean,
-        value: () => {
-          return loadTimeData.getBoolean('enableToastRefinements');
-        },
-      },
-
       /** Valid toast alert level option. */
       toastAlertLevelEnum_: {
         type: Object,
@@ -196,22 +197,22 @@ export class SettingsA11yPageElement extends SettingsA11yPageElementBase {
   private browserProxy_: AccessibilityBrowserProxy =
       AccessibilityBrowserProxyImpl.getInstance();
 
-  currentRoute: Route;
+  declare currentRoute: Route;
   // <if expr="not is_chromeos">
-  languages: LanguagesModel;
-  languageHelper: LanguageHelper;
+  declare languages: LanguagesModel;
+  declare languageHelper: LanguageHelper;
 
-  private enableLiveCaption_: boolean;
-  private numericUncheckedToastAlertValues_: ToastAlertLevel[];
-  private isToastRefinementsEnabled_: boolean;
+  declare private enableLiveCaption_: boolean;
+  declare private numericUncheckedToastAlertValues_: ToastAlertLevel[];
   // </if>
 
-  private focusConfig_: FocusConfig;
-  private captionSettingsOpensExternally_: boolean;
-  private hasScreenReader_: boolean;
-  private showOverscrollHistoryNavigationToggle_: boolean;
+  declare private focusConfig_: FocusConfig;
+  declare private captionSettingsOpensExternally_: boolean;
+  declare private hasScreenReader_: boolean;
+  declare private showOverscrollHistoryNavigationToggle_: boolean;
+  declare private showAxTreeFixingSection_: boolean;
   // <if expr="is_win or is_linux or is_macosx">
-  private showAxAnnotationsSection_: boolean;
+  declare private showAxAnnotationsSection_: boolean;
   // </if>
 
   override connectedCallback() {

@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "extensions/browser/script_executor.h"
+
 #include <string>
 
 #include "base/json/json_writer.h"
@@ -10,7 +12,6 @@
 #include "base/test/values_test_util.h"
 #include "base/values.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -19,8 +20,8 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "extensions/browser/extension_api_frame_id_map.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/script_executor.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/mojom/css_origin.mojom-shared.h"
 #include "extensions/common/mojom/host_id.mojom.h"
@@ -83,7 +84,7 @@ class ScriptExecutorBrowserTest : public ExtensionBrowserTest {
         ExtensionBuilder("extension")
             .AddHostPermission(host_permission)
             .Build();
-    extension_service()->AddExtension(extension.get());
+    extension_registrar()->AddExtension(extension);
     EXPECT_TRUE(
         extension_registry()->enabled_extensions().GetByID(extension->id()));
     return extension.get();
@@ -286,7 +287,7 @@ IN_PROC_BROWSER_TEST_F(ScriptExecutorBrowserTest, PromisesResolve) {
   {
     // Inject two pieces of code. They each evaluate to a promise. The second,
     // `kCode2`, evaluates to a promise that resolves immediately, and then
-    // asynchronously resovles the promise from the first, `kCode1`, which
+    // asynchronously resolves the promise from the first, `kCode1`, which
     // changes the title of the page.
     // This guarantees that the renderer code properly waits for *all* results
     // to resolve, and not simply the last one.

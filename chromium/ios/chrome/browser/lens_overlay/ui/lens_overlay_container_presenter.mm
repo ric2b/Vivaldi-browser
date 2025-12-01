@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_container_presenter.h"
 
+#import "base/ios/block_types.h"
 #import "base/memory/raw_ptr.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
 #import "ios/chrome/app/profile/profile_state.h"
@@ -13,13 +14,18 @@
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
+#import "ios/chrome/common/ui/util/constraints_ui_util.h"
 
 namespace {
 
-// The duration of the dismiss animation when exiting the selection UI.
-const CGFloat kSelectionViewDismissAnimationDuration = 0.2f;
+// The duration of the animation when exiting the selection UI.
+const CGFloat kSelectionViewAnimationDuration = 0.2f;
 
 }  // namespace
+
+@interface LensOverlayContainerPresenter () <LensOverlayContainerDelegate>
+
+@end
 
 @implementation LensOverlayContainerPresenter {
   // The controller on which to present the container.
@@ -30,10 +36,17 @@ const CGFloat kSelectionViewDismissAnimationDuration = 0.2f;
 
   /// Forces the device orientation in portrait mode.
   std::unique_ptr<ScopedForcePortraitOrientation> _scopedForceOrientation;
+
+  // The top constraint for the controller.
+  NSLayoutConstraint* _topConstraint;
+
+  // Block to be called when the container is added to a view hierarchy.
+  ProceduralBlock _callWhenContainerAppear;
 }
 
 - (BOOL)isLensOverlayVisible {
-  return _containerViewController.presentingViewController != nil;
+  return _containerViewController.isViewLoaded &&
+         _containerViewController.view.window != nil;
 }
 
 - (instancetype)initWithBaseViewController:(UIViewController*)baseViewController
@@ -50,7 +63,7 @@ const CGFloat kSelectionViewDismissAnimationDuration = 0.2f;
 
 - (void)presentContainerAnimated:(BOOL)animated
                       sceneState:(SceneState*)sceneState
-                      completion:(void (^)())completion {
+                      completion:(void (^)(void))completion {
   if (!_baseViewController || !_containerViewController) {
     if (completion) {
       completion();
@@ -58,6 +71,9 @@ const CGFloat kSelectionViewDismissAnimationDuration = 0.2f;
     return;
   }
 
+  _callWhenContainerAppear = completion;
+
+  _containerViewController.delegate = self;
   AppState* appState = sceneState.profileState.appState;
   ProfileIOS* profile = sceneState.profileState.profile;
   CHECK(profile, kLensOverlayNotFatalUntil);
@@ -66,51 +82,94 @@ const CGFloat kSelectionViewDismissAnimationDuration = 0.2f;
     _scopedForceOrientation = ForcePortraitOrientationOnIphone(appState);
   }
 
-  _containerViewController.modalPresentationStyle =
-      UIModalPresentationOverCurrentContext;
-  _containerViewController.modalTransitionStyle =
-      UIModalTransitionStyleCrossDissolve;
+  [self.delegate lensOverlayContainerPresenterWillBeginPresentation:self];
 
-  UIViewController* presentingBase = _baseViewController;
+  [_baseViewController.view endEditing:YES];
+  [_baseViewController.view addSubview:_containerViewController.view];
+  [_baseViewController addChildViewController:_containerViewController];
+  _containerViewController.view.translatesAutoresizingMaskIntoConstraints = NO;
+  NSDirectionalEdgeInsets insets =
+      [self.delegate lensOverlayContainerPresenterInsetsForPresentation:self];
 
-  if (_baseViewController.presentedViewController &&
-      !_baseViewController.presentedViewController.isBeingDismissed) {
-    presentingBase = _baseViewController.presentedViewController;
+  AddSameConstraintsToSides(
+      _containerViewController.view, _baseViewController.view,
+      LayoutSides::kLeading | LayoutSides::kBottom | LayoutSides::kTrailing);
+  _topConstraint = [_containerViewController.view.topAnchor
+      constraintEqualToAnchor:_baseViewController.view.topAnchor
+                     constant:insets.top];
+  [NSLayoutConstraint activateConstraints:@[ _topConstraint ]];
+
+  [_containerViewController didMoveToParentViewController:_baseViewController];
+  _containerViewController.selectionViewController.view.alpha = 1;
+
+  if (!animated) {
+    return;
   }
 
-  [presentingBase presentViewController:_containerViewController
-                               animated:animated
-                             completion:completion];
+  _containerViewController.view.alpha = 0;
+  __weak UIViewController* weakContainer = _containerViewController;
+  [UIView animateWithDuration:kSelectionViewAnimationDuration
+                   animations:^{
+                     weakContainer.view.alpha = 1.0;
+                   }
+                   completion:nil];
 }
 
 - (void)dismissContainerAnimated:(BOOL)animated
                       completion:(void (^)())completion {
-  if (!_containerViewController.presentingViewController) {
+  _scopedForceOrientation.reset();
+  _containerViewController.delegate = nil;
+  [self.delegate lensOverlayContainerPresenterWillDismissPresentation:self];
+  // If the container is not attached, directly call completion.
+  if (!_containerViewController.view.superview) {
     if (completion) {
-      _scopedForceOrientation.reset();
       completion();
     }
     return;
   }
 
-  _scopedForceOrientation.reset();
-  [_containerViewController.presentingViewController
-      dismissViewControllerAnimated:animated
-                         completion:completion];
+  __weak UIViewController* weakContainer = _containerViewController;
+  auto executeCleanup = ^{
+    [weakContainer.view removeFromSuperview];
+    [weakContainer removeFromParentViewController];
+    if (completion) {
+      completion();
+    }
+  };
+
+  if (!animated) {
+    executeCleanup();
+    return;
+  }
+
+  [self fadeSelectionUIWithCompletion:executeCleanup];
 }
 
 - (void)fadeSelectionUIWithCompletion:(void (^)())completion {
-  __weak UIViewController* weakContainer = _containerViewController;
+  [_containerViewController
+      fadeSelectionUIWithDuration:kSelectionViewAnimationDuration
+                       completion:completion];
+}
 
-  [UIView animateWithDuration:kSelectionViewDismissAnimationDuration
-      animations:^{
-        weakContainer.view.alpha = 0;
-      }
-      completion:^(BOOL success) {
-        if (completion) {
-          completion();
-        }
-      }];
+#pragma mark - LensOverlayContainerDelegate
+
+- (void)lensOverlayContainerDidAppear:(LensOverlayContainerViewController*)
+                                          lensOverlayContainerViewController
+                             animated:(BOOL)animated {
+  if (_callWhenContainerAppear) {
+    _callWhenContainerAppear();
+    _callWhenContainerAppear = nil;
+  }
+  [self.delegate lensOverlayContainerPresenterDidCompletePresentation:self
+                                                             animated:animated];
+}
+
+- (void)lensOverlayContainerDidChangeSizeClass:
+    (LensOverlayContainerViewController*)lensOverlayContainerViewController {
+  NSDirectionalEdgeInsets insets =
+      [self.delegate lensOverlayContainerPresenterInsetsForPresentation:self];
+  _topConstraint.constant = insets.top;
+  [self.delegate lensOverlayContainerPresenterDidReadjustPresentation:self];
 }
 
 @end

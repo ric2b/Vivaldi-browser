@@ -11,6 +11,8 @@ shown first, followed by targets with one dep that needs annotation, etc.
 
 import argparse
 import collections
+import csv
+import datetime
 import json
 import pathlib
 import re
@@ -42,6 +44,9 @@ _IGNORED_CLASSES_RE = [
     # The target boundary_interface_java sets chromium_code=false in
     # //android_webview/support_library/boundary_interfaces/BUILD.gn.
     r'org.chromium.support_lib_boundary.*',
+    # False positive, version used in Chrome is @NullMarked; Cronet version
+    # is not marked.
+    r'org.chromium.net.ConnectivityManagerShim',
 ]
 
 
@@ -60,14 +65,14 @@ def gen_build_target_graph(out_dir: pathlib.Path, include_testonly: bool,
         for target, info in data['targets'].items():
             if not info['testonly']:
                 continue
-        if '__' in target:
-            target = target.split('__')[0]
-        skip.add(target)
+            # If it exists, it should always be True.
+            assert info['testonly'], f'{target} has false testonly value.'
+            skip.add(target)
     for target, info in data['targets'].items():
-        if '__' in target:
-            target = target.split('__')[0]
         if target in skip:
             continue
+        if '__' in target:
+            target = target.split('__')[0]
         for dep in info['deps']:
             if '__' in dep:
                 dep = dep.split('__')[0]
@@ -102,6 +107,9 @@ def main():
         type=pathlib.Path,
         help='Used to generate project.json in the outdir and use it for the '
         'target graph. Defaults to out/Debug.')
+    parser.add_argument('--csv',
+                        type=pathlib.Path,
+                        help='Also output a .csv file for further processing')
     parser.add_argument(
         '-v',
         '--verbose',
@@ -178,7 +186,7 @@ def main():
             if '__' in t:
                 t = t.split('__')[0]
             # Skip these jni ones, not interesting.
-            if 'jni_headers_java' in t:
+            if 'jni_headers_java' in t or 'jni_java' in t:
                 continue
             if t in skipped_targets:
                 continue
@@ -272,6 +280,19 @@ For the status prefix:[A B C] <target-name>:
 this target.
 - C (shows up only with -v and -a) is the number of unmarked targets that this \
 target depends on.''')
+
+    if args.csv:
+        timestamp = datetime.datetime.now(datetime.UTC).timestamp()
+        print(f"Writing csv to {args.csv}")
+        with open(args.csv, 'w') as csv_output_file:
+            csv_writer = csv.writer(csv_output_file)
+            for t in targets_list:
+                status = [
+                    t[2:], targets_num_unmarked[t],
+                    len(targets_unmarked_dependents[t]),
+                    len(targets_unmarked_deps[t]), timestamp
+                ]
+                csv_writer.writerow(status)
 
 
 if __name__ == '__main__':

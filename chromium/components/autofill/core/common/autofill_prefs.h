@@ -69,6 +69,12 @@ inline constexpr char kAutofillPaymentCardBenefits[] =
 // Boolean that is true if Autofill is enabled and allowed to save profile data.
 // Do not get/set the value of this pref directly. Use provided getter/setter.
 inline constexpr char kAutofillProfileEnabled[] = "autofill.profile_enabled";
+// To simplify the rollout of `kAutofillDeduplicateAccountAddresses`,
+// deduplication can be run a second time per milestone for users enrolled in
+// the experiment. This pref tracks whether deduplication was run a second time.
+// TODO(crbug.com/357074792): Remove after the rollout finished.
+inline constexpr char kAutofillRanExtraDeduplication[] =
+    "autofill.ran_extra_deduplication";
 // The opt-ins for Sync Transport features for each client.
 inline constexpr char kAutofillSyncTransportOptIn[] =
     "autofill.sync_transport_opt_ins";
@@ -83,6 +89,12 @@ inline constexpr char kAutofillUploadEncodingSeed[] =
 // via a 10-bit modulus) to an integer bit-field where each bit denotes whether
 // or not a given vote upload event has occurred.
 inline constexpr char kAutofillVoteUploadEvents[] = "autofill.upload_events";
+// Dictionary pref used to track which secondary form signature vote uploads
+// have been performed. Each entry in the dictionary maps a form signature
+// (reduced via a 10-bit modulus) to an integer bit-field where each bit denotes
+// whether or not a given vote upload event has occurred.
+inline constexpr char kAutofillVoteSecondaryFormSignatureUploadEvents[] =
+    "autofill.secondary_form_signature_upload_events";
 // Dictionary pref used to track which form signature metadata uploads have been
 // performed. Each entry in the dictionary maps a form signature (reduced
 // via a 10-bit modulus) to an integer flag that denotes whether or not a given

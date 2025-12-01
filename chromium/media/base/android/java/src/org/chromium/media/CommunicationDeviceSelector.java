@@ -4,6 +4,7 @@
 
 package org.chromium.media;
 
+import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 
 import org.chromium.base.Log;
@@ -55,8 +56,11 @@ abstract class CommunicationDeviceSelector {
     /** Gets whether the speakerphone is currently active. */
     public abstract boolean isSpeakerphoneOn();
 
-    /** Gets whether the bluetooth microphone is currently active. */
-    public abstract boolean isBluetoothMicrophoneOn();
+    /** Gets whether Bluetooth SCO is currently enabled. */
+    public abstract boolean isBluetoothScoOn();
+
+    /** Requests for Bluetooth SCO to be enabled or disabled. This request may fail. */
+    public abstract void maybeSetBluetoothScoState(boolean state);
 
     /**
      * Sets speakerphone on or off.
@@ -285,8 +289,12 @@ abstract class CommunicationDeviceSelector {
             int i = 0;
             for (int id = 0; id < devices.length; ++id) {
                 if (devices[id]) {
+                    // Device type information is not used for communication devices
                     array[i] =
-                            new AudioManagerAndroid.AudioDevice(id, DeviceHelpers.DEVICE_NAMES[id]);
+                            new AudioManagerAndroid.AudioDevice(
+                                    id,
+                                    DeviceHelpers.DEVICE_NAMES[id],
+                                    AudioDeviceInfo.TYPE_UNKNOWN);
                     list.add(DeviceHelpers.DEVICE_NAMES[id]);
                     i++;
                 }

@@ -43,6 +43,14 @@ BASE_FEATURE(kWebViewDisableSharpeningAndMSAA,
              "WebViewDisableSharpeningAndMSAA",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+// Enables draining the WebView prefetch queue (for prefetches triggered from
+// background thread) during WebView instance initialization and before
+// WebView#loadUrl().
+// TODO(crbug.com/419251646): remove for M139.
+BASE_FEATURE(kWebViewDrainPrefetchQueueDuringInit,
+             "WebViewDrainPrefetchQueueDuringInit",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 // Enable JS FileSystemAccess API.
 // This flag is set by WebView internal code based on an app's targetSdkVersion.
 // It is enabled for version B+. The default value here is not relevant, and is
@@ -89,23 +97,11 @@ BASE_FEATURE(kWebViewMuteAudio,
              "WebViewMuteAudio",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-// Only allow extra headers added via loadUrl() to be sent to the original
-// origin; strip them from the request if a cross-origin redirect occurs.
-BASE_FEATURE(kWebViewExtraHeadersSameOriginOnly,
-             "WebViewExtraHeadersSameOriginOnly",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // Whether to record size of the embedding app's data directory to the UMA
 // histogram Android.WebView.AppDataDirectorySize.
 BASE_FEATURE(kWebViewRecordAppDataDirectorySize,
              "WebViewRecordAppDataDirectorySize",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Enable blocking the loading of mature sites (according to Google SafeSearch)
-// on WebViews running on supervised user accounts.
-BASE_FEATURE(kWebViewSupervisedUserSiteBlock,
-             "WebViewSupervisedUserSiteBlock",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // A Feature used for WebView variations tests. Not used in production. Please
 // do not clean up this stale feature: we intentionally keep this feature flag
@@ -166,6 +162,12 @@ BASE_FEATURE(kWebViewInvokeZoomPickerOnGSU,
 // Whether to use WebView's own Context for resource related lookups.
 BASE_FEATURE(kWebViewSeparateResourceContext,
              "WebViewSeparateResourceContext",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Whether to skip shouldInterceptRequest and other checks for prefetch
+// requests.
+BASE_FEATURE(kWebViewSkipInterceptsForPrefetch,
+             "WebViewSkipInterceptsForPrefetch",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether to use initial network state during initialization to speed up
@@ -236,29 +238,6 @@ BASE_FEATURE(kWebViewRenderDocument,
              "WebViewRenderDocument",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-// When enabled, WebView performs normal processing work for cookie request
-// headers and response headers for the shouldInterceptRequest API. However,
-// whether the app is provided the cookie jar contents is controlled by
-// WebViewInterceptedCookieHeaderReadWrite. Whether Set-Cookie headers
-// affect the cookie jar is also controlled by
-// WebViewInterceptedCookieHeaderReadWrite. When that flag is disabled,
-// set-cookie headers are ignored and the response headers passed to the
-// app remain unchanged.
-BASE_FEATURE(kWebViewInterceptedCookieHeader,
-             "WebViewInterceptedCookieHeader",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// When enabled in conjunction with WebViewInterceptedCookieHeader flag, the
-// cookie header in the request headers will be included for
-// shouldInterceptRequest. Also, the set-cookie header in the response headers
-// will be processed and stored in the cookie jar for shouldInterceptRequest.
-// When disabled while WebViewInterceptedCookieHeader is enabled, the response
-// headers passed to the app remain unchanged. Also, the set-cookie
-// header has no effect on the cookie jar.
-BASE_FEATURE(kWebViewInterceptedCookieHeaderReadWrite,
-             "WebViewInterceptedCookieHeaderReadWrite",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 // When enabled, if the developer hasn't overridden shouldInterceptRequest
 // (or provided the async version), we short circuit (return no response)
 // on the IO thread instead of calling the (empty) method on a background
@@ -275,4 +254,48 @@ BASE_FEATURE(kWebViewShortCircuitShouldInterceptRequest,
 BASE_FEATURE(kWebViewUseStartupTasksLogic,
              "WebViewUseStartupTasksLogic",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, records histograms relating to app's cache size.
+BASE_FEATURE(kWebViewRecordAppCacheHistograms,
+             "WebViewRecordAppCacheHistograms",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// When enabled, WebView changes the default value of the QUIC connection
+// timeout, it uses the value in `WebViewUpdateQuicConnectionTimeoutSeconds`
+BASE_FEATURE(kWebViewQuicConnectionTimeout,
+             "WebViewQuicConnectionTimeout",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// A parameter to change the quic connection timeout value, this value is in
+// seconds.
+const base::FeatureParam<int> kWebViewQuicConnectionTimeoutSeconds{
+    &kWebViewQuicConnectionTimeout, "WebViewQuicConnectionTimeoutSeconds", 30};
+// When enabled, instead of using the 20MiB as the HTTP cache
+// limit, derive the value from the cache quota allocated to the app by the
+// Android framework.
+//
+// Each code cache's limit will be half the value of the HTTP cache limit.
+BASE_FEATURE(kWebViewCacheSizeLimitDerivedFromAppCacheQuota,
+             "WebViewCacheSizeLimitDerivedFromAppCacheQuota",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+// The multiplier that is used to compute the cache limit from the cache quota.
+const base::FeatureParam<double> kWebViewCacheSizeLimitMultiplier{
+    &kWebViewCacheSizeLimitDerivedFromAppCacheQuota,
+    "WebViewCacheSizeLimitMultiplier", 0.5};
+
+// The minimum HTTP cache size limit
+const base::FeatureParam<int> kWebViewCacheSizeLimitMinimum{
+    &kWebViewCacheSizeLimitDerivedFromAppCacheQuota,
+    "WebViewCacheSizeLimitMinimum", 20 * 1024 * 1024};
+
+// The maximum HTTP cache size limit
+const base::FeatureParam<int> kWebViewCacheSizeLimitMaximum{
+    &kWebViewCacheSizeLimitDerivedFromAppCacheQuota,
+    "WebViewCacheSizeLimitMaximum", 320 * 1024 * 1024};
+
+// The code cache limit is this multiplier times the HTTP cache limit
+const base::FeatureParam<double> kWebViewCodeCacheSizeLimitMultiplier{
+    &kWebViewCacheSizeLimitDerivedFromAppCacheQuota,
+    "WebViewCodeCacheSizeLimitMultiplier", 0.5};
 }  // namespace android_webview::features

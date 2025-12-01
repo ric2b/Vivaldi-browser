@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja-KS">
+<translation id="1062777154504442433">さらのタブスタック</translation>
+<translation id="1625440863545383011">タブ取り除いてスタックから出す</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {タブをブックマークに入れる}
+          other {タブをブックマークに入れる}
+        }</translation>
+<translation id="2947471979790858922">これらのプライベートタブでのアクティビティは、このデバイスからほかされるで</translation>
+<translation id="3298614730029636660">スタックから出す</translation>
+<translation id="354698175756845966">スタックの色変える</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        =1 {閉じたタブは、Vivaldiメインメニューにある「最近のタブ」にあるで。プライベートタブは出えへんで。}
+        other {閉じたタブは、Vivaldiメインメニューにある「最近のタブ」にあるで。 # つのプライベートタブは出えへんで。}}</translation>
 <translation id="4871187110787939393">プライベートタブ全部閉じる？</translation>
+<translation id="5494920125229734069">全部選ぶ</translation>
+<translation id="6807841890213931603">タブ取り除いてスタックほかす</translation>
+<translation id="750227952939161636">タブスタックは、サインインしているデバイス全部で自動的に保存・更新されるで</translation>
+<translation id="7640137753339219124">スタックほかす</translation>
+<translation id="7653857400289671414">タブスタックは自動的に保存されるで</translation>
+<translation id="8440938071054361204">スタックの名前変える</translation>
+<translation id="8602902357364871325">スタック閉じる</translation>
+<translation id="8851621822786801079">スタックから取り出す</translation>
 </translationbundle>

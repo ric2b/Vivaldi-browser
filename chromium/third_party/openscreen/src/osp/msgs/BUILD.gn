@@ -17,41 +17,9 @@ openscreen_source_set("msgs") {
   public_deps = [ ":cddl_gen" ]
   deps = [ "../../third_party/tinycbor" ]
 
-  configs = [ ":msgs_internal_config" ]
+  remove_configs = [ "//build/config/compiler:chromium_code" ]
+  configs = [ "//build/config/compiler:no_chromium_code" ]
   public_configs = [ ":cddl_gen_config" ]
-}
-
-config("msgs_internal_config") {
-  cflags = [ "-Wall" ]
-
-  if (is_clang) {
-    cflags += [ "-Wno-shadow" ]
-  }
-
-  if (is_win) {
-    # On Windows, some of the libc++ reserved macros are incorrectly reported
-    # as errors.
-    cflags += [
-      "-Wno-reserved-macro-identifier",
-      "-Wno-reserved-identifier",
-      "-Wno-c++98-compat",
-      "-Wno-c++98-compat-pedantic",
-      "-Wno-old-style-cast",
-      "-Wno-covered-switch-default",
-      "-Wno-missing-prototypes",
-      "-Wno-tautological-unsigned-zero-compare",
-      "-Wno-sign-conversion",
-      "-Wno-extra-semi-stmt",
-      "-Wno-dtor-name",
-      "-Wno-switch-default",
-      "-Wno-undef",
-      "-Wno-float-equal",
-      "-Wno-unsafe-buffer-usage",
-      "-Wno-unused-macros",
-      "-Wno-newline-eof",
-      "-Wno-implicit-int-conversion",
-    ]
-  }
 }
 
 config("cddl_gen_config") {

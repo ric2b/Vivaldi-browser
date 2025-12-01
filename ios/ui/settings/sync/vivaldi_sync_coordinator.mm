@@ -355,6 +355,15 @@
                             class]]) {
     return;
   }
+  if ([self.baseNavigationController.viewControllers.lastObject
+          isKindOfClass:[VivaldiSyncSettingsViewController class]]) {
+    return;
+  }
+  if ([self.baseNavigationController.viewControllers.lastObject
+          isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+    return;
+  }
+
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
 }
 
@@ -437,6 +446,11 @@
   }
   if ([self.baseNavigationController.viewControllers.lastObject
           isKindOfClass:[VivaldiSyncLoginViewController class]]) {
+    return;
+  }
+  if ([self.baseNavigationController.viewControllers.lastObject
+          isKindOfClass:[VivaldiSyncCreateEncryptionPasswordViewController
+                            class]]) {
     return;
   }
   [self.delegate vivaldiSyncCoordinatorWasRemoved:self];
@@ -546,9 +560,8 @@
 }
 
 - (void)nextButtonPressed:(NSString*)username
-                      age:(int)age
      recoveryEmailAddress:(NSString*)recoveryEmailAddress {
-  [self.mediator storeUsername:username age:age email:recoveryEmailAddress];
+  [self.mediator storeUsername:username email:recoveryEmailAddress];
   [self showSyncCreateAccountPasswordView];
 }
 

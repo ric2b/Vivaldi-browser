@@ -13,6 +13,7 @@
 #include "include/gpu/graphite/vk/VulkanGraphiteTypes.h"
 #include "include/gpu/vk/VulkanExtensions.h"
 #include "include/gpu/vk/VulkanTypes.h"
+#include "src/gpu/SwizzlePriv.h"
 #include "src/gpu/graphite/ContextUtils.h"
 #include "src/gpu/graphite/GraphicsPipelineDesc.h"
 #include "src/gpu/graphite/GraphiteResourceKey.h"
@@ -20,8 +21,10 @@
 #include "src/gpu/graphite/RendererProvider.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/TextureInfoPriv.h"
+#include "src/gpu/graphite/vk/VulkanGraphicsPipeline.h"
 #include "src/gpu/graphite/vk/VulkanGraphiteUtils.h"
 #include "src/gpu/graphite/vk/VulkanRenderPass.h"
+#include "src/gpu/graphite/vk/VulkanResourceProvider.h"
 #include "src/gpu/graphite/vk/VulkanSharedContext.h"
 #include "src/gpu/graphite/vk/VulkanYcbcrConversion.h"
 #include "src/gpu/vk/VulkanUtilsPriv.h"
@@ -32,6 +35,84 @@
 #endif
 
 namespace skgpu::graphite {
+
+namespace {
+skgpu::UniqueKey::Domain get_pipeline_domain() {
+    static const skgpu::UniqueKey::Domain kVulkanGraphicsPipelineDomain =
+            skgpu::UniqueKey::GenerateDomain();
+
+    return kVulkanGraphicsPipelineDomain;
+}
+}  // namespace
+
+namespace {
+struct EnabledFeatures {
+    // VkPhysicalDeviceFeatures
+    bool fDualSrcBlend = false;
+    // From VkPhysicalDeviceSamplerYcbcrConversionFeatures:
+    bool fSamplerYcbcrConversion = false;
+    // From VkPhysicalDeviceFaultFeaturesEXT:
+    bool fDeviceFault = false;
+    // From VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT:
+    bool fAdvancedBlendModes = false;
+    bool fCoherentAdvancedBlendModes = false;
+    // From VK_EXT_rasterization_order_attachment_access:
+    bool fRasterizationOrderColorAttachmentAccess = false;
+};
+
+// Walk the feature chain once and extract any enabled features that Graphite cares about.
+EnabledFeatures GetEnabledFeature(const VkPhysicalDeviceFeatures2* features) {
+    EnabledFeatures enabled;
+    if (features) {
+        // Base features:
+        enabled.fDualSrcBlend = features->features.dualSrcBlend;
+
+        // Extended features:
+        const VkBaseInStructure* pNext = static_cast<const VkBaseInStructure*>(features->pNext);
+        while (pNext) {
+            switch (pNext->sType) {
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES: {
+                    const auto* feature =
+                            reinterpret_cast<const VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(
+                                    pNext);
+                    enabled.fSamplerYcbcrConversion = feature->samplerYcbcrConversion;
+                    break;
+                }
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FAULT_FEATURES_EXT: {
+                    const auto* feature =
+                            reinterpret_cast<const VkPhysicalDeviceFaultFeaturesEXT*>(pNext);
+                    enabled.fDeviceFault = feature->deviceFault;
+                    break;
+                }
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BLEND_OPERATION_ADVANCED_PROPERTIES_EXT: {
+                    const auto* feature = reinterpret_cast<
+                            const VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT*>(pNext);
+                    // The feature struct being present at all indicated advanced blend mode
+                    // support. A member of it indicates whether the device offers coherent or
+                    // noncoherent support.
+                    enabled.fAdvancedBlendModes = true;
+                    enabled.fCoherentAdvancedBlendModes =
+                            feature->advancedBlendCoherentOperations == VK_TRUE;
+                    break;
+                }
+                case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_FEATURES_EXT: {
+                    const auto* feature = reinterpret_cast<
+                            const VkPhysicalDeviceRasterizationOrderAttachmentAccessFeaturesEXT*>(
+                            pNext);
+                    enabled.fRasterizationOrderColorAttachmentAccess =
+                            feature->rasterizationOrderColorAttachmentAccess;
+                    break;
+                }
+                default:
+                    break;
+            }
+
+            pNext = pNext->pNext;
+        }
+    }
+    return enabled;
+}
+}  // namespace
 
 VulkanCaps::VulkanCaps(const ContextOptions& contextOptions,
                        const skgpu::VulkanInterface* vkInterface,
@@ -89,6 +170,8 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     VkPhysicalDeviceProperties physDevProperties;
     VULKAN_CALL(vkInterface, GetPhysicalDeviceProperties(physDev, &physDevProperties));
 
+    const EnabledFeatures enabledFeatures = GetEnabledFeature(features);
+
 #if defined(GPU_TEST_UTILS)
     this->setDeviceName(physDevProperties.deviceName);
 #endif
@@ -116,6 +199,9 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     fRequiredUniformBufferAlignment = physDevProperties.limits.minUniformBufferOffsetAlignment;
     fRequiredStorageBufferAlignment =  physDevProperties.limits.minStorageBufferOffsetAlignment;
     fRequiredTransferBufferAlignment = 4;
+
+    fMaxVaryings = std::min(physDevProperties.limits.maxVertexOutputComponents,
+                            physDevProperties.limits.maxFragmentInputComponents) / 4;
 
     // Unlike D3D, WebGPU, and Metal, the Vulkan NDC coordinate space is aligned with the top-left
     // Y-down coordinate space of the viewport.
@@ -164,10 +250,6 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
         fShouldPersistentlyMapCpuToGpuBuffers = false;
     }
 
-    if (!contextOptions.fDisableDriverCorrectnessWorkarounds) {
-        this->applyDriverCorrectnessWorkarounds(physDevProperties);
-    }
-
     if (physDevProperties.vendorID == kAMD_VkVendor) {
         // AMD advertises support for MAX_UINT vertex attributes but in reality only supports 32.
         fMaxVertexAttributes = 32;
@@ -184,28 +266,32 @@ void VulkanCaps::init(const ContextOptions& contextOptions,
     }
 #endif
 
-    // Determine whether the client enabled certain physical device features.
-    if (features) {
-        auto ycbcrFeatures =
-                skgpu::GetExtensionFeatureStruct<VkPhysicalDeviceSamplerYcbcrConversionFeatures>(
-                        *features,
-                        VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES);
-        if (ycbcrFeatures && ycbcrFeatures->samplerYcbcrConversion) {
-            fSupportsYcbcrConversion = true;
-        }
+    fSupportsYcbcrConversion = enabledFeatures.fSamplerYcbcrConversion;
+    fSupportsDeviceFaultInfo = enabledFeatures.fDeviceFault;
+
+    if (enabledFeatures.fAdvancedBlendModes) {
+        fBlendEqSupport = enabledFeatures.fCoherentAdvancedBlendModes
+                ? BlendEquationSupport::kAdvancedCoherent
+                : BlendEquationSupport::kAdvancedNoncoherent;
+        fShaderCaps->fAdvBlendEqInteraction =
+                SkSL::ShaderCaps::AdvBlendEqInteraction::kAutomatic_AdvBlendEqInteraction;
     }
 
-    if (extensions->hasExtension(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, 1)) {
-        fSupportsDeviceFaultInfo = true;
-    }
+    // Note: ARM GPUs have always been coherent, do not add a subpass self-dependency even if the
+    // application hasn't enabled this feature as it comes with a performance cost on this GPU.
+    fIsInputAttachmentReadCoherent = enabledFeatures.fRasterizationOrderColorAttachmentAccess ||
+                                     physDevProperties.vendorID == kARM_VkVendor;
 
     // TODO(skia:14639): We must force std430 array stride when using SSBOs since SPIR-V generation
     // cannot handle mixed array strides being passed into functions.
     fShaderCaps->fForceStd430ArrayLayout =
             fStorageBufferSupport && fResourceBindingReqs.fStorageBufferLayout == Layout::kStd430;
 
-    if (features && features->features.dualSrcBlend) {
-        fShaderCaps->fDualSourceBlendingSupport = true;
+    fShaderCaps->fDualSourceBlendingSupport = enabledFeatures.fDualSrcBlend;
+
+    // Note: Do not add extension/feature checks after this; driver workarounds should be done last.
+    if (!contextOptions.fDisableDriverCorrectnessWorkarounds) {
+        this->applyDriverCorrectnessWorkarounds(physDevProperties);
     }
 
     // Note that format table initialization should be performed at the end of this method to ensure
@@ -282,22 +368,89 @@ static constexpr VkFormat kDepthStencilVkFormats[] = {
     VK_FORMAT_D32_SFLOAT_S8_UINT,
 };
 
+bool VulkanCaps::isSampleCountSupported(TextureFormat format, uint8_t requestedSampleCount) const {
+    VkFormat vkFormat = TextureFormatToVkFormat(format);
+    const SupportedSampleCounts* sampleCounts;
+
+    // TODO(b/390473370): When Caps stores the format tables, the color format and depth stencil
+    // format infos will be combined and this will be simplified.
+    if (TextureFormatIsDepthOrStencil(format)) {
+        const DepthStencilFormatInfo& formatInfo = this->getDepthStencilFormatInfo(vkFormat);
+        if (!formatInfo.isDepthStencilSupported(
+                formatInfo.fFormatProperties.optimalTilingFeatures)) {
+            return false;
+        }
+        sampleCounts = &formatInfo.fSupportedSampleCounts;
+    } else {
+        const FormatInfo& formatInfo = this->getFormatInfo(vkFormat);
+        if (!formatInfo.isRenderable(VK_IMAGE_TILING_OPTIMAL, 1)) {
+            return false;
+        }
+        sampleCounts = &formatInfo.fSupportedSampleCounts;
+    }
+
+    return sampleCounts->isSampleCountSupported(requestedSampleCount);
+}
+
+TextureFormat VulkanCaps::getDepthStencilFormat(SkEnumBitMask<DepthStencilFlags> flags) const {
+    VkFormat format = fDepthStencilFlagsToFormatTable[flags.value()];
+    return VkFormatToTextureFormat(format);
+}
+
+TextureInfo VulkanCaps::getDefaultAttachmentTextureInfo(AttachmentDesc desc,
+                                                        Protected isProtected,
+                                                        Discardable discardable) const {
+    if ((isProtected == Protected::kYes && !this->protectedSupport()) ||
+         !this->isSampleCountSupported(desc.fFormat, desc.fSampleCount)) {
+        return {};
+    }
+
+    const bool isDepthStencil = TextureFormatIsDepthOrStencil(desc.fFormat);
+
+    VulkanTextureInfo info;
+    info.fSampleCount = desc.fSampleCount;
+    info.fMipmapped = Mipmapped::kNo;
+    info.fFlags = (isProtected == Protected::kYes) ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
+    info.fFormat = TextureFormatToVkFormat(desc.fFormat);
+    info.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
+
+    /**
+     * Graphite, unlike ganesh, does not require a dedicated MSAA attachment on every surface.
+     * MSAA textures now get resolved within the scope of a render pass, which can be done simply
+     * with the color attachment usage flag. So we no longer require transfer src/dst usage flags.
+     * All renderable textures in Vulkan are made with input attachment usage.
+    */
+    VkImageUsageFlags flags = isDepthStencil
+            ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+            : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    if (discardable == Discardable::kYes && fSupportsMemorylessAttachments) {
+        flags = flags | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    }
+
+    info.fImageUsageFlags = flags;
+    info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+
+    return TextureInfos::MakeVulkan(info);
+}
+
 TextureInfo VulkanCaps::getDefaultSampledTextureInfo(SkColorType ct,
                                                      Mipmapped mipmapped,
                                                      Protected isProtected,
                                                      Renderable isRenderable) const {
     VkFormat format = this->getFormatFromColorType(ct);
     const FormatInfo& formatInfo = this->getFormatInfo(format);
-    static constexpr int defaultSampleCount = 1;
+
+    static constexpr int kSingleSampled = 1;
     if ((isProtected == Protected::kYes && !this->protectedSupport()) ||
         !formatInfo.isTexturable(VK_IMAGE_TILING_OPTIMAL) ||
         (isRenderable == Renderable::kYes &&
-         !formatInfo.isRenderable(VK_IMAGE_TILING_OPTIMAL, defaultSampleCount)) ) {
+         !formatInfo.isRenderable(VK_IMAGE_TILING_OPTIMAL, kSingleSampled)) ) {
         return {};
     }
 
     VulkanTextureInfo info;
-    info.fSampleCount = defaultSampleCount;
+    info.fSampleCount = kSingleSampled;
     info.fMipmapped = mipmapped;
     info.fFlags = (isProtected == Protected::kYes) ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
     info.fFormat = format;
@@ -369,75 +522,6 @@ TextureInfo VulkanCaps::getDefaultCompressedTextureInfo(SkTextureCompressionType
     info.fImageUsageFlags = VK_IMAGE_USAGE_SAMPLED_BIT |
                             VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
                             VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-    return TextureInfos::MakeVulkan(info);
-}
-
-TextureInfo VulkanCaps::getDefaultMSAATextureInfo(const TextureInfo& singleSampledInfo,
-                                                  Discardable discardable) const {
-    if (fDefaultMSAASamples <= 1) {
-        return {};
-    }
-
-    const VkFormat singleSpecFormat =
-            TextureInfoPriv::Get<VulkanTextureInfo>(singleSampledInfo).fFormat;
-    const FormatInfo& formatInfo = this->getFormatInfo(singleSpecFormat);
-    if ((singleSampledInfo.isProtected() == Protected::kYes && !this->protectedSupport()) ||
-        !formatInfo.isRenderable(VK_IMAGE_TILING_OPTIMAL, fDefaultMSAASamples)) {
-        return {};
-    }
-
-    VulkanTextureInfo info;
-    info.fSampleCount = fDefaultMSAASamples;
-    info.fMipmapped = Mipmapped::kNo;
-    info.fFlags = (singleSampledInfo.isProtected() == Protected::kYes) ?
-            VK_IMAGE_CREATE_PROTECTED_BIT : 0;
-    info.fFormat = singleSpecFormat;
-    info.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
-
-    /**
-     * Graphite, unlike ganesh, does not require a dedicated MSAA attachment on every surface.
-     * MSAA textures now get resolved within the scope of a render pass, which can be done simply
-     * with the color attachment usage flag. So we no longer require transfer src/dst usage flags.
-    */
-    VkImageUsageFlags flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    if (discardable == Discardable::kYes && fSupportsMemorylessAttachments) {
-        flags = flags | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-    }
-
-    info.fImageUsageFlags = flags;
-    info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-
-    return TextureInfos::MakeVulkan(info);
-}
-
-TextureInfo VulkanCaps::getDefaultDepthStencilTextureInfo(SkEnumBitMask<DepthStencilFlags> flags,
-                                                          uint32_t sampleCount,
-                                                          Protected isProtected,
-                                                          Discardable discardable) const {
-    VkFormat format = this->getFormatFromDepthStencilFlags(flags);
-    const DepthStencilFormatInfo& formatInfo = this->getDepthStencilFormatInfo(format);
-    if ( (isProtected == Protected::kYes && !this->protectedSupport()) ||
-         !formatInfo.isDepthStencilSupported(formatInfo.fFormatProperties.optimalTilingFeatures) ||
-         !formatInfo.fSupportedSampleCounts.isSampleCountSupported(sampleCount)) {
-        return {};
-    }
-
-    VulkanTextureInfo info;
-    info.fSampleCount = sampleCount;
-    info.fMipmapped = Mipmapped::kNo;
-    info.fFlags = (isProtected == Protected::kYes) ? VK_IMAGE_CREATE_PROTECTED_BIT : 0;
-    info.fFormat = format;
-    info.fImageTiling = VK_IMAGE_TILING_OPTIMAL;
-    // TODO: Passing in a discardable flag to this method, and if true, add the TRANSIENT bit.
-    VkImageUsageFlags usageFlags = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    if (discardable == Discardable::kYes && fSupportsMemorylessAttachments) {
-        usageFlags = usageFlags | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
-    }
-    info.fImageUsageFlags = usageFlags;
     info.fSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     info.fAspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 
@@ -1195,7 +1279,7 @@ void VulkanCaps::FormatInfo::init(const skgpu::VulkanInterface* interface,
                                   VkPhysicalDevice physDev,
                                   const VkPhysicalDeviceProperties& properties,
                                   VkFormat format) {
-    memset(&fFormatProperties, 0, sizeof(VkFormatProperties));
+    fFormatProperties = {};
     VULKAN_CALL(interface, GetPhysicalDeviceFormatProperties(physDev, format, &fFormatProperties));
 
     if (is_renderable(fFormatProperties.optimalTilingFeatures)) {
@@ -1313,7 +1397,7 @@ void VulkanCaps::DepthStencilFormatInfo::init(const skgpu::VulkanInterface* inte
                                              VkPhysicalDevice physDev,
                                              const VkPhysicalDeviceProperties& properties,
                                              VkFormat format) {
-    memset(&fFormatProperties, 0, sizeof(VkFormatProperties));
+    fFormatProperties = {};
     VULKAN_CALL(interface, GetPhysicalDeviceFormatProperties(physDev, format, &fFormatProperties));
 
     if (this->isDepthStencilSupported(fFormatProperties.optimalTilingFeatures)) {
@@ -1324,11 +1408,6 @@ void VulkanCaps::DepthStencilFormatInfo::init(const skgpu::VulkanInterface* inte
 
 bool VulkanCaps::DepthStencilFormatInfo::isDepthStencilSupported(VkFormatFeatureFlags flags) const {
     return SkToBool(VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT & flags);
-}
-
-VkFormat VulkanCaps::getFormatFromDepthStencilFlags(const SkEnumBitMask<DepthStencilFlags>& flags)
-        const {
-    return fDepthStencilFlagsToFormatTable[flags.value()];
 }
 
 VulkanCaps::DepthStencilFormatInfo& VulkanCaps::getDepthStencilFormatInfo(VkFormat format) {
@@ -1395,7 +1474,9 @@ bool VulkanCaps::isRenderable(const TextureInfo& texInfo) const {
 
 bool VulkanCaps::isRenderable(const VulkanTextureInfo& vkInfo) const {
     const FormatInfo& info = this->getFormatInfo(vkInfo.fFormat);
-    return info.isRenderable(vkInfo.fImageTiling, vkInfo.fSampleCount);
+    // All renderable vulkan textures within graphite must also support input attachment usage
+    return info.isRenderable(vkInfo.fImageTiling, vkInfo.fSampleCount) &&
+           SkToBool(vkInfo.fImageUsageFlags & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
 }
 
 bool VulkanCaps::isStorage(const TextureInfo& texInfo) const {
@@ -1522,23 +1603,22 @@ std::pair<SkColorType, bool /*isRGBFormat*/> VulkanCaps::supportedReadPixelsColo
     return {kUnknown_SkColorType, false};
 }
 
+// 3 uint32s for the render step id, paint id, and write swizzle.
+static constexpr int kVulkanGraphicsPipelineKeyHeaderData32Count = 3;
+
 UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipelineDesc,
                                               const RenderPassDesc& renderPassDesc) const {
     UniqueKey pipelineKey;
     {
-        static const skgpu::UniqueKey::Domain kGraphicsPipelineDomain =
-            UniqueKey::GenerateDomain();
+        VulkanRenderPass::Metadata rpMetadata{renderPassDesc, /*compatibleOnly=*/true};
 
-        VulkanRenderPass::VulkanRenderPassMetaData rpMetaData {renderPassDesc};
-
-        // Reserve 3 uint32s for the render step id, paint id, and write swizzle.
-        static constexpr int kUint32sNeededForPipelineInfo = 3;
         // The uint32s needed for a RenderPass is variable number, so consult rpMetaData to
         // determine how many to reserve.
-        UniqueKey::Builder builder(&pipelineKey,
-                                   kGraphicsPipelineDomain,
-                                   kUint32sNeededForPipelineInfo + rpMetaData.fUint32DataCnt,
-                                   "GraphicsPipeline");
+        UniqueKey::Builder builder(
+                &pipelineKey,
+                get_pipeline_domain(),
+                kVulkanGraphicsPipelineKeyHeaderData32Count + rpMetadata.keySize(),
+                "GraphicsPipeline");
 
         int idx = 0;
         // Add GraphicsPipelineDesc information
@@ -1547,7 +1627,7 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
         // Add RenderPass info relevant for pipeline creation that's not captured in RenderPass keys
         builder[idx++] = renderPassDesc.fWriteSwizzle.asKey();
         // Add RenderPassDesc information
-        VulkanRenderPass::AddRenderPassInfoToKey(rpMetaData, builder, idx, /*compatibleOnly=*/true);
+        rpMetadata.addToKey(builder, idx);
 
         builder.finish();
     }
@@ -1555,12 +1635,73 @@ UniqueKey VulkanCaps::makeGraphicsPipelineKey(const GraphicsPipelineDesc& pipeli
     return pipelineKey;
 }
 
-bool VulkanCaps::serializeTextureInfo(const TextureInfo& info, SkWStream* out) const {
-    return TextureInfoPriv::Serialize<VulkanTextureInfo>(info, out);
-}
+bool VulkanCaps::extractGraphicsDescs(const UniqueKey& key,
+                                      GraphicsPipelineDesc* pipelineDesc,
+                                      RenderPassDesc* renderPassDesc,
+                                      const RendererProvider* rendererProvider) const {
+    SkASSERT(key.domain() == get_pipeline_domain());
+    SkASSERT(key.dataSize() >= 4 * kVulkanGraphicsPipelineKeyHeaderData32Count);
 
-bool VulkanCaps::deserializeTextureInfo(SkStream* stream, TextureInfo* out) const {
-    return TextureInfoPriv::Deserialize<VulkanTextureInfo>(stream, out);
+    const uint32_t* rawKeyData = key.data();
+
+    SkASSERT(RenderStep::IsValidRenderStepID(rawKeyData[0]));
+    RenderStep::RenderStepID renderStepID = static_cast<RenderStep::RenderStepID>(rawKeyData[0]);
+
+    SkDEBUGCODE(const RenderStep* renderStep = rendererProvider->lookup(renderStepID);)
+    *pipelineDesc = GraphicsPipelineDesc(renderStepID, UniquePaintParamsID(rawKeyData[1]));
+    SkASSERT(renderStep->performsShading() == pipelineDesc->paintParamsID().isValid());
+
+    *renderPassDesc = {};
+    renderPassDesc->fWriteSwizzle = SwizzleCtorAccessor::Make(rawKeyData[2] & 0xFFFF);
+
+    const uint32_t attachmentCount = rawKeyData[3] & 0xFF;
+    const uint32_t subpassCount = rawKeyData[3] >> 8;
+    SkASSERT(key.dataSize() ==
+             4 * (kVulkanGraphicsPipelineKeyHeaderData32Count + 1 + (attachmentCount + 1) / 2 + 1));
+    SkASSERT(subpassCount == 1 || subpassCount == 2);
+
+    SkASSERT(attachmentCount <= 3);
+    AttachmentDesc attachments[3] = {};
+
+    for (uint32_t i = 0; i < attachmentCount; i++) {
+        uint32_t desc = rawKeyData[4 + i / 2];
+        if (i % 2 == 0) {
+            desc &= 0xFFFF;
+        } else if (i % 2 == 1) {
+            desc >>= 16;
+        }
+
+        attachments[i].fFormat = static_cast<TextureFormat>(desc >> 8);
+        attachments[i].fLoadOp = static_cast<LoadOp>(desc >> 6 & 0x3);
+        attachments[i].fStoreOp = static_cast<StoreOp>(desc >> 4 & 0x3);
+        attachments[i].fSampleCount = desc & 0xF;
+    }
+
+    const uint32_t attachmentIndices = rawKeyData[3 + (attachmentCount + 1) / 2 + 1];
+    const uint32_t colorIndex = attachmentIndices & 0xFF;
+    const uint32_t resolveIndex = attachmentIndices >> 8 & 0xFF;
+    const uint32_t depthIndex = attachmentIndices >> 16 & 0xFF;
+
+    if (colorIndex < 3) {
+        renderPassDesc->fColorAttachment = attachments[colorIndex];
+    }
+    if (resolveIndex < 3) {
+        renderPassDesc->fColorResolveAttachment = attachments[resolveIndex];
+
+        const bool loadMSAAFromResolve = subpassCount == 2;
+        if (loadMSAAFromResolve) {
+            renderPassDesc->fColorResolveAttachment.fLoadOp = LoadOp::kLoad;
+            renderPassDesc->fColorResolveAttachment.fStoreOp = StoreOp::kStore;
+        }
+    }
+    if (depthIndex < 3) {
+        renderPassDesc->fDepthStencilAttachment = attachments[depthIndex];
+    }
+
+    renderPassDesc->fSampleCount = renderPassDesc->fColorAttachment.fSampleCount;
+    renderPassDesc->fDstReadStrategy = this->getDstReadStrategy();
+
+    return true;
 }
 
 void VulkanCaps::buildKeyForTexture(SkISize dimensions,
@@ -1631,27 +1772,13 @@ void VulkanCaps::buildKeyForTexture(SkISize dimensions,
     SkASSERT(i == num32DataCnt);
 }
 
-DstReadStrategy VulkanCaps::getDstReadStrategy(const TextureInfo& info) const {
+DstReadStrategy VulkanCaps::getDstReadStrategy() const {
     // We know the graphite Vulkan backend does not support frame buffer fetch, so make sure it is
     // not marked as supported and skip checking for it.
     SkASSERT(!this->shaderCaps()->fFBFetchSupport);
 
-    // TODO(b/383769988): Once DstReadStrategy::kReadFromInput is supported by the Vulkan backend,
-    // determine whether that strategy can be used.
-    // bool supportsInputAttachmentUsage =
-    //      GetVkUsageFlags(info) & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-// #ifdef SK_BUILD_FOR_ANDROID
-    // We expect that all Android target textures to support input attachment usage.
-    // SkASSERT(supportsInputAttachmentUsage);
-// #endif
-    // TODO(b/390458117): Add support to do this w/ MSAA textures. For now, simply default to using
-    // TextureCopy if the texture has a sample count >1.
-    // return supportsInputAttachmentUsage && info.numSamples() == 1
-    //      ? DstReadStrategy::kReadFromInput
-    //      : DstReadStrategy::kTextureCopy;
-
-    // For now, always return DstReadStrategy::kTextureCopy.
-    return DstReadStrategy::kTextureCopy;
+    // All render target textures are expected to have VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT.
+    return DstReadStrategy::kReadFromInput;
 }
 
 ImmutableSamplerInfo VulkanCaps::getImmutableSamplerInfo(const TextureInfo& textureInfo) const {

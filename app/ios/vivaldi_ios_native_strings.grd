@@ -849,14 +849,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SYNC_DEVICE_NAME_EDIT_CONFIRM_TITLE" desc="(Vivaldi) Title for Confirm button for the device name update dialog.">
         Confirm
       </message>
-      <message name="IDS_VIVALDI_USER_AGE" desc="(Vivaldi) Age field in sync account set up.">
-        Age
-      </message>
       <message name="IDS_VIVALDI_RECOVERY_EMAIL" desc="(Vivaldi) Recovery email field in sync account set up.">
         Recovery email
-      </message>
-      <message name="IDS_VIVALDI_CONFIRM_RECOVERY_EMAIL" desc="(Vivaldi) Confirm Recovery email field in sync account set up.">
-        Confirm recovery email
       </message>
       <message name="IDS_VIVALDI_CONFIRM_PASSWORD" desc="(Vivaldi) Confirm password field in sync account set up.">
         Confirm password
@@ -879,15 +873,6 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_VIVALDI_SYNC_ACCOUNT_LOCKED" desc="(Vivaldi) Error message indicating the account has been locked. ">
         Account has been locked
       </message>
-      <message name="IDS_SYNC_USER_UNDER_AGE" desc="(Vivaldi) Error indicating the user is under age.">
-        Sorry, it looks like you need to wait a little before joining our community. We require our members to be at least 16 years old to join.
-      </message>
-      <message name="IDS_SYNC_USER_INVALID_AGE" desc="(Vivaldi) Error indicating user age is not realistic.">
-        Please enter a realistic lifespan number.
-      </message>
-      <message name="IDS_SYNC_USER_AGE_EMPTY_ERROR" desc="(Vivaldi) Error indicating user age is not entered.">
-        Please provide your age.
-      </message>
       <message name="IDS_SYNC_PASSWORD_LENGTH_ERROR" desc="(Vivaldi) Error indicating entered password is not long enough.">
         Please choose a password at least 12 characters long.
       </message>
@@ -896,9 +881,6 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_SYNC_NOT_VALID_EMAIL_ERROR" desc="(Vivaldi) Error indicating entered email address is not valid.">
         Please enter a valid email address.
-      </message>
-      <message name="IDS_SYNC_EMAIL_MATCH_ERROR" desc="(Vivaldi) Error indicating entered email address do not match.">
-        Email addresses need to match.
       </message>
       <message name="IDS_SYNC_USER_EXISTS" desc="(Vivaldi) Error indicating entered username is not available.">
         This username is not available.
@@ -1368,6 +1350,12 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_AD_EXCEPTIONS_EXPANDED_DESCRIPTION_GENERIC" desc="Description for the ad and tracker blocker Why am I seeing ads section when visited page is a partner URL.">
         We have a partnership with this site and exempt ads in the search result from being blocked by default. These ads generate revenue for Vivaldi if you interact with them.
       </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_STRICT_BLOCKING_SETTING_TITLE" desc="Title for strict block setting inside ad and tracker blocker">
+        Strict Blocking
+      </message>
+      <message name="IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_STRICT_BLOCKING_SETTING_DETAIL" desc="Description for strict block setting inside ad and tracker blocker">
+        Allow blocking rules to block certain webpages.
+      </message>
       <!-- END AD AND TRACKER BLOCKER -->
       <message name="IDS_VIVALDI_BOOKMARK_EMPTY_MESSAGE" desc="Message shown on the Bookmarks screen when there are no bookmarks">
         Add your first bookmark by tapping the plus icon below
@@ -1417,6 +1405,9 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_SMALL" desc="Start page layout settings small speed dials">
         Small
+      </message>
+      <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_ICON" desc="Start page layout settings icon speed dials">
+        Icon
       </message>
       <message name="IDS_IOS_VIVALDI_START_PAGE_LAYOUT_LIST" desc="Start page layout settings list speed dials">
         List
@@ -2367,20 +2358,52 @@ locale.  The strings in this file are specific to iOS.
       </message>
       <!-- END VIVALDI TRANSLATE -->
       <!-- SEARCH ENGINE CHANGE PROMPT -->
-      <message name="IDS_IOS_SE_CHANGE_NEW_SEARCH_ENGINE_TITLE" desc="Title for the Search Engine change prompt at the app launch which is triggered only if certain criteria matched. [Length: unlimited]">
-        A new Search Engine
+      <message name="IDS_IOS_SE_PROMPT_BREAK_FREE_HEADLINE" desc="Headline for the first search engine choice prompt">
+        Break free from Big Tech
       </message>
-      <message name="IDS_IOS_SE_CHANGE_NEW_SEARCH_ENGINE_STARTPAGE_DESCRIPTION" desc="Description for the Search Engine change prompt at the app launch which is triggered only if certain criteria matched. This description is for the case when new search engine is Startpage. [Length: unlimited]">
-        To support the development of Vivaldi, we have partnered with <ph name="NEW_SEARCH_ENGINE_1">$1</ph> and set it as your new default search engine. <ph name="NEW_SEARCH_ENGINE_2">$2</ph> is a private search engine we like, and we hope you like it too.
+      <message name="IDS_IOS_SE_PROMPT_BREAK_FREE_BODY" desc="Body text encouraging users to choose an independent search engine">
+        Step away from surveillance and choose a search engine that aligns with your values:
       </message>
-      <message name="IDS_IOS_SE_CHANGE_NEW_SEARCH_ENGINE_DESCRIPTION" desc="Description for the Search Engine change prompt at the app launch which is triggered only if certain criteria matched. [Length: unlimited]">
-        To support the development of Vivaldi, we have partnered with <ph name="NEW_SEARCH_ENGINE">$1</ph> and set it as your new default search engine.
+      <message name="IDS_IOS_SE_PROMPT_SEARCH_OPTION_DUCKDUCKGO" desc="Description for DuckDuckGo search option">
+        Private. Fast. Fewer ads.
       </message>
-      <message name="IDS_IOS_SE_CHANGE_USE_NEW_ENGINE_TITLE" desc="Title for Use New Engine button on the Search Engine change prompt. [Length: unlimited]">
-        Use <ph name="NEW_SEARCH_ENGINE">$1</ph>
+      <message name="IDS_IOS_SE_PROMPT_SEARCH_OPTION_STARTPAGE" desc="Description for Startpage search option">
+        Private Google results, made in Europe
       </message>
-      <message name="IDS_IOS_SE_CHANGE_USE_OLD_ENGINE_TITLE" desc="Title for Keep using Old Engine button on the Search Engine change prompt. [Length: unlimited]">
-        Keep using <ph name="OLD_SEARCH_ENGINE">$1</ph>
+      <message name="IDS_IOS_SE_PROMPT_SEARCH_OPTION_ECOSIA" desc="Description for Ecosia search option">
+        Plant trees as you search
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_SEARCH_OPTION_QWANT" desc="Description for Qwant search option">
+        Independent search, built in France
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_CONFIRM_CHOICE_BUTTON" desc="Button label to confirm the search engine choice">
+        Confirm choice
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_NO_THANKS_BUTTON" desc="Button label to decline the prompt">
+        No thanks
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_SEARCH_SUPPORT_NOTE" desc="Note explaining how choosing a search engine supports Vivaldi">
+        By selecting one of these search engines, you support the development of Vivaldi.
+      </message>
+
+      <message name="IDS_IOS_SE_PROMPT_DONATION_HEADLINE" desc="Headline for donation request prompt after cooldown">
+        Stand with us for a better web
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_DONATION_BODY" desc="Body encouraging users to donate to support Vivaldi's mission">
+        Vivaldi is powered by our users, not Big Tech or investors. Every donation directly supports our mission for an open, private internet. Be part of the change.
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_DONATE_NOW_BUTTON" desc="Button label to proceed with donation">
+        Donate now
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_DONATION_SUPPORT_NOTE" desc="Note explaining how donations support Vivaldi's development">
+        100% of your donations will be used to fund the long-term development of Vivaldi and our fight for a better web.
+      </message>
+
+      <message name="IDS_IOS_SE_PROMPT_SECOND_CHANCE_HEADLINE" desc="Headline for follow-up search engine choice prompt">
+        An easier way to support us
+      </message>
+      <message name="IDS_IOS_SE_PROMPT_SECOND_CHANCE_BODY" desc="Body text reminding users they can support Vivaldi by choosing an independent search engine">
+        You can still support Vivaldi simply by choosing a privacy-focused, independent search engine:
       </message>
       <!-- END SEARCH ENGINE CHANGE PROMPT -->
       <message name="IDS_IOS_PANEL_PREFER_TRANSLATE_PANEL" desc="Title for the option in Settings for showing translate panel instead of dialog from web page text selection. [Length: unlimited] [iOS only]">
@@ -2456,6 +2479,14 @@ locale.  The strings in this file are specific to iOS.
         Vivaldi may earn an affiliate commission if you make a purchase after clicking some of these links. This helps support Vivaldi’s development and keeps the browser independent. Thank you for your support!
       </message>
       <!-- END NEW SPEED DIAL DIALOG -->
+      <!-- PRIVACY AND SECURITY SETTINGS -->
+      <message name="IDS_IOS_PRIVACY_BLOCK_EXTERNAL_APP" desc="Title for Block External Apps Opening Switch">
+        Don't open links in external apps
+      </message>
+      <message name="IDS_IOS_PRIVACY_BLOCK_EXTERNAL_APP_DETAIL" desc="Detail for Block External Apps Opening Switch">
+        Prefer opening pages in the browser instead of external apps
+      </message>
+      <!-- PRIVACY AND SECURITY SETTINGS -->
     </messages>
   </release>
 </grit>

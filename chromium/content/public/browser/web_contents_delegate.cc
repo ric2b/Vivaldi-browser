@@ -141,6 +141,7 @@ bool WebContentsDelegate::OnGoToEntryOffset(int offset) {
 }
 
 bool WebContentsDelegate::IsWebContentsCreationOverridden(
+    RenderFrameHost* opener,
     SiteInstance* source_site_instance,
     mojom::WindowContainerType window_container_type,
     const GURL& opener_url,
@@ -334,10 +335,6 @@ void WebContentsDelegate::Detach(WebContents* web_contents) {
 gfx::Size WebContentsDelegate::GetSizeForNewRenderView(
     WebContents* web_contents) {
   return gfx::Size();
-}
-
-bool WebContentsDelegate::IsNeverComposited(WebContents* web_contents) {
-  return false;
 }
 
 bool WebContentsDelegate::GuestSaveFrame(WebContents* guest_web_contents) {

@@ -173,20 +173,8 @@ g.test('stale')
       );
     }
 
-    const kTimeoutMS = 1000;
-    const lostDevice = await t.requestDeviceTracked(adapter);
-    const lost = await raceWithRejectOnTimeout(
-      lostDevice.lost,
-      kTimeoutMS,
-      'adapter was not stale'
-    );
-    t.expect(lost.reason === 'unknown');
-
-    // Make sure to destroy the valid device after trying to get a second one. Otherwise, the second
-    // device may fail because the adapter is put into an invalid state from the destroy.
-    if (device) {
-      device.destroy();
-    }
+    // Since the adapter is consumed now, requesting another device is not possible anymore.
+    t.shouldReject('OperationError', t.requestDeviceTracked(adapter));
   });
 
 g.test('features,unknown')
@@ -513,7 +501,7 @@ g.test('always_returns_device')
     const gpu = getGPU(t.rec);
     const adapter = await gpu.requestAdapter({
       featureLevel,
-    } as GPURequestAdapterOptions);
+    });
     if (adapter) {
       const device = await t.requestDeviceTracked(adapter);
       assert(device instanceof GPUDevice, 'requestDevice must return a device or throw');

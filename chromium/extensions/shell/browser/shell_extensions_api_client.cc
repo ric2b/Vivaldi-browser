@@ -4,22 +4,29 @@
 
 #include "extensions/shell/browser/shell_extensions_api_client.h"
 
+#include <memory>
 #include <utility>
 
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
+#include "extensions/browser/api/declarative_content/content_rules_registry.h"
 #include "extensions/browser/api/messaging/messaging_delegate.h"
 #include "extensions/shell/browser/api/feedback_private/shell_feedback_private_delegate.h"
 #include "extensions/shell/browser/delegates/shell_kiosk_delegate.h"
-#include "extensions/shell/browser/shell_app_view_guest_delegate.h"
 #include "extensions/shell/browser/shell_display_info_provider.h"
 #include "extensions/shell/browser/shell_extension_web_contents_observer.h"
 #include "extensions/shell/browser/shell_virtual_keyboard_delegate.h"
-#include "extensions/shell/browser/shell_web_view_guest_delegate.h"
 
 #if BUILDFLAG(IS_LINUX)
 #include "extensions/shell/browser/api/file_system/shell_file_system_delegate.h"
+#endif
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+#include "extensions/browser/guest_view/extensions_guest_view_manager_delegate.h"
+#include "extensions/browser/guest_view/web_view/web_view_permission_helper_delegate.h"
+#include "extensions/shell/browser/shell_app_view_guest_delegate.h"
+#include "extensions/shell/browser/shell_web_view_guest_delegate.h"
 #endif
 
 namespace extensions {
@@ -34,14 +41,27 @@ void ShellExtensionsAPIClient::AttachWebContentsHelpers(
 }
 
 #if BUILDFLAG(ENABLE_GUEST_VIEW)
-AppViewGuestDelegate* ShellExtensionsAPIClient::CreateAppViewGuestDelegate()
-    const {
-  return new ShellAppViewGuestDelegate();
+std::unique_ptr<AppViewGuestDelegate>
+ShellExtensionsAPIClient::CreateAppViewGuestDelegate() const {
+  return std::make_unique<ShellAppViewGuestDelegate>();
 }
 
-WebViewGuestDelegate* ShellExtensionsAPIClient::CreateWebViewGuestDelegate(
+std::unique_ptr<guest_view::GuestViewManagerDelegate>
+ShellExtensionsAPIClient::CreateGuestViewManagerDelegate() const {
+  return std::make_unique<ExtensionsGuestViewManagerDelegate>();
+}
+
+std::unique_ptr<WebViewGuestDelegate>
+ShellExtensionsAPIClient::CreateWebViewGuestDelegate(
     WebViewGuest* web_view_guest) const {
-  return new ShellWebViewGuestDelegate();
+  return std::make_unique<ShellWebViewGuestDelegate>();
+}
+
+std::unique_ptr<WebViewPermissionHelperDelegate>
+ShellExtensionsAPIClient::CreateWebViewPermissionHelperDelegate(
+    WebViewPermissionHelper* web_view_permission_helper) const {
+  return std::make_unique<WebViewPermissionHelperDelegate>(
+      web_view_permission_helper);
 }
 #endif  // BUILDFLAG(ENABLE_GUEST_VIEW)
 

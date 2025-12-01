@@ -9,7 +9,9 @@
 
 #include "base/base64.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "chrome/browser/enterprise/browser_management/management_service_factory.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
@@ -23,7 +25,8 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/multipart_uploader.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/resumable_uploader.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
-#include "chromeos/components/mgs/managed_guest_session_utils.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
+#include "components/enterprise/connectors/core/reporting_utils.h"
 #include "components/policy/core/common/management/management_service.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
 #include "components/safe_browsing/core/common/features.h"
@@ -31,6 +34,10 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/http/http_status_code.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/components/mgs/managed_guest_session_utils.h"
+#endif
 
 namespace safe_browsing {
 namespace {
@@ -151,8 +158,9 @@ bool CanUseAccessToken(const BinaryUploadService::Request& request,
                        Profile* profile) {
   DCHECK(profile);
   // Consumer requests never need to use the access token.
-  if (IsConsumerScanRequest(request))
+  if (IsConsumerScanRequest(request)) {
     return false;
+  }
 
   // Allow the access token to be used on unmanaged devices, but not on
   // managed devices that aren't affiliated.
@@ -290,10 +298,11 @@ void CloudBinaryUploadService::MaybeUploadForDeepScanningCallback(
 
 void CloudBinaryUploadService::QueueForDeepScanning(
     std::unique_ptr<CloudBinaryUploadService::Request> request) {
-  if (active_requests_.size() >= GetParallelActiveRequestsMax())
+  if (active_requests_.size() >= GetParallelActiveRequestsMax()) {
     request_queue_.push(std::move(request));
-  else
+  } else {
     UploadForDeepScanning(std::move(request));
+  }
 }
 
 void CloudBinaryUploadService::UploadForDeepScanning(
@@ -322,6 +331,14 @@ void CloudBinaryUploadService::PrepareRequestForUpload(Request::Id request_id) {
   if (request->IsAuthRequest()) {
     request->GetRequestData(
         base::BindOnce(&CloudBinaryUploadService::OnGetRequestData,
+                       weakptr_factory_.GetWeakPtr(), request_id));
+  } else if (!IsConsumerScanRequest(*request) &&
+             base::FeatureList::IsEnabled(
+                 safe_browsing::kLocalIpAddressInEvents)) {
+    base::ThreadPool::PostTaskAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::BindOnce(&::enterprise_connectors::GetLocalIpAddresses),
+        base::BindOnce(&CloudBinaryUploadService::OnIpAddressesFetched,
                        weakptr_factory_.GetWeakPtr(), request_id));
   } else {
     MaybeGetAccessToken(request_id);
@@ -377,6 +394,21 @@ void CloudBinaryUploadService::OnGetAccessToken(
                      weakptr_factory_.GetWeakPtr(), request_id));
 }
 
+void CloudBinaryUploadService::OnIpAddressesFetched(
+    Request::Id request_id,
+    std::vector<std::string> ip_addresses) {
+  Request* request = GetRequest(request_id);
+  if (!request) {
+    return;
+  }
+
+  for (const auto& ip_address : ip_addresses) {
+    request->add_local_ips(ip_address);
+  }
+
+  MaybeGetAccessToken(request_id);
+}
+
 void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
                                                 Result result,
                                                 Request::Data data) {
@@ -412,8 +444,9 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
   metadata = base::Base64Encode(metadata);
 
   GURL url = request->GetUrlWithParams();
-  if (!url.is_valid())
+  if (!url.is_valid()) {
     url = GetUploadUrl(IsConsumerScanRequest(*request));
+  }
   net::NetworkTrafficAnnotationTag traffic_annotation =
       GetTrafficAnnotationTag(IsConsumerScanRequest(*request));
   std::string histogram_suffix =
@@ -427,6 +460,12 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
       base::BindOnce(&CloudBinaryUploadService::OnContentUploaded,
                      weakptr_factory_.GetWeakPtr(), request_id);
   std::unique_ptr<ConnectorUploadRequest> upload_request;
+  // The downloaded file will not be available for deep scan upload due to the
+  // newly introduced download obfuscation step. We must wait for deobfuscation
+  // to complete before uploading, which is guaranteed under the pre-async
+  // upload behaviour.
+  bool force_sync_upload =
+      request->analysis_connector() == enterprise_connectors::FILE_DOWNLOADED;
   if (request->IsAuthRequest() || !data.contents.empty()) {
     upload_request = MultipartUploadRequest::CreateStringRequest(
         url_loader_factory_, url, metadata, data.contents, histogram_suffix,
@@ -439,7 +478,7 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
                   data.size, data.is_obfuscated, histogram_suffix,
                   std::move(traffic_annotation),
                   std::move(verdict_received_callback),
-                  std::move(content_uploaded_callback))
+                  std::move(content_uploaded_callback), force_sync_upload)
             : MultipartUploadRequest::CreateFileRequest(
                   url_loader_factory_, url, metadata, data.path, data.size,
                   data.is_obfuscated, histogram_suffix,
@@ -453,7 +492,7 @@ void CloudBinaryUploadService::OnGetRequestData(Request::Id request_id,
                   std::move(data.page), histogram_suffix,
                   std::move(traffic_annotation),
                   std::move(verdict_received_callback),
-                  std::move(content_uploaded_callback))
+                  std::move(content_uploaded_callback), force_sync_upload)
             : MultipartUploadRequest::CreatePageRequest(
                   url_loader_factory_, url, metadata, std::move(data.page),
                   histogram_suffix, std::move(traffic_annotation),

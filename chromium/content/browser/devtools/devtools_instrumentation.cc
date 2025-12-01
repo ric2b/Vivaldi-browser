@@ -8,6 +8,7 @@
 #include "base/feature_list.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/traced_value.h"
 #include "components/download/public/common/download_create_info.h"
 #include "components/download/public/common/download_item.h"
@@ -116,10 +117,10 @@ void DispatchToAgents(WebContents* web_contents,
     DispatchToAgents(static_cast<DevToolsAgentHostImpl*>(agent_host.get()),
                      method, std::forward<Args>(args)...);
   }
-  if (content::DevToolsAgentHost::HasFor(web_contents)) {
+  if (DevToolsAgentHost::HasFor(web_contents)) {
     DispatchToAgents(
         static_cast<DevToolsAgentHostImpl*>(
-            content::DevToolsAgentHost::GetOrCreateFor(web_contents).get()),
+            DevToolsAgentHost::GetOrCreateFor(web_contents).get()),
         method, std::forward<Args>(args)...);
   }
 }
@@ -728,7 +729,7 @@ void WillSwapFrameTreeNode(FrameTreeNode& old_node, FrameTreeNode& new_node) {
 void OnFrameTreeNodeDestroyed(FrameTreeNode& frame_tree_node) {
   // If the child frame is an OOPIF, we emit Page.frameDetached event which
   // otherwise might be lost because the OOPIF target is being destroyed.
-  content::RenderFrameHostImpl* parent = frame_tree_node.parent();
+  RenderFrameHostImpl* parent = frame_tree_node.parent();
   if (!parent) {
     return;
   }
@@ -1172,13 +1173,11 @@ void ThrottleForServiceWorkerAgentHost(
   }
 }
 
-std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
-    NavigationHandle* navigation_handle) {
+void CreateAndAddNavigationThrottles(NavigationThrottleRegistry& registry) {
+  auto* navigation_handle = &registry.GetNavigationHandle();
   FrameTreeNode* frame_tree_node =
       NavigationRequest::From(navigation_handle)->frame_tree_node();
   FrameTreeNode* parent = FrameTreeNode::From(frame_tree_node->parent());
-
-  std::vector<std::unique_ptr<NavigationThrottle>> result;
 
   if (!parent) {
     FrameTreeNode* outer_delegate_node =
@@ -1193,26 +1192,21 @@ std::vector<std::unique_ptr<NavigationThrottle>> CreateNavigationThrottles(
               WebContentsImpl::FromFrameTreeNode(frame_tree_node))) {
         // For prerender, perform auto-attach to tab target at the point of
         // initial navigation.
-        agent_host->auto_attacher()->AppendNavigationThrottles(
-            navigation_handle, &result);
-        return result;
+        agent_host->auto_attacher()->CreateAndAddNavigationThrottles(registry);
+        return;
       }
     }
   }
 
   if (parent) {
     if (auto* agent_host = RenderFrameDevToolsAgentHost::GetFor(parent)) {
-      agent_host->auto_attacher()->AppendNavigationThrottles(navigation_handle,
-                                                             &result);
+      agent_host->auto_attacher()->CreateAndAddNavigationThrottles(registry);
     }
   } else {
     for (DevToolsAgentHostImpl* host : BrowserDevToolsAgentHost::Instances()) {
-      host->auto_attacher()->AppendNavigationThrottles(navigation_handle,
-                                                       &result);
+      host->auto_attacher()->CreateAndAddNavigationThrottles(registry);
     }
   }
-
-  return result;
 }
 
 void ThrottleServiceWorkerMainScriptFetch(
@@ -1701,7 +1695,7 @@ void OnInterestGroupAuctionEventOccurred(
 
 void OnInterestGroupAuctionNetworkRequestCreated(
     FrameTreeNodeId frame_tree_node_id,
-    content::InterestGroupAuctionFetchType type,
+    InterestGroupAuctionFetchType type,
     const std::string& request_id,
     const std::vector<std::string>& devtools_auction_ids) {
   DispatchToAgents(frame_tree_node_id,
@@ -1806,7 +1800,7 @@ void FencedFrameCreated(
 }
 
 void WillStartDragging(FrameTreeNode* main_frame_tree_node,
-                       const content::DropData& drop_data,
+                       const DropData& drop_data,
                        const blink::mojom::DragDataPtr drag_data,
                        blink::DragOperationsMask drag_operations_mask,
                        bool* intercepted) {
@@ -2127,6 +2121,52 @@ void AddIssueToIssueStorage(
 
 }  // namespace
 
+namespace {
+
+std::unique_ptr<protocol::Audits::InspectorIssue>
+BuildUserReidentificationIssue(
+    const blink::mojom::UserReidentificationIssueDetailsPtr& issue_details) {
+  auto affected_request = issue_details->request.is_null()
+                              ? nullptr
+                              : protocol::Audits::AffectedRequest::Create()
+                                    .SetUrl(issue_details->request->url)
+                                    .Build();
+  std::string issue_type;
+  switch (issue_details->type) {
+    case blink::mojom::UserReidentificationIssueType::kBlockedFrameNavigation:
+      issue_type = protocol::Audits::UserReidentificationIssueTypeEnum::
+          BlockedFrameNavigation;
+      break;
+    case blink::mojom::UserReidentificationIssueType::kBlockedSubresource:
+      issue_type = protocol::Audits::UserReidentificationIssueTypeEnum::
+          BlockedSubresource;
+      break;
+    default:
+      NOTREACHED();
+  }
+  auto reidentification_issue_details =
+      protocol::Audits::UserReidentificationIssueDetails::Create()
+          .SetType(issue_type)
+          .SetRequest(std::move(affected_request))
+          .Build();
+
+  auto protocol_issue_details =
+      protocol::Audits::InspectorIssueDetails::Create()
+          .SetUserReidentificationIssueDetails(
+              std::move(reidentification_issue_details))
+          .Build();
+
+  auto issue = protocol::Audits::InspectorIssue::Create()
+                   .SetCode(protocol::Audits::InspectorIssueCodeEnum::
+                                UserReidentificationIssue)
+                   .SetDetails(std::move(protocol_issue_details))
+                   .Build();
+
+  return issue;
+}
+
+}  // namespace
+
 void ReportBrowserInitiatedIssue(RenderFrameHostImpl* frame,
                                  protocol::Audits::InspectorIssue* issue) {
   FrameTreeNode* ftn = frame->frame_tree_node();
@@ -2171,6 +2211,10 @@ void BuildAndReportBrowserInitiatedIssue(
              blink::mojom::InspectorIssueCode::kAttributionReportingIssue) {
     issue = BuildAttributionReportingIssue(
         info->details->attribution_reporting_issue_details);
+  } else if (info->code ==
+             blink::mojom::InspectorIssueCode::kUserReidentificationIssue) {
+    issue = BuildUserReidentificationIssue(
+        info->details->user_reidentification_issue_details);
   } else {
     NOTREACHED() << "Unsupported type of browser-initiated issue";
   }
@@ -2294,6 +2338,15 @@ void MaybeAssignResourceRequestId(FrameTreeNode* ftn,
                                   network::ResourceRequest& request) {
   if (auto* host = RenderFrameDevToolsAgentHost::GetFor(ftn)) {
     MaybeAssignResourceRequestId(host, id, request);
+  }
+}
+
+void MaybeAssignResourceRequestId(FrameTreeNodeId frame_tree_node_id,
+                                  const std::string& id,
+                                  network::ResourceRequest& request) {
+  auto* frame_tree_node = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (frame_tree_node) {
+    MaybeAssignResourceRequestId(frame_tree_node, id, request);
   }
 }
 
@@ -2549,6 +2602,86 @@ void DidCloseFedCmDialog(RenderFrameHost& render_frame_host) {
     return;
   }
   DispatchToAgents(ftn, &protocol::FedCmHandler::DidCloseDialog);
+}
+
+void WillSendFedCmNetworkRequest(FrameTreeNodeId frame_tree_node_id,
+                                 const network::ResourceRequest& request) {
+  FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (!ftn) {
+    return;
+  }
+
+  // Get the DevTools navigation token from the current frame host
+  const std::optional<base::UnguessableToken>& loader_id =
+      ftn->current_frame_host()->GetDevToolsNavigationToken();
+
+  if (!loader_id.has_value()) {
+    return;
+  }
+
+  std::optional<base::UnguessableToken> frame_token =
+      ftn->current_frame_host()->devtools_frame_token();
+
+  GURL initiator_url;
+  if (request.request_initiator.has_value()) {
+    initiator_url = request.request_initiator->GetURL();
+  }
+
+  network::mojom::URLRequestDevToolsInfoPtr request_info =
+      network::ExtractDevToolsInfo(request);
+
+  DispatchToAgents(frame_tree_node_id, &protocol::NetworkHandler::RequestSent,
+                   request.devtools_request_id.value(),
+                   loader_id.value().ToString(), request.headers, *request_info,
+                   protocol::Network::ResourceTypeEnum::Other, initiator_url,
+                   /*initiator_devtools_request_id=*/"", frame_token,
+                   base::TimeTicks::Now());
+}
+
+void DidReceiveFedCmNetworkResponse(
+    FrameTreeNodeId frame_tree_node_id,
+    const std::string& devtools_request_id,
+    const GURL& url,
+    const network::mojom::URLResponseHead* response_head,
+    const std::string& response_body,
+    const network::URLLoaderCompletionStatus& status) {
+  FrameTreeNode* ftn = FrameTreeNode::GloballyFindByID(frame_tree_node_id);
+  if (!ftn) {
+    return;
+  }
+
+  // Get the DevTools navigation token from the current frame host
+  const std::optional<base::UnguessableToken>& loader_id =
+      ftn->current_frame_host()->GetDevToolsNavigationToken();
+
+  if (!loader_id.has_value()) {
+    return;
+  }
+
+  if (response_head) {
+    network::mojom::URLResponseHeadDevToolsInfoPtr head_info =
+        network::ExtractDevToolsInfo(*response_head);
+
+    std::optional<base::UnguessableToken> frame_token =
+        ftn->current_frame_host()->devtools_frame_token();
+
+    DispatchToAgents(frame_tree_node_id,
+                     &protocol::NetworkHandler::ResponseReceived,
+                     devtools_request_id, loader_id.value().ToString(), url,
+                     protocol::Network::ResourceTypeEnum::Other, *head_info,
+                     frame_token.value().ToString());
+  }
+
+  if (status.error_code == net::OK) {
+    DispatchToAgents(frame_tree_node_id,
+                     &protocol::NetworkHandler::BodyDataReceived,
+                     devtools_request_id, response_body,
+                     /*is_base64_encoded=*/false);
+  }
+
+  DispatchToAgents(
+      frame_tree_node_id, &protocol::NetworkHandler::LoadingComplete,
+      devtools_request_id, protocol::Network::ResourceTypeEnum::Other, status);
 }
 
 void OnFencedFrameReportRequestSent(

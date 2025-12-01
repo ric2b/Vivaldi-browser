@@ -63,6 +63,11 @@
             "optional": true,
             "description": "The URL navigated to when a user clicks the bookmark. Omitted for folders."
           },
+          "displayUrl": {
+            "type": "string",
+            "optional": true,
+            "description": "The destination URL when a user clicks the bookmark. Omitted for folders."
+          },
           "title": {
             "type": "string",
             "description": "The text displayed for the node."
@@ -287,6 +292,10 @@
                 "optional": true
               },
               "themeColor": {
+                "type": "string",
+                "optional": true
+              },
+              "displayUrl": {
                 "type": "string",
                 "optional": true
               }

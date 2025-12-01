@@ -89,9 +89,6 @@ NET_EXPORT extern const base::FeatureParam<int>
 NET_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kUseDnsHttpsSvcbSecureExtraTimeMin;
 
-// Update protocol using ALPN information in HTTPS DNS records.
-NET_EXPORT BASE_DECLARE_FEATURE(kUseDnsHttpsSvcbAlpn);
-
 // If enabled, HostResolver will use the new HostResolverCache that separately
 // caches by DNS type, unlike the old HostCache that always cached by merged
 // request results. May enable related behavior such as separately sorting DNS
@@ -177,21 +174,32 @@ NET_EXPORT BASE_DECLARE_FEATURE(kSplitCodeCacheByNetworkIsolationKey);
 // See https://github.com/MattMenke2/Explainer---Partition-Network-State.
 NET_EXPORT BASE_DECLARE_FEATURE(kPartitionConnectionsByNetworkIsolationKey);
 
-// Enables post-quantum key-agreements in TLS 1.3 connections. kUseMLKEM
-// controls whether ML-KEM or Kyber (its predecessor) is used. The flag is named
-// after Kyber because it was originally introduced for Kyber.
-NET_EXPORT BASE_DECLARE_FEATURE(kPostQuantumKyber);
-
-// Causes TLS 1.3 connections to use the ML-KEM standard instead of the Kyber
-// draft standard for post-quantum key-agreement. Post-quantum key-agreement
-// must be enabled (e.g. via kPostQuantumKyber) for this to have an effect.
-//
-// TODO(crbug.com/40910498): Remove this flag sometime after M131 has reached
-// stable without issues.
-NET_EXPORT BASE_DECLARE_FEATURE(kUseMLKEM);
-
 // Changes the interval between two search engine preconnect attempts.
 NET_EXPORT BASE_DECLARE_FEATURE(kSearchEnginePreconnectInterval);
+
+// Enables a more efficient SearchEnginePreconnector
+NET_EXPORT BASE_DECLARE_FEATURE(kSearchEnginePreconnect2);
+
+// The idle timeout for the SearchEnginePreconnector2 feature.
+NET_EXPORT BASE_DECLARE_FEATURE_PARAM(int, kIdleTimeoutInSeconds);
+
+// The maximum time for the SearchEnginePreconnector2 to be considered as short.
+NET_EXPORT BASE_DECLARE_FEATURE_PARAM(base::TimeDelta, kShortSessionThreshold);
+
+// The maximum time to backoff when attempting preconnect retry for
+// SearchEnginePreconnector2.
+NET_EXPORT extern const base::FeatureParam<int> kMaxPreconnectRetryInterval;
+
+// The interval between two QUIC ping requests for the periodic PING for
+// SearchEnginePreconnector2.
+NET_EXPORT BASE_DECLARE_FEATURE_PARAM(int, kPingIntervalInSeconds);
+
+// The QUIC connection options which will be sent to the server in order to
+// enable certain QUIC features. This should be set using `QuicTag`s (32-bit
+// value represented in ASCII equivalent e.g. EXMP). If we want to set
+// multiple features, then the values should be separated with a comma
+// (e.g. "ABCD,EFGH").
+NET_EXPORT BASE_DECLARE_FEATURE_PARAM(std::string, kQuicConnectionOptions);
 
 // When enabled, the time threshold for Lax-allow-unsafe cookies will be lowered
 // from 2 minutes to 10 seconds. This time threshold refers to the age cutoff
@@ -208,10 +216,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kShortLaxAllowUnsafeThreshold);
 // methods will not be allowed at all for top-level cross-site navigations.
 // This only has an effect if the cookie defaults to SameSite=Lax.
 NET_EXPORT BASE_DECLARE_FEATURE(kSameSiteDefaultChecksMethodRigorously);
-
-// When enabled this feature will cause same-site calculations to take into
-// account the scheme of the site-for-cookies and the request/response url.
-NET_EXPORT BASE_DECLARE_FEATURE(kSchemefulSameSite);
 
 // Enables a process-wide limit on "open" UDP sockets. See
 // udp_socket_global_limits.h for details on what constitutes an "open" socket.
@@ -322,8 +326,11 @@ NET_EXPORT BASE_DECLARE_FEATURE(kEnableWebsocketsOverHttp3);
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableGetNetworkConnectivityHintAPI);
 
 // Whether or not to enable TCP port randomization via SO_RANDOMIZE_PORT on
-// Windows 20H1+.
-NET_EXPORT BASE_DECLARE_FEATURE(kEnableTcpPortRandomization);
+// Windows for versions >= kTcpPortRandomizationWinVersionMinimum.
+// See crbug.com/40744069 for more details.
+NET_EXPORT BASE_DECLARE_FEATURE(kTcpPortRandomizationWin);
+NET_EXPORT BASE_DECLARE_FEATURE_PARAM(int,
+                                      kTcpPortRandomizationWinVersionMinimum);
 
 // Whether to use a TCP socket implementation which uses an IO completion
 // handler to be notified of completed reads and writes, instead of an event.
@@ -334,10 +341,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kTcpSocketIoCompletionPortWin);
 NET_EXPORT BASE_DECLARE_FEATURE(kAvoidEntryCreationForNoStore);
 NET_EXPORT extern const base::FeatureParam<int>
     kAvoidEntryCreationForNoStoreCacheSize;
-
-// Prefetch to follow normal semantics instead of 5-minute rule
-// https://crbug.com/1345207
-NET_EXPORT BASE_DECLARE_FEATURE(kPrefetchFollowsNormalCacheSemantics);
 
 // A flag for new Kerberos feature, that suggests new UI
 // when Kerberos authentication in browser fails on ChromeOS.
@@ -364,10 +367,53 @@ NET_EXPORT extern const base::FeatureParam<std::string>
 NET_EXPORT extern const base::FeatureParam<std::string>
     kProbabilisticRevealTokenServerPath;
 
-// If true, probabilistic reveal tokens will be attached to all proxied requests
-// regardless of whether the request domain is registered.
+// If true, the probabilistic reveal token registration check will be skipped
+// and we will consider every domain as being eligible to receive PRTs. In order
+// for PRTs to be attached to requests, the
+// `ProbabilisticRevealTokensAddHeaderToProxiedRequests` flag must also be true.
 NET_EXPORT extern const base::FeatureParam<bool>
-    kAttachProbabilisticRevealTokensOnAllProxiedRequests;
+    kBypassProbabilisticRevealTokenRegistry;
+
+// If true, the standard probabilistic reveal token registry will be ignored and
+// the custom registry will be used instead. The custom registry can be set with
+// the `CustomProbabilisticRevealTokenRegistry` flag. This will only be used if
+// `BypassProbabilisticRevealTokenRegistry` is false. This is intended to be
+// used for developer testing only.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kUseCustomProbabilisticRevealTokenRegistry;
+
+// A comma-separated list of domains (eTLD+1) which will be considered eligible
+// to receive PRTs. This will override the default PRT registry and will only be
+// used if `UseCustomProbabilisticRevealTokenRegistry` is true and
+// `BypassProbabilisticRevealTokenRegistry` is false. This is intended to be
+// used for developer testing only.
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kCustomProbabilisticRevealTokenRegistry;
+
+// If true, probabilistic reveal tokens will only be enabled in Incognito mode.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kProbabilisticRevealTokensOnlyInIncognito;
+
+// If true, probabilistic reveal tokens will only be fetched. PRTs will not be
+// randomized at request time or attached to any requests. This is intended to
+// be used for measuring issuer server load before the feature is fully enabled.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kProbabilisticRevealTokenFetchOnly;
+
+// If true, probabilistic reveal tokens can be attached to non-proxied requests
+// as well. PRTs will still only be attached to requests if the
+// `ProbabilisticRevealTokensAddHeaderToProxiedRequests` flag is true and the
+// request is being sent to a registered domain, but this flag can be used in
+//  combination with `BypassProbabilisticRevealTokenRegistry` or
+// `CustomProbabilisticRevealTokenRegistry`. This is intended to be used for
+// developer testing only.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kEnableProbabilisticRevealTokensForNonProxiedRequests;
+
+// If true, probabilistic reveal tokens header will be added to proxied
+// requests.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kProbabilisticRevealTokensAddHeaderToProxiedRequests;
 
 // Enables custom proxy configuration for the IP Protection experimental proxy.
 NET_EXPORT BASE_DECLARE_FEATURE(kEnableIpProtectionProxy);
@@ -508,6 +554,17 @@ NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyOnlyInIncognito;
 // the ability to bypass IP Protection via the User Bypass UX.
 NET_EXPORT extern const base::FeatureParam<bool> kIpPrivacyEnableUserBypass;
 
+// If true, IP Protection will be disabled by default for enterprise users.
+// Otherwise, IP Protection will be enabled by default for enterprise users (but
+// can still be opted out of via enterprise policy). This is intended to be used
+// as a kill-switch in case significant enterprise breakage is encountered
+// during the IP Protection rollout. Note that this has no effect unless the
+// `kEnableIpProtectionProxy` feature is enabled.
+// TODO(https://crbug.com/41496985): Remove this feature a few milestones after
+// launch assuming no major enterprise breakage is encountered.
+NET_EXPORT extern const base::FeatureParam<bool>
+    kIpPrivacyDisableForEnterpriseByDefault;
+
 // Maximum report body size (KB) to include in serialized reports. Bodies
 // exceeding this are omitted when kExcludeLargeBodyReports is enabled.  Use
 // Reporting.ReportBodySize UMA histogram to monitor report body sizes and
@@ -557,10 +614,6 @@ NET_EXPORT BASE_DECLARE_FEATURE(kThirdPartyPartitionedStorageAllowedByDefault);
 
 // Enables a more efficient implementation of SpdyHeadersToHttpResponse().
 NET_EXPORT BASE_DECLARE_FEATURE(kSpdyHeadersToHttpResponseUseBuilder);
-
-// Enables receiving ECN bit by UDP sockets in Chrome, and reporting the counts
-// to QUIC servers via ACK frames.
-NET_EXPORT BASE_DECLARE_FEATURE(kReportEcn);
 
 // Enables using the new ALPS codepoint to negotiate application settings for
 // HTTP2.
@@ -707,6 +760,11 @@ NET_EXPORT BASE_DECLARE_FEATURE(kReportingApiCorsOriginHeader);
 // helps prevent excessively large reports json stringification.
 NET_EXPORT BASE_DECLARE_FEATURE(kExcludeLargeBodyReports);
 
+// Enables the Related Website Partition API, allowing members of a Related
+// Website Set to access partitioned non-cookie storage. See
+// https://github.com/explainers-by-googlers/related-website-partition-api.
+NET_EXPORT BASE_DECLARE_FEATURE(kRelatedWebsitePartitionAPI);
+
 #if BUILDFLAG(IS_ANDROID)
 // If enabled, Android OS's certificate verification (CertVerifyProcAndroid) is
 // done using the certificate transparency aware API.
@@ -722,6 +780,25 @@ NET_EXPORT BASE_DECLARE_FEATURE(kSelfSignedLocalNetworkInterstitial);
 // as QWACs will be verified against the 1-QWAC specification as well.
 NET_EXPORT BASE_DECLARE_FEATURE(kVerifyQWACs);
 #endif
+
+#if BUILDFLAG(IS_MAC)
+// If enabled, includes deprecated APIs for looking up client certificates on
+// macOS. This is disabled by default and is available as an emergency kill
+// switch.
+// TODO(crbug.com/40233280): This will reach stable in M137 (May 2025). Remove
+// this flag sometime after August 2025.
+NET_EXPORT BASE_DECLARE_FEATURE(kIncludeDeprecatedClientCertLookup);
+#endif
+
+// Finch-controlled list of ports that should be blocked due to ongoing abuse.
+NET_EXPORT BASE_DECLARE_FEATURE(kRestrictAbusePorts);
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kPortsToRestrictForAbuse;
+NET_EXPORT extern const base::FeatureParam<std::string>
+    kPortsToRestrictForAbuseMonitorOnly;
+
+// Finch-controlled list of ports that should be blocked on localhost.
+NET_EXPORT BASE_DECLARE_FEATURE(kRestrictAbusePortsOnLocalhost);
 
 }  // namespace net::features
 

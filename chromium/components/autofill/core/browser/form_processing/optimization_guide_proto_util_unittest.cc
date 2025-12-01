@@ -33,20 +33,17 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_P(ByConversionReason, ToFormDataProto) {
   FormData form = test::GetFormData(
       {.fields = {{.is_focusable = true,
-                   .is_visible = true,
                    .label = u"label",
                    .name = u"name",
                    .value = u"val",
                    .placeholder = u"placeholder",
                    .form_control_ax_id = 123},
                   {.is_focusable = false,
-                   .is_visible = true,
                    .label = u"label2",
                    .name = u"name2",
                    .value = u"value",
                    .form_control_ax_id = 124},
                   {.is_focusable = false,
-                   .is_visible = true,
                    .label = u"select",
                    .form_control_type = FormControlType::kSelectOne,
                    .select_options = {{{.value = u"1", .text = u"text1"},
@@ -57,22 +54,26 @@ TEST_P(ByConversionReason, ToFormDataProto) {
       ToFormDataProto(form, /*conversion_reason=*/GetParam());
   ASSERT_EQ(form_data_proto.fields_size(), 3);
 
+  EXPECT_EQ(form_data_proto.form_signature(), *CalculateFormSignature(form));
+
   optimization_guide::proto::FormFieldData field_data1 =
       form_data_proto.fields(0);
+  EXPECT_EQ(field_data1.field_signature(),
+            *CalculateFieldSignatureForField(form.fields()[0]));
   EXPECT_EQ(field_data1.field_label(), "label");
   EXPECT_EQ(field_data1.field_value(), "");
   EXPECT_EQ(field_data1.field_name(), "name");
-  EXPECT_EQ(field_data1.is_visible(), true);
   EXPECT_EQ(field_data1.is_focusable(), true);
   EXPECT_EQ(field_data1.placeholder(), "placeholder");
   EXPECT_EQ(field_data1.form_control_ax_node_id(), 123);
 
   optimization_guide::proto::FormFieldData field_data2 =
       form_data_proto.fields(1);
+  EXPECT_EQ(field_data2.field_signature(),
+            *CalculateFieldSignatureForField(form.fields()[1]));
   EXPECT_EQ(field_data2.field_label(), "label2");
   EXPECT_EQ(field_data2.field_value(), "");
   EXPECT_EQ(field_data2.field_name(), "name2");
-  EXPECT_EQ(field_data2.is_visible(), true);
   EXPECT_EQ(field_data2.is_focusable(), false);
   EXPECT_EQ(field_data2.placeholder(), "");
   EXPECT_EQ(field_data2.form_control_ax_node_id(), 124);
@@ -80,6 +81,8 @@ TEST_P(ByConversionReason, ToFormDataProto) {
   // Check that the options are corectly extracted from the select element.
   optimization_guide::proto::FormFieldData field_data3 =
       form_data_proto.fields(2);
+  EXPECT_EQ(field_data3.field_signature(),
+            *CalculateFieldSignatureForField(form.fields()[2]));
   EXPECT_EQ(field_data3.field_label(), "select");
   EXPECT_TRUE(field_data3.field_value().empty());
   EXPECT_TRUE(field_data3.field_name().empty());
@@ -94,8 +97,7 @@ TEST_P(ByConversionReason, ToFormDataProto) {
   EXPECT_EQ("text2", select_option2.text());
 }
 
-// Tests that the "ForExtensionAPI" flavor additionally populates signatures and
-// global IDs.
+// Tests that the "ForExtensionAPI" flavor additionally populates global IDs.
 TEST_F(AutofillOptimizationGuideProtoUtilTest, ToFormDataProtoForExtensionAPI) {
   const FormGlobalId form_id = test::MakeFormGlobalId();
   const FieldGlobalId field_id = test::MakeFieldGlobalId();
@@ -113,7 +115,6 @@ TEST_F(AutofillOptimizationGuideProtoUtilTest, ToFormDataProtoForExtensionAPI) {
   EXPECT_EQ(form_proto.global_id().frame_token(),
             form_id.frame_token->ToString());
   EXPECT_EQ(form_proto.global_id().renderer_id(), *form_id.renderer_id);
-  EXPECT_EQ(form_proto.form_signature(), *CalculateFormSignature(form));
 
   // Field-level metadata.
   ASSERT_EQ(form_proto.fields_size(), 1);
@@ -122,8 +123,6 @@ TEST_F(AutofillOptimizationGuideProtoUtilTest, ToFormDataProtoForExtensionAPI) {
   EXPECT_EQ(field_proto.global_id().frame_token(),
             field_id.frame_token->ToString());
   EXPECT_EQ(field_proto.global_id().renderer_id(), *field_id.renderer_id);
-  EXPECT_EQ(field_proto.field_signature(),
-            *CalculateFieldSignatureForField(form.fields()[0]));
 }
 
 }  // namespace

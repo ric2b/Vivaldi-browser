@@ -943,8 +943,8 @@ If you see strange errors with the file system on the first run of gclient,
 </li>
 <li>
 <p>
-After running gclient open a command prompt and type <code>where python</code> and confirm that
-  the depot_tools python.bat comes ahead of any copies of python.exe. Failing to ensure
+After running gclient open a command prompt and type <code>where python3</code> and confirm that
+  the depot_tools python3.bat comes ahead of any copies of python3.exe. Failing to ensure
   this can lead to overbuilding when using gn - see
   <a href="https://issues.chromium.org/issues/41253477">crbug.com/41253477</a>.
 </p>
@@ -977,7 +977,10 @@ commands:</p></div>
 <div class="sectionbody">
 <div class="listingblock">
 <div class="content">
-<pre><code><strong><span class="white">$</span></strong> # get the code
+<pre><code><strong><span class="white">$</span></strong> # Set up auth in Git config:
+<strong><span class="white">$ git cl creds-check --global</span></strong>
+
+<strong><span class="white">$</span></strong> # get the code
 <strong><span class="white">$</span></strong> # In an empty directory:
 <strong><span class="white">$ fetch {chromium,...}</span></strong>
 
@@ -999,6 +1002,12 @@ commands:</p></div>
 <div class="sect1">
 <h2 id="_getting_the_code">GETTING THE CODE</h2>
 <div class="sectionbody">
+<div class="paragraph"><p>Unless you plan on only fetching code anonymously, you&#8217;ll need to set
+up your auth config in Git.  Run this:</p></div>
+<div class="listingblock">
+<div class="content">
+<pre><code><strong><span class="white">$ git cl creds-check --global</span></strong></code></pre>
+</div></div>
 <div class="paragraph"><p>Pick an empty directory and run one of the following:</p></div>
 <div class="listingblock">
 <div class="content">
@@ -1461,7 +1470,7 @@ EOF
 <span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">2c0ad9c59b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Fix typo for good!
 <span style="color: #FF5555">|</span> * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">615ffa720f</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ Fix terrible typo.
 <span style="color: #FF5555">|</span><span style="color: #FF5555">/</span>
-* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">fix_typo, chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
+* <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">beec6f4746</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">(</span><span style="font-weight: bold; color: #FF5555">origin/main</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">, </span><span style="font-weight: bold; color: #FF5555">origin/HEAD</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #50FA7B"></span><span style="font-weight: bold; color: #50FA7B">) </span><span style="font-weight: bold"></span><span style="font-weight: bold"></span><span style="color: #F1FA8C">2014-04-10</span> ~ Make ReflectorImpl use mailboxes    &lt;(<span style="color: #BFBFBF"></span><span style="font-weight: bold; color: #BFBFBF">chap2, fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>)
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">41290e02b7</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ don't use glibc-specific execinfo.h on uclibc builds
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">a76fde7b7b</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ [fsp] Add requestUnmount() method together with the request manager.
 * <span style="color: #FF5555"></span><span style="font-weight: bold; color: #FF5555">9de7a713b3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>	<span style="color: #F1FA8C">2014-04-10</span> ~ linux_aura: Use system configuration for middle clicking the titlebar.
@@ -1474,10 +1483,10 @@ EOF
 Fetching origin
 From https://upstream
    beec6f4..59cdb73  main       -&gt; origin/main
-Rebasing: chap2
-Rebasing: fix_typo
-Failed! Attempting to squash fix_typo ... Success!
-Rebasing: chap3
+Rebasing: <span style="font-weight: bold">chap2</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
+Rebasing: <span style="font-weight: bold">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
+Failed! Attempting to squash <span style="font-weight: bold">fix_typo</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> ... Success!
+Rebasing: <span style="font-weight: bold">chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span>
 Reparented chap3 to track origin/main (was tracking chap2)
 Deleted branch fix_typo (was 5d26fec).
 Deleted branch chap2 (was 5d26fec).
@@ -1547,7 +1556,7 @@ Rebasing: chap2
 
 <span style="font-weight: bold; color: #BFBFBF">$ git rebase-update</span>
 Fetching origin
-chap3 up-to-date
+<span style="font-weight: bold">chap3</span><span style="font-weight: bold"></span><span style="font-weight: bold"></span> up-to-date
 
 Running `git gc --auto` - Ctrl-C to abort is OK.
 
@@ -1638,7 +1647,7 @@ by checking out the <a href="https://chromium.googlesource.com/chromium/tools/de
 <div id="footer">
 <div id="footer-text">
 Last updated
- 2025-02-20 16:05:41 PST
+ 2025-05-07 21:15:19 UTC
 </div>
 </div>
 </body>

@@ -4,6 +4,11 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import static org.chromium.build.NullUtil.assertNonNull;
+
+import org.chromium.build.annotations.Contract;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.bookmarks.BookmarkItem;
 import org.chromium.components.bookmarks.BookmarkType;
@@ -19,28 +24,35 @@ import org.chromium.chrome.browser.ChromeApplicationImpl;
 // End Vivaldi
 
 /** Simple implementation of {@link BookmarkQueryHandler} that fetches children. */
+@NullMarked
 public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
     // TODO(crbug.com/40266584): Support pagination.
     private static final int MAXIMUM_NUMBER_OF_SEARCH_RESULTS = 500;
 
     private final BookmarkModel mBookmarkModel;
     private final BookmarkUiPrefs mBookmarkUiPrefs;
+    private final @BookmarkNodeMaskBit int mRootFolderForceVisibleMask;
 
     /**
      * @param bookmarkModel The underlying source of bookmark data.
      * @param bookmarkUiPrefs Stores display preferences for bookmarks.
+     * @param rootFolderForceVisibleMask The bitmask used to force visibility of root folder nodes.
      */
-    public BasicBookmarkQueryHandler(BookmarkModel bookmarkModel, BookmarkUiPrefs bookmarkUiPrefs) {
+    public BasicBookmarkQueryHandler(
+            BookmarkModel bookmarkModel,
+            BookmarkUiPrefs bookmarkUiPrefs,
+            @BookmarkNodeMaskBit int rootFolderForceVisibleMask) {
         mBookmarkModel = bookmarkModel;
         mBookmarkUiPrefs = bookmarkUiPrefs;
+        mRootFolderForceVisibleMask = rootFolderForceVisibleMask;
     }
 
     @Override
     public List<BookmarkListEntry> buildBookmarkListForParent(
-            BookmarkId parentId, Set<PowerBookmarkType> powerFilter) {
+            BookmarkId parentId, @Nullable Set<PowerBookmarkType> powerFilter) {
         final List<BookmarkId> childIdList =
                 parentId.equals(mBookmarkModel.getRootFolderId())
-                        ? mBookmarkModel.getTopLevelFolderIds()
+                        ? mBookmarkModel.getTopLevelFolderIds(mRootFolderForceVisibleMask)
                         : mBookmarkModel.getChildIds(parentId);
 
         final List<BookmarkListEntry> bookmarkListEntries =
@@ -54,10 +66,10 @@ public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
 
     @Override
     public List<BookmarkListEntry> buildBookmarkListForSearch(
-            String query, Set<PowerBookmarkType> powerFilter) {
+            String query, @Nullable Set<PowerBookmarkType> powerFilter) {
         List<BookmarkId> searchIdList =
                 mBookmarkModel.searchBookmarks(query, MAXIMUM_NUMBER_OF_SEARCH_RESULTS);
-        if (ChromeApplicationImpl.isVivaldi()) {
+        if (ChromeApplicationImpl.isVivaldi() && mBookmarkModel.getTrashFolderId() != null) {
             List<BookmarkId> trashBookmarksList =
                     mBookmarkModel.getChildIds(mBookmarkModel.getTrashFolderId());
             searchIdList.removeAll(trashBookmarksList);
@@ -80,7 +92,8 @@ public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
     public List<BookmarkListEntry> buildBookmarkListForFolderSelect(BookmarkId parentId) {
         List<BookmarkId> childIdList =
                 parentId.equals(mBookmarkModel.getRootFolderId())
-                        ? mBookmarkModel.getTopLevelFolderIds(/* ignoreVisibility= */ true)
+                        ? mBookmarkModel.getTopLevelFolderIds(
+                                /* forceVisibleMask= */ BookmarkNodeMaskBit.ALL)
                         : mBookmarkModel.getChildIds(parentId);
         List<BookmarkListEntry> bookmarkListEntries =
                 bookmarkIdListToBookmarkListEntryList(childIdList);
@@ -94,8 +107,10 @@ public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
     }
 
     /** Returns whether the given {@link BookmarkListEntry} is a folder. */
+    @Contract("null -> false")
     private boolean isFolderEntry(BookmarkListEntry entry) {
-        return entry.getBookmarkItem().isFolder();
+        @Nullable BookmarkItem bookmarkItem = entry.getBookmarkItem();
+        return bookmarkItem != null && bookmarkItem.isFolder();
     }
 
     /**
@@ -103,9 +118,10 @@ public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
      * All entries passed to this function need to be folders, this is enfored by an assert.
      */
     private boolean isValidFolder(BookmarkListEntry entry) {
-        assert entry.getBookmarkItem().isFolder();
+        assert isFolderEntry(entry);
 
-        BookmarkId folderId = entry.getBookmarkItem().getId();
+        // entry.getBookmarkItem() should be null (see isFolderEntry call above).
+        BookmarkId folderId = assertNonNull(entry.getBookmarkItem()).getId();
         return BookmarkUtils.canAddBookmarkToParent(mBookmarkModel, folderId);
     }
 
@@ -115,6 +131,7 @@ public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
         for (BookmarkId bookmarkId : bookmarkIds) {
             PowerBookmarkMeta powerBookmarkMeta = mBookmarkModel.getPowerBookmarkMeta(bookmarkId);
             BookmarkItem bookmarkItem = mBookmarkModel.getBookmarkById(bookmarkId);
+            if (bookmarkItem == null) continue;
             BookmarkListEntry bookmarkListEntry =
                     BookmarkListEntry.createBookmarkEntry(
                             bookmarkItem,
@@ -125,7 +142,7 @@ public class BasicBookmarkQueryHandler implements BookmarkQueryHandler {
         return bookmarkListEntries;
     }
 
-    private PowerBookmarkType getTypeFromMeta(PowerBookmarkMeta powerBookmarkMeta) {
+    private PowerBookmarkType getTypeFromMeta(@Nullable PowerBookmarkMeta powerBookmarkMeta) {
         if (powerBookmarkMeta != null && powerBookmarkMeta.hasShoppingSpecifics()) {
             return PowerBookmarkType.SHOPPING;
         } else {

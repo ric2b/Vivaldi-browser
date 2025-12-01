@@ -155,7 +155,7 @@ class CC_EXPORT LayerImpl {
                                      gfx::Size* resource_size,
                                      gfx::SizeF* resource_uv_size) const;
 
-  virtual void NotifyTileStateChanged(const Tile* tile) {}
+  virtual void NotifyTileStateChanged(const Tile* tile, bool update_damage) {}
 
   virtual bool IsScrollbarLayer() const;
 
@@ -165,6 +165,7 @@ class CC_EXPORT LayerImpl {
   void SetDrawsContent(bool draws_content);
   bool draws_content() const { return draws_content_; }
 
+  HitTestOpaqueness hit_test_opaqueness() const { return hit_test_opaqueness_; }
   void SetHitTestOpaqueness(HitTestOpaqueness opaqueness);
   bool HitTestable() const;
   bool OpaqueToHitTest() const;
@@ -266,6 +267,8 @@ class CC_EXPORT LayerImpl {
     PaintFlags::DynamicRangeLimitMixture dynamic_range_limit{
         PaintFlags::DynamicRangeLimit::kHigh};
   };
+
+  bool HasAnyRarePropertySet() { return !!rare_properties_; }
 
   RareProperties& EnsureRareProperties() {
     if (!rare_properties_)

@@ -10,15 +10,14 @@ import time
 from typing import Any
 import unittest
 
+from telemetry.core import exceptions
+
+import gpu_path_util
 from gpu_tests import common_browser_args as cba
 from gpu_tests import common_typing as ct
 from gpu_tests import gpu_integration_test
 from gpu_tests import gpu_helper
 from gpu_tests.util import host_information
-
-import gpu_path_util
-
-from telemetry.core import exceptions
 
 harness_script = r"""
   var domAutomationController = {};
@@ -202,10 +201,11 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     cls.SetStaticServerDirs([gpu_path_util.GPU_DATA_DIR])
 
   # Can be changed to functools.cache on Python 3.9+.
+  @classmethod
   @functools.lru_cache(maxsize=None)
-  def _GetWaitTimeout(self):
+  def _GetWaitTimeout(cls):
     timeout = 60
-    if self._is_asan or self.browser.browser_type == 'debug':
+    if cls._is_asan or cls.browser.browser_type == 'debug':
       timeout *= 2
     return timeout
 
@@ -277,7 +277,7 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       while current_time - start_time < 20:
         system_info = tab.browser.GetSystemInfo()
         number_of_crashes = \
-            system_info.gpu.aux_attributes[u'process_crash_count']
+            system_info.gpu.aux_attributes['process_crash_count']
         if number_of_crashes >= expected_kills:
           break
         time.sleep(1)
@@ -288,13 +288,13 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     time.sleep(5)
     system_info = tab.browser.GetSystemInfo()
     number_of_crashes = \
-        system_info.gpu.aux_attributes[u'process_crash_count']
+        system_info.gpu.aux_attributes['process_crash_count']
 
     if number_of_crashes < expected_kills:
       self.fail('Timed out waiting for a gpu process crash')
     elif number_of_crashes != expected_kills:
-      self.fail('Expected %d gpu process crashes; got: %d' %
-                (expected_kills, number_of_crashes))
+      self.fail(f'Expected {expected_kills} gpu process crashes; got: '
+                f'{number_of_crashes}')
 
   def _NavigateAndWaitForLoad(self, test_path: str) -> None:
     url = self.UrlOfStaticFilePath(test_path)
@@ -308,8 +308,8 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     tab.Navigate('chrome:gpu',
                  script_to_evaluate_on_commit=feature_query_script)
     tab.WaitForJavaScriptCondition('window.gpuPagePopulated', timeout=10)
-    status = (tab.EvaluateJavaScript('GetFeatureStatus("webgl", %s)' %
-                                     ('true' if for_hardware_gpu else 'false')))
+    status = tab.EvaluateJavaScript(
+        f'GetFeatureStatus("webgl", {ToJsBoolString(for_hardware_gpu)})')
     tab.Close()
     return status
 
@@ -318,8 +318,8 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     tab.Navigate('chrome:gpu',
                  script_to_evaluate_on_commit=vendor_id_query_script)
     tab.WaitForJavaScriptCondition('window.gpuPagePopulated', timeout=10)
-    vid = (tab.EvaluateJavaScript('GetActiveVendorId(%s)' %
-                                  ('true' if for_hardware_gpu else 'false')))
+    vid = tab.EvaluateJavaScript(
+        f'GetActiveVendorId({ToJsBoolString(for_hardware_gpu)})')
     tab.Close()
     return vid
 
@@ -692,8 +692,8 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     # Check WebGL status at browser startup.
     webgl_status = self._GetWebGLFeatureStatus(False)
     if webgl_status != 'enabled':
-      self.fail('WebGL should be hardware accelerated initially, but got %s' %
-                webgl_status)
+      self.fail(f'WebGL should be hardware accelerated initially, but got '
+                f'{webgl_status}')
     webgl_status_for_hardware_gpu = self._GetWebGLFeatureStatus(True)
     if webgl_status_for_hardware_gpu != '':
       self.fail('Feature status for hardware gpu should not be displayed '
@@ -702,12 +702,12 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     self._KillGPUProcess(3, True)
     webgl_status = self._GetWebGLFeatureStatus(False)
     if webgl_status != 'unavailable_software':
-      self.fail('WebGL should be software only with SwiftShader, but got %s' %
-                webgl_status)
+      self.fail(f'WebGL should be software only with SwiftShader, but got '
+                f'{webgl_status}')
     webgl_status_for_hardware_gpu = self._GetWebGLFeatureStatus(True)
     if webgl_status_for_hardware_gpu != 'enabled':
-      self.fail('WebGL status for hardware gpu should be "enabled", '
-                'but got %s' % webgl_status_for_hardware_gpu)
+      self.fail(f'WebGL status for hardware gpu should be "enabled", '
+                f'but got {webgl_status_for_hardware_gpu}')
     self._RestartBrowser('must restart after tests that kill the GPU process')
 
   def _GpuCrash_SoftwareFallbackDisabled(self, test_path: str) -> None:
@@ -722,14 +722,14 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     # Check WebGL status at browser startup.
     webgl_status = self._GetWebGLFeatureStatus(False)
     if webgl_status != 'enabled':
-      self.fail('WebGL should be hardware accelerated initially, but got %s' %
-                webgl_status)
+      self.fail(f'WebGL should be hardware accelerated initially, but got '
+                f'{webgl_status}')
     # Check WebGL status after three GPU crashes - No software fallback due to
     # AllowSoftwareGLFallbackDueToCrashes being disabled.
     self._KillGPUProcess(3, True)
     webgl_status = self._GetWebGLFeatureStatus(False)
     if webgl_status != 'disabled_off':
-      self.fail('WebGL should be disabled_off, but got %s' % webgl_status)
+      self.fail(f'WebGL should be disabled_off, but got {webgl_status}')
     self._RestartBrowser('must restart after tests that kill the GPU process')
 
   def _GpuCrash_InfoForDualHardwareGpus(self, test_path: str) -> None:
@@ -756,8 +756,8 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     if not active_vendor_id_for_hardware_gpu:
       self.fail('Fail to query the active GPU vendor id for hardware GPU')
     if active_vendor_id_for_hardware_gpu != new_active_vendor_id:
-      self.fail('vendor id for hw GPU should be 0x%04x, got 0x%04x' %
-                (new_active_vendor_id, active_vendor_id_for_hardware_gpu))
+      self.fail(f'vendor id for hw GPU should be 0x{new_active_vendor_id:04x}, '
+                f'got 0x{active_vendor_id_for_hardware_gpu:04x}')
     self._RestartBrowser('must restart after tests that kill the GPU process')
 
   def _ContextLost_WebGPUBlockedAfterJSNavigation(self, test_path: str) -> None:
@@ -863,6 +863,10 @@ class ContextLostIntegrationTest(gpu_integration_test.GpuIntegrationTest):
             os.path.dirname(os.path.abspath(__file__)), 'test_expectations',
             'context_lost_expectations.txt')
     ]
+
+
+def ToJsBoolString(value: bool) -> str:
+  return 'true' if value else 'false'
 
 
 def load_tests(loader: unittest.TestLoader, tests: Any,

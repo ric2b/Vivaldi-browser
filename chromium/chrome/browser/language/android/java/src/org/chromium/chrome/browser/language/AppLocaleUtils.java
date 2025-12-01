@@ -54,7 +54,7 @@ public class AppLocaleUtils {
      * @param overrideLanguage String to compare to the default system language value.
      * @return Whether or not |overrideLanguage| is the default system language.
      */
-    public static boolean isFollowSystemLanguage(String overrideLanguage) {
+    public static boolean isFollowSystemLanguage(@Nullable String overrideLanguage) {
         return TextUtils.equals(overrideLanguage, APP_LOCALE_USE_SYSTEM_LANGUAGE);
     }
 
@@ -145,7 +145,7 @@ public class AppLocaleUtils {
      * @param listener LanguageSplitInstaller.InstallListener to use for callbacks.
      */
     public static void setAppLanguagePref(
-            String languageName, LanguageSplitInstaller.InstallListener listener) {
+            @Nullable String languageName, LanguageSplitInstaller.InstallListener listener) {
         // Wrap the install listener so that on success the app override preference is set.
         LanguageSplitInstaller.InstallListener wrappedListener =
                 (success) -> {
@@ -168,13 +168,14 @@ public class AppLocaleUtils {
         if (!BundleUtils.isBundle() || isFollowSystemLanguage(languageName)) {
             wrappedListener.onComplete(true);
         } else {
+            assert languageName != null;
             LanguageSplitInstaller.getInstance().installLanguage(languageName, wrappedListener);
         }
     }
 
     /** Sets the {@link LocaleManager} App language to |languageName|. */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    private static void setSystemManagedAppLanguage(String languageName) {
+    private static void setSystemManagedAppLanguage(@Nullable String languageName) {
         LocaleManager localeManager = getLocaleManager();
         if (TextUtils.isEmpty(languageName)) {
             localeManager.setApplicationLocales(LocaleList.getEmptyLocaleList());
@@ -231,13 +232,10 @@ public class AppLocaleUtils {
      * possible to use Build.VERSION_CODES.T.
      *
      * @return True if the current Android SDK supports {@link LocaleManager}
-     * NOTE(jarle@vivaldi.com): Remove temp fix when the new SDK is released.
      */
     @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.TIRAMISU)
     public static boolean shouldUseSystemManagedLocale() {
-        // Vivaldi (temp. fix for VAB-6818)
-        return false;
-        //return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
     }
 
     /**
@@ -245,7 +243,7 @@ public class AppLocaleUtils {
      * Note: "en" and "en-AU" will return false since the available locales are "en-GB" and "en-US".
      * @param potentialUiLanguage BCP-47 language tag representing a locale (e.g. "en-US")
      */
-    public static boolean isAvailableExactUiLanguage(String potentialUiLanguage) {
+    public static boolean isAvailableExactUiLanguage(@Nullable String potentialUiLanguage) {
         return isAvailableUiLanguage(potentialUiLanguage, null);
     }
 
@@ -262,7 +260,7 @@ public class AppLocaleUtils {
     }
 
     private static boolean isAvailableUiLanguage(
-            String potentialUiLanguage, @Nullable Comparator<String> comparator) {
+            @Nullable String potentialUiLanguage, @Nullable Comparator<String> comparator) {
         // The default system language is always an available UI language.
         if (isFollowSystemLanguage(potentialUiLanguage)) return true;
         return Arrays.binarySearch(

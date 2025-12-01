@@ -5,6 +5,7 @@
 #ifndef CONTENT_BROWSER_AI_ECHO_AI_LANGUAGE_MODEL_H_
 #define CONTENT_BROWSER_AI_ECHO_AI_LANGUAGE_MODEL_H_
 
+#include "base/containers/flat_set.h"
 #include "base/memory/weak_ptr.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -17,7 +18,8 @@ namespace content {
 class EchoAILanguageModel : public blink::mojom::AILanguageModel {
  public:
   explicit EchoAILanguageModel(
-      blink::mojom::AILanguageModelSamplingParamsPtr sampling_params);
+      blink::mojom::AILanguageModelSamplingParamsPtr sampling_params,
+      base::flat_set<blink::mojom::AILanguageModelPromptType> input_types);
   EchoAILanguageModel(const EchoAILanguageModel&) = delete;
   EchoAILanguageModel& operator=(const EchoAILanguageModel&) = delete;
 
@@ -25,6 +27,10 @@ class EchoAILanguageModel : public blink::mojom::AILanguageModel {
 
   // `blink::mojom::AILanguageModel` implementation.
   void Prompt(std::vector<blink::mojom::AILanguageModelPromptPtr> prompts,
+              on_device_model::mojom::ResponseConstraintPtr constraint,
+              mojo::PendingRemote<blink::mojom::ModelStreamingResponder>
+                  pending_responder) override;
+  void Append(std::vector<blink::mojom::AILanguageModelPromptPtr> prompts,
               mojo::PendingRemote<blink::mojom::ModelStreamingResponder>
                   pending_responder) override;
   void Fork(
@@ -32,9 +38,8 @@ class EchoAILanguageModel : public blink::mojom::AILanguageModel {
           client) override;
   void Destroy() override;
   void MeasureInputUsage(
-      const std::string& input,
-      mojo::PendingRemote<blink::mojom::AILanguageModelMeasureInputUsageClient>
-          client) override;
+      std::vector<blink::mojom::AILanguageModelPromptPtr> input,
+      MeasureInputUsageCallback callback) override;
 
  private:
   void DoMockExecution(const std::string& input,
@@ -43,6 +48,8 @@ class EchoAILanguageModel : public blink::mojom::AILanguageModel {
   bool is_destroyed_ = false;
   uint64_t current_tokens_ = 0;
   blink::mojom::AILanguageModelSamplingParamsPtr sampling_params_;
+  // Prompt types supported by the language model in this session.
+  base::flat_set<blink::mojom::AILanguageModelPromptType> input_types_;
 
   mojo::RemoteSet<blink::mojom::ModelStreamingResponder> responder_set_;
 

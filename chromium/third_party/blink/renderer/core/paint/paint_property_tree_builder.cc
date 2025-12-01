@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/animation/element_animations.h"
 #include "third_party/blink/renderer/core/css/clip_path_paint_image_generator.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
+#include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
@@ -269,6 +270,8 @@ class FragmentPaintPropertyTreeBuilder {
   ALWAYS_INLINE void UpdateViewTransitionSubframeRootEffect();
   ALWAYS_INLINE void UpdateViewTransitionEffect();
   ALWAYS_INLINE void UpdateViewTransitionClip();
+  ALWAYS_INLINE const EffectPaintPropertyNodeOrAlias*
+  ParentForViewTransitionPseudoEffect() const;
   ALWAYS_INLINE void UpdateEffect();
   ALWAYS_INLINE void UpdateElementCaptureEffect();
   ALWAYS_INLINE void UpdateFilter();
@@ -844,6 +847,24 @@ void FragmentPaintPropertyTreeBuilder::UpdateStickyTranslation(
                              ->scroll_container_relative_containing_block_rect);
 
           constraint->pixel_snap_offset = gfx::Vector2dF(pixel_snap_offset);
+          // gfx::Vector2dF rounds differently than PhysicalOffset at
+          // half-integral negative values. This hack works around that
+          // situation.
+          // See https://issues.chromium.org/issues/401693546#comment6
+          //
+          // TODO(crbug.com/404418768 ): Remove this in favor of applying the
+          // same rounding logic (round up instead of away from 0) for our
+          // floating point rounding.
+          float adjustment_left = 0.0;
+          float adjustment_top = 0.0;
+          if (pixel_snap_offset.left == LayoutUnit(-0.5)) {
+            adjustment_left = 0.001;
+          }
+          if (pixel_snap_offset.top == LayoutUnit(-0.5)) {
+            adjustment_top = 0.001;
+          }
+          constraint->pixel_snap_offset +=
+              gfx::Vector2dF(adjustment_left, adjustment_top);
 
           if (const LayoutBoxModelObject* sticky_box_shifting_ancestor =
                   layout_constraint->nearest_sticky_layer_shifting_sticky_box) {
@@ -1542,7 +1563,21 @@ bool FragmentPaintPropertyTreeBuilder::NeedsEffectFor2DScaleTransform() const {
     return false;
   }
 
-  return has_scale2d_transform_ && !has_non_scale2d_transform_;
+  if (!has_scale2d_transform_ || has_non_scale2d_transform_) {
+    return false;
+  }
+
+  if (To<LayoutBoxModelObject>(object_)
+          .Layer()
+          ->HasBackdropFilterDescendant()) {
+    return false;
+  }
+
+  if (object_.StyleRef().HasNonInitialBackdropFilter()) {
+    return false;
+  }
+
+  return true;
 }
 
 static bool NeedsEffectIgnoringClipPathAnd2DScale(
@@ -1661,6 +1696,47 @@ bool FragmentPaintPropertyTreeBuilder::EffectCanUseCurrentClipAsOutputClip()
   return true;
 }
 
+const EffectPaintPropertyNodeOrAlias*
+FragmentPaintPropertyTreeBuilder::ParentForViewTransitionPseudoEffect() const {
+  PseudoElement* pseudo = To<PseudoElement>(object_.GetNode());
+  DCHECK(pseudo);
+
+  Element& scope = pseudo->UltimateOriginatingElement();
+  if (scope.IsDocumentElement()) {
+    // The transition pseudo element doesn't draw into the LayoutView's
+    // effect, but rather as its sibling. So this re-parents the effect to
+    // whatever the grand-parent effect was. Note that it doesn't matter
+    // whether the grand-parent is the root stacking context or something
+    // intermediate, as long as it is a sibling of the LayoutView context.
+    // This makes it possible to capture the output of the LayoutView context
+    // into one of the transition contexts. We also want that capture to be
+    // without any additional effects, such as overscroll elasticity effects.
+    if (IsInLocalSubframe(object_)) {
+      return object_.GetDocument()
+          .GetLayoutView()
+          ->FirstFragment()
+          .PaintProperties()
+          ->ViewTransitionSubframeRootEffect();
+    } else {
+      return &EffectPaintPropertyNode::Root();
+    }
+  }
+
+  DCHECK(!scope.IsDocumentElement());
+  auto* scope_properties =
+      scope.GetLayoutObject()->FirstFragment().PaintProperties();
+  if (!scope_properties) {
+    return context_.current_effect;
+  }
+
+  // Make the effect node for the ::view-transition pseudo element a sibling of
+  // the ViewTransitionEffect for the scope element. The ViewTransitionEffect is
+  // guaranteed to exist (see ViewTransition::NeedsViewTransitionEffectNode).
+  auto* scope_vt_effect = scope_properties->ViewTransitionEffect();
+  CHECK(scope_vt_effect && scope_vt_effect->Parent());
+  return scope_vt_effect->Parent();
+}
+
 void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
   DCHECK(properties_);
   // Since we're doing a full update, clear list of objects waiting for a
@@ -1708,7 +1784,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
       if (object_.IsBoxModelObject()) {
         if (auto* layer = To<LayoutBoxModelObject>(object_).Layer()) {
           CompositorFilterOperations operations;
-          gfx::RRectF bounds;
+          SkPath bounds;
           layer->UpdateCompositorFilterOperationsForBackdropFilter(operations,
                                                                    bounds);
           if (!operations.IsEmpty()) {
@@ -1719,7 +1795,8 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
         }
       }
 
-      state.has_2d_scale_transform = NeedsEffectFor2DScaleTransform();
+      state.needs_effect_for_2d_scale_transform =
+          NeedsEffectFor2DScaleTransform();
 
       state.direct_compositing_reasons =
           full_context_.direct_compositing_reasons &
@@ -1757,26 +1834,9 @@ void FragmentPaintPropertyTreeBuilder::UpdateEffect() {
           style.IsRunningBackdropFilterAnimationOnCompositor();
 
       const auto* parent_effect = context_.current_effect;
-      // The transition pseudo element doesn't draw into the LayoutView's
-      // effect, but rather as its sibling. So this re-parents the effect to
-      // whatever the grand-parent effect was. Note that it doesn't matter
-      // whether the grand-parent is the root stacking context or something
-      // intermediate, as long as it is a sibling of the LayoutView context.
-      // This makes it possible to capture the output of the LayoutView context
-      // into one of the transition contexts. We also want that capture to be
-      // without any additional effects, such as overscroll elasticity effects.
       if (object_.GetNode() &&
           object_.GetNode()->GetPseudoId() == kPseudoIdViewTransition) {
-        if (IsInLocalSubframe(object_)) {
-          parent_effect = object_.GetDocument()
-                              .GetLayoutView()
-                              ->FirstFragment()
-                              .PaintProperties()
-                              ->ViewTransitionSubframeRootEffect();
-        } else {
-          parent_effect = &EffectPaintPropertyNode::Root();
-        }
-        DCHECK(parent_effect);
+        parent_effect = ParentForViewTransitionPseudoEffect();
       }
       DCHECK(parent_effect);
 
@@ -2274,8 +2334,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateClipPathClip() {
                 : gfx::Vector2dF();
         precise_clip_path_rect_->Offset(paint_offset);
         if (std::optional<Path> path =
-                ClipPathClipper::PathBasedClip(object_)) {
-          path->Translate(paint_offset);
+                ClipPathClipper::PathBasedClip(object_, paint_offset)) {
           std::optional<FloatRoundedRect> rrect;
           // TODO(crbug.com/337191311): The optimization breaks
           // view-transition if the bounding box of clip-path is larger than
@@ -2521,7 +2580,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateBackgroundClip() {
 static void AdjustRoundedClipForOverflowClipMargin(
     const LayoutBox& box,
     gfx::RectF& layout_clip_rect,
-    FloatRoundedRect& paint_clip_rect) {
+    ContouredRect& paint_clip_rect) {
   const auto& style = box.StyleRef();
   auto overflow_clip_margin = style.OverflowClipMargin();
   if (!overflow_clip_margin || !box.ShouldApplyOverflowClipMargin())
@@ -2570,14 +2629,11 @@ void FragmentPaintPropertyTreeBuilder::UpdateInnerBorderRadiusClip() {
       gfx::Vector2dF offset(-OffsetInStitchedFragments(BoxFragment()));
       layout_clip_rect.Offset(offset);
       paint_clip_rect.Move(offset);
-
-      FloatRoundedRect rounded_rect = paint_clip_rect.AsRoundedRect();
-
-      // TODO(crbug.com/397459628) Apply corner-shape to overflow-clip-margin
       AdjustRoundedClipForOverflowClipMargin(box, layout_clip_rect,
-                                             rounded_rect);
+                                             paint_clip_rect);
       ClipPaintPropertyNode::State state(*context_.current.transform,
-                                         layout_clip_rect, rounded_rect);
+                                         layout_clip_rect,
+                                         paint_clip_rect.AsRoundedRect());
       if (!paint_clip_rect.HasRoundCurvature()) {
         state.SetClipRect(layout_clip_rect,
                           FloatRoundedRect(paint_clip_rect.Rect()));
@@ -2676,8 +2732,10 @@ void FragmentPaintPropertyTreeBuilder::UpdateOverflowClip() {
         DCHECK(object_.IsSVGViewportContainer());
         const auto& viewport_container =
             To<LayoutSVGViewportContainer>(object_);
+        // Clipping is performed in the viewport container's local coordinate
+        // space, so take the inverse from viewBox transform.
         const auto clip_rect =
-            viewport_container.LocalToSVGParentTransform().Inverse().MapRect(
+            viewport_container.ComputeViewboxTransform().Inverse().MapRect(
                 viewport_container.Viewport());
         // TODO(crbug.com/1248598): Should we use non-snapped clip rect for
         // the first parameter?
@@ -2817,14 +2875,12 @@ void FragmentPaintPropertyTreeBuilder::UpdateScrollAndScrollTranslation() {
       UpdateScrollNode();
       UpdateOverflowControlEffects();
       UpdateScrollTranslation();
-      if (RuntimeEnabledFeatures::
-              ScrollableAreasWithScrollNodeOptimizationEnabled()) {
+      if (RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
         object_.GetFrameView()->AddScrollableAreaWithScrollNode(
             *To<LayoutBox>(object_).GetScrollableArea());
       }
     } else {
-      if (RuntimeEnabledFeatures::
-              ScrollableAreasWithScrollNodeOptimizationEnabled()) {
+      if (RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
         if (properties_->Scroll() &&
             To<LayoutBox>(object_).GetScrollableArea()) {
           object_.GetFrameView()->RemoveScrollableAreaWithScrollNode(
@@ -2875,7 +2931,7 @@ void FragmentPaintPropertyTreeBuilder::UpdateScrollNode() {
   state.user_scrollable_vertical =
       scrollable_area->UserInputScrollable(kVerticalScrollbar);
 
-  if (!RuntimeEnabledFeatures::UnifiedScrollableAreasEnabled()) {
+  if (!RuntimeEnabledFeatures::ScrollableAreaOptimizationEnabled()) {
     if (state.user_scrollable_horizontal || state.user_scrollable_vertical) {
       object_.GetFrameView()->AddUserScrollableArea(*scrollable_area);
     } else {
@@ -3649,21 +3705,16 @@ FragmentData& PaintPropertyTreeBuilder::GetFragmentData() const {
 
 void PaintPropertyTreeBuilder::UpdateFragmentData() {
   FragmentData& fragment = GetFragmentData();
-  if (IsInNGFragmentTraversal()) {
-    context_.fragment_context.current.fragmentainer_idx =
-        pre_paint_info_->fragmentainer_idx;
-  } else {
+  if (!IsInNGFragmentTraversal()) {
     DCHECK_EQ(&fragment, &object_.FirstFragment());
     const FragmentDataList& fragment_list =
         object_.GetMutableForPainting().FragmentList();
     wtf_size_t old_fragment_count = fragment_list.size();
     object_.GetMutableForPainting().FragmentList().Shrink(1);
 
-    if (context_.fragment_context.current.fragmentainer_idx == WTF::kNotFound) {
-      // We're not fragmented, but we may have been previously.
-      if (old_fragment_count > 1u) {
-        object_.GetMutableForPainting().FragmentCountChanged();
-      }
+    // We're not fragmented, but we may have been previously.
+    if (old_fragment_count > 1u) {
+      object_.GetMutableForPainting().FragmentCountChanged();
     }
   }
 }
@@ -3704,6 +3755,9 @@ static bool NeedsRootElementGroupForViewBackground(const LayoutObject& object) {
         return true;
       }
       if (NeedsClipPathClipOrMask(*root_object)) {
+        return true;
+      }
+      if (root_object->StyleRef().HasFilter()) {
         return true;
       }
     }
@@ -4058,7 +4112,7 @@ bool PaintPropertyTreeBuilder::CanDoDeferredTransformNodeUpdate(
     // the fast path. (However, we intentionally allow the fast path to
     // happen when changing *to* a scale transform, to avoid performance
     // problems detecting this situation.
-    if (effect->Has2DScaleTransform()) {
+    if (effect->NeedsEffectFor2DScaleTransform()) {
       return false;
     }
   }

@@ -12,7 +12,6 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "chrome/browser/task_manager/providers/web_contents/back_forward_cache_task.h"
 #include "chrome/browser/task_manager/providers/web_contents/fenced_frame_task.h"
@@ -204,11 +203,11 @@ WebContentsTaskProvider::WebContentsEntry::GetTaskForFrame(
 
 RenderFrameHost* WebContentsTaskProvider::WebContentsEntry::FindLocalRoot(
     RenderFrameHost* render_frame_host) const {
-  SiteInstance* site_instance = render_frame_host->GetSiteInstance();
   RenderFrameHost* candidate = render_frame_host;
   while (RenderFrameHost* parent = candidate->GetParent()) {
-    if (parent->GetSiteInstance() != site_instance)
+    if (parent->GetProcess() != candidate->GetProcess()) {
       break;
+    }
     candidate = parent;
   }
   return candidate;
@@ -572,7 +571,7 @@ void WebContentsTaskProvider::OnWebContentsTagRemoved(
   DCHECK(web_contents);
 
   auto itr = entries_map_.find(web_contents);
-  CHECK(itr != entries_map_.end(), base::NotFatalUntil::M130);
+  CHECK(itr != entries_map_.end());
 
   // Must manually clear the tasks and notify the observer.
   itr->second->ClearAllTasks(true);

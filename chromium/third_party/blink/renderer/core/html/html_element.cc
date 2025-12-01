@@ -55,6 +55,7 @@
 #include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/focus_params.h"
 #include "third_party/blink/renderer/core/dom/id_target_observer.h"
+#include "third_party/blink/renderer/core/dom/invoker_data.h"
 #include "third_party/blink/renderer/core/dom/node_lists_node_data.h"
 #include "third_party/blink/renderer/core/dom/node_traversal.h"
 #include "third_party/blink/renderer/core/dom/popover_data.h"
@@ -189,7 +190,7 @@ class PopoverCloseWatcherEventListener : public NativeEventListener {
     // Don't do anything in response to cancel events, as per the HTML spec
     if (event->type() == event_type_names::kClose) {
       popover_->HidePopoverInternal(
-          HidePopoverFocusBehavior::kFocusPreviousElement,
+          /*invoker=*/nullptr, HidePopoverFocusBehavior::kFocusPreviousElement,
           HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
           /*exception_state=*/nullptr);
     }
@@ -774,6 +775,8 @@ const AttributeTriggers* HTMLElement::TriggersForAttributeName(
        kNoEvent, nullptr},
       {html_names::kWritingsuggestionsAttr,
        WebFeature::kHTMLElementWritingSuggestions, kNoEvent, nullptr},
+      {html_names::kRoleAttr, kNoWebFeature, kNoEvent,
+       &HTMLElement::OnRoleAttrChanged},
   });
 
   static bool registered_triggers = false;
@@ -1231,7 +1234,7 @@ void HTMLElement::UpdatePopoverAttribute(const AtomicString& value) {
     // If the popover type is changing, hide it.
     if (popoverOpen()) {
       HidePopoverInternal(
-          HidePopoverFocusBehavior::kFocusPreviousElement,
+          /*invoker=*/nullptr, HidePopoverFocusBehavior::kFocusPreviousElement,
           HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
           /*exception_state=*/nullptr);
       // Event handlers could have changed the popover, including by removing
@@ -1444,6 +1447,17 @@ void HTMLElement::showPopover(ShowPopoverOptions* options,
 
 void HTMLElement::ShowPopoverInternal(Element* invoker,
                                       ExceptionState* exception_state) {
+  auto is_potential_partial_interest = [](Element* invoker) {
+    return invoker && invoker->GetInvokerData() &&
+           invoker->GetInvokerData()->GetInterestState() ==
+               InterestState::kPotentialPartialInterest;
+  };
+  auto abandon_partial_interest = [this, &invoker,
+                                   &is_potential_partial_interest]() {
+    if (is_potential_partial_interest(invoker)) {
+      invoker->ChangeInterestState(this, InterestState::kNoInterest);
+    }
+  };
   if (!IsPopoverReady(PopoverTriggerAction::kShow, exception_state,
                       /*include_event_handler_text=*/false,
                       /*document=*/nullptr)) {
@@ -1451,6 +1465,7 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
         << " Callers which aren't supposed to throw exceptions should not call "
            "ShowPopoverInternal when the Popover isn't in a valid state to be "
            "shown.";
+    abandon_partial_interest();
     return;
   }
 
@@ -1468,14 +1483,16 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
   // Fire the "opening" beforetoggle event.
   auto* event = ToggleEvent::Create(
       event_type_names::kBeforetoggle, Event::Cancelable::kYes,
-      /*old_state*/ "closed", /*new_state*/ "open");
+      /*old_state*/ "closed", /*new_state*/ "open", invoker);
   CHECK(!event->bubbles());
   CHECK(event->cancelable());
   CHECK_EQ(event->oldState(), "closed");
   CHECK_EQ(event->newState(), "open");
   event->SetTarget(this);
-  if (DispatchEvent(*event) != DispatchEventResult::kNotCanceled)
+  if (DispatchEvent(*event) != DispatchEventResult::kNotCanceled) {
+    abandon_partial_interest();
     return;
+  }
 
   // The 'beforetoggle' event handler could have changed this popover, e.g. by
   // changing its type, removing it from the document, moving it to another
@@ -1483,6 +1500,7 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
   if (!IsPopoverReady(PopoverTriggerAction::kShow, exception_state,
                       /*include_event_handler_text=*/true,
                       &original_document)) {
+    abandon_partial_interest();
     return;
   }
 
@@ -1549,11 +1567,13 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
             "The value of the popover attribute was changed while hiding the "
             "popover.");
       }
+      abandon_partial_interest();
       return;
     }
     if (!IsPopoverReady(PopoverTriggerAction::kShow, exception_state,
                         /*include_event_handler_text=*/true,
                         &original_document)) {
+      abandon_partial_interest();
       return;
     }
 
@@ -1579,13 +1599,17 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
     GetPopoverData()->setCloseWatcher(close_watcher);
   }
 
+  if (!IsInUserAgentShadowRoot()) {
+    // Don't count things like customizable-`<select>`'s use of a popover.
+    UseCounter::Count(GetDocument(), WebFeature::kPopoverShown);
+  }
   MarkPopoverInvokersDirty(*this);
   GetPopoverData()->setPreviouslyFocusedElement(nullptr);
   Element* originally_focused_element = original_document.FocusedElement();
   original_document.AddToTopLayer(this);
   // Make the popover match `:popover-open` and remove `display:none` styling:
   GetPopoverData()->setVisibilityState(PopoverVisibilityState::kShowing);
-  GetPopoverData()->setInvoker(invoker);
+  SetPopoverInvoker(invoker);
   SetImplicitAnchor(invoker);
 
   PseudoStateChanged(CSSSelector::kPseudoPopoverOpen);
@@ -1606,6 +1630,19 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
     GetPopoverData()->setPreviouslyFocusedElement(originally_focused_element);
   }
 
+  // Now that the popover has been shown, we can check the focusability of its
+  // contents, to evaluate whether we need partial interest, or should go
+  // directly to full interest.
+  if (is_potential_partial_interest(invoker)) {
+    bool is_focusable =
+        IsKeyboardFocusableSlow(UpdateBehavior::kAssertNoLayoutUpdates) ||
+        ContainsKeyboardFocusableElementsSlow(
+            UpdateBehavior::kAssertNoLayoutUpdates);
+    invoker->ChangeInterestState(this, is_focusable
+                                           ? InterestState::kPartialInterest
+                                           : InterestState::kFullInterest);
+  }
+
   // Queue the "opening" toggle event.
   String old_state = "closed";
   ToggleEvent* after_event;
@@ -1620,7 +1657,7 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
   }
   after_event = ToggleEvent::Create(event_type_names::kToggle,
                                     Event::Cancelable::kNo, old_state,
-                                    /*new_state*/ "open");
+                                    /*new_state*/ "open", invoker);
   CHECK_EQ(after_event->newState(), "open");
   CHECK_EQ(after_event->oldState(), old_state);
   CHECK(!after_event->bubbles());
@@ -1637,6 +1674,16 @@ void HTMLElement::ShowPopoverInternal(Element* invoker,
           WrapPersistent(this), WrapPersistent(after_event))));
 }
 
+void HTMLElement::SetPopoverInvoker(Element* invoker) {
+  if (Element* oldInvoker = GetPopoverData()->invoker()) {
+    oldInvoker->GetInvokerData()->SetInvokedPopover(nullptr);
+  }
+  GetPopoverData()->setInvoker(invoker);
+  if (invoker) {
+    invoker->EnsureInvokerData().SetInvokedPopover(this);
+  }
+}
+
 // static
 void HTMLElement::CloseEntirePopoverStack(
     HTMLDocument::PopoverStack& stack,
@@ -1645,8 +1692,9 @@ void HTMLElement::CloseEntirePopoverStack(
   while (!stack.empty()) {
     // TODO(masonf) If a popover's beforetoggle handler opens a new popover, it
     // is possible to get an infinite loop here. Need to break that loop.
-    stack.back()->HidePopoverInternal(focus_behavior, transition_behavior,
-                                      /*exception_state*/ nullptr);
+    stack.back()->HidePopoverInternal(
+        /*invoker=*/nullptr, focus_behavior, transition_behavior,
+        /*exception_state=*/nullptr);
   }
 }
 
@@ -1711,8 +1759,9 @@ void HTMLElement::HideAllPopoversUntil(
       }
       while (last_to_hide && last_to_hide->popoverOpen()) {
         CHECK(!stack.empty());
-        stack.back()->HidePopoverInternal(focus_behavior, transition_behavior,
-                                          exception_state);
+        stack.back()->HidePopoverInternal(
+            /*invoker=*/nullptr, focus_behavior, transition_behavior,
+            exception_state);
       }
       // Now check if we're left with endpoint at the top of the stack.
       CHECK(!repeating_hide || stack.back() == endpoint);
@@ -1754,12 +1803,13 @@ void HTMLElement::HideAllPopoversUntil(
 
 void HTMLElement::hidePopover(ExceptionState& exception_state) {
   HidePopoverInternal(
-      HidePopoverFocusBehavior::kFocusPreviousElement,
+      /*invoker=*/nullptr, HidePopoverFocusBehavior::kFocusPreviousElement,
       HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
       &exception_state);
 }
 
 void HTMLElement::HidePopoverInternal(
+    Element* invoker,
     HidePopoverFocusBehavior focus_behavior,
     HidePopoverTransitionBehavior transition_behavior,
     ExceptionState* exception_state) {
@@ -1802,7 +1852,9 @@ void HTMLElement::HidePopoverInternal(
   }
 
   MarkPopoverInvokersDirty(*this);
-  GetPopoverData()->setInvoker(nullptr);
+  if (!RuntimeEnabledFeatures::ClearPopoverInvokerAfterBeforeToggleEnabled()) {
+    SetPopoverInvoker(nullptr);
+  }
   // Events are only fired in the case that the popover is not being removed
   // from the document.
   if (transition_behavior ==
@@ -1810,7 +1862,7 @@ void HTMLElement::HidePopoverInternal(
     // Fire the "closing" beforetoggle event.
     auto* event = ToggleEvent::Create(
         event_type_names::kBeforetoggle, Event::Cancelable::kNo,
-        /*old_state*/ "open", /*new_state*/ "closed");
+        /*old_state*/ "open", /*new_state*/ "closed", invoker);
     CHECK(!event->bubbles());
     CHECK(!event->cancelable());
     CHECK_EQ(event->oldState(), "open");
@@ -1844,6 +1896,25 @@ void HTMLElement::HidePopoverInternal(
       return;
     }
 
+    // If this is the target of an active interest invoker, closing the popover
+    // constitutes an automatic loss of interest in the invoker.
+    if (Element* upstream_invoker = GetInterestInvoker()) {
+      DCHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+          GetDocument().GetExecutionContext()));
+      DCHECK_EQ(upstream_invoker->InterestTargetElement(), this);
+      DCHECK_NE(upstream_invoker->GetInvokerData()->GetInterestState(),
+                InterestState::kNoInterest);
+      upstream_invoker->LoseInterestNow(this);
+    }
+
+    // The 'loseinterest' event handler could have changed this popover, e.g. by
+    // changing its type, removing it from the document, or calling
+    // showPopover().
+    if (!IsPopoverReady(PopoverTriggerAction::kHide, exception_state,
+                        /*include_event_handler_text=*/true, &document)) {
+      return;
+    }
+
     // Queue the "closing" toggle event.
     String old_state = "open";
     ToggleEvent* after_event;
@@ -1858,7 +1929,7 @@ void HTMLElement::HidePopoverInternal(
     }
     after_event = ToggleEvent::Create(event_type_names::kToggle,
                                       Event::Cancelable::kNo, old_state,
-                                      /*new_state*/ "closed");
+                                      /*new_state*/ "closed", invoker);
     CHECK_EQ(after_event->newState(), "closed");
     CHECK_EQ(after_event->oldState(), old_state);
     CHECK(!after_event->bubbles());
@@ -1890,6 +1961,10 @@ void HTMLElement::HidePopoverInternal(
       CHECK_EQ(auto_stack.back(), this);
       auto_stack.pop_back();
     }
+  }
+
+  if (RuntimeEnabledFeatures::ClearPopoverInvokerAfterBeforeToggleEnabled()) {
+    SetPopoverInvoker(nullptr);
   }
 
   // Re-apply display:none, and stop matching `:popover-open`.
@@ -2317,7 +2392,7 @@ bool HTMLElement::HandleCommandInternal(HTMLElement& invoker,
        command == CommandEventType::kHidePopover);
   if (can_hide) {
     HidePopoverInternal(
-        HidePopoverFocusBehavior::kFocusPreviousElement,
+        &invoker, HidePopoverFocusBehavior::kFocusPreviousElement,
         HidePopoverTransitionBehavior::kFireEventsAndWaitForTransitions,
         /*exception_state=*/nullptr);
     return true;
@@ -2607,9 +2682,10 @@ void HTMLElement::RemovedFrom(ContainerNode& insertion_point) {
     bool was_in_document = insertion_point.isConnected();
     if (was_in_document) {
       // We can't run focus event handlers while removing elements.
-      HidePopoverInternal(HidePopoverFocusBehavior::kNone,
-                          HidePopoverTransitionBehavior::kNoEventsNoWaiting,
-                          /*exception_state=*/nullptr);
+      HidePopoverInternal(
+          /*invoker=*/nullptr, HidePopoverFocusBehavior::kNone,
+          HidePopoverTransitionBehavior::kNoEventsNoWaiting,
+          /*exception_state=*/nullptr);
     }
   }
 
@@ -2773,11 +2849,12 @@ void HTMLElement::AddHTMLBackgroundImageToStyle(
   if (url.empty()) {
     return;
   }
-  auto* image_value = MakeGarbageCollected<CSSImageValue>(
-      CSSUrlData(AtomicString(url), GetDocument().CompleteURL(url),
-                 Referrer(GetExecutionContext()->OutgoingReferrer(),
-                          GetExecutionContext()->GetReferrerPolicy()),
-                 OriginClean::kTrue, false /* is_ad_related */));
+  auto* image_value =
+      MakeGarbageCollected<CSSImageValue>(*MakeGarbageCollected<CSSUrlData>(
+          AtomicString(url), GetDocument().CompleteURL(url),
+          Referrer(GetExecutionContext()->OutgoingReferrer(),
+                   GetExecutionContext()->GetReferrerPolicy()),
+          /*origin_clean=*/true, /*is_ad_related=*/false));
   if (initiator_name) {
     image_value->SetInitiator(initiator_name);
   }
@@ -3206,6 +3283,119 @@ AtomicString HTMLElement::writingSuggestions() const {
 
 void HTMLElement::setWritingSuggestions(const AtomicString& value) {
   setAttribute(html_names::kWritingsuggestionsAttr, value);
+}
+
+void HTMLElement::OnRoleAttrChanged(const AttributeModificationParams& params) {
+  if (IsInUserAgentShadowRoot()) {
+    // Don't UseCount values built into the browser, we want to know when
+    // authors are using them.
+    return;
+  }
+
+  if (EqualIgnoringASCIICase(params.new_value, "menu")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMenu);
+  } else if (EqualIgnoringASCIICase(params.new_value, "menubar")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMenubar);
+  } else if (EqualIgnoringASCIICase(params.new_value, "menuitem")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMenuitem);
+  } else if (EqualIgnoringASCIICase(params.new_value, "menuitemcheckbox")) {
+    UseCounter::Count(GetDocument(),
+                      WebFeature::kRoleAttributeMenuitemcheckbox);
+  } else if (EqualIgnoringASCIICase(params.new_value, "menuitemradio")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMenuitemradio);
+  } else if (EqualIgnoringASCIICase(params.new_value, "button")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeButton);
+  } else if (EqualIgnoringASCIICase(params.new_value, "cell")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeCell);
+  } else if (EqualIgnoringASCIICase(params.new_value, "checkbox")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeCheckbox);
+  } else if (EqualIgnoringASCIICase(params.new_value, "columnheader")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeColumnheader);
+  } else if (EqualIgnoringASCIICase(params.new_value, "combobox")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeCombobox);
+  } else if (EqualIgnoringASCIICase(params.new_value, "dialog")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeDialog);
+  } else if (EqualIgnoringASCIICase(params.new_value, "grid")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeGrid);
+  } else if (EqualIgnoringASCIICase(params.new_value, "gridcell")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeGridcell);
+  } else if (EqualIgnoringASCIICase(params.new_value, "heading")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeHeading);
+  } else if (EqualIgnoringASCIICase(params.new_value, "img")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeImg);
+  } else if (EqualIgnoringASCIICase(params.new_value, "input")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeInput);
+  } else if (EqualIgnoringASCIICase(params.new_value, "link")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeLink);
+  } else if (EqualIgnoringASCIICase(params.new_value, "list")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeList);
+  } else if (EqualIgnoringASCIICase(params.new_value, "listbox")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeListbox);
+  } else if (EqualIgnoringASCIICase(params.new_value, "listitem")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeListitem);
+  } else if (EqualIgnoringASCIICase(params.new_value, "main")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMain);
+  } else if (EqualIgnoringASCIICase(params.new_value, "marquee")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMarquee);
+  } else if (EqualIgnoringASCIICase(params.new_value, "math")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMath);
+  } else if (EqualIgnoringASCIICase(params.new_value, "meter")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeMeter);
+  } else if (EqualIgnoringASCIICase(params.new_value, "navigation")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeNavigation);
+  } else if (EqualIgnoringASCIICase(params.new_value, "option")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeOption);
+  } else if (EqualIgnoringASCIICase(params.new_value, "progressbar")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeProgressbar);
+  } else if (EqualIgnoringASCIICase(params.new_value, "radio")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeRadio);
+  } else if (EqualIgnoringASCIICase(params.new_value, "radiogroup")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeRadiogroup);
+  } else if (EqualIgnoringASCIICase(params.new_value, "range")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeRange);
+  } else if (EqualIgnoringASCIICase(params.new_value, "row")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeRow);
+  } else if (EqualIgnoringASCIICase(params.new_value, "rowgroup")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeRowgroup);
+  } else if (EqualIgnoringASCIICase(params.new_value, "rowheader")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeRowheader);
+  } else if (EqualIgnoringASCIICase(params.new_value, "scrollbar")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeScrollbar);
+  } else if (EqualIgnoringASCIICase(params.new_value, "search")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSearch);
+  } else if (EqualIgnoringASCIICase(params.new_value, "searchbox")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSearchbox);
+  } else if (EqualIgnoringASCIICase(params.new_value, "select")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSelect);
+  } else if (EqualIgnoringASCIICase(params.new_value, "separator")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSeparator);
+  } else if (EqualIgnoringASCIICase(params.new_value, "slider")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSlider);
+  } else if (EqualIgnoringASCIICase(params.new_value, "spinbutton")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSpinbutton);
+  } else if (EqualIgnoringASCIICase(params.new_value, "switch")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeSwitch);
+  } else if (EqualIgnoringASCIICase(params.new_value, "tab")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTab);
+  } else if (EqualIgnoringASCIICase(params.new_value, "table")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTable);
+  } else if (EqualIgnoringASCIICase(params.new_value, "tablist")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTablist);
+  } else if (EqualIgnoringASCIICase(params.new_value, "tabpanel")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTabpanel);
+  } else if (EqualIgnoringASCIICase(params.new_value, "textbox")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTextbox);
+  } else if (EqualIgnoringASCIICase(params.new_value, "toolbar")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeToolbar);
+  } else if (EqualIgnoringASCIICase(params.new_value, "tooltip")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTooltip);
+  } else if (EqualIgnoringASCIICase(params.new_value, "tree")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTree);
+  } else if (EqualIgnoringASCIICase(params.new_value, "treegrid")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTreegrid);
+  } else if (EqualIgnoringASCIICase(params.new_value, "treeitem")) {
+    UseCounter::Count(GetDocument(), WebFeature::kRoleAttributeTreeitem);
+  }
 }
 
 }  // namespace blink

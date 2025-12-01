@@ -3,9 +3,6 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_collapse/cr_collapse.js';
-import 'chrome://resources/cr_elements/cr_hidden_style.css.js';
-import 'chrome://resources/cr_elements/cr_shared_style.css.js';
-import 'chrome://resources/cr_elements/cr_shared_vars.css.js';
 import './advanced_options_settings.js';
 import './button_strip.js';
 import './color_settings.js';
@@ -15,7 +12,6 @@ import './duplex_settings.js';
 import './header.js';
 import './layout_settings.js';
 import './media_size_settings.js';
-import './media_type_settings.js';
 import './margins_settings.js';
 import './more_settings.js';
 import './other_options_settings.js';
@@ -26,25 +22,48 @@ import './scaling_settings.js';
 import '/strings.m.js';
 import './link_container.js';
 
-import {CrContainerShadowMixin} from 'chrome://resources/cr_elements/cr_container_shadow_mixin.js';
-import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
-import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {CrContainerShadowMixinLit} from 'chrome://resources/cr_elements/cr_container_shadow_mixin_lit.js';
+import {WebUiListenerMixinLit} from 'chrome://resources/cr_elements/web_ui_listener_mixin_lit.js';
+import {assert} from 'chrome://resources/js/assert.js';
+import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 
 import {DarkModeMixin} from '../dark_mode_mixin.js';
+import type {Cdd} from '../data/cdd.js';
 import type {Destination} from '../data/destination.js';
 import type {Settings} from '../data/model.js';
 import type {Error} from '../data/state.js';
 import {State} from '../data/state.js';
 import {MetricsContext, PrintSettingsUiBucket} from '../metrics.js';
 
-import type {DestinationState, PrintPreviewDestinationSettingsElement} from './destination_settings.js';
+import {DestinationState} from './destination_settings.js';
+import type {PrintPreviewDestinationSettingsElement} from './destination_settings.js';
 import {SettingsMixin} from './settings_mixin.js';
-import {getTemplate} from './sidebar.html.js';
+import {getCss} from './sidebar.css.js';
+import {getHtml} from './sidebar.html.js';
 
 /**
  * Number of settings sections to show when "More settings" is collapsed.
  */
 const MAX_SECTIONS_TO_SHOW: number = 6;
+
+// Settings to observe their `available` field to decide whether to show the
+// "More settings" collapsible section.
+const SETTINGS_TO_OBSERVE: Array<keyof Settings> = [
+  'color',
+  'copies',
+  'dpi',
+  'duplex',
+  'layout',
+  'margins',
+  'mediaSize',
+  'otherOptions',
+  'pages',
+  'pagesPerSheet',
+  'scaling',
+  'vendorItems',
+];
+
 
 export interface PrintPreviewSidebarElement {
   $: {
@@ -52,26 +71,32 @@ export interface PrintPreviewSidebarElement {
   };
 }
 
-const PrintPreviewSidebarElementBase = CrContainerShadowMixin(
-    WebUiListenerMixin(SettingsMixin(DarkModeMixin(PolymerElement))));
+const PrintPreviewSidebarElementBase = CrContainerShadowMixinLit(
+    WebUiListenerMixinLit(SettingsMixin(DarkModeMixin(CrLitElement))));
 
 export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
   static get is() {
     return 'print-preview-sidebar';
   }
 
-  static get template() {
-    return getTemplate();
+  static override get styles() {
+    return getCss();
   }
 
-  static get properties() {
+  override render() {
+    return getHtml.bind(this)();
+  }
+
+  static override get properties() {
     return {
-      controlsManaged: Boolean,
+      controlsManaged: {type: Boolean},
 
       destination: {
         type: Object,
         notify: true,
       },
+
+      destinationCapabilities_: {type: Object},
 
       destinationState: {
         type: Number,
@@ -83,70 +108,70 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
         notify: true,
       },
 
-      isPdf: Boolean,
-
-      pageCount: Number,
-
-      state: {
-        type: Number,
-        observer: 'onStateChanged_',
-      },
-
-      controlsDisabled_: {
-        type: Boolean,
-        computed: 'computeControlsDisabled_(state)',
-      },
-
-      maxSheets: Number,
-
-      sheetCount_: {
-        type: Number,
-        computed: 'computeSheetCount_(' +
-            'settings.pages.*, settings.duplex.*, settings.copies.*)',
-      },
-
-      firstLoad_: {
-        type: Boolean,
-        value: true,
-      },
-
-      isInAppKioskMode_: {
-        type: Boolean,
-        value: false,
-      },
-
-      settingsExpandedByUser_: {
-        type: Boolean,
-        value: false,
-      },
-
-      shouldShowMoreSettings_: {
-        type: Boolean,
-        computed: 'computeShouldShowMoreSettings_(settings.pages.available, ' +
-            'settings.copies.available, settings.layout.available, ' +
-            'settings.color.available, settings.mediaSize.available, ' +
-            'settings.dpi.available, settings.margins.available, ' +
-            'settings.pagesPerSheet.available, settings.scaling.available, ' +
-            'settings.duplex.available, settings.otherOptions.available, ' +
-            'settings.vendorItems.available)',
-      },
+      isPdf: {type: Boolean},
+      pageCount: {type: Number},
+      state: {type: Number},
+      controlsDisabled_: {type: Boolean},
+      firstLoad_: {type: Boolean},
+      isInAppKioskMode_: {type: Boolean},
+      settingsExpandedByUser_: {type: Boolean},
+      shouldShowMoreSettings_: {type: Boolean},
+      settingsAvailable_: {type: Object},
     };
   }
 
-  controlsManaged: boolean;
-  destination: Destination|null;
-  destinationState: DestinationState;
-  error: Error;
-  isPdf: boolean;
-  pageCount: number;
-  state: State;
-  private controlsDisabled_: boolean;
-  private firstLoad_: boolean;
-  private isInAppKioskMode_: boolean;
-  private settingsExpandedByUser_: boolean;
-  maxSheets: number;
-  private sheetCount_: number;
-  private shouldShowMoreSettings_: boolean;
+  accessor controlsManaged: boolean = false;
+  accessor destination: Destination|null = null;
+  accessor destinationCapabilities_: Cdd|null = null;
+  accessor destinationState: DestinationState = DestinationState.INIT;
+  accessor error: Error|null = null;
+  accessor isPdf: boolean = false;
+  accessor pageCount: number = 0;
+  accessor state: State = State.NOT_READY;
+  protected accessor settingsAvailable_: Record<keyof Settings, boolean>;
+  protected accessor controlsDisabled_: boolean = false;
+  protected accessor firstLoad_: boolean = true;
+  protected accessor isInAppKioskMode_: boolean = false;
+  protected accessor settingsExpandedByUser_: boolean = false;
+  protected accessor shouldShowMoreSettings_: boolean = false;
+
+  constructor() {
+    super();
+
+    this.settingsAvailable_ = {} as Record<keyof Settings, boolean>;
+    for (const key of SETTINGS_TO_OBSERVE) {
+      this.settingsAvailable_[key] = true;
+    }
+  }
+
+  override connectedCallback() {
+    super.connectedCallback();
+
+    for (const key of SETTINGS_TO_OBSERVE) {
+      this.addSettingObserver(`${key}.available`, (value: boolean) => {
+        this.settingsAvailable_[key] = value;
+        this.updateShouldShowMoreSettings_();
+        this.requestUpdate();
+      });
+    }
+    this.updateShouldShowMoreSettings_();
+  }
+
+  override willUpdate(changedProperties: PropertyValues<this>) {
+    super.willUpdate(changedProperties);
+
+    if (changedProperties.has('state')) {
+      this.controlsDisabled_ = this.state !== State.READY;
+    }
+  }
+
+  override updated(changedProperties: PropertyValues<this>) {
+    super.updated(changedProperties);
+
+    if (changedProperties.has('state')) {
+      this.onStateChanged_();
+    }
+  }
 
   /**
    * @param defaultPrinter The system default printer ID.
@@ -166,54 +191,19 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
         serializedDestinationSelectionRulesStr);
   }
 
-  /**
-   * @return Whether the controls should be disabled.
-   */
-  private computeControlsDisabled_(): boolean {
-    return this.state !== State.READY;
-  }
-
-  /**
-   * @return The number of sheets that will be printed.
-   */
-  private computeSheetCount_(): number {
-    let sheets = (this.getSettingValue('pages') as number[]).length;
-    if (this.getSettingValue('duplex')) {
-      sheets = Math.ceil(sheets / 2);
-    }
-    return sheets * (this.getSettingValue('copies') as number);
-  }
-
-  /**
-   * @return Whether to show the "More settings" link.
-   */
-  private computeShouldShowMoreSettings_(): boolean {
+  private updateShouldShowMoreSettings_() {
     // Destination settings is always available. See if the total number of
     // available sections exceeds the maximum number to show.
-    const keys: Array<keyof Settings> = [
-      'pages',
-      'copies',
-      'layout',
-      'color',
-      'mediaSize',
-      'margins',
-      'color',
-      'pagesPerSheet',
-      'scaling',
-      'dpi',
-      'duplex',
-      'otherOptions',
-      'vendorItems',
-    ];
-    return keys.reduce((count, setting) => {
-      return this.getSetting(setting).available ? count + 1 : count;
-    }, 1) > MAX_SECTIONS_TO_SHOW;
+    this.shouldShowMoreSettings_ =
+        SETTINGS_TO_OBSERVE.reduce((count, setting) => {
+          return this.settingsAvailable_[setting] ? count + 1 : count;
+        }, 1) > MAX_SECTIONS_TO_SHOW;
   }
 
   /**
    * @return Whether the "more settings" collapse should be expanded.
    */
-  private shouldExpandSettings_(): boolean {
+  protected shouldExpandSettings_(): boolean {
     if (this.settingsExpandedByUser_ === undefined ||
         this.shouldShowMoreSettings_ === undefined) {
       return false;
@@ -224,7 +214,7 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
     return this.settingsExpandedByUser_ || !this.shouldShowMoreSettings_;
   }
 
-  private onPrintButtonFocused_() {
+  protected onPrintButtonFocused_() {
     this.firstLoad_ = false;
   }
 
@@ -244,10 +234,37 @@ export class PrintPreviewSidebarElement extends PrintPreviewSidebarElementBase {
   /** @return Whether the system dialog link is available. */
   systemDialogLinkAvailable(): boolean {
     const linkContainer =
-        this.shadowRoot!.querySelector('print-preview-link-container');
+        this.shadowRoot.querySelector('print-preview-link-container');
     return !!linkContainer && linkContainer.systemDialogLinkAvailable();
   }
+
+  protected onDestinationChanged_(e: CustomEvent<{value: Destination}>) {
+    this.destination = e.detail.value;
+    this.destinationCapabilities_ = null;
+  }
+
+  protected onDestinationCapabilitiesChanged_(e: CustomEvent<Destination>) {
+    assert(this.destination);
+    assert(e.detail.id === this.destination.id);
+    // When `this.destination.capabilities` changes it is always a new object.
+    this.destinationCapabilities_ = this.destination.capabilities;
+  }
+
+  protected onDestinationStateChanged_(
+      e: CustomEvent<{value: DestinationState}>) {
+    this.destinationState = e.detail.value;
+  }
+
+  protected onErrorChanged_(e: CustomEvent<{value: Error}>) {
+    this.error = e.detail.value;
+  }
+
+  protected onSettingsExpandedByUserChanged_(e: CustomEvent<{value: boolean}>) {
+    this.settingsExpandedByUser_ = e.detail.value;
+  }
 }
+
+export type SidebarElement = PrintPreviewSidebarElement;
 
 declare global {
   interface HTMLElementTagNameMap {

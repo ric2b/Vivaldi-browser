@@ -32,14 +32,14 @@
 #include "absl/base/nullability.h"
 #include "./centipede/runner_utils.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 namespace {
 
 constexpr bool kDlDebug = false;  // we may want to make it a runtime flag.
 
-bool StringEndsWithSuffix(absl::Nonnull<const char*> string,
-                          absl::Nonnull<const char*> suffix) {
+bool StringEndsWithSuffix(const char* absl_nonnull string,
+                          const char* absl_nonnull suffix) {
   const char* pos = std::strstr(string, suffix);
   if (pos == nullptr) return false;
   return pos == string + std::strlen(string) - std::strlen(suffix);
@@ -148,7 +148,7 @@ DlInfo GetDlInfoFromImage(
 
 }  // namespace
 
-DlInfo GetDlInfo(absl::Nullable<const char*> dl_path_suffix) {
+DlInfo GetDlInfo(const char* absl_nullable dl_path_suffix) {
   if constexpr (kDlDebug) {
     fprintf(stderr, "GetDlInfo for path suffix %s\n",
             dl_path_suffix ? dl_path_suffix : "(null)");
@@ -196,7 +196,7 @@ struct DlCallbackParam {
 int g_some_global;  // Used in DlIteratePhdrCallback.
 
 // Returns the size of the DL represented by `info`.
-size_t DlSize(absl::Nonnull<struct dl_phdr_info *> info) {
+size_t DlSize(struct dl_phdr_info *absl_nonnull info) {
   size_t size = 0;
   // Iterate program headers.
   for (int j = 0; j < info->dlpi_phnum; ++j) {
@@ -233,8 +233,8 @@ size_t DlSize(absl::Nonnull<struct dl_phdr_info *> info) {
 // nullptr`. The code assumes that the main binary is the first one to be
 // iterated on. If the desired library is found, sets result.start_address and
 // result.size, otherwise leaves result unchanged.
-int DlIteratePhdrCallback(absl::Nonnull<struct dl_phdr_info *> info,
-                          size_t size, absl::Nonnull<void *> param_voidptr) {
+int DlIteratePhdrCallback(struct dl_phdr_info *absl_nonnull info, size_t size,
+                          void *absl_nonnull param_voidptr) {
   const DlCallbackParam *param = static_cast<DlCallbackParam *>(param_voidptr);
   DlInfo &result = param->result;
   RunnerCheck(!result.IsSet(), "result is already set");
@@ -284,9 +284,8 @@ int DlIteratePhdrCallback(absl::Nonnull<struct dl_phdr_info *> info,
 // See man dl_iterate_phdr.
 // `param_voidptr` is cast to a `DlCallbackParam *param`.
 // Looks for the dynamic library who's address range contains `param->pc`.
-int DlIteratePhdrPCCallback(absl::Nonnull<struct dl_phdr_info *> info,
-                            size_t unused,
-                            absl::Nonnull<void *> param_voidptr) {
+int DlIteratePhdrPCCallback(struct dl_phdr_info *absl_nonnull info,
+                            size_t unused, void *absl_nonnull param_voidptr) {
   const DlCallbackParam *param = static_cast<DlCallbackParam *>(param_voidptr);
   DlInfo &result = param->result;
   if (param->pc < info->dlpi_addr) return 0;  // wrong DSO.
@@ -309,7 +308,7 @@ int DlIteratePhdrPCCallback(absl::Nonnull<struct dl_phdr_info *> info,
 
 }  // namespace
 
-DlInfo GetDlInfo(absl::Nullable<const char *> dl_path_suffix) {
+DlInfo GetDlInfo(const char *absl_nullable dl_path_suffix) {
   DlInfo result;
   result.Clear();
   DlCallbackParam callback_param = {dl_path_suffix, /*pc=*/0, result};
@@ -327,4 +326,4 @@ DlInfo GetDlInfo(uintptr_t pc) {
 
 #endif  // __APPLE__
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

@@ -55,6 +55,7 @@ const CountryLocaleMap& GetAllowedCountryToLocaleMap() {
         {"ca", {"en", "en-ca", "en-gb", "en-us"}},
         {"in", {"en", "en-gb", "en-in", "en-us"}},
         {"jp", {"ja", "ja-jp"}}};
+    map[&kDiscountAutofillRegionLaunched] = {{"us", {"en-us"}}};
 
     return map;
   }());
@@ -180,6 +181,14 @@ const char kPriceInsightsUseCacheParam[] = "price-insights-use-cache";
 const base::FeatureParam<bool> kPriceInsightsUseCache{
     &commerce::kPriceInsights, kPriceInsightsUseCacheParam, true};
 
+// Discount Autofill at Checkout
+BASE_FEATURE(kDiscountAutofill,
+             "DiscountAutofill",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+BASE_FEATURE(kDiscountAutofillRegionLaunched,
+             "DiscountAutofillRegionLaunched",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 // Promotion in Magic Stack for Price Tracking users from other platforms.
 BASE_FEATURE(kPriceTrackingPromo,
              "PriceTrackingPromo",
@@ -210,12 +219,6 @@ BASE_FEATURE(kCompareConfirmationToast,
 
 BASE_FEATURE(kProductSpecificationsCache,
              "ProductSpecificationsCache",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
-// Moves the table management interface from history to chrome://compare and
-// enables a new context menu for comparison tables under Bookmarks and Lists.
-BASE_FEATURE(kCompareManagementInterface,
-             "CompareManagementInterface",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Discount on navigation

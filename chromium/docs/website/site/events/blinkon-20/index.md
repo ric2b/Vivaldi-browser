@@ -8,6 +8,10 @@ title: BlinkOn 20
 
 **Welcome to BlinkOn 20!**
 
+## **Presentations**
+
+Recordings of presentations are available on the
+[BlinkOn YouTube Channel](https://youtube.com/@blinkontalks/videos)
 
 ## **Registration**
 
@@ -26,7 +30,7 @@ form. All presenters who elect to be in-person will be able to.
 ## **Logistics**
 
 * When: April 7-8, 2025, 9am to ~5pm PST (agenda TBD).
-* Where: Mountain View, CA, USA + Virtually on [slack](https://chromium.slack.com) (#blinkon)
+* Where: Google building C440 in Mountain View, CA, USA + Virtually on [slack](https://chromium.slack.com) (#blinkon)
 * What: Combination of live and recorded sessions, including keynotes, lightning talks, breakout talks, and social events
 
 

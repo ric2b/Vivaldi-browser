@@ -24,6 +24,7 @@
 #include "base/values.h"
 #include "build/blink_buildflags.h"
 #include "build/build_config.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_listener.h"
@@ -123,7 +124,7 @@ class DocumentProviderTest : public testing::Test,
   }
 
   base::test::SingleThreadTaskEnvironment task_environment_{
-    base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   // Not enabled by default on mobile, so have to enable it explicitly.
   base::test::ScopedFeatureList feature_list_{omnibox::kDocumentProvider};
   std::unique_ptr<FakeAutocompleteProviderClient> client_;
@@ -428,19 +429,19 @@ TEST_F(DocumentProviderTest,
 
   // match.destination_url is used as the match's temporary text in the Omnibox.
   EXPECT_EQ(AutocompleteMatchType::ToAccessibilityLabel(
-                matches[0],
+                matches[0], u"",
                 base::ASCIIToUTF16(matches[0].destination_url.spec()), 1, 4),
             u"My Google Doc, 10/15/07 - Google Docs, "
             u"https://documentprovider.tld/doc?id=1, 2 of 4");
   // Unhandled MIME Type falls back to "Google Drive" where the file was stored.
   EXPECT_EQ(AutocompleteMatchType::ToAccessibilityLabel(
-                matches[1],
+                matches[1], u"",
                 base::ASCIIToUTF16(matches[1].destination_url.spec()), 2, 4),
             u"My File in Drive, 10/10/10 - Google Drive, "
             "https://documentprovider.tld/doc?id=2, 3 of 4");
   // No modified time was specified for the last file.
   EXPECT_EQ(AutocompleteMatchType::ToAccessibilityLabel(
-                matches[2],
+                matches[2], u"",
                 base::ASCIIToUTF16(matches[2].destination_url.spec()), 3, 4),
             u"Shared Spreadsheet, Google Sheets, "
             "https://documentprovider.tld/doc?id=3, 4 of 4");
@@ -1042,7 +1043,7 @@ TEST_F(DocumentProviderTest, Logging) {
   {
     SCOPED_TRACE("Case: Stop() before Run().");
     base::HistogramTester histogram_tester;
-    provider_->Stop(false, false);
+    provider_->Stop(AutocompleteStopReason::kClobbered);
     histogram_tester.ExpectTotalCount("Omnibox.DocumentSuggest.Requests", 0);
     histogram_tester.ExpectTotalCount("Omnibox.DocumentSuggest.TotalTime", 0);
     histogram_tester.ExpectTotalCount(
@@ -1060,7 +1061,7 @@ TEST_F(DocumentProviderTest, Logging) {
     SCOPED_TRACE("Case: Stop() before request.");
     base::HistogramTester histogram_tester;
     provider_->time_run_invoked_ = base::TimeTicks::Now();
-    provider_->Stop(false, false);
+    provider_->Stop(AutocompleteStopReason::kClobbered);
     histogram_tester.ExpectTotalCount("Omnibox.DocumentSuggest.Requests", 0);
     histogram_tester.ExpectTotalCount("Omnibox.DocumentSuggest.TotalTime", 1);
     histogram_tester.ExpectTotalCount(
@@ -1082,7 +1083,7 @@ TEST_F(DocumentProviderTest, Logging) {
         network::SimpleURLLoader::Create(
             std::make_unique<network::ResourceRequest>(),
             net::DefineNetworkTrafficAnnotation("test", "test")));
-    provider_->Stop(false, false);
+    provider_->Stop(AutocompleteStopReason::kClobbered);
     histogram_tester.ExpectTotalCount("Omnibox.DocumentSuggest.Requests", 2);
     histogram_tester.ExpectBucketCount("Omnibox.DocumentSuggest.Requests", 1,
                                        1);
@@ -1181,7 +1182,8 @@ TEST_F(DocumentProviderTest, Backoff) {
 
   {
     omnibox_feature_configs::ScopedConfigForTesting<
-        omnibox_feature_configs::DocumentProvider> scoped_config;
+        omnibox_feature_configs::DocumentProvider>
+        scoped_config;
     scoped_config.Get().enabled = true;
     scoped_config.Get().scope_backoff_to_profile = false;
 
@@ -1198,7 +1200,8 @@ TEST_F(DocumentProviderTest, Backoff) {
 
   {
     omnibox_feature_configs::ScopedConfigForTesting<
-        omnibox_feature_configs::DocumentProvider> scoped_config;
+        omnibox_feature_configs::DocumentProvider>
+        scoped_config;
     scoped_config.Get().enabled = true;
     scoped_config.Get().scope_backoff_to_profile = true;
     scoped_config.Get().backoff_duration = base::Minutes(30);

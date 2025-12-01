@@ -53,8 +53,6 @@ void ExtensionEnableFlow::Start() {
 }
 
 void ExtensionEnableFlow::Run() {
-  extensions::ExtensionService* service =
-      extensions::ExtensionSystem::Get(profile_)->extension_service();
   extensions::ExtensionRegistry* registry =
       extensions::ExtensionRegistry::Get(profile_);
   const Extension* extension =
@@ -67,7 +65,8 @@ void ExtensionEnableFlow::Run() {
       return;
     }
     // If the app was terminated, reload it first.
-    service->ReloadExtension(extension_id_);
+    extensions::ExtensionRegistrar::Get(profile_)->ReloadExtension(
+        extension_id_);
 
     // ReloadExtension reallocates the Extension object.
     extension = registry->disabled_extensions().GetByID(extension_id_);
@@ -84,11 +83,9 @@ void ExtensionEnableFlow::Run() {
 }
 
 void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
-  extensions::ExtensionSystem* system =
-      extensions::ExtensionSystem::Get(profile_);
-  extensions::ExtensionService* service = system->extension_service();
-  extensions::ExtensionRegistry* registry =
-      extensions::ExtensionRegistry::Get(profile_);
+  auto* system = extensions::ExtensionSystem::Get(profile_);
+  auto* registrar = extensions::ExtensionRegistrar::Get(profile_);
+  auto* registry = extensions::ExtensionRegistry::Get(profile_);
   const Extension* extension =
       registry->disabled_extensions().GetByID(extension_id_);
 
@@ -139,10 +136,9 @@ void ExtensionEnableFlow::CheckPermissionAndMaybePromptUser() {
   if (!prefs->DidExtensionEscalatePermissions(extension_id_)) {
     // Enable the extension immediately if its privileges weren't escalated.
     // This is a no-op if the extension was previously terminated.
-    service->EnableExtension(extension_id_);
+    registrar->EnableExtension(extension_id_);
 
-    DCHECK(extensions::ExtensionRegistrar::Get(profile_)->IsExtensionEnabled(
-        extension_id_));
+    DCHECK(registrar->IsExtensionEnabled(extension_id_));
     delegate_->ExtensionEnableFlowFinished();  // |delegate_| may delete us.
     return;
   }

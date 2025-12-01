@@ -14,8 +14,6 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/functional/callback_forward.h"
-#include "base/task/sequenced_task_runner.h"
-#include "base/task/thread_pool.h"
 #include "components/safe_browsing/content/browser/web_contents_key.h"
 #include "content/public/browser/frame_tree_node_id.h"
 #include "content/public/browser/global_routing_id.h"
@@ -127,33 +125,34 @@ class AwContentsIoThreadClient {
 
   // Retrieve the AllowContentAccess setting value of this AwContents.
   // This method is called on the IO thread only.
-  bool ShouldBlockContentUrls() const;
+  bool ShouldBlockContentUrls(base::TimeDelta& counter) const;
 
   // Retrieve the AllowFileAccess setting value of this AwContents.
   // This method is called on the IO thread only.
-  bool ShouldBlockFileUrls() const;
+  bool ShouldBlockFileUrls(base::TimeDelta& counter) const;
 
   // Retrieves if special android file urls (android_{asset/res}) should be
   // allowed.
-  bool ShouldBlockSpecialFileUrls() const;
+  bool ShouldBlockSpecialFileUrls(base::TimeDelta& counter) const;
 
   // Retrieve the BlockNetworkLoads setting value of this AwContents.
   // This method is called on the IO thread only.
-  bool ShouldBlockNetworkLoads() const;
+  bool ShouldBlockNetworkLoads(base::TimeDelta& counter) const;
 
   // Retrieve the AcceptCookies setting value of this AwContents.
-  bool ShouldAcceptCookies() const;
+  bool ShouldAcceptCookies(base::TimeDelta& counter) const;
 
   // Retrieve the AcceptThirdPartyCookies setting value of this AwContents.
-  bool ShouldAcceptThirdPartyCookies() const;
+  bool ShouldAcceptThirdPartyCookies(base::TimeDelta& counter) const;
 
   // Retrieve the SafeBrowsingEnabled setting value of this AwContents.
   bool GetSafeBrowsingEnabled() const;
 
+  // Enables getting and setting cookies as part of shouldInterceptRequest.
+  bool ShouldIncludeCookiesOnIntercept(base::TimeDelta& counter) const;
+
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
-  scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner_ =
-      base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
 };
 
 }  // namespace android_webview

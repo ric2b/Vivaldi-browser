@@ -182,6 +182,8 @@ class MODULES_EXPORT MediaStreamTrackImpl : public MediaStreamTrack,
 #endif
   void PropagateTrackEnded();
 
+  void PropagateTrackEnabled(bool enabled);
+
   void SendLogMessage(const WTF::String& message);
 
   // Ensures that |feature_handle_for_scheduler_| is initialized.
@@ -226,6 +228,7 @@ class MODULES_EXPORT MediaStreamTrackImpl : public MediaStreamTrack,
   std::optional<int> zoom_level_;
   MediaConstraints constraints_;
   std::optional<bool> suppress_local_audio_playback_setting_;
+  std::optional<bool> restrict_own_audio_setting_;
   Member<V8UnionMediaStreamTrackAudioStatsOrMediaStreamTrackVideoStats> stats_;
 };
 

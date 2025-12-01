@@ -16,7 +16,7 @@
 #include "zstd_double_fast.h"   /* ZSTD_fillDoubleHashTable() */
 #include "zstd_ldm_geartab.h"
 
-#define LDM_BUCKET_SIZE_LOG 3
+#define LDM_BUCKET_SIZE_LOG 4
 #define LDM_MIN_MATCH_LENGTH 64
 #define LDM_HASH_RLOG 7
 
@@ -133,21 +133,35 @@ done:
 }
 
 void ZSTD_ldm_adjustParameters(ldmParams_t* params,
-                               ZSTD_compressionParameters const* cParams)
+                        const ZSTD_compressionParameters* cParams)
 {
     params->windowLog = cParams->windowLog;
     ZSTD_STATIC_ASSERT(LDM_BUCKET_SIZE_LOG <= ZSTD_LDM_BUCKETSIZELOG_MAX);
     DEBUGLOG(4, "ZSTD_ldm_adjustParameters");
-    if (!params->bucketSizeLog) params->bucketSizeLog = LDM_BUCKET_SIZE_LOG;
-    if (!params->minMatchLength) params->minMatchLength = LDM_MIN_MATCH_LENGTH;
-    if (params->hashLog == 0) {
-        params->hashLog = MAX(ZSTD_HASHLOG_MIN, params->windowLog - LDM_HASH_RLOG);
-        assert(params->hashLog <= ZSTD_HASHLOG_MAX);
-    }
     if (params->hashRateLog == 0) {
-        params->hashRateLog = params->windowLog < params->hashLog
-                                   ? 0
-                                   : params->windowLog - params->hashLog;
+        if (params->hashLog > 0) {
+            /* if params->hashLog is set, derive hashRateLog from it */
+            assert(params->hashLog <= ZSTD_HASHLOG_MAX);
+            if (params->windowLog > params->hashLog) {
+                params->hashRateLog = params->windowLog - params->hashLog;
+            }
+        } else {
+            assert(1 <= (int)cParams->strategy && (int)cParams->strategy <= 9);
+            /* mapping from [fast, rate7] to [btultra2, rate4] */
+            params->hashRateLog = 7 - (cParams->strategy/3);
+        }
+    }
+    if (params->hashLog == 0) {
+        params->hashLog = BOUNDED(ZSTD_HASHLOG_MIN, params->windowLog - params->hashRateLog, ZSTD_HASHLOG_MAX);
+    }
+    if (params->minMatchLength == 0) {
+        params->minMatchLength = LDM_MIN_MATCH_LENGTH;
+        if (cParams->strategy >= ZSTD_btultra)
+            params->minMatchLength /= 2;
+    }
+    if (params->bucketSizeLog==0) {
+        assert(1 <= (int)cParams->strategy && (int)cParams->strategy <= 9);
+        params->bucketSizeLog = BOUNDED(LDM_BUCKET_SIZE_LOG, (U32)cParams->strategy, ZSTD_LDM_BUCKETSIZELOG_MAX);
     }
     params->bucketSizeLog = MIN(params->bucketSizeLog, params->hashLog);
 }

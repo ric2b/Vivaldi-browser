@@ -20,8 +20,9 @@ export function getHtml(this: ViewerSidePanelElement) {
             @current-size-changed="${this.onCurrentSizeChanged}">
         </ink-size-selector>
         <h2>$i18n{ink2Color}</h2>
-        <ink-color-selector .currentColor="${this.currentColor}"
-            .currentType="${this.currentType}"
+        <ink-color-selector label="$i18n{ink2Color}"
+            .colors="${this.availableBrushColors()}"
+            .currentColor="${this.currentColor}"
             @current-color-changed="${this.onCurrentColorChanged}">
         </ink-color-selector>
       </div>` : ''}

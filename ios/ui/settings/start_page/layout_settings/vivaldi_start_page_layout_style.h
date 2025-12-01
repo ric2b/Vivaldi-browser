@@ -9,6 +9,7 @@ typedef NS_ENUM(NSUInteger, VivaldiStartPageLayoutStyle) {
   VivaldiStartPageLayoutStyleMedium = 1,
   VivaldiStartPageLayoutStyleSmall = 2,
   VivaldiStartPageLayoutStyleList = 3,
+  VivaldiStartPageLayoutStyleIcon = 4,
 };
 
 #endif  // IOS_UI_SETTINGS_START_PAGE_LAYOUT_SETTINGS_VIVALDI_START_PAGE_LAYOUT_STYLE_H_

@@ -7,15 +7,27 @@
 
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
+#include "content/public/browser/btm_redirect_info.h"
 #include "content/public/browser/btm_service.h"
 #include "url/gurl.h"
 
 namespace content {
+class BrowserContext;
+class WebContents;
 
-class DipsRedirectChainObserver : public BtmService::Observer {
+void Populate3PcExceptions(BrowserContext* browser_context,
+                           WebContents* web_contents,
+                           const GURL& initial_url,
+                           const GURL& final_url,
+                           base::span<BtmRedirectInfoPtr> redirects);
+
+bool Are3PcsGenerallyEnabled(BrowserContext* browser_context,
+                             WebContents* web_contents);
+
+class BtmRedirectChainObserver : public BtmService::Observer {
  public:
-  DipsRedirectChainObserver(BtmService* service, GURL final_url);
-  ~DipsRedirectChainObserver() override;
+  BtmRedirectChainObserver(BtmService* service, GURL final_url);
+  ~BtmRedirectChainObserver() override;
 
   void Wait();
   const std::optional<std::vector<BtmRedirectInfoPtr>>& redirects() const {

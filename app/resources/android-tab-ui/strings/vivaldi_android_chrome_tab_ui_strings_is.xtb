@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="is">
-<translation id="2277224997687551299">Breyta heiti flipabunka</translation>
+<translation id="1062777154504442433">Nýr flipabunki</translation>
+<translation id="1625440863545383011">Fjarlægja flipa og fara úr bunka</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Bókamerkja flipa}
           other {Bókamerkja flipa}
         }</translation>
 <translation id="2947471979790858922">Aðgerðir þínar í þessum einkaflipum verða fjarlægðar af þessu tæki</translation>
+<translation id="3298614730029636660">Fara úr bunka</translation>
+<translation id="354698175756845966">Breyta lit á bunka</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Þú getur fundið lokaða flipa í nýlegum flipum undir valmyndinni í Vivaldi. Einkaflipinn þinn er ekki aðgengilegur þar.}
         other {Þú getur fundið lokaða flipa í nýlegum flipum undir valmyndinni í Vivaldi. Einkafliparnir þínir, #, eru ekki aðgengilegir þar.}}</translation>
-<translation id="4460014764210899310">Sundra flipabunka</translation>
 <translation id="4871187110787939393">Loka öllum einkaflipum?</translation>
 <translation id="5494920125229734069">Velja allt</translation>
-<translation id="6744956528665271406">Breyta lit flibabunka</translation>
+<translation id="6807841890213931603">Fjarlæga flipa og eyða bunka</translation>
+<translation id="750227952939161636">Flipabunkarnir þínir vistast sjálfkrafa og uppfærast á öllum tækjum sem þú ert skráð/ur inn á</translation>
+<translation id="7640137753339219124">Eyða bunka</translation>
+<translation id="7653857400289671414">Flipabunkinn þinn vistast sjálfkrafa</translation>
+<translation id="8440938071054361204">Breyta nafni á bunka</translation>
+<translation id="8602902357364871325">Loka bunka</translation>
+<translation id="8851621822786801079">Fjarlægja úr bunka</translation>
 </translationbundle>

@@ -33,11 +33,13 @@ public class MockPackageManagerDelegate extends PackageManagerDelegate {
     private final Map<ResolveInfo, CharSequence> mLabels = new HashMap<>();
     private final List<ResolveInfo> mServices = new ArrayList<>();
     private final Map<ApplicationInfo, List<String[]>> mResources = new HashMap<>();
+    // A map of a UID to a list of matching PackageInfo.
+    private final Map<Integer, List<PackageInfo>> mOverridenPackageInfos = new HashMap<>();
 
     private String mInvokedAppPackageName;
 
     // A map of a package name to its installer's package name.
-    private Map<String, String> mMockInstallerPackageMap = new HashMap<>();
+    private final Map<String, String> mMockInstallerPackageMap = new HashMap<>();
 
     /**
      * An enum that can be used to configure the mock package manager for whether it should return
@@ -275,8 +277,13 @@ public class MockPackageManagerDelegate extends PackageManagerDelegate {
     }
 
     @Override
-    public PackageInfo getPackageInfoWithSignatures(int uid) {
-        return mPackages.get(mInvokedAppPackageName);
+    public List<PackageInfo> getPackageInfosWithSignatures(int uid) {
+        if (mOverridenPackageInfos.containsKey(uid)) {
+            return mOverridenPackageInfos.get(uid);
+        }
+        // Since most tests cannot control the UID that this method is called with, we default to
+        // just returning PackageInfo for the invoked app.
+        return List.of(mPackages.get(mInvokedAppPackageName));
     }
 
     @Override
@@ -323,5 +330,9 @@ public class MockPackageManagerDelegate extends PackageManagerDelegate {
     public void mockInstallerForPackage(String packageName, @Nullable String installerPackageName) {
         assert packageName != null;
         mMockInstallerPackageMap.put(packageName, installerPackageName);
+    }
+
+    public void overridePackageInfosForUid(int uid, List<PackageInfo> packageInfos) {
+        mOverridenPackageInfos.put(uid, packageInfos);
     }
 }

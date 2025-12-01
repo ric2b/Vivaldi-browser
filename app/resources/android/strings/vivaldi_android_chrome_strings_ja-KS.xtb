@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja-KS">
+<translation id="1204037785786432551">リンクダウンロード</translation>
+<translation id="1206892813135768548">リンクアドレスコピー</translation>
 <translation id="1397811292916898096"><ph name="PRODUCT_NAME" /> 使て調べる</translation>
+<translation id="1435593198351412143">PDF自動で開く</translation>
 <translation id="1456207338570705181">タッチ検索は、VivaldiでGoogleがデフォルトの検索エンジンに設定されてる時だけ使えるねん。今おるページをコンテキストにして、検索ワードをGoogle検索に送るねん。<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />からオフにできるで。</translation>
 <translation id="1598449788754183301">通常タブとプライベートタブの切替</translation>
 <translation id="1644574205037202324">履歴</translation>
@@ -9,30 +12,52 @@
 <translation id="1910514478706885609">さらのタブスタックで開く</translation>
 <translation id="1925021887439448749">カスタムウェブアドレス入れる</translation>
 <translation id="2038563949887743358">[デスクトップ版サイトを見る] オンにしとくわ</translation>
+<translation id="208033313373016095">ウェブページのリーダービュー</translation>
 <translation id="2149973817440762519">ブックマークいらう</translation>
 <translation id="2306442503286132111">ブックマーク、<ph name="FOLDER_NAME" /> フォルダーに保存したで</translation>
 <translation id="2433507940547922241">ええ格好つける</translation>
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2633278372998075009">プライベートタブ</translation>
+<translation id="2650751991977523696">ファイルもっかいダウンロードする？</translation>
+<translation id="265156376773362237">標準プリロード</translation>
+<translation id="272026394418727548">Vivaldiのホームページ</translation>
+<translation id="2842985007712546952">親フォルダー</translation>
+<translation id="2871733351037274014">ページをプリロードする</translation>
+<translation id="2904300462646366554">ダウンロードしたPDFは自動的にデバイス上のPDFビューアのどれかで開くで</translation>
 <translation id="2951071800649516099">ページあとでリーディングリストに入れる</translation>
+<translation id="3029276696788198026">プリロードせえへん</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> 個のブックマーク}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> 個のブックマーク}}</translation>
 <translation id="3076631378407175873">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved.</translation>
+<translation id="3110967157686007724">プライベートタブ</translation>
+<translation id="3232293466644486101">閲覧履歴データほかす…</translation>
 <translation id="3234355010754616171">さらのプライベートタブ</translation>
-<translation id="3377025655491224618">プライベートタブ</translation>
+<translation id="3237087289225714896">標準プリロード：</translation>
+<translation id="3478414204555961127">リーダービュー</translation>
 <translation id="3504699618187058974">タブスタックする</translation>
 <translation id="3518985090088779359">OK、いこう</translation>
 <translation id="3571177741182643350">未読記事 - オフラインでも読めるで：</translation>
+<translation id="3602290021589620013">プレビュー</translation>
 <translation id="3700829948786686853">Vivaldiへ、いらっしゃ～い</translation>
 <translation id="3719826155360621982">ホームページ</translation>
+<translation id="3738139272394829648">タップして検索</translation>
 <translation id="385051799172605136">戻る</translation>
+<translation id="3987993985790029246">リンクコピー</translation>
 <translation id="399014816462153200">読んだ記事：</translation>
 <translation id="4121750346708795461">このアプリケーション使うってことは、Vivaldiの<ph name="BEGIN_LINK1" />エンドユーザー用使用許諾契約<ph name="END_LINK1" />と<ph name="BEGIN_LINK2" />プライバシーポリシー<ph name="END_LINK2" />に同意したってことになるで。</translation>
 <translation id="4137746084635924146">デバイスが今使ってる言語</translation>
 <translation id="4167670741834902166">さらのプライベートタブ</translation>
+<translation id="4195643157523330669">さらのタブで開く</translation>
+<translation id="4225895483398857530">ツールバーショートカット</translation>
 <translation id="4243710787042215766">プライベートタブで開く</translation>
+<translation id="4269820728363426813">リンクアドレスコピー</translation>
+<translation id="4291407919474070700"><ph name="BEGIN_LINK" />Androidの設定で画面ロック有効にする<ph name="END_LINK" /></translation>
+<translation id="4304713468139749426">パスワードマネージャー</translation>
+<translation id="451872707440238414">ブックマーク検索</translation>
 <translation id="4526803704855831732">プライベートタブ</translation>
+<translation id="4532845899244822526">フォルダー選んで</translation>
+<translation id="4699172675775169585">キャッシュされた画像とファイル</translation>
 <translation id="4719086422742491124">ウェブページから離れんでも、気になるトピック調べられるで。このページでいくつか単語選んで、検索してみて。
 
 VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら、タッチ検索機能が使えるねん。</translation>
@@ -43,31 +68,59 @@ VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら�
 <translation id="49576331685473090">コンテンツブロッカー</translation>
 <translation id="5079259810715830221">Googleのサイトがページ上のリンクを非公開でプリロードするように要求したら、VivaldiはCookiesなしで、Google サーバー介してページを暗号化してプリロードするで。これで、プリロードされたサイトから自分の情報隠せるようになるねん。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 容れもん</translation>
+<translation id="5144385790872094440">アクセスしたページの一部はプリロードされるで。ページがGoogleサイトかアプリからリンクされている場合は、Googleサーバー介してプリロードされる可能性があるで。</translation>
 <translation id="5186185447130319458">プライベート</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+            =1 {ファイルダウンロードしてるで…}
+            other {# 件のファイルダウンロードしてるで…}}</translation>
 <translation id="5233638681132016545">さらのタブ</translation>
 <translation id="5375131951310889874">ウェブページから離れんでも、気になるトピック調べられるで。VivaldiでGoogleがデフォルトの検索エンジンに設定されてたら、タッチ検索機能が使えるねん。その単語と周りのコンテキストをGoogle検索に送って、定義、画像、検索結果なんかが帰ってくるねん。
 
 検索ワード調整するんやったら、長押しして選択して。検索精度上げるんやったら、パネルを一番上までスライドさせて、検索ボックスタップして。</translation>
+<translation id="543338862236136125">パスワード変える</translation>
 <translation id="572328651809341494">最近つこたタブ</translation>
+<translation id="5833984609253377421">リンクわけわけ</translation>
 <translation id="6150320133806434356">ブックマーク作ったわ</translation>
+<translation id="6193448654517602979">タブ選ぶ</translation>
 <translation id="6336451774241870485">さらのプライベートタブ</translation>
+<translation id="6337323516034698937">このタブ別のデバイスに送るんやったら、両方のデバイスでVivaldi同期にサインインしてな。必要やったら暗号化パスワードも入れなあかんで。</translation>
+<translation id="6341580099087024258">ファイル保存する所確認する</translation>
 <translation id="6404511346730675251">ブックマークいらう</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+          =1 {ファイルダウンロードしたで}
+          other {# 件のダウンロードできたで}}</translation>
 <translation id="6585139692466700358">Vivaldiの翻訳サービス使うて他の言語に翻訳するか聞く</translation>
+<translation id="6588043302623806746">セキュアDNS使う</translation>
 <translation id="6593061639179217415">デスクトップ用サイト</translation>
 <translation id="6610147964972079463">プライベートタブをほかす</translation>
+<translation id="6627583120233659107">フォルダー編集</translation>
+<translation id="6865313869410766144">自動入力フォームのデータ</translation>
+<translation id="6909589135458168665">ページをプリロードする</translation>
 <translation id="7029995644714925509">サイトがページ上のリンクを非公開でプリロードするように要求したら、VivaldiはCookiesなしで、Googleサーバー介してページを暗号化してプリロードするねん。これで、プリロードされたサイトから自分の情報隠せるようになるねん。</translation>
 <translation id="706339621163631076">プライバシー守るいうやつ</translation>
 <translation id="732145680195464316">ブックマーク、<ph name="PRODUCT_NAME" /> に保存したで</translation>
+<translation id="7324354302972299151">「追跡せんといて」リクエスト送る</translation>
+<translation id="7359002509206457351">支払方法へのアクセス</translation>
+<translation id="7419565702166471774">いつも安全な接続使う</translation>
 <translation id="7427132068601343474">Vivaldiって何や</translation>
+<translation id="7456774706094330779">拡張プリロード</translation>
 <translation id="7465104139234185284">プライベートタブを全てほかす</translation>
 <translation id="7481312909269577407">進む</translation>
+<translation id="7764225426217299476">住所入れる</translation>
 <translation id="7968014550143838305">リーディングリストに入れたで</translation>
 <translation id="804786196054284061">読まなあかんやつ</translation>
+<translation id="8062594758852531064">拡張プリロード：</translation>
+<translation id="8073388330009372546">さらのタブで画像開く</translation>
 <translation id="8127542551745560481">ホームページいらう</translation>
+<translation id="8266862848225348053">ダウンロード先</translation>
+<translation id="8348430946834215779">できるだけHTTPS使うて、HTTPSサポートしていないサイトやったら読込前に警告出すで</translation>
 <translation id="8560602726703398413">リーディングリストはブックマークにあるで</translation>
 <translation id="85991616550051997">ホーム行く</translation>
+<translation id="8693232767599693749">リーディングモード見る？</translation>
 <translation id="8820817407110198400">また来れるようにするやつ</translation>
+<translation id="9042893549633094279">プライバシーとセキュリティ</translation>
 <translation id="9063523880881406963">[デスクトップ版サイトを見る] 切っとくわ</translation>
 <translation id="9080642952018487277">忍者モードにする</translation>
-<translation id="96681097142096641">簡易表示にする？</translation>
+<translation id="930124987204876019">履歴、Cookie、サイトデータ、キャッシュほかす…</translation>
+<translation id="961856697154696964">閲覧履歴データほかす</translation>
 </translationbundle>

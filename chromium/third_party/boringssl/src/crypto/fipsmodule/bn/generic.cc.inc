@@ -151,22 +151,33 @@ BN_ULONG bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num,
   return c1;
 }
 
-void bn_sqr_words(BN_ULONG *r, const BN_ULONG *a, size_t n) {
+void bn_sqr_add_words(BN_ULONG *r, const BN_ULONG *a, size_t n) {
   if (n == 0) {
     return;
   }
 
+  BN_ULONG carry = 0, lo, hi;
   while (n & ~3) {
-    sqr(r[0], r[1], a[0]);
-    sqr(r[2], r[3], a[1]);
-    sqr(r[4], r[5], a[2]);
-    sqr(r[6], r[7], a[3]);
+    sqr(lo, hi, a[0]);
+    r[0] = CRYPTO_addc_w(r[0], lo, carry, &carry);
+    r[1] = CRYPTO_addc_w(r[1], hi, carry, &carry);
+    sqr(lo, hi, a[1]);
+    r[2] = CRYPTO_addc_w(r[2], lo, carry, &carry);
+    r[3] = CRYPTO_addc_w(r[3], hi, carry, &carry);
+    sqr(lo, hi, a[2]);
+    r[4] = CRYPTO_addc_w(r[4], lo, carry, &carry);
+    r[5] = CRYPTO_addc_w(r[5], hi, carry, &carry);
+    sqr(lo, hi, a[3]);
+    r[6] = CRYPTO_addc_w(r[6], lo, carry, &carry);
+    r[7] = CRYPTO_addc_w(r[7], hi, carry, &carry);
     a += 4;
     r += 8;
     n -= 4;
   }
   while (n) {
-    sqr(r[0], r[1], a[0]);
+    sqr(lo, hi, a[0]);
+    r[0] = CRYPTO_addc_w(r[0], lo, carry, &carry);
+    r[1] = CRYPTO_addc_w(r[1], hi, carry, &carry);
     a++;
     r += 2;
     n--;

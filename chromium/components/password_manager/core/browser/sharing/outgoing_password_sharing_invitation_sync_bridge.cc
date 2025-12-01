@@ -184,15 +184,22 @@ OutgoingPasswordSharingInvitationSyncBridge::GetAllDataForDebugging() {
 }
 
 std::string OutgoingPasswordSharingInvitationSyncBridge::GetClientTag(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   return GetStorageKey(entity_data);
 }
 
 std::string OutgoingPasswordSharingInvitationSyncBridge::GetStorageKey(
-    const syncer::EntityData& entity_data) {
+    const syncer::EntityData& entity_data) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetStorageKeyFromSpecifics(
       entity_data.specifics.outgoing_password_sharing_invitation());
+}
+
+bool OutgoingPasswordSharingInvitationSyncBridge::IsEntityDataValid(
+    const syncer::EntityData& entity_data) const {
+  // OUTGOING_PASSWORD_SHARING_INVITATION is a commit only data type so
+  // this method is not called.
+  NOTREACHED();
 }
 
 bool OutgoingPasswordSharingInvitationSyncBridge::SupportsGetClientTag() const {

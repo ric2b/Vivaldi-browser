@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2011 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2022 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -130,9 +130,6 @@
 #ifndef OF_AS86
 #define OF_AS86
 #endif
-#ifndef OF_RDF2
-#define OF_RDF2
-#endif
 #ifndef OF_IEEE
 #define OF_IEEE
 #endif
@@ -194,9 +191,6 @@
 #ifndef OF_AS86
 #define OF_AS86
 #endif
-#ifndef OF_RDF2
-#define OF_RDF2
-#endif
 #ifndef OF_IEEE
 #define OF_IEEE
 #endif
@@ -242,9 +236,6 @@
 #ifdef OF_NO_AS86
 #undef OF_AS86
 #endif
-#ifdef OF_NO_RDF2
-#undef OF_RDF2
-#endif
 #ifdef OF_NO_IEEE
 #undef OF_IEEE
 #endif
@@ -275,7 +266,6 @@ extern const struct ofmt of_as86;
 extern const struct ofmt of_obj;
 extern const struct ofmt of_win32;
 extern const struct ofmt of_win64;
-extern const struct ofmt of_rdf2;
 extern const struct ofmt of_ieee;
 extern const struct ofmt of_macho32;
 extern const struct ofmt of_macho64;
@@ -323,9 +313,6 @@ static const struct ofmt * const drivers[] = {
 #endif
 #ifdef OF_WIN64
     &of_win64,
-#endif
-#ifdef OF_RDF2
-    &of_rdf2,
 #endif
 #ifdef OF_IEEE
     &of_ieee,

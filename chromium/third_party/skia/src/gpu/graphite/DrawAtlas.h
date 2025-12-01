@@ -175,8 +175,9 @@ public:
         return fMaxPages;
     }
 
-    int numAllocated_TestingOnly() const;
-    void setMaxPages_TestingOnly(uint32_t maxPages);
+#if defined(GPU_TEST_UTILS)
+    int numAllocatedPlots() const;
+#endif
 
 private:
     DrawAtlas(SkColorType, size_t bpp,
@@ -218,7 +219,9 @@ private:
     bool activateNewPage(Recorder*);
     void deactivateLastPage();
 
-    void processEvictionAndResetRects(Plot* plot);
+    // If freeData is true, this will free the backing data as well. This should only be used
+    // when we know we won't be adding to the Plot immediately afterwards.
+    void processEvictionAndResetRects(Plot* plot, bool freeData);
 
     SkColorType           fColorType;
     size_t                fBytesPerPixel;

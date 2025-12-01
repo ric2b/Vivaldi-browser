@@ -15,10 +15,10 @@
 #include "base/values.h"
 #include "chrome/browser/importer/importer_list.h"
 #include "chrome/browser/shell_integration.h"
-#include "chrome/common/importer/imported_bookmark_entry.h"
 #include "chrome/common/importer/importer_bridge.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
+#include "components/user_data_importer/common/imported_bookmark_entry.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 #include "ui/base/l10n/l10n_util.h"
 
 OperaAdrFileReader::OperaAdrFileReader() {}

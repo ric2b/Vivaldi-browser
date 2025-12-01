@@ -1,17 +1,14 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Platform from '../../../core/platform/platform.js';
 import * as Lit from '../../lit/lit.js';
 import * as RenderCoordinator from '../render_coordinator/render_coordinator.js';
 
-import linkifierImplStylesRaw from './linkifierImpl.css.js';
+import linkifierImplStyles from './linkifierImpl.css.js';
 import * as LinkifierUtils from './LinkifierUtils.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const linkifierImplStyles = new CSSStyleSheet();
-linkifierImplStyles.replaceSync(linkifierImplStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -68,10 +65,6 @@ export class Linkifier extends HTMLElement {
     return node;
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [linkifierImplStyles];
-  }
-
   #onLinkActivation(event: Event): void {
     event.preventDefault();
     const linkifierClickEvent = new LinkifierClick({
@@ -88,7 +81,10 @@ export class Linkifier extends HTMLElement {
     await RenderCoordinator.write(() => {
       // clang-format off
       // eslint-disable-next-line rulesdir/no-a-tags-in-lit
-      Lit.render(html`<a class="link" href=${this.#url} @click=${this.#onLinkActivation} title=${Lit.Directives.ifDefined(this.#title) as string}><slot>${linkText}</slot></a>`, this.#shadow, { host: this});
+      Lit.render(html`
+        <style>${linkifierImplStyles}</style>
+        <a class="link" href=${this.#url} @click=${this.#onLinkActivation} title=${Lit.Directives.ifDefined(this.#title) as string}><slot>${linkText}</slot></a>
+      `, this.#shadow, { host: this});
       // clang-format on
     });
   }

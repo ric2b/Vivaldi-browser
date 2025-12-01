@@ -221,6 +221,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[::prefs::kShowHomeButton] = settings_api::PrefType::kBoolean;
   (*s_allowlist)[::prefs::kShowForwardButton] =
       settings_api::PrefType::kBoolean;
+  (*s_allowlist)[::prefs::kPinSplitTabButton] =
+      settings_api::PrefType::kBoolean;
 
   // Appearance settings.
   (*s_allowlist)[::prefs::kCurrentThemeID] = settings_api::PrefType::kString;
@@ -570,9 +572,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
       settings_api::PrefType::kBoolean;
 #endif
 #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(toast_features::kToastRefinements)) {
-    (*s_allowlist)[::prefs::kToastAlertLevel] = settings_api::PrefType::kNumber;
-  }
+  (*s_allowlist)[::prefs::kToastAlertLevel] = settings_api::PrefType::kNumber;
 #endif
 
   (*s_allowlist)[::prefs::kCaretBrowsingEnabled] =
@@ -1286,11 +1286,16 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
   (*s_allowlist)[optimization_guide::prefs::
                      kProductSpecificationsEnterprisePolicyAllowed] =
       settings_api::PrefType::kNumber;
+  (*s_allowlist)[optimization_guide::prefs::
+                     kAutofillPredictionImprovementsEnterprisePolicyAllowed] =
+      settings_api::PrefType::kNumber;
 
   // Glic prefs
 #if BUILDFLAG(ENABLE_GLIC)
   if (glic::GlicEnabling::IsEnabledByFlags()) {
     (*s_allowlist)[glic::prefs::kGlicLauncherEnabled] =
+        settings_api::PrefType::kBoolean;
+    (*s_allowlist)[glic::prefs::kGlicClosedCaptioningEnabled] =
         settings_api::PrefType::kBoolean;
     (*s_allowlist)[glic::prefs::kGlicGeolocationEnabled] =
         settings_api::PrefType::kBoolean;

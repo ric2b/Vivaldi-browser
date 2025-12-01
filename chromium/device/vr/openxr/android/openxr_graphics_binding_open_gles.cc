@@ -41,7 +41,9 @@ void OpenXrGraphicsBinding::GetRequiredExtensions(
   extensions.push_back(XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME);
 }
 
-OpenXrGraphicsBindingOpenGLES::OpenXrGraphicsBindingOpenGLES() = default;
+OpenXrGraphicsBindingOpenGLES::OpenXrGraphicsBindingOpenGLES(
+    const OpenXrExtensionEnumeration* extension_enum)
+    : OpenXrGraphicsBinding(extension_enum) {}
 OpenXrGraphicsBindingOpenGLES::~OpenXrGraphicsBindingOpenGLES() {
   if (back_buffer_fbo_) {
     glDeleteFramebuffersEXT(1, &back_buffer_fbo_);
@@ -199,6 +201,11 @@ base::span<SwapChainInfo> OpenXrGraphicsBindingOpenGLES::GetSwapChainImages() {
   return color_swapchain_images_;
 }
 
+base::span<const SwapChainInfo>
+OpenXrGraphicsBindingOpenGLES::GetSwapChainImages() const {
+  return color_swapchain_images_;
+}
+
 bool OpenXrGraphicsBindingOpenGLES::CanUseSharedImages() const {
   return true;
 }
@@ -343,7 +350,7 @@ bool OpenXrGraphicsBindingOpenGLES::Render(
 
   // TODO(https://crbug.com/324596270): This shouldn't be necessary, but we
   // can't seem to get the image set up to be treated as linear any other way.
-  glDisable(GL_FRAMEBUFFER_SRGB);
+  glDisable(GL_FRAMEBUFFER_SRGB_EXT);
   glViewport(0, 0, swapchain_image_size.width(), swapchain_image_size.height());
 
   gfx::Transform transform;
@@ -355,7 +362,7 @@ bool OpenXrGraphicsBindingOpenGLES::Render(
   }
 
   if (overlay_visible_) {
-    glEnable(GL_FRAMEBUFFER_SRGB);
+    glEnable(GL_FRAMEBUFFER_SRGB_EXT);
     if (webxr_visible_) {
       glEnable(GL_BLEND);
       glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -401,7 +408,7 @@ bool OpenXrGraphicsBindingOpenGLES::WaitOnFence(gfx::GpuFence& gpu_fence) {
   return true;
 }
 
-bool OpenXrGraphicsBindingOpenGLES::ShouldFlipSubmittedImage() {
+bool OpenXrGraphicsBindingOpenGLES::ShouldFlipSubmittedImage() const {
   // WebGPU produces textures that are y-flipped relative to WebGL, which needs
   // to be accounted for during frame submission.
   return IsWebGPUSession();

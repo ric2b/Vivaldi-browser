@@ -710,7 +710,12 @@ let Page = (() => {
          *
          * ```ts
          * const frame = await page.waitForFrame(async frame => {
-         *   return frame.name() === 'Test';
+         *   const frameElement = await frame.frameElement();
+         *   if (!frameElement) {
+         *     return false;
+         *   }
+         *   const name = await frameElement.evaluate(el => el.getAttribute('name'));
+         *   return name === 'test';
          * });
          * ```
          */
@@ -855,8 +860,8 @@ let Page = (() => {
          *
          * @remarks
          *
-         * All recordings will be {@link https://www.webmproject.org/ | WebM} format using
-         * the {@link https://www.webmproject.org/vp9/ | VP9} video codec. The FPS is 30.
+         * By default, all recordings will be {@link https://www.webmproject.org/ | WebM} format using
+         * the {@link https://www.webmproject.org/vp9/ | VP9} video codec, with a frame rate of 30 FPS.
          *
          * You must have {@link https://ffmpeg.org/ | ffmpeg} installed on your system.
          */
@@ -895,7 +900,6 @@ let Page = (() => {
             }
             const recorder = new ScreenRecorder(this, width, height, {
                 ...options,
-                path: options.ffmpegPath,
                 crop,
             });
             try {

@@ -12,7 +12,6 @@
 #include "base/check.h"
 #include "base/check_is_test.h"
 #include "base/containers/flat_tree.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/to_string.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
@@ -325,6 +324,7 @@ WebAppInstallInfo::CreateWithStartUrlForTesting(const GURL& start_url) {
   auto info = std::make_unique<WebAppInstallInfo>(
       GenerateManifestIdFromStartUrlOnly(start_url), start_url);
   info->scope = start_url.GetWithoutFilename();
+  CHECK(!info->scope.is_empty());
   return info;
 }
 
@@ -342,6 +342,7 @@ std::unique_ptr<WebAppInstallInfo> WebAppInstallInfo::CreateForTesting(
   info->launch_handler = blink::Manifest::LaunchHandler(client_mode);
   CHECK_EQ(info->launch_handler->client_mode_valid_and_specified(),
            client_mode.has_value());
+  CHECK(!info->scope.is_empty());
   return info;
 }
 
@@ -368,18 +369,20 @@ base::expected<WebAppInstallInfo, std::string> WebAppInstallInfo::Create(
         manifest_url.possibly_invalid_spec());
   }
 
-  return WebAppInstallInfo(manifest_id, start_url);
+  WebAppInstallInfo info(manifest_id, start_url);
+  info.scope = start_url.GetWithoutFilename();
+  CHECK(!info.scope.is_empty());
+  return info;
 }
 
 namespace {
 void CheckValidManifestIdAndStartUrl(const webapps::ManifestId& manifest_id,
                                      const GURL& start_url) {
-  CHECK(manifest_id.is_valid(), base::NotFatalUntil::M129);
-  CHECK(!manifest_id.has_ref(), base::NotFatalUntil::M129);
-  CHECK(start_url.is_valid(), base::NotFatalUntil::M129);
+  CHECK(manifest_id.is_valid());
+  CHECK(!manifest_id.has_ref());
+  CHECK(start_url.is_valid());
   CHECK(url::Origin::Create(start_url).IsSameOriginWith(
-            url::Origin::Create(manifest_id)),
-        base::NotFatalUntil::M129);
+      url::Origin::Create(manifest_id)));
 }
 }  // namespace
 

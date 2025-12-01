@@ -24,7 +24,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/error/uma_logging.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_response_reader.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_response_reader_factory.h"
-#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/iwa_key_distribution_info_provider.h"
 #include "chrome/browser/web_applications/isolated_web_apps/signed_web_bundle_reader.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/web_applications/web_app_ui_manager.h"
 #include "chrome/common/url_constants.h"
 #include "components/web_package/signed_web_bundles/signed_web_bundle_id.h"
+#include "components/webapps/isolated_web_apps/iwa_key_distribution_info_provider.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "url/url_constants.h"
 
@@ -111,7 +111,7 @@ void IsolatedWebAppReaderRegistry::ReadResponse(
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!web_bundle_id.is_for_proxy_mode());
 
-  Cache::Key cache_key{.path = web_bundle_path, .dev_mode = dev_mode};
+  Cache::Key cache_key = web_bundle_path;
 
   {
     auto cache_entry_it = reader_cache_.Find(cache_key);
@@ -177,8 +177,7 @@ void IsolatedWebAppReaderRegistry::ReadResponse(
       base::BindOnce(&IsolatedWebAppReaderRegistry::OnResponseReaderCreated,
                      // `base::Unretained` can be used here since `this` owns
                      // `reader_factory`.
-                     base::Unretained(this), web_bundle_path, dev_mode,
-                     web_bundle_id));
+                     base::Unretained(this), web_bundle_path, web_bundle_id));
 }
 
 // Processes a component update event and queues close requests for readers
@@ -237,17 +236,7 @@ void IsolatedWebAppReaderRegistry::OnComponentUpdateSuccess(
 void IsolatedWebAppReaderRegistry::ClearCacheForPath(
     const base::FilePath& web_bundle_path,
     base::OnceClosure callback) {
-  auto callbacks = base::BarrierClosure(2, std::move(callback));
-  ClearCacheForPathImpl(web_bundle_path, /*dev_mode=*/false, callbacks);
-  ClearCacheForPathImpl(web_bundle_path, /*dev_mode=*/true, callbacks);
-}
-
-void IsolatedWebAppReaderRegistry::ClearCacheForPathImpl(
-    const base::FilePath& web_bundle_path,
-    bool dev_mode,
-    base::OnceClosure callback) {
-  auto cache_entry_it =
-      reader_cache_.Find({.path = web_bundle_path, .dev_mode = dev_mode});
+  auto cache_entry_it = reader_cache_.Find(web_bundle_path);
   const bool found = cache_entry_it != reader_cache_.End();
   if (!found) {
     std::move(callback).Run();
@@ -267,14 +256,12 @@ void IsolatedWebAppReaderRegistry::ClearCacheForPathImpl(
 
 void IsolatedWebAppReaderRegistry::OnResponseReaderCreated(
     const base::FilePath& web_bundle_path,
-    bool dev_mode,
     const web_package::SignedWebBundleId& web_bundle_id,
     base::expected<std::unique_ptr<IsolatedWebAppResponseReader>,
                    UnusableSwbnFileError> reader) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  auto cache_entry_it =
-      reader_cache_.Find({.path = web_bundle_path, .dev_mode = dev_mode});
+  auto cache_entry_it = reader_cache_.Find(web_bundle_path);
   DCHECK(cache_entry_it != reader_cache_.End());
   DCHECK_EQ(cache_entry_it->second.state(), Cache::Entry::State::kPending);
 
@@ -306,7 +293,7 @@ void IsolatedWebAppReaderRegistry::OnResponseReaderCreated(
   // The `SignedWebBundleReader` is now ready to read responses. Inform all
   // consumers that were waiting for this `SignedWebBundleReader` to become
   // available.
-  verified_files_.insert(cache_entry_it->first.path);
+  verified_files_.insert(cache_entry_it->first);
   cache_entry_it->second.set_reader(std::move(*reader));
   for (auto& [resource_request, callback] : pending_requests) {
     DoReadResponse(cache_entry_it->second.GetReader(), resource_request,
@@ -465,11 +452,6 @@ void IsolatedWebAppReaderRegistry::Cache::CleanupOldEntries() {
     return false;
   });
   StopCleanupTimerIfCacheIsEmpty();
-}
-
-bool IsolatedWebAppReaderRegistry::Cache::Key::operator<(
-    const Key& other) const {
-  return std::tie(path, dev_mode) < std::tie(other.path, other.dev_mode);
 }
 
 void IsolatedWebAppReaderRegistry::Cache::Entry::SetCloseReaderCallback(

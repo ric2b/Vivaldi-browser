@@ -51,16 +51,6 @@ export class UserMetrics {
     }
   }
 
-  panelShownInLocation(panelName: string, location: 'main'|'drawer'): void {
-    const panelWithLocationName = `${panelName}-${location}`;
-    const panelWithLocation = PanelWithLocation[panelWithLocationName as keyof typeof PanelWithLocation] || 0;
-    InspectorFrontendHostInstance.recordEnumeratedHistogram(
-        EnumeratedHistogram.PanelShownInLocation,
-        panelWithLocation,
-        PanelWithLocation.MAX_VALUE,
-    );
-  }
-
   settingsPanelShown(settingsViewId: string): void {
     this.panelShown('settings-' + settingsViewId);
   }
@@ -337,6 +327,11 @@ export class UserMetrics {
 
   freestylerEvalResponseSize(bytes: number): void {
     InspectorFrontendHostInstance.recordCountHistogram('DevTools.Freestyler.EvalResponseSize', bytes, 0, 100_000, 100);
+  }
+
+  performanceAINetworkSummaryResponseSize(bytes: number): void {
+    InspectorFrontendHostInstance.recordCountHistogram(
+        'DevTools.PerformanceAI.NetworkSummaryResponseSize', bytes, 0, 100_000, 100);
   }
 }
 
@@ -972,14 +967,11 @@ export enum DevtoolsExperiments {
   'just-my-code' = 65,
   'highlight-errors-elements-panel' = 73,
   'use-source-map-scopes' = 76,
-  'network-panel-filter-bar-redesign' = 79,
   'timeline-show-postmessage-events' = 86,
   'timeline-enhanced-traces' = 90,
   'timeline-compiled-sources' = 91,
   'timeline-debug-mode' = 93,
   'timeline-experimental-insights' = 102,
-  'timeline-dim-unrelated-events' = 103,
-  'timeline-alternative-navigation' = 104,
   // 106 was historically used [https://chromium-review.googlesource.com/c/devtools/devtools-frontend/+/6230097]
   // next experiment should be 107
   /* eslint-enable @typescript-eslint/naming-convention */

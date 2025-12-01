@@ -32,6 +32,8 @@
 #include "components/drm_helper/vivaldi_drm_tab_helper.h"
 #endif
 
+#include "components/prefs/pref_service.h"
+
 using content::WebContents;
 
 namespace vivaldi {
@@ -109,4 +111,20 @@ void VivaldiAttachTabHelpers(WebContents* web_contents) {
     geolocation_context->SetOverride(std::move(geoposition));
   }
 }
+
+base::Value::List getLinkRoutes(content::WebContents* contents) {
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
+  base::Value::List link_routes =
+      prefs->GetList(vivaldiprefs::kWorkspacesLinkRoutes).Clone();
+  return link_routes;
+}
+
+bool IsWorkspacesEnabled(content::WebContents* contents) {
+  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
+  PrefService* prefs = profile->GetPrefs();
+  return prefs->GetBoolean(vivaldiprefs::kWorkspacesEnabled);
+}
+
+
 }  // namespace vivaldi

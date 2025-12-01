@@ -116,10 +116,16 @@ if [compiler_gcc, compiler_clang].contains(cc_id)
   if cc_id == compiler_clang
     common_warning_flags += ['-Wconversion', '-Wno-sign-conversion', '-Wdocumentation']
   endif
-  cc_compile_flags = cc.get_supported_arguments(common_warning_flags + ['-Wstrict-prototypes'])
-  cxx_compile_flags = cxx.get_supported_arguments(common_warning_flags)
+  noexecstack_flags = ['-Wa,--noexecstack' ]
+  noexecstack_link_flags = ['-Wl,-z,noexecstack']
+  cc_compile_flags = cc.get_supported_arguments(common_warning_flags + noexecstack_flags + ['-Wstrict-prototypes'])
+  cxx_compile_flags = cxx.get_supported_arguments(common_warning_flags + noexecstack_flags)
   add_project_arguments(cc_compile_flags, language : 'c')
   add_project_arguments(cxx_compile_flags, language : 'cpp')
+  cc_link_flags = cc.get_supported_link_arguments(noexecstack_link_flags)
+  cxx_link_flags = cxx.get_supported_link_arguments(noexecstack_link_flags)
+  add_project_link_arguments(cc_link_flags, language: 'c')
+  add_project_link_arguments(cxx_link_flags, language: 'cpp')
 elif cc_id == compiler_msvc
   msvc_compile_flags = [ '/D_UNICODE', '/DUNICODE' ]
   if use_multi_thread

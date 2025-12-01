@@ -125,10 +125,10 @@ describeWithMockConnection('AutofillView', () => {
         addressText, ['Crocodile', ' Middle ', 'Dundee', 'Uluru ToursOutback Road 1Bundaberg Queensland ', '12345']);
     const expectedHeaders = ['Form field', 'Predicted autofill value', 'Value'];
     const expectedRows = [
-      ['#input1 (text)', 'First name \nheur', '"Crocodile"'],
-      ['input2 (text)', 'Last name \nheur', '"Dundee"'],
-      ['#input3 (text)', 'Country \nheur', '"Australia"'],
-      ['#input4 (text)', 'Zip code \nattr', '"12345"'],
+      ['#input1 (text)', 'First name\nheur', '"Crocodile"'],
+      ['input2 (text)', 'Last name\nheur', '"Dundee"'],
+      ['#input3 (text)', 'Country\nheur', '"Australia"'],
+      ['#input4 (text)', 'Zip code\nattr', '"12345"'],
     ];
     assertGridContents(view, expectedHeaders, expectedRows);
   };
@@ -159,7 +159,7 @@ describeWithMockConnection('AutofillView', () => {
 
   it('shows content if the view is created after the event was received', async () => {
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
+    sinon.assert.calledOnceWithExactly(showViewStub, 'autofill-view');
     const view = await renderAutofillView();
     assert.isNotNull(view.shadowRoot);
     assertViewShowsEventData(view);
@@ -170,11 +170,11 @@ describeWithMockConnection('AutofillView', () => {
     const view = await renderAutofillView();
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
+    sinon.assert.calledOnceWithExactly(showViewStub, 'autofill-view');
     showViewStub.reset();
 
     // The auto-opening checkbox is the second one.
-    const checkbox = view.shadowRoot!.querySelectorAll('input')[1];
+    const checkbox = view.shadowRoot!.querySelectorAll('devtools-checkbox')[1];
     assert.isNotNull(checkbox);
     assert.isTrue(checkbox.checked);
     checkbox.checked = false;
@@ -182,14 +182,14 @@ describeWithMockConnection('AutofillView', () => {
     checkbox.dispatchEvent(event);
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.notCalled);
+    sinon.assert.notCalled(showViewStub);
 
     checkbox.checked = true;
     event = new Event('change');
     checkbox.dispatchEvent(event);
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
+    sinon.assert.calledOnceWithExactly(showViewStub, 'autofill-view');
     await RenderCoordinator.done();
   });
 
@@ -197,21 +197,21 @@ describeWithMockConnection('AutofillView', () => {
     const view = await renderAutofillView();
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
+    sinon.assert.calledOnceWithExactly(showViewStub, 'autofill-view');
     showViewStub.reset();
 
     // The show test addresses checkbox is the first one.
-    const checkbox = view.shadowRoot!.querySelectorAll('input')[0];
+    const checkbox = view.shadowRoot!.querySelectorAll('devtools-checkbox')[0];
     assert.isNotNull(checkbox);
     assert.isFalse(checkbox.checked);
 
     const setAddressSpy = sinon.spy(autofillModel!.agent, 'invoke_setAddresses');
-    assert.isTrue(setAddressSpy.notCalled);
+    sinon.assert.notCalled(setAddressSpy);
 
     checkbox.checked = true;
     const event = new Event('change');
     checkbox.dispatchEvent(event);
-    assert.isTrue(setAddressSpy.calledOnce);
+    sinon.assert.calledOnce(setAddressSpy);
 
     await RenderCoordinator.done();
   });
@@ -220,7 +220,7 @@ describeWithMockConnection('AutofillView', () => {
     const monospaceStyles = 'font-family:var(--monospace-font-family);font-size:var(--monospace-font-size);';
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
+    sinon.assert.calledOnceWithExactly(showViewStub, 'autofill-view');
     const view = await renderAutofillView();
     assertViewShowsEventData(view);
 
@@ -260,7 +260,7 @@ describeWithMockConnection('AutofillView', () => {
     });
 
     autofillModel.addressFormFilled(addressFormFilledEvent);
-    assert.isTrue(showViewStub.calledOnceWithExactly('autofill-view'));
+    sinon.assert.calledOnceWithExactly(showViewStub, 'autofill-view');
     const view = await renderAutofillView();
     assertViewShowsEventData(view);
 
@@ -280,16 +280,16 @@ describeWithMockConnection('AutofillView', () => {
     fourthGridRow.dispatchEvent(new MouseEvent('mouseenter'));
     await RenderCoordinator.done({waitForWork: true});
     assert.isTrue(zipCodeSpan.classList.contains('highlighted'));
-    assert.isTrue(overlaySpy.calledOnce);
+    sinon.assert.calledOnce(overlaySpy);
     const deferredNode =
         (overlaySpy.getCall(0).args[0] as unknown as SDK.OverlayModel.HighlightDeferredNode).deferredNode;
     assert.strictEqual(deferredNode.backendNodeId(), 4);
-    assert.isTrue(hideOverlaySpy.notCalled);
+    sinon.assert.notCalled(hideOverlaySpy);
 
     fourthGridRow.dispatchEvent(new MouseEvent('mouseleave'));
     await RenderCoordinator.done({waitForWork: true});
     assert.isFalse(zipCodeSpan.classList.contains('highlighted'));
-    assert.isTrue(hideOverlaySpy.calledOnce);
+    sinon.assert.calledOnce(hideOverlaySpy);
     getFrameStub.restore();
   });
 });

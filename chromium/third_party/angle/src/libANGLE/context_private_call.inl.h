@@ -495,7 +495,8 @@ inline void ContextPrivateBlendEquation(PrivateState *privateState,
                                         GLenum mode)
 {
     privateState->setBlendEquation(mode, mode);
-    if (privateState->getExtensions().blendEquationAdvancedKHR)
+    if (privateState->getExtensions().blendEquationAdvancedKHR ||
+        privateState->getClientVersion() >= ES_3_2)
     {
         privateStateCache->onBlendEquationOrFuncChange();
     }
@@ -507,7 +508,8 @@ inline void ContextPrivateBlendEquationi(PrivateState *privateState,
                                          GLenum mode)
 {
     privateState->setBlendEquationIndexed(mode, mode, buf);
-    if (privateState->getExtensions().blendEquationAdvancedKHR)
+    if (privateState->getExtensions().blendEquationAdvancedKHR ||
+        privateState->getClientVersion() >= ES_3_2)
     {
         privateStateCache->onBlendEquationOrFuncChange();
     }
@@ -519,7 +521,8 @@ inline void ContextPrivateBlendEquationSeparate(PrivateState *privateState,
                                                 GLenum modeAlpha)
 {
     privateState->setBlendEquation(modeRGB, modeAlpha);
-    if (privateState->getExtensions().blendEquationAdvancedKHR)
+    if (privateState->getExtensions().blendEquationAdvancedKHR ||
+        privateState->getClientVersion() >= ES_3_2)
     {
         privateStateCache->onBlendEquationOrFuncChange();
     }
@@ -532,7 +535,8 @@ inline void ContextPrivateBlendEquationSeparatei(PrivateState *privateState,
                                                  GLenum modeAlpha)
 {
     privateState->setBlendEquationIndexed(modeRGB, modeAlpha, buf);
-    if (privateState->getExtensions().blendEquationAdvancedKHR)
+    if (privateState->getExtensions().blendEquationAdvancedKHR ||
+        privateState->getClientVersion() >= ES_3_2)
     {
         privateStateCache->onBlendEquationOrFuncChange();
     }
@@ -699,47 +703,47 @@ inline void ContextPrivatePixelStorei(PrivateState *privateState,
             break;
 
         case GL_UNPACK_ROW_LENGTH:
-            ASSERT(privateState->getClientMajorVersion() >= 3 ||
+            ASSERT(privateState->getClientVersion() >= ES_3_0 ||
                    privateState->getExtensions().unpackSubimageEXT);
             privateState->setUnpackRowLength(param);
             break;
 
         case GL_UNPACK_IMAGE_HEIGHT:
-            ASSERT(privateState->getClientMajorVersion() >= 3);
+            ASSERT(privateState->getClientVersion() >= ES_3_0);
             privateState->setUnpackImageHeight(param);
             break;
 
         case GL_UNPACK_SKIP_IMAGES:
-            ASSERT(privateState->getClientMajorVersion() >= 3);
+            ASSERT(privateState->getClientVersion() >= ES_3_0);
             privateState->setUnpackSkipImages(param);
             break;
 
         case GL_UNPACK_SKIP_ROWS:
-            ASSERT((privateState->getClientMajorVersion() >= 3) ||
+            ASSERT((privateState->getClientVersion() >= ES_3_0) ||
                    privateState->getExtensions().unpackSubimageEXT);
             privateState->setUnpackSkipRows(param);
             break;
 
         case GL_UNPACK_SKIP_PIXELS:
-            ASSERT((privateState->getClientMajorVersion() >= 3) ||
+            ASSERT((privateState->getClientVersion() >= ES_3_0) ||
                    privateState->getExtensions().unpackSubimageEXT);
             privateState->setUnpackSkipPixels(param);
             break;
 
         case GL_PACK_ROW_LENGTH:
-            ASSERT((privateState->getClientMajorVersion() >= 3) ||
+            ASSERT((privateState->getClientVersion() >= ES_3_0) ||
                    privateState->getExtensions().packSubimageNV);
             privateState->setPackRowLength(param);
             break;
 
         case GL_PACK_SKIP_ROWS:
-            ASSERT((privateState->getClientMajorVersion() >= 3) ||
+            ASSERT((privateState->getClientVersion() >= ES_3_0) ||
                    privateState->getExtensions().packSubimageNV);
             privateState->setPackSkipRows(param);
             break;
 
         case GL_PACK_SKIP_PIXELS:
-            ASSERT((privateState->getClientMajorVersion() >= 3) ||
+            ASSERT((privateState->getClientVersion() >= ES_3_0) ||
                    privateState->getExtensions().packSubimageNV);
             privateState->setPackSkipPixels(param);
             break;

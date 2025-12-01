@@ -1,6 +1,7 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../../../core/common/common.js';
 import * as Platform from '../../../../core/platform/platform.js';
@@ -190,7 +191,9 @@ export class ChartViewport extends UI.Widget.VBox {
   }
 
   scrollOffset(): number {
-    return this.vScrollElement.scrollTop;
+    // Return the cached value, rather than the live value (which typically incurs a forced reflow)
+    // In practice, this is true whenever scrollOffset() is called:  `this.scrollTop === this.vScrollElement.scrollTop`
+    return this.scrollTop;
   }
 
   chartHeight(): number {
@@ -483,6 +486,16 @@ export class ChartViewport extends UI.Widget.VBox {
     this.delegate.update();
   }
 
+  override willHide(): void {
+    // Stop animations when the view is hidden (or destroyed).
+    // In this case, we also jump the time immediately to the target time, so
+    // that if the view is restored, the time shown is correct.
+    if (this.cancelWindowTimesAnimation) {
+      this.cancelWindowTimesAnimation();
+      this.setWindowTimes(this.targetLeftTime, this.targetRightTime, false);
+    }
+  }
+
   setWindowTimes(startTime: number, endTime: number, animate?: boolean): void {
     if (startTime === this.targetLeftTime && endTime === this.targetRightTime) {
       return;
@@ -511,6 +524,11 @@ export class ChartViewport extends UI.Widget.VBox {
         });
 
     function animateWindowTimes(this: ChartViewport, startTime: number, endTime: number): void {
+      // We cancel the animation in the willHide method, but as an extra check
+      // bail here if we are hidden rather than queue an update.
+      if (!this.isShowing()) {
+        return;
+      }
       this.visibleLeftTime = startTime;
       this.visibleRightTime = endTime;
       this.update();

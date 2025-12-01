@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">Caret серептөөсүн күйгүзүү же өчүрүү</translation>
 <translation id="2531025035050312891">түзмөк жай</translation>
 <translation id="2531107890083353124">Өтмөктү сүйрөгөндө, <ph name="KEY_ONE" /> баскычын басып туруңуз</translation>
+<translation id="2532199152994248594">Сүрөткө тарта турган аймакты тандоо үчүн сүйрөңүз же Боштук баскычын басыңыз</translation>
 <translation id="2545334090614121435">Home баскычы керек болуп жатабы? Муну колдонуңуз:</translation>
 <translation id="254900897760075745">Тандалган контентти алмашуу буферине көчүрүү</translation>
 <translation id="2549711466868162843">Жарыгыраак кылуу</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765"><ph name="MODIFIER" /> баскычын басып, шилтемени чыкылдатыңыз</translation>
 <translation id="2957159466053076448">Бул функцияларды каалаган убакта Параметрлерден өчүрө аласыз. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Түзмөктөгү аудиолор</translation>
-<translation id="2960314608273155470">Сүрөткө тартуу режими, демейки шартта: <ph name="SOURCE" /> <ph name="TYPE" />. Өтүү үчүн баскычтоптогу "Tab" баскычын басыңыз.</translation>
 <translation id="2961963223658824723">Бир жерден ката кетти. Бир нече секунддан кийин кайталап көрүңүз.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Микрофонду пайдалануу мүмкүнчүлүгүн күйгүзөсүзбү?</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">Wi-Fi өчүрүлгөн</translation>
 <translation id="3554215588514239132">Иштеп чыгуучунун куралдарынын панелин көрсөтүү же жашыруу</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> кадалды</translation>
+<translation id="3554928024630051016">Башка USB түзмөктөрүн кошуу үчүн бирөөнү чыгарып, жаңысын сайып көрүңүз</translation>
 <translation id="3558768885091059911">Камера менен микрофонду колдонууга уруксат бересизби?</translation>
 <translation id="3560174576767922131">Видео жаздыруу</translation>
 <translation id="3563775809269155755">Туташуу түйүнүн иштетүү</translation>
@@ -868,6 +869,7 @@
 <translation id="3861651314799684201">Толук экранды жаздыруу үчүн "Enter" баскычын басыңыз</translation>
 <translation id="3870197372373144624">Түзмөктү өчүрүп көрүңүз.</translation>
 <translation id="3879748587602334249">Жүктөп алгыч</translation>
+<translation id="3884007280698606545">USB түзмөктөрүнүн саны чекке жетти</translation>
 <translation id="3886872229787704059">Бүгүн ачылды</translation>
 <translation id="3891340733213178823">Чыгуу үчүн эки ирет Ctrl+Shift+Q басыңыз.</translation>
 <translation id="3892148308691398805">Текстти көчүрүү</translation>
@@ -1440,6 +1442,7 @@
 <translation id="5672890847723042801">Кызматтык программалар</translation>
 <translation id="5673434351075758678">Параметрлер шайкештештирилгенден кийин тил "<ph name="FROM_LOCALE" />" тилинен "<ph name="TO_LOCALE" />" тилине өзгөртүлдү.</translation>
 <translation id="5675363643668471212">Текчедеги нерсе</translation>
+<translation id="5677022547882470786">Издөө үчүн аймакты тандоо үчүн сүйрөңүз же Space баскычын басыңыз</translation>
 <translation id="5677928146339483299">Бөгөттөлгөн</translation>
 <translation id="5678564054339031017">Кийинки аптаны көрсөтүү</translation>
 <translation id="5679050765726761783">Кубаты төмөн адаптер туташтырылды</translation>
@@ -1485,6 +1488,7 @@
 <translation id="5788127256798019331">Google Play файлдары</translation>
 <translation id="5788535737706478207">Жабылган акыркы өтмөктү же терезени ачуу</translation>
 <translation id="5790085346892983794">Ийгилик</translation>
+<translation id="5791926618942305301">Экрандагыны тартып алуу параметрине өтүп, <ph name="SOURCE" /> <ph name="TYPE" /> деп коюңуз. Тартуу түрүн тандоо үчүн өтмөктү басыңыз. Тартуу үчүн Enter баскычын басыңыз. Тартуу аймагын тандоо үчүн жарым-жартылай скриншот параметрин тандаңыз. Эгер иштетиле элек болсо, аймак тандоо үчүн боштукту басыңыз.</translation>
 <translation id="579415080077680903">Үнүн өчүрүү</translation>
 <translation id="5802516411616338943">Ыкчам параметрлерди ачуу</translation>
 <translation id="5804651031882187592">"SIM картаны кулпулоо" параметрин өчүрүү</translation>
@@ -1641,6 +1645,7 @@
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> ата-эненин уруксаты менен кайра кошууга болот.</translation>
 <translation id="6291221004442998378">Кубатталган жок</translation>
 <translation id="6298183524022479114">Бул түзмөктү колдонмодо тууралаңыз</translation>
+<translation id="6304076460080088478">Google Lens менен экрандагы нерсени издөө үчүн Жашыруун терезелерди жаап же кичирейтиңиз</translation>
 <translation id="6309219492973062892">Текчедеги 1-8 сүрөтчөлөрүн чыкылдатуу же таптап коюу</translation>
 <translation id="6315170314923504164">Үн</translation>
 <translation id="6319058840130157106">Төмөнкү оң бурчтун, Жүргүзгүчтун, дарек тилкесинин, кыстармалар тилкесинин, ачылып турган вебсайттын жана жүктөлүп алынгандардын ортосунда артка жылуу</translation>
@@ -1769,6 +1774,7 @@
 <translation id="6700713906295497288">IME меню баскычы</translation>
 <translation id="6704073473590541209">Маркердин оң чети тандалды. Жылдыруу үчүн жебе баскычтарын колдонуңуз</translation>
 <translation id="6706742084323792866">Баскычтопту кадап коюу</translation>
+<translation id="6709719156428404245">Жаздыра турган аймакты тандоо үчүн сүйрөңүз же Боштук баскычын басыңыз</translation>
 <translation id="6710213216561001401">Мурунку</translation>
 <translation id="6723839937902243910">Кубат</translation>
 <translation id="672609503628871915">Эмне жаңылык бар</translation>

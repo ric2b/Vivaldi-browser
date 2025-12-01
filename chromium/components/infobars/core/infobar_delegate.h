@@ -58,10 +58,10 @@ class InfoBarDelegate {
 
   // Unique identifier for every InfoBarDelegate subclass.  Use suffixes to mark
   // infobars specific to particular OSes/platforms.
-  // KEEP IN SYNC WITH THE InfoBarIdentifier ENUM IN enums.xml.
   // NEW VALUES MUST BE APPENDED AND AVOID CHANGING ANY PRE-EXISTING VALUES.
   // A Java counterpart will be generated for this enum.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.infobar
+  // LINT.IfChange(InfoBarIdentifier)
   enum InfoBarIdentifier {
     INVALID = -1,
     TEST_INFOBAR = 0,
@@ -125,7 +125,7 @@ class InfoBarDelegate {
     SYNC_ERROR_INFOBAR_DELEGATE_IOS = 58,
     UPGRADE_INFOBAR_DELEGATE_IOS = 59,
     // Removed: WINDOW_ERROR_INFOBAR_DELEGATE_ANDROID = 60,
-    DANGEROUS_DOWNLOAD_INFOBAR_DELEGATE_ANDROID = 61,
+    // Removed: DANGEROUS_DOWNLOAD_INFOBAR_DELEGATE_ANDROID = 61,
     // Removed: DESKTOP_SEARCH_REDIRECTION_INFOBAR_DELEGATE = 62,
     // Removed: UPDATE_PASSWORD_INFOBAR_DELEGATE_MOBILE = 63,
     // Removed: DATA_REDUCTION_PROMO_INFOBAR_DELEGATE_ANDROID = 64,
@@ -146,7 +146,7 @@ class InfoBarDelegate {
     // Removed: NEAR_OOM_INFOBAR_ANDROID = 79,
     INSTALLABLE_AMBIENT_BADGE_INFOBAR_DELEGATE = 80,
     // Removed: PAGE_LOAD_CAPPING_INFOBAR_DELEGATE = 81,
-    DOWNLOAD_PROGRESS_INFOBAR_ANDROID = 82,
+    // Removed: DOWNLOAD_PROGRESS_INFOBAR_ANDROID = 82,
     // Removed: AR_CORE_UPGRADE_ANDROID = 83,
     BLOATED_RENDERER_INFOBAR_DELEGATE = 84,
     // Removed: SUPERVISED_USERS_DEPRECATED_INFOBAR_DELEGATE = 85,
@@ -162,7 +162,7 @@ class InfoBarDelegate {
     WEBOTP_SERVICE_INFOBAR_DELEGATE = 95,
     KNOWN_INTERCEPTION_DISCLOSURE_INFOBAR_DELEGATE = 96,
     // Removed: SYNC_ERROR_INFOBAR_DELEGATE_ANDROID = 97,
-    INSECURE_DOWNLOAD_INFOBAR_DELEGATE_ANDROID = 98,
+    // Removed: INSECURE_DOWNLOAD_INFOBAR_DELEGATE_ANDROID = 98,
     // Removed: CONDITIONAL_TAB_STRIP_INFOBAR_ANDROID = 99,
     // Removed: LITE_MODE_HTTPS_IMAGE_COMPRESSION_INFOBAR_ANDROID = 100,
     // Removed: SYSTEM_INFOBAR_DELEGATE_MAC = 101,
@@ -187,9 +187,13 @@ class InfoBarDelegate {
     DEV_TOOLS_SHARED_PROCESS_DELEGATE = 120,
     ENHANCED_SAFE_BROWSING_INFOBAR_DELEGATE = 121,
     CREDENTIAL_PROVIDER_INFOBAR_DELEGATE_IOS = 122,
+    PDF_INFOBAR_DELEGATE = 123,
+    INSTALLER_DOWNLOADER_INFOBAR_DELEGATE = 124,
+
     // Vivaldi: Keep unique.
     VIVALDI_INFOBAR_DELEGATE_DESKTOP = 1024,
   };
+  // LINT.ThenChange(//tools/metrics/histograms/metadata/browser/enums.xml:InfoBarIdentifier)
 
   // Describes navigation events, used to decide whether infobars should be
   // dismissed.
@@ -283,6 +287,10 @@ class InfoBarDelegate {
   // Returns true if the InfoBar should animate when showing or hiding; true by
   // default.
   virtual bool ShouldAnimate() const;
+
+  // Returns true if the InfoBar should hide when the browser is in fullscreen
+  // mode. True by default.
+  virtual bool ShouldHideInFullscreen() const;
 
   // Type-checking downcast routines:
   virtual ConfirmInfoBarDelegate* AsConfirmInfoBarDelegate();

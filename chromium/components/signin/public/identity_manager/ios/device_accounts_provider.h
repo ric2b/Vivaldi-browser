@@ -36,10 +36,28 @@ enum AuthenticationErrorCategory {
 class DeviceAccountsProvider {
  public:
   // Account information.
-  struct AccountInfo {
-    GaiaId gaia;
-    std::string email;
-    std::string hosted_domain;
+  class AccountInfo {
+   public:
+    AccountInfo(GaiaId gaia,
+                std::string email,
+                std::string hosted_domain,
+                bool has_persistent_auth_error = false);
+    AccountInfo(const AccountInfo& other);
+    AccountInfo& operator=(const AccountInfo& other);
+    AccountInfo(AccountInfo&& other);
+    AccountInfo& operator=(AccountInfo&& other);
+    ~AccountInfo();
+
+    const GaiaId& GetGaiaId() const;
+    const std::string& GetEmail() const;
+    const std::string& GetHostedDomain() const;
+    bool HasPersistentAuthError() const;
+
+   private:
+    GaiaId gaia_;
+    std::string email_;
+    std::string hosted_domain_;
+    bool has_persistent_auth_error_;
   };
 
   // Access token info.

@@ -1,6 +1,7 @@
 // Copyright (c) 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
@@ -491,7 +492,6 @@ export class Section {
   private sourceField: Element;
   private readonly statusField: Element;
   private readonly clientsField: Element;
-  private readonly linkifier: Components.Linkifier.Linkifier;
   private readonly clientInfoCache: Map<string, Protocol.Target.TargetInfo>;
   private readonly throttler: Common.Throttler.Throttler;
   private updateCycleField?: Element;
@@ -551,7 +551,6 @@ export class Section {
     this.createUpdateCycleField();
     this.maybeCreateRouterField();
 
-    this.linkifier = new Components.Linkifier.Linkifier();
     this.clientInfoCache = new Map();
     this.throttler = new Common.Throttler.Throttler(500);
   }

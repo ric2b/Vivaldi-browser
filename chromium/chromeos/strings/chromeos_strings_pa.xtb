@@ -20,6 +20,7 @@
 <translation id="1059913517121127803">ਸਕੈਨ ਕਰਨਾ ਸ਼ੁਰੂ ਨਹੀਂ ਕੀਤਾ ਜਾ ਸਕਿਆ</translation>
 <translation id="1061864016440983342">ਟਿਕਾਣੇ ਤੋਂ ਬਿਨਾਂ ਵਰਤੋ</translation>
 <translation id="1062823486781306604"><ph name="COUNT" /> ਵਿੱਚੋਂ <ph name="INDEX" />, <ph name="NAME" />।</translation>
+<translation id="106558928761833284">ਇੱਕ ਸੋਹਣਾ ਬ੍ਰਹਿਮੰਡੀ ਨੀਬੂਲਾ ਗਲੈਕਸੀ, ਜਿਸ ਵਿੱਚ ਇੱਕ ਤੇਜ਼ ਭਵਿੱਖਮੁਖੀ ਸਪੇਸਸ਼ਿਪ, ਨੀਲੇ, ਗੁਲਾਬੀ ਅਤੇ ਜਾਮਨੀ ਰੰਗ ਦੀ ਭਾਹ</translation>
 <translation id="1069150558259542054">ਕਵਿੱਕ ਇੰਸਰਟ ਦੀ ਵਰਤੋਂ ਵਿਉਂਤਬੱਧ ਸ਼ਾਰਟਕੱਟਾਂ ਲਈ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ।</translation>
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">Firewall ਦਾ ਪਤਾ ਲੱਗਾ</translation>
@@ -27,9 +28,11 @@
 <translation id="1082009148392559545">ਸਕ੍ਰੀਨ ਸੇਵਰ ਡਾਊਨਲੋਡ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="1094693127011229778">IP ਪਤਾ ਉਪਲਬਧ ਨਹੀਂ</translation>
 <translation id="1100902271996134409">ਚਿੱਤਰ ਬਣਾਏ ਜਾ ਰਹੇ ਹਨ...</translation>
+<translation id="1102946598597843031">ਝੀਲ ਦੇ ਉੱਤੇ ਡਿੱਗਦੇ ਚੈਰੀ ਬਲੌਸਮ ਪੱਤਿਆਂ ਦੇ ਨਾਲ ਚੰਦਰਮਾ ਦੀ ਇੱਕ ਫ਼ੋਟੋਗ੍ਰਾਫ਼, 4k</translation>
 <translation id="1107856713690040084"><ph name="DEVICE_TYPE" /> ਆਡੀਓ</translation>
 <translation id="1116694919640316211">ਬਾਰੇ</translation>
 <translation id="1118572504348554005">ਅਸੀਂ ਇਸ ਫ਼ਾਰਮ ਰਾਹੀਂ ਪੇਸ਼ ਕੀਤੇ ਵਿਚਾਰ ਨੂੰ ਪਾਰਟਨਰਾਂ ਨਾਲ ਸਾਂਝਾ ਕਰ ਸਕਦੇ ਹਾਂ ਤਾਂ ਜੋ ਤੁਹਾਡੇ ਵੱਲੋਂ ਸਾਨੂੰ ਰਿਪੋਰਟ ਕੀਤੇ ਜਾਣ ਵਾਲੇ ਬੱਗਾਂ ਅਤੇ ਹੋਰ ਸਮੱਸਿਆਵਾਂ ਨੂੰ ਠੀਕ ਕੀਤਾ ਜਾ ਸਕੇ। ਸੰਵੇਦਨਸ਼ੀਲ ਜਾਣਕਾਰੀ ਸ਼ਾਮਲ ਨਾ ਕਰੋ ਜਿਵੇਂ ਕਿ ਪਾਸਵਰਡ।</translation>
+<translation id="1118596190635569417">ਇਸ ਮੀਨੂ ਨੂੰ ਸੱਜੇ ਪਾਸੇ ਵੱਲ ਲੈ ਜਾਓ</translation>
 <translation id="1119403468619527527">ਸਰਲ ਸ਼ਬਦਾਂ ਵਿੱਚ ਸਮਝਣ ਲਈ ਚੁਣੇ ਹੋਏ ਸ਼ਬਦ ਬਹੁਤ ਘੱਟ ਹਨ</translation>
 <translation id="1119447706177454957">ਅੰਦਰੂਨੀ ਗੜਬੜ</translation>
 <translation id="1124772482545689468">ਵਰਤੋਂਕਾਰ</translation>
@@ -66,6 +69,7 @@
 <translation id="1238163879850290856">ਹੋਰਾਂ ਨੂੰ ਡਾਟੇ ਤੱਕ ਪਹੁੰਚ ਕਰਨ ਤੋਂ ਰੋਕਣ ਲਈ ਰੀਸੈੱਟ ਕਰੋ। ਸਿਰਫ਼ ਆਪਣੀਆਂ ਭਰੋਸੇਮੰਦ ਇਨਪੁੱਟ ਵਿਧੀਆਂ ਨੂੰ ਹੀ ਵਰਤੋ।</translation>
 <translation id="1238612778414822719">HTTPS ਵਿਲੰਬਤਾ</translation>
 <translation id="1252766349417594414">ਜਾਏਸਟਿੱਕ</translation>
+<translation id="1261045951892393759">ਇੱਕ ਬਿੱਲੀ ਯੂਨੀਕੋਰਨ ਦੀ ਸਵਾਰੀ ਕਰਦੇ ਹੋਏ ਉੱਡਦੇ ਹੋਏ ਵੀ ਖੇਡ ਰਹੀ ਹੈ, ਜਿਸਦੀ ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਬਿਜਲੀ ਲਿਸ਼ਕ ਰਹੀ ਹੈ</translation>
 <translation id="1270369111467284986">ਕੈਪਟਿਵ ਪੋਰਟਲ 'ਤੇ ਸ਼ੱਕ ਹੈ</translation>
 <translation id="1274654146705270731">ਸੰਤਰੇ</translation>
 <translation id="1275718070701477396">ਚੁਣਿਆ ਗਿਆ</translation>
@@ -91,8 +95,10 @@
 <translation id="1367951781824006909">ਇੱਕ ਫਾਈਲ ਚੁਣੋ</translation>
 <translation id="1371650399987522809">Google AI ਵੱਲੋਂ ਸੰਚਾਲਿਤ ਵਾਲਪੇਪਰ ਲਈ ਵਿਚਾਰ</translation>
 <translation id="1374385338586507108">ਪਰਿਭਾਸ਼ਾ ਦਿਓ</translation>
+<translation id="1376064675713230088">ਟੀ-ਰੈਕਸ</translation>
 <translation id="1383876407941801731">ਖੋਜੋ</translation>
 <translation id="1387854245479784695">ਇਹ ਸਾਰੇ ਕੋਰ ਅੰਕੜਿਆਂ ਦਾ ਇਕੱਤਰੀਕਰਨ ਹੈ</translation>
+<translation id="1388919980490622894">ਰੰਗ ਗ੍ਰੇਡਿੰਗ ਨਾਲ</translation>
 <translation id="1393206549145430405">ਕਿਲ੍ਹਾ</translation>
 <translation id="1394661041439318933">ਡੀਵਾਈਸ ਦੇ ਕੇਸ ਦੀ ਬੈਟਰੀ ਦਾ ਪੱਧਰ <ph name="BATTERY_PERCENTAGE" />% ਹੈ।</translation>
 <translation id="1397738625398125236">ਗੇਟਵੇ ਨੂੰ ਪਿੰਗ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ</translation>
@@ -125,11 +131,11 @@
 <translation id="1499900233129743732"><ph name="MANAGER" /> ਇਸ ਵਰਤੋਂਕਾਰ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰਦਾ ਹੈ ਅਤੇ ਦੂਰ-ਦਰਾਡੇ ਤੋਂ ਸੈਟਿੰਗਾਂ ਦਾ ਪ੍ਰਬੰਧਨ ਅਤੇ ਵਰਤੋਂਕਾਰ ਸਰਗਰਮੀ ਦੀ ਨਿਗਰਾਨੀ ਕਰ ਸਕਦਾ ਹੈ।</translation>
 <translation id="150962533380566081">ਅਵੈਧ PUK।</translation>
 <translation id="1510238584712386396">ਲੌਂਚਰ</translation>
+<translation id="1512872158112631650">ਅਦਭੁਤ ਛਾਵਾਂ</translation>
 <translation id="1514446283880973949">ਹੋਰ ਵਿਸ਼ਵਾਸ ਨਾਲ ਲਿਖੋ, ਸਮੱਗਰੀ ਦਾ ਸਾਰਾਂਸ਼ ਦਿਓ, ਪਰਿਭਾਸ਼ਾਵਾਂ ਅਤੇ ਹੋਰ ਚੀਜ਼ਾਂ ਪ੍ਰਾਪਤ ਕਰੋ</translation>
 <translation id="1515129336378114413">ਬ੍ਰਾਊਜ਼ਰ ਦਾ ਹੋਮ ਪੇਜ</translation>
 <translation id="1526389707933164996">ਸਕ੍ਰੀਨ ਸੇਵਰ ਐਨੀਮੇਸ਼ਨ</translation>
 <translation id="152892567002884378">ਅਵਾਜ਼ ਵਧਾਓ</translation>
-<translation id="1531038290222364269">ਟੈਬਾਂ ਦਿਖਾਓ</translation>
 <translation id="1539864135338521185">ਲੈਪਿਸ ਲਜ਼ੂਲੀ</translation>
 <translation id="1548555207631326346">ਕੋਈ ਥੀਮ ਚੁਣੋ ਅਤੇ ਫਿਰ ਆਪਣੇ AI ਚਿੱਤਰਾਂ ਨੂੰ ਵਿਅਕਤੀਗਤ ਬਣਾਉਣ ਲਈ ਰੇਖਾਂਕਿਤ ਕੀਤੇ ਸ਼ਬਦ ਚੁਣੋ।<ph name="LINE_BREAK" />
           <ph name="LINE_BREAK" />
@@ -200,6 +206,7 @@
 <translation id="1758018619400202187">EAP-TLS</translation>
 <translation id="1758459542619182298"><ph name="CONTROL_TYPE" /> <ph name="KEY_LIST" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1762353673362288306">ਤੁਸੀਂ ਹੁਣ ਸਿਰਫ਼ ਕਲਾਸ ਟੂਲ ਵਰਤ ਸਕਦੇ ਹੋ</translation>
 <translation id="1762483337755424125">ਪ੍ਰਤੀਲਿਪੀ</translation>
 <translation id="1765169783255151332">ਕੁੰਜੀਆਂ ਵਿਚਕਾਰ ਤੁਰੰਤ ਸਵਿੱਚ ਕਰੋ</translation>
 <translation id="1768959921651994223">ਪ੍ਰਮਾਣੀਕਰਨ ਦੀ ਕਿਸਮ</translation>
@@ -229,6 +236,7 @@
 <translation id="1854156910036166007">ਸਲਾਥ</translation>
 <translation id="1856388568474281774">ਹੇਠਾਂ ਤੀਰ</translation>
 <translation id="1858620243986915808">ਸਕ੍ਰੀਨਸ਼ਾਟ ਨੱਥੀ ਕਰੋ</translation>
+<translation id="1860654594958086756">3D ਰੈਂਡਰ</translation>
 <translation id="1871413952174074704">APN ਵਿੱਚ <ph name="CHAR_LIMIT" /> ਤੋਂ ਜ਼ਿਆਦਾ ਅੱਖਰ-ਚਿੰਨ੍ਹ ਨਹੀਂ ਹੋ ਸਕਦੇ</translation>
 <translation id="1871569928317311284">ਗੂੜ੍ਹਾ ਥੀਮ ਬੰਦ ਕਰੋ</translation>
 <translation id="1874612839560830905">MTU</translation>
@@ -242,10 +250,11 @@
 <translation id="1905710495812624430">ਅਧਿਕਤਮ ਮਨਜ਼ੂਰ ਕੀਤੀਆਂ ਕੋਸ਼ਿਸ਼ਾਂ ਵਧੀਆਂ।</translation>
 <translation id="1908234395526491708">UDP ਬੇਨਤੀ ਦੀਆਂ ਅਸਫਲਤਾਵਾਂ</translation>
 <translation id="1908394185991500139">ਖੱਬਾ ਤੀਰ</translation>
-<translation id="1911678930322867245">ਸਿਖਰਲੇ ਸੱਜੇ ਪਾਸੇ ਲੈ ਕੇ ਜਾਓ</translation>
 <translation id="1914144885717544695">ਸ਼ੁੱਕਰਵਾਰ ਨੂੰ</translation>
 <translation id="1915960750806557358">ਆਪਣੇ ਵਿਚਾਰ ਸਾਂਝੇ ਕਰੋ ਜਾਂ ਆਪਣੀ ਸਮੱਸਿਆ ਦਾ ਵਰਣਨ ਕਰੋ। ਇਹ ਪੱਕਾ ਕਰੋ ਕਿ ਇਸ ਵਿੱਚ ਕੋਈ ਵੀ ਅਜਿਹੀ ਜਾਣਕਾਰੀ ਸ਼ਾਮਲ ਨਾ ਹੋਵੇ ਜੋ ਨਿੱਜੀ, ਸੰਵੇਦਨਸ਼ੀਲ ਜਾਂ ਗੁਪਤ ਹੋਵੇ।</translation>
 <translation id="1923388006036088459">ਐਕਸੈਂਟ ਰੰਗ</translation>
+<translation id="1926611810597212636">ਯੂਨੀਕੋਰਨ</translation>
+<translation id="1944321879609775960">ਸਾਰਾਂਸ਼ ਬਣਾਉਣ ਲਈ, ਆਪਣੇ <ph name="DEVICE_TYPE" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="1945403655450283000">Recorder</translation>
 <translation id="1947737735496445907">ਪ੍ਰਿੰਟ ਕੀਤੀ ਗਈ</translation>
 <translation id="1951012854035635156">Assistant</translation>
@@ -268,6 +277,7 @@
 <translation id="2045814230297767491">ਕਟਲਰੀ</translation>
 <translation id="2047316797244836561">ਸਕ੍ਰੀਨ ਸੇਵਰ ਦੇਖਣ ਲਈ ਕਿਰਪਾ ਕਰਕੇ ਕਿਸੇ ਨੈੱਟਵਰਕ ਨਾਲ ਕਨੈਕਟ ਕਰੋ ਅਤੇ ਪੰਨੇ ਨੂੰ ਰੀਲੋਡ ਕਰੋ।</translation>
 <translation id="2056550196601855911">IPv4/IPv6</translation>
+<translation id="2068472557797646626">ਕ੍ਰੋਮ ਆਰਕੀਟੈਕਚਰਲ ਤੱਤਾਂ ਦੀ ਬੈਕਗ੍ਰਾਊਂਡ 'ਤੇ ਕ੍ਰੋਮ ਗੋਲਿਆਂ ਅਤੇ ਗੋਲਿਆਂ ਦੇ ਆਕਾਰਾਂ ਦੀ 3D ਰੈਂਡਰਿੰਗ। ਇਹ ਰਚਨਾ ਵਿਗਿਆਪਨਬਾਜ਼ੀ, ਬ੍ਰਾਂਡਿੰਗ ਜਾਂ ਕਾਪੀ ਸਪੇਸ ਨਾਲ ਪੇਸ਼ਕਾਰੀ ਲਈ ਆਧੁਨਿਕ ਘੱਟੋ-ਘੱਟ ਸੰਕਲਪ ਹੈ। ਘੱਟੋ-ਘੱਟਵਾਦ ਦੀ ਸ਼ੈਲੀ ਵਿੱਚ ਇੱਕ ਅਮੂਰਤ ਬੈਕਗ੍ਰਾਊਂਡ ਦੇ ਸਾਹਮਣੇ ਇੱਕ ਵੱਡਾ ਆਰਕ। ਸਟੂਡੀਓ ਲਾਈਟਿੰਗ। ਕਲੋਜ਼ਅੱਪ ਸ਼ਾਟ।</translation>
 <translation id="2073232437457681324">ਵਿਸ਼ਾਲ ਮਹਾਂਸਾਗਰ</translation>
 <translation id="2080070583977670716">ਹੋਰ ਸੈਟਿੰਗਾਂ</translation>
 <translation id="2082932131694554252">ਜਿੰਮੇ ਲਗਾਈ ਗਈ ਕੀ-ਬੋਰਡ ਕੁੰਜੀ</translation>
@@ -315,6 +325,7 @@
 <translation id="2230624078793142213">ਹੋਰ ਬਣਾਓ</translation>
 <translation id="2236746079896696523">ਕੀ-ਬੋਰਡ ਬੈਕਲਾਈਟ ਨੂੰ ਟੌਗਲ ਕਰਨ ਵਾਲਾ ਬਟਨ</translation>
 <translation id="2240366984605217732">ਖਾਕਾ ਸਵਿੱਚ ਕਰਨ ਵਾਲੀ ਕੁੰਜੀ</translation>
+<translation id="224421911978987610">ਲਾਂਗ ਐਕਸਪੋਜਰ</translation>
 <translation id="2244834438220057800">ਹਰਾ</translation>
 <translation id="225692081236532131">ਕਿਰਿਆਸ਼ੀਲਤਾ ਸਥਿਤੀ</translation>
 <translation id="2267285889943769271">ਸਕ੍ਰੀਨਸ਼ਾਟ ਸ਼ਾਮਲ ਕਰੋ</translation>
@@ -342,6 +353,7 @@
 <translation id="2380886658946992094">ਕਨੂੰਨੀ</translation>
 <translation id="2391082728065870591">ਵਿਚਾਰ ਸੰਬੰਧੀ ਰਿਪੋਰਟ ਭੇਜੋ</translation>
 <translation id="2407209115954268704">ਸਿਮ ਦੀ ਲਾਕ ਸਥਿਤੀ</translation>
+<translation id="240798792848608143"><ph name="LANGUAGE_NAME" /> ਵਿੱਚ ਪ੍ਰਤੀਲਿਪੀ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ, ਆਪਣੇ <ph name="DEVICE_TYPE" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="241419523391571119">ਜਾਂਚ ਕਰਨ ਲਈ ਢੱਕਣ ਨੂੰ ਮੁੜ-ਖੋਲ੍ਹੋ</translation>
 <translation id="2414660853550118611">ਵਾਲਪੇਪਰ ਬਾਰੇ</translation>
 <translation id="2414886740292270097">ਡਾਰਕ</translation>
@@ -351,6 +363,7 @@
 <translation id="2438248248625638801">ਰਿਕਾਰਡਿੰਗ ਦੇ ਸਿਰਲੇਖ ਬਣਾਏ ਜਾ ਰਹੇ ਹਨ</translation>
 <translation id="2446553403094072641">ਫ਼ਲੋਟਿੰਗ ਪੁਆਇੰਟ ਸਟੀਕਤਾ</translation>
 <translation id="2448312741937722512">ਟਾਈਪ ਕਰੋ</translation>
+<translation id="2448857983905133469">ਕਲਾਸ ਟੂਲ</translation>
 <translation id="2468124392950503650"><ph name="BEGIN_LINK_PROMPTING_GUIDE" />ਉਤਪ੍ਰੇਰਕ ਗਾਈਡ<ph name="END_LINK_PROMPTING_GUIDE" /> ਬਣਾਉਣ ਜਾਂ ਦੇਖਣ ਲਈ ਉਤਪ੍ਰੇਰਕ ਚੁਣੋ</translation>
 <translation id="2472215337771558851">ਡਰਾਫਟ ਬਣਾਉਣ ਜਾਂ ਮੌਜੂਦਾ ਕੰਮ ਨੂੰ ਸੋਧਣ ਲਈ 'ਲਿਖਣ ਵਿੱਚ ਮੇਰੀ ਮਦਦ ਕਰੋ' ਵਰਤੋ, Google AI ਵੱਲੋਂ ਸੰਚਾਲਿਤ</translation>
 <translation id="2475982808118771221">ਇੱਕ ਗੜਬੜ ਹੋਈ</translation>
@@ -361,6 +374,7 @@
 <translation id="2493126929778606526">ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਚੁਣੀਆਂ ਗਈਆਂ, ਤੁਹਾਡੀਆਂ ਬਿਹਤਰੀਨ ਫ਼ੋਟੋਆਂ</translation>
 <translation id="249323605434939166"><ph name="QUERY_TEXT" /> · <ph name="SOURCE_LANGUAGE_NAME" /></translation>
 <translation id="2501126912075504550">ਓਪਲ</translation>
+<translation id="2501278716633472235">ਪਿੱਛੇ ਜਾਓ</translation>
 <translation id="2505327257735685095">ਮੌਜੂਦਾ ਵਾਲਪੇਪਰ ਚਿੱਤਰ ਨੂੰ ਰਿਫ੍ਰੈਸ਼ ਕਰੋ</translation>
 <translation id="2507491234071975894">ਸਪੀਕਰ</translation>
 <translation id="2512979179176933762">ਵਿੰਡੋਆਂ ਨੂੰ ਦਿਖਾਓ</translation>
@@ -420,6 +434,7 @@
 <translation id="2805756323405976993">ਐਪਸ</translation>
 <translation id="28232023175184696">ਇੰਟਰਨੈੱਟ ਨਾਲ ਕਨੈਕਟ ਨਹੀਂ ਕੀਤਾ ਸਕਦਾ। ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰਨ ਲਈ ਕਲਿੱਕ ਕਰੋ।</translation>
 <translation id="2855718259207180827">ਉੱਨ</translation>
+<translation id="2856429654176718363">ਸ਼ਹਿਰ ਦੇ ਉੱਤੇ ਤੈਰਦੀ ਇੱਕ ਵਿਸ਼ਾਲ ਸਪੇਸਸ਼ਿਪ, ਜੋ ਕਿ ਬਹੁਤ ਸਾਰੀਆਂ ਲਾਈਟਾਂ ਨਾਲ ਜਗਮਗਾ ਰਹੀ ਹੈ। ਪੂਰੇ ਦ੍ਰਿਸ਼ ਵਿੱਚ ਤੇਲ-ਚਿੱਤਰਕਾਰੀ ਦੀ ਸ਼ੈਲੀ ਹੈ ਅਤੇ ਗੂੜ੍ਹੇ ਰੰਗਾਂ ਨੂੰ ਪੇਸ਼ ਕਰਦਾ ਹੈ। ਇਹ ਭਵਿੱਖਮੁਖੀ ਵਿਗਿਆਨ-ਗਲਪ ਤੱਤਾਂ ਨਾਲ ਇੱਕ ਰਹੱਸਮਈ ਮਾਹੌਲ ਬਣਾਉਂਦਾ ਹੈ। ਇਹ ਕਲਾਕਾਰੀ ਜ਼ਿਆਦਾ ਰੈਜ਼ੋਲਿਊਸ਼ਨ ਅਤੇ ਜ਼ਿਆਦਾ ਵੇਰਵਿਆਂ ਨੂੰ ਉਜਾਗਰ ਕਰਨ ਲਈ C4D ਸਾਫ਼ਟਵੇਅਰ ਅਤੇ OC ਰੈਂਡਰਰ ਦੀ ਵਰਤੋਂ ਕਰ ਕੇ ਬਣਾਈ ਗਈ ਸੀ। ਕੁਝ ਸ਼ਹਿਰੀ ਇਮਾਰਤਾਂ ਵੀ ਨੇੜੇ-ਤੇੜੇ ਸਨ, ਜੋ ਖੇਤਰ ਦੇ ਪ੍ਰਭਾਵ ਨੂੰ ਡੂੰਘਾਈ ਪ੍ਰਦਾਨ ਕਰਦੀਆਂ ਸਨ। ਇਹ ਦ੍ਰਿਸ਼ ਤੇਲ-ਚਿੱਤਰਕਾਰੀ ਸ਼ੈਲੀ ਵਿੱਚ ਪੇਸ਼ ਕੀਤਾ ਗਿਆ ਹੈ, ਜੋ ਗੂੜ੍ਹੇ ਰੰਗਾਂ ਨੂੰ ਪੇਸ਼ ਕਰਦਾ ਹੈ ਅਤੇ ਭਵਿੱਖਮੁਖੀ ਵਿਗਿਆਨ-ਗਲਪ ਤੱਤਾਂ ਨਾਲ ਇੱਕ ਰਹੱਸਮਈ ਮਾਹੌਲ ਸਿਰਜਦਾ ਹੈ।</translation>
 <translation id="2859243502336719778">ਜ਼ਰੂਰੀ ਅੱਪਡੇਟ</translation>
 <translation id="2860473693272905224">ਕਿਸੇ ਹੋਰ ਪੰਨੇ ਨੂੰ ਸਕੈਨਰ 'ਤੇ ਰੱਖੋ</translation>
 <translation id="286265581261662583">ਪਰਿਭਾਸ਼ਾਵਾਂ, ਅਨੁਵਾਦ ਜਾਂ ਇਕਾਈ ਰੂਪਾਂਤਰਨ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ ਸੱਜਾ-ਕਲਿੱਕ ਕਰੋ ਜਾਂ ਦਬਾਈ ਰੱਖੋ</translation>
@@ -436,9 +451,11 @@
 <translation id="2895772081848316509">ਡਾਰਕ</translation>
 <translation id="2915996080311180594">ਬਾਅਦ ਵਿੱਚ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="2926057806159140518">ਆਪਣਾ ਵਰਤੋਂਕਾਰ ਨਾਮ ਅਤੇ ਪਾਸਵਰਡ ਦਾਖਲ ਕਰੋ ਜਾਂ ਆਪਣਾ QR ਕੋਡ ਸਕੈਨ ਕਰੋ</translation>
+<translation id="2927007463545347013">ਚੈਰੀ ਬਲੌਸਮ ਦੇ ਡਿੱਗਦੇ ਪੱਤਿਆਂ ਨਾਲ ਸਮੁੰਦਰ ਨੂੰ ਨਜ਼ਰਅੰਦਾਜ਼ ਕਰਦਾ ਐਨੀਮੇ ਰਸਤਾ</translation>
 <translation id="2940811910881150316">ਡੀਵਾਈਸ ਦੀ ਜਾਂਚ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ। ਜਾਂਚ ਕਰਨ ਲਈ ਢੱਕਣ ਨੂੰ ਮੁੜ-ਖੋਲ੍ਹੋ।</translation>
 <translation id="2941112035454246133">ਘੱਟ</translation>
 <translation id="2956070106555335453">ਸਾਰਾਂਸ਼</translation>
+<translation id="2968959705684615497">ਚਿੱਟੇ ਰੇਤ ਦੇ ਟਿੱਬੇ 'ਤੇ ਬੈਠਾ ਸੁਨਹਿਰੀ ਅੱਖਾਂ ਅਤੇ ਸੁਨਹਿਰੀ ਧਾਰੀਆਂ ਵਾਲਾ ਇੱਕ ਅਤਿਯਥਾਰਥਵਾਦੀ ਚਿੱਟਾ ਬਾਘ</translation>
 <translation id="299385721391037602">ਗੁਲਾਬੀ ਅਤੇ ਪੀਲਾ</translation>
 <translation id="3008341117444806826">ਰਿਫ੍ਰੈਸ਼ ਕਰੋ</translation>
 <translation id="3009958530611748826">ਇੱਥੇ ਰੱਖਿਅਤ ਕਰਨ ਲਈ ਕੋਈ ਫੋਲਡਰ ਚੁਣੋ</translation>
@@ -449,6 +466,7 @@
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" />mA</translation>
 <translation id="3056720590588772262">ਅਖੀਰਲਾ ਬਿੰਦੂ</translation>
 <translation id="3060579846059757016">ਖਾਕੇ</translation>
+<translation id="3060798442805232711">ਕਲਾਸ ਟੂਲ ਤੁਹਾਡੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਦੀ ਵਰਤੋਂ ਕਰ ਰਿਹਾ ਹੈ</translation>
 <translation id="3061850252076394168">'ਚੁਣੋ ਅਤੇ ਸੁਣੋ' ਨੂੰ ਚਾਲੂ ਕਰੋ</translation>
 <translation id="3066772729299747758">ਮੰਗਲਵਾਰ ਨੂੰ</translation>
 <translation id="3069085583900247081">ਟੈਸਟ ਅਸਫਲ ਰਿਹਾ</translation>
@@ -458,7 +476,8 @@
 <translation id="3084958266922136097">ਸਕ੍ਰੀਨ ਸੇਵਰ ਬੰਦ ਕਰੋ</translation>
 <translation id="3091839911843451378">ਅਸਫਲ ਰਹੀ - ਪ੍ਰਿੰਟਰ ਰੁਕ ਗਿਆ ਹੈ</translation>
 <translation id="3102119246920354026">ਕੈਚ</translation>
-<translation id="3112413615003385433">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਨੇ ਸਕੂਲ ਵਾਲੇ ਟੂਲਾਂ ਵਿੱਚ ਸਮੱਗਰੀ ਨੂੰ ਹਟਾ ਦਿੱਤਾ ਹੈ</translation>
+<translation id="3103783611481501187">ਕਾਲਪਨਿਕ</translation>
+<translation id="3119672627216736407">ਅਨੁਵਾਦ ਕਰਨਾ ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3122614491980756867">ਪੂਲ</translation>
 <translation id="3122883569442693641">ਹੋਰ ਵੇਰਵੇ</translation>
@@ -473,6 +492,7 @@
 <translation id="3156846309055100599">ਪੰਨਾ <ph name="PAGE_NUMBER" /> ਸਕੈਨ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ...</translation>
 <translation id="315738237743207937">ਕੈਪਟਿਵ ਪੋਰਟਲ ਦਾ ਪਤਾ ਲੱਗਾ</translation>
 <translation id="3160172848211257835"><ph name="BEGIN_LINK1" />ਸਿਸਟਮ ਅਤੇ ਐਪ ਜਾਣਕਾਰੀ<ph name="END_LINK1" /> ਅਤੇ <ph name="BEGIN_LINK2" />ਮਾਪਕ<ph name="END_LINK2" /> ਭੇਜੋ</translation>
+<translation id="3161556797767210144">ਸਾਰਾਂਸ਼ ਅਤੇ ਸਿਰਲੇਖ ਬਣਾਉਣ ਲਈ, ਆਪਣੇ <ph name="DEVICE_TYPE" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="3170673040743561620">ਆਪਣੇ ਦਸਤਾਵੇਜ਼ ਨੂੰ ਸਕੈਨਰ 'ਤੇ ਰੱਖੋ</translation>
 <translation id="3174321110679064523">ਸਵੇਰ ਤੋਂ ਰਾਤ ਤੱਕ ਦਾ ਵਾਲਪੇਪਰ</translation>
 <translation id="3178532070248519384">ਐਵਾਂ ਗਾਰਦ</translation>
@@ -487,6 +507,7 @@
 <translation id="3226405216343213872">ਸਕੈਨਰ ਲੱਭੇ ਜਾ ਰਹੇ ਹਨ</translation>
 <translation id="3226657629376379887">ਖਾਕਾ ਕਾਰਵਾਈ ਮੀਨੂ</translation>
 <translation id="3227186760713762082"><ph name="CATEGORY_TEXT" /> ਮੁੱਲ ਨੂੰ <ph name="CONVERSION_RATE" /> ਨਾਲ ਭਾਗ ਕਰੋ</translation>
+<translation id="3242622575335502454">ਡਿਜੀਟਲ ਕਲਾ</translation>
 <translation id="3246869037381808805">1 ਦਿਨ ਤੋਂ ਜ਼ਿਆਦਾ ਪੁਰਾਣੀਆਂ ਪ੍ਰਿੰਟ ਜੌਬਾਂ ਨੂੰ ਹਟਾ ਦਿੱਤਾ ਜਾਵੇਗਾ</translation>
 <translation id="3248791727258378769">ਕੋਈ ਪ੍ਰਤੀਲਿਪੀ ਨਹੀਂ ਬਣਾਈ ਜਾਵੇਗੀ</translation>
 <translation id="324961752321393509">ਤੁਹਾਡਾ ਪ੍ਰਸ਼ਾਸਕ ਇਸ ਐਪ ਨੂੰ ਬੰਦ ਕਰਨ ਦੀ ਆਗਿਆ ਨਹੀਂ ਦਿੰਦਾ</translation>
@@ -505,6 +526,7 @@
 <translation id="3321030238473337787">ਪਲੇਬੈਕ ਦੀ ਗਤੀ</translation>
 <translation id="3327613592010997943">ਤੁਸੀਂ ਇਹ ਡੀਵਾਈਸ <ph name="DAY" /> ਨੂੰ <ph name="TIME" /> ਵਜੇ ਦੁਬਾਰਾ ਵਰਤ ਸਕੋਗੇ।</translation>
 <translation id="3328783797891415197">ਟੈਸਟ ਚੱਲ ਰਿਹਾ ਹੈ</translation>
+<translation id="3332683265015995419">ਇੱਕ ਸਟੀਮਪੰਕ ਸਪੇਸ ਸ਼ਿੱਪ ਰੇਤ ਦੇ ਤੂਫ਼ਾਨ ਵਿੱਚੋਂ ਉੱਡ ਰਿਹਾ ਹੈ</translation>
 <translation id="3340011300870565703">ਡੀਵਾਈਸ ਦੇ ਸੱਜੇ ਪਾਸੇ ਵਾਲੇ ਬੱਡ ਦਾ ਬੈਟਰੀ ਪੱਧਰ <ph name="BATTERY_PERCENTAGE" />% ਹੈ।</translation>
 <translation id="3340978935015468852">ਸੈਟਿੰਗਾਂ</translation>
 <translation id="3347558044552027859">ਮਾਡਰਨ</translation>
@@ -516,6 +538,7 @@
 <translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">ਧਰਤੀ ਪ੍ਰਵਾਹ ਦਾ ਵਾਲਪੇਪਰ</translation>
 <translation id="33736539805963175">ਅੱਖਰ <ph name="LETTERS_LETTER" /> ਨਾਲ <ph name="LETTERS_COLOR" /> ਬੈਕਗ੍ਰਾਊਂਡ</translation>
+<translation id="3382806462014639823"><ph name="TEACHER_NAME" /> ਤੁਹਾਡੀ ਸਕ੍ਰੀਨ ਦੇਖ ਰਹੇ ਹਨ</translation>
 <translation id="3383623117265110236">ਵਿਸ਼ੇਸ਼</translation>
 <translation id="3404249063913988450">ਸਕ੍ਰੀਨ ਸੇਵਰ ਚਾਲੂ ਕਰੋ</translation>
 <translation id="3413935475507503304">ਅੱਪਡੇਟ ਨਾਲ ਜਾਰੀ ਰੱਖਣ ਲਈ, 'ਅੱਗੇ 'ਤੇ ਕਲਿੱਕ ਕਰੋ।</translation>
@@ -523,6 +546,7 @@
 <translation id="3428551088151258685">ਆਊਟਡੋਰ</translation>
 <translation id="3428971106895559033">ਪੇਸਟਲ</translation>
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" />%</translation>
+<translation id="3434988468785284438">ਪ੍ਰਤਿਬਿੰਬ</translation>
 <translation id="3435738964857648380">ਸੁਰੱਖਿਆ</translation>
 <translation id="3435896845095436175">ਚਾਲੂ ਕਰੋ</translation>
 <translation id="345256797477978759">ਸਕ੍ਰੀਨ ਦੇ <ph name="DIRECTION" /> ਵੱਡੇ ਹਿੱਸੇ 'ਤੇ ਵਿੰਡੋ ਨੂੰ ਡੌਕ ਕਰੋ</translation>
@@ -539,7 +563,6 @@
 <translation id="3488065109653206955">ਅੰਸ਼ਕ ਤੌਰ ਤੇ ਸਕਿਰਿਆ ਕੀਤਾ</translation>
 <translation id="3492882532495507361"><ph name="OFFICE_COLOR" /> ਟੋਨਾਂ ਨਾਲ ਇੱਕ <ph name="OFFICE_STYLE" /> ਦਫ਼ਤਰ</translation>
 <translation id="3493187369049186498">ਡਾਟਾ ਤੁਹਾਡੀ Chromebook ਵੱਲੋਂ ਮਾਪਿਆ ਜਾਂਦਾ ਹੈ। ਇਹ ਮਾਪ ਪ੍ਰਦਾਨਕ ਡਾਟੇ ਤੋਂ ਵੱਖ ਹੋ ਸਕਦਾ ਹੈ।</translation>
-<translation id="349570724365779960">School Tools ਵਿਦਿਆਰਥੀਆਂ ਨਾਲ ਕਨੈਕਟ ਹੈ</translation>
 <translation id="3502426834823382181">ਸਾਰੀਆਂ ਐਪਾਂ ਦੇਖੋ</translation>
 <translation id="3510890413042482857"><ph name="BEGIN_LINK1" />ਕਾਰਗੁਜ਼ਾਰੀ ਟ੍ਰੇਸ ਡਾਟਾ<ph name="END_LINK1" /> ਭੇਜੋ</translation>
 <translation id="3517001332549868749">ChromeOS ਸੰਬੰਧੀ ਅੱਪਡੇਟ</translation>
@@ -547,8 +570,8 @@
 <translation id="353214771040290298">ਸੰਪਾਦਨ ਪੂਰਾ ਹੋਇਆ</translation>
 <translation id="3532980081107202182">ਲਗਭਗ <ph name="MIN_REMAINING" /> ਮਿੰਟ ਬਾਕੀ</translation>
 <translation id="3533790840489634638">ਪੂਲ</translation>
-<translation id="3535802910192338629">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਨੇ ਸਕੂਲ ਵਾਲੇ ਟੂਲਾਂ ਵਿੱਚ ਨਵੀਂ ਸਮੱਗਰੀ ਨੂੰ ਸ਼ਾਮਲ ਕੀਤਾ ਹੈ</translation>
 <translation id="3547264467365135390">ਫ਼ਾਰਮੂਲਾ</translation>
+<translation id="3552832331940389362">ਇੱਕ ਜਪਾਨੀ ਐਨੀਮੇਸ਼ਨ ਚਿੱਤਰ, ਜਿਸ ਵਿੱਚ ਇੱਕ ਬਿੱਲੀ ਖਿੜਕੀ 'ਤੇ ਬੈਠੀ ਦੁਪਹਿਰ ਨੂੰ ਮੀਂਹ ਦੇਖ ਰਹੀ ਹੈ</translation>
 <translation id="3557205324756024651">ਸਥਾਨਕ ਪਛਾਣ (ਵਿਕਲਪਿਕ)</translation>
 <translation id="3565064564551103223">ਮਨਜ਼ੂਰਸ਼ੁਦਾ IP</translation>
 <translation id="3569407787324516067">ਸਕ੍ਰੀਨ ਸੇਵਰ</translation>
@@ -565,6 +588,7 @@
 <translation id="3604713164406837697">ਵਾਲਪੇਪਰ ਬਦਲੋ</translation>
 <translation id="360565022852130722">ਵਾਈ-ਫਾਈ ਨੈੱਟਵਰਕ ਕਮਜ਼ੋਰ ਪ੍ਰੋਟੋਕੋਲ WEP 802.1x ਨਾਲ ਸੁਰੱਖਿਅਤ ਹੈ</translation>
 <translation id="3606583719724308068">HTTPS ਵੈੱਬਸਾਈਟਾਂ ਲਈ ਉੱਚ ਵਿਲੰਬਤਾ</translation>
+<translation id="3614639364827854748">ਇਸ ਮੀਨੂ ਨੂੰ ਖੱਬੇ ਪਾਸੇ ਵੱਲ ਲੈ ਜਾਓ</translation>
 <translation id="361575905210396100">ਤੁਹਾਡੇ ਵਿਚਾਰ ਲਈ ਧੰਨਵਾਦ</translation>
 <translation id="3621072146987826699">ਹਾਥੀ</translation>
 <translation id="3628462041319107639">ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਮਾਡਲ ਨੂੰ ਡਾਊਨਲੋਡ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ…</translation>
@@ -623,11 +647,14 @@
 <translation id="38811596981744338">ਕਨੂੰਨੀ ਸਮੱਸਿਆ</translation>
 <translation id="3885327323343477505">ਸਕ੍ਰੀਨ ਸੇਵਰ ਬਦਲੋ</translation>
 <translation id="3889914174935857450">ਤਾਰੀਖ ਰੀਸੈੱਟ ਕਰੋ</translation>
+<translation id="3889954687526985291">ਕਾਲੇ ਕਾਗਜ਼ ਤੋਂ ਬਣੀ ਇੱਕ ਭਵਿੱਖਮੁਖੀ ਮੋਟਰਸਾਈਕਲ, ਜਿਸਦੀ ਨਿਓਨ ਲਾਈਟਾਂ ਵਾਲੀ ਗੂੜ੍ਹੀ ਬੈਕਗ੍ਰਾਊਂਡ ਹੈ</translation>
 <translation id="3897092660631435901">ਮੀਨੂ</translation>
 <translation id="3902271751020176019">ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਭਾਸ਼ਾ</translation>
+<translation id="390890062090528082">ਤਾਰਿਆਂ ਨਾਲ ਭਰਿਆ ਅਸਮਾਨ</translation>
 <translation id="391412459402535266">ਡੀਵਾਈਸ ਦੀ ਜਾਂਚ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ। ਜਾਂਚ ਕਰਨ ਲਈ ਲੈਪਟਾਪ ਮੋਡ 'ਤੇ ਸਵਿੱਚ ਕਰੋ।</translation>
 <translation id="3916998944874125962">ਸਕ੍ਰੀਨਸ਼ਾਟ ਲਓ</translation>
 <translation id="3923184630988645767">ਡਾਟਾ ਵਰਤੋਂ</translation>
+<translation id="392943705803418306">ਤੁਹਾਡੇ ਲਈ ਕਲਾਸ ਟੂਲ ਸੈਸ਼ਨ ਸਮਾਪਤ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ</translation>
 <translation id="3932043219784172185">ਕੋਈ ਡੀਵਾਈਸ ਕਨੈਕਟ ਨਹੀਂ ਹੈ</translation>
 <translation id="3934185438132762746">ਜ਼ਿੰਮੇ ਲਗਾਉਣ ਤੋਂ ਹਟਾਇਆ ਗਿਆ <ph name="CONTROL_TYPE" /></translation>
 <translation id="3941014780699102620">ਹੋਸਟ ਨੂੰ ਹੱਲ ਕਰਨਾ ਅਸਫਲ ਰਿਹਾ</translation>
@@ -714,6 +741,7 @@
           <ph name="LINE_BREAK" />
           <ph name="LINE_BREAK" />
           ਜਨਰੇਟਿਵ AI ਗਲਤੀਆਂ ਕਰ ਸਕਦਾ ਹੈ, ਜਿਸ ਵਿੱਚ ਲੋਕਾਂ ਬਾਰੇ ਜਾਣਕਾਰੀ ਵੀ ਸ਼ਾਮਲ ਹੈ, ਇਸ ਲਈ ਇਸ ਦੀ ਦੋਹਰੀ-ਜਾਂਚ ਕਰੋ। <ph name="BEGIN_LINK_CREATE_YOUR_OWN_WALLPAPER" />ਹੋਰ ਜਾਣੋ<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" /></translation>
+<translation id="4253971074682120908">ਨੈਗਟਿਵ ਸਪੇਸ</translation>
 <translation id="4258281355379922695">HTTP ਵਿਲੰਬਤਾ</translation>
 <translation id="4266143281602681663">ਉੱਨ</translation>
 <translation id="4269815121975886860">ਸਟਾਰਟ-ਅੱਪ ਤਰਜੀਹਾਂ</translation>
@@ -741,6 +769,7 @@
 <translation id="4378373042927530923">ਨੈੱਟਵਰਕ ਤਸ਼ਖੀਸ ਨਹੀਂ ਚੱਲੀ</translation>
 <translation id="4378551569595875038">ਕਨੈਕਟ ਕਰ ਰਿਹਾ ਹੈ...</translation>
 <translation id="4382484599443659549">PDF</translation>
+<translation id="4383322413532809099">ਆਪਣੀ ਰਿਕਾਰਡਿੰਗ ਦੇ ਸਿਰਲੇਖ ਬਣਾਉਣ ਲਈ, ਆਪਣੇ <ph name="DEVICE_TYPE" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="4394049700291259645">ਬੰਦ ਕਰੋ</translation>
 <translation id="439429847087949098"><ph name="DEVICE_NAME" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="4395835743215824109">ਕੀ-ਬੋਰਡ ਵਿਉਂਤਬੱਧ ਕਰੋ</translation>
@@ -769,6 +798,7 @@
 <translation id="4486524074141928967">ਤੁਹਾਨੂੰ <ph name="TIME" /> ਵਜੇ 'ਤੇ ਸਾਈਨ-ਆਊਟ ਕਰ ਦਿੱਤਾ ਜਾਵੇਗਾ</translation>
 <translation id="4500722292849917410">ਸ਼ਾਰਟਕੱਟ ਉਪਲਬਧ ਨਹੀਂ। ਸੋਧਕ ਕੁੰਜੀ (ctrl, alt, shift ਜਾਂ <ph name="META_KEY" />) ਦੀ ਵਰਤੋਂ ਕਰ ਕੇ ਨਵਾਂ ਸ਼ਾਰਟਕੱਟ ਦਬਾਓ।</translation>
 <translation id="4500966230243561393">ਇੰਟਰਫ਼ੇਸ ਦਾ ਰੰਗ</translation>
+<translation id="4501302804999678844">ਪ੍ਰਤੀਲਿਪੀ ਬਣਾਉਣ ਲਈ, ਆਪਣੇ <ph name="DEVICE_TYPE" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="4503223151711056411">ਖੱਬਾ ਤੀਰ</translation>
 <translation id="4503441351962730761">ਆਧੁਨਿਕ ਕਲਾ</translation>
 <translation id="4507392511610824664">ਚਮਕ ਵਧਾਓ</translation>
@@ -791,6 +821,7 @@
 <translation id="4593212453765072419">ਪ੍ਰੌਕਸੀ ਪ੍ਰਮਾਣੀਕਰਨ ਦੀ ਲੋੜ ਹੈ</translation>
 <translation id="4594021849294327751">ਪ੍ਰਤੀਲਿਪੀ ਬਣਾਓ</translation>
 <translation id="4594541568452132351">ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਭਾਸ਼ਾ ਅਤੇ ਡਾਊਨਲੋਡ ਮਾਡਲ ਚੁਣੋ</translation>
+<translation id="4600301862817165514">ਨਿਓਨ ਲਾਈਟਾਂ ਵਾਲੀ ਇੱਕ Delorean ਗਲੈਕਸੀ ਵਿੱਚੋਂ ਲੰਘ ਰਹੀ ਹੈ, ਜਿਸਦੇ ਕੋਲ ਤਾਰਿਆਂ ਦੀ ਝਲਕ ਦੇਖਣ ਨੂੰ ਮਿਲ ਰਹੀ ਹੈ</translation>
 <translation id="4609350030397390689">ਕੀ-ਬੋਰਡ ਦੀ ਚਮਕ ਘਟਾਉਣ ਵਾਲੀ ਕੁੰਜੀ</translation>
 <translation id="4627232916386272576"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="TOTAL_PAGE_NUMBER" /> ਵਿੱਚੋਂ <ph name="PRINTED_PAGE_NUMBER" />। ਪ੍ਰਿੰਟ ਜੌਬ ਨੂੰ ਰੱਦ ਕਰਨ ਲਈ Enter ਦਬਾਓ।</translation>
 <translation id="463791356324567266">ਸਕੈਨਿੰਗ ਰੱਦ ਕੀਤੀ ਜਾ ਰਹੀ ਹੈ...</translation>
@@ -811,7 +842,10 @@
 <translation id="4691278870498629773">ਬੰਦ ਹੋ ਗਿਆ - ਟ੍ਰੇਅ ਮੌਜੂਦ ਨਹੀਂ ਹੈ</translation>
 <translation id="469379815867856270">ਸਿਗਨਲ ਦੀ ਤੀਬਰਤਾ</translation>
 <translation id="4697260493945012995">ਕੰਟਰੋਲ ਦੀ ਕਿਸਮ ਚੁਣੋ</translation>
+<translation id="4712940987669302829">ਬੋਕੇਹ ਪ੍ਰਭਾਵ</translation>
 <translation id="4731797938093519117">ਮਾਂ-ਪਿਓ ਲਈ ਪਹੁੰਚ</translation>
+<translation id="4733200407105375152">ਕਲਾਸ ਟੂਲਾਂ ਵਿੱਚ ਨਹੀਂ ਹੈ</translation>
+<translation id="4734982181169850310">ਪੇਸਟਲ ਰੰਗ</translation>
 <translation id="473775607612524610">ਅੱਪਡੇਟ ਕਰੋ</translation>
 <translation id="4744944742468440486">ਤੁਹਾਡੀ ਚੋਣ ਨਾਲ ਸੰਬੰਧਿਤ ਜਾਣਕਾਰੀ</translation>
 <translation id="4750394297954878236">ਸੁਝਾਅ</translation>
@@ -819,6 +853,7 @@
 <translation id="4771607256327216405">ਕੀ-ਬੋਰਡ ਦੀ ਚਮਕ ਵਧਾਓ</translation>
 <translation id="4771923071974529837">ਕੱਲ੍ਹ</translation>
 <translation id="4773299976671772492">ਬੰਦ ਕੀਤਾ</translation>
+<translation id="4777310452073659583">ਪ੍ਰਤੀਲਿਪੀ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ, ਆਪਣੇ <ph name="DEVICE_TYPE" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰੋ</translation>
 <translation id="4778082030331381943">ਐਮਿਥਿਸਟ</translation>
 <translation id="4782311465517282004">ਲਿਖਤ ਨੂੰ ਸਪਰਸ਼ ਕਰਕੇ ਰੱਖਣ ਜਾਂ ਉਸ 'ਤੇ ਸੱਜਾ-ਕਲਿੱਕ ਕਰਨ 'ਤੇ ਪਰਿਭਾਸ਼ਾਵਾਂ, ਅਨੁਵਾਦ, ਜਾਂ ਇਕਾਈ ਰੂਪਾਂਤਰਨ ਪ੍ਰਾਪਤ ਕਰੋ</translation>
 <translation id="4791000909649665275"><ph name="NUMBER" /> ਫ਼ੋਟੋ</translation>
@@ -861,14 +896,17 @@
 <translation id="4921665434385737356"><ph name="NUM_SECONDS" /> ਸਕਿੰਟਾਂ ਵਿੱਚ <ph name="RATE" /> ਚਾਰਜ ਹੋਈ।</translation>
 <translation id="4930320165497208503">ਕਿਸੇ ਕਨੈਕਸ਼ਨ ਦਾ ਸੈੱਟਅੱਪ ਕਰਨ ਜਾਂ ਉਸਨੂੰ ਅੱਪਡੇਟ ਕਰਨ ਲਈ, <ph name="BEGIN_LINK" />ਸੈਟਿੰਗਾਂ<ph name="END_LINK" /> 'ਤੇ ਜਾਓ।</translation>
 <translation id="4932733599132424254">ਤਾਰੀਖ</translation>
+<translation id="493637535592633700">ਹਨੇਰੇ ਵਿੱਚ ਚਮਕਦਾ</translation>
 <translation id="494102685638938793"><ph name="LINK_TEXT" />, ਨਵੀਂ ਟੈਬ ਵਿੱਚ ਖੁੱਲ੍ਹਦਾ ਹੈ</translation>
 <translation id="4946927805998996217">ਸਾਰਾਂਸ਼ ਸਿਰਜਿਆ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="4950314376641394653">ਫ਼ਰਮਵੇਅਰ <ph name="DEVICE_NAME" /> ਨੂੰ ਵਰਜਨ <ph name="VERSION" /> 'ਤੇ ਅੱਪਡੇਟ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ</translation>
 <translation id="4950893758552030541">ਰੁੱਖਾਂ ਨਾਲ ਬਣਾਈ ਗਈ ਸੁਰੰਗ</translation>
+<translation id="4964806321337443935">4k</translation>
 <translation id="4965661459364092269">ਸੁਰੱਖਿਆ ਰੀਸੈੱਟ ਦੀ ਪ੍ਰਕਿਰਿਆ ਪੂਰੀ ਹੋ ਗਈ ਹੈ</translation>
 <translation id="4965703485264574128">ਕਿਸੇ ਅੰਦਾਜ਼ਨ ਨਤੀਜੇ ਲਈ, <ph name="CATEGORY_TEXT" /> ਮੁੱਲ ਨੂੰ <ph name="CONVERSION_RATE" /> ਨਾਲ ਗੁਣਾ ਕਰੋ</translation>
 <translation id="4969079779290789265">ਵੰਡਿਆ</translation>
 <translation id="4972592110715526173">ਮੋਡ ਬਦਲੋ</translation>
+<translation id="497421865427891073">ਅੱਗੇ ਵੱਲ ਜਾਓ</translation>
 <translation id="4981003703840817201">ਨੀਲਾ ਅਤੇ ਗੁਲਾਬੀ</translation>
 <translation id="498186245079027698">ਸਕੈਨਰ ਦੀ ਜਾਂਚ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ। ਇਹ ਪੱਕਾ ਕਰੋ ਕਿ ਸਕੈਨ ਕੀਤੀਆਂ ਫ਼ਾਈਲਾਂ ਨੂੰ ਰੱਖਿਅਤ ਕਰਨ ਲਈ ਲੋੜੀਂਦੀ ਜਗ੍ਹਾ ਹੈ।</translation>
 <translation id="4982627662315910959">ਸ਼ਾਰਟਕੱਟ ਉਪਲਬਧ ਨਹੀਂ। Shift ਅਤੇ 1 ਹੋਰ ਸੋਧਕ ਕੁੰਜੀ (ctrl, alt ਜਾਂ <ph name="META_KEY" />) ਦੀ ਵਰਤੋਂ ਕਰ ਕੇ ਨਵਾਂ ਸ਼ਾਰਟਕੱਟ ਦਬਾਓ।</translation>
@@ -876,6 +914,7 @@
 <translation id="4987769320337599931">ਫ਼ਾਇਰਵਾਲ</translation>
 <translation id="4988526792673242964">ਸਫ਼ੇ</translation>
 <translation id="4989542687859782284">ਅਣਉਪਲਬਧ</translation>
+<translation id="4999267570108760491">ਵੈਕਟਰ ਕਲਾ ਸਟਾਈਲ</translation>
 <translation id="4999333166442584738">ਰਿਪੋਰਟ ਲੁਕਾਓ</translation>
 <translation id="500920857929044050">ਟੈਸਟ ਬੰਦ ਕਰੋ</translation>
 <translation id="5017508259293544172">LEAP</translation>
@@ -913,6 +952,7 @@
 <translation id="5170568018924773124">ਫੋਲਡਰ ਵਿੱਚ ਦਿਖਾਓ</translation>
 <translation id="517075088756846356">ਅੱਪਡੇਟ ਦੀ ਪ੍ਰਕਿਰਿਆ ਜਾਰੀ ਰੱਖਣ ਲਈ <ph name="DEVICE_NAME" /> ਦੀ ਪਾਵਰ ਕੇਬਲ ਨੂੰ ਅਣਪਲੱਗ ਕਰੋ ਅਤੇ ਦੁਬਾਰਾ ਲਗਾਓ</translation>
 <translation id="5180108905184566358">ਬਾਓਬਾਬ ਰੁੱਖ</translation>
+<translation id="5180431943345994173">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਨੇ ਕਲਾਸ ਟੂਲ ਵਿੱਚ ਸਮੱਗਰੀ ਨੂੰ ਹਟਾ ਦਿੱਤਾ ਹੈ</translation>
 <translation id="5180712487038406644">ਭਾਵਪੂਰਨ</translation>
 <translation id="5190187232518914472">ਆਪਣੀਆਂ ਮਨਪਸੰਦ ਯਾਦਾਂ ਨੂੰ ਤਾਜ਼ਾ ਕਰੋ। ਐਲਬਮਾਂ ਸ਼ਾਮਲ ਜਾਂ ਉਹਨਾਂ ਦਾ ਸੰਪਾਦਨ ਕਰਨ ਲਈ, <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" /> 'ਤੇ ਜਾਓ।</translation>
 <translation id="5212593641110061691">ਪੱਤਰਕਾ</translation>
@@ -943,6 +983,7 @@
 <translation id="5300172019534884676">ਕੈਮਰਾ ਪਹੁੰਚ ਨੂੰ ਟੌਗਲ ਕਰੋ</translation>
 <translation id="5300814202279832142">ਵਿੰਡੋ ਨੂੰ ਡੈਸਕ 'ਤੇ ਲਿਜਾਓ</translation>
 <translation id="5302048478445481009">ਭਾਸ਼ਾ</translation>
+<translation id="5303459213631364445">ਚਮਕੀਲਾ</translation>
 <translation id="5303837385540978511"><ph name="PRODUCT_NAME" /> ਦਾ ਵਿਸ਼ੇਸ਼ ਵਾਲਪੇਪਰ</translation>
 <translation id="5304899856529773394">EVDO</translation>
 <translation id="530883153651464140"><ph name="DEVICE_NAME" /> ਨੂੰ <ph name="VERSION" /> ਵਰਜਨ 'ਤੇ ਅੱਪਡੇਟ ਕਰੋ</translation>
@@ -980,6 +1021,7 @@
 <translation id="5499762266711462226">ਕੀ-ਬੋਰਡ ਦਾ ਰੰਗ ਵਾਲਪੇਪਰ 'ਤੇ ਆਧਾਰਿਤ ਹੈ</translation>
 <translation id="5502931783115429516">Android ਨਹੀਂ ਚੱਲ ਰਿਹਾ ਹੈ</translation>
 <translation id="550600468576850160">ਚਰਾਗਾਹ</translation>
+<translation id="5507504956167780539">ਨਾਟਕੀ ਪਰਛਾਵਿਆਂ ਵਾਲੇ ਚਮਕਦਾਰ ਕਾਲੇ ਰੇਤ ਦੇ ਟਿੱਬਿਆਂ ਦੀ ਇੱਕ ਘੱਟੋ-ਘੱਟ ਪੇਸ਼ੇਵਰ ਫ਼ੋਟੋ</translation>
 <translation id="551689408806449779">ਡੀਵਾਈਸ ਨੂੰ ਡਿਸਕਨੈਕਟ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ। ਜਾਂਚ ਕਰਨ ਲਈ ਮੁੜ-ਕਨੈਕਟ ਕਰ ਕੇ ਦੇਖੋ</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="552644173505433109">ਸਾਰਾਂਸ਼ ਅਤੇ ਸਿਰਲੇਖ ਬਣਾਉਣ ਬਾਰੇ ਹੋਰ ਜਾਣੋ</translation>
@@ -1006,6 +1048,7 @@
 <translation id="5628106863521633649">ਉਪਲਬਧ ਭਾਸ਼ਾਵਾਂ</translation>
 <translation id="5630438231335788050">ਬੌਹੌਸ</translation>
 <translation id="5631759159893697722">ਸਾਰਾਂਸ਼</translation>
+<translation id="5655084389678168978">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਨੇ ਕਲਾਸ ਟੂਲ ਵਿੱਚ ਨਵੀਂ ਸਮੱਗਰੀ ਨੂੰ ਸ਼ਾਮਲ ਕੀਤਾ ਹੈ</translation>
 <translation id="5655283760733841251">ਕੀ-ਬੋਰਡ ਦੀ ਚਮਕ ਵਧਾਉਣ ਵਾਲੀ ਕੁੰਜੀ</translation>
 <translation id="5655296450510165335">ਡੀਵਾਈਸ ਐਨਰੋਲਮੈਂਟ</translation>
 <translation id="5655776422854483175">ਕੋਈ ਪ੍ਰਿੰਟ ਜੌਬ ਨਹੀਂ ਹੈ</translation>
@@ -1029,7 +1072,6 @@
 <translation id="5760715441271661976">ਪੋਰਟਲ ਸਥਿਤੀ</translation>
 <translation id="5763838252932650682"><ph name="APP_NAME" /> ਨੂੰ ਮੁੜ-ਸ਼ੁਰੂ ਅਤੇ ਅੱਪਡੇਟ ਕੀਤਾ ਜਾ ਰਿਹਾ ਹੈ</translation>
 <translation id="576835345334454681">ਡਿਸਪਲੇ ਦੀ ਚਮਕ ਵਧਾਉਣ ਵਾਲੀ ਕੁੰਜੀ</translation>
-<translation id="5775340474232476653">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਨੇ ਕਲਾਸ ਖਤਮ ਕਰ ਦਿੱਤੀ ਹੈ</translation>
 <translation id="5779818640587041940">ਰਿਕਾਰਡਿੰਗ ਕਰਦੇ ਸਮੇਂ ਸਕ੍ਰੀਨ ਨੂੰ ਚਾਲੂ ਰੱਖੋ</translation>
 <translation id="57838592816432529">ਮਿਊਟ ਕਰੋ</translation>
 <translation id="5784136236926853061">ਜ਼ਿਆਦਾ HTTP ਵਿਲੰਬਤਾ</translation>
@@ -1046,16 +1088,17 @@
 <translation id="5859969039821714932">ਸ਼ਾਰਟਕੱਟ ਉਪਲਬਧ ਨਹੀਂ। <ph name="KEY" /> ਤੋਂ ਬਿਨਾਂ ਨਵਾਂ ਸ਼ਾਰਟਕੱਟ ਦਬਾਓ।</translation>
 <translation id="5860033963881614850">ਬੰਦ ਕਰੋ</translation>
 <translation id="5860491529813859533">ਚਾਲੂ ਕਰੋ</translation>
+<translation id="586463370326011345">ਅਸਮਾਨੀ ਬਿਜਲੀ</translation>
 <translation id="5875913454160982848">ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਮਾਡਲ ਡਾਊਨਲੋਡ ਕਰੋ</translation>
 <translation id="5876385649737594562">ਵਿਕਲਪ ਚੁਣਨ ਲਈ ਚਾਲੂ ਕਰੋ</translation>
 <translation id="5877503382465267833"><ph name="RECORDING_NAME" /> ਨੂੰ ਰੋਕੋ</translation>
 <translation id="588258955323874662">ਫੁਲਸਕ੍ਰੀਨ</translation>
+<translation id="5889539348012432386">ਕਲਾਸ ਟੂਲ ਦਾ ਹੋਮਪੇਜ</translation>
 <translation id="5893975327266416093">ਸਪੁਰਦ ਕਰਨ ਲਈ ਕੀ-ਬੋਰਡ ਦੀ ਕੁੰਜੀ 'ਤੇ ਟੈਪ ਕਰੋ</translation>
 <translation id="5895138241574237353">ਰੀਸਟਾਰਟ ਕਰੋ</translation>
 <translation id="5896602941605730551">ਚਲਾਓ</translation>
 <translation id="5901630391730855834">ਪੀਲਾ</translation>
 <translation id="5903200662178656908">ਡੀਵਾਈਸ ਕੀ-ਬੋਰਡ ਅਤੇ ਮਾਊਸ ਦਾ ਸੁਮੇਲ ਹੈ।</translation>
-<translation id="5903822368221507416">ਟੈਬਾਂ ਲੁਕਾਓ</translation>
 <translation id="5904994456462260490">ਨਵਾਂ APN ਸ਼ਾਮਲ ਕਰੋ</translation>
 <translation id="590746845088109442">ਬਿੱਲੀਆਂ</translation>
 <translation id="5907649332524363701">ਕੁੰਜੀ ਦਾ ਰੰਗ</translation>
@@ -1095,10 +1138,12 @@
 <translation id="6058625436358447366">ਪੂਰਾ ਕਰਨ ਲਈ, ਆਪਣਾ ਪੁਰਾਣਾ ਅਤੇ ਨਵਾਂ ਪਾਸਵਰਡ ਦਾਖਲ ਕਰੋ</translation>
 <translation id="6061772781719867950">ਅਸਫਲ HTTP ਬੇਨਤੀਆਂ</translation>
 <translation id="6073292342939316679">ਕੀ-ਬੋਰਡ ਦੀ ਚਮਕ ਘਟਾਓ</translation>
+<translation id="6074608334942655098">ਅਨੁਵਾਦ ਕਰਨਾ ਬੰਦ ਕਰੋ</translation>
 <translation id="6074752328838739425">ਸਾਰਾਂਸ਼ ਲੁਕਾਓ</translation>
 <translation id="6075872808778243331">(Android) HTTP ਵਿਲੰਬਤਾ</translation>
 <translation id="6078323886959318429">ਸ਼ਾਰਟਕੱਟ ਸ਼ਾਮਲ ਕਰੋ</translation>
 <translation id="6079693086494835199">ਇਹ ਪੱਕਾ ਕਰਨ ਲਈ ਰੀਸੈੱਟ ਕਰੋ ਕਿ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਹੋਮਪੇਜ ਕੋਈ ਫ਼ਿਸ਼ਿੰਗ ਸਾਈਟ ਨਹੀਂ ਹੈ। ਸਿਰਫ਼ ਆਪਣੀਆਂ ਭਰੋਸੇਮੰਦ ਵੈੱਬਸਾਈਟਾਂ ਨੂੰ ਹੀ ਵਰਤੋ।</translation>
+<translation id="6090672065638047175">ਤਾਰਿਆਂ ਨਾਲ ਬਣੇ ਇੱਕ ਚਮਕਦੇ ਰੁੱਖ ਦੀ ਫ਼ੋਟੋ, ਜਿਸਦੀ ਬੈਕਗ੍ਰਾਊਂਡ ਵਿੱਚ ਇੱਕ ਸੋਹਣੀ ਰਾਤ ਵਾਲਾ ਅਸਮਾਨ ਅਤੇ ਗਲੈਕਸੀ ਹੈ</translation>
 <translation id="6091080061796993741">ਪੀਲਾ</translation>
 <translation id="6104112872696127344">ਸਕੈਨਿੰਗ ਰੱਦ ਕੀਤੀ ਗਈ</translation>
 <translation id="6106186594183574873">ਪੂਰਾ ਕਰਨ ਲਈ, ਆਪਣਾ ਪੁਰਾਣਾ ਪਾਸਵਰਡ ਦਾਖਲ ਕਰੋ</translation>
@@ -1181,6 +1226,7 @@
 <translation id="6417265370957905582">Google Assistant</translation>
 <translation id="6419454453018688975">ਸਿਸਟਮ ਟਿਕਾਣਾ ਪਹੁੰਚ ਨੂੰ ਚਾਲੂ ਕਰੋ</translation>
 <translation id="6423239382391657905">OpenVPN</translation>
+<translation id="642713342828771202">ਡੁੱਬਦਾ ਸੂਰਜ</translation>
 <translation id="6437513277380808188">TXT</translation>
 <translation id="6439505561246192797">ਕਮਜ਼ੋਰ (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="6447630859861661624">ਖਾਤਾ ਸੈਟਿੰਗਾਂ 'ਤੇ ਜਾਓ</translation>
@@ -1283,6 +1329,7 @@
 <translation id="6900701049656042631">ਇਸ ਐਲਬਮ ਵਿੱਚ ਕੋਈ ਫ਼ੋਟੋ ਨਹੀਂ ਹੈ। ਫ਼ੋਟੋਆਂ ਸ਼ਾਮਲ ਕਰਨ ਲਈ, <ph name="LINK" /> ’ਤੇ ਜਾਓ</translation>
 <translation id="6902359863093437070">AI ਨਾਲ ਬੈਕਗ੍ਰਾਊਂਡ ਬਣਾਓ</translation>
 <translation id="6905163627763043954">ਇਸਨੂੰ ਅਜ਼ਮਾਓ</translation>
+<translation id="6905275015682612674">ਸੂਰਜ ਡੁੱਬਣ ਵੇਲੇ ਇੱਕ ਬਾਇਓਲੂਮਿਨਸੈਂਟ ਬੀਚ ਦੀ ਇੱਕ ਲਾਂਗ ਐਕਸਪੋਜਰ ਫ਼ੋਟੋ, ਅਸਮਾਨ ਵਿੱਚ ਤਾਰਿਆਂ ਨਾਲ, ਸੋਹਣੇ ਪੇਸਟਲ ਰੰਗ, 4k</translation>
 <translation id="6905724422583748843"><ph name="PAGE_NAME" /> 'ਤੇ ਵਾਪਸ ਜਾਓ</translation>
 <translation id="6910312834584889076">ਸਕੈਨਰ ਦਾ ਕਵਰ ਖੁੱਲ੍ਹਾ ਹੈ। ਕਵਰ ਬੰਦ ਕਰਕੇ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</translation>
 <translation id="6910845598686542904">ਰਿਕਾਰਡਿੰਗ ਵਿੱਚ ਪਤਾ ਲਗਾਈਆਂ ਗਈਆਂ ਅਵਾਜਾਂ ਦੇ ਮਾਡਲਾਂ ਦੀ ਗਣਨਾ ਕਰਦੀ ਹੈ</translation>
@@ -1290,7 +1337,9 @@
 <translation id="6926069762081461162">ਰਿਕਾਰਡਿੰਗ ਦਾ ਸਿਰਲੇਖ</translation>
 <translation id="6930242544192836755">ਮਿਆਦ</translation>
 <translation id="6930597342185648547">ਬੈਕਗ੍ਰਾਊਂਡ ਬਾਰੇ</translation>
+<translation id="6931666215260956151">ਗਲੈਕਸੀ</translation>
 <translation id="6939766318048400022">ਕੈਫ਼ੇ</translation>
+<translation id="6940212863873359282">ਚਿੱਟੇ ਆਰਗੇਨਜ਼ਾ ਦਾ ਇੱਕ ਟੁਕੜਾ ਵਿਚਕਾਰ ਤੈਰ ਰਿਹਾ ਹੈ, ਇੱਕ ਚਿੱਟੇ ਸੰਗਮਰਮਰ ਦੇ ਆਰਕ ਦੇ ਉੱਪਰ, ਜਿਸਦੀ ਕਰੀਮ ਬੈਕਗ੍ਰਾਊਂਡ ਹੈ</translation>
 <translation id="6942253772720771875">ਆਪਣੇ ਵਿਚਾਰ ਸਾਂਝੇ ਕਰੋ ਜਾਂ ਆਪਣੀ ਸਮੱਸਿਆ ਦਾ ਵਰਣਨ ਕਰੋ</translation>
 <translation id="6943893908656559156">ਰਿਮੋਟ ਪਛਾਣ (ਵਿਕਲਪਿਕ)</translation>
 <translation id="694981048020558038">ਰਿਕਾਰਡਿੰਗ ਦਾ ਸਿਰਲੇਖ ਖੋਜੋ</translation>
@@ -1366,6 +1415,7 @@
 <translation id="7212547870105584639">ਨੈੱਟਵਰਕ APN ਸੈਟਿੰਗਾਂ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰੋ। APN ਸੈਲਿਊਲਰ ਨੈੱਟਵਰਕ ਅਤੇ ਇੰਟਰਨੈੱਟ ਵਿਚਕਾਰ ਕਨੈਕਸ਼ਨ ਸਥਾਪਤ ਕਰਦੇ ਹਨ। <ph name="BEGIN_LINK_LEARN_MORE" />ਹੋਰ ਜਾਣੋ<ph name="END_LINK_LEARN_MORE" /></translation>
 <translation id="7212734716605298123">ਬਾਹਰੀ ਡੀਵਾਈਸਾਂ ਲਈ ਫ਼ਰਮਵੇਅਰ ਅੱਪਡੇਟ</translation>
 <translation id="7216409898977639127">ਸੈਲਿਊਲਰ ਪ੍ਰਦਾਨਕ</translation>
+<translation id="7221869452894271364">ਇਹ ਪੰਨਾ ਰੀਲੋਡ ਕਰੋ</translation>
 <translation id="7223952304612664117">ਇਸ ਨਾਲ ਸਿਸਟਮ ਸੇਵਾਵਾਂ ਨੂੰ ਤੁਹਾਡਾ ਟਿਕਾਣਾ ਨਿਰਧਾਰਿਤ ਕਰਨ ਲਈ ਟਿਕਾਣਾ ਸਟੀਕਤਾ ਦੀ ਵਰਤੋਂ ਕਰਨ ਦੀ ਆਗਿਆ ਮਿਲਦੀ ਹੈ। ਟਿਕਾਣਾ ਸਟੀਕਤਾ ਸੈਟਿੰਗ ਵਾਇਰਲੈੱਸ ਸਿਗਨਲਾਂ ਅਤੇ ਸੈਂਸਰਾਂ ਸੰਬੰਧੀ ਜਾਣਕਾਰੀ ਦੀ ਵਰਤੋਂ ਕਰਦੀ ਹੈ, ਤਾਂ ਜੋ ਡੀਵਾਈਸ ਟਿਕਾਣੇ ਦਾ ਅੰਦਾਜ਼ਾ ਲਗਾਇਆ ਜਾ ਸਕੇ।</translation>
 <translation id="7233782086689993269">ਸ਼ਾਰਟਕੱਟ ਮੁੜ-ਬਹਾਲ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="723419678599947502">Google AI ਵਰਤ ਕੇ ਸਿਰਲੇਖ ਬਣਾਓ</translation>
@@ -1376,6 +1426,7 @@
 <translation id="7271040990581020067">ਫ਼ਿਲਹਾਲ ਸਕੈਨਰ ਵਰਤੋਂ ਵਿੱਚ ਹੈ। ਬਾਅਦ ਵਿੱਚ ਦੁਬਾਰਾ ਕੋਸ਼ਿਸ਼ ਕਰੋ।</translation>
 <translation id="7271932918253517778">ਸਿਖਰਲੀ ਕਤਾਰ ਨਾਲ ਕੁੰਜੀਆਂ ਵਾਲੇ ਸ਼ਾਰਟਕੱਟ ਵਿੱਚ <ph name="META_KEY" /> ਕੁੰਜੀ ਨੂੰ ਸ਼ਾਮਲ ਕਰਨ ਦੀ ਲੋੜ ਹੁੰਦੀ ਹੈ।</translation>
 <translation id="7274587244503383581"><ph name="PRINTED_PAGES_NUMBER" />/<ph name="TOTAL_PAGES_NUMBER" /></translation>
+<translation id="7275707758336796649">ਗੁਲਾਬੀ ਬੈਕਗ੍ਰਾਊਂਡ ਦੇ ਅੱਗੇ ਇੱਕ ਡਾਲਮੇਸ਼ੀਅਨ ਕੁੱਤਾ, ਪੂਰੇ ਸਰੀਰ ਦੇ ਗਤੀਸ਼ੀਲ ਪੋਜ਼ ਵਿੱਚ, ਜ਼ਿਆਦਾ ਰੈਜ਼ੋਲਿਊਸ਼ਨ ਵਾਲੀ ਫ਼ੋਟੋਗ੍ਰਾਫੀ ਨਾਲ ਖਿੱਚਿਆ ਗਿਆ ਹਾਈਪਰ ਯਥਾਰਥਵਾਦੀ ਸਟਾਕ ਬੈਕਗ੍ਰਾਊਂਡ ਰੰਗ ਗ੍ਰੇਡਿੰਗ ਦੇ ਨਾਲ</translation>
 <translation id="7281657306185710294">ਹਵਾ ਨੂੰ ਮਹਿਸੂਸ ਕਰੋ</translation>
 <translation id="7287310195820267359">ਵਾਲਪੇਪਰ ਸੰਗ੍ਰਹਿ</translation>
 <translation id="7293429513719260019">ਭਾਸ਼ਾ ਚੁਣੋ</translation>
@@ -1385,6 +1436,7 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Chromebook ਮਦਦ ਫ਼ੋਰਮ ਵਿੱਚ ਮਾਹਰਾਂ ਤੋਂ ਸਵਾਲ ਪੁੱਛੋ</translation>
+<translation id="7309823890857024809">ਕਾਲੇ ਬੈਕਗ੍ਰਾਊਂਡ 'ਤੇ ਕੱਚ ਦੇ ਫੁੱਲਦਾਨ ਵਿੱਚ ਕੁਝ ਪਾਪਾਵਰ ਰੀਆ ਸਟੈਮ ਦੀ ਘੱਟੋ-ਘੱਟ ਸਥਿਰ ਜ਼ਿੰਦਗੀ</translation>
 <translation id="7311368985037279727">ਕੀ-ਬੋਰਡ ਦਾ ਰੰਗ</translation>
 <translation id="7317831949569936035">ਸਕੂਲ ਵਿੱਚ ਦਾਖਲੇ ਦੀ ਪ੍ਰਕਿਰਿਆ</translation>
 <translation id="7319430975418800333">A3</translation>
@@ -1402,6 +1454,7 @@
 <translation id="7353413232959255829"><ph name="LIST_SIZE" /> ਵਿੱਚੋਂ <ph name="LIST_POSITION" /> ਖੋਜ ਨਤੀਜਾ: <ph name="SEARCH_RESULT_TEXT" />। ਸ਼ਾਰਟਕੱਟ 'ਤੇ ਨੈਵੀਗੇਟ ਕਰਨ ਲਈ Enter ਦਬਾਓ।</translation>
 <translation id="7359657277149375382">ਫ਼ਾਈਲ ਦੀ ਕਿਸਮ</translation>
 <translation id="73631062356239394">ਤਸ਼ਖੀਸੀ ਡਾਟਾ ਸਾਂਝਾ ਕਰੋ</translation>
+<translation id="7369648056634183167">ਮੀਂਹ ਵਿੱਚ ਇੱਕ ਗੁੰਝਲਦਾਰ, ਤ੍ਰੇਲ ਨਾਲ ਢੱਕੀ ਤਲਾਅ ਦੀ ਲਿਲੀ ਦਾ ਨਜ਼ਦੀਕੀ ਦ੍ਰਿਸ਼। ਧਿਆਨ ਨਾਜ਼ੁਕ ਪੱਤੀਆਂ ਅਤੇ ਲਾਈਟ ਪ੍ਰਤੀਬਿੰਬਤ ਕਰਨ ਵਾਲੀਆਂ ਪਾਣੀ ਦੀਆਂ ਬੂੰਦਾਂ 'ਤੇ ਹੈ, ਜੋ ਨੀਲੇ ਬੈਕਗ੍ਰਾਊਂਡ ਸਾਹਮਣੇ ਉਨ੍ਹਾਂ ਦੇ ਨਰਮ ਪੇਸਟਲ ਰੰਗਾਂ ਨੂੰ ਕੈਦ ਕਰਦੇ ਹਨ। ਕੁਦਰਤੀ ਲਾਈਟ ਦੀ ਵਰਤੋਂ ਕਰ ਕੇ ਅੱਖਾਂ ਦੇ ਪੱਧਰ ਤੋਂ ਖਿੱਚੀ ਗਈ ਫ਼ੋਟੋ</translation>
 <translation id="7375053625150546623">EAP</translation>
 <translation id="7378170410161264436">Recorder ਬੋਲੀ ਵਾਲੀਆਂ ਰਿਕਾਰਡਿੰਗਾਂ ਦੇ ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਬਣਾਉਂਦੀ ਹੈ।
 ਇਹ ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਪ੍ਰਾਪਤ ਕਰਨ ਲਈ ਪ੍ਰਤੀਲਿਪੀਕਰਨ ਮਾਡਲ (100MB ਤੱਕ) ਨੂੰ ਡਾਊਨਲੋਡ ਕਰੋ।</translation>
@@ -1409,7 +1462,6 @@
 <translation id="7388345524791662148"><ph name="RECORDING_NAME" /> ਲਈ ਹੋਰ ਵਿਕਲਪ</translation>
 <translation id="7388959671917308825">ਬਿਲਟ-ਇਨ ਟੱਚਪੈਡ</translation>
 <translation id="7397270852490618635">ਹਲਕਾ ਥੀਮ ਬੰਦ ਕਰੋ</translation>
-<translation id="7400166052988585408">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਵੱਲੋਂ ਤੁਹਾਡੀ ਸਕ੍ਰੀਨ <ph name="NUM_SECONDS" /> ਸਕਿੰਟ ਵਿੱਚ ਲਾਕ ਕੀਤੀ ਜਾਵੇਗੀ</translation>
 <translation id="7401543881546089382">ਸ਼ਾਰਟਕੱਟ ਮਿਟਾਓ</translation>
 <translation id="7405493795721832710"><ph name="DEVICE_NAME" /> ਅੱਪਡੇਟ ਕੀਤੇ ਜਾਣ ਲਈ ਤਿਆਰ ਹੈ</translation>
 <translation id="741244894080940828">ਰੂਪਾਂਤਰਨ</translation>
@@ -1424,6 +1476,7 @@
 <translation id="7481312909269577407">ਅੱਗੇ ਭੇਜੋ</translation>
 <translation id="7487067081878637334">ਤਕਨਾਲੋਜੀ</translation>
 <translation id="7490813197707563893">MAC ਪਤਾ</translation>
+<translation id="7494145938791663804">ਖੂਬਸੂਰਤ</translation>
 <translation id="7497215489070763236">ਸਰਵਰ CA ਪ੍ਰਮਾਣ-ਪੱਤਰ</translation>
 <translation id="7500205272584643581">ਕੀ Recorder ਨੂੰ ਸਪੀਕਰਾਂ ਦਾ ਪਤਾ ਲਗਾਉਣ ਅਤੇ ਉਨ੍ਹਾਂ ਨੂੰ ਲੇਬਲਬੱਧ ਕਰਨ ਦੀ ਆਗਿਆ ਦੇਣੀ ਹੈ?</translation>
 <translation id="7501957181231305652">ਜਾਂ</translation>
@@ -1441,7 +1494,6 @@
 <translation id="7544853251252956727">ਸ਼ੱਫਲ ਕਰੋ</translation>
 <translation id="7550715992156305117">ਤਸ਼ਖੀਸ ਸੰਬੰਧੀ ਨਿਯਮਬੱਧ ਕੰਮ</translation>
 <translation id="7551123448725492271">ਡੀਵਾਈਸ ਇੱਕ ਆਡੀਓ ਡੀਵਾਈਸ ਹੈ।</translation>
-<translation id="7553913964854052228">School Tools ਤੁਹਾਡੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਦੀ ਵਰਤੋਂ ਕਰ ਰਿਹਾ ਹੈ</translation>
 <translation id="7559239713112547082">ਸਕ੍ਰੀਨਸ਼ਾਟ ਦੀ ਪੂਰਵ-ਝਲਕ ਦੇਖੋ</translation>
 <translation id="7561454561030345039">ਤੁਹਾਡਾ ਪ੍ਰਸ਼ਾਸਕ ਇਸ ਕਾਰਵਾਈ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰਦਾ ਹੈ</translation>
 <translation id="7561759921596375678">ਅਵਾਜ਼ ਚਾਲੂ ਕਰੋ</translation>
@@ -1480,6 +1532,7 @@
 <translation id="7760571082554155847">ਹੋਮਪੇਜ ਸੈਟਿੰਗਾਂ</translation>
 <translation id="7762130827864645708">ਤੁਹਾਡੇ ਵੱਲੋਂ ਪਾਸਵਰਡ ਨੂੰ ਬਦਲਣਾ ਸਫਲ ਰਿਹਾ। ਕਿਰਪਾ ਕਰਕੇ ਹੁਣ ਤੋਂ ਨਵੇਂ ਪਾਸਵਰਡ ਦੀ ਵਰਤੋਂ ਕਰੋ।</translation>
 <translation id="7763470514545477072">ਡੋੋਮੇਨ ਪਿਛੇਤਰ ਦਾ ਮਿਲਾਨ</translation>
+<translation id="7764171263909999400">ਵਾਲਿਊਮੀਟ੍ਰਿਕ ਲਾਈਟ</translation>
 <translation id="7769672763586021400">ਮਾਡਲ ਆਈ.ਡੀ.</translation>
 <translation id="7774759755755950354">ਪਿੱਛੇ</translation>
 <translation id="7778717409420828014">ਤੁਹਾਡਾ ਵਿਚਾਰ Chromebook ਅਨੁਭਵ ਨੂੰ ਬਿਹਤਰ ਬਣਾਉਣ ਵਿੱਚ ਸਾਡੀ ਮਦਦ ਕਰਦਾ ਹੈ ਅਤੇ ਸਾਡੀ ਟੀਮ ਇਸਦੀ ਸਮੀਖਿਆ ਕਰੇਗੀ। ਰਿਪੋਰਟਾਂ ਦੀ ਗਿਣਤੀ ਜ਼ਿਆਦਾ ਹੋਣ ਕਰਕੇ, ਅਸੀਂ ਜਵਾਬ ਨਹੀਂ ਭੇਜ ਸਕਾਂਗੇ।</translation>
@@ -1533,6 +1586,7 @@
 <translation id="7971535376154084247">ਆਮ ਕੰਟਰੋਲ</translation>
 <translation id="7977800524392185497"><ph name="NETWORK_NAME" /> ਨੈੱਟਵਰਕ ਨਾਲ ਕਨੈਕਟ ਕਰਨ ਲਈ, ਸੈਟਿੰਗਾਂ 'ਤੇ ਜਾਓ</translation>
 <translation id="7978412674231730200">ਨਿੱਜੀ ਕੁੰਜੀ</translation>
+<translation id="7979468455552394856">ਵਿਦਿਆਰਥੀ ਕਲਾਸ ਟੂਲ ਨਾਲ ਕਨੈਕਟ ਹਨ</translation>
 <translation id="7982789257301363584">ਨੈੱਟਵਰਕ</translation>
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{"<ph name="APP_NAME_1" />" ਨੂੰ ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਸ਼ੁਰੂ ਕੀਤਾ ਗਿਆ ਸੀ}one{# ਐਪ ਨੂੰ ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਸ਼ੁਰੂ ਕੀਤਾ ਗਿਆ ਸੀ}other{# ਐਪਾਂ ਨੂੰ ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਸ਼ੁਰੂ ਕੀਤਾ ਗਿਆ ਸੀ}}</translation>
 <translation id="7994702968232966508">EAP ਵਿਧੀ</translation>
@@ -1562,7 +1616,7 @@
 <translation id="8088963492174775412">ਰਿਕਾਰਡ ਕਰਨ ਲਈ ਦਬਾਓ</translation>
 <translation id="8094062939584182041">Google ਨੂੰ ਇਸ ਸਮੱਸਿਆ ਬਾਰੇ ਤੁਹਾਨੂੰ ਈਮੇਲ ਭੇਜਣ ਦੀ ਆਗਿਆ ਦਿਓ</translation>
 <translation id="8104083085214006426">ਤੁਸੀਂ ਕੋਈ ਖੁੱਲ੍ਹਾ ਅਤੇ ਅਸੁਰੱਖਿਅਤ ਨੈੱਟਵਰਕ ਵਰਤ ਰਹੇ ਹੋ</translation>
-<translation id="8110942816572072814">ਤੁਹਾਡੇ ਅਧਿਆਪਕ ਨੇ ਤੁਹਾਡੀ ਸਕ੍ਰੀਨ ਲਾਕ ਕਰ ਦਿੱਤੀ ਹੈ</translation>
+<translation id="8108879170356113798">ਤੁਸੀਂ ਸਿਰਫ਼ <ph name="NUM_SECONDS" /> ਸਕਿੰਟਾਂ ਵਿੱਚ ਕਲਾਸ ਟੂਲਾਂ ਦੀ ਵਰਤੋਂ ਕਰ ਸਕੋਗੇ</translation>
 <translation id="811820734797650957">(Android) ਗੇਟਵੇ ਨੂੰ ਪਿੰਗ ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ</translation>
 <translation id="8129620843620772246"><ph name="TEMPERATURE_C" />° C</translation>
 <translation id="8131740175452115882">ਪੁਸ਼ਟੀ ਕਰੋ</translation>
@@ -1570,6 +1624,7 @@
 <translation id="8135609423982943441">ਤੁਹਾਡੀ Chromebook ਨੂੰ ਸੁਰੱਖਿਅਤ ਪੂਰਵ-ਨਿਰਧਾਰਿਤ ਸੈਟਿੰਗਾਂ 'ਤੇ ਰੀਸੈੱਟ ਕਰ ਦਿੱਤਾ ਗਿਆ ਹੈ। ਤੁਸੀਂ ਸੈਟਿੰਗਾਂ ਵਿੱਚ ਜਾ ਕੇ ਕਿਸੇ ਵੀ ਵੇਲੇ ਇਨ੍ਹਾਂ ਤਬਦੀਲੀਆਂ ਨੂੰ ਵਿਵਸਥਿਤ ਕਰ ਸਕਦੇ ਹੋ।</translation>
 <translation id="8138405288920084977">LTEAdvanced</translation>
 <translation id="8140591278915222789">ਖੁਦ ਲਈ ਬਣਾਓ</translation>
+<translation id="8142182840415860496">ਚਿੱਟੇ ਅਤੇ ਪੀਲੇ ਰੰਗ ਦੇ ਕਈ ਫੁੱਲਾਂ ਦੀ ਨੇੜਿਓਂ ਤਸਵੀਰ, ਕਿਸੇ ਐਨੀਮੇਟਿਡ ਫ਼ਿਲਮ ਦਾ ਦ੍ਰਿਸ਼, ਨੀਲੇ ਅਸਮਾਨ ਦੇ ਹੇਠਾਂ, ਹਲਕੇ ਰੰਗਾਂ ਵਿੱਚ ਬਿਨਾਂ ਪੱਤਿਆਂ ਵਾਲੇ ਦੋ ਪੀਲੇ ਰੰਗ ਦੇ ਵੱਡੇ ਟਿਊਲਿਪ ਫੁੱਲਾਂ ਦੇ ਵਿਚਕਾਰ ਇੱਕ ਫਿੱਕੇ ਗੁਲਾਬੀ ਰੰਗ ਦਾ ਨਾਜ਼ੁਕ ਫੁੱਲ ਹੈ, ਜਿਸ ਵਿੱਚ ਕੋਈ ਪੱਤਾ ਜਾਂ ਫੁੱਲ ਨਹੀਂ ਹੈ, ਪੇਸਟਲ ਰੰਗ ਕੀਤੇ ਹੋਏ ਹਨ, ਜ਼ਿਆਦਾ ਰੈਜ਼ੋਲਿਊਸ਼ਨ ਅਤੇ ਵੇਰਵਿਆਂ ਵਾਲਾ ਇੱਕ ਸਿਨੇਮੈਟਿਕ ਦ੍ਰਿਸ਼, ਸ਼ਾਨਦਾਰ ਰੌਸ਼ਨੀ, ਤੇਜ਼ ਰੌਸ਼ਨੀ ਅਤੇ ਮਾਹੌਲ ਦੇ ਹਿਸਾਬ ਨਾਲ ਬਦਲਣ ਵਾਲੀਆਂ ਰੌਸ਼ਨੀ ਦੇ ਨਾਲ ਓਕਟੇਨ ਰੈਂਡਰ।</translation>
 <translation id="8143951647992294073"><ph name="TOPIC_SOURCE" /> <ph name="TOPIC_SOURCE_DESC" /> ਚੁਣੋ</translation>
 <translation id="8151185429379586178">ਵਿਕਾਸਕਾਰ ਟੂਲਾਂ</translation>
 <translation id="8152370627892825"><ph name="DESCRIPTION" />, <ph name="ACCELERATOR_INFO" />।</translation>
@@ -1603,7 +1658,6 @@
 <translation id="8318753676953949627">ਕੋਈ ਚਿੱਤਰ ਨਹੀਂ</translation>
 <translation id="8319809980370328428">ਰਿਕਾਰਡਿੰਗ ਦਾ ਸਾਰਾਂਸ਼ ਅਤੇ ਸਿਰਲੇਖ ਬਣਾਉਣਾ</translation>
 <translation id="8320910311642849813">ਜੰਗਲ</translation>
-<translation id="8322464149031882595">ਅੱਗੇ ਜਾਣ ਲਈ ਕਲਿੱਕ ਕਰੋ</translation>
 <translation id="8329018942023753850">Calculator ਐਪ</translation>
 <translation id="8336739000755212683">ਡੀਵਾਈਸ ਦੇ ਖਾਤੇ ਦਾ ਚਿੱਤਰ ਬਦਲੋ</translation>
 <translation id="8339024191194156249">ਸਵੈ-ਲਾਂਚ ਬਾਰੇ ਹੋਰ ਜਾਣੋ</translation>
@@ -1651,12 +1705,14 @@
 <translation id="8503813439785031346">ਵਰਤੋਂਕਾਰ ਨਾਮ</translation>
 <translation id="8503836310948963452">ਬਸ ਕੁਝ ਮਿੰਟ ਹੋਰ…</translation>
 <translation id="8505011850330200833">Gemini ਮਾਡਲ ਨੂੰ ਪ੍ਰਤੀਲਿਪੀਆਂ 'ਤੇ ਪ੍ਰਕਿਰਿਆ ਕਰਨ ਅਤੇ ਸਾਰਾਂਸ਼ ਬਣਾਉਣ ਲਈ 2GB ਸਟੋਰੇਜ ਲੋੜੀਂਦੀ ਹੁੰਦੀ ਹੈ</translation>
+<translation id="8506063704538210734">ਰਾਤ ਦੇ ਅਸਮਾਨ ਦੀ ਫ਼ੋਟੋ, ਜਿਸ ਵਿੱਚ ਇੱਕ ਉਲਕਾ ਵਰਖਾ ਹੈ ਅਤੇ ਅਗਲੇ ਹਿੱਸੇ ਵਿੱਚ ਕੁਝ ਰੁੱਖ ਹਨ, ਜਿਸ ਵਿੱਚ ਜਾਮਨੀ ਅਤੇ ਗੁਲਾਬੀ ਰੰਗ ਦੀ ਭਾਹ ਹੈ</translation>
+<translation id="8506394543220680287">ਬਰਫ਼ ਨਾਲ ਢੱਕਿਆ ਹੋਇਆ</translation>
 <translation id="8508640263392900755">APN ਸੰਬੰਧੀ ਵੇਰਵੇ</translation>
 <translation id="8522687886059337719">ਤੁਹਾਡੇ ਕੋਲ ਹੁਣ ਨਵੇਂ <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />ਵਾਲਪੇਪਰਾਂ<ph name="END_LINK_WALLPAPER_SUBPAGE" /> ਅਤੇ <ph name="BEGIN_LINK_SCREENSAVER_SUBPAGE" />ਸਕ੍ਰੀਨ ਸੇਵਰ<ph name="END_LINK_SCREENSAVER_SUBPAGE" /> ਤੱਕ ਪਹੁੰਚ ਹੈ</translation>
 <translation id="8528615187455571738">Crosvm</translation>
 <translation id="852896705346853285">ਟੀ ਹਾਊਸ</translation>
+<translation id="8531692079895415839">ਧੁੰਦਲਾ</translation>
 <translation id="8538236298648811558">Google AI ਵੱਲੋਂ ਸੰਚਾਲਿਤ</translation>
-<translation id="8543574988889671960">ਟੈਬ ਨੂੰ ਰੀਲੋਡ ਕਰੋ</translation>
 <translation id="8550364285433943656">ਕੀ-ਬੋਰਡ ਕੁੰਜੀਆਂ ਨਾਲ ਗੇਮ ਖੇਡਣ ਲਈ ਗੇਮ ਕਾਰਵਾਈਆਂ 'ਤੇ ਕੰਟਰੋਲ ਸ਼ਾਮਲ ਕਰੋ</translation>
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8558521694042102707">ਜਨਰੇਟਿਵ AI ਗਲਤੀਆਂ ਕਰ ਸਕਦਾ ਹੈ, ਜਿਸ ਵਿੱਚ ਲੋਕਾਂ ਬਾਰੇ ਜਾਣਕਾਰੀ ਵੀ ਸ਼ਾਮਲ ਹੈ, ਇਸ ਲਈ ਇਸ ਦੀ ਦੋਹਰੀ-ਜਾਂਚ ਕਰੋ।</translation>
@@ -1664,7 +1720,6 @@
 <translation id="8576249514688522074">ਸ਼ੁਰੂ ਨਹੀਂ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="8584654835905316966"><ph name="DEVICE_NAME" /> ਦੇ ਲਈ <ph name="VERSION" /> ਵਰਜਨ 'ਤੇ ਫ਼ਰਮਵੇਅਰ ਦੀ ਸਥਾਪਨਾ ਨੂੰ ਪੂਰਾ ਕਰਨ ਲਈ, ਉਸਨੂੰ ਇੱਕ ਵਾਰ ਮੁੜ-ਸ਼ੁਰੂ ਕਰਨ ਦੀ ਲੋੜ ਹੈ। ਅਜਿਹਾ ਲੱਗ ਸਕਦਾ ਹੈ ਕਿ ਤੁਹਾਡਾ ਕੰਪਿਊਟਰ ਕਈ ਵਾਰ ਰੀਬੂਟ ਹੋ ਰਿਹਾ ਹੈ। ਅਜਿਹਾ ਹੋਣਾ ਆਮ ਗੱਲ ਹੈ।</translation>
 <translation id="8593058461203131755">ਮੀਡੀਆ ਰੋਕੋ</translation>
-<translation id="8619169570378509764">ਸਕੂਲ ਵਾਲੇ ਟੂਲ</translation>
 <translation id="8620617069779373398">ਰੋਮਿੰਗ ਅਵਸਥਾ</translation>
 <translation id="8626489604350149811"><ph name="APN_NAME" /> ਲਈ ਹੋਰ ਕਾਰਵਾਈਆਂ</translation>
 <translation id="86356131183441916">ਹਲਕਾ ਜਾਮਨੀ</translation>
@@ -1674,11 +1729,13 @@
 <translation id="8655295600908251630">ਚੈਨਲ</translation>
 <translation id="8655828773034788261">URL ਸਾਂਝਾ ਕਰੋ:</translation>
 <translation id="8660881923941176839">ਪੌਂਡ</translation>
+<translation id="8669187096858652220">ਟੈਬਾਂ ਦਿਖਾਉਣ ਲਈ ਕਲਿੱਕ ਕਰੋ</translation>
 <translation id="8670574982334489519">ਸੱਜੇ</translation>
 <translation id="8675354002693747642">ਪਹਿਲਾਂ ਤੋਂ ਸਾਂਝੀ ਕੀਤੀ ਗਈ ਕੁੰਜੀ</translation>
 <translation id="8677859815076891398">ਕੋਈ ਐਲਬਮ ਨਹੀਂ ਹੈ। <ph name="LINK_BEGIN" />Google Photos<ph name="LINK_END" /> ਵਿੱਚ ਐਲਬਮ ਬਣਾਓ।</translation>
 <translation id="8682949824227998083">ਰਾਮੇਨ</translation>
 <translation id="8689520252402395106">ਅੱਪਡੇਟ ਦੀ ਪ੍ਰਕਿਰਿਆ ਜਾਰੀ ਰੱਖਣ ਲਈ <ph name="DEVICE_NAME" /> ਦੀ USB ਕੇਬਲ ਨੂੰ ਦੁਬਾਰਾ ਪਾਓ</translation>
+<translation id="8699053192961439771">ਟੈਬਾਂ ਨੂੰ ਸਵੈਚਲਿਤ ਤੌਰ 'ਤੇ ਲੁਕਾਉਣ ਲਈ ਕਲਿੱਕ ਕਰੋ</translation>
 <translation id="8709616837707653427"><ph name="DESC_TEXT" /> ਇਸ ਵਿਸ਼ੇਸ਼ਤਾ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰਨ ਲਈ ਖੱਬੀ ਜਾਂ ਸੱਜੀ ਤੀਰ ਕੁੰਜੀ ਵਰਤੋ।</translation>
 <translation id="8712637175834984815">ਸਮਝ ਲਿਆ</translation>
 <translation id="871560550817059752">ਅਸਫਲ ਰਹੀ - ਸਿਆਹੀ ਖਤਮ ਹੋ ਗਈ ਹੈ</translation>
@@ -1708,7 +1765,6 @@
 <translation id="8820817407110198400">Bookmarks</translation>
 <translation id="8833620912470026819">ਕੈਕਟਸ ਦਾ ਜੰਗਲ</translation>
 <translation id="8834539327799336565">ਇਸ ਵੇਲੇ ਕਨੈਕਟ ਹੈ</translation>
-<translation id="8842526499753992487">ਸਿਖਰਲੇ ਖੱਬੇ ਪਾਸੇ ਲੈ ਕੇ ਜਾਓ</translation>
 <translation id="8845001906332463065">ਮਦਦ ਪ੍ਰਾਪਤ ਕਰੋ</translation>
 <translation id="8849799913685544685">ਲਾਈਟਹਾਊਸ</translation>
 <translation id="8851859208664803097">ਬੰਦ ਹੋ ਗਿਆ - ਪ੍ਰਿੰਟਰ ਤੱਕ ਪਹੁੰਚ ਨਹੀਂ ਕੀਤੀ ਜਾ ਸਕਦੀ</translation>
@@ -1748,15 +1804,16 @@
 <translation id="8961025972867871808">ਪੈਂਗੁਇਨ</translation>
 <translation id="8968751544471797276">ਚਾਰਜਿੰਗ ਦਰ</translation>
 <translation id="8970109610781093811">ਦੁਬਾਰਾ ਚਲਾਓ</translation>
-<translation id="8972061581514441296">ਵਾਪਸ ਜਾਣ ਲਈ ਕਲਿੱਕ ਕਰੋ</translation>
 <translation id="8983038754672563810">HSPA</translation>
 <translation id="8987565828374052507">{NUMBER_OF_PAGES,plural, =0{ਸਕੈਨ ਕਰੋ}=1{{NUMBER_OF_PAGES} ਪੰਨਾ ਸਕੈਨ ਕਰੋ}other{{NUMBER_OF_PAGES} ਪੰਨੇ ਸਕੈਨ ਕਰੋ}}</translation>
 <translation id="89945434909472341">ਪਿੰਡ</translation>
 <translation id="8997710128084572139">ਡੀਵਾਈਸ ਦੀ ਬੈਟਰੀ ਦਾ ਪੱਧਰ <ph name="BATTERY_PERCENTAGE" />% ਹੈ।</translation>
+<translation id="8998002498898621320">ਵਾਸਤਵਿਕ ਫ਼ੋਟੋ</translation>
 <translation id="8998289560386111590">ਤੁਹਾਡੇ ਡੀਵਾਈਸ 'ਤੇ ਉਪਲਬਧ ਨਹੀਂ ਹੈ</translation>
 <translation id="9000871120886759611">ਇਹ ਪੱਕਾ ਕਰਨ ਲਈ ਰੀਸੈੱਟ ਕਰੋ ਕਿ ਤੁਸੀਂ ਆਪਣੀ ਤਰਜੀਹੀ ਭਾਸ਼ਾ ਵਿੱਚ ਜਾਣਕਾਰੀ ਤੱਕ ਪਹੁੰਚ ਕਰ ਸਕਦੇ ਹੋ। ਇਹ ਦੇਖੋ ਕਿ ਸਿਰਫ਼ ਤਰਜੀਹੀ ਭਾਸ਼ਾ ਦੀ ਹੀ ਵਰਤੋਂ ਕੀਤੀ ਜਾਵੇ।</translation>
 <translation id="9003499805101629690">ਪੀਜ਼ਾ</translation>
 <translation id="9003704114456258138">ਬਾਰੰਬਾਰਤਾ</translation>
+<translation id="9017411601860840405">ਨਿਓਨ ਲਾਈਟਾਂ</translation>
 <translation id="901834265349196618">ਈਮੇਲ</translation>
 <translation id="9022897536196898720">ਫੁੱਲ</translation>
 <translation id="9024331582947483881">ਫੁਲ ਸਕ੍ਰੀਨ</translation>

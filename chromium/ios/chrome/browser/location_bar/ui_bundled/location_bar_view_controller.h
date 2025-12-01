@@ -21,6 +21,7 @@
 @protocol ActivityServiceCommands;
 @protocol ApplicationCommands;
 @protocol BadgeViewVisibilityDelegate;
+@protocol BrowserCoordinatorCommands;
 @protocol ContextualPanelEntrypointVisibilityDelegate;
 @protocol FakeboxButtonsSnapshotProvider;
 @protocol HelpCommands;
@@ -28,6 +29,7 @@
 @protocol LensOverlayCommands;
 @protocol LocationBarOffsetProvider;
 @protocol LoadQueryCommands;
+@protocol PageActionMenuCommands;
 @protocol TextFieldViewContaining;
 class PrefService;
 namespace feature_engagement {
@@ -90,6 +92,7 @@ class Tracker;
 // The dispatcher for the share button, voice search, and long press actions.
 @property(nonatomic, weak) id<ActivityServiceCommands,
                               ApplicationCommands,
+                              BrowserCoordinatorCommands,
                               LoadQueryCommands,
                               LensCommands,
                               LensOverlayCommands,
@@ -115,10 +118,16 @@ class Tracker;
 // The help command handler.
 @property(nonatomic, weak) id<HelpCommands> helpCommandsHandler;
 
+// The page action menu handler.
+@property(nonatomic, weak) id<PageActionMenuCommands> pageActionMenuHandler;
+
 // An object to provide a snapshot of the fakebox buttons to be used during
 // focus and defocus transitions.
 @property(nonatomic, weak) id<FakeboxButtonsSnapshotProvider>
     fakeboxButtonsSnapshotProvider;
+
+// Whether Lens overlay is currently visible.
+@property(nonatomic, assign) BOOL lensOverlayVisible;
 
 // Sets the edit view to use in the editing state. This must be set before the
 // view of this view controller is initialized. This must only be called once.
@@ -174,6 +183,9 @@ class Tracker;
 
 // Records the lens overlay entrypoint availability in the location bar.
 - (void)recordLensOverlayAvailability;
+
+// Moves the focus of VoiceOver to the steady view.
+- (void)focusSteadyViewForVoiceOver;
 
 // Vivaldi
 @property(nonatomic, strong) UIColor* locationBarContainerColor;

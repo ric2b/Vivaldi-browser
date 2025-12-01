@@ -11,6 +11,7 @@
 #include "chrome/browser/contextual_cueing/contextual_cueing_page_data.h"
 #include "chrome/browser/contextual_cueing/contextual_cueing_service.h"
 #include "chrome/browser/contextual_cueing/contextual_cueing_service_factory.h"
+#include "chrome/browser/contextual_cueing/zero_state_suggestions_page_data.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -24,7 +25,7 @@
 #include "components/optimization_guide/core/optimization_guide_decider.h"
 #include "components/optimization_guide/core/optimization_metadata.h"
 #include "components/optimization_guide/proto/contextual_cueing_metadata.pb.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
@@ -79,15 +80,21 @@ ContextualCueingHelper::ContextualCueingHelper(
       content::WebContentsUserData<ContextualCueingHelper>(*web_contents),
       optimization_guide_keyed_service_(ogks),
       contextual_cueing_service_(ccs) {
-  // LINT.IfChange(OptType)
-  optimization_guide_keyed_service_->RegisterOptimizationTypes(
-      {optimization_guide::proto::GLIC_CONTEXTUAL_CUEING});
-  // LINT.ThenChange(//tools/metrics/histograms/metadata/contextual_cueing/histograms.xml:OptType)
+  if (base::FeatureList::IsEnabled(kContextualCueing)) {
+    // LINT.IfChange(OptType)
+    optimization_guide_keyed_service_->RegisterOptimizationTypes(
+        {optimization_guide::proto::GLIC_CONTEXTUAL_CUEING});
+    // LINT.ThenChange(//tools/metrics/histograms/metadata/contextual_cueing/histograms.xml:OptType)
+  }
 }
 
 ContextualCueingHelper::~ContextualCueingHelper() = default;
 
 tabs::GlicNudgeController* ContextualCueingHelper::GetGlicNudgeController() {
+  if (!base::FeatureList::IsEnabled(kContextualCueing)) {
+    return nullptr;
+  }
+
   Browser* browser = chrome::FindBrowserWithTab(web_contents());
   if (!browser) {
     return nullptr;
@@ -97,25 +104,81 @@ tabs::GlicNudgeController* ContextualCueingHelper::GetGlicNudgeController() {
 
 void ContextualCueingHelper::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsInMainFrame() || navigation_handle->IsErrorPage() ||
-      !navigation_handle->HasCommitted() ||
-      !navigation_handle->ShouldUpdateHistory()) {
+  // Ignore sub-frame and uncommitted navigations.
+  if (!navigation_handle->IsInPrimaryMainFrame()) {
     return;
   }
+  if (!navigation_handle->HasCommitted()) {
+    return;
+  }
+
+  last_same_doc_navigation_committed_ =
+      navigation_handle->IsSameDocument()
+          ? std::make_optional(base::TimeTicks::Now())
+          : std::nullopt;
+
+  // Ignore reloads.
   if (PageTransitionCoreTypeIs(navigation_handle->GetPageTransition(),
                                ui::PAGE_TRANSITION_RELOAD)) {
     return;
   }
-  contextual_cueing_service_->ReportPageLoad();
+
+  // Ignore fragment changes.
+  if (navigation_handle->GetPreviousPrimaryMainFrameURL().GetWithoutRef() ==
+      navigation_handle->GetURL().GetWithoutRef()) {
+    return;
+  }
+
+  // Reset FCP state.
+  has_first_contentful_paint_ = false;
+
+  // Clear zero state suggestions if needed.
+  if (base::FeatureList::IsEnabled(kGlicZeroStateSuggestions) &&
+      ZeroStateSuggestionsPageData::GetForPage(
+          web_contents()->GetPrimaryPage())) {
+    ZeroStateSuggestionsPageData::DeleteForPage(
+        web_contents()->GetPrimaryPage());
+  }
+
+  if (!base::FeatureList::IsEnabled(kContextualCueing)) {
+    return;
+  }
+
+  // Make sure we always clear the nudge label anyway despite operating on
+  // pages.
   auto* glic_nudge_controller = GetGlicNudgeController();
   if (glic_nudge_controller) {
     glic_nudge_controller->UpdateNudgeLabel(
         web_contents(), std::string(),
         tabs::GlicNudgeActivity::kNudgeIgnoredNavigation, base::DoNothing());
   }
+
+  // Do not report page loads for these types of navigations.
+  if (navigation_handle->IsErrorPage() ||
+      !navigation_handle->ShouldUpdateHistory()) {
+    return;
+  }
+
+  // We have already initiated nudging sequence for the page. Do not report page
+  // load.
+  if (ContextualCueingPageData::GetForPage(web_contents()->GetPrimaryPage())) {
+    return;
+  }
+
+  contextual_cueing_service_->ReportPageLoad();
 }
 
 void ContextualCueingHelper::PrimaryMainDocumentElementAvailable() {
+  if (!base::FeatureList::IsEnabled(kContextualCueing)) {
+    return;
+  }
+
+  // We have already initiated nudging sequence for the page. Do not see if we
+  // should nudge.
+  if (ContextualCueingPageData::GetForPage(web_contents()->GetPrimaryPage())) {
+    return;
+  }
+
   auto* glic_nudge_controller = GetGlicNudgeController();
   if (!glic_nudge_controller ||
       !web_contents()->GetLastCommittedURL().SchemeIsHTTPOrHTTPS()) {
@@ -127,6 +190,34 @@ void ContextualCueingHelper::PrimaryMainDocumentElementAvailable() {
       optimization_guide::proto::GLIC_CONTEXTUAL_CUEING,
       base::BindOnce(&ContextualCueingHelper::OnOptimizationGuideCueingMetadata,
                      weak_ptr_factory_.GetWeakPtr(), base::TimeTicks::Now()));
+}
+
+void ContextualCueingHelper::OnFirstContentfulPaintInPrimaryMainFrame() {
+  if (!base::FeatureList::IsEnabled(kGlicZeroStateSuggestions)) {
+    return;
+  }
+
+  has_first_contentful_paint_ = true;
+
+  ZeroStateSuggestionsPageData* page_data =
+      ZeroStateSuggestionsPageData::GetForPage(
+          web_contents()->GetPrimaryPage());
+  if (page_data) {
+    page_data->InitiatePageContentExtraction();
+  }
+}
+
+void ContextualCueingHelper::DocumentOnLoadCompletedInPrimaryMainFrame() {
+  if (!base::FeatureList::IsEnabled(kGlicZeroStateSuggestions)) {
+    return;
+  }
+
+  ZeroStateSuggestionsPageData* page_data =
+      ZeroStateSuggestionsPageData::GetForPage(
+          web_contents()->GetPrimaryPage());
+  if (page_data) {
+    page_data->InitiatePageContentExtraction();
+  }
 }
 
 void ContextualCueingHelper::OnOptimizationGuideCueingMetadata(
@@ -189,6 +280,11 @@ bool ContextualCueingHelper::IsBrowserBlockingNudges(
 #if BUILDFLAG(ENABLE_GLIC)
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  if (!glic::GlicEnabling::IsEnabledForProfile(profile)) {
+    return true;
+  }
+
   auto* glic_service =
       glic::GlicKeyedServiceFactory::GetGlicKeyedService(profile);
 
@@ -237,22 +333,22 @@ void ContextualCueingHelper::OnCueingDecision(
 // static
 void ContextualCueingHelper::MaybeCreateForWebContents(
     content::WebContents* web_contents) {
-  if (!base::FeatureList::IsEnabled(contextual_cueing::kContextualCueing)) {
+  if (!base::FeatureList::IsEnabled(contextual_cueing::kContextualCueing) &&
+      !base::FeatureList::IsEnabled(
+          contextual_cueing::kGlicZeroStateSuggestions)) {
     return;
   }
 
 #if BUILDFLAG(ENABLE_GLIC)
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  if (!glic::GlicEnabling::IsEnabledForProfile(profile)) {
+  if (!glic::GlicEnabling::IsProfileEligible(profile)) {
     return;
   }
 
   auto* optimization_guide_keyed_service =
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
-  if (!optimization_guide_keyed_service ||
-      !optimization_guide_keyed_service
-           ->ShouldModelExecutionBeAllowedForUser()) {
+  if (!optimization_guide_keyed_service) {
     return;
   }
 

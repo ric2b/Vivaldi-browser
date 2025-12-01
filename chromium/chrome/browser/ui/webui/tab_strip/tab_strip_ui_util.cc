@@ -15,11 +15,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
+#include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/webui/tab_strip/tab_strip_ui.h"
+#include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_id.h"
+#include "components/tabs/public/tab_group.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/custom_data_helper.h"
@@ -82,7 +84,16 @@ void MoveGroupAcrossWindows(Browser* source_browser,
     return;
   }
 
-  std::unique_ptr<DetachedTabGroup> detached_group =
+  tab_groups::TabGroupSyncService* tab_group_service =
+      tab_groups::SavedTabGroupUtils::GetServiceForProfile(
+          source_browser->profile());
+
+  std::unique_ptr<tab_groups::ScopedLocalObservationPauser> observation_pauser;
+  if (tab_group_service && tab_group_service->GetGroup(group_id)) {
+    observation_pauser = tab_group_service->CreateScopedLocalObserverPauser();
+  }
+
+  std::unique_ptr<DetachedTabCollection> detached_group =
       source_browser->tab_strip_model()->DetachTabGroupForInsertion(group_id);
   target_browser->tab_strip_model()->InsertDetachedTabGroupAt(
       std::move(detached_group), to_index);

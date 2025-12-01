@@ -76,6 +76,11 @@ class PLATFORM_EXPORT ExceptionState {
   // Throws a DOMException due to the given exception code.
   NOINLINE void ThrowDOMException(DOMExceptionCode, const String& message);
 
+  // Throws a constructed DOMException.
+  NOINLINE void ThrowDOMException(v8::Local<v8::Value> exception,
+                                  DOMExceptionCode code,
+                                  const String& message);
+
   // Throws a DOMException with SECURITY_ERR.
   NOINLINE void ThrowSecurityError(
       const String& sanitized_message,
@@ -84,6 +89,7 @@ class PLATFORM_EXPORT ExceptionState {
   // Throws an ECMAScript Error object.
   NOINLINE void ThrowRangeError(const String& message);
   NOINLINE void ThrowTypeError(const String& message);
+  NOINLINE void ThrowSyntaxError(const String& message);
 
   // Throws WebAssembly Error object.
   NOINLINE void ThrowWasmCompileError(const String& message);
@@ -98,6 +104,7 @@ class PLATFORM_EXPORT ExceptionState {
                                    const char* unsanitized_message = nullptr);
   NOINLINE void ThrowRangeError(const char* message);
   NOINLINE void ThrowTypeError(const char* message);
+  NOINLINE void ThrowSyntaxError(const char* message);
   NOINLINE void ThrowWasmCompileError(const char* message);
 
   // Report the given value as the exception being thrown, but rethrow it
@@ -109,6 +116,8 @@ class PLATFORM_EXPORT ExceptionState {
 
   // Returns the context of what Web API is currently being executed.
   const ExceptionContext& GetContext() const { return context_; }
+
+  v8::Isolate* GetIsolate() const { return isolate_; }
 
   ExceptionState& ReturnThis() { return *this; }
 
@@ -133,7 +142,7 @@ class PLATFORM_EXPORT ExceptionState {
   // Delegated constructor for DummyExceptionStateForTesting
   explicit ExceptionState(DummyExceptionStateForTesting& dummy_derived);
 
-  static constexpr ExceptionContext kEmptyContext;
+  static constexpr ExceptionContext kEmptyContext{};
 
  private:
   void SetExceptionInfo(ExceptionCode, const String&);
@@ -173,22 +182,6 @@ class PassThroughException {
 
  private:
   ExceptionState exception_state_;
-};
-
-class IgnoreException {
-  STACK_ALLOCATED();
-
- public:
-  explicit IgnoreException(v8::Isolate* isolate)
-      : exception_state_(nullptr), try_catch_(isolate) {}
-
-  operator ExceptionState&() & = delete;
-  // NOLINTNEXTLINE(google-explicit-constructor)
-  operator ExceptionState&() && { return exception_state_; }
-
- private:
-  ExceptionState exception_state_;
-  v8::TryCatch try_catch_;
 };
 
 // NonThrowableExceptionState never allow call sites to throw an exception.
@@ -248,8 +241,8 @@ class PLATFORM_EXPORT TryRethrowScope {
 // This can be used as a default value of an ExceptionState parameter like this:
 //
 //     Node* removeChild(Node*, ExceptionState& = IGNORE_EXCEPTION);
-#define IGNORE_EXCEPTION_FOR_TESTING \
-  (::blink::ExceptionState(nullptr).ReturnThis())
+#define IGNORE_EXCEPTION (::blink::ExceptionState(nullptr).ReturnThis())
+#define IGNORE_EXCEPTION_FOR_TESTING IGNORE_EXCEPTION
 
 // Syntax sugar for NonThrowableExceptionState.
 // This can be used as a default value of an ExceptionState parameter like this:
@@ -258,7 +251,7 @@ class PLATFORM_EXPORT TryRethrowScope {
 #if DCHECK_IS_ON()
 #define ASSERT_NO_EXCEPTION (::blink::NonThrowableExceptionState().ReturnThis())
 #else
-#define ASSERT_NO_EXCEPTION IGNORE_EXCEPTION_FOR_TESTING
+#define ASSERT_NO_EXCEPTION IGNORE_EXCEPTION
 #endif
 }  // namespace blink
 

@@ -1,17 +1,11 @@
 // Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
 
-#include "components/tabs/tab_helpers.h"
 
 #include "base/json/json_reader.h"
 #include "base/json/json_string_value_serializer.h"
 
-#include "chrome/browser/profiles/profile.h"
-
-#include "components/prefs/pref_service.h"
-
 #include "content/public/browser/web_contents.h"
-
-#include "vivaldi/prefs/vivaldi_gen_prefs.h"
+#include "components/tabs/tab_helpers.h"
 
 using content::WebContents;
 
@@ -35,7 +29,7 @@ bool ValueToJSONString(const base::Value& value, std::string& json_string) {
   return serializer.Serialize(value);
 }
 
-}
+} // namespace
 
 bool IsTabMuted(const WebContents* web_contents) {
   std::string viv_extdata = web_contents->GetVivExtData();
@@ -68,20 +62,6 @@ std::optional<double> GetTabWorkspaceId(const std::string& viv_extdata) {
   return value;
 }
 
-base::Value::List getLinkRoutes(content::WebContents* contents) {
-  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
-  PrefService* prefs = profile->GetPrefs();
-  base::Value::List link_routes =
-      prefs->GetList(vivaldiprefs::kWorkspacesLinkRoutes).Clone();
-  return link_routes;
-}
-
-bool IsWorkspacesEnabled(content::WebContents* contents) {
-  Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
-  PrefService* prefs = profile->GetPrefs();
-  return prefs->GetBoolean(vivaldiprefs::kWorkspacesEnabled);
-}
-
 bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
   auto viv_ext_data = contents->GetVivExtData();
   std::optional<base::Value> json = GetDictValueFromVivExtData(viv_ext_data);
@@ -101,5 +81,4 @@ bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id) {
   contents->SetVivExtData(json_string);
   return true;
 }
-
 }  // namespace vivaldi

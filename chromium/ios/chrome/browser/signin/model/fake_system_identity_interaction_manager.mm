@@ -147,7 +147,8 @@ BOOL gUsingUnknownCapabilities;
 - (void)startAuthActivityWithViewController:(UIViewController*)viewController
                                   userEmail:(NSString*)userEmail
                                  completion:(SigninCompletionBlock)completion {
-  DCHECK(completion);
+  CHECK(completion, base::NotFatalUntil::M140);
+  CHECK(viewController, base::NotFatalUntil::M140);
   _lastStartAuthActivityUserEmail = userEmail;
   if (userEmail.length) {
     [FakeSystemIdentityInteractionManager
@@ -203,7 +204,10 @@ BOOL gUsingUnknownCapabilities;
   if (identity) {
     FakeSystemIdentityManager* manager = _manager.get();
     if (manager) {
-      if (gUsingUnknownCapabilities) {
+      if (manager->ContainsIdentity(identity)) {
+        manager->ClearPersistentAuthErrorForAccount(
+            CoreAccountId::FromGaiaId(GaiaId(identity.gaiaID)));
+      } else if (gUsingUnknownCapabilities) {
         manager->AddIdentityWithUnknownCapabilities(identity);
       } else {
         manager->AddIdentity(identity);

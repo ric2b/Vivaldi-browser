@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
 import * as Platform from '../../core/platform/platform.js';
@@ -114,7 +116,7 @@ export class Layers3DView extends Common.ObjectWrapper.eventMixin<EventTypes, ty
   private readonly layerViewHost: LayerViewHost;
   private transformController: TransformController;
   private canvasElement: HTMLCanvasElement;
-  private lastSelection: {[x: string]: Selection|null};
+  private lastSelection: Record<string, Selection|null>;
   private layerTree: SDK.LayerTreeBase.LayerTreeBase|null;
   private readonly textureManager: LayerTextureManager;
   private chromeTextures: Array<WebGLTexture|undefined>;

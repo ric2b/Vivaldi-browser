@@ -711,7 +711,10 @@ angle::Result TextureVk::setImageImpl(const gl::Context *context,
                            unpackBuffer, pixels, vkFormat);
 }
 
-bool TextureVk::isFastUnpackPossible(const vk::Format &vkFormat,
+bool TextureVk::isFastUnpackPossible(const gl::Box &area,
+                                     GLuint rowLengthPixels,
+                                     GLuint imageHeightPixels,
+                                     const vk::Format &vkFormat,
                                      size_t offset,
                                      const vk::Format &bufferVkFormat) const
 {
@@ -725,6 +728,12 @@ bool TextureVk::isFastUnpackPossible(const vk::Format &vkFormat,
     //    to emulated depth/stencil.
     // 4. vkCmdCopyBufferToImage requires byte offset to be a multiple of 4.
     // 5. Actual texture format and intended buffer format must match for color formats
+    // 6. rowLengthPixels must not smaller than the width of the copy area.
+    // 7. imageHeight must not smaller than the height of the copy area.
+    if (!mImage->valid())
+    {
+        return false;
+    }
     const angle::Format &bufferFormat = vkFormat.getActualBufferFormat(false);
     const bool isCombinedDepthStencil = bufferFormat.hasDepthAndStencilBits();
     const bool isDepthXorStencil = bufferFormat.hasDepthOrStencilBits() && !isCombinedDepthStencil;
@@ -734,12 +743,14 @@ bool TextureVk::isFastUnpackPossible(const vk::Format &vkFormat,
     const bool formatsMatch = bufferFormat.hasDepthOrStencilBits() ||
                               (vkFormat.getActualImageFormatID(getRequiredImageAccess()) ==
                                bufferVkFormat.getIntendedFormatID());
+    const bool overlapRow   = rowLengthPixels < static_cast<uint32_t>(area.width);
+    const bool overlapImage = imageHeightPixels < static_cast<uint32_t>(area.height);
 
-    return mImage->valid() && !isCombinedDepthStencil &&
+    return !isCombinedDepthStencil &&
            (vkFormat.getIntendedFormatID() ==
                 vkFormat.getActualImageFormatID(getRequiredImageAccess()) ||
             (isDepthXorStencil && isCompatibleDepth)) &&
-           (offset % imageCopyAlignment) == 0 && formatsMatch;
+           (offset % imageCopyAlignment) == 0 && formatsMatch && !overlapRow && !overlapImage;
 }
 
 bool TextureVk::isMipImageDescDefined(gl::TextureTarget textureTarget, size_t level)
@@ -975,12 +986,20 @@ angle::Result TextureVk::clearSubImageImpl(const gl::Context *context,
 
     bool usesBufferForClear = false;
 
-    VkFormatFeatureFlags renderableCheckFlag =
+    const VkFormatFeatureFlags clearUpdateRequiredFeature =
         clearMode == vk::ClearTextureMode::FullClear ? VK_FORMAT_FEATURE_TRANSFER_DST_BIT
         : outputFormatInfo.isDepthOrStencil() ? VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
                                               : VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
-    if (vk::FormatHasNecessaryFeature(contextVk->getRenderer(), outputActualFormatID,
-                                      getTilingMode(), renderableCheckFlag))
+    const VkImageUsageFlags clearUpdateRequiredUsage =
+        clearMode == vk::ClearTextureMode::FullClear ? VK_IMAGE_USAGE_TRANSFER_DST_BIT
+        : outputFormatInfo.isDepthOrStencil()        ? VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+                                                     : VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    const bool formatFeaturesAllowClearUpdate =
+        vk::FormatHasNecessaryFeature(contextVk->getRenderer(), outputActualFormatID,
+                                      getTilingMode(), clearUpdateRequiredFeature);
+    const bool imageUsageAllowsClearUpdate =
+        (mImageUsageFlags & clearUpdateRequiredUsage) == clearUpdateRequiredUsage;
+    if (formatFeaturesAllowClearUpdate && imageUsageAllowsClearUpdate)
     {
         uint32_t baseLayer  = useLayerAsDepth ? clearArea.z : 0;
         uint32_t layerCount = useLayerAsDepth ? clearArea.depth : 1;
@@ -1100,6 +1119,78 @@ angle::Result TextureVk::ensureImageInitializedIfUpdatesNeedStageOrFlush(
     return angle::Result::Continue;
 }
 
+angle::Result TextureVk::ghostOnOverwrite(ContextVk *contextVk,
+                                          const gl::ImageIndex &index,
+                                          const gl::Box &area)
+{
+    // If the texture's image is in use by the GPU but is overwritten completely, release the old
+    // image and create a fresh one.  If the texture was used in a render pass, this avoids breaking
+    // the render pass.  Otherwise, it allows the new image to be initialized with
+    // VK_EXT_host_image_copy functionality.  In the very least, an unnecessary ?->Transfer barrier
+    // is avoided.
+
+    // Can't ghost the image if it's not owned by this texture.  For simplicity, also don't ghost
+    // images if it's the target of an EGL image; this avoids the need to have to get the image
+    // siblings to sync their ImageHelper pointers (http://anglebug.com/410584007).  This limitation
+    // can likely be more easily lifted once http://anglebug.com/352005188 is implemented.
+    //
+    // If the allocateNonZeroMemory feature is enabled, the image's memory is going to be
+    // initialized which puts the image back in GPU use so there's no point in ghosting the image
+    // either.
+    vk::Renderer *renderer = contextVk->getRenderer();
+    if (!mOwnsImage || mImage == nullptr || !mImage->valid() || mImage->isForeignImage() ||
+        mState.hasBeenBoundAsSourceOfEglImage() || mState.isExternalMemoryTexture() ||
+        renderer->getFeatures().allocateNonZeroMemory.enabled)
+    {
+        return angle::Result::Continue;
+    }
+
+    // Only ghost the image if it's in use by the GPU.
+    if (renderer->hasResourceUseFinished(mImage->getResourceUse()))
+    {
+        return angle::Result::Continue;
+    }
+
+    // Size check: Can only ghost the image if the area being overwritten covers the entire image.
+    //
+    // As a targeted optimization, only limit to non-array 2D color textures.  Other texture types
+    // can be very easily added if need, but need additional tests similar to those that have landed
+    // in http://anglebug.com/42265356 for 2D textures.
+    const gl::LevelIndex overwriteLevel = gl::LevelIndex(index.getLevelIndex());
+    const gl::LevelIndex imageLevel     = mImage->getFirstAllocatedLevel();
+
+    const bool is2DImage = mImage->getLevelCount() == 1 && mImage->getLayerCount() == 1 &&
+                           mImage->getType() == VK_IMAGE_TYPE_2D;
+    const bool is2DUpdate  = mState.getType() == gl::TextureType::_2D && index.getLayerCount() == 1;
+    const bool isWholeArea = area.x == 0 && area.y == 0 && area.z == 0 &&
+                             mImage->getExtents().width == static_cast<uint32_t>(area.width) &&
+                             mImage->getExtents().height == static_cast<uint32_t>(area.height) &&
+                             mImage->getExtents().depth == static_cast<uint32_t>(area.depth);
+    const bool isColor = mImage->getAspectFlags() == VK_IMAGE_ASPECT_COLOR_BIT;
+
+    if (!is2DImage || !is2DUpdate || overwriteLevel != imageLevel || !isWholeArea || !isColor)
+    {
+        return angle::Result::Continue;
+    }
+
+    const vk::Format &format = getBaseLevelFormat(renderer);
+
+    // Since the entire image is being overwritten, there's no reason to keep the previous contents
+    // of the image around.  Just start over with a completely new image; data is about to be
+    // uploaded to it.
+    releaseImage(contextVk);
+    ANGLE_TRY(ensureImageAllocated(contextVk, format));
+    ANGLE_TRY(initImage(contextVk, format.getIntendedFormatID(),
+                        format.getActualImageFormatID(getRequiredImageAccess()),
+                        ImageMipLevels::EnabledLevels));
+
+    // The new image is now ready to be used with no dependency to the texture's previous use.  Note
+    // that |releaseimage| already includes a notification to observers that the image has changed.
+    ASSERT(renderer->hasResourceUseFinished(mImage->getResourceUse()));
+
+    return angle::Result::Continue;
+}
+
 angle::Result TextureVk::setSubImageImpl(const gl::Context *context,
                                          const gl::ImageIndex &index,
                                          const gl::Box &area,
@@ -1111,6 +1202,8 @@ angle::Result TextureVk::setSubImageImpl(const gl::Context *context,
                                          const vk::Format &vkFormat)
 {
     ContextVk *contextVk = vk::GetImpl(context);
+
+    ANGLE_TRY(ghostOnOverwrite(contextVk, index, area));
 
     bool mustStage = updateMustBeStaged(gl::LevelIndex(index.getLevelIndex()),
                                         vkFormat.getActualImageFormatID(getRequiredImageAccess()));
@@ -1162,24 +1255,25 @@ angle::Result TextureVk::setSubImageImpl(const gl::Context *context,
         const vk::Format &bufferVkFormat =
             contextVk->getRenderer()->getFormat(formatInfo.sizedInternalFormat);
 
-        if (shouldUpdateBeFlushed(gl::LevelIndex(index.getLevelIndex()),
-                                  vkFormat.getActualImageFormatID(getRequiredImageAccess())) &&
-            isFastUnpackPossible(vkFormat, offsetBytes, bufferVkFormat))
+        GLuint pixelSize   = formatInfo.pixelBytes;
+        GLuint blockWidth  = formatInfo.compressedBlockWidth;
+        GLuint blockHeight = formatInfo.compressedBlockHeight;
+        if (!formatInfo.compressed)
         {
-            GLuint pixelSize   = formatInfo.pixelBytes;
-            GLuint blockWidth  = formatInfo.compressedBlockWidth;
-            GLuint blockHeight = formatInfo.compressedBlockHeight;
-            if (!formatInfo.compressed)
-            {
-                pixelSize   = formatInfo.computePixelBytes(type);
-                blockWidth  = 1;
-                blockHeight = 1;
-            }
-            ASSERT(pixelSize != 0 && inputRowPitch != 0 && blockWidth != 0 && blockHeight != 0);
+            pixelSize   = formatInfo.computePixelBytes(type);
+            blockWidth  = 1;
+            blockHeight = 1;
+        }
+        ASSERT(pixelSize != 0 && inputRowPitch != 0 && blockWidth != 0 && blockHeight != 0);
 
-            GLuint rowLengthPixels   = inputRowPitch / pixelSize * blockWidth;
-            GLuint imageHeightPixels = inputDepthPitch / inputRowPitch * blockHeight;
+        GLuint rowLengthPixels   = inputRowPitch / pixelSize * blockWidth;
+        GLuint imageHeightPixels = inputDepthPitch / inputRowPitch * blockHeight;
 
+        if ((shouldUpdateBeFlushed(gl::LevelIndex(index.getLevelIndex()),
+                                   vkFormat.getActualImageFormatID(getRequiredImageAccess()))) &&
+            isFastUnpackPossible(area, rowLengthPixels, imageHeightPixels, vkFormat, offsetBytes,
+                                 bufferVkFormat))
+        {
             ANGLE_TRY(copyBufferDataToImage(contextVk, &bufferHelper, index, rowLengthPixels,
                                             imageHeightPixels, area, offsetBytes, aspectFlags));
         }
@@ -1192,7 +1286,7 @@ angle::Result TextureVk::setSubImageImpl(const gl::Context *context,
 
             void *mapPtr = nullptr;
 
-            ANGLE_TRY(unpackBufferVk->mapImpl(contextVk, GL_MAP_READ_BIT, &mapPtr));
+            ANGLE_TRY(unpackBufferVk->mapForReadAccessOnly(contextVk, &mapPtr));
 
             const uint8_t *source =
                 static_cast<const uint8_t *>(mapPtr) + reinterpret_cast<ptrdiff_t>(pixels);
@@ -1204,7 +1298,7 @@ angle::Result TextureVk::setSubImageImpl(const gl::Context *context,
                 getRequiredImageAccess(), inputRowPitch, inputDepthPitch, inputSkipBytes,
                 applyUpdate, &updateAppliedImmediately));
 
-            ANGLE_TRY(unpackBufferVk->unmapImpl(contextVk));
+            ANGLE_TRY(unpackBufferVk->unmapReadAccessOnly(contextVk));
         }
     }
     else if (pixels)
@@ -2292,7 +2386,9 @@ void TextureVk::releaseAndDeleteImageAndViews(ContextVk *contextVk)
     mDescriptorSetCacheManager.releaseKeys(contextVk->getRenderer());
 }
 
-void TextureVk::initImageUsageFlags(ContextVk *contextVk, angle::FormatID actualFormatID)
+void TextureVk::initImageUsageFlags(ContextVk *contextVk,
+                                    const angle::Format &intendedFormat,
+                                    angle::FormatID actualFormatID)
 {
     ASSERT(actualFormatID != angle::FormatID::NONE);
 
@@ -2318,7 +2414,13 @@ void TextureVk::initImageUsageFlags(ContextVk *contextVk, angle::FormatID actual
     else if (renderer->hasImageFormatFeatureBits(actualFormatID,
                                                  VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT))
     {
-        mImageUsageFlags |= kColorAttachmentImageFlags;
+        // If the intended format is not renderable, don't add color attachment flags even if the
+        // fallback format is.  This way, the image is more likely to be usable with
+        // VK_EXT_host_image_copy.
+        if (!intendedFormat.isLUMA() || mRequiredImageAccess == vk::ImageAccess::Renderable)
+        {
+            mImageUsageFlags |= kColorAttachmentImageFlags;
+        }
     }
 }
 
@@ -2330,7 +2432,8 @@ angle::Result TextureVk::ensureImageAllocated(ContextVk *contextVk, const vk::Fo
                        {});
     }
 
-    initImageUsageFlags(contextVk, format.getActualImageFormatID(getRequiredImageAccess()));
+    initImageUsageFlags(contextVk, format.getIntendedFormat(),
+                        format.getActualImageFormatID(getRequiredImageAccess()));
 
     return angle::Result::Continue;
 }
@@ -2715,10 +2818,16 @@ angle::Result TextureVk::generateMipmap(const gl::Context *context)
     vk::LevelIndex maxLevel  = mImage->toVkLevel(gl::LevelIndex(mState.getMipmapMaxLevel()));
     ASSERT(maxLevel != vk::LevelIndex(0));
 
-    if (getImageViews().hasColorspaceOverrideForWrite(*mImage))
+    const bool colorspaceOverrideForRead  = getImageViews().hasColorspaceOverrideForRead(*mImage);
+    const bool colorspaceOverrideForWrite = getImageViews().hasColorspaceOverrideForWrite(*mImage);
+
+    if (colorspaceOverrideForRead || colorspaceOverrideForWrite)
     {
         angle::FormatID actualFormatID =
-            getImageViews().getColorspaceOverrideFormatForWrite(mImage->getActualFormatID());
+            colorspaceOverrideForRead
+                ? getImageViews().getColorspaceOverrideFormatForRead(mImage->getActualFormatID())
+                : getImageViews().getColorspaceOverrideFormatForWrite(mImage->getActualFormatID());
+
         return contextVk->getUtils().generateMipmapWithDraw(
             contextVk, mImage, actualFormatID,
             gl::IsMipmapFiltered(mState.getSamplerState().getMinFilter()));
@@ -4001,10 +4110,13 @@ angle::Result TextureVk::initImage(ContextVk *contextVk,
                 &perfQuery, vk::ImageHelper::FormatSupportCheck::OnlyQuerySuccess))
         {
             // Only enable it if it has no performance impact whatsoever (or impact is tiny, given
-            // feature).
+            // feature).  For luminance/alpha formats, on some platforms it's known to be an overall
+            // win despite non-optimal layout.
+            const bool isLUMA = angle::Format::Get(intendedImageFormatID).isLUMA();
             if (perfQuery.identicalMemoryLayout ||
                 (perfQuery.optimalDeviceAccess &&
-                 renderer->getFeatures().allowHostImageCopyDespiteNonIdenticalLayout.enabled))
+                 renderer->getFeatures().allowHostImageCopyDespiteNonIdenticalLayout.enabled) ||
+                (isLUMA && renderer->getFeatures().forceHostImageCopyForLuma.enabled))
             {
                 mImageUsageFlags |= VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT;
             }
@@ -4564,9 +4676,13 @@ angle::Result TextureVk::ensureRenderableWithFormat(ContextVk *contextVk,
         return angle::Result::Continue;
     }
 
-    // luminance/alpha format never fallback for rendering and if we ever do fallback, the
-    // following code may not handle it properly.
-    ASSERT(!format.getIntendedFormat().isLUMA());
+    // If luminance/alpha formats ever fall back for rendering, it would only be because the
+    // color attachment usage isn't specified by default.  The following wouldn't actually change
+    // the format of the LUMA image because it's always emulated with a renderable format.  If
+    // Vulkan ever introduces a LUMA format that ANGLE uses, the following code may not handle it
+    // properly.
+    ASSERT(!format.getIntendedFormat().isLUMA() ||
+           (mImageUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == 0);
 
     angle::FormatID previousActualFormatID =
         format.getActualImageFormatID(vk::ImageAccess::SampleOnly);

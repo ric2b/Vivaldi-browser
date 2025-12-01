@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -46,12 +47,13 @@ import type * as HAR from '../../models/har/har.js';
 import * as Logs from '../../models/logs/logs.js';
 import * as Workspace from '../../models/workspace/workspace.js';
 import * as NetworkForward from '../../panels/network/forward/forward.js';
-import * as FloatingButton from '../../ui/components/floating_button/floating_button.js';
+import * as Buttons from '../../ui/components/buttons/buttons.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as DataGrid from '../../ui/legacy/components/data_grid/data_grid.js';
 import * as PerfUI from '../../ui/legacy/components/perf_ui/perf_ui.js';
 import * as Components from '../../ui/legacy/components/utils/utils.js';
 import * as UI from '../../ui/legacy/legacy.js';
+import {render} from '../../ui/lit/lit.js';
 import {PanelUtils} from '../utils/utils.js';
 
 import type {NetworkTimeCalculator} from './NetworkTimeCalculator.js';
@@ -189,6 +191,19 @@ const UIStrings = {
    *@description Text of a DOM element in Network Data Grid Node of the Network panel
    */
   serviceWorker: '(`ServiceWorker`)',
+  /**
+   *@description Cell title in Network Data Grid Node of the Network panel
+   *@example {4 B} PH1
+   *@example {10 B} PH2
+   */
+  servedFromNetwork: '{PH1} transferred over network, resource size: {PH2}',
+  /**
+   *@description Cell title in Network Data Grid Node of the Network panel
+   *@example {4 B} PH1
+   *@example {10 B} PH2
+   */
+  servedFromNetworkMissingServiceWorkerRoute:
+      '{PH1} transferred over network, resource size: {PH2}, no matching ServiceWorker routes',
   /**
    *@description Cell title in Network Data Grid Node of the Network panel
    *@example {4 B} PH1
@@ -537,9 +552,7 @@ export class NetworkNode extends DataGrid.SortableDataGrid.SortableDataGridNode<
   }
 }
 
-export const _backgroundColors: {
-  [x: string]: string,
-} = {
+export const _backgroundColors: Record<string, string> = {
   Default: '--color-grid-default',
   Stripe: '--color-grid-stripe',
   Navigation: '--network-grid-navigation-color',
@@ -554,7 +567,6 @@ export const _backgroundColors: {
 };
 
 export class NetworkRequestNode extends NetworkNode {
-  private nameCell: Element|null;
   private initiatorCell: Element|null;
   private requestInternal: SDK.NetworkRequest.NetworkRequest;
   private readonly isNavigationRequestInternal: boolean;
@@ -565,7 +577,6 @@ export class NetworkRequestNode extends NetworkNode {
 
   constructor(parentView: NetworkLogViewInterface, request: SDK.NetworkRequest.NetworkRequest) {
     super(parentView);
-    this.nameCell = null;
     this.initiatorCell = null;
     this.requestInternal = request;
     this.isNavigationRequestInternal = false;
@@ -911,7 +922,6 @@ export class NetworkRequestNode extends NetworkNode {
   }
 
   override createCells(element: Element): void {
-    this.nameCell = null;
     this.initiatorCell = null;
 
     element.classList.toggle('network-warning-row', this.isWarning());
@@ -1085,7 +1095,6 @@ export class NetworkRequestNode extends NetworkNode {
       const leftPadding = this.leftPadding ? this.leftPadding + 'px' : '';
       cell.style.setProperty('padding-left', leftPadding);
       cell.tabIndex = -1;
-      this.nameCell = cell;
       cell.addEventListener('dblclick', this.openInNewTab.bind(this), false);
       cell.addEventListener('mousedown', () => {
         // When the request panel isn't visible yet, firing the RequestActivated event
@@ -1097,7 +1106,8 @@ export class NetworkRequestNode extends NetworkNode {
 
       // render icons
       const iconElement = PanelUtils.getIconForNetworkRequest(this.requestInternal);
-      cell.appendChild(iconElement);
+      // eslint-disable-next-line rulesdir/no-lit-render-outside-of-view
+      render(iconElement, cell);
 
       // render Ask AI button
       const aiButtonContainer = this.createAiButtonIfAvailable();
@@ -1109,12 +1119,9 @@ export class NetworkRequestNode extends NetworkNode {
     if (columnId === 'name') {
       const webBundleInnerRequestInfo = this.requestInternal.webBundleInnerRequestInfo();
       if (webBundleInnerRequestInfo) {
-        const iconData = {
-          iconName: 'bundle',
-          color: 'var(--icon-info)',
-        };
-        const secondIconElement = PanelUtils.createIconElement(iconData, i18nString(UIStrings.webBundleInnerRequest));
-        secondIconElement.classList.add('icon');
+        const secondIconElement = IconButton.Icon.create('bundle', 'icon');
+        secondIconElement.style.color = 'var(--icon-info)';
+        secondIconElement.title = i18nString(UIStrings.webBundleInnerRequest);
 
         const networkManager = SDK.NetworkManager.NetworkManager.forRequest(this.requestInternal);
         if (webBundleInnerRequestInfo.bundleRequestId && networkManager) {
@@ -1238,6 +1245,8 @@ export class NetworkRequestNode extends NetworkNode {
       const statusText = this.requestInternal.getInferredStatusText();
       this.appendSubtitle(cell, statusText);
       UI.Tooltip.Tooltip.install(cell, this.requestInternal.statusCode + ' ' + statusText);
+    } else if (this.requestInternal.statusText) {
+      this.setTextAndTitle(cell, this.requestInternal.statusText);
     } else if (this.requestInternal.finished) {
       this.setTextAndTitle(cell, i18nString(UIStrings.finished));
     } else if (this.requestInternal.preserved) {
@@ -1406,13 +1415,13 @@ export class NetworkRequestNode extends NetworkNode {
       UI.UIUtils.createTextChild(cell, i18nString(UIStrings.memoryCache));
       UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.servedFromMemoryCacheResource, {PH1: resourceSize}));
       cell.classList.add('network-dim-cell');
-    } else if (this.requestInternal.serviceWorkerRouterInfo) {
-      const {serviceWorkerRouterInfo} = this.requestInternal;
-      // If `serviceWorkerRouterInfo.ruleIdMatched` is undefined,store 0 to indicate invalid ID.
-      const ruleIdMatched = serviceWorkerRouterInfo.ruleIdMatched ?? 0;
+    } else if (this.requestInternal.hasMatchingServiceWorkerRouter()) {
+      const ruleIdMatched = this.requestInternal.serviceWorkerRouterInfo?.ruleIdMatched as number;
+      const matchedSourceType =
+          this.requestInternal.serviceWorkerRouterInfo?.matchedSourceType as Protocol.Network.ServiceWorkerRouterSource;
       UI.UIUtils.createTextChild(cell, i18n.i18n.lockedString('(ServiceWorker router)'));
       let tooltipText;
-      if (serviceWorkerRouterInfo.matchedSourceType === Protocol.Network.ServiceWorkerRouterSource.Network) {
+      if (matchedSourceType === Protocol.Network.ServiceWorkerRouterSource.Network) {
         const transferSize = i18n.ByteUtilities.formatBytesToKb(this.requestInternal.transferSize);
         tooltipText = i18nString(
             UIStrings.matchedToServiceWorkerRouterWithNetworkSource,
@@ -1422,6 +1431,14 @@ export class NetworkRequestNode extends NetworkNode {
       }
       UI.Tooltip.Tooltip.install(cell, tooltipText);
       cell.classList.add('network-dim-cell');
+    } else if (this.requestInternal.serviceWorkerRouterInfo) {
+      // ServiceWorker routers are registered, but the request fallbacks to network
+      // because no matching router rules found.
+      const transferSize = i18n.ByteUtilities.formatBytesToKb(this.requestInternal.transferSize);
+      UI.UIUtils.createTextChild(cell, transferSize);
+      UI.Tooltip.Tooltip.install(
+          cell,
+          i18nString(UIStrings.servedFromNetworkMissingServiceWorkerRoute, {PH1: transferSize, PH2: resourceSize}));
     } else if (this.requestInternal.fetchedViaServiceWorker) {
       UI.UIUtils.createTextChild(cell, i18nString(UIStrings.serviceWorker));
       UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.servedFromServiceWorkerResource, {PH1: resourceSize}));
@@ -1445,7 +1462,7 @@ export class NetworkRequestNode extends NetworkNode {
     } else {
       const transferSize = i18n.ByteUtilities.formatBytesToKb(this.requestInternal.transferSize);
       UI.UIUtils.createTextChild(cell, transferSize);
-      UI.Tooltip.Tooltip.install(cell, `${transferSize} transferred over network, resource size: ${resourceSize}`);
+      UI.Tooltip.Tooltip.install(cell, i18nString(UIStrings.servedFromNetwork, {PH1: transferSize, PH2: resourceSize}));
     }
     this.appendSubtitle(cell, resourceSize);
   }
@@ -1482,10 +1499,7 @@ export class NetworkRequestNode extends NetworkNode {
       const action = UI.ActionRegistry.ActionRegistry.instance().getAction('drjones.network-floating-button');
       const aiButtonContainer = document.createElement('span');
       aiButtonContainer.classList.add('ai-button-container');
-      const floatingButton = new FloatingButton.FloatingButton.FloatingButton({
-        title: action.title(),
-        iconName: 'smart-assistant',
-      });
+      const floatingButton = Buttons.FloatingButton.create('smart-assistant', action.title());
       floatingButton.addEventListener('click', ev => {
         ev.stopPropagation();
         this.select();

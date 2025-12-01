@@ -82,7 +82,6 @@ class KioskChromeAppOfflineNetworkPromptTest
       public testing::WithParamInterface<PolicyValue> {
  public:
   KioskChromeAppOfflineNetworkPromptTest() = default;
-
   KioskChromeAppOfflineNetworkPromptTest(
       const KioskChromeAppOfflineNetworkPromptTest&) = delete;
   KioskChromeAppOfflineNetworkPromptTest& operator=(

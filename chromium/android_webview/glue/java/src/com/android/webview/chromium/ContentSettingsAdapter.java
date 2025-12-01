@@ -25,7 +25,7 @@ import org.chromium.base.TraceEvent;
 @SuppressWarnings({"deprecation", "NoSynchronizedMethodCheck"})
 public class ContentSettingsAdapter extends android.webkit.WebSettings {
     private static final String TAG = "WebSettings";
-    private AwSettings mAwSettings;
+    private final AwSettings mAwSettings;
     private PluginState mPluginState = PluginState.OFF;
 
     public ContentSettingsAdapter(AwSettings awSettings) {
@@ -712,11 +712,7 @@ public class ContentSettingsAdapter extends android.webkit.WebSettings {
 
     @Override
     public synchronized void setDatabaseEnabled(boolean flag) {
-        try (TraceEvent event =
-                TraceEvent.scoped("WebView.APICall.Framework.WEB_SETTINGS_SET_DATABASE_ENABLED")) {
-            WebViewChromium.recordWebViewApiCall(ApiCall.WEB_SETTINGS_SET_DATABASE_ENABLED);
-            mAwSettings.setDatabaseEnabled(flag);
-        }
+        // Intentional no-op.
     }
 
     @Override
@@ -747,11 +743,8 @@ public class ContentSettingsAdapter extends android.webkit.WebSettings {
 
     @Override
     public synchronized boolean getDatabaseEnabled() {
-        try (TraceEvent event =
-                TraceEvent.scoped("WebView.APICall.Framework.WEB_SETTINGS_GET_DATABASE_ENABLED")) {
-            WebViewChromium.recordWebViewApiCall(ApiCall.WEB_SETTINGS_GET_DATABASE_ENABLED);
-            return mAwSettings.getDatabaseEnabled();
-        }
+        // Intentional no-op.
+        return false;
     }
 
     @Override

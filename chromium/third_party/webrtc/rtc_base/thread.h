@@ -366,7 +366,7 @@ class RTC_LOCKABLE RTC_EXPORT Thread : public TaskQueueBase {
   // These functions are public to avoid injecting test hooks. Don't call them
   // outside of tests.
   // This method should be called when thread is created using non standard
-  // method, like derived implementation of rtc::Thread and it can not be
+  // method, like derived implementation of webrtc::Thread and it can not be
   // started by calling Start(). This will set started flag to true and
   // owned to false. This must be called from the current thread.
   bool WrapCurrent();
@@ -568,11 +568,13 @@ class AutoSocketServerThread : public Thread {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::AutoSocketServerThread;
 using ::webrtc::AutoThread;
 using ::webrtc::Thread;
 using ::webrtc::ThreadManager;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_THREAD_H_

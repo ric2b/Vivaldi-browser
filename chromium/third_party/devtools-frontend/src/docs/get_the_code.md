@@ -167,7 +167,14 @@ to run in Chrome Canary instead of Chrome for Testing; this requires you to inst
 npm start -- http://www.example.com
 ```
 
-to automatically open `http://www.example.com` in the newly spawned Chrome tab.
+to automatically open `http://www.example.com` in the newly spawned Chrome tab. Use
+
+```bash
+npm start -- --verbose
+```
+
+to enable verbose logging, which among other things, also prints all output from Chrome to the terminal, which is
+otherwise suppressed.
 
 
 ##### Controlling the feature set
@@ -191,6 +198,24 @@ npm start -- --disable-features=DevToolsWellKnown --enable-features=DevToolsFree
 ```
 
 which you can use to override the default feature set.
+
+##### Remote debugging
+
+The `npm start` command also supports launching Chrome for remote debugging via
+
+```bash
+npm start -- --remote-debugging-port=9222
+```
+
+or
+
+```bash
+npm start -- --browser=canary --remote-debugging-port=9222 --user-data-dir=\`mktemp -d`
+```
+
+Note that you have to also pass the `--user-data-dir` and point it to a non-standard profile directory (a freshly created
+temporary directory in this example) for security reason when using any Chrome version except for Chrome for Testing.
+[This article](https://developer.chrome.com/blog/remote-debugging-port) explains the reasons behind it.
 
 #### Running from file system
 

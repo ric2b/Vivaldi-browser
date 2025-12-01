@@ -62,6 +62,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
             content::IdentityProviderMetadata(),
             CreateTestClientMetadata(),
             blink::mojom::RpContext::kSignIn,
+            /*format=*/std::nullopt,
             kDefaultDisclosureFields,
             /*has_login_status_mismatch=*/false)) {
     test_shared_url_loader_factory_ =
@@ -85,8 +86,9 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
         delegate_.get(), browser()->GetActiveTabInterface(),
         test_shared_url_loader_factory_);
     account_selection_view_->ShowLoadingDialog(
-        base::UTF16ToASCII(kRpETLDPlusOne), base::UTF16ToASCII(kIdpETLDPlusOne),
-        blink::mojom::RpContext::kSignIn, blink::mojom::RpMode::kActive);
+        content::RelyingPartyData(kRpETLDPlusOne, iframe_for_display_),
+        base::UTF16ToASCII(kIdpETLDPlusOne), blink::mojom::RpContext::kSignIn,
+        blink::mojom::RpMode::kActive);
     dialog_ = static_cast<AccountSelectionModalView*>(
         account_selection_view_->account_selection_view());
 
@@ -108,10 +110,16 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
 
   void CreateAndShowMultiAccountPicker(
       const std::vector<std::string>& account_suffixes,
+      bool has_display_identifier,
       bool supports_add_account = false) {
     idp_data_->idp_metadata.supports_add_account = supports_add_account;
     account_list_ =
         CreateTestIdentityRequestAccounts(account_suffixes, idp_data_);
+    if (!has_display_identifier) {
+      for (auto& account : account_list_) {
+        account->display_identifier = "";
+      }
+    }
 
     CreateAccountSelectionModal();
     dialog_->ShowMultiAccountPicker(account_list_, {idp_data_},
@@ -130,6 +138,10 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
 
   void CreateAndShowVerifyingSheet() {
     CreateAccountSelectionModal();
+    ShowVerifyingSheet();
+  }
+
+  void ShowVerifyingSheet() {
     const std::string kAccountSuffix = "suffix";
     IdentityRequestAccountPtr account(CreateTestIdentityRequestAccount(
         kAccountSuffix, idp_data_,
@@ -159,8 +171,13 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
     EXPECT_FALSE(dialog()->GetOkButton());
     EXPECT_FALSE(dialog()->GetCancelButton());
 
+    bool has_subtitle = !iframe_for_display_.empty();
+
     // Order: Brand icon, title and body for non loading UI.
     std::vector<std::string> expected_class_names = {"View", "Label"};
+    if (has_subtitle) {
+      expected_class_names.push_back("Label");
+    }
     bool is_loading_dialog =
         !expect_visible_idp_icon && !expect_visible_combined_icons;
     if (!is_loading_dialog) {
@@ -260,11 +277,27 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
     // Check title text.
     views::Label* title_view = static_cast<views::Label*>(header_children[1]);
     ASSERT_TRUE(title_view);
-    EXPECT_EQ(title_view->GetText(), kTitleSignIn);
+    if (has_subtitle) {
+      EXPECT_EQ(title_view->GetText(), kTitleIframeSignIn);
+      EXPECT_EQ(dialog()->GetDialogTitle(),
+                base::UTF16ToUTF8(kTitleIframeSignIn));
+
+      views::Label* subtitle_view =
+          static_cast<views::Label*>(header_children[2]);
+      ASSERT_TRUE(subtitle_view);
+      EXPECT_EQ(subtitle_view->GetText(), kSubtitleIframeSignIn);
+      EXPECT_EQ(dialog()->GetDialogSubtitle(),
+                base::UTF16ToUTF8(kSubtitleIframeSignIn));
+    } else {
+      EXPECT_EQ(title_view->GetText(), kTitleSignIn);
+      EXPECT_EQ(dialog()->GetDialogTitle(), base::UTF16ToUTF8(kTitleSignIn));
+      EXPECT_EQ(dialog()->GetDialogSubtitle(), std::nullopt);
+    }
 
     if (!is_loading_dialog) {
       // Check body text.
-      views::Label* body_view = static_cast<views::Label*>(header_children[2]);
+      views::Label* body_view =
+          static_cast<views::Label*>(header_children[has_subtitle ? 3 : 2]);
       ASSERT_TRUE(body_view);
       EXPECT_EQ(body_view->GetText(), kBodySignIn);
       EXPECT_EQ(body_view->GetVisible(), expect_visible_body_label_);
@@ -375,7 +408,9 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
 
   void TestMultipleAccounts(bool supports_add_account = false) {
     const std::vector<std::string> kAccountSuffixes = {"0", "1", "2"};
-    CreateAndShowMultiAccountPicker(kAccountSuffixes, supports_add_account);
+    CreateAndShowMultiAccountPicker(kAccountSuffixes,
+                                    /*has_display_identifier=*/true,
+                                    supports_add_account);
 
     std::vector<raw_ptr<views::View, VectorExperimental>> children =
         dialog()->children();
@@ -410,6 +445,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
   }
 
   void TestRequestPermission(
+      bool has_display_identifier,
       content::IdentityRequestAccount::LoginState login_state =
           content::IdentityRequestAccount::LoginState::kSignUp,
       const std::string& idp_brand_icon_url = kIdpBrandIconUrl,
@@ -427,6 +463,9 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
     }
     IdentityRequestAccountPtr account(CreateTestIdentityRequestAccount(
         kAccountSuffix, idp_data_, login_state));
+    if (!has_display_identifier) {
+      account->display_identifier = "";
+    }
     CreateAndShowRequestPermissionDialog(*account);
 
     std::vector<raw_ptr<views::View, VectorExperimental>> children =
@@ -455,7 +494,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
                 testing::ElementsAreArray(expected_class_names));
 
     CheckNonHoverableAccountRow(single_account_chooser->children()[0],
-                                kAccountSuffix);
+                                kAccountSuffix, has_display_identifier);
     if (!is_returning_user) {
       views::View* disclosure_text_view = single_account_chooser->children()[1];
       CheckDisclosureText(disclosure_text_view,
@@ -616,6 +655,7 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
         ++accounts_index;
       }
       CheckHoverableAccountRow(accounts[accounts_index++], account_suffix,
+                               /*has_display_identifier=*/true,
                                /*expect_idp=*/false, /*is_modal_dialog=*/true,
                                /*is_disabled=*/true);
     }
@@ -624,11 +664,15 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
                    /*expect_back_button=*/false);
   }
 
-  void TestEnabledAndDisabled() {
+  void TestEnabledAndDisabled(bool has_display_identifier) {
     idp_data_->idp_metadata.has_filtered_out_account = true;
     std::vector<std::string> account_suffixes = {"enabled", "disabled"};
     account_list_ =
         CreateTestIdentityRequestAccounts(account_suffixes, idp_data_);
+    if (!has_display_identifier) {
+      account_list_[0]->display_identifier = "";
+      account_list_[1]->display_identifier = "";
+    }
     account_list_[1]->is_filtered_out = true;
     CreateAccountSelectionModal();
     dialog()->ShowMultiAccountPicker(account_list_, {idp_data()},
@@ -648,10 +692,12 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
 
     ASSERT_EQ(accounts[0]->GetClassName(), "Separator");
     CheckHoverableAccountRow(accounts[1], "enabled",
+                             /*has_display_identifier=*/has_display_identifier,
                              /*expect_idp=*/false, /*is_modal_dialog=*/true,
                              /*is_disabled=*/false);
     ASSERT_EQ(accounts[2]->GetClassName(), "Separator");
     CheckHoverableAccountRow(accounts[3], "disabled",
+                             /*has_display_identifier=*/has_display_identifier,
                              /*expect_idp=*/false, /*is_modal_dialog=*/true,
                              /*is_disabled=*/true);
 
@@ -675,6 +721,10 @@ class AccountSelectionModalViewTest : public DialogBrowserTest,
       idp_data_->idp_metadata.brand_decoded_icon = gfx::Image();
     }
   }
+
+  // Can be set before the dialog is created to be set on the RelyingPartyData
+  // that is passed to the dialog.
+  std::u16string iframe_for_display_;
 
  private:
   bool expect_visible_body_label_{true};
@@ -704,7 +754,7 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest, MultipleAccounts) {
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionAfterSingleAccount) {
   TestSingleAccount();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
 }
 
 // Tests that the request permission dialog is rendered correctly, when it is
@@ -712,7 +762,7 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionAfterMultipleAccounts) {
   TestMultipleAccounts();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
 }
 
 // Tests that the single account dialog is rendered correctly, when it is
@@ -720,7 +770,7 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // on the "back" button.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        SingleAccountAfterRequestPermission) {
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
   TestSingleAccount();
 }
 
@@ -729,7 +779,7 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // on the "back" button.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        MultipleAccountsAfterRequestPermission) {
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
   TestMultipleAccounts();
 }
 
@@ -760,7 +810,7 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        VerifyingForSingleAccountFlow) {
   TestSingleAccount();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
   TestVerifyingSheet(/*has_multiple_accounts=*/false,
                      /*expect_visible_idp_icon=*/false,
                      /*expect_visible_combined_icons=*/true);
@@ -771,7 +821,7 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        VerifyingForMultipleAccountFlow) {
   TestMultipleAccounts();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
   TestVerifyingSheet(/*has_multiple_accounts=*/false,
                      /*expect_visible_idp_icon=*/false,
                      /*expect_visible_combined_icons=*/true);
@@ -795,14 +845,16 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // shown after the loading dialog for a non-returning user.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionNonReturningUser) {
-  TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignUp);
+  TestRequestPermission(/*has_display_identifier=*/true,
+                        content::IdentityRequestAccount::LoginState::kSignUp);
 }
 
 // Tests that the request permission dialog is rendered correctly, when it is
 // shown after the loading dialog for a returning user.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionReturningUser) {
-  TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignIn);
+  TestRequestPermission(/*has_display_identifier=*/true,
+                        content::IdentityRequestAccount::LoginState::kSignIn);
 }
 
 // Tests that the brand icon view does not hide the brand icon like it does on
@@ -825,7 +877,8 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // icon is available.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionOnlyIdpIconAvailable) {
-  TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignIn,
+  TestRequestPermission(/*has_display_identifier=*/true,
+                        content::IdentityRequestAccount::LoginState::kSignIn,
                         /*idp_brand_icon_url=*/kIdpBrandIconUrl,
                         /*rp_brand_icon_url=*/"");
 }
@@ -834,7 +887,8 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // icon is available.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionOnlyRpIconAvailable) {
-  TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignIn,
+  TestRequestPermission(/*has_display_identifier=*/true,
+                        content::IdentityRequestAccount::LoginState::kSignIn,
                         /*idp_brand_icon_url=*/"",
                         /*rp_brand_icon_url=*/kRpBrandIconUrl);
 }
@@ -843,7 +897,8 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // RP nor IDP icon is available.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionNeitherRpNorIdpIconsAvailable) {
-  TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignIn,
+  TestRequestPermission(/*has_display_identifier=*/true,
+                        content::IdentityRequestAccount::LoginState::kSignIn,
                         /*idp_brand_icon_url=*/"", /*rp_brand_icon_url=*/"");
 }
 
@@ -851,7 +906,8 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // and IDP icons are available.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        RequestPermissionBothRpAndIdpIconsAvailable) {
-  TestRequestPermission(content::IdentityRequestAccount::LoginState::kSignIn,
+  TestRequestPermission(/*has_display_identifier=*/true,
+                        content::IdentityRequestAccount::LoginState::kSignIn,
                         /*idp_brand_icon_url=*/kIdpBrandIconUrl,
                         /*rp_brand_icon_url=*/kRpBrandIconUrl);
 }
@@ -860,11 +916,11 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 // flow if the user clicks the back button during the flow.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest, SingleAccountFlowBack) {
   TestSingleAccount();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
 
   // Simulate user clicking the back button before completing the sign-in flow.
   TestSingleAccount();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
   TestVerifyingSheet(/*has_multiple_accounts=*/false,
                      /*expect_visible_idp_icon=*/false,
                      /*expect_visible_combined_icons=*/true);
@@ -874,11 +930,11 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest, SingleAccountFlowBack) {
 // account flow if the user clicks the back button during the flow.
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest, MultipleAccountFlowBack) {
   TestMultipleAccounts();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
 
   // Simulate user clicking the back button before completing the sign-in flow.
   TestMultipleAccounts();
-  TestRequestPermission();
+  TestRequestPermission(/*has_display_identifier=*/true);
   TestVerifyingSheet(/*has_multiple_accounts=*/false,
                      /*expect_visible_idp_icon=*/false,
                      /*expect_visible_combined_icons=*/true);
@@ -995,7 +1051,32 @@ IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
 
 IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
                        OneDisabledAccountAndOneEnabledAccount) {
-  TestEnabledAndDisabled();
+  TestEnabledAndDisabled(/*has_display_identifier=*/true);
+}
+
+IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest, SingleIdentifier) {
+  TestEnabledAndDisabled(/*has_display_identifier=*/false);
+}
+
+IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
+                       RequestPermissionSingleIdentifier) {
+  TestRequestPermission(/*has_display_identifier=*/false,
+                        content::IdentityRequestAccount::LoginState::kSignIn,
+                        /*idp_brand_icon_url=*/kIdpBrandIconUrl,
+                        /*rp_brand_icon_url=*/kRpBrandIconUrl);
+}
+
+IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest,
+                       VerifyingSheetSingleIdentifier) {
+  CreateAndShowMultiAccountPicker(/*account_suffixes=*/{"0", "suffix", "2"},
+                                  /*has_display_identifier=*/false);
+  ShowVerifyingSheet();
+}
+
+IN_PROC_BROWSER_TEST_F(AccountSelectionModalViewTest, IframeTitle) {
+  iframe_for_display_ = kIframeETLDPlusOne;
+  // This will also run the header/title tests.
+  CreateAccountSelectionModal();
 }
 
 }  //  namespace webid

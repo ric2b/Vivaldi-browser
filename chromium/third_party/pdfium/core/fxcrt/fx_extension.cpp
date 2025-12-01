@@ -42,15 +42,14 @@ float FXSYS_wcstof(WideStringView pwsStr, size_t* pUsedLen) {
     ++start;
   }
 
-  // Skip a leading '+' sign.
-  if (start < len && pwsStr[start] == '+') {
-    ++start;
-  }
-
   WideStringView sub_strc = pwsStr.Substr(start, len - start);
 
   float value;
-  auto result = fast_float::from_chars(sub_strc.begin(), sub_strc.end(), value);
+  auto result =
+      fast_float::from_chars(sub_strc.begin(), sub_strc.end(), value,
+                             static_cast<fast_float::chars_format>(
+                                 fast_float::chars_format::general |
+                                 fast_float::chars_format::allow_leading_plus));
 
   if (pUsedLen) {
     *pUsedLen = result.ptr - pwsStr.unterminated_c_str();
@@ -101,11 +100,11 @@ pdfium::span<const char> FXSYS_ToUTF16BE(uint32_t unicode,
   DCHECK(!pdfium::IsLowSurrogate(unicode));
 
   if (unicode <= 0xFFFF) {
-    FXSYS_IntToFourHexChars(unicode, buf);
+    FXSYS_IntToFourHexChars(unicode, buf.first<4u>());
     return buf.first<4u>();
   }
   pdfium::SurrogatePair surrogate_pair(unicode);
-  FXSYS_IntToFourHexChars(surrogate_pair.high(), buf);
+  FXSYS_IntToFourHexChars(surrogate_pair.high(), buf.first<4u>());
   FXSYS_IntToFourHexChars(surrogate_pair.low(), buf.subspan<4u>());
   return buf;
 }
@@ -120,8 +119,9 @@ void FXSYS_SetLocaltimeFunction(struct tm* (*func)(const time_t*)) {
 
 time_t FXSYS_time(time_t* tloc) {
   time_t ret_val = g_time_func();
-  if (tloc)
+  if (tloc) {
     *tloc = ret_val;
+  }
   return ret_val;
 }
 

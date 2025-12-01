@@ -35,6 +35,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <variants name="AuxiliarySearchQueryType">
+  <variant name="CustomTabs" summary="CustomTabs"/>
   <variant name="Favicons" summary="Favicons"/>
   <variant name="History" summary="Tabs and CCTs"/>
   <variant name="Tabs" summary="Tabs"/>
@@ -65,7 +66,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Search.Ambient.Query" enum="AmbientSearchEntryPoint"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>juanmojica@google.com</owner>
   <owner>schechter@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -86,6 +87,18 @@ chromium-metrics-reviews@google.com.
     Records whether a favicon is fetched successfully. The histogram is logged
     when Chrome is paused and a favicon is fetched for a Tab for the auxiliary
     search. Android-only.
+  </summary>
+</histogram>
+
+<histogram name="Search.AuxiliarySearch.CustomTabFetchResults.Count"
+    units="count" expires_after="2025-11-16">
+  <owner>hanxi@chromium.org</owner>
+  <owner>clank-start@google.com</owner>
+  <summary>
+    Records the number of entries returned from fetching history database which
+    was initiated by a Custom Tab for auxiliary search. The histogram is logged
+    when the Custom Tab is paused and the fetching from history database is
+    completed. Android-only.
   </summary>
 </histogram>
 
@@ -122,7 +135,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.DonateTime" units="ms"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>gangwu@chromium.org</owner>
   <owner>chrome-mobile-search@google.com</owner>
   <summary>Time taken for donating contents to the auxiliary search.</summary>
@@ -130,7 +143,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Search.AuxiliarySearch.DonationCount.{AuxiliarySearchEntryType}"
-    units="count" expires_after="2025-09-15">
+    units="count" expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -154,7 +167,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.DonationRequestStatus"
-    enum="AuxiliarySearchRequestStatus" expires_after="2025-09-15">
+    enum="AuxiliarySearchRequestStatus" expires_after="2025-11-16">
   <owner>gangwu@chromium.org</owner>
   <owner>chrome-mobile-search@google.com</owner>
   <summary>
@@ -165,7 +178,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Favicon.FirstDonateCount" units="Count"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -192,7 +205,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Module.ClickInfo" enum="ClickInfo"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -204,7 +217,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.QueryTime.{AuxiliarySearchQueryType}"
-    units="ms" expires_after="2025-09-15">
+    units="ms" expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -217,7 +230,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Schedule.DelayTime" units="ms"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -229,7 +242,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Schedule.DonateTime" units="ms"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -241,7 +254,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Schedule.Favicon.DonateCount"
-    units="count" expires_after="2025-09-15">
+    units="count" expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -253,7 +266,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Schedule.Favicon.FetchTime" units="ms"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -265,7 +278,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.Schedule.FaviconDonateResult"
-    enum="DonateResult" expires_after="2025-09-15">
+    enum="DonateResult" expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -277,7 +290,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.AuxiliarySearch.ShareTabsWithOs" enum="Boolean"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>hanxi@chromium.org</owner>
   <owner>gangwu@chromium.org</owner>
   <owner>clank-start@google.com</owner>
@@ -285,6 +298,18 @@ chromium-metrics-reviews@google.com.
     Records the whether the sharing Tabs with OS config is enabled. The
     histogram is logged when the user changes the config on Tabs settings.
     Android-only.
+  </summary>
+</histogram>
+
+<histogram name="Search.AuxiliarySearch.TimeToCreateControllerInCustomTab"
+    units="ms" expires_after="2025-11-15">
+  <owner>hanxi@chromium.org</owner>
+  <owner>clank-start@google.com</owner>
+  <summary>
+    Records the time from CustomTabActivity is created until the
+    AuxiliarySearchController is created in the deferred startup. The histogram
+    is logged when the AuxiliarySearchController is created in the
+    CustomTabActivity. Android-only.
   </summary>
 </histogram>
 
@@ -300,9 +325,29 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Search.ChoiceCompletedOnMonth.OnProfileLoad"
+    enum="SearchEngineChoiceDate" expires_after="2026-05-01">
+<!-- When bumping expiry date, also update the enum (making the enumeration in sync with existing values). Escalate when data count
+exceeds 100 entries:
+https://chromium.googlesource.com/chromium/src/tools/+/HEAD/metrics/histograms/README.md#sustainability -->
+
+  <owner>dgn@google.com</owner>
+  <owner>tju@google.com</owner>
+  <owner>chrome-regionalcapabilities@google.com</owner>
+  <summary>
+    Recorded on each profile load (tied to service construction), indicates the
+    last engine choice timestamp formatted as YYYYMM integer. For convenience,
+    the enum maps these to user readable `YYYY-MM` labels.
+
+    The value is serialized as a sparse histogram with integer values. Since
+    each client can record the same value multiple times, it might be more
+    interesting to look at unique clients.
+  </summary>
+</histogram>
+
 <histogram name="Search.ChoiceDebug.ScrollStateWithMoreButtonClick"
     enum="SearchEngineChoiceScrollState" expires_after="2025-08-24">
-  <owner>jyammine@google.com</owner>
+  <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
     Records an enum that represents the search engine choice page scroll state
@@ -330,7 +375,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceReprompt{Category}"
-    enum="SearchEngineChoiceReprompt" expires_after="2025-08-10">
+    enum="SearchEngineChoiceReprompt" expires_after="2025-10-12">
   <owner>droger@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -346,7 +391,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenDefaultSearchEngineType"
-    enum="OmniboxSearchEngineType" expires_after="2025-08-24">
+    enum="OmniboxSearchEngineType" expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -372,7 +417,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenEvents"
-    enum="SearchEngineChoiceScreenEvents" expires_after="2025-08-24">
+    enum="SearchEngineChoiceScreenEvents" expires_after="2025-10-26">
   <owner>samarchehade@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -385,7 +430,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenNavigationConditions"
-    enum="SearchEngineChoiceScreenConditions" expires_after="2025-08-24">
+    enum="SearchEngineChoiceScreenConditions" expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>muellerj@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
@@ -399,7 +444,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenProfileInitConditions"
-    enum="SearchEngineChoiceScreenConditions" expires_after="2025-08-24">
+    enum="SearchEngineChoiceScreenConditions" expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>muellerj@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
@@ -412,7 +457,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenSelectedEngineIndex" units="index"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -423,7 +468,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenShowedEngineAt.CountryMismatch"
-    enum="BooleanSkipped" expires_after="2025-08-24">
+    enum="BooleanSkipped" expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -435,7 +480,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceScreenShowedEngineAt.Index{Index}"
-    enum="OmniboxSearchEngineType" expires_after="2025-08-24">
+    enum="OmniboxSearchEngineType" expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -466,7 +511,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.ChoiceWipeReason" enum="SearchEngineChoiceWipeReason"
-    expires_after="2025-06-08">
+    expires_after="2025-10-19">
   <owner>droger@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -868,7 +913,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.DefaultSearchProviderType2{Population}"
-    enum="OmniboxSearchEngineType" expires_after="2025-08-10">
+    enum="OmniboxSearchEngineType" expires_after="2025-10-12">
   <owner>mpearson@chromium.org</owner>
   <owner>ftirelo@chromium.org</owner>
   <summary>
@@ -904,7 +949,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.Image.Camera.Open" enum="CameraOpenEntryPoint"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>juanmojica@google.com</owner>
   <owner>schechter@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -929,7 +974,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.iOS.SelectDefaultSearchEngine"
-    enum="OmniboxSearchEngineType" expires_after="2025-08-10">
+    enum="OmniboxSearchEngineType" expires_after="2025-10-19">
   <owner>sczs@chromium.org</owner>
   <owner>gambard@chromium.org</owner>
   <summary>
@@ -939,7 +984,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.KeywordTable.HashValidationStatus"
-    enum="KeywordTableHashValidationStatus" expires_after="2025-09-15">
+    enum="KeywordTableHashValidationStatus" expires_after="2025-11-16">
   <owner>wfh@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>chrome-desktop-search@google.com</owner>
@@ -953,7 +998,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.KeywordTable.MigrationSuccess.V137"
-    enum="BooleanSuccess" expires_after="2025-09-15">
+    enum="BooleanSuccess" expires_after="2025-11-16">
   <owner>wfh@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <owner>chrome-desktop-search@google.com</owner>
@@ -980,8 +1025,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.DelayFromDialogShownToFirstStatus"
-    units="ms" expires_after="2025-09-14">
-  <owner>dgn@google.com</owner>
+    units="ms" expires_after="2025-11-16">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1000,8 +1045,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.DelayFromObservationToFirstStatus"
-    units="ms" expires_after="2025-09-14">
-  <owner>dgn@google.com</owner>
+    units="ms" expires_after="2025-11-16">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1017,8 +1062,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.DialogShownAttempt" units="attempts"
-    expires_after="2025-09-14">
-  <owner>dgn@google.com</owner>
+    expires_after="2025-11-16">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1037,8 +1082,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.DialogStatusChange"
-    enum="OsDefaultsChoiceDialogStatus" expires_after="2025-09-14">
-  <owner>dgn@google.com</owner>
+    enum="OsDefaultsChoiceDialogStatus" expires_after="2025-11-16">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1055,8 +1100,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.DialogStatusOnAppOpen"
-    enum="OsDefaultsChoiceDialogStatus" expires_after="2025-09-14">
-  <owner>dgn@google.com</owner>
+    enum="OsDefaultsChoiceDialogStatus" expires_after="2025-11-16">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1066,8 +1111,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.DialogSuppressionStatus"
-    enum="OsDefaultsChoiceDialogSuppressionStatus" expires_after="2025-09-14">
-  <owner>dgn@google.com</owner>
+    enum="OsDefaultsChoiceDialogSuppressionStatus" expires_after="2025-11-16">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1085,8 +1130,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.OsDefaultsChoice.LaunchChoiceScreenTapHandlingStatus"
-    enum="LaunchOsChoiceScreenTapHandlingStatus" expires_after="2025-08-24">
-  <owner>dgn@google.com</owner>
+    enum="LaunchOsChoiceScreenTapHandlingStatus" expires_after="2025-10-26">
+  <owner>dgn@chromium.org</owner>
   <owner>triploblastic@google.com</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
@@ -1266,7 +1311,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.RegionSearch.Lens.Result"
-    enum="LensRegionSearchCaptureResult" expires_after="2025-09-14">
+    enum="LensRegionSearchCaptureResult" expires_after="2025-11-16">
   <owner>juanmojica@google.com</owner>
   <owner>benwgold@google.com</owner>
   <owner>stanfield@google.com</owner>
@@ -1394,21 +1439,10 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Search.SaveGuestModeEligible" enum="BooleanEligible"
-    expires_after="2025-04-06">
-  <owner>dullweber@chromium.org</owner>
-  <owner>chrome-waffle-eng@google.com</owner>
-  <summary>
-    Records whether the guest profile that showed a search engine choice dialog
-    is eligible to save the chosen search engine for future guest sessions. Only
-    eligible profiles show a checkbox that allows users to save their selection.
-    Recorded when users confirm the search engine choice dialog in guest mode.
-  </summary>
-</histogram>
-
 <histogram name="Search.SaveGuestModeSelection" enum="BooleanYesNo"
-    expires_after="2025-08-10">
+    expires_after="2025-11-02">
   <owner>dullweber@chromium.org</owner>
+  <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
   <summary>
     Records whether users chose to save the Guest search engine. Recorded for
@@ -1418,7 +1452,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.SearchEngineChangedSnackbar.SettingsTapped"
-    enum="Boolean" expires_after="2025-09-01">
+    enum="Boolean" expires_after="2025-11-02">
   <owner>triploblastic@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <owner>chrome-waffle-eng@google.com</owner>
@@ -1437,7 +1471,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.SearchEngineCountryDelegate.Connection{Result}Time"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>triploblastic@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <summary>
@@ -1456,7 +1490,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.SearchEngineCountryDelegate.Fetch{Result}Time"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>triploblastic@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <summary>
@@ -1476,7 +1510,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.SearchEngineCountryDelegate.ServiceBindStatus"
-    enum="BooleanStartedCompleted" expires_after="2025-09-07">
+    enum="BooleanStartedCompleted" expires_after="2025-11-09">
   <owner>triploblastic@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <summary>
@@ -1512,7 +1546,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Search.SearchEngineSelectionInPromoDialog{SearchEnginePromoDeviceType}"
-    enum="OmniboxSearchEngineType" expires_after="2025-08-24">
+    enum="OmniboxSearchEngineType" expires_after="2025-10-26">
   <owner>yusufo@chromium.org</owner>
   <owner>dgn@chromium.org</owner>
   <summary>
@@ -1584,7 +1618,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Search.SearchProviderOverrideStatus"
-    enum="SearchProviderOverrideStatus" expires_after="2025-08-24">
+    enum="SearchProviderOverrideStatus" expires_after="2025-10-26">
   <owner>dgn@chromium.org</owner>
   <owner>droger@chromium.org</owner>
   <summary>

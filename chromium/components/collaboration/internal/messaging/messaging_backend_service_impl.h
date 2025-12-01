@@ -98,11 +98,14 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
   void OnTabRemoved(tab_groups::SavedTabGroupTab removed_tab,
                     tab_groups::TriggerSource source,
                     bool is_selected) override;
-  void OnTabUpdated(const tab_groups::SavedTabGroupTab& updated_tab,
+  void OnTabUpdated(const tab_groups::SavedTabGroupTab& before,
+                    const tab_groups::SavedTabGroupTab& after,
                     tab_groups::TriggerSource source,
                     bool is_selected) override;
   void OnTabSelectionChanged(const tab_groups::LocalTabID& tab_id,
                              bool is_selected) override;
+  void OnTabLastSeenTimeChanged(const base::Uuid& tab_id,
+                                tab_groups::TriggerSource source) override;
   void OnTabGroupOpened(const tab_groups::SavedTabGroup& tab_group) override;
   void OnTabGroupClosed(const tab_groups::SavedTabGroup& tab_group) override;
 
@@ -114,6 +117,9 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
   void OnGroupMemberRemoved(const data_sharing::GroupData& group_data,
                             const GaiaId& member_gaia_id,
                             const base::Time& event_time) override;
+
+  static std::u16string GetTruncatedTabTitleForTesting(
+      const std::u16string& original_title);
 
  private:
   void OnStoreInitialized(bool success);
@@ -151,9 +157,9 @@ class MessagingBackendServiceImpl : public MessagingBackendService,
       const collaboration_pb::Message& message,
       const std::optional<tab_groups::SavedTabGroup>& tab_group);
 
-  // Tries to retrieve the correct tab group based on data in the Message.
-  std::optional<tab_groups::SavedTabGroup> GetTabGroupFromMessage(
-      const collaboration_pb::Message& message);
+  // Tries to retrieve the tab group from CollaborationId.
+  std::optional<tab_groups::SavedTabGroup> GetTabGroupFromCollaborationId(
+      const std::string& collaboration_id);
 
   // Uses the available data to look up a GroupMember.
   std::optional<data_sharing::GroupMember> GetGroupMemberFromGaiaId(

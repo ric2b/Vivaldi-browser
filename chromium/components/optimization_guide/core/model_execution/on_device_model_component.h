@@ -11,16 +11,22 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/sequence_checker.h"
+#include "base/types/pass_key.h"
 #include "base/values.h"
 #include "base/version.h"
 #include "components/optimization_guide/core/optimization_guide_enums.h"
 #include "components/optimization_guide/proto/on_device_base_model_metadata.pb.h"
 
 class PrefService;
+
+namespace on_device_internals {
+class PageHandler;
+}  // namespace on_device_internals
 
 namespace optimization_guide {
 
@@ -30,6 +36,42 @@ inline constexpr std::string_view kOnDeviceModelCrxId =
 class OnDeviceModelComponentState;
 
 enum class ModelBasedCapabilityKey;
+
+// Status of the on-device model.
+//
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class OnDeviceModelStatus {
+  // Model is installed and ready to use.
+  kReady = 0,
+  // Criteria to install model have not been met.
+  kNotEligible = 1,
+  // Criteria to install are met, but model installation has not completed yet.
+  kInstallNotComplete = 2,
+  // The model installer was not registered, even though the client would be
+  // eligible to install right now. This likely means the state of the system
+  // has changed recently.
+  kModelInstallerNotRegisteredForUnknownReason = 3,
+  // The model is ready, but it wasn't ready early enough for
+  // OnDeviceModelServiceController to use it.
+  kModelInstalledTooLate = 4,
+  // The model is not ready, and the reason is unknown.
+  kNotReadyForUnknownReason = 5,
+  // Criteria (except disk space) to install are met, but the device doesn't
+  // have enough disk space.
+  kInsufficientDiskSpace = 6,
+  // Criteria to install are met, but model is not downloaded because there was
+  // no on-device feature usage.
+  kNoOnDeviceFeatureUsed = 7,
+
+  // This must be kept in sync with
+  // OptimizationGuideOnDeviceModelStatus in optimization/enums.xml.
+
+  // Insert new values before this line.
+  kMaxValue = kNoOnDeviceFeatureUsed,
+};
+
+std::ostream& operator<<(std::ostream& out, OnDeviceModelStatus status);
 
 // Wraps the specification needed to determine compatibility of the
 // on-device base model with any feature specific code.
@@ -42,6 +84,8 @@ struct OnDeviceBaseModelSpec {
           supported_performance_hints);
   ~OnDeviceBaseModelSpec();
   OnDeviceBaseModelSpec(const OnDeviceBaseModelSpec&);
+
+  bool operator==(const OnDeviceBaseModelSpec& other) const;
 
   // The name of the base model currently available on-device.
   std::string model_name;
@@ -156,6 +200,7 @@ class OnDeviceModelComponentStateManager
 
   // Should be called whenever the device performance class changes.
   void DevicePerformanceClassChanged(
+      base::OnceClosure complete,
       OnDeviceModelPerformanceClass performance_class);
 
   // Whether the performance class needs to be fetched.
@@ -187,16 +232,27 @@ class OnDeviceModelComponentStateManager
   // Returns the current OnDeviceModelStatus.
   OnDeviceModelStatus GetOnDeviceModelStatus();
 
-  // Returns the most recently computed registration criteria, or nullopt if no
-  // registration has been computed yet.
-  const RegistrationCriteria* GetRegistrationCriteria();
+  // Exposed internal state for chrome://on-device-internals
+  struct DebugState {
+    int64_t disk_space_available_;
+    raw_ptr<const RegistrationCriteria> criteria_;
+    OnDeviceModelStatus status_;
+    bool has_override_;
+    raw_ptr<OnDeviceModelComponentState> state_;
+  };
 
-  // Return the most recently queried free disk space in bytes, which is used to
-  // determine eligibility for model install.
-  int64_t GetDiskBytesAvailableForModel();
+  // Get internal state for debugging page.
+  DebugState GetDebugState(base::PassKey<on_device_internals::PageHandler>) {
+    return GetDebugState();
+  }
 
   // Returns true if this is determined to be a low tier device.
   bool IsLowTierDevice() const;
+
+  // Returns true if the device supports image input.
+  bool SupportsImageInput() const;
+  // Returns true if the device supports audio input.
+  bool SupportsAudioInput() const;
 
   // Returns the performance hint for this device based on the supported
   // performance hints in the manifest.
@@ -230,8 +286,10 @@ class OnDeviceModelComponentStateManager
   RegistrationCriteria ComputeRegistrationCriteria(
       int64_t disk_space_free_bytes);
 
+  DebugState GetDebugState();
+
   // Installs the component installer if it needs installed.
-  void BeginUpdateRegistration();
+  void BeginUpdateRegistration(base::OnceClosure complete);
   // Continuation of `UpdateRegistration()` after async work.
   void CompleteUpdateRegistration(int64_t disk_space_free_bytes);
 

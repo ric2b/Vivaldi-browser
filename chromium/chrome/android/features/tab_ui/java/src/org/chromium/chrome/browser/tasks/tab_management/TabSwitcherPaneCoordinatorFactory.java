@@ -15,10 +15,12 @@ import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplier;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.data_sharing.DataSharingTabManager;
+import org.chromium.chrome.browser.hub.PaneManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -33,10 +35,12 @@ import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
 import org.chromium.chrome.browser.tasks.tab_management.TabListCoordinator.TabListMode;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeController;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
+import org.chromium.chrome.browser.undo_tab_close_snackbar.UndoBarThrottle;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
+import org.chromium.components.tab_group_sync.TabGroupUiActionHandler;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.util.TokenHolder;
 
@@ -64,6 +68,9 @@ public class TabSwitcherPaneCoordinatorFactory {
     private final @NonNull ObservableSupplier<EdgeToEdgeController> mEdgeToEdgeSupplier;
     private final @NonNull ObservableSupplier<ShareDelegate> mShareDelegateSupplier;
     private final @NonNull ObservableSupplier<TabBookmarker> mTabBookmarkerSupplier;
+    private final UndoBarThrottle mUndoBarThrottle;
+    private final @NonNull Supplier<PaneManager> mPaneManagerSupplier;
+    private final @NonNull Supplier<TabGroupUiActionHandler> mTabGroupUiActionHandlerSupplier;
     private @Nullable TabSwitcherMessageManager mMessageManager;
 
     /**
@@ -87,6 +94,10 @@ public class TabSwitcherPaneCoordinatorFactory {
      * @param edgeToEdgeSupplier Supplier to the {@link EdgeToEdgeController} instance.
      * @param shareDelegateSupplier Supplies the {@link ShareDelegate} that will be used to share
      *     the tab's URL when the user selects the "Share" option.
+     * @param tabBookmarkerSupplier Supplier of {@link TabBookmarker} for bookmarking a given tab.
+     * @param undoBarThrottle Used to throttle the undo bar.
+     * @param paneManagerSupplier Used to switch and communicate with other panes.
+     * @param tabGroupUiActionHandlerSupplier Used to open hidden tab groups.
      */
     TabSwitcherPaneCoordinatorFactory(
             @NonNull Activity activity,
@@ -106,7 +117,10 @@ public class TabSwitcherPaneCoordinatorFactory {
             @Nullable DesktopWindowStateManager desktopWindowStateManager,
             @NonNull ObservableSupplier<EdgeToEdgeController> edgeToEdgeSupplier,
             @NonNull ObservableSupplier<ShareDelegate> shareDelegateSupplier,
-            @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier) {
+            @NonNull ObservableSupplier<TabBookmarker> tabBookmarkerSupplier,
+            UndoBarThrottle undoBarThrottle,
+            @NonNull Supplier<PaneManager> paneManagerSupplier,
+            @NonNull Supplier<TabGroupUiActionHandler> tabGroupUiActionHandlerSupplier) {
         mActivity = activity;
         mLifecycleDispatcher = lifecycleDispatcher;
         mProfileProviderSupplier = profileProviderSupplier;
@@ -129,6 +143,9 @@ public class TabSwitcherPaneCoordinatorFactory {
         mEdgeToEdgeSupplier = edgeToEdgeSupplier;
         mShareDelegateSupplier = shareDelegateSupplier;
         mTabBookmarkerSupplier = tabBookmarkerSupplier;
+        mUndoBarThrottle = undoBarThrottle;
+        mPaneManagerSupplier = paneManagerSupplier;
+        mTabGroupUiActionHandlerSupplier = tabGroupUiActionHandlerSupplier;
     }
 
     /**
@@ -182,7 +199,8 @@ public class TabSwitcherPaneCoordinatorFactory {
                 edgeToEdgeSupplier,
                 mDesktopWindowStateManager,
                 mShareDelegateSupplier,
-                mTabBookmarkerSupplier);
+                mTabBookmarkerSupplier,
+                mUndoBarThrottle);
     }
 
     /** Returns the {@link TabListMode} of the produced {@link TabListCoordinator}s. */
@@ -245,7 +263,9 @@ public class TabSwitcherPaneCoordinatorFactory {
                             mTabCreatorManager.getTabCreator(/* incognito= */ false),
                             mBackPressManager,
                             mDesktopWindowStateManager,
-                            mEdgeToEdgeSupplier);
+                            mEdgeToEdgeSupplier,
+                            mPaneManagerSupplier,
+                            mTabGroupUiActionHandlerSupplier);
             if (mLifecycleDispatcher.isNativeInitializationFinished()) {
                 mMessageManager.initWithNative(
                         mProfileProviderSupplier.get().getOriginalProfile(), getTabListMode());

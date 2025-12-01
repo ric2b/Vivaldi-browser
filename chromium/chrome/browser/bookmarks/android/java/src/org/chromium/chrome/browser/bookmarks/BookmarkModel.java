@@ -4,13 +4,12 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ThreadUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmark;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -30,14 +29,16 @@ import java.io.File;
 import org.chromium.build.BuildConfig;
 import org.chromium.base.PathUtils;
 import org.chromium.base.task.AsyncTask;
+import org.chromium.url.GURL;
 
 /**
  * A class that encapsulates {@link BookmarkBridge} and provides extra features such as undo, large
  * icon fetching, reader mode url redirecting, etc. This class should serve as the single class for
  * the UI to acquire data from the backend.
  */
+@NullMarked
 public class BookmarkModel extends BookmarkBridge {
-    private static BookmarkModel sInstanceForTesting;
+    private static @Nullable BookmarkModel sInstanceForTesting;
 
     // Vivaldi
     private static final boolean THUMBNAILS_ENABLED = true;
@@ -51,7 +52,7 @@ public class BookmarkModel extends BookmarkBridge {
 
     /** Sets a pre-configured runnable which loads the parter bookmarks shim. */
     public static void setPartnerBookmarkIteratorProvider(
-            @NonNull PartnerBookmarkIteratorProvider provider) {
+            PartnerBookmarkIteratorProvider provider) {
         BookmarkBridge.setPartnerBookmarkIteratorProvider(provider);
     }
 
@@ -77,7 +78,7 @@ public class BookmarkModel extends BookmarkBridge {
         void onDeleteBookmarks(String[] titles, boolean isUndoable);
     }
 
-    private ObserverList<BookmarkDeleteObserver> mDeleteObservers = new ObserverList<>();
+    private final ObserverList<BookmarkDeleteObserver> mDeleteObservers = new ObserverList<>();
 
     /**
      * Provides an instance of the bookmark model for the provided profile.
@@ -85,7 +86,7 @@ public class BookmarkModel extends BookmarkBridge {
      * @param profile A profile for which the bookmark model is provided.
      * @return An instance of the bookmark model.
      */
-    public static final BookmarkModel getForProfile(@NonNull Profile profile) {
+    public static final BookmarkModel getForProfile(Profile profile) {
         assert profile != null;
         if (sInstanceForTesting != null) {
             return sInstanceForTesting;
@@ -199,7 +200,7 @@ public class BookmarkModel extends BookmarkBridge {
     /**
      * @return The id of the default folder to view bookmarks.
      */
-    public BookmarkId getDefaultFolderViewLocation() {
+    public @Nullable BookmarkId getDefaultFolderViewLocation() {
         /*
           Vivaldi: Vivaldi uses the Desktop folder aka the "Bookmark bar node" as
           the root shown in Bookmarks manager/panel
@@ -218,8 +219,10 @@ public class BookmarkModel extends BookmarkBridge {
     public boolean hasBookmarkIdForTab(@Nullable Tab tab) {
         if (tab == null) return false;
         // Vivaldi Ref. VAB-9205
-        if (BookmarkBridge.getForProfile(tab.getProfile()).isBookmarkModelLoaded())
-            if (isInsideTrashFolder(getUserBookmarkIdForTab(tab))) return false;
+        if (BookmarkBridge.getForProfile(tab.getProfile()).isBookmarkModelLoaded()) {
+            BookmarkId id = getUserBookmarkIdForTab(tab);
+            if (id != null && isInsideTrashFolder(id)) return false;
+        }
         return isBookmarked(tab.getOriginalUrl());
     }
 
@@ -233,7 +236,7 @@ public class BookmarkModel extends BookmarkBridge {
     }
 
     /** Returns whether the given folder is a reading list folder. */
-    public boolean isReadingListFolder(BookmarkId folderId) {
+    public boolean isReadingListFolder(@Nullable BookmarkId folderId) {
         if (folderId == null) {
             return false;
         }
@@ -252,10 +255,8 @@ public class BookmarkModel extends BookmarkBridge {
         moveBookmarks(bookmarkIds, newParentId);
     }
 
-    public boolean isInsideTrashFolder(BookmarkId folderId) {
-        BookmarkItem item = getBookmarkById(folderId);
-        if (item == null) return false;
-        return item.getParentId().equals(getTrashFolderId());
+    public boolean isInsideTrashFolder(BookmarkId bookmarkId) {
+        return bookmarkId != null && isChildOfTrashNode(bookmarkId);
     }
 
     public boolean isInsideSpeedDialFolder(BookmarkId id) {
@@ -282,29 +283,30 @@ public class BookmarkModel extends BookmarkBridge {
         // Store all titles of bookmarks.
         List<String> titles = new ArrayList<>();
         BookmarkId trashFolderId = getTrashFolderId();
-        int appendIndex = getChildCount(trashFolderId);
-        List<String> filesToDelete = new ArrayList<>();
-        for (BookmarkId bookmarkId : bookmarks) {
-            BookmarkItem bookmarkItem = getBookmarkById(bookmarkId);
-            if (bookmarkItem == null) continue;
-            titles.add(bookmarkItem.getTitle());
-            if (bookmarkItem.getParentId().equals(trashFolderId)) {
-                if (THUMBNAILS_ENABLED) filesToDelete.add(bookmarkItem.getGUID());
-                deleteBookmark(bookmarkId);
-            } else
-                moveBookmark(bookmarkId, trashFolderId, appendIndex++);
-        }
+        if (trashFolderId != null) {
+            int appendIndex = getChildCount(trashFolderId);
+            List<String> filesToDelete = new ArrayList<>();
+            for (BookmarkId bookmarkId : bookmarks) {
+                BookmarkItem bookmarkItem = getBookmarkById(bookmarkId);
+                if (bookmarkItem == null) continue;
+                titles.add(bookmarkItem.getTitle());
+                if (bookmarkItem.getParentId().equals(trashFolderId)) {
+                    if (THUMBNAILS_ENABLED) filesToDelete.add(bookmarkItem.getGUID());
+                    deleteBookmark(bookmarkId);
+                } else
+                    moveBookmark(bookmarkId, trashFolderId, appendIndex++);
+            }
 
-        if (THUMBNAILS_ENABLED && !filesToDelete.isEmpty())
-            deleteThumbnailFiles(filesToDelete);
+            if (THUMBNAILS_ENABLED && !filesToDelete.isEmpty()) deleteThumbnailFiles(filesToDelete);
 
-        for (BookmarkDeleteObserver observer : mDeleteObservers) {
-            observer.onDeleteBookmarks(titles.toArray(new String[titles.size()]), false);
+            for (BookmarkDeleteObserver observer : mDeleteObservers) {
+                observer.onDeleteBookmarks(titles.toArray(new String[titles.size()]), false);
+            }
         }
     }
 
     /* Vivaldi */
-    public BookmarkId getDefaultFolder() {
+    public @Nullable BookmarkId getDefaultFolder() {
         return getDesktopFolderId();
     }
 
@@ -319,15 +321,7 @@ public class BookmarkModel extends BookmarkBridge {
 
     /* Vivaldi */
     public boolean isURLAddedToFolderLocal(BookmarkId folderId, String url) {
-        List<BookmarkId> ids = getChildIds(folderId);
-        for (BookmarkId id : ids) {
-            BookmarkItem item = getBookmarkById(id);
-            if (item != null && item.getUrl() != null &&
-                    item.getUrl().getSpec().equals(url)) {
-                return true;
-            }
-        }
-        return false;
+        return isURLAddedToFolder(folderId.getId(), new GURL(url));
     }
 
 

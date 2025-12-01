@@ -10,6 +10,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/login/login_screen_controller.h"
 #include "ash/public/cpp/input_device_settings_controller.h"
 #include "ash/public/cpp/login/local_authentication_request_controller.h"
 #include "ash/public/cpp/login_accelerators.h"
@@ -32,6 +33,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
+#include "base/syslog_logging.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "chrome/browser/ash/accessibility/accessibility_manager.h"
@@ -322,6 +324,8 @@ void LoginDisplayHostMojo::UseAlternativeAuthentication(
   // so mark the flow as reauth:
   if (GetWizardContext()->knowledge_factor_setup.auth_setup_flow ==
       WizardContext::AuthChangeFlow::kInitialSetup) {
+    SYSLOG(INFO) << "(LOGIN)AuthChangeFlow::kInitialSetup changing to "
+                 << "kReauthentication";
     GetWizardContext()->knowledge_factor_setup.auth_setup_flow =
         WizardContext::AuthChangeFlow::kReauthentication;
   }
@@ -330,6 +334,8 @@ void LoginDisplayHostMojo::UseAlternativeAuthentication(
   if (online_password_mismatch &&
       (GetWizardContext()->knowledge_factor_setup.auth_setup_flow ==
        WizardContext::AuthChangeFlow::kReauthentication)) {
+    SYSLOG(INFO) << "(LOGIN) AuthChangeFlow::kReauthentication changing to "
+                 << "kRecovery due to online_password_mismatch";
     GetWizardContext()->knowledge_factor_setup.auth_setup_flow =
         WizardContext::AuthChangeFlow::kRecovery;
   }
@@ -552,9 +558,13 @@ void LoginDisplayHostMojo::ShowGaiaDialog(const AccountId& prefilled_account) {
       WizardContext::KnowledgeFactorSetup();
 
   if (prefilled_account.is_valid()) {
+    SYSLOG(INFO) << "(LOGIN) Prefilled account is valid, setting "
+                 << "auth_setup_flow to kReauthentication";
     GetWizardContext()->knowledge_factor_setup.auth_setup_flow =
         WizardContext::AuthChangeFlow::kReauthentication;
   } else {
+    SYSLOG(INFO) << "(LOGIN) Prefilled account is not valid, setting "
+                 << "auth_setup_flow to kInitialSetup";
     GetWizardContext()->knowledge_factor_setup.auth_setup_flow =
         WizardContext::AuthChangeFlow::kInitialSetup;
   }
@@ -564,6 +574,7 @@ void LoginDisplayHostMojo::ShowGaiaDialog(const AccountId& prefilled_account) {
 
 void LoginDisplayHostMojo::StartUserRecovery(
     const AccountId& account_to_recover) {
+  SYSLOG(INFO) << "(LOGIN) LoginDisplayHostMojo::StartUserRecovery";
   GetWizardContext()->knowledge_factor_setup =
       WizardContext::KnowledgeFactorSetup();
 
@@ -654,6 +665,10 @@ void LoginDisplayHostMojo::SetShelfButtonsEnabled(bool enabled) {
 void LoginDisplayHostMojo::UpdateOobeDialogState(OobeDialogState state) {
   if (dialog_) {
     dialog_->SetState(state);
+
+    if (state == OobeDialogState::KIOSK_LAUNCH) {
+      Shell::Get()->login_screen_controller()->FocusOobeDialog();
+    }
   }
 }
 
@@ -790,6 +805,7 @@ void LoginDisplayHostMojo::HandleFocusOobeDialog() {
     return;
   }
 
+  dialog_->GetWebDialogView()->RequestFocus();
   dialog_->GetWebContents()->Focus();
 }
 

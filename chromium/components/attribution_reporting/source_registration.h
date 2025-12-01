@@ -20,7 +20,9 @@
 #include "components/attribution_reporting/constants.h"
 #include "components/attribution_reporting/destination_set.h"
 #include "components/attribution_reporting/event_level_epsilon.h"
+#include "components/attribution_reporting/event_report_windows.h"
 #include "components/attribution_reporting/filters.h"
+#include "components/attribution_reporting/max_event_level_reports.h"
 #include "components/attribution_reporting/source_registration_error.mojom-forward.h"
 #include "components/attribution_reporting/source_type.mojom-forward.h"
 #include "components/attribution_reporting/trigger_config.h"
@@ -33,9 +35,6 @@ class Value;
 }  // namespace base
 
 namespace attribution_reporting {
-
-COMPONENT_EXPORT(ATTRIBUTION_REPORTING)
-void RecordSourceRegistrationError(mojom::SourceRegistrationError);
 
 struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) SourceRegistration {
   // Doesn't log metric on parsing failures.
@@ -73,7 +72,9 @@ struct COMPONENT_EXPORT(ATTRIBUTION_REPORTING) SourceRegistration {
   // These `base::TimeDelta`s must be non-negative if set. This is verified by
   // the `Parse()` and `IsValid()` methods.
   base::TimeDelta expiry = kMaxSourceExpiry;
-  TriggerSpecs trigger_specs;
+  EventReportWindows event_report_windows;
+  MaxEventLevelReports max_event_level_reports;
+  TriggerDataSet trigger_data;
   base::TimeDelta aggregatable_report_window = expiry;
   int64_t priority = 0;
   FilterData filter_data;

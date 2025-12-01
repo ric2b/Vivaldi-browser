@@ -59,8 +59,9 @@ ByteString ByteString::FormatV(const char* pFormat, va_list argList) {
   int nMaxLen = UNSAFE_BUFFERS(vsnprintf(nullptr, 0, pFormat, argListCopy));
   va_end(argListCopy);
 
-  if (nMaxLen <= 0)
+  if (nMaxLen <= 0) {
     return ByteString();
+  }
 
   ByteString ret;
   {
@@ -92,7 +93,7 @@ ByteString ByteString::Format(const char* pFormat, ...) {
 ByteString::ByteString(const char* pStr, size_t nLen) {
   if (nLen) {
     // SAFETY: caller ensures `pStr` points to at least `nLen` chars.
-    m_pData = StringData::Create(UNSAFE_BUFFERS(pdfium::make_span(pStr, nLen)));
+    data_ = StringData::Create(UNSAFE_BUFFERS(pdfium::span(pStr, nLen)));
   }
 }
 
@@ -101,8 +102,8 @@ ByteString::ByteString(const uint8_t* pStr, size_t nLen)
     : UNSAFE_BUFFERS(ByteString(reinterpret_cast<const char*>(pStr), nLen)) {}
 
 ByteString::ByteString(char ch) {
-  m_pData = StringData::Create(1);
-  m_pData->m_String[0] = ch;
+  data_ = StringData::Create(1);
+  data_->string_[0] = ch;
 }
 
 ByteString::ByteString(const char* ptr)
@@ -111,7 +112,7 @@ ByteString::ByteString(const char* ptr)
 
 ByteString::ByteString(ByteStringView bstrc) {
   if (!bstrc.IsEmpty()) {
-    m_pData = StringData::Create(bstrc.span());
+    data_ = StringData::Create(bstrc.span());
   }
 }
 
@@ -120,28 +121,31 @@ ByteString::ByteString(ByteStringView str1, ByteStringView str2) {
   nSafeLen += str2.GetLength();
 
   size_t nNewLen = nSafeLen.ValueOrDie();
-  if (nNewLen == 0)
+  if (nNewLen == 0) {
     return;
+  }
 
-  m_pData = StringData::Create(nNewLen);
-  m_pData->CopyContents(str1.span());
-  m_pData->CopyContentsAt(str1.GetLength(), str2.span());
+  data_ = StringData::Create(nNewLen);
+  data_->CopyContents(str1.span());
+  data_->CopyContentsAt(str1.GetLength(), str2.span());
 }
 
 ByteString::ByteString(const std::initializer_list<ByteStringView>& list) {
   FX_SAFE_SIZE_T nSafeLen = 0;
-  for (const auto& item : list)
+  for (const auto& item : list) {
     nSafeLen += item.GetLength();
+  }
 
   size_t nNewLen = nSafeLen.ValueOrDie();
-  if (nNewLen == 0)
+  if (nNewLen == 0) {
     return;
+  }
 
-  m_pData = StringData::Create(nNewLen);
+  data_ = StringData::Create(nNewLen);
 
   size_t nOffset = 0;
   for (const auto& item : list) {
-    m_pData->CopyContentsAt(nOffset, item.span());
+    data_->CopyContentsAt(nOffset, item.span());
     nOffset += item.GetLength();
   }
 }
@@ -149,11 +153,10 @@ ByteString::ByteString(const std::initializer_list<ByteStringView>& list) {
 ByteString::ByteString(const fxcrt::ostringstream& outStream) {
   auto str = outStream.str();
   if (!str.empty()) {
-    m_pData = StringData::Create(pdfium::make_span(str));
+    data_ = StringData::Create(pdfium::span(str));
   }
 }
 
-// TODO(tsepez): Should be UNSAFE_BUFFER_USAGE.
 ByteString& ByteString::operator=(const char* str) {
   if (!str || !str[0]) {
     clear();
@@ -165,24 +168,27 @@ ByteString& ByteString::operator=(const char* str) {
 }
 
 ByteString& ByteString::operator=(ByteStringView str) {
-  if (str.IsEmpty())
+  if (str.IsEmpty()) {
     clear();
-  else
+  } else {
     AssignCopy(str.unterminated_c_str(), str.GetLength());
+  }
 
   return *this;
 }
 
 ByteString& ByteString::operator=(const ByteString& that) {
-  if (m_pData != that.m_pData)
-    m_pData = that.m_pData;
+  if (data_ != that.data_) {
+    data_ = that.data_;
+  }
 
   return *this;
 }
 
 ByteString& ByteString::operator=(ByteString&& that) noexcept {
-  if (m_pData != that.m_pData)
-    m_pData = std::move(that.m_pData);
+  if (data_ != that.data_) {
+    data_ = std::move(that.data_);
+  }
 
   return *this;
 }
@@ -202,67 +208,36 @@ ByteString& ByteString::operator+=(char ch) {
 }
 
 ByteString& ByteString::operator+=(const ByteString& str) {
-  if (str.m_pData)
-    Concat(str.m_pData->m_String, str.m_pData->m_nDataLength);
+  if (str.data_) {
+    Concat(str.data_->string_, str.data_->data_length_);
+  }
 
   return *this;
 }
 
 ByteString& ByteString::operator+=(ByteStringView str) {
-  if (!str.IsEmpty())
+  if (!str.IsEmpty()) {
     Concat(str.unterminated_c_str(), str.GetLength());
+  }
 
   return *this;
 }
 
-// TODO(tsepez): Should be UNSAFE_BUFFER_USAGE
-bool ByteString::operator==(const char* ptr) const {
-  if (!m_pData)
-    return !ptr || !ptr[0];
-
-  if (!ptr)
-    return m_pData->m_nDataLength == 0;
-
-  // SAFETY: `m_nDataLength` is within `m_String`, and the strlen() call
-  // (whose own safety is required from the caller) ensures there are
-  // `m_nDataLength` bytes at `ptr` before the terminator.
-  return UNSAFE_BUFFERS(strlen(ptr)) == m_pData->m_nDataLength &&
-         UNSAFE_BUFFERS(
-             FXSYS_memcmp(ptr, m_pData->m_String, m_pData->m_nDataLength)) == 0;
-}
-
-bool ByteString::operator==(ByteStringView str) const {
-  if (!m_pData)
-    return str.IsEmpty();
-
-  // SAFETY: `str` has `GetLength()` valid bytes in `unterminated_c_str()`,
-  // `m_nDataLength` is within `m_String`, and equality comparison.
-  return m_pData->m_nDataLength == str.GetLength() &&
-         UNSAFE_BUFFERS(FXSYS_memcmp(
-             m_pData->m_String, str.unterminated_c_str(), str.GetLength())) ==
-             0;
-}
-
-bool ByteString::operator==(const ByteString& other) const {
-  if (m_pData == other.m_pData) {
-    return true;
+bool operator==(const ByteString& lhs, const char* rhs) {
+  if (lhs.IsEmpty()) {
+    return !rhs || !rhs[0];
   }
-  if (IsEmpty()) {
-    return other.IsEmpty();
-  }
-  if (other.IsEmpty()) {
+  if (!rhs) {
     return false;
   }
 
-  // SAFETY: m_nDataLength describes the length of m_String.
-  return other.m_pData->m_nDataLength == m_pData->m_nDataLength &&
-         UNSAFE_BUFFERS(memcmp(other.m_pData->m_String, m_pData->m_String,
-                               m_pData->m_nDataLength)) == 0;
+  // SAFETY: required from caller.
+  return UNSAFE_BUFFERS(strcmp(lhs.data_->string_, rhs)) == 0;
 }
 
 // TODO(tsepez): Should be UNSAFE_BUFFER_USAGE.
 bool ByteString::operator<(const char* ptr) const {
-  if (!m_pData && !ptr) {
+  if (!data_ && !ptr) {
     return false;
   }
   if (c_str() == ptr) {
@@ -284,8 +259,9 @@ bool ByteString::operator<(ByteStringView str) const {
 }
 
 bool ByteString::operator<(const ByteString& other) const {
-  if (m_pData == other.m_pData)
+  if (data_ == other.data_) {
     return false;
+  }
 
   size_t len = GetLength();
   size_t other_len = other.GetLength();
@@ -297,13 +273,13 @@ bool ByteString::operator<(const ByteString& other) const {
 }
 
 bool ByteString::EqualNoCase(ByteStringView str) const {
-  if (!m_pData) {
+  if (!data_) {
     return str.IsEmpty();
   }
-  if (m_pData->m_nDataLength != str.GetLength()) {
+  if (data_->data_length_ != str.GetLength()) {
     return false;
   }
-  pdfium::span<const uint8_t> this_span = pdfium::as_bytes(m_pData->span());
+  pdfium::span<const uint8_t> this_span = pdfium::as_bytes(data_->span());
   pdfium::span<const uint8_t> that_span = str.unsigned_span();
   while (!this_span.empty()) {
     uint8_t this_char = this_span.front();
@@ -311,14 +287,14 @@ bool ByteString::EqualNoCase(ByteStringView str) const {
     if (this_char != that_char && tolower(this_char) != tolower(that_char)) {
       return false;
     }
-    this_span = this_span.subspan(1);
-    that_span = that_span.subspan(1);
+    this_span = this_span.subspan<1u>();
+    that_span = that_span.subspan<1u>();
   }
   return true;
 }
 
 intptr_t ByteString::ReferenceCountForTesting() const {
-  return m_pData ? m_pData->m_nRefs : 0;
+  return data_ ? data_->refs_ : 0;
 }
 
 ByteString ByteString::Substr(size_t offset) const {
@@ -327,10 +303,10 @@ ByteString ByteString::Substr(size_t offset) const {
 }
 
 ByteString ByteString::Substr(size_t first, size_t count) const {
-  if (!m_pData) {
+  if (!data_) {
     return ByteString();
   }
-  if (first == 0 && count == m_pData->m_nDataLength) {
+  if (first == 0 && count == data_->data_length_) {
     return *this;
   }
   return ByteString(AsStringView().Substr(first, count));
@@ -346,36 +322,41 @@ ByteString ByteString::Last(size_t count) const {
 }
 
 void ByteString::MakeLower() {
-  if (IsEmpty())
+  if (IsEmpty()) {
     return;
+  }
 
-  ReallocBeforeWrite(m_pData->m_nDataLength);
-  FXSYS_strlwr(m_pData->m_String);
+  ReallocBeforeWrite(data_->data_length_);
+  FXSYS_strlwr(data_->string_);
 }
 
 void ByteString::MakeUpper() {
-  if (IsEmpty())
+  if (IsEmpty()) {
     return;
+  }
 
-  ReallocBeforeWrite(m_pData->m_nDataLength);
-  FXSYS_strupr(m_pData->m_String);
+  ReallocBeforeWrite(data_->data_length_);
+  FXSYS_strupr(data_->string_);
 }
 
 int ByteString::Compare(ByteStringView str) const {
-  if (!m_pData)
+  if (!data_) {
     return str.IsEmpty() ? 0 : -1;
+  }
 
-  size_t this_len = m_pData->m_nDataLength;
+  size_t this_len = data_->data_length_;
   size_t that_len = str.GetLength();
   size_t min_len = std::min(this_len, that_len);
 
   // SAFETY: Comparison limited to minimum valid length of either argument.
   int result = UNSAFE_BUFFERS(
-      FXSYS_memcmp(m_pData->m_String, str.unterminated_c_str(), min_len));
-  if (result != 0)
+      FXSYS_memcmp(data_->string_, str.unterminated_c_str(), min_len));
+  if (result != 0) {
     return result;
-  if (this_len == that_len)
+  }
+  if (this_len == that_len) {
     return 0;
+  }
   return this_len < that_len ? -1 : 1;
 }
 
@@ -404,28 +385,32 @@ std::ostream& operator<<(std::ostream& os, ByteStringView str) {
 
 uint32_t FX_HashCode_GetA(ByteStringView str) {
   uint32_t dwHashCode = 0;
-  for (ByteStringView::UnsignedType c : str)
+  for (ByteStringView::UnsignedType c : str) {
     dwHashCode = 31 * dwHashCode + c;
+  }
   return dwHashCode;
 }
 
 uint32_t FX_HashCode_GetLoweredA(ByteStringView str) {
   uint32_t dwHashCode = 0;
-  for (ByteStringView::UnsignedType c : str)
+  for (ByteStringView::UnsignedType c : str) {
     dwHashCode = 31 * dwHashCode + tolower(c);
+  }
   return dwHashCode;
 }
 
 uint32_t FX_HashCode_GetAsIfW(ByteStringView str) {
   uint32_t dwHashCode = 0;
-  for (ByteStringView::UnsignedType c : str)
+  for (ByteStringView::UnsignedType c : str) {
     dwHashCode = 1313 * dwHashCode + c;
+  }
   return dwHashCode;
 }
 
 uint32_t FX_HashCode_GetLoweredAsIfW(ByteStringView str) {
   uint32_t dwHashCode = 0;
-  for (ByteStringView::UnsignedType c : str)
+  for (ByteStringView::UnsignedType c : str) {
     dwHashCode = 1313 * dwHashCode + FXSYS_towlower(c);
+  }
   return dwHashCode;
 }

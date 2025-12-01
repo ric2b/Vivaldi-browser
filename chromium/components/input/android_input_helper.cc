@@ -56,6 +56,27 @@ bool AndroidInputHelper::ShouldRouteEvents() const {
          view_->GetViewRenderInputRouter()->delegate()->GetInputEventRouter();
 }
 
+void AndroidInputHelper::ResetGestureDetection() {
+  ui::FilteredGestureProvider& gesture_provider =
+      delegate_->GetGestureProvider();
+
+  const ui::MotionEvent* current_down_event =
+      gesture_provider.GetCurrentDownEvent();
+  if (!current_down_event) {
+    // A hard reset ensures prevention of any timer-based events that might fire
+    // after a touch sequence has ended.
+    gesture_provider.ResetDetection();
+    return;
+  }
+
+  std::unique_ptr<ui::MotionEvent> cancel_event = current_down_event->Cancel();
+  if (gesture_provider.OnTouchEvent(*cancel_event).succeeded) {
+    blink::WebTouchEvent web_event = ui::CreateWebTouchEventFromMotionEvent(
+        *cancel_event, false /* may_cause_scrolling */, false /* hovering */);
+    RouteOrForwardTouchEvent(web_event);
+  }
+}
+
 bool AndroidInputHelper::RequiresDoubleTapGestureEvents() const {
   return true;
 }
@@ -145,9 +166,8 @@ void AndroidInputHelper::RecordToolTypeForActionDown(
 }
 
 void AndroidInputHelper::ComputeEventLatencyOSTouchHistograms(
-    const ui::MotionEvent& event) {
-  base::TimeTicks event_time = event.GetEventTime();
-  base::TimeTicks current_time = base::TimeTicks::Now();
+    const ui::MotionEvent& event,
+    const base::TimeTicks& processing_time) {
   ui::EventType event_type;
   switch (event.GetAction()) {
     case ui::MotionEvent::Action::DOWN:
@@ -164,7 +184,7 @@ void AndroidInputHelper::ComputeEventLatencyOSTouchHistograms(
     default:
       return;
   }
-  ui::ComputeEventLatencyOS(event_type, event_time, current_time);
+  ui::ComputeEventLatencyOS(event_type, event.GetEventTime(), processing_time);
 }
 
 }  // namespace input

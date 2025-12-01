@@ -12,11 +12,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+
 #include <algorithm>
 #include <cmath>
 #include <memory>
 #include <queue>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,9 +32,10 @@
 #include "base/i18n/string_compare.h"
 #include "base/logging.h"
 #include "base/memory/raw_ptr.h"
-#include "base/not_fatal_until.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/uuid.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
@@ -134,6 +137,54 @@ const bookmarks::BookmarkNode* GetNodeFromReadingListIfLoaded(
   return nullptr;
 }
 
+// The loaded state recorded for BookmarkBridge. Should be kept consistent with
+// the JavaBookmarkBridgeBackend enum in
+// tools/metrics/histograms/metadata/bookmarks/enums.xml.
+enum class BookmarksBackend : int {
+  kBookmarks = 0,
+  kPartnerBookmarks = 1,
+  kReadingList = 2,
+  kReadingListManager = 3,
+  kMaxValue = kReadingListManager
+};
+
+// Values passed through `backend_client_name` should be kept consistent with
+// JavaBookmarkBackendClients in
+// tools/metrics/histograms/metadata/bookmarks/histograms.xml.
+std::string_view GetBookmarksBackendClientName(BookmarksBackend backend) {
+  switch (backend) {
+    case BookmarksBackend::kBookmarks:
+      return "Bookmarks";
+    case BookmarksBackend::kPartnerBookmarks:
+      return "PartnerBookmarks";
+    case BookmarksBackend::kReadingList:
+      return "ReadingList";
+    case BookmarksBackend::kReadingListManager:
+      return "ReadingListManager";
+  }
+}
+
+void RecordBackendLoaded(base::TimeTicks start_time, BookmarksBackend backend) {
+  base::UmaHistogramEnumeration("Bookmarks.Android.BackendLoaded", backend);
+  base::UmaHistogramLongTimes(
+      base::StrCat({"Bookmarks.Android.BackendLoadTime.",
+                    GetBookmarksBackendClientName(backend)}),
+      base::TimeTicks::Now() - start_time);
+}
+
+// The loaded state recorded for BookmarkBridge. Should be kept consistent with
+// the JavaBookmarkBridgeLoadedState enum in
+// tools/metrics/histograms/metadata/bookmarks/enums.xml.
+enum class LoadedState : int {
+  kLoadStarted = 0,
+  kLoadFinished = 1,
+  kMaxValue = kLoadFinished
+};
+
+void RecordLoadedStateEnum(LoadedState state) {
+  base::UmaHistogramEnumeration("Bookmarks.Android.LoadedState", state);
+}
+
 }  // namespace
 
 // static
@@ -202,11 +253,26 @@ BookmarkBridge::BookmarkBridge(
   CHECK(dual_reading_list_model);
   CHECK(identity_manager_);
 
+  load_start_time_ = base::TimeTicks::Now();
+  RecordLoadedStateEnum(LoadedState::kLoadStarted);
+
   profile_observation_.Observe(profile_);
   bookmark_model_observation_.Observe(bookmark_model_);
+  if (bookmark_model_->loaded()) {
+    BookmarkModelLoaded(false);
+  }
+
   partner_bookmarks_shim_observation_.Observe(partner_bookmarks_shim_);
+  if (partner_bookmarks_shim_->IsLoaded()) {
+    PartnerShimLoaded(partner_bookmarks_shim_);
+  }
+
   reading_list_manager_observations_.AddObservation(
       local_or_syncable_reading_list_manager_.get());
+  if (local_or_syncable_reading_list_manager_->IsLoaded()) {
+    ReadingListLoaded();
+  }
+
   dual_reading_list_model_observation_.Observe(dual_reading_list_model_);
   identity_manager_observation_.Observe(identity_manager_);
 
@@ -399,18 +465,24 @@ void BookmarkBridge::GetAllFoldersWithDepths(
 
 void BookmarkBridge::GetTopLevelFolderIds(
     JNIEnv* env,
-    jboolean j_ignore_visibility,
+    jint j_force_visible_mask,
     const JavaParamRef<jobject>& j_result_obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(IsLoaded());
 
   AddBookmarkNodesToBookmarkIdList(
-      env, j_result_obj, GetTopLevelFolderIdsImpl(j_ignore_visibility));
+      env, j_result_obj,
+      GetTopLevelFolderIdsImpl(
+          static_cast<BookmarkNodeMaskBit>(j_force_visible_mask)));
 }
 
 std::vector<const BookmarkNode*> BookmarkBridge::GetTopLevelFolderIdsImpl(
-    bool ignore_visibility) {
+    BookmarkNodeMaskBit force_visible_mask) {
   std::vector<const BookmarkNode*> top_level_folders;
+
+  if (!vivaldi::IsVivaldiRunning()) {
+  // We do not show account nodes on vivaldi. Withouth this they will show up when logged in
+  // to sync but sync is not started
 
   // Query for the top-level folders:
   // bookmarks bar, mobile node, other node, and managed node (if it exists,
@@ -418,40 +490,53 @@ std::vector<const BookmarkNode*> BookmarkBridge::GetTopLevelFolderIdsImpl(
   // local bookmarks after.
   const BookmarkNode* account_mobile_node =
       bookmark_model_->account_mobile_node();
-  if (IsPermanentFolderVisible(ignore_visibility, account_mobile_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::ACCOUNT_MOBILE) != 0,
+          account_mobile_node)) {
     top_level_folders.push_back(account_mobile_node);
   }
 
   const BookmarkNode* account_bookmark_bar_node =
       bookmark_model_->account_bookmark_bar_node();
-  if (IsPermanentFolderVisible(ignore_visibility, account_bookmark_bar_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::ACCOUNT_BOOKMARK_BAR) != 0,
+          account_bookmark_bar_node)) {
     top_level_folders.push_back(account_bookmark_bar_node);
   }
 
   const BookmarkNode* account_other_node =
       bookmark_model_->account_other_node();
-  if (IsPermanentFolderVisible(ignore_visibility, account_other_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::ACCOUNT_OTHER) != 0,
+          account_other_node)) {
     top_level_folders.push_back(account_other_node);
   }
 
   const BookmarkNode* account_reading_list_node =
       account_reading_list_manager_ ? account_reading_list_manager_->GetRoot()
                                     : nullptr;
-  if (IsPermanentFolderVisible(ignore_visibility, account_reading_list_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::ACCOUNT_READING_LIST) != 0,
+          account_reading_list_node)) {
     top_level_folders.push_back(account_reading_list_node);
   }
+  } // End Vivaldi
 
   if (!vivaldi::IsVivaldiRunning()) {
   const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
   // Partner bookmarks are child of the local mobile_node.
-  if (IsPermanentFolderVisible(ignore_visibility, mobile_node) ||
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::MOBILE) != 0,
+          mobile_node) ||
       partner_bookmarks_shim_->HasPartnerBookmarks()) {
     top_level_folders.push_back(mobile_node);
   }
   }
 
   const BookmarkNode* bookmark_bar_node = bookmark_model_->bookmark_bar_node();
-  if (IsPermanentFolderVisible(ignore_visibility, bookmark_bar_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::BOOKMARK_BAR) != 0,
+          bookmark_bar_node)) {
     top_level_folders.push_back(bookmark_bar_node);
   }
 
@@ -459,20 +544,25 @@ std::vector<const BookmarkNode*> BookmarkBridge::GetTopLevelFolderIdsImpl(
   const BookmarkNode* mobile_node = bookmark_model_->mobile_node();
   // Partner bookmarks are child of the local mobile_node.
   if (mobile_node->children().size() > 0)
-  if (IsPermanentFolderVisible(ignore_visibility, mobile_node) ||
-      partner_bookmarks_shim_->HasPartnerBookmarks()) {
-    top_level_folders.push_back(mobile_node);
-  }
+    if (IsPermanentFolderVisible(
+            (force_visible_mask & BookmarkNodeMaskBit::MOBILE) != 0,
+            mobile_node) ||
+        partner_bookmarks_shim_->HasPartnerBookmarks()) {
+        top_level_folders.push_back(mobile_node);
+    }
   }
 
   const BookmarkNode* other_node = bookmark_model_->other_node();
-  if (IsPermanentFolderVisible(ignore_visibility, other_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::OTHER) != 0, other_node)) {
     top_level_folders.push_back(other_node);
   }
 
   const BookmarkNode* reading_list_node =
       local_or_syncable_reading_list_manager_->GetRoot();
-  if (IsPermanentFolderVisible(ignore_visibility, reading_list_node)) {
+  if (IsPermanentFolderVisible(
+          (force_visible_mask & BookmarkNodeMaskBit::READING_LIST) != 0,
+          reading_list_node)) {
     top_level_folders.push_back(reading_list_node);
   }
 
@@ -495,7 +585,7 @@ std::vector<const BookmarkNode*> BookmarkBridge::GetTopLevelFolderIdsImpl(
   return top_level_folders;
 }
 
-bool BookmarkBridge::IsPermanentFolderVisible(bool ignore_visibility,
+bool BookmarkBridge::IsPermanentFolderVisible(bool force_visible,
                                               const BookmarkNode* folder) {
   // Null folders are never shown.
   if (!folder) {
@@ -503,7 +593,7 @@ bool BookmarkBridge::IsPermanentFolderVisible(bool ignore_visibility,
   }
 
   bool is_account_bookmark = IsAccountBookmarkImpl(folder);
-  if (ignore_visibility) {
+  if (force_visible) {
     // When butter is active ignore_visibility only applies to a subset of local
     // folder to avoid overwhelming the user with unnecessary folders
     // (crbug.com/325070543).
@@ -1537,8 +1627,12 @@ void BookmarkBridge::NotifyIfDoneLoading() {
   if (!IsLoaded() || !java_bookmark_model_)
     return;
 
+  if (!loading_notification_sent_) {
+    RecordLoadedStateEnum(LoadedState::kLoadFinished);
+  }
   Java_BookmarkBridge_bookmarkModelLoaded(
       AttachCurrentThread(), ScopedJavaLocalRef<jobject>(java_bookmark_model_));
+  loading_notification_sent_ = true;
 }
 
 void BookmarkBridge::AddBookmarkNodesToBookmarkIdList(
@@ -1573,6 +1667,7 @@ void BookmarkBridge::BookmarkModelChanged() {
 }
 
 void BookmarkBridge::BookmarkModelLoaded(bool ids_reassigned) {
+  RecordBackendLoaded(load_start_time_, BookmarksBackend::kBookmarks);
   NotifyIfDoneLoading();
 }
 
@@ -1650,6 +1745,10 @@ void BookmarkBridge::BookmarkNodeChanged(const BookmarkNode* node) {
       CreateJavaBookmark(node));
 }
 
+void BookmarkBridge::BookmarkNodeFaviconChanged(const BookmarkNode* node) {
+  BookmarkNodeChanged(node);
+}
+
 void BookmarkBridge::BookmarkNodeChildrenReordered(const BookmarkNode* node) {
   if (!IsLoaded() || !java_bookmark_model_ ||
       suppress_observer_notifications_) {
@@ -1690,10 +1789,7 @@ void BookmarkBridge::PartnerShimChanged(PartnerBookmarksShim* shim) {
 }
 
 void BookmarkBridge::PartnerShimLoaded(PartnerBookmarksShim* shim) {
-  if (suppress_observer_notifications_) {
-    return;
-  }
-
+  RecordBackendLoaded(load_start_time_, BookmarksBackend::kPartnerBookmarks);
   NotifyIfDoneLoading();
 }
 
@@ -1702,6 +1798,7 @@ void BookmarkBridge::ShimBeingDeleted(PartnerBookmarksShim* shim) {
 }
 
 void BookmarkBridge::ReadingListLoaded() {
+  RecordBackendLoaded(load_start_time_, BookmarksBackend::kReadingListManager);
   NotifyIfDoneLoading();
 }
 
@@ -1732,10 +1829,9 @@ void BookmarkBridge::ReorderChildren(
   // iterate through array, adding the BookmarkNode*s of the objects
   for (int i = 0; i < arraySize; ++i) {
     const BookmarkNode* child_node = GetNodeByID(elements[i], bookmark_type);
-    CHECK(child_node->parent() == parent_node, base::NotFatalUntil::M135);
-    CHECK(
-        base::checked_cast<jsize>(parent_node->children().size()) == arraySize,
-        base::NotFatalUntil::M135);
+    CHECK(child_node->parent() == parent_node);
+    CHECK(base::checked_cast<jsize>(parent_node->children().size()) ==
+          arraySize);
     ordered_nodes.push_back(GetNodeByID(elements[i], 0));
   }
 
@@ -1784,6 +1880,7 @@ ReadingListManager* BookmarkBridge::GetReadingListManagerFromParentNode(
 }
 
 void BookmarkBridge::ReadingListModelLoaded(const ReadingListModel* model) {
+  RecordBackendLoaded(load_start_time_, BookmarksBackend::kReadingList);
   CreateOrDestroyAccountReadingListManagerIfNeeded();
 }
 

@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2011 Brian Grinstead All rights reserved.
@@ -228,7 +229,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
   private srgbOverlay: SrgbOverlay.SrgbOverlay.SrgbOverlay;
   private contrastOverlay: ContrastOverlay|undefined;
   private contrastDetails: ContrastDetails|undefined;
-  private readonly contrastDetailsBackgroundColorPickedToggledBound:
+  private readonly contrastDetailsBackgroundColorPickerToggledBound:
       ((event: Common.EventTarget.EventTargetEvent<boolean>) => void)|undefined;
   private readonly palettes: Map<string, Palette>;
   private readonly palettePanel: HTMLElement;
@@ -398,8 +399,8 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
           this.contrastInfo, this.contentElement, this.toggleColorPicker.bind(this),
           this.contrastPanelExpandedChanged.bind(this), this.colorSelected.bind(this));
 
-      this.contrastDetailsBackgroundColorPickedToggledBound =
-          this.contrastDetailsBackgroundColorPickedToggled.bind(this);
+      this.contrastDetailsBackgroundColorPickerToggledBound =
+          this.contrastDetailsBackgroundColorPickerToggled.bind(this);
     }
 
     this.element.classList.add('flex-none');
@@ -571,7 +572,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
     return true;
   }
 
-  private contrastDetailsBackgroundColorPickedToggled(event: {
+  private contrastDetailsBackgroundColorPickerToggled(event: {
     data: unknown,
   }): void {
     if (event.data) {
@@ -1354,19 +1355,19 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
       this.colorPickerButton.setToggled(false);
     }
 
-    if (this.contrastDetails && this.contrastDetailsBackgroundColorPickedToggledBound) {
+    if (this.contrastDetails && this.contrastDetailsBackgroundColorPickerToggledBound) {
       this.contrastDetails.addEventListener(
           ContrastDetailsEvents.BACKGROUND_COLOR_PICKER_WILL_BE_TOGGLED,
-          this.contrastDetailsBackgroundColorPickedToggledBound);
+          this.contrastDetailsBackgroundColorPickerToggledBound);
     }
   }
 
   override willHide(): void {
     void this.toggleColorPicker(false);
-    if (this.contrastDetails && this.contrastDetailsBackgroundColorPickedToggledBound) {
+    if (this.contrastDetails && this.contrastDetailsBackgroundColorPickerToggledBound) {
       this.contrastDetails.removeEventListener(
           ContrastDetailsEvents.BACKGROUND_COLOR_PICKER_WILL_BE_TOGGLED,
-          this.contrastDetailsBackgroundColorPickedToggledBound);
+          this.contrastDetailsBackgroundColorPickerToggledBound);
     }
   }
 
@@ -1375,9 +1376,10 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
       enabled = this.colorPickerButton.isToggled();
     }
 
-    // This is to make sure that only one picker is open at a time
-    // Also have a look at this.contrastDetailsBackgroundColorPickedToggled
-    if (this.contrastDetails && enabled && this.contrastDetails.backgroundColorPickerEnabled()) {
+    // This is to make sure that only one picker is open at a time (enabled is true) and
+    // the background color picker gets dismissed whenever the popup is closed by an Esc (enabled is false).
+    // Also have a look at this.contrastDetailsBackgroundColorPickedToggled.
+    if (this.contrastDetails?.backgroundColorPickerEnabled()) {
       this.contrastDetails.toggleBackgroundColorPicker(false);
     }
 
@@ -1397,7 +1399,7 @@ export class Spectrum extends Common.ObjectWrapper.eventMixin<EventTypes, typeof
       // Wait for TypeScript to support the definition of EyeDropper API:
       // https://github.com/microsoft/TypeScript/issues/48638
       /* eslint-disable  @typescript-eslint/no-explicit-any */
-      const eyeDropper = new (<any>window).EyeDropper();
+      const eyeDropper = new (window as any).EyeDropper();
       this.eyeDropperAbortController = new AbortController();
 
       try {

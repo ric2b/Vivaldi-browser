@@ -188,7 +188,7 @@ export async function getDataGridData(selector: string, columns: string[]) {
 
   const dataGridNodes = await $$('.data-grid-data-grid-node:not(.creation-node)');
   const dataGridRowValues = await Promise.all(dataGridNodes.map(node => node.evaluate((row: Element, columns) => {
-    const data: {[key: string]: string|null} = {};
+    const data: Record<string, string|null> = {};
     for (const column of columns) {
       const columnElement = row.querySelector(`.${column}-column`);
       data[column] = (columnElement?.textContent?.trim()) || '';
@@ -262,7 +262,7 @@ export async function selectStorageItemAtIndex(index: number) {
 }
 
 export async function deleteSelectedStorageItem() {
-  await click('[aria-label="Delete Selected"]');
+  await click('[title="Delete Selected"]');
   await expectVeEvents([veClick(
       'Panel: resources > Pane: session-storage-data > Toolbar > Action: storage-items-view.delete-selected')]);
 }
@@ -482,7 +482,6 @@ function veImpressionForStorageOverview() {
           veImpression('Toggle', 'clear-storage-cookies'),
           veImpression('Toggle', 'clear-storage-indexeddb'),
           veImpression('Toggle', 'clear-storage-local-storage'),
-          veImpression('Toggle', 'clear-storage-websql'),
         ]),
     veImpression(
         'Section', 'usage',

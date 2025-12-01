@@ -12,7 +12,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/webui/help/version_updater.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chrome/browser/upgrade_detector/upgrade_observer.h"
@@ -20,13 +19,14 @@
 #include "content/public/browser/web_ui_message_handler.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
+#include "base/callback_list.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/ash/tpm/tpm_firmware_update.h"
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 namespace base {
-class FilePath;
 class Clock;
+class FilePath;
 }  // namespace base
 
 class Profile;
@@ -120,7 +120,7 @@ class AboutHandler : public settings::SettingsPageUIHandler,
                           const std::string& target_channel);
 
   // Applies deferred update, triggered by JS.
-  void HandleApplyDeferredUpdate(const base::Value::List& args);
+  void HandleApplyDeferredUpdateAdvanced(const base::Value::List& args);
 
   // Checks for and applies update, triggered by JS.
   void HandleRequestUpdate(const base::Value::List& args);

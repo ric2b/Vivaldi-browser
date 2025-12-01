@@ -7,15 +7,19 @@
 #include <memory>
 #include <string>
 
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/fingerprinting_protection_filter/common/fingerprinting_protection_filter_features.h"
 #include "components/subresource_filter/content/shared/browser/child_frame_navigation_test_utils.h"
 #include "components/subresource_filter/core/mojom/subresource_filter.mojom.h"
+#include "components/variations/variations_switches.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/test_navigation_throttle_inserter.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -79,29 +83,43 @@ class FingerprintingProtectionChildNavigationThrottleTest
 
   ~FingerprintingProtectionChildNavigationThrottleTest() override = default;
 
+  void SetUp() override {
+    ChildFrameNavigationFilteringThrottleTestHarness::SetUp();
+    throttle_inserter_ =
+        std::make_unique<content::TestNavigationThrottleInserter>(
+            content::RenderViewHostTestHarness::web_contents(),
+            base::BindLambdaForTesting(
+                [&](content::NavigationThrottleRegistry& registry) -> void {
+                  // The |parent_filter_| is the parent frame's filter. Do not
+                  // register a throttle if the parent is not activated with a
+                  // valid filter.
+                  if (parent_filter_) {
+                    auto throttle = std::make_unique<
+                        FingerprintingProtectionChildNavigationThrottle>(
+                        registry, parent_filter_.get(),
+                        /*is_incognito=*/GetParam(),
+                        base::BindRepeating([](const GURL& filtered_url) {
+                          // TODO(https://crbug.com/40280666): Implement new
+                          // console message.
+                          return base::StringPrintf(
+                              kDisallowedConsoleMessageFormat,
+                              filtered_url.possibly_invalid_spec().c_str());
+                        }));
+                    ASSERT_EQ("FingerprintingProtectionChildNavigationThrottle",
+                              std::string(throttle->GetNameForLogging()));
+                    registry.AddThrottle(std::move(throttle));
+                  }
+                }));
+  }
+
   // content::WebContentsObserver:
   void DidStartNavigation(
       content::NavigationHandle* navigation_handle) override {
     ASSERT_FALSE(navigation_handle->IsInMainFrame());
-    // The |parent_filter_| is the parent frame's filter. Do not register a
-    // throttle if the parent is not activated with a valid filter.
-    if (parent_filter_) {
-      auto throttle =
-          std::make_unique<FingerprintingProtectionChildNavigationThrottle>(
-              navigation_handle, parent_filter_.get(),
-              /*is_incognito=*/GetParam(),
-              base::BindRepeating([](const GURL& filtered_url) {
-                // TODO(https://crbug.com/40280666): Implement new console
-                // message.
-                return base::StringPrintf(
-                    kDisallowedConsoleMessageFormat,
-                    filtered_url.possibly_invalid_spec().c_str());
-              }));
-      ASSERT_EQ("FingerprintingProtectionChildNavigationThrottle",
-                std::string(throttle->GetNameForLogging()));
-      navigation_handle->RegisterThrottleForTesting(std::move(throttle));
-    }
   }
+
+ private:
+  std::unique_ptr<content::TestNavigationThrottleInserter> throttle_inserter_;
 };
 
 INSTANTIATE_TEST_SUITE_P(
@@ -160,6 +178,44 @@ TEST_P(FingerprintingProtectionChildNavigationThrottleTest, DelayMetrics) {
   histogram_tester.ExpectTotalCount(kFilterDelayAliasChecked, 0);
   histogram_tester.ExpectTotalCount(kFilterDelayAliasWouldDisallow, 0);
   histogram_tester.ExpectTotalCount(kFilterDelayAliasDisallowed, 0);
+}
+
+// There should be no activation on localhosts, except for when
+// --enable-benchmarking switch is active.
+TEST_P(FingerprintingProtectionChildNavigationThrottleTest,
+       Localhost_SkipThrottleWithoutBenchmarking) {
+  ChildFrameNavigationFilteringThrottleTestHarness::
+      InitializeDocumentSubresourceFilter(
+          GURL("https://127.0.0.1/example.test"));
+  ChildFrameNavigationFilteringThrottleTestHarness::
+      CreateTestSubframeAndInitNavigation(
+          GURL("https://127.0.0.1/example.test/allowed.html"), main_rfh());
+  navigation_simulator()->SetTransition(ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            SimulateStartAndGetResult(navigation_simulator()));
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            SimulateRedirectAndGetResult(
+                navigation_simulator(),
+                GURL("https://127.0.0.1/example.test/disallowed.html")));
+}
+
+TEST_P(FingerprintingProtectionChildNavigationThrottleTest,
+       Localhost_SkipThrottleWithBenchmarking) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      variations::switches::kEnableBenchmarking);
+  ChildFrameNavigationFilteringThrottleTestHarness::
+      InitializeDocumentSubresourceFilter(
+          GURL("https://127.0.0.1/example.test"));
+  ChildFrameNavigationFilteringThrottleTestHarness::
+      CreateTestSubframeAndInitNavigation(
+          GURL("https://127.0.0.1/example.test/allowed.html"), main_rfh());
+  navigation_simulator()->SetTransition(ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  EXPECT_EQ(content::NavigationThrottle::PROCEED,
+            SimulateStartAndGetResult(navigation_simulator()));
+  EXPECT_EQ(content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE,
+            SimulateRedirectAndGetResult(
+                navigation_simulator(),
+                GURL("https://127.0.0.1/example.test/disallowed.html")));
 }
 
 TEST_P(FingerprintingProtectionChildNavigationThrottleTest,

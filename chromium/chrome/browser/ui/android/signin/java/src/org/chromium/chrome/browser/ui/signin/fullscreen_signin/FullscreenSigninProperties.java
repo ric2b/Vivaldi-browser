@@ -9,6 +9,7 @@ import android.view.View.OnClickListener;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.StringRes;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -17,6 +18,7 @@ import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableIntPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 
+@NullMarked
 class FullscreenSigninProperties {
     static final ReadableObjectPropertyKey<OnClickListener> ON_SELECTED_ACCOUNT_CLICKED =
             new ReadableObjectPropertyKey<>("on_selected_account_clicked");
@@ -95,14 +97,15 @@ class FullscreenSigninProperties {
             @DrawableRes int logoDrawableId,
             @StringRes int titleStringId,
             @StringRes int subtitleStringId,
-            @StringRes int dismissStringId) {
+            @StringRes int dismissStringId,
+            boolean showInitialLoadProgressSpinner) {
         return new PropertyModel.Builder(ALL_KEYS)
                 .with(ON_SELECTED_ACCOUNT_CLICKED, v -> onSelectedAccountClicked.run())
                 .with(SELECTED_ACCOUNT_DATA, null)
                 .with(IS_SELECTED_ACCOUNT_SUPERVISED, false)
                 .with(ON_CONTINUE_AS_CLICKED, v -> onContinueAsClicked.run())
                 .with(ON_DISMISS_CLICKED, v -> onDismissClicked.run())
-                .with(SHOW_INITIAL_LOAD_PROGRESS_SPINNER, true)
+                .with(SHOW_INITIAL_LOAD_PROGRESS_SPINNER, showInitialLoadProgressSpinner)
                 .with(SHOW_ENTERPRISE_MANAGEMENT_NOTICE, false)
                 .with(IS_SIGNIN_SUPPORTED, isSigninSupported)
                 .with(LOGO_DRAWABLE_ID, logoDrawableId)

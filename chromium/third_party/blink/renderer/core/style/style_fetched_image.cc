@@ -37,17 +37,15 @@
 namespace blink {
 
 StyleFetchedImage::StyleFetchedImage(ImageResourceContent* image,
+                                     const CSSUrlData& url_data,
                                      const Document& document,
                                      bool is_lazyload_possibly_deferred,
-                                     bool origin_clean,
-                                     bool is_ad_related,
                                      const KURL& url,
                                      const float override_image_resolution)
-    : document_(document),
+    : url_data_(url_data),
+      document_(document),
       url_(url),
-      override_image_resolution_(override_image_resolution),
-      origin_clean_(origin_clean),
-      is_ad_related_(is_ad_related) {
+      override_image_resolution_(override_image_resolution) {
   is_image_resource_ = true;
   is_lazyload_possibly_deferred_ = is_lazyload_possibly_deferred;
 
@@ -71,10 +69,8 @@ bool StyleFetchedImage::IsEqual(const StyleImage& other) const {
   if (!other.IsImageResource()) {
     return false;
   }
-
   const auto& other_image = To<StyleFetchedImage>(other);
-
-  return image_ == other_image.image_ && url_ == other_image.url_ &&
+  return image_ == other_image.image_ && *url_data_ == *other_image.url_data_ &&
          EqualResolutions(override_image_resolution_,
                           other_image.override_image_resolution_);
 }
@@ -101,10 +97,7 @@ ImageResourceContent* StyleFetchedImage::CachedImage() const {
 
 CSSValue* StyleFetchedImage::CssValue() const {
   return MakeGarbageCollected<CSSImageValue>(
-      CSSUrlData(AtomicString(url_.GetString()), url_, Referrer(),
-                 origin_clean_ ? OriginClean::kTrue : OriginClean::kFalse,
-                 is_ad_related_),
-      const_cast<StyleFetchedImage*>(this));
+      *url_data_->MakeComputed(), const_cast<StyleFetchedImage*>(this));
 }
 
 CSSValue* StyleFetchedImage::ComputedCSSValue(const ComputedStyle&,
@@ -136,6 +129,10 @@ bool StyleFetchedImage::IsAccessAllowed(String& failing_url) const {
   }
   failing_url = image_->Url().ElidedString();
   return false;
+}
+
+bool StyleFetchedImage::IsFromOriginCleanStyleSheet() const {
+  return url_data_->IsFromOriginCleanStyleSheet();
 }
 
 float StyleFetchedImage::ApplyImageResolution(float multiplier) const {
@@ -224,7 +221,7 @@ void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {
       // Check that the SVGImage has completed loading (i.e the 'load' event
       // has been dispatched in the SVG document).
       svg_image->CheckLoaded();
-      svg_image->UpdateUseCounters(*document_);
+      svg_image->UpdateUseCountersAfterLoad(*document_);
       svg_image->MaybeRecordSvgImageProcessingTime(*document_);
     }
     image_->RecordDecodedImageType(document_->GetExecutionContext());
@@ -240,7 +237,7 @@ void StyleFetchedImage::ImageNotifyFinished(ImageResourceContent*) {
 
 scoped_refptr<Image> StyleFetchedImage::GetImage(
     const ImageResourceObserver&,
-    const Document& document,
+    const Node& node,
     const ComputedStyle& style,
     const gfx::SizeF& target_size) const {
   Image* image = image_->GetImage();
@@ -252,12 +249,13 @@ scoped_refptr<Image> StyleFetchedImage::GetImage(
       SVGImageForContainer::CreateViewInfo(*svg_image, url_);
   return SVGImageForContainer::Create(
       *svg_image, target_size, style.EffectiveZoom(), view_info,
-      document.GetStyleEngine().ResolveColorSchemeForEmbedding(&style));
+      node.GetDocument().GetStyleEngine().ResolveColorSchemeForEmbedding(
+          &style));
 }
 
 bool StyleFetchedImage::KnownToBeOpaque(const Document&,
                                         const ComputedStyle&) const {
-  return image_->GetImage()->CurrentFrameKnownToBeOpaque();
+  return image_->GetImage()->IsOpaque();
 }
 
 void StyleFetchedImage::LoadDeferredImage(const Document& document) {
@@ -297,6 +295,7 @@ bool StyleFetchedImage::CanBeSpeculativelyDecoded() const {
 
 void StyleFetchedImage::Trace(Visitor* visitor) const {
   visitor->Trace(image_);
+  visitor->Trace(url_data_);
   visitor->Trace(document_);
   StyleImage::Trace(visitor);
   ImageResourceObserver::Trace(visitor);

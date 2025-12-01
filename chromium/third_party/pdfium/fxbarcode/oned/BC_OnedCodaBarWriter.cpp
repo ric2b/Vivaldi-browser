@@ -28,18 +28,17 @@
 #include "core/fxcrt/containers/contains.h"
 #include "core/fxcrt/fx_2d_size.h"
 #include "core/fxcrt/fx_extension.h"
-#include "core/fxcrt/stl_util.h"
 #include "fxbarcode/BC_Writer.h"
 #include "fxbarcode/oned/BC_OneDimWriter.h"
 
 namespace {
 
-constexpr auto kOnedCodaAlphabet = fxcrt::ToArray<const char>(
+constexpr auto kOnedCodaAlphabet = std::to_array<const char>(
     {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-',
      '$', ':', '/', '.', '+', 'A', 'B', 'C', 'D', 'T', 'N'});
 static_assert(std::size(kOnedCodaAlphabet) == 22, "Wrong size");
 
-constexpr auto kOnedCodaCharacterEncoding = fxcrt::ToArray<const int8_t>(
+constexpr auto kOnedCodaCharacterEncoding = std::to_array<const int8_t>(
     {0x03, 0x06, 0x09, 0x60, 0x12, 0x42, 0x21, 0x24, 0x30, 0x48, 0x0c,
      0x18, 0x45, 0x51, 0x54, 0x15, 0x1A, 0x29, 0x0B, 0x0E, 0x1A, 0x29});
 static_assert(std::size(kOnedCodaCharacterEncoding) == 22, "Wrong size");
@@ -50,8 +49,9 @@ const char kContentChars[] = {'0', '1', '2', '3', '4', '5', '6', '7',
                               '8', '9', '-', '$', '/', ':', '+', '.'};
 
 bool IsValidChar(wchar_t ch, bool isContent) {
-  if (ch > 0x7F)
+  if (ch > 0x7F) {
     return false;
+  }
 
   char narrow_ch = static_cast<char>(ch);
   return pdfium::Contains(kContentChars, narrow_ch) ||
@@ -65,34 +65,37 @@ CBC_OnedCodaBarWriter::CBC_OnedCodaBarWriter() = default;
 CBC_OnedCodaBarWriter::~CBC_OnedCodaBarWriter() = default;
 
 bool CBC_OnedCodaBarWriter::SetStartChar(char start) {
-  if (!pdfium::Contains(kStartEndChars, start))
+  if (!pdfium::Contains(kStartEndChars, start)) {
     return false;
+  }
 
-  m_chStart = start;
+  ch_start_ = start;
   return true;
 }
 
 bool CBC_OnedCodaBarWriter::SetEndChar(char end) {
-  if (!pdfium::Contains(kStartEndChars, end))
+  if (!pdfium::Contains(kStartEndChars, end)) {
     return false;
+  }
 
-  m_chEnd = end;
+  ch_end_ = end;
   return true;
 }
 
 void CBC_OnedCodaBarWriter::SetDataLength(int32_t length) {
-  m_iDataLenth = length + 2;
+  data_length_ = length + 2;
 }
 
 void CBC_OnedCodaBarWriter::SetTextLocation(BC_TEXT_LOC location) {
-  m_locTextLoc = location;
+  loc_text_loc_ = location;
 }
 
 bool CBC_OnedCodaBarWriter::SetWideNarrowRatio(int8_t ratio) {
-  if (ratio < 2 || ratio > 3)
+  if (ratio < 2 || ratio > 3) {
     return false;
+  }
 
-  m_iWideNarrRatio = ratio;
+  wide_narr_ratio_ = ratio;
   return true;
 }
 
@@ -112,18 +115,19 @@ WideString CBC_OnedCodaBarWriter::FilterContents(WideStringView contents) {
       index++;
       continue;
     }
-    if (!IsValidChar(ch, true))
+    if (!IsValidChar(ch, true)) {
       continue;
+    }
     filtercontents += ch;
   }
   return filtercontents;
 }
 
 DataVector<uint8_t> CBC_OnedCodaBarWriter::Encode(const ByteString& contents) {
-  ByteString data = m_chStart + contents + m_chEnd;
-  m_iContentLen = data.GetLength();
+  ByteString data = ch_start_ + contents + ch_end_;
+  content_len_ = data.GetLength();
   DataVector<uint8_t> result(
-      Fx2DSizeOrDie(m_iWideNarrRatio * 7, data.GetLength()));
+      Fx2DSizeOrDie(wide_narr_ratio_ * 7, data.GetLength()));
   char ch;
   int32_t position = 0;
   for (size_t index = 0; index < data.GetLength(); index++) {
@@ -157,7 +161,7 @@ DataVector<uint8_t> CBC_OnedCodaBarWriter::Encode(const ByteString& contents) {
     while (bit < 7) {
       result[position] = color;
       position++;
-      if (((code >> (6 - bit)) & 1) == 0 || counter == m_iWideNarrRatio - 1) {
+      if (((code >> (6 - bit)) & 1) == 0 || counter == wide_narr_ratio_ - 1) {
         color = !color;
         bit++;
         counter = 0;
@@ -175,8 +179,8 @@ DataVector<uint8_t> CBC_OnedCodaBarWriter::Encode(const ByteString& contents) {
 }
 
 WideString CBC_OnedCodaBarWriter::encodedContents(WideStringView contents) {
-  WideString strStart(static_cast<wchar_t>(m_chStart));
-  WideString strEnd(static_cast<wchar_t>(m_chEnd));
+  WideString strStart(static_cast<wchar_t>(ch_start_));
+  WideString strEnd(static_cast<wchar_t>(ch_end_));
   return strStart + contents + strEnd;
 }
 

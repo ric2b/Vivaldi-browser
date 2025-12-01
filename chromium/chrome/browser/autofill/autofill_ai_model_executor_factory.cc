@@ -31,12 +31,8 @@ AutofillAiModelExecutorFactory* AutofillAiModelExecutorFactory::GetInstance() {
 }
 
 AutofillAiModelExecutorFactory::AutofillAiModelExecutorFactory()
-    : ProfileKeyedServiceFactory(
-          "AutofillAiModelExecutor",
-          ProfileSelections::Builder()
-              .WithRegular(ProfileSelection::kOwnInstance)
-              .WithGuest(ProfileSelection::kNone)
-              .Build()) {
+    : ProfileKeyedServiceFactory("AutofillAiModelExecutor",
+                                 ProfileSelections::BuildForRegularProfile()) {
   DependsOn(AutofillAiModelCacheFactory::GetInstance());
   DependsOn(OptimizationGuideKeyedServiceFactory::GetInstance());
 }
@@ -58,13 +54,9 @@ AutofillAiModelExecutorFactory::BuildServiceInstanceForBrowserContext(
   if (!model_cache || !optimization_guide) {
     return nullptr;
   }
-  return std::make_unique<AutofillAiModelExecutorImpl>(model_cache,
-                                                       optimization_guide);
-}
-
-bool AutofillAiModelExecutorFactory::ServiceIsCreatedWithBrowserContext()
-    const {
-  return base::FeatureList::IsEnabled(features::kAutofillAiServerModel);
+  return std::make_unique<AutofillAiModelExecutorImpl>(
+      model_cache, optimization_guide,
+      optimization_guide->GetModelQualityLogsUploaderService());
 }
 
 }  // namespace autofill

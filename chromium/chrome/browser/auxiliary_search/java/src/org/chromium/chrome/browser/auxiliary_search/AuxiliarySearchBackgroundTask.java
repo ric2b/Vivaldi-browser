@@ -11,8 +11,6 @@ import android.content.res.Resources;
 import android.graphics.Bitmap;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Callback;
@@ -21,6 +19,9 @@ import org.chromium.base.TimeUtils;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchController.AuxiliarySearchHostType;
 import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchGroupProto.AuxiliarySearchEntry;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileManager;
@@ -40,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 
 /** Task to donate tab favicons for Auxiliary search. */
+@NullMarked
 public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
     // The result of a donation.
     // These values are persisted to logs. Entries should not be renumbered and numeric values
@@ -57,9 +59,9 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
         int MAX_COUNT = 3;
     }
 
-    private @NonNull Context mContext;
+    private Context mContext;
     private int mTaskFinishedCount;
-    private AuxiliarySearchController mAuxiliarySearchController;
+    private @Nullable AuxiliarySearchController mAuxiliarySearchController;
     private FaviconHelper mFaviconHelper;
 
     @Override
@@ -85,7 +87,10 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
         mAuxiliarySearchController =
                 AuxiliarySearchControllerFactory.getInstance()
                         .createAuxiliarySearchController(
-                                mContext, profile, /* tabModelSelector= */ null);
+                                mContext,
+                                profile,
+                                /* tabModelSelector= */ null,
+                                AuxiliarySearchHostType.BACKGROUND_TASK);
 
         long startTimeMs = TimeUtils.uptimeMillis();
         // Record the delay from soonest expected wakeup time.
@@ -104,17 +109,19 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
                                 R.dimen.auxiliary_search_favicon_size_small);
 
         mFaviconHelper = new FaviconHelper();
-        readDonationMetadataAsync(
-                mContext,
-                (tabs) ->
-                        onDonationMetadataRead(
-                                profile,
-                                faviconSize,
-                                startTimeMs,
-                                taskFinishedCallback,
-                                mFaviconHelper,
-                                mAuxiliarySearchController,
-                                tabs));
+        if (mAuxiliarySearchController != null) {
+            readDonationMetadataAsync(
+                    mContext,
+                    (tabs) ->
+                            onDonationMetadataRead(
+                                    profile,
+                                    faviconSize,
+                                    startTimeMs,
+                                    taskFinishedCallback,
+                                    mFaviconHelper,
+                                    mAuxiliarySearchController,
+                                    tabs));
+        }
     }
 
     @Override
@@ -144,10 +151,11 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
      * @param <T> The type of the entry data for donation.
      */
     @VisibleForTesting
-    static <T> void readDonationMetadataAsync(Context context, Callback<List<T>> callback) {
-        new AsyncTask<>() {
+    static <T> void readDonationMetadataAsync(
+            Context context, Callback<@Nullable List<T>> callback) {
+        new AsyncTask<@Nullable DataInputStream>() {
             @Override
-            protected Object doInBackground() {
+            protected @Nullable DataInputStream doInBackground() {
                 File tabDonateFile = AuxiliarySearchUtils.getTabDonateFile(context);
                 if (!tabDonateFile.exists()) {
                     return null;
@@ -167,8 +175,7 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
             }
 
             @Override
-            protected void onPostExecute(Object o) {
-                DataInputStream stream = (DataInputStream) o;
+            protected void onPostExecute(@Nullable DataInputStream stream) {
                 try {
                     callback.onResult(AuxiliarySearchProvider.readSavedMetadataFile(stream));
                     // TODO(crbug.com/370478696): Delete the metadata file after reading.
@@ -187,14 +194,14 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
      */
     @VisibleForTesting
     <T> void onDonationMetadataRead(
-            @NonNull Profile profile,
+            Profile profile,
             int faviconSize,
             long startTimeMs,
-            @NonNull TaskFinishedCallback taskFinishedCallback,
-            @NonNull FaviconHelper faviconHelper,
-            @NonNull AuxiliarySearchController auxiliarySearchController,
+            TaskFinishedCallback taskFinishedCallback,
+            FaviconHelper faviconHelper,
+            @Nullable AuxiliarySearchController auxiliarySearchController,
             @Nullable List<T> entries) {
-        if (entries == null || entries.isEmpty()) {
+        if (entries == null || entries.isEmpty() || auxiliarySearchController == null) {
             onTaskFinished(taskFinishedCallback);
             return;
         }
@@ -257,7 +264,7 @@ public class AuxiliarySearchBackgroundTask extends NativeBackgroundTask {
 
     private void destroy() {
         if (mAuxiliarySearchController != null) {
-            mAuxiliarySearchController.destroy();
+            mAuxiliarySearchController.destroy(/* lifecycleDispatcher= */ null);
             mAuxiliarySearchController = null;
         }
         if (mFaviconHelper != null) {

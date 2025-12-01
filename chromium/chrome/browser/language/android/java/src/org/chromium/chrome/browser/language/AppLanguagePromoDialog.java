@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.language;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.app.Activity;
 import android.content.res.Resources;
 import android.text.TextUtils;
@@ -23,6 +25,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import org.chromium.base.LocaleUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.language.settings.LanguageItem;
 import org.chromium.chrome.browser.language.settings.LanguagesManager;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -48,6 +52,7 @@ import java.util.Set;
  * Implements a modal dialog that prompts the user to change their UI language. Displayed once at
  * browser startup when no other promo or modals are shown.
  */
+@NullMarked
 public class AppLanguagePromoDialog {
     private final Activity mActivity;
     private final Profile mProfile;
@@ -159,8 +164,8 @@ public class AppLanguagePromoDialog {
      */
     protected static class LanguageItemAdapter
             extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
-        private ArrayList<LanguageItem> mTopLanguages;
-        private ArrayList<LanguageItem> mOtherLanguages;
+        private final ArrayList<LanguageItem> mTopLanguages;
+        private final ArrayList<LanguageItem> mOtherLanguages;
         private LanguageItem mCurrentLanguage;
         private boolean mShowOtherLanguages;
 
@@ -208,7 +213,7 @@ public class AppLanguagePromoDialog {
                                             false));
                 default:
                     assert false : "No matching viewType";
-                    return null;
+                    return assumeNonNull(null);
             }
         }
 
@@ -284,7 +289,7 @@ public class AppLanguagePromoDialog {
                 return mOtherLanguages.get(position - mTopLanguages.size() - 1);
             }
             assert false : "The language item at the separator can not be accessed";
-            return null;
+            return assumeNonNull(null);
         }
 
         @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -304,9 +309,9 @@ public class AppLanguagePromoDialog {
     /** Internal class representing an individual language row. */
     private static class AppLanguagePromptRowViewHolder extends RecyclerView.ViewHolder
             implements View.OnClickListener {
-        private TextView mPrimaryNameTextView;
-        private TextView mSecondaryNameTextView;
-        private RadioButton mRadioButton;
+        private final TextView mPrimaryNameTextView;
+        private final TextView mSecondaryNameTextView;
+        private final RadioButton mRadioButton;
 
         AppLanguagePromptRowViewHolder(View view) {
             super(view);
@@ -328,6 +333,7 @@ public class AppLanguagePromoDialog {
                 // update the new selected language.
                 return;
             }
+            assumeNonNull(adapter);
             adapter.setSelectedLanguage(position);
             View positiveButton = row.getRootView().findViewById(R.id.positive_button);
             if (positiveButton != null) {
@@ -360,6 +366,7 @@ public class AppLanguagePromoDialog {
         @Override
         public void onClick(View row) {
             LanguageItemAdapter adapter = (LanguageItemAdapter) getBindingAdapter();
+            assumeNonNull(adapter);
             adapter.showOtherLanguages();
         }
     }
@@ -375,11 +382,13 @@ public class AppLanguagePromoDialog {
      * Show the app language modal and add a custom view holding a list of languages with the
      * current location's and users preferred languages at the top.
      */
+    @Initializer
     protected void showAppLanguageModal() {
         LanguagesManager languagesManager = LanguagesManager.getForProfile(mProfile);
         // Setup initial language lists.
         LanguageItem currentOverrideLanguage =
                 languagesManager.getLanguageItem(AppLocaleUtils.getAppLanguagePref());
+        assert currentOverrideLanguage != null;
         LinkedHashSet<LanguageItem> uiLanguages =
                 new LinkedHashSet<LanguageItem>(languagesManager.getAllPossibleUiLanguages());
         LinkedHashSet<LanguageItem> topLanguages =

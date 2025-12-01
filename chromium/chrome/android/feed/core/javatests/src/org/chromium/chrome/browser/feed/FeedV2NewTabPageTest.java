@@ -70,6 +70,7 @@ import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.feed.sections.SectionHeaderListProperties;
@@ -86,8 +87,9 @@ import org.chromium.chrome.browser.suggestions.tile.TilesLinearLayout;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.top.ToolbarPhone;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
-import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.ChromeTransitTestRules;
+import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.signin.SigninTestRule;
@@ -134,8 +136,8 @@ public class FeedV2NewTabPageTest {
             new GeneralSwipeAction(
                     Swipe.FAST, GeneralLocation.CENTER, GeneralLocation.CENTER_LEFT, Press.FINGER);
 
-    private final ChromeTabbedActivityTestRule mActivityTestRule =
-            new ChromeTabbedActivityTestRule();
+    private final FreshCtaTransitTestRule mActivityTestRule =
+            ChromeTransitTestRules.freshChromeTabbedActivityRule();
 
     @Rule
     public final SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
@@ -145,6 +147,7 @@ public class FeedV2NewTabPageTest {
             ChromeRenderTestRule.Builder.withPublicCorpus()
                     .setBugComponent(
                             ChromeRenderTestRule.Component.UI_BROWSER_CONTENT_SUGGESTIONS_FEED)
+                    .setRevision(2)
                     .build();
 
     public final SigninTestRule mSigninTestRule = new SigninTestRule();
@@ -190,7 +193,7 @@ public class FeedV2NewTabPageTest {
 
         SignInPromo.setDisablePromoForTesting(mDisableSigninPromoCard);
 
-        mActivityTestRule.startMainActivityWithURL("about:blank");
+        mActivityTestRule.startOnBlankPage();
 
         // EULA must be accepted, and internet connectivity is required, or the Feed will not
         // attempt to load.
@@ -433,9 +436,14 @@ public class FeedV2NewTabPageTest {
         onView(withId(R.id.signin_promo_view_container)).check(matches(isDisplayed()));
     }
 
+    // The three-dot button in the feed's header is removed by the `NewTabPageCustomization`
+    // feature. Disabling this feature flag ensures the current test continues to validate the
+    // three-dot button's functionality.
+    // TODO(crbug.com/376238770): Removes this test once the feature flag turns on by default.
     @Test
     @MediumTest
     @Feature({"NewTabPage", "FeedNewTabPage"})
+    @DisableFeatures({"NewTabPageCustomization", "FeedHeaderRemoval"})
     @ParameterAnnotations.UseMethodParameter(SigninPromoParams.class)
     public void testArticleSectionHeaderWithMenu(boolean disableSigninPromoCard) throws Exception {
         openNewTabPage();
@@ -444,7 +452,7 @@ public class FeedV2NewTabPageTest {
                 .perform(RecyclerViewActions.scrollToPosition(ARTICLE_SECTION_HEADER_POSITION));
         waitForView((ViewGroup) mNtp.getView(), allOf(withId(R.id.header_title), isDisplayed()));
 
-        View sectionHeaderView = mNtp.getCoordinatorForTesting().getSectionHeaderViewForTesting();
+        View sectionHeaderView = mNtp.getCoordinatorForTesting().getHeaderViewForTesting();
         TextView headerStatusView = sectionHeaderView.findViewById(R.id.header_title);
 
         // Assert that the feed is expanded and that the header title text is correct.

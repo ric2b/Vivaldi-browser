@@ -167,7 +167,7 @@ base::StatusOr<std::string> GeneratorImpl::Generate(
 base::StatusOr<std::string> GeneratorImpl::GenerateImpl() {
   StructuredQuery::Decoder q(state_[state_index_].bytes);
 
-  // Warning: do *not* keep a reference to elemenets in `state_` across any of
+  // Warning: do *not* keep a reference to elements in `state_` across any of
   // these functions: `state_` can be modified by them.
   std::string source;
   {
@@ -536,7 +536,7 @@ base::StatusOr<std::string> GeneratorImpl::AggregateToString(
     case StructuredQuery::GroupBy::Aggregate::MEAN:
       return "AVG(" + column_name + ")";
     case StructuredQuery::GroupBy::Aggregate::MEDIAN:
-      return "MEDIAN(" + column_name + ")";
+      return "PERCENTILE(" + column_name + ", 50)";
     case StructuredQuery::GroupBy::Aggregate::DURATION_WEIGHTED_MEAN:
       return "SUM(cast_double!(" + column_name +
              " * dur)) / cast_double!(SUM(dur))";

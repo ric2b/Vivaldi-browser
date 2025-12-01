@@ -39,6 +39,7 @@
 #include "sync/notes/notes_model_observer_impl.h"
 #include "sync/notes/parent_guid_preprocessing.h"
 #include "sync/notes/synced_note_tracker_entity.h"
+#include "third_party/abseil-cpp/absl/container/flat_hash_map.h"
 #include "ui/base/models/tree_node_iterator.h"
 
 namespace sync_notes {
@@ -104,6 +105,22 @@ size_t CountSyncableNotesFromModel(NoteModelView* model) {
     }
   }
   return count;
+}
+
+// Gaia-ID-related metrics should not be recorded on mobile platforms, where
+// Sync-the-feature is no longer a thing (excluding edge cases pending
+// migration). On desktop, use `wipe_model_upon_sync_disabled_behavior` as
+// a workaround to distinguish transport mode from full-sync mode, as
+// metrics should only be recorded for the latter.
+bool ShouldRecordPreviouslySyncingGaiaIdMetrics(
+    syncer::WipeModelUponSyncDisabledBehavior
+        wipe_model_upon_sync_disabled_behavior) {
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_CHROMEOS)
+  return false;
+#else   // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_CHROMEOS)
+  return wipe_model_upon_sync_disabled_behavior ==
+         syncer::WipeModelUponSyncDisabledBehavior::kNever;
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS) || BUILDFLAG(IS_CHROMEOS)
 }
 
 }  // namespace
@@ -562,7 +579,12 @@ void NoteDataTypeProcessor::OnInitialUpdateReceived(
                                          notes_model_observer_.get());
 
     notes_model_->EnsurePermanentNodesExist();
-    NoteModelMerger(std::move(updates), notes_model_, note_tracker_.get())
+    NoteModelMerger(
+        std::move(updates), notes_model_, note_tracker_.get(),
+        ShouldRecordPreviouslySyncingGaiaIdMetrics(
+            wipe_model_upon_sync_disabled_behavior_)
+            ? activation_request_.previously_syncing_gaia_id_info
+            : syncer::PreviouslySyncingGaiaIdInfoForMetrics::kUnspecified)
         .Merge();
   }
 
@@ -597,9 +619,10 @@ void NoteDataTypeProcessor::StartTrackingMetadata() {
   notes_model_->AddObserver(notes_model_observer_.get());
 }
 
-void NoteDataTypeProcessor::HasUnsyncedData(
-    base::OnceCallback<void(bool)> callback) {
-  std::move(callback).Run(note_tracker_ && note_tracker_->HasLocalChanges());
+void NoteDataTypeProcessor::GetUnsyncedDataCount(
+    base::OnceCallback<void(size_t)> callback) {
+  std::move(callback).Run(note_tracker_ ? note_tracker_->GetUnsyncedDataCount()
+                                        : 0);
 }
 
 void NoteDataTypeProcessor::GetAllNodesForDebugging(AllNodesCallback callback) {

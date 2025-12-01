@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <openssl/lhash.h>
-
 #include <assert.h>
 #include <limits.h>
 #include <string.h>

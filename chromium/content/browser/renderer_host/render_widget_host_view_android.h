@@ -166,11 +166,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback) override;
-  void CopyFromExactSurfaceWithIpcPriority(
+  void CopyFromExactSurfaceWithIpcDelay(
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
       base::OnceCallback<void(const SkBitmap&)> callback,
-      CopyOutputIpcPriority ipc_priority) override;
+      base::TimeDelta ipc_delay) override;
   void CopyFromExactSurface(
       const gfx::Rect& src_rect,
       const gfx::Size& output_size,
@@ -214,7 +214,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void InvalidateLocalSurfaceIdAndAllocationGroup() override;
   void ClearFallbackSurfaceForCommitPending() override;
   void ResetFallbackToFirstNavigationSurface() override;
-  bool RequestRepaintForTesting() override;
+  bool RequestRepaintOnNewSurface() override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   bool CanSynchronizeVisualProperties() override;
   std::unique_ptr<SyntheticGestureTarget> CreateSyntheticGestureTarget()
@@ -230,6 +230,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       const gfx::PointF& point,
       input::RenderWidgetHostViewInput* target_view,
       gfx::PointF* transformed_point) override;
+  bool IsTouchSequencePotentiallyActiveOnViz() override;
+  void RequestInputBackForDragAndDrop(
+      blink::mojom::DragDataPtr drag_data,
+      const url::Origin& source_origin,
+      blink::DragOperationsMask drag_operations_mask,
+      SkBitmap bitmap,
+      gfx::Vector2d cursor_offset_in_dip,
+      gfx::Rect drag_obj_rect_in_dip,
+      blink::mojom::DragEventSourceInfoPtr event_info) override;
   TouchSelectionControllerClientManager*
   GetTouchSelectionControllerClientManager() override;
   TouchSelectionControllerInputObserver*
@@ -261,6 +270,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void NotifyVirtualKeyboardOverlayRect(
       const gfx::Rect& keyboard_rect) override;
   void NotifyContextMenuInsetsObservers(const gfx::Rect&) override;
+  void ShowInterestInElement(int) override;
   void OnPointerLockRelease() override;
 
   // ui::ViewAndroidObserver implementation:
@@ -414,6 +424,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   gpu::SurfaceHandle GetRootSurfaceHandle() override;
   void SendStateOnTouchTransfer(const ui::MotionEvent& event,
                                 bool browser_would_have_handled) override;
+  bool IsMojoRIRDelegateConnectionSetup() override;
 
   // Methods called from Java
   bool IsReady(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj);
@@ -651,6 +662,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Specifies whether touch selection handles are hidden due to text selection.
   bool handles_hidden_by_selection_ui_ = false;
 
+  // Specifies whether the current input sequence is being handled completely by
+  // OverscrollController.
+  bool is_sequence_overscrolling_ = false;
   std::unique_ptr<input::AndroidInputHelper> input_helper_;
 
   raw_ptr<ImeAdapterAndroid> ime_adapter_android_;
@@ -788,6 +802,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   SurfaceIdChangedCallbackList surface_id_changed_callbacks_;
 
   base::android::ScopedJavaGlobalRef<jobject> obj_;
+
+  void CleanupDraggingCallback();
+
+  base::OneShotTimer cleanup_dragging_callback_timer_;
+
+  base::OnceCallback<void()> start_dragging_callback_;
 
   ScreenStateChangeHandler screen_state_change_handler_;
 

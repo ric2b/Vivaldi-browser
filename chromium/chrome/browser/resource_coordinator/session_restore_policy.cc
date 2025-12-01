@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/resource_coordinator/session_restore_policy.h"
 
 #include <math.h>
@@ -19,8 +14,8 @@
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/sequence_checker.h"
+#include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
 #include "base/task/bind_post_task.h"
 #include "base/task/sequenced_task_runner.h"
@@ -38,6 +33,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/permission_controller.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 
@@ -52,17 +48,13 @@ namespace resource_coordinator {
 namespace {
 
 bool IsApp(content::WebContents* contents) {
-  static constexpr char kInternalUrlPrefix[] = "chrome-extension://";
   const GURL& url = contents->GetLastCommittedURL();
-  return strncmp(url.spec().c_str(), kInternalUrlPrefix,
-                 std::size(kInternalUrlPrefix));
+  return base::StartsWith(url.spec(), "chrome-extension://");
 }
 
 bool IsInternalPage(content::WebContents* contents) {
-  static constexpr char kInternalUrlPrefix[] = "chrome://";
   const GURL& url = contents->GetLastCommittedURL();
-  return strncmp(url.spec().c_str(), kInternalUrlPrefix,
-                 std::size(kInternalUrlPrefix));
+  return base::StartsWith(url.spec(), "chrome://");
 }
 
 class SysInfoDelegate : public SessionRestorePolicy::Delegate {
@@ -179,7 +171,7 @@ float SessionRestorePolicy::AddTabForScoring(content::WebContents* contents) {
 
 void SessionRestorePolicy::RemoveTabForScoring(content::WebContents* contents) {
   auto it = tab_data_.find(contents);
-  CHECK(it != tab_data_.end(), base::NotFatalUntil::M130);
+  CHECK(it != tab_data_.end());
   auto* tab_data = it->second.get();
 
   if (HasFinalScore(tab_data)) {
@@ -209,7 +201,7 @@ bool SessionRestorePolicy::ShouldLoad(content::WebContents* contents) const {
   }
 
   auto it = tab_data_.find(contents);
-  CHECK(it != tab_data_.end(), base::NotFatalUntil::M130);
+  CHECK(it != tab_data_.end());
   const TabData* tab_data = it->second.get();
 
   // Enforce a max time since use if one is specified.
@@ -294,7 +286,7 @@ void SessionRestorePolicy::OnSiteDataReaderDataReceived(
     content::WebContents* contents,
     TabData::SiteDataReaderData reader_data) {
   auto it = tab_data_.find(contents);
-  CHECK(it != tab_data_.end(), base::NotFatalUntil::M130);
+  CHECK(it != tab_data_.end());
   auto* tab_data = it->second.get();
 
   // Determine if background communication with the user is used. A pinned tab
@@ -312,7 +304,9 @@ void SessionRestorePolicy::OnSiteDataReaderDataReceived(
       contents->GetBrowserContext()->GetPermissionController();
 
   if (permission_controller->GetPermissionStatusForCurrentDocument(
-          blink::PermissionType::NOTIFICATIONS,
+          content::PermissionDescriptorUtil::
+              CreatePermissionDescriptorForPermissionType(
+                  blink::PermissionType::NOTIFICATIONS),
           contents->GetPrimaryMainFrame()) ==
       blink::mojom::PermissionStatus::GRANTED) {
     used_in_bg = true;

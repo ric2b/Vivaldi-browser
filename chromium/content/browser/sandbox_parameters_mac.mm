@@ -108,7 +108,7 @@ void SetupCommonSandboxParameters(
   CHECK(
       serializer->SetParameter(sandbox::policy::kParamBundlePath, bundle_path));
 
-  std::string bundle_id = base::apple::BaseBundleID();
+  std::string bundle_id(base::apple::BaseBundleID());
   DCHECK(!bundle_id.empty()) << "base::apple::OuterBundle is unset";
   CHECK(serializer->SetParameter(sandbox::policy::kParamBundleId, bundle_id));
 
@@ -139,13 +139,6 @@ void SetupCommonSandboxParameters(
       sandbox::policy::GetCanonicalPath(base::GetHomeDir()).value();
   CHECK(serializer->SetParameter(sandbox::policy::kParamHomedirAsLiteral,
                                  homedir));
-
-  CHECK(serializer->SetBooleanParameter(
-      sandbox::policy::kParamFilterSyscalls,
-      base::FeatureList::IsEnabled(features::kMacSyscallSandbox)));
-
-  CHECK(serializer->SetBooleanParameter(
-      sandbox::policy::kParamFilterSyscallsDebug, false));
 }
 
 void SetupNetworkSandboxParameters(sandbox::SandboxSerializer* serializer,

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import type * as Common from '../../../../core/common/common.js';
+import * as Root from '../../../../core/root/root.js';
 import * as Trace from '../../../../models/trace/trace.js';
 import {dispatchClickEvent, renderElementIntoDOM} from '../../../../testing/DOMHelpers.js';
 import {describeWithEnvironment, updateHostConfig} from '../../../../testing/EnvironmentHelpers.js';
@@ -20,6 +21,11 @@ describeWithEnvironment('BaseInsightComponent', () => {
   const {BaseInsightComponent} = Insights.BaseInsightComponent;
   class TestInsightComponentNoAISupport extends BaseInsightComponent<Trace.Insights.Types.InsightModel> {
     override internalName = 'test-insight';
+
+    override hasAskAiSupport() {
+      return false;
+    }
+
     override createOverlays(): TimelineOverlay[] {
       return [];
     }
@@ -29,7 +35,9 @@ describeWithEnvironment('BaseInsightComponent', () => {
   }
   class TestInsightComponentWithAISupport extends BaseInsightComponent<Trace.Insights.Types.InsightModel> {
     override internalName = 'test-insight';
-    protected override hasAskAISupport = true;
+    override hasAskAiSupport() {
+      return true;
+    }
     override createOverlays(): TimelineOverlay[] {
       return [];
     }
@@ -91,11 +99,116 @@ describeWithEnvironment('BaseInsightComponent', () => {
       const descElement = component.shadowRoot.querySelector<HTMLElement>('.insight-description');
       assert.isNotNull(descElement);
       // It's in the markdown component.
-      assert.strictEqual(descElement.children[0].shadowRoot?.textContent?.trim(), 'some description');
+      assert.include(descElement.children[0].shadowRoot?.textContent?.trim(), 'some description');
 
       const contentElement = component.shadowRoot.querySelector<HTMLElement>('.insight-content');
       assert.isNotNull(contentElement);
       assert.strictEqual(contentElement.textContent, 'test content');
+    });
+  });
+
+  describe('estimated savings output', () => {
+    let testComponentIndex = 0;  // used for defining the custom element and making it unique
+    function makeTestComponent(opts: {wastedBytes?: number, timeSavings?: number}) {
+      class TestInsight extends BaseInsightComponent<Trace.Insights.Types.InsightModel> {
+        override internalName = 'test-insight';
+        override createOverlays(): TimelineOverlay[] {
+          return [];
+        }
+
+        override getEstimatedSavingsTime(): Trace.Types.Timing.Milli|null {
+          return opts.timeSavings ? Trace.Types.Timing.Milli(opts.timeSavings) : null;
+        }
+
+        override getEstimatedSavingsBytes(): number|null {
+          return opts.wastedBytes ?? null;
+        }
+
+        override renderContent(): Lit.LitTemplate {
+          return html`<div>test content</div>`;
+        }
+      }
+      customElements.define(`test-insight-est-savings-${testComponentIndex++}`, TestInsight);
+      return new TestInsight();
+    }
+
+    it('outputs the correct estimated savings for both bytes and time', async () => {
+      const component = makeTestComponent({wastedBytes: 5_000, timeSavings: 50});
+      component.model = {
+        insightKey: 'LCPPhases',
+        strings: {},
+        title: 'LCP by Phase' as Common.UIString.LocalizedString,
+        description: 'some description' as Common.UIString.LocalizedString,
+        category: Trace.Insights.Types.InsightCategory.ALL,
+        state: 'fail',
+        frameId: '123',
+      };
+      renderElementIntoDOM(component);
+
+      await RenderCoordinator.done();
+      const estSavings = component.shadowRoot?.querySelector<HTMLElement>('slot[name=insight-savings]');
+      assert.isOk(estSavings);
+      assert.strictEqual(estSavings.innerText, 'Est savings: 50 ms & 5.0 kB');
+    });
+
+    it('outputs the correct estimated savings for bytes only', async () => {
+      const component = makeTestComponent({wastedBytes: 5_000});
+      component.model = {
+        insightKey: 'LCPPhases',
+        strings: {},
+        title: 'LCP by Phase' as Common.UIString.LocalizedString,
+        description: 'some description' as Common.UIString.LocalizedString,
+        category: Trace.Insights.Types.InsightCategory.ALL,
+        state: 'fail',
+        frameId: '123',
+      };
+      renderElementIntoDOM(component);
+
+      await RenderCoordinator.done();
+      const estSavings = component.shadowRoot?.querySelector<HTMLElement>('slot[name=insight-savings]');
+      assert.isOk(estSavings);
+      assert.strictEqual(estSavings.innerText, 'Est savings: 5.0 kB');
+    });
+
+    it('outputs the correct estimated savings for time only', async () => {
+      const component = makeTestComponent({timeSavings: 50});
+      component.model = {
+        insightKey: 'LCPPhases',
+        strings: {},
+        title: 'LCP by Phase' as Common.UIString.LocalizedString,
+        description: 'some description' as Common.UIString.LocalizedString,
+        category: Trace.Insights.Types.InsightCategory.ALL,
+        state: 'fail',
+        frameId: '123',
+      };
+      renderElementIntoDOM(component);
+
+      await RenderCoordinator.done();
+      const estSavings = component.shadowRoot?.querySelector<HTMLElement>('slot[name=insight-savings]');
+      assert.isOk(estSavings);
+      assert.strictEqual(estSavings.innerText, 'Est savings: 50 ms');
+    });
+
+    it('includes the output in the insight aria label', async () => {
+      const component = makeTestComponent({wastedBytes: 5_000, timeSavings: 50});
+      component.model = {
+        insightKey: 'LCPPhases',
+        strings: {},
+        title: 'LCP by Phase' as Common.UIString.LocalizedString,
+        description: 'some description' as Common.UIString.LocalizedString,
+        category: Trace.Insights.Types.InsightCategory.ALL,
+        state: 'fail',
+        frameId: '123',
+      };
+      renderElementIntoDOM(component);
+
+      await RenderCoordinator.done();
+      const label = component.shadowRoot?.querySelector('header')?.getAttribute('aria-label');
+      assert.isOk(label);
+
+      assert.strictEqual(
+          label,
+          'View details for LCP by Phase insight. Estimated savings for this insight: 50 ms and 5.0 kB transfer size');
     });
   });
 
@@ -135,6 +248,36 @@ describeWithEnvironment('BaseInsightComponent', () => {
       assert.isOk(component.shadowRoot);
       const button = component.shadowRoot.querySelector('devtools-button[data-insights-ask-ai]');
       assert.isOk(button);
+    });
+
+    it('adds a descriptive aria label to the button', async () => {
+      updateHostConfig({
+        devToolsAiAssistancePerformanceAgent: {
+          enabled: true,
+          insightsEnabled: true,
+        }
+      });
+      const component = await renderComponent({insightHasAISupport: true});
+      assert.isOk(component.shadowRoot);
+      const button = component.shadowRoot.querySelector('devtools-button[data-insights-ask-ai]');
+      assert.isOk(button);
+      assert.strictEqual(button.getAttribute('aria-label'), 'Ask AI about LCP by Phase insight');
+    });
+
+    it('does not render the "Ask AI" button if disabled by enterprise policy', async () => {
+      updateHostConfig({
+        devToolsAiAssistancePerformanceAgent: {
+          enabled: true,
+          insightsEnabled: true,
+        },
+        aidaAvailability: {
+          enterprisePolicyValue: Root.Runtime.GenAiEnterprisePolicyValue.DISABLE,
+        }
+      });
+      const component = await renderComponent({insightHasAISupport: true});
+      assert.isOk(component.shadowRoot);
+      const button = component.shadowRoot.querySelector('devtools-button[data-insights-ask-ai]');
+      assert.isNull(button);
     });
 
     it('does not show the button if the feature is enabled but the Insight does not support it', async () => {

@@ -133,8 +133,6 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
   struct PrewalkResult;
 
   struct AggregateStatistics {
-    int prewalked_surface_count = 0;
-    int copied_surface_count = 0;
     // True if the current frame contains a pixel-moving foreground filter
     // render pass.
     bool has_pixel_moving_filter = false;
@@ -261,7 +259,6 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
 
   void CopyUndrawnSurfaces(PrewalkResult* prewalk);
   void CopyPasses(ResolvedFrameData& resolved_frame);
-  void AddColorConversionPass();
   void AddRootReadbackPass();
   void AddDisplayTransformPass();
   void AddRenderPassHelper(AggregatedRenderPassId render_pass_id,
@@ -269,7 +266,6 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
                            const gfx::Rect& render_pass_damage_rect,
                            gfx::ContentColorUsage pass_color_usage,
                            bool pass_has_transparent_background,
-                           bool pass_is_color_conversion_pass,
                            const gfx::Transform& quad_state_to_target_transform,
                            bool quad_state_contents_opaque,
                            SkBlendMode quad_state_blend_mode,
@@ -301,7 +297,8 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
       const gfx::Transform& parent_target_transform,
       const std::optional<gfx::Rect> dest_root_target_clip_rect,
       const gfx::Transform& dest_transform_to_root_target,
-      ResolvedFrameData* resolved_frame);
+      ResolvedFrameData* resolved_frame,
+      bool force_add_zero_damage_rect);
 
   void AddRenderPassFilterDamageToDamageList(
       const ResolvedFrameData& resolved_frame,
@@ -376,8 +373,6 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
   // Maximum texture size which if larger than zero, will limit the size of
   // render passes.
   int max_render_target_size_ = 0;
-  // The id for the final color conversion render pass.
-  AggregatedRenderPassId color_conversion_render_pass_id_;
   // The id for the extra pass added to avoid readback from root pass.
   AggregatedRenderPassId readback_render_pass_id_;
   // The id for the optional render pass used to apply the display transform.
@@ -449,9 +444,6 @@ class VIZ_SERVICE_EXPORT SurfaceAggregator : public SurfaceObserver {
   // Used to avoid excessive UMA logging per frame.
   base::MetricsSubSampler metrics_subsampler_;
 
-  // Whether the last drawn frame had a color conversion pass applied. Used in
-  // production on Windows only (does not interact with jelly).
-  bool last_frame_had_color_conversion_pass_ = false;
   // Whether last frame had an extra render pass added to avoid readback from
   // root frame buffer.
   bool last_frame_had_readback_pass_ = false;

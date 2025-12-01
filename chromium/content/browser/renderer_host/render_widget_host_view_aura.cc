@@ -1089,7 +1089,7 @@ void RenderWidgetHostViewAura::ResetFallbackToFirstNavigationSurface() {
   delegated_frame_host_->ResetFallbackToFirstNavigationSurface();
 }
 
-bool RenderWidgetHostViewAura::RequestRepaintForTesting() {
+bool RenderWidgetHostViewAura::RequestRepaintOnNewSurface() {
   return SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                                      std::nullopt);
 }

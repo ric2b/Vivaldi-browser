@@ -15235,6 +15235,126 @@ void safe_VkPhysicalDeviceDepthClampZeroOneFeaturesKHR::initialize(
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
+safe_VkPhysicalDeviceRobustness2FeaturesKHR::safe_VkPhysicalDeviceRobustness2FeaturesKHR(
+    const VkPhysicalDeviceRobustness2FeaturesKHR* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType),
+      robustBufferAccess2(in_struct->robustBufferAccess2),
+      robustImageAccess2(in_struct->robustImageAccess2),
+      nullDescriptor(in_struct->nullDescriptor) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceRobustness2FeaturesKHR::safe_VkPhysicalDeviceRobustness2FeaturesKHR()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_KHR),
+      pNext(nullptr),
+      robustBufferAccess2(),
+      robustImageAccess2(),
+      nullDescriptor() {}
+
+safe_VkPhysicalDeviceRobustness2FeaturesKHR::safe_VkPhysicalDeviceRobustness2FeaturesKHR(
+    const safe_VkPhysicalDeviceRobustness2FeaturesKHR& copy_src) {
+    sType = copy_src.sType;
+    robustBufferAccess2 = copy_src.robustBufferAccess2;
+    robustImageAccess2 = copy_src.robustImageAccess2;
+    nullDescriptor = copy_src.nullDescriptor;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceRobustness2FeaturesKHR& safe_VkPhysicalDeviceRobustness2FeaturesKHR::operator=(
+    const safe_VkPhysicalDeviceRobustness2FeaturesKHR& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    robustBufferAccess2 = copy_src.robustBufferAccess2;
+    robustImageAccess2 = copy_src.robustImageAccess2;
+    nullDescriptor = copy_src.nullDescriptor;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceRobustness2FeaturesKHR::~safe_VkPhysicalDeviceRobustness2FeaturesKHR() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceRobustness2FeaturesKHR::initialize(const VkPhysicalDeviceRobustness2FeaturesKHR* in_struct,
+                                                             [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    robustBufferAccess2 = in_struct->robustBufferAccess2;
+    robustImageAccess2 = in_struct->robustImageAccess2;
+    nullDescriptor = in_struct->nullDescriptor;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceRobustness2FeaturesKHR::initialize(const safe_VkPhysicalDeviceRobustness2FeaturesKHR* copy_src,
+                                                             [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    robustBufferAccess2 = copy_src->robustBufferAccess2;
+    robustImageAccess2 = copy_src->robustImageAccess2;
+    nullDescriptor = copy_src->nullDescriptor;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceRobustness2PropertiesKHR::safe_VkPhysicalDeviceRobustness2PropertiesKHR(
+    const VkPhysicalDeviceRobustness2PropertiesKHR* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType),
+      robustStorageBufferAccessSizeAlignment(in_struct->robustStorageBufferAccessSizeAlignment),
+      robustUniformBufferAccessSizeAlignment(in_struct->robustUniformBufferAccessSizeAlignment) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceRobustness2PropertiesKHR::safe_VkPhysicalDeviceRobustness2PropertiesKHR()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_KHR),
+      pNext(nullptr),
+      robustStorageBufferAccessSizeAlignment(),
+      robustUniformBufferAccessSizeAlignment() {}
+
+safe_VkPhysicalDeviceRobustness2PropertiesKHR::safe_VkPhysicalDeviceRobustness2PropertiesKHR(
+    const safe_VkPhysicalDeviceRobustness2PropertiesKHR& copy_src) {
+    sType = copy_src.sType;
+    robustStorageBufferAccessSizeAlignment = copy_src.robustStorageBufferAccessSizeAlignment;
+    robustUniformBufferAccessSizeAlignment = copy_src.robustUniformBufferAccessSizeAlignment;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceRobustness2PropertiesKHR& safe_VkPhysicalDeviceRobustness2PropertiesKHR::operator=(
+    const safe_VkPhysicalDeviceRobustness2PropertiesKHR& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    robustStorageBufferAccessSizeAlignment = copy_src.robustStorageBufferAccessSizeAlignment;
+    robustUniformBufferAccessSizeAlignment = copy_src.robustUniformBufferAccessSizeAlignment;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceRobustness2PropertiesKHR::~safe_VkPhysicalDeviceRobustness2PropertiesKHR() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceRobustness2PropertiesKHR::initialize(const VkPhysicalDeviceRobustness2PropertiesKHR* in_struct,
+                                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    robustStorageBufferAccessSizeAlignment = in_struct->robustStorageBufferAccessSizeAlignment;
+    robustUniformBufferAccessSizeAlignment = in_struct->robustUniformBufferAccessSizeAlignment;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceRobustness2PropertiesKHR::initialize(const safe_VkPhysicalDeviceRobustness2PropertiesKHR* copy_src,
+                                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    robustStorageBufferAccessSizeAlignment = copy_src->robustStorageBufferAccessSizeAlignment;
+    robustUniformBufferAccessSizeAlignment = copy_src->robustUniformBufferAccessSizeAlignment;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkDeviceOrHostAddressConstKHR::safe_VkDeviceOrHostAddressConstKHR(const VkDeviceOrHostAddressConstKHR* in_struct,
                                                                        PNextCopyState*) {
     initialize(in_struct);

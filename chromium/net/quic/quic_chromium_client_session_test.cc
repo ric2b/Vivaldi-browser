@@ -99,6 +99,23 @@ const size_t kMaxReadersPerQuicSession = 5;
 const handles::NetworkHandle kDefaultNetworkForTests = 1;
 const handles::NetworkHandle kNewNetworkForTests = 2;
 
+class TestingQuicConnection : public quic::QuicConnection {
+ public:
+  using quic::QuicConnection::QuicConnection;
+
+  void OnKeepAliveTimeout() override {
+    keep_alive_timeout_callback_.Run();
+    quic::QuicConnection::OnKeepAliveTimeout();
+  }
+
+  void SetKeepAliveTimeoutCallback(base::RepeatingCallback<void()> callback) {
+    keep_alive_timeout_callback_ = std::move(callback);
+  }
+
+ private:
+  base::RepeatingCallback<void()> keep_alive_timeout_callback_;
+};
+
 // A subclass of QuicChromiumClientSession that allows OnPathDegrading to be
 // mocked.
 class TestingQuicChromiumClientSession : public QuicChromiumClientSession {
@@ -106,6 +123,8 @@ class TestingQuicChromiumClientSession : public QuicChromiumClientSession {
   using QuicChromiumClientSession::QuicChromiumClientSession;
 
   MOCK_METHOD(void, OnPathDegrading, (), (override));
+  MOCK_METHOD(void, RegisterQuicConnectionClosePayload, (), (override));
+  MOCK_METHOD(void, UnregisterQuicConnectionClosePayload, (), (override));
 
   void ReallyOnPathDegrading() { QuicChromiumClientSession::OnPathDegrading(); }
 };
@@ -172,11 +191,16 @@ class QuicChromiumClientSessionTest
     socket->Connect(kIpEndPoint);
     QuicChromiumPacketWriter* writer = new net::QuicChromiumPacketWriter(
         socket.get(), base::SingleThreadTaskRunner::GetCurrentDefault().get());
-    quic::QuicConnection* connection = new quic::QuicConnection(
+    auto* connection = new TestingQuicConnection(
         quic::QuicUtils::CreateRandomConnectionId(&random_),
         quic::QuicSocketAddress(), ToQuicSocketAddress(kIpEndPoint), &helper_,
         &alarm_factory_, writer, true, quic::Perspective::IS_CLIENT,
         quic::test::SupportedVersions(version_), connection_id_generator_);
+    ping_alarm_ = quic::test::QuicTestAlarmProxy(
+        quic::test::QuicConnectionPeer::GetPingAlarm(connection));
+    connection->SetKeepAliveTimeoutCallback(
+        base::BindRepeating(&QuicChromiumClientSessionTest::OnKeepAliveTimeout,
+                            base::Unretained(this)));
     session_ = std::make_unique<TestingQuicChromiumClientSession>(
         connection, std::move(socket),
         /*stream_factory=*/nullptr, &crypto_client_stream_factory_, &clock_,
@@ -201,8 +225,7 @@ class QuicChromiumClientSessionTest
         base::DefaultTickClock::GetInstance(),
         base::SingleThreadTaskRunner::GetCurrentDefault().get(),
         /*socket_performance_watcher=*/nullptr, ConnectionEndpointMetadata(),
-        /*report_ecn=*/true, /*enable_origin_frame=*/true,
-        /*allow_server_preferred_address=*/true,
+        /*enable_origin_frame=*/true, /*allow_server_preferred_address=*/true,
         MultiplexedSessionCreationInitiator::kUnknown,
         NetLogWithSource::Make(NetLogSourceType::NONE));
     if (connectivity_monitor_) {
@@ -227,6 +250,9 @@ class QuicChromiumClientSessionTest
       if (connectivity_monitor_) {
         session_->RemoveConnectivityObserver(connectivity_monitor_.get());
       }
+      if (session_->connection()->connected()) {
+        EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
+      }
       session_->CloseSessionOnError(
           ERR_ABORTED, quic::QUIC_INTERNAL_ERROR,
           quic::ConnectionCloseBehavior::SILENT_CLOSE);
@@ -236,6 +262,8 @@ class QuicChromiumClientSessionTest
   void CompleteCryptoHandshake() {
     ASSERT_THAT(session_->CryptoConnect(callback_.callback()), IsOk());
   }
+
+  void OnKeepAliveTimeout() { keep_alive_timeouts_++; }
 
   std::unique_ptr<QuicChromiumPacketWriter> CreateQuicChromiumPacketWriter(
       DatagramClientSocket* socket,
@@ -291,6 +319,8 @@ class QuicChromiumClientSessionTest
   bool allow_port_migration_ = false;
   quic::test::MockConnectionIdGenerator connection_id_generator_;
   quic::test::NoopQpackStreamSenderDelegate noop_qpack_stream_sender_delegate_;
+  int keep_alive_timeouts_ = 0;
+  std::optional<quic::test::QuicTestAlarmProxy> ping_alarm_;
 };
 
 INSTANTIATE_TEST_SUITE_P(VersionIncludeStreamDependencySequence,
@@ -477,6 +507,7 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
                                       TRAFFIC_ANNOTATION_FOR_TESTS));
   EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -544,6 +575,7 @@ TEST_P(QuicChromiumClientSessionTest, StreamRequest) {
                                       TRAFFIC_ANNOTATION_FOR_TESTS));
   EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -568,6 +600,7 @@ TEST_P(QuicChromiumClientSessionTest, ConfirmationRequiredStreamRequest) {
                                       TRAFFIC_ANNOTATION_FOR_TESTS));
   EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -597,6 +630,7 @@ TEST_P(QuicChromiumClientSessionTest, StreamRequestBeforeConfirmation) {
 
   EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -631,6 +665,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelStreamRequestBeforeRelease) {
                                       TRAFFIC_ANNOTATION_FOR_TESTS));
   handle.reset();
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -744,6 +779,7 @@ TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
   EXPECT_THAT(callback2.WaitForResult(), IsOk());
   EXPECT_TRUE(handle2->ReleaseStream() != nullptr);
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -812,6 +848,7 @@ TEST_P(QuicChromiumClientSessionTest, ReadAfterConnectionClose) {
                                    callback2.callback(),
                                    TRAFFIC_ANNOTATION_FOR_TESTS));
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   session_->connection()->CloseConnection(
       quic::QUIC_NETWORK_IDLE_TIMEOUT, "Timed out",
       quic::ConnectionCloseBehavior::SILENT_CLOSE);
@@ -879,6 +916,7 @@ TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
                                    callback2.callback(),
                                    TRAFFIC_ANNOTATION_FOR_TESTS));
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload);
   session_->connection()->CloseConnection(
       quic::QUIC_NETWORK_IDLE_TIMEOUT, "Timed out",
       quic::ConnectionCloseBehavior::SILENT_CLOSE);
@@ -952,6 +990,7 @@ TEST_P(QuicChromiumClientSessionTest, CancelPendingStreamRequest) {
   session_->OnStopSendingFrame(stop_sending);
   EXPECT_EQ(kMaxOpenStreams - 1, session_->GetNumActiveStreams());
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload);
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -979,6 +1018,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeStreamRequest) {
   session_->connection()->SendPing();
 
   // Pump the message loop to read the connection close packet.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload);
   base::RunLoop().RunUntilIdle();
 
   // Request a stream and verify that it failed.
@@ -1081,6 +1121,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseWithPendingStreamRequest) {
 
   // Close the connection and verify that the StreamRequest completes with
   // an error.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   base::RunLoop().RunUntilIdle();
 
@@ -1645,7 +1686,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
       kQuicYieldAfterPacketsRead,
       quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds),
-      /*report_ecn=*/true, net_log_with_source_);
+      net_log_with_source_);
   new_reader->StartReading();
   std::unique_ptr<QuicChromiumPacketWriter> new_writer(
       CreateQuicChromiumPacketWriter(new_reader->socket(), session_.get()));
@@ -1655,6 +1696,8 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocket) {
   IPEndPoint peer_address;
   new_reader->socket()->GetPeerAddress(&peer_address);
   // Migrate session.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
+  EXPECT_CALL(*session_, RegisterQuicConnectionClosePayload());
   EXPECT_TRUE(session_->MigrateToSocket(
       ToQuicSocketAddress(local_address), ToQuicSocketAddress(peer_address),
       std::move(new_reader), std::move(new_writer)));
@@ -1741,7 +1784,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
         kQuicYieldAfterPacketsRead,
         quic::QuicTime::Delta::FromMilliseconds(
             kQuicYieldAfterDurationMilliseconds),
-        /*report_ecn=*/true, net_log_with_source_);
+        net_log_with_source_);
     new_reader->StartReading();
     std::unique_ptr<QuicChromiumPacketWriter> new_writer(
         CreateQuicChromiumPacketWriter(new_reader->socket(), session_.get()));
@@ -1751,11 +1794,14 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
     IPEndPoint peer_address;
     new_reader->socket()->GetPeerAddress(&peer_address);
     // Migrate session.
+    EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
+    EXPECT_CALL(*session_, RegisterQuicConnectionClosePayload());
     EXPECT_TRUE(session_->MigrateToSocket(
         ToQuicSocketAddress(local_address), ToQuicSocketAddress(peer_address),
         std::move(new_reader), std::move(new_writer)));
     // Spin message loop to complete migration.
     base::RunLoop().RunUntilIdle();
+    EXPECT_CALL(*session_, RegisterQuicConnectionClosePayload());
     alarm_factory_.FireAlarm(
         quic::test::QuicConnectionPeer::GetRetirePeerIssuedConnectionIdAlarm(
             session_->connection()));
@@ -1782,7 +1828,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketMaxReaders) {
       kQuicYieldAfterPacketsRead,
       quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds),
-      /*report_ecn=*/true, net_log_with_source_);
+      net_log_with_source_);
   new_reader->StartReading();
   std::unique_ptr<QuicChromiumPacketWriter> new_writer(
       CreateQuicChromiumPacketWriter(new_reader->socket(), session_.get()));
@@ -1852,7 +1898,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
       kQuicYieldAfterPacketsRead,
       quic::QuicTime::Delta::FromMilliseconds(
           kQuicYieldAfterDurationMilliseconds),
-      /*report_ecn=*/true, net_log_with_source_);
+      net_log_with_source_);
   new_reader->StartReading();
   std::unique_ptr<QuicChromiumPacketWriter> new_writer(
       CreateQuicChromiumPacketWriter(new_reader->socket(), session_.get()));
@@ -1862,6 +1908,8 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   IPEndPoint peer_address;
   new_reader->socket()->GetPeerAddress(&peer_address);
   // Store old socket and migrate session.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
+  EXPECT_CALL(*session_, RegisterQuicConnectionClosePayload());
   EXPECT_TRUE(session_->MigrateToSocket(
       ToQuicSocketAddress(local_address), ToQuicSocketAddress(peer_address),
       std::move(new_reader), std::move(new_writer)));
@@ -1878,6 +1926,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   quic_data2.Resume();
 
   // Read error on new socket causes session close.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   EXPECT_TRUE(session_->connection()->connected());
   quic_data2.Resume();
   EXPECT_FALSE(session_->connection()->connected());
@@ -1934,6 +1983,7 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
   alarm.Fire();
   base::RunLoop().RunUntilIdle();
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -1990,6 +2040,7 @@ TEST_P(QuicChromiumClientSessionTest, ResetOnEmptyResponseHeaders) {
                                              CompletionOnceCallback());
   EXPECT_THAT(rv, IsError(net::ERR_QUIC_PROTOCOL_ERROR));
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   base::RunLoop().RunUntilIdle();
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
@@ -2021,6 +2072,7 @@ TEST_P(QuicChromiumClientSessionTest,
 
   // Close the session but keep the session around, the connectivity monitor
   // will not remove the tracking immediately.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   session_->CloseSessionOnError(ERR_ABORTED, quic::QUIC_INTERNAL_ERROR,
                                 quic::ConnectionCloseBehavior::SILENT_CLOSE);
   EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
@@ -2092,6 +2144,7 @@ TEST_P(QuicChromiumClientSessionTest, DegradingWithIPAddressChange) {
   session_->ReallyOnPathDegrading();
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   session_->CloseSessionOnError(ERR_ABORTED, quic::QUIC_INTERNAL_ERROR,
                                 quic::ConnectionCloseBehavior::SILENT_CLOSE);
   EXPECT_EQ(0u, connectivity_monitor_->GetNumDegradingSessions());
@@ -2122,8 +2175,10 @@ TEST_P(QuicChromiumClientSessionTest,
 
   session_->ReallyOnPathDegrading();
   EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
+
   // Close the session but keep the session around, the connectivity monitor
   // should not remove the count immediately.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   session_->CloseSessionOnError(ERR_ABORTED, quic::QUIC_INTERNAL_ERROR,
                                 quic::ConnectionCloseBehavior::SILENT_CLOSE);
   EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
@@ -2180,6 +2235,7 @@ TEST_P(QuicChromiumClientSessionTest,
   session_->ReallyOnPathDegrading();
   EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
 
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   session_->CloseSessionOnError(ERR_ABORTED, quic::QUIC_INTERNAL_ERROR,
                                 quic::ConnectionCloseBehavior::SILENT_CLOSE);
   EXPECT_EQ(1u, connectivity_monitor_->GetNumDegradingSessions());
@@ -2206,6 +2262,7 @@ TEST_P(QuicChromiumClientSessionTest, WriteErrorDuringCryptoConnect) {
   quic_data.AddSocketDataToFactory(&socket_factory_);
 
   Initialize();
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   ASSERT_THAT(session_->CryptoConnect(callback_.callback()),
               IsError(ERR_QUIC_HANDSHAKE_FAILED));
   // Verify error count is properly recorded.
@@ -2240,6 +2297,7 @@ TEST_P(QuicChromiumClientSessionTest, WriteErrorAfterHandshakeConfirmed) {
   CompleteCryptoHandshake();
 
   // Send a ping so that client has outgoing traffic before receiving packets.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
   session_->connection()->SendPing();
 
   // Verify error count is properly recorded.
@@ -2261,9 +2319,6 @@ TEST_P(QuicChromiumClientSessionTest, WriteErrorAfterHandshakeConfirmed) {
 
 // Much like above, but checking that ECN marks are reported.
 TEST_P(QuicChromiumClientSessionTest, ReportsReceivedEcn) {
-  base::test::ScopedFeatureList scoped_feature_list_;
-  scoped_feature_list_.InitAndEnableFeature(net::features::kReportEcn);
-
   MockQuicData mock_quic_data(version_);
   int write_packet_num = 1, read_packet_num = 0;
   quic::QuicEcnCounts ecn(1, 0, 0);  // 1 ECT(0) packet received
@@ -2372,6 +2427,103 @@ TEST_P(QuicChromiumClientSessionTest, SettingEcn) {
       std::make_unique<quic::test::TaggingEncrypter>(0x0a));
   session_->connection()->SendPing();
   EXPECT_EQ(mock_socket->outgoing_ecn(), ECN_ECT1);
+}
+
+TEST_P(QuicChromiumClientSessionTest,
+       RegisterQuicConnectionClosePayloadOnTlsHandshakeConfirmed) {
+  Initialize();
+
+  // Call OnTlsHandshakeConfirmed and verify RegisterQuicConnectionClosePayload
+  // is called.
+  // Since it's not easy to trigger OnTlsHandshakeConfirmed by injecting read
+  // data, this test directly calls OnTlsHandshakeConfirmed().
+  EXPECT_CALL(*session_, RegisterQuicConnectionClosePayload());
+  session_->OnTlsHandshakeConfirmed();
+}
+
+TEST_P(QuicChromiumClientSessionTest,
+       RegisterQuicConnectionClosePayloadOnServerConnectionIdRetired) {
+  MockQuicData quic_data(version_);
+  int packet_num = 1;
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddWrite(ASYNC,
+                     client_maker_.MakeInitialSettingsPacket(packet_num++));
+  // Set retire_prior_to=1 to retire the currently active connection ID.
+  quic::QuicConnectionId new_cid = quic::test::TestConnectionId(123456);
+  quic_data.AddRead(ASYNC, server_maker_.Packet(1)
+                               .AddNewConnectionIdFrame(new_cid,
+                                                        /*sequence_number=*/1u,
+                                                        /*retire_prior_to=*/1u)
+                               .Build());
+
+  client_maker_.set_connection_id(new_cid);
+  quic_data.AddWrite(SYNCHRONOUS, client_maker_.Packet(packet_num++)
+                                      .AddAckFrame(/*first_received=*/1,
+                                                   /*largest_received=*/1,
+                                                   /*smallest_received=*/1)
+                                      .AddRetireConnectionIdFrame(
+                                          /*sequence_number=*/0)
+                                      .Build());
+
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, ERR_CONNECTION_CLOSED);
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+  Initialize();
+  CompleteCryptoHandshake();
+
+  // Make new connection ID available
+  quic_data.Resume();
+  base::RunLoop().RunUntilIdle();
+
+  // Retire server connection ID and verify that
+  // RegisterQuicConnectionClosePayload is called.
+  EXPECT_CALL(*session_, RegisterQuicConnectionClosePayload());
+  alarm_factory_.FireAlarm(
+      quic::test::QuicConnectionPeer::GetRetirePeerIssuedConnectionIdAlarm(
+          session_->connection()));
+
+  // Close the connection and verify that UnregisterQuicConnectionClosePayload
+  // is called.
+  EXPECT_CALL(*session_, UnregisterQuicConnectionClosePayload());
+  quic_data.Resume();
+  EXPECT_TRUE(quic_data.AllReadDataConsumed());
+  EXPECT_TRUE(quic_data.AllWriteDataConsumed());
+}
+
+// Test whether we arm pings after send a ping for periodic keep alive.
+TEST_P(QuicChromiumClientSessionTest, SendPeriodicPings) {
+  MockQuicData quic_data(version_);
+  int packet_num = 1;
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.MakeInitialSettingsPacket(packet_num++));
+  quic_data.AddWrite(SYNCHRONOUS,
+                     client_maker_.Packet(packet_num++).AddPingFrame().Build());
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, ERR_CONNECTION_CLOSED);
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  Initialize();
+  // Set the keep alive ping to a relatively short timeout.
+  session_->connection()->set_keep_alive_ping_timeout(
+      quic::QuicTime::Delta::FromSeconds(10));
+  // Set connection keep alive true.
+  session_->SetPeriodicConnectionKeepAlive(true);
+
+  EXPECT_TRUE(ping_alarm_.has_value());
+  EXPECT_FALSE(ping_alarm_->IsSet());
+  CompleteCryptoHandshake();
+
+  // Check that we do not have any outstanding streams, but have the alarm set.
+  EXPECT_EQ(0u, session_->GetNumActiveStreams());
+  EXPECT_TRUE(ping_alarm_->IsSet());
+
+  EXPECT_EQ(quic::QuicTime::Delta::FromSeconds(10),
+            ping_alarm_->deadline() - clock_.ApproximateNow());
+  clock_.AdvanceTime(quic::QuicTime::Delta::FromSeconds(10));
+  ping_alarm_->Fire();
+
+  // Check if we call keep alive timeout even without any outstanding packets.
+  CHECK_EQ(1, keep_alive_timeouts_);
 }
 
 }  // namespace

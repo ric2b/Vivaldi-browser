@@ -13,6 +13,7 @@
 
 #include "base/memory/raw_ptr.h"
 #include "base/uuid.h"
+#include "components/sync/base/previously_syncing_gaia_id_info_for_metrics.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/commit_and_get_updates_types.h"
 
@@ -35,7 +36,9 @@ class NoteModelMerger {
   // null and must outlive this object.
   NoteModelMerger(syncer::UpdateResponseDataList updates,
                   NoteModelView* notes_model,
-                  SyncedNoteTracker* note_tracker);
+                  SyncedNoteTracker* note_tracker,
+                  syncer::PreviouslySyncingGaiaIdInfoForMetrics
+                      previously_syncing_gaia_id_info);
   NoteModelMerger(const NoteModelMerger&) = delete;
   NoteModelMerger& operator=(const NoteModelMerger&) = delete;
 
@@ -48,8 +51,8 @@ class NoteModelMerger {
   // and metadata entities in the injected tracker.
   void Merge();
 
- private:
-  // Internal representation of a remote tree, composed of nodes.
+  // Internal representation of a remote tree, composed of nodes. Exposed
+  // publicly for metric recording.
   class RemoteTreeNode final {
    private:
     using UpdatesPerParentUuid =
@@ -69,6 +72,10 @@ class NoteModelMerger {
         syncer::UpdateResponseData update,
         size_t max_depth,
         UpdatesPerParentUuid* updates_per_parent_uuid);
+
+    // Test-only factory function.
+    static RemoteTreeNode BuildForTesting(syncer::UpdateResponseData update,
+                                          std::vector<RemoteTreeNode> children);
 
     ~RemoteTreeNode();
 
@@ -106,6 +113,7 @@ class NoteModelMerger {
   // a permanent node, keyed by server-defined unique tag of the root.
   using RemoteForest = std::unordered_map<std::string, RemoteTreeNode>;
 
+ private:
   // Represents a pair of notes, one local and one remote, that have been
   // matched by UUID. They are guaranteed to have the same type and URL (if
   // applicable).

@@ -20,12 +20,14 @@
 #import "components/password_manager/core/browser/generation/password_generator.h"
 #import "components/password_manager/core/browser/password_form.h"
 #import "components/password_manager/core/browser/password_manager_util.h"
+#import "components/password_manager/core/browser/password_requirements_service.h"
 #import "components/password_manager/core/browser/password_sync_util.h"
 #import "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #import "components/signin/public/identity_manager/account_info.h"
 #import "ios/chrome/browser/passwords/model/password_check_observer_bridge.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_details/add_password_details_consumer.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_details/add_password_mediator_delegate.h"
+#import "ios/chrome/browser/settings/ui_bundled/password/password_details/add_password_metrics.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_details/add_password_view_controller_delegate.h"
 #import "ios/chrome/browser/settings/ui_bundled/password/password_manager_ui_features.h"
 #import "net/base/apple/url_conversions.h"
@@ -65,6 +67,8 @@ bool CheckForDuplicates(
   raw_ptr<syncer::SyncService> _syncService;
   // Used to create and run validation tasks.
   std::unique_ptr<base::CancelableTaskTracker> _validationTaskTracker;
+  raw_ptr<password_manager::PasswordRequirementsService>
+      _passwordRequirementsService;
 }
 
 // Delegate for this mediator.
@@ -77,18 +81,19 @@ bool CheckForDuplicates(
 // Stores the url entered in the website field.
 @property(nonatomic, assign) GURL URL;
 
+@property(nonatomic, copy) NSString* suggestedPassword;
+
 @end
 
-@implementation AddPasswordMediator {
-  // Stores the last suggested password or nil if no password have
-  // been suggested.
-  NSString* _suggestedPassword;
-}
+@implementation AddPasswordMediator
 
 - (instancetype)initWithDelegate:(id<AddPasswordMediatorDelegate>)delegate
             passwordCheckManager:(IOSChromePasswordCheckManager*)manager
                      prefService:(PrefService*)prefService
-                     syncService:(syncer::SyncService*)syncService {
+                     syncService:(syncer::SyncService*)syncService
+     passwordRequirementsService:
+         (password_manager::PasswordRequirementsService*)
+             passwordRequirementsService {
   DCHECK(delegate);
   DCHECK(manager);
   DCHECK(prefService);
@@ -99,6 +104,7 @@ bool CheckForDuplicates(
     _manager = manager;
     _prefService = prefService;
     _syncService = syncService;
+    _passwordRequirementsService = passwordRequirementsService;
     _sequencedTaskRunner = base::ThreadPool::CreateSequencedTaskRunner(
         {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
     _validationTaskTracker = std::make_unique<base::CancelableTaskTracker>();
@@ -148,8 +154,9 @@ bool CheckForDuplicates(
 
   if (password_manager::features::
           IsSuggestStrongPasswordInAddPasswordEnabled()) {
-    base::UmaHistogramBoolean("PasswordManager.SavedPasswordIsGenerated",
-                              [password isEqualToString:_suggestedPassword]);
+    base::UmaHistogramBoolean(
+        kPasswordManagerPasswordSettingsiOSSavedPasswordIsGenerated,
+        [password isEqualToString:_suggestedPassword]);
   }
 
   credential.note = SysNSStringToUTF16(note);
@@ -230,12 +237,19 @@ bool CheckForDuplicates(
                                                                   _syncService);
 }
 
-- (NSString*)generatePassword {
-  // The default spec is used to avoiding complicating the user flow.
-  autofill::PasswordRequirementsSpec defaultSpec;
-  _suggestedPassword =
-      base::SysUTF16ToNSString(autofill::GeneratePassword(defaultSpec));
-  return _suggestedPassword;
+// Requests a generated password and calls the completion block with the result.
+- (void)requestGeneratedPasswordWithCompletion:
+    (void (^)(NSString* password))completion {
+  __weak __typeof(self) weakSelf = self;
+  password_manager::FetchPasswordRequirementsSpecCallback callback =
+      base::BindOnce(^(autofill::PasswordRequirementsSpec spec) {
+        NSString* generatedPassword =
+            base::SysUTF16ToNSString(autofill::GeneratePassword(spec));
+        weakSelf.suggestedPassword = generatedPassword;
+        completion(generatedPassword);
+      });
+  _passwordRequirementsService->FetchPasswordRequirementsSpec(
+      self.URL, std::move(callback));
 }
 
 @end

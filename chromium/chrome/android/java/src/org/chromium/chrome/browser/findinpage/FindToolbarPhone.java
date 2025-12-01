@@ -13,6 +13,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.theme.SurfaceColorUpdateUtils;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 
@@ -70,7 +71,7 @@ public class FindToolbarPhone extends FindToolbar {
 
     @Override
     protected void updateVisualsForTabModel(boolean isIncognito) {
-        setBackgroundColor(ChromeColors.getDefaultThemeColor(getContext(), isIncognito));
+        setBackgroundColor(SurfaceColorUpdateUtils.getDefaultThemeColor(getContext(), isIncognito));
         final ColorStateList color = ChromeColors.getPrimaryIconTint(getContext(), isIncognito);
         ImageViewCompat.setImageTintList(mFindNextButton, color);
         ImageViewCompat.setImageTintList(mFindPrevButton, color);

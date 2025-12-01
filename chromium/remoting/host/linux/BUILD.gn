@@ -60,14 +60,6 @@ if (enable_me2me_host) {
     }
   }
 
-  if (!is_linux || !enable_chromoting_crashpad) {
-    copy("remoting_me2me_host_copy_crash_uploader") {
-      sources = [ "$root_build_dir/remoting_crash_uploader" ]
-      outputs = [ "$root_build_dir/remoting/crash-uploader" ]
-      deps = [ "//remoting/host/crash:remoting_crash_uploader" ]
-    }
-  }
-
   copy("remoting_me2me_host_copy_libremoting_core") {
     sources = [ "$root_build_dir/libremoting_core.so" ]
     outputs = [ "$root_build_dir/remoting/libremoting_core.so" ]
@@ -101,13 +93,6 @@ if (enable_me2me_host) {
       "//remoting/host/remote_open_url",
       "//remoting/host/webauthn:remote_webauthn",
     ]
-
-    if (!enable_chromoting_crashpad) {
-      deps += [
-        ":remoting_me2me_host_copy_crash_uploader",
-        "//remoting/host/crash:remoting_crash_uploader",
-      ]
-    }
   }
 }
 
@@ -158,6 +143,10 @@ source_set("platform_impls") {
     "desktop_resizer_linux.cc",
     "desktop_resizer_x11.cc",
     "desktop_resizer_x11.h",
+    "ei_sender_session.cc",
+    "ei_sender_session.h",
+    "gnome_interaction_strategy.cc",
+    "gnome_interaction_strategy.h",
     "input_injector_constants_linux.h",
     "input_injector_linux.cc",
     "input_injector_x11.cc",
@@ -165,8 +154,16 @@ source_set("platform_impls") {
     "keyboard_layout_monitor_linux.cc",
     "keyboard_layout_monitor_utils.cc",
     "keyboard_layout_monitor_utils.h",
+    "pipewire_capture_stream.cc",
+    "pipewire_capture_stream.h",
+    "pipewire_desktop_capturer.cc",
+    "pipewire_desktop_capturer.h",
+    "pipewire_mouse_cursor_monitor.cc",
+    "pipewire_mouse_cursor_monitor.h",
   ]
   deps = [
+    ":gvariant",
+    ":utils",
     ":x11",
     ":x11_display_utils",
     "//base",
@@ -180,6 +177,7 @@ source_set("platform_impls") {
     "//remoting/host:platform_interfaces",
     "//remoting/host/base",
     "//remoting/host/input_monitor",
+    "//remoting/host/linux/dbus_interfaces:interface_headers",
     "//remoting/proto",
     "//remoting/protocol",
     "//third_party/webrtc_overrides:webrtc_component",
@@ -203,7 +201,6 @@ source_set("x11_display_utils") {
   ]
   deps = [
     ":x11",
-    "//build/config/linux/gtk",
     "//remoting/base:logging",
     "//remoting/host:display_layout",
     "//remoting/host/linux/dbus_interfaces:interface_headers",

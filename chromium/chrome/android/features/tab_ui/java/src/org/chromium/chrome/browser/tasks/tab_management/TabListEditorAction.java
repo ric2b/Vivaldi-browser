@@ -11,19 +11,21 @@ import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.Token;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiMetricsHelper.TabListEditorExitMetricGroups;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.util.motion.MotionEventInfo;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -33,6 +35,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Defines the core action of a {@link TabListEditorMenuItem}. */
+@NullMarked
 public abstract class TabListEditorAction {
     @IntDef({ShowMode.MENU_ONLY, ShowMode.IF_ROOM, ShowMode.NUM_ENTRIES})
     @Retention(RetentionPolicy.SOURCE)
@@ -121,11 +124,11 @@ public abstract class TabListEditorAction {
 
     private static final String EXPECTED_RESOURCE_TYPE_NAME = "plurals";
 
-    private ObserverList<ActionObserver> mObsevers = new ObserverList<>();
-    private PropertyModel mModel;
+    private final ObserverList<ActionObserver> mObsevers = new ObserverList<>();
+    private final PropertyModel mModel;
     private Supplier<TabGroupModelFilter> mCurrentTabGroupModelFilterSupplier;
     private ActionDelegate mActionDelegate;
-    private SelectionDelegate<Integer> mSelectionDelegate;
+    private SelectionDelegate<TabListEditorItemSelectionId> mSelectionDelegate;
     private Boolean mEditorSupportsActionOnRelatedTabs;
 
     public TabListEditorAction(
@@ -213,17 +216,35 @@ public abstract class TabListEditorAction {
      * Actions should override this to decide if an action should be enabled and to provide the
      * enabled state and count to the PropertyModel.
      *
-     * @param tabIds the list of selected tab ids.
+     * @param itemIds the list of selected tab ids for tabs and sync ids for tab groups.
      */
-    public abstract void onSelectionStateChange(List<Integer> tabIds);
+    public abstract void onSelectionStateChange(List<TabListEditorItemSelectionId> itemIds);
 
     /**
-     * Processes the selected tabs from the selection list this includes related tabs if
-     * {@link #editorSupportsActionOnRelatedTabs()} is true.
-     * @param tabs a list of tabs from getTabsFromSelection().
+     * Processes the selected tabs from the selection list.
+     *
+     * @see #performAction(List, List, MotionEventInfo)
+     */
+    public final boolean performAction(List<Tab> tabs, List<String> tabGroupSyncIds) {
+        return performAction(tabs, tabGroupSyncIds, /* triggeringMotion= */ null);
+    }
+
+    /**
+     * Processes the selected tabs from the selection list this includes related tabs if {@link
+     * #editorSupportsActionOnRelatedTabs()} is true.
+     *
+     * @param tabs A list of tabs from getTabsFromSelection().
+     * @param tabGroupSyncIds A list of tab group sync ids representing {@link SavedTabGroups} that
+     *     are selected as indicated in the {@link SelectionDelegate}.
+     * @param triggeringMotion the {@link MotionEventInfo} that triggered the action; it is {@code
+     *     null} if {@link android.view.MotionEvent} wasn't available when the action was triggered,
+     *     such as in {@link android.view.View.OnClickListener}.
      * @return Whether an action was performed without an error.
      */
-    public abstract boolean performAction(List<Tab> tabs);
+    public abstract boolean performAction(
+            List<Tab> tabs,
+            List<String> tabGroupSyncIds,
+            @Nullable MotionEventInfo triggeringMotion);
 
     /**
      * @return Whether to hide the editor after tabking the action.
@@ -233,9 +254,19 @@ public abstract class TabListEditorAction {
     /**
      * Processes the selected tabs from the selection list.
      *
+     * @see #perform(MotionEventInfo)
+     */
+    public final boolean perform() {
+        return perform(/* triggeringMotion= */ null);
+    }
+
+    /**
+     * Processes the selected tabs from the selection list.
+     *
+     * @param triggeringMotion see {@link #performAction(List, List, MotionEventInfo)}.
      * @return whether an action was taken.
      */
-    public boolean perform() {
+    public boolean perform(@Nullable MotionEventInfo triggeringMotion) {
         assert mActionDelegate != null;
         assert mCurrentTabGroupModelFilterSupplier != null;
         assert mSelectionDelegate != null;
@@ -246,6 +277,7 @@ public abstract class TabListEditorAction {
                 obs.preProcessSelectedTabs(tabs);
             }
         }
+        List<String> tabGroupSyncIds = getTabGroupSyncIdsFromSelection();
         // When hiding by action it is expected that syncRecyclerViewPosition() is called before the
         // action occurs. This is because an action may remove tabs so it needs to sync position
         // before the removal of items occurs to ensure the positions match correctly for
@@ -253,15 +285,14 @@ public abstract class TabListEditorAction {
         if (shouldHideEditorAfterAction()) {
             mActionDelegate.syncRecyclerViewPosition();
         }
-        if (!performAction(tabs)) {
+        if (!performAction(tabs, tabGroupSyncIds, triggeringMotion)) {
             return false;
         }
 
         if (shouldHideEditorAfterAction()) {
             mActionDelegate.hideByAction();
             TabUiMetricsHelper.recordSelectionEditorExitMetrics(
-                    TabListEditorExitMetricGroups.CLOSED_AUTOMATICALLY,
-                    tabs.get(0).getContext());
+                    TabListEditorExitMetricGroups.CLOSED_AUTOMATICALLY, tabs.get(0).getContext());
         }
         return true;
     }
@@ -275,10 +306,11 @@ public abstract class TabListEditorAction {
      * @param editorSupportsActionOnRelatedTabs whether the TabListEditor supports actions on
      *     related tabs.
      */
+    @Initializer
     void configure(
-            @NonNull Supplier<TabGroupModelFilter> currentTabGroupModelFilterSupplier,
-            @NonNull SelectionDelegate<Integer> selectionDelegate,
-            @NonNull ActionDelegate actionDelegate,
+            Supplier<TabGroupModelFilter> currentTabGroupModelFilterSupplier,
+            SelectionDelegate<TabListEditorItemSelectionId> selectionDelegate,
+            ActionDelegate actionDelegate,
             boolean editorSupportsActionOnRelatedTabs) {
         mCurrentTabGroupModelFilterSupplier = currentTabGroupModelFilterSupplier;
         mSelectionDelegate = selectionDelegate;
@@ -291,13 +323,13 @@ public abstract class TabListEditorAction {
         return mModel;
     }
 
-    protected @NonNull TabGroupModelFilter getTabGroupModelFilter() {
+    protected TabGroupModelFilter getTabGroupModelFilter() {
         TabGroupModelFilter filter = mCurrentTabGroupModelFilterSupplier.get();
         assert filter != null;
         return filter;
     }
 
-    protected @NonNull ActionDelegate getActionDelegate() {
+    protected ActionDelegate getActionDelegate() {
         assert mActionDelegate != null;
         return mActionDelegate;
     }
@@ -309,11 +341,15 @@ public abstract class TabListEditorAction {
 
     private List<Tab> getTabsFromSelection() {
         List<Tab> selectedTabs = new ArrayList<>();
-        for (int tabId : mSelectionDelegate.getSelectedItems()) {
-            Tab tab = getTabGroupModelFilter().getTabModel().getTabById(tabId);
-            if (tab == null) continue;
+        for (TabListEditorItemSelectionId itemId : mSelectionDelegate.getSelectedItems()) {
+            // Only items of type tabId representing a tab are considered. Synced tab groups
+            // represented by a syncId will be ignored.
+            if (itemId.isTabId()) {
+                Tab tab = getTabGroupModelFilter().getTabModel().getTabById(itemId.getTabId());
+                if (tab == null) continue;
 
-            selectedTabs.add(tab);
+                selectedTabs.add(tab);
+            }
         }
         return selectedTabs;
     }
@@ -322,8 +358,12 @@ public abstract class TabListEditorAction {
         TabGroupModelFilter filter = mCurrentTabGroupModelFilterSupplier.get();
 
         List<Tab> tabs = new ArrayList<>();
-        for (int tabId : mSelectionDelegate.getSelectedItems()) {
-            tabs.addAll(filter.getRelatedTabList(tabId));
+        for (TabListEditorItemSelectionId itemId : mSelectionDelegate.getSelectedItems()) {
+            // Only items of type tabId representing a tab are considered. Synced tab groups
+            // represented by a syncId will be ignored.
+            if (itemId.isTabId()) {
+                tabs.addAll(filter.getRelatedTabList(itemId.getTabId()));
+            }
         }
         return tabs;
     }
@@ -332,6 +372,18 @@ public abstract class TabListEditorAction {
         return editorSupportsActionOnRelatedTabs()
                 ? getTabsAndRelatedTabsFromSelection()
                 : getTabsFromSelection();
+    }
+
+    private List<String> getTabGroupSyncIdsFromSelection() {
+        List<String> tabGroupSyncIds = new ArrayList<>();
+        for (TabListEditorItemSelectionId itemId : mSelectionDelegate.getSelectedItems()) {
+            // Only items of type syncId representing a {@link SavedTabGroup} are considered.
+            // Regular tabs or other representations of tab groups will be ignored.
+            if (itemId.isTabGroupSyncId()) {
+                tabGroupSyncIds.add(itemId.getTabGroupSyncId());
+            }
+        }
+        return tabGroupSyncIds;
     }
 
     protected void setDestroyable(Destroyable destroyable) {
@@ -353,19 +405,27 @@ public abstract class TabListEditorAction {
     }
 
     public static int getTabCountIncludingRelatedTabs(
-            TabGroupModelFilter tabGroupModelFilter, List<Integer> tabIds) {
+            TabGroupModelFilter tabGroupModelFilter, List<TabListEditorItemSelectionId> itemIds) {
         int tabCount = 0;
-        for (int tabId : tabIds) {
-            Tab tab = tabGroupModelFilter.getTabModel().getTabById(tabId);
-            // TODO(crbug.com/41495189): Find out how we can have a tab ID that is no longer
-            // in the tab model here.
-            if (tab == null) continue;
+        for (TabListEditorItemSelectionId itemId : itemIds) {
+            if (itemId.isTabId()) {
+                Tab tab = tabGroupModelFilter.getTabModel().getTabById(itemId.getTabId());
+                // TODO(crbug.com/41495189): Find out how we can have a tab ID that is no longer
+                // in the tab model here.
+                if (tab == null) continue;
 
-            @Nullable Token tabGroupId = tab.getTabGroupId();
-            if (tabGroupId != null) {
-                tabCount += tabGroupModelFilter.getTabCountForGroup(tabGroupId);
+                @Nullable Token tabGroupId = tab.getTabGroupId();
+                if (tabGroupId != null) {
+                    tabCount += tabGroupModelFilter.getTabCountForGroup(tabGroupId);
+                } else {
+                    tabCount++;
+                }
+            } else if (itemId.isTabGroupSyncId()) {
+                String syncId = itemId.getTabGroupSyncId();
+                if (syncId == null) continue;
+                tabCount += 1;
             } else {
-                tabCount++;
+                assert false : "Unexpected itemId type.";
             }
         }
         return tabCount;

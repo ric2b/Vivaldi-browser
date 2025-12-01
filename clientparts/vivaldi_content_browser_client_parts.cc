@@ -30,6 +30,17 @@
 #include "ui/content/vivaldi_tab_check.h"
 #endif
 
+#ifdef VIVALDI_V8_CONTEXT_SNAPSHOT
+#include "apps/switches.h"
+#include "base/command_line.h"
+#include "base/vivaldi_switches.h"
+#include "content/public/browser/render_process_host.h"
+#include "extensions/browser/process_map.h"
+#if BUILDFLAG(IS_LINUX)
+#include "content/public/common/content_switches.h"
+#endif // IS_LINUX
+#endif // VIVALDI_V8_CONTEXT_SNAPSHOT
+
 namespace vivaldi {
 
 bool HandleVivaldiURLRewrite(GURL* url,
@@ -129,7 +140,6 @@ void VivaldiContentBrowserClientParts::OverrideWebPreferences(
     extensions::WebViewGuest* guest =
         extensions::WebViewGuest::FromWebContents(web_contents);
     if (guest && guest->IsNavigatingAwayFromVivaldiUI()) {
-      web_prefs->databases_enabled = true;
       web_prefs->local_storage_enabled = true;
       web_prefs->sync_xhr_in_documents_enabled = true;
       web_prefs->cookie_enabled = true;
@@ -150,4 +160,33 @@ void VivaldiContentBrowserClientParts::OverrideWebPreferences(
 #endif //ENABLE_EXTENSIONS
   }
 #endif  // !IS_ANDROID
+}
+
+void VivaldiContentBrowserClientParts::AppendExtraRendererCommandLineSwitches(
+    base::CommandLine* command_line,
+    content::RenderProcessHost& process) {
+#ifdef VIVALDI_V8_CONTEXT_SNAPSHOT
+  base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+  if (cl->HasSwitch(apps::kLoadAndLaunchApp)) {
+    return;
+  }
+
+  if (!vivaldi::IsVivaldiRunning())
+    return;
+
+#if BUILDFLAG(IS_LINUX)
+  if (!cl->HasSwitch(switches::kNoZygote)) {
+    return;
+  }
+#endif
+
+  Profile* profile =
+      Profile::FromBrowserContext(process.GetBrowserContext());
+  DCHECK(profile);
+  if (extensions::ProcessMap::Get(profile) && extensions::ProcessMap::Get(profile)
+          ->Contains(vivaldi::kVivaldiAppId,
+                                                     process.GetDeprecatedID())) {
+    command_line->AppendSwitch(switches::kVivaldiSnapshotProcess);
+  }
+#endif // VIVALDI_V8_CONTEXT_SNAPSHOT
 }

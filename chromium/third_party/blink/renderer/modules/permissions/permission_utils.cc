@@ -135,6 +135,16 @@ String PermissionNameToString(PermissionName name) {
       return "web-app-installation";
     case PermissionName::LOCAL_NETWORK_ACCESS:
       return "local-network-access";
+    case PermissionName::VR:
+      return "vr";
+    case PermissionName::AR:
+      return "ar";
+    case PermissionName::HAND_TRACKING:
+      return "hand-tracking";
+    case PermissionName::WEB_PRINTING:
+      return "web-printing";
+    case PermissionName::SMART_CARD:
+      return "smart-card";
   }
 }
 
@@ -429,6 +439,10 @@ PermissionDescriptorPtr ParsePermissionDescriptor(
       return nullptr;
     }
     return CreatePermissionDescriptor(PermissionName::WEB_APP_INSTALLATION);
+  }
+
+  if (name == V8PermissionName::Enum::kLocalNetworkAccess) {
+    return CreatePermissionDescriptor(PermissionName::LOCAL_NETWORK_ACCESS);
   }
   return nullptr;
 }

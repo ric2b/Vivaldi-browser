@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/services/app_service/public/cpp/intent_util.h"
 #include "ui/base/mojom/window_show_state.mojom.h"
@@ -521,7 +522,4 @@ bool AppRestoreData::operator==(const AppRestoreData& other) const {
          status_bar_color == other.status_bar_color;
 }
 
-bool AppRestoreData::operator!=(const AppRestoreData& other) const {
-  return !(*this == other);
-}
 }  // namespace app_restore

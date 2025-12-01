@@ -89,7 +89,7 @@ std::optional<ModelError> UserEventSyncBridge::MergeFullSyncData(
     EntityChangeList entity_data) {
   DCHECK(entity_data.empty());
   DCHECK(change_processor()->IsTrackingMetadata());
-  DCHECK(!change_processor()->TrackedAccountId().empty());
+  DCHECK(!change_processor()->TrackedGaiaId().empty());
   return ApplyIncrementalSyncChanges(std::move(metadata_change_list),
                                      std::move(entity_data));
 }
@@ -154,12 +154,20 @@ std::unique_ptr<DataBatch> UserEventSyncBridge::GetAllDataForDebugging() {
   return batch;
 }
 
-std::string UserEventSyncBridge::GetClientTag(const EntityData& entity_data) {
+std::string UserEventSyncBridge::GetClientTag(
+    const EntityData& entity_data) const {
   return GetStorageKey(entity_data);
 }
 
-std::string UserEventSyncBridge::GetStorageKey(const EntityData& entity_data) {
+std::string UserEventSyncBridge::GetStorageKey(
+    const EntityData& entity_data) const {
   return GetStorageKeyFromSpecifics(entity_data.specifics.user_event());
+}
+
+bool UserEventSyncBridge::IsEntityDataValid(
+    const EntityData& entity_data) const {
+  // USER_EVENTS is a commit only data type so this method is not called.
+  NOTREACHED();
 }
 
 void UserEventSyncBridge::ApplyDisableSyncChanges(

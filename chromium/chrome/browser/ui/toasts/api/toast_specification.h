@@ -48,6 +48,13 @@ class ToastSpecification {
     // dismiss.
     Builder& AddGlobalScoped();
 
+    // Explicitly marks this toast as an actionable toast (allows the user to
+    // interact with it in some way).
+    // NOTE: Only use this for toasts that do not have actionable buttons /
+    // menus but have interactions tied to the toast that are handled outside
+    // the toast framework such as keyboard shortcuts.
+    Builder& SetToastAsActionable();
+
     std::unique_ptr<ToastSpecification> Build();
 
    private:
@@ -72,13 +79,19 @@ class ToastSpecification {
   base::RepeatingClosure action_button_callback() const {
     return action_button_closure_;
   }
+
   bool has_menu() const { return has_menu_; }
   bool is_global_scope() const { return is_global_scope_; }
+  bool is_actionable() const {
+    return has_close_button() || has_menu() || has_actionable_override();
+  }
+  bool has_actionable_override() const { return actionable_toast_override_; }
 
   void AddCloseButton();
   void AddActionButton(int string_id, base::RepeatingClosure closure);
   void AddMenu();
   void AddGlobalScope();
+  void SetToastAsActionable();
 
  private:
   const base::raw_ref<const gfx::VectorIcon> icon_;
@@ -88,6 +101,7 @@ class ToastSpecification {
   std::optional<int> action_button_string_id_;
   base::RepeatingClosure action_button_closure_;
   bool is_global_scope_ = false;
+  bool actionable_toast_override_ = false;
 };
 
 #endif  // CHROME_BROWSER_UI_TOASTS_API_TOAST_SPECIFICATION_H_

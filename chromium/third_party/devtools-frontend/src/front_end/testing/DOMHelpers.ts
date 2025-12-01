@@ -9,6 +9,7 @@
  * Note that `resetTestDOM` is automatically run before each test (see `test_setup.ts`).
  **/
 
+import type * as Platform from '../core/platform/platform.js';
 import type * as NodeText from '../ui/components/node_text/node_text.js';
 import * as UI from '../ui/legacy/legacy.js';
 
@@ -21,7 +22,8 @@ interface RenderOptions {
 /**
  * Renders a given element into the DOM. By default it will error if it finds an element already rendered but this can be controlled via the options.
  **/
-export function renderElementIntoDOM<E extends Element>(element: E, renderOptions: RenderOptions = {}): E {
+export function renderElementIntoDOM<E extends Node|UI.Widget.Widget>(
+    element: E, renderOptions: RenderOptions = {}): E {
   const container = document.getElementById(TEST_CONTAINER_ID);
 
   if (!container) {
@@ -33,7 +35,12 @@ export function renderElementIntoDOM<E extends Element>(element: E, renderOption
   if (container.childNodes.length !== 0 && !allowMultipleChildren) {
     throw new Error(`renderElementIntoDOM expects the container to be empty ${container.innerHTML}`);
   }
-  container.appendChild(element);
+  if (element instanceof Node) {
+    container.appendChild(element);
+  } else {
+    element.markAsRoot();
+    element.show(container);
+  }
   return element;
 }
 
@@ -88,20 +95,17 @@ export const cleanTestDOM = async () => {
   await raf();
 };
 
-interface Constructor<T> {
-  new(...args: unknown[]): T;
-}
-
 /**
  * Asserts that all emenents of `nodeList` are at least of type `T`.
  */
 export function assertElements<T extends Element>(
-    nodeList: NodeListOf<Element>, elementClass: Constructor<T>): asserts nodeList is NodeListOf<T> {
+    nodeList: NodeListOf<Element>,
+    elementClass: Platform.Constructor.Constructor<T>): asserts nodeList is NodeListOf<T> {
   nodeList.forEach(e => assert.instanceOf(e, elementClass));
 }
 
 export function getElementWithinComponent<T extends HTMLElement, V extends Element>(
-    component: T, selector: string, elementClass: Constructor<V>) {
+    component: T, selector: string, elementClass: Platform.Constructor.Constructor<V>) {
   assert.isNotNull(component.shadowRoot);
   const element = component.shadowRoot.querySelector(selector);
   assert.instanceOf(element, elementClass);
@@ -109,7 +113,7 @@ export function getElementWithinComponent<T extends HTMLElement, V extends Eleme
 }
 
 export function getElementsWithinComponent<T extends HTMLElement, V extends Element>(
-    component: T, selector: string, elementClass: Constructor<V>) {
+    component: T, selector: string, elementClass: Platform.Constructor.Constructor<V>) {
   assert.isNotNull(component.shadowRoot);
   const elements = component.shadowRoot.querySelectorAll(selector);
   assertElements(elements, elementClass);
@@ -279,7 +283,9 @@ export function stripLitHtmlCommentNodes(text: string) {
 export function getCleanTextContentFromElements(el: ShadowRoot|HTMLElement, selector: string): string[] {
   const elements = Array.from(el.querySelectorAll(selector));
   return elements.map(element => {
-    return element.textContent ? element.textContent.trim().replace(/[ \n]{2,}/g, ' ') : '';
+    return ((element instanceof HTMLElement ? element.innerText : element.textContent) ?? '')
+        .trim()
+        .replace(/[ \n]{2,}/g, ' ');
   });
 }
 
@@ -329,10 +335,14 @@ export async function assertScreenshot(filename: string) {
     frame.scrollTo(0, 0);
     frame = frame.parent !== frame ? frame.parent : null;
   }
+
+  // For test we load the fonts though the network - front_end/testing/test_setup.ts
+  // Which means we may try to take screenshot while they are loading
+  await document.fonts.ready;
   await raf();
   // @ts-expect-error see karma config.
-  const result = await window.assertScreenshot(`#${TEST_CONTAINER_ID}`, filename);
-  if (result) {
-    throw new Error(result);
+  const errorMessage = await window.assertScreenshot(`#${TEST_CONTAINER_ID}`, filename);
+  if (errorMessage) {
+    throw new Error(errorMessage);
   }
 }

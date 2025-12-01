@@ -38,6 +38,7 @@
 #import "ios/chrome/browser/ui/tab_strip/vivaldi_tab_strip_constants.h"
 #import "ios/ui/context_menu/vivaldi_context_menu_constants.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
+#import "ios/ui/ntp/vivaldi_speed_dial_constants.h"
 // End Vivaldi
 
 namespace {
@@ -74,9 +75,12 @@ constexpr CGFloat kGroupStrokeBottomOffset = 2.0;
 constexpr CGFloat kTabGroupInset = 4.0;
 constexpr CGFloat kGroupEdgeInset = 3.0;
 
+// Activity Indicator
+constexpr CGFloat kActivityIndicatorRadius = 8;
+
 // Returns the default favicon image.
 UIImage* DefaultFavicon() {
-  return DefaultSymbolWithPointSize(kGlobeAmericasSymbol, 14);
+  return [UIImage imageNamed:vNTPSDFallbackFavicon];
 }
 
 NSString* closeSymbolName = @"tabstrip_close_tab";
@@ -870,6 +874,8 @@ NSString* closeSymbolName = @"tabstrip_close_tab";
 // Returns a new Activity Indicator.
 - (MDCActivityIndicator*)createActivityIndicatior {
   MDCActivityIndicator* activityIndicator = [[MDCActivityIndicator alloc] init];
+  activityIndicator.cycleColors = @[ [UIColor colorNamed:kBlueColor] ];
+  activityIndicator.radius = kActivityIndicatorRadius;
   activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
   activityIndicator.hidden = YES;
   return activityIndicator;

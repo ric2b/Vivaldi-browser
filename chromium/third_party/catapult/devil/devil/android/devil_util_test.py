@@ -39,8 +39,8 @@ class DevilUtilTest(unittest.TestCase):
 
   def testCalculateHostHashes_singlePath(self):
     test_paths = ['/test/host/file.dat']
-    mock_get_cmd_output = mock.Mock(return_value='0123456789abcdef')
-    with mock.patch('devil.utils.cmd_helper.GetCmdOutput',
+    mock_get_cmd_output = mock.Mock(return_value=(0, '0123456789abcdef', ''))
+    with mock.patch('devil.utils.cmd_helper.GetCmdStatusOutputAndError',
                     new=mock_get_cmd_output):
       out = devil_util.CalculateHostHashes(test_paths)
       self.assertEqual(1, len(out))
@@ -52,8 +52,8 @@ class DevilUtilTest(unittest.TestCase):
   def testCalculateHostHashes_list(self):
     test_paths = ['/test/host/file0.dat', '/test/host/file1.dat']
     mock_get_cmd_output = mock.Mock(
-        return_value='0123456789abcdef\n123456789abcdef0\n')
-    with mock.patch('devil.utils.cmd_helper.GetCmdOutput',
+        return_value=(0, '0123456789abcdef\n123456789abcdef0\n', ''))
+    with mock.patch('devil.utils.cmd_helper.GetCmdStatusOutputAndError',
                     new=mock_get_cmd_output):
       out = devil_util.CalculateHostHashes(test_paths)
       self.assertEqual(2, len(out))
@@ -180,7 +180,8 @@ class DevilUtilTest(unittest.TestCase):
                        out['/storage/emulated/legacy/test/file.dat'])
       self.assertEqual(3, len(device.RunShellCommand.call_args_list))
       device.adb.Push.assert_called_once_with(
-          'test/out/directory/devil_util_dist', '/data/local/tmp/devil_util')
+          'test/out/directory/devil_util_dist/devil_util_bin',
+          '/data/local/tmp/devil_util_bin')
 
 
 if __name__ == '__main__':

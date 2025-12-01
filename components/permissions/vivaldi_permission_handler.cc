@@ -13,11 +13,11 @@ bool PermissionRequestManager::VivaldiHandlePermissionRequest() {
   if (requests_.size() < 1)
     return false;
 
-  auto request = requests_[0];
-  auto isource = request_sources_map_.find(request);
+  auto &request = requests_[0];
+  auto isource = request_sources_map_.find(request.get());
   if (isource != request_sources_map_.end() &&
       vivaldi::permissions::HandlePermissionRequest(
-          isource->second.requesting_frame_id, request)) {
+          isource->second.requesting_frame_id, request.get())) {
     // Stops RestorePrompt from reaching our HandlePermissionRequest call (would lead to crash).
     current_request_prompt_disposition_.reset();
     // We set this to stop the logic in OnVisibilityChanged to try recreate the

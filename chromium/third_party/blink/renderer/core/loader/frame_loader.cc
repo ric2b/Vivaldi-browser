@@ -921,9 +921,9 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
           IsOnInitialEmptyDocument()) == ClientRedirectPolicy::kClientRedirect,
       request.IsUnfencedTopNavigation(), request.GetTriggeringEventInfo(),
       request.Form(), should_check_main_world_csp, request.GetBlobURLToken(),
-      request.GetInputStartTime(), request.HrefTranslate().GetString(),
-      request.Impression(), request.GetInitiatorFrameToken(),
-      request.TakeSourceLocation(),
+      request.GetInputStartTime(), request.GetCreationTime(),
+      request.HrefTranslate().GetString(), request.Impression(),
+      request.GetInitiatorFrameToken(), request.TakeSourceLocation(),
       request.TakeInitiatorNavigationStateKeepAliveHandle(),
       request.IsContainerInitiated(),
       request.GetWindowFeatures().explicit_opener);
@@ -1797,7 +1797,7 @@ void FrameLoader::ModifyRequestForCSP(
 
   MixedContentChecker::UpgradeInsecureRequest(
       resource_request, fetch_client_settings_object, window_for_logging,
-      frame_type, frame_->GetContentSettingsClient());
+      frame_type, frame_->GetContentSettingsClient(), frame_);
 }
 
 void FrameLoader::WriteIntoTrace(perfetto::TracedValue context) const {
@@ -1824,7 +1824,7 @@ mojo::PendingRemote<mojom::blink::CodeCacheHost>
 FrameLoader::CreateWorkerCodeCacheHost() {
   if (!document_loader_)
     return mojo::NullRemote();
-  return document_loader_->CreateWorkerCodeCacheHost();
+  return document_loader_->CreateCodeCacheHost();
 }
 
 }  // namespace blink

@@ -30,10 +30,10 @@
 #include "chrome/browser/ui/safety_hub/notification_permission_review_service_factory.h"
 #include "chrome/browser/ui/safety_hub/password_status_check_service.h"
 #include "chrome/browser/ui/safety_hub/password_status_check_service_factory.h"
+#include "chrome/browser/ui/safety_hub/revoked_permissions_service.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_constants.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_test_util.h"
 #include "chrome/browser/ui/safety_hub/safety_hub_util.h"
-#include "chrome/browser/ui/safety_hub/unused_site_permissions_service.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/browser/ui/webui/version/version_ui.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
@@ -105,6 +105,10 @@ class SafetyHubHandlerTest : public testing::Test {
     base::Time time;
     ASSERT_TRUE(base::Time::FromString("2022-09-07 13:00", &time));
     clock_.SetNow(time);
+
+    safety_hub_test_util::CreateRevokedPermissionsService(profile());
+    safety_hub_test_util::CreateNotificationPermissionsReviewService(profile());
+
     hcsm_ = HostContentSettingsMapFactory::GetForProfile(profile());
     hcsm_->SetClockForTesting(&clock_);
 
@@ -117,7 +121,7 @@ class SafetyHubHandlerTest : public testing::Test {
 
     // Run password check to fetch latest result from disk.
     safety_hub_test_util::UpdatePasswordCheckServiceAsync(
-        PasswordStatusCheckServiceFactory::GetForProfile(profile()));
+        safety_hub_test_util::CreateAndUsePasswordStatusService(profile()));
   }
 
   void TearDown() override {
@@ -147,21 +151,21 @@ class SafetyHubHandlerTest : public testing::Test {
   }
 
   void AddRevokedPermission() {
-    auto dict = base::Value::Dict()
-                    .Set(permissions::kRevokedKey,
-                         base::Value::List()
-                             .Append(UnusedSitePermissionsService::
-                                         ConvertContentSettingsTypeToKey(
-                                             kUnusedRegularPermission))
-                             .Append(UnusedSitePermissionsService::
-                                         ConvertContentSettingsTypeToKey(
-                                             kUnusedChooserPermission)))
-                    .Set(permissions::kRevokedChooserPermissionsKey,
-                         base::Value::Dict().Set(
-                             UnusedSitePermissionsService::
+    auto dict =
+        base::Value::Dict()
+            .Set(permissions::kRevokedKey,
+                 base::Value::List()
+                     .Append(RevokedPermissionsService::
                                  ConvertContentSettingsTypeToKey(
-                                     kUnusedChooserPermission),
-                             base::Value::Dict().Set("foo", "bar")));
+                                     kUnusedRegularPermission))
+                     .Append(RevokedPermissionsService::
+                                 ConvertContentSettingsTypeToKey(
+                                     kUnusedChooserPermission)))
+            .Set(permissions::kRevokedChooserPermissionsKey,
+                 base::Value::Dict().Set(
+                     RevokedPermissionsService::ConvertContentSettingsTypeToKey(
+                         kUnusedChooserPermission),
+                     base::Value::Dict().Set("foo", "bar")));
 
     content_settings::ContentSettingConstraints constraint(clock()->Now());
     constraint.set_lifetime(kLifetime);
@@ -205,20 +209,20 @@ class SafetyHubHandlerTest : public testing::Test {
         base::Value::Dict()
             .Set(permissions::kRevokedKey,
                  base::Value::List()
-                     .Append(UnusedSitePermissionsService::
+                     .Append(RevokedPermissionsService::
                                  ConvertContentSettingsTypeToKey(
                                      kUnusedRegularPermission))
-                     .Append(UnusedSitePermissionsService::
+                     .Append(RevokedPermissionsService::
                                  ConvertContentSettingsTypeToKey(
                                      kUnusedChooserPermission)))
             .Set(permissions::kRevokedChooserPermissionsKey,
-                 base::Value::Dict().Set(UnusedSitePermissionsService::
-                                             ConvertContentSettingsTypeToKey(
-                                                 kUnusedChooserPermission),
-                                         base::Value::Dict().Set("foo", "bar")))
-            .Set(safety_hub::kAbusiveRevocationExpirationKey,
+                 base::Value::Dict().Set(
+                     RevokedPermissionsService::ConvertContentSettingsTypeToKey(
+                         kUnusedChooserPermission),
+                     base::Value::Dict().Set("foo", "bar")))
+            .Set(safety_hub::kExpirationKey,
                  base::TimeToValue(constraint.expiration()))
-            .Set(safety_hub::kAbusiveRevocationLifetimeKey,
+            .Set(safety_hub::kLifetimeKey,
                  base::TimeDeltaToValue(constraint.lifetime()));
     hcsm()->SetWebsiteSettingDefaultScope(
         GURL(kAbusiveAndUnusedTestSite), GURL(kAbusiveAndUnusedTestSite),
@@ -584,7 +588,7 @@ TEST_F(SafetyHubHandlerTest, PopulateUnusedSitePermissionsData) {
   const auto* chooser_permissions_data = revoked_permission_dict.FindDict(
       safety_hub::kSafetyHubChooserPermissionsData);
   EXPECT_TRUE(chooser_permissions_data->contains(
-      UnusedSitePermissionsService::ConvertContentSettingsTypeToKey(
+      RevokedPermissionsService::ConvertContentSettingsTypeToKey(
           kUnusedChooserPermission)));
 }
 
@@ -1061,8 +1065,7 @@ TEST_F(SafetyHubHandlerTest, RevokeAllContentSettingTypes) {
     auto dict = base::Value::Dict().Set(
         permissions::kRevokedKey,
         base::Value::List().Append(
-            UnusedSitePermissionsService::ConvertContentSettingsTypeToKey(
-                type)));
+            RevokedPermissionsService::ConvertContentSettingsTypeToKey(type)));
     hcsm()->SetWebsiteSettingDefaultScope(
         GURL(kUnusedTestSite), GURL(kUnusedTestSite),
         ContentSettingsType::REVOKED_UNUSED_SITE_PERMISSIONS,
@@ -1369,6 +1372,10 @@ class SafetyHubHandlerEitherAbusiveOrUnusedPermissionRevocationDisabledTest
     base::Time time;
     ASSERT_TRUE(base::Time::FromString("2022-09-07 13:00", &time));
     clock_.SetNow(time);
+
+    safety_hub_test_util::CreateRevokedPermissionsService(profile());
+    safety_hub_test_util::CreateNotificationPermissionsReviewService(profile());
+
     hcsm_ = HostContentSettingsMapFactory::GetForProfile(profile());
     hcsm_->SetClockForTesting(&clock_);
 
@@ -1410,7 +1417,7 @@ class SafetyHubHandlerEitherAbusiveOrUnusedPermissionRevocationDisabledTest
     auto dict = base::Value::Dict().Set(
         permissions::kRevokedKey,
         base::Value::List().Append(
-            UnusedSitePermissionsService::ConvertContentSettingsTypeToKey(
+            RevokedPermissionsService::ConvertContentSettingsTypeToKey(
                 kUnusedRegularPermission)));
 
     content_settings::ContentSettingConstraints constraint(clock()->Now());

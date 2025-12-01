@@ -47,8 +47,9 @@ namespace {
 
 bool VerifyUnicode(const RetainPtr<CFGAS_GEFont>& pFont, wchar_t wcUnicode) {
   RetainPtr<CFX_Face> pFace = pFont->GetDevFont()->GetFace();
-  if (!pFace)
+  if (!pFace) {
     return false;
+  }
 
   CFX_Face::CharMap charmap = pFace->GetCurrentCharMap();
   if (!pFace->SelectCharMap(fxge::FontEncoding::kUnicode)) {
@@ -106,10 +107,13 @@ int32_t GetSimilarityScore(FX_FONTDESCRIPTOR const* pFont,
       FontStyleIsFixedPitch(pFont->dwFontStyles)) {
     iValue += 32;
   }
-  if (FontStyleIsSerif(dwFontStyles) == FontStyleIsSerif(pFont->dwFontStyles))
+  if (FontStyleIsSerif(dwFontStyles) == FontStyleIsSerif(pFont->dwFontStyles)) {
     iValue += 16;
-  if (FontStyleIsScript(dwFontStyles) == FontStyleIsScript(pFont->dwFontStyles))
+  }
+  if (FontStyleIsScript(dwFontStyles) ==
+      FontStyleIsScript(pFont->dwFontStyles)) {
     iValue += 8;
+  }
   return iValue;
 }
 
@@ -125,32 +129,39 @@ const FX_FONTDESCRIPTOR* MatchDefaultFont(
     }
 
     if (pParams->pwsFamily) {
-      if (FXSYS_wcsicmp(pParams->pwsFamily, font.wsFontFace))
+      if (FXSYS_wcsicmp(pParams->pwsFamily, font.wsFontFace)) {
         continue;
-      if (font.uCharSet == FX_Charset::kSymbol)
+      }
+      if (font.uCharSet == FX_Charset::kSymbol) {
         return &font;
+      }
     }
-    if (font.uCharSet == FX_Charset::kSymbol)
+    if (font.uCharSet == FX_Charset::kSymbol) {
       continue;
+    }
     if (pParams->wCodePage != FX_CodePage::kFailure) {
-      if (FX_GetCodePageFromCharset(font.uCharSet) != pParams->wCodePage)
+      if (FX_GetCodePageFromCharset(font.uCharSet) != pParams->wCodePage) {
         continue;
+      }
     } else {
       if (pParams->dwUSB < 128) {
         uint32_t dwByte = pParams->dwUSB / 32;
         uint32_t dwUSB = 1 << (pParams->dwUSB % 32);
-        if ((font.FontSignature.fsUsb[dwByte] & dwUSB) == 0)
+        if ((font.FontSignature.fsUsb[dwByte] & dwUSB) == 0) {
           continue;
+        }
       }
     }
     if (pParams->matchParagraphStyle) {
-      if ((font.dwFontStyles & 0x0F) == (pParams->dwFontStyles & 0x0F))
+      if ((font.dwFontStyles & 0x0F) == (pParams->dwFontStyles & 0x0F)) {
         return &font;
+      }
       continue;
     }
     if (pParams->pwsFamily) {
-      if (FXSYS_wcsicmp(pParams->pwsFamily, font.wsFontFace) == 0)
+      if (FXSYS_wcsicmp(pParams->pwsFamily, font.wsFontFace) == 0) {
         return &font;
+      }
     }
     int32_t iSimilarValue = GetSimilarityScore(&font, pParams->dwFontStyles);
     if (iBestSimilar < iSimilarValue) {
@@ -183,11 +194,13 @@ int32_t CALLBACK GdiFontEnumProc(ENUMLOGFONTEX* lpelfe,
                                  NEWTEXTMETRICEX* lpntme,
                                  DWORD dwFontType,
                                  LPARAM lParam) {
-  if (dwFontType != TRUETYPE_FONTTYPE)
+  if (dwFontType != TRUETYPE_FONTTYPE) {
     return 1;
+  }
   const LOGFONTW& lf = ((LPENUMLOGFONTEXW)lpelfe)->elfLogFont;
-  if (lf.lfFaceName[0] == L'@')
+  if (lf.lfFaceName[0] == L'@') {
     return 1;
+  }
   FX_FONTDESCRIPTOR font = {};  // Aggregate initialization.
   static_assert(std::is_aggregate_v<decltype(font)>);
   font.uCharSet = FX_GetCharsetFromInt(lf.lfCharSet);
@@ -229,7 +242,7 @@ std::deque<FX_FONTDESCRIPTOR> EnumGdiFonts(const wchar_t* pwsFaceName,
 
 }  // namespace
 
-CFGAS_FontMgr::CFGAS_FontMgr() : m_FontFaces(EnumGdiFonts(nullptr, 0xFEFF)) {}
+CFGAS_FontMgr::CFGAS_FontMgr() : font_faces_(EnumGdiFonts(nullptr, 0xFEFF)) {}
 
 CFGAS_FontMgr::~CFGAS_FontMgr() = default;
 
@@ -250,22 +263,24 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::GetFontByUnicodeImpl(
     pFD =
         FindFont(nullptr, dwFontStyles, false, wCodePage, wBitField, wUnicode);
   }
-  if (!pFD)
+  if (!pFD) {
     return nullptr;
+  }
 
   FX_CodePage newCodePage = FX_GetCodePageFromCharset(pFD->uCharSet);
   RetainPtr<CFGAS_GEFont> pFont =
       CFGAS_GEFont::LoadFont(pFD->wsFontFace, dwFontStyles, newCodePage);
-  if (!pFont)
-    return nullptr;
-
-  pFont->SetLogicalFontStyle(dwFontStyles);
-  if (!VerifyUnicode(pFont, wUnicode)) {
-    m_FailedUnicodesSet.insert(wUnicode);
+  if (!pFont) {
     return nullptr;
   }
 
-  m_Hash2Fonts[dwHash].push_back(pFont);
+  pFont->SetLogicalFontStyle(dwFontStyles);
+  if (!VerifyUnicode(pFont, wUnicode)) {
+    failed_unicodes_set_.insert(wUnicode);
+    return nullptr;
+  }
+
+  hash_2fonts_[dwHash].push_back(pFont);
   return pFont;
 }
 
@@ -284,12 +299,14 @@ const FX_FONTDESCRIPTOR* CFGAS_FontMgr::FindFont(const wchar_t* pszFontFamily,
   params.dwFontStyles = dwFontStyles;
   params.matchParagraphStyle = matchParagraphStyle;
 
-  const FX_FONTDESCRIPTOR* pDesc = MatchDefaultFont(&params, m_FontFaces);
-  if (pDesc)
+  const FX_FONTDESCRIPTOR* pDesc = MatchDefaultFont(&params, font_faces_);
+  if (pDesc) {
     return pDesc;
+  }
 
-  if (!pszFontFamily)
+  if (!pszFontFamily) {
     return nullptr;
+  }
 
   // Use a named object to store the returned value of EnumGdiFonts() instead
   // of using a temporary object. This can prevent use-after-free issues since
@@ -298,15 +315,17 @@ const FX_FONTDESCRIPTOR* CFGAS_FontMgr::FindFont(const wchar_t* pszFontFamily,
       EnumGdiFonts(pszFontFamily, wUnicode);
   params.pwsFamily = nullptr;
   pDesc = MatchDefaultFont(&params, namedFonts);
-  if (!pDesc)
+  if (!pDesc) {
     return nullptr;
+  }
 
-  auto it = std::find(m_FontFaces.rbegin(), m_FontFaces.rend(), *pDesc);
-  if (it != m_FontFaces.rend())
+  auto it = std::find(font_faces_.rbegin(), font_faces_.rend(), *pDesc);
+  if (it != font_faces_.rend()) {
     return &*it;
+  }
 
-  m_FontFaces.push_back(*pDesc);
-  return &m_FontFaces.back();
+  font_faces_.push_back(*pDesc);
+  return &font_faces_.back();
 }
 
 #else  // BUILDFLAG(IS_WIN)
@@ -314,70 +333,70 @@ const FX_FONTDESCRIPTOR* CFGAS_FontMgr::FindFont(const wchar_t* pszFontFamily,
 namespace {
 
 constexpr auto kCodePages =
-    fxcrt::ToArray<const FX_CodePage>({FX_CodePage::kMSWin_WesternEuropean,
-                                       FX_CodePage::kMSWin_EasternEuropean,
-                                       FX_CodePage::kMSWin_Cyrillic,
-                                       FX_CodePage::kMSWin_Greek,
-                                       FX_CodePage::kMSWin_Turkish,
-                                       FX_CodePage::kMSWin_Hebrew,
-                                       FX_CodePage::kMSWin_Arabic,
-                                       FX_CodePage::kMSWin_Baltic,
-                                       FX_CodePage::kMSWin_Vietnamese,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kMSDOS_Thai,
-                                       FX_CodePage::kShiftJIS,
-                                       FX_CodePage::kChineseSimplified,
-                                       FX_CodePage::kHangul,
-                                       FX_CodePage::kChineseTraditional,
-                                       FX_CodePage::kJohab,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kDefANSI,
-                                       FX_CodePage::kMSDOS_Greek2,
-                                       FX_CodePage::kMSDOS_Russian,
-                                       FX_CodePage::kMSDOS_Norwegian,
-                                       FX_CodePage::kMSDOS_Arabic,
-                                       FX_CodePage::kMSDOS_FrenchCanadian,
-                                       FX_CodePage::kMSDOS_Hebrew,
-                                       FX_CodePage::kMSDOS_Icelandic,
-                                       FX_CodePage::kMSDOS_Portuguese,
-                                       FX_CodePage::kMSDOS_Turkish,
-                                       FX_CodePage::kMSDOS_Cyrillic,
-                                       FX_CodePage::kMSDOS_EasternEuropean,
-                                       FX_CodePage::kMSDOS_Baltic,
-                                       FX_CodePage::kMSDOS_Greek1,
-                                       FX_CodePage::kArabic_ASMO708,
-                                       FX_CodePage::kMSDOS_WesternEuropean,
-                                       FX_CodePage::kMSDOS_US});
+    std::to_array<const FX_CodePage>({FX_CodePage::kMSWin_WesternEuropean,
+                                      FX_CodePage::kMSWin_EasternEuropean,
+                                      FX_CodePage::kMSWin_Cyrillic,
+                                      FX_CodePage::kMSWin_Greek,
+                                      FX_CodePage::kMSWin_Turkish,
+                                      FX_CodePage::kMSWin_Hebrew,
+                                      FX_CodePage::kMSWin_Arabic,
+                                      FX_CodePage::kMSWin_Baltic,
+                                      FX_CodePage::kMSWin_Vietnamese,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kMSDOS_Thai,
+                                      FX_CodePage::kShiftJIS,
+                                      FX_CodePage::kChineseSimplified,
+                                      FX_CodePage::kHangul,
+                                      FX_CodePage::kChineseTraditional,
+                                      FX_CodePage::kJohab,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kDefANSI,
+                                      FX_CodePage::kMSDOS_Greek2,
+                                      FX_CodePage::kMSDOS_Russian,
+                                      FX_CodePage::kMSDOS_Norwegian,
+                                      FX_CodePage::kMSDOS_Arabic,
+                                      FX_CodePage::kMSDOS_FrenchCanadian,
+                                      FX_CodePage::kMSDOS_Hebrew,
+                                      FX_CodePage::kMSDOS_Icelandic,
+                                      FX_CodePage::kMSDOS_Portuguese,
+                                      FX_CodePage::kMSDOS_Turkish,
+                                      FX_CodePage::kMSDOS_Cyrillic,
+                                      FX_CodePage::kMSDOS_EasternEuropean,
+                                      FX_CodePage::kMSDOS_Baltic,
+                                      FX_CodePage::kMSDOS_Greek1,
+                                      FX_CodePage::kArabic_ASMO708,
+                                      FX_CodePage::kMSDOS_WesternEuropean,
+                                      FX_CodePage::kMSDOS_US});
 
 uint16_t FX_GetCodePageBit(FX_CodePage wCodePage) {
   for (size_t i = 0; i < kCodePages.size(); ++i) {
@@ -395,7 +414,7 @@ uint16_t FX_GetUnicodeBit(wchar_t wcUnicode) {
 
 uint16_t ReadUInt16FromSpanAtOffset(pdfium::span<const uint8_t> data,
                                     size_t offset) {
-  return fxcrt::GetUInt16MSBFirst(data.subspan(offset));
+  return fxcrt::GetUInt16MSBFirst(data.subspan(offset).first<2u>());
 }
 
 extern "C" {
@@ -404,15 +423,16 @@ unsigned long ftStreamRead(FXFT_StreamRec* stream,
                            unsigned long offset,
                            unsigned char* buffer,
                            unsigned long count) {
-  if (count == 0)
+  if (count == 0) {
     return 0;
+  }
 
   IFX_SeekableReadStream* pFile =
       static_cast<IFX_SeekableReadStream*>(stream->descriptor.pointer);
 
   // SAFETY: required from caller.
   if (!pFile->ReadBlockAtOffset(
-          UNSAFE_BUFFERS(pdfium::make_span(buffer, count), offset))) {
+          UNSAFE_BUFFERS(pdfium::span(buffer, count), offset))) {
     return 0;
   }
   return count;
@@ -424,17 +444,19 @@ void ftStreamClose(FXFT_StreamRec* stream) {}
 
 std::vector<WideString> GetNames(pdfium::span<const uint8_t> name_table) {
   std::vector<WideString> results;
-  if (name_table.empty())
+  if (name_table.empty()) {
     return results;
+  }
 
   uint16_t nNameCount = ReadUInt16FromSpanAtOffset(name_table, 2);
   pdfium::span<const uint8_t> str =
       name_table.subspan(ReadUInt16FromSpanAtOffset(name_table, 4));
-  pdfium::span<const uint8_t> name_record = name_table.subspan(6);
+  pdfium::span<const uint8_t> name_record = name_table.subspan<6u>();
   for (uint16_t i = 0; i < nNameCount; ++i) {
     uint16_t nNameID = ReadUInt16FromSpanAtOffset(name_table, i * 12 + 6);
-    if (nNameID != 1)
+    if (nNameID != 1) {
       continue;
+    }
 
     uint16_t nPlatformID = ReadUInt16FromSpanAtOffset(name_record, i * 12);
     uint16_t nNameLength = ReadUInt16FromSpanAtOffset(name_record, i * 12 + 8);
@@ -508,8 +530,9 @@ RetainPtr<IFX_SeekableReadStream> CreateFontStream(
   pFontMapper->LoadInstalledFonts();
 
   for (size_t i = 0; i < pFontMapper->GetFaceSize(); ++i) {
-    if (pFontMapper->GetFaceName(i) == bsFaceName)
+    if (pFontMapper->GetFaceName(i) == bsFaceName) {
       return CreateFontStream(pFontMapper, i);
+    }
   }
   return nullptr;
 }
@@ -517,13 +540,15 @@ RetainPtr<IFX_SeekableReadStream> CreateFontStream(
 RetainPtr<CFX_Face> LoadFace(
     const RetainPtr<IFX_SeekableReadStream>& pFontStream,
     int32_t iFaceIndex) {
-  if (!pFontStream)
+  if (!pFontStream) {
     return nullptr;
+  }
 
   CFX_FontMgr* pFontMgr = CFX_GEModule::Get()->GetFontMgr();
   FXFT_LibraryRec* library = pFontMgr->GetFTLibrary();
-  if (!library)
+  if (!library) {
     return nullptr;
+  }
 
   // TODO(palmer): This memory will be freed with |ft_free| (which is |free|).
   // Ultimately, we want to change this to:
@@ -556,20 +581,20 @@ RetainPtr<CFX_Face> LoadFace(
 
 bool VerifyUnicodeForFontDescriptor(CFGAS_FontDescriptor* pDesc,
                                     wchar_t wcUnicode) {
-  if (!pDesc->m_pFace) {
+  if (!pDesc->face_) {
     RetainPtr<IFX_SeekableReadStream> pFileRead =
-        CreateFontStream(pDesc->m_wsFaceName.ToUTF8());
+        CreateFontStream(pDesc->face_name_.ToUTF8());
     if (!pFileRead) {
       return false;
     }
-    pDesc->m_pFace = LoadFace(pFileRead, pDesc->m_nFaceIndex);
-    if (!pDesc->m_pFace) {
+    pDesc->face_ = LoadFace(pFileRead, pDesc->face_index_);
+    if (!pDesc->face_) {
       return false;
     }
-    pDesc->m_pFace->ClearExternalStream();
+    pDesc->face_->ClearExternalStream();
   }
-  return pDesc->m_pFace->SelectCharMap(fxge::FontEncoding::kUnicode) &&
-         pDesc->m_pFace->GetCharIndex(wcUnicode);
+  return pDesc->face_->SelectCharMap(fxge::FontEncoding::kUnicode) &&
+         pDesc->face_->GetCharIndex(wcUnicode);
 }
 
 bool IsPartName(const WideString& name1, const WideString& name2) {
@@ -583,46 +608,56 @@ int32_t CalcPenalty(CFGAS_FontDescriptor* pInstalled,
                     wchar_t wcUnicode) {
   int32_t nPenalty = 30000;
   if (FontName.GetLength() != 0) {
-    if (FontName != pInstalled->m_wsFaceName) {
+    if (FontName != pInstalled->face_name_) {
       size_t i;
-      for (i = 0; i < pInstalled->m_wsFamilyNames.size(); ++i) {
-        if (pInstalled->m_wsFamilyNames[i] == FontName)
+      for (i = 0; i < pInstalled->family_names_.size(); ++i) {
+        if (pInstalled->family_names_[i] == FontName) {
           break;
+        }
       }
-      if (i == pInstalled->m_wsFamilyNames.size())
+      if (i == pInstalled->family_names_.size()) {
         nPenalty += 0xFFFF;
-      else
+      } else {
         nPenalty -= 28000;
+      }
     } else {
       nPenalty -= 30000;
     }
-    if (nPenalty == 30000 && !IsPartName(pInstalled->m_wsFaceName, FontName)) {
+    if (nPenalty == 30000 && !IsPartName(pInstalled->face_name_, FontName)) {
       size_t i;
-      for (i = 0; i < pInstalled->m_wsFamilyNames.size(); i++) {
-        if (IsPartName(pInstalled->m_wsFamilyNames[i], FontName))
+      for (i = 0; i < pInstalled->family_names_.size(); i++) {
+        if (IsPartName(pInstalled->family_names_[i], FontName)) {
           break;
+        }
       }
-      if (i == pInstalled->m_wsFamilyNames.size())
+      if (i == pInstalled->family_names_.size()) {
         nPenalty += 0xFFFF;
-      else
+      } else {
         nPenalty -= 26000;
+      }
     } else {
       nPenalty -= 27000;
     }
   }
-  uint32_t dwStyleMask = pInstalled->m_dwFontStyles ^ dwFontStyles;
-  if (FontStyleIsForceBold(dwStyleMask))
+  uint32_t dwStyleMask = pInstalled->font_styles_ ^ dwFontStyles;
+  if (FontStyleIsForceBold(dwStyleMask)) {
     nPenalty += 4500;
-  if (FontStyleIsFixedPitch(dwStyleMask))
+  }
+  if (FontStyleIsFixedPitch(dwStyleMask)) {
     nPenalty += 10000;
-  if (FontStyleIsItalic(dwStyleMask))
+  }
+  if (FontStyleIsItalic(dwStyleMask)) {
     nPenalty += 10000;
-  if (FontStyleIsSerif(dwStyleMask))
+  }
+  if (FontStyleIsSerif(dwStyleMask)) {
     nPenalty += 500;
-  if (FontStyleIsSymbolic(dwStyleMask))
+  }
+  if (FontStyleIsSymbolic(dwStyleMask)) {
     nPenalty += 0xFFFF;
-  if (nPenalty >= 0xFFFF)
+  }
+  if (nPenalty >= 0xFFFF) {
     return 0xFFFF;
+  }
 
   uint16_t wBit =
       (wCodePage == FX_CodePage::kDefANSI || wCodePage == FX_CodePage::kFailure)
@@ -630,19 +665,21 @@ int32_t CalcPenalty(CFGAS_FontDescriptor* pInstalled,
           : FX_GetCodePageBit(wCodePage);
   if (wBit != static_cast<uint16_t>(-1)) {
     DCHECK(wBit < 64);
-    if ((pInstalled->m_dwCsb[wBit / 32] & (1 << (wBit % 32))) == 0)
+    if ((pInstalled->csb_[wBit / 32] & (1 << (wBit % 32))) == 0) {
       nPenalty += 0xFFFF;
-    else
+    } else {
       nPenalty -= 60000;
+    }
   }
   wBit = (wcUnicode == 0 || wcUnicode == 0xFFFE) ? FGAS_FONTUSB::kNoBitField
                                                  : FX_GetUnicodeBit(wcUnicode);
   if (wBit != FGAS_FONTUSB::kNoBitField) {
     DCHECK(wBit < 128);
-    if ((pInstalled->m_dwUsb[wBit / 32] & (1 << (wBit % 32))) == 0)
+    if ((pInstalled->usb_[wBit / 32] & (1 << (wBit % 32))) == 0) {
       nPenalty += 0xFFFF;
-    else
+    } else {
       nPenalty -= 60000;
+    }
   }
   return nPenalty;
 }
@@ -665,15 +702,16 @@ bool CFGAS_FontMgr::EnumFontsFromFontMapper() {
   for (size_t i = 0; i < pFontMapper->GetFaceSize(); ++i) {
     RetainPtr<IFX_SeekableReadStream> pFontStream =
         CreateFontStream(pFontMapper, i);
-    if (!pFontStream)
+    if (!pFontStream) {
       continue;
+    }
 
     WideString wsFaceName =
         WideString::FromDefANSI(pFontMapper->GetFaceName(i).AsStringView());
     RegisterFaces(pFontStream, wsFaceName);
   }
 
-  return !m_InstalledFonts.empty();
+  return !installed_fonts_.empty();
 }
 
 bool CFGAS_FontMgr::EnumFonts() {
@@ -687,24 +725,27 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::GetFontByUnicodeImpl(
     uint32_t dwHash,
     FX_CodePage wCodePage,
     uint16_t /* wBitField*/) {
-  if (!pdfium::Contains(m_Hash2CandidateList, dwHash)) {
-    m_Hash2CandidateList[dwHash] =
+  if (!pdfium::Contains(hash_2candidate_list_, dwHash)) {
+    hash_2candidate_list_[dwHash] =
         MatchFonts(wCodePage, dwFontStyles, pszFontFamily, wUnicode);
   }
-  for (const auto& info : m_Hash2CandidateList[dwHash]) {
+  for (const auto& info : hash_2candidate_list_[dwHash]) {
     CFGAS_FontDescriptor* pDesc = info.pFont;
-    if (!VerifyUnicodeForFontDescriptor(pDesc, wUnicode))
+    if (!VerifyUnicodeForFontDescriptor(pDesc, wUnicode)) {
       continue;
+    }
     RetainPtr<CFGAS_GEFont> pFont =
-        LoadFontInternal(pDesc->m_wsFaceName, pDesc->m_nFaceIndex);
-    if (!pFont)
+        LoadFontInternal(pDesc->face_name_, pDesc->face_index_);
+    if (!pFont) {
       continue;
+    }
     pFont->SetLogicalFontStyle(dwFontStyles);
-    m_Hash2Fonts[dwHash].push_back(pFont);
+    hash_2fonts_[dwHash].push_back(pFont);
     return pFont;
   }
-  if (!pszFontFamily)
-    m_FailedUnicodesSet.insert(wUnicode);
+  if (!pszFontFamily) {
+    failed_unicodes_set_.insert(wUnicode);
+  }
   return nullptr;
 }
 
@@ -713,12 +754,14 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::LoadFontInternal(
     int32_t iFaceIndex) {
   RetainPtr<IFX_SeekableReadStream> pFontStream =
       CreateFontStream(wsFaceName.ToUTF8());
-  if (!pFontStream)
+  if (!pFontStream) {
     return nullptr;
+  }
 
   auto pInternalFont = std::make_unique<CFX_Font>();
-  if (!pInternalFont->LoadFile(std::move(pFontStream), iFaceIndex))
+  if (!pInternalFont->LoadFile(std::move(pFontStream), iFaceIndex)) {
     return nullptr;
+  }
 
   return CFGAS_GEFont::LoadFont(std::move(pInternalFont));
 }
@@ -729,14 +772,16 @@ std::vector<CFGAS_FontDescriptorInfo> CFGAS_FontMgr::MatchFonts(
     const WideString& FontName,
     wchar_t wcUnicode) {
   std::vector<CFGAS_FontDescriptorInfo> matched_fonts;
-  for (const auto& pFont : m_InstalledFonts) {
+  for (const auto& pFont : installed_fonts_) {
     int32_t nPenalty =
         CalcPenalty(pFont.get(), wCodePage, dwFontStyles, FontName, wcUnicode);
-    if (nPenalty >= 0xffff)
+    if (nPenalty >= 0xffff) {
       continue;
+    }
     matched_fonts.push_back({pFont.get(), nPenalty});
-    if (matched_fonts.size() == 0xffff)
+    if (matched_fonts.size() == 0xffff) {
       break;
+    }
   }
   std::stable_sort(matched_fonts.begin(), matched_fonts.end());
   return matched_fonts;
@@ -749,24 +794,22 @@ void CFGAS_FontMgr::RegisterFace(RetainPtr<CFX_Face> pFace,
   }
 
   auto pFont = std::make_unique<CFGAS_FontDescriptor>();
-  pFont->m_dwFontStyles |= GetFlags(pFace);
+  pFont->font_styles_ |= GetFlags(pFace);
 
-  // TODO(crbug.com/pdfium/2085): Use make_span() in fewer places after updating
-  // pdfium::span.
   std::optional<std::array<uint32_t, 4>> unicode_range =
       pFace->GetOs2UnicodeRange();
   if (unicode_range.has_value()) {
-    fxcrt::Copy(unicode_range.value(), pFont->m_dwUsb);
+    fxcrt::Copy(unicode_range.value(), pFont->usb_);
   } else {
-    fxcrt::Fill(pFont->m_dwUsb, 0);
+    std::ranges::fill(pFont->usb_, 0);
   }
 
   std::optional<std::array<uint32_t, 2>> code_page_range =
       pFace->GetOs2CodePageRange();
   if (code_page_range.has_value()) {
-    fxcrt::Copy(code_page_range.value(), pFont->m_dwCsb);
+    fxcrt::Copy(code_page_range.value(), pFont->csb_);
   } else {
-    fxcrt::Fill(pFont->m_dwCsb, 0);
+    std::ranges::fill(pFont->csb_, 0);
   }
 
   static constexpr uint32_t kNameTag =
@@ -780,13 +823,13 @@ void CFGAS_FontMgr::RegisterFace(RetainPtr<CFX_Face> pFace,
       table.clear();
     }
   }
-  pFont->m_wsFamilyNames = GetNames(table);
-  pFont->m_wsFamilyNames.push_back(
+  pFont->family_names_ = GetNames(table);
+  pFont->family_names_.push_back(
       WideString::FromUTF8(pFace->GetRec()->family_name));
-  pFont->m_wsFaceName = wsFaceName;
-  pFont->m_nFaceIndex =
+  pFont->face_name_ = wsFaceName;
+  pFont->face_index_ =
       pdfium::checked_cast<int32_t>(pFace->GetRec()->face_index);
-  m_InstalledFonts.push_back(std::move(pFont));
+  installed_fonts_.push_back(std::move(pFont));
 }
 
 void CFGAS_FontMgr::RegisterFaces(
@@ -796,8 +839,9 @@ void CFGAS_FontMgr::RegisterFaces(
   int32_t num_faces = 0;
   do {
     RetainPtr<CFX_Face> pFace = LoadFace(pFontStream, index++);
-    if (!pFace)
+    if (!pFace) {
       continue;
+    }
     // All faces keep number of faces. It can be retrieved from any one face.
     if (num_faces == 0) {
       num_faces = pdfium::checked_cast<int32_t>(pFace->GetRec()->num_faces);
@@ -814,11 +858,12 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::GetFontByCodePage(
     uint32_t dwFontStyles,
     const wchar_t* pszFontFamily) {
   uint32_t dwHash = ShortFormHash(wCodePage, dwFontStyles, pszFontFamily);
-  auto* pFontVector = &m_Hash2Fonts[dwHash];
+  auto* pFontVector = &hash_2fonts_[dwHash];
   if (!pFontVector->empty()) {
     for (auto iter = pFontVector->begin(); iter != pFontVector->end(); ++iter) {
-      if (*iter != nullptr)
+      if (*iter != nullptr) {
         return *iter;
+      }
     }
     return nullptr;
   }
@@ -835,26 +880,29 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::GetFontByCodePage(
     pFD = FindFont(nullptr, dwFontStyles, false, wCodePage,
                    FGAS_FONTUSB::kNoBitField, 0);
   }
-  if (!pFD)
+  if (!pFD) {
     return nullptr;
+  }
 
   RetainPtr<CFGAS_GEFont> pFont =
       CFGAS_GEFont::LoadFont(pFD->wsFontFace, dwFontStyles, wCodePage);
 #else   // BUILDFLAG(IS_WIN)
-  if (!pdfium::Contains(m_Hash2CandidateList, dwHash)) {
-    m_Hash2CandidateList[dwHash] =
+  if (!pdfium::Contains(hash_2candidate_list_, dwHash)) {
+    hash_2candidate_list_[dwHash] =
         MatchFonts(wCodePage, dwFontStyles, WideString(pszFontFamily), 0);
   }
-  if (m_Hash2CandidateList[dwHash].empty())
+  if (hash_2candidate_list_[dwHash].empty()) {
     return nullptr;
+  }
 
-  CFGAS_FontDescriptor* pDesc = m_Hash2CandidateList[dwHash].front().pFont;
+  CFGAS_FontDescriptor* pDesc = hash_2candidate_list_[dwHash].front().pFont;
   RetainPtr<CFGAS_GEFont> pFont =
-      LoadFontInternal(pDesc->m_wsFaceName, pDesc->m_nFaceIndex);
+      LoadFontInternal(pDesc->face_name_, pDesc->face_index_);
 #endif  // BUILDFLAG(IS_WIN)
 
-  if (!pFont)
+  if (!pFont) {
     return nullptr;
+  }
 
   pFont->SetLogicalFontStyle(dwFontStyles);
   pFontVector->push_back(pFont);
@@ -865,8 +913,9 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::GetFontByUnicode(
     wchar_t wUnicode,
     uint32_t dwFontStyles,
     const wchar_t* pszFontFamily) {
-  if (pdfium::Contains(m_FailedUnicodesSet, wUnicode))
+  if (pdfium::Contains(failed_unicodes_set_, wUnicode)) {
     return nullptr;
+  }
 
   const FGAS_FONTUSB* x = FGAS_GetUnicodeBitField(wUnicode);
   FX_CodePage wCodePage = x ? x->wCodePage : FX_CodePage::kFailure;
@@ -875,9 +924,10 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::GetFontByUnicode(
       wCodePage == FX_CodePage::kFailure
           ? LongFormHash(wCodePage, wBitField, dwFontStyles, pszFontFamily)
           : ShortFormHash(wCodePage, dwFontStyles, pszFontFamily);
-  for (auto& pFont : m_Hash2Fonts[dwHash]) {
-    if (VerifyUnicode(pFont, wUnicode))
+  for (auto& pFont : hash_2fonts_[dwHash]) {
+    if (VerifyUnicode(pFont, wUnicode)) {
       return pFont;
+    }
   }
   return GetFontByUnicodeImpl(wUnicode, dwFontStyles, pszFontFamily, dwHash,
                               wCodePage, wBitField);
@@ -888,9 +938,10 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::LoadFont(const wchar_t* pszFontFamily,
                                                 FX_CodePage wCodePage) {
 #if BUILDFLAG(IS_WIN)
   uint32_t dwHash = ShortFormHash(wCodePage, dwFontStyles, pszFontFamily);
-  std::vector<RetainPtr<CFGAS_GEFont>>* pFontArray = &m_Hash2Fonts[dwHash];
-  if (!pFontArray->empty())
+  std::vector<RetainPtr<CFGAS_GEFont>>* pFontArray = &hash_2fonts_[dwHash];
+  if (!pFontArray->empty()) {
     return pFontArray->front();
+  }
 
   const FX_FONTDESCRIPTOR* pFD =
       FindFont(pszFontFamily, dwFontStyles, true, wCodePage,
@@ -899,13 +950,15 @@ RetainPtr<CFGAS_GEFont> CFGAS_FontMgr::LoadFont(const wchar_t* pszFontFamily,
     pFD = FindFont(pszFontFamily, dwFontStyles, false, wCodePage,
                    FGAS_FONTUSB::kNoBitField, 0);
   }
-  if (!pFD)
+  if (!pFD) {
     return nullptr;
+  }
 
   RetainPtr<CFGAS_GEFont> pFont =
       CFGAS_GEFont::LoadFont(pFD->wsFontFace, dwFontStyles, wCodePage);
-  if (!pFont)
+  if (!pFont) {
     return nullptr;
+  }
 
   pFont->SetLogicalFontStyle(dwFontStyles);
   pFontArray->push_back(pFont);

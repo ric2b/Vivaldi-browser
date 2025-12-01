@@ -35,7 +35,9 @@ WebUIContentsPreloadManagerTestAPI::GetNextWebUIURLToPreload(
 
 void WebUIContentsPreloadManagerTestAPI::MaybePreloadForBrowserContext(
     content::BrowserContext* browser_context) {
-  return preload_manager()->MaybePreloadForBrowserContext(browser_context);
+  return preload_manager()->MaybePreloadForBrowserContext(
+      browser_context,
+      WebUIContentsPreloadManager::PreloadReason::kBrowserWarmup);
 }
 
 void WebUIContentsPreloadManagerTestAPI::MaybePreloadForBrowserContextLater(
@@ -43,7 +45,8 @@ void WebUIContentsPreloadManagerTestAPI::MaybePreloadForBrowserContextLater(
     content::WebContents* busy_web_contents_to_watch,
     base::TimeDelta deadline) {
   return preload_manager()->MaybePreloadForBrowserContextLater(
-      browser_context, busy_web_contents_to_watch, deadline);
+      browser_context, busy_web_contents_to_watch,
+      WebUIContentsPreloadManager::PreloadReason::kBrowserWarmup, deadline);
 }
 
 void WebUIContentsPreloadManagerTestAPI::PreloadUrl(
@@ -53,9 +56,14 @@ void WebUIContentsPreloadManagerTestAPI::PreloadUrl(
       preload_manager()->CreateNewContents(browser_context, url));
 }
 
-void WebUIContentsPreloadManagerTestAPI::SetPreloadedContents(
+std::unique_ptr<content::WebContents>
+WebUIContentsPreloadManagerTestAPI::SetPreloadedContents(
     std::unique_ptr<content::WebContents> web_contents) {
-  preload_manager()->SetPreloadedContents(std::move(web_contents));
+  return preload_manager()->SetPreloadedContents(std::move(web_contents));
+}
+
+void WebUIContentsPreloadManagerTestAPI::DisableDelayPreload(bool disable) {
+  preload_manager()->is_delay_preload_disabled_for_test_ = disable;
 }
 
 void WebUIContentsPreloadManagerTestAPI::SetPreloadCandidateSelector(

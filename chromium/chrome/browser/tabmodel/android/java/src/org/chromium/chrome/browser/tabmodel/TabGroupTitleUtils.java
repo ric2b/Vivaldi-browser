@@ -57,7 +57,7 @@ public class TabGroupTitleUtils {
      * @return A non-null string that can be shown to users.
      */
     public static String getDisplayableTitle(
-            Context context, TabGroupModelFilter tabGroupModelFilter, Token tabGroupId) {
+            Context context, TabGroupModelFilter tabGroupModelFilter, @Nullable Token tabGroupId) {
         int rootId = tabGroupModelFilter.getRootIdFromTabGroupId(tabGroupId);
         @Nullable String explicitTitle =
                 rootId == Tab.INVALID_TAB_ID ? null : tabGroupModelFilter.getTabGroupTitle(rootId);
@@ -76,7 +76,7 @@ public class TabGroupTitleUtils {
      * @param tabRootId The tab root ID which is used as reference to store group title.
      * @param title The tab group title to store.
      */
-    static void storeTabGroupTitle(int tabRootId, String title) {
+    static void storeTabGroupTitle(int tabRootId, @Nullable String title) {
         assert tabRootId != Tab.INVALID_TAB_ID;
         if (TextUtils.isEmpty(title)) {
             deleteTabGroupTitle(tabRootId);

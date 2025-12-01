@@ -54,9 +54,14 @@ suite('Searchbox', () => {
     // Simulate searchbox being focused and the autocomplete request being
     // started.
     lensOverlayElement.setSearchboxFocusForTesting(true);
-    document.dispatchEvent(new CustomEvent('query-autocomplete'));
+    document.dispatchEvent(new CustomEvent('query-autocomplete', {
+      bubbles: true,
+      cancelable: true,
+      detail: {inputValue: 'hello'},
+    }));
     await waitAfterNextRender(lensOverlayElement);
-    assertTrue(isVisible(lensOverlayElement.$.searchboxGhostLoader));
+    // Ghost loader should not be visible if the input is not empty.
+    assertFalse(isVisible(lensOverlayElement.$.searchboxGhostLoader));
 
     // Simulate escape being pressed from the searchbox with empty input.
     const escapeEvent = new CustomEvent('escape-searchbox', {
@@ -69,7 +74,7 @@ suite('Searchbox', () => {
     });
     lensOverlayElement.handleEscapeSearchboxForTesting(escapeEvent);
     await waitAfterNextRender(lensOverlayElement);
-    // Ghost loader should hide when escape is pressed.
+    // Ghost loader should stay hidden when escape is pressed.
     assertFalse(isVisible(lensOverlayElement.$.searchboxGhostLoader));
   });
 });

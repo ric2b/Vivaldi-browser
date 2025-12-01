@@ -26,6 +26,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/navigation_simulator.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/buildflags/buildflags.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_features.h"
@@ -34,6 +35,8 @@
 #include "extensions/common/mojom/injection_type.mojom-shared.h"
 #include "extensions/common/mojom/run_location.mojom-shared.h"
 #include "extensions/common/user_script.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 namespace extensions {
 
@@ -202,8 +205,7 @@ void ExtensionActionRunnerUnitTest::TearDown() {
 // is allowed to run.
 TEST_F(ExtensionActionRunnerUnitTest, GrantTabPermissions) {
   ActiveTabPermissionGranter* active_tab_permission_granter =
-      TabHelper::FromWebContents(web_contents())
-          ->active_tab_permission_granter();
+      ActiveTabPermissionGranter::FromWebContents(web_contents());
   ASSERT_TRUE(active_tab_permission_granter);
 
   const Extension* extension = AddExtension();
@@ -255,7 +257,7 @@ TEST_F(ExtensionActionRunnerUnitTest, RequestPermissionAndExecute) {
   EXPECT_FALSE(RequiresUserConsent(extension));
 
   // Reloading and same-origin navigations shouldn't clear those permissions,
-  // and we shouldn't require user constent again.
+  // and we shouldn't require user consent again.
   content::NavigationSimulator::Reload(web_contents());
   EXPECT_FALSE(RequiresUserConsent(extension));
   NavigateAndCommit(GURL("https://www.google.com/foo"));
@@ -338,8 +340,7 @@ TEST_F(ExtensionActionRunnerUnitTest, ActiveScriptsUseActiveTabPermissions) {
   NavigateAndCommit(GURL("https://www.google.com"));
 
   ActiveTabPermissionGranter* active_tab_permission_granter =
-      TabHelper::FromWebContents(web_contents())
-          ->active_tab_permission_granter();
+      ActiveTabPermissionGranter::FromWebContents(web_contents());
   ASSERT_TRUE(active_tab_permission_granter);
   // Grant the extension active tab permissions. This normally happens, e.g.,
   // if the user clicks on a browser action.
@@ -362,7 +363,7 @@ TEST_F(ExtensionActionRunnerUnitTest, ActiveScriptsUseActiveTabPermissions) {
   NavigateAndCommit(GURL("https://yahoo.com"));
   EXPECT_TRUE(RequiresUserConsent(extension));
 
-  // Back to the original origin should also re-require constent.
+  // Back to the original origin should also re-require consent.
   NavigateAndCommit(GURL("https://www.google.com"));
   EXPECT_TRUE(RequiresUserConsent(extension));
 

@@ -1,0 +1,75 @@
+{
+    "fonts": [
+	{
+	    "family": [
+		"Foo"
+	    ],
+	    "style": [
+		"Regular"
+	    ],
+	    "lang": "en",
+	    "charset": [
+		"a",
+            "b"
+	    ],
+	    "file": "/system/path/to/Foo.ttf",
+	    "fontversion": 1,
+	}
+    ],
+    "appfonts": [
+	{
+	    "family": [
+		"Foo"
+	    ],
+	    "style": [
+		"Regular"
+	    ],
+	    "lang": "en",
+	    "charset": [
+		"a",
+            "b"
+	    ],
+	    "file": "/app/path/to/Foo.ttf",
+	    "fontversion": 2,
+	}
+    ],
+    "tests": [
+	{
+	    "config": {
+		"prefer_app_font": false
+	    },
+	    "method": "sort",
+	    "query": {
+		"family": "Foo",
+		"style": "Regular"
+	    },
+	    "result_fs": [
+		{
+		    "family": "Foo",
+		    "style": "Regular",
+		    "file": "/system/path/to/Foo.ttf",
+		    "fontversion": 1
+		}
+	    ]
+	},
+	{
+	    "config": {
+		"prefer_app_font": true
+	    },
+	    "method": "sort",
+	    "query": {
+		"family": "Foo",
+		"style": "Regular"
+	    },
+	    "result_fs": [
+		{
+		    "family": "Foo",
+		    "style": "Regular",
+		    "file": "/app/path/to/Foo.ttf",
+		    "fontversion": 2
+		}
+	    ]
+	}
+
+    ]
+}

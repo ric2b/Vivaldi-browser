@@ -12,12 +12,14 @@ import androidx.core.util.Pair;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModel.ReadableObjectPropertyKey;
 import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
 
+@NullMarked
 class TabListContainerProperties {
     public static final PropertyModel.WritableBooleanPropertyKey BLOCK_TOUCH_INPUT =
             new PropertyModel.WritableBooleanPropertyKey();
@@ -69,6 +71,9 @@ class TabListContainerProperties {
     public static final PropertyModel.WritableBooleanPropertyKey IS_CONTENT_SENSITIVE =
             new PropertyModel.WritableBooleanPropertyKey();
 
+    public static final ReadableObjectPropertyKey<Callback<TabKeyEventData>> PAGE_KEY_LISTENER =
+            new ReadableObjectPropertyKey<>();
+
     // Vivaldi
     public static final PropertyModel.WritableObjectPropertyKey<Integer> SCROLL_INDEX_NORMAL =
             new PropertyModel.WritableObjectPropertyKey<>(true);
@@ -91,6 +96,7 @@ class TabListContainerProperties {
                 GET_VISIBLE_RANGE_CALLBACK,
                 IS_SCROLLING_SUPPLIER_CALLBACK,
                 IS_CONTENT_SENSITIVE,
+                PAGE_KEY_LISTENER,
 
                 SCROLL_INDEX_NORMAL, // Vivaldi
                 SCROLL_INDEX_PRIVATE, // Vivaldi

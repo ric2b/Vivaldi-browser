@@ -18,12 +18,12 @@
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/time/time.h"
+#include "gpu/command_buffer/client/test_shared_image_interface.h"
 #include "media/base/color_plane_layout.h"
 #include "media/base/format_utils.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_frame_layout.h"
 #include "media/base/video_types.h"
-#include "media/video/fake_gpu_memory_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/geometry/rect.h"
@@ -132,11 +132,12 @@ TEST(PlatformVideoFrameUtilsTest, CreateNativePixmapDmaBuf) {
 
 // TODO(b/230370976): remove this #if/#endif guard. To do so, we need to be able
 // to mock/fake the allocator used by CreatePlatformVideoFrame() and
-// CreateGpuMemoryBufferVideoFrame() so that those functions return a
+// CreateMappableVideoFrame() so that those functions return a
 // non-nullptr frame on platforms where allocating NV12 buffers is not
 // supported.
 #if BUILDFLAG(IS_CHROMEOS)
 TEST(PlatformVideoFrameUtilsTest, CreateVideoFrame) {
+  auto test_sii = base::MakeRefCounted<gpu::TestSharedImageInterface>();
   constexpr VideoPixelFormat kPixelFormat = PIXEL_FORMAT_NV12;
   constexpr gfx::Size kCodedSize(320, 240);
   constexpr gfx::Rect kVisibleRect(kCodedSize);
@@ -158,9 +159,9 @@ TEST(PlatformVideoFrameUtilsTest, CreateVideoFrame) {
                                      kNaturalSize, kTimeStamp, kBufferUsage);
         break;
       case VideoFrame::STORAGE_GPU_MEMORY_BUFFER:
-        frame = CreateGpuMemoryBufferVideoFrame(kPixelFormat, kCodedSize,
-                                                kVisibleRect, kNaturalSize,
-                                                kTimeStamp, kBufferUsage);
+        frame = CreateMappableVideoFrame(kPixelFormat, kCodedSize, kVisibleRect,
+                                         kNaturalSize, kTimeStamp, kBufferUsage,
+                                         test_sii.get());
         break;
       default:
         NOTREACHED();
@@ -179,7 +180,7 @@ TEST(PlatformVideoFrameUtilsTest, CreateVideoFrame) {
         EXPECT_FALSE(frame->NumDmabufFds() == 0);
         break;
       case VideoFrame::STORAGE_GPU_MEMORY_BUFFER:
-        EXPECT_TRUE(frame->GetGpuMemoryBufferForTesting());
+        EXPECT_FALSE(frame->GetGpuMemoryBufferHandle().is_null());
         break;
       default:
         NOTREACHED();

@@ -11,8 +11,6 @@ chromium-chrome-browser-ui-views-reviews@google.com
 # The find-owners plugin does not support groups, so the actual c/b/ui/views
 # reviewers are listed below but tagged with {LAST_RESORT_SUGGESTION} so that
 # Gerrit will preferentially suggest the review alias above.
-bsep@chromium.org         #{LAST_RESORT_SUGGESTION}
-collinbaker@chromium.org  #{LAST_RESORT_SUGGESTION}
 corising@chromium.org     #{LAST_RESORT_SUGGESTION}
 dfried@chromium.org       #{LAST_RESORT_SUGGESTION}
 dljames@chromium.org      #{LAST_RESORT_SUGGESTION}
@@ -21,8 +19,6 @@ ellyjones@chromium.org    #{LAST_RESORT_SUGGESTION}
 emshack@chromium.org      #{LAST_RESORT_SUGGESTION}
 kylixrd@chromium.org      #{LAST_RESORT_SUGGESTION}
 msw@chromium.org          #{LAST_RESORT_SUGGESTION}
-pkasting@chromium.org     #{LAST_RESORT_SUGGESTION}
-tbergquist@chromium.org   #{LAST_RESORT_SUGGESTION}
 
 per-file content_settings*=file://components/content_settings/OWNERS
 

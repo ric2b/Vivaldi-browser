@@ -56,6 +56,12 @@ StringView ToString(CSSMathOperator op) {
       return "hypot";
     case CSSMathOperator::kAbs:
       return "abs";
+    case CSSMathOperator::kLog:
+      return "log";
+    case CSSMathOperator::kExp:
+      return "exp";
+    case CSSMathOperator::kSqrt:
+      return "sqrt";
     case CSSMathOperator::kSign:
       return "sign";
     case CSSMathOperator::kProgress:
@@ -83,6 +89,7 @@ StringView ToString(CSSMathOperator op) {
     case CSSMathOperator::kAtan2:
       return "atan2";
     case CSSMathOperator::kInvalid:
+    case CSSMathOperator::kInvert:
       NOTREACHED();
   }
 }

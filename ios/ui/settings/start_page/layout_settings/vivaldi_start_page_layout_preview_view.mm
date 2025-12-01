@@ -6,6 +6,7 @@
 
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
+#import "ios/ui/ntp/cells/vivaldi_speed_dial_icon_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_list_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_regular_cell.h"
 #import "ios/ui/ntp/cells/vivaldi_speed_dial_small_cell.h"
@@ -23,6 +24,7 @@ namespace {
 // Cell Identifier for the cell types
 NSString* cellIdRegular = @"cellIdRegular";
 NSString* cellIdSmall = @"cellIdSmall";
+NSString* cellIdIcon = @"cellIdIcon";
 NSString* cellIdList = @"cellIdList";
 
 // A constant high enough to render 2 or more rows of preview.
@@ -84,6 +86,8 @@ const CGFloat numberOfItems = 30;
       forCellWithReuseIdentifier:cellIdRegular];
   [collectionView registerClass:[VivaldiSpeedDialSmallCell class]
       forCellWithReuseIdentifier:cellIdSmall];
+  [collectionView registerClass:[VivaldiSpeedDialIconCell class]
+      forCellWithReuseIdentifier:cellIdIcon];
   [collectionView registerClass:[VivaldiSpeedDialListCell class]
       forCellWithReuseIdentifier:cellIdList];
   [collectionView setBackgroundColor:[UIColor clearColor]];
@@ -160,6 +164,13 @@ const CGFloat numberOfItems = 30;
                                                   forIndexPath:indexPath];
       [smallCell configurePreviewForDevice: self.showTabletLayout];
       return smallCell;
+    }
+    case VivaldiStartPageLayoutStyleIcon: {
+      VivaldiSpeedDialIconCell *iconCell =
+        [collectionView dequeueReusableCellWithReuseIdentifier:cellIdIcon
+                                                  forIndexPath:indexPath];
+      [iconCell configurePreviewForDevice: self.showTabletLayout];
+      return iconCell;
     }
     case VivaldiStartPageLayoutStyleList: {
         VivaldiSpeedDialListCell *listCell =

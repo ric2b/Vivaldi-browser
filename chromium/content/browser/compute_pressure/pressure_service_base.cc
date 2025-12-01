@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -14,6 +15,11 @@
 #include "content/public/browser/video_picture_in_picture_window_controller.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "services/device/public/cpp/device_features.h"
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "base/check.h"
+#endif
 
 namespace {
 
@@ -34,7 +40,14 @@ constexpr char kVirtualPressureSourceStopConsoleMessage[] =
 namespace content {
 
 PressureServiceBase::PressureServiceBase()
-    : source_to_client_{PressureClientImpl(this)} {}
+    : source_to_client_{PressureClientImpl(this)} {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (base::FeatureList::IsEnabled(
+          features::kComputePressureBreakCalibrationMitigation)) {
+    converter_.EnableStateRandomizationMitigation();
+  }
+}
 
 PressureServiceBase::~PressureServiceBase() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -57,6 +70,13 @@ PressureServiceBase::~PressureServiceBase() {
 // static
 // https://www.w3.org/TR/compute-pressure/#dfn-document-has-implicit-focus
 bool PressureServiceBase::HasImplicitFocus(RenderFrameHost* render_frame_host) {
+#if BUILDFLAG(IS_CHROMEOS)
+  // TODO: http://crbug.com/407801065
+  // On ChromeOS, in rare occasions render_frame_host may be nullptr. The
+  // following DUMP_WILL_BE_CHECK() is used to provide additional information
+  // for diagnosis.
+  DUMP_WILL_BE_CHECK(render_frame_host);
+#endif
   if (!render_frame_host) {
     return false;
   }
@@ -114,6 +134,11 @@ bool PressureServiceBase::HasImplicitFocus(RenderFrameHost* render_frame_host) {
       focused_frame->GetLastCommittedOrigin());
 }
 
+device::mojom::PressureState PressureServiceBase::CalculateState(
+    double pressure_value) {
+  return converter_.CalculateState(pressure_value);
+}
+
 bool PressureServiceBase::CanCallAddClient() const {
   return true;
 }
@@ -144,7 +169,7 @@ void PressureServiceBase::BindReceiver(
 
 void PressureServiceBase::AddClient(
     device::mojom::PressureSource source,
-    mojo::PendingAssociatedRemote<device::mojom::PressureClient> client,
+    mojo::PendingAssociatedRemote<blink::mojom::WebPressureClient> client,
     AddClientCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -158,6 +183,9 @@ void PressureServiceBase::AddClient(
   if (pressure_client.is_client_associated_remote_bound()) {
     manager_receiver_.ReportBadMessage(
         "PressureClientImpl is already connected.");
+    // manager_receiver_.ReportBadMessage() will reset `manager_receiver_` and
+    // so clean up as if the pipe had been disconnected.
+    OnPressureManagerDisconnected();
     return;
   }
 

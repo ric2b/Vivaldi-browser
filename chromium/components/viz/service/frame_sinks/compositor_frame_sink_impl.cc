@@ -51,12 +51,10 @@ class BundleClientProxy : public mojom::CompositorFrameSinkClient {
 
   void OnBeginFrame(const BeginFrameArgs& args,
                     const FrameTimingDetailsMap& timing_details,
-                    bool frame_ack,
                     std::vector<ReturnedResource> resources) override {
     if (auto* bundle = GetBundle()) {
       bundle->EnqueueOnBeginFrame(frame_sink_id_.sink_id(), args,
-                                  timing_details, frame_ack,
-                                  std::move(resources));
+                                  timing_details, std::move(resources));
     }
   }
 
@@ -133,10 +131,6 @@ void CompositorFrameSinkImpl::SetWantsAnimateOnlyBeginFrames() {
   support_->SetWantsAnimateOnlyBeginFrames();
 }
 
-void CompositorFrameSinkImpl::SetWantsBeginFrameAcks() {
-  support_->SetWantsBeginFrameAcks();
-}
-
 void CompositorFrameSinkImpl::SetAutoNeedsBeginFrame() {
   support_->SetAutoNeedsBeginFrame();
 }
@@ -195,8 +189,9 @@ void CompositorFrameSinkImpl::InitializeCompositorFrameSinkType(
 }
 
 void CompositorFrameSinkImpl::BindLayerContext(
-    mojom::PendingLayerContextPtr context) {
-  support_->BindLayerContext(*context);
+    mojom::PendingLayerContextPtr context,
+    bool draw_mode_is_gpu) {
+  support_->BindLayerContext(*context, draw_mode_is_gpu);
 }
 
 #if BUILDFLAG(IS_ANDROID)

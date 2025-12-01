@@ -21,6 +21,7 @@ How build arguments are set
 
   First, system default arguments are set based on the current system. The
   built-in arguments are:
+   - gn_version
    - host_cpu
    - host_os
    - current_cpu
@@ -29,7 +30,8 @@ How build arguments are set
    - target_os
 
   Next, project-specific overrides are applied. These are specified inside
-  the default_args variable of //.gn. See "gn help dotfile" for more.
+  the default_args variable of //.gn. See "gn help dotfile" for more. Note
+  that during processing of the dotfile itself, only `gn_version` is defined.
 
   If specified, arguments from the --args command line flag are used. If that
   flag is not specified, args from previous builds in the build directory will

@@ -7,12 +7,17 @@
 
 #include <memory>
 
+#include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
 class GURL;
 
 namespace base {
 class FilePath;
+}
+
+namespace content {
+struct FileSystemAccessWriteItem;
 }
 
 namespace download {
@@ -41,18 +46,31 @@ class DownloadProtectionDelegate {
   // preferences.
   virtual bool ShouldCheckDownloadUrl(download::DownloadItem* item) const = 0;
 
-  // Returns whether the download item should be checked by
-  // CheckClientDownload() based on user preferences.
-  virtual bool ShouldCheckClientDownload(
-      download::DownloadItem* item) const = 0;
+  // Returns whether the download item may be checked by CheckClientDownload().
+  // This is based on user preferences, properties of the file, and potentially
+  // random sampling.
+  // A return value of false indicates that the delegate does not permit the
+  // download to be checked.
+  // A return value of true indicates that checking the download is permitted,
+  // but caller may apply further logic to determine whether a check occurs.
+  // TODO(chlily): Implementations of this method currently rely on the checks
+  // in IsSupportedDownload. This is redundant. Refactor this logic to eliminate
+  // IsSupportedDownload().
+  virtual bool MayCheckClientDownload(download::DownloadItem* item) const = 0;
 
-  // Returns whether the download item should be checked by
+  // Returns whether the File System Access write may be checked by
+  // CheckFileSystemAccessWrite().
+  virtual bool MayCheckFileSystemAccessWrite(
+      content::FileSystemAccessWriteItem* item) const = 0;
+
+  // Returns enum value indicating whether the download item may be checked by
   // CheckClientDownload() based on whether the file supports the check.
-  // May modify the DownloadItem with a SupportsUserData::Data.
-  // TODO(chlily): Refactor and/or rename this, as it currently contains logic
-  // based on things other than the file itself (i.e. random sampling).
-  virtual bool IsSupportedDownload(download::DownloadItem& item,
-                                   const base::FilePath& target_path) const = 0;
+  // TODO(chlily): Remove this method. The only place where it is called seems
+  // to be vestigial, and does not affect whether CheckClientDownload ultimately
+  // happens.
+  virtual MayCheckDownloadResult IsSupportedDownload(
+      download::DownloadItem& item,
+      const base::FilePath& target_path) const = 0;
 
   // Called immediately prior to serializing the ClientDownloadRequest into the
   // string to send in the POST request body, which is followed by sending out
@@ -63,9 +81,10 @@ class DownloadProtectionDelegate {
 
   // Called immediately prior to consuming the ResourceRequest used to send out
   // a download ping. Allows the delegate to make final modifications to the
-  // ResourceRequest.
+  // ResourceRequest. The delegate must add the appropriate Content-Type HTTP
+  // header in this method.
   virtual void FinalizeResourceRequest(
-      network::ResourceRequest& resource_request) {}
+      network::ResourceRequest& resource_request) = 0;
 
   // Returns the URL that will be contacted for download protection requests.
   virtual const GURL& GetDownloadRequestUrl() const = 0;

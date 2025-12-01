@@ -71,6 +71,7 @@ enum class PasskeyCreationEligibility {
   kPasswordSyncDisabled,
   kSignedOut,
   kUnsupportedAlgorithm,
+  kExcludedPasskey,
 };
 
 @interface CredentialProviderViewController () <
@@ -395,6 +396,15 @@ enum class PasskeyCreationEligibility {
       return;
     case PasskeyCreationEligibility::kUnsupportedAlgorithm:
       [self exitWithErrorCode:ASExtensionErrorCodeFailed];
+      return;
+    case PasskeyCreationEligibility::kExcludedPasskey:
+      // Note: ASExtensionErrorCodeMatchedExcludedCredential is iOS 18.0+ only,
+      // but so is the excludedCredentials array, so we can't reach this point
+      // if the iOS version is below 18.0, which is why there's no need for an
+      // else statement.
+      if (@available(iOS 18.0, *)) {
+        [self exitWithErrorCode:ASExtensionErrorCodeMatchedExcludedCredential];
+      }
       return;
     case PasskeyCreationEligibility::kCanCreateWithUserInteraction:
       if ([self isUsingMultiProfile]) {
@@ -731,6 +741,11 @@ enum class PasskeyCreationEligibility {
     return PasskeyCreationEligibility::kUnsupportedAlgorithm;
   }
 
+  if ([passkeyRequestDetails
+          hasExcludedPasskey:self.credentialStore.credentials]) {
+    return PasskeyCreationEligibility::kExcludedPasskey;
+  }
+
   if (passkeyRequestDetails.userVerificationRequired ||
       !IsAutomaticPasskeyUpgradeEnabled() || [self isUsingMultiProfile]) {
     return PasskeyCreationEligibility::kCanCreateWithUserInteraction;
@@ -1017,16 +1032,34 @@ enum class PasskeyCreationEligibility {
                    completion:nil];
 }
 
+// Returns the favicon associated with the rpId if it exists.
+// Returns nil otherwise.
+- (NSString*)faviconForRpId:(NSString*)rpId {
+  // Verify if a favicon already exists for the provided rpId.
+  NSArray<id<Credential>>* credentials = self.credentialStore.credentials;
+  NSUInteger credentialIndex =
+      [credentials indexOfObjectPassingTest:^BOOL(id<Credential> credential,
+                                                  NSUInteger idx, BOOL* stop) {
+        return [credential.rpId isEqualToString:rpId] &&
+               credential.favicon.length > 0;
+      }];
+  return credentialIndex != NSNotFound ? credentials[credentialIndex].favicon
+                                       : nil;
+}
+
 // Shows a confirmation dialog to the user before performing passkey creation.
 - (void)showMultiProfilePasskeyCreationDialogWithDetails:
             (PasskeyRequestDetails*)passkeyRequestDetails
                                                     gaia:(NSString*)gaia {
+  NSString* favicon =
+      [self faviconForRpId:passkeyRequestDetails.relyingPartyIdentifier];
   MultiProfilePasskeyCreationViewController*
       multiProfilePasskeyCreationViewController =
           [[MultiProfilePasskeyCreationViewController alloc]
                       initWithDetails:passkeyRequestDetails
                                  gaia:gaia
                             userEmail:[self userEmail]
+                              favicon:favicon
               navigationItemTitleView:self.passkeyNavigationItemTitleView
                              delegate:self];
 

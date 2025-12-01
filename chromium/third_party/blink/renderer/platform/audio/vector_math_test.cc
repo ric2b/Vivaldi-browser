@@ -10,6 +10,7 @@
 #include "third_party/blink/renderer/platform/audio/vector_math.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <limits>
 #include <numeric>
@@ -36,32 +37,36 @@ constexpr size_t kMaxByteAlignment = kMaxBitAlignment / 8u;
 
 constexpr size_t kMaxStride = 2u;
 
-constexpr MemoryLayout kMemoryLayouts[] = {
+constexpr auto kMemoryLayouts = std::to_array<MemoryLayout>({
     {kMaxByteAlignment / 4u, 1u},
     {kMaxByteAlignment / 2u, 1u},
     {kMaxByteAlignment / 2u + kMaxByteAlignment / 4u, 1u},
     {kMaxByteAlignment, 1u},
-    {0u, kMaxStride}};
+    {0u, kMaxStride},
+});
 constexpr size_t kMemoryLayoutCount =
-    sizeof(kMemoryLayouts) / sizeof(*kMemoryLayouts);
+    (kMemoryLayouts.size() * sizeof(decltype(kMemoryLayouts)::value_type)) /
+    sizeof(kMemoryLayouts[0]);
 
 // This is the minimum vector size in bytes needed for MSA instructions on
 // MIPS.
 constexpr size_t kMaxVectorSizeInBytes = 1024u;
-constexpr size_t kVectorSizesInBytes[] = {
-    kMaxVectorSizeInBytes,
-    // This vector size in bytes is chosen so that the following optimization
-    // paths can be tested on x86 family architectures using different memory
-    // layouts:
-    //  * AVX + SSE + scalar
-    //  * scalar + SSE + AVX
-    //  * SSE + AVX + scalar
-    //  * scalar + AVX + SSE
-    // On other architectures, this vector size in bytes results in either
-    // optimization + scalar path or scalar path to be tested.
-    kMaxByteAlignment + kMaxByteAlignment / 2u + kMaxByteAlignment / 4u};
+constexpr auto kVectorSizesInBytes = std::to_array<size_t>(
+    {kMaxVectorSizeInBytes,
+     // This vector size in bytes is chosen so that the following optimization
+     // paths can be tested on x86 family architectures using different memory
+     // layouts:
+     //  * AVX + SSE + scalar
+     //  * scalar + SSE + AVX
+     //  * SSE + AVX + scalar
+     //  * scalar + AVX + SSE
+     // On other architectures, this vector size in bytes results in either
+     // optimization + scalar path or scalar path to be tested.
+     kMaxByteAlignment + kMaxByteAlignment / 2u + kMaxByteAlignment / 4u});
 constexpr size_t kVectorSizeCount =
-    sizeof(kVectorSizesInBytes) / sizeof(*kVectorSizesInBytes);
+    (kVectorSizesInBytes.size() *
+     sizeof(decltype(kVectorSizesInBytes)::value_type)) /
+    sizeof(kVectorSizesInBytes[0]);
 
 // Compare two floats and consider all NaNs to be equal.
 bool Equal(float a, float b) {
@@ -146,6 +151,7 @@ class TestVector {
   T* p() const { return p_; }
   size_t size() const { return size_; }
   int stride() const { return static_cast<int>(memory_layout()->stride); }
+  base::span<T> as_span() const { return base::span<T>(p_.get(), size_); }
 
   bool operator==(const TestVector& other) const {
     return std::ranges::equal(*this, other, Equal);
@@ -360,8 +366,8 @@ TEST_F(VectorMathTest, Vclip) {
       expected_dest[i] = ClampTo(source[i], low_threshold, high_threshold);
     }
     for (auto& dest : GetSecondaryVectors(GetDestination(1u), source)) {
-      Vclip(source.p(), source.stride(), &low_threshold, &high_threshold,
-            dest.p(), dest.stride(), source.size());
+      Vclip(source.as_span(), source.stride(), &low_threshold, &high_threshold,
+            dest.as_span(), dest.stride());
       EXPECT_EQ(expected_dest, dest);
     }
   }

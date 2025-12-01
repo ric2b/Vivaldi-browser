@@ -46,6 +46,8 @@ constexpr DataType DATA_TYPE_READING_LIST = DATA_TYPE_EMBEDDER_BEGIN << 14;
 constexpr DataType DATA_TYPE_TABS = DATA_TYPE_EMBEDDER_BEGIN << 15;
 constexpr DataType DATA_TYPE_SEARCH_ENGINE_CHOICE = DATA_TYPE_EMBEDDER_BEGIN
                                                     << 16;
+constexpr DataType DATA_TYPE_ADS_TRACKER_BLOCKER = DATA_TYPE_EMBEDDER_BEGIN // Vivaldi
+                                                   << 17;
 
 // Group datatypes.
 
@@ -73,7 +75,9 @@ constexpr DataType IMPORTANT_SITES_DATA_TYPES =
 constexpr DataType FILTERABLE_DATA_TYPES =
     DATA_TYPE_SITE_DATA | content::BrowsingDataRemover::DATA_TYPE_CACHE |
     content::BrowsingDataRemover::DATA_TYPE_DOWNLOADS |
-    content::BrowsingDataRemover::DATA_TYPE_RELATED_WEBSITE_SETS_PERMISSIONS;
+    content::BrowsingDataRemover::DATA_TYPE_RELATED_WEBSITE_SETS_PERMISSIONS |
+    content::BrowsingDataRemover::DATA_TYPE_PREFETCH_CACHE |
+    content::BrowsingDataRemover::DATA_TYPE_PRERENDER_CACHE;
 
 // Datatypes with account-scoped data that needs to be removed
 // before Google cookies are deleted.
@@ -96,7 +100,8 @@ constexpr DataType ALL_DATA_TYPES =
     DATA_TYPE_BOOKMARKS |                //
     DATA_TYPE_LOCAL_CUSTOM_DICTIONARY |  //
     DATA_TYPE_READING_LIST |             //
-    DATA_TYPE_SEARCH_ENGINE_CHOICE;
+    DATA_TYPE_SEARCH_ENGINE_CHOICE |     //
+    DATA_TYPE_ADS_TRACKER_BLOCKER;       // Vivaldi VAB-11363
 
 // Includes all available remove options. Meant to be used when the Profile
 // is scheduled to be deleted, and all possible data should be wiped from

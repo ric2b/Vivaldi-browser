@@ -71,6 +71,20 @@ static int listlevel, listlevel_e;
 
 static FILE *listfp;
 
+static inline char err_fill_char(errflags severity)
+{
+    severity &= ERR_MASK;
+
+    if (severity < ERR_NOTE)
+        return ' ';
+    else if (severity < ERR_WARNING)
+        return '-';
+    else if (severity < ERR_CRITICAL)
+        return '*';
+    else
+        return 'X';
+}
+
 static void list_emit(void)
 {
     int i;
@@ -100,12 +114,11 @@ static void list_emit(void)
     }
 
     if (list_errors) {
-        static const char fillchars[] = " --***XX";
-        char fillchar;
-
         strlist_for_each(e, list_errors) {
+            char fillchar;
+
             fprintf(listfp, "%6"PRId32"          ", listlineno);
-            fillchar = fillchars[e->pvt.u & ERR_MASK];
+            fillchar = err_fill_char(e->pvt.u);
             for (i = 0; i < LIST_HEXBIT; i++)
                 putc(fillchar, listfp);
 
@@ -130,6 +143,7 @@ static void list_cleanup(void)
     list_emit();
     fclose(listfp);
     listfp = NULL;
+    active_list_options = 0;
 }
 
 static void list_init(const char *fname)
@@ -152,6 +166,8 @@ static void list_init(const char *fname)
         nasm_nonfatal("unable to open listing file `%s'", fname);
         return;
     }
+
+    active_list_options = list_options | 1;
 
     *listline = '\0';
     listlineno = 0;
@@ -337,7 +353,7 @@ static void list_downlevel(int type)
     }
 }
 
-static void list_error(errflags severity, const char *fmt, ...)
+static void printf_func(2, 3) list_error(errflags severity, const char *fmt, ...)
 {
     va_list ap;
 

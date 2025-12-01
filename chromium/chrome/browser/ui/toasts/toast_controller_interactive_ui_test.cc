@@ -118,9 +118,9 @@ class ToastControllerInteractiveTest : public InteractiveBrowserTest {
  public:
   void SetUp() override {
     feature_list_.InitWithFeatures(
-        {toast_features::kToastFramework, toast_features::kToastRefinements,
-         toast_features::kLinkCopiedToast, toast_features::kImageCopiedToast,
+        {toast_features::kLinkCopiedToast, toast_features::kImageCopiedToast,
          toast_features::kReadingListToast,
+         toast_features::kPinnedTabToastOnClose,
          plus_addresses::features::kPlusAddressesEnabled,
          plus_addresses::features::kPlusAddressFullFormFill},
         {});
@@ -555,4 +555,26 @@ IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
     EXPECT_TRUE(
         toast_controller->MaybeShowToast(ToastParams(ToastId::kLinkCopied)));
   }
+}
+
+IN_PROC_BROWSER_TEST_F(ToastControllerInteractiveTest,
+                       ShowPinnedTabToastOnTabCloseViaKeyboardShortcut) {
+  ui::Accelerator close_tab_accelerator;
+  ASSERT_TRUE(BrowserView::GetBrowserViewForBrowser(browser())->GetAccelerator(
+      IDC_CLOSE_TAB, &close_tab_accelerator));
+
+  RunTestSequence(
+      // Add a pinned tab.
+      InstrumentTab(kFirstTab), WaitForShow(kFirstTab),
+      AddInstrumentedTab(kSecondTab, GetURL()),
+      SelectTab(kTabStripElementId, 0),
+      Do([&]() { browser()->tab_strip_model()->SetTabPinned(0, true); }),
+      // Expect that closing the tab with an accelerator will show a toast.
+      SendAccelerator(kBrowserViewElementId, close_tab_accelerator),
+      WaitForShow(toasts::ToastView::kToastViewId),
+      CheckResult([&]() { return browser()->tab_strip_model()->count(); }, 2),
+      // Expect that we can close the tab by pressing the accelerator again.
+      SendAccelerator(kBrowserViewElementId, close_tab_accelerator),
+      WaitForHide(toasts::ToastView::kToastViewId),
+      CheckResult([&]() { return browser()->tab_strip_model()->count(); }, 1));
 }

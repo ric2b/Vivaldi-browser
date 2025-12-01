@@ -4,9 +4,6 @@
 
 namespace guest_view {
 
-void GuestViewBase::WebContentsDidDetach() {
-}
-
 content::WebContentsDelegate* GuestViewBase::GetDevToolsConnector() {
   return this;
 }

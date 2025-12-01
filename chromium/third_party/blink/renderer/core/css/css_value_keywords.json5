@@ -512,6 +512,7 @@
     //none
     //
     // The order must match the order found in IsDisplayOutside().
+    // "block" also a keyword for caret-shape
     "inline",
     "block",
     // The order must match the order found in IsDisplayInside().
@@ -908,6 +909,9 @@
     // <select>. It should be renamed when a standardized name is chosen.
     "base-select",
     "-internal-auto-base",
+    // Used to set the `content` property of the pseudo element "hint" given to
+    // elements with partial interest (via `interesttarget` keyboard activation).
+    "-internal-partial-interest-content",
 
     //
     // background-clip/background-origin
@@ -1211,7 +1215,7 @@
     // "round",
     "scoop",
     "squircle",
-    "straight",
+    // "square",
     "superellipse",
 
     // -webkit-app-region
@@ -1645,6 +1649,7 @@
     "block-end",
     // inline-start,
     // inline-end,
+    "anchored",
 
     // grid auto-repeat
     "auto-fill",
@@ -1866,6 +1871,7 @@
     // normal,
     // size,
     // scroll-state,
+    // anchored,
 
     // (scripting:) media feature
     "enabled",
@@ -1970,6 +1976,14 @@
     "context-fill",
     "context-stroke",
 
+    // text-grow / text-shrink
+    "per-line",
+    "consistent",
+    // "scale",
+    "font-size",
+    "scale-inline",
+    "letter-spacing",
+
     // media-progress()
     "media-progress",
 
@@ -1992,6 +2006,9 @@
     "sibling-count",
     "sibling-index",
 
+    // https://drafts.csswg.org/css-values-5/#ident
+    "ident",
+
     // @function
     "returns",
 
@@ -2005,5 +2022,10 @@
     "if",
     "else",
     "media",
+
+    // caret-shape
+    // block is elsewhere
+    "bar",
+    "underscore",
   ],
 }

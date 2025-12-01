@@ -11,13 +11,16 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/ash/mahi/web_contents/test_support/fake_mahi_web_contents_manager.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/ui/ash/editor_menu/utils/utils.h"
 #include "chrome/browser/ui/views/mahi/mahi_menu_constants.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/views/chrome_views_test_base.h"
 #include "chromeos/components/mahi/public/cpp/mahi_browser_util.h"
 #include "chromeos/components/mahi/public/cpp/mahi_util.h"
 #include "chromeos/components/mahi/public/cpp/mahi_web_contents_manager.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
+#include "components/application_locale_storage/application_locale_storage.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -84,17 +87,36 @@ void TypeTestResponse(ui::test::EventGenerator* event_generator) {
   }
 }
 
+const std::string& GetApplicationLocale() {
+  return TestingBrowserProcess::GetGlobal()
+      ->GetFeatures()
+      ->application_locale_storage()
+      ->Get();
+}
+
+std::unique_ptr<MahiMenuView> CreateMahiMenuView(
+    MahiMenuView::ButtonStatus button_status) {
+  return std::make_unique<MahiMenuView>(TestingBrowserProcess::GetGlobal()
+                                            ->GetFeatures()
+                                            ->application_locale_storage(),
+                                        button_status);
+}
+
 }  // namespace
 
 TEST_F(MahiMenuViewTest, Bounds) {
   const gfx::Rect anchor_view_bounds = gfx::Rect(50, 50, 25, 100);
   auto menu_widget =
-      MahiMenuView::CreateWidget(anchor_view_bounds, default_button_status);
+      MahiMenuView::CreateWidget(TestingBrowserProcess::GetGlobal()
+                                     ->GetFeatures()
+                                     ->application_locale_storage(),
+                                 anchor_view_bounds, default_button_status);
 
   // The bounds of the created widget should be similar to the value from the
   // utils function.
   EXPECT_EQ(editor_menu::GetEditorMenuBounds(
-                anchor_view_bounds, menu_widget.get()->GetContentsView()),
+                anchor_view_bounds, menu_widget.get()->GetContentsView(),
+                GetApplicationLocale()),
             menu_widget->GetRestoredBounds());
 }
 
@@ -106,8 +128,8 @@ TEST_F(MahiMenuViewTest, SettingsButtonClicked) {
 
   std::unique_ptr<views::Widget> menu_widget =
       CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   EXPECT_CALL(
       mock_mahi_web_contents_manager,
@@ -138,8 +160,8 @@ TEST_F(MahiMenuViewTest, SummaryButtonClicked) {
 
   auto menu_widget =
       CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   auto event_generator = std::make_unique<ui::test::EventGenerator>(
       views::GetRootWindow(menu_widget.get()));
@@ -189,8 +211,8 @@ TEST_F(MahiMenuViewTest, SummaryOfSelectionButtonClicked) {
   // The `button_status` makes the summary button for selected text.
   MahiMenuView::ButtonStatus button_status{.summary_of_selection_eligibility =
                                                SelectedTextState::kEligible};
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(button_status));
 
   auto event_generator = std::make_unique<ui::test::EventGenerator>(
       views::GetRootWindow(menu_widget.get()));
@@ -235,14 +257,13 @@ TEST_F(MahiMenuViewTest, SummaryButtonAvailability) {
   // kEmpty enables the button for whole document.
   MahiMenuView::ButtonStatus button_status{.summary_of_selection_eligibility =
                                                SelectedTextState::kEmpty};
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kSummaryButton)->GetEnabled());
 
   // kTooShort shows the button but disabled.
   button_status.summary_of_selection_eligibility = SelectedTextState::kTooShort;
-  menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  menu_view = menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_FALSE(menu_view->GetViewByID(ViewID::kSummaryButton)->GetEnabled());
   EXPECT_EQ(menu_view->GetViewByID(ViewID::kSummaryButton)->GetTooltipText(),
             l10n_util::GetStringUTF16(
@@ -250,8 +271,7 @@ TEST_F(MahiMenuViewTest, SummaryButtonAvailability) {
 
   // kEligible enables the button for summary of selection.
   button_status.summary_of_selection_eligibility = SelectedTextState::kEligible;
-  menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  menu_view = menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kSummaryButton)->GetEnabled());
 }
 
@@ -263,30 +283,27 @@ TEST_F(MahiMenuViewTest, ElucidationButtonVisibilityAvailability) {
   MahiMenuView::ButtonStatus button_status{
       .summary_of_selection_eligibility = SelectedTextState::kEmpty,
       .elucidation_eligiblity = SelectedTextState::kUnknown};
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_FALSE(
       menu_view->GetViewByID(ViewID::kElucidationButton)->GetVisible());
 
   // kTooLong and kTooShort shows the button but disabled.
   button_status.elucidation_eligiblity = SelectedTextState::kTooLong;
-  menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  menu_view = menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kElucidationButton)->GetVisible());
   EXPECT_FALSE(
       menu_view->GetViewByID(ViewID::kElucidationButton)->GetEnabled());
 
   button_status.elucidation_eligiblity = SelectedTextState::kTooShort;
-  menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  menu_view = menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kElucidationButton)->GetVisible());
   EXPECT_FALSE(
       menu_view->GetViewByID(ViewID::kElucidationButton)->GetEnabled());
 
   // kEligible enables the button.
   button_status.elucidation_eligiblity = SelectedTextState::kEligible;
-  menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(button_status));
+  menu_view = menu_widget->SetContentsView(CreateMahiMenuView(button_status));
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kElucidationButton)->GetVisible());
   EXPECT_TRUE(menu_view->GetViewByID(ViewID::kElucidationButton)->GetEnabled());
 }
@@ -299,8 +316,8 @@ TEST_F(MahiMenuViewTest, ElucidationButtonClicked) {
 
   auto menu_widget =
       CreateTestWidget(views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET);
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   views::test::RunScheduledLayout(menu_view);
 
@@ -343,8 +360,8 @@ TEST_F(MahiMenuViewTest, SubmitQuestionButtonEnabledAfterTextInput) {
   auto menu_widget = std::make_unique<ActiveWidget>();
   menu_widget->Init(CreateParamsForTestWidget());
 
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   auto event_generator = std::make_unique<ui::test::EventGenerator>(
       views::GetRootWindow(menu_widget.get()));
@@ -371,8 +388,8 @@ TEST_F(MahiMenuViewTest, QuestionSubmitted) {
 
   auto menu_widget = std::make_unique<ActiveWidget>();
   menu_widget->Init(CreateParamsForTestWidget());
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   auto event_generator = std::make_unique<ui::test::EventGenerator>(
       views::GetRootWindow(menu_widget.get()));
@@ -424,8 +441,8 @@ TEST_F(MahiMenuViewTest, EmptyQuestionNotSubmitted) {
 
   auto menu_widget = std::make_unique<ActiveWidget>();
   menu_widget->Init(CreateParamsForTestWidget());
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   auto event_generator = std::make_unique<ui::test::EventGenerator>(
       views::GetRootWindow(menu_widget.get()));
@@ -445,8 +462,8 @@ TEST_F(MahiMenuViewTest, EmptyQuestionNotSubmitted) {
 TEST_F(MahiMenuViewTest, AccessibleProperties) {
   auto menu_widget = std::make_unique<ActiveWidget>();
   menu_widget->Init(CreateParamsForTestWidget());
-  auto* menu_view = menu_widget->SetContentsView(
-      std::make_unique<MahiMenuView>(default_button_status));
+  auto* menu_view =
+      menu_widget->SetContentsView(CreateMahiMenuView(default_button_status));
 
   ui::AXNodeData data;
   menu_view->GetViewAccessibility().GetAccessibleNodeData(&data);

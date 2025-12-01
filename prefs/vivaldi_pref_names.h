@@ -146,6 +146,8 @@ extern const char kVivaldiPreferTranslatePanel[];
 // Content Settings
 // Global page zoom value
 extern const char kVivaldiPageZoomLevel[];
+// Privacy & Security Settings
+extern const char kVivaldiBlockExternalApps[];
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

@@ -138,8 +138,9 @@ test suites to the CQ builders is to:
    the test on the affected post-submit builders to determine the amount of
    regressions they're catching. Note: unless the new test is providing unique
    info/artifacts (e.g. stack traces, log files) that pre-existing tests lack,
-   exclude any regressions that _other_ tests also caught. We're only interested
-   in the regressions that these new tests catch alone.
+   exclude any regressions that _other_ tests on the CQ also caught. We're only
+   interested in the regressions that these new tests would catch alone in the
+   CQ.
 1. If the new tests aren't excessively flaky (use
    [this dashboard](http://shortn/_gP9pAC2IS3) to verify) and if they catch a
    sufficient number of regressions over that trial period, then they can be
@@ -425,7 +426,7 @@ Each bot's description is a dictionary containing the following:
        isolate, invoke a wrapper script from src/testing/scripts as their
        top-level entry point, and are used to adapt to multiple kinds of test
        harnesses. These must implement the
-       [Test Executable API](//docs/testing/test_executable_api.md) and
+       [Test Executable API](/docs/testing/test_executable_api.md) and
        can also be run either locally or under Swarming.
     * `junit_tests`: (Android-specific) JUnit tests. These are not run
        under Swarming.

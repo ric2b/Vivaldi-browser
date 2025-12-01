@@ -262,6 +262,8 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   void VisitPropertyLoadForRegister(Register obj, Property* expr,
                                     Register destination);
 
+  bool BuildInitializationBlockForParametersIfExist();
+
   AssignmentLhsData PrepareAssignmentLhs(
       Expression* lhs, AccumulatorPreservingMode accumulator_preserving_mode =
                            AccumulatorPreservingMode::kNone);
@@ -294,6 +296,7 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
 
   Variable* GetPotentialVariableInAccumulator();
 
+  void AddDisposableValue(VariableMode mode);
   void BuildVariableLoad(Variable* variable, HoleCheckMode hole_check_mode,
                          TypeofMode typeof_mode = TypeofMode::kNotInside);
   void BuildVariableLoadForAccumulatorValue(
@@ -471,6 +474,9 @@ class BytecodeGenerator final : public AstVisitor<BytecodeGenerator> {
   // register, or just getting the effect. Some visitors return a TypeHint which
   // specifies the type of the result of the visited expression.
   TypeHint VisitForAccumulatorValue(Expression* expr);
+  TypeHint VisitForAccumulatorValueAsPropertyKey(Expression* expr);
+  TypeHint VisitForAccumulatorValueImpl(Expression* expr,
+                                        ValueResultScope* accumulator_scope);
   void VisitForAccumulatorValueOrTheHole(Expression* expr);
   V8_WARN_UNUSED_RESULT Register VisitForRegisterValue(Expression* expr);
   V8_INLINE void VisitForRegisterValue(Expression* expr, Register destination);

@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.privacy_sandbox;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.app.Activity;
 import android.content.DialogInterface;
 import android.text.method.LinkMovementMethod;
@@ -15,8 +17,9 @@ import android.widget.ScrollView;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.content.WebContentsFactory;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.ui.edge_to_edge.EdgeToEdgeUtils;
 import org.chromium.components.browser_ui.widget.ChromeDialog;
@@ -37,36 +40,37 @@ import org.chromium.url.GURL;
  * Dialog in the form of a notice shown for the Privacy Sandbox - V2. This new version is part of
  * the Ads API UX Enhancement.
  */
+@NullMarked
 public class PrivacySandboxDialogNoticeEeaV2 extends ChromeDialog
         implements DialogInterface.OnShowListener {
     private final PrivacySandboxBridge mPrivacySandboxBridge;
-    private View mContentView;
+    private final View mContentView;
 
-    private LinearLayout mNoticeViewContainer;
-    private ButtonCompat mMoreButton;
-    private LinearLayout mActionButtons;
-    private ScrollView mScrollView;
-    private LinearLayout mSiteSuggestedAdsDropdownElement;
-    private LinearLayout mAdMeasurementDropdownElement;
+    private final LinearLayout mNoticeViewContainer;
+    private final ButtonCompat mMoreButton;
+    private final LinearLayout mActionButtons;
+    private final ScrollView mScrollView;
+    private final LinearLayout mSiteSuggestedAdsDropdownElement;
+    private final LinearLayout mAdMeasurementDropdownElement;
 
     private final CheckableImageView mSiteSuggestedAdsExpandArrowView;
     private final CheckableImageView mAdMeasurementExpandArrowView;
-    private LinearLayout mSiteSuggestedAdsDropdownContainer;
-    private LinearLayout mAdMeasurementDropdownContainer;
-    private @SurfaceType int mSurfaceType;
+    private final LinearLayout mSiteSuggestedAdsDropdownContainer;
+    private final LinearLayout mAdMeasurementDropdownContainer;
+    private final @SurfaceType int mSurfaceType;
 
-    private LinearLayout mPrivacyPolicyView;
-    private FrameLayout mPrivacyPolicyContent;
-    private ChromeImageButton mPrivacyPolicyBackButton;
-    private TextViewWithLeading mLearnMoreBullet1Description;
-    private ThinWebView mThinWebView;
-    private WebContents mWebContents;
-    private WebContentsObserver mWebContentsObserver;
+    private final LinearLayout mPrivacyPolicyView;
+    private final FrameLayout mPrivacyPolicyContent;
+    private final ChromeImageButton mPrivacyPolicyBackButton;
+    private @Nullable TextViewWithLeading mLearnMoreBullet1Description;
+    private @Nullable ThinWebView mThinWebView;
+    private @Nullable WebContents mWebContents;
+    private @Nullable WebContentsObserver mWebContentsObserver;
     private final Profile mProfile;
     private long mPrivacyPolicyClickedTimestamp;
     private final ActivityWindowAndroid mActivityWindowAndroid;
     private boolean mIsPrivacyPageLoaded;
-    private View.OnClickListener mOnClickListener;
+    private final View.OnClickListener mOnClickListener;
 
     public PrivacySandboxDialogNoticeEeaV2(
             Activity activity,
@@ -90,14 +94,6 @@ public class PrivacySandboxDialogNoticeEeaV2 extends ChromeDialog
 
         ButtonCompat ackButton = mContentView.findViewById(R.id.ack_button);
         ackButton.setOnClickListener(mOnClickListener);
-        ButtonCompat ackButtonEqualized = mContentView.findViewById(R.id.ack_button_equalized);
-        ackButtonEqualized.setOnClickListener(mOnClickListener);
-        if (ChromeFeatureList.isEnabled(
-                ChromeFeatureList.PRIVACY_SANDBOX_EQUALIZED_PROMPT_BUTTONS)) {
-            ackButton.setVisibility(View.GONE);
-        } else {
-            ackButtonEqualized.setVisibility(View.GONE);
-        }
         ButtonCompat settingsButton = mContentView.findViewById(R.id.settings_button);
         settingsButton.setOnClickListener(mOnClickListener);
 
@@ -217,7 +213,7 @@ public class PrivacySandboxDialogNoticeEeaV2 extends ChromeDialog
 
             mScrollView.post(
                     () -> mScrollView.scrollTo(0, mSiteSuggestedAdsDropdownElement.getTop()));
-            handlePrivacyPolicyFeature();
+            handlePrivacyPolicyLink();
         }
 
         mSiteSuggestedAdsExpandArrowView.setChecked(isSiteSuggestedAdsDropdownExpanded());
@@ -280,7 +276,7 @@ public class PrivacySandboxDialogNoticeEeaV2 extends ChromeDialog
 
     public void processClickImpl(View view) {
         int id = view.getId();
-        if (id == R.id.ack_button || id == R.id.ack_button_equalized) {
+        if (id == R.id.ack_button) {
             handleAckButtonClick();
         } else if (id == R.id.settings_button) {
             handleSettingsButtonClick();
@@ -313,6 +309,8 @@ public class PrivacySandboxDialogNoticeEeaV2 extends ChromeDialog
 
         // Clean up the WebContents, WebContentsObserver and when the dialog is stopped
         if (mThinWebView != null) {
+            assumeNonNull(mWebContents);
+            assumeNonNull(mWebContentsObserver);
             mWebContents.destroy();
             mWebContents = null;
             mWebContentsObserver.observe(null);
@@ -322,54 +320,48 @@ public class PrivacySandboxDialogNoticeEeaV2 extends ChromeDialog
         }
     }
 
-    private void handlePrivacyPolicyFeature() {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.PRIVACY_SANDBOX_PRIVACY_POLICY)) {
-            mLearnMoreBullet1Description =
-                    mContentView.findViewById(
-                            R.id
-                                    .privacy_sandbox_m1_notice_eea_site_suggested_ads_learn_more_bullet_one_description);
-            mLearnMoreBullet1Description.setText(
-                    SpanApplier.applySpans(
-                            getContext()
-                                    .getString(
-                                            R.string
-                                                    .privacy_sandbox_m1_notice_eea_site_suggested_ads_learn_more_bullet_1_description_clank),
-                            new SpanApplier.SpanInfo(
-                                    "<link>",
-                                    "</link>",
-                                    new ChromeClickableSpan(
-                                            getContext(), this::onPrivacyPolicyClicked))));
-            mLearnMoreBullet1Description.setMovementMethod(LinkMovementMethod.getInstance());
-            if (mThinWebView == null || mWebContents == null || mWebContents.isDestroyed()) {
-                mWebContents = WebContentsFactory.createWebContents(mProfile, true, false);
-                mWebContentsObserver =
-                        new WebContentsObserver(mWebContents) {
-                            @Override
-                            public void didFirstVisuallyNonEmptyPaint() {
-                                if (!mIsPrivacyPageLoaded) {
-                                    RecordHistogram.recordTimesHistogram(
-                                            "PrivacySandbox.PrivacyPolicy.LoadingTime",
-                                            System.currentTimeMillis()
-                                                    - mPrivacyPolicyClickedTimestamp);
-                                    mIsPrivacyPageLoaded = true;
-                                }
+    private void handlePrivacyPolicyLink() {
+        mLearnMoreBullet1Description =
+                mContentView.findViewById(
+                        R.id
+                                .privacy_sandbox_m1_notice_eea_site_suggested_ads_learn_more_bullet_one_description);
+        mLearnMoreBullet1Description.setText(
+                SpanApplier.applySpans(
+                        mLearnMoreBullet1Description.getText().toString(),
+                        new SpanApplier.SpanInfo(
+                                "<link>",
+                                "</link>",
+                                new ChromeClickableSpan(
+                                        getContext(), this::onPrivacyPolicyClicked))));
+        mLearnMoreBullet1Description.setMovementMethod(LinkMovementMethod.getInstance());
+        if (mThinWebView == null || mWebContents == null || mWebContents.isDestroyed()) {
+            mWebContents = WebContentsFactory.createWebContents(mProfile, true, false);
+            mWebContentsObserver =
+                    new WebContentsObserver(mWebContents) {
+                        @Override
+                        public void didFirstVisuallyNonEmptyPaint() {
+                            if (!mIsPrivacyPageLoaded) {
+                                RecordHistogram.recordTimesHistogram(
+                                        "PrivacySandbox.PrivacyPolicy.LoadingTime",
+                                        System.currentTimeMillis()
+                                                - mPrivacyPolicyClickedTimestamp);
+                                mIsPrivacyPageLoaded = true;
                             }
+                        }
 
-                            @Override
-                            public void didFailLoad(
-                                    boolean isInPrimaryMainFrame,
-                                    int errorCode,
-                                    GURL failingUrl,
-                                    @LifecycleState int rfhLifecycleState) {
-                                RecordHistogram.recordSparseHistogram(
-                                        "PrivacySandbox.PrivacyPolicy.FailedLoadErrorCode",
-                                        errorCode);
-                            }
-                        };
-                mThinWebView =
-                        PrivacySandboxDialogController.createPrivacyPolicyThinWebView(
-                                mWebContents, mProfile, mActivityWindowAndroid);
-            }
+                        @Override
+                        public void didFailLoad(
+                                boolean isInPrimaryMainFrame,
+                                int errorCode,
+                                GURL failingUrl,
+                                @LifecycleState int rfhLifecycleState) {
+                            RecordHistogram.recordSparseHistogram(
+                                    "PrivacySandbox.PrivacyPolicy.FailedLoadErrorCode", errorCode);
+                        }
+                    };
+            mThinWebView =
+                    PrivacySandboxDialogController.createPrivacyPolicyThinWebView(
+                            mWebContents, mProfile, mActivityWindowAndroid);
         }
     }
 

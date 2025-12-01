@@ -34,7 +34,8 @@ TranslateJavaScriptFeature::TranslateJavaScriptFeature()
               kScriptName,
               FeatureScript::InjectionTime::kDocumentStart,
               FeatureScript::TargetFrames::kMainFrame,
-              FeatureScript::ReinjectionBehavior::kInjectOncePerWindow)}) {}
+              FeatureScript::ReinjectionBehavior::kInjectOncePerWindow)}),
+      weak_ptr_factory_(this) {}
 
 TranslateJavaScriptFeature::~TranslateJavaScriptFeature() = default;
 
@@ -93,8 +94,8 @@ void TranslateJavaScriptFeature::InjectTranslateScript(
       frame,
       base::UTF8ToUTF16(script),
       base::BindOnce(&TranslateJavaScriptFeature::OnScriptExecuted,
-                     base::Unretained(this),
-                     base::Unretained(frame)));
+                     weak_ptr_factory_.GetWeakPtr(),
+                     frame->AsWeakPtr()));
     return;
   } // End Vivaldi
 
@@ -104,16 +105,16 @@ void TranslateJavaScriptFeature::InjectTranslateScript(
 
 // Vivaldi
 void TranslateJavaScriptFeature::OnScriptExecuted(
-    web::WebFrame* frame,
+    base::WeakPtr<web::WebFrame> frame,
     const base::Value* value,
     NSError* error) {
-  if (error) {
+  if (error || !frame || !frame->GetBrowserState()) {
     return;
   }
 
   // Setup the ios result callback function
   // Function defined in vivapp/src/translate/extension/scripts/main.js
-  ExecuteJavaScript(frame, u"window.vivaldiTranslate.iOSSetupResultCallback();",
+  ExecuteJavaScript(frame.get(), u"window.vivaldiTranslate.iOSSetupResultCallback();",
                     base::DoNothingAs<void(const base::Value*, NSError*)>());
 }
 // End Vivaldi

@@ -7,6 +7,10 @@ import("//components/nacl/toolchain.gni")
 import("//crypto/features.gni")
 import("//testing/test.gni")
 
+if (is_ios) {
+  import("//build/config/apple/mobile_config.gni")  # For `target_platform`
+}
+
 buildflag_header("buildflags") {
   header = "crypto_buildflags.h"
   flags = [ "USE_NSS_CERTS=$use_nss_certs" ]
@@ -38,6 +42,10 @@ component("crypto") {
     "hmac.h",
     "kdf.cc",
     "kdf.h",
+    "keypair.cc",
+    "keypair.h",
+    "obsolete/md5.cc",
+    "obsolete/md5.h",
     "openssl_util.cc",
     "openssl_util.h",
     "process_bound_string.cc",
@@ -53,6 +61,8 @@ component("crypto") {
     "secure_util.h",
     "sha2.cc",
     "sha2.h",
+    "sign.cc",
+    "sign.h",
     "signature_creator.cc",
     "signature_creator.h",
     "signature_verifier.cc",
@@ -78,7 +88,10 @@ component("crypto") {
 
   if (is_apple) {
     sources += [
+      "apple_keychain.cc",
       "apple_keychain.h",
+      "apple_keychain_secitem.h",
+      "apple_keychain_secitem.mm",
       "apple_keychain_util.h",
       "apple_keychain_util.mm",
       "apple_keychain_v2.h",
@@ -87,7 +100,8 @@ component("crypto") {
 
     if (is_mac) {
       sources += [
-        "apple_keychain_mac.cc",
+        "apple_keychain_seckeychain.cc",
+        "apple_keychain_seckeychain.h",
         "mac_security_services_lock.cc",
         "mac_security_services_lock.h",
         "scoped_lacontext.h",
@@ -96,17 +110,18 @@ component("crypto") {
         "unexportable_key_mac.mm",
         "user_verifying_key_mac.mm",
       ]
-    } else if (is_ios) {
-      sources += [ "apple_keychain_ios.mm" ]
     }
 
     frameworks = [
-      "LocalAuthentication.framework",
       "CoreFoundation.framework",
       "CryptoTokenKit.framework",
       "Foundation.framework",
       "Security.framework",
     ]
+
+    if (is_mac || (is_ios && target_platform != "tvos")) {
+      frameworks += [ "LocalAuthentication.framework" ]
+    }
   }
 
   if (is_win) {
@@ -155,12 +170,6 @@ if (is_apple) {
       "mock_apple_keychain.h",
     ]
 
-    if (is_mac) {
-      sources += [ "mock_apple_keychain_mac.cc" ]
-    } else if (is_ios) {
-      sources += [ "mock_apple_keychain_ios.cc" ]
-    }
-
     deps = [
       ":crypto",
       "//base",
@@ -178,11 +187,14 @@ test("crypto_unittests") {
     "hash_unittest.cc",
     "hmac_unittest.cc",
     "kdf_unittest.cc",
+    "keypair_unittest.cc",
+    "obsolete/md5_unittest.cc",
     "process_bound_string_unittest.cc",
     "random_unittest.cc",
     "rsa_private_key_unittest.cc",
     "secure_hash_unittest.cc",
     "sha2_unittest.cc",
+    "sign_unittest.cc",
     "signature_creator_unittest.cc",
     "signature_verifier_unittest.cc",
     "unexportable_key_unittest.cc",
@@ -213,6 +225,10 @@ test("crypto_unittests") {
     configs += [ "//build/config/linux/nss" ]
   }
 
+  if (is_win) {
+    libs = [ "ncrypt.lib" ]
+  }
+
   deps = [
     ":crypto",
     ":test_support",
@@ -235,6 +251,8 @@ static_library("test_support") {
     "scoped_fake_unexportable_key_provider.h",
     "scoped_fake_user_verifying_key_provider.cc",
     "scoped_fake_user_verifying_key_provider.h",
+    "test_support.cc",
+    "test_support.h",
   ]
 
   if (use_nss_certs) {

@@ -73,6 +73,9 @@
 - (void)setFakeboxButtonsSnapshotProvider:
     (id<FakeboxButtonsSnapshotProvider>)provider;
 
+// Sets whether Lens overlay is currently visible.
+- (void)setLensOverlayVisible:(BOOL)lensOverlayVisible;
+
 // Vivaldi
 // Positioner for activity services attached to the location bar i.e. share page
 - (id<SharingPositioner>)vivaldiPositioner;

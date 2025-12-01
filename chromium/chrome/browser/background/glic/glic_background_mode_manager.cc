@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/check.h"
+#include "base/functional/bind.h"
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/background/glic/glic_controller.h"
 #include "chrome/browser/background/glic/glic_launcher_configuration.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/global_features.h"
 #include "chrome/browser/profiles/nuke_profile_directory_utils.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "components/keep_alive_registry/keep_alive_registry.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "ui/base/accelerators/accelerator.h"
@@ -95,11 +97,17 @@ void GlicBackgroundModeManager::OnProfileAdded(Profile* profile) {
   if (!service) {
     return;
   }
+  // Recompute whether the background launcher should change state based on the
+  // updated policy and FRE completion state.
   GlicEnabling& enabling = service->enabling();
-  profile_subscriptions_.emplace(
-      profile, enabling.RegisterAllowedChanged(base::BindRepeating(
-                   &GlicBackgroundModeManager::OnProfileAllowedChanged,
-                   base::Unretained(this))));
+  profile_enabled_subscriptions_.emplace(
+      profile, enabling.RegisterAllowedChanged(
+                   base::BindRepeating(&GlicBackgroundModeManager::UpdateState,
+                                       weak_ptr_factory_.GetWeakPtr())));
+  profile_consent_subscriptions_.emplace(
+      profile, enabling.RegisterOnConsentChanged(
+                   base::BindRepeating(&GlicBackgroundModeManager::UpdateState,
+                                       weak_ptr_factory_.GetWeakPtr())));
   auto [it, inserted] = profile_observers_.emplace(profile, this);
   it->second.Observe(profile);
 
@@ -113,7 +121,8 @@ void GlicBackgroundModeManager::OnProfileAdded(Profile* profile) {
 
 void GlicBackgroundModeManager::OnProfileWillBeDestroyed(Profile* profile) {
   profile_observers_.erase(profile);
-  profile_subscriptions_.erase(profile);
+  profile_enabled_subscriptions_.erase(profile);
+  profile_consent_subscriptions_.erase(profile);
 
   // If a profile is removed while in background mode, check if it must now be
   // exited.
@@ -128,7 +137,10 @@ void GlicBackgroundModeManager::Shutdown() {
 }
 
 void GlicBackgroundModeManager::EnterBackgroundMode() {
-  if (!keep_alive_) {
+  KeepAliveRegistry* const keep_alive_registry =
+      KeepAliveRegistry::GetInstance();
+  if (!keep_alive_ && keep_alive_registry &&
+      !keep_alive_registry->IsShuttingDown()) {
     keep_alive_ = std::make_unique<ScopedKeepAlive>(
         KeepAliveOrigin::GLIC_LAUNCHER, KeepAliveRestartOption::ENABLED);
   }
@@ -201,12 +213,6 @@ void GlicBackgroundModeManager::UpdateState() {
   if (status_icon_) {
     status_icon_->UpdateHotkey(actual_registered_hotkey_);
   }
-}
-
-void GlicBackgroundModeManager::OnProfileAllowedChanged() {
-  // Recompute whether the background launcher should change state based on the
-  // updated policy.
-  UpdateState();
 }
 
 bool GlicBackgroundModeManager::IsEnabledInAnyLoadedProfile() {

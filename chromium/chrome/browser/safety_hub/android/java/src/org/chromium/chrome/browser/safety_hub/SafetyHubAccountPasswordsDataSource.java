@@ -5,8 +5,10 @@
 package org.chromium.chrome.browser.safety_hub;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 
+import org.chromium.base.ObserverList;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.password_manager.PasswordStoreBridge;
 import org.chromium.chrome.browser.password_manager.PasswordStoreCredential;
@@ -22,12 +24,13 @@ import java.lang.annotation.RetentionPolicy;
  * DataSource for the Safety Hub password module. Listens to changes of passwords and their state,
  * and notifies its observer of the current module type.
  */
+@NullMarked
 public class SafetyHubAccountPasswordsDataSource
         implements SafetyHubFetchService.Observer,
                 PasswordStoreBridge.PasswordStoreObserver,
                 SigninManager.SignInStateObserver {
     interface Observer {
-        void stateChanged(@ModuleType int moduleType);
+        void accountPasswordsStateChanged(@ModuleType int moduleType);
     }
 
     /**
@@ -62,27 +65,29 @@ public class SafetyHubAccountPasswordsDataSource
     private final Profile mProfile;
     private final PrefService mPrefService;
     private final SafetyHubFetchService mSafetyHubFetchService;
-    private final SigninManager mSigninManager;
+    private @Nullable final SigninManager mSigninManager;
     private final SafetyHubModuleDelegate mModuleDelegate;
+    private final ObserverList<Observer> mObservers;
 
-    @Nullable private PasswordStoreBridge mPasswordStoreBridge;
-    private Observer mObserver;
+    private @Nullable PasswordStoreBridge mPasswordStoreBridge;
 
     private int mCompromisedPasswordCount;
     private int mWeakPasswordCount;
     private int mReusedPasswordCount;
+    private @ModuleType int mModuleType;
 
     SafetyHubAccountPasswordsDataSource(
             SafetyHubModuleDelegate moduleDelegate,
             PrefService prefService,
             SafetyHubFetchService safetyHubFetchService,
-            SigninManager signinManager,
+            @Nullable SigninManager signinManager,
             Profile profile) {
         mPrefService = prefService;
         mSafetyHubFetchService = safetyHubFetchService;
         mModuleDelegate = moduleDelegate;
         mProfile = profile;
         mSigninManager = signinManager;
+        mObservers = new ObserverList<>();
     }
 
     public void setUp() {
@@ -94,6 +99,7 @@ public class SafetyHubAccountPasswordsDataSource
                 mPasswordStoreBridge.addObserver(this, true);
             }
         }
+        assert mSigninManager != null : "SigninManager should not be null.";
         mSigninManager.addSignInStateObserver(this);
     }
 
@@ -101,23 +107,32 @@ public class SafetyHubAccountPasswordsDataSource
         updateCompromisedPasswordCount();
         updateReusedPasswordCount();
         updateWeakPasswordCount();
-        if (mObserver != null) {
-            mObserver.stateChanged(getModuleType());
+        mModuleType = calculateModuleType();
+
+        for (Observer observer : mObservers) {
+            observer.accountPasswordsStateChanged(mModuleType);
         }
     }
 
-    public void setObserver(Observer observer) {
-        mObserver = observer;
+    public void addObserver(Observer observer) {
+        mObservers.addObserver(observer);
     }
 
-    // Returns the password module type according to the application state.
-    private @ModuleType int getModuleType() {
+    public @ModuleType int getModuleType() {
+        return mModuleType;
+    }
+
+    // Calculates the password module type according to the application state.
+    private @ModuleType int calculateModuleType() {
         boolean isWeakAndReusedFeatureEnabled =
                 ChromeFeatureList.sSafetyHubWeakAndReusedPasswords.isEnabled();
 
         if (!isSignedIn()) {
             assert mCompromisedPasswordCount == INVALID_BREACHED_CREDENTIALS_COUNT;
             return ModuleType.SIGNED_OUT;
+        }
+        if (getTotalPasswordCount() == 0) {
+            return ModuleType.NO_SAVED_PASSWORDS;
         }
         if (mCompromisedPasswordCount == INVALID_BREACHED_CREDENTIALS_COUNT) {
             if (isWeakAndReusedFeatureEnabled
@@ -127,9 +142,6 @@ public class SafetyHubAccountPasswordsDataSource
             }
 
             return ModuleType.UNAVAILABLE_PASSWORDS;
-        }
-        if (getTotalPasswordCount() == 0) {
-            return ModuleType.NO_SAVED_PASSWORDS;
         }
         if (mCompromisedPasswordCount > 0) {
             return ModuleType.HAS_COMPROMISED_PASSWORDS;
@@ -191,7 +203,7 @@ public class SafetyHubAccountPasswordsDataSource
         return SafetyHubUtils.isSignedIn(mProfile);
     }
 
-    public String getAccountEmail() {
+    public @Nullable String getAccountEmail() {
         assert mProfile != null
                 : "A null Profile was detected in" + " SafetyHubAccountPasswordsDataSource";
         return SafetyHubUtils.getAccountEmail(mProfile);
@@ -199,11 +211,13 @@ public class SafetyHubAccountPasswordsDataSource
 
     public void destroy() {
         mSafetyHubFetchService.removeObserver(this);
-        mSigninManager.removeSignInStateObserver(this);
+        if (mSigninManager != null) {
+            mSigninManager.removeSignInStateObserver(this);
+        }
         if (mPasswordStoreBridge != null) {
             mPasswordStoreBridge.removeObserver(this);
         }
-        mObserver = null;
+        mObservers.clear();
     }
 
     @Override

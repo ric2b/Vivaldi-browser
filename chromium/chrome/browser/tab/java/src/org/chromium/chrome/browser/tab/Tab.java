@@ -13,6 +13,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.Token;
 import org.chromium.base.UserDataHost;
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -243,6 +244,9 @@ public interface Tab extends TabLifecycle {
     /** Returns whether the tab is detached for reparenting. */
     boolean isDetached();
 
+    /** Returns whether this is the activated tab; AKA selected tab, or current tab. */
+    boolean isActivated();
+
     /** Sets Parent for the current Tab and other tab related parent properties. */
     void reparentTab(Tab parent);
 
@@ -327,9 +331,19 @@ public interface Tab extends TabLifecycle {
     void goForward();
 
     /**
-     * @return true if the {@link Tab} is a custom tab.
+     * @return true if the {@link Tab} is a custom tab, including CCTs, TWAs and WebAPKs.
      */
     boolean isCustomTab();
+
+    /**
+     * @return true if the {@link Tab} is in either a TWA or a WebAPK, both types of PWA.
+     */
+    boolean isTabInPWA();
+
+    /**
+     * @return true if the {@link Tab} is in the main browser app (i.e. not a CCT, TWA, or WebApk).
+     */
+    boolean isTabInBrowser();
 
     /**
      * @return the last time this tab was shown or the time of its initialization if it wasn't yet
@@ -444,8 +458,24 @@ public interface Tab extends TabLifecycle {
      */
     void setTabHasSensitiveContent(boolean contentIsSensitive);
 
+    /** Returns the current pinned state of the tab. */
+    boolean getIsPinned();
+
+    /**
+     * Sets the pinned state of the tab.
+     *
+     * @param isPinned True if the tab is pinned.
+     */
+    void setIsPinned(boolean isPinned);
+
     /** Called when the tab is restored from the archived tab model. */
     void onTabRestoredFromArchivedTabModel();
+
+    /** Called when the tab is added to a tab model. */
+    void onAddedToTabModel(ObservableSupplier<@Nullable Tab> currentTabSupplier);
+
+    /** Called when the tab is removed from a tab model. */
+    void onRemovedFromTabModel(ObservableSupplier<@Nullable Tab> currentTabSupplier);
 
     /** Vivaldi: This is will exchange the webcontents. */
     public void changeWebContents(

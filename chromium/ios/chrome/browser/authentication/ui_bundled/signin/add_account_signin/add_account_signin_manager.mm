@@ -74,6 +74,10 @@ void LogAddAccountToDeviceHistograms(SigninAddAccountToDeviceResult result,
         (id<SystemIdentityInteractionManager>)identityInteractionManager {
   self = [super init];
   if (self) {
+    CHECK(baseViewController, base::NotFatalUntil::M140);
+    CHECK(prefService, base::NotFatalUntil::M140);
+    CHECK(identityManager, base::NotFatalUntil::M140);
+    CHECK(identityInteractionManager, base::NotFatalUntil::M140);
     _baseViewController = baseViewController;
     _prefService = prefService;
     _identityManager = identityManager;
@@ -141,7 +145,7 @@ void LogAddAccountToDeviceHistograms(SigninAddAccountToDeviceResult result,
     // See: `interruptAddAccountAnimated:completion:`.
     return;
   }
-  CHECK(!_lastStartAddAccountToDeviceTs.is_null(), base::NotFatalUntil::M135);
+  CHECK(!_lastStartAddAccountToDeviceTs.is_null());
   base::TimeDelta addAccountDuration =
       base::TimeTicks::Now() - _lastStartAddAccountToDeviceTs;
   _lastStartAddAccountToDeviceTs = base::TimeTicks();
@@ -169,9 +173,13 @@ void LogAddAccountToDeviceHistograms(SigninAddAccountToDeviceResult result,
   }
 
   LogAddAccountToDeviceHistograms(result, addAccountDuration);
-  [self.delegate addAccountSigninManagerFinishedWithResult:result
-                                                  identity:resultIdentity
-                                                     error:resultError];
+  if (!self.signinInterrupted) {
+    // If the coordinator interrupted the manager, it is in charge of doing
+    // the cleanup.
+    [self.delegate addAccountSigninManagerFinishedWithResult:result
+                                                    identity:resultIdentity
+                                                       error:resultError];
+  }
 }
 
 @end

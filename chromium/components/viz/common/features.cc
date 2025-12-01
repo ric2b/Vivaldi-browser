@@ -39,14 +39,14 @@ namespace features {
 // involvement. For now, this applies only to top controls.
 BASE_FEATURE(kAndroidBrowserControlsInViz,
              "AndroidBrowserControlsInViz",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT); // Vivaldi
 
 // If this flag is enabled, AndroidBrowserControlsInViz and
 // BottomControlsRefactor with the "Dispatch yOffset" variation must also be
 // enabled.
 BASE_FEATURE(kAndroidBcivBottomControls,
              "AndroidBcivBottomControls",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -65,16 +65,12 @@ BASE_FEATURE(kUseDrmBlackFullscreenOptimization,
 
 BASE_FEATURE(kUseFrameIntervalDecider,
              "UseFrameIntervalDecider",
-#if BUILDFLAG(IS_ANDROID)
              base::FEATURE_ENABLED_BY_DEFAULT
-#else
-             base::FEATURE_DISABLED_BY_DEFAULT
-#endif
 );
 
 #if BUILDFLAG(IS_ANDROID)
-BASE_FEATURE(kUseFrameIntervalDeciderNewAndroidFeatures,
-             "UseFrameIntervalDeciderNewAndroidFeatures",
+BASE_FEATURE(kUseFrameIntervalDeciderAdaptiveFrameRate,
+             "UseFrameIntervalDeciderAdaptiveFrameRate",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
@@ -152,12 +148,6 @@ BASE_FEATURE(kRemoveRedirectionBitmap,
              "RemoveRedirectionBitmap",
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
-
-// Feature finched to stable 50% and launched.
-// See crbug.com/350764043
-BASE_FEATURE(kRenderPassDrawnRect,
-             "RenderPassDrawnRect",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_ANDROID)
 // When wide color gamut content from the web is encountered, promote our
@@ -259,6 +249,15 @@ const base::FeatureParam<int> kCALayerNewLimitManyVideos{&kCALayerNewLimit,
 BASE_FEATURE(kVSyncAlignedPresent,
              "VSyncAlignedPresent",
              base::FEATURE_DISABLED_BY_DEFAULT);
+
+// Present the frame at next VSync only if this frame handles interaction or
+// animation as described in kTargetForVSync. Three finch experiment groups for
+// kVSyncAlignedPresent.
+constexpr const char kTargetForVSyncAllFrames[] = "AllFrames";
+constexpr const char kTargetForVSyncAnimation[] = "Animation";
+constexpr const char kTargetForVSyncInteraction[] = "Interaction";
+const base::FeatureParam<std::string> kTargetForVSync{
+    &kVSyncAlignedPresent, "Target", kTargetForVSyncAllFrames};
 #endif
 
 BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
@@ -269,9 +268,9 @@ BASE_FEATURE(kAllowUndamagedNonrootRenderPassToSkip,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
-// Enables occlusion culling for TextureDrawQuads when possible.
-BASE_FEATURE(kOcclusionCullingForTextureQuads,
-             "OcclusionCullingForTextureQuads",
+// If enabled, complex occluders are generated for quads with rounded corners,
+BASE_FEATURE(kComplexOccluderForQuadsWithRoundedCorners,
+             "ComplexOccluderForQuadsWithRoundedCorners",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Allow SurfaceAggregator to merge render passes when they contain quads that
@@ -279,17 +278,6 @@ BASE_FEATURE(kOcclusionCullingForTextureQuads,
 BASE_FEATURE(kAllowForceMergeRenderPassWithRequireOverlayQuads,
              "AllowForceMergeRenderPassWithRequireOverlayQuads",
              base::FEATURE_ENABLED_BY_DEFAULT);
-
-
-// If enabled, CompositorFrameSinkClient::OnBeginFrame is also treated as the
-// DidReceiveCompositorFrameAck. Both in providing the Ack for the previous
-// frame, and in returning resources. While enabled we attempt to not send
-// separate Ack and ReclaimResources signals. However if while sending an
-// OnBeginFrame there is a pending Ack, then if the Ack arrives before the next
-// OnBeginFrame we will send the Ack immediately, rather than batching it.
-BASE_FEATURE(kOnBeginFrameAcks,
-             "OnBeginFrameAcks",
-             base::FEATURE_DISABLED_BY_DEFAULT);
 
 // if enabled, Any CompositorFrameSink of type video that defines a preferred
 // framerate that is below the display framerate will throttle OnBeginFrame
@@ -329,12 +317,6 @@ const base::FeatureParam<base::TimeDelta> kADPFBoostTimeout{
     &kEnableADPFScrollBoost, "adpf_boost_mode_timeout",
     base::Milliseconds(200)};
 
-// If enabled, Chrome includes the Renderer Main thread(s) into the
-// ADPF(Android Dynamic Performance Framework) hint session.
-BASE_FEATURE(kEnableADPFRendererMain,
-             "EnableADPFRendererMain",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 // If enabled, Chrome's ADPF(Android Dynamic Performance Framework) hint
 // session includes Renderer threads only if:
 // - The Renderer is handling an interacton
@@ -368,24 +350,14 @@ BASE_FEATURE(kEnableADPFSetThreads,
 // If enabled, surface activation and draw do not block on dependencies.
 BASE_FEATURE(kDrawImmediatelyWhenInteractive,
              "DrawImmediatelyWhenInteractive",
-#if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // If enabled, we immediately send acks to clients when a viz surface
 // activates. This effectively removes back-pressure. This can result in wasted
 // work and contention, but should regularize the timing of client rendering.
 BASE_FEATURE(kAckOnSurfaceActivationWhenInteractive,
              "AckOnSurfaceActivationWhenInteractive",
-#if BUILDFLAG(IS_CHROMEOS)
-             base::FEATURE_DISABLED_BY_DEFAULT
-#else
-             base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<int>
     kNumCooldownFramesForAckOnSurfaceActivationDuringInteraction{
@@ -449,12 +421,6 @@ BASE_FEATURE(kShouldLogFrameQuadInfo,
 BASE_FEATURE(kBatchResourceRelease,
              "BatchResourceRelease",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-// Do HDR color conversion per render pass update rect in renderer instead of
-// inserting a separate color conversion pass during surface aggregation.
-BASE_FEATURE(kColorConversionInRenderer,
-             "ColorConversionInRenderer",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Stops BeginFrame issue to use |last_vsync_interval_| instead of the current
 // set of BeginFrameArgs.
@@ -557,13 +523,9 @@ bool ShouldOnBeginFrameThrottleVideo() {
   return base::FeatureList::IsEnabled(features::kOnBeginFrameThrottleVideo);
 }
 
-bool IsOnBeginFrameAcksEnabled() {
-  return base::FeatureList::IsEnabled(features::kOnBeginFrameAcks);
-}
-
-bool IsOcclusionCullingForTextureQuadsEnabled() {
-  static bool enabled =
-      base::FeatureList::IsEnabled(features::kOcclusionCullingForTextureQuads);
+bool IsComplexOccluderForQuadsWithRoundedCornersEnabled() {
+  static bool enabled = base::FeatureList::IsEnabled(
+      features::kComplexOccluderForQuadsWithRoundedCorners);
   return enabled;
 }
 
@@ -622,31 +584,18 @@ bool IsCrosContentAdjustedRefreshRateEnabled() {
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_WIN)
-bool ShouldUseDCompSurfacesForDelegatedInk() {
-  // kDCompSurfacesForDelegatedInk is for delegated ink to work with partial
-  // delegated compositing. This function should return true if the feature
-  // is enabled or partial delegated compositing is enabled - a condition
-  // which requires the use of DCOMP surfaces for delegated ink.
-  if (IsDelegatedCompositingEnabled() &&
-      kDelegatedCompositingModeParam.Get() ==
-          DelegatedCompositingMode::kLimitToUi) {
-    return true;
-  }
-  return base::FeatureList::IsEnabled(kDCompSurfacesForDelegatedInk);
-}
-
 bool ShouldRemoveRedirectionBitmap() {
-  // Redirection bitmap should not be removed if Direct Composition is
-  // disabled. On devices with DComp disabled, ANGLE draws to the redirection
-  // bitmap via a blit swap chain. DWM_SYSTEMBACKDROP_TYPE is only available
-  // on Win11 22H2+, therefore limit the bitmap removal to those versions or
-  // higher so that an appropriate background replacement is available.
-  // Note: the disable-direct-composition command line check is a workaround for
-  // https://crbug.com/40276881.
-  return base::win::GetVersion() >= base::win::Version::WIN11_22H2 &&
+  // Limit to Win11 because there are a high number of D3D9 users on Win10;
+  // which requires the Redirection Bitmap. Additionally, software GL in tests
+  // can take the Swiftshader rendering path, which also needs the Redirection
+  // Bitmap. On devices with DComp disabled, ANGLE draws to the redirection
+  // bitmap via a blit swap chain, so check for the command line switch as well.
+  return base::win::GetVersion() >= base::win::Version::WIN11 &&
+         base::FeatureList::IsEnabled(kRemoveRedirectionBitmap) &&
          !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kDisableDirectComposition) &&
-         base::FeatureList::IsEnabled(kRemoveRedirectionBitmap);
+             switches::kOverrideUseSoftwareGLForTests) &&
+         !base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kDisableDirectComposition);
 }
 #endif
 

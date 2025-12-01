@@ -40,34 +40,36 @@ void CFWL_Caret::Update() {}
 
 void CFWL_Caret::DrawWidget(CFGAS_GEGraphics* pGraphics,
                             const CFX_Matrix& matrix) {
-  if (!pGraphics)
+  if (!pGraphics) {
     return;
+  }
 
   DrawCaretBK(pGraphics, matrix);
 }
 
 void CFWL_Caret::ShowCaret() {
-  m_pTimer = std::make_unique<CFX_Timer>(GetFWLApp()->GetTimerHandler(), this,
-                                         kBlinkPeriodMs);
+  timer_ = std::make_unique<CFX_Timer>(GetFWLApp()->GetTimerHandler(), this,
+                                       kBlinkPeriodMs);
   RemoveStates(FWL_STATE_WGT_Invisible);
   SetStates(kStateHighlight);
 }
 
 void CFWL_Caret::HideCaret() {
-  m_pTimer.reset();
+  timer_.reset();
   SetStates(FWL_STATE_WGT_Invisible);
 }
 
 void CFWL_Caret::DrawCaretBK(CFGAS_GEGraphics* pGraphics,
                              const CFX_Matrix& mtMatrix) {
-  if (!(m_Properties.m_dwStates & kStateHighlight))
+  if (!(properties_.states_ & kStateHighlight)) {
     return;
+  }
 
   CFWL_ThemeBackground param(CFWL_ThemePart::Part::kBackground, this,
                              pGraphics);
-  param.m_PartRect = CFX_RectF(0, 0, GetWidgetRect().Size());
-  param.m_dwStates = CFWL_PartState::kHightLight;
-  param.m_matrix = mtMatrix;
+  param.part_rect_ = CFX_RectF(0, 0, GetWidgetRect().Size());
+  param.states_ = CFWL_PartState::kHightLight;
+  param.matrix_ = mtMatrix;
   GetThemeProvider()->DrawBackground(param);
 }
 
@@ -79,10 +81,11 @@ void CFWL_Caret::OnDrawWidget(CFGAS_GEGraphics* pGraphics,
 }
 
 void CFWL_Caret::OnTimerFired() {
-  if (!(GetStates() & kStateHighlight))
+  if (!(GetStates() & kStateHighlight)) {
     SetStates(kStateHighlight);
-  else
+  } else {
     RemoveStates(kStateHighlight);
+  }
 
   CFX_RectF rt = GetWidgetRect();
   RepaintRect(CFX_RectF(0, 0, rt.width + 1, rt.height));

@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Host from '../../../core/host/host.js';
 import * as i18n from '../../../core/i18n/i18n.js';
@@ -132,7 +133,6 @@ const REPLAY_EXTENSION_PREFIX = 'extension';
 
 export class ReplaySection extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #boundRender = this.#render.bind(this);
   readonly #props: ReplaySectionProps = {disabled: false};
   #settings?: Models.RecorderSettings.RecorderSettings;
   #replayExtensions: Extensions.ExtensionManager.Extension[] = [];
@@ -150,14 +150,14 @@ export class ReplaySection extends HTMLElement {
     this.#props.disabled = disabled;
     void ComponentHelpers.ScheduledRender.scheduleRender(
         this,
-        this.#boundRender,
+        this.#render,
     );
   }
 
   connectedCallback(): void {
     void ComponentHelpers.ScheduledRender.scheduleRender(
         this,
-        this.#boundRender,
+        this.#render,
     );
   }
 
@@ -171,7 +171,7 @@ export class ReplaySection extends HTMLElement {
     Host.userMetrics.recordingReplaySpeed(replaySpeedToMetricSpeedMap[speed]);
     void ComponentHelpers.ScheduledRender.scheduleRender(
         this,
-        this.#boundRender,
+        this.#render,
     );
   }
 
@@ -193,7 +193,7 @@ export class ReplaySection extends HTMLElement {
       );
       void ComponentHelpers.ScheduledRender.scheduleRender(
           this,
-          this.#boundRender,
+          this.#render,
       );
       return;
     }
@@ -201,7 +201,7 @@ export class ReplaySection extends HTMLElement {
     this.dispatchEvent(new StartReplayEvent(this.#settings ? this.#settings.speed : PlayRecordingSpeed.NORMAL));
     void ComponentHelpers.ScheduledRender.scheduleRender(
         this,
-        this.#boundRender,
+        this.#render,
     );
   }
 

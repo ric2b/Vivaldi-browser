@@ -8,7 +8,6 @@
 
 #include "base/check.h"
 #include "base/command_line.h"
-#include "base/debug/stack_trace.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -121,7 +120,7 @@ base::LazyInstance<UnboundWidgetInputHandler>::Leaky g_unbound_input_handler =
 }  // namespace
 
 RenderInputRouter::~RenderInputRouter() {
-  TRACE_EVENT_INSTANT("input", "RenderInputRouter::~RenderInputRouter");
+  TRACE_EVENT("input", "RenderInputRouter::~RenderInputRouter");
 }
 
 RenderInputRouter::RenderInputRouter(
@@ -213,6 +212,7 @@ void RenderInputRouter::SetDeviceScaleFactor(float device_scale_factor) {
 
 void RenderInputRouter::ProgressFlingIfNeeded(base::TimeTicks current_time) {
   TRACE_EVENT("input", "RenderInputRouter::ProgressFlingIfNeeded");
+  CHECK(fling_scheduler_);
   fling_scheduler_->ProgressFlingOnBeginFrameIfneeded(current_time);
 }
 
@@ -309,7 +309,7 @@ blink::mojom::InputEventResultState RenderInputRouter::FilterInputEvent(
   // Don't ignore touch cancel events, since they may be sent while input
   // events are being ignored in order to keep the renderer from getting
   // confused about how many touches are active.
-  if (delegate_->IsIgnoringWebInputEvents(event) &&
+  if ((is_blocked_ || delegate_->IsIgnoringWebInputEvents(event)) &&
       event.GetType() != WebInputEvent::Type::kTouchCancel) {
     delegate_->OnInputIgnored(event);
     return blink::mojom::InputEventResultState::kNoConsumerExists;
@@ -344,7 +344,7 @@ void RenderInputRouter::StopInputEventAckTimeout() {
 }
 
 void RenderInputRouter::RestartInputEventAckTimeoutIfNecessary() {
-  if (!delegate_->IsRendererProcessBlocked() && !should_disable_hang_monitor_ &&
+  if (!is_blocked_ && !should_disable_hang_monitor_ &&
       in_flight_event_count_ > 0) {
     input_event_ack_timeout_.Start(
         FROM_HERE, hung_renderer_delay_,
@@ -354,7 +354,8 @@ void RenderInputRouter::RestartInputEventAckTimeoutIfNecessary() {
 }
 
 void RenderInputRouter::OnInputEventAckTimeout() {
-  delegate_->OnInputEventAckTimeout();
+  delegate_->OnInputEventAckTimeout(
+      /* ack_timeout_ts= */ base::TimeTicks::Now());
   // Do not add code after this since the Delegate may delete this
   // RenderInputRouter in RendererUnresponsive.
 }
@@ -390,10 +391,9 @@ void RenderInputRouter::OnInputDispatchedToRendererResult(
       event, result == DispatchToRendererResult::kDispatched);
 }
 
-void RenderInputRouter::DidOverscroll(const ui::DidOverscrollParams& params) {
-  if (view_input_) {
-    view_input_->DidOverscroll(params);
-  }
+void RenderInputRouter::DidOverscroll(
+    blink::mojom::DidOverscrollParamsPtr params) {
+  delegate_->DidOverscroll(std::move(params));
 }
 
 void RenderInputRouter::DidStartScrollingViewport() {
@@ -434,7 +434,7 @@ void RenderInputRouter::ForwardGestureEventWithLatencyInfo(
       });
 
   // Early out if necessary, prior to performing latency logic.
-  if (delegate_->IsIgnoringWebInputEvents(gesture_event)) {
+  if (is_blocked_ || delegate_->IsIgnoringWebInputEvents(gesture_event)) {
     // IgnoreWebInputEvents is primarily concerned with suppressing event
     // dispatch to the renderer. However, the embedder may be filtering gesture
     // events to drive its own UI so we still give it an opportunity to see
@@ -674,6 +674,12 @@ void RenderInputRouter::SetView(RenderWidgetHostViewInput* view) {
   view_input_ = view->GetInputWeakPtr();
 }
 
+void RenderInputRouter::SetBeginFrameSourceForFlingScheduler(
+    viz::BeginFrameSource* begin_frame_source) {
+  CHECK(fling_scheduler_);
+  fling_scheduler_->SetBeginFrameSource(begin_frame_source);
+}
+
 void RenderInputRouter::ResetFrameWidgetInputInterfaces() {
   frame_widget_input_handler_.reset();
   input_target_client_.reset();
@@ -681,6 +687,17 @@ void RenderInputRouter::ResetFrameWidgetInputInterfaces() {
 
 void RenderInputRouter::ResetWidgetInputInterfaces() {
   widget_input_handler_.reset();
+}
+
+void RenderInputRouter::RenderProcessBlockedStateChanged(bool blocked) {
+  // Early out if the blocked state hasn't actually changed.
+  if (blocked == is_blocked_) {
+    return;
+  }
+
+  is_blocked_ = blocked;
+  is_blocked_ ? StopInputEventAckTimeout()
+              : RestartInputEventAckTimeoutIfNecessary();
 }
 
 void RenderInputRouter::SetInputTargetClientForTesting(

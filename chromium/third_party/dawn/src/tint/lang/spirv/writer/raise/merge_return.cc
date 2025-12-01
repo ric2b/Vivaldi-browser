@@ -43,6 +43,11 @@ namespace tint::spirv::writer::raise {
 
 namespace {
 
+// The capabilities that the transform can support.
+const core::ir::Capabilities kMergeReturnCapabilities{
+    core::ir::Capability::kAllowAnyInputAttachmentIndexType,
+};
+
 /// PIMPL state for the transform, for a single function.
 struct State {
     /// The IR module.
@@ -259,7 +264,7 @@ struct State {
         // Change the function return to unconditionally load 'return_val' and return it
         auto* load = b.Load(return_val);
         load->InsertBefore(ret);
-        ret->SetValue(load->Result(0));
+        ret->SetValue(load->Result());
     }
 
     /// Transforms the return instruction that is found in a control instruction.
@@ -322,7 +327,7 @@ struct State {
 }  // namespace
 
 Result<SuccessType> MergeReturn(core::ir::Module& ir) {
-    auto result = ValidateAndDumpIfNeeded(ir, "spirv.MergeReturn");
+    auto result = ValidateAndDumpIfNeeded(ir, "spirv.MergeReturn", kMergeReturnCapabilities);
     if (result != Success) {
         return result;
     }

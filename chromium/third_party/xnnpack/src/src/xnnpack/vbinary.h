@@ -37,8 +37,8 @@ extern "C" {
 #include "src/f16-vbinary/f16-vmulc.h"
 #include "src/f16-vbinary/f16-vprelu.h"
 #include "src/f16-vbinary/f16-vpreluc.h"
-#include "src/f16-vbinary/f16-vrpreluc.h"
 #include "src/f16-vbinary/f16-vrdivc.h"
+#include "src/f16-vbinary/f16-vrpreluc.h"
 #include "src/f16-vbinary/f16-vrsubc.h"
 #include "src/f16-vbinary/f16-vsqrdiff.h"
 #include "src/f16-vbinary/f16-vsqrdiffc.h"
@@ -53,9 +53,9 @@ extern "C" {
       const params_type params[XNN_RESTRICT XNN_MIN_ELEMENTS(1)]);
 #include "src/f32-vbinary/f32-vadd.h"
 #include "src/f32-vbinary/f32-vaddc.h"
+#include "src/f32-vbinary/f32-vcmul.h"
 #include "src/f32-vbinary/f32-vcopysign.h"
 #include "src/f32-vbinary/f32-vcopysignc.h"
-#include "src/f32-vbinary/f32-vcmul.h"
 #include "src/f32-vbinary/f32-vdiv.h"
 #include "src/f32-vbinary/f32-vdivc.h"
 #include "src/f32-vbinary/f32-vmax.h"
@@ -66,9 +66,9 @@ extern "C" {
 #include "src/f32-vbinary/f32-vmulc.h"
 #include "src/f32-vbinary/f32-vprelu.h"
 #include "src/f32-vbinary/f32-vpreluc.h"
-#include "src/f32-vbinary/f32-vrpreluc.h"
 #include "src/f32-vbinary/f32-vrcopysignc.h"
 #include "src/f32-vbinary/f32-vrdivc.h"
+#include "src/f32-vbinary/f32-vrpreluc.h"
 #include "src/f32-vbinary/f32-vrsubc.h"
 #include "src/f32-vbinary/f32-vsqrdiff.h"
 #include "src/f32-vbinary/f32-vsqrdiffc.h"
@@ -88,6 +88,9 @@ extern "C" {
 #include "src/qu8-vmul/qu8-vmul-minmax-rndnu.h"
 #include "src/qu8-vmulc/qu8-vmulc-minmax-fp32.h"
 #include "src/qu8-vmulc/qu8-vmulc-minmax-rndnu.h"
+#include "src/qu8-vprelu/qu8-vprelu.h"
+#include "src/qu8-vpreluc/qu8-vpreluc.h"
+#include "src/qu8-vrpreluc/qu8-vrpreluc.h"
 #undef XNN_UKERNEL_WITH_PARAMS
 
 #define XNN_UKERNEL_WITH_PARAMS(arch_flags, ukernel, batch_tile, vector_tile, \
@@ -101,6 +104,9 @@ extern "C" {
 #include "src/qs8-vmul/qs8-vmul-minmax-rndnu.h"
 #include "src/qs8-vmulc/qs8-vmulc-minmax-fp32.h"
 #include "src/qs8-vmulc/qs8-vmulc-minmax-rndnu.h"
+#include "src/qs8-vprelu/qs8-vprelu.h"
+#include "src/qs8-vpreluc/qs8-vpreluc.h"
+#include "src/qs8-vrpreluc/qs8-vrpreluc.h"
 #undef XNN_UKERNEL_WITH_PARAMS
 
 #ifdef __cplusplus

@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-CN">
-<translation id="2277224997687551299">修改组名称</translation>
+<translation id="1062777154504442433">新建标签栈</translation>
+<translation id="1625440863545383011">移出后保留标签栈</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {将所选标签页加入书签}
           other {将所有选中标签页加入书签}
         }</translation>
 <translation id="2947471979790858922">您在这些隐身标签页中的活动将从该设备中删除</translation>
+<translation id="3298614730029636660">离开标签栈</translation>
+<translation id="354698175756845966">编辑标签栈颜色</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {您可以在 Vivaldi 主菜单下的 "最近标签页 "中找到已关闭的标签页。您的隐身标签页将不可用。}
         other {您可以在 Vivaldi 主菜单下的 "最近标签页 "中找到已关闭的标签页。您的 # 个隐身标签页将不可用。}}</translation>
-<translation id="4460014764210899310">取消分组</translation>
 <translation id="4871187110787939393">是否关闭所有隐身标签页？</translation>
 <translation id="5494920125229734069">全选</translation>
-<translation id="6744956528665271406">编辑分组颜色</translation>
+<translation id="6807841890213931603">移出后删除标签栈</translation>
+<translation id="750227952939161636">自动保存标签栈并更新您的所有签名设备</translation>
+<translation id="7640137753339219124">删除标签栈</translation>
+<translation id="7653857400289671414">标签栈自动保存</translation>
+<translation id="8440938071054361204">编辑标签栈名称</translation>
+<translation id="8602902357364871325">关闭标签栈</translation>
+<translation id="8851621822786801079">移出标签栈</translation>
 </translationbundle>

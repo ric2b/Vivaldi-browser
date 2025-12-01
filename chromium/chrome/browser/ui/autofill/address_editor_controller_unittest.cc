@@ -131,21 +131,6 @@ TEST_F(AddressEditorControllerTest, GetCountryComboboxModel) {
       1l);
 }
 
-// TODO(crbug.com/40263955): remove this test once unsupported countries
-// filtering is removed.
-TEST_F(AddressEditorControllerTest, NonZeroCountriesFiltered) {
-  auto non_validatable_controller = std::make_unique<AddressEditorController>(
-      profile_, &pdm_, /*is_validatable=*/false);
-  auto validatable_controller = std::make_unique<AddressEditorController>(
-      profile_, &pdm_, /*is_validatable=*/true);
-
-  // Country list should be reduced in size after unsupported countries are
-  // filtered out.
-  EXPECT_GT(
-      non_validatable_controller->GetCountryComboboxModel().GetItemCount(),
-      validatable_controller->GetCountryComboboxModel().GetItemCount());
-}
-
 TEST_F(AddressEditorControllerTest, SetProfileInfo) {
   CreateController(/*is_validatable=*/false);
 

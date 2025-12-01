@@ -96,10 +96,14 @@ struct Suggestion {
     base::Uuid guid;
   };
 
+  using Guid = base::StrongAlias<class GuidTag, std::string>;
+
   struct PaymentsPayload final {
     PaymentsPayload();
     PaymentsPayload(std::u16string main_text_content_description,
-                    bool should_display_terms_available);
+                    bool should_display_terms_available,
+                    Guid guid,
+                    bool is_local_payments_method);
     PaymentsPayload(const PaymentsPayload&);
     PaymentsPayload(PaymentsPayload&&);
     PaymentsPayload& operator=(const PaymentsPayload&);
@@ -116,13 +120,17 @@ struct Suggestion {
     // benefits" message below the suggestions list on TTF for mobile.
     bool should_display_terms_available = false;
 
+    // Payments method identifier associated with suggestion.
+    Guid guid;
+
+    // If true, the payments method associated with the suggestion is local.
+    bool is_local_payments_method = false;
+
     // The amount of the payment as extracted from the page. For example, used
     // for BNPL suggestions to confirm the amount is in the supported range for
     // a BNPL provider.
     std::optional<uint64_t> extracted_amount_in_micros = std::nullopt;
   };
-
-  using Guid = base::StrongAlias<class GuidTag, std::string>;
 
   struct AutofillProfilePayload final {
     AutofillProfilePayload();
@@ -162,16 +170,16 @@ struct Suggestion {
     // The account ID as defined here:
     // https://w3c-fedid.github.io/FedCM/#dom-identityprovideraccount-id
     std::string account_id;
+    // The field values of the account profile available to autofill.
+    std::map<FieldType, std::u16string> fields;
   };
 
   using IsLoading = base::StrongAlias<class IsLoadingTag, bool>;
   using InstrumentId = base::StrongAlias<class InstrumentIdTag, uint64_t>;
-  using ValueToFill = base::StrongAlias<struct ValueToFill, std::u16string>;
   using Payload = std::variant<Guid,
                                InstrumentId,
                                AutofillProfilePayload,
                                GURL,
-                               ValueToFill,
                                PasswordSuggestionDetails,
                                PlusAddressPayload,
                                AutofillAiPayload,
@@ -269,6 +277,8 @@ struct Suggestion {
     kGoogleMonochrome,
     kGooglePasswordManager,
     kGooglePay,
+    kGoogleWallet,
+    kGoogleWalletMonochrome,
     kHome,
     kHttpWarning,
     kHttpsInvalid,
@@ -394,12 +404,10 @@ struct Suggestion {
       case SuggestionType::kSeePromoCodeDetails:
         return std::holds_alternative<GURL>(payload);
       case SuggestionType::kIbanEntry:
-        return std::holds_alternative<ValueToFill>(payload) ||
-               std::holds_alternative<Guid>(payload) ||
+        return std::holds_alternative<Guid>(payload) ||
                std::holds_alternative<InstrumentId>(payload);
       case SuggestionType::kFillAutofillAi:
-        return std::holds_alternative<ValueToFill>(payload) ||
-               std::holds_alternative<AutofillAiPayload>(payload);
+        return std::holds_alternative<AutofillAiPayload>(payload);
       case SuggestionType::kCreditCardEntry:
       case SuggestionType::kVirtualCreditCardEntry:
         // TODO(crbug.com/367434234): Use `PaymentsPayload` for all credit card
@@ -459,9 +467,6 @@ struct Suggestion {
   // submenus.
   std::vector<Suggestion> children;
 #if BUILDFLAG(IS_ANDROID)
-  // On Android, the icon can be at the start of the suggestion before the label
-  // or at the end of the label.
-  bool is_icon_at_start = false;
   // TODO(crbug.com/346469807): Remove once strings are passed directly.
   std::u16string iph_description_text;
 #endif  // BUILDFLAG(IS_ANDROID)

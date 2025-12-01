@@ -29,6 +29,28 @@ This page discusses how to debug a **ChromiumOS minidump**.
 *   For other thoughts on crash analysis see [Crash
             Reports](/developers/crash-reports).
 
+# Currently recommended workflow
+
+This is the preferred procedure for obtaining a symbolized stack trace from a
+minidump (some of these steps are only available inside Google):
+
+1. Copy the minidump `<binary>.<version>.dmp` from the DUT or the crash server
+   into your `cros_sdk`.
+
+1. Make the `<binary>.debug` executable also reachable in the sdk.  You may have
+   built it locally, or, more likely, obtained it from `debug.tgz` on a builder.
+
+1. In the sdk, run `lldb <binary>.debug -c <binary>.<version>.dmp`, then run
+   `bt` in the debugger.
+
+More details (relevant to Googlers only) are available at go/cros-crash-playbook.
+
+# Older workflows
+
+Some of the tools below have bit-rotted, but are still documented here in case
+they get resuscitated.
+
+
 ## ==Use minidump_stackwalk to show a stack trace==
 
 TODO(mkrebs): ...

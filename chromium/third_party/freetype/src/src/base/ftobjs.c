@@ -994,8 +994,7 @@
         /* the check for `num_locations' assures that we actually    */
         /* test for instructions in a TTF and not in a CFF-based OTF */
         /*                                                           */
-        /* since `maxSizeOfInstructions' might be unreliable, we     */
-        /* check the size of the `fpgm' and `prep' tables, too --    */
+        /* we check the size of the `fpgm' and `prep' tables, too -- */
         /* the assumption is that there don't exist real TTFs where  */
         /* both `fpgm' and `prep' tables are missing                 */
         if ( ( mode == FT_RENDER_MODE_LIGHT           &&
@@ -1003,9 +1002,8 @@
                  !is_light_type1                    ) )         ||
              ( FT_IS_SFNT( face )                             &&
                ttface->num_locations                          &&
-               ttface->max_profile.maxSizeOfInstructions == 0 &&
                ttface->font_program_size == 0                 &&
-               ttface->cvt_program_size == 0                  ) )
+               ttface->cvt_program_size <= 7                  ) )
           autohint = TRUE;
       }
     }
@@ -1359,21 +1357,9 @@
   }
 
 
-  /**************************************************************************
-   *
-   * @Function:
-   *   find_unicode_charmap
-   *
-   * @Description:
-   *   This function finds a Unicode charmap, if there is one.
-   *   And if there is more than one, it tries to favour the more
-   *   extensive one, i.e., one that supports UCS-4 against those which
-   *   are limited to the BMP (said UCS-2 encoding.)
-   *
-   *   This function is called from open_face() (just below), and also
-   *   from FT_Select_Charmap( ..., FT_ENCODING_UNICODE ).
-   */
-  static FT_Error
+  /* documentation is in ftobjs.h */
+
+  FT_BASE_DEF( FT_Error )
   find_unicode_charmap( FT_Face  face )
   {
     FT_CharMap*  first;

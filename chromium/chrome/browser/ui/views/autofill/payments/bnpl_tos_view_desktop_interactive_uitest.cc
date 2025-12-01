@@ -12,6 +12,7 @@
 #include "chrome/test/interaction/interactive_browser_test.h"
 #include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
 #include "components/autofill/core/browser/foundations/test_autofill_client.h"
+#include "components/autofill/core/browser/metrics/payments/bnpl_metrics.h"
 #include "components/autofill/core/browser/payments/constants.h"
 #include "components/autofill/core/browser/ui/payments/bnpl_tos_controller_impl.h"
 #include "components/signin/public/identity_manager/account_info.h"
@@ -21,6 +22,7 @@
 #include "ui/views/window/dialog_client_view.h"
 
 namespace autofill {
+using autofill_metrics::BnplTosDialogResult;
 
 namespace {
 constexpr char kSuppressedScreenshotError[] =
@@ -55,15 +57,16 @@ class BnplTosViewDesktopInteractiveUiTest : public InteractiveBrowserTest {
     InteractiveBrowserTest::TearDownOnMainThread();
   }
 
-  InteractiveBrowserTestApi::MultiStep InvokeUiAndWaitForShow() {
+  InteractiveBrowserTestApi::MultiStep InvokeUiAndWaitForShow(
+      BnplIssuer::IssuerId bnpl_issuer_id) {
     return Steps(
         ObserveState(
             views::test::kCurrentFocusedViewId,
             BrowserView::GetBrowserViewForBrowser(browser())->GetWidget()),
-        Do([this]() {
+        Do([this, bnpl_issuer_id]() {
           BnplTosModel model;
           model.issuer = BnplIssuer(
-              /*instrument_id=*/std::nullopt, std::string(kBnplAffirmIssuerId),
+              /*instrument_id=*/std::nullopt, bnpl_issuer_id,
               std::vector<BnplIssuer::EligiblePriceRange>{});
           LegalMessageLine::Parse(
               base::JSONReader::Read(
@@ -94,7 +97,7 @@ class BnplTosViewDesktopInteractiveUiTest : public InteractiveBrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, InvokeUi) {
-  RunTestSequence(InvokeUiAndWaitForShow(),
+  RunTestSequence(InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
                   InAnyContext(SetOnIncompatibleAction(
                                    OnIncompatibleAction::kIgnoreAndContinue,
                                    kSuppressedScreenshotError),
@@ -106,14 +109,14 @@ IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, InvokeUi) {
 IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, DialogAccepted) {
   EXPECT_CALL(accept_callback_, Run);
   RunTestSequence(
-      InvokeUiAndWaitForShow(),
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
       InAnyContext(PressButton(views::DialogClientView::kOkButtonElementId),
                    WaitForShow(BnplTosDialog::kThrobberId)));
 }
 
 IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, DialogShownLogged) {
   base::HistogramTester histogram_tester;
-  RunTestSequence(InvokeUiAndWaitForShow(),
+  RunTestSequence(InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
                   InSameContext(Check([&histogram_tester]() {
                     return histogram_tester.GetBucketCount(
                                "Autofill.Bnpl.TosDialogShown.Affirm",
@@ -125,7 +128,7 @@ IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest,
                        DialogAcceptedTwice) {
   EXPECT_CALL(accept_callback_, Run);
   RunTestSequence(
-      InvokeUiAndWaitForShow(),
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
       InAnyContext(PressButton(views::DialogClientView::kOkButtonElementId),
                    WaitForShow(BnplTosDialog::kThrobberId),
                    PressButton(views::DialogClientView::kOkButtonElementId)));
@@ -134,7 +137,7 @@ IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest,
 IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, DialogDeclined) {
   EXPECT_CALL(cancel_callback_, Run);
   RunTestSequence(
-      InvokeUiAndWaitForShow(),
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
       InAnyContext(PressButton(views::DialogClientView::kCancelButtonElementId),
                    WaitForHide(views::DialogClientView::kTopViewId)));
 }
@@ -144,7 +147,7 @@ IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest,
   EXPECT_CALL(accept_callback_, Run);
   EXPECT_CALL(cancel_callback_, Run);
   RunTestSequence(
-      InvokeUiAndWaitForShow(),
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
       InAnyContext(PressButton(views::DialogClientView::kOkButtonElementId),
                    WaitForShow(BnplTosDialog::kThrobberId)),
       PressButton(views::DialogClientView::kCancelButtonElementId),
@@ -154,7 +157,7 @@ IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest,
 IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, EscKeyPress) {
   EXPECT_CALL(cancel_callback_, Run);
   RunTestSequence(
-      InvokeUiAndWaitForShow(),
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
       InAnyContext(
 // Dialogs are already in focus for Mac builds and focusing again causes a
 // button click.
@@ -169,6 +172,35 @@ IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest, EscKeyPress) {
           SendAccelerator(views::DialogClientView::kTopViewId,
                           ui::Accelerator(ui::VKEY_ESCAPE, ui::MODIFIER_NONE)),
           WaitForHide(views::DialogClientView::kTopViewId)));
+}
+
+IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest,
+                       DialogLoggedWithAcceptButtonClicked) {
+  base::HistogramTester histogram_tester;
+  RunTestSequence(
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
+      InSameContext(Steps(
+          PressButton(views::DialogClientView::kOkButtonElementId),
+          WaitForShow(BnplTosDialog::kThrobberId), Check([&histogram_tester]() {
+            return histogram_tester.GetBucketCount(
+                       "Autofill.Bnpl.TosDialogResult.Affirm",
+                       BnplTosDialogResult::kAcceptButtonClicked) == 1;
+          }))));
+}
+
+IN_PROC_BROWSER_TEST_F(BnplTosViewDesktopInteractiveUiTest,
+                       DialogLoggedWithCancelButtonClicked) {
+  base::HistogramTester histogram_tester;
+  RunTestSequence(
+      InvokeUiAndWaitForShow(BnplIssuer::IssuerId::kBnplAffirm),
+      InSameContext(
+          Steps(PressButton(views::DialogClientView::kCancelButtonElementId),
+                WaitForHide(views::DialogClientView::kTopViewId),
+                Check([&histogram_tester]() {
+                  return histogram_tester.GetBucketCount(
+                             "Autofill.Bnpl.TosDialogResult.Affirm",
+                             BnplTosDialogResult::kCancelButtonClicked) == 1;
+                }))));
 }
 
 }  // namespace autofill

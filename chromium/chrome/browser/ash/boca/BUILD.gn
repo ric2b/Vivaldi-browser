@@ -16,7 +16,10 @@ static_library("boca") {
     "boca_manager_factory.h",
   ]
 
-  public_deps = [ "//chrome/browser:browser_public_dependencies" ]
+  public_deps = [
+    "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser/ui:browser_list",
+  ]
 
   deps = [
     "//ash/constants",
@@ -31,7 +34,9 @@ static_library("boca") {
     "//chromeos/ash/components/boca",
     "//chromeos/ash/components/boca:invalidations",
     "//chromeos/ash/components/boca:spotlight",
+    "//chromeos/ash/components/boca:spotlight_lib",
     "//chromeos/ash/components/boca/babelorca",
+    "//chromeos/ash/components/boca/babelorca:soda_installer",
     "//chromeos/ash/components/boca/on_task",
     "//chromeos/ash/components/boca/session_api",
     "//chromeos/ash/components/browser_context_helper",
@@ -39,6 +44,7 @@ static_library("boca") {
     "//components/live_caption",
     "//components/live_caption:live_translate",
     "//components/signin/public/identity_manager",
+    "//components/soda:constants",
     "//components/user_manager",
     "//extensions/browser",
     "//google_apis:google_apis",

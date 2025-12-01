@@ -155,6 +155,16 @@ bool SavedTabGroupButton::OnKeyPressed(const ui::KeyEvent& event) {
   return false;
 }
 
+gfx::Point SavedTabGroupButton::GetKeyboardContextMenuLocation() {
+  // Use center bottom of the button as menu location so the context menu does
+  // not overlap with text.
+  gfx::Rect vis_bounds = GetVisibleBounds();
+  gfx::Point screen_point(vis_bounds.x() + vis_bounds.width() / 2,
+                          vis_bounds.y() + vis_bounds.height());
+  ConvertPointToScreen(this, &screen_point);
+  return screen_point;
+}
+
 bool SavedTabGroupButton::IsTriggerableEvent(const ui::Event& e) {
   return e.type() == ui::EventType::kGestureTap ||
          e.type() == ui::EventType::kGestureTapDown ||
@@ -193,12 +203,17 @@ std::u16string SavedTabGroupButton::GetAccessibleNameForButton() const {
           ? l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_OPENED)
           : l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_CLOSED);
 
+  const std::u16string& shared_state =
+      is_shared_ ? l10n_util::GetStringUTF16(IDS_SAVED_GROUP_AX_LABEL_SHARED)
+                 : u"";
+
   const std::u16string saved_group_acessible_name =
       GetText().empty()
           ? l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT, opened_state)
+                IDS_GROUP_AX_LABEL_UNNAMED_SAVED_GROUP_FORMAT, shared_state,
+                opened_state)
           : l10n_util::GetStringFUTF16(
-                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT,
+                IDS_GROUP_AX_LABEL_NAMED_SAVED_GROUP_FORMAT, shared_state,
                 std::u16string(GetText()), opened_state);
   return saved_group_acessible_name;
 }
@@ -247,12 +262,11 @@ void SavedTabGroupButton::UpdateButtonLayout() {
   }
 
   if (is_shared_) {
-    const ui::ColorId icon_color =
-        GetText().empty() ? GetSavedTabGroupOutlineColorId(tab_group_color_id_)
-                          : ui::kColorMenuIcon;
     SetImageModel(ButtonState::STATE_NORMAL,
-                  ui::ImageModel::FromVectorIcon(kPeopleGroupIcon, icon_color,
-                                                 gfx::kFaviconSize));
+                  ui::ImageModel::FromVectorIcon(
+                      kPeopleGroupIcon,
+                      GetSavedTabGroupForegroundColorId(tab_group_color_id_),
+                      gfx::kFaviconSize));
   }
 
   if (GetText().empty()) {

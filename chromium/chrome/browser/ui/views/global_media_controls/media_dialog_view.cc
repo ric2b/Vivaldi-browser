@@ -257,7 +257,7 @@ void MediaDialogView::AddedToWidget() {
       views::Emphasis::kHigh);
   views::BubbleFrameView* frame = GetBubbleFrameView();
   if (frame) {
-    frame->SetCornerRadius(corner_radius);
+    frame->SetRoundedCorners(gfx::RoundedCornersF(corner_radius));
   }
   if (entry_point_ ==
       global_media_controls::GlobalMediaControlsEntryPoint::kPresentation) {
@@ -416,9 +416,6 @@ MediaDialogView::MediaDialogView(
       web_contents_for_presentation_request_(contents),
       entry_point_(entry_point) {
   SetProperty(views::kElementIdentifierKey, kToolbarMediaBubbleElementId);
-  // Enable layer based clipping to ensure children using layers are clipped
-  // appropriately.
-  SetPaintClientToLayer(true);
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetAccessibleTitle(
       l10n_util::GetStringUTF16(IDS_GLOBAL_MEDIA_CONTROLS_DIALOG_NAME));
@@ -445,10 +442,10 @@ MediaDialogView::MediaDialogView(
 }
 
 MediaDialogView::~MediaDialogView() {
-  for (auto item_pair : observed_items_) {
+  for (auto& item_pair : observed_items_) {
     item_pair.second->RemoveObserver(this);
   }
-  for (auto item_pair : updated_items_) {
+  for (auto& item_pair : updated_items_) {
     item_pair.second->RemoveObserver(this);
   }
 }

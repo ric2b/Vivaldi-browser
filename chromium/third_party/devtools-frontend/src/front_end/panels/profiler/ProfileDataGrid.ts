@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2009 280 North Inc. All Rights Reserved.
@@ -365,27 +366,13 @@ export class ProfileDataGridTree implements UI.SearchableView.Searchable {
   }
 
   static propertyComparator(property: string, isAscending: boolean):
-      (arg0: {
-        [x: string]: unknown,
-      },
-       arg1: {
-         [x: string]: unknown,
-       }) => number {
+      (arg0: Record<string, unknown>, arg1: Record<string, unknown>) => number {
     let comparator = propertyComparators[(isAscending ? 1 : 0)][property];
 
     if (!comparator) {
       if (isAscending) {
-        comparator = function(
-            lhs: {
-              // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              [x: string]: any,
-            },
-            rhs: {
-              // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              [x: string]: any,
-            }): number {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        comparator = function(lhs: Record<string, any>, rhs: Record<string, any>): number {
           if (lhs[property] < rhs[property]) {
             return -1;
           }
@@ -398,16 +385,9 @@ export class ProfileDataGridTree implements UI.SearchableView.Searchable {
         };
       } else {
         comparator = function(
-            lhs: {
-              // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              [x: string]: any,
-            },
-            rhs: {
-              // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              [x: string]: any,
-            }): number {
+            // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            lhs: Record<string, any>, rhs: Record<string, any>): number {
           if (lhs[property] > rhs[property]) {
             return -1;
           }
@@ -423,13 +403,7 @@ export class ProfileDataGridTree implements UI.SearchableView.Searchable {
       propertyComparators[(isAscending ? 1 : 0)][property] = comparator;
     }
 
-    return comparator as (
-               arg0: {
-                 [x: string]: unknown,
-               },
-               arg1: {
-                 [x: string]: unknown,
-               }) => number;
+    return comparator as (arg0: Record<string, unknown>, arg1: Record<string, unknown>) => number;
   }
 
   get expanded(): boolean {
@@ -607,7 +581,7 @@ export class ProfileDataGridTree implements UI.SearchableView.Searchable {
     return matchesQuery;
   }
 
-  performSearch(searchConfig: UI.SearchableView.SearchConfig, shouldJump: boolean, jumpBackwards?: boolean): void {
+  performSearch(searchConfig: UI.SearchableView.SearchConfig, _shouldJump: boolean, jumpBackwards?: boolean): void {
     this.onSearchCanceled();
     const matchesQuery = this.matchFunction(searchConfig);
     if (!matchesQuery) {
@@ -682,7 +656,7 @@ export class ProfileDataGridTree implements UI.SearchableView.Searchable {
   }
 }
 
-const propertyComparators: Array<{[key: string]: unknown}> = [{}, {}];
+const propertyComparators: Array<Record<string, unknown>> = [{}, {}];
 
 export interface Formatter {
   formatValue(value: number, node: ProfileDataGridNode): string;

@@ -28,6 +28,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_classification.h"
@@ -43,6 +44,7 @@
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/url_formatter/url_formatter.h"
 #include "services/data_decoder/public/cpp/data_decoder.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -51,6 +53,12 @@
 #include "url/gurl.h"
 
 namespace {
+
+// Whether to make multiple requests to the backend.
+bool kMultipleRequests() {
+  return omnibox_feature_configs::SearchAggregatorProvider::Get()
+      .multiple_requests;
+}
 
 // Limit the number matches created for each type, not total, as a performance
 // guard.
@@ -159,63 +167,80 @@ struct MimeInfo {
   const std::string_view file_type_description;
 };
 
-// A mapping from `mime_type` to the human readable `file_type_description`.
+// A mapping from `mime_type` to the human readable `file_type_description` for
+// selected MIME types.
 // Mappings documentation:
 // https://developers.google.com/drive/api/guides/mime-types
 // https://developers.google.com/drive/api/guides/ref-export-formats
-// TODO(crbug.com/402436108): Localize the following strings.
-const auto kMimeTypeMapping = base::MakeFixedFlatMap<std::string_view,
-                                                     std::string_view>({
-    {"application/vnd.google-apps.audio", "Audio"},
-    {"application/vnd.google-apps.document", "Google Docs"},
-    {"application/vnd.google-apps.drive-sdk", "Third-party shortcut"},
-    {"application/vnd.google-apps.drawing", "Google Drawings"},
-    {"application/vnd.google-apps.file", "Google Drive file"},
-    {"application/vnd.google-apps.folder", "Google Drive folder"},
-    {"application/vnd.google-apps.form", "Google Forms"},
-    {"application/vnd.google-apps.fusiontable", "Google Fusion Tables"},
-    {"application/vnd.google-apps.jam", "Google Jamboard"},
-    {"application/vnd.google-apps.mail-layout", "Email layout"},
-    {"application/vnd.google-apps.map", "Google My Maps"},
-    {"application/vnd.google-apps.photo", "Google Photos"},
-    {"application/vnd.google-apps.presentation", "Google Slides"},
-    {"application/vnd.google-apps.script", "Google Apps Script"},
-    {"application/vnd.google-apps.shortcut", "Shortcut"},
-    {"application/vnd.google-apps.site", "Google Sites"},
-    {"application/vnd.google-apps.spreadsheet", "Google Sheets"},
-    {"application/vnd.google-apps.unknown", ""},
-    {"application/vnd.google-apps.vid", "MP4"},
-    {"application/vnd.google-apps.video", "Video"},
-    {"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-     "Microsoft Word"},
-    {"application/vnd.oasis.opendocument.text", "OpenDocument"},
-    {"application/rtf", "Rich Text"},
-    {"application/pdf", "PDF"},
-    {"text/plain", "Plain Text"},
-    {"application/zip", "ZIP"},
-    {"application/epub+zip", "EPUB ZIP"},
-    {"text/markdown", "Markdown"},
-    {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-     "Microsoft Excel"},
-    {"application/x-vnd.oasis.opendocument.spreadsheet",
-     "OpenDocument Spreadsheet"},
-    {"text/csv", "Comma Separated Values"},
-    {"text/tab-separated-values", "Tab Separated Values"},
+const auto kMimeTypeMapping = base::MakeFixedFlatMap<std::string_view, int>({
+    {"application/json", IDS_CONTENT_SUGGESTION_DESCRIPTION_JSON},
+    {"application/rtf", IDS_CONTENT_SUGGESTION_DESCRIPTION_RICH_TEXT_FORMAT},
+    {"application/pdf", IDS_CONTENT_SUGGESTION_DESCRIPTION_PDF},
+    {"application/vnd.google-apps.document",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_DOCS},
+    {"application/vnd.google-apps.drawing",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_DRAWINGS},
+    {"application/vnd.google-apps.folder",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_DRIVE_FOLDER},
+    {"application/vnd.google-apps.form",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_FORMS},
+    {"application/vnd.google-apps.jam",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_JAMBOARD},
+    {"application/vnd.google-apps.photo",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_PHOTOS},
+    {"application/vnd.google-apps.presentation",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_SLIDES},
+    {"application/vnd.google-apps.script",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_APPS_SCRIPT},
+    {"application/vnd.google-apps.site",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_SITES},
+    {"application/vnd.google-apps.spreadsheet",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_GOOGLE_SHEETS},
     {"application/"
      "vnd.openxmlformats-officedocument.presentationml.presentation",
-     "Microsoft PowerPoint"},
-    {"application/vnd.oasis.opendocument.presentation", "ODP"},
-    {"image/jpeg", "JPEG"},
-    {"image/png", "PNG"},
-    {"image/svg+xml", "Scalable Vector Graphics"},
-    {"application/vnd.google-apps.script+json", "JSON"},
-    {"video/quicktime", "Quicktime Video"},
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_MS_POWERPOINT},
+    {"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_MS_EXCEL},
+    {"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_MS_WORD},
+    {"application/vnd.oasis.opendocument.presentation",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_OPEN_DOCUMENT_PRESENTATION},
+    {"application/vnd.oasis.opendocument.spreadsheet",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_OPEN_DOCUMENT_SPREADSHEET},
+    {"application/vnd.oasis.opendocument.text",
+     IDS_CONTENT_SUGGESTION_DESCRIPTION_OPEN_DOCUMENT_TEXT},
+    {"application/zip", IDS_CONTENT_SUGGESTION_DESCRIPTION_ZIP_FILE},
+    {"image/jpeg", IDS_CONTENT_SUGGESTION_DESCRIPTION_IMAGE_JPEG},
+    {"image/png", IDS_CONTENT_SUGGESTION_DESCRIPTION_IMAGE_PNG},
+    {"image/svg+xml", IDS_CONTENT_SUGGESTION_DESCRIPTION_IMAGE_SVG},
+    {"text/csv", IDS_CONTENT_SUGGESTION_DESCRIPTION_COMMA_SEPARATED_VALUES},
+    {"text/markdown", IDS_CONTENT_SUGGESTION_DESCRIPTION_MARKDOWN},
+    {"text/plain", IDS_CONTENT_SUGGESTION_DESCRIPTION_PLAIN_TEXT},
+    {"video/mp4", IDS_CONTENT_SUGGESTION_DESCRIPTION_VIDEO_MP4},
+    {"video/quicktime", IDS_CONTENT_SUGGESTION_DESCRIPTION_VIDEO_QUICKTIME},
+    {"video/webm", IDS_CONTENT_SUGGESTION_DESCRIPTION_VIDEO_WEBM},
 });
 
-// Helper for converting a `mime_type` into an abbreviated string.
-std::string_view MimeToDescription(const std::string_view& mime_type) {
-  const auto it = kMimeTypeMapping.find(mime_type);
-  return it != kMimeTypeMapping.end() ? it->second : "";
+// A mapping from `source_type` to the human readable `content_type_description`.
+const auto kSourceTypeMapping = base::MakeFixedFlatMap<std::string_view, int>({
+    {"buganizer", IDS_CONTENT_SUGGESTION_DESCRIPTION_BUGANIZER},
+    {"jira", IDS_CONTENT_SUGGESTION_DESCRIPTION_JIRA},
+    {"salesforce", IDS_CONTENT_SUGGESTION_DESCRIPTION_SALESFORCE},
+    {"slack", IDS_CONTENT_SUGGESTION_DESCRIPTION_SLACK},
+});
+
+// Helper for converting `mime_type` and `source_type` into a human readable
+// string. Prioritizes `mime_type` over `source_type`.
+std::u16string ContentTypeToDescription(const std::string_view& mime_type,
+                                        const std::string_view& source_type) {
+  const auto mimeTypeIter = kMimeTypeMapping.find(mime_type);
+  if (mimeTypeIter != kMimeTypeMapping.end()) {
+    return l10n_util::GetStringUTF16(mimeTypeIter->second);
+  }
+  const auto sourceTypeIter = kSourceTypeMapping.find(source_type);
+  return sourceTypeIter != kSourceTypeMapping.end()
+             ? l10n_util::GetStringUTF16(sourceTypeIter->second)
+             : std::u16string();
 }
 
 // Helper for converting unix timestamp `time` into an abbreviated date.
@@ -248,6 +273,12 @@ const TemplateURL* AdjustTemplateURL(AutocompleteInput* input,
              ? AutocompleteInput::GetSubstitutingTemplateURLForInput(
                    turl_service, input)
              : turl_service->GetEnterpriseSearchAggregatorEngine();
+}
+
+EnterpriseSearchAggregatorProvider::RelevanceData GetServerRelevanceData(
+    const base::Value::Dict& result) {
+  return {static_cast<int>(result.FindDouble("score").value_or(0) * 1000), 0, 0,
+          "server"};
 }
 
 // Helpers to convert vector of strings to sets of words.
@@ -295,14 +326,12 @@ EnterpriseSearchAggregatorProvider::RelevanceData CalculateRelevanceData(
     std::set<std::u16string> input_words,
     bool in_keyword_mode,
     AutocompleteMatch::EnterpriseSearchAggregatorType suggestion_type,
-    const std::string& description,
-    const std::string& contents,
-    const std::vector<std::string> additional_scoring_fields) {
+    const std::vector<std::string> strong_scoring_fields,
+    const std::vector<std::string> weak_scoring_fields) {
   // Split match fields into words.
   std::set<std::u16string> strong_scoring_words =
-      GetWords({description, contents});
-  std::set<std::u16string> weak_scoring_words =
-      GetWords(additional_scoring_fields);
+      GetWords(strong_scoring_fields);
+  std::set<std::u16string> weak_scoring_words = GetWords(weak_scoring_fields);
 
   // Compute text similarity of the input and match fields. See comment for
   // `kMinCharForStrongTextMatch`.
@@ -330,7 +359,7 @@ EnterpriseSearchAggregatorProvider::RelevanceData CalculateRelevanceData(
   // Skip if there aren't at least 1 strong match or 2 weak matches.
   if (!in_keyword_mode && strong_word_matches == 0 && weak_word_matches < 2) {
     return {0, strong_word_matches, weak_word_matches,
-            "less than 1 strong or 2 weak word matches"};
+            "local, less than 1 strong or 2 weak word matches"};
   }
 
   // Skip when less than half the input words had matches. The backend
@@ -338,7 +367,7 @@ EnterpriseSearchAggregatorProvider::RelevanceData CalculateRelevanceData(
   // input word to match.
   if ((strong_word_matches + weak_word_matches) * 2 < input_words.size()) {
     return {0, strong_word_matches, weak_word_matches,
-            "less than half the input words matched"};
+            "local, less than half the input words matched"};
   }
 
   // Compute `relevance` using text similarity. See comments for
@@ -363,7 +392,7 @@ EnterpriseSearchAggregatorProvider::RelevanceData CalculateRelevanceData(
       AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE) {
     if (strong_word_matches + weak_word_matches < input_words.size()) {
       return {0, strong_word_matches, weak_word_matches,
-              "unmatched input word for PEOPLE type"};
+              "local, unmatched input word for PEOPLE type"};
     } else {
       // See comment for `kPeopleScoreBoost`.
       relevance += kPeopleScoreBoost();
@@ -379,38 +408,33 @@ EnterpriseSearchAggregatorProvider::RelevanceData CalculateRelevanceData(
     relevance += 10;
   }
 
-  return {relevance, strong_word_matches, weak_word_matches, "scored"};
+  return {relevance, strong_word_matches, weak_word_matches, "local"};
 }
 
-void LogResultCounts(const base::Value::List* queryResults,
-                     const base::Value::List* peopleResults,
-                     const base::Value::List* contentResults) {
-  size_t query_count = (queryResults ? queryResults->size() : 0);
-  size_t people_count = (peopleResults ? peopleResults->size() : 0);
-  size_t content_count = (contentResults ? contentResults->size() : 0);
-
-  base::UmaHistogramExactLinear(
-      "Omnibox.SuggestRequestsSent.ResultCount."
-      "EnterpriseSearchAggregatorSuggest.Query",
-      query_count, 50);
-
-  base::UmaHistogramExactLinear(
-      "Omnibox.SuggestRequestsSent.ResultCount."
-      "EnterpriseSearchAggregatorSuggest.People",
-      people_count, 50);
-
-  base::UmaHistogramExactLinear(
-      "Omnibox.SuggestRequestsSent.ResultCount."
-      "EnterpriseSearchAggregatorSuggest.Content",
-      content_count, 50);
-
-  base::UmaHistogramExactLinear(
-      "Omnibox.SuggestRequestsSent.ResultCount."
-      "EnterpriseSearchAggregatorSuggest",
-      query_count + people_count + content_count, 150);
+std::string SearchAggregatorSuggestionTypeToHistogramSuffix(
+    EnterpriseSearchAggregatorProvider::SuggestionType type) {
+  switch (type) {
+    case EnterpriseSearchAggregatorProvider::SuggestionType::PEOPLE:
+      return ".People";
+    case EnterpriseSearchAggregatorProvider::SuggestionType::CONTENT:
+      return ".Content";
+    case EnterpriseSearchAggregatorProvider::SuggestionType::QUERY:
+      return ".Query";
+    case EnterpriseSearchAggregatorProvider::SuggestionType::NONE:
+      return "";
+  }
 }
 
 }  // namespace
+
+EnterpriseSearchAggregatorProvider::SearchAggregatorRequest::
+    SearchAggregatorRequest() = default;
+
+EnterpriseSearchAggregatorProvider::SearchAggregatorRequest::
+    ~SearchAggregatorRequest() = default;
+
+EnterpriseSearchAggregatorProvider::SearchAggregatorRequest::
+    SearchAggregatorRequest(SearchAggregatorRequest&&) = default;
 
 EnterpriseSearchAggregatorProvider::EnterpriseSearchAggregatorProvider(
     AutocompleteProviderClient* client,
@@ -430,11 +454,13 @@ void EnterpriseSearchAggregatorProvider::Start(const AutocompleteInput& input,
                                                bool minimal_changes) {
   // Don't clear matches. Keep showing old matches until a new response comes.
   // This avoids flickering.
-  Stop(/*clear_cached_results=*/false,
-       /*due_to_user_inactivity=*/false);
+  Stop(AutocompleteStopReason::kInteraction);
 
   if (!IsProviderAllowed(input)) {
     // Clear old matches if provider is not allowed.
+    for (auto& request : requests_) {
+      request.matches.clear();
+    }
     matches_.clear();
     return;
   }
@@ -462,6 +488,9 @@ void EnterpriseSearchAggregatorProvider::Start(const AutocompleteInput& input,
   // TODO(crbug.com/393480150): Update this check once recent suggestions are
   //   supported.
   if (adjusted_input_.IsZeroSuggest() || adjusted_input_.text().empty()) {
+    for (auto& request : requests_) {
+      request.matches.clear();
+    }
     matches_.clear();
     return;
   }
@@ -470,20 +499,28 @@ void EnterpriseSearchAggregatorProvider::Start(const AutocompleteInput& input,
 
   // Unretained is safe because `this` owns `debouncer_`.
   debouncer_->RequestRun(base::BindOnce(
-      &EnterpriseSearchAggregatorProvider::Run, base::Unretained(this)));
+      &EnterpriseSearchAggregatorProvider::Run, base::Unretained(this), input));
 }
 
-void EnterpriseSearchAggregatorProvider::Stop(bool clear_cached_results,
-                                              bool due_to_user_inactivity) {
-  // Ignore the stop timer since this provider is expected to take longer than
-  // 1500ms (the stop timer gets triggered due to user inactivity).
-  if (!due_to_user_inactivity) {
-    AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
-    debouncer_->CancelRequest();
-    if (loader_) {
-      LogResponseTime(true);
-      loader_.reset();
-    }
+void EnterpriseSearchAggregatorProvider::Stop(
+    AutocompleteStopReason stop_reason) {
+  // Ignore the stop timer since this provider is expected to sometimes take
+  // longer than 1500ms.
+  if (stop_reason == AutocompleteStopReason::kInactivity) {
+    return;
+  }
+  AutocompleteProvider::Stop(stop_reason);
+  debouncer_->CancelRequest();
+
+  if (auto* remote_suggestions_service = client_->GetRemoteSuggestionsService(
+          /*create_if_necessary=*/false)) {
+    remote_suggestions_service
+        ->StopCreatingEnterpriseSearchAggregatorSuggestionsRequest();
+  }
+
+  if (requests_.size() > 0) {
+    LogResponseTime(true);
+    requests_.clear();
   }
 }
 
@@ -505,12 +542,6 @@ bool EnterpriseSearchAggregatorProvider::IsProviderAllowed(
     return false;
   }
 
-  // Google must be set as default search provider.
-  if (!search::DefaultSearchProviderIsGoogle(
-          client_->GetTemplateURLService())) {
-    return false;
-  }
-
   // Don't run provider in non-keyword mode if query length is less than
   // the minimum length.
   if (!input.InKeywordMode() &&
@@ -525,36 +556,68 @@ bool EnterpriseSearchAggregatorProvider::IsProviderAllowed(
     return false;
   }
 
+  if (input.current_page_classification() ==
+          metrics::OmniboxEventProto::NTP_REALBOX &&
+      !omnibox_feature_configs::SearchAggregatorProvider::Get()
+           .realbox_unscoped_suggestions) {
+    return false;
+  }
+
   // TODO(crbug.com/380642693): Add backoff check.
   return true;
 }
 
-void EnterpriseSearchAggregatorProvider::Run() {
-  // Don't clear `matches_` until a new successful response is ready to replace
-  // them.
+void EnterpriseSearchAggregatorProvider::Run(const AutocompleteInput& input) {
+  // For now, exclude recent suggestions (4) and, outside of keyword mode,
+  // search suggestions (1).
+  // TODO(crbug.com/393480150): Support recent suggestions.
+  std::vector<int> people = std::vector<int>{2};
+  std::vector<int> content = std::vector<int>{3, 5};
+  std::vector<int> query = std::vector<int>{1};
+  std::vector<int> all_types = adjusted_input_.InKeywordMode()
+                                   ? std::vector<int>{1, 2, 3, 5}
+                                   : std::vector<int>{2, 3, 5};
+  std::vector<std::vector<int>> request_types =
+      kMultipleRequests()
+          ? std::vector<std::vector<int>>{people, content, query}
+          : std::vector<std::vector<int>>{all_types};
+  // For now, set time requests started as when the requests are run.
+  // TODO(crbug.com/415786421): This bug will add a `start_time` for each
+  //   `SearchAggregatorRequest` and log latencies for each request instead of
+  //   once for all requests.
+  SetTimeRequestSent();
+  for (size_t i = 0; i < request_types.size(); ++i) {
+    requests_.push_back({});
+  }
+
   client_->GetRemoteSuggestionsService(/*create_if_necessary=*/true)
       ->CreateEnterpriseSearchAggregatorSuggestionsRequest(
           adjusted_input_.text(), GURL(template_url_->suggestions_url()),
-          base::BindOnce(&EnterpriseSearchAggregatorProvider::RequestStarted,
-                         weak_ptr_factory_.GetWeakPtr()),
-          base::BindOnce(
+          adjusted_input_.current_page_classification(),
+          base::BindRepeating(
+              &EnterpriseSearchAggregatorProvider::RequestStarted,
+              weak_ptr_factory_.GetWeakPtr()),
+          base::BindRepeating(
               &EnterpriseSearchAggregatorProvider::RequestCompleted,
               base::Unretained(this) /* this owns SimpleURLLoader */),
-          adjusted_input_.InKeywordMode());
+          request_types);
 }
 
 void EnterpriseSearchAggregatorProvider::RequestStarted(
+    int request_index,
     std::unique_ptr<network::SimpleURLLoader> loader) {
-  SetTimeRequestSent();
-  loader_ = std::move(loader);
+  requests_[request_index].loader = std::move(loader);
 }
 
 void EnterpriseSearchAggregatorProvider::RequestCompleted(
+    int request_index,
     const network::SimpleURLLoader* source,
     int response_code,
     std::unique_ptr<std::string> response_body) {
   DCHECK(!done_);
-  DCHECK_EQ(loader_.get(), source);
+  DCHECK(requests_.size() > 0);
+  DCHECK_EQ(requests_[request_index].loader.get(), source);
+
   LogResponseTime(false);
   if (response_code == 200) {
     // Parse `response_body` in utility process if feature param is true.
@@ -566,33 +629,33 @@ void EnterpriseSearchAggregatorProvider::RequestCompleted(
           json_data,
           base::BindOnce(
               &EnterpriseSearchAggregatorProvider::OnJsonParsedIsolated,
-              base::Unretained(this)));
+              base::Unretained(this), request_index));
     } else {
       std::optional<base::Value::Dict> value = base::JSONReader::ReadDict(
           json_data, base::JSON_ALLOW_TRAILING_COMMAS);
-      UpdateResults(value, response_code);
+      UpdateResults(request_index, value, response_code);
     }
   } else {
     // TODO(crbug.com/380642693): Add backoff if needed. This could be done by
     //   tracking the number of consecutive errors and only clearing matches if
     //   the number of errors exceeds a certain threshold. Or verifying backoff
     //   conditions from the server-side team.
-    UpdateResults(std::nullopt, response_code);
+    UpdateResults(request_index, std::nullopt, response_code);
   }
 }
 
 void EnterpriseSearchAggregatorProvider::OnJsonParsedIsolated(
+    int request_index,
     base::expected<base::Value, std::string> result) {
   std::optional<base::Value::Dict> value = std::nullopt;
-  if (result.has_value()) {
-    if (result.value().is_dict()) {
-      value = std::move(result.value().GetDict());
-    }
+  if (result.has_value() && result.value().is_dict()) {
+    value = std::move(result.value().GetDict());
   }
-  UpdateResults(value, 200);
+  UpdateResults(request_index, value, 200);
 }
 
 void EnterpriseSearchAggregatorProvider::UpdateResults(
+    int request_index,
     const std::optional<base::Value::Dict>& response_value,
     int response_code) {
   bool updated_matches = false;
@@ -600,8 +663,9 @@ void EnterpriseSearchAggregatorProvider::UpdateResults(
   if (response_value.has_value()) {
     // Clear old matches if received a successful response, even if the response
     // is empty.
-    matches_.clear();
-    ParseEnterpriseSearchAggregatorSearchResults(response_value.value());
+    requests_[request_index].matches.clear();
+    ParseEnterpriseSearchAggregatorSearchResults(request_index,
+                                                 response_value.value());
     updated_matches = true;
   } else if (response_code != 200) {
     // Clear matches for any response that is an error.
@@ -609,13 +673,29 @@ void EnterpriseSearchAggregatorProvider::UpdateResults(
     updated_matches = true;
   }
 
-  loader_.reset();
-  done_ = true;
-  NotifyListeners(/*updated_matches=*/updated_matches);
+  requests_[request_index].done = true;
+  requests_[request_index].loader.reset();
+  bool requests_pending =
+      std::any_of(requests_.begin(), requests_.end(),
+                  [](auto& request) { return !request.done; });
+
+  if (!requests_pending) {
+    // Log total results after all requests are done.
+    int num_total_results = 0;
+    for (auto& request : requests_) {
+      num_total_results += request.result_count;
+    }
+    LogResultCounts(/*histogram_suffix=*/"", num_total_results);
+
+    done_ = true;
+    requests_.clear();
+    NotifyListeners(/*updated_matches=*/updated_matches);
+  }
 }
 
 void EnterpriseSearchAggregatorProvider::
     ParseEnterpriseSearchAggregatorSearchResults(
+        int request_index,
         const base::Value::Dict& root_val) {
   // Break the input into words to avoid redoing this for every match.
   std::set<std::u16string> input_words = GetWords({adjusted_input_.text()});
@@ -626,18 +706,26 @@ void EnterpriseSearchAggregatorProvider::
       root_val.FindList("peopleSuggestions");
   const base::Value::List* contentResults =
       root_val.FindList("contentSuggestions");
+  if (request_index == 0 || !kMultipleRequests()) {
+    ParseResultList(request_index, input_words, peopleResults,
+                    /*suggestion_type=*/SuggestionType::PEOPLE,
+                    /*is_navigation=*/true);
+  }
+  if (request_index == 1 || !kMultipleRequests()) {
+    ParseResultList(request_index, input_words, contentResults,
+                    /*suggestion_type=*/SuggestionType::CONTENT,
+                    /*is_navigation=*/true);
+  }
+  if (request_index == 2 || !kMultipleRequests()) {
+    ParseResultList(request_index, input_words, queryResults,
+                    /*suggestion_type=*/SuggestionType::QUERY,
+                    /*is_navigation=*/false);
+  }
 
-  ParseResultList(input_words, queryResults,
-                  /*suggestion_type=*/SuggestionType::QUERY,
-                  /*is_navigation=*/false);
-  ParseResultList(input_words, peopleResults,
-                  /*suggestion_type=*/SuggestionType::PEOPLE,
-                  /*is_navigation=*/true);
-  ParseResultList(input_words, contentResults,
-                  /*suggestion_type=*/SuggestionType::CONTENT,
-                  /*is_navigation=*/true);
-
-  LogResultCounts(queryResults, peopleResults, contentResults);
+  matches_.clear();
+  for (auto& request : requests_) {
+    std::ranges::copy(request.matches, std::back_inserter(matches_));
+  }
 
   // Limit low-quality suggestions. See comment for
   // `kScopedMaxLowQualityMatches`.
@@ -657,6 +745,7 @@ void EnterpriseSearchAggregatorProvider::
 }
 
 void EnterpriseSearchAggregatorProvider::ParseResultList(
+    int request_index,
     std::set<std::u16string> input_words,
     const base::Value::List* results,
     SuggestionType suggestion_type,
@@ -664,6 +753,12 @@ void EnterpriseSearchAggregatorProvider::ParseResultList(
   if (!results) {
     return;
   }
+
+  requests_[request_index].result_count += results ? results->size() : 0;
+
+  LogResultCounts(
+      SearchAggregatorSuggestionTypeToHistogramSuffix(suggestion_type),
+      requests_[request_index].result_count);
 
   // Limit # of matches created. See comment for `kMaxMatchesCreatedPerType`.
   size_t num_results = std::min(results->size(), kMaxMatchesCreatedPerType());
@@ -677,8 +772,7 @@ void EnterpriseSearchAggregatorProvider::ParseResultList(
 
     const base::Value::Dict& result = result_value.GetDict();
 
-    auto url = GetMatchDestinationUrl(result, template_url_->url_ref(),
-                                      suggestion_type);
+    auto url = GetMatchDestinationUrl(result, suggestion_type);
     // All matches must have a URL.
     if (url.empty()) {
       continue;
@@ -688,19 +782,26 @@ void EnterpriseSearchAggregatorProvider::ParseResultList(
     std::string image_url;
     std::string icon_url;
     if (suggestion_type == SuggestionType::PEOPLE) {
+      // For people suggestions, `icon_url` must always be set to the favicon
+      // for the TemplateURL, which is used as the Omnibox icon. `image_url` is
+      // used for the match icon, falling back to the favicon if not present.
       image_url = ptr_to_string(result.FindStringByDottedPath(
           "document.derivedStructData.displayPhoto.url"));
       // Ensure that image URLs from lh3.googleusercontent.com include an image
       // size parameter.
       if (base::StartsWith(image_url, "https://lh3.googleusercontent.com")) {
         // Check for existing size parameters (e.g., -s128, =w256, -h64).
-        RE2 size_regex("[-=][s|w|h]\\d+");
+        RE2 size_regex("=(?:[swh]\\d+|[^=]*?-[swh]\\d+)");
         if (!RE2::PartialMatch(image_url, size_regex)) {
           image_url += base::Contains(image_url, "=") ? "-s64" : "=s64";
         }
       }
+      icon_url = template_url_->favicon_url().spec();
     } else if (suggestion_type == SuggestionType::CONTENT) {
-      icon_url = ptr_to_string(result.FindStringByDottedPath("iconUri"));
+      icon_url = ptr_to_string(result.FindString("iconUri"));
+    } else if (suggestion_type == SuggestionType::QUERY &&
+               !adjusted_input_.InKeywordMode()) {
+      icon_url = template_url_->favicon_url().spec();
     }
 
     auto description = GetMatchDescription(result, suggestion_type);
@@ -715,11 +816,26 @@ void EnterpriseSearchAggregatorProvider::ParseResultList(
       continue;
     }
 
-    auto additional_scoring_fields =
-        GetAdditionalScoringFields(result, suggestion_type);
-    auto relevance_data = CalculateRelevanceData(
-        input_words, adjusted_input_.InKeywordMode(), suggestion_type,
-        description, contents, additional_scoring_fields);
+    EnterpriseSearchAggregatorProvider::RelevanceData relevance_data;
+    std::string relevance_scoring_mode =
+        omnibox_feature_configs::SearchAggregatorProvider::Get()
+            .relevance_scoring_mode;
+    // If mode is `server|client`, always use server|client scoring; otherwise,
+    // use server scoring in scoped mode, and client scoring in unscoped mode.
+    if (relevance_scoring_mode == "server" ||
+        (relevance_scoring_mode != "client" &&
+         adjusted_input_.InKeywordMode())) {
+      relevance_data = GetServerRelevanceData(result);
+    } else {
+      auto strong_scoring_fields =
+          GetStrongScoringFields(result, suggestion_type);
+      strong_scoring_fields.push_back(contents);
+      strong_scoring_fields.push_back(description);
+      auto weak_scoring_fields = GetWeakScoringFields(result, suggestion_type);
+      relevance_data = CalculateRelevanceData(
+          input_words, adjusted_input_.InKeywordMode(), suggestion_type,
+          strong_scoring_fields, weak_scoring_fields);
+    }
     if (relevance_data.relevance) {
       // Decrement scores to keep sorting stable. Add 10 to avoid going below
       // "weak" threshold or change the hundred's digit; e.g. a score of
@@ -751,23 +867,17 @@ void EnterpriseSearchAggregatorProvider::ParseResultList(
     matches.erase(matches.begin() + matches_to_add, matches.end());
   }
 
-  std::ranges::move(matches, std::back_inserter(matches_));
+  std::ranges::move(matches,
+                    std::back_inserter(requests_[request_index].matches));
 }
 
 std::string EnterpriseSearchAggregatorProvider::GetMatchDestinationUrl(
     const base::Value::Dict& result,
-    const TemplateURLRef& url_ref,
     SuggestionType suggestion_type) const {
-  if (suggestion_type == SuggestionType::CONTENT) {
-    std::string destination_uri =
-        ptr_to_string(result.FindString("destinationUri"));
-    // TODO(crbug.com/403545926): Remove support for
-    //   "document.derivedStructData.link" once the change to populate
-    //   "destinationUri" is available in prod.
-    if (destination_uri.empty()) {
-      destination_uri = ptr_to_string(
-          result.FindStringByDottedPath("document.derivedStructData.link"));
-    }
+  std::string destination_uri =
+      ptr_to_string(result.FindString("destinationUri"));
+  if (suggestion_type == SuggestionType::CONTENT ||
+      suggestion_type == SuggestionType::PEOPLE) {
     return destination_uri;
   }
 
@@ -776,6 +886,7 @@ std::string EnterpriseSearchAggregatorProvider::GetMatchDestinationUrl(
     return "";
   }
 
+  const TemplateURLRef& url_ref = template_url_->url_ref();
   return url_ref.ReplaceSearchTerms(
       TemplateURLRef::SearchTermsArgs(base::UTF8ToUTF16(query)), {}, nullptr);
 }
@@ -796,20 +907,28 @@ std::string EnterpriseSearchAggregatorProvider::GetMatchDescription(
 std::string EnterpriseSearchAggregatorProvider::GetMatchContents(
     const base::Value::Dict& result,
     SuggestionType suggestion_type) const {
-  if (suggestion_type == SuggestionType::QUERY ||
-      suggestion_type == SuggestionType::PEOPLE) {
+  if (suggestion_type == SuggestionType::QUERY) {
     return ptr_to_string(result.FindString("suggestion"));
+  } else if (suggestion_type == SuggestionType::PEOPLE) {
+    return l10n_util::GetStringFUTF8(
+        IDS_PERSON_SUGGESTION_DESCRIPTION,
+        template_url_->AdjustedShortNameForLocaleDirection());
   } else if (suggestion_type == SuggestionType::CONTENT) {
     std::optional<int> response_time =
         result.FindIntByDottedPath("document.derivedStructData.updated_time");
     const std::u16string last_updated = UpdateTimeToString(response_time);
+
     const std::u16string owner = base::UTF8ToUTF16(ptr_to_string(
         result.FindStringByDottedPath("document.derivedStructData.owner")));
-    const std::u16string file_type_description = base::UTF8ToUTF16(
-        MimeToDescription(ptr_to_string(result.FindStringByDottedPath(
-            "document.derivedStructData.mime_type"))));
+
+    const std::u16string content_type_description = ContentTypeToDescription(
+        ptr_to_string(result.FindStringByDottedPath(
+            "document.derivedStructData.mime_type")),
+        ptr_to_string(result.FindStringByDottedPath(
+            "document.derivedStructData.source_type")));
+
     return base::UTF16ToUTF8(GetLocalizedContentMetadata(
-        last_updated, owner, file_type_description));
+        last_updated, owner, content_type_description));
   }
 
   return "";
@@ -818,35 +937,35 @@ std::string EnterpriseSearchAggregatorProvider::GetMatchContents(
 std::u16string EnterpriseSearchAggregatorProvider::GetLocalizedContentMetadata(
     const std::u16string& update_time,
     const std::u16string& owner,
-    const std::u16string& file_type_description) const {
+    const std::u16string& content_type_description) const {
   if (!update_time.empty()) {
     if (!owner.empty()) {
-      return !file_type_description.empty()
+      return !content_type_description.empty()
                  ? l10n_util::GetStringFUTF16(
                        IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE, update_time,
-                       owner, file_type_description)
+                       owner, content_type_description)
                  : l10n_util::GetStringFUTF16(
                        IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_FILE_TYPE_DESCRIPTION,
                        update_time, owner);
     }
-    return !file_type_description.empty()
+    return !content_type_description.empty()
                ? l10n_util::GetStringFUTF16(
                      IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_OWNER,
-                     update_time, file_type_description)
+                     update_time, content_type_description)
                : update_time;
   }
   if (!owner.empty()) {
-    return !file_type_description.empty()
+    return !content_type_description.empty()
                ? l10n_util::GetStringFUTF16(
                      IDS_CONTENT_SUGGESTION_DESCRIPTION_TEMPLATE_WITHOUT_DATE,
-                     owner, file_type_description)
+                     owner, content_type_description)
                : owner;
   }
-  return !file_type_description.empty() ? file_type_description : u"";
+  return !content_type_description.empty() ? content_type_description : u"";
 }
 
 std::vector<std::string>
-EnterpriseSearchAggregatorProvider::GetAdditionalScoringFields(
+EnterpriseSearchAggregatorProvider::GetStrongScoringFields(
     const base::Value::Dict& result,
     SuggestionType suggestion_type) const {
   // Should not return any fields already included in `GetMatchDescription()` &
@@ -854,6 +973,19 @@ EnterpriseSearchAggregatorProvider::GetAdditionalScoringFields(
   if (suggestion_type == SuggestionType::PEOPLE) {
     return {
         ptr_to_string(result.FindString("suggestion")),
+    };
+  }
+  return {};
+}
+
+std::vector<std::string>
+EnterpriseSearchAggregatorProvider::GetWeakScoringFields(
+    const base::Value::Dict& result,
+    SuggestionType suggestion_type) const {
+  // Should not return any fields already included in `GetMatchDescription()` &
+  // `GetMatchContents()`.
+  if (suggestion_type == SuggestionType::PEOPLE) {
+    return {
         ptr_to_string(result.FindStringByDottedPath(
             "document.derivedStructData.name.givenName")),
         ptr_to_string(result.FindStringByDottedPath(
@@ -942,13 +1074,13 @@ AutocompleteMatch EnterpriseSearchAggregatorProvider::CreateMatch(
   match.RecordAdditionalInfo(
       "relevance weak word matches",
       static_cast<int>(relevance_data.weak_word_matches));
-  match.RecordAdditionalInfo("relevance rule", relevance_data.rule);
+  match.RecordAdditionalInfo("relevance source", relevance_data.source);
 
   return match;
 }
 
 void EnterpriseSearchAggregatorProvider::SetTimeRequestSent() {
-  client_->GetRemoteSuggestionsService(/*create_if_necessary=*/false)
+  client_->GetRemoteSuggestionsService(/*create_if_necessary=*/true)
       ->SetTimeRequestSent(
           RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
           base::TimeTicks::Now());
@@ -958,4 +1090,14 @@ void EnterpriseSearchAggregatorProvider::LogResponseTime(bool interrupted) {
   client_->GetRemoteSuggestionsService(/*create_if_necessary=*/false)
       ->LogResponseTime(RemoteRequestType::kEnterpriseSearchAggregatorSuggest,
                         interrupted);
+}
+
+void EnterpriseSearchAggregatorProvider::LogResultCounts(
+    std::string histogram_suffix,
+    size_t result_count) {
+  base::UmaHistogramExactLinear(
+      base::StringPrintf("Omnibox.SuggestRequestsSent.ResultCount."
+                         "EnterpriseSearchAggregatorSuggest%s",
+                         histogram_suffix),
+      result_count, 50);
 }

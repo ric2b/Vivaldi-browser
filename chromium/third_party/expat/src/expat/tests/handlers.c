@@ -89,21 +89,23 @@ start_element_event_handler2(void *userData, const XML_Char *name,
                              const XML_Char **attr) {
   StructData *storage = (StructData *)userData;
   UNUSED_P(attr);
-  StructData_AddItem(storage, name, XML_GetCurrentColumnNumber(g_parser),
-                     XML_GetCurrentLineNumber(g_parser), STRUCT_START_TAG);
+  StructData_AddItem(storage, name, (int)XML_GetCurrentColumnNumber(g_parser),
+                     (int)XML_GetCurrentLineNumber(g_parser), STRUCT_START_TAG);
 }
 
 void XMLCALL
 end_element_event_handler2(void *userData, const XML_Char *name) {
   StructData *storage = (StructData *)userData;
-  StructData_AddItem(storage, name, XML_GetCurrentColumnNumber(g_parser),
-                     XML_GetCurrentLineNumber(g_parser), STRUCT_END_TAG);
+  StructData_AddItem(storage, name, (int)XML_GetCurrentColumnNumber(g_parser),
+                     (int)XML_GetCurrentLineNumber(g_parser), STRUCT_END_TAG);
 }
 
 void XMLCALL
 counting_start_element_handler(void *userData, const XML_Char *name,
                                const XML_Char **atts) {
-  ElementInfo *info = (ElementInfo *)userData;
+  ParserAndElementInfo *const parserAndElementInfos
+      = (ParserAndElementInfo *)userData;
+  ElementInfo *info = parserAndElementInfos->info;
   AttrInfo *attr;
   int count, id, i;
 
@@ -120,17 +122,17 @@ counting_start_element_handler(void *userData, const XML_Char *name,
    * is possibly a little unexpected, but it is what the
    * documentation in expat.h tells us to expect.
    */
-  count = XML_GetSpecifiedAttributeCount(g_parser);
+  count = XML_GetSpecifiedAttributeCount(parserAndElementInfos->parser);
   if (info->attr_count * 2 != count) {
     fail("Not got expected attribute count");
     return;
   }
-  id = XML_GetIdAttributeIndex(g_parser);
+  id = XML_GetIdAttributeIndex(parserAndElementInfos->parser);
   if (id == -1 && info->id_name != NULL) {
     fail("ID not present");
     return;
   }
-  if (id != -1 && xcstrcmp(atts[id], info->id_name)) {
+  if (id != -1 && xcstrcmp(atts[id], info->id_name) != 0) {
     fail("ID does not have the correct name");
     return;
   }
@@ -145,7 +147,7 @@ counting_start_element_handler(void *userData, const XML_Char *name,
       fail("Attribute not recognised");
       return;
     }
-    if (xcstrcmp(atts[1], attr->value)) {
+    if (xcstrcmp(atts[1], attr->value) != 0) {
       fail("Attribute has wrong value");
       return;
     }
@@ -1108,7 +1110,7 @@ external_entity_devaluer(XML_Parser parser, const XML_Char *context,
   UNUSED_P(publicId);
   if (systemId == NULL || ! xcstrcmp(systemId, XCS("bar")))
     return XML_STATUS_OK;
-  if (xcstrcmp(systemId, XCS("foo")))
+  if (xcstrcmp(systemId, XCS("foo")) != 0)
     fail("Unexpected system ID");
   ext_parser = XML_ExternalEntityParserCreate(parser, context, NULL);
   if (ext_parser == NULL)
@@ -1274,7 +1276,7 @@ external_entity_duff_loader(XML_Parser parser, const XML_Char *context,
   UNUSED_P(publicId);
   /* Try a few different allocation levels */
   for (i = 0; i < max_alloc_count; i++) {
-    g_allocation_count = i;
+    g_allocation_count = (int)i;
     new_parser = XML_ExternalEntityParserCreate(parser, context, NULL);
     if (new_parser != NULL) {
       XML_ParserFree(new_parser);
@@ -1550,15 +1552,16 @@ verify_attlist_decl_handler(void *userData, const XML_Char *element_name,
                             const XML_Char *default_value, int is_required) {
   AttTest *at = (AttTest *)userData;
 
-  if (xcstrcmp(element_name, at->element_name))
+  if (xcstrcmp(element_name, at->element_name) != 0)
     fail("Unexpected element name in attribute declaration");
-  if (xcstrcmp(attr_name, at->attr_name))
+  if (xcstrcmp(attr_name, at->attr_name) != 0)
     fail("Unexpected attribute name in attribute declaration");
-  if (xcstrcmp(attr_type, at->attr_type))
+  if (xcstrcmp(attr_type, at->attr_type) != 0)
     fail("Unexpected attribute type in attribute declaration");
   if ((default_value == NULL && at->default_value != NULL)
       || (default_value != NULL && at->default_value == NULL)
-      || (default_value != NULL && xcstrcmp(default_value, at->default_value)))
+      || (default_value != NULL
+          && xcstrcmp(default_value, at->default_value) != 0))
     fail("Unexpected default value in attribute declaration");
   if (is_required != at->is_required)
     fail("Requirement mismatch in attribute declaration");
@@ -1749,7 +1752,7 @@ param_entity_match_handler(void *userData, const XML_Char *entityName,
      * going to overflow an int.
      */
     if (value_length != (int)xcstrlen(entity_value_to_match)
-        || xcstrncmp(value, entity_value_to_match, value_length)) {
+        || xcstrncmp(value, entity_value_to_match, value_length) != 0) {
       entity_match_flag = ENTITY_MATCH_FAIL;
     } else {
       entity_match_flag = ENTITY_MATCH_SUCCESS;
@@ -1841,6 +1844,15 @@ element_decl_suspender(void *userData, const XML_Char *name,
 }
 
 void XMLCALL
+suspend_after_element_declaration(void *userData, const XML_Char *name,
+                                  XML_Content *model) {
+  UNUSED_P(name);
+  XML_Parser parser = (XML_Parser)userData;
+  assert_true(XML_StopParser(parser, /*resumable*/ XML_TRUE) == XML_STATUS_OK);
+  XML_FreeContentModel(parser, model);
+}
+
+void XMLCALL
 accumulate_pi_characters(void *userData, const XML_Char *target,
                          const XML_Char *data) {
   CharData *storage = (CharData *)userData;
@@ -1881,9 +1893,17 @@ accumulate_entity_decl(void *userData, const XML_Char *entityName,
 }
 
 void XMLCALL
-accumulate_char_data(void *userData, const XML_Char *s, int len) {
-  CharData *const storage = (CharData *)userData;
-  CharData_AppendXMLChars(storage, s, len);
+accumulate_char_data_and_suspend(void *userData, const XML_Char *s, int len) {
+  ParserPlusStorage *const parserPlusStorage = (ParserPlusStorage *)userData;
+
+  CharData_AppendXMLChars(parserPlusStorage->storage, s, len);
+
+  for (int i = 0; i < len; i++) {
+    if (s[i] == 'Z') {
+      XML_StopParser(parserPlusStorage->parser, /*resumable=*/XML_TRUE);
+      break;
+    }
+  }
 }
 
 void XMLCALL
@@ -1908,6 +1928,34 @@ accumulate_start_element(void *userData, const XML_Char *name,
   }
 
   CharData_AppendXMLChars(storage, XCS(")\n"), 2);
+}
+
+void XMLCALL
+accumulate_characters(void *userData, const XML_Char *s, int len) {
+  CharData *const storage = (CharData *)userData;
+  CharData_AppendXMLChars(storage, s, len);
+}
+
+void XMLCALL
+accumulate_attribute(void *userData, const XML_Char *name,
+                     const XML_Char **atts) {
+  CharData *const storage = (CharData *)userData;
+  UNUSED_P(name);
+  /* Check there are attributes to deal with */
+  if (atts == NULL)
+    return;
+
+  while (storage->count < 0 && atts[0] != NULL) {
+    /* "accumulate" the value of the first attribute we see */
+    CharData_AppendXMLChars(storage, atts[1], -1);
+    atts += 2;
+  }
+}
+
+void XMLCALL
+ext_accumulate_characters(void *userData, const XML_Char *s, int len) {
+  ExtTest *const test_data = (ExtTest *)userData;
+  accumulate_characters(test_data->storage, s, len);
 }
 
 void XMLCALL

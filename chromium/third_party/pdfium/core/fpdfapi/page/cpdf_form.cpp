@@ -27,8 +27,9 @@ CPDF_Dictionary* CPDF_Form::ChooseResourcesDict(
     CPDF_Dictionary* pResources,
     CPDF_Dictionary* pParentResources,
     CPDF_Dictionary* pPageResources) {
-  if (pResources)
+  if (pResources) {
     return pResources;
+  }
   return pParentResources ? pParentResources : pPageResources;
 }
 
@@ -53,7 +54,7 @@ CPDF_Form::CPDF_Form(CPDF_Document* pDoc,
                                     .Get(),
                                 pParentResources,
                                 pPageResources.Get()))),
-      m_pFormStream(std::move(pFormStream)) {
+      form_stream_(std::move(pFormStream)) {
   LoadTransparencyInfo();
 }
 
@@ -77,13 +78,14 @@ void CPDF_Form::ParseContentInternal(const CPDF_AllStates* pGraphicStates,
                                      const CFX_Matrix* pParentMatrix,
                                      CPDF_Type3Char* pType3Char,
                                      RecursionState* recursion_state) {
-  if (GetParseState() == ParseState::kParsed)
+  if (GetParseState() == ParseState::kParsed) {
     return;
+  }
 
   if (GetParseState() == ParseState::kNotParsed) {
     StartParse(std::make_unique<CPDF_ContentParser>(
         GetStream(), this, pGraphicStates, pParentMatrix, pType3Char,
-        recursion_state ? recursion_state : &m_RecursionState));
+        recursion_state ? recursion_state : &recursion_state_));
   }
   DCHECK_EQ(GetParseState(), ParseState::kParsing);
   ContinueParse(nullptr);
@@ -116,7 +118,7 @@ CFX_FloatRect CPDF_Form::CalcBoundingBox() const {
 }
 
 RetainPtr<const CPDF_Stream> CPDF_Form::GetStream() const {
-  return m_pFormStream;
+  return form_stream_;
 }
 
 std::optional<std::pair<RetainPtr<CFX_DIBitmap>, CFX_Matrix>>

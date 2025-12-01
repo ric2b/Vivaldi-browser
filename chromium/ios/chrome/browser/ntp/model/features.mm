@@ -8,34 +8,19 @@
 
 namespace set_up_list {
 
-BASE_FEATURE(kSetUpListInFirstRun,
-             "SetUpListInFirstRun",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kSetUpListShortenedDuration,
              "SetUpListShortenedDuration",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kSetUpListWithoutSignInItem,
              "SetUpListWithoutSignInItem",
              base::FEATURE_ENABLED_BY_DEFAULT);
 
-const char kSetUpListInFirstRunParam[] = "SetUpListInFirstRunParam";
-
 const char kSetUpListDurationParam[] = "SetUpListDurationParam";
-
-FirstRunVariationType GetSetUpListInFirstRunVariation() {
-  if (!base::FeatureList::IsEnabled(kSetUpListInFirstRun)) {
-    return FirstRunVariationType::kDisabled;
-  }
-  return static_cast<FirstRunVariationType>(
-      base::GetFieldTrialParamByFeatureAsInt(kSetUpListInFirstRun,
-                                             kSetUpListInFirstRunParam, 1));
-}
 
 base::TimeDelta SetUpListDurationPastFirstRun() {
   return base::Days(base::GetFieldTrialParamByFeatureAsInt(
-      kSetUpListShortenedDuration, kSetUpListDurationParam, 7));
+      kSetUpListShortenedDuration, kSetUpListDurationParam, 14));
 }
 
 }  // namespace set_up_list

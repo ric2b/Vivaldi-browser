@@ -56,11 +56,12 @@ void TestPageBroadcast::CreateRemoteMainFrame(
     blink::mojom::FrameReplicationStatePtr replication_state,
     bool is_loading,
     const base::UnguessableToken& devtools_frame_token,
+    const std::optional<base::UnguessableToken>& navigation_metrics_token,
     blink::mojom::RemoteFrameInterfacesFromBrowserPtr remote_frame_interfaces,
     blink::mojom::RemoteMainFrameInterfacesPtr remote_main_frame_interfaces) {}
 
 void TestPageBroadcast::UpdatePageBrowsingContextGroup(
-    const blink::BrowsingContextGroupInfo& browsing_context_group_info) {}
+    const base::UnguessableToken& browsing_context_group_token) {}
 
 void TestPageBroadcast::SetPageAttributionSupport(
     network::mojom::AttributionSupport support) {}

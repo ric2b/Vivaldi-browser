@@ -8,27 +8,35 @@
 
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
-#include "chrome/browser/task_manager/providers/web_contents/background_contents_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/devtools_tag.h"
-#include "chrome/browser/task_manager/providers/web_contents/guest_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/no_state_prefetch_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/printing_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/tab_contents_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/tool_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/web_app_tag.h"
 #include "chrome/browser/task_manager/providers/web_contents/web_contents_tags_manager.h"
+#include "components/guest_view/buildflags/buildflags.h"
 #include "components/webapps/common/web_app_id.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "extensions/buildflags/buildflags.h"
 #include "printing/buildflags/buildflags.h"
 
 #if !BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/task_manager/providers/web_contents/extension_tag.h"
+#include "chrome/browser/task_manager/providers/web_contents/background_contents_tag.h"
+#endif
+
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
+#include "chrome/browser/task_manager/providers/web_contents/guest_tag.h"
 #include "components/guest_view/browser/guest_view_base.h"
+#endif
+
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+#include "chrome/browser/task_manager/providers/web_contents/extension_tag.h"
 #include "extensions/browser/process_manager.h"       // nogncheck
 #include "extensions/browser/view_type_utils.h"       // nogncheck
 #include "extensions/common/mojom/view_type.mojom.h"  // nogncheck
-#endif                                                // !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 
 #include "app/vivaldi_apptools.h"
 
@@ -50,14 +58,16 @@ void TagWebContents(content::WebContents* contents,
   WebContentsTagsManager::GetInstance()->AddTag(tag_ptr);
 }
 
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 bool IsExtensionWebContents(content::WebContents* contents) {
   DCHECK(contents);
 
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
   if (!base::FeatureList::IsEnabled(features::kGuestViewMPArch) &&
       guest_view::GuestViewBase::IsGuest(contents)) {
     return false;
   }
+#endif
 
   // Note(andre@vivaldi.com): We use webviews as ExtensionHost for extension
   //                          popups.
@@ -72,7 +82,7 @@ bool IsExtensionWebContents(content::WebContents* contents) {
           view_type != extensions::mojom::ViewType::kBackgroundContents &&
           view_type != extensions::mojom::ViewType::kDeveloperTools);
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 
 }  // namespace
 
@@ -131,7 +141,7 @@ void WebContentsTags::CreateForPrintingContents(
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 }
 
-#if !BUILDFLAG(IS_ANDROID)
+#if BUILDFLAG(ENABLE_GUEST_VIEW)
 // static
 void WebContentsTags::CreateForGuestContents(
     content::WebContents* web_contents) {
@@ -149,7 +159,9 @@ void WebContentsTags::CreateForGuestContents(
                    WebContentsTag::kTagKey);
   }
 }
+#endif  // BUILDFLAG(ENABLE_GUEST_VIEW)
 
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 // static
 void WebContentsTags::CreateForExtension(
     content::WebContents* web_contents,
@@ -162,7 +174,7 @@ void WebContentsTags::CreateForExtension(
                    WebContentsTag::kTagKey);
   }
 }
-#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
 
 // static
 void WebContentsTags::CreateForWebApp(content::WebContents* web_contents,

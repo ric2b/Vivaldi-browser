@@ -69,7 +69,6 @@
 #include <concepts>
 #include <iosfwd>
 #include <limits>
-#include <ostream>
 #include <type_traits>
 
 #include "base/base_export.h"
@@ -78,9 +77,6 @@
 #include "base/compiler_specific.h"
 #include "base/numerics/clamped_math.h"
 #include "build/build_config.h"
-// TODO(crbug.com/354842935): Remove this include once other modules don't
-// accidentally (transitively) depend on it anymore.
-#include "build/chromeos_buildflags.h"
 
 #if BUILDFLAG(IS_FUCHSIA)
 #include <zircon/types.h>
@@ -103,6 +99,8 @@
 #endif
 
 #if BUILDFLAG(IS_WIN)
+#include <string>
+
 #include "base/gtest_prod_util.h"
 #include "base/win/windows_types.h"
 
@@ -119,6 +117,7 @@ struct TimeSpan;
 namespace base {
 
 #if BUILDFLAG(IS_WIN)
+class CommandLine;
 class PlatformThreadHandle;
 #endif
 class TimeDelta;
@@ -213,6 +212,10 @@ class BASE_EXPORT TimeDelta {
   constexpr bool is_inf() const { return is_min() || is_max(); }
 
 #if BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
+  // According to https://en.cppreference.com/w/c/chrono/timespec, negative
+  // timespecs are invalid, so this function clamps negative TimeDeltas to 0.
+  // In addition, this function clamps the upper bound of TimeDelta values to
+  // what a `time_t` can hold.
   struct timespec ToTimeSpec() const;
 #endif
 #if BUILDFLAG(IS_FUCHSIA)
@@ -1228,6 +1231,18 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   // value has the same origin as Now(). Do NOT attempt to use this if
   // IsHighResolution() returns false.
   static TimeTicks FromQPCValue(LONGLONG qpc_value);
+
+  // If this device doesn't have an invariant TSC, it may be added to the
+  // client-side trial to try to use QPC anyway. This function returns true for
+  // all devices in the trial (which is all the devices without an invariant
+  // TSC), and populates `trial_name` and `group_name` for them. `group_name`
+  // can be "Enabled" and "Control", as well as "Excluded" for devices where
+  // QueryPerformanceFrequency returns 0 (which shouldn't happen, but the
+  // assertion to validate this is new).
+  static bool GetHighResolutionTimeTicksFieldTrial(std::string* trial_name,
+                                                   std::string* group_name);
+
+  static void MaybeAddHighResolutionTimeTicksSwitch(CommandLine* command_line);
 #endif
 
 #if BUILDFLAG(IS_APPLE)

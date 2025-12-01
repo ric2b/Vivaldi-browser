@@ -130,5 +130,5 @@ jobs:
       run: |
         cargo build --features capi --release
         cmake -S c_api_tests -B c_build
-        make -C c_build
+        make -C c_build conformance_tests
         ctest --test-dir c_build -R conformance_tests

@@ -69,6 +69,7 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style_property_shorthand.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
@@ -706,16 +707,16 @@ void EditingStyle::ExtractFontSizeDelta() {
   const CSSValue* value = mutable_style_->GetPropertyCSSValue(
       CSSPropertyID::kInternalFontSizeDelta);
   const auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value);
-  if (!primitive_value)
-    return;
-
   // Only PX handled now. If we handle more types in the future, perhaps
   // a switch statement here would be more appropriate.
-  if (!primitive_value->IsPx())
+  if (!primitive_value || !primitive_value->IsPx()) {
     return;
-
-  font_size_delta_ = primitive_value->GetFloatValue();
-  mutable_style_->RemoveProperty(CSSPropertyID::kInternalFontSizeDelta);
+  }
+  std::optional<double> font_size_delta = primitive_value->GetValueIfKnown();
+  if (font_size_delta.has_value()) {
+    font_size_delta_ = ClampTo<float>(font_size_delta.value());
+    mutable_style_->RemoveProperty(CSSPropertyID::kInternalFontSizeDelta);
+  }
 }
 
 bool EditingStyle::IsEmpty() const {
@@ -1120,10 +1121,11 @@ bool EditingStyle::ConflictsWithInlineStyleOfElement(
 
 static const HeapVector<Member<HTMLElementEquivalent>>&
 HtmlElementEquivalents() {
-  DEFINE_STATIC_LOCAL(
-      Persistent<HeapVector<Member<HTMLElementEquivalent>>>,
-      html_element_equivalents,
-      (MakeGarbageCollected<HeapVector<Member<HTMLElementEquivalent>>>()));
+  using Holder = DisallowNewWrapper<HeapVector<Member<HTMLElementEquivalent>>>;
+  DEFINE_STATIC_LOCAL(Persistent<Holder>, html_element_equivalents_holder,
+                      (MakeGarbageCollected<Holder>()));
+  HeapVector<Member<HTMLElementEquivalent>>* html_element_equivalents =
+      &html_element_equivalents_holder->Value();
   if (!html_element_equivalents->size()) {
     html_element_equivalents->push_back(
         MakeGarbageCollected<HTMLElementEquivalent>(
@@ -1184,10 +1186,12 @@ bool EditingStyle::ConflictsWithImplicitStyleOfElement(
 
 static const HeapVector<Member<HTMLAttributeEquivalent>>&
 HtmlAttributeEquivalents() {
-  DEFINE_STATIC_LOCAL(
-      Persistent<HeapVector<Member<HTMLAttributeEquivalent>>>,
-      html_attribute_equivalents,
-      (MakeGarbageCollected<HeapVector<Member<HTMLAttributeEquivalent>>>()));
+  using Holder =
+      DisallowNewWrapper<HeapVector<Member<HTMLAttributeEquivalent>>>;
+  DEFINE_STATIC_LOCAL(Persistent<Holder>, html_attribute_equivalents_holder,
+                      (MakeGarbageCollected<Holder>()));
+  HeapVector<Member<HTMLAttributeEquivalent>>* html_attribute_equivalents =
+      &html_attribute_equivalents_holder->Value();
   if (!html_attribute_equivalents->size()) {
     // elementIsStyledSpanOrHTMLEquivalent depends on the fact each
     // HTMLAttriuteEquivalent matches exactly one attribute of exactly one
@@ -1819,30 +1823,28 @@ static void SetTextDecorationProperty(MutableCSSPropertyValueSet* style,
   }
 }
 
-static bool GetPrimitiveValueNumber(CSSPropertyValueSet* style,
-                                    CSSPropertyID property_id,
-                                    float& number) {
-  if (!style)
-    return false;
+static std::optional<double> GetPrimitiveValueNumber(
+    CSSPropertyValueSet* style,
+    CSSPropertyID property_id) {
+  if (!style) {
+    return std::nullopt;
+  }
   const CSSValue* value = style->GetPropertyCSSValue(property_id);
-  const auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value);
-  if (!primitive_value)
-    return false;
-  number = primitive_value->GetFloatValue();
-  return true;
+  if (const auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value)) {
+    return primitive_value->GetValueIfKnown();
+  }
+  return std::nullopt;
 }
 
 void StyleChange::ExtractTextStyles(Document* document,
                                     MutableCSSPropertyValueSet* style,
                                     bool is_monospace_font) {
-  DCHECK(style);
-
-  float weight = 0;
-  bool is_number =
-      GetPrimitiveValueNumber(style, CSSPropertyID::kFontWeight, weight);
-  if (GetIdentifierValue(style, CSSPropertyID::kFontWeight) ==
-          CSSValueID::kBold ||
-      (is_number && weight >= kBoldThreshold)) {
+  CHECK(style);
+  std::optional<double> weight =
+      GetPrimitiveValueNumber(style, CSSPropertyID::kFontWeight);
+  if ((weight.has_value() && weight.value() >= kBoldThreshold) ||
+      GetIdentifierValue(style, CSSPropertyID::kFontWeight) ==
+          CSSValueID::kBold) {
     style->RemoveProperty(CSSPropertyID::kFontWeight);
     apply_bold_ = true;
   }
@@ -1957,8 +1959,12 @@ static bool FontWeightIsBold(const CSSValue* font_weight) {
     }
   }
 
-  CHECK(To<CSSPrimitiveValue>(font_weight)->IsNumber());
-  return To<CSSPrimitiveValue>(font_weight)->GetFloatValue() >= kBoldThreshold;
+  if (const auto* primitive_value = DynamicTo<CSSPrimitiveValue>(font_weight)) {
+    CHECK(primitive_value->IsNumber());
+    std::optional<double> weight = primitive_value->GetValueIfKnown();
+    return weight.has_value() && weight.value() >= kBoldThreshold;
+  }
+  return false;
 }
 
 static bool FontWeightNeedsResolving(const CSSValue* font_weight) {
@@ -2087,7 +2093,7 @@ int LegacyFontSizeFromCSSValue(Document* document,
                                LegacyFontSizeMode mode) {
   if (const auto* primitive_value = DynamicTo<CSSPrimitiveValue>(value)) {
     if (primitive_value->IsLength()) {
-      // TODO(crbug.com/979895): This doesn't seem to be handle math functions
+      // TODO(crbug.com/40634280): This doesn't seem to be handle math functions
       // correctly. This is the result of a refactoring, and may have revealed
       // an existing bug. Fix it if necessary.
       CSSPrimitiveValue::UnitType length_unit =
@@ -2095,11 +2101,14 @@ int LegacyFontSizeFromCSSValue(Document* document,
               ? To<CSSNumericLiteralValue>(primitive_value)->GetType()
               : CSSPrimitiveValue::UnitType::kPixels;
       if (!CSSPrimitiveValue::IsRelativeUnit(length_unit)) {
+        std::optional<double> number = primitive_value->GetValueIfKnown();
+        if (!number.has_value()) {
+          return 0;
+        }
         double conversion =
             CSSPrimitiveValue::ConversionToCanonicalUnitsScaleFactor(
                 length_unit);
-        int pixel_font_size =
-            ClampTo<int>(primitive_value->GetDoubleValue() * conversion);
+        int pixel_font_size = ClampTo<int>(number.value() * conversion);
         int legacy_font_size = FontSizeFunctions::LegacyFontSize(
             document, pixel_font_size, is_monospace_font);
         // Use legacy font size only if pixel value matches exactly to that of

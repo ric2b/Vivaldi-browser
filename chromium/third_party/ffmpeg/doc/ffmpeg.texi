@@ -1196,9 +1196,9 @@ ffmpeg -i front.wav -i back.wav -i center.wav -i lfe.wav
 demixing=parameter_id=998,
 recon_gain=parameter_id=101,
 layer=ch_layout=stereo,
-layer=ch_layout=5.1,
+layer=ch_layout=5.1(side),
 -stream_group type=iamf_mix_presentation:id=2:stg=0:annotations=en-us=Mix_Presentation,
-submix=parameter_id=100:parameter_rate=48000|element=stg=0:parameter_id=100:annotations=en-us=Scalable_Submix|layout=sound_system=stereo|layout=sound_system=5.1
+submix=parameter_id=100:parameter_rate=48000|element=stg=0:parameter_id=100:annotations=en-us=Scalable_Submix|layout=sound_system=stereo|layout=sound_system=5.1(side)
 -streamid 0:0 -streamid 1:1 -streamid 2:2 -streamid 3:3 output.iamf
 @end example
 
@@ -1372,6 +1372,12 @@ reference available in some filters. Any frames buffered at time of reinitializa
 The properties where a change triggers reinitialization are,
 for video, frame resolution or pixel format;
 for audio, sample format, sample rate, channel count or channel layout.
+
+@item -drop_changed[:@var{stream_specifier}] @var{integer} (@emph{input,per-stream})
+This boolean option determines whether a frame with differing frame parameters mid-stream
+gets dropped instead of leading to filtergraph reinitialization, as that would lead to loss
+of filter state. Generally useful to avoid corrupted yet decodable packets in live streaming
+inputs. Default is false.
 
 @item -filter_threads @var{nb_threads} (@emph{global})
 Defines how many threads are used to process a filter pipeline. Each pipeline
@@ -1985,6 +1991,9 @@ transcoding, without copying the frames into the system memory.
 
 For it to work, both the decoder and the encoder must support QSV acceleration
 and no filters must be used.
+
+@item videotoolbox
+Use Video Toolbox hardware acceleration.
 @end table
 
 This option has no effect if the selected hwaccel is not available or not
@@ -2325,6 +2334,11 @@ Read input at native frame rate. This is equivalent to setting @code{-readrate 1
 @item -readrate_initial_burst @var{seconds}
 Set an initial read burst time, in seconds, after which @option{-re/-readrate}
 will be enforced.
+@item -readrate_catchup @var{speed} (@emph{input})
+If either the input or output is blocked leading to actual read speed falling behind the
+specified readrate, then this rate takes effect till the input catches up with the
+specified readrate. Must not be lower than the primary readrate.
+
 @item -vsync @var{parameter} (@emph{global})
 @itemx -fps_mode[:@var{stream_specifier}] @var{parameter} (@emph{output,per-stream})
 Set video sync method / framerate mode. vsync is applied to all output video streams

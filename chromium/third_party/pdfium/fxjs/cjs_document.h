@@ -29,7 +29,7 @@ class CJS_Document final : public CJS_Object, public Observable {
 
   void SetFormFillEnv(CPDFSDK_FormFillEnvironment* pFormFillEnv);
   CPDFSDK_FormFillEnvironment* GetFormFillEnv() const {
-    return m_pFormFillEnv.Get();
+    return form_fill_env_.Get();
   }
   void AddDelayData(std::unique_ptr<CJS_DelayData> pData);
   void DoFieldDelay(const WideString& sFieldName, int nControlIndex);
@@ -299,18 +299,18 @@ class CJS_Document final : public CJS_Object, public Observable {
   CJS_Result removeIcon(CJS_Runtime* pRuntime,
                         pdfium::span<v8::Local<v8::Value>> params);
 
-  CJS_Result getPropertyInternal(CJS_Runtime* pRuntime,
-                                 const ByteString& propName);
+  CJS_Result GetPropertyInternal(CJS_Runtime* pRuntime,
+                                 ByteStringView property_name);
 
   CPDF_InteractiveForm* GetCoreInteractiveForm();
   CPDFSDK_InteractiveForm* GetSDKInteractiveForm();
 
-  WideString m_cwBaseURL;
-  ObservedPtr<CPDFSDK_FormFillEnvironment> m_pFormFillEnv;
-  std::list<std::unique_ptr<CJS_DelayData>> m_DelayData;
+  WideString base_url_;
+  ObservedPtr<CPDFSDK_FormFillEnvironment> form_fill_env_;
+  std::list<std::unique_ptr<CJS_DelayData>> delay_data_;
   // Needs to be a std::list for iterator stability.
-  std::list<WideString> m_IconNames;
-  bool m_bDelay = false;
+  std::list<WideString> icon_names_;
+  bool delay_ = false;
 };
 
 #endif  // FXJS_CJS_DOCUMENT_H_

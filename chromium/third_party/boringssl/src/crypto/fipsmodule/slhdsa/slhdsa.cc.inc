@@ -368,7 +368,7 @@ static int slhdsa_get_context_and_oid(uint8_t *out_context_and_oid,
     case NID_sha256:
       oid = kSHA256OID;
       oid_len = sizeof(kSHA256OID);
-      static_assert(sizeof(kSHA256OID) <= MAX_OID_LENGTH, "");
+      static_assert(sizeof(kSHA256OID) <= MAX_OID_LENGTH);
       expected_hash_len = 32;
       break;
 
@@ -377,7 +377,7 @@ static int slhdsa_get_context_and_oid(uint8_t *out_context_and_oid,
     case NID_sha384:
       oid = kSHA384OID;
       oid_len = sizeof(kSHA384OID);
-      static_assert(sizeof(kSHA384OID) <= MAX_OID_LENGTH, "");
+      static_assert(sizeof(kSHA384OID) <= MAX_OID_LENGTH);
       expected_hash_len = 48;
       break;
 

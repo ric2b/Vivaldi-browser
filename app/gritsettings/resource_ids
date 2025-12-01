@@ -10,10 +10,6 @@
   "app/installer/vivaldi_installer_strings.grd": {
     "messages": [62700],
   },
-  "app/native_resources/vivaldi_native_unscaled.grd": {
-    "includes": [62800],
-    "structures": [62850],
-  },
   # Long sections, hundreds of strings
   "app/native_resources/vivaldi_native_strings.grd": {
     "messages": [63000],
@@ -24,6 +20,10 @@
   "app/native_resources/vivaldi_native_resources.grd": {
     "includes": [65000],
     "structures": [65050],
+  },
+  "app/native_resources/vivaldi_native_unscaled.grd": {
+    "includes": [65100],
+    "structures": [65110],
   },
 
 

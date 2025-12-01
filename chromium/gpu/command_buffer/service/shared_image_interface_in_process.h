@@ -5,7 +5,6 @@
 #ifndef GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_INTERFACE_IN_PROCESS_H_
 #define GPU_COMMAND_BUFFER_SERVICE_SHARED_IMAGE_INTERFACE_IN_PROCESS_H_
 
-#include "base/containers/flat_map.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "build/build_config.h"
@@ -94,6 +93,11 @@ class GPU_GLES2_EXPORT SharedImageInterfaceInProcess
   scoped_refptr<ClientSharedImage> CreateSharedImage(
       const SharedImageInfo& si_info,
       gfx::GpuMemoryBufferHandle buffer_handle) override;
+  scoped_refptr<ClientSharedImage> CreateSharedImageForMLTensor(
+      std::string debug_label,
+      viz::SharedImageFormat format,
+      const gfx::Size& size,
+      gpu::SharedImageUsageSet usage) override;
   scoped_refptr<ClientSharedImage> CreateSharedImageForSoftwareCompositor(
       const SharedImageInfo& si_info) override;
   void UpdateSharedImage(const SyncToken& sync_token,

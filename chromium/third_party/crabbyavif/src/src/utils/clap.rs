@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::internal_utils::*;
 use crate::utils::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -23,13 +22,48 @@ pub struct CleanAperture {
     pub vert_off: UFraction,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 #[repr(C)]
 pub struct CropRect {
     pub x: u32,
     pub y: u32,
     pub width: u32,
     pub height: u32,
+}
+
+impl CleanAperture {
+    pub fn create_from(
+        rect: &CropRect,
+        image_width: u32,
+        image_height: u32,
+        pixel_format: PixelFormat,
+    ) -> AvifResult<Self> {
+        if !rect.is_valid(image_width, image_height, pixel_format) {
+            return Err(AvifError::InvalidArgument);
+        }
+        let mut cropped_center_x = IFraction::simplified(i32_from_u32(rect.width)?, 2);
+        let mut cropped_center_y = IFraction::simplified(i32_from_u32(rect.height)?, 2);
+        cropped_center_x.0 = i32_from_i64(checked_add!(
+            cropped_center_x.0 as i64,
+            checked_mul!(rect.x as i64, cropped_center_x.1 as i64)?
+        )?)?;
+        cropped_center_y.0 = i32_from_i64(checked_add!(
+            cropped_center_y.0 as i64,
+            checked_mul!(rect.y as i64, cropped_center_y.1 as i64)?
+        )?)?;
+        let uncropped_center_x = IFraction::simplified(i32_from_u32(image_width)?, 2);
+        let mut horiz_off = cropped_center_x;
+        horiz_off.sub(&uncropped_center_x)?;
+        let uncropped_center_y = IFraction::simplified(i32_from_u32(image_height)?, 2);
+        let mut vert_off = cropped_center_y;
+        vert_off.sub(&uncropped_center_y)?;
+        Ok(Self {
+            width: UFraction(rect.width, 1),
+            height: UFraction(rect.height, 1),
+            horiz_off: UFraction(horiz_off.0 as u32, horiz_off.1 as u32),
+            vert_off: UFraction(vert_off.0 as u32, vert_off.1 as u32),
+        })
+    }
 }
 
 impl CropRect {
@@ -175,8 +209,9 @@ mod tests {
         invalid!(99, 99, Yuv420, 99, 1, 99, 1, -1i32 as u32, 2, -1i32 as u32, 2),
     ];
 
+    #[allow(clippy::zero_prefixed_literal)]
     #[test_case::test_matrix(0usize..20)]
-    fn valid_clap_to_rect(index: usize) {
+    fn clap_to_rect(index: usize) {
         let param = &TEST_PARAMS[index];
         let rect = CropRect::create_from(
             &param.clap,
@@ -184,16 +219,28 @@ mod tests {
             param.image_height,
             param.pixel_format,
         );
-        if param.rect.is_some() {
+        if let Some(expected_rect) = param.rect {
             assert!(rect.is_ok());
-            let rect = rect.unwrap();
-            let expected_rect = param.rect.unwrap_ref();
-            assert_eq!(rect.x, expected_rect.x);
-            assert_eq!(rect.y, expected_rect.y);
-            assert_eq!(rect.width, expected_rect.width);
-            assert_eq!(rect.height, expected_rect.height);
+            assert_eq!(rect.unwrap(), expected_rect);
         } else {
             assert!(rect.is_err());
         }
+    }
+
+    #[allow(clippy::zero_prefixed_literal)]
+    #[test_case::test_matrix(0usize..20)]
+    fn rect_to_clap(index: usize) {
+        let param = &TEST_PARAMS[index];
+        if param.rect.is_none() {
+            return;
+        }
+        let clap = CleanAperture::create_from(
+            param.rect.unwrap_ref(),
+            param.image_width,
+            param.image_height,
+            param.pixel_format,
+        );
+        assert!(clap.is_ok());
+        assert_eq!(clap.unwrap(), param.clap);
     }
 }

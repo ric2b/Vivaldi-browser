@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pl">
-<translation id="2277224997687551299">Edytuj nazwę grupy</translation>
+<translation id="1062777154504442433">Nowa grupa kart</translation>
+<translation id="1625440863545383011">Usuń kartę i opuść grupę</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Dodaj kartę do zakładek}
           few{Dodaj karty do zakładek}
@@ -9,11 +10,18 @@
           other{Dodaj karty do zakładek}
         }</translation>
 <translation id="2947471979790858922">Twoja aktywność z kart prywatnych zostanie usunięta z tego urządzenia</translation>
+<translation id="3298614730029636660">Opuść grupę</translation>
+<translation id="354698175756845966">Edytuj kolor grupy</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Możesz znaleźć zamknięte karty wybierając Ostatnie karty z menu głównego Vivaldi. Twoja karta prywatna nie będzie dostępna.}
         other {Możesz znaleźć zamknięte karty wybierając Ostatnie karty z menu głównego Vivaldi. Twoje karty prywatne (#) nie będą dostępne.}}</translation>
-<translation id="4460014764210899310">Rozgrupuj</translation>
 <translation id="4871187110787939393">Zamknąć wszystkie karty prywatne?</translation>
 <translation id="5494920125229734069">Zaznacz wszystko</translation>
-<translation id="6744956528665271406">Edytuj kolor grupy</translation>
+<translation id="6807841890213931603">Usuń kartę i skasuj grupę</translation>
+<translation id="750227952939161636">Twoje grupy kart są automatycznie zapisywane i aktualizowane na synchronizowanych urządzeniach</translation>
+<translation id="7640137753339219124">Usuń grupę</translation>
+<translation id="7653857400289671414">Twoje grupy kart są zapisywane automatycznie</translation>
+<translation id="8440938071054361204">Edytuj nazwę grupy</translation>
+<translation id="8602902357364871325">Zamknij grupę</translation>
+<translation id="8851621822786801079">Usuń z grupy</translation>
 </translationbundle>

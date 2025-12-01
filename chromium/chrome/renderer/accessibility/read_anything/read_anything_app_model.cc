@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "chrome/renderer/accessibility/read_anything/read_anything_app_model.h"
 
 #include <cstddef>
@@ -116,31 +111,7 @@ void ReadAnythingAppModel::InsertIdIfNotIgnored(
     return;
   }
 
-  // PDFs processed with OCR have additional nodes that mark the start and end
-  // of a page. The start of a page is indicated with a `kBanner` node that has
-  // a child static text node. Ignore both. The end of a page is indicated with
-  // a `kContentInfo` node that has a child static text node. Ignore the static
-  // text node but keep the `kContentInfo` so a line break can be inserted in
-  // between pages during `a11y::GetHtmlTagForPDF()`.
-  const ax::mojom::Role role = ax_node->GetRole();
-  if (is_pdf_) {
-    // The text content of the aforementioned `kBanner` or `kContentInfo` node
-    // is the same as the text content of its child static text node.
-    const ui::AXNode* const parent = ax_node->GetParent();
-    if (const std::string_view text = ax_node->GetTextContentUTF8();
-        text == l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_BEGIN)) {
-      if (role == ax::mojom::Role::kBanner ||
-          (parent && parent->GetRole() == ax::mojom::Role::kBanner)) {
-        return;
-      }
-    } else if (text == l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_END) &&
-               parent && parent->GetRole() == ax::mojom::Role::kContentInfo) {
-      return;
-    }
-  }
-
-  // Ignore interactive elements, except for text fields.
-  if ((!ui::IsControl(role) || ui::IsTextField(role)) && !ui::IsSelect(role)) {
+  if (!a11y::IsIgnored(ax_node, is_pdf_)) {
     non_ignored_ids.insert(id);
   }
 }
@@ -167,7 +138,7 @@ void ReadAnythingAppModel::Reset(std::vector<ui::AXNodeID> content_node_ids) {
   display_node_ids_.clear();
   distillation_in_progress_ = false;
   requires_post_process_selection_ = false;
-  selection_from_action_ = false;
+  selections_from_reading_mode_ = 0;
   ResetSelection();
 }
 
@@ -197,17 +168,15 @@ bool ReadAnythingAppModel::PostProcessSelection() {
     return display_node_ids_.contains(start_.id) &&
            display_node_ids_.contains(end_.id);
   };
-  const bool need_to_draw = !selection_from_action_ && has_selection() &&
+  const bool need_to_draw = (selections_from_reading_mode_ == 0) &&
+                            has_selection() &&
                             !selection_in_distilled_content();
   const bool was_empty = is_empty();
 
   // Update selection.
   ResetSelection();
-  ui::AXSerializableTree* tree = GetTreeFromId(active_tree_id_);
-  if (!tree) {
-    return false;
-  }
-  if (const ui::AXSelection selection = tree->GetUnignoredSelection();
+  if (const ui::AXSelection selection =
+          GetTreeFromId(active_tree_id_)->GetUnignoredSelection();
       selection.anchor_object_id != ui::kInvalidAXNodeID &&
       selection.focus_object_id != ui::kInvalidAXNodeID &&
       !selection.IsCollapsed()) {
@@ -238,11 +207,20 @@ bool ReadAnythingAppModel::PostProcessSelection() {
     return need_to_draw;
   }
 
-  // The main panel selection contains content outside of the distilled content.
-  // Find the selected nodes to display instead of the distilled content.
-  if (const ui::AXNode *node = GetAXNode(start_.id), *end = GetAXNode(end_.id);
-      node && end && !node->IsInvisibleOrIgnored() &&
-      !end->IsInvisibleOrIgnored()) {
+  const ui::AXNode* node = GetAXNode(start_.id);
+  const ui::AXNode* end = GetAXNode(end_.id);
+  DUMP_WILL_BE_CHECK(node && end);
+  if (!node || !end) {
+    // Fail gracefully if the returned nodes are ever missing.
+    // This should never happen given that the AXSelection object is retrieved
+    // from the active tree.
+    return false;
+  }
+
+  // The main panel selection contains content outside of the distilled
+  // content. Find the selected nodes to display instead of the distilled
+  // content.
+  if (!node->IsInvisibleOrIgnored() && !end->IsInvisibleOrIgnored()) {
     // Add all ancestor ids of start node, including the start node itself.
     for (base::queue<ui::AXNode*> ancestors =
              node->GetAncestorsCrossingTreeBoundaryAsQueue();
@@ -389,15 +367,18 @@ void ReadAnythingAppModel::ComputeDisplayNodeIdsForDistilledTree() {
   }
 }
 
+ui::AXSerializableTree* ReadAnythingAppModel::GetActiveTree() const {
+  return GetTreeFromId(active_tree_id_);
+}
+
 ui::AXSerializableTree* ReadAnythingAppModel::GetTreeFromId(
     const ui::AXTreeID& tree_id) const {
-  // If the tree id is unknown or not associated with a tree, fail on DCHECK
-  // builds. On live builds, fail gracefully, since reading mode can sometimes
-  // get into a state with invalid data, and failing gracefully is preferable
-  // to crashing.
-  DCHECK_NE(tree_id, ui::AXTreeIDUnknown());
-  DCHECK(ContainsTree(tree_id));
-
+  // If the tree id is unknown or not associated with a tree, fail gracefully,
+  // since reading mode can sometimes get into a state with invalid data, and
+  // failing gracefully is preferable to crashing. Use DUMP_WILL_BE_CHECK to
+  // collect information on this bad state without actually crashing.
+  DUMP_WILL_BE_CHECK(ContainsTree(tree_id));
+  DUMP_WILL_BE_CHECK(tree_id != ui::AXTreeIDUnknown());
   if (!ContainsTree(tree_id) || tree_id == ui::AXTreeIDUnknown()) {
     return nullptr;
   }
@@ -407,6 +388,10 @@ ui::AXSerializableTree* ReadAnythingAppModel::GetTreeFromId(
 
 bool ReadAnythingAppModel::ContainsTree(const ui::AXTreeID& tree_id) const {
   return base::Contains(tree_infos_, tree_id);
+}
+
+bool ReadAnythingAppModel::ContainsActiveTree() const {
+  return ContainsTree(active_tree_id_);
 }
 
 void ReadAnythingAppModel::SetUrlInformationCallback(
@@ -483,10 +468,7 @@ bool ReadAnythingAppModel::IsReload() const {
 
 void ReadAnythingAppModel::AddPendingUpdates(const ui::AXTreeID& tree_id,
                                              Updates& updates) {
-  Updates& update = pending_updates_[tree_id];
-  for (auto& item : updates) {
-    update.emplace_back(std::move(item));
-  }
+  pending_updates_[tree_id].emplace_back(std::move(updates));
 }
 
 void ReadAnythingAppModel::ClearPendingUpdates() {
@@ -501,9 +483,13 @@ void ReadAnythingAppModel::UnserializePendingUpdates(
   // TODO(crbug.com/40802192): Ensure there are no crashes/unexpected behavior
   // if an accessibility event is received on the same tree after
   // unserialization has begun.
-  Updates update = pending_updates_.extract(tree_id).mapped();
-  DCHECK(update.empty() || tree_id == active_tree_id_);
-  UnserializeUpdates(update, tree_id);
+  std::vector<Updates> updates = pending_updates_.extract(tree_id).mapped();
+  for (Updates update : updates) {
+    // Unserialize the updates in batches in the groupings in which they were
+    // received by AccessibilityEventReceived.
+    DCHECK(update.empty() || tree_id == active_tree_id_);
+    UnserializeUpdates(update, tree_id);
+  }
 }
 
 void ReadAnythingAppModel::UnserializeUpdates(Updates& updates,
@@ -519,21 +505,21 @@ void ReadAnythingAppModel::UnserializeUpdates(Updates& updates,
       static_cast<ui::AXSerializableTree*>(it->second->manager->ax_tree());
   CHECK(tree);
 
-  // Try to merge updates. If the updates are mergeable, MergeAXTreeUpdates will
-  // return true and merge_updates_out will contain the updates. Otherwise, if
-  // the updates are not mergeable, merge_updates_out will be empty.
-  const Updates* merged_updates = &updates;
-  Updates merge_updates_out;
-  if (ui::MergeAXTreeUpdates(updates, &merge_updates_out)) {
-    merged_updates = &merge_updates_out;
-  }
-
   // Build an event generator prior to any unserializations.
   ui::AXEventGenerator event_generator(tree);
 
   // Unserialize the updates.
   const size_t prev_tree_size = tree->size();
-  for (const ui::AXTreeUpdate& update : *merged_updates) {
+  for (const ui::AXTreeUpdate& update : updates) {
+    // If a tree update without a valid root is received for a tree without
+    // a valid root, it is likely the tree was previously destroyed and reading
+    // mode received a delayed accessibility event. This can happen on pages
+    // with frequent updates. If this happens, don't continue trying to
+    // unserialize because the data is bad.
+    DUMP_WILL_BE_CHECK(tree->root() || update.root_id != ui::kInvalidAXNodeID);
+    if (!tree->root() && update.root_id == ui::kInvalidAXNodeID) {
+      return;
+    }
     tree->Unserialize(update);
   }
 
@@ -559,6 +545,29 @@ void ReadAnythingAppModel::AccessibilityEventReceived(
     tree_infos_.emplace(
         tree_id, std::make_unique<AXTreeInfo>(
                      std::make_unique<ui::AXTreeManager>(std::move(new_tree))));
+    // If we previously received UKM source info for this tree_id, set the
+    // UKM source now that the tree information has been added to tree_infos_.
+    if (tree_id == active_tree_id_ && pending_ukm_sources_.count(tree_id) > 0) {
+      ukm::SourceId ukm_source_id = pending_ukm_sources_[tree_id];
+      pending_ukm_sources_.erase(tree_id);
+      SetUkmSourceId(ukm_source_id);
+    }
+  }
+
+  if (may_use_child_for_active_tree_) {
+    // If this is the original root tree id, set it back to the active tree
+    // in case there has been a delay in receiving valid accessibility tree
+    // updates.
+    if (root_tree_id_ == tree_id) {
+      SetRootTreeId(root_tree_id_);
+    } else if (active_tree_id_ != ui::AXTreeIDUnknown() &&
+               active_tree_id_ != tree_id &&
+               child_tree_ids_.find(tree_id) != child_tree_ids_.end()) {
+      // If read aloud is searching for a child tree to distill and this tree id
+      // matches one of the possible child ids, set the active tree to this tree
+      // so that it can be distilled.
+      SetActiveTreeId(tree_id);
+    }
   }
 
   // If a tree update on the active tree is received while distillation is in
@@ -575,11 +584,10 @@ void ReadAnythingAppModel::AccessibilityEventReceived(
         timer_since_tree_changed_for_data_collection_.Reset();
       }
       return;
-    } else {
-      // We need to unserialize old updates before we can unserialize the new
-      // ones.
-      UnserializePendingUpdates(tree_id);
     }
+    // We need to unserialize old updates before we can unserialize the new
+    // ones.
+    UnserializePendingUpdates(tree_id);
     UnserializeUpdates(updates, tree_id);
     ProcessNonGeneratedEvents(events);
   } else {
@@ -631,6 +639,21 @@ ukm::SourceId ReadAnythingAppModel::GetUkmSourceId() const {
     }
   }
   return ukm::kInvalidSourceId;
+}
+
+void ReadAnythingAppModel::SetUkmSourceIdForTree(const ui::AXTreeID& tree,
+                                                 ukm::SourceId ukm_source_id) {
+  // We may receive an OnActiveAXTreeIDChanged event on a tree before we've
+  // received an AccessibilityEventReceived event adding the tree to
+  // tree_infos_. When this happens, we should keep track of the ukm_source_id,
+  // and later, if the tree is added to tree_infos_ while it's still active,
+  // we can try again to set the ukm source.
+  if (!base::Contains(tree_infos_, active_tree_id_)) {
+    pending_ukm_sources_[tree] = ukm_source_id;
+    return;
+  }
+
+  SetUkmSourceId(ukm_source_id);
 }
 
 void ReadAnythingAppModel::SetUkmSourceId(ukm::SourceId ukm_source_id) {
@@ -690,7 +713,7 @@ void ReadAnythingAppModel::AdjustTextSize(int increment) {
 }
 
 void ReadAnythingAppModel::ResetTextSize() {
-  SetFontSize(1.0f);
+  SetFontSize(2.0f);
 }
 
 void ReadAnythingAppModel::OnScroll(bool on_selection,
@@ -723,44 +746,26 @@ void ReadAnythingAppModel::OnScroll(bool on_selection,
                                 event);
 }
 
-void ReadAnythingAppModel::OnSelection(ax::mojom::EventFrom event_from) {
-  // If event_from is kUser, the user selected text on the main web page.
-  // If event_from is kAction, the user selected text in RM and the main web
-  // page was updated with that selection.
-  // Edgecases:
-  // 1. For selections in PDFs coming from the main pane or from the side
-  // panel, event_from is set to kNone.
-  // 2. When the user clicks and drags the cursor to highlight text on a
-  // webpage, such that the anchor node and offset stays the same and the focus
-  // node and/or offset changes, the first few selection events have event_from
-  // kUser, but the subsequent selection events have event_from kPage. This is
-  // the way UserActivationState is implemented. To detect this case, compare
-  // the new selection to the saved selection. If the anchor is the same, update
-  // the selection in RM.
-  bool is_click_and_drag_selection = false;
-  if (ContainsTree(active_tree_id_)) {
-    ui::AXSerializableTree* tree = GetTreeFromId(active_tree_id_);
-    if (!tree) {
-      return;
-    }
-    ui::AXSelection selection = tree->GetUnignoredSelection();
-    const SelectionEndpoint anchor(selection,
-                                   SelectionEndpoint::Source::kAnchor);
-    const SelectionEndpoint focus(selection, SelectionEndpoint::Source::kFocus);
-    is_click_and_drag_selection = (anchor == start_ && focus != end_) ||
-                                  (anchor == end_ && focus != start_);
-  }
-  if (event_from == ax::mojom::EventFrom::kUser ||
-      event_from == ax::mojom::EventFrom::kAction ||
-      (event_from == ax::mojom::EventFrom::kPage &&
-       is_click_and_drag_selection) ||
-      is_pdf_) {
-    requires_post_process_selection_ = true;
-    selection_from_action_ = event_from == ax::mojom::EventFrom::kAction;
-  }
+void ReadAnythingAppModel::SetRootTreeId(ui::AXTreeID root_tree_id) {
+  root_tree_id_ = root_tree_id;
+  SetActiveTreeId(root_tree_id);
+
+  // Whenever reading mode receives a signal of a new active tree id, clear
+  // previous attempts to search for a valid child tree on the active tree in
+  // case the new active tree is distillable.
+  may_use_child_for_active_tree_ = false;
+  child_tree_ids_.clear();
 }
 
 void ReadAnythingAppModel::SetActiveTreeId(ui::AXTreeID active_tree_id) {
+  // Unserialize any updates on the previous active tree;
+  // Otherwise, this can cause tree inconsistency issues if reading mode later
+  // incorrectly receives updates from the old tree.
+  if (active_tree_id_ != active_tree_id &&
+      active_tree_id_ != ui::AXTreeIDUnknown() && ContainsActiveTree()) {
+    UnserializePendingUpdates(active_tree_id_);
+  }
+
   active_tree_id_ = std::move(active_tree_id);
   // If data collection mode for screen2x is enabled, begin
   // `timer_since_page_load_for_data_collection_` from here. This is a
@@ -808,6 +813,16 @@ void ReadAnythingAppModel::ProcessNonGeneratedEvents(
       case ax::mojom::Event::kLocationChanged:
         delay_screen2x_training_data_collection_ = true;
         break;
+
+      case ax::mojom::Event::kBlur:
+        // Closing ads sometimes sends this event but we also get this when
+        // keyboard focus changes. Only try to redistill if we have no content
+        // right now.
+        if (features::IsReadAnythingReadAloudEnabled() &&
+            content_node_ids_.size() == 0) {
+          requires_distillation_ = true;
+        }
+        break;
       // Audit these events e.g. to require distillation.
       case ax::mojom::Event::kActiveDescendantChanged:
       case ax::mojom::Event::kCheckedStateChanged:
@@ -822,7 +837,6 @@ void ReadAnythingAppModel::ProcessNonGeneratedEvents(
       case ax::mojom::Event::kNone:
       case ax::mojom::Event::kAlert:
       case ax::mojom::Event::kAutocorrectionOccured:
-      case ax::mojom::Event::kBlur:
       case ax::mojom::Event::kClicked:
       case ax::mojom::Event::kControlsChanged:
       case ax::mojom::Event::kEndOfTest:
@@ -863,12 +877,12 @@ void ReadAnythingAppModel::ProcessNonGeneratedEvents(
       case ax::mojom::Event::kTooltipClosed:
       case ax::mojom::Event::kTooltipOpened:
       case ax::mojom::Event::kTreeChanged:
-        if (!features::IsReadAnythingReadAloudEnabled()) {
           break;
-        }
-        [[fallthrough]];
       case ax::mojom::Event::kValueChanged:
-        if (!features::IsReadAnythingReadAloudEnabled()) {
+        // After the user finishes typing something we wait for a timer and
+        // redraw to capture the input.
+        if (event.event_from == ax::mojom::EventFrom::kUser &&
+            event.event_intents.size() > 0) {
           reset_draw_timer_ = true;
         }
         break;
@@ -904,7 +918,7 @@ void ReadAnythingAppModel::ProcessGeneratedEvents(
   for (const auto& event : event_generator) {
     switch (event.event_params->event) {
       case ui::AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED:
-        OnSelection(event.event_params->event_from);
+        requires_post_process_selection_ = true;
         break;
       case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
         if (!features::IsReadAnythingReadAloudEnabled() ||
@@ -952,20 +966,8 @@ void ReadAnythingAppModel::ProcessGeneratedEvents(
           }
         }
         break;
-      // After the user finishes typing something we wait for a timer and redraw
-      // to capture the input. For some reason, scrolling pdfs sends editable
-      // text changed events, which is not what we want, so only redraw if it's
-      // not a pdf.
-      // TODO(crbug.com//40927698): Determine why these events are generated
-      // for PDF scrolling, and if there's a need to differentiate actual pdf
-      // edits.
-      case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
-        if (features::IsReadAnythingReadAloudEnabled() && !is_pdf_) {
-          reset_draw_timer_ = true;
-          break;
-        }
-        [[fallthrough]];
       // Audit these events e.g. to trigger distillation.
+      case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
       case ui::AXEventGenerator::Event::NONE:
       case ui::AXEventGenerator::Event::ACCESS_KEY_CHANGED:
       case ui::AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED:
@@ -1110,4 +1112,31 @@ void ReadAnythingAppModel::RemoveObserver(ModelObserver* observer) {
 
 void ReadAnythingAppModel::SetFontSize(double font_size, int increment) {
   font_size_ = AdjustFontScale(font_size, increment);
+}
+
+const std::set<ui::AXNodeID>* ReadAnythingAppModel::GetCurrentlyVisibleNodes()
+    const {
+  return selection_node_ids_.empty() ? &display_node_ids()
+                                     : &selection_node_ids_;
+}
+
+void ReadAnythingAppModel::AllowChildTreeForActiveTree(bool use_child_tree) {
+  may_use_child_for_active_tree_ = use_child_tree;
+
+  if (!may_use_child_for_active_tree_) {
+    child_tree_ids_.clear();
+  }
+
+  ui::AXSerializableTree* active_tree = GetTreeFromId(active_tree_id_);
+  if (!active_tree) {
+    return;
+  }
+  std::set<ui::AXTreeID> child_ids = active_tree->GetAllChildTreeIds();
+  if (!child_ids.size()) {
+    return;
+  }
+
+  // Store all the possible child tree ids that could be used as the active
+  // tree if they have distillable content.
+  child_tree_ids_.insert(child_ids.begin(), child_ids.end());
 }

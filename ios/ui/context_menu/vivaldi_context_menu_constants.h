@@ -33,8 +33,11 @@ extern NSString* vMenuEyeOff;
 extern NSString* vMenuEyeOn;
 extern NSString* vSearch;
 extern NSString* vPrint;
+extern NSString* vClearHistory;
+extern NSString* vClearHistoryTabs;
 extern NSString* vClearHistoryAutofill;
 extern NSString* vClearHistoryCache;
 extern NSString* vClearHistoryCookies;
+extern NSString* vClearHistoryPasswords;
 
 #endif  // IOS_UI_CONTEXT_MENU_VIVALDI_CONTEXT_MENU_CONSTANTS_H_

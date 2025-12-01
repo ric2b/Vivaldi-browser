@@ -156,13 +156,25 @@ def GetExeSuffix():
 
 
 @functools.lru_cache
-def GetGClientPrimarySolutionName(gclient_root_dir_path):
-    """Returns the name of the primary solution in the .gclient file specified."""
+def _GetGClientSolutions(gclient_root_dir_path):
     gclient_config_file = os.path.join(gclient_root_dir_path, '.gclient')
     gclient_config_contents = gclient_utils.FileRead(gclient_config_file)
     env = {}
     exec(gclient_config_contents, env)
-    solutions = env.get('solutions', [])
+    return env.get('solutions', [])
+
+
+def GetGClientPrimarySolutionName(gclient_root_dir_path):
+    """Returns the name of the primary solution in the .gclient file specified."""
+    solutions = _GetGClientSolutions(gclient_root_dir_path)
     if solutions:
         return solutions[0].get('name')
+    return None
+
+
+def GetGClientPrimarySolutionURL(gclient_root_dir_path):
+    """Returns the URL of the primary solution in the .gclient file specified."""
+    solutions = _GetGClientSolutions(gclient_root_dir_path)
+    if solutions:
+        return solutions[0].get('url')
     return None

@@ -298,9 +298,13 @@ class MjsunitNamesProvider {
 
   void PrintHeapType(StringBuilder& out, HeapType type, OutputContext mode) {
     switch (type.representation()) {
-#define CASE(kCpp, JS, JSCode)                       \
-  case HeapType::kCpp:                               \
-    out << (mode == kEmitWireBytes ? #JSCode : #JS); \
+#define CASE(kCpp, JS, JSCode)                                             \
+  case HeapType::kCpp:                                                     \
+    out << (mode == kEmitWireBytes ? #JSCode : #JS);                       \
+    return;                                                                \
+  case HeapType::kCpp##Shared:                                             \
+    out << (mode == kEmitWireBytes ? "kWasmSharedTypeForm, " #JSCode       \
+                                   : "wasmRefNullType(" #JS ").shared()"); \
     return;
       ABSTRACT_TYPE_LIST(CASE)
       ABSTRACT_NN_TYPE_LIST(CASE)
@@ -842,9 +846,11 @@ class MjsunitImmediatesPrinter {
 
   void ValueType(ValueType type) {
     if (owner_->current_opcode_ == kExprBrOnCast ||
-        owner_->current_opcode_ == kExprBrOnCastFail) {
+        owner_->current_opcode_ == kExprBrOnCastFail ||
+        owner_->current_opcode_ == kExprBrOnCastDesc ||
+        owner_->current_opcode_ == kExprBrOnCastDescFail) {
       // We somewhat incorrectly use the {ValueType} callback rather than
-      // {HeapType()} for br_on_cast[_fail], because that's convenient
+      // {HeapType()} for br_on_cast[_desc][_fail], because that's convenient
       // for disassembling to the text format. For module builder output,
       // fix that hack here, by dispatching back to {HeapType()}.
       return HeapType(type.heap_type());
@@ -913,6 +919,36 @@ class MjsunitImmediatesPrinter {
     owner_->indentation_.decrease();
   }
 
+  void EffectHandlerTable(EffectHandlerTableImmediate& imm) {
+    const uint8_t* pc = imm.table;
+    owner_->indentation_.increase();
+    owner_->indentation_.increase();
+
+    for (uint32_t i = 0; i < imm.table_count; i++) {
+      out_ << "\n" << owner_->indentation_;
+
+      uint8_t kind = owner_->read_u8<ValidationTag>(pc);
+      pc += 1;
+      if (kind == kOnSuspend) {
+        out_ << "kOnSuspend, ";
+        auto [tag, taglength] = owner_->read_u32v<ValidationTag>(pc);
+        pc += taglength;
+        names()->PrintTagReferenceLeb(out_, tag);
+        out_ << ", ";
+        auto [target, label_length] = owner_->read_u32v<ValidationTag>(pc);
+        pc += label_length;
+        out_ << target << ",";
+      } else {
+        out_ << "kOnSwitch, ";
+        auto [tag, length] = owner_->read_u32v<ValidationTag>(pc);
+        names()->PrintTagReferenceLeb(out_, tag);
+        out_ << ", ";
+      }
+    }
+    owner_->indentation_.decrease();
+    owner_->indentation_.decrease();
+  }
+
   void CallIndirect(CallIndirectImmediate& imm) {
     PrintSignature(imm.sig_imm.index);
     TableIndex(imm.table_imm);
@@ -940,6 +976,18 @@ class MjsunitImmediatesPrinter {
       DCHECK_LE(imm.offset, std::numeric_limits<uint32_t>::max());
       WriteUnsignedLEB(static_cast<uint32_t>(imm.offset));
     }
+  }
+
+  void MemoryOrder(const MemoryOrderImmediate& memory_order) {
+    switch (memory_order.order) {
+      case AtomicMemoryOrder::kAcqRel:
+        out_ << " kAtomicAcqRel,";
+        return;
+      case AtomicMemoryOrder::kSeqCst:
+        out_ << " kAtomicSeqCst,";
+        return;
+    }
+    out_ << " /* INVALID */ " << static_cast<int>(memory_order.order) << ',';
   }
 
   void SimdLane(SimdLaneImmediate& imm) { out_ << " " << imm.lane << ","; }

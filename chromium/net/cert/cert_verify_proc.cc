@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "net/cert/cert_verify_proc.h"
 
 #include <stdint.h>
@@ -512,8 +507,7 @@ int CertVerifyProc::Verify(X509Certificate* cert,
     if (hash.tag() != HASH_VALUE_SHA256) {
       continue;
     }
-    if (!crl_set()->IsKnownInterceptionKey(std::string_view(
-            reinterpret_cast<const char*>(hash.data()), hash.size()))) {
+    if (!crl_set()->IsKnownInterceptionKey(hash.span())) {
       continue;
     }
 
@@ -602,6 +596,17 @@ int CertVerifyProc::Verify(X509Certificate* cert,
   net_log.EndEvent(NetLogEventType::CERT_VERIFY_PROC,
                    [&] { return verify_result->NetLogParams(rv); });
   return rv;
+}
+
+int CertVerifyProc::Verify2Qwac(X509Certificate* cert,
+                                const std::string& hostname,
+                                CertVerifyResult* verify_result,
+                                const NetLogWithSource& net_log) {
+  // Default implementation of Verify2QwacInternal that always fails.
+  // Subclasses that actually implement 2-QWAC verification should override
+  // this.
+  verify_result->cert_status |= CERT_STATUS_INVALID;
+  return ERR_CERT_INVALID;
 }
 
 // static

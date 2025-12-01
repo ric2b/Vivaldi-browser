@@ -460,7 +460,7 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
                                                       animated:YES
                                                     completion:[OCMArg any]])
       .andDo(^(NSInvocation* invocation) {
-        __weak id object;
+        __unsafe_unretained id object;
         [invocation getArgument:&object atIndex:2];
         EXPECT_EQ([UIActivityViewController class], [object class]);
         UIActivityViewController* open_in_controller =
@@ -482,6 +482,11 @@ TEST_F(DownloadManagerCoordinatorTest, OpenIn) {
 
     // Complete the download before presenting Open In... menu.
     task_ptr->SetDone(true);
+
+    ASSERT_TRUE(WaitUntilConditionOrTimeout(
+        base::test::ios::kWaitForDownloadTimeout, true, ^{
+          return !tab_helper()->GetDownloadTaskFinalFilePath().empty();
+        }));
 
     [view_controller.delegate
         presentOpenInForDownloadManagerViewController:view_controller];

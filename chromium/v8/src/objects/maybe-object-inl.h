@@ -23,8 +23,8 @@ inline Tagged<ClearedWeakValue> ClearedValue(PtrComprCageBase cage_base) {
 #ifdef V8_COMPRESS_POINTERS
   // This is necessary to make pointer decompression computation also
   // suitable for cleared weak references.
-  value = V8HeapCompressionScheme::DecompressTagged(
-      cage_base, kClearedWeakHeapObjectLower32);
+  value =
+      V8HeapCompressionScheme::DecompressTagged(kClearedWeakHeapObjectLower32);
 #else
   value = kClearedWeakHeapObjectLower32;
 #endif
@@ -37,7 +37,6 @@ inline Tagged<ClearedWeakValue> ClearedTrustedValue() {
 #ifdef V8_COMPRESS_POINTERS
   return Tagged<ClearedWeakValue>(
       TrustedSpaceCompressionScheme::DecompressTagged(
-          TrustedSpaceCompressionScheme::base(),
           kClearedWeakHeapObjectLower32));
 #else
   return Tagged<ClearedWeakValue>(kClearedWeakHeapObjectLower32);
@@ -47,8 +46,8 @@ inline Tagged<ClearedWeakValue> ClearedTrustedValue() {
 template <typename THeapObjectSlot>
 void UpdateHeapObjectReferenceSlot(THeapObjectSlot slot,
                                    Tagged<HeapObject> value) {
-  static_assert(std::is_same<THeapObjectSlot, FullHeapObjectSlot>::value ||
-                    std::is_same<THeapObjectSlot, HeapObjectSlot>::value,
+  static_assert(std::is_same_v<THeapObjectSlot, FullHeapObjectSlot> ||
+                    std::is_same_v<THeapObjectSlot, HeapObjectSlot>,
                 "Only FullHeapObjectSlot and HeapObjectSlot are expected here");
   Address old_value = (*slot).ptr();
   DCHECK(!HAS_SMI_TAG(old_value));

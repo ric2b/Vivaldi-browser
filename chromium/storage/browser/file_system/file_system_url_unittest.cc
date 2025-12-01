@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "storage/browser/file_system/file_system_url.h"
 
@@ -54,7 +50,7 @@ BucketLocator CreateNonDefaultBucket() {
   return BucketLocator(
       BucketId::FromUnsafeValue(kBucketId),
       blink::StorageKey::CreateFromStringForTesting("http://www.example.com/"),
-      blink::mojom::StorageType::kTemporary, /*is_default=*/false);
+      /*is_default=*/false);
 }
 
 }  // namespace

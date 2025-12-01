@@ -21,8 +21,6 @@
 #include "internal/platform/implementation/awdl.h"
 #include "internal/platform/nsd_service_info.h"
 
-@class GNCMBonjourBrowser;
-@class GNCMBonjourService;
 @class GNCNWFramework;
 @class GNCNWFrameworkServerSocket;
 @class GNCNWFrameworkSocket;
@@ -84,7 +82,7 @@ class AwdlSocket : public api::AwdlSocket {
  */
 class AwdlServerSocket : public api::AwdlServerSocket {
  public:
-  explicit AwdlServerSocket(GNCNWFrameworkServerSocket*  server_socket);
+  explicit AwdlServerSocket(GNCNWFrameworkServerSocket* server_socket);
   ~AwdlServerSocket() override = default;
 
   std::string GetIPAddress() const override;
@@ -93,7 +91,7 @@ class AwdlServerSocket : public api::AwdlServerSocket {
   Exception Close() override;
 
  private:
-   GNCNWFrameworkServerSocket* server_socket_;
+  GNCNWFrameworkServerSocket* server_socket_;
 };
 
 /**
@@ -116,14 +114,18 @@ class AwdlMedium : public api::AwdlMedium {
   bool StopAdvertising(const NsdServiceInfo& nsd_service_info) override;
   bool StartDiscovery(const std::string& service_type, DiscoveredServiceCallback callback) override;
   bool StopDiscovery(const std::string& service_type) override;
-  std::unique_ptr<api::AwdlSocket> ConnectToService(
-      const NsdServiceInfo& remote_service_info, CancellationFlag* cancellation_flag) override;
-  std::unique_ptr<api::AwdlSocket> ConnectToService(
-      const std::string& ip_address, int port, CancellationFlag* cancellation_flag) override;
+  std::unique_ptr<api::AwdlSocket> ConnectToService(const NsdServiceInfo& remote_service_info,
+                                                    CancellationFlag* cancellation_flag) override;
+  std::unique_ptr<api::AwdlSocket> ConnectToService(const NsdServiceInfo& remote_service_info,
+                                                    const api::PskInfo& psk_info,
+                                                    CancellationFlag* cancellation_flag) override;
   std::unique_ptr<api::AwdlServerSocket> ListenForService(int port) override;
+  std::unique_ptr<api::AwdlServerSocket> ListenForService(const api::PskInfo& psk_info,
+                                                          int port) override;
 
  private:
   GNCNWFramework* medium_;
+  DiscoveredServiceCallback service_callback_;
   absl::AnyInvocable<void(NsdServiceInfo)> service_discovered_cb_;
   absl::AnyInvocable<void(NsdServiceInfo)> service_lost_cb_;
 };
@@ -132,4 +134,3 @@ class AwdlMedium : public api::AwdlMedium {
 }  // namespace nearby
 
 #endif  // PLATFORM_IMPL_APPLE_AWDL_H_
-

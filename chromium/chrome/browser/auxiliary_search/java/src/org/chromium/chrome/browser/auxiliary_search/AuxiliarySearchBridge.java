@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.auxiliary_search;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.jni_zero.CalledByNative;
@@ -14,8 +13,8 @@ import org.jni_zero.NativeMethods;
 import org.chromium.base.Callback;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.task.TaskTraits;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
-import org.chromium.chrome.browser.auxiliary_search.AuxiliarySearchProvider.Observer;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
@@ -25,16 +24,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 /** Java bridge to provide information for the auxiliary search. */
+@NullMarked
 public class AuxiliarySearchBridge {
-    private long mNativeBridge;
-    private AuxiliarySearchProvider.Observer mObserver;
+    private final long mNativeBridge;
 
     /**
      * Constructs a bridge for the auxiliary search provider.
      *
      * @param profile The Profile to retrieve the corresponding information.
      */
-    public AuxiliarySearchBridge(@NonNull Profile profile) {
+    public AuxiliarySearchBridge(Profile profile) {
         if ((!ChromeFeatureList.sAndroidAppIntegration.isEnabled()
                         && !ChromeFeatureList.sAndroidAppIntegrationV2.isEnabled())
                 || profile.isOffTheRecord()) {
@@ -50,7 +49,7 @@ public class AuxiliarySearchBridge {
      * @param tabs A list of {@link Tab}s to check if they are sensitive.
      * @param callback {@link Callback} to pass back the list of non-sensitive {@link Tab}s.
      */
-    public void getNonSensitiveTabs(List<Tab> tabs, Callback<List<Tab>> callback) {
+    public void getNonSensitiveTabs(List<Tab> tabs, Callback<@Nullable List<Tab>> callback) {
         if (mNativeBridge == 0) {
             PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> callback.onResult(null));
             return;
@@ -82,7 +81,8 @@ public class AuxiliarySearchBridge {
      * @param callback {@link Callback} to pass back the list of non-sensitive {@link
      *     AuxiliarySearchDataEntry}s.
      */
-    public void getNonSensitiveHistoryData(Callback<List<AuxiliarySearchDataEntry>> callback) {
+    public void getNonSensitiveHistoryData(
+            Callback<@Nullable List<AuxiliarySearchDataEntry>> callback) {
         if (mNativeBridge == 0) {
             PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> callback.onResult(null));
             return;
@@ -92,31 +92,19 @@ public class AuxiliarySearchBridge {
     }
 
     /**
-     * Assigns {@link #mObserver}, possibly to null. If non-null {@param observer} is passed,
-     * requires {@link #mObserver} initially null, then fetches the current most visited site
-     * suggestions.
+     * This method will return a list of Custom Tabs URLs.
      *
-     * @param observer The observer to receive suggestions when they are ready.
+     * @param url The current URL of the Custom Tab.
+     * @param callback {@link Callback} to pass back the list of {@link AuxiliarySearchDataEntry}s.
      */
-    public void setObserver(Observer observer) {
-        if (observer == null) {
-            mObserver = null;
-            return;
-        }
-
-        assert mObserver == null;
-        mObserver = observer;
-        AuxiliarySearchBridgeJni.get().setObserverAndTrigger(mNativeBridge, this);
-    }
-
-    /** Starts a fetch of the current most visited sites suggestions. */
-    public void getMostVisitedSites() {
+    public void getCustomTabs(
+            GURL url, long timestamp, Callback<@Nullable List<AuxiliarySearchDataEntry>> callback) {
         if (mNativeBridge == 0) {
-            mObserver.onSiteSuggestionsAvailable(null);
+            PostTask.runOrPostTask(TaskTraits.UI_DEFAULT, () -> callback.onResult(null));
             return;
         }
 
-        AuxiliarySearchBridgeJni.get().getMostVisitedSites(mNativeBridge);
+        AuxiliarySearchBridgeJni.get().getCustomTabs(mNativeBridge, url, timestamp, callback);
     }
 
     /**
@@ -133,37 +121,6 @@ public class AuxiliarySearchBridge {
         callback.onResult(entries);
     }
 
-    @CalledByNative
-    @VisibleForTesting
-    static AuxiliarySearchDataEntry addDataEntry(
-            @AuxiliarySearchEntryType int type,
-            GURL url,
-            String title,
-            long lastActiveTime,
-            int tabId,
-            @Nullable String appId,
-            int visitId,
-            int score) {
-        return new AuxiliarySearchDataEntry(
-                type, url, title, lastActiveTime, tabId, appId, visitId, score);
-    }
-
-    @CalledByNative
-    @VisibleForTesting
-    void onMostVisitedSitesURLsAvailable(
-            @JniType("std::vector") List<AuxiliarySearchDataEntry> entries) {
-        mObserver.onSiteSuggestionsAvailable(entries);
-    }
-
-    @CalledByNative
-    void onIconMadeAvailable(@JniType("GURL") GURL siteUrl) {
-        mObserver.onIconMadeAvailable(siteUrl);
-    }
-
-    AuxiliarySearchProvider.Observer getObserverForTesting() {
-        return mObserver;
-    }
-
     @NativeMethods
     @VisibleForTesting(otherwise = VisibleForTesting.PACKAGE_PRIVATE)
     public interface Natives {
@@ -174,10 +131,12 @@ public class AuxiliarySearchBridge {
 
         void getNonSensitiveHistoryData(
                 long nativeAuxiliarySearchProvider,
-                Callback<List<AuxiliarySearchDataEntry>> callback);
+                Callback<@Nullable List<AuxiliarySearchDataEntry>> callback);
 
-        void setObserverAndTrigger(long nativeAuxiliarySearchProvider, AuxiliarySearchBridge self);
-
-        void getMostVisitedSites(long nativeAuxiliarySearchProvider);
+        void getCustomTabs(
+                long nativeAuxiliarySearchProvider,
+                GURL url,
+                long timestamp,
+                Callback<@Nullable List<AuxiliarySearchDataEntry>> callback);
     }
 }

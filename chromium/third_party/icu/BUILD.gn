@@ -553,7 +553,8 @@ if (icu_use_data_file) {
       asmflags = []
       if (current_cpu == "arm64") {
         import("//build/config/arm.gni")
-        if (arm_control_flow_integrity == "standard") {
+        if (arm_control_flow_integrity == "standard" ||
+            arm_control_flow_integrity == "bti+pac") {
           asmflags += [ "-mmark-bti-property" ]
         }
       }

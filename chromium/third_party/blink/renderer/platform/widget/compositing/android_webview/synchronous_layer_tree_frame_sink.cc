@@ -86,7 +86,6 @@ class SoftwareCompositorFrameSinkClient
   }
   void OnBeginFrame(const viz::BeginFrameArgs& args,
                     const viz::FrameTimingDetailsMap& timing_details,
-                    bool frame_ack,
                     std::vector<viz::ReturnedResource> resources) override {
     DCHECK(resources.empty());
   }
@@ -130,8 +129,7 @@ base::TimeDelta SynchronousLayerTreeFrameSink::StubDisplayClient::
 
 SynchronousLayerTreeFrameSink::SynchronousLayerTreeFrameSink(
     scoped_refptr<viz::RasterContextProvider> context_provider,
-    scoped_refptr<cc::RasterContextProviderWrapper>
-        worker_context_provider_wrapper,
+    scoped_refptr<viz::RasterContextProvider> worker_context_provider_wrapper,
     scoped_refptr<base::SingleThreadTaskRunner> compositor_task_runner,
     uint32_t layer_tree_frame_sink_id,
     std::unique_ptr<viz::BeginFrameSource> synthetic_begin_frame_source,
@@ -568,15 +566,10 @@ void SynchronousLayerTreeFrameSink::DidReceiveCompositorFrameAck(
 void SynchronousLayerTreeFrameSink::OnBeginFrame(
     const viz::BeginFrameArgs& args,
     const HashMap<uint32_t, viz::FrameTimingDetails>& timing_details,
-    bool frame_ack,
     Vector<viz::ReturnedResource> resources) {
   DCHECK(viz_frame_submission_enabled_);
-  if (::features::IsOnBeginFrameAcksEnabled()) {
-    if (frame_ack) {
-      DidReceiveCompositorFrameAck(std::move(resources));
-    } else if (!resources.empty()) {
-      ReclaimResources(std::move(resources));
-    }
+  if (!resources.empty()) {
+    ReclaimResources(std::move(resources));
   }
 
   // We do not receive BeginFrames via CompositorFrameSink, so we do not forward

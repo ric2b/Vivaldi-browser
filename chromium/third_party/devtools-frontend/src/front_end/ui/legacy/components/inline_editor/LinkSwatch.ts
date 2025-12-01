@@ -1,6 +1,7 @@
 // Copyright (c) 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Platform from '../../../../core/platform/platform.js';
 import * as Buttons from '../../../components/buttons/buttons.js';
@@ -61,7 +62,7 @@ export class LinkSwatch extends HTMLElement {
 
     render(
         // clang-format off
-        html`<style>${Buttons.textButtonStyles.cssText}</style><style>${linkSwatchStyles.cssText}</style><button
+        html`<style>${Buttons.textButtonStyles}</style><style>${linkSwatchStyles}</style><button
           .disabled=${!isDefined}
           jslog=${jslogContext ? VisualLogging.link().track({click: true}).context(jslogContext) : nothing}
           class=${classes}

@@ -54,6 +54,7 @@
 #include "third_party/blink/public/mojom/picture_in_picture_window_options/picture_in_picture_window_options.mojom.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/platform/inspect/ax_api_type.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
@@ -65,6 +66,7 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "content/public/browser/android/child_process_importance.h"
 #include "third_party/jni_zero/jni_zero.h"
 #endif
 
@@ -122,6 +124,7 @@ class RenderViewHost;
 class RenderWidgetHostView;
 class ScreenOrientationDelegate;
 class SiteInstance;
+class UnownedInnerWebContentsClient;
 class WebContentsDelegate;
 class WebUI;
 struct DropData;
@@ -208,6 +211,14 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
 
     // True if the contents should be initially hidden.
     bool initially_hidden = false;
+
+    // Returns true if the WebContents is never user-visible, thus the renderer
+    // need never produce pixels for display.
+    bool is_never_composited = false;
+
+    // True if newly created WebContents should defer all autofill to the
+    // platform.
+    bool initially_use_platform_autofill = false;
 
     // If non-null then this WebContents will be hosted by a BrowserPlugin.
     raw_ptr<BrowserPluginGuestDelegate> guest_delegate = nullptr;
@@ -430,6 +441,10 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // Returns a weak pointer.
   virtual base::WeakPtr<WebContents> GetWeakPtr() = 0;
 
+  // Returns true if the WebContents is never user-visible and thus never need
+  // to generate pixels for display.
+  virtual bool IsNeverComposited() = 0;
+
   // Gets the URL that is currently being displayed, if there is one.
   // This method is deprecated. DO NOT USE! Pick either |GetVisibleURL| or
   // |GetLastCommittedURL| as appropriate.
@@ -561,6 +576,14 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
                                      base::TimeDelta timeout,
                                      AXTreeSnapshotPolicy policy) = 0;
 
+  // Request a one-time snapshot of the accessibility tree, without going
+  // through the renderer process. This method constructs the tree based on the
+  // current AXTree's in the browser-side RenderFrameHosts. This will only work
+  // if an accessibility mode is already enabled. Unlike RequestAXTreeSnapshot,
+  // the AXMode is not an input; rather, the AXMode that was used to construct
+  // the existing tree must be used.
+  virtual ui::AXTreeUpdate RequestAXTreeSnapshotWithinBrowserProcess() = 0;
+
   // Causes the current page to be closed, including running its onunload event
   // handler.
   virtual void ClosePage() = 0;
@@ -655,6 +678,11 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   virtual std::string DumpAccessibilityTree(
       ui::AXApiType::Type api_type,
       std::vector<ui::AXPropertyFilter> property_filters) = 0;
+
+  // Applies a fix to an AXTree from an AXTreeFixing service.
+  virtual void ApplyAXTreeFixingResult(ui::AXTreeID tree_id,
+                                       ui::AXNodeID node_id,
+                                       ax::mojom::Role role) = 0;
 
   // A callback that takes a string which contains accessibility event
   // information.
@@ -930,6 +958,27 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
       std::unique_ptr<WebContents> inner_web_contents,
       RenderFrameHost* render_frame_host,
       bool is_full_page) = 0;
+
+  // The unowned version of AttachInnerWebContents(). The caller should manage
+  // the lifetime of the inner WebContents.
+  // WARNING: this is for prototyping purposes only. You should not use this in
+  // production. In the long term, the concept of inner WebContents should
+  // probably be removed from the WebContents API.
+  // TODO(crbug.com/416609971): Remove this method once we find a way to attach
+  // inner WebContents without using WebContents trees.
+  virtual void AttachUnownedInnerWebContents(
+      base::PassKey<UnownedInnerWebContentsClient>,
+      WebContents* inner_web_contents,
+      RenderFrameHost* render_frame_host) = 0;
+
+  // Detaches the unowned `inner_web_contents` from this outer WebContents.
+  // WARNING: this is for prototyping purposes only. You should not use this in
+  // production.
+  // TODO(crbug.com/416609971): Remove this method once we find a way to attach
+  // inner WebContents without using WebContents trees.
+  virtual void DetachUnownedInnerWebContents(
+      base::PassKey<UnownedInnerWebContentsClient>,
+      WebContents* inner_web_contents) = 0;
 
   // Attaches `guest_page` to the container frame `outer_render_frame_host`,
   // which must be in a FrameTree for this WebContents. Note:
@@ -1397,7 +1446,7 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // Sets whether the WebContents is for overlaying content on a page.
   virtual void SetIsOverlayContent(bool is_overlay_content) = 0;
 
-  virtual int GetCurrentlyPlayingVideoCount() = 0;
+  virtual int GetCurrentlyPlayingVideoCount() const = 0;
 
   virtual std::optional<gfx::Size> GetFullscreenVideoSize() = 0;
 
@@ -1440,6 +1489,16 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // scoped to this WebContents. This provides access to interfaces implemented
   // in Java in the browser process to C++ code in the browser process.
   virtual service_manager::InterfaceProvider* GetJavaInterfaces() = 0;
+
+  // Returns the primary main frame importance. This is for testing only.
+  virtual ChildProcessImportance GetPrimaryMainFrameImportanceForTesting() = 0;
+
+  // Set an importance of the page to the primary main frame.
+  //
+  // Note this does not affect importance of subframe processes or main frames
+  // processeses for non-primary pages.
+  virtual void SetPrimaryMainFrameImportance(
+      ChildProcessImportance importance) = 0;
 #endif  // BUILDFLAG(IS_ANDROID)
 
   // Returns true if the WebContents has completed its first meaningful paint
@@ -1458,9 +1517,14 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // until all tokens have been destroyed.
   // If WebInputEventAuditCallback is given, it can audits WebInputEvent based
   // input events and ignore only events that the callback returns false for the
-  // event. Other kind of events, such as focus event or ui::Events will be
-  // always ignored without asking the callback. The given callback will be
-  // invoked only while the returned ScopedIgnoreInputEvents alives.
+  // event. This however will only start ignoring input events from the next
+  // input sequence, i.e., this will have no impact on the current input
+  // sequence when input is being handled on VizCompositorThread (with
+  // InputVizard). Call ResetGestureDetection explicitly if the current input
+  // sequence needs to be stopped. Other kind of events, such as focus event or
+  // ui::Events will be always ignored without asking the callback. The given
+  // callback will be invoked only while the returned ScopedIgnoreInputEvents
+  // alives.
   using WebInputEventAuditCallback =
       base::RepeatingCallback<bool(const blink::WebInputEvent&)>;
   [[nodiscard]] virtual ScopedIgnoreInputEvents IgnoreInputEvents(
@@ -1548,6 +1612,8 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // - `prefetch_url` is the url the prefetch will be performed.
   // - If `use_prefetch_proxy` is set to true, private prefetch proxy is used in
   //   this prefetch request.
+  // - `embedder_histogram_suffix` is used for generating internal histogram
+  //   names recorded per trigger.
   // - `referrer` is utilized as a value of Referer HTTP request header in this
   //   prefetch request.
   // - `referring_origin` represents the initiator origin of prefetch request,
@@ -1567,6 +1633,7 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   virtual std::unique_ptr<PrefetchHandle> StartPrefetch(
       const GURL& prefetch_url,
       bool use_prefetch_proxy,
+      const std::string& embedder_histogram_suffix,
       const blink::mojom::Referrer& referrer,
       const std::optional<url::Origin>& referring_origin,
       std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
@@ -1672,6 +1739,16 @@ class WebContents : public PageNavigator, public base::SupportsUserData {
   // See https://explainers-by-googlers.github.io/partitioned-popins/
   virtual GURL GetPartitionedPopinEmbedderOrigin(
       base::PassKey<StorageAccessGrantPermissionContext>) const = 0;
+
+  // Returns the window open disposition that was originally requested
+  // when this WebContents was created.
+  // This method provides the disposition specified by the opener of this
+  // WebContents, indicating how the content was initially intended to be
+  // displayed (e.g., as a new foreground tab, a background tab, a new window,
+  // a popup, etc.). This value is determined at the point of
+  // creation, such as during a navigation that results in a new WebContents
+  // (e.g., from a link click with `target="_blank"`, `window.open()`).
+  virtual WindowOpenDisposition GetOriginalWindowOpenDisposition() const = 0;
 
  private:
   // This interface should only be implemented inside content.

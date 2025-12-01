@@ -9,10 +9,13 @@
 
 #import "base/ios/block_types.h"
 #import "components/signin/public/base/signin_metrics.h"
-#import "ios/chrome/browser/authentication/ui_bundled/signin/interruptible_chrome_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/change_profile_continuation_provider.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_constants.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_context_style.h"
+#import "ios/chrome/browser/shared/coordinator/chrome_coordinator/animated_coordinator.h"
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
 
+enum class AccountMenuAccessPoint;
 class Browser;
 @protocol SystemIdentity;
 namespace syncer {
@@ -24,15 +27,18 @@ enum class SecurityDomainId;
 namespace user_prefs {
 class PrefRegistrySyncable;
 }  // namespace user_prefs
+@class ShowSigninCommand;
 
 // Main class for sign-in coordinator. This class should not be instantiated
 // directly, this should be done using the class methods.
-@interface SigninCoordinator
-    : ChromeCoordinator <InterruptibleChromeCoordinator>
+@interface SigninCoordinator : AnimatedCoordinator
 
 // Called when the sign-in dialog is interrupted, canceled or successful.
 // This completion needs to be set before calling -[SigninCoordinator start].
 @property(nonatomic, copy) SigninCoordinatorCompletionCallback signinCompletion;
+
+// Customize content on sign-in and history sync screens.
+@property(nonatomic, readonly) SigninContextStyle contextStyle;
 
 // The access point which caused this coordinator to open.
 // Used for histogram only.
@@ -45,6 +51,7 @@ class PrefRegistrySyncable;
 
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
                                    browser:(Browser*)browser
+                              contextStyle:(SigninContextStyle)contextStyle
                                accessPoint:
                                    (signin_metrics::AccessPoint)accessPoint
     NS_DESIGNATED_INITIALIZER;
@@ -55,151 +62,172 @@ class PrefRegistrySyncable;
 // Registers preferences related to sign-in coordinator.
 + (void)registerProfilePrefs:(user_prefs::PrefRegistrySyncable*)registry;
 
+// Returns a coordinator according to the command
++ (SigninCoordinator*)signinCoordinatorWithCommand:(ShowSigninCommand*)command
+                                           browser:(Browser*)browser
+                                baseViewController:
+                                    (UIViewController*)baseViewController;
+
 // Returns a coordinator to sign-in the user without taps if the identity has
 // been selected with `identity`. Otherwise, it will ask the user to select
 // an identity, and starts the sign-in flow. If there is no identity on the
 // device, the add account dialog will be displayed, and then the sign-in flow
 // is started with the newly added identity.
-+ (instancetype)
++ (SigninCoordinator*)
     instantSigninCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                            browser:(Browser*)browser
                                           identity:(id<SystemIdentity>)identity
+                                      contextStyle:
+                                          (SigninContextStyle)contextStyle
                                        accessPoint:(signin_metrics::AccessPoint)
                                                        accessPoint
                                        promoAction:(signin_metrics::PromoAction)
-                                                       promoAction;
+                                                       promoAction
+                              continuationProvider:
+                                  (const ChangeProfileContinuationProvider&)
+                                      continuationProvider;
 
-// Returns a coordinator for forced sign-in workflow.
+// Returns a coordinator for fullscreen sign-in workflow.
 // `viewController` presents the sign-in.
-+ (instancetype)
-    forcedSigninCoordinatorWithBaseViewController:
++ (SigninCoordinator*)
+    fullscreenSigninCoordinatorWithBaseViewController:
         (UIViewController*)viewController
-                                          browser:(Browser*)browser
-                                      accessPoint:(signin_metrics::AccessPoint)
-                                                      accessPoint;
+                                              browser:(Browser*)browser
+                                         contextStyle:
+                                             (SigninContextStyle)contextStyle
+                                          accessPoint:
+                                              (signin_metrics::AccessPoint)
+                                                  accessPoint
+                    changeProfileContinuationProvider:
+                        (const ChangeProfileContinuationProvider&)
+                            changeProfileContinuationProvider;
 
 // Returns a coordinator for upgrade sign-in workflow.
 // `viewController` presents the sign-in.
-+ (instancetype)upgradeSigninPromoCoordinatorWithBaseViewController:
-                    (UIViewController*)viewController
-                                                            browser:(Browser*)
-                                                                        browser;
+// `contextStyle` is used to customize content on screens.
++ (SigninCoordinator*)
+    upgradeSigninPromoCoordinatorWithBaseViewController:
+        (UIViewController*)viewController
+                                                browser:(Browser*)browser
+                                           contextStyle:
+                                               (SigninContextStyle)contextStyle
+                      changeProfileContinuationProvider:
+                          (const ChangeProfileContinuationProvider&)
+                              changeProfileContinuationProvider;
 
 // Returns a coordinator to add an account.
 // `viewController` presents the sign-in.
+// `contextStyle` is used to customize content on screens.
 // `accessPoint` access point from the sign-in where is started.
-+ (instancetype)
++ (SigninCoordinator*)
     addAccountCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                         browser:(Browser*)browser
-                                    accessPoint:(signin_metrics::AccessPoint)
-                                                    accessPoint;
+                                   contextStyle:(SigninContextStyle)contextStyle
+                                    accessPoint:
+                                        (signin_metrics::AccessPoint)accessPoint
+                           continuationProvider:
+                               (const ChangeProfileContinuationProvider&)
+                                   continuationProvider;
 
 // Returns a coordinator for re-authentication workflow. This should only be
 // called when the primary account is available.
 // `viewController` presents the sign-in.
+// `contextStyle` is used to customize content on screens.
 // `accessPoint` access point from the sign-in where is started.
 // `promoAction` is promo button used to trigger the sign-in.
-+ (instancetype)
++ (SigninCoordinator*)
     primaryAccountReauthCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                                   browser:(Browser*)browser
+                                             contextStyle:(SigninContextStyle)
+                                                              contextStyle
                                               accessPoint:
                                                   (signin_metrics::AccessPoint)
                                                       accessPoint
                                               promoAction:
                                                   (signin_metrics::PromoAction)
-                                                      promoAction;
+                                                      promoAction
+                                     continuationProvider:
+                                         (const ChangeProfileContinuationProvider&)
+                                             continuationProvider;
 
 // Returns a coordinator for re-authentication workflow. This should only be
 // called when there is no primary account.
 // `viewController` presents the sign-in.
+// `contextStyle` is used to customize content on screens.
 // `accessPoint` access point from the sign-in where is started.
 // `promoAction` is promo button used to trigger the sign-in.
-+ (instancetype)
++ (SigninCoordinator*)
     signinAndSyncReauthCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                                  browser:(Browser*)browser
+                                            contextStyle:
+                                                (SigninContextStyle)contextStyle
                                              accessPoint:
                                                  (signin_metrics::AccessPoint)
                                                      accessPoint
                                              promoAction:
                                                  (signin_metrics::PromoAction)
-                                                     promoAction;
-
-// Returns a coordinator for re-authentication workflow for Trusted
-// Vault for the primary identity. This is done with TrustedVaultService.
-// Related to IOSTrustedVaultClient.
-// `viewController` presents the sign-in.
-// `intent` Dialog to present.
-// `securityDomainID` Identifies a particular security domain.
-// `trigger` UI elements where the trusted vault reauth has been triggered.
-// `accessPoint` Identifies where the dialog is initiated from.
-+ (instancetype)
-    trustedVaultReAuthenticationCoordinatorWithBaseViewController:
-        (UIViewController*)viewController
-                                                          browser:
-                                                              (Browser*)browser
-                                                           intent:
-                                                               (SigninTrustedVaultDialogIntent)
-                                                                   intent
-                                                 securityDomainID:
-                                                     (trusted_vault::
-                                                          SecurityDomainId)
-                                                         securityDomainID
-                                                          trigger:
-                                                              (syncer::
-                                                                   TrustedVaultUserActionTriggerForUMA)
-                                                                  trigger
-                                                      accessPoint:
-                                                          (signin_metrics::
-                                                               AccessPoint)
-                                                              accessPoint;
+                                                     promoAction
+                                    continuationProvider:
+                                        (const ChangeProfileContinuationProvider&)
+                                            continuationProvider;
 
 // Returns a coordinator to display the account consistency promo with a list
 // of accounts available on the device for sign-in.
 // `viewController` presents the promo.
 // This method can return nil if sign-in is not authorized or if there is no
 // account on the device.
-+ (instancetype)
++ (SigninCoordinator*)
     consistencyPromoSigninCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                                     browser:(Browser*)browser
-                                                accessPoint:(signin_metrics::
-                                                                 AccessPoint)
-                                                                accessPoint;
+                                               contextStyle:(SigninContextStyle)
+                                                                contextStyle
+                                                accessPoint:
+                                                    (signin_metrics::
+                                                         AccessPoint)accessPoint
+                                       prepareChangeProfile:
+                                           (ProceduralBlock)prepareChangeProfile
+                                       continuationProvider:
+                                           (const ChangeProfileContinuationProvider&)
+                                               continuationProvider;
 
 // Returns a coordinator to display the sign-in view then the history opt-in
 // with  with its base `viewController`, the `browser`, from which `accessPoint`
 // the sign in flow was initialized, using which `promoAction` (when relevant),
 // when `optionalHistorySync` is YES, the history sync opt in will be presented
 // if the user hasn't already approved it.
-+ (instancetype)
-    sheetSigninAndHistorySyncCoordinatorWithBaseViewController:
+// `fullscreenPromo`: whether the promo should be displayed in a fullscreen
+// modal.
++ (SigninCoordinator*)
+    signinAndHistorySyncCoordinatorWithBaseViewController:
         (UIViewController*)viewController
-                                                       browser:(Browser*)browser
-                                                   accessPoint:(signin_metrics::
-                                                                    AccessPoint)
-                                                                   accessPoint
-                                                   promoAction:(signin_metrics::
-                                                                    PromoAction)
-                                                                   promoAction
-                                           optionalHistorySync:
-                                               (BOOL)optionalHistorySync;
-
-// Returns a coordinator to switch account.
-+ (instancetype)accountMenuCoordinatorWithBaseViewController:
-                    (UIViewController*)viewController
-                                                     browser:(Browser*)browser
-                                                  anchorView:
-                                                      (UIView*)anchorView;
+                                                  browser:(Browser*)browser
+                                             contextStyle:(SigninContextStyle)
+                                                              contextStyle
+                                              accessPoint:
+                                                  (signin_metrics::AccessPoint)
+                                                      accessPoint
+                                              promoAction:
+                                                  (signin_metrics::PromoAction)
+                                                      promoAction
+                                      optionalHistorySync:
+                                          (BOOL)optionalHistorySync
+                                          fullscreenPromo:(BOOL)fullscreenPromo
+                                     continuationProvider:
+                                         (const ChangeProfileContinuationProvider&)
+                                             continuationProvider;
 
 // Returns a coordinator to show the history sync.
-+ (instancetype)
++ (SigninCoordinator*)
     historySyncCoordinatorWithBaseViewController:
         (UIViewController*)viewController
                                          browser:(Browser*)browser
+                                    contextStyle:
+                                        (SigninContextStyle)contextStyle
                                      accessPoint:(signin_metrics::AccessPoint)
                                                      accessPoint
                                      promoAction:(signin_metrics::PromoAction)
@@ -207,7 +235,6 @@ class PrefRegistrySyncable;
 
 // ChromeCoordinator.
 - (void)start NS_REQUIRES_SUPER;
-- (void)stop NS_REQUIRES_SUPER;
 
 @end
 

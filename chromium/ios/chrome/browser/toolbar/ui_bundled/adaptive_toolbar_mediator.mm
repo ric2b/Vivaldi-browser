@@ -294,7 +294,7 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
     return;
   }
 
-  [self.consumer updateTabGroupState:[self tabGroupStateToDisplay]];
+  [self updateConsumerTabGroupState];
 
   const int tabCount = [self tabCountToDisplay];
   switch (change.type()) {
@@ -331,7 +331,7 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 
 - (void)webStateListBatchOperationEnded:(WebStateList*)webStateList {
   DCHECK_EQ(_webStateList, webStateList);
-  [self.consumer updateTabGroupState:[self tabGroupStateToDisplay]];
+  [self updateConsumerTabGroupState];
   [self.consumer setTabCount:[self tabCountToDisplay] addedInBackground:NO];
 }
 
@@ -425,6 +425,8 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
     if (self.consumer) {
       [self updateConsumer];
     }
+
+    [self updateTabGridButtonBlueDot];
   }
 }
 
@@ -486,6 +488,12 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 }
 
 #pragma mark - Update helper methods
+
+/// Updates the consumer Tab Group state.
+- (void)updateConsumerTabGroupState {
+  [self.consumer updateTabGroupState:[self tabGroupStateToDisplay]];
+  [self updateTabGridButtonBlueDot];
+}
 
 /// Updates the consumer to match the current WebState.
 - (void)updateConsumer {
@@ -775,6 +783,7 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
   if (activeTabGroup == nullptr) {
     return ToolbarTabGroupState::kNormal;
   }
+
   return IsTabGroupIndicatorEnabled() && HasTabGroupIndicatorButtonsUpdated()
              ? ToolbarTabGroupState::kTabGroup
              : ToolbarTabGroupState::kNormal;
@@ -836,6 +845,10 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 }
 
 - (void)startObservingBottomOmniboxStateChange:(PrefService*)prefService {
+  if (_bottomOmniboxEnabled) {
+    [_bottomOmniboxEnabled stop];
+    [_bottomOmniboxEnabled setObserver:nil];
+  }
   _bottomOmniboxEnabled =
       [[PrefBackedBoolean alloc] initWithPrefService:prefService
                                             prefName:prefs::kBottomOmnibox];
@@ -843,6 +856,10 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 }
 
 - (void)startObservingTabBarStyleChange:(PrefService*)prefService {
+  if (_tabBarEnabled) {
+    [_tabBarEnabled stop];
+    [_tabBarEnabled setObserver:nil];
+  }
   _tabBarEnabled =
       [[PrefBackedBoolean alloc]
           initWithPrefService:prefService
@@ -851,6 +868,10 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 }
 
 - (void)startObservingAccentColorChange:(PrefService*)prefService {
+  if (_dynamicAccentColorEnabled) {
+    [_dynamicAccentColorEnabled stop];
+    [_dynamicAccentColorEnabled setObserver:nil];
+  }
   // Dynamic accent color toggle
   _dynamicAccentColorEnabled =
       [[PrefBackedBoolean alloc]
@@ -870,6 +891,10 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 }
 
 - (void)startObservingWebsiteAppearanceChange:(PrefService*)prefService {
+  if (_forceDarkWebPagesEnabled) {
+    [_forceDarkWebPagesEnabled stop];
+    [_forceDarkWebPagesEnabled setObserver:nil];
+  }
   _forceDarkWebPagesEnabled =
       [[PrefBackedBoolean alloc]
           initWithPrefService:prefService
@@ -889,6 +914,10 @@ std::optional<tab_groups::LocalTabGroupID> LocalTabGroupID(
 }
 
 - (void)startObservingBrowserForHomepageButtonState:(PrefService*)prefService {
+  if (_homepageEnabled) {
+    [_homepageEnabled stop];
+    [_homepageEnabled setObserver:nil];
+  }
   _homepageEnabled =
     [[PrefBackedBoolean alloc]
       initWithPrefService:prefService

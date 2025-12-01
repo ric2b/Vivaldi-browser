@@ -3,14 +3,14 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_UTILS_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_UTILS_H_
 
+#include <compare>
 #include <string>
 #include <string_view>
 
 #include "base/containers/span.h"
-
-namespace flatbuffers {
-struct String;
-}
+#include "base/functional/callback.h"
+#include "third_party/flatbuffers/src/include/flatbuffers/flatbuffers.h"
+#include "vivaldi/components/request_filter/adblock_filter/flat/adblock_rules_list_generated.h"
 
 namespace url {
 class Origin;
@@ -19,12 +19,8 @@ class Origin;
 class GURL;
 
 namespace adblock_filter {
-
-namespace flat {
-struct RequestFilterRule;
-struct CosmeticRule;
-struct ScriptletInjectionRule;
-}  // namespace flat
+using FlatStringOffset = flatbuffers::Offset<flatbuffers::String>;
+using PartyMatcher = base::RepeatingCallback<bool(flat::Party party)>;
 
 std::string GetIndexVersionHeader();
 std::string GetRulesListVersionHeader();
@@ -36,7 +32,14 @@ std::string_view ToStringPiece(const flatbuffers::String* string);
 int GetRulePriority(const flat::RequestFilterRule& rule);
 int GetMaxRulePriority();
 bool IsFullModifierPassRule(const flat::RequestFilterRule& rule);
-bool IsThirdParty(const GURL& url, const url::Origin& origin);
+PartyMatcher GetPartyMatcher(const GURL& url, const url::Origin& origin);
+
+std::weak_ordering FastCompareFlatString(const flatbuffers::String* lhs,
+                                         const flatbuffers::String* rhs);
+
+std::weak_ordering FastCompareFlatStringVector(
+    const flatbuffers::Vector<FlatStringOffset>* lhs,
+    const flatbuffers::Vector<FlatStringOffset>* rhs);
 
 // These comparators only look at the rules body. This allows to avoid a string
 // copy of the body from the rule when building maps/sets keyed on those bodies.

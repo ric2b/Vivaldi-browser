@@ -28,7 +28,7 @@
 #include "./centipede/shared_memory_blob_sequence.h"
 #include "./common/defs.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 inline constexpr std::string_view kExecutionFailurePerInputTimeout =
     "per-input-timeout-exceeded";
@@ -142,6 +142,10 @@ class BatchResult {
   // a crash tied to a specific input.
   bool IsSetupFailure() const;
 
+  // Returns true if the test is skipped during setup, thus there is no need to
+  // run any inputs at all.
+  bool IsSkippedTest() const;
+
   // Accessors.
   std::vector<ExecutionResult>& results() { return results_; }
   const std::vector<ExecutionResult>& results() const { return results_; }
@@ -204,6 +208,6 @@ class MutationResult {
   std::vector<ByteArray> mutants_;
 };
 
-}  // namespace centipede
+}  // namespace fuzztest::internal
 
 #endif  // THIRD_PARTY_CENTIPEDE_EXECUTION_RESULT_H_

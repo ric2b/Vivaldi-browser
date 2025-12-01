@@ -14,7 +14,9 @@
 
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
@@ -25,6 +27,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/sound_content_setting_observer.h"
 #include "chrome/browser/file_select_helper.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/media/protected_media_identifier_permission_context.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
@@ -52,6 +55,7 @@
 #include "components/blocked_content/popup_tracker.h"
 #include "components/browser_ui/sms/android/sms_infobar.h"
 #include "components/browser_ui/util/android/url_constants.h"
+#include "components/external_intents/android/external_intents_features.h"
 #include "components/find_in_page/find_notification_details.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/infobars/content/content_infobar_manager.h"
@@ -73,6 +77,7 @@
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
+#include "url/android/gurl_android.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -110,6 +115,18 @@ JNI_TabWebContentsDelegateAndroidImpl_CreateJavaRect(JNIEnv* env,
       Java_TabWebContentsDelegateAndroidImpl_createRect(
           env, static_cast<int>(rect.x()), static_cast<int>(rect.y()),
           static_cast<int>(rect.right()), static_cast<int>(rect.bottom())));
+}
+
+ScopedJavaLocalRef<jobject>
+JNI_TabWebContentsDelegateAndroidImpl_CreateJavaWindowFeatures(
+    JNIEnv* env,
+    const blink::mojom::WindowFeatures& window_features) {
+  return ScopedJavaLocalRef<jobject>(
+      Java_TabWebContentsDelegateAndroidImpl_createWindowFeatures(
+          env, window_features.bounds.x(), window_features.bounds.y(),
+          window_features.bounds.width(), window_features.bounds.height(),
+          window_features.has_x, window_features.has_y,
+          window_features.has_width, window_features.has_height));
 }
 
 void ShowFramebustBlockMessageInternal(content::WebContents* web_contents,
@@ -280,6 +297,17 @@ WebContents* TabWebContentsDelegateAndroid::OpenURLFromTab(
         source, params, std::move(navigation_handle_callback));
   }
 
+  if (base::FeatureList::IsEnabled(
+          external_intents::kNavigationCaptureRefactorAndroid)) {
+    if (IsCustomTab() &&
+        disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB) {
+      if (OpenInAppOrChromeFromCct(params.url)) {
+        // Navigation handled, stop here. Otherwise proceed normally.
+        return nullptr;
+      }
+    }
+  }
+
   Profile* profile = Profile::FromBrowserContext(source->GetBrowserContext());
   NavigateParams nav_params(profile, params.url, params.transition);
   nav_params.FillNavigateParamsFromOpenURLParams(params);
@@ -366,10 +394,13 @@ WebContents* TabWebContentsDelegateAndroid::AddNewContents(
     ScopedJavaLocalRef<jobject> jnew_contents;
     if (new_contents)
       jnew_contents = new_contents->GetJavaWebContents();
+    ScopedJavaLocalRef<jobject> jwindow_features =
+        JNI_TabWebContentsDelegateAndroidImpl_CreateJavaWindowFeatures(
+            env, window_features);
 
     handled = Java_TabWebContentsDelegateAndroidImpl_addNewContents(
         env, obj, jsource, jnew_contents, static_cast<jint>(disposition),
-        nullptr, user_gesture);
+        jwindow_features, user_gesture);
   }
 
   if (was_blocked)
@@ -597,6 +628,18 @@ bool TabWebContentsDelegateAndroid::IsDynamicSafeAreaInsetsEnabled() const {
   }
   return Java_TabWebContentsDelegateAndroidImpl_isDynamicSafeAreaInsetsEnabled(
       env, obj);
+}
+
+bool TabWebContentsDelegateAndroid::OpenInAppOrChromeFromCct(GURL url) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
+  if (obj.is_null()) {
+    return false;
+  }
+  ScopedJavaLocalRef<jobject> jurl = url::GURLAndroid::FromNativeGURL(env, url);
+
+  return Java_TabWebContentsDelegateAndroidImpl_openInAppOrChromeFromCct(
+      env, obj, jurl);
 }
 
 }  // namespace android

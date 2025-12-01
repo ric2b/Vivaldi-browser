@@ -63,7 +63,6 @@
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/serializers/serialization.h"
-#include "third_party/blink/renderer/core/execution_context/agent.h"
 #include "third_party/blink/renderer/core/fileapi/file.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -71,6 +70,7 @@
 #include "third_party/blink/renderer/core/frame/remote_frame.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/document_fenced_frames.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
@@ -270,6 +270,8 @@ protocol::DOM::PseudoType InspectorDOMAgent::ProtocolPseudoElementType(
       return protocol::DOM::PseudoTypeEnum::FileSelectorButton;
     case kPseudoIdDetailsContent:
       return protocol::DOM::PseudoTypeEnum::DetailsContent;
+    case kPseudoIdPermissionIcon:
+      return protocol::DOM::PseudoTypeEnum::PermissionIcon;
     case kPseudoIdPickerSelect:
       return protocol::DOM::PseudoTypeEnum::Picker;
     case kPseudoIdViewTransition:
@@ -392,6 +394,9 @@ PseudoId InspectorDOMAgent::ProtocolPseudoTypeToPseudoId(
   }
   if (type == protocol::DOM::PseudoTypeEnum::DetailsContent) {
     return kPseudoIdDetailsContent;
+  }
+  if (type == protocol::DOM::PseudoTypeEnum::PermissionIcon) {
+    return kPseudoIdPermissionIcon;
   }
   if (type == protocol::DOM::PseudoTypeEnum::Picker) {
     return kPseudoIdPickerSelect;
@@ -1087,13 +1092,10 @@ protocol::Response InspectorDOMAgent::setAttributesAsText(
                               : "<span " + text + "></span>";
     DocumentFragment* fragment =
         element->GetDocument().createDocumentFragment();
-    if (is_html_document && contextElement) {
+    if (is_html_document && contextElement)
       fragment->ParseHTML(markup, contextElement, kAllowScriptingContent);
-    } else {
-      fragment->ParseXML(
-          markup, contextElement,
-          IgnoreException(element->GetDocument().GetAgent().isolate()));
-    }
+    else
+      fragment->ParseXML(markup, contextElement, IGNORE_EXCEPTION);
     return DynamicTo<Element>(fragment->firstChild());
   };
 
@@ -1445,9 +1447,10 @@ protocol::Response InspectorDOMAgent::performSearch(
   }
 
   *search_id = IdentifiersFactory::CreateIdentifier();
-  HeapVector<Member<Node>>* results_it =
+  GCedHeapVector<Member<Node>>* results_it =
       search_results_
-          .insert(*search_id, MakeGarbageCollected<HeapVector<Member<Node>>>())
+          .insert(*search_id,
+                  MakeGarbageCollected<GCedHeapVector<Member<Node>>>())
           .stored_value->value;
 
   for (auto& result : result_collector)
@@ -1841,8 +1844,8 @@ protocol::Response InspectorDOMAgent::getContainerForNode(
   Element* container = style_resolver.FindContainerForElement(
       element,
       ContainerSelector(AtomicString(container_name.value_or(g_null_atom)),
-                        physical, logical,
-                        queries_scroll_state.value_or(false)),
+                        physical, logical, queries_scroll_state.value_or(false),
+                        /* anchored_query */ false),
       nullptr /* selector_tree_scope */);
   if (container)
     *container_node_id = PushNodePathToFrontend(container);
@@ -1886,7 +1889,12 @@ protocol::Response InspectorDOMAgent::getElementByRelation(
   } else if (relation == protocol::DOM::GetElementByRelation::RelationEnum::
                              InterestTarget) {
     if (auto* invoker = DynamicTo<Element>(node)) {
-      element = invoker->interestTargetElement();
+      element = invoker->InterestTargetElement();
+    }
+  } else if (relation ==
+             protocol::DOM::GetElementByRelation::RelationEnum::CommandFor) {
+    if (auto* invoker = DynamicTo<HTMLButtonElement>(node)) {
+      element = invoker->commandForElement();
     }
   }
 
@@ -1972,7 +1980,7 @@ bool InspectorDOMAgent::ContainerQueriedByElement(Element* container,
     return false;
   }
   for (auto it = matched_rules->rbegin(); it != matched_rules->rend(); ++it) {
-    CSSRule* parent_rule = it->first;
+    CSSRule* parent_rule = it->rule.Get();
     while (parent_rule) {
       auto* container_rule = DynamicTo<CSSContainerRule>(parent_rule);
       if (container_rule) {

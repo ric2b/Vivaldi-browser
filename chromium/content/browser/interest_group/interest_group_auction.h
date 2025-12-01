@@ -29,6 +29,7 @@
 #include "content/browser/interest_group/auction_nonce_manager.h"
 #include "content/browser/interest_group/auction_worklet_manager.h"
 #include "content/browser/interest_group/bidding_and_auction_response.h"
+#include "content/browser/interest_group/dwa_auction_metrics.h"
 #include "content/browser/interest_group/header_direct_from_seller_signals.h"
 #include "content/browser/interest_group/interest_group_auction_reporter.h"
 #include "content/browser/interest_group/interest_group_caching_storage.h"
@@ -175,8 +176,8 @@ class CONTENT_EXPORT InterestGroupAuction
   using AdAuctionPageDataCallback =
       base::RepeatingCallback<AdAuctionPageData*()>;
 
-  using PrivateAggregationRequests =
-      std::vector<auction_worklet::mojom::PrivateAggregationRequestPtr>;
+  using FinalizedPrivateAggregationRequests = std::vector<
+      auction_worklet::mojom::FinalizedPrivateAggregationRequestPtr>;
 
   using RealTimeReportingContributions =
       std::vector<auction_worklet::mojom::RealTimeReportingContributionPtr>;
@@ -234,6 +235,14 @@ class CONTENT_EXPORT InterestGroupAuction
     // std::nullopt means no ID is currently assigned, and there's no pending
     // event.
     std::optional<uint64_t> trace_id;
+
+    // ID used to isolate conflicting IGs in GroupByOrigin execution mode.
+    // 0 for things that don't use that mode.
+    size_t group_by_origin_id = 0;
+
+    // ID used to isolate conflicting IGs in GroupByOrigin execution mode.
+    // 0 for things that don't use that mode.
+    std::optional<size_t> seller_group_by_origin_id;
 
     // ReceiverId for use as a GenerateBidClient. Only populated while
     // generateBid() is running.
@@ -316,6 +325,12 @@ class CONTENT_EXPORT InterestGroupAuction
     // True if the bid is created from parsing B&A server response.
     bool is_from_server_response = false;
 
+    // True if this BidState has received a bidder worklet but now needs to wait
+    // on the bidder's `per_buyer_tkv_signals` promise being resolved before
+    // sending a KVv2 signals fetch and calling BeginGenerateBid() on the bidder
+    // worklet.
+    bool waiting_for_tkv_promise = false;
+
     // forDebuggingOnly reports that have been filtered (also sampled) by the
     // B&A server.
     std::map<url::Origin, std::vector<GURL>>
@@ -336,9 +351,9 @@ class CONTENT_EXPORT InterestGroupAuction
     // Private aggregation requests from B&A response that have been filtered by
     // B&A server. These can be simply be forwarded without further filtering on
     // Chrome side.
-    std::map<PrivateAggregationKey, PrivateAggregationRequests>
+    std::map<PrivateAggregationKey, FinalizedPrivateAggregationRequests>
         server_filtered_pagg_requests_reserved;
-    std::map<std::string, PrivateAggregationRequests>
+    std::map<std::string, FinalizedPrivateAggregationRequests>
         server_filtered_pagg_requests_non_reserved;
 
     std::array<PrivateAggregationTimings,
@@ -518,6 +533,7 @@ class CONTENT_EXPORT InterestGroupAuction
       const blink::AuctionConfig* config,
       const InterestGroupAuction* parent,
       AuctionMetricsRecorder* auction_metrics_recorder,
+      DwaAuctionMetricsManager* dwa_auction_metrics_manager,
       AuctionWorkletManager* auction_worklet_manager,
       AuctionNonceManager* auction_nonce_manager,
       InterestGroupManagerImpl* interest_group_manager,
@@ -617,6 +633,22 @@ class CONTENT_EXPORT InterestGroupAuction
   // a parent auction.
   void NotifyComponentConfigPromisesResolved(uint32_t pos);
 
+  // Called by AuctionRunner when a buyer's TKV signals promise has been
+  // resolved or rejected. `pos` is nullopt if this is a promise in the
+  // top-level auction, and the index of a component auction if it's the buyer's
+  // TKV signals in a component auction.
+  //
+  // AuctionConfig must already have been updated to reflect the result of the
+  // promise before calling.
+  //
+  // This is a separate method because it delayed GenerateBid() calls for the
+  // interest groups of `buyer` groups using TKVv2, not just the
+  // FinishedGenerateBid() calls, like other promises.
+  //
+  // Assumes that `pos` has already been range-checked.
+  void NotifyBuyerTkvSignalsPromiseResolved(const url::Origin& buyer,
+                                            std::optional<uint32_t> pos);
+
   // Called by AuctionRunner when the promise providing the additional_bids
   // array has been resolved, if one exists. Unlike other similar methods,
   // `auction_page_data` may be null.
@@ -708,7 +740,7 @@ class CONTENT_EXPORT InterestGroupAuction
   // failed (on success, used internally to pass them to the
   // InterestGroupAuctionReporter). May only be called once, since it takes
   // ownership of stored reporting URLs.
-  std::map<PrivateAggregationKey, PrivateAggregationRequests>
+  std::map<PrivateAggregationKey, FinalizedPrivateAggregationRequests>
   TakeReservedPrivateAggregationRequests();
 
   // Retrieves all requests with non-reserved event type to the Private
@@ -716,7 +748,7 @@ class CONTENT_EXPORT InterestGroupAuction
   // event type of the associated requests. Used internally to pass them to the
   // InterestGroupAuctionReporter. May only be called once, since it takes
   // ownership of stored reporting URLs.
-  std::map<std::string, PrivateAggregationRequests>
+  std::map<std::string, FinalizedPrivateAggregationRequests>
   TakeNonReservedPrivateAggregationRequests();
 
   // Assembles per-participant metrics values relevant to the buyer and
@@ -1204,6 +1236,15 @@ class CONTENT_EXPORT InterestGroupAuction
   // ensuring that it's at least 1.
   uint16_t GetBuyerMultiBidLimit(const url::Origin& buyer);
 
+  // Gets the buyer `per-buyer-tkv-signals` in `config` for interest group
+  // buyer. Returns nullptr if no such signals exist.
+  const blink::AuctionConfig::MaybePromiseJson* GetBuyerTKVSignals(
+      const url::Origin& buyer) const;
+
+  // Gets the `seller-tkv-signals` in `config` to provide more contextual data
+  // during scoring ads process.
+  base::optional_ref<const std::string> GetSellerTKVSignals() const;
+
   // -----------------------------------
   // Methods not associated with a phase
   // -----------------------------------
@@ -1373,6 +1414,8 @@ class CONTENT_EXPORT InterestGroupAuction
   const network::mojom::IPAddressSpace ip_address_space_;
 
   const raw_ptr<AuctionMetricsRecorder> auction_metrics_recorder_;
+  const raw_ptr<DwaAuctionMetricsManager> dwa_auction_metrics_manager_;
+  raw_ptr<DwaAuctionMetrics> dwa_auction_metrics_ = nullptr;
   const raw_ptr<AuctionWorkletManager> auction_worklet_manager_;
   const raw_ptr<AuctionNonceManager> auction_nonce_manager_;
   const raw_ptr<InterestGroupManagerImpl> interest_group_manager_;
@@ -1571,14 +1614,14 @@ class CONTENT_EXPORT InterestGroupAuction
   // InterestGroupAuctionReporter when it's created. Keyed by the origin of the
   // script that issued the request (i.e. the reporting origin) and the
   // aggregation coordinator origin.
-  std::map<PrivateAggregationKey, PrivateAggregationRequests>
+  std::map<PrivateAggregationKey, FinalizedPrivateAggregationRequests>
       private_aggregation_requests_reserved_;
 
   // Stores all pending Private Aggregation API report requests of non-reserved
   // event type. Only comes from bidding phase of winning buyer. These are
   // passed to the InterestGroupAuctionReporter when it's created. Keyed by the
   // request's event type.
-  std::map<std::string, PrivateAggregationRequests>
+  std::map<std::string, FinalizedPrivateAggregationRequests>
       private_aggregation_requests_non_reserved_;
 
   // This is used to keep track of which scoreAd execution's PA contributions on

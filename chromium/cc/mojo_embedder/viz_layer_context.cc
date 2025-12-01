@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/check_deref.h"
 #include "base/containers/contains.h"
 #include "base/containers/span.h"
 #include "base/notreached.h"
@@ -23,8 +24,13 @@
 #include "cc/animation/keyframe_model.h"
 #include "cc/layers/layer_impl.h"
 #include "cc/layers/mirror_layer_impl.h"
+#include "cc/layers/nine_patch_thumb_scrollbar_layer_impl.h"
+#include "cc/layers/painted_scrollbar_layer_impl.h"
 #include "cc/layers/picture_layer_impl.h"
+#include "cc/layers/solid_color_scrollbar_layer_impl.h"
 #include "cc/layers/surface_layer_impl.h"
+#include "cc/layers/texture_layer_impl.h"
+#include "cc/layers/view_transition_content_layer_impl.h"
 #include "cc/tiles/picture_layer_tiling.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/property_tree.h"
@@ -115,6 +121,7 @@ void ComputePropertyTreeNodeUpdate(
   wire->will_change_transform = new_node.will_change_transform;
   wire->visible_frame_element_id = new_node.visible_frame_element_id;
   wire->damage_reasons_bit_mask = new_node.damage_reasons().ToEnumBitmask();
+  wire->moved_by_safe_area_bottom = new_node.moved_by_safe_area_bottom;
   container.push_back(std::move(wire));
 }
 
@@ -156,12 +163,25 @@ void ComputePropertyTreeNodeUpdate(
       old_node->subtree_size == new_node.subtree_size &&
       old_node->blend_mode == new_node.blend_mode &&
       old_node->target_id == new_node.target_id &&
+      old_node->view_transition_target_id ==
+          new_node.view_transition_target_id &&
+      old_node->closest_ancestor_with_cached_render_surface_id ==
+          new_node.closest_ancestor_with_cached_render_surface_id &&
+      old_node->closest_ancestor_with_copy_request_id ==
+          new_node.closest_ancestor_with_copy_request_id &&
+      old_node->closest_ancestor_being_captured_id ==
+          new_node.closest_ancestor_being_captured_id &&
+      old_node->closest_ancestor_with_shared_element_id ==
+          new_node.closest_ancestor_with_shared_element_id &&
+      old_node->view_transition_element_resource_id ==
+          new_node.view_transition_element_resource_id &&
       old_node->has_copy_request == new_node.has_copy_request &&
       old_node->filters == new_node.filters &&
       old_node->backdrop_filters == new_node.backdrop_filters &&
       old_node->backdrop_filter_bounds == new_node.backdrop_filter_bounds &&
       old_node->backdrop_filter_quality == new_node.backdrop_filter_quality &&
       old_node->backdrop_mask_element_id == new_node.backdrop_mask_element_id &&
+      old_node->mask_filter_info == new_node.mask_filter_info &&
       old_node->cache_render_surface == new_node.cache_render_surface &&
       old_node->hidden_by_backface_visibility ==
           new_node.hidden_by_backface_visibility &&
@@ -187,7 +207,8 @@ void ComputePropertyTreeNodeUpdate(
       old_node->lcd_text_disallowed_by_backdrop_filter ==
           new_node.lcd_text_disallowed_by_backdrop_filter &&
       old_node->may_have_backdrop_effect == new_node.may_have_backdrop_effect &&
-      old_node->has_2d_scale_transform == new_node.has_2d_scale_transform &&
+      old_node->needs_effect_for_2d_scale_transform ==
+          new_node.needs_effect_for_2d_scale_transform &&
       copy_requests.empty()) {
     return;
   }
@@ -206,12 +227,24 @@ void ComputePropertyTreeNodeUpdate(
   wire->subtree_size = new_node.subtree_size;
   wire->blend_mode = base::checked_cast<uint32_t>(new_node.blend_mode);
   wire->target_id = new_node.target_id;
+  wire->view_transition_target_id = new_node.view_transition_target_id;
+  wire->closest_ancestor_with_cached_render_surface_id =
+      new_node.closest_ancestor_with_cached_render_surface_id;
+  wire->closest_ancestor_with_copy_request_id =
+      new_node.closest_ancestor_with_copy_request_id;
+  wire->closest_ancestor_being_captured_id =
+      new_node.closest_ancestor_being_captured_id;
+  wire->closest_ancestor_with_shared_element_id =
+      new_node.closest_ancestor_with_shared_element_id;
+  wire->view_transition_element_resource_id =
+      new_node.view_transition_element_resource_id;
   wire->copy_output_requests = std::move(copy_requests);
   wire->filters = new_node.filters;
   wire->backdrop_filters = new_node.backdrop_filters;
   wire->backdrop_filter_bounds = new_node.backdrop_filter_bounds;
   wire->backdrop_filter_quality = new_node.backdrop_filter_quality;
   wire->backdrop_mask_element_id = new_node.backdrop_mask_element_id;
+  wire->mask_filter_info = new_node.mask_filter_info;
 
   wire->cache_render_surface = new_node.cache_render_surface;
   wire->double_sided = new_node.double_sided;
@@ -226,7 +259,8 @@ void ComputePropertyTreeNodeUpdate(
   wire->subtree_has_copy_request = new_node.subtree_has_copy_request;
   wire->is_fast_rounded_corner = new_node.is_fast_rounded_corner;
   wire->may_have_backdrop_effect = new_node.may_have_backdrop_effect;
-  wire->has_2d_scale_transform = new_node.has_2d_scale_transform;
+  wire->needs_effect_for_2d_scale_transform =
+      new_node.needs_effect_for_2d_scale_transform;
 
   container.push_back(std::move(wire));
 }
@@ -328,6 +362,7 @@ std::vector<viz::mojom::StickyPositionNodeDataPtr> SerializeStickyPositionData(
         data.constraints.scroll_container_relative_sticky_box_rect;
     wire->scroll_container_relative_containing_block_rect =
         data.constraints.scroll_container_relative_containing_block_rect;
+    wire->pixel_snap_offset = data.constraints.pixel_snap_offset;
     wire->nearest_node_shifting_sticky_box =
         data.nearest_node_shifting_sticky_box;
     wire->nearest_node_shifting_containing_block =
@@ -384,6 +419,52 @@ viz::mojom::TransformTreeUpdatePtr ComputeTransformTreePropertiesUpdate(
   return wire;
 }
 
+viz::mojom::ScrollTreeUpdatePtr ComputeScrollTreePropertiesUpdate(
+    const ScrollTree& old_tree,
+    const ScrollTree& new_tree) {
+  if (old_tree.synced_scroll_offset_map() ==
+      new_tree.synced_scroll_offset_map()) {
+    return nullptr;
+  }
+
+  auto wire = viz::mojom::ScrollTreeUpdate::New();
+  wire->synced_scroll_offsets = new_tree.synced_scroll_offset_map();
+
+  return wire;
+}
+
+void SerializeUIResourceRequest(
+    cc::LayerTreeHostImpl& host_impl,
+    viz::RasterContextProvider& context_provider,
+    viz::mojom::LayerTreeUpdate& update,
+    cc::UIResourceId uid,
+    viz::mojom::TransferableUIResourceRequest::Type type) {
+  if (type == viz::mojom::TransferableUIResourceRequest::Type::kCreate) {
+    std::vector<viz::ResourceId> ids;
+    std::vector<viz::TransferableResource> resources;
+
+    viz::ResourceId resource_id = host_impl.ResourceIdForUIResource(uid);
+    bool opaque = host_impl.IsUIResourceOpaque(uid);
+    ids.push_back(resource_id);
+    host_impl.resource_provider()->PrepareSendToParent(ids, &resources,
+                                                       &context_provider);
+    CHECK_EQ(resources.size(), ids.size());
+
+    auto& request = update.ui_resource_requests.emplace_back(
+        viz::mojom::TransferableUIResourceRequest::New());
+    request->type = type;
+    request->uid = uid;
+    request->transferable_resource = resources[0];
+    request->opaque = opaque;
+  } else {
+    CHECK_EQ(type, viz::mojom::TransferableUIResourceRequest::Type::kDelete);
+    auto& request = update.ui_resource_requests.emplace_back(
+        viz::mojom::TransferableUIResourceRequest::New());
+    request->type = type;
+    request->uid = uid;
+  }
+}
+
 viz::mojom::TileResourcePtr SerializeTileResource(
     const Tile& tile,
     viz::ClientResourceProvider& resource_provider,
@@ -396,7 +477,7 @@ viz::mojom::TileResourcePtr SerializeTileResource(
 
   auto wire = viz::mojom::TileResource::New();
   wire->resource = resources[0];
-  wire->is_premultiplied = draw_info.is_premultiplied();
+
   wire->is_checkered = draw_info.is_checker_imaged();
   return wire;
 }
@@ -408,10 +489,11 @@ viz::mojom::TilePtr SerializeTile(
   auto wire = viz::mojom::Tile::New();
   wire->column_index = tile.tiling_i_index();
   wire->row_index = tile.tiling_j_index();
+
   switch (tile.draw_info().mode()) {
     case TileDrawInfo::OOM_MODE:
       wire->contents = viz::mojom::TileContents::NewMissingReason(
-          viz::mojom::MissingTileReason::kOutOfMemory);
+          mojom::MissingTileReason::kOutOfMemory);
       break;
 
     case TileDrawInfo::SOLID_COLOR_MODE:
@@ -426,62 +508,101 @@ viz::mojom::TilePtr SerializeTile(
             SerializeTileResource(tile, resource_provider, context_provider));
       } else {
         wire->contents = viz::mojom::TileContents::NewMissingReason(
-            viz::mojom::MissingTileReason::kResourceNotReady);
+            mojom::MissingTileReason::kResourceNotReady);
       }
       break;
   }
   return wire;
 }
 
+// Serializes a set of tile updates (live or deleted) into a mojo Tiling object.
+// Handles nullptr tiling as a deleted tiling, and wraps valid and missing
+// tiles.
 viz::mojom::TilingPtr SerializeTiling(
     PictureLayerImpl& layer,
-    const PictureLayerTiling& tiling,
-    base::span<const Tile*> tiles,
+    const PictureLayerTiling* tiling,
+    float scale_key,
+    base::span<const std::pair<TileIndex, const Tile*>> tile_updates,
     viz::ClientResourceProvider& resource_provider,
     viz::RasterContextProvider& context_provider) {
+  // Handle the case where the tiling no longer exists (deleted).
+  if (!tiling) {
+    auto deleted_tiling = viz::mojom::Tiling::New();
+    deleted_tiling->layer_id = layer.id();
+    deleted_tiling->scale_key = scale_key;
+    deleted_tiling->is_deleted = true;
+    return deleted_tiling;
+  }
+
   std::vector<viz::mojom::TilePtr> wire_tiles;
-  for (const Tile* tile : tiles) {
-    if (auto wire_tile =
-            SerializeTile(*tile, resource_provider, context_provider)) {
-      wire_tiles.push_back(std::move(wire_tile));
+
+  // Serialize both live and deleted tiles into mojo wire format.
+  for (const auto& [index, tile] : tile_updates) {
+    if (tile && !tile->deleted()) {
+      // Serialize a live tile with content.
+      if (auto wire_tile =
+              SerializeTile(*tile, resource_provider, context_provider)) {
+        wire_tiles.push_back(std::move(wire_tile));
+      }
+    } else {
+      // Tile was deleted or missing, serialize a tile with deletion reason.
+      // Mark the reason as kTileDeleted. This is essential to distinguish
+      // deleted tiles from OOMed OR RESOURCE_MODE tiles with no resources.
+      // OOMed tiles have no content but are still required in order to perform
+      // checkerboard.
+      auto deleted_tile = viz::mojom::Tile::New();
+      deleted_tile->column_index = index.i;
+      deleted_tile->row_index = index.j;
+      deleted_tile->contents = viz::mojom::TileContents::NewMissingReason(
+          mojom::MissingTileReason::kTileDeleted);
+      wire_tiles.push_back(std::move(deleted_tile));
     }
   }
+
   if (wire_tiles.empty()) {
     return nullptr;
   }
 
+  // Wrap into a mojo Tiling object.
   auto wire = viz::mojom::Tiling::New();
   wire->layer_id = layer.id();
-  wire->raster_translation = tiling.raster_transform().translation();
-  wire->raster_scale = tiling.raster_transform().scale();
-  wire->tile_size = tiling.tile_size();
-  wire->tiling_rect = tiling.tiling_rect();
+  wire->scale_key = scale_key;
+  wire->raster_translation = tiling->raster_transform().translation();
+  wire->raster_scale = tiling->raster_transform().scale();
+  wire->tile_size = tiling->tile_size();
+  wire->tiling_rect = tiling->tiling_rect();
   wire->tiles = std::move(wire_tiles);
+  wire->is_deleted = false;
   return wire;
 }
 
+// Collects updated tile indices and serializes them into tilings for the given
+// layer.
 void SerializePictureLayerTileUpdates(
     PictureLayerImpl& layer,
     viz::ClientResourceProvider& resource_provider,
     viz::RasterContextProvider& context_provider,
     std::vector<viz::mojom::TilingPtr>& tilings) {
   auto updates = layer.TakeUpdatedTiles();
-  for (const auto& [scale_key, tile_indices] : updates) {
-    if (const auto* tiling =
-            layer.picture_layer_tiling_set()->FindTilingWithScaleKey(
-                scale_key)) {
-      std::vector<const Tile*> tiles;
-      tiles.reserve(tile_indices.size());
-      for (const auto& index : tile_indices) {
-        if (auto* tile = tiling->TileAt(index)) {
-          tiles.push_back(tile);
-        }
-      }
 
-      if (auto wire_tiling = SerializeTiling(
-              layer, *tiling, tiles, resource_provider, context_provider)) {
-        tilings.push_back(std::move(wire_tiling));
-      }
+  for (const auto& [scale_key, tile_indices] : updates) {
+    const auto* tiling =
+        layer.picture_layer_tiling_set()->FindTilingWithScaleKey(scale_key);
+
+    // Create a unified vector of tile updates, marking missing tiles with
+    // nullptr.
+    std::vector<std::pair<TileIndex, const Tile*>> tile_updates;
+    tile_updates.reserve(tile_indices.size());
+    for (const auto& index : tile_indices) {
+      const Tile* tile = tiling ? tiling->TileAt(index) : nullptr;
+      tile_updates.emplace_back(index, tile);
+    }
+
+    // Serialize the tiling and push to output.
+    if (auto wire_tiling =
+            SerializeTiling(layer, tiling, scale_key, tile_updates,
+                            resource_provider, context_provider)) {
+      tilings.push_back(std::move(wire_tiling));
     }
   }
 }
@@ -489,6 +610,110 @@ void SerializePictureLayerTileUpdates(
 void SerializeMirrorLayerExtra(MirrorLayerImpl& layer,
                                viz::mojom::MirrorLayerExtraPtr& extra) {
   extra->mirrored_layer_id = layer.mirrored_layer_id();
+}
+
+void SerializeTextureLayerExtra(TextureLayerImpl& layer,
+                                viz::mojom::TextureLayerExtraPtr& extra,
+                                viz::ClientResourceProvider& resource_provider,
+                                viz::RasterContextProvider& context_provider) {
+  extra->blend_background_color = layer.blend_background_color();
+  extra->force_texture_to_opaque = layer.force_texture_to_opaque();
+  extra->uv_top_left = layer.uv_top_left();
+  extra->uv_bottom_right = layer.uv_bottom_right();
+
+  if (layer.needs_set_resource_push()) {
+    if (layer.resource_id() != viz::kInvalidResourceId) {
+      std::vector<viz::ResourceId> ids(1, layer.resource_id());
+      std::vector<viz::TransferableResource> resources;
+      resource_provider.PrepareSendToParent(ids, &resources, &context_provider);
+      CHECK_EQ(resources.size(), 1u);
+      extra->transferable_resource = resources[0];
+    } else {
+      extra->transferable_resource = viz::TransferableResource();
+    }
+
+    layer.ClearNeedsSetResourcePush();
+  }
+}
+
+void SerializeScrollbarLayerBaseExtra(
+    ScrollbarLayerImplBase& layer,
+    viz::mojom::ScrollbarLayerBaseExtraPtr& extra) {
+  extra = viz::mojom::ScrollbarLayerBaseExtra::New();
+  extra->scroll_element_id = layer.scroll_element_id();
+  extra->is_overlay_scrollbar = layer.is_overlay_scrollbar();
+  extra->is_web_test = layer.is_web_test();
+  extra->thumb_thickness_scale_factor = layer.thumb_thickness_scale_factor();
+  extra->current_pos = layer.current_pos();
+  extra->clip_layer_length = layer.clip_layer_length();
+  extra->scroll_layer_length = layer.scroll_layer_length();
+  extra->is_horizontal_orientation =
+      layer.orientation() == ScrollbarOrientation::kHorizontal;
+  extra->is_left_side_vertical_scrollbar =
+      layer.is_left_side_vertical_scrollbar();
+  extra->vertical_adjust = layer.vertical_adjust();
+  extra->has_find_in_page_tickmarks = layer.has_find_in_page_tickmarks();
+}
+
+void SerializeNinePatchThumbScrollbarLayerExtra(
+    NinePatchThumbScrollbarLayerImpl& layer,
+    viz::mojom::NinePatchThumbScrollbarLayerExtraPtr& extra) {
+  SerializeScrollbarLayerBaseExtra(static_cast<ScrollbarLayerImplBase&>(layer),
+                                   extra->scrollbar_base_extra);
+
+  extra->thumb_thickness = layer.thumb_thickness();
+  extra->thumb_length = layer.thumb_length();
+  extra->track_start = layer.track_start();
+  extra->track_length = layer.track_length();
+  extra->image_bounds = layer.image_bounds();
+  extra->aperture = layer.aperture();
+  extra->thumb_ui_resource_id = layer.thumb_ui_resource_id();
+  extra->track_and_buttons_ui_resource_id =
+      layer.track_and_buttons_ui_resource_id();
+}
+
+void SerializePaintedScrollbarLayerExtra(
+    PaintedScrollbarLayerImpl& layer,
+    viz::mojom::PaintedScrollbarLayerExtraPtr& extra) {
+  SerializeScrollbarLayerBaseExtra(static_cast<ScrollbarLayerImplBase&>(layer),
+                                   extra->scrollbar_base_extra);
+  extra->internal_contents_scale = layer.internal_contents_scale();
+  extra->internal_content_bounds = layer.internal_content_bounds();
+  extra->jump_on_track_click = layer.jump_on_track_click();
+  extra->supports_drag_snap_back = layer.supports_drag_snap_back();
+  extra->thumb_thickness = layer.thumb_thickness();
+  extra->thumb_length = layer.thumb_length();
+  extra->back_button_rect = layer.back_button_rect();
+  extra->forward_button_rect = layer.forward_button_rect();
+  extra->track_rect = layer.track_rect();
+  extra->track_and_buttons_ui_resource_id =
+      layer.track_and_buttons_ui_resource_id();
+  extra->thumb_ui_resource_id = layer.thumb_ui_resource_id();
+  extra->uses_nine_patch_track_and_buttons =
+      layer.uses_nine_patch_track_and_buttons();
+  extra->painted_opacity = layer.painted_opacity();
+  extra->thumb_color = layer.thumb_color();
+  extra->track_and_buttons_image_bounds =
+      layer.track_and_buttons_image_bounds();
+  extra->track_and_buttons_aperture = layer.track_and_buttons_aperture();
+}
+
+void SerializeSolidColorScrollbarLayerExtra(
+    SolidColorScrollbarLayerImpl& layer,
+    viz::mojom::SolidColorScrollbarLayerExtraPtr& extra) {
+  SerializeScrollbarLayerBaseExtra(static_cast<ScrollbarLayerImplBase&>(layer),
+                                   extra->scrollbar_base_extra);
+  extra->thumb_thickness = layer.thumb_thickness();
+  extra->track_start = layer.track_start();
+  extra->color = layer.color();
+}
+
+void SerializeViewTransitionContentLayerExtra(
+    ViewTransitionContentLayerImpl& layer,
+    viz::mojom::ViewTransitionContentLayerExtraPtr& extra) {
+  extra->resource_id = layer.resource_id();
+  extra->is_live_content_layer = layer.is_live_content_layer();
+  extra->max_extents_rect = layer.max_extents_rect();
 }
 
 void SerializeSurfaceLayerExtra(SurfaceLayerImpl& layer,
@@ -516,8 +741,13 @@ void SerializeLayer(LayerImpl& layer,
   wire.type = layer.GetLayerType();
   wire.bounds = layer.bounds();
   wire.is_drawable = layer.draws_content();
+  wire.layer_property_changed_not_from_property_trees =
+      layer.LayerPropertyChangedNotFromPropertyTrees();
+  wire.layer_property_changed_from_property_trees =
+      layer.LayerPropertyChangedFromPropertyTrees();
   wire.contents_opaque = layer.contents_opaque();
   wire.contents_opaque_for_text = layer.contents_opaque_for_text();
+  wire.hit_test_opaqueness = layer.hit_test_opaqueness();
   wire.background_color = layer.background_color();
   wire.safe_opaque_background_color = layer.safe_opaque_background_color();
   wire.update_rect = layer.update_rect();
@@ -526,6 +756,19 @@ void SerializeLayer(LayerImpl& layer,
   wire.clip_tree_index = layer.clip_tree_index();
   wire.effect_tree_index = layer.effect_tree_index();
   wire.scroll_tree_index = layer.scroll_tree_index();
+  wire.should_check_backface_visibility =
+      layer.should_check_backface_visibility();
+  if (layer.HasAnyRarePropertySet()) {
+    auto rare_properties = viz::mojom::RareProperties::New();
+    rare_properties->filter_quality = layer.GetFilterQuality();
+    rare_properties->dynamic_range_limit = layer.GetDynamicRangeLimit();
+
+    // NOTE: If the layer's RareProperties is present, then `capture_bounds()`
+    // is guaranteed to be non-null.
+    rare_properties->capture_bounds = CHECK_DEREF(layer.capture_bounds());
+    wire.rare_properties = std::move(rare_properties);
+  }
+  wire.may_contain_video = layer.may_contain_video();
   switch (layer.GetLayerType()) {
     case mojom::LayerType::kMirror: {
       auto mirror_layer_extra = viz::mojom::MirrorLayerExtra::New();
@@ -533,6 +776,38 @@ void SerializeLayer(LayerImpl& layer,
                                 mirror_layer_extra);
       wire.layer_extra = viz::mojom::LayerExtra::NewMirrorLayerExtra(
           std::move(mirror_layer_extra));
+      break;
+    }
+    case mojom::LayerType::kNinePatchThumbScrollbar: {
+      auto nine_patch_thumb_scrollbar_layer_extra =
+          viz::mojom::NinePatchThumbScrollbarLayerExtra::New();
+      SerializeNinePatchThumbScrollbarLayerExtra(
+          static_cast<NinePatchThumbScrollbarLayerImpl&>(layer),
+          nine_patch_thumb_scrollbar_layer_extra);
+      wire.layer_extra =
+          viz::mojom::LayerExtra::NewNinePatchThumbScrollbarLayerExtra(
+              std::move(nine_patch_thumb_scrollbar_layer_extra));
+      break;
+    }
+    case mojom::LayerType::kPaintedScrollbar: {
+      auto painted_scrollbar_layer_extra =
+          viz::mojom::PaintedScrollbarLayerExtra::New();
+      SerializePaintedScrollbarLayerExtra(
+          static_cast<PaintedScrollbarLayerImpl&>(layer),
+          painted_scrollbar_layer_extra);
+      wire.layer_extra = viz::mojom::LayerExtra::NewPaintedScrollbarLayerExtra(
+          std::move(painted_scrollbar_layer_extra));
+      break;
+    }
+    case mojom::LayerType::kSolidColorScrollbar: {
+      auto solid_color_scrollbar_layer_extra =
+          viz::mojom::SolidColorScrollbarLayerExtra::New();
+      SerializeSolidColorScrollbarLayerExtra(
+          static_cast<SolidColorScrollbarLayerImpl&>(layer),
+          solid_color_scrollbar_layer_extra);
+      wire.layer_extra =
+          viz::mojom::LayerExtra::NewSolidColorScrollbarLayerExtra(
+              std::move(solid_color_scrollbar_layer_extra));
       break;
     }
     case mojom::LayerType::kSurface: {
@@ -552,6 +827,26 @@ void SerializeLayer(LayerImpl& layer,
       }
       SerializePictureLayerTileUpdates(picture_layer, resource_provider,
                                        context_provider, update.tilings);
+      break;
+    }
+    case mojom::LayerType::kTexture: {
+      auto texture_layer_extra = viz::mojom::TextureLayerExtra::New();
+      SerializeTextureLayerExtra(static_cast<TextureLayerImpl&>(layer),
+                                 texture_layer_extra, resource_provider,
+                                 context_provider);
+      wire.layer_extra = viz::mojom::LayerExtra::NewTextureLayerExtra(
+          std::move(texture_layer_extra));
+      break;
+    }
+    case mojom::LayerType::kViewTransitionContent: {
+      auto view_transition_content_layer_extra =
+          viz::mojom::ViewTransitionContentLayerExtra::New();
+      SerializeViewTransitionContentLayerExtra(
+          static_cast<ViewTransitionContentLayerImpl&>(layer),
+          view_transition_content_layer_extra);
+      wire.layer_extra =
+          viz::mojom::LayerExtra::NewViewTransitionContentLayerExtra(
+              std::move(view_transition_content_layer_extra));
       break;
     }
     default:
@@ -793,6 +1088,36 @@ viz::mojom::AnimationPtr SerializeAnimation(cc::Animation& animation) {
   return wire;
 }
 
+viz::mojom::ViewTransitionRequestPtr SerializeViewTransitionRequest(
+    const cc::ViewTransitionRequest& request) {
+  auto wire = viz::mojom::ViewTransitionRequest::New();
+  switch (request.type()) {
+    case cc::ViewTransitionRequest::Type::kSave:
+      wire->type = viz::mojom::CompositorFrameTransitionDirectiveType::kSave;
+      break;
+    case cc::ViewTransitionRequest::Type::kAnimateRenderer:
+      wire->type =
+          viz::mojom::CompositorFrameTransitionDirectiveType::kAnimateRenderer;
+      break;
+    case cc::ViewTransitionRequest::Type::kRelease:
+      wire->type = viz::mojom::CompositorFrameTransitionDirectiveType::kRelease;
+      break;
+  }
+  wire->transition_token = request.token();
+  wire->maybe_cross_frame_sink = request.maybe_cross_frame_sink();
+  wire->sequence_id = request.sequence_id();
+  if (request.type() == cc::ViewTransitionRequest::Type::kSave &&
+      !request.capture_resource_ids().empty()) {
+    wire->capture_resource_ids.reserve(request.capture_resource_ids().size());
+    for (const auto& id : request.capture_resource_ids()) {
+      wire->capture_resource_ids.push_back(id);
+    }
+  } else {
+    DCHECK(request.capture_resource_ids().empty());
+  }
+  return wire;
+}
+
 }  // namespace
 
 VizLayerContext::VizLayerContext(viz::mojom::CompositorFrameSink& frame_sink,
@@ -801,7 +1126,8 @@ VizLayerContext::VizLayerContext(viz::mojom::CompositorFrameSink& frame_sink,
   auto context = viz::mojom::PendingLayerContext::New();
   context->receiver = service_.BindNewEndpointAndPassReceiver();
   context->client = client_receiver_.BindNewEndpointAndPassRemote();
-  frame_sink.BindLayerContext(std::move(context));
+  bool draw_mode_is_gpu = host_impl.GetDrawMode() == DRAW_MODE_HARDWARE;
+  frame_sink.BindLayerContext(std::move(context), draw_mode_is_gpu);
 }
 
 VizLayerContext::~VizLayerContext() = default;
@@ -820,6 +1146,8 @@ void VizLayerContext::UpdateDisplayTreeFrom(
   update->begin_frame_args = tree.CurrentBeginFrameArgs();
   update->source_frame_number = tree.source_frame_number();
   update->trace_id = tree.trace_id().value();
+  update->primary_main_frame_item_sequence_number =
+      tree.primary_main_frame_item_sequence_number();
   update->page_scale_factor = tree.page_scale_factor()->Current(true);
   update->min_page_scale_factor = tree.min_page_scale_factor();
   update->max_page_scale_factor = tree.max_page_scale_factor();
@@ -827,6 +1155,7 @@ void VizLayerContext::UpdateDisplayTreeFrom(
   update->device_viewport = tree.GetDeviceViewport();
   update->device_scale_factor = tree.device_scale_factor();
   update->painted_device_scale_factor = tree.painted_device_scale_factor();
+  update->display_color_spaces = tree.display_color_spaces();
   if (tree.local_surface_id_from_parent().is_valid()) {
     update->local_surface_id_from_parent = tree.local_surface_id_from_parent();
   }
@@ -842,21 +1171,46 @@ void VizLayerContext::UpdateDisplayTreeFrom(
 
   update->viewport_damage_rect = viewport_damage_rect;
 
+  // Sync changes to UI resources
+  {
+    auto resource_changes = host_impl_->TakeUIResourceChanges(needs_full_sync_);
+    for (const auto& [uid, change] : resource_changes) {
+      if (change.resource_deleted) {
+        SerializeUIResourceRequest(
+            *host_impl_, context_provider, *update, uid,
+            viz::mojom::TransferableUIResourceRequest::Type::kDelete);
+      }
+      if (change.resource_created) {
+        SerializeUIResourceRequest(
+            *host_impl_, context_provider, *update, uid,
+            viz::mojom::TransferableUIResourceRequest::Type::kCreate);
+      }
+    }
+  }
+
   // This flag will be set if and only if a new layer list was pushed to the
   // active tree during activation, implying that at least one layer addition or
   // removal happened since our last update. In this case only, we push the full
   // ordered list of layer IDs.
-  if (tree.needs_full_tree_sync()) {
+  if (tree.needs_full_tree_sync() || needs_full_sync_) {
     update->layer_order.emplace();
     update->layer_order->reserve(tree.NumLayers());
     for (LayerImpl* layer : tree) {
       update->layer_order->push_back(layer->id());
     }
+    tree.set_needs_full_tree_sync(false);
   }
 
-  for (LayerImpl* layer : tree.LayersThatShouldPushProperties()) {
-    SerializeLayer(*layer, resource_provider, context_provider, *update);
+  if (needs_full_sync_) {
+    for (LayerImpl* layer : tree) {
+      SerializeLayer(*layer, resource_provider, context_provider, *update);
+    }
+  } else {
+    for (LayerImpl* layer : tree.LayersThatShouldPushProperties()) {
+      SerializeLayer(*layer, resource_provider, context_provider, *update);
+    }
   }
+  tree.ClearLayersThatShouldPushProperties();
 
   // TODO(rockot): Granular change tracking for property trees, so we aren't
   // diffing every time.
@@ -875,9 +1229,12 @@ void VizLayerContext::UpdateDisplayTreeFrom(
   update->transform_tree_update = ComputeTransformTreePropertiesUpdate(
       old_trees.transform_tree(), property_trees.transform_tree());
 
+  update->scroll_tree_update = ComputeScrollTreePropertiesUpdate(
+      old_trees.scroll_tree(), property_trees.scroll_tree());
+
   last_committed_property_trees_ = property_trees;
 
-  if (tree.needs_surface_ranges_sync()) {
+  if (tree.needs_surface_ranges_sync() || needs_full_sync_) {
     update->surface_ranges.emplace();
     update->surface_ranges->reserve(tree.SurfaceRanges().size());
     for (const auto& surface_range : tree.SurfaceRanges()) {
@@ -885,22 +1242,42 @@ void VizLayerContext::UpdateDisplayTreeFrom(
     }
     tree.set_needs_surface_ranges_sync(false);
   }
+  if (tree.HasViewTransitionRequests()) {
+    auto requests = tree.TakeViewTransitionRequests(
+        /*should_set_needs_update_draw_properties=*/false);
+    update->view_transition_requests.emplace();
+    update->view_transition_requests->reserve(requests.size());
+    for (const auto& request : requests) {
+      auto data = SerializeViewTransitionRequest(*request);
+      update->view_transition_requests->push_back(std::move(data));
+    }
+  }
 
   if (base::FeatureList::IsEnabled(features::kTreeAnimationsInViz)) {
     SerializeAnimationUpdates(tree, *update);
   }
   service_->UpdateDisplayTree(std::move(update));
+
+  needs_full_sync_ = false;
 }
 
+// Sends a single-tile update to the Viz service by serializing it as a tiling.
 void VizLayerContext::UpdateDisplayTile(
     PictureLayerImpl& layer,
     const Tile& tile,
     viz::ClientResourceProvider& resource_provider,
-    viz::RasterContextProvider& context_provider) {
-  const Tile* tiles[] = {&tile};
-  if (auto tiling = SerializeTiling(layer, *tile.tiling(), tiles,
-                                    resource_provider, context_provider)) {
-    service_->UpdateDisplayTiling(std::move(tiling));
+    viz::RasterContextProvider& context_provider,
+    bool update_damage) {
+  // Create a one-element update list for the given tile.
+  TileIndex index(tile.tiling_i_index(), tile.tiling_j_index());
+  const Tile* tile_ptr = &tile;
+  std::pair<TileIndex, const Tile*> tile_updates[] = {{index, tile_ptr}};
+
+  // Serialize the tile and send it to the display service.
+  if (auto tiling =
+          SerializeTiling(layer, tile.tiling(), tile.contents_scale_key(),
+                          tile_updates, resource_provider, context_provider)) {
+    service_->UpdateDisplayTiling(std::move(tiling), update_damage);
   }
 }
 

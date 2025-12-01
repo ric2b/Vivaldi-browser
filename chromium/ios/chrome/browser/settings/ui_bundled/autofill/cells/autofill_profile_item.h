@@ -21,7 +21,10 @@
 
 // Detail text to be displayed. The detail text label is configured with
 // multiline (no limit).
-@property(nonatomic, strong) NSString* detailText;
+@property(nonatomic, copy) NSString* detailText;
+
+// Trailing detail text to be displayed.
+@property(nonatomic, copy) NSString* trailingDetailText;
 
 // The GUID used by the PersonalDataManager to identify profiles.
 @property(nonatomic, assign) std::string GUID;
@@ -37,18 +40,27 @@
 // YES, if the cloud off icon representing local profile is shown.
 @property(nonatomic, assign) BOOL localProfileIconShown;
 
+// YES, if item can be modified.
+@property(nonatomic, assign, getter=isDeletable) BOOL deletable;
+
 @end
 
 @interface AutofillProfileCell : TableViewCell
 
 // The cell imageView.
 @property(nonatomic, readonly, strong) UIImageView* imageView;
-// The cell text.
-@property(nonatomic, readonly, strong) UILabel* textLabel;
-// The cell detail text.
-@property(nonatomic, readonly, strong) UILabel* detailTextLabel;
+
 // YES, if the cloud off icon representing local profile is shown.
 @property(nonatomic, assign) BOOL localProfileIconShown;
+
+// Sets the textLabel.
+- (void)setText:(NSString*)text;
+
+// Sets the detailTextLabel.
+- (void)setDetailText:(NSString*)detailText;
+
+// Sets the visibility of trailingDetailTextLabel.
+- (void)setTrailingDetailText:(NSString*)trailingText;
 
 @end
 

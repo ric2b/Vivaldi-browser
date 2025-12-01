@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2008 Apple Inc. All Rights Reserved.
@@ -349,7 +350,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
   }
 
   static createPropertyValueWithCustomSupport(
-      value: SDK.RemoteObject.RemoteObject, wasThrown: boolean, showPreview: boolean, parentElement?: Element,
+      value: SDK.RemoteObject.RemoteObject, wasThrown: boolean, showPreview: boolean,
       linkifier?: Components.Linkifier.Linkifier, isSyntheticProperty?: boolean,
       variableName?: string): ObjectPropertyValue {
     if (value.customPreview()) {
@@ -358,7 +359,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
       return new ObjectPropertyValue(result);
     }
     return ObjectPropertiesSection.createPropertyValue(
-        value, wasThrown, showPreview, parentElement, linkifier, isSyntheticProperty, variableName);
+        value, wasThrown, showPreview, linkifier, isSyntheticProperty, variableName);
   }
 
   static appendMemoryIcon(element: Element, object: SDK.RemoteObject.RemoteObject, expression?: string): void {
@@ -392,7 +393,7 @@ export class ObjectPropertiesSection extends UI.TreeOutline.TreeOutlineInShadow 
   }
 
   static createPropertyValue(
-      value: SDK.RemoteObject.RemoteObject, wasThrown: boolean, showPreview: boolean, parentElement?: Element,
+      value: SDK.RemoteObject.RemoteObject, wasThrown: boolean, showPreview: boolean,
       linkifier?: Components.Linkifier.Linkifier, isSyntheticProperty = false,
       variableName?: string): ObjectPropertyValue {
     let propertyValue;
@@ -586,11 +587,9 @@ const ARRAY_LOAD_THRESHOLD = 100;
 const maxRenderableStringLength = 10000;
 
 export class ObjectPropertiesSectionsTreeOutline extends UI.TreeOutline.TreeOutlineInShadow {
-  private readonly editable: boolean;
-  constructor(options?: TreeOutlineOptions|null) {
+  constructor() {
     super();
     this.registerRequiredCSS(objectValueStyles, objectPropertiesSectionStyles);
-    this.editable = !(options?.readOnly);
     this.contentElement.classList.add('source-code');
     this.contentElement.classList.add('object-properties-section');
   }
@@ -1027,8 +1026,8 @@ export class ObjectPropertyTreeElement extends UI.TreeOutline.TreeElement {
     } else if (this.property.value) {
       const showPreview = this.property.name !== '[[Prototype]]';
       this.propertyValue = ObjectPropertiesSection.createPropertyValueWithCustomSupport(
-          this.property.value, this.property.wasThrown, showPreview, this.listItemElement, this.linkifier,
-          this.property.synthetic, this.path() /* variableName */);
+          this.property.value, this.property.wasThrown, showPreview, this.linkifier, this.property.synthetic,
+          this.path() /* variableName */);
       this.valueElement = (this.propertyValue.element as HTMLElement);
     } else if (this.property.getter) {
       this.valueElement = document.createElement('span');
@@ -1423,7 +1422,7 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
       return {ranges};
     }
 
-    async function callback(result: {ranges: number[][]}|undefined): Promise<void> {
+    async function callback(result: {ranges: number[][]}|undefined|null): Promise<void> {
       if (!result) {
         return;
       }
@@ -1480,10 +1479,11 @@ export class ArrayGroupingTreeElement extends UI.TreeOutline.TreeElement {
     }
 
     function buildArrayFragment(
-        this: {
-          [x: number]: Object,
-        },
-        fromIndex?: number, toIndex?: number, sparseIterationThreshold?: number): unknown {
+        this: Record<number, Object>,
+        fromIndex?: number,
+        toIndex?: number,
+        sparseIterationThreshold?: number,
+        ): unknown {
       const result = Object.create(null);
 
       if (fromIndex === undefined || toIndex === undefined || sparseIterationThreshold === undefined) {
@@ -1736,7 +1736,4 @@ export class ExpandableTextPropertyValue extends ObjectPropertyValue {
   private copyText(): void {
     Host.InspectorFrontendHost.InspectorFrontendHostInstance.copyText(this.text);
   }
-}
-export interface TreeOutlineOptions {
-  readOnly?: boolean;
 }

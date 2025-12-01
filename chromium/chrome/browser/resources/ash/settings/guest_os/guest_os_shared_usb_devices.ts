@@ -123,23 +123,19 @@ export class SettingsGuestOsSharedUsbDevicesElement extends
           return [];
         },
       },
-
-      /**
-       * Used by DeepLinkingMixin to focus this page's deep links.
-       */
-      supportedSettingIds: {
-        type: Object,
-        value: () => new Set<Setting>([
-          Setting.kGuestUsbNotification,
-          Setting.kGuestUsbPersistentPassthrough,
-        ]),
-      },
     };
   }
 
   defaultGuestId: GuestId;
   guestOsType: GuestOsType;
   hasContainers: boolean;
+
+  // DeepLinkingMixin override
+  override supportedSettingIds = new Set<Setting>([
+    Setting.kGuestUsbNotification,
+    Setting.kGuestUsbPersistentPassthrough,
+  ]);
+
   private allContainers_: ContainerInfo[];
   private browserProxy_: GuestOsBrowserProxy;
   private reassignDevice_: GuestOsSharedUsbDevice|null;
@@ -213,7 +209,7 @@ export class SettingsGuestOsSharedUsbDevicesElement extends
         this.get('prefs.guest_os.usb_persistent_passthrough_enabled.value');
     if (!target.checked && persistentPassthroughEnabled) {
       const deviceIdentifier = `${parseInt(device.vendorId, 16)}:${
-          parseInt(device.productId)}:${device.serialNumber}`;
+          parseInt(device.productId, 16)}:${device.serialNumber}`;
       // Return value of deletion is agnostic to presence of key existence, so
       // nothing to return/check here.
       this.deletePrefDictEntry(

@@ -47,7 +47,7 @@ Result<SuccessType> IRFuzzer(core::ir::Module& module,
     std::unordered_set<tint::BindingPoint> storage_bindings;
     for (auto* inst : *module.root_block) {
         auto* var = inst->As<core::ir::Var>();
-        if (!var->Result(0)->Type()->UnwrapPtr()->HasFixedFootprint()) {
+        if (!var->Result()->Type()->UnwrapPtr()->HasFixedFootprint()) {
             if (auto bp = var->BindingPoint()) {
                 if (storage_bindings.insert(bp.value()).second) {
                     options.array_length_from_uniform.bindpoint_to_size_index.emplace(
@@ -63,6 +63,10 @@ Result<SuccessType> IRFuzzer(core::ir::Module& module,
     }
 
     auto output = Generate(module, options);
+    if (output != Success) {
+        TINT_ICE() << "Generate() failed after CanGenerate() succeeded: "
+                   << output.Failure().reason;
+    }
 
     if (output == Success && context.options.dump) {
         std::cout << "Dumping generated MSL:\n" << output->msl << "\n";
@@ -74,4 +78,7 @@ Result<SuccessType> IRFuzzer(core::ir::Module& module,
 }  // namespace
 }  // namespace tint::msl::writer
 
-TINT_IR_MODULE_FUZZER(tint::msl::writer::IRFuzzer, tint::core::ir::Capabilities{});
+TINT_IR_MODULE_FUZZER(tint::msl::writer::IRFuzzer,
+                      tint::core::ir::Capabilities{},
+                      tint::core::ir::Capabilities{
+                          tint::core::ir::Capability::kAllowWorkspacePointerInputToEntryPoint});

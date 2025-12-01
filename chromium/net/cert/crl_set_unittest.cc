@@ -2,13 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "net/cert/crl_set.h"
 
+#include <array>
 #include <string_view>
 
 #include "base/files/file_util.h"
@@ -145,11 +142,14 @@ TEST(CertVerifyProcTest, CRLSetIncorporatesStaticBlocklist) {
   EXPECT_TRUE(CRLSet::Parse(s, &set2));
   ASSERT_TRUE(set2);
 
-  static const char* const kDigiNotarFilenames[] = {
-      "diginotar_root_ca.pem",          "diginotar_cyber_ca.pem",
-      "diginotar_services_1024_ca.pem", "diginotar_pkioverheid.pem",
-      "diginotar_pkioverheid_g2.pem",   nullptr,
-  };
+  static const auto kDigiNotarFilenames = std::to_array<const char*>({
+      "diginotar_root_ca.pem",
+      "diginotar_cyber_ca.pem",
+      "diginotar_services_1024_ca.pem",
+      "diginotar_pkioverheid.pem",
+      "diginotar_pkioverheid_g2.pem",
+      nullptr,
+  });
 
   base::FilePath certs_dir = GetTestCertsDirectory();
 

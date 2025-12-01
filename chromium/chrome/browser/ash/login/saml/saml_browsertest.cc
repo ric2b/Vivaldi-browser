@@ -26,7 +26,6 @@
 #include "base/test/gmock_callback_support.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/run_until.h"
-#include "base/test/scoped_chromeos_version_info.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
@@ -53,6 +52,7 @@
 #include "chrome/browser/ash/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/ash/login/test/scoped_policy_update.h"
 #include "chrome/browser/ash/login/test/session_manager_state_waiter.h"
+#include "chrome/browser/ash/login/test/test_condition_waiter.h"
 #include "chrome/browser/ash/login/test/test_predicate_waiter.h"
 #include "chrome/browser/ash/login/test/user_auth_config.h"
 #include "chrome/browser/ash/login/users/test_users.h"
@@ -62,8 +62,6 @@
 #include "chrome/browser/ash/policy/core/device_policy_cros_test_helper.h"
 #include "chrome/browser/ash/policy/test_support/embedded_policy_test_server_mixin.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/ash/settings/scoped_testing_cros_settings.h"
-#include "chrome/browser/ash/settings/stub_cros_settings_provider.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/enterprise/connectors/device_trust/common/metrics_utils.h"
@@ -347,21 +345,20 @@ class SamlTestBase : public OobeBaseTest {
         "    });");
   }
 
+  std::unique_ptr<test::TestConditionWaiter> CreateSamlPageLoadWaiter() {
+    return CreateGaiaPageEventWaiter("samlPageLoaded");
+  }
+
   virtual void StartSamlAndWaitForIdpPageLoad(const std::string& gaia_email) {
     OobeScreenWaiter(GetFirstSigninScreen()).Wait();
+    auto saml_waiter = CreateSamlPageLoadWaiter();
 
-    content::DOMMessageQueue message_queue(
-        GetLoginUI()->GetWebContents());  // Start observe before SAML.
-    SetupAuthFlowChangeListener();
     LoginDisplayHost::default_host()
         ->GetOobeUI()
         ->GetView<GaiaScreenHandler>()
         ->ShowSigninScreenForTest(gaia_email, "", "[]");
 
-    std::string message;
-    do {
-      ASSERT_TRUE(message_queue.WaitForMessage(&message));
-    } while (message != "\"SamlLoaded\"");
+    saml_waiter->Wait();
   }
 
   void SendConfirmPassword(const std::string& password_to_confirm) {
@@ -556,6 +553,8 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithFeatures, IdpRequiresHttpAuth) {
       ->ShowSigninScreenForTest(saml_test_users::kFirstUserCorpExampleComEmail,
                                 "", "[]");
 
+  auto saml_waiter = CreateSamlPageLoadWaiter();
+
   ASSERT_TRUE(base::test::RunUntil(
       []() { return HttpAuthDialog::GetAllDialogsForTest().size() == 1; }));
   // Note that the actual credentials don't matter because `fake_saml_idp()`
@@ -564,10 +563,7 @@ IN_PROC_BROWSER_TEST_P(SamlTestWithFeatures, IdpRequiresHttpAuth) {
       u"user", u"pwd");
 
   // Now the SAML sign-in form should actually load.
-  std::string message;
-  do {
-    ASSERT_TRUE(message_queue.WaitForMessage(&message));
-  } while (message != "\"SamlLoaded\"");
+  saml_waiter->Wait();
 
   test::OobeJS().ExpectPathDisplayed(false, kBackButton);
 
@@ -1184,11 +1180,10 @@ void SAMLEnrollmentTest::StartSamlAndWaitForIdpPageLoad(
   LoginDisplayHost::default_host()->StartWizard(
       EnrollmentScreenView::kScreenId);
   WaitForGaiaPageBackButtonUpdate();
-  auto flow_change_waiter =
-      OobeBaseTest::CreateGaiaPageEventWaiter("authFlowChange");
+  auto saml_waiter = CreateSamlPageLoadWaiter();
   SigninFrameJS().TypeIntoPath(gaia_email, FakeGaiaMixin::kEmailPath);
   test::OobeJS().ClickOnPath(kEnterprisePrimaryButton);
-  flow_change_waiter->Wait();
+  saml_waiter->Wait();
 }
 
 IN_PROC_BROWSER_TEST_F(SAMLEnrollmentTest, WithoutCredentialsPassingAPI) {
@@ -1245,7 +1240,6 @@ class SAMLPolicyTest : public SamlTestBase {
 
   void ShowGAIALoginForm();
   void ShowSAMLLoginForm();
-  void MaybeWaitForSAMLToLoad();
   void ClickBackOnSAMLPage();
   void LogInWithSAML(const std::string& user_id,
                      const GaiaId& gaia_id,
@@ -1453,24 +1447,10 @@ void SAMLPolicyTest::ShowSAMLLoginForm() {
   MaybeWaitForLoginScreenLoad();
   ASSERT_TRUE(LoginScreenTestApi::ClickAddUserButton());
   OobeScreenWaiter(GaiaView::kScreenId).Wait();
+  auto saml_waiter = CreateSamlPageLoadWaiter();
   test::OobeJS().CreateVisibilityWaiter(true, kSigninFrameDialog)->Wait();
   test::OobeJS().CreateVisibilityWaiter(false, kGaiaLoading)->Wait();
-}
-
-void SAMLPolicyTest::MaybeWaitForSAMLToLoad() {
-  // If SAML already loaded return and otherwise wait for the SamlLoaded
-  // message.
-  if (test::OobeJS().GetAttributeBool("isSamlAuthFlowForTesting()",
-                                      {"gaia-signin"}))
-    return;
-  content::DOMMessageQueue message_queue(GetLoginUI()->GetWebContents());
-  SetupAuthFlowChangeListener();
-  std::string message;
-  do {
-    ASSERT_TRUE(message_queue.WaitForMessage(&message));
-  } while (message != "\"SamlLoaded\"");
-  test::OobeJS().ExpectAttributeEQ("isSamlAuthFlowForTesting()",
-                                   {"gaia-signin"}, true);
+  saml_waiter->Wait();
 }
 
 void SAMLPolicyTest::ClickBackOnSAMLPage() {
@@ -1799,7 +1779,7 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLChangeAccount) {
 // Tests that clicking back on the SAML page successfully closes the oobe
 // dialog. Reopens a dialog and checks that SAML IdP authentication page is
 // loaded and authenticating there is successful.
-IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLClosaAndReopen) {
+IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLCloseAndReopen) {
   fake_saml_idp()->SetLoginHTMLTemplate("saml_login.html");
   fake_gaia_.fake_gaia()->SetConfigurationHelper(
       saml_test_users::kFirstUserCorpExampleComEmail, kTestAuthSIDCookie1,
@@ -1815,7 +1795,6 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, SAMLClosaAndReopen) {
   EXPECT_TRUE(LoginScreenTestApi::IsAddUserButtonShown());
 
   ShowSAMLLoginForm();
-  MaybeWaitForSAMLToLoad();
 
   SigninFrameJS().TypeIntoPath("fake_user", {"Email"});
   SigninFrameJS().TypeIntoPath("fake_password", {"Password"});
@@ -1878,7 +1857,6 @@ IN_PROC_BROWSER_TEST_F(SAMLPolicyTest, TestLoginMediaPermission) {
   WaitForSigninScreen();
 
   ShowSAMLLoginForm();
-  MaybeWaitForSAMLToLoad();
 
   const GURL url0(fake_saml_idp()->GetSamlPageUrl());
   const GURL url1("https://google.com");
@@ -2127,9 +2105,6 @@ class SAMLCookiesAndFloatingSsoTest : public SAMLPolicyTest {
   }
 
  protected:
-  // TODO(crbug.com/379092376): remove this once Floating SSO is out of beta.
-  base::test::ScopedChromeOSVersionInfo scoped_channel_override_{
-      "CHROMEOS_RELEASE_TRACK=beta-channel", base::Time::Now()};
 
   base::test::ScopedFeatureList feature_list_;
 };
@@ -2351,9 +2326,6 @@ class SAMLDeviceAttestationTest : public SamlTestBase {
   void SetDeviceContextAwareAccessSignalsAllowlistPolicy(
       const std::vector<std::string>& allowed_urls);
 
-  ScopedTestingCrosSettings settings_helper_;
-  raw_ptr<StubCrosSettingsProvider> settings_provider_ = nullptr;
-
   policy::DevicePolicyCrosTestHelper policy_helper_;
 
   attestation::MockMachineCertificateUploader mock_cert_uploader_;
@@ -2363,8 +2335,6 @@ class SAMLDeviceAttestationTest : public SamlTestBase {
 
 void SAMLDeviceAttestationTest::SetUpInProcessBrowserTestFixture() {
   SamlTestBase::SetUpInProcessBrowserTestFixture();
-
-  settings_provider_ = settings_helper_.device_settings();
 
   ON_CALL(mock_attestation_flow_, GetCertificate)
       .WillByDefault(WithArgs<7>(Invoke(FakeGetCertificateCallbackTrue)));
@@ -2383,12 +2353,15 @@ void SAMLDeviceAttestationTest::SetUpInProcessBrowserTestFixture() {
 
 void SAMLDeviceAttestationTest::SetAllowedUrlsPolicy(
     const std::vector<std::string>& allowed_urls) {
-  base::Value::List allowed_urls_values;
+  auto* allowed_url_container =
+      policy_helper_.device_policy()
+          ->payload()
+          .mutable_device_web_based_attestation_allowed_urls()
+          ->mutable_value();
   for (const auto& url : allowed_urls) {
-    allowed_urls_values.Append(url);
+    allowed_url_container->add_entries(url);
   }
-  settings_provider_->Set(kDeviceWebBasedAttestationAllowedUrls,
-                          base::Value(std::move(allowed_urls_values)));
+  policy_helper_.RefreshDevicePolicy();
 }
 
 void SAMLDeviceAttestationTest::

@@ -40,11 +40,13 @@ import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.cc.input.OffsetTag;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker;
 import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerScrollBehavior;
+import org.chromium.chrome.browser.browser_controls.BottomControlsStacker.LayerVisibility;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
 import org.chromium.chrome.browser.layouts.LayoutManager;
 import org.chromium.chrome.browser.layouts.LayoutType;
+import org.chromium.ui.InsetObserver;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -55,6 +57,7 @@ public class EdgeToEdgeBottomChinMediatorTest {
     @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
     @Mock private KeyboardVisibilityDelegate mKeyboardVisibilityDelegate;
+    @Mock private InsetObserver mInsetObserver;
     @Mock private LayoutManager mLayoutManager;
     @Mock private EdgeToEdgeController mEdgeToEdgeController;
     @Mock private BottomControlsStacker mBottomControlsStacker;
@@ -64,7 +67,7 @@ public class EdgeToEdgeBottomChinMediatorTest {
     private PropertyModel mModel;
     private EdgeToEdgeBottomChinMediator mMediator;
 
-    private final int mDefaultHeight = 60;
+    private static final int DEFAULT_HEIGHT = 60;
 
     @Before
     public void setUp() {
@@ -73,6 +76,7 @@ public class EdgeToEdgeBottomChinMediatorTest {
                 new EdgeToEdgeBottomChinMediator(
                         mModel,
                         mKeyboardVisibilityDelegate,
+                        mInsetObserver,
                         mLayoutManager,
                         mEdgeToEdgeController,
                         mBottomControlsStacker,
@@ -126,7 +130,7 @@ public class EdgeToEdgeBottomChinMediatorTest {
         enableDispatchYOffset();
 
         // make view visible
-        mModel.set(HEIGHT, mDefaultHeight);
+        mModel.set(HEIGHT, DEFAULT_HEIGHT);
         mMediator.onBrowserControlsOffsetUpdate(0);
 
         mMediator.changeBottomChinColor(Color.BLUE);
@@ -161,7 +165,7 @@ public class EdgeToEdgeBottomChinMediatorTest {
         enableDispatchYOffset();
         OffsetTag offsetTag = OffsetTag.createRandom();
         mModel.set(OFFSET_TAG, offsetTag);
-        mModel.set(HEIGHT, mDefaultHeight);
+        mModel.set(HEIGHT, DEFAULT_HEIGHT);
         assertEquals("The color should default to 0.", 0, mModel.get(COLOR));
 
         // make view visible
@@ -172,12 +176,12 @@ public class EdgeToEdgeBottomChinMediatorTest {
         assertEquals("The color should have been updated to blue.", Color.BLUE, mModel.get(COLOR));
 
         // scroll view but keep it visible
-        doReturn(mDefaultHeight / 2).when(mBrowserControlsStateProvider).getBottomControlOffset();
+        doReturn(DEFAULT_HEIGHT / 2).when(mBrowserControlsStateProvider).getBottomControlOffset();
         mMediator.changeBottomChinColor(Color.RED);
         assertEquals("The color should have been updated to red.", Color.RED, mModel.get(COLOR));
 
         // scroll view offscreen
-        doReturn(mDefaultHeight).when(mBrowserControlsStateProvider).getBottomControlOffset();
+        doReturn(DEFAULT_HEIGHT).when(mBrowserControlsStateProvider).getBottomControlOffset();
         mMediator.changeBottomChinColor(Color.WHITE);
         assertEquals("The color should have not been updated.", Color.RED, mModel.get(COLOR));
 
@@ -192,7 +196,7 @@ public class EdgeToEdgeBottomChinMediatorTest {
         enableDispatchYOffset();
 
         // make view visible
-        mModel.set(HEIGHT, mDefaultHeight);
+        mModel.set(HEIGHT, DEFAULT_HEIGHT);
         mMediator.onBrowserControlsOffsetUpdate(0);
 
         mMediator.changeBottomChinDividerColor(Color.WHITE);
@@ -429,13 +433,20 @@ public class EdgeToEdgeBottomChinMediatorTest {
         assertTrue("The chin should be visible as all conditions are met.", mModel.get(CAN_SHOW));
 
         mMediator.keyboardVisibilityChanged(true);
+        assertTrue(
+                "The chin should still be visible as the keyboard has a zero inset.",
+                mModel.get(CAN_SHOW));
+
+        mMediator.onKeyboardInsetChanged(180);
         assertFalse(
                 "The chin should not be visible as the keyboard is showing.", mModel.get(CAN_SHOW));
+        assertEquals(LayerVisibility.HIDDEN, mMediator.getLayerVisibility());
 
         mMediator.keyboardVisibilityChanged(false);
         assertTrue(
                 "The chin should be visible as the keyboard is no longer showing.",
                 mModel.get(CAN_SHOW));
+        assertEquals(LayerVisibility.VISIBLE, mMediator.getLayerVisibility());
     }
 
     private void onToEdgeChange(

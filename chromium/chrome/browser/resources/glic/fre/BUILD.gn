@@ -10,11 +10,11 @@ build_webui("build") {
   grd_prefix = "glic_fre"
 
   static_files = [
-    "fre.html",
     "fre.css",
+    "fre.html",
   ]
 
-  non_web_component_files = [
+  ts_files = [
     "fre_app_controller.ts",
     "icons.html.ts",
     "main.ts",
@@ -27,7 +27,7 @@ build_webui("build") {
     "//ui/webui/resources/mojo:build_ts",
   ]
 
-  mojo_files_deps = [ "//chrome/browser/glic:mojo_bindings_ts__generator" ]
+  mojo_files_deps = [ "//chrome/browser/glic/fre:mojo_bindings_ts__generator" ]
   mojo_files =
       [ "$root_gen_dir/chrome/browser/glic/fre/glic_fre.mojom-webui.ts" ]
 

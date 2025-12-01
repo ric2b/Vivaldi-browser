@@ -9,6 +9,8 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/check_deref.h"
+#include "base/check_op.h"
 #include "base/containers/to_vector.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -22,16 +24,24 @@
 #include "chrome/browser/permissions/one_time_permissions_tracker.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker_factory.h"
 #include "chrome/browser/permissions/one_time_permissions_tracker_observer.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/smart_card/smart_card_histograms.h"
 #include "chrome/browser/smart_card/smart_card_reader_tracker.h"
 #include "chrome/browser/smart_card/smart_card_reader_tracker_factory.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/permissions/features.h"
+#include "components/content_settings/core/common/pref_names.h"
+#include "components/permissions/permission_context_base.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
 #include "components/permissions/permission_request_manager.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/gurl.h"
 #include "url/origin.h"
 
 namespace {
@@ -56,6 +66,9 @@ class SmartCardPermissionContext::OneTimeObserver
   }
   void OnLastPageFromOriginClosed(const url::Origin& origin) override {
     permission_context_->RevokeEphemeralPermissionsForOrigin(origin);
+    RecordSmartCardOneTimePermissionExpiryReason(
+        SmartCardOneTimePermissionExpiryReason::
+            kSmartCardPermissionExpiredLastWindowClosed);
   }
 
   void OnAllTabsInBackgroundTimerExpired(
@@ -63,6 +76,11 @@ class SmartCardPermissionContext::OneTimeObserver
       const BackgroundExpiryType& expiry_type) override {
     if (expiry_type == BackgroundExpiryType::kTimeout) {
       permission_context_->RevokeEphemeralPermissionsForOrigin(origin);
+      // Record histogram even if no permissions were revoked - for the purpose
+      // of a dry run.
+      RecordSmartCardOneTimePermissionExpiryReason(
+          SmartCardOneTimePermissionExpiryReason::
+              kSmartCardPermissionExpiredAllWindowsInTheBackgroundTimeout);
     }
   }
 
@@ -87,6 +105,9 @@ class SmartCardPermissionContext::PowerSuspendObserver
 
   void OnSuspend() override {
     permission_context_->RevokeEphemeralPermissions();
+    RecordSmartCardOneTimePermissionExpiryReason(
+        SmartCardOneTimePermissionExpiryReason::
+            kSmartCardPermissionExpiredSystemSuspended);
   }
 
  private:
@@ -110,6 +131,9 @@ class SmartCardPermissionContext::ReaderObserver
   void OnReaderRemoved(const std::string& reader_name) override {
     known_info_map_.erase(reader_name);
     permission_context_->RevokeEphemeralPermissionsForReader(reader_name);
+    RecordSmartCardOneTimePermissionExpiryReason(
+        SmartCardOneTimePermissionExpiryReason::
+            kSmartCardPermissionExpiredReaderRemoved);
   }
 
   void OnReaderChanged(
@@ -139,6 +163,9 @@ class SmartCardPermissionContext::ReaderObserver
     if (card_removed) {
       permission_context_->RevokeEphemeralPermissionsForReader(
           reader_info.name);
+      RecordSmartCardOneTimePermissionExpiryReason(
+          SmartCardOneTimePermissionExpiryReason::
+              kSmartCardPermissionExpiredCardRemoved);
     }
   }
 
@@ -186,6 +213,33 @@ bool SmartCardPermissionContext::HasReaderPermission(
          HasPersistentReaderPermission(origin, reader_name);
 }
 
+bool SmartCardPermissionContext::IsAllowlistedByPolicy(
+    const url::Origin& origin) const {
+  if (!guard_content_settings_type_) {
+    return false;
+  }
+
+  content_settings::SettingInfo setting_info;
+  auto content_setting =
+      HostContentSettingsMapFactory::GetForProfile(&profile_.get())
+          ->GetContentSetting(origin.GetURL(), GURL(),
+                              ContentSettingsType::SMART_CARD_GUARD,
+                              &setting_info);
+  return setting_info.source == content_settings::SettingSource::kPolicy &&
+         content_setting == CONTENT_SETTING_ALLOW;
+}
+
+bool SmartCardPermissionContext::CanRequestObjectPermission(
+    const url::Origin& origin) const {
+  CHECK(guard_content_settings_type_);
+  if (CHECK_DEREF(
+          PermissionDecisionAutoBlockerFactory::GetForProfile(&profile_.get()))
+          .IsEmbargoed(origin.GetURL(), *guard_content_settings_type_)) {
+    return false;
+  }
+  return ObjectPermissionContextBase::CanRequestObjectPermission(origin);
+}
+
 void SmartCardPermissionContext::RequestReaderPermisssion(
     content::RenderFrameHost& render_frame_host,
     const std::string& reader_name,
@@ -209,16 +263,14 @@ void SmartCardPermissionContext::RequestReaderPermisssion(
     return;
   }
 
-  // Regarding ownership: The request will delete itself once the request
-  // manager notifies that it can do so.
-  auto* permission_request = new SmartCardPermissionRequest(
+  auto permission_request = std::make_unique<SmartCardPermissionRequest>(
       origin, reader_name,
       base::BindOnce(&SmartCardPermissionContext::OnPermissionRequestDecided,
                      weak_ptr_factory_.GetWeakPtr(), origin, reader_name,
                      std::move(callback)));
 
   permission_request_manager->AddRequest(&render_frame_host,
-                                         permission_request);
+                                         std::move(permission_request));
 }
 
 void SmartCardPermissionContext::GrantEphemeralReaderPermission(
@@ -227,8 +279,7 @@ void SmartCardPermissionContext::GrantEphemeralReaderPermission(
   CHECK(!HasReaderPermission(origin, reader_name));
   ephemeral_grants_with_expiry_[origin].emplace(
       reader_name,
-      base::Time::Now() +
-          permissions::feature_params::kOneTimePermissionLongTimeout.Get());
+      base::Time::Now() + permissions::kOneTimePermissionMaximumLifetime);
 
   if (!power_suspend_observer_) {
     power_suspend_observer_ = std::make_unique<PowerSuspendObserver>(*this);
@@ -247,7 +298,7 @@ void SmartCardPermissionContext::GrantEphemeralReaderPermission(
       base::BindOnce(&SmartCardPermissionContext::
                          RevokeEphemeralPermissionIfLongTimeoutOccured,
                      weak_ptr_factory_.GetWeakPtr(), origin, reader_name),
-      permissions::feature_params::kOneTimePermissionLongTimeout.Get());
+      permissions::kOneTimePermissionMaximumLifetime);
 }
 
 void SmartCardPermissionContext::GrantPersistentReaderPermission(
@@ -349,40 +400,6 @@ void SmartCardPermissionContext::RevokeAllPermissions() {
   RevokeEphemeralPermissions();
 }
 
-void SmartCardPermissionContext::RevokePersistentPermission(
-    const std::string& reader_name,
-    const url::Origin& origin) {
-  RevokeObjectPermission(origin, ReaderNameToValue(reader_name));
-}
-
-SmartCardPermissionContext::ReaderGrants::ReaderGrants(
-    const std::string& reader_name,
-    const std::vector<url::Origin>& origins)
-    : reader_name(reader_name), origins(origins) {}
-SmartCardPermissionContext::ReaderGrants::~ReaderGrants() = default;
-SmartCardPermissionContext::ReaderGrants::ReaderGrants(
-    const ReaderGrants& other) = default;
-bool SmartCardPermissionContext::ReaderGrants::operator==(
-    const ReaderGrants& other) const = default;
-
-std::vector<SmartCardPermissionContext::ReaderGrants>
-SmartCardPermissionContext::GetPersistentReaderGrants() {
-  std::map<std::string, std::set<url::Origin>> reader_grants;
-  for (const auto& object : GetAllGrantedObjects()) {
-    const base::Value::Dict& reader_value = object->value;
-
-    CHECK(IsValidObject(reader_value));
-
-    reader_grants[*reader_value.FindString(kReaderNameKey)].insert(
-        url::Origin::Create(object->origin));
-  }
-
-  return base::ToVector(
-      reader_grants, [](const auto& reader_grants) -> ReaderGrants {
-        return {reader_grants.first, base::ToVector(reader_grants.second)};
-      });
-}
-
 void SmartCardPermissionContext::OnTrackingStarted(
     std::optional<std::vector<SmartCardReaderTracker::ReaderInfo>> info_list) {
   if (!info_list) {
@@ -411,48 +428,16 @@ void SmartCardPermissionContext::OnPermissionRequestDecided(
   switch (result) {
     case SmartCardPermissionRequest::Result::kAllowOnce:
       GrantEphemeralReaderPermission(origin, reader_name);
-      consecutive_denials_.erase(origin);
       std::move(callback).Run(true);
       break;
     case SmartCardPermissionRequest::Result::kAllowAlways:
       GrantPersistentReaderPermission(origin, reader_name);
-      consecutive_denials_.erase(origin);
       std::move(callback).Run(true);
       break;
     case SmartCardPermissionRequest::Result::kDontAllow:
       std::move(callback).Run(false);
-      OnPermissionDenied(origin);
       break;
   }
-}
-
-void SmartCardPermissionContext::OnPermissionDenied(const url::Origin& origin) {
-  auto consecutive_denials = ++consecutive_denials_[origin];
-
-  DCHECK(consecutive_denials <= 3);
-  if (consecutive_denials >= 3) {
-    HostContentSettingsMapFactory::GetForProfile(&profile_.get())
-        ->SetContentSettingDefaultScope(origin.GetURL(), GURL(),
-                                        ContentSettingsType::SMART_CARD_GUARD,
-                                        ContentSetting::CONTENT_SETTING_BLOCK);
-    consecutive_denials_.erase(origin);
-  }
-}
-
-bool SmartCardPermissionContext::IsAllowlistedByPolicy(
-    const url::Origin& origin) {
-  if (!guard_content_settings_type_) {
-    return false;
-  }
-
-  content_settings::SettingInfo setting_info;
-  auto content_setting =
-      HostContentSettingsMapFactory::GetForProfile(&profile_.get())
-          ->GetContentSetting(origin.GetURL(), GURL(),
-                              ContentSettingsType::SMART_CARD_GUARD,
-                              &setting_info);
-  return setting_info.source == content_settings::SettingSource::kPolicy &&
-         content_setting == CONTENT_SETTING_ALLOW;
 }
 
 std::vector<std::unique_ptr<SmartCardPermissionContext::Object>>
@@ -505,5 +490,27 @@ void SmartCardPermissionContext::RevokeEphemeralPermissionIfLongTimeoutOccured(
       ephemeral_grants_with_expiry_.erase(it_origin);
     }
     NotifyPermissionRevoked(origin);
+    RecordSmartCardOneTimePermissionExpiryReason(
+        SmartCardOneTimePermissionExpiryReason::
+            kSmartCardPermissionExpiredMaxLifetimeReached);
   }
+}
+
+std::vector<std::unique_ptr<SmartCardPermissionContext::Object>>
+SmartCardPermissionContext::GetAllGrantedObjects() {
+  auto objects = ObjectPermissionContextBase::GetAllGrantedObjects();
+  const auto& allowlisted_origins = profile_->GetPrefs()->GetList(
+      prefs::kManagedSmartCardConnectAllowedForUrls);
+  for (const auto& allowlisted_origin : allowlisted_origins) {
+    CHECK(allowlisted_origin.is_string());
+    GURL url = GURL(allowlisted_origin.GetString());
+    CHECK(url.is_valid());
+
+    objects.push_back(std::make_unique<Object>(
+        url::Origin::Create(url),
+        ReaderNameToValue(l10n_util::GetStringUTF16(
+            IDS_SMART_CARD_POLICY_DESCRIPTION_FOR_ANY_DEVICE)),
+        content_settings::SettingSource::kPolicy, IsOffTheRecord()));
+  }
+  return objects;
 }

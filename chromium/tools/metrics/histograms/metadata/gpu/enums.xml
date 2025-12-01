@@ -424,6 +424,8 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="kVideoConference"/>
   <int value="4" label="kOnlyAnimatingImage"/>
   <int value="5" label="kOnlyScrollBarFadeOut"/>
+  <int value="6" label="kUserInputBoost"/>
+  <int value="7" label="kSlowScrollThrottle"/>
 </enum>
 
 <enum name="GLImplementation">
@@ -1159,6 +1161,11 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="3" label="GLES3.2"/>
 </enum>
 
+<enum name="MetalFamilyMac">
+  <int value="0" label="Mac1"/>
+  <int value="1" label="Mac2"/>
+</enum>
+
 <enum name="MetalReadWriteTextureSupportTier">
   <int value="0" label="Unknown"/>
   <int value="1" label="Tier0_NoSupport"/>
@@ -1399,6 +1406,7 @@ Called by update_gpu_driver_bug_workaround_entries.py.-->
   <int value="5" label="GraphiteDawnMetal"/>
   <int value="6" label="GraphiteDawnD3D11"/>
   <int value="7" label="GraphiteDawnD3D12"/>
+  <int value="8" label="GraphiteMetal"/>
 </enum>
 
 <enum name="SkiaPipelineCreationRace">

@@ -26,7 +26,7 @@ jobs:
         toolchain: stable
 
     - name: Build the library and generate the C header file
-      run: cargo build --features capi --release --no-default-features
+      run: cargo build --features capi,encoder --release --no-default-features
 
     - name: Ensure that there is no diff in the header file.
       run: git diff --exit-code include/avif/avif.h

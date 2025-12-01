@@ -31,6 +31,12 @@
 #include "extensions/helper/vivaldi_frame_host_service_impl.h"
 #endif
 
+#if BUILDFLAG(IS_LINUX)
+#include "apps/switches.h"
+#include "base/vivaldi_switches.h"
+#include "sandbox/policy/switches.h"
+#endif
+
 VivaldiContentBrowserClient::VivaldiContentBrowserClient()
     : ChromeContentBrowserClient() {}
 
@@ -53,13 +59,13 @@ VivaldiContentBrowserClient::CreateBrowserMainParts(bool is_integration_test) {
 }
 
 #if !BUILDFLAG(IS_ANDROID)
-std::vector<std::unique_ptr<content::NavigationThrottle>>
+void
 VivaldiContentBrowserClient::CreateThrottlesForNavigation(
-    content::NavigationHandle* handle) {
+    content::NavigationThrottleRegistry& registry) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  content::NavigationHandle *handle = &registry.GetNavigationHandle();
 
-  auto throttles =
-      ChromeContentBrowserClient::CreateThrottlesForNavigation(handle);
+  ChromeContentBrowserClient::CreateThrottlesForNavigation(registry);
 
   AdverseAdFilterListService* adblock_list =
       VivaldiAdverseAdFilterListFactory::GetForProfile(
@@ -73,14 +79,11 @@ VivaldiContentBrowserClient::CreateThrottlesForNavigation(
             VivaldiSubresourceFilterAdblockingThrottleManager::FromWebContents(
                 web_contents)) {
       vivaldi_subresource_throttle_manager->MaybeAppendNavigationThrottles(
-          handle, &throttles);
+          handle, registry);
     }
   }
-
-  throttles.push_back(
+  registry.AddThrottle(
       std::make_unique<adblock_filter::DocumentBlockedThrottle>(handle));
-
-  return throttles;
 }
 
 bool VivaldiContentBrowserClient::CanCommitURL(
@@ -93,6 +96,31 @@ bool VivaldiContentBrowserClient::CanCommitURL(
 }
 
 #endif  // !IS_ANDROID
+
+#ifdef VIVALDI_V8_CONTEXT_SNAPSHOT
+#if BUILDFLAG(IS_LINUX)
+void VivaldiContentBrowserClient::AppendExtraCommandLineSwitches(
+    base::CommandLine* command_line,
+    int child_process_id) {
+  const base::CommandLine& browser_command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (!browser_command_line.HasSwitch(apps::kLoadAndLaunchApp)) {
+    std::string process_type = command_line->GetSwitchValueASCII(
+        sandbox::policy::switches::kProcessType);
+    if (process_type == sandbox::policy::switches::kZygoteProcessType) {
+      bool is_gpu_zygote = command_line->HasSwitch(
+          sandbox::policy::switches::kNoZygoteSandbox);
+      if (!is_gpu_zygote) {
+        command_line->AppendSwitch(switches::kVivaldiSnapshotProcess);
+      }
+    }
+  }
+  return ChromeContentBrowserClient::AppendExtraCommandLineSwitches(
+      command_line,
+      child_process_id);
+}
+#endif  // VIVALDI_V8_CONTEXT_SNAPSHOT
+#endif  // IS_LINUX
 
 void BindCosmeticFilter(
     content::RenderFrameHost* frame,

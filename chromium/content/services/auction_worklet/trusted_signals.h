@@ -20,11 +20,12 @@
 #include "base/time/time.h"
 #include "content/common/content_export.h"
 #include "content/services/auction_worklet/auction_v8_helper.h"
+#include "content/services/auction_worklet/public/cpp/creative_info.h"
 #include "content/services/auction_worklet/public/mojom/auction_network_events_handler.mojom.h"
+#include "content/services/auction_worklet/public/mojom/in_progress_auction_download.mojom-forward.h"
 #include "content/services/auction_worklet/public/mojom/seller_worklet.mojom-forward.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
-#include "third_party/blink/public/common/interest_group/ad_display_size.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "v8/include/v8-forward.h"
@@ -147,55 +148,6 @@ class CONTENT_EXPORT TrustedSignals {
     // Data version associated with the trusted signals.
     const std::optional<uint32_t> data_version_;
   };
-
-  // Info about a creative, either ad or component ad, that's sent to trusted
-  // scoring signals server, corresponding to one chosen by a generateBid()
-  // invocation. `buyer_and_seller_reporting_id` is only applicable, and only
-  // sent, for ads - not for ad components - as ad components may not provide a
-  // value for `buyer_and_seller_reporting_id` or any other reporting IDs.
-  //
-  // If operating with `send_creative_scanning_metadata` true, the same URL may
-  // need to be repeated, in cases like it occurring in multiple interest groups
-  // with the same ad creative but different scanning metadata.
-  //
-  // When `send_creative_scanning_metadata` is false, all fields other than
-  // `ad_descriptor`'s `url` must be kept empty to avoid needlessly duplicating
-  // URLs.
-  struct CONTENT_EXPORT CreativeInfo {
-    CreativeInfo();
-    CreativeInfo(blink::AdDescriptor ad_descriptor,
-                 std::string creative_scanning_metadata,
-                 std::optional<url::Origin> interest_group_owner,
-                 std::string buyer_and_seller_reporting_id);
-    CreativeInfo(bool send_creative_scanning_metadata,
-                 const mojom::CreativeInfoWithoutOwner& mojo_creative_info,
-                 const url::Origin& in_interest_group_owner,
-                 const std::optional<std::string>&
-                     browser_signal_buyer_and_seller_reporting_id);
-    ~CreativeInfo();
-
-    CreativeInfo(CreativeInfo&&);
-    CreativeInfo(const CreativeInfo&);
-    CreativeInfo& operator=(CreativeInfo&&);
-    CreativeInfo& operator=(const CreativeInfo&);
-
-    bool operator<(const CreativeInfo& other) const;
-
-    // The ad and size selected by generateBid().
-    blink::AdDescriptor ad_descriptor;
-
-    // From `InterestGroup::Ad::creative_scanning_metadata`, with nullopt
-    // converted to empty string.
-    std::string creative_scanning_metadata;
-
-    // From `InterestGroup::owner`.
-    std::optional<url::Origin> interest_group_owner;
-
-    // From `InterestGroup::Ad::buyer_and_seller_reporting_id`, with nullopt
-    // converted to empty string.
-    std::string buyer_and_seller_reporting_id;
-  };
-
   using LoadSignalsCallback =
       base::OnceCallback<void(scoped_refptr<Result> result,
                               std::optional<std::string> error_msg)>;
@@ -204,86 +156,13 @@ class CONTENT_EXPORT TrustedSignals {
   TrustedSignals& operator=(const TrustedSignals&) = delete;
   ~TrustedSignals();
 
-  // Note: this is in the order these are assembled into the URL string.
-  enum class UrlField {
-    kBase,
-    kKeys,
-    kInterestGroupNames,
-    kRenderUrls,
-    kAdComponentRenderUrls,
-    kExperimentGroupId,
-    kSlotSizeParam,
-    kAdCreativeScanningMetadata,
-    kAdComponentCreativeScanningMetadata,
-    kAdSizes,
-    kAdComponentSizes,
-    kAdBuyer,
-    kAdComponentBuyer,
-    kBuyerAndSellerReportingIds,
-    kNumValues
-  };
-
-  // A portion of a URL. Those with the same value of `field` are meant to be
-  // appended right next to each other.
-  struct UrlPiece {
-    UrlField field;
-    std::string text;
-
-    friend bool operator==(const UrlPiece&, const UrlPiece&) = default;
-  };
-
-  // BuildTrusted{Bidding,Scoring}SignalsURL helps incrementally
-  // compute trusted signals URLs merged from multiple requests by accumulating
-  // fragments of the full URL into the `..._fragments` out params. They should
-  // be called for first requests with the output vectors empty. Later requests
-  // to merge should be called with same objects for `..._fragments` and the set
-  // inputs only containing the values that are fresh for the new request.
-  // Each invocation will append new values to the end of the output vectors.
-  //
-  // The produced values can then be passed to LoadBiddingSignals
-  // and LoadScoringSignals, which will use ComposeURL to compose them in the
-  // right order to form a URL.
-
-  // For BuildTrustedBiddingSignalsURL, `main_fragments` is used to accumulate
-  // all of URL pieces that do not have to do with the `keys` parameter, which
-  // go into `key_fragments`. This split is needed because the first request
-  // (or all) requests might have an empty `bidding_signals_keys`.
-  static void BuildTrustedBiddingSignalsURL(
-      const std::string& hostname,
-      const GURL& trusted_bidding_signals_url,
-      const std::set<std::string>& interest_group_names,
-      const std::set<std::string>& bidding_signals_keys,
-      std::optional<uint16_t> experiment_group_id,
-      const std::string& trusted_bidding_signals_slot_size_param,
-      std::vector<UrlPiece>& main_fragments,
-      std::vector<UrlPiece>& key_fragments);
-
-  // `ads` and `component_ads` are set<CreativeInfo> rather than
-  // map<GURL, something> because the same URL can have different creative
-  // scanning metadata in different IGs, or different size in difference
-  // occurrences as a component ad, etc.
-  static void BuildTrustedScoringSignalsURL(
-      bool send_creative_scanning_metadata,
-      const std::string& hostname,
-      const GURL& trusted_scoring_signals_url,
-      const std::set<CreativeInfo>& ads,
-      const std::set<CreativeInfo>& component_ads,
-      std::optional<uint16_t> experiment_group_id,
-      std::vector<UrlPiece>& main_fragments,
-      std::vector<UrlPiece>& ad_component_fragments);
-
   // Constructs a TrustedSignals for fetching bidding signals, and starts
   // the fetch. `trusted_bidding_signals_url` must be the base URL (no query
   // params added).  Callback will be invoked asynchronously once the data
-  // has been fetched or an error has occurred. De-duplicates keys when
-  // assembling the full URL for the fetch. Fails if the URL already has a
+  // has been fetched or an error has occurred. Fails if the URL already has a
   // query param (or has a location or embedded credentials) or if the
   // response is not JSON. If some or all of the render URLs are missing,
   // still succeeds, and GetSignals() will populate them with nulls.
-  //
-  // If non-empty, "&`trusted_bidding_signals_slot_size_param`" is appended
-  // to the end of the query string. It's expected to already be escaped if
-  // necessary.
   //
   // There are no lifetime constraints of `url_loader_factory`.
   static std::unique_ptr<TrustedSignals> LoadBiddingSignals(
@@ -293,8 +172,20 @@ class CONTENT_EXPORT TrustedSignals {
       std::set<std::string> interest_group_names,
       std::set<std::string> bidding_signals_keys,
       const GURL& trusted_bidding_signals_url,
-      std::vector<UrlPiece> main_fragments,
-      std::vector<UrlPiece> key_fragments,
+      const GURL& full_signals_url,
+      scoped_refptr<AuctionV8Helper> v8_helper,
+      LoadSignalsCallback load_signals_callback);
+
+  // Same as LoadBiddingSignals, except it adopts an
+  // existing fetch from `download` instead of starting a new one.
+  static std::unique_ptr<TrustedSignals> CreateFromBiddingSignalsLoad(
+      network::mojom::URLLoaderFactory* url_loader_factory,
+      mojo::PendingRemote<auction_worklet::mojom::AuctionNetworkEventsHandler>
+          auction_network_events_handler,
+      mojom::InProgressAuctionDownloadPtr download,
+      std::set<std::string> interest_group_names,
+      std::set<std::string> bidding_signals_keys,
+      const GURL& trusted_bidding_signals_url,
       scoped_refptr<AuctionV8Helper> v8_helper,
       LoadSignalsCallback load_signals_callback);
 
@@ -305,11 +196,8 @@ class CONTENT_EXPORT TrustedSignals {
           auction_network_events_handler,
       std::set<CreativeInfo> ads,
       std::set<CreativeInfo> ad_components,
-      const std::string& hostname,
       const GURL& trusted_scoring_signals_url,
-      std::optional<uint16_t> experiment_group_id,
-      std::vector<UrlPiece> main_fragments,
-      std::vector<UrlPiece> ad_component_fragments,
+      const GURL& full_signals_url,
       bool send_creative_scanning_metadata,
       scoped_refptr<AuctionV8Helper> v8_helper,
       LoadSignalsCallback load_signals_callback);
@@ -333,11 +221,6 @@ class CONTENT_EXPORT TrustedSignals {
       AuctionV8Helper* v8_helper,
       v8::Local<v8::Object> v8_per_interest_group_data);
 
-  static GURL ComposeURLForTesting(std::vector<UrlPiece> main_fragments,
-                                   std::vector<UrlPiece> aux_fragments) {
-    return ComposeURL(std::move(main_fragments), std::move(aux_fragments));
-  }
-
  private:
   TrustedSignals(
       std::optional<std::set<std::string>> interest_group_names,
@@ -354,6 +237,10 @@ class CONTENT_EXPORT TrustedSignals {
   // URL with the query parameter correctly set.
   void StartDownload(network::mojom::URLLoaderFactory* url_loader_factory,
                      const GURL& full_signals_url);
+
+  // Waits for a response from `download`.
+  void AdoptDownload(network::mojom::URLLoaderFactory* url_loader_factory,
+                     mojom::InProgressAuctionDownloadPtr download);
 
   void OnDownloadComplete(std::unique_ptr<std::string> body,
                           scoped_refptr<net::HttpResponseHeaders> headers,
@@ -385,15 +272,6 @@ class CONTENT_EXPORT TrustedSignals {
   // Called on user thread.
   void DeliverCallbackOnUserThread(scoped_refptr<Result> result,
                                    std::optional<std::string> error_msg);
-
-  // Computes a URL out of pieces collected inside `main_fragments` and
-  // `aux_fragments`, by ordering them first by the UrlField and then by
-  // their order inside the vectors, and concatenating the text.
-  //
-  // (It is assumed that the UrlField values present in the two vectors
-  //  are disjoint).
-  static GURL ComposeURL(std::vector<UrlPiece> main_fragments,
-                         std::vector<UrlPiece> aux_fragments);
 
   // Keys being fetched. For bidding signals, only `bidding_signals_keys_` and
   // `interest_group_names_` are non-null. For scoring signals, only

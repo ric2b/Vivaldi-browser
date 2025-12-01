@@ -59,6 +59,7 @@ source_set("platform_apps") {
     "//chrome/browser:shell_integration",
     "//chrome/browser/apps/app_service",
     "//chrome/browser/extensions",
+    "//chrome/browser/lifetime:termination_notification",
     "//chrome/browser/media/router/discovery",
     "//chrome/browser/profiles",
     "//chrome/browser/profiles:profile",
@@ -86,7 +87,11 @@ source_set("platform_apps") {
   allow_circular_includes_from = [ "//chrome/browser/extensions" ]
 
   if (is_mac) {
-    deps += [ "//chrome/browser/apps/app_shim" ]
+    deps += [
+      "//chrome/browser/apps/app_shim",
+      "//chrome/browser/profiles",
+      "//chrome/browser/ui/extensions:extension_enable_flow_delegate",
+    ]
   }
 
   if (is_chromeos) {

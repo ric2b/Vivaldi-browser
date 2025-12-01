@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 import './ExtensionView.js';
@@ -20,8 +21,7 @@ import * as Dialogs from '../../../ui/components/dialogs/dialogs.js';
 import * as Input from '../../../ui/components/input/input.js';
 import type * as Menus from '../../../ui/components/menus/menus.js';
 import * as TextEditor from '../../../ui/components/text_editor/text_editor.js';
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStylesRaw from '../../../ui/legacy/inspectorCommon.css.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import type * as Converters from '../converters/converters.js';
@@ -30,7 +30,7 @@ import * as Models from '../models/models.js';
 import {PlayRecordingSpeed} from '../models/RecordingPlayer.js';
 import * as Actions from '../recorder-actions/recorder-actions.js';
 
-import recordingViewStylesRaw from './recordingView.css.js';
+import recordingViewStyles from './recordingView.css.js';
 import type {ReplaySectionData, StartReplayEvent} from './ReplaySection.js';
 import {
   type CopyStepEvent,
@@ -38,14 +38,6 @@ import {
   type StepView,
   type StepViewData,
 } from './StepView.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const inspectorCommonStyles = new CSSStyleSheet();
-inspectorCommonStyles.replaceSync(inspectorCommonStylesRaw.cssText);
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const recordingViewStyles = new CSSStyleSheet();
-recordingViewStyles.replaceSync(recordingViewStylesRaw.cssText);
 
 const {html} = Lit;
 
@@ -379,11 +371,6 @@ export class RecordingView extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [
-      inspectorCommonStyles,
-      recordingViewStyles,
-      Input.textInputStyles,
-    ];
     document.addEventListener('copy', this.#onCopyBound);
     this.#render();
   }
@@ -583,8 +570,8 @@ export class RecordingView extends HTMLElement {
   }
 
   #onTitleBlur = (event: Event): void => {
-    const target = event.target as HTMLElement;
-    const title = target.innerText.trim();
+    const target = event.target as HTMLInputElement;
+    const title = target.value.trim();
     if (!title) {
       this.#isTitleInvalid = true;
       this.#render();
@@ -604,14 +591,8 @@ export class RecordingView extends HTMLElement {
   };
 
   #onEditTitleButtonClick = (): void => {
-    const input = this.#shadow.getElementById('title-input') as HTMLElement;
+    const input = this.#shadow.getElementById('title-input') as HTMLInputElement;
     input.focus();
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    range.collapse(false);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    selection?.addRange(range);
   };
 
   #onSelectMenuLabelClick = (event: Event): void => {
@@ -1196,16 +1177,17 @@ export class RecordingView extends HTMLElement {
       <div class="header">
         <div class="header-title-wrapper">
           <div class="header-title">
-            <span @blur=${this.#onTitleBlur}
+            <input @blur=${this.#onTitleBlur}
                   @keydown=${this.#onTitleInputKeyDown}
                   id="title-input"
-                  .contentEditable=${isTitleEditable ? 'true' : 'false'}
                   jslog=${VisualLogging.value('title').track({change: true})}
                   class=${Lit.Directives.classMap({
                     'has-error': this.#isTitleInvalid,
                     disabled: !isTitleEditable,
                   })}
-                  .innerText=${Lit.Directives.live(title)}></span>
+                  .value=${Lit.Directives.live(title)}
+                  .disabled=${!isTitleEditable}
+                  >
             <div class="title-button-bar">
               <devtools-button
                 @click=${this.#onEditTitleButtonClick}
@@ -1297,6 +1279,9 @@ export class RecordingView extends HTMLElement {
     // clang-format off
     Lit.render(
       html`
+      <style>${UI.inspectorCommonStyles}</style>
+      <style>${recordingViewStyles}</style>
+      <style>${Input.textInputStyles}</style>
       <div @click=${this.#onWrapperClick} class=${Lit.Directives.classMap(
         classNames,
       )}>

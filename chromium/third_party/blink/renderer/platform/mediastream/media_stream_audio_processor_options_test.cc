@@ -154,34 +154,10 @@ TEST(AudioProcessingPropertiesTest, VerifyDefaultProcessingState) {
   EXPECT_EQ(kDefaultProperties.echo_cancellation_type,
             EchoCancellationType::kEchoCancellationAec3);
   EXPECT_FALSE(kDefaultProperties.system_gain_control_activated);
-  EXPECT_FALSE(kDefaultProperties.disable_hw_noise_suppression);
   EXPECT_TRUE(kDefaultProperties.auto_gain_control);
   EXPECT_TRUE(kDefaultProperties.noise_suppression);
   EXPECT_EQ(kDefaultProperties.voice_isolation,
             VoiceIsolationType::kVoiceIsolationDefault);
-}
-
-TEST(AudioProcessingPropertiesTest,
-     GainControlEnabledReturnsTrueIfBrowserAgcEnabled) {
-  constexpr AudioProcessingProperties kPropertiesWithBrowserAgc{
-      .auto_gain_control = true};
-  EXPECT_TRUE(kPropertiesWithBrowserAgc.GainControlEnabled());
-}
-
-TEST(AudioProcessingPropertiesTest,
-     GainControlEnabledReturnsTrueIfSystemAgcEnabled) {
-  constexpr AudioProcessingProperties kPropertiesWithBrowserAgc{
-      .system_gain_control_activated = true,
-      .auto_gain_control = true,
-  };
-  EXPECT_TRUE(kPropertiesWithBrowserAgc.GainControlEnabled());
-}
-
-TEST(AudioProcessingPropertiesTest,
-     GainControlEnabledReturnsFalseIfAgcDisabled) {
-  constexpr AudioProcessingProperties kPropertiesWithBrowserAgc{
-      .auto_gain_control = false};
-  EXPECT_FALSE(kPropertiesWithBrowserAgc.GainControlEnabled());
 }
 
 }  // namespace blink

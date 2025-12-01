@@ -55,4 +55,13 @@ TEST(ScopePerFileProvider, Expected) {
     EXPECT_EQ("//out/Debug/tc/gen/source", GPV(variables::kTargetGenDir));
     EXPECT_EQ("//out/Debug/tc/obj/source", GPV(variables::kTargetOutDir));
   }
+
+  // Test just the dotfile scope.
+  {
+    Scope scope(test.settings());
+    ScopePerFileProvider provider(&scope, false, true);
+    EXPECT_GE(provider.GetProgrammaticValue(variables::kGnVersion)->int_value(),
+              0);
+    EXPECT_EQ(nullptr, provider.GetProgrammaticValue(variables::kRootBuildDir));
+  }
 }

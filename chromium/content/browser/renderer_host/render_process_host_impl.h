@@ -49,6 +49,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/process_allocation_context.h"
 #include "content/public/browser/render_process_host.h"
+#include "media/gpu/buildflags.h"
 #include "media/mojo/mojom/interface_factory.mojom-forward.h"
 #include "media/mojo/mojom/video_decode_perf_history.mojom-forward.h"
 #include "media/mojo/mojom/video_encoder_metrics_provider.mojom-forward.h"
@@ -84,10 +85,8 @@
 #include "third_party/blink/public/mojom/loader/code_cache.mojom-forward.h"
 #include "third_party/blink/public/mojom/plugins/plugin_registry.mojom-forward.h"
 #include "third_party/blink/public/mojom/push_messaging/push_messaging.mojom-forward.h"
-#include "third_party/blink/public/mojom/webdatabase/web_database.mojom-forward.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
-#include "ui/gfx/gpu_memory_buffer.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/memory/memory_pressure_listener.h"
@@ -565,7 +564,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
     kSpareTaken = 4,
     kRefusedBySiteInstance = 5,
     kRefusedForPdfContent = 6,
-    kMaxValue = kRefusedForPdfContent
+    kRefusedForJitMismatch = 7,
+    kRefusedForV8OptimizationMismatch = 8,
+    kMaxValue = kRefusedForV8OptimizationMismatch
   };
   // LINT.ThenChange(tools/metrics/histograms/metadata/browser/histograms.xml:SpareProcessMaybeTakeAction)
 
@@ -606,6 +607,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #if !BUILDFLAG(IS_ANDROID)
   // Gets the platform-specific limit. Used by GetMaxRendererProcessCount().
   static size_t GetPlatformMaxRendererProcessCount();
+
+  // Returns whether the current platform has no known process limit, in which
+  // case `GetPlatformMaxRendererProcessCount()` will use a fallback value.
+  static bool IsPlatformProcessLimitUnknownForTesting();
 #endif
 
   // This forces a renderer that is running "in process" to shut down.
@@ -986,11 +991,13 @@ class CONTENT_EXPORT RenderProcessHostImpl
     std::unique_ptr<service_manager::BinderRegistry> binders_;
     mojo::Receiver<mojom::ChildProcessHost> receiver_{this};
 
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(USE_LINUX_VIDEO_ACCELERATION)
     mojo::Remote<media::mojom::VideoEncodeAcceleratorProviderFactory>
         video_encode_accelerator_factory_remote_;
+#endif
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
     ChildThreadTypeSwitcher child_thread_type_switcher_;
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+#endif
   };
 
   // Use CreateRenderProcessHost() instead of calling this constructor
@@ -1048,10 +1055,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void BindVideoEncoderMetricsProvider(
       mojo::PendingReceiver<media::mojom::VideoEncoderMetricsProvider>
           receiver);
-#if BUILDFLAG(IS_ANDROID)
-  void BindWebDatabaseHostImpl(
-      mojo::PendingReceiver<blink::mojom::WebDatabaseHost> receiver);
-#endif  // BUILDFLAG(IS_ANDROID)
   void BindAecDumpManager(
       mojo::PendingReceiver<blink::mojom::AecDumpManager> receiver);
   void CreateMediaLogRecordHost(

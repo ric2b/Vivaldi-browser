@@ -7,10 +7,12 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -20,6 +22,7 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
@@ -63,6 +66,11 @@ namespace {
 
 std::string TimeDeltaToString(base::TimeDelta delta) {
   return base::StrCat({base::NumberToString(delta.InMilliseconds()), "ms"});
+}
+
+int GetSampleCountForHistogram(std::string_view histogram_name) {
+  auto* histogram = base::StatisticsRecorder::FindHistogram(histogram_name);
+  return histogram ? histogram->SnapshotSamples()->TotalCount() : 0;
 }
 
 }  // namespace
@@ -151,6 +159,12 @@ void SharedStorageBrowserTestBase::ExpectAccessObserved(
   observer_->ExpectAccessObserved(expected_accesses);
 }
 
+void SharedStorageBrowserTestBase::ExpectOperationFinishedInfosObserved(
+    const std::vector<TestSharedStorageObserver::OperationFinishedInfo>&
+        expected_infos) {
+  observer_->ExpectOperationFinishedInfosObserved(expected_infos);
+}
+
 double SharedStorageBrowserTestBase::GetRemainingBudget(
     const url::Origin& origin) {
   base::test::TestFuture<SharedStorageWorkletHost::BudgetResult> future;
@@ -166,8 +180,8 @@ FrameTreeNode* SharedStorageBrowserTestBase::PrimaryFrameTreeNodeRoot() {
       .root();
 }
 
-FrameTreeNodeId SharedStorageBrowserTestBase::MainFrameId() {
-  return PrimaryFrameTreeNodeRoot()->frame_tree_node_id();
+GlobalRenderFrameHostId SharedStorageBrowserTestBase::MainFrameId() {
+  return PrimaryFrameTreeNodeRoot()->current_frame_host()->GetGlobalId();
 }
 
 SharedStorageBudgetMetadata*
@@ -504,6 +518,12 @@ SharedStorageBrowserTestBase::test_runtime_manager() {
   return *test_runtime_manager_;
 }
 
+const std::vector<GURL>& SharedStorageBrowserTestBase::urn_uuids_observed()
+    const {
+  DCHECK(observer_);
+  return observer_->urn_uuids_observed();
+}
+
 SharedStorageBrowserTestBase::~SharedStorageBrowserTestBase() = default;
 
 // static
@@ -531,6 +551,48 @@ void SharedStorageBrowserTestBase::WaitForHistograms(
   for (const auto& name : histogram_names) {
     WaitForHistogram(name);
   }
+}
+
+// static
+void SharedStorageBrowserTestBase::WaitForHistogramWithCount(
+    std::string_view histogram_name,
+    int count) {
+  if (GetSampleCountForHistogram(histogram_name) >= count) {
+    return;
+  }
+
+  base::RunLoop run_loop;
+  auto histogram_observer =
+      std::make_unique<base::StatisticsRecorder::ScopedHistogramSampleObserver>(
+          histogram_name,
+          base::BindLambdaForTesting([&](std::string_view histogram_name,
+                                         uint64_t name_hash,
+                                         base::HistogramBase::Sample32 sample) {
+            if (GetSampleCountForHistogram(histogram_name) >= count) {
+              run_loop.Quit();
+            }
+          }));
+  run_loop.Run();
+}
+
+// static
+void SharedStorageBrowserTestBase::WaitForHistogramsWithCounts(
+    const std::vector<std::tuple<std::string_view, int>>&
+        histogram_names_and_counts) {
+  for (auto [name, count] : histogram_names_and_counts) {
+    WaitForHistogramWithCount(name, count);
+  }
+}
+
+std::map<int, base::UnguessableToken>&
+SharedStorageBrowserTestBase::GetCachedWorkletHostDevToolsTokens() {
+  return test_runtime_manager().GetCachedWorkletHostDevToolsTokens();
+}
+
+base::UnguessableToken
+SharedStorageBrowserTestBase::GetFirstWorkletHostDevToolsToken() {
+  CHECK(!test_runtime_manager().GetCachedWorkletHostDevToolsTokens().empty());
+  return test_runtime_manager().GetCachedWorkletHostDevToolsTokens()[0];
 }
 
 }  // namespace content

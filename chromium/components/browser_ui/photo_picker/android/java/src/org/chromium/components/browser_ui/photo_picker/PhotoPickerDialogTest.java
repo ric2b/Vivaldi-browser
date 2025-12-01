@@ -99,11 +99,11 @@ public class PhotoPickerDialogTest
     private Uri[] mLastSelectedPhotos;
 
     // A list of view IDs we receive from an animating event in the order the events occurred.
-    private List<Long> mLastViewAnimatingIds = new ArrayList();
+    private final List<Long> mLastViewAnimatingIds = new ArrayList();
 
     // A list of view alpha values we receive from an animating event in the order the events
     // occurred.
-    private List<Float> mLastViewAnimatingAlphas = new ArrayList();
+    private final List<Float> mLastViewAnimatingAlphas = new ArrayList();
 
     // The list of currently selected photos (built piecemeal).
     private List<PickerBitmap> mCurrentPhotoSelection;
@@ -303,7 +303,7 @@ public class PhotoPickerDialogTest
     public void onAnimationRepeat(Animation animation) {}
 
     private RecyclerView getRecyclerView() {
-        return (RecyclerView) mDialog.findViewById(R.id.selectable_list_recycler_view);
+        return mDialog.findViewById(R.id.selectable_list_recycler_view);
     }
 
     private PhotoPickerDialog createDialogWithContentResolver(
@@ -366,8 +366,8 @@ public class PhotoPickerDialogTest
     private void clickDone() throws Exception {
         mLastActionRecorded = PhotoPickerAction.NUM_ENTRIES;
 
-        PhotoPickerToolbar toolbar = (PhotoPickerToolbar) mDialog.findViewById(R.id.action_bar);
-        Button done = (Button) toolbar.findViewById(R.id.done);
+        PhotoPickerToolbar toolbar = mDialog.findViewById(R.id.action_bar);
+        Button done = toolbar.findViewById(R.id.done);
         int callCount = mOnActionCallback.getCallCount();
         TouchCommon.singleClickView(done);
         mOnActionCallback.waitForCallback(callCount, 1);

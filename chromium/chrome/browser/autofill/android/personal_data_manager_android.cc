@@ -20,7 +20,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/android/resource_mapper.h"
-#include "chrome/browser/autofill/android/autofill_image_fetcher_impl.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -240,13 +239,6 @@ std::string PersonalDataManagerAndroid::GetDefaultCountryCodeForNewAddress(
   return address_data_manager().GetDefaultCountryCodeForNewAddress().value();
 }
 
-bool PersonalDataManagerAndroid::IsCountryEligibleForAccountStorage(
-    JNIEnv* env,
-    std::string& country_code) const {
-  return address_data_manager().IsCountryEligibleForAccountStorage(
-      country_code);
-}
-
 std::string PersonalDataManagerAndroid::SetProfile(
     JNIEnv* env,
     const JavaParamRef<jobject>& jprofile,
@@ -449,13 +441,6 @@ jboolean PersonalDataManagerAndroid::IsFidoAuthenticationAvailable(
   }
   // Show the toggle switch only if FIDO authentication is available.
   return IsCreditCardFidoAuthenticationEnabled();
-}
-
-ScopedJavaLocalRef<jobject>
-PersonalDataManagerAndroid::GetOrCreateJavaImageFetcher(JNIEnv* env) {
-  return static_cast<AutofillImageFetcherImpl*>(
-             payments_data_manager().GetImageFetcher())
-      ->GetOrCreateJavaImageFetcher();
 }
 
 // static

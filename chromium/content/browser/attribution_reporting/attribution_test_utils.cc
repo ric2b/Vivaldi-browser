@@ -47,6 +47,7 @@
 #include "content/browser/attribution_reporting/attribution_utils.h"
 #include "content/browser/attribution_reporting/os_registration.h"
 #include "content/browser/attribution_reporting/rate_limit_result.h"
+#include "content/browser/attribution_reporting/send_result.h"
 #include "content/browser/attribution_reporting/stored_source.h"
 #include "content/public/browser/attribution_data_model.h"
 #include "net/base/net_errors.h"
@@ -86,9 +87,10 @@ SourceBuilder::SourceBuilder(base::Time time)
           {net::SchemefulSite::Deserialize(kDefaultDestinationOrigin)})),
       reporting_origin_(*SuitableOrigin::Deserialize(kDefaultReportOrigin)) {
   registration_.source_event_id = 123;
-  registration_.trigger_specs = attribution_reporting::TriggerSpecs(
-      source_type_, attribution_reporting::EventReportWindows(),
-      attribution_reporting::MaxEventLevelReports::Max());
+  registration_.trigger_data =
+      attribution_reporting::TriggerDataSet(source_type_);
+  registration_.max_event_level_reports =
+      attribution_reporting::MaxEventLevelReports::Max();
 }
 
 SourceBuilder::~SourceBuilder() = default;
@@ -136,9 +138,10 @@ SourceBuilder& SourceBuilder::SetReportingOrigin(SuitableOrigin origin) {
 
 SourceBuilder& SourceBuilder::SetSourceType(SourceType source_type) {
   source_type_ = source_type;
-  registration_.trigger_specs = attribution_reporting::TriggerSpecs(
-      source_type_, attribution_reporting::EventReportWindows(),
-      attribution_reporting::MaxEventLevelReports(source_type));
+  registration_.trigger_data =
+      attribution_reporting::TriggerDataSet(source_type_);
+  registration_.max_event_level_reports =
+      attribution_reporting::MaxEventLevelReports(source_type);
   return *this;
 }
 
@@ -222,16 +225,22 @@ SourceBuilder& SourceBuilder::SetDebugReporting(bool debug_reporting) {
   return *this;
 }
 
-SourceBuilder& SourceBuilder::SetTriggerSpecs(
-    attribution_reporting::TriggerSpecs trigger_specs) {
-  registration_.trigger_specs = std::move(trigger_specs);
+SourceBuilder& SourceBuilder::SetTriggerData(
+    attribution_reporting::TriggerDataSet trigger_data) {
+  registration_.trigger_data = std::move(trigger_data);
+  return *this;
+}
+
+SourceBuilder& SourceBuilder::SetEventReportWindows(
+    attribution_reporting::EventReportWindows event_report_windows) {
+  registration_.event_report_windows = std::move(event_report_windows);
   return *this;
 }
 
 SourceBuilder& SourceBuilder::SetMaxEventLevelReports(
     int max_event_level_reports) {
-  registration_.trigger_specs.SetMaxEventLevelReportsForTesting(
-      attribution_reporting::MaxEventLevelReports(max_event_level_reports));
+  registration_.max_event_level_reports =
+      attribution_reporting::MaxEventLevelReports(max_event_level_reports);
   return *this;
 }
 
@@ -288,7 +297,8 @@ StoredSource SourceBuilder::BuildStored() const {
       CommonSourceInfo(source_origin_, reporting_origin_, source_type_,
                        cookie_based_debug_allowed_),
       registration_.source_event_id, registration_.destination_set,
-      source_time_, expiry_time, registration_.trigger_specs,
+      source_time_, expiry_time, registration_.trigger_data,
+      registration_.event_report_windows, registration_.max_event_level_reports,
       source_time_ + registration_.aggregatable_report_window,
       registration_.priority, registration_.filter_data,
       registration_.debug_key, registration_.aggregation_keys,
@@ -607,7 +617,7 @@ bool operator==(const StoredSource& a, const StoredSource& b) {
     return std::make_tuple(
         source.common_info(), source.source_event_id(),
         source.destination_sites(), source.source_time(), source.expiry_time(),
-        source.trigger_specs(), source.aggregatable_report_window_time(),
+        source.trigger_data(), source.aggregatable_report_window_time(),
         source.priority(), source.filter_data(), source.debug_key(),
         source.aggregation_keys(), source.attribution_logic(),
         source.active_state(), source.dedup_keys(),
@@ -730,7 +740,7 @@ std::ostream& operator<<(std::ostream& out, const StoredSource& source) {
       << ",destination_sites=" << source.destination_sites()
       << ",source_time=" << source.source_time()
       << ",expiry_time=" << source.expiry_time()
-      << ",trigger_specs=" << source.trigger_specs()
+      << ",trigger_data=" << source.trigger_data()
       << ",aggregatable_report_window_time="
       << source.aggregatable_report_window_time()
       << ",priority=" << source.priority()
@@ -789,7 +799,6 @@ std::ostream& operator<<(std::ostream& out,
       << ",destinations=" << data.destinations
       << ",source_event_id=" << data.source_event_id
       << ",source_type=" << data.source_type << ",source_debug_key=";
-
 
   return out << ",randomized_response_rate=" << data.randomized_response_rate
              << ",attributed_truthfully=" << data.attributed_truthfully << "}";
@@ -856,6 +865,8 @@ std::ostream& operator<<(std::ostream& out, SendResult::Status status) {
       return out << "kTransientFailure";
     case SendResult::Status::kFailure:
       return out << "kFailure";
+    case SendResult::Status::kExpired:
+      return out << "kExpired";
     case SendResult::Status::kDropped:
       return out << "kDropped";
     case SendResult::Status::kAssemblyFailure:
@@ -867,22 +878,9 @@ std::ostream& operator<<(std::ostream& out, SendResult::Status status) {
 
 std::ostream& operator<<(std::ostream& out, const SendResult& info) {
   std::visit(base::Overloaded{
-                 [&](SendResult::Sent sent) {
-                   out << "{Sent={result=";
-                   switch (sent.result) {
-                     case SendResult::Sent::Result::kSent:
-                       out << "kSent";
-                       break;
-                     case SendResult::Sent::Result::kTransientFailure:
-                       out << "kTransientFailure";
-                       break;
-                     case SendResult::Sent::Result::kFailure:
-                       out << "kFailure";
-                       break;
-                   }
-                   out << ",status=" << sent.status << "}}";
-                 },
+                 [&](SendResult::Sent sent) { out << sent; },
                  [&](SendResult::Dropped) { out << "{Dropped={}}"; },
+                 [&](SendResult::Expired) { out << "{Expired={}}"; },
                  [&](SendResult::AssemblyFailure failure) {
                    out << "{AssemblyFailure={transient=" << failure.transient
                        << "}}";
@@ -890,6 +888,28 @@ std::ostream& operator<<(std::ostream& out, const SendResult& info) {
              },
              info.result);
   return out;
+}
+
+std::ostream& operator<<(std::ostream& out, SendResult::Sent sent) {
+  out << "{Sent={result=";
+  switch (sent.result) {
+    case SendResult::Sent::Result::kSent:
+      out << "kSent";
+      break;
+    case SendResult::Sent::Result::kTransientFailure:
+      out << "kTransientFailure";
+      break;
+    case SendResult::Sent::Result::kFailure:
+      out << "kFailure";
+      break;
+  }
+  out << ",status=";
+  if (sent.status < 0) {
+    out << net::ErrorToShortString(sent.status);
+  } else {
+    out << sent.status;
+  }
+  return out << "}}";
 }
 
 std::ostream& operator<<(std::ostream& out,

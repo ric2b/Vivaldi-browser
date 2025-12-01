@@ -44,7 +44,9 @@
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/transitions/legacy_grid_transition_layout.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/transitions/tab_grid_transition_item.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_group_item.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_snapshot_and_favicon.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_switcher_item.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_switcher_item_snapshot_and_favicon_data_source.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_utils.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
@@ -1668,9 +1670,9 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
 }
 
 // Configures `groupCell`'s identifier and title synchronously, and pass the
-// list of `GroupTabInfo`asynchronously with information from `item`. Updates
-// the `cell`'s theme to this view controller's theme. This view controller
-// becomes the delegate for the cell.
+// list of `TabSnapshotAndFavicon` asynchronously with information from `item`.
+// Updates the `cell`'s theme to this view controller's theme. This view
+// controller becomes the delegate for the cell.
 - (void)configureGroupCell:(GroupGridCell*)cell
                   withItem:(TabGroupItem*)item
                    atIndex:(NSUInteger)index {
@@ -1686,9 +1688,7 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   cell.title = item.title;
   cell.accessibilityIdentifier = GroupGridCellAccessibilityIdentifier(index);
 
-  UIViewController* facePile =
-      [self.gridProvider facePileViewControllerForItem:groupItemIdentifier];
-  [cell setFacePileViewController:facePile parentViewController:self];
+  cell.facePile = [self.gridProvider facePileViewForItem:groupItemIdentifier];
 
   if (self.mode == TabGridMode::kSelection) {
     if ([self.gridProvider isItemSelected:groupItemIdentifier]) {
@@ -1703,13 +1703,15 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   cell.activityLabelData =
       [self.gridProvider activityLabelDataForItem:groupItemIdentifier];
 
-  [item fetchGroupTabInfos:^(TabGroupItem* innerItem,
-                             NSArray<GroupTabInfo*>* groupTabInfos) {
+  auto completionBlock = ^(
+      TabGroupItem* innerItem,
+      NSArray<TabSnapshotAndFavicon*>* tabSnapshotsAndFavicons) {
     if ([cell.itemIdentifier.tabGroupItem isEqual:innerItem]) {
-      [cell configureWithGroupTabInfos:groupTabInfos
-                        totalTabsCount:innerItem.numberOfTabsInGroup];
+      [cell configureWithSnapshotsAndFavicons:tabSnapshotsAndFavicons
+                               totalTabsCount:innerItem.numberOfTabsInGroup];
     }
-  }];
+  };
+  [self.gridProvider fetchTabGroupItemInfo:item completion:completionBlock];
 }
 
 // Configures `cell`'s identifier and title synchronously, and favicon and
@@ -1738,19 +1740,22 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
   } else {
     cell.state = GridCellStateNotEditing;
   }
-  [item fetchFavicon:^(TabSwitcherItem* innerItem, UIImage* icon) {
-    // Only update the icon if the cell is not already reused for another item.
-    if ([cell.itemIdentifier.tabSwitcherItem isEqual:innerItem]) {
-      cell.icon = icon;
-    }
-  }];
+  if ([cell.itemIdentifier isEqual:self.selectedItemIdentifier]) {
+    cell.layoutGuideCenter = self.layoutGuideCenter;
+    [cell registerAsSelectedCellGuide];
+  }
 
-  [item fetchSnapshot:^(TabSwitcherItem* innerItem, UIImage* snapshot) {
-    // Only update the icon if the cell is not already reused for another item.
+  auto completion = ^(TabSwitcherItem* innerItem,
+                      TabSnapshotAndFavicon* tabSnapshotAndFavicon) {
+    // Only apply changes if the cell is not already reused for another
+    // item.
     if ([cell.itemIdentifier.tabSwitcherItem isEqual:innerItem]) {
-      cell.snapshot = snapshot;
+      cell.icon = tabSnapshotAndFavicon.favicon;
+      cell.snapshot = tabSnapshotAndFavicon.snapshot;
     }
-  }];
+  };
+  [self.snapshotAndfaviconDataSource fetchTabSnapshotAndFavicon:item
+                                                     completion:completion];
 
   web::WebStateID itemID = item.identifier;
   [self.priceCardDataSource
@@ -1908,8 +1913,8 @@ NSString* GroupGridCellAccessibilityIdentifier(NSUInteger index) {
 
 // Updates the number of results found on the search open tabs section header.
 - (void)updateSearchResultsHeader {
-  CHECK_EQ(_mode, TabGridMode::kSearch, base::NotFatalUntil::M129);
-  CHECK_GT(_searchText.length, 0ul, base::NotFatalUntil::M129);
+  CHECK_EQ(_mode, TabGridMode::kSearch);
+  CHECK_GT(_searchText.length, 0ul);
   NSInteger tabSectionIndex = [self.diffableDataSource
       indexForSectionIdentifier:kGridOpenTabsSectionIdentifier];
   GridHeader* headerView = base::apple::ObjCCast<

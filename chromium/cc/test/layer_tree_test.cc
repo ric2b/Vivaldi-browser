@@ -120,10 +120,6 @@ class SynchronousLayerTreeFrameSink : public TestLayerTreeFrameSink {
   }
   void DidReceiveCompositorFrameAck(
       std::vector<viz::ReturnedResource> resources) override {
-    if (!frame_ack_pending_) {
-      DCHECK(resources.empty());
-      return;
-    }
     DCHECK(frame_ack_pending_);
     frame_ack_pending_ = false;
     TestLayerTreeFrameSink::DidReceiveCompositorFrameAck(std::move(resources));
@@ -257,6 +253,14 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
 
   DrawResult PrepareToDraw(FrameData* frame) override {
     test_hooks_->WillPrepareToDrawOnThread(this);
+
+    if (!active_tree()->local_surface_id_from_parent().is_valid()) {
+      // Make sure the active tree always has a valid LocalSurfaceId.
+      active_tree()->SetLocalSurfaceIdFromParent(viz::LocalSurfaceId(
+          1, base::UnguessableToken::CreateForTesting(2u, 3u)));
+      UpdateChildLocalSurfaceId();
+    }
+
     DrawResult draw_result = LayerTreeHostImpl::PrepareToDraw(frame);
     return test_hooks_->PrepareToDrawOnThread(this, frame, draw_result);
   }
@@ -357,9 +361,9 @@ class LayerTreeHostImplForTesting : public LayerTreeHostImpl {
     test_hooks_->UpdateAnimationState(this, has_unfinished_animation);
   }
 
-  void NotifyTileStateChanged(const Tile* tile) override {
-    LayerTreeHostImpl::NotifyTileStateChanged(tile);
-    test_hooks_->NotifyTileStateChangedOnThread(this, tile);
+  void NotifyTileStateChanged(const Tile* tile, bool update_damage) override {
+    LayerTreeHostImpl::NotifyTileStateChanged(tile, update_damage);
+    test_hooks_->NotifyTileStateChangedOnThread(this, tile, update_damage);
   }
 
   void InvalidateContentOnImplSide() override {

@@ -11,6 +11,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/image_fetcher/image_decoder_impl.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -31,6 +32,7 @@
 #include "skia/ext/image_operations.h"
 #include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
@@ -56,6 +58,7 @@
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
 #include "ui/views/layout/flex_layout.h"
+#include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
@@ -109,7 +112,7 @@ class ContinueButton : public views::MdTextButton {
     }
 
     const SkColor dialog_background_color =
-        bubble_view_->background_color().ConvertToSkColor(GetColorProvider());
+        bubble_view_->background_color().ResolveToSkColor(GetColorProvider());
     if (color_utils::GetContrastRatio(dialog_background_color,
                                       *brand_background_color_) <
         color_utils::kMinimumVisibleContrastRatio) {
@@ -160,7 +163,7 @@ int AddLoginButtonSeparator(views::View* scroller_content,
 }  // namespace
 
 AccountSelectionBubbleView::AccountSelectionBubbleView(
-    const std::u16string& rp_for_display,
+    const content::RelyingPartyData& rp_data,
     const std::optional<std::u16string>& idp_title,
     blink::mojom::RpContext rp_context,
     views::View* anchor_view,
@@ -174,9 +177,7 @@ AccountSelectionBubbleView::AccountSelectionBubbleView(
           views::BubbleBorder::Arrow::TOP_RIGHT,
           views::BubbleBorder::DIALOG_SHADOW,
           /*autosize=*/true),
-      AccountSelectionViewBase(owner,
-                               std::move(url_loader_factory),
-                               rp_for_display),
+      AccountSelectionViewBase(owner, std::move(url_loader_factory), rp_data),
       rp_context_(rp_context) {
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_fixed_width(kBubbleWidth);
@@ -186,16 +187,12 @@ AccountSelectionBubbleView::AccountSelectionBubbleView(
       idp_title.has_value() ||
       base::FeatureList::IsEnabled(features::kFedCmMultipleIdentityProviders));
   set_margins(gfx::Insets::VH(kTopBottomPadding + kVerticalSpacing, 0));
-  // TODO(crbug.com/40224637): we are currently using a custom header because
-  // the icon, title, and close buttons from a bubble are not customizable
-  // enough to satisfy the UI requirements. However, this adds complexity to the
-  // code and makes this bubble lose any improvements made to the base bubble,
-  // so we should revisit this.
+
   SetShowTitle(false);
   SetShowCloseButton(false);
   set_close_on_deactivate(false);
 
-  title_ = GetTitle(rp_for_display_, idp_title, rp_context);
+  title_ = GetTitle(rp_data_, idp_title, rp_context);
   SetAccessibleTitle(title_);
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -213,14 +210,14 @@ void AccountSelectionBubbleView::ShowMultiAccountPicker(
     bool show_back_button) {
   bool is_multi_idp = idp_list.size() > 1u;
   std::u16string title = GetTitle(
-      rp_for_display_,
+      rp_data_,
       is_multi_idp ? std::nullopt
                    : std::make_optional<std::u16string>(
                          base::UTF8ToUTF16(idp_list[0]->idp_for_display)),
       rp_context_);
   UpdateHeader(
       is_multi_idp ? rp_icon : idp_list[0]->idp_metadata.brand_decoded_icon,
-      title, show_back_button,
+      title, webid::GetSubtitle(rp_data_), show_back_button,
       /*should_circle_crop_header_icon=*/!is_multi_idp);
 
   RemoveNonHeaderChildViews();
@@ -233,7 +230,7 @@ void AccountSelectionBubbleView::ShowVerifyingSheet(
     const IdentityRequestAccountPtr& account,
     const std::u16string& title) {
   UpdateHeader(account->identity_provider->idp_metadata.brand_decoded_icon,
-               title,
+               title, u"",
                /*show_back_button=*/false,
                /*should_circle_crop_header_icon=*/true);
 
@@ -260,18 +257,25 @@ void AccountSelectionBubbleView::ShowVerifyingSheet(
 void AccountSelectionBubbleView::ShowSingleAccountConfirmDialog(
     const IdentityRequestAccountPtr& account,
     bool show_back_button) {
-  std::u16string title =
-      GetTitle(rp_for_display_,
-               base::UTF8ToUTF16(account->identity_provider->idp_for_display),
-               rp_context_);
+  std::u16string title = GetTitle(
+      rp_data_, base::UTF8ToUTF16(account->identity_provider->idp_for_display),
+      rp_context_);
   UpdateHeader(account->identity_provider->idp_metadata.brand_decoded_icon,
-               title, show_back_button,
+               title, webid::GetSubtitle(rp_data_), show_back_button,
                /*should_circle_crop_header_icon=*/true);
 
   RemoveNonHeaderChildViews();
   AddChildView(std::make_unique<views::Separator>());
-  AddChildView(CreateSingleAccountChooser(account));
+  std::pair<std::unique_ptr<views::View>, views::MdTextButton*>
+      chooser_and_button = CreateSingleAccountChooser(account);
+  AddChildView(std::move(chooser_and_button.first));
 
+  // If the screen reader is active, request focus so that the creation of
+  // this button is announced to the user. Do not do this when screen reader
+  // is not active because it looks bad.
+  if (ui::AXPlatform::GetInstance().IsScreenReaderActive()) {
+    chooser_and_button.second->RequestFocus();
+  }
   PreferredSizeChanged();
 }
 
@@ -279,7 +283,8 @@ void AccountSelectionBubbleView::ShowFailureDialog(
     const std::u16string& idp_for_display,
     const content::IdentityProviderMetadata& idp_metadata) {
   UpdateHeader(idp_metadata.brand_decoded_icon,
-               GetTitle(rp_for_display_, idp_for_display, rp_context_),
+               GetTitle(rp_data_, idp_for_display, rp_context_),
+               webid::GetSubtitle(rp_data_),
                /*show_back_button=*/false,
                /*should_circle_crop_header_icon=*/true);
 
@@ -312,7 +317,7 @@ void AccountSelectionBubbleView::ShowFailureDialog(
                           base::Unretained(owner_), idp_metadata.config_url,
                           idp_metadata.idp_login_url),
       l10n_util::GetStringUTF16(IDS_SIGNIN_CONTINUE), this, idp_metadata,
-      /*extra_accessible_text=*/std::nullopt);
+      /*extra_accessible_text=*/u"Opens in a new tab");
   row->AddChildView(std::move(button));
   AddChildView(std::move(row));
 
@@ -323,9 +328,9 @@ void AccountSelectionBubbleView::ShowErrorDialog(
     const std::u16string& idp_for_display,
     const content::IdentityProviderMetadata& idp_metadata,
     const std::optional<TokenError>& error) {
-  std::u16string title =
-      GetTitle(rp_for_display_, idp_for_display, rp_context_);
+  std::u16string title = GetTitle(rp_data_, idp_for_display, rp_context_);
   UpdateHeader(idp_metadata.brand_decoded_icon, title,
+               webid::GetSubtitle(rp_data_),
                /*show_back_button=*/false,
                /*should_circle_crop_header_icon=*/true);
 
@@ -339,7 +344,7 @@ void AccountSelectionBubbleView::ShowErrorDialog(
   std::u16string summary_text;
   std::u16string description_text;
   std::tie(summary_text, description_text) =
-      GetErrorDialogText(error, rp_for_display_, idp_for_display);
+      GetErrorDialogText(error, idp_for_display);
 
   // Add error summary.
   views::Label* const summary =
@@ -401,6 +406,14 @@ void AccountSelectionBubbleView::ShowRequestPermissionDialog(
 
 std::string AccountSelectionBubbleView::GetDialogTitle() const {
   return base::UTF16ToUTF8(title_);
+}
+
+std::optional<std::string> AccountSelectionBubbleView::GetDialogSubtitle()
+    const {
+  if (subtitle_.empty()) {
+    return std::nullopt;
+  }
+  return base::UTF16ToUTF8(subtitle_);
 }
 
 gfx::Rect AccountSelectionBubbleView::GetBubbleBounds() {
@@ -491,11 +504,30 @@ std::unique_ptr<views::View> AccountSelectionBubbleView::CreateHeaderView() {
   back_button_->SetProperty(views::kMarginsKey,
                             gfx::Insets().set_right(back_button_right_margin));
 
+  auto* titles_container =
+      header->AddChildView(std::make_unique<views::View>());
+  titles_container
+      ->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kVertical))
+      ->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
+  views::FlexSpecification flex_spec(views::LayoutOrientation::kHorizontal,
+                                     views::MinimumFlexSizeRule::kScaleToZero,
+                                     views::MaximumFlexSizeRule::kUnbounded);
+  titles_container->SetProperty(views::kFlexBehaviorKey, flex_spec);
+
   // Add the title.
-  title_label_ = header->AddChildView(std::make_unique<views::Label>(
+  title_label_ = titles_container->AddChildView(std::make_unique<views::Label>(
       title_, views::style::CONTEXT_DIALOG_BODY_TEXT,
       views::style::STYLE_PRIMARY));
   SetLabelProperties(title_label_);
+
+  // Add the subtitle.
+  subtitle_label_ =
+      titles_container->AddChildView(std::make_unique<views::Label>(
+          subtitle_, views::style::CONTEXT_DIALOG_BODY_TEXT,
+          views::style::STYLE_SECONDARY));
+  SetLabelProperties(subtitle_label_);
+  subtitle_label_->SetVisible(!subtitle_.empty());
 
   // Add the close button.
   std::unique_ptr<views::Button> close_button =
@@ -504,10 +536,11 @@ std::unique_ptr<views::View> AccountSelectionBubbleView::CreateHeaderView() {
                               base::Unretained(owner_)));
   close_button->SetVisible(true);
   header->AddChildView(std::move(close_button));
+
   return header;
 }
 
-std::unique_ptr<views::View>
+std::pair<std::unique_ptr<views::View>, views::MdTextButton*>
 AccountSelectionBubbleView::CreateSingleAccountChooser(
     const IdentityRequestAccountPtr& account) {
   auto row = std::make_unique<views::View>();
@@ -535,18 +568,19 @@ AccountSelectionBubbleView::CreateSingleAccountChooser(
                           base::Unretained(owner_), account),
       button_title, this, idp_metadata,
       base::UTF8ToUTF16(account->display_identifier));
+  views::MdTextButton* button_ptr = button.get();
   row->AddChildView(std::move(button));
 
   // Do not add disclosure text if this is a sign in or if we were requested
   // to skip it.
   if (account->login_state == Account::LoginState::kSignIn ||
       idp_data.disclosure_fields.empty()) {
-    return row;
+    return std::make_pair(std::move(row), button_ptr);
   }
 
   // Add disclosure text.
   row->AddChildView(CreateDisclosureLabel(idp_data));
-  return row;
+  return std::make_pair(std::move(row), button_ptr);
 }
 
 void AccountSelectionBubbleView::AddSeparatorAndMultipleAccountChooser(
@@ -695,6 +729,8 @@ std::unique_ptr<views::View> AccountSelectionBubbleView::CreateMultiIdpLoginRow(
       /*horizontal=*/kLeftRightPadding)));
   button->SetIconHorizontalMargins(kMultiIdpIconLeftMargin,
                                    kMultiIdpIconRightMargin);
+  button->AddExtraAccessibleText(
+      l10n_util::GetStringUTF16(IDS_ACCOUNT_SELECTION_OPENS_IN_NEW_TAB));
   return button;
 }
 
@@ -712,12 +748,15 @@ AccountSelectionBubbleView::CreateSingleIdpUseOtherAccountButton(
                           idp_metadata.idp_login_url),
       std::move(icon_view), title);
   button->SetIconHorizontalMargins(icon_margin, icon_margin);
+  button->AddExtraAccessibleText(
+      l10n_util::GetStringUTF16(IDS_ACCOUNT_SELECTION_OPENS_IN_NEW_TAB));
   return button;
 }
 
 void AccountSelectionBubbleView::UpdateHeader(
     const gfx::Image& idp_image,
     const std::u16string& title,
+    const std::u16string& subtitle,
     bool show_back_button,
     bool should_circle_crop_header_icon) {
   back_button_->SetVisible(show_back_button);
@@ -732,12 +771,18 @@ void AccountSelectionBubbleView::UpdateHeader(
                                          should_circle_crop_header_icon);
     header_icon_view_->SetVisible(true);
   }
-  if (title.compare(title_) != 0) {
+  if (title != title_) {
     title_ = title;
     title_label_->SetText(title_);
+    // TODO(crbug.com/390581529): Make this work properly with subtitles.
     SetAccessibleTitle(title_);
     // The title label is not destroyed, so announce it manually.
     SendAccessibilityEvent(GetWidget(), title_);
+  }
+  if (subtitle != subtitle_) {
+    subtitle_ = subtitle;
+    subtitle_label_->SetText(subtitle_);
+    subtitle_label_->SetVisible(!subtitle_.empty());
   }
 }
 

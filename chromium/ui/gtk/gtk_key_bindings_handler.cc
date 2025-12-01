@@ -8,6 +8,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/logging.h"
+#include "ui/base/glib/gsettings.h"
 #include "ui/base/ime/text_edit_commands.h"
 #include "ui/events/event_constants.h"
 #include "ui/gtk/gtk_compat.h"
@@ -67,8 +68,6 @@ constexpr auto kEmacsBindings =
          ui::TextEditCommand::MOVE_UP},
         {{ui::KeyboardCode::VKEY_P, ui::EF_CONTROL_DOWN | ui::EF_SHIFT_DOWN},
          ui::TextEditCommand::MOVE_UP_AND_MODIFY_SELECTION},
-        {{ui::KeyboardCode::VKEY_T, ui::EF_CONTROL_DOWN},
-         ui::TextEditCommand::TRANSPOSE},
         {{ui::KeyboardCode::VKEY_U, ui::EF_CONTROL_DOWN},
          ui::TextEditCommand::DELETE_TO_BEGINNING_OF_LINE},
         {{ui::KeyboardCode::VKEY_W, ui::EF_CONTROL_DOWN},
@@ -84,17 +83,10 @@ constexpr auto kEmacsBindings =
 }  // namespace
 
 GtkKeyBindingsHandler::GtkKeyBindingsHandler() {
-  // g_settings_new() will fatally fail if the schema does not exist, so
-  // use g_settings_schema_source_lookup() to check for it first.
-  auto* schema_source = g_settings_schema_source_get_default();
-  auto* schema =
-      g_settings_schema_source_lookup(schema_source, kDesktopInterface, true);
-  if (!schema) {
+  settings_ = ui::GSettingsNew(kDesktopInterface);
+  if (!settings_) {
     return;
   }
-  settings_ = TakeGObject(g_settings_new_full(schema, nullptr, nullptr));
-  g_settings_schema_unref(schema);
-
   signal_ = ScopedGSignal(
       settings_, "changed",
       base::BindRepeating(&GtkKeyBindingsHandler::OnSettingsChanged,

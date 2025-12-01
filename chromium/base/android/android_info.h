@@ -5,6 +5,8 @@
 #ifndef BASE_ANDROID_ANDROID_INFO_H_
 #define BASE_ANDROID_ANDROID_INFO_H_
 
+#include <string>
+
 #include "base/base_export.h"
 
 namespace base::android::android_info {
@@ -32,42 +34,41 @@ enum SdkVersion {
   SDK_VERSION_T = 33,
   SDK_VERSION_U = 34,
   SDK_VERSION_V = 35,
+  SDK_VERSION_BAKLAVA = 36,
 };
 
-const char* device();
+const std::string& device();
 
-const char* manufacturer();
+const std::string& manufacturer();
 
-const char* model();
+const std::string& model();
 
-BASE_EXPORT const char* brand();
+BASE_EXPORT const std::string& brand();
 
-const char* android_build_id();
+const std::string& android_build_id();
 
-const char* build_type();
+const std::string& build_type();
 
-const char* board();
+const std::string& board();
 
-const char* android_build_fp();
+const std::string& android_build_fp();
 
 BASE_EXPORT int sdk_int();
 
-bool is_debug_android();
+BASE_EXPORT bool is_debug_android();
 
-const char* version_incremental();
+const std::string& version_incremental();
 
-BASE_EXPORT const char* hardware();
+BASE_EXPORT const std::string& hardware();
 
-bool is_at_least_u();
-
-const char* codename();
+const std::string& codename();
 
 // Available only on android S+. For S-, this method returns empty string.
-const char* soc_manufacturer();
+const std::string& soc_manufacturer();
 
-bool is_at_least_t();
+const std::string& abi_name();
 
-const char* abi_name();
+BASE_EXPORT const std::string& security_patch();
 
 }  // namespace base::android::android_info
 

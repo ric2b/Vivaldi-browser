@@ -11,13 +11,12 @@
 #include "base/functional/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/time/time.h"
 #include "components/subresource_filter/content/renderer/unverified_ruleset_dealer.h"
+#include "components/subresource_filter/content/renderer/web_document_subresource_filter_impl.h"
 #include "components/subresource_filter/content/shared/common/utils.h"
 #include "components/subresource_filter/core/common/document_subresource_filter.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
-#include "components/subresource_filter/content/renderer/web_document_subresource_filter_impl.h"
 #include "components/subresource_filter/core/common/scoped_timers.h"
 #include "components/subresource_filter/core/common/time_measurements.h"
 #include "content/public/common/content_features.h"
@@ -38,8 +37,9 @@ namespace {
 
 bool IsFencedFrameRoot(content::RenderFrame* frame) {
   // Unit tests may have a nullptr render_frame.
-  if (!frame)
+  if (!frame) {
     return false;
+  }
   return frame->IsInFencedFrameTree() && frame->IsMainFrame();
 }
 
@@ -53,13 +53,13 @@ SubresourceFilterAgent::SubresourceFilterAgent(
     : content::RenderFrameObserver(render_frame),
       content::RenderFrameObserverTracker<SubresourceFilterAgent>(render_frame),
       ruleset_dealer_(ruleset_dealer) {
-  CHECK(ruleset_dealer, base::NotFatalUntil::M129);
+  CHECK(ruleset_dealer);
 }
 
 void SubresourceFilterAgent::Initialize() {
   const GURL& url = GetDocumentURL();
   // The initial empty document will always inherit activation.
-  CHECK(ShouldInheritActivation(url), base::NotFatalUntil::M129);
+  CHECK(ShouldInheritActivation(url));
 
   // We must check for provisional here because in that case 2 RenderFrames will
   // be created for the same FrameTreeNode in the browser. The browser service
@@ -82,8 +82,9 @@ void SubresourceFilterAgent::Initialize() {
     // DidCreateFencedFrame which is called by the creating RenderFrame.
     // Additionally, there's no need to set evidence for the initial empty
     // subframe since the fenced frame is isolated from its embedder.
-    if (IsFrameCreatedByAdScript())
+    if (IsFrameCreatedByAdScript()) {
       SendFrameWasCreatedByAdScript();
+    }
 
     // As this is the initial empty document, we won't have received any message
     // from the browser and so we must populate the ad evidence here.
@@ -135,7 +136,7 @@ bool SubresourceFilterAgent::IsSubresourceFilterChild() {
 bool SubresourceFilterAgent::IsParentAdFrame() {
   // A fenced frame root should never ask this since it can't see the outer
   // frame tree. Its AdEvidence is always computed by the browser.
-  CHECK(!IsFencedFrameRoot(render_frame()), base::NotFatalUntil::M129);
+  CHECK(!IsFencedFrameRoot(render_frame()));
   return render_frame()->GetWebFrame()->Parent()->IsAdFrame();
 }
 
@@ -144,14 +145,14 @@ bool SubresourceFilterAgent::IsProvisional() {
 }
 
 bool SubresourceFilterAgent::IsFrameCreatedByAdScript() {
-  CHECK(!IsFencedFrameRoot(render_frame()), base::NotFatalUntil::M129);
+  CHECK(!IsFencedFrameRoot(render_frame()));
   return render_frame()->GetWebFrame()->IsFrameCreatedByAdScript();
 }
 
 void SubresourceFilterAgent::SetSubresourceFilterForCurrentDocument(
     std::unique_ptr<blink::WebDocumentSubresourceFilter> filter) {
   blink::WebLocalFrame* web_frame = render_frame()->GetWebFrame();
-  CHECK(web_frame->GetDocumentLoader(), base::NotFatalUntil::M129);
+  CHECK(web_frame->GetDocumentLoader());
   web_frame->GetDocumentLoader()->SetSubresourceFilter(filter.release());
 }
 
@@ -170,7 +171,7 @@ void SubresourceFilterAgent::SendFrameIsAd() {
 }
 
 void SubresourceFilterAgent::SendFrameWasCreatedByAdScript() {
-  CHECK(!IsFencedFrameRoot(render_frame()), base::NotFatalUntil::M129);
+  CHECK(!IsFencedFrameRoot(render_frame()));
   GetSubresourceFilterHost()->FrameWasCreatedByAdScript();
 }
 
@@ -191,22 +192,25 @@ SubresourceFilterAgent::AdEvidence() {
 // static
 mojom::ActivationState SubresourceFilterAgent::GetInheritedActivationState(
     content::RenderFrame* render_frame) {
-  if (!render_frame)
+  if (!render_frame) {
     return mojom::ActivationState();
+  }
 
   // A fenced frame is isolated from its outer embedder so we cannot inspect
   // the parent's activation state. However, that's ok because the embedder
   // cannot script the fenced frame so we can wait until a navigation to set
   // activation state.
-  if (IsFencedFrameRoot(render_frame))
+  if (IsFencedFrameRoot(render_frame)) {
     return mojom::ActivationState();
+  }
 
   blink::WebFrame* frame_to_inherit_from =
       render_frame->IsMainFrame() ? render_frame->GetWebFrame()->Opener()
                                   : render_frame->GetWebFrame()->Parent();
 
-  if (!frame_to_inherit_from || !frame_to_inherit_from->IsWebLocalFrame())
+  if (!frame_to_inherit_from || !frame_to_inherit_from->IsWebLocalFrame()) {
     return mojom::ActivationState();
+  }
 
   blink::WebSecurityOrigin render_frame_origin =
       render_frame->GetWebFrame()->GetSecurityOrigin();
@@ -218,8 +222,9 @@ mojom::ActivationState SubresourceFilterAgent::GetInheritedActivationState(
     auto* agent =
         SubresourceFilterAgent::Get(content::RenderFrame::FromWebFrame(
             frame_to_inherit_from->ToWebLocalFrame()));
-    if (agent && agent->filter_for_last_created_document_)
+    if (agent && agent->filter_for_last_created_document_) {
       return agent->filter_for_last_created_document_->activation_state();
+    }
   }
 
   return mojom::ActivationState();
@@ -266,10 +271,10 @@ void SubresourceFilterAgent::ActivateForNextCommittedLoad(
     const std::optional<blink::FrameAdEvidence>& ad_evidence) {
   activation_state_for_next_document_ = *activation_state;
   if (IsSubresourceFilterChild()) {
-    CHECK(ad_evidence.has_value(), base::NotFatalUntil::M129);
+    CHECK(ad_evidence.has_value());
     SetAdEvidence(ad_evidence.value());
   } else {
-    CHECK(!ad_evidence.has_value(), base::NotFatalUntil::M129);
+    CHECK(!ad_evidence.has_value());
   }
 }
 
@@ -278,9 +283,9 @@ void SubresourceFilterAgent::OnDestruct() {
 }
 
 void SubresourceFilterAgent::SetAdEvidenceForInitialEmptySubframe() {
-  CHECK(!IsAdFrame(), base::NotFatalUntil::M129);
-  CHECK(!AdEvidence().has_value(), base::NotFatalUntil::M129);
-  CHECK(!IsFencedFrameRoot(render_frame()), base::NotFatalUntil::M129);
+  CHECK(!IsAdFrame());
+  CHECK(!AdEvidence().has_value());
+  CHECK(!IsFencedFrameRoot(render_frame()));
 
   blink::FrameAdEvidence ad_evidence(IsParentAdFrame());
   ad_evidence.set_created_by_ad_script(
@@ -303,8 +308,9 @@ void SubresourceFilterAgent::DidCreateNewDocument() {
   // A new browser-side host is created for each new page (i.e. new document in
   // a subresource filter root frame) so we have to reset the remote so we
   // re-bind on the next message.
-  if (!IsSubresourceFilterChild())
+  if (!IsSubresourceFilterChild()) {
     subresource_filter_host_.reset();
+  }
 
   const mojom::ActivationState activation_state =
       ShouldInheritActivation(url) ? GetInheritedActivationStateForNewDocument()
@@ -325,7 +331,7 @@ void SubresourceFilterAgent::DidCreateNewDocument() {
 
 const mojom::ActivationState
 SubresourceFilterAgent::GetInheritedActivationStateForNewDocument() {
-  CHECK(ShouldInheritActivation(GetDocumentURL()), base::NotFatalUntil::M129);
+  CHECK(ShouldInheritActivation(GetDocumentURL()));
   return GetInheritedActivationState(render_frame());
 }
 
@@ -335,13 +341,15 @@ void SubresourceFilterAgent::ConstructFilter(
   filter_for_last_created_document_.reset();
 
   if (activation_state.activation_level == mojom::ActivationLevel::kDisabled ||
-      !ruleset_dealer_->IsRulesetFileAvailable())
+      !ruleset_dealer_->IsRulesetFileAvailable()) {
     return;
+  }
 
   scoped_refptr<const MemoryMappedRuleset> ruleset =
       ruleset_dealer_->GetRuleset();
-  if (!ruleset)
+  if (!ruleset) {
     return;
+  }
 
   base::OnceClosure first_disallowed_load_callback(
       base::BindOnce(&SubresourceFilterAgent::
@@ -360,8 +368,9 @@ void SubresourceFilterAgent::DidFailProvisionalLoad() {
 }
 
 void SubresourceFilterAgent::DidFinishLoad() {
-  if (!filter_for_last_created_document_)
+  if (!filter_for_last_created_document_) {
     return;
+  }
   const auto& statistics =
       filter_for_last_created_document_->filter().statistics();
   SendDocumentLoadStatistics(statistics);
@@ -369,13 +378,16 @@ void SubresourceFilterAgent::DidFinishLoad() {
 
 void SubresourceFilterAgent::WillCreateWorkerFetchContext(
     blink::WebWorkerFetchContext* worker_fetch_context) {
-  if (!filter_for_last_created_document_)
+  if (!filter_for_last_created_document_) {
     return;
-  if (!ruleset_dealer_->IsRulesetFileAvailable())
+  }
+  if (!ruleset_dealer_->IsRulesetFileAvailable()) {
     return;
+  }
   base::File ruleset_file = ruleset_dealer_->DuplicateRulesetFile();
-  if (!ruleset_file.IsValid())
+  if (!ruleset_file.IsValid()) {
     return;
+  }
 
   worker_fetch_context->SetSubresourceFilterBuilder(
       std::make_unique<WebDocumentSubresourceFilterImpl::BuilderImpl>(

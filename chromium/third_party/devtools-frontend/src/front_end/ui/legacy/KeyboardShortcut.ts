@@ -216,6 +216,14 @@ export class KeyboardShortcut {
       return (modifiers || 0) & m.value ? /** @type {string} */ modifierNames.get(m) as string : '';
     }
   }
+
+  static keyCodeToKey(keyCode: number): Key|undefined {
+    return Object.values(Keys).find(key => key.code === keyCode);
+  }
+
+  static modifierValueToModifier(modifierValue: number): Modifier|undefined {
+    return Object.values(Modifiers).find(modifier => modifier.value === modifierValue);
+  }
 }
 
 export interface Modifier {
@@ -227,9 +235,7 @@ export interface Modifier {
  * Constants for encoding modifier key set as a bit mask.
  * see #makeKeyFromCodeAndModifiers
  */
-export const Modifiers: {
-  [x: string]: Modifier,
-} = {
+export const Modifiers: Record<string, Modifier> = {
   None: {value: 0, name: 'None'},
   Shift: {value: 1, name: 'Shift'},
   Ctrl: {value: 2, name: 'Ctrl'},
@@ -290,9 +296,7 @@ const metaKey = {
   name: 'Meta',
 };
 
-export const Keys: {
-  [x: string]: Key,
-} = {
+export const Keys: Record<string, Key> = {
   Backspace: {code: 8, name: '\u21a4'},
   Tab: {code: 9, name: {mac: '\u21e5', other: 'Tab'}},
   Enter: {code: 13, name: {mac: '\u21a9', other: 'Enter'}},
@@ -321,8 +325,10 @@ export const Keys: {
   C: {code: 67, name: 'C'},
   H: {code: 72, name: 'H'},
   N: {code: 78, name: 'N'},
+  O: {code: 79, name: 'O'},
   P: {code: 80, name: 'P'},
   R: {code: 82, name: 'R'},
+  S: {code: 83, name: 'S'},
   U: {code: 85, name: 'U'},
   V: {code: 86, name: 'V'},
   X: {code: 88, name: 'X'},
@@ -371,9 +377,7 @@ export const enum Type {
   KEYBIND_SET_SHORTCUT = 'KeybindSetShortcut',
 }
 
-export const KeyBindings: {
-  [x: string]: Key,
-} = {};
+export const KeyBindings: Record<string, Key> = {};
 
 (function(): void {
 for (const key in Keys) {
@@ -386,9 +390,7 @@ for (const key in Keys) {
 })();
 export interface Key {
   code: number;
-  name: string|{
-    [x: string]: string,
-  };
+  name: string|Record<string, string>;
   shiftKey?: boolean;
 }
 export interface Descriptor {

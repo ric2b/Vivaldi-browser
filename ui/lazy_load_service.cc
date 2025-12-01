@@ -20,6 +20,12 @@ namespace vivaldi {
 
 const char LazyLoadService::kLazyLoadIsSafe[] = "lazy_load_is_safe";
 
+//static
+void LazyLoadService::OnWillRestoreTab(content::WebContents* web_contents) {
+  web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
+                            std::make_unique<base::SupportsUserData::Data>());
+}
+
 LazyLoadService::LazyLoadService(Profile* profile) : profile_(profile) {
   SessionRestore::AddObserver(this);
   // Make sure the TabLifecycleUnitSource instance has been set up.
@@ -63,14 +69,6 @@ void LazyLoadService::OnLifecycleUnitCreated(
   // Discard all restored tabs as the activation is now done after the webview
   // has been attached.
   tab_lifecycle_unit_external->SetIsDiscarded();
-}
-
-void LazyLoadService::OnWillRestoreTab(
-    content::WebContents* web_contents) {
-  // Always allow lazyload/discard the webcontents. We must load it
-  // after it has been attached in a webview .
-  web_contents->SetUserData(&vivaldi::LazyLoadService::kLazyLoadIsSafe,
-                            std::make_unique<base::SupportsUserData::Data>());
 }
 
 }  // namespace vivaldi

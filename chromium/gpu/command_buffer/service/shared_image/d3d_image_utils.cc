@@ -85,8 +85,11 @@ wgpu::SharedTextureMemory CreateDawnSharedTextureMemory(
 
   shared_texture_memory = device.ImportSharedTextureMemory(&desc);
 
-  if (!shared_texture_memory || shared_texture_memory.IsDeviceLost()) {
-    LOG(ERROR) << "Failed to create shared texture memory";
+  // If ImportSharedTextureMemory is not successful and the device is not lost,
+  // an error SharedTextureMemory object will be returned, which will cause an
+  // error upon usage.
+  if (shared_texture_memory.IsDeviceLost()) {
+    LOG(ERROR) << "Failed to create shared texture memory due to device loss.";
     return nullptr;
   }
 
@@ -95,18 +98,23 @@ wgpu::SharedTextureMemory CreateDawnSharedTextureMemory(
 
 wgpu::SharedTextureMemory CreateDawnSharedTextureMemory(
     const wgpu::Device& device,
-    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture) {
+    Microsoft::WRL::ComPtr<ID3D11Texture2D> texture,
+    bool requires_dawn_signal_fence) {
   wgpu::SharedTextureMemory shared_texture_memory;
   SharedTextureMemoryD3D11Texture2DDescriptor texture2d_desc;
   texture2d_desc.texture = texture;
+  texture2d_desc.requiresEndAccessFence = requires_dawn_signal_fence;
 
   wgpu::SharedTextureMemoryDescriptor desc;
   desc.nextInChain = &texture2d_desc;
   desc.label = "SharedImageD3D_SharedTextureMemory_Texture2D";
   shared_texture_memory = device.ImportSharedTextureMemory(&desc);
 
-  if (!shared_texture_memory || shared_texture_memory.IsDeviceLost()) {
-    LOG(ERROR) << "Failed to create shared texture memory";
+  // If ImportSharedTextureMemory is not successful and the device is not lost,
+  // an error SharedTextureMemory object will be returned, which will cause an
+  // error upon usage.
+  if (shared_texture_memory.IsDeviceLost()) {
+    LOG(ERROR) << "Failed to create shared texture memory due to device loss.";
     return nullptr;
   }
 
@@ -138,12 +146,14 @@ wgpu::SharedBufferMemory CreateDawnSharedBufferMemory(
   desc.label = "SharedBufferD3D_SharedBufferMemory_Resource";
   shared_buffer_memory = device.ImportSharedBufferMemory(&desc);
 
-  if (!shared_buffer_memory) {
-    LOG(ERROR) << "Failed to create shared buffer memory";
+  // If ImportSharedBufferMemory is not successful and the device is not lost,
+  // an error SharedBufferMemory object will be returned, which will cause an
+  // error upon usage.
+  if (shared_buffer_memory.IsDeviceLost()) {
+    LOG(ERROR) << "Failed to create shared buffer memory due to device loss.";
     return nullptr;
   }
 
-  DCHECK(!shared_buffer_memory.IsDeviceLost());
   return shared_buffer_memory;
 }
 
@@ -157,11 +167,6 @@ wgpu::SharedFence CreateDawnSharedFence(
   fence_desc.nextInChain = &dxgi_desc;
 
   shared_fence = device.ImportSharedFence(&fence_desc);
-
-  if (!shared_fence) {
-    LOG(ERROR) << "Failed to create shared fence.";
-    return nullptr;
-  }
 
   return shared_fence;
 }

@@ -97,8 +97,9 @@ export class TimelineController implements Trace.TracingManager.TracingManagerCl
       disabledByDefault('devtools.timeline.frame'),
       disabledByDefault('devtools.timeline.stack'),
       disabledByDefault('devtools.timeline'),
+      disabledByDefault('devtools.v8-source-rundown-sources'),
       disabledByDefault('devtools.v8-source-rundown'),
-      disabledByDefault('v8.compile'),
+      // Looking for disabled-by-default-v8.compile? We disabled it: crbug.com/414330508.
       disabledByDefault('v8.inspector'),
       disabledByDefault('v8.cpu_profiler.hires'),
       disabledByDefault('lighthouse'),
@@ -107,10 +108,6 @@ export class TimelineController implements Trace.TracingManager.TracingManagerCl
       'cppgc',
       'navigation,rail',
     ];
-
-    if (Root.Runtime.experiments.isEnabled(Root.Runtime.ExperimentName.TIMELINE_COMPILED_SOURCES)) {
-      categoriesArray.push(disabledByDefault('devtools.v8-source-rundown-sources'));
-    }
 
     if (Root.Runtime.experiments.isEnabled('timeline-v8-runtime-call-stats') && options.enableJSSampling) {
       categoriesArray.push(disabledByDefault('v8.runtime_stats_sampling'));
@@ -239,7 +236,7 @@ export class TimelineController implements Trace.TracingManager.TracingManagerCl
     // all the functions data.
     await SDK.TargetManager.TargetManager.instance().suspendAllTargets('performance-timeline');
     this.tracingCompletePromise = Promise.withResolvers();
-    const response = await this.tracingManager.start(this, categories, '');
+    const response = await this.tracingManager.start(this, categories);
     await this.warmupJsProfiler();
     Extensions.ExtensionServer.ExtensionServer.instance().profilingStarted();
     return response;

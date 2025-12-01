@@ -28,6 +28,9 @@ class MdTextButton;
 
 class DesktopMediaPickerImpl;
 
+const DesktopMediaSourceViewStyle& GetGenericScreenStyle();
+const DesktopMediaSourceViewStyle& GetSingleScreenStyle();
+
 // Dialog view used for DesktopMediaPickerImpl.
 //
 // TODO(crbug.com/40637301): Consider renaming this class.
@@ -178,6 +181,7 @@ class DesktopMediaPickerDialogView : public views::DialogDelegateView,
   const bool exclude_system_audio_requested_;  // JS-exposed as systemAudio.
   const bool is_system_audio_offered_;
   const bool suppress_local_audio_playback_;  // Effective only if audio shared.
+  const bool restrict_own_audio_;             // Effective only if audio shared.
   const content::GlobalRenderFrameHostId capturer_global_id_;
 
   raw_ptr<DesktopMediaPickerImpl> parent_;

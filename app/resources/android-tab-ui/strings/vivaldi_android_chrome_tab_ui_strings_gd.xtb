@@ -1,4 +1,20 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="gd">
+<translation id="1062777154504442433">Staca thabaichean ùra</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Taba comharra-lìn}
+          other {Tabaichean chomharran-lìn}
+        }</translation>
+<translation id="3298614730029636660">Fàg an staca</translation>
+<translation id="354698175756845966">Deasaich dath an staca</translation>
+<translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
+        one {Chì thu tabaichean a dhùin thu sna “Tabaichean o chionn goirid” ann am prìomh-chlàr-taice Vivaldi. Cha bhi an # taba prìobhaideach agad an-sin.}
+        two {Chì thu tabaichean a dhùin thu sna “Tabaichean o chionn goirid” ann am prìomh-chlàr-taice Vivaldi. Cha bhi an # thaba prìobhaideach agad an-sin.}
+        few {Chì thu tabaichean a dhùin thu sna “Tabaichean o chionn goirid” ann am prìomh-chlàr-taice Vivaldi. Cha bhi na # tabaichean prìobhaideach agad an-sin.}
+        other {Chì thu tabaichean a dhùin thu sna “Tabaichean o chionn goirid” ann am prìomh-chlàr-taice Vivaldi. Cha bhi na # taba prìobhaideach agad an-sin.}}</translation>
+<translation id="4871187110787939393">A bheil thu airson gach taba prìobhaideach a dhùnadh?</translation>
+<translation id="7640137753339219124">Sguab an staca às</translation>
+<translation id="8440938071054361204">Deasaich ainm an staca</translation>
+<translation id="8602902357364871325">Dùin an staca</translation>
 </translationbundle>

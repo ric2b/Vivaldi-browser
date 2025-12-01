@@ -15,7 +15,6 @@ namespace vivaldi {
 
 const std::string vivaldi_service_name = "Vivaldi Safe Storage";
 const std::string vivaldi_account_name = "Vivaldi";
-const crypto::AppleKeychain keychain_;
 
 // Much of the Keychain API was marked deprecated as of the macOS 13 SDK.
 // Removal of its use is tracked in https://crbug.com/1348251 but deprecation
@@ -27,20 +26,14 @@ OSStatus GetVivaldiKeychainStatus() {
   // Turn off the keychain user interaction
   SecKeychainSetUserInteractionAllowed(false);
 
-  UInt32 viv_password_length = 0;
-  void* viv_password_data = NULL;
-  OSStatus error = keychain_.FindGenericPassword(vivaldi_service_name.size(),
-                                                 vivaldi_service_name.data(),
-                                                 vivaldi_account_name.size(),
-                                                 vivaldi_account_name.data(),
-                                                 &viv_password_length,
-                                                 &viv_password_data,
-                                                 NULL);
+  auto keychain = crypto::AppleKeychain::DefaultKeychain();
+  auto password =
+      keychain->FindGenericPassword(vivaldi_service_name, vivaldi_account_name);
 
   // Turn keychain user interaction back on
   SecKeychainSetUserInteractionAllowed(true);
 
-  return error;
+  return password.error();
 }
 
 #pragma clang diagnostic pop

@@ -58,12 +58,14 @@ class AutofillFormInjectorTest : public PlatformTest {
 TEST_F(AutofillFormInjectorTest, InjectFlagsWebFrames) {
   ScopedFeatureList features;
   features.InitWithFeatures(
-      /* enabled_features= */ {kAutofillIsolatedWorldForJavascriptIos,
-                               autofill::features::kAutofillAcrossIframesIos,
-                               autofill::features::
-                                   kAutofillAcrossIframesIosThrottling,
-                               kAutofillFixPaymentSheetSpam,
-                               kAutofillCorrectUserEditedBitInParsedField},
+      /* enabled_features= */
+      {kAutofillIsolatedWorldForJavascriptIos,
+       autofill::features::kAutofillAcrossIframesIos,
+       autofill::features::kAutofillAcrossIframesIosThrottling,
+       autofill::features::kAutofillDisallowSlashDotLabels,
+       kAutofillCorrectUserEditedBitInParsedField,
+       kAutofillAllowDefaultPreventedSubmission, kAutofillDedupeFormSubmission,
+       kAutofillReportFormSubmissionErrors},
       /* disabled_features= */ {});
 
   AutofillFormFeaturesInjector injector(&fake_web_state_,
@@ -82,9 +84,15 @@ TEST_F(AutofillFormInjectorTest, InjectFlagsWebFrames) {
                     u"__gCrWeb.autofill_form_features."
                     u"setAutofillAcrossIframesThrottling(true);",
                     u"__gCrWeb.autofill_form_features."
-                    u"setAutofillFixPaymentSheetSpam(true);",
+                    u"setAutofillDisallowSlashDotLabels(true);",
                     u"__gCrWeb.autofill_form_features."
-                    u"setAutofillCorrectUserEditedBitInParsedField(true);"));
+                    u"setAutofillCorrectUserEditedBitInParsedField(true);",
+                    u"__gCrWeb.autofill_form_features."
+                    u"setAutofillAllowDefaultPreventedSubmission(true);",
+                    u"__gCrWeb.autofill_form_features."
+                    u"setAutofillDedupeFormSubmission(true);",
+                    u"__gCrWeb.autofill_form_features."
+                    u"setAutofillReportFormSubmissionErrors(true);"));
   }
 }
 

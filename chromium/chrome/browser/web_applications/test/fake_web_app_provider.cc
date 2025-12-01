@@ -23,7 +23,6 @@
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
 #include "chrome/browser/web_applications/preinstalled_web_app_manager.h"
-#include "chrome/browser/web_applications/test/fake_externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_os_integration_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_database_factory.h"
 #include "chrome/browser/web_applications/test/fake_web_app_ui_manager.h"
@@ -310,9 +309,6 @@ void FakeWebAppProvider::CreateFakeSubsystems() {
 
   SetWebAppUiManager(std::make_unique<FakeWebAppUiManager>());
 
-  SetExternallyManagedAppManager(
-      std::make_unique<FakeExternallyManagedAppManager>(profile_));
-
   IwaIdentityValidator::CreateSingleton();
 
   // Do not create real subsystems here. That will be done already by
@@ -355,6 +351,10 @@ void FakeWebAppProvider::Shutdown() {
 
 FakeWebAppProvider* FakeWebAppProvider::AsFakeWebAppProviderForTesting() {
   return this;
+}
+
+FakeWebContentsManager* FakeWebAppProvider::GetFakeWebContentsManager() const {
+  return static_cast<FakeWebContentsManager*>(web_contents_manager_.get());
 }
 
 void FakeWebAppProvider::CheckNotStartedAndDisconnect(

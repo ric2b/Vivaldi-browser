@@ -10,7 +10,7 @@
 #include "core/fxcrt/fx_safe_types.h"
 
 CJBig2_HuffmanDecoder::CJBig2_HuffmanDecoder(CJBig2_BitStream* pStream)
-    : m_pStream(pStream) {}
+    : stream_(pStream) {}
 
 CJBig2_HuffmanDecoder::~CJBig2_HuffmanDecoder() = default;
 
@@ -20,32 +20,38 @@ int CJBig2_HuffmanDecoder::DecodeAValue(const CJBig2_HuffmanTable* pTable,
   int nBits = 0;
   while (true) {
     uint32_t nTmp;
-    if (m_pStream->read1Bit(&nTmp) == -1)
+    if (stream_->read1Bit(&nTmp) == -1) {
       break;
+    }
 
     nSafeVal <<= 1;
-    if (!nSafeVal.IsValid())
+    if (!nSafeVal.IsValid()) {
       break;
+    }
 
     nSafeVal |= nTmp;
     ++nBits;
     const int32_t nVal = nSafeVal.ValueOrDie();
     for (uint32_t i = 0; i < pTable->Size(); ++i) {
       const JBig2HuffmanCode& code = pTable->GetCODES()[i];
-      if (code.codelen != nBits || code.code != nVal)
+      if (code.codelen != nBits || code.code != nVal) {
         continue;
+      }
 
-      if (pTable->IsHTOOB() && i == pTable->Size() - 1)
+      if (pTable->IsHTOOB() && i == pTable->Size() - 1) {
         return kJBig2OOB;
+      }
 
-      if (m_pStream->readNBits(pTable->GetRANGELEN()[i], &nTmp) == -1)
+      if (stream_->readNBits(pTable->GetRANGELEN()[i], &nTmp) == -1) {
         return -1;
+      }
 
       uint32_t offset = pTable->IsHTOOB() ? 3 : 2;
-      if (i == pTable->Size() - offset)
+      if (i == pTable->Size() - offset) {
         *nResult = pTable->GetRANGELOW()[i] - nTmp;
-      else
+      } else {
         *nResult = pTable->GetRANGELOW()[i] + nTmp;
+      }
       return 0;
     }
   }

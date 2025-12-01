@@ -79,28 +79,27 @@ class RTCCertificateGeneratorTest : public ::testing::Test {
 };
 
 TEST_F(RTCCertificateGeneratorTest, GenerateECDSA) {
-  EXPECT_TRUE(RTCCertificateGenerator::GenerateCertificate(
-      rtc::KeyParams::ECDSA(), std::nullopt));
+  EXPECT_TRUE(RTCCertificateGenerator::GenerateCertificate(KeyParams::ECDSA(),
+                                                           std::nullopt));
 }
 
 TEST_F(RTCCertificateGeneratorTest, GenerateRSA) {
-  EXPECT_TRUE(RTCCertificateGenerator::GenerateCertificate(
-      rtc::KeyParams::RSA(), std::nullopt));
+  EXPECT_TRUE(RTCCertificateGenerator::GenerateCertificate(KeyParams::RSA(),
+                                                           std::nullopt));
 }
 
 TEST_F(RTCCertificateGeneratorTest, GenerateAsyncECDSA) {
   EXPECT_FALSE(fixture_.certificate());
   fixture_.generator()->GenerateCertificateAsync(
-      rtc::KeyParams::ECDSA(), std::nullopt, fixture_.OnGenerated());
+      KeyParams::ECDSA(), std::nullopt, fixture_.OnGenerated());
   // Until generation has completed, the certificate is null. Since this is an
   // async call, generation must not have completed until we process messages
   // posted to this thread (which is done by `EXPECT_TRUE_WAIT`).
   EXPECT_FALSE(fixture_.GenerateAsyncCompleted());
   EXPECT_FALSE(fixture_.certificate());
-  EXPECT_THAT(
-      webrtc::WaitUntil([&] { return fixture_.GenerateAsyncCompleted(); },
+  EXPECT_THAT(WaitUntil([&] { return fixture_.GenerateAsyncCompleted(); },
                         ::testing::IsTrue(), {.timeout = kGenerationTimeoutMs}),
-      webrtc::IsRtcOk());
+              IsRtcOk());
   EXPECT_TRUE(fixture_.certificate());
 }
 
@@ -113,13 +112,13 @@ TEST_F(RTCCertificateGeneratorTest, GenerateWithExpires) {
 
   // Generate a certificate that expires immediately.
   scoped_refptr<RTCCertificate> cert_a =
-      RTCCertificateGenerator::GenerateCertificate(rtc::KeyParams::ECDSA(), 0);
+      RTCCertificateGenerator::GenerateCertificate(KeyParams::ECDSA(), 0);
   EXPECT_TRUE(cert_a);
 
   // Generate a certificate that expires in one minute.
   const uint64_t kExpiresMs = 60000;
   scoped_refptr<RTCCertificate> cert_b =
-      RTCCertificateGenerator::GenerateCertificate(rtc::KeyParams::ECDSA(),
+      RTCCertificateGenerator::GenerateCertificate(KeyParams::ECDSA(),
                                                    kExpiresMs);
   EXPECT_TRUE(cert_b);
 
@@ -132,7 +131,7 @@ TEST_F(RTCCertificateGeneratorTest, GenerateWithExpires) {
 }
 
 TEST_F(RTCCertificateGeneratorTest, GenerateWithInvalidParamsShouldFail) {
-  rtc::KeyParams invalid_params = rtc::KeyParams::RSA(0, 0);
+  KeyParams invalid_params = KeyParams::RSA(0, 0);
   EXPECT_FALSE(invalid_params.IsValid());
 
   EXPECT_FALSE(RTCCertificateGenerator::GenerateCertificate(invalid_params,
@@ -140,10 +139,9 @@ TEST_F(RTCCertificateGeneratorTest, GenerateWithInvalidParamsShouldFail) {
 
   fixture_.generator()->GenerateCertificateAsync(invalid_params, std::nullopt,
                                                  fixture_.OnGenerated());
-  EXPECT_THAT(
-      webrtc::WaitUntil([&] { return fixture_.GenerateAsyncCompleted(); },
+  EXPECT_THAT(WaitUntil([&] { return fixture_.GenerateAsyncCompleted(); },
                         ::testing::IsTrue(), {.timeout = kGenerationTimeoutMs}),
-      webrtc::IsRtcOk());
+              IsRtcOk());
   EXPECT_FALSE(fixture_.certificate());
 }
 

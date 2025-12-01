@@ -40,7 +40,6 @@
 #include "build/chromecast_buildflags.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/features.h"
-#include "content/browser/gpu/gpu_memory_buffer_manager_singleton.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/browser/media/frameless_media_interface_proxy.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -435,7 +434,7 @@ void CollectExtraDevicePerfInfo(const gpu::GPUInfo& gpu_info,
 class HDRProxy {
  public:
   static void Initialize() {
-    display::win::ScreenWin::SetRequestHDRStatusCallback(
+    display::win::GetScreenWin()->SetRequestHDRStatusCallback(
         base::BindRepeating(&HDRProxy::RequestHDRStatus));
   }
 
@@ -451,7 +450,7 @@ class HDRProxy {
   }
 
   static void GotResult(gfx::mojom::DXGIInfoPtr dxgi_info) {
-    display::win::ScreenWin::SetDXGIInfo(std::move(dxgi_info));
+    display::win::GetScreenWin()->SetDXGIInfo(std::move(dxgi_info));
   }
 };
 
@@ -1188,16 +1187,22 @@ void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
     const gpu::GpuFeatureInfo& gpu_feature_info,
     const std::optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu) {
-  gpu_feature_info_ = gpu_feature_info;
+  if (gpu_mode_ == gpu::GpuMode::DISPLAY_COMPOSITOR) {
+    // If we're in the display compositor mode, force the feature info to
+    // disable everything. UpdateGpuFeatureInfo calls may come at any time so we
+    // make it sticky here. The gpu_feature_info will be used to initialize
+    // gpu_feature_info_for_hardware_gpu_ below if no
+    // gpu_feature_info_for_hardware_gpu was provided.
+    gpu_feature_info_ = gpu::ComputeGpuFeatureInfoWithNoGpu();
+  } else {
+    gpu_feature_info_ = gpu_feature_info;
+  }
 #if !BUILDFLAG(IS_FUCHSIA)
   // With Vulkan or Graphite, GL might be blocked so don't fallback to it later.
   if (HardwareAccelerationEnabled() &&
       gpu_feature_info_.status_values[gpu::GPU_FEATURE_TYPE_ACCELERATED_GL] !=
           gpu::GpuFeatureStatus::kGpuFeatureStatusEnabled) {
-    fallback_modes_.erase(
-        std::remove(fallback_modes_.begin(), fallback_modes_.end(),
-                    gpu::GpuMode::HARDWARE_GL),
-        fallback_modes_.end());
+    std::erase(fallback_modes_, gpu::GpuMode::HARDWARE_GL);
   }
 
   // If Vulkan or Graphite initialization fails, the GPU process can silently
@@ -1223,7 +1228,7 @@ void GpuDataManagerImplPrivate::UpdateGpuFeatureInfo(
       gpu_feature_info_for_hardware_gpu_ =
           gpu_feature_info_for_hardware_gpu.value();
     } else {
-      gpu_feature_info_for_hardware_gpu_ = gpu_feature_info_;
+      gpu_feature_info_for_hardware_gpu_ = gpu_feature_info;
     }
     is_gpu_compositing_disabled_for_hardware_gpu_ = IsGpuCompositingDisabled();
     gpu_access_allowed_for_hardware_gpu_ =
@@ -1400,8 +1405,7 @@ void GpuDataManagerImplPrivate::OnGpuBlocked() {
   std::optional<gpu::GpuFeatureInfo> gpu_feature_info_for_hardware_gpu;
   if (gpu_feature_info_.IsInitialized())
     gpu_feature_info_for_hardware_gpu = gpu_feature_info_;
-  gpu::GpuFeatureInfo gpu_feature_info = gpu::ComputeGpuFeatureInfoWithNoGpu();
-  UpdateGpuFeatureInfo(gpu_feature_info, gpu_feature_info_for_hardware_gpu);
+  UpdateGpuFeatureInfo(gpu_feature_info_, gpu_feature_info_for_hardware_gpu);
 
   // Some observers might be waiting.
   NotifyGpuInfoUpdate();
@@ -1694,11 +1698,7 @@ void GpuDataManagerImplPrivate::RecordCompositingMode() {
 
 #if BUILDFLAG(IS_LINUX)
 bool GpuDataManagerImplPrivate::IsGpuMemoryBufferNV12Supported() {
-  return is_gpu_memory_buffer_NV12_supported_;
-}
-void GpuDataManagerImplPrivate::SetGpuMemoryBufferNV12Supported(
-    bool supported) {
-  is_gpu_memory_buffer_NV12_supported_ = supported;
+  return gpu_extra_info_.is_gmb_nv12_supported;
 }
 #endif  // BUILDFLAG(IS_LINUX)
 

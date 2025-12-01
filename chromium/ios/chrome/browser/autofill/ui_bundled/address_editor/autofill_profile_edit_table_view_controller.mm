@@ -44,6 +44,10 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
 // autofill::AutofillProfile::RecordType::kAccount.
 @property(nonatomic, assign) BOOL accountProfile;
 
+// YES, if the profile's record type is
+// autofill::AutofillProfile::RecordType::kAccountHome/kAccountWork.
+@property(nonatomic, assign) BOOL isHomeWorkProfile;
+
 // If YES, denotes that the view is laid out for the migration prompt.
 @property(nonatomic, assign) BOOL migrationPrompt;
 
@@ -103,8 +107,11 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
     _settingsView = settingsView;
     _addManualAddress = addManualAddress;
     _moveToAccountFromSettings = NO;
+    _hasSaveButton = NO;
+    _hasUpdateButton = NO;
     _dynamicallyLoadInputFieldsEnabled = base::FeatureList::IsEnabled(
         kAutofillDynamicallyLoadsFieldsForAddressInput);
+    _isHomeWorkProfile = NO;
   }
 
   return self;
@@ -154,79 +161,52 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
 }
 
 - (void)loadModel {
-  _hasSaveButton = NO;
-  _hasUpdateButton = NO;
-
   TableViewModel* model = _controller.tableViewModel;
 
-  if (_dynamicallyLoadInputFieldsEnabled) {
-    if (![model hasSectionForSectionIdentifier:
-                    AutofillProfileDetailsSectionIdentifierName]) {
-      [model
-          addSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierName];
+  if (!self.isHomeWorkProfile) {
+    AutofillProfileDetailsSectionIdentifier nameSection =
+        _dynamicallyLoadInputFieldsEnabled
+            ? AutofillProfileDetailsSectionIdentifierName
+            : AutofillProfileDetailsSectionIdentifierFields;
 
-      [model addItem:[self nameItem]
-          toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierName];
-      [model addItem:[self companyItem]
-          toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierName];
+    if (![model hasSectionForSectionIdentifier:nameSection]) {
+      [model addSectionWithIdentifier:nameSection];
     }
-
-    if (![model hasSectionForSectionIdentifier:
-                    AutofillProfileDetailsSectionIdentifierAddress]) {
-      [model addSectionWithIdentifier:
-                 AutofillProfileDetailsSectionIdentifierAddress];
+    for (AutofillEditProfileField* nonAddressField in
+         [_delegate inputNonAddressFields]) {
+      [model addItem:[self profileEditItem:nonAddressField.fieldLabel
+                                 fieldType:nonAddressField.fieldType]
+          toSectionWithIdentifier:nameSection];
     }
-    for (AutofillProfileAddressField* addressField in
-         [_delegate inputAddressFields]) {
-      [model addItem:[self addressItem:addressField.fieldLabel
-                             fieldType:addressField.fieldType]
-          toSectionWithIdentifier:
-              AutofillProfileDetailsSectionIdentifierAddress];
+  }
+
+  AutofillProfileDetailsSectionIdentifier addressSection =
+      _dynamicallyLoadInputFieldsEnabled
+          ? AutofillProfileDetailsSectionIdentifierAddress
+          : AutofillProfileDetailsSectionIdentifierFields;
+
+  if (![model hasSectionForSectionIdentifier:addressSection]) {
+    [model addSectionWithIdentifier:addressSection];
+  }
+  for (AutofillEditProfileField* addressField in
+       [_delegate inputAddressFields]) {
+    [model addItem:[self profileEditItem:addressField.fieldLabel
+                               fieldType:addressField.fieldType]
+        toSectionWithIdentifier:addressSection];
+  }
+  [model addItem:[self countryItem] toSectionWithIdentifier:addressSection];
+
+  if (!self.isHomeWorkProfile) {
+    AutofillProfileDetailsSectionIdentifier phoneEmailSection =
+        _dynamicallyLoadInputFieldsEnabled
+            ? AutofillProfileDetailsSectionIdentifierPhoneEmail
+            : AutofillProfileDetailsSectionIdentifierFields;
+
+    if (![model hasSectionForSectionIdentifier:phoneEmailSection]) {
+      [model addSectionWithIdentifier:phoneEmailSection];
     }
-
-    [model addItem:[self countryItem]
-        toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierAddress];
-
-    if (![model hasSectionForSectionIdentifier:
-                    AutofillProfileDetailsSectionIdentifierPhoneEmail]) {
-      [model addSectionWithIdentifier:
-                 AutofillProfileDetailsSectionIdentifierPhoneEmail];
-
-      [model addItem:[self phoneItem]
-          toSectionWithIdentifier:
-              AutofillProfileDetailsSectionIdentifierPhoneEmail];
-      [model addItem:[self emailItem]
-          toSectionWithIdentifier:
-              AutofillProfileDetailsSectionIdentifierPhoneEmail];
-    }
-
-  } else {
-    if (![model hasSectionForSectionIdentifier:
-                    AutofillProfileDetailsSectionIdentifierFields]) {
-      [model addSectionWithIdentifier:
-                 AutofillProfileDetailsSectionIdentifierFields];
-    }
-
-    [model addItem:[self nameItem]
-        toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierFields];
-    [model addItem:[self companyItem]
-        toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierFields];
-
-    for (AutofillProfileAddressField* addressField in
-         [_delegate inputAddressFields]) {
-      [model addItem:[self addressItem:addressField.fieldLabel
-                             fieldType:addressField.fieldType]
-          toSectionWithIdentifier:
-              AutofillProfileDetailsSectionIdentifierFields];
-    }
-
-    [model addItem:[self countryItem]
-        toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierFields];
-
-    [model addItem:[self phoneItem]
-        toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierFields];
-    [model addItem:[self emailItem]
-        toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierFields];
+    [model addItem:[self phoneItem] toSectionWithIdentifier:phoneEmailSection];
+    [model addItem:[self emailItem] toSectionWithIdentifier:phoneEmailSection];
   }
 }
 
@@ -316,6 +296,10 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
       [_controller.tableViewModel sectionIdentifierForSectionIndex:section];
 
   if (_dynamicallyLoadInputFieldsEnabled) {
+    if (self.isHomeWorkProfile) {
+      return sectionIdentifier ==
+             AutofillProfileDetailsSectionIdentifierAddress;
+    }
     return sectionIdentifier ==
            AutofillProfileDetailsSectionIdentifierPhoneEmail;
   }
@@ -340,6 +324,8 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
 
 - (void)loadMessageAndButtonForModalIfSaveOrUpdate:(BOOL)update {
   CHECK(!_settingsView);
+  _hasSaveButton = !update;
+  _hasUpdateButton = update;
   TableViewModel* model = _controller.tableViewModel;
 
   if (self.accountProfile || self.migrationPrompt) {
@@ -366,9 +352,6 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
     [model addItem:[self saveButtonIfSaveOrUpdate:update]
         toSectionWithIdentifier:AutofillProfileDetailsSectionIdentifierFields];
   }
-
-  _hasSaveButton = !update;
-  _hasUpdateButton = update;
 }
 
 - (BOOL)isItemAtIndexPathTextEditCell:(NSIndexPath*)cellPath {
@@ -427,7 +410,11 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
   TableViewModel* model = _controller.tableViewModel;
   if (_dynamicallyLoadInputFieldsEnabled) {
     [model deleteAllItemsFromSectionWithIdentifier:
+               AutofillProfileDetailsSectionIdentifierName];
+    [model deleteAllItemsFromSectionWithIdentifier:
                AutofillProfileDetailsSectionIdentifierAddress];
+    [model deleteAllItemsFromSectionWithIdentifier:
+               AutofillProfileDetailsSectionIdentifierPhoneEmail];
   } else {
     [model deleteAllItemsFromSectionWithIdentifier:
                AutofillProfileDetailsSectionIdentifierFields];
@@ -542,32 +529,6 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
   return item;
 }
 
-// Returns the name field used in the save/update prompts as well as the
-// settings view.
-- (AutofillProfileEditItem*)nameItem {
-  return [self
-      autofillEditItemFromAutofillType:
-          [_delegate fieldTypeToTypeName:autofill::NAME_FULL]
-                            fieldLabel:l10n_util::GetNSString(
-                                           IDS_IOS_AUTOFILL_FULLNAME)
-                         returnKeyType:UIReturnKeyNext
-                          keyboardType:UIKeyboardTypeDefault
-                autoCapitalizationType:UITextAutocapitalizationTypeSentences];
-}
-
-// Returns the company field used in the save/update prompts as well as the
-// settings view.
-- (AutofillProfileEditItem*)companyItem {
-  return [self
-      autofillEditItemFromAutofillType:
-          [_delegate fieldTypeToTypeName:autofill::COMPANY_NAME]
-                            fieldLabel:l10n_util::GetNSString(
-                                           IDS_IOS_AUTOFILL_COMPANY_NAME)
-                         returnKeyType:UIReturnKeyNext
-                          keyboardType:UIKeyboardTypeDefault
-                autoCapitalizationType:UITextAutocapitalizationTypeSentences];
-}
-
 // Returns the phone field used in the save/update prompts as well as the
 // settings view.
 - (AutofillProfileEditItem*)phoneItem {
@@ -596,8 +557,8 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
 
 // Returns the address field used in the save/update prompts as well as the
 // settings view.
-- (AutofillProfileEditItem*)addressItem:(NSString*)fieldLabel
-                              fieldType:(NSString*)fieldType {
+- (AutofillProfileEditItem*)profileEditItem:(NSString*)fieldLabel
+                                  fieldType:(NSString*)fieldType {
   return [self
       autofillEditItemFromAutofillType:fieldType
                             fieldLabel:fieldLabel
@@ -784,7 +745,9 @@ const CGFloat kLineSpacingBetweenErrorAndFooter = 12.0f;
   return _moveToAccountFromSettings
              ? @""
              : l10n_util::GetNSStringF(
-                   IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT,
+                   _hasSaveButton
+                       ? IDS_IOS_AUTOFILL_SAVE_ADDRESS_IN_ACCOUNT_FOOTER
+                       : IDS_IOS_SETTINGS_AUTOFILL_ACCOUNT_ADDRESS_FOOTER_TEXT,
                    base::SysNSStringToUTF16(_userEmail));
 }
 

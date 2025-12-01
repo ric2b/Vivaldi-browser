@@ -107,8 +107,7 @@ void FrameGeneratorCapturer::InsertFrame() {
       // Skip frames that are identical to the previous one but still send at
       // least one frame every second.
       if (number_of_frames_skipped_ < target_capture_fps_ - 1 &&
-          webrtc::test::FrameBufsEqual(last_frame_captured_,
-                                       frame_data.buffer)) {
+          test::FrameBufsEqual(last_frame_captured_, frame_data.buffer)) {
         ++number_of_frames_skipped_;
         return;
       }
@@ -200,8 +199,8 @@ void FrameGeneratorCapturer::SetSinkWantsObserver(SinkWantsObserver* observer) {
 }
 
 void FrameGeneratorCapturer::AddOrUpdateSink(
-    rtc::VideoSinkInterface<VideoFrame>* sink,
-    const rtc::VideoSinkWants& wants) {
+    VideoSinkInterface<VideoFrame>* sink,
+    const VideoSinkWants& wants) {
   TestVideoCapturer::AddOrUpdateSink(sink, wants);
   {
     MutexLock lock(&lock_);
@@ -213,8 +212,7 @@ void FrameGeneratorCapturer::AddOrUpdateSink(
   ChangeFramerate(GetSinkWants().max_framerate_fps);
 }
 
-void FrameGeneratorCapturer::RemoveSink(
-    rtc::VideoSinkInterface<VideoFrame>* sink) {
+void FrameGeneratorCapturer::RemoveSink(VideoSinkInterface<VideoFrame>* sink) {
   TestVideoCapturer::RemoveSink(sink);
   ChangeFramerate(GetSinkWants().max_framerate_fps);
 }

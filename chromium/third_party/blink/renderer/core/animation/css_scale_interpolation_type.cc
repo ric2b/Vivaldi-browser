@@ -9,6 +9,9 @@
 
 #include "base/memory/ptr_util.h"
 #include "third_party/blink/renderer/core/animation/interpolable_value.h"
+#include "third_party/blink/renderer/core/animation/length_units_checker.h"
+#include "third_party/blink/renderer/core/animation/tree_counting_checker.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_numeric_literal_value.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -190,17 +193,30 @@ InterpolationValue CSSScaleInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSScaleInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState* state,
-    ConversionCheckers&) const {
+    const StyleResolverState& state,
+    ConversionCheckers& conversion_checkers) const {
   if (!value.IsBaseValueList())
     return CreateInterpolationValue();
 
   const auto& list = To<CSSValueList>(value);
   DCHECK(list.length() >= 1 && list.length() <= 3);
 
-  CSSToLengthConversionData conversion_data =
-      state ? state->CssToLengthConversionData()
-            : CSSToLengthConversionData(/*element=*/nullptr);
+  CSSToLengthConversionData conversion_data = state.CssToLengthConversionData();
+
+  CSSPrimitiveValue::LengthTypeFlags types;
+  for (const auto& scale_value : list) {
+    const auto& primitive_value = To<CSSPrimitiveValue>(*scale_value);
+    primitive_value.AccumulateLengthUnitTypes(types);
+    if (primitive_value.IsElementDependent()) {
+      conversion_checkers.push_back(
+          TreeCountingChecker::Create(conversion_data));
+      break;
+    }
+  }
+  if (InterpolationType::ConversionChecker* length_units_checker =
+          LengthUnitsChecker::MaybeCreate(types, state)) {
+    conversion_checkers.push_back(length_units_checker);
+  }
   if (list.length() == 1) {
     InterpolableNumber* scale =
         CSSValueToInterpolableNumber(list.Item(0), conversion_data);

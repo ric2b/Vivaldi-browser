@@ -11,12 +11,13 @@
 #import "ios/chrome/browser/lens_overlay/ui/lens_overlay_progress_bar.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_result_page_mutator.h"
 #import "ios/chrome/browser/lens_overlay/ui/lens_toolbar_mutator.h"
-#import "ios/chrome/browser/omnibox/ui_bundled/text_field_view_containing.h"
+#import "ios/chrome/browser/omnibox/ui/text_field_view_containing.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/common/ui/util/ui_util.h"
+#import "ios/chrome/grit/ios_strings.h"
 #import "ios/components/ui_util/dynamic_type_util.h"
 #import "ui/base/l10n/l10n_util.h"
 
@@ -51,6 +52,14 @@ const CGFloat kWebContainerTopPadding = 16;
 const CGFloat kProgressBarHeight = 2.0f;
 /// Value of a full progress bar.
 const CGFloat kProgressBarFull = 1.0f;
+/// Value of the grabber corner radius.
+const CGFloat kGrabberCornerRadius = 3.0;
+/// The width of the bottom sheet grabber.
+const CGFloat kGrabberWidth = 36.0;
+/// The height of the bottom sheet grabber.
+const CGFloat kGrabberHeight = 5.0;
+/// The top padding of the bottom sheet grabber.
+const CGFloat kGrabberTopPadding = 5;
 
 }  // namespace
 
@@ -92,6 +101,10 @@ const CGFloat kProgressBarFull = 1.0f;
   /// When set, the omnibox tap target continues to "eat" the touches, but they
   /// are ignored, effectively preventing omnibox interaction.
   BOOL _ignoreOmniboxTaps;
+  /// The grabber indicator for the bottom sheet.
+  UIView* _bottomSheetGrabber;
+  /// Whether to show the bottom sheet grabber.
+  BOOL _bottomSheetGrabberVisible;
 }
 
 - (instancetype)init {
@@ -120,6 +133,17 @@ const CGFloat kProgressBarFull = 1.0f;
   self.webViewContainer.translatesAutoresizingMaskIntoConstraints = NO;
   self.webViewContainer.clipsToBounds = YES;
   [self.view addSubview:self.webViewContainer];
+
+  // Bottom sheet grabber.
+  _bottomSheetGrabber = [self createSheetGrabber];
+  [self.view addSubview:_bottomSheetGrabber];
+  [self setBottomSheetGrabberVisible:_bottomSheetGrabberVisible];
+  AddSameCenterXConstraint(_bottomSheetGrabber, self.view);
+  AddSameConstraintsToSidesWithInsets(
+      _bottomSheetGrabber, self.view, LayoutSides::kTop,
+      NSDirectionalEdgeInsetsMake(kGrabberTopPadding, 0, 0, 0));
+  AddSizeConstraints(_bottomSheetGrabber,
+                     CGSizeMake(kGrabberWidth, kGrabberHeight));
 
   // Omnibox popup container.
   _omniboxPopupContainer.translatesAutoresizingMaskIntoConstraints = NO;
@@ -165,6 +189,8 @@ const CGFloat kProgressBarFull = 1.0f;
   [_omniboxTapTarget addTarget:self
                         action:@selector(didTapOmniboxTapTarget:)
               forControlEvents:UIControlEventTouchUpInside];
+  _omniboxTapTarget.accessibilityLabel =
+      l10n_util::GetNSString(IDS_IOS_LENS_OVERLAY_OMNIBOX_FOCUS);
   AddSameConstraints(_omniboxContainer, _omniboxTapTarget);
 
   // Cancel button.
@@ -298,6 +324,11 @@ const CGFloat kProgressBarFull = 1.0f;
   _editView.translatesAutoresizingMaskIntoConstraints = NO;
   [_omniboxContainer insertSubview:_editView belowSubview:_omniboxTapTarget];
   AddSameConstraints(_editView, _omniboxContainer);
+}
+
+- (void)setBottomSheetGrabberVisible:(BOOL)bottomSheetGrabberVisible {
+  _bottomSheetGrabberVisible = bottomSheetGrabberVisible;
+  _bottomSheetGrabber.hidden = !bottomSheetGrabberVisible;
 }
 
 - (void)setMutator:(id<LensResultPageMutator>)mutator {
@@ -438,6 +469,26 @@ const CGFloat kProgressBarFull = 1.0f;
 }
 
 #pragma mark - Private
+
+- (UIView*)createSheetGrabber {
+  UIButton* grabber = [[UIButton alloc] init];
+  [grabber addTarget:self
+                action:@selector(didTapBottomSheetGrabber:)
+      forControlEvents:UIControlEventTouchUpInside];
+  grabber.translatesAutoresizingMaskIntoConstraints = NO;
+  grabber.backgroundColor = [UIColor colorNamed:kGrey400Color];
+  grabber.layer.cornerRadius = kGrabberCornerRadius;
+  grabber.accessibilityLabel = l10n_util::GetNSString(
+      IDS_IOS_LENS_OVERLAY_SHEET_GRABBER_ACCESSIBILITY_LABEL);
+  grabber.accessibilityHint = l10n_util::GetNSString(
+      IDS_IOS_LENS_OVERLAY_SHEET_GRABBER_ACCESSIBILITY_HINT);
+
+  return grabber;
+}
+
+- (void)didTapBottomSheetGrabber:(id)sender {
+  [_delegate lensResultPageViewControllerDidTapBottomSheetGrabber:self];
+}
 
 /// Handles omnibox tap target taps.
 - (void)didTapOmniboxTapTarget:(UIView*)view {

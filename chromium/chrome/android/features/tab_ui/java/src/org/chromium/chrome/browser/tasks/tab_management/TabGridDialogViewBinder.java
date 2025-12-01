@@ -32,6 +32,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProp
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_MAIN_CONTENT_VISIBLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.IS_TITLE_TEXT_FOCUSED;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.MENU_CLICK_LISTENER;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.PAGE_KEY_LISTENER;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.PRIMARY_COLOR;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SCRIMVIEW_CLICK_RUNNABLE;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SEND_FEEDBACK_RUNNABLE;
@@ -41,6 +42,7 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProp
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHOW_IMAGE_TILES;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHOW_SEND_FEEDBACK;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SHOW_SHARE_BUTTON;
+import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.SUPPRESS_ACCESSIBILITY;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.TAB_GROUP_COLOR_ID;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.TINT;
 import static org.chromium.chrome.browser.tasks.tab_management.TabGridDialogProperties.TITLE_CURSOR_VISIBILITY;
@@ -77,12 +79,12 @@ class TabGridDialogViewBinder {
     /** ViewHolder class to get access to all {@link View}s inside the TabGridDialog. */
     public static class ViewHolder {
         public final TabGridDialogToolbarView toolbarView;
-        public final RecyclerView contentView;
+        public final TabListRecyclerView contentView;
         @Nullable public TabGridDialogView dialogView;
 
         ViewHolder(
                 TabGridDialogToolbarView toolbarView,
-                RecyclerView contentView,
+                TabListRecyclerView contentView,
                 @Nullable TabGridDialogView dialogView) {
             this.toolbarView = toolbarView;
             this.contentView = contentView;
@@ -149,7 +151,7 @@ class TabGridDialogViewBinder {
         } else if (SCRIMVIEW_CLICK_RUNNABLE == propertyKey) {
             viewHolder.dialogView.setScrimClickRunnable(model.get(SCRIMVIEW_CLICK_RUNNABLE));
         } else if (IS_DIALOG_VISIBLE == propertyKey) {
-            if (model.get(IS_DIALOG_VISIBLE)) {
+            if (Boolean.TRUE.equals(model.get(IS_DIALOG_VISIBLE))) {
                 viewHolder.dialogView.resetDialog(viewHolder.toolbarView, viewHolder.contentView);
                 viewHolder.dialogView.showDialog();
             } else {
@@ -277,6 +279,14 @@ class TabGridDialogViewBinder {
             viewHolder.dialogView.setSendFeedbackVisible(model.get(SHOW_SEND_FEEDBACK));
         } else if (SEND_FEEDBACK_RUNNABLE == propertyKey) {
             viewHolder.dialogView.setSendFeedbackRunnable(model.get(SEND_FEEDBACK_RUNNABLE));
+        } else if (PAGE_KEY_LISTENER == propertyKey) {
+            viewHolder.contentView.setPageKeyListenerCallback(model.get(PAGE_KEY_LISTENER));
+        } else if (SUPPRESS_ACCESSIBILITY == propertyKey) {
+            int important =
+                    model.get(SUPPRESS_ACCESSIBILITY)
+                            ? View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+                            : View.IMPORTANT_FOR_ACCESSIBILITY_AUTO;
+            viewHolder.dialogView.setImportantForAccessibility(important);
         }
     }
 

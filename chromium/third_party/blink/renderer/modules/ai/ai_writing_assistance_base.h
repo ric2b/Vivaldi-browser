@@ -9,16 +9,19 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
+#include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/ai/ai_common.mojom-blink.h"
 #include "third_party/blink/public/mojom/ai/model_streaming_responder.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/dom/abort_signal.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
-#include "third_party/blink/renderer/modules/ai/ai_availability.h"
 #include "third_party/blink/renderer/modules/ai/ai_interface_proxy.h"
 #include "third_party/blink/renderer/modules/ai/ai_metrics.h"
+#include "third_party/blink/renderer/modules/ai/ai_utils.h"
 #include "third_party/blink/renderer/modules/ai/ai_writing_assistance_create_client.h"
+#include "third_party/blink/renderer/modules/ai/availability.h"
 #include "third_party/blink/renderer/modules/ai/exception_helpers.h"
 #include "third_party/blink/renderer/modules/ai/model_execution_responder.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
@@ -29,6 +32,53 @@ class SequencedTaskRunner;
 }  // namespace base
 
 namespace blink {
+
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(WritingAssistanceMetricsOptionType)
+enum class WritingAssistanceMetricsOptionType {
+  kTldr = 0,
+  kKeyPoints = 1,
+  kTeaser = 2,
+  kHeadline = 3,
+  kMaxValue = kHeadline,
+
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/ai/enums.xml:WritingAssistanceMetricsOptionType)
+
+// LINT.IfChange(WritingAssistanceMetricsOptionTone)
+enum class WritingAssistanceMetricsOptionTone {
+  kAsIs = 0,
+  kNeutral = 1,
+  kMoreFormal = 2,
+  kMoreCasual = 3,
+  kFormal = 4,
+  kCasual = 5,
+  kMaxValue = kCasual,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/ai/enums.xml:WritingAssistanceMetricsOptionTone)
+
+// LINT.IfChange(WritingAssistanceMetricsOptionFormat)
+enum class WritingAssistanceMetricsOptionFormat {
+  kPlainText = 0,
+  kAsIs = 1,
+  kMarkdown = 2,
+  kMaxValue = kMarkdown,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/ai/enums.xml:WritingAssistanceMetricsOptionFormat)
+
+// LINT.IfChange(WritingAssistanceMetricsOptionLength)
+enum class WritingAssistanceMetricsOptionLength {
+  kShort = 0,
+  kMedium = 1,
+  kLong = 2,
+  kAsIs = 3,
+  kShorter = 4,
+  kLonger = 5,
+  kMaxValue = kLonger,
+};
+// LINT.ThenChange(//tools/metrics/histograms/metadata/ai/enums.xml:WritingAssistanceMetricsOptionLength)
 
 class ReadableStream;
 
@@ -65,21 +115,32 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
     visitor->Trace(options_);
   }
 
-  static ScriptPromise<V8AIAvailability> availability(
+  static ScriptPromise<V8Availability> availability(
       ScriptState* script_state,
       CreateCoreOptions* options,
       ExceptionState& exception_state) {
     if (!script_state->ContextIsValid()) {
       ThrowInvalidContextException(exception_state);
-      return ScriptPromise<V8AIAvailability>();
+      return ScriptPromise<V8Availability>();
+    }
+    CHECK(options);
+    if (!ValidateAndCanonicalizeOptionLanguages(script_state->GetIsolate(),
+                                                options)) {
+      return ScriptPromise<V8Availability>();
     }
 
     auto* resolver =
-        MakeGarbageCollected<ScriptPromiseResolver<V8AIAvailability>>(
+        MakeGarbageCollected<ScriptPromiseResolver<V8Availability>>(
             script_state);
     auto promise = resolver->Promise();
-
     ExecutionContext* execution_context = ExecutionContext::From(script_state);
+
+    // Return unavailable if the Permission Policy is not enabled.
+    if (!execution_context->IsFeatureEnabled(GetPermissionsPolicy())) {
+      resolver->Resolve(AvailabilityToV8(Availability::kUnavailable));
+      return promise;
+    }
+
     HeapMojoRemote<mojom::blink::AIManager>& ai_manager_remote =
         AIInterfaceProxy::GetAIManagerRemote(execution_context);
 
@@ -87,16 +148,16 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
       RejectPromiseWithInternalError(resolver);
       return promise;
     }
-
+    RecordCreateOptionMetrics(*options, "availability");
     RemoteCanCreate(
         ai_manager_remote, options,
         WTF::BindOnce(
-            [](ScriptPromiseResolver<V8AIAvailability>* resolver,
+            [](ScriptPromiseResolver<V8Availability>* resolver,
                ExecutionContext* execution_context,
                mojom::blink::ModelAvailabilityCheckResult result) {
-              AIAvailability availability = HandleModelAvailabilityCheckResult(
+              Availability availability = HandleModelAvailabilityCheckResult(
                   execution_context, GetSessionType(), result);
-              resolver->Resolve(AIAvailabilityToV8(availability));
+              resolver->Resolve(AvailabilityToV8(availability));
             },
             WrapPersistent(resolver), WrapPersistent(execution_context)));
     return promise;
@@ -111,6 +172,11 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
       return ScriptPromise<V8SessionObjectType>();
     }
     CHECK(options);
+    if (!ValidateAndCanonicalizeOptionLanguages(script_state->GetIsolate(),
+                                                options)) {
+      return ScriptPromise<V8SessionObjectType>();
+    }
+
     auto* resolver =
         MakeGarbageCollected<ScriptPromiseResolver<V8SessionObjectType>>(
             script_state);
@@ -122,6 +188,15 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
     }
 
     ExecutionContext* execution_context = ExecutionContext::From(script_state);
+
+    // Block access if the Permission Policy is not enabled.
+    if (!execution_context->IsFeatureEnabled(GetPermissionsPolicy())) {
+      resolver->Reject(MakeGarbageCollected<DOMException>(
+          DOMExceptionCode::kNotAllowedError,
+          kExceptionMessagePermissionPolicy));
+      return promise;
+    }
+
     HeapMojoRemote<mojom::blink::AIManager>& ai_manager_remote =
         AIInterfaceProxy::GetAIManagerRemote(execution_context);
 
@@ -129,11 +204,50 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
       RejectPromiseWithInternalError(resolver);
       return promise;
     }
+    RecordCreateOptionMetrics(*options, "create");
 
-    MakeGarbageCollected<AIWritingAssistanceCreateClient<
-        AIMojoClient, AIMojoCreateClient, CreateOptions, V8SessionObjectType>>(
-        script_state, resolver, options)
-        ->Create();
+    RemoteCanCreate(
+        ai_manager_remote, options,
+        WTF::BindOnce(
+            [](ScriptPromiseResolver<V8SessionObjectType>* resolver,
+               CreateOptions* options,
+               mojom::blink::ModelAvailabilityCheckResult result) {
+              ScriptState* script_state = resolver->GetScriptState();
+              if (!script_state || !script_state->ContextIsValid()) {
+                return;
+              }
+
+              auto availability = ConvertModelAvailabilityCheckResult(result);
+              if (availability == Availability::kUnavailable) {
+                resolver->RejectWithDOMException(
+                    DOMExceptionCode::kNotAllowedError,
+                    ConvertModelAvailabilityCheckResultToDebugString(result));
+                return;
+              }
+
+              LocalDOMWindow* const window = LocalDOMWindow::From(script_state);
+
+              // Writing Assistance APIs are only available within window and
+              // extension worker contexts by default. User activation is not
+              // consumed by workers, as they lack the ability to do so.
+              if (window && RequiresUserActivation(availability) &&
+                  !LocalFrame::ConsumeTransientUserActivation(
+                      window->GetFrame())) {
+                resolver->RejectWithDOMException(
+                    DOMExceptionCode::kNotAllowedError,
+                    kExceptionMessageUserActivationRequired);
+                return;
+              }
+
+              // TODO(crbug.com/396466270): Make this one mojo round trip
+              // once we can consume User Activation on the browser-side.
+              MakeGarbageCollected<AIWritingAssistanceCreateClient<
+                  AIMojoClient, AIMojoCreateClient, CreateOptions,
+                  V8SessionObjectType>>(script_state, resolver, options)
+                  ->Create();
+            },
+            WrapPersistent(resolver), WrapPersistent(options)));
+
     return promise;
   }
 
@@ -177,10 +291,11 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
 
     const String trimmed_context =
         options->getContextOr(g_empty_string).StripWhiteSpace();
+    // Pass persistent refs to keep this instance alive during the response.
     auto pending_remote = CreateModelExecutionResponder(
         script_state, signal, resolver, task_runner_, metric_session_type_,
-        /*complete_callback=*/base::DoNothing(),
-        /*overflow_callback=*/base::DoNothing());
+        base::DoNothingWithBoundArgs(WrapPersistent(this)),
+        base::DoNothingWithBoundArgs(WrapPersistent(this)));
     remoteExecute(trimmed_input, trimmed_context, std::move(pending_remote));
     return promise;
   }
@@ -221,11 +336,12 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
 
     const String trimmed_context =
         options->getContextOr(g_empty_string).StripWhiteSpace();
+    // Pass persistent refs to keep this instance alive during the response.
     auto [readable_stream, pending_remote] =
         CreateModelExecutionStreamingResponder(
             script_state, signal, task_runner_, metric_session_type_,
-            /*complete_callback=*/base::DoNothing(),
-            /*overflow_callback=*/base::DoNothing());
+            base::DoNothingWithBoundArgs(WrapPersistent(this)),
+            base::DoNothingWithBoundArgs(WrapPersistent(this)));
     remoteExecute(trimmed_input, trimmed_context, std::move(pending_remote));
     return readable_stream;
   }
@@ -258,7 +374,7 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
         input, options->getContextOr(g_empty_string),
         WTF::BindOnce(
             [](ScriptPromiseResolver<IDLDouble>* resolver, AbortSignal* signal,
-               std::optional<uint64_t> usage) {
+               std::optional<uint32_t> usage) {
               ExecutionContext* context = resolver->GetExecutionContext();
               if (!context) {
                 return;
@@ -335,6 +451,13 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
   // Returns the session type; defined in template specializations.
   static AIMetrics::AISessionType GetSessionType();
 
+  // Returns permission policy feature for session type.
+  static network::mojom::PermissionsPolicyFeature GetPermissionsPolicy();
+
+  // Record metrics for options when creating or using a session.
+  static void RecordCreateOptionMetrics(const CreateCoreOptions& options,
+                                        std::string function_name);
+
   // Runs CanCreate* for the session type; defined in template specializations.
   static void RemoteCanCreate(
       HeapMojoRemote<mojom::blink::AIManager>& ai_manager_remote,
@@ -345,6 +468,39 @@ class AIWritingAssistanceBase : public ExecutionContextClient {
   Member<CreateOptions> options_;
 
  private:
+  static bool ValidateAndCanonicalizeOptionLanguages(
+      v8::Isolate* isolate,
+      CreateCoreOptions* options) {
+    using LanguageList = std::optional<Vector<String>>;
+    if (options->hasExpectedContextLanguages()) {
+      LanguageList result = ValidateAndCanonicalizeBCP47Languages(
+          isolate, options->expectedContextLanguages());
+      if (!result) {
+        return false;
+      }
+      options->setExpectedContextLanguages(*result);
+    }
+
+    if (options->hasExpectedInputLanguages()) {
+      LanguageList result = ValidateAndCanonicalizeBCP47Languages(
+          isolate, options->expectedInputLanguages());
+      if (!result) {
+        return false;
+      }
+      options->setExpectedInputLanguages(*result);
+    }
+
+    if (options->hasOutputLanguage()) {
+      LanguageList result = ValidateAndCanonicalizeBCP47Languages(
+          isolate, {options->outputLanguage()});
+      if (!result) {
+        return false;
+      }
+      options->setOutputLanguage((*result)[0]);
+    }
+    return true;
+  }
+
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   AIMetrics::AISessionType metric_session_type_;
   // Whether to echo back the original input if it only contains whitespace.

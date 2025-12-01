@@ -2,12 +2,12 @@
 .\"     Title: depot_tools_tutorial
 .\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
 .\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
-.\"      Date: 02/20/2025
+.\"      Date: 05/07/2025
 .\"    Manual: Chromium depot_tools Manual
-.\"    Source: depot_tools 8a5ec2b9
+.\"    Source: depot_tools fab0a429
 .\"  Language: English
 .\"
-.TH "DEPOT_TOOLS_TUTORIAL" "7" "02/20/2025" "depot_tools 8a5ec2b9" "Chromium depot_tools Manual"
+.TH "DEPOT_TOOLS_TUTORIAL" "7" "05/07/2025" "depot_tools fab0a429" "Chromium depot_tools Manual"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -259,6 +259,9 @@ If you have never used git before, you\(cqll need to set some global git configu
 .RS 4
 .\}
 .nf
+\fB$\fR # Set up auth in Git config:
+\fB$ git cl creds\-check \-\-global\fR
+
 \fB$\fR # get the code
 \fB$\fR # In an empty directory:
 \fB$ fetch {chromium,\&.\&.\&.}\fR
@@ -281,6 +284,19 @@ If you have never used git before, you\(cqll need to set some global git configu
 .\}
 .sp
 .SH "GETTING THE CODE"
+.sp
+Unless you plan on only fetching code anonymously, you\(cqll need to set up your auth config in Git\&. Run this:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+\fB$ git cl creds\-check \-\-global\fR
+.fi
+.if n \{\
+.RE
+.\}
+.sp
 .sp
 Pick an empty directory and run one of the following:
 .sp
@@ -858,7 +874,7 @@ EOF
 | * \fB2c0ad9c59b\fR	\fB(fix_typo\fR\fB) \fR2014\-04\-10 ~ Fix typo for good!
 | * \fB615ffa720f\fR	2014\-04\-10 ~ Fix terrible typo\&.
 |/
-* \fBbeec6f4746\fR	\fB(origin/main\fR\fB, origin/HEAD\fR\fB) \fR2014\-04\-10 ~ Make ReflectorImpl use mailboxes    <(\fBchap2, fix_typo\fR)
+* \fBbeec6f4746\fR	\fB(origin/main\fR\fB, origin/HEAD\fR\fB) \fR2014\-04\-10 ~ Make ReflectorImpl use mailboxes    <(\fBfix_typo, chap2\fR)
 * \fB41290e02b7\fR	2014\-04\-10 ~ don\*(Aqt use glibc\-specific execinfo\&.h on uclibc builds
 * \fBa76fde7b7b\fR	2014\-04\-10 ~ [fsp] Add requestUnmount() method together with the request manager\&.
 * \fB9de7a713b3\fR	2014\-04\-10 ~ linux_aura: Use system configuration for middle clicking the titlebar\&.
@@ -882,10 +898,10 @@ We haven\*(Aqt updated the code in a while, so let\*(Aqs do that now\&.
 Fetching origin
 From https://upstream
    beec6f4\&.\&.59cdb73  main       \-> origin/main
-Rebasing: chap2
-Rebasing: fix_typo
-Failed! Attempting to squash fix_typo \&.\&.\&. Success!
-Rebasing: chap3
+Rebasing: \fBchap2\fR
+Rebasing: \fBfix_typo\fR
+Failed! Attempting to squash \fBfix_typo\fR \&.\&.\&. Success!
+Rebasing: \fBchap3\fR
 Reparented chap3 to track origin/main (was tracking chap2)
 Deleted branch fix_typo (was 5d26fec)\&.
 Deleted branch chap2 (was 5d26fec)\&.
@@ -999,7 +1015,7 @@ Much better
 
 \fB$ git rebase\-update\fR
 Fetching origin
-chap3 up\-to\-date
+\fBchap3\fR up\-to\-date
 
 Running `git gc \-\-auto` \- Ctrl\-C to abort is OK\&.
 

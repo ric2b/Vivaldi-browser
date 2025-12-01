@@ -6,20 +6,25 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_AI_LANGUAGE_MODEL_H_
 
 #include "base/types/pass_key.h"
-#include "third_party/blink/public/mojom/ai/ai_language_model.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/ai/ai_language_model.mojom-blink.h"
+#include "third_party/blink/public/mojom/ai/model_streaming_responder.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/idl_types.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_availability.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_language_model_append_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_language_model_clone_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_language_model_create_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_language_model_message_role.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_language_model_prompt_options.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_language_model_prompt_role.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
 #include "third_party/blink/renderer/core/dom/events/event_target.h"
 #include "third_party/blink/renderer/core/event_type_names.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
-#include "third_party/blink/renderer/modules/ai/language_model_factory.h"
+#include "third_party/blink/renderer/modules/ai/language_model_params.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_remote.h"
+#include "third_party/blink/renderer/platform/wtf/hash_set.h"
 
 namespace blink {
 
@@ -30,7 +35,7 @@ class LanguageModel final : public EventTarget, public ExecutionContextClient {
  public:
   // Get the mojo enum value for the given V8 `role` enum value.
   static mojom::blink::AILanguageModelPromptRole ConvertRoleToMojo(
-      V8LanguageModelPromptRole role);
+      V8LanguageModelMessageRole role);
 
   LanguageModel(
       ExecutionContext* execution_context,
@@ -50,9 +55,9 @@ class LanguageModel final : public EventTarget, public ExecutionContextClient {
   // language_model.idl implementation.
   static ScriptPromise<LanguageModel> create(
       ScriptState* script_state,
-      const LanguageModelCreateOptions* options,
+      LanguageModelCreateOptions* options,
       ExceptionState& exception_state);
-  static ScriptPromise<V8AIAvailability> availability(
+  static ScriptPromise<V8Availability> availability(
       ScriptState* script_state,
       const LanguageModelCreateCoreOptions* options,
       ExceptionState& exception_state);
@@ -61,16 +66,20 @@ class LanguageModel final : public EventTarget, public ExecutionContextClient {
       ExceptionState& exception_state);
 
   ScriptPromise<IDLString> prompt(ScriptState* script_state,
-                                  const V8LanguageModelPromptInput* input,
+                                  const V8LanguageModelPrompt* input,
                                   const LanguageModelPromptOptions* options,
                                   ExceptionState& exception_state);
   ReadableStream* promptStreaming(ScriptState* script_state,
-                                  const V8LanguageModelPromptInput* input,
+                                  const V8LanguageModelPrompt* input,
                                   const LanguageModelPromptOptions* options,
                                   ExceptionState& exception_state);
+  ScriptPromise<IDLUndefined> append(ScriptState* script_state,
+                                     const V8LanguageModelPrompt* input,
+                                     const LanguageModelAppendOptions* options,
+                                     ExceptionState& exception_state);
   ScriptPromise<IDLDouble> measureInputUsage(
       ScriptState* script_state,
-      const V8LanguageModelPromptInput* input,
+      const V8LanguageModelPrompt* input,
       const LanguageModelPromptOptions* options,
       ExceptionState& exception_state);
   double inputQuota() const { return input_quota_; }
@@ -92,10 +101,39 @@ class LanguageModel final : public EventTarget, public ExecutionContextClient {
       mojom::blink::ModelExecutionContextInfoPtr context_info);
   void OnQuotaOverflow();
 
+  using ResolverOrStream =
+      std::variant<ScriptPromiseResolverBase*, ReadableStream*>;
+  // Helper to make AILanguageModelProxy::Prompt compatible with
+  // ConvertPromptInputsToMojo callback.
+  void ExecutePrompt(
+      ScriptState* script_state,
+      ResolverOrStream resolver_or_stream,
+      on_device_model::mojom::blink::ResponseConstraintPtr constraint,
+      mojo::PendingRemote<mojom::blink::ModelStreamingResponder>
+          pending_responder,
+      WTF::Vector<mojom::blink::AILanguageModelPromptPtr> prompts);
+
+  // Helper to make AILanguageModelProxy::MeasureInputUsage compatible with
+  // ConvertPromptInputsToMojo callback.
+  void ExecuteMeasureInputUsage(
+      ScriptPromiseResolver<IDLDouble>* resolver,
+      AbortSignal* signal,
+      WTF::Vector<mojom::blink::AILanguageModelPromptPtr> prompts);
+
+  // Validates and processed prompt input and returns the processed constraints.
+  // Returns std::nullopt on failure.
+  std::optional<on_device_model::mojom::blink::ResponseConstraintPtr>
+  ValidateAndProcessPromptInput(ScriptState* script_state,
+                                const V8LanguageModelPrompt* input,
+                                const LanguageModelPromptOptions* options,
+                                ExceptionState& exception_state);
+
   uint64_t input_usage_;
   uint64_t input_quota_ = 0;
   uint32_t top_k_ = 0;
   float temperature_ = 0.0;
+  // Prompt types supported by the language model in this session.
+  WTF::HashSet<mojom::blink::AILanguageModelPromptType> input_types_;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   HeapMojoRemote<mojom::blink::AILanguageModel> language_model_remote_;

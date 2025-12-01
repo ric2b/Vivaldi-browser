@@ -1,17 +1,14 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Trace from '../../../models/trace/trace.js';
 import * as ComponentHelpers from '../../../ui/components/helpers/helpers.js';
 import * as Lit from '../../../ui/lit/lit.js';
 
-import stylesRaw from './relatedInsightChips.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const styles = new CSSStyleSheet();
-styles.replaceSync(stylesRaw.cssText);
+import relatedInsightsStyles from './relatedInsightChips.css.js';
 
 const {html} = Lit;
 
@@ -42,13 +39,9 @@ export interface Data {
 }
 export class RelatedInsightChips extends HTMLElement {
   #shadow = this.attachShadow({mode: 'open'});
-
-  #boundRender = this.#render.bind(this);
-
   #data: Data = {eventToRelatedInsightsMap: new Map(), activeEvent: null};
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [styles];
     this.#render();
   }
 
@@ -57,12 +50,12 @@ export class RelatedInsightChips extends HTMLElement {
       return;
     }
     this.#data.activeEvent = event;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   set eventToRelatedInsightsMap(map: Data['eventToRelatedInsightsMap']) {
     this.#data.eventToRelatedInsightsMap = map;
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#boundRender);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   #insightClick(insight: RelatedInsight): (e: Event) => void {
@@ -83,6 +76,7 @@ export class RelatedInsightChips extends HTMLElement {
     // TODO: Render insight messages in a separate UX
     // Right before insight chips is acceptable for now
     const insightMessages = relatedInsights.flatMap(insight => {
+      // TODO: support markdown (`md`).
       return insight.messages.map(message => html`
         <li class="insight-message-box">
           <button type="button" @click=${this.#insightClick(insight)}>
@@ -110,6 +104,7 @@ export class RelatedInsightChips extends HTMLElement {
 
     // clang-format off
     Lit.render(html`
+      <style>${relatedInsightsStyles}</style>
       <ul>${insightMessages}</ul>
       <ul>${insightChips}</ul>
     `, this.#shadow, {host: this});

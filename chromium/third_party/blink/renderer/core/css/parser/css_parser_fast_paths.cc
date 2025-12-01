@@ -155,8 +155,8 @@ static CSSValue* ParseSimpleLengthValue(CSSPropertyID property_id,
   double number;
   CSSPrimitiveValue::UnitType unit = CSSPrimitiveValue::UnitType::kNumber;
 
-  const bool parsed_simple_length =
-      ParseSimpleLength(string.Characters8(), string.length(), unit, number);
+  const bool parsed_simple_length = ParseSimpleLength(
+      UNSAFE_TODO(string.Characters8()), string.length(), unit, number);
   if (!parsed_simple_length) {
     return nullptr;
   }
@@ -907,20 +907,22 @@ static inline bool MatchesCaseInsensitiveLiteral2(const LChar* a,
   return (av | mask) == bv;
 }
 
-static inline bool MightBeRGBOrRGBA(const LChar* characters, unsigned length) {
-  if (length < 5) {
+static inline bool MightBeRGBOrRGBA(base::span<const LChar> chars) {
+  if (chars.size() < 5u) {
     return false;
   }
+  const LChar* characters = chars.data();
   return MatchesLiteral(characters, "rgb") &&
          (UNSAFE_TODO(characters[3]) == '(' ||
           (UNSAFE_TODO(characters[3]) == 'a' &&
            UNSAFE_TODO(characters[4]) == '('));
 }
 
-static inline bool MightBeHSLOrHSLA(const LChar* characters, unsigned length) {
-  if (length < 5) {
+static inline bool MightBeHSLOrHSLA(base::span<const LChar> chars) {
+  if (chars.size() < 5u) {
     return false;
   }
+  const LChar* characters = chars.data();
   return MatchesLiteral(characters, "hsl") &&
          (UNSAFE_TODO(characters[3]) == '(' ||
           (UNSAFE_TODO(characters[3]) == 'a' &&
@@ -928,23 +930,22 @@ static inline bool MightBeHSLOrHSLA(const LChar* characters, unsigned length) {
 }
 
 static bool FastParseColorInternal(Color& color,
-                                   const LChar* characters,
-                                   unsigned length,
+                                   base::span<const LChar> chars,
                                    bool quirks_mode) {
+  const LChar* characters = chars.data();
+  const unsigned length = static_cast<unsigned>(chars.size());
   if (length >= 4 && characters[0] == '#') {
-    return Color::ParseHexColor(
-        UNSAFE_TODO(base::span(characters + 1, length - 1)), color);
+    return Color::ParseHexColor(chars.subspan(1u), color);
   }
 
   if (quirks_mode && (length == 3 || length == 6)) {
-    if (Color::ParseHexColor(UNSAFE_TODO(base::span(characters, length)),
-                             color)) {
+    if (Color::ParseHexColor(chars, color)) {
       return true;
     }
   }
 
   // rgb() and rgba() have the same syntax.
-  if (MightBeRGBOrRGBA(characters, length)) {
+  if (MightBeRGBOrRGBA(chars)) {
     int length_to_add = (UNSAFE_TODO(characters[3]) == 'a') ? 5 : 4;
     const LChar* current = UNSAFE_TODO(characters + length_to_add);
     const LChar* end = UNSAFE_TODO(characters + length);
@@ -1007,7 +1008,7 @@ static bool FastParseColorInternal(Color& color,
   // Also for legacy reasons, an hsla() function also exists, with an identical
   // grammar and behavior to hsl().
 
-  if (MightBeHSLOrHSLA(characters, length)) {
+  if (MightBeHSLOrHSLA(chars)) {
     int length_to_add = (UNSAFE_TODO(characters[3]) == 'a') ? 5 : 4;
     const LChar* current = UNSAFE_TODO(characters + length_to_add);
     const LChar* end = UNSAFE_TODO(characters + length);
@@ -1141,8 +1142,8 @@ static ParseColorResult ParseColor(CSSPropertyID property_id,
   // Fast path for hex colors and rgb()/rgba()/hsl()/hsla() colors.
   // Note that ParseColor may be called from external contexts,
   // i.e., when parsing style sheets, so we need the Unicode path here.
-  const bool parsed = FastParseColorInternal(out_color, string.Characters8(),
-                                             string.length(), quirks_mode);
+  const bool parsed =
+      FastParseColorInternal(out_color, string.Span8(), quirks_mode);
   return parsed ? ParseColorResult::kColor : ParseColorResult::kFailure;
 }
 
@@ -1211,6 +1212,10 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kTop || value_id == CSSValueID::kBottom;
     case CSSPropertyID::kCaretAnimation:
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kManual;
+    case CSSPropertyID::kCaretShape:
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kBlock ||
+             value_id == CSSValueID::kBar ||
+             value_id == CSSValueID::kUnderscore;
     case CSSPropertyID::kClear:
       return value_id == CSSValueID::kNone || value_id == CSSValueID::kLeft ||
              value_id == CSSValueID::kRight || value_id == CSSValueID::kBoth ||
@@ -1302,8 +1307,6 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kNormal ||
              value_id == CSSValueID::kBreakWord ||
              value_id == CSSValueID::kAnywhere;
-    case CSSPropertyID::kInternalOverflowBlock:
-    case CSSPropertyID::kInternalOverflowInline:
     case CSSPropertyID::kOverflowBlock:
     case CSSPropertyID::kOverflowInline:
     case CSSPropertyID::kOverflowX:
@@ -1521,7 +1524,8 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
     case CSSPropertyID::kColumnFill:
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kBalance;
     case CSSPropertyID::kColumnWrap:
-      return value_id == CSSValueID::kWrap || value_id == CSSValueID::kNowrap;
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kWrap ||
+             value_id == CSSValueID::kNowrap;
     case CSSPropertyID::kAlignContent:
       // FIXME: Per CSS alignment, this property should accept an optional
       // <overflow-position>. We should share this parsing code with
@@ -1554,9 +1558,6 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kRowReverse ||
              value_id == CSSValueID::kColumn ||
              value_id == CSSValueID::kColumnReverse;
-    case CSSPropertyID::kFlexWrap:
-      return value_id == CSSValueID::kNowrap || value_id == CSSValueID::kWrap ||
-             value_id == CSSValueID::kWrapReverse;
     case CSSPropertyID::kFieldSizing:
       return value_id == CSSValueID::kFixed || value_id == CSSValueID::kContent;
     case CSSPropertyID::kHyphens:
@@ -1734,6 +1735,7 @@ CSSBitset CSSParserFastPaths::handled_by_keyword_fast_paths_properties_{{
     CSSPropertyID::kBufferedRendering,
     CSSPropertyID::kCaptionSide,
     CSSPropertyID::kCaretAnimation,
+    CSSPropertyID::kCaretShape,
     CSSPropertyID::kClear,
     CSSPropertyID::kClipRule,
     CSSPropertyID::kColorInterpolation,
@@ -1750,8 +1752,6 @@ CSSBitset CSSParserFastPaths::handled_by_keyword_fast_paths_properties_{{
     CSSPropertyID::kGapRulePaintOrder,
     CSSPropertyID::kHyphens,
     CSSPropertyID::kImageRendering,
-    CSSPropertyID::kInternalOverflowBlock,
-    CSSPropertyID::kInternalOverflowInline,
     CSSPropertyID::kInterpolateSize,
     CSSPropertyID::kListStylePosition,
     CSSPropertyID::kMaskType,
@@ -1820,7 +1820,6 @@ CSSBitset CSSParserFastPaths::handled_by_keyword_fast_paths_properties_{{
     CSSPropertyID::kColumnFill,
     CSSPropertyID::kColumnWrap,
     CSSPropertyID::kFlexDirection,
-    CSSPropertyID::kFlexWrap,
     CSSPropertyID::kFontKerning,
     CSSPropertyID::kFontOpticalSizing,
     CSSPropertyID::kFontSynthesisWeight,
@@ -1860,8 +1859,10 @@ bool CSSParserFastPaths::IsValidSystemFont(CSSValueID value_id) {
   return value_id >= CSSValueID::kCaption && value_id <= CSSValueID::kStatusBar;
 }
 
-static inline CSSValue* ParseCSSWideKeywordValue(const LChar* ptr,
-                                                 unsigned length) {
+static inline CSSValue* ParseCSSWideKeywordValue(
+    base::span<const LChar> chars) {
+  const LChar* ptr = chars.data();
+  const unsigned length = static_cast<unsigned>(chars.size());
   if (length == 7 && MatchesCaseInsensitiveLiteral4(ptr, "init") &&
       MatchesCaseInsensitiveLiteral4(UNSAFE_TODO(ptr + 3), "tial")) {
     return CSSInitialValue::Create();
@@ -1891,8 +1892,7 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
                                    const CSSParserContext* context) {
   DCHECK(!string.empty());
 
-  CSSValue* css_wide_keyword =
-      ParseCSSWideKeywordValue(string.Characters8(), string.length());
+  CSSValue* css_wide_keyword = ParseCSSWideKeywordValue(string.Span8());
 
   if (!CSSParserFastPaths::IsHandledByKeywordFastPath(property_id)) {
     // This isn't a property we have a fast path for, but even
@@ -2118,11 +2118,13 @@ static CSSFunctionValue* ParseSimpleTransformValue(const LChar*& pos,
   return nullptr;
 }
 
-static bool TransformCanLikelyUseFastPath(const LChar* chars, unsigned length) {
+static bool TransformCanLikelyUseFastPath(base::span<const LChar> span) {
   // Very fast scan that attempts to reject most transforms that couldn't
   // take the fast path. This avoids doing the malloc and string->double
   // conversions in parseSimpleTransformValue only to discard them when we
   // run into a transform component we don't understand.
+  const LChar* chars = span.data();
+  const unsigned length = static_cast<unsigned>(span.size());
   unsigned i = 0;
   while (i < length) {
     if (UNSAFE_TODO(chars[i]) == ' ') {
@@ -2165,8 +2167,7 @@ static bool TransformCanLikelyUseFastPath(const LChar* chars, unsigned length) {
         // All other things, ex. skew.
         return false;
     }
-    wtf_size_t arguments_end =
-        WTF::Find(UNSAFE_TODO(base::span(chars, length)), ')', i);
+    wtf_size_t arguments_end = WTF::Find(span, ')', i);
     if (arguments_end == kNotFound) {
       return false;
     }
@@ -2184,12 +2185,12 @@ static CSSValue* ParseSimpleTransform(CSSPropertyID property_id,
     return nullptr;
   }
 
-  const LChar* pos = string.Characters8();
-  unsigned length = string.length();
-  if (!TransformCanLikelyUseFastPath(pos, length)) {
+  base::span<const LChar> chars = string.Span8();
+  if (!TransformCanLikelyUseFastPath(chars)) {
     return nullptr;
   }
-  const auto* end = UNSAFE_TODO(pos + length);
+  const LChar* pos = chars.data();
+  const auto* end = base::to_address(chars.end());
   CSSValueList* transform_list = nullptr;
   while (pos < end) {
     while (pos < end && *pos == ' ') {

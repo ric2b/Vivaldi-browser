@@ -14,11 +14,13 @@
 #include "base/memory/raw_ptr.h"
 #include "base/notreached.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "printing/backend/cups_ipp_constants.h"
 #include "printing/backend/mock_cups_printer.h"
 #include "printing/backend/print_backend_utils.h"
 #include "printing/mojom/print.mojom.h"
+#include "printing/printing_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -359,6 +361,41 @@ TEST_F(PrintBackendCupsIppHelperTest, CopiesCapable) {
 
   EXPECT_EQ(2, caps.copies_max);
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+TEST_F(PrintBackendCupsIppHelperTest, PaperMargins) {
+  // There is one borderless variant of the paper. Thus, the total margins
+  // stored will be papers.size() - 1 as borderless margins are not stored
+  // as a separate entry.
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
+  static const std::array<PaperMargins, 3> kExpectedMarginsUm = {
+      PaperMargins{2960, 3150, 2960, 3150},
+      PaperMargins{3900, 100, 6350, 200},
+      PaperMargins{1000, 1000, 1000, 1000},
+  };
+
+  printer_->SetMediaColDatabase(
+      MakeMediaColDatabase(ipp_, {
+                                     {21000, 29700, 0, 0, 0, 0, {}},
+                                     {21000, 29700, 296, 315, 315, 296, {}},
+                                     {21590, 35560, 635, 20, 10, 390, {}},
+                                     {18200, 25700, 100, 100, 100, 100, {}},
+                                 }));
+
+  PrinterSemanticCapsAndDefaults caps;
+  CapsAndDefaultsFromPrinter(*printer_, &caps);
+  EXPECT_EQ(kExpectedMarginsUm.size(), caps.papers.size());
+
+  std::vector<PaperMargins> supported_margins_um;
+  for (const auto& paper : caps.papers) {
+    ASSERT_TRUE(paper.supported_margins_um().has_value());
+    supported_margins_um.emplace_back(paper.supported_margins_um().value());
+  }
+  EXPECT_THAT(supported_margins_um,
+              UnorderedElementsAreArray(kExpectedMarginsUm));
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(PrintBackendCupsIppHelperTest, CopiesNotCapable) {
   // copies missing, no setup
@@ -1176,6 +1213,8 @@ TEST_F(PrintBackendCupsIppHelperTest, MediaSource) {
 
 // Test print-scaling values are correctly stored.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   printer_->SetSupportedOptions(
       "print-scaling",
       MakeStringCollection(ipp_, {"auto", "auto-fit", "fill", "fit", "none"}));
@@ -1194,6 +1233,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes) {
 }
 
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_CorrectMapping) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   struct ScalingTypeToString {
     std::string str;
     mojom::PrintScalingType type;
@@ -1220,6 +1261,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_CorrectMapping) {
 // Test first value from supported values is used as default if default is
 // missing.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_NoDefault) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   printer_->SetSupportedOptions(
       "print-scaling",
       MakeStringCollection(ipp_, {"auto-fit", "fill", "none"}));
@@ -1237,6 +1280,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_NoDefault) {
 // Test first value from supported values is used as default if default is
 // unknown.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_DefaultUnknown) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   printer_->SetSupportedOptions(
       "print-scaling", MakeStringCollection(ipp_, {"fit", "fill", "none"}));
   printer_->SetOptionDefault("print-scaling", MakeString(ipp_, "value-1"));
@@ -1253,6 +1298,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_DefaultUnknown) {
 
 // Test no values are stored when there are no supported values.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_NoValues) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   PrinterSemanticCapsAndDefaults caps;
   CapsAndDefaultsFromPrinter(*printer_, &caps);
 
@@ -1264,6 +1311,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_NoValues) {
 // Test no values are stored despite printer saying it has one default value
 // while supported values are empty.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_NoValues2) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   printer_->SetOptionDefault("print-scaling", MakeString(ipp_, "auto"));
 
   PrinterSemanticCapsAndDefaults caps;
@@ -1277,6 +1326,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_NoValues2) {
 // Test unknown values are not stored and default is correctly set as first
 // value of known print-scaling types.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_UnknownValues) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   printer_->SetSupportedOptions(
       "print-scaling",
       MakeStringCollection(ipp_, {"value-1", "value-2", "auto", "none"}));
@@ -1292,6 +1343,8 @@ TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_UnknownValues) {
 
 // Test default is not set if only unknown values are supported.
 TEST_F(PrintBackendCupsIppHelperTest, PrintScalingTypes_UnknownValues2) {
+  base::test::ScopedFeatureList scoped_enable;
+  scoped_enable.InitAndEnableFeature(features::kApiPrintingMarginsAndScale);
   printer_->SetSupportedOptions(
       "print-scaling",
       MakeStringCollection(ipp_, {"value-1", "value-2", "value-3", "value-4"}));

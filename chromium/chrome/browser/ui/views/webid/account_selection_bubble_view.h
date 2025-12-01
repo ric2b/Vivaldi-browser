@@ -33,7 +33,7 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
 
  public:
   AccountSelectionBubbleView(
-      const std::u16string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::optional<std::u16string>& idp_title,
       blink::mojom::RpContext rp_context,
       views::View* anchor_view,
@@ -65,6 +65,7 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
       const IdentityRequestAccountPtr& account) override;
 
   std::string GetDialogTitle() const override;
+  std::optional<std::string> GetDialogSubtitle() const override;
 
   // views::BubbleDialogDelegateView:
   gfx::Rect GetBubbleBounds() override;
@@ -76,11 +77,12 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   // Returns a View containing the logo of the identity provider.
   std::unique_ptr<views::View> CreateHeaderView();
 
-  // Returns a View for single account chooser. It contains the account
-  // information, disclosure text and a button for the user to confirm the
-  // selection.
-  std::unique_ptr<views::View> CreateSingleAccountChooser(
-      const IdentityRequestAccountPtr& account);
+  // Returns a pair <View, Button> where the first element is the View for
+  // single account chooser. This View contains the account information,
+  // disclosure text and a button for the user to confirm the selection. The
+  // second element is the button for the user to confirm the selection.
+  std::pair<std::unique_ptr<views::View>, views::MdTextButton*>
+  CreateSingleAccountChooser(const IdentityRequestAccountPtr& account);
 
   // Adds a separator as well as a multiple account chooser. The chooser
   // contains the info for each account in a button, so the user can pick an
@@ -112,13 +114,14 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
       int icon_margin);
 
   // Updates the header title, the header icon visibility and the header back
-  // button visibiltiy. `idp_image` is not empty when we need to set a header
+  // button visibility. `idp_image` is not empty when we need to set a header
   // image based on the IDP. `should_circle_crop_header_icon` determines whether
   // the icon passed should be cropped or not. Some icons like the RP icon are
   // not meant to be cropped, and some icons like the badged account icon are
   // cropped on the backend, so they should not be cropped here.
   void UpdateHeader(const gfx::Image& idp_image,
                     const std::u16string& title,
+                    const std::u16string& subtitle,
                     bool show_back_button,
                     bool should_circle_crop_header_icon);
 
@@ -134,6 +137,9 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
   // The current title for the dialog.
   std::u16string title_;
 
+  // The current subtitle for the dialog.
+  std::u16string subtitle_;
+
   // The relying party context to show in the title.
   blink::mojom::RpContext rp_context_;
 
@@ -148,6 +154,9 @@ class AccountSelectionBubbleView : public views::BubbleDialogDelegateView,
 
   // View containing the bubble title.
   raw_ptr<views::Label> title_label_ = nullptr;
+
+  // View containing the bubble subtitle.
+  raw_ptr<views::Label> subtitle_label_ = nullptr;
 
   // Used to ensure that callbacks are not run if the AccountSelectionBubbleView
   // is destroyed.

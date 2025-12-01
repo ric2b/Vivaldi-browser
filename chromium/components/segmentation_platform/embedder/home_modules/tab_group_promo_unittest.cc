@@ -29,13 +29,16 @@ class TabGroupPromoTest : public testing::Test {
                                  float numberOfTabs,
                                  float tabGroupExists,
                                  float tabGroupPromoShownCount,
+                                 float isUserSignedIn,
+                                 float educationalTipShownCount,
                                  EphemeralHomeModuleRank position) {
     pref_service_.SetUserPref(
         kTabGroupPromoInteractedPref,
         std::make_unique<base::Value>(hasTabGroupPromoInteracted));
     auto card = std::make_unique<TabGroupPromo>(&pref_service_);
     AllCardSignals all_signals = CreateAllCardSignals(
-        card.get(), {numberOfTabs, tabGroupExists, tabGroupPromoShownCount});
+        card.get(), {educationalTipShownCount, isUserSignedIn, numberOfTabs,
+                     tabGroupExists, tabGroupPromoShownCount});
     CardSelectionSignals card_signal(&all_signals, kTabGroupPromo);
     CardSelectionInfo::ShowResult result = card->ComputeCardResult(card_signal);
     EXPECT_EQ(position, result.position);
@@ -49,11 +52,14 @@ class TabGroupPromoTest : public testing::Test {
 TEST_F(TabGroupPromoTest, GetInputsReturnsExpectedInputs) {
   auto card = std::make_unique<TabGroupPromo>(&pref_service_);
   std::map<SignalKey, FeatureQuery> inputs = card->GetInputs();
-  EXPECT_EQ(inputs.size(), 3u);
+  EXPECT_EQ(inputs.size(), 5u);
   // Verify that the inputs map contains the expected keys.
   EXPECT_NE(inputs.find(segmentation_platform::kTabGroupExists), inputs.end());
   EXPECT_NE(inputs.find(segmentation_platform::kNumberOfTabs), inputs.end());
   EXPECT_NE(inputs.find(segmentation_platform::kTabGroupPromoShownCount),
+            inputs.end());
+  EXPECT_NE(inputs.find(segmentation_platform::kIsUserSignedIn), inputs.end());
+  EXPECT_NE(inputs.find(segmentation_platform::kEducationalTipShownCount),
             inputs.end());
 }
 
@@ -64,6 +70,8 @@ TEST_F(TabGroupPromoTest, TestComputeCardResultWithCardEnabled) {
                             /* numberOfTabs */ 11,
                             /* tabGroupExists */ 0,
                             /* tabGroupPromoShownCount */ 0,
+                            /* isUserSignedIn */ 1,
+                            /* educationalTipShownCount */ 0,
                             EphemeralHomeModuleRank::kLast);
 }
 
@@ -75,6 +83,8 @@ TEST_F(TabGroupPromoTest,
                             /* numberOfTabs */ 11,
                             /* tabGroupExists */ 1,
                             /* tabGroupPromoShownCount */ 0,
+                            /* isUserSignedIn */ 1,
+                            /* educationalTipShownCount */ 0,
                             EphemeralHomeModuleRank::kNotShown);
 }
 
@@ -86,18 +96,21 @@ TEST_F(TabGroupPromoTest,
                             /* numberOfTabs */ 10,
                             /* tabGroupExists */ 0,
                             /* tabGroupPromoShownCount */ 0,
+                            /* isUserSignedIn */ 1,
+                            /* educationalTipShownCount */ 0,
                             EphemeralHomeModuleRank::kNotShown);
 }
 
 // Validates that the ComputeCardResult() function returns kNotShown when the
-// card has been displayed to the user more times than the single day limit
-// allows.
+// card has been displayed to the user more times than the limit allows.
 TEST_F(TabGroupPromoTest,
        TestComputeCardResultWithCardDisabledForHasReachedSessionLimit) {
   TestComputeCardResultImpl(/* hasTabGroupPromoInteracted */ false,
                             /* numberOfTabs */ 11,
                             /* tabGroupExists */ 0,
-                            /* tabGroupPromoShownCount */ 3,
+                            /* tabGroupPromoShownCount */ 1,
+                            /* isUserSignedIn */ 1,
+                            /* educationalTipShownCount */ 0,
                             EphemeralHomeModuleRank::kNotShown);
 }
 
@@ -110,6 +123,36 @@ TEST_F(TabGroupPromoTest,
                             /* numberOfTabs */ 11,
                             /* tabGroupExists */ 0,
                             /* tabGroupPromoShownCount */ 0,
+                            /* isUserSignedIn */ 1,
+                            /* educationalTipShownCount */ 0,
+                            EphemeralHomeModuleRank::kNotShown);
+}
+
+// Validates that the ComputeCardResult() function returns kNotShown when the
+// tab group promo card is disabled because the user is not signed in.
+TEST_F(TabGroupPromoTest,
+       TestComputeCardResultWithCardDisabledForUserNotSignedIn) {
+  TestComputeCardResultImpl(/* hasTabGroupPromoInteracted */ false,
+                            /* numberOfTabs */ 11,
+                            /* tabGroupExists */ 0,
+                            /* tabGroupPromoShownCount */ 0,
+                            /* isUserSignedIn */ 0,
+                            /* educationalTipShownCount */ 0,
+                            EphemeralHomeModuleRank::kNotShown);
+}
+
+// Validates that the ComputeCardResult() function returns kNotShown when
+// educational tip card has been displayed to the user more times than the limit
+// allows.
+TEST_F(
+    TabGroupPromoTest,
+    TestComputeCardResultWithCardDisabledForEducationalTipCardHasReachedSessionLimit) {
+  TestComputeCardResultImpl(/* hasTabGroupPromoInteracted */ false,
+                            /* numberOfTabs */ 11,
+                            /* tabGroupExists */ 0,
+                            /* tabGroupPromoShownCount */ 0,
+                            /* isUserSignedIn */ 1,
+                            /* educationalTipShownCount */ 1,
                             EphemeralHomeModuleRank::kNotShown);
 }
 

@@ -15,15 +15,6 @@ void AudioProcessingProperties::DisableDefaultProperties() {
   voice_isolation = VoiceIsolationType::kVoiceIsolationDefault;
 }
 
-bool AudioProcessingProperties::EchoCancellationEnabled() const {
-  return echo_cancellation_type !=
-         EchoCancellationType::kEchoCancellationDisabled;
-}
-
-bool AudioProcessingProperties::EchoCancellationIsWebRtcProvided() const {
-  return echo_cancellation_type == EchoCancellationType::kEchoCancellationAec3;
-}
-
 bool AudioProcessingProperties::HasSameReconfigurableSettings(
     const AudioProcessingProperties& other) const {
   return echo_cancellation_type == other.echo_cancellation_type;
@@ -31,14 +22,9 @@ bool AudioProcessingProperties::HasSameReconfigurableSettings(
 
 bool AudioProcessingProperties::HasSameNonReconfigurableSettings(
     const AudioProcessingProperties& other) const {
-  return disable_hw_noise_suppression == other.disable_hw_noise_suppression &&
-         auto_gain_control == other.auto_gain_control &&
+  return auto_gain_control == other.auto_gain_control &&
          noise_suppression == other.noise_suppression &&
          voice_isolation == other.voice_isolation;
-}
-
-bool AudioProcessingProperties::GainControlEnabled() const {
-  return auto_gain_control;
 }
 
 media::AudioProcessingSettings

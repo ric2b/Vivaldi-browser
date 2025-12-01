@@ -14,7 +14,10 @@ source_set("interface") {
     "browser_bound_key.h",
     "browser_bound_key_store.h",
   ]
-  public_deps = [ "//device/fido" ]
+  public_deps = [
+    "//base",
+    "//device/fido",
+  ]
 }
 
 source_set("passkey_browser_binder") {
@@ -25,6 +28,7 @@ source_set("passkey_browser_binder") {
   ]
   public_deps = [ ":interface" ]
   deps = [
+    ":browser_bound_key_metadata",
     "//base",
     "//components/payments/content:utils",
     "//components/webdata/common",
@@ -36,6 +40,7 @@ source_set("passkey_browser_binder_unittests") {
   visibility = [ "//components/payments/*" ]
   sources = [ "passkey_browser_binder_unittest.cc" ]
   deps = [
+    ":browser_bound_key_metadata",
     ":fake_browser_bound_key_store",
     ":interface",
     ":passkey_browser_binder",
@@ -50,8 +55,30 @@ source_set("passkey_browser_binder_unittests") {
 }
 
 if (is_android) {
+  source_set("browser_bound_keys_deleter_factory") {
+    sources = [
+      "browser_bound_keys_deleter.cc",
+      "browser_bound_keys_deleter.h",
+      "browser_bound_keys_deleter_factory.cc",
+      "browser_bound_keys_deleter_factory.h",
+    ]
+    public_deps = [
+      "//base",  # base/no_destructor.h
+      "//components/keyed_service/content",
+      "//components/payments/content:utils",
+    ]
+    deps = [
+      ":android",
+      ":passkey_browser_binder",
+      "//components/keyed_service/content",
+      "//components/webauthn/android",
+      "//components/webdata_services",
+      "//content/public/browser",
+    ]
+  }
+
   source_set("android") {
-    visibility = [ "//components/payments/content/browser_binding" ]
+    visibility = [ ":*" ]
     sources = [
       "browser_bound_key_android.cc",
       "browser_bound_key_android.h",
@@ -64,6 +91,18 @@ if (is_android) {
       "//components/payments/content/android:browser_binding_jni",
       "//device/fido",
       "//third_party/jni_zero",
+    ]
+  }
+
+  source_set("test_support") {
+    testonly = true
+    sources = [
+      "mock_browser_bound_keys_deleter.cc",
+      "mock_browser_bound_keys_deleter.h",
+    ]
+    public_deps = [
+      ":browser_bound_keys_deleter_factory",
+      "//testing/gmock",
     ]
   }
 }
@@ -80,5 +119,12 @@ source_set("fake_browser_bound_key_store") {
     ":interface",
     "//base",
     "//device/fido",
+  ]
+}
+
+source_set("browser_bound_key_metadata") {
+  sources = [
+    "browser_bound_key_metadata.cc",
+    "browser_bound_key_metadata.h",
   ]
 }

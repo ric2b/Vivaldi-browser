@@ -193,7 +193,7 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
     layer_impl->lcd_text_disallowed_reason_ = lcd_text_disallowed_reason_;
   }
 
-  if (layer_tree_impl()->settings().UseLayerContextForDisplay()) {
+  if (layer_tree_impl()->settings().TreesInVizInClientProcess()) {
     // Move tile updates over to the active layer so they get pushed to the
     // display tree. Note that active layers never accumulate their own tile
     // updates, so replacement is safe.
@@ -496,8 +496,7 @@ void PictureLayerImpl::AppendQuads(const AppendQuadsContext& context,
               shared_quad_state, offset_geometry_rect,
               offset_visible_geometry_rect, needs_blending,
               draw_info.resource_id_for_export(), texture_rect,
-              draw_info.resource_size(), draw_info.is_premultiplied(),
-              nearest_neighbor_,
+              draw_info.resource_size(), nearest_neighbor_,
               !layer_tree_impl()->settings().enable_edge_anti_aliasing);
           ValidateQuadResources(quad);
           has_draw_quad = true;
@@ -944,19 +943,23 @@ PictureLayerImpl::ComputeLCDTextDisallowedReasonForTesting() const {
       CalculateRasterTranslation(raster_translation));
 }
 
-void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile) {
-  if (layer_tree_impl()->IsActiveTree())
-    damage_rect_.Union(tile->enclosing_layer_rect());
-  if (tile->draw_info().NeedsRaster()) {
-    PictureLayerTiling* tiling =
-        tilings_->FindTilingWithScaleKey(tile->contents_scale_key());
-    if (tiling) {
-      tiling->set_all_tiles_done(false);
-      tilings_->set_all_tiles_done(false);
+void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile,
+                                              bool update_damage) {
+  if (update_damage) {
+    if (layer_tree_impl()->IsActiveTree()) {
+      damage_rect_.Union(tile->enclosing_layer_rect());
+    }
+    if (tile->draw_info().NeedsRaster()) {
+      PictureLayerTiling* tiling =
+          tilings_->FindTilingWithScaleKey(tile->contents_scale_key());
+      if (tiling) {
+        tiling->set_all_tiles_done(false);
+        tilings_->set_all_tiles_done(false);
+      }
     }
   }
 
-  if (layer_tree_impl()->settings().UseLayerContextForDisplay() &&
+  if (layer_tree_impl()->settings().TreesInVizInClientProcess() &&
       (!IsActive() || layer_tree_impl()->settings().commit_to_active_tree)) {
     // Tiles for the tree currently being committed to (Pending or Active)
     // are pushed to the display during UpdateDisplayTree. Accumulate those
@@ -1073,9 +1076,26 @@ ScrollOffsetMap PictureLayerImpl::GetRasterInducingScrollOffsets() const {
   if (raster_source_) {
     const ScrollTree& scroll_tree =
         layer_tree_impl()->property_trees()->scroll_tree();
+    const TransformTree& transform_tree =
+        layer_tree_impl()->property_trees()->transform_tree();
     for (auto [element_id, _] :
          raster_source_->GetDisplayItemList()->raster_inducing_scrolls()) {
-      map[element_id] = scroll_tree.current_scroll_offset(element_id);
+      // The transform node has the realized scroll offset and snap amount,
+      // and should be used for rendering.
+      const auto* scroll_node = scroll_tree.FindNodeFromElementId(element_id);
+      const auto* transform =
+          scroll_node ? transform_tree.Node(scroll_node->transform_id)
+                      : nullptr;
+      if (transform) {
+        map[element_id] = gfx::PointAtOffsetFromOrigin(
+            -transform->to_parent.To2dTranslation());
+      } else {
+        // Use the current scroll offset if the scroll node doesn't exist or
+        // doesn't have a transform node. It doesn't matter because such a
+        // scroller is invisible. TODO(crbug.com/419921722): Investigate the
+        // case and add a test case.
+        map[element_id] = scroll_tree.current_scroll_offset(element_id);
+      }
     }
   }
   return map;

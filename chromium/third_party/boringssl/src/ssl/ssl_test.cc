@@ -1417,53 +1417,56 @@ static bssl::UniquePtr<EVP_PKEY> GetECDSATestKey() {
   return KeyFromPEM(kKeyPEM);
 }
 
+static const char kChainTestCertificatePEM[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIC0jCCAbqgAwIBAgICEAAwDQYJKoZIhvcNAQELBQAwDzENMAsGA1UEAwwEQiBD\n"
+    "QTAeFw0xNjAyMjgyMDI3MDNaFw0yNjAyMjUyMDI3MDNaMBgxFjAUBgNVBAMMDUNs\n"
+    "aWVudCBDZXJ0IEEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDRvaz8\n"
+    "CC/cshpCafJo4jLkHEoBqDLhdgFelJoAiQUyIqyWl2O7YHPnpJH+TgR7oelzNzt/\n"
+    "kLRcH89M/TszB6zqyLTC4aqmvzKL0peD/jL2LWBucR0WXIvjA3zoRuF/x86+rYH3\n"
+    "tHb+xs2PSs8EGL/Ev+ss+qTzTGEn26fuGNHkNw6tOwPpc+o8+wUtzf/kAthamo+c\n"
+    "IDs2rQ+lP7+aLZTLeU/q4gcLutlzcK5imex5xy2jPkweq48kijK0kIzl1cPlA5d1\n"
+    "z7C8jU50Pj9X9sQDJTN32j7UYRisJeeYQF8GaaN8SbrDI6zHgKzrRLyxDt/KQa9V\n"
+    "iLeXANgZi+Xx9KgfAgMBAAGjLzAtMAwGA1UdEwEB/wQCMAAwHQYDVR0lBBYwFAYI\n"
+    "KwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEBCwUAA4IBAQBFEVbmYl+2RtNw\n"
+    "rDftRDF1v2QUbcN2ouSnQDHxeDQdSgasLzT3ui8iYu0Rw2WWcZ0DV5e0ztGPhWq7\n"
+    "AO0B120aFRMOY+4+bzu9Q2FFkQqc7/fKTvTDzIJI5wrMnFvUfzzvxh3OHWMYSs/w\n"
+    "giq33hTKeHEq6Jyk3btCny0Ycecyc3yGXH10sizUfiHlhviCkDuESk8mFDwDDzqW\n"
+    "ZF0IipzFbEDHoIxLlm3GQxpiLoEV4k8KYJp3R5KBLFyxM6UGPz8h72mIPCJp2RuK\n"
+    "MYgF91UDvVzvnYm6TfseM2+ewKirC00GOrZ7rEcFvtxnKSqYf4ckqfNdSU1Y+RRC\n"
+    "1ngWZ7Ih\n"
+    "-----END CERTIFICATE-----\n";
+
+
 static bssl::UniquePtr<CRYPTO_BUFFER> GetChainTestCertificateBuffer() {
-  static const char kCertPEM[] =
-      "-----BEGIN CERTIFICATE-----\n"
-      "MIIC0jCCAbqgAwIBAgICEAAwDQYJKoZIhvcNAQELBQAwDzENMAsGA1UEAwwEQiBD\n"
-      "QTAeFw0xNjAyMjgyMDI3MDNaFw0yNjAyMjUyMDI3MDNaMBgxFjAUBgNVBAMMDUNs\n"
-      "aWVudCBDZXJ0IEEwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDRvaz8\n"
-      "CC/cshpCafJo4jLkHEoBqDLhdgFelJoAiQUyIqyWl2O7YHPnpJH+TgR7oelzNzt/\n"
-      "kLRcH89M/TszB6zqyLTC4aqmvzKL0peD/jL2LWBucR0WXIvjA3zoRuF/x86+rYH3\n"
-      "tHb+xs2PSs8EGL/Ev+ss+qTzTGEn26fuGNHkNw6tOwPpc+o8+wUtzf/kAthamo+c\n"
-      "IDs2rQ+lP7+aLZTLeU/q4gcLutlzcK5imex5xy2jPkweq48kijK0kIzl1cPlA5d1\n"
-      "z7C8jU50Pj9X9sQDJTN32j7UYRisJeeYQF8GaaN8SbrDI6zHgKzrRLyxDt/KQa9V\n"
-      "iLeXANgZi+Xx9KgfAgMBAAGjLzAtMAwGA1UdEwEB/wQCMAAwHQYDVR0lBBYwFAYI\n"
-      "KwYBBQUHAwEGCCsGAQUFBwMCMA0GCSqGSIb3DQEBCwUAA4IBAQBFEVbmYl+2RtNw\n"
-      "rDftRDF1v2QUbcN2ouSnQDHxeDQdSgasLzT3ui8iYu0Rw2WWcZ0DV5e0ztGPhWq7\n"
-      "AO0B120aFRMOY+4+bzu9Q2FFkQqc7/fKTvTDzIJI5wrMnFvUfzzvxh3OHWMYSs/w\n"
-      "giq33hTKeHEq6Jyk3btCny0Ycecyc3yGXH10sizUfiHlhviCkDuESk8mFDwDDzqW\n"
-      "ZF0IipzFbEDHoIxLlm3GQxpiLoEV4k8KYJp3R5KBLFyxM6UGPz8h72mIPCJp2RuK\n"
-      "MYgF91UDvVzvnYm6TfseM2+ewKirC00GOrZ7rEcFvtxnKSqYf4ckqfNdSU1Y+RRC\n"
-      "1ngWZ7Ih\n"
-      "-----END CERTIFICATE-----\n";
-  return BufferFromPEM(kCertPEM);
+  return BufferFromPEM(kChainTestCertificatePEM);
 }
 
 static bssl::UniquePtr<X509> GetChainTestCertificate() {
   return X509FromBuffer(GetChainTestCertificateBuffer());
 }
 
+static const char kChainTestIntermediatePEM[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIICwjCCAaqgAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwFDESMBAGA1UEAwwJQyBS\n"
+    "b290IENBMB4XDTE2MDIyODIwMjcwM1oXDTI2MDIyNTIwMjcwM1owDzENMAsGA1UE\n"
+    "AwwEQiBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALsSCYmDip2D\n"
+    "GkjFxw7ykz26JSjELkl6ArlYjFJ3aT/SCh8qbS4gln7RH8CPBd78oFdfhIKQrwtZ\n"
+    "3/q21ykD9BAS3qHe2YdcJfm8/kWAy5DvXk6NXU4qX334KofBAEpgdA/igEFq1P1l\n"
+    "HAuIfZCpMRfT+i5WohVsGi8f/NgpRvVaMONLNfgw57mz1lbtFeBEISmX0kbsuJxF\n"
+    "Qj/Bwhi5/0HAEXG8e7zN4cEx0yPRvmOATRdVb/8dW2pwOHRJq9R5M0NUkIsTSnL7\n"
+    "6N/z8hRAHMsV3IudC5Yd7GXW1AGu9a+iKU+Q4xcZCoj0DC99tL4VKujrV1kAeqsM\n"
+    "cz5/dKzi6+cCAwEAAaMjMCEwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC\n"
+    "AQYwDQYJKoZIhvcNAQELBQADggEBAIIeZiEeNhWWQ8Y4D+AGDwqUUeG8NjCbKrXQ\n"
+    "BlHg5wZ8xftFaiP1Dp/UAezmx2LNazdmuwrYB8lm3FVTyaPDTKEGIPS4wJKHgqH1\n"
+    "QPDhqNm85ey7TEtI9oYjsNim/Rb+iGkIAMXaxt58SzxbjvP0kMr1JfJIZbic9vye\n"
+    "NwIspMFIpP3FB8ywyu0T0hWtCQgL4J47nigCHpOu58deP88fS/Nyz/fyGVWOZ76b\n"
+    "WhWwgM3P3X95fQ3d7oFPR/bVh0YV+Cf861INwplokXgXQ3/TCQ+HNXeAMWn3JLWv\n"
+    "XFwk8owk9dq/kQGdndGgy3KTEW4ctPX5GNhf3LJ9Q7dLji4ReQ4=\n"
+    "-----END CERTIFICATE-----\n";
+
 static bssl::UniquePtr<CRYPTO_BUFFER> GetChainTestIntermediateBuffer() {
-  static const char kCertPEM[] =
-      "-----BEGIN CERTIFICATE-----\n"
-      "MIICwjCCAaqgAwIBAgICEAEwDQYJKoZIhvcNAQELBQAwFDESMBAGA1UEAwwJQyBS\n"
-      "b290IENBMB4XDTE2MDIyODIwMjcwM1oXDTI2MDIyNTIwMjcwM1owDzENMAsGA1UE\n"
-      "AwwEQiBDQTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALsSCYmDip2D\n"
-      "GkjFxw7ykz26JSjELkl6ArlYjFJ3aT/SCh8qbS4gln7RH8CPBd78oFdfhIKQrwtZ\n"
-      "3/q21ykD9BAS3qHe2YdcJfm8/kWAy5DvXk6NXU4qX334KofBAEpgdA/igEFq1P1l\n"
-      "HAuIfZCpMRfT+i5WohVsGi8f/NgpRvVaMONLNfgw57mz1lbtFeBEISmX0kbsuJxF\n"
-      "Qj/Bwhi5/0HAEXG8e7zN4cEx0yPRvmOATRdVb/8dW2pwOHRJq9R5M0NUkIsTSnL7\n"
-      "6N/z8hRAHMsV3IudC5Yd7GXW1AGu9a+iKU+Q4xcZCoj0DC99tL4VKujrV1kAeqsM\n"
-      "cz5/dKzi6+cCAwEAAaMjMCEwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC\n"
-      "AQYwDQYJKoZIhvcNAQELBQADggEBAIIeZiEeNhWWQ8Y4D+AGDwqUUeG8NjCbKrXQ\n"
-      "BlHg5wZ8xftFaiP1Dp/UAezmx2LNazdmuwrYB8lm3FVTyaPDTKEGIPS4wJKHgqH1\n"
-      "QPDhqNm85ey7TEtI9oYjsNim/Rb+iGkIAMXaxt58SzxbjvP0kMr1JfJIZbic9vye\n"
-      "NwIspMFIpP3FB8ywyu0T0hWtCQgL4J47nigCHpOu58deP88fS/Nyz/fyGVWOZ76b\n"
-      "WhWwgM3P3X95fQ3d7oFPR/bVh0YV+Cf861INwplokXgXQ3/TCQ+HNXeAMWn3JLWv\n"
-      "XFwk8owk9dq/kQGdndGgy3KTEW4ctPX5GNhf3LJ9Q7dLji4ReQ4=\n"
-      "-----END CERTIFICATE-----\n";
-  return BufferFromPEM(kCertPEM);
+  return BufferFromPEM(kChainTestIntermediatePEM);
 }
 
 static bssl::UniquePtr<CRYPTO_BUFFER> GetChainTestIntermediateIssuerBuffer() {
@@ -1495,37 +1498,38 @@ static bssl::UniquePtr<X509> GetChainTestIntermediate() {
   return X509FromBuffer(GetChainTestIntermediateBuffer());
 }
 
+static const char kChainTestKeyPEM[] =
+    "-----BEGIN PRIVATE KEY-----\n"
+    "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDRvaz8CC/cshpC\n"
+    "afJo4jLkHEoBqDLhdgFelJoAiQUyIqyWl2O7YHPnpJH+TgR7oelzNzt/kLRcH89M\n"
+    "/TszB6zqyLTC4aqmvzKL0peD/jL2LWBucR0WXIvjA3zoRuF/x86+rYH3tHb+xs2P\n"
+    "Ss8EGL/Ev+ss+qTzTGEn26fuGNHkNw6tOwPpc+o8+wUtzf/kAthamo+cIDs2rQ+l\n"
+    "P7+aLZTLeU/q4gcLutlzcK5imex5xy2jPkweq48kijK0kIzl1cPlA5d1z7C8jU50\n"
+    "Pj9X9sQDJTN32j7UYRisJeeYQF8GaaN8SbrDI6zHgKzrRLyxDt/KQa9ViLeXANgZ\n"
+    "i+Xx9KgfAgMBAAECggEBAK0VjSJzkyPaamcyTVSWjo7GdaBGcK60lk657RjR+lK0\n"
+    "YJ7pkej4oM2hdsVZFsP8Cs4E33nXLa/0pDsRov/qrp0WQm2skwqGMC1I/bZ0WRPk\n"
+    "wHaDrBBfESWnJDX/AGpVtlyOjPmgmK6J2usMPihQUDkKdAYrVWJePrMIxt1q6BMe\n"
+    "iczs3qriMmtY3bUc4UyUwJ5fhDLjshHvfuIpYQyI6EXZM6dZksn9LylXJnigY6QJ\n"
+    "HxOYO0BDwOsZ8yQ8J8afLk88i0GizEkgE1z3REtQUwgWfxr1WV/ud+T6/ZhSAgH9\n"
+    "042mQvSFZnIUSEsmCvjhWuAunfxHKCTcAoYISWfzWpkCgYEA7gpf3HHU5Tn+CgUn\n"
+    "1X5uGpG3DmcMgfeGgs2r2f/IIg/5Ac1dfYILiybL1tN9zbyLCJfcbFpWBc9hJL6f\n"
+    "CPc5hUiwWFJqBJewxQkC1Ae/HakHbip+IZ+Jr0842O4BAArvixk4Lb7/N2Ct9sTE\n"
+    "NJO6RtK9lbEZ5uK61DglHy8CS2UCgYEA4ZC1o36kPAMQBggajgnucb2yuUEelk0f\n"
+    "AEr+GI32MGE+93xMr7rAhBoqLg4AITyIfEnOSQ5HwagnIHonBbv1LV/Gf9ursx8Z\n"
+    "YOGbvT8zzzC+SU1bkDzdjAYnFQVGIjMtKOBJ3K07++ypwX1fr4QsQ8uKL8WSOWwt\n"
+    "Z3Bym6XiZzMCgYADnhy+2OwHX85AkLt+PyGlPbmuelpyTzS4IDAQbBa6jcuW/2wA\n"
+    "UE2km75VUXmD+u2R/9zVuLm99NzhFhSMqlUxdV1YukfqMfP5yp1EY6m/5aW7QuIP\n"
+    "2MDa7TVL9rIFMiVZ09RKvbBbQxjhuzPQKL6X/PPspnhiTefQ+dl2k9xREQKBgHDS\n"
+    "fMfGNEeAEKezrfSVqxphE9/tXms3L+ZpnCaT+yu/uEr5dTIAawKoQ6i9f/sf1/Sy\n"
+    "xedsqR+IB+oKrzIDDWMgoJybN4pkZ8E5lzhVQIjFjKgFdWLzzqyW9z1gYfABQPlN\n"
+    "FiS20WX0vgP1vcKAjdNrHzc9zyHBpgQzDmAj3NZZAoGBAI8vKCKdH7w3aL5CNkZQ\n"
+    "2buIeWNA2HZazVwAGG5F2TU/LmXfRKnG6dX5bkU+AkBZh56jNZy//hfFSewJB4Kk\n"
+    "buB7ERSdaNbO21zXt9FEA3+z0RfMd/Zv2vlIWOSB5nzl/7UKti3sribK6s9ZVLfi\n"
+    "SxpiPQ8d/hmSGwn4ksrWUsJD\n"
+    "-----END PRIVATE KEY-----\n";
+
 static bssl::UniquePtr<EVP_PKEY> GetChainTestKey() {
-  static const char kKeyPEM[] =
-      "-----BEGIN PRIVATE KEY-----\n"
-      "MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDRvaz8CC/cshpC\n"
-      "afJo4jLkHEoBqDLhdgFelJoAiQUyIqyWl2O7YHPnpJH+TgR7oelzNzt/kLRcH89M\n"
-      "/TszB6zqyLTC4aqmvzKL0peD/jL2LWBucR0WXIvjA3zoRuF/x86+rYH3tHb+xs2P\n"
-      "Ss8EGL/Ev+ss+qTzTGEn26fuGNHkNw6tOwPpc+o8+wUtzf/kAthamo+cIDs2rQ+l\n"
-      "P7+aLZTLeU/q4gcLutlzcK5imex5xy2jPkweq48kijK0kIzl1cPlA5d1z7C8jU50\n"
-      "Pj9X9sQDJTN32j7UYRisJeeYQF8GaaN8SbrDI6zHgKzrRLyxDt/KQa9ViLeXANgZ\n"
-      "i+Xx9KgfAgMBAAECggEBAK0VjSJzkyPaamcyTVSWjo7GdaBGcK60lk657RjR+lK0\n"
-      "YJ7pkej4oM2hdsVZFsP8Cs4E33nXLa/0pDsRov/qrp0WQm2skwqGMC1I/bZ0WRPk\n"
-      "wHaDrBBfESWnJDX/AGpVtlyOjPmgmK6J2usMPihQUDkKdAYrVWJePrMIxt1q6BMe\n"
-      "iczs3qriMmtY3bUc4UyUwJ5fhDLjshHvfuIpYQyI6EXZM6dZksn9LylXJnigY6QJ\n"
-      "HxOYO0BDwOsZ8yQ8J8afLk88i0GizEkgE1z3REtQUwgWfxr1WV/ud+T6/ZhSAgH9\n"
-      "042mQvSFZnIUSEsmCvjhWuAunfxHKCTcAoYISWfzWpkCgYEA7gpf3HHU5Tn+CgUn\n"
-      "1X5uGpG3DmcMgfeGgs2r2f/IIg/5Ac1dfYILiybL1tN9zbyLCJfcbFpWBc9hJL6f\n"
-      "CPc5hUiwWFJqBJewxQkC1Ae/HakHbip+IZ+Jr0842O4BAArvixk4Lb7/N2Ct9sTE\n"
-      "NJO6RtK9lbEZ5uK61DglHy8CS2UCgYEA4ZC1o36kPAMQBggajgnucb2yuUEelk0f\n"
-      "AEr+GI32MGE+93xMr7rAhBoqLg4AITyIfEnOSQ5HwagnIHonBbv1LV/Gf9ursx8Z\n"
-      "YOGbvT8zzzC+SU1bkDzdjAYnFQVGIjMtKOBJ3K07++ypwX1fr4QsQ8uKL8WSOWwt\n"
-      "Z3Bym6XiZzMCgYADnhy+2OwHX85AkLt+PyGlPbmuelpyTzS4IDAQbBa6jcuW/2wA\n"
-      "UE2km75VUXmD+u2R/9zVuLm99NzhFhSMqlUxdV1YukfqMfP5yp1EY6m/5aW7QuIP\n"
-      "2MDa7TVL9rIFMiVZ09RKvbBbQxjhuzPQKL6X/PPspnhiTefQ+dl2k9xREQKBgHDS\n"
-      "fMfGNEeAEKezrfSVqxphE9/tXms3L+ZpnCaT+yu/uEr5dTIAawKoQ6i9f/sf1/Sy\n"
-      "xedsqR+IB+oKrzIDDWMgoJybN4pkZ8E5lzhVQIjFjKgFdWLzzqyW9z1gYfABQPlN\n"
-      "FiS20WX0vgP1vcKAjdNrHzc9zyHBpgQzDmAj3NZZAoGBAI8vKCKdH7w3aL5CNkZQ\n"
-      "2buIeWNA2HZazVwAGG5F2TU/LmXfRKnG6dX5bkU+AkBZh56jNZy//hfFSewJB4Kk\n"
-      "buB7ERSdaNbO21zXt9FEA3+z0RfMd/Zv2vlIWOSB5nzl/7UKti3sribK6s9ZVLfi\n"
-      "SxpiPQ8d/hmSGwn4ksrWUsJD\n"
-      "-----END PRIVATE KEY-----\n";
-  return KeyFromPEM(kKeyPEM);
+  return KeyFromPEM(kChainTestKeyPEM);
 }
 
 static bool CompleteHandshakes(SSL *client, SSL *server) {
@@ -8902,6 +8906,32 @@ TEST_F(AlpsNewCodepointTest, Enabled) {
   ASSERT_TRUE(SSL_has_application_settings(client_.get()));
 }
 
+TEST_F(AlpsNewCodepointTest, ClientExplictServerDefault) {
+  SetUpExpectedNewCodePoint(server_ctx_.get());
+
+  ASSERT_TRUE(CreateClientAndServer(&client_, &server_, client_ctx_.get(),
+                                    server_ctx_.get()));
+
+  SSL_set_alps_use_new_codepoint(client_.get(), 1);
+
+  SetUpApplicationSetting();
+  ASSERT_TRUE(CompleteHandshakes(client_.get(), server_.get()));
+  ASSERT_TRUE(SSL_has_application_settings(client_.get()));
+}
+
+TEST_F(AlpsNewCodepointTest, ClientDefaultServerExplicit) {
+  SetUpExpectedNewCodePoint(server_ctx_.get());
+
+  ASSERT_TRUE(CreateClientAndServer(&client_, &server_, client_ctx_.get(),
+                                    server_ctx_.get()));
+
+  SSL_set_alps_use_new_codepoint(server_.get(), 1);
+
+  SetUpApplicationSetting();
+  ASSERT_TRUE(CompleteHandshakes(client_.get(), server_.get()));
+  ASSERT_TRUE(SSL_has_application_settings(client_.get()));
+}
+
 TEST_F(AlpsNewCodepointTest, Disabled) {
   // Both client and server disable alps new codepoint.
   SetUpExpectedOldCodePoint(server_ctx_.get());
@@ -9485,6 +9515,264 @@ TEST(SSLTest, EmptyClientCAList) {
   bssl::UniquePtr<STACK_OF(X509_NAME)> names(
       SSL_load_client_CA_file(empty.path().c_str()));
   EXPECT_FALSE(names);
+}
+
+TEST(SSLTest, CertificatesFromFile) {
+  if (SkipTempFileTests()) {
+    GTEST_SKIP();
+  }
+
+  bssl::UniquePtr<X509> cert = GetChainTestCertificate();
+  ASSERT_TRUE(cert);
+  bssl::UniquePtr<X509> ca = GetChainTestIntermediate();
+  ASSERT_TRUE(ca);
+  bssl::UniquePtr<EVP_PKEY> key = GetChainTestKey();
+  ASSERT_TRUE(key);
+  bssl::UniquePtr<EVP_PKEY> wrong_key = GetTestKey();
+  ASSERT_TRUE(wrong_key);
+
+  // Picking up a single certificate with the chain and single-certificate APIs.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestCertificatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_certificate_file(ctx.get(), file.path().c_str(),
+                                             SSL_FILETYPE_PEM));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    STACK_OF(X509) *chain = nullptr;
+    ASSERT_TRUE(SSL_CTX_get0_chain_certs(ctx.get(), &chain));
+    EXPECT_EQ(sk_X509_num(chain), 0u);
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestCertificatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    STACK_OF(X509) *chain = nullptr;
+    ASSERT_TRUE(SSL_CTX_get0_chain_certs(ctx.get(), &chain));
+    EXPECT_EQ(sk_X509_num(chain), 0u);
+  }
+
+  // Picking up a certificate chain.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(std::string(kChainTestCertificatePEM) +
+                          kChainTestIntermediatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    STACK_OF(X509) *chain = nullptr;
+    ASSERT_TRUE(SSL_CTX_get0_chain_certs(ctx.get(), &chain));
+    ASSERT_EQ(sk_X509_num(chain), 1u);
+    EXPECT_EQ(X509_cmp(ca.get(), sk_X509_value(chain, 0)), 0);
+  }
+
+  // The single-certificate API will only pick up the leaf.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(std::string(kChainTestCertificatePEM) +
+                          kChainTestIntermediatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_certificate_file(ctx.get(), file.path().c_str(),
+                                             SSL_FILETYPE_PEM));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    STACK_OF(X509) *chain = nullptr;
+    ASSERT_TRUE(SSL_CTX_get0_chain_certs(ctx.get(), &chain));
+    EXPECT_EQ(sk_X509_num(chain), 0u);
+  }
+
+  // If there is already a chain, |SSL_CTX_use_certificate_chain_file| should
+  // clear it, not append to it. (Run the function twice.)
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(std::string(kChainTestCertificatePEM) +
+                          kChainTestIntermediatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    ASSERT_TRUE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    STACK_OF(X509) *chain = nullptr;
+    ASSERT_TRUE(SSL_CTX_get0_chain_certs(ctx.get(), &chain));
+    ASSERT_EQ(sk_X509_num(chain), 1u);
+    EXPECT_EQ(X509_cmp(ca.get(), sk_X509_value(chain, 0)), 0);
+  }
+
+  // If there is already a private key, the key is retained if it matches.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestCertificatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_PrivateKey(ctx.get(), key.get()));
+    ASSERT_TRUE(SSL_CTX_use_certificate_file(ctx.get(), file.path().c_str(),
+                                             SSL_FILETYPE_PEM));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    EXPECT_EQ(SSL_CTX_get0_privatekey(ctx.get()), key.get());
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestCertificatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_PrivateKey(ctx.get(), key.get()));
+    ASSERT_TRUE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    EXPECT_EQ(SSL_CTX_get0_privatekey(ctx.get()), key.get());
+  }
+
+  // If the private key does not match, it is silently discarded.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestCertificatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_PrivateKey(ctx.get(), wrong_key.get()));
+    ASSERT_TRUE(SSL_CTX_use_certificate_file(ctx.get(), file.path().c_str(),
+                                             SSL_FILETYPE_PEM));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    EXPECT_EQ(SSL_CTX_get0_privatekey(ctx.get()), nullptr);
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestCertificatePEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_PrivateKey(ctx.get(), wrong_key.get()));
+    ASSERT_TRUE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_EQ(X509_cmp(cert.get(), SSL_CTX_get0_certificate(ctx.get())), 0);
+    EXPECT_EQ(SSL_CTX_get0_privatekey(ctx.get()), nullptr);
+  }
+
+  // Private keys can be configured from files.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestKeyPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_PrivateKey_file(ctx.get(), file.path().c_str(),
+                                            SSL_FILETYPE_PEM));
+    EXPECT_EQ(EVP_PKEY_cmp(SSL_CTX_get0_privatekey(ctx.get()), key.get()), 1);
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kChainTestKeyPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    ASSERT_TRUE(SSL_CTX_use_RSAPrivateKey_file(ctx.get(), file.path().c_str(),
+                                               SSL_FILETYPE_PEM));
+    EXPECT_EQ(EVP_PKEY_cmp(SSL_CTX_get0_privatekey(ctx.get()), key.get()), 1);
+  }
+
+  // Empty files are errors.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init());
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(SSL_CTX_use_certificate_file(ctx.get(), file.path().c_str(),
+                                             SSL_FILETYPE_PEM));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_NO_START_LINE));
+    ERR_clear_error();
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init());
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_NO_START_LINE));
+    ERR_clear_error();
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init());
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(SSL_CTX_use_PrivateKey_file(ctx.get(), file.path().c_str(),
+                                            SSL_FILETYPE_PEM));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_NO_START_LINE));
+    ERR_clear_error();
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init());
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(SSL_CTX_use_RSAPrivateKey_file(ctx.get(), file.path().c_str(),
+                                               SSL_FILETYPE_PEM));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_NO_START_LINE));
+    ERR_clear_error();
+  }
+
+  // As are broken PEM blocks.
+  static const char kInvalidPEM[] = "-----BEGIN CERTIFICATE-----\n";
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kInvalidPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(SSL_CTX_use_certificate_file(ctx.get(), file.path().c_str(),
+                                              SSL_FILETYPE_PEM));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_BAD_END_LINE));
+    ERR_clear_error();
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kInvalidPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_BAD_END_LINE));
+    ERR_clear_error();
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kInvalidPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(SSL_CTX_use_PrivateKey_file(ctx.get(), file.path().c_str(),
+                                             SSL_FILETYPE_PEM));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_BAD_END_LINE));
+    ERR_clear_error();
+  }
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(kInvalidPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(SSL_CTX_use_RSAPrivateKey_file(ctx.get(), file.path().c_str(),
+                                                SSL_FILETYPE_PEM));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_BAD_END_LINE));
+    ERR_clear_error();
+  }
+
+  // SSL_CTX_use_certificate_chain_file reads multiple PEM blocks. Errors after
+  // the first should be caught.
+  {
+    TemporaryFile file;
+    ASSERT_TRUE(file.Init(std::string(kChainTestCertificatePEM) +
+                          kChainTestIntermediatePEM + kInvalidPEM));
+    bssl::UniquePtr<SSL_CTX> ctx(SSL_CTX_new(TLS_method()));
+    ASSERT_TRUE(ctx.get());
+    EXPECT_FALSE(
+        SSL_CTX_use_certificate_chain_file(ctx.get(), file.path().c_str()));
+    EXPECT_TRUE(ErrorEquals(ERR_get_error(), ERR_LIB_PEM, PEM_R_BAD_END_LINE));
+    ERR_clear_error();
+  }
 }
 
 TEST(SSLTest, EmptyWriteBlockedOnHandshakeData) {

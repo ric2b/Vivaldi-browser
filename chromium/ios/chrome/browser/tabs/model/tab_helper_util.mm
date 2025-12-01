@@ -18,12 +18,16 @@
 #import "components/safe_browsing/ios/browser/safe_browsing_url_allow_list.h"
 #import "components/supervised_user/core/common/features.h"
 #import "components/ukm/ios/ukm_url_recorder.h"
+#import "components/webauthn/ios/features.h"
+#import "components/webauthn/ios/passkey_tab_helper.h"
 #import "ios/chrome/browser/app_launcher/model/app_launcher_abuse_detector.h"
 #import "ios/chrome/browser/app_launcher/model/app_launcher_tab_helper.h"
 #import "ios/chrome/browser/autofill/model/autofill_tab_helper.h"
 #import "ios/chrome/browser/autofill/model/bottom_sheet/autofill_bottom_sheet_tab_helper.h"
 #import "ios/chrome/browser/autofill/model/form_suggestion_tab_helper.h"
 #import "ios/chrome/browser/browser_container/model/edit_menu_tab_helper.h"
+#import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
+#import "ios/chrome/browser/collaboration/model/data_sharing_tab_helper.h"
 #import "ios/chrome/browser/collaboration/model/features.h"
 #import "ios/chrome/browser/commerce/model/price_alert_util.h"
 #import "ios/chrome/browser/commerce/model/price_notifications/price_notifications_tab_helper.h"
@@ -35,7 +39,7 @@
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_model_service_factory.h"
 #import "ios/chrome/browser/contextual_panel/model/contextual_panel_tab_helper.h"
 #import "ios/chrome/browser/crash_report/model/breadcrumbs/breadcrumb_manager_tab_helper.h"
-#import "ios/chrome/browser/data_sharing/model/data_sharing_tab_helper.h"
+#import "ios/chrome/browser/dom_distiller/model/distiller_service_factory.h"
 #import "ios/chrome/browser/download/model/ar_quick_look_tab_helper.h"
 #import "ios/chrome/browser/download/model/document_download_tab_helper.h"
 #import "ios/chrome/browser/download/model/download_manager_tab_helper.h"
@@ -114,6 +118,7 @@
 #import "ios/chrome/browser/web/model/sad_tab_tab_helper.h"
 #import "ios/chrome/browser/web/model/web_performance_metrics/web_performance_metrics_tab_helper.h"
 #import "ios/chrome/browser/web_selection/model/web_selection_tab_helper.h"
+#import "ios/chrome/browser/webauthn/model/ios_passkey_model_factory.h"
 #import "ios/chrome/browser/webui/model/net_export_tab_helper.h"
 #import "ios/components/security_interstitials/https_only_mode/feature.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_container.h"
@@ -212,7 +217,9 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
     }
     AppLauncherTabHelper::CreateForWebState(
         web_state, [[AppLauncherAbuseDetector alloc] init], is_off_the_record);
-    ReaderModeTabHelper::CreateForWebState(web_state);
+
+    ReaderModeTabHelper::CreateForWebState(
+        web_state, DistillerServiceFactory::GetForProfile(profile));
   }
   security_interstitials::IOSBlockingPageTabHelper::CreateForWebState(
       web_state);
@@ -317,6 +324,11 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
       PasswordTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
       AutofillTabHelper::FromWebState(web_state)->GetSuggestionProvider(),
     ]);
+
+    if (base::FeatureList::IsEnabled(kIOSPasskeyShim)) {
+      PasskeyTabHelper::CreateForWebState(
+          web_state, IOSPasskeyModelFactory::GetForProfile(profile));
+    }
   }
 
   if (!for_lens_overlay) {
@@ -373,9 +385,13 @@ void AttachTabHelpers(web::WebState* web_state, TabHelperFilter filter_flags) {
     }
   }
 
-  if (IsSharedTabGroupsJoinEnabled(profile) && !is_off_the_record &&
-      !for_prerender) {
-    DataSharingTabHelper::CreateForWebState(web_state);
+  if (!is_off_the_record && !for_prerender) {
+    auto* collaboration_service =
+        collaboration::CollaborationServiceFactory::GetForProfile(profile);
+    if (IsSharedTabGroupsJoinEnabled(collaboration_service)) {
+      DataSharingTabHelper::CreateForWebState(web_state);
+    }
   }
+
   EditMenuTabHelper::CreateForWebState(web_state);
 }

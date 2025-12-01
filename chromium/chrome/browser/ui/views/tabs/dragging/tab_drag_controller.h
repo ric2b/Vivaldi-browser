@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "components/saved_tab_groups/public/tab_group_sync_service.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/split_tab_data.h"
 #include "components/webapps/common/web_app_id.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/models/list_selection_model.h"
@@ -59,7 +60,7 @@ class TabStripModel;
 class TabStripScrollSession;
 class WindowFinder;
 class TabStripScrollSession;
-struct DetachedTabGroup;
+struct DetachedTabCollection;
 
 // TabDragController is responsible for managing the tab dragging session. When
 // the user presses the mouse on a tab a new TabDragController is created and
@@ -352,8 +353,8 @@ class TabDragController : public views::WidgetObserver
       TabDragContext* attached_context,
       std::unique_ptr<TabDragController> controller,
       std::vector<std::variant<std::unique_ptr<tabs::TabModel>,
-                               std::unique_ptr<DetachedTabGroup>>>
-          owned_tabs_and_groups);
+                               std::unique_ptr<DetachedTabCollection>>>
+          owned_tabs_and_collections);
 
   // Sets up dragging in `attached_context_`. The dragged tabs must already
   // be present.
@@ -365,7 +366,7 @@ class TabDragController : public views::WidgetObserver
   // nullptr.
   std::tuple<std::unique_ptr<TabDragController>,
              std::vector<std::variant<std::unique_ptr<tabs::TabModel>,
-                                      std::unique_ptr<DetachedTabGroup>>>>
+                                      std::unique_ptr<DetachedTabCollection>>>>
   Detach(ReleaseCapture release_capture);
 
   // Detach from `attached_context_` and attach to `target_context` instead.
@@ -399,12 +400,6 @@ class TabDragController : public views::WidgetObserver
   // Reverts a cancelled drag operation.
   void RevertDrag();
 
-  // Reverts the drag for all the tabs belonging to a group.
-  void RevertHeaderDrag(tab_groups::TabGroupId group_id);
-
-  // Reverts the tab at `drag_index` in `drag_data_`.
-  void RevertDragAt(size_t drag_index);
-
   // Selects the dragged tabs in `model`. Does nothing if there are no longer
   // any dragged contents (as happens when a WebContents is deleted out from
   // under us).
@@ -412,6 +407,15 @@ class TabDragController : public views::WidgetObserver
 
   // Restores `initial_selection_model_` to the `source_context_`.
   void RestoreInitialSelection();
+
+  // Reverts the drag the group starting at `drag_index_`.
+  void RevertGroupAt(size_t drag_index);
+
+  // Reverts the tab at `drag_index` in `drag_data_`.
+  void RevertTabAt(size_t drag_index);
+
+  // Reverts the split starting at `drag_index_`.
+  void RevertSplitAt(size_t drag_index);
 
   // Finishes a successful drag operation.
   void CompleteDrag();
@@ -429,12 +433,6 @@ class TabDragController : public views::WidgetObserver
 
   // Returns true if currently dragging a tab with `contents`.
   bool IsDraggingTab(content::WebContents* contents) const;
-
-  // Returns the index of the first Tab, since the first dragging view may
-  // instead be a TabGroupHeader.
-  int first_tab_index() {
-    return drag_data_.group_drag_data_.has_value() ? 1 : 0;
-  }
 
   // Returns the Widget of the currently attached TabDragContext's
   // BrowserView.
@@ -508,6 +506,11 @@ class TabDragController : public views::WidgetObserver
   // within `attached_context_`.
   void StartDraggingTabsSession(bool initial_move,
                                 gfx::Point start_point_in_screen);
+
+  // Calls `SetSelectionFromModel` in the `tab_strip_model`. This centralizes
+  // the logic for retaining previous active and anchor tabs for split.
+  void UpdateSelectionModel(TabStripModel* tab_strip_model,
+                            ui::ListSelectionModel selection_model);
 
 #if defined(USE_AURA)
   // aura::client::DragDropClientObserver:

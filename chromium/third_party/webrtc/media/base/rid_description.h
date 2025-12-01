@@ -17,7 +17,7 @@
 
 #include "media/base/codec.h"
 
-namespace cricket {
+namespace webrtc {
 
 enum class RidDirection { kSend, kReceive };
 
@@ -92,6 +92,15 @@ struct RidDescription final {
   std::map<std::string, std::string> restrictions;
 };
 
+}  //  namespace webrtc
+
+// Re-export symbols from the webrtc namespace for backwards compatibility.
+// TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
+namespace cricket {
+using ::webrtc::RidDescription;
+using ::webrtc::RidDirection;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // MEDIA_BASE_RID_DESCRIPTION_H_

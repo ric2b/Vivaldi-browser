@@ -83,7 +83,11 @@ class SizeFeatureSet : public MediaQueryParser::FeatureSet {
     return false;
   }
   bool SupportsRange() const override { return true; }
-  bool SupportsElementDependent() const override { return true; }
+  bool SupportsStyleRange() const override { return false; }
+  bool SupportsElementDependent() const override {
+    return RuntimeEnabledFeatures::
+        CSSSiblingFunctionsInContainerQueriesEnabled();
+  }
 };
 
 class StateFeatureSet : public MediaQueryParser::FeatureSet {
@@ -91,12 +95,12 @@ class StateFeatureSet : public MediaQueryParser::FeatureSet {
 
  public:
   bool IsAllowed(const AtomicString& feature) const override {
-    return (RuntimeEnabledFeatures::CSSStickyContainerQueriesEnabled() &&
-            feature == media_feature_names::kStuckMediaFeature) ||
-           (RuntimeEnabledFeatures::CSSSnapContainerQueriesEnabled() &&
-            feature == media_feature_names::kSnappedMediaFeature) ||
-           (RuntimeEnabledFeatures::CSSScrollableContainerQueriesEnabled() &&
-            feature == media_feature_names::kScrollableMediaFeature);
+    return feature == media_feature_names::kStuckMediaFeature ||
+           feature == media_feature_names::kSnappedMediaFeature ||
+           feature == media_feature_names::kScrollableMediaFeature ||
+           (RuntimeEnabledFeatures::
+                CSSScrollDirectionContainerQueriesEnabled() &&
+            feature == media_feature_names::kScrollDirectionMediaFeature);
   }
   bool IsAllowedWithoutValue(const AtomicString& feature,
                              const ExecutionContext*) const override {
@@ -106,7 +110,33 @@ class StateFeatureSet : public MediaQueryParser::FeatureSet {
     return false;
   }
   bool SupportsRange() const override { return false; }
-  bool SupportsElementDependent() const override { return true; }
+  bool SupportsStyleRange() const override { return false; }
+  bool SupportsElementDependent() const override {
+    return RuntimeEnabledFeatures::
+        CSSSiblingFunctionsInContainerQueriesEnabled();
+  }
+};
+
+class AnchoredFeatureSet : public MediaQueryParser::FeatureSet {
+  STACK_ALLOCATED();
+
+ public:
+  bool IsAllowed(const AtomicString& feature) const override {
+    return feature == media_feature_names::kFallbackMediaFeature;
+  }
+  bool IsAllowedWithoutValue(const AtomicString& feature,
+                             const ExecutionContext*) const override {
+    return true;
+  }
+  bool IsCaseSensitive(const AtomicString& feature) const override {
+    return false;
+  }
+  bool SupportsRange() const override { return true; }
+  bool SupportsStyleRange() const override { return false; }
+  bool SupportsElementDependent() const override {
+    return RuntimeEnabledFeatures::
+        CSSSiblingFunctionsInContainerQueriesEnabled();
+  }
 };
 
 }  // namespace
@@ -136,6 +166,8 @@ const MediaQueryExpNode* ContainerQueryParser::ParseCondition(
 // <query-in-parens> = ( <container-condition> )
 //                   | ( <size-feature> )
 //                   | style( <style-query> )
+//                   | scroll-state( <scroll-state-query> )
+//                   | anchored( <anchored-state-query> )
 //                   | <general-enclosed>
 const MediaQueryExpNode* ContainerQueryParser::ConsumeQueryInParens(
     CSSParserTokenStream& stream) {
@@ -179,13 +211,17 @@ const MediaQueryExpNode* ContainerQueryParser::ConsumeQueryInParens(
       stream.ConsumeWhitespace();
       return MediaQueryExpNode::Function(query, AtomicString("style"));
     }
-  } else if (RuntimeEnabledFeatures::CSSScrollStateContainerQueriesEnabled() &&
-             stream.Peek().GetType() == kFunctionToken &&
+  } else if (stream.Peek().GetType() == kFunctionToken &&
              stream.Peek().FunctionId() == CSSValueID::kScrollState) {
     // scroll-state(stuck: [ none | top | right | bottom | left | block-start |
-    // inline-start | block-end | inline-end ] ) scroll-state(snapped: [ none |
-    // x | y | block | inline ] ) scroll-state(overflowing: [ none | top | right
-    // | bottom | left | block-start | inline-start | block-end | inline-end ] )
+    // inline-start | block-end | inline-end ] )
+    // scroll-state(snapped: [ none | x | y | block | inline ] )
+    // scroll-state(scrollable: [ none | top | right | bottom | left |
+    // block-start | inline-start | block-end | inline-end | x | y | block |
+    // inline ] )
+    // scroll-state(scroll-direction: [ none | any | top | right | bottom | left
+    // | block-start | inline-start | block-end | inline-end | x | y | block |
+    // inline ] )
     CSSParserTokenStream::RestoringBlockGuard guard(stream);
     stream.ConsumeWhitespace();
 
@@ -194,6 +230,19 @@ const MediaQueryExpNode* ContainerQueryParser::ConsumeQueryInParens(
       guard.Release();
       stream.ConsumeWhitespace();
       return MediaQueryExpNode::Function(query, AtomicString("scroll-state"));
+    }
+  } else if (RuntimeEnabledFeatures::CSSFallbackContainerQueriesEnabled() &&
+             stream.Peek().GetType() == kFunctionToken &&
+             stream.Peek().FunctionId() == CSSValueID::kAnchored) {
+    // anchored(fallback: <integer>)
+    CSSParserTokenStream::RestoringBlockGuard guard(stream);
+    stream.ConsumeWhitespace();
+
+    if (const MediaQueryExpNode* query =
+            ConsumeFeatureQuery(stream, AnchoredFeatureSet())) {
+      guard.Release();
+      stream.ConsumeWhitespace();
+      return MediaQueryExpNode::Function(query, AtomicString("anchored"));
     }
   }
   stream.Restore(savepoint);

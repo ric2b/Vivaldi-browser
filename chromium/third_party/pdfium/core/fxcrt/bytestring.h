@@ -36,6 +36,7 @@ class ByteString : public StringTemplate<char> {
 
   ~ByteString() = default;
 
+  // PRECONDITIONS: `pStr` must point to `len` valid bytes.
   UNSAFE_BUFFER_USAGE ByteString(const char* pStr, size_t len);
   UNSAFE_BUFFER_USAGE ByteString(const uint8_t* pStr, size_t len);
 
@@ -58,13 +59,14 @@ class ByteString : public StringTemplate<char> {
   int Compare(ByteStringView str) const;
   bool EqualNoCase(ByteStringView str) const;
 
-  bool operator==(const char* ptr) const;
-  bool operator==(ByteStringView str) const;
-  bool operator==(const ByteString& other) const;
-
-  bool operator!=(const char* ptr) const { return !(*this == ptr); }
-  bool operator!=(ByteStringView str) const { return !(*this == str); }
-  bool operator!=(const ByteString& other) const { return !(*this == other); }
+  // TODO(tsepez): The char* form should be UNSAFE_BUFFER_USAGE.
+  friend bool operator==(const ByteString& lhs, const char* rhs);
+  friend bool operator==(const ByteString& lhs, ByteStringView rhs) {
+    return lhs.AsStringView() == rhs;
+  }
+  friend bool operator==(const ByteString& lhs, const ByteString& rhs) {
+    return lhs.AsStringView() == rhs.AsStringView();
+  }
 
   bool operator<(const char* ptr) const;
   bool operator<(ByteStringView str) const;
@@ -106,18 +108,6 @@ class ByteString : public StringTemplate<char> {
   friend class StringPool_ByteString_Test;
 };
 
-inline bool operator==(const char* lhs, const ByteString& rhs) {
-  return rhs == lhs;
-}
-inline bool operator==(ByteStringView lhs, const ByteString& rhs) {
-  return rhs == lhs;
-}
-inline bool operator!=(const char* lhs, const ByteString& rhs) {
-  return rhs != lhs;
-}
-inline bool operator!=(ByteStringView lhs, const ByteString& rhs) {
-  return rhs != lhs;
-}
 inline bool operator<(const char* lhs, const ByteString& rhs) {
   return rhs.Compare(lhs) > 0;
 }

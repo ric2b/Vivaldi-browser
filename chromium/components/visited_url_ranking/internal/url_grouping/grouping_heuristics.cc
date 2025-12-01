@@ -4,14 +4,15 @@
 
 #include "components/visited_url_ranking/internal/url_grouping/grouping_heuristics.h"
 
+#include <unordered_map>
 #include <variant>
 
 #include "base/containers/contains.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/flat_map.h"
-#include "base/hash/hash.h"
 #include "base/json/json_writer.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time.h"
 #include "components/segmentation_platform/public/input_context.h"
@@ -35,6 +36,7 @@ constexpr auto kReasonToMinTabCount =
         {GroupSuggestion::SuggestionReason::kRecentlyOpened, 4},
         {GroupSuggestion::SuggestionReason::kSwitchedBetween, 2},
         {GroupSuggestion::SuggestionReason::kSimilarSource, 3},
+        {GroupSuggestion::SuggestionReason::kSameOrigin, 3},
     });
 
 // Limit for tab age till which a tab is considered recent.
@@ -42,16 +44,10 @@ constexpr base::TimeDelta kRecencyTabTimeLimit = base::Seconds(600);
 // Number of switches to the tab to group with the current tab.
 constexpr int kMinSwitchesToGroup = 2;
 
-UrlGroupingSuggestionId::Generator g_id_generator;
+// history_clusters::Config::content_visibility_threshold
+constexpr float kVisibilityScoreThreshold = 0.7;
 
-const char* GetNameForInput(URLVisitAggregateRankingModelInputSignals signal) {
-  for (const auto& field : kSuggestionsPredictionSchema) {
-    if (field.signal == signal) {
-      return field.name;
-    }
-  }
-  return nullptr;
-}
+UrlGroupingSuggestionId::Generator g_id_generator;
 
 // A heuristic that find the recently opened tabs and groups them.
 class RecentlyOpenedHeuristic : public GroupingHeuristics::Heuristic {
@@ -67,15 +63,19 @@ class RecentlyOpenedHeuristic : public GroupingHeuristics::Heuristic {
     std::vector<float> result(inputs.size(), 0.0f);
     const char* time_since_active_input = GetNameForInput(
         URLVisitAggregateRankingModelInputSignals::kTimeSinceLastActiveSec);
+    unsigned count = 0;
     for (unsigned i = 0; i < inputs.size(); ++i) {
       std::optional<ProcessedValue> duration_sec =
           inputs[i]->GetMetadataArgument(time_since_active_input);
       if (duration_sec &&
           duration_sec->float_val < kRecencyTabTimeLimit.InSecondsF()) {
         result[i] = 1;
+        ++count;
       }
     }
     CHECK_EQ(result.size(), inputs.size());
+    base::UmaHistogramCounts100(
+        "GroupSuggestionsService.OpenedTabCount.Last10Mins", count);
     return result;
   }
 };
@@ -120,27 +120,30 @@ class SimilarSourceHeuristic : public GroupingHeuristics::Heuristic {
     std::vector<float> result(inputs.size(), 0.0f);
     const char* tab_opened_by_user_input = GetNameForInput(
         URLVisitAggregateRankingModelInputSignals::kIsTabOpenedByUser);
-    const char* tab_launch_type_input = GetNameForInput(
-        URLVisitAggregateRankingModelInputSignals::kAndroidTabLaunchType);
-    const char* tab_launch_package_name_input =
-        GetNameForInput(URLVisitAggregateRankingModelInputSignals::
-                            kAndroidTabLaunchPackageName);
     const char* tab_parent_id_input = GetNameForInput(
         URLVisitAggregateRankingModelInputSignals::kTabParentId);
     const char* tab_group_sync_id_input = GetNameForInput(
         URLVisitAggregateRankingModelInputSignals::kTabGroupSyncId);
+    const char* tab_id_input =
+        GetNameForInput(URLVisitAggregateRankingModelInputSignals::kTabId);
+    const char* time_since_active_input = GetNameForInput(
+        URLVisitAggregateRankingModelInputSignals::kTimeSinceLastActiveSec);
 
+    std::unordered_map<float, float> tab_id_to_parent_id_map;
+    tab_id_to_parent_id_map.reserve(inputs.size());
+    std::unordered_map<float, unsigned> tab_id_to_tab_index_map;
+    tab_id_to_tab_index_map.reserve(inputs.size());
     for (unsigned i = 0; i < inputs.size(); ++i) {
       std::optional<ProcessedValue> tab_opened_by_user =
           inputs[i]->GetMetadataArgument(tab_opened_by_user_input);
-      std::optional<ProcessedValue> tab_launch_type =
-          inputs[i]->GetMetadataArgument(tab_launch_type_input);
-      std::optional<ProcessedValue> tab_launch_package_name =
-          inputs[i]->GetMetadataArgument(tab_launch_package_name_input);
       std::optional<ProcessedValue> tab_parent_id =
           inputs[i]->GetMetadataArgument(tab_parent_id_input);
       std::optional<ProcessedValue> tab_group_sync_id =
           inputs[i]->GetMetadataArgument(tab_group_sync_id_input);
+      std::optional<ProcessedValue> tab_id =
+          inputs[i]->GetMetadataArgument(tab_id_input);
+      std::optional<ProcessedValue> duration_sec =
+          inputs[i]->GetMetadataArgument(time_since_active_input);
 
       if (!tab_opened_by_user || tab_opened_by_user->float_val == 0) {
         // Do not group tabs not opened by user.
@@ -150,18 +153,76 @@ class SimilarSourceHeuristic : public GroupingHeuristics::Heuristic {
         // Not group tabs already grouped.
         continue;
       }
-      if (tab_launch_package_name &&
-          !tab_launch_package_name->str_val.empty()) {
-        // Assign a cluster ID based on hash of the package name.
-        result[i] = base::FastHash(tab_launch_package_name->str_val);
+      if (duration_sec &&
+          duration_sec->float_val >= kRecencyTabTimeLimit.InSecondsF()) {
+        // Not group tabs that are not recent.
         continue;
       }
-      if (tab_parent_id) {
-        result[i] = tab_parent_id->float_val;
+      if (tab_parent_id && tab_id) {
+        tab_id_to_parent_id_map[tab_id->float_val] = tab_parent_id->float_val;
+        tab_id_to_tab_index_map[tab_id->float_val] = i;
         continue;
       }
-      // TODO(ssid): Reconsider grouping based on launch types.
     }
+    // Cluster tabs based on parent tab relationship by finding disjoint sets in
+    // the tab-parent DAG.
+    // A bool to track whether there are any cluster merge happen in each round.
+    bool merged = true;
+    while (merged) {
+      merged = false;
+      std::unordered_map<float, float> new_tab_id_to_parent_id_map;
+      new_tab_id_to_parent_id_map.reserve(tab_id_to_parent_id_map.size());
+      for (const auto& pair : tab_id_to_parent_id_map) {
+        float tab_id = pair.first;
+        float parent_id = pair.second;
+        if (base::Contains(tab_id_to_parent_id_map, parent_id) &&
+            tab_id_to_parent_id_map[parent_id] != parent_id) {
+          new_tab_id_to_parent_id_map[tab_id] =
+              tab_id_to_parent_id_map[parent_id];
+          // Keep track of merge.
+          merged = true;
+        } else {
+          new_tab_id_to_parent_id_map[tab_id] = parent_id;
+        }
+      }
+      tab_id_to_parent_id_map.swap(new_tab_id_to_parent_id_map);
+    }
+    for (const auto& pair : tab_id_to_tab_index_map) {
+      result[pair.second] = tab_id_to_parent_id_map[pair.first];
+    }
+    return result;
+  }
+};
+
+// A heuristic that find the recently opened tabs of the same origin.
+class SameOriginHeuristic : public GroupingHeuristics::Heuristic {
+ public:
+  SameOriginHeuristic()
+      : GroupingHeuristics::Heuristic(
+            GroupSuggestion::SuggestionReason::kSameOrigin) {}
+  ~SameOriginHeuristic() override = default;
+
+  std::vector<float> Run(
+      const std::vector<scoped_refptr<segmentation_platform::InputContext>>&
+          inputs) override {
+    std::vector<float> result(inputs.size(), 0.0f);
+    const char* time_since_active_input = GetNameForInput(
+        URLVisitAggregateRankingModelInputSignals::kTimeSinceLastActiveSec);
+    const char* tab_url_hash = GetNameForInput(
+        URLVisitAggregateRankingModelInputSignals::kTabUrlOriginHash);
+    for (unsigned i = 0; i < inputs.size(); ++i) {
+      std::optional<ProcessedValue> duration_sec =
+          inputs[i]->GetMetadataArgument(time_since_active_input);
+      std::optional<ProcessedValue> tab_url_origin_hash_value =
+          inputs[i]->GetMetadataArgument(tab_url_hash);
+      if (duration_sec &&
+          duration_sec->float_val < kRecencyTabTimeLimit.InSecondsF() &&
+          tab_url_origin_hash_value &&
+          tab_url_origin_hash_value->float_val != 0) {
+        result[i] = tab_url_origin_hash_value->float_val;
+      }
+    }
+    CHECK_EQ(result.size(), inputs.size());
     return result;
   }
 };
@@ -171,10 +232,9 @@ void SetSuggestionText(GroupSuggestion& suggestion) {
   // TODO(ssid): Set better messages and tab group names.
   switch (suggestion.suggestion_reason) {
     case GroupSuggestion::SuggestionReason::kUnknown:
-    case GroupSuggestion::SuggestionReason::kNumReasons:
       NOTREACHED();
     case GroupSuggestion::SuggestionReason::kSwitchedBetween:
-      suggestion.promo_header = "Group tabs in bottom tab strip?";
+      suggestion.promo_header = "Group recently selected tabs?";
       suggestion.promo_contents =
           "Switch between tabs easily with tab strip at the bottom.";
       suggestion.suggested_name = u"today";
@@ -182,7 +242,7 @@ void SetSuggestionText(GroupSuggestion& suggestion) {
     case GroupSuggestion::SuggestionReason::kSimilarSource:
       suggestion.promo_header = "Group recently opened tabs?";
       suggestion.promo_contents =
-          "Organize recent tabs opened using the same action.";
+          "Organize recent tabs opened from the same tab.";
       suggestion.suggested_name = u"today";
       break;
     case GroupSuggestion::SuggestionReason::kRecentlyOpened:
@@ -190,7 +250,61 @@ void SetSuggestionText(GroupSuggestion& suggestion) {
       suggestion.promo_contents = "Organize recently opened tabs.";
       suggestion.suggested_name = u"today";
       break;
+    case GroupSuggestion::SuggestionReason::kSameOrigin:
+      suggestion.promo_header = "Group recently opened tabs?";
+      suggestion.promo_contents =
+          "Organize recently opened tabs from the same website.";
+      suggestion.suggested_name = u"today";
+      break;
   }
+}
+
+// Returns true if the group is visible.
+bool IsGroupVisible(const GroupSuggestion& suggestion,
+                    const std::vector<URLVisitAggregate>& candidates) {
+  if (!features::kGroupSuggestionEnableVisibilityCheck.Get()) {
+    return true;
+  }
+  std::map<int, bool> suggestion_tabs_visibility;
+  for (const auto& candidate : candidates) {
+    auto tab_it = candidate.fetcher_data_map.find(Fetcher::kTabModel);
+    if (tab_it == candidate.fetcher_data_map.end()) {
+      continue;
+    }
+    const auto& tab_data =
+        std::get_if<URLVisitAggregate::TabData>(&tab_it->second);
+    if (!tab_data) {
+      continue;
+    }
+
+    int tab_id = tab_data->last_active_tab.id;
+    if (!base::Contains(suggestion.tab_ids, tab_id)) {
+      continue;
+    }
+
+    const auto& history_it = candidate.fetcher_data_map.find(Fetcher::kHistory);
+    if (history_it != candidate.fetcher_data_map.end()) {
+      const auto* history =
+          std::get_if<URLVisitAggregate::HistoryData>(&history_it->second);
+      if (history) {
+        suggestion_tabs_visibility[tab_id] =
+            history->last_visited.content_annotations.model_annotations
+                .visibility_score > kVisibilityScoreThreshold;
+      }
+    }
+  }
+
+  // Return false if all tabs in the suggestion do not have a score, or if any
+  // tab is not visible.
+  if (suggestion_tabs_visibility.empty()) {
+    return false;
+  }
+  for (const auto& [tab_id, is_visible] : suggestion_tabs_visibility) {
+    if (!is_visible) {
+      return false;
+    }
+  }
+  return true;
 }
 
 std::optional<GroupSuggestion> GetSuggestionFromHeuristicResult(
@@ -201,18 +315,28 @@ std::optional<GroupSuggestion> GetSuggestionFromHeuristicResult(
   GroupSuggestion suggestion;
   suggestion.suggestion_reason = reason;
 
-  // TODO(ssid): pass in current tab from tab fetcher.
   // Find the current tab based on the most recently active tab.
   int current_tab_index = -1;
-  base::Time latest_active_tab;
   for (unsigned i = 0; i < candidates.size(); ++i) {
-    base::Time last_visit_time = candidates[i].GetLastVisitTime();
-    if (last_visit_time > latest_active_tab) {
-      latest_active_tab = last_visit_time;
+    auto it = candidates[i].fetcher_data_map.find(Fetcher::kTabModel);
+    DCHECK(it != candidates[i].fetcher_data_map.end());
+    if (it == candidates[i].fetcher_data_map.end()) {
+      continue;
+    }
+    const auto& tab_data = std::get_if<URLVisitAggregate::TabData>(&it->second);
+    DCHECK(tab_data);
+    if (!tab_data) {
+      continue;
+    }
+    if (tab_data->last_active_tab.tab_metadata.is_currently_active) {
       current_tab_index = i;
     }
   }
-  CHECK(current_tab_index != -1);  // At least one tab should exist.
+  if (current_tab_index == -1) {
+    // If current tab is not a candidate (e.g. if it's a new tab page), don't
+    // show.
+    return std::nullopt;
+  }
   float current_tab_cluster = outputs[current_tab_index];
   if (current_tab_cluster == 0) {
     // If current tab is not part of any cluster, don't show.
@@ -225,9 +349,15 @@ std::optional<GroupSuggestion> GetSuggestionFromHeuristicResult(
       continue;
     }
     auto it = candidates[i].fetcher_data_map.find(Fetcher::kTabModel);
-    CHECK(it != candidates[i].fetcher_data_map.end());
+    DCHECK(it != candidates[i].fetcher_data_map.end());
+    if (it == candidates[i].fetcher_data_map.end()) {
+      continue;
+    }
     const auto& tab_data = std::get_if<URLVisitAggregate::TabData>(&it->second);
-    CHECK(tab_data);
+    DCHECK(tab_data);
+    if (!tab_data) {
+      continue;
+    }
     suggestion.tab_ids.push_back(tab_data->last_active_tab.id);
   }
   // If the number of tabs per the heuristic is too low, dont show suggestion.
@@ -235,6 +365,16 @@ std::optional<GroupSuggestion> GetSuggestionFromHeuristicResult(
   if (suggestion.tab_ids.size() < min_tabs) {
     return std::nullopt;
   }
+
+  if (!IsGroupVisible(suggestion, candidates)) {
+    VLOG(1) << "Suggestion discarded due to visibility";
+    base::UmaHistogramEnumeration(
+        "GroupSuggestionsService.SuggestionThrottledReason",
+        TabGroupSuggestionThrottleReason::kGroupNotVisible);
+
+    return std::nullopt;
+  }
+
   suggestion.suggestion_id = g_id_generator.GenerateNextId();
   SetSuggestionText(suggestion);
   return suggestion;
@@ -265,6 +405,14 @@ std::optional<GroupSuggestions> GetAllGroupSuggestions(
 
 }  // namespace
 
+GroupingHeuristics::SuggestionsResult::SuggestionsResult() = default;
+GroupingHeuristics::SuggestionsResult::~SuggestionsResult() = default;
+GroupingHeuristics::SuggestionsResult::SuggestionsResult(
+    GroupingHeuristics::SuggestionsResult&&) = default;
+GroupingHeuristics::SuggestionsResult&
+GroupingHeuristics::SuggestionsResult::operator=(
+    GroupingHeuristics::SuggestionsResult&& suggestion_result) = default;
+
 GroupingHeuristics::GroupingHeuristics() {
   if (features::kGroupSuggestionEnableRecentlyOpened.Get()) {
     heuristics_.emplace(GroupSuggestion::SuggestionReason::kRecentlyOpened,
@@ -278,16 +426,21 @@ GroupingHeuristics::GroupingHeuristics() {
     heuristics_.emplace(GroupSuggestion::SuggestionReason::kSimilarSource,
                         std::make_unique<SimilarSourceHeuristic>());
   }
+  if (features::kGroupSuggestionEnableSameOrigin.Get()) {
+    heuristics_.emplace(GroupSuggestion::SuggestionReason::kSameOrigin,
+                        std::make_unique<SameOriginHeuristic>());
+  }
 }
 
 GroupingHeuristics::~GroupingHeuristics() = default;
 
 void GroupingHeuristics::GetSuggestions(
     std::vector<URLVisitAggregate> candidates,
-    GroupingHeuristics::SuggestionsCallback callback) {
+    GroupingHeuristics::SuggestionResultCallback callback) {
   GetSuggestions(std::move(candidates),
                  {GroupSuggestion::SuggestionReason::kSwitchedBetween,
                   GroupSuggestion::SuggestionReason::kSimilarSource,
+                  GroupSuggestion::SuggestionReason::kSameOrigin,
                   GroupSuggestion::SuggestionReason::kRecentlyOpened},
                  std::move(callback));
 }
@@ -295,9 +448,10 @@ void GroupingHeuristics::GetSuggestions(
 void GroupingHeuristics::GetSuggestions(
     std::vector<URLVisitAggregate> candidates,
     const std::vector<GroupSuggestion::SuggestionReason>& heuristics_priority,
-    SuggestionsCallback callback) {
+    SuggestionResultCallback callback) {
+  SuggestionsResult result;
   if (candidates.empty()) {
-    std::move(callback).Run(std::nullopt);
+    std::move(callback).Run(std::move(result));
     return;
   }
 
@@ -314,9 +468,10 @@ void GroupingHeuristics::GetSuggestions(
     auto& heuristic = heuristics_[type];
     heuristic_results.emplace(heuristic->reason(), heuristic->Run(signals));
   }
-
-  std::move(callback).Run(GetAllGroupSuggestions(
-      candidates, heuristics_priority, heuristic_results));
+  result.suggestions = GetAllGroupSuggestions(candidates, heuristics_priority,
+                                              heuristic_results);
+  result.inputs = signals;
+  std::move(callback).Run(std::move(result));
 }
 
 }  // namespace visited_url_ranking

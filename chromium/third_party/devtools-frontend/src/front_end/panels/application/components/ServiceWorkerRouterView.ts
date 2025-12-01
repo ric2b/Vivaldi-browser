@@ -1,6 +1,7 @@
 // Copyright (c) 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import type * as SDK from '../../../core/sdk/sdk.js';
 import * as LegacyWrapper from '../../../ui/components/legacy_wrapper/legacy_wrapper.js';
@@ -24,7 +25,7 @@ export class ServiceWorkerRouterView extends LegacyWrapper.LegacyWrapper.Wrappab
   #render(): void {
     // clang-format off
     render(html`
-      <style>${serviceWorkerRouterViewStyles.cssText}</style>
+      <style>${serviceWorkerRouterViewStyles}</style>
       <ul class="router-rules">
         ${this.#rules.map(this.#renderRouterRule)}
       </ul>

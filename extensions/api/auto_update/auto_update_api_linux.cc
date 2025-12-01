@@ -18,7 +18,8 @@ static const std::string kFFMPEGFuturePath = "VIVALDI_FFMPEG_FUTURE_PATH";
 
 bool getFFMPEGFuturePath(std::string &target) {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  return env->GetVar(kFFMPEGFuturePath, &target) && !target.empty();
+  target = env->GetVar(kFFMPEGFuturePath).value_or(std::string());
+  return !target.empty();
 }
 
 bool DetectNeedCodecRestart() {

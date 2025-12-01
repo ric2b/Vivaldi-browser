@@ -77,16 +77,16 @@ enum class SystemTheme { kDefault, kCustom };
 class ThemeScoper {
  public:
   ThemeScoper() = default;
-  ThemeScoper(extensions::ExtensionService* extension_service,
+  ThemeScoper(extensions::ExtensionRegistrar* extension_registrar,
               extensions::ExtensionRegistry* extension_registry)
-      : extension_service_(extension_service),
+      : extension_registrar_(extension_registrar),
         extension_registry_(extension_registry) {}
   ThemeScoper(ThemeScoper&&) noexcept = default;
   ThemeScoper& operator=(ThemeScoper&&) = default;
   ~ThemeScoper() {
     if (!extension_id_.empty() &&
         extension_registry_->GetInstalledExtension(extension_id_)) {
-      extension_service_->UninstallExtension(
+      extension_registrar_->UninstallExtension(
           extension_id_, extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
     }
   }
@@ -102,7 +102,7 @@ class ThemeScoper {
   }
 
  private:
-  raw_ptr<extensions::ExtensionService> extension_service_ = nullptr;
+  raw_ptr<extensions::ExtensionRegistrar> extension_registrar_ = nullptr;
   raw_ptr<extensions::ExtensionRegistry> extension_registry_ = nullptr;
   extensions::ExtensionId extension_id_;
   base::ScopedTempDir temp_dir_;
@@ -150,7 +150,7 @@ class ThemeServiceTest : public extensions::ExtensionServiceTestBase {
 
   ThemeScoper LoadUnpackedTheme(const std::string& source_file_path =
                                     "extensions/theme_minimal/manifest.json") {
-    ThemeScoper scoper(service_, registry_);
+    ThemeScoper scoper(registrar(), registry_);
     test::ThemeServiceChangedWaiter waiter(theme_service_);
     base::FilePath temp_dir = scoper.GetTempPath();
     base::FilePath dst_manifest_path = temp_dir.AppendASCII("manifest.json");
@@ -161,7 +161,7 @@ class ThemeServiceTest : public extensions::ExtensionServiceTestBase {
     EXPECT_TRUE(base::CopyFile(src_manifest_path, dst_manifest_path));
 
     scoped_refptr<extensions::UnpackedInstaller> installer(
-        extensions::UnpackedInstaller::Create(service_));
+        extensions::UnpackedInstaller::Create(profile()));
     extensions::TestExtensionRegistryObserver observer(registry_);
     installer->Load(temp_dir);
     std::string extenson_id = observer.WaitForExtensionLoaded()->id();
@@ -184,7 +184,7 @@ class ThemeServiceTest : public extensions::ExtensionServiceTestBase {
         registry_->GetInstalledExtension(extension_id)->path();
 
     scoped_refptr<extensions::UnpackedInstaller> installer(
-        extensions::UnpackedInstaller::Create(service_));
+        extensions::UnpackedInstaller::Create(profile()));
 
     extensions::TestExtensionRegistryObserver observer(registry_);
     installer->Load(path);
@@ -376,7 +376,7 @@ TEST_F(ThemeServiceTest, ThemeInstallUninstall) {
   EXPECT_EQ(scoper.extension_id(), theme_service_->GetThemeID());
 
   // Now uninstall the extension, should revert to the default theme.
-  service_->UninstallExtension(
+  registrar()->UninstallExtension(
       scoper.extension_id(), extensions::UNINSTALL_REASON_FOR_TESTING, nullptr);
   EXPECT_TRUE(theme_service_->UsingDefaultTheme());
   EXPECT_FALSE(theme_service_->UsingExtensionTheme());
@@ -405,7 +405,7 @@ TEST_F(ThemeServiceTest, DisableUnusedTheme) {
   // 2) Enabling a disabled theme extension should swap the current theme.
   {
     test::ThemeServiceChangedWaiter waiter(theme_service_);
-    service_->EnableExtension(scoper1.extension_id());
+    registrar()->EnableExtension(scoper1.extension_id());
     waiter.WaitForThemeChanged();
   }
   EXPECT_EQ(scoper1.extension_id(), theme_service_->GetThemeID());
@@ -427,8 +427,9 @@ TEST_F(ThemeServiceTest, DisableUnusedTheme) {
   // 4) Disabling the current theme extension should revert to the default theme
   // and disable any installed theme extensions.
   EXPECT_FALSE(theme_service_->UsingDefaultTheme());
-  service_->DisableExtension(scoper2.extension_id(),
-                             extensions::disable_reason::DISABLE_USER_ACTION);
+  registrar()->DisableExtension(
+      scoper2.extension_id(),
+      {extensions::disable_reason::DISABLE_USER_ACTION});
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(theme_service_->UsingDefaultTheme());
   EXPECT_FALSE(registrar()->IsExtensionEnabled(scoper1.extension_id()));
@@ -588,21 +589,18 @@ TEST_F(ThemeServiceTest, UseDefaultTheme_DisableNtpThemeTest) {
   NtpCustomBackgroundServiceFactory::GetForProfile(profile_.get());
   base::Value::Dict test_background_info;
   test_background_info.Set("test_data", "foo");
-  pref_service_->SetDict(GetThemePrefNameInMigration(
-                             ThemePrefInMigration::kNtpCustomBackgroundDict),
+  pref_service_->SetDict(prefs::kNtpCustomBackgroundDict,
                          std::move(test_background_info));
 
   const base::Value::Dict& background_info_with_theme =
-      pref_service_->GetDict(GetThemePrefNameInMigration(
-          ThemePrefInMigration::kNtpCustomBackgroundDict));
+      pref_service_->GetDict(prefs::kNtpCustomBackgroundDict);
   const base::Value* test_data = background_info_with_theme.Find("test_data");
   EXPECT_NE(test_data, nullptr);
   EXPECT_NE(test_data->GetIfString(), nullptr);
 
   theme_service_->UseDefaultTheme();
   const base::Value::Dict& background_info_without_theme =
-      pref_service_->GetDict(GetThemePrefNameInMigration(
-          ThemePrefInMigration::kNtpCustomBackgroundDict));
+      pref_service_->GetDict(prefs::kNtpCustomBackgroundDict);
   EXPECT_EQ(background_info_without_theme.Find("test_data"), nullptr);
 }
 
@@ -797,8 +795,7 @@ TEST_F(ThemeServiceTest, UserColor) {
   // Set an autogenerated theme with background prefs.
   base::Value::Dict background_info;
   background_info.Set("test_data", "foo");
-  pref_service_->SetDict(GetThemePrefNameInMigration(
-                             ThemePrefInMigration::kNtpCustomBackgroundDict),
+  pref_service_->SetDict(prefs::kNtpCustomBackgroundDict,
                          std::move(background_info));
   theme_service_->BuildAutogeneratedThemeFromColor(SK_ColorBLUE);
   EXPECT_EQ(theme_service_->GetAutogeneratedThemeColor(), SK_ColorBLUE);
@@ -807,9 +804,7 @@ TEST_F(ThemeServiceTest, UserColor) {
   theme_service_->SetUserColor(SK_ColorGREEN);
   EXPECT_EQ(theme_service_->GetUserColor(), SK_ColorGREEN);
   EXPECT_EQ(theme_service_->GetAutogeneratedThemeColor(), SK_ColorTRANSPARENT);
-  EXPECT_EQ(*pref_service_
-                 ->GetDict(GetThemePrefNameInMigration(
-                     ThemePrefInMigration::kNtpCustomBackgroundDict))
+  EXPECT_EQ(*pref_service_->GetDict(prefs::kNtpCustomBackgroundDict)
                  .FindString("test_data"),
             "foo");
   EXPECT_EQ(ThemeService::kUserColorThemeID, theme_service_->GetThemeID());
@@ -840,8 +835,7 @@ TEST_F(ThemeServiceTest, IsGrayscale) {
   // Set an autogenerated theme with background prefs.
   base::Value::Dict background_info;
   background_info.Set("test_data", "foo");
-  pref_service_->SetDict(GetThemePrefNameInMigration(
-                             ThemePrefInMigration::kNtpCustomBackgroundDict),
+  pref_service_->SetDict(prefs::kNtpCustomBackgroundDict,
                          std::move(background_info));
   theme_service_->BuildAutogeneratedThemeFromColor(SK_ColorBLUE);
   EXPECT_EQ(theme_service_->GetAutogeneratedThemeColor(), SK_ColorBLUE);
@@ -850,9 +844,7 @@ TEST_F(ThemeServiceTest, IsGrayscale) {
   theme_service_->SetIsGrayscale(true);
   EXPECT_TRUE(theme_service_->GetIsGrayscale());
   EXPECT_EQ(theme_service_->GetAutogeneratedThemeColor(), SK_ColorTRANSPARENT);
-  EXPECT_EQ(*pref_service_
-                 ->GetDict(GetThemePrefNameInMigration(
-                     ThemePrefInMigration::kNtpCustomBackgroundDict))
+  EXPECT_EQ(*pref_service_->GetDict(prefs::kNtpCustomBackgroundDict)
                  .FindString("test_data"),
             "foo");
 }
@@ -875,8 +867,7 @@ TEST_F(ThemeServiceTest, SetUserColorAndBrowserColorVariant) {
   // Set an autogenerated theme with background prefs.
   base::Value::Dict background_info;
   background_info.Set("test_data", "foo");
-  pref_service_->SetDict(GetThemePrefNameInMigration(
-                             ThemePrefInMigration::kNtpCustomBackgroundDict),
+  pref_service_->SetDict(prefs::kNtpCustomBackgroundDict,
                          std::move(background_info));
   theme_service_->BuildAutogeneratedThemeFromColor(SK_ColorBLUE);
   EXPECT_EQ(theme_service_->GetAutogeneratedThemeColor(), SK_ColorBLUE);
@@ -889,9 +880,7 @@ TEST_F(ThemeServiceTest, SetUserColorAndBrowserColorVariant) {
   EXPECT_EQ(theme_service_->GetBrowserColorVariant(),
             ui::mojom::BrowserColorVariant::kTonalSpot);
   EXPECT_EQ(theme_service_->GetAutogeneratedThemeColor(), SK_ColorTRANSPARENT);
-  EXPECT_EQ(*pref_service_
-                 ->GetDict(GetThemePrefNameInMigration(
-                     ThemePrefInMigration::kNtpCustomBackgroundDict))
+  EXPECT_EQ(*pref_service_->GetDict(prefs::kNtpCustomBackgroundDict)
                  .FindString("test_data"),
             "foo");
   EXPECT_EQ(ThemeService::kUserColorThemeID, theme_service_->GetThemeID());

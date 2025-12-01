@@ -66,6 +66,7 @@
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/model/web_state_list/web_state_list.h"
 #import "ios/chrome/browser/shared/public/commands/application_commands.h"
 #import "ios/chrome/browser/shared/public/commands/browser_coordinator_commands.h"
@@ -106,6 +107,8 @@ const base::Feature* FetchIPHFeatureFromEnum(
           kIPHAutofillExternalAccountProfileSuggestionFeature;
     case SuggestionFeatureForIPH::kPlusAddressCreation:
       return &feature_engagement::kIPHPlusAddressCreateSuggestionFeature;
+    case SuggestionFeatureForIPH::kHomeWorkAddressSuggestion:
+      return &feature_engagement::kIPHAutofillHomeWorkProfileSuggestionFeature;
     case SuggestionFeatureForIPH::kUnknown:
       NOTREACHED();
   }
@@ -413,6 +416,14 @@ bool CanReloadInputViews() {
   [self reset];
 }
 
+- (void)dismissPopover {
+  if (IsKeyboardAccessoryUpgradeEnabled() &&
+      ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_TABLET) {
+    // Close the popover view.
+    [self stopChildren];
+  }
+}
+
 - (void)notifyAutofillSuggestionWithIPHSelectedFor:
     (SuggestionFeatureForIPH)featureForIPH {
   // The engagement tracker can change during testing (in feature engagement app
@@ -427,6 +438,10 @@ bool CanReloadInputViews() {
         break;
       case SuggestionFeatureForIPH::kPlusAddressCreation:
         tracker->NotifyEvent("plus_address_create_suggestion_feature_used");
+        break;
+      case SuggestionFeatureForIPH::kHomeWorkAddressSuggestion:
+        tracker->NotifyEvent(
+            "home_work_address_create_suggestion_feature_used");
         break;
       case SuggestionFeatureForIPH::kUnknown:
         NOTREACHED();
@@ -643,6 +658,27 @@ bool CanReloadInputViews() {
 - (void)openAddressDetailsInEditMode:(autofill::AutofillProfile)address
                offerMigrateToAccount:(BOOL)offerMigrateToAccount {
   [self reset];
+
+  if (base::FeatureList::IsEnabled(
+          autofill::features::kAutofillEnableSupportForHomeAndWork)) {
+    autofill::AutofillProfile::RecordType type = address.record_type();
+    id<ApplicationCommands> applicationHandler = HandlerForProtocol(
+        self.browser->GetCommandDispatcher(), ApplicationCommands);
+    if (type == autofill::AutofillProfile::RecordType::kAccountHome) {
+      OpenNewTabCommand* command = [OpenNewTabCommand
+          commandWithURLFromChrome:GURL(kGoogleMyAccountHomeAddressURL)];
+      [applicationHandler openURLInNewTab:command];
+      return;
+    }
+
+    if (type == autofill::AutofillProfile::RecordType::kAccountWork) {
+      OpenNewTabCommand* command = [OpenNewTabCommand
+          commandWithURLFromChrome:GURL(kGoogleMyAccountWorkAddressURL)];
+      [applicationHandler openURLInNewTab:command];
+      return;
+    }
+  }
+
   CommandDispatcher* dispatcher = self.browser->GetCommandDispatcher();
   id<SettingsCommands> settingsHandler =
       HandlerForProtocol(dispatcher, SettingsCommands);
@@ -887,6 +923,12 @@ bool CanReloadInputViews() {
       voiceOverText = l10n_util::GetNSString(
           IDS_PLUS_ADDRESS_CREATE_SUGGESTION_IPH_SCREENREADER_IOS);
       break;
+    case SuggestionFeatureForIPH::kHomeWorkAddressSuggestion:
+      text = l10n_util::GetNSString(
+          IDS_AUTOFILL_IPH_HOME_AND_WORK_ACCOUNT_PROFILE_SUGGESTION);
+      voiceOverText = l10n_util::GetNSString(
+          IDS_AUTOFILL_IPH_HOME_AND_WORK_ACCOUNT_PROFILE_SUGGESTION_SCREENREADER);
+      break;
     case SuggestionFeatureForIPH::kUnknown:
       NOTREACHED();
   }
@@ -911,6 +953,7 @@ bool CanReloadInputViews() {
              arrowDirection:BubbleArrowDirectionDown
                   alignment:BubbleAlignmentTopOrLeading
                  bubbleType:BubbleViewTypeWithClose
+            pageControlPage:BubblePageControlPageNone
           dismissalCallback:dismissalCallback];
   bubbleViewControllerPresenter.voiceOverAnnouncement = voiceOverText;
   return bubbleViewControllerPresenter;

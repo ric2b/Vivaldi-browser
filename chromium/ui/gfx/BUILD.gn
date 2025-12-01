@@ -246,6 +246,8 @@ component("gfx") {
       "win/text_analysis_source.h",
       "win/window_impl.cc",
       "win/window_impl.h",
+      "win/wuc_backdrop.cc",
+      "win/wuc_backdrop.h",
     ]
   }
   if (is_apple) {
@@ -331,6 +333,7 @@ component("gfx") {
     "//mojo/public/cpp/bindings:struct_traits",
     "//skia",
     "//third_party/zlib",
+    "//ui/base:features",
     "//ui/base:ozone_buildflags",
     "//ui/base:ui_data_pack",
   ]
@@ -399,7 +402,6 @@ component("gfx") {
 
   # Windows.
   if (is_win) {
-    deps += [ "//ui/base:features" ]
     libs = [
       "setupapi.lib",
       "dwmapi.lib",
@@ -451,8 +453,6 @@ component("gfx") {
 
 component("color_space") {
   sources = [
-    "color_conversion_sk_filter_cache.cc",
-    "color_conversion_sk_filter_cache.h",
     "color_space.cc",
     "color_space.h",
     "color_space_export.h",
@@ -462,6 +462,8 @@ component("color_space") {
     "display_color_spaces.h",
     "hdr_metadata.cc",
     "hdr_metadata.h",
+    "hdr_metadata_agtm.cc",
+    "hdr_metadata_agtm.h",
     "hdr_static_metadata.cc",
     "hdr_static_metadata.h",
     "icc_profile.cc",
@@ -478,6 +480,7 @@ component("color_space") {
   deps = [
     "//skia:skcms",
     "//ui/gfx:buffer_types",
+    "//ui/gfx:gfx_switches",
     "//ui/gfx/geometry:geometry_skia",
   ]
   public_deps = [
@@ -999,7 +1002,6 @@ test("gfx_unittests") {
 if (is_android) {
   generate_jni("gfx_jni_headers") {
     sources = [
-      "../android/java/src/org/chromium/ui/gfx/Animation.java",
       "../android/java/src/org/chromium/ui/gfx/BitmapHelper.java",
       "../android/java/src/org/chromium/ui/gfx/ViewConfigurationHelper.java",
     ]

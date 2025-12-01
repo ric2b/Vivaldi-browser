@@ -170,12 +170,17 @@ class WebUIContentsPreloadManagerBrowserSmokeTest
         features::kPreloadTopChromeWebUI,
         {{features::kPreloadTopChromeWebUIModeName, GetParam()},
          {features::kPreloadTopChromeWebUISmartPreloadName, "true"}});
+    test_api().DisableDelayPreload(true);
   }
   void SetUpPreloadURL() override {
     // Don't preload for the default browser. The smoke test will
     // test each WebUI in a new browser.
     ON_CALL(*mock_preload_candidate_selector(), GetURLToPreload(_))
         .WillByDefault(Return(std::nullopt));
+  }
+  void TearDown() override {
+    WebUIContentsPreloadManagerBrowserTestBase::TearDown();
+    test_api().DisableDelayPreload(false);
   }
 };
 
@@ -271,8 +276,14 @@ class WebUIContentsPreloadManagerPageLoadMetricsTest
 
 // Tests that the time from the WebUI is requested to when First Contentful
 // Paint (FCP) is recorded.
+// TODO(crbug.com/40168622): this times out on Chromium OS ASan LSan Tests.
+#if BUILDFLAG(IS_CHROMEOS) && defined(ADDRESS_SANITIZER)
+#define MAYBE_RequestToFCPAndLCP DISABLED_RequestToFCPAndLCP
+#else
+#define MAYBE_RequestToFCPAndLCP RequestToFCPAndLCP
+#endif
 IN_PROC_BROWSER_TEST_F(WebUIContentsPreloadManagerPageLoadMetricsTest,
-                       RequestToFCPAndLCP) {
+                       MAYBE_RequestToFCPAndLCP) {
   // Serves the test origin with files from the test data folder.
   auto url_loader_interceptor =
       content::URLLoaderInterceptor::ServeFilesFromDirectoryAtOrigin(

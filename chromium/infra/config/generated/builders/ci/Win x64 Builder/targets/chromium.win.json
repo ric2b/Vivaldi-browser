@@ -5,6 +5,7 @@
       "blink_platform_nocompile_tests",
       "blink_probes_nocompile_tests",
       "content_nocompile_tests",
+      "ipc_fuzzer",
       "pdf_fuzzers"
     ],
     "scripts": [
@@ -896,7 +897,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 9
+          "shards": 11
         },
         "test": "interactive_ui_tests",
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
@@ -1466,7 +1467,8 @@
             "cpu": "x86-64",
             "os": "Windows-10-19045"
           },
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
+          "shards": 3
         },
         "test": "sync_integration_tests",
         "test_id_prefix": "ninja://chrome/test:sync_integration_tests/"
@@ -2014,7 +2016,7 @@
             "os": "Windows-10-19045"
           },
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 17
+          "shards": 19
         },
         "test": "headless_shell_wpt",
         "test_id_prefix": "ninja://:headless_shell_wpt/"

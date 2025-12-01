@@ -25,7 +25,9 @@
 #include "src/objects/js-locale-inl.h"
 #include "src/objects/js-locale.h"
 #include "src/objects/js-number-format-inl.h"
+#ifdef V8_TEMPORAL_SUPPORT
 #include "src/objects/js-temporal-objects.h"
+#endif  // V8_TEMPORAL_SUPPORT
 #include "src/objects/managed-inl.h"
 #include "src/objects/objects-inl.h"
 #include "src/objects/option-utils.h"
@@ -230,7 +232,13 @@ icu::UnicodeString Intl::ToICUUnicodeString(Isolate* isolate,
   // attacker model) and we therefore need to use an unsigned int here when
   // comparing it against the kShortStringSize.
   uint32_t length = string->length();
-  DCHECK_LE(offset, length);
+  // As the length is untrusted, we should also double-check the offset here.
+  // Technically it's fine for the offset to go out-of-bounds since it will
+  // only cause an OOB read (not write) outside the sandbox, but we still want
+  // to avoid these issues. An alternative would be for this function to
+  // allocate temporary buffers inside the sandbox, then there would be no need
+  // for additional bounds checks here (since we're using 32-bit sizes/offsets).
+  SBXCHECK_LE(offset, length);
   if (flat.IsOneByte() && length <= kShortStringSize) {
     CopyChars(short_string_buffer, flat.ToOneByteVector().begin(), length);
     uchar_buffer = short_string_buffer;
@@ -525,7 +533,8 @@ Handle<JSObject> InnerAddElement(Isolate* isolate, DirectHandle<JSArray> array,
   JSObject::AddProperty(isolate, element, factory->value_string(), value, NONE);
   // TODO(victorgomes): Temporarily forcing a fatal error here in case of
   // overflow, until Intl::AddElement can handle exceptions.
-  if (JSObject::AddDataElement(array, index, element, NONE).IsNothing()) {
+  if (JSObject::AddDataElement(isolate, array, index, element, NONE)
+          .IsNothing()) {
     FATAL("Fatal JavaScript invalid size error when adding element");
     UNREACHABLE();
   }
@@ -677,13 +686,13 @@ MaybeDirectHandle<Object> Intl::LegacyUnwrapReceiver(
 
 namespace {
 
-bool IsTwoLetterLanguage(const std::string& locale) {
+bool IsTwoLetterLanguage(std::string_view locale) {
   // Two letters, both in range 'a'-'z'...
   return locale.length() == 2 && IsAsciiLower(locale[0]) &&
          IsAsciiLower(locale[1]);
 }
 
-bool IsDeprecatedOrLegacyLanguage(const std::string& locale) {
+bool IsDeprecatedOrLegacyLanguage(std::string_view locale) {
   //  Check if locale is one of the deprecated language tags:
   return locale == "in" || locale == "iw" || locale == "ji" || locale == "jw" ||
          locale == "mo" ||
@@ -691,26 +700,49 @@ bool IsDeprecatedOrLegacyLanguage(const std::string& locale) {
          locale == "sh" || locale == "tl" || locale == "no";
 }
 
-bool IsStructurallyValidLanguageTag(const std::string& tag) {
+bool IsStructurallyValidLanguageTag(std::string_view tag) {
   return JSLocale::StartsWithUnicodeLanguageId(tag);
 }
 
-// Canonicalize the locale.
-// https://tc39.github.io/ecma402/#sec-canonicalizelanguagetag,
-// including type check and structural validity check.
 Maybe<std::string> CanonicalizeLanguageTag(Isolate* isolate,
-                                           const std::string& locale_in) {
-  std::string locale = locale_in;
+                                           DirectHandle<Object> locale_in) {
+  DirectHandle<String> locale_str;
+  // This does part of the validity checking spec'ed in CanonicalizeLocaleList:
+  // 7c ii. If Type(kValue) is not String or Object, throw a TypeError
+  // exception.
+  // 7c iii. Let tag be ? ToString(kValue).
+  // 7c iv. If IsStructurallyValidLanguageTag(tag) is false, throw a
+  // RangeError exception.
 
-  if (locale.empty() ||
-      !String::IsAscii(locale.data(), static_cast<int>(locale.length()))) {
+  if (IsString(*locale_in)) {
+    locale_str = Cast<String>(locale_in);
+  } else if (IsJSReceiver(*locale_in)) {
+    ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, locale_str,
+                                     Object::ToString(isolate, locale_in),
+                                     Nothing<std::string>());
+  } else {
+    THROW_NEW_ERROR_RETURN_VALUE(isolate,
+                                 NewTypeError(MessageTemplate::kLanguageID),
+                                 Nothing<std::string>());
+  }
+  std::string locale(locale_str->ToCString().get());
+  return Intl::ValidateAndCanonicalizeUnicodeLocaleId(isolate, locale);
+}
+
+}  // anonymous namespace
+
+// static
+Maybe<std::string> Intl::ValidateAndCanonicalizeUnicodeLocaleId(
+    Isolate* isolate, std::string_view locale_in) {
+  if (!IsStructurallyValidLanguageTag(locale_in)) {
     THROW_NEW_ERROR_RETURN_VALUE(
         isolate,
-        NewRangeError(
-            MessageTemplate::kInvalidLanguageTag,
-            isolate->factory()->NewStringFromAsciiChecked(locale.c_str())),
+        NewRangeError(MessageTemplate::kInvalidLanguageTag,
+                      isolate->factory()->NewStringFromAsciiChecked(locale_in)),
         Nothing<std::string>());
   }
+
+  std::string locale(locale_in);
 
   // Optimize for the most common case: a 2-letter language code in the
   // canonical form/lowercase that is not one of the deprecated codes
@@ -772,39 +804,6 @@ Maybe<std::string> CanonicalizeLanguageTag(Isolate* isolate,
 
   return maybe_to_language_tag;
 }
-
-Maybe<std::string> CanonicalizeLanguageTag(Isolate* isolate,
-                                           DirectHandle<Object> locale_in) {
-  DirectHandle<String> locale_str;
-  // This does part of the validity checking spec'ed in CanonicalizeLocaleList:
-  // 7c ii. If Type(kValue) is not String or Object, throw a TypeError
-  // exception.
-  // 7c iii. Let tag be ? ToString(kValue).
-  // 7c iv. If IsStructurallyValidLanguageTag(tag) is false, throw a
-  // RangeError exception.
-
-  if (IsString(*locale_in)) {
-    locale_str = Cast<String>(locale_in);
-  } else if (IsJSReceiver(*locale_in)) {
-    ASSIGN_RETURN_ON_EXCEPTION_VALUE(isolate, locale_str,
-                                     Object::ToString(isolate, locale_in),
-                                     Nothing<std::string>());
-  } else {
-    THROW_NEW_ERROR_RETURN_VALUE(isolate,
-                                 NewTypeError(MessageTemplate::kLanguageID),
-                                 Nothing<std::string>());
-  }
-  std::string locale(locale_str->ToCString().get());
-
-  if (!IsStructurallyValidLanguageTag(locale)) {
-    THROW_NEW_ERROR_RETURN_VALUE(
-        isolate, NewRangeError(MessageTemplate::kLocaleBadParameters),
-        Nothing<std::string>());
-  }
-  return CanonicalizeLanguageTag(isolate, locale);
-}
-
-}  // anonymous namespace
 
 Maybe<std::vector<std::string>> Intl::CanonicalizeLocaleList(
     Isolate* isolate, DirectHandle<Object> locales,
@@ -2105,7 +2104,7 @@ MaybeDirectHandle<JSArray> CreateArrayFromList(
     DirectHandle<String> value =
         factory->NewStringFromUtf8(base::CStrVector(part.c_str()))
             .ToHandleChecked();
-    MAYBE_RETURN(JSObject::AddDataElement(array, i, value, attr), {});
+    MAYBE_RETURN(JSObject::AddDataElement(isolate, array, i, value, attr), {});
   }
   // 5. Return array.
   return array;
@@ -2976,9 +2975,11 @@ bool Intl::IsValidTimeZoneName(const icu::TimeZone& tz) {
 
 // Function to support Temporal
 std::string Intl::TimeZoneIdFromIndex(int32_t index) {
+#ifdef V8_TEMPORAL_SUPPORT
   if (index == JSTemporalTimeZone::kUTCTimeZoneIndex) {
     return "UTC";
   }
+#endif  // V8_TEMPORAL_SUPPORT
   std::unique_ptr<icu::StringEnumeration> enumeration(
       icu::TimeZone::createEnumeration());
   int32_t curr = 0;

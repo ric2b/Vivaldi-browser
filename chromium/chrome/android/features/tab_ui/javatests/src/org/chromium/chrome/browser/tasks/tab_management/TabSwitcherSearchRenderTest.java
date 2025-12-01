@@ -25,14 +25,17 @@ import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.night_mode.ChromeNightModeTestUtils;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
 import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
+import org.chromium.chrome.test.transit.Journeys;
 import org.chromium.chrome.test.transit.hub.TabSwitcherSearchStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.ActivityTestUtils;
@@ -43,12 +46,20 @@ import org.chromium.ui.test.util.RenderTestRule.Component;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 /** Tests for search in the tab switcher. */
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
+// TODO(crbug.com/419289558): Re-enable color surface feature flags.
+@Features.DisableFeatures({
+    ChromeFeatureList.ANDROID_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_SURFACE_COLOR_UPDATE,
+    ChromeFeatureList.GRID_TAB_SWITCHER_UPDATE,
+    ChromeFeatureList.ANDROID_THEME_MODULE
+})
 public class TabSwitcherSearchRenderTest {
     private static final int SERVER_PORT = 13245;
 
@@ -114,11 +125,8 @@ public class TabSwitcherSearchRenderTest {
     @Restriction(PHONE)
     public void testHubSearchBox_Phone_Incognito() throws IOException {
         ChromeTabbedActivity cta = mCtaTestRule.getActivity();
-        TabSwitcherSearchTestUtils.openUrls(
-                        mTestServer,
-                        mInitialPage,
-                        Arrays.asList("/chrome/test/data/android/navigate/one.html"),
-                        /* incognito= */ true)
+        List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
+        Journeys.createIncognitoTabsWithWebPages(mInitialPage, mTestServer.getURLs(urlsToOpen))
                 .openIncognitoTabSwitcher();
 
         mRenderTestRule.render(
@@ -158,11 +166,8 @@ public class TabSwitcherSearchRenderTest {
     @Restriction(TABLET)
     public void testHubSearchLoupe_Tablet_Incognito() throws IOException {
         ChromeTabbedActivity cta = mCtaTestRule.getActivity();
-        TabSwitcherSearchTestUtils.openUrls(
-                        mTestServer,
-                        mInitialPage,
-                        Arrays.asList("/chrome/test/data/android/navigate/one.html"),
-                        /* incognito= */ true)
+        List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
+        Journeys.createIncognitoTabsWithWebPages(mInitialPage, mTestServer.getURLs(urlsToOpen))
                 .openIncognitoTabSwitcher();
 
         mRenderTestRule.render(
@@ -176,12 +181,10 @@ public class TabSwitcherSearchRenderTest {
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testZeroPrefixSuggestions_ShownInRegular(boolean nightModeEnabled)
             throws IOException {
+        List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/test.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer,
-                                mInitialPage,
-                                Arrays.asList("/chrome/test/data/android/test.html"),
-                                /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(true);
@@ -195,12 +198,10 @@ public class TabSwitcherSearchRenderTest {
     @MediumTest
     @Feature({"RenderTest"})
     public void testZeroPrefixSuggestions_HiddenInIncognito() throws IOException {
+        List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/test.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer,
-                                mInitialPage,
-                                Arrays.asList("/chrome/test/data/android/test.html"),
-                                /* incognito= */ true)
+                Journeys.createIncognitoTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openIncognitoTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(false);
@@ -215,12 +216,10 @@ public class TabSwitcherSearchRenderTest {
     @Feature({"RenderTest"})
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testRenderTypedSuggestions(boolean nightModeEnabled) throws IOException {
+        List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer,
-                                mInitialPage,
-                                Arrays.asList("/chrome/test/data/android/navigate/one.html"),
-                                /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("one.html");
@@ -235,12 +234,10 @@ public class TabSwitcherSearchRenderTest {
     @MediumTest
     @Feature({"RenderTest"})
     public void testRenderTypedSuggestions_Incognito() throws IOException {
+        List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer,
-                                mInitialPage,
-                                Arrays.asList("/chrome/test/data/android/navigate/one.html"),
-                                /* incognito= */ true)
+                Journeys.createIncognitoTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openIncognitoTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("one.html");

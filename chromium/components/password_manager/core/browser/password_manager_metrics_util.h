@@ -67,6 +67,8 @@ enum UIDisplayDisposition {
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // Metrics: "PasswordManager.UIDismissalReason"
+//
+// LINT.IfChange(UIDismissalReason)
 enum UIDismissalReason {
   // We use this to mean both "Bubble lost focus" and "No interaction with the
   // infobar".
@@ -86,8 +88,10 @@ enum UIDismissalReason {
   CLICKED_MANAGE_PASSWORD = 13,
   CLICKED_GOT_IT = 14,
   CLICKED_ABOUT_PASSWORD_CHANGE = 15,
+  CLICKED_NOT_NOW = 16,
   NUM_UI_RESPONSES,
 };
+// LINT.ThenChange(/tools/metrics/histograms/metadata/password/enums.xml:PasswordManagerUIDismissalReason)
 
 // Enum representing the different leak detection dialogs shown to the user.
 // Corresponds to LeakDetectionDialogType suffix in histogram_suffixes_list.xml
@@ -414,9 +418,8 @@ enum class AddCredentialFromSettingsUserInteractions {
 };
 
 // Metrics: PasswordManager.MoveToAccountStoreTrigger.
-// This must be kept in sync with the enum in
-// password_move_multiple_passwords_to_account_dialog.ts
-// (in chrome/browser/resources/settings/autofill_page).
+// This must be kept in sync with the enum in move_single_password_dialog.ts (in
+// chrome/browser/resources/password_manager/dialogs/).
 // These values are persisted to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 enum class MoveToAccountStoreTrigger {
@@ -597,6 +600,24 @@ enum class PasswordManagerCredentialRemovalReason {
   kDeletingUndecryptablePasswords = 3,  // Stored as (1<<3) in the bit vector.
   kDeleteAllPasswordManagerData = 4,    // Stored as (1<<4) in the bit vector.
   kMaxValue = kDeleteAllPasswordManagerData,
+};
+
+// Describes the combination of duplicate credential types found in a password
+// dropdown when it is shown.
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused. Remember to update
+// PasswordDropdownDuplicateCredentialsType in
+// tools/metrics/histograms/password/enums.xml if you make changes here.
+enum class PasswordDropdownDuplicateCredentialsType {
+  // Only duplicate passwords for the same username were found.
+  kDuplicatePasswords = 0,
+  // Only duplicate passkeys for the same username were found.
+  kDuplicatePasskeys = 1,
+  // At least one password and a passkey for the same username were found. This
+  // category is used if this condition is met, even if other duplications
+  // (e.g., duplicate passwords) also exist.
+  kDuplicatePasswordsAndPasskeys = 2,
+  kMaxValue = kDuplicatePasswordsAndPasskeys,
 };
 
 std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
@@ -843,6 +864,13 @@ void AddPasswordRemovalReason(
 // passwords popup / dropdown. Also emits a user action for the displayed
 // dropdown.
 void MaybeLogMetricsForPasswordAndWebauthnCounts(
+    const std::vector<autofill::Suggestion>& suggestions,
+    bool is_for_webauthn_request);
+
+// Logs metrics about duplicate credentials in the passwords popup / dropdown.
+// The first metric is whether the dropdown has any duplicate credentials. The
+// second metric is the type of duplicate credentials if there are any.
+void LogDuplicateCredentialsMetrics(
     const std::vector<autofill::Suggestion>& suggestions,
     bool is_for_webauthn_request);
 

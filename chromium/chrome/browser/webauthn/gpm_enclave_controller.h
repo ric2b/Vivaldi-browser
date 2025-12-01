@@ -43,13 +43,16 @@ enum class FidoRequestType : uint8_t;
 enum class UserVerificationRequirement;
 namespace enclave {
 struct CredentialRequest;
-class ICloudRecoveryKey;
 }  // namespace enclave
 }  // namespace device
 
 namespace sync_pb {
 class WebauthnCredentialSpecifics;
 }  // namespace sync_pb
+
+namespace trusted_vault {
+class ICloudRecoveryKey;
+}  // namespace trusted_vault
 
 enum class EnclaveEnabledStatus;
 class Profile;
@@ -97,6 +100,12 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
   GPMEnclaveController& operator=(GPMEnclaveController&&) = delete;
   ~GPMEnclaveController() override;
 
+  // Determines the enclave user verification early depending on the enclave
+  // state and UV requirements. Can return `std::nullopt` if the enclave is not
+  // ready. This is used for immediate mode requests.
+  std::optional<EnclaveUserVerificationMethod>
+  GetEnclaveUserVerificationMethod();
+
   // Returns true if the enclave is active for this request. Crashes the address
   // space if this hasn't yet been resolved.
   bool is_active() const;
@@ -114,6 +123,8 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
   const std::vector<sync_pb::WebauthnCredentialSpecifics>& creds() const;
 
   AccountState account_state_for_testing() const;
+  // Returns true if the account is ready to use.
+  bool is_account_ready() const;
 
  private:
   // GPMEnclaveTransaction::Delegate:
@@ -171,18 +182,18 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
   // Called when Chrome has retrieved the iCloud recovery keys present in the
   // current device.
   void OnICloudKeysRetrievedForEnrollment(
-      std::vector<std::unique_ptr<device::enclave::ICloudRecoveryKey>>
+      std::vector<std::unique_ptr<trusted_vault::ICloudRecoveryKey>>
           local_icloud_keys);
 
   // Enrolls a specific iCloud keychain recovery key. |key| may be null, in
   // which case we skip to the next step.
   void EnrollICloudRecoveryKey(
-      std::unique_ptr<device::enclave::ICloudRecoveryKey> key);
+      std::unique_ptr<trusted_vault::ICloudRecoveryKey> key);
 
   // Called when Chrome has retrieved the iCloud recovery keys present in the
   // current device.
   void OnICloudKeysRetrievedForRecovery(
-      std::vector<std::unique_ptr<device::enclave::ICloudRecoveryKey>>
+      std::vector<std::unique_ptr<trusted_vault::ICloudRecoveryKey>>
           local_icloud_keys);
 #endif  // BUILDFLAG(IS_MAC)
 
@@ -227,16 +238,6 @@ class GPMEnclaveController : public AuthenticatorRequestDialogModel::Observer,
 
   // Starts a create() or get() action with the enclave.
   void StartTransaction();
-
-  // Called when the UI has reached a state where it needs to do an enclave
-  // operation, and an OAuth token for the enclave has been fetched.
-  void MaybeHashPinAndStartEnclaveTransaction(std::optional<std::string> token);
-
-  // Called when the UI has reached a state where it needs to do an enclave
-  // operation, an OAuth token for the enclave has been fetched, and any PIN
-  // hashing has been completed.
-  void StartEnclaveTransaction(std::optional<std::string> token,
-                               std::unique_ptr<device::enclave::ClaimedPIN>);
 
   // Accessors for the profile pref that counts the number of consecutive failed
   // PIN attempts to know when a lockout will happen.

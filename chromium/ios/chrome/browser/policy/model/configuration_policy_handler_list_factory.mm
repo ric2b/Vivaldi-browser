@@ -9,6 +9,7 @@
 #import "components/autofill/core/common/autofill_prefs.h"
 #import "components/bookmarks/common/bookmark_pref_names.h"
 #import "components/bookmarks/managed/managed_bookmarks_policy_handler.h"
+#import "components/collaboration/public/pref_names.h"
 #import "components/commerce/core/pref_names.h"
 #import "components/component_updater/pref_names.h"
 #import "components/content_settings/core/common/pref_names.h"
@@ -22,6 +23,7 @@
 #import "components/history/core/common/pref_names.h"
 #import "components/lens/lens_overlay_permission_utils.h"
 #import "components/metrics/metrics_pref_names.h"
+#import "components/omnibox/browser/omnibox_prefs.h"
 #import "components/optimization_guide/core/feature_registry/feature_registration.h"
 #import "components/password_manager/core/common/password_manager_pref_names.h"
 #import "components/policy/core/browser/boolean_disabling_policy_handler.h"
@@ -164,6 +166,15 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { policy::key::kProfileSeparationDataMigrationSettings,
     prefs::kProfileSeparationDataMigrationSettings,
     base::Value::Type::INTEGER },
+  { policy::key::kProvisionalNotificationsAllowed,
+    prefs::kProvisionalNotificationsAllowedByPolicy,
+    base::Value::Type::BOOLEAN },
+  { policy::key::kAIModeSearchSuggestSettings,
+    omnibox::kAIModeSearchSuggestSettings,
+    base::Value::Type::INTEGER },
+  { policy::key::kAIModeSettings,
+    omnibox::kAIModeSettings,
+    base::Value::Type::INTEGER },
 };
 // clang-format on
 
@@ -239,11 +250,24 @@ std::unique_ptr<policy::ConfigurationPolicyHandlerList> BuildPolicyHandlerList(
 
   std::vector<policy::GenAiDefaultSettingsPolicyHandler::GenAiPolicyDetails>
       gen_ai_default_policies;
-  // No GenAI policies are currently covered by GenAiDefaultSettings on iOS.
-  // When eligible policies are added, they will be handled here.
+  gen_ai_default_policies.emplace_back(
+      policy::key::kAIModeSearchSuggestSettings,
+      omnibox::kAIModeSearchSuggestSettings,
+      policy::GenAiDefaultSettingsPolicyHandler::PolicyValueToPrefMap(
+          {{0, 0}, {1, 0}, {2, 1}}));
+  gen_ai_default_policies.emplace_back(
+      policy::key::kAIModeSettings, omnibox::kAIModeSettings,
+      policy::GenAiDefaultSettingsPolicyHandler::PolicyValueToPrefMap(
+          {{0, 0}, {1, 0}, {2, 1}}));
   handlers->AddHandler(
       std::make_unique<policy::GenAiDefaultSettingsPolicyHandler>(
           std::move(gen_ai_default_policies)));
+
+  handlers->AddHandler(std::make_unique<policy::CloudUserOnlyPolicyHandler>(
+      std::make_unique<SimplePolicyHandler>(
+          policy::key::kTabGroupSharingSettings,
+          collaboration::prefs::kSharedTabGroupsManagedAccountSetting,
+          base::Value::Type::INTEGER)));
 
   handlers->AddHandler(
       std::make_unique<

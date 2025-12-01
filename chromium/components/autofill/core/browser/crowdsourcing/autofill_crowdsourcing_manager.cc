@@ -139,6 +139,7 @@ enum class RequestType {
 enum class UploadType {
   kVote,
   kMetadata,
+  kSecondaryFormSignature,
 };
 
 // Returns the base URL for the autofill server.
@@ -316,7 +317,8 @@ net::NetworkTrafficAnnotationTag GetNetworkTrafficAnnotation(
 // A field is active if it contributes to the form signature and it is are
 // included in queries to the Autofill server.
 size_t CountActiveFieldsInForms(
-    const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms) {
+    const std::vector<raw_ptr<const FormStructure, VectorExperimental>>&
+        forms) {
   size_t active_field_count = 0;
   for (const FormStructure* form : forms) {
     active_field_count += std::ranges::count_if(
@@ -382,6 +384,10 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
     out << Tr{} << "last_address_form_submitted:"
         << upload.last_address_form_submitted();
   }
+  if (upload.has_secondary_form_signature()) {
+    out << Tr{}
+        << "secondary_form_signature:" << upload.secondary_form_signature();
+  }
   if (upload.has_last_credit_card_form_submitted()) {
     out << Tr{} << "last_credit_card_form_submitted:"
         << upload.last_credit_card_form_submitted();
@@ -417,6 +423,19 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
   return out;
 }
 
+// Get the preference name for the upload event based on the `upload_type`.
+std::string_view GetUploadEventPreferenceName(UploadType upload_type) {
+  switch (upload_type) {
+    case UploadType::kVote:
+      return prefs::kAutofillVoteUploadEvents;
+    case UploadType::kMetadata:
+      return prefs::kAutofillMetadataUploadEvents;
+    case UploadType::kSecondaryFormSignature:
+      return prefs::kAutofillVoteSecondaryFormSignatureUploadEvents;
+  }
+  NOTREACHED();
+}
+
 // Returns true if part of upload of a form with `form_signature`, triggered by
 // `form_submission_source` should be throttled/suppressed. This is true if
 // `pref_service` indicates that this upload has already happened within the
@@ -428,6 +447,8 @@ LogBuffer& operator<<(LogBuffer& out, const AutofillUploadContents& upload) {
 // metadata part of the upload. Metadata throttling is shared by Autofill and
 // the Password Manager, ensuring that together they don't upload metadata more
 // frequently than desired.
+// If `upload_type` equals `UploadType::kSecondaryFormSignature`,
+// `form_signature` is assumed to be the secondary (alternative) form signature.
 bool ShouldThrottleUpload(FormSignature form_signature,
                           UploadType upload_type,
                           base::TimeDelta throttle_reset_period,
@@ -446,9 +467,7 @@ bool ShouldThrottleUpload(FormSignature form_signature,
     AutofillCrowdsourcingManager::ClearUploadHistory(pref_service);
   }
 
-  std::string_view preference = upload_type == UploadType::kVote
-                                    ? prefs::kAutofillVoteUploadEvents
-                                    : prefs::kAutofillMetadataUploadEvents;
+  std::string_view preference = GetUploadEventPreferenceName(upload_type);
 
   // Get the key for the upload bucket and extract the current bitfield value.
   static constexpr size_t kNumUploadBuckets = 1021;
@@ -466,6 +485,8 @@ bool ShouldThrottleUpload(FormSignature form_signature,
       mask = (1 << bit);
       break;
     }
+    // The secondary form signature should be uploaded only once (go/bnxhp).
+    case UploadType::kSecondaryFormSignature:
     case UploadType::kMetadata:
       mask = 1;
       break;
@@ -708,7 +729,7 @@ bool AutofillCrowdsourcingManager::IsEnabled() const {
 }
 
 bool AutofillCrowdsourcingManager::StartQueryRequest(
-    const std::vector<raw_ptr<FormStructure, VectorExperimental>>& forms,
+    const std::vector<raw_ptr<const FormStructure, VectorExperimental>>& forms,
     std::optional<net::IsolationInfo> isolation_info,
     base::OnceCallback<void(std::optional<QueryResponse>)> callback) {
   ScopedCallbackRunner<void(std::optional<QueryResponse>)>
@@ -789,6 +810,8 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
 
   PrefService* prefs = client_->GetPrefs();
   const FormSignature form_signature(upload_contents[0].form_signature());
+  const FormSignature secondary_form_signature(
+      upload_contents[0].secondary_form_signature());
   // Autofill vote uploads are limited via throttling so that only one vote is
   // uploaded per form_submission_source and form signature in a given period of
   // time.
@@ -803,6 +826,17 @@ bool AutofillCrowdsourcingManager::StartUploadRequest(
       !base::FeatureList::IsEnabled(features::test::kAutofillUploadThrottling);
 
   AutofillMetrics::LogUploadEvent(form_submission_source, allow_upload);
+
+  // Secondary form signature throttling does not cancel the upload, but only
+  // clears the secondary form signature.
+  if (secondary_form_signature &&
+      ShouldThrottleUpload(
+          secondary_form_signature, UploadType::kSecondaryFormSignature,
+          throttle_reset_period_, prefs, form_submission_source)) {
+    for (AutofillUploadContents& upload : upload_contents) {
+      upload.clear_secondary_form_signature();
+    }
+  }
 
   // Metadata throttling does not cancel the upload, but only clears all
   // metadata related entries.

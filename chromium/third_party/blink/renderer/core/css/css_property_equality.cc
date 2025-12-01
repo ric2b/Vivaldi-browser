@@ -292,6 +292,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kCaretColor:
       return a.CaretColor() == b.CaretColor() &&
              a.InternalVisitedCaretColor() == b.InternalVisitedCaretColor();
+    case CSSPropertyID::kCaretShape:
+      return a.CaretShape() == b.CaretShape();
     case CSSPropertyID::kClear:
       return a.Clear() == b.Clear();
     case CSSPropertyID::kClip:
@@ -533,8 +535,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return a.MasonryDirection() == b.MasonryDirection();
     case CSSPropertyID::kMasonryFill:
       return a.MasonryFill() == b.MasonryFill();
-    case CSSPropertyID::kMasonrySlack:
-      return a.MasonrySlack() == b.MasonrySlack();
+    case CSSPropertyID::kItemTolerance:
+      return a.ItemTolerance() == b.ItemTolerance();
     case CSSPropertyID::kMasonryTemplateTracks:
       return a.MasonryTemplateTracks() == b.MasonryTemplateTracks();
     case CSSPropertyID::kMasonryTrackEnd:
@@ -741,6 +743,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
       return (a.GetTextEmphasisFill() == b.GetTextEmphasisFill()) &&
              (a.GetTextEmphasisMark() == b.GetTextEmphasisMark()) &&
              (a.TextEmphasisCustomMark() == b.TextEmphasisCustomMark());
+    case CSSPropertyID::kTextGrow:
+      return a.TextGrow() == b.TextGrow();
     case CSSPropertyID::kTextIndent:
       return a.TextIndent() == b.TextIndent();
     case CSSPropertyID::kTextOverflow:
@@ -750,6 +754,8 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
              b.GetFontDescription().TextRendering();
     case CSSPropertyID::kTextShadow:
       return base::ValuesEquivalent(a.TextShadow(), b.TextShadow());
+    case CSSPropertyID::kTextShrink:
+      return a.TextShrink() == b.TextShrink();
     case CSSPropertyID::kTextSizeAdjust:
       return a.GetTextSizeAdjust() == b.GetTextSizeAdjust();
     case CSSPropertyID::kTextSpacingTrim:
@@ -1167,8 +1173,6 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kInsetInlineEnd:
     case CSSPropertyID::kInsetBlockStart:
     case CSSPropertyID::kInsetBlockEnd:
-    case CSSPropertyID::kInternalOverflowBlock:
-    case CSSPropertyID::kInternalOverflowInline:
     case CSSPropertyID::kOverflowBlock:
     case CSSPropertyID::kOverflowInline:
     case CSSPropertyID::kOverscrollBehaviorBlock:
@@ -1288,6 +1292,11 @@ bool CSSPropertyEquality::PropertiesEqual(const PropertyHandle& property,
     case CSSPropertyID::kPlaceItems:
     case CSSPropertyID::kPlaceSelf:
     case CSSPropertyID::kPositionTry:
+    case CSSPropertyID::kRowRule:
+    case CSSPropertyID::kRule:
+    case CSSPropertyID::kRuleColor:
+    case CSSPropertyID::kRuleWidth:
+    case CSSPropertyID::kRuleStyle:
     case CSSPropertyID::kScrollMargin:
     case CSSPropertyID::kScrollPadding:
     case CSSPropertyID::kScrollStart:

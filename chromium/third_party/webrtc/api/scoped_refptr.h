@@ -78,7 +78,7 @@ class ABSL_NULLABILITY_COMPATIBLE scoped_refptr {
   scoped_refptr() : ptr_(nullptr) {}
   scoped_refptr(std::nullptr_t) : ptr_(nullptr) {}  // NOLINT(runtime/explicit)
 
-  explicit scoped_refptr(absl::Nullable<T*> p) : ptr_(p) {
+  explicit scoped_refptr(T* absl_nullable p) : ptr_(p) {
     if (ptr_)
       ptr_->AddRef();
   }
@@ -121,7 +121,7 @@ class ABSL_NULLABILITY_COMPATIBLE scoped_refptr {
     return retVal;
   }
 
-  scoped_refptr<T>& operator=(absl::Nullable<T*> p) {
+  scoped_refptr<T>& operator=(T* absl_nullable p) {
     // AddRef first so that self assignment should work
     if (p)
       p->AddRef();
@@ -151,7 +151,7 @@ class ABSL_NULLABILITY_COMPATIBLE scoped_refptr {
     return *this;
   }
 
-  void swap(absl::Nonnull<T**> pp) noexcept {
+  void swap(T** absl_nonnull pp) noexcept {
     T* p = ptr_;
     ptr_ = *pp;
     *pp = p;
@@ -219,10 +219,12 @@ bool operator<(const scoped_refptr<T>& a, const scoped_refptr<U>& b) {
 
 }  // namespace webrtc
 
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 // Backwards compatible alias.
 // TODO: bugs.webrtc.org/42225969 - Deprecate and remove.
 using ::webrtc::scoped_refptr;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // API_SCOPED_REFPTR_H_

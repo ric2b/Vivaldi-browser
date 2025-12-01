@@ -15,6 +15,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/tabs/features.h"
 #include "components/lens/buildflags.h"
 #include "components/lens/lens_features.h"
 #include "printing/buildflags/buildflags.h"
@@ -22,6 +23,10 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
+
+// Android chrome shortcuts are implemented in KeyboardShortcuts.java.
+static_assert(!BUILDFLAG(IS_ANDROID));
 
 namespace {
 
@@ -58,9 +63,6 @@ const AcceleratorMapping kAcceleratorMap[] = {
     {ui::VKEY_G, ui::EF_PLATFORM_ACCELERATOR, IDC_FIND_NEXT},
     {ui::VKEY_G, ui::EF_SHIFT_DOWN | ui::EF_PLATFORM_ACCELERATOR,
      IDC_FIND_PREVIOUS},
-#if !BUILDFLAG(IS_CHROMEOS)
-    {ui::VKEY_G, ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN, IDC_GLIC_TOGGLE_FOCUS},
-#endif
     {ui::VKEY_L, ui::EF_PLATFORM_ACCELERATOR, IDC_FOCUS_LOCATION},
     {ui::VKEY_O, ui::EF_PLATFORM_ACCELERATOR, IDC_OPEN_FILE},
     {ui::VKEY_P, ui::EF_PLATFORM_ACCELERATOR, IDC_PRINT},
@@ -250,6 +252,15 @@ const AcceleratorMapping kAcceleratorMap[] = {
 #endif  // !BUILDFLAG(IS_MAC)
 };
 
+const AcceleratorMapping kTabGroupAcceleratorMap[] = {
+    // Tab group commands.
+    {ui::VKEY_C, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_ADD_NEW_TAB_TO_GROUP},
+    {ui::VKEY_P, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_CREATE_NEW_TAB_GROUP},
+    {ui::VKEY_X, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_FOCUS_NEXT_TAB_GROUP},
+    {ui::VKEY_Z, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_FOCUS_PREV_TAB_GROUP},
+    {ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, IDC_CLOSE_TAB_GROUP},
+};
+
 const AcceleratorMapping kDevToolsAcceleratorMap[] = {
     {ui::VKEY_F12, ui::EF_NONE, IDC_DEV_TOOLS_TOGGLE},
 #if !BUILDFLAG(IS_MAC)
@@ -311,6 +322,12 @@ std::vector<AcceleratorMapping> GetAcceleratorList() {
       accelerators->insert(accelerators->begin(),
                            std::begin(kUIDebugAcceleratorMap),
                            std::end(kUIDebugAcceleratorMap));
+    }
+
+    if (tabs::AreTabGroupShortcutsEnabled()) {
+      accelerators->insert(accelerators->end(),
+                           std::begin(kTabGroupAcceleratorMap),
+                           std::end(kTabGroupAcceleratorMap));
     }
   }
 

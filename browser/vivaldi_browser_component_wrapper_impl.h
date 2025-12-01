@@ -7,6 +7,7 @@
 #include "base/scoped_observation.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_action_dispatcher.h"
+#include "chrome/browser/ui/performance_controls/tab_resource_usage_collector.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "extensions/vivaldi_browser_component_wrapper.h"
 
@@ -259,7 +260,7 @@ class VivaldiBrowserComponentWrapperImpl
                                      uint64_t& memory_usage,
                                      bool& is_discarded) override;
   void LoadTabContentsIfNecessary(content::WebContents* web_contents) override;
-  std::vector<TabAlertState> GetTabAlertStatesForContents(
+  std::vector<tabs::TabAlert> GetTabAlertStatesForContents(
       content::WebContents* contents) override;
   std::unique_ptr<translate::TranslateUIDelegate> GetTranslateUIDelegate(
       content::WebContents* web_contents,

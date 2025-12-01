@@ -37,6 +37,7 @@ struct PartnerDetails {
   std::string thumbnail;
   std::string favicon;
   std::string favicon_url;
+  std::string display_url;
   bool folder = false;
   bool speeddial = false;
 };

@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
 import * as Platform from '../../../../core/platform/platform.js';
@@ -180,12 +182,8 @@ export interface FlameChartDelegate {
   containingElement?: () => HTMLElement;
 }
 
-interface GroupExpansionState {
-  [groupName: string]: boolean;
-}
-interface GroupHiddenState {
-  [groupName: string]: boolean;
-}
+type GroupExpansionState = Record<string, boolean>;
+type GroupHiddenState = Record<string, boolean>;
 
 interface PopoverState {
   // Index of the last entry the popover was shown over.
@@ -267,6 +265,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   private contextMenu?: UI.ContextMenu.ContextMenu;
   private viewportElement: HTMLElement;
   private canvas: HTMLCanvasElement;
+  private context: CanvasRenderingContext2D;
   private popoverElement: HTMLElement;
   private readonly markerHighlighElement: HTMLElement;
   readonly highlightElement: HTMLElement;
@@ -339,6 +338,8 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     super(true);
     this.#font = `${DEFAULT_FONT_SIZE} ${getFontFamilyForCanvas()}`;
     this.registerRequiredCSS(flameChartStyles);
+    this.registerRequiredCSS(UI.inspectorCommonStyles);
+
     this.contentElement.classList.add('flame-chart-main-pane');
     if (typeof optionalConfig.selectedElementOutline === 'boolean') {
       this.#selectedElementOutlineEnabled = optionalConfig.selectedElementOutline;
@@ -365,6 +366,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
 
     this.viewportElement = this.chartViewport.viewportElement;
     this.canvas = this.viewportElement.createChild('canvas', 'fill');
+    this.context = this.canvas.getContext('2d') as CanvasRenderingContext2D;
     this.candyStripePattern = this.candyStripePatternGray = null;
 
     this.canvas.tabIndex = 0;
@@ -617,7 +619,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const candyStripeCanvas = document.createElement('canvas');
     candyStripeCanvas.width = size;
     candyStripeCanvas.height = size;
-    const ctx = candyStripeCanvas.getContext('2d') as CanvasRenderingContext2D;
+    const ctx = candyStripeCanvas.getContext('2d', {willReadFrequently: true}) as CanvasRenderingContext2D;
 
     // Rotate the stripe by 45deg to the right.
     ctx.translate(size * 0.5, size * 0.5);
@@ -674,11 +676,12 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.updateHighlight();
   }
 
-  timelineData(rebuid?: boolean): FlameChartTimelineData|null {
+  timelineData(rebuild?: boolean): FlameChartTimelineData|null {
     if (!this.dataProvider) {
       return null;
     }
-    const timelineData = this.dataProvider.timelineData(rebuid);
+
+    const timelineData = this.dataProvider.timelineData(rebuild);
     if (timelineData !== this.rawTimelineData ||
         (timelineData && timelineData.entryStartTimes.length !== this.rawTimelineDataLength)) {
       this.processTimelineData(timelineData);
@@ -900,6 +903,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
   updatePopoverContents(popoverElement: Element): void {
     this.popoverElement.removeChildren();
     this.popoverElement.appendChild(popoverElement);
+    // Must update the offset AFTER the new content has been added.
     this.updatePopoverOffset();
     this.lastPopoverState.entryIndex = -1;
   }
@@ -1127,7 +1131,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
 
   private deselectAllEntries(): void {
     this.selectedEntryIndex = -1;
-    this.rawTimelineData?.resetFlowData();
+    this.rawTimelineData?.emptyInitiators();
     this.draw();
   }
 
@@ -1215,7 +1219,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
             (groupIndex >= groups.length - 1 || groups[groupIndex + 1].startLevel > level)) {
           this.selectedEntryIndex = -1;
           // Reset all flow arrows when we deselect the entry.
-          this.rawTimelineData.resetFlowData();
+          this.rawTimelineData.emptyInitiators();
         }
       }
     }
@@ -2068,7 +2072,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
         if (y >= this.groupOffsets[groupIndex] && y < this.groupOffsets[nextIndex]) {
           // This section is used to calculate the position of current group's header
           // If we are in edit mode, the track label is pushed right to make room for the icons.
-          const context = (this.canvas.getContext('2d') as CanvasRenderingContext2D);
+          const context = this.context;
           context.save();
           context.font = this.#font;
           const headerRight = HEADER_LEFT_PADDING + (this.#inTrackConfigEditMode ? EDIT_MODE_TOTAL_ICON_WIDTH : 0) +
@@ -2188,7 +2192,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     });
     const canvasWidth = this.offsetWidth;
     const canvasHeight = this.offsetHeight;
-    const context = (this.canvas.getContext('2d') as CanvasRenderingContext2D);
+    const context = this.context;
 
     context.save();
     const ratio = window.devicePixelRatio;
@@ -2654,7 +2658,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
    * there is no group being hovered.
    */
   private drawGroupHeaders(width: number, height: number): void {
-    const context = (this.canvas.getContext('2d') as CanvasRenderingContext2D);
+    const context = this.context;
     const top = this.chartViewport.scrollOffset();
     const ratio = window.devicePixelRatio;
     if (!this.rawTimelineData) {
@@ -2679,7 +2683,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
 
     context.fillStyle = ThemeSupport.ThemeSupport.instance().getComputedValue('--sys-color-cdt-base-container');
     // Fill the gap between groups.
-    this.forEachGroupInViewport((offset, index, group) => {
+    this.forEachGroupInViewport((offset, _, group) => {
       const paddingHeight = group.style.padding;
       if (paddingHeight < 5) {
         return;
@@ -2695,7 +2699,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     context.strokeStyle = ThemeSupport.ThemeSupport.instance().getComputedValue('--sys-color-neutral-container');
     context.beginPath();
     // Draw a separator line at the beginning of each top-level group (except the first one).
-    this.forEachGroupInViewport((offset, index, group, isFirst) => {
+    this.forEachGroupInViewport((offset, _, group, isFirst) => {
       if (isFirst || group.style.padding < 4) {
         return;
       }
@@ -2799,7 +2803,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     context.beginPath();
     context.stroke();
 
-    this.forEachGroupInViewport((offset, index, group, isFirst, groupHeight) => {
+    this.forEachGroupInViewport((offset, index, group, _isFirst, groupHeight) => {
       if (this.isGroupFocused(index)) {
         const lineWidth = 2;
         const bracketLength = 10;
@@ -3088,7 +3092,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const range = new Common.SegmentedRange.SegmentedRange<string>(mergeCallback);
     const timeWindowLeft = this.chartViewport.windowLeftTime();
     const timeWindowRight = this.chartViewport.windowRightTime();
-    const context = (this.canvas.getContext('2d') as CanvasRenderingContext2D);
+    const context = this.context;
     const groupBarHeight = group.style.height;
     if (!this.rawTimelineData) {
       return;
@@ -3171,9 +3175,9 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     context.save();
     context.scale(ratio, ratio);
     context.translate(0, -top);
-
-    context.fillStyle = '#7f5050';
-    context.strokeStyle = '#7f5050';
+    const arrowColor = ThemeSupport.ThemeSupport.instance().getComputedValue('--sys-color-on-surface-subtle');
+    context.fillStyle = arrowColor;
+    context.strokeStyle = arrowColor;
 
     for (let i = 0; i < td.initiatorsData.length; ++i) {
       const initiatorsData = td.initiatorsData[i];
@@ -3227,16 +3231,18 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
       const endY = this.levelToOffset(endLevel) + this.levelHeight(endLevel) / 2;
       const lineLength = endX - startX;
 
-      // Make line an arrow if the line is long enough to fit the arrow head. Otherwise, draw a thinner line without the arrow head.
+      context.lineWidth = 1;
+      context.shadowColor = 'rgba(0, 0, 0, 0.3)';
+      context.shadowOffsetX = 2;
+      context.shadowOffsetY = 2;
+      context.shadowBlur = 3;
       if (lineLength > arrowWidth) {
-        context.lineWidth = 0.5;
+        // Add an arrow to the line if the line is long enough.
         context.beginPath();
         context.moveTo(endX, endY);
         context.lineTo(endX - arrowLineWidth, endY - 3);
         context.lineTo(endX - arrowLineWidth, endY + 3);
         context.fill();
-      } else {
-        context.lineWidth = 0.2;
       }
 
       if (initiatorEndsBeforeInitiatedStart) {
@@ -3321,7 +3327,7 @@ export class FlameChart extends Common.ObjectWrapper.eventMixin<EventTypes, type
     const rightBoundary = this.maximumBoundary();
     const timeToPixel = this.chartViewport.timeToPixel();
 
-    const context = (this.canvas.getContext('2d') as CanvasRenderingContext2D);
+    const context = this.context;
     context.save();
     const ratio = window.devicePixelRatio;
     context.scale(ratio, ratio);
@@ -4145,7 +4151,7 @@ export class FlameChartTimelineData {
     );
   }
 
-  resetFlowData(): void {
+  emptyInitiators(): void {
     this.initiatorsData = [];
   }
 }

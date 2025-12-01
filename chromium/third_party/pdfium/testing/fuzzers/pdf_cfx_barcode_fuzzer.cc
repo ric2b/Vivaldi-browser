@@ -8,11 +8,12 @@
 #include "fxbarcode/cfx_barcode.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-  if (size < 2 * sizeof(uint16_t))
+  if (size < 2 * sizeof(uint16_t)) {
     return 0;
+  }
 
   // SAFETY: trusted arguments from fuzzer.
-  auto span = UNSAFE_BUFFERS(pdfium::make_span(data, size));
+  auto span = UNSAFE_BUFFERS(pdfium::span(data, size));
 
   BC_TYPE type =
       static_cast<BC_TYPE>(data[0] % (static_cast<int>(BC_TYPE::kLast) + 1));
@@ -29,8 +30,9 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   barcode->SetWidth(418);
 
   WideString content = WideString::FromUTF16LE(span);
-  if (!barcode->Encode(content.AsStringView()))
+  if (!barcode->Encode(content.AsStringView())) {
     return 0;
+  }
 
   // TODO(tsepez): Output to device.
   return 0;

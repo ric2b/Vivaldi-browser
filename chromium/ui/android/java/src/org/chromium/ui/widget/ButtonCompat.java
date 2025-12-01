@@ -43,7 +43,7 @@ import org.chromium.ui.R;
  */
 @NullMarked
 public class ButtonCompat extends AppCompatButton {
-    private RippleBackgroundHelper mRippleBackgroundHelper;
+    private final RippleBackgroundHelper mRippleBackgroundHelper;
 
     /**
      * Constructor for programmatically creating a {@link ButtonCompat}.
@@ -89,7 +89,7 @@ public class ButtonCompat extends AppCompatButton {
                 a.getResourceId(R.styleable.ButtonCompat_borderColor, android.R.color.transparent);
         int borderWidthId =
                 a.getResourceId(
-                        R.styleable.ButtonCompat_borderWidth,
+                        R.styleable.ButtonCompat_buttonBorderWidth,
                         R.dimen.default_ripple_background_border_size);
         int verticalInset =
                 a.getDimensionPixelSize(

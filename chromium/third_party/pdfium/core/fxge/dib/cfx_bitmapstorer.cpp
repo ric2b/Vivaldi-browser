@@ -17,16 +17,16 @@ CFX_BitmapStorer::CFX_BitmapStorer() = default;
 CFX_BitmapStorer::~CFX_BitmapStorer() = default;
 
 RetainPtr<CFX_DIBitmap> CFX_BitmapStorer::Detach() {
-  return std::move(m_pBitmap);
+  return std::move(bitmap_);
 }
 
 void CFX_BitmapStorer::Replace(RetainPtr<CFX_DIBitmap>&& pBitmap) {
-  m_pBitmap = std::move(pBitmap);
+  bitmap_ = std::move(pBitmap);
 }
 
 void CFX_BitmapStorer::ComposeScanline(int line,
                                        pdfium::span<const uint8_t> scanline) {
-  pdfium::span<uint8_t> dest_buf = m_pBitmap->GetWritableScanline(line);
+  pdfium::span<uint8_t> dest_buf = bitmap_->GetWritableScanline(line);
   if (!dest_buf.empty()) {
     fxcrt::Copy(scanline, dest_buf);
   }
@@ -39,13 +39,14 @@ bool CFX_BitmapStorer::SetInfo(int width,
   DCHECK_NE(src_format, FXDIB_Format::k1bppMask);
   DCHECK_NE(src_format, FXDIB_Format::k1bppRgb);
   auto pBitmap = pdfium::MakeRetain<CFX_DIBitmap>();
-  if (!pBitmap->Create(width, height, src_format))
+  if (!pBitmap->Create(width, height, src_format)) {
     return false;
+  }
 
   if (!src_palette.empty()) {
     pBitmap->TakePalette(std::move(src_palette));
   }
 
-  m_pBitmap = std::move(pBitmap);
+  bitmap_ = std::move(pBitmap);
   return true;
 }

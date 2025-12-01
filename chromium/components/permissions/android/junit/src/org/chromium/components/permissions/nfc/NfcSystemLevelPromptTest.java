@@ -40,9 +40,9 @@ public class NfcSystemLevelPromptTest {
     private Activity mActivity;
     @Mock private WindowAndroid mWindowAndroid;
     @Mock private WindowAndroid.IntentCallback mWindowAndroidIntentCallback;
-    private CallbackHelper mDialogCallback = new CallbackHelper();
-    private CallbackHelper mIntentCallback = new CallbackHelper();
-    private MockModalDialogManager mModalDialogManager = new MockModalDialogManager();
+    private final CallbackHelper mDialogCallback = new CallbackHelper();
+    private final CallbackHelper mIntentCallback = new CallbackHelper();
+    private final MockModalDialogManager mModalDialogManager = new MockModalDialogManager();
 
     private static class MockModalDialogManager extends ModalDialogManager {
         private PropertyModel mShownDialogModel;
@@ -79,10 +79,6 @@ public class NfcSystemLevelPromptTest {
                             Object intent = invocation.getArguments()[0];
                             String intentAction = ((Intent) intent).getAction();
                             Assert.assertEquals(Settings.ACTION_NFC_SETTINGS, intentAction);
-
-                            Object intentCallback = invocation.getArguments()[1];
-                            mWindowAndroidIntentCallback =
-                                    (WindowAndroid.IntentCallback) intentCallback;
 
                             mIntentCallback.notifyCalled();
                             return null;

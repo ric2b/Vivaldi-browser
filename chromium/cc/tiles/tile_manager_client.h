@@ -13,6 +13,7 @@
 #include "cc/paint/target_color_params.h"
 #include "cc/tiles/raster_tile_priority_queue.h"
 #include "cc/tiles/tile_priority.h"
+#include "components/viz/common/resources/shared_image_format.h"
 #include "ui/gfx/display_color_spaces.h"
 
 namespace cc {
@@ -40,7 +41,8 @@ class CC_EXPORT TileManagerClient {
   // - Tile version initialized.
   // - Tile resources freed.
   // - Tile marked for on-demand raster.
-  virtual void NotifyTileStateChanged(const Tile* tile) = 0;
+  virtual void NotifyTileStateChanged(const Tile* tile,
+                                      bool update_damage = true) = 0;
 
   // Given an empty raster tile priority queue, this will build a priority queue
   // that will return tiles in the order in which they should be rasterized.
@@ -67,6 +69,9 @@ class CC_EXPORT TileManagerClient {
   // Requests the color parameters in which the tiles should be rasterized.
   virtual TargetColorParams GetTargetColorParams(
       gfx::ContentColorUsage content_color_usage) const = 0;
+
+  // Returns the format to use for the tiles.
+  virtual viz::SharedImageFormat GetTileFormat() const = 0;
 
   // Requests that a pending tree be scheduled to invalidate content on the
   // pending on active tree. This is currently used when tiles that are

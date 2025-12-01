@@ -9,12 +9,12 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "components/input/event_with_latency_info.h"
+#include "components/input/render_input_router.mojom.h"
 #include "components/input/render_input_router_delegate.h"
 #include "components/input/render_input_router_iterator.h"
 #include "components/viz/common/resources/peak_gpu_memory_tracker.h"
 #include "components/viz/common/surfaces/frame_sink_id.h"
 #include "components/viz/service/viz_service_export.h"
-#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 
 namespace input {
 class RenderWidgetHostViewInput;
@@ -36,20 +36,8 @@ class VIZ_SERVICE_EXPORT RenderInputRouterDelegateImpl
    public:
     virtual std::unique_ptr<input::RenderInputRouterIterator>
     GetEmbeddedRenderInputRouters(const FrameSinkId& id) = 0;
-    virtual void NotifyObserversOfInputEvent(
-        const FrameSinkId& frame_sink_id,
-        const base::UnguessableToken& grouping_id,
-        std::unique_ptr<blink::WebCoalescedInputEvent> event,
-        bool dispatched_to_renderer) = 0;
-    virtual void NotifyObserversOfInputEventAcks(
-        const FrameSinkId& frame_sink_id,
-        const base::UnguessableToken& grouping_id,
-        blink::mojom::InputEventResultSource ack_source,
-        blink::mojom::InputEventResultState ack_result,
-        std::unique_ptr<blink::WebCoalescedInputEvent> event) = 0;
-    virtual void OnInvalidInputEventSource(
-        const FrameSinkId& frame_sink_id,
-        const base::UnguessableToken& grouping_id) = 0;
+    virtual input::mojom::RenderInputRouterDelegateClient*
+    GetRIRDelegateClientRemote(const FrameSinkId& frame_sink_id) = 0;
     virtual std::optional<bool> IsDelegatedInkHovering(
         const FrameSinkId& frame_sink_id) = 0;
     virtual GpuServiceImpl* GetGpuService() = 0;
@@ -58,8 +46,7 @@ class VIZ_SERVICE_EXPORT RenderInputRouterDelegateImpl
   RenderInputRouterDelegateImpl(
       scoped_refptr<input::RenderWidgetHostInputEventRouter> rwhier,
       Delegate& delegate,
-      const FrameSinkId& frame_sink_id,
-      const base::UnguessableToken& grouping_id);
+      const FrameSinkId& frame_sink_id);
 
   ~RenderInputRouterDelegateImpl() override;
 
@@ -95,18 +82,20 @@ class VIZ_SERVICE_EXPORT RenderInputRouterDelegateImpl
   void OnInputIgnored(const blink::WebInputEvent& event) override {}
   input::StylusInterface* GetStylusInterface() override;
   bool IsHidden() const override;
-  bool IsRendererProcessBlocked() override;
-  void OnInputEventAckTimeout() override {}
-  void RendererIsResponsive() override {}
+  void OnInputEventAckTimeout(base::TimeTicks ack_timeout_ts) override;
+  void RendererIsResponsive() override;
+  void DidOverscroll(blink::mojom::DidOverscrollParamsPtr params) override;
 
-  void SetIsBlocked(bool blocked) { is_blocked_ = blocked; }
+  void SetIsHidden(bool is_hidden) { is_hidden_ = is_hidden; }
 
  private:
-  bool is_blocked_ = false;
+  // Indicates whether the RenderInputRouter associated with this RIRDelegate is
+  // hidden or not.
+  bool is_hidden_ = true;
+  bool is_responsive_ = true;
   scoped_refptr<input::RenderWidgetHostInputEventRouter> rwhier_;
   raw_ref<Delegate> delegate_;
   const FrameSinkId frame_sink_id_;
-  const base::UnguessableToken grouping_id_;
 };
 
 }  // namespace viz

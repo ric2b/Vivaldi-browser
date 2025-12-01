@@ -52,10 +52,7 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
     // Check for unsupported module-scope variable address spaces and types.
     for (auto* inst : *ir.root_block) {
         auto* var = inst->As<core::ir::Var>();
-        auto* ptr = var->Result(0)->Type()->As<core::type::Pointer>();
-        if (ptr->AddressSpace() == core::AddressSpace::kPushConstant) {
-            return Failure("push constants are not supported by the HLSL backend");
-        }
+        auto* ptr = var->Result()->Type()->As<core::type::Pointer>();
         if (ptr->AddressSpace() == core::AddressSpace::kPixelLocal) {
             // Check the pixel_local variables have corresponding entries in the PLS attachment map.
             auto* str = ptr->StoreType()->As<core::type::Struct>();
@@ -70,6 +67,28 @@ Result<SuccessType> CanGenerate(const core::ir::Module& ir, const Options& optio
             return Failure("input attachments are not supported by the HLSL backend");
         }
     }
+
+    // Check for unsupported shader IO builtins.
+    for (auto& func : ir.functions) {
+        if (!func->IsEntryPoint()) {
+            continue;
+        }
+
+        for (auto* param : func->Params()) {
+            if (auto* str = param->Type()->As<core::type::Struct>()) {
+                for (auto* member : str->Members()) {
+                    if (member->Attributes().builtin == core::BuiltinValue::kSubgroupId) {
+                        return Failure("subgroup_id is not yet supported by the HLSL backend");
+                    }
+                }
+            } else {
+                if (param->Builtin() == core::BuiltinValue::kSubgroupId) {
+                    return Failure("subgroup_id is not yet supported by the HLSL backend");
+                }
+            }
+        }
+    }
+
     return Success;
 }
 

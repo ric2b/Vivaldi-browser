@@ -144,6 +144,7 @@ HTMLDialogElement::HTMLDialogElement(Document& document)
 }
 
 void HTMLDialogElement::close(const String& return_value,
+                              Element* invoker,
                               bool open_attribute_being_removed) {
   DCHECK(!open_attribute_being_removed ||
          RuntimeEnabledFeatures::DialogCloseWhenOpenRemovedEnabled());
@@ -165,7 +166,7 @@ void HTMLDialogElement::close(const String& return_value,
     Document& document = GetDocument();
     HTMLDialogElement* old_modal_dialog = document.ActiveModalDialog();
 
-    DispatchToggleEvents(/*opening=*/false);
+    DispatchToggleEvents(/*opening=*/false, invoker);
     if (!IsOpen() && !open_attribute_being_removed) {
       return;
     }
@@ -221,7 +222,7 @@ void HTMLDialogElement::close(const String& return_value,
 
 void HTMLDialogElement::requestClose(const String& return_value,
                                      ExceptionState& exception_state) {
-  if (!IsOpen()) {
+  if (!IsOpenAndActive()) {
     return;
   }
   CHECK(close_watcher_);
@@ -270,7 +271,7 @@ const HTMLDialogElement* FindNearestDialog(const Node& target_node,
   // First check if this is a click on a dialog's backdrop, which will show up
   // as a click on the dialog directly.
   if (auto* dialog = DynamicTo<HTMLDialogElement>(target_node);
-      dialog && dialog->IsOpen() && dialog->IsModal()) {
+      dialog && dialog->IsOpenAndActive() && dialog->IsModal()) {
     DOMRect* dialog_rect =
         const_cast<HTMLDialogElement*>(dialog)->GetBoundingClientRect();
     if (!dialog_rect->IsPointInside(pointer_event.clientX(),
@@ -282,7 +283,7 @@ const HTMLDialogElement* FindNearestDialog(const Node& target_node,
   for (const Node* node = &target_node; node;
        node = FlatTreeTraversal::Parent(*node)) {
     if (auto* dialog = DynamicTo<HTMLDialogElement>(node);
-        dialog && dialog->IsOpen()) {
+        dialog && dialog->IsOpenAndActive()) {
       return dialog;
     }
   }
@@ -357,7 +358,7 @@ bool HTMLDialogElement::HandleCommandInternal(HTMLElement& invoker,
     return false;
   }
 
-  bool open = IsOpen();
+  bool open = IsOpenAndActive();
   String return_value;
 
   if (command == CommandEventType::kClose ||
@@ -369,7 +370,7 @@ bool HTMLDialogElement::HandleCommandInternal(HTMLElement& invoker,
 
   if (command == CommandEventType::kClose) {
     if (open) {
-      close(return_value);
+      close(return_value, &invoker);
       return true;
     } else {
       AddConsoleMessage(
@@ -390,7 +391,7 @@ bool HTMLDialogElement::HandleCommandInternal(HTMLElement& invoker,
     }
   } else if (command == CommandEventType::kShowModal) {
     if (isConnected() && !open) {
-      showModal(ASSERT_NO_EXCEPTION);
+      showModal(ASSERT_NO_EXCEPTION, &invoker);
       return true;
     } else {
       AddConsoleMessage(
@@ -426,7 +427,7 @@ void HTMLDialogElement::show(ExceptionState& exception_state) {
     return;
   }
 
-  if (!DispatchToggleEvents(/*opening=*/true)) {
+  if (!DispatchToggleEvents(/*opening=*/true, /*invoker=*/nullptr)) {
     return;
   }
   SetBooleanAttribute(html_names::kOpenAttr, true);
@@ -453,6 +454,12 @@ void HTMLDialogElement::show(ExceptionState& exception_state) {
 bool HTMLDialogElement::IsKeyboardFocusableSlow(
     UpdateBehavior update_behavior) const {
   if (!IsFocusable(update_behavior)) {
+    return false;
+  }
+  // Interest invoker targets with partial interest aren't keyboard focusable.
+  if (IsInPartialInterestPopover()) {
+    CHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+        GetDocument().GetExecutionContext()));
     return false;
   }
   // This handles cases such as <dialog tabindex=0>, <dialog contenteditable>,
@@ -486,7 +493,7 @@ class DialogCloseWatcherEventListener : public NativeEventListener {
 };
 
 void HTMLDialogElement::SetCloseWatcherEnabledState() {
-  if (!IsOpen()) {
+  if (!IsOpenAndActive()) {
     return;
   }
   CHECK(close_watcher_);
@@ -500,7 +507,7 @@ void HTMLDialogElement::CreateCloseWatcher() {
   if (!window) {
     return;
   }
-  CHECK(IsOpen());
+  CHECK(IsOpenAndActive());
   CHECK(window->GetFrame());
   close_watcher_ = CloseWatcher::Create(*window);
   CHECK(close_watcher_);
@@ -511,7 +518,8 @@ void HTMLDialogElement::CreateCloseWatcher() {
   close_watcher_->addEventListener(event_type_names::kCancel, event_listener);
 }
 
-void HTMLDialogElement::showModal(ExceptionState& exception_state) {
+void HTMLDialogElement::showModal(ExceptionState& exception_state,
+                                  Element* invoker) {
   if (IsOpen()) {
     if (!IsModal()) {
       exception_state.ThrowDOMException(
@@ -538,7 +546,7 @@ void HTMLDialogElement::showModal(ExceptionState& exception_state) {
         DOMExceptionCode::kInvalidStateError,
         "Invalid for dialogs within documents that are not fully active.");
   }
-  if (!DispatchToggleEvents(/*opening=*/true, /*asModal=*/true)) {
+  if (!DispatchToggleEvents(/*opening=*/true, invoker, /*asModal=*/true)) {
     return;
   }
 
@@ -668,7 +676,9 @@ void HTMLDialogElement::SetFocusForDialog() {
 
 // Returns false if beforetoggle was canceled, otherwise true. Queues a toggle
 // event if beforetoggle was not canceled.
-bool HTMLDialogElement::DispatchToggleEvents(bool opening, bool asModal) {
+bool HTMLDialogElement::DispatchToggleEvents(bool opening,
+                                             Element* source,
+                                             bool asModal) {
   if (!RuntimeEnabledFeatures::DialogElementToggleEventsEnabled()) {
     return true;
   }
@@ -679,7 +689,7 @@ bool HTMLDialogElement::DispatchToggleEvents(bool opening, bool asModal) {
   if (DispatchEvent(*ToggleEvent::Create(
           event_type_names::kBeforetoggle,
           opening ? Event::Cancelable::kYes : Event::Cancelable::kNo, old_state,
-          new_state)) != DispatchEventResult::kNotCanceled) {
+          new_state, source)) != DispatchEventResult::kNotCanceled) {
     return false;
   }
   if (opening) {
@@ -695,8 +705,9 @@ bool HTMLDialogElement::DispatchToggleEvents(bool opening, bool asModal) {
   if (pending_toggle_event_) {
     old_state = pending_toggle_event_->oldState();
   }
-  pending_toggle_event_ = ToggleEvent::Create(
-      event_type_names::kToggle, Event::Cancelable::kNo, old_state, new_state);
+  pending_toggle_event_ =
+      ToggleEvent::Create(event_type_names::kToggle, Event::Cancelable::kNo,
+                          old_state, new_state, source);
   pending_toggle_event_task_ = PostCancellableTask(
       *GetDocument().GetTaskRunner(TaskType::kDOMManipulation), FROM_HERE,
       WTF::BindOnce(&HTMLDialogElement::DispatchPendingToggleEvent,
@@ -722,7 +733,7 @@ void HTMLDialogElement::Trace(Visitor* visitor) const {
 void HTMLDialogElement::AttributeChanged(
     const AttributeModificationParams& params) {
   HTMLElement::AttributeChanged(params);
-  if (params.name == html_names::kClosedbyAttr && IsOpen() && isConnected() &&
+  if (params.name == html_names::kClosedbyAttr && IsOpenAndActive() &&
       params.old_value != params.new_value) {
     SetCloseWatcherEnabledState();
   }
@@ -745,7 +756,8 @@ void HTMLDialogElement::ParseAttribute(
             "The open attribute was removed from a dialog element while it was "
             "open. This is not recommended - some closing behaviors will not "
             "occur. Please close dialogs using dialog.close().");
-        close(/*return_value=*/String(), /*open_attribute_being_removed=*/true);
+        close(/*return_value=*/String(), /*invoker=*/nullptr,
+              /*open_attribute_being_removed=*/true);
       } else {
         DCHECK(GetDocument().AllOpenDialogs().Contains(this));
         GetDocument().AllOpenDialogs().erase(this);

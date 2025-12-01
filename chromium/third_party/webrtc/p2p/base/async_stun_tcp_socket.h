@@ -39,8 +39,8 @@ class AsyncStunTCPSocket : public AsyncTCPSocketBase {
 
   int Send(const void* pv,
            size_t cb,
-           const rtc::PacketOptions& options) override;
-  size_t ProcessInput(rtc::ArrayView<const uint8_t> data) override;
+           const AsyncSocketPacketOptions& options) override;
+  size_t ProcessInput(ArrayView<const uint8_t> data) override;
 
  private:
   // This method returns the message hdr + length written in the header.
@@ -53,8 +53,10 @@ class AsyncStunTCPSocket : public AsyncTCPSocketBase {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::AsyncStunTCPSocket;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_BASE_ASYNC_STUN_TCP_SOCKET_H_

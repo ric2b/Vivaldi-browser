@@ -58,8 +58,7 @@ export function getHtml(this: ToolsElement) {
       @value-changed="${this.onTemperatureChanged_}">
   </cr-input>
 </div>
-<cr-textarea id="textInput"
-    ?disabled="${!this.canEnterInput_()}" label="Input"
+<cr-textarea type="text" id="textInput" label="Input"
     placeholder="Place control tokens {$SYSTEM, $MODEL, $USER, $END} on their own lines, in between lines of text."
     .value="${this.text_}" @value-changed="${this.onTextChanged_}">
 </cr-textarea>
@@ -91,7 +90,7 @@ export function getHtml(this: ToolsElement) {
         <cr-icon icon="cr:add" slot="prefix-icon"></cr-icon>
         Add audio
       </cr-button>
-      <input id="audioInput" type="file">
+      <input id="audioInput" type="file" accept="audio/*">
     </div>
     ${this.audioFile_ ? html`
       <cr-button class="floating-button" @click="${this.onRemoteAudioClick_}">

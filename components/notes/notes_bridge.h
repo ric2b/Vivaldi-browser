@@ -54,8 +54,6 @@ class NotesBridge : public vivaldi::NotesModelObserver {
   void GetTopLevelFolderIDs(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      jboolean get_special,
-      jboolean get_normal,
       const base::android::JavaParamRef<jobject>& j_result_obj);
 
   void GetAllFoldersWithDepths(
@@ -263,6 +261,10 @@ class NotesBridge : public vivaldi::NotesModelObserver {
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& j_note_id_obj,
       jlongArray arr);
+
+  bool IsChildOfTrashNode(JNIEnv* env,
+                          const base::android::JavaParamRef<jobject>& obj,
+                          jlong id);
 
  private:
   ~NotesBridge() override;

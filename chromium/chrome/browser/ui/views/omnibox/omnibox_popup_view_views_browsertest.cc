@@ -13,27 +13,35 @@
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/themes/test/theme_service_changed_waiter.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/omnibox/omnibox_header_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_popup_view_views_test.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_result_view.h"
 #include "chrome/browser/ui/views/omnibox/omnibox_view_views.h"
 #include "chrome/browser/ui/views/omnibox/rounded_omnibox_results_frame.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/omnibox/browser/actions/tab_switch_action.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
+#include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/fake_autocomplete_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_popup_selection.h"
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/omnibox_triggered_feature_service.h"
+#include "components/omnibox/browser/suggestion_group_util.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -49,12 +57,23 @@
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
 #endif
 
 namespace {
+
+std::string result_a11y_text(OmniboxResultView* result_view) {
+  if (!result_view) {
+    return "";
+  }
+
+  ui::AXNodeData result_node_data;
+  result_view->GetViewAccessibility().GetAccessibleNodeData(&result_node_data);
+  return result_node_data.GetStringAttribute(ax::mojom::StringAttribute::kName);
+}
 
 bool contains(std::string str, std::string substr) {
   return str.find(substr) != std::string::npos;
@@ -597,7 +616,9 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
   matches.push_back(match);
   results.AppendMatches(matches);
   results.SortAndCull(input, /*template_url_service=*/nullptr,
-                      triggered_feature_service());
+                      triggered_feature_service(), /*is_lens_active=*/false,
+                      /*can_show_contextual_suggestions=*/false,
+                      /*mia_enabled*/ false);
   controller()->autocomplete_controller()->NotifyChanged();
 
   // Check that arrowing up and down emits the event.
@@ -638,7 +659,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
       ax::mojom::IntAttribute::kPopupForId));
 
   // Check accessibility of list box while it's closed.
-  controller()->autocomplete_controller()->Stop(true);
+  controller()->autocomplete_controller()->Stop(
+      AutocompleteStopReason::kClobbered);
   popup_view()->UpdatePopupAppearance();
   popup_node_data_while_open = ui::AXNodeData();
   popup_view()->GetViewAccessibility().GetAccessibleNodeData(
@@ -884,7 +906,8 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest,
 
   // Check accessibility when popup is closed.
   ax_node_data_omnibox = ui::AXNodeData();
-  controller()->autocomplete_controller()->Stop(true);
+  controller()->autocomplete_controller()->Stop(
+      AutocompleteStopReason::kClobbered);
   omnibox_view()->GetViewAccessibility().GetAccessibleNodeData(
       &ax_node_data_omnibox);
   EXPECT_FALSE(popup_view()->IsOpen());
@@ -916,10 +939,161 @@ IN_PROC_BROWSER_TEST_F(OmniboxPopupViewViewsTest, AccessibleControlIds) {
 
   // Check accessibility when popup is closed.
   ax_node_data_omnibox = ui::AXNodeData();
-  controller()->autocomplete_controller()->Stop(true);
+  controller()->autocomplete_controller()->Stop(
+      AutocompleteStopReason::kClobbered);
   omnibox_view()->GetViewAccessibility().GetAccessibleNodeData(
       &ax_node_data_omnibox);
   EXPECT_FALSE(popup_view()->IsOpen());
   EXPECT_FALSE(ax_node_data_omnibox.HasIntListAttribute(
       ax::mojom::IntListAttribute::kControlsIds));
+}
+
+IN_PROC_BROWSER_TEST_F(OmniboxPopupSuggestionGroupHeadersTest,
+                       ShowSuggestionGroupHeadersByPageContext) {
+  scoped_refptr<FakeAutocompleteProvider> provider =
+      new FakeAutocompleteProvider(AutocompleteProvider::TYPE_SEARCH);
+  controller()->autocomplete_controller()->providers_.push_back(provider);
+
+  const auto group1 = omnibox::GroupId::GROUP_VISITED_DOC_RELATED;
+  const auto group2 = omnibox::GroupId::GROUP_CONTEXTUAL_SEARCH;
+
+  ACMatches matches;
+  // Non-contextual search suggestion.
+  {
+    std::u16string match_url = u"https://google.com/search?q=foo1";
+    AutocompleteMatch match(nullptr, 500, false,
+                            AutocompleteMatchType::SEARCH_SUGGEST);
+    match.contents = u"foo1";
+    match.contents_class.emplace_back(0, ACMatchClassification::URL);
+    match.destination_url = GURL(match_url);
+    match.description = u"first match";
+    match.description_class.emplace_back(0, ACMatchClassification::URL);
+    match.allowed_to_be_default_match = true;
+    match.provider = provider.get();
+    match.suggestion_group_id = group1;
+    match.keyword = u"foo1";
+    matches.push_back(match);
+  }
+  // Contextual search suggestion.
+  {
+    std::u16string match_url = u"https://google.com/search?q=foo2";
+    AutocompleteMatch match(nullptr, 450, false,
+                            AutocompleteMatchType::SEARCH_SUGGEST);
+    match.contents = u"foo2";
+    match.contents_class.emplace_back(0, ACMatchClassification::URL);
+    match.destination_url = GURL(match_url);
+    match.description = u"second match";
+    match.description_class.emplace_back(0, ACMatchClassification::URL);
+    match.allowed_to_be_default_match = true;
+    match.provider = provider.get();
+    match.suggestion_group_id = group2;
+    match.keyword = u"foo2";
+    matches.push_back(match);
+  }
+  provider->matches_ = matches;
+
+  omnibox::GroupConfigMap suggestion_groups_map;
+  // Non-contextual suggestion group header.
+  const std::string kNonContextualSuggestionGroupHeaderText =
+      "Related to this page";
+  suggestion_groups_map[group1];
+  suggestion_groups_map[group1].set_header_text(
+      kNonContextualSuggestionGroupHeaderText);
+  // Contextual suggestion group header.
+  const std::string kContextualSuggestionGroupHeaderText =
+      "Suggested questions about this page";
+  suggestion_groups_map[group2];
+  suggestion_groups_map[group2].set_header_text(
+      kContextualSuggestionGroupHeaderText);
+  provider->suggestion_groups_map_ = suggestion_groups_map;
+
+  // NTP page context.
+  {
+    edit_model()->SetUserText(u"foo");
+    AutocompleteInput input(
+        u"foo",
+        metrics::OmniboxEventProto::INSTANT_NTP_WITH_OMNIBOX_AS_STARTING_FOCUS,
+        ChromeAutocompleteSchemeClassifier(browser()->profile()));
+    input.set_omit_asynchronous_matches(true);
+    controller()->autocomplete_controller()->Start(input);
+    ASSERT_TRUE(popup_view()->IsOpen());
+
+    // Skip over implicit SEARCH_WHAT_YOU_TYPED suggestion at index 0.
+
+    // Non-contextual suggestion group header should be SHOWN.
+    EXPECT_TRUE(GetHeaderViewAt(1)->GetVisible());
+    EXPECT_TRUE(GetResultViewAt(1)->GetVisible());
+
+    // Header text should be INCLUDED in the suggestion a11y text.
+    edit_model()->SetPopupSelection(OmniboxPopupSelection(1));
+    EXPECT_TRUE(contains(result_a11y_text(GetResultViewAt(1)),
+                         kNonContextualSuggestionGroupHeaderText));
+
+    // Contextual suggestion group header should be SHOWN.
+    EXPECT_TRUE(GetHeaderViewAt(2)->GetVisible());
+    EXPECT_TRUE(GetResultViewAt(2)->GetVisible());
+
+    // Header text should be INCLUDED in the suggestion a11y text.
+    edit_model()->SetPopupSelection(OmniboxPopupSelection(2));
+    EXPECT_TRUE(contains(result_a11y_text(GetResultViewAt(2)),
+                         kContextualSuggestionGroupHeaderText));
+  }
+
+  // SRP page context.
+  {
+    edit_model()->SetUserText(u"foo");
+    AutocompleteInput input(
+        u"foo",
+        metrics::OmniboxEventProto::
+            SEARCH_RESULT_PAGE_NO_SEARCH_TERM_REPLACEMENT,
+        ChromeAutocompleteSchemeClassifier(browser()->profile()));
+    input.set_omit_asynchronous_matches(true);
+    controller()->autocomplete_controller()->Start(input);
+    ASSERT_TRUE(popup_view()->IsOpen());
+
+    // Skip over implicit SEARCH_WHAT_YOU_TYPED suggestion at index 0.
+
+    // Non-contextual suggestion group header should be HIDDEN for SRP page
+    // context.
+    EXPECT_FALSE(popup_view()->header_view_at(1)->GetVisible());
+    EXPECT_TRUE(popup_view()->result_view_at(1)->GetVisible());
+
+    // Header text should be EXCLUDED from the suggestion a11y text.
+    edit_model()->SetPopupSelection(OmniboxPopupSelection(1));
+    EXPECT_FALSE(contains(result_a11y_text(GetResultViewAt(1)),
+                          kNonContextualSuggestionGroupHeaderText));
+
+    // Contextual suggestion group header should be HIDDEN for SRP page
+    // context.
+    EXPECT_FALSE(popup_view()->header_view_at(2)->GetVisible());
+    EXPECT_TRUE(popup_view()->result_view_at(2)->GetVisible());
+  }
+
+  // Web page context.
+  {
+    edit_model()->SetUserText(u"foo");
+    AutocompleteInput input(
+        u"foo", metrics::OmniboxEventProto::OTHER,
+        ChromeAutocompleteSchemeClassifier(browser()->profile()));
+    input.set_omit_asynchronous_matches(true);
+    controller()->autocomplete_controller()->Start(input);
+    ASSERT_TRUE(popup_view()->IsOpen());
+
+    // Skip over implicit SEARCH_WHAT_YOU_TYPED suggestion at index 0.
+
+    // Non-contextual suggestion group header should be HIDDEN for Web page
+    // context.
+    EXPECT_FALSE(popup_view()->header_view_at(1)->GetVisible());
+    EXPECT_TRUE(popup_view()->result_view_at(1)->GetVisible());
+
+    // Header text should be EXCLUDED from the suggestion a11y text.
+    edit_model()->SetPopupSelection(OmniboxPopupSelection(1));
+    EXPECT_FALSE(contains(result_a11y_text(GetResultViewAt(1)),
+                          kNonContextualSuggestionGroupHeaderText));
+
+    // Contextual suggestion group header should be SHOWN for Web page
+    // context.
+    EXPECT_FALSE(popup_view()->header_view_at(2)->GetVisible());
+    EXPECT_TRUE(popup_view()->result_view_at(2)->GetVisible());
+  }
 }

@@ -26,7 +26,7 @@ void ExplicitZeroMemory(void* ptr, size_t len);
 template <typename T,
           typename std::enable_if<!std::is_const<T>::value &&
                                   std::is_trivial<T>::value>::type* = nullptr>
-void ExplicitZeroMemory(rtc::ArrayView<T> a) {
+void ExplicitZeroMemory(ArrayView<T> a) {
   ExplicitZeroMemory(a.data(), a.size());
 }
 
@@ -34,8 +34,10 @@ void ExplicitZeroMemory(rtc::ArrayView<T> a) {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::ExplicitZeroMemory;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_ZERO_MEMORY_H_

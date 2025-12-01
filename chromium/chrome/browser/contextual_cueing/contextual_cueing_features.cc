@@ -46,6 +46,11 @@ const base::FeatureParam<int> kMinPageCountBetweenNudges(
     "MinPageCountBetweenNudges",
     3);
 
+const base::FeatureParam<base::TimeDelta> kMinTimeBetweenNudges(
+    &kContextualCueing,
+    "MinTimeBetweenNudges",
+    base::Minutes(10));
+
 const base::FeatureParam<int> kVisitedDomainsLimit(&kContextualCueing,
                                                    "VisitedDomainsLimit",
                                                    20);
@@ -59,5 +64,27 @@ const base::FeatureParam<bool> kEnablePageContentExtraction(
     &kContextualCueing,
     "EnablePageContentExtraction",
     true);
+
+const base::FeatureParam<bool> kExtractInnerTextForZeroStateSuggestions(
+    &kGlicZeroStateSuggestions,
+    "ZSSExtractInnerText",
+    true);
+
+const base::FeatureParam<bool>
+    kExtractAnnotatedPageContentForZeroStateSuggestions(
+        &kGlicZeroStateSuggestions,
+        "ZSSExtractAnnotatedPageContent",
+        false);
+
+const base::FeatureParam<base::TimeDelta>
+    kPageContentExtractionDelayForSameDocumentNavigation(
+        &kGlicZeroStateSuggestions,
+        "ZSSPageContentExtractionDelayForSameDocumentNavigation",
+        base::Seconds(3));
+
+const base::FeatureParam<bool> kReturnEmptyForSameDocumentNavigation(
+    &kGlicZeroStateSuggestions,
+    "ZSSReturnEmptyForSameDocumentNavigation",
+    false);
 
 }  // namespace contextual_cueing

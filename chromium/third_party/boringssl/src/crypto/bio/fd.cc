@@ -96,62 +96,47 @@ static int fd_write(BIO *b, const char *in, int inl) {
 }
 
 static long fd_ctrl(BIO *b, int cmd, long num, void *ptr) {
-  long ret = 1;
-  int *ip;
-
   switch (cmd) {
     case BIO_CTRL_RESET:
       num = 0;
       [[fallthrough]];
     case BIO_C_FILE_SEEK:
-      ret = 0;
       if (b->init) {
-        ret = (long)BORINGSSL_LSEEK(b->num, num, SEEK_SET);
+        return (long)BORINGSSL_LSEEK(b->num, num, SEEK_SET);
       }
-      break;
+      return 0;
     case BIO_C_FILE_TELL:
     case BIO_CTRL_INFO:
-      ret = 0;
       if (b->init) {
-        ret = (long)BORINGSSL_LSEEK(b->num, 0, SEEK_CUR);
+        return (long)BORINGSSL_LSEEK(b->num, 0, SEEK_CUR);
       }
-      break;
+      return 0;
     case BIO_C_SET_FD:
       fd_free(b);
-      b->num = *((int *)ptr);
-      b->shutdown = (int)num;
+      b->num = *static_cast<int *>(ptr);
+      b->shutdown = static_cast<int>(num);
       b->init = 1;
-      break;
+      return 1;
     case BIO_C_GET_FD:
       if (b->init) {
-        ip = (int *)ptr;
-        if (ip != NULL) {
-          *ip = b->num;
+        int *out = static_cast<int *>(ptr);
+        if (out != nullptr) {
+          *out = b->num;
         }
         return b->num;
       } else {
-        ret = -1;
+        return -1;
       }
-      break;
     case BIO_CTRL_GET_CLOSE:
-      ret = b->shutdown;
-      break;
+      return b->shutdown;
     case BIO_CTRL_SET_CLOSE:
-      b->shutdown = (int)num;
-      break;
-    case BIO_CTRL_PENDING:
-    case BIO_CTRL_WPENDING:
-      ret = 0;
-      break;
+      b->shutdown = static_cast<int>(num);
+      return 1;
     case BIO_CTRL_FLUSH:
-      ret = 1;
-      break;
+      return 1;
     default:
-      ret = 0;
-      break;
+      return 0;
   }
-
-  return ret;
 }
 
 static int fd_gets(BIO *bp, char *buf, int size) {

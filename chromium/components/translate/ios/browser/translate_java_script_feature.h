@@ -44,7 +44,7 @@ class TranslateJavaScriptFeature : public web::JavaScriptFeature {
                              const web::ScriptMessage& message) override;
 
   // Vivaldi
-  void OnScriptExecuted(web::WebFrame* frame,
+  void OnScriptExecuted(base::WeakPtr<web::WebFrame> frame,
                         const base::Value* value,
                         NSError* error);
   // End Vivaldi
@@ -55,6 +55,8 @@ class TranslateJavaScriptFeature : public web::JavaScriptFeature {
   TranslateJavaScriptFeature(const TranslateJavaScriptFeature&) = delete;
   TranslateJavaScriptFeature& operator=(const TranslateJavaScriptFeature&) =
       delete;
+
+  base::WeakPtrFactory<TranslateJavaScriptFeature> weak_ptr_factory_;
 };
 
 }  // namespace translate

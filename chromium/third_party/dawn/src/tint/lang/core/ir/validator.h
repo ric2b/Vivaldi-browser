@@ -64,6 +64,12 @@ enum class Capability : uint8_t {
     kAllowPhonyInstructions,
     /// Allows lets to have any type, used by MSL backend for module scoped vars
     kAllowAnyLetType,
+    /// Allows input_attachment_index to be associated with any type, used by
+    /// SPIRV backend for spirv.image.
+    kAllowAnyInputAttachmentIndexType,
+    /// Allows workgroup address space pointers as entry point inputs. Used by
+    /// the MSL backend.
+    kAllowWorkspacePointerInputToEntryPoint,
 };
 
 /// Capabilities is a set of Capability
@@ -79,10 +85,12 @@ Result<SuccessType> Validate(const Module& mod, Capabilities capabilities = {});
 /// @param ir the module to transform
 /// @param msg the msg to accompany the output
 /// @param capabilities the optional capabilities that are allowed
+/// @param timing when the validation is run.
 /// @returns success or failure
 Result<SuccessType> ValidateAndDumpIfNeeded(const Module& ir,
                                             const char* msg,
-                                            Capabilities capabilities = {});
+                                            Capabilities capabilities = {},
+                                            std::string_view timing = "before");
 
 }  // namespace tint::core::ir
 

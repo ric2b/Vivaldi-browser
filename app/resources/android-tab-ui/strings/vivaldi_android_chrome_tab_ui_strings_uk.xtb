@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="uk">
-<translation id="2277224997687551299">Змінити назву групи</translation>
+<translation id="1062777154504442433">Нова група вкладок</translation>
+<translation id="1625440863545383011">Видалити вкладку з групи та покинути групу вкладок</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Вкладку в закладки}
           other {Вкладки в закладки}
         }</translation>
 <translation id="2947471979790858922">Вашу активність в приватних вкладках буде видалено з пристрою</translation>
+<translation id="3298614730029636660">Покинути групу вкладок</translation>
+<translation id="354698175756845966">Редагувати колір групи вкладок</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Усі закриті вкладки, окрім приватних, ви знайдете в Нещодавно закритих в меню Vivaldi.}
         other {Усі закриті вкладки, окрім # приватних, ви знайдете в Нещодавно закритих в меню Vivaldi.}}</translation>
-<translation id="4460014764210899310">Розгрупувати</translation>
 <translation id="4871187110787939393">Закрити усі приватні вкладки?</translation>
 <translation id="5494920125229734069">Вибрати все</translation>
-<translation id="6744956528665271406">Змінити колір групи</translation>
+<translation id="6807841890213931603">Видалити вкладку з групи та видалити групу вкладок</translation>
+<translation id="750227952939161636">Ваші групи вкладок автоматично зберігаються та оновлюються на всіх ваших пристроях</translation>
+<translation id="7640137753339219124">Видалити групу вкладок</translation>
+<translation id="7653857400289671414">Ваша група вкладок автоматично збережена</translation>
+<translation id="8440938071054361204">Редагувати назву групи вкладок</translation>
+<translation id="8602902357364871325">Закрити групу вкладок</translation>
+<translation id="8851621822786801079">Видалити з групи вкладок</translation>
 </translationbundle>

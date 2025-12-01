@@ -30,7 +30,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -380,6 +379,9 @@ NetworkService::NetworkService(
   DCHECK(!g_network_service);
   g_network_service = this;
 
+  ContentDecodingInterceptor::SetIsNetworkServiceRunningInTheCurrentProcess(
+      true, {});
+
   // |registry_| is nullptr when a NetworkService is out-of-process.
   if (registry_) {
     mojo::SetDefaultProcessErrorHandler(base::BindRepeating(&HandleBadMessage));
@@ -507,6 +509,9 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
 NetworkService::~NetworkService() {
   DCHECK_EQ(this, g_network_service);
 
+  ContentDecodingInterceptor::SetIsNetworkServiceRunningInTheCurrentProcess(
+      false, {});
+
   doh_probe_activator_.reset();
 
   g_network_service = nullptr;
@@ -517,12 +522,7 @@ NetworkService::~NetworkService() {
   // point.
   DCHECK(network_contexts_.empty());
 
-  if (file_net_log_observer_) {
-    auto polled_data =
-        std::make_unique<base::Value>(std::move(net_log_polled_data_list_));
-    file_net_log_observer_->StopObserving(std::move(polled_data),
-                                          base::OnceClosure());
-  }
+  StopNetLog();
 
   if (initialized_) {
     trace_net_log_observer_.StopWatchForTraceStart();
@@ -656,15 +656,41 @@ void NetworkService::SetSystemDnsResolver(
 void NetworkService::StartNetLog(base::File file,
                                  uint64_t max_total_size,
                                  net::NetLogCaptureMode capture_mode,
-                                 base::Value::Dict constants) {
+                                 base::Value::Dict constants,
+                                 std::optional<base::TimeDelta> duration) {
   if (max_total_size == net::FileNetLogObserver::kNoLimit) {
     StartNetLogUnbounded(std::move(file), capture_mode, std::move(constants));
   } else {
     StartNetLogBounded(std::move(file), max_total_size, capture_mode,
                        std::move(constants));
   }
+  if (duration.has_value() && !duration->is_zero()) {
+    base::SequencedTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&NetworkService::StopNetLog, weak_factory_.GetWeakPtr()),
+        *duration);
+  }
 }
 
+void NetworkService::StopNetLog() {
+  if (!file_net_log_observer_) {
+    return;
+  }
+
+  for (const auto& context_ptr : owned_network_contexts_) {
+    NetworkContext* context = context_ptr.get();
+    base::Value::Dict context_info =
+        net::GetNetInfo(context->url_request_context());
+    CHECK(!context_info.empty());
+    net_log_polled_data_list_.Append(std::move(context_info));
+  }
+  auto polled_data =
+      std::make_unique<base::Value>(std::move(net_log_polled_data_list_));
+
+  file_net_log_observer_->StopObserving(std::move(polled_data),
+                                        base::OnceClosure());
+  file_net_log_observer_.reset();
+}
 void NetworkService::AttachNetLogProxy(
     mojo::PendingRemote<mojom::NetLogProxySource> proxy_source,
     mojo::PendingReceiver<mojom::NetLogProxySink> proxy_sink) {
@@ -1043,6 +1069,12 @@ void NetworkService::InterceptUrlLoaderForBodyDecoding(
           {base::TaskPriority::USER_BLOCKING}));
 }
 
+void NetworkService::SetTLS13EarlyDataEnabled(bool enabled) {
+  for (NetworkContext* network_context : network_contexts_) {
+    network_context->SetTLS13EarlyDataEnabled(enabled);
+  }
+}
+
 void NetworkService::StartNetLogBounded(base::File file,
                                         uint64_t max_total_size,
                                         net::NetLogCaptureMode capture_mode,
@@ -1138,7 +1170,7 @@ void NetworkService::DestroyNetworkContexts() {
 void NetworkService::OnNetworkContextConnectionClosed(
     NetworkContext* network_context) {
   auto it = owned_network_contexts_.find(network_context);
-  CHECK(it != owned_network_contexts_.end(), base::NotFatalUntil::M130);
+  CHECK(it != owned_network_contexts_.end());
   if (file_net_log_observer_) {
     net_log_polled_data_list_.Append(
         net::GetNetInfo(network_context->url_request_context()));

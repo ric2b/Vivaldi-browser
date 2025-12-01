@@ -6,7 +6,6 @@ package org.chromium.chrome.browser.touch_to_fill;
 
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.CREDENTIAL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FAVICON_OR_FALLBACK;
-import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FORMATTED_ORIGIN;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.ITEM_COLLECTION_INFO;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.ON_CLICK_LISTENER;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.SHOW_SUBMIT_BUTTON;
@@ -425,7 +424,6 @@ class TouchToFillMediator {
         return new PropertyModel.Builder(CredentialProperties.ALL_KEYS)
                 .with(CREDENTIAL, credential)
                 .with(ON_CLICK_LISTENER, this::onSelectedCredentialVivaldi)
-                .with(FORMATTED_ORIGIN, credential.getDisplayName())
                 .with(SHOW_SUBMIT_BUTTON, triggerSubmission)
                 .with(ITEM_COLLECTION_INFO, itemCollectionInfo)
                 .build();

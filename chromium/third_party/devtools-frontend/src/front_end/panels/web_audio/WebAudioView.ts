@@ -1,6 +1,7 @@
 // Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import '../../ui/legacy/legacy.js';
 
@@ -71,7 +72,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
     // Creates the landing page.
     this.landingPage = new UI.EmptyWidget.EmptyWidget(
         i18nString(UIStrings.noWebAudio), i18nString(UIStrings.openAPageThatUsesWebAudioApiTo));
-    this.landingPage.appendLink(WEBAUDIO_EXPLANATION_URL);
+    this.landingPage.link = WEBAUDIO_EXPLANATION_URL;
     this.landingPage.show(this.detailViewContainer);
 
     // Creates the summary bar.
@@ -81,9 +82,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
         SelectorEvents.CONTEXT_SELECTED,
         (event: Common.EventTarget.EventTargetEvent<Protocol.WebAudio.BaseAudioContext|null>) => {
           const context = event.data;
-          if (context) {
-            this.updateDetailView(context);
-          }
+          this.updateDetailView(context);
           void this.doUpdate();
         });
 
@@ -179,10 +178,10 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
   }
 
   private reset(): void {
+    this.contextSelector.reset();
     if (this.landingPage.isShowing()) {
       this.landingPage.detach();
     }
-    this.contextSelector.reset();
     this.detailViewContainer.removeChildren();
     this.landingPage.show(this.detailViewContainer);
     this.graphManager.clearGraphs();
@@ -334,7 +333,13 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
     });
   }
 
-  private updateDetailView(context: Protocol.WebAudio.BaseAudioContext): void {
+  private updateDetailView(context: Protocol.WebAudio.BaseAudioContext|null): void {
+    if (!context) {
+      this.landingPage.detach();
+      this.detailViewContainer.removeChildren();
+      this.landingPage.show(this.detailViewContainer);
+      return;
+    }
     if (this.landingPage.isShowing()) {
       this.landingPage.detach();
     }
@@ -343,8 +348,8 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
     this.detailViewContainer.appendChild(detailBuilder.getFragment());
   }
 
-  private updateSummaryBar(contextId: string, contextRealtimeData: Protocol.WebAudio.ContextRealtimeData): void {
-    const summaryBuilder = new ContextSummaryBuilder(contextId, contextRealtimeData);
+  private updateSummaryBar(contextRealtimeData: Protocol.WebAudio.ContextRealtimeData): void {
+    const summaryBuilder = new ContextSummaryBuilder(contextRealtimeData);
     this.summaryBarContainer.removeChildren();
     this.summaryBarContainer.appendChild(summaryBuilder.getFragment());
   }
@@ -368,7 +373,7 @@ export class WebAudioView extends UI.ThrottledWidget.ThrottledWidget implements
         }
         const realtimeData = await model.requestRealtimeData(context.contextId);
         if (realtimeData) {
-          this.updateSummaryBar(context.contextId, realtimeData);
+          this.updateSummaryBar(realtimeData);
         }
       } else {
         this.clearSummaryBar();

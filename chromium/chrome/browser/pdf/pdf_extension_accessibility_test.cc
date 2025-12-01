@@ -42,7 +42,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/ax_inspect_factory.h"
-#include "content/public/browser/browser_accessibility_state.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/browser_test.h"
@@ -237,9 +236,7 @@ class PDFExtensionAccessibilityTest : public PDFExtensionTestBase {
 
   void EnableScreenReader() {
     // Spoof a screen reader.
-    mode_override_.emplace(ui::kAXModeComplete);
-    content::BrowserAccessibilityState::GetInstance()->SetScreenReaderAppActive(
-        true);
+    mode_override_.emplace(ui::kAXModeDefaultForTests);
   }
 
   void TearDownOnMainThread() override {
@@ -518,54 +515,6 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTestWithOopifOverride,
   std::string selected_text = base::UTF16ToUTF8(params.selection_text);
   base::ReplaceChars(selected_text, "\r", "", &selected_text);
   EXPECT_EQ(kExepectedPDFSelection, selected_text);
-}
-
-IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTestWithOopifOverride,
-                       RecordHasAccessibleTextToUmaWithAccessiblePdf) {
-  base::HistogramTester histograms;
-  content::ScopedAccessibilityModeOverride mode_override(ui::kAXModeComplete);
-  ASSERT_TRUE(
-      LoadPdf(embedded_test_server()->GetURL("/pdf/test-bookmarks.pdf")));
-
-  WebContents* contents = GetActiveWebContents();
-  ASSERT_TRUE(contents);
-
-  WaitForAccessibilityTreeToContainNodeWithName(contents,
-                                                "1 First Section\r\n");
-
-  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-  histograms.ExpectBucketCount("Accessibility.PDF.HasAccessibleText2",
-                               /*sample=*/true,
-                               /*expected_count=*/1);
-  histograms.ExpectTotalCount("Accessibility.PDF.HasAccessibleText2",
-                              /*expected_count=*/1);
-}
-
-IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTestWithOopifOverride,
-                       RecordHasAccessibleTextToUmaWithInaccessible) {
-  base::HistogramTester histograms;
-  content::ScopedAccessibilityModeOverride mode_override(ui::kAXModeComplete);
-
-  ASSERT_TRUE(LoadPdf(embedded_test_server()->GetURL(
-      "/pdf/accessibility/hello-world-in-image.pdf")));
-
-  WebContents* contents = GetActiveWebContents();
-  ASSERT_TRUE(contents);
-
-  // This string is defined as `IDS_AX_UNLABELED_IMAGE_ROLE_DESCRIPTION` in
-  // blink_accessibility_strings.grd.
-#if BUILDFLAG(IS_WIN)
-  const char kUnlabeledImageName[] = "Unlabeled graphic";
-#else
-  const char kUnlabeledImageName[] = "Unlabeled image";
-#endif  // BUILDFLAG(IS_WIN)
-  WaitForAccessibilityTreeToContainNodeWithName(contents, kUnlabeledImageName);
-
-  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-  histograms.ExpectBucketCount("Accessibility.PDF.HasAccessibleText2", false,
-                               /*expected_count=*/1);
-  histograms.ExpectTotalCount("Accessibility.PDF.HasAccessibleText2",
-                              /*expected_count=*/1);
 }
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -1051,12 +1000,6 @@ INSTANTIATE_TEST_SUITE_P(All,
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, HelloWorld) {
   base::HistogramTester histograms;
   RunPDFTest(FILE_PATH_LITERAL("hello-world.pdf"));
-  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-  histograms.ExpectBucketCount("Accessibility.PDF.HasAccessibleText2",
-                               /*sample=*/true,
-                               /*expected_count=*/1);
-  histograms.ExpectTotalCount("Accessibility.PDF.HasAccessibleText2",
-                              /*expected_count=*/1);
 }
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest,
@@ -1149,8 +1092,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityNavigationTest,
   EXPECT_EQ(ax::mojom::DefaultActionVerb::kJump,
             link_node->GetData().GetDefaultActionVerb());
   content::AccessibilityNotificationWaiter event_waiter(
-      GetActiveWebContents(), ui::kAXModeComplete,
-      ax::mojom::Event::kLoadComplete);
+      GetActiveWebContents(), ax::mojom::Event::kLoadComplete);
   ui::AXActionData action_data;
   action_data.action = ax::mojom::Action::kDoDefault;
   action_data.target_node_id = link_node->GetData().id;
@@ -1513,9 +1455,6 @@ IN_PROC_BROWSER_TEST_P(PdfOcrIntegrationTest, HelloWorld) {
                        GetExpectedStatus(/*has_content=*/true));
 
   metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-  histograms.ExpectUniqueSample("Accessibility.PDF.HasAccessibleText2",
-                                /*sample=*/false,
-                                /*expected_count=*/1);
 
   int expected_count = (IsSearchifyEnabled() && IsOcrAvailable()) ? 1 : 0;
   // Screen Reader is always enabled for this test.

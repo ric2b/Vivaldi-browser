@@ -48,7 +48,7 @@ class CPDF_PageContentGenerator {
   void ProcessText(fxcrt::ostringstream* buf, CPDF_TextObject* pTextObj);
   ByteString GetOrCreateDefaultGraphics() const;
   ByteString RealizeResource(const CPDF_Object* pResource,
-                             const ByteString& bsType) const;
+                             ByteStringView type) const;
   const CPDF_ContentMarks* ProcessContentMarks(fxcrt::ostringstream* buf,
                                                const CPDF_PageObject* pPageObj,
                                                const CPDF_ContentMarks* pPrev);
@@ -69,14 +69,14 @@ class CPDF_PageContentGenerator {
   // been parsed from or written to any content stream yet.
   void UpdateStreamlessPageObjects(int new_content_stream_index);
 
-  // Updates the resource dictionary for `m_pObjHolder` to account for all the
+  // Updates the resource dictionary for `obj_holder_` to account for all the
   // changes.
   void UpdateResourcesDict();
 
-  UnownedPtr<CPDF_PageObjectHolder> const m_pObjHolder;
-  UnownedPtr<CPDF_Document> const m_pDocument;
-  std::vector<UnownedPtr<CPDF_PageObject>> m_pageObjects;
-  ByteString m_DefaultGraphicsName;
+  UnownedPtr<CPDF_PageObjectHolder> const obj_holder_;
+  UnownedPtr<CPDF_Document> const document_;
+  std::vector<UnownedPtr<CPDF_PageObject>> page_objects_;
+  ByteString default_graphics_name_;
 };
 
 #endif  // CORE_FPDFAPI_EDIT_CPDF_PAGECONTENTGENERATOR_H_

@@ -56,12 +56,12 @@ bool IsSharedStorageAllowedByPermissionsPolicy(
                  kEnabled;
 }
 
-FrameTreeNodeId GetMainFrameIdFromRFH(RenderFrameHost* rfh) {
+GlobalRenderFrameHostId GetMainFrameIdFromRFH(RenderFrameHost* rfh) {
   return static_cast<RenderFrameHostImpl*>(rfh->GetOutermostMainFrame())
-      ->GetFrameTreeNodeId();
+      ->GetGlobalId();
 }
 
-FrameTreeNodeId GetMainFrameIdFromNavigationOrDocumentHandle(
+GlobalRenderFrameHostId GetMainFrameIdFromNavigationOrDocumentHandle(
     NavigationOrDocumentHandle* navigation_or_document_handle) {
   if (auto* navigation_request =
           navigation_or_document_handle->GetNavigationRequest()) {
@@ -71,7 +71,7 @@ FrameTreeNodeId GetMainFrameIdFromNavigationOrDocumentHandle(
   if (auto* rfh = navigation_or_document_handle->GetDocument()) {
     return GetMainFrameIdFromRFH(rfh);
   }
-  return FrameTreeNodeId();
+  return GlobalRenderFrameHostId();
 }
 
 }  // namespace
@@ -242,8 +242,9 @@ void SharedStorageHeaderObserver::HeaderReceived(
     return;
   }
 
-  FrameTreeNodeId main_frame_id = GetMainFrameIdFromNavigationOrDocumentHandle(
-      navigation_or_document_handle);
+  GlobalRenderFrameHostId main_frame_id =
+      GetMainFrameIdFromNavigationOrDocumentHandle(
+          navigation_or_document_handle);
 
   std::vector<MethodWithOptionsPtr> cloned_methods_with_options;
   cloned_methods_with_options.reserve(methods_with_options.size());
@@ -256,7 +257,9 @@ void SharedStorageHeaderObserver::HeaderReceived(
       ->lock_manager()
       .SharedStorageBatchUpdate(
           std::move(methods_with_options), with_lock, request_origin,
-          AccessScope::kHeader, main_frame_id, /*worklet_id=*/std::nullopt,
+          AccessScope::kHeader, main_frame_id,
+          /*worklet_ordinal_id=*/std::nullopt,
+          /*worklet_devtools_token=*/base::UnguessableToken::Null(),
           base::BindOnce(&SharedStorageHeaderObserver::OnBatchUpdateFinished,
                          weak_ptr_factory_.GetWeakPtr(), request_origin,
                          std::move(cloned_methods_with_options), with_lock));

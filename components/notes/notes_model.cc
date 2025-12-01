@@ -634,6 +634,26 @@ bool NotesModel::IsNotesNoLock(const GURL& url) {
           nodes_ordered_by_url_set_.end());
 }
 
+bool NotesModel::IsChildOfTrashNode(const NoteNode* node) {
+  const NoteNode* trash_node = this->trash_node();
+
+  if (!node)
+    return false;
+
+  const NoteNode* current = node;
+  const NoteNode* parent = current->parent();
+
+  while (parent != nullptr) {
+    if (parent == trash_node)
+      return true;
+
+    current = parent;
+    parent = current->parent();
+  }
+
+  return false;
+}
+
 void NotesModel::RemoveNodeTreeFromURLSet(NoteNode* node) {
   DCHECK(loaded_);
   DCHECK(node);

@@ -6,7 +6,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_CANVAS_OFFSCREENCANVAS2D_OFFSCREEN_CANVAS_RENDERING_CONTEXT_2D_H_
 
 #include "base/notreached.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_typedefs.h"
+#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_enums.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_2d_color_params.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
@@ -137,6 +137,10 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
     return HasTriggerForIntervention();
   }
 
+  CanvasOperationType GetCanvasTriggerOperations() const override {
+    return GetTriggersForIntervention();
+  }
+
   std::optional<cc::PaintRecord> FlushCanvas(FlushReason) override;
 
  protected:
@@ -148,8 +152,6 @@ class MODULES_EXPORT OffscreenCanvasRenderingContext2D final
                    size_t row_bytes,
                    int x,
                    int y) override;
-  void DispatchContextLostEvent(TimerBase*) override;
-  void TryRestoreContextEvent(TimerBase*) override;
 
   bool ResolveFont(const String& new_font) override;
 

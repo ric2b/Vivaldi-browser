@@ -2,20 +2,124 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
+
 import type {DevToolsRecorder} from './injected/injected.js';
 import type {Schema} from './models/models.js';
 
 describe('Injected', () => {
   let iframe: HTMLIFrameElement|undefined;
+  // TODO: use smaller test pages per test.
+  const testPage = `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Recording Client example</title>
+    <style>
+      html, body, * {
+        margin: 0;
+        padding: 0;
+      }
+      button {
+        width: 100px;
+        height: 20px;
+      }
+    </style>
+  </head>
+  <body>
 
+    <button aria-role="button" aria-name="testButton" id="button"></button>
+    <button id="buttonNoARIA"></button>
+    <button id="buttonWithLength11">length a 11</button>
+    <button id="buttonWithLength12">length aa 12</button>
+    <button id="buttonWithLength32">length aaaaaaaaa aaaaaaaaa aa 32</button>
+    <button id="buttonWithLength33">length aaaaaaaaa aaaaaaaaa aaa 33</button>
+    <button id="buttonWithLength64">length aaaaaaaaa aaaaaaaaa aaaaaaaaa aaaaaaaaa aaaaaaaaa aaaa 64</button>
+    <button id="buttonWithLength65">length aaaaaaaaa aaaaaaaaa aaaaaaaaa aaaaaaaaa aaaaaaaaa aaaaa 65</button>
+    <button id="buttonWithNewLines">
+      with newlines
+    </button>
+    <input id="input"></input>
+
+    <script>
+      class ShadowCSSSelectorElement extends HTMLElement {
+        constructor() {
+          super();
+          const shadow = this.attachShadow({mode: 'open'});
+          shadow.innerHTML = \`
+            <p>sss</p>
+            <button id="insideShadowRoot">Login</button>
+          \`;
+        }
+      }
+      customElements.define('shadow-css-selector-element', ShadowCSSSelectorElement);
+
+      class ShadowARIASelectorElement extends HTMLElement {
+        constructor() {
+          super();
+          const shadow = this.attachShadow({mode: 'open'});
+          shadow.innerHTML = \`
+            <p>sss</p>
+            <button aria-role="button" aria-name="login">Login</button>
+          \`;
+        }
+      }
+      customElements.define('shadow-aria-selector-element', ShadowARIASelectorElement);
+    </script>
+    <header>
+      <shadow-css-selector-element></shadow-css-selector-element>
+    </header>
+    <main>
+      <shadow-css-selector-element></shadow-css-selector-element>
+    </main>
+
+    <div aria-role="header">
+      <shadow-aria-selector-element></shadow-aria-selector-element>
+    </div>
+    <div aria-role="main">
+      <shadow-aria-selector-element></shadow-aria-selector-element>
+    </div>
+
+    <div aria-name="parent-name">
+      <div id="no-aria-name-or-role" aria-name="" aria-role="">
+    </div>
+
+    <host-element id="slotted-host-element">
+      <template shadowrootmode="open">
+        <slot></slot>
+      </template>
+      text in slot
+    </host-element>
+
+    <button class="custom-selector-attribute" data-testid="unique">Custom selector</button>
+    <button class="custom-selector-attribute" data-testid="123456789">Custom selector (invalid CSS id)</button>
+
+    <host-element id="shadow-root-with-custom-selectors" data-qa="custom-id">
+      <template shadowrootmode="open">
+        <button data-testid="shadow button">Shadow button with testid</button>>
+      </template>
+    </host-element>
+
+    <div id="notunique"></div>
+    <div id="notunique"></div>
+  </body>
+</html>`;
+
+  /**
+   * Loads scripts injected by Recorder into a new iframe to make sure
+   * they run in dedicated environment.
+   */
   async function createSandbox(): Promise<Window> {
     const url = new URL('./injected/injected.generated.js', import.meta.url);
+    // Some tests run this method twice, so ensure we tidy up any previous iframe.
+    iframe?.remove();
 
     iframe = document.createElement('iframe');
     const {promise, resolve} = Promise.withResolvers();
-    iframe.src = new URL('../../ui/components/docs/recorder_injected/basic.html', import.meta.url).toString();
+    iframe.srcdoc = testPage;
     iframe.onload = resolve;
-    document.body.append(iframe);
+    renderElementIntoDOM(iframe);
     await promise;
     const iframeDocument = iframe.contentDocument!;
     {
@@ -237,6 +341,7 @@ describe('Injected', () => {
       const selectors = await getSelectorOfButtonWithLength(MAXIMUM_LENGTH + 1);
       assert.isUndefined(selectors);
     });
+
     it('should return a text selector correctly with same prefix elements', async () => {
       let selectors = await getSelectorOfButtonWithLength(
           SAME_PREFIX_TEXT_LENGTH,

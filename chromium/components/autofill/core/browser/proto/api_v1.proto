@@ -66,7 +66,7 @@ message AutofillPageQueryRequest {
 message AutofillQueryResponse {
   // Next ID: 3
   message FormSuggestion {
-    // Next ID: 7
+    // Next ID: 9
     message FieldSuggestion {
       // Prediction made on a field.
       // Next ID: 5
@@ -97,6 +97,9 @@ message AutofillQueryResponse {
           SOURCE_AUTOFILL_COMBINED_TYPES = 7 [deprecated = true];
           // The prediction is a (cached) Autofill AI model prediction.
           SOURCE_AUTOFILL_AI = 8;
+          // The prediction is a crowdsourced Autofill AI prediction based on
+          // client type votes.
+          SOURCE_AUTOFILL_AI_CROWDSOURCING = 9;
         }
 
         // The predicted field type.
@@ -116,14 +119,13 @@ message AutofillQueryResponse {
       // Detailed list of all possible predictions. Contains an autofill and/or
       // a password manager prediction.
       repeated FieldPrediction predictions = 3;
-      // Whether the server-side classification believes that the field
-      // may be pre-filled with a placeholder in the value attribute.
-      optional bool may_use_prefilled_placeholder = 4;
+      reserved 4;  // optional bool may_use_prefilled_placeholder
       // For fields of type NEW_PASSWORD and ACCOUNT_CREATION_PASSWORD, this may
       // specify requirements for the generation of passwords.
       optional .autofill.PasswordRequirementsSpec password_requirements = 5;
       reserved 6;  // optional bool primary_type_prediction_is_override
-      optional string format_string = 7;
+      reserved 7;  // optional string format_string = 7;
+      optional FormatString format_string = 8;
     };
     // Suggestions on the fields in the same form.
     repeated FieldSuggestion field_suggestions = 1;

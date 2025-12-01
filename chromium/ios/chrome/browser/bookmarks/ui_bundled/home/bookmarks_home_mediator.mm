@@ -222,6 +222,13 @@ bool IsABookmarkNodeSectionForIdentifier(
   DCHECK(!_bookmarkPromoController);
 }
 
+- (BOOL)canDismiss {
+  // While sign-in is in progress, the UI should be frozen.
+  // The promo manager is in charge of displaying the activity overlay, but
+  // we’re still in charge of stopping dismiss from occurring.
+  return !_bookmarkPromoController.signinInProgress;
+}
+
 #pragma mark - Initial Model Setup
 
 // Computes the bookmarks table view based on the currently displayed node.
@@ -392,7 +399,7 @@ bool IsABookmarkNodeSectionForIdentifier(
   // show the spinner backgound. Otherwise, check if we need to show the empty
   // background.
   if (self.consumer.isDisplayingBookmarkRoot) {
-    if (_bookmarkModel->HasNoUserCreatedBookmarksOrFolders() &&
+    if (!_bookmarkModel->HasUserCreatedBookmarksOrFolders() &&
         _syncedBookmarksObserver->IsPerformingInitialSync()) {
       [self.consumer
           updateTableViewBackgroundStyle:BookmarksHomeBackgroundStyleLoading];
@@ -527,6 +534,10 @@ bool IsABookmarkNodeSectionForIdentifier(
 
 - (BOOL)shouldDisplayCloudSlashIconWithBookmarkNode:
     (const BookmarkNode*)bookmarkNode {
+
+  if (IsVivaldiRunning())
+    return NO; // End Vivaldi
+
   return bookmarkNode &&
          bookmark_utils_ios::IsAccountBookmarkStorageOptedIn(
              self.syncService) &&
@@ -608,7 +619,7 @@ bool IsABookmarkNodeSectionForIdentifier(
 - (void)willDeleteNode:(const BookmarkNode*)node
             fromFolder:(const BookmarkNode*)folder {
   DCHECK(node);
-  if (self.displayedNode == node) {
+  if (self.displayedNode->HasAncestor(node)) {
     [self.consumer closeThisFolder];
   }
 }

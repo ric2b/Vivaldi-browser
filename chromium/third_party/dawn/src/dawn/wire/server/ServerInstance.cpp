@@ -51,7 +51,7 @@ WireResult Server::DoInstanceRequestAdapter(Known<WGPUInstance> instance,
     mProcs.instanceRequestAdapter(
         instance->handle, options,
         {nullptr, WGPUCallbackMode_AllowSpontaneous,
-         ForwardToServer2<&Server::OnRequestAdapterCallback>, userdata.release(), nullptr});
+         ForwardToServer<&Server::OnRequestAdapterCallback>, userdata.release(), nullptr});
     return WireResult::Success;
 }
 
@@ -130,27 +130,21 @@ void Server::OnRequestAdapterCallback(RequestAdapterUserdata* data,
         propertiesChain = &(*propertiesChain)->next;
     }
 
+    WGPUDawnAdapterPropertiesPowerPreference powerProperties = {};
+    powerProperties.chain.sType = WGPUSType_DawnAdapterPropertiesPowerPreference;
+    *propertiesChain = &powerProperties.chain;
+    propertiesChain = &(*propertiesChain)->next;
+
     mProcs.adapterGetInfo(adapter, &info);
     cmd.info = &info;
 
-    // Query and report the adapter limits, including DawnExperimentalSubgroupLimits,
-    // DawnExperimentalImmediateDataLimits, and DawnTexelCopyBufferRowAlignmentLimits.
+    // Query and report the adapter limits, including all known extension limits.
     WGPULimits limits = {};
-
-    // TODO(crbug.com/354751907) Remove this, as it is now in AdapterInfo.
-    WGPUDawnExperimentalSubgroupLimits experimentalSubgroupLimits = {};
-    experimentalSubgroupLimits.chain.sType = WGPUSType_DawnExperimentalSubgroupLimits;
-    limits.nextInChain = &experimentalSubgroupLimits.chain;
-
-    // Chained DawnExperimentalImmediateDataLimits.
-    WGPUDawnExperimentalImmediateDataLimits experimentalImmediateDataLimits = {};
-    experimentalImmediateDataLimits.chain.sType = WGPUSType_DawnExperimentalImmediateDataLimits;
-    experimentalSubgroupLimits.chain.next = &experimentalImmediateDataLimits.chain;
 
     // Chained DawnTexelCopyBufferRowAlignmentLimits.
     WGPUDawnTexelCopyBufferRowAlignmentLimits texelCopyBufferRowAlignmentLimits = {};
     texelCopyBufferRowAlignmentLimits.chain.sType = WGPUSType_DawnTexelCopyBufferRowAlignmentLimits;
-    experimentalImmediateDataLimits.chain.next = &texelCopyBufferRowAlignmentLimits.chain;
+    limits.nextInChain = &texelCopyBufferRowAlignmentLimits.chain;
 
     mProcs.adapterGetLimits(adapter, &limits);
     cmd.limits = &limits;

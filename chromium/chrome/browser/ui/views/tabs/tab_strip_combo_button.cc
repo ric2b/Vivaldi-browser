@@ -9,10 +9,10 @@
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/layout_constants.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/tabs/tab_search_button.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_control_button.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/vector_icons/vector_icons.h"
@@ -38,9 +38,6 @@ enum class AccidentalClickType {
 // LINT.ThenChange(//tools/metrics/histograms/metadata/tab/enums.xml:AccidentalClickType)
 
 constexpr int kButtonGapNoBackground = 14;
-constexpr int kSeparatorBorderRadius = 2;
-constexpr int kSeparatorWidth = 2;
-constexpr int kSeparatorHeight = 16;
 constexpr base::TimeDelta kAccidentalClickThreshold = base::Seconds(1);
 constexpr char kNewTabButtonAccidentalClickName[] =
     "Tabs.NewTabButton.AccidentalClicks";
@@ -105,8 +102,8 @@ TabStripComboButton::TabStripComboButton(BrowserWindowInterface* browser,
 
   std::unique_ptr<views::Separator> separator =
       std::make_unique<views::Separator>();
-  separator->SetBorderRadius(kSeparatorBorderRadius);
-  separator->SetPreferredSize(gfx::Size(kSeparatorWidth, kSeparatorHeight));
+  separator->SetBorderRadius(TabStyle::Get()->GetSeparatorCornerRadius());
+  separator->SetPreferredSize(TabStyle::Get()->GetSeparatorSize());
   subscriptions_.push_back(browser->RegisterDidBecomeActive(base::BindRepeating(
       &TabStripComboButton::DidBecomeActive, base::Unretained(this))));
   subscriptions_.push_back(

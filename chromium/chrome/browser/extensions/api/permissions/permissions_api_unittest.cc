@@ -18,10 +18,10 @@
 #include "chrome/browser/extensions/extension_service_test_with_install.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "chrome/browser/extensions/permissions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/permissions/permissions_test_util.h"
 #include "chrome/browser/extensions/permissions/permissions_updater.h"
 #include "chrome/browser/extensions/permissions/scripting_permissions_modifier.h"
-#include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
 #include "content/public/browser/web_contents.h"
@@ -1216,8 +1216,7 @@ TEST_F(PermissionsAPIHostAccessRequestsUnitTest,
   int tab_id = ExtensionTabUtil::GetTabId(web_contents);
 
   // Grant one-time host access.
-  TabHelper::FromWebContents(web_contents)
-      ->active_tab_permission_granter()
+  ActiveTabPermissionGranter::FromWebContents(web_contents)
       ->GrantIfRequested(extension.get());
 
   // Add host access request for requested.com. Request is invalid because

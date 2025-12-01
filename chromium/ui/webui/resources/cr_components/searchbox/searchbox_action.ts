@@ -52,6 +52,11 @@ class SearchboxActionElement extends PolymerElement {
       //========================================================================
       // Private properties
       //========================================================================
+      actionIconStyle_: {
+        type: String,
+        computed: `computeActionIconStyle_(action)`,
+      },
+
       /** Element's 'aria-label' attribute. */
       ariaLabel: {
         type: String,
@@ -79,6 +84,7 @@ class SearchboxActionElement extends PolymerElement {
   declare ariaLabel: string;
   declare private hintHtml_: TrustedHTML;
   declare private tooltip_: string;
+  declare private actionIconStyle_;
 
   override ready() {
     super.ready();
@@ -116,6 +122,16 @@ class SearchboxActionElement extends PolymerElement {
   //============================================================================
   // Helpers
   //============================================================================
+
+  private computeActionIconStyle_(): string {
+    // If this is a custom icon, shouldn't follow the standard theming given to
+    // all other action icons.
+    if (this.action.iconPath.startsWith('data:image/')) {
+      return `background-image: url(${this.action.iconPath})`;
+    } else {
+      return `-webkit-mask-image: url(${this.action.iconPath})`;
+    }
+  }
 
   private computeAriaLabel_(): string {
     if (this.action.a11yLabel) {

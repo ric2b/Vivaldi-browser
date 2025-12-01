@@ -127,7 +127,23 @@ bool IsDefaultPrediction(const FieldPrediction& prediction) {
 }
 
 bool IsAutofillAiPrediction(const FieldPrediction& prediction) {
-  return prediction.source() == FieldPrediction::SOURCE_AUTOFILL_AI;
+  switch (prediction.source()) {
+    case FieldPrediction::SOURCE_UNSPECIFIED:
+    case FieldPrediction::SOURCE_AUTOFILL_DEFAULT:
+    case FieldPrediction::SOURCE_PASSWORDS_DEFAULT:
+    case FieldPrediction::SOURCE_OVERRIDE:
+    case FieldPrediction::SOURCE_ALL_APPROVED_EXPERIMENTS:
+    case FieldPrediction::SOURCE_FIELD_RANKS:
+    case FieldPrediction::SOURCE_MANUAL_OVERRIDE:
+    case FieldPrediction::SOURCE_AUTOFILL_COMBINED_TYPES:
+      return false;
+    case FieldPrediction::SOURCE_AUTOFILL_AI:
+    case FieldPrediction::SOURCE_AUTOFILL_AI_CROWDSOURCING:
+      return true;
+  }
+  // This is not using `NOTREACHED()` because the `FieldPrediction` may
+  // originate from outside of Chrome and may not have been validated.
+  return false;
 }
 
 // Returns true if for two consecutive events, the second event may be ignored.
@@ -150,6 +166,13 @@ bool AreCollapsibleLogEvents(const AutofillField::FieldLogEventType& event1,
 // want to prioritize local heuristics over the autocomplete type.
 bool PreferHeuristicOverHtml(FieldType heuristic_type,
                              HtmlFieldType html_type) {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableEmailOrLoyaltyCardsFilling) &&
+      heuristic_type == EMAIL_OR_LOYALTY_MEMBERSHIP_ID &&
+      html_type == HtmlFieldType::kEmail) {
+    return true;
+  }
+
   return base::Contains(kAutofillHeuristicsVsHtmlOverrides,
                         std::make_pair(heuristic_type, html_type));
 }
@@ -161,6 +184,12 @@ bool PreferHeuristicOverHtml(FieldType heuristic_type,
 // can help the server to "learn" the correct classification for these fields.
 bool PreferHeuristicOverServer(FieldType heuristic_type,
                                FieldType server_type) {
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillEnableEmailOrLoyaltyCardsFilling) &&
+      heuristic_type == EMAIL_OR_LOYALTY_MEMBERSHIP_ID &&
+      server_type == EMAIL_ADDRESS) {
+    return true;
+  }
   // Until we gain confidence in the precision of AutofillAI predictions, they
   // should not overrule local heuristics. The AutofillAI prediction itself can
   // always be retrieved via `GetAutofillAiServerTypePredictions`.
@@ -529,46 +558,15 @@ AutofillField::PredictionResult AutofillField::GetComputedPredictionResult()
 }
 
 const std::u16string& AutofillField::value_for_import() const {
-  bool should_consider_value_for_import =
-      IsSelectElement() ||
-      value(ValueSemantics::kInitial) != value(ValueSemantics::kCurrent);
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillFixCurrentValueInImport)) {
-    // If the feature is not enabled, legacy behavior applies:
-    // FormStructure::RetrieveFromCache() has already set the current value to
-    // the empty string for <input> elements whose value did not change. This
-    // special case only exists to ensure that kAutofillFixCurrentValueInImport
-    // is a refactoring w/o side effects.
-    should_consider_value_for_import = true;
-  }
+  const bool should_consider_value_for_import =
+      IsSelectElement() || initial_value() != value();
   if (!should_consider_value_for_import) {
     return base::EmptyString16();
   }
   if (base::optional_ref<const SelectOption> o = selected_option()) {
     return o->text;
   }
-  return value(ValueSemantics::kCurrent);
-}
-
-const std::u16string& AutofillField::value(ValueSemantics s) const {
-  if (!base::FeatureList::IsEnabled(features::kAutofillFixValueSemantics)) {
-    return FormFieldData::value();
-  }
-  switch (s) {
-    case ValueSemantics::kCurrent:
-      return FormFieldData::value();
-    case ValueSemantics::kInitial:
-      return initial_value_;
-  }
-}
-
-void AutofillField::set_initial_value(std::u16string initial_value,
-                                      base::PassKey<FormStructure> pass_key) {
-  if (!base::FeatureList::IsEnabled(features::kAutofillFixValueSemantics)) {
-    FormFieldData::set_value(std::move(initial_value));
-    return;
-  }
-  initial_value_ = std::move(initial_value);
+  return value();
 }
 
 FieldSignature AutofillField::GetFieldSignature() const {

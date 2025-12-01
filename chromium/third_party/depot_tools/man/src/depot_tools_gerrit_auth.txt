@@ -1,0 +1,64 @@
+depot_tools_gerrit_auth(7)
+==========================
+
+NAME
+----
+depot_tools_gerrit_auth - Gerrit authentication for depot_tools
+
+DESCRIPTION
+-----------
+
+The Chromium linkgit:depot_tools[7] suite contains many tools which
+may need to authenticate to Gerrit.
+
+Gerrit uses OAuth for authentication.  For depot_tools, OAuth is
+handled by `git-credential-luci`.
+
+Authentication is needed both for Gerrit API calls made by depot_tools
+and for operations done directly by Git (e.g., `git push`, `git
+fetch`).
+
+For Gerrit API calls, depot_tools uses `git-credential-luci` out of the
+box, but for Git, you need to modify your Git configuration to use
+`git-credential-luci`.
+
+GIT CONFIGURATION
+-----------------
+
+You need to configure Git to authenticate to Gerrit.  While
+depot_tools can help set up the necessary configuration (`git cl
+creds-check`), you can also do it manually.
+
+You need to add the following lines to your Git config:
+
+[subs="quotes"]
+----
+[credential "https://chromium.googlesource.com"]
+helper =
+helper = luci
+----
+
+This tells Git to use `git-credential-luci`.  The first empty value
+line is needed to reset the helper list to prevent conflicts.
+
+You should copy this for each Gerrit host you use.
+
+For Googlers, see go/chrome-gerrit-auth.
+
+CREDENTIAL HELPER
+-----------------
+
+`git-credential-luci` is a Git credential helper that can provide
+OAuth credentials for Gerrit.
+
+You will need to set up your OAuth credentials first by running
+`git-credential-luci login`.  After that, it will be able to provide
+credentials to authenticate Git commands, if you have configured it
+according to the previous section.
+
+`git-credential-luci` only keeps one active login session at a time
+per OS user.
+
+include::_footer.txt[]
+
+// vim: ft=asciidoc:

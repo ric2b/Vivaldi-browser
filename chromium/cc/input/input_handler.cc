@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/feature_list.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/types/optional_ref.h"
 #include "build/build_config.h"
@@ -63,6 +64,20 @@ InputHandlerClient::ScrollEventDispatchMode GetScrollEventDispatchMode() {
   }
 
   return InputHandlerClient::ScrollEventDispatchMode::kEnqueueScrollEvents;
+}
+
+std::string GetScrollInputTypeSuffix(ui::ScrollInputType input_type) {
+  switch (input_type) {
+    case ui::ScrollInputType::kTouchscreen:
+      return "Touchscreen";
+    case ui::ScrollInputType::kWheel:
+      return "Wheel";
+    case ui::ScrollInputType::kAutoscroll:
+      return "Autoscroll";
+    case ui::ScrollInputType::kScrollbar:
+      return "Scrollbar";
+  }
+  NOTREACHED();
 }
 
 }  // namespace
@@ -353,9 +368,6 @@ InputHandlerScrollResult InputHandler::ScrollUpdate(
         ui::ScrollGranularity::kScrollByPixel;
   }
 
-  compositor_delegate_->AccumulateScrollDeltaForTracing(
-      gfx::Vector2dF(scroll_state.delta_x(), scroll_state.delta_y()));
-
   compositor_delegate_->WillScrollContent(scroll_node.element_id);
 
   float initial_top_controls_offset =
@@ -371,8 +383,8 @@ InputHandlerScrollResult InputHandler::ScrollUpdate(
   bool did_scroll_content = did_scroll_x || did_scroll_y;
   if (did_scroll_content) {
     bool is_animated_scroll = ShouldAnimateScroll(scroll_state);
-    compositor_delegate_->DidScrollContent(scroll_node.element_id,
-                                           is_animated_scroll);
+    compositor_delegate_->DidScrollContent(
+        scroll_node.element_id, is_animated_scroll, resolvedScrollDelta);
   }
 
   SetNeedsCommit();
@@ -560,6 +572,8 @@ void InputHandler::ScrollEnd(ScrollNode* scroll_node, bool should_snap) {
 void InputHandler::RecordScrollBegin(
     ui::ScrollInputType input_type,
     ScrollBeginThreadState scroll_start_state) {
+  last_scroll_begin_time_ = base::TimeTicks::Now();
+
   auto tracker_type = GetTrackerTypeForScroll(input_type);
   DCHECK_NE(tracker_type, FrameSequenceTrackerType::kMaxType);
 
@@ -589,6 +603,9 @@ void InputHandler::RecordScrollBegin(
 
 void InputHandler::RecordScrollEnd(ui::ScrollInputType input_type) {
   compositor_delegate_->StopSequence(GetTrackerTypeForScroll(input_type));
+  base::UmaHistogramTimes(
+      "Event.Scroll." + GetScrollInputTypeSuffix(input_type),
+      base::TimeTicks::Now() - last_scroll_begin_time_);
 }
 
 InputHandlerPointerResult InputHandler::MouseMoveAt(
@@ -685,18 +702,21 @@ void InputHandler::SetSynchronousInputHandlerRootScrollOffset(
       root_content_offset - GetViewport().TotalScrollOffset();
   physical_delta.Scale(ActiveTree().page_scale_factor_for_scroll());
 
-  bool changed = !GetViewport()
-                      .ScrollBy(physical_delta,
-                                /*viewport_point=*/gfx::Point(),
-                                /*is_direct_manipulation=*/false,
-                                /*affect_browser_controls=*/false,
-                                /*scroll_outer_viewport=*/true)
-                      .consumed_delta.IsZero();
-  if (!changed)
+  gfx::Vector2dF consumed_delta =
+      GetViewport()
+          .ScrollBy(physical_delta,
+                    /*viewport_point=*/gfx::Point(),
+                    /*is_direct_manipulation=*/false,
+                    /*affect_browser_controls=*/false,
+                    /*scroll_outer_viewport=*/true)
+          .consumed_delta;
+  if (consumed_delta.IsZero()) {
     return;
+  }
 
   compositor_delegate_->DidScrollContent(OuterViewportScrollNode()->element_id,
-                                         /*is_animated_scroll=*/false);
+                                         /*is_animated_scroll=*/false,
+                                         consumed_delta);
   SetNeedsCommit();
 
   // After applying the synchronous input handler's scroll offset, tell it what
@@ -999,7 +1019,7 @@ bool InputHandler::GetSnapFlingInfoAndSetAnimatingSnapTarget(
   // CC side always uses fractional scroll deltas.
   bool use_fractional_offsets = true;
   std::unique_ptr<SnapSelectionStrategy> strategy =
-      SnapSelectionStrategy::CreateForEndAndDirection(
+      SnapSelectionStrategy::CreateForDisplacement(
           current_offset, snap_displacement, use_fractional_offsets);
 
   double snapport_height_adjustment =
@@ -1058,8 +1078,8 @@ void InputHandler::ScrollEndForSnapFling(bool did_finish) {
   ScrollEnd(true /* should_snap */);
 }
 
-void InputHandler::NotifyInputEvent() {
-  compositor_delegate_->NotifyInputEvent();
+void InputHandler::NotifyInputEvent(bool is_fling) {
+  compositor_delegate_->NotifyInputEvent(is_fling);
 }
 
 //

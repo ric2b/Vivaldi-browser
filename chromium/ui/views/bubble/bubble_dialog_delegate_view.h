@@ -120,10 +120,10 @@ class ShelfBubble;
 class TestBubbleDialogDelegateView;
 class TestBubbleDialogDelegate;
 class TrayBubbleView;
-FORWARD_DECLARE_TEST(OverviewSessionTest, HideBubbleTransient);
+FORWARD_DECLARE_TEST(OverviewSessionTest, DoNotHideBubbleTransient);
 FORWARD_DECLARE_TEST(ResizeShadowAndCursorTest,
                      DefaultCursorOnBubbleWidgetCorners);
-FORWARD_DECLARE_TEST(SnapGroupOverviewTest, HideBubbleTransientInOverview);
+FORWARD_DECLARE_TEST(SnapGroupOverviewTest, BubbleTransientIsVisibleInOverview);
 FORWARD_DECLARE_TEST(
     SnapGroupDesksTest,
     NoCrashWhenDraggingOverviewGroupItemWithBubbleToAnotherDesk);
@@ -286,10 +286,10 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // bubble is active, and will optionally resize itself to fit within the
   // anchor widget if the anchor widget's size changes.
   //
-  // The anchor widget is implied by the anchor view - bubbles with no anchor
-  // view cannot be anchored to a widget.
-
+  // The anchor widget can be explicitly set, or is implied by the anchor view.
+  void SetAnchorWidget(views::Widget* anchor_widget);
   Widget* anchor_widget() { return anchor_widget_; }
+  const Widget* anchor_widget() const { return anchor_widget_; }
 
   //////////////////////////////////////////////////////////////////////////////
   // The arrow:
@@ -448,7 +448,7 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // be a good fit for the UI you are building.
 
   ui::ColorVariant background_color() const { return color_; }
-  void set_background_color(ui::ColorVariant color) { color_ = color; }
+  void SetBackgroundColor(ui::ColorVariant color);
 
   void set_force_create_contents_background(
       bool force_create_contents_background) {
@@ -463,11 +463,6 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   void set_footnote_margins(const gfx::Insets& footnote_margins) {
     footnote_margins_ = footnote_margins;
   }
-
-  // Sets whether or not CreateClientView() returns a Layer backed ClientView.
-  // TODO(pbos): Remove all calls to this, then remove `paint_client_to_layer_`.
-  // See comment around `paint_client_to_layer_`.
-  void SetPaintClientToLayer(bool paint_client_to_layer);
 
   // Sets the content margins to a default picked for smaller bubbles.
   void UseCompactMargins();
@@ -609,7 +604,7 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   void OnBubbleWidgetPaintAsActiveChanged();
 
   void OnDeactivate();
-  void UpdateFrameColors();
+  void UpdateFrameColor();
 
   // Notify this bubble that it is now the primary anchored bubble. When a new
   // bubble becomes the primary anchor, the previous primary silently loses its
@@ -662,19 +657,8 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // Pointer to this bubble's ClientView.
   raw_ptr<ClientView> client_view_ = nullptr;
 
-  // A BubbleFrameView will apply a masking path to its ClientView to ensure
-  // contents are appropriately clipped to the frame's rounded corners. If the
-  // bubble uses layers in its views hierarchy, these will not be clipped to
-  // the client mask unless the ClientView is backed by a textured ui::Layer.
-  // This flag tracks whether or not to to create a layer backed ClientView.
-  //
-  // TODO(tluk): Fix all cases where bubble transparency is used and have bubble
-  // ClientViews always paint to a layer.
-  // TODO(tluk): Flip this to true for all bubbles.
-  bool paint_client_to_layer_ = false;
-
   // If true, contents view will be forced to create a solid color background in
-  // `UpdateFrameColors()`.
+  // `UpdateFrameColor()`.
   bool force_create_contents_background_ = false;
 
 #if BUILDFLAG(IS_MAC)
@@ -848,11 +832,12 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public View,
   friend class ::ash::TestBubbleDialogDelegateView;
   friend class ::ash::TestBubbleDialogDelegate;
   friend class ::ash::TrayBubbleView;
-  FRIEND_TEST_ALL_PREFIXES(::ash::OverviewSessionTest, HideBubbleTransient);
+  FRIEND_TEST_ALL_PREFIXES(::ash::OverviewSessionTest,
+                           DoNotHideBubbleTransient);
   FRIEND_TEST_ALL_PREFIXES(::ash::ResizeShadowAndCursorTest,
                            DefaultCursorOnBubbleWidgetCorners);
   FRIEND_TEST_ALL_PREFIXES(::ash::SnapGroupOverviewTest,
-                           HideBubbleTransientInOverview);
+                           BubbleTransientIsVisibleInOverview);
   FRIEND_TEST_ALL_PREFIXES(
       ::ash::SnapGroupDesksTest,
       NoCrashWhenDraggingOverviewGroupItemWithBubbleToAnotherDesk);
@@ -891,9 +876,8 @@ class VIEWS_EXPORT BubbleDialogDelegateView : public View,
   friend class TouchSelectionMenuViews;
   FRIEND_TEST_ALL_PREFIXES(BubbleDialogDelegateViewInteractiveTest,
                            BubbleAndParentNotActiveSimultaneously);
-  FRIEND_TEST_ALL_PREFIXES(BubbleDialogDelegateViewTest, WithClientLayerTest);
   FRIEND_TEST_ALL_PREFIXES(BubbleDialogDelegateViewTest,
-                           WithoutClientLayerTest);
+                           ClientViewIsPaintedToLayer);
   FRIEND_TEST_ALL_PREFIXES(WidgetFocusObserverTest, Bubble);
   friend class examples::DialogExampleDelegate<BubbleDialogDelegateView>;
   friend class examples::ExampleBubble;

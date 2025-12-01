@@ -79,14 +79,14 @@ void SVGImageElement::Trace(Visitor* visitor) const {
   SVGURIReference::Trace(visitor);
 }
 
-bool SVGImageElement::CurrentFrameHasSingleSecurityOrigin() const {
+bool SVGImageElement::HasSingleSecurityOrigin() const {
   if (auto* layout_svg_image = To<LayoutSVGImage>(GetLayoutObject())) {
     LayoutImageResource* layout_image_resource =
         layout_svg_image->ImageResource();
     ImageResourceContent* image_content = layout_image_resource->CachedImage();
     if (image_content) {
       if (Image* image = image_content->GetImage())
-        return image->CurrentFrameHasSingleSecurityOrigin();
+        return image->HasSingleSecurityOrigin();
     }
   }
   return true;
@@ -101,23 +101,19 @@ ScriptPromise<IDLUndefined> SVGImageElement::decode(
 void SVGImageElement::SvgAttributeChanged(
     const SvgAttributeChangedParams& params) {
   const QualifiedName& attr_name = params.name;
-  bool is_length_attribute =
-      attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
-      attr_name == svg_names::kWidthAttr || attr_name == svg_names::kHeightAttr;
 
-  if (is_length_attribute || attr_name == svg_names::kPreserveAspectRatioAttr) {
-    if (is_length_attribute) {
-      UpdatePresentationAttributeStyle(params.property);
-    }
+  if (attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
+      attr_name == svg_names::kWidthAttr ||
+      attr_name == svg_names::kHeightAttr) {
+    UpdatePresentationAttributeStyle(params.property);
+    return;
+  }
 
+  if (attr_name == svg_names::kPreserveAspectRatioAttr) {
     LayoutObject* object = GetLayoutObject();
     if (!object)
       return;
 
-    // FIXME: if isLengthAttribute then we should avoid this call if the
-    // viewport didn't change, however since we don't have the computed
-    // style yet we can't use updateBoundingBox/updateImageContainerSize.
-    // See http://crbug.com/466200.
     MarkForLayoutAndParentResourceInvalidation(*object);
     return;
   }

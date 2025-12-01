@@ -18,8 +18,14 @@
 #import "components/sync/service/sync_user_settings.h"
 #import "components/trusted_vault/trusted_vault_server_constants.h"
 #import "ios/chrome/app/application_delegate/app_state.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_constants.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/account_menu/account_menu_coordinator_delegate.h"
+#import "ios/chrome/browser/authentication/ui_bundled/continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signout_action_sheet/signout_action_sheet_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/trusted_vault_reauthentication/trusted_vault_reauthentication_coordinator.h"
+#import "ios/chrome/browser/authentication/ui_bundled/trusted_vault_reauthentication/trusted_vault_reauthentication_coordinator_delegate.h"
 #import "ios/chrome/browser/regional_capabilities/model/regional_capabilities_service_factory.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/bulk_upload/bulk_upload_coordinator.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/bulk_upload/bulk_upload_coordinator_delegate.h"
@@ -69,6 +75,7 @@ using signin_metrics::PromoAction;
 using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 @interface ManageSyncSettingsCoordinator () <
+    AccountMenuCoordinatorDelegate,
     BulkUploadCoordinatorDelegate,
     ManageAccountsCoordinatorDelegate,
     ManageSyncSettingsCommandHandler,
@@ -77,7 +84,8 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
     SettingsNavigationControllerDelegate,
     SignoutActionSheetCoordinatorDelegate,
     SyncErrorSettingsCommandHandler,
-    SyncObserverModelBridge> {
+    SyncObserverModelBridge,
+    TrustedVaultReauthenticationCoordinatorDelegate> {
   // Sync observer.
   std::unique_ptr<SyncObserverBridge> _syncObserver;
   // Whether Settings have been dismissed.
@@ -90,7 +98,9 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
   SyncEncryptionPassphraseTableViewController*
       _syncEncryptionPassphraseTableViewController;
   // Account menu coordinator.
-  SigninCoordinator* _accountMenuCoordinator;
+  AccountMenuCoordinator* _accountMenuCoordinator;
+  TrustedVaultReauthenticationCoordinator*
+      _trustedVaultReauthenticationCoordinator;
 }
 
 // View controller.
@@ -123,6 +133,7 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
   SettingsNavigationController* _navigationControllerInModalView;
   // The coordinator for the Personalize Google Services view.
   PersonalizeGoogleServicesCoordinator* _personalizeGoogleServicesCoordinator;
+  SigninCoordinator* _addAccountCoordinator;
 }
 
 @synthesize baseNavigationController = _baseNavigationController;
@@ -180,7 +191,7 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
   self.mediator.consumer = viewController;
 
-  CHECK(_baseNavigationController, base::NotFatalUntil::M129);
+  CHECK(_baseNavigationController);
   [self.baseNavigationController pushViewController:viewController
                                            animated:YES];
   _syncObserver = std::make_unique<SyncObserverBridge>(self, self.syncService);
@@ -188,10 +199,12 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 - (void)stop {
   [super stop];
+  [self stopAddAccountCoordinator];
   [self.mediator disconnect];
   [self stopBulkUpload];
   [self stopManageAccountsCoordinator];
-  [self interruptAccountMenuCoordinator];
+  [self stopAccountMenuCoordinator];
+  [self stopTrustedVaultReauthenticationCoordinator];
   self.mediator = nil;
   self.viewController = nil;
   [_syncEncryptionPassphraseTableViewController settingsWillBeDismissed];
@@ -226,6 +239,17 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 #pragma mark - Private
 
+- (void)stopAddAccountCoordinator {
+  [_addAccountCoordinator stop];
+  _addAccountCoordinator = nil;
+}
+
+- (void)stopTrustedVaultReauthenticationCoordinator {
+  [_trustedVaultReauthenticationCoordinator stop];
+  _trustedVaultReauthenticationCoordinator.delegate = nil;
+  _trustedVaultReauthenticationCoordinator = nil;
+}
+
 - (void)stopManageAccountsCoordinator {
   _manageAccountsCoordinator.delegate = nil;
   [_manageAccountsCoordinator stop];
@@ -249,11 +273,7 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 - (void)stopAccountMenuCoordinator {
   [_accountMenuCoordinator stop];
-  _accountMenuCoordinator = nil;
-}
-
-- (void)interruptAccountMenuCoordinator {
-  [_accountMenuCoordinator interruptAnimated:YES];
+  _accountMenuCoordinator.delegate = nil;
   _accountMenuCoordinator = nil;
 }
 
@@ -301,8 +321,7 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
         // `baseNavigationController`, `baseNavigationController` needs to be
         // closed.
         CHECK([self.baseNavigationController
-                  isKindOfClass:[SettingsNavigationController class]],
-              base::NotFatalUntil::M129);
+            isKindOfClass:[SettingsNavigationController class]]);
         [self.baseNavigationController
             performSelector:@selector(closeSettings)];
       } else {
@@ -341,7 +360,7 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 - (void)manageAccountsCoordinatorWantsToBeStopped:
     (ManageAccountsCoordinator*)coordinator {
-  CHECK_EQ(coordinator, _manageAccountsCoordinator, base::NotFatalUntil::M133);
+  CHECK_EQ(coordinator, _manageAccountsCoordinator);
   [self stopManageAccountsCoordinator];
 }
 
@@ -417,7 +436,7 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
                             view:self.viewController.view
         forceSnackbarOverToolbar:NO
                       withSource:metricSignOut
-                      completion:^(BOOL success) {
+                      completion:^(BOOL success, SceneState* scene_state) {
                         [weakSelf handleSignOutCompleted:success];
                       }];
   self.signoutActionSheetCoordinator.delegate = self;
@@ -490,18 +509,13 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 }
 
 - (void)openAccountMenu {
-  // TODO(crbug.com/336719357): Update to use ApplicationCommands.
-  _accountMenuCoordinator = [SigninCoordinator
-      accountMenuCoordinatorWithBaseViewController:self.viewController
-                                           browser:self.browser
-                                        anchorView:_viewController.view];
-
-  __weak __typeof(self) weakself = self;
-  _accountMenuCoordinator.signinCompletion =
-      ^(SigninCoordinatorResult result, id<SystemIdentity> identity) {
-        [weakself stopAccountMenuCoordinator];
-      };
-
+  _accountMenuCoordinator = [[AccountMenuCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser
+                      anchorView:_viewController.view
+                     accessPoint:AccountMenuAccessPoint::kNewTabPage
+                             URL:GURL()];
+  _accountMenuCoordinator.delegate = self;
   [_accountMenuCoordinator start];
 }
 
@@ -564,37 +578,39 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 }
 
 - (void)openTrustedVaultReauthForFetchKeys {
-  id<ApplicationCommands> applicationCommands = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), ApplicationCommands);
   trusted_vault::SecurityDomainId chromeSyncID =
       trusted_vault::SecurityDomainId::kChromeSync;
   syncer::TrustedVaultUserActionTriggerForUMA settingsTrigger =
       syncer::TrustedVaultUserActionTriggerForUMA::kSettings;
-  AccessPoint settingsAccessPoint = AccessPoint::kSettings;
-  [applicationCommands
-      showTrustedVaultReauthForFetchKeysFromViewController:self.viewController
-                                          securityDomainID:chromeSyncID
-                                                   trigger:settingsTrigger
-                                               accessPoint:settingsAccessPoint];
+  CHECK(!_trustedVaultReauthenticationCoordinator, base::NotFatalUntil::M145);
+  _trustedVaultReauthenticationCoordinator =
+      [[TrustedVaultReauthenticationCoordinator alloc]
+          initWithBaseViewController:self.viewController
+                             browser:self.browser
+                              intent:SigninTrustedVaultDialogIntentFetchKeys
+                    securityDomainID:chromeSyncID
+                             trigger:settingsTrigger];
+  _trustedVaultReauthenticationCoordinator.delegate = self;
+  [_trustedVaultReauthenticationCoordinator start];
 }
 
 - (void)openTrustedVaultReauthForDegradedRecoverability {
-  id<ApplicationCommands> applicationCommands = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), ApplicationCommands);
   trusted_vault::SecurityDomainId chromeSyncID =
       trusted_vault::SecurityDomainId::kChromeSync;
   syncer::TrustedVaultUserActionTriggerForUMA settingsTrigger =
       syncer::TrustedVaultUserActionTriggerForUMA::kSettings;
-  AccessPoint settingsAccessPoint = AccessPoint::kSettings;
-  [applicationCommands
-      showTrustedVaultReauthForDegradedRecoverabilityFromViewController:
-          self.viewController
-                                                       securityDomainID:
-                                                           chromeSyncID
-                                                                trigger:
-                                                                    settingsTrigger
-                                                            accessPoint:
-                                                                settingsAccessPoint];
+  SigninTrustedVaultDialogIntent intent =
+      SigninTrustedVaultDialogIntentDegradedRecoverability;
+  CHECK(!_trustedVaultReauthenticationCoordinator, base::NotFatalUntil::M145);
+  _trustedVaultReauthenticationCoordinator =
+      [[TrustedVaultReauthenticationCoordinator alloc]
+          initWithBaseViewController:self.viewController
+                             browser:self.browser
+                              intent:intent
+                    securityDomainID:chromeSyncID
+                             trigger:settingsTrigger];
+  _trustedVaultReauthenticationCoordinator.delegate = self;
+  [_trustedVaultReauthenticationCoordinator start];
 }
 
 - (void)openMDMErrodDialogWithSystemIdentity:(id<SystemIdentity>)identity {
@@ -602,13 +618,24 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 }
 
 - (void)openPrimaryAccountReauthDialog {
-  id<ApplicationCommands> applicationCommands = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), ApplicationCommands);
-  ShowSigninCommand* signinCommand = [[ShowSigninCommand alloc]
-      initWithOperation:AuthenticationOperation::kPrimaryAccountReauth
-            accessPoint:AccessPoint::kSettings];
-  [applicationCommands showSignin:signinCommand
-               baseViewController:self.viewController];
+  SigninContextStyle contextStyle = SigninContextStyle::kDefault;
+  AccessPoint accessPoint = AccessPoint::kSettings;
+  signin_metrics::PromoAction promoAction =
+      signin_metrics::PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO;
+  _addAccountCoordinator = [SigninCoordinator
+      primaryAccountReauthCoordinatorWithBaseViewController:self.viewController
+                                                    browser:self.browser
+                                               contextStyle:contextStyle
+                                                accessPoint:accessPoint
+                                                promoAction:promoAction
+                                       continuationProvider:
+                                           DoNothingContinuationProvider()];
+  __weak __typeof(self) weakSelf = self;
+  _addAccountCoordinator.signinCompletion =
+      ^(SigninCoordinatorResult result, id<SystemIdentity> identity) {
+        [weakSelf stopAddAccountCoordinator];
+      };
+  [_addAccountCoordinator start];
 }
 
 - (void)openAccountStorage {
@@ -650,6 +677,22 @@ using DismissViewCallback = SystemIdentityManager::DismissViewCallback;
 
 - (void)settingsWasDismissed {
   [self.delegate manageSyncSettingsCoordinatorWasRemoved:self];
+}
+
+#pragma mark - TrustedVaultReauthenticationCoordinatorDelegate
+
+- (void)trustedVaultReauthenticationCoordinatorWantsToBeStopped:
+    (TrustedVaultReauthenticationCoordinator*)coordinator {
+  CHECK_EQ(coordinator, _trustedVaultReauthenticationCoordinator);
+  [self stopTrustedVaultReauthenticationCoordinator];
+}
+
+#pragma mark - AccountMenuCoordinatorDelegate
+
+- (void)accountMenuCoordinatorWantsToBeStopped:
+    (AccountMenuCoordinator*)coordinator {
+  CHECK_EQ(_accountMenuCoordinator, coordinator, base::NotFatalUntil::M140);
+  [self stopAccountMenuCoordinator];
 }
 
 @end

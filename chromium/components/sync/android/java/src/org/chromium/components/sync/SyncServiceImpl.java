@@ -14,13 +14,13 @@ import org.json.JSONArray;
 import org.json.JSONException;
 
 import org.chromium.base.Callback;
-import org.chromium.base.Promise;
 import org.chromium.base.ThreadUtils.ThreadChecker;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountsChangeObserver;
+import org.chromium.components.signin.base.AccountInfo;
 import org.chromium.components.signin.base.CoreAccountInfo;
 import org.chromium.google_apis.gaia.GoogleServiceAuthError;
 
@@ -59,8 +59,7 @@ public class SyncServiceImpl implements SyncService, AccountsChangeObserver {
         mSyncServiceAndroidBridge = ptr;
         AccountManagerFacade accountManagerFacade = AccountManagerFacadeProvider.getInstance();
         accountManagerFacade.addObserver(this);
-        Promise<List<CoreAccountInfo>> accountsPromise =
-                AccountManagerFacadeProvider.getInstance().getCoreAccountInfos();
+        var accountsPromise = AccountManagerFacadeProvider.getInstance().getAccounts();
         if (accountsPromise.isFulfilled()) {
             // The promise is already fulfilled - call immediately. If the promise is not fulfilled,
             // `keepSettingsOnlyForAccountManagerAccounts` will be invoked by
@@ -237,13 +236,6 @@ public class SyncServiceImpl implements SyncService, AccountsChangeObserver {
         assert mSyncServiceAndroidBridge != 0;
         return SyncServiceImplJni.get()
                 .isInitialSyncFeatureSetupComplete(mSyncServiceAndroidBridge);
-    }
-
-    @Override
-    public void setSyncRequested() {
-        mThreadChecker.assertOnValidThread();
-        assert mSyncServiceAndroidBridge != 0;
-        SyncServiceImplJni.get().setSyncRequested(mSyncServiceAndroidBridge);
     }
 
     @Override
@@ -450,13 +442,12 @@ public class SyncServiceImpl implements SyncService, AccountsChangeObserver {
     @Override
     /* AccountsChangeObserver implementation. */
     public void onCoreAccountInfosChanged() {
-        Promise<List<CoreAccountInfo>> accountsPromise =
-                AccountManagerFacadeProvider.getInstance().getCoreAccountInfos();
+        var accountsPromise = AccountManagerFacadeProvider.getInstance().getAccounts();
         assert accountsPromise.isFulfilled();
         keepSettingsOnlyForAccountManagerAccounts(accountsPromise.getResult());
     }
 
-    private void keepSettingsOnlyForAccountManagerAccounts(List<CoreAccountInfo> accounts) {
+    private void keepSettingsOnlyForAccountManagerAccounts(List<AccountInfo> accounts) {
         int size = accounts.size();
         String[] gaiaIds = new String[size];
         for (int i = 0; i < size; ++i) {
@@ -536,8 +527,6 @@ public class SyncServiceImpl implements SyncService, AccountsChangeObserver {
     @NativeMethods
     interface Natives {
         // Please keep all methods below in the same order as sync_service_android_bridge.h.
-        void setSyncRequested(long nativeSyncServiceAndroidBridge);
-
         boolean isSyncFeatureEnabled(long nativeSyncServiceAndroidBridge);
 
         boolean isSyncFeatureActive(long nativeSyncServiceAndroidBridge);

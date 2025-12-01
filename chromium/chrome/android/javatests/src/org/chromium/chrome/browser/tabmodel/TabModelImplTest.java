@@ -20,7 +20,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.Token;
 import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CommandLineFlags;
@@ -37,6 +36,7 @@ import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.EmbeddedTestServerRule;
+import org.chromium.url.GURL;
 
 /** Tests for {@link TabModelImpl}. */
 @RunWith(ChromeJUnit4ClassRunner.class)
@@ -94,6 +94,7 @@ public class TabModelImplTest {
 
     @Test
     @SmallTest
+    @DisabledTest(message = "https://crbug.com/410945407")
     public void validIndexAfterRestored_FromColdStart_WithIncognitoTabs() throws Exception {
         createTabs(1, true, mTestUrl);
 
@@ -151,36 +152,6 @@ public class TabModelImplTest {
 
     @Test
     @SmallTest
-    public void isTabInTabGroup_detectMergedTabs() throws Exception {
-        createTabs(3, false, mTestUrl);
-
-        ThreadUtils.runOnUiThreadBlocking(
-                () -> {
-                    TabModel tabModel =
-                            sActivityTestRule.getActivity().getTabModelSelector().getModel(false);
-                    final Tab tab1 = tabModel.getTabAt(0);
-                    final Tab tab2 = tabModel.getTabAt(1);
-                    final Tab tab3 = tabModel.getTabAt(2);
-
-                    assertFalse(TabModelImpl.isTabInTabGroup(tab1));
-                    assertFalse(TabModelImpl.isTabInTabGroup(tab2));
-                    assertFalse(TabModelImpl.isTabInTabGroup(tab3));
-
-                    ChromeTabUtils.mergeTabsToGroup(tab2, tab3);
-
-                    assertFalse(TabModelImpl.isTabInTabGroup(tab1));
-                    assertTrue(TabModelImpl.isTabInTabGroup(tab2));
-                    assertTrue(TabModelImpl.isTabInTabGroup(tab3));
-
-                    tab1.setTabGroupId(new Token(1L, 2L));
-                    assertTrue(TabModelImpl.isTabInTabGroup(tab1));
-
-                    tab1.setTabGroupId(null);
-                });
-    }
-
-    @Test
-    @SmallTest
     public void testTabRemover_RemoveTab() {
         createTabs(1, false, mTestUrl);
 
@@ -229,6 +200,29 @@ public class TabModelImplTest {
                     assertEquals(1, tabModel.getCount());
 
                     assertTrue(tab1.isDestroyed());
+                });
+    }
+
+    @Test
+    @SmallTest
+    public void testOpenTabProgrammatically() {
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    TabModelImpl tabModel =
+                            (TabModelImpl)
+                                    sActivityTestRule
+                                            .getActivity()
+                                            .getTabModelSelector()
+                                            .getModel(false);
+                    assertEquals(1, tabModel.getCount());
+
+                    GURL url = new GURL("https://www.chromium.org");
+                    tabModel.openTabProgrammatically(url, 0);
+                    assertEquals(2, tabModel.getCount());
+
+                    Tab tab1 = tabModel.getTabAt(1);
+                    assertNotNull(tab1);
+                    assertEquals(url, tab1.getUrl());
                 });
     }
 }

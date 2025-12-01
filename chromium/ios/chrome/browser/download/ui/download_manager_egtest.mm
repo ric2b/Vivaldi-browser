@@ -5,6 +5,7 @@
 #import "base/functional/bind.h"
 #import "base/path_service.h"
 #import "base/test/ios/wait_util.h"
+#import "ios/chrome/browser/download/model/download_app_interface.h"
 #import "ios/chrome/browser/download/ui/download_manager_constants.h"
 #import "ios/chrome/browser/shared/model/url/chrome_url_constants.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -98,9 +99,11 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
 }
 
 // Waits until Download button is shown.
-[[nodiscard]] bool WaitForDownloadButton() {
+[[nodiscard]] bool WaitForDownloadButton(bool loading) {
   return base::test::ios::WaitUntilConditionOrTimeout(
-      base::test::ios::kWaitForPageLoadTimeout, ^{
+      loading ? base::test::ios::kWaitForPageLoadTimeout
+              : base::test::ios::kWaitForUIElementTimeout,
+      ^{
         NSError* error = nil;
         [[EarlGrey selectElementWithMatcher:DownloadButton()]
             assertWithMatcher:grey_interactable()
@@ -153,7 +156,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -169,7 +173,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -182,7 +187,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       assertWithMatcher:grey_notNil()];
 
@@ -205,7 +211,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -245,7 +252,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   // Wait until the new tab is open and switch to that tab.
   [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey selectTabAtIndex:1U];
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ false),
+             @"Download button did not show up");
 
   // Proceed with download.
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
@@ -259,7 +267,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       assertWithMatcher:grey_notNil()];
 
@@ -272,7 +281,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -293,7 +303,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -321,18 +332,26 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
     EARL_GREY_TEST_SKIPPED(@"Test skipped on iPad.");
   }
 
+  // Clear the already downloaded file in downloads directory.
+  [DownloadAppInterface
+      deleteDownloadsDirectoryFileWithName:@"download-example"];
+  base::test::ios::SpinRunLoopWithMinDelay(
+      base::test::ios::kWaitForFileOperationTimeout);
+
   // Create a download A task in one tab.
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
 
   // Go to a second tab and start a download B.
   [ChromeEarlGrey openNewTab];
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/")];
   [ChromeEarlGrey waitForWebStateContainingText:"Download"];
   [ChromeEarlGrey tapWebStateElementWithID:@"download"];
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -363,7 +382,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"BlobURL"];
   [ChromeEarlGrey tapWebStateElementWithID:@"blob"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -379,7 +399,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"PDF"];
   [ChromeEarlGrey tapWebStateElementWithID:@"pdf"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
   if (shouldOpen) {
@@ -398,7 +419,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"PDF"];
   [ChromeEarlGrey tapWebStateElementWithID:@"pdf"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
   if (shouldOpen) {
@@ -415,7 +437,8 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [ChromeEarlGrey waitForWebStateContainingText:"PDF"];
   [ChromeEarlGrey tapWebStateElementWithID:@"pdf_new_window"];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 
@@ -527,11 +550,11 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
 
 // Tests that a pdf that is displayed in the web view can be downloaded.
 // Only valid with "Save to drive" enabled.
-// TDOO(crbug.com/343971371): Enable after fixing flakiness.
-- (void)FLAKY_testDownloadDisplayedPDF {
+- (void)testDownloadDisplayedPDF {
   [ChromeEarlGrey loadURL:self.testServer->GetURL("/two_pages.pdf")];
   [ChromeEarlGrey waitForPageToFinishLoading];
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  GREYAssert(WaitForDownloadButton(/*loading*/ true),
+             @"Download button did not show up");
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:grey_scrollInDirection(kGREYDirectionDown, 150)];
 
@@ -549,7 +572,15 @@ GetContentDispositionPDFResponse(const net::test_server::HttpRequest& request) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
       performAction:grey_scrollToContentEdge(kGREYContentEdgeTop)];
 
-  GREYAssert(WaitForDownloadButton(), @"Download button did not show up");
+  BOOL barAppeared = WaitForDownloadButton(/*loading*/ false);
+  if (!barAppeared) {
+    // Scrolling to top is sometimes not wnough to exit fullscreen. Give a
+    // second swipe to the bottom.
+    [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewMatcher()]
+        performAction:GREYSwipeFastInDirection(kGREYDirectionDown)];
+    GREYAssert(WaitForDownloadButton(/*loading*/ false),
+               @"Download button did not show up");
+  }
   [[EarlGrey selectElementWithMatcher:DownloadButton()]
       performAction:grey_tap()];
 

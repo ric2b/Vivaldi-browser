@@ -19,16 +19,31 @@
 namespace {
 constexpr char kDragAmongTabsPresentationTimeHistogram[] =
     "Browser.TabDragging.DragAmongTabsPresentationTime";
+
+int CalculateMouseOffset(const DragSessionData& drag_data_,
+                         float offset_to_width_ratio_) {
+  std::vector<TabSlotView*> tabs_to_source(drag_data_.attached_views());
+  TabSlotView* source_view = drag_data_.source_view_drag_data()->attached_view;
+  tabs_to_source.erase(
+      tabs_to_source.begin() + drag_data_.source_view_index_ + 1,
+      tabs_to_source.end());
+  const int new_x =
+      TabStrip::GetSizeNeededForViews(tabs_to_source) - source_view->width() +
+      base::ClampRound(offset_to_width_ratio_ * source_view->width());
+
+  return new_x;
 }
+
+}  // namespace
 
 DraggingTabsSession::DraggingTabsSession(DragSessionData drag_data,
                                          TabDragContext* attached_context,
-                                         int mouse_offset,
+                                         float offset_to_width_ratio_,
                                          bool initial_move,
                                          gfx::Point start_point_in_screen)
     : drag_data_(drag_data),
       attached_context_(attached_context),
-      mouse_offset_(mouse_offset),
+      mouse_offset_(CalculateMouseOffset(drag_data_, offset_to_width_ratio_)),
       initial_move_(initial_move),
       last_move_attached_context_loc_(
           views::View::ConvertPointFromScreen(attached_context,
@@ -109,8 +124,6 @@ void DraggingTabsSession::MoveAttachedImpl(gfx::Point point_in_screen,
 
   const gfx::Point dragged_view_point = GetAttachedDragPoint(point_in_screen);
 
-  const int threshold = attached_context_->GetHorizontalDragThreshold();
-
   std::vector<TabSlotView*> views(drag_data_.tab_drag_data_.size());
   for (size_t i = 0; i < drag_data_.tab_drag_data_.size(); ++i) {
     views[i] = drag_data_.tab_drag_data_[i].attached_view.get();
@@ -120,6 +133,17 @@ void DraggingTabsSession::MoveAttachedImpl(gfx::Point point_in_screen,
 
   const gfx::Point point_in_attached_context =
       views::View::ConvertPointFromScreen(attached_context_, point_in_screen);
+
+  const int to_index = attached_context_->GetInsertionIndexForDraggedBounds(
+      GetDraggedViewTabStripBounds(dragged_view_point),
+      drag_data_.attached_views(), drag_data_.num_dragging_tabs());
+
+  constexpr int kHorizontalMoveThreshold = 16;  // DIPs.
+  const int threshold = base::ClampRound(
+      static_cast<double>(
+          attached_context_->GetTabAt(to_index)->bounds().width()) /
+      TabStyle::Get()->GetStandardWidth(/*is_split=*/false) *
+      kHorizontalMoveThreshold);
 
   // Update the model, moving the WebContents from one index to another. Do this
   // only if we have moved a minimum distance since the last reorder (to prevent
@@ -131,9 +155,6 @@ void DraggingTabsSession::MoveAttachedImpl(gfx::Point point_in_screen,
        threshold) ||
       (initial_move_ && !AreTabsConsecutive())) {
     TabStripModel* attached_model = attached_context_->GetTabStripModel();
-    const int to_index = attached_context_->GetInsertionIndexForDraggedBounds(
-        GetDraggedViewTabStripBounds(dragged_view_point),
-        drag_data_.attached_views(), drag_data_.num_dragging_tabs());
 
     content::WebContents* last_contents =
         drag_data_.tab_drag_data_.back().contents;
@@ -215,7 +236,7 @@ gfx::Rect DraggingTabsSession::GetDraggedViewTabStripBounds(
   }
 
   return gfx::Rect(tab_strip_point.x(), tab_strip_point.y(),
-                   attached_context_->GetActiveTabWidth(),
+                   TabStyle::Get()->GetStandardWidth(/*is_split=*/false),
                    GetLayoutConstant(TAB_HEIGHT));
 }
 
@@ -293,7 +314,7 @@ DraggingTabsSession::CalculateGroupForDraggedTabs(int to_index) {
   const auto tab_bounds_in_drag_context_coords = [this](int model_index) {
     const Tab* const tab = attached_context_->GetTabAt(model_index);
     return ToEnclosingRect(views::View::ConvertRectToTarget(
-        tab, attached_context_, gfx::RectF(tab->GetLocalBounds())));
+        tab->parent(), attached_context_, gfx::RectF(tab->bounds())));
   };
 
   // Use the left edge for a reliable fallback, e.g. if this is the leftmost
@@ -316,7 +337,7 @@ DraggingTabsSession::CalculateGroupForDraggedTabs(int to_index) {
     left_edge -= buffer;
   }
 
-  int left_most_selected_x_position =
+  const int left_most_selected_x_position =
       left_most_selected_tab->x() + tab_left_inset;
 
   if (left_group.has_value() &&

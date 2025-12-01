@@ -159,9 +159,17 @@ class NavigatorAuction::AuctionHandle final : public AbortSignal::Algorithm {
       visitor->Trace(promise_);
     }
 
-    void Attach(ScriptState* script_state, Rejected* rejected) final {
+    // The default Attach() implementation uses `this` to handle resolved
+    // promises, and the passed in shared Rejected handle to handle rejected
+    // promises. Subclasses may override Attach() to provide their own handler
+    // for rejected promises.
+    void Attach(ScriptState* script_state, Rejected* rejected) override {
       promise_.Unwrap().Then(script_state, this, rejected);
     }
+
+   protected:
+    // Exposed for classes that override Attach().
+    MemberScriptPromise<IDLType>& promise() { return promise_; }
 
    private:
     MemberScriptPromise<IDLType> promise_;
@@ -203,6 +211,61 @@ class NavigatorAuction::AuctionHandle final : public AbortSignal::Algorithm {
                    HeapVector<std::pair<String, blink::ScriptValue>>>&);
 
    private:
+    const mojom::blink::AuctionAdConfigAuctionIdPtr auction_id_;
+    const String seller_name_;
+  };
+
+  // Handles resolution of a single promise in perBuyerTkvSignals.
+  //
+  // Overrides common reject handler to treat rejection as a promise resolution,
+  // with no data passed in, so the auction will continue, but with empty TKV
+  // signals for the affected buyer.
+  class BuyerTkvSignalsResolved
+      : public AuctionHandleFunctionImpl<IDLAny, BuyerTkvSignalsResolved> {
+   public:
+    BuyerTkvSignalsResolved(
+        AuctionHandle* auction_handle,
+        scoped_refptr<const SecurityOrigin> buyer,
+        const MemberScriptPromise<IDLAny>& promise,
+        mojom::blink::AuctionAdConfigAuctionIdPtr auction_id,
+        const String& seller_name);
+
+    void React(ScriptState* script_state, ScriptValue value);
+
+    // Override default reject handler, to instead continue the auction (with no
+    // signals for the current buyer) on promise rejection.
+    void Attach(ScriptState* script_state, Rejected* rejected) override {
+      auto* rejected_buyer_tkv_signals =
+          MakeGarbageCollected<BuyerTkvSignalsRejected>(this);
+      promise().Unwrap().Then(script_state, this, rejected_buyer_tkv_signals);
+    }
+
+   private:
+    // Reject handler that calls into the BuyerTkvSignalsResolved's React()
+    // method to continue the auction, but passing in no contextual signals to
+    // the affected buyer.
+    class BuyerTkvSignalsRejected
+        : public ThenCallable<IDLAny, BuyerTkvSignalsRejected> {
+     public:
+      explicit BuyerTkvSignalsRejected(
+          BuyerTkvSignalsResolved* buyer_tkv_signals_resolved)
+          : buyer_tkv_signals_resolved_(buyer_tkv_signals_resolved) {}
+
+      void Trace(Visitor* visitor) const override {
+        ThenCallable<IDLAny, BuyerTkvSignalsRejected>::Trace(visitor);
+        visitor->Trace(buyer_tkv_signals_resolved_);
+      }
+
+      void React(ScriptState* script_state, ScriptValue) {
+        // Call into the resolution handler, with no data.
+        buyer_tkv_signals_resolved_->React(script_state, ScriptValue());
+      }
+
+     private:
+      const Member<BuyerTkvSignalsResolved> buyer_tkv_signals_resolved_;
+    };
+
+    scoped_refptr<const SecurityOrigin> buyer_;
     const mojom::blink::AuctionAdConfigAuctionIdPtr auction_id_;
     const String seller_name_;
   };
@@ -739,32 +802,34 @@ bool CopySellerCapabilitiesFromIdlToMojo(
   return true;
 }
 
-bool CopyExecutionModeFromIdlToMojo(const ExecutionContext& execution_context,
-                                    ExceptionState& exception_state,
-                                    const AuctionAdInterestGroup& input,
-                                    mojom::blink::InterestGroup& output) {
-  if (!input.hasExecutionMode()) {
-    return true;
-  }
-  const bool used_deprecated_names = input.executionMode() == "groupByOrigin";
-  base::UmaHistogramBoolean(
-      "Ads.InterestGroup.EnumNaming.Renderer.WorkletExecutionMode",
-      used_deprecated_names);
-  if (used_deprecated_names) {
-    ConsoleWarnDeprecatedEnum(execution_context, "executionMode",
-                              input.executionMode());
+bool CopyExecutionModeFromIdlToMojo(
+    const ExecutionContext& execution_context,
+    ExceptionState& exception_state,
+    const WTF::String& execution_mode,
+    const bool check_deprecated_names,
+    mojom::blink::InterestGroup::ExecutionMode& output) {
+  if (check_deprecated_names) {
+    const bool used_deprecated_names = execution_mode == "groupByOrigin";
+    base::UmaHistogramBoolean(
+        "Ads.InterestGroup.EnumNaming.Renderer.WorkletExecutionMode",
+        used_deprecated_names);
+    if (used_deprecated_names) {
+      ConsoleWarnDeprecatedEnum(execution_context, "executionMode",
+                                execution_mode);
+    }
   }
 
-  if (input.executionMode() == "compatibility") {
-    output.execution_mode =
-        mojom::blink::InterestGroup::ExecutionMode::kCompatibilityMode;
-  } else if (input.executionMode() == "group-by-origin" ||
-             input.executionMode() == "groupByOrigin") {
-    output.execution_mode =
-        mojom::blink::InterestGroup::ExecutionMode::kGroupedByOriginMode;
-  } else if (input.executionMode() == "frozen-context") {
-    output.execution_mode =
-        mojom::blink::InterestGroup::ExecutionMode::kFrozenContext;
+  if (execution_mode == "compatibility") {
+    output = mojom::blink::InterestGroup::ExecutionMode::kCompatibilityMode;
+    return true;
+  } else if (execution_mode == "group-by-origin" ||
+             (check_deprecated_names && execution_mode == "groupByOrigin")) {
+    output = mojom::blink::InterestGroup::ExecutionMode::kGroupedByOriginMode;
+    return true;
+
+  } else if (execution_mode == "frozen-context") {
+    output = mojom::blink::InterestGroup::ExecutionMode::kFrozenContext;
+    return true;
   }
   // For forward compatibility with new values, don't throw if unrecognized enum
   // values encountered.
@@ -2028,34 +2093,32 @@ void CopyPerBuyerSignalsFromIdlToMojo(
 }
 
 bool CopyPerBuyerTKVSignalsFromIdlToMojo(
-    const ScriptState& script_state,
     ExceptionState& exception_state,
+    NavigatorAuction::AuctionHandle* auction_handle,
+    const mojom::blink::AuctionAdConfigAuctionId* auction_id,
     const AuctionAdConfig& input,
     mojom::blink::AuctionAdConfig& output) {
   if (!input.hasPerBuyerTKVSignals()) {
     return true;
   }
 
-  for (const auto& per_buyer_tkv_signal : input.perBuyerTKVSignals()) {
+  for (const auto& per_buyer_tkv_signals : input.perBuyerTKVSignals()) {
     scoped_refptr<const SecurityOrigin> buyer =
-        ParseOrigin(per_buyer_tkv_signal.first);
+        ParseOrigin(per_buyer_tkv_signals.first);
     if (!buyer) {
       exception_state.ThrowTypeError(ErrorInvalidAuctionConfig(
-          input, "perBuyerTKVSignals buyer", per_buyer_tkv_signal.first,
+          input, "perBuyerTKVSignals buyer", per_buyer_tkv_signals.first,
           "must be a valid https origin."));
       return false;
     }
 
-    String tkv_signals_str;
-    if (!Jsonify(script_state, per_buyer_tkv_signal.second.V8Value(),
-                 tkv_signals_str)) {
-      exception_state.ThrowTypeError(ErrorInvalidAuctionConfigSellerJson(
-          input.seller(), "perBuyerTKVSignals"));
-      return false;
-    }
-
+    auction_handle->QueueAttachPromiseHandler(
+        MakeGarbageCollected<
+            NavigatorAuction::AuctionHandle::BuyerTkvSignalsResolved>(
+            auction_handle, buyer, per_buyer_tkv_signals.second,
+            auction_id->Clone(), input.seller()));
     output.auction_ad_config_non_shared_params->per_buyer_tkv_signals.insert(
-        buyer, tkv_signals_str);
+        buyer, mojom::blink::AuctionAdConfigMaybePromiseJson::NewPromise(0));
   }
 
   return true;
@@ -2680,6 +2743,11 @@ mojom::blink::AuctionAdConfigPtr IdlAuctionConfigToMojo(
   }
 
   if (!CopySellerFromIdlToMojo(exception_state, config, *mojo_config) ||
+      (config.hasExecutionMode() &&
+       !CopyExecutionModeFromIdlToMojo(
+           context, exception_state, config.executionMode(),
+           /*check_deprecated_names=*/false,
+           mojo_config->auction_ad_config_non_shared_params->execution_mode)) ||
       !CopyServerResponseFromIdlToMojo(auction_handle, auction_id.get(),
                                        exception_state, config, *mojo_config) ||
       !CopyDecisionLogicUrlFromIdlToMojo(context, exception_state, config,
@@ -2720,8 +2788,9 @@ mojom::blink::AuctionAdConfigPtr IdlAuctionConfigToMojo(
                                                      *mojo_config) ||
       !CopyPerBuyerRealTimeReportingTypesFromIdlToMojo(exception_state, config,
                                                        *mojo_config) ||
-      !CopyPerBuyerTKVSignalsFromIdlToMojo(script_state, exception_state,
-                                           config, *mojo_config)) {
+      !CopyPerBuyerTKVSignalsFromIdlToMojo(exception_state, auction_handle,
+                                           auction_id.get(), config,
+                                           *mojo_config)) {
     return mojom::blink::AuctionAdConfigPtr();
   }
 
@@ -3246,6 +3315,41 @@ void NavigatorAuction::AuctionHandle::PerBuyerSignalsResolved::React(
   }
 }
 
+NavigatorAuction::AuctionHandle::BuyerTkvSignalsResolved::
+    BuyerTkvSignalsResolved(
+        AuctionHandle* auction_handle,
+        scoped_refptr<const SecurityOrigin> buyer,
+        const MemberScriptPromise<IDLAny>& promise,
+        mojom::blink::AuctionAdConfigAuctionIdPtr auction_id,
+        const String& seller_name)
+    : AuctionHandleFunctionImpl(auction_handle, promise, /*is_input=*/true),
+      buyer_(buyer),
+      auction_id_(std::move(auction_id)),
+      seller_name_(seller_name) {}
+
+void NavigatorAuction::AuctionHandle::BuyerTkvSignalsResolved::React(
+    ScriptState* script_state,
+    ScriptValue value) {
+  OnResolved();
+
+  if (!script_state->ContextIsValid()) {
+    return;
+  }
+
+  String maybe_json;
+  if (!value.IsEmpty()) {
+    if (!Jsonify(*script_state, value.V8Value(), maybe_json)) {
+      maybe_json = String();
+      // TODO(crbug.com/412588114): Consider throwing an exception here. It
+      // won't be possible to catch the exception, but it will be visible via an
+      // `unhandledrejection` event.
+    }
+  }
+
+  auction_handle()->mojo_pipe()->ResolvedBuyerTkvSignalsPromise(
+      auction_id_->Clone(), buyer_, maybe_json);
+}
+
 NavigatorAuction::AuctionHandle::DeprecatedRenderURLReplacementsResolved::
     DeprecatedRenderURLReplacementsResolved(
         AuctionHandle* auction_handle,
@@ -3546,8 +3650,10 @@ ScriptPromise<IDLUndefined> NavigatorAuction::joinAdInterestGroup(
 
   if (!CopySellerCapabilitiesFromIdlToMojo(*context, exception_state, *group,
                                            *mojo_group) ||
-      !CopyExecutionModeFromIdlToMojo(*context, exception_state, *group,
-                                      *mojo_group) ||
+      (group->hasExecutionMode() &&
+       !CopyExecutionModeFromIdlToMojo(
+           *context, exception_state, group->executionMode(),
+           /*check_deprecated_names=*/true, mojo_group->execution_mode)) ||
       !CopyBiddingLogicUrlFromIdlToMojo(*context, exception_state, *group,
                                         *mojo_group) ||
       !CopyWasmHelperUrlFromIdlToMojo(*context, exception_state, *group,

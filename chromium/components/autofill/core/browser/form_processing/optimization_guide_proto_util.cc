@@ -27,9 +27,9 @@ optimization_guide::proto::FormControlType ToFormControlTypeProto(
     case FormControlType::kInputCheckbox:
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_CHECKBOX;
     case FormControlType::kInputEmail:
-      return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_DATE;
-    case FormControlType::kInputDate:
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_EMAIL;
+    case FormControlType::kInputDate:
+      return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_DATE;
     case FormControlType::kInputMonth:
       return optimization_guide::proto::FORM_CONTROL_TYPE_INPUT_MONTH;
     case FormControlType::kInputNumber:
@@ -68,16 +68,13 @@ void PopulateExtensionAPISpecificFields(
     optimization_guide::proto::FormData& form_proto) {
   // Add additional form-level metadata.
   *form_proto.mutable_global_id() = ToGlobalIdProto(form_data.global_id());
-  form_proto.set_form_signature(*CalculateFormSignature(form_data));
   // Add additional field-level metadata.
   CHECK_EQ(form_data.fields().size(),
            static_cast<size_t>(form_proto.fields_size()));
   for (size_t i = 0; i < form_data.fields().size(); i++) {
     const FormFieldData& field = form_data.fields()[i];
-    optimization_guide::proto::FormFieldData* proto_field =
-        form_proto.mutable_fields(i);
-    *proto_field->mutable_global_id() = ToGlobalIdProto(field.global_id());
-    proto_field->set_field_signature(*CalculateFieldSignatureForField(field));
+    *form_proto.mutable_fields(i)->mutable_global_id() =
+        ToGlobalIdProto(field.global_id());
   }
 }
 
@@ -87,15 +84,15 @@ optimization_guide::proto::FormData ToFormDataProto(
     const FormData& form_data,
     FormDataProtoConversionReason conversion_reason) {
   optimization_guide::proto::FormData form_data_proto;
+  form_data_proto.set_form_signature(*CalculateFormSignature(form_data));
   form_data_proto.set_form_name(base::UTF16ToUTF8(form_data.name()));
   for (const FormFieldData& field : form_data.fields()) {
     optimization_guide::proto::FormFieldData* field_proto =
         form_data_proto.add_fields();
-
+    field_proto->set_field_signature(*CalculateFieldSignatureForField(field));
     // Unconditionally assign html meta data to the field.
     field_proto->set_field_name(base::UTF16ToUTF8(field.name()));
     field_proto->set_field_label(base::UTF16ToUTF8(field.label()));
-    field_proto->set_is_visible(field.is_visible());
     field_proto->set_is_focusable(field.is_focusable());
     field_proto->set_placeholder(base::UTF16ToUTF8(field.placeholder()));
     field_proto->set_form_control_type(

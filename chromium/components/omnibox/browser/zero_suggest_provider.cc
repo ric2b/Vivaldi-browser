@@ -9,10 +9,12 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
+#include "base/i18n/char_iterator.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
@@ -20,6 +22,7 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_classification.h"
@@ -32,7 +35,9 @@
 #include "components/omnibox/browser/page_classification_functions.h"
 #include "components/omnibox/browser/remote_suggestions_service.h"
 #include "components/omnibox/browser/search_suggestion_parser.h"
+#include "components/omnibox/browser/suggestion_group_util.h"
 #include "components/omnibox/browser/zero_suggest_cache_service.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -45,12 +50,25 @@
 #include "third_party/metrics_proto/omnibox_focus_type.pb.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "url/gurl.h"
+#include "url/url_canon.h"
+#include "url/url_util.h"
 
 using OEP = metrics::OmniboxEventProto;
 using OFT = metrics::OmniboxFocusType;
 using OIT = metrics::OmniboxInputType;
 
 namespace {
+
+// Maximum length of page title sent to Suggest via `pageTitle` CGI param,
+// expressed as number of Unicode characters (codepoints).
+//
+// NOTE: The actual string value for the CGI param could be longer (in bytes)
+// than this number, due to the way we're encoding the page title before sending
+// it to Suggest. In the worst-case scenario, the total number of bytes sent
+// could be up to 12x the value specified here:
+// `kMaxPageTitleLength` (# of codepoints) x 4 (UTF-8 code-units per codepoint
+// [maximum]) x 3 (due to URL-encoding [worst-case]).
+const size_t kMaxPageTitleLength = 128;
 
 using ResultType = ZeroSuggestProvider::ResultType;
 constexpr bool is_ios = !!BUILDFLAG(IS_IOS);
@@ -117,9 +135,6 @@ void LogOmniboxZeroSuggestRequest(const RemoteRequestEvent request_event,
       request_event);
 }
 
-// Relevance value to use if it was not set explicitly by the server.
-const int kDefaultZeroSuggestRelevance = 100;
-
 // Called in StoreRemoteResponse() and ReadStoredResponse() to determine if the
 // zero suggest cache is being used to store ZPS responses received from the
 // remote Suggest service for the given |result_type|.
@@ -166,7 +181,8 @@ bool StoreRemoteResponse(const std::string& response_json,
 
   if (!SearchSuggestionParser::ParseSuggestResults(
           *response_data, input, client->GetSchemeClassifier(),
-          /*default_result_relevance=*/kDefaultZeroSuggestRelevance,
+          /*default_result_relevance=*/
+          omnibox::kDefaultRemoteZeroSuggestRelevance,
           /*is_keyword_result=*/false, results)) {
     return false;
   }
@@ -223,7 +239,8 @@ bool ReadStoredResponse(const AutocompleteProviderClient* client,
 
   if (!SearchSuggestionParser::ParseSuggestResults(
           *response_data, input, client->GetSchemeClassifier(),
-          /*default_result_relevance=*/kDefaultZeroSuggestRelevance,
+          /*default_result_relevance=*/
+          omnibox::kDefaultRemoteZeroSuggestRelevance,
           /*is_keyword_result=*/false, results)) {
     return false;
   }
@@ -284,6 +301,67 @@ ResultType ResultTypeForInput(const AutocompleteInput& input) {
   return ResultType::kNone;
 }
 
+std::u16string TruncateUTF16(const std::u16string& input, size_t max_length) {
+  if (input.empty()) {
+    return u"";
+  }
+
+  size_t num_chars = 0;
+  base::i18n::UTF16CharIterator it(input);
+  while (!it.end() && (num_chars < max_length)) {
+    it.Advance();
+    num_chars++;
+  }
+
+  return input.substr(0, it.array_pos());
+}
+
+std::string EncodeURIComponent(const std::string& component) {
+  url::RawCanonOutputT<char> encoded;
+  url::EncodeURIComponent(component, &encoded);
+  return std::string(encoded.view());
+}
+
+void MaybeAddContextualSuggestParams(
+    const AutocompleteProviderClient* client,
+    const AutocompleteInput& input,
+    TemplateURLRef::SearchTermsArgs& search_terms_args) {
+  // Do not add the contextual suggest params if Lens is not enabled to fulfill
+  // the suggestion.
+  if (!client->IsLensEnabled()) {
+    return;
+  }
+
+  std::vector<std::string> additional_query_params;
+
+  if (!search_terms_args.current_page_url.empty() &&
+      omnibox::IsOtherWebPage(search_terms_args.page_classification)) {
+    // Add "ctxus=" CGI param.
+    std::string_view contextual_url_suggest_param =
+        omnibox_feature_configs::ContextualSearch::Get()
+            .contextual_url_suggest_param;
+    if (!contextual_url_suggest_param.empty()) {
+      additional_query_params.push_back(
+          base::StrCat({"ctxus=", contextual_url_suggest_param}));
+    }
+
+    // Add "pageTitle=" CGI param.
+    if (omnibox_feature_configs::ContextualSearch::Get()
+            .send_page_title_suggest_param &&
+        client->IsPersonalizedUrlDataCollectionActive()) {
+      std::string page_title = EncodeURIComponent(base::UTF16ToUTF8(
+          TruncateUTF16(input.current_title(), kMaxPageTitleLength)));
+      if (!page_title.empty()) {
+        additional_query_params.push_back(
+            base::StrCat({"pageTitle=", page_title}));
+      }
+    }
+
+    search_terms_args.additional_query_params =
+        base::JoinString(additional_query_params, "&");
+  }
+}
+
 }  // namespace
 
 // static
@@ -312,13 +390,15 @@ AutocompleteMatch ZeroSuggestProvider::NavigationToMatch(
   match.contents = url_formatter::FormatUrl(navigation.url(), format_types,
                                             base::UnescapeRule::SPACES, nullptr,
                                             nullptr, nullptr);
-  match.contents_class = ClassifyTermMatches({}, match.contents.length(), 0,
+  match.contents_class = ClassifyTermMatches({}, match.contents.length(),
+                                             ACMatchClassification::NONE,
                                              ACMatchClassification::URL);
 
   match.description =
       AutocompleteMatch::SanitizeString(navigation.description());
   match.description_class = ClassifyTermMatches({}, match.description.length(),
-                                                0, ACMatchClassification::NONE);
+                                                ACMatchClassification::NONE,
+                                                ACMatchClassification::NONE);
   match.suggest_type = navigation.suggest_type();
   for (const int subtype : navigation.subtypes()) {
     match.subtypes.insert(SuggestSubtypeForNumber(subtype));
@@ -379,7 +459,9 @@ void ZeroSuggestProvider::StartPrefetch(const AutocompleteInput& input) {
   TRACE_EVENT0("omnibox", "ZeroSuggestProvider::StartPrefetch");
 
   if (!OmniboxFieldTrial::IsZeroSuggestPrefetchingEnabledInContext(
-          input.current_page_classification())) {
+          input.current_page_classification()) &&
+      !omnibox_feature_configs::ContextualSearch::Get()
+           .IsEnabledWithPrefetch()) {
     return;
   }
 
@@ -409,6 +491,8 @@ void ZeroSuggestProvider::RunZeroSuggestPrefetch(const AutocompleteInput& input,
                                            : std::string();
   search_terms_args.lens_overlay_suggest_inputs =
       input.lens_overlay_suggest_inputs();
+
+  MaybeAddContextualSuggestParams(client(), input, search_terms_args);
 
   std::unique_ptr<network::SimpleURLLoader>* prefetch_loader = nullptr;
   if (result_type == ResultType::kRemoteNoURL) {
@@ -455,7 +539,7 @@ void ZeroSuggestProvider::RunZeroSuggestPrefetch(const AutocompleteInput& input,
 void ZeroSuggestProvider::Start(const AutocompleteInput& input,
                                 bool minimal_changes) {
   TRACE_EVENT0("omnibox", "ZeroSuggestProvider::Start");
-  Stop(true, false);
+  Stop(AutocompleteStopReason::kClobbered);
 
   auto [result_type, eligible] = GetResultTypeAndEligibility(client(), input);
   LogOmniboxZeroSuggestEligibility(result_type, eligible);
@@ -493,6 +577,8 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
   search_terms_args.lens_overlay_suggest_inputs =
       input.lens_overlay_suggest_inputs();
 
+  MaybeAddContextualSuggestParams(client(), input, search_terms_args);
+
   const auto* template_url_service = client()->GetTemplateURLService();
   // Create a loader for the request and take ownership of it.
   // Request for zero-prefix suggestions in OTR contexts is not allowed; except
@@ -515,9 +601,8 @@ void ZeroSuggestProvider::Start(const AutocompleteInput& input,
                                /*is_prefetch=*/false);
 }
 
-void ZeroSuggestProvider::Stop(bool clear_cached_results,
-                               bool due_to_user_inactivity) {
-  AutocompleteProvider::Stop(clear_cached_results, due_to_user_inactivity);
+void ZeroSuggestProvider::Stop(AutocompleteStopReason stop_reason) {
+  AutocompleteProvider::Stop(stop_reason);
 
   if (base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetchDebouncing)) {
     debouncer_->CancelRequest();
@@ -531,7 +616,7 @@ void ZeroSuggestProvider::Stop(bool clear_cached_results,
   }
   result_type_running_ = ResultType::kNone;
 
-  if (clear_cached_results) {
+  if (stop_reason == AutocompleteStopReason::kClobbered) {
     experiment_stats_v2s_.clear();
     gws_event_id_hashes_.clear();
   }
@@ -616,6 +701,16 @@ void ZeroSuggestProvider::OnURLLoadComplete(
 
   loader_.reset();
   done_ = true;
+
+  // The Contextual Search in Omnibox experience, which is only active on Web
+  // page context, intentionally updates the cache with latest received results,
+  // but does not publish the matches asynchronously.
+  if (input.current_page_classification() ==
+          metrics::OmniboxEventProto::OTHER &&
+      omnibox_feature_configs::ContextualSearch::Get()
+          .IsEnabledWithPrefetch()) {
+    return;
+  }
 
   // For display stability reasons, update the displayed results with the remote
   // response only if they are empty or if an empty result set is received. In

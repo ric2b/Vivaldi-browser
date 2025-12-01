@@ -2,21 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "components/domain_reliability/quic_error_mapping.h"
+
+#include <array>
 
 namespace domain_reliability {
 
 namespace {
 
-const struct QuicErrorMapping {
+struct QuicErrorMapping {
   quic::QuicErrorCode quic_error;
   const char* beacon_quic_error;
-} kQuicErrorMap[] = {
+};
+const auto kQuicErrorMap = std::to_array<QuicErrorMapping>({
     // Connection has reached an invalid state.
     {quic::QUIC_INTERNAL_ERROR, "quic.internal_error"},
     // There were data frames after the a fin or reset.
@@ -512,7 +511,8 @@ const struct QuicErrorMapping {
      "quic.quic_handshake_failed_cid_collision"},
 
     // No error. Used as bound while iterating.
-    {quic::QUIC_LAST_ERROR, "quic.last_error"}};
+    {quic::QUIC_LAST_ERROR, "quic.last_error"},
+});
 
 // Must be updated any time a quic::QuicErrorCode is deprecated in
 // net/third_party/quiche/src/quiche/quic/core/quic_error_codes.h.

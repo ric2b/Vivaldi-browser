@@ -47,6 +47,12 @@ buildflag_header("fast_app_terminate_buildflags") {
   flags = [ "FAST_APP_TERMINATE_ENABLED=$fast_app_terminate_enabled" ]
 }
 
+buildflag_header("ios_force_build_chrome_framework_buildflags") {
+  header = "ios_force_build_chrome_framework_buildflags.h"
+  flags =
+      [ "IOS_FORCE_BUILD_CHROME_FRAMEWORK=$ios_force_build_chrome_framework" ]
+}
+
 source_set("app") {
   sources = [
     "app_startup_parameters.h",
@@ -71,7 +77,7 @@ source_set("app") {
 }
 
 source_set("app_trampoline") {
-  sources = [ "chrome_exe_trampoline.mm" ]
+  sources = [ "chrome_exe_main.mm" ]
 }
 
 source_set("unit_tests") {
@@ -100,7 +106,7 @@ source_set("unit_tests") {
     "//components/open_from_clipboard:test_support",
     "//components/prefs",
     "//components/prefs:test_support",
-    "//components/sync_preferences:sync_preferences",
+    "//components/sync_preferences",
     "//components/sync_preferences:test_support",
     "//components/variations",
     "//components/variations/service",
@@ -150,7 +156,7 @@ source_set("unit_tests") {
     "//ios/public/provider/chrome/browser/application_mode_fetcher:application_mode_fetcher_api",
     "//ios/testing:block_swizzler",
     "//ios/third_party/material_components_ios",
-    "//ios/web/public/test:test",
+    "//ios/web/public/test",
     "//testing/gmock",
     "//testing/gtest",
     "//third_party/ocmock",
@@ -241,11 +247,13 @@ if (ios_enable_credential_provider_extension) {
       "//components/webauthn/core/browser:passkey_model",
       "//ios/chrome/app/application_delegate:app_state",
       "//ios/chrome/app/application_delegate:observing_app_state_agent",
+      "//ios/chrome/app/profile",
       "//ios/chrome/browser/credential_provider/model",
       "//ios/chrome/browser/passwords/model:store_factory",
       "//ios/chrome/browser/shared/coordinator/scene:scene_state_header",
       "//ios/chrome/browser/shared/model/application_context",
       "//ios/chrome/browser/shared/model/profile",
+      "//ios/chrome/browser/shared/model/profile:features",
       "//ios/chrome/browser/sync/model",
       "//ios/chrome/browser/webauthn/model",
       "//ios/chrome/common/app_group",
@@ -460,7 +468,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/discover_feed/model:discover_feed_app_agent",
     "//ios/chrome/browser/download/model",
     "//ios/chrome/browser/download/model/auto_deletion",
-    "//ios/chrome/browser/download/model/background_service:background_service",
+    "//ios/chrome/browser/download/model/background_service",
     "//ios/chrome/browser/download/ui",
     "//ios/chrome/browser/favicon/model",
     "//ios/chrome/browser/first_run/model",
@@ -479,6 +487,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/omaha/model",
     "//ios/chrome/browser/passwords/model",
     "//ios/chrome/browser/promos_manager/model:factory",
+    "//ios/chrome/browser/push_notification/model:push_notification_delegate",
     "//ios/chrome/browser/push_notification/model:push_notification_service",
     "//ios/chrome/browser/push_notification/model:push_notification_util",
     "//ios/chrome/browser/saved_tab_groups/model",
@@ -493,6 +502,7 @@ source_set("app_internal") {
     "//ios/chrome/browser/shared/model/paths",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
@@ -615,10 +625,11 @@ source_set("mode") {
 }
 
 source_set("main") {
-  sources = [ "chrome_exe_main.mm" ]
+  sources = [ "chrome_main.mm" ]
 
   deps = [
     ":app_internal",
+    ":ios_force_build_chrome_framework_buildflags",
     "//base",
     "//build:blink_buildflags",
     "//components/component_updater",

@@ -5,12 +5,16 @@
 package org.chromium.chrome.browser.toolbar.back_button;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.robolectric.Shadows.shadowOf;
 
+import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Resources;
 import android.os.Looper;
 
 import org.junit.Before;
@@ -31,6 +35,7 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.util.ClickWithMetaStateCallback;
 
 @RunWith(BaseRobolectricTestRunner.class)
 @LooperMode(LooperMode.Mode.PAUSED)
@@ -38,21 +43,25 @@ public class BackButtonMediatorTest {
     private static final int TAB_ID = 0;
 
     @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
-    @Mock public Runnable mOnBackPressed;
+    @Mock public ClickWithMetaStateCallback mOnBackPressed;
     @Mock public ThemeColorProvider mThemeColorProvider;
     @Mock public Callback<Tab> mShowNavigationPopup;
     @Mock public Profile mProfile;
+    @Mock public Resources mResources;
+    @Mock public Context mContext;
     private ObservableSupplierImpl<Tab> mTabSupplier;
+    private ObservableSupplierImpl<Boolean> mEnabledSupplier;
     private PropertyModel mModel;
     private BackButtonMediator mMediator;
 
     // test properties
-    private Tab mTab;
+    private MockTab mTab;
 
     @Before
     public void setup() {
         mTab = new MockTab(TAB_ID, mProfile);
         mTabSupplier = new ObservableSupplierImpl<>();
+        mEnabledSupplier = new ObservableSupplierImpl<>(true);
         mModel =
                 new PropertyModel.Builder(BackButtonProperties.ALL_KEYS)
                         .with(BackButtonProperties.CLICK_LISTENER, mOnBackPressed)
@@ -63,9 +72,31 @@ public class BackButtonMediatorTest {
                         mOnBackPressed,
                         mThemeColorProvider,
                         mTabSupplier,
-                        mShowNavigationPopup);
+                        mEnabledSupplier,
+                        mShowNavigationPopup,
+                        mResources,
+                        mContext,
+                        /* isWebApp= */ false);
 
         shadowOf(Looper.getMainLooper()).idle();
+    }
+
+    private static void verifyEnabled(final PropertyModel model) {
+        assertTrue(
+                "Button is disabled, but should be enabled.",
+                model.get(BackButtonProperties.IS_ENABLED));
+        assertTrue(
+                "Button is not focusable, but should be focusable.",
+                model.get(BackButtonProperties.IS_FOCUSABLE));
+    }
+
+    private static void verifyDisabled(final PropertyModel model) {
+        assertFalse(
+                "Button is enabled, but should be disabled.",
+                model.get(BackButtonProperties.IS_ENABLED));
+        assertFalse(
+                "Button is focusable, but should be not focusable.",
+                model.get(BackButtonProperties.IS_FOCUSABLE));
     }
 
     @Test
@@ -87,7 +118,7 @@ public class BackButtonMediatorTest {
 
         assertEquals(
                 "Background ripple effect should be default",
-                mModel.get(BackButtonProperties.BACKGROUND_HIGHLIGHT_RESOURCE),
+                mMediator.getBackgroundResForTesting(),
                 org.chromium.chrome.browser.toolbar.R.drawable.default_icon_background);
     }
 
@@ -98,7 +129,7 @@ public class BackButtonMediatorTest {
 
         assertEquals(
                 "Background ripple effect should be default",
-                mModel.get(BackButtonProperties.BACKGROUND_HIGHLIGHT_RESOURCE),
+                mMediator.getBackgroundResForTesting(),
                 org.chromium.chrome.browser.toolbar.R.drawable.default_icon_background);
     }
 
@@ -109,7 +140,7 @@ public class BackButtonMediatorTest {
 
         assertEquals(
                 "Background ripple effect should be default",
-                mModel.get(BackButtonProperties.BACKGROUND_HIGHLIGHT_RESOURCE),
+                mMediator.getBackgroundResForTesting(),
                 org.chromium.chrome.browser.toolbar.R.drawable.default_icon_background);
     }
 
@@ -120,14 +151,14 @@ public class BackButtonMediatorTest {
 
         assertEquals(
                 "Background ripple effect should be incognito",
-                mModel.get(BackButtonProperties.BACKGROUND_HIGHLIGHT_RESOURCE),
+                mMediator.getBackgroundResForTesting(),
                 org.chromium.chrome.browser.toolbar.R.drawable.default_icon_background_baseline);
     }
 
     @Test
     public void testClick_shouldForwardCallToParent() {
-        mModel.get(BackButtonProperties.CLICK_LISTENER).run();
-        verify(mOnBackPressed).run();
+        mModel.get(BackButtonProperties.CLICK_LISTENER).onClickWithMeta(0);
+        verify(mOnBackPressed).onClickWithMeta(0);
     }
 
     @Test
@@ -142,5 +173,142 @@ public class BackButtonMediatorTest {
 
         mModel.get(BackButtonProperties.LONG_CLICK_LISTENER).run();
         verify(mShowNavigationPopup).onResult(mTab);
+    }
+
+    @Test
+    public void testNewTabWithNoHistory_shouldKeepButtonDisabled() {
+        mTab.setCanGoBack(false);
+        mTabSupplier.set(mTab);
+
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testNewTabWithHistory_shouldEnableButton() {
+        mTab.setCanGoBack(false);
+        mTabSupplier.set(mTab);
+
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testTabChangesToNonInteractive_shouldKeepEnabledButton() {
+        mTab.setCanGoBack(true);
+        mTabSupplier.set(mTab);
+        verifyEnabled(mModel);
+
+        mTabSupplier.set(null);
+        verifyEnabled(mModel);
+    }
+
+    @Test
+    public void testLoadingStartedCanGoBack_shouldEnableButton() {
+        mTab.setCanGoBack(true);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onLoadStarted(mTab, /* toDifferentDocument= */ false);
+        verifyEnabled(mModel);
+    }
+
+    @Test
+    public void testLoadingStartedCantGoBack_shouldDisableButton() {
+        mTab.setCanGoBack(false);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onLoadStarted(mTab, /* toDifferentDocument= */ false);
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testLoadingStoppedCanGoBack_shouldEnableButton() {
+        mTab.setCanGoBack(true);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onLoadStopped(mTab, /* toDifferentDocument= */ false);
+        verifyEnabled(mModel);
+    }
+
+    @Test
+    public void testLoadingStoppedCantGoBack_shouldDisableButton() {
+        mTab.setCanGoBack(false);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onLoadStopped(mTab, /* toDifferentDocument= */ false);
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testHistoryDeleted_shouldDisableButton() {
+        mTab.setCanGoBack(false);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onNavigationEntriesDeleted(mTab);
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testUrlUpdatedCanGoBack_shouldEnableButton() {
+        mTab.setCanGoBack(true);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onUrlUpdated(mTab);
+        verifyEnabled(mModel);
+    }
+
+    @Test
+    public void testUrlUpdatedCantGoBack_shouldDisableButton() {
+        mTab.setCanGoBack(false);
+        mTabSupplier.set(mTab);
+
+        mMediator.getTabObserver().onUrlUpdated(mTab);
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testDisabledControl_shouldDisableButton() {
+        mTab.setCanGoBack(true);
+        mTabSupplier.set(mTab);
+        mEnabledSupplier.set(false);
+
+        verifyDisabled(mModel);
+    }
+
+    @Test
+    public void testEnabledControl_shouldEnableButton() {
+        mTab.setCanGoBack(true);
+        mTabSupplier.set(mTab);
+        mEnabledSupplier.set(false);
+        mEnabledSupplier.set(true);
+
+        verifyEnabled(mModel);
+    }
+
+    @Test
+    public void testHide_shouldHideButton() {
+        mMediator.setVisibility(false);
+        assertFalse(
+                "Button is visible, but should be gone.",
+                mModel.get(BackButtonProperties.IS_VISIBLE));
+    }
+
+    @Test
+    public void testShow_shouldShowButton() {
+        mMediator.setVisibility(true);
+        assertTrue(
+                "Button is gone, but should be visible.",
+                mModel.get(BackButtonProperties.IS_VISIBLE));
+    }
+
+    @Test
+    public void testGetFadeInAnimator_shouldPrepareViewWithAlpha0() {
+        mMediator.getFadeAnimator(true);
+        assertEquals(
+                "View should be transparent", 0f, mModel.get(BackButtonProperties.ALPHA), 0.01f);
+    }
+
+    @Test
+    public void testGetFadeInAnimator_shouldPrepareViewWithAlpha1() {
+        mMediator.getFadeAnimator(false);
+        assertEquals("View should be opaque", 1f, mModel.get(BackButtonProperties.ALPHA), 0.01f);
     }
 }

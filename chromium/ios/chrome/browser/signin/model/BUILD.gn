@@ -22,14 +22,10 @@ source_set("model") {
     "account_profile_mapper.mm",
     "account_reconcilor_factory.cc",
     "account_reconcilor_factory.h",
-    "account_widget_updater.h",
-    "account_widget_updater.mm",
     "chrome_account_manager_service.h",
     "chrome_account_manager_service.mm",
     "chrome_account_manager_service_factory.h",
     "chrome_account_manager_service_factory.mm",
-    "chrome_account_manager_service_observer_bridge.h",
-    "chrome_account_manager_service_observer_bridge.mm",
     "device_accounts_provider_impl.h",
     "device_accounts_provider_impl.mm",
     "gaia_auth_fetcher_ios.h",
@@ -56,6 +52,8 @@ source_set("model") {
     "signin_profile_info_updater.mm",
     "signin_profile_info_updater_factory.h",
     "signin_profile_info_updater_factory.mm",
+    "system_account_updater.h",
+    "system_account_updater.mm",
   ]
   deps = [
     ":capabilities_types",
@@ -79,6 +77,9 @@ source_set("model") {
     "//google_apis",
     "//ios/chrome/app:change_profile_commands",
     "//ios/chrome/app:tests_hook",
+    "//ios/chrome/browser/authentication/ui_bundled:continuation",
+    "//ios/chrome/browser/authentication/ui_bundled/account_menu:constants",
+    "//ios/chrome/browser/authentication/ui_bundled/signin:signin_headers",
     "//ios/chrome/browser/bookmarks/model:model_utils",
     "//ios/chrome/browser/content_settings/model",
     "//ios/chrome/browser/crash_report/model",
@@ -87,6 +88,7 @@ source_set("model") {
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/model/profile:profile_keyed_service_factory",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
@@ -97,7 +99,7 @@ source_set("model") {
     "//ios/chrome/browser/webdata_services/model",
     "//ios/chrome/browser/widget_kit/model:features",
     "//ios/chrome/common",
-    "//ios/chrome/common/app_group:app_group",
+    "//ios/chrome/common/app_group",
     "//ios/chrome/common/ui/table_view:cells_constants",
     "//ios/chrome/common/ui/util:image_util",
     "//ios/net",
@@ -109,10 +111,10 @@ source_set("model") {
     "//net",
     "//url",
   ]
-
-  if (ios_enable_widget_kit_extension && ios_enable_widgets_for_mim) {
+  if (ios_enable_widget_kit_extension) {
     deps += [ "//ios/chrome/browser/widget_kit/model:model_swift" ]
   }
+
   public_deps = [
     ":constants",
     ":signin_util",
@@ -152,14 +154,11 @@ source_set("authentication_service") {
     "//ios/chrome/browser/policy/model:policy_util",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/public/features:system_flags",
-    "//ios/chrome/browser/widget_kit/model:features",
     "//ios/chrome/common/app_group",
   ]
-  if (ios_enable_widget_kit_extension && ios_enable_widgets_for_mim) {
-    deps += [ "//ios/chrome/browser/widget_kit/model:model_swift" ]
-  }
 }
 
 source_set("authentication_service_factory") {
@@ -178,6 +177,7 @@ source_set("authentication_service_factory") {
     "//ios/chrome/browser/ntp/ui_bundled:feature_flags",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/model/profile:profile_keyed_service_factory",
     "//ios/chrome/browser/sync/model",
   ]
@@ -197,7 +197,6 @@ source_set("signin_util") {
     "//base",
     "//components/prefs",
     "//components/signin/public/identity_manager",
-    "//ios/chrome/app:tests_hook",
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/public/features:system_flags",
@@ -235,8 +234,10 @@ source_set("signin_util_internal") {
   deps = [
     "//base",
     "//components/signin/public/identity_manager",
+    "//ios/chrome/app:tests_hook",
     "//ios/chrome/browser/shared/model/paths",
     "//ios/chrome/browser/shared/public/features:system_flags",
+    "//ios/chrome/common",
   ]
 }
 
@@ -293,6 +294,7 @@ source_set("fake_system_identity_manager") {
     "fake_system_identity_manager_storage.mm",
   ]
   public = [
+    "fake_refresh_access_token_error.h",
     "fake_system_identity_interaction_manager.h",
     "fake_system_identity_manager.h",
   ]
@@ -309,7 +311,7 @@ source_set("fake_system_identity_manager") {
     "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager:test_support",
     "//google_apis",
-    "//ios/chrome/browser/authentication/ui_bundled/signin:interruptible_chrome_coordinator",
+    "//ios/chrome/browser/signin/model:constants",
     "//ios/public/provider/chrome/browser/signin:signin_error_api",
   ]
   frameworks = [ "Foundation.framework" ]
@@ -444,7 +446,6 @@ source_set("unit_tests") {
     "account_profile_mapper_unittest.mm",
     "authentication_service_observer_bridge_unittest.mm",
     "authentication_service_unittest.mm",
-    "chrome_account_manager_service_observer_bridge_unittest.mm",
     "chrome_account_manager_service_unittest.mm",
     "device_accounts_provider_impl_unittest.mm",
     "gaia_auth_fetcher_ios_ns_url_session_bridge_unittests.mm",
@@ -453,6 +454,7 @@ source_set("unit_tests") {
     "resized_avatar_cache_unittest.mm",
     "signin_profile_info_updater_unittest.mm",
     "signin_util_unittest.mm",
+    "system_account_updater_unittests.mm",
     "system_identity_manager_unittest.mm",
   ]
   deps = [
@@ -481,6 +483,7 @@ source_set("unit_tests") {
     "//components/sync_preferences:test_support",
     "//google_apis",
     "//ios/chrome/app:change_profile_commands",
+    "//ios/chrome/browser/authentication/ui_bundled/account_menu:constants",
     "//ios/chrome/browser/content_settings/model",
     "//ios/chrome/browser/lens/model",
     "//ios/chrome/browser/policy/model:policy_util",
@@ -489,6 +492,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/shared/model/prefs:browser_prefs",
     "//ios/chrome/browser/shared/model/prefs:pref_names",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/profile:features",
     "//ios/chrome/browser/shared/model/profile/test",
     "//ios/chrome/browser/shared/model/web_state_list",
     "//ios/chrome/browser/shared/public/commands",
@@ -497,6 +501,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/sync/model",
     "//ios/chrome/browser/sync/model:test_support",
     "//ios/chrome/browser/web/model",
+    "//ios/chrome/common/app_group",
     "//ios/chrome/test:test_support",
     "//ios/net",
     "//ios/web/common",

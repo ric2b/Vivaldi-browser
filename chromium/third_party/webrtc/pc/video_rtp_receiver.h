@@ -29,7 +29,6 @@
 #include "api/transport/rtp/rtp_source.h"
 #include "api/video/video_frame.h"
 #include "api/video/video_sink_interface.h"
-#include "api/video/video_source_interface.h"
 #include "media/base/media_channel.h"
 #include "pc/jitter_buffer_delay.h"
 #include "pc/media_stream_track_proxy.h"
@@ -54,36 +53,32 @@ class VideoRtpReceiver : public RtpReceiverInternal {
   VideoRtpReceiver(
       Thread* worker_thread,
       const std::string& receiver_id,
-      const std::vector<rtc::scoped_refptr<MediaStreamInterface>>& streams);
+      const std::vector<scoped_refptr<MediaStreamInterface>>& streams);
 
   virtual ~VideoRtpReceiver();
 
-  rtc::scoped_refptr<VideoTrackInterface> video_track() const { return track_; }
+  scoped_refptr<VideoTrackInterface> video_track() const { return track_; }
 
   // RtpReceiverInterface implementation
-  rtc::scoped_refptr<MediaStreamTrackInterface> track() const override {
+  scoped_refptr<MediaStreamTrackInterface> track() const override {
     return track_;
   }
-  rtc::scoped_refptr<DtlsTransportInterface> dtls_transport() const override;
+  scoped_refptr<DtlsTransportInterface> dtls_transport() const override;
   std::vector<std::string> stream_ids() const override;
-  std::vector<rtc::scoped_refptr<MediaStreamInterface>> streams()
-      const override;
-  webrtc::MediaType media_type() const override {
-    return webrtc::MediaType::VIDEO;
-  }
+  std::vector<scoped_refptr<MediaStreamInterface>> streams() const override;
+  MediaType media_type() const override { return MediaType::VIDEO; }
 
   std::string id() const override { return id_; }
 
   RtpParameters GetParameters() const override;
 
   void SetFrameDecryptor(
-      rtc::scoped_refptr<FrameDecryptorInterface> frame_decryptor) override;
+      scoped_refptr<FrameDecryptorInterface> frame_decryptor) override;
 
-  rtc::scoped_refptr<FrameDecryptorInterface> GetFrameDecryptor()
-      const override;
+  scoped_refptr<FrameDecryptorInterface> GetFrameDecryptor() const override;
 
   void SetFrameTransformer(
-      rtc::scoped_refptr<FrameTransformerInterface> frame_transformer) override;
+      scoped_refptr<FrameTransformerInterface> frame_transformer) override;
 
   // RtpReceiverInternal implementation.
   void Stop() override;
@@ -93,17 +88,16 @@ class VideoRtpReceiver : public RtpReceiverInternal {
   void NotifyFirstPacketReceived() override;
   void set_stream_ids(std::vector<std::string> stream_ids) override;
   void set_transport(
-      rtc::scoped_refptr<DtlsTransportInterface> dtls_transport) override;
-  void SetStreams(const std::vector<rtc::scoped_refptr<MediaStreamInterface>>&
-                      streams) override;
+      scoped_refptr<DtlsTransportInterface> dtls_transport) override;
+  void SetStreams(
+      const std::vector<scoped_refptr<MediaStreamInterface>>& streams) override;
 
   void SetObserver(RtpReceiverObserverInterface* observer) override;
 
   void SetJitterBufferMinimumDelay(
       std::optional<double> delay_seconds) override;
 
-  void SetMediaChannel(
-      cricket::MediaReceiveChannelInterface* media_channel) override;
+  void SetMediaChannel(MediaReceiveChannelInterface* media_channel) override;
 
   int AttachmentId() const override { return attachment_id_; }
 
@@ -112,7 +106,7 @@ class VideoRtpReceiver : public RtpReceiverInternal {
   // Combines SetMediaChannel, SetupMediaChannel and
   // SetupUnsignaledMediaChannel.
   void SetupMediaChannel(std::optional<uint32_t> ssrc,
-                         cricket::MediaReceiveChannelInterface* media_channel);
+                         MediaReceiveChannelInterface* media_channel);
 
  private:
   void RestartMediaChannel(std::optional<uint32_t> ssrc)
@@ -120,9 +114,8 @@ class VideoRtpReceiver : public RtpReceiverInternal {
   void RestartMediaChannel_w(std::optional<uint32_t> ssrc,
                              MediaSourceInterface::SourceState state)
       RTC_RUN_ON(worker_thread_);
-  void SetSink(rtc::VideoSinkInterface<VideoFrame>* sink)
-      RTC_RUN_ON(worker_thread_);
-  void SetMediaChannel_w(cricket::MediaReceiveChannelInterface* media_channel)
+  void SetSink(VideoSinkInterface<VideoFrame>* sink) RTC_RUN_ON(worker_thread_);
+  void SetMediaChannel_w(MediaReceiveChannelInterface* media_channel)
       RTC_RUN_ON(worker_thread_);
 
   // VideoRtpTrackSource::Callback
@@ -149,25 +142,25 @@ class VideoRtpReceiver : public RtpReceiverInternal {
   Thread* const worker_thread_;
 
   const std::string id_;
-  cricket::VideoMediaReceiveChannelInterface* media_channel_
+  VideoMediaReceiveChannelInterface* media_channel_
       RTC_GUARDED_BY(worker_thread_) = nullptr;
   std::optional<uint32_t> signaled_ssrc_ RTC_GUARDED_BY(worker_thread_);
   // `source_` is held here to be able to change the state of the source when
   // the VideoRtpReceiver is stopped.
-  const rtc::scoped_refptr<VideoRtpTrackSource> source_;
-  const rtc::scoped_refptr<VideoTrackProxyWithInternal<VideoTrack>> track_;
-  std::vector<rtc::scoped_refptr<MediaStreamInterface>> streams_
+  const scoped_refptr<VideoRtpTrackSource> source_;
+  const scoped_refptr<VideoTrackProxyWithInternal<VideoTrack>> track_;
+  std::vector<scoped_refptr<MediaStreamInterface>> streams_
       RTC_GUARDED_BY(&signaling_thread_checker_);
   RtpReceiverObserverInterface* observer_
       RTC_GUARDED_BY(&signaling_thread_checker_) = nullptr;
   bool received_first_packet_ RTC_GUARDED_BY(&signaling_thread_checker_) =
       false;
   const int attachment_id_;
-  rtc::scoped_refptr<FrameDecryptorInterface> frame_decryptor_
+  scoped_refptr<FrameDecryptorInterface> frame_decryptor_
       RTC_GUARDED_BY(worker_thread_);
-  rtc::scoped_refptr<DtlsTransportInterface> dtls_transport_
+  scoped_refptr<DtlsTransportInterface> dtls_transport_
       RTC_GUARDED_BY(&signaling_thread_checker_);
-  rtc::scoped_refptr<FrameTransformerInterface> frame_transformer_
+  scoped_refptr<FrameTransformerInterface> frame_transformer_
       RTC_GUARDED_BY(worker_thread_);
   // Stores the minimum jitter buffer delay. Handles caching cases
   // if `SetJitterBufferMinimumDelay` is called before start.

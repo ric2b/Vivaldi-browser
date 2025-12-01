@@ -24,6 +24,7 @@
 #import "internal/platform/implementation/apple/Tests/GNCBLEMedium+Testing.h"
 #import "internal/platform/implementation/apple/Tests/GNCFakeCentralManager.h"
 #import "internal/platform/implementation/apple/Tests/GNCFakePeripheral.h"
+#import "internal/platform/implementation/apple/Tests/GNCFakePeripheralManager.h"
 
 static NSString *const kServiceUUID = @"0000FEF3-0000-1000-8000-00805F9B34FB";
 
@@ -271,6 +272,36 @@ static NSString *const kServiceUUID = @"0000FEF3-0000-1000-8000-00805F9B34FB";
   }];
 
   [self waitForExpectations:@[ expectation ] timeout:3];
+}
+
+#pragma mark - Open L2CAP Channel
+
+- (void)testOpenL2CAPServerSocket {
+  GNCFakeCentralManager *fakeCentralManager = [[GNCFakeCentralManager alloc] init];
+  GNCFakePeripheralManager *fakePeripheralManager = [[GNCFakePeripheralManager alloc] init];
+  GNCBLEMedium *medium = [[GNCBLEMedium alloc] initWithCentralManager:fakeCentralManager queue:nil];
+  XCTestExpectation *psmPublishedexpectation =
+      [[XCTestExpectation alloc] initWithDescription:@"PSM published."];
+  XCTestExpectation *channelOpenedexpectation =
+      [[XCTestExpectation alloc] initWithDescription:@"Channel opened."];
+
+  [fakePeripheralManager simulatePeripheralManagerDidUpdateState:CBManagerStatePoweredOn];
+
+  // Open L2CAP server is fully covered with @c GNCBLEL2CAPServer tests.
+  [medium
+      openL2CAPServerWithPSMPublishedCompletionHandler:^(uint16_t PSM, NSError *error) {
+        XCTAssertEqual(PSM, fakePeripheralManager.PSM);
+        XCTAssertNil(error);
+        [psmPublishedexpectation fulfill];
+      }
+      channelOpenedCompletionHandler:^(GNCBLEL2CAPStream *stream, NSError *error) {
+        XCTAssertNil(error);
+        [channelOpenedexpectation fulfill];
+      }
+      peripheralManager:fakePeripheralManager];
+
+  [self waitForExpectations:@[ psmPublishedexpectation ] timeout:0.1];
+  [self waitForExpectations:@[ channelOpenedexpectation ] timeout:0.5];
 }
 
 #pragma mark - Connect

@@ -28,7 +28,7 @@ import '../performance_page/memory_page.js';
 import '../performance_page/performance_page.js';
 import '../performance_page/speed_page.js';
 import '../reset_page/reset_profile_banner.js';
-import '../search_page/search_page.js';
+// import '../search_page/search_page.js';
 import '../settings_page/settings_section.js';
 import '../settings_page_styles.css.js';
 // <if expr="not is_chromeos">
@@ -159,19 +159,9 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
         value: false,
       },
 
-      showAdvancedFeaturesMainControl_: {
+      showAiPageAiFeatureSection_: {
         type: Boolean,
-        value: () => loadTimeData.getBoolean('showAdvancedFeaturesMainControl'),
-      },
-
-      enableAiSettingsPageRefresh_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('enableAiSettingsPageRefresh'),
-      },
-
-      aiPageTitle_: {
-        type: String,
-        computed: 'computeAiPageTitle_(enableAiSettingsPageRefresh_)',
+        value: () => loadTimeData.getBoolean('showAiPageAiFeatureSection'),
       },
 
       // <if expr="enable_glic">
@@ -190,23 +180,21 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
   }
 
   // <if expr="not chromeos_ash">
-  languages?: LanguagesModel;
-  languageHelper: LanguageHelper;
+  declare languages?: LanguagesModel;
+  declare languageHelper: LanguageHelper;
   // </if>
-  pageVisibility: PageVisibility;
-  inSearchMode: boolean;
-  private showResetProfileBanner_: boolean;
+  declare pageVisibility: PageVisibility;
+  declare inSearchMode: boolean;
+  declare private showResetProfileBanner_: boolean;
 
-  private currentRoute_: Route;
-  private advancedTogglingInProgress_: boolean;
-  private showBatterySettings_: boolean;
-  private showAdvancedFeaturesMainControl_: boolean;
-  private enableAiSettingsPageRefresh_: boolean;
-  private aiPageTitle_: string;
+  declare private currentRoute_: Route;
+  declare private advancedTogglingInProgress_: boolean;
+  declare private showBatterySettings_: boolean;
+  declare private showAiPageAiFeatureSection_: boolean;
   // <if expr="enable_glic">
-  private showGlicSection_: boolean;
+  declare private showGlicSection_: boolean;
   // </if>
-  private showPrivacyGuidePromo_: boolean;
+  declare private showPrivacyGuidePromo_: boolean;
   private privacyGuidePromoWasShown_: boolean;
   private privacyGuideBrowserProxy_: PrivacyGuideBrowserProxy =
       PrivacyGuideBrowserProxyImpl.getInstance();
@@ -356,20 +344,8 @@ export class SettingsBasicPageElement extends SettingsBasicPageElementBase {
     return this.showPage_(visibility);
   }
 
-  private showAiInfoCard_(visibility?: boolean): boolean {
-    return loadTimeData.getBoolean('enableAiSettingsPageRefresh') &&
-        this.showExperimentalAdvancedPage_(visibility);
-  }
-
-  private showExperimentalAdvancedPage_(visibility?: boolean): boolean {
-    return loadTimeData.getBoolean('showAdvancedFeaturesMainControl') &&
-        this.showPage_(visibility);
-  }
-
-  private computeAiPageTitle_(): string {
-    return loadTimeData.getString(
-        this.enableAiSettingsPageRefresh_ ? 'aiInnovationsPageTitle' :
-                                            'aiPageTitle');
+  private showAiPage_(visibility?: boolean): boolean {
+    return loadTimeData.getBoolean('showAiPage') && this.showPage_(visibility);
   }
 
   // <if expr="_google_chrome">

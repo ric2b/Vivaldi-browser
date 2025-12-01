@@ -26,6 +26,7 @@
 #include <stdint.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -171,6 +172,7 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
   raw_ptr<AVStream> stream_;
   base::TimeDelta start_time_;
+  std::optional<base::TimeDelta> initial_start_padding_;
   std::unique_ptr<AudioDecoderConfig> audio_config_;
   std::unique_ptr<VideoDecoderConfig> video_config_;
   raw_ptr<MediaLog> media_log_;
@@ -248,13 +250,10 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
   // Allow FFmpegDemxuerStream to notify us about an error.
   void NotifyDemuxerError(PipelineStatus error);
 
-  void OnEnabledAudioTracksChanged(const std::vector<MediaTrack::Id>& track_ids,
-                                   base::TimeDelta curr_time,
-                                   TrackChangeCB change_completed_cb) override;
-
-  void OnSelectedVideoTrackChanged(const std::vector<MediaTrack::Id>& track_ids,
-                                   base::TimeDelta curr_time,
-                                   TrackChangeCB change_completed_cb) override;
+  void OnTracksChanged(DemuxerStream::Type track_type,
+                       const std::vector<MediaTrack::Id>& track_ids,
+                       base::TimeDelta curr_time,
+                       TrackChangeCB change_completed_cb) override;
   void SetPlaybackRate(double rate) override {}
 
   // The lowest demuxed timestamp.  If negative, DemuxerStreams must use this to
@@ -275,14 +274,6 @@ class MEDIA_EXPORT FFmpegDemuxer : public Demuxer {
  private:
   // To allow tests access to privates.
   friend class FFmpegDemuxerTest;
-
-  // Helper for video and audio track changing. For the `track_type`, enables
-  // tracks associated with `track_ids` and disables the rest. Fires
-  // `change_completed_cb` when the operation is completed.
-  void FindAndEnableProperTracks(const std::vector<MediaTrack::Id>& track_ids,
-                                 base::TimeDelta curr_time,
-                                 DemuxerStream::Type track_type,
-                                 TrackChangeCB change_completed_cb);
 
   // FFmpeg callbacks during initialization.
   void OnOpenContextDone(bool result);

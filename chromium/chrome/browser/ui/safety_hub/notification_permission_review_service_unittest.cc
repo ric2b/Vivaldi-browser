@@ -28,6 +28,11 @@
 #include "url/gurl.h"
 
 class NotificationPermissionReviewServiceTest : public testing::Test {
+  void SetUp() override {
+    testing::Test::SetUp();
+    safety_hub_test_util::CreateNotificationPermissionsReviewService(profile());
+  }
+
  protected:
   void CreateMockNotificationPermissionsForReview() {
     // Add a couple of notification permission and check they appear in review
@@ -467,4 +472,43 @@ TEST_F(NotificationPermissionReviewServiceTest,
   type = hcsm()->GetContentSetting(GURL(pattern.ToString()), GURL(),
                                    ContentSettingsType::NOTIFICATIONS);
   ASSERT_EQ(CONTENT_SETTING_ASK, type);
+}
+
+TEST_F(NotificationPermissionReviewServiceTest,
+       DisruptiveNotificationRevocationShadowRun) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kSafetyHubDisruptiveNotificationRevocation,
+      {
+          {features::kSafetyHubDisruptiveNotificationRevocationShadowRun.name,
+           "true"},
+      });
+
+  CreateMockNotificationPermissionsForReview();
+
+  auto* service =
+      NotificationPermissionsReviewServiceFactory::GetForProfile(profile());
+  const auto& notification_permissions =
+      service->PopulateNotificationPermissionReviewData();
+  // Check if the results are returned.
+  EXPECT_EQ(2UL, notification_permissions.size());
+}
+
+TEST_F(NotificationPermissionReviewServiceTest,
+       DisruptiveNotificationRevocation) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kSafetyHubDisruptiveNotificationRevocation,
+      {
+          {features::kSafetyHubDisruptiveNotificationRevocationShadowRun.name,
+           "false"},
+      });
+
+  CreateMockNotificationPermissionsForReview();
+  auto* service =
+      NotificationPermissionsReviewServiceFactory::GetForProfile(profile());
+  const auto& notification_permissions =
+      service->PopulateNotificationPermissionReviewData();
+  // Check that no permissions are returned.
+  EXPECT_EQ(0UL, notification_permissions.size());
 }

@@ -5,6 +5,7 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
@@ -12,6 +13,7 @@
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/page_action/page_action_view.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
@@ -20,14 +22,18 @@
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/input/native_web_keyboard_event.h"
+#include "components/tabs/public/split_tab_visual_data.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "ui/base/ozone_buildflags.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/ozone/public/ozone_platform.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/buildflags.h"
 #include "ui/views/test/ax_event_counter.h"
+#include "ui/views/test/widget_activation_waiter.h"
 #include "ui/views/widget/widget_interactive_uitest_utils.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -46,7 +52,9 @@ namespace {
 
 class BrowserViewTest : public InProcessBrowserTest {
  public:
-  BrowserViewTest() : ax_observer_(views::AXUpdateNotifier::Get()) {}
+  BrowserViewTest() : ax_observer_(views::AXUpdateNotifier::Get()) {
+    feature_list_.InitAndEnableFeature(features::kSideBySide);
+  }
   ~BrowserViewTest() override = default;
   BrowserViewTest(const BrowserViewTest&) = delete;
   BrowserViewTest& operator=(const BrowserViewTest&) = delete;
@@ -73,6 +81,7 @@ class BrowserViewTest : public InProcessBrowserTest {
 
  protected:
   views::test::AXEventCounter ax_observer_;
+  base::test::ScopedFeatureList feature_list_;
 };
 
 }  // namespace
@@ -223,6 +232,42 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, TabFullscreenShowTopView) {
   EXPECT_TRUE(browser_view->GetTabStripVisible());
 }
 
+// Test whether the split view is hidden when a tab is fullscreened.
+IN_PROC_BROWSER_TEST_F(BrowserViewTest, TabFullscreenHideSplitView) {
+  // Add a second tab and create a split
+  chrome::AddTabAt(browser(), GURL(), -1, true);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  browser()->tab_strip_model()->AddToNewSplit({1},
+                                              split_tabs::SplitTabVisualData());
+
+  BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
+
+  // Split view should be open
+  EXPECT_FALSE(browser_view->IsFullscreen());
+  EXPECT_TRUE(browser_view->IsInSplitView());
+
+  // Enter into tab fullscreen mode.
+  FullscreenController* controller =
+      browser()->exclusive_access_manager()->fullscreen_controller();
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  controller->EnterFullscreenModeForTab(web_contents->GetPrimaryMainFrame());
+  EXPECT_TRUE(browser_view->IsFullscreen());
+
+  // The split view should be closed.
+  EXPECT_FALSE(browser_view->IsInSplitView());
+  EXPECT_TRUE(views::test::PropertyWaiter(
+                  base::BindRepeating(&BrowserView::GetTabStripVisible,
+                                      base::Unretained(browser_view)),
+                  false)
+                  .Wait());
+
+  // After exiting the fullscreen mode, the top view should show up again.
+  controller->ExitFullscreenModeForTab(web_contents);
+  EXPECT_FALSE(browser_view->IsFullscreen());
+  EXPECT_TRUE(browser_view->IsInSplitView());
+}
+
 // Test whether bookmark bar shows up or hides correctly for fullscreen modes.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, FullscreenShowBookmarkBar) {
   BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
@@ -302,6 +347,46 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, WindowActivatedAccessibleEvent) {
   ASSERT_EQ(2, ax_observer_.GetCount(ax::mojom::Event::kWindowActivated));
 }
 #endif
+
+#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/40568702) NativeWidgetMac::Deactivate is not implemented on
+// Mac.
+#define MAYBE_FocusInactivePopupForAccessibility \
+  DISABLED_FocusInactivePopupForAccessibility
+#else
+#define MAYBE_FocusInactivePopupForAccessibility \
+  FocusInactivePopupForAccessibility
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserViewTest,
+                       MAYBE_FocusInactivePopupForAccessibility) {
+  std::unique_ptr<ui::DialogModel> dialog_model =
+      ui::DialogModel::Builder()
+          .SetTitle(u"test")
+          .SetIsAlertDialog()
+          .AddOkButton(base::DoNothing())
+          .Build();
+  views::View* anchor = browser_view()->GetLocationBarView();
+  auto bubble = std::make_unique<views::BubbleDialogModelHost>(
+      std::move(dialog_model), anchor, views::BubbleBorder::TOP_RIGHT);
+  bubble->set_close_on_deactivate(false);
+  views::Widget* widget =
+      views::BubbleDialogDelegate::CreateBubble(std::move(bubble));
+
+  widget->Show();
+  views::test::WaitForWidgetActive(widget, true);
+
+  widget->Deactivate();
+  widget->ShowInactive();
+  EXPECT_TRUE(widget->IsVisible());
+  EXPECT_FALSE(widget->IsActive());
+
+  browser_view()->FocusInactivePopupForAccessibility();
+  views::test::WaitForWidgetActive(widget, true);
+
+  // Ensure the bubble's widget refreshed appropriately.
+  EXPECT_TRUE(widget->IsVisible());
+  EXPECT_TRUE(widget->IsActive());
+}
 
 class BrowserViewFullscreenTest : public BrowserViewTest {
  public:

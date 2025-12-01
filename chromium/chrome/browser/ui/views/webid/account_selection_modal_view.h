@@ -36,7 +36,7 @@ class AccountSelectionModalView : public views::DialogDelegateView,
 
  public:
   AccountSelectionModalView(
-      const std::u16string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::optional<std::u16string>& idp_title,
       blink::mojom::RpContext rp_context,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
@@ -73,6 +73,7 @@ class AccountSelectionModalView : public views::DialogDelegateView,
       const IdentityRequestAccountPtr& account) override;
 
   std::string GetDialogTitle() const override;
+  std::optional<std::string> GetDialogSubtitle() const override;
 
   // views::DialogDelegateView:
   views::View* GetInitiallyFocusedView() override;
@@ -222,6 +223,9 @@ class AccountSelectionModalView : public views::DialogDelegateView,
 
   // The title for the modal dialog.
   std::u16string title_;
+
+  // The subtitle for the modal dialog.
+  std::u16string subtitle_;
 
   // Used to ensure that callbacks are not run if the AccountSelectionModalView
   // is destroyed.

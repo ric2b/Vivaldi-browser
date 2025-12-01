@@ -351,7 +351,7 @@ void GroupDataModel::OnBatchOfGroupsFetchedFromSDK(
 
     const auto old_group_data_opt = group_data_store_.GetGroupData(group_id);
     group_data_store_.StoreGroupData(requested_groups_and_versions.at(group_id),
-                                     requested_at_timestamp, group_data);
+                                     requested_at_timestamp, group_data_proto);
     for (auto& observer : observers_) {
       // TODO(crbug.com/377215683): pass the actual event time (at least derived
       // from CollaborationGroupSpecifics).
@@ -384,13 +384,13 @@ void GroupDataModel::HandleBatchCompletion() {
 void GroupDataModel::NotifyObserversAboutChangedMembers(
     const GroupData& old_group_data,
     const GroupData& new_group_data) {
-  std::vector<GaiaId> old_members_gaia_ids;
+  std::set<GaiaId> old_members_gaia_ids;
   for (const auto& member : old_group_data.members) {
-    old_members_gaia_ids.push_back(member.gaia_id);
+    old_members_gaia_ids.insert(member.gaia_id);
   }
-  std::vector<GaiaId> new_members_gaia_ids;
+  std::set<GaiaId> new_members_gaia_ids;
   for (const auto& member : new_group_data.members) {
-    new_members_gaia_ids.push_back(member.gaia_id);
+    new_members_gaia_ids.insert(member.gaia_id);
   }
 
   std::vector<GaiaId> added_members_gaia_ids;

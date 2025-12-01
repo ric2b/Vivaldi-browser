@@ -418,16 +418,6 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
   }
 }
 
-#pragma mark - UIAdaptivePresentationControllerDelegate
-
-- (void)presentationControllerDidDismiss:
-    (UIPresentationController*)presentationController {
-  base::RecordAction(base::UserMetricsAction("IOSReadingListCloseWithSwipe"));
-  // Call the delegate dismissReadingListListViewController to clean up state
-  // and stop the Coordinator.
-  [self.delegate dismissReadingListListViewController:self];
-}
-
 #pragma mark - LegacyChromeTableViewController
 
 - (void)loadModel {
@@ -450,10 +440,15 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 }
 
 - (NSArray*)keyCommands {
-  return @[ UIKeyCommand.cr_close ];
+  if (self.delegate.canDismiss) {
+    return @[ UIKeyCommand.cr_close ];
+  } else {
+    return @[];
+  }
 }
 
 - (void)keyCommand_close {
+  CHECK(self.delegate.canDismiss, base::NotFatalUntil::M145);
   base::RecordAction(base::UserMetricsAction("MobileKeyCommandClose"));
   [self.delegate dismissReadingListListViewController:self];
 }
@@ -1188,6 +1183,9 @@ ReadingListSelectionState GetSelectionStateForSelectedCounts(
 #pragma mark - Accessibility
 
 - (BOOL)accessibilityPerformEscape {
+  if (!self.delegate.canDismiss) {
+    return NO;
+  }
   base::RecordAction(
       base::UserMetricsAction("MobileReadingListAccessibilityClose"));
   [self.delegate dismissReadingListListViewController:self];

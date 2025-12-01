@@ -9,6 +9,7 @@
 #include <unordered_map>
 
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/timer/elapsed_timer.h"
@@ -490,6 +491,19 @@ bool RunNinjaPostProcessTools(const BuildSettings* build_settings,
   return true;
 }
 
+bool WriteIgnoreFile(Setup& setup, Err* err) {
+  // Write a .gitignore file that causes the build directory to be ignored.
+  base::FilePath output_path =
+      setup.build_settings()
+          .GetFullPath(setup.build_settings().build_dir())
+          .Append(FILE_PATH_LITERAL(".gitignore"));
+
+  if (base::PathExists(output_path))
+    return true;
+
+  return WriteFile(output_path, "# Created by GN\n*\n", err);
+}
+
 }  // namespace
 
 const char kGen[] = "gen";
@@ -867,6 +881,11 @@ int RunGen(const std::vector<std::string>& args) {
 
   if (command_line->HasSwitch(kSwitchExportRustProject) &&
       !RunRustProjectWriter(&setup->build_settings(), setup->builder(), &err)) {
+    err.PrintToStdout();
+    return 1;
+  }
+
+  if (!WriteIgnoreFile(*setup, &err)) {
     err.PrintToStdout();
     return 1;
   }

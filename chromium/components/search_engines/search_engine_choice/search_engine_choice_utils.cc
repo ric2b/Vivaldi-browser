@@ -13,11 +13,15 @@
 #include "base/command_line.h"
 #include "base/containers/fixed_flat_map.h"
 #include "base/containers/to_vector.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/user_metrics.h"
+#include "base/not_fatal_until.h"
 #include "base/strings/stringprintf.h"
+#include "base/types/expected.h"
 #include "base/values.h"
 #include "base/version.h"
+#include "base/version_info/version_info.h"
 #include "build/branding_buildflags.h"
 #include "components/country_codes/country_codes.h"
 #include "components/policy/core/common/policy_service.h"
@@ -45,11 +49,6 @@ using ::country_codes::CountryId;
 namespace search_engines {
 
 namespace {
-#if !BUILDFLAG(IS_ANDROID)
-// Defines `kSearchEngineResourceIdMap`.
-#include "components/search_engines/generated_search_engine_resource_ids-inc.cc"
-#endif
-
 // Serialization keys for `ChoiceScreenDisplayState`.
 constexpr char kDisplayStateCountryIdKey[] = "country_id";
 constexpr char kDisplayStateSearchEnginesKey[] = "search_engines";
@@ -211,6 +210,14 @@ void RecordChoiceScreenPositions(
 void WipeSearchEngineChoicePrefs(PrefService& profile_prefs,
                                  SearchEngineChoiceWipeReason reason) {
   base::UmaHistogramEnumeration(kSearchEngineChoiceWipeReasonHistogram, reason);
+  if (reason == SearchEngineChoiceWipeReason::kDeviceRestored &&
+      profile_prefs.HasPrefPath(
+          prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)) {
+    profile_prefs.SetInt64(
+        prefs::kDefaultSearchProviderChoiceInvalidationTimestamp,
+        base::Time::Now().ToDeltaSinceWindowsEpoch().InSeconds());
+  }
+
   profile_prefs.ClearPref(
       prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp);
   profile_prefs.ClearPref(
@@ -224,22 +231,102 @@ void WipeSearchEngineChoicePrefs(PrefService& profile_prefs,
 #endif
 }
 
+base::expected<ChoiceCompletionMetadata, ChoiceCompletionMetadata::ParseError>
+GetChoiceCompletionMetadata(const PrefService& prefs) {
+  if (!prefs.HasPrefPath(
+          prefs::kDefaultSearchProviderChoiceScreenCompletionVersion)) {
+    return base::unexpected(
+        prefs.HasPrefPath(
+            prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)
+            ? ChoiceCompletionMetadata::ParseError::kMissingVersion
+            : ChoiceCompletionMetadata::ParseError::kAbsent);
+  }
+
+  base::Version version(prefs.GetString(
+      prefs::kDefaultSearchProviderChoiceScreenCompletionVersion));
+  if (!version.IsValid() ||
+      version.components().size() !=
+          version_info::GetVersion().components().size()) {
+    return base::unexpected(
+        ChoiceCompletionMetadata::ParseError::kInvalidVersion);
+  }
+
+  // Note: Other error conditions don't have dedicated handling, so we log all
+  // of them as `kOther`.
+
+  base::Time timestamp =
+      base::Time::FromDeltaSinceWindowsEpoch(base::Seconds(prefs.GetInt64(
+          prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)));
+
+  if (timestamp.is_null()) {
+    return base::unexpected(ChoiceCompletionMetadata::ParseError::kOther);
+  }
+
+  return ChoiceCompletionMetadata{
+      .timestamp = timestamp,
+      .version = version,
+  };
+}
+
+void ClearSearchEngineChoiceInvalidation(PrefService& prefs) {
+  prefs.ClearPref(prefs::kDefaultSearchProviderChoiceInvalidationTimestamp);
+}
+
+bool IsSearchEngineChoiceInvalid(PrefService& prefs) {
+  if (!base::FeatureList::IsEnabled(
+          switches::kInvalidateSearchEngineChoiceOnDeviceRestoreDetection)) {
+    // Ensure that we never consider a search engine choice invalid when the
+    // feature is disabled. This could happen if a user changes experiment
+    // groups for example.
+    return false;
+  }
+
+  if (prefs.GetInt64(prefs::kDefaultSearchProviderChoiceInvalidationTimestamp) >
+      0) {
+    CHECK(!prefs.HasPrefPath(
+              prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp),
+          base::NotFatalUntil::M140);
+    return true;
+  }
+
+  return false;
+}
+
+void SetChoiceCompletionMetadata(PrefService& prefs,
+                                 ChoiceCompletionMetadata metadata) {
+  // Verify that any invalidation has already been cleared. Otherwise the
+  // completion
+  // will be ignored.
+  CHECK(!IsSearchEngineChoiceInvalid(prefs), base::NotFatalUntil::M140);
+
+  prefs.SetInt64(prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp,
+                 metadata.timestamp.ToDeltaSinceWindowsEpoch().InSeconds());
+  prefs.SetString(prefs::kDefaultSearchProviderChoiceScreenCompletionVersion,
+                  metadata.version.GetString());
+}
+
 std::optional<base::Time> GetChoiceScreenCompletionTimestamp(
     PrefService& prefs) {
-  if (!prefs.HasPrefPath(
-          prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)) {
+  auto metadata = GetChoiceCompletionMetadata(prefs);
+  if (!metadata.has_value()) {
     return std::nullopt;
   }
 
-  return base::Time::FromDeltaSinceWindowsEpoch(base::Seconds(prefs.GetInt64(
-      prefs::kDefaultSearchProviderChoiceScreenCompletionTimestamp)));
+  return metadata->timestamp;
 }
 
 #if !BUILDFLAG(IS_ANDROID)
 std::u16string GetMarketingSnippetString(
     const TemplateURLData& template_url_data) {
+  constexpr bool kEnableBuiltinSearchProviderAssets =
+      !!BUILDFLAG(ENABLE_BUILTIN_SEARCH_PROVIDER_ASSETS);
+
+  // TODO(crbug.com/420943295): `GetMarketingSnippetResourceId()` is generated
+  // code. The flag-gating should be moved there directly.
   int snippet_resource_id =
-      GetMarketingSnippetResourceId(template_url_data.keyword());
+      kEnableBuiltinSearchProviderAssets
+          ? GetMarketingSnippetResourceId(template_url_data.keyword())
+          : -1;
 
   return snippet_resource_id == -1
              ? l10n_util::GetStringFUTF16(
@@ -247,17 +334,6 @@ std::u16string GetMarketingSnippetString(
                    template_url_data.short_name())
              : l10n_util::GetStringUTF16(snippet_resource_id);
 }
-
-#ifndef VIVALDI_BUILD
-int GetIconResourceId(const std::u16string& engine_keyword) {
-  // `kSearchEngineResourceIdMap` is defined in
-  // `components/search_engines/generated_search_engine_resource_ids-inc.cc`
-  const base::fixed_flat_map<std::u16string_view, int,
-                             kSearchEngineResourceIdMap.size()>::const_iterator
-      iterator = kSearchEngineResourceIdMap.find(engine_keyword);
-  return iterator == kSearchEngineResourceIdMap.cend() ? -1 : iterator->second;
-}
-#endif // Vivaldi
 
 #endif  // !BUILDFLAG(IS_ANDROID)
 

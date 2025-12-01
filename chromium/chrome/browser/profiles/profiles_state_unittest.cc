@@ -8,6 +8,7 @@
 
 #include "base/command_line.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_storage.h"
@@ -19,7 +20,6 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
-#include "profiles_state.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {

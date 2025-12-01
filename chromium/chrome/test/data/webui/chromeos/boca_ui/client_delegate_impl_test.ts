@@ -3,7 +3,7 @@
 // found in the LICENSE file.
 
 import {ClientDelegateFactory, getNetworkInfoMojomToUI, getSessionConfigMojomToUI, getStudentActivityMojomToUI} from 'chrome-untrusted://boca-app/app/client_delegate.js';
-import type {AddStudentsError, Assignment, BocaValidPref, CaptionConfig, Config, Course, EndViewScreenSessionError, Identity, OnTaskConfig, Permission, PermissionSetting, RemoveStudentError, SessionResult, SetViewScreenSessionActiveError, UpdateSessionError, ViewStudentScreenError, Window} from 'chrome-untrusted://boca-app/mojom/boca.mojom-webui.js';
+import type {AddStudentsError, Assignment, BocaValidPref, CaptionConfig, Config, Course, CreateSessionError, EndViewScreenSessionError, Identity, OnTaskConfig, Permission, PermissionSetting, RemoveStudentError, RenotifyStudentError, SessionResult, SetViewScreenSessionActiveError, UpdateSessionError, ViewStudentScreenError, Window} from 'chrome-untrusted://boca-app/mojom/boca.mojom-webui.js';
 import {PageHandlerRemote, SubmitAccessCodeError} from 'chrome-untrusted://boca-app/mojom/boca.mojom-webui.js';
 import type {TimeDelta} from 'chrome-untrusted://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 import type {Value} from 'chrome-untrusted://resources/mojo/mojo/public/mojom/base/values.mojom-webui.js';
@@ -86,7 +86,8 @@ class MockRemoteHandler extends PageHandlerRemote {
     });
   }
 
-  override createSession(config: Config): Promise<{success: boolean}> {
+  override createSession(config: Config):
+      Promise<{error: CreateSessionError | null}> {
     assertDeepEquals(
         {
           sessionDuration: {
@@ -142,7 +143,7 @@ class MockRemoteHandler extends PageHandlerRemote {
           },
         },
         config);
-    return Promise.resolve({success: true});
+    return Promise.resolve({error: null});
   }
 
   override getSession(): Promise<{result: SessionResult}> {
@@ -276,9 +277,24 @@ class MockRemoteHandler extends PageHandlerRemote {
     return Promise.resolve({error: null});
   }
 
-  override addStudents(ids: string[]):
+  override addStudents(students: Identity[]):
       Promise<{error: AddStudentsError | null}> {
-    ids;
+    assertDeepEquals(
+        [
+          {
+            id: '1',
+            name: 'cat',
+            email: 'cat@gmail.com',
+            photoUrl: {url: 'cdn1'},
+          },
+          {
+            id: '2',
+            name: 'dog',
+            email: 'dog@gmail.com',
+            photoUrl: {url: 'cdn2'},
+          },
+        ],
+        students);
     return Promise.resolve({error: null});
   }
 
@@ -338,6 +354,17 @@ class MockRemoteHandler extends PageHandlerRemote {
   }
 
   override refreshWorkbook() {
+    return Promise.resolve();
+  }
+
+  override renotifyStudent(id: string):
+      Promise<{error: RenotifyStudentError | null}> {
+    id;
+    return Promise.resolve({error: null});
+  }
+
+  override startSpotlight(crdConnectionCode: string) {
+    crdConnectionCode;
     return Promise.resolve();
   }
 }
@@ -492,7 +519,7 @@ suite('ClientDelegateTest', function() {
             sessionTranslationEnabled: true,
           },
         });
-        assertTrue(result);
+        assertDeepEquals(1, result);
       });
 
   test('client delegate should properly translate get session', async () => {
@@ -666,8 +693,10 @@ suite('ClientDelegateTest', function() {
   });
 
   test('client delegate should translate data for add students', async () => {
-    const result =
-        await clientDelegateImpl.getInstance().addStudents(['1', '2']);
+    const result = await clientDelegateImpl.getInstance().addStudents([
+      {id: '1', name: 'cat', email: 'cat@gmail.com', photoUrl: 'cdn1'},
+      {id: '2', name: 'dog', email: 'dog@gmail.com', photoUrl: 'cdn2'},
+    ]);
     assertTrue(result);
   });
 
@@ -850,5 +879,22 @@ suite('ClientDelegateTest', function() {
           refreshWorkbookResponded = true;
         });
         assertTrue(refreshWorkbookResponded);
+      });
+
+  test(
+      'client delegate should translate data for renotify student',
+      async () => {
+        const result =
+            await clientDelegateImpl.getInstance().renotifyStudent('1');
+        assertTrue(result);
+      });
+
+  test(
+      'client delegate should translate data for start spotlight', async () => {
+        let startSpotlightResponded = false;
+        await clientDelegateImpl.getInstance().startSpotlight('1').then(() => {
+          startSpotlightResponded = true;
+        });
+        assertTrue(startSpotlightResponded);
       });
 });

@@ -27,7 +27,7 @@ $sse2=1;
 
 &bn_mul_add_words("bn_mul_add_words");
 &bn_mul_words("bn_mul_words");
-&bn_sqr_words("bn_sqr_words");
+&bn_sqr_add_words("bn_sqr_add_words");
 &bn_add_words("bn_add_words");
 &bn_sub_words("bn_sub_words");
 
@@ -174,7 +174,7 @@ sub bn_mul_words
 	&function_end($name);
 	}
 
-sub bn_sqr_words
+sub bn_sqr_add_words
 	{
 	local($name)=@_;
 
@@ -188,12 +188,21 @@ sub bn_sqr_words
 		&mov($r,&wparam(0));
 		&mov($a,&wparam(1));
 		&mov($c,&wparam(2));
+		&pxor("mm1","mm1");		# mm1 = carry_in
 
 	&set_label("sqr_sse2_loop",16);
 		&movd("mm0",&DWP(0,$a));	# mm0 = a[i]
+		&movd("mm2",&DWP(0,$r,"",0));	# mm2 = r[i]
+		&movd("mm3",&DWP(4,$r,"",0));	# mm3 = r[i+1]
 		&pmuludq("mm0","mm0");		# a[i] *= a[i]
 		&lea($a,&DWP(4,$a));		# a++
-		&movq(&QWP(0,$r),"mm0");	# r[i] = a[i]*a[i]
+		&paddq("mm1","mm0");		# carry += a[i] * a[i]
+		&paddq("mm1","mm2");		# carry += r[i]
+		&movd(&DWP(0,$r), "mm1");
+		&psrlq("mm1",32);		# carry >>= 32
+		&paddq("mm1","mm3");		# carry += r[i+1]
+		&movd(&DWP(4,$r), "mm1");
+		&psrlq("mm1",32);		# carry >>= 32
 		&sub($c,1);
 		&lea($r,&DWP(8,$r));		# r += 2
 		&jnz(&label("sqr_sse2_loop"));

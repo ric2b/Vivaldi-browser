@@ -22,7 +22,6 @@
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -48,6 +47,7 @@
 #include "content/browser/loader/url_loader_factory_utils.h"
 #include "content/browser/private_aggregation/private_aggregation_manager.h"
 #include "content/browser/renderer_host/page_impl.h"
+#include "content/browser/renderer_host/policy_container_host.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
@@ -66,6 +66,7 @@
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
+#include "services/network/public/mojom/connection_change_observer_client.mojom.h"
 #include "services/network/public/mojom/permissions_policy/permissions_policy_feature.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -393,8 +394,8 @@ void AdAuctionServiceImpl::UpdateAdInterestGroups() {
 
   // `base::Unretained` is safe here since the `BrowserContext` owns the
   // `StoragePartition` that owns the interest group manager.
-  GetInterestGroupManager().UpdateInterestGroupsOfOwner(
-      origin(), GetClientSecurityState(), user_agent_override,
+  GetInterestGroupManager().UpdateInterestGroupsOfOwners(
+      {origin()}, GetClientSecurityState(), user_agent_override,
       base::BindRepeating(
           &AreAllowedReportingOriginsAttested,
           base::Unretained(render_frame_host().GetBrowserContext())));
@@ -480,9 +481,10 @@ void AdAuctionServiceImpl::RunAdAuction(
 
   std::unique_ptr<AuctionRunner> auction = AuctionRunner::CreateAndStart(
       auction_metrics_recorder_manager_.CreateAuctionMetricsRecorder(),
-      &auction_worklet_manager_, &auction_nonce_manager_,
-      &GetInterestGroupManager(), render_frame_host().GetBrowserContext(),
-      private_aggregation_manager_, std::move(ad_auction_page_data_callback),
+      &dwa_auction_metrics_manager_, &auction_worklet_manager_,
+      &auction_nonce_manager_, &GetInterestGroupManager(),
+      render_frame_host().GetBrowserContext(), private_aggregation_manager_,
+      std::move(ad_auction_page_data_callback),
       // Unlike other callbacks, this needs to be safe to call after destruction
       // of the AdAuctionServiceImpl, so that the reporter can outlive it.
       base::BindRepeating(
@@ -725,7 +727,8 @@ void AdAuctionServiceImpl::PreconnectSocket(
       ->GetNetworkContext()
       ->PreconnectSockets(
           /*num_streams=*/1, url, network::mojom::CredentialsMode::kOmit,
-          network_anonymization_key, net::MutableNetworkTrafficAnnotationTag());
+          network_anonymization_key, net::MutableNetworkTrafficAnnotationTag(),
+          /*keepalive_config=*/std::nullopt, mojo::NullRemote());
 }
 
 scoped_refptr<network::SharedURLLoaderFactory>
@@ -743,6 +746,18 @@ scoped_refptr<SiteInstance> AdAuctionServiceImpl::GetFrameSiteInstance() {
 
 network::mojom::ClientSecurityStatePtr
 AdAuctionServiceImpl::GetClientSecurityState() {
+  if (base::FeatureList::IsEnabled(
+          features::kFledgeOnlyUseIpAddressSpaceInClientSecurityState)) {
+    PolicyContainerHost* policies = GetFrame()->policy_container_host();
+    // This matches what GetFrame()->BuildClientSecurityState() does, in the no
+    // PolicyContainer case. According to comments there, PolicyContainerHost
+    // should only be null before commit, which shouldn't be the case when any
+    // of AdAuctionServiceImpl's methods are invoked.
+    network::mojom::IPAddressSpace ip_address_space =
+        policies ? policies->ip_address_space()
+                 : network::mojom::IPAddressSpace::kUnknown;
+    return CreateClientSecurityStateForProtectedAudience(ip_address_space);
+  }
   network::mojom::ClientSecurityStatePtr frame_state =
       GetFrame()->BuildClientSecurityState();
   // Ensure all Local Network Access requests are blocked as this could lead to
@@ -946,7 +961,7 @@ void AdAuctionServiceImpl::OnAuctionComplete(
   // auction, which `reporter` can reuse once started. Fine to delete after
   // starting the reporter.
   auto auction_it = auctions_.find(auction);
-  CHECK(auction_it != auctions_.end(), base::NotFatalUntil::M130);
+  CHECK(auction_it != auctions_.end());
   std::unique_ptr<AuctionRunner> owned_auction = std::move(auction_it->second);
   auctions_.erase(auction_it);
 
@@ -1087,6 +1102,24 @@ void AdAuctionServiceImpl::MaybeLogPrivateAggregationFeatures(
     GetContentClient()->browser()->LogWebFeatureForCurrentPage(
         &render_frame_host(),
         blink::mojom::WebFeature::kPrivateAggregationApiFilteringIds);
+  }
+
+  if (!has_logged_private_aggregation_error_reporting_web_feature_ &&
+      std::ranges::any_of(
+          private_aggregation_requests, [](const auto& request) {
+            auction_worklet::mojom::AggregatableReportContributionPtr&
+                contribution = request->contribution;
+            if (contribution->is_histogram_contribution()) {
+              return false;
+            }
+            CHECK(contribution->is_for_event_contribution());
+            return contribution->get_for_event_contribution()
+                ->event_type->is_reserved_error();
+          })) {
+    has_logged_private_aggregation_error_reporting_web_feature_ = true;
+    GetContentClient()->browser()->LogWebFeatureForCurrentPage(
+        &render_frame_host(),
+        blink::mojom::WebFeature::kPrivateAggregationApiErrorReporting);
   }
 
   if (!has_logged_private_aggregation_enable_debug_mode_web_feature_ &&
@@ -1292,7 +1325,8 @@ void AdAuctionServiceImpl::OnGotAuctionDataAndKey(
           render_frame_host()
               .GetIsolationInfoForSubresources()
               .network_anonymization_key(),
-          net::MutableNetworkTrafficAnnotationTag());
+          net::MutableNetworkTrafficAnnotationTag(),
+          /*keepalive_config=*/std::nullopt, mojo::NullRemote());
 
   AdAuctionPageData* ad_auction_page_data = GetAdAuctionPageData();
   if (!ad_auction_page_data) {

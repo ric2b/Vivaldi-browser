@@ -112,7 +112,7 @@ endif()
 
 macro (add_definition target var)
     if (NOT ("${${var}}" STREQUAL ""))
-        set_property(TARGET ${target} APPEND PROPERTY COMPILE_DEFINITIONS "${var}=__attribute__((visibility(\"${${var}}\")))")
+        target_compile_definitions(${target} PUBLIC "${var}=__attribute__((visibility(\"${${var}}\")))")
     endif ()
 endmacro ()
 
@@ -126,7 +126,7 @@ if (ZSTD_BUILD_SHARED)
     target_include_directories(libzstd_shared INTERFACE $<BUILD_INTERFACE:${PUBLIC_INCLUDE_DIRS}>)
     list(APPEND library_targets libzstd_shared)
     if (ZSTD_MULTITHREAD_SUPPORT)
-        set_property(TARGET libzstd_shared APPEND PROPERTY COMPILE_DEFINITIONS "ZSTD_MULTITHREAD")
+        target_compile_definitions(libzstd_shared PUBLIC ZSTD_MULTITHREAD)
         if (UNIX)
             target_link_libraries(libzstd_shared ${THREADS_LIBS})
         endif ()
@@ -140,7 +140,7 @@ if (ZSTD_BUILD_STATIC)
     target_include_directories(libzstd_static INTERFACE $<BUILD_INTERFACE:${PUBLIC_INCLUDE_DIRS}>)
     list(APPEND library_targets libzstd_static)
     if (ZSTD_MULTITHREAD_SUPPORT)
-        set_property(TARGET libzstd_static APPEND PROPERTY COMPILE_DEFINITIONS "ZSTD_MULTITHREAD")
+        target_compile_definitions(libzstd_static PUBLIC ZSTD_MULTITHREAD)
         if (UNIX)
             target_link_libraries(libzstd_static ${THREADS_LIBS})
         endif ()
@@ -207,7 +207,7 @@ if (ZSTD_BUILD_SHARED)
             OUTPUT_NAME zstd
             VERSION ${ZSTD_FULL_VERSION}
             SOVERSION ${zstd_VERSION_MAJOR})
-            
+
     if (ZSTD_FRAMEWORK)
         set_target_properties(
                 libzstd_shared

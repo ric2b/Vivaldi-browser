@@ -31,21 +31,21 @@ limitations under the License.
 #include "xla/service/gpu/autotuning/autotuner_util.h"
 #include "xla/service/platform_util.h"
 #include "xla/stream_executor/platform.h"
-#include "xla/tests/hlo_test_base.h"
+#include "xla/tests/hlo_pjrt_test_base.h"
 #include "xla/tsl/lib/core/status_test_util.h"
+#include "xla/tsl/platform/status_matchers.h"
 #include "xla/xla.pb.h"
 #include "xla/xla_data.pb.h"
-#include "tsl/platform/status_matchers.h"
 
 namespace xla::gpu {
 namespace {
 
 class TritonFusionNumericsVerifierTest
-    : public HloTestBase,
+    : public HloPjRtTestBase,
       public ::testing::WithParamInterface<PrimitiveType> {
  public:
   DebugOptions GetDebugOptionsForTest() const override {
-    auto options = HloTestBase::GetDebugOptionsForTest();
+    auto options = HloPjRtTestBase::GetDebugOptionsForTest();
     options.set_xla_gpu_verify_triton_fusion_numerics(true);
     return options;
   }
@@ -116,16 +116,48 @@ triton_softmax_computation {
 ENTRY main{
   p = $0[127,125] parameter(0)
   ROOT triton_softmax = $0[127,125] fusion(p), kind=kCustom,
-    calls=triton_softmax_computation,
-    backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],
-    "fusion_backend_config":{"kind":"__triton","block_level_fusion_config":
-    {"output_tiles":[{"sizes":["1","125"]}],"num_warps":"1"}},"force_earliest_schedule":false}
-}
-
-)";
+    calls=triton_softmax_computation, backend_config={
+      "fusion_backend_config":{
+      "kind":"__triton",
+      "block_level_fusion_config":{
+        "output_tiles":[{"sizes":["1","125"]}],
+        "num_warps":"1",
+        "num_ctas":"1",
+        "num_stages":"1"}}}
+})";
 
 TEST_P(TritonFusionNumericsVerifierTest, VerifyExactSoftmaxFusionNumerics) {
   auto module = Module(kSoftmaxHlo,
+                       primitive_util::LowercasePrimitiveTypeName(GetParam()));
+
+  EXPECT_NE(TritonFusion(*module), nullptr);
+  auto verifier = TritonFusionNumericsVerifier(CreateAutotuneConfig());
+  TF_EXPECT_OK(verifier.Run(module.get(), /*execution_threads=*/{}));
+}
+
+TEST_P(TritonFusionNumericsVerifierTest, VerifyMultiOutputFusionNumerics) {
+  constexpr absl::string_view kMultiOutputFusionHloText = R"(
+HloModule m
+fusion_computation {
+  param_0 = $0[127,125]{1,0} parameter(0)
+  exponential = $0[127,125]{1,0} exponential(param_0)
+  negate = $0[127,125]{1,0} negate(exponential)
+  ROOT res = ($0[127,125]{1,0}, $0[127,125]{1,0}) tuple(exponential, negate)
+}
+
+ENTRY main{
+  p = $0[127,125] parameter(0)
+  ROOT result = ($0[127,125], $0[127,125]) fusion(p), kind=kCustom,
+    calls=fusion_computation, backend_config={
+      "fusion_backend_config":{
+      "kind":"__triton",
+      "block_level_fusion_config":{
+        "output_tiles":[{"sizes":["1","125"]}, {"sizes":["1","125"]}],
+        "num_warps":"1",
+        "num_ctas":"1",
+        "num_stages":"1"}}}
+})";
+  auto module = Module(kMultiOutputFusionHloText,
                        primitive_util::LowercasePrimitiveTypeName(GetParam()));
 
   EXPECT_NE(TritonFusion(*module), nullptr);
@@ -205,12 +237,15 @@ triton_softmax_computation {
 ENTRY main {
   param_0 = f32[16,256000] parameter(0)
   ROOT triton_softmax = f32[16,256000]{1,0} fusion(param_0), kind=kCustom,
-    calls=triton_softmax_computation,
-    backend_config={"fusion_backend_config":
-      {"kind":"__triton","block_level_fusion_config":
-        {"output_tiles":[{"sizes":["1","256000"]}],"num_warps":"32"}}}
-}
-  )",
+    calls=triton_softmax_computation, backend_config={
+      "fusion_backend_config":{
+        "kind":"__triton",
+        "block_level_fusion_config":{
+          "output_tiles":[{"sizes":["1","256000"]}],
+          "num_warps":"32",
+          "num_ctas":"1",
+          "num_stages":"1"}}}
+})",
                        "");
 
   auto verifier = TritonFusionNumericsVerifier(CreateAutotuneConfig());
@@ -273,9 +308,9 @@ ENTRY main {
   p0 = f32[16,16] parameter(0)
   p1 = f32[16,16] parameter(1)
   p2 = f32[16,16] parameter(2)
-  r0 = f32[16] fusion(p0), kind=kCustom, calls=reduce_0, backend_config={"fusion_backend_config": {"kind":"__triton","block_level_fusion_config":{"output_tiles":[{"sizes":["16"]}],"num_warps":"1"}}}
-  r1 = f32[16] fusion(p1), kind=kCustom, calls=reduce_1, backend_config={"fusion_backend_config": {"kind":"__triton","block_level_fusion_config":{"output_tiles":[{"sizes":["16"]}],"num_warps":"1"}}}
-  r2 = f32[16] fusion(p2), kind=kCustom, calls=reduce_2, backend_config={"fusion_backend_config": {"kind":"__triton","block_level_fusion_config":{"output_tiles":[{"sizes":["16"]}],"num_warps":"1"}}}
+  r0 = f32[16] fusion(p0), kind=kCustom, calls=reduce_0, backend_config={"fusion_backend_config": {"kind":"__triton","block_level_fusion_config":{"output_tiles":[{"sizes":["16"]}],"num_warps":"1","num_ctas":"1","num_stages":"1"}}}
+  r1 = f32[16] fusion(p1), kind=kCustom, calls=reduce_1, backend_config={"fusion_backend_config": {"kind":"__triton","block_level_fusion_config":{"output_tiles":[{"sizes":["16"]}],"num_warps":"1","num_ctas":"1","num_stages":"1"}}}
+  r2 = f32[16] fusion(p2), kind=kCustom, calls=reduce_2, backend_config={"fusion_backend_config": {"kind":"__triton","block_level_fusion_config":{"output_tiles":[{"sizes":["16"]}],"num_warps":"1","num_ctas":"1","num_stages":"1"}}}
   add_0_1 = f32[16] add(r0, r1)
   ROOT add_0_2 = f32[16] add(add_0_1, r2)
 }
@@ -324,11 +359,14 @@ triton_softmax_computation {
 ENTRY main {
   p = f32[16384,16384] parameter(0)
   ROOT triton_softmax = f32[1,1,16384,16384] fusion(p), kind=kCustom,
-    calls=triton_softmax_computation,
-    backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],
-      "fusion_backend_config":{"kind":"__triton","block_level_fusion_config":
-        {"output_tiles":[{"sizes":["1","1","1","16384"]}],"num_warps":"32"}},
-        "force_earliest_schedule":false}
+    calls=triton_softmax_computation, backend_config={
+      "fusion_backend_config":{
+      "kind":"__triton",
+      "block_level_fusion_config":{
+        "output_tiles":[{"sizes":["1","1","1","16384"]}],
+        "num_warps":"32",
+        "num_ctas":"1",
+        "num_stages":"1"}}}
 }
   )";
   auto module = Module(hlo_text, "");

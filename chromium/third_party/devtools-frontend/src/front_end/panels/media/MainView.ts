@@ -1,6 +1,7 @@
 // Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import type * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -182,7 +183,7 @@ export class MainView extends UI.Panel.PanelWithSidebar implements SDK.TargetMan
     this.#placeholder =
         new UI.EmptyWidget.EmptyWidget(i18nString(UIStrings.noMediaPlayer), UIStrings.mediaPlayerDescription);
     this.#placeholder.show(this.mainElement());
-    this.#placeholder.appendLink(MEDIA_PLAYER_EXPLANATION_URL);
+    this.#placeholder.link = MEDIA_PLAYER_EXPLANATION_URL;
 
     SDK.TargetManager.TargetManager.instance().observeModels(MediaModel, this, {scoped: true});
   }

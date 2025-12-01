@@ -7,19 +7,18 @@
 #include <cinttypes>
 
 #include "base/strings/stringprintf.h"
-#include "services/strings/grit/services_strings.h"
 #include "ui/accessibility/ax_enum_util.h"
 #include "ui/accessibility/ax_role_properties.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace a11y {
 
-bool IsSuperscript(ui::AXNode* ax_node) {
+bool IsSuperscript(const ui::AXNode* ax_node) {
   return ax_node->data().GetTextPosition() ==
          ax::mojom::TextPosition::kSuperscript;
 }
 
-bool IsTextForReadAnything(ui::AXNode* node, bool is_pdf, bool is_docs) {
+bool IsTextForReadAnything(const ui::AXNode* node, bool is_pdf, bool is_docs) {
   if (!node) {
     return false;
   }
@@ -37,7 +36,40 @@ bool IsTextForReadAnything(ui::AXNode* node, bool is_pdf, bool is_docs) {
   return (GetHtmlTag(node, is_pdf, is_docs).length() == 0) || is_list_marker;
 }
 
-std::string GetHtmlTag(ui::AXNode* ax_node, bool is_pdf, bool is_docs) {
+bool IsIgnored(const ui::AXNode* const ax_node, bool is_pdf) {
+  if (ax_node->IsIgnored()) {
+    return true;
+  }
+
+  // PDFs processed with OCR have additional nodes that mark the start and end
+  // of a page. The start of a page is indicated with a `kBanner` node that has
+  // a child static text node. Ignore both. The end of a page is indicated with
+  // a `kContentInfo` node that has a child static text node. Ignore the static
+  // text node but keep the `kContentInfo` so a line break can be inserted in
+  // between pages during `a11y::GetHtmlTagForPDF()`.
+  const ax::mojom::Role role = ax_node->GetRole();
+  if (is_pdf) {
+    // The text content of the aforementioned `kBanner` or `kContentInfo` node
+    // is the same as the text content of its child static text node.
+    const ui::AXNode* const parent = ax_node->GetParent();
+    if (const std::string_view text = ax_node->GetTextContentUTF8();
+        text == l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_BEGIN)) {
+      if (role == ax::mojom::Role::kBanner ||
+          (parent && parent->GetRole() == ax::mojom::Role::kBanner)) {
+        return true;
+      }
+    } else if (text == l10n_util::GetStringUTF8(IDS_PDF_OCR_RESULT_END) &&
+               parent && parent->GetRole() == ax::mojom::Role::kContentInfo) {
+      return true;
+    }
+  }
+
+  // Ignore interactive elements, except for text fields and aria-related
+  // support fields.
+  return (ui::IsControl(role) && !ui::IsTextField(role)) || ui::IsSelect(role);
+}
+
+std::string GetHtmlTag(const ui::AXNode* ax_node, bool is_pdf, bool is_docs) {
   std::string html_tag =
       ax_node->GetStringAttribute(ax::mojom::StringAttribute::kHtmlTag);
 
@@ -74,7 +106,8 @@ std::string GetHtmlTag(ui::AXNode* ax_node, bool is_pdf, bool is_docs) {
   return html_tag;
 }
 
-std::string GetHtmlTagForPDF(ui::AXNode* ax_node, const std::string& html_tag) {
+std::string GetHtmlTagForPDF(const ui::AXNode* ax_node,
+                             const std::string& html_tag) {
   ax::mojom::Role role = ax_node->GetRole();
 
   // Some nodes in PDFs don't have an HTML tag so use role instead.
@@ -105,7 +138,7 @@ std::string GetHtmlTagForPDF(ui::AXNode* ax_node, const std::string& html_tag) {
   }
 }
 
-std::string GetHeadingHtmlTagForPDF(ui::AXNode* ax_node,
+std::string GetHeadingHtmlTagForPDF(const ui::AXNode* ax_node,
                                     const std::string& html_tag) {
   // Sometimes whole paragraphs can be formatted as a heading. If the text is
   // longer than 2 lines, assume it was meant to be a paragragh.
@@ -139,19 +172,21 @@ std::string GetHeadingHtmlTagForPDF(ui::AXNode* ax_node,
   return html_tag;
 }
 
-std::string GetAltText(ui::AXNode* ax_node) {
+std::string GetAltText(const ui::AXNode* ax_node) {
   std::string alt_text =
       ax_node->GetStringAttribute(ax::mojom::StringAttribute::kName);
   return alt_text;
 }
 
-std::string GetImageDataUrl(ui::AXNode* ax_node) {
+std::string GetImageDataUrl(const ui::AXNode* ax_node) {
   std::string url =
       ax_node->GetStringAttribute(ax::mojom::StringAttribute::kImageDataUrl);
   return url;
 }
 
-std::u16string GetTextContent(ui::AXNode* ax_node, bool is_docs, bool is_pdf) {
+std::u16string GetTextContent(const ui::AXNode* ax_node,
+                              bool is_docs,
+                              bool is_pdf) {
   // For Google Docs, because the content is rendered in canvas, we distill
   // text from the "Annotated Canvas"
   // (https://sites.google.com/corp/google.com/docs-canvas-migration/home)
@@ -207,7 +242,7 @@ std::u16string GetTextContent(ui::AXNode* ax_node, bool is_docs, bool is_pdf) {
   return ax_node->GetTextContentUTF16();
 }
 
-std::u16string GetNameAttributeText(ui::AXNode* ax_node) {
+std::u16string GetNameAttributeText(const ui::AXNode* ax_node) {
   DCHECK(ax_node);
   std::u16string node_text;
   if (ax_node->HasStringAttribute(ax::mojom::StringAttribute::kName)) {

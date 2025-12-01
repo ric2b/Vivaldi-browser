@@ -99,7 +99,7 @@ public class ReadAloudMetrics {
         int COUNT = 7;
     }
 
-    private static float[] sPlaybackSpeeds = {0.5f, 0.8f, 1.0f, 1.2f, 1.5f, 2.0f, 3.0f, 4.0f};
+    private static final float[] sPlaybackSpeeds = {0.5f, 0.8f, 1.0f, 1.2f, 1.5f, 2.0f, 3.0f, 4.0f};
 
     /**
      * Reasons for stopping a playback defined in readaloud/enums.xml.
@@ -119,6 +119,7 @@ public class ReadAloudMetrics {
         ReasonForStoppingPlayback.ACTIVITY_ATTACHEMENT_CHANGED,
         ReasonForStoppingPlayback.EXTERNAL_PLAYBACK_REQUEST,
         ReasonForStoppingPlayback.TAB_CLOSED,
+        ReasonForStoppingPlayback.PLAYBACK_MODE_CHANGE,
     })
     public @interface ReasonForStoppingPlayback {
         int UNKNOWN_REASON = 0;
@@ -146,8 +147,10 @@ public class ReadAloudMetrics {
         // Playback was requested from another activity (e.g. Chrome playback must stop because CCT
         // is about to play).
         int EXTERNAL_PLAYBACK_REQUEST = 11;
+        // Playback mode was changed during playback.
+        int PLAYBACK_MODE_CHANGE = 12;
         // Be sure to also update enums.xml when updating these values.
-        int NUM_ENTRIES = 12;
+        int NUM_ENTRIES = 13;
     }
 
     public static void recordDurationMsListened(long durationMs) {

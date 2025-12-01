@@ -7,6 +7,7 @@ file://ATL_OWNERS
 
 per-file .clang-format=thakis@chromium.org
 per-file .clang-tidy=file://styleguide/c++/OWNERS
+per-file .clang-tidy=flowerhack@google.com
 per-file .clangd=file://styleguide/c++/OWNERS
 per-file .gitattributes=*
 per-file .gitignore=*
@@ -19,27 +20,28 @@ per-file .gn=file://build/OWNERS
 per-file .mailmap=*
 per-file .rustfmt.toml=file://styleguide/rust/OWNERS
 per-file .vpython3=bpastene@chromium.org
-per-file .vpython3=dpranke@google.com
 per-file .vpython3=tikuta@chromium.org
+per-file .vpython3=file://third_party/protobuf/OWNERS  # For protobuf wheels changes
 per-file .yapfignore=*
 per-file AUTHORS=*
 per-file BUILD.gn=file://build/OWNERS
-per-file CODE_OF_CONDUCT.md=dpranke@google.com
 per-file CODE_OF_CONDUCT.md=ellyjones@chromium.org
 per-file CPPLINT.cfg=file://styleguide/c++/OWNERS
 per-file DEPS=*
 per-file DEPS=bryner@google.com # For new DEPS hook
-per-file DEPS=dpranke@google.com # For new DEPS hook
 per-file DEPS=gatong@chromium.org # For new DEPS hook
-per-file DEPS=guterman@google.com # For new DEPS hook
 per-file DEPS=treilly@google.com # For new DEPS hook
 per-file PRESUBMIT*.py=agrieve@chromium.org  # For .pydeps changes
 per-file PRESUBMIT*.py=dcheng@chromium.org
-per-file PRESUBMIT*.py=dpranke@google.com
 per-file PRESUBMIT*.py=battre@chromium.org
 per-file PRESUBMIT*.py=wnwen@chromium.org  # For .pydeps changes
 per-file README.md=*
 per-file WATCHLISTS=*
+
+# Membership in SECURITY_OWNERS files is subject to a specific policy:
+# //docs/security/security-owners.md.
+per-file .../SECURITY_OWNERS=set noparent
+per-file .../SECURITY_OWNERS=file://SECURITY_OWNERS
 
 # git submodules
 per-file build/fuchsia/internal=*
@@ -47,7 +49,6 @@ per-file chromeos/ash/resources/internal=*
 per-file chromeos/assistant/internal=*
 per-file clank=*
 per-file content/test/data/plugin=*
-per-file chrome/release_scripts=*
 per-file docs/website=*
 per-file google_apis/internal=*
 per-file internal=*
@@ -99,6 +100,7 @@ per-file third_party/chromite=*
 per-file third_party/clang-format/script=*
 per-file third_party/cld_3/src=*
 per-file third_party/colorama/src=*
+per-file third_party/compiler-rt/src=*
 per-file third_party/content_analysis_sdk/src=*
 per-file third_party/cpu_features/src=*
 per-file third_party/cpuinfo/src=*

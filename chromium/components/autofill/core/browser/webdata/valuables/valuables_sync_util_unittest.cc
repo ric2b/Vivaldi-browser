@@ -4,6 +4,7 @@
 
 #include "components/autofill/core/browser/webdata/valuables/valuables_sync_util.h"
 
+#include "base/types/zip.h"
 #include "components/sync/protocol/autofill_valuable_specifics.pb.h"
 #include "components/sync/protocol/entity_data.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -17,16 +18,18 @@ constexpr char kInvalidId[] = "";
 
 constexpr char kValidProgramLogo[] = "http://foobar.com/logo.png";
 constexpr char kInvalidProgramLogo[] = "logo.png";
+constexpr char kValidCardNumber[] = "80974934820245";
 
 LoyaltyCard TestLoyaltyCard(std::string_view id = kId1) {
   return LoyaltyCard(ValuableId(std::string(id)), "merchant_name",
                      "program_name", GURL("http://foobar.com/logo.png"),
-                     "suffix");
+                     kValidCardNumber, {GURL("https://domain.example")});
 }
 
 sync_pb::AutofillValuableSpecifics TestLoyaltyCardSpecifics(
     std::string_view id = kId1,
-    std::string_view program_logo = kValidProgramLogo) {
+    std::string_view program_logo = kValidProgramLogo,
+    std::string_view number = kValidCardNumber) {
   sync_pb::AutofillValuableSpecifics specifics =
       sync_pb::AutofillValuableSpecifics();
   specifics.set_id(std::string(id));
@@ -36,7 +39,8 @@ sync_pb::AutofillValuableSpecifics TestLoyaltyCardSpecifics(
   loyalty_card->set_merchant_name("merchant_name");
   loyalty_card->set_program_name("program_name");
   loyalty_card->set_program_logo(std::string(program_logo));
-  loyalty_card->set_loyalty_card_suffix("suffix");
+  loyalty_card->set_loyalty_card_number(number);
+  *loyalty_card->add_merchant_domains() = "https://domain.example";
   return specifics;
 }
 
@@ -53,8 +57,14 @@ TEST_F(LoyaltyCardSyncUtilTest, CreateValuableSpecificsFromLoyaltyCard) {
   EXPECT_EQ(card.merchant_name(), specifics.loyalty_card().merchant_name());
   EXPECT_EQ(card.program_name(), specifics.loyalty_card().program_name());
   EXPECT_EQ(card.program_logo(), specifics.loyalty_card().program_logo());
-  EXPECT_EQ(card.loyalty_card_suffix(),
-            specifics.loyalty_card().loyalty_card_suffix());
+  EXPECT_EQ(card.loyalty_card_number(),
+            specifics.loyalty_card().loyalty_card_number());
+  ASSERT_EQ(card.merchant_domains().size(),
+            (size_t)specifics.loyalty_card().merchant_domains().size());
+  for (size_t i = 0; i < card.merchant_domains().size(); i++) {
+    EXPECT_EQ(card.merchant_domains()[i],
+              specifics.loyalty_card().merchant_domains(i));
+  }
 }
 
 TEST_F(LoyaltyCardSyncUtilTest, CreateEntityDataFromLoyaltyCard) {
@@ -70,14 +80,18 @@ TEST_F(LoyaltyCardSyncUtilTest, CreateEntityDataFromLoyaltyCard) {
   EXPECT_EQ(card.merchant_name(), specifics.loyalty_card().merchant_name());
   EXPECT_EQ(card.program_name(), specifics.loyalty_card().program_name());
   EXPECT_EQ(card.program_logo(), specifics.loyalty_card().program_logo());
-  EXPECT_EQ(card.loyalty_card_suffix(),
-            specifics.loyalty_card().loyalty_card_suffix());
+  EXPECT_EQ(card.loyalty_card_number(),
+            specifics.loyalty_card().loyalty_card_number());
+  ASSERT_EQ(card.merchant_domains().size(),
+            (size_t)specifics.loyalty_card().merchant_domains().size());
+  for (auto [merchant_domain, loyalty_card_domain] :
+       base::zip(card.merchant_domains(),
+                 specifics.loyalty_card().merchant_domains())) {
+    EXPECT_EQ(merchant_domain, loyalty_card_domain);
+  }
 }
 
 TEST_F(LoyaltyCardSyncUtilTest, CreateAutofillLoyaltyCardFromSpecifics) {
-  EXPECT_EQ(CreateAutofillLoyaltyCardFromSpecifics(
-                TestLoyaltyCardSpecifics(kInvalidId)),
-            std::nullopt);
   EXPECT_EQ(TestLoyaltyCard(), CreateAutofillLoyaltyCardFromSpecifics(
                                    TestLoyaltyCardSpecifics(kId1)));
 }
@@ -87,8 +101,18 @@ TEST_F(LoyaltyCardSyncUtilTest, AreAutofillLoyaltyCardSpecificsValid) {
       TestLoyaltyCardSpecifics(kInvalidId)));
   EXPECT_FALSE(AreAutofillLoyaltyCardSpecificsValid(
       TestLoyaltyCardSpecifics(kId1, kInvalidProgramLogo)));
+  EXPECT_FALSE(AreAutofillLoyaltyCardSpecificsValid(
+      TestLoyaltyCardSpecifics(kId1, kInvalidProgramLogo)));
+  EXPECT_FALSE(AreAutofillLoyaltyCardSpecificsValid(
+      TestLoyaltyCardSpecifics(kId1, kValidProgramLogo, /*number=*/"")));
   EXPECT_TRUE(
       AreAutofillLoyaltyCardSpecificsValid(TestLoyaltyCardSpecifics(kId1)));
+
+  sync_pb::AutofillValuableSpecifics specifics = TestLoyaltyCardSpecifics(kId1);
+  specifics.mutable_loyalty_card()->clear_program_logo();
+  EXPECT_TRUE(AreAutofillLoyaltyCardSpecificsValid(specifics));
+  EXPECT_TRUE(AreAutofillLoyaltyCardSpecificsValid(
+      TestLoyaltyCardSpecifics(kId1, /*program_logo=*/"")));
 }
 
 TEST_F(LoyaltyCardSyncUtilTest, TrimAutofillValuableSpecificsDataForCaching) {

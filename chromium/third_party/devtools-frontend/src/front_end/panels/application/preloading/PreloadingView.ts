@@ -1,6 +1,8 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/legacy.js';
 
@@ -10,7 +12,6 @@ import * as Platform from '../../../core/platform/platform.js';
 import {assertNotNullOrUndefined} from '../../../core/platform/platform.js';
 import * as SDK from '../../../core/sdk/sdk.js';
 import * as Protocol from '../../../generated/protocol.js';
-import * as Bindings from '../../../models/bindings/bindings.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 // eslint-disable-next-line rulesdir/es-modules-import
 import emptyWidgetStyles from '../../../ui/legacy/emptyWidget.css.js';
@@ -19,6 +20,7 @@ import {html, render} from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import * as PreloadingComponents from './components/components.js';
+import {ruleSetTagOrLocationShort} from './components/PreloadingString.js';
 import type * as PreloadingHelper from './helper/helper.js';
 import preloadingViewStyles from './preloadingView.css.js';
 import preloadingViewDropDownStyles from './preloadingViewDropDown.css.js';
@@ -180,16 +182,6 @@ class PreloadingUIUtils {
     const index = id.indexOf('.');
     return index === -1 ? id : id.slice(index + 1);
   }
-
-  // TODO(https://crbug.com/1410709): Move
-  // front_end/panels/application/preloading/components/PreloadingString.ts
-  // to
-  // front_end/panels/application/preloading/helper/PreloadingString.ts
-  // and use PreloadingString.ruleSetLocationShort.
-  static ruleSetLocationShort(ruleSet: Protocol.Preload.RuleSet, pageURL: Platform.DevToolsPath.UrlString): string {
-    const url = ruleSet.url === undefined ? pageURL : ruleSet.url as Platform.DevToolsPath.UrlString;
-    return Bindings.ResourceUtils.displayNameForURL(url);
-  }
 }
 
 function pageURL(): Platform.DevToolsPath.UrlString {
@@ -200,7 +192,6 @@ function pageURL(): Platform.DevToolsPath.UrlString {
 export class PreloadingRuleSetView extends UI.Widget.VBox {
   private model: SDK.PreloadingModel.PreloadingModel;
   private focusedRuleSetId: Protocol.Preload.RuleSetId|null = null;
-  private focusedPreloadingAttemptId: SDK.PreloadingModel.PreloadingAttemptId|null = null;
 
   private readonly warningsContainer: HTMLDivElement;
   private readonly warningsView = new PreloadingWarningsView();
@@ -620,12 +611,10 @@ class PreloadingRuleSetSelector implements
     const ids = this.model.getAllRuleSets().map(({id}) => id);
     const items = [AllRuleSetRootId, ...ids] as [typeof AllRuleSetRootId, ...Protocol.Preload.RuleSetId[]];
     const selected = this.dropDown.getSelectedItem();
+    // Use `AllRuleSetRootId` by default. For example, `selected` is null or has gone.
+    const newSelected = (selected === null || !items.includes(selected)) ? AllRuleSetRootId : selected;
     this.listModel.replaceAll(items);
-    if (selected === null) {
-      this.dropDown.selectItem(AllRuleSetRootId);
-    } else {
-      this.dropDown.selectItem(selected);
-    }
+    this.dropDown.selectItem(newSelected);
     this.updateWidth(items);
   }
 
@@ -676,7 +665,8 @@ class PreloadingRuleSetSelector implements
     if (ruleSet === null) {
       return i18n.i18n.lockedString('Internal error');
     }
-    return PreloadingUIUtils.ruleSetLocationShort(ruleSet, pageURL());
+
+    return ruleSetTagOrLocationShort(ruleSet, pageURL());
   }
 
   subtitleFor(id: Protocol.Preload.RuleSetId|typeof AllRuleSetRootId): string {

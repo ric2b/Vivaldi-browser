@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 
@@ -12,11 +13,7 @@ import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Models from '../models/models.js';
 import * as Actions from '../recorder-actions/recorder-actions.js';
 
-import recordingListViewStylesRaw from './recordingListView.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const recordingListViewStyles = new CSSStyleSheet();
-recordingListViewStyles.replaceSync(recordingListViewStylesRaw.cssText);
+import recordingListViewStyles from './recordingListView.css.js';
 
 const {html} = Lit;
 
@@ -104,7 +101,6 @@ export class RecordingListView extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [recordingListViewStyles];
     void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
@@ -152,6 +148,7 @@ export class RecordingListView extends HTMLElement {
     // clang-format off
     Lit.render(
       html`
+        <style>${recordingListViewStyles}</style>
         <div class="wrapper">
           <div class="header">
             <h1>${i18nString(UIStrings.savedRecordings)}</h1>

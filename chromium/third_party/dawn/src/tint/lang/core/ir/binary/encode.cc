@@ -771,8 +771,8 @@ struct Encoder {
                 return pb::AddressSpace::pixel_local;
             case core::AddressSpace::kPrivate:
                 return pb::AddressSpace::private_;
-            case core::AddressSpace::kPushConstant:
-                return pb::AddressSpace::push_constant;
+            case core::AddressSpace::kImmediate:
+                return pb::AddressSpace::immediate;
             case core::AddressSpace::kStorage:
                 return pb::AddressSpace::storage;
             case core::AddressSpace::kUniform:
@@ -996,6 +996,8 @@ struct Encoder {
                 return pb::BuiltinValue::sample_index;
             case core::BuiltinValue::kSampleMask:
                 return pb::BuiltinValue::sample_mask;
+            case core::BuiltinValue::kSubgroupId:
+                return pb::BuiltinValue::subgroup_id;
             case core::BuiltinValue::kSubgroupInvocationId:
                 return pb::BuiltinValue::subgroup_invocation_id;
             case core::BuiltinValue::kSubgroupSize:

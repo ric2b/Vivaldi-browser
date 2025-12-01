@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_PERFORMANCE_MANAGER_FREEZING_FREEZING_POLICY_H_
 #define COMPONENTS_PERFORMANCE_MANAGER_FREEZING_FREEZING_POLICY_H_
 
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -19,9 +20,9 @@
 #include "base/rand_util.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "components/performance_manager/freezing/cannot_freeze_reason.h"
 #include "components/performance_manager/freezing/freezer.h"
 #include "components/performance_manager/public/decorators/page_live_state_decorator.h"
+#include "components/performance_manager/public/freezing/cannot_freeze_reason.h"
 #include "components/performance_manager/public/freezing/freezing.h"
 #include "components/performance_manager/public/graph/frame_node.h"
 #include "components/performance_manager/public/graph/graph.h"
@@ -53,11 +54,23 @@ namespace performance_manager {
 // freezing.
 class FreezingPolicy : public PageNodeObserver,
                        public FrameNodeObserver,
-                       public PageLiveStateObserverDefaultImpl,
+                       public PageLiveStateObserver,
                        public resource_attribution::QueryResultObserver,
                        public GraphOwnedAndRegistered<FreezingPolicy>,
                        public NodeDataDescriberDefaultImpl {
  public:
+  enum class FreezingType {
+    // Freezing via the voting system exposed to embedders.
+    kVoting,
+    // Freezing of CPU-intensive background tabs when Battery Saver is active.
+    kBatterySaver,
+    // Freezing of tabs which aren't in the set of most recently used, to
+    // scale to infinite tabs.
+    kInfiniteTabs,
+  };
+  using FreezingTypeSet = base::
+      EnumSet<FreezingType, FreezingType::kVoting, FreezingType::kInfiniteTabs>;
+
   explicit FreezingPolicy(
       std::unique_ptr<freezing::Discarder> discarder,
       std::unique_ptr<freezing::OptOutChecker> opt_out_checker = nullptr);
@@ -79,15 +92,23 @@ class FreezingPolicy : public PageNodeObserver,
   void AddFreezeVote(PageNode* page_node);
   void RemoveFreezeVote(PageNode* page_node);
 
-  // Returns a list of human-readable reasons why a page can't be frozen
-  // automatically, or an empty list if it can be frozen automatically.
-  std::set<std::string> GetCannotFreezeReasons(const PageNode* page_node);
+  // Returns details about whether a page can be frozen.
+  freezing::CanFreezeDetails GetCanFreezeDetails(const PageNode* page_node);
+
+  // Returns a set of `CannotFreezeReason`s applicable to `freezing_type`.
+  static freezing::CannotFreezeReasonSet CannotFreezeReasonsForType(
+      FreezingPolicy::FreezingType type);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(FreezingPolicyBatterySaverTest,
                            RecordFreezingEligibilityUKMForPageStatic);
 
-  // State of a browsing instance.
+  class CanFreezePerTypeTracker;
+
+  // Freezing related state for a page.
+  struct PageFreezingState;
+
+  // Freezing related state for a browsing instance.
   struct BrowsingInstanceState {
     BrowsingInstanceState();
     ~BrowsingInstanceState();
@@ -105,12 +126,13 @@ class FreezingPolicy : public PageNodeObserver,
     std::optional<double> highest_cpu_current_interval;
     // Highest CPU measurement for a group of same-origin frames/workers
     // associated within this browsing instance, over any past measurement
-    // period during which no `CannotFreezeReason` was applicable.
-    // (1.0 = 100% of 1 core)
-    double highest_cpu_any_interval_without_cannot_freeze_reason = 0.0;
+    // period during which no `CannotFreezeReason` associated with
+    // `FreezingType::kBatterySaver` was applicable. (1.0 = 100% of 1 core)
+    double highest_cpu_without_battery_saver_cannot_freeze = 0.0;
     // `CannotFreezeReason`s applicable to this browsing instance at any point
     // since the last CPU measurement.
-    CannotFreezeReasonSet cannot_freeze_reasons_since_last_cpu_measurement;
+    freezing::CannotFreezeReasonSet
+        cannot_freeze_reasons_since_last_cpu_measurement;
     // First per-origin Private Memory Footprint measurement taken after this
     // browsing instance became frozen. Empty if not all pages in this browsing
     // instance are frozen.
@@ -126,20 +148,24 @@ class FreezingPolicy : public PageNodeObserver,
   base::flat_set<content::BrowsingInstanceId> GetBrowsingInstances(
       const PageNode* page) const;
 
+  // Returns the `PageFreezingState` for `page`, creating it if necessary.
+  PageFreezingState& GetFreezingState(const PageNode* page_node) const;
+
   // Update frozen state for all pages connected to `page`. Connected pages
   // (including `page_node`) are added to `connected_pages_out` if not nullptr.
   void UpdateFrozenState(
       const PageNode* page_node,
+      base::TimeTicks now = base::TimeTicks::Now(),
       base::flat_set<raw_ptr<const PageNode>>* connected_pages_out = nullptr);
 
   // Helper to add or remove a `CannotFreezeReason` for `page_node`.
   void OnCannotFreezeReasonChange(const PageNode* page_node,
                                   bool add,
-                                  CannotFreezeReason reason);
+                                  freezing::CannotFreezeReason reason);
 
   // Returns the union of `CannotFreezeReason`s applicable to pages associated
   // with `browsing_instance_state`.
-  static CannotFreezeReasonSet GetCannotFreezeReasons(
+  freezing::CannotFreezeReasonSet GetCannotFreezeReasons(
       const BrowsingInstanceState& browsing_instance_state);
 
   // GraphOwned implementation:
@@ -149,6 +175,8 @@ class FreezingPolicy : public PageNodeObserver,
   // PageNodeObserver implementation:
   void OnPageNodeAdded(const PageNode* page_node) override;
   void OnBeforePageNodeRemoved(const PageNode* page_node) override;
+  void OnTypeChanged(const PageNode* page_node,
+                     PageType previous_type) override;
   void OnIsVisibleChanged(const PageNode* page_node) override;
   void OnIsAudibleChanged(const PageNode* page_node) override;
   void OnPageLifecycleStateChanged(const PageNode* page_node) override;
@@ -175,7 +203,7 @@ class FreezingPolicy : public PageNodeObserver,
       const FrameNode* previous_parent_or_outer_document_or_embedder) override;
   void OnIsAudibleChanged(const FrameNode* frame_node) override;
 
-  // PageLiveStateObserverDefaultImpl:
+  // PageLiveStateObserver:
   void OnIsConnectedToUSBDeviceChanged(const PageNode* page_node) override;
   void OnIsConnectedToBluetoothDeviceChanged(
       const PageNode* page_node) override;
@@ -208,6 +236,24 @@ class FreezingPolicy : public PageNodeObserver,
   // `browser_context_id` changes.
   void OnOptOutPolicyChanged(std::string_view browser_context_id);
 
+  // Removes the last page from the most recently used list if needed, to keep
+  // its size below the limit.
+  void MaybePopFromMostRecentlyUsedList();
+
+  // Checks that the size of the most recently used list respects the limit.
+  void CheckMostRecentlyUsedListSize();
+
+  // Starts a timer to manage periodic unfreezing of a tab frozen for
+  // `FreezingContext::kInfiniteTabs`. The timer is scheduled to invoke
+  // OnPeriodicUnfreezeTimer() at the next time when the tab must be unfrozen or
+  // re-frozen.
+  void StartPeriodicUnfreezeTimer(const PageNode* page_node,
+                                  base::TimeTicks now);
+
+  // Method invoked when when it's time to unfreeze or re-freeze a tab frozen
+  // for `FreezingContext::kInfiniteTabs`.
+  void OnPeriodicUnfreezeTimer(const PageNode* page);
+
   // Records freezing eligibility UKM for all pages.
   void RecordFreezingEligibilityUKM();
 
@@ -215,8 +261,8 @@ class FreezingPolicy : public PageNodeObserver,
   virtual void RecordFreezingEligibilityUKMForPage(
       ukm::SourceId source_id,
       double highest_cpu_current_interval,
-      double highest_cpu_any_interval_without_cannot_freeze_reason,
-      CannotFreezeReasonSet cannot_freeze_reasons);
+      double highest_cpu_without_battery_saver_cannot_freeze,
+      freezing::CannotFreezeReasonSet battery_saver_cannot_freeze_reasons);
 
   // Records freezing eligibility UKM for a page. Static implementation.
   //
@@ -227,8 +273,12 @@ class FreezingPolicy : public PageNodeObserver,
   static void RecordFreezingEligibilityUKMForPageStatic(
       ukm::SourceId source_id,
       double highest_cpu_current_interval,
-      double highest_cpu_any_interval_without_cannot_freeze_reason,
-      CannotFreezeReasonSet cannot_freeze_reasons);
+      double highest_cpu_without_battery_saver_cannot_freeze,
+      freezing::CannotFreezeReasonSet battery_saver_cannot_freeze_reasons);
+
+  // Returns a random periodic unfreeze phase. Can be overridden in test to
+  // eliminate randomness.
+  virtual base::TimeTicks GenerateRandomPeriodicUnfreezePhase() const;
 
   // Used to freeze pages.
   std::unique_ptr<Freezer> freezer_;
@@ -263,6 +313,14 @@ class FreezingPolicy : public PageNodeObserver,
 
   // Used to subsample the emission of UKM events.
   base::MetricsSubSampler metrics_subsampler_;
+
+  // List of most recently used hidden tabs. A tab becomes the most recently
+  // used when it transitions from visible to hidden, or when it's created in a
+  // hidden state.
+  std::deque<raw_ptr<const PageNode>> most_recently_used_;
+
+  // Number of visible tabs.
+  int num_visible_tabs_ = 0;
 
   base::WeakPtrFactory<FreezingPolicy> weak_factory_{this};
 };

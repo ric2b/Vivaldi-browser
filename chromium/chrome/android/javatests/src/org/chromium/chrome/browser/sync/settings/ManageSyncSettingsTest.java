@@ -6,9 +6,11 @@ package org.chromium.chrome.browser.sync.settings;
 
 import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
+import static androidx.test.espresso.action.ViewActions.pressKey;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.hasDescendant;
+import static androidx.test.espresso.matcher.ViewMatchers.hasFocus;
 import static androidx.test.espresso.matcher.ViewMatchers.hasSibling;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
@@ -20,10 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import static org.chromium.ui.test.util.ViewUtils.onViewWaiting;
@@ -32,6 +31,7 @@ import static java.util.Map.entry;
 
 import android.app.Dialog;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
@@ -67,7 +67,6 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.DoNotBatch;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.Features;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.device_reauth.BiometricStatus;
@@ -101,7 +100,6 @@ import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.policy.test.annotations.Policies;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.regional_capabilities.RegionalCapabilitiesService;
-import org.chromium.components.signin.SigninFeatures;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.test.util.TestAccounts;
 import org.chromium.components.sync.DataType;
@@ -129,7 +127,6 @@ import java.util.Set;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @DoNotBatch(reason = "TODO(crbug.com/40743432): SyncTestRule doesn't support batching.")
-@Features.DisableFeatures(SigninFeatures.HISTORY_OPT_IN_IPH)
 public class ManageSyncSettingsTest {
     private static final int RENDER_TEST_REVISION = 6;
 
@@ -194,7 +191,6 @@ public class ManageSyncSettingsTest {
     @Mock private HistorySyncHelper mHistorySyncHelperMock;
     @Mock private SyncService mSyncService;
     @Mock private ReauthenticatorBridge mReauthenticatorMock;
-    @Mock private HistoryOptInIphController mHistoryOptInIphControllerMock;
 
     @Before
     public void setUp() {
@@ -214,7 +210,6 @@ public class ManageSyncSettingsTest {
         when(mRegionalCapabilities.isInEeaCountry()).thenReturn(false);
 
         HistorySyncHelper.setInstanceForTesting(mHistorySyncHelperMock);
-        HistoryOptInIphController.setInstanceForTesting(mHistoryOptInIphControllerMock);
 
         mUiDataTypes = new HashMap<>();
         mUiDataTypes.put(UserSelectableType.AUTOFILL, ManageSyncSettings.PREF_SYNC_AUTOFILL);
@@ -462,7 +457,6 @@ public class ManageSyncSettingsTest {
 
         mSyncTestRule.setUpAccountAndSignInForTesting();
         SyncTestUtil.waitForSyncTransportActive();
-        mSyncTestRule.getSyncService();
 
         ManageSyncSettings fragment = startManageSyncPreferences();
 
@@ -514,86 +508,6 @@ public class ManageSyncSettingsTest {
                         });
         Assert.assertFalse(activeDataTypes.contains(DataType.HISTORY));
         Assert.assertFalse(activeDataTypes.contains(DataType.SESSIONS));
-    }
-
-    @Test
-    @LargeTest
-    @Feature({"Sync"})
-    @Features.EnableFeatures(SigninFeatures.HISTORY_OPT_IN_IPH)
-    public void testSyncHistoryAndTabsToggle_historyOptInIphEnabled() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
-        SyncTestUtil.waitForSyncTransportActive();
-
-        ManageSyncSettings fragment = startManageSyncPreferences();
-        ChromeSwitchPreference historyToggle =
-                (ChromeSwitchPreference)
-                        fragment.findPreference(
-                                ManageSyncSettings.PREF_ACCOUNT_SECTION_HISTORY_TOGGLE);
-        // Opening settings with the history toggle off triggers the request to display the IPH. The
-        // request is triggered twice: once for history and once for tabs.
-        verify(mHistoryOptInIphControllerMock, times(2)).showIph(any(), any());
-
-        SyncService syncService = mSyncTestRule.getSyncService();
-
-        // Switching history sync on from settings clears history sync declined prefs.
-        mSyncTestRule.togglePreference(historyToggle);
-        verify(mHistorySyncHelperMock).clearHistorySyncDeclinedPrefs();
-
-        Set<Integer> activeDataTypes =
-                ThreadUtils.runOnUiThreadBlocking(
-                        () -> {
-                            return syncService.getActiveDataTypes();
-                        });
-        Assert.assertTrue(activeDataTypes.contains(DataType.HISTORY));
-        Assert.assertTrue(activeDataTypes.contains(DataType.SESSIONS));
-
-        // Switching history sync off from settings records history sync declined prefs but does not
-        // trigger the request to show the IPH.
-        mSyncTestRule.togglePreference(historyToggle);
-        verify(mHistorySyncHelperMock).recordHistorySyncDeclinedPrefs();
-        verifyNoMoreInteractions(mHistoryOptInIphControllerMock);
-
-        activeDataTypes =
-                ThreadUtils.runOnUiThreadBlocking(
-                        () -> {
-                            return syncService.getActiveDataTypes();
-                        });
-        Assert.assertFalse(activeDataTypes.contains(DataType.HISTORY));
-        Assert.assertFalse(activeDataTypes.contains(DataType.SESSIONS));
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Sync"})
-    @DisabledTest(message = "https://crbug.com/394583571")
-    @Features.EnableFeatures(SigninFeatures.HISTORY_OPT_IN_IPH)
-    public void testSyncHistoryAndTabsToggle_typeManagedByCustodian_historyOptInIphEnabled() {
-        setupMockSyncService();
-        mSyncTestRule.setUpAccountAndSignInForTesting();
-        when(mSyncService.isTypeManagedByCustodian(UserSelectableType.HISTORY)).thenReturn(true);
-        when(mSyncService.isTypeManagedByCustodian(UserSelectableType.TABS)).thenReturn(true);
-
-        startManageSyncPreferences();
-
-        // We should not attempt to display the IPH.
-        verifyNoInteractions(mHistoryOptInIphControllerMock);
-    }
-
-    @Test
-    @SmallTest
-    @Feature({"Sync"})
-    @DisabledTest(message = "https://crbug.com/395041422")
-    @Features.EnableFeatures(SigninFeatures.HISTORY_OPT_IN_IPH)
-    public void testSyncHistoryAndTabsToggle_typesManagedByPolicy_historyOptInIphEnabled() {
-        setupMockSyncService();
-        mSyncTestRule.setUpAccountAndSignInForTesting();
-        when(mSyncService.isTypeManagedByPolicy(UserSelectableType.HISTORY)).thenReturn(true);
-        when(mSyncService.isTypeManagedByPolicy(UserSelectableType.TABS)).thenReturn(true);
-
-        startManageSyncPreferences();
-
-        // We should not attempt to display the IPH.
-        verifyNoInteractions(mHistoryOptInIphControllerMock);
     }
 
     @Test
@@ -754,7 +668,6 @@ public class ManageSyncSettingsTest {
 
     @Test
     @LargeTest
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadCardVisibilityWhenSyncIsConfiguring()
             throws Exception {
         setupMockSyncService(BiometricStatus.ONLY_LSKF_AVAILABLE, TransportState.CONFIGURING);
@@ -902,7 +815,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadEntryDescriptionPassword() throws Exception {
         setupMockSyncService();
         doAnswer(
@@ -941,7 +853,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadEntryDescriptionOther() throws Exception {
         setupMockSyncService();
         doAnswer(
@@ -980,7 +891,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadEntryDescriptionPasswordAndOther() throws Exception {
         setupMockSyncService();
         doAnswer(
@@ -1019,7 +929,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadDialogShouldShowPasswordsToggle() throws Exception {
         setupMockSyncService();
         doAnswer(
@@ -1067,7 +976,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadDialogShouldShowBookmarksAndReadingListToggles()
             throws Exception {
         setupMockSyncService();
@@ -1116,7 +1024,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync", "RenderTest"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void testSigninSettingsBatchUploadDialogShouldShowAllToggles() throws Exception {
         setupMockSyncService();
         doAnswer(
@@ -1164,7 +1071,6 @@ public class ManageSyncSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync"})
-    @EnableFeatures({ChromeFeatureList.ENABLE_BATCH_UPLOAD_FROM_SETTINGS})
     public void
             testSigninSettingsBatchUploadEntryDescriptionForPasswordsNotRequestedWhenAuthUnavailable()
                     throws Exception {
@@ -1273,6 +1179,140 @@ public class ManageSyncSettingsTest {
         onView(withText(R.string.sign_in_personalize_google_services_title_eea)).perform(click());
         onView(withText(R.string.personalized_google_services_summary))
                 .check(matches(isDisplayed()));
+    }
+
+    @Test
+    @LargeTest
+    public void testKeyboardNavigationToSignOutButton() {
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        final ManageSyncSettings fragment = startManageSyncPreferences();
+        RecyclerView recyclerView = fragment.getView().findViewById(R.id.recycler_view);
+        // There are 4 non-selectable preferences in the preference screen: central_account_card,
+        // account_section_header, account_section_footer, and account_advanced_header.
+        for (int i = 0; i < recyclerView.getAdapter().getItemCount() - 4; ++i) {
+            onView(withId(R.id.recycler_view)).perform(pressKey(KeyEvent.KEYCODE_DPAD_DOWN));
+        }
+        onView(withId(R.id.sign_out_button)).check(matches(hasFocus()));
+    }
+
+    @Test
+    @SmallTest
+    public void testCentralAccountCardNotReceivingFocus() {
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        startManageSyncPreferences();
+        // Focus on the first element that can receive focus in the settings page.
+        onView(withId(R.id.recycler_view)).perform(pressKey(KeyEvent.KEYCODE_DPAD_DOWN));
+        onView(withId(R.id.history_and_tabs_toggle)).check(matches(hasFocus()));
+    }
+
+    @Test
+    @SmallTest
+    public void testBatchUploadCardNotReceivingFocus() {
+        setupMockSyncService();
+        doAnswer(
+                        args -> {
+                            HashMap<Integer, LocalDataDescription> localDataDescription =
+                                    new HashMap<>();
+                            localDataDescription.put(
+                                    DataType.PASSWORDS,
+                                    new LocalDataDescription(0, new String[] {}, 0));
+                            localDataDescription.put(
+                                    DataType.BOOKMARKS,
+                                    new LocalDataDescription(1, new String[] {"example.com"}, 1));
+                            localDataDescription.put(
+                                    DataType.READING_LIST,
+                                    new LocalDataDescription(0, new String[] {}, 0));
+                            args.getArgument(1, Callback.class).onResult(localDataDescription);
+                            return null;
+                        })
+                .when(mSyncService)
+                .getLocalDataDescriptions(
+                        eq(Set.of(DataType.BOOKMARKS, DataType.PASSWORDS, DataType.READING_LIST)),
+                        any(Callback.class));
+
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        startManageSyncPreferences();
+        ViewUtils.waitForVisibleView(withId(R.id.signin_settings_card));
+
+        // Focus on the first element that can receive focus in the settings page.
+        onView(withId(R.id.recycler_view)).perform(pressKey(KeyEvent.KEYCODE_DPAD_DOWN));
+        onView(withId(R.id.signin_settings_card_button)).check(matches(hasFocus()));
+    }
+
+    @Test
+    @SmallTest
+    public void testIdentityErrorCardNotReceivingFocus() {
+        mSyncTestRule.getFakeServerHelper().setCustomPassphraseNigori("passphrase");
+
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        SyncTestUtil.waitForSyncTransportActive();
+
+        CriteriaHelper.pollUiThread(
+                () -> mSyncTestRule.getSyncService().isPassphraseRequiredForPreferredDataTypes());
+
+        startManageSyncPreferences();
+        ViewUtils.waitForVisibleView(withId(R.id.signin_settings_card));
+
+        // Focus on the first element that can receive focus in the settings page.
+        onView(withId(R.id.recycler_view)).perform(pressKey(KeyEvent.KEYCODE_DPAD_DOWN));
+        onView(withId(R.id.signin_settings_card_button)).check(matches(hasFocus()));
+    }
+
+    @Test
+    @SmallTest
+    public void testFirstTextViewInPassphraseDialogNotReceivingFocus() {
+        mSyncTestRule.getFakeServerHelper().setCustomPassphraseNigori("passphrase");
+
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        SyncTestUtil.waitForSyncTransportActive();
+
+        CriteriaHelper.pollUiThread(
+                () -> mSyncTestRule.getSyncService().isPassphraseRequiredForPreferredDataTypes());
+
+        startManageSyncPreferences();
+        ViewUtils.waitForVisibleView(withId(R.id.signin_settings_card));
+
+        // Mimic the user tapping on the error card's button.
+        onView(withId(R.id.signin_settings_card_button)).perform(click());
+
+        // Passphrase dialog should open.
+        final PassphraseDialogFragment passphraseFragment =
+                ActivityTestUtils.waitForFragment(
+                        mSettingsActivity, ManageSyncSettings.FRAGMENT_ENTER_PASSPHRASE);
+        Assert.assertTrue(passphraseFragment.isAdded());
+
+        // Focus on the first element that can receive focus in the passphrase dialog.
+        onView(withText(R.string.sync_enter_passphrase_title))
+                .perform(pressKey(KeyEvent.KEYCODE_DPAD_LEFT));
+        onView(withId(R.id.passphrase)).check(matches(hasFocus()));
+    }
+
+    @Test
+    @LargeTest
+    public void testWrongPassphraseShowsIncorrectPassphraseError() throws Exception {
+        mSyncTestRule.getFakeServerHelper().setCustomPassphraseNigori("passphrase");
+
+        mSyncTestRule.setUpAccountAndSignInForTesting();
+        SyncTestUtil.waitForSyncTransportActive();
+
+        CriteriaHelper.pollUiThread(
+                () -> mSyncTestRule.getSyncService().isPassphraseRequiredForPreferredDataTypes());
+
+        startManageSyncPreferences();
+        ViewUtils.waitForVisibleView(withId(R.id.signin_settings_card));
+
+        // Mimic the user tapping on the error card's button.
+        onView(withId(R.id.signin_settings_card_button)).perform(click());
+
+        // Passphrase dialog should open.
+        final PassphraseDialogFragment passphraseFragment =
+                ActivityTestUtils.waitForFragment(
+                        mSettingsActivity, ManageSyncSettings.FRAGMENT_ENTER_PASSPHRASE);
+        Assert.assertTrue(passphraseFragment.isAdded());
+
+        // Mimic the user tapping on the positive(submit) button with an empty(wrong) passphrase.
+        onView(withText(R.string.submit)).perform(click());
+        onView(withId(R.id.verifying)).check(matches(withText(R.string.sync_passphrase_incorrect)));
     }
 
     // TODO(crbug.com/330438265): Extend this test for the identity error card.

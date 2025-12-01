@@ -183,6 +183,10 @@ void OffscreenCanvas::SetSize(gfx::Size size) {
   UpdateMemoryUsage();
   current_frame_damage_rect_ = SkIRect::MakeWH(Size().width(), Size().height());
 
+  if (context_ && context_->isContextLost()) {
+    context_->RestoreFromInvalidSizeIfNeeded();
+  }
+
   if (frame_dispatcher_)
     frame_dispatcher_->Reshape(Size());
   if (context_) {
@@ -366,7 +370,7 @@ ScriptPromise<Blob> OffscreenCanvas::convertToBlob(
     auto intervention_type =
         CanvasInterventionsHelper::CanvasInterventionType::kNone;
     if (CanvasInterventionsHelper::MaybeNoiseSnapshot(
-            context_, GetExecutionContext(), image_bitmap, GetRasterMode())) {
+            context_, GetExecutionContext(), image_bitmap)) {
       intervention_type =
           CanvasInterventionsHelper::CanvasInterventionType::kNoise;
     };
@@ -503,7 +507,7 @@ CanvasResourceDispatcher* OffscreenCanvas::GetOrCreateResourceDispatcher() {
   DCHECK(HasPlaceholderCanvas());
   // If we don't have a valid placeholder_canvas_id_, then this is a standalone
   // OffscreenCanvas, and it should not have a placeholder.
-  if (frame_dispatcher_ == nullptr || restoring_gpu_context_) {
+  if (frame_dispatcher_ == nullptr) {
     scoped_refptr<base::SingleThreadTaskRunner>
         agent_group_scheduler_compositor_task_runner;
     scoped_refptr<base::SingleThreadTaskRunner> dispatcher_task_runner;
@@ -511,18 +515,13 @@ CanvasResourceDispatcher* OffscreenCanvas::GetOrCreateResourceDispatcher() {
       agent_group_scheduler_compositor_task_runner =
           top_execution_context->GetAgentGroupSchedulerCompositorTaskRunner();
 
-      // AgentGroupSchedulerCompositorTaskRunner will be null for
-      // SharedWorkers, but for windows and other workers it should be non-null.
-      DCHECK(top_execution_context->IsSharedWorkerGlobalScope() ||
-             agent_group_scheduler_compositor_task_runner);
-
       dispatcher_task_runner =
           top_execution_context->GetTaskRunner(TaskType::kInternalDefault);
     }
 
     // The frame dispatcher connects the current thread of OffscreenCanvas
-    // (either main or worker) to the browser process and remains unchanged
-    // throughout the lifetime of this OffscreenCanvas.
+    // (either main or worker) to the GPU process and will have to be recreated
+    // if the GPU channel is lost.
     frame_dispatcher_ = std::make_unique<CanvasResourceDispatcher>(
         this, std::move(dispatcher_task_runner),
         std::move(agent_group_scheduler_compositor_task_runner), client_id_,
@@ -535,8 +534,31 @@ CanvasResourceDispatcher* OffscreenCanvas::GetOrCreateResourceDispatcher() {
 }
 
 CanvasResourceProvider* OffscreenCanvas::GetOrCreateResourceProvider() {
-  if (ResourceProvider() && !restoring_gpu_context_) {
-    return ResourceProvider();
+  if (!context_ ||
+      (context_->isContextLost() && !context_->IsContextBeingRestored())) {
+    return nullptr;
+  }
+
+  if (CanvasResourceProvider* provider = ResourceProvider()) {
+    if (!provider->IsValid()) {
+      // The canvas context is not lost but the provider is invalid. This
+      // happens if the GPU process dies in the middle of a render task. The
+      // canvas is notified of GPU context losses via the `NotifyGpuContextLost`
+      // callback and restoration happens in `TryRestoreContextEvent`. Both
+      // callbacks are executed in their own separate task. If the GPU context
+      // goes invalid in the middle of a render task, the canvas won't
+      // immediately know about it and canvas APIs will continue using the
+      // provider that is now invalid. We can early return here, trying to
+      // re-create the provider right away would just fail. We need to let
+      // `TryRestoreContextEvent` wait for the GPU process to up again.
+      return nullptr;
+    }
+    return provider;
+  }
+
+  if (!IsValidImageSize(Size()) && !Size().IsEmpty()) {
+    context_->LoseContext(CanvasRenderingContext::kInvalidCanvasSize);
+    return nullptr;
   }
 
   std::unique_ptr<CanvasResourceProvider> provider;
@@ -688,24 +710,6 @@ void OffscreenCanvas::NotifyGpuContextLost() {
   }
 }
 
-void OffscreenCanvas::CheckForGpuContextLost() {
-  // If the GPU has crashed, it is necessary to notify the OffscreenCanvas so
-  // the context can be recovered.
-  if (!context_lost() && ResourceProvider() &&
-      ResourceProvider()->IsAccelerated() &&
-      ResourceProvider()->IsGpuContextLost()) {
-    set_context_lost(true);
-    NotifyGpuContextLost();
-  }
-
-  // For software rendering.
-  if (!shared_bitmap_gpu_channel_lost() && ResourceProvider() &&
-      ResourceProvider()->IsSoftwareSharedImageGpuChannelLost()) {
-    set_shared_bitmap_gpu_channel_lost(true);
-    NotifyGpuContextLost();
-  }
-}
-
 TextDirection OffscreenCanvas::GetTextDirection(const ComputedStyle*) {
   return text_direction_.value_or(TextDirection::kLtr);
 }
@@ -750,8 +754,8 @@ UniqueFontSelector* OffscreenCanvas::GetFontSelector() {
 }
 
 void OffscreenCanvas::UpdateMemoryUsage() {
-  int bytes_per_pixel =
-      SkColorTypeBytesPerPixel(GetRenderingContextSkColorType());
+  // NOTE: All formats used by canvas are either 8-bit or 16-bit.
+  int bytes_per_pixel = GetRenderingContextFormat().BitsPerPixel() / 8;
 
   base::CheckedNumeric<int32_t> memory_usage_checked = bytes_per_pixel;
   memory_usage_checked *= Size().width();

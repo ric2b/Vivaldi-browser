@@ -5,11 +5,12 @@
 #include "third_party/blink/renderer/modules/ai/on_device_translation/create_translator_client.h"
 
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-shared.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_ai_create_monitor_callback.h"
+#include "third_party/blink/public/mojom/on_device_translation/translation_manager.mojom-blink-forward.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_create_monitor_callback.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
-#include "third_party/blink/renderer/modules/ai/ai_create_monitor.h"
 #include "third_party/blink/renderer/modules/ai/ai_interface_proxy.h"
 #include "third_party/blink/renderer/modules/ai/ai_utils.h"
+#include "third_party/blink/renderer/modules/ai/create_monitor.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
 namespace blink {
@@ -20,10 +21,6 @@ using mojom::blink::CreateTranslatorError;
 
 const char kExceptionMessageUnableToCreateTranslator[] =
     "Unable to create translator for the given source and target language.";
-const char kLinkToDocument[] =
-    "See "
-    "https://developer.chrome.com/docs/ai/translator-api?#supported-languages "
-    "for more details.";
 
 String ConvertCreateTranslatorErrorToDebugString(CreateTranslatorError error) {
   switch (error) {
@@ -35,14 +32,6 @@ String ConvertCreateTranslatorErrorToDebugString(CreateTranslatorError error) {
       return "Failed to initialize the translation library.";
     case CreateTranslatorError::kFailedToCreateTranslator:
       return "The translation library failed to create a translator.";
-    case CreateTranslatorError::kAcceptLanguagesCheckFailed:
-      return String(base::StrCat(
-          {"The preferred languages check for Translator API failed. ",
-           kLinkToDocument}));
-    case CreateTranslatorError::kExceedsLanguagePackCountLimitation:
-      return String(base::StrCat(
-          {"The Translator API language pack count exceeded the limitation. ",
-           kLinkToDocument}));
     case CreateTranslatorError::kServiceCrashed:
       return "The translation service crashed.";
     case CreateTranslatorError::kDisallowedByPolicy:
@@ -56,6 +45,32 @@ String ConvertCreateTranslatorErrorToDebugString(CreateTranslatorError error) {
   }
 }
 
+String ConvertCanCreateTranslatorResultToDebugString(
+    CanCreateTranslatorResult error) {
+  CreateTranslatorError equivalent_error;
+  switch (error) {
+    case CanCreateTranslatorResult::kReadily:
+    case CanCreateTranslatorResult::kAfterDownloadLibraryNotReady:
+    case CanCreateTranslatorResult::kAfterDownloadLanguagePackNotReady:
+    case CanCreateTranslatorResult::
+        kAfterDownloadLibraryAndLanguagePackNotReady:
+    case CanCreateTranslatorResult::kAfterDownloadTranslatorCreationRequired:
+      NOTREACHED();
+    case CanCreateTranslatorResult::kNoNotSupportedLanguage:
+      return "The language pair is unsupported.";
+    case CanCreateTranslatorResult::kNoServiceCrashed:
+      equivalent_error = CreateTranslatorError::kServiceCrashed;
+      break;
+    case CanCreateTranslatorResult::kNoDisallowedByPolicy:
+      equivalent_error = CreateTranslatorError::kDisallowedByPolicy;
+      break;
+    case CanCreateTranslatorResult::kNoExceedsServiceCountLimitation:
+      equivalent_error = CreateTranslatorError::kExceedsServiceCountLimitation;
+      break;
+  }
+  return ConvertCreateTranslatorErrorToDebugString(equivalent_error);
+}
+
 bool RequiresUserActivation(CanCreateTranslatorResult result) {
   switch (result) {
     case CanCreateTranslatorResult::kAfterDownloadLibraryNotReady:
@@ -67,14 +82,30 @@ bool RequiresUserActivation(CanCreateTranslatorResult result) {
       return true;
     case CanCreateTranslatorResult::kReadily:
     case CanCreateTranslatorResult::kNoNotSupportedLanguage:
-    case CanCreateTranslatorResult::kNoAcceptLanguagesCheckFailed:
-    case CanCreateTranslatorResult::kNoExceedsLanguagePackCountLimitation:
     case CanCreateTranslatorResult::kNoServiceCrashed:
     case CanCreateTranslatorResult::kNoDisallowedByPolicy:
     case CanCreateTranslatorResult::kNoExceedsServiceCountLimitation:
       return false;
   }
 }
+
+bool TranslatorIsUnavailable(CanCreateTranslatorResult result) {
+  switch (result) {
+    case CanCreateTranslatorResult::kReadily:
+    case CanCreateTranslatorResult::kAfterDownloadLibraryNotReady:
+    case CanCreateTranslatorResult::kAfterDownloadLanguagePackNotReady:
+    case CanCreateTranslatorResult::
+        kAfterDownloadLibraryAndLanguagePackNotReady:
+    case CanCreateTranslatorResult::kAfterDownloadTranslatorCreationRequired:
+      return false;
+    case CanCreateTranslatorResult::kNoNotSupportedLanguage:
+    case CanCreateTranslatorResult::kNoServiceCrashed:
+    case CanCreateTranslatorResult::kNoDisallowedByPolicy:
+    case CanCreateTranslatorResult::kNoExceedsServiceCountLimitation:
+      return true;
+  }
+}
+
 }  // namespace
 
 CreateTranslatorClient::CreateTranslatorClient(
@@ -91,10 +122,23 @@ CreateTranslatorClient::CreateTranslatorClient(
       receiver_(this, GetExecutionContext()),
       task_runner_(AIInterfaceProxy::GetTaskRunner(GetExecutionContext())) {
   if (options->hasMonitor()) {
-    monitor_ = MakeGarbageCollected<AICreateMonitor>(GetExecutionContext(),
-                                                     task_runner_);
-    std::ignore = options->monitor()->Invoke(nullptr, monitor_);
+    monitor_ = MakeGarbageCollected<CreateMonitor>(GetExecutionContext(),
+                                                   task_runner_);
+
+    // If an exception is thrown, don't initiate language detection model
+    // download. `AICreateMonitorCallback`'s `Invoke` will automatically
+    // reject the promise with the thrown exception.
+    if (options->monitor()->Invoke(nullptr, monitor_).IsNothing()) {
+      return;
+    }
   }
+
+  AIInterfaceProxy::GetTranslationManagerRemote(GetExecutionContext())
+      ->TranslationAvailable(
+          mojom::blink::TranslatorLanguageCode::New(options->sourceLanguage()),
+          mojom::blink::TranslatorLanguageCode::New(options->targetLanguage()),
+          WTF::BindOnce(&CreateTranslatorClient::OnGotAvailability,
+                        WrapPersistent(this)));
 }
 CreateTranslatorClient::~CreateTranslatorClient() = default;
 
@@ -106,45 +150,92 @@ void CreateTranslatorClient::Trace(Visitor* visitor) const {
 }
 
 void CreateTranslatorClient::OnResult(
-    mojom::blink::CreateTranslatorResultPtr result) {
+    mojom::blink::CreateTranslatorResultPtr result,
+    mojom::blink::TranslatorLanguageCodePtr source_language,
+    mojom::blink::TranslatorLanguageCodePtr target_language) {
+  // Call `Cleanup` when this function returns.
+  RunOnDestruction run_on_destruction(WTF::BindOnce(
+      &CreateTranslatorClient::Cleanup, WrapWeakPersistent(this)));
+
   if (!GetResolver()) {
     // The request was aborted. Note: Currently abort signal is not supported.
     // TODO(crbug.com/331735396): Support abort signal.
     return;
   }
-  if (result->is_translator()) {
-    if (monitor_) {
-      // Ensure that a download completion event is sent.
-      monitor_->OnDownloadProgressUpdate(kNormalizedDownloadProgressMax,
-                                         kNormalizedDownloadProgressMax);
-    }
-    GetResolver()->Resolve(MakeGarbageCollected<Translator>(
-        std::move(result->get_translator()), task_runner_,
-        std::move(source_language_), std::move(target_language_)));
-  } else {
+
+  if (!result->is_translator()) {
     CHECK(result->is_error());
+    CHECK(!source_language);
+    CHECK(!target_language);
+
     GetExecutionContext()->AddConsoleMessage(
         mojom::blink::ConsoleMessageSource::kJavaScript,
         mojom::blink::ConsoleMessageLevel::kWarning,
         ConvertCreateTranslatorErrorToDebugString(result->get_error()));
-    GetResolver()->Reject(DOMException::Create(
-        kExceptionMessageUnableToCreateTranslator,
-        DOMException::GetErrorName(DOMExceptionCode::kNotSupportedError)));
+    GetResolver()->RejectWithDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        kExceptionMessageUnableToCreateTranslator);
+    return;
   }
-  Cleanup();
+
+  CHECK(source_language);
+  CHECK(target_language);
+  source_language_ = source_language->code;
+  target_language_ = target_language->code;
+
+  if (monitor_) {
+    // Ensure that a download completion event is sent.
+    monitor_->OnDownloadProgressUpdate(0, kNormalizedDownloadProgressMax);
+
+    // Abort may have been triggered by `OnDownloadProgressUpdate`.
+    if (!this->GetResolver()) {
+      return;
+    }
+
+    // Ensure that a download completion event is sent.
+    monitor_->OnDownloadProgressUpdate(kNormalizedDownloadProgressMax,
+                                       kNormalizedDownloadProgressMax);
+
+    // Abort may have been triggered by `OnDownloadProgressUpdate`.
+    if (!this->GetResolver()) {
+      return;
+    }
+  }
+
+  GetResolver()->Resolve(MakeGarbageCollected<Translator>(
+      GetScriptState(), std::move(result->get_translator()), task_runner_,
+      std::move(source_language_), std::move(target_language_),
+      GetAbortSignal()));
 }
 
 void CreateTranslatorClient::OnGotAvailability(
     CanCreateTranslatorResult result) {
-  LocalDOMWindow* const window = LocalDOMWindow::From(GetScriptState());
+  ScriptState* script_state = GetScriptState();
+  ExecutionContext* context = GetExecutionContext();
+  LocalDOMWindow* const window = LocalDOMWindow::From(script_state);
 
-  if (RuntimeEnabledFeatures::TranslationAPIV1Enabled() &&
+  if (TranslatorIsUnavailable(result)) {
+    GetExecutionContext()->AddConsoleMessage(
+        mojom::blink::ConsoleMessageSource::kJavaScript,
+        mojom::blink::ConsoleMessageLevel::kWarning,
+        ConvertCanCreateTranslatorResultToDebugString(result));
+    GetResolver()->RejectWithDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        kExceptionMessageUnableToCreateTranslator);
+    return;
+  }
+
+  // The Translator API is only available within a window or extension
+  // service worker context. User activation is not consumed by workers, as
+  // they lack the ability to do so.
+  CHECK(window != nullptr || context->IsServiceWorkerGlobalScope());
+
+  if (!context->IsServiceWorkerGlobalScope() &&
       RequiresUserActivation(result) &&
       !LocalFrame::ConsumeTransientUserActivation(window->GetFrame())) {
     GetResolver()->RejectWithDOMException(
         DOMExceptionCode::kNotAllowedError,
-        "Requires handling a user gesture when availability is "
-        "\"after-download\".");
+        kExceptionMessageUserActivationRequired);
     return;
   }
   mojo::PendingRemote<mojom::blink::TranslationManagerCreateTranslatorClient>
@@ -159,13 +250,18 @@ void CreateTranslatorClient::OnGotAvailability(
     progress_observer = monitor_->BindRemote();
   }
 
+  bool add_fake_download_delay =
+      result ==
+      CanCreateTranslatorResult::kAfterDownloadTranslatorCreationRequired;
+
   AIInterfaceProxy::GetTranslationManagerRemote(GetExecutionContext())
       ->CreateTranslator(
           std::move(client),
           mojom::blink::TranslatorCreateOptions::New(
               mojom::blink::TranslatorLanguageCode::New(source_language_),
               mojom::blink::TranslatorLanguageCode::New(target_language_),
-              std::move(progress_observer)));
+              std::move(progress_observer)),
+          add_fake_download_delay);
 }
 
 void CreateTranslatorClient::ResetReceiver() {

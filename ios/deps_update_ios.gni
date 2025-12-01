@@ -193,7 +193,9 @@ update_template_instance("//ios/web/common:user_agent") {
 
 update_template_instance("//ios/web/navigation:navigation") {
   deps += [
+    "//ios/chrome/browser/shared/model/profile",
     "//vivaldi/components:user_agent",
+    "//vivaldi/prefs:prefs_strings",
   ]
 }
 
@@ -222,4 +224,17 @@ update_target("//ios/chrome/browser/partial_translate/ui_bundled:ui_bundled") {
     "//vivaldi/ios/ui/translate:vivaldi_translate",
     "//vivaldi/ios/ui/translate:vivaldi_translate_swift",
   ]
+}
+
+update_target("//components/resources:about_credits") {
+  if (generate_about_credits) {
+    if (!defined(deps)) {
+      deps = []
+    }
+    deps += [ "//vivaldi/vivapp:bundle" ]
+    inputs += [
+      "//vivaldi/scripts/licenses/licenses_vivaldi.py",
+      "$root_gen_dir/vivaldi/vivapp/module_list",
+    ]
+  }
 }

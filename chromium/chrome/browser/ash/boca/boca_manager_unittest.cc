@@ -101,6 +101,7 @@ class MockSessionClientImpl : public boca::SessionClientImpl {
 class BocaManagerTest : public testing::Test {
  protected:
   BocaManagerTest() = default;
+
   void SetUp() override {
     // This is called in the FCMHandler.
     ON_CALL(mock_instance_id_driver_,
@@ -149,10 +150,13 @@ class BocaManagerTest : public testing::Test {
 class BocaManagerProducerTest : public BocaManagerTest {
  protected:
   BocaManagerProducerTest() = default;
+
   void SetUp() override {
     BocaManagerTest::SetUp();
-    scoped_feature_list_.InitWithFeatures({ash::features::kBoca},
-                                          /*disabled_features=*/{});
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{ash::features::kBoca},
+        /*disabled_features=*/{ash::features::kBocaSpotlightRobotRequester});
+
     boca_manager_ = std::make_unique<BocaManager>(
         std::make_unique<boca::OnTaskSessionManager>(
             /*system_web_app_manager=*/nullptr, /*extensions_manager=*/nullptr),
@@ -167,6 +171,7 @@ class BocaManagerProducerTest : public BocaManagerTest {
             /*spotlight_notification_handler=*/nullptr,
             /*spotlight_crd_manager=*/nullptr, /*spotlight_service=*/nullptr));
   }
+
   std::unique_ptr<BocaManager> boca_manager_;
   TestingPrefServiceSimple pref_service_;
 };
@@ -201,11 +206,13 @@ TEST_F(BocaManagerProducerTest,
 class BocaManagerConsumerTest : public BocaManagerTest {
  protected:
   BocaManagerConsumerTest() = default;
+
   void SetUp() override {
     BocaManagerTest::SetUp();
     scoped_feature_list_.InitWithFeatures(
         /* enabled_features=*/{ash::features::kBoca,
-                               ash::features::kBocaConsumer},
+                               ash::features::kBocaConsumer,
+                               ash::features::kBocaSpotlightRobotRequester},
         /* disabled_features=*/{});
 
     boca_manager_ = std::make_unique<BocaManager>(
@@ -222,6 +229,7 @@ class BocaManagerConsumerTest : public BocaManagerTest {
             /*spotlight_notification_handler=*/nullptr,
             /*spotlight_crd_manager=*/nullptr, /*spotlight_service=*/nullptr));
   }
+
   std::unique_ptr<BocaManager> boca_manager_;
   TestingPrefServiceSimple pref_service_;
 };

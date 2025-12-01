@@ -26,6 +26,8 @@
  * Libpostproc version macros
  */
 
-#define LIBPOSTPROC_VERSION_MAJOR  58
+#define LIBPOSTPROC_VERSION_MAJOR  59
+
+#define FF_API_PP_AMD_3DNOW      (LIBPOSTPROC_VERSION_MAJOR < 60)
 
 #endif /* POSTPROC_VERSION_MAJOR_H */

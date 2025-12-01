@@ -13,7 +13,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.ItemDecoration;
 import androidx.recyclerview.widget.RecyclerView.State;
@@ -23,6 +22,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.build.annotations.MonotonicNonNull;
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.EmptyBottomSheetObserver;
@@ -40,11 +40,11 @@ import java.util.List;
 public class CommerceBottomSheetContentCoordinator implements CommerceBottomSheetContentController {
     private static final long CONTENT_PROVIDER_TIMEOUT_MS = 200;
 
-    private List<CommerceBottomSheetContentProvider> mContentProviders = new ArrayList<>();
+    private final List<CommerceBottomSheetContentProvider> mContentProviders = new ArrayList<>();
     private final CommerceBottomSheetContentMediator mMediator;
-    private RecyclerView mContentRecyclerView;
-    private View mCommerceBottomSheetContentContainer;
-    private ModelList mModelList;
+    private final RecyclerView mContentRecyclerView;
+    private final View mCommerceBottomSheetContentContainer;
+    private final ModelList mModelList;
     private @Nullable Long mSheetOpenTimeMs;
 
     @MonotonicNonNull private CallbackController mCallbackController;
@@ -144,6 +144,8 @@ public class CommerceBottomSheetContentCoordinator implements CommerceBottomShee
                         mCommerceBottomSheetContentContainer);
     }
 
+    @SuppressWarnings(
+            "NullAway") // CallbackController#makeCancelable returns Callback<PropertyModel>
     @Override
     public void requestShowContent() {
         mCallbackController = new CallbackController();

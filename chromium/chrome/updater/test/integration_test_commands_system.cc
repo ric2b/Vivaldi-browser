@@ -297,9 +297,12 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
     RunCommand("setup_fake_updater_lower_version");
   }
 
-  void SetupRealUpdater(const base::FilePath& updater_path) const override {
-    RunCommand("setup_real_updater",
-               {Param("updater_path", updater_path.AsUTF8Unsafe())});
+  void SetupRealUpdater(const base::FilePath& updater_path,
+                        const base::Value::List& switches) const override {
+    RunCommand(
+        "setup_real_updater",
+        {Param("updater_path", updater_path.AsUTF8Unsafe()),
+         Param("switches", StringFromValue(base::Value(switches.Clone())))});
   }
 
   void SetExistenceCheckerPath(const std::string& app_id,
@@ -463,8 +466,10 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
                base::NumberToString(expected_exit_code))});
   }
 
-  void ExpectLegacyPolicyStatusSucceeds() const override {
-    RunCommand("expect_legacy_policy_status_succeeds");
+  void ExpectLegacyPolicyStatusSucceeds(
+      const base::Version& updater_version) const override {
+    RunCommand("expect_legacy_policy_status_succeeds",
+               {Param("updater_version", updater_version.GetString())});
   }
 
   void LegacyInstallApp(const std::string& app_id,
@@ -549,7 +554,16 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
       std::optional<UpdaterScope> store_flag,
       std::optional<std::string> want_tag) const override {
     updater::test::ExpectKSAdminFetchTag(updater_scope_, elevate, product_id,
-                                         xc_path, store_flag, want_tag);
+                                         xc_path, store_flag,
+                                         std::move(want_tag));
+  }
+
+  void ExpectKSAdminXattrBrand(
+      bool elevate,
+      const base::FilePath& path,
+      std::optional<std::string> want_brand) const override {
+    updater::test::ExpectKSAdminXattrBrand(updater_scope_, elevate, path,
+                                           std::move(want_brand));
   }
 #endif  // BUILDFLAG(IS_MAC)
 
@@ -580,10 +594,14 @@ class IntegrationTestCommandsSystem : public IntegrationTestCommands {
   }
 
   void RunOfflineInstall(bool is_legacy_install,
-                         bool is_silent_install) override {
+                         bool is_silent_install,
+                         int installer_result,
+                         int installer_error) override {
     RunCommand("run_offline_install",
                {Param("legacy_install", BoolToString(is_legacy_install)),
-                Param("silent", BoolToString(is_silent_install))});
+                Param("silent", BoolToString(is_silent_install)),
+                Param("installer_result", base::ToString(installer_result)),
+                Param("installer_error", base::ToString(installer_error))});
   }
 
   void RunOfflineInstallOsNotSupported(bool is_legacy_install,

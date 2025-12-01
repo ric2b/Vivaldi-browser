@@ -42,8 +42,6 @@ enum ChromeDistanceMetric {
   // Same as |DISTANCE_CONTENT_LIST_VERTICAL_SINGLE|, but used at the beginning
   // and end of a multi-item content list.
   DISTANCE_CONTENT_LIST_VERTICAL_MULTI,
-  // Vertical spacing between a list of multiple controls in one column.
-  DISTANCE_CONTROL_LIST_VERTICAL,
   // Width of the extensions menu.
   DISTANCE_EXTENSIONS_MENU_WIDTH,
   // Width and height of a button's icon in the extensions menu.
@@ -81,9 +79,6 @@ enum ChromeDistanceMetric {
   DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE,
   // Larger vertical spacing between unrelated controls.
   DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE,
-  // Width and height of a vector icon in a bubble's header (i.e. the one
-  // returned from GetWindowIcon).
-  DISTANCE_BUBBLE_HEADER_VECTOR_ICON_SIZE,
   // Width of a bubble that appears mid-screen (like a standalone dialog)
   // instead of being anchored.
   DISTANCE_STANDALONE_BUBBLE_PREFERRED_WIDTH,
@@ -188,6 +183,14 @@ enum ChromeDistanceMetric {
   // Vertical spacing between a textfield and an account card, usually
   // consisting of an avatar icon, name and email address.
   DISTANCE_TEXTFIELD_ACCOUNT_CARD_VERTICAL,
+  // Width and height of the vector icon shown in infoboxes in the FFR dialog.
+  DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_ICON_SIZE,
+  // Vertical and horizontal padding of the infoboxes in the FFR dialog.
+  DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_PADDING,
+  // Rounded corner radius for infoboxes in the FFR dialog.
+  DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_ROUNDED_BORDER_RADIUS,
+  // Vertical spacing between infoboxes in the FFR dialog.
+  DISTANCE_FEATURE_FIRST_RUN_INFO_BOX_VERTICAL,
 };
 
 class ChromeLayoutProvider : public views::LayoutProvider {

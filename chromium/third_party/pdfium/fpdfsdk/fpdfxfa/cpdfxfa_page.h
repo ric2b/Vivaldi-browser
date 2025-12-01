@@ -32,20 +32,21 @@ class CPDFXFA_Page final : public IPDF_Page {
   CPDF_Document* GetDocument() const override;
   float GetPageWidth() const override;
   float GetPageHeight() const override;
-  CFX_Matrix GetDisplayMatrix(const FX_RECT& rect, int iRotate) const override;
+  CFX_Matrix GetDisplayMatrixForRect(const FX_RECT& rect,
+                                     int rotation) const override;
   std::optional<CFX_PointF> DeviceToPage(
       const FX_RECT& rect,
-      int rotate,
+      int rotation,
       const CFX_PointF& device_point) const override;
   std::optional<CFX_PointF> PageToDevice(
       const FX_RECT& rect,
-      int rotate,
+      int rotation,
       const CFX_PointF& page_point) const override;
 
   bool LoadPage();
   void LoadPDFPageFromDict(RetainPtr<CPDF_Dictionary> pPageDict);
-  int GetPageIndex() const { return m_iPageIndex; }
-  void SetXFAPageViewIndex(int index) { m_iPageIndex = index; }
+  int GetPageIndex() const { return page_index_; }
+  void SetXFAPageViewIndex(int index) { page_index_ = index; }
   CXFA_FFPageView* GetXFAPageView() const;
   CPDFSDK_Annot* GetNextXFAAnnot(CPDFSDK_Annot* pSDKAnnot) const;
   CPDFSDK_Annot* GetPrevXFAAnnot(CPDFSDK_Annot* pSDKAnnot) const;
@@ -64,9 +65,9 @@ class CPDFXFA_Page final : public IPDF_Page {
 
   bool LoadPDFPage();
 
-  RetainPtr<CPDF_Page> m_pPDFPage;  // Backing page, if any.
-  UnownedPtr<CPDF_Document> const m_pDocument;
-  int m_iPageIndex;
+  RetainPtr<CPDF_Page> pdfpage_;  // Backing page, if any.
+  UnownedPtr<CPDF_Document> const document_;
+  int page_index_;
 };
 
 #endif  // FPDFSDK_FPDFXFA_CPDFXFA_PAGE_H_

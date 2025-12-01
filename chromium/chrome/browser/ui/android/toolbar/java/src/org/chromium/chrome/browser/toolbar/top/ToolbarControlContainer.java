@@ -4,8 +4,11 @@
 
 package org.chromium.chrome.browser.toolbar.top;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.Region;
@@ -17,21 +20,25 @@ import android.util.AttributeSet;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewStub;
 import android.widget.FrameLayout;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.core.content.res.ResourcesCompat;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.fullscreen.FullscreenManager;
@@ -49,6 +56,7 @@ import org.chromium.chrome.browser.toolbar.top.CaptureReadinessResult.TopToolbar
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
 import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar.DrawingInfo;
+import org.chromium.components.browser_ui.widget.TouchEventObserver;
 import org.chromium.components.browser_ui.widget.ViewResourceFrameLayout;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
@@ -68,6 +76,7 @@ import org.chromium.build.BuildConfig;
 import org.chromium.base.supplier.Supplier;
 
 /** Layout for the browser controls (omnibox, menu, tab strip, etc..). */
+@NullMarked
 public class ToolbarControlContainer extends OptimizedFrameLayout
         implements ControlContainer, DesktopWindowStateManager.AppHeaderObserver {
     private boolean mIncognito;
@@ -78,17 +87,20 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     private Toolbar mToolbar;
     private ToolbarViewResourceFrameLayout mToolbarContainer;
 
-    private SwipeGestureListener mSwipeGestureListener;
-    private OnDragListener mToolbarContainerDragListener;
+    private @Nullable SwipeGestureListener mSwipeGestureListener;
+    private @Nullable OnDragListener mToolbarContainerDragListener;
 
     private boolean mIsAppInUnfocusedDesktopWindow;
     private final int mToolbarLayoutHeight;
 
     private View mToolbarHairline;
-    private View mToolbarView;
+    private ViewGroup mToolbarView;
+    private boolean mShowLocationBarOnly;
+    private @Nullable View mLocationBarView;
+    private final ObserverList<TouchEventObserver> mTouchEventObservers = new ObserverList<>();
 
     // Vivaldi
-    private Supplier<Boolean> mIsInOverviewModeSupplier;
+    private @Nullable Supplier<Boolean> mIsInOverviewModeSupplier;
     private float mTabGroupUiToolbarHeight;
     private float mTabStripHeight;
 
@@ -154,10 +166,10 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     }
 
     @Override
+    @Initializer
     public void initWithToolbar(int toolbarLayoutId) {
         try (TraceEvent te = TraceEvent.scoped("ToolbarControlContainer.initWithToolbar")) {
-            mToolbarContainer =
-                    (ToolbarViewResourceFrameLayout) findViewById(R.id.toolbar_container);
+            mToolbarContainer = findViewById(R.id.toolbar_container);
             ViewStub toolbarStub = findViewById(R.id.toolbar_stub);
             toolbarStub.setLayoutResource(toolbarLayoutId);
             toolbarStub.inflate();
@@ -211,6 +223,42 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     }
 
     @Override
+    public void toggleLocationBarOnlyMode(boolean showLocationBarOnly) {
+        if (mShowLocationBarOnly == showLocationBarOnly) return;
+
+        mShowLocationBarOnly = showLocationBarOnly;
+        if (showLocationBarOnly) {
+            mLocationBarView = mToolbar.removeLocationBarView();
+            assert mLocationBarView != null
+                    : "Trying to remove location bar view from toolbar when there is no location"
+                            + " bar";
+            mToolbar.getProgressBar().setVisibility(View.GONE);
+            mToolbarView.setVisibility(View.GONE);
+            mToolbarView.removeView(mLocationBarView);
+            mToolbarContainer.addView(mLocationBarView);
+            setBackgroundColor(mToolbar.getPrimaryColor());
+        } else {
+            assert mLocationBarView != null
+                    : "Trying to restore location bar view to toolbar without removing it first";
+            mToolbar.getProgressBar().setVisibility(View.VISIBLE);
+            mToolbarView.setVisibility(View.VISIBLE);
+            mToolbarContainer.removeView(mLocationBarView);
+            mToolbar.restoreLocationBarView();
+            setBackgroundColor(Color.TRANSPARENT);
+        }
+    }
+
+    @Override
+    public void addTouchEventObserver(TouchEventObserver observer) {
+        mTouchEventObservers.addObserver(observer);
+    }
+
+    @Override
+    public void removeTouchEventObserver(TouchEventObserver observer) {
+        mTouchEventObservers.removeObserver(observer);
+    }
+
+    @Override
     public void destroy() {
         ((ToolbarViewResourceAdapter) getToolbarResourceAdapter()).destroy();
         if (mToolbarContainerDragListener != null) {
@@ -251,13 +299,9 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
                         getContext().getResources(),
                         TabUiThemeUtil.getTabResource(),
                         getContext().getTheme());
+        assumeNonNull(backgroundTabImage);
         backgroundTabImage.setTint(
-                TabUiThemeUtil.getTabStripContainerColor(
-                        getContext(),
-                        incognito,
-                        /* foreground= */ true,
-                        /* isPlaceholder= */ false,
-                        /* isHovered= */ false));
+                TabUiThemeUtil.getTabStripSelectedTabColor(getContext(), incognito));
         LayerDrawable backgroundDrawable =
                 new LayerDrawable(new Drawable[] {backgroundColor, backgroundTabImage});
 
@@ -298,11 +342,13 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
      * @param layoutStateProviderSupplier Used to check the current layout type.
      * @param fullscreenManager Used to check whether in fullscreen.
      */
+    @Initializer
     public void setPostInitializationDependencies(
             Toolbar toolbar,
+            ViewGroup toolbarView,
             boolean isIncognito,
             ObservableSupplier<Integer> constraintsSupplier,
-            Supplier<Tab> tabSupplier,
+            Supplier<@Nullable Tab> tabSupplier,
             ObservableSupplier<Boolean> compositorInMotionSupplier,
             BrowserStateBrowserControlsVisibilityDelegate
                     browserStateBrowserControlsVisibilityDelegate,
@@ -323,7 +369,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
                 fullscreenManager,
                 () -> mMidVisibilityToggle);
 
-        mToolbarView = findViewById(R.id.toolbar);
+        mToolbarView = toolbarView;
         assert mToolbarView != null;
 
         // Note(david@vivaldi.com): This looks ugly in Vivaldi. Skip it.
@@ -393,7 +439,7 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     /** The layout that handles generating the toolbar view resource. */
     // Only publicly visible due to lint warnings.
     public static class ToolbarViewResourceFrameLayout extends ViewResourceFrameLayout {
-        @Nullable private BooleanSupplier mIsMidVisibilityToggle;
+        private BooleanSupplier mIsMidVisibilityToggle;
         private boolean mReadyForBitmapCapture;
 
         public ToolbarViewResourceFrameLayout(Context context, AttributeSet attrs) {
@@ -408,10 +454,11 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         /**
          * @see ToolbarViewResourceAdapter#setPostInitializationDependencies.
          */
+        @Initializer
         public void setPostInitializationDependencies(
                 Toolbar toolbar,
                 ObservableSupplier<Integer> constraintsSupplier,
-                Supplier<Tab> tabSupplier,
+                Supplier<@Nullable Tab> tabSupplier,
                 ObservableSupplier<Boolean> compositorInMotionSupplier,
                 BrowserStateBrowserControlsVisibilityDelegate
                         browserStateBrowserControlsVisibilityDelegate,
@@ -474,18 +521,17 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         private final Callback<Boolean> mOnCompositorInMotionChange =
                 this::onCompositorInMotionChange;
 
-        @Nullable private Toolbar mToolbar;
-        @Nullable private ConstraintsChecker mConstraintsObserver;
-        @Nullable private Supplier<Tab> mTabSupplier;
-        @Nullable private ObservableSupplier<Boolean> mCompositorInMotionSupplier;
+        private Toolbar mToolbar;
+        private ConstraintsChecker mConstraintsObserver;
+        private Supplier<@Nullable Tab> mTabSupplier;
+        private ObservableSupplier<Boolean> mCompositorInMotionSupplier;
 
-        @Nullable
         private BrowserStateBrowserControlsVisibilityDelegate
                 mBrowserStateBrowserControlsVisibilityDelegate;
 
-        @Nullable private BooleanSupplier mControlContainerIsVisibleSupplier;
-        @Nullable private LayoutStateProvider mLayoutStateProvider;
-        @Nullable private FullscreenManager mFullscreenManager;
+        private BooleanSupplier mControlContainerIsVisibleSupplier;
+        private @Nullable LayoutStateProvider mLayoutStateProvider;
+        private FullscreenManager mFullscreenManager;
 
         private int mControlsToken = TokenHolder.INVALID_TOKEN;
 
@@ -511,10 +557,11 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
          * @param layoutStateProviderSupplier Used to check the current layout type.
          * @param fullscreenManager Used to check whether in fullscreen.
          */
+        @Initializer
         public void setPostInitializationDependencies(
                 Toolbar toolbar,
                 ObservableSupplier<Integer> constraintsSupplier,
-                Supplier<Tab> tabSupplier,
+                Supplier<@Nullable Tab> tabSupplier,
                 ObservableSupplier<Boolean> compositorInMotionSupplier,
                 BrowserStateBrowserControlsVisibilityDelegate
                         browserStateBrowserControlsVisibilityDelegate,
@@ -622,7 +669,8 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         }
 
         @Override
-        public void onCaptureStart(Canvas canvas, Rect dirtyRect) {
+        @SuppressWarnings("NullAway")
+        public void onCaptureStart(Canvas canvas, @Nullable Rect dirtyRect) {
             RecordHistogram.recordEnumeratedHistogram(
                     "Android.Toolbar.BitmapCapture",
                     ToolbarCaptureType.TOP,
@@ -772,10 +820,15 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
         if (!isToolbarContainerFullyVisible()) return true;
+        if (isOnTabStrip(event)) return false;
         if (isOnTabGroupToolbar(event)) return false; // Vivaldi
-        if (mSwipeGestureListener == null || isOnTabStrip(event)) return false;
+        if (mSwipeGestureListener != null && mSwipeGestureListener.onTouchEvent(event)) return true;
 
-        return mSwipeGestureListener.onTouchEvent(event);
+        for (TouchEventObserver o : mTouchEventObservers) {
+            if (o.onInterceptTouchEvent(event)) return true;
+        }
+
+        return false;
     }
 
     private boolean isOnTabStrip(MotionEvent e) {
@@ -818,6 +871,10 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         mToolbar = testToolbar;
     }
 
+    ToolbarViewResourceFrameLayout getToolbarContainerForTesting() {
+        return mToolbarContainer;
+    }
+
     /** Vivaldi */
     public void setTabStripHeight(int height) {
         mTabStripHeight = height;
@@ -842,4 +899,5 @@ public class ToolbarControlContainer extends OptimizedFrameLayout
         else
             return false;
     }
+    // End Vivaldi
 }

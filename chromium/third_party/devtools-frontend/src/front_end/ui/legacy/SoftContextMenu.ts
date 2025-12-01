@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
@@ -375,7 +377,7 @@ export class SoftContextMenu {
   }
 
   private root(): SoftContextMenu {
-    let root: SoftContextMenu = (this as SoftContextMenu);
+    let root: SoftContextMenu = this;
     while (root.parentMenu) {
       root = root.parentMenu;
     }
@@ -544,8 +546,7 @@ export class SoftContextMenu {
     }
   }
 
-  private menuKeyDown(event: Event): void {
-    const keyboardEvent = (event as KeyboardEvent);
+  private menuKeyDown(keyboardEvent: KeyboardEvent): void {
     function onEnterOrSpace(this: SoftContextMenu): void {
       if (!this.highlightedMenuItemElement) {
         return;

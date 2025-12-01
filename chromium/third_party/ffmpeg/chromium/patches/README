@@ -1025,25 +1025,6 @@ Affects:
     libavformat/mov.c
 
 ------------------------------------------------------------------
-commit a5f42b5e823887837696c61dae0448265272bd67
-Author: Michael Niedermayer <michael@niedermayer.cc>
-Date:   Tue Jan 7 23:21:32 2025 +0100
-
-    avformat/mov: perform sanity checks for heif before index building
-
-    Fixes: undefined NULL pointer use
-    Fixes: clusterfuzz-testcase-minimized-audio_decoder_fuzzer-6363211175493632
-
-    This performs equivalent sanity checks as are done in mov_read_trak()
-    before mov_build_index()
-
-    Reported-by: Dale Curtis <dalecurtis@chromium.org>
-    Signed-off-by: Michael Niedermayer <michael@niedermayer.cc>
-
-Affects:
-    libavformat/mov.c
-
-------------------------------------------------------------------
 commit cae04bf9414c582fcc28edc6078ebfd3800e7838
 Merge: d10a0f8bf5 d5873be583
 Author: Frank Liberato <liberato@chromium.org>
@@ -1055,23 +1036,6 @@ Date:   Mon Jan 13 20:41:30 2025 +0000
             libavcodec/h2645_sei.c
             libavcodec/hevc/hevcdec.c
             libavformat/mov.c
-
-Affects:
-    libavformat/mov.c
-
-------------------------------------------------------------------
-commit c21ed81ae4d19f58ab1b681d836ca8b9ffd856a3
-Author: James Almer <jamrial@gmail.com>
-Date:   Mon Jan 13 18:17:06 2025 -0300
-
-    avformat/mov: fix potential unsigned underflow in loop condition
-
-    if sc->tts_count is 0, this condition will wrap around to UINT_MAX and the
-    code will try to dereference a NULL pointer.
-
-    Fixes ticket #11417
-
-    Signed-off-by: James Almer <jamrial@gmail.com>
 
 Affects:
     libavformat/mov.c
@@ -1105,21 +1069,6 @@ Affects:
     libavcodec/Makefile
 
 ------------------------------------------------------------------
-commit d9ba911e510995cf769bd0e2dd8a988eb903b77c
-Author: James Almer <jamrial@gmail.com>
-Date:   Tue Jan 28 21:23:11 2025 -0300
-
-    avformat/mov: fix overflow in drift timestamp calculation
-
-    Fixes: signed integer overflow: 7803923888585309955 - -3407677434275325337 cannot be represented in type 'int64_t' (aka 'long')
-    Fixes: 377736723/clusterfuzz-testcase-minimized-media_pipeline_integration_fuzzer-5052449500889088
-
-    Signed-off-by: James Almer <jamrial@gmail.com>
-
-Affects:
-    libavformat/mov.c
-
-------------------------------------------------------------------
 commit dc0b6ad4dd1d4d483fa1704142b6a1f14e6dad33
 Author: Frank Liberato <liberato@chromium.org>
 Date:   Fri Jan 31 19:02:31 2025 +0000
@@ -1143,3 +1092,41 @@ Date:   Fri Feb 14 11:06:26 2025 -0800
 
 Affects:
     libavformat/mov.c
+
+------------------------------------------------------------------
+commit 6c6759c1598cf7aa4e0328733d36ac4350d5b1c7
+Author: Hans-Filip Elo <hans-filip.elo@xperi.com>
+Date:   Thu Feb 20 13:00:16 2025 +0100
+
+    Fixes to build ffmpeg
+
+    We are a Chromium integrator, we saw build issues with ffmpeg due to a
+    patch not applied correctly in Chromium. This is a weird issue to me.
+
+    Chromium seems to modify ffmpeg. This seem to have lead to a revert not
+    being properly applied. Here follows patch order in Chromiums ffmpeg:
+
+    1. Problematic patch that got reverted in ffmpeg [1]
+    2. Patching of some nullcheck that's only made in Chromium ffmpeg [2]
+    3. The revert of problematic patch in ffmpeg [3]
+
+    This patch order seem to have lead to stray:
+
+        s->sei.common.aom_film_grain->enable
+
+    Being left in hevcdec.c. aom_film_grain does not seem to be a pointer.
+    This patch updates any such instances to match with ffmpeg upstream.
+
+    [1]: https://github.com/FFmpeg/FFmpeg/commit/08b1bffa49715a9615acc025dfbea252d8409e1f
+    [2]: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/5825845
+    [3]: https://github.com/FFmpeg/FFmpeg/commit/08b1bffa49715a9615acc025dfbea252d8409e1f
+
+    Change-Id: Ia047bd45625208819d774ad3dbba38b325a0c936
+    Reviewed-on: https://chromium-review.googlesource.com/c/chromium/third_party/ffmpeg/+/6286027
+    Reviewed-by: Dale Curtis <dalecurtis@chromium.org>
+    Reviewed-by: Eugene Zemtsov <eugene@chromium.org>
+    Reviewed-by: Thomas Guilbert <tguilbert@chromium.org>
+
+Affects:
+    libavcodec/hevc/hevcdec.c
+

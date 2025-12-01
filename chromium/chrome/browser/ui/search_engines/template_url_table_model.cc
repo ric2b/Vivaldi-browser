@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/common/omnibox_feature_configs.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
@@ -72,7 +73,9 @@ bool OrderByManagedAndAlphabetically::operator()(const TemplateURL* lhs,
         collator_ ? GetShortNameSortKey(engine->short_name()) : std::string(),
         // If a collator is not available, fallback to regular string
         // comparison.
-        engine->short_name());
+        engine->short_name(),
+        // If short name is the same, fallback to keyword.
+        engine->keyword());
   };
   return get_sort_key(lhs) < get_sort_key(rhs);
 }
@@ -120,7 +123,7 @@ void TemplateURLTableModel::Reload() {
              TemplateURLStarterPackData::kGemini &&
          !OmniboxFieldTrial::IsStarterPackExpansionEnabled()) ||
         (template_url->starter_pack_id() == TemplateURLStarterPackData::kPage &&
-         !OmniboxFieldTrial::IsStarterPackPageEnabled())) {
+         !omnibox_feature_configs::ContextualSearch::Get().starter_pack_page)) {
       continue;
     }
 
@@ -188,14 +191,6 @@ std::u16string TemplateURLTableModel::GetText(size_t row, int col_id) {
 
 void TemplateURLTableModel::SetObserver(ui::TableModelObserver* observer) {
   observer_ = observer;
-}
-
-std::u16string TemplateURLTableModel::GetKeywordToDisplay(size_t row) {
-  std::u16string keyword =
-      GetText(row, IDS_SEARCH_ENGINES_EDITOR_KEYWORD_COLUMN);
-  return template_url_service_->BothPolicySetKeywordsNotOverriden(entries_[row])
-             ? base::JoinString({keyword, std::u16string(keyword, 1)}, u", ")
-             : keyword;
 }
 
 void TemplateURLTableModel::Remove(size_t index) {

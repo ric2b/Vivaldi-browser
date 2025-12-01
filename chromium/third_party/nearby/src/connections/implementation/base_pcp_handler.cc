@@ -107,6 +107,7 @@ using ::location::nearby::connections::ConnectionResponseFrame;
 using ::location::nearby::connections::ConnectionsDevice;
 using ::location::nearby::connections::MediumMetadata;
 using ::location::nearby::connections::OfflineFrame;
+using ::location::nearby::connections::OsInfo;
 using ::location::nearby::connections::PresenceDevice;
 using ::location::nearby::connections::V1Frame;
 using ::location::nearby::proto::connections::OperationResultCode;
@@ -359,6 +360,10 @@ void BasePcpHandler::OptionsAllowed(const BooleanMediumSelector& allowed,
                   Medium::WIFI_DIRECT)
            << " ";
   }
+  if (allowed.awdl) {
+    result << location::nearby::proto::connections::Medium_Name(Medium::AWDL)
+           << " ";
+  }
   result << "}";
 }
 
@@ -433,6 +438,7 @@ BooleanMediumSelector BasePcpHandler::ComputeIntersectionOfSupportedMediums(
   mediumSelector.wifi_lan = intersection.contains(Medium::WIFI_LAN);
   mediumSelector.wifi_hotspot = intersection.contains(Medium::WIFI_HOTSPOT);
   mediumSelector.wifi_direct = intersection.contains(Medium::WIFI_DIRECT);
+  mediumSelector.awdl = intersection.contains(Medium::AWDL);
   return mediumSelector;
 }
 
@@ -807,6 +813,16 @@ ConnectionInfo BasePcpHandler::FillConnectionInfo(
     connection_info.bssid = wifi_info.bssid;
     connection_info.ap_frequency = wifi_info.ap_frequency;
     connection_info.ip_address = wifi_info.ip_address_4_bytes;
+    if (NearbyFlags::GetInstance().GetBoolFlag(
+            config_package_nearby::nearby_connections_feature::
+                kEnableDynamicRoleSwitch) &&
+        client->GetLocalOsInfo().type() == OsInfo::APPLE) {
+      ::location::nearby::connections::MediumRole medium_role_info;
+      medium_role_info.set_support_awdl_publisher(true);
+      medium_role_info.set_support_awdl_subscriber(true);
+      medium_role_info.set_support_wifi_hotspot_client(true);
+      connection_info.medium_role.emplace(medium_role_info);
+    }
     NEARBY_LOGS(INFO) << "Query for WIFI information: is_supports_5_ghz="
                       << connection_info.supports_5_ghz
                       << "; bssid=" << connection_info.bssid
@@ -1169,6 +1185,9 @@ void BasePcpHandler::StripOutUnavailableMediums(
   }
   if (allowed.wifi_direct) {
     allowed.wifi_direct = mediums_->GetWifiDirect().IsGOAvailable();
+  }
+  if (allowed.awdl) {
+    allowed.awdl = mediums_->GetAwdl().IsAvailable();
   }
 }
 
@@ -1661,34 +1680,45 @@ void BasePcpHandler::OnEndpointFound(
   DiscoveredEndpoint* owned_endpoint = nullptr;
   for (auto& item = range.first; item != range.second; ++item) {
     auto& discovered_endpoint = item->second;
-    if (discovered_endpoint->endpoint_info != endpoint->endpoint_info) {
-      // Endpoint info should be same for an endpoint ID. If it is changed,
-      // we should reset discovered endpoints of the endpoint ID, and use the
-      // new endpoint info and medium as discovered endpoint.
-      NEARBY_LOGS(INFO) << "Endpoint info of endpoint " << endpoint_id
-                        << " changed on medium "
-                        << location::nearby::proto::connections::Medium_Name(
-                               endpoint->medium);
-      // Report endpoint lost
-      client->OnEndpointLost(endpoint->service_id, endpoint->endpoint_id);
-      // Reset discovered endpoints
-      discovered_endpoints_.erase(item->first);
-      // Add the endpoint as discovered endpoint.
-      owned_endpoint =
-          discovered_endpoints_.emplace(endpoint_id, std::move(endpoint))
-              ->second.get();
-      StopEndpointLostByMediumAlarm(owned_endpoint->endpoint_id,
-                                    owned_endpoint->medium);
-      client->OnEndpointFound(
-          owned_endpoint->service_id, owned_endpoint->endpoint_id,
-          owned_endpoint->endpoint_info, owned_endpoint->medium);
-      return;
-    }
-    if (discovered_endpoint->medium == endpoint->medium) {
-      NEARBY_LOGS(INFO) << "Ignore the dup endpoint info on medium "
-                        << location::nearby::proto::connections::Medium_Name(
-                               endpoint->medium);
-      return;
+    if (client->IsDctEnabled()) {
+      // Because the DCT endpoint info is mocked on BLE, we need to specially
+      // handle it to avoid device refresh between different mediums.
+      if (discovered_endpoint->medium == endpoint->medium) {
+        NEARBY_LOGS(INFO) << "Ignore the dup endpoint info on medium "
+                          << location::nearby::proto::connections::Medium_Name(
+                                 endpoint->medium);
+        return;
+      }
+    } else {
+      if (discovered_endpoint->endpoint_info != endpoint->endpoint_info) {
+        // Endpoint info should be same for an endpoint ID. If it is changed,
+        // we should reset discovered endpoints of the endpoint ID, and use the
+        // new endpoint info and medium as discovered endpoint.
+        NEARBY_LOGS(INFO) << "Endpoint info of endpoint " << endpoint_id
+                          << " changed on medium "
+                          << location::nearby::proto::connections::Medium_Name(
+                                 endpoint->medium);
+        // Report endpoint lost
+        client->OnEndpointLost(endpoint->service_id, endpoint->endpoint_id);
+        // Reset discovered endpoints
+        discovered_endpoints_.erase(item->first);
+        // Add the endpoint as discovered endpoint.
+        owned_endpoint =
+            discovered_endpoints_.emplace(endpoint_id, std::move(endpoint))
+                ->second.get();
+        StopEndpointLostByMediumAlarm(owned_endpoint->endpoint_id,
+                                      owned_endpoint->medium);
+        client->OnEndpointFound(
+            owned_endpoint->service_id, owned_endpoint->endpoint_id,
+            owned_endpoint->endpoint_info, owned_endpoint->medium);
+        return;
+      }
+      if (discovered_endpoint->medium == endpoint->medium) {
+        NEARBY_LOGS(INFO) << "Ignore the dup endpoint info on medium "
+                          << location::nearby::proto::connections::Medium_Name(
+                                 endpoint->medium);
+        return;
+      }
     }
   }
 
@@ -2003,13 +2033,43 @@ Exception BasePcpHandler::OnIncomingConnection(
   connection_info.bssid = medium_metadata.bssid();
   connection_info.ap_frequency = medium_metadata.ap_frequency();
   connection_info.ip_address = medium_metadata.ip_address();
-  NEARBY_LOGS(INFO) << connection_request.endpoint_id()
-                    << "'s WIFI information: is_supports_5_ghz="
-                    << connection_info.supports_5_ghz
-                    << "; bssid=" << connection_info.bssid
-                    << "; ap_frequency=" << connection_info.ap_frequency
-                    << "Mhz; ip_address in bytes format="
-                    << absl::BytesToHexString(connection_info.ip_address);
+  if (medium_metadata.has_medium_role()) {
+    connection_info.medium_role.emplace(medium_metadata.medium_role());
+  }
+  if (medium_metadata.has_medium_role()) {
+    NEARBY_LOGS(INFO)
+        << connection_request.endpoint_id()
+        << "'s WIFI information: is_supports_5_ghz="
+        << connection_info.supports_5_ghz << "; bssid=" << connection_info.bssid
+        << "; ap_frequency=" << connection_info.ap_frequency
+        << "Mhz; ip_address in bytes format="
+        << absl::BytesToHexString(connection_info.ip_address)
+        << "; support_wifi_direct_group_owner="
+        << medium_metadata.medium_role().support_wifi_direct_group_owner()
+        << "; support_wifi_direct_group_client="
+        << medium_metadata.medium_role().support_wifi_direct_group_client()
+        << "; support_wifi_hotspot_host="
+        << medium_metadata.medium_role().support_wifi_hotspot_host()
+        << "; support_wifi_hotspot_client="
+        << medium_metadata.medium_role().support_wifi_hotspot_client()
+        << "; support_wifi_aware_publisher="
+        << medium_metadata.medium_role().support_wifi_aware_publisher()
+        << "; support_wifi_aware_subscriber="
+        << medium_metadata.medium_role().support_wifi_aware_subscriber()
+        << "; support_awdl_publisher="
+        << medium_metadata.medium_role().support_awdl_publisher()
+        << "; support_awdl_subscriber="
+        << medium_metadata.medium_role().support_awdl_subscriber();
+  } else {
+    NEARBY_LOGS(INFO) << connection_request.endpoint_id()
+                      << "'s WIFI information: is_supports_5_ghz="
+                      << connection_info.supports_5_ghz
+                      << "; bssid=" << connection_info.bssid
+                      << "; ap_frequency=" << connection_info.ap_frequency
+                      << "Mhz; ip_address in bytes format="
+                      << absl::BytesToHexString(connection_info.ip_address)
+                      << "; has no mediumRole";
+  }
 
   // We've successfully connected to the device, and are now about to jump on to
   // the EncryptionRunner thread to start running our encryption protocol. We'll

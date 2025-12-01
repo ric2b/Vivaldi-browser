@@ -12,6 +12,7 @@
 #include "build/buildflag.h"
 #include "chrome/browser/background/glic/glic_controller.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/glic/fre/glic_fre_controller.h"
 #include "chrome/browser/glic/glic_keyed_service_factory.h"
 #include "chrome/browser/glic/glic_metrics.h"
 #include "chrome/browser/glic/glic_pref_names.h"
@@ -22,9 +23,13 @@
 #include "chrome/browser/glic/widget/glic_view.h"
 #include "chrome/browser/glic/widget/glic_window_controller.h"
 #include "chrome/browser/lifetime/application_lifetime_desktop.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_test_util.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/glic_button.h"
@@ -51,11 +56,10 @@
 namespace glic {
 
 namespace {
+DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kFirstTab);
 
-const InteractiveBrowserTestApi::DeepQuery
-    kMockGlicClientStart3sUnresponsiveButton = {"#busyWork3s"};
-const InteractiveBrowserTestApi::DeepQuery
-    kMockGlicClientStart8sUnresponsiveButton = {"#busyWork8s"};
+const InteractiveBrowserTestApi::DeepQuery kMockGlicClientHangButton = {
+    "#hang"};
 
 }  // anonymous namespace
 
@@ -81,6 +85,12 @@ class GlicWindowControllerUiTest : public test::InteractiveGlicTest {
     });
   }
 
+  auto SimulateOsButton() {
+    return Do([this]() {
+      glic_controller_->Toggle(mojom::InvocationSource::kOsButton);
+    });
+  }
+
   auto ForceInvalidateAccount() {
     return Do([this]() { InvalidateAccount(window_controller().profile()); });
   }
@@ -93,18 +103,6 @@ class GlicWindowControllerUiTest : public test::InteractiveGlicTest {
   std::unique_ptr<GlicController> glic_controller_ =
       std::make_unique<GlicController>();
 };
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-// TODO(394945970): Check top right corner position.
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       DISABLED_ShowAndCloseAttachedWidget) {
-  RunTestSequence(OpenGlicWindow(GlicWindowMode::kAttached),
-                  // Verify glic is open in attached mode.
-                  CheckControllerHasWidget(true),
-                  CheckControllerWidgetMode(GlicWindowMode::kAttached),
-                  CloseGlicWindow(), CheckControllerHasWidget(false));
-}
 
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, ShowAndCloseDetachedWidget) {
   RunTestSequence(OpenGlicWindow(GlicWindowMode::kDetached),
@@ -123,52 +121,6 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, DoNotCrashWhenReopening) {
   RunTestSequence(OpenGlicWindow(GlicWindowMode::kAttached), CloseGlicWindow(),
                   OpenGlicWindow(GlicWindowMode::kAttached));
 }
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-IN_PROC_BROWSER_TEST_F(
-    GlicWindowControllerUiTest,
-    DISABLED_OpenAttachedThenOpenAttachedToSameBrowserCloses) {
-  RunTestSequence(OpenGlicWindow(GlicWindowMode::kAttached),
-                  CheckControllerHasWidget(true),
-                  CheckControllerWidgetMode(GlicWindowMode::kAttached),
-                  ToggleGlicWindow(GlicWindowMode::kAttached),
-                  InAnyContext(WaitForHide(kGlicViewElementId)),
-                  CheckControllerHasWidget(false));
-}
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-IN_PROC_BROWSER_TEST_F(
-    GlicWindowControllerUiTest,
-    DISABLED_OpenAttachedThenOpenAttachedToDifferentBrowser) {
-  Browser* const new_browser = CreateBrowser(browser()->profile());
-
-  RunTestSequence(OpenGlicWindow(GlicWindowMode::kAttached),
-                  CheckControllerWidgetMode(GlicWindowMode::kAttached),
-                  InContext(new_browser->window()->GetElementContext(),
-                            PressButton(kGlicButtonElementId)),
-                  CheckControllerHasWidget(true),
-                  CheckControllerWidgetMode(GlicWindowMode::kAttached),
-                  CheckIfAttachedToBrowser(new_browser));
-}
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-#if !BUILDFLAG(IS_LINUX)
-IN_PROC_BROWSER_TEST_F(
-    GlicWindowControllerUiTest,
-    DISABLED_OpenAttachedThenOpenAttachedToDifferentBrowserWithHotkey) {
-  Browser* const new_browser = CreateBrowser(browser()->profile());
-
-  RunTestSequence(OpenGlicWindow(GlicWindowMode::kAttached),
-                  CheckControllerWidgetMode(GlicWindowMode::kAttached),
-                  Do([&]() { new_browser->window()->Activate(); }),
-                  SimulateGlicHotkey(), CheckControllerHasWidget(true),
-                  CheckControllerWidgetMode(GlicWindowMode::kAttached),
-                  CheckIfAttachedToBrowser(new_browser));
-}
-#endif
 
 // Disabled due to flakes Mac; see https://crbug.com/394350688.
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
@@ -201,20 +153,6 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
       CheckControllerHasWidget(false));
 }
 
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       DISABLED_HotkeyWhenAttachedToActiveBrowserCloses) {
-  RunTestSequence(
-      OpenGlicWindow(GlicWindowMode::kAttached),
-      // Glic should close.
-      SetOnIncompatibleAction(OnIncompatibleAction::kSkipTest,
-                              kActivateSurfaceIncompatibilityNotice),
-      ActivateSurface(kBrowserViewElementId), SimulateGlicHotkey(),
-      InAnyContext(WaitForHide(kGlicViewElementId)),
-      CheckControllerHasWidget(false));
-}
-
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
                        HotkeyWhenDetachedActiveCloses) {
   RunTestSequence(
@@ -224,20 +162,6 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
       InAnyContext(ActivateSurface(test::kGlicHostElementId)),
       SimulateGlicHotkey(), InAnyContext(WaitForHide(kGlicViewElementId)),
       CheckControllerHasWidget(false));
-}
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       DISABLED_HotkeyAttachesToActiveBrowser) {
-  RunTestSequence(
-      // Glic should open attached to active browser.
-      SetOnIncompatibleAction(OnIncompatibleAction::kSkipTest,
-                              kActivateSurfaceIncompatibilityNotice),
-      ActivateSurface(kBrowserViewElementId), SimulateGlicHotkey(),
-      InAnyContext(WaitForShow(kGlicViewElementId).SetMustRemainVisible(false)),
-      CheckControllerHasWidget(true),
-      CheckControllerWidgetMode(GlicWindowMode::kAttached));
 }
 
 // TODO(393203136): Once tests can observe window controller state rather than
@@ -270,28 +194,6 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
       CheckControllerHasWidget(true),
       CheckControllerWidgetMode(GlicWindowMode::kDetached));
 }
-
-#if !BUILDFLAG(IS_LINUX)
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true. Widget activation doesn't work on
-// Linux; see InteractionTestUtilSimulatorViews::ActivateWidget.
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       DISABLED_CanFocusGlicWindowWithFocusDialogHotkey) {
-  RunTestSequence(
-      OpenGlicWindow(GlicWindowMode::kDetached),
-      ActivateSurface(kBrowserViewElementId),
-      // Activating the browser actually focuses the omnibox.
-      CheckViewProperty(kOmniboxElementId, &views::View::HasFocus, true),
-      // Trigger the popup focusing code.
-      Do([&]() {
-        browser()->GetBrowserView().FocusInactivePopupForAccessibility();
-      }),
-      // That should have moved the focus back to the Glic web view.
-      CheckViewProperty(kOmniboxElementId, &views::View::HasFocus, false),
-      InAnyContext(CheckViewProperty(GlicView::kWebViewElementIdForTesting,
-                                     &views::View::HasFocus, true)));
-}
-#endif  // !BUILDFLAG(IS_LINUX)
 
 #if BUILDFLAG(IS_WIN)
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
@@ -337,50 +239,16 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
       CheckControllerHasWidget(false));
 }
 
-// TODO(388102775): When Mac app focus issues are resolved, add a test to verify
-// that invoking the hotkey while open detached always closes glic regardless of
-// activation.
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true.
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, DISABLED_ApiDetach) {
-  base::HistogramTester tester;
-  RunTestSequence(
-      // Open attached.
-      OpenGlicWindow(GlicWindowMode::kAttached), CheckControllerHasWidget(true),
-      CheckControllerWidgetMode(GlicWindowMode::kAttached),
-
-      // Detach. State will temporarily be kDetaching but will again be kOpen
-      // after the animation runs.
-      // TODO(393203136): Observe state() without polling, then we can verify
-      // that we go to kDetaching and then kOpen.
-      ObserveState(test::internal::kGlicWindowControllerState,
-                   std::ref(window_controller())),
-      Do([this] { window_controller().Detach(); }),
-      WaitForState(test::internal::kGlicWindowControllerState,
-                   GlicWindowController::State::kOpen),
-      StopObservingState(test::internal::kGlicWindowControllerState),
-
-      CheckControllerWidgetMode(GlicWindowMode::kDetached));
-
-  tester.ExpectTotalCount("Glic.AttachedToBrowser", 1);
-  tester.ExpectBucketCount("Glic.AttachedToBrowser", AttachChangeReason::kInit,
-                           1);
-  tester.ExpectTotalCount("Glic.DetachedFromBrowser", 1);
-  tester.ExpectBucketCount("Glic.DetachedFromBrowser",
-                           AttachChangeReason::kMenu, 1);
-}
-
 // TODO: Re-nable this test when there is a glic state for post-resize.
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
                        DISABLED_CloseWithContextMenu) {
-  RunTestSequence(OpenGlicWindow(GlicWindowMode::kAttached),
-                  CheckControllerHasWidget(true));
-  auto center =
-      window_controller().GetGlicView()->GetBoundsInScreen().CenterPoint();
   RunTestSequence(
-      MoveMouseTo(center), ClickMouse(ui_controls::RIGHT),
-      InAnyContext(SelectMenuItem(RenderViewContextMenu::kGlicCloseMenuItem)),
+      OpenGlicWindow(GlicWindowMode::kAttached), CheckControllerHasWidget(true),
+      MoveMouseTo(kGlicViewElementId),
+      MayInvolveNativeContextMenu(
+          ClickMouse(ui_controls::RIGHT), WaitForHide(kBrowserViewElementId),
+          InAnyContext(
+              SelectMenuItem(RenderViewContextMenu::kGlicCloseMenuItem))),
       CheckControllerHasWidget(false));
 }
 
@@ -397,6 +265,18 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, MAYBE_OpenMenuItemShows) {
                   CheckControllerWidgetMode(GlicWindowMode::kDetached),
                   CloseGlicWindow(), CheckControllerHasWidget(false));
 }
+
+#if BUILDFLAG(IS_WIN)
+// On Windows, the OsButton toggles opening and closing floaty, because floaty
+// will never be active when the os button is clicked.
+IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, OsButtonToggles) {
+  RunTestSequence(
+      SimulateOsButton(), WaitForAndInstrumentGlic(kHostAndContents),
+      CheckControllerHasWidget(true),
+      CheckControllerWidgetMode(GlicWindowMode::kDetached), SimulateOsButton(),
+      WaitForHide(test::kGlicHostElementId), CheckControllerHasWidget(false));
+}
+#endif  // BUILDFLAG(IS_WIN)
 
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
                        OpenMenuItemWhenAttachedToActiveBrowserDoesNotClose) {
@@ -430,35 +310,34 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       ClientUnresponsiveThenResumeResponsive) {
-  RunTestSequence(
-      OpenGlicWindow(GlicWindowMode::kAttached),
-      ClickMockGlicElement(kMockGlicClientStart3sUnresponsiveButton, true),
-      ObserveState(test::internal::kGlicAppState, &window_controller()),
-      WaitForState(test::internal::kGlicAppState,
-                   mojom::WebUiState::kUnresponsive),
-      // Client should resume responsive if unresponsive less than 5s.
-      WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kReady));
-}
-
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
                        ClientUnresponsiveThenError) {
+  base::HistogramTester histogram_tester;
   RunTestSequence(
       OpenGlicWindow(GlicWindowMode::kAttached),
-      ClickMockGlicElement(kMockGlicClientStart8sUnresponsiveButton, true),
-      ObserveState(test::internal::kGlicAppState, &window_controller()),
+      ClickMockGlicElement(kMockGlicClientHangButton, true),
+      ObserveState(test::internal::kGlicAppState, &host()),
       WaitForState(test::internal::kGlicAppState,
                    mojom::WebUiState::kUnresponsive),
       // Client should show error after showing the unresponsive UI for 5s.
       WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kError));
+  histogram_tester.ExpectTotalCount(
+      "Glic.Host.WebClientUnresponsiveState.Duration", 1);
+  histogram_tester.ExpectTotalCount("Glic.Host.WebClientUnresponsiveState", 2);
+  // One sample in the WebClientUnresponsiveState.ENTERED_FROM_CUSTOM_HEARTBEAT
+  // (1) bucket.
+  histogram_tester.ExpectBucketCount("Glic.Host.WebClientUnresponsiveState", 1,
+                                     1);
+  // One sample in the WebClientUnresponsiveState.EXITED (4) bucket.
+  histogram_tester.ExpectBucketCount("Glic.Host.WebClientUnresponsiveState", 4,
+                                     1);
 }
 
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       InvalidatedAccountSignInOnGlicOpenFlow) {
+                       InvalidatedAccountWhileLoadingGlic) {
   RunTestSequence(
-      ObserveState(test::internal::kGlicAppState, &window_controller()),
-      ForceInvalidateAccount(), SimulateGlicHotkey(),
-      CheckControllerHasWidget(true), WaitForAndInstrumentGlic(kHostOnly),
+      ObserveState(test::internal::kGlicAppState, &host()),
+      SimulateGlicHotkey(), CheckControllerHasWidget(true),
+      ForceInvalidateAccount(), WaitForAndInstrumentGlic(kHostOnly),
       WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kSignIn),
       InAnyContext(ClickElement(test::kGlicHostElementId, {"#signInButton"},
                                 ui_controls::LEFT, ui_controls::kNoAccelerator,
@@ -472,35 +351,180 @@ IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
 }
 
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
+                       InvalidatedAccountSignInOnGlicOpenFlow) {
+  RunTestSequence(
+      ObserveState(test::internal::kGlicAppState, &host()),
+      ForceInvalidateAccount(), SimulateGlicHotkey(),
+      CheckControllerHasWidget(false), InstrumentTab(kFirstTab),
+      WaitForWebContentsReady(kFirstTab),
+      // Without a pause here, we will 'sign-in' before the callback is
+      // registered to listen for it. This isn't a bug because it takes real
+      // users finite time to actually sign-in.
+      Wait(base::Milliseconds(500)), ForceReauthAccount(),
+      WaitForAndInstrumentGlic(kHostOnly),
+      WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kReady));
+}
+
+IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
                        AccountInvalidatedWhileGlicOpen) {
   RunTestSequence(
       SimulateGlicHotkey(), CheckControllerHasWidget(true),
-      ObserveState(test::internal::kGlicAppState, &window_controller()),
+      ObserveState(test::internal::kGlicAppState, &host()),
       WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kReady),
       ForceInvalidateAccount(),
-      WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kSignIn));
-}
-
-// Open glic with an invalidated account, then sign in without clicking the
-// sign-in button. The web client should loaded and shown.
-IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest,
-                       OpenGlicWithInvalidatedAccountAndThenSignIn) {
-  RunTestSequence(
-      ForceInvalidateAccount(), SimulateGlicHotkey(),
-      CheckControllerHasWidget(true),
-      ObserveState(test::internal::kGlicAppState, &window_controller()),
       WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kSignIn),
       ForceReauthAccount(),
       WaitForState(test::internal::kGlicAppState, mojom::WebUiState::kReady));
+}
+
+IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, TestInitialBounds) {
+  // The GlicButton and Tabstrip are not actually shown until a tab is created.
+  chrome::AddTabAt(browser(), GURL("about:blank"), 0, true);
+  // Calculate default location offset from work area.
+  gfx::Point top_right =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area().top_right();
+  int expected_x = top_right.x() - GlicWidget::GetInitialSize().width() -
+                   glic::kDefaultDetachedTopRightDistance;
+  int expected_y = top_right.y() + glic::kDefaultDetachedTopRightDistance;
+  gfx::Point default_origin(expected_x, expected_y);
+
+  // Check that with no saved position the default location is used.
+  gfx::Rect initial_bounds = window_controller().GetInitialBounds(nullptr);
+  EXPECT_EQ(initial_bounds.origin(), default_origin);
+
+  // Initial bounds with browser are valid and not default location.
+  initial_bounds = window_controller().GetInitialBounds(browser());
+  EXPECT_NE(initial_bounds.origin(), default_origin);
+
+  // Use default location if Glic button location results in an invalid widget
+  // location. Move browser window so that it is mostly off the screen to the
+  // right.
+  browser()->window()->SetBounds(
+      {{top_right.x() + 500, top_right.y() + 50}, {900, 900}});
+  initial_bounds = window_controller().GetInitialBounds(browser());
+  EXPECT_EQ(initial_bounds.origin(), default_origin);
+
+  gfx::Rect screen_bounds =
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
+
+  struct TestPair {
+    gfx::Point test;
+    gfx::Point expected;
+    std::string msg;
+  };
+
+  std::vector<TestPair> test_points = {
+      {{10, 20}, {10, 20}, "Valid position on screen"},
+
+      // Valid positions off each corner.
+      {{-20, -2}, {-20, -2}, "Valid top-left"},
+      {{-20, screen_bounds.height() - 100},
+       {-20, screen_bounds.height() - 100},
+       "Valid bottom left"},
+      {{screen_bounds.width() - initial_bounds.width() + 20,
+        screen_bounds.height() - 100},
+       {screen_bounds.width() - initial_bounds.width() + 20,
+        screen_bounds.height() - 100},
+       "Valid bottom right"},
+      {{screen_bounds.width() - initial_bounds.width() + 20, -2},
+       {screen_bounds.width() - initial_bounds.width() + 20, -2},
+       "Valid top right"},
+
+      // Invalid positions off of each edge
+      {{10, -5}, default_origin, "Invalid top"},
+      {{-400, 10}, default_origin, "Invalid left"},
+      {{10, screen_bounds.height() + 600}, default_origin, "Invalid bottom"},
+      {{screen_bounds.width() + 400, 10}, default_origin, "Invalid right"},
+  };
+
+  for (auto& t : test_points) {
+    window_controller().SetPreviousPositionForTesting(t.test);
+    initial_bounds = window_controller().GetInitialBounds(nullptr);
+    EXPECT_EQ(initial_bounds.origin(), t.expected) << t.msg;
+  }
+}
+
+class GlicWindowControllerWithPreviousPostionUiTest
+    : public GlicWindowControllerUiTest {
+ public:
+  void SetUpBrowserContextKeyedServices(
+      content::BrowserContext* context) override {
+    // Set initial bounds via pref and check that they are used.
+    Profile::FromBrowserContext(context)->GetPrefs()->SetInteger(
+        prefs::kGlicPreviousPositionX, 20);
+    Profile::FromBrowserContext(context)->GetPrefs()->SetInteger(
+        prefs::kGlicPreviousPositionY, 10);
+    test::InteractiveGlicTest::SetUpBrowserContextKeyedServices(context);
+  }
+};
+
+IN_PROC_BROWSER_TEST_F(GlicWindowControllerUiTest, PermanentlyDeleteProfile) {
+  ProfileManager* const profile_manager = g_browser_process->profile_manager();
+  Profile& profile1 = profiles::testing::CreateProfileSync(
+      profile_manager, profile_manager->GenerateNextProfileDirectoryPath());
+  Browser* const browser1 = CreateBrowser(&profile1);
+  SigninWithPrimaryAccount(&profile1);
+  SetModelExecutionCapability(&profile1, true);
+  GlicKeyedService* const service1 =
+      GlicKeyedServiceFactory::GetGlicKeyedService(browser1->profile());
+  service1->window_controller().fre_controller()->AcceptFre();
+  EXPECT_TRUE(service1->enabling().HasConsented());
+
+  // Open glic
+  g_browser_process->local_state()->SetBoolean(prefs::kGlicLauncherEnabled,
+                                               true);
+  service1->ToggleUI(nullptr, false, mojom::InvocationSource::kOsHotkey);
+  EXPECT_TRUE(service1->IsWindowShowing());
+
+  // Delete the second profile
+  profile_manager->GetDeleteProfileHelper().MaybeScheduleProfileForDeletion(
+      browser1->profile()->GetPath(), base::DoNothing(),
+      ProfileMetrics::DELETE_PROFILE_USER_MANAGER);
+  ui_test_utils::WaitForBrowserToClose(browser1);
+
+  EXPECT_FALSE(service1->IsWindowShowing());
+}
+
+IN_PROC_BROWSER_TEST_F(GlicWindowControllerWithPreviousPostionUiTest,
+                       TestInitialBounds) {
+  // Check that the saved initial bounds are used.
+  gfx::Rect initial_bounds = window_controller().GetInitialBounds(nullptr);
+  ASSERT_EQ(initial_bounds.origin(), gfx::Point(20, 10));
+}
+
+class GlicWindowControllerUnloadOnCloseTest
+    : public GlicWindowControllerUiTest {
+ public:
+  GlicWindowControllerUnloadOnCloseTest() {
+    features_.InitAndEnableFeature(features::kGlicUnloadOnClose);
+  }
+  ~GlicWindowControllerUnloadOnCloseTest() override = default;
+
+  auto CheckWebUiContentsExist(bool exist) {
+    return CheckResult(
+        [this]() { return !!glic_service()->host().webui_contents(); }, exist,
+        "CheckWebUiContentsExist");
+  }
+
+ private:
+  base::test::ScopedFeatureList features_;
+};
+
+IN_PROC_BROWSER_TEST_F(GlicWindowControllerUnloadOnCloseTest, UnloadOnClose) {
+  RunTestSequence(OpenGlicWindow(GlicWindowMode::kDetached),
+                  CheckControllerHasWidget(true), CheckWebUiContentsExist(true),
+                  CloseGlicWindow(), CheckWebUiContentsExist(false));
 }
 
 class GlicWindowControllerWithMemoryPressureUiTest
     : public GlicWindowControllerUiTest {
  public:
   GlicWindowControllerWithMemoryPressureUiTest() {
-    features_.InitWithFeatures(
+    features_.InitWithFeaturesAndParameters(
         /*enabled_features=*/
-        {features::kGlicWarming},
+        {{features::kGlicWarming,
+          {{features::kGlicWarmingDelayMs.name, "0"},
+           {features::kGlicWarmingJitterMs.name, "0"}}}},
         /*disabled_features=*/{});
   }
   ~GlicWindowControllerWithMemoryPressureUiTest() override = default;
@@ -509,34 +533,43 @@ class GlicWindowControllerWithMemoryPressureUiTest
     // This will temporarily disable preloading to ensure that we don't load the
     // web client before we've initialized the embedded test server and can set
     // the correct URL.
-    GlicProfileManager::ForceMemoryPressureForTesting(&forced_memory_pressure_);
+    GlicProfileManager::ForceMemoryPressureForTesting(
+        base::MemoryPressureMonitor::MemoryPressureLevel::
+            MEMORY_PRESSURE_LEVEL_CRITICAL);
     GlicWindowControllerUiTest::SetUp();
   }
 
   void TearDown() override {
     GlicWindowControllerUiTest::TearDown();
-    GlicProfileManager::ForceMemoryPressureForTesting(nullptr);
+    GlicProfileManager::ForceMemoryPressureForTesting(std::nullopt);
   }
 
  protected:
-  void ResetMemoryPressure() {
-    forced_memory_pressure_ = base::MemoryPressureMonitor::MemoryPressureLevel::
-        MEMORY_PRESSURE_LEVEL_NONE;
+  auto ResetMemoryPressure() {
+    return Do([]() {
+      GlicProfileManager::ForceMemoryPressureForTesting(
+          base::MemoryPressureMonitor::MemoryPressureLevel::
+              MEMORY_PRESSURE_LEVEL_NONE);
+    });
+  }
+
+  auto TryPreload() {
+    return Do([this]() { glic_service()->TryPreload(); });
+  }
+
+  auto CheckWarmed() {
+    return Do([this]() { EXPECT_TRUE(window_controller().IsWarmed()); });
   }
 
  private:
-  base::MemoryPressureMonitor::MemoryPressureLevel forced_memory_pressure_ =
-      base::MemoryPressureMonitor::MemoryPressureLevel::
-          MEMORY_PRESSURE_LEVEL_CRITICAL;
-
   base::test::ScopedFeatureList features_;
 };
 
 IN_PROC_BROWSER_TEST_F(GlicWindowControllerWithMemoryPressureUiTest, Preload) {
-  ResetMemoryPressure();
-  glic_service()->TryPreload();
-  EXPECT_TRUE(window_controller().IsWarmed());
+  // TODO(crbug.com/411100559): Wait for preload completion rather than assuming
+  // that it will finish before the next step in the sequence.
   RunTestSequence(
+      ResetMemoryPressure(), TryPreload(), CheckWarmed(),
       PressButton(kGlicButtonElementId),
       InAnyContext(
           WaitForShow(kGlicViewElementId).SetMustRemainVisible(false)));

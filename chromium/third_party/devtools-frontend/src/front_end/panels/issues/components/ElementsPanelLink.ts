@@ -1,15 +1,12 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import {html, render} from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import elementsPanelLinkStylesRaw from './elementsPanelLink.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const elementsPanelLinkStyles = new CSSStyleSheet();
-elementsPanelLinkStyles.replaceSync(elementsPanelLinkStylesRaw.cssText);
+import elementsPanelLinkStyles from './elementsPanelLink.css.js';
 
 export interface ElementsPanelLinkData {
   onElementRevealIconClick: (event?: Event) => void;
@@ -34,13 +31,10 @@ export class ElementsPanelLink extends HTMLElement {
     this.#render();
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [elementsPanelLinkStyles];
-  }
-
   #render(): void {
     // clang-format off
     render(html`
+      <style>${elementsPanelLinkStyles}</style>
       <span
         class="element-reveal-icon"
         jslog=${VisualLogging.link('elements-panel').track({click: true})}

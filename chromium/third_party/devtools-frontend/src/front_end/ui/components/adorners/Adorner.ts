@@ -1,6 +1,7 @@
 // Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import type * as Platform from '../../../core/platform/platform.js';
 import {html, render} from '../../../ui/lit/lit.js';
@@ -119,7 +120,7 @@ export class Adorner extends HTMLElement {
   }
 
   #render(): void {
-    render(html`<style>${adornerStyles.cssText}</style><slot></slot>`, this.#shadow, {host: this});
+    render(html`<style>${adornerStyles}</style><slot></slot>`, this.#shadow, {host: this});
   }
 }
 

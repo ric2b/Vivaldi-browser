@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 
 #include <stddef.h>
@@ -50,7 +45,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
-#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/common/chrome_constants.h"
@@ -86,30 +80,7 @@ using LoadingState = TabLoadTracker::LoadingState;
 ////////////////////////////////////////////////////////////////////////////////
 // TabManager
 
-class TabManager::TabManagerSessionRestoreObserver final
-    : public SessionRestoreObserver {
- public:
-  explicit TabManagerSessionRestoreObserver(TabManager* tab_manager)
-      : tab_manager_(tab_manager) {
-    SessionRestore::AddObserver(this);
-  }
-
-  ~TabManagerSessionRestoreObserver() { SessionRestore::RemoveObserver(this); }
-
-  // SessionRestoreObserver implementation:
-  void OnWillRestoreTab(WebContents* web_contents) override {
-    tab_manager_->OnWillRestoreTab(web_contents);
-  }
-
- private:
-  raw_ptr<TabManager> tab_manager_;
-};
-
-TabManager::TabManager() {
-  session_restore_observer_ =
-      std::make_unique<TabManagerSessionRestoreObserver>(this);
-}
-
+TabManager::TabManager() = default;
 TabManager::~TabManager() = default;
 
 void TabManager::Start() {
@@ -168,12 +139,11 @@ bool TabManager::IsInternalPage(const GURL& url) {
       chrome::kChromeUINewTabURL,
       chrome::kChromeUISettingsURL,
   });
-  // Prefix-match against the table above. Use strncmp to avoid allocating
-  // memory to convert the URL prefix constants into std::strings.
-  for (size_t i = 0; i < std::size(kInternalPagePrefixes); ++i) {
-    if (!strncmp(url.spec().c_str(), kInternalPagePrefixes[i],
-                 strlen(kInternalPagePrefixes[i])))
+  // Prefix-match against the table above.
+  for (const char* prefix : kInternalPagePrefixes) {
+    if (base::StartsWith(url.spec(), prefix)) {
       return true;
+    }
   }
   return false;
 }
@@ -200,14 +170,6 @@ content::WebContents* TabManager::DiscardTabImpl(
   }
 
   return nullptr;
-}
-
-void TabManager::OnWillRestoreTab(WebContents* contents) {
-  // TabUIHelper is initialized in TabHelpers::AttachTabHelpers. But this place
-  // gets called earlier than that. So for restored tabs, also initialize their
-  // TabUIHelper here.
-  TabUIHelper::CreateForWebContents(contents);
-  TabUIHelper::FromWebContents(contents)->set_created_by_session_restore(true);
 }
 
 void TabManager::OnLifecycleUnitDestroyed(LifecycleUnit* lifecycle_unit) {

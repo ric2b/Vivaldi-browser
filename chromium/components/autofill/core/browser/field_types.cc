@@ -166,7 +166,8 @@ static constexpr auto kTypeNameToFieldType =
          {"DRIVERS_LICENSE_REGION", DRIVERS_LICENSE_REGION},
          {"DRIVERS_LICENSE_NUMBER", DRIVERS_LICENSE_NUMBER},
          {"DRIVERS_LICENSE_EXPIRATION_DATE", DRIVERS_LICENSE_EXPIRATION_DATE},
-         {"DRIVERS_LICENSE_ISSUE_DATE", DRIVERS_LICENSE_ISSUE_DATE}});
+         {"DRIVERS_LICENSE_ISSUE_DATE", DRIVERS_LICENSE_ISSUE_DATE},
+         {"EMAIL_OR_LOYALTY_MEMBERSHIP_ID", EMAIL_OR_LOYALTY_MEMBERSHIP_ID}});
 
 bool IsFillableFieldType(FieldType field_type) {
   switch (field_type) {
@@ -235,6 +236,7 @@ bool IsFillableFieldType(FieldType field_type) {
     case LOYALTY_MEMBERSHIP_PROGRAM:
     case LOYALTY_MEMBERSHIP_PROVIDER:
     case LOYALTY_MEMBERSHIP_ID:
+    case EMAIL_OR_LOYALTY_MEMBERSHIP_ID:
     case VEHICLE_LICENSE_PLATE:
     case VEHICLE_VIN:
     case VEHICLE_MAKE:
@@ -363,6 +365,7 @@ std::string_view FieldTypeToDeveloperRepresentationString(FieldType type) {
     case LOYALTY_MEMBERSHIP_PROGRAM:
     case LOYALTY_MEMBERSHIP_PROVIDER:
     case LOYALTY_MEMBERSHIP_ID:
+    case EMAIL_OR_LOYALTY_MEMBERSHIP_ID:
     case VEHICLE_OWNER_TAG:
     case VEHICLE_LICENSE_PLATE:
     case VEHICLE_VIN:
@@ -577,6 +580,7 @@ FieldTypeGroup GroupTypeOfFieldType(FieldType field_type) {
 
     case EMAIL_ADDRESS:
     case USERNAME_AND_EMAIL_ADDRESS:
+    case EMAIL_OR_LOYALTY_MEMBERSHIP_ID:
       return FieldTypeGroup::kEmail;
 
     case PHONE_HOME_NUMBER:
@@ -687,13 +691,15 @@ FieldTypeGroup GroupTypeOfFieldType(FieldType field_type) {
     case EMPTY_TYPE:
     case AMBIGUOUS_TYPE:
     case FIELD_WITH_DEFAULT_VALUE:
-    case LOYALTY_MEMBERSHIP_PROGRAM:
-    case LOYALTY_MEMBERSHIP_PROVIDER:
-    case LOYALTY_MEMBERSHIP_ID:
     case MERCHANT_EMAIL_SIGNUP:
     case MERCHANT_PROMO_CODE:
     case ONE_TIME_CODE:
       return FieldTypeGroup::kNoGroup;
+
+    case LOYALTY_MEMBERSHIP_ID:
+    case LOYALTY_MEMBERSHIP_PROGRAM:
+    case LOYALTY_MEMBERSHIP_PROVIDER:
+      return FieldTypeGroup::kLoyaltyCard;
 
     case USERNAME:
       return FieldTypeGroup::kUsernameField;
@@ -1025,6 +1031,7 @@ bool IsDateFieldType(FieldType field_type) {
     case ADDRESS_HOME_APT:
     case ADDRESS_HOME_APT_TYPE:
     case LOYALTY_MEMBERSHIP_ID:
+    case EMAIL_OR_LOYALTY_MEMBERSHIP_ID:
     case SINGLE_USERNAME_WITH_INTERMEDIATE_VALUES:
     case IMPROVED_PREDICTION:
     case ALTERNATIVE_FULL_NAME:

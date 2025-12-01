@@ -30,6 +30,7 @@
 
 // TODO(crbug.com/1172300) Ignored during the jsdoc to ts migration
 /* eslint-disable @typescript-eslint/naming-convention */
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import type {Chrome} from '../../../extension-api/ExtensionAPI.js';
 import * as Common from '../../core/common/common.js';
@@ -375,7 +376,7 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
         case 'f64':
           return {type, value: Number(value)};
         case 'i64':
-          return {type, value: BigInt(value)};
+          return {type, value: BigInt(value.replace(/n$/, ''))};
         case 'v128':
           return {type, value};
         default:
@@ -925,8 +926,18 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
     return harLog;
   }
 
-  private makeResource(contentProvider: TextUtils.ContentProvider.ContentProvider): {url: string, type: string} {
-    return {url: contentProvider.contentURL(), type: contentProvider.contentType().name()};
+  private makeResource(contentProvider: TextUtils.ContentProvider.ContentProvider):
+      {url: string, type: string, buildId?: string} {
+    let buildId: string|undefined = undefined;
+    if (contentProvider instanceof Workspace.UISourceCode.UISourceCode) {
+      // We use the first buildId we find searching in all Script objects that correspond to this UISourceCode.
+      buildId = Bindings.DebuggerWorkspaceBinding.DebuggerWorkspaceBinding.instance()
+                    .scriptsForUISourceCode(contentProvider)
+                    .find(script => Boolean(script.buildId))
+                    ?.buildId ??
+          undefined;
+    }
+    return {url: contentProvider.contentURL(), type: contentProvider.contentType().name(), buildId};
   }
 
   private onGetPageResources(_message: unknown, port: MessagePort): Array<{url: string, type: string}> {
@@ -1156,7 +1167,7 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   private notifyUISourceCodeContentCommitted(
-      event: Common.EventTarget.EventTargetEvent<Workspace.Workspace.WorkingCopyCommitedEvent>): void {
+      event: Common.EventTarget.EventTargetEvent<Workspace.Workspace.WorkingCopyCommittedEvent>): void {
     const {uiSourceCode, content} = event.data;
     this.postNotification(
         PrivateAPI.Events.ResourceContentCommitted, [this.makeResource(uiSourceCode), content],
@@ -1336,7 +1347,7 @@ export class ExtensionServer extends Common.ObjectWrapper.ObjectWrapper<EventTyp
   }
 
   private registerResourceContentCommittedHandler(
-      handler: (arg0: Common.EventTarget.EventTargetEvent<Workspace.Workspace.WorkingCopyCommitedEvent>) => unknown):
+      handler: (arg0: Common.EventTarget.EventTargetEvent<Workspace.Workspace.WorkingCopyCommittedEvent>) => unknown):
       void {
     function addFirstEventListener(this: ExtensionServer): void {
       Workspace.Workspace.WorkspaceImpl.instance().addEventListener(

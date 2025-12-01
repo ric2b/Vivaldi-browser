@@ -12,12 +12,12 @@ bool GetSnapDesktopPathOverride(base::FilePath *path) {
   if (!IsRunningInSnap()) return false;
 
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  std::string realhome;
+  auto realhome = env->GetVar("SNAP_REAL_HOME");
 
-  if (!env->GetVar("SNAP_REAL_HOME", &realhome))
+  if (!realhome.has_value())
     return true;
 
-  *path = base::FilePath(realhome).Append(FILE_PATH_LITERAL("/.local/share/applications"));
+  *path = base::FilePath(realhome.value()).Append(FILE_PATH_LITERAL("/.local/share/applications"));
 
   return true;
 }

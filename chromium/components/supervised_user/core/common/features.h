@@ -7,6 +7,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "build/android_buildflags.h"
 #include "build/build_config.h"
 #include "extensions/buildflags/buildflags.h"
 
@@ -36,32 +37,6 @@ BASE_DECLARE_FEATURE(kLocalWebApprovalsWidgetSupportsUrlPayload);
 // Whether supervised users see an updated URL filter interstitial.
 BASE_DECLARE_FEATURE(kSupervisedUserBlockInterstitialV3);
 
-// Applies the updated extension approval flow, which can skip parent-approvals
-// on extension installations.
-BASE_DECLARE_FEATURE(
-    kEnableSupervisedUserSkipParentApprovalToInstallExtensions);
-
-// Applies new informative strings during the parental extension approval flow.
-BASE_DECLARE_FEATURE(kUpdatedSupervisedUserExtensionApprovalStrings);
-
-#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_WIN)
-BASE_DECLARE_FEATURE(kEnableExtensionsPermissionsForSupervisedUsersOnDesktop);
-#endif
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-// Returns whether a new installation state for supervised users
-// on new extension installations is offered to the Webstore.
-BASE_DECLARE_FEATURE(kExposedParentalControlNeededForExtensionInstallation);
-
-// Returns whether the new mode for extension approval management is enabled.
-// Under this mode, supervised users may request parent approval on each
-// extension installation or the parent allows and approves by default all
-// extension installations.
-// On Win/Linux/Mac enabling the new mode requires that the feature
-// `kEnableExtensionsPermissionsForSupervisedUsersOnDesktop` is also enabled.
-bool IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled();
-#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 // Enable different web sign in interception behaviour for supervised users:
 //
@@ -83,14 +58,6 @@ BASE_DECLARE_FEATURE(kForceSafeSearchForUnauthenticatedSupervisedUsers);
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 // Uses supervised user strings on the signout dialog.
 BASE_DECLARE_FEATURE(kEnableSupervisedUserVersionSignOutDialog);
-
-// Force re-authentication when an unauthenticated supervised user tries to
-// access YouTube, so that content restrictions can be applied.
-BASE_DECLARE_FEATURE(kForceSupervisedUserReauthenticationForYouTube);
-
-// Specifies if infrastructure-related YouTube endpoints should be still
-// reachable even if parental controls related restrict YouTube access.
-BASE_DECLARE_FEATURE(kExemptYouTubeInfrastructureFromBlocking);
 #endif
 
 // Fallback to sending un-credentialed filtering requests for supervised users
@@ -100,6 +67,14 @@ BASE_DECLARE_FEATURE(kUncredentialedFilteringFallbackForSupervisedUsers);
 // Uses PrimaryAccountAccessTokenFetcher::Mode::kWaitUntilAvailable for
 // ClassifyUrl fetches.
 BASE_DECLARE_FEATURE(kWaitUntilAccessTokenAvailableForClassifyUrl);
+
+// Manages kSupervisedUserSafeSites exclusively within managed user pref store,
+// while keeping the default value neutral.
+BASE_DECLARE_FEATURE(kAlignSafeSitesValueWithBrowserDefault);
+
+// Allows reading SafeSites setting without extra supervised user guard. Can be
+// enabled iff kAlignSafeSitesValueWithBrowserDefault is also enabled.
+BASE_DECLARE_FEATURE(kDecoupleSafeSitesFromMainSwitch);
 
 // Returns whether the V3 version of the URL filter interstitial is
 // enabled.

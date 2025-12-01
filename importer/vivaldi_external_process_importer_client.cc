@@ -6,7 +6,7 @@
 #include "importer/vivaldi_profile_import_process_messages.h"
 
 void ExternalProcessImporterClient::OnImportItemFailed(
-    importer::ImportItem import_item,
+    user_data_importer::ImportItem import_item,
     const std::string& error_msg) {
   if (cancelled_)
     return;

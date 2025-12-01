@@ -11,36 +11,49 @@
 #include "test/pc/e2e/analyzer/video/default_video_quality_analyzer.h"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "absl/flags/flag.h"
+#include "absl/strings/string_view.h"
 #include "api/array_view.h"
 #include "api/numerics/samples_stats_counter.h"
+#include "api/rtp_packet_info.h"
 #include "api/test/metrics/metric.h"
+#include "api/test/metrics/metrics_logger.h"
+#include "api/units/data_size.h"
 #include "api/units/time_delta.h"
 #include "api/units/timestamp.h"
+#include "api/video/encoded_image.h"
 #include "api/video/video_frame.h"
+#include "api/video_codecs/video_encoder.h"
 #include "rtc_base/checks.h"
 #include "rtc_base/logging.h"
 #include "rtc_base/strings/string_builder.h"
+#include "rtc_base/synchronization/mutex.h"
 #include "system_wrappers/include/clock.h"
 #include "test/pc/e2e/analyzer/video/default_video_quality_analyzer_frame_in_flight.h"
 #include "test/pc/e2e/analyzer/video/default_video_quality_analyzer_frames_comparator.h"
 #include "test/pc/e2e/analyzer/video/default_video_quality_analyzer_internal_shared_objects.h"
 #include "test/pc/e2e/analyzer/video/default_video_quality_analyzer_shared_objects.h"
 #include "test/pc/e2e/analyzer/video/default_video_quality_analyzer_stream_state.h"
+#include "test/pc/e2e/analyzer/video/names_collection.h"
 #include "test/pc/e2e/metric_metadata_keys.h"
+#include "test/test_flags.h"
 
 namespace webrtc {
 namespace {
 
-using ::webrtc::test::ImprovementDirection;
-using ::webrtc::test::Unit;
-using ::webrtc::webrtc_pc_e2e::MetricMetadataKey;
+using test::ImprovementDirection;
+using test::Unit;
+using webrtc_pc_e2e::MetricMetadataKey;
 
 constexpr int kBitsInByte = 8;
 constexpr absl::string_view kSkipRenderedFrameReasonProcessed = "processed";
@@ -127,7 +140,7 @@ SamplesStatsCounter::StatsSample StatsSample(double value,
 }  // namespace
 
 DefaultVideoQualityAnalyzer::DefaultVideoQualityAnalyzer(
-    webrtc::Clock* clock,
+    Clock* clock,
     test::MetricsLogger* metrics_logger,
     DefaultVideoQualityAnalyzerOptions options)
     : options_(options),
@@ -142,10 +155,9 @@ DefaultVideoQualityAnalyzer::~DefaultVideoQualityAnalyzer() {
   Stop();
 }
 
-void DefaultVideoQualityAnalyzer::Start(
-    std::string test_case_name,
-    rtc::ArrayView<const std::string> peer_names,
-    int max_threads_count) {
+void DefaultVideoQualityAnalyzer::Start(std::string test_case_name,
+                                        ArrayView<const std::string> peer_names,
+                                        int max_threads_count) {
   test_label_ = std::move(test_case_name);
   frames_comparator_.Start(max_threads_count);
   {
@@ -163,7 +175,7 @@ void DefaultVideoQualityAnalyzer::Start(
 uint16_t DefaultVideoQualityAnalyzer::OnFrameCaptured(
     absl::string_view peer_name,
     const std::string& stream_label,
-    const webrtc::VideoFrame& frame) {
+    const VideoFrame& frame) {
   // `next_frame_id` is atomic, so we needn't lock here.
   Timestamp captured_time = Now();
   Timestamp start_time = Timestamp::MinusInfinity();
@@ -276,9 +288,8 @@ uint16_t DefaultVideoQualityAnalyzer::OnFrameCaptured(
   return frame_id;
 }
 
-void DefaultVideoQualityAnalyzer::OnFramePreEncode(
-    absl::string_view peer_name,
-    const webrtc::VideoFrame& frame) {
+void DefaultVideoQualityAnalyzer::OnFramePreEncode(absl::string_view peer_name,
+                                                   const VideoFrame& frame) {
   Timestamp processing_started = Now();
   MutexLock lock(&mutex_);
   RTC_CHECK_EQ(state_, State::kActive)
@@ -311,7 +322,7 @@ void DefaultVideoQualityAnalyzer::OnFramePreEncode(
 void DefaultVideoQualityAnalyzer::OnFrameEncoded(
     absl::string_view peer_name,
     uint16_t frame_id,
-    const webrtc::EncodedImage& encoded_image,
+    const EncodedImage& encoded_image,
     const EncoderStats& stats,
     bool discarded) {
   if (discarded)
@@ -380,14 +391,14 @@ void DefaultVideoQualityAnalyzer::OnFrameEncoded(
 
 void DefaultVideoQualityAnalyzer::OnFrameDropped(
     absl::string_view peer_name,
-    webrtc::EncodedImageCallback::DropReason reason) {
+    EncodedImageCallback::DropReason reason) {
   // Here we do nothing, because we will see this drop on renderer side.
 }
 
 void DefaultVideoQualityAnalyzer::OnFramePreDecode(
     absl::string_view peer_name,
     uint16_t frame_id,
-    const webrtc::EncodedImage& input_image) {
+    const EncodedImage& input_image) {
   Timestamp processing_started = Now();
   MutexLock lock(&mutex_);
   RTC_CHECK_EQ(state_, State::kActive)
@@ -437,10 +448,9 @@ void DefaultVideoQualityAnalyzer::OnFramePreDecode(
   }
 }
 
-void DefaultVideoQualityAnalyzer::OnFrameDecoded(
-    absl::string_view peer_name,
-    const webrtc::VideoFrame& frame,
-    const DecoderStats& stats) {
+void DefaultVideoQualityAnalyzer::OnFrameDecoded(absl::string_view peer_name,
+                                                 const VideoFrame& frame,
+                                                 const DecoderStats& stats) {
   Timestamp processing_started = Now();
   MutexLock lock(&mutex_);
   RTC_CHECK_EQ(state_, State::kActive)
@@ -484,9 +494,8 @@ void DefaultVideoQualityAnalyzer::OnFrameDecoded(
   }
 }
 
-void DefaultVideoQualityAnalyzer::OnFrameRendered(
-    absl::string_view peer_name,
-    const webrtc::VideoFrame& frame) {
+void DefaultVideoQualityAnalyzer::OnFrameRendered(absl::string_view peer_name,
+                                                  const VideoFrame& frame) {
   Timestamp processing_started = Now();
   MutexLock lock(&mutex_);
   RTC_CHECK_EQ(state_, State::kActive)
@@ -587,10 +596,9 @@ void DefaultVideoQualityAnalyzer::OnFrameRendered(
   }
 }
 
-void DefaultVideoQualityAnalyzer::OnEncoderError(
-    absl::string_view peer_name,
-    const webrtc::VideoFrame& frame,
-    int32_t error_code) {
+void DefaultVideoQualityAnalyzer::OnEncoderError(absl::string_view peer_name,
+                                                 const VideoFrame& frame,
+                                                 int32_t error_code) {
   RTC_LOG(LS_ERROR) << "Encoder error for frame.id=" << frame.id()
                     << ", code=" << error_code;
 }
@@ -1078,11 +1086,9 @@ void DefaultVideoQualityAnalyzer::ReportResults() {
     ReportResults(item.first, item.second,
                   stream_frame_counters_.at(item.first));
   }
-  // TODO(bugs.webrtc.org/14757): Remove kExperimentalTestNameMetadataKey.
-  metrics_logger_->LogSingleValueMetric(
-      "cpu_usage_%", test_label_, GetCpuUsagePercent(), Unit::kUnitless,
-      ImprovementDirection::kSmallerIsBetter,
-      {{MetricMetadataKey::kExperimentalTestNameMetadataKey, test_label_}});
+  metrics_logger_->LogSingleValueMetric("cpu_usage_%", test_label_,
+                                        GetCpuUsagePercent(), Unit::kUnitless,
+                                        ImprovementDirection::kSmallerIsBetter);
   LogFrameCounters("Global", frame_counters_);
   if (!unknown_sender_frame_counters_.empty()) {
     RTC_LOG(LS_INFO) << "Received frame counters with unknown frame id:";
@@ -1174,13 +1180,11 @@ void DefaultVideoQualityAnalyzer::ReportResults(
     const FrameCounters& frame_counters) {
   TimeDelta test_duration = Now() - start_time_;
   std::string test_case_name = GetTestCaseName(ToMetricName(key));
-  // TODO(bugs.webrtc.org/14757): Remove kExperimentalTestNameMetadataKey.
   std::map<std::string, std::string> metric_metadata{
       {MetricMetadataKey::kPeerMetadataKey, peers_->name(key.sender)},
       {MetricMetadataKey::kVideoStreamMetadataKey, streams_.name(key.stream)},
       {MetricMetadataKey::kSenderMetadataKey, peers_->name(key.sender)},
-      {MetricMetadataKey::kReceiverMetadataKey, peers_->name(key.receiver)},
-      {MetricMetadataKey::kExperimentalTestNameMetadataKey, test_label_}};
+      {MetricMetadataKey::kReceiverMetadataKey, peers_->name(key.receiver)}};
 
   metrics_logger_->LogMetric(
       "psnr_dB", test_case_name, stats.psnr, Unit::kUnitless,
@@ -1304,7 +1308,10 @@ void DefaultVideoQualityAnalyzer::ReportResults(
 
 std::string DefaultVideoQualityAnalyzer::GetTestCaseName(
     const std::string& stream_label) const {
-  return test_label_ + "/" + stream_label;
+  if (!absl::GetFlag(FLAGS_isolated_script_test_perf_output).empty()) {
+    return test_label_ + "/" + stream_label;
+  }
+  return test_label_;
 }
 
 Timestamp DefaultVideoQualityAnalyzer::Now() {

@@ -56,7 +56,6 @@
 #import "ios/chrome/browser/favicon/model/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
 #import "ios/chrome/browser/first_run/model/first_run.h"
-#import "ios/chrome/browser/first_run/ui_bundled/first_run_util.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_prefs.h"
 #import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_constants.h"
 #import "ios/chrome/browser/reading_list/model/reading_list_model_factory.h"
@@ -70,6 +69,7 @@
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
+#import "ios/chrome/browser/shared/model/utils/first_run_test_util.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -89,12 +89,17 @@
 #import "third_party/ocmock/gtest_support.h"
 
 using set_up_list_prefs::SetUpListItemState;
-using startup_metric_utils::FirstRunSentinelCreationResult;
 
 namespace {
 std::unique_ptr<KeyedService> BuildFeatureEngagementMockTracker(
     web::BrowserState* browser_state) {
-  return std::make_unique<feature_engagement::test::MockTracker>();
+  // Allow ShortcutsMediator to call WouldTriggerHelpUI() without causing log
+  // noise.
+  auto tracker = std::make_unique<feature_engagement::test::MockTracker>();
+  EXPECT_CALL(*tracker, WouldTriggerHelpUI(testing::Ref(
+                            feature_engagement::kIPHWhatsNewUpdatedFeature)))
+      .Times(testing::AnyNumber());
+  return std::move(tracker);
 }
 }  // namespace
 
@@ -150,13 +155,8 @@ std::unique_ptr<KeyedService> BuildFeatureEngagementMockTracker(
     _config = [[MostVisitedTilesConfig alloc] init];
     _config.mostVisitedItems =
         @[ [[ContentSuggestionsMostVisitedItem alloc] init] ];
-    _config.inMagicStack = self.inMagicStack;
   }
   return _config;
-}
-
-- (BOOL)inMagicStack {
-  return ShouldPutMostVisitedSitesInMagicStack(FeedActivityBucket::kNoActivity);
 }
 
 @end
@@ -205,7 +205,6 @@ std::unique_ptr<KeyedService> BuildFeatureEngagementMockTracker(
 
 // Expose -hasReceivedMagicStackResponse for waiting for ranking to return.
 @interface MagicStackRankingModel (Testing) <
-    MostVisitedTilesMediatorDelegate,
     SafetyCheckMagicStackMediatorDelegate,
     TipsMagicStackMediatorDelegate,
     TabResumptionHelperDelegate>
@@ -220,8 +219,6 @@ class MagicStackRankingModelTest : public PlatformTest {
     scoped_command_line_.GetProcessCommandLine()->AppendSwitchASCII(
         segmentation_platform::kEphemeralModuleBackendRankerTestOverride,
         "price_tracking_notification_promo");
-    scoped_feature_list_.InitWithFeaturesAndParameters(
-        {{kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}}}, {});
 
     TestProfileIOS::Builder builder;
     builder.AddTestingFactory(
@@ -294,8 +291,7 @@ class MagicStackRankingModelTest : public PlatformTest {
                  authenticationService:authenticationService
                             sceneState:scene_state_
                  isDefaultSearchEngine:NO
-                   segmentationService:nullptr
-        deviceSwitcherResultDispatcher:nullptr];
+                  priceTrackingEnabled:NO];
     _setUpListMediator.shouldShowSetUpList = YES;
     _tabResumptionMediator = [[FakeTabResumptionMediator alloc]
               initWithLocalState:GetLocalState()
@@ -406,22 +402,14 @@ class MagicStackRankingModelTest : public PlatformTest {
     [_safetyCheckMediator disconnect];
     [_tipsMediator disconnect];
     [_priceTrackingPromoMediator disconnect];
+    ResetFirstRunSentinel();
   }
 
  protected:
   // Clears and re-writes the FirstRun sentinel file, in order to allow Set Up
   // List to display.
   void WriteFirstRunSentinel() {
-    base::ScopedAllowBlockingForTesting allow_blocking;
-    FirstRun::RemoveSentinel();
-    base::File::Error file_error = base::File::FILE_OK;
-    FirstRunSentinelCreationResult sentinel_created =
-        FirstRun::CreateSentinel(&file_error);
-    ASSERT_EQ(sentinel_created, FirstRunSentinelCreationResult::kSuccess)
-        << "Error creating FirstRun sentinel: "
-        << base::File::ErrorToString(file_error);
-    FirstRun::LoadSentinelInfo();
-    FirstRun::ClearStateForTesting();
+    ForceFirstRunRecency(1);
     EXPECT_FALSE(set_up_list_prefs::IsSetUpListDisabled(profile_->GetPrefs()));
     EXPECT_FALSE(FirstRun::IsChromeFirstRun());
     EXPECT_TRUE(set_up_list_utils::IsSetUpListActive(GetLocalState(),
@@ -521,11 +509,6 @@ TEST_F(MagicStackRankingModelTest, TestModuleClickIndexMetric) {
                                ContentSuggestionsModuleType::kSetUpListSync];
   histogram_tester_->ExpectUniqueSample("IOS.MagicStack.Module.Click.SetUpList",
                                         0, 1);
-
-  [_magicStackRankingModel logMagicStackEngagementForType:
-                               ContentSuggestionsModuleType::kMostVisited];
-  histogram_tester_->ExpectUniqueSample(
-      "IOS.MagicStack.Module.Click.MostVisited", 1, 1);
 }
 
 // Test that the ranking model passed an expected list of module configs in
@@ -541,7 +524,7 @@ TEST_F(MagicStackRankingModelTest, TestModelDidGetLatestRankingOrder) {
         base::RunLoop().RunUntilIdle();
         return [delegate_.rank count] > 0;
       }));
-  NSArray* expectedModuleRank = @[ @(5), @(0), @(1), @(10) ];
+  NSArray* expectedModuleRank = @[ @(5), @(1), @(10) ];
   EXPECT_EQ([delegate_.rank count], [expectedModuleRank count]);
   for (NSUInteger i = 0; i < [expectedModuleRank count]; i++) {
     MagicStackModule* config = delegate_.rank[i];
@@ -564,46 +547,8 @@ TEST_F(MagicStackRankingModelTest, TestFeatureInsertCalls) {
       }));
 
   [_magicStackRankingModel tabResumptionHelperDidReceiveItem];
-  EXPECT_EQ(delegate_.lastInsertionIndex, 3u);
+  EXPECT_EQ(delegate_.lastInsertionIndex, 2u);
   EXPECT_EQ(delegate_.lastInsertedItem, _tabResumptionMediator.itemConfig);
-}
-
-// Test the TestMostVisitedTilesMediatorDelegate API implementations in
-// MagicStackRankingModel.
-TEST_F(MagicStackRankingModelTest, TestMostVisitedTilesMediatorDelegate) {
-  scoped_feature_list_.Reset();
-  scoped_feature_list_.InitWithFeaturesAndParameters(
-      {{kMagicStack, {{kMagicStackMostVisitedModuleParam, "true"}}}}, {});
-
-  // Assert that delegate API isn't called if rank has not been received yet.
-  id mockDelegate =
-      OCMStrictProtocolMock(@protocol(MagicStackRankingModelDelegate));
-  _magicStackRankingModel.delegate = mockDelegate;
-  [_magicStackRankingModel didReceiveInitialMostVistedTiles];
-  [_magicStackRankingModel removeMostVisitedTilesModule];
-  EXPECT_OCMOCK_VERIFY(mockDelegate);
-
-  FakeMagicStackRankingModelDelegate* fakeDelegate =
-      [[FakeMagicStackRankingModelDelegate alloc] init];
-  _magicStackRankingModel.delegate = fakeDelegate;
-  [_magicStackRankingModel fetchLatestMagicStackRanking];
-  EXPECT_TRUE(base::test::ios::WaitUntilConditionOrTimeout(
-      TestTimeouts::action_timeout(), true, ^bool() {
-        base::RunLoop().RunUntilIdle();
-        return [fakeDelegate.rank count] > 0;
-      }));
-
-  _magicStackRankingModel.delegate = mockDelegate;
-  OCMExpect([mockDelegate magicStackRankingModel:[OCMArg any]
-                                   didInsertItem:[OCMArg any]
-                                         atIndex:1]);
-  [_magicStackRankingModel didReceiveInitialMostVistedTiles];
-  OCMExpect([mockDelegate magicStackRankingModel:[OCMArg any]
-                                   didRemoveItem:[OCMArg any]
-                                         animate:[OCMArg any]
-                                  withCompletion:[OCMArg any]]);
-  [_magicStackRankingModel removeMostVisitedTilesModule];
-  EXPECT_OCMOCK_VERIFY(mockDelegate);
 }
 
 // Verifies that the ranking model correctly emits removal signals to its

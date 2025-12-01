@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/data_sharing/collaboration_controller_delegate_desktop.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/collaboration/collaboration_service_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/signin/signin_ui_util.h"
@@ -47,6 +48,12 @@ DialogText GetPromptDialogTextFromStatus(
       title_id = IDS_DATA_SHARING_NEED_SIGN_IN;
       body_id = IDS_DATA_SHARING_NEED_SIGN_IN_BODY;
       ok_button_text_id = IDS_DATA_SHARING_NEED_SIGN_IN_CONTINUE_BUTTON;
+      valid = true;
+      break;
+    case collaboration::SigninStatus::kSigninDisabled:
+      title_id = IDS_DATA_SHARING_SIGNED_OUT;
+      body_id = IDS_DATA_SHARING_SIGNED_OUT_BODY;
+      ok_button_text_id = IDS_DATA_SHARING_SETTINGS;
       valid = true;
       break;
     case collaboration::SigninStatus::kSignedInPaused:
@@ -123,7 +130,7 @@ void CollaborationControllerDelegateDesktop::ShowError(const ErrorInfo& error,
     return;
   }
 
-  ShowErrorDialog();
+  ShowErrorDialog(error);
   error_ui_callback_ = std::move(result);
 }
 
@@ -155,9 +162,9 @@ void CollaborationControllerDelegateDesktop::ShowJoinDialog(
   controller->SetOnCloseCallback(base::BindOnce(
       &CollaborationControllerDelegateDesktop::OnJoinDialogClosing,
       weak_ptr_factory_.GetWeakPtr(), std::move(result)));
-  controller->SetShowErrorDialogCallback(
-      base::BindOnce(&CollaborationControllerDelegateDesktop::ShowErrorDialog,
-                     weak_ptr_factory_.GetWeakPtr()));
+  controller->SetShowErrorDialogCallback(base::BindOnce(
+      &CollaborationControllerDelegateDesktop::ShowErrorDialog,
+      weak_ptr_factory_.GetWeakPtr(), ErrorInfo(ErrorInfo::Type::kUnknown)));
 
   data_sharing::RequestInfo request_info(token, data_sharing::FlowType::kJoin);
   controller->Show(request_info);
@@ -237,6 +244,18 @@ void CollaborationControllerDelegateDesktop::ShowManageDialog(
   controller->Show(*request_info);
 }
 
+void CollaborationControllerDelegateDesktop::ShowLeaveDialog(
+    const tab_groups::EitherGroupID& either_id,
+    ResultCallback result) {
+  ShowManageDialog(either_id, std::move(result));
+}
+
+void CollaborationControllerDelegateDesktop::ShowDeleteDialog(
+    const tab_groups::EitherGroupID& either_id,
+    ResultCallback result) {
+  ShowManageDialog(either_id, std::move(result));
+}
+
 void CollaborationControllerDelegateDesktop::PromoteTabGroup(
     const data_sharing::GroupId& group_id,
     ResultCallback result) {
@@ -308,9 +327,14 @@ void CollaborationControllerDelegateDesktop::OnJoinDialogClosing(
     std::optional<data_sharing::mojom::GroupActionProgress> progress) {
   // Joins flow should end when the shared tab group is open after join
   // or cancel without joining.
-  // TODO(crbug.org/380287432): Only cancel the flow if user doesn't join the
-  // group.
-  std::move(result).Run(CollaborationControllerDelegate::Outcome::kCancel);
+  CollaborationControllerDelegate::Outcome outcome =
+      CollaborationControllerDelegate::Outcome::kCancel;
+  if (action == data_sharing::mojom::GroupAction::kJoinGroup &&
+      progress == data_sharing::mojom::GroupActionProgress::kSuccess) {
+    outcome = CollaborationControllerDelegate::Outcome::kSuccess;
+  }
+
+  std::move(result).Run(outcome);
 }
 
 void CollaborationControllerDelegateDesktop::OnManageDialogClosing(
@@ -321,23 +345,23 @@ void CollaborationControllerDelegateDesktop::OnManageDialogClosing(
        action == data_sharing::mojom::GroupAction::kDeleteGroup) &&
       progress == data_sharing::mojom::GroupActionProgress::kSuccess) {
     std::move(result).Run(
-        CollaborationControllerDelegate::Outcome::kDeleteOrLeaveGroup);
+        CollaborationControllerDelegate::Outcome::kGroupLeftOrDeleted);
   } else {
-    std::move(result).Run(CollaborationControllerDelegate::Outcome::kSuccess);
+    std::move(result).Run(CollaborationControllerDelegate::Outcome::kCancel);
   }
 }
 
-void CollaborationControllerDelegateDesktop::ShowErrorDialog() {
+void CollaborationControllerDelegateDesktop::ShowErrorDialog(
+    const ErrorInfo& error) {
   if (error_dialog_widget_) {
     return;
   }
 
-  // TODO(crbug.com/366057481): Show more detail errors based on ErrorInfo.
   std::unique_ptr<ui::DialogModel> dialog_model =
       ui::DialogModel::Builder()
-          .SetTitle(l10n_util::GetStringUTF16(IDS_DATA_SHARING_SOMETHING_WRONG))
-          .AddParagraph(ui::DialogModelLabel(
-              l10n_util::GetStringUTF16(IDS_DATA_SHARING_SOMETHING_WRONG_BODY)))
+          .SetTitle(base::UTF8ToUTF16(error.error_header))
+          .AddParagraph(
+              ui::DialogModelLabel(base::UTF8ToUTF16(error.error_body)))
           .AddOkButton(
               base::BindOnce(
                   &CollaborationControllerDelegateDesktop::OnErrorDialogOk,
@@ -366,6 +390,9 @@ void CollaborationControllerDelegateDesktop::MaybeShowSignInAndSyncUi() {
     case collaboration::SigninStatus::kNotSignedIn:
       ShowSignInAndSyncUi(profile);
       break;
+    case collaboration::SigninStatus::kSigninDisabled:
+      chrome::ShowSettingsSubPage(browser_, chrome::kSyncSetupSubPage);
+      break;
     case collaboration::SigninStatus::kSignedInPaused:
       signin_ui_util::ShowReauthForAccount(
           profile, GetAccountInfoFromProfile(profile).email,
@@ -377,7 +404,8 @@ void CollaborationControllerDelegateDesktop::MaybeShowSignInAndSyncUi() {
           ShowSignInAndSyncUi(profile);
           break;
         case collaboration::SyncStatus::kSyncWithoutTabGroup:
-          chrome::ShowSettingsSubPage(browser_, chrome::kSyncSetupSubPage);
+          chrome::ShowSettingsSubPage(browser_,
+                                      chrome::kSyncSetupAdvancedSubPage);
           break;
         case collaboration::SyncStatus::kSyncEnabled:
           NOTREACHED();

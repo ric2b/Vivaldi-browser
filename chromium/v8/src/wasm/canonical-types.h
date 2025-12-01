@@ -9,16 +9,18 @@
 #error This header should only be included if WebAssembly is enabled.
 #endif  // !V8_ENABLE_WEBASSEMBLY
 
-#include <unordered_map>
+#include <unordered_set>
 
 #include "src/base/bounds.h"
 #include "src/base/hashing.h"
+#include "src/base/platform/mutex.h"
+#include "src/wasm/struct-types.h"
 #include "src/wasm/value-type.h"
-#include "src/wasm/wasm-module.h"
 
 namespace v8::internal::wasm {
 
 class CanonicalTypeNamesProvider;
+struct WasmModule;
 
 // We use ValueType instances constructed from canonical type indices, so we
 // can't let them get bigger than what we have storage space for.
@@ -113,6 +115,7 @@ class TypeCanonicalizer {
   V8_EXPORT_PRIVATE bool IsFunctionSignature(CanonicalTypeIndex index) const;
   V8_EXPORT_PRIVATE bool IsStruct(CanonicalTypeIndex index) const;
   V8_EXPORT_PRIVATE bool IsArray(CanonicalTypeIndex index) const;
+  V8_EXPORT_PRIVATE bool IsShared(CanonicalTypeIndex index) const;
 
   bool IsHeapSubtype(CanonicalTypeIndex sub, CanonicalTypeIndex super) const;
   bool IsCanonicalSubtype_Locked(CanonicalTypeIndex sub_index,
@@ -356,7 +359,8 @@ class TypeCanonicalizer {
       const bool indexed = type1.has_index();
       if (indexed != type2.has_index()) return false;
       if (indexed) {
-        return EqualTypeIndex(type1.ref_index(), type2.ref_index());
+        return type1.is_equal_except_index(type2) &&
+               EqualTypeIndex(type1.ref_index(), type2.ref_index());
       }
       return type1 == type2;
     }

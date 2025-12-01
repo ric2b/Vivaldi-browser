@@ -11,6 +11,7 @@
 #include "base/location.h"
 #include "base/memory/raw_ref.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/notimplemented.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/task_traits.h"
@@ -20,6 +21,7 @@
 #include "services/webnn/buildflags.h"
 #include "services/webnn/error.h"
 #include "services/webnn/public/cpp/webnn_trace.h"
+#include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom.h"
 #include "services/webnn/public/mojom/webnn_error.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
@@ -107,7 +109,7 @@ class GraphImplTflite::ComputeResources {
   Create(WebNNContextImpl* context,
          flatbuffers::DetachedBuffer buffer,
          std::vector<uint8_t> buffer_data,
-         const base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>&
+         const base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>&
              constant_operands,
          bool graph_requires_fp32_precision) {
     auto self = std::make_unique<ComputeResources>();
@@ -283,15 +285,18 @@ class GraphImplTflite::ComputeResources {
 // static
 base::expected<std::unique_ptr<GraphImplTflite>, mojom::ErrorPtr>
 GraphImplTflite::CreateAndBuild(
+    mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
     mojom::GraphInfoPtr graph_info,
     ComputeResourceInfo compute_resource_info,
-    base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+    base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
         constant_operands,
+    base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
     ContextImplTflite* context) {
   ASSIGN_OR_RETURN(GraphBuilderTflite::Result result,
                    GraphBuilderTflite::CreateAndBuild(
                        context->properties(), *graph_info, constant_operands,
-                       compute_resource_info.operand_to_dependent_operations),
+                       compute_resource_info.operand_to_dependent_operations,
+                       compute_resource_info.operand_to_producing_operation),
                    [](std::string error) {
                      return mojom::Error::New(
                          mojom::Error::Code::kNotSupportedError,
@@ -303,33 +308,39 @@ GraphImplTflite::CreateAndBuild(
       ComputeResources::Create(context, std::move(result.buffer),
                                std::move(result.buffer_data), constant_operands,
                                result.graph_requires_fp32_precision));
-
+  // TODO(crbug.com/418031018): Get devices that will be used for dispatch.
   auto compute_resources_state =
       base::MakeRefCounted<QueueableResourceState<ComputeResources>>(
           std::move(compute_resources));
   return base::WrapUnique(new GraphImplTflite(
-      std::move(compute_resource_info), std::move(result.input_name_to_index),
+      std::move(receiver), std::move(compute_resource_info),
+      std::move(result.input_name_to_index),
       std::move(result.output_name_to_index),
-      std::move(compute_resources_state), context));
+      std::move(compute_resources_state), context, /*devices=*/{}));
 }
 
 GraphImplTflite::~GraphImplTflite() = default;
 
 GraphImplTflite::GraphImplTflite(
+    mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
     ComputeResourceInfo compute_resource_info,
     base::flat_map<std::string, int> input_name_to_index,
     base::flat_map<std::string, int> output_name_to_index,
     scoped_refptr<QueueableResourceState<ComputeResources>>
         compute_resources_state,
-    ContextImplTflite* context)
-    : WebNNGraphImpl(context, std::move(compute_resource_info)),
+    ContextImplTflite* context,
+    std::vector<mojom::Device> devices)
+    : WebNNGraphImpl(std::move(receiver),
+                     context,
+                     std::move(compute_resource_info),
+                     std::move(devices)),
       compute_resources_state_(std::move(compute_resources_state)),
       input_name_to_index_(std::move(input_name_to_index)),
       output_name_to_index_(std::move(output_name_to_index)) {}
 
 void GraphImplTflite::DispatchImpl(
-    const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
-    const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs) {
+    const base::flat_map<std::string, WebNNTensorImpl*> named_inputs,
+    const base::flat_map<std::string, WebNNTensorImpl*> named_outputs) {
   ScopedTrace scoped_trace("GraphImplTflite::DispatchImpl");
 
   std::vector<

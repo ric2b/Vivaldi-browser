@@ -9,12 +9,15 @@ import type {ChromeUrlsAppElement} from './app.js';
 export function getHtml(this: ChromeUrlsAppElement) {
   // clang-format off
   return html`
-<h2>List of Chrome URLs</h2>
+<h2>List of Vivaldi URLs</h2>
 <ul>
   ${this.webuiUrlInfos_.map(info => html`
-    ${info.enabled ?
-      html`<li><a href="${info.url.url}">${info.url.url}</a></li>` :
-      html`<li>${info.url.url}</li>`
+    ${this.isChromeUrlsUrl_(info) ?
+      html`<li><a href="#">chrome://chrome-urls</a></li>` :
+      html`${info.enabled ?
+        html`<li><a href="${info.url.url}">${info.url.url}</a></li>` :
+        html`<li>${info.url.url}</li>`
+      }`
     }`)}
 </ul>
 ${this.internalUrlInfos_.length ? html`

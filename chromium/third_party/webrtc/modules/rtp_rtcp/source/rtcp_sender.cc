@@ -22,6 +22,7 @@
 
 #include "absl/strings/string_view.h"
 #include "api/array_view.h"
+#include "api/call/transport.h"
 #include "api/environment/environment.h"
 #include "api/rtc_event_log/rtc_event_log.h"
 #include "api/rtp_headers.h"
@@ -90,7 +91,7 @@ class RTCPSender::PacketSender {
   // Sends pending rtcp packet.
   void Send() {
     if (index_ > 0) {
-      callback_(rtc::ArrayView<const uint8_t>(buffer_, index_));
+      callback_(ArrayView<const uint8_t>(buffer_, index_));
       index_ = 0;
     }
   }
@@ -237,8 +238,8 @@ int32_t RTCPSender::SendLossNotification(const FeedbackState& feedback_state,
                                          bool decodability_flag,
                                          bool buffering_allowed) {
   int32_t error_code = -1;
-  auto callback = [&](rtc::ArrayView<const uint8_t> packet) {
-    transport_->SendRtcp(packet);
+  auto callback = [&](ArrayView<const uint8_t> packet) {
+    transport_->SendRtcp(packet, /*packet_options=*/{});
     error_code = 0;
     env_.event_log().Log(std::make_unique<RtcEventRtcpPacketOutgoing>(packet));
   };
@@ -595,8 +596,8 @@ int32_t RTCPSender::SendRTCP(const FeedbackState& feedback_state,
                              int32_t nack_size,
                              const uint16_t* nack_list) {
   int32_t error_code = -1;
-  auto callback = [&](rtc::ArrayView<const uint8_t> packet) {
-    if (transport_->SendRtcp(packet)) {
+  auto callback = [&](ArrayView<const uint8_t> packet) {
+    if (transport_->SendRtcp(packet, /*packet_options=*/{})) {
       error_code = 0;
       env_.event_log().Log(
           std::make_unique<RtcEventRtcpPacketOutgoing>(packet));
@@ -893,8 +894,8 @@ void RTCPSender::SendCombinedRtcpPacket(
     ssrc = ssrc_;
   }
   RTC_DCHECK_LE(max_packet_size, IP_PACKET_SIZE);
-  auto callback = [&](rtc::ArrayView<const uint8_t> packet) {
-    if (transport_->SendRtcp(packet)) {
+  auto callback = [&](ArrayView<const uint8_t> packet) {
+    if (transport_->SendRtcp(packet, /*packet_options=*/{})) {
       env_.event_log().Log(
           std::make_unique<RtcEventRtcpPacketOutgoing>(packet));
     }

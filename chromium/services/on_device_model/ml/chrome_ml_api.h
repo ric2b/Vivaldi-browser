@@ -9,6 +9,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "services/on_device_model/ml/chrome_ml_types.h"
 #include "third_party/dawn/include/dawn/dawn_proc_table.h"
@@ -45,6 +46,8 @@ using ChromeMLCancel = uintptr_t;
 using ChromeMLTSModel = uintptr_t;
 // Opaque handle to a video-frame-specific ML inference engine.
 using ChromeMLInferenceEngine = uintptr_t;
+// Opaque handle to a constraint object.
+using ChromeMLConstraint = uintptr_t;
 
 // A contiguous byte span.
 struct ChromeMLByteSpan {
@@ -61,6 +64,10 @@ struct ChromeMLModelData {
   // A unique ID to identify `weights_file`s which point to the same data.
   // Matching `file_id` tells the backend that the data also matches.
   std::optional<uint32_t> file_id;
+
+  // File holding the weight cache. The file will be owned by the inference
+  // library and closed upon model destruction.
+  PlatformFile cache_file;
 
   // Null-terminated model path pointing to the model to use. Only kApuBackend
   // provides this field. Other backends provide model through the
@@ -128,24 +135,26 @@ struct ChromeMLAdaptationDescriptor {
 };
 
 // A status value included with each output chunk.
-enum class ChromeMLExecutionStatus {
-  // Model execution is still in progress and more outputs should be expected.
+enum class ChromeMLGenerateStatus {
+  // Generation is still in progress and more outputs should be expected.
   kInProgress,
 
-  // Model execution either completed normally or was cancelled. This is the
+  // Generation either completed normally or was cancelled. This is the
   // last output.
   kComplete,
 };
+using ChromeMLExecutionStatus = ChromeMLGenerateStatus;
 
-// Structure conveying sequential output from an in-progress model execution.
-struct ChromeMLExecutionOutput {
-  // Status of this model execution.
-  ChromeMLExecutionStatus status;
+// Structure conveying sequential output from an in-progress generation.
+struct ChromeMLGenerateOutput {
+  // Status of this generation.
+  ChromeMLGenerateStatus status;
 
   // Null-terminated text content for this output chunk, or null if there is no
   // new text output.
   const char* text;
 };
+using ChromeMLExecutionOutput = ChromeMLGenerateOutput;
 
 struct ChromeMLTSModelDescriptor {
   ChromeMLByteSpan model;
@@ -174,14 +183,14 @@ enum class ChromeMLSafetyResult {
 // and output when called. This is safe to call on any thread.
 using ChromeMLCancelFn = std::function<void()>;
 
-// Receives tokens an other information from a call to ExecuteModel(). This will
-// be called on the internal thread executing the model. May be multiple times,
-// and the final invocation will be indicated by the `status` field within
-// `output`. Note that `output` and any pointer fields therein are only valid
-// through the extent of the function invocation and must not be retained by
-// the callee.
-using ChromeMLExecutionOutputFn =
-    std::function<void(const ChromeMLExecutionOutput* output)>;
+// Receives tokens an other information from a call to Generate(). This will
+// be called on the internal thread holding the model. May be called multiple
+// times; the final invocation will have output->status == kComplete. Note that
+// `output` and any pointer fields therein are only valid through the extent of
+// the function invocation and must not be retained by the callee.
+using ChromeMLGenerateOutputFn =
+    std::function<void(const ChromeMLGenerateOutput* output)>;
+using ChromeMLExecutionOutputFn = ChromeMLGenerateOutputFn;
 
 // Called with the number of tokens processed after a call to RunModel()
 // which has the kSave ContextMode set. This will be called on the internal
@@ -196,10 +205,39 @@ using ChromeMLSizeInTokensFn = std::function<void(int)>;
 // This will be called on the internal thread executing the model.
 using ChromeMLScoreFn = std::function<void(float)>;
 
+// Called with a vector of probability scores after a call to
+// GetProbabilitiesBlocking().
+using ChromeMLGetProbabilitiesBlockingFn =
+    std::function<void(const std::vector<float>&)>;
+
+// Arguments to SessionAppend().
+struct ChromeMLAppendOptions {
+  // The content to append to the context.
+  // Points to the first element of a list of `input_size`.
+  const ml::InputPiece* input;
+  // Number of pieces in input.
+  size_t input_size;
+  // The maximum number of tokens to add to the context.
+  uint32_t max_tokens;
+  // How to return the result on completion.
+  const ChromeMLContextSavedFn* context_saved_fn;
+};
+
+// Arguments to SessionGenerate()
+struct ChromeMLGenerateOptions {
+  // Stop once this amount of tokens has been generated.
+  uint32_t max_output_tokens;
+  // A constraint to apply on the output. Ownership of this object is passed to
+  // the callee.
+  ChromeMLConstraint constraint;
+  // How to return the generated tokens.
+  const ChromeMLGenerateOutputFn* output_fn;
+};
+
+// DEPRECATED, migrating to Append/Generate.
 struct ChromeMLExecuteOptions {
   int context_mode;
   uint32_t max_tokens;
-  uint32_t token_offset;
   uint32_t max_output_tokens;
   const ChromeMLContextSavedFn* context_saved_fn;
   const ChromeMLExecutionOutputFn* execution_output_fn;
@@ -208,6 +246,10 @@ struct ChromeMLExecuteOptions {
 
   const ml::InputPiece* input;
   size_t input_size;
+
+  // A constraint to apply on the output. Ownership of this object is passed to
+  // the callee.
+  ChromeMLConstraint constraint;
 };
 
 // Performance data filled out by GetEstimatedPerformance().
@@ -251,7 +293,74 @@ struct ChromeMLMetricsFns {
                                       int min,
                                       int exclusive_max,
                                       size_t buckets);
+
+  // Logs a sample for timings up to 3 minutes.
+  void (*RecordMediumTimesHistogram)(const char* name, int64_t milliseconds);
 };
+
+// Represents a bitmask when generating a constraint.
+struct ChromeMLConstraintMask {
+  // Mask containing one bit per vocab token.
+  const uint32_t* sample_mask;
+  // Whether the sequence should stop.
+  bool is_stop;
+};
+
+struct ChromeMLConstraintFns {
+  // Delete the constraint.
+  void (*Delete)(ChromeMLConstraint constraint);
+
+  // Computes the mask to use for generating the next token.
+  bool (*ComputeMask)(ChromeMLConstraint constraint,
+                      ChromeMLConstraintMask& mask);
+
+  // Commits the specified token to the constraint.
+  bool (*CommitToken)(ChromeMLConstraint constraint, uint32_t token);
+
+  // Returns true if the sequence cannot be extended any further.
+  bool (*IsStopped)(ChromeMLConstraint constraint);
+
+  // Gets the last error on this constraint or null for no error. The returned
+  // string will be valid until the next call on this constraint.
+  const char* (*GetError)(ChromeMLConstraint constraint);
+
+  // Clones the constraint and associated state.
+  ChromeMLConstraint (*Clone)(ChromeMLConstraint constraint);
+};
+
+// Tokenizes `bytes` and outputs into `output_tokens` at most
+// `output_tokens_len`. Returns the total number of tokens in `bytes`.
+using ChromeMLTokenizeFn = size_t (*)(const void* user_data,
+                                      const uint8_t* bytes,
+                                      size_t bytes_len,
+                                      uint32_t* output_tokens,
+                                      size_t output_tokens_len);
+
+struct ChromeMLTokenizerParams {
+  // The size of the token vocabulary from the LLM.
+  uint32_t vocab_size;
+
+  // The End of Sequence (EOS) token ID from the LLM.
+  uint32_t eos_token_id;
+
+  // An array of the lengths of the token strings (vocab_size elements).
+  const uint32_t* token_lens;
+
+  // A pointer to the token strings. The length of this is the sum of all
+  // lengths from elements of token_lens.
+  const uint8_t* token_bytes;
+
+  // Instead of passing token_lens and token_bytes, this can be set to model's
+  // tokenizer.json file content.
+  const char* tokenizer_json_file_content;
+
+  // Function for tokenizing a string. Will be passed `tokenize_user_data`.
+  ChromeMLTokenizeFn tokenize_fn;
+  const void* tokenize_user_data;
+};
+
+using ChromeMLGetTokenizerParamsFn =
+    std::function<void(const ChromeMLTokenizerParams&)>;
 
 // Precision used by the gpu delegate during inference.
 enum class GpuDelegatePrecision { kFp16, kFp32 };
@@ -354,6 +463,19 @@ struct ChromeMLAPI {
                                       uintptr_t context,
                                       ChromeMLScheduleFn schedule);
 
+  // Appends input to the Session's context.
+  // May be cancelled by calling CancelExecuteModel on cancel.
+  bool (*SessionAppend)(ChromeMLSession session,
+                        const ChromeMLAppendOptions* options,
+                        ChromeMLCancel cancel);
+
+  // Requests output to be generated by the model, appending it in the context.
+  // May be cancelled by calling CancelExecuteModel on cancel.
+  bool (*SessionGenerate)(ChromeMLSession session,
+                          const ChromeMLGenerateOptions* options,
+                          ChromeMLCancel cancel);
+
+  // DEPRECATED, migrating to Append/Generate.
   // Executes a model given the input `options.input`. Results are fed
   // incrementally to `options.execution_output_fn`. Execution may be cancelled
   // by calling CancelExecuteModel on `cancel`.
@@ -377,6 +499,13 @@ struct ChromeMLAPI {
                        const std::string& text,
                        const ChromeMLScoreFn& fn);
 
+  // Get the probabilities of a batch of tokens.
+  // Note that this is a blocking call, and mainly used for testing purpose.
+  void (*SessionGetProbabilitiesBlocking)(
+      ChromeMLSession session,
+      const std::string& input,
+      const ChromeMLGetProbabilitiesBlockingFn& fn);
+
   // Create a new session in the model, optionally loading adaptation data.
   ChromeMLSession (*CreateSession)(
       ChromeMLModel model,
@@ -391,6 +520,13 @@ struct ChromeMLAPI {
   ChromeMLCancel (*CreateCancel)();
   void (*DestroyCancel)(ChromeMLCancel cancel);
   void (*CancelExecuteModel)(ChromeMLCancel cancel);
+
+  // Sets constraint functions to be used in the shared library.
+  void (*SetConstraintFns)(const ChromeMLConstraintFns* fns);
+
+  // Gets parameters needed to construct a tokenizer.
+  bool (*GetTokenizerParams)(ChromeMLModel model,
+                             const ChromeMLGetTokenizerParamsFn& fn);
 
   // Create new instance of ML inference engine, using the passed in `device`.
   // `model_blob` should contain a binary blob of a TFLite model (read from

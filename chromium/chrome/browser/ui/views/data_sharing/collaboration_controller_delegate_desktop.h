@@ -50,6 +50,10 @@ class CollaborationControllerDelegateDesktop
                          ResultCallback result) override;
   void ShowManageDialog(const tab_groups::EitherGroupID& either_id,
                         ResultCallback result) override;
+  void ShowLeaveDialog(const tab_groups::EitherGroupID& either_id,
+                       ResultCallback result) override;
+  void ShowDeleteDialog(const tab_groups::EitherGroupID& either_id,
+                        ResultCallback result) override;
   void PromoteTabGroup(const data_sharing::GroupId& group_id,
                        ResultCallback result) override;
   void PromoteCurrentScreen() override;
@@ -80,7 +84,7 @@ class CollaborationControllerDelegateDesktop
       std::optional<data_sharing::mojom::GroupAction> action,
       std::optional<data_sharing::mojom::GroupActionProgress> progress);
 
-  void ShowErrorDialog();
+  void ShowErrorDialog(const ErrorInfo& error);
   void MaybeShowSignInAndSyncUi();
   void MaybeShowSignInOrSyncPromptDialog();
   void OnPromptDialogOk();

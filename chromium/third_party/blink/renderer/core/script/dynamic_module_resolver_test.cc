@@ -96,6 +96,7 @@ class DynamicModuleResolverTestModulator final : public DummyModulator {
                  const ScriptFetchOptions&,
                  ModuleScriptCustomFetchType custom_fetch_type,
                  ModuleTreeClient* client,
+                 ModuleImportPhase import_phase,
                  String) final {
     EXPECT_EQ(expected_fetch_tree_url_, url);
     EXPECT_EQ(expected_fetch_tree_module_type_, module_type);
@@ -111,7 +112,7 @@ class DynamicModuleResolverTestModulator final : public DummyModulator {
   Member<ScriptState> script_state_;
   Member<ModuleTreeClient> pending_client_;
   KURL expected_fetch_tree_url_;
-  ModuleType expected_fetch_tree_module_type_ = ModuleType::kJavaScript;
+  ModuleType expected_fetch_tree_module_type_ = ModuleType::kJavaScriptOrWasm;
   bool fetch_tree_was_called_ = false;
 };
 

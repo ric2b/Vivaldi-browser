@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
+#include "third_party/blink/renderer/core/animation/underlying_value_owner.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value_mappings.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
@@ -138,7 +139,7 @@ InterpolationValue CSSOverlayInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSOverlayInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState*,
+    const StyleResolverState&,
     ConversionCheckers& conversion_checkers) const {
   const auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
   if (!identifier_value) {
@@ -182,7 +183,7 @@ void CSSOverlayInterpolationType::Composite(
     double underlying_fraction,
     const InterpolationValue& value,
     double interpolation_fraction) const {
-  underlying_value_owner.Set(*this, value);
+  underlying_value_owner.Set(this, value);
 }
 
 void CSSOverlayInterpolationType::ApplyStandardPropertyValue(

@@ -78,8 +78,9 @@ class FPDF_FileAccessContext final : public IFX_SeekableReadStream {
 
   bool ReadBlockAtOffset(pdfium::span<uint8_t> buffer,
                          FX_FILESIZE offset) override {
-    if (buffer.empty() || offset < 0)
+    if (buffer.empty() || offset < 0) {
       return false;
+    }
 
     if (!pdfium::IsValueInRangeForNumericType<FX_FILESIZE>(buffer.size())) {
       return false;
@@ -105,19 +106,19 @@ class FPDF_FileAccessContext final : public IFX_SeekableReadStream {
 class FPDF_DownloadHintsContext final : public CPDF_DataAvail::DownloadHints {
  public:
   explicit FPDF_DownloadHintsContext(FX_DOWNLOADHINTS* pDownloadHints)
-      : m_pDownloadHints(pDownloadHints) {}
+      : download_hints_(pDownloadHints) {}
   ~FPDF_DownloadHintsContext() override = default;
 
   // IFX_DownloadHints
   void AddSegment(FX_FILESIZE offset, size_t size) override {
-    if (m_pDownloadHints) {
-      m_pDownloadHints->AddSegment(m_pDownloadHints,
-                                   static_cast<size_t>(offset), size);
+    if (download_hints_) {
+      download_hints_->AddSegment(download_hints_, static_cast<size_t>(offset),
+                                  size);
     }
   }
 
  private:
-  UnownedPtr<FX_DOWNLOADHINTS> m_pDownloadHints;
+  UnownedPtr<FX_DOWNLOADHINTS> download_hints_;
 };
 
 class FPDF_AvailContext {
@@ -163,8 +164,9 @@ FPDF_EXPORT void FPDF_CALLCONV FPDFAvail_Destroy(FPDF_AVAIL avail) {
 FPDF_EXPORT int FPDF_CALLCONV FPDFAvail_IsDocAvail(FPDF_AVAIL avail,
                                                    FX_DOWNLOADHINTS* hints) {
   auto* avail_context = FPDFAvailContextFromFPDFAvail(avail);
-  if (!avail_context)
+  if (!avail_context) {
     return PDF_DATA_ERROR;
+  }
   FPDF_DownloadHintsContext hints_context(hints);
   return avail_context->data_avail()->IsDocAvail(&hints_context);
 }
@@ -197,10 +199,12 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFAvail_IsPageAvail(FPDF_AVAIL avail,
                                                     int page_index,
                                                     FX_DOWNLOADHINTS* hints) {
   auto* avail_context = FPDFAvailContextFromFPDFAvail(avail);
-  if (!avail_context)
+  if (!avail_context) {
     return PDF_DATA_ERROR;
-  if (page_index < 0)
+  }
+  if (page_index < 0) {
     return PDF_DATA_NOTAVAIL;
+  }
   FPDF_DownloadHintsContext hints_context(hints);
   return avail_context->data_avail()->IsPageAvail(page_index, &hints_context);
 }
@@ -208,15 +212,17 @@ FPDF_EXPORT int FPDF_CALLCONV FPDFAvail_IsPageAvail(FPDF_AVAIL avail,
 FPDF_EXPORT int FPDF_CALLCONV FPDFAvail_IsFormAvail(FPDF_AVAIL avail,
                                                     FX_DOWNLOADHINTS* hints) {
   auto* avail_context = FPDFAvailContextFromFPDFAvail(avail);
-  if (!avail_context)
+  if (!avail_context) {
     return PDF_FORM_ERROR;
+  }
   FPDF_DownloadHintsContext hints_context(hints);
   return avail_context->data_avail()->IsFormAvail(&hints_context);
 }
 
 FPDF_EXPORT int FPDF_CALLCONV FPDFAvail_IsLinearized(FPDF_AVAIL avail) {
   auto* avail_context = FPDFAvailContextFromFPDFAvail(avail);
-  if (!avail_context)
+  if (!avail_context) {
     return PDF_LINEARIZATION_UNKNOWN;
+  }
   return avail_context->data_avail()->IsLinearizedPDF();
 }

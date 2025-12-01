@@ -83,9 +83,9 @@ class IFaceWithTypemap
 #endif // !BUILDFLAG(IS_FUCHSIA)
   virtual ~IFaceWithTypemap() = default;
 
-
   using EchoCallback = base::OnceCallback<void(TypemappedPtr)>;
-  
+  using EchoMojoCallback = base::OnceCallback<void(TypemappedPtr)>;
+
   virtual void Echo(TypemappedPtr param, EchoCallback callback) = 0;
 };
 
@@ -211,6 +211,13 @@ class  Typemapped {
 
   template <typename T, Typemapped::EnableIfSame<T>* = nullptr>
   bool operator!=(const T& rhs) const { return !operator==(rhs); }
+
+  template <mojo::internal::SendValidation send_validation, typename UserType>
+  static std::vector<uint8_t> Serialize(UserType* input) {
+    return mojo::internal::SerializeImpl<
+        Typemapped::DataView, std::vector<uint8_t>, send_validation>(input);
+  }
+
   template <typename UserType>
   static std::vector<uint8_t> Serialize(UserType* input) {
     return mojo::internal::SerializeImpl<

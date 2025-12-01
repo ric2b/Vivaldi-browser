@@ -13,6 +13,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/functional/bind.h"
 #include "base/lazy_instance.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/extensions/blocklist_check.h"
 #include "chrome/browser/extensions/convert_user_script.h"
 #include "chrome/browser/extensions/extension_assets_manager.h"
+#include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
 #include "chrome/browser/extensions/install_approval.h"
@@ -43,6 +45,7 @@
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/crx_verifier.h"
+#include "components/sync/model/string_ordinal.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/content_verifier/content_verifier.h"
@@ -51,6 +54,7 @@
 #include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/install/crx_install_error.h"
 #include "extensions/browser/install_flag.h"
 #include "extensions/browser/install_stage.h"
@@ -77,13 +81,6 @@
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "components/user_manager/user_manager.h"
-#endif
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-#include "chrome/browser/extensions/extension_management.h"
-#include "chrome/browser/extensions/extension_service.h"
-#else
-#include "chrome/browser/extensions/desktop_android/desktop_android_extension_system.h"
 #endif
 
 using content::BrowserThread;
@@ -128,7 +125,6 @@ CrxInstaller::CrxInstaller(content::BrowserContext* context,
       apps_require_extension_mime_type_(false),
       allow_silent_install_(false),
       grant_permissions_(true),
-      install_cause_(extension_misc::INSTALL_CAUSE_UNSET),
       creation_flags_(Extension::NO_FLAGS),
       off_store_install_allow_reason_(OffStoreInstallDisallowed),
       did_handle_successfully_(true),
@@ -302,7 +298,6 @@ void CrxInstaller::UpdateExtensionFromUnpackedCrx(
 
   expected_id_ = extension_id;
   install_source_ = extension->location();
-  install_cause_ = extension_misc::INSTALL_CAUSE_UPDATE;
   InitializeCreationFlagsForUpdate(extension, Extension::NO_FLAGS);
 
   const ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile_);
@@ -402,8 +397,7 @@ std::optional<CrxInstallError> CrxInstaller::AllowInstall(
         l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALL_NOT_ENABLED));
   }
 
-  if (install_cause_ == extension_misc::INSTALL_CAUSE_USER_DOWNLOAD &&
-      !is_gallery_install() &&
+  if (was_triggered_by_user_download() && !is_gallery_install() &&
       off_store_install_allow_reason_ == OffStoreInstallDisallowed) {
     // Don't delete source in this case so that the user can install
     // manually if they want.
@@ -768,7 +762,7 @@ void CrxInstaller::ConfirmInstall() {
     bool in_kiosk_mode = false;
 #if BUILDFLAG(IS_CHROMEOS)
     user_manager::UserManager* user_manager = user_manager::UserManager::Get();
-    in_kiosk_mode = user_manager && user_manager->IsLoggedInAsKioskApp();
+    in_kiosk_mode = user_manager && user_manager->IsLoggedInAsKioskChromeApp();
 #endif
     if (!in_kiosk_mode) {
       ReportFailureFromUIThread(CrxInstallError(
@@ -1010,8 +1004,9 @@ void CrxInstaller::ReportSuccessFromSharedFileThread() {
   DCHECK(shared_file_task_runner_->RunsTasksInCurrentSequence());
 
   // Tracking number of extensions installed by users
-  if (install_cause() == extension_misc::INSTALL_CAUSE_USER_DOWNLOAD)
+  if (was_triggered_by_user_download()) {
     UMA_HISTOGRAM_ENUMERATION("Extensions.ExtensionInstalled", 1, 2);
+  }
 
   if (!content::GetUIThreadTaskRunner({})->PostTask(
           FROM_HERE,
@@ -1049,23 +1044,15 @@ void CrxInstaller::ReportSuccessFromUIThread() {
     }
   }
 
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  ExtensionService* service =
-      ExtensionSystem::Get(profile_)->extension_service();
-  service->OnExtensionInstalled(extension(), page_ordinal_, install_flags_,
-                                std::move(ruleset_install_prefs_));
-#else
-  // TODO(crbug.com/403352172): Remove this block of code when there's a
-  // replacement for ExtensionService::OnExtensionInstalled(). It exists
-  // for prototyping and manual testing purposes.
-  DesktopAndroidExtensionSystem* system =
-      static_cast<DesktopAndroidExtensionSystem*>(
-          ExtensionSystem::Get(profile_));
-  scoped_refptr<Extension> mutable_extension =
-      const_cast<Extension*>(extension_.get());
-  std::string error;
-  CHECK(system->AddExtension(mutable_extension, error));
-#endif
+  if (!util::AnyCurrentlyInstalledExtensionIsFromWebstore(profile()) &&
+      was_triggered_by_user_download()) {
+    base::UmaHistogramBoolean("Extensions.ExtensionInstalled.NewFromWebstore",
+                              true);
+  }
+
+  registrar_->OnExtensionInstalled(extension(), page_ordinal_, install_flags_,
+                                   std::move(ruleset_install_prefs_));
+
   NotifyCrxInstallComplete(std::nullopt);
 }
 
@@ -1191,7 +1178,6 @@ void CrxInstaller::CheckUpdateFromSettingsPage() {
     update_from_settings_page_ = true;
     expected_id_ = installed_extension->id();
     install_source_ = installed_extension->location();
-    install_cause_ = extension_misc::INSTALL_CAUSE_UPDATE;
   }
 }
 
@@ -1264,27 +1250,15 @@ void CrxInstaller::OnBrowserTerminating() {
 }
 
 GURL CrxInstaller::GetEffectiveUpdateURL(const Extension& extension) {
-#if BUILDFLAG(IS_ANDROID)
-  // TODO(crbug.com/394876083): Use ExtensionManagement when it
-  // is ported to desktop Android.
-  return ManifestURL::GetUpdateURL(&extension);
-#else
   ExtensionManagement* extension_management =
       ExtensionManagementFactory::GetForBrowserContext(profile_);
   return extension_management->GetEffectiveUpdateURL(extension);
-#endif
 }
 
 bool CrxInstaller::UpdatesFromWebstore(const Extension& extension) {
-#if BUILDFLAG(IS_ANDROID)
-  // TODO(crbug.com/394876083): Use ExtensionManagement when it
-  // is ported to desktop Android.
-  return true;
-#else
   ExtensionManagement* extension_management =
       ExtensionManagementFactory::GetForBrowserContext(profile_);
   return extension_management->UpdatesFromWebstore(extension);
-#endif
 }
 
 }  // namespace extensions

@@ -33,6 +33,10 @@ pub mod libyuv {
         Err(AvifError::NotImplemented)
     }
 
+    pub(crate) fn rgb_to_yuv(_rgb: &rgb::Image, _image: &mut image::Image) -> AvifResult<bool> {
+        Err(AvifError::NotImplemented)
+    }
+
     pub(crate) fn convert_to_half_float(_rgb: &mut rgb::Image, _scale: f32) -> AvifResult<()> {
         Err(AvifError::NotImplemented)
     }

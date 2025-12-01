@@ -110,8 +110,7 @@ struct Impl {
     }
 
     const core::type::Pointer* RefToPtr(const core::type::Reference* ref_ty) {
-        return mod.Types().Get<core::type::Pointer>(ref_ty->AddressSpace(), ref_ty->StoreType(),
-                                                    ref_ty->Access());
+        return mod.Types().ptr(ref_ty->AddressSpace(), ref_ty->StoreType(), ref_ty->Access());
     }
 
     void OperandPtrToRef(const core::ir::Usage& use) {
@@ -125,15 +124,14 @@ struct Impl {
     }
 
     void ResultPtrToRef(core::ir::Instruction* inst) {
-        auto* result = inst->Result(0);
+        auto* result = inst->Result();
         if (auto* ptr = result->Type()->As<core::type::Pointer>()) {
             result->SetType(PtrToRef(ptr));
         }
     }
 
     const core::type::Reference* PtrToRef(const core::type::Pointer* ptr_ty) {
-        return mod.Types().Get<core::type::Reference>(ptr_ty->AddressSpace(), ptr_ty->StoreType(),
-                                                      ptr_ty->Access());
+        return mod.Types().ref(ptr_ty->AddressSpace(), ptr_ty->StoreType(), ptr_ty->Access());
     }
 };
 

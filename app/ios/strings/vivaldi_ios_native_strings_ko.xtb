@@ -133,6 +133,7 @@
 <translation id="2765217105034171413">작게</translation>
 <translation id="2767124759205735526">방문 기록 및 입력한 URL 동기화</translation>
 <translation id="2770868136620962117">와, 그 소식을 들으니 정말 기뻐요!</translation>
+<translation id="2818665331928314854">북마크 활성화</translation>
 <translation id="2825232297853754349">이용약관에 동의해야 합니다.</translation>
 <translation id="2842985007712546952">상위 폴더</translation>
 <translation id="2843343418360315034">헝가리어 (<ph name="ORIGIN" />)</translation>
@@ -194,6 +195,7 @@
 <translation id="3646647753063635401">모두 동기화하고 새로 추가되는 유형도 자동으로 동기화 활성화하기</translation>
 <translation id="3682791711395736890">데스크톱 버전으로 보기</translation>
 <translation id="3689125468279190285">홈 버튼 표시</translation>
+<translation id="3694122362646626770">웹사이트</translation>
 <translation id="3699026013955941879">코드가 만료되었습니다. 새 활성화 코드를 요청해주세요.</translation>
 <translation id="3700829948786686853">Vivaldi에 오신 것을 환영합니다</translation>
 <translation id="3719826155360621982">홈페이지</translation>
@@ -211,10 +213,12 @@
 <translation id="3866249974567520381">설명</translation>
 <translation id="3872195896030547485">유효한 이메일 주소를 입력해주세요.</translation>
 <translation id="3891045256838140223">잘못된 점을 우리와 공유해 주실 수 있나요?</translation>
+<translation id="3893665538496915434">방문기록 활성화</translation>
 <translation id="3897092660631435901">메뉴</translation>
 <translation id="3920366244737784074"><ph name="ITEM_TYPE" /> 추가</translation>
 <translation id="3921585859122905677">주소표시줄 위치</translation>
 <translation id="3925725503020335904">Vivaldi의 개발을 지원하기 위해 <ph name="NEW_SEARCH_ENGINE_1" />와 제휴를 맺고 이를 새로운 기본 검색 엔진으로 설정했습니다. <ph name="NEW_SEARCH_ENGINE_2" />는 우리가 좋아하는 비공개 검색 엔진이므로 여러분도 마음에 드셨으면 좋겠습니다.</translation>
+<translation id="3934481038955624945">모두 초기화</translation>
 <translation id="3953599441418463312">일본어 (<ph name="ORIGIN" />)</translation>
 <translation id="395506590020066151">추적기 차단됨</translation>
 <translation id="3958433364221339259"><ph name="SEARCH_ENGINE" /> 검색</translation>
@@ -512,6 +516,7 @@
 <translation id="7765158879357617694">이동</translation>
 <translation id="7771452384635174008">레이아웃</translation>
 <translation id="7781069478569868053">새 탭 페이지</translation>
+<translation id="7791543448312431591">추가</translation>
 <translation id="7801111502975417831">백그라운드에서 동영상을 재생하고 싶어요</translation>
 <translation id="7801204999757211519">계정을 가지고 계신가요? <ph name="BEGIN_LINK" />로그인 ➔<ph name="END_LINK" /></translation>
 <translation id="7850070199083838600">새 그룹을 생성하시겠어요?</translation>
@@ -593,6 +598,7 @@
 <translation id="8855707633300847215">탭 표시줄 표시</translation>
 <translation id="8892354889971902600">최근에 닫은 탭이 여기에 표시됩니다.</translation>
 <translation id="89390081013973080">준비 완료! 이제 기기 간에 어떤 데이터를 동기화하실건지 선택해주세요.</translation>
+<translation id="8948792607467387336">배경화면 선택</translation>
 <translation id="8964449607824577665">현재 암호화 비밀번호가 없다면 데이터를 해독할 수 없습니다. 비밀번호를 초기화하면 Vivaldi 서버에 있는 모든 동기화 데이터가 삭제됩니다.</translation>
 <translation id="8965371804397726192">모든 데이터 동기화 시작</translation>
 <translation id="8993821994276892302">{count, plural,

@@ -80,7 +80,7 @@ UIButton* ActionButton() {
 // The editing mode for view controller, e.g. adding domain or source.
 @property(nonatomic,assign) ATBDomainSourceEditingMode editingMode;
 // The domain currently editing. Optional, available in editing mode.
-@property(nonatomic, assign) NSString* editingDomain;
+@property(nonatomic, strong) NSString* editingDomain;
 // User preferred setting for the editing domain.
 @property(nonatomic, assign) ATBSettingType siteSpecificSetting;
 @end

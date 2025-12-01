@@ -46,6 +46,9 @@ class ConnectorsServiceBase {
   // affiliation.
   EnterpriseRealTimeUrlCheckMode GetAppliedRealTimeUrlCheck() const;
 
+  // Returns the policy scope of enterprise real-time URL check
+  std::optional<policy::PolicyScope> GetRealtimeUrlCheckScope() const;
+
   // Returns whether the Connectors are enabled.
   virtual bool IsConnectorEnabled(AnalysisConnector connector) const = 0;
 
@@ -104,6 +107,12 @@ class ConnectorsServiceBase {
   // one exists.
   virtual policy::CloudPolicyManager* GetManagedUserCloudPolicyManager()
       const = 0;
+
+  void PopulateBrowserMetadata(bool include_device_info,
+                               ClientMetadata::Browser* browser_proto);
+  void PopulateDeviceMetadata(const ReportingSettings& reporting_settings,
+                              const std::string& client_id,
+                              ClientMetadata::Device* device_proto);
 };
 
 }  // namespace enterprise_connectors

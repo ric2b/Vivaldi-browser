@@ -111,13 +111,13 @@ describeWithMockConnection('StorageBucketsTreeElement', function() {
 
     const panel = Application.ResourcesPanel.ResourcesPanel.instance({forceNew: true});
     panel.markAsRoot();
-    panel.show(document.body);
+    renderElementIntoDOM(panel);
 
     const parentTreeElement = new Application.StorageBucketsTreeElement.StorageBucketsTreeParentElement(panel);
     const appendChildSpy = sinon.spy(parentTreeElement, 'appendChild');
     parentTreeElement.initialize();
 
-    assert.strictEqual(appendChildSpy.callCount, getNonDefaultBuckets().length);
+    sinon.assert.callCount(appendChildSpy, getNonDefaultBuckets().length);
 
     panel.detach();
   });
@@ -141,7 +141,7 @@ describeWithMockConnection('StorageBucketsTreeElement', function() {
     treeElement.selectable = true;
     treeElement.select();
 
-    assert.isTrue(showViewSpy.calledOnce);
+    sinon.assert.calledOnce(showViewSpy);
 
     panel.detach();
   });

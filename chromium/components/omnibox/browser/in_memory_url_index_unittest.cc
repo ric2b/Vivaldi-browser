@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
+#include <array>
+
 
 #include "components/omnibox/browser/in_memory_url_index.h"
 
@@ -1130,7 +1128,7 @@ TEST_F(InMemoryURLIndexTest, CalculateWordStartsOffsets) {
     const char* search_string;
     size_t cursor_position;
     const size_t expected_word_starts_offsets_size;
-    const size_t expected_word_starts_offsets[3];
+    const std::array<size_t, 3> expected_word_starts_offsets;
   } test_cases[] = {
       /* No punctuations, only cursor position change. */
       {"ABCD", kInvalid, 1, {0, kInvalid, kInvalid}},

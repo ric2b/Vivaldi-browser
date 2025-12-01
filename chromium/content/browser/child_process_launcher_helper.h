@@ -60,6 +60,7 @@ class CommandLine;
 
 #if BUILDFLAG(IS_IOS)
 class MachPortRendezvousServerIOS;
+class ScopedTempDir;
 #endif
 }
 
@@ -241,6 +242,8 @@ class ChildProcessLauncherHelper
   void OnChildProcessStarted(pid_t process_id,
                              std::unique_ptr<LaunchResult> launch_result);
   void ClearProcessStorage();
+  void SetExitCode(int exit_code);
+  std::optional<int> GetExitCode();
 
 #if defined(__OBJC__)
   NSObject* GetProcess();
@@ -308,12 +311,6 @@ class ChildProcessLauncherHelper
   std::optional<base::ProcessId> process_id_ = std::nullopt;
 #endif  // BUILDFLAG(IS_CHROMEOS)
 
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-  // The priority of the process. The state is stored to avoid changing the
-  // setting repeatedly.
-  std::optional<base::Process::Priority> priority_;
-#endif
-
   // The PlatformChannel that will be used to transmit an invitation to the
   // child process in most cases. Only used if the platform's helper
   // implementation doesn't return a server endpoint from
@@ -337,7 +334,7 @@ class ChildProcessLauncherHelper
   std::string serialized_policy_;
 #endif  // BUILDFLAG(IS_MAC)
 
-#if BUILDFLAG(IS_IOS)
+#if BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_IOS_TVOS)
   std::unique_ptr<base::MachPortRendezvousServerIOS> rendezvous_server_;
   std::unique_ptr<ProcessStorageBase> process_storage_;
 #endif
@@ -356,6 +353,11 @@ class ChildProcessLauncherHelper
 #if BUILDFLAG(IS_WIN)
   // Only valid if the host process has logging enabled.
   base::win::ScopedHandle log_handle_;
+#endif
+
+#if BUILDFLAG(IS_IOS)
+  std::unique_ptr<base::ScopedTempDir> scoped_temp_dir_;
+  std::optional<int> exit_code_;
 #endif
 
   // Histogram shared memory region. Ownership of the memory region object is

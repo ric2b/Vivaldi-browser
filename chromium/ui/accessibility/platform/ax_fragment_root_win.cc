@@ -19,6 +19,7 @@
 #include "base/win/scoped_safearray.h"
 #include "ui/accessibility/accessibility_features.h"
 #include "ui/accessibility/platform/ax_fragment_root_delegate_win.h"
+#include "ui/accessibility/platform/ax_platform.h"
 #include "ui/accessibility/platform/ax_platform_node_win.h"
 #include "ui/accessibility/platform/uia_registrar_win.h"
 #include "ui/base/win/atl_module.h"
@@ -37,7 +38,7 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
   COM_INTERFACE_ENTRY_CHAIN(AXPlatformNodeWin)
   END_COM_MAP()
 
-  static Pointer Create(AXFragmentRootWin* delegate) {
+  static Pointer Create(AXFragmentRootWin& delegate) {
     // Make sure ATL is initialized in this module.
     win::CreateATLModuleIfNeeded();
 
@@ -241,10 +242,7 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
     UIA_VALIDATE_CALL();
     WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ADVISE_EVENT_ADDED);
 
-    AXFragmentRootWin* root = static_cast<AXFragmentRootWin*>(delegate_);
-    if (!root) {
-      return S_OK;
-    }
+    AXFragmentRootWin* root = static_cast<AXFragmentRootWin*>(GetDelegate());
 
     base::win::ScopedSafearray safe_array(property_ids);
     absl::Cleanup release_safe_array(
@@ -263,10 +261,7 @@ class AXFragmentRootPlatformNodeWin : public AXPlatformNodeWin,
     UIA_VALIDATE_CALL();
     WIN_ACCESSIBILITY_API_HISTOGRAM(UMA_API_ADVISE_EVENT_REMOVED);
 
-    AXFragmentRootWin* root = static_cast<AXFragmentRootWin*>(delegate_);
-    if (!root) {
-      return S_OK;
-    }
+    AXFragmentRootWin* root = static_cast<AXFragmentRootWin*>(GetDelegate());
 
     base::win::ScopedSafearray safe_array(property_ids);
     absl::Cleanup release_safe_array(
@@ -322,7 +317,7 @@ AXFragmentRootWin::AXFragmentRootWin(gfx::AcceleratedWidget widget,
                                      AXFragmentRootDelegateWin* delegate)
     : widget_(widget),
       delegate_(delegate),
-      platform_node_(AXFragmentRootPlatformNodeWin::Create(this)) {
+      platform_node_(AXFragmentRootPlatformNodeWin::Create(*this)) {
   AXFragmentRootMapWin::GetInstance().AddFragmentRoot(widget, this);
 }
 
@@ -344,11 +339,8 @@ AXFragmentRootWin* AXFragmentRootWin::GetFragmentRootParentOf(
 
 gfx::NativeViewAccessible AXFragmentRootWin::GetNativeViewAccessible() {
   // The fragment root is the entry point from the operating system for UI
-  // Automation. Signal observers when we're asked for a platform object on it.
-  for (WinAccessibilityAPIUsageObserver& observer :
-       GetWinAccessibilityAPIUsageObserverList()) {
-    observer.OnBasicUIAutomationUsed();
-  }
+  // Automation. Signal when we're asked for a platform object on it.
+  AXPlatform::GetInstance().OnPropertiesUsedInBrowserUI();
   return static_cast<AXFragmentRootPlatformNodeWin*>(platform_node_.get());
 }
 

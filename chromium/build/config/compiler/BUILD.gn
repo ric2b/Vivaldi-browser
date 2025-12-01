@@ -42,15 +42,17 @@ if (is_nacl) {
   import("//build/config/nacl/config.gni")
 }
 
-lld_path = ""
+# Normally, clang will find the correct LLD binary to invoke without needing
+# -B to be passed. For cases where this does not give the correct result,
+# we allow lld_path to be specified.
+default_lld_path = ""
 if (!is_clang) {
-  declare_args() {
-    # This allows overriding the location of lld.
-    lld_path = rebase_path("$clang_base_path/bin", root_build_dir)
-  }
-} else {
-  # clang looks for lld next to it, no need for -B.
-  lld_path = ""
+  default_lld_path = "$clang_base_path/bin"
+}
+
+declare_args() {
+  # This allows overriding the location of lld.
+  lld_path = default_lld_path
 }
 
 declare_args() {
@@ -204,7 +206,7 @@ declare_args() {
   # Set to true to use icf, Identical Code Folding.
   use_icf = (is_posix || is_fuchsia) && !is_debug && !using_sanitizer &&
             !use_clang_coverage && current_os != "zos" &&
-            !(is_android && use_order_profiling) && use_lld
+            !(is_android && use_order_profiling) && use_lld && !is_wasm
 }
 
 if (is_android) {
@@ -277,6 +279,7 @@ config("compiler") {
   cflags_cc = []
   cflags_objc = []
   cflags_objcc = []
+  rustenv = []
   rustflags = []
   ldflags = []
   defines = []
@@ -314,6 +317,16 @@ config("compiler") {
     ":compiler_deterministic",
     ":clang_warning_suppression",
   ]
+
+  # TODO(https://crbug.com/404297941): Disable clang_warning_suppression
+  # configuration because the ICECC build doesn't distribute the
+  # warning_suppression.txt file to other ICECC nodes. As a result, the nodes
+  # cannot locate the file during target compilation. Therefore, we are
+  # disabling the clang_warning_suppression configuration for ICECC builds for
+  # now.
+  if (cc_wrapper == "icecc") {
+    configs -= [ ":clang_warning_suppression" ]
+  }
 
   # Here we enable -fno-delete-null-pointer-checks, which makes various nullptr
   # operations (e.g. dereferencing) into defined behavior. This avoids deletion
@@ -390,7 +403,7 @@ config("compiler") {
     if (use_lld) {
       ldflags += [ "-fuse-ld=lld" ]
       if (lld_path != "") {
-        ldflags += [ "-B$lld_path" ]
+        ldflags += [ "-B" + rebase_path(lld_path, root_build_dir) ]
       }
     }
 
@@ -540,11 +553,12 @@ config("compiler") {
     # (https://crbug.com/829795).
     cflags += [ "-fmerge-all-constants" ]
 
-    # TODO(crbug.com/345541122): investigate the fuchsia binary size increase.
-    if (is_win) {
-      cflags += [ "/Zc:sizedDealloc-" ]
-    } else {
-      cflags += [ "-fno-sized-deallocation" ]
+    if (!use_sized_deallocation) {
+      if (is_win) {
+        cflags += [ "/Zc:sizedDealloc-" ]
+      } else {
+        cflags += [ "-fno-sized-deallocation" ]
+      }
     }
   }
 
@@ -618,7 +632,7 @@ config("compiler") {
     # Enable ELF CREL (see crbug.com/357878242) for all platforms that use ELF
     # (excluding toolchains that use an older version of LLVM).
     # TODO(crbug.com/376278218): This causes segfault on Linux ARM builds.
-    if (is_linux && !llvm_android_mainline && current_cpu != "arm" &&
+    if (is_linux && use_lld && !llvm_android_mainline && current_cpu != "arm" &&
         default_toolchain != "//build/toolchain/cros:target") {
       cflags += [ "-Wa,--crel,--allow-experimental-crel" ]
     }
@@ -707,6 +721,20 @@ config("compiler") {
   if (use_relative_vtables_abi) {
     cflags_cc += [ "-fexperimental-relative-c++-abi-vtables" ]
     ldflags += [ "-fexperimental-relative-c++-abi-vtables" ]
+  }
+
+  if (is_wasm) {
+    ldflags += [
+      "-s",
+      "ALLOW_MEMORY_GROWTH=1",
+      "-s",
+      "LLD_REPORT_UNDEFINED=1",
+    ]
+
+    if (is_official_build) {
+      cflags += [ "-flto=full" ]
+      ldflags += [ "-flto=full" ]
+    }
   }
 
   # Add flags for link-time optimization. These flags enable
@@ -1082,6 +1110,12 @@ config("compiler") {
     ]
   }
 
+  # crbug.com/397463803: Set this until CrOS' user enumeration is done; its
+  # `lld` will complain otherwise. Should be removable by Q4 2025.
+  if (is_chromeos) {
+    rustenv += [ "CROSTC_IS_AWARE_OF_THIS_USECASE=1" ]
+  }
+
   # 64-bit Android sometimes defines __ARM_NEON but not __ARM_NEON__.
   # 32-bit Android builds and macOS, however, define __ARM_NEON__,
   # and code typically checks for this.
@@ -1198,14 +1232,23 @@ config("compiler_cpu_abi") {
     # CPU architecture. We may or may not be doing a cross compile now, so for
     # simplicity we always explicitly set the architecture.
     if (current_cpu == "x64") {
-      cflags += [
-        "-m64",
-        "-msse3",
-      ]
-      ldflags += [ "-m64" ]
+      if (is_clang && !is_android && !is_nacl && !is_fuchsia &&
+          !is_chromeos_device) {
+        cflags += [ "--target=x86_64-unknown-linux-gnu" ]
+        ldflags += [ "--target=x86_64-unknown-linux-gnu" ]
+      } else {
+        cflags += [ "-m64" ]
+        ldflags += [ "-m64" ]
+      }
+      cflags += [ "-msse3" ]
     } else if (current_cpu == "x86") {
-      cflags += [ "-m32" ]
-      ldflags += [ "-m32" ]
+      if (is_clang && !is_android && !is_nacl && !is_chromeos_device) {
+        cflags += [ "--target=i386-unknown-linux-gnu" ]
+        ldflags += [ "--target=i386-unknown-linux-gnu" ]
+      } else {
+        cflags += [ "-m32" ]
+        ldflags += [ "-m32" ]
+      }
       if (!is_nacl) {
         cflags += [
           "-mfpmath=sse",
@@ -1466,8 +1509,16 @@ config("compiler_cpu_abi") {
       }
     } else if (current_cpu == "ppc64") {
       if (current_os == "aix") {
-        cflags += [ "-maix64" ]
-        ldflags += [ "-maix64" ]
+        if (is_clang) {
+          cflags += [ "--target=powerpc64-ibm-aix" ]
+          ldflags += [ "--target=powerpc64-ibm-aix" ]
+        } else {
+          cflags += [ "-maix64" ]
+          ldflags += [ "-maix64" ]
+        }
+      } else if (is_clang) {
+        cflags += [ "--target=powerpc64le-unknown-linux-gnu" ]
+        ldflags += [ "--target=powerpc64le-unknown-linux-gnu" ]
       } else {
         cflags += [ "-m64" ]
         ldflags += [ "-m64" ]
@@ -1488,6 +1539,10 @@ config("compiler_cpu_abi") {
         "-mcmodel=medium",
       ]
     } else if (current_cpu == "s390x") {
+      if (is_clang) {
+        cflags += [ "--target=s390x-unknown-linux-gnu" ]
+        ldflags += [ "--target=s390x-unknown-linux-gnu" ]
+      }
       cflags += [ "-m64" ]
       ldflags += [ "-m64" ]
     }
@@ -1617,27 +1672,94 @@ config("compiler_deterministic") {
       ldflags += [ "-no-canonical-prefixes" ]
     }
   }
+
+  if (use_libcxx_modules) {
+    cflags += [
+      # This removes absolute paths from .pcm files.
+      "-Xclang",
+      "-fmodule-file-home-is-cwd",
+    ]
+  }
 }
 
 config("clang_revision") {
   if (is_clang && clang_base_path == default_clang_base_path &&
       current_os != "zos") {
-    update_args = [
-      "--print-revision",
-      "--verify-version=$clang_version",
-    ]
+    _perform_consistency_checks = current_toolchain == default_toolchain
     if (llvm_force_head_revision) {
-      update_args += [ "--llvm-force-head-revision" ]
+      _head_revision_stamp_path = "//third_party/llvm-build/force_head_revision"
+      _head_revision = ""
+      if (path_exists(_head_revision_stamp_path)) {
+        _head_revision = read_file(_head_revision_stamp_path, "trim string")
+      }
+      assert(
+          _head_revision != "",
+          "llvm_force_head_revision=true, but no locally built version was detected.")
+      _clang_revision = _head_revision
+    } else {
+      _clang_revision = read_file(
+              "//third_party/llvm-build/Release+Asserts/cr_build_revision",
+              "trim string")
+
+      # Ensure that the synced clang version matches what's in git.
+      if (_perform_consistency_checks) {
+        # Parse the clang version from the Python script.
+        _clang_version_lines = filter_include(
+                read_file("//tools/clang/scripts/update.py", "list lines"),
+                [ "CLANG_*REVISION = *" ])
+        _py_revision =
+            string_replace(_clang_version_lines[0], "CLANG_REVISION = '", "")
+        _py_revision = string_replace(_py_revision, "'", "")
+        _py_subrevision =
+            string_replace(_clang_version_lines[1], "CLANG_SUB_REVISION = ", "")
+        _expected_clang_revision = "$_py_revision-$_py_subrevision"
+
+        # TODO(agrieve): Change filter_include to _clang_revision ==
+        # _expected_clang_revision once angle & webrtc use a GCS DEPS entry
+        # rather than a update.py runhook.
+        assert(
+            filter_include([ _clang_revision ],
+                           [
+                             _expected_clang_revision,
+                             "$_expected_clang_revision,*",
+                           ]) != [],
+            "clang_revision=\"$_clang_revision\" but update.py expected \"$_expected_clang_revision\". Did you forget to gclient sync?")
+      }
     }
-    clang_revision = exec_script("//tools/clang/scripts/update.py",
-                                 update_args,
-                                 "trim string")
+
+    if (_perform_consistency_checks) {
+      # Ensure that the revision matches the version major expected by GN.
+      _versions_match = filter_include([ _clang_revision ],
+                                       [ "llvmorg-$clang_version-*" ]) != []
+      assert(
+          _versions_match,
+          "clang_revision=\"$_clang_revision\" but clang_version=\"$clang_version\". clang_version in build/toolchain/toolchain.gni is likely outdated.")
+    }
+
+    if (toolchain_has_rust && _perform_consistency_checks) {
+      # Ensure that the synced rust version matches what's in git.
+      _rust_revision_lines =
+          filter_include(read_file("//tools/rust/update_rust.py", "list lines"),
+                         [ "RUST_*REVISION = *" ])
+      _py_revision =
+          string_replace(_rust_revision_lines[0], "RUST_REVISION = '", "")
+      _py_revision = string_replace(_py_revision, "'", "")
+      _py_subrevision =
+          string_replace(_rust_revision_lines[1], "RUST_SUB_REVISION = ", "")
+      _expected_rust_revision = "$_py_revision-$_py_subrevision"
+
+      # Ensure the rust version matches the clang version.
+      assert(
+          filter_include([ rustc_revision ],
+                         [ "*-$_expected_rust_revision-*" ]) != [],
+          "rustc_revision=\"$rustc_revision\" but update_rust.py expected \"$_expected_rust_revision\". Run \"gclient sync\"?")
+    }
 
     # This is here so that all files get recompiled after a clang roll and
     # when turning clang on or off. (defines are passed via the command line,
     # and build system rebuild things when their commandline changes). Nothing
     # should ever read this define.
-    defines = [ "CR_CLANG_REVISION=\"$clang_revision\"" ]
+    defines = [ "CR_CLANG_REVISION=\"$_clang_revision\"" ]
   }
 }
 
@@ -1659,10 +1781,7 @@ config("clang_warning_suppression") {
     from_build_root =
         rebase_path(clang_warning_suppression_file, root_build_dir)
     inputs = [ clang_warning_suppression_file ]
-    cflags = [
-      "-Xclang",
-      "--warning-suppression-mappings=" + from_build_root,
-    ]
+    cflags = [ "--warning-suppression-mappings=" + from_build_root ]
   }
 }
 
@@ -1705,17 +1824,18 @@ config("compiler_arm") {
 
 config("libcxx_module") {
   if (use_libcxx_modules) {
-    modulemap = rebase_path("//third_party/libc++/src/include/module.modulemap",
-                            root_build_dir)
+    modulemap = rebase_path(
+            "${root_gen_dir}/third_party/libc++/src/include/module.modulemap",
+            root_build_dir)
+    sysroot_modulemap =
+        rebase_path("//build/linux/amd64/module.modulemap", root_build_dir)
+
     cflags_cc = [
       "-fmodules",
       "-fmodule-map-file=" + modulemap,
       "-fbuiltin-module-map",
+      "-fmodule-map-file=" + sysroot_modulemap,
       "-fno-implicit-module-maps",
-
-      # This removes absolute paths from .pcm files.
-      "-Xclang",
-      "-fmodule-file-home-is-cwd",
 
       "-Xclang",
       "-fmodules-local-submodule-visibility",  # required for builtins
@@ -1840,14 +1960,42 @@ config("treat_warnings_as_errors") {
   rustflags = [ "-Dwarnings" ]
 }
 
+# tot_warnings ----------------------------------------------------------------
+#
+# These are warning flags that should only be enabled for builds with
+# tip-of-tree (ToT) clang. Typically this is because the warning is newly-added,
+# so passing it to the current pinned clang would result in an "unknown warning"
+# error.
+#
+# Warnings should be moved from here to default_warnings whenever we roll clang.
+# Unless they have unusual requirements (e.g. only on one OS), they usually go
+# in the place marked "New clang warnings usually go here during a roll".
+config("tot_warnings") {
+  cflags = []
+  cflags_cc = []
+  cflags_objcc = []
+
+  # Entries should generally require both is_clang and llvm_force_head_revision,
+  # but may have additional constraints as well (e.g. only some OSes)
+  if (is_clang && llvm_force_head_revision && !is_nacl) {
+    cflags_cc += [
+      # TODO(crbug.com/417996267): Fix and re-enable
+      "-Wno-character-conversion",
+    ]
+    cflags_objcc += [
+      # TODO(crbug.com/417996267): Fix and re-enable
+      "-Wno-character-conversion",
+    ]
+  }
+}
+
 # default_warnings ------------------------------------------------------------
 #
-# Collects all warning flags that are used by default.  This is used as a
-# subconfig of both chromium_code and no_chromium_code.  This way these
+# Collects all warning flags that are used by default. This is used as a
+# subconfig of both chromium_code and no_chromium_code. This way these
 # flags are guaranteed to appear on the compile command line after -Wall.
 config("default_warnings") {
   cflags = []
-  cflags_c = []
   cflags_cc = []
   ldflags = []
   configs = []
@@ -2003,6 +2151,8 @@ config("default_warnings") {
         # nullability-completeness check can detect or an alternate check for
         # annotation completeness, this warning exception can be removed.
         "-Wno-nullability-completeness",
+
+        # New clang warnings usually go here during a roll
       ]
     }
 
@@ -2225,12 +2375,8 @@ config("no_chromium_code") {
       "/wd4800",  # Disable warning when forcing value to bool.
       "/wd4267",  # TODO(jschuh): size_t to int.
     ]
-  } else {
-    if (is_clang && !is_nacl) {
-      # TODO(thakis): Remove !is_nacl once
-      # https://codereview.webrtc.org/1552863002/ made its way into chromium.
-      cflags += [ "-Wall" ]
-    }
+  } else if (is_clang) {
+    cflags += [ "-Wall" ]
   }
 
   if (is_clang) {
@@ -2247,9 +2393,6 @@ config("no_chromium_code") {
       cflags += [
         # Disabled for similar reasons as -Wunused-variable.
         "-Wno-unused-but-set-variable",
-
-        # TODO(crbug.com/40762742): Clean up and enable.
-        "-Wno-misleading-indentation",
       ]
     }
   }
@@ -2854,7 +2997,16 @@ config("symbols") {
         # Disable putting the compiler command line into the debug info to
         # prevent some types of non-determinism.
         "-gno-codeview-command-line",
+
+        # Deterministically choose one source line number out of all merged
+        # source line numbers to avoid line 0 debug info when multiple
+        # instructions are merged.
+        # See https://crbug.com/415272777.
+        "-mllvm",
+        "-pick-merged-source-locations",
       ]
+
+      rustflags = [ "-Cllvm-args=-pick-merged-source-locations" ]
     } else {
       cflags = [ "/Zi" ]  # Produce PDB file, no edit and continue.
     }
@@ -2868,9 +3020,12 @@ config("symbols") {
 
     # All configs using /DEBUG should include this:
     configs += [ ":win_pdbaltpath" ]
+  } else if (is_wasm) {
+    cflags = [ "-gseparate-dwarf" ]
+    ldflags = [ "-gseparate-dwarf" ]
   } else {
     cflags = []
-    if (is_mac && enable_dsyms) {
+    if (is_apple && enable_dsyms) {
       # If generating dSYMs, specify -fno-standalone-debug. This was
       # originally specified for https://crbug.com/479841 because dsymutil
       # could not handle a 4GB dSYM file. But dsymutil from Xcodes prior to
@@ -3138,10 +3293,13 @@ if (is_apple) {
   # C++ and exceptions in Objective-C code are intended to be fatal, so
   # -fno-objc-arc-exceptions is specified to disable these unwanted exception
   # handlers.
+  # -Wobjc-property-assign-on-object-type enables to show warnings when the
+  # assign is used for a property on an Objective-C object under ARC.
   config("enable_arc") {
     common_flags = [
       "-fobjc-arc",
       "-fno-objc-arc-exceptions",
+      "-Wobjc-property-assign-on-object-type",
     ]
     cflags_objc = common_flags
     cflags_objcc = common_flags

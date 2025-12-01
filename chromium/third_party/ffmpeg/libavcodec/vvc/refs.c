@@ -21,6 +21,7 @@
  */
 
 #include <stdatomic.h>
+#include <stdbool.h>
 
 #include "libavutil/mem.h"
 #include "libavutil/thread.h"
@@ -47,6 +48,8 @@ void ff_vvc_unref_frame(VVCFrameContext *fc, VVCFrame *frame, int flags)
         return;
 
     frame->flags &= ~flags;
+    if (!(frame->flags & ~VVC_FRAME_FLAG_CORRUPT))
+        frame->flags = 0;
     if (!frame->flags) {
         av_frame_unref(frame->frame);
         av_refstruct_unref(&frame->sps);
@@ -144,10 +147,10 @@ static VVCFrame *alloc_frame(VVCContext *s, VVCFrameContext *fc)
         for (int j = 0; j < frame->ctb_count; j++)
             frame->rpl_tab[j] = frame->rpl;
 
-        win->left_offset   = pps->r->pps_scaling_win_left_offset   << sps->hshift[CHROMA];
-        win->right_offset  = pps->r->pps_scaling_win_right_offset  << sps->hshift[CHROMA];
-        win->top_offset    = pps->r->pps_scaling_win_top_offset    << sps->vshift[CHROMA];
-        win->bottom_offset = pps->r->pps_scaling_win_bottom_offset << sps->vshift[CHROMA];
+        win->left_offset   = pps->r->pps_scaling_win_left_offset   * (1 << sps->hshift[CHROMA]);
+        win->right_offset  = pps->r->pps_scaling_win_right_offset  * (1 << sps->hshift[CHROMA]);
+        win->top_offset    = pps->r->pps_scaling_win_top_offset    * (1 << sps->vshift[CHROMA]);
+        win->bottom_offset = pps->r->pps_scaling_win_bottom_offset * (1 << sps->vshift[CHROMA]);
         frame->ref_width   = pps->r->pps_pic_width_in_luma_samples  - win->left_offset   - win->right_offset;
         frame->ref_height  = pps->r->pps_pic_height_in_luma_samples - win->bottom_offset - win->top_offset;
 
@@ -166,6 +169,36 @@ fail:
     }
     av_log(s->avctx, AV_LOG_ERROR, "Error allocating frame, DPB full.\n");
     return NULL;
+}
+
+static void set_pict_type(AVFrame *frame, const VVCContext *s, const VVCFrameContext *fc)
+{
+    bool has_b = false, has_inter = false;
+
+    if (IS_IRAP(s)) {
+        frame->pict_type = AV_PICTURE_TYPE_I;
+        frame->flags |= AV_FRAME_FLAG_KEY;
+        return;
+    }
+
+    if (fc->ps.ph.r->ph_inter_slice_allowed_flag) {
+        // At this point, fc->slices is not fully initialized; we need to inspect the CBS directly.
+        const CodedBitstreamFragment *current = &s->current_frame;
+        for (int i = 0; i < current->nb_units && !has_b; i++) {
+            const CodedBitstreamUnit *unit = current->units + i;
+            if (unit->content_ref && unit->type <= VVC_RSV_IRAP_11) {
+                const H266RawSliceHeader *rsh = unit->content_ref;
+                has_inter |= !IS_I(rsh);
+                has_b     |= IS_B(rsh);
+            }
+        }
+    }
+    if (!has_inter)
+        frame->pict_type = AV_PICTURE_TYPE_I;
+    else if (has_b)
+        frame->pict_type = AV_PICTURE_TYPE_B;
+    else
+        frame->pict_type = AV_PICTURE_TYPE_P;
 }
 
 int ff_vvc_set_new_ref(VVCContext *s, VVCFrameContext *fc, AVFrame **frame)
@@ -189,6 +222,7 @@ int ff_vvc_set_new_ref(VVCContext *s, VVCFrameContext *fc, AVFrame **frame)
     if (!ref)
         return AVERROR(ENOMEM);
 
+    set_pict_type(ref->frame, s, fc);
     *frame = ref->frame;
     fc->ref = ref;
 
@@ -247,6 +281,9 @@ int ff_vvc_output_frame(VVCContext *s, VVCFrameContext *fc, AVFrame *out, const 
 
         if (nb_output) {
             VVCFrame *frame = &fc->DPB[min_idx];
+
+            if (frame->flags & VVC_FRAME_FLAG_CORRUPT)
+                frame->frame->flags |= AV_FRAME_FLAG_CORRUPT;
 
             ret = av_frame_ref(out, frame->frame);
             if (frame->flags & VVC_FRAME_FLAG_BUMPING)
@@ -357,7 +394,7 @@ static VVCFrame *generate_missing_ref(VVCContext *s, VVCFrameContext *fc, int po
 
     frame->poc      = poc;
     frame->sequence = s->seq_decode;
-    frame->flags    = 0;
+    frame->flags    = VVC_FRAME_FLAG_CORRUPT;
 
     ff_vvc_report_frame_finished(frame);
 
@@ -391,6 +428,19 @@ static int add_candidate_ref(VVCContext *s, VVCFrameContext *fc, RefPicList *lis
 
     if (ref == fc->ref || list->nb_refs >= VVC_MAX_REF_ENTRIES)
         return AVERROR_INVALIDDATA;
+
+    if (!IS_CVSS(s)) {
+        const bool ref_corrupt = !ref || (ref->flags & VVC_FRAME_FLAG_CORRUPT);
+        const bool recovering  = s->no_output_before_recovery_flag && !GDR_IS_RECOVERED(s);
+
+        if (ref_corrupt && !recovering) {
+            if (!(s->avctx->flags & AV_CODEC_FLAG_OUTPUT_CORRUPT) &&
+                !(s->avctx->flags2 & AV_CODEC_FLAG2_SHOW_ALL))
+                return AVERROR_INVALIDDATA;
+
+            fc->ref->flags |= VVC_FRAME_FLAG_CORRUPT;
+        }
+    }
 
     if (!ref) {
         ref = generate_missing_ref(s, fc, poc);

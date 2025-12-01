@@ -127,7 +127,7 @@ class EventLogger final {
                      const unsigned long long* arg_values,
                      uint64_t timestamp,
                      int /* pid */,
-                     rtc::PlatformThreadId thread_id) {
+                     PlatformThreadId thread_id) {
     std::vector<TraceArg> args(num_args);
     for (int i = 0; i < num_args; ++i) {
       TraceArg& arg = args[i];
@@ -282,7 +282,7 @@ class EventLogger final {
     std::vector<TraceArg> args;
     uint64_t timestamp;
     int pid;
-    rtc::PlatformThreadId tid;
+    PlatformThreadId tid;
   };
 
   static std::string TraceArgValueAsString(TraceArg arg) {
@@ -387,7 +387,7 @@ void InternalAddTraceEvent(char phase,
 
   g_event_logger.load()->AddTraceEvent(name, category_enabled, phase, num_args,
                                        arg_names, arg_types, arg_values,
-                                       TimeMicros(), 1, rtc::CurrentThreadId());
+                                       TimeMicros(), 1, CurrentThreadId());
 }
 
 }  // namespace

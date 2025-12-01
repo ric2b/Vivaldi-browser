@@ -69,6 +69,7 @@ CSSSelector::RelationType GetImplicitShadowCombinatorForMatching(
     case CSSSelector::PseudoType::kPseudoPlaceholder:
     case CSSSelector::PseudoType::kPseudoFileSelectorButton:
     case CSSSelector::PseudoType::kPseudoPicker:
+    case CSSSelector::PseudoType::kPseudoPermissionIcon:
       return CSSSelector::RelationType::kUAShadow;
     case CSSSelector::PseudoType::kPseudoPart:
       return CSSSelector::RelationType::kShadowPart;
@@ -2565,6 +2566,9 @@ static void RecordUsageAndDeprecationsOneSelector(
       break;
     case CSSSelector::kPseudoHas:
       feature = WebFeature::kCSSSelectorPseudoHas;
+      break;
+    case CSSSelector::kPseudoHasSlotted:
+      feature = WebFeature::kCSSSelectorPseudoHasSlotted;
       break;
     case CSSSelector::kPseudoState:
       feature = WebFeature::kCSSSelectorPseudoState;

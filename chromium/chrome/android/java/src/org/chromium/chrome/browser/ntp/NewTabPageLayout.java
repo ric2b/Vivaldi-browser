@@ -10,17 +10,19 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Point;
 import android.graphics.Rect;
-import android.graphics.drawable.Drawable;
 import android.text.Editable;
 import android.util.AttributeSet;
 import android.view.DragEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import androidx.core.widget.ImageViewCompat;
 
 import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
@@ -41,6 +43,7 @@ import org.chromium.chrome.browser.logo.LogoView;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
 import org.chromium.chrome.browser.ntp.search.SearchBoxCoordinator;
+import org.chromium.chrome.browser.omnibox.SearchEngineUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.tile.MostVisitedTilesCoordinator;
 import org.chromium.chrome.browser.suggestions.tile.TileGroup;
@@ -63,7 +66,8 @@ import org.chromium.ui.text.EmptyTextWatcher;
  * Layout for the new tab page. This positions the page elements in the correct vertical positions.
  * There are no separate phone and tablet UIs; this layout adapts based on the available space.
  */
-public class NewTabPageLayout extends LinearLayout {
+public class NewTabPageLayout extends LinearLayout
+        implements SearchEngineUtils.SearchBoxHintTextObserver {
     private static final String TAG = "NewTabPageLayout";
 
     private int mSearchBoxTwoSideMargin;
@@ -122,7 +126,7 @@ public class NewTabPageLayout extends LinearLayout {
 
     private FeedSurfaceScrollDelegate mScrollDelegate;
 
-    private int mTileViewWidth;
+    private final int mTileViewWidth;
     private Integer mInitialTileNum;
     private Boolean mIsMvtAllFilledLandscape;
     private Boolean mIsMvtAllFilledPortrait;
@@ -135,7 +139,10 @@ public class NewTabPageLayout extends LinearLayout {
     // This variable is only valid when the NTP surface is in tablet mode.
     private boolean mIsInMultiWindowModeOnTablet;
     private View mFakeSearchBoxLayout;
+    private TextView mFakeSearchBoxEditText;
     private Callback<Logo> mOnLogoAvailableCallback;
+    private @Nullable ImageView mDseIconView;
+    private ViewGroup mFakeSearchBox;
 
     /** Constructor for inflating from XML. */
     public NewTabPageLayout(Context context, AttributeSet attrs) {
@@ -166,6 +173,7 @@ public class NewTabPageLayout extends LinearLayout {
 
         mMiddleSpacer = findViewById(R.id.ntp_middle_spacer);
         mFakeSearchBoxLayout = findViewById(R.id.search_box);
+        mFakeSearchBoxEditText = findViewById(R.id.search_box_text);
         insertSiteSectionView();
 
         Log.i(TAG, "NewTabPageLayout.onFinishInflate after insertSiteSectionView");
@@ -247,10 +255,14 @@ public class NewTabPageLayout extends LinearLayout {
         initializeLogoCoordinator(searchProviderHasLogo, searchProviderIsGoogle);
         initializeMostVisitedTilesCoordinator(
                 mProfile, lifecycleDispatcher, tileGroupDelegate, touchEnabledDelegate);
+        initializeDseIconView(searchProviderIsGoogle);
         initializeSearchBoxTextView();
         initializeVoiceSearchButton();
         initializeLensButton();
         initializeLayoutChangeListener();
+
+        // Initialize Searchbox observers
+        SearchEngineUtils.getForProfile(mProfile).addSearchBoxHintTextObserver(this);
 
         manager.addDestructionObserver(NewTabPageLayout.this::onDestroy);
         mInitialized = true;
@@ -305,6 +317,41 @@ public class NewTabPageLayout extends LinearLayout {
                     }
                 });
         TraceEvent.end(TAG + ".initializeSearchBoxTextView()");
+    }
+
+    private void initializeDseIconView(boolean shouldShowDesIconView) {
+        if (!OmniboxFeatures.sOmniboxMobileParityUpdate.isEnabled()) return;
+
+        mFakeSearchBox = findViewById(R.id.search_box);
+        mDseIconView = mFakeSearchBox.findViewById(R.id.search_box_engine_icon);
+        ImageViewCompat.setImageTintList(mDseIconView, null);
+
+        setDseIconViewVisibility(shouldShowDesIconView);
+    }
+
+    private void setDseIconViewVisibility(boolean isVisible) {
+        if (mDseIconView == null) return;
+
+        int visibility = isVisible ? VISIBLE : GONE;
+        if (mDseIconView.getVisibility() == visibility) return;
+
+        mDseIconView.setVisibility(visibility);
+
+        if (isVisible) {
+            mFakeSearchBox.setPaddingRelative(
+                    getResources()
+                            .getDimensionPixelSize(
+                                    R.dimen.fake_search_box_start_padding_with_dse_logo),
+                    mFakeSearchBox.getPaddingTop(),
+                    mFakeSearchBox.getPaddingEnd(),
+                    mFakeSearchBox.getPaddingBottom());
+        } else {
+            mFakeSearchBox.setPaddingRelative(
+                    getResources().getDimensionPixelSize(R.dimen.fake_search_box_start_padding),
+                    mFakeSearchBox.getPaddingTop(),
+                    mFakeSearchBox.getPaddingEnd(),
+                    mFakeSearchBox.getPaddingBottom());
+        }
     }
 
     private void initializeVoiceSearchButton() {
@@ -589,6 +636,9 @@ public class NewTabPageLayout extends LinearLayout {
         // Hide or show the views above the most visited tiles as needed, including search box, and
         // spacers. The visibility of Logo is handled by LogoCoordinator.
         mSearchBoxCoordinator.setVisibility(mSearchProviderHasLogo);
+        if (mDseIconView != null) {
+            setDseIconViewVisibility(mSearchProviderIsGoogle);
+        }
 
         onUrlFocusAnimationChanged();
 
@@ -716,15 +766,6 @@ public class NewTabPageLayout extends LinearLayout {
      */
     public void setSearchProviderLogoAlpha(float alpha) {
         mLogoCoordinator.setAlpha(alpha);
-    }
-
-    /**
-     * Set the search box background drawable.
-     *
-     * @param drawable The search box background.
-     */
-    public void setSearchBoxBackground(Drawable drawable) {
-        mSearchBoxCoordinator.setBackground(drawable);
     }
 
     /**
@@ -878,6 +919,8 @@ public class NewTabPageLayout extends LinearLayout {
     }
 
     private void onDestroy() {
+        SearchEngineUtils.getForProfile(mProfile).removeSearchBoxHintTextObserver(this);
+
         if (mCallbackController != null) {
             mCallbackController.destroy();
             mCallbackController = null;
@@ -1017,5 +1060,10 @@ public class NewTabPageLayout extends LinearLayout {
     public static boolean isInNarrowWindowOnTablet(boolean isTablet, UiConfig uiConfig) {
         return isTablet
                 && uiConfig.getCurrentDisplayStyle().horizontal < HorizontalDisplayStyle.WIDE;
+    }
+
+    @Override
+    public void onSearchBoxHintTextChanged(String newHint) {
+        mFakeSearchBoxEditText.setHint(newHint);
     }
 }

@@ -35,6 +35,7 @@ class CampaignsManagerClientImpl;
 class ChromeMetricsServiceClient;
 class ChromePasswordManagerClient;
 class ChromeVariationsServiceClient;
+class GlobalFeatures;
 class HttpsFirstModeService;
 class NavigationMetricsRecorder;
 class PrefService;
@@ -42,6 +43,12 @@ class PrefService;
 namespace {
 class CrashesDOMHandler;
 }
+
+#if BUILDFLAG(IS_ANDROID)
+namespace autofill {
+class AutofillClientProvider;
+}
+#endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_CHROMEOS)
 class ChromeCameraAppUIDelegate;
@@ -77,6 +84,10 @@ class ChromeOSPerUserMetricsBrowserTestBase;
 class UkmConsentParamBrowserTest;
 class CrOSPreConsentMetricsManagerTest;
 }  // namespace metrics
+
+namespace optimization_guide {
+class ChromeOnDeviceModelServiceController;
+}  // namespace optimization_guide
 
 namespace safe_browsing {
 class ChromeSafeBrowsingUIManagerDelegate;
@@ -154,6 +165,9 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class BoundSessionCookieRefreshServiceImpl;
 #endif
   friend class ::CrashesDOMHandler;
+#if BUILDFLAG(IS_ANDROID)
+  friend class autofill::AutofillClientProvider;
+#endif  // BUILDFLAG(IS_ANDROID)
   friend class ChromeBrowserFieldTrials;
   // For ClangPGO.
   friend class ChromeBrowserMainExtraPartsMetrics;
@@ -161,6 +175,7 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserMainParts;
   friend class ChromeContentBrowserClient;
   friend class ChromeMetricsServicesManagerClient;
+  friend class ChromeSigninClient;
   friend class browser_sync::ChromeSyncClient;
   // TODO(crbug.com/40948861): Remove this friend when the limited entropy
   // synthetic trial has wrapped up.
@@ -188,10 +203,12 @@ class ChromeMetricsServiceAccessor : public metrics::MetricsServiceAccessor {
   friend class ChromeBrowserMainExtraPartsGpu;
   friend class Browser;
   friend class BrowserProcessImpl;
+  friend class GlobalFeatures;
 #if BUILDFLAG(ENABLE_GLIC)
   friend class glic::GlicSyntheticTrialManager;
 #endif
   friend class OptimizationGuideKeyedService;
+  friend class optimization_guide::ChromeOnDeviceModelServiceController;
   friend class WebUITabStripFieldTrial;
   friend class feed::FeedServiceDelegateImpl;
   friend class FirstRunService;

@@ -349,19 +349,26 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
               UnorderedElementsAre(HasSharedGroupMetadata(
                   "title", TabGroupColorId::kCyan, collaboration_id)));
   const SavedTabGroup& group = service_groups.front();
-  EXPECT_FALSE(group.creation_time_windows_epoch_micros().is_null());
+  EXPECT_FALSE(group.creation_time().is_null());
   EXPECT_THAT(
       group.saved_tabs(),
       UnorderedElementsAre(HasTabMetadata("tab 1", "http://google.com/1"),
                            HasTabMetadata("tab 2", "http://google.com/2")));
   for (const SavedTabGroupTab& tab : group.saved_tabs()) {
-    EXPECT_FALSE(tab.creation_time_windows_epoch_micros().is_null());
+    EXPECT_FALSE(tab.creation_time().is_null());
   }
 }
 
-// Flaky: crbug.com/403333571
+// Flaky on Android: crbug.com/403333571.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_ShouldTransitionSavedToSharedTabGroup \
+  DISABLED_ShouldTransitionSavedToSharedTabGroup
+#else
+#define MAYBE_ShouldTransitionSavedToSharedTabGroup \
+  ShouldTransitionSavedToSharedTabGroup
+#endif
 IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
-                       DISABLED_ShouldTransitionSavedToSharedTabGroup) {
+                       MAYBE_ShouldTransitionSavedToSharedTabGroup) {
   const GURL kUrl = embedded_test_server()->GetURL(kDefaultURLPath);
   ASSERT_TRUE(SetupSync());
 
@@ -436,9 +443,16 @@ IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
             saved_group_specifics.guid());
 }
 
-// Flaky: crbug.com/403333571
+// Flaky on Android: crbug.com/403333571.
+#if BUILDFLAG(IS_ANDROID)
+#define MAYBE_ShouldTransitionSavedToSharedGroupRemotely \
+  DISABLED_ShouldTransitionSavedToSharedGroupRemotely
+#else
+#define MAYBE_ShouldTransitionSavedToSharedGroupRemotely \
+  ShouldTransitionSavedToSharedGroupRemotely
+#endif
 IN_PROC_BROWSER_TEST_F(SingleClientSharedTabGroupDataSyncTest,
-                       DISABLED_ShouldTransitionSavedToSharedGroupRemotely) {
+                       MAYBE_ShouldTransitionSavedToSharedGroupRemotely) {
   const GURL kUrl = embedded_test_server()->GetURL(kDefaultURLPath);
   const std::string kCollaborationId = "collaboration";
 

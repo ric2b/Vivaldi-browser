@@ -299,3 +299,8 @@ D. Local Modifications
   - https://g-issues.chromium.org/issues/393989622
   - https://patch-diff.githubusercontent.com/raw/unicode-org/icu/pull/3416.diff
   - https://patch-diff.githubusercontent.com/raw/unicode-org/icu/pull/3420.diff
+
+18. Patch unnecessary uses of the virtual keyword.
+    patches/unnecessary_virtual_specifier.patch
+  - https://issues.chromium.org/issues/403236787
+  - https://patch-diff.githubusercontent.com/raw/unicode-org/icu/pull/3489.diff

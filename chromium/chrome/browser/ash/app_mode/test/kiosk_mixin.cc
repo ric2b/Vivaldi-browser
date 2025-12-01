@@ -202,6 +202,12 @@ void ConfigureIsolatedWebApp(ScopedDevicePolicyUpdate& update,
       option.web_bundle_id.id());
   account->mutable_isolated_kiosk_app()->set_update_manifest_url(
       option.update_manifest_url.spec());
+  account->mutable_isolated_kiosk_app()->set_update_channel(
+      option.update_channel);
+  account->mutable_isolated_kiosk_app()->set_pinned_version(
+      option.pinned_version);
+  account->mutable_isolated_kiosk_app()->set_allow_downgrades(
+      option.allow_downgrades);
 }
 
 // Configures the Kiosk account given by `account_id` as the auto launch
@@ -221,6 +227,14 @@ void ConfigureDefaultWebAppUserPolicies(ScopedUserPolicyUpdate& update) {
       ->add_entries("*");
 }
 
+bool HasChromeApps(KioskMixin::Config config) {
+  return std::ranges::any_of(config.options, [](const auto& option) {
+    return std::holds_alternative<KioskMixin::CwsChromeAppOption>(option) ||
+           std::holds_alternative<KioskMixin::SelfHostedChromeAppOption>(
+               option);
+  });
+}
+
 }  // namespace
 
 KioskMixin::KioskMixin(InProcessBrowserTestMixinHost* host,
@@ -235,7 +249,15 @@ KioskMixin::KioskMixin(InProcessBrowserTestMixinHost* host,
       fake_cws_mixin_(host, FakeCwsMixin::kPublic),
       device_state_(
           host,
-          ash::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED) {}
+          ash::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED) {
+  // Chrome apps default to disabled in Kiosk from M138. Re-enable Chrome apps
+  // in tests that need it. Tests can initialize their own `ScopedFeatureList`
+  // separately to override this setting if needed.
+  if (cached_configuration_.has_value() &&
+      HasChromeApps(cached_configuration_.value())) {
+    scoped_features_.InitFromCommandLine("AllowChromeAppsInKioskSessions", "");
+  }
+}
 
 KioskMixin::KioskMixin(InProcessBrowserTestMixinHost* host,
                        Config cached_configuration)
@@ -430,10 +452,16 @@ KioskMixin::SelfHostedChromeAppOption::~SelfHostedChromeAppOption() = default;
 KioskMixin::IsolatedWebAppOption::IsolatedWebAppOption(
     std::string_view account_id,
     const web_package::SignedWebBundleId& web_bundle_id,
-    GURL update_manifest_url)
+    GURL update_manifest_url,
+    std::string update_channel,
+    std::string pinned_version,
+    bool allow_downgrades)
     : account_id(std::string(account_id)),
       web_bundle_id(web_bundle_id),
-      update_manifest_url(std::move(update_manifest_url)) {}
+      update_manifest_url(std::move(update_manifest_url)),
+      update_channel(std::move(update_channel)),
+      pinned_version(std::move(pinned_version)),
+      allow_downgrades(allow_downgrades) {}
 
 KioskMixin::IsolatedWebAppOption::IsolatedWebAppOption(
     const KioskMixin::IsolatedWebAppOption&) = default;

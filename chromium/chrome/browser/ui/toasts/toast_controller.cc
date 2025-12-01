@@ -32,7 +32,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/omnibox/common/omnibox_focus_state.h"
 #include "components/prefs/pref_service.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
@@ -73,17 +73,13 @@ bool ToastController::IsShowingToast() const {
 }
 
 bool ToastController::CanShowToast(ToastId toast_id) const {
-  if (!base::FeatureList::IsEnabled(toast_features::kToastFramework)) {
-    return false;
-  }
-  if (base::FeatureList::IsEnabled(toast_features::kToastRefinements) &&
-      static_cast<toasts::ToastAlertLevel>(
+  if (static_cast<toasts::ToastAlertLevel>(
           g_browser_process->local_state()->GetInteger(
               prefs::kToastAlertLevel)) ==
-          toasts::ToastAlertLevel::kActionable) {
+      toasts::ToastAlertLevel::kActionable) {
     const ToastSpecification* toast_spec =
         toast_registry_->GetToastSpecification(toast_id);
-    return toast_spec->has_close_button() || toast_spec->has_menu();
+    return toast_spec->is_actionable();
   }
   return true;
 }
@@ -238,8 +234,7 @@ void ToastController::ShowToast(ToastParams params) {
       current_toast_spec->action_button_string_id().has_value() ||
       current_toast_spec->has_menu();
   base::TimeDelta timeout =
-      is_actionable ? toast_features::kToastTimeout.Get()
-                    : toast_features::kToastWithoutActionTimeout.Get();
+      is_actionable ? kToastWithActionTimeout : kToastDefaultTimeout;
 
   toast_close_timer_.Start(
       FROM_HERE, timeout,
@@ -284,6 +279,7 @@ void ToastController::CreateToast(ToastParams params,
   const ui::ImageModel* image_override = params.image_override.has_value()
                                              ? &params.image_override.value()
                                              : nullptr;
+
   const std::u16string body_string =
       params.body_string_override.has_value()
           ? params.body_string_override.value()

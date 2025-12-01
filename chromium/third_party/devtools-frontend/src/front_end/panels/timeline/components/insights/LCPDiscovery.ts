@@ -1,6 +1,7 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import './Checklist.js';
 
@@ -62,7 +63,10 @@ function getImageData(model: LCPDiscoveryInsightModel): LCPImageDiscoveryData|nu
 export class LCPDiscovery extends BaseInsightComponent<LCPDiscoveryInsightModel> {
   static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-lcp-discovery`;
   override internalName = 'lcp-discovery';
-  protected override hasAskAISupport = true;
+
+  protected override hasAskAiSupport(): boolean {
+    return true;
+  }
 
   #renderDiscoveryDelay(delay: Trace.Types.Timing.Micro): Element {
     const timeWrapper = document.createElement('span');

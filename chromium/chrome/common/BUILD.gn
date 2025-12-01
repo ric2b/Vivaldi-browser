@@ -7,6 +7,7 @@ import("//build/config/chrome_build.gni")
 import("//build/util/process_version.gni")
 import("//chrome/browser/downgrade/buildflags.gni")
 import("//chrome/common/features.gni")
+import("//components/cdm/common/playready.gni")
 import("//components/nacl/features.gni")
 import("//components/offline_pages/buildflags/features.gni")
 import("//components/signin/features.gni")
@@ -259,6 +260,7 @@ static_library("common_lib") {
   ]
 
   deps = [
+    "//components/cdm/common:buildflags",
     "//components/crash/core/app",
     "//components/google/core/common",
     "//components/heap_profiling/in_process",
@@ -272,7 +274,7 @@ static_library("common_lib") {
     "//components/pdf/common:util",
   ]
 
-  if (is_android || enable_library_cdms) {
+  if (is_android || enable_library_cdms || enable_playready) {
     public_deps += [ "//components/cdm/common" ]
   }
 
@@ -357,6 +359,9 @@ static_library("common_lib") {
     # Non-Android.
     public_deps += [ "//chrome/common/importer" ]
     sources += [
+      "actor/action_result.cc",
+      "actor/action_result.h",
+      "actor/actor_logging.h",
       "read_anything/read_anything_util.cc",
       "read_anything/read_anything_util.h",
     ]
@@ -467,7 +472,6 @@ static_library("non_code_constants") {
     "chrome_constants.h",
     "chrome_switches.cc",
     "chrome_switches.h",
-    "env_vars.cc",
     "env_vars.h",
   ]
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
@@ -527,6 +531,7 @@ static_library("url_constants") {
 
   public_deps = [
     ":buildflags",
+    "//build:android_buildflags",
     "//build:branding_buildflags",
     "//build/config/chromebox_for_meetings:buildflags",
     "//components/signin/public/base:signin_buildflags",
@@ -568,6 +573,7 @@ static_library("constants") {
     "//components/signin/public/base:signin_buildflags",
     "//content/public/common:buildflags",
     "//content/public/common:result_codes",
+    "//pdf:buildflags",
     "//rlz/buildflags",
     "//third_party/widevine/cdm:buildflags",
   ]
@@ -694,6 +700,8 @@ mojom("mojo_bindings") {
 
   if (is_android) {
     sources += [ "sandbox_status_extension_android.mojom" ]
+  } else {
+    sources += [ "actor.mojom" ]
   }
 
   if (is_mac) {
@@ -730,7 +738,6 @@ mojom("mojo_bindings") {
   enabled_features = []
 
   if (enable_glic) {
-    sources += [ "actor.mojom" ]
     enabled_features += [ "enable_glic" ]
   }
 

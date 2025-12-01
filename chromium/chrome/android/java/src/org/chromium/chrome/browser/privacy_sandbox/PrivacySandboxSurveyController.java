@@ -78,7 +78,7 @@ public class PrivacySandboxSurveyController {
         int MAX_VALUE = 7;
     }
 
-    // LINT.ThenChange(/tools/metrics/histograms/enums.xml:PrivacySandboxSurveyTypesEnums)
+    // LINT.ThenChange(//tools/metrics/histograms/metadata/privacy/enums.xml:PrivacySandboxSurveyTypesEnums)
 
     // LINT.IfChange(PrivacySandboxCctAdsNoticeSurveyFailures)
     /** Represents the possible failures when attempting to surface a CCT ads notice survey. */
@@ -115,7 +115,7 @@ public class PrivacySandboxSurveyController {
         int MAX_VALUE = INVALID_ROW_CONTROL_SURVEY_CONFIG;
     }
 
-    // LINT.ThenChange(/tools/metrics/histograms/enums.xml:PrivacySandboxCctAdsNoticeSurveyFailures)
+    // LINT.ThenChange(//tools/metrics/histograms/metadata/privacy/enums.xml:PrivacySandboxCctAdsNoticeSurveyFailures)
 
     // Maps {@link PrivacySandboxSurveyType} to their survey triggerid.
     private static final Map<Integer, String> sSurveyTriggers =
@@ -141,12 +141,12 @@ public class PrivacySandboxSurveyController {
                     .build();
 
     private ActivityTabTabObserver mActivityTabTabObserver;
-    private Activity mActivity;
-    private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
+    private final Activity mActivity;
+    private final ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
     private PropertyModel mMessage;
-    private TabModelSelector mTabModelSelector;
-    private MessageDispatcher mMessageDispatcher;
-    private Profile mProfile;
+    private final TabModelSelector mTabModelSelector;
+    private final MessageDispatcher mMessageDispatcher;
+    private final Profile mProfile;
     private boolean mHasSeenNtp;
     private boolean mOverrideChannelForTesting;
     private int mChannelForTesting;
@@ -334,7 +334,7 @@ public class PrivacySandboxSurveyController {
                         SurveyClientFactory.getInstance().getCrashUploadPermissionSupplier());
         SurveyClient surveyClient =
                 SurveyClientFactory.getInstance()
-                        .createClient(surveyConfig, messageDelegate, mProfile);
+                        .createClient(surveyConfig, messageDelegate, mProfile, mTabModelSelector);
         return surveyClient;
     }
 

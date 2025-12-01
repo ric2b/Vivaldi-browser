@@ -20,6 +20,14 @@
                OpName %a_0 "a"
                OpName %b_0 "b"
                OpName %main "main"
+               OpDecorate %baz_h4Z_aSampler RelaxedPrecision
+               OpDecorate %baz_h4Z_aSecondSampler RelaxedPrecision
+               OpDecorate %baz_h4Z_aThirdSampler RelaxedPrecision
+               OpDecorate %bar_h4Z_aSampler RelaxedPrecision
+               OpDecorate %bar_h4Z_aThirdSampler RelaxedPrecision
+               OpDecorate %bar_h4Z_aSecondSampler RelaxedPrecision
+               OpDecorate %foo_h4ZZ_aSampler_aSecondSampler RelaxedPrecision
+               OpDecorate %foo_h4ZZ_aSecondSampler_aThirdSampler RelaxedPrecision
                OpDecorate %sk_FragColor RelaxedPrecision
                OpDecorate %sk_FragColor Location 0
                OpDecorate %sk_FragColor Index 0
@@ -32,8 +40,11 @@
                OpDecorate %aThirdSampler RelaxedPrecision
                OpDecorate %aThirdSampler Binding 2
                OpDecorate %aThirdSampler DescriptorSet 0
+               OpDecorate %23 RelaxedPrecision
                OpDecorate %24 RelaxedPrecision
+               OpDecorate %29 RelaxedPrecision
                OpDecorate %30 RelaxedPrecision
+               OpDecorate %32 RelaxedPrecision
                OpDecorate %33 RelaxedPrecision
                OpDecorate %a RelaxedPrecision
                OpDecorate %b RelaxedPrecision

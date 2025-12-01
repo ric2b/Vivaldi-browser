@@ -111,12 +111,13 @@ FT_BEGIN_HEADER
     TT_Face            face;       /* ! */
     TT_Size            size;       /* ! */
     FT_Memory          memory;
+    TT_Interpreter     interpreter;
 
     /* instructions state */
 
     FT_Error           error;      /* last execution error */
 
-    FT_Long            top;        /* @ top of exec. stack */
+    FT_Long            top;        /* @! top of exec. stack */
 
     FT_Long            stackSize;  /* ! size of exec. stack */
     FT_Long*           stack;      /* ! current exec. stack */
@@ -142,11 +143,9 @@ FT_BEGIN_HEADER
     FT_Long            IP;        /* current instruction pointer */
     FT_Long            codeSize;  /* size of current range       */
 
-    FT_Byte            opcode;    /* current opcode              */
-    FT_Int             length;    /* length of current opcode    */
+    FT_Byte            opcode;    /* current opcode             */
+    FT_Int             length;    /* opcode length or increment */
 
-    FT_Bool            step_ins;  /* true if the interpreter must */
-                                  /* increment IP after ins. exec */
     FT_ULong           cvtSize;   /* ! */
     FT_Long*           cvt;       /* ! */
     FT_ULong           glyfCvtSize;
@@ -166,9 +165,9 @@ FT_BEGIN_HEADER
     FT_UInt            maxFunc;   /* ! maximum function index    */
     FT_UInt            maxIns;    /* ! maximum instruction index */
 
-    FT_Int             callTop,    /* @ top of call stack during execution */
-                       callSize;   /*   size of call stack                 */
-    TT_CallStack       callStack;  /*   call stack                         */
+    FT_Int             callTop,    /* @! top of call stack during execution */
+                       callSize;   /*    size of call stack                 */
+    TT_CallStack       callStack;  /*    call stack                         */
 
     FT_UShort          maxPoints;    /* capacity of this context's `pts' */
     FT_Short           maxContours;  /* record, expressed in points and  */
@@ -189,16 +188,14 @@ FT_BEGIN_HEADER
     FT_Bool            instruction_trap; /* ! If `True', the interpreter   */
                                          /*   exits after each instruction */
 
-    TT_GraphicsState   default_GS;       /* graphics state resulting from   */
-                                         /* the prep program                */
     FT_Bool            is_composite;     /* true if the glyph is composite  */
     FT_Bool            pedantic_hinting; /* true if pedantic interpretation */
 
     /* latest interpreter additions */
 
-    FT_Long            F_dot_P;    /* dot product of freedom and projection */
-                                   /* vectors                               */
-    TT_Round_Func      func_round; /* current rounding function             */
+    TT_Round_Func      func_round;     /* current rounding function   */
+
+    FT_Vector          moveVector;     /* "projected" freedom vector  */
 
     TT_Project_Func    func_project,   /* current projection function */
                        func_dualproj,  /* current dual proj. function */
@@ -327,26 +324,17 @@ FT_BEGIN_HEADER
      *
      */
 
-    /* Using v40 implies subpixel hinting, unless FT_RENDER_MODE_MONO has been
-     * requested.  Used to detect interpreter */
-    /* version switches.  `_lean' to differentiate from the Infinality */
-    /* `subpixel_hinting', which is managed differently.               */
+    /* Activate backward compatibility (bit 2) and track IUP (bits 0-1). */
+    /* If this is zero, it means that the interpreter is either in v35   */
+    /* or in native ClearType mode.                                      */
+    FT_Int             backward_compatibility;
+
+    /* Using v40 implies subpixel hinting, unless FT_RENDER_MODE_MONO    */
+    /* has been requested.  Used to detect interpreter version switches. */
     FT_Bool            subpixel_hinting_lean;
 
     /* Long side of a LCD subpixel is vertical (e.g., screen is rotated). */
-    /* `_lean' to differentiate from the Infinality `vertical_lcd', which */
-    /* is managed differently.                                            */
     FT_Bool            vertical_lcd_lean;
-
-    /* Default to backward compatibility mode in v40 interpreter.  If   */
-    /* this is false, it implies the interpreter is in v35 or in native */
-    /* ClearType mode.                                                  */
-    FT_Bool            backward_compatibility;
-
-    /* Useful for detecting and denying post-IUP trickery that is usually */
-    /* used to fix pixel patterns (`superhinting').                       */
-    FT_Bool            iupx_called;
-    FT_Bool            iupy_called;
 
     /* ClearType hinting and grayscale rendering, as used by Universal */
     /* Windows Platform apps (Windows 8 and above).  Like the standard */
@@ -373,14 +361,9 @@ FT_BEGIN_HEADER
 
 #ifdef TT_USE_BYTECODE_INTERPRETER
   FT_LOCAL( void )
-  TT_Goto_CodeRange( TT_ExecContext  exec,
-                     FT_Int          range,
-                     FT_Long         IP );
-
-  FT_LOCAL( void )
   TT_Set_CodeRange( TT_ExecContext  exec,
                     FT_Int          range,
-                    void*           base,
+                    FT_Byte*        base,
                     FT_Long         length );
 
   FT_LOCAL( void )
@@ -424,10 +407,11 @@ FT_BEGIN_HEADER
 
   FT_LOCAL( void )
   TT_Save_Context( TT_ExecContext  exec,
-                   TT_Size         ins );
+                   TT_Size         size );
 
   FT_LOCAL( FT_Error )
-  TT_Run_Context( TT_ExecContext  exec );
+  TT_Run_Context( TT_ExecContext  exec,
+                  TT_Size         size );
 #endif /* TT_USE_BYTECODE_INTERPRETER */
 
 

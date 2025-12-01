@@ -163,6 +163,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   //   after CreateAndStart() returns.
   static std::unique_ptr<AuctionRunner> CreateAndStart(
       AuctionMetricsRecorder* auction_metrics_recorder,
+      DwaAuctionMetricsManager* dwa_auction_metrics_manager,
       AuctionWorkletManager* auction_worklet_manager,
       AuctionNonceManager* auction_nonce_manager,
       InterestGroupManagerImpl* interest_group_manager,
@@ -196,6 +197,10 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
       blink::mojom::AuctionAdConfigAuctionIdPtr auction_id,
       const std::optional<base::flat_map<url::Origin, std::string>>&
           per_buyer_signals) override;
+  void ResolvedBuyerTkvSignalsPromise(
+      blink::mojom::AuctionAdConfigAuctionIdPtr auction_id,
+      const url::Origin& buyer,
+      const std::optional<std::string>& buyer_tkv_signals) override;
   void ResolvedBuyerTimeoutsPromise(
       blink::mojom::AuctionAdConfigAuctionIdPtr auction_id,
       blink::mojom::AuctionAdConfigBuyerTimeoutField field,
@@ -251,6 +256,7 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
 
   AuctionRunner(
       AuctionMetricsRecorder* auction_metrics_recorder,
+      DwaAuctionMetricsManager* dwa_auction_metrics_manager,
       AuctionWorkletManager* auction_worklet_manager,
       AuctionNonceManager* auction_nonce_manager,
       InterestGroupManagerImpl* interest_group_manager,
@@ -309,8 +315,8 @@ class CONTENT_EXPORT AuctionRunner : public blink::mojom::AbortableAdAuction {
   // Notify relevant InterestGroupAuctions of progress in resolving promises in
   // config, as appropriate. Manages `promise_fields_in_auction_config_`.
   void NotifyPromiseResolved(
-      const blink::mojom::AuctionAdConfigAuctionId* auction_id,
-      blink::AuctionConfig* config);
+      const blink::mojom::AuctionAdConfigAuctionId& auction_id,
+      const blink::AuctionConfig& config);
 
   // Looks up the decoder from AdAuctionPageData, if that's available.
   data_decoder::DataDecoder* GetDataDecoder(const url::Origin& origin);

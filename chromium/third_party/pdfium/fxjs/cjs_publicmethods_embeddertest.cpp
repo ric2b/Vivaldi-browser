@@ -187,7 +187,7 @@ TEST_F(CJSPublicMethodsEmbedderTest, AFSimpleCalculateSum) {
   v8::Context::Scope context_scope(GetV8Context());
 
   ASSERT_TRUE(OpenDocument("calculate.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   CJS_Runtime runtime(
@@ -220,7 +220,7 @@ TEST_F(CJSPublicMethodsEmbedderTest, AFNumberKeystroke) {
   v8::Context::Scope context_scope(GetV8Context());
 
   ASSERT_TRUE(OpenDocument("calculate.pdf"));
-  ScopedEmbedderTestPage page = LoadScopedPage(0);
+  ScopedPage page = LoadScopedPage(0);
   ASSERT_TRUE(page);
 
   CJS_Runtime runtime(
@@ -249,7 +249,6 @@ TEST_F(CJSPublicMethodsEmbedderTest, AFNumberKeystroke) {
   EXPECT_TRUE(valid);
   EXPECT_TRUE(!ret.HasError());
   EXPECT_TRUE(!ret.HasReturn());
-
 
   // Keep the *SAN bots happy. One of these is an UnownedPtr, another seems to
   // used during destruction. Clear them all to be safe and consistent.

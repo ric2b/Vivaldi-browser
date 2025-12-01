@@ -43,7 +43,8 @@ class AdverseAdFilterListService : public KeyedService,
 
   // This will load and parse the block list in addition to compute a MD5
   // checksum for the file-contents.
-  void LoadAndInitializeFromString(const std::string* json_string);
+  void LoadAndInitializeFromUniqueString(
+      std::unique_ptr<std::string> json_string);
 
   bool IsSiteInList(const GURL&);
   bool has_sites() const { return !adverse_ad_sites_.empty(); }
@@ -56,7 +57,8 @@ class AdverseAdFilterListService : public KeyedService,
 
   static base::FilePath GetDefaultFilePath();
 
-  static std::string* ReadFileToString(const base::FilePath& json_filename);
+  static std::unique_ptr<std::string> ReadFileToString(
+      const base::FilePath& json_filename);
 
  private:
 

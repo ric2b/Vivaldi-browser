@@ -9,8 +9,10 @@ import android.graphics.Rect;
 import org.chromium.base.lifetime.Destroyable;
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.util.WindowFeatures;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.url.GURL;
 
 /** A basic {@link WebContentsDelegateAndroid} that proxies methods into Tab. */
 @NullMarked
@@ -23,20 +25,21 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
     protected abstract boolean shouldResumeRequestsForCreatedWindow();
 
     /**
-     * Creates a new tab with the already-created WebContents. The tab for the added
-     * contents should be reparented correctly when this method returns.
+     * Creates a new tab with the already-created WebContents. The tab for the added contents should
+     * be reparented correctly when this method returns.
+     *
      * @param sourceWebContents Source WebContents from which the new one is created.
      * @param webContents Newly created WebContents object.
      * @param disposition WindowOpenDisposition indicating how the tab should be created.
-     * @param initialPosition Initial position of the content to be created.
+     * @param windowFeatures Initial window features to be used for the new tab.
      * @param userGesture {@code true} if opened by user gesture.
-     * @return {@code true} if new tab was created successfully with a give WebContents.
+     * @return {@code true} if new tab was created successfully with a given WebContents.
      */
     protected abstract boolean addNewContents(
             WebContents sourceWebContents,
             WebContents webContents,
             int disposition,
-            Rect initialPosition,
+            WindowFeatures windowFeatures,
             boolean userGesture);
 
     /**
@@ -137,6 +140,10 @@ public abstract class TabWebContentsDelegateAndroid extends WebContentsDelegateA
 
     /** Return if dynamically change safe area insets as browser controls scroll. */
     protected boolean isDynamicSafeAreaInsetsEnabled() {
+        return false;
+    }
+
+    protected boolean openInAppOrChromeFromCct(GURL gurl) {
         return false;
     }
 }

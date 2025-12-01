@@ -49,8 +49,8 @@
       navigationController.sheetPresentationController;
   presentationController.prefersEdgeAttachedInCompactHeight = YES;
   presentationController.detents = @[
-    UISheetPresentationControllerDetent.mediumDetent,
-    UISheetPresentationControllerDetent.largeDetent
+    [UISheetPresentationControllerDetent mediumDetent],
+    [UISheetPresentationControllerDetent largeDetent]
   ];
   [self.baseViewController presentViewController:navigationController
                                         animated:YES
@@ -75,7 +75,7 @@
 
 - (void)learnMoreDone:
     (SearchEngineChoiceLearnMoreViewController*)viewController {
-  CHECK_EQ(_viewController, viewController, base::NotFatalUntil::M127);
+  CHECK_EQ(_viewController, viewController);
   __weak __typeof(self) weakSelf = self;
   [_viewController dismissViewControllerAnimated:YES
                                       completion:^() {

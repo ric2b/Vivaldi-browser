@@ -642,7 +642,7 @@ static int construct_multi_layer_gf_structure(
                                         : gf_group->is_sframe_due ? S_FRAME
                                                                   : INTER_FRAME;
     gf_group->is_sframe_due =
-        sframe_enabled && !(gf_group->frame_type[frame_index] == S_FRAME);
+        sframe_enabled && gf_group->frame_type[frame_index] != S_FRAME;
     gf_group->refbuf_state[frame_index] = REFBUF_UPDATE;
     gf_group->max_layer_depth = 1;
     gf_group->arf_index = frame_index;
@@ -857,6 +857,10 @@ void av1_gop_setup_structure(AV1_COMP *cpi) {
   } else if (!cpi->ppi->gf_state.arf_gf_boost_lst) {
     first_frame_update_type = GF_UPDATE;
   }
+
+  if (cpi->oxcf.algo_cfg.sharpness == 3)
+    gf_group->max_layer_depth_allowed =
+        AOMMIN(gf_group->max_layer_depth_allowed, 2);
 
   gf_group->size = construct_multi_layer_gf_structure(
       cpi, twopass, gf_group, rc, frame_info, p_rc->baseline_gf_interval,

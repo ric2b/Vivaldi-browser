@@ -193,6 +193,14 @@
             ]
         },
         {
+            "name": "prefer_global_pipeline_cache",
+            "category": "Features",
+            "description": [
+                "The renderer's pipeline cache will be used instead of the separate caches per program."
+            ],
+            "issue": "http://anglebug.com/411442610"
+        },
+        {
             "name": "supports_YUV_sampler_conversion",
             "category": "Features",
             "description": [
@@ -389,14 +397,6 @@
                 "Persistently map buffer memory to reduce map/unmap IOCTL overhead."
             ],
             "issue": "http://anglebug.com/40096464"
-        },
-        {
-            "name": "enable_pre_rotate_surfaces",
-            "category": "Features",
-            "description": [
-                "Enable Android pre-rotation for landscape applications"
-            ],
-            "issue": "http://anglebug.com/42262166"
         },
         {
             "name": "enable_precision_qualifiers",
@@ -658,14 +658,6 @@
                 "Emulate 270-degree prerotation."
             ],
             "issue": "http://anglebug.com/42263477"
-        },
-        {
-            "name": "prefer_driver_uniform_over_spec_const",
-            "category": "Features",
-            "description": [
-                "Prefer using driver uniforms instead of specialization constants."
-            ],
-            "issue": "http://anglebug.com/42265878"
         },
         {
             "name": "expose_non_conformant_extensions_and_versions",
@@ -1281,6 +1273,14 @@
             "issue": "http://anglebug.com/42263322"
         },
         {
+            "name": "enable_extra_submit_fence",
+            "category": "Workarounds",
+            "description": [
+                "Enable using a separate submit fence in the command batches."
+            ],
+            "issue": "https://issuetracker.google.com/384477641"
+        },
+        {
             "name": "supports_pipeline_protected_access",
             "category": "Features",
             "description": [
@@ -1461,6 +1461,14 @@
             ]
         },
         {
+            "name": "force_host_image_copy_for_luma",
+            "category": "Features",
+            "description": [
+                "When using VK_EXT_host_image_copy, use VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT for images created",
+                "for luminance/alpha textures"
+            ]
+        },
+        {
             "name": "enable_parallel_compile_and_link",
             "category": "Features",
             "description": [
@@ -1638,6 +1646,14 @@
                 "Uses VkEvent instead of VkCmdPipelineBarrier for buffer barriers"
             ],
             "issue": "https://issues.angleproject.org/360274928"
+        },
+        {
+            "name": "recycle_vkEvent",
+            "category": "Features",
+            "description": [
+                "Keep and recycle VkEvent instead of destroying when the last reference goes away"
+            ],
+            "issue": "https://issues.angleproject.org/409441956"
         },
         {
             "name": "supports_synchronization2",
@@ -1872,6 +1888,14 @@
                 "VkDevice supports VK_EXT_texture_compression_astc_hdr extension"
             ],
             "issue": "https://anglebug.com/379186304"
+        },
+        {
+            "name": "supports_astc_hdr_3d_textures",
+            "category": "Features",
+            "description": [
+                "Whether the device supports 3D textures with ASTC HDR compression"
+            ],
+            "issue": "https://anglebug.com/416095435"
         },
         {
             "name": "supports_image_compression_control_swapchain",

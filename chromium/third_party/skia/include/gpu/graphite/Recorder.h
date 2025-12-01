@@ -8,23 +8,32 @@
 #ifndef skgpu_graphite_Recorder_DEFINED
 #define skgpu_graphite_Recorder_DEFINED
 
+#include "include/core/SkRecorder.h"
 #include "include/core/SkRefCnt.h"
-#include "include/core/SkSize.h"
 #include "include/gpu/graphite/GraphiteTypes.h"
 #include "include/gpu/graphite/Recording.h"
 #include "include/private/base/SingleOwner.h"
+#include "include/private/base/SkAPI.h"
 #include "include/private/base/SkTArray.h"
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
 
-struct AHardwareBuffer;
 class SkCanvas;
-struct SkImageInfo;
 class SkPixmap;
 class SkTraceMemoryDump;
+struct SkISize;
+struct SkImageInfo;
+
+#if defined(SK_BUILD_FOR_ANDROID)
+struct AHardwareBuffer;
+#endif
 
 namespace skgpu {
+enum class BackendApi : unsigned int;
 class RefCntedCallback;
 class TokenTracker;
 }
@@ -38,25 +47,22 @@ namespace skgpu::graphite {
 
 class AtlasProvider;
 class BackendTexture;
-class Caps;
 class Context;
 class Device;
 class DrawBufferManager;
-class GlobalCache;
 class ImageProvider;
-class ProxyCache;
 class ProxyReadCountMap;
 class RecorderPriv;
 class ResourceProvider;
 class RuntimeEffectDictionary;
 class SharedContext;
-class Task;
 class TaskList;
 class TextureDataBlock;
 class TextureInfo;
-class UniformDataBlock;
 class UploadBufferManager;
 class UploadList;
+
+struct RecorderOptionsPriv;
 
 template<typename T> class PipelineDataCache;
 using TextureDataCache = PipelineDataCache<TextureDataBlock>;
@@ -72,21 +78,26 @@ struct SK_API RecorderOptions final {
     // What is the budget for GPU resources allocated and held by this Recorder.
     size_t fGpuBudgetInBytes = kDefaultRecorderBudget;
     // If Recordings are known to be played back in the order they are recorded, then Graphite
-    // may be able to make certain assuptions that improve performance. This is often the case
+    // may be able to make certain assumptions that improve performance. This is often the case
     // if the content being drawn triggers the use of internal atlasing in Graphite (e.g. text).
     std::optional<bool> fRequireOrderedRecordings;
+
+    // Private options that are only meant for testing within Skia's tools.
+    RecorderOptionsPriv* fRecorderOptionsPriv = nullptr;
 };
 
-class SK_API Recorder final {
+class SK_API Recorder final : public SkRecorder {
 public:
     Recorder(const Recorder&) = delete;
     Recorder(Recorder&&) = delete;
     Recorder& operator=(const Recorder&) = delete;
     Recorder& operator=(Recorder&&) = delete;
 
-    ~Recorder();
+    ~Recorder() override;
 
     BackendApi backend() const;
+
+    Type type() const override { return SkRecorder::Type::kGraphite; }
 
     std::unique_ptr<Recording> snap();
 

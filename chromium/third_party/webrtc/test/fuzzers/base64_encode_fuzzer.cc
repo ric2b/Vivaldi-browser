@@ -11,7 +11,7 @@
 #include <cstdint>
 #include <cstring>
 #include <optional>
-#include <vector>
+#include <string>
 
 #include "api/array_view.h"
 #include "rtc_base/base64.h"
@@ -20,8 +20,8 @@
 namespace webrtc {
 
 void FuzzOneInput(const uint8_t* data, size_t size) {
-  std::optional<std::vector<uint8_t>> decoded_encoded_data =
-      Base64Decode(Base64Encode(rtc::MakeArrayView(data, size)));
+  std::optional<std::string> decoded_encoded_data =
+      Base64Decode(Base64Encode(webrtc::MakeArrayView(data, size)));
   RTC_CHECK(decoded_encoded_data.has_value());
   RTC_CHECK_EQ(std::memcmp(data, decoded_encoded_data->data(), size), 0);
 }

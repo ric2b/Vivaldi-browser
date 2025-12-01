@@ -39,13 +39,19 @@ import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Network;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.ContextThemeWrapper;
+import android.view.WindowManager;
 
 import androidx.browser.customtabs.CustomTabColorSchemeParams;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsSession;
+import androidx.browser.customtabs.TrustedWebUtils;
+import androidx.browser.trusted.FileHandlingData;
+import androidx.browser.trusted.LaunchHandlerClientMode;
 import androidx.browser.trusted.ScreenOrientation;
+import androidx.browser.trusted.TrustedWebActivityDisplayMode;
 import androidx.browser.trusted.TrustedWebActivityIntentBuilder;
 import androidx.test.core.app.ApplicationProvider;
 
@@ -63,8 +69,10 @@ import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.Features.EnableFeatures;
+import org.chromium.blink.mojom.DisplayMode;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
+import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider.CustomTabsUiType;
 import org.chromium.chrome.browser.browserservices.intents.ColorProvider;
 import org.chromium.chrome.browser.browserservices.intents.CustomButtonParams;
@@ -1582,6 +1590,18 @@ public class CustomTabIntentDataProviderTest {
         return bundle;
     }
 
+    private ArrayList<Uri> getSampleUriList() {
+        return new ArrayList<>(
+                Arrays.asList(
+                        Uri.parse("content://com.a.b.c/a"), Uri.parse("content://com.a.b.c/b")));
+    }
+
+    private Bundle createFileHandlingDataBundle() {
+        Bundle bundle = new Bundle();
+        bundle.putParcelableArrayList(FileHandlingData.KEY_URIS, getSampleUriList());
+        return bundle;
+    }
+
     protected Uri getLaunchingUrl() {
         return Uri.parse("https://www.example.com/");
     }
@@ -1607,7 +1627,7 @@ public class CustomTabIntentDataProviderTest {
 
         Intent intent = new CustomTabsIntent.Builder().build().intent;
         intent.putExtra(
-                CustomTabIntentDataProvider.EXTRA_NETWORK,
+                CustomTabsIntent.EXTRA_NETWORK,
                 network);
         intent.putExtra(
                 CustomTabIntentDataProvider.EXTRA_UI_TYPE,
@@ -1634,7 +1654,7 @@ public class CustomTabIntentDataProviderTest {
     @Test
     public void setCloseButtonDisabled() {
         Intent intent = new CustomTabsIntent.Builder().build().intent;
-        intent.putExtra(CustomTabIntentDataProvider.EXTRA_CLOSE_BUTTON_ENABLED, false);
+        intent.putExtra(CustomTabsIntent.EXTRA_CLOSE_BUTTON_ENABLED, false);
         var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
         assertFalse(dataProvider.isCloseButtonEnabled());
     }
@@ -1642,7 +1662,7 @@ public class CustomTabIntentDataProviderTest {
     @Test
     public void setCloseButtonEnabled() {
         Intent intent = new CustomTabsIntent.Builder().build().intent;
-        intent.putExtra(CustomTabIntentDataProvider.EXTRA_CLOSE_BUTTON_ENABLED, true);
+        intent.putExtra(CustomTabsIntent.EXTRA_CLOSE_BUTTON_ENABLED, true);
         var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
         assertTrue(dataProvider.isCloseButtonEnabled());
     }
@@ -1652,7 +1672,7 @@ public class CustomTabIntentDataProviderTest {
         Intent intent = new CustomTabsIntent.Builder().build().intent;
         Bitmap icon =
                 Bitmap.createBitmap(/* width= */ 16, /* height= */ 16, Bitmap.Config.ARGB_8888);
-        intent.putExtra(CustomTabIntentDataProvider.EXTRA_CLOSE_BUTTON_ENABLED, false);
+        intent.putExtra(CustomTabsIntent.EXTRA_CLOSE_BUTTON_ENABLED, false);
         intent.putExtra(CustomTabsIntent.EXTRA_CLOSE_BUTTON_ICON, icon);
         var dataProvider = new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
         assertFalse(dataProvider.isCloseButtonEnabled());
@@ -1676,5 +1696,294 @@ public class CustomTabIntentDataProviderTest {
         assertNotNull(dataProvider.getCloseButtonDrawable());
         assertEquals(
                 CustomTabsIntent.CLOSE_BUTTON_POSITION_END, dataProvider.getCloseButtonPosition());
+    }
+
+    @Test
+    public void launchHandlerClientMode() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_LAUNCH_HANDLER_CLIENT_MODE,
+                LaunchHandlerClientMode.FOCUS_EXISTING);
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                LaunchHandlerClientMode.FOCUS_EXISTING, dataProvider.getLaunchHandlerClientMode());
+    }
+
+    @Test
+    public void launchHandlerClientMode_noValue() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(LaunchHandlerClientMode.AUTO, dataProvider.getLaunchHandlerClientMode());
+    }
+
+    @Test
+    public void launchHandlerClientMode_wrongValue() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(TrustedWebActivityIntentBuilder.EXTRA_LAUNCH_HANDLER_CLIENT_MODE, 45);
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(LaunchHandlerClientMode.AUTO, dataProvider.getLaunchHandlerClientMode());
+    }
+
+    @Test
+    public void launchHandlerFileHandlingData() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_FILE_HANDLING_DATA,
+                createFileHandlingDataBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        FileHandlingData data = dataProvider.getFileHandlingData();
+        assertEquals(getSampleUriList(), data.uris);
+    }
+
+    @Test
+    public void testTwaFullscreenDisplayMode_ResolveToFullscreen() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.ImmersiveMode(
+                                /* isSticky= */ false,
+                                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT)
+                        .toBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to fullscreen display mode",
+                DisplayMode.FULLSCREEN,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    public void testTwaStandaloneDisplayMode_ResolveToStandalone() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.DefaultMode().toBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to standalone display mode",
+                DisplayMode.STANDALONE,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    @Config(sdk = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    @EnableFeatures({ChromeFeatureList.ANDROID_MINIMAL_UI_LARGE_SCREEN})
+    public void testTwaMinUiEnabledDisplayMode_ResolveToMinimalUi() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.MinimalUiMode().toBundle());
+
+        // on sdk < 35 min ui is not supported
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to standalone display mode",
+                DisplayMode.STANDALONE,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    @Config(sdk = Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    @DisableFeatures({ChromeFeatureList.ANDROID_MINIMAL_UI_LARGE_SCREEN})
+    public void testTwaMinUiDisabledDisplayMode_ResolveToStandalone() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.MinimalUiMode().toBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to standalone display mode",
+                DisplayMode.STANDALONE,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    @Config(sdk = Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    @EnableFeatures({ChromeFeatureList.ANDROID_MINIMAL_UI_LARGE_SCREEN})
+    public void testTwaBrowserModeWithEnabledMinUI_ResolveToMinimalUi() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.BrowserMode().toBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to minimal ui display mode",
+                DisplayMode.MINIMAL_UI,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    @EnableFeatures({ChromeFeatureList.ANDROID_MINIMAL_UI_LARGE_SCREEN})
+    public void testTwaBrowserModeWithEnabledMinUiPreSdk35_ResolveToMinimalUi() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.BrowserMode().toBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to standalone display mode",
+                DisplayMode.STANDALONE,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    @Config(sdk = Build.VERSION_CODES.VANILLA_ICE_CREAM)
+    @DisableFeatures({ChromeFeatureList.ANDROID_MINIMAL_UI_LARGE_SCREEN})
+    public void testTwaBrowserModeWithDisabledMinimalUi_ResolveToStandalone() {
+        CustomTabsSession session =
+                CustomTabsSession.createMockSessionForTesting(
+                        new ComponentName(mContext, ChromeLauncherActivity.class));
+        Intent intent = new CustomTabsIntent.Builder(session).build().intent;
+        intent.putExtra(TrustedWebUtils.EXTRA_LAUNCH_AS_TRUSTED_WEB_ACTIVITY, true);
+        intent.putExtra(
+                TrustedWebActivityIntentBuilder.EXTRA_DISPLAY_MODE,
+                new TrustedWebActivityDisplayMode.BrowserMode().toBundle());
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to standalone display mode",
+                DisplayMode.STANDALONE,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    public void testResolveTwaDisplayModeNotForTwa_ResolveToUndefined() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to undefined display mode",
+                DisplayMode.UNDEFINED,
+                dataProvider.getResolvedDisplayMode());
+    }
+
+    @Test
+    public void uiTypePopup_hasNoToolbarButtons() {
+        Intent intent =
+                new Intent()
+                        .putExtra(
+                                CustomTabsIntent.EXTRA_SHARE_STATE, CustomTabsIntent.SHARE_STATE_ON)
+                        .putExtra(CustomTabsIntent.EXTRA_CLOSE_BUTTON_ENABLED, true)
+                        .putExtra(
+                                CustomTabIntentDataProvider.EXTRA_UI_TYPE, CustomTabsUiType.POPUP);
+        IntentUtils.setForceIsTrustedIntentForTesting(true);
+
+        CustomTabIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        // If there are no custom buttons defined, then the share button is added to the set of
+        // custom toolbar buttons. Otherwise it gets punted to menu.
+        // The open in browser button can be presented only by being added to the set of custom
+        // toolbar buttons.
+        assertEquals(
+                "There should be no buttons on toolbar",
+                0,
+                dataProvider.getCustomButtonsOnToolbar().size());
+
+        assertFalse("The close button should be disabled", dataProvider.isCloseButtonEnabled());
+
+        IntentUtils.setForceIsTrustedIntentForTesting(false);
+    }
+
+    @Test
+    public void testGetOpenInBrowserButtonState_defaultState() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_OPEN_IN_BROWSER_STATE,
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_DEFAULT);
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to the default state",
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_DEFAULT,
+                dataProvider.getOpenInBrowserButtonState());
+    }
+
+    @Test
+    public void testGetOpenInBrowserButtonState_notSet() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+
+        assertEquals(
+                "Should resolve to the default state",
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_DEFAULT,
+                dataProvider.getOpenInBrowserButtonState());
+    }
+
+    @Test
+    public void testGetOpenInBrowserButtonState_offState() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_OPEN_IN_BROWSER_STATE,
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_OFF);
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to the off state",
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_OFF,
+                dataProvider.getOpenInBrowserButtonState());
+    }
+
+    @Test
+    public void testGetOpenInBrowserButtonState_onState() {
+        Intent intent = new CustomTabsIntent.Builder().build().intent;
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_OPEN_IN_BROWSER_STATE,
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_ON);
+
+        BrowserServicesIntentDataProvider dataProvider =
+                new CustomTabIntentDataProvider(intent, mContext, COLOR_SCHEME_LIGHT);
+        assertEquals(
+                "Should resolve to the on state",
+                CustomTabsIntent.OPEN_IN_BROWSER_STATE_ON,
+                dataProvider.getOpenInBrowserButtonState());
     }
 }

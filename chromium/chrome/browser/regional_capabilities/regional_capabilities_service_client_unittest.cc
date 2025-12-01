@@ -155,18 +155,29 @@ TEST_F(RegionalCapabilitiesServiceClientTest,
   RegionalCapabilitiesServiceClient client(/* variations_service= */ nullptr);
   SetLoadingState(ash::system::StatisticsProvider::LoadingState::kFinished);
 
-  histogram_tester().ExpectUniqueSample(
-      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionTooShort, 0);
+  histogram_tester().ExpectTotalCount(kCrOSMissingVariationData, 0);
   EXPECT_EQ(client.GetFallbackCountryId(),
             country_codes::GetCurrentCountryID());
   histogram_tester().ExpectUniqueSample(
-      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionTooShort, 1);
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionAbsent, 1);
+
+  SetRegion("");
+  EXPECT_EQ(client.GetFallbackCountryId(),
+            country_codes::GetCurrentCountryID());
+  histogram_tester().ExpectBucketCount(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionAbsent, 1);
+  histogram_tester().ExpectBucketCount(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionEmpty, 1);
 
   SetRegion("a");
   EXPECT_EQ(client.GetFallbackCountryId(),
             country_codes::GetCurrentCountryID());
-  histogram_tester().ExpectUniqueSample(
-      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionTooShort, 2);
+  histogram_tester().ExpectBucketCount(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionAbsent, 1);
+  histogram_tester().ExpectBucketCount(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionEmpty, 1);
+  histogram_tester().ExpectBucketCount(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kRegionTooShort, 1);
 }
 
 TEST_F(RegionalCapabilitiesServiceClientTest,
@@ -200,6 +211,43 @@ TEST_F(RegionalCapabilitiesServiceClientTest,
   EXPECT_EQ(fallback_id, country_codes::CountryId(country_code));
   histogram_tester().ExpectUniqueSample(
       kCrOSMissingVariationData, ChromeOSFallbackCountry::kValidCountryCode, 1);
+}
+
+TEST_F(RegionalCapabilitiesServiceClientTest,
+       GetFallbackCountryId_StripKeyboardLayout) {
+  RegionalCapabilitiesServiceClient client(/* variations_service= */ nullptr);
+  SetLoadingState(ash::system::StatisticsProvider::LoadingState::kFinished);
+
+  histogram_tester().ExpectUniqueSample(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kValidCountryCode, 0);
+  std::string country_code = "DE";
+  if (country_code == country_codes::GetCurrentCountryID().CountryCode()) {
+    country_code = "BE";
+  }
+  const std::string country_with_layout_info = country_code + ".us-intl";
+  SetRegion(country_with_layout_info);
+  const CountryId fallback_id = client.GetFallbackCountryId();
+  ASSERT_NE(fallback_id, country_codes::GetCurrentCountryID());
+  EXPECT_EQ(fallback_id, country_codes::CountryId(country_code));
+  histogram_tester().ExpectUniqueSample(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kValidCountryCode, 1);
+  histogram_tester().ExpectUniqueSample(kVpdRegionSplittingOutcome, true, 1);
+}
+
+TEST_F(RegionalCapabilitiesServiceClientTest,
+       GetFallbackCountryId_StripKeyboardLayoutFailure) {
+  RegionalCapabilitiesServiceClient client(/* variations_service= */ nullptr);
+  SetLoadingState(ash::system::StatisticsProvider::LoadingState::kFinished);
+
+  histogram_tester().ExpectUniqueSample(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kValidCountryCode, 0);
+  SetRegion("99.us-intl");
+  const CountryId fallback_id = client.GetFallbackCountryId();
+  ASSERT_EQ(fallback_id, country_codes::GetCurrentCountryID());
+  histogram_tester().ExpectUniqueSample(
+      kCrOSMissingVariationData, ChromeOSFallbackCountry::kInvalidCountryCode,
+      1);
+  histogram_tester().ExpectUniqueSample(kVpdRegionSplittingOutcome, false, 1);
 }
 #endif
 

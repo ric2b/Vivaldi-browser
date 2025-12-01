@@ -109,7 +109,6 @@ class StyleBuilderConverterBase {
       const CSSToLengthConversionData&,
       FontDescription::Size parent_size,
       const Document*);
-  static DynamicRangeLimit ConvertDynamicRangeLimit(const CSSValue&);
   static FontSizeAdjust ConvertFontSizeAdjust(const StyleResolverState&,
                                               const CSSValue&);
   static scoped_refptr<FontPalette> ConvertFontPalette(const CSSLengthResolver&,
@@ -130,7 +129,7 @@ class StyleBuilderConverter {
   static LengthBox ConvertClip(StyleResolverState&, const CSSValue&);
   static ClipPathOperation* ConvertClipPath(StyleResolverState&,
                                             const CSSValue&);
-  static DynamicRangeLimit ConvertDynamicRangeLimit(StyleResolverState&,
+  static DynamicRangeLimit ConvertDynamicRangeLimit(const StyleResolverState&,
                                                     const CSSValue&);
   static StyleSVGResource* ConvertElementReference(StyleResolverState&,
                                                    const CSSValue&,
@@ -144,6 +143,8 @@ class StyleBuilderConverter {
   // converted to zero.
   template <typename T, CSSValueID ZeroValue = CSSValueID::kNone>
   static T ConvertFlags(StyleResolverState&, const CSSValue&);
+  static StyleFlexWrapData ConvertFlexWrapData(StyleResolverState&,
+                                               const CSSValue&);
   static FontDescription::FamilyDescription ConvertFontFamily(
       StyleResolverState&,
       const CSSValue&);
@@ -207,8 +208,8 @@ class StyleBuilderConverter {
                                             const CSSValue&);
   static NGGridTrackList ConvertGridTrackSizeList(StyleResolverState&,
                                                   const CSSValue&);
-  static std::optional<Length> ConvertMasonrySlack(const StyleResolverState&,
-                                                   const CSSValue&);
+  static std::optional<Length> ConvertItemTolerance(const StyleResolverState&,
+                                                    const CSSValue&);
   static StyleHyphenateLimitChars ConvertHyphenateLimitChars(
       StyleResolverState&,
       const CSSValue&);
@@ -216,7 +217,8 @@ class StyleBuilderConverter {
   static T ConvertLineWidth(StyleResolverState&, const CSSValue&);
   static int ConvertBorderWidth(StyleResolverState&, const CSSValue&);
   static uint16_t ConvertColumnRuleWidth(StyleResolverState&, const CSSValue&);
-  static Superellipse ConvertCornerShape(StyleResolverState&, const CSSValue&);
+  static Superellipse ConvertCornerShape(const StyleResolverState&,
+                                         const CSSValue&);
   static LayoutUnit ConvertLayoutUnit(const StyleResolverState&,
                                       const CSSValue&);
   static std::optional<Length> ConvertGapLength(const StyleResolverState&,
@@ -419,6 +421,7 @@ class StyleBuilderConverter {
                                                  const CSSValue&);
 
   static PositionArea ConvertPositionArea(StyleResolverState&, const CSSValue&);
+  static FitText ConvertFitText(StyleResolverState&, const CSSValue&);
 };
 
 template <typename T>

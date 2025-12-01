@@ -188,8 +188,6 @@ static_library("content_shell_lib") {
     "browser/shell_javascript_dialog.h",
     "browser/shell_javascript_dialog_manager.cc",
     "browser/shell_javascript_dialog_manager.h",
-    "browser/shell_paths.cc",
-    "browser/shell_paths.h",
     "browser/shell_permission_manager.cc",
     "browser/shell_permission_manager.h",
     "browser/shell_platform_data_aura.cc",
@@ -208,6 +206,8 @@ static_library("content_shell_lib") {
     "common/shell_content_client.h",
     "common/shell_origin_trial_policy.cc",
     "common/shell_origin_trial_policy.h",
+    "common/shell_paths.cc",
+    "common/shell_paths.h",
     "common/shell_switches.cc",
     "common/shell_switches.h",
     "gpu/shell_content_gpu_client.cc",
@@ -650,8 +650,13 @@ if (is_android) {
 
     # Path to an entitlements file used in ios_content_shell. Can be overridden
     # to provide an alternative.
-    ios_content_shell_entitlements_path =
-        "//content/app/ios/appex/app.entitlements"
+    if (target_platform == "iphoneos") {
+      ios_content_shell_entitlements_path =
+          "//content/app/ios/appex/app.entitlements"
+    } else {
+      ios_content_shell_entitlements_path =
+          "//build/config/ios/entitlements.plist"
+    }
   }
 
   declare_args() {
@@ -905,12 +910,15 @@ if (is_mac) {
     ]
 
     deps = [
-      ":content_shell_angle_binaries",
       ":content_shell_app",
       "//content/public/app",
       "//content/public/common",
       "//third_party/icu:icudata",
     ]
+
+    if (!use_static_angle) {
+      deps += [ ":content_shell_angle_binaries" ]
+    }
 
     bundle_deps = [
       ":content_shell_framework_helpers",
@@ -986,14 +994,16 @@ if (is_mac) {
 
       if (is_component_build) {
         ldflags = [
-          # The helper is in Content Shell.app/Contents/Frameworks/
-          #     Content Shell Framework.framework/Versions/C/Helpers/
-          #     Content Shell Helper.app/Contents/MacOS/
-          # so set rpath up to the base.
-          "-Wl,-rpath,@executable_path/../../../../../../../../../..",
+          # The helper is in Content Shell.app/Contents/Frameworks/Content Shell Framework.framework/Versions/C/Helpers/Content Shell Helper.app/Contents/MacOS
 
-          # ... and up to Contents/Frameworks.
+          # Set up an rpath to the Contents/Frameworks/ directory so that
+          # Content Shell Framework.framework will be found there. This matches
+          # the path that app_shell_main.cc uses with `dlopen` and avoids
+          # loading the framework into memory twice.
           "-Wl,-rpath,@executable_path/../../../../../../..",
+
+          # Add an rpath up to the base for all other libraries.
+          "-Wl,-rpath,@executable_path/../../../../../../../../../..",
         ]
 
         # In a component build, the framework is directly linked to the
@@ -1034,14 +1044,16 @@ if (is_mac) {
     outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
   }
 
-  # Add the ANGLE .dylibs in the Libraries directory of the Framework.
-  bundle_data("content_shell_angle_binaries") {
-    sources = [
-      "$root_out_dir/egl_intermediates/libEGL.dylib",
-      "$root_out_dir/egl_intermediates/libGLESv2.dylib",
-    ]
-    outputs = [ "{{bundle_contents_dir}}/Libraries/{{source_file_part}}" ]
-    public_deps = [ "//ui/gl:angle_library_copy" ]
+  if (!use_static_angle) {
+    # Add the ANGLE .dylibs in the Libraries directory of the Framework.
+    bundle_data("content_shell_angle_binaries") {
+      sources = [
+        "$root_out_dir/egl_intermediates/libEGL.dylib",
+        "$root_out_dir/egl_intermediates/libGLESv2.dylib",
+      ]
+      outputs = [ "{{bundle_contents_dir}}/Libraries/{{source_file_part}}" ]
+      public_deps = [ "//ui/gl:angle_library_copy" ]
+    }
   }
 
   # Add the SwiftShader .dylibs in the Libraries directory of the Framework.

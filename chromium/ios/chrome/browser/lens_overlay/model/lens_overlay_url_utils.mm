@@ -8,11 +8,19 @@
 
 #import "components/google/core/common/google_util.h"
 #import "components/lens/lens_url_utils.h"
+#import "ios/chrome/browser/shared/public/features/system_flags.h"
 #import "net/base/url_util.h"
 
 namespace lens {
 
 bool IsGoogleHostURL(const GURL& url) {
+  // Only available for debug builds.
+  if (experimental_flags::GetLensResultPanelGwsURL() != nil) {
+    return google_util::IsGoogleDomainUrl(
+        url, google_util::ALLOW_SUBDOMAIN,
+        google_util::ALLOW_NON_STANDARD_PORTS);
+  }
+
   return google_util::IsGoogleDomainUrl(
       url, google_util::DISALLOW_SUBDOMAIN,
       google_util::DISALLOW_NON_STANDARD_PORTS);
@@ -47,6 +55,16 @@ bool IsLensMultimodalSRP(const GURL& url) {
 
   return has_search_terms && has_lens_surface && has_lens_param &&
          has_unified_drilldown_param && lens_surface == "4" && udm == "24";
+}
+
+bool IsLensAIMSRP(const GURL& url) {
+  if (!IsGoogleHostURL(url)) {
+    return false;
+  }
+  std::string udm;
+  bool has_unified_drilldown_param = net::GetValueForKeyInQuery(
+      url, lens::kUnifiedDrillDownQueryParameter, &udm);
+  return has_unified_drilldown_param && udm == "50";
 }
 
 std::string ExtractQueryFromLensOverlaySRP(const GURL& url) {

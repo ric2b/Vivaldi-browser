@@ -64,6 +64,7 @@
 #include "third_party/blink/renderer/core/paint/object_paint_invalidator.h"
 #include "third_party/blink/renderer/platform/fonts/character_range.h"
 #include "third_party/blink/renderer/platform/heap/disallow_new_wrapper.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/text/character.h"
@@ -400,7 +401,7 @@ Vector<LayoutText::TextBoxInfo> LayoutText::GetTextBoxInfo() const {
            mapping->GetMappingUnitsForTextContentOffsetRange(offset.start,
                                                              offset.end)) {
         DCHECK_EQ(unit.GetLayoutObject(), this);
-        if (unit.GetType() == OffsetMappingUnitType::kCollapsed) {
+        if (unit.IsCollapsed()) {
           continue;
         }
         // [clamped_start, clamped_end] of |fragment| matches a legacy text box.
@@ -618,7 +619,13 @@ void LayoutText::AbsoluteQuadsForRange(Vector<gfx::QuadF>& quads,
       PhysicalRect rect;
       if (!item.IsGeneratedText()) {
         const TextOffsetRange& offset = item.TextOffset();
-        if (start > offset.end || end < offset.start) {
+        // If `item` is a forced line break and `start` and `end` values
+        // ​​are equal, it signifies a collapsed range. In this case, we
+        // should skip processing `item`.
+        if (start > offset.end || end < offset.start ||
+            (RuntimeEnabledFeatures::
+                 SkipLineBreakItemWhenIsCollapsedEnabled() &&
+             item.IsLineBreak() && start == end)) {
           is_last_end_included = false;
           continue;
         }
@@ -648,7 +655,11 @@ void LayoutText::AbsoluteQuadsForRange(Vector<gfx::QuadF>& quads,
         quad.Scale(1 / scaling_factor, 1 / scaling_factor);
         quad = LocalToAbsoluteQuad(quad);
       } else {
-        rect.Move(cursor.CurrentOffsetInBlockFlow());
+        if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+          rect.Move(cursor.CurrentOffsetInFirstContainerFragment());
+        } else {
+          rect.Move(cursor.CurrentOffsetInBlockFlow());
+        }
         quad = LocalRectToAbsoluteQuad(rect);
       }
       if (!is_collapsed) {
@@ -734,6 +745,10 @@ PhysicalRect LayoutText::LocalCaretRect(int caret_offset) const {
 
 bool LayoutText::IsAllCollapsibleWhitespace() const {
   NOT_DESTROYED();
+  if (text_.empty()) {
+    return true;
+  }
+
   const ComputedStyle& style = StyleRef();
   return WTF::VisitCharacters(text_, [&style](auto chars) {
     return std::ranges::all_of(
@@ -802,8 +817,9 @@ void LayoutText::LogicalStartingPointAndHeight(
       return;
     }
     PhysicalSize outer_size = ContainingBlock()->Size();
-    logical_starting_point = physical_offset.ConvertToLogical(
-        StyleRef().GetWritingDirection(), outer_size, cursor.Current().Size());
+    logical_starting_point =
+        WritingModeConverter(StyleRef().GetWritingDirection(), outer_size)
+            .ToLogical(physical_offset, cursor.Current().Size());
     cursor.MoveToLastForSameLayoutObject();
     PhysicalRect last_physical_rect =
         cursor.Current().RectInContainerFragment();
@@ -866,8 +882,14 @@ UChar LayoutText::PreviousCharacter() const {
   // find previous text layoutObject if one exists
   const LayoutObject* previous_text = PreviousInPreOrder();
   for (; previous_text; previous_text = previous_text->PreviousInPreOrder()) {
-    if (!IsInlineFlowOrEmptyText(previous_text))
+    if (RuntimeEnabledFeatures::
+            IgnoreOutOfFlowPositionForPreviousTextEnabled() &&
+        previous_text->IsOutOfFlowPositioned()) {
+      continue;
+    }
+    if (!IsInlineFlowOrEmptyText(previous_text)) {
       break;
+    }
   }
   UChar prev = kSpaceCharacter;
   if (previous_text && previous_text->IsText()) {

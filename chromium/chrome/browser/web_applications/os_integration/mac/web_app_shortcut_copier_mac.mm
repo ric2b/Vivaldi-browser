@@ -10,7 +10,8 @@
 
 #include "base/apple/bundle_locations.h"
 #include "base/apple/foundation_util.h"
-#include "base/apple/mach_port_rendezvous.h"
+#include "base/apple/mach_port_rendezvous_mac.h"
+#include "base/at_exit.h"
 #include "base/base_paths.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
@@ -123,6 +124,7 @@ __attribute__((visibility("default"))) int ChromeWebAppShortcutCopierMain(
 // ad-hoc code signatures.
 int ChromeWebAppShortcutCopierMain(int argc, char** argv) {
   base::CommandLine::Init(argc, argv);
+  base::AtExitManager exit_manager;
 
   // Override the path to the framework bundle so that it has a sensible value.
   // This tool lives within the Helpers subdirectory of the framework, so the
@@ -139,10 +141,11 @@ int ChromeWebAppShortcutCopierMain(int argc, char** argv) {
   NSString* outer_app_dir_ns = base::SysUTF8ToNSString(outer_app_dir.value());
   NSBundle* base_bundle = [NSBundle bundleWithPath:outer_app_dir_ns];
   // In tests we might not be running from inside an app bundle, in that case
-  // there is also no need to overide the bundle ID, as the default value should
-  // already match that of the caller process.
+  // there is also no need to override the bundle ID, as the default value
+  // should already match that of the caller process.
   if (base_bundle && base_bundle.bundleIdentifier) {
-    base::apple::SetBaseBundleID(base_bundle.bundleIdentifier.UTF8String);
+    base::apple::SetBaseBundleIDOverride(
+        base::SysNSStringToUTF8(base_bundle.bundleIdentifier));
   }
 
   auto requirement = CallerProcessRequirement();

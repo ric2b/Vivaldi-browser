@@ -14,6 +14,7 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/tribool.h"
 #import "components/supervised_user/core/browser/family_link_user_capabilities.h"
+#import "ios/chrome/browser/incognito_reauth/ui_bundled/features.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_constants.h"
 #import "ios/chrome/browser/incognito_reauth/ui_bundled/incognito_reauth_scene_agent.h"
 #import "ios/chrome/browser/policy/model/policy_util.h"
@@ -170,6 +171,10 @@
 
   BOOL authenticationRequired = self.reauthSceneAgent.authenticationRequired;
   if (_incognitoDisabled || authenticationRequired) {
+    if (IsIOSSoftLockEnabled()) {
+      [self.toolbarsMutator
+          setIncognitoToolbarsBackgroundHidden:authenticationRequired];
+    }
     [self.toolbarsMutator
         setToolbarConfiguration:
             [TabGridToolbarsConfiguration
@@ -248,9 +253,9 @@
 
 - (void)reauthAgent:(IncognitoReauthSceneAgent*)agent
     didUpdateIncognitoLockState:(IncognitoLockState)incogitoLockState {
-  [self reauthAgent:agent
-      didUpdateAuthenticationRequirement:incogitoLockState !=
-                                         IncognitoLockState::kNone];
+  BOOL reauthRequired = incogitoLockState != IncognitoLockState::kNone;
+  [self reauthAgent:agent didUpdateAuthenticationRequirement:reauthRequired];
+  [self.toolbarsMutator setIncognitoToolbarsBackgroundHidden:reauthRequired];
 }
 
 #pragma mark - FamilyLinkUserCapabilitiesObserving

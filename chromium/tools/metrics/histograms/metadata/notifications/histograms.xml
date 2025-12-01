@@ -94,7 +94,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Notifications.Actions" enum="NotificationActionType"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>dewittj@chromium.org</owner>
   <owner>leandre@chromium.org</owner>
   <owner>cros-status-area-eng@google.com</owner>
@@ -197,7 +197,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.Android.JobNativeStartupDuration{IntentAction}"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>peter@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <summary>
@@ -246,7 +246,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.Android.JobStage{IntentAction}"
-    enum="NotificationJobStage" expires_after="2025-06-22">
+    enum="NotificationJobStage" expires_after="2025-11-02">
   <owner>peter@chromium.org</owner>
   <owner>engedy@chromium.org</owner>
   <summary>
@@ -449,7 +449,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.Cros.Actions.{NotificationAction}"
-    enum="NotificationTypeDetailed" expires_after="2025-08-24">
+    enum="NotificationTypeDetailed" expires_after="2025-10-26">
   <owner>leandre@chromium.org</owner>
   <owner>cros-status-area-eng@google.com</owner>
   <summary>
@@ -594,6 +594,30 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Notifications.Database.WriteNotificationMetadataReadResult"
+    enum="NotificationDatabaseStatus" expires_after="2026-04-22">
+  <owner>skrakowi@chromium.org</owner>
+  <owner>peter@chromium.org</owner>
+  <summary>
+    Records the response status after trying to find the existing
+    NotificationDatabase entry that corresponds to the one we should update with
+    notification content detection metadata. Logged each time a notification is
+    shown, when we request to persist the metadata.
+  </summary>
+</histogram>
+
+<histogram name="Notifications.Database.WriteNotificationMetadataUpdateResult"
+    enum="NotificationDatabaseStatus" expires_after="2026-04-22">
+  <owner>skrakowi@chromium.org</owner>
+  <owner>peter@chromium.org</owner>
+  <summary>
+    Records the response status after trying to update an existing
+    NotificationDatabase entry with notification content detection metadata.
+    Logged each time a notification is shown and the database entry is
+    successfully found.
+  </summary>
+</histogram>
+
 <histogram name="Notifications.Database.WriteResult"
     enum="NotificationDatabaseStatus" expires_after="2023-04-16">
   <owner>knollr@chromium.org</owner>
@@ -605,7 +629,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.Engagement.{Type}.Volume{Volume}"
-    units="site-engagement-score*2" expires_after="2025-07-27">
+    units="site-engagement-score*2" expires_after="2025-09-28">
   <owner>antoniosartori@chromium.org</owner>
   <owner>feuunk@chromium.org</owner>
   <summary>
@@ -695,7 +719,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.NonPersistentNotificationThirdPartyCount"
-    enum="Boolean" expires_after="2025-08-24">
+    enum="Boolean" expires_after="2025-10-26">
   <owner>awillia@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -720,7 +744,7 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="Notifications.NotificationHelper.NotificationActivatorPrimaryStatus"
     enum="NotificationHelperNotificationActivatorPrimaryStatus"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>finnur@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -824,7 +848,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.PerNotificationActions"
-    enum="NotificationActionType" expires_after="2025-09-07">
+    enum="NotificationActionType" expires_after="2025-11-09">
   <owner>dewittj@chromium.org</owner>
   <owner>leandre@chromium.org</owner>
   <owner>cros-status-area-eng@google.com</owner>
@@ -837,7 +861,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.PersistentNotificationActionCount"
-    units="buttons" expires_after="2025-09-14">
+    units="buttons" expires_after="2025-11-16">
   <owner>peter@chromium.org</owner>
   <summary>
     The number of action buttons the developer provided for a persistent Web
@@ -860,7 +884,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.PersistentNotificationThirdPartyCount"
-    enum="Boolean" expires_after="2025-08-24">
+    enum="Boolean" expires_after="2025-10-26">
   <owner>awillia@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -967,7 +991,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Notifications.Windows.ActivationStatus"
-    enum="WindowsNotificationActivationStatus" expires_after="2025-07-27">
+    enum="WindowsNotificationActivationStatus" expires_after="2025-09-28">
   <owner>finnur@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>

@@ -31,6 +31,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_SVG_PROPERTIES_SVG_ANIMATED_PROPERTY_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_SVG_PROPERTIES_SVG_ANIMATED_PROPERTY_H_
 
+#include <concepts>
+
 #include "base/check_op.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
 #include "third_party/blink/renderer/core/dom/qualified_name.h"
@@ -91,7 +93,6 @@ class SVGAnimatedPropertyBase : public GarbageCollectedMixin {
     kRemoved,
   };
   void BaseValueChanged(BaseValueChangeType);
-  void EnsureAnimValUpdated();
 
  protected:
   SVGAnimatedPropertyBase(AnimatedPropertyType,
@@ -141,9 +142,8 @@ class SVGAnimatedPropertyBase : public GarbageCollectedMixin {
 };
 
 template <typename T>
-struct ThreadingTrait<
-    T,
-    std::enable_if_t<std::is_base_of_v<SVGAnimatedPropertyBase, T>>> {
+  requires(std::derived_from<T, SVGAnimatedPropertyBase>)
+struct ThreadingTrait<T> {
   static constexpr ThreadAffinity kAffinity = kMainThreadOnly;
 };
 
@@ -229,7 +229,6 @@ class SVGAnimatedProperty : public SVGAnimatedPropertyCommon<Property> {
   }
 
   PrimitiveType animVal() {
-    this->EnsureAnimValUpdated();
     return this->CurrentValue()->Value();
   }
 

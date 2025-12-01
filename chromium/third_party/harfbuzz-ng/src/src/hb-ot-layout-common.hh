@@ -1850,7 +1850,7 @@ struct ClassDefFormat2_4
     hb_sorted_vector_t<hb_codepoint_pair_t> glyph_and_klass;
     hb_set_t orig_klasses;
 
-    if (glyph_set.get_population () * hb_bit_storage ((unsigned) rangeRecord.len) / 2
+    if (glyph_set.get_population () * hb_bit_storage ((unsigned) rangeRecord.len)
 	< get_population ())
     {
       for (hb_codepoint_t g : glyph_set)
@@ -1931,7 +1931,7 @@ struct ClassDefFormat2_4
 
   bool intersects (const hb_set_t *glyphs) const
   {
-    if (rangeRecord.len > glyphs->get_population () * hb_bit_storage ((unsigned) rangeRecord.len) / 2)
+    if (rangeRecord.len > glyphs->get_population () * hb_bit_storage ((unsigned) rangeRecord.len))
     {
       for (auto g : *glyphs)
         if (get_class (g))
@@ -2000,7 +2000,7 @@ struct ClassDefFormat2_4
     }
 
     unsigned count = rangeRecord.len;
-    if (count > glyphs->get_population () * hb_bit_storage (count) * 8)
+    if (count > glyphs->get_population () * hb_bit_storage (count))
     {
       for (auto g : *glyphs)
       {
@@ -2565,7 +2565,7 @@ struct VarRegionList
     if (cache)
     {
       cached_value = &(cache[region_index]);
-      if (likely (*cached_value != REGION_CACHE_ITEM_CACHE_INVALID))
+      if (*cached_value != REGION_CACHE_ITEM_CACHE_INVALID)
 	return *cached_value;
     }
 
@@ -2743,7 +2743,7 @@ struct SparseVarRegionList
     if (cache)
     {
       cached_value = &(cache[region_index]);
-      if (likely (*cached_value != REGION_CACHE_ITEM_CACHE_INVALID))
+      if (*cached_value != REGION_CACHE_ITEM_CACHE_INVALID)
 	return *cached_value;
     }
 
@@ -3147,23 +3147,14 @@ struct MultiVarData
   {
     auto &deltaSets = StructAfter<decltype (deltaSetsX)> (regionIndices);
 
-    auto values_iter = deltaSets[inner];
-
+    auto values_iter = deltaSets.fetcher (inner);
     unsigned regionCount = regionIndices.len;
-    unsigned count = out.length;
     for (unsigned regionIndex = 0; regionIndex < regionCount; regionIndex++)
     {
       float scalar = regions.evaluate (regionIndices.arrayZ[regionIndex],
 				       coords, coord_count,
 				       cache);
-      if (scalar == 1.f)
-	for (unsigned i = 0; i < count; i++)
-	  out.arrayZ[i] += *values_iter++;
-      else if (scalar)
-	for (unsigned i = 0; i < count; i++)
-	  out.arrayZ[i] += *values_iter++ * scalar;
-      else
-        values_iter += count;
+      values_iter.add_to (out, scalar);
     }
   }
 
@@ -3449,7 +3440,7 @@ struct MultiItemVariationStore
 {
   using cache_t = SparseVarRegionList::cache_t;
 
-  cache_t *create_cache () const
+  cache_t *create_cache (hb_array_t<float> static_cache = hb_array_t<float> ()) const
   {
 #ifdef HB_NO_VAR
     return nullptr;
@@ -3457,8 +3448,14 @@ struct MultiItemVariationStore
     auto &r = this+regions;
     unsigned count = r.regions.len;
 
-    float *cache = (float *) hb_malloc (sizeof (float) * count);
-    if (unlikely (!cache)) return nullptr;
+    float *cache;
+    if (count <= static_cache.length)
+      cache = static_cache.arrayZ;
+    else
+    {
+      cache = (float *) hb_malloc (sizeof (float) * count);
+      if (unlikely (!cache)) return nullptr;
+    }
 
     for (unsigned i = 0; i < count; i++)
       cache[i] = REGION_CACHE_ITEM_CACHE_INVALID;
@@ -3466,7 +3463,12 @@ struct MultiItemVariationStore
     return cache;
   }
 
-  static void destroy_cache (cache_t *cache) { hb_free (cache); }
+  static void destroy_cache (cache_t *cache,
+			     hb_array_t<float> static_cache = hb_array_t<float> ())
+  {
+    if (cache != static_cache.arrayZ)
+      hb_free (cache);
+  }
 
   private:
   void get_delta (unsigned int outer, unsigned int inner,
@@ -3741,11 +3743,13 @@ struct ItemVarStoreInstancer
 
   float operator() (uint32_t varIdx, unsigned short offset = 0) const
   {
+   if (!coords || varIdx == VarIdx::NO_VARIATION)
+     return 0.f;
+
+    varIdx += offset;
     if (varIdxMap)
-      varIdx = varIdxMap->map (VarIdx::add (varIdx, offset));
-    else
-      varIdx += offset;
-    return coords ? varStore->get_delta (varIdx, coords, cache) : 0.f;
+      varIdx = varIdxMap->map (varIdx);
+    return varStore->get_delta (varIdx, coords, cache);
   }
 
   const ItemVariationStore *varStore;
@@ -3777,12 +3781,11 @@ struct MultiItemVarStoreInstancer
 
   void operator() (hb_array_t<float> out, uint32_t varIdx, unsigned short offset = 0) const
   {
-    if (coords)
+    if (coords && varIdx != VarIdx::NO_VARIATION)
     {
+      varIdx += offset;
       if (varIdxMap)
-	varIdx = varIdxMap->map (VarIdx::add (varIdx, offset));
-      else
-	varIdx += offset;
+	varIdx = varIdxMap->map (varIdx);
       varStore->get_delta (varIdx, coords, out, cache);
     }
     else

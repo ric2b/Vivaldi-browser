@@ -47,10 +47,10 @@ BASE_FEATURE(kCertProvisioningUseOnlyInvalidationsForTesting,
 
 BASE_FEATURE(kDeviceCertProvisioningInvalidationWithDirectMessagesEnabled,
              "DeviceCertProvisioningInvalidationWithDirectMessagesEnabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 BASE_FEATURE(kUserCertProvisioningInvalidationWithDirectMessagesEnabled,
              "UserCertProvisioningInvalidationWithDirectMessagesEnabled",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 namespace {
 
@@ -249,20 +249,6 @@ std::optional<CertProfile> CertProfile::MakeFromValue(
   }
 
   return result;
-}
-
-bool CertProfile::operator==(const CertProfile& other) const {
-  static_assert(kVersion == 7, "This function should be updated");
-  return ((profile_id == other.profile_id) && (name == other.name) &&
-          (policy_version == other.policy_version) &&
-          (is_va_enabled == other.is_va_enabled) &&
-          (renewal_period == other.renewal_period) &&
-          (protocol_version == other.protocol_version) &&
-          (key_type == other.key_type));
-}
-
-bool CertProfile::operator!=(const CertProfile& other) const {
-  return !(*this == other);
 }
 
 bool CertProfileComparator::operator()(const CertProfile& a,

@@ -10,6 +10,7 @@ android_library("java") {
     "//build/android:build_java",
     "//components/cached_flags:java",
     "//components/externalauth/android:java",
+    "//google_apis/gaia/android:java",
     "//net/android:net_java",
     "//third_party/android_deps:chromium_play_services_availability_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
@@ -42,7 +43,6 @@ android_library("java") {
     "java/src/org/chromium/components/signin/AccountUtils.java",
     "java/src/org/chromium/components/signin/AccountsChangeObserver.java",
     "java/src/org/chromium/components/signin/AuthException.java",
-    "java/src/org/chromium/components/signin/ChildAccountInfoFetcher.java",
     "java/src/org/chromium/components/signin/ConnectionRetry.java",
     "java/src/org/chromium/components/signin/PatternMatcher.java",
     "java/src/org/chromium/components/signin/SigninFeatureMap.java",
@@ -74,7 +74,6 @@ generate_jni("jni_headers") {
   namespace = "signin"
   sources = [
     "java/src/org/chromium/components/signin/AccountCapabilitiesFetcher.java",
-    "java/src/org/chromium/components/signin/ChildAccountInfoFetcher.java",
     "java/src/org/chromium/components/signin/SigninFeatureMap.java",
     "java/src/org/chromium/components/signin/base/AccountCapabilities.java",
     "java/src/org/chromium/components/signin/base/AccountInfo.java",
@@ -103,7 +102,7 @@ java_cpp_strings("java_constants") {
 
 java_cpp_enum("java_enums") {
   sources = [
-    "//components/signin/public/identity_manager/account_managed_status_finder.h",
+    "//components/signin/public/identity_manager/account_managed_status_finder_outcome.h",
     "//components/signin/public/identity_manager/tribool.h",
   ]
 }
@@ -125,6 +124,7 @@ android_library("signin_java_test_support") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//content/public/test/android:content_java_test_support",
+    "//google_apis/gaia/android:java",
     "//third_party/android_deps:guava_android_java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/androidx:androidx_appcompat_appcompat_resources_java",
@@ -168,6 +168,7 @@ android_library("unit_device_javatests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//content/public/test/android:content_java_test_support",
+    "//google_apis/gaia/android:java",
     "//third_party/androidx:androidx_annotation_annotation_java",
     "//third_party/androidx:androidx_test_monitor_java",
     "//third_party/androidx:androidx_test_runner_java",

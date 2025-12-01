@@ -13,6 +13,7 @@
 #include "base/containers/flat_map.h"
 #include "base/containers/span.h"
 #include "base/feature_list.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -184,14 +185,12 @@ class FormFillerTest : public testing::Test {
     return browser_autofill_manager_->GetAutofillField(form_id, field_id);
   }
 
-  // Lets `BrowserAutofillManager` fill `form` with `filling_payload` and
+  // Lets `BrowserAutofillManager` fill `form` using `trigger`` and
   // returns `form` as it would be extracted from the renderer afterwards, i.e.,
   // with the autofilled `FormFieldData::value`s.
-  FormData FillAutofillFormData(
+  FormData ApplyFormAction(
       FormData form,
-      const FormFieldData& trigger_field,
-      FillingPayload filling_payload,
-      AutofillTriggerSource trigger_source = AutofillTriggerSource::kPopup) {
+      base::FunctionRef<void(const FormData& form)> trigger) {
     std::vector<FormFieldData> filled_fields;
     std::vector<FieldGlobalId> global_ids;
     for (const FormFieldData& field : form.fields()) {
@@ -203,11 +202,7 @@ class FormFillerTest : public testing::Test {
     EXPECT_CALL(autofill_driver_, ApplyFormAction)
         .WillOnce(
             DoAll(SaveArgElementsTo<2>(&filled_fields), Return(global_ids)));
-    form_filler().FillOrPreviewForm(
-        mojom::ActionPersistence::kFill, form, filling_payload,
-        *GetFormStructure(form),
-        *GetAutofillField(form.global_id(), trigger_field.global_id()),
-        trigger_source);
+    trigger(form);
     // Copy the filled data into the form.
     for (FormFieldData& field : test_api(form).fields()) {
       if (auto it = std::ranges::find(filled_fields, field.global_id(),
@@ -216,6 +211,54 @@ class FormFillerTest : public testing::Test {
         field = *it;
       }
     }
+    return form;
+  }
+
+  // Lets `BrowserAutofillManager` fill `form` with `filling_payload` and
+  // returns `form` as it would be extracted from the renderer afterwards, i.e.,
+  // with the autofilled `FormFieldData::value`s.
+  FormData FillAutofillFormData(
+      FormData form,
+      const FormFieldData& trigger_field,
+      FillingPayload filling_payload,
+      AutofillTriggerSource trigger_source = AutofillTriggerSource::kPopup) {
+    return ApplyFormAction(std::move(form), [&](const FormData& form) {
+      form_filler().FillOrPreviewForm(
+          mojom::ActionPersistence::kFill, form, filling_payload,
+          *GetFormStructure(form),
+          *GetAutofillField(form.global_id(), trigger_field.global_id()),
+          trigger_source);
+    });
+  }
+
+  // Lets `BrowserAutofillManager` undo the last filling operation performed on
+  // `trigger_field`, which belongs to `form`, and returns `form` as it would be
+  // extracted from the renderer afterwards, i.e., with the autofilled
+  // `FormFieldData::value`s.
+  FormData UndoAutofill(FormData form, const FormFieldData& trigger_field) {
+    return ApplyFormAction(std::move(form), [&](const FormData& form) {
+      browser_autofill_manager_->UndoAutofill(mojom::ActionPersistence::kFill,
+                                              form, trigger_field);
+    });
+  }
+
+  // Lets `BrowserAutofillManager` fill `trigger_field` with `value` and
+  // modifies `form` to reflect this filling.
+  FormData FillField(FormData form,
+                     const FormFieldData& trigger_field,
+                     FillingProduct filling_product,
+                     std::u16string value) {
+    form_filler().FillOrPreviewField(
+        mojom::ActionPersistence::kFill, mojom::FieldActionType::kReplaceAll,
+        trigger_field,
+        GetAutofillField(form.global_id(), trigger_field.global_id()), value,
+        filling_product, /*field_type_used=*/std::nullopt);
+
+    FormFieldData& field =
+        *std::ranges::find(test_api(form).fields(), trigger_field.global_id(),
+                           &FormFieldData::global_id);
+    field.set_is_autofilled(true);
+    field.set_value(value);
     return form;
   }
 
@@ -310,51 +353,9 @@ TEST_F(FormFillerTest, DoNotFillIfFormChanged) {
       AutofillTriggerSource::kPopup);
 }
 
-TEST_F(FormFillerTest, SkipFillIfFieldIsMeaningfullyPreFilled) {
-  base::test::ScopedFeatureList placeholders_feature;
-  placeholders_feature.InitWithFeatures(
-      /*enabled_features=*/{features::kAutofillOverwritePlaceholdersOnly},
-      /*disabled_features=*/{features::kAutofillSkipPreFilledFields});
-
-  const FieldType kSkippedType = ADDRESS_HOME_LINE1;
-  FormData form = test::GetFormData(
-      {.fields = {
-           {.role = NAME_FIRST, .value = u"Triggering field (filled)"},
-           {.role = NAME_LAST, .value = u"Placeholder (filled)"},
-           {.role = EMAIL_ADDRESS, .value = u"No data (filled)"},
-           {.role = kSkippedType,
-            .value = u"Meaningfully pre-filled (skipped)"},
-           // Value initialized with whitespace-only, expect field to be filled.
-           {.role = ADDRESS_HOME_COUNTRY, .value = u" "}}});
-  FormsSeen({form});
-
-  FormStructure* form_structure = GetFormStructure(form);
-  form_structure->fields()[0]->set_may_use_prefilled_placeholder(false);
-  form_structure->fields()[1]->set_may_use_prefilled_placeholder(true);
-  form_structure->fields()[3]->set_may_use_prefilled_placeholder(false);
-
-  AutofillProfile profile = test::GetFullProfile();
-  std::vector<FormFieldData> filled_fields =
-      FillAutofillFormData(form, form.fields().front(), &profile).fields();
-
-  EXPECT_THAT(filled_fields[0],
-              AutofilledWith(profile.GetInfo(NAME_FIRST, kAppLocale)));
-  EXPECT_THAT(filled_fields[1],
-              AutofilledWith(profile.GetInfo(NAME_LAST, kAppLocale)));
-  EXPECT_THAT(filled_fields[2],
-              AutofilledWith(profile.GetInfo(EMAIL_ADDRESS, kAppLocale)));
-  EXPECT_FALSE(filled_fields[3].is_autofilled());
-  EXPECT_EQ(filled_fields[3].value(), form.fields()[3].value());
-  EXPECT_THAT(filled_fields[4], AutofilledWith(profile.GetInfo(
-                                    ADDRESS_HOME_COUNTRY, kAppLocale)));
-}
-
-TEST_F(FormFillerTest, SkipAllPreFilledFieldsExceptIfFieldIsAPlaceholder) {
-  base::test::ScopedFeatureList placeholders_features;
-  placeholders_features.InitWithFeatures(
-      {features::kAutofillOverwritePlaceholdersOnly,
-       features::kAutofillSkipPreFilledFields},
-      {});
+TEST_F(FormFillerTest, SkipPreFilledFields) {
+  base::test::ScopedFeatureList placeholders_features(
+      features::kAutofillSkipPreFilledFields);
 
   AutofillProfile profile = test::GetFullProfile();
   const std::u16string kToBeFilledState =
@@ -363,7 +364,7 @@ TEST_F(FormFillerTest, SkipAllPreFilledFieldsExceptIfFieldIsAPlaceholder) {
   FormData form = test::GetFormData(
       {.fields = {
            {.role = NAME_FIRST, .value = u"Triggering field (filled)"},
-           {.role = NAME_LAST, .value = u"Placeholder (filled)"},
+           {.role = NAME_LAST, .value = u"Placeholder (skipped)"},
            {.role = EMAIL_ADDRESS, .value = u"No data (skipped)"},
            {.role = ADDRESS_HOME_LINE1, .value = u"No placeholder (skipped)"},
            {.role = ADDRESS_HOME_STATE,
@@ -377,19 +378,13 @@ TEST_F(FormFillerTest, SkipAllPreFilledFieldsExceptIfFieldIsAPlaceholder) {
            {.role = ADDRESS_HOME_COUNTRY, .value = u" "}}});
   FormsSeen({form});
 
-  FormStructure* form_structure = GetFormStructure(form);
-  form_structure->fields()[0]->set_may_use_prefilled_placeholder(true);
-  form_structure->fields()[1]->set_may_use_prefilled_placeholder(true);
-  form_structure->fields()[3]->set_may_use_prefilled_placeholder(false);
-  form_structure->fields()[4]->set_may_use_prefilled_placeholder(std::nullopt);
-
   std::vector<FormFieldData> filled_fields =
       FillAutofillFormData(form, form.fields().front(), &profile).fields();
 
   EXPECT_THAT(filled_fields[0],
               AutofilledWith(profile.GetInfo(NAME_FIRST, kAppLocale)));
-  EXPECT_THAT(filled_fields[1],
-              AutofilledWith(profile.GetInfo(NAME_LAST, kAppLocale)));
+  EXPECT_FALSE(filled_fields[1].is_autofilled());
+  EXPECT_EQ(filled_fields[1].value(), form.fields()[1].value());
   EXPECT_FALSE(filled_fields[2].is_autofilled());
   EXPECT_EQ(filled_fields[2].value(), form.fields()[2].value());
   EXPECT_FALSE(filled_fields[3].is_autofilled());
@@ -435,10 +430,10 @@ TEST_F(FormFillerTest, UndoSavesFormFillingDataForAutofillAi) {
       .Times(2)
       .WillRepeatedly(Return(safe_fields));
 
-  AutofillProfile profile = test::GetFullProfile();
-  browser_autofill_manager_->FillOrPreviewFormWithAutofillAiData(
-      mojom::ActionPersistence::kFill, form, form.fields()[0],
-      test::GetPassportEntityInstance());
+  EntityInstance passport = test::GetPassportEntityInstance();
+  browser_autofill_manager_->FillOrPreviewForm(
+      mojom::ActionPersistence::kFill, form, form.fields()[0].global_id(),
+      &passport, AutofillTriggerSource::kAutofillAi);
   browser_autofill_manager_->UndoAutofill(mojom::ActionPersistence::kFill, form,
                                           form.fields().front());
 }
@@ -493,7 +488,7 @@ TEST_F(FormFillerTest, UndoResetsCachedAutofillState) {
   AutofillField filled_autofill_field(form.fields().front());
   test_api(form).field(0).set_is_autofilled(false);
   test_api(form_filler())
-      .AddFormFillEntry(
+      .AddFormFillingEntry(
           std::to_array<const FormFieldData*>({&form.fields().front()}),
           std::to_array<const AutofillField*>({&filled_autofill_field}),
           FillingProduct::kAddress, /*is_refill=*/false);
@@ -1779,10 +1774,8 @@ TEST_F(FormFillerTest, TrackFillingOriginOnEditedField) {
 // Regression test that a field with an unrelated type doesn't cause a crash
 // (crbug.com/324811625).
 TEST_F(FormFillerTest, PreFilledCCFieldInAddressFormDoesNotCauseCrash) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures({features::kAutofillSkipPreFilledFields,
-                                 features::kAutofillOverwritePlaceholdersOnly},
-                                {});
+  base::test::ScopedFeatureList feature_list(
+      features::kAutofillSkipPreFilledFields);
   FormData form = test::GetFormData(
       {.fields = {{.role = NAME_FULL,
                    .value = u"pre-filled",
@@ -1915,5 +1908,112 @@ INSTANTIATE_TEST_SUITE_P(
             .exp_date_from_js = u"04 / 299",
             .triggers_refill = false,
         }));
+
+// Test that, if after an initial form filling, some field is autofilled again,
+// Undoing the first filling operation doesn't change that field.
+TEST_F(FormFillerTest, UndoSkipsFieldsAutofilledFurther) {
+  FormData form = test::GetFormData(
+      {.fields = {
+           {.role = NAME_FIRST, .autocomplete_attribute = "given-name"},
+           {.role = NAME_LAST, .autocomplete_attribute = "family-name"}}});
+  FormsSeen({form});
+  FormStructure* form_structure = GetFormStructure(form);
+  ASSERT_TRUE(form_structure);
+
+  // Fill the form with an address profile.
+  AutofillProfile profile1 = test::GetFullProfile();
+  form = FillAutofillFormData(form, form.fields()[0], &profile1);
+  EXPECT_THAT(form.fields()[0], AutofilledWith(u"John"));
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Doe"));
+
+  // Simulate a field swapping operation on the second field.
+  form = FillField(form, form.fields()[1], FillingProduct::kAddress, u"Other");
+  EXPECT_THAT(form.fields()[0], AutofilledWith(u"John"));
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Other"));
+
+  // Now Undo the first filling operation on the first field.
+  form = UndoAutofill(form, form.fields()[0]);
+  EXPECT_TRUE(form.fields()[0].value().empty());
+  EXPECT_FALSE(form.fields()[0].is_autofilled());
+  // The second field should not change, because the last operation that
+  // modified it isn't the one that is being currently undone.
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Other"));
+}
+
+// Regression test for crbug.com/416019464
+TEST_F(FormFillerTest, MultipleUndoOperations) {
+  FormData form = test::GetFormData(
+      {.fields = {
+           {.role = NAME_FIRST, .autocomplete_attribute = "given-name"},
+           {.role = NAME_LAST, .autocomplete_attribute = "family-name"}}});
+  FormsSeen({form});
+  FormStructure* form_structure = GetFormStructure(form);
+  ASSERT_TRUE(form_structure);
+
+  // Fill the form with an address profile.
+  AutofillProfile profile1 = test::GetFullProfile();
+  form = FillAutofillFormData(form, form.fields()[0], &profile1);
+  EXPECT_THAT(form.fields()[0], AutofilledWith(u"John"));
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Doe"));
+
+  // Simulate a field swapping operation on the second field.
+  form = FillField(form, form.fields()[1], FillingProduct::kAddress, u"Other");
+  EXPECT_THAT(form.fields()[0], AutofilledWith(u"John"));
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Other"));
+
+  // Now Undo the first filling operation on the first field.
+  form = UndoAutofill(form, form.fields()[0]);
+  // The first field should be cleared, as this was its initial state.
+  EXPECT_TRUE(form.fields()[0].value().empty());
+  EXPECT_FALSE(form.fields()[0].is_autofilled());
+  // The second field should not change.
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Other"));
+
+  // Now Undo the second filling operation on the second field.
+  form = UndoAutofill(form, form.fields()[1]);
+  EXPECT_TRUE(form.fields()[0].value().empty());
+  EXPECT_FALSE(form.fields()[0].is_autofilled());
+  // The second field should restore the value of the first filling operation.
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Doe"));
+
+  // Now Undo the first filling operation on the second field.
+  form = UndoAutofill(form, form.fields()[1]);
+  EXPECT_TRUE(form.fields()[0].value().empty());
+  EXPECT_FALSE(form.fields()[0].is_autofilled());
+  // The second field should be cleared, as this was its initial state.
+  EXPECT_TRUE(form.fields()[1].value().empty());
+  EXPECT_FALSE(form.fields()[1].is_autofilled());
+}
+
+// Tests that Undoing a filling operation on a field discards other fields that
+// changed filling product (i.e. were autofilled afterwards using some other
+// filling product).
+TEST_F(FormFillerTest, UndoDiscardsFieldsThatChangedFillingProduct) {
+  FormData form = test::GetFormData(
+      {.fields = {
+           {.role = NAME_FIRST, .autocomplete_attribute = "given-name"},
+           {.role = NAME_LAST, .autocomplete_attribute = "family-name"}}});
+  FormsSeen({form});
+  FormStructure* form_structure = GetFormStructure(form);
+  ASSERT_TRUE(form_structure);
+
+  // Fill the form with an address profile.
+  AutofillProfile profile1 = test::GetFullProfile();
+  form = FillAutofillFormData(form, form.fields()[0], &profile1);
+  EXPECT_THAT(form.fields()[0], AutofilledWith(u"John"));
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Doe"));
+
+  // Simulate a field swapping operation on the second field.
+  form = FillField(form, form.fields()[1], FillingProduct::kAutocomplete,
+                   u"Other");
+  EXPECT_THAT(form.fields()[0], AutofilledWith(u"John"));
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Other"));
+
+  // Now Undo the first filling operation on the first field.
+  form = UndoAutofill(form, form.fields()[0]);
+  EXPECT_TRUE(form.fields()[0].value().empty());
+  EXPECT_FALSE(form.fields()[0].is_autofilled());
+  EXPECT_THAT(form.fields()[1], AutofilledWith(u"Other"));
+}
 
 }  // namespace autofill

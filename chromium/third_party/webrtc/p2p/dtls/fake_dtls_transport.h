@@ -36,6 +36,7 @@
 #include "rtc_base/network_route.h"
 #include "rtc_base/rtc_certificate.h"
 #include "rtc_base/socket.h"
+#include "rtc_base/ssl_certificate.h"
 #include "rtc_base/ssl_fingerprint.h"
 #include "rtc_base/ssl_stream_adapter.h"
 #include "rtc_base/thread.h"
@@ -45,32 +46,32 @@ namespace webrtc {
 // Fake DTLS transport which is implemented by wrapping a fake ICE transport.
 // Doesn't interact directly with fake ICE transport for anything other than
 // sending packets.
-class FakeDtlsTransport : public cricket::DtlsTransportInternal {
+class FakeDtlsTransport : public DtlsTransportInternal {
  public:
-  explicit FakeDtlsTransport(cricket::FakeIceTransport* ice_transport)
+  explicit FakeDtlsTransport(FakeIceTransport* ice_transport)
       : ice_transport_(ice_transport),
         transport_name_(ice_transport->transport_name()),
         component_(ice_transport->component()),
         dtls_fingerprint_("", nullptr) {
     RTC_DCHECK(ice_transport_);
     ice_transport_->RegisterReceivedPacketCallback(
-        this, [&](rtc::PacketTransportInternal* transport,
-                  const rtc::ReceivedPacket& packet) {
+        this, [&](PacketTransportInternal* transport,
+                  const ReceivedIpPacket& packet) {
           OnIceTransportReadPacket(transport, packet);
         });
     ice_transport_->SignalNetworkRouteChanged.connect(
         this, &FakeDtlsTransport::OnNetworkRouteChanged);
   }
 
-  explicit FakeDtlsTransport(std::unique_ptr<cricket::FakeIceTransport> ice)
+  explicit FakeDtlsTransport(std::unique_ptr<FakeIceTransport> ice)
       : owned_ice_transport_(std::move(ice)),
         transport_name_(owned_ice_transport_->transport_name()),
         component_(owned_ice_transport_->component()),
-        dtls_fingerprint_("", rtc::ArrayView<const uint8_t>()) {
+        dtls_fingerprint_("", ArrayView<const uint8_t>()) {
     ice_transport_ = owned_ice_transport_.get();
     ice_transport_->RegisterReceivedPacketCallback(
-        this, [&](rtc::PacketTransportInternal* transport,
-                  const rtc::ReceivedPacket& packet) {
+        this, [&](PacketTransportInternal* transport,
+                  const ReceivedIpPacket& packet) {
           OnIceTransportReadPacket(transport, packet);
         });
     ice_transport_->SignalNetworkRouteChanged.connect(
@@ -80,15 +81,14 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   // If this constructor is called, a new fake ICE transport will be created,
   // and this FakeDtlsTransport will take the ownership.
   FakeDtlsTransport(const std::string& name, int component)
-      : FakeDtlsTransport(
-            std::make_unique<cricket::FakeIceTransport>(name, component)) {}
+      : FakeDtlsTransport(std::make_unique<FakeIceTransport>(name, component)) {
+  }
   FakeDtlsTransport(const std::string& name,
                     int component,
                     Thread* network_thread)
-      : FakeDtlsTransport(
-            std::make_unique<cricket::FakeIceTransport>(name,
-                                                        component,
-                                                        network_thread)) {}
+      : FakeDtlsTransport(std::make_unique<FakeIceTransport>(name,
+                                                             component,
+                                                             network_thread)) {}
 
   ~FakeDtlsTransport() override {
     if (dest_ && dest_->dest_ == this) {
@@ -98,7 +98,7 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   }
 
   // Get inner fake ICE transport.
-  cricket::FakeIceTransport* fake_ice_transport() { return ice_transport_; }
+  FakeIceTransport* fake_ice_transport() { return ice_transport_; }
 
   // If async, will send packets by "Post"-ing to message queue instead of
   // synchronously "Send"-ing.
@@ -149,8 +149,7 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
       }
       SetDtlsState(DtlsTransportState::kConnected);
       ice_transport_->SetDestination(
-          static_cast<cricket::FakeIceTransport*>(dest->ice_transport()),
-          asymmetric);
+          static_cast<FakeIceTransport*>(dest->ice_transport()), asymmetric);
     } else {
       // Simulates loss of connectivity, by asymmetrically forgetting dest_.
       dest_ = nullptr;
@@ -163,9 +162,7 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   DtlsTransportState dtls_state() const override { return dtls_state_; }
   const std::string& transport_name() const override { return transport_name_; }
   int component() const override { return component_; }
-  const rtc::SSLFingerprint& dtls_fingerprint() const {
-    return dtls_fingerprint_;
-  }
+  const SSLFingerprint& dtls_fingerprint() const { return dtls_fingerprint_; }
   RTCError SetRemoteParameters(absl::string_view alg,
                                const uint8_t* digest,
                                size_t digest_len,
@@ -179,8 +176,7 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   bool SetRemoteFingerprint(absl::string_view alg,
                             const uint8_t* digest,
                             size_t digest_len) {
-    dtls_fingerprint_ =
-        rtc::SSLFingerprint(alg, rtc::MakeArrayView(digest, digest_len));
+    dtls_fingerprint_ = SSLFingerprint(alg, MakeArrayView(digest, digest_len));
     return true;
   }
   bool SetDtlsRole(SSLRole role) override {
@@ -211,6 +207,7 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
     *version = 0x0102;
     return true;
   }
+  uint16_t GetSslGroupId() const override { return 0; }
   bool GetSrtpCryptoSuite(int* crypto_suite) const override {
     if (!do_dtls_) {
       return false;
@@ -238,14 +235,14 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   scoped_refptr<RTCCertificate> GetLocalCertificate() const override {
     return local_cert_;
   }
-  std::unique_ptr<rtc::SSLCertChain> GetRemoteSSLCertChain() const override {
+  std::unique_ptr<SSLCertChain> GetRemoteSSLCertChain() const override {
     if (!remote_cert_) {
       return nullptr;
     }
-    return std::make_unique<rtc::SSLCertChain>(remote_cert_->Clone());
+    return std::make_unique<SSLCertChain>(remote_cert_->Clone());
   }
   bool ExportSrtpKeyingMaterial(
-      rtc::ZeroOnFreeBuffer<uint8_t>& keying_material) override {
+      ZeroOnFreeBuffer<uint8_t>& keying_material) override {
     if (do_dtls_) {
       std::memset(keying_material.data(), 0xff, keying_material.size());
     }
@@ -266,10 +263,10 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   bool receiving() const override { return receiving_; }
   int SendPacket(const char* data,
                  size_t len,
-                 const rtc::PacketOptions& options,
+                 const AsyncSocketPacketOptions& options,
                  int flags) override {
     // We expect only SRTP packets to be sent through this interface.
-    if (flags != cricket::PF_SRTP_BYPASS && flags != 0) {
+    if (flags != PF_SRTP_BYPASS && flags != 0) {
       return -1;
     }
     return ice_transport_->SendPacket(data, len, options, flags);
@@ -282,13 +279,13 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   }
   int GetError() override { return ice_transport_->GetError(); }
 
-  std::optional<rtc::NetworkRoute> network_route() const override {
+  std::optional<NetworkRoute> network_route() const override {
     return ice_transport_->network_route();
   }
 
  private:
   void OnIceTransportReadPacket(PacketTransportInternal* /* ice_ */,
-                                const rtc::ReceivedPacket& packet) {
+                                const ReceivedIpPacket& packet) {
     NotifyPacketReceived(packet);
   }
 
@@ -311,12 +308,12 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
     SignalWritableState(this);
   }
 
-  void OnNetworkRouteChanged(std::optional<rtc::NetworkRoute> network_route) {
+  void OnNetworkRouteChanged(std::optional<NetworkRoute> network_route) {
     SignalNetworkRouteChanged(network_route);
   }
 
-  cricket::FakeIceTransport* ice_transport_;
-  std::unique_ptr<cricket::FakeIceTransport> owned_ice_transport_;
+  FakeIceTransport* ice_transport_;
+  std::unique_ptr<FakeIceTransport> owned_ice_transport_;
   std::string transport_name_;
   int component_;
   FakeDtlsTransport* dest_ = nullptr;
@@ -324,7 +321,7 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
   FakeSSLCertificate* remote_cert_ = nullptr;
   bool do_dtls_ = false;
   SSLProtocolVersion ssl_max_version_ = webrtc::SSL_PROTOCOL_DTLS_12;
-  rtc::SSLFingerprint dtls_fingerprint_;
+  SSLFingerprint dtls_fingerprint_;
   std::optional<SSLRole> dtls_role_;
   int crypto_suite_ = webrtc::kSrtpAes128CmSha1_80;
   std::optional<int> ssl_cipher_suite_;
@@ -339,8 +336,10 @@ class FakeDtlsTransport : public cricket::DtlsTransportInternal {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::FakeDtlsTransport;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_DTLS_FAKE_DTLS_TRANSPORT_H_

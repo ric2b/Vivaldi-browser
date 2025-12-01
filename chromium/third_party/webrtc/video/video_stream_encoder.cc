@@ -334,7 +334,7 @@ VideoLayersAllocation CreateVideoLayersAllocation(
       // Encoder may drop frames internally if `maxFramerate` is set.
       spatial_layer.frame_rate_fps = std::min<uint8_t>(
           encoder_config.simulcastStream[si].maxFramerate,
-          rtc::saturated_cast<uint8_t>(
+          saturated_cast<uint8_t>(
               (current_rate.framerate_fps * frame_rate_fraction) /
               VideoEncoder::EncoderInfo::kMaxFramerateFraction));
     }
@@ -346,9 +346,9 @@ VideoLayersAllocation CreateVideoLayersAllocation(
         encoder_config.VP9().interLayerPred == InterLayerPredMode::kOn;
     layers_allocation.resolution_and_frame_rate_is_valid = true;
 
-    std::vector<DataRate> aggregated_spatial_bitrate(
-        webrtc::kMaxTemporalStreams, DataRate::Zero());
-    for (int si = 0; si < webrtc::kMaxSpatialLayers; ++si) {
+    std::vector<DataRate> aggregated_spatial_bitrate(kMaxTemporalStreams,
+                                                     DataRate::Zero());
+    for (int si = 0; si < kMaxSpatialLayers; ++si) {
       layers_allocation.resolution_and_frame_rate_is_valid = true;
       if (!target_bitrate.IsSpatialLayerUsed(si) ||
           target_bitrate.GetSpatialLayerSum(si) == 0) {
@@ -404,7 +404,7 @@ VideoLayersAllocation CreateVideoLayersAllocation(
       // Encoder may drop frames internally if `maxFramerate` is set.
       spatial_layer.frame_rate_fps = std::min<uint8_t>(
           encoder_config.spatialLayers[si].maxFramerate,
-          rtc::saturated_cast<uint8_t>(
+          saturated_cast<uint8_t>(
               (current_rate.framerate_fps * frame_rate_fraction) /
               VideoEncoder::EncoderInfo::kMaxFramerateFraction));
     }
@@ -692,10 +692,9 @@ VideoStreamEncoder::VideoStreamEncoder(
     const VideoStreamEncoderSettings& settings,
     std::unique_ptr<OveruseFrameDetector> overuse_detector,
     std::unique_ptr<FrameCadenceAdapterInterface> frame_cadence_adapter,
-    std::unique_ptr<webrtc::TaskQueueBase, webrtc::TaskQueueDeleter>
-        encoder_queue,
+    std::unique_ptr<TaskQueueBase, TaskQueueDeleter> encoder_queue,
     BitrateAllocationCallbackType allocation_cb_type,
-    webrtc::VideoEncoderFactory::EncoderSelectorInterface* encoder_selector)
+    VideoEncoderFactory::EncoderSelectorInterface* encoder_selector)
     : env_(env),
       worker_queue_(TaskQueueBase::Current()),
       number_of_cores_(number_of_cores),
@@ -839,7 +838,7 @@ void VideoStreamEncoder::SetFecControllerOverride(
 }
 
 void VideoStreamEncoder::AddAdaptationResource(
-    rtc::scoped_refptr<Resource> resource) {
+    scoped_refptr<Resource> resource) {
   RTC_DCHECK_RUN_ON(worker_queue_);
   TRACE_EVENT0("webrtc", "VideoStreamEncoder::AddAdaptationResource");
   // Map any externally added resources as kCpu for the sake of stats reporting.
@@ -856,7 +855,7 @@ void VideoStreamEncoder::AddAdaptationResource(
   });
 }
 
-std::vector<rtc::scoped_refptr<Resource>>
+std::vector<scoped_refptr<Resource>>
 VideoStreamEncoder::GetAdaptationResources() {
   RTC_DCHECK_RUN_ON(worker_queue_);
   // In practice, this method is only called by tests to verify operations that
@@ -864,7 +863,7 @@ VideoStreamEncoder::GetAdaptationResources() {
   // be accompanied by an event and a `Wait()`, we'll use PostTask + Wait()
   // here.
   Event event;
-  std::vector<rtc::scoped_refptr<Resource>> resources;
+  std::vector<scoped_refptr<Resource>> resources;
   encoder_queue_->PostTask([&] {
     RTC_DCHECK_RUN_ON(encoder_queue_.get());
     resources = resource_adaptation_processor_->GetResources();
@@ -875,7 +874,7 @@ VideoStreamEncoder::GetAdaptationResources() {
 }
 
 void VideoStreamEncoder::SetSource(
-    rtc::VideoSourceInterface<VideoFrame>* source,
+    VideoSourceInterface<VideoFrame>* source,
     const DegradationPreference& degradation_preference) {
   RTC_DCHECK_RUN_ON(worker_queue_);
   video_source_sink_controller_.SetSource(source);
@@ -935,7 +934,7 @@ void VideoStreamEncoder::ConfigureEncoder(VideoEncoderConfig config,
   // Is any layer active.
   bool active = false;
   // The max scale_resolution_down_to.
-  std::optional<rtc::VideoSinkWants::FrameSize> scale_resolution_down_to;
+  std::optional<VideoSinkWants::FrameSize> scale_resolution_down_to;
   for (const auto& stream : config.simulcast_layers) {
     active |= stream.active;
     if (stream.active) {
@@ -1012,7 +1011,7 @@ void VideoStreamEncoder::ConfigureEncoder(VideoEncoderConfig config,
 
       ReconfigureEncoder();
     } else {
-      webrtc::InvokeSetParametersCallback(callback, webrtc::RTCError::OK());
+      InvokeSetParametersCallback(callback, RTCError::OK());
     }
   });
 }
@@ -1065,7 +1064,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
         env_.field_trials(), last_frame_info_->width, last_frame_info_->height,
         encoder_config_);
   } else {
-    auto factory = rtc::make_ref_counted<EncoderStreamFactory>(
+    auto factory = make_ref_counted<EncoderStreamFactory>(
         encoder_->GetEncoderInfo(), latest_restrictions_);
 
     streams = factory->CreateEncoderStreams(
@@ -1288,7 +1287,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
   max_framerate_ = codec.maxFramerate;
 
   // The resolutions that we're actually encoding with.
-  std::vector<rtc::VideoSinkWants::FrameSize> encoder_resolutions;
+  std::vector<VideoSinkWants::FrameSize> encoder_resolutions;
   // TODO(hbos): For the case of SVC, also make use of `codec.spatialLayers`.
   // For now, SVC layers are handled by the VP9 encoder.
   for (const auto& simulcastStream : codec.simulcastStream) {
@@ -1485,7 +1484,7 @@ void VideoStreamEncoder::ReconfigureEncoder() {
   stream_resource_manager_.ConfigureQualityScaler(info);
   stream_resource_manager_.ConfigureBandwidthQualityScaler(info);
 
-  webrtc::RTCError encoder_configuration_result = webrtc::RTCError::OK();
+  RTCError encoder_configuration_result = RTCError::OK();
 
   if (!encoder_initialized_) {
     RTC_LOG(LS_WARNING) << "Failed to initialize "
@@ -1497,14 +1496,13 @@ void VideoStreamEncoder::ReconfigureEncoder() {
       RequestEncoderSwitch();
     } else {
       encoder_configuration_result =
-          webrtc::RTCError(RTCErrorType::UNSUPPORTED_OPERATION);
+          RTCError(RTCErrorType::UNSUPPORTED_OPERATION);
     }
   }
 
   if (!encoder_configuration_callbacks_.empty()) {
     for (auto& callback : encoder_configuration_callbacks_) {
-      webrtc::InvokeSetParametersCallback(callback,
-                                          encoder_configuration_result);
+      InvokeSetParametersCallback(callback, encoder_configuration_result);
     }
     encoder_configuration_callbacks_.clear();
   }
@@ -1532,7 +1530,7 @@ void VideoStreamEncoder::RequestEncoderSwitch() {
   }
 
   if (!preferred_fallback_encoder) {
-    if (!env_.field_trials().IsDisabled(
+    if (env_.field_trials().IsEnabled(
             kSwitchEncoderFollowCodecPreferenceOrderFieldTrial)) {
       encoder_fallback_requested_ = true;
       settings_.encoder_switch_request_callback->RequestEncoderFallback();
@@ -2011,7 +2009,7 @@ void VideoStreamEncoder::EncodeVideoFrame(const VideoFrame& video_frame,
        !info.supports_native_handle)) {
     int cropped_width = video_frame.width() - crop_width_;
     int cropped_height = video_frame.height() - crop_height_;
-    rtc::scoped_refptr<VideoFrameBuffer> cropped_buffer;
+    scoped_refptr<VideoFrameBuffer> cropped_buffer;
     // TODO(ilnik): Remove scaling if cropping is too big, as it should never
     // happen after SinkWants signaled correctly from ReconfigureEncoder.
     VideoFrame::UpdateRect update_rect = video_frame.update_rect();
@@ -2468,7 +2466,7 @@ bool VideoStreamEncoder::DropDueToSize(uint32_t source_pixel_count) const {
 void VideoStreamEncoder::OnVideoSourceRestrictionsUpdated(
     VideoSourceRestrictions restrictions,
     const VideoAdaptationCounters& adaptation_counters,
-    rtc::scoped_refptr<Resource> reason,
+    scoped_refptr<Resource> reason,
     const VideoSourceRestrictions& unfiltered_restrictions) {
   RTC_DCHECK_RUN_ON(encoder_queue_.get());
   RTC_LOG(LS_INFO) << "Updating sink restrictions from "
@@ -2562,7 +2560,7 @@ void VideoStreamEncoder::ReleaseEncoder() {
 }
 
 void VideoStreamEncoder::InjectAdaptationResource(
-    rtc::scoped_refptr<Resource> resource,
+    scoped_refptr<Resource> resource,
     VideoAdaptationReason reason) {
   encoder_queue_->PostTask([this, resource = std::move(resource), reason] {
     RTC_DCHECK_RUN_ON(encoder_queue_.get());

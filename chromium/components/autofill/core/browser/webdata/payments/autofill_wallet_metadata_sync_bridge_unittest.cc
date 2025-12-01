@@ -1009,7 +1009,7 @@ TEST_F(AutofillWalletMetadataSyncBridgeTest,
           kCard1SpecificsId, /*use_count=*/30, /*use_date=*/40);
 
   // Save only metadata and not data - simulate an orphan.
-  table()->AddServerCardMetadata(
+  table()->AddOrUpdateServerCardMetadata(
       CreateServerCreditCardFromSpecifics(card).GetMetadata());
 
   // Make the orphans old by advancing time.
@@ -1096,7 +1096,7 @@ TEST_F(AutofillWalletMetadataSyncBridgeTest,
           UseDateToProtoValue(base::Time::Now() - base::Minutes(1)));
 
   // Save only metadata and not data - simulate an orphan.
-  table()->AddServerCardMetadata(
+  table()->AddOrUpdateServerCardMetadata(
       CreateServerCreditCardFromSpecifics(card).GetMetadata());
 
   // We do not advance time so the orphans are recent, should not get deleted.
@@ -1304,7 +1304,7 @@ enum RemoteChangesMode {
                      // UPDATE changes.
 };
 
-// Parametrized fixture for tests that apply in the same way for all
+// Parameterized fixture for tests that apply in the same way for all
 // RemoteChangesModes.
 class AutofillWalletMetadataSyncBridgeRemoteChangesTest
     : public testing::WithParamInterface<RemoteChangesMode>,

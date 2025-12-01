@@ -85,7 +85,6 @@ class BaseSearchProvider : public AutocompleteProvider {
   static AutocompleteMatch CreateShortcutSearchSuggestion(
       const std::u16string& suggestion,
       AutocompleteMatchType::Type type,
-      bool from_keyword_provider,
       const TemplateURL* template_url,
       const SearchTermsData& search_terms_data);
 
@@ -105,6 +104,9 @@ class BaseSearchProvider : public AutocompleteProvider {
       const TemplateURLRef& search_url,
       const TemplateURLRef::SearchTermsArgs& original_search_terms,
       const SearchTermsData& search_terms_data);
+
+  static std::string CreateQueryParamStringFromMap(
+      const google::protobuf::Map<std::string, std::string>& query_param_map);
 
   static scoped_refptr<OmniboxAction> CreateAnswerAction(
       omnibox::SuggestionEnhancement enhancement,

@@ -1,6 +1,7 @@
 // Copyright (c) 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import type * as Common from '../../../../core/common/common.js';
 import * as i18n from '../../../../core/i18n/i18n.js';
@@ -8,11 +9,7 @@ import * as ColorPicker from '../../../legacy/components/color_picker/color_pick
 import * as Lit from '../../../lit/lit.js';
 import * as VisualLogging from '../../../visual_logging/visual_logging.js';
 
-import colorSwatchStylesRaw from './colorSwatch.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const colorSwatchStyles = new CSSStyleSheet();
-colorSwatchStyles.replaceSync(colorSwatchStylesRaw.cssText);
+import colorSwatchStyles from './colorSwatch.css.js';
 
 const {html} = Lit;
 
@@ -52,9 +49,6 @@ export class ColorSwatch extends HTMLElement {
 
   constructor(tooltip?: string) {
     super();
-    this.shadow.adoptedStyleSheets = [
-      colorSwatchStyles,
-    ];
     if (tooltip) {
       this.tooltip = tooltip;
     }
@@ -107,7 +101,7 @@ export class ColorSwatch extends HTMLElement {
     // Note also that whitespace between nodes is removed on purpose to avoid pushing these elements apart. Do not
     // re-format the HTML code.
     Lit.render(
-      html`<span class=${colorSwatchClasses} title=${this.tooltip}><span class="color-swatch-inner"
+      html`<style>${colorSwatchStyles}</style></style><span class=${colorSwatchClasses} title=${this.tooltip}><span class="color-swatch-inner"
         style="background-color: ${color.asString()};"
         jslog=${VisualLogging.showStyleEditor('color').track({click: true})}
         @click=${this.onClick}

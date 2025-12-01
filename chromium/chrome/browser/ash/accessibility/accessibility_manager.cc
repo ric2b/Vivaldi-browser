@@ -58,7 +58,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/braille_display_private/stub_braille_controller.h"
 #include "chrome/browser/extensions/component_loader.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
@@ -533,12 +532,15 @@ AccessibilityManager::AccessibilityManager() {
   const bool enable_v3_manifest =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           ::switches::kEnableExperimentalAccessibilityManifestV3);
+
+  const bool enable_accessibility_common_v3_manifest =
+      ::features::IsAccessibilityManifestV3EnabledForAccessibilityCommon();
   const base::FilePath::CharType* accessibility_common_manifest_filename =
-      enable_v3_manifest
+      enable_v3_manifest || enable_accessibility_common_v3_manifest
           ? extension_misc::kAccessibilityCommonManifestV3Filename
           : extension_misc::kAccessibilityCommonManifestFilename;
   const base::FilePath::CharType* accessibility_common_guest_manifest_filename =
-      enable_v3_manifest
+      enable_v3_manifest || enable_accessibility_common_v3_manifest
           ? extension_misc::kAccessibilityCommonGuestManifestV3Filename
           : extension_misc::kAccessibilityCommonGuestManifestFilename;
 
@@ -794,10 +796,6 @@ void AccessibilityManager::OnSpokenFeedbackChanged() {
   const bool enabled = profile_->GetPrefs()->GetBoolean(
       prefs::kAccessibilitySpokenFeedbackEnabled);
 
-  content::BrowserAccessibilityState* browser_ax_state =
-      content::BrowserAccessibilityState::GetInstance();
-  browser_ax_state->SetScreenReaderAppActive(enabled);
-
   if (IsUserBrowserContext(profile_)) {
     user_manager::KnownUser known_user(g_browser_process->local_state());
     known_user.SetBooleanPref(
@@ -817,13 +815,21 @@ void AccessibilityManager::OnSpokenFeedbackChanged() {
                        weak_ptr_factory_.GetWeakPtr()));
   }
 
-  if (spoken_feedback_enabled_ == enabled)
+  bool was_enabled = spoken_feedback_enabled();
+  if (was_enabled == enabled) {
     return;
+  }
+
+  if (enabled) {
+    screen_reader_mode_ =
+        content::BrowserAccessibilityState::GetInstance()
+            ->CreateScopedModeForProcess(ui::AXMode::kScreenReader);
+  } else {
+    screen_reader_mode_.reset();
+  }
 
   if (accessibility_service_client_)
     accessibility_service_client_->SetChromeVoxEnabled(enabled);
-
-  spoken_feedback_enabled_ = enabled;
 
   AccessibilityStatusEventDetails details(
       AccessibilityNotificationType::kToggleSpokenFeedback, enabled);
@@ -1008,6 +1014,23 @@ void AccessibilityManager::EnableFaceGaze(bool enabled) {
 bool AccessibilityManager::IsFaceGazeEnabled() const {
   return ::features::IsAccessibilityFaceGazeEnabled() && profile_ &&
          profile_->GetPrefs()->GetBoolean(prefs::kAccessibilityFaceGazeEnabled);
+}
+
+void AccessibilityManager::RequestEnableFaceGaze(bool enable) {
+  if (enable) {
+    EnableFaceGaze(enable);
+  } else {
+    AccessibilityController::Get()->RequestDisableFaceGaze();
+  }
+}
+
+void AccessibilityManager::SendFaceGazeDisableDialogResultToSettings(
+    bool accepted) {
+  if (!facegaze_settings_event_handler_) {
+    return;
+  }
+
+  facegaze_settings_event_handler_->HandleDisableDialogResult(accepted);
 }
 
 void AccessibilityManager::AddFaceGazeSettingsEventHandler(
@@ -2184,8 +2207,9 @@ void AccessibilityManager::PostLoadChromeVox() {
       base::Value::List()));
   event_router->DispatchEventWithLazyListener(extension_id, std::move(event));
 
-  if (!chromevox_panel_ && spoken_feedback_enabled_)
+  if (!chromevox_panel_ && spoken_feedback_enabled()) {
     CreateChromeVoxPanel();
+  }
 
   audio_focus_manager_->SetEnforcementMode(
       media_session::mojom::EnforcementMode::kNone);
@@ -2226,7 +2250,7 @@ void AccessibilityManager::PostUnloadChromeVox() {
 }
 
 void AccessibilityManager::CreateChromeVoxPanel() {
-  DCHECK(!chromevox_panel_ && spoken_feedback_enabled_);
+  DCHECK(!chromevox_panel_ && spoken_feedback_enabled());
   chromevox_panel_ = new ChromeVoxPanel(profile_);
   chromevox_panel_widget_observer_ =
       std::make_unique<AccessibilityPanelWidgetObserver>(
@@ -2240,8 +2264,9 @@ void AccessibilityManager::PostSwitchChromeVoxProfile() {
     chromevox_panel_->CloseNow();
     chromevox_panel_ = nullptr;
   }
-  if (!chromevox_panel_ && spoken_feedback_enabled_)
+  if (!chromevox_panel_ && spoken_feedback_enabled()) {
     CreateChromeVoxPanel();
+  }
 }
 
 void AccessibilityManager::OnChromeVoxPanelDestroying() {
@@ -2297,10 +2322,7 @@ void AccessibilityManager::LoadEnhancedNetworkTts() {
   if (!profile_)
     return;
 
-  extensions::ComponentLoader* component_loader =
-      extensions::ExtensionSystem::Get(profile_)
-          ->extension_service()
-          ->component_loader();
+  auto* component_loader = extensions::ComponentLoader::Get(profile_);
 
   if (component_loader->Exists(extension_misc::kEnhancedNetworkTtsExtensionId))
     return;
@@ -2334,10 +2356,7 @@ void AccessibilityManager::UnloadEnhancedNetworkTts() {
   if (!profile_)
     return;
 
-  extensions::ComponentLoader* component_loader =
-      extensions::ExtensionSystem::Get(profile_)
-          ->extension_service()
-          ->component_loader();
+  auto* component_loader = extensions::ComponentLoader::Get(profile_);
   if (component_loader->Exists(extension_misc::kEnhancedNetworkTtsExtensionId))
     component_loader->Remove(extension_misc::kEnhancedNetworkTtsExtensionId);
 }
@@ -2535,7 +2554,7 @@ const std::string AccessibilityManager::GetBluetoothBrailleDisplayAddress()
 
 void AccessibilityManager::UpdateBluetoothBrailleDisplayAddress(
     const std::string& address) {
-  CHECK(spoken_feedback_enabled_);
+  CHECK(spoken_feedback_enabled());
   if (!profile_)
     return;
 

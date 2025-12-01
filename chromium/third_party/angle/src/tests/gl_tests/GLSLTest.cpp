@@ -6,6 +6,7 @@
 
 #include "test_utils/ANGLETest.h"
 
+#include "test_utils/angle_test_configs.h"
 #include "test_utils/gl_raii.h"
 #include "util/shader_utils.h"
 
@@ -7042,6 +7043,37 @@ TEST_P(GLSLTest, InactiveVaryingInVertexActiveInFragment)
     ANGLE_GL_PROGRAM(program, kVS, kFS);
     drawQuad(program, "inputAttribute", 0.5f);
     ASSERT_GL_NO_ERROR();
+}
+
+// Test that standard derivatives work as expected with FBOs since the render target
+// might have flipped viewport orientation.
+TEST_P(GLSLTest, ScreenFlipCauseStandardDerivativesWrong)
+{
+    constexpr char kFS[] =
+        R"(
+#extension GL_OES_standard_derivatives : enable
+precision mediump float;
+
+void main()
+{
+    gl_FragColor = vec4(
+        dFdx(gl_FragCoord.x),
+        dFdy(gl_FragCoord.y),
+        0.0, 1.0
+    );
+}
+        )";
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glClearColor(0.0, 0.0, 0.0, 1.0);
+    ASSERT_GL_NO_ERROR();
+
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), kFS);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+    ASSERT_GL_NO_ERROR();
+    EXPECT_PIXEL_RECT_EQ(0, 0, getWindowWidth(), getWindowHeight(), GLColor::yellow);
 }
 
 // Test that a varying struct that's not statically used in the fragment shader works.
@@ -16067,6 +16099,24 @@ void main()
     EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::yellow);
 }
 
+// Test when a constant constructor is nested inside a constructor of a different type, where the
+// outer constructor itself is not a constant.
+TEST_P(GLSLTest, ConstantConstructorNestedInConstructorOfDifferentType)
+{
+    constexpr char kFS[] = R"(precision mediump float;
+void main()
+{
+    float e = 1.;
+    gl_FragColor.xyz = vec3(ivec2(1, 0),e);
+    gl_FragColor.a = 1.;
+})";
+
+    ANGLE_GL_PROGRAM(program, essl1_shaders::vs::Simple(), kFS);
+    drawQuad(program, essl1_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::magenta);
+    ASSERT_GL_NO_ERROR();
+}
+
 // Test that initializing global variables with non-constant values work
 TEST_P(GLSLTest_ES3, InitGlobalNonConstant)
 {
@@ -20738,6 +20788,57 @@ void main()
     GLuint shader = CompileShader(GL_VERTEX_SHADER, kVS);
     EXPECT_NE(0u, shader);
     glDeleteShader(shader);
+}
+
+// Test that denorm float values in GLSL are preserved
+TEST_P(GLSLTest_ES3, DenormFloatsToIntValues)
+{
+    ANGLE_SKIP_TEST_IF(!IsVulkan());
+
+    constexpr char kFS[] =
+        "#version 300 es\n"
+        "precision highp float;\n"
+        "out vec4 out_color;\n"
+        "uniform float u;\n"
+        "void main()\n"
+        "{\n"
+        "   float smallDenormFloat = 1.40129846e-45;\n"
+        "   int smallBits = floatBitsToInt(smallDenormFloat);\n"
+        "   bool smallCorrect = smallBits == 1;\n"
+        "\n"
+        "   float largeDenormFloat = 1.1754942107e-38f;\n"
+        "   int largeBits = floatBitsToInt(largeDenormFloat);\n"
+        "   bool largeCorrect = largeBits == 0x007FFFFF;\n"
+        "\n"
+        "   out_color = (smallCorrect && largeCorrect)\n"
+        "             ? vec4(0.0, 1.0, 0.0, 1.0)\n"
+        "             : vec4(1.0, 0.0, 0.0, 1.0);\n"
+        "}\n";
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f);
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::green);
+}
+
+// Test output initialization vs. fragment output arrays
+TEST_P(WebGL2GLSLTest, FragmentOutputArray)
+{
+    constexpr char kFS[] = R"(#version 300 es
+precision mediump float;
+layout(location = 0) out vec4 activeColor;
+layout(location = 1) out vec4 inactive[3];
+void main() {
+    // Make activeColor active without fully initializing it.
+    activeColor.x += 0.0001;
+})";
+
+    glClearColor(100, 200, 50, 150);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    ANGLE_GL_PROGRAM(program, essl3_shaders::vs::Simple(), kFS);
+    drawQuad(program, essl3_shaders::PositionAttrib(), 0.5f, 1.0f, true);
+
+    EXPECT_PIXEL_COLOR_EQ(0, 0, GLColor::transparentBlack);
 }
 }  // anonymous namespace
 

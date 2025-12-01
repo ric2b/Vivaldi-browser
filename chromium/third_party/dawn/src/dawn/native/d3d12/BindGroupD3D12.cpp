@@ -29,7 +29,6 @@
 
 #include <utility>
 
-#include "dawn/common/BitSetIterator.h"
 #include "dawn/common/MatchVariant.h"
 #include "dawn/common/Range.h"
 #include "dawn/native/ExternalTexture.h"
@@ -212,7 +211,7 @@ MaybeError BindGroup::InitializeImpl() {
     // dynamic storage buffer to its binding size. The index |dynamicStorageBufferIndex|
     // means that it is the i'th buffer that is both dynamic and storage, in increasing order
     // of BindingNumber.
-    mDynamicStorageBufferLengths.resize(bgl->GetBindingCountInfo().dynamicStorageBufferCount);
+    mDynamicStorageBufferLengths.resize(bgl->GetDynamicStorageBufferCount());
     uint32_t dynamicStorageBufferIndex = 0;
     for (BindingIndex bindingIndex(0); bindingIndex < bgl->GetDynamicBufferCount();
          ++bindingIndex) {

@@ -65,11 +65,14 @@ component("user_manager") {
       "user_manager.h",
       "user_manager_impl.cc",
       "user_manager_impl.h",
+      "user_manager_policy_util.cc",
+      "user_manager_policy_util.h",
     ]
 
     deps += [
       "//ash/constants",
       "//chromeos/ash/components/install_attributes",
+      "//chromeos/ash/components/policy/device_local_account",
       "//chromeos/ash/components/settings",
       "//components/pref_registry",
       "//skia",
@@ -106,6 +109,7 @@ if (is_chromeos) {
       "//chromeos/ash/components/dbus/cryptohome",
       "//chromeos/ash/components/dbus/cryptohome:cryptohome_proto",
       "//chromeos/ash/components/dbus/userdataauth",
+      "//chromeos/ash/components/policy/device_local_account",
       "//chromeos/ash/components/settings",
       "//components/policy/core/common",
       "//components/prefs",

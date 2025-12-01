@@ -25,7 +25,6 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/strings/strcat.h"
 #include "base/types/pass_key.h"
@@ -353,7 +352,7 @@ void FencedFrameReporter::OnUrlMappingReady(
     ReportingUrlMap reporting_url_map,
     std::optional<ReportingMacros> reporting_ad_macros) {
   auto it = reporting_metadata_.find(reporting_destination);
-  CHECK(it != reporting_metadata_.end(), base::NotFatalUntil::M130);
+  CHECK(it != reporting_metadata_.end());
   DCHECK(!it->second.reporting_url_map);
   DCHECK(!it->second.reporting_ad_macros);
 
@@ -864,10 +863,10 @@ void FencedFrameReporter::RemoveObserverForTesting(
 }
 
 void FencedFrameReporter::OnForEventPrivateAggregationRequestsReceived(
-    std::map<std::string, PrivateAggregationRequests>
+    std::map<std::string, FinalizedPrivateAggregationRequests>
         private_aggregation_event_map) {
   for (auto& [event_type, requests] : private_aggregation_event_map) {
-    PrivateAggregationRequests& destination_vector =
+    FinalizedPrivateAggregationRequests& destination_vector =
         private_aggregation_event_map_[event_type];
     destination_vector.insert(destination_vector.end(),
                               std::move_iterator(requests.begin()),
@@ -980,12 +979,12 @@ std::set<std::string> FencedFrameReporter::GetReceivedPaEventsForTesting()
   return received_pa_events_;
 }
 
-std::map<std::string, FencedFrameReporter::PrivateAggregationRequests>
+std::map<std::string, FencedFrameReporter::FinalizedPrivateAggregationRequests>
 FencedFrameReporter::GetPrivateAggregationEventMapForTesting() {
-  std::map<std::string, FencedFrameReporter::PrivateAggregationRequests> out;
+  std::map<std::string, FinalizedPrivateAggregationRequests> out;
   for (auto& [event_type, requests] : private_aggregation_event_map_) {
-    for (auction_worklet::mojom::PrivateAggregationRequestPtr& request :
-         requests) {
+    for (auction_worklet::mojom::FinalizedPrivateAggregationRequestPtr&
+             request : requests) {
       out[event_type].emplace_back(request.Clone());
     }
   }

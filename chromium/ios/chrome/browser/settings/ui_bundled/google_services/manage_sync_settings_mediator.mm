@@ -42,6 +42,7 @@
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_constants.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/manage_sync_settings_consumer.h"
 #import "ios/chrome/browser/settings/ui_bundled/google_services/sync_error_settings_command_handler.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/list_model/list_model.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
@@ -54,7 +55,6 @@
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/browser/signin/model/constants.h"
 #import "ios/chrome/browser/sync/model/enterprise_utils.h"
 #import "ios/chrome/browser/sync/model/sync_observer_bridge.h"
@@ -85,8 +85,7 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
 }  // namespace
 
-@interface ManageSyncSettingsMediator () <IdentityManagerObserverBridgeDelegate,
-                                          ChromeAccountManagerServiceObserver>
+@interface ManageSyncSettingsMediator () <IdentityManagerObserverBridgeDelegate>
 
 // Model item for each data types.
 @property(nonatomic, strong) NSArray<TableViewItem*>* syncSwitchItems;
@@ -121,9 +120,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   raw_ptr<AuthenticationService> _authenticationService;
   // Account manager service to retrieve Chrome identities.
   raw_ptr<ChromeAccountManagerService> _chromeAccountManagerService;
-  // Chrome account manager service observer bridge.
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
   // The pref service.
   raw_ptr<PrefService> _prefService;
   // Signed-in identity. Note: may be nil while signing out.
@@ -148,9 +144,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
                                                                 self);
     _authenticationService = authenticationService;
     _chromeAccountManagerService = accountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _chromeAccountManagerService);
     _signedInIdentity = _authenticationService->GetPrimaryIdentity(
         signin::ConsentLevel::kSignin);
     _prefService = prefService;
@@ -171,7 +164,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
   _identityManagerObserver.reset();
   _authenticationService = nullptr;
   _chromeAccountManagerService = nullptr;
-  _accountManagerServiceObserver.reset();
   _prefService = nullptr;
   _signedInIdentity = nil;
   [[NSNotificationCenter defaultCenter] removeObserver:self];
@@ -761,17 +753,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 
 #pragma mark - Private
 
-- (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
-  if ([_signedInIdentity isEqual:identity]) {
-    [self updatePrimaryAccountDetails];
-    [self updateSyncItemsNotifyConsumer:YES];
-    [self updateSyncErrorsSection:YES];
-    [self updateBatchUploadSectionWithNotifyConsumer:YES firstLoad:NO];
-    [self updateEncryptionItem:YES];
-    [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:NO];
-  }
-}
-
 // Creates a SyncSwitchItem or TableViewInfoButtonItem instance if the item is
 // managed.
 - (TableViewItem*)tableViewItemWithDataType:
@@ -826,7 +807,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     case syncer::UserSelectableType::kExtensions:
     case syncer::UserSelectableType::kApps:
     case syncer::UserSelectableType::kSavedTabGroups:
-    case syncer::UserSelectableType::kSharedTabGroupData:
     case syncer::UserSelectableType::kProductComparison:
     case syncer::UserSelectableType::kCookies:
       NOTREACHED();
@@ -889,13 +869,12 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 }
 
 - (BOOL)shouldEncryptionItemBeEnabled {
+  // Note, that it is not enough to check whether UserActionableError is
+  // kNeedsTrustedVaultKeyForPasswords or kNeedsTrustedVaultKeyForEverything
+  // because sync might currently attempt to silently fetch the trusted vault
+  // keys.
   return !self.disabledBecauseOfSyncError &&
-         _syncService->GetUserActionableError() !=
-             syncer::SyncService::UserActionableError::
-                 kNeedsTrustedVaultKeyForPasswords &&
-         _syncService->GetUserActionableError() !=
-             syncer::SyncService::UserActionableError::
-                 kNeedsTrustedVaultKeyForEverything &&
+         !_syncService->GetUserSettings()->IsTrustedVaultKeyRequired() &&
          _syncService->GetUserSettings()->IsCustomPassphraseAllowed();
 }
 
@@ -956,13 +935,16 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
 #pragma mark - IdentityManagerObserverBridgeDelegate
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _chromeAccountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
-  [self handleIdentityUpdated:identity];
+  if ([_signedInIdentity isEqual:identity]) {
+    [self updatePrimaryAccountDetails];
+    [self updateSyncItemsNotifyConsumer:YES];
+    [self updateSyncErrorsSection:YES];
+    [self updateBatchUploadSectionWithNotifyConsumer:YES firstLoad:NO];
+    [self updateEncryptionItem:YES];
+    [self fetchLocalDataDescriptionsForBatchUploadWithFirstLoad:NO];
+  }
 }
 
 - (void)onPrimaryAccountChanged:
@@ -978,22 +960,6 @@ constexpr CGFloat kBatchUploadSymbolPointSize = 22.;
     case signin::PrimaryAccountChangeEvent::Type::kNone:
       break;
   }
-}
-
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
 }
 
 #pragma mark - ManageSyncSettingsServiceDelegate

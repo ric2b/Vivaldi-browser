@@ -7,6 +7,7 @@
 
 #include <optional>
 
+#include "base/sequence_checker.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -84,7 +85,7 @@ class CORE_EXPORT ThreadedMessagingProxyBase
   // where the original Window context isn't directly accessible,
   // `client_provided_devtools_params` will be pre-calculated and passed to this
   // function, and this param will be used directly to start the worklet thread.
-  void InitializeWorkerThread(
+  bool InitializeWorkerThread(
       std::unique_ptr<GlobalScopeCreationParams>,
       const std::optional<WorkerBackingThreadStartupData>&,
       const std::optional<const blink::DedicatedWorkerToken>&,
@@ -118,6 +119,7 @@ class CORE_EXPORT ThreadedMessagingProxyBase
       parent_execution_context_task_runners_;
   scoped_refptr<base::SingleThreadTaskRunner> parent_agent_group_task_runner_;
 
+  SEQUENCE_CHECKER(sequence_checker_);
   std::unique_ptr<WorkerThread> worker_thread_;
 
   bool asked_to_terminate_ = false;

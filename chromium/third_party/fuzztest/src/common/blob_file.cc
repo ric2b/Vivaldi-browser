@@ -48,7 +48,7 @@
 #include "riegeli/records/record_writer.h"
 #endif  // CENTIPEDE_DISABLE_RIEGELI
 
-namespace centipede {
+namespace fuzztest::internal {
 namespace {
 
 constexpr size_t kMagicLen = 11;
@@ -461,10 +461,9 @@ ByteArray PackBytesForAppendFile(ByteSpan blob) {
 }
 
 // Reverse to a sequence of PackBytesForAppendFile() appended to each other.
-void UnpackBytesFromAppendFile(
-    const ByteArray &packed_data,
-    absl::Nullable<std::vector<ByteArray> *> unpacked,
-    absl::Nullable<std::vector<std::string> *> hashes) {
+void UnpackBytesFromAppendFile(const ByteArray &packed_data,
+                               std::vector<ByteArray> *absl_nullable unpacked,
+                               std::vector<std::string> *absl_nullable hashes) {
   auto pos = packed_data.cbegin();
   while (true) {
     pos = std::search(pos, packed_data.end(), &kPackBegMagic[0],
@@ -505,4 +504,4 @@ std::unique_ptr<BlobFileWriter> DefaultBlobFileWriterFactory(bool riegeli) {
     return std::make_unique<SimpleBlobFileWriter>();
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

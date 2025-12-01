@@ -6,16 +6,19 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_AI_AI_WRITING_ASSISTANCE_CREATE_CLIENT_H_
 
 #include "base/task/sequenced_task_runner.h"
-#include "third_party/blink/renderer/bindings/modules/v8/v8_ai_create_monitor_callback.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_create_monitor_callback.h"
+#include "third_party/blink/renderer/core/dom/quota_exceeded_error.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
 #include "third_party/blink/renderer/modules/ai/ai_context_observer.h"
-#include "third_party/blink/renderer/modules/ai/ai_create_monitor.h"
+#include "third_party/blink/renderer/modules/ai/ai_interface_proxy.h"
 #include "third_party/blink/renderer/modules/ai/ai_utils.h"
+#include "third_party/blink/renderer/modules/ai/create_monitor.h"
 #include "third_party/blink/renderer/platform/mojo/heap_mojo_receiver.h"
 
 namespace blink {
 
+// TODO(crbug.com/416021087): Consolidate with LanguageModelCreateClient.
 template <typename AIMojoClient,
           typename AIMojoCreateClient,
           typename CreateOptions,
@@ -44,8 +47,8 @@ class AIWritingAssistanceCreateClient
         task_runner_(
             GetExecutionContext()->GetTaskRunner(TaskType::kInternalDefault)) {
     if (options->hasMonitor()) {
-      monitor_ = MakeGarbageCollected<AICreateMonitor>(GetExecutionContext(),
-                                                       task_runner_);
+      monitor_ = MakeGarbageCollected<CreateMonitor>(GetExecutionContext(),
+                                                     task_runner_);
       std::ignore = options->monitor()->Invoke(nullptr, monitor_);
       HeapMojoRemote<mojom::blink::AIManager>& ai_manager_remote =
           AIInterfaceProxy::GetAIManagerRemote(GetExecutionContext());
@@ -77,13 +80,31 @@ class AIWritingAssistanceCreateClient
 
   // AIMojoCreateClient:
   void OnResult(mojo::PendingRemote<AIMojoClient> pending_remote) override {
+    // Call `Cleanup` when this function returns.
+    RunOnDestruction run_on_destruction(WTF::BindOnce(
+        &AIWritingAssistanceCreateClient::Cleanup, WrapWeakPersistent(this)));
+
     if (!this->GetResolver()) {
       return;
     }
+
     if (pending_remote && monitor_) {
+      // Ensure that a download completion event is sent.
+      monitor_->OnDownloadProgressUpdate(0, kNormalizedDownloadProgressMax);
+
+      // Abort may have been triggered by `OnDownloadProgressUpdate`.
+      if (!this->GetResolver()) {
+        return;
+      }
+
       // Ensure that a download completion event is sent.
       monitor_->OnDownloadProgressUpdate(kNormalizedDownloadProgressMax,
                                          kNormalizedDownloadProgressMax);
+
+      // Abort may have been triggered by `OnDownloadProgressUpdate`.
+      if (!this->GetResolver()) {
+        return;
+      }
     }
 
     if (GetExecutionContext() && pending_remote) {
@@ -95,10 +116,14 @@ class AIWritingAssistanceCreateClient
           DOMExceptionCode::kInvalidStateError,
           kExceptionMessageUnableToCreateSession);
     }
-    this->Cleanup();
   }
 
-  void OnError(mojom::blink::AIManagerCreateClientError error) override {
+  void OnError(mojom::blink::AIManagerCreateClientError error,
+               mojom::blink::QuotaErrorInfoPtr quota_error_info) override {
+    // Call `Cleanup` when this function returns.
+    RunOnDestruction run_on_destruction(WTF::BindOnce(
+        &AIWritingAssistanceCreateClient::Cleanup, WrapWeakPersistent(this)));
+
     if (!this->GetResolver()) {
       return;
     }
@@ -114,9 +139,11 @@ class AIWritingAssistanceCreateClient
         break;
       }
       case AIManagerCreateClientError::kInitialInputTooLarge: {
-        this->GetResolver()->RejectWithDOMException(
-            DOMExceptionCode::kQuotaExceededError,
-            kExceptionMessageInputTooLarge);
+        CHECK(quota_error_info);
+        QuotaExceededError::Reject(
+            this->GetResolver(), kExceptionMessageInputTooLarge,
+            static_cast<double>(quota_error_info->quota),
+            static_cast<double>(quota_error_info->requested));
         break;
       }
       case AIManagerCreateClientError::kUnsupportedLanguage: {
@@ -126,7 +153,6 @@ class AIWritingAssistanceCreateClient
         break;
       }
     }
-    this->Cleanup();
   }
 
   // AIContextObserver:
@@ -139,7 +165,7 @@ class AIWritingAssistanceCreateClient
   HeapMojoReceiver<AIMojoCreateClient, AIWritingAssistanceCreateClient>
       receiver_;
   Member<CreateOptions> options_;
-  Member<AICreateMonitor> monitor_;
+  Member<CreateMonitor> monitor_;
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 };
 

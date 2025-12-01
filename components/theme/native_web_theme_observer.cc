@@ -24,7 +24,7 @@ NativeWebThemeObserver::NativeWebThemeObserver(content::BrowserContext* context)
       base::BindOnce(&NativeWebThemeObserver::OnAboutFlagsStorageRecieved,
                      base::Unretained(this)));
 
-  auto* nativeTheme = ui::NativeTheme::GetInstanceForWeb();
+  auto* nativeTheme = ui::NativeTheme::GetInstanceForNativeUi();
   DCHECK(nativeTheme);
   native_theme_observation_.Observe(nativeTheme);
 
@@ -35,7 +35,7 @@ NativeWebThemeObserver::NativeWebThemeObserver(content::BrowserContext* context)
       vivaldiprefs::kVivaldiPreferredColorScheme,
       base::BindRepeating(&NativeWebThemeObserver::OnNativeThemeUpdated,
                           base::Unretained(this),
-                          ui::NativeTheme::GetInstanceForWeb()));
+                          ui::NativeTheme::GetInstanceForNativeUi()));
 
   auto* pref_state = profile_->GetPrefs();
   DCHECK(pref_state);
@@ -82,6 +82,8 @@ void NativeWebThemeObserver::OnPreferredColorSchemeChange(
   }
 
   if (newScheme != observed_theme->GetPreferredColorScheme()) {
+    observed_theme->set_use_dark_colors(
+        newScheme == ui::NativeTheme::PreferredColorScheme::kDark);
     observed_theme->set_preferred_color_scheme(newScheme);
     observed_theme->NotifyOnNativeThemeUpdated();
   }
@@ -98,7 +100,7 @@ void NativeWebThemeObserver::OnForceDarkThemeChange() {
 
     // If preferred color sheme is Auto deduct value from preferred color theme
     if (preferredColorScheme == PreferredColorScheme::Auto) {
-      auto* nativeTheme = ui::NativeTheme::GetInstanceForWeb();
+      auto* nativeTheme = ui::NativeTheme::GetInstanceForNativeUi();
       DCHECK(nativeTheme);
       shouldForceDarkTheme &= nativeTheme->ShouldUseDarkColors();
     } else {

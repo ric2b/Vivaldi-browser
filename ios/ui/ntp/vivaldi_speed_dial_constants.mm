@@ -38,11 +38,16 @@ const CGSize vSpeedDialItemFaviconSizeRegularLayout = CGSizeMake(16.0, 16.0);
 const CGSize vSpeedDialItemFaviconSizeSmallLayout = CGSizeMake(28.0, 28.0);
 // Speed Dial item favicon size for layout 'Small' on tablet.
 const CGSize vSpeedDialItemFaviconSizeSmallLayoutTablet = CGSizeMake(36.0, 36.0);
+// Speed Dial item favicon size for layout 'Icon'
+const CGSize vSpeedDialItemFaviconSizeIconLayout = CGSizeMake(42.0, 42.0);
+// Speed Dial item favicon size for layout 'Icon' on tablet.
+const CGSize vSpeedDialItemFaviconSizeIconLayoutTablet = CGSizeMake(50.0, 50.0);
 // Speed Dial item favicon size for layout 'List'
 const CGSize vSpeedDialItemFaviconSizeListLayout = CGSizeMake(36.0, 36.0);
 // Speed Dial favicon corner radius
 const CGFloat vSpeedDialFaviconCornerRadius = 4.0;
-
+// Speed Dial favicon corner radius for icon layout
+const CGFloat vSpeedDialIconLayoutFaviconCornerRadius = 6.0;
 #pragma mark - COLORS
 // Color for the shadow of the speed dial item
 NSString* vSpeedDialItemShadowColor =
@@ -56,6 +61,10 @@ NSString* vNTPSpeedDialCellBackgroundColor =
 // Color for the new tab page speed dial domain/website name text
 NSString* vNTPSpeedDialDomainTextColor =
     @"vivaldi_ntp_speed_dial_domain_text_color";
+NSString* vNTPSpeedDialDomainTextColorDark =
+    @"vivaldi_ntp_speed_dial_domain_text_color_dark";
+NSString* vNTPSpeedDialDomainTextColorLight =
+    @"vivaldi_ntp_speed_dial_domain_text_color_light";
 
 #pragma mark - ICONS
 // Image name for add new speed dial

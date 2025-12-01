@@ -204,14 +204,12 @@ const char kTabletProductivityUserModelLabelHigh[] = "High";
 // Labels for Android Home modules for ranking.
 const char kSingleTab[] = "SingleTab";
 const char kPriceChange[] = "PriceChange";
-const char kTabResumptionForAndroidHome[] = "TabResumption";
 const char kSafetyHub[] = "SafetyHub";
 const char kAuxiliarySearch[] = "AuxiliarySearch";
 
 // Input Context keys for freshness for Android Home modules.
 const char kSingleTabFreshness[] = "single_tab_freshness";
 const char kPriceChangeFreshness[] = "price_change_freshness";
-const char kTabResumptionForAndroidHomeFreshness[] = "tab_resumption_freshness";
 const char kSafetyHubFreshness[] = "safety_hub_freshness";
 const char kAuxiliarySearchFreshness[] = "auxiliary_search_freshness";
 
@@ -257,12 +255,16 @@ constexpr char kModelExecutionSamplingRateKey[] =
 // startup.
 constexpr char kModelInitializationDelay[] = "model_initialization_delay";
 
-// Input Context keys for FedCM clickthrough rates.
-const char kPerPageLoadClickthroughRate[] = "per_page_load_clickthrough_rate";
-const char kPerClientClickthroughRate[] = "per_client_clickthrough_rate";
-const char kPerImpressionClickthroughRate[] =
+// Input Context keys for FedCM.
+const char kFedCmHost[] = "host";
+const char kFedCmUrl[] = "url";
+const char kFedCmPerPageLoadClickthroughRate[] =
+    "per_page_load_clickthrough_rate";
+const char kFedCmPerClientClickthroughRate[] = "per_client_clickthrough_rate";
+const char kFedCmPerImpressionClickthroughRate[] =
     "per_impression_clickthrough_rate";
-const char kLikelyToSignin[] = "likely_to_signin";
+const char kFedCmLikelyToSignin[] = "likely_to_signin";
+const char kFedCmLikelyInsufficientData[] = "likely_insufficient_data";
 
 }  // namespace segmentation_platform
 

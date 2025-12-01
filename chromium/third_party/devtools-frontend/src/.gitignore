@@ -26,7 +26,9 @@ config.gypi
 npm-debug.log
 /scripts/protocol_typescript/*.js
 /scripts/ai_assistance/data
+/scripts/ai_assistance/auto-run/data
 /scripts/ai_assistance/performance-trace-downloads
+/scripts/ai_assistance/auto-run/performance-trace-downloads
 
 /build
 /buildtools

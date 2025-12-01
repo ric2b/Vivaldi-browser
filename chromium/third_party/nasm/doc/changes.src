@@ -7,7 +7,273 @@
 The NASM 2 series supports x86-64, and is the production version of NASM
 since 2007.
 
+\S{cl-2.17} Version 2.17
+
+\b Improve the documentation for building from source (\k{source}).
+
+\S{cl-2.16.04} Version 2.16.04
+
+\b Clean up the command-line help text (\c{-h}) and break it down into
+individual topics, as the previous output was just too verbose to be
+practical as a quick reference.
+
+\S{cl-2.16.03} Version 2.16.03
+
+\e{This is a source build machinery and documentation update
+only. There are no functionality changes.}
+
+\b Fix building from \c{git} in a separate directory from the source.
+
+\b Remove some irrelevant files from the source distribution.
+
+\b Make the documentation stronger that \c{-O0} or \c{-O1} are
+probably not what the user wants. See \k{opt-O}.
+
+\b Fix \c{configure --enable-lto} build option.
+
+\b Update the included RPM \c{.spec} file.
+
+\S{cl-2.16.02} Version 2.16.02
+
+\b Fix building from the source distribution in a separate directory
+from the source.
+
+\b Fix a number of issues when building from source, mostly involving
+\c{configure} or dependency generation.
+
+\> In particular, more aggressively avoid cross-compilation problems
+on Unix/Linux systems automatically invoking WINE. We could end up
+invoking WINE even when we didn't want to, making \c{configure} think
+it was running native when in fact cross-compiling.
+
+\b Hopefully fix compiling with the latest versions of MSVC/nmake.
+
+\b Windows host: add embedded manifest file. Without a manifest,
+Windows applications force a fixed \c{PATH_MAX} limit to any pathname;
+this is unnecessary.
+
+\b Add support VEX-encoded SM4-NI instructions.
+
+\b Add support for VEX-encoded SM3-NI instructions.
+
+\b Add support for VEX-encoded SHA512-NI instructions.
+
+\b \c{PTWRITE} opcode corrected (\c{F3} prefix required.)
+
+\b Disassembler: the SMAP instructions are \c{NP}; notably the
+prefixed versions of \c{CLAC} are \c{ERETU}/\c{ERETS}.
+
+\b Add support for Flexible Return and Exception Delivery (FRED): the
+\c{LKGS}, \c{ERETS} and \c{ERETU} instructions.
+
+\b Fix external references to segments in the \c{obj} (OMF) and
+possibly other output formats.
+
+\b Always support up to 8 characters, i.e. 64 bits, in a
+string-to-numeric conversion.
+
+\b Preprocessor: add \c{%map()} function to expand a macro from a list of
+arguments, see \k{f_map}.
+
+\b Preprocessor: allow the user to specify the desired radix for an
+evaluated parameter. It doesn't make any direct difference, but can be
+nice for debugging or turning into strings. See the \c{=} modifier in
+\k{define}.
+
+\b Update documentation: \c{__USE_}\e{package}\c{__} is now
+\c{__?USE_}\e{package}\c{?__}.
+
+\b Documentation: correct a minor problem in the expression grammar
+for \c{D}\e{x} statements, see \k{db}.
+
+\b Preprocessor: correctly handle empty \c{%rep} blocks.
+
+\b Preprocessor: add options for a base prefix to \c{%num()}, see \k{f_num}.
+
+\b Preprocessor: add a \c{%hex()} function, equivalent to \c{%eval()}
+except that it producess hexadecimal values that are nevertheless
+valid NASM numeric constants, see \k{f_hex}.
+
+\b Preprocessor: fix the parameter number in error messages (should be
+1-based, like \c{%}\e{num} references to multi-line macro arguments.)
+
+\b Documentation: be more clear than the \c{bin} format is simply a
+linker built into NASM. See \k{binfmt}.
+
+\b Adjust the \c{LOCK} prefix warning for \c{XCHG}.
+
+\> \c{LOCK XCHG }\e{reg}\c{,}\e{mem} would issue a warning for being
+unlockable, which is incorrect. In this case the \e{reg}\c{,}\e{mem}
+encoding is simply an alias for the \e{mem}\c{,}\e{reg} encoding. However,
+\c{XCHG} is \e{always} locked, so create a new warning
+(\c{-w+prefix-lock-xchg}) to explicitly flag a user-specified \c{LOCK
+XCHG}; default off. Future versions of NASM may remove the \c{LOCK}
+prefix when optimization is enabled.
+
+\b Fix broken dependency-list generation.
+
+\b Add optional warnings for specific relocation types
+(\c{-w+reloc-*}, see \k{warnings}), default off.
+
+\> Some target environments may have specific restrictions on what
+kinds of relocations are possible or allowed.
+
+\b Error out on certain bad syntax in \c{D}\e{x} statements, such as
+\c{db 1 2}. See \k{db}.
+
+\S{cl-2.16.01} Version 2.16.01
+
+\e{This is a documentation update release only. There are no
+functionality changes.}
+
+\b Fix the creation of the table of contents in the HTML version of
+the documentation.
+
+
+\S{cl-2.16} Version 2.16
+
+\b Support for the \c{rdf} format has been discontinued and all the
+RDOFF utilities has been removed.
+
+\b The \c{--reproducible} option now leaves the filename field in the
+COFF object format blank. This was always rather useless since it is
+only 18 characters long; as such debug formats have to carry their own
+filename information anyway.
+
+\b Fix handling of MASM-syntax reserved memory (e.g. \c{dw ?}) when
+used in structure definitions.
+
+\b The preprocessor now supports functions, which can be less verbose
+and more convenient than the equivalent code implemented using
+directives. See \k{ppfunc}.
+
+\b Fix the handling of \c{%00} in the preprocessor.
+
+\b Fix incorrect handling of path names affecting error messages,
+dependency generation, and debug format output.
+
+\b Support for the RDOFF output format and the RDOFF tools have been
+removed. The RDOFF tools had already been broken since at least NASM
+2.14. For flat code the ELF output format recommended; for segmented
+code the \c{obj} (OMF) output format.
+
+\b New facility: preprocessor functions. Preprocessor functions, which
+are expanded similarly to single-line macros, can greatly simplify
+code that in the past would have required a lengthy list of directives
+and intermediate macros. See \k{ppfunc}.
+
+\b Single-line macros can now declare parameters (using a \c{&&}
+prefix) that creates a quoted string, but does \e{not} requote an
+already quoted string. See \k{define}.
+
+\b Instruction table updated per public information available as of
+November 2022.
+
+\b All warnings in the preprocessor have now been assigned warning
+classes. See \k{warnings}.
+
+\b Fix the invalid use of \c{RELA}-type relocations instead of
+\c{REL}-type relocations when generating DWARF debug information for
+the \c{elf32} output format.
+
+\b Fix the handling \c{at} in \c{istruc} when the structure contains
+local labels. See \k{istruc}.
+
+\b When assembling with \c{--reproducible}, don't encode the filename
+in the COFF header for the \c{coff}, \c{win32} or \c{win64} output
+formats. The COFF header only has space for an 18-character filename,
+which makes this field rather useless in the first place. Debug output
+data, if enabled, is not affected.
+
+\b Fix incorrect size calculation when using MASM syntax for non-byte
+reservations (e.g. \c{dw ?}.)
+
+\b Allow forcing an instruction in 64-bit mode to have a (possibly
+redundant) REX prefix, using the syntax \i\c{\{rex\}} as a prefix.
+
+\b Add a \c{\{vex\}} prefix to enforce VEX (AVX) encoding of an
+instruction, either using the 2- or 3-byte VEX prefixes.
+
+\b The \c{CPU} directive has been augmented to allow control of
+generation of VEX (AVX) versus EVEX (AVX-512) instruction formats, see
+\k{CPU}.
+
+\b Some recent instructions that previously have been only available
+using EVEX encodings are now also encodable using VEX (AVX)
+encodings. For backwards compatibility these encodings are not enabled
+by default, but can be generated either via an explicit \c{\{vex\}}
+prefix or by specifying either \c{CPU LATEVEX} or \c{CPU NOEVEX}; see
+\k{CPU}.
+
+\b Document the already existing \c{%unimacro} directive. See \k{unmacro}.
+
+\b Fix a code range generation bug in the DWARF debug format
+(incorrect information in the \c{DW_AT_high_pc} field) for the ELF
+output formats. This bug happened to cancel out with a bug in older
+versions of the GNU binutils linker, but breaks with other linkers and
+updated or other linkers that expect the spec to be followed.
+
+\b Fix segment symbols with addends, e.g. \c{jmp _TEXT+10h:0} in
+output formats that support segment relocations, e.g. the \c{obj}
+format.
+
+\b Fix various crashes and hangs on invalid input.
+
+
+\S{cl-2.15.05} Version 2.15.05
+
+\b Fix \c{%ifid $} and \c{%ifid $$} incorrectly being treated as
+true. See \k{iftyp}.
+
+\b Add \c{--reproducible} option to suppress NASM version numbers and
+timestamps in output files. See \k{opt-reproducible}.
+
+\S{cl-2.15.04} Version 2.15.04
+
+\b More sensible handling of the case where one single-line macro
+definition will shadow another. A warning will be issued, but the
+additional definition will be allowed. For the existing error case
+where both a parameterless and parametered macro are created, that
+warning is promoted to an error by default.
+
+\b Add special preprocessor tokens \c{%*?} and \c{%*??} that expand
+like \c{%?} and \c{%??} in single-line macros only. See
+\k{selfref%*?}.
+
+\b Correct the encoding of the \c{ENQCMDS} and \c{TILELOADT1}
+instructions.
+
+\b Fix case where the COFF backend (the \c{coff}, \c{win32} and
+\c{win64} output formats) would add padding bytes in the middle of a
+section if a \c{SECTION}/\c{SEGMENT} directive was provided which
+repeated an \c{ALIGN=} attribute. This neither matched legacy
+behavior, other backends, or user expectations.
+
+\b Fix SSE instructions not being recognized with an explicit memory
+operation size (e.g. \c{movsd qword [eax],xmm0}).
+
+\b The \c{-L+} option no longer enables \c{-Lw}, which is mainly
+useful to debug NASM crashes. See \k{opt-L}.
+
+\b Document long-standing hazards in the use of \c{$} in \c{D}\e{x}
+statements, see \k{db}.
+
+\b The NASM-only RDOFF output format backend, which has been broken
+since at least NASM 2.14, has been disabled. The RDOFF tools are
+scheduled to be removed from the NASM distribution in NASM 2.16. If
+you have a concrete use case for RDOFF, please file a NASM bug report
+at \W{https://bugs.nasm.us/}\c{https://bugs.nasm.us/} as soon as
+possible.
+
 \S{cl-2.15.03} Version 2.15.03
+
+\b Add instructions from the Intel Instruction Set Extensions and
+Future Features Programming Reference, June 2020. This includes
+AVX5512 \c{bfloat16}, AVX512 mask intersect, and Intel Advanced Matrix
+Extensions (AMX).
+
+\b Support for \c{bfloat16} floating-point constants. See \k{fltconst}
+and \k{pkg_fp}.
 
 \b Properly display warnings in preprocess-only mode.
 
@@ -27,7 +293,7 @@ in \c{%+} tokens at the beginning or end, or multiple ones in a row.
 
 \b Fix macro label capture (\c{%00}, \k{percent00}).
 
-\b Much better documentation for the MASM compatiblity package,
+\b Much better documentation for the MASM compatibility package,
 \c{%use masm} (see \k{pkg_masm}).
 
 \b Fix \c{LEA} without square brackets, for MASM compatibility.
@@ -175,7 +441,7 @@ generation pass if a list file is specified.
 
 \S{cl-2.14.01} Version 2.14.01
 
-\b Create all system-defined macros defore processing command-line
+\b Create all system-defined macros before processing command-line
 given preprocessing directives (\c{-p}, \c{-d}, \c{-u}, \c{--pragma},
 \c{--before}).
 
@@ -394,7 +660,7 @@ files. See \k{opt-keep-all}.
 \b Fix the \c{\{z\}} decorator on AVX-512 \c{VMOVDQ*} instructions.
 
 \b Add new warnings for certain dangerous constructs which never ought
-   to have been allowed.  In particular, the \c{RESB} family of
+   to have been allowed.  In particular, the \c{RES}\e{x} family of
    instructions should have been taking a critical expression all
    along.
 
@@ -537,7 +803,7 @@ files. See \k{opt-keep-all}.
 \b Fix \c{-MD} option handling, which was rather broken in previous
 release changing command line api.
 
-\b Fix access to unitialized space when handling strings with
+\b Fix access to uninitialized space when handling strings with
 a single grave.
 
 \b Fix nil dereference in handling memory reference parsing.
@@ -642,9 +908,10 @@ options to indicate whether all relevant branches should be getting
 \c{BND} prefixes.  This is expected to be the normal for use in MPX
 code.
 
-\b Add \c{{evex}}, \c{{vex3}} and \c{{vex2}} instruction prefixes to
-have NASM encode the corresponding instruction, if possible, with an EVEX,
-3-byte VEX, or 2-byte VEX prefix, respectively.
+\b Add \c{\{evex\}}, \c{\{vex3\}} and \c{\{vex2\}} instruction
+prefixes to have NASM encode the corresponding instruction, if
+possible, with an EVEX, 3-byte VEX, or 2-byte VEX prefix,
+respectively.
 
 \b Support for section names longer than 8 bytes in Win32/Win64 COFF.
 
@@ -812,7 +1079,7 @@ only integer logarithms.  See \k{pkg_ifunc}.
 
 \S{cl-2.09.04} Version 2.09.04
 
-\b Fix incorrect labels offset for VEX intructions.
+\b Fix incorrect labels offset for VEX instructions.
 
 \b Eliminate bogus warning on implicit operand size override.
 
@@ -830,7 +1097,7 @@ only integer logarithms.  See \k{pkg_ifunc}.
    too early and sometime simply wrong. Move behaviour back to
    the origins (down to NASM 2.05.01).
 
-\b Fix unitialized data dereference on OMF output format.
+\b Fix uninitialized data dereference on OMF output format.
 
 \b Issue warning on unterminated \c{%{} construct.
 
@@ -883,7 +1150,7 @@ only integer logarithms.  See \k{pkg_ifunc}.
 
 \b Macros parameters range expansion introduced. See \k{mlmacrange}.
 
-\b Backward compatibility on expanging of local sigle macros restored.
+\b Backward compatibility on expanging of local single macros restored.
 
 \b 8 bit relocations for \c{elf} and \c{bin} output formats are introduced.
 
@@ -1578,7 +1845,7 @@ it 0.98.28 to not confuse poor little apt-get.
 
 \b Line continuation character \c{\\}.
 
-\b Docs inadvertantly reverted - "dos packaging".
+\b Docs inadvertently reverted - "dos packaging".
 
 
 \S{cl-0.98.24p1} Version 0.98.24p1
@@ -2040,7 +2307,7 @@ in macros etc. For example:
 
 \>    In this example the "if" mmacro enters into the "if" context, so %$arg1
     is not valid anymore inside "if". Of course it could be worked around
-    by using explicitely %$$arg1 but this is ugly IMHO.
+    by using explicitly %$$arg1 but this is ugly IMHO.
 
 \b Fixed memory leak in \c{%undef}. The origline wasn't freed before
     exiting on success.

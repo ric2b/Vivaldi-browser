@@ -16,7 +16,6 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/permissions/active_tab_permission_granter.h"
 #include "chrome/browser/extensions/permissions/site_permissions_helper.h"
-#include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
@@ -104,10 +103,11 @@ class ExtensionsMenuMainPageViewUnitTest : public ExtensionsToolbarUnitTest {
 
   // ExtensionsToolbarUnitTest:
   void SetUp() override;
+  void TearDown() override;
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  raw_ptr<content::WebContentsTester, DanglingUntriaged> web_contents_tester_;
+  raw_ptr<content::WebContentsTester> web_contents_tester_;
 };
 
 ExtensionsMenuMainPageViewUnitTest::ExtensionsMenuMainPageViewUnitTest() {
@@ -192,6 +192,11 @@ void ExtensionsMenuMainPageViewUnitTest::SetUp() {
   // Menu needs web contents at construction, so we need to add them to every
   // test.
   web_contents_tester_ = AddWebContentsAndGetTester();
+}
+
+void ExtensionsMenuMainPageViewUnitTest::TearDown() {
+  web_contents_tester_ = nullptr;
+  ExtensionsToolbarUnitTest::TearDown();
 }
 
 TEST_F(ExtensionsMenuMainPageViewUnitTest, ExtensionsAreSorted) {
@@ -788,9 +793,8 @@ TEST_F(ExtensionsMenuMainPageViewUnitTest, ActiveTabRequested_DynamicUpdates) {
   //     access on grants tab permissions but doesn't change the user site
   //     access.
   extensions::ActiveTabPermissionGranter* active_tab_permission_granter =
-      extensions::TabHelper::FromWebContents(
-          browser()->tab_strip_model()->GetActiveWebContents())
-          ->active_tab_permission_granter();
+      extensions::ActiveTabPermissionGranter::FromWebContents(
+          browser()->tab_strip_model()->GetActiveWebContents());
   ASSERT_TRUE(active_tab_permission_granter);
   active_tab_permission_granter->GrantIfRequested(extension.get());
   EXPECT_TRUE(menu_item->site_permissions_button_for_testing()->GetVisible());
@@ -1125,7 +1129,7 @@ TEST_F(ExtensionsMenuMainPageViewUnitTest, ReloadExtensionFailed) {
   extension_directory.WriteManifest(kManifestWithErrors);
 
   // Reload the extension. It should fail due to the manifest errors.
-  extension_service()->ReloadExtensionWithQuietFailure(extension->id());
+  extension_registrar()->ReloadExtensionWithQuietFailure(extension->id());
   base::RunLoop().RunUntilIdle();
   LayoutMenuIfNecessary();
 

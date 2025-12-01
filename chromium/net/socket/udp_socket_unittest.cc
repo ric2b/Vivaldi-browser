@@ -15,6 +15,7 @@
 #include "base/scoped_clear_last_error.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread.h"
 #include "base/time/time.h"
@@ -25,6 +26,7 @@
 #include "net/base/ip_endpoint.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
+#include "net/base/port_util.h"
 #include "net/base/test_completion_callback.h"
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
@@ -324,6 +326,30 @@ TEST_F(UDPSocketTest, Connect) {
   // Run ConnectTest once with sync connect and once with async connect
   ConnectTest(false, false);
   ConnectTest(false, true);
+}
+
+TEST_F(UDPSocketTest, ConnectRestrictedPort) {
+  base::HistogramTester histogram_tester;
+  base::test::ScopedFeatureList feature_list;
+  // Setup the server to listen.
+  UDPServerSocket server(NetLog::Get(), NetLogSource());
+  server.AllowAddressReuse();
+  ASSERT_THAT(server.Listen(IPEndPoint(IPAddress::IPv4Localhost(), 0)), IsOk());
+  // Get bound port.
+  IPEndPoint server_address;
+  ASSERT_THAT(server.GetLocalAddress(&server_address), IsOk());
+  feature_list.InitAndEnableFeatureWithParameters(
+      features::kRestrictAbusePortsOnLocalhost,
+      {{"localhost_restrict_ports",
+        base::NumberToString(server_address.port())}});
+  ReloadLocalhostRestrictedPortsForTesting();
+  // Setup the client.
+  auto client = std::make_unique<UDPClientSocket>(
+      DatagramSocket::DEFAULT_BIND, NetLog::Get(), NetLogSource());
+  EXPECT_THAT(client->Connect(server_address), IsError(ERR_UNSAFE_PORT));
+  histogram_tester.ExpectTotalCount("Net.RestrictedLocalhostPorts", 1);
+  histogram_tester.ExpectBucketCount("Net.RestrictedLocalhostPorts",
+                                     server_address.port(), 1);
 }
 
 #if BUILDFLAG(IS_WIN)

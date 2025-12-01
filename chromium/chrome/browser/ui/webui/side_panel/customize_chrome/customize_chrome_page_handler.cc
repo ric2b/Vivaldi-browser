@@ -28,7 +28,12 @@
 #include "chrome/browser/ui/chrome_select_file_policy.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/search/ntp_user_data_types.h"
+#include "chrome/browser/ui/views/side_panel/customize_chrome/customize_chrome_utils.h"
+#include "chrome/browser/ui/webui/new_tab_footer/new_tab_footer_helper.h"
+#include "chrome/browser/ui/webui/new_tab_page/new_tab_page_ui.h"
 #include "chrome/browser/ui/webui/new_tab_page/ntp_pref_names.h"
+#include "chrome/browser/ui/webui/new_tab_page_third_party/new_tab_page_third_party_ui.h"
+#include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
 #include "chrome/browser/ui/webui/side_panel/customize_chrome/customize_chrome_section.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -129,6 +134,10 @@ CustomizeChromePageHandler::CustomizeChromePageHandler(
       prefs::kNtpHiddenModules,
       base::BindRepeating(&CustomizeChromePageHandler::UpdateModulesSettings,
                           base::Unretained(this)));
+  pref_change_registrar_.Add(
+      prefs::kNtpFooterVisible,
+      base::BindRepeating(&CustomizeChromePageHandler::UpdateFooterSettings,
+                          base::Unretained(this)));
 
   ntp_custom_background_service_observation_.Observe(
       ntp_custom_background_service_.get());
@@ -178,10 +187,9 @@ void CustomizeChromePageHandler::ScrollToSection(
   page_->ScrollToSection(mojo_section);
 }
 
-void CustomizeChromePageHandler::AttachedTabStateUpdated(
-    bool is_source_tab_first_party_ntp) {
-  last_is_source_tab_first_party_ntp_ = is_source_tab_first_party_ntp;
-  page_->AttachedTabStateUpdated(is_source_tab_first_party_ntp);
+void CustomizeChromePageHandler::AttachedTabStateUpdated(const GURL& url) {
+  last_source_url_ = url;
+  page_->AttachedTabStateUpdated(GetNewTabPageType(url));
 }
 
 bool CustomizeChromePageHandler::IsNtpManagedByThirdPartySearchEngine() const {
@@ -210,6 +218,7 @@ void CustomizeChromePageHandler::SetBackgroundImage(
   ntp_custom_background_service_->SetCustomBackgroundInfo(
       image_url, thumbnail_url, attribution_1, attribution_2, attribution_url,
       collection_id);
+  customize_chrome::MaybeDisableExtensionOverridingNtp(profile_);
 }
 
 void CustomizeChromePageHandler::SetDailyRefreshCollectionId(
@@ -220,6 +229,7 @@ void CustomizeChromePageHandler::SetDailyRefreshCollectionId(
       /* image_url */ GURL(), /* thumbnail_url */ GURL(),
       /* attribution_line_1= */ "", /* attribution_line_2= */ "",
       /* action_url= */ GURL(), collection_id);
+  customize_chrome::MaybeDisableExtensionOverridingNtp(profile_);
 }
 
 void CustomizeChromePageHandler::GetBackgroundCollections(
@@ -296,6 +306,7 @@ void CustomizeChromePageHandler::ChooseLocalCustomBackground(
 void CustomizeChromePageHandler::RemoveBackgroundImage() {
   if (ntp_custom_background_service_) {
     ntp_custom_background_service_->ResetCustomBackgroundInfo();
+    customize_chrome::MaybeDisableExtensionOverridingNtp(profile_);
   }
 }
 
@@ -463,6 +474,15 @@ void CustomizeChromePageHandler::UpdateMostVisitedSettings() {
   page_->SetMostVisitedSettings(IsCustomLinksEnabled(), IsShortcutsVisible());
 }
 
+void CustomizeChromePageHandler::SetFooterVisible(bool visible) {
+  profile_->GetPrefs()->SetBoolean(prefs::kNtpFooterVisible, visible);
+}
+
+void CustomizeChromePageHandler::UpdateFooterSettings() {
+  page_->SetFooterSettings(
+      profile_->GetPrefs()->GetBoolean(prefs::kNtpFooterVisible));
+}
+
 void CustomizeChromePageHandler::SetModulesVisible(bool visible) {
   profile_->GetPrefs()->SetBoolean(prefs::kNtpModulesVisible, visible);
 }
@@ -522,7 +542,7 @@ void CustomizeChromePageHandler::UpdateScrollToSection() {
 }
 
 void CustomizeChromePageHandler::UpdateAttachedTabState() {
-  AttachedTabStateUpdated(last_is_source_tab_first_party_ntp_);
+  AttachedTabStateUpdated(last_source_url_);
 }
 
 void CustomizeChromePageHandler::UpdateNtpManagedByName() {
@@ -696,6 +716,7 @@ void CustomizeChromePageHandler::FileSelected(const ui::SelectedFileInfo& file,
 
     profile_->set_last_selected_directory(file.path().DirName());
     ntp_custom_background_service_->SelectLocalBackgroundImage(file.path());
+    customize_chrome::MaybeDisableExtensionOverridingNtp(profile_);
   }
   select_file_dialog_ = nullptr;
   LogEvent(NTP_BACKGROUND_UPLOAD_DONE);
@@ -707,4 +728,23 @@ void CustomizeChromePageHandler::FileSelectionCanceled() {
   select_file_dialog_ = nullptr;
   LogEvent(NTP_BACKGROUND_UPLOAD_CANCEL);
   std::move(choose_local_custom_background_callback_).Run(false);
+}
+
+side_panel::mojom::NewTabPageType CustomizeChromePageHandler::GetNewTabPageType(
+    const GURL& url) {
+  if (NewTabPageUI::IsNewTabPageOrigin(url)) {
+    return side_panel::mojom::NewTabPageType::kFirstPartyWebUI;
+  } else if (ntp_footer::IsExtensionNtp(url, profile_)) {
+    return side_panel::mojom::NewTabPageType::kExtension;
+  } else if (NewTabPageThirdPartyUI::IsNewTabPageOrigin(url)) {
+    return side_panel::mojom::NewTabPageType::kThirdPartyWebUI;
+  } else if (IsNtpManagedByThirdPartySearchEngine()) {
+    return side_panel::mojom::NewTabPageType::kThirdPartyRemote;
+  } else if (NewTabUI::IsNewTab(url)) {
+    return profile_->IsGuestSession()
+               ? side_panel::mojom::NewTabPageType::kGuestMode
+               : side_panel::mojom::NewTabPageType::kIncognito;
+  }
+
+  return side_panel::mojom::NewTabPageType::kNone;
 }

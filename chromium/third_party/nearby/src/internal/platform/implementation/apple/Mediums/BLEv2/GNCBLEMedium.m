@@ -17,9 +17,12 @@
 #import <CoreBluetooth/CoreBluetooth.h>
 #import <Foundation/Foundation.h>
 
+#import "internal/platform/implementation/apple/Flags/GNCFeatureFlags.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEError.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEGATTClient.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEGATTServer.h"
+#import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPClient.h"
+#import "internal/platform/implementation/apple/Mediums/BLEv2/GNCBLEL2CAPServer.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCCentralManager.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/GNCPeripheral.h"
 #import "internal/platform/implementation/apple/Mediums/BLEv2/NSData+GNCBase85.h"
@@ -33,6 +36,16 @@ static NSError *AlreadyScanningError() {
   return [NSError errorWithDomain:GNCBLEErrorDomain code:GNCBLEErrorAlreadyScanning userInfo:nil];
 }
 
+static GNCBLEL2CAPServer *_Nonnull CreateL2CapServer(
+    id<GNCPeripheralManager> _Nullable peripheralManager) {
+  if (!peripheralManager) {
+    return [[GNCBLEL2CAPServer alloc] init];
+  } else {
+    return [[GNCBLEL2CAPServer alloc] initWithPeripheralManager:peripheralManager
+                                                          queue:dispatch_get_main_queue()];
+  }
+}
+
 @interface GNCBLEMedium () <GNCCentralManagerDelegate, CBCentralManagerDelegate>
 @end
 
@@ -42,6 +55,8 @@ static NSError *AlreadyScanningError() {
 
   // The active GATT server, or @nil if one hasn't been started yet.
   GNCBLEGATTServer *_server;
+  GNCBLEL2CAPServer *_l2capServer;
+  GNCBLEL2CAPClient *_l2capClient;
 
   // The services that is being actively scanned for.
   NSMutableArray<CBUUID *> *_scanningServiceUUIDs;
@@ -158,6 +173,15 @@ static NSError *AlreadyScanningError() {
   });
 }
 
+- (void)resumeMediumScanning:(nullable GNCStartScanningCompletionHandler)completionHandler {
+  dispatch_async(_queue, ^{
+    [self internalStartScanningIfPoweredOn];
+    if (completionHandler) {
+      completionHandler(nil);
+    }
+  });
+}
+
 - (void)startGATTServerWithCompletionHandler:
     (nullable GNCGATTServerCompletionHandler)completionHandler {
   dispatch_async(_queue, ^{
@@ -178,6 +202,46 @@ static NSError *AlreadyScanningError() {
     _disconnectionHandlers[remotePeripheral.identifier] = disconnectionHandler;
     _connectionCompletionHandlers[remotePeripheral.identifier] = completionHandler;
     [_centralManager connectPeripheral:remotePeripheral options:@{}];
+  });
+}
+
+- (void)openL2CAPServerWithPSMPublishedCompletionHandler:
+            (GNCOpenL2CAPServerPSMPublishedCompletionHandler)psmPublishedCompletionHandler
+                          channelOpenedCompletionHandler:
+                              (GNCOpenL2CAPServerChannelOpendCompletionHandler)
+                                  channelOpenedCompletionHandler
+                                       peripheralManager:
+                                           (nullable id<GNCPeripheralManager>)peripheralManager {
+  dispatch_async(_queue, ^{
+    if (!_l2capServer) {
+      _l2capServer = CreateL2CapServer(peripheralManager);
+    }
+    [_l2capServer
+        startListeningChannelWithPSMPublishedCompletionHandler:psmPublishedCompletionHandler
+                                channelOpenedCompletionHandler:channelOpenedCompletionHandler];
+  });
+}
+
+- (void)openL2CAPChannelWithPSM:(uint16_t)psm
+                     peripheral:(id<GNCPeripheral>)remotePeripheral
+              completionHandler:(nullable GNCOpenL2CAPStreamCompletionHandler)completionHandler {
+  dispatch_async(_queue, ^{
+    if (!_l2capClient) {
+      _l2capClient =
+          [[GNCBLEL2CAPClient alloc] initWithPeripheral:remotePeripheral
+                            requestDisconnectionHandler:^(id<GNCPeripheral> _Nonnull peripheral){
+                            }];
+    }
+    [_l2capClient openL2CAPChannelWithPSM:psm
+                        completionHandler:^void(GNCBLEL2CAPStream *_Nullable stream,
+                                                NSError *_Nullable error) {
+                          if (!completionHandler) return;
+                          if (error) {
+                            completionHandler(nil, error);
+                          } else {
+                            completionHandler(stream, nil);
+                          }
+                        }];
   });
 }
 
@@ -220,11 +284,10 @@ static NSError *AlreadyScanningError() {
   if (!localName) {
     return @{};
   }
-#if defined(NC_IOS_SDK)
-  NSData *data = [[NSData alloc] initWithBase85EncodedString:localName];
-#else
-  NSData *data = [[NSData alloc] initWithWebSafeBase64EncodedString:localName];
-#endif  // defined(NC_IOS_SDK)
+
+  NSData *data = GNCFeatureFlags.dctEnabled
+                     ? [[NSData alloc] initWithBase85EncodedString:localName]
+                     : [[NSData alloc] initWithWebSafeBase64EncodedString:localName];
 
   // A Nearby Apple advertisement should only have a single service, so simply grab the first one if
   // it exists.

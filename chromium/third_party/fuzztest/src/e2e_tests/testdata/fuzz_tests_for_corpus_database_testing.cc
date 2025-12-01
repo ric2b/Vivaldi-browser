@@ -22,10 +22,9 @@ namespace {
 volatile int force_write = 0;
 
 // This test fails in two ways:
-// 1. It fails with an assertion failure, e.g., when `v == {1}`.
-// 2. It fails with a heap buffer overflow, e.g., when `v == {2}`.
+// 1. It fails with an assertion failure, e.g., when `v == {100}`.
+// 2. It fails with a heap buffer overflow, e.g., when `v == {101}`.
 void FailsInTwoWays(const std::vector<int>& v) {
-  if (v.size() % 7 != 1) return;
   // Compare A - B and 0 instead of A and B to not rely on auto-dictionary for
   // flipping the branches. Otherwise due to the current auto-dictionary
   // implementation sometimes the branches are not flipped evenly, causing test
@@ -33,7 +32,13 @@ void FailsInTwoWays(const std::vector<int>& v) {
   ASSERT_NE(v[0] % 3 - 1, 0);
   if (v[0] % 3 - 2 == 0) force_write = v.data()[v.size()];
 }
-FUZZ_TEST(FuzzTest, FailsInTwoWays);
+FUZZ_TEST(FuzzTest, FailsInTwoWays)
+    .WithDomains(
+        // Use a range that begins/ends with multiples of 3 to avoid unwanted
+        // bias.
+        fuzztest::ContainerOf<std::vector<int>>(fuzztest::InRange(99, 255))
+            // Limit the size to avoid batch timeouts in the e2e test setting.
+            .WithSize(1));
 
 int ReachStackOverflow(int n) {
   // Use volatile to prevent the compiler from inlining the recursion.

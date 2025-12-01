@@ -12,14 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[path = "./mod.rs"]
-mod tests;
+#![cfg(feature = "png")]
+
+mod utils;
+use utils::*;
 
 use crabby_avif::reformat::rgb::*;
-use tests::*;
+#[cfg(all(feature = "jpeg", feature = "encoder"))]
+use crabby_avif::utils::reader::jpeg::JpegReader;
+#[cfg(feature = "encoder")]
+use crabby_avif::utils::reader::png::PngReader;
+#[cfg(feature = "encoder")]
+use crabby_avif::utils::reader::Config;
+#[cfg(feature = "encoder")]
+use crabby_avif::utils::reader::Reader;
+#[cfg(feature = "encoder")]
+use crabby_avif::*;
 
-#[test_case::test_case("paris_identity.avif", "paris_icc_exif_xmp.png"; "lossless_identity")]
-#[test_case::test_case("paris_ycgco_re.avif", "paris_icc_exif_xmp.png"; "lossless_ycgco_re")]
+use test_case::test_case;
+#[cfg(feature = "encoder")]
+use test_case::test_matrix;
+
+#[test_case("paris_identity.avif", "paris_icc_exif_xmp.png"; "lossless_identity")]
+#[test_case("paris_ycgco_re.avif", "paris_icc_exif_xmp.png"; "lossless_ycgco_re")]
 fn lossless(avif_file: &str, png_file: &str) {
     let mut decoder = get_decoder(avif_file);
     assert!(decoder.parse().is_ok());
@@ -42,4 +57,68 @@ fn lossless(avif_file: &str, png_file: &str) {
             .slice(0, source.len() as u32)
             .unwrap()
     );
+}
+
+#[test_matrix(
+    ["paris_icc_exif_xmp.png", "paris_exif_xmp_icc.jpg"],
+    [MatrixCoefficients::Identity, MatrixCoefficients::Ycgco, MatrixCoefficients::YcgcoRe],
+    [PixelFormat::Yuv444, PixelFormat::Yuv420]
+)]
+#[cfg(feature = "encoder")]
+fn lossless_roundtrip(
+    input_file: &str,
+    matrix_coefficients: MatrixCoefficients,
+    yuv_format: PixelFormat,
+) -> AvifResult<()> {
+    if !HAS_ENCODER {
+        return Ok(());
+    }
+    if input_file.ends_with("jpg") && !cfg!(feature = "jpeg") {
+        return Ok(());
+    }
+    if matrix_coefficients == MatrixCoefficients::Identity && yuv_format != PixelFormat::Yuv444 {
+        // The AV1 spec does not allow identity with subsampling.
+        return Ok(());
+    }
+    let input_file_abs = get_test_file(input_file);
+    let mut reader: Box<dyn Reader> = if input_file.ends_with("png") {
+        Box::new(PngReader::create(&input_file_abs)?)
+    } else {
+        #[cfg(feature = "jpeg")]
+        {
+            Box::new(JpegReader::create(&input_file_abs)?)
+        }
+        #[cfg(not(feature = "jpeg"))]
+        unreachable!();
+    };
+    let image = reader.read_frame(&Config {
+        yuv_format: Some(yuv_format),
+        matrix_coefficients: Some(matrix_coefficients),
+        ..Default::default()
+    })?;
+
+    let settings = encoder::Settings {
+        speed: Some(10),
+        mutable: encoder::MutableSettings {
+            quality: 100,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut encoder = encoder::Encoder::create_with_settings(&settings)?;
+    encoder.add_image(&image)?;
+    let edata = encoder.finish()?;
+    assert!(!edata.is_empty());
+
+    if !HAS_DECODER {
+        return Ok(());
+    }
+
+    let mut decoder = decoder::Decoder::default();
+    decoder.set_io_vec(edata);
+    assert!(decoder.parse().is_ok());
+    assert!(decoder.next_image().is_ok());
+    let decoded_image = decoder.image().expect("image was none");
+    are_images_equal(&image, decoded_image)?;
+    Ok(())
 }

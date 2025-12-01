@@ -24,17 +24,17 @@ namespace webrtc {
 
 // struct with arguments to IceControllerFactoryInterface::Create
 struct IceControllerFactoryArgs {
-  std::function<cricket::IceTransportState()> ice_transport_state_func;
-  std::function<cricket::IceRole()> ice_role_func;
-  std::function<bool(const cricket::Connection*)> is_connection_pruned_func;
-  const cricket::IceFieldTrials* ice_field_trials;
+  std::function<IceTransportStateInternal()> ice_transport_state_func;
+  std::function<IceRole()> ice_role_func;
+  std::function<bool(const webrtc::Connection*)> is_connection_pruned_func;
+  const IceFieldTrials* ice_field_trials;
   std::string ice_controller_field_trials;
 };
 
 class IceControllerFactoryInterface {
  public:
   virtual ~IceControllerFactoryInterface() = default;
-  virtual std::unique_ptr<cricket::IceControllerInterface> Create(
+  virtual std::unique_ptr<IceControllerInterface> Create(
       const IceControllerFactoryArgs& args) = 0;
 };
 
@@ -42,9 +42,11 @@ class IceControllerFactoryInterface {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::IceControllerFactoryArgs;
 using ::webrtc::IceControllerFactoryInterface;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // P2P_BASE_ICE_CONTROLLER_FACTORY_INTERFACE_H_

@@ -30,9 +30,7 @@
 #include "third_party/blink/renderer/core/layout/fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/layout/geometry/writing_mode_converter.h"
 #include "third_party/blink/renderer/core/layout/inline/inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/layout_block.h"
@@ -52,6 +50,9 @@
 #include "third_party/blink/renderer/platform/geometry/layout_point.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
+#include "third_party/blink/renderer/platform/geometry/physical_size.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/size_f.h"
 
@@ -177,7 +178,8 @@ std::optional<PhysicalRect> LayoutReplaced::ComputeObjectViewBoxRect(
   DCHECK_EQ(object_view_box->GetType(), BasicShape::kBasicShapeInsetType);
 
   const gfx::RectF bounding_box{gfx::SizeF(sizing_info.size)};
-  const Path path = object_view_box->GetPath(bounding_box, 1.f);
+  const Path path =
+      object_view_box->GetPath(bounding_box, /*zoom=*/1.f, /*path_scale=*/1.f);
 
   const PhysicalRect view_box_rect =
       PhysicalRect::EnclosingRect(path.BoundingRect());
@@ -357,14 +359,15 @@ PhysicalNaturalSizingInfo LayoutReplaced::ComputeNaturalSizingInfo() const {
 }
 
 static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
-    const LayoutReplaced& layout_replaced) {
+    const LayoutReplaced& layout_replaced,
+    const LogicalRect& rect) {
   // TODO(layout-dev): This code is buggy if the replaced element is relative
   // positioned.
 
   // The fallback answer when we can't find the containing line box of
   // |layout_replaced|.
-  const std::pair<LayoutUnit, LayoutUnit> fallback(
-      layout_replaced.LogicalTop(), layout_replaced.LogicalBottom());
+  const std::pair<LayoutUnit, LayoutUnit> fallback(rect.BlockStartOffset(),
+                                                   rect.BlockEndOffset());
 
   if (layout_replaced.IsInline() &&
       layout_replaced.IsInLayoutNGInlineFormattingContext()) {
@@ -384,10 +387,15 @@ static std::pair<LayoutUnit, LayoutUnit> SelectionTopAndBottom(
     const auto writing_direction = line_style.GetWritingDirection();
     const WritingModeConverter converter(writing_direction,
                                          line_box.ContainerFragment().Size());
-    PhysicalRect physical_rect = line_box.Current().RectInContainerFragment();
-    // The caller expects it to be in the "stitched" coordinate space.
-    physical_rect.offset +=
-        OffsetInStitchedFragments(line_box.ContainerFragment());
+    PhysicalRect physical_rect;
+    if (RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+      physical_rect = line_box.CurrentRectInFirstContainerFragment();
+    } else {
+      physical_rect = line_box.Current().RectInContainerFragment();
+      // The caller expects it to be in the "stitched" coordinate space.
+      physical_rect.offset +=
+          OffsetInStitchedFragments(line_box.ContainerFragment());
+    }
     const LogicalRect logical_rect = converter.ToLogical(physical_rect);
     return {logical_rect.offset.block_offset, logical_rect.BlockEndOffset()};
   }
@@ -399,7 +407,8 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
     const PhysicalOffset& point) const {
   NOT_DESTROYED();
 
-  auto [top, bottom] = SelectionTopAndBottom(*this);
+  LogicalRect logical_rect = LogicalRectInContainer();
+  auto [top, bottom] = SelectionTopAndBottom(*this, logical_rect);
 
   LogicalOffset logical_point =
       LocationContainer()->CreateWritingModeConverter().ToLogical(
@@ -415,7 +424,8 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
 
   if (GetNode()) {
     const bool is_at_left_side =
-        line_direction_position <= LogicalLeft() + (LogicalWidth() / 2);
+        line_direction_position <=
+        logical_rect.offset.inline_offset + logical_rect.InlineSize() / 2;
     const bool is_at_start = is_at_left_side == IsLtr(ResolvedDirection());
     if (is_at_start)
       return PositionBeforeThis();
@@ -425,7 +435,7 @@ PositionWithAffinity LayoutReplaced::PositionForPoint(
   return LayoutBox::PositionForPoint(point);
 }
 
-gfx::Size LayoutReplaced::GetSpeculativeDecodeSize() const {
+gfx::Size LayoutReplaced::ComputeSpeculativeDecodeSize() const {
   NOT_DESTROYED();
   return ReplacedContentRect().PixelSnappedSize();
 }

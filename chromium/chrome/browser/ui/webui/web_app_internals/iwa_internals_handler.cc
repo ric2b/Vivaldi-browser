@@ -25,7 +25,6 @@
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_update_manager.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolated_web_app_url_info.h"
 #include "chrome/browser/web_applications/isolated_web_apps/isolation_data.h"
-#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/iwa_key_distribution_info_provider.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest.h"
 #include "chrome/browser/web_applications/isolated_web_apps/update_manifest/update_manifest_fetcher.h"
 #include "chrome/browser/web_applications/locks/app_lock.h"
@@ -34,6 +33,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_registry_update.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
+#include "components/webapps/isolated_web_apps/iwa_key_distribution_info_provider.h"
 #include "content/public/browser/file_select_listener.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_delegate.h"
@@ -327,8 +327,23 @@ void IwaInternalsHandler::InstallIsolatedWebAppFromBundleUrl(
     ::mojom::InstallFromBundleUrlParamsPtr params,
     Handler::InstallIsolatedWebAppFromBundleUrlCallback callback) {
   if (!WebAppProvider::GetForWebApps(profile())) {
-    std::move(callback).Run(::mojom::InstallIsolatedWebAppResult::NewError(
-        "WebAppProvider not supported for current profile."));
+    SendError(std::move(callback),
+              "WebAppProvider not supported for current profile.");
+    return;
+  }
+  if (!params->update_info) {
+    SendError(std::move(callback),
+             "Update info is required for this operation.");
+    return;
+  }
+  if (!params->update_info->update_manifest_url.is_valid()) {
+    SendError(std::move(callback),
+              "Update manifest URL is not a valid GURL.");
+    return;
+  }
+  if (params->update_info->update_channel.empty()) {
+    SendError(std::move(callback),
+              "Update channel is required for this operation.");
     return;
   }
   ScopedTempWebBundleFile::Create(
@@ -748,6 +763,12 @@ void IwaInternalsHandler::OnInstalledIsolatedWebAppInDevModeFromWebBundle(
                       "channel.");
                 }
 
+                GURL update_manifest_url = update_info->update_manifest_url;
+                if (!update_manifest_url.is_valid()) {
+                  return ::mojom::InstallIsolatedWebAppResult::NewError(
+                      "Something went wrong while setting the update "
+                      "manifest url.");
+                }
                 web_app->SetIsolationData(
                     web_app::IsolationData::Builder(*web_app->isolation_data())
                         .SetUpdateManifestUrl(update_info->update_manifest_url)

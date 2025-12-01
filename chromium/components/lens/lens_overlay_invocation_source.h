@@ -45,7 +45,17 @@ enum class LensOverlayInvocationSource {
   // The context menu when long pressing a web image.
   kContextMenu = 8,
 
-  kMaxValue = kContextMenu
+  // The Lens suggestion in the omnibox.
+  kOmniboxPageAction = 9,
+
+  // The contextual suggestions in the omnibox that take you directly to
+  // contextual answers in the side panel.
+  kOmniboxContextualSuggestion = 10,
+
+  // The Lens homework action chip in the omnibox.
+  kHomeworkActionChip = 11,
+
+  kMaxValue = kHomeworkActionChip
 };
 // LINT.ThenChange(//tools/metrics/histograms/metadata/lens/enums.xml:LensOverlayInvocationSource)
 // When adding a value here, also update:

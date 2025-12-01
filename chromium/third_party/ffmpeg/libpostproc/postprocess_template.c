@@ -831,9 +831,11 @@ static inline void RENAME(doVertDefFilter)(uint8_t src[], int stride, PPContext 
 #endif //TEMPLATE_PP_ALTIVEC
 
 #if !TEMPLATE_PP_ALTIVEC
-static inline void RENAME(dering)(uint8_t src[], int stride, PPContext *c)
+static inline void RENAME(dering)(uint8_t src[], int stride, PPContext *c, int leftborder, int rightborder, int topborder)
 {
 #if TEMPLATE_PP_MMXEXT && HAVE_7REGS
+    if (topborder)
+        return;
     DECLARE_ALIGNED(8, uint64_t, tmp)[3];
     __asm__ volatile(
         "pxor %%mm6, %%mm6                      \n\t"
@@ -888,7 +890,7 @@ FIND_MIN_MAX((%0, %1, 8))
         "psubb %%mm7, %%mm6                     \n\t" // max - min
         "push %%"FF_REG_a"                      \n\t"
         "movd %%mm6, %%eax                      \n\t"
-        "cmpb "MANGLE(deringThreshold)", %%al   \n\t"
+        "cmpb $"AV_STRINGIFY(DERING_THRESHOLD)", %%al   \n\t"
         "pop %%"FF_REG_a"                       \n\t"
         " jb 1f                                 \n\t"
         PAVGB(%%mm0, %%mm7)                           // a=(max + min)/2
@@ -980,7 +982,6 @@ FIND_MIN_MAX((%0, %1, 8))
         PMINUB(t1, pplx, t0)\
         "paddb " #sx ", " #ppsx "               \n\t"\
         "paddb " #psx ", " #ppsx "              \n\t"\
-        "#paddb "MANGLE(b02)", " #ppsx "        \n\t"\
         "pand "MANGLE(b08)", " #ppsx "          \n\t"\
         "pcmpeqb " #lx ", " #ppsx "             \n\t"\
         "pand " #ppsx ", " #pplx "              \n\t"\
@@ -1018,7 +1019,7 @@ DERING_CORE((%0, %1, 8)       ,(%%FF_REGd, %1, 4),%%mm2,%%mm4,%%mm0,%%mm3,%%mm5,
 
         "1:                        \n\t"
         : : "r" (src), "r" ((x86_reg)stride), "m" (c->pQPb), "m"(c->pQPb2), "q"(tmp)
-          NAMED_CONSTRAINTS_ADD(deringThreshold,b00,b02,b08)
+          NAMED_CONSTRAINTS_ADD(b00,b08)
         : "%"FF_REG_a, "%"FF_REG_d
     );
 #else // HAVE_7REGS && TEMPLATE_PP_MMXEXT
@@ -1042,12 +1043,13 @@ DERING_CORE((%0, %1, 8)       ,(%%FF_REGd, %1, 4),%%mm2,%%mm4,%%mm0,%%mm3,%%mm5,
     }
     avg= (min + max + 1)>>1;
 
-    if(max - min <deringThreshold) return;
+    if (max - min < DERING_THRESHOLD) return;
 
-    for(y=0; y<10; y++){
+    s[0] = 0;
+    for(y=topborder; y<10; y++){
         int t = 0;
 
-        if(src[stride*y + 0] > avg) t+= 1;
+        if(!leftborder && src[stride*y + 0] > avg) t+= 1;
         if(src[stride*y + 1] > avg) t+= 2;
         if(src[stride*y + 2] > avg) t+= 4;
         if(src[stride*y + 3] > avg) t+= 8;
@@ -1056,7 +1058,7 @@ DERING_CORE((%0, %1, 8)       ,(%%FF_REGd, %1, 4),%%mm2,%%mm4,%%mm0,%%mm3,%%mm5,
         if(src[stride*y + 6] > avg) t+= 64;
         if(src[stride*y + 7] > avg) t+= 128;
         if(src[stride*y + 8] > avg) t+= 256;
-        if(src[stride*y + 9] > avg) t+= 512;
+        if(!rightborder && src[stride*y + 9] > avg) t+= 512;
 
         t |= (~t)<<16;
         t &= (t<<1) & (t>>1);
@@ -1073,8 +1075,8 @@ DERING_CORE((%0, %1, 8)       ,(%%FF_REGd, %1, 4),%%mm2,%%mm4,%%mm0,%%mm3,%%mm5,
         int x;
         int t = s[y-1];
 
-        p= src + stride*y;
-        for(x=1; x<9; x++){
+        p= src + stride*y + leftborder;
+        for(x=1+leftborder; x<9-rightborder; x++){
             p++;
             if(t & (1<<x)){
                 int f= (*(p-stride-1)) + 2*(*(p-stride)) + (*(p-stride+1))
@@ -3210,8 +3212,7 @@ static void RENAME(postProcess)(const uint8_t src[], int srcStride, uint8_t dst[
                 }
 #endif //TEMPLATE_PP_MMX
                 if(mode & DERING){
-                //FIXME filter first line
-                    if(y>0) RENAME(dering)(dstBlock - stride - 8, stride, c);
+                    RENAME(dering)(dstBlock - stride - 8, stride, c, x<=8, 0, y<=0);
                 }
 
                 if(mode & TEMP_NOISE_FILTER)
@@ -3233,7 +3234,7 @@ static void RENAME(postProcess)(const uint8_t src[], int srcStride, uint8_t dst[
         }
 
         if(mode & DERING){
-            if(y > 0) RENAME(dering)(dstBlock - dstStride - 8, dstStride, c);
+            RENAME(dering)(dstBlock - dstStride - 8, dstStride, c, 0, 1, y<=0);
         }
 
         if((mode & TEMP_NOISE_FILTER)){

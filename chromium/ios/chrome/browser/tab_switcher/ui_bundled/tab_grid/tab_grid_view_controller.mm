@@ -372,6 +372,10 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
       offset = 1.0 - offset;
     }
     self.topToolbar.pageControl.sliderPosition = offset;
+    [self.topToolbar setBackgroundContentOffset:scrollView.contentOffset
+                                       animated:NO];
+    [self.bottomToolbar setBackgroundContentOffset:scrollView.contentOffset
+                                          animated:NO];
 
     TabGridPage page = GetPageFromScrollView(scrollView);
     if (page != self.currentPage) {
@@ -922,6 +926,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // Otherwise don't.
   if (!self.viewVisible || !animated) {
     [self.scrollView setContentOffset:targetOffset animated:NO];
+    [self.topToolbar setBackgroundContentOffset:targetOffset animated:NO];
+    [self.bottomToolbar setBackgroundContentOffset:targetOffset animated:NO];
     self.currentPage = targetPage;
     // Important updates (e.g., button configurations, incognito visibility) are
     // made at the end of scrolling animations after `self.currentPage` is set.
@@ -934,6 +940,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
     if (scrolled) {
       self.scrollViewAnimatingContentOffset = YES;
       [self.scrollView setContentOffset:targetOffset animated:YES];
+      [self.topToolbar setBackgroundContentOffset:targetOffset animated:YES];
+      [self.bottomToolbar setBackgroundContentOffset:targetOffset animated:YES];
       // `self.currentPage` is set in scrollViewDidEndScrollingAnimation:
     } else {
       self.currentPage = targetPage;
@@ -1009,6 +1017,7 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   UIScrollView* scrollView = [[UIScrollView alloc] init];
   scrollView.translatesAutoresizingMaskIntoConstraints = NO;
   scrollView.pagingEnabled = YES;
+  scrollView.showsHorizontalScrollIndicator = NO;
   scrollView.delegate = self;
   // Ensures that scroll view does not add additional margins based on safe
   // areas.
@@ -1345,6 +1354,11 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   }
 }
 
+// Closes the current active tab.
+- (void)closeTabForKeyboardCommand {
+  [self.delegate closeCurrentTab];
+}
+
 // Broadcasts whether incognito tabs are showing.
 - (void)broadcastIncognitoContentVisibility {
   // It is programmer error to broadcast incognito content visibility when the
@@ -1505,6 +1519,25 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   return [self isPageEnabled:destinationPage] &&
          self.currentPage != TabGridPageRemoteTabs &&
          self.currentPage != TabGridPageTabGroups;
+}
+
+// Returns YES if a close tab action that targets the active page can be
+// performed.
+- (BOOL)canPerformCloseTab {
+  switch (self.activePage) {
+    case TabGridPageIncognitoTabs:
+      return !self.incognitoTabsViewController.isGridEmpty;
+    case TabGridPageRegularTabs:
+      return !self.regularTabsViewController.isGridEmpty ||
+             (self.pinnedTabsViewController &&
+              !self.pinnedTabsViewController.isCollectionEmpty);
+    case TabGridPageTabGroups:
+    case TabGridPageRemoteTabs:
+      // Vivaldi
+    case TabGridPageClosedTabs:
+      // End Vivaldi
+      return NO;
+  }
 }
 
 // Returns transition layout for the provided `page`.
@@ -2096,6 +2129,8 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
   // scroll width.
   contentOffset.x = offsetWidth * offset;
   self.scrollView.contentOffset = contentOffset;
+  [self.topToolbar setBackgroundContentOffset:contentOffset animated:NO];
+  [self.bottomToolbar setBackgroundContentOffset:contentOffset animated:NO];
 }
 
 - (void)pageControlChangedPageByDrag:(id)sender {
@@ -2219,6 +2254,9 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 }
 
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
+  if (sel_isEqual(action, @selector(keyCommand_closeTab))) {
+    return [self canPerformCloseTab];
+  }
   if (sel_isEqual(action, @selector(keyCommand_openNewTab))) {
     return [self canPerformOpenNewTabActionForDestinationPage:self.currentPage];
   }
@@ -2261,6 +2299,14 @@ NSUInteger GetPageIndexFromPage(TabGridPage page) {
 - (void)keyCommand_openNewTab {
   base::RecordAction(base::UserMetricsAction("MobileKeyCommandOpenNewTab"));
   [self openNewTabInCurrentPageForKeyboardCommand];
+}
+
+- (void)keyCommand_closeTab {
+  RecordAction(base::UserMetricsAction("MobileKeyCommandCloseTab"));
+  __weak TabGridViewController* weakSelf = self;
+  [self.handler dismissModalDialogsWithCompletion:^{
+    [weakSelf closeTabForKeyboardCommand];
+  }];
 }
 
 - (void)keyCommand_openNewRegularTab {

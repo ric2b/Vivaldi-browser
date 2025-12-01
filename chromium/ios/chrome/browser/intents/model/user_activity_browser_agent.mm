@@ -113,10 +113,9 @@ bool IsProfileStateReady(Browser* browser) {
 
 }  // namespace
 
-BROWSER_USER_DATA_KEY_IMPL(UserActivityBrowserAgent)
-
 UserActivityBrowserAgent::UserActivityBrowserAgent(Browser* browser)
-    : browser_(browser), profile_(browser->GetProfile()) {
+    : BrowserUserData(browser),
+      profile_(browser->GetProfile()) {
   SceneState* scene_state = browser_->GetSceneState();
   connection_information_ = scene_state.controller;
   tab_opener_ = scene_state.controller;
@@ -854,13 +853,15 @@ void UserActivityBrowserAgent::HandleRouteToCorrectTab(
             LensEntrypoint::ContextMenu,
             search_engines::SupportsSearchImageWithLens(template_url_service));
     if (!useLens) {
-      NSData* image_data =
-          connection_information_.startupParameters.imageSearchData;
-      web::NavigationManager::WebLoadParams web_load_params =
-          ImageSearchParamGenerator::LoadParamsForImageData(
-              image_data, GURL(), template_url_service);
+      if (search_engines::SupportsSearchByImage(template_url_service)) {
+        NSData* image_data =
+            connection_information_.startupParameters.imageSearchData;
+        web::NavigationManager::WebLoadParams web_load_params =
+            ImageSearchParamGenerator::LoadParamsForImageData(
+                image_data, GURL(), template_url_service);
 
-      params.web_params = web_load_params;
+        params.web_params = web_load_params;
+      }
     } else {
       connection_information_.startupParameters.postOpeningAction =
           START_LENS_FROM_SHARE_EXTENSION;

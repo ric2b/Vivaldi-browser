@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.about_settings;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
@@ -16,9 +18,12 @@ import androidx.preference.PreferenceFragmentCompat;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.version_info.VersionInfo;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.tracing.settings.DeveloperSettings;
 import org.chromium.components.browser_ui.settings.EmbeddableSettingsPage;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.widget.Toast;
 
@@ -35,6 +40,7 @@ import org.vivaldi.browser.oem_extensions.lynkco.OemLynkcoExtensions;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Settings fragment that displays information about Chrome. */
+@NullMarked
 public class AboutChromeSettings extends PreferenceFragmentCompat
         implements EmbeddableSettingsPage, Preference.OnPreferenceClickListener {
     private static final int TAPS_FOR_DEVELOPER_SETTINGS = 7;
@@ -56,22 +62,25 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
 
     private int mDeveloperHitCountdown =
             DeveloperSettings.shouldShowDeveloperSettings() ? -1 : TAPS_FOR_DEVELOPER_SETTINGS;
-    private Toast mToast;
+    private @Nullable Toast mToast;
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override
-    public void onCreatePreferences(Bundle bundle, String s) {
+    public void onCreatePreferences(@Nullable Bundle bundle, @Nullable String s) {
         mPageTitle.set(getString(R.string.prefs_about_chrome));
         SettingsUtils.addPreferencesFromResource(this, R.xml.about_chrome_preferences);
 
         Preference p = findPreference(PREF_APPLICATION_VERSION);
+        assumeNonNull(p);
         p.setSummary(
                 getApplicationVersion(getActivity(), AboutSettingsBridge.getApplicationVersion()));
         // Vivaldi (ref. VB-59279)
         // p.setOnPreferenceClickListener(this);
         p = findPreference(PREF_OS_VERSION);
+        assumeNonNull(p);
         p.setSummary(AboutSettingsBridge.getOSVersion());
         p = findPreference(PREF_LEGAL_INFORMATION);
+        assumeNonNull(p);
         int currentYear = Calendar.getInstance().get(Calendar.YEAR);
         p.setSummary(getString(R.string.legal_information_summary, currentYear));
 
@@ -188,5 +197,10 @@ public class AboutChromeSettings extends PreferenceFragmentCompat
             mToast.show();
         }
         return true;
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
     }
 }

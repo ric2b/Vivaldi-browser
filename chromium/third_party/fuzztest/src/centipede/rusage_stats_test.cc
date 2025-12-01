@@ -38,7 +38,7 @@ ABSL_FLAG(bool, enable_system_load_sensitive_tests, false,
           "environment on the current machine, e.g. the wall time accuracy or "
           "average CPU load");
 
-namespace centipede::perf {
+namespace fuzztest::internal {
 namespace {
 
 class BigThing {
@@ -63,12 +63,12 @@ class BigThing {
 // subsides too much.
 class CpuHog {
  public:
-  CpuHog(                                                  //
-      absl::Duration idle_time,                            //
-      absl::Duration hog_time,                             //
-      int num_hogs,                                        //
-      absl::Nonnull<absl::Notification*> hogging_started,  //
-      absl::Nonnull<absl::Notification*> hogging_stopped)
+  CpuHog(                                                //
+      absl::Duration idle_time,                          //
+      absl::Duration hog_time,                           //
+      int num_hogs,                                      //
+      absl::Notification* absl_nonnull hogging_started,  //
+      absl::Notification* absl_nonnull hogging_stopped)
       : hog_barrier_{num_hogs}, hog_pool_{num_hogs} {
     const auto hog_func = [=]() {
       const absl::Time start = absl::Now();
@@ -551,4 +551,4 @@ TEST(RUsageMemoryTest, Logging) {
       "Data:      -375.00M | ShMem:      -125.0K");
 }
 
-}  // namespace centipede::perf
+}  // namespace fuzztest::internal

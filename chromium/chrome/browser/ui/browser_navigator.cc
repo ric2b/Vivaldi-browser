@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "chrome/browser/ui/browser_navigator.h"
 
 #include <algorithm>
@@ -305,8 +300,8 @@ std::tuple<Browser*, int> GetBrowserAndTabForDisposition(
         browser_params.trusted_source = params.trusted_source;
         browser_params.initial_bounds = params.window_features.bounds;
         browser_params.initial_origin_specified = GetOriginSpecified(params);
-        browser_params.can_maximize = !params.is_tab_modal_popup;
-        browser_params.can_fullscreen = !params.is_tab_modal_popup;
+        browser_params.can_maximize = !params.is_tab_modal_popup_deprecated;
+        browser_params.can_fullscreen = !params.is_tab_modal_popup_deprecated;
         return {Browser::Create(browser_params), -1};
       }
       Browser::CreateParams browser_params =
@@ -447,8 +442,8 @@ base::WeakPtr<content::NavigationHandle> LoadURLInContents(
             captive_portal::CaptivePortalWindowType::kNone;
     std::unique_ptr<ChromeNavigationUIData> navigation_ui_data =
         ChromeNavigationUIData::CreateForMainFrameNavigation(
-            target_contents, params->disposition,
-            params->is_using_https_as_default_scheme, force_no_https_upgrade);
+            target_contents, params->is_using_https_as_default_scheme,
+            force_no_https_upgrade);
     navigation_ui_data->set_navigation_initiated_from_sync(
         params->navigation_initiated_from_sync);
     load_url_params.navigation_ui_data = std::move(navigation_ui_data);
@@ -478,12 +473,13 @@ class ScopedBrowserShower {
     if (params_->window_action == NavigateParams::SHOW_WINDOW_INACTIVE) {
       // TODO(crbug.com/40284685): investigate if SHOW_WINDOW_INACTIVE needs to
       // be supported for tab modal popups.
-      CHECK_EQ(params_->is_tab_modal_popup, false);
+      CHECK_EQ(params_->is_tab_modal_popup_deprecated, false);
       window->ShowInactive();
     } else if (params_->window_action == NavigateParams::SHOW_WINDOW) {
-      if (params_->is_tab_modal_popup) {
+      if (params_->is_tab_modal_popup_deprecated) {
         CHECK_EQ(params_->disposition, WindowOpenDisposition::NEW_POPUP);
         CHECK_NE(source_contents_, nullptr);
+        window->SetIsTabModalPopupDeprecated(true);
         constrained_window::ShowModalDialog(window->GetNativeWindow(),
                                             source_contents_);
       } else {
@@ -587,7 +583,6 @@ bool IsHostAllowedInIncognito(const GURL& url) {
          host != chrome::kChromeUIHelpHost &&
          host != chrome::kChromeUIHistoryHost &&
          host != chrome::kChromeUIExtensionsHost &&
-         host != chrome::kChromeUIBookmarksHost &&
          host != password_manager::kChromeUIPasswordManagerHost;
 }
 
@@ -605,7 +600,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   // If the created window is a partitioned popin, a valid source exists, and
   // the disposition is NEW_POPUP then the resulting popup should be tab-modal.
   // See: https://explainers-by-googlers.github.io/partitioned-popins/
-  params->is_tab_modal_popup |=
+  params->is_tab_modal_popup_deprecated |=
       params->window_features.is_partitioned_popin && params->source_contents &&
       params->disposition == WindowOpenDisposition::NEW_POPUP;
 
@@ -825,7 +820,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
 
   // Make sure the Browser is shown if params call for it.
   ScopedBrowserShower shower(params, &contents_to_navigate_or_insert);
-  if (params->is_tab_modal_popup) {
+  if (params->is_tab_modal_popup_deprecated) {
     shower.set_source_contents(params->source_contents);
   }
 

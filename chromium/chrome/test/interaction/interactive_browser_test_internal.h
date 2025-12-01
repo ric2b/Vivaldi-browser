@@ -10,7 +10,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/test/interaction/interaction_test_util_browser.h"
 #include "chrome/test/interaction/tracked_element_webcontents.h"
@@ -102,9 +101,6 @@ class MatchableValue {
   // that a base::Value can be constructed from. This is also required for a lot
   // of gtest and gmock logic to work properly.
   bool operator==(const MatchableValue& other) const;
-  bool operator!=(const MatchableValue& other) const {
-    return !(*this == other);
-  }
   bool operator<(const MatchableValue& other) const;
   bool operator>(const MatchableValue& other) const;
   bool operator<=(const MatchableValue& other) const;

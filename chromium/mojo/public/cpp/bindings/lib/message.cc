@@ -11,12 +11,8 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
 
-#include <algorithm>
-#include <atomic>
 #include <string_view>
-#include <tuple>
 #include <utility>
 
 #include "base/check_op.h"
@@ -225,7 +221,7 @@ Message CreateUnserializedMessage(
 
 Message::Message() = default;
 
-Message::Message(Message&& other)
+Message::Message(Message&& other) noexcept
     : handle_(std::move(other.handle_)),
       payload_buffer_(std::move(other.payload_buffer_)),
       handles_(std::move(other.handles_)),
@@ -424,7 +420,7 @@ Message Message::CreateFromMessageHandle(ScopedMessageHandle* message_handle) {
 
 Message::~Message() = default;
 
-Message& Message::operator=(Message&& other) {
+Message& Message::operator=(Message&& other) noexcept {
   handle_ = std::move(other.handle_);
   payload_buffer_ = std::move(other.payload_buffer_);
   handles_ = std::move(other.handles_);

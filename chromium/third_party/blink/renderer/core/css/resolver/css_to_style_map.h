@@ -69,7 +69,6 @@ class CSSToStyleMap {
 
   static Timing::Delay MapAnimationDelayStart(StyleResolverState&,
                                               const CSSValue&);
-  static Timing::Delay MapAnimationDelayEnd(const CSSValue&);
   static Timing::Delay MapAnimationDelayEnd(StyleResolverState&,
                                             const CSSValue&);
   static Timing::PlaybackDirection MapAnimationDirection(StyleResolverState&,
@@ -128,10 +127,10 @@ class CSSToStyleMap {
   static std::optional<TimelineOffset> MapAnimationTriggerRangeEnd(
       StyleResolverState&,
       const CSSValue&);
-  static std::optional<TimelineOffset> MapAnimationTriggerExitRangeStart(
+  static TimelineOffsetOrAuto MapAnimationTriggerExitRangeStart(
       StyleResolverState&,
       const CSSValue&);
-  static std::optional<TimelineOffset> MapAnimationTriggerExitRangeEnd(
+  static TimelineOffsetOrAuto MapAnimationTriggerExitRangeEnd(
       StyleResolverState&,
       const CSSValue&);
 };

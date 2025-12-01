@@ -110,6 +110,7 @@ void CreateAndAddVersionUIDataSource(Profile* profile) {
   VersionUI::AddVersionDetailStrings(html_source);
 
   html_source->AddResourcePaths(kVersionUiResources);
+  html_source->AddResourcePath("", IDR_VERSION_UI_ABOUT_VERSION_HTML);
   html_source->UseStringsJs();
 
 #if BUILDFLAG(IS_ANDROID)
@@ -117,7 +118,6 @@ void CreateAndAddVersionUIDataSource(Profile* profile) {
   html_source->AddResourcePath("images/product_logo_white.png",
                                IDR_PRODUCT_LOGO_WHITE);
 #endif  // BUILDFLAG(IS_ANDROID)
-  html_source->SetDefaultResource(IDR_VERSION_UI_ABOUT_VERSION_HTML);
 
   vivaldi::UpdateVersionUIDataSource(html_source);
 }
@@ -266,8 +266,6 @@ void VersionUI::AddVersionDetailStrings(content::WebUIDataSource* html_source) {
       version_ui::kTargetSdkVersion,
       base::NumberToString(
           base::android::BuildInfo::GetInstance()->target_sdk_version()));
-  html_source->AddString(version_ui::kTargetsU,
-                         AndroidAboutAppInfo::GetTargetsUInfo());
   html_source->AddString(version_ui::kGmsVersion,
                          AndroidAboutAppInfo::GetGmsInfo());
   html_source->AddString(

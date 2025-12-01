@@ -26,6 +26,7 @@
 #include "chrome/browser/ui/views/tabs/tab_slot_animation_delegate.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_controller.h"
+#include "chrome/browser/ui/views/tabs/tab_strip_layout_types.h"
 #include "chrome/browser/ui/views/tabs/tab_strip_types.h"
 #include "chrome/browser/ui/views/tabs/tab_style_views.h"
 #include "chrome/browser/ui/views/tabs/z_orderable_tab_container_element.h"
@@ -234,7 +235,8 @@ void TabContainerImpl::SetActiveTab(std::optional<size_t> prev_active_index,
 
   layout_helper_->SetActiveTab(prev_active_index, new_active_index);
 
-  if (GetActiveTabWidth() == GetInactiveTabWidth()) {
+  if (layout_helper_->layout_domain() ==
+      LayoutDomain::kInactiveWidthEqualsActiveWidth) {
     // When tabs are wide enough, selecting a new tab cannot change the
     // ideal bounds, so only a repaint is necessary.
     SchedulePaint();
@@ -483,6 +485,39 @@ void TabContainerImpl::NotifyTabstripBubbleClosed() {
   // Restore the mouse watching behavior of tab closing mode.
   if (in_tab_close_) {
     AddMessageLoopObserver();
+  }
+}
+
+void TabContainerImpl::OnSplitCreated(const std::vector<int>& indices) {
+  for (const int index : indices) {
+    Tab* const tab = GetTabAtModelIndex(index);
+    CHECK(tab->split().has_value());
+    tab->UpdateInsets();
+  }
+
+  AnimateToIdealBounds();
+}
+
+void TabContainerImpl::OnSplitRemoved(const std::vector<int>& indices) {
+  for (const int index : indices) {
+    Tab* const tab = GetTabAtModelIndex(index);
+    CHECK(!tab->split().has_value());
+
+    // Hide hover effects since the split is removed.
+    if (!tab->mouse_hovered()) {
+      tab->HideHover(TabStyle::HideHoverStyle::kImmediate);
+    }
+    tab->UpdateInsets();
+  }
+
+  AnimateToIdealBounds();
+}
+
+void TabContainerImpl::OnSplitContentsChanged(const std::vector<int>& indices) {
+  for (const int index : indices) {
+    Tab* const tab = GetTabAtModelIndex(index);
+    CHECK(tab->split().has_value());
+    tab->UpdateInsets();
   }
 }
 
@@ -785,14 +820,6 @@ TabGroupViews* TabContainerImpl::GetGroupViews(
 const std::map<tab_groups::TabGroupId, std::unique_ptr<TabGroupViews>>&
 TabContainerImpl::get_group_views_for_testing() const {
   return group_views_;
-}
-
-int TabContainerImpl::GetActiveTabWidth() const {
-  return layout_helper_->active_tab_width();
-}
-
-int TabContainerImpl::GetInactiveTabWidth() const {
-  return layout_helper_->inactive_tab_width();
 }
 
 gfx::Rect TabContainerImpl::GetIdealBounds(int model_index) const {
@@ -1416,8 +1443,8 @@ void TabContainerImpl::UpdateClosingModeOnRemovedTab(int model_index,
   // removed from the container is really the current width of whichever
   // inactive tab will be made active.
   if (was_active && !tab_being_removed->data().pinned &&
-      layout_helper_->active_tab_width() >
-          layout_helper_->inactive_tab_width()) {
+      layout_helper_->layout_domain() ==
+          LayoutDomain::kInactiveWidthBelowActiveWidth) {
     const std::optional<int> next_active_viewmodel_index =
         controller_->GetActiveIndex();
     // The next active tab may not be in this TabContainer.
@@ -1655,11 +1682,14 @@ bool TabContainerImpl::ShouldTabBeVisible(const Tab* tab) const {
   // We need to check what would happen if the active tab were to move to this
   // tab or before. If animating, we want to use the target bounds in this
   // calculation.
+  const Tab* active_tab =
+      GetTabAtModelIndex(controller_->GetActiveIndex().value());
+  int active_tab_width = active_tab->width();
   if (IsAnimating()) {
     right_edge = bounds_animator_.GetTargetBounds(tab).right();
+    active_tab_width = bounds_animator_.GetTargetBounds(active_tab).width();
   }
-  return (right_edge + layout_helper_->active_tab_width() -
-          layout_helper_->inactive_tab_width()) <= tabstrip_right;
+  return right_edge + active_tab_width - tab->width() <= tabstrip_right;
 }
 
 gfx::Rect TabContainerImpl::GetDropBounds(int drop_index,

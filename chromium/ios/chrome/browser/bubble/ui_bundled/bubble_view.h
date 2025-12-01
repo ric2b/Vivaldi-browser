@@ -9,6 +9,7 @@
 
 typedef NS_ENUM(NSInteger, BubbleAlignment);
 typedef NS_ENUM(NSInteger, BubbleArrowDirection);
+typedef NS_ENUM(NSInteger, BubblePageControlPage);
 
 // Delegate for actions happening in BubbleView.
 @protocol BubbleViewDelegate <NSObject>
@@ -19,6 +20,8 @@ typedef NS_ENUM(NSInteger, BubbleArrowDirection);
 - (void)didTapCloseButton;
 // User tapped on the snooze button.
 - (void)didTapSnoozeButton;
+// User tapped on the next button.
+- (void)didTapNextButton;
 
 @end
 
@@ -27,13 +30,15 @@ typedef NS_ENUM(NSInteger, BubbleArrowDirection);
 
 // Initialize with the given text, direction that the bubble should point,
 // alignment of the bubble and optionals close button, title, snooze button,
-// text alignment (for title, text and snooze button) and delegate.
+// text alignment (for title, text and snooze button), page, and delegate.
 - (instancetype)initWithText:(NSString*)text
               arrowDirection:(BubbleArrowDirection)direction
                    alignment:(BubbleAlignment)alignment
             showsCloseButton:(BOOL)shouldShowCloseButton
                        title:(NSString*)titleString
            showsSnoozeButton:(BOOL)shouldShowSnoozeButton
+             showsNextButton:(BOOL)showsNextButton
+                        page:(BubblePageControlPage)page
                textAlignment:(NSTextAlignment)textAlignment
                     delegate:(id<BubbleViewDelegate>)delegate
     NS_DESIGNATED_INITIALIZER;

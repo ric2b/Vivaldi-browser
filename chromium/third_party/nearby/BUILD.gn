@@ -8,8 +8,6 @@ if (is_chromeos_device) {
 }
 import("//build/config/rust.gni")
 
-assert(enable_rust, "Nearby Presence requires rust to be enabled")
-
 # Nearby Config
 config("nearby_include_config") {
   include_dirs = [
@@ -115,6 +113,9 @@ source_set("connections_implementation_types") {
 }
 
 source_set("connections_implementation_ble_advertisement") {
+  # TODO(crbug.com/415053888): Remove once usage of the deprecated version of
+  # BluetoothUtils::ToString and BluetoothUtils::FromString have been removed.
+  cflags = [ "-Wno-deprecated-declarations" ]
   public_configs = [
     ":nearby_include_config",
     ":nearby_defines",
@@ -133,11 +134,16 @@ source_set("connections_implementation_ble_advertisement") {
 }
 
 source_set("connections_implementation") {
+  # TODO(crbug.com/415053888): Remove once usage of the deprecated version of
+  # BluetoothUtils::ToString and BluetoothUtils::FromString have been removed.
+  cflags = [ "-Wno-deprecated-declarations" ]
   public_configs = [
     ":nearby_include_config",
     ":nearby_defines",
   ]
   sources = [
+    "src/connections/implementation/awdl_bwu_handler.cc",
+    "src/connections/implementation/awdl_endpoint_channel.cc",
     "src/connections/implementation/base_bwu_handler.cc",
     "src/connections/implementation/base_endpoint_channel.cc",
     "src/connections/implementation/base_pcp_handler.cc",
@@ -177,6 +183,8 @@ source_set("connections_implementation") {
     "src/connections/implementation/wifi_lan_service_info.cc",
   ]
   public = [
+    "src/connections/implementation/awdl_bwu_handler.h",
+    "src/connections/implementation/awdl_endpoint_channel.h",
     "src/connections/implementation/base_bwu_handler.h",
     "src/connections/implementation/base_endpoint_channel.h",
     "src/connections/implementation/base_pcp_handler.h",
@@ -323,6 +331,7 @@ source_set("connections_implementation_mediums") {
     "src/connections/implementation/mediums/advertisements/advertisement_util.cc",
     "src/connections/implementation/mediums/advertisements/data_element.cc",
     "src/connections/implementation/mediums/advertisements/dct_advertisement.cc",
+    "src/connections/implementation/mediums/awdl.cc",
     "src/connections/implementation/mediums/ble.cc",
     "src/connections/implementation/mediums/ble_v2.cc",
     "src/connections/implementation/mediums/ble_v2/advertisement_read_result.cc",
@@ -349,6 +358,7 @@ source_set("connections_implementation_mediums") {
     "src/connections/implementation/mediums/advertisements/advertisement_util.h",
     "src/connections/implementation/mediums/advertisements/data_element.h",
     "src/connections/implementation/mediums/advertisements/dct_advertisement.h",
+    "src/connections/implementation/mediums/awdl.h",
     "src/connections/implementation/mediums/ble.h",
     "src/connections/implementation/mediums/ble_v2.h",
     "src/connections/implementation/mediums/ble_v2/advertisement_read_result.h",
@@ -664,6 +674,7 @@ source_set("platform_api_comm") {
     ":nearby_defines",
   ]
   sources = [
+    "src/internal/platform/implementation/awdl.h",
     "src/internal/platform/implementation/ble.h",
     "src/internal/platform/implementation/ble_v2.h",
     "src/internal/platform/implementation/bluetooth_adapter.h",
@@ -764,14 +775,11 @@ source_set("platform_base") {
     ":nearby_include_config",
     ":nearby_defines",
   ]
-
-  # TODO(crbug.com/325102878): Remove once usage of the deprecated version of
-  # absl::HexStringToBytes have been removed.
-  cflags = [ "-Wno-deprecated-declarations" ]
   sources = [
     "src/internal/platform/base64_utils.cc",
     "src/internal/platform/bluetooth_utils.cc",
     "src/internal/platform/input_stream.cc",
+    "src/internal/platform/mac_address.cc",
     "src/internal/platform/prng.cc",
   ]
   public = [
@@ -783,6 +791,7 @@ source_set("platform_base") {
     "src/internal/platform/feature_flags.h",
     "src/internal/platform/input_stream.h",
     "src/internal/platform/listeners.h",
+    "src/internal/platform/mac_address.h",
     "src/internal/platform/nsd_service_info.h",
     "src/internal/platform/os_name.h",
     "src/internal/platform/output_stream.h",
@@ -1018,6 +1027,7 @@ source_set("platform_public_comm") {
     ":unused_private_field_warning",
   ]
   sources = [
+    "src/internal/platform/awdl.cc",
     "src/internal/platform/ble.cc",
     "src/internal/platform/ble_v2.cc",
     "src/internal/platform/bluetooth_classic.cc",
@@ -1028,6 +1038,7 @@ source_set("platform_public_comm") {
     "src/internal/platform/wifi_lan.cc",
   ]
   public = [
+    "src/internal/platform/awdl.h",
     "src/internal/platform/ble.h",
     "src/internal/platform/ble_v2.h",
     "src/internal/platform/bluetooth_adapter.h",
@@ -1179,6 +1190,7 @@ source_set("presence_internal") {
     "src/presence/implementation/connection_authenticator_impl.cc",
     "src/presence/implementation/credential_manager_impl.cc",
     "src/presence/implementation/ldt.cc",
+    "src/presence/implementation/ldt_stub.c",
     "src/presence/implementation/scan_manager.cc",
     "src/presence/implementation/service_controller_impl.cc",
   ]
@@ -1195,6 +1207,7 @@ source_set("presence_internal") {
     "src/presence/implementation/credential_manager.h",
     "src/presence/implementation/credential_manager_impl.h",
     "src/presence/implementation/ldt.h",
+    "src/presence/implementation/np_ldt.h",
     "src/presence/implementation/scan_manager.h",
     "src/presence/implementation/service_controller.h",
     "src/presence/implementation/service_controller_impl.h",
@@ -1213,7 +1226,6 @@ source_set("presence_internal") {
     ":presence_mediums",
     ":presence_types",
     "//third_party/abseil-cpp:absl",
-    "//third_party/beto-core:ldt_np_adv_ffi",
     "//third_party/boringssl:boringssl",
   ]
   configs -= [ "//build/config/compiler:chromium_code" ]
@@ -1281,11 +1293,7 @@ proto_library("connections_log_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/internal/proto/analytics/connections_log.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [
-    ":connections_enums_proto",
-    ":error_code_enums_proto",
-  ]
-  link_deps = [
+  deps = [
     ":connections_enums_proto",
     ":error_code_enums_proto",
   ]
@@ -1295,11 +1303,7 @@ proto_library("fast_pair_log_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/internal/proto/analytics/fast_pair_log.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [
-    ":connections_log_proto",
-    ":fast_pair_enums_proto",
-  ]
-  link_deps = [
+  deps = [
     ":connections_log_proto",
     ":fast_pair_enums_proto",
   ]
@@ -1316,8 +1320,7 @@ proto_library("connections_local_credential_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/internal/proto/local_credential.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [ ":connections_credential_proto" ]
-  link_deps = [ ":connections_credential_proto" ]
+  deps = [ ":connections_credential_proto" ]
 }
 
 proto_library("connections_metadata_proto") {
@@ -1368,27 +1371,21 @@ proto_library("rpc_resources_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/sharing/proto/rpc_resources.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [ ":timestamp_proto" ]
-  link_deps = [ ":timestamp_proto" ]
+  deps = [ ":timestamp_proto" ]
 }
 
 proto_library("wire_format_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/sharing/proto/wire_format.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [ ":sharing_enums_proto" ]
-  link_deps = [ ":sharing_enums_proto" ]
+  deps = [ ":sharing_enums_proto" ]
 }
 
 proto_library("device_rpc_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/sharing/proto/device_rpc.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [
-    ":field_mask_proto",
-    ":rpc_resources_proto",
-  ]
-  link_deps = [
+  deps = [
     ":field_mask_proto",
     ":rpc_resources_proto",
   ]
@@ -1398,16 +1395,14 @@ proto_library("contact_rpc_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/sharing/proto/contact_rpc.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [ ":rpc_resources_proto" ]
-  link_deps = [ ":rpc_resources_proto" ]
+  deps = [ ":rpc_resources_proto" ]
 }
 
 proto_library("certificate_rpc_proto") {
   proto_in_dir = "src"
   sources = [ "${proto_in_dir}/sharing/proto/certificate_rpc.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [ ":rpc_resources_proto" ]
-  link_deps = [ ":rpc_resources_proto" ]
+  deps = [ ":rpc_resources_proto" ]
 }
 
 config("sharing_log_proto_inputs_config") {
@@ -1424,11 +1419,8 @@ proto_library("sharing_log_proto") {
   sources =
       [ "${proto_in_dir}/sharing/proto/analytics/nearby_sharing_log.proto" ]
   proto_out_dir = "third_party/nearby"
-  proto_deps = [
-    ":sharing_enums_proto",
-    ":sharing_log_proto_inputs",
-  ]
-  link_deps = [ ":sharing_enums_proto" ]
+  proto_deps = [ ":sharing_log_proto_inputs" ]
+  deps = [ ":sharing_enums_proto" ]
 
   # For built-in protos, specifically duration.proto.
   import_dirs = [ "//third_party/protobuf/src" ]

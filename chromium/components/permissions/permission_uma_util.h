@@ -11,15 +11,16 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "base/version.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
-#include "components/permissions/permission_request.h"
 #include "components/permissions/permission_request_enums.h"
 #include "components/permissions/prediction_service/prediction_service_messages.pb.h"
 #include "components/permissions/request_type.h"
 #include "content/public/browser/permission_result.h"
+#include "url/gurl.h"
 
 namespace blink {
 enum class PermissionType;
@@ -31,8 +32,6 @@ class RenderFrameHost;
 class WebContents;
 class RenderFrameHost;
 }  // namespace content
-
-class GURL;
 
 namespace permissions {
 enum class PermissionRequestGestureType;
@@ -50,14 +49,14 @@ enum class ActivityIndicatorState {
 
 // Used for UMA histograms to record model execution stats for the different
 // models we use for a permission prediction.
-// When updating, you also need to update the PredictionModels variant in
-//      tools/metrics/histograms/metadata/permissions/histograms.xml.
+// LINT.IfChange(PredictionModelType)
 enum class PredictionModelType {
   kUnknown = 0,
-  kServerSide = 1,      // url based cpss v2
-  kTfLiteOnDevice = 2,  // on device cpss v1
-  kGenAiOnDevice = 3,   // on device genAI v1
+  kServerSideCpssV3Model = 1,
+  kOnDeviceCpssV1Model = 2,
+  kOnDeviceAiV3Model = 3,
 };
+// LINT.ThenChange(//tools/metrics/histograms/metadata/permissions/histograms.xml:PredictionModels)
 
 // Used for UMA to record the types of permission prompts shown.
 // When updating, you also need to update:
@@ -703,8 +702,7 @@ class PermissionUmaUtil {
   // This gets recorded during the creation process of a prompt, but only for
   // prompts that aren't labeled as abusive or disruptive.
   static void RecordPermissionPromptAttempt(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       bool can_display_prompt);
 
   // UMA specifically for when permission prompts are shown. This should be
@@ -717,12 +715,10 @@ class PermissionUmaUtil {
   //   granted+denied+dismissed+ignored is not equal to requested), so it is
   //   unclear from those metrics alone how many prompts are seen by users.
   static void PermissionPromptShown(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests);
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests);
 
   static void PermissionPromptResolved(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       content::WebContents* web_contents,
       PermissionAction permission_action,
       base::TimeDelta time_to_action,
@@ -743,20 +739,17 @@ class PermissionUmaUtil {
       const std::optional<base::Version>& version);
 
   static void RecordElementAnchoredBubbleDismiss(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       DismissedReason reason);
 
   static void RecordElementAnchoredBubbleOsMetrics(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       OsScreen screen,
       OsScreenAction action,
       base::TimeDelta time_to_action);
 
   static void RecordElementAnchoredBubbleVariantUMA(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       ElementAnchoredBubbleVariant variant);
 
   // Record UMAs related to the Android "Missing permissions" infobar.
@@ -777,7 +770,8 @@ class PermissionUmaUtil {
       bool is_allowlisted,
       int suspicious_score,
       content::BrowserContext* browser_context,
-      const GURL& requesting_origin);
+      const GURL& requesting_origin,
+      uint64_t site_engagement_level);
 
   static void RecordTimeElapsedBetweenGrantAndUse(
       ContentSettingsType type,
@@ -801,7 +795,7 @@ class PermissionUmaUtil {
 
   static void RecordPermissionPredictionServiceHoldback(
       RequestType request_type,
-      bool is_on_device,
+      PredictionModelType model_type,
       bool is_heldback);
 
   static void RecordPageInfoDialogAccessType(
@@ -843,8 +837,7 @@ class PermissionUmaUtil {
       PermissionPromptDisposition prompt_disposition);
 
   static void RecordIgnoreReason(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       PermissionPromptDisposition prompt_disposition,
       PermissionIgnoredReason reason);
 
@@ -881,9 +874,8 @@ class PermissionUmaUtil {
   // Permission Element. The passed in `permission` must be such that
   // PermissionUtil::IsPermission(permission) returns true.
   static void RecordElementAnchoredPermissionPromptAction(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
+      const std::vector<base::WeakPtr<permissions::PermissionRequest>>&
           screen_requests,
       ElementAnchoredBubbleAction action,
       ElementAnchoredBubbleVariant variant,
@@ -900,6 +892,29 @@ class PermissionUmaUtil {
 
   static void RecordPermissionRequestRelevance(
       PermissionRequestRelevance permission_request_relevance);
+
+  // Records if the browser was always active while the prompt was
+  // displaying.
+  static void RecordBrowserAlwaysActiveWhilePrompting(
+      RequestTypeForUma request_type,
+      bool embedded_permission_element_initiated,
+      bool always_active);
+
+  // Records if the browser was always active before user's interaction.
+  static void RecordActionBrowserAlwaysActive(RequestTypeForUma request_type,
+                                              std::string permission_action,
+                                              bool always_active);
+
+  // Records the execution time of prediction model inquiries.
+  static void RecordPredictionModelInquireTime(
+      base::TimeTicks model_inquire_start_time,
+      PredictionModelType model_type);
+
+  // Records if the browser was active at the time the prompt started displaying
+  static void RecordPromptShownInActiveBrowser(
+      RequestTypeForUma request_type,
+      bool embedded_permission_element_initiated,
+      bool active);
 
   // A scoped class that will check the current resolved content setting on
   // construction and report a revocation metric accordingly if the revocation
@@ -964,8 +979,7 @@ class PermissionUmaUtil {
                                                int count);
 
   static void RecordPromptDecided(
-      const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-          requests,
+      const std::vector<std::unique_ptr<PermissionRequest>>& requests,
       bool accepted,
       bool is_one_time);
 };

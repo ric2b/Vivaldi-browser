@@ -4,6 +4,7 @@
 
 package org.chromium.ui;
 
+import android.graphics.Rect;
 import android.view.View;
 
 import androidx.core.graphics.Insets;
@@ -11,6 +12,10 @@ import androidx.core.view.WindowInsetsCompat;
 
 import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
+import org.chromium.ui.util.WindowInsetsUtils;
+
+import java.util.ArrayList;
+import java.util.List;
 
 // Note - this class does not currently support the case in which the status bar covers the caption
 // bar, and extends past it (i.e. there is a larger status bar than caption bar).
@@ -25,6 +30,7 @@ public class CaptionBarInsetsRectProvider extends InsetsRectProvider {
      * @param insetObserver {@link InsetObserver} that's attached to the root view.
      * @param initialInsets The initial window insets that will be used to read the bounding rects.
      * @param insetConsumerSource The {@link InsetConsumerSource} of inset observation and
+     *     consumption.
      */
     public CaptionBarInsetsRectProvider(
             InsetObserver insetObserver,
@@ -67,6 +73,7 @@ public class CaptionBarInsetsRectProvider extends InsetsRectProvider {
                                         WindowInsetsCompat.Type.statusBars()),
                                 consumedCaptionBarInsets),
                         Insets.NONE);
+
         Insets navigationBarInsetsWithoutCaptionBar =
                 Insets.max(
                         Insets.subtract(
@@ -80,5 +87,31 @@ public class CaptionBarInsetsRectProvider extends InsetsRectProvider {
                         WindowInsetsCompat.Type.navigationBars(),
                         navigationBarInsetsWithoutCaptionBar)
                 .build();
+    }
+
+    /**
+     * Gets the system bounding rects for the caption bar. When status bar insets are present, it
+     * means that there is a potential caption-status overlap. In this case, the caption bar should
+     * include the status bar region as a bounding rect so that it is considered as occluded space
+     * within the caption bar, in addition to the bounding rects that define the caption bar system
+     * UI.
+     *
+     * @param windowInsetsCompat The current system {@link WindowInsetsCompat}.
+     * @return The list of system bounding rects within the caption bar.
+     */
+    @Override
+    protected List<Rect> getBoundingRectsFromInsets(WindowInsetsCompat windowInsetsCompat) {
+        var systemCaptionBoundingRects = super.getBoundingRectsFromInsets(windowInsetsCompat);
+        Rect statusBarRect =
+                WindowInsetsUtils.toRectInWindow(
+                        getWindowRect(),
+                        windowInsetsCompat.getInsets(WindowInsetsCompat.Type.statusBars()));
+        if (statusBarRect.isEmpty()) return systemCaptionBoundingRects;
+
+        // Non-zero status bar insets indicates that there is a potential status-caption overlap.
+        // Include the status bar as a bounding rect for the caption bar.
+        List<Rect> captionBoundingRects = new ArrayList<>(systemCaptionBoundingRects);
+        captionBoundingRects.add(statusBarRect);
+        return captionBoundingRects;
     }
 }

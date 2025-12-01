@@ -1,11 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="hy">
-<translation id="2277224997687551299">Խմբագրել խմբի անունը</translation>
+<translation id="1062777154504442433">Նոր ներդիրների խումբ</translation>
+<translation id="1625440863545383011">Հեռացնել ներդիրը և լքել խումբը</translation>
+<translation id="2330212241471632770">{TABS_COUNT, plural,
+          =1 {Էջանշել ներդիրը}
+          other {Էջանշել ներդիրները}
+        }</translation>
 <translation id="2947471979790858922">Այս գաղտնի ներդիրներում Ձեր գործունեությունը սարքից կջնջվի</translation>
+<translation id="3298614730029636660">Լքել խումբը</translation>
+<translation id="354698175756845966">Փոփոխել խմբի գույնը</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Ձեր փակած ներդիրները կարող եք գտնել Վերջին ներդիրների ներքո, Vivaldi-ի գլխավոր մենյուից։ Ձեր գաղտնի ներդիրը հասանելի չի լինի։}
         other {Ձեր փակած ներդիրները կարող եք գտնել Վերջին ներդիրների ներքո, Vivaldi-ի գլխավոր մենյուից։ Ձեր # գաղտնի ներդիրները հասանելի չեն լինի։}}</translation>
 <translation id="4871187110787939393">Փակե՞լ բոլոր գաղտնի ներդիրները</translation>
-<translation id="6744956528665271406">Փոփոխել խմբի գույնը</translation>
+<translation id="5494920125229734069">Ընտրել բոլորը</translation>
+<translation id="6807841890213931603">Հեռացնել ներդիրը և ջնջել խումբը</translation>
+<translation id="750227952939161636">Ձեր ներդիրների խմբերն ավտոմատ պահպանվում և թարմացվում են Ձեր բոլոր սարքերում, որտեղ մուտք եք գործել</translation>
+<translation id="7640137753339219124">Ջնջել խումբը</translation>
+<translation id="7653857400289671414">Ձեր ներդիրների խմբերն ավտոմատ պահպանվում են</translation>
+<translation id="8440938071054361204">Փոփոխել խմբի անունը</translation>
+<translation id="8602902357364871325">Փակել խումբը</translation>
+<translation id="8851621822786801079">Հեռացնել խմբից</translation>
 </translationbundle>

@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
@@ -11,11 +12,7 @@ import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Buttons from '../buttons/buttons.js';
 
-import dialogStylesRaw from './dialog.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const dialogStyles = new CSSStyleSheet();
-dialogStyles.replaceSync(dialogStylesRaw.cssText);
+import dialogStyles from './dialog.css.js';
 
 const {html} = Lit;
 
@@ -111,7 +108,6 @@ export const MODAL = 'MODAL';
 export type DialogOrigin = DialogAnchor|null|(() => DialogAnchor)|typeof MODAL;
 export class Dialog extends HTMLElement {
   readonly #shadow = this.attachShadow({mode: 'open'});
-  readonly #renderBound = this.#render.bind(this);
   readonly #forceDialogCloseInDevToolsBound = this.#forceDialogCloseInDevToolsMutation.bind(this);
   readonly #handleScrollAttemptBound = this.#handleScrollAttempt.bind(this);
   readonly #props: DialogData = {
@@ -241,12 +237,10 @@ export class Dialog extends HTMLElement {
   }
 
   #onStateChange(): void {
-    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#renderBound);
+    void ComponentHelpers.ScheduledRender.scheduleRender(this, this.#render);
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [dialogStyles];
-
     window.addEventListener('resize', this.#forceDialogCloseInDevToolsBound);
     this.#devtoolsMutationObserver.observe(this.#devToolsBoundingElement, {childList: true, subtree: true});
     this.#devToolsBoundingElement.addEventListener('wheel', this.#handleScrollAttemptBound);
@@ -659,6 +653,7 @@ export class Dialog extends HTMLElement {
 
     // clang-format off
     Lit.render(html`
+      <style>${dialogStyles}</style>
       <dialog @click=${this.#handlePointerEvent} @pointermove=${this.#handlePointerEvent} @cancel=${this.#onCancel}
               jslog=${VisualLogging.dialog(this.#props.jslogContext).track({resize: true, keydown: 'Escape'}).parent('mapped')}>
         <div id="content">

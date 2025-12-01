@@ -131,6 +131,7 @@ enum SectionCode : int8_t {
   kInstTraceSectionCode,          // Instruction trace section
   kCompilationHintsSectionCode,   // Compilation hints section
   kBranchHintsSectionCode,        // Branch hints section
+  kDescriptorsSectionCode,        // Descriptors section
 
   // Helper values
   kFirstSectionInModule = kTypeSectionCode,
@@ -167,6 +168,12 @@ enum CatchKind : uint8_t {
   kCatchAll = 0x2,
   kCatchAllRef = 0x3,
   kLastCatchKind = kCatchAllRef,
+};
+
+enum SwitchKind : uint8_t {
+  kOnSuspend = 0x0,
+  kSwitch = 0x1,
+  kLastSwitchKind = kSwitch,
 };
 
 constexpr size_t kWasmPageSize = 0x10000;

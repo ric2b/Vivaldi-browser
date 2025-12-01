@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -100,8 +101,8 @@ export class ResourceSourceFrame extends SourceFrameImpl {
 export class SearchableContainer extends UI.Widget.VBox {
   private readonly sourceFrame: ResourceSourceFrame;
 
-  constructor(resource: TextUtils.ContentProvider.ContentProvider, contentType: string) {
-    super(true);
+  constructor(resource: TextUtils.ContentProvider.ContentProvider, contentType: string, element?: HTMLElement) {
+    super(true, undefined, element);
     this.registerRequiredCSS(resourceSourceFrameStyles);
     const simpleContentType = Common.ResourceType.ResourceType.simplifyContentType(contentType);
     const sourceFrame = new ResourceSourceFrame(resource, simpleContentType);

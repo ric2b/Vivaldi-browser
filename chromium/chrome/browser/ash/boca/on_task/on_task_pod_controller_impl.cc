@@ -12,10 +12,12 @@
 #include "ash/shell.h"
 #include "ash/style/icon_button.h"
 #include "ash/wm/window_pin_util.h"
+#include "ash/wm/window_state.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chromeos/ash/components/boca/boca_metrics_util.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "chromeos/ui/frame/frame_header.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -65,15 +67,19 @@ OnTaskPodControllerImpl::OnTaskPodControllerImpl(Browser* browser)
       l10n_util::GetStringUTF16(IDS_ON_TASK_POD_ACCESSIBLE_NAME));
   pod_widget_->SetBounds(CalculateWidgetBounds());
   OnPageNavigationContextChanged();
+  pod_widget_->SetFocusTraversableParentView(
+      BrowserView::GetBrowserViewForBrowser(browser_.get()));
   pod_widget_->Show();
-  is_window_pinned_ = IsWindowPinned(browser_window);
 
   browser_window->AddObserver(this);
+  WindowState::Get(browser_window)->AddObserver(this);
 }
 
 OnTaskPodControllerImpl::~OnTaskPodControllerImpl() {
   if (browser_) {
-    browser_->window()->GetNativeWindow()->RemoveObserver(this);
+    aura::Window* const browser_window = browser_->window()->GetNativeWindow();
+    WindowState::Get(browser_window)->RemoveObserver(this);
+    browser_window->RemoveObserver(this);
   }
 }
 
@@ -81,6 +87,7 @@ void OnTaskPodControllerImpl::MaybeNavigateToPreviousPage() {
   if (!browser_) {
     return;
   }
+  boca::RecordOnTaskPodNavigateBackClicked();
   chrome::GoBack(browser_.get(), WindowOpenDisposition::CURRENT_TAB);
 }
 
@@ -88,6 +95,7 @@ void OnTaskPodControllerImpl::MaybeNavigateToNextPage() {
   if (!browser_) {
     return;
   }
+  boca::RecordOnTaskPodNavigateForwardClicked();
   chrome::GoForward(browser_.get(), WindowOpenDisposition::CURRENT_TAB);
 }
 
@@ -95,10 +103,16 @@ void OnTaskPodControllerImpl::ReloadCurrentPage() {
   if (!browser_) {
     return;
   }
+  boca::RecordOnTaskPodReloadPageClicked();
   chrome::Reload(browser_.get(), WindowOpenDisposition::CURRENT_TAB);
 }
 
-void OnTaskPodControllerImpl::ToggleTabStripVisibility(bool show) {
+void OnTaskPodControllerImpl::ToggleTabStripVisibility(bool show,
+                                                       bool user_action) {
+  if (user_action) {
+    boca::RecordOnTaskPodToggleTabStripVisibilityClicked();
+  }
+
   // Hide tab strip.
   if (!show) {
     tab_strip_reveal_lock_.reset();
@@ -115,6 +129,8 @@ void OnTaskPodControllerImpl::ToggleTabStripVisibility(bool show) {
 
 void OnTaskPodControllerImpl::SetSnapLocation(
     OnTaskPodSnapLocation snap_location) {
+  boca::RecordOnTaskPodSetSnapLocationClicked(
+      snap_location == ash::OnTaskPodSnapLocation::kTopLeft);
   pod_snap_location_ = snap_location;
 
   // Reposition the widget.
@@ -130,22 +146,29 @@ void OnTaskPodControllerImpl::OnWindowBoundsChanged(
     return;
   }
   pod_widget_->SetBounds(CalculateWidgetBounds());
+}
+
+void OnTaskPodControllerImpl::OnPostWindowStateTypeChange(
+    WindowState* window_state,
+    chromeos::WindowStateType old_type) {
+  // Only update the pod when the old window and new window have different
+  // pinned state.
+  chromeos::WindowStateType new_type = window_state->GetStateType();
+  if (chromeos::IsPinnedWindowStateType(old_type) ==
+      chromeos::IsPinnedWindowStateType(new_type)) {
+    return;
+  }
   views::View* const pod_widget_contents_view = pod_widget_->GetContentsView();
   if (!pod_widget_contents_view) {
     return;
   }
   OnTaskPodView* const on_task_pod_view =
       static_cast<OnTaskPodView*>(pod_widget_contents_view);
+  on_task_pod_view->OnLockedModeUpdate();
 
-  bool is_window_pinned = IsWindowPinned(window);
-  if (is_window_pinned_ != is_window_pinned) {
-    on_task_pod_view->OnLockedModeUpdate();
-
-    // Resize and reset bounds of the widget to fit the contents view.
-    pod_widget_->SetSize(on_task_pod_view->GetPreferredSize());
-    pod_widget_->SetBounds(CalculateWidgetBounds());
-  }
-  is_window_pinned_ = is_window_pinned;
+  // Resize and reset bounds of the widget to fit the contents view.
+  pod_widget_->SetSize(on_task_pod_view->GetPreferredSize());
+  pod_widget_->SetBounds(CalculateWidgetBounds());
 }
 
 void OnTaskPodControllerImpl::OnWindowVisibilityChanged(aura::Window* window,
@@ -160,22 +183,15 @@ void OnTaskPodControllerImpl::OnWindowVisibilityChanged(aura::Window* window,
   }
 }
 
-void OnTaskPodControllerImpl::OnPauseModeChanged() {
+void OnTaskPodControllerImpl::OnPauseModeChanged(bool paused) {
   if (!pod_widget_) {
     return;
   }
-  views::View* const pod_widget_contents_view = pod_widget_->GetContentsView();
-  if (!pod_widget_contents_view) {
-    return;
+  if (paused) {
+    pod_widget_->Hide();
+  } else {
+    pod_widget_->Show();
   }
-  OnTaskPodView* const on_task_pod_view =
-      static_cast<OnTaskPodView*>(pod_widget_contents_view);
-
-  on_task_pod_view->OnLockedModeUpdate();
-
-  // Resize and reset bounds of the widget to fit the contents view.
-  pod_widget_->SetSize(on_task_pod_view->GetPreferredSize());
-  pod_widget_->SetBounds(CalculateWidgetBounds());
 }
 
 void OnTaskPodControllerImpl::OnPageNavigationContextChanged() {

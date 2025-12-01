@@ -15,12 +15,12 @@
 
 namespace webrtc {
 
-class TestCertificateVerifier : public rtc::SSLCertificateVerifier {
+class TestCertificateVerifier : public SSLCertificateVerifier {
  public:
   TestCertificateVerifier() = default;
   ~TestCertificateVerifier() override = default;
 
-  bool Verify(const rtc::SSLCertificate& certificate) override {
+  bool Verify(const SSLCertificate& certificate) override {
     call_count_++;
     return verify_certificate_;
   }
@@ -33,8 +33,10 @@ class TestCertificateVerifier : public rtc::SSLCertificateVerifier {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::TestCertificateVerifier;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_TEST_CERTIFICATE_VERIFIER_H_

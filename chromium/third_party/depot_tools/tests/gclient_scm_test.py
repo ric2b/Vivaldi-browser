@@ -502,8 +502,8 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
                                              self.relpath)
         file_list = []
         git_wrapper.update(options, (), file_list)
-        self.assert_(gclient_scm.os.path.isdir(dir_path))
-        self.assert_(gclient_scm.os.path.isfile(file_path))
+        self.assertTrue(gclient_scm.os.path.isdir(dir_path))
+        self.assertTrue(gclient_scm.os.path.isfile(file_path))
         sys.stdout.close()
 
     def testUpdateResetUnsetsFetchConfig(self):
@@ -545,8 +545,8 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
                                              self.relpath)
         file_list = []
         git_wrapper.update(options, (), file_list)
-        self.assert_(not gclient_scm.os.path.isdir(dir_path))
-        self.assert_(gclient_scm.os.path.isfile(file_path))
+        self.assertTrue(not gclient_scm.os.path.isdir(dir_path))
+        self.assertTrue(gclient_scm.os.path.isfile(file_path))
         sys.stdout.close()
 
     def testUpdateUnstagedConflict(self):
@@ -596,8 +596,8 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
         with open(file_path, 'w'):
             pass
         git_wrapper.update(options, (), [])
-        self.assertRegexpMatches(sys.stdout.getvalue(),
-                                 r'breaking lock.*\.git[/|\\]index\.lock')
+        self.assertRegex(sys.stdout.getvalue(),
+                         r'breaking lock.*\.git[/|\\]index\.lock')
         self.assertFalse(os.path.exists(file_path))
         sys.stdout.close()
 
@@ -1298,12 +1298,14 @@ class GerritChangesTest(fake_repos.FakeReposTestBase):
                          self.gitrevparse(self.root_dir))
 
     def testCanCloneGerritChangeMirror(self):
-        self.setUpMirror()
-        self.testCanCloneGerritChange()
+        with mock.patch('git_cache.Mirror.contains_revision',
+                        side_effect=lambda r: r == 'refs/changes/35/1235/1'):
+            self.testCanCloneGerritChange()
 
     def testCanSyncToGerritChangeMirror(self):
-        self.setUpMirror()
-        self.testCanSyncToGerritChange()
+        with mock.patch('git_cache.Mirror.contains_revision',
+                        side_effect=lambda r: r == 'refs/changes/35/1235/1'):
+            self.testCanSyncToGerritChange()
 
     def testMirrorPushUrl(self):
         self.setUpMirror()

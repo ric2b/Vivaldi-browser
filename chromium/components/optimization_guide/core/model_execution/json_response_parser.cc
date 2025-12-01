@@ -33,10 +33,8 @@ ResponseParser::Result ExtractProto(
 
 }  // namespace
 
-JsonResponseParser::JsonResponseParser(
-    const proto::OnDeviceModelExecutionOutputConfig& config)
-    : proto_type_(config.proto_type()), config_(config) {}
-JsonResponseParser::~JsonResponseParser() = default;
+JsonResponseParser::JsonResponseParser(std::string_view proto_type)
+    : proto_type_(proto_type) {}
 
 void JsonResponseParser::ParseAsync(const std::string& redacted_output,
                                     ResultCallback callback) const {
@@ -48,14 +46,6 @@ void JsonResponseParser::ParseAsync(const std::string& redacted_output,
 bool JsonResponseParser::SuppressParsingIncompleteResponse() const {
   // Json parser can only parse complete responses.
   return true;
-}
-
-JsonResponseParserFactory::JsonResponseParserFactory() = default;
-JsonResponseParserFactory::~JsonResponseParserFactory() = default;
-
-std::unique_ptr<ResponseParser> JsonResponseParserFactory::CreateParser(
-    const proto::OnDeviceModelExecutionOutputConfig& config) {
-  return std::make_unique<JsonResponseParser>(config);
 }
 
 }  // namespace optimization_guide

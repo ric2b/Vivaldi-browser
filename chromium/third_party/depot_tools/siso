@@ -5,4 +5,4 @@
 # found in the LICENSE file.
 
 base_dir=$(dirname "$0")
-PYTHONDONTWRITEBYTECODE=1 exec python3 "$base_dir/siso.py" "$@"
+PYTHONDONTWRITEBYTECODE=1 exec "$base_dir/python-bin/python3" "$base_dir/siso.py" "$@"

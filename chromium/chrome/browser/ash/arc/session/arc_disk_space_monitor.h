@@ -16,35 +16,42 @@ namespace arc {
 
 // These thresholds are chosen based on UMA stats. (go/arcvm-virtio-blk-sparse)
 // Show a pre-stop warning notification if free disk space is lower than this.
-constexpr int64_t kDiskSpaceThresholdForPreStopNotification = 1LL << 30;  // 1GB
+inline constexpr int64_t kDiskSpaceThresholdForPreStopNotification =
+    1LL << 30;  // 1GB
 
 // Stop ARC and show a post-stop warning notification if free disk space is
 // lower than this.
-constexpr int64_t kDiskSpaceThresholdForStoppingArc = 256LL << 20;  // 256MB
+//
+// 256MB
+inline constexpr int64_t kDiskSpaceThresholdForStoppingArc = 256LL << 20;
 
 // TODO(b/233030867): Choose these values based on some logic
 //                    instead of deciding them on a hunch.
 // Disk space check interval used when free disk space is lower than
 // kDiskSpaceThresholdForPreStopNotification.
-constexpr base::TimeDelta kDiskSpaceCheckIntervalShort = base::Seconds(1);
+inline constexpr base::TimeDelta kDiskSpaceCheckIntervalShort =
+    base::Seconds(1);
 
 // Disk space check interval used when free disk space is higher than
 // kDiskSpaceThresholdForPreStopNotification.
-constexpr base::TimeDelta kDiskSpaceCheckIntervalLong = base::Seconds(10);
+inline constexpr base::TimeDelta kDiskSpaceCheckIntervalLong =
+    base::Seconds(10);
 
 // A pre-stop warning notification should not be shown more than once within
 // this interval.
 // TODO(b/237040345): Finalize the value.
-constexpr base::TimeDelta kPreStopNotificationReshowInterval = base::Minutes(2);
+inline constexpr base::TimeDelta kPreStopNotificationReshowInterval =
+    base::Minutes(2);
 
 // Notifier ID of ArcDiskSpaceMonitor.
-const char kDiskSpaceMonitorNotifierId[] = "arc_disk_space_monitor";
+inline constexpr char kDiskSpaceMonitorNotifierId[] = "arc_disk_space_monitor";
 
 // Notification ID of the pre-stop warning notification.
-const char kLowDiskSpacePreStopNotificationId[] = "arc_low_disk_space_pre_stop";
+inline constexpr char kLowDiskSpacePreStopNotificationId[] =
+    "arc_low_disk_space_pre_stop";
 
 // Notification ID of the post-stop warning notification.
-const char kLowDiskSpacePostStopNotificationId[] =
+inline constexpr char kLowDiskSpacePostStopNotificationId[] =
     "arc_low_disk_space_post_stop";
 
 // Monitors disk usage. Requests stopping ARC and/or shows a warning

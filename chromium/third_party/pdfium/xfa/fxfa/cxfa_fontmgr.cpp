@@ -25,21 +25,24 @@ RetainPtr<CFGAS_GEFont> CXFA_FontMgr::GetFont(CXFA_FFDoc* pDoc,
                                               const WideString& wsFontFamily,
                                               uint32_t dwFontStyles) {
   auto key = std::make_pair(wsFontFamily, dwFontStyles);
-  auto iter = m_FontMap.find(key);
-  if (iter != m_FontMap.end())
+  auto iter = font_map_.find(key);
+  if (iter != font_map_.end()) {
     return iter->second;
+  }
 
   WideString wsEnglishName = FGAS_FontNameToEnglishName(wsFontFamily);
   RetainPtr<CFGAS_GEFont> pFont =
       pDoc->GetPDFFont(wsEnglishName, dwFontStyles, true);
-  if (pFont)
+  if (pFont) {
     return pFont;
+  }
 
   pFont = CFGAS_DefaultFontManager::GetFont(wsFontFamily, dwFontStyles);
   if (!pFont) {
     pFont = pDoc->GetPDFFont(wsEnglishName, dwFontStyles, false);
-    if (pFont)
+    if (pFont) {
       return pFont;
+    }
   }
   if (!pFont) {
     pFont = CFGAS_DefaultFontManager::GetDefaultFont(dwFontStyles);
@@ -48,9 +51,10 @@ RetainPtr<CFGAS_GEFont> CXFA_FontMgr::GetFont(CXFA_FFDoc* pDoc,
     pFont = CFGAS_GEFont::LoadStockFont(
         pDoc->GetPDFDoc(), ByteString::Format("%ls", wsFontFamily.c_str()));
   }
-  if (!pFont)
+  if (!pFont) {
     return nullptr;
+  }
 
-  m_FontMap[key] = pFont;
+  font_map_[key] = pFont;
   return pFont;
 }

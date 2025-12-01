@@ -5,6 +5,7 @@
 #import <AVFoundation/AVFoundation.h>
 #import <CoreMedia/CoreMedia.h>
 
+#import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
 #import "ios/ui/helpers/vivaldi_global_helpers.h"
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ios/ui/onboarding/vivaldi_onboarding_swift.h"
@@ -52,6 +53,17 @@ CGFloat const kOverlayLightOpacity = 0.6;
 
   [self addSubview:overlay];
   [overlay fillSuperview];
+
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(@[
+      UITraitVerticalSizeClass.class, UITraitHorizontalSizeClass.class
+    ]);
+    [self registerForTraitChanges:traits
+                       withAction:@selector(updatePlayerLayerFrame)];
+
+    [self registerForTraitChanges:@[ UITraitUserInterfaceStyle.class ]
+                       withAction:@selector(updateStyleAndRestartPlayer)];
+  }
 }
 
 - (void)updatePlayerLayerFrame {
@@ -127,23 +139,9 @@ CGFloat const kOverlayLightOpacity = 0.6;
   }];
 }
 
-#pragma mark - Trait Collection
-
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
-  [super traitCollectionDidChange:previousTraitCollection];
-
-  if (self.traitCollection.userInterfaceStyle !=
-      previousTraitCollection.userInterfaceStyle) {
-    self.overlay.backgroundColor = [self overlayColor];
-    [self restartPlayer];
-  }
-
-  if (self.traitCollection.verticalSizeClass !=
-      previousTraitCollection.verticalSizeClass ||
-      self.traitCollection.horizontalSizeClass !=
-      previousTraitCollection.horizontalSizeClass) {
-    [self updatePlayerLayerFrame];
-  }
+- (void)updateStyleAndRestartPlayer {
+  self.overlay.backgroundColor = [self overlayColor];
+  [self restartPlayer];
 }
 
 @end

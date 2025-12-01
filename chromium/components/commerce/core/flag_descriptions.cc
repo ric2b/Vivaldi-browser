@@ -19,12 +19,6 @@ const char kCompareConfirmationToastName[] = "Added to set confirmation toast";
 const char kCompareConfirmationToastDescription[] =
     "Enable to show the added to set confirmation in a toast.";
 
-const char kCompareManagementInterfaceName[] =
-    "Comparison table management from main Compare UI";
-const char kCompareManagementInterfaceDescription[] =
-    "Enable showing the comparison tables list in the Compare UI and enable "
-    "the new \"Comparison tables\" context menu under \"Bookmarks and Lists\".";
-
 const char kShoppingListName[] = "Shopping List";
 const char kShoppingListDescription[] = "Enable shopping list in bookmarks.";
 
@@ -72,5 +66,9 @@ const char kPriceTrackingSubscriptionServiceProductVersionName[] =
 const char kPriceTrackingSubscriptionServiceProductVersionDescription[] =
     "Enable the product version logging for price tracking subscription "
     "service";
+
+const char kDiscountAutofillName[] = "Discount Autofill";
+const char kDiscountAutofillDescription[] =
+    "Enable discount autofill experiment.";
 
 }  // namespace commerce::flag_descriptions

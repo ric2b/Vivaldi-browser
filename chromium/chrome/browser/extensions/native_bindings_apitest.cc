@@ -656,7 +656,7 @@ IN_PROC_BROWSER_TEST_F(NativeBindingsApiTest, MV2PromisesNotSupported) {
 
   // The above test makes 2 calls to chrome.tabs.create, so check that those
   // have been logged in the histograms we expect, but not to the histograms
-  // specifcally tracking service worker and MV3 calls.
+  // specifically tracking service worker and MV3 calls.
   EXPECT_EQ(2, histogram_tester.GetBucketCount(
                    "Extensions.Functions.ExtensionCalls",
                    functions::HistogramValue::TABS_CREATE));
@@ -786,8 +786,21 @@ class DeveloperModeNativeBindingsApiTest
       public testing::WithParamInterface<bool> {
  public:
   DeveloperModeNativeBindingsApiTest() {
-    scoped_feature_list_.InitWithFeatureState(
-        extensions_features::kDebuggerAPIRestrictedToDevMode, GetParam());
+    if (GetParam()) {
+      // Ensure chrome.debugger is controlled by Developer Mode.
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/
+          {extensions_features::kUserScriptUserExtensionToggle,
+           extensions_features::kDebuggerAPIRestrictedToDevMode},
+          /*disabled_features=*/{});
+
+    } else {
+      // Ensure chrome.userScripts is controlled by Developer Mode.
+      scoped_feature_list_.InitWithFeatures(
+          /*enabled_features=*/{}, /*disabled_features=*/{
+              extensions_features::kUserScriptUserExtensionToggle,
+              extensions_features::kDebuggerAPIRestrictedToDevMode});
+    }
   }
 
  private:

@@ -920,39 +920,6 @@ bool CheckVideoProcessorFormatSupport(DXGI_FORMAT dxgi_format) {
          (device & D3D11_FORMAT_SUPPORT_VIDEO_PROCESSOR_OUTPUT);
 }
 
-bool CheckDisplayableSupportForP010() {
-  static const bool p010_displayable = [] {
-    Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device = g_d3d11_device;
-    if (!d3d11_device) {
-      DLOG(ERROR) << "Failed to retrieve D3D11 device";
-      return false;
-    }
-
-    // According to the document:
-    // https://learn.microsoft.com/en-us/windows/win32/direct3d11/displayable-surfaces#formats
-    // DXGI_FORMAT_P010 display feature is optional and provided by platform
-    // driver.
-    D3D11_FEATURE_DATA_FORMAT_SUPPORT2 supported_format;
-    supported_format.InFormat = DXGI_FORMAT_P010;
-
-    if (!SUCCEEDED(d3d11_device->CheckFeatureSupport(
-            D3D11_FEATURE_FORMAT_SUPPORT2, &supported_format,
-            sizeof(supported_format)))) {
-      DLOG(ERROR) << "Failed to check supported feature";
-      return false;
-    }
-
-    if (supported_format.OutFormatSupport2 &
-        D3D11_FORMAT_SUPPORT2_DISPLAYABLE) {
-      return true;
-    }
-
-    return false;
-  }();
-
-  return p010_displayable;
-}
-
 UINT GetDirectCompositionOverlaySupportFlags(DXGI_FORMAT format) {
   UpdateOverlaySupport();
   base::AutoLock auto_lock(GetOverlayLock());
@@ -1063,6 +1030,11 @@ void SetDirectCompositionOverlayFormatUsedForTesting(DXGI_FORMAT format) {
   DCHECK_EQ(format, GetDirectCompositionSDROverlayFormat());
 }
 
+UINT GetDirectCompositionOverlaySupportFlagsForTesting(DXGI_FORMAT format) {
+  SetOverlayCapsValid(false);
+  return GetDirectCompositionOverlaySupportFlags(format);
+}
+
 gfx::mojom::DXGIInfoPtr GetDirectCompositionHDRMonitorDXGIInfo() {
   auto result_info = gfx::mojom::DXGIInfo::New();
 
@@ -1137,6 +1109,8 @@ UINT GetDXGIWaitableSwapChainMaxQueuedFrames() {
       features::kDXGIWaitableSwapChainMaxQueuedFrames.Get());
 }
 
+std::optional<bool> g_direct_composition_texture_supported;
+
 void SetDirectCompositionOverlayWorkarounds(
     const DirectCompositionOverlayWorkarounds& workarounds) {
   // This has to be set before initializing overlay caps.
@@ -1149,6 +1123,10 @@ void SetDirectCompositionOverlayWorkarounds(
   g_force_rgb10a2_overlay_support = workarounds.force_rgb10a2_overlay_support;
   g_check_ycbcr_studio_g22_left_p709_for_nv12_support =
       workarounds.check_ycbcr_studio_g22_left_p709_for_nv12_support;
+  CHECK(!g_direct_composition_texture_supported.has_value());
+  if (workarounds.disable_dcomp_texture) {
+    g_direct_composition_texture_supported = false;
+  }
 }
 
 void SetDirectCompositionMonitorInfoForTesting(
@@ -1158,7 +1136,6 @@ void SetDirectCompositionMonitorInfoForTesting(
   g_primary_monitor_size = primary_monitor_size;
 }
 
-std::optional<bool> g_direct_composition_texture_supported;
 
 bool DirectCompositionTextureSupported() {
   if (g_direct_composition_texture_supported.has_value()) {

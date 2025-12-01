@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
-<translation id="2277224997687551299">グループ名を編集</translation>
+<translation id="1062777154504442433">新しいタブスタック</translation>
+<translation id="1625440863545383011">タブを取り除いてスタックから出る</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {タブをブックマークに追加}
           other {タブをブックマークに追加}
         }</translation>
 <translation id="2947471979790858922">これらのプライベートタブでのアクティビティは、このデバイスから削除されます</translation>
+<translation id="3298614730029636660">スタックから出る</translation>
+<translation id="354698175756845966">スタックの色を変更する</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {閉じたタブは、Vivaldi のメインメニューにある「最近のタブ」にあります。プライベートタブは表示されません。}
         other {閉じたタブは、Vivaldiのメインメニューにある「最近のタブ」にあります。 # つのプライベートタブは表示されません。}}</translation>
-<translation id="4460014764210899310">グループを解除</translation>
 <translation id="4871187110787939393">プライベートタブをすべて閉じますか？</translation>
 <translation id="5494920125229734069">すべて選択する</translation>
-<translation id="6744956528665271406">グループの色を変更する</translation>
+<translation id="6807841890213931603">タブを取り除いてスタックを削除する</translation>
+<translation id="750227952939161636">タブスタックは自動的に保存され、サインインしているすべてのデバイスで更新されます</translation>
+<translation id="7640137753339219124">スタックを削除する</translation>
+<translation id="7653857400289671414">タブスタックは自動的に保存されます</translation>
+<translation id="8440938071054361204">スタックの名前を変更する</translation>
+<translation id="8602902357364871325">スタックを閉じる</translation>
+<translation id="8851621822786801079">スタックから取り出す</translation>
 </translationbundle>

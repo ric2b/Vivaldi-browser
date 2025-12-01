@@ -16,6 +16,7 @@
 #include "base/check.h"
 #include "base/functional/bind.h"
 #include "base/no_destructor.h"
+#include "base/notimplemented.h"
 #include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/time/time_delta_from_string.h"
@@ -339,6 +340,10 @@ HostResolver::ResolveHostParameters::ResolveHostParameters(
 HostResolver::ResolveHostParameters&
 HostResolver::ResolveHostParameters::operator=(const ResolveHostParameters&) =
     default;
+
+std::string HostResolver::ServiceEndpointRequest::DebugString() const {
+  return "";
+}
 
 HostResolver::~HostResolver() = default;
 

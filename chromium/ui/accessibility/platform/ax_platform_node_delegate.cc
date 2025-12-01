@@ -6,6 +6,7 @@
 
 #include "base/containers/fixed_flat_set.h"
 #include "base/notreached.h"
+#include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_selection.h"
 #include "ui/accessibility/platform/ax_platform.h"
@@ -83,8 +84,9 @@ std::u16string AXPlatformNodeDelegate::GetTextContentUTF16() const {
     // const_cast.
     const AXPlatformNode* child = AXPlatformNode::FromNativeViewAccessible(
         const_cast<AXPlatformNodeDelegate*>(this)->ChildAtIndex(i));
-    if (!child || !child->GetDelegate())
+    if (!child) {
       continue;
+    }
     text_content += child->GetDelegate()->GetTextContentUTF16();
   }
   return text_content;
@@ -154,7 +156,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNativeViewAccessible() {
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetParent() const {
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 std::optional<size_t> AXPlatformNodeDelegate::GetIndexInParent() const {
@@ -180,7 +182,7 @@ size_t AXPlatformNodeDelegate::GetChildCount() const {
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::ChildAtIndex(
     size_t index) const {
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 bool AXPlatformNodeDelegate::HasModalDialog() const {
@@ -190,40 +192,40 @@ bool AXPlatformNodeDelegate::HasModalDialog() const {
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetFirstChild() const {
   if (GetChildCount() > 0)
     return ChildAtIndex(0);
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetLastChild() const {
   size_t child_count = GetChildCount();
   if (child_count > 0)
     return ChildAtIndex(child_count - 1);
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetNextSibling() const {
   AXPlatformNodeDelegate* parent = GetParentDelegate();
   if (!parent)
-    return nullptr;
+    return gfx::NativeViewAccessible();
   auto index = GetIndexInParent();
   if (index.has_value()) {
     size_t next_index = index.value() + 1;
     if (next_index < parent->GetChildCount())
       return parent->ChildAtIndex(next_index);
   }
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetPreviousSibling() const {
   AXPlatformNodeDelegate* parent = GetParentDelegate();
   if (!parent)
-    return nullptr;
+    return gfx::NativeViewAccessible();
   auto index = GetIndexInParent();
   if (index.has_value()) {
     size_t next_index = index.value() - 1;
     if (next_index < parent->GetChildCount())
       return parent->ChildAtIndex(next_index);
   }
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 bool AXPlatformNodeDelegate::IsChildOfLeaf() const {
@@ -342,7 +344,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetTextFieldAncestor() const {
     if (ancestor_delegate->GetData().IsTextField())
       return ancestor_delegate->GetNativeViewAccessible();
   }
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetSelectionContainer()
@@ -357,7 +359,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetSelectionContainer()
     if (IsContainerWithSelectableChildren(ancestor_delegate->GetRole()))
       return ancestor_delegate->GetNativeViewAccessible();
   }
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetTableAncestor() const {
@@ -371,7 +373,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegate::GetTableAncestor() const {
     if (IsTableLike(ancestor_delegate->GetRole()))
       return ancestor_delegate->GetNativeViewAccessible();
   }
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 std::unique_ptr<ChildIterator> AXPlatformNodeDelegate::ChildrenBegin() const {
@@ -463,11 +465,11 @@ gfx::Rect AXPlatformNodeDelegate::GetInnerTextRangeBoundsRect(
 gfx::NativeViewAccessible AXPlatformNodeDelegate::HitTestSync(
     int screen_physical_pixel_x,
     int screen_physical_pixel_y) const {
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 gfx::NativeViewAccessible AXPlatformNodeDelegate::GetFocus() const {
-  return nullptr;
+  return gfx::NativeViewAccessible();
 }
 
 bool AXPlatformNodeDelegate::IsOffscreen() const {

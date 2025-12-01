@@ -30,9 +30,7 @@
 
 enum GPUFeatureName {
     "multi-draw-indirect",
-    "chromium-experimental-immediate-data",
     "chromium-experimental-subgroup-matrix",
-    "core-features-and-limits",
 };
 
 enum GPUSubgroupMatrixComponentType {
@@ -53,7 +51,6 @@ interface GPUSubgroupMatrixConfig {
 };
 
 interface GPUAdapterInfo {
-    readonly attribute boolean isFallbackAdapter;
     [SameObject] readonly attribute FrozenArray<GPUSubgroupMatrixConfig> subgroupMatrixConfigs;
 };
 

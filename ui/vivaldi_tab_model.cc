@@ -6,12 +6,11 @@
 #include "components/extensions/vivaldi_panel_utils.h"
 
 namespace tabs {
-
-bool TabModel::is_viv_panel() const {
-  if (vivaldi::GetVivPanelId(contents_.get())) {
-    return true;
+bool TabModel::IsVivaldiPanel() const {
+  if (!is_vivaldi_panel_cache_) {
+    is_vivaldi_panel_cache_ = !!vivaldi::GetVivPanelId(contents_.get());
   }
-  return false;
-}
 
+  return *is_vivaldi_panel_cache_;
+}
 }  // namespace tabs

@@ -307,7 +307,7 @@ class RTC_EXPORT CopyOnWriteBuffer {
     }
   }
 
-  // buffer_ is either null, or points to an rtc::Buffer with capacity > 0.
+  // buffer_ is either null, or points to an webrtc::Buffer with capacity > 0.
   scoped_refptr<RefCountedBuffer> buffer_;
   // This buffer may represent a slice of a original data.
   size_t offset_;  // Offset of a current slice in the original data in buffer_.
@@ -320,8 +320,10 @@ class RTC_EXPORT CopyOnWriteBuffer {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::CopyOnWriteBuffer;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_COPY_ON_WRITE_BUFFER_H_

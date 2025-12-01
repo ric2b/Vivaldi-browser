@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.multiwindow;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -33,6 +34,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.HistogramWatcher;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -40,8 +42,10 @@ import org.chromium.chrome.browser.multiwindow.MultiWindowUtils.InstanceAllocati
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtilsUnitTest.ShadowMultiInstanceManagerApi31;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tabmodel.TabGroupModelFilter;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.chrome.test.AutomotiveContextWrapperTestRule;
 import org.chromium.components.browser_ui.desktop_windowing.AppHeaderState;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
@@ -121,6 +125,8 @@ public class MultiWindowUtilsUnitTest {
     private Boolean mOverrideOpenInNewWindowSupported;
 
     @Mock TabModelSelector mTabModelSelector;
+    @Mock TabGroupModelFilter mTabGroupModelFilter;
+    @Mock ObservableSupplier<TabModel> mTabModelSupplier;
     @Mock TabModel mNormalTabModel;
     @Mock TabModel mIncognitoTabModel;
     @Mock HomepageManager mHomepageManager;
@@ -180,6 +186,8 @@ public class MultiWindowUtilsUnitTest {
 
         when(mDesktopWindowStateManager.getAppHeaderState()).thenReturn(mAppHeaderState);
         when(mAppHeaderState.isInDesktopWindow()).thenReturn(false);
+        when(mTabModelSelector.getCurrentTabModelSupplier()).thenReturn(mTabModelSupplier);
+        when(mTabModelSupplier.get()).thenReturn(mNormalTabModel);
     }
 
     @After
@@ -336,6 +344,57 @@ public class MultiWindowUtilsUnitTest {
     }
 
     @Test
+    public void
+            testHasAtMostOneTabGroupWithHomepageEnabled_OneTabGroupAndNoOtherTabs_HasCustomHomepage() {
+        when(mHomepageManager.shouldCloseAppWithZeroTabs()).thenReturn(true);
+        when(mTabModelSelector.getTotalTabCount()).thenReturn(3);
+        when(mTabGroupModelFilter.getTabCountForGroup(any())).thenReturn(3);
+        when(mNormalTabModel.getTabAt(0)).thenReturn(mTab1);
+        assertTrue(
+                "Should return true with one tab group and custom homepage.",
+                mUtils.hasAtMostOneTabGroupWithHomepageEnabled(
+                        mTabModelSelector, mTabGroupModelFilter));
+    }
+
+    @Test
+    public void
+            testHasAtMostOneTabWithHomepageEnabled_OneTabGroupAndNoOtherTabs_NoCustomHomepage() {
+        when(mHomepageManager.shouldCloseAppWithZeroTabs()).thenReturn(false);
+        when(mTabModelSelector.getTotalTabCount()).thenReturn(3);
+        when(mTabGroupModelFilter.getTabCountForGroup(any())).thenReturn(3);
+        when(mNormalTabModel.getTabAt(0)).thenReturn(mTab1);
+        assertFalse(
+                "Should return true with one tab group and custom homepage.",
+                mUtils.hasAtMostOneTabGroupWithHomepageEnabled(
+                        mTabModelSelector, mTabGroupModelFilter));
+    }
+
+    @Test
+    public void testHasAtMostOneTabWithHomepageEnabled_WithMoreThanOneTabGroup_HasCustomHomepage() {
+        when(mHomepageManager.shouldCloseAppWithZeroTabs()).thenReturn(true);
+        when(mTabModelSelector.getTotalTabCount()).thenReturn(4);
+        when(mTabGroupModelFilter.getTabCountForGroup(any())).thenReturn(3);
+        when(mNormalTabModel.getTabAt(0)).thenReturn(mTab1);
+        assertFalse(
+                "Should return false for multiple tabs.",
+                mUtils.hasAtMostOneTabGroupWithHomepageEnabled(
+                        mTabModelSelector, mTabGroupModelFilter));
+    }
+
+    @Test
+    public void testHasAtMostOneTabWithHomepageEnabled_WithMoreThanOneTabGroup_NoCustomHomepage() {
+        when(mHomepageManager.shouldCloseAppWithZeroTabs()).thenReturn(false);
+        when(mTabModelSelector.getTotalTabCount()).thenReturn(4);
+        when(mTabGroupModelFilter.getTabCountForGroup(any())).thenReturn(3);
+        when(mNormalTabModel.getTabAt(0)).thenReturn(mTab1);
+        assertFalse(
+                "Should return false for multiple tabs.",
+                mUtils.hasAtMostOneTabGroupWithHomepageEnabled(
+                        mTabModelSelector, mTabGroupModelFilter));
+    }
+    ;
+
+    @Test
     public void testGetInstanceCount() {
         when(mTabModelSelector.getModel(false)).thenReturn(mNormalTabModel);
         when(mTabModelSelector.getModel(true)).thenReturn(mIncognitoTabModel);
@@ -379,7 +438,7 @@ public class MultiWindowUtilsUnitTest {
         int instanceId = MultiWindowUtils.getInstanceIdForViewIntent(true);
         assertEquals(
                 "The default instance ID should be returned when a new instance is preferred.",
-                MultiWindowUtils.INVALID_INSTANCE_ID,
+                TabWindowManager.INVALID_WINDOW_ID,
                 instanceId);
 
         // Existing instance preferred.
@@ -457,9 +516,9 @@ public class MultiWindowUtilsUnitTest {
 
         int instanceId = MultiWindowUtils.getInstanceIdForLinkIntent(mock(Activity.class));
         assertEquals(
-                "Instance ID for link intent should be INVALID_INSTANCE_ID when fewer than the max"
+                "Instance ID for link intent should be INVALID_WINDOW_ID when fewer than the max"
                         + " number of instances are open.",
-                MultiWindowUtils.INVALID_INSTANCE_ID,
+                TabWindowManager.INVALID_WINDOW_ID,
                 instanceId);
     }
 

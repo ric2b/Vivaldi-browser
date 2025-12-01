@@ -11,10 +11,11 @@
 #import "base/files/file_path.h"
 #import "base/files/file_util.h"
 #import "base/functional/bind.h"
+#import "base/strings/string_number_conversions.h"
 #import "base/strings/sys_string_conversions.h"
-#import "base/task/thread_pool.h"
 #import "ios/chrome/browser/download/model/document_download_tab_helper.h"
 #import "ios/chrome/browser/download/model/download_directory_util.h"
+#import "ios/chrome/browser/download/model/download_manager_tab_helper.h"
 #import "ios/chrome/browser/download/model/external_app_util.h"
 #import "ios/chrome/browser/drive/model/drive_availability.h"
 #import "ios/chrome/browser/drive/model/drive_tab_helper.h"
@@ -37,9 +38,7 @@ DownloadManagerMediator::DownloadManagerMediator() : weak_ptr_factory_(this) {}
 DownloadManagerMediator::~DownloadManagerMediator() {
   DCHECK(!application_foregrounding_observer_);
   SetDownloadTask(nullptr);
-  if (identity_manager_) {
-    identity_manager_->RemoveObserver(this);
-  }
+  identity_manager_observation_.Reset();
   identity_manager_ = nullptr;
 }
 
@@ -51,12 +50,10 @@ void DownloadManagerMediator::SetIsIncognito(bool is_incognito) {
 
 void DownloadManagerMediator::SetIdentityManager(
     signin::IdentityManager* identity_manager) {
-  if (identity_manager_) {
-    identity_manager_->RemoveObserver(this);
-  }
+  identity_manager_observation_.Reset();
   identity_manager_ = identity_manager;
   if (identity_manager_) {
-    identity_manager_->AddObserver(this);
+    identity_manager_observation_.Observe(identity_manager_);
     UpdateConsumer();
   }
 }
@@ -96,7 +93,11 @@ void DownloadManagerMediator::SetDownloadTask(web::DownloadTask* task) {
 }
 
 base::FilePath DownloadManagerMediator::GetDownloadPath() {
-  return download_path_;
+  DCHECK(download_task_);
+
+  DownloadManagerTabHelper* tab_helper =
+      DownloadManagerTabHelper::FromWebState(download_task_->GetWebState());
+  return tab_helper->GetDownloadTaskFinalFilePath();
 }
 
 UploadTask* DownloadManagerMediator::GetUploadTask() {
@@ -196,7 +197,11 @@ void DownloadManagerMediator::UpdateConsumer() {
     return;
   }
   DownloadManagerState state = GetDownloadManagerState();
-  base::FilePath filename = download_task_->GenerateFileName();
+
+  base::FilePath download_path = GetDownloadPath();
+  base::FilePath filename = download_path.empty()
+                                ? download_task_->GenerateFileName()
+                                : download_path.BaseName();
 
   // Vivaldi: Always hide GDrive install promo.
   if (IsVivaldiRunning()) {
@@ -271,42 +276,6 @@ void DownloadManagerMediator::UpdateConsumer() {
 
 void DownloadManagerMediator::SetGoogleDriveAppInstalled(bool installed) {
   is_google_drive_app_installed_ = installed;
-}
-
-void DownloadManagerMediator::MoveToUserDocumentsIfFileExists(
-    base::FilePath task_path,
-    bool file_exists) {
-  if (!file_exists || !download_task_) {
-    return;
-  }
-
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&base::Move, task_path, download_path_),
-      base::BindOnce(&DownloadManagerMediator::MoveComplete,
-                     weak_ptr_factory_.GetWeakPtr()));
-}
-
-void DownloadManagerMediator::RemoveIfFileExists(base::FilePath task_path,
-                                                 bool file_exists) {
-  if (!file_exists || !download_task_) {
-    return;
-  }
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE,
-      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-      base::BindOnce(&base::DeleteFile, task_path),
-      base::BindOnce(&DownloadManagerMediator::RemoveComplete,
-                     weak_ptr_factory_.GetWeakPtr()));
-}
-
-void DownloadManagerMediator::MoveComplete(bool move_completed) {
-  DCHECK(move_completed);
-}
-
-void DownloadManagerMediator::RemoveComplete(bool remove_completed) {
-  DCHECK(remove_completed);
 }
 
 int DownloadManagerMediator::GetDownloadManagerA11yAnnouncement() const {
@@ -391,23 +360,6 @@ void DownloadManagerMediator::DidFinishNavigation(
 
 void DownloadManagerMediator::OnDownloadUpdated(web::DownloadTask* task) {
   UpdateConsumer();
-  // If the download succeeded and the file will not be uploaded, move it to the
-  // appropriate folder.
-  if (task->GetState() == web::DownloadTask::State::kComplete &&
-      !upload_task_) {
-    base::FilePath user_download_path;
-    GetDownloadsDirectory(&user_download_path);
-    download_path_ =
-        user_download_path.Append(download_task_->GenerateFileName());
-    base::FilePath task_path = download_task_->GetResponsePath();
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-        base::BindOnce(base::PathExists, task_path),
-        base::BindOnce(
-            &DownloadManagerMediator::MoveToUserDocumentsIfFileExists,
-            weak_ptr_factory_.GetWeakPtr(), task_path));
-  }
 }
 
 void DownloadManagerMediator::OnDownloadDestroyed(web::DownloadTask* task) {
@@ -418,16 +370,6 @@ void DownloadManagerMediator::OnDownloadDestroyed(web::DownloadTask* task) {
 
 void DownloadManagerMediator::OnUploadUpdated(UploadTask* task) {
   UpdateConsumer();
-  // If the upload succeeded, remove the local copy of the download.
-  if (task->GetState() == UploadTask::State::kComplete) {
-    base::FilePath task_path = download_task_->GetResponsePath();
-    base::ThreadPool::PostTaskAndReplyWithResult(
-        FROM_HERE,
-        {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-        base::BindOnce(base::PathExists, task_path),
-        base::BindOnce(&DownloadManagerMediator::RemoveIfFileExists,
-                       weak_ptr_factory_.GetWeakPtr(), task_path));
-  }
 }
 
 void DownloadManagerMediator::OnUploadDestroyed(UploadTask* task) {

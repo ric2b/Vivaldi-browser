@@ -281,6 +281,7 @@ public class TabGroupUiMediator implements BackPressHandler {
                     public void onStartedShowing(@LayoutType int layoutType) {
                         if (layoutType == LayoutType.TAB_SWITCHER) {
                             mIsShowingHub = true;
+                            hideTabGridDialog();
                             resetTabStrip();
                         }
                     }
@@ -385,7 +386,7 @@ public class TabGroupUiMediator implements BackPressHandler {
     private void onThemeColorChanged(@ColorInt int color, boolean shouldAnimate) {
         mModel.set(BACKGROUND_COLOR, color);
         if (mSharedImageTilesCoordinator != null && mSharedImageTilesConfigBuilder != null) {
-            mSharedImageTilesConfigBuilder.setBorderColor(color).setBackgroundColor(color);
+            mSharedImageTilesConfigBuilder.setBorderColor(color);
             mSharedImageTilesCoordinator.updateConfig(mSharedImageTilesConfigBuilder.build());
         }
         publishSnapshotToken();
@@ -439,6 +440,7 @@ public class TabGroupUiMediator implements BackPressHandler {
     private void hideTabStrip() {
         if (mCurrentTabGroupId == null) return;
 
+        hideTabGridDialog();
         updateTabGroupIdForShareByTab(null);
         mResetHandler.resetStripWithListOfTabs(null);
         mCurrentTabGroupId = null;
@@ -449,6 +451,7 @@ public class TabGroupUiMediator implements BackPressHandler {
     private void showTabStrip(Tab tab) {
         if (Objects.equals(mCurrentTabGroupId, tab.getTabGroupId())) return;
 
+        hideTabGridDialog();
         updateTabGroupIdForShareByTab(tab);
         assert tab.getTabGroupId() != null;
         List<Tab> listOfTabs = getTabsToShowForId(tab.getId());
@@ -635,6 +638,11 @@ public class TabGroupUiMediator implements BackPressHandler {
         if (mTabGridDialogControllerSupplier == null) return null;
         if (!mTabGridDialogControllerSupplier.hasValue()) return null;
         return mTabGridDialogControllerSupplier.get();
+    }
+
+    private void hideTabGridDialog() {
+        DialogController controller = getTabGridDialogControllerIfExists();
+        if (controller != null) controller.hideDialog(/* showAnimation= */ false);
     }
 
     /** Vivaldi **/

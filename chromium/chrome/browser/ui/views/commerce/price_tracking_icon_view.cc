@@ -39,7 +39,7 @@
 #include "components/power_bookmarks/core/proto/power_bookmark_meta.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -169,6 +169,7 @@ void PriceTrackingIconView::UpdateImpl() {
     }
     MaybeShowPageActionLabel();
   } else {
+    scoped_window_call_to_action_ptr_.reset();
     HidePageActionLabel();
   }
   SetVisible(should_show);
@@ -306,6 +307,16 @@ void PriceTrackingIconView::MaybeShowPageActionLabel() {
                          PageActionIconType::kPriceTracking)) {
     return;
   }
+  if (!tabs::TabInterface::GetFromContents(GetWebContents())
+           ->GetBrowserWindowInterface()
+           ->CanShowCallToAction()) {
+    return;
+  }
+
+  scoped_window_call_to_action_ptr_ =
+      tabs::TabInterface::GetFromContents(GetWebContents())
+          ->GetBrowserWindowInterface()
+          ->ShowCallToAction();
 
   should_extend_label_shown_duration_ = true;
   AnimateIn(std::nullopt);

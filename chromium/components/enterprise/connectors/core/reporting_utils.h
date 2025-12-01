@@ -14,6 +14,9 @@
 
 namespace enterprise_connectors {
 
+// The maximum number of referrers to include in the referrer chain.
+inline constexpr int kReferrerUserGestureLimit = 5;
+
 // Helper functions that compiles information into event protos. The
 // logic is shared across platforms to ensure event consistency.
 //
@@ -21,6 +24,9 @@ namespace enterprise_connectors {
 // foo@example.com), everything before @ should be masked. Otherwise, the entire
 // username should be masked.
 std::string MaskUsername(const std::u16string& username);
+
+// Convert base::Time to Timestamp proto.
+::google3_protos::Timestamp ToProtoTimestamp(base::Time);
 
 // Verify if the given `matcher` matches the `url`.
 bool IsUrlMatched(url_matcher::URLMatcher* matcher, const GURL& url);
@@ -66,7 +72,9 @@ chrome::cros::reporting::proto::LoginEvent GetLoginEvent(
     const GURL& url,
     bool is_federated,
     const url::SchemeHostPort& federated_origin,
-    const std::u16string& username);
+    const std::u16string& username,
+    const std::string& profile_identifier,
+    const std::string& profile_username);
 
 chrome::cros::reporting::proto::SafeBrowsingInterstitialEvent
 GetInterstitialEvent(const GURL& url,
@@ -83,6 +91,11 @@ chrome::cros::reporting::proto::BrowserCrashEvent GetBrowserCrashEvent(
 
 // Returns a list of the local IPv4 and IPv6 addresses of the device.
 std::vector<std::string> GetLocalIpAddresses();
+
+void AddReferrerChainToEvent(
+    const google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>&
+        referrer_chain,
+    base::Value::Dict& event);
 
 }  // namespace enterprise_connectors
 

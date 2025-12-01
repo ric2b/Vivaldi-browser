@@ -120,7 +120,6 @@ class TestSyncService : public SyncService {
   base::android::ScopedJavaLocalRef<jobject> GetJavaObject() override;
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  void SetSyncFeatureRequested() override;
   TestSyncUserSettings* GetUserSettings() override;
   const TestSyncUserSettings* GetUserSettings() const override;
   DisableReasonSet GetDisableReasons() const override;
@@ -170,7 +169,8 @@ class TestSyncService : public SyncService {
   void SendExplicitPassphraseToPlatformClient() override;
   void GetTypesWithUnsyncedData(
       DataTypeSet requested_types,
-      base::OnceCallback<void(DataTypeSet)> cb) const override;
+      base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)> cb)
+      const override;
   void GetLocalDataDescriptions(
       DataTypeSet types,
       base::OnceCallback<void(std::map<DataType, LocalDataDescription>)>

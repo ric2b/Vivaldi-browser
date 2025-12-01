@@ -36,7 +36,7 @@ These are the criteria that we expect from a good security bug report:
             template](https://issues.chromium.org/issues/new?component=1363614&template=1922342).
 *   Contains a clear and descriptive title.
 *   Includes the Chromium/Chrome version number and [release
-            channel](/getting-involved/dev-channel).
+            channel](/getting-involved/chrome-release-channels).
 *   Lists the operating system, version, and service pack level of the
             testing platform.
 *   Includes a reproducible example of the bug, such as an attached HTML

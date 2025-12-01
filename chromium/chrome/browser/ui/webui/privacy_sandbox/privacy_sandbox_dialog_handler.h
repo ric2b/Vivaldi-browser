@@ -19,7 +19,7 @@ enum class PrivacySandboxDialogCallbackState {
   kCallbackUnknownBeforeShown = 2,
   kMaxValue = kCallbackUnknownBeforeShown,
 };
-// LINT.ThenChange(//tools/metrics/histograms/enums.xml:PrivacySandboxDialogCallbackState)
+// LINT.ThenChange(//tools/metrics/histograms/metadata/privacy/enums.xml:PrivacySandboxDialogCallbackState)
 class PrivacySandboxDialogHandler : public content::WebUIMessageHandler {
  public:
   PrivacySandboxDialogHandler(
@@ -45,9 +45,6 @@ class PrivacySandboxDialogHandler : public content::WebUIMessageHandler {
   void HandleShowDialog(const base::Value::List& args);
   void HandleRecordPrivacyPolicyLoadTime(const base::Value::List& args);
   void HandleShouldShowAdTopicsContentParity(const base::Value::List& args);
-  // Determines if the Privacy Policy page should be shown.
-  void HandleShouldShowPrivacySandboxPrivacyPolicy(
-      const base::Value::List& args);
   void CloseDialog();
 
   base::RepeatingCallback<void(

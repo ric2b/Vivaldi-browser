@@ -186,12 +186,14 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num,
 // operation. |ap| and |rp| may be equal but otherwise may not alias.
 BN_ULONG bn_mul_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num, BN_ULONG w);
 
-// bn_sqr_words sets |rp[2*i]| and |rp[2*i+1]| to |ap[i]|'s square, for all |i|
-// up to |num|. |ap| is an array of |num| words and |rp| an array of |2*num|
-// words. |ap| and |rp| may not alias.
+// bn_sqr_add_words computes |tmp| where |tmp[2*i]| and |tmp[2*i+1]| are
+// |ap[i]|'s square, for all |i| up to |num|, and adds the result to |rp|. If
+// the result does not fit in |2*num| words, the final carry bit is truncated.
+// |ap| is an array of |num| words and |rp| an array of |2*num| words. |ap| and
+// |rp| may not alias.
 //
 // This gives the contribution of the |ap[i]*ap[i]| terms when squaring |ap|.
-void bn_sqr_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num);
+void bn_sqr_add_words(BN_ULONG *rp, const BN_ULONG *ap, size_t num);
 
 // bn_add_words adds |ap| to |bp| and places the result in |rp|, each of which
 // are |num| words long. It returns the carry bit, which is one if the operation
@@ -645,8 +647,8 @@ int BN_MONT_CTX_set_locked(BN_MONT_CTX **pmont, CRYPTO_MUTEX *lock,
 void bn_mul_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a,
                  const BN_ULONG *b, size_t num_b);
 
-// bn_sqr_small sets |r| to |a|^2. |num_a| must be at most |BN_SMALL_MAX_WORDS|.
-// |num_r| must be |num_a|*2. |r| and |a| may not alias.
+// bn_sqr_small sets |r| to |a|^2. |num_r| must be |num_a|*2. |r| and |a| may
+// not alias.
 void bn_sqr_small(BN_ULONG *r, size_t num_r, const BN_ULONG *a, size_t num_a);
 
 // In the following functions, the modulus must be at most |BN_SMALL_MAX_WORDS|

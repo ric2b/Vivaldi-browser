@@ -36,20 +36,16 @@ declare namespace Adb {
     adbPortStatus: number[];
     adbConnected: boolean;
   }
-  interface PortForwardingConfig {
-    [field: string]: string;
-  }
+  type PortForwardingConfig = Record<string, string>;
   interface PortForwardingRule {
     port: string;
     address: string;
   }
   interface DevicePortForwardingStatus {
-    ports: {[port: string]: number};
+    ports: Record<string, number>;
     browserId: string;
   }
-  interface PortForwardingStatus {
-    [field: string]: DevicePortForwardingStatus;
-  }
+  type PortForwardingStatus = Record<string, DevicePortForwardingStatus>;
   interface Config {
     discoverUsbDevices: boolean;
     portForwardingEnabled: boolean;
@@ -93,7 +89,8 @@ interface Node {
   setTextContentTruncatedIfNeeded(text: unknown, placeholder?: string): boolean;
   traverseNextNode(stayWithin?: Node): Node|null;
   traversePreviousNode(stayWithin?: Node): Node|null;
-  deepTextContent(): string;
+  deepTextContent(normalizeWhitespace?: boolean): string;
+  deepInnerText(): string;
   window(): Window;
   childTextNodes(): Node[];
 }

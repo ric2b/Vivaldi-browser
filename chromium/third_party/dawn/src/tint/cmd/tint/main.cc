@@ -65,11 +65,6 @@
 #if TINT_BUILD_WGSL_READER
 #include "src/tint/lang/wgsl/reader/program_to_ir/program_to_ir.h"
 #include "src/tint/lang/wgsl/reader/reader.h"
-
-#if TINT_BUILD_IR_BINARY
-#include "src/tint/lang/wgsl/helpers/apply_substitute_overrides.h"
-#endif  // TINT_BUILD_IR_BINARY
-
 #endif  // TINT_BUILD_WGSL_READER
 
 #if TINT_BUILD_SPV_WRITER
@@ -122,6 +117,11 @@ enum class Format : uint8_t {
     kIr,
 };
 
+enum class ExeMode : uint8_t {
+    kStandalone,
+    kServer,
+};
+
 #if TINT_BUILD_HLSL_WRITER
 constexpr uint32_t kMinShaderModelForDXC = 60u;
 constexpr uint32_t kMaxSupportedShaderModelForDXC = 66u;
@@ -172,6 +172,7 @@ struct Options {
 
 #if TINT_BUILD_MSL_WRITER
     std::string xcrun_path;
+    bool use_argument_buffers = false;
     std::unordered_map<uint32_t, uint32_t> pixel_local_attachments;
 #endif
 
@@ -226,7 +227,7 @@ Format InferFormat(const std::string& filename) {
 // The actual warning occurs on `std::from_chars(hash.data(), hash.data() + hash.size(), value,
 // base);`, but disabling/enabling warnings cannot be done within function scope
 TINT_BEGIN_DISABLE_WARNING(UNSAFE_BUFFER_USAGE);
-bool ParseArgs(tint::VectorRef<std::string_view> arguments, Options* opts) {
+bool ParseArgs(tint::VectorRef<std::string_view> arguments, Options* opts, ExeMode exe_mode) {
     using namespace tint::cli;  // NOLINT(build/namespaces)
 
     tint::Vector<EnumName<Format>, 8> format_enum_names{
@@ -271,14 +272,16 @@ If not provided, will be inferred from output filename extension:
                                                 format_enum_names, ShortName{"f"});
     TINT_DEFER(opts->format = fmt.value.value_or(Format::kUnknown));
 
-    auto& col = options.Add<EnumOption<tint::ColorMode>>(
-        "color", "Use colored output",
-        tint::Vector{
-            EnumName{tint::ColorMode::kPlain, "off"},
-            EnumName{tint::ColorMode::kDark, "dark"},
-            EnumName{tint::ColorMode::kLight, "light"},
-        },
-        ShortName{"col"}, Default{tint::ColorModeDefault()});
+    const auto default_color_mode =
+        exe_mode == ExeMode::kServer ? tint::ColorMode::kPlain : tint::ColorModeDefault();
+    auto& col =
+        options.Add<EnumOption<tint::ColorMode>>("color", "Use colored output",
+                                                 tint::Vector{
+                                                     EnumName{tint::ColorMode::kPlain, "off"},
+                                                     EnumName{tint::ColorMode::kDark, "dark"},
+                                                     EnumName{tint::ColorMode::kLight, "light"},
+                                                 },
+                                                 ShortName{"col"}, Default{default_color_mode});
     TINT_DEFER(opts->printer = CreatePrinter(*col.value));
 
     auto& ep = options.Add<StringOption>("entry-point", "Output single entry point",
@@ -391,6 +394,15 @@ violations that may be produced)",
             opts->spirv_reader_options.allow_non_uniform_derivatives = true;
         }
     });
+
+    auto& sampler_mapping = options.Add<StringOption>(
+        "sampler-mapping",
+        "Allows remapping the binding points of samplers from the SPIR-V file. "
+        "This allows setting a correct binding point for samplers which were part of a combined "
+        "texture/sampler pair. Entries are provided as binding point pairs (group, binding) and "
+        "each provides a (source:destination) mapping. (e.g. 1,2:3,4) Multiple entries should "
+        "be separated with a space.",
+        Default{""});
 #endif
 
 #if TINT_BUILD_SPV_WRITER
@@ -420,6 +432,10 @@ When specified, automatically enables MSL validation)",
             opts->validate = true;
         }
     });
+
+    auto& use_argument_buffers = options.Add<BoolOption>(
+        "use-argument-buffers", "Use the Argument Buffers in MSL", Default{false});
+    TINT_DEFER(opts->use_argument_buffers = *use_argument_buffers.value);
 #endif  // TINT_BUILD_MSL_WRITER
 
 #if TINT_BUILD_HLSL_WRITER
@@ -499,6 +515,49 @@ Options:
             opts->overrides.Add(std::string(parts[0]), value.Get());
         }
     }
+
+#if TINT_BUILD_SPV_READER
+    if (!sampler_mapping.value->empty()) {
+        auto str_to_bp = [](const std::string_view& str) -> std::optional<tint::BindingPoint> {
+            auto parts = tint::Split(str, ",");
+            if (parts.Length() != 2) {
+                std::cerr << "A binding point requires a 'group,binding' pair, found "
+                          << parts.Length() << " components instead of 2.\n";
+                return std::nullopt;
+            }
+
+            uint32_t group = 0;
+            std::from_chars(parts[0].data(), parts[0].data() + parts[0].size(), group);
+
+            uint32_t binding = 0;
+            std::from_chars(parts[1].data(), parts[1].data() + parts[0].size(), binding);
+
+            return {tint::BindingPoint{group, binding}};
+        };
+
+        for (auto mapping : tint::Split(*sampler_mapping.value, " ")) {
+            auto parts = tint::Split(mapping, ":");
+            if (parts.Length() != 2) {
+                std::cerr << "Expected source and destination binding points separated by a ':'\n";
+                return false;
+            }
+
+            auto opt_src = str_to_bp(parts[0]);
+            if (!opt_src.has_value()) {
+                return false;
+            }
+            tint::BindingPoint src_bp = opt_src.value();
+
+            auto opt_dst = str_to_bp(parts[1]);
+            if (!opt_dst.has_value()) {
+                return false;
+            }
+            tint::BindingPoint dst_bp = opt_dst.value();
+
+            opts->spirv_reader_options.sampler_mappings.insert({src_bp, dst_bp});
+        }
+    }
+#endif  // TINT_BUILD_SPV_READER
 
 #if TINT_BUILD_HLSL_WRITER
     if (pixel_local_attachment_formats.value.has_value()) {
@@ -790,7 +849,7 @@ bool GenerateSpirv([[maybe_unused]] Options& options,
     auto res = ProcessASTTransforms(options, inspector, src_program, cfg);
     if (res != tint::Success) {
         std::cerr << res.Failure() << "\n";
-        return 1;
+        return true;
     }
 
     // Convert the AST program to an IR module.
@@ -834,11 +893,11 @@ bool GenerateSpirv([[maybe_unused]] Options& options,
 
     auto entry_point = inspector.GetEntryPoint(options.ep_name);
 
-    // Push constant Offset must be 4-byte aligned.
-    uint32_t offset = tint::RoundUp(4u, entry_point.push_constant_size);
+    // Immediate data Offset must be 4-byte aligned.
+    uint32_t offset = tint::RoundUp(4u, entry_point.immediate_data_size);
 
     if (entry_point.frag_depth_used) {
-        // Place the RangeOffset push constant member after user-defined push constants (if
+        // Place the RangeOffset immediate data member after user-defined immediate data (if
         // any).
         gen_options.depth_range_offsets = {offset + 0, offset + 4};
         offset += 8;
@@ -965,7 +1024,7 @@ bool GenerateMsl([[maybe_unused]] Options& options,
     auto transform_res = ProcessASTTransforms(options, inspector, src_program, cfg);
     if (transform_res != tint::Success) {
         std::cerr << transform_res.Failure() << "\n";
-        return 1;
+        return true;
     }
 
     // Convert the AST program to an IR module.
@@ -1019,6 +1078,7 @@ bool GenerateMsl([[maybe_unused]] Options& options,
     gen_options.bindings = tint::msl::writer::GenerateBindings(ir.Get());
     gen_options.array_length_from_uniform.ubo_binding = 30;
     gen_options.disable_demote_to_helper = options.disable_demote_to_helper;
+    gen_options.use_argument_buffers = options.use_argument_buffers;
 
     // Add array_length_from_uniform entries for all storage buffers with runtime sized arrays.
     std::unordered_set<tint::BindingPoint> storage_bindings;
@@ -1033,7 +1093,7 @@ bool GenerateMsl([[maybe_unused]] Options& options,
             continue;
         }
 
-        auto* ty = var->Result(0)->Type()->UnwrapPtr();
+        auto* ty = var->Result()->Type()->UnwrapPtr();
         if (!ty->HasFixedFootprint()) {
             if (storage_bindings.insert(bp.value()).second) {
                 gen_options.array_length_from_uniform.bindpoint_to_size_index.emplace(
@@ -1113,7 +1173,7 @@ bool GenerateHlsl([[maybe_unused]] Options& options,
     auto res = ProcessASTTransforms(options, inspector, src_program, cfg);
     if (res != tint::Success) {
         std::cerr << res.Failure() << "\n";
-        return 1;
+        return true;
     }
 
     const bool for_fxc = options.format == Format::kHlslFxc;
@@ -1283,7 +1343,7 @@ bool GenerateGlsl([[maybe_unused]] Options& options,
     auto res = ProcessASTTransforms(options, inspector, src_program, cfg);
     if (res != tint::Success) {
         std::cerr << res.Failure() << "\n";
-        return 1;
+        return true;
     }
 
     tint::glsl::writer::Options gen_options;
@@ -1299,11 +1359,11 @@ bool GenerateGlsl([[maybe_unused]] Options& options,
 
     auto entry_point = inspector.GetEntryPoint(options.ep_name);
 
-    // Push constant Offset must be 4-byte aligned.
-    uint32_t offset = tint::RoundUp(4u, entry_point.push_constant_size);
+    // Immediate data Offset must be 4-byte aligned.
+    uint32_t offset = tint::RoundUp(4u, entry_point.immediate_data_size);
 
     if (entry_point.instance_index_used) {
-        // Place the first_instance push constant member after user-defined push constants (if
+        // Place the first_instance immediate data member after user-defined immediate data (if
         // any).
         gen_options.first_instance_offset = offset;
         offset += 4;
@@ -1357,7 +1417,7 @@ bool GenerateGlsl([[maybe_unused]] Options& options,
     }
 
     // Generate GLSL.
-    auto result = tint::glsl::writer::Generate(ir.Get(), gen_options, "");
+    auto result = tint::glsl::writer::Generate(ir.Get(), gen_options);
     if (result != tint::Success) {
         std::cerr << "Failed to generate: " << result.Failure() << "\n";
         return false;
@@ -1379,16 +1439,17 @@ bool GenerateGlsl([[maybe_unused]] Options& options,
 #else
         // If there is no entry point name there is nothing to validate
         if (options.ep_name != "") {
-            tint::ast::PipelineStage stage = tint::ast::PipelineStage::kCompute;
+            tint::core::ir::Function::PipelineStage stage =
+                tint::core::ir::Function::PipelineStage::kCompute;
             switch (entry_point.stage) {
                 case tint::inspector::PipelineStage::kCompute:
-                    stage = tint::ast::PipelineStage::kCompute;
+                    stage = tint::core::ir::Function::PipelineStage::kCompute;
                     break;
                 case tint::inspector::PipelineStage::kVertex:
-                    stage = tint::ast::PipelineStage::kVertex;
+                    stage = tint::core::ir::Function::PipelineStage::kVertex;
                     break;
                 case tint::inspector::PipelineStage::kFragment:
-                    stage = tint::ast::PipelineStage::kFragment;
+                    stage = tint::core::ir::Function::PipelineStage::kFragment;
                     break;
             }
 
@@ -1430,16 +1491,15 @@ bool DumpIR([[maybe_unused]] const tint::Program& program,
 #endif
 }
 
-}  // namespace
-
-int main(int argc, const char** argv) {
-    tint::Vector<std::string_view, 8> arguments = tint::args::Vectorize(argc, argv);
+int Run(tint::VectorRef<std::string_view> arguments, ExeMode exe_mode) {
     Options options;
 
-    tint::Initialize();
-    tint::SetInternalCompilerErrorReporter(&tint::cmd::TintInternalCompilerErrorReporter);
+    if (!ParseArgs(arguments, &options, exe_mode)) {
+        return 1;
+    }
 
-    if (!ParseArgs(arguments, &options)) {
+    if (exe_mode == ExeMode::kServer && options.format == Format::kSpirv) {
+        std::cerr << "Cannot emit binary SPIR-V to stdout in server mode\n";
         return 1;
     }
 
@@ -1491,7 +1551,7 @@ int main(int argc, const char** argv) {
     if (options.dump_ir || options.format == Format::kIr) {
         auto res = DumpIR(info.program, options);
         if (options.format == Format::kIr) {
-            return res;
+            return static_cast<int>(res);
         }
     }
 
@@ -1575,4 +1635,62 @@ int main(int argc, const char** argv) {
         }
     }
     return success ? 0 : 1;
+}
+
+/// Run a server that accepts arguments on stdin.
+/// @returns 0 on success, non-zero on failure
+int RunServer() {
+    // Each line read from stdin will invoke Tint with the supplied arguments.
+    // Output on stdout and stderr will be delimited with \0 characters.
+    // The server will exit on failure or if stdin is closed.
+    while (!std::cin.eof()) {
+        // Read the next set of arguments.
+        std::string arg_line;
+        std::getline(std::cin, arg_line);
+
+        // Split the arguments by whitespace, taking double-quotes into account.
+        std::istringstream arg_in(arg_line);
+        tint::Vector<std::string, 8> arg_tokens;
+        while (!arg_in.eof()) {
+            std::string arg;
+            arg_in >> std::quoted(arg, '"', '\0');
+            if (!arg.empty()) {
+                arg_tokens.Push(arg);
+            }
+        }
+
+        // Run Tint with the provided arguments.
+        auto arguments =
+            tint::Transform(arg_tokens, [](const std::string& arg) -> std::string_view {
+                return std::string_view(arg);  //
+            });
+        auto ret = Run(arguments, ExeMode::kServer);
+        if (ret != 0) {
+            // The Tint invocation failed, so exit the server.
+            return ret;
+        }
+
+        // Delimit stdout and stderr with \0 and flush them.
+        std::cout << '\0' << std::flush;
+        std::cerr << '\0' << std::flush;
+    }
+    return 0;
+}
+
+}  // namespace
+
+int main(int argc, const char** argv) {
+    tint::Vector<std::string_view, 8> arguments = tint::args::Vectorize(argc, argv);
+
+    tint::Initialize();
+
+    if (arguments.Length() > 0 && arguments[0] == "--server") {
+        if (arguments.Length() > 1) {
+            std::cerr << "--server must not be used with any other arguments\n";
+            return 1;
+        }
+        return RunServer();
+    }
+
+    return Run(arguments, ExeMode::kStandalone);
 }

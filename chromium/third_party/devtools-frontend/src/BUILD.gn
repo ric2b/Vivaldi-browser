@@ -16,7 +16,6 @@ import("./third_party/blink/public/public_features.gni")
 devtools_frontend_resources_deps = [
   ":favicon",
   "front_end",
-  "test",
 ]
 
 group("devtools_all_files") {
@@ -25,8 +24,12 @@ group("devtools_all_files") {
     # This enables us to test bots with whitespace changes.
     "scripts/whitespaces.txt",
   ]
-  data_deps = devtools_frontend_resources_deps
 
+  data_deps = devtools_frontend_resources_deps + [
+                "front_end:web_test_resources",
+                "test",
+              ]
+  deps = [ ":frontend_indexer_tsconfig" ]
   public_deps = [ "front_end/ui/components/docs" ]
 }
 
@@ -35,7 +38,6 @@ group("devtools_frontend_resources") {
   deps = [
     ":assert_grd",
     ":assert_third_party_readmes",
-    ":frontend_indexer_tsconfig",
   ]
 }
 

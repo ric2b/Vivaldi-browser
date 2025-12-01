@@ -455,9 +455,10 @@ chromium-metrics-reviews@google.com.
 
 <enum name="AndroidWebViewSupervisedUserUrlCheckResult">
   <int value="0" label="ALLOWED_SITE_LOADED"/>
-  <int value="1" label="ALLOWED_SITE_DETECTED"/>
+  <int value="1" label="(Obsolete) ALLOWED_SITE_DETECTED. Removed in 2025/02"/>
   <int value="2" label="DISALLOWED_SITE_BLOCKED"/>
-  <int value="3" label="DISALLOWED_SITE_DETECTED"/>
+  <int value="3"
+      label="(Obsolete) DISALLOWED_SITE_DETECTED. Removed in 2025/02"/>
   <int value="4" label="TIMEOUT"/>
   <int value="5" label="UNKNOWN_ERROR"/>
 </enum>
@@ -643,6 +644,14 @@ chromium-metrics-reviews@google.com.
   <int value="142" label="WebSettingsCompat.getPaymentRequestEnabled"/>
   <int value="143" label="WebSettingsCompat.setHasEnrolledInstrumentEnabled"/>
   <int value="144" label="WebSettingsCompat.getHasEnrolledInstrumentEnabled"/>
+  <int value="145" label="WebViewBuilder"/>
+  <int value="146" label="WebSettingsCompat.setIncludeCookiesOnIntercept"/>
+  <int value="147" label="WebSettingsCompat.getIncludeCookiesOnIntercept"/>
+  <int value="148"
+      label="ServiceWorkerWebSettingsCompat.setIncludeCookiesOnIntercept"/>
+  <int value="149"
+      label="ServiceWorkerWebSettingsCompat.getIncludeCookiesOnIntercept"/>
+  <int value="150" label="Profile.warmUpRendererProcess"/>
 <!-- LINT.ThenChange(/android_webview/support_library/java/src/org/chromium/support_lib_glue/SupportLibWebViewChromiumFactory.java:ApiCall) -->
 
 </enum>
@@ -761,6 +770,16 @@ chromium-metrics-reviews@google.com.
   <int value="22" label="(06) ARCHIVED_TABS_DIALOG"/>
 </enum>
 
+<!-- LINT.IfChange(BackPressTabCloseType) -->
+
+<enum name="BackPressTabCloseType">
+  <int value="0" label="close without minimization"/>
+  <int value="1" label="close during minimization by chrome"/>
+  <int value="2" label="close during minimization by os"/>
+</enum>
+
+<!-- LINT.ThenChange(//chrome/browser/back_press/android/java/src/org/chromium/chrome/browser/back_press/MinimizeAppAndCloseTabBackPressHandler.java:TabClosureType)-->
+
 <enum name="BiometricsAvailability">
   <int value="0" label="Other error"/>
   <int value="1" label="Available"/>
@@ -799,6 +818,24 @@ chromium-metrics-reviews@google.com.
   <int value="1" label="Not Multi-Window, Edge-to-Edge"/>
   <int value="2" label="Multi-Window, not Edge-to-Edge"/>
   <int value="3" label="Neither Multi-Window nor Edge-to-Edge"/>
+</enum>
+
+<enum name="BrowserControlsLockReason">
+  <summary>The reason why browser controls were locked.</summary>
+  <int value="0" label="CHROME_URL"/>
+  <int value="1" label="TAB_CONTENT_DANGEROUS"/>
+  <int value="2" label="EDITABLE_NODE_FOCUS"/>
+  <int value="3" label="TAB_ERROR"/>
+  <int value="4" label="TAB_HIDDEN"/>
+  <int value="5" label="FULLSCREEN_LOADING"/>
+  <int value="6" label="A11Y_ENABLED"/>
+  <int value="7" label="FULLSCREEN_DISABLED"/>
+</enum>
+
+<enum name="CacheQuotaFreshness">
+  <int value="0" label="Value returned from memory"/>
+  <int value="1" label="Value returned from prefs"/>
+  <int value="2" label="Value is absent"/>
 </enum>
 
 <enum name="CaptureNativeViewResult">
@@ -871,6 +908,8 @@ chromium-metrics-reviews@google.com.
   <int value="3" label="Both 32-bit and 64-bit"/>
 </enum>
 
+<!-- LINT.IfChange(CreateAndroidInputReceiverResult) -->
+
 <enum name="CreateAndroidInputReceiverResult">
   <int value="0" label="SuccessfullyCreated"/>
   <int value="1" label="FailedUnknown"/>
@@ -880,7 +919,16 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="FailedNullCallbacks"/>
   <int value="6" label="SuccessfulButNullTransferToken"/>
   <int value="7" label="ReuseExistingInputReceiver"/>
+  <int value="8" label="NullBrowserInputToken"/>
+  <int value="9" label="NotCreatingMoreThanOneReceiver"/>
+  <int value="10" label="RootCompositorFrameSinkDestroyed"/>
+  <int value="11" label="FailedChoreographerNotSupported"/>
+  <int value="12" label="FailedNullChoreographer"/>
+  <int value="13" label="FailedNullParentSurfaceControl"/>
+  <int value="14" label="FailedNullChildSurfaceControl"/>
 </enum>
+
+<!-- LINT.ThenChange(//components/viz/service/input/input_manager.cc:CreateAndroidInputReceiverResult) -->
 
 <enum name="DebuggingEnabled">
   <int value="0" label="Debugging not enabled."/>
@@ -891,12 +939,13 @@ chromium-metrics-reviews@google.com.
              of the setWebContentsDebuggingEnabled value."/>
 </enum>
 
-<enum name="DesktopWindowHeuristicResult2">
+<enum name="DesktopWindowHeuristicResult3">
   <int value="0" label="Invalid result."/>
   <int value="1" label="The app is in a desktop window."/>
   <int value="2" label="Caption bar top insets are not present."/>
   <int value="3" label="Caption bar bounding rect has an invalid height."/>
   <int value="4" label="Caption bar customizable space unavailable."/>
+  <int value="5" label="The app is open on an external display."/>
 </enum>
 
 <enum name="DesktopWindowModeState">
@@ -947,11 +996,12 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="START_STICKY"/>
 </enum>
 
-<enum name="DragDropTabResult">
+<enum name="DragDropResult">
   <summary>
     SUCCESS is recorded during ACTION_DRAG_ENDED. The rest enums are all for
     failed drops, which are recorded in ACTION_DROP. Also see
-    Android.DragDrop.Tab.FromStrip.Result
+    Android.DragDrop.Tab.FromStrip.Result and
+    Android.DragDrop.TabGroup.FromStrip.Result.
   </summary>
   <int value="0" label="SUCCESS"/>
   <int value="1" label="IGNORED_TOOLBAR"/>
@@ -960,10 +1010,13 @@ chromium-metrics-reviews@google.com.
   <int value="4" label="IGNORED_SAME_INSTANCE"/>
   <int value="5" label="ERROR_TAB_NOT_FOUND"/>
   <int value="6" label="IGNORED_MAX_INSTANCES"/>
+  <int value="7" label="IGNORED_MHTML_TAB"/>
 </enum>
 
 <enum name="DragDropType">
-  <summary>See Android.DragDrop.Tab.Type</summary>
+  <summary>
+    See Android.DragDrop.Tab.Type and Android.DragDrop.TabGroup.Type
+  </summary>
   <int value="0" label="TAB_STRIP_TO_TAB_STRIP"/>
   <int value="1" label="TAB_STRIP_TO_CONTENT"/>
   <int value="2" label="TAB_STRIP_TO_NEW_INSTANCE"/>
@@ -981,6 +1034,12 @@ chromium-metrics-reviews@google.com.
   <int value="6" label="Flip Horizontally"/>
   <int value="7" label="Flip Vertically"/>
   <int value="8" label="Undefined"/>
+</enum>
+
+<enum name="FontLoadingOutcome">
+  <int value="0" label="Fallback Font Family"/>
+  <int value="1" label="Font resource"/>
+  <int value="2" label="Font family"/>
 </enum>
 
 <enum name="FrameJankStatus">
@@ -1071,6 +1130,7 @@ chromium-metrics-reviews@google.com.
   <int value="0" label="ProcessedSuccessfully"/>
   <int value="1" label="CouldNotFindViewForFrameSinkId"/>
   <int value="2" label="FrameSinkIdCorrespondsToChildView"/>
+  <int value="3" label="FrameSinkIdNotAttachedToRootCFS"/>
 </enum>
 
 <enum name="LightTheme">
@@ -1181,6 +1241,15 @@ chromium-metrics-reviews@google.com.
   <int value="2" label="Device lock restored"/>
 </enum>
 
+<enum name="MissingNavbarInsetsReason">
+  <int value="0" label="Other"/>
+  <int value="1" label="InMultiWindow"/>
+  <int value="2" label="InDesktopWindow"/>
+  <int value="3" label="InFullscreen"/>
+  <int value="4" label="ActivityNotVisible"/>
+  <int value="5" label="SystemBarInsetsEmpty"/>
+</enum>
+
 <enum name="MotionEventAction">
   <int value="0" label="NONE"/>
   <int value="1" label="DOWN"/>
@@ -1258,6 +1327,8 @@ chromium-metrics-reviews@google.com.
   <int value="17" label="Focus restored on activity recreation."/>
 </enum>
 
+<!-- LINT.IfChange(OmniboxSuggestionUiType) -->
+
 <enum name="OmniboxSuggestionUiType">
   <int value="0" label="DEFAULT"/>
   <int value="1" label="EDIT_URL_SUGGESTION"/>
@@ -1267,10 +1338,11 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="CLIPBOARD_SUGGESTION"/>
   <int value="6" label="HEADER"/>
   <int value="7" label="TILE_NAVSUGGEST"/>
-  <int value="8" label="PEDAL_SUGGESTION"/>
-  <int value="9" label="DIVIDER_LINE"/>
-  <int value="10" label="QUERY_TILES"/>
+  <int value="8" label="GROUP_SEPARATOR"/>
+  <int value="9" label="OBSOLETE_QUERY_TILES"/>
 </enum>
+
+<!-- LINT.ThenChange(//components/omnibox/browser/android/java/src/org/chromium/components/omnibox/suggestions/OmniboxSuggestionUiType.java:OmniboxSuggestionUiType) -->
 
 <enum name="PartnerCustomizationProviderDelegate">
   <int value="0" label="None: default delegate inValid"/>
@@ -1558,6 +1630,11 @@ chromium-metrics-reviews@google.com.
   <int value="5" label="Exempted"/>
 </enum>
 
+<enum name="SupportedConfigurationSwitch">
+  <int value="0" label="FromSupportedToUnsupported"/>
+  <int value="1" label="FromUnsupportedToSupported"/>
+</enum>
+
 <enum name="SurveyDownloadResponseCodes2">
   <summary>
     Results when download survey response is available. Used by
@@ -1721,9 +1798,11 @@ chromium-metrics-reviews@google.com.
   <int value="10" label="MultipleBrowserWindowsOpen"/>
   <int value="11" label="DownTimeAfterEventTime"/>
   <int value="12" label="SequenceTransferredBackFromViz"/>
+  <int value="13" label="WebContentsIgnoringInputEvents"/>
+  <int value="14" label="RIRDelegateConnectionNotSetup"/>
 </enum>
 
-<!-- LINT.ThenChange(//content/browser/renderer_host/input/transfer_input_to_viz_result.h:TransferInputToVizResult)-->
+<!-- LINT.ThenChange(//content/public/browser/android/transfer_input_to_viz_result.h:TransferInputToVizResult)-->
 
 <enum name="UrlTargetType">
   <int value="0" label="URL"/>
@@ -2344,6 +2423,16 @@ chromium-metrics-reviews@google.com.
   <int value="7" label="Text dark, night mode on"/>
   <int value="8" label="Text dark, night mode off"/>
 </enum>
+
+<!-- LINT.IfChange(WebViewSendIntentState) -->
+
+<enum name="WebViewSendIntentState">
+  <int value="0" label="Did not invoke sendBrowsingIntent"/>
+  <int value="1" label="Invoked sendBrowsingIntent"/>
+  <int value="2" label="New activity started"/>
+</enum>
+
+<!-- LINT.ThenChange(//android_webview/java/src/org/chromium/android_webview/AwContentsClient.java:SendIntentState) -->
 
 <enum name="WebViewShouldInterceptRequestOverridden">
   <int value="0"

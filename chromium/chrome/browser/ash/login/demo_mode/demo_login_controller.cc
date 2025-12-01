@@ -16,6 +16,10 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/strings/stringprintf.h"
+#include "base/syslog_logging.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "base/uuid.h"
 #include "base/values.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
@@ -76,6 +80,23 @@ constexpr int kMaxResponseSize = 1024 * 1024;
 const char kErrorCodePath[] = "error.code";
 const char kErrorMessagePath[] = "error.message";
 const char kErrorStatusPath[] = "error.status";
+
+constexpr base::TimeDelta kConnectPolicyManagerTimeout = base::Seconds(5);
+
+// Server may return a 200 for setup demo account request with Quota exhuasted
+// error. Sample response:
+//  {
+//    "status": {
+//      "code": 8
+//    }
+//    "retryDetails": {}
+//  }
+constexpr char kStatusCodePath[] = "status.code";
+constexpr char kRetryDetailsPath[] = "retryDetails";
+
+// TODO(crbugs.com/355727308): Consider using
+// components/enterprise/common/proto/google3_protos.proto.
+constexpr int kServerResourceExhuastedCode = 8;
 
 constexpr char kDemoModeSignInEnabledPath[] = "forceEnabled";
 
@@ -253,7 +274,6 @@ void LogServerResponseError(const std::string& error_response, bool is_setup) {
   const std::optional<int> code = error->FindIntByDottedPath(kErrorCodePath);
   const auto* msg = error->FindStringByDottedPath(kErrorMessagePath);
   const auto* status = error->FindStringByDottedPath(kErrorStatusPath);
-
   LOG(ERROR) << base::StringPrintf(
       "%s error code: %d; message: %s; status: %s.", response_name,
       code ? *code : -1, msg ? *msg : "", status ? *status : "");
@@ -275,7 +295,7 @@ DemoLoginController::ResultCode GetDemoAccountRequestResult(
   }
 
   if (response_body.empty()) {
-    return DemoLoginController::ResultCode::kEmptyReponse;
+    return DemoLoginController::ResultCode::kEmptyResponse;
   }
 
   // A request was successful if there is response body and the response code is
@@ -347,6 +367,14 @@ DemoLoginController::DemoLoginController(
   // connected.
   if (!is_policy_manager_connected_) {
     observation_.Observe(cloud_policy_manager);
+
+    // `DemoLoginController::OnDeviceCloudPolicyManagerConnected` might not be
+    // triggered if there is a network issue.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DemoLoginController::OnPolicyManagerConnectionTimeOut,
+                       weak_ptr_factory_.GetWeakPtr()),
+        kConnectPolicyManagerTimeout);
   }
 
   is_feature_eligiblity_loaded_ = features::IsDemoModeSignInEnabled();
@@ -373,21 +401,20 @@ void DemoLoginController::TriggerDemoAccountLoginFlow() {
   // Try demo account login first by disable auto-login to managed guest
   // session.
   state_ = State::kSetupDemoAccountInProgress;
-  // TODO(crbug.com/387572263): figure out whether should ignore the power idle
-  // policy when fallback to MGS when sign in is enable.
-  demo_mode::SetDoNothingWhenPowerIdle();
 
   MaybeCleanupPreviousDemoAccount();
 }
 
-void DemoLoginController::SetSetupFailedCallbackForTest(
-    FailedRequestCallback callback) {
-  setup_failed_callback_for_testing_ = std::move(callback);
+void DemoLoginController::SetSetupRequestCallbackForTesting(
+    RequestCallback callback) {
+  CHECK_IS_TEST();
+  setup_request_callback_for_testing_ = std::move(callback);
 }
 
-void DemoLoginController::SetCleanUpFailedCallbackForTest(
-    FailedRequestCallback callback) {
-  clean_up_failed_callback_for_testing_ = std::move(callback);
+void DemoLoginController::SetCleanupRequestCallbackForTesting(
+    RequestCallback callback) {
+  CHECK_IS_TEST();
+  cleanup_request_callback_for_testing_ = std::move(callback);
 }
 
 void DemoLoginController::SetDeviceCloudPolicyManagerForTesting(
@@ -398,8 +425,6 @@ void DemoLoginController::SetDeviceCloudPolicyManagerForTesting(
 void DemoLoginController::SendSetupDemoAccountRequest() {
   CHECK(!url_loader_);
 
-  // TODO(crbug.com/372333479): Demo server use auth the request with device
-  // integrity check. Attach credential to the request once it is ready.
   const auto sign_in_scoped_device_id = GenerateSigninScopedDeviceId();
   std::optional<base::Value::Dict> device_identifier =
       GetDeviceIdentifier(sign_in_scoped_device_id);
@@ -451,16 +476,32 @@ void DemoLoginController::OnSetupDemoAccountComplete(
 void DemoLoginController::HandleSetupDemoAcountResponse(
     const std::string& sign_in_scoped_device_id,
     const std::unique_ptr<std::string> response_body) {
-  std::optional<base::Value::Dict> gaia_creds(
+  std::optional<base::DictValue> response_json(
       base::JSONReader::ReadDict(*response_body));
-  if (!gaia_creds) {
+  if (!response_json) {
     OnSetupDemoAccountError(ResultCode::kResponseParsingError);
     return;
   }
 
-  const auto* email = gaia_creds->FindString(kDemoAccountEmail);
-  const auto* gaia_id = gaia_creds->FindString(kDemoAccountGaiaId);
-  const auto* auth_code = gaia_creds->FindString(kDemoAccountAuthCode);
+  const std::optional<int> code =
+      response_json->FindIntByDottedPath(kStatusCodePath);
+  if (code && *code == kServerResourceExhuastedCode) {
+    // TODO(crbugs.com/355727308): Right now, we retry with a random delay if
+    // `retry_details` exists. In later version we will decide the retry delay
+    // from `retry_details`.
+    base::DictValue* retry_details = response_json->FindDict(kRetryDetailsPath);
+    if (retry_details) {
+      demo_mode::TurnOnScheduleLogoutForMGS();
+      OnSetupDemoAccountError(ResultCode::kQuotaExhaustedRetriable);
+    } else {
+      OnSetupDemoAccountError(ResultCode::kQuotaExhaustedNotRetriable);
+    }
+    return;
+  }
+
+  const auto* email = response_json->FindString(kDemoAccountEmail);
+  const auto* gaia_id = response_json->FindString(kDemoAccountGaiaId);
+  const auto* auth_code = response_json->FindString(kDemoAccountAuthCode);
   if (!email || !gaia_id || !auth_code) {
     OnSetupDemoAccountError(ResultCode::kInvalidCreds);
     return;
@@ -470,10 +511,17 @@ void DemoLoginController::HandleSetupDemoAcountResponse(
   DemoSessionMetricsRecorder::ReportDemoAccountSetupResult(
       ResultCode::kSuccess);
 
+  if (setup_request_callback_for_testing_) {
+    std::move(setup_request_callback_for_testing_).Run();
+  }
+
   UserLoginPermissionTracker::Get()->SetDemoUser(
       gaia::CanonicalizeEmail(*email));
   DCHECK_EQ(State::kSetupDemoAccountInProgress, state_);
   state_ = State::kLoginDemoAccount;
+
+  // Enable 24 hour session by overriding power policy.
+  demo_mode::SetDoNothingWhenPowerIdle();
   DemoSessionMetricsRecorder::SetCurrentSessionType(
       DemoSessionMetricsRecorder::SessionType::kSignedInDemoSession);
 
@@ -506,8 +554,8 @@ void DemoLoginController::OnSetupDemoAccountError(
       DemoSessionMetricsRecorder::SessionType::kFallbackMGS);
   configure_auto_login_callback_.Run();
 
-  if (setup_failed_callback_for_testing_) {
-    std::move(setup_failed_callback_for_testing_).Run();
+  if (setup_request_callback_for_testing_) {
+    std::move(setup_request_callback_for_testing_).Run();
   }
 }
 
@@ -596,6 +644,16 @@ void DemoLoginController::OnCleanUpDemoAccountComplete(
   if (result == ResultCode::kSuccess) {
     // Report success to the metrics.
     DemoSessionMetricsRecorder::ReportDemoAccountCleanupResult(result);
+
+    // Clear the the gaia_id and sign_in_scoped_device_id in pref to prevent
+    // repeating cleanups.
+    auto* local_state = g_browser_process->local_state();
+    local_state->ClearPref(prefs::kDemoAccountGaiaId);
+    local_state->ClearPref(prefs::kDemoModeSessionIdentifier);
+
+    if (cleanup_request_callback_for_testing_) {
+      std::move(cleanup_request_callback_for_testing_).Run();
+    }
   } else {
     // `response_body` could be nullptr when network is not connected.
     if (response_body) {
@@ -616,8 +674,8 @@ void DemoLoginController::OnCleanUpDemoAccountError(
   LOG(ERROR) << "Failed to clean up demo account. Result code: "
              << static_cast<int>(result_code);
 
-  if (clean_up_failed_callback_for_testing_) {
-    std::move(clean_up_failed_callback_for_testing_).Run();
+  if (cleanup_request_callback_for_testing_) {
+    std::move(cleanup_request_callback_for_testing_).Run();
   }
 }
 
@@ -691,16 +749,36 @@ void DemoLoginController::OnCampaignsLoaded() {
 
 void DemoLoginController::MaybeTriggerAutoLogin() {
   CHECK_EQ(State::kLoadingAvailibility, state_);
+
+  bool is_policy_manager_loading_finished =
+      is_policy_manager_connected_ || is_loading_policy_manager_timeout_;
   bool is_loading_finished =
-      is_policy_manager_connected_ && is_feature_eligiblity_loaded_;
+      is_policy_manager_loading_finished && is_feature_eligiblity_loaded_;
+
   if (!is_loading_finished) {
     return;
   }
+
   bool is_sign_in_enable = demo_mode::IsDemoAccountSignInEnabled();
-  state_ = is_sign_in_enable ? State::kReadyForLoginWithDemoAccount
-                             : State::kLoginToMGS;
+  state_ = is_sign_in_enable && is_policy_manager_connected_
+               ? State::kReadyForLoginWithDemoAccount
+               : State::kLoginToMGS;
 
   configure_auto_login_callback_.Run();
+}
+
+void DemoLoginController::OnPolicyManagerConnectionTimeOut() {
+  if (is_policy_manager_connected_) {
+    return;
+  }
+
+  is_loading_policy_manager_timeout_ = true;
+  observation_.Reset();
+
+  DemoSessionMetricsRecorder::RecordCloudPolicyConnectionTimeout();
+  SYSLOG(INFO) << "Timeout for waiting cloud policy manager connected. Login "
+                  "to managed guest session.";
+  MaybeTriggerAutoLogin();
 }
 
 }  // namespace ash

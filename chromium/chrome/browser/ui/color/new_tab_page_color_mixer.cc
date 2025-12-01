@@ -382,6 +382,11 @@ void AddNewTabPageColorMixer(ui::ColorProvider* provider,
     mixer[kColorNewTabPageText] = {dark_mode ? gfx::kGoogleGrey200
                                              : SK_ColorBLACK};
   }
+
+  /* NewTabFooter */
+  mixer[kColorNewTabFooterBackground] = {kColorToolbar};
+  mixer[kColorNewTabFooterText] =
+      ui::GetColorWithMaxContrast({kColorNewTabFooterBackground});
 }
 
 void AddWebThemeNewTabPageColors(ui::ColorMixer& mixer, bool dark_mode) {

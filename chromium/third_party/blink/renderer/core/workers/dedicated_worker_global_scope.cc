@@ -349,15 +349,12 @@ void DedicatedWorkerGlobalScope::FetchAndRunModuleScript(
     std::unique_ptr<PolicyContainer> policy_container,
     const FetchClientSettingsObjectSnapshot& outside_settings_object,
     WorkerResourceTimingNotifier& outside_resource_timing_notifier,
-    network::mojom::CredentialsMode credentials_mode,
-    RejectCoepUnsafeNone reject_coep_unsafe_none) {
+    network::mojom::CredentialsMode credentials_mode) {
   TRACE_EVENT("blink.worker",
               "DedicatedWorkerGlobalScope::FetchAndRunModuleScript",
               "module_url_record", module_url_record);
   // TODO(crbug.com/1177199): SetPolicyContainer once we passed down policy
   // container from DedicatedWorkerHost
-
-  reject_coep_unsafe_none_ = reject_coep_unsafe_none;
 
   if (worker_main_script_load_params) {
     SetWorkerMainScriptLoadingParametersForModules(
@@ -534,9 +531,6 @@ DedicatedWorkerObjectProxy& DedicatedWorkerGlobalScope::WorkerObjectProxy()
 
 void DedicatedWorkerGlobalScope::UpdateBackForwardCacheDisablingFeatures(
     BlockingDetails details) {
-  // `back_forward_cache_controller_host_` might not be bound when non-
-  // PlzDedicatedWorker is used. Non-PlzDedicatedWorker will be removed in near
-  // future.
   // TODO(crbug.com/40093136): Remove this 'if' branch now that
   // PlzDedicatedWorker has been removed.
   if (!back_forward_cache_controller_host_.is_bound()) {

@@ -30,8 +30,15 @@ enum AnchorType : ubyte (bit_flags) {
 enum OptionFlag : ubyte (bit_flags) {
   MODIFY_BLOCK,
   IS_CASE_SENSITIVE,
-  FIRST_PARTY,
-  THIRD_PARTY,
+}
+
+enum Party: ubyte {
+  ALL,
+  FIRST,
+  THIRD,
+  STRICT_FIRST,
+  STRICT_THIRD,
+  FIRST_AND_STRICT_THIRD
 }
 
 // The options controlling whether or not to activate filtering for subresources
@@ -71,6 +78,8 @@ table RequestFilterRule {
   // Rule matching options, a bitmask consisting of OptionFlags.
   options : ubyte;
 
+  party: Party = ALL;
+
   // A bitmask of ResourceType. Rules most commonly have all types set.
   resource_types : ushort = 16383;
 
@@ -107,6 +116,9 @@ table RequestFilterRule {
   // This should be in lower case if the rule is case-insensitive.
   pattern : string;
 
+  //------------------------------------------------------------------------
+  //The following fields do not need to be checked when comparing rules
+
   // For regular expression pattern types, this sets a string that is safe to
   // use for ngram extraction. It contains only string pieces that a url must
   // match to match the full regex, separated by wildcards
@@ -139,6 +151,7 @@ table ScriptletInjectionRule {
 
 table RulesList {
   request_filter_rules_list: [RequestFilterRule];
+  bad_request_filter_rules_list: [RequestFilterRule];
   cosmetic_rules_list: [CosmeticRule];
   scriptlet_injection_rules_list: [ScriptletInjectionRule];
 }

@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="1204037785786432551">Lataa linkin kohde</translation>
+<translation id="1206892813135768548">Kopioi linkin teksti</translation>
 <translation id="1397811292916898096">Etsi hakukoneella <ph name="PRODUCT_NAME" /></translation>
+<translation id="1435593198351412143">Avaa PDF-tiedostot automaattisesti</translation>
 <translation id="1456207338570705181">Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushaku. Se lähettää valitun sanan ja nykyisen sivun sen kontekstiksi Google-hakuun. Sen voi poistaa käytöstä <ph name="BEGIN_LINK" />asetuksista<ph name="END_LINK" />.</translation>
 <translation id="1598449788754183301">Vaihda tavallisten/yksityisvälilehtien välillä</translation>
 <translation id="1644574205037202324">Historia</translation>
@@ -9,23 +12,29 @@
 <translation id="1910514478706885609">Avaa uuteen välilehtinippuun</translation>
 <translation id="1925021887439448749">Syötä oma verkko-osoite</translation>
 <translation id="2038563949887743358">Ota käyttöön ”Käytä työpöytäsivustoa”</translation>
+<translation id="208033313373016095">Verkkosivujen lukunäkymä</translation>
 <translation id="2149973817440762519">Muokkaa kirjanmerkkiä</translation>
 <translation id="2306442503286132111">Kirjanmerkki tallennettu kansioon <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Ulkoasu</translation>
 <translation id="2501278716633472235">Palaa takaisin</translation>
 <translation id="2633278372998075009">Yksityisvälilehdet</translation>
+<translation id="2650751991977523696">Ladataanko tiedosto uudelleen?</translation>
 <translation id="265156376773362237">Vakioesilataus</translation>
 <translation id="272026394418727548">Vivaldin aloitussivu</translation>
+<translation id="2842985007712546952">Yläkansio</translation>
 <translation id="2871733351037274014">Esilataa sivut</translation>
+<translation id="2904300462646366554">Ladatut PDF-tiedostot avataan automaattisesti laitteen PDF-lukijassa</translation>
 <translation id="2951071800649516099">Lisää sivuja lukulistalle myöhempää käyttöä varten</translation>
+<translation id="3029276696788198026">Ei esilatausta</translation>
 <translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> kirjanmerkki}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> kirjanmerkkiä}}</translation>
 <translation id="3076631378407175873">Tekijänoikeudet <ph name="YEAR" /> Vivaldi Technologies AS. Kaikki oikeudet pidätetään.</translation>
+<translation id="3110967157686007724">Yksityisvälilehti</translation>
 <translation id="3232293466644486101">Poista selaustiedot…</translation>
 <translation id="3234355010754616171">Uusi yksityisvälilehti</translation>
 <translation id="3237087289225714896">Vakioesilataus:</translation>
-<translation id="3377025655491224618">Yksityisvälilehti</translation>
+<translation id="3478414204555961127">Lukunäkymä</translation>
 <translation id="3504699618187058974">Niputa välilehdet</translation>
 <translation id="3518985090088779359">Hyväksy ja jatka</translation>
 <translation id="3571177741182643350">Ei-luetut artikkelit – Saatavilla verkotta:</translation>
@@ -34,6 +43,7 @@
 <translation id="3719826155360621982">Kotisivu</translation>
 <translation id="3738139272394829648">Etsi koskettamalla</translation>
 <translation id="385051799172605136">Takaisin</translation>
+<translation id="3987993985790029246">Kopioi linkki</translation>
 <translation id="399014816462153200">Luetut artikkelit:</translation>
 <translation id="4121750346708795461">Käyttämällä sovellusta hyväksyt Vivaldin <ph name="BEGIN_LINK1" />loppukäyttäjän lisenssisopimuksen<ph name="END_LINK1" /> ja <ph name="BEGIN_LINK2" />tietosuojakäytännön<ph name="END_LINK2" />.</translation>
 <translation id="4137746084635924146">Laitteen nykyinen kieli</translation>
@@ -41,10 +51,13 @@
 <translation id="4195643157523330669">Avaa uuteen välilehteen</translation>
 <translation id="4225895483398857530">Työkalurivin pikakuvake</translation>
 <translation id="4243710787042215766">Avaa yksityisvälilehdessä</translation>
+<translation id="4269820728363426813">Kopioi linkin osoite</translation>
 <translation id="4291407919474070700"><ph name="BEGIN_LINK" />Aseta Android-asetuksista näytön lukitus käyttöön<ph name="END_LINK" /></translation>
 <translation id="4304713468139749426">Salasanahallinta</translation>
 <translation id="451872707440238414">Hae kirjanmerkeistä</translation>
 <translation id="4526803704855831732">Yksityisvälilehdet</translation>
+<translation id="4532845899244822526">Valitse kansio</translation>
+<translation id="4699172675775169585">Välimuistin kuvat ja tiedostot</translation>
 <translation id="4719086422742491124">Lue lisää sivuston aiheista jättämättä sivua. Etsi sanoja valitsemalla niitä sivulta yksi tai useampia.
 
 Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushakukone.</translation>
@@ -55,20 +68,34 @@ Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin
 <translation id="49576331685473090">Sisällönesto</translation>
 <translation id="5079259810715830221">Google-sivuston pyytäessä sivujensa linkkien yksityistä esilatausta Vivaldi salaa ja esilataa sivut evästeittä Googlen palvelimilla. Näin henkilöytesi piilotetaan esiladatulta sivustolta.</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> – tallennustila</translation>
+<translation id="5144385790872094440">Jotkin avaamistasi sivuista on esiladattu. Sivut on saatettu esiladata Googlen palvelimien kautta, mikäli ne on avattu Googlen sivustojen tai sovellusten kautta.</translation>
 <translation id="5186185447130319458">Yksityinen</translation>
+<translation id="5206168361184759344">{FILE_COUNT, plural,
+=1 {Ladataan tiedostoa…}
+other {Ladataan # tiedostoa…}}</translation>
 <translation id="5233638681132016545">Uusi välilehti</translation>
 <translation id="5375131951310889874">Lue lisää sivuston aiheista jättämättä sivua. Kosketushaku on ominaisuus, joka on käytettävissä vain kun Google on Vivaldin oletushakukone. Se lähettää sanan konteksteineen Google-hakuun ja palauttaa määritelmiä, kuvia, hakutuloksia ja muuta tietoa.
 
 Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua pyyhkäisemällä paneeli ylös asti ja napauttamalla hakukenttää.</translation>
+<translation id="543338862236136125">Vahda salasana</translation>
 <translation id="572328651809341494">Viimeaikaiset välilehdet</translation>
+<translation id="5833984609253377421">Jaa linkki</translation>
 <translation id="6150320133806434356">Kirjanmerkki tallennettu</translation>
+<translation id="6193448654517602979">Valitse välilehtiä</translation>
 <translation id="6336451774241870485">Uusi yksityisvälilehti</translation>
 <translation id="6337323516034698937">Lähettääksesi välilehden laitteelta toiselle kirjaa molemmat laitteeet Vivaldin synkronointipalveluun. Varmista, että syötät tarvittaessa salasanan.</translation>
+<translation id="6341580099087024258">Kysy tiedostojen tallennussijaintia</translation>
 <translation id="6404511346730675251">Muokkaa kirjanmerkkiä</translation>
+<translation id="650224091954855786">{FILE_COUNT, plural,
+=1 {Tiedosto on ladattu}
+other {# tiedostoa on ladattu}}</translation>
 <translation id="6585139692466700358">Tarjoa sivujen käännöstä eri kielille Vivaldin käännöspalvelulla</translation>
 <translation id="6588043302623806746">Käytä salattua DNS:ää</translation>
 <translation id="6593061639179217415">Työpöytäsivusto</translation>
 <translation id="6610147964972079463">Sulje yksityisvälilehdet</translation>
+<translation id="6627583120233659107">Muutakansiota</translation>
+<translation id="6865313869410766144">Automaattitäytön lomaketiedot</translation>
+<translation id="6909589135458168665">Esilataa sivut</translation>
 <translation id="7029995644714925509">Sivuston pyytäessä sivujensa linkkien yksityistä esilatausta Vivaldi salaa ja esilataa sivut evästeittä Googlen palvelimilla. Näin henkilöytesi piilotetaan esiladatulta sivustolta.</translation>
 <translation id="706339621163631076">Selaimen tietosuojakäytäntö</translation>
 <translation id="732145680195464316">Kirjanmerkki tallennettu ohjelmalle <ph name="PRODUCT_NAME" /></translation>
@@ -79,10 +106,13 @@ Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua py
 <translation id="7456774706094330779">Laajennettu esilataus</translation>
 <translation id="7465104139234185284">Sulje kaikki yksityisvälilehdet</translation>
 <translation id="7481312909269577407">Eteenpäin</translation>
+<translation id="7764225426217299476">Lisää osoite</translation>
 <translation id="7968014550143838305">Lisätty lukulistalle</translation>
 <translation id="804786196054284061">Vivaldin käyttöehdot</translation>
 <translation id="8062594758852531064">Laajennettu esilataus:</translation>
+<translation id="8073388330009372546">Avaa kuva uuteen välilehteen</translation>
 <translation id="8127542551745560481">Muokkaa kotisivua</translation>
+<translation id="8266862848225348053">Lataussijainti</translation>
 <translation id="8348430946834215779">Käytä HTTPS:ää aina kun mahdollista ja varoita ladattaessa sivuja, jotka eivät tue sitä</translation>
 <translation id="8560602726703398413">Etsi lukulistasi kirjanmerkeistä</translation>
 <translation id="85991616550051997">Avaa kotisivu</translation>
@@ -92,5 +122,4 @@ Hakusanoja voi mukauttaa valitsemalla ne painamalla pitkään. Säädä hakua py
 <translation id="9080642952018487277">Siirry yksityistilaan</translation>
 <translation id="930124987204876019">Poista historia, evästeet, sivustotiedot, välimuisti…</translation>
 <translation id="961856697154696964">Poista selaustiedot</translation>
-<translation id="96681097142096641">Näytetäänkö yksinkertaistettu sivu?</translation>
 </translationbundle>

@@ -141,6 +141,14 @@ const opflags_t nasm_reg_flags[] = {
     FPUREG,         /* st5   */
     FPUREG,         /* st6   */
     FPUREG,         /* st7   */
+    TMMREG,         /* tmm0  */
+    TMMREG,         /* tmm1  */
+    TMMREG,         /* tmm2  */
+    TMMREG,         /* tmm3  */
+    TMMREG,         /* tmm4  */
+    TMMREG,         /* tmm5  */
+    TMMREG,         /* tmm6  */
+    TMMREG,         /* tmm7  */
     REG_TREG,       /* tr0   */
     REG_TREG,       /* tr1   */
     REG_TREG,       /* tr2   */

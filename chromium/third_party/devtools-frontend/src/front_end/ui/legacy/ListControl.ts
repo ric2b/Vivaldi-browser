@@ -1,6 +1,7 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import type * as Common from '../../core/common/common.js';
 import * as Platform from '../../core/platform/platform.js';
@@ -312,8 +313,7 @@ export class ListControl<T> {
     }
   }
 
-  private onKeyDown(ev: Event): void {
-    const event = (ev as KeyboardEvent);
+  private onKeyDown(event: KeyboardEvent): void {
     let selected = false;
     switch (event.key) {
       case 'ArrowUp':

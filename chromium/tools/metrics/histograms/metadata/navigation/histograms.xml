@@ -193,7 +193,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.AllSites.HistoryNavigationOutcome"
-    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2025-07-27">
+    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2025-09-28">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -207,7 +207,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BackForwardCache.AllSites.HistoryNavigationOutcome.BlocklistedFeature"
-    enum="WebSchedulerTrackedFeature" expires_after="2025-08-10">
+    enum="WebSchedulerTrackedFeature" expires_after="2025-10-12">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -261,7 +261,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BackForwardCache.AllSites.HistoryNavigationOutcome.NotRestoredReason"
-    enum="BackForwardCacheNotRestoredReason" expires_after="2025-08-10">
+    enum="BackForwardCacheNotRestoredReason" expires_after="2025-10-12">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -293,7 +293,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.Eviction.Renderer"
-    enum="BackForwardCacheRendererEvictionReason" expires_after="2025-07-26">
+    enum="BackForwardCacheRendererEvictionReason" expires_after="2025-09-28">
   <owner>rakina@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -314,7 +314,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BackForwardCache.Experimental.UnexpectedIPCMessagePostedToCachedFrame.MethodHash"
-    enum="MojoInterfaceName" expires_after="2025-09-14">
+    enum="MojoInterfaceName" expires_after="2025-11-16">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -345,7 +345,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavHasPotentialMatch" enum="Boolean"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>rakina@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -357,7 +357,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome"
-    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2025-07-27">
+    enum="BackForwardCacheHistoryNavigationOutcome" expires_after="2025-09-28">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -371,7 +371,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome.BlocklistedFeature"
-    enum="WebSchedulerTrackedFeature" expires_after="2025-08-10">
+    enum="WebSchedulerTrackedFeature" expires_after="2025-10-12">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -389,7 +389,7 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="BackForwardCache.HistoryNavigationOutcome.BrowsingInstanceNotSwappedReason"
     enum="BackForwardCacheBrowsingInstanceNotSwappedReason"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -407,7 +407,7 @@ chromium-metrics-reviews@google.com.
 <histogram
     name="BackForwardCache.HistoryNavigationOutcome.DisabledForRenderFrameHostReason2"
     enum="BackForwardCacheDisabledForRenderFrameHostReason2"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -426,7 +426,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="BackForwardCache.HistoryNavigationOutcome.DisallowActivationReason"
-    enum="InactiveFrameDisallowActivationReason" expires_after="2025-09-07">
+    enum="InactiveFrameDisallowActivationReason" expires_after="2025-11-09">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -465,7 +465,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.HistoryNavigationOutcome.NotRestoredReason"
-    enum="BackForwardCacheNotRestoredReason" expires_after="2025-07-27">
+    enum="BackForwardCacheNotRestoredReason" expires_after="2025-09-28">
   <owner>fergal@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -611,7 +611,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="BackForwardCache.Restore.NavigationToFirstPaint" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>sreejakshetty@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -687,7 +687,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.AutomaticBeaconOutcome"
-    enum="AutomaticBeaconOutcome" expires_after="2025-07-27">
+    enum="AutomaticBeaconOutcome" expires_after="2025-09-28">
   <owner>lbrady@google.com</owner>
   <owner>shivanisha@chromium.org</owner>
   <owner>chrome-fenced-frames-core@google.com</owner>
@@ -738,7 +738,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.BrowserInitiatedSessionHistoryCount"
-    enum="HistoryNavType" expires_after="2025-08-24">
+    enum="HistoryNavType" expires_after="2025-10-26">
   <owner>liuwilliam@chromium.org</owner>
   <owner>chrome-seamless-core@google.com</owner>
   <summary>
@@ -752,7 +752,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Navigation.BrowserMappedUrnUuidInIframeOrFencedFrame"
     enum="NavigationBrowserMappedUrnUuidInIframeOrFencedFrame"
-    expires_after="2025-09-09">
+    expires_after="2025-11-09">
   <owner>xiaochenzh@chromium.org</owner>
   <owner>shivanisha@chromium.org</owner>
   <summary>
@@ -780,7 +780,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.CommitNavigationWithParams.Time.IsStandardLoadType.IsHTTPOrHTTPS"
-    units="microseconds" expires_after="2025-09-14">
+    units="microseconds" expires_after="2025-11-16">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -793,7 +793,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.CommitRenderFrame" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -804,7 +804,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.CommitRenderFrame.OutermostMainFrame.NewNavigation.IsHTTPOrHTTPS"
-    units="ms" expires_after="2025-09-14">
+    units="ms" expires_after="2025-11-16">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -816,7 +816,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.CommitRenderFrame.{FrameType}" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -827,7 +827,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.CompositorCreationTo{Stage}2" units="ms"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>rakina@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -855,7 +855,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.CreateSpeculativeRFH" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -876,8 +876,21 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Navigation.DelayedCurrentProcessInitByLaunchingSpareFirst"
+    enum="Boolean" expires_after="2025-12-31">
+  <owner>gjc@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Records whether a new spare renderer process is launched when the renderer
+    process for the SiteInstance of the current navigation is not ready. The UMA
+    is recorded each time `RenderFrameHostManager::GetSiteInstanceForNavigation`
+    is called. The UMA records true only if the spare renderer process is
+    initialized before the destination process's renderer process.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.DidCommitSameDocumentNavigation.Duration"
-    units="ms" expires_after="2025-09-14">
+    units="ms" expires_after="2025-11-16">
   <owner>peilinwang@google.com</owner>
   <owner>woa-performance-bugs+jank@google.com</owner>
   <summary>
@@ -888,7 +901,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.DuringGesture.NavStarted{NavigationMode}"
-    enum="Boolean" expires_after="2025-09-07">
+    enum="Boolean" expires_after="2025-11-09">
   <owner>lazzzis@google.com</owner>
   <owner>liuwilliam@chromium.org</owner>
   <owner>chrome-seamless-core@google.com</owner>
@@ -1019,7 +1032,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.FencedFrameAutomaticBeaconEventType"
-    enum="FencedFrameAutomaticBeaconEventType" expires_after="2025-08-10">
+    enum="FencedFrameAutomaticBeaconEventType" expires_after="2025-10-12">
   <owner>lbrady@google.com</owner>
   <owner>shivanisha@chromium.org</owner>
   <owner>chrome-fenced-frames-core@google.com</owner>
@@ -1030,7 +1043,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.FencedFrameBeaconReportingCountCrossOrigin"
-    units="beacons" expires_after="2025-07-27">
+    units="beacons" expires_after="2025-09-28">
   <owner>lbrady@google.com</owner>
   <owner>shivanisha@chromium.org</owner>
   <owner>chrome-fenced-frames-core@google.com</owner>
@@ -1073,7 +1086,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.GestureTransition.AnimationAbortReason"
-    enum="AnimationAbortReason" expires_after="M140">
+    enum="AnimationAbortReason" expires_after="2025-10-05">
   <owner>liuwilliam@google.com</owner>
   <owner>baranerf@google.com</owner>
   <owner>chrome-seamless-core@google.com</owner>
@@ -1084,7 +1097,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.GestureTransition.CacheHitOrMissReason"
-    enum="NavigationTransitionCacheHitOrMissReason" expires_after="M140">
+    enum="NavigationTransitionCacheHitOrMissReason" expires_after="2025-10-05">
   <owner>liuwilliam@google.com</owner>
   <owner>baranerf@google.com</owner>
   <owner>chrome-seamless-core@google.com</owner>
@@ -1096,7 +1109,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.GestureTransition.CompressionTime" units="ms"
-    expires_after="M140">
+    expires_after="2025-11-02">
   <owner>lizeb@chromium.org</owner>
   <owner>clank-performance-team@google.com</owner>
   <summary>
@@ -1108,7 +1121,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.GestureTransition.IgnoredInputCount.{Reason}.{Position}"
-    units="count" expires_after="M140">
+    units="count" expires_after="2025-10-05">
   <owner>liuwilliam@google.com</owner>
   <owner>baranerf@google.com</owner>
   <owner>chrome-seamless-core@google.com</owner>
@@ -1128,7 +1141,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.GestureTransition.ScreenshotCacheSize" units="MB"
-    expires_after="M140">
+    expires_after="2025-10-05">
   <owner>liuwilliam@google.com</owner>
   <owner>baranerf@google.com</owner>
   <owner>chrome-seamless-core@google.com</owner>
@@ -1162,7 +1175,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.GetFrameHostForNavigation" units="ms"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -1174,7 +1187,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.GetFrameHostForNavigationTime.InDidCreateNavigationRequest.IsHTTPOrHTTPS"
-    units="microseconds" expires_after="2025-09-14">
+    units="microseconds" expires_after="2025-11-16">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1250,8 +1263,20 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram
+    name="Navigation.IframeCreated.AdTracker.MaxScriptAncestrySizeReached"
+    enum="Boolean" expires_after="2025-10-28">
+  <owner>jkarlin@chromium.org</owner>
+  <owner>yaoxia@chromium.org</owner>
+  <owner>chrome-ads-histograms@google.com</owner>
+  <summary>
+    Records whether the maximum ad script ancestry length was reached when an
+    iframe was created.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.IsGuest" enum="NavigationIsGuest"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <owner>wjmaclean@chromium.org</owner>
@@ -1285,7 +1310,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.IsProcessBackgrounded2.{Timing}" enum="Boolean"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1310,29 +1335,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.IsSameSiteInstance"
-    enum="NavigationIsSameSiteInstance" expires_after="2025-09-07">
+    enum="NavigationIsSameSiteInstance" expires_after="2025-11-09">
   <owner>arthursonzogni@chromium.org</owner>
   <owner>clamy@chromium.org</owner>
   <owner>nasko@chromium.org</owner>
   <summary>
     Whether the navigation led to a change of SiteInstance or not.
-  </summary>
-</histogram>
-
-<histogram name="Navigation.LatencyAblation.ExcessWaitTime" units="ms"
-    expires_after="2023-08-08">
-  <owner>ryansturm@chromium.org</owner>
-  <owner>spelchat@chromium.org</owner>
-  <summary>
-    The time the user waits beyond what is configured for the latency ablation
-    study. The enabled arms of the latency ablation study prescribe an amount of
-    time to delay the navigation, and this histogram records the amount of time
-    that was waited beyond that prescription. Recorded upon resuming the
-    navigation after the ablation occurs. This ablation occurs for most
-    navigations, but does not occur for subframes, prerenders, fenced frames,
-    bf/restore style navigations, and client redirects. The experiment can be
-    configured to only affect default search (or only affect non default
-    search).
   </summary>
 </histogram>
 
@@ -1363,7 +1371,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrame.FromAdClick" enum="Boolean"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>yaoxia@chromium.org</owner>
   <owner>jkarlin@chromium.org</owner>
   <owner>chrome-ads-histograms@google.com</owner>
@@ -1389,7 +1397,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.MainFrame.NewNavigation.IgnoreRestore.IsHTTPOrHTTPS.{DurationFromTo}.Time2"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>chikamune@chromium.org</owner>
   <owner>yyanagisawa@chromium.org</owner>
   <owner>kouhei@chromium.org</owner>
@@ -1446,7 +1454,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrame.SiteEngagementLevel"
-    enum="SiteEngagementLevel" expires_after="2025-09-14">
+    enum="SiteEngagementLevel" expires_after="2025-11-16">
   <owner>meacer@chromium.org</owner>
   <owner>security-enamel@chromium.org</owner>
   <summary>
@@ -1456,7 +1464,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrame.ThirdPartyCookieBlockingEnabled"
-    enum="ThirdPartyCookieBlockState" expires_after="2025-09-14">
+    enum="ThirdPartyCookieBlockState" expires_after="2025-11-16">
   <owner>dullweber@chromium.org</owner>
   <owner>feuunk@chromium.org</owner>
   <summary>
@@ -1467,7 +1475,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrameHasRTLDomain2" enum="Boolean"
-    expires_after="2025-07-27">
+    expires_after="2026-04-07">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -1478,7 +1486,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrameHasRTLDomainDifferentPage2" enum="Boolean"
-    expires_after="2025-05-19">
+    expires_after="2026-04-07">
   <owner>cthomp@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
   <summary>
@@ -1491,7 +1499,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrameProfileType2" enum="BrowserProfileType"
-    expires_after="2025-08-17">
+    expires_after="2025-10-19">
   <owner>dullweber@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -1503,7 +1511,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrameProfileTypeDifferentPage2"
-    enum="BrowserProfileType" expires_after="2025-08-31">
+    enum="BrowserProfileType" expires_after="2025-11-02">
   <owner>dullweber@chromium.org</owner>
   <owner>chrome-privacy-core@google.com</owner>
   <summary>
@@ -1516,7 +1524,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.MainframeSameDocumentNavigationCommitToPresentFirstFrame"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>liuwilliam@chromium.org</owner>
   <owner>chrome-seamless-core@google.com</owner>
   <summary>
@@ -1571,7 +1579,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.MainFrameSchemeDifferentPageOTR2"
-    enum="NavigationScheme" expires_after="2025-09-14">
+    enum="NavigationScheme" expires_after="2025-11-16">
   <owner>estark@chromium.org</owner>
   <owner>elawrence@chromium.org</owner>
   <owner>trusty-transport@chromium.org</owner>
@@ -1595,7 +1603,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.OnBeforeUnloadOverheadTime" units="ms"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>clamy@chromium.org</owner>
   <owner>nasko@chromium.org</owner>
   <summary>
@@ -1608,7 +1616,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.OnBeforeUnloadOverheadTime.NoBeforeUnloadHandlerRegistered"
-    units="ms" expires_after="2025-08-01">
+    units="ms" expires_after="2025-10-05">
   <owner>hayato@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1620,7 +1628,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.OnBeforeUnloadTotalTime" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1632,7 +1640,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.OnGestureStart.NavigationInProgress{NavigationMode}"
-    enum="Boolean" expires_after="2025-08-24">
+    enum="Boolean" expires_after="2025-10-26">
   <owner>lazzzis@google.com</owner>
   <owner>liuwilliam@chromium.org</owner>
   <owner>chrome-seamless-core@google.com</owner>
@@ -1702,7 +1710,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.PendingCommit.Duration.{RegularOrMHTMLType}"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>dcheng@chromium.org</owner>
   <owner>rakina@chromium.org</owner>
   <summary>
@@ -1876,7 +1884,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.Prerender.NoVarySearchCommitDeferTime.{NVSTriggerType}"
-    units="ms" expires_after="2025-08-03">
+    units="ms" expires_after="2025-10-05">
   <owner>lingqi@chromium.org</owner>
   <owner>chrome-prerendering@chromium.org</owner>
   <summary>
@@ -1894,7 +1902,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.ProcessNavigationThrottlesTime.WillStartRequest.{FrameType}"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1906,7 +1914,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ProcessReuseOnCOOP.{ProcessReuseOnCOOPType}"
-    enum="Boolean" expires_after="2025-06-25">
+    enum="Boolean" expires_after="2025-10-12">
   <owner>taiyo@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1929,7 +1937,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.QueueTime.{Method}.{FrameType}" units="ms"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>cduvall@chromium.org</owner>
   <owner>yyanagisawa@chromium.org</owner>
   <summary>
@@ -1963,7 +1971,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RegisterNavigationThrottlesTime.{FrameType}"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -1987,7 +1995,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RendererCommitDelay.{FrameType}" units="ms"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -2002,7 +2010,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RendererCommitProcessWaitTime.{FrameType}"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -2018,7 +2026,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RendererCommitQueueTime.{FrameType}" units="ms"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>cduvall@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -2046,7 +2054,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.RendererRunLoopStartToFirstCommitNavigation2.{FrameType}"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>chikamune@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2059,7 +2067,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderFrameDelete" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2069,7 +2077,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderFrameHostConstructor" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2079,7 +2087,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderFrameHostDestructor" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2089,7 +2097,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderViewHostConstructor" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2099,7 +2107,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderViewHostDestructor" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2109,7 +2117,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderWidgetHostConstructor" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2119,7 +2127,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RenderWidgetHostDestructor" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2129,7 +2137,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.RequiresDedicatedProcess"
-    enum="NavigationRequiresDedicatedProcess" expires_after="2025-08-10">
+    enum="NavigationRequiresDedicatedProcess" expires_after="2025-10-12">
   <owner>alexmos@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
   <summary>
@@ -2152,7 +2160,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.SameDocumentNavigationWithScreenshot"
-    enum="Boolean" expires_after="2025-08-10">
+    enum="Boolean" expires_after="2025-10-12">
   <owner>khushalsagar@chromium.org</owner>
   <owner>liuwilliam@chromium.org</owner>
   <summary>
@@ -2307,7 +2315,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.StartToCommit{NavigationProcessType}" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>nasko@chromium.org</owner>
   <owner>csharrison@chromium.org</owner>
   <summary>
@@ -2353,7 +2361,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleCount" units="throttles"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2364,7 +2372,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleDeferredEvent"
-    enum="NavigationThrottleEvent" expires_after="2025-08-03">
+    enum="NavigationThrottleEvent" expires_after="2025-10-05">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2375,7 +2383,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleDeferTime.{Event}" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>cduvall@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -2390,7 +2398,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleEventDurationTime.{Event}" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2403,7 +2411,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleEventExecutionTime.{Event}" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2415,7 +2423,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleExecutionTime.{Event}" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>cduvall@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -2430,7 +2438,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleTotalDeferCount{Condition}"
-    units="throttles" expires_after="2025-08-03">
+    units="throttles" expires_after="2025-10-05">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2442,7 +2450,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.ThrottleTotalDeferTime{Condition}" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>toyoshim@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -2453,8 +2461,109 @@ chromium-metrics-reviews@google.com.
   <token key="Condition" variants="NavigationThrottleConditions"/>
 </histogram>
 
+<histogram name="Navigation.Timeline.IgnoredCorrectly.Duration" units="ms"
+    expires_after="2026-03-25">
+  <owner>alexmos@chromium.org</owner>
+  <owner>creis@chromium.org</owner>
+  <summary>
+    Reports how much time from beforeunload phases 1 and 2 was correctly
+    excluded from the Navigation.Timeline.TotalExcludingBeforeUnload.Duration
+    metric, so that beforeunload handlers and dialogs would not be counted as
+    part of the navigation.
+
+    Recorded at the point when a navigation finishes committing, i.e. finishes
+    processing the DidCommitNavigation message. A corresponding event is also
+    emitted for tracing.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.Timeline.IgnoredIncorrectly.Duration" units="ms"
+    expires_after="2026-03-25">
+  <owner>alexmos@chromium.org</owner>
+  <owner>creis@chromium.org</owner>
+  <summary>
+    Reports how much time navigation guardrail metrics like FCP are incorrectly
+    excluding from the navigation duration, due to collecting start times after
+    beforeunload phase 1 finishes and possibly adjusting them to after
+    beforeunload phase 2 finishes. This excluded time represents actual time the
+    user is waiting that is not accounted for in current metrics.
+
+    Recorded at the point when a navigation finishes committing, i.e. finishes
+    processing the DidCommitNavigation message. A corresponding event is also
+    emitted for tracing.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration"
+    units="ms" expires_after="2026-03-25">
+  <owner>alexmos@chromium.org</owner>
+  <owner>creis@chromium.org</owner>
+  <summary>
+    Reports how much time navigation guardrail metrics like FCP are incorrectly
+    excluding from the navigation duration, due to collecting start times after
+    beforeunload phase 1 finishes and possibly adjusting them to after
+    beforeunload phase 2 finishes. This excluded time represents actual time the
+    user is waiting that is not accounted for in current metrics.
+
+    This metric is recorded each time a cross-document navigation finishes in a
+    primary main frame, i.e. finishes processing the DidCommitNavigation
+    message. See also Navigation.Timeline.IgnoredIncorrectly.Duration for all
+    navigations, including subframes and same-document cases.
+  </summary>
+</histogram>
+
+<histogram
+    name="Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Percentage"
+    units="%" expires_after="2026-03-25">
+  <owner>creis@chromium.org</owner>
+  <owner>alexmos@chromium.org</owner>
+  <summary>
+    Records the percentage of navigation time that was incorrectly ignored due
+    to setting the start time later than it should be. See also
+    Navigation.Timeline.IgnoredIncorrectly.MainFrameOnly.Duration.
+
+    This metric is recorded each time a cross-document navigation finishes in a
+    primary main frame, i.e. finishes processing the DidCommitNavigation
+    message. See also Navigation.Timeline.IgnoredIncorrectly.Percentage for all
+    navigations, including subframes and same-document cases.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.Timeline.IgnoredIncorrectly.Percentage" units="%"
+    expires_after="2026-03-25">
+  <owner>creis@chromium.org</owner>
+  <owner>alexmos@chromium.org</owner>
+  <summary>
+    Records the percentage of navigation time that was incorrectly ignored due
+    to setting the start time later than it should be. See also
+    Navigation.Timeline.IgnoredIncorrectly.Duration.
+
+    Recorded at the point when a navigation finishes committing, i.e. finishes
+    processing the DidCommitNavigation message. A corresponding event is also
+    emitted for tracing.
+  </summary>
+</histogram>
+
+<histogram
+    name="Navigation.Timeline.TotalExcludingBeforeUnload.MainFrameOnly.Duration"
+    units="ms" expires_after="2026-03-25">
+  <owner>creis@chromium.org</owner>
+  <owner>alexmos@chromium.org</owner>
+  <summary>
+    Measures the duration between when the navigation starts to when the browser
+    process finishes processing the DidCommitNavigation IPC, at which point the
+    navigation is committed. Excludes the time spent running any beforeunload
+    handlers/dialogs.
+
+    This metric is recorded each time a cross-document navigation finishes in a
+    primary main frame, i.e. finishes processing the DidCommitNavigation
+    message. See also Navigation.Timeline.TotalExcludingBeforeUnload.Duration
+    for all navigations, including subframes and same-document cases.
+  </summary>
+</histogram>
+
 <histogram name="Navigation.Timeline.{DurationFromTo}.Duration" units="ms"
-    expires_after="2026-01-15">
+    expires_after="2026-03-25">
   <owner>alexmos@chromium.org</owner>
   <owner>creis@chromium.org</owner>
   <summary>
@@ -2464,9 +2573,17 @@ chromium-metrics-reviews@google.com.
     tracing.
   </summary>
   <token key="DurationFromTo">
-    <variant name="BeforeUnloadToBeginNavigation"
-        summary="when beforeunload handler processing is started to when
-                 beforeunload handler processing is finished and
+    <variant name="BeforeUnloadPhase1"
+        summary="the start and end of beforeunload phase 1 in the initiating
+                 renderer process, if that phase runs in a given navigation"/>
+    <variant name="BeforeUnloadPhase1ToNavigationRequestCreation"
+        summary="when beforeunload phase 1 is finished to when the
+                 NavigationRequest is created"/>
+    <variant name="BeforeUnloadPhase2"
+        summary="the start and end of beforeunload phase 2 in the browser
+                 process, if that phase runs in a given navigation"/>
+    <variant name="BeforeUnloadPhase2ToBeginNavigation"
+        summary="when beforeunload phase 2 is finished to when
                  NavigationRequest::BeginNavigation() is called"/>
     <variant name="BeginNavigationToCommit"
         summary="when NavigationRequest::BeginNavigation() is called to start
@@ -2497,10 +2614,10 @@ chromium-metrics-reviews@google.com.
     <variant name="LoaderStartToReceiveResponse"
         summary="when the NavigationURLLoader starts to when
                  NavigationRequest::OnResponseStarted() is called"/>
-    <variant name="NavigationRequestToBeforeUnload"
+    <variant name="NavigationRequestToBeforeUnloadPhase2"
         summary="when the NavigationRequest is created to when beforeunload
-                 handler processing is started. Includes time to pick a
-                 target RenderFrameHost, SiteInstance, and process"/>
+                 phase 2 is started in the browser process. Includes time to
+                 pick a target RenderFrameHost, SiteInstance, and process"/>
     <variant name="NavigationRequestToBeginNavigation"
         summary="when the NavigationRequest is created to when
                  NavigationRequest::BeginNavigation() is called. Logged only
@@ -2519,9 +2636,15 @@ chromium-metrics-reviews@google.com.
     <variant name="RendererCommitToDidCommit"
         summary="when the renderer process receives a CommitNavigation IPC to
                  when the renderer process sends a DidCommitNavigation reply."/>
+    <variant name="StartToBeforeUnloadPhase1"
+        summary="when the navigation starts, which could be in the renderer
+                 process, to when beforeunload phase 1 starts in that process"/>
     <variant name="StartToNavigationRequestCreation"
         summary="when the navigation starts, which could be in the renderer
                  process, to when the NavigationRequest is created"/>
+    <variant name="StartToSyncRendererCommit"
+        summary="when the navigation starts in the renderer process, to when
+                 the renderer process begins a synchronous renderer commit"/>
     <variant name="Total"
         summary="when the navigation starts to when the browser process
                  finishes processing the DidCommitNavigation IPC, at which
@@ -2536,7 +2659,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.TimeToActivatePrerender{PreloadingTriggerType}"
-    units="ms" expires_after="2025-09-14">
+    units="ms" expires_after="2025-11-16">
   <owner>nhiroki@chromium.org</owner>
   <owner>sreejakshetty@chromium.org</owner>
   <owner>chrome-prerendering@chromium.org</owner>
@@ -2551,7 +2674,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.TimeToReadyToCommit2{NavigationProcessType}"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>clamy@chromium.org</owner>
   <owner>nasko@chromium.org</owner>
   <summary>
@@ -2567,7 +2690,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.TpcdMitigations.MetadataCohortDistribution"
-    enum="TpcdMetadataCohort" expires_after="2025-09-14">
+    enum="TpcdMetadataCohort" expires_after="2025-11-16">
   <owner>njeunje@chromium.org</owner>
   <owner>src/chrome/browser/tpcd/OWNERS</owner>
   <summary>
@@ -2595,7 +2718,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Navigation.Unload" units="ms" expires_after="2025-08-31">
+<histogram name="Navigation.Unload" units="ms" expires_after="2025-11-02">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2629,6 +2752,19 @@ chromium-metrics-reviews@google.com.
 
     Note: The metrics is reported from all clients. Some of clients may not have
     high resolution timer that can send metrics with microseconds precision.
+  </summary>
+</histogram>
+
+<histogram name="Navigation.URLLoader.OnAcceptCHFrameReceived.ReturnLocation"
+    enum="OnAcceptCHFrameReceivedReturnLocation" expires_after="2025-09-27">
+  <owner>yyanagisawa@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Record the code location where the Accept-CH receiver function in
+    NavigationURLLoader executed calback (i.e. returning from the mojo IPC). We
+    aim to migrate some functionality in the OnAcceptCHFrameReceived to the
+    caller, and want to estimate benefits of the migration. Refer to
+    NavigationURLLoaderImpl::OnAcceptCHFrameReceived() for details.
   </summary>
 </histogram>
 
@@ -2670,7 +2806,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.{InitiatorType}.WastedSpeculativeRFH.CrossOriginIsolationDiffers"
-    enum="Boolean" expires_after="2025-08-10">
+    enum="Boolean" expires_after="2025-10-12">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2708,7 +2844,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.{InitiatorType}.WastedSpeculativeRFH.ReplacementRFHCreatedNewProcess"
-    enum="Boolean" expires_after="2025-08-10">
+    enum="Boolean" expires_after="2025-10-12">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2728,7 +2864,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Navigation.{InitiatorType}.WastedSpeculativeRFH.WastedRFHLikelyCreatedNewProcess"
-    enum="Boolean" expires_after="2025-08-10">
+    enum="Boolean" expires_after="2025-10-12">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2747,7 +2883,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.{InitiatorType}.WastedSpeculativeRFHCase"
-    enum="WastedSpeculativeRFHCase" expires_after="2025-08-10">
+    enum="WastedSpeculativeRFHCase" expires_after="2025-10-12">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2763,7 +2899,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.{Stage}.{FrameType}" units="ms"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>cduvall@chromium.org</owner>
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
@@ -2801,7 +2937,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation.{TracedMethod}" units="ms"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-security-architecture@google.com</owner>
   <summary>
@@ -2811,8 +2947,55 @@ chromium-metrics-reviews@google.com.
   <token key="TracedMethod" variants="TracedMethod"/>
 </histogram>
 
+<histogram
+    name="NavigationPredictor.SearchEnginePreconnector.ConsecutiveFailures"
+    units="Consecutive failures" expires_after="2025-09-30">
+  <owner>suzukikeita@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The number of preconnect failures that happened before a successful
+    connection. This is recorded when the `SearchEnginePreconnector` detects a
+    connection close of a &quot;long&quot; session (i.e. was not considered as
+    short per comparison with the threshold).
+  </summary>
+</histogram>
+
+<histogram
+    name="NavigationPredictor.SearchEnginePreconnector.PreconnectAttemptInterval"
+    units="ms" expires_after="2025-09-30">
+  <owner>suzukikeita@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The duration between successive preconnect attempts made by the
+    `SearchEnginePreconnector`. This is recorded when receiving the
+    preconnect-emitting event.
+  </summary>
+</histogram>
+
+<histogram name="NavigationPredictor.SearchEnginePreconnector.PreconnectDelay"
+    units="ms" expires_after="2025-09-30">
+  <owner>suzukikeita@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The duration `SearchEnginePreconnector` waits until running the next
+    preconnect attempt from the timing when preconnect-emitting event has been
+    issued. This is recorded when receiving the preconnect-emitting event and
+    when the delay has been calculated.
+  </summary>
+</histogram>
+
+<histogram name="NavigationPredictor.SearchEnginePreconnector.TriggerEvent"
+    enum="PreconnectTriggerEvent" expires_after="2025-09-30">
+  <owner>suzukikeita@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    The event which triggered a preconnect. This is recorded when each event is
+    received by the `SearchEnginePreconnector`.
+  </summary>
+</histogram>
+
 <histogram name="NavigationSuggestion.Event2" enum="NavigationSuggestionEvent"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>meacer@chromium.org</owner>
   <owner>chrome-secure-web-and-net@chromium.org</owner>
   <summary>
@@ -2829,7 +3012,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="NavigationSuggestion.Event2.Incognito"
-    enum="NavigationSuggestionEvent" expires_after="2025-08-10">
+    enum="NavigationSuggestionEvent" expires_after="2025-10-12">
   <owner>meacer@chromium.org</owner>
   <owner>chrome-secure-web-and-net@chromium.org</owner>
   <summary>
@@ -2900,7 +3083,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation{Initiator}.DuplicateNavIsUnderThreshold"
-    enum="Boolean" expires_after="2025-08-03">
+    enum="Boolean" expires_after="2025-10-05">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-navigation@google.com</owner>
   <summary>
@@ -2917,7 +3100,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation{Initiator}.DuplicateNavStartTimeDiff" units="ms"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>rakina@chromium.org</owner>
   <owner>bfcache-dev@chromium.org</owner>
   <summary>
@@ -2933,7 +3116,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Navigation{Initiator}.IsDuplicateWithoutThresholdCheck"
-    enum="Boolean" expires_after="2025-07-27">
+    enum="Boolean" expires_after="2025-09-28">
   <owner>rakina@chromium.org</owner>
   <owner>chrome-navigation@google.com</owner>
   <summary>
@@ -2944,6 +3127,20 @@ chromium-metrics-reviews@google.com.
 
     Logged when the new navigation is triggered and about to take the place of
     the old navigation.
+  </summary>
+  <token key="Initiator" variants="Initiator"/>
+</histogram>
+
+<histogram name="Navigation{Initiator}.ShouldDispatchBeforeUnload"
+    enum="Boolean" expires_after="2025-11-01">
+  <owner>chikamune@chromium.org</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Records whether a {Initiator} navigation required to use the beforeunload
+    logic or not. If using the beforeunload logic in the browser process to post
+    a task is necessary for legacy reasons, as described in the code comment of
+    RenderFrameHostImpl::SendBeforeUnload(), true will be recorded. This is
+    recorded on each {Initiator} navigation.
   </summary>
   <token key="Initiator" variants="Initiator"/>
 </histogram>
@@ -2978,7 +3175,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Prerender.Experimental.ActivationHeadersMismatch{PreloadingTriggerType}"
-    enum="PrerenderActivationHeaderMismatchType" expires_after="2025-09-14">
+    enum="PrerenderActivationHeaderMismatchType" expires_after="2025-11-16">
   <owner>lingqi@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -3005,7 +3202,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Prerender.Experimental.ActivationIPCDelay{PreloadingTriggerType}"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>lingqi@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -3020,7 +3217,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Prerender.Experimental.ActivationNavigationParamsMatch{PreloadingTriggerType}"
-    enum="PrerenderActivationNavigationParamsMatch" expires_after="2025-08-24">
+    enum="PrerenderActivationNavigationParamsMatch" expires_after="2025-10-26">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -3070,7 +3267,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Prerender.Experimental.MatchableHostCountOnActivation"
-    units="count" expires_after="2025-08-31">
+    units="count" expires_after="2025-11-02">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -3080,26 +3277,8 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram
-    name="Prerender.Experimental.NewTabPage.TouchDuration.{ConversionResultType}"
-    units="ms" expires_after="2025-06-22">
-  <owner>robertlin@chromium.org</owner>
-  <owner>chrome-prerendering@google.com</owner>
-  <summary>
-    The metrics for preload NewTabPage to understand the distribution of touch
-    duration. It records touch duration time of a NewTabPage tile. And this
-    records both cases, the first being NotTaken if a navigation never happens,
-    the other being Taken when a NewTabPage is actually navigated per touch
-    event completion.
-  </summary>
-  <token key="ConversionResultType">
-    <variant name="NotTaken"/>
-    <variant name="Taken"/>
-  </token>
-</histogram>
-
 <histogram name="Prerender.Experimental.PredictionStatus.DefaultSearchEngine"
-    enum="PrerenderPredictionStatus" expires_after="2025-09-14">
+    enum="PrerenderPredictionStatus" expires_after="2025-11-16">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -3151,7 +3330,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Prerender.Experimental.PrerenderCancelledUnknownInterface{PreloadingTriggerType}"
-    enum="PrerenderCancelledUnknownInterface" expires_after="2025-09-14">
+    enum="PrerenderCancelledUnknownInterface" expires_after="2025-11-16">
   <owner>nhiroki@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>lingqi@chromium.org</owner>
@@ -3203,7 +3382,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Prerender.Experimental.PrerenderHostFinalStatus{PreloadingTriggerType}"
-    enum="PrerenderHostFinalStatus" expires_after="2025-09-14">
+    enum="PrerenderHostFinalStatus" expires_after="2025-11-16">
   <owner>nhiroki@chromium.org</owner>
   <owner>toyoshim@chromium.org</owner>
   <owner>lingqi@chromium.org</owner>
@@ -3289,7 +3468,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Prerender.Experimental.WaitingForHeadersFinishedReason{PreloadingTriggerType}"
-    enum="PrerenderWaitingForHeadersFinishedReason" expires_after="2025-08-14">
+    enum="PrerenderWaitingForHeadersFinishedReason" expires_after="2025-10-19">
   <owner>nhiroki@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>
@@ -3301,7 +3480,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Prerender.FinalStatus" enum="PrerenderFinalStatus"
-    expires_after="2025-07-13">
+    expires_after="2025-10-05">
   <owner>ryansturm@chromium.org</owner>
   <owner>tbansal@chromium.org</owner>
   <summary>
@@ -3310,7 +3489,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Prerender.IsPrerenderingSRPUrl.{PreloadingEmbedderType}"
-    enum="Boolean" expires_after="2025-09-14">
+    enum="Boolean" expires_after="2025-11-16">
   <owner>robertlin@chromium.org</owner>
   <owner>chrome-prerendering@google.com</owner>
   <summary>

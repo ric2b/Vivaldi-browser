@@ -48,6 +48,12 @@
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_error_types.h"
+
+namespace ui {
+struct AXTreeUpdate;
+class AXMode;
+}  // namespace ui
 
 namespace blink {
 
@@ -101,6 +107,7 @@ class BLINK_EXPORT WebDocument : public WebNode {
   bool IsHTMLDocument() const;
   bool IsXHTMLDocument() const;
   bool IsPluginDocument() const;
+  bool IsActive() const;
   WebURL BaseURL() const;
   ukm::SourceId GetUkmSourceId() const;
 
@@ -123,6 +130,7 @@ class BLINK_EXPORT WebDocument : public WebNode {
   WebString ContentAsTextForTesting() const;
   WebElementCollection All() const;
   std::vector<WebFormElement> Forms() const;
+  WebElement ScrollingElement();
 
   // Returns all form elements that have no shadow-tree including ancestor that
   // is also a form element. This includes form elements inside shadow trees.
@@ -188,6 +196,13 @@ class BLINK_EXPORT WebDocument : public WebNode {
   //
   // It is intended to be used in WebLinkPreviewTriggerer.
   void InitiatePreview(const WebURL& url);
+
+  void SnapshotAccessibilityTree(
+      size_t max_nodes,
+      base::TimeDelta timeout,
+      ui::AXTreeUpdate* response,
+      ui::AXMode mode,
+      std::set<ui::AXSerializationErrorFlag>* out_error);
 
 #if INSIDE_BLINK
   WebDocument(Document*);

@@ -739,9 +739,29 @@ MaybeError ValidateTextureDescriptor(
                     "The texture size (%s) or mipLevelCount (%u) is empty.", &descriptor->size,
                     descriptor->mipLevelCount);
 
-    DAWN_INVALID_IF(descriptor->dimension != wgpu::TextureDimension::e2D && format->isCompressed,
-                    "The dimension (%s) of a texture with a compressed format (%s) is not 2D.",
-                    descriptor->dimension, format->format);
+    if (format->isCompressed) {
+        DAWN_INVALID_IF(descriptor->dimension == wgpu::TextureDimension::e1D,
+                        "A texture with a compressed format (%s) does not support 1D.",
+                        format->format);
+
+        if (format->isBC) {
+            DAWN_INVALID_IF(
+                descriptor->dimension == wgpu::TextureDimension::e3D &&
+                    !device->HasFeature(Feature::TextureCompressionBCSliced3D),
+                "A texture with a BC compressed format (%s) only supports 3D if %s is enabled.",
+                format->format, wgpu::FeatureName::TextureCompressionBCSliced3D);
+        } else if (format->isASTC) {
+            DAWN_INVALID_IF(
+                descriptor->dimension == wgpu::TextureDimension::e3D &&
+                    !device->HasFeature(Feature::TextureCompressionASTCSliced3D),
+                "A texture with a ASTC compressed format (%s) only supports 3D if %s is enabled.",
+                format->format, wgpu::FeatureName::TextureCompressionASTCSliced3D);
+        } else {
+            DAWN_INVALID_IF(descriptor->dimension == wgpu::TextureDimension::e3D,
+                            "A texture with a compressed format (%s) does not support 3D.",
+                            format->format);
+        }
+    }
 
     // Depth/stencil formats are valid for 2D textures only. Metal has this limit. And D3D12
     // doesn't support depth/stencil formats on 3D textures.
@@ -1049,17 +1069,12 @@ Extent3D TextureBase::GetSize(Aspect aspect) const {
             auto planeSize = mBaseSize;
             switch (GetFormat().subSampling) {
                 case TextureSubsampling::e420:
-                    if (planeSize.width > 1) {
-                        planeSize.width >>= 1;
-                    }
-                    if (planeSize.height > 1) {
-                        planeSize.height >>= 1;
-                    }
+                    // Divide by 2, rounding odd dimensions up.
+                    planeSize.width = (planeSize.width + 1) >> 1;
+                    planeSize.height = (planeSize.height + 1) >> 1;
                     break;
                 case TextureSubsampling::e422:
-                    if (planeSize.width > 1) {
-                        planeSize.width >>= 1;
-                    }
+                    planeSize.width = (planeSize.width + 1) >> 1;
                     break;
                 case TextureSubsampling::e444:
                     break;
@@ -1341,7 +1356,7 @@ TextureViewBase* TextureBase::APICreateErrorView(const TextureViewDescriptor* de
 }
 
 bool TextureBase::IsImplicitMSAARenderTextureViewSupported() const {
-    return (GetUsage() & wgpu::TextureUsage::TextureBinding) != 0;
+    return GetUsage() & wgpu::TextureUsage::TextureBinding;
 }
 
 void TextureBase::SetSharedResourceMemoryContentsForTesting(
@@ -1366,7 +1381,7 @@ uint64_t TextureBase::ComputeEstimatedByteSize() const {
     // Do not emit a non-zero size for textures that wrap external shared texture memory, or
     // textures used as transient (memoryless) attachments.
     if (GetSharedResourceMemoryContents() != nullptr ||
-        (GetInternalUsage() & wgpu::TextureUsage::TransientAttachment) != 0) {
+        (GetInternalUsage() & wgpu::TextureUsage::TransientAttachment)) {
         return 0;
     }
     uint64_t byteSize = 0;

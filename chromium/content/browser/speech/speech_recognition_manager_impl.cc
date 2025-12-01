@@ -15,7 +15,6 @@
 #include "base/location.h"
 #include "base/memory/ref_counted_delete_on_sequence.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "build/build_config.h"
@@ -233,8 +232,7 @@ int SpeechRecognitionManagerImpl::CreateSession(
     // Set the error if on-device speech recognition is not used but recognition
     // context is set.
     if (config.recognition_context.has_value()) {
-      error = media::mojom::SpeechRecognitionErrorCode::
-          kRecognitionContextNotSupported;
+      error = media::mojom::SpeechRecognitionErrorCode::kPhrasesNotSupported;
     }
   }
 
@@ -905,7 +903,7 @@ SpeechRecognitionManagerImpl::Session*
 SpeechRecognitionManagerImpl::GetSession(int session_id) const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   auto iter = sessions_.find(session_id);
-  CHECK(iter != sessions_.end(), base::NotFatalUntil::M130);
+  CHECK(iter != sessions_.end());
   return iter->second.get();
 }
 

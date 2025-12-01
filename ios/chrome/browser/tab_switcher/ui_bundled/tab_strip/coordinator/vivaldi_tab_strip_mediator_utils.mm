@@ -46,7 +46,7 @@ TabStripItemIdentifier* CreateGroupItemIdentifier(
     const TabGroup* group,
     WebStateList* web_state_list) {
   TabGroupItem* group_item =
-      [[TabGroupItem alloc] initWithTabGroup:group webStateList:web_state_list];
+      [[TabGroupItem alloc] initWithTabGroup:group];
   TabStripItemIdentifier* group_item_identifier =
       [TabStripItemIdentifier groupIdentifier:group_item];
   return group_item_identifier;

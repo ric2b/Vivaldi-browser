@@ -113,7 +113,7 @@ declare_args() {
   if (current_cpu == "arm64" || current_cpu == "x64" ||
       current_cpu == "mips64el" || current_cpu == "s390x" ||
       current_cpu == "ppc64" || current_cpu == "loong64" ||
-      current_cpu == "riscv64") {
+      current_cpu == "riscv64" || current_cpu == "arm64e") {
     angle_64bit_current_cpu = true
   } else if (current_cpu == "arm" || current_cpu == "x86" ||
              current_cpu == "mipsel" || current_cpu == "s390" ||
@@ -140,9 +140,7 @@ declare_args() {
   if (!is_android) {
     ndk_api_level_at_least_26 = false
   } else {
-    ndk_api_level_at_least_26 =
-        (!angle_64bit_current_cpu && android32_ndk_api_level >= 26) ||
-        (angle_64bit_current_cpu && android64_ndk_api_level >= 26)
+    ndk_api_level_at_least_26 = android_ndk_api_level >= 26
   }
 
   # Vulkan loader is statically linked on Mac. http://anglebug.com/40096682
@@ -252,6 +250,7 @@ declare_args() {
   angle_enable_trace = false
   angle_enable_trace_android_logcat = false
   angle_enable_trace_events = false
+  angle_enable_platform_trace_events = build_with_chromium
   angle_dump_pipeline_cache_graph = false
 
   angle_always_log_info = false

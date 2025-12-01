@@ -271,7 +271,7 @@ void OmniboxFieldTrial::GetDemotionsByType(
     omnibox::CheckObsoletePageClass(current_page_classification);
 
     if (current_page_classification == OmniboxEventProto::NTP_REALBOX) {
-      demotion_rule = "1:10,2:10,3:10,4:10,5:10,16:10,17:10,24:10";
+      demotion_rule = "1:10,2:10,3:10,4:10,5:10,16:10,17:10,24:10,33:0";
     }
   }
 
@@ -588,8 +588,8 @@ bool OmniboxFieldTrial::IsOnDeviceTailSuggestEnabled(
   // Do not launch for iOS since the feature is not supported in iOS yet.
 #if !BUILDFLAG(IS_IOS)
   if (IsEnglishLocale(locale)) {
-    return !base::FeatureList::IsEnabled(
-        omnibox::kDisableOnDeviceTailEnglishModel);
+    return base::FeatureList::IsEnabled(
+        omnibox::kOnDeviceTailEnableEnglishModel);
   }
 #endif  // !BUILDFLAG(IS_IOS)
 
@@ -699,6 +699,8 @@ const char OmniboxFieldTrial::kDynamicMaxAutocompleteUrlCutoffParam[] =
     "OmniboxDynamicMaxAutocompleteUrlCutoff";
 const char OmniboxFieldTrial::kDynamicMaxAutocompleteIncreasedLimitParam[] =
     "OmniboxDynamicMaxAutocompleteIncreasedLimit";
+const char OmniboxFieldTrial::kSuppressPsuggestBackfillWithMIAParam[] =
+    "SuppressPsuggestBackfillWithMIA";
 
 const char OmniboxFieldTrial::kOnDeviceHeadModelLocaleConstraint[] =
     "ForceModelLocaleConstraint";
@@ -740,13 +742,6 @@ const base::FeatureParam<int> kZeroSuggestCacheMaxSize(
     &omnibox::kZeroSuggestInMemoryCaching,
     "ZeroSuggestCacheMaxSize",
     5);
-
-// The relevance score for remote zero-suggest ranges from 550-1400. A default
-// value of 500 places local history zero-suggest below the remote zero-suggest.
-const base::FeatureParam<int> kLocalHistoryZeroSuggestRelevanceScore(
-    &omnibox::kAdjustLocalHistoryZeroSuggestRelevanceScore,
-    "LocalHistoryZeroSuggestRelevanceScore",
-    500);
 
 bool IsZeroSuggestPrefetchingEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kZeroSuggestPrefetching) ||
@@ -1123,9 +1118,6 @@ bool IsStarterPackIPHEnabled() {
   return base::FeatureList::IsEnabled(omnibox::kStarterPackIPH);
 }
 
-bool IsStarterPackPageEnabled() {
-  return base::FeatureList::IsEnabled(omnibox::kStarterPackPage);
-}
 // <- Site Search Starter Pack
 }  // namespace OmniboxFieldTrial
 

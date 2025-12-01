@@ -56,6 +56,8 @@ class CONTENT_EXPORT IdentityRequestAccount
       const std::string& name,
       const std::string& given_name,
       const GURL& picture,
+      const std::string& phone,
+      const std::string& username,
       std::vector<std::string> login_hints,
       std::vector<std::string> domain_hints,
       std::vector<std::string> labels,
@@ -79,6 +81,8 @@ class CONTENT_EXPORT IdentityRequestAccount
   std::string name;
   std::string given_name;
   GURL picture;
+  std::string phone;
+  std::string username;
   // This will be an empty image if fetching failed.
   gfx::Image decoded_picture;
 
@@ -98,6 +102,11 @@ class CONTENT_EXPORT IdentityRequestAccount
   // Whether this account is filtered out or not. An account may be filtered out
   // due to login hint, domain hint, or account label.
   bool is_filtered_out = false;
+
+  // Whether this account was retrieved from the Lightweight FedCM Accounts Push
+  // storage. If this is true, the request for the account picture will only
+  // check against cache, and will fail on cache miss.
+  bool from_accounts_push = false;
 
  private:
   friend class base::RefCounted<IdentityRequestAccount>;

@@ -547,6 +547,37 @@ int X509_PURPOSE_get_trust(const X509_PURPOSE *xp);
 // TODO(https://crbug.com/boringssl/695): Remove this.
 int DIST_POINT_set_dpname(DIST_POINT_NAME *dpn, X509_NAME *iname);
 
+// x509_marshal_name marshals |in| as a DER-encoded, X.509 Name and writes the
+// result to |out|. It returns one on success and zero on error.
+//
+// TODO(https://crbug.com/boringssl/407): This function should be const and
+// thread-safe but is currently neither in some cases, notably if |in| was
+// mutated.
+int x509_marshal_name(CBB *out, X509_NAME *in);
+
+// x509_marshal_algorithm marshals |in| as a DER-encoded, AlgorithmIdentifier
+// and writes the result to |out|. It returns one on success and zero on error.
+int x509_marshal_algorithm(CBB *out, const X509_ALGOR *in);
+
+
+// Standard extensions.
+
+extern const X509V3_EXT_METHOD v3_bcons, v3_nscert, v3_key_usage, v3_ext_ku;
+extern const X509V3_EXT_METHOD v3_info, v3_sinfo;
+extern const X509V3_EXT_METHOD v3_skey_id, v3_akey_id;
+extern const X509V3_EXT_METHOD v3_subject_alt_name, v3_issuer_alt_name,
+    v3_certificate_issuer;
+extern const X509V3_EXT_METHOD v3_netscape_base_url, v3_netscape_revocation_url,
+    v3_netscape_ca_revocation_url, v3_netscape_renewal_url,
+    v3_netscape_ca_policy_url, v3_netscape_ssl_server_name, v3_netscape_comment;
+extern const X509V3_EXT_METHOD v3_crl_num, v3_crl_reason, v3_crl_invdate;
+extern const X509V3_EXT_METHOD v3_delta_crl, v3_cpols, v3_crld, v3_freshest_crl;
+extern const X509V3_EXT_METHOD v3_ocsp_nocheck;
+extern const X509V3_EXT_METHOD v3_crl_hold;
+extern const X509V3_EXT_METHOD v3_policy_mappings, v3_policy_constraints;
+extern const X509V3_EXT_METHOD v3_name_constraints, v3_inhibit_anyp, v3_idp;
+extern const X509V3_EXT_METHOD v3_addr, v3_asid;
+
 
 #if defined(__cplusplus)
 }  // extern C

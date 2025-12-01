@@ -964,7 +964,7 @@
 </project>
 
 <project name="StructuredMetrics">
-  <owner>jongahn@chromium.org</owner>
+  <owner>troywang@google.com</owner>
   <owner>tby@chromium.org</owner>
   <id>per-project</id>
   <scope>device</scope>
@@ -989,8 +989,8 @@
   </event>
 </project>
 
-<project name="CrOSEvents" cros_events="true" targets="chromium,webui">
-  <owner>jongahn@chromium.org</owner>
+<project name="CrOSEvents" cros_events="true" targets="webui,chromium">
+  <owner>troywang@google.com</owner>
   <id>per-project</id>
   <scope>device</scope>
   <key-rotation>120</key-rotation>
@@ -1594,7 +1594,7 @@
     </metric>
     <metric name="Language" type="int">
       <summary>
-        The integer maps to the LocaleCodeISO639 enum indicating the language that
+        The integer maps to the LocaleCodeBCP47 enum indicating the language that
         CCA UI uses.
       </summary>
     </metric>
@@ -3168,6 +3168,13 @@
     <metric name="IsSignedIn" type="int">
       <summary>
         Whether the user is signed in or not.
+        Deprecated in favor of the Tags bitmask metric
+      </summary>
+    </metric>
+    <metric name="Tags" type="int">
+      <summary>
+        Various tags associated with the session, e.g. whether the user is signed in or not,
+        if certain enterprise policies are enabled, etc. Stored as a bitmask.
       </summary>
     </metric>
   </event>
@@ -3445,6 +3452,33 @@
     <metric name="StringValue" type="int">
       <summary>
         Hash of the setting value if it is a string.
+      </summary>
+    </metric>
+    <metric name="TimeSinceSessionStart" type="int">
+      <summary>
+        Time in milliseconds since DevTools sessions start.
+      </summary>
+    </metric>
+    <metric name="SessionId" type="int">
+      <summary>
+        Unique ID of this debugging session. If DevTools is opened on multiple tabs,
+        each instance would have a unique ID.
+      </summary>
+    </metric>
+  </event>
+
+  <event name="FunctionCall">
+    <summary>
+      Recorded when an instrumented function is called.
+    </summary>
+    <metric name="Name" type="int">
+      <summary>
+        Hash of the function name
+      </summary>
+    </metric>
+    <metric name="Context" type="int">
+      <summary>
+        Hash of the function's context.
       </summary>
     </metric>
     <metric name="TimeSinceSessionStart" type="int">

@@ -12,10 +12,11 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.CompositorViewHolder;
 import org.chromium.chrome.browser.compositor.layouts.phone.NewTabAnimationLayout;
 import org.chromium.chrome.browser.compositor.layouts.phone.SimpleAnimationLayout;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.hub.HubLayoutDependencyHolder;
+import org.chromium.chrome.browser.hub.NewTabAnimationUtils;
 import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab_ui.ActionConfirmationManager;
 import org.chromium.chrome.browser.tab_ui.TabContentManager;
 import org.chromium.chrome.browser.tab_ui.TabSwitcher;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
@@ -41,7 +42,6 @@ import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.multiwindow.MultiInstanceManager;
 import org.chromium.chrome.browser.share.ShareDelegate;
-import org.chromium.chrome.browser.tasks.tab_management.ActionConfirmationManager;
 import org.chromium.chrome.browser.toolbar.ToolbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.desktop_windowing.DesktopWindowStateManager;
@@ -110,10 +110,9 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             ViewStub tabHoverCardViewStub, // Vivaldi
             ViewStub tabHoverCardViewStubStack, // Vivaldi
             WindowAndroid windowAndroid, // Vivaldi
-            DesktopWindowStateManager desktopWindowStateManager,
-            ActionConfirmationManager actionConfirmationManager,
-            BrowserControlsStateProvider browserControlsStateProvider,
-            ModalDialogManager modalDialogManager, // Vivaldi
+            DesktopWindowStateManager desktopWindowStateManager, // Vivaldi
+            ActionConfirmationManager actionConfirmationManager, // Vivaldi
+            BrowserControlsStateProvider browserControlsStateProvider, // Vivaldi
             DataSharingTabManager dataSharingTabManager, // Vivaldi
             BottomSheetController bottomSheetController, // Vivaldi
             Supplier<ShareDelegate> shareDelegateSupplier) { //Vivaldi
@@ -140,7 +139,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                     i == 0 ? tabHoverCardViewStub : tabHoverCardViewStubStack,
                     tabStripTooltipViewStub, tabContentManagerSupplier,
                     browserControlsStateProvider, windowAndroid, toolbarManager,
-                    desktopWindowStateManager, actionConfirmationManager, modalDialogManager,
+                    desktopWindowStateManager, actionConfirmationManager,
                     dataSharingTabManager, bottomSheetController, shareDelegateSupplier));
             mTabStrips.get(i).setIsStackStrip(i != 0);
             addObserver(mTabStrips.get(i).getTabSwitcherObserver());
@@ -170,7 +169,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         Context context = mHost.getContext();
         LayoutRenderHost renderHost = mHost.getLayoutRenderHost();
 
-        if (ChromeFeatureList.sShowNewTabAnimations.isEnabled()) {
+        if (NewTabAnimationUtils.isNewTabAnimationEnabled()) {
             // TODO(crbug.com/40282469): Change from getContentContainer() as it is z-indexed behind
             // the NTP.
             mSimpleAnimationLayout =
@@ -178,6 +177,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
                             context,
                             this,
                             renderHost,
+                            this,
                             getContentContainer(),
                             mCompositorViewHolderSupplier,
                             mContentView,

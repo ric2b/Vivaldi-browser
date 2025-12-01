@@ -78,7 +78,7 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
       const gfx::ColorSpace& color_space,
       base::OnceCallback<void(const gpu::SyncToken&)> release_callback);
 
-  bool CurrentFrameKnownToBeOpaque() override;
+  bool IsOpaque() override;
   bool IsTextureBacked() const override { return true; }
 
   void Draw(cc::PaintCanvas*,
@@ -97,10 +97,10 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
                      GLenum dest_target,
                      GLuint dest_texture_id,
                      GLint dest_level,
-                     bool unpack_premultiply_alpha,
-                     bool unpack_flip_y,
+                     SkAlphaType dest_alpha_type,
+                     GrSurfaceOrigin destination_origin,
                      const gfx::Point& dest_point,
-                     const gfx::Rect& source_sub_rectangle) override;
+                     const gfx::Rect& src_rect) override;
 
   bool CopyToResourceProvider(CanvasResourceProvider* resource_provider,
                               const gfx::Rect& copy_rect) override;
@@ -124,20 +124,11 @@ class PLATFORM_EXPORT AcceleratedStaticBitmapImage final
   gpu::MailboxHolder GetMailboxHolder() const final;
   scoped_refptr<gpu::ClientSharedImage> GetSharedImage() const final;
   gpu::SyncToken GetSyncToken() const final;
-  bool IsOriginTopLeft() const final {
-    return shared_image_->surface_origin() == kTopLeft_GrSurfaceOrigin;
-  }
 
   PaintImage PaintImageForCurrentFrame() override;
 
   gfx::Size GetSize() const override { return size_; }
   SkAlphaType GetAlphaType() const override { return alpha_type_; }
-  SkColorType GetSkColorType() const override {
-    return viz::ToClosestSkColorType(format_);
-  }
-  sk_sp<SkColorSpace> GetSkColorSpace() const override {
-    return color_space_.ToSkColorSpace();
-  }
   gfx::ColorSpace GetColorSpace() const override { return color_space_; }
   viz::SharedImageFormat GetSharedImageFormat() const override {
     return format_;

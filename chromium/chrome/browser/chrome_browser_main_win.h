@@ -40,6 +40,7 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
   ~ChromeBrowserMainPartsWin() override;
 
   // BrowserParts overrides.
+  int PreEarlyInitialization() override;
   void ToolkitInitialized() override;
   void PreCreateMainMessageLoop() override;
   int PreCreateThreads() override;
@@ -79,6 +80,11 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
   // updates. Removes URL args, unnecessary switches, and the program name.
   static base::CommandLine GetRestartCommandLine(
       const base::CommandLine& command_line);
+
+  // Check if running elevated, and attempt to automatically de-elevate. Returns
+  // an exit code if browser should exit due to a restart, or std::nullopt if
+  // startup should continue.
+  std::optional<int> MaybeAutoDeElevate();
 
  private:
   void OnModuleEvent(const ModuleWatcher::ModuleEvent& event);

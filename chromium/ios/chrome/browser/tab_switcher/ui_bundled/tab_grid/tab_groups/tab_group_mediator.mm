@@ -23,6 +23,7 @@
 #import "ios/chrome/browser/drag_and_drop/model/drag_item_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
+#import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_avatar_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_face_pile_configuration.h"
 #import "ios/chrome/browser/share_kit/model/share_kit_service.h"
@@ -62,10 +63,13 @@ using ScopedDataSharingSyncObservation =
 using tab_groups::SharingState;
 
 namespace {
+
 // The preferred size in points for the avatar icons.
-constexpr CGFloat kFacePileAvatarSize = 24;
+constexpr CGFloat kLegacyFacePileAvatarSize = 24;
+constexpr CGFloat kFacePileAvatarSize = 26;
 // The preferred size in points for the avatar icon in the activity label.
 constexpr CGFloat kActivityLabelAvatarSize = 16;
+
 }  // namespace
 
 @interface TabGroupMediator () <DataSharingServiceObserverDelegate,
@@ -151,7 +155,8 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
     _tabGroup = tabGroup;
 
     [_groupConsumer setGroupTitle:tabGroup->GetTitle()];
-    [_groupConsumer setGroupColor:tabGroup->GetColor()];
+    [_groupConsumer setGroupColor:tab_groups::ColorForTabGroupColorId(
+                                      tabGroup->GetColor())];
 
     _messagingService = messagingService;
     if (_messagingService) {
@@ -393,9 +398,6 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
 
   if (!_shareKitService->IsSupported() ||
       !message.attribution.triggering_user.has_value()) {
-    // TODO(crbug.com/385090658): Now, `triggering_user` doesn't have a value in
-    // any cases (a tab is added / updated) and the label isn't created. Confirm
-    // why `triggering_user` is nil.
     return nil;
   }
 
@@ -420,29 +422,7 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
 - (void)closeItemWithIdentifier:(GridItemIdentifier*)identifier {
   CHECK_EQ(identifier.type, GridItemType::kTab);
   web::WebStateID webStateID = identifier.tabSwitcherItem.identifier;
-  if (_tabGroup->range().count() > 1 || ![self isShared] ||
-      !_collaborationService) {
-    [self closeItemWithID:webStateID];
-    return;
-  }
-
-  data_sharing::MemberRole userRole = tab_groups::utils::GetUserRoleForGroup(
-      _tabGroup.get(), _tabGroupSyncService, _collaborationService);
-
-  switch (userRole) {
-    case data_sharing::MemberRole::kOwner:
-      [self.tabGroupDelegate tabGroupMediatorCloseLastTabAsOwner:self
-                                               lastTabIdentifier:webStateID];
-      break;
-    case data_sharing::MemberRole::kMember:
-      [self.tabGroupDelegate tabGroupMediatorCloseLastTabAsMember:self
-                                                lastTabIdentifier:webStateID];
-      break;
-    case data_sharing::MemberRole::kInvitee:
-    case data_sharing::MemberRole::kFormerMember:
-    case data_sharing::MemberRole::kUnknown:
-      NOTREACHED();
-  }
+  [self closeItemWithID:webStateID];
 }
 
 #pragma mark - TabCollectionDragDropHandler override
@@ -575,7 +555,8 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
         break;
       }
       [_groupConsumer setGroupTitle:tabGroup->GetTitle()];
-      [_groupConsumer setGroupColor:tabGroup->GetColor()];
+      [_groupConsumer setGroupColor:tab_groups::ColorForTabGroupColorId(
+                                        tabGroup->GetColor())];
       break;
     }
     case WebStateListChange::Type::kGroupDelete: {
@@ -629,6 +610,10 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
       [self addObservationForWebState:insertChange.inserted_web_state()];
       break;
     }
+    case WebStateListChange::Type::kGroupCreate: {
+      // Don't show tab group when created.
+      break;
+    }
     default:
       [super didChangeWebStateList:webStateList change:change status:status];
       break;
@@ -648,7 +633,8 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
   [self populateConsumerItems];
   if (_tabGroup) {
     [_groupConsumer setGroupTitle:_tabGroup->GetTitle()];
-    [_groupConsumer setGroupColor:_tabGroup->GetColor()];
+    [_groupConsumer setGroupColor:tab_groups::ColorForTabGroupColorId(
+                                      _tabGroup->GetColor())];
   } else {
     [self.tabGroupsHandler hideTabGroup];
   }
@@ -663,6 +649,7 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
   if (newGroup.local_group_id() != _tabGroup->tab_group_id()) {
     return;
   }
+  [self updateTabGroupSharingState];
   [self updateFacePileUI];
 }
 
@@ -721,8 +708,12 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
       [[ShareKitFacePileConfiguration alloc] init];
   config.collabID = base::SysUTF8ToNSString(savedCollabID.value());
   config.showsEmptyState = YES;
-  config.avatarSize = kFacePileAvatarSize;
-  [_groupConsumer setFacePileViewController:_shareKitService->FacePile(config)];
+  if (IsContainedTabGroupEnabled()) {
+    config.avatarSize = kFacePileAvatarSize;
+  } else {
+    config.avatarSize = kLegacyFacePileAvatarSize;
+  }
+  [_groupConsumer setFacePileView:_shareKitService->FacePileView(config)];
 }
 
 // Inserts an item representing `webState` in the consumer at `index`.
@@ -791,6 +782,10 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
         numOfTabsAdded++;
         break;
       }
+      case collaboration::messaging::CollaborationEvent::TAB_UPDATED: {
+        numOfTabsAdded++;
+        break;
+      }
       case collaboration::messaging::CollaborationEvent::TAB_REMOVED:
         numOfTabsRemoved++;
         break;
@@ -850,8 +845,8 @@ constexpr CGFloat kActivityLabelAvatarSize = 16;
 // Returns YES if the group is shared.
 - (BOOL)isShared {
   CHECK(_tabGroup);
-  return tab_groups::utils::IsTabGroupShared(
-      _tabGroup.get(), _tabGroupSyncService, _shareKitService);
+  return tab_groups::utils::IsTabGroupShared(_tabGroup.get(),
+                                             _tabGroupSyncService);
 }
 
 // Updates the consumer after a data sharing service update for the current tab

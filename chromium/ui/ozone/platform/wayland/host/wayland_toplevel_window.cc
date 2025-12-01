@@ -21,10 +21,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/host/dump_util.h"
-#include "ui/ozone/platform/wayland/host/gtk_shell1.h"
-#include "ui/ozone/platform/wayland/host/gtk_surface1.h"
-#include "ui/ozone/platform/wayland/host/shell_object_factory.h"
-#include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
+#include "ui/ozone/platform/wayland/host/org_kde_kwin_appmenu.h"
 #include "ui/ozone/platform/wayland/host/wayland_bubble.h"
 #include "ui/ozone/platform/wayland/host/wayland_buffer_manager_host.h"
 #include "ui/ozone/platform/wayland/host/wayland_connection.h"
@@ -39,6 +36,8 @@
 #include "ui/ozone/platform/wayland/host/wayland_zwp_pointer_constraints.h"
 #include "ui/ozone/platform/wayland/host/xdg_activation.h"
 #include "ui/ozone/platform/wayland/host/xdg_session.h"
+#include "ui/ozone/platform/wayland/host/xdg_surface.h"
+#include "ui/ozone/platform/wayland/host/xdg_toplevel.h"
 #include "ui/platform_window/common/platform_window_defaults.h"
 #include "ui/platform_window/extensions/wayland_extension.h"
 #include "ui/platform_window/platform_window_delegate.h"
@@ -65,16 +64,22 @@ WaylandToplevelWindow::WaylandToplevelWindow(PlatformWindowDelegate* delegate,
 
 WaylandToplevelWindow::~WaylandToplevelWindow() = default;
 
-bool WaylandToplevelWindow::CreateShellToplevel() {
-  ShellObjectFactory factory;
-  shell_toplevel_ = factory.CreateShellToplevelWrapper(connection(), this);
-  if (!shell_toplevel_) {
-    LOG(ERROR) << "Failed to create a ShellToplevel.";
+bool WaylandToplevelWindow::CreateXdgToplevel() {
+  if (auto xdg_surface = std::make_unique<XdgSurface>(this, connection())) {
+    if (xdg_surface->Initialize()) {
+      auto xdg_toplevel = std::make_unique<XdgToplevel>(std::move(xdg_surface));
+      if (xdg_toplevel && xdg_toplevel->Initialize()) {
+        xdg_toplevel_ = std::move(xdg_toplevel);
+      }
+    }
+  }
+  if (!xdg_toplevel_) {
+    LOG(ERROR) << "Failed to create a XdgToplevel.";
     return false;
   }
 
-  shell_toplevel_->SetAppId(app_id_);
-  shell_toplevel_->SetTitle(window_title_);
+  xdg_toplevel_->SetAppId(app_id_);
+  xdg_toplevel_->SetTitle(window_title_);
   SetSizeConstraints();
   TriggerStateChanges(GetPlatformWindowState());
   SetUpShellIntegration();
@@ -106,12 +111,12 @@ bool WaylandToplevelWindow::CreateShellToplevel() {
 void WaylandToplevelWindow::DispatchHostWindowDragMovement(
     int hittest,
     const gfx::Point& pointer_location_in_px) {
-  DCHECK(shell_toplevel_);
+  DCHECK(xdg_toplevel_);
 
   if (hittest == HTCAPTION)
-    shell_toplevel_->SurfaceMove(connection());
+    xdg_toplevel_->SurfaceMove(connection());
   else
-    shell_toplevel_->SurfaceResize(connection(), hittest);
+    xdg_toplevel_->SurfaceResize(connection(), hittest);
 
   connection()->Flush();
   // TODO(crbug.com/40917147): Revisit to resolve the correct impl.
@@ -120,10 +125,11 @@ void WaylandToplevelWindow::DispatchHostWindowDragMovement(
 }
 
 void WaylandToplevelWindow::Show(bool inactive) {
-  if (shell_toplevel_)
+  if (xdg_toplevel_) {
     return;
+  }
 
-  if (!CreateShellToplevel()) {
+  if (!CreateXdgToplevel()) {
     Close();
     return;
   }
@@ -137,8 +143,9 @@ void WaylandToplevelWindow::Show(bool inactive) {
 }
 
 void WaylandToplevelWindow::Hide() {
-  if (!shell_toplevel_)
+  if (!xdg_toplevel_) {
     return;
+  }
 
   if (child_popup()) {
     child_popup()->Hide();
@@ -147,13 +154,23 @@ void WaylandToplevelWindow::Hide() {
   for (auto bubble : child_bubbles()) {
     bubble->Hide();
   }
-  WaylandWindow::Hide();
 
-  if (gtk_surface1_)
-    gtk_surface1_.reset();
-
+  // Note that the xdg_toplevel object should be destroyed before we touch
+  // anything else in order to provide the compositor a good reference point
+  // when the window contents can be frozen in case a window closing animation
+  // needs to be played. Ideally, the xdg_toplevel object should also be
+  // destroyed before any subsurface is destroyed, otherwise the window may have
+  // missing contents when the compositor animates it.
+  //
+  // The xdg-shell spec provides another way to hide a window: attach a nil
+  // buffer to the root surface. However, compositors often get it wrong, and it
+  // makes sense only if the xdg_toplevel object is going to be reused, which is
+  // not the case here.
+  xdg_toplevel_.reset();
   toplevel_session_.reset();
-  shell_toplevel_.reset();
+  appmenu_.reset();
+
+  WaylandWindow::Hide();
   ClearInFlightRequestsSerial();
 
   connection()->Flush();
@@ -162,7 +179,7 @@ void WaylandToplevelWindow::Hide() {
 bool WaylandToplevelWindow::IsVisible() const {
   // X and Windows return true if the window is minimized. For consistency, do
   // the same.
-  return !!shell_toplevel_ ||
+  return !!xdg_toplevel_ ||
          GetPlatformWindowState() == PlatformWindowState::kMinimized;
 }
 
@@ -172,8 +189,8 @@ void WaylandToplevelWindow::SetTitle(const std::u16string& title) {
 
   window_title_ = title;
 
-  if (shell_toplevel_) {
-    shell_toplevel_->SetTitle(title);
+  if (xdg_toplevel_) {
+    xdg_toplevel_->SetTitle(title);
     connection()->Flush();
   }
 }
@@ -189,10 +206,10 @@ void WaylandToplevelWindow::SetFullscreen(bool fullscreen,
 
   if (base::FeatureList::IsEnabled(features::kAsyncFullscreenWindowState)) {
     if (fullscreen) {
-      shell_toplevel_->SetFullscreen(
+      xdg_toplevel_->SetFullscreen(
           GetWaylandOutputForDisplayId(target_display_id));
     } else {
-      shell_toplevel_->UnSetFullscreen();
+      xdg_toplevel_->UnSetFullscreen();
     }
     return;
   }
@@ -219,14 +236,14 @@ void WaylandToplevelWindow::Maximize() {
 }
 
 void WaylandToplevelWindow::Minimize() {
-  if (!shell_toplevel_) {
+  if (!xdg_toplevel_) {
     // TODO(crbug.com/40276379): Store `PlatformWindowState::kMinimized` to a
     // pending state.
     return;
   }
 
   fullscreen_display_id_ = display::kInvalidDisplayId;
-  shell_toplevel_->SetMinimized();
+  xdg_toplevel_->SetMinimized();
 
   if (IsSurfaceConfigured()) {
     // Wayland standard does not have API to notify client apps about
@@ -252,7 +269,7 @@ void WaylandToplevelWindow::Minimize() {
 }
 
 void WaylandToplevelWindow::Restore() {
-  DCHECK(shell_toplevel_);
+  DCHECK(xdg_toplevel_);
 
   // Differently from other platforms, under Wayland, unmaximizing the dragged
   // window before starting the drag loop is not needed as it is assumed to be
@@ -267,8 +284,8 @@ void WaylandToplevelWindow::Restore() {
 }
 
 void WaylandToplevelWindow::ShowWindowControlsMenu(const gfx::Point& point) {
-  if (shell_toplevel_) {
-    shell_toplevel_->ShowWindowMenu(
+  if (xdg_toplevel_) {
+    xdg_toplevel_->ShowWindowMenu(
         connection(),
         gfx::ScaleToRoundedPoint(point, applied_state().ui_scale));
   }
@@ -276,23 +293,21 @@ void WaylandToplevelWindow::ShowWindowControlsMenu(const gfx::Point& point) {
 
 void WaylandToplevelWindow::ActivateWithToken(std::string token) {
   DCHECK(connection()->xdg_activation());
-  // xdg-activation implementation doesn't seem to interact well with dnd in
-  // some compositors. Eg: Mutter crashes were observed in tab drag sessions.
-  // See https://gitlab.gnome.org/GNOME/mutter/-/issues/3822.
-  //
-  // TODO(crbug.com/40866970): Remove once the compositor bug gets fixed.
-  if (connection()->IsDragInProgress()) {
-    return;
+  bool can_activate = IsSurfaceConfigured();
+
+  // Stacking the dragged xdg toplevel as the topmost one (and tied to the
+  // pointer cursor) is reponsibility of the Wayland compositor, so bail out
+  // if `this` is currently being dragged.
+  if (auto* drag_controller = connection()->window_drag_controller()) {
+    can_activate &= !drag_controller->IsDraggingWindow(this);
   }
-  connection()->xdg_activation()->Activate(root_surface()->surface(), token);
+
+  if (can_activate) {
+    connection()->xdg_activation()->Activate(root_surface()->surface(), token);
+  }
 }
 
 void WaylandToplevelWindow::Activate() {
-  // Activation is supported through optional protocol extensions and hence may
-  // or may not work depending on the compositor.  The details depend on the
-  // compositor as well; for example, Mutter doesn't bring the window to the top
-  // when it requests focus, but instead shows a system popup notification to
-  // user.
   if (connection()->xdg_activation()) {
     if (auto token = base::nix::TakeXdgActivationToken()) {
       ActivateWithToken(token.value());
@@ -301,27 +316,21 @@ void WaylandToplevelWindow::Activate() {
           base::BindOnce(&WaylandToplevelWindow::ActivateWithToken,
                          weak_ptr_factory_.GetWeakPtr()));
     }
-  } else if (gtk_surface1_) {
-    gtk_surface1_->RequestFocus();
+    connection()->Flush();
   }
-
-  // This is required as the high level activation might not get a flush for
-  // a while.
-  connection()->Flush();
-
   WaylandWindow::Activate();
 }
 
 void WaylandToplevelWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
                                            const gfx::ImageSkia& app_icon) {
-  if (!shell_toplevel_) {
+  if (!xdg_toplevel_) {
     return;
   }
   // Let the app icon take precedence over the window icon.
   if (!app_icon.isNull()) {
-    shell_toplevel_->SetIcon(app_icon);
+    xdg_toplevel_->SetIcon(app_icon);
   } else if (!window_icon.isNull()) {
-    shell_toplevel_->SetIcon(window_icon);
+    xdg_toplevel_->SetIcon(window_icon);
   } else {
     // Don't reset the icon if a null icon is passed in. There are callers
     // that attempt to set a null icon after the initial icon has been set,
@@ -333,8 +342,9 @@ void WaylandToplevelWindow::SetWindowIcons(const gfx::ImageSkia& window_icon,
 
 void WaylandToplevelWindow::SizeConstraintsChanged() {
   // Size constraints only make sense for normal windows.
-  if (!shell_toplevel_)
+  if (!xdg_toplevel_) {
     return;
+  }
 
   SetSizeConstraints();
 }
@@ -357,8 +367,9 @@ void WaylandToplevelWindow::SetUseNativeFrame(bool use_native_frame) {
   if (use_native_frame_ == use_native_frame)
     return;
   use_native_frame_ = use_native_frame;
-  if (shell_toplevel_)
+  if (xdg_toplevel_) {
     OnDecorationModeChanged();
+  }
 
   UpdateWindowMask();
 }
@@ -390,12 +401,6 @@ void WaylandToplevelWindow::SetInputRegion(
   root_surface()->set_input_region(region_px);
 }
 
-void WaylandToplevelWindow::NotifyStartupComplete(
-    const std::string& startup_id) {
-  if (auto* gtk_shell = connection()->gtk_shell1())
-    gtk_shell->SetStartupId(startup_id);
-}
-
 void WaylandToplevelWindow::UpdateWindowScale(bool update_bounds) {
   auto old_scale = applied_state().window_scale;
   WaylandWindow::UpdateWindowScale(update_bounds);
@@ -415,15 +420,27 @@ void WaylandToplevelWindow::UpdateActivationState() {
   bool prev_is_active = is_active_;
 
   // Determine active state from keyboard focus. If keyboard is unavailable,
-  // determine it from xdg-shell "activated" state as that's the only hint the
-  // compositor provides us on whether our window is considered active.
-  // TODO(crbug.com/369574355): utilize zwp_text_input_v3::{enter,leave}
-  // eventually
+  // determine it from zwp_text_input_v3::{enter,leave}.
+  // If neither of those are available, use xdg-shell "activated" state as
+  // that's the only other hint the compositor provides us on whether our window
+  // is considered active.
   if (connection()->IsKeyboardAvailable()) {
     auto* keyboard_focused_window =
         connection()->window_manager()->GetCurrentKeyboardFocusedWindow();
     is_active_ = keyboard_focused_window &&
                  keyboard_focused_window->GetRootParentWindow() == this;
+  } else if (connection()->SupportsTextInputFocus()) {
+    // Note: Some compositors (sway, niri, cosmic etc.) may not send
+    // text-input-v3 enter/leave events if an IM framework is not
+    // installed/running. So text input focus cannot be used always instead of
+    // keyboard focus above. However, if there is no physical keyboard, there
+    // should be an IM framework to facilitate inputting text in some way, e.g.
+    // using a virtual keyboard, and so it should be okay to expect focus to be
+    // received from text-input in that case if text-input-v3 is available.
+    auto* text_input_focused_window =
+        connection()->window_manager()->GetCurrentTextInputFocusedWindow();
+    is_active_ = text_input_focused_window &&
+                 text_input_focused_window->GetRootParentWindow() == this;
   } else {
     is_active_ = is_xdg_active_;
   }
@@ -478,6 +495,10 @@ void WaylandToplevelWindow::HandleToplevelConfigureWithOrigin(
   is_suspended_ = window_states.is_suspended;
 
   // The tiled state affects the window geometry, so apply it here.
+  // TODO(crbug.com/414831391): Remove this and notify in
+  // WindowTreeHostPlatform::OnStateUpdate instead like all other state changes.
+  // The only issue there is when doing that a regression was seen in kwin. See
+  // the bug description for additional details.
   if (window_states.tiled_edges != applied_state().tiled_edges) {
     // This configure changes the decoration insets.  We should adjust the
     // bounds appropriately.
@@ -546,8 +567,9 @@ void WaylandToplevelWindow::HandleSurfaceConfigure(uint32_t serial) {
 }
 
 void WaylandToplevelWindow::OnSequencePoint(int64_t seq) {
-  if (!shell_toplevel_)
+  if (!xdg_toplevel_) {
     return;
+  }
 
   ProcessSequencePoint(seq);
   MaybeApplyLatestStateRequest(/*force=*/false);
@@ -608,15 +630,16 @@ bool WaylandToplevelWindow::IsSuspended() const {
 }
 
 bool WaylandToplevelWindow::IsSurfaceConfigured() {
-  return shell_toplevel() ? shell_toplevel()->IsConfigured() : false;
+  return xdg_toplevel() ? xdg_toplevel()->IsConfigured() : false;
 }
 
 void WaylandToplevelWindow::SetWindowGeometry(
     const PlatformWindowDelegate::State& state) {
   DCHECK(connection()->SupportsSetWindowGeometry());
 
-  if (!shell_toplevel_)
+  if (!xdg_toplevel_) {
     return;
+  }
 
   gfx::Rect geometry_dip = gfx::ScaleToEnclosingRectIgnoringError(
       gfx::Rect(state.bounds_dip.size()), state.ui_scale);
@@ -635,17 +658,17 @@ void WaylandToplevelWindow::SetWindowGeometry(
       geometry_dip.set_height(1);
     }
   }
-  shell_toplevel_->SetWindowGeometry(geometry_dip);
+  xdg_toplevel_->SetWindowGeometry(geometry_dip);
 }
 
 void WaylandToplevelWindow::AckConfigure(uint32_t serial) {
-  // We cannot assume the top level wrapper is non-NULL because of a corner case
-  // in drag n' drop. There could be times when the tab strip change is detected
+  // We cannot assume the xdg-toplevel is non-NULL because of a corner case in
+  // drag n' drop. There could be times when the tab strip change is detected
   // while processing a configure event received from the compositor and hence
-  // destroy the top level wrapper before an ACK is sent.
-  // See crbug.com/1512046 for details.
-  if (shell_toplevel()) {
-    shell_toplevel()->AckConfigure(serial);
+  // destroy the xdg-toplevel before an ACK is sent. See crbug.com/1512046 for
+  // details.
+  if (xdg_toplevel()) {
+    xdg_toplevel()->AckConfigure(serial);
   }
 }
 
@@ -702,10 +725,27 @@ void WaylandToplevelWindow::LockPointer(bool enabled) {
     pointer_constraints->UnlockPointer();
 }
 
+void WaylandToplevelWindow::SetAppmenu(const std::string& service_name,
+                                       const std::string& object_path) {
+  appmenu_service_name_ = service_name;
+  appmenu_object_path_ = object_path;
+
+  if (xdg_toplevel_) {
+    TryAnnounceAppmenu();
+  }
+}
+
+void WaylandToplevelWindow::UnsetAppmenu() {
+  appmenu_.reset();
+  appmenu_service_name_.clear();
+  appmenu_object_path_.clear();
+}
+
 void WaylandToplevelWindow::SetSystemModal(bool modal) {
   system_modal_ = modal;
-  if (shell_toplevel_)
-    shell_toplevel_->SetSystemModal(modal);
+  if (xdg_toplevel_) {
+    xdg_toplevel_->SetSystemModal(modal);
+  }
 }
 
 void WaylandToplevelWindow::DumpState(std::ostream& out) const {
@@ -722,8 +762,9 @@ void WaylandToplevelWindow::OnSessionDestroying() {
 }
 
 void WaylandToplevelWindow::UpdateSystemModal() {
-  if (shell_toplevel_)
-    shell_toplevel_->SetSystemModal(system_modal_);
+  if (xdg_toplevel_) {
+    xdg_toplevel_->SetSystemModal(system_modal_);
+  }
 }
 
 std::string WaylandToplevelWindow::GetWorkspace() const {
@@ -746,7 +787,7 @@ void WaylandToplevelWindow::SetWorkspaceExtensionDelegate(
 
 void WaylandToplevelWindow::TriggerStateChanges(
     PlatformWindowState window_state) {
-  if (shell_toplevel_) {
+  if (xdg_toplevel_) {
     // Call UnSetMaximized only if current state is normal. Otherwise, if the
     // current state is fullscreen and the previous is maximized, calling
     // UnSetMaximized may result in wrong restored window position that clients
@@ -754,15 +795,15 @@ void WaylandToplevelWindow::TriggerStateChanges(
     if (window_state == PlatformWindowState::kMinimized) {
       LOG(FATAL) << "Should not be called with kMinimized state";
     } else if (window_state == PlatformWindowState::kFullScreen) {
-      shell_toplevel_->SetFullscreen(
+      xdg_toplevel_->SetFullscreen(
           GetWaylandOutputForDisplayId(fullscreen_display_id_));
     } else if (GetLatestRequestedState().window_state ==
                PlatformWindowState::kFullScreen) {
-      shell_toplevel_->UnSetFullscreen();
+      xdg_toplevel_->UnSetFullscreen();
     } else if (window_state == PlatformWindowState::kMaximized) {
-      shell_toplevel_->SetMaximized();
+      xdg_toplevel_->SetMaximized();
     } else if (window_state == PlatformWindowState::kNormal) {
-      shell_toplevel_->UnSetMaximized();
+      xdg_toplevel_->UnSetMaximized();
     }
   }
 
@@ -851,35 +892,28 @@ void WaylandToplevelWindow::SetSizeConstraints() {
   auto max_size_dip = delegate()->GetMaximumSizeForWindow();
 
   if (min_size_dip.has_value())
-    shell_toplevel_->SetMinSize(min_size_dip->width(), min_size_dip->height());
+    xdg_toplevel_->SetMinSize(min_size_dip->width(), min_size_dip->height());
 
   if (max_size_dip.has_value())
-    shell_toplevel_->SetMaxSize(max_size_dip->width(), max_size_dip->height());
+    xdg_toplevel_->SetMaxSize(max_size_dip->width(), max_size_dip->height());
 
   connection()->Flush();
 }
 
 void WaylandToplevelWindow::SetUpShellIntegration() {
   // This method should be called after the XDG surface is initialized.
-  DCHECK(shell_toplevel_);
-  // We must not request a new GtkSurface if we already have one, else we get a
-  // "gtk_shell::get_gtk_surface already requested" error. (crbug.com/1380419)
-  if (connection()->gtk_shell1() && !gtk_surface1_) {
-    gtk_surface1_ =
-        connection()->gtk_shell1()->GetGtkSurface1(root_surface()->surface());
-  }
+  DCHECK(xdg_toplevel_);
+  TryAnnounceAppmenu();
 }
 
 void WaylandToplevelWindow::OnDecorationModeChanged() {
-  DCHECK(shell_toplevel_);
+  DCHECK(xdg_toplevel_);
   if (use_native_frame_) {
     // Set server-side decoration for windows using a native frame,
     // e.g. taskmanager
-    shell_toplevel_->SetDecoration(
-        ShellToplevelWrapper::DecorationMode::kServerSide);
+    xdg_toplevel_->SetDecoration(XdgToplevel::DecorationMode::kServerSide);
   } else {
-    shell_toplevel_->SetDecoration(
-        ShellToplevelWrapper::DecorationMode::kClientSide);
+    xdg_toplevel_->SetDecoration(XdgToplevel::DecorationMode::kClientSide);
   }
 }
 
@@ -895,23 +929,46 @@ void WaylandToplevelWindow::UpdateWindowMask() {
 }
 
 void WaylandToplevelWindow::UpdateSessionStateIfNeeded() {
-  CHECK(shell_toplevel_);
+  CHECK(xdg_toplevel_);
   if (!session_) {
     return;
   }
   // If we're handling the first configure sequence and a `toplevel_session_`
-  // was instantiated at window creation (see CreateShellToplevel), it must be
+  // was instantiated at window creation (see CreateXdgToplevel), it must be
   // removed now, so the requested `new_id` can be associated to this window.
   // Note that IsConfigured returns true only after the first ack_configure.
-  if (!shell_toplevel_->IsConfigured()) {
+  if (!xdg_toplevel_->IsConfigured()) {
     const auto& session_data = session_data_.value();
     if (toplevel_session_) {
       CHECK(session_data.restore_id.has_value());
       toplevel_session_->Remove();
     }
-    toplevel_session_ = session_->TrackToplevel(this, session_data.window_id,
-                                                XdgSession::Action::kAdd);
+    if (session_data.window_id) {
+      toplevel_session_ = session_->TrackToplevel(this, session_data.window_id,
+                                                  XdgSession::Action::kAdd);
+    } else {
+      // Window was just removed from `session_` and no new session window id
+      // was provided. Notifying about it can result in `this` being destroyed
+      // when the Wayland compositor supports only experimental version of the
+      // session management protocol. See comments in XdgSession for details.
+      // TODO(crbug.com/409099413): Remove when support for the experimental
+      // session management protocol support gets dropped.
+      auto alive = weak_ptr_factory_.GetWeakPtr();
+      connection()->window_manager()->NotifyWindowRemovedFromSession(this);
+      if (!alive) {
+        return;
+      }
+    }
     connection()->Flush();
+  }
+}
+
+void WaylandToplevelWindow::TryAnnounceAppmenu() {
+  if (auto* appmenu_manager = connection()->org_kde_kwin_appmenu_manager()) {
+    if (!appmenu_service_name_.empty() && !appmenu_object_path_.empty()) {
+      appmenu_ = appmenu_manager->Create(root_surface()->surface());
+      appmenu_->SetAddress(appmenu_service_name_, appmenu_object_path_);
+    }
   }
 }
 

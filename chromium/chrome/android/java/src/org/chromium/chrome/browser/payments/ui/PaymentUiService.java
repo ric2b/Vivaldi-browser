@@ -343,7 +343,7 @@ public class PaymentUiService
      * @param context The activity context.
      */
     public void createShippingSectionIfNeeded(Context context) {
-        if (!shouldShowShippingSection()) return;
+        if (!shouldShowShippingSection() || mShippingAddressesSection != null) return;
         createShippingSectionForPaymentRequestUi(context);
     }
 
@@ -928,7 +928,7 @@ public class PaymentUiService
      * @param toEdit The information to edit, allowed to be null.
      */
     private void editContactOnPaymentRequestUi(@Nullable final AutofillContact toEdit) {
-        mContactEditor.edit(
+        mContactEditor.showEditPrompt(
                 toEdit,
                 new Callback<AutofillContact>() {
                     @Override
@@ -971,10 +971,11 @@ public class PaymentUiService
 
     /**
      * Edit the address on the PaymentRequest UI.
+     *
      * @param toEdit The address to be updated with, allowed to be null.
      */
     private void editAddress(@Nullable final AutofillAddress toEdit) {
-        mAddressEditor.edit(
+        mAddressEditor.showEditPrompt(
                 toEdit,
                 new Callback<AutofillAddress>() {
                     @Override
@@ -1130,6 +1131,8 @@ public class PaymentUiService
             mLayoutStateProvider = layoutStateProvider;
             mLayoutStateProvider.addObserver(this);
         }
+
+        createShippingSectionIfNeeded(activity);
 
         if (shouldShowContactSection()) {
             mContactSection =

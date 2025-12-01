@@ -19,6 +19,7 @@
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/network/public/cpp/resource_request.h"
+#include "services/network/public/mojom/attribution.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 
 namespace {
@@ -29,10 +30,16 @@ namespace {
 constexpr size_t kMaxNonBucketedNumRedirects = 20;
 
 ChromeKeepAliveRequestTracker::RequestType ComputeRequestType(
-    const network::ResourceRequest& request,
-    bool is_attribution_reporting_eligible_request) {
-  if (is_attribution_reporting_eligible_request) {
-    return ChromeKeepAliveRequestTracker::RequestType::kAttribution;
+    const network::ResourceRequest& request) {
+  switch (request.attribution_reporting_eligibility) {
+    case network::mojom::AttributionReportingEligibility::kUnset:
+    case network::mojom::AttributionReportingEligibility::kEmpty:
+      break;
+    case network::mojom::AttributionReportingEligibility::kEventSource:
+    case network::mojom::AttributionReportingEligibility::kNavigationSource:
+    case network::mojom::AttributionReportingEligibility::kTrigger:
+    case network::mojom::AttributionReportingEligibility::kEventSourceOrTrigger:
+      return ChromeKeepAliveRequestTracker::RequestType::kAttribution;
   }
 
   if (request.is_fetch_later_api) {
@@ -49,7 +56,6 @@ std::unique_ptr<ChromeKeepAliveRequestTracker>
 ChromeKeepAliveRequestTracker::MaybeCreateKeepAliveRequestTracker(
     const network::ResourceRequest& request,
     std::optional<ukm::SourceId> ukm_source_id,
-    bool is_attribution_reporting_eligible_request,
     IsContextDetachedCallback is_context_detached_callback) {
   if (!request.keepalive || !request.keepalive_token.has_value()) {
     return nullptr;
@@ -70,7 +76,7 @@ ChromeKeepAliveRequestTracker::MaybeCreateKeepAliveRequestTracker(
   }
 
   ChromeKeepAliveRequestTracker::RequestType request_type =
-      ComputeRequestType(request, is_attribution_reporting_eligible_request);
+      ComputeRequestType(request);
 
   return base::WrapUnique(new ChromeKeepAliveRequestTracker(
       request_type, *category_id, *ukm_source_id,
@@ -138,8 +144,8 @@ void ChromeKeepAliveRequestTracker::AddStageMetrics(const RequestStage& stage) {
     case RequestStageType::kRequestFailed:
       ukm_builder_.SetTimeDelta_RequestFailed(
           relative_to_created_time.InMilliseconds());
-      ukm_builder_.SetCompletionStatus_ErrorCode(stage.status->error_code);
-      ukm_builder_.SetCompletionStatus_ExtendedErrorCode(
+      ukm_builder_.SetRequestFailed_ErrorCode(stage.status->error_code);
+      ukm_builder_.SetRequestFailed_ExtendedErrorCode(
           stage.status->extended_error_code);
       break;
 
@@ -166,8 +172,8 @@ void ChromeKeepAliveRequestTracker::AddStageMetrics(const RequestStage& stage) {
     case RequestStageType::kLoaderCompleted:
       ukm_builder_.SetTimeDelta_LoaderCompleted(
           relative_to_created_time.InMilliseconds());
-      ukm_builder_.SetCompletionStatus_ErrorCode(stage.status->error_code);
-      ukm_builder_.SetCompletionStatus_ExtendedErrorCode(
+      ukm_builder_.SetLoaderCompleted_ErrorCode(stage.status->error_code);
+      ukm_builder_.SetLoaderCompleted_ExtendedErrorCode(
           stage.status->extended_error_code);
       break;
   }

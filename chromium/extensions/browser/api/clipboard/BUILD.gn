@@ -18,11 +18,19 @@ source_set("clipboard") {
   configs += [ "//build/config/compiler:wexit_time_destructors" ]
 
   public_deps = [
+    ":clipboard_types",
     "//base",
     "//extensions/browser:browser_sources",
+    "//extensions/browser/api:extensions_api_client",
     "//extensions/common/api",
     "//ui/base/clipboard",
   ]
 
   allow_circular_includes_from = [ "//extensions/browser:browser_sources" ]
+}
+
+source_set("clipboard_types") {
+  sources = [ "clipboard_api_types.h" ]
+
+  configs += [ "//build/config/compiler:wexit_time_destructors" ]
 }

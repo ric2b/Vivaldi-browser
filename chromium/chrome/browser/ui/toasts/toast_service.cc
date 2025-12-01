@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/toasts/api/toast_registry.h"
 #include "chrome/browser/ui/toasts/api/toast_specification.h"
 #include "chrome/browser/ui/toasts/toast_controller.h"
+#include "chrome/browser/ui/toasts/toast_features.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_entry_id.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_enums.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_ui.h"
@@ -35,7 +36,7 @@
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/menus/simple_menu_model.h"
 
@@ -66,6 +67,11 @@ void ToastService::RegisterToasts(
   toast_registry_->RegisterToast(
       ToastId::kImageCopied,
       ToastSpecification::Builder(kCopyMenuIcon, IDS_IMAGE_COPIED_TOAST_BODY)
+          .Build());
+  toast_registry_->RegisterToast(
+      ToastId::kVideoFrameCopied,
+      ToastSpecification::Builder(kCopyMenuIcon,
+                                  IDS_VIDEO_FRAME_COPIED_TOAST_BODY)
           .Build());
 
   toast_registry_->RegisterToast(
@@ -247,4 +253,13 @@ void ToastService::RegisterToasts(
             .AddGlobalScoped()
             .Build());
   }
-}
+
+  if (toast_features::IsEnabled(toast_features::kPinnedTabToastOnClose)) {
+    toast_registry_->RegisterToast(
+        ToastId::kClosePinnedTab,
+        ToastSpecification::Builder(kKeepIcon, IDS_CLOSE_PINNED_TAB_TOAST_BODY)
+            .SetToastAsActionable()
+            .Build());
+  }
+
+}  // RegisterToasts() end.

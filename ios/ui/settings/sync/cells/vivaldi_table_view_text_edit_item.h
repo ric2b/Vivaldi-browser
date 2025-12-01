@@ -57,7 +57,7 @@ typedef NS_ENUM(NSInteger, TableViewTextEditItemIconType) {
 // Keyboard type to be displayed when the text field becomes first responder.
 @property(nonatomic, assign) UIKeyboardType keyboardType;
 
-@property(nonatomic, assign) UITextContentType textContentType;
+@property(nonatomic, strong) UITextContentType textContentType;
 
 // Controls autocapitalization behavior of the text field.
 @property(nonatomic, assign)

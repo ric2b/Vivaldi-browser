@@ -9,6 +9,7 @@
 #include "components/omnibox/recent_typed_history_provider.h"
 
 #include "base/functional/bind.h"
+#include "base/trace_event/base_tracing.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/url_database.h"
 #include "components/omnibox/browser/autocomplete_input.h"
@@ -66,7 +67,7 @@ RecentTypedHistoryProvider::~RecentTypedHistoryProvider() = default;
 void RecentTypedHistoryProvider::Start(const AutocompleteInput& input,
                                        bool minimal_changes) {
   TRACE_EVENT0("omnibox", "RecentTypedHistoryProvider::Start");
-  Stop(true, false);
+  Stop(AutocompleteStopReason::kClobbered);
 
   if (input.focus_type() != metrics::OmniboxFocusType::INTERACTION_FOCUS ||
          input.type() != OmniboxInputType::EMPTY) {

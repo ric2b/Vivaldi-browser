@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "components/dom_distiller/content/browser/dom_distiller_viewer_source.h"
 
 #include <memory>
@@ -227,11 +222,10 @@ void DomDistillerViewerSource::StartDataRequest(
         base::MakeRefCounted<base::RefCountedString>(std::move(image)));
     return;
   }
-  if (base::StartsWith(path, kViewerSaveFontScalingPath,
-                       base::CompareCase::SENSITIVE)) {
+  auto remainder = base::RemovePrefix(path, kViewerSaveFontScalingPath);
+  if (remainder) {
     double scale = 1.0;
-    if (base::StringToDouble(path.substr(strlen(kViewerSaveFontScalingPath)),
-                             &scale)) {
+    if (base::StringToDouble(*remainder, &scale)) {
       dom_distiller_service_->GetDistilledPagePrefs()->SetFontScaling(scale);
     }
   }
@@ -261,7 +255,7 @@ void DomDistillerViewerSource::StartDataRequest(
   std::string unsafe_page_html = viewer::GetArticleTemplateHtml(
       dom_distiller_service_->GetDistilledPagePrefs()->GetTheme(),
       dom_distiller_service_->GetDistilledPagePrefs()->GetFontFamily(),
-      std::string());
+      std::string(), /*use_offline_data=*/false);
 
   if (viewer_handle) {
     // The service returned a |ViewerHandle| and guarantees it will call

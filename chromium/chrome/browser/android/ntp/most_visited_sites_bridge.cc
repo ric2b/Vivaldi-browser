@@ -176,7 +176,7 @@ MostVisitedSitesBridge::MostVisitedSitesBridge(Profile* profile,
     : most_visited_(ChromeMostVisitedSitesFactory::NewForProfile(profile)),
       profile_(profile) {
   DCHECK(!profile->IsOffTheRecord());
-  // TODO(crbug.com/397421743): Use |enable_custom_links|.
+  most_visited_->EnableCustomLinks(enable_custom_links);
 }
 
 MostVisitedSitesBridge::~MostVisitedSitesBridge() = default;
@@ -209,31 +209,49 @@ void MostVisitedSitesBridge::SetObserver(
   most_visited_->AddMostVisitedURLsObserver(java_observer_.get(), num_sites);
 }
 
+jboolean MostVisitedSitesBridge::AddCustomLinkTo(JNIEnv* env,
+                                                 const std::u16string& name,
+                                                 const GURL& url,
+                                                 jint pos) {
+  return most_visited_->AddCustomLinkTo(url, name, pos);
+}
+
 jboolean MostVisitedSitesBridge::AddCustomLink(JNIEnv* env,
                                                const std::u16string& name,
                                                const GURL& url) {
-  // TODO(crbug.com/397421743): Implement.
-  return false;
+  return most_visited_->AddCustomLink(url, name);
 }
 
 jboolean MostVisitedSitesBridge::AssignCustomLink(JNIEnv* env,
                                                   const GURL& key_url,
                                                   const std::u16string& name,
                                                   const GURL& url) {
-  // TODO(crbug.com/397421743): Implement.
-  return false;
+  if (most_visited_->HasCustomLink(key_url)) {
+    // Update existing Custom link. In rare cases (e.g., split-window editing
+    // and/or race conditions) HasCustomLink() can output stale results. But
+    // this is fine, since update / add functions in the backend would still
+    // serialize and make reasonable changes or return error.
+    // If the URL does not change, need to pass empty URL instead.
+    const GURL& url_to_use = (key_url == url) ? GURL() : url;
+    return most_visited_->UpdateCustomLink(key_url, url_to_use, name);
+  }
+  return most_visited_->AddCustomLink(url, name);
 }
 
 jboolean MostVisitedSitesBridge::DeleteCustomLink(JNIEnv* env,
                                                   const GURL& key_url) {
-  // TODO(crbug.com/397421743): Implement.
-  return false;
+  return most_visited_->DeleteCustomLink(key_url);
 }
 
-jboolean MostVisitedSitesBridge::QueryCustomLink(JNIEnv* env,
-                                                 const GURL& key_url) {
-  // TODO(crbug.com/397421743): Implement.
-  return false;
+jboolean MostVisitedSitesBridge::HasCustomLink(JNIEnv* env,
+                                               const GURL& key_url) {
+  return most_visited_->HasCustomLink(key_url);
+}
+
+jboolean MostVisitedSitesBridge::ReorderCustomLink(JNIEnv* env,
+                                                   const GURL& key_url,
+                                                   jint new_pos) {
+  return most_visited_->ReorderCustomLink(key_url, new_pos);
 }
 
 void MostVisitedSitesBridge::AddOrRemoveBlockedUrl(

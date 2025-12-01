@@ -55,9 +55,11 @@ const base::FeatureParam<DevToolsFreestylerExecutionMode>
         /*default_value=*/DevToolsFreestylerExecutionMode::kAllScripts,
         &devtools_freestyler_execution_mode_options};
 const base::FeatureParam<bool> kDevToolsFreestylerPatching{
-    &kDevToolsFreestyler, "patching", /*default_value=*/false};
+    &kDevToolsFreestyler, "patching", /*default_value=*/true};
 const base::FeatureParam<bool> kDevToolsFreestylerMultimodal{
-    &kDevToolsFreestyler, "multimodal", /*default_value=*/false};
+    &kDevToolsFreestyler, "multimodal", /*default_value=*/true};
+const base::FeatureParam<bool> kDevToolsFreestylerMultimodalUploadInput{
+    &kDevToolsFreestyler, "multimodal_upload_input", /*default_value=*/false};
 const base::FeatureParam<bool> kDevToolsFreestylerFunctionCalling{
     &kDevToolsFreestyler, "function_calling", /*default_value=*/false};
 
@@ -97,7 +99,7 @@ const base::FeatureParam<DevToolsFreestylerUserTier>
 const base::FeatureParam<bool>
     kDevToolsAiAssistancePerformanceAgentInsightsEnabled{
         &kDevToolsAiAssistancePerformanceAgent, "insights_enabled",
-        /*default_value=*/false};
+        /*default_value=*/true};
 
 // Whether the DevTools AI Assistance File Agent is enabled.
 BASE_FEATURE(kDevToolsAiAssistanceFileAgent,
@@ -138,7 +140,7 @@ BASE_FEATURE(kDevToolsAnimationStylesInStylesTab,
 // See http://go/chrome-devtools:automatic-workspace-folders-design for details.
 BASE_FEATURE(kDevToolsAutomaticFileSystems,
              "DevToolsAutomaticFileSystems",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether DevTools will attempt to load project settings from a well-known
 // URI. See https://goo.gle/devtools-json-design for additional details.
@@ -150,12 +152,17 @@ BASE_FEATURE(kDevToolsWellKnown,
 // Whether DevTools will offer the new CSS value tracing UI.
 BASE_FEATURE(kDevToolsCssValueTracing,
              "DevToolsCssValueTracing",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 // Whether the DevTools AI generated annotation labels in timeline are enabled.
 BASE_FEATURE(kDevToolsAiGeneratedTimelineLabels,
              "DevToolsAiGeneratedTimelineLabels",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
+// Whether the DevTools AI generated annotation labels in timeline are enabled.
+BASE_FEATURE(kDevToolsNewPermissionDialog,
+             "DevToolsNewPermissionDialog",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 // If enabled, DevTools does not accept remote debugging connections unless
@@ -169,5 +176,10 @@ BASE_FEATURE(kDevToolsDebuggingRestrictions,
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 );
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+
+// Whether DevTools drawer can be toggled to vertical orientation.
+BASE_FEATURE(kDevToolsVerticalDrawer,
+             "DevToolsVerticalDrawer",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features

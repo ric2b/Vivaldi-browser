@@ -20,14 +20,11 @@
 
 
 static_assert(SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES ==
-                  BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES,
-              "");
+              BCM_SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES);
 static_assert(SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES ==
-                  BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES,
-              "");
+              BCM_SLHDSA_SHA2_128S_PRIVATE_KEY_BYTES);
 static_assert(SLHDSA_SHA2_128S_SIGNATURE_BYTES ==
-                  BCM_SLHDSA_SHA2_128S_SIGNATURE_BYTES,
-              "");
+              BCM_SLHDSA_SHA2_128S_SIGNATURE_BYTES);
 
 void SLHDSA_SHA2_128S_generate_key(
     uint8_t out_public_key[SLHDSA_SHA2_128S_PUBLIC_KEY_BYTES],

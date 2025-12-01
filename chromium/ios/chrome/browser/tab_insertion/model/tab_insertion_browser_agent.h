@@ -93,11 +93,8 @@ class TabInsertionBrowserAgent
 
  private:
   friend class BrowserUserData<TabInsertionBrowserAgent>;
-  BROWSER_USER_DATA_KEY_DECL();
 
   explicit TabInsertionBrowserAgent(Browser* browser);
-
-  raw_ptr<Browser> browser_;
 };
 
 #endif  // IOS_CHROME_BROWSER_TAB_INSERTION_MODEL_TAB_INSERTION_BROWSER_AGENT_H_

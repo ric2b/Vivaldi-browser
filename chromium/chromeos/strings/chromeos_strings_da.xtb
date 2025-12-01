@@ -20,6 +20,7 @@
 <translation id="1059913517121127803">Kunne ikke begynde at scanne</translation>
 <translation id="1061864016440983342">Brug uden lokation</translation>
 <translation id="1062823486781306604"><ph name="INDEX" /> af <ph name="COUNT" />, <ph name="NAME" />.</translation>
+<translation id="106558928761833284">en smuk kosmisk stjernetåge med et hurtigt futuristisk rumskib, blå, lyserøde og lilla nuancer</translation>
 <translation id="1069150558259542054">Hurtigindsættelse kan ikke bruges til tilpassede genveje.</translation>
 <translation id="1070066693520972135">WEP</translation>
 <translation id="1071587090247825784">En firewall blev registreret</translation>
@@ -27,9 +28,11 @@
 <translation id="1082009148392559545">Downloader pauseskærmen</translation>
 <translation id="1094693127011229778">IP-adresse er ikke tilgængelig</translation>
 <translation id="1100902271996134409">Opretter af billeder…</translation>
+<translation id="1102946598597843031">et fotografi af en måne over en sø med faldende blade fra et kirsebærtræ, 4K</translation>
 <translation id="1107856713690040084"><ph name="DEVICE_TYPE" />-lyd</translation>
 <translation id="1116694919640316211">Om</translation>
 <translation id="1118572504348554005">Vi deler muligvis feedback, der indsendes via denne formular, med vores partnere for at finde og rette fejl samt løse andre problemer, du rapporterer til os. Medtag ikke følsomme oplysninger som f.eks. adgangskoder.</translation>
+<translation id="1118596190635569417">Flyt denne menu til højre</translation>
 <translation id="1119403468619527527">For få ord til at forenkle</translation>
 <translation id="1119447706177454957">Intern fejl</translation>
 <translation id="1124772482545689468">Bruger</translation>
@@ -66,6 +69,7 @@
 <translation id="1238163879850290856">Nulstil for at forhindre andre i at få adgang til data. Brug kun indtastningsmetoder, du har tillid til.</translation>
 <translation id="1238612778414822719">HTTPS-forsinkelse</translation>
 <translation id="1252766349417594414">Joystick</translation>
+<translation id="1261045951892393759">en kat, der spiller på en V-formet guitar, mens den rider på en enhjørning, og med et lyn i baggrunden</translation>
 <translation id="1270369111467284986">Der blev muligvis registreret en loginportal</translation>
 <translation id="1274654146705270731">appelsiner</translation>
 <translation id="1275718070701477396">Valgt</translation>
@@ -91,8 +95,10 @@
 <translation id="1367951781824006909">Vælg en fil</translation>
 <translation id="1371650399987522809">Feedback til baggrunde, der er baseret på Google AI</translation>
 <translation id="1374385338586507108">Definer</translation>
+<translation id="1376064675713230088">tyrannosaurus rex</translation>
 <translation id="1383876407941801731">Søg</translation>
 <translation id="1387854245479784695">Dette er den aggregerede værdi for alle kerner</translation>
+<translation id="1388919980490622894">med farvegradering</translation>
 <translation id="1393206549145430405">et slot</translation>
 <translation id="1394661041439318933">Enheden har <ph name="BATTERY_PERCENTAGE" /> % batteri i etuiet.</translation>
 <translation id="1397738625398125236">Gatewayen kan pinges</translation>
@@ -125,11 +131,11 @@
 <translation id="1499900233129743732"><ph name="MANAGER" /> administrerer denne bruger, og vedkommende kan administrere indstillinger og overvåge brugeraktivitet via fjernadgang.</translation>
 <translation id="150962533380566081">Ugyldig PUK-kode.</translation>
 <translation id="1510238584712386396">Appliste</translation>
+<translation id="1512872158112631650">dramatiske skygger</translation>
 <translation id="1514446283880973949">Skriv mere selvsikkert, opsummer indhold, få definitioner og meget mere</translation>
 <translation id="1515129336378114413">browserens startside</translation>
 <translation id="1526389707933164996">Pauseskærmanimation</translation>
 <translation id="152892567002884378">Lydstyrke op</translation>
-<translation id="1531038290222364269">Vis faner</translation>
 <translation id="1539864135338521185">lapis lazuli</translation>
 <translation id="1548555207631326346">Vælg et tema, og vælg derefter de understregede ord for at foretage personlig tilpasning af dine AI-billeder.<ph name="LINE_BREAK" />
           <ph name="LINE_BREAK" />
@@ -200,6 +206,7 @@
 <translation id="1758018619400202187">EAP-TLS</translation>
 <translation id="1758459542619182298"><ph name="CONTROL_TYPE" /> <ph name="KEY_LIST" /></translation>
 <translation id="1759842336958782510">Chrome</translation>
+<translation id="1762353673362288306">Du kan nu kun bruge holdværktøjet</translation>
 <translation id="1762483337755424125">Transskription</translation>
 <translation id="1765169783255151332">Skift hurtigt taster</translation>
 <translation id="1768959921651994223">Godkendelsestype</translation>
@@ -216,7 +223,7 @@
 <translation id="1818174214124933000">Når du vælger Send, sendes din feedback og indholdet (vist nedenfor) til Google, hvorefter det gennemgås af mennesker og anvendes til at oplære eller forbedre vores produkter og tjenester i henhold til <ph name="LINK_POLICY_BEGIN" />privatlivspolitikken<ph name="LINK_POLICY_END" /> og <ph name="LINK_TERMS_OF_SERVICE_BEGIN" />Googles servicevilkår<ph name="LINK_TERMS_OF_SERVICE_END" />.</translation>
 <translation id="1823120442877418684">Figurer</translation>
 <translation id="1827738518074806965">Kunstgalleri</translation>
-<translation id="183287940576828840">Stødende/usikkert</translation>
+<translation id="183287940576828840">Stødende/skadeligt</translation>
 <translation id="1834032517784994783">Vælg transskriptionssprog</translation>
 <translation id="1836553715834333258">Systemfarve</translation>
 <translation id="183675228220305365">realisme</translation>
@@ -229,6 +236,7 @@
 <translation id="1854156910036166007">dovendyr</translation>
 <translation id="1856388568474281774">Pil ned</translation>
 <translation id="1858620243986915808">Vedhæft screenshot</translation>
+<translation id="1860654594958086756">3D-gengivelse</translation>
 <translation id="1871413952174074704">APN'et må ikke indeholde mere end <ph name="CHAR_LIMIT" /> tegn</translation>
 <translation id="1871569928317311284">Deaktiver Mørkt tema</translation>
 <translation id="1874612839560830905">MTU</translation>
@@ -242,10 +250,11 @@
 <translation id="1905710495812624430">Det maksimale antal forsøg er overskredet.</translation>
 <translation id="1908234395526491708">Mislykkede UDP-anmodninger</translation>
 <translation id="1908394185991500139">venstrepil</translation>
-<translation id="1911678930322867245">Flyt til øverste højre hjørne</translation>
 <translation id="1914144885717544695">på fredag</translation>
 <translation id="1915960750806557358">Del din feedback, eller beskriv dit problem. Sørg for ikke at medtage personlige, følsomme eller fortrolige oplysninger.</translation>
 <translation id="1923388006036088459">Kontrastfarver</translation>
+<translation id="1926611810597212636">enhjørning</translation>
+<translation id="1944321879609775960">Genstart <ph name="DEVICE_TYPE" /> for at oprette en opsummering</translation>
 <translation id="1945403655450283000">Lydoptager</translation>
 <translation id="1947737735496445907">Udskrevet</translation>
 <translation id="1951012854035635156">Assistent</translation>
@@ -268,6 +277,7 @@
 <translation id="2045814230297767491">bestik</translation>
 <translation id="2047316797244836561">Opret forbindelse til et netværk, og genindlæs siden for at se baggrunden.</translation>
 <translation id="2056550196601855911">IPv4/IPv6</translation>
+<translation id="2068472557797646626">3D-gengivelse af kugler og runde former i krom på en baggrund af arkitektoniske elementer i krom. Kompositionen er et moderne minimalistisk koncept til annoncering, branding eller præsentation med plads til tekst. En stor bue står foran en abstrakt baggrund i minimalistisk stil. Studiebelysning. Nærbillede.</translation>
 <translation id="2073232437457681324">et åbent hav</translation>
 <translation id="2080070583977670716">Flere indstillinger</translation>
 <translation id="2082932131694554252">Tildelt tast</translation>
@@ -315,6 +325,7 @@
 <translation id="2230624078793142213">Opret flere</translation>
 <translation id="2236746079896696523">Skydeknap for tastaturets baggrundslys</translation>
 <translation id="2240366984605217732">Layoutskift</translation>
+<translation id="224421911978987610">lang eksponering</translation>
 <translation id="2244834438220057800">grøn</translation>
 <translation id="225692081236532131">Aktiveringsstatus</translation>
 <translation id="2267285889943769271">Tilføj screenshot</translation>
@@ -342,6 +353,7 @@
 <translation id="2380886658946992094">Legal</translation>
 <translation id="2391082728065870591">Send feedbackrapport</translation>
 <translation id="2407209115954268704">Status for SIM-lås</translation>
+<translation id="240798792848608143">Genstart <ph name="DEVICE_TYPE" />, hvis du vil have en transskription på <ph name="LANGUAGE_NAME" /></translation>
 <translation id="241419523391571119">Åbn skærmen igen for at teste</translation>
 <translation id="2414660853550118611">Om baggrunden</translation>
 <translation id="2414886740292270097">Mørk</translation>
@@ -351,6 +363,7 @@
 <translation id="2438248248625638801">Optagelsestitler oprettes</translation>
 <translation id="2446553403094072641">Nøjagtighed af flydende komma</translation>
 <translation id="2448312741937722512">Type</translation>
+<translation id="2448857983905133469">Holdværktøjet</translation>
 <translation id="2468124392950503650">Vælg en prompt, eller tjek <ph name="BEGIN_LINK_PROMPTING_GUIDE" />guiden til prompter<ph name="END_LINK_PROMPTING_GUIDE" /> for at oprette et AI-billede</translation>
 <translation id="2472215337771558851">Brug "Hjælp mig med at skrive" til at oprette et udkast eller justere eksisterende tekstarbejde – baseret på Google AI</translation>
 <translation id="2475982808118771221">Der opstod en fejl</translation>
@@ -361,6 +374,7 @@
 <translation id="2493126929778606526">Dine bedste billeder udvælges automatisk</translation>
 <translation id="249323605434939166"><ph name="QUERY_TEXT" /> · <ph name="SOURCE_LANGUAGE_NAME" /></translation>
 <translation id="2501126912075504550">opal</translation>
+<translation id="2501278716633472235">Gå tilbage</translation>
 <translation id="2505327257735685095">Opdater det aktuelle baggrundsbillede</translation>
 <translation id="2507491234071975894">Højttaler</translation>
 <translation id="2512979179176933762">se vinduer</translation>
@@ -420,6 +434,7 @@
 <translation id="2805756323405976993">Apps</translation>
 <translation id="28232023175184696">Der kunne ikke oprettes forbindelse til internettet. Klik for at prøve igen.</translation>
 <translation id="2855718259207180827">uld</translation>
+<translation id="2856429654176718363">Et kæmpestort rumskib svæver over byen, som er oplyst af mange lys. Hele scenen har en oliemaleristil og er i mørke toner. Billedet har en mystisk atmosfære med futuristiske science fiction-elementer. Dette billede blev skabt ved hjælp af C4D-software og OC-gengivelsesværktøjet for at fremhæve høj opløsning og mange detaljer. Der var også nogle bygninger i forgrunden, som tilføjede dybdeskarphed. Scenen er gengivet i oliemaleristil, har mørke toner og skaber en mystisk atmosfære med futuristiske science fiction-elementer.</translation>
 <translation id="2859243502336719778">Kritisk opdatering</translation>
 <translation id="2860473693272905224">Placer en ny side i scanneren</translation>
 <translation id="286265581261662583">Højreklik eller hold fingeren nede for at få definitioner, oversættelser eller enhedsomregninger</translation>
@@ -436,9 +451,11 @@
 <translation id="2895772081848316509">mørkt</translation>
 <translation id="2915996080311180594">Genstart senere</translation>
 <translation id="2926057806159140518">Angiv dit brugernavn og din adgangskode, eller scan din QR-kode</translation>
+<translation id="2927007463545347013">anime-sti med udsigt over havet og faldende blade fra et kirsebærtræ</translation>
 <translation id="2940811910881150316">Enheden kan ikke testes. Åbn skærmen igen for at teste den.</translation>
 <translation id="2941112035454246133">Lav</translation>
 <translation id="2956070106555335453">Oversigt</translation>
+<translation id="2968959705684615497">en surrealistisk hvid tiger med guldfarvede øjne og guldfarvede striber, der sidder på en hvid sandklit</translation>
 <translation id="299385721391037602">lyserød og gul</translation>
 <translation id="3008341117444806826">OPDATER</translation>
 <translation id="3009958530611748826">Vælg en mappe, du vil gemme i</translation>
@@ -449,6 +466,7 @@
 <translation id="3054177598518735801"><ph name="CURRENT_VALUE" /> mA</translation>
 <translation id="3056720590588772262">Slutpunkt</translation>
 <translation id="3060579846059757016">Oversigter</translation>
+<translation id="3060798442805232711">Holdværktøjet bruger din mikrofon</translation>
 <translation id="3061850252076394168">aktivér Tekstoplæsning</translation>
 <translation id="3066772729299747758">på tirsdag</translation>
 <translation id="3069085583900247081">Testen mislykkedes</translation>
@@ -458,7 +476,8 @@
 <translation id="3084958266922136097">Deaktiver Pauseskærm</translation>
 <translation id="3091839911843451378">Handlingen mislykkedes – Stoppede</translation>
 <translation id="3102119246920354026">Cache</translation>
-<translation id="3112413615003385433">Din underviser har fjernet indhold i Skoleværktøjer</translation>
+<translation id="3103783611481501187">surrealistisk</translation>
+<translation id="3119672627216736407">Tilgængelig oversættelse</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3122614491980756867">pools</translation>
 <translation id="3122883569442693641">Flere oplysninger</translation>
@@ -473,6 +492,7 @@
 <translation id="3156846309055100599">Scanner side <ph name="PAGE_NUMBER" />...</translation>
 <translation id="315738237743207937">Der blev registreret en loginportal</translation>
 <translation id="3160172848211257835">Send <ph name="BEGIN_LINK1" />system- og appoplysninger<ph name="END_LINK1" /> samt <ph name="BEGIN_LINK2" />metrics<ph name="END_LINK2" /></translation>
+<translation id="3161556797767210144">Genstart <ph name="DEVICE_TYPE" /> for at oprette en opsummering og en titel</translation>
 <translation id="3170673040743561620">Placer dit dokument i scanneren</translation>
 <translation id="3174321110679064523">Baggrunden Daggry til mørkets frembrud</translation>
 <translation id="3178532070248519384">avantgarde</translation>
@@ -487,6 +507,7 @@
 <translation id="3226405216343213872">Søger efter scannere</translation>
 <translation id="3226657629376379887">Handlingsmenu for layout</translation>
 <translation id="3227186760713762082">Divider værdien for <ph name="CATEGORY_TEXT" /> med <ph name="CONVERSION_RATE" /></translation>
+<translation id="3242622575335502454">digital kunst</translation>
 <translation id="3246869037381808805">Udskriftjobs, der er ældre end 1 dag, fjernes</translation>
 <translation id="3248791727258378769">Der oprettes ingen transskription</translation>
 <translation id="324961752321393509">Din administrator tillader ikke lukning af denne app</translation>
@@ -505,6 +526,7 @@
 <translation id="3321030238473337787">Afspilningshastighed</translation>
 <translation id="3327613592010997943">Du kan bruge enheden igen <ph name="DAY" /> kl. <ph name="TIME" />.</translation>
 <translation id="3328783797891415197">Testen kører</translation>
+<translation id="3332683265015995419">et steampunk-rumskib, der flyver gennem en sandstorm</translation>
 <translation id="3340011300870565703">Enheden har <ph name="BATTERY_PERCENTAGE" /> % batteri på højre øretelefon.</translation>
 <translation id="3340978935015468852">indstillinger</translation>
 <translation id="3347558044552027859">moderne</translation>
@@ -516,6 +538,7 @@
 <translation id="3369632935976756339"><ph name="INTENT" />; <ph name="QUERY_TEXT" />; <ph name="SUBTEXT" />; <ph name="RESULT_TEXT" /></translation>
 <translation id="3373141842870501561">Baggrunden Flow med Jorden</translation>
 <translation id="33736539805963175"><ph name="LETTERS_COLOR" />-baggrund med bogstavet <ph name="LETTERS_LETTER" /></translation>
+<translation id="3382806462014639823"><ph name="TEACHER_NAME" /> ser din skærm</translation>
 <translation id="3383623117265110236">Eksklusivt</translation>
 <translation id="3404249063913988450">Aktivér Pauseskærm</translation>
 <translation id="3413935475507503304">Klik på Næste for at fortsætte med opdateringen.</translation>
@@ -523,6 +546,7 @@
 <translation id="3428551088151258685">udendørs</translation>
 <translation id="3428971106895559033">pastel</translation>
 <translation id="3434107140712555581"><ph name="BATTERY_PERCENTAGE" /> %</translation>
+<translation id="3434988468785284438">reflektioner</translation>
 <translation id="3435738964857648380">Sikkerhed</translation>
 <translation id="3435896845095436175">Aktivér</translation>
 <translation id="345256797477978759">Fastgør vinduet på den største del af skærmen (<ph name="DIRECTION" />)</translation>
@@ -539,7 +563,6 @@
 <translation id="3488065109653206955">Delvist aktiveret</translation>
 <translation id="3492882532495507361">Et <ph name="OFFICE_STYLE" /> kontor med <ph name="OFFICE_COLOR" /> toner</translation>
 <translation id="3493187369049186498">Data måles af din Chromebook. Disse data kan være forskellige fra udbyderdataene.</translation>
-<translation id="349570724365779960">Skoleværktøjer er tilknyttet eleverne</translation>
 <translation id="3502426834823382181">se alle apps</translation>
 <translation id="3510890413042482857">Send <ph name="BEGIN_LINK1" />data om ydeevne<ph name="END_LINK1" /></translation>
 <translation id="3517001332549868749">ChromeOS-opdatering</translation>
@@ -547,8 +570,8 @@
 <translation id="353214771040290298">Færdig med at redigere</translation>
 <translation id="3532980081107202182">Ca. <ph name="MIN_REMAINING" /> minutter tilbage</translation>
 <translation id="3533790840489634638">pool</translation>
-<translation id="3535802910192338629">Din underviser har tilføjet nyt indhold i Skoleværktøjer</translation>
 <translation id="3547264467365135390">Formel</translation>
+<translation id="3552832331940389362">en japansk animeret illustration af en kat, der sidder i en vindueskarm og kigger på eftermiddagsregnen</translation>
 <translation id="3557205324756024651">Lokal identitet (valgfrit)</translation>
 <translation id="3565064564551103223">Tilladte IP'er</translation>
 <translation id="3569407787324516067">Pauseskærm</translation>
@@ -565,6 +588,7 @@
 <translation id="3604713164406837697">Skift baggrund</translation>
 <translation id="360565022852130722">Wi-Fi-netværket er beskyttet med den svage protokol WEP 802.1x</translation>
 <translation id="3606583719724308068">Stor forsinkelse til HTTPS-websites</translation>
+<translation id="3614639364827854748">Flyt denne menu til venstre</translation>
 <translation id="361575905210396100">Tak for din feedback</translation>
 <translation id="3621072146987826699">elefanter</translation>
 <translation id="3628462041319107639">Transskriptionsmodellen downloades…</translation>
@@ -623,11 +647,14 @@
 <translation id="38811596981744338">Juridisk problem</translation>
 <translation id="3885327323343477505">Skift pauseskærm</translation>
 <translation id="3889914174935857450">Nulstil dato</translation>
+<translation id="3889954687526985291">en futuristisk motorcykel lavet af sort papir med neonlys på en mørk baggrund</translation>
 <translation id="3897092660631435901">Menu</translation>
 <translation id="3902271751020176019">Transskriptionssprog</translation>
+<translation id="390890062090528082">stjernehimmel</translation>
 <translation id="391412459402535266">Enheden kan ikke testes. Skift til computertilstand for at teste den.</translation>
 <translation id="3916998944874125962">tag et screenshot</translation>
 <translation id="3923184630988645767">Dataforbrug</translation>
+<translation id="392943705803418306">Sessionen i holdværktøjet er afsluttet for dig</translation>
 <translation id="3932043219784172185">Der er ikke nogen forbundne enheder</translation>
 <translation id="3934185438132762746">Ikke-tildelt <ph name="CONTROL_TYPE" /></translation>
 <translation id="3941014780699102620">Der kunne ikke identificeres en host</translation>
@@ -714,6 +741,7 @@
           <ph name="LINE_BREAK" />
           <ph name="LINE_BREAK" />
           Generativ AI kan begå fejl, herunder om personer, så sørg for at dobbelttjekke dens svar. <ph name="BEGIN_LINK_CREATE_YOUR_OWN_WALLPAPER" />Få flere oplysninger<ph name="END_LINK_GOOGLE_PRIVACY_POLICY" /></translation>
+<translation id="4253971074682120908">negativt rum</translation>
 <translation id="4258281355379922695">HTTP-forsinkelse</translation>
 <translation id="4266143281602681663">garn</translation>
 <translation id="4269815121975886860">Indstillinger for opstart</translation>
@@ -741,6 +769,7 @@
 <translation id="4378373042927530923">Kørte ikke</translation>
 <translation id="4378551569595875038">Tilslutter...</translation>
 <translation id="4382484599443659549">PDF</translation>
+<translation id="4383322413532809099">Genstart <ph name="DEVICE_TYPE" /> for at oprette titler til din optagelse</translation>
 <translation id="4394049700291259645">Deaktiver</translation>
 <translation id="439429847087949098">Genstarter <ph name="DEVICE_NAME" /></translation>
 <translation id="4395835743215824109">tilpas tastatur</translation>
@@ -769,6 +798,7 @@
 <translation id="4486524074141928967">Du logges ud kl. <ph name="TIME" /></translation>
 <translation id="4500722292849917410">Genvejen er ikke tilgængelig. Tryk en ny genvej ved hjælp af en ændringstast (Ctrl, Alt, Shift eller <ph name="META_KEY" />).</translation>
 <translation id="4500966230243561393">Grænsefladefarve</translation>
+<translation id="4501302804999678844">Genstart <ph name="DEVICE_TYPE" /> for at oprette en transskription</translation>
 <translation id="4503223151711056411">Venstrepil</translation>
 <translation id="4503441351962730761">moderne kunst</translation>
 <translation id="4507392511610824664">lysstyrke op</translation>
@@ -791,6 +821,7 @@
 <translation id="4593212453765072419">Proxygodkendelse påkrævet</translation>
 <translation id="4594021849294327751">Opret transskription</translation>
 <translation id="4594541568452132351">Vælg transskriptionssprog, og download modellen</translation>
+<translation id="4600301862817165514">en Delorean med neonlys, der kører gennem galaksen med stjerner susende forbi</translation>
 <translation id="4609350030397390689">Reducer tastaturets lysstyrke</translation>
 <translation id="4627232916386272576"><ph name="DOCUMENT_TITLE" />, <ph name="PRINTER_NAME" />, <ph name="CREATION_TIME" />, <ph name="PRINTED_PAGE_NUMBER" /> ud af <ph name="TOTAL_PAGE_NUMBER" />. Tryk på Enter for at annullere udskriftsjobbet.</translation>
 <translation id="463791356324567266">Annullerer scanning...</translation>
@@ -811,7 +842,10 @@
 <translation id="4691278870498629773">Stoppet – Bakke mangler</translation>
 <translation id="469379815867856270">Signalstyrke</translation>
 <translation id="4697260493945012995">Vælg typen af styringselement</translation>
+<translation id="4712940987669302829">bokeh-effekt</translation>
 <translation id="4731797938093519117">Forældreadgang</translation>
+<translation id="4733200407105375152">Ikke i holdværktøjet</translation>
+<translation id="4734982181169850310">pastelfarver</translation>
 <translation id="473775607612524610">Opdater</translation>
 <translation id="4744944742468440486">Oplysninger relateret til det, du har markeret</translation>
 <translation id="4750394297954878236">Forslag</translation>
@@ -819,6 +853,7 @@
 <translation id="4771607256327216405">skru op for tastaturlys</translation>
 <translation id="4771923071974529837">i morgen</translation>
 <translation id="4773299976671772492">Stoppet</translation>
+<translation id="4777310452073659583">Genstart <ph name="DEVICE_TYPE" /> for at få en transskription</translation>
 <translation id="4778082030331381943">ametyst</translation>
 <translation id="4782311465517282004">Få definitioner, oversættelser eller enhedsomregninger, når du højreklikker på eller holder tekst nede</translation>
 <translation id="4791000909649665275"><ph name="NUMBER" /> billede</translation>
@@ -861,14 +896,17 @@
 <translation id="4921665434385737356">Opladet <ph name="RATE" /> på <ph name="NUM_SECONDS" /> sekunder.</translation>
 <translation id="4930320165497208503">Gå til <ph name="BEGIN_LINK" />Indstillinger<ph name="END_LINK" /> for at konfigurere eller opdatere en forbindelse.</translation>
 <translation id="4932733599132424254">Dato</translation>
+<translation id="493637535592633700">bioluminescens</translation>
 <translation id="494102685638938793"><ph name="LINK_TEXT" />, åbner på en ny fane</translation>
 <translation id="4946927805998996217">Oversigten genereres</translation>
 <translation id="4950314376641394653">Firmwaren på <ph name="DEVICE_NAME" /> er opdateret til version <ph name="VERSION" /></translation>
 <translation id="4950893758552030541">trætunnel</translation>
+<translation id="4964806321337443935">4K</translation>
 <translation id="4965661459364092269">Sikkerhedsnulstillingen er gennemført</translation>
 <translation id="4965703485264574128">Gang værdien for <ph name="CATEGORY_TEXT" /> med <ph name="CONVERSION_RATE" /> for at se et omtrentligt resultat</translation>
 <translation id="4969079779290789265">Opdel</translation>
 <translation id="4972592110715526173">ændring af tilstand</translation>
+<translation id="497421865427891073">Gå fremad</translation>
 <translation id="4981003703840817201">blå og lyserød</translation>
 <translation id="498186245079027698">Tjek scanneren, og prøv igen. Sørg for, at der er nok lokal lagerplads til at gemme de scannede filer.</translation>
 <translation id="4982627662315910959">Genvejen er ikke tilgængelig. Tryk en ny genvej ved hjælp af Shift og 1 anden ændringstast (Ctrl, Alt eller <ph name="META_KEY" />).</translation>
@@ -876,6 +914,7 @@
 <translation id="4987769320337599931">Firewall</translation>
 <translation id="4988526792673242964">Sider</translation>
 <translation id="4989542687859782284">Ikke tilgængelige</translation>
+<translation id="4999267570108760491">vektorkunst</translation>
 <translation id="4999333166442584738">Skjul rapport</translation>
 <translation id="500920857929044050">Stop test</translation>
 <translation id="5017508259293544172">LEAP</translation>
@@ -913,6 +952,7 @@
 <translation id="5170568018924773124">Vis i mappe</translation>
 <translation id="517075088756846356">Tag strømkablet ud af din <ph name="DEVICE_NAME" />, og sæt det derefter i igen for at fortsætte opdateringsprocessen</translation>
 <translation id="5180108905184566358">baobabtræer</translation>
+<translation id="5180431943345994173">Din underviser har fjernet indhold i holdværktøjet</translation>
 <translation id="5180712487038406644">Varieret</translation>
 <translation id="5190187232518914472">Genoplev dine bedste minder. Gå til <ph name="LINK_BEGIN" />Google Fotos<ph name="LINK_END" /> for at tilføje eller redigere album.</translation>
 <translation id="5212593641110061691">Tabloid</translation>
@@ -922,7 +962,7 @@
 <translation id="5223226274641517059">Der vises livetransskriptioner, mens du optager. Du kan til enhver tid deaktivere dette under Indstillinger.</translation>
 <translation id="5226879510707344687">Eksportér transskription</translation>
 <translation id="5227902338748591677">Tidsplan for Mørkt tema</translation>
-<translation id="5229104491259541281">Konverter "<ph name="QUERY" />"</translation>
+<translation id="5229104491259541281">Konvertér "<ph name="QUERY" />"</translation>
 <translation id="5229344016299762883">Afslut fuld skærm</translation>
 <translation id="5234764350956374838">Luk</translation>
 <translation id="5236119614998611749">Opsummeringen kunne ikke genereres</translation>
@@ -943,6 +983,7 @@
 <translation id="5300172019534884676">slå kameraadgang til/fra</translation>
 <translation id="5300814202279832142">Flyt vindue til skrivebord</translation>
 <translation id="5302048478445481009">Sprog</translation>
+<translation id="5303459213631364445">lysende</translation>
 <translation id="5303837385540978511">Baggrund udelukkende til <ph name="PRODUCT_NAME" /></translation>
 <translation id="5304899856529773394">EvDo</translation>
 <translation id="530883153651464140">Opdater <ph name="DEVICE_NAME" /> til version <ph name="VERSION" /></translation>
@@ -980,6 +1021,7 @@
 <translation id="5499762266711462226">Tastaturets farve er baseret på baggrunden</translation>
 <translation id="5502931783115429516">Android kører ikke</translation>
 <translation id="550600468576850160">en eng</translation>
+<translation id="5507504956167780539">et minimalistisk professionelt billede af glitrende sorte sandklitter med dramatiske skygger</translation>
 <translation id="551689408806449779">Forbindelsen til enheden er blevet afbrudt. Prøv at oprette forbindelse igen for at teste</translation>
 <translation id="5519195206574732858">LTE</translation>
 <translation id="552644173505433109">Få flere oplysninger om oprettelse af opsummering og titel</translation>
@@ -1006,6 +1048,7 @@
 <translation id="5628106863521633649">Tilgængelige sprog</translation>
 <translation id="5630438231335788050">Bauhaus</translation>
 <translation id="5631759159893697722">abstrakt</translation>
+<translation id="5655084389678168978">Din underviser har tilføjet nyt indhold i holdværktøjet</translation>
 <translation id="5655283760733841251">Øg tastaturets lysstyrke</translation>
 <translation id="5655296450510165335">Tilmelding af enhed</translation>
 <translation id="5655776422854483175">Ingen udskriftsjob</translation>
@@ -1029,7 +1072,6 @@
 <translation id="5760715441271661976">Tilstand for portal</translation>
 <translation id="5763838252932650682">Genstarter og opdaterer <ph name="APP_NAME" /></translation>
 <translation id="576835345334454681">Øg skærmens lysstyrke</translation>
-<translation id="5775340474232476653">Din underviser har afsluttet lektionen</translation>
 <translation id="5779818640587041940">Sørg for, at skærmen er tændt, mens du optager</translation>
 <translation id="57838592816432529">Slå lyden fra</translation>
 <translation id="5784136236926853061">Stor HTTP-forsinkelse</translation>
@@ -1046,16 +1088,17 @@
 <translation id="5859969039821714932">Genvejen er ikke tilgængelig. Tryk på en ny genvej uden <ph name="KEY" />.</translation>
 <translation id="5860033963881614850">Fra</translation>
 <translation id="5860491529813859533">Aktivér</translation>
+<translation id="586463370326011345">lyn</translation>
 <translation id="5875913454160982848">Download transskriptionsmodel</translation>
 <translation id="5876385649737594562">Aktivér for at vælge muligheder</translation>
 <translation id="5877503382465267833">Sæt <ph name="RECORDING_NAME" /> på pause</translation>
 <translation id="588258955323874662">Fuld skærm</translation>
+<translation id="5889539348012432386">Startside for holdværktøjet</translation>
 <translation id="5893975327266416093">Tryk på en tastaturtast for at tildele</translation>
 <translation id="5895138241574237353">Genstart</translation>
 <translation id="5896602941605730551">Afspil</translation>
 <translation id="5901630391730855834">Gul</translation>
 <translation id="5903200662178656908">Enheden er en kombination af et tastatur og en mus</translation>
-<translation id="5903822368221507416">Skjul faner</translation>
 <translation id="5904994456462260490">Tilføj et nyt APN</translation>
 <translation id="590746845088109442">katte</translation>
 <translation id="5907649332524363701">farve på taster</translation>
@@ -1095,10 +1138,12 @@
 <translation id="6058625436358447366">Angiv din gamle og nye adgangskode for at afslutte</translation>
 <translation id="6061772781719867950">Mislykkede HTTP-anmodninger</translation>
 <translation id="6073292342939316679">reducer tastaturets lysstyrke</translation>
+<translation id="6074608334942655098">Stop oversættelse</translation>
 <translation id="6074752328838739425">Skjul oversigt</translation>
 <translation id="6075872808778243331">(Android) HTTP-forsinkelse</translation>
 <translation id="6078323886959318429">Tilføj genvej</translation>
 <translation id="6079693086494835199">Nulstil for at sikre, at standardstartsiden ikke er et phishingwebsite. Brug kun websites, du har tillid til.</translation>
+<translation id="6090672065638047175">et billede af et lysende træ lavet af stjerner med en smuk nattehimmel og galakse i baggrunden</translation>
 <translation id="6091080061796993741">gul</translation>
 <translation id="6104112872696127344">Scanningen blev annulleret</translation>
 <translation id="6106186594183574873">Angiv din gamle adgangskode for at afslutte</translation>
@@ -1181,6 +1226,7 @@
 <translation id="6417265370957905582">Google Assistent</translation>
 <translation id="6419454453018688975">Aktivér systemets lokationsadgang</translation>
 <translation id="6423239382391657905">OpenVPN</translation>
+<translation id="642713342828771202">solnedgang</translation>
 <translation id="6437513277380808188">TXT</translation>
 <translation id="6439505561246192797">Svagt (<ph name="SIGNAL_STRENGTH" />)</translation>
 <translation id="6447630859861661624">Gå til kontoindstillinger</translation>
@@ -1283,6 +1329,7 @@
 <translation id="6900701049656042631">Dette album indeholder ingen billeder. Du kan tilføje billeder ved at gå til <ph name="LINK" /></translation>
 <translation id="6902359863093437070">Opret baggrund med AI</translation>
 <translation id="6905163627763043954">Prøv det</translation>
+<translation id="6905275015682612674">et billede med lang eksponeringstid af en bioluminescerende strand ved solnedgang med stjerner på himlen, flotte pastelfarver, 4k</translation>
 <translation id="6905724422583748843">Tilbage til <ph name="PAGE_NAME" /></translation>
 <translation id="6910312834584889076">Scannerens er åben. Luk den, og prøv igen.</translation>
 <translation id="6910845598686542904">Skab modeller af de stemmer, der registreres i optagelsen</translation>
@@ -1290,7 +1337,9 @@
 <translation id="6926069762081461162">Optagelsestitel</translation>
 <translation id="6930242544192836755">Varighed</translation>
 <translation id="6930597342185648547">Om baggrunden</translation>
+<translation id="6931666215260956151">galakse</translation>
 <translation id="6939766318048400022">Café</translation>
+<translation id="6940212863873359282">et stykke hvidt organza, der svæver i midten, over en hvid marmorbue med en cremefarvet baggrund</translation>
 <translation id="6942253772720771875">Del din feedback, eller beskriv dit problem</translation>
 <translation id="6943893908656559156">Fjernidentitet (valgfrit)</translation>
 <translation id="694981048020558038">Søg efter optagelsestitel</translation>
@@ -1366,6 +1415,7 @@
 <translation id="7212547870105584639">Administrer indstillinger for APN-netværk. APN'er opretter forbindelse mellem et mobilnetværk og internettet. <ph name="BEGIN_LINK_LEARN_MORE" />Få flere oplysninger<ph name="END_LINK_LEARN_MORE" /></translation>
 <translation id="7212734716605298123">Opdateringer af firmware på eksterne enheder</translation>
 <translation id="7216409898977639127">Mobilselskab</translation>
+<translation id="7221869452894271364">Genindlæs denne side</translation>
 <translation id="7223952304612664117">Dette giver systemtjenester tilladelse til at anvende Lokationsnøjagtighed til at fastslå din lokation. Lokationsnøjagtighed anvender oplysninger om trådløse signaler og sensorer til at estimere enhedens lokation.</translation>
 <translation id="7233782086689993269">Genvejen er gendannet</translation>
 <translation id="723419678599947502">Opret en titel ved hjælp af Google AI</translation>
@@ -1376,6 +1426,7 @@
 <translation id="7271040990581020067">Scanneren bruges i øjeblikket. Prøv igen senere.</translation>
 <translation id="7271932918253517778">Genvejen med taster i øverste række skal indeholde <ph name="META_KEY" />-tasten.</translation>
 <translation id="7274587244503383581"><ph name="PRINTED_PAGES_NUMBER" />/<ph name="TOTAL_PAGES_NUMBER" /></translation>
+<translation id="7275707758336796649">en dalmatiner foran en lyserød baggrund i en dynamisk kropsstilling, taget med fotografi i høj opløsning, hyperrealistisk baggrund med farvegradering</translation>
 <translation id="7281657306185710294">Feel the breeze</translation>
 <translation id="7287310195820267359">Samlinger med baggrunde</translation>
 <translation id="7293429513719260019">Vælg sprog</translation>
@@ -1385,6 +1436,7 @@
 <translation id="7302860742311162920">ICCID</translation>
 <translation id="7305884605064981971">EDGE</translation>
 <translation id="7308203371573257315">Spørg eksperterne i hjælpeforummet for Chromebook</translation>
+<translation id="7309823890857024809">billede af et par kornvalmuers stilke i en glasvase på en sort baggrund</translation>
 <translation id="7311368985037279727">tastaturfarve</translation>
 <translation id="7317831949569936035">Skoleindskrivning</translation>
 <translation id="7319430975418800333">A3</translation>
@@ -1402,6 +1454,7 @@
 <translation id="7353413232959255829">Søgeresultat <ph name="LIST_POSITION" /> af <ph name="LIST_SIZE" />: <ph name="SEARCH_RESULT_TEXT" />. Tryk på Enter for at gå til genvejen.</translation>
 <translation id="7359657277149375382">Filtype</translation>
 <translation id="73631062356239394">Del diagnosticeringsdata</translation>
+<translation id="7369648056634183167">et nærbillede af en detaljeret, dugdækket vandlilje i regnen. Fokus er på de sarte kronblade og de lysreflekterende vanddråber, som er i pastelfarver på en blå baggrund. Billedet er taget i øjenhøjde med naturligt lys</translation>
 <translation id="7375053625150546623">EAP</translation>
 <translation id="7378170410161264436">Lydoptager kan oprette transskriptioner af optagelser med tale.
 Download transskriptionsmodellen (op til 100 MB) for at få disse transskriptioner.</translation>
@@ -1409,7 +1462,6 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="7388345524791662148">Flere valgmuligheder for <ph name="RECORDING_NAME" /></translation>
 <translation id="7388959671917308825">Indbygget touchplade</translation>
 <translation id="7397270852490618635">Deaktiver Lyst tema</translation>
-<translation id="7400166052988585408">Din underviser låser din skærm om <ph name="NUM_SECONDS" /> sekunder</translation>
 <translation id="7401543881546089382">Slet genvej</translation>
 <translation id="7405493795721832710"><ph name="DEVICE_NAME" /> er klar til at blive opdateret</translation>
 <translation id="741244894080940828">konvertering</translation>
@@ -1424,6 +1476,7 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="7481312909269577407">Frem</translation>
 <translation id="7487067081878637334">Teknologi</translation>
 <translation id="7490813197707563893">MAC-adresse</translation>
+<translation id="7494145938791663804">smuk</translation>
 <translation id="7497215489070763236">Serverens CA-certifikat</translation>
 <translation id="7500205272584643581">Vil du tillade, at Lydoptager registrerer og navngiver højttalere?</translation>
 <translation id="7501957181231305652">eller</translation>
@@ -1441,7 +1494,6 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="7544853251252956727">Bland</translation>
 <translation id="7550715992156305117">Diagnostikrutiner</translation>
 <translation id="7551123448725492271">Enheden er en lydenhed.</translation>
-<translation id="7553913964854052228">Skoleværktøjer anvender din mikrofon</translation>
 <translation id="7559239713112547082">Se forhåndsvisning af screenshot</translation>
 <translation id="7561454561030345039">Denne handling administreres af din administrator</translation>
 <translation id="7561759921596375678">Slå lyden til</translation>
@@ -1480,6 +1532,7 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="7760571082554155847">Indstillinger for startsiden</translation>
 <translation id="7762130827864645708">Din adgangskode er ændret. Brug den nye adgangskode fremover.</translation>
 <translation id="7763470514545477072">Match af domænesuffiks</translation>
+<translation id="7764171263909999400">lysstråle</translation>
 <translation id="7769672763586021400">Model-id</translation>
 <translation id="7774759755755950354">Tilbage</translation>
 <translation id="7778717409420828014">Din feedback hjælper os med at forbedre Chromebook-oplevelsen, og den vil blive gennemgået af vores team. Vi modtager mange indrapporteringer, så vi kan ikke sende dig et personligt svar.</translation>
@@ -1533,6 +1586,7 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="7971535376154084247">Generelle styringselementer</translation>
 <translation id="7977800524392185497">Gå til Indstillinger for at oprette forbindelse til et <ph name="NETWORK_NAME" />-netværk</translation>
 <translation id="7978412674231730200">Privat nøgle</translation>
+<translation id="7979468455552394856">Eleverne har forbindelse til holdværktøjet</translation>
 <translation id="7982789257301363584">Netværk</translation>
 <translation id="7983597390787556680">{NUM_ROOL_APPS,plural, =1{"<ph name="APP_NAME_1" />" blev startet automatisk}one{# app blev startet automatisk}other{# apps blev startet automatisk}}</translation>
 <translation id="7994702968232966508">EAP-metode</translation>
@@ -1562,7 +1616,7 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8088963492174775412">Tryk for at optage</translation>
 <translation id="8094062939584182041">Giv Google tilladelse til at kontakte dig via mail vedrørende dette problem</translation>
 <translation id="8104083085214006426">Du bruger et åbent og usikkert netværk</translation>
-<translation id="8110942816572072814">Din underviser har låst din skærm</translation>
+<translation id="8108879170356113798">Du skal vente <ph name="NUM_SECONDS" /> sekunder for at bruge holdværktøjet</translation>
 <translation id="811820734797650957">(Android) Gatewayen kan pinges</translation>
 <translation id="8129620843620772246"><ph name="TEMPERATURE_C" /> °C</translation>
 <translation id="8131740175452115882">Bekræft</translation>
@@ -1570,6 +1624,7 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8135609423982943441">Din Chromebook er nulstillet til de sikre standardindstillinger. Du kan til enhver tid ændre dette under Indstillinger.</translation>
 <translation id="8138405288920084977">LTEAdvanced</translation>
 <translation id="8140591278915222789">Opret dit eget</translation>
+<translation id="8142182840415860496">et nærbillede af flere hvide og gule blomster, et stillbillede fra en animeret film, en sart lyserød blomst med lange kronblade og en grøn stilk placeret mellem to store gule tulipaner med en blå himmel i baggrunden og uden blade eller løv i pastelfarver, et filmisk stillbillede i høj opløsning med mange detaljer, Octane-gengivelse med smuk belysning, volumetrisk og stemningsfuldt lys.</translation>
 <translation id="8143951647992294073">Vælg <ph name="TOPIC_SOURCE" /> <ph name="TOPIC_SOURCE_DESC" /></translation>
 <translation id="8151185429379586178">Udviklerværktøjer</translation>
 <translation id="8152370627892825"><ph name="DESCRIPTION" />, <ph name="ACCELERATOR_INFO" />.</translation>
@@ -1603,7 +1658,6 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8318753676953949627">Der er ingen billeder</translation>
 <translation id="8319809980370328428">Oprettelse af optagelsesopsummering og titel</translation>
 <translation id="8320910311642849813">en skov</translation>
-<translation id="8322464149031882595">Klik for at gå videre</translation>
 <translation id="8329018942023753850">appen Lommeregner</translation>
 <translation id="8336739000755212683">Skift kontobillede på enheden</translation>
 <translation id="8339024191194156249">Få flere oplysninger om automatisk opstart</translation>
@@ -1651,12 +1705,14 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8503813439785031346">Brugernavn</translation>
 <translation id="8503836310948963452">Det tager kun et par minutter mere...</translation>
 <translation id="8505011850330200833">Gemini-modellen kræver 2 GB lagerplads for at behandle transskriptioner og oprette opsummeringer</translation>
+<translation id="8506063704538210734">billede af en nattehimmel med meteorregn og et par træer i forgrunden, med lilla og lyserøde nuancer</translation>
+<translation id="8506394543220680287">dækket af sne</translation>
 <translation id="8508640263392900755">Oplysninger om APN</translation>
 <translation id="8522687886059337719">Du har nu adgang til nye <ph name="BEGIN_LINK_WALLPAPER_SUBPAGE" />baggrunde<ph name="END_LINK_WALLPAPER_SUBPAGE" /> og <ph name="BEGIN_LINK_SCREENSAVER_SUBPAGE" />pauseskærme<ph name="END_LINK_SCREENSAVER_SUBPAGE" /></translation>
 <translation id="8528615187455571738">Crosvm</translation>
 <translation id="852896705346853285">tehus</translation>
+<translation id="8531692079895415839">tåget</translation>
 <translation id="8538236298648811558">Baseret på Google AI</translation>
-<translation id="8543574988889671960">Genindlæs fane</translation>
 <translation id="8550364285433943656">Placer styringselementer på spilhandlinger, så du kan spille ved hjælp af tasterne</translation>
 <translation id="8557447961879934694">WPA2</translation>
 <translation id="8558521694042102707">Generativ AI kan begå fejl, f.eks. med hensyn til personoplysninger, så sørg for at dobbelttjekke dens svar.</translation>
@@ -1664,7 +1720,6 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8576249514688522074">Ikke startet</translation>
 <translation id="8584654835905316966">En genstart er påkrævet for at gennemføre installationen af firmwaren til <ph name="DEVICE_NAME" /> til version <ph name="VERSION" />. Din computer ser muligvis ud til at genstarte flere gange. Dette er helt normalt.</translation>
 <translation id="8593058461203131755">sæt medie på pause</translation>
-<translation id="8619169570378509764">Skoleværktøjer</translation>
 <translation id="8620617069779373398">Roamingstatus</translation>
 <translation id="8626489604350149811">Flere handlinger for <ph name="APN_NAME" /></translation>
 <translation id="86356131183441916">Lys violet</translation>
@@ -1674,11 +1729,13 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8655295600908251630">Kanal</translation>
 <translation id="8655828773034788261">Del webadresse:</translation>
 <translation id="8660881923941176839">pund</translation>
+<translation id="8669187096858652220">Klik for at se faner</translation>
 <translation id="8670574982334489519">højre</translation>
 <translation id="8675354002693747642">Forhåndsdelt nøgle:</translation>
 <translation id="8677859815076891398">Der er ingen album. Opret et album i <ph name="LINK_BEGIN" />Google Fotos<ph name="LINK_END" />.</translation>
 <translation id="8682949824227998083">ramen</translation>
 <translation id="8689520252402395106">Sæt USB-kablet i <ph name="DEVICE_NAME" /> igen for at fortsætte opdateringsprocessen</translation>
+<translation id="8699053192961439771">Klik for at skjule faner automatisk</translation>
 <translation id="8709616837707653427"><ph name="DESC_TEXT" /> Tryk på venstre- eller højrepil for at bruge denne funktion.</translation>
 <translation id="8712637175834984815">Forstået</translation>
 <translation id="871560550817059752">Handlingen mislykkedes – Mangler blæk</translation>
@@ -1708,7 +1765,6 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8820817407110198400">Bogmærker</translation>
 <translation id="8833620912470026819">kaktusskov</translation>
 <translation id="8834539327799336565">Forbundet lige nu</translation>
-<translation id="8842526499753992487">Flyt til øverste venstre hjørne</translation>
 <translation id="8845001906332463065">Få hjælp</translation>
 <translation id="8849799913685544685">et fyrtårn</translation>
 <translation id="8851859208664803097">Stoppet – Ingen forbindelse til printer</translation>
@@ -1748,15 +1804,16 @@ Download transskriptionsmodellen (op til 100 MB) for at få disse transskription
 <translation id="8961025972867871808">pingviner</translation>
 <translation id="8968751544471797276">Opladningshastighed</translation>
 <translation id="8970109610781093811">Kør igen</translation>
-<translation id="8972061581514441296">Klik for at gå tilbage</translation>
 <translation id="8983038754672563810">HSPA</translation>
 <translation id="8987565828374052507">{NUMBER_OF_PAGES,plural, =0{Scan}=1{Scan side {NUMBER_OF_PAGES}}one{Scan page {NUMBER_OF_PAGES}}other{Scan siderne {NUMBER_OF_PAGES}}}</translation>
 <translation id="89945434909472341">en landsby</translation>
 <translation id="8997710128084572139">Enheden har <ph name="BATTERY_PERCENTAGE" /> % batteri.</translation>
+<translation id="8998002498898621320">realistisk billede</translation>
 <translation id="8998289560386111590">Ikke tilgængelig på din enhed</translation>
 <translation id="9000871120886759611">Nulstil for at sikre, at du kan få adgang til oplysninger på dit foretrukne sprog. Tjek, at der kun bruges foretrukne sprog.</translation>
 <translation id="9003499805101629690">pizza</translation>
 <translation id="9003704114456258138">Frekvens</translation>
+<translation id="9017411601860840405">neonlys</translation>
 <translation id="901834265349196618">mail</translation>
 <translation id="9022897536196898720">blomster</translation>
 <translation id="9024331582947483881">fuld skærm</translation>

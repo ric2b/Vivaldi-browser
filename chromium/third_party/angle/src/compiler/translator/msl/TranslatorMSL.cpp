@@ -21,8 +21,8 @@
 #include "compiler/translator/tree_ops/InitializeVariables.h"
 #include "compiler/translator/tree_ops/MonomorphizeUnsupportedFunctions.h"
 #include "compiler/translator/tree_ops/PreTransformTextureCubeGradDerivatives.h"
+#include "compiler/translator/tree_ops/ReduceInterfaceBlocks.h"
 #include "compiler/translator/tree_ops/RemoveAtomicCounterBuiltins.h"
-#include "compiler/translator/tree_ops/RemoveInactiveInterfaceVariables.h"
 #include "compiler/translator/tree_ops/RewriteArrayOfArrayOfOpaqueUniforms.h"
 #include "compiler/translator/tree_ops/RewriteAtomicCounters.h"
 #include "compiler/translator/tree_ops/RewriteDfdy.h"
@@ -33,7 +33,6 @@
 #include "compiler/translator/tree_ops/msl/FixTypeConstructors.h"
 #include "compiler/translator/tree_ops/msl/HoistConstants.h"
 #include "compiler/translator/tree_ops/msl/IntroduceVertexIndexID.h"
-#include "compiler/translator/tree_ops/msl/ReduceInterfaceBlocks.h"
 #include "compiler/translator/tree_ops/msl/RewriteCaseDeclarations.h"
 #include "compiler/translator/tree_ops/msl/RewriteInterpolants.h"
 #include "compiler/translator/tree_ops/msl/RewriteOutArgs.h"
@@ -958,18 +957,6 @@ bool TranslatorMSL::translateImpl(TInfoSinkBase &sink,
         return false;
     }
 
-    // Remove declarations of inactive shader interface variables so glslang wrapper doesn't need to
-    // replace them.  Note: this is done before extracting samplers from structs, as removing such
-    // inactive samplers is not yet supported.  Note also that currently, CollectVariables marks
-    // every field of an active uniform that's of struct type as active, i.e. no extracted sampler
-    // is inactive.
-    if (!RemoveInactiveInterfaceVariables(this, root, &getSymbolTable(), getAttributes(),
-                                          getInputVaryings(), getOutputVariables(), getUniforms(),
-                                          getInterfaceBlocks(), false))
-    {
-        return false;
-    }
-
     // Write out default uniforms into a uniform block assigned to a specific set/binding.
     int aggregateTypesUsedForUniforms = 0;
     int atomicCounterCount            = 0;
@@ -1283,8 +1270,7 @@ bool TranslatorMSL::translateImpl(TInfoSinkBase &sink,
             DeclareRightBeforeMain(*root, *fragCoord);
         }
 
-        if (!RewriteDfdy(this, root, &getSymbolTable(), getShaderVersion(), specConst,
-                         driverUniforms))
+        if (!RewriteDfdy(this, root, &getSymbolTable(), getShaderVersion(), driverUniforms))
         {
             return false;
         }
@@ -1420,7 +1406,8 @@ bool TranslatorMSL::translateImpl(TInfoSinkBase &sink,
         return false;
     }
 
-    if (!ReduceInterfaceBlocks(*this, *root, idGen))
+    if (!ReduceInterfaceBlocks(*this, *root,
+                               [&idGen]() { return idGen.createNewName().rawName(); }))
     {
         return false;
     }
@@ -1497,7 +1484,7 @@ bool TranslatorMSL::translate(TIntermBlock *root,
     mValidateASTOptions.validatePrecision = false;
 
     TInfoSinkBase &sink = getInfoSink().obj;
-    SpecConst specConst(&getSymbolTable(), compileOptions, getShaderType());
+    SpecConst specConst(&getSymbolTable(), getShaderType());
     DriverUniformMetal driverUniforms(DriverUniformMode::Structure);
     if (!translateImpl(sink, root, compileOptions, perfDiagnostics, &specConst, &driverUniforms))
     {

@@ -144,6 +144,14 @@ enum reg_enum {
     R_ST5,
     R_ST6,
     R_ST7,
+    R_TMM0,
+    R_TMM1,
+    R_TMM2,
+    R_TMM3,
+    R_TMM4,
+    R_TMM5,
+    R_TMM6,
+    R_TMM7,
     R_TR0,
     R_TR1,
     R_TR2,
@@ -251,7 +259,7 @@ enum reg_enum {
     REG_ENUM_LIMIT
 };
 
-#define EXPR_REG_END 240
+#define EXPR_REG_END 248
 
 #define REG_NUM_AH       4
 #define REG_NUM_AL       0
@@ -389,6 +397,14 @@ enum reg_enum {
 #define REG_NUM_ST5      5
 #define REG_NUM_ST6      6
 #define REG_NUM_ST7      7
+#define REG_NUM_TMM0     0
+#define REG_NUM_TMM1     1
+#define REG_NUM_TMM2     2
+#define REG_NUM_TMM3     3
+#define REG_NUM_TMM4     4
+#define REG_NUM_TMM5     5
+#define REG_NUM_TMM6     6
+#define REG_NUM_TMM7     7
 #define REG_NUM_TR0      0
 #define REG_NUM_TR1      1
 #define REG_NUM_TR2      2

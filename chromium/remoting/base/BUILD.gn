@@ -166,12 +166,12 @@ source_set("base") {
     "//remoting/proto/google/internal/remoting/cloud/v1alpha:messages",
     "//remoting/proto/google/remoting/cloud/v1:messages",
     "//remoting/proto/remoting/v1:directory_proto",
+    "//remoting/proto/remoting/v1:remote_support_host_messages",
     "//remoting/proto/remoting/v1:telemetry_messages",
     "//services/network/public/cpp",
     "//services/network/public/mojom",
     "//third_party/abseil-cpp:absl",
     "//third_party/libvpx",
-    "//third_party/libyuv",
     "//third_party/webrtc_overrides:webrtc_component",
     "//url",
   ]
@@ -439,7 +439,6 @@ source_set("unit_tests") {
     "//remoting/proto/remoting/v1:telemetry_messages",
     "//services/network:test_support",
     "//services/network/public/cpp",
-    "//third_party/libyuv",
     "//third_party/webrtc_overrides:webrtc_component",
   ]
 

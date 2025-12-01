@@ -285,14 +285,6 @@
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   };
 
-  static const unsigned char  hdigits[32] =
-  {
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x03,
-    0x7E, 0x00, 0x00, 0x00, 0x7E, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  };
-
 
   /* Routine to convert a decimal ASCII string to an unsigned long integer. */
   static unsigned long
@@ -1495,14 +1487,14 @@
     if ( FT_QALLOC( buf, buf_size ) )
       goto Exit;
 
-    lineno  = 1;
-    start   = 0;
-    cursor  = 0;
+    lineno = 1;
+    start  = 0;
+    cursor = 0;
 
   Refill:
-    bytes  = FT_Stream_TryRead( stream,
-                                (FT_Byte*)buf + cursor, buf_size - cursor );
-    avail  = cursor + bytes;
+    bytes = FT_Stream_TryRead( stream,
+                               (FT_Byte*)buf + cursor, buf_size - cursor );
+    avail = cursor + bytes;
 
     while ( bytes )
     {

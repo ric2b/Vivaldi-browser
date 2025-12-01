@@ -25,7 +25,7 @@ TEST(ContentSecurityPolicyUtilTest, BackAndForthConversion) {
       ContentSecurityPolicyHeader::New(
           "my-csp", network::mojom::ContentSecurityPolicyType::kEnforce,
           network::mojom::ContentSecurityPolicySource::kHTTP),
-      false, std::vector<std::string>(), network::mojom::CSPRequireSRIFor::None,
+      false, std::vector<std::string>(),
       network::mojom::CSPRequireTrustedTypesFor::None, nullptr,
       std::vector<std::string>());
 
@@ -105,7 +105,7 @@ TEST(ContentSecurityPolicyUtilTest, BackAndForthConversionForCSPSourceList) {
       network::mojom::ContentSecurityPolicyHeader::New(
           "my-csp", network::mojom::ContentSecurityPolicyType::kEnforce,
           network::mojom::ContentSecurityPolicySource::kHTTP),
-      false, std::vector<std::string>(), network::mojom::CSPRequireSRIFor::None,
+      false, std::vector<std::string>(),
       network::mojom::CSPRequireTrustedTypesFor::None, nullptr,
       std::vector<std::string>());
 
@@ -135,6 +135,17 @@ TEST(ContentSecurityPolicyUtilTest, BackAndForthConversionForCSPSourceList) {
         source_list.hashes.emplace_back(network::mojom::CSPHashSource::New(
             network::mojom::IntegrityAlgorithm::kSha384,
             std::vector<uint8_t>({'c', 'd', 'e'})));
+      },
+      [](CSPSourceList& source_list) {
+        source_list.hashes.emplace_back(network::mojom::CSPHashSource::New(
+            network::mojom::IntegrityAlgorithm::kSha256,
+            std::vector<uint8_t>({'a', 'd'})));
+        source_list.url_hashes.emplace_back(network::mojom::CSPHashSource::New(
+            network::mojom::IntegrityAlgorithm::kSha384,
+            std::vector<uint8_t>({'c', 'd', 'e'})));
+        source_list.eval_hashes.emplace_back(network::mojom::CSPHashSource::New(
+            network::mojom::IntegrityAlgorithm::kSha384,
+            std::vector<uint8_t>({'f', 'g', 'h'})));
       },
       [](CSPSourceList& source_list) { source_list.allow_self = true; },
       [](CSPSourceList& source_list) { source_list.allow_star = true; },

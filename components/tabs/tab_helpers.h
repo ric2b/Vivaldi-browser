@@ -20,9 +20,7 @@ bool IsTabMuted(const content::WebContents* web_contents);
 bool IsTabInAWorkspace(const content::WebContents* web_contents);
 bool IsTabInAWorkspace(const std::string& viv_extdata);
 std::optional<double> GetTabWorkspaceId(const std::string& viv_extdata);
-base::Value::List getLinkRoutes(content::WebContents* contents);
 bool SetTabWorkspaceId(content::WebContents* contents, double workspace_id);
-bool IsWorkspacesEnabled(content::WebContents* contents);
 
 }
 

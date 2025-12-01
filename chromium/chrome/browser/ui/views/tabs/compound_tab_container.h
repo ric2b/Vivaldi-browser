@@ -63,6 +63,9 @@ class CompoundTabContainer : public TabContainer,
   void UpdateTabGroupVisuals(tab_groups::TabGroupId group_id) override;
   void NotifyTabstripBubbleOpened() override;
   void NotifyTabstripBubbleClosed() override;
+  void OnSplitCreated(const std::vector<int>& indices) override;
+  void OnSplitRemoved(const std::vector<int>& indices) override;
+  void OnSplitContentsChanged(const std::vector<int>& indices) override;
   std::optional<int> GetModelIndexOf(
       const TabSlotView* slot_view) const override;
   Tab* GetTabAtModelIndex(int index) const override;
@@ -93,8 +96,6 @@ class CompoundTabContainer : public TabContainer,
   TabGroupViews* GetGroupViews(tab_groups::TabGroupId group_id) const override;
   const std::map<tab_groups::TabGroupId, std::unique_ptr<TabGroupViews>>&
   get_group_views_for_testing() const override;
-  int GetActiveTabWidth() const override;
-  int GetInactiveTabWidth() const override;
   gfx::Rect GetIdealBounds(int model_index) const override;
   gfx::Rect GetIdealBounds(tab_groups::TabGroupId group) const override;
 

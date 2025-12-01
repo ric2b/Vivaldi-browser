@@ -17,6 +17,7 @@
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "ui/gfx/frame_data.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/overlay_layer_id.h"
 #include "ui/gl/child_window_win.h"
 #include "ui/gl/gl_export.h"
 #include "ui/gl/presenter.h"
@@ -47,6 +48,7 @@ class GL_EXPORT DCompPresenter : public Presenter,
     bool disable_vp_auto_hdr = false;
     bool disable_vp_scaling = false;
     bool disable_vp_super_resolution = false;
+    bool disable_dc_letterbox_video_optimization = false;
     bool force_dcomp_triple_buffer_video_swap_chain = false;
     bool no_downscaled_overlay_promotion = false;
   };
@@ -89,12 +91,12 @@ class GL_EXPORT DCompPresenter : public Presenter,
   scoped_refptr<base::TaskRunner> GetWindowTaskRunnerForTesting();
 
   Microsoft::WRL::ComPtr<IDXGISwapChain1> GetLayerSwapChainForTesting(
-      size_t index) const;
+      const gfx::OverlayLayerId& layer_id) const;
 
-  void GetSwapChainVisualInfoForTesting(size_t index,
-                                        gfx::Transform* transform,
-                                        gfx::Point* offset,
-                                        gfx::Rect* clip_rect) const;
+  void GetSwapChainVisualInfoForTesting(const gfx::OverlayLayerId& layer_id,
+                                        gfx::Transform* out_transform,
+                                        gfx::Point* out_offset,
+                                        gfx::Rect* out_clip_rect) const;
 
   DCLayerTree* GetLayerTreeForTesting() { return layer_tree_.get(); }
 

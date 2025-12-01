@@ -18,6 +18,10 @@
       Symbol: "kIdDetailsContent",
     },
     {
+      name: "permission-icon",
+      Symbol: "kIdPermissionIcon",
+    },
+    {
       name: "details-summary",
       Symbol: "kIdDetailsSummary",
     },
@@ -40,6 +44,10 @@
     {
       name: "editing-view-port",
       Symbol: "kIdEditingViewPort",
+    },
+    {
+      name: "textarea-placeholder-break",
+      Symbol: "kIdPlaceholderBreak",
     },
     {
       name: "picker",
@@ -157,6 +165,10 @@
     {
       name: "-internal-datetime-container",
       Symbol: "kPseudoInternalDatetimeContainer",
+    },
+    {
+      name: "-internal-permission-fallback-slot",
+      Symbol: "kPseudoInternalPermissionFallbackSlot",
     },
     {
       name: "-internal-permission-text",

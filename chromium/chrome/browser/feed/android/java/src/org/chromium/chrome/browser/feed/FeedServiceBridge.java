@@ -14,6 +14,8 @@ import org.jni_zero.NativeClassQualifiedName;
 import org.jni_zero.NativeMethods;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.feed.v2.ContentOrder;
 import org.chromium.chrome.browser.feed.v2.FeedUserActionType;
 import org.chromium.chrome.browser.xsurface.ImageCacheHelper;
@@ -24,8 +26,9 @@ import java.util.Locale;
 
 /** Bridge for FeedService-related calls. */
 @JNINamespace("feed")
+@NullMarked
 public final class FeedServiceBridge {
-    public static ProcessScope xSurfaceProcessScope() {
+    public static @Nullable ProcessScope xSurfaceProcessScope() {
         return XSurfaceProcessScopeProvider.getProcessScope();
     }
 
@@ -102,8 +105,6 @@ public final class FeedServiceBridge {
     }
 
     /** Reports that a user action occurred which is independent of any feed stream. */
-    // TODO(crbug.com/404592444): Add the usage of this function for NTP Customization Discover
-    // Feed bottom sheet.
     public static void reportOtherUserAction(@FeedUserActionType int userAction) {
         FeedServiceBridgeJni.get().reportOtherUserAction(userAction);
     }

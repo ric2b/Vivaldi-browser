@@ -25,24 +25,29 @@ import org.chromium.components.tab_group_sync.EitherId;
 import org.chromium.components.tab_group_sync.LocalTabGroupId;
 import org.chromium.components.tab_groups.TabGroupColorId;
 
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** A companion object to the native MessagingBackendServiceBridgeTest. */
 @JNINamespace("collaboration::messaging")
 public class MessagingBackendServiceBridgeUnitTestCompanion {
     // The service instance we're testing.
-    private MessagingBackendService mService;
+    private final MessagingBackendService mService;
 
-    private MessagingBackendService.PersistentMessageObserver mObserver =
+    private final MessagingBackendService.PersistentMessageObserver mObserver =
             mock(MessagingBackendService.PersistentMessageObserver.class);
-    private MessagingBackendService.InstantMessageDelegate mInstantMessageDelegate =
+    private final MessagingBackendService.InstantMessageDelegate mInstantMessageDelegate =
             mock(MessagingBackendService.InstantMessageDelegate.class);
 
-    private ArgumentCaptor<InstantMessage> mInstantMessageCaptor =
+    private final ArgumentCaptor<InstantMessage> mInstantMessageCaptor =
             ArgumentCaptor.forClass(InstantMessage.class);
-    private ArgumentCaptor<Callback> mInstantMessageCallbackCaptor =
+    private final ArgumentCaptor<Callback> mInstantMessageCallbackCaptor =
             ArgumentCaptor.forClass(Callback.class);
+    private final ArgumentCaptor<Set<String>> mHideInstantMessageIdsCaptor =
+            ArgumentCaptor.forClass(Set.class);
 
     @CalledByNative
     private MessagingBackendServiceBridgeUnitTestCompanion(MessagingBackendService service) {
@@ -230,6 +235,18 @@ public class MessagingBackendServiceBridgeUnitTestCompanion {
     @CalledByNative
     private void invokeInstantMessageSuccessCallback(boolean success) {
         mInstantMessageCallbackCaptor.getValue().onResult(success);
+    }
+
+    @CalledByNative
+    private void verifyHideInstantMessageCalledWithIds(String[] expectedIdsArray) {
+        verify(mInstantMessageDelegate)
+                .hideInstantaneousMessage(mHideInstantMessageIdsCaptor.capture());
+        Set<String> actualIds = mHideInstantMessageIdsCaptor.getValue();
+        Assert.assertEquals(
+                "Number of hidden IDs does not match", expectedIdsArray.length, actualIds.size());
+        // Convert String[] to Set<String> for proper comparison, as order doesn't matter in Set.
+        Set<String> expectedIdsSet = new HashSet<>(Arrays.asList(expectedIdsArray));
+        Assert.assertEquals("Hidden message IDs do not match", expectedIdsSet, actualIds);
     }
 
     @CalledByNative

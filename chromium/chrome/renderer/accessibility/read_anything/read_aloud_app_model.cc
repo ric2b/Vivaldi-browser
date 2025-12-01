@@ -41,10 +41,7 @@ std::vector<size_t> GetDependencyHeads(base::span<const std::string> input) {
 
 }  // namespace
 
-ReadAloudAppModel::ReadAloudAppModel()
-    : sentence_movement_options_(ui::AXMovementOptions(
-          ui::AXBoundaryBehavior::kCrossBoundary,
-          ui::AXBoundaryDetection::kDontCheckInitialPosition)) {
+ReadAloudAppModel::ReadAloudAppModel() {
   for (const auto& [metric, count] : metric_to_count_map_) {
     metric_to_single_sample_[metric] =
         base::SingleSampleMetricsFactory::Get()->CreateCustomCountsMetric(
@@ -86,14 +83,21 @@ void ReadAloudAppModel::ResetGranularityIndex() {
   processed_granularity_index_ = 0;
 }
 
-void ReadAloudAppModel::InitAXPositionWithNode(ui::AXNode* ax_node) {
-  // If instance is Null or Empty, create the next AxPosition
-  if (ax_node != nullptr && (!ax_position_ || ax_position_->IsNullPosition())) {
+void ReadAloudAppModel::InitAXPositionWithNode(
+    ui::AXNode* ax_node,
+    const ui::AXTreeID& active_tree_id) {
+  // If instance is Null or Empty, create the next AxPosition. Don't create a
+  // new position if the node's manager is missing, as that means we've
+  // received incorrect data somewhere.
+  if (ax_node != nullptr && (!ax_position_ || ax_position_->IsNullPosition()) &&
+      ax_node->GetManager() && !speech_tree_initialized_) {
     ax_position_ =
         ui::AXNodePosition::CreateTreePositionAtStartOfAnchor(*ax_node);
     current_text_index_ = 0;
     processed_granularity_index_ = 0;
     processed_granularities_on_current_page_.clear();
+    active_tree_id_ = active_tree_id;
+    speech_tree_initialized_ = true;
   }
 }
 void ReadAloudAppModel::MovePositionToNextGranularity() {
@@ -253,7 +257,7 @@ void ReadAloudAppModel::UpdatePhraseBoundaries(std::vector<std::string> tokens,
 
   // Reconstruct the tokenized sentence using the tokens.
   std::vector<std::u16string> u16string_tokens;
-  for (auto token : tokens) {
+  for (const auto& token : tokens) {
     u16string_tokens.emplace_back(base::UTF8ToUTF16(token));
   }
 
@@ -349,7 +353,7 @@ a11y::ReadAloudCurrentGranularity ReadAloudAppModel::GetNextNodes(
 
 bool ReadAloudAppModel::NoValidTextRemainingInCurrentNode(bool is_pdf,
                                                           bool is_docs) const {
-  ui::AXNode* anchor_node = GetNextNodeFromPosition(ax_position_);
+  ui::AXNode* anchor_node = GetAnchorNode(ax_position_);
   std::u16string text = a11y::GetTextContent(anchor_node, is_docs, is_pdf);
   std::u16string text_substr = text.substr(current_text_index_);
   int prev_index = current_text_index_;
@@ -429,7 +433,7 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromStartOfNode(
     bool is_pdf,
     bool is_docs,
     a11y::ReadAloudCurrentGranularity& current_granularity) {
-  ui::AXNode* anchor_node = GetNextNodeFromPosition(ax_position_);
+  ui::AXNode* anchor_node = GetAnchorNode(ax_position_);
 
   std::u16string base_text = a11y::GetTextContent(anchor_node, is_docs, is_pdf);
 
@@ -469,7 +473,7 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromStartOfNode(
   //    be added to the current sentence.
   if (((int)current_granularity.text.length() < combined_sentence_index) &&
       !is_opening_punctuation) {
-    anchor_node = GetNextNodeFromPosition(ax_position_);
+    anchor_node = GetAnchorNode(ax_position_);
     // Calculate the new sentence index.
     int index_in_new_node =
         combined_sentence_index - current_granularity.text.length();
@@ -505,7 +509,7 @@ a11y::TraversalState ReadAloudAppModel::AddTextFromMiddleOfNode(
     bool is_docs,
     a11y::ReadAloudCurrentGranularity& current_granularity) {
   // Add the next granularity piece within the current node.
-  ui::AXNode* anchor_node = GetNextNodeFromPosition(ax_position_);
+  ui::AXNode* anchor_node = GetAnchorNode(ax_position_);
   std::u16string text = a11y::GetTextContent(anchor_node, is_docs, is_pdf);
   int prev_index = current_text_index_;
   std::u16string text_substr = text.substr(current_text_index_);
@@ -558,85 +562,37 @@ ReadAloudAppModel::GetNextValidPositionFromCurrentPosition(
   ui::AXNodePosition::AXPositionInstance new_position =
       ui::AXNodePosition::CreateNullPosition();
 
-  new_position = GetNextSentencePosition();
+  // Traverse the available nodes in the tree using depth-first search.
+  // TODO(crbug.com/411198154): If it's determined that reading mode and read
+  // aloud should both be using AXPosition, revisit using sentence start
+  // positions. If reading mode is populating the panel with nodes and read
+  // aloud is populating via text-based positions from AXPosition, there can
+  // be inconsistencies between the two.
+  new_position = ax_position_->CreateNextAnchorPosition();
 
   if (new_position->IsNullPosition() || new_position->AtEndOfAXTree() ||
       !new_position->GetAnchor()) {
     return new_position;
   }
 
+  // Ensure the current position is valid. If it's not, move to the next
+  // position.
   while (!IsValidAXPosition(new_position, current_granularity, is_pdf, is_docs,
                             current_nodes)) {
-    ui::AXNodePosition::AXPositionInstance possible_new_position =
-        new_position->CreateNextSentenceStartPosition(
-            sentence_movement_options_);
-
-    // If the new position and the previous position are the same, try moving
-    // to the next line position instead. This seems to happen on pdfs sometimes
-    // where next sentence returns the same position and next paragraph skips
-    // some text.
-    // TODO(crbug.com/40927698): Investigate whether this is helpful beyond pdfs
-    if (is_pdf && ArePositionsEqual(possible_new_position, new_position)) {
-      possible_new_position =
-          new_position->CreateNextLineStartPosition(sentence_movement_options_);
-    }
-
-    // If the new position and the previous position are the same, try moving
-    // to the next paragraph position instead. This happens rarely, but when
-    // it does, we can get stuck in an infinite loop of calling
-    // CreateNextSentenceStartPosition, as it will always return the same
-    // position.
-    if (possible_new_position->IsNullPosition() ||
-        ArePositionsEqual(possible_new_position, new_position)) {
-      possible_new_position = new_position->CreateNextParagraphStartPosition(
-          sentence_movement_options_);
-
-      // If after switching to use the paragraph position, the position is
-      // in a null position, go ahead and return the null position so
-      // speech can terminate properly. Otherwise, speech may get caught
-      // in an infinite loop of searching for another item to speak when
-      // there's no text left. This happens when the final node to be spoken
-      // in the content is followed by an invalid character that causes
-      // CreatenextSentenceStartPosition to repeatedly return the same thing.
-      if (possible_new_position->IsNullPosition()) {
-        return ui::AXNodePosition::AXPosition::CreateNullPosition();
-      }
-    }
-
-    // If the new position is still the same as the old position after trying
-    // both line and paragraph positions, go ahead and return a null position
-    // instead, as ending speech early is preferable to getting stuck in an
-    // infinite loop.
-    if (ArePositionsEqual(possible_new_position, new_position)) {
-      return ui::AXNodePosition::AXPosition::CreateNullPosition();
-    }
-
-    if (!possible_new_position->GetAnchor()) {
-      if (NodeBeenOrWillBeSpoken(current_granularity,
-                                 new_position->GetAnchor()->id())) {
-        // If the previous position we were looking at was previously spoken,
-        // go ahead and return the null position to avoid duplicate nodes
-        // being added.
-        return possible_new_position;
-      }
+    new_position = new_position->CreateNextAnchorPosition();
+    if (new_position->IsNullPosition() || new_position->AtEndOfAXTree() ||
+        !new_position->GetAnchor()) {
       return new_position;
     }
-
-    new_position = std::move(possible_new_position);
   }
 
   return new_position;
 }
 
-ui::AXNodePosition::AXPositionInstance
-ReadAloudAppModel::GetNextSentencePosition() const {
-  return ax_position_->CreatePositionAtTextBoundary(
-      ax::mojom::TextBoundary::kSentenceStart,
-      ax::mojom::MoveDirection::kForward, sentence_movement_options_);
-}
-
 int ReadAloudAppModel::GetCurrentTextStartIndex(const ui::AXNodeID& node_id) {
-  if (processed_granularities_on_current_page_.size() < 1) {
+  if (processed_granularities_on_current_page_.size() < 1 ||
+      processed_granularity_index_ >=
+          processed_granularities_on_current_page_.size()) {
     return -1;
   }
 
@@ -651,7 +607,9 @@ int ReadAloudAppModel::GetCurrentTextStartIndex(const ui::AXNodeID& node_id) {
 }
 
 int ReadAloudAppModel::GetCurrentTextEndIndex(const ui::AXNodeID& node_id) {
-  if (processed_granularities_on_current_page_.size() < 1) {
+  if (processed_granularities_on_current_page_.size() < 1 ||
+      processed_granularity_index_ >=
+          processed_granularities_on_current_page_.size()) {
     return -1;
   }
 
@@ -671,8 +629,7 @@ bool ReadAloudAppModel::NodeBeenOrWillBeSpoken(
   if (base::Contains(current_granularity.segments, id)) {
     return true;
   }
-  for (a11y::ReadAloudCurrentGranularity granularity :
-       processed_granularities_on_current_page_) {
+  for (const auto& granularity : processed_granularities_on_current_page_) {
     if (base::Contains(granularity.segments, id)) {
       return true;
     }
@@ -686,6 +643,7 @@ void ReadAloudAppModel::ResetReadAloudState() {
   current_text_index_ = 0;
   processed_granularity_index_ = 0;
   processed_granularities_on_current_page_.clear();
+  speech_tree_initialized_ = false;
 }
 
 bool ReadAloudAppModel::IsValidAXPosition(
@@ -699,12 +657,17 @@ bool ReadAloudAppModel::IsValidAXPosition(
     return false;
   }
 
+  // AXPosition returns nodes that aren't part of the active tree, but
+  // reading mode only displays nodes that are part of the active tree.
+  bool on_active_tree = anchor_node->tree()->GetAXTreeID() == active_tree_id_;
   bool was_previously_spoken =
       NodeBeenOrWillBeSpoken(current_granularity, anchor_node->id());
   bool is_text_node = a11y::IsTextForReadAnything(anchor_node, is_pdf, is_docs);
   bool contains_node = base::Contains(*current_nodes, anchor_node->id());
+  bool is_ignored = a11y::IsIgnored(anchor_node, is_pdf);
 
-  return !was_previously_spoken && is_text_node && contains_node;
+  return !is_ignored && !was_previously_spoken && is_text_node &&
+         contains_node && on_active_tree;
 }
 
 std::vector<ReadAloudTextSegment>

@@ -10,6 +10,7 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/threading/thread_checker.h"
 #include "components/collaboration/public/collaboration_controller_delegate.h"
 #include "components/collaboration/public/collaboration_flow_type.h"
 #include "components/data_sharing/public/data_sharing_service.h"
@@ -76,6 +77,12 @@ class CollaborationController {
     // Delegate is showing the manage people screen.
     kShowingManageScreen,
 
+    // Delegate is showing the leave group screen.
+    kLeavingGroup,
+
+    // Delegate is showing the delete group screen.
+    kDeletingGroup,
+
     // A shared tab group has been deleted, cleaning up.
     kCleaningUpSharedTabGroup,
 
@@ -91,7 +98,7 @@ class CollaborationController {
     // Join flow constructor.
     Flow(FlowType type, const data_sharing::GroupToken& token);
 
-    // Share flow constructor.
+    // Share/manage/leave/delete flow constructor.
     Flow(FlowType type, const tab_groups::EitherGroupID& either_id);
 
     ~Flow();
@@ -106,7 +113,6 @@ class CollaborationController {
     }
 
     const tab_groups::EitherGroupID& either_id() const {
-      DCHECK_EQ(type, FlowType::kShareOrManage);
       return either_id_;
     }
 
@@ -124,7 +130,7 @@ class CollaborationController {
     // ID for join flow.
     const data_sharing::GroupToken join_token_;
 
-    // ID for share flow.
+    // ID for share/manage/leave/delete flow.
     const tab_groups::EitherGroupID either_id_;
     data_sharing::GroupToken share_token_;
   };
@@ -185,7 +191,7 @@ class CollaborationController {
   StateId GetStateForTesting();
 
  private:
-  static constexpr std::array<std::pair<StateId, StateId>, 35>
+  static constexpr std::array<std::pair<StateId, StateId>, 41>
       kValidTransitions = {{
           // kPending transitions to:
           //
@@ -253,6 +259,8 @@ class CollaborationController {
           {StateId::kCheckingFlowRequirements, StateId::kOpeningLocalTabGroup},
           {StateId::kCheckingFlowRequirements, StateId::kShowingShareScreen},
           {StateId::kCheckingFlowRequirements, StateId::kShowingManageScreen},
+          {StateId::kCheckingFlowRequirements, StateId::kLeavingGroup},
+          {StateId::kCheckingFlowRequirements, StateId::kDeletingGroup},
           {StateId::kCheckingFlowRequirements, StateId::kError},
 
           // kAddingUserToGroup transition to:
@@ -316,10 +324,26 @@ class CollaborationController {
           //   kError: An error occurred while showing the manage people screen.
           {StateId::kShowingManageScreen, StateId::kCleaningUpSharedTabGroup},
           {StateId::kShowingManageScreen, StateId::kError},
+
+          // kShowingManageScreen transition to:
+          //
+          //   kCleaningUpSharedTabGroup: After leaving group successfully.
+          //   kError: An error occurred while leaving group.
+          {StateId::kLeavingGroup, StateId::kCleaningUpSharedTabGroup},
+          {StateId::kLeavingGroup, StateId::kError},
+
+          // kDeletingGroup transition to:
+          //
+          //   kCleaningUpSharedTabGroup: When deletion has been completed.
+          //   kError: An error occurred while deleting group.
+          {StateId::kDeletingGroup, StateId::kCleaningUpSharedTabGroup},
+          {StateId::kDeletingGroup, StateId::kError},
       }};
 
   bool IsValidStateTransition(StateId from, StateId to);
   std::unique_ptr<ControllerState> CreateStateObject(StateId state);
+
+  THREAD_CHECKER(thread_checker_);
 
   std::unique_ptr<ControllerState> current_state_;
 

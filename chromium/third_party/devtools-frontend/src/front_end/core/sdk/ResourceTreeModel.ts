@@ -783,9 +783,9 @@ export class ResourceTreeFrame {
     return this.#domainAndRegistryInternal;
   }
 
-  async getAdScriptId(frameId: Protocol.Page.FrameId): Promise<Protocol.Page.AdScriptId|null> {
-    const res = await this.#model.agent.invoke_getAdScriptId({frameId});
-    return res.adScriptId || null;
+  async getAdScriptAncestryIds(frameId: Protocol.Page.FrameId): Promise<Protocol.Page.AdScriptId[]|null> {
+    const res = await this.#model.agent.invoke_getAdScriptAncestryIds({frameId});
+    return res.adScriptAncestryIds || null;
   }
 
   get securityOrigin(): string|null {

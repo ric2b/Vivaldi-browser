@@ -38,12 +38,12 @@ public class IncognitoNewTabPage extends BasicNativePage
     private final Profile mProfile;
     private final int mIncognitoNtpBackgroundColor;
 
-    private String mTitle;
+    private final String mTitle;
     protected IncognitoNewTabPageView mIncognitoNewTabPageView;
 
     private boolean mIsLoaded;
 
-    private IncognitoNewTabPageManager mIncognitoNewTabPageManager;
+    private final IncognitoNewTabPageManager mIncognitoNewTabPageManager;
     private IncognitoCookieControlsManager mCookieControlsManager;
     private IncognitoCookieControlsManager.Observer mCookieControlsObserver;
     private EdgeToEdgePadAdjuster mEdgeToEdgePadAdjuster;
@@ -213,7 +213,10 @@ public class IncognitoNewTabPage extends BasicNativePage
                 return UserPrefs.get(mProfile).getBoolean(Pref.TRACKING_PROTECTION3PCD_ENABLED)
                         || ChromeFeatureList.isEnabled(ChromeFeatureList.TRACKING_PROTECTION_3PCD)
                         || ChromeFeatureList.isEnabled(
-                                ChromeFeatureList.ALWAYS_BLOCK_3PCS_INCOGNITO);
+                                ChromeFeatureList.ALWAYS_BLOCK_3PCS_INCOGNITO)
+                        || ChromeFeatureList.isEnabled(ChromeFeatureList.IP_PROTECTION_UX)
+                        || ChromeFeatureList.isEnabled(
+                                ChromeFeatureList.FINGERPRINTING_PROTECTION_UX);
             }
 
             @Override

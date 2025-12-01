@@ -46,6 +46,7 @@ import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.RequiresRestart;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -57,8 +58,9 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.R;
+import org.chromium.chrome.test.transit.AutoResetCtaTransitTestRule;
 import org.chromium.chrome.test.transit.ChromeTransitTestRules;
-import org.chromium.chrome.test.transit.FreshCtaTransitTestRule;
+import org.chromium.chrome.test.transit.Journeys;
 import org.chromium.chrome.test.transit.hub.TabSwitcherSearchStation;
 import org.chromium.chrome.test.transit.page.WebPageStation;
 import org.chromium.chrome.test.util.BookmarkTestUtil;
@@ -78,9 +80,11 @@ public class TabSwitcherSearchTest {
     private static final int SERVER_PORT = 13245;
     private static final String URL_PREFIX = "127.0.0.1:" + SERVER_PORT;
 
+    // The Activity doesn't get reused because tearDown() closes it, but resetting the tab state
+    // is necessary for some tests.
     @Rule
-    public FreshCtaTransitTestRule mCtaTestRule =
-            ChromeTransitTestRules.freshChromeTabbedActivityRule();
+    public AutoResetCtaTransitTestRule mCtaTestRule =
+            ChromeTransitTestRules.autoResetCtaActivityRule();
 
     private EmbeddedTestServer mTestServer;
     private WebPageStation mInitialPage;
@@ -134,8 +138,8 @@ public class TabSwitcherSearchTest {
                         "/chrome/test/data/android/test.html",
                         "/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(true);
@@ -156,8 +160,8 @@ public class TabSwitcherSearchTest {
                         "/chrome/test/data/android/test.html",
                         "/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(true);
@@ -183,8 +187,8 @@ public class TabSwitcherSearchTest {
         ChromeTabbedActivity cta = mCtaTestRule.getActivity();
         List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(true);
@@ -214,8 +218,8 @@ public class TabSwitcherSearchTest {
                         "/chrome/test/data/android/test.html",
                         "/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(true);
@@ -241,8 +245,8 @@ public class TabSwitcherSearchTest {
     public void testZeroPrefixSuggestions_Incognito() {
         List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ true)
+                Journeys.createIncognitoTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openIncognitoTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(false);
@@ -256,8 +260,8 @@ public class TabSwitcherSearchTest {
                         "/chrome/test/data/android/test.html",
                         "/chrome/test/data/android/test.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.checkSuggestionsShown(true);
@@ -271,8 +275,8 @@ public class TabSwitcherSearchTest {
     public void testTypedSuggestions() {
         List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("one.html");
@@ -290,8 +294,8 @@ public class TabSwitcherSearchTest {
                         "/chrome/test/data/android/test.html",
                         "/chrome/test/data/android/test.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("test.html");
@@ -318,8 +322,8 @@ public class TabSwitcherSearchTest {
         ChromeTabbedActivity cta = mCtaTestRule.getActivity();
         List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("one.html");
@@ -349,8 +353,8 @@ public class TabSwitcherSearchTest {
                         "/chrome/test/data/android/navigate/one.html",
                         "/chrome/test/data/android/test.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ false)
+                Journeys.prepareRegularTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openRegularTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("one.html");
@@ -373,8 +377,8 @@ public class TabSwitcherSearchTest {
     public void testTypedSuggestions_Incognito() {
         List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ true)
+                Journeys.createIncognitoTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openIncognitoTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("one.html");
@@ -423,8 +427,8 @@ public class TabSwitcherSearchTest {
         ChromeTabbedActivity cta = mCtaTestRule.getActivity();
         List<String> urlsToOpen = Arrays.asList("/chrome/test/data/android/navigate/one.html");
         TabSwitcherSearchStation tabSwitcherSearchStation =
-                TabSwitcherSearchTestUtils.openUrls(
-                                mTestServer, mInitialPage, urlsToOpen, /* incognito= */ true)
+                Journeys.createIncognitoTabsWithWebPages(
+                                mInitialPage, mTestServer.getURLs(urlsToOpen))
                         .openIncognitoTabSwitcher()
                         .openTabSwitcherSearch();
         tabSwitcherSearchStation.typeInOmnibox("foobar");
@@ -449,6 +453,7 @@ public class TabSwitcherSearchTest {
 
     @Test
     @MediumTest
+    @RequiresRestart("Adding the bookmark affects suggestions in subsequent tests")
     // TODO(crbug.com/394401323): Add some PT station for searching bookmarks.
     public void testBookmarkSuggestions() {
         WebPageStation openPage =

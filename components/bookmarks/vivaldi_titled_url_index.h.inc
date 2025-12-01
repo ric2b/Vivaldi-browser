@@ -18,7 +18,7 @@ private:
   // For each node, calls `MatchNicknameNodeWithQuery()` and returns the
   // aggregated `TitledUrlMatch`s.
   std::vector<TitledUrlMatch> MatchNicknameNodesWithQuery(
-      const TitledUrlIndex::NodeVector& nodes,
+      const TitledUrlIndex::TitledUrlNodes& nodes,
       const query_parser::QueryNodeVector& query_nodes,
       const std::vector<std::u16string>& query_terms,
       size_t max_count);
@@ -35,5 +35,5 @@ private:
                               const TitledUrlNode* node);
 
 
-  TitledUrlIndex::FlatNodeSet RetrieveNicknameNodesMatchingAnyTerms(
+  TitledUrlIndex::TitledUrlNodeSet RetrieveNicknameNodesMatchingAnyTerms(
       const std::vector<std::u16string>& terms) const;

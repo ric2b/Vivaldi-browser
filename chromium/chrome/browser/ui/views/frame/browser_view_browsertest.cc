@@ -26,7 +26,6 @@
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
-#include "chrome/browser/ui/tabs/split_tab_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_user_gesture_details.h"
 #include "chrome/browser/ui/test/test_browser_ui.h"
@@ -34,6 +33,7 @@
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view_observer.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/frame/scrim_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
@@ -53,6 +53,8 @@
 #include "components/policy/core/common/policy_types.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/browser/realtime/fake_url_lookup_service.h"
+#include "components/tabs/public/split_tab_collection.h"
+#include "components/tabs/public/split_tab_visual_data.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -378,13 +380,14 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, TitleAndLoadState) {
 // Verifies a tab should show its favicon.
 IN_PROC_BROWSER_TEST_F(BrowserViewTest, ShowFaviconInTab) {
   // Opens "chrome://version/" page, which uses default favicon.
-  GURL version_url(chrome::kChromeUIVersionURL);
+  const GURL version_url(chrome::kChromeUIVersionURL);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), version_url));
-  auto* contents = browser()->tab_strip_model()->GetActiveWebContents();
-  auto* helper = TabUIHelper::FromWebContents(contents);
+  auto* const tab_features =
+      browser()->tab_strip_model()->GetActiveTab()->GetTabFeatures();
+  auto* const helper = tab_features->tab_ui_helper();
   ASSERT_TRUE(helper);
 
-  auto favicon = helper->GetFavicon();
+  const auto favicon = helper->GetFavicon();
   ASSERT_FALSE(favicon.IsEmpty());
 }
 
@@ -478,15 +481,15 @@ IN_PROC_BROWSER_TEST_F(BrowserViewTest, ScrimForBrowserWindowModal) {
   child_widget->Init(std::move(params));
 
   child_widget->Show();
-  EXPECT_TRUE(browser_view()->window_scrim_view_for_testing()->GetVisible());
+  EXPECT_TRUE(browser_view()->window_scrim_view()->GetVisible());
   child_widget->Hide();
-  EXPECT_FALSE(browser_view()->window_scrim_view_for_testing()->GetVisible());
+  EXPECT_FALSE(browser_view()->window_scrim_view()->GetVisible());
   child_widget->Show();
-  EXPECT_TRUE(browser_view()->window_scrim_view_for_testing()->GetVisible());
+  EXPECT_TRUE(browser_view()->window_scrim_view()->GetVisible());
   // Destroy the child widget, the parent should be notified about child modal
   // visibility change.
   child_widget.reset();
-  EXPECT_FALSE(browser_view()->window_scrim_view_for_testing()->GetVisible());
+  EXPECT_FALSE(browser_view()->window_scrim_view()->GetVisible());
 }
 #endif  // !BUILDFLAG(IS_MAC)
 
@@ -510,29 +513,44 @@ class SideBySideBrowserViewTest : public InProcessBrowserTest {
 
 // Tests that GetInactiveSplitTabIndex returns correctly with two adjacent
 // splits.
-IN_PROC_BROWSER_TEST_F(SideBySideBrowserViewTest,
-                       SplitViewInactiveIndexReturnsCorrectly) {
+IN_PROC_BROWSER_TEST_F(SideBySideBrowserViewTest, SplitViewActiveIndexTest) {
   // Add enough tabs to create two split views.
   chrome::AddTabAt(browser(), GURL(), -1, true);
   chrome::AddTabAt(browser(), GURL(), -1, true);
   chrome::AddTabAt(browser(), GURL(), -1, true);
   // Add tabs to splits.
   browser()->tab_strip_model()->ActivateTabAt(0);
-  browser()->tab_strip_model()->AddToNewSplit(
-      {1}, tabs::SplitTabLayout::kHorizontal);
+  browser()->tab_strip_model()->AddToNewSplit({1},
+                                              split_tabs::SplitTabVisualData());
+
   browser()->tab_strip_model()->ActivateTabAt(2);
-  browser()->tab_strip_model()->AddToNewSplit(
-      {3}, tabs::SplitTabLayout::kHorizontal);
-  // Verify GetInactiveSplitTabIndex() correctly returns the inactive tab if
-  // each index is activated.
+  browser()->tab_strip_model()->AddToNewSplit({3},
+                                              split_tabs::SplitTabVisualData());
+
   browser()->tab_strip_model()->ActivateTabAt(0);
-  EXPECT_EQ(browser_view()->GetInactiveSplitTabIndex(), 1);
-  browser()->tab_strip_model()->ActivateTabAt(1);
-  EXPECT_EQ(browser_view()->GetInactiveSplitTabIndex(), 0);
+  EXPECT_TRUE(browser_view()->multi_contents_view_for_testing());
+  EXPECT_EQ(browser_view()
+                ->multi_contents_view_for_testing()
+                ->GetActiveContentsView(),
+            browser_view()
+                ->multi_contents_view_for_testing()
+                ->start_contents_view_for_testing());
+
   browser()->tab_strip_model()->ActivateTabAt(2);
-  EXPECT_EQ(browser_view()->GetInactiveSplitTabIndex(), 3);
+  EXPECT_EQ(browser_view()
+                ->multi_contents_view_for_testing()
+                ->GetActiveContentsView(),
+            browser_view()
+                ->multi_contents_view_for_testing()
+                ->start_contents_view_for_testing());
+
   browser()->tab_strip_model()->ActivateTabAt(3);
-  EXPECT_EQ(browser_view()->GetInactiveSplitTabIndex(), 2);
+  EXPECT_EQ(browser_view()
+                ->multi_contents_view_for_testing()
+                ->GetActiveContentsView(),
+            browser_view()
+                ->multi_contents_view_for_testing()
+                ->end_contents_view_for_testing());
 }
 
 namespace {

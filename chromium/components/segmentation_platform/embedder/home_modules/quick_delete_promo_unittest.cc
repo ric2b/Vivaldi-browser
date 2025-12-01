@@ -30,15 +30,18 @@ class QuickDeletePromoTest : public testing::Test {
       float countOfClearingBrowsingData,
       float countOfClearingBrowsingDataThroughQuickDelete,
       float quickDeletePromoShownCount,
+      float isUserSignedIn,
+      float educationalTipShownCount,
       EphemeralHomeModuleRank position) {
     pref_service_.SetUserPref(
         kQuickDeletePromoInteractedPref,
         std::make_unique<base::Value>(hasQuickDeletePromoInteracted));
     auto card = std::make_unique<QuickDeletePromo>(&pref_service_);
     AllCardSignals all_signals = CreateAllCardSignals(
-        card.get(), {countOfClearingBrowsingData,
-                     countOfClearingBrowsingDataThroughQuickDelete,
-                     quickDeletePromoShownCount});
+        card.get(),
+        {countOfClearingBrowsingData,
+         countOfClearingBrowsingDataThroughQuickDelete,
+         educationalTipShownCount, isUserSignedIn, quickDeletePromoShownCount});
     CardSelectionSignals card_signal(&all_signals, kQuickDeletePromo);
     CardSelectionInfo::ShowResult result = card->ComputeCardResult(card_signal);
     EXPECT_EQ(position, result.position);
@@ -52,7 +55,7 @@ class QuickDeletePromoTest : public testing::Test {
 TEST_F(QuickDeletePromoTest, GetInputsReturnsExpectedInputs) {
   auto card = std::make_unique<QuickDeletePromo>(&pref_service_);
   std::map<SignalKey, FeatureQuery> inputs = card->GetInputs();
-  EXPECT_EQ(inputs.size(), 3u);
+  EXPECT_EQ(inputs.size(), 5u);
   // Verify that the inputs map contains the expected keys.
   EXPECT_NE(inputs.find(segmentation_platform::kCountOfClearingBrowsingData),
             inputs.end());
@@ -60,6 +63,9 @@ TEST_F(QuickDeletePromoTest, GetInputsReturnsExpectedInputs) {
                             kCountOfClearingBrowsingDataThroughQuickDelete),
             inputs.end());
   EXPECT_NE(inputs.find(segmentation_platform::kQuickDeletePromoShownCount),
+            inputs.end());
+  EXPECT_NE(inputs.find(segmentation_platform::kIsUserSignedIn), inputs.end());
+  EXPECT_NE(inputs.find(segmentation_platform::kEducationalTipShownCount),
             inputs.end());
 }
 
@@ -72,7 +78,9 @@ TEST_F(QuickDeletePromoTest,
       /* hasQuickDeletePromoInteracted */ false,
       /* countOfClearingBrowsingData */ 0,
       /* countOfClearingBrowsingDataThroughQuickDelete */ 0,
-      /* quickDeletePromoShownCount */ 0, EphemeralHomeModuleRank::kLast);
+      /* quickDeletePromoShownCount */ 0,
+      /* isUserSignedIn */ 1,
+      /* educationalTipShownCount */ 0, EphemeralHomeModuleRank::kLast);
 }
 
 // Validates that ComputeCardResult() returns kLast when quick delete promo card
@@ -84,7 +92,8 @@ TEST_F(QuickDeletePromoTest,
       /* hasQuickDeletePromoInteracted */ false,
       /* countOfClearingBrowsingData */ 5,
       /* countOfClearingBrowsingDataThroughQuickDelete */ 0,
-      /* quickDeletePromoShownCount */ 0, EphemeralHomeModuleRank::kLast);
+      /* quickDeletePromoShownCount */ 0, /* isUserSignedIn */ 1,
+      /* educationalTipShownCount */ 0, EphemeralHomeModuleRank::kLast);
 }
 
 // Validates that when the quick delete promo card is disabled because the user
@@ -96,19 +105,20 @@ TEST_F(QuickDeletePromoTest,
       /* hasQuickDeletePromoInteracted */ false,
       /* countOfClearingBrowsingData */ 5,
       /* countOfClearingBrowsingDataThroughQuickDelete */ 3,
-      /* quickDeletePromoShownCount */ 0, EphemeralHomeModuleRank::kNotShown);
+      /* quickDeletePromoShownCount */ 0, /* isUserSignedIn */ 1,
+      /* educationalTipShownCount */ 0, EphemeralHomeModuleRank::kNotShown);
 }
 
 // Validates that the ComputeCardResult() function returns kNotShown when the
-// card has been displayed to the user more times than the single day limit
-// allows.
+// card has been displayed to the user more times than the limit allows.
 TEST_F(QuickDeletePromoTest,
        TestComputeCardResultWithCardDisabledForHasReachedSessionLimit) {
   TestComputeCardResultImpl(
       /* hasQuickDeletePromoInteracted */ false,
       /* countOfClearingBrowsingData */ 5,
       /* countOfClearingBrowsingDataThroughQuickDelete */ 0,
-      /* quickDeletePromoShownCount */ 3, EphemeralHomeModuleRank::kNotShown);
+      /* quickDeletePromoShownCount */ 1, /* isUserSignedIn */ 1,
+      /* educationalTipShownCount */ 0, EphemeralHomeModuleRank::kNotShown);
 }
 
 // Validates that the ComputeCardResult() function returns kNotShown when the
@@ -120,7 +130,34 @@ TEST_F(QuickDeletePromoTest,
       /* hasQuickDeletePromoInteracted */ true,
       /* countOfClearingBrowsingData */ 5,
       /* countOfClearingBrowsingDataThroughQuickDelete */ 0,
-      /* quickDeletePromoShownCount */ 0, EphemeralHomeModuleRank::kNotShown);
+      /* quickDeletePromoShownCount */ 0, /* isUserSignedIn */ 1,
+      /* educationalTipShownCount */ 0, EphemeralHomeModuleRank::kNotShown);
+}
+
+// Validates that the ComputeCardResult() function returns kNotShown when the
+// quick delete promo card is disabled because the user is not signed in.
+TEST_F(QuickDeletePromoTest,
+       TestComputeCardResultWithCardDisabledForUserNotSignedIn) {
+  TestComputeCardResultImpl(
+      /* hasQuickDeletePromoInteracted */ false,
+      /* countOfClearingBrowsingData */ 0,
+      /* countOfClearingBrowsingDataThroughQuickDelete */ 0,
+      /* quickDeletePromoShownCount */ 0, /* isUserSignedIn */ 0,
+      /* educationalTipShownCount */ 0, EphemeralHomeModuleRank::kNotShown);
+}
+
+// Validates that the ComputeCardResult() function returns kNotShown when
+// educational tip card has been displayed to the user more times than the limit
+// allows.
+TEST_F(
+    QuickDeletePromoTest,
+    TestComputeCardResultWithCardDisabledForEducationalTipCardHasReachedSessionLimit) {
+  TestComputeCardResultImpl(
+      /* hasQuickDeletePromoInteracted */ false,
+      /* countOfClearingBrowsingData */ 0,
+      /* countOfClearingBrowsingDataThroughQuickDelete */ 0,
+      /* quickDeletePromoShownCount */ 0, /* isUserSignedIn */ 1,
+      /* educationalTipShownCount */ 1, EphemeralHomeModuleRank::kNotShown);
 }
 
 }  // namespace segmentation_platform::home_modules

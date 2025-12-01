@@ -69,6 +69,7 @@ static_library("shelf") {
 
   public_deps = [
     "//chrome/browser:browser_public_dependencies",
+    "//chrome/browser/ui/extensions:extension_enable_flow_delegate",
     "//chrome/browser/ui/tabs:tab_strip_model_observer",
   ]
 
@@ -104,6 +105,7 @@ static_library("shelf") {
     "//chrome/browser/ash/plugin_vm",
     "//chrome/browser/ash/policy/handlers",
     "//chrome/browser/ash/profiles",
+    "//chrome/browser/ash/system_web_apps",
     "//chrome/browser/chromeos/extensions/login_screen/login/cleanup",
     "//chrome/browser/extensions",
     "//chrome/browser/image_decoder",

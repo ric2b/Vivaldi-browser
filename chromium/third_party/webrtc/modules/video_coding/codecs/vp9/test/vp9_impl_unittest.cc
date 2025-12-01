@@ -8,31 +8,65 @@
  *  be found in the AUTHORS file in the root of the source tree.
  */
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <vector>
+
+#include "absl/container/inlined_vector.h"
 #include "absl/memory/memory.h"
+#include "api/array_view.h"
+#include "api/environment/environment_factory.h"
+#include "api/scoped_refptr.h"
 #include "api/test/create_frame_generator.h"
 #include "api/test/frame_generator_interface.h"
 #include "api/test/mock_video_encoder.h"
+#include "api/units/data_rate.h"
+#include "api/units/timestamp.h"
 #include "api/video/color_space.h"
-#include "api/video/i420_buffer.h"
+#include "api/video/encoded_image.h"
+#include "api/video/video_bitrate_allocation.h"
+#include "api/video/video_codec_constants.h"
+#include "api/video/video_codec_type.h"
+#include "api/video/video_frame.h"
+#include "api/video/video_frame_buffer.h"
+#include "api/video/video_frame_type.h"
+#include "api/video_codecs/scalability_mode.h"
+#include "api/video_codecs/spatial_layer.h"
+#include "api/video_codecs/video_codec.h"
+#include "api/video_codecs/video_decoder.h"
 #include "api/video_codecs/video_encoder.h"
 #include "api/video_codecs/vp9_profile.h"
 #include "common_video/libyuv/include/webrtc_libyuv.h"
 #include "modules/rtp_rtcp/include/rtp_rtcp_defines.h"
+#include "modules/video_coding/codecs/interface/common_constants.h"
 #include "modules/video_coding/codecs/interface/libvpx_interface.h"
 #include "modules/video_coding/codecs/interface/mock_libvpx_interface.h"
 #include "modules/video_coding/codecs/test/encoded_video_frame_producer.h"
 #include "modules/video_coding/codecs/test/video_codec_unittest.h"
 #include "modules/video_coding/codecs/vp9/include/vp9.h"
+#include "modules/video_coding/codecs/vp9/include/vp9_globals.h"
 #include "modules/video_coding/codecs/vp9/libvpx_vp9_encoder.h"
 #include "modules/video_coding/codecs/vp9/svc_config.h"
+#include "modules/video_coding/include/video_codec_interface.h"
+#include "modules/video_coding/include/video_error_codes.h"
 #include "modules/video_coding/svc/scalability_mode_util.h"
-#include "rtc_base/strings/string_builder.h"
+#include "modules/video_coding/utility/vp9_uncompressed_header_parser.h"
 #include "test/explicit_key_value_config.h"
 #include "test/field_trial.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 #include "test/mappable_native_buffer.h"
 #include "test/video_codec_settings.h"
+#include "vpx/vp8cx.h"
+#include "vpx/vpx_codec.h"
+#include "vpx/vpx_encoder.h"
+#include "vpx/vpx_image.h"
 
 namespace webrtc {
 namespace {
@@ -59,9 +93,8 @@ using ::testing::SizeIs;
 using ::testing::TypedEq;
 using ::testing::UnorderedElementsAreArray;
 using ::testing::WithArg;
-using EncoderInfo = webrtc::VideoEncoder::EncoderInfo;
-using FramerateFractions =
-    absl::InlinedVector<uint8_t, webrtc::kMaxTemporalStreams>;
+using EncoderInfo = VideoEncoder::EncoderInfo;
+using FramerateFractions = absl::InlinedVector<uint8_t, kMaxTemporalStreams>;
 
 constexpr size_t kWidth = 1280;
 constexpr size_t kHeight = 720;
@@ -74,7 +107,7 @@ const VideoEncoder::Settings kSettings(kCapabilities,
 
 VideoCodec DefaultCodecSettings() {
   VideoCodec codec_settings;
-  webrtc::test::CodecSettings(kVideoCodecVP9, &codec_settings);
+  test::CodecSettings(kVideoCodecVP9, &codec_settings);
   codec_settings.width = kWidth;
   codec_settings.height = kHeight;
   codec_settings.startBitrate = kBitrateKbps;
@@ -111,7 +144,7 @@ class TestVp9Impl : public VideoCodecUnitTest {
   }
 
   void ModifyCodecSettings(VideoCodec* codec_settings) override {
-    webrtc::test::CodecSettings(kVideoCodecVP9, codec_settings);
+    test::CodecSettings(kVideoCodecVP9, codec_settings);
     codec_settings->width = kWidth;
     codec_settings->height = kHeight;
     ConfigureSvc(*codec_settings);
@@ -175,9 +208,9 @@ TEST_P(TestVp9ImplForPixelFormat, EncodeNativeBuffer) {
   ASSERT_TRUE(WaitForEncodedFrame(&encoded_frame, &codec_specific_info));
 
   // After encoding, we would expect a single mapping to have happened.
-  rtc::scoped_refptr<test::MappableNativeBuffer> mappable_buffer =
+  scoped_refptr<test::MappableNativeBuffer> mappable_buffer =
       test::GetMappableNativeBufferFromVideoFrame(input_frame);
-  std::vector<rtc::scoped_refptr<VideoFrameBuffer>> mapped_buffers =
+  std::vector<scoped_refptr<VideoFrameBuffer>> mapped_buffers =
       mappable_buffer->GetMappedFramedBuffers();
   ASSERT_EQ(mapped_buffers.size(), 1u);
   EXPECT_EQ(mapped_buffers[0]->type(), mappable_buffer->mappable_type());
@@ -2022,7 +2055,7 @@ TEST_P(Vp9ImplWithLayeringTest, FlexibleMode) {
     if (picture_idx == 0) {
       EXPECT_EQ(vp9.num_ref_pics, 0) << "Frame " << i;
     } else {
-      EXPECT_THAT(rtc::MakeArrayView(vp9.p_diff, vp9.num_ref_pics),
+      EXPECT_THAT(MakeArrayView(vp9.p_diff, vp9.num_ref_pics),
                   UnorderedElementsAreArray(gof.pid_diff[gof_idx],
                                             gof.num_ref_pics[gof_idx]))
           << "Frame " << i;
@@ -2038,7 +2071,7 @@ INSTANTIATE_TEST_SUITE_P(All,
 class TestVp9ImplFrameDropping : public TestVp9Impl {
  protected:
   void ModifyCodecSettings(VideoCodec* codec_settings) override {
-    webrtc::test::CodecSettings(kVideoCodecVP9, codec_settings);
+    test::CodecSettings(kVideoCodecVP9, codec_settings);
     // We need to encode quite a lot of frames in this test. Use low resolution
     // to reduce execution time.
     codec_settings->width = 64;
@@ -2324,6 +2357,104 @@ GetWrapImageFunction(vpx_image_t* img) {
     img->img_data = img_data;
     return img;
   };
+}
+
+TEST_F(TestVp9Impl, ScalesInputToActiveResolution) {
+  // Keep a raw pointer for EXPECT calls and the like. Ownership is otherwise
+  // passed on to LibvpxVp9Encoder.
+  auto* const vpx = new NiceMock<MockLibvpxInterface>();
+  LibvpxVp9Encoder encoder(CreateEnvironment(), {},
+                           absl::WrapUnique<LibvpxInterface>(vpx));
+
+  VideoCodec settings = DefaultCodecSettings();
+  settings.width = 1280;
+  settings.height = 720;
+  constexpr int kNumSpatialLayers = 3;
+  constexpr int kNumTemporalLayers = 3;
+  ConfigureSvc(settings, kNumSpatialLayers, kNumTemporalLayers);
+  VideoBitrateAllocation bitrate_allocation;
+  for (int si = 0; si < kNumSpatialLayers; ++si) {
+    for (int ti = 0; ti < kNumTemporalLayers; ++ti) {
+      uint32_t bitrate_bps =
+          settings.spatialLayers[si].targetBitrate * 1'000 / kNumTemporalLayers;
+      bitrate_allocation.SetBitrate(si, ti, bitrate_bps);
+    }
+  }
+  vpx_image_t img;
+
+  ON_CALL(*vpx, img_wrap).WillByDefault(GetWrapImageFunction(&img));
+  ON_CALL(*vpx, codec_enc_init)
+      .WillByDefault(WithArg<0>([](vpx_codec_ctx_t* ctx) {
+        memset(ctx, 0, sizeof(*ctx));
+        return VPX_CODEC_OK;
+      }));
+  ON_CALL(*vpx, codec_enc_config_default)
+      .WillByDefault(DoAll(WithArg<1>([](vpx_codec_enc_cfg_t* cfg) {
+                             memset(cfg, 0, sizeof(vpx_codec_enc_cfg_t));
+                           }),
+                           Return(VPX_CODEC_OK)));
+
+  vpx_codec_priv_output_cx_pkt_cb_pair_t callback_pointer = {};
+  EXPECT_CALL(*vpx, codec_control(_, VP9E_REGISTER_CX_CALLBACK, A<void*>()))
+      .WillOnce(WithArg<2>([&](void* cbp) {
+        callback_pointer =
+            *reinterpret_cast<vpx_codec_priv_output_cx_pkt_cb_pair_t*>(cbp);
+        return VPX_CODEC_OK;
+      }));
+
+  EXPECT_CALL(
+      *vpx,
+      codec_control(
+          _, VP9E_SET_SVC_PARAMETERS,
+          SafeMatcherCast<vpx_svc_extra_cfg_t*>(AllOf(
+              Field(&vpx_svc_extra_cfg_t::scaling_factor_num,
+                    ElementsAreArray({1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
+              Field(&vpx_svc_extra_cfg_t::scaling_factor_den,
+                    ElementsAreArray({4, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}))))));
+
+  EXPECT_EQ(WEBRTC_VIDEO_CODEC_OK, encoder.InitEncode(&settings, kSettings));
+
+  Mock::VerifyAndClearExpectations(vpx);
+
+  // All layers active.
+  encoder.SetRates(VideoEncoder::RateControlParameters(bitrate_allocation,
+                                                       settings.maxFramerate));
+
+  // Deactivate SL2
+  bitrate_allocation.SetBitrate(2, 0, 0);
+  bitrate_allocation.SetBitrate(2, 1, 0);
+  bitrate_allocation.SetBitrate(2, 2, 0);
+
+  EXPECT_CALL(
+      *vpx,
+      codec_control(
+          _, VP9E_SET_SVC_PARAMETERS,
+          SafeMatcherCast<vpx_svc_extra_cfg_t*>(AllOf(
+              Field(&vpx_svc_extra_cfg_t::scaling_factor_num,
+                    ElementsAreArray({1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
+              Field(&vpx_svc_extra_cfg_t::scaling_factor_den,
+                    ElementsAreArray({2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}))))));
+
+  encoder.SetRates(VideoEncoder::RateControlParameters(bitrate_allocation,
+                                                       settings.maxFramerate));
+
+  // Deactivate SL1
+  bitrate_allocation.SetBitrate(1, 0, 0);
+  bitrate_allocation.SetBitrate(1, 1, 0);
+  bitrate_allocation.SetBitrate(1, 2, 0);
+
+  EXPECT_CALL(
+      *vpx,
+      codec_control(
+          _, VP9E_SET_SVC_PARAMETERS,
+          SafeMatcherCast<vpx_svc_extra_cfg_t*>(AllOf(
+              Field(&vpx_svc_extra_cfg_t::scaling_factor_num,
+                    ElementsAreArray({1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0})),
+              Field(&vpx_svc_extra_cfg_t::scaling_factor_den,
+                    ElementsAreArray({1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}))))));
+
+  encoder.SetRates(VideoEncoder::RateControlParameters(bitrate_allocation,
+                                                       settings.maxFramerate));
 }
 
 TEST(Vp9SpeedSettingsTrialsTest, NoSvcUsesGlobalSpeedFromTl0InLayerConfig) {

@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -134,8 +135,8 @@ class SSLStreamAdapter : public StreamInterface {
   // Specify our SSL identity: key and certificate. SSLStream takes ownership
   // of the SSLIdentity object and will free it when appropriate. Should be
   // called no more than once on a given SSLStream instance.
-  virtual void SetIdentity(std::unique_ptr<rtc::SSLIdentity> identity) = 0;
-  virtual rtc::SSLIdentity* GetIdentityForTesting() const = 0;
+  virtual void SetIdentity(std::unique_ptr<SSLIdentity> identity) = 0;
+  virtual SSLIdentity* GetIdentityForTesting() const = 0;
 
   // Call this to indicate that we are to play the server role (or client role,
   // if the default argument is replaced by SSL_CLIENT).
@@ -158,6 +159,9 @@ class SSLStreamAdapter : public StreamInterface {
   // increased.
   // This should only be called before StartSSL().
   virtual void SetInitialRetransmissionTimeout(int timeout_ms) = 0;
+
+  // Set MTU to be used for next handshake flight.
+  virtual void SetMTU(int mtu) = 0;
 
   // StartSSL starts negotiation with a peer, whose certificate is verified
   // using the certificate digest. Generally, SetIdentity() and possibly
@@ -186,7 +190,7 @@ class SSLStreamAdapter : public StreamInterface {
   // Returns SSLPeerCertificateDigestError::NONE if successful.
   virtual SSLPeerCertificateDigestError SetPeerCertificateDigest(
       absl::string_view digest_alg,
-      rtc::ArrayView<const uint8_t> digest_val) = 0;
+      ArrayView<const uint8_t> digest_val) = 0;
   [[deprecated(
       "Use SetPeerCertificateDigest with ArrayView instead")]] virtual bool
   SetPeerCertificateDigest(absl::string_view digest_alg,
@@ -196,7 +200,7 @@ class SSLStreamAdapter : public StreamInterface {
 
   // Retrieves the peer's certificate chain including leaf certificate, if a
   // connection has been established.
-  virtual std::unique_ptr<rtc::SSLCertChain> GetPeerSSLCertChain() const = 0;
+  virtual std::unique_ptr<SSLCertChain> GetPeerSSLCertChain() const = 0;
 
   // Retrieves the IANA registration id of the cipher suite used for the
   // connection (e.g. 0x2F for "TLS_RSA_WITH_AES_128_CBC_SHA").
@@ -215,7 +219,7 @@ class SSLStreamAdapter : public StreamInterface {
 
   // Key Exporter interface from RFC 5705
   virtual bool ExportSrtpKeyingMaterial(
-      rtc::ZeroOnFreeBuffer<uint8_t>& keying_material) = 0;
+      ZeroOnFreeBuffer<uint8_t>& keying_material) = 0;
 
   // Returns the signature algorithm or 0 if not applicable.
   virtual uint16_t GetPeerSignatureAlgorithm() const = 0;
@@ -238,9 +242,14 @@ class SSLStreamAdapter : public StreamInterface {
 
   // Returns true iff the supplied cipher is deemed to be strong.
   // TODO(torbjorng): Consider removing the KeyType argument.
-  static bool IsAcceptableCipher(int cipher, rtc::KeyType key_type);
-  static bool IsAcceptableCipher(absl::string_view cipher,
-                                 rtc::KeyType key_type);
+  static bool IsAcceptableCipher(int cipher, KeyType key_type);
+  static bool IsAcceptableCipher(absl::string_view cipher, KeyType key_type);
+
+  static std::set<uint16_t> GetSupportedEphemeralKeyExchangeCipherGroups();
+  static std::optional<std::string> GetEphemeralKeyExchangeCipherGroupName(
+      uint16_t);
+  static std::vector<uint16_t> GetDefaultEphemeralKeyExchangeCipherGroups(
+      const FieldTrialsView* field_trials);
 
   ////////////////////////////////////////////////////////////////////////////
   // Testing only member functions
@@ -268,6 +277,14 @@ class SSLStreamAdapter : public StreamInterface {
   // Used for testing (and maybe put into stats?).
   virtual int GetRetransmissionCount() const = 0;
 
+  // Set cipher group ids to use during DTLS handshake to establish ephemeral
+  // key, see CryptoOptions::EphemeralKeyExchangeCipherGroups.
+  virtual bool SetSslGroupIds(const std::vector<uint16_t>& group_ids) = 0;
+
+  // Return the the ID of the group used by the adapters most recently
+  // completed handshake, or 0 if not applicable (e.g. before the handshake).
+  virtual uint16_t GetSslGroupId() const = 0;
+
  private:
   // If true (default), the client is required to provide a certificate during
   // handshake. If no certificate is given, handshake fails. This applies to
@@ -279,6 +296,7 @@ class SSLStreamAdapter : public StreamInterface {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::GetSrtpKeyAndSaltLengths;
 using ::webrtc::IsGcmCryptoSuite;
@@ -320,5 +338,6 @@ using ::webrtc::SSLProtocolVersion;
 using ::webrtc::SSLRole;
 using ::webrtc::SSLStreamAdapter;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_SSL_STREAM_ADAPTER_H_

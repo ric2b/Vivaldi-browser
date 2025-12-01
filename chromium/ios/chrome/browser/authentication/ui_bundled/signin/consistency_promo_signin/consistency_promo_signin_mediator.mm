@@ -19,6 +19,8 @@
 #import "components/signin/public/identity_manager/identity_manager.h"
 #import "components/signin/public/identity_manager/objc/identity_manager_observer_bridge.h"
 #import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow.h"
+#import "ios/chrome/browser/authentication/ui_bundled/authentication_flow/authentication_flow_delegate.h"
+#import "ios/chrome/browser/authentication/ui_bundled/continuation.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin/signin_utils.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
@@ -34,6 +36,7 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
 }  // namespace
 
 @interface ConsistencyPromoSigninMediator () <
+    AuthenticationFlowDelegate,
     IdentityManagerObserverBridgeDelegate> {
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
   raw_ptr<AuthenticationService> _authenticationService;
@@ -84,6 +87,7 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
                       accessPoint:(signin_metrics::AccessPoint)accessPoint {
   self = [super init];
   if (self) {
+    CHECK(identityManager);
     _accountManagerService = accountManagerService;
     _authenticationService = authenticationService;
     _identityManager = identityManager;
@@ -201,18 +205,19 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
     // Reset dismissal count if the user wants to sign-in.
     _prefService->SetInteger(prefs::kSigninWebSignDismissalCount, 0);
   }
-  __weak __typeof(self) weakSelf = self;
-  [_authenticationFlow
-      startSignInWithCompletion:^(SigninCoordinatorResult result) {
-        [weakSelf authenticationFlowCompletedWithResult:result];
-      }];
+  _authenticationFlow.delegate = self;
+  [_authenticationFlow startSignIn];
   [self.delegate consistencyPromoSigninMediatorSigninStarted:self];
 }
 
-#pragma mark - Private
+#pragma mark - AuthenticationFlowDelegate
 
-- (void)authenticationFlowCompletedWithResult:(SigninCoordinatorResult)result {
-  DCHECK(_authenticationFlow);
+- (void)authenticationFlowDidSignInInSameProfileWithResult:
+    (SigninCoordinatorResult)result {
+  if (!_identityManager) {
+    // The mediator was already disconnected, nothing to do.
+    return;
+  }
   _authenticationFlow = nil;
   if (result != SigninCoordinatorResultSuccess) {
     RecordConsistencyPromoUserAction(
@@ -262,6 +267,14 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
       FROM_HERE, _cookieTimeoutClosure.callback(), kSigninTimeout);
 }
 
+- (ChangeProfileContinuation)authenticationFlowWillChangeProfile {
+  _authenticationFlow.delegate = nil;
+  _authenticationFlow = nil;
+  return [self.delegate changeProfileContinuation];
+}
+
+#pragma mark - Private
+
 // Called by _webSigninTracker when the result of the web sign-in flow is known.
 - (void)webSigninFinishedWithResult:(signin::WebSigninTracker::Result)result {
   _webSigninTracker.reset();
@@ -274,8 +287,7 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
       [self cancelSigninWithError:ConsistencyPromoSigninMediatorErrorGeneric];
       break;
     case signin::WebSigninTracker::Result::kAuthError:
-      // TODO(crbug.com/388871821): Add special handling for auth errors.
-      [self cancelSigninWithError:ConsistencyPromoSigninMediatorErrorGeneric];
+      [self cancelSigninWithError:ConsistencyPromoSigninMediatorErrorAuth];
       break;
     case signin::WebSigninTracker::Result::kTimeout:
       [self cancelSigninWithError:ConsistencyPromoSigninMediatorErrorTimeout];
@@ -288,6 +300,7 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
   if (!_authenticationService) {
     return;
   }
+  id<SystemIdentity> signinIdentity = _signingIdentity;
   _signingIdentity = nil;
   _authenticationFlow = nil;
   switch (error) {
@@ -301,12 +314,18 @@ constexpr base::TimeDelta kSigninTimeout = base::Seconds(10);
           signin_metrics::AccountConsistencyPromoAction::GENERIC_ERROR_SHOWN,
           _accessPoint);
       break;
+    case ConsistencyPromoSigninMediatorErrorAuth:
+      RecordConsistencyPromoUserAction(
+          signin_metrics::AccountConsistencyPromoAction::AUTH_ERROR_SHOWN,
+          _accessPoint);
+      break;
   }
   __weak __typeof(self) weakSelf = self;
   _authenticationService->SignOut(
       signin_metrics::ProfileSignout::kAbortSignin, ^() {
         [weakSelf.delegate consistencyPromoSigninMediator:weakSelf
-                                           errorDidHappen:error];
+                                           errorDidHappen:error
+                                             withIdentity:signinIdentity];
       });
 }
 

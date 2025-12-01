@@ -33,7 +33,7 @@ enum class AutofillAiAction {
   // Trigger a run of the server classification model.
   kServerClassificationModel,
   // Access locally cached results from the server classification model.
-  kUseCachedServerClassificationModelResults,
+  kUseCachedServerClassificationModelResults
 };
 
 // Returns whether all permission-related requirements are met for `action`.

@@ -21,15 +21,15 @@ namespace blink {
 
 namespace {
 
-webnn::mojom::blink::CreateContextOptions::Device ConvertBlinkDeviceTypeToMojo(
+webnn::mojom::blink::Device ConvertBlinkDeviceTypeToMojo(
     const V8MLDeviceType& device_type_blink) {
   switch (device_type_blink.AsEnum()) {
     case V8MLDeviceType::Enum::kCpu:
-      return webnn::mojom::blink::CreateContextOptions::Device::kCpu;
+      return webnn::mojom::blink::Device::kCpu;
     case V8MLDeviceType::Enum::kGpu:
-      return webnn::mojom::blink::CreateContextOptions::Device::kGpu;
+      return webnn::mojom::blink::Device::kGpu;
     case V8MLDeviceType::Enum::kNpu:
-      return webnn::mojom::blink::CreateContextOptions::Device::kNpu;
+      return webnn::mojom::blink::Device::kNpu;
   }
 }
 
@@ -65,7 +65,7 @@ void ML::Trace(Visitor* visitor) const {
 ScriptPromise<MLContext> ML::createContext(ScriptState* script_state,
                                            MLContextOptions* options,
                                            ExceptionState& exception_state) {
-  webnn::ScopedTrace scoped_trace("ML::createContext");
+  webnn::ScopedTrace scoped_trace("ML::createContext(MLContextOptions)");
   if (!script_state->ContextIsValid()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "Invalid script state");
@@ -124,6 +124,16 @@ void ML::OnWebNNServiceConnectionError() {
                                      "WebNN service connection error.");
   }
   pending_resolvers_.clear();
+}
+
+ScriptPromise<MLContext> ML::createContext(ScriptState* script_state,
+                                           GPUDevice* gpu_device,
+                                           ExceptionState& exception_state) {
+  webnn::ScopedTrace scoped_trace("ML::createContext(GPUDevice)");
+  exception_state.ThrowDOMException(
+      DOMExceptionCode::kNotSupportedError,
+      "ML.createContext(GPUDevice) is not supported.");
+  return EmptyPromise();
 }
 
 void ML::EnsureWebNNServiceConnection() {

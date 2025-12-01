@@ -31,15 +31,11 @@ const flags = yargs(hideBin(process.argv))
     describe:
       'Disable cache validations during debugging, useful for custom rule creation/debugging.',
   })
-  .option('tsc', {
-    type: 'boolean',
-    default: false,
-    describe: 'Temperary here while fixing EsLint rule',
-  })
   .usage('$0 [<files...>]', 'Run the linter on the provided files', yargs => {
-    yargs.positional('files', {
+    return yargs.positional('files', {
       describe: 'File(s), glob(s), or directories',
-      type: 'array',
+      type: 'string',
+      array: true,
       default: [
         'front_end',
         'inspector_overlay',
@@ -106,9 +102,11 @@ async function runESLint(scriptFiles) {
   );
   if (usedDeprecatedRules.length) {
     console.log('Used deprecated rules:');
-    for (const { ruleId, replaceBy } of usedDeprecatedRules) {
+    for (const { ruleId, replacedBy } of usedDeprecatedRules) {
       console.log(
-        ` Rule ${ruleId} can be replaced with ${replaceBy ?? 'none'}`,
+        ` Rule ${ruleId} can be replaced with ${
+          replacedBy.join(',') ?? 'none'
+        }`,
       );
     }
   }
@@ -176,7 +174,7 @@ async function runLitAnalyzer(files) {
   /**
    *
    * @param {string[]} subsetFiles
-   * @returns {{output: string, error: string, status:boolean}}
+   * @returns {Promise<{output: string, error: string, status:boolean}>}
    */
   const getLitAnalyzerResult = async subsetFiles => {
     const args = [
@@ -193,7 +191,6 @@ async function runLitAnalyzer(files) {
 
     return await new Promise(resolve => {
       const litAnalyzerProcess = spawn(nodePath(), args, {
-        encoding: 'utf-8',
         cwd: devtoolsRootPath(),
       });
 
@@ -221,6 +218,9 @@ async function runLitAnalyzer(files) {
       return [filesToSplit];
     }
 
+    /**
+     * @type {string[][]}
+     */
     const splitFiles = [[]];
     let index = 0;
     for (const file of filesToSplit) {
@@ -275,7 +275,8 @@ function shouldIgnoreFile(path) {
 }
 
 async function runEslintRulesTypeCheck(_files) {
-  const tscPath = join(nodeModulesPath(), '.bin', 'tsc');
+  debugLogging('[lint]: Running EsLint custom rules typechecking...');
+  const tscPath = join(nodeModulesPath(), 'typescript', 'bin', 'tsc');
   const tsConfigEslintRules = join(
     devtoolsRootPath(),
     'scripts',
@@ -294,24 +295,23 @@ async function runEslintRulesTypeCheck(_files) {
     };
 
     return await new Promise(resolve => {
-      const litAnalyzerProcess = spawn(nodePath(), args, {
-        encoding: 'utf-8',
+      const tscProcess = spawn(nodePath(), args, {
         cwd: devtoolsRootPath(),
       });
 
-      litAnalyzerProcess.stdout.on('data', data => {
+      tscProcess.stdout.on('data', data => {
         result.output += `\n${data.toString()}`;
       });
-      litAnalyzerProcess.stderr.on('data', data => {
+      tscProcess.stderr.on('data', data => {
         result.error += `\n${data.toString()}`;
       });
 
-      litAnalyzerProcess.on('error', message => {
+      tscProcess.on('error', message => {
         result.error += `\n${message}`;
         resolve(result);
       });
 
-      litAnalyzerProcess.on('exit', code => {
+      tscProcess.on('exit', code => {
         result.status = code === 0;
         resolve(result);
       });
@@ -320,7 +320,7 @@ async function runEslintRulesTypeCheck(_files) {
 
   const result = await runTypeCheck();
 
-  if (result.output && !result.output.includes('Found 0 problems')) {
+  if (result.output) {
     console.log(result.output);
   }
   if (result.error) {
@@ -330,9 +330,10 @@ async function runEslintRulesTypeCheck(_files) {
 }
 
 async function run() {
+  const files = Array.isArray(flags.files) ? flags.files : [flags.files];
   const scripts = [];
   const styles = [];
-  for (const path of sync(flags.files, {
+  for (const path of sync(files, {
     expandDirectories: { extensions: ['css', 'mjs', 'js', 'ts'] },
     gitignore: true,
   })) {
@@ -362,7 +363,7 @@ async function run() {
   if (styles.length !== 0) {
     succeed &&= await runStylelint(styles);
   }
-  if (esLintRules.length !== 0 && flags.tsc) {
+  if (esLintRules.length !== 0) {
     succeed &&= await runEslintRulesTypeCheck();
   }
 

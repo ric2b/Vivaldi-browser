@@ -26,6 +26,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/navigation_throttle_registry.h"
 #include "content/public/browser/overlay_window.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -148,6 +149,31 @@ class HeadlessContentBrowserClient::StubBadgeService
   mojo::ReceiverSet<blink::mojom::BadgeService> receivers_;
 };
 
+// As with the above stub BadgeService, a stub implementation of a
+// PersistentRendererPrefsService is needed since the service is
+// implemented in chrome, and thus won't be available here.
+class HeadlessContentBrowserClient::StubPersistentRendererPrefsService
+    : public blink::mojom::PersistentRendererPrefsService {
+ public:
+  StubPersistentRendererPrefsService() = default;
+  StubPersistentRendererPrefsService(
+      const StubPersistentRendererPrefsService&) = delete;
+  StubPersistentRendererPrefsService& operator=(
+      const StubPersistentRendererPrefsService&) = delete;
+  ~StubPersistentRendererPrefsService() override = default;
+
+  void Bind(mojo::PendingReceiver<blink::mojom::PersistentRendererPrefsService>
+                receiver) {
+    receivers_.Add(this, std::move(receiver));
+  }
+
+  // blink::mojom::PersistentRendererPrefsService:
+  void SetViewSourceLineWrapping(bool value) override {}
+
+ private:
+  mojo::ReceiverSet<blink::mojom::PersistentRendererPrefsService> receivers_;
+};
+
 HeadlessContentBrowserClient::HeadlessContentBrowserClient(
     HeadlessBrowserImpl* browser)
     : browser_(browser) {}
@@ -178,6 +204,9 @@ void HeadlessContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
   map->Add<blink::mojom::BadgeService>(base::BindRepeating(
       &HeadlessContentBrowserClient::BindBadgeService, base::Unretained(this)));
+  map->Add<blink::mojom::PersistentRendererPrefsService>(base::BindRepeating(
+      &HeadlessContentBrowserClient::BindPersistentRendererPrefsService,
+      base::Unretained(this)));
 }
 
 void HeadlessContentBrowserClient::
@@ -427,6 +456,18 @@ void HeadlessContentBrowserClient::BindBadgeService(
   stub_badge_service_->Bind(std::move(receiver));
 }
 
+void HeadlessContentBrowserClient::BindPersistentRendererPrefsService(
+    content::RenderFrameHost* render_frame_host,
+    mojo::PendingReceiver<blink::mojom::PersistentRendererPrefsService>
+        receiver) {
+  if (!stub_persistent_renderer_prefs_service_) {
+    stub_persistent_renderer_prefs_service_ =
+        std::make_unique<StubPersistentRendererPrefsService>();
+  }
+
+  stub_persistent_renderer_prefs_service_->Bind(std::move(receiver));
+}
+
 bool HeadlessContentBrowserClient::CanAcceptUntrustedExchangesIfNeeded() {
   // We require --user-data-dir flag too so that no dangerous changes are made
   // in the user's regular profile.
@@ -452,19 +493,15 @@ void HeadlessContentBrowserClient::SessionEnding(
 #endif
 
 #if defined(HEADLESS_USE_POLICY)
-std::vector<std::unique_ptr<content::NavigationThrottle>>
-HeadlessContentBrowserClient::CreateThrottlesForNavigation(
-    content::NavigationHandle* handle) {
-  std::vector<std::unique_ptr<content::NavigationThrottle>> throttles;
-
+void HeadlessContentBrowserClient::CreateThrottlesForNavigation(
+    content::NavigationThrottleRegistry& registry) {
   // Avoid creating naviagtion throttle if preferences are not available
   // (happens in tests).
+  content::NavigationHandle& handle = registry.GetNavigationHandle();
   if (browser_->GetPrefs()) {
-    throttles.push_back(std::make_unique<PolicyBlocklistNavigationThrottle>(
-        handle, handle->GetWebContents()->GetBrowserContext()));
+    registry.AddThrottle(std::make_unique<PolicyBlocklistNavigationThrottle>(
+        registry, handle.GetWebContents()->GetBrowserContext()));
   }
-
-  return throttles;
 }
 #endif  // defined(HEADLESS_USE_POLICY)
 
@@ -539,6 +576,12 @@ HeadlessContentBrowserClient::GetBluetoothDelegate() {
     bluetooth_delegate_ = std::make_unique<HeadlessBluetoothDelegate>();
   }
   return bluetooth_delegate_.get();
+}
+
+bool HeadlessContentBrowserClient::IsRendererProcessPriorityEnabled() {
+  // Since there is no visible window in headless, the renderer process priority
+  // policy, which is mostly based on visibility, is not needed.
+  return false;
 }
 
 }  // namespace headless

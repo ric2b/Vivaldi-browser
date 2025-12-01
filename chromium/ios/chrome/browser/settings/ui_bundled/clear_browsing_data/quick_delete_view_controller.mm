@@ -32,6 +32,11 @@
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 
+// Vivaldi
+#import "app/vivaldi_apptools.h"
+#import "ios/ui/bookmarks_editor/vivaldi_bookmarks_constants.h"
+// End Vivaldi
+
 namespace {
 
 using browsing_data::DeleteBrowsingDataDialogAction;
@@ -714,6 +719,12 @@ typedef NS_ENUM(NSInteger, ItemIdentifier) {
   UIImageView* icon =
       [[UIImageView alloc] initWithImage:DefaultSymbolTemplateWithPointSize(
                                              kTrashSymbol, kTrashIconSize)];
+
+  if (vivaldi::IsVivaldiRunning()) {
+    icon = [[UIImageView alloc]
+                initWithImage:[UIImage imageNamed:vBookmarkTrashFolder]];
+  } // End Vivaldi
+
   icon.clipsToBounds = YES;
   icon.translatesAutoresizingMaskIntoConstraints = NO;
   icon.tintColor = [UIColor colorNamed:kRedColor];

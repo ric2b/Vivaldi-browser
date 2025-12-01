@@ -3942,7 +3942,7 @@ static void encode_frame_to_data_rate(VP8_COMP *cpi, size_t *size,
 
       if (cm->refresh_entropy_probs == 0) {
         /* save a copy for later refresh */
-        memcpy(&cm->lfc, &cm->fc, sizeof(cm->fc));
+        cm->lfc = cm->fc;
       }
 
       vp8_update_coef_context(cpi);
@@ -4834,7 +4834,6 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
                             unsigned char *dest_end, int64_t *time_stamp,
                             int64_t *time_end, int flush) {
   VP8_COMMON *cm;
-  struct vpx_usec_timer tsctimer;
   struct vpx_usec_timer ticktimer;
 #if CONFIG_INTERNAL_STATS
   struct vpx_usec_timer cmptimer;
@@ -5021,7 +5020,6 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
   }
 
   if (cpi->compressor_speed == 2) {
-    vpx_usec_timer_start(&tsctimer);
     vpx_usec_timer_start(&ticktimer);
   }
 
@@ -5096,7 +5094,6 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
 
   if (cpi->compressor_speed == 2) {
     unsigned int duration, duration2;
-    vpx_usec_timer_mark(&tsctimer);
     vpx_usec_timer_mark(&ticktimer);
 
     duration = (int)(vpx_usec_timer_elapsed(&ticktimer));
@@ -5123,16 +5120,16 @@ int vp8_get_compressed_data(VP8_COMP *cpi, unsigned int *frame_flags,
   }
 
   if (cm->refresh_entropy_probs == 0) {
-    memcpy(&cm->fc, &cm->lfc, sizeof(cm->fc));
+    cm->fc = cm->lfc;
   }
 
   /* Save the contexts separately for alt ref, gold and last. */
   /* (TODO jbb -> Optimize this with pointers to avoid extra copies. ) */
-  if (cm->refresh_alt_ref_frame) memcpy(&cpi->lfc_a, &cm->fc, sizeof(cm->fc));
+  if (cm->refresh_alt_ref_frame) cpi->lfc_a = cm->fc;
 
-  if (cm->refresh_golden_frame) memcpy(&cpi->lfc_g, &cm->fc, sizeof(cm->fc));
+  if (cm->refresh_golden_frame) cpi->lfc_g = cm->fc;
 
-  if (cm->refresh_last_frame) memcpy(&cpi->lfc_n, &cm->fc, sizeof(cm->fc));
+  if (cm->refresh_last_frame) cpi->lfc_n = cm->fc;
 
   /* if it's a dropped frame honor the requests on subsequent frames */
   if (*size > 0) {

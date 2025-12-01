@@ -33,7 +33,7 @@
 #include "extensions/common/extension_features.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
-#include "ui/content/vivaldi_tab_check.h"
+#include "app/vivaldi_apptools.h"
 
 namespace {
 
@@ -191,10 +191,6 @@ std::unique_ptr<content::HidChooser> ChromeHidDelegate::RunChooser(
   GetContextObserver(browser_context);
   DCHECK(base::Contains(observations_, browser_context));
 
-  // Vivaldi can show permission prompts inside webviews showing tab-content.
-  // Added for VB-106343.
-  if (!VivaldiTabCheck::IsVivaldiTab(
-          content::WebContents::FromRenderFrameHost(render_frame_host))) {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // If it's a webview, request permission to show chooser from the embedder.
   if (auto* web_view =
@@ -214,18 +210,25 @@ std::unique_ptr<content::HidChooser> ChromeHidDelegate::RunChooser(
     // base::Unretained is safe here since ChromeHidDelegate is owned by
     // ChromeContentBrowserClient and will exist for the lifetime of the
     // browser.
+
+    // The permission request is sent for the webpage and not the embedder. So
+    // in Vivaldi we need to change the GlobalId from the embedder to the tab.
+    // Was VB-112800.
+    content::RenderFrameHost* requesting_rfh = vivaldi::IsVivaldiRunning()
+                                                   ? render_frame_host
+                                                   : web_view->embedder_rfh();
+
     web_view->web_view_permission_helper()->RequestHidPermission(
         guest_origin.GetURL(),
         base::BindOnce(
             &ChromeHidDelegate::OnWebViewHidPermissionRequestCompleted,
             base::Unretained(this), chooser->GetWeakPtr(),
-            web_view->embedder_rfh()->GetGlobalId(), std::move(filters),
+            requesting_rfh->GetGlobalId(), std::move(filters),
             std::move(exclusion_filters),
             std::move(device_requested_callback)));
     return chooser;
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-  } // IsVivaldiTab
 
   return std::make_unique<HidChooser>(chrome::ShowDeviceChooserDialog(
       render_frame_host,

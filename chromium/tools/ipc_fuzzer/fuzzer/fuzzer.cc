@@ -44,6 +44,14 @@
 #include "tools/ipc_fuzzer/message_lib/message_cracker.h"
 #include "tools/ipc_fuzzer/message_lib/message_file.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/geometry/size.h"
+#include "ui/gfx/geometry/size_f.h"
+#include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/geometry/vector2d_f.h"
 #include "ui/gfx/range/range.h"
 #include "ui/gl/gpu_preference.h"
 #include "ui/latency/latency_info.h"
@@ -761,24 +769,22 @@ struct FuzzTraits<gfx::GpuMemoryBufferHandle> {
     auto buffer_type = static_cast<gfx::GpuMemoryBufferType>(type);
     switch (buffer_type) {
       case gfx::SHARED_MEMORY_BUFFER: {
-        p->type = buffer_type;
         base::UnsafeSharedMemoryRegion region;
         if (!FuzzParam(&region, fuzzer)) {
           return false;
         }
-        p->set_region(std::move(region));
+        *p = gfx::GpuMemoryBufferHandle(std::move(region));
         break;
       }
 #if BUILDFLAG(IS_WIN)
       case gfx::DXGI_SHARED_HANDLE: {
-        p->type = buffer_type;
+        gfx::DXGIHandle dxgi_handle = gfx::DXGIHandle::CreateFakeForTest();
         base::UnsafeSharedMemoryRegion region;
         if (!FuzzParam(&region, fuzzer)) {
           return false;
         }
-        gfx::DXGIHandle dxgi_handle = gfx::DXGIHandle::CreateFakeForTest();
-        dxgi_handle.set_region(std::move(region));
-        p->set_dxgi_handle(std::move(dxgi_handle));
+        *p = gfx::GpuMemoryBufferHandle(
+            dxgi_handle.CloneWithRegion(std::move(region)));
         break;
       }
 #endif

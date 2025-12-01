@@ -4,11 +4,12 @@
 
 // Utilities that are used in multiple tests.
 
+// clang-format off
 import type {Bookmark, DocumentDimensions, LayoutOptions, PdfViewerElement, ViewerToolbarElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {resetForTesting as resetMetricsForTesting, UserAction, Viewport} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 // <if expr="enable_pdf_ink2">
-import type {AnnotationBrush, BeforeUnloadProxy, InkBrushSelectorElement, InkColorSelectorElement, InkSizeSelectorElement, SelectableIconButtonElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
-import {AnnotationBrushType, BeforeUnloadProxyImpl, PluginController, PluginControllerEventType} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import type {AnnotationBrush, BeforeUnloadProxy, InkBrushSelectorElement, InkColorSelectorElement, InkSizeSelectorElement, SelectableIconButtonElement, ViewerBottomToolbarDropdownElement} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
+import {AnnotationBrushType, BeforeUnloadProxyImpl, DEFAULT_TEXTBOX_WIDTH, DEFAULT_TEXTBOX_HEIGHT, hexToColor, Ink2Manager, TEXT_COLORS, TextAlignment, TextStyle, PluginController, PluginControllerEventType, SaveRequestType} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 // </if>
 import {assert} from 'chrome://resources/js/assert.js';
 import {CrLitElement, html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
@@ -16,6 +17,7 @@ import {CrLitElement, html} from 'chrome://resources/lit/v3_0/lit.rollup.js';
 import {TestBrowserProxy} from 'chrome://webui-test/test_browser_proxy.js';
 // </if>
 import {eventToPromise, isVisible, microtasksFinished} from 'chrome://webui-test/test_util.js';
+// clang-format on
 
 export class MockElement {
   dir: string = '';
@@ -173,8 +175,8 @@ export class MockDocumentDimensions implements DocumentDimensions {
 export class MockPdfPluginElement extends HTMLEmbedElement {
   private messages_: any[] = [];
   // <if expr="enable_pdf_ink2">
-  private messageReply_: Object|null = null;
-  private replyType_: string = '';
+  private messageReplies_: Map<string, Object> = new Map();
+  private replyToSave_: boolean = false;
   // </if>
 
   get messages(): any[] {
@@ -192,14 +194,17 @@ export class MockPdfPluginElement extends HTMLEmbedElement {
   postMessage(message: any, _transfer: Transferable[]) {
     assert(message.type);
     // <if expr="enable_pdf_ink2">
-    if (message.type === this.replyType_) {
-      assert(this.messageReply_);
+    if (message.type === 'save' && this.replyToSave_) {
+      this.replyToSaveMessage_(message);
+    } else if (this.messageReplies_.has(message.type)) {
+      const reply = this.messageReplies_.get(message.type);
+      assert(reply);
       assert(message.messageId);
-
       this.dispatchEvent(new MessageEvent('message', {
         data: {
           messageId: message.messageId,
-          ...this.messageReply_,
+          type: message.type + 'Reply',
+          ...reply,
         },
         origin: '*',
       }));
@@ -216,8 +221,49 @@ export class MockPdfPluginElement extends HTMLEmbedElement {
    * @param reply The reply to the message.
    */
   setMessageReply(type: string, reply: Object) {
-    this.replyType_ = type;
-    this.messageReply_ = reply;
+    this.messageReplies_.set(type, reply);
+  }
+
+  /**
+   * Tells the plugin to respond to a "save" event by firing a 'saveData'
+   * or 'consumeSaveToken' message.
+   */
+  setReplyToSave(reply: boolean) {
+    this.replyToSave_ = reply;
+  }
+
+  private replyToSaveMessage_(message: any) {
+    assert(message.token);
+    if (message.saveRequestType === SaveRequestType.ORIGINAL) {
+      this.dispatchEvent(new MessageEvent('message', {
+        data: {
+          type: 'consumeSaveToken',
+          token: message.token,
+        },
+        origin: '*',
+      }));
+      return;
+    }
+    assert(
+        message.saveRequestType === SaveRequestType.ANNOTATION,
+        'Unexpected save request type');
+    const testData = '%PDF1.0 Hello World';
+    const buffer = new ArrayBuffer(testData.length);
+    // Encode the same way chrome/browser/resources/pdf/controller.ts decodes.
+    const view = new Uint8Array(buffer);
+    for (let i = 0; i < testData.length; i++) {
+      view[i] = testData.charCodeAt(i);
+    }
+    this.dispatchEvent(new MessageEvent('message', {
+      data: {
+        type: 'saveData',
+        token: message.token,
+        dataToSave: buffer,
+        fileName: 'test.pdf',
+        bypassSaveFileForTesting: true,
+      },
+      origin: '*',
+    }));
   }
   // </if>
 }
@@ -249,7 +295,7 @@ class TestBookmarksElement extends CrLitElement {
     };
   }
 
-  bookmarks: Bookmark[] = [];
+  accessor bookmarks: Bookmark[] = [];
 }
 
 declare global {
@@ -444,12 +490,34 @@ export function enterFullscreenWithUserGesture(): Promise<void> {
 
 // <if expr="enable_pdf_ink2">
 /**
- * Helper to simulate the PDF content sending a message to the PDF extension
- * to indicate that a new ink stroke has been drawn.
+ * Convenience function to start stroking, and then modify some Ink stroke
+ * before finishing.
  */
-export function finishInkStroke(controller: PluginController) {
+export function startFinishModifiedInkStroke(controller: PluginController) {
+  startInkStroke(controller);
+  finishInkStroke(controller, true);
+}
+
+/**
+ * Helper to simulate the PDF content sending a message to the PDF extension
+ * to indicate that a new ink stroke has been started.
+ */
+export function startInkStroke(controller: PluginController) {
   const eventTarget = controller.getEventTarget();
-  const message = {type: 'finishInkStroke'};
+  const message = {type: 'startInkStroke'};
+
+  eventTarget.dispatchEvent(new CustomEvent(
+      PluginControllerEventType.PLUGIN_MESSAGE, {detail: message}));
+}
+
+/**
+ * Helper to simulate the PDF content sending a message to the PDF extension
+ * to indicate that Ink stroking has occurred.
+ */
+export function finishInkStroke(
+    controller: PluginController, modified: boolean) {
+  const eventTarget = controller.getEventTarget();
+  const message = {type: 'finishInkStroke', modified};
 
   eventTarget.dispatchEvent(new CustomEvent(
       PluginControllerEventType.PLUGIN_MESSAGE, {detail: message}));
@@ -483,7 +551,67 @@ export function setupTestMockPluginForInk(): MockPdfPluginElement {
       color: {r: 0, g: 0, b: 0},
     },
   });
+  mockPlugin.setMessageReply('getAllTextAnnotations', {
+    annotations: [],
+  });
   return mockPlugin;
+}
+
+// Sets up zoomable viewport and a dummy plugin for Ink. This combines the
+// functionality of getZoomableViewport() and setupTestMockPluginForInk(), which
+// are mutually exclusive since they both attempt to call setContent() on the
+// viewport. Returns a reference to the new viewport, plugin and mock window.
+export function setUpInkTestContext(): {
+  viewport: Viewport,
+  mockPlugin: MockPdfPluginElement,
+  mockWindow: MockElement,
+} {
+  // Clear the DOM and create dummy content.
+  document.body.innerHTML = '';
+  const dummyContent = document.createElement('div');
+  document.body.appendChild(dummyContent);
+
+  // Create the viewport.
+  const mockWindow = new MockElement(100, 100, null);
+  const mockSizer = new MockSizer();
+  const viewport = new Viewport(
+      mockWindow as unknown as HTMLElement, mockSizer as unknown as HTMLElement,
+      dummyContent, /*scrollbarWidth=*/ 5, /*defaultZoom=*/ 1);
+  viewport.setZoomFactorRange([0.25, 0.4, 0.5, 1, 2]);
+  const documentDimensions = new MockDocumentDimensions(0, 0);
+  documentDimensions.addPage(90, 90);
+  viewport.setDocumentDimensions(documentDimensions);
+
+  // Create mock plugin.
+  const mockPlugin = createMockPdfPluginForTest();
+  mockPlugin.id = 'plugin';
+  mockPlugin.src = 'data:text/plain,plugin-content';
+  mockPlugin.setMessageReply('getAnnotationBrush', {
+    data: {
+      type: AnnotationBrushType.PEN,
+      size: 3,
+      color: {r: 0, g: 0, b: 0},
+    },
+  });
+  mockPlugin.setMessageReply('getAllTextAnnotations', {
+    annotations: [],
+  });
+
+  // Initialize controller. This also calls setContent() on the viewport.
+  const controller = PluginController.getInstance();
+  controller.init(mockPlugin, viewport, () => false, () => null);
+
+  // Initialize the ink manager and update its viewport parameters with the
+  // new dummy viewport.
+  const manager = Ink2Manager.getInstance();
+  manager.setViewport(viewport);
+  manager.viewportChanged();
+
+  // Use setViewportChangedCallback to subscribe the manager to viewport
+  // changes. In prod these are piped through the top level pdf-viewer element.
+  viewport.setViewportChangedCallback(() => manager.viewportChanged());
+
+  return {viewport, mockPlugin, mockWindow};
 }
 
 /**
@@ -605,4 +733,50 @@ export function assertLabels(element: HTMLElement, label: string) {
   chrome.test.assertEq(label, element.title);
 }
 
+export async function clickDropdownButton(
+    dropdown: ViewerBottomToolbarDropdownElement) {
+  const dropdownButton = getRequiredElement(dropdown, 'cr-button');
+  dropdownButton.click();
+  await microtasksFinished();
+}
+
+export function assertDeepEquals(
+    value1: object|any[]|undefined|null, value2: object|any[]|undefined|null) {
+  chrome.test.assertTrue(chrome.test.checkDeepEq(value1, value2));
+}
+
+// Simulates initializing a textbox. To make this usable from tests that do
+// not use a mock viewport, directly dispatch the event from the
+// Ink2Manager. Otherwise, the real viewport and page layout can vary, and
+// a textbox may not actually be created if a click event is simulated in a part
+// of the viewport that doesn't contain a page.
+export function createTextBox() {
+  Ink2Manager.getInstance().dispatchEvent(
+      new CustomEvent('initialize-text-box', {
+        detail: {
+          annotation: {
+            text: '',
+            textAttributes: {
+              size: 12,
+              typeface: 'sans-serif',
+              styles: {
+                [TextStyle.BOLD]: false,
+                [TextStyle.ITALIC]: false,
+              },
+              alignment: TextAlignment.LEFT,
+              color: hexToColor(TEXT_COLORS[0]!.color),
+            },
+            textBoxRect: {
+              height: DEFAULT_TEXTBOX_HEIGHT,
+              locationX: 50,
+              locationY: 50,
+              width: DEFAULT_TEXTBOX_WIDTH,
+            },
+            id: 0,
+            pageNumber: 0,
+          },
+          pageCoordinates: {x: 10, y: 3},
+        },
+      }));
+}
 // </if>

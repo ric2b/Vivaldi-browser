@@ -170,23 +170,6 @@ WebViewImpl.prototype.createGuest = function() {
       const tab_id = Number(tab_id_str);
       if (Number.isInteger(tab_id)) {
         params['tab_id'] = tab_id;
-      } else {
-        const createOptions = {
-          url: 'about:blank',
-          vivExtData: JSON.stringify({
-            panelId: tab_id_str,
-          }),
-        };
-
-        chrome.tabs.create(createOptions, tab => {
-          params['tab_id'] = tab.id;
-          this.guest.create(
-              this.viewInstanceId, params, $Function.bind(function() {
-                this.attachWindow();
-              }, this));
-        });
-
-        return;
       }
     }
   }

@@ -159,6 +159,7 @@ struct VivaldiMetaNames {
   const std::string partner = "Partner";
   const std::string thumbnail = "Thumbnail";
   const std::string theme_color = "ThemeColor";
+  const std::string display_url = "DisplayURL";
 
   // values stored in the node
   const std::string true_value = "true";
@@ -265,6 +266,11 @@ void CustomMetaInfo::SetThumbnail(const std::string& thumbnail) {
   SetMetaString(&map_, GetMetaNames().thumbnail, thumbnail);
 }
 
+void CustomMetaInfo::SetDisplayUrl(const GURL& display_url) {
+  SetMetaString(&map_, GetMetaNames().display_url,
+                display_url.is_valid() ? display_url.spec() : "");
+}
+
 bool GetSpeeddial(const BookmarkNode* node) {
   return GetMetaBool(node, GetMetaNames().speeddial);
 }
@@ -279,6 +285,10 @@ const std::string& GetNickname(const BookmarkNode* node) {
 
 const std::string& GetDescription(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().description);
+}
+
+const std::string& GetDisplayURL(const BookmarkNode* node) {
+  return GetMetaString(node, GetMetaNames().display_url);
 }
 
 SkColor GetThemeColor(const BookmarkNode* node) {
@@ -510,6 +520,26 @@ bool IsDirectChildOfRoot(BookmarkModel* model, const BookmarkNode* node) {
     if (!root_node || root_node->children().empty())
       continue;
     return node && node->parent() == root_node;
+  }
+
+  return false;
+}
+
+bool IsChildOfTrashNode(BookmarkModel* model, const BookmarkNode* node) {
+  const BookmarkNode* trash_node = model->trash_node();
+
+  if (!node)
+    return false;
+
+  const BookmarkNode* current = node;
+  const BookmarkNode* parent = current->parent();
+
+  while (parent != nullptr) {
+    if (parent == trash_node)
+      return true;
+
+    current = parent;
+    parent = current->parent();
   }
 
   return false;

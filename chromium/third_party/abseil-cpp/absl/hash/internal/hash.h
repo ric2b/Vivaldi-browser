@@ -24,14 +24,28 @@
 #include <TargetConditionals.h>
 #endif
 
+// We include config.h here to make sure that ABSL_INTERNAL_CPLUSPLUS_LANG is
+// defined.
 #include "absl/base/config.h"
 
+// GCC15 warns that <ciso646> is deprecated in C++17 and suggests using
+// <version> instead, even though <version> is not available in C++17 mode prior
+// to GCC9.
+#if defined(__has_include)
+#if __has_include(<version>)
+#define ABSL_INTERNAL_VERSION_HEADER_AVAILABLE 1
+#endif
+#endif
+
 // For feature testing and determining which headers can be included.
-#if ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L
+#if ABSL_INTERNAL_CPLUSPLUS_LANG >= 202002L || \
+    ABSL_INTERNAL_VERSION_HEADER_AVAILABLE
 #include <version>
 #else
 #include <ciso646>
 #endif
+
+#undef ABSL_INTERNAL_VERSION_HEADER_AVAILABLE
 
 #include <algorithm>
 #include <array>
@@ -51,6 +65,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <unordered_map>
@@ -66,6 +81,7 @@
 #include "absl/container/fixed_array.h"
 #include "absl/hash/internal/city.h"
 #include "absl/hash/internal/low_level_hash.h"
+#include "absl/hash/internal/weakly_mixed_integer.h"
 #include "absl/meta/type_traits.h"
 #include "absl/numeric/bits.h"
 #include "absl/numeric/int128.h"
@@ -76,14 +92,6 @@
 
 #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>  // NOLINT
-#endif
-
-#ifdef ABSL_HAVE_STD_STRING_VIEW
-#include <string_view>
-#endif
-
-#ifdef __ARM_ACLE
-#include <arm_acle.h>
 #endif
 
 namespace absl {
@@ -394,6 +402,11 @@ H hash_bytes(H hash_state, const T& value) {
   return H::combine_contiguous(std::move(hash_state), start, sizeof(value));
 }
 
+template <typename H>
+H hash_weakly_mixed_integer(H hash_state, WeaklyMixedInteger value) {
+  return H::combine_weakly_mixed_integer(std::move(hash_state), value);
+}
+
 // -----------------------------------------------------------------------------
 // AbslHashValue for Basic Types
 // -----------------------------------------------------------------------------
@@ -609,7 +622,7 @@ template <typename H>
 H AbslHashValue(H hash_state, absl::string_view str) {
   return H::combine(
       H::combine_contiguous(std::move(hash_state), str.data(), str.size()),
-      str.size());
+      WeaklyMixedInteger{str.size()});
 }
 
 // Support std::wstring, std::u16string and std::u32string.
@@ -622,10 +635,8 @@ H AbslHashValue(
     const std::basic_string<Char, std::char_traits<Char>, Alloc>& str) {
   return H::combine(
       H::combine_contiguous(std::move(hash_state), str.data(), str.size()),
-      str.size());
+      WeaklyMixedInteger{str.size()});
 }
-
-#ifdef ABSL_HAVE_STD_STRING_VIEW
 
 // Support std::wstring_view, std::u16string_view and std::u32string_view.
 template <typename Char, typename H,
@@ -635,10 +646,8 @@ template <typename Char, typename H,
 H AbslHashValue(H hash_state, std::basic_string_view<Char> str) {
   return H::combine(
       H::combine_contiguous(std::move(hash_state), str.data(), str.size()),
-      str.size());
+      WeaklyMixedInteger{str.size()});
 }
-
-#endif  // ABSL_HAVE_STD_STRING_VIEW
 
 #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L && \
     (!defined(__ENVIRONMENT_IPHONE_OS_VERSION_MIN_REQUIRED__) ||        \
@@ -685,7 +694,7 @@ typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
   for (const auto& t : deque) {
     hash_state = H::combine(std::move(hash_state), t);
   }
-  return H::combine(std::move(hash_state), deque.size());
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{deque.size()});
 }
 
 // AbslHashValue for hashing std::forward_list
@@ -697,7 +706,7 @@ typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
     hash_state = H::combine(std::move(hash_state), t);
     ++size;
   }
-  return H::combine(std::move(hash_state), size);
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{size});
 }
 
 // AbslHashValue for hashing std::list
@@ -707,7 +716,7 @@ typename std::enable_if<is_hashable<T>::value, H>::type AbslHashValue(
   for (const auto& t : list) {
     hash_state = H::combine(std::move(hash_state), t);
   }
-  return H::combine(std::move(hash_state), list.size());
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{list.size()});
 }
 
 // AbslHashValue for hashing std::vector
@@ -721,7 +730,7 @@ typename std::enable_if<is_hashable<T>::value && !std::is_same<T, bool>::value,
 AbslHashValue(H hash_state, const std::vector<T, Allocator>& vector) {
   return H::combine(H::combine_contiguous(std::move(hash_state), vector.data(),
                                           vector.size()),
-                    vector.size());
+                    WeaklyMixedInteger{vector.size()});
 }
 
 // AbslHashValue special cases for hashing std::vector<bool>
@@ -742,7 +751,8 @@ AbslHashValue(H hash_state, const std::vector<T, Allocator>& vector) {
     unsigned char c = static_cast<unsigned char>(i);
     hash_state = combiner.add_buffer(std::move(hash_state), &c, sizeof(c));
   }
-  return H::combine(combiner.finalize(std::move(hash_state)), vector.size());
+  return H::combine(combiner.finalize(std::move(hash_state)),
+                    WeaklyMixedInteger{vector.size()});
 }
 #else
 // When not working around the libstdc++ bug above, we still have to contend
@@ -758,7 +768,7 @@ typename std::enable_if<is_hashable<T>::value && std::is_same<T, bool>::value,
 AbslHashValue(H hash_state, const std::vector<T, Allocator>& vector) {
   return H::combine(std::move(hash_state),
                     std::hash<std::vector<T, Allocator>>{}(vector),
-                    vector.size());
+                    WeaklyMixedInteger{vector.size()});
 }
 #endif
 
@@ -775,7 +785,7 @@ AbslHashValue(H hash_state, const std::map<Key, T, Compare, Allocator>& map) {
   for (const auto& t : map) {
     hash_state = H::combine(std::move(hash_state), t);
   }
-  return H::combine(std::move(hash_state), map.size());
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{map.size()});
 }
 
 // AbslHashValue for hashing std::multimap
@@ -788,7 +798,7 @@ AbslHashValue(H hash_state,
   for (const auto& t : map) {
     hash_state = H::combine(std::move(hash_state), t);
   }
-  return H::combine(std::move(hash_state), map.size());
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{map.size()});
 }
 
 // AbslHashValue for hashing std::set
@@ -798,7 +808,7 @@ typename std::enable_if<is_hashable<Key>::value, H>::type AbslHashValue(
   for (const auto& t : set) {
     hash_state = H::combine(std::move(hash_state), t);
   }
-  return H::combine(std::move(hash_state), set.size());
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{set.size()});
 }
 
 // AbslHashValue for hashing std::multiset
@@ -808,7 +818,7 @@ typename std::enable_if<is_hashable<Key>::value, H>::type AbslHashValue(
   for (const auto& t : set) {
     hash_state = H::combine(std::move(hash_state), t);
   }
-  return H::combine(std::move(hash_state), set.size());
+  return H::combine(std::move(hash_state), WeaklyMixedInteger{set.size()});
 }
 
 // -----------------------------------------------------------------------------
@@ -822,7 +832,7 @@ typename std::enable_if<is_hashable<Key>::value, H>::type AbslHashValue(
     H hash_state, const std::unordered_set<Key, Hash, KeyEqual, Alloc>& s) {
   return H::combine(
       H::combine_unordered(std::move(hash_state), s.begin(), s.end()),
-      s.size());
+      WeaklyMixedInteger{s.size()});
 }
 
 // AbslHashValue for hashing std::unordered_multiset
@@ -833,7 +843,7 @@ typename std::enable_if<is_hashable<Key>::value, H>::type AbslHashValue(
     const std::unordered_multiset<Key, Hash, KeyEqual, Alloc>& s) {
   return H::combine(
       H::combine_unordered(std::move(hash_state), s.begin(), s.end()),
-      s.size());
+      WeaklyMixedInteger{s.size()});
 }
 
 // AbslHashValue for hashing std::unordered_set
@@ -845,7 +855,7 @@ AbslHashValue(H hash_state,
               const std::unordered_map<Key, T, Hash, KeyEqual, Alloc>& s) {
   return H::combine(
       H::combine_unordered(std::move(hash_state), s.begin(), s.end()),
-      s.size());
+      WeaklyMixedInteger{s.size()});
 }
 
 // AbslHashValue for hashing std::unordered_multiset
@@ -857,7 +867,7 @@ AbslHashValue(H hash_state,
               const std::unordered_multimap<Key, T, Hash, KeyEqual, Alloc>& s) {
   return H::combine(
       H::combine_unordered(std::move(hash_state), s.begin(), s.end()),
-      s.size());
+      WeaklyMixedInteger{s.size()});
 }
 
 // -----------------------------------------------------------------------------
@@ -968,11 +978,20 @@ hash_range_or_bytes(H hash_state, const T* data, size_t size) {
 // `false`.
 struct HashSelect {
  private:
+  struct WeaklyMixedIntegerProbe {
+    template <typename H>
+    static H Invoke(H state, WeaklyMixedInteger value) {
+      return hash_internal::hash_weakly_mixed_integer(std::move(state), value);
+    }
+  };
+
   struct State : HashStateBase<State> {
     static State combine_contiguous(State hash_state, const unsigned char*,
                                     size_t);
     using State::HashStateBase::combine_contiguous;
     static State combine_raw(State state, uint64_t value);
+    static State combine_weakly_mixed_integer(State hash_state,
+                                              WeaklyMixedInteger value);
   };
 
   struct UniquelyRepresentedProbe {
@@ -1034,6 +1053,7 @@ struct HashSelect {
   // disjunction provides short circuiting wrt instantiation.
   template <typename T>
   using Apply = absl::disjunction<         //
+      Probe<WeaklyMixedIntegerProbe, T>,   //
       Probe<UniquelyRepresentedProbe, T>,  //
       Probe<HashValueProbe, T>,            //
       Probe<LegacyHashProbe, T>,           //
@@ -1055,16 +1075,8 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   using uint128 = absl::uint128;
 #endif  // ABSL_HAVE_INTRINSIC_INT128
 
-  // Random data taken from the hexadecimal digits of Pi's fractional component.
-  // https://en.wikipedia.org/wiki/Nothing-up-my-sleeve_number
-  ABSL_CACHELINE_ALIGNED static constexpr uint64_t kStaticRandomData[] = {
-      0x243f'6a88'85a3'08d3, 0x1319'8a2e'0370'7344, 0xa409'3822'299f'31d0,
-      0x082e'fa98'ec4e'6c89, 0x4528'21e6'38d0'1377,
-  };
-
   static constexpr uint64_t kMul =
-  sizeof(size_t) == 4 ? uint64_t{0xcc9e2d51}
-                      : uint64_t{0xdcb22ca68cb134ed};
+   uint64_t{0xdcb22ca68cb134ed};
 
   template <typename T>
   using IntegralFastPath =
@@ -1114,6 +1126,18 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   MixingHashState() : state_(Seed()) {}
 
   friend class MixingHashState::HashStateBase;
+  template <typename H>
+  friend H absl::hash_internal::hash_weakly_mixed_integer(H,
+                                                          WeaklyMixedInteger);
+
+  static MixingHashState combine_weakly_mixed_integer(
+      MixingHashState hash_state, WeaklyMixedInteger value) {
+    // Some transformation for the value is needed to make an empty
+    // string/container change the mixing hash state.
+    // We use constant smaller than 8 bits to make compiler use
+    // `add` with an immediate operand with 1 byte value.
+    return MixingHashState{hash_state.state_ + (0x57 + value.value)};
+  }
 
   template <typename CombinerT>
   static MixingHashState RunCombineUnordered(MixingHashState state,
@@ -1222,20 +1246,11 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
                                                size_t len);
 
   // Reads 9 to 16 bytes from p.
-  // The least significant 8 bytes are in .first, the rest (zero padded) bytes
-  // are in .second.
+  // The first 8 bytes are in .first, and the rest of the bytes are in .second
+  // along with duplicated bytes from .first if len<16.
   static std::pair<uint64_t, uint64_t> Read9To16(const unsigned char* p,
                                                  size_t len) {
-    uint64_t low_mem = Read8(p);
-    uint64_t high_mem = Read8(p + len - 8);
-#ifdef ABSL_IS_LITTLE_ENDIAN
-    uint64_t most_significant = high_mem;
-    uint64_t least_significant = low_mem;
-#else
-    uint64_t most_significant = low_mem;
-    uint64_t least_significant = high_mem;
-#endif
-    return {least_significant, most_significant};
+    return {Read8(p), Read8(p + len - 8)};
   }
 
   // Reads 8 bytes from p.
@@ -1286,13 +1301,16 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
   }
 
   ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Mix(uint64_t lhs, uint64_t rhs) {
+    // For 32 bit platforms we are trying to use all 64 lower bits.
+    if constexpr (sizeof(size_t) < 8) {
+      uint64_t m = lhs * rhs;
+      return m ^ (m >> 32);
+    }
     // Though the 128-bit product on AArch64 needs two instructions, it is
     // still a good balance between speed and hash quality.
-    using MultType =
-        absl::conditional_t<sizeof(size_t) == 4, uint64_t, uint128>;
-    MultType m = lhs;
+    uint128 m = lhs;
     m *= rhs;
-    return static_cast<uint64_t>(m ^ (m >> (sizeof(m) * 8 / 2)));
+    return Uint128High64(m) ^ Uint128Low64(m);
   }
 
   // Slightly lower latency than Mix, but with lower quality. The byte swap
@@ -1302,25 +1320,17 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
     const uint64_t n = lhs ^ rhs;
     // WeakMix doesn't work well on 32-bit platforms so just use Mix.
     if constexpr (sizeof(size_t) < 8) return Mix(n, kMul);
-#ifdef __ARM_ACLE
-    // gbswap_64 compiles to `rev` on ARM, but `rbit` is better because it
-    // reverses bits rather than reversing bytes.
-    return __rbitll(n * kMul);
-#else
     return absl::gbswap_64(n * kMul);
-#endif
   }
 
-  // An extern to avoid bloat on a direct call to LowLevelHash() with fixed
-  // values for both the seed and salt parameters.
-  static uint64_t LowLevelHashImpl(const unsigned char* data, size_t len);
-
   ABSL_ATTRIBUTE_ALWAYS_INLINE static uint64_t Hash64(const unsigned char* data,
-                                                      size_t len) {
+                                                      size_t len,
+                                                      uint64_t state) {
 #ifdef ABSL_HAVE_INTRINSIC_INT128
-    return LowLevelHashImpl(data, len);
+    return LowLevelHashLenGt32(data, len, state);
 #else
-    return hash_internal::CityHash64(reinterpret_cast<const char*>(data), len);
+    return hash_internal::CityHash64WithSeed(
+        reinterpret_cast<const char*>(data), len, state);
 #endif
   }
 
@@ -1360,12 +1370,13 @@ class ABSL_DLL MixingHashState : public HashStateBase<MixingHashState> {
 inline uint64_t MixingHashState::CombineContiguousImpl(
     uint64_t state, const unsigned char* first, size_t len,
     std::integral_constant<int, 4> /* sizeof_size_t */) {
-  // For large values we use CityHash, for small ones we just use a
-  // multiplicative hash.
+  // For large values we use CityHash, for small ones we use custom low latency
+  // hash.
   if (len <= 8) {
     return CombineSmallContiguousImpl(state, first, len);
   }
   if (ABSL_PREDICT_TRUE(len <= PiecewiseChunkSize())) {
+    // TODO(b/417141985): expose and use CityHash32WithSeed.
     return Mix(state ^ hash_internal::CityHash32(
                            reinterpret_cast<const char*>(first), len),
                kMul);
@@ -1378,7 +1389,7 @@ inline uint64_t MixingHashState::CombineContiguousImpl(
     uint64_t state, const unsigned char* first, size_t len,
     std::integral_constant<int, 8> /* sizeof_size_t */) {
   // For large values we use LowLevelHash or CityHash depending on the platform,
-  // for small ones we just use a multiplicative hash.
+  // for small ones we use custom low latency hash.
   if (len <= 8) {
     return CombineSmallContiguousImpl(state, first, len);
   }
@@ -1389,7 +1400,7 @@ inline uint64_t MixingHashState::CombineContiguousImpl(
     return CombineContiguousImpl17to32(state, first, len);
   }
   if (ABSL_PREDICT_TRUE(len <= PiecewiseChunkSize())) {
-    return Mix(state ^ Hash64(first, len), kMul);
+    return Hash64(first, len, state);
   }
   return CombineLargeContiguousImpl64(state, first, len);
 }

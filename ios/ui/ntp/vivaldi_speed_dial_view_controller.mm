@@ -448,7 +448,8 @@ VivaldiStartPageQuickSettingsCoordinator* _startPageSettingsCoordinator;
                            topSitesAvailable:NO
                             topToolbarHidden:NO
                            verticalSizeClass:
-                                self.view.traitCollection.verticalSizeClass];
+                                self.view.traitCollection.verticalSizeClass
+                                   wallpaper:[self getWallpaperImage]];
 }
 
 - (void)setFrequentlyVisitedPagesEnabled:(BOOL)enabled {

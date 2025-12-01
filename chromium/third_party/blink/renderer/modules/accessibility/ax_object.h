@@ -250,13 +250,12 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   };
 
  protected:
-  explicit AXObject(AXObjectCacheImpl&);
+  explicit AXObject(AXObjectCacheImpl&, bool is_node_object = false);
 
 #if DCHECK_IS_ON()
   bool is_initializing_ = false;
   bool is_computing_role_ = false;
   bool is_updating_cached_values_ = false;
-  bool is_initialized_ = false;
 #endif
 #if !defined(NDEBUG)
   // Keep track of what the object used to be, to make it easier to debug
@@ -302,7 +301,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // When the corresponding WebCore object that this AXObject
   // wraps is deleted, it must be detached.
   virtual void Detach();
-  bool IsDetached() const;
+  bool IsDetached() const { return !ax_object_cache_; }
 
   // Updates the cached attribute values. This may be recursive, so to prevent
   // deadlocks, functions called here may only search up the tree (ancestors),
@@ -341,17 +340,16 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     return std::nullopt;
   }
 
-  static const HeapVector<Member<Element>>* ElementsFromAttributeOrInternals(
-      const Element* from,
-      const QualifiedName& attribute);
+  static const GCedHeapVector<Member<Element>>*
+  ElementsFromAttributeOrInternals(const Element* from,
+                                   const QualifiedName& attribute);
   static Element* ElementFromAttributeOrInternals(
       const Element* from,
       const QualifiedName& attribute);
 
   // Serialize the properties of this node into |node_data|.
   void Serialize(ui::AXNodeData* node_data,
-                 ui::AXMode accessibility_mode,
-                 bool is_snapshot = false) const;
+                 ui::AXMode accessibility_mode) const;
 
   // Determine subclass type.
   virtual bool IsImageMapLink() const;
@@ -362,6 +360,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsAXRadioInput() const;
   virtual bool IsSlider() const;
   virtual bool IsValidationMessage() const;
+
+  bool IsNodeObject() const { return is_node_object_; }
 
   // Returns true if this object is an ARIA text field, i.e. it is neither an
   // <input> nor a <textarea>, but it has an ARIA role of textbox, searchbox or
@@ -452,7 +452,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsLoaded() const;
   virtual bool IsModal() const;
   virtual bool IsMultiSelectable() const;
-  virtual bool ComputeIsOffScreen() const;
   virtual bool IsRequired() const;
   virtual AccessibilitySelectedState IsSelected() const;
   virtual bool IsSelectedFromFocusSupported() const;
@@ -711,8 +710,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // false. Must be called with clean layout.
   virtual void LoadInlineTextBoxes();
   virtual void LoadInlineTextBoxesHelper();
-  // When adding children to this node, consider inline textboxes.
-  virtual bool ShouldLoadInlineTextBoxes() const { return false; }
 
   // Walk the AXObjects on the same line.
   virtual AXObject* NextOnLine() const;
@@ -939,8 +936,16 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // added to the aria-details list.
   AXObject* GetPositionedObjectForAnchor(ui::AXNodeData* node_data) const;
 
+  // Scroll marker pseudo-elements target their originating element which
+  // is located under a different parent in the layout tree.
+  AXObject* GetScrollMarkerTarget() const;
+
   // Heuristic to get the listbox for an <input role="combobox">.
   AXObject* GetControlsListboxForTextfieldCombobox() const;
+
+  // Scroll buttons and scroll marker groups are controls for the scrolling
+  // element.
+  AXObject* GetControlsForOverflowNavigation() const;
 
   // Returns true if this object is within or at the root of an editable region,
   // such as a contenteditable. Also, returns true if this object is an atomic
@@ -1325,12 +1330,16 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // If this object is associated with generated content, or a list marker,
   // returns a pseudoelement. It does not return the node that generated the
   // content or the list marker.
-  virtual Node* GetNode() const;
+  //
+  // This function is manually inlined because it is very hot and LTO/PGO
+  // doesn't manage to inline it. To call it, you will need to include
+  // ax_object-inl.h.
+  ALWAYS_INLINE Node* GetNode() const;
   // Looks for the first ancestor AXObject (inclusive) that has a node, and
   // returns that node.
-  Node* GetClosestNode() const {
-    return GetNode() ? GetNode() : ParentObject()->GetClosestNode();
-  }
+  //
+  // To call this function, you will need to include ax_object-inl.h.
+  ALWAYS_INLINE Node* GetClosestNode() const;
   // Looks for the first ancestor AXObject (inclusive) that has an element, and
   // returns that element.
   Element* GetClosestElement() const;
@@ -1496,6 +1505,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   void PopulateAXRelativeBounds(ui::AXRelativeBounds& bounds,
                                 bool* clips_children) const;
 
+  // Should inline text boxes be considered when adding children to this node.
+  bool ShouldLoadInlineTextBoxes() const;
+
  protected:
   AXID id_;
   // Any parent, regardless of whether it's ignored or not included in the tree.
@@ -1537,7 +1549,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
                              bool* found_text_alternative) const;
   String TextFromElements(bool in_aria_labelledby_traversal,
                           AXObjectSet& visited,
-                          const HeapVector<Member<Element>>& elements,
+                          base::span<const Member<Element>> elements,
                           AXRelatedObjectVector* related_objects) const;
   static bool HasAriaLabelledbyElements(Element* from);
 
@@ -1606,6 +1618,16 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     ax_object_cache_ = &ax_object_cache;
   }
 
+  // Is it possible for inline textboxes to be attached to these type of node?
+  bool CanHaveInlineTextBoxChildren(const blink::AXObject* obj) const;
+
+#if defined(REDUCE_AX_INLINE_TEXTBOXES)
+  // Used on Android. On other platforms, this is effectively always true.
+  void SetAlwaysLoadInlineTextBoxes(bool should_load) {
+    always_load_inline_text_boxes_ = should_load;
+  }
+#endif
+
  private:
   bool ComputeCanSetFocusAttribute();
   String KeyboardShortcut() const;
@@ -1616,6 +1638,9 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Returns true if this node should use the aria role combobox menu button.
   bool ShouldUseComboboxMenuButtonRole() const;
+
+  // Whether this is an AXNodeObject.
+  bool is_node_object_ : 1 = false;
 
   bool children_dirty_ : 1 = false;
 
@@ -1639,6 +1664,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool cached_is_descendant_of_disabled_node_ : 1 = false;
   bool cached_can_set_focus_attribute_ : 1 = false;
   bool cached_is_in_menu_list_subtree_ : 1 = false;
+  bool always_load_inline_text_boxes_ : 1 = false;  // Used for Android only.
   std::optional<bool> cached_is_on_screen_;
 
   Member<AXObject> cached_live_region_root_;

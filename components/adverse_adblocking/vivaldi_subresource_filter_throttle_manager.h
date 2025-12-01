@@ -40,7 +40,7 @@ class VivaldiSubresourceFilterAdblockingThrottleManager
   // throttles.
   void MaybeAppendNavigationThrottles(
       content::NavigationHandle* navigation_handle,
-      std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles,
+      content::NavigationThrottleRegistry& registry,
       bool done_mainframe = false);
 
   void set_adblock_list(AdverseAdFilterListService* list) {

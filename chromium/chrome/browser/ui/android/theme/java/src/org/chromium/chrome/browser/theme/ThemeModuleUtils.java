@@ -6,19 +6,26 @@ package org.chromium.chrome.browser.theme;
 
 import org.chromium.base.ResettersForTesting;
 import org.chromium.base.ServiceLoaderUtil;
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 
 /** Utility class for interactions with ThemeOverlayProvider. */
+@NullMarked
 public final class ThemeModuleUtils {
 
-    private static ThemeOverlayProvider sInstance;
+    private static @Nullable ThemeOverlayProvider sInstance;
 
     private ThemeModuleUtils() {}
 
     /** Returns whether theme module is enabled. */
     public static boolean isEnabled() {
         return ChromeFeatureList.sAndroidThemeModule.isEnabled();
+    }
+
+    /** Returns whether enable all the dependency features. */
+    public static boolean isForceEnableDependencies() {
+        return isEnabled() && ChromeFeatureList.sAndroidThemeModuleForceDependencies.getValue();
     }
 
     /**

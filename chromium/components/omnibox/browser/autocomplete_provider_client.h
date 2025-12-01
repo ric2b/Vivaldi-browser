@@ -9,10 +9,12 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/history/core/browser/keyword_id.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
+#include "components/omnibox/browser/lens_suggest_inputs_utils.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 
 class AutocompleteClassifier;
@@ -72,6 +74,10 @@ namespace signin {
 class IdentityManager;
 }
 
+namespace tab_groups {
+class TabGroupSyncService;
+}
+
 class TemplateURLService;
 
 class AutocompleteProviderClient : public OmniboxAction::Client {
@@ -113,6 +119,9 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
       const = 0;
   virtual OnDeviceTailModelService* GetOnDeviceTailModelService() const = 0;
   virtual ProviderStateService* GetProviderStateService() const = 0;
+  virtual base::CallbackListSubscription GetLensSuggestInputsWhenReady(
+      LensOverlaySuggestInputsCallback callback) const = 0;
+  virtual tab_groups::TabGroupSyncService* GetTabGroupSyncService() const = 0;
 
   // The value to use for Accept-Languages HTTP header when making an HTTP
   // request.
@@ -155,12 +164,20 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   // True for almost all users except ones with a specific enterprise policy.
   virtual bool AllowDeletingBrowserHistory() const;
 
-  // Returns whether URL data collection is enabled.  I.e.,
-  // the user has consented to have URLs recorded keyed by their Google account.
-  // In this case, the user has agreed to share browsing data with Google and so
-  // this state can be used to govern features such as sending the current page
-  // URL with omnibox suggest requests.
+  // Returns whether *anonymized* data collection is enabled.
+  // This is used by the client to check whether the user has granted consent
+  // for *anonymized* URL-keyed data collection. This currently governs
+  // whether we send Suggest requests that include information about the
+  // current page URL (when the user has enabled the MSBB opt-in).
   virtual bool IsUrlDataCollectionActive() const = 0;
+
+  // Returns whether *personalized* data collection is enabled.
+  // This is used by the client to check whether the user has granted consent
+  // for *personalized* URL-keyed data collection keyed by their Google account.
+  // This currently governs whether we send Suggest requests that include
+  // information about the current page title (when the user has enabled the
+  // History Sync opt-in).
+  virtual bool IsPersonalizedUrlDataCollectionActive() const = 0;
 
   // This function returns true if the user is signed in.
   virtual bool IsAuthenticated() const = 0;
@@ -214,6 +231,24 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   // Returns true if history embeddings is enabled and user can opt in/out.
   virtual bool IsHistoryEmbeddingsSettingVisible() const;
 
+  // Returns true if the current profile is eligible for Lens. This is used to
+  // control whether Lens entrypoints can be shown during this browsing session.
+  // Can be changed on demand via enterprise policy.
+  virtual bool IsLensEnabled() const;
+
+  // Returns true if the Lens entrypoints can be shown to the user at this
+  // instant in time. This is false if Lens is already active, and therefore the
+  // entrypoint shouldn't be shown as it will cause nothing to happen if
+  // clicked. This is per tab dependent.
+  virtual bool AreLensEntrypointsVisible() const;
+
+  // Returns true if the page contains the paywall hint in the HTML. Returns
+  // false if the page does not contain the paywall hint. Returns std::nullopt
+  // if the page content wasn't extracted and therefore the signal could not be
+  // calculated. This is used to control whether contextual suggestions can be
+  // shown to the user.
+  virtual std::optional<bool> IsPagePaywalled() const;
+
   // Returns whether the app is currently in the background state (Mobile only).
   virtual bool in_background_state() const;
 
@@ -234,6 +269,10 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual void SetFromSearchField(bool from_search_field) {}
   virtual bool GetFromSearchField() { return false; }
   virtual bool VivaldiOnlyKeywordSearch() { return false; }
+
+  // NOTE(ondrej@vivaldi.com): VB-116850
+  virtual bool IsAddressBarAutocompleteEnabled() { return false; }
+  virtual bool AddressBarOmniboxShowBrowserHistory() { return false; }
   // End Vivaldi
 };
 

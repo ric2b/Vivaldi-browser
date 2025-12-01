@@ -5,8 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_BOX_UTILS_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_BOX_UTILS_H_
 
-#include "third_party/blink/renderer/core/layout/geometry/physical_offset.h"
 #include "third_party/blink/renderer/platform/geometry/layout_unit.h"
+#include "third_party/blink/renderer/platform/geometry/physical_offset.h"
 
 namespace blink {
 
@@ -31,6 +31,15 @@ DeprecatedLayoutPoint ComputeBoxLocation(
     PhysicalOffset offset,
     const PhysicalBoxFragment& container_fragment,
     const BlockBreakToken* previous_container_break_token);
+
+// Set the LayoutBox location for direct children of the specified fragment, or,
+// if the specified fragment establishes a root fragmentation context (i.e. when
+// it does not participate in any outer fragmentation context), do this for the
+// entire fragmented subtree. This function is called after layout of each
+// node. For fragmented content, we need to have laid out the entire
+// fragmentation context before we can tell where boxes are relatively to each
+// other.
+void UpdateChildLayoutBoxLocations(const PhysicalBoxFragment&);
 
 }  // namespace blink
 

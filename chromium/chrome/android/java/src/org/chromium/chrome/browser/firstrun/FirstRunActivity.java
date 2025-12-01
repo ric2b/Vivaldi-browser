@@ -257,7 +257,7 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         // Vivaldi - Welcome Page changes
         FirstRunPage firstRunPage = ChromeApplicationImpl.isVivaldi()
                 ? new FirstRunPage<>(VivaldiFirstRunFragment.class, showWelcomePage)
-                : new FirstRunPage<>(SigninFirstRunFragment.class);
+                : new FirstRunPage<>(SigninFirstRunFragment.class, showWelcomePage);
 
         mPages.add(firstRunPage);
         mFreProgressStates.add(MobileFreProgress.WELCOME_SHOWN);
@@ -750,11 +750,6 @@ public class FirstRunActivity extends FirstRunActivityBase implements FirstRunPa
         }
 
         if (sObserver != null) sObserver.onExitFirstRun(this);
-    }
-
-    @Override
-    public boolean didAcceptTermsOfService() {
-        return FirstRunUtils.didAcceptTermsOfService();
     }
 
     @Override

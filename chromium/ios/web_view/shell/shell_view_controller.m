@@ -50,7 +50,7 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
 // The on-going download task if any.
 @property(nonatomic, strong, nullable) CWVDownloadTask* downloadTask;
 // The path to a local file which the download task is writing to.
-@property(nonatomic, strong, nullable) NSString* downloadFilePath;
+@property(nonatomic, copy, nullable) NSString* downloadFilePath;
 // A controller to show a "Share" menu for the downloaded file.
 @property(nonatomic, strong, nullable)
     UIDocumentInteractionController* documentInteractionController;
@@ -466,9 +466,11 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                                   weakAlertController.textFields[1].text;
                               NSString* site =
                                   weakAlertController.textFields[2].text;
+                              NSDate* now = [NSDate date];
                               [dataManager addNewPasswordForUsername:username
                                                             password:password
-                                                                site:site];
+                                                                site:site
+                                                           timestamp:now];
                             }]];
   [self presentViewController:alertController animated:YES completion:nil];
 }
@@ -535,10 +537,11 @@ NSString* const kWebViewShellJavaScriptDialogTextFieldAccessibilityIdentifier =
                                          NSString* newPassword =
                                              weakAlertController.textFields
                                                  .lastObject.text;
-                                         [dataManager
-                                             updatePassword:password
-                                                newUsername:newUsername
-                                                newPassword:newPassword];
+                                         NSDate* now = [NSDate date];
+                                         [dataManager updatePassword:password
+                                                         newUsername:newUsername
+                                                         newPassword:newPassword
+                                                           timestamp:now];
                                        }]];
   [self presentViewController:alertController animated:YES completion:nil];
 }

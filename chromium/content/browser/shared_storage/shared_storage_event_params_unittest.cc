@@ -62,8 +62,11 @@ TEST(SharedStorageEventParamsTest, NonASCIISerializedData_EscapedByInsertion) {
   blink::CloneableMessage serialized_data_message;
   SetCloneableMessageWithByteArray(serialized_data_message, data);
 
-  auto params = SharedStorageEventParams::CreateForRun(
-      "test-operation", serialized_data_message, /*worklet_id=*/0);
+  auto params = SharedStorageEventParams::CreateForRunForTesting(
+      "test-operation", /*operation_id=*/0, /*keep_alive=*/false,
+      SharedStorageEventParams::PrivateAggregationConfigWrapper(),
+      serialized_data_message, /*worklet_ordinal_id=*/0,
+      /*worklet_devtools_token=*/base::UnguessableToken::Create());
 
   EXPECT_FALSE(base::IsStringUTF8(GetSerializedDataDirectFromBytes(params)));
 
@@ -88,8 +91,11 @@ TEST(SharedStorageEventParamsTest, ASCIISerializedData_UnchangedByInsertion) {
   blink::CloneableMessage serialized_data_message;
   SetCloneableMessageWithByteArray(serialized_data_message, data);
 
-  auto params = SharedStorageEventParams::CreateForRun(
-      "test-operation", serialized_data_message, /*worklet_id=*/0);
+  auto params = SharedStorageEventParams::CreateForRunForTesting(
+      "test-operation", /*operation_id=*/0, /*keep_alive=*/false,
+      SharedStorageEventParams::PrivateAggregationConfigWrapper(),
+      serialized_data_message, /*worklet_ordinal_id=*/0,
+      /*worklet_devtools_token=*/base::UnguessableToken::Create());
 
   std::string serialized_data_direct_from_bytes =
       GetSerializedDataDirectFromBytes(params);

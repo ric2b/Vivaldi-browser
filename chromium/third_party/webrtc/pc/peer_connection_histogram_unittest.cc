@@ -51,8 +51,7 @@ using RTCOfferAnswerOptions = PeerConnectionInterface::RTCOfferAnswerOptions;
 using ::testing::NiceMock;
 
 static const char kUsagePatternMetric[] = "WebRTC.PeerConnection.UsagePattern";
-static constexpr webrtc::TimeDelta kDefaultTimeout =
-    webrtc::TimeDelta::Millis(10000);
+static constexpr TimeDelta kDefaultTimeout = TimeDelta::Millis(10000);
 static const SocketAddress kLocalAddrs[2] = {SocketAddress("1.1.1.1", 0),
                                              SocketAddress("2.2.2.2", 0)};
 static const SocketAddress kPrivateLocalAddress("10.1.1.1", 0);
@@ -227,8 +226,7 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
     PeerConnectionDependencies deps(nullptr /* observer_in */);
     deps.async_dns_resolver_factory =
         std::make_unique<NiceMock<MockAsyncDnsResolverFactory>>();
-
-    auto fake_network = std::make_unique<FakeNetworkManager>();
+    auto fake_network = std::make_unique<FakeNetworkManager>(Thread::Current());
     fake_network->set_mdns_responder(
         std::make_unique<FakeMdnsResponder>(Thread::Current()));
     fake_network->AddInterface(NextLocalAddress());
@@ -246,7 +244,7 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
   }
 
   WrapperPtr CreatePeerConnectionWithPrivateLocalAddresses() {
-    auto fake_network = std::make_unique<FakeNetworkManager>();
+    auto fake_network = std::make_unique<FakeNetworkManager>(Thread::Current());
     fake_network->AddInterface(NextLocalAddress());
     fake_network->AddInterface(kPrivateLocalAddress);
 
@@ -258,7 +256,7 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
   }
 
   WrapperPtr CreatePeerConnectionWithPrivateIpv6LocalAddresses() {
-    auto fake_network = std::make_unique<FakeNetworkManager>();
+    auto fake_network = std::make_unique<FakeNetworkManager>(Thread::Current());
     fake_network->AddInterface(NextLocalAddress());
     fake_network->AddInterface(kPrivateIpv6LocalAddress);
 
@@ -273,7 +271,7 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
       const RTCConfiguration& config,
       const PeerConnectionFactoryInterface::Options factory_options,
       PeerConnectionDependencies deps,
-      std::unique_ptr<rtc::NetworkManager> network_manager) {
+      std::unique_ptr<NetworkManager> network_manager) {
     PeerConnectionFactoryDependencies pcf_deps;
     pcf_deps.network_thread = Thread::Current();
     pcf_deps.worker_thread = Thread::Current();
@@ -284,7 +282,8 @@ class PeerConnectionUsageHistogramTest : public ::testing::Test {
     } else {
       // If no network manager is provided, one will be created that uses the
       // host network. This doesn't work on all trybots.
-      auto fake_network = std::make_unique<FakeNetworkManager>();
+      auto fake_network =
+          std::make_unique<FakeNetworkManager>(pcf_deps.network_thread);
       fake_network->AddInterface(NextLocalAddress());
       pcf_deps.network_manager = std::move(fake_network);
     }

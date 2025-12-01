@@ -32,27 +32,30 @@
 
 namespace partition_alloc {
 
+namespace internal::base {
+
+// For gtest-printers. This `operator<<` makes failures of EXPECT-s, which
+// compare TimeDelta values, human-readable.
+// E.g. Without the `operator<<`,
+//  NextInterval()
+//    Which is: 8-byte object <00-09 3D-00 00-00 00-00>
+// With the `operator<<`,
+//    Which is: 4 s
+std::ostream& operator<<(std::ostream& os, TimeDelta time_delta) {
+  return os << time_delta.InSecondsF() << " s";
+}
+
+}  // namespace internal::base
+
 using BucketDistribution = PartitionRoot::BucketDistribution;
-using PartitionFreelistEncoding = internal::PartitionFreelistEncoding;
 
 struct ThreadCacheTestParam {
   BucketDistribution bucket_distribution;
-  PartitionFreelistEncoding freelist_encoding;
 };
 
 const std::vector<ThreadCacheTestParam> params = {
-    {ThreadCacheTestParam{
-        BucketDistribution::kNeutral,
-        internal::PartitionFreelistEncoding::kPoolOffsetFreeList}},
-    {ThreadCacheTestParam{
-        BucketDistribution::kDenser,
-        internal::PartitionFreelistEncoding::kEncodedFreeList}},
-    {ThreadCacheTestParam{
-        BucketDistribution::kNeutral,
-        internal::PartitionFreelistEncoding::kPoolOffsetFreeList}},
-    {ThreadCacheTestParam{
-        BucketDistribution::kDenser,
-        internal::PartitionFreelistEncoding::kEncodedFreeList}}};
+    {ThreadCacheTestParam{BucketDistribution::kNeutral}},
+    {ThreadCacheTestParam{BucketDistribution::kNeutral}}};
 
 namespace {
 
@@ -82,17 +85,11 @@ class DeltaCounter {
 };
 
 // Forbid extras, since they make finding out which bucket is used harder.
-std::unique_ptr<PartitionAllocatorForTesting> CreateAllocator(
-    internal::PartitionFreelistEncoding encoding =
-        internal::PartitionFreelistEncoding::kEncodedFreeList) {
+std::unique_ptr<PartitionAllocatorForTesting> CreateAllocator() {
   PartitionOptions opts;
 #if !PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
   opts.thread_cache = PartitionOptions::kEnabled;
 #endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
-  opts.use_pool_offset_freelists =
-      (encoding == internal::PartitionFreelistEncoding::kPoolOffsetFreeList)
-          ? PartitionOptions::kEnabled
-          : PartitionOptions::kDisabled;
   std::unique_ptr<PartitionAllocatorForTesting> allocator =
       std::make_unique<PartitionAllocatorForTesting>(opts);
   allocator->root()->UncapEmptySlotSpanMemoryForTesting();
@@ -105,8 +102,7 @@ class PartitionAllocThreadCacheTest
     : public ::testing::TestWithParam<ThreadCacheTestParam> {
  public:
   PartitionAllocThreadCacheTest()
-      : allocator_(CreateAllocator(GetParam().freelist_encoding)),
-        scope_(allocator_->root()) {}
+      : allocator_(CreateAllocator()), scope_(allocator_->root()) {}
 
   ~PartitionAllocThreadCacheTest() override {
     ThreadCache::SetLargestCachedSize(ThreadCache::kDefaultSizeThreshold);
@@ -354,25 +350,29 @@ TEST_P(PartitionAllocThreadCacheTest, DirectMappedReallocMetrics) {
             root()->get_total_size_of_allocated_bytes());
   EXPECT_EQ(expected_allocated_size, root()->get_max_size_of_allocated_bytes());
 
-  void* ptr = root()->Alloc(
-      root()->AdjustSizeForExtrasSubtract(10 * internal::kMaxBucketed), "");
+  void* ptr = root()->Alloc(root()->AdjustSizeForExtrasSubtract(
+                                10 * BucketIndexLookup::kMaxBucketSize),
+                            "");
 
-  EXPECT_EQ(expected_allocated_size + 10 * internal::kMaxBucketed,
+  EXPECT_EQ(expected_allocated_size + 10 * BucketIndexLookup::kMaxBucketSize,
             root()->get_total_size_of_allocated_bytes());
 
-  void* ptr2 = root()->Realloc(
-      ptr, root()->AdjustSizeForExtrasSubtract(9 * internal::kMaxBucketed), "");
+  void* ptr2 = root()->Realloc(ptr,
+                               root()->AdjustSizeForExtrasSubtract(
+                                   9 * BucketIndexLookup::kMaxBucketSize),
+                               "");
 
   ASSERT_EQ(ptr, ptr2);
-  EXPECT_EQ(expected_allocated_size + 9 * internal::kMaxBucketed,
+  EXPECT_EQ(expected_allocated_size + 9 * BucketIndexLookup::kMaxBucketSize,
             root()->get_total_size_of_allocated_bytes());
 
-  ptr2 = root()->Realloc(
-      ptr, root()->AdjustSizeForExtrasSubtract(10 * internal::kMaxBucketed),
-      "");
+  ptr2 = root()->Realloc(ptr,
+                         root()->AdjustSizeForExtrasSubtract(
+                             10 * BucketIndexLookup::kMaxBucketSize),
+                         "");
 
   ASSERT_EQ(ptr, ptr2);
-  EXPECT_EQ(expected_allocated_size + 10 * internal::kMaxBucketed,
+  EXPECT_EQ(expected_allocated_size + 10 * BucketIndexLookup::kMaxBucketSize,
             root()->get_total_size_of_allocated_bytes());
 
   root()->Free(ptr);
@@ -1195,19 +1195,12 @@ TEST_P(PartitionAllocThreadCacheTest, DISABLED_DynamicSizeThresholdPurge) {
 }
 
 TEST_P(PartitionAllocThreadCacheTest, ClearFromTail) {
-  auto count_items = [this](ThreadCache* tcache, size_t index) {
-    const internal::PartitionFreelistDispatcher* freelist_dispatcher =
-        this->root()->get_freelist_dispatcher();
+  auto count_items = [](ThreadCache* tcache, size_t index) {
     uint8_t count = 0;
     auto* head = tcache->bucket_for_testing(index).freelist_head;
     while (head) {
-#if PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
-      head = freelist_dispatcher->GetNextForThreadCacheTrue(
-          head, tcache->bucket_for_testing(index).slot_size);
-#else
-      head = freelist_dispatcher->GetNextForThreadCache<true>(
-          head, tcache->bucket_for_testing(index).slot_size);
-#endif  // PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
+      head = head->GetNextForThreadCache(
+          tcache->bucket_for_testing(index).slot_size);
       count++;
     }
     return count;
@@ -1294,93 +1287,6 @@ TEST_P(PartitionAllocThreadCacheTest, MAYBE_Bookkeeping) {
   EXPECT_EQ(root()->get_total_size_of_allocated_bytes(),
             expected_allocated_size);
   tcache->Purge();
-}
-
-TEST_P(PartitionAllocThreadCacheTest, TryPurgeNoAllocs) {
-  auto* tcache = root()->thread_cache_for_testing();
-  tcache->TryPurge();
-}
-
-TEST_P(PartitionAllocThreadCacheTest, TryPurgeMultipleCorrupted) {
-  auto* tcache = root()->thread_cache_for_testing();
-
-  void* ptr =
-      root()->Alloc(root()->AdjustSizeForExtrasSubtract(kMediumSize), "");
-
-  auto* medium_bucket = root()->buckets + SizeToIndex(kMediumSize);
-
-  auto* curr = medium_bucket->active_slot_spans_head->get_freelist_head();
-  const internal::PartitionFreelistDispatcher* freelist_dispatcher =
-      root()->get_freelist_dispatcher();
-#if PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
-  curr = freelist_dispatcher->GetNextForThreadCacheTrue(curr, kMediumSize);
-#else
-  curr = freelist_dispatcher->GetNextForThreadCache<true>(curr, kMediumSize);
-#endif  // PA_BUILDFLAG(USE_FREELIST_DISPATCHER)
-  freelist_dispatcher->CorruptNextForTesting(curr, 0x12345678);
-  tcache->TryPurge();
-  freelist_dispatcher->SetNext(curr, nullptr);
-  root()->Free(ptr);
-}
-
-TEST(AlternateBucketDistributionTest, SizeToIndex) {
-  using internal::BucketIndexLookup;
-
-  // The first 12 buckets are the same as the default bucket index.
-  for (size_t i = 1 << 0; i < 1 << 8; i <<= 1) {
-    for (size_t offset = 0; offset < 4; offset++) {
-      size_t n = i * (4 + offset) / 4;
-      EXPECT_EQ(BucketIndexLookup::GetIndex(n),
-                BucketIndexLookup::GetIndexForNeutralBuckets(n));
-    }
-  }
-
-  // The alternate bucket distribution is different in the middle values.
-  //
-  // For each order, the top two buckets are removed compared with the default
-  // distribution. Values that would be allocated in those two buckets are
-  // instead allocated in the next power of two bucket.
-  //
-  // The first two buckets (each power of two and the next bucket up) remain
-  // the same between the two bucket distributions.
-  size_t expected_index = BucketIndexLookup::GetIndex(1 << 8);
-  for (size_t i = 1 << 8; i < internal::kHighThresholdForAlternateDistribution;
-       i <<= 1) {
-    // The first two buckets in the order should match up to the normal bucket
-    // distribution.
-    for (size_t offset = 0; offset < 2; offset++) {
-      size_t n = i * (4 + offset) / 4;
-      EXPECT_EQ(BucketIndexLookup::GetIndex(n),
-                BucketIndexLookup::GetIndexForNeutralBuckets(n));
-      EXPECT_EQ(BucketIndexLookup::GetIndex(n), expected_index);
-      expected_index += 2;
-    }
-    // The last two buckets in the order are "rounded up" to the same bucket
-    // as the next power of two.
-    expected_index += 4;
-    for (size_t offset = 2; offset < 4; offset++) {
-      size_t n = i * (4 + offset) / 4;
-      // These two are rounded up in the alternate distribution, so we expect
-      // the bucket index to be larger than the bucket index for the same
-      // allocation under the default distribution.
-      EXPECT_GT(BucketIndexLookup::GetIndex(n),
-                BucketIndexLookup::GetIndexForNeutralBuckets(n));
-      // We expect both allocations in this loop to be rounded up to the next
-      // power of two bucket.
-      EXPECT_EQ(BucketIndexLookup::GetIndex(n), expected_index);
-    }
-  }
-
-  // The rest of the buckets all match up exactly with the existing
-  // bucket distribution.
-  for (size_t i = internal::kHighThresholdForAlternateDistribution;
-       i < internal::kMaxBucketed; i <<= 1) {
-    for (size_t offset = 0; offset < 4; offset++) {
-      size_t n = i * (4 + offset) / 4;
-      EXPECT_EQ(BucketIndexLookup::GetIndex(n),
-                BucketIndexLookup::GetIndexForNeutralBuckets(n));
-    }
-  }
 }
 
 TEST_P(PartitionAllocThreadCacheTest, AllocationRecording) {
@@ -1528,45 +1434,6 @@ TEST_P(PartitionAllocThreadCacheTest, AllocationRecordingRealloc) {
   }
   EXPECT_EQ(tcache->thread_alloc_stats().alloc_total_size,
             tcache->thread_alloc_stats().dealloc_total_size);
-}
-
-// This test makes sure it's safe to switch to the alternate bucket distribution
-// at runtime. This is intended to happen once, near the start of Chrome,
-// once we have enabled features.
-TEST(AlternateBucketDistributionTest, SwitchBeforeAlloc) {
-  std::unique_ptr<PartitionAllocatorForTesting> allocator(CreateAllocator());
-  PartitionRoot* root = allocator->root();
-
-  root->SwitchToDenserBucketDistribution();
-  constexpr size_t n = (1 << 12) * 3 / 2;
-  EXPECT_NE(internal::BucketIndexLookup::GetIndex(n),
-            internal::BucketIndexLookup::GetIndexForNeutralBuckets(n));
-
-  void* ptr = root->Alloc(n);
-
-  root->ResetBucketDistributionForTesting();
-
-  root->Free(ptr);
-}
-
-// This test makes sure it's safe to switch to the alternate bucket distribution
-// at runtime. This is intended to happen once, near the start of Chrome,
-// once we have enabled features.
-TEST(AlternateBucketDistributionTest, SwitchAfterAlloc) {
-  std::unique_ptr<PartitionAllocatorForTesting> allocator(CreateAllocator());
-  constexpr size_t n = (1 << 12) * 3 / 2;
-  EXPECT_NE(internal::BucketIndexLookup::GetIndex(n),
-            internal::BucketIndexLookup::GetIndexForNeutralBuckets(n));
-
-  PartitionRoot* root = allocator->root();
-  void* ptr = root->Alloc(n);
-
-  root->SwitchToDenserBucketDistribution();
-
-  void* ptr2 = root->Alloc(n);
-
-  root->Free(ptr2);
-  root->Free(ptr);
 }
 
 }  // namespace partition_alloc

@@ -121,6 +121,7 @@ class CORE_EXPORT HTMLInputElement
   // autofill classified the field as password by predictions, so that its value
   // can be protected from memorization by autofill or keyboards.
   bool HasBeenPasswordField() const;
+  void MaybeSetHasBeenPasswordField();
 
   bool IsCheckable() const;
   bool checkedForBinding() const { return Checked(); }
@@ -365,8 +366,6 @@ class CORE_EXPORT HTMLInputElement
 
   LayoutBox* GetLayoutBoxForScrolling() const final;
 
-  void SetHasBeenPasswordField() { has_been_password_field_ = true; }
-
   bool IsDraggedSlider() const;
 
   mojom::blink::FormControlType FormControlType() const final;
@@ -383,6 +382,18 @@ class CORE_EXPORT HTMLInputElement
                              CommandEventType command) override;
 
   void SetFocused(bool is_focused, mojom::blink::FocusType) override;
+
+  // These methods are used to determine what the nearest ancestor <select>
+  // element is and whether this is the first <input> in tree order within that
+  // <select>. These are populated lazily by the select element's
+  // MutationObserver and are not guaranteed to be correct all of the time
+  // since that MutationObserver only runs when the select element has base
+  // appearance.
+  bool IsFirstTextInputInAncestorSelect() const;
+  HTMLSelectElement* FirstAncestorSelectElement() const;
+  void SetFirstAncestorSelectElement(HTMLSelectElement* select) {
+    first_ancestor_select_ = select;
+  }
 
  protected:
   void DefaultEventHandler(Event&) override;
@@ -472,6 +483,8 @@ class CORE_EXPORT HTMLInputElement
   void InitializeTypeInParsing();
   void UpdateType(const AtomicString&);
 
+  void UpdateHasBeenPasswordField(const AtomicString& new_type_name);
+
   void SubtreeHasChanged() final;
 
   void SetListAttributeTargetObserver(ListAttributeTargetObserver*);
@@ -513,6 +526,7 @@ class CORE_EXPORT HTMLInputElement
   // element lives on.
   Member<HTMLImageLoader> image_loader_;
   Member<ListAttributeTargetObserver> list_attribute_target_observer_;
+  Member<HTMLSelectElement> first_ancestor_select_;
 
   FRIEND_TEST_ALL_PREFIXES(HTMLInputElementTest, RadioKeyDownDCHECKFailure);
 };

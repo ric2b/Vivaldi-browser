@@ -53,6 +53,7 @@ absl::Status CreateTritonPipeline(mlir::OpPassManager* pm,
   const int ccAsInt = cc.major * 10 + cc.minor;
   const int threadsPerWarp = 32;
 
+  pm->addPass(mt_xla::CreateRoundF32ToTF32ForTf32DotRewritePass());
   if (is_xla_fusion) {
     pm->addPass(mt_xla::CreateInt4ToPackedInt4RewritePass());
   }
@@ -84,6 +85,7 @@ absl::Status CreateTritonPipeline(mlir::OpPassManager* pm,
   pm->addPass(mt::gpu::createTritonGPURemoveLayoutConversions());
   pm->addPass(
       mt::gpu::createTritonGPUOptimizeDotOperands({cc.IsAtLeastAmpere()}));
+  pm->addPass(mlir::createTritonNvidiaGPUOptimizeDescriptorEncodingPass());
   pm->addPass(mlir::createCSEPass());
 
   if (cc.IsAtLeastBlackwell()) {
@@ -91,10 +93,12 @@ absl::Status CreateTritonPipeline(mlir::OpPassManager* pm,
     pm->addPass(mlir::createCanonicalizerPass());
     pm->addPass(mlir::createLoopInvariantCodeMotionPass());
     pm->addPass(mt::gpu::createTritonGPUOptimizeAccumulatorInit());
+    pm->addPass(
+        mt::gpu::createTritonGPUAutomaticWarpSpecialization({num_stages}));
+    pm->addPass(mt::gpu::createTritonGPUHoistTMEMAlloc());
     pm->addPass(mt::gpu::createTritonGPUPipeline({num_stages}));
     pm->addPass(mt::gpu::createTritonGPUCombineTensorSelectAndIf());
     pm->addPass(mlir::createTritonNvidiaGPUPromoteLHSToTMemPass());
-    pm->addPass(mlir::createTritonNvidiaGPUKeepAccInTMemPass());
     pm->addPass(mlir::createCanonicalizerPass());
   } else if (cc.IsAtLeastAmpere()) {
     // Even though we don't run on pre-Ampere architectures anymore, we keep
@@ -102,7 +106,6 @@ absl::Status CreateTritonPipeline(mlir::OpPassManager* pm,
     pm->addPass(mt::gpu::createTritonGPUFuseNestedLoops());
     pm->addPass(mlir::createCanonicalizerPass());
     pm->addPass(mlir::createLoopInvariantCodeMotionPass());
-    pm->addPass(mt::gpu::createTritonGPUOptimizeAccumulatorInit());
     pm->addPass(mlir::createCanonicalizerPass());
     pm->addPass(mt::gpu::createTritonGPUCombineTensorSelectAndIf());
     pm->addPass(mt::gpu::createTritonGPUPipeline({num_stages}));
@@ -123,6 +126,10 @@ absl::Status CreateTritonPipeline(mlir::OpPassManager* pm,
     pm->addPass(mlir::createTritonNvidiaGPUTMALoweringPass());
   }
   pm->addPass(mlir::createCanonicalizerPass());
+
+  // Corresponds to "mod.get_tensordesc_metadata()"
+  // in @triton//:third_party/nvidia/backend/compiler.py
+  pm->addPass(mt_xla::CreateExtractTmaInfoPass());
 
   // Based on make_llir() in
   // @triton//:third_party/nvidia/backend/compiler.py

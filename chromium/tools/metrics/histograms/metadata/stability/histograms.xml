@@ -83,7 +83,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ChildProcess.Launched.UtilityProcessHash"
-    enum="UtilityProcessNameHash" expires_after="2025-08-24">
+    enum="UtilityProcessNameHash" expires_after="2025-10-26">
   <owner>wfh@chromium.org</owner>
   <summary>
     Count of child utility process launches, bucketed by the hash of their
@@ -140,6 +140,26 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Stability.Android.KillSpareRendererAvailability.{KillType}"
+    enum="SpareRendererAvailabilityWhenKilled" expires_after="2025-09-30">
+  <owner>gjc@google.com</owner>
+  <owner>chrome-loading@google.com</owner>
+  <summary>
+    Records whether a process killed because of KillType is a spare renderer and
+    the spare renderer existence. Recorded when a child process exits and the
+    kill type in the ChildProcessTerminationInfo matches KillType. KillType
+    Details: {KillType}
+  </summary>
+  <token key="KillType">
+    <variant name="IntentionalKill"
+        summary="Intentionally killed by the browser process"/>
+    <variant name="OOM"
+        summary="Killed because of out of memory. All the non-clean exits
+                 that is neither a crash nor requested by the browser or the
+                 renderer are classified as out of memory."/>
+  </token>
+</histogram>
+
 <histogram name="Stability.Android.MinidumpUploadingTime" units="ms"
     expires_after="2023-12-24">
   <owner>shaktisahu@chromium.org</owner>
@@ -169,7 +189,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.Android.ProcessedRealMinidumps"
-    enum="AndroidProcessedMinidumps" expires_after="2025-09-14">
+    enum="AndroidProcessedMinidumps" expires_after="2025-11-16">
   <owner>wnwen@chromium.org</owner>
   <owner>src/components/minidump_uploader/OWNERS</owner>
   <summary>
@@ -181,7 +201,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.Android.RendererCrash" enum="Boolean"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>wnwen@chromium.org</owner>
   <summary>
     Counts renderer crashes including OOMs. Android only. Mirrors old stability
@@ -190,7 +210,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.Android.SystemExitReason{AndroidProcessExitReasons}"
-    enum="AndroidProcessExitReason" expires_after="2025-09-14">
+    enum="AndroidProcessExitReason" expires_after="2025-11-16">
   <owner>boliu@chromium.org</owner>
   <owner>ssid@chromium.org</owner>
   <owner>wnwen@chromium.org</owner>
@@ -351,7 +371,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.ChildFrameCrash.Visibility" enum="CrashVisibility"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>alexmos@chromium.org</owner>
   <owner>boliu@chromium.org</owner>
   <owner>lukasza@chromium.org</owner>
@@ -484,7 +504,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.IOS.PostCrashAction" enum="IOSPostCrashAction"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>justincohen@chromium.org</owner>
   <owner>bling-fundamentals@google.com</owner>
   <summary>
@@ -527,7 +547,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.DeviceThermalState"
-    enum="IOSDeviceThermalState" expires_after="2025-07-27">
+    enum="IOSDeviceThermalState" expires_after="2025-11-09">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -537,7 +557,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.HasPossibleExplanation"
-    enum="BooleanHasPossibleExplanation" expires_after="2025-07-27">
+    enum="BooleanHasPossibleExplanation" expires_after="2025-09-28">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -595,7 +615,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.iOS.UTE.OSVersion" enum="VersionComparison"
-    expires_after="2025-05-01">
+    expires_after="2025-07-27">
   <owner>michaeldo@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -679,7 +699,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.MobileSessionShutdownType2"
-    enum="MobileSessionShutdownType" expires_after="2025-08-24">
+    enum="MobileSessionShutdownType" expires_after="2025-10-26">
   <owner>justincohen@chromium.org</owner>
   <owner>bling-fundamentals@google.com</owner>
   <summary>
@@ -696,7 +716,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.RendererAbnormalTermination2.HostedContentType"
-    enum="RendererHostedContentType" expires_after="2025-09-14">
+    enum="RendererHostedContentType" expires_after="2025-11-16">
   <owner>fdoray@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -706,7 +726,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Stability.RendererAbnormalTermination2.{HostedContentType}"
-    enum="TerminationStatus" expires_after="2025-09-14">
+    enum="TerminationStatus" expires_after="2025-11-16">
   <owner>fdoray@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>

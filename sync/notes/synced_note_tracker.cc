@@ -369,6 +369,11 @@ bool SyncedNoteTracker::HasLocalChanges() const {
   return false;
 }
 
+size_t SyncedNoteTracker::GetUnsyncedDataCount() const {
+  return std::ranges::count_if(GetAllEntities(),
+                               &SyncedNoteTrackerEntity::IsUnsynced);
+}
+
 std::vector<const SyncedNoteTrackerEntity*> SyncedNoteTracker::GetAllEntities()
     const {
   std::vector<const SyncedNoteTrackerEntity*> entities;

@@ -41,7 +41,6 @@ xml_inputs = sorted(khronos_xml_inputs + angle_xml_inputs)
 # We document those extensions in gl_angle_ext.xml instead of the canonical gl.xml.
 
 angle_toggleable_extensions = [
-    "GL_ANGLE_texture_rectangle",
 ]
 
 angle_requestable_extensions = [
@@ -74,6 +73,7 @@ angle_requestable_extensions = [
     "GL_ANGLE_texture_compression_dxt5",
     "GL_ANGLE_texture_external_update",
     "GL_ANGLE_texture_multisample",
+    "GL_ANGLE_texture_rectangle",
     "GL_ANGLE_vulkan_image",
     "GL_ANGLE_yuv_internal_format",
     "GL_CHROMIUM_color_buffer_float_rgb",
@@ -88,7 +88,6 @@ gles_requestable_extensions = [
     "GL_ANGLE_pack_reverse_row_order",
     "GL_ANGLE_texture_usage",
     "GL_APPLE_clip_distance",
-    "GL_ARB_sync",
     "GL_ARM_rgba8",
     "GL_ARM_shader_framebuffer_fetch",
     "GL_ARM_shader_framebuffer_fetch_depth_stencil",
@@ -109,6 +108,7 @@ gles_requestable_extensions = [
     "GL_EXT_draw_buffers",
     "GL_EXT_draw_buffers_indexed",
     "GL_EXT_draw_elements_base_vertex",
+    "GL_EXT_draw_instanced",
     "GL_EXT_EGL_image_array",
     "GL_EXT_EGL_image_external_wrap_modes",
     "GL_EXT_EGL_image_storage",
@@ -122,11 +122,13 @@ gles_requestable_extensions = [
     "GL_EXT_map_buffer_range",
     "GL_EXT_memory_object",
     "GL_EXT_memory_object_fd",
+    "GL_EXT_multi_draw_arrays",
     "GL_EXT_multi_draw_indirect",
     "GL_EXT_multisampled_render_to_texture",
     "GL_EXT_multisampled_render_to_texture2",
     "GL_EXT_occlusion_query_boolean",
     "GL_EXT_polygon_offset_clamp",
+    "GL_EXT_primitive_bounding_box",
     "GL_EXT_protected_textures",
     "GL_EXT_pvrtc_sRGB",
     "GL_EXT_read_format_bgra",
@@ -170,6 +172,8 @@ gles_requestable_extensions = [
     "GL_EXT_YUV_target",
     "GL_IMG_texture_compression_pvrtc",
     "GL_IMG_texture_compression_pvrtc2",
+    "GL_KHR_blend_equation_advanced",
+    "GL_KHR_blend_equation_advanced_coherent",
     "GL_KHR_parallel_shader_compile",
     "GL_KHR_texture_compression_astc_hdr",
     "GL_KHR_texture_compression_astc_ldr",
@@ -210,6 +214,7 @@ gles_requestable_extensions = [
     "GL_OES_get_program_binary",
     "GL_OES_gpu_shader5",
     "GL_OES_mapbuffer",
+    "GL_OES_primitive_bounding_box",
     "GL_OES_required_internalformat",
     "GL_OES_rgb8_rgba8",
     "GL_OES_sample_shading",
@@ -273,13 +278,10 @@ gles_es_only_extensions = [
     "GL_EXT_debug_marker",
     "GL_EXT_discard_framebuffer",
     "GL_EXT_multisample_compatibility",
-    "GL_EXT_primitive_bounding_box",
     "GL_EXT_robustness",
     "GL_EXT_sRGB_write_control",
     "GL_EXT_texture_format_sRGB_override",
     "GL_EXT_texture_sRGB_decode",
-    "GL_KHR_blend_equation_advanced",
-    "GL_KHR_blend_equation_advanced_coherent",
     "GL_KHR_debug",
     "GL_KHR_no_error",
     "GL_KHR_robust_buffer_access_behavior",
@@ -291,7 +293,6 @@ gles_es_only_extensions = [
     "GL_OES_depth_texture",
     "GL_OES_EGL_sync",
     "GL_OES_packed_depth_stencil",
-    "GL_OES_primitive_bounding_box",
     "GL_OES_surfaceless_context",
 ]
 
@@ -308,6 +309,25 @@ gles1_extensions = [
     "GL_OES_texture_mirrored_repeat",
 ]
 
+# Unsupported entry points that require explicit exclusion
+# because XML registry does not contain enough information.
+gles_skipped_commands = [
+    # GL_EXT_EGL_image_storage
+    "glEGLImageTargetTextureStorageEXT",
+    # GL_EXT_external_buffer
+    "glNamedBufferStorageExternalEXT",
+    # GL_EXT_memory_object
+    "glTextureStorageMem2DEXT",
+    "glTextureStorageMem2DMultisampleEXT",
+    "glTextureStorageMem3DEXT",
+    "glTextureStorageMem3DMultisampleEXT",
+    "glNamedBufferStorageMemEXT",
+    # GL_EXT_texture_storage
+    "glTexStorage1DEXT",
+    "glTextureStorage1DEXT",
+    "glTextureStorage2DEXT",
+    "glTextureStorage3DEXT",
+]
 
 def check_sorted(name, l):
     unidiff = difflib.unified_diff(l, sorted(l, key=str.casefold), 'unsorted', 'sorted')
@@ -524,6 +544,7 @@ class RegistryXML:
         self.all_commands = self.root.findall('commands/command')
         self.all_cmd_names = CommandNames()
         self.commands = {}
+        self.sources_by_command = {}
 
     def _AppendANGLEExts(self, ext_file):
         angle_ext_tree = etree.parse(script_relative(ext_file))
@@ -549,6 +570,10 @@ class RegistryXML:
         xpath = ".//feature[@name='%s']//command" % feature_name
         commands = [cmd.attrib['name'] for cmd in self.root.findall(xpath)]
 
+        # Reverse cache for all places a command may be defined in.
+        for cmd in commands:
+            self.sources_by_command.setdefault(cmd, []).append(annotation)
+
         # Remove commands that have already been processed
         current_cmds = self.all_cmd_names.get_all_commands()
         commands = [cmd for cmd in commands if cmd not in current_cmds]
@@ -559,7 +584,7 @@ class RegistryXML:
     def _ClassifySupport(self, extension):
         supported = extension.attrib['supported']
         # Desktop GL extensions exposed in ANGLE GLES for Chrome.
-        if extension.attrib['name'] in ['GL_ARB_sync', 'GL_NV_robustness_video_memory_purge']:
+        if extension.attrib['name'] in ['GL_NV_robustness_video_memory_purge']:
             supported += "|gles2"
         if 'gles2' in supported:
             return 'gl2ext'
@@ -602,17 +627,19 @@ class RegistryXML:
                 if 'api' in require.attrib and require.attrib['api'] not in apis:
                     continue
 
-                # A special case for EXT_texture_storage
-                filter_out_comment = "Supported only if GL_EXT_direct_state_access is supported"
-                if 'comment' in require.attrib and require.attrib['comment'] == filter_out_comment:
-                    continue
-
-                extension_commands = require.findall('command')
-                ext_cmd_names += [command.attrib['name'] for command in extension_commands]
+                ext_cmd_names += [
+                    command.attrib['name']
+                    for command in require.findall('command')
+                    if command.attrib['name'] not in gles_skipped_commands
+                ]
 
             self.ext_data[extension_name] = sorted(ext_cmd_names)
 
         for extension_name, ext_cmd_names in sorted(self.ext_data.items()):
+
+            # Reverse cache for all places a command may be defined in.
+            for cmd in ext_cmd_names:
+                self.sources_by_command.setdefault(cmd, []).append(extension_name)
 
             # Detect and filter duplicate extensions.
             dupes = []

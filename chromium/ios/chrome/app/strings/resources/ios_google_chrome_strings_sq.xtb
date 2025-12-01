@@ -46,6 +46,7 @@ Gjëra për të pasur parasysh:
 <translation id="1917964099031477364">Kjo llogari dhe të dhënat e paruajtura do të hiqen nga Chrome dhe nga aplikacionet e tjera në këtë pajisje.</translation>
 <translation id="1919130412786645364">Lejo identifikimin në Chrome</translation>
 <translation id="1965935827552890526">Përfundo atë që po bën në dritaren tjetër të hapur të Chrome.</translation>
+<translation id="1966638102563776885">Këshillë për Chrome: Merr fjalëkalimet e tua në çdo aplikacion</translation>
 <translation id="1973910962341002002">Nga cilësimet e "<ph name="TEXT_OF_THE_SETTINGS_MENU_ITEM" />", aktivizo "Chrome"</translation>
 <translation id="1984705450038014246">Sinkronizo të dhënat e tua të Chrome</translation>
 <translation id="1987779152850321833">Përfundo këto veprime të sugjeruara më poshtë për të përfituar sa më shumë nga Chrome.</translation>
@@ -113,7 +114,6 @@ Provo të presësh për disa minuta para se të dalësh nga ajo. Nëse del tani,
 <translation id="3655656110921623717">Kjo do të thotë që Chrome do kërkojë sajtin në celular çdo herë.</translation>
 <translation id="3740397331642243698">Hap URL-të e futura në Google Chrome në modalitetin "i fshehtë".</translation>
 <translation id="3741995255368156336">Hap "Listën e leximit" të Chrome.</translation>
-<translation id="3808570423967020928">Qasu më shpejt në Chrome nga Dock i ekranit bazë.</translation>
 <translation id="3827545470516145620">Po merr mbrojtjen standarde të sigurisë në këtë pajisje</translation>
 <translation id="384394811301901750">Google Chrome nuk mund të përdorë kamerën tënde për momentin</translation>
 <translation id="3863841106411295595">Shton URL-të e futura te lista e leximit në Chrome.</translation>
@@ -122,6 +122,7 @@ Provo të presësh për disa minuta para se të dalësh nga ajo. Nëse del tani,
 <translation id="3984746313391923992">Organizata jote kërkon që të qëndrosh i dalë nga Chrome.</translation>
 <translation id="3988789688219830639">Google Chrome nuk ka qasje te fotografitë apo videot e tua. Aktivizo qasjen te Cilësimet e iOS &gt; Privatësia &gt; Fotografitë.</translation>
 <translation id="4064699917955374540">Për të përdorur dhe për të ruajtur të dhënat e Chrome në "Llogarinë tënde të Google", verifiko që je ti.</translation>
+<translation id="411154422556990518">Qëndro i informuar me përditësimet e monitorimit të çmimeve dhe këshillat për Chrome.</translation>
 <translation id="417201473131094001">Nuk mbështetet në Chrome Canary</translation>
 <translation id="424864128008805179">Do të dalësh nga Chrome?</translation>
 <translation id="4430797724889237570">Hap lidhjet nga Gmail, Maps, YouTube dhe aplikacione të tjera në Chrome</translation>
@@ -132,9 +133,11 @@ Provo të presësh për disa minuta para se të dalësh nga ajo. Nëse del tani,
 <translation id="4636900170638246267">Identifikohu në këtë sajt dhe në Chrome.</translation>
 <translation id="4647910807533196601">Hap skedën time të fundit në Chrome.</translation>
 <translation id="4693084815234024320">Je në modalitetin "I fshehtë" të Chrome</translation>
+<translation id="4713907610796204963">Mëso bazat e dobishme për Chrome për të filluar</translation>
 <translation id="4724297637870447613">Përdor Chrome kudo</translation>
 <translation id="4738647308035481133">Faqe e Google Chrome</translation>
 <translation id="4742795653798179840">Të dhënat e Chrome u fshinë</translation>
+<translation id="4749294594657945639">Për t'i marrë me lehtësi fjalëkalimet e tua të ruajtura në aplikacionet e tjera, zgjidh Chrome për "Plotësimin automatik".</translation>
 <translation id="4761869838909035636">Ekzekuto "Kontrollin e sigurisë" të Chrome</translation>
 <translation id="4798859546468762093">Për të marrë personalizimin dhe veçoritë e tjera, përfshi Chrome tek "<ph name="FEATURE_NAME_1" />" dhe te "<ph name="FEATURE_NAME_2" />"</translation>
 <translation id="4819268619367838612">Për të ndihmuar në përmirësimin e aplikacionit, Chrome dërgon të dhëna të përdorimit dhe të ndërprerjeve aksidentale te Google. <ph name="BEGIN_LINK" />Menaxho<ph name="END_LINK" /></translation>
@@ -227,11 +230,9 @@ Për ta ndryshuar këtë cilësim, <ph name="BEGIN_LINK" />fshi të dhënat e Ch
 Për më shumë cilësime që përdorin të dhënat për të përmirësuar përvojën tënde me Chrome, shko te <ph name="BEGIN_LINK" />Shërbimet e Google<ph name="END_LINK" />.</translation>
 <translation id="6922332667202044570">Fshi të dhënat e shfletimit në Chrome.</translation>
 <translation id="6924922227983877439">Hapi lidhjet në Chrome si parazgjedhje</translation>
-<translation id="6931601805528922498">Identifikimi e shton llogarinë tënde te Chrome për të shfletuar në lidhje me punën.</translation>
 <translation id="6975725306479268850">Zgjidh Chrome për AutoFill</translation>
 <translation id="7056826488869329999">Hap dhe ekzekuton kontrollin e sigurisë në Chrome.</translation>
 <translation id="7061455974939528301">Shtyp dhe mbaj shtypur ikonën e Chrome dhe kliko te "Modifiko ekranin bazë"</translation>
-<translation id="7065813315247345131">Zhvendose Chrome te Dock</translation>
 <translation id="7124339256045485976">Mbaje Chrome të përditësuar</translation>
 <translation id="7145599899567697473">Ruaj dhe plotëso automatikisht fjalëkalimet në Chrome</translation>
 <translation id="7161390184744336561">Google Chrome është i papërditësuar</translation>
@@ -239,7 +240,6 @@ Për më shumë cilësime që përdorin të dhënat për të përmirësuar përv
 <translation id="7175129790242719365">Këshillë për Chrome: Identifikohu në Chrome</translation>
 <translation id="7187993566681480880">Të mban të sigurt në Chrome dhe mund të përdoret për të përmirësuar sigurinë tënde në aplikacionet e tjera të Google kur je i identifikuar.</translation>
 <translation id="7200524487407690471">Chrome ekzekuton automatikisht "Kontrollin e sigurisë" çdo ditë për t'i mbajtur të dhënat e tua të sigurta nga shkeljet, uebsajtet e pasigurta dhe të tjera. Mund të zbulosh më shumë për "Kontrollin e sigurisë" te "Cilësimet".</translation>
-<translation id="7203324561587388418">Qëndro i informuar për përmbajtjet dhe merr këshilla të dobishme për Chrome.</translation>
 <translation id="72119412072970160">Fjalëkalimet që ke ruajtur në "Menaxherin e fjalëkalimeve të Google" mund t'i përdorësh në aplikacione të tjera në iPad.</translation>
 <translation id="7214019116829172458">Hap skedën "e fshehtë" në Chrome</translation>
 <translation id="722167379782941918">Chrome rekomandon mbrojtjen e përmirësuar</translation>
@@ -252,6 +252,7 @@ Për më shumë cilësime që përdorin të dhënat për të përmirësuar përv
 <translation id="7299681342915173313">Tani mund të përdorësh Chrome sa herë që troket te lidhjet në email-e, dokumente dhe aplikacione të tjera.</translation>
 <translation id="7344094882820374540">Merr sigurinë më të fortë të Chrome ndaj sajteve të rrezikshme</translation>
 <translation id="7349129508108954623">Lejo që Chrome të përdorë Google Maps për të të dhënë udhëzime dhe informacione lokale për adresat e zbuluara.</translation>
+<translation id="7371674917547846460">Qëndro i informuar me këshilla të dobishme për Chrome dhe më shumë.</translation>
 <translation id="7394108421562933108">Maps në Chrome</translation>
 <translation id="7400722733683201933">Informacion për Google Chrome</translation>
 <translation id="7466693328838535498">Në kutinë e "Miniaplikacioneve të kërkimit", shkruaj Chrome</translation>
@@ -262,6 +263,7 @@ Për më shumë cilësime që përdorin të dhënat për të përmirësuar përv
 <translation id="7581063337314642333">Vizito rrjetën e skedave në Chrome</translation>
 <translation id="7599894504325210080">Pamja e zgjeruar për plotësimin automatik në Chrome</translation>
 <translation id="7617512710641355143">Chrome po menaxhohet</translation>
+<translation id="7626032353295482388">Mirë se vjen në Chrome</translation>
 <translation id="7642373780953416937">Merr sinjalizime për çdo problem të privatësisë ose sigurisë që Chrome zbulon automatikisht për ty.</translation>
 <translation id="7660356333829433649">Kontrollo përsëri këtu për më shumë këshilla të dobishme për të përfituar sa më shumë nga Chrome.</translation>
 <translation id="7662994914830945754">Për të parë skedat e tua nga çdo vend ku përdor Chrome, identifikohu dhe aktivizo sinkronizimin</translation>
@@ -275,6 +277,7 @@ Për më shumë cilësime që përdorin të dhënat për të përmirësuar përv
 <translation id="778855399387580014">Nis një kërkim në një skedë të re Chrome.</translation>
 <translation id="7792140019572081272">Chrome i mban të dhënat e tua delikate të sigurta me Face ID.</translation>
 <translation id="7855730255114109580">Google Chrome është i përditësuar</translation>
+<translation id="787226752901403048">Identifikohu në Chrome për të ndarë dhe për t'u bashkuar në grupet e skedave dhe për të punuar së bashku për ide të ndryshme</translation>
 <translation id="7897703007638178753">Shiko skedat e fundit në Chrome</translation>
 <translation id="7948283758957877064">Ç'të reja ka në Chrome</translation>
 <translation id="8000174216052461231">Këshillë për Chrome: Merr sigurinë më të fortë të Chrome</translation>
@@ -313,10 +316,10 @@ Të dhënat e tua janë enkriptuar me frazën tënde të kalimit më <ph name="T
 <translation id="8603022514504485810">"Menaxheri i fjalëkalimeve i Google" nuk mund t'i kontrollonte të gjitha fjalëkalimet. Provo përsëri nesër ose <ph name="BEGIN_LINK" />kontrollo fjalëkalimet në "Llogarinë tënde të Google".<ph name="END_LINK" /></translation>
 <translation id="8630122478628016441">Aktivizo "Kyç skedat 'e fshehta' kur mbyll Chrome".</translation>
 <translation id="8673726683583791503">Bli me "Lenten e Google"</translation>
-<translation id="8727043961453758442">Përfito sa më shumë nga Chrome</translation>
 <translation id="8765470054473112089">Kur shkruan në shiritin e adresës ose në kutinë e kërkimit, Chrome i dërgon ato që shkruan te motori i parazgjedhur i kërkimit për të marrë sugjerime më të mira. Kjo është joaktive në modalitetin "e fshehtë".</translation>
 <translation id="8772179140489533211">Shfaq kërkesa për t'u identifikuar në Chrome.</translation>
 <translation id="8788269841521769222">Nuk është nevoja ta kujtosh këtë fjalëkalim. Ai do të ruhet në "Menaxherin e fjalëkalimeve të Google" për <ph name="EMAIL" /></translation>
+<translation id="8796490717897731471"><ph name="EMAIL" />. Chrome po menaxhohet.</translation>
 <translation id="880967149107462122">Shko te "Cilësimet" e Chrome</translation>
 <translation id="8842132678697187091">Mund ta hapësh "Lenten e Google" këtu.</translation>
 <translation id="8850736900032787670">Për të marrë përmbajtje të personalizuara bazuar në interesat e tu, identifikohu në Chrome.</translation>

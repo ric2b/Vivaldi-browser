@@ -17,6 +17,7 @@ source_set("profiles") {
     "incognito_helpers.h",
     "profile_key.cc",
     "profile_key.h",
+    "profiles_state.h",
   ]
 
   if (is_android) {
@@ -39,6 +40,7 @@ source_set("profiles") {
 
   public_deps = [
     ":profile",
+    "//build:chromeos_buildflags",
     "//components/leveldb_proto",
   ]
 }
@@ -160,6 +162,7 @@ source_set("profile_util_impl") {
     "//chrome/browser:browser_process",
     "//chrome/browser/autofill",
     "//chrome/browser/prefs",
+    "//chrome/browser/profiles",
     "//chrome/browser/safe_browsing",
     "//chrome/browser/ui:ui_features",
     "//chrome/common",
@@ -221,6 +224,7 @@ source_set("profiles_extra_parts_impl") {
     "//base",
     "//chrome/browser:browser_process",
     "//chrome/browser:font_pref",
+    "//chrome/browser/affiliations",
     "//chrome/browser/ai",
     "//chrome/browser/autofill",
     "//chrome/browser/background:background",
@@ -237,7 +241,11 @@ source_set("profiles_extra_parts_impl") {
     "//chrome/browser/optimization_guide",
     "//chrome/browser/permissions",
     "//chrome/browser/persisted_state_db",
+    "//chrome/browser/plus_addresses",
     "//chrome/browser/prefs",
+    "//chrome/browser/preloading/search_preload",
+    "//chrome/browser/privacy_sandbox/incognito:incognito_surveys",
+    "//chrome/browser/privacy_sandbox/notice:factory",
     "//chrome/browser/reading_list",
     "//chrome/browser/regional_capabilities",
     "//chrome/browser/safe_browsing",
@@ -246,6 +254,7 @@ source_set("profiles_extra_parts_impl") {
     "//chrome/browser/safe_browsing:verdict_cache_manager_factory",
     "//chrome/browser/search_engine_choice",
     "//chrome/browser/search_engines",
+    "//chrome/browser/serial",
     "//chrome/browser/storage_access_api",
     "//chrome/browser/sync",
     "//chrome/browser/ui",
@@ -269,12 +278,12 @@ source_set("profiles_extra_parts_impl") {
     "//components/manta",
     "//components/omnibox/browser",
     "//components/optimization_guide/core",
+    "//components/passage_embeddings",
     "//components/password_manager/content/browser",
     "//components/payments/content",
     "//components/permissions:permissions_common",
     "//components/policy/content",
     "//components/policy/content:safe_sites_navigation_throttle",
-    "//components/reading_list/features:flags",
     "//components/safe_browsing/core/common:features",
     "//components/signin/public/base",
     "//components/site_engagement/content",
@@ -290,7 +299,9 @@ source_set("profiles_extra_parts_impl") {
     deps += [
       "//chrome/browser/commerce/merchant_viewer:merchant_viewer_data_manager",
       "//chrome/browser/fast_checkout",
+      "//chrome/browser/password_manager/android/one_time_passwords:backend",
       "//components/commerce/core:merchant_signal_db_proto",
+      "//components/payments/content/browser_binding:browser_bound_keys_deleter_factory",
     ]
   } else {
     deps += [

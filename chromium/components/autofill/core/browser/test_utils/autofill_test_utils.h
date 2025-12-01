@@ -231,12 +231,14 @@ CreditCardMerchantBenefit GetActiveCreditCardMerchantBenefit();
 // benefit.
 base::flat_set<url::Origin> GetOriginsForMerchantBenefit();
 
-// Adds `card` with a set `benefit` and `issuer_id` to `personal_data`. Also
-// configures a category benefit with the `optimization_guide`.
+// Adds `card` with a set `issuer_id`, `benefit` and `benefit_source` to
+// `personal_data`. Also configures a category benefit with the
+// `optimization_guide`.
 void SetUpCreditCardAndBenefitData(
     CreditCard& card,
-    const CreditCardBenefit& benefit,
     const std::string& issuer_id,
+    const CreditCardBenefit& benefit,
+    const std::string& benefit_source,
     TestPersonalDataManager& personal_data,
     AutofillOptimizationGuide* optimization_guide);
 
@@ -327,7 +329,8 @@ CreditCard CreateCreditCardWithInfo(const char* name_on_card,
 void SetServerCreditCards(PaymentsAutofillTable* table,
                           const std::vector<CreditCard>& cards);
 
-struct PassportEntityOptions {
+template <typename = void>
+struct PassportEntityOptionsT {
   const char16_t* name = u"Pippi Långstrump";
   const char16_t* number = u"123";
   const char16_t* country = u"Sweden";
@@ -336,7 +339,9 @@ struct PassportEntityOptions {
   std::string_view guid = "00000000-0000-4000-8000-000000000000";
   std::string_view nickname = "Passie";
   base::Time date_modified = kJune2017;
+  std::string_view app_locale = "en-US";
 };
+using PassportEntityOptions = PassportEntityOptionsT<>;
 
 // Creates a test passport instance with the values from `options`.
 // Attributes whose value in `options` is `nullptr` are left absent.
@@ -345,7 +350,8 @@ struct PassportEntityOptions {
 // base::Time in the database is seconds).
 EntityInstance GetPassportEntityInstance(PassportEntityOptions options = {});
 
-struct DriversLicenseOptions {
+template <typename = void>
+struct DriversLicenseOptionsT {
   const char16_t* name = u"Knecht Ruprecht";
   const char16_t* region = u"California";
   const char16_t* number = u"12312345";
@@ -354,12 +360,15 @@ struct DriversLicenseOptions {
   std::string_view guid = "00000000-0000-4000-8000-100000000000";
   std::string_view nickname = "License";
   base::Time date_modified = kJune2017;
+  std::string_view app_locale = "en-US";
 };
+using DriversLicenseOptions = DriversLicenseOptionsT<>;
 
 EntityInstance GetDriversLicenseEntityInstance(
     DriversLicenseOptions options = {});
 
-struct VehicleOptions {
+template <typename = void>
+struct VehicleOptionsT {
   const char16_t* name = u"Knecht Ruprecht";
   const char16_t* plate = u"123456";
   const char16_t* number = u"12312345";
@@ -369,7 +378,9 @@ struct VehicleOptions {
   const char16_t* state = u"California";
   std::string_view guid = "00000000-0000-4000-8000-200000000000";
   std::string_view nickname = "Vehicle";
+  std::string_view app_locale = "en-US";
 };
+using VehicleOptions = VehicleOptionsT<>;
 
 EntityInstance GetVehicleEntityInstance(VehicleOptions options = {});
 
@@ -480,7 +491,8 @@ sync_pb::PaymentInstrument CreatePaymentInstrumentWithLinkedBnplIssuer(
 
 // Returns a linked BNPL issuer with fake data.
 BnplIssuer GetTestLinkedBnplIssuer(
-    std::string_view issuer_id = kBnplAffirmIssuerId);
+    autofill::BnplIssuer::IssuerId issuer_id =
+        autofill::BnplIssuer::IssuerId::kBnplAffirm);
 
 // Returns an unlinked BNPL issuer with fake data.
 BnplIssuer GetTestUnlinkedBnplIssuer();

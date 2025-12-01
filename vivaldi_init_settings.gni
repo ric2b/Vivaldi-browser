@@ -58,10 +58,19 @@ declare_overrides() {
     is_component_ffmpeg = true
   }
 
+  if (is_linux || is_android) {
+      # Temporary workaround for https://issues.chromium.org/issues/416540976
+      # until it has been fixed
+      # mksnapshot exits with error -5
+      v8_enable_temporal_support = false
+  }
+
   if (is_android) {
     if (is_official_build) {
       symbol_level = 1
       use_relr_relocations = false
+    } else {
+      android_static_analysis = "on"
     }
     enable_cardboard = false
     enable_arcore = false

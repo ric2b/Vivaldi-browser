@@ -46,6 +46,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/platform_notification_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/browser/storage_partition_config.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/notifications/notification_resources.h"
 #include "third_party/blink/public/common/notifications/platform_notification_data.h"
@@ -67,6 +68,8 @@
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
+#else
+#include "chrome/browser/safe_browsing/android/notification_content_detection_manager_android.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -274,11 +277,21 @@ void PlatformNotificationServiceImpl::DisplayNotification(
       ContentSettingsType::NOTIFICATIONS, profile_, nullptr,
       notification.origin_url());
 
-    auto* service =
-        NotificationsEngagementServiceFactory::GetForProfile(profile_);
-    // This service might be missing for incognito profiles and in tests.
-    if (service)
-      service->RecordNotificationDisplayed(notification.origin_url());
+  auto* service =
+      NotificationsEngagementServiceFactory::GetForProfile(profile_);
+  // This service might be missing for incognito profiles and in tests.
+  if (service) {
+    service->RecordNotificationDisplayed(notification.origin_url());
+  }
+
+  // Logs metrics for proposed disruptive notification revocation when
+  // displaying a non persistent notification. Disruptive are notifications
+  // with high notification volume and low site engagement score.
+  ukm::SourceId source_id = ukm::UkmRecorder::GetSourceIdForNotificationEvent(
+      base::PassKey<PlatformNotificationServiceImpl>(),
+      notification.origin_url());
+  DisruptiveNotificationPermissionsManager::LogMetrics(
+      profile_, notification.origin_url(), source_id);
 }
 
 void PlatformNotificationServiceImpl::DisplayPersistentNotification(
@@ -759,15 +772,41 @@ bool PlatformNotificationServiceImpl::IsActivelyInstalledWebAppScope(
 
 void PlatformNotificationServiceImpl::UpdatePersistentMetadataThenDisplay(
     const message_center::Notification& notification,
-    std::unique_ptr<PersistentNotificationMetadata> metadata,
-    bool is_suspicious) {
-  base::UmaHistogramEnumeration(
-      kNotificationContentDetectionDisplayPersistentNotificationEventHistogram,
-      DisplayPersistentNotificationEvents::kFinished);
-  metadata->is_suspicious = is_suspicious;
-  NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
-      NotificationHandler::Type::WEB_PERSISTENT, notification,
-      std::move(metadata));
+    std::unique_ptr<PersistentNotificationMetadata> persistent_metadata,
+    bool should_show_warning,
+    std::optional<std::string> serialized_content_detection_metadata) {
+  if (base::FeatureList::IsEnabled(
+          safe_browsing::kReportNotificationContentDetectionData)) {
+    content::PlatformNotificationContext::WriteResourcesResultCallback
+        callback = base::BindOnce(
+            &PlatformNotificationServiceImpl::DidUpdatePersistentMetadata,
+            weak_ptr_factory_.GetWeakPtr(), std::move(persistent_metadata),
+            notification, should_show_warning);
+#if BUILDFLAG(IS_ANDROID)
+    if (should_show_warning) {
+      // Keep track of suspicious notification ids.
+      safe_browsing::UpdateSuspiciousNotificationIds(
+          HostContentSettingsMapFactory::GetForProfile(profile_),
+          notification.origin_url(), notification.id());
+    }
+#endif
+    if (serialized_content_detection_metadata.has_value()) {
+      scoped_refptr<content::PlatformNotificationContext> notification_context =
+          profile_->GetStoragePartitionForUrl(notification.origin_url())
+              ->GetPlatformNotificationContext();
+      if (notification_context) {
+        notification_context->WriteNotificationMetadata(
+            notification.id(), notification.origin_url(),
+            safe_browsing::kMetadataDictionaryKey,
+            serialized_content_detection_metadata.value(), std::move(callback));
+        return;
+      }
+    }
+    std::move(callback).Run(/*success=*/false);
+  } else {
+    DoUpdatePersistentMetadataThenDisplay(std::move(persistent_metadata),
+                                          notification, should_show_warning);
+  }
 }
 
 void PlatformNotificationServiceImpl::LogPersistentNotificationShownMetrics(
@@ -810,4 +849,26 @@ bool PlatformNotificationServiceImpl::
   return stored_value.GetDict()
       .FindBool(safe_browsing::kIsAllowlistedByUserKey)
       .value_or(false);
+}
+
+void PlatformNotificationServiceImpl::DidUpdatePersistentMetadata(
+    std::unique_ptr<PersistentNotificationMetadata> persistent_metadata,
+    message_center::Notification notification,
+    bool should_show_warning,
+    bool success) {
+  DoUpdatePersistentMetadataThenDisplay(std::move(persistent_metadata),
+                                        notification, should_show_warning);
+}
+
+void PlatformNotificationServiceImpl::DoUpdatePersistentMetadataThenDisplay(
+    std::unique_ptr<PersistentNotificationMetadata> persistent_metadata,
+    message_center::Notification notification,
+    bool should_show_warning) {
+  base::UmaHistogramEnumeration(
+      kNotificationContentDetectionDisplayPersistentNotificationEventHistogram,
+      DisplayPersistentNotificationEvents::kFinished);
+  persistent_metadata->is_suspicious = should_show_warning;
+  NotificationDisplayServiceFactory::GetForProfile(profile_)->Display(
+      NotificationHandler::Type::WEB_PERSISTENT, notification,
+      std::move(persistent_metadata));
 }

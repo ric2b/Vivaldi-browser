@@ -64,7 +64,7 @@ Vector<uint32_t> MLTensor::shape() const {
   return Vector<uint32_t>(descriptor_.shape());
 }
 
-bool MLTensor::importableToWebGPU() const {
+bool MLTensor::exportableToGPU() const {
   return usage_.Has(webnn::MLTensorUsageFlags::kWebGpuInterop);
 }
 
@@ -74,6 +74,10 @@ bool MLTensor::readable() const {
 
 bool MLTensor::writable() const {
   return usage_.Has(webnn::MLTensorUsageFlags::kWrite);
+}
+
+bool MLTensor::constant() const {
+  return usage_.Has(webnn::MLTensorUsageFlags::kGraphConstant);
 }
 
 void MLTensor::destroy() {

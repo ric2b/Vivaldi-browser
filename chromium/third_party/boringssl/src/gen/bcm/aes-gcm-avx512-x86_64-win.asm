@@ -91,13 +91,10 @@ _CET_ENDBR
 
 
 	vpclmulqdq	xmm0,xmm3,xmm3,0x00
-	vpclmulqdq	xmm1,xmm3,xmm3,0x01
-	vpclmulqdq	xmm2,xmm3,xmm3,0x10
-	vpxord	xmm1,xmm1,xmm2
-	vpclmulqdq	xmm2,xmm5,xmm0,0x01
-	vpshufd	xmm0,xmm0,0x4e
-	vpternlogd	xmm1,xmm0,xmm2,0x96
 	vpclmulqdq	xmm4,xmm3,xmm3,0x11
+	vpclmulqdq	xmm1,xmm5,xmm0,0x01
+	vpshufd	xmm0,xmm0,0x4e
+	vpxor	xmm1,xmm1,xmm0
 	vpclmulqdq	xmm0,xmm5,xmm1,0x01
 	vpshufd	xmm1,xmm1,0x4e
 	vpternlogd	xmm4,xmm1,xmm0,0x96

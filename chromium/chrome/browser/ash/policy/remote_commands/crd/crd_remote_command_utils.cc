@@ -39,10 +39,10 @@ using remoting::features::kEnableCrdSharedSessionToUnattendedDevice;
 
 const ash::KioskAppManagerBase* GetKioskAppManager(
     const user_manager::UserManager& user_manager) {
-  if (user_manager.IsLoggedInAsKioskApp()) {
+  if (user_manager.IsLoggedInAsKioskChromeApp()) {
     return ash::KioskChromeAppManager::Get();
   }
-  if (user_manager.IsLoggedInAsWebKioskApp()) {
+  if (user_manager.IsLoggedInAsKioskWebApp()) {
     return ash::WebKioskAppManager::Get();
   }
   if (user_manager.IsLoggedInAsKioskIWA()) {
@@ -254,6 +254,30 @@ void CalculateIsInManagedEnvironmentAsync(
           // Keep the mojom connection alive until the callback is invoked.
           .Then(base::BindOnce(CloseMojomConnection,
                                std::move(network_service))));
+}
+
+remoting::ChromeOsEnterpriseRequestOrigin
+ConvertToChromeOsEnterpriseRequestOrigin(
+    StartCrdSessionJobDelegate::RequestOrigin request_origin) {
+  switch (request_origin) {
+    case StartCrdSessionJobDelegate::RequestOrigin::kClassManagement:
+      return remoting::ChromeOsEnterpriseRequestOrigin::kClassManagement;
+    case StartCrdSessionJobDelegate::RequestOrigin::kEnterpriseAdmin:
+      return remoting::ChromeOsEnterpriseRequestOrigin::kEnterpriseAdmin;
+  }
+  NOTREACHED();
+}
+
+StartCrdSessionJobDelegate::RequestOrigin
+ConvertToStartCrdSessionJobDelegateRequestOrigin(
+    SharedCrdSession::RequestOrigin request_origin) {
+  switch (request_origin) {
+    case SharedCrdSession::RequestOrigin::kClassManagement:
+      return StartCrdSessionJobDelegate::RequestOrigin::kClassManagement;
+    case SharedCrdSession::RequestOrigin::kEnterpriseAdmin:
+      return StartCrdSessionJobDelegate::RequestOrigin::kEnterpriseAdmin;
+  }
+  NOTREACHED();
 }
 
 }  // namespace policy

@@ -162,9 +162,16 @@
       },
     },
   },
-  'cros-cbx-dut': {
-    'skylab': {
-      'cros_cbx': True,
+  'chromium_pixel_2_q': {
+    'fail_if_unused': False,
+    'swarming': {
+      'dimensions': {
+        'device_os': 'QQ1A.191205.008',
+        'device_os_flavor': 'google',
+        'device_type': 'walleye',
+        'os': 'Android',
+        'pool': 'chromium.tests',
+      },
     },
   },
   'crosier-no-arc': {
@@ -266,6 +273,7 @@
     ],
     'android_args': [
       '$$MAGIC_SUBSTITUTION_GPUTelemetryNoRootForUnrootedDevices',
+      '$$MAGIC_SUBSTITUTION_AndroidDesktopTelemetryRemote',
       '--initial-find-device-attempts=3',
     ],
     'chromeos_args': [
@@ -406,7 +414,7 @@
     'fail_if_unused': False,
     'swarming': {
       'dimensions': {
-        'device_type': 'e2s',
+        'device_type': 's5e9945',
         'device_os': 'UP1A.231005.007',
         'device_os_type': 'user',
         'os': 'Android',
@@ -427,12 +435,12 @@
       },
     },
   },
-  'ios_runtime_cache_18_0': {
+  'ios_runtime_cache_18_2': {
     'swarming': {
       'named_caches': [
         {
-          'name': 'runtime_ios_18_0',
-          'path': 'Runtime-ios-18.0',
+          'name': 'runtime_ios_18_2',
+          'path': 'Runtime-ios-18.2',
         },
       ],
     },
@@ -537,7 +545,7 @@
     'swarming': {
       'dimensions': {
         'cpu': 'x86-64',
-        'os': 'Mac-14',
+        'os': 'Mac-14|Mac-15',
       },
     },
   },
@@ -548,7 +556,7 @@
         'cpu': 'arm64',
         'gpu': 'apple:m1',
         'mac_model': 'Macmini9,1',
-        'os': 'Mac-14.5',
+        'os': 'Mac-15.5',
         'pool': 'chromium.tests',
         'display_attached': '1',
       },
@@ -595,6 +603,20 @@
       },
     },
   },
+  'mac_arm64_apple_m3_retina_gpu_stable': {
+    'fail_if_unused': False,
+    'swarming': {
+      'dimensions': {
+        'cpu': 'arm64',
+        'gpu': 'apple:m3',
+        'mac_model': 'Mac15,3',
+        'os': 'Mac-15.4.1',
+        'pool': 'chromium.tests.gpu',
+        'display_attached': '1',
+        'hidpi': '1',
+      },
+    },
+  },
   'mac_default_arm64': {
     'swarming': {
       'dimensions': {
@@ -617,7 +639,7 @@
       'dimensions': {
         'cpu': 'x86-64',
         'gpu': '8086:3e9b',
-        'os': 'Mac-15.0',
+        'os': 'Mac-15.5',
         'display_attached': '1',
       },
     },
@@ -857,8 +879,8 @@
     'swarming': {
       'dimensions': {
         'display_attached': '1',
-        'gpu': '10de:2184-31.0.15.4601',
-        'os': 'Windows-10-19045',
+        'gpu': '10de:2184-32.0.15.7602',
+        'os': 'Windows-11-26100',
         'pool': 'chromium.tests.gpu',
       },
     },

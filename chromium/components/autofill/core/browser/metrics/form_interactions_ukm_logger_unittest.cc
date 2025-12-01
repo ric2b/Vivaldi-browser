@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/notreached.h"
 #include "base/strings/to_string.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
@@ -53,14 +54,6 @@ using UkmSubmittedFormWithExperimentalFieldsType =
     ukm::builders::Autofill2_SubmittedFormWithExperimentalFields;
 using ExpectedUkmMetricsRecord = std::vector<ExpectedUkmMetricsPair>;
 using ExpectedUkmMetrics = std::vector<ExpectedUkmMetricsRecord>;
-
-FormSignature Collapse(FormSignature sig) {
-  return FormSignature(sig.value() % 1021);
-}
-
-FieldSignature Collapse(FieldSignature sig) {
-  return FieldSignature(sig.value() % 1021);
-}
 
 std::string SerializeAndEncode(const AutofillQueryResponse& response) {
   std::string unencoded_response_string;
@@ -1713,19 +1706,17 @@ TEST_P(LogFocusedComplexFormAtFormRemoveTest, TestEmittedUKM) {
     ASSERT_TRUE(first_field.parsed_autocomplete());
     HtmlFieldType autocomplete = first_field.parsed_autocomplete()->field_type;
     if (GroupTypeOfHtmlFieldType(autocomplete) == FieldTypeGroup::kAddress) {
-      // This simulates the call to the renderer
-      // (AutofillManager::FillOrPreviewProfileForm).
       FillTestProfile(form);
     } else if (GroupTypeOfHtmlFieldType(autocomplete) ==
                FieldTypeGroup::kCreditCard) {
-      autofill_manager().FillOrPreviewCreditCardForm(
+      autofill_manager().FillOrPreviewForm(
           mojom::ActionPersistence::kFill, form, first_field.global_id(),
-          *personal_data().payments_data_manager().GetCreditCardByGUID(
+          personal_data().payments_data_manager().GetCreditCardByGUID(
               "10000000-0000-0000-0000-000000000001"),
           AutofillTriggerSource::kPopup);
     } else {
       // Autofill should not be simulated on a field that is not autofillable.
-      ASSERT_TRUE(false);
+      NOTREACHED();
     }
     // This simulates the callback from the renderer
     // (AutofillManager::OnDidFillAutofillFormData).

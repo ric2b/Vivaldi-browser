@@ -18,11 +18,15 @@ update_target("//components/input:input") {
       "//components/services/storage/public/mojom",
       "//components/services/storage/privileged/mojom",
       "//components/services/quarantine/public/mojom",
-      "//content/services/auction_worklet/public/mojom",
       "//media/mojo/mojom:remoting",
       "//services/cert_verifier/public/mojom",
       "//vivaldi/renderer/mojo:frame_service",
     ]
+    if (is_linux) {
+      deps += [
+        "//content/services/auction_worklet/public/mojom",
+      ]
+    }
   }
 }
 
@@ -80,6 +84,11 @@ update_target("//chrome/browser/ui:ui") {
     ]
     deps += [
       "//vivaldi/ui/vector_icons:vector_icons",
+    ]
+  } else {
+    sources+= [
+      "//vivaldi/ui/web_ui_native_call_utils.cc",
+      "//vivaldi/ui/web_ui_native_call_utils.h",
     ]
   }
   if (is_mac) {

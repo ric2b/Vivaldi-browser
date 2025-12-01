@@ -14,6 +14,7 @@ import android.view.View;
 
 import org.jni_zero.internal.Nullable;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.magic_stack.HomeModulesConfigManager;
 import org.chromium.chrome.browser.ntp_customization.BottomSheetDelegate;
 import org.chromium.chrome.browser.ntp_customization.ListContainerViewDelegate;
@@ -25,6 +26,7 @@ import java.util.List;
  * A mediator class that manages navigation between bottom sheets and manages the container view on
  * the NTP cards bottom sheet.
  */
+@NullMarked
 public class NtpCardsMediator {
 
     private final PropertyModel mContainerPropertyModel;
@@ -38,8 +40,10 @@ public class NtpCardsMediator {
         mBottomSheetPropertyModel = bottomSheetPropertyModel;
 
         mContainerPropertyModel.set(LIST_CONTAINER_VIEW_DELEGATE, createListDelegate());
+        // Hides the back button when the NTP Cards bottom sheet is displayed standalone.
         mBottomSheetPropertyModel.set(
-                BACK_PRESS_HANDLER, v -> delegate.backPressOnCurrentBottomSheet());
+                BACK_PRESS_HANDLER,
+                delegate.shouldShowAlone() ? null : v -> delegate.backPressOnCurrentBottomSheet());
     }
 
     /** Returns {@link ListContainerViewDelegate} that defines the content of each list item. */
@@ -59,7 +63,7 @@ public class NtpCardsMediator {
             }
 
             @Override
-            public String getListItemSubtitle(int type, Context context) {
+            public @Nullable String getListItemSubtitle(int type, Context context) {
                 return null;
             }
 
@@ -69,7 +73,7 @@ public class NtpCardsMediator {
             }
 
             @Override
-            public Integer getTrailingIcon(int type) {
+            public @Nullable Integer getTrailingIcon(int type) {
                 return null;
             }
         };

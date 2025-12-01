@@ -8,12 +8,13 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/browser_element_identifiers.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/commerce/commerce_ui_tab_helper.h"
 #include "chrome/browser/ui/tabs/public/tab_features.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/metrics/discounts_metric_collector.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -84,6 +85,7 @@ void DiscountsIconView::UpdateImpl() {
   if (should_show) {
     MaybeShowPageActionLabel();
   } else {
+    scoped_window_call_to_action_ptr_.reset();
     HidePageActionLabel();
   }
   SetBackgroundVisibility(BackgroundVisibility::kWithLabel);
@@ -107,6 +109,17 @@ void DiscountsIconView::MaybeShowPageActionLabel() {
       !tab_helper->ShouldExpandPageActionIcon(PageActionIconType::kDiscounts)) {
     return;
   }
+
+  if (!tabs::TabInterface::GetFromContents(GetWebContents())
+           ->GetBrowserWindowInterface()
+           ->CanShowCallToAction()) {
+    return;
+  }
+
+  scoped_window_call_to_action_ptr_ =
+      tabs::TabInterface::GetFromContents(GetWebContents())
+          ->GetBrowserWindowInterface()
+          ->ShowCallToAction();
 
   should_extend_label_shown_duration_ = true;
   AnimateIn(IDS_DISCOUNT_ICON_EXPANDED_TEXT);

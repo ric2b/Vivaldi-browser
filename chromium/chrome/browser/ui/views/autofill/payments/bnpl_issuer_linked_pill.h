@@ -19,6 +19,13 @@ class BnplLinkedIssuerPill : public views::Label {
   BnplLinkedIssuerPill(const BnplLinkedIssuerPill&) = delete;
   BnplLinkedIssuerPill& operator=(const BnplLinkedIssuerPill&) = delete;
   ~BnplLinkedIssuerPill() override;
+
+  // views::View overrides.
+  void AddedToWidget() override;
+
+  // Returns the view description for accessibility message, which will be read
+  // when this view is focused by a screenreader.
+  std::u16string GetAccessibilityDescription();
 };
 
 BEGIN_VIEW_BUILDER(, BnplLinkedIssuerPill, views::Label)

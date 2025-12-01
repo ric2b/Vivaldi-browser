@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -32,7 +31,6 @@
 #include "components/autofill/core/browser/webdata/payments/payments_sync_bridge_util.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/prefs/pref_service.h"
-#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/sync/base/data_type.h"
 #include "components/sync/base/features.h"
@@ -194,36 +192,10 @@ class SingleClientWalletSyncTest : public SyncTest {
   base::HistogramTester histogram_tester_;
 };
 
-// Same as SingleClientWalletSyncTest but allows exercising tests with and
-// without `switches::IsImprovedSigninUIOnDesktopEnabled()`.
-class SingleClientWalletWithImprovedSigninUISyncTest
-    : public SingleClientWalletSyncTest,
-      public testing::WithParamInterface<bool> {
- public:
-  SingleClientWalletWithImprovedSigninUISyncTest() {
-    if (GetParam()) {
-      feature_list_.InitWithFeatures(
-          /*enabled_features=*/{switches::kImprovedSigninUIOnDesktop},
-          /*disabled_features=*/{});
-    } else {
-      feature_list_.InitWithFeatures(
-          /*enabled_features=*/{},
-          /*disabled_features=*/{switches::kImprovedSigninUIOnDesktop});
-    }
-
-    EXPECT_EQ(GetParam(), switches::IsImprovedSigninUIOnDesktopEnabled());
-  }
-
-  ~SingleClientWalletWithImprovedSigninUISyncTest() override = default;
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
 // ChromeOS does not support late signin after profile creation, so the test
 // below does not apply, at least in the current form.
 #if !BUILDFLAG(IS_CHROMEOS)
-IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
+IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest,
                        DownloadAccountStorage_Card) {
   ASSERT_TRUE(SetupClients());
   PaymentsDataManager* paydm = GetPaymentsDataManager(0);
@@ -256,26 +228,10 @@ IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
   // feature flags. The corresponding metric is recorded twice as an artifact
   // of the test setup: SyncTest creates a new profile for single-client tests,
   // disregarding the existing profile that browser tests already have.
-  if (switches::IsImprovedSigninUIOnDesktopEnabled()) {
-    EXPECT_FALSE(GetAccountWebDataService(0)->UsesInMemoryDatabaseForMetrics());
-    histogram_tester_.ExpectUniqueSample("WebDatabase.AutofillAccountStorage",
-                                         /*sample=*/2,  // kOnDisk_SignedOut.
-                                         /*expected_bucket_count=*/2);
-    histogram_tester_.ExpectUniqueSample(
-        "Sync.PaymentsAccountStorageUponSyncConfiguration",
-        /*sample=*/1,  // kSignedInExplicitlyWithOnDiskStorage.
-        /*expected_bucket_count=*/1);
-  } else {
-    EXPECT_TRUE(GetAccountWebDataService(0)->UsesInMemoryDatabaseForMetrics());
-    histogram_tester_.ExpectUniqueSample(
-        "WebDatabase.AutofillAccountStorage",
-        /*sample=*/0,  // kInMemory_FlagDisabled.
-        /*expected_bucket_count=*/2);
-    histogram_tester_.ExpectUniqueSample(
-        "Sync.PaymentsAccountStorageUponSyncConfiguration",
-        /*sample=*/2,  // kSignedInExplicitlyWithInMemoryStorage.
-        /*expected_bucket_count=*/1);
-  }
+  EXPECT_FALSE(GetAccountWebDataService(0)->UsesInMemoryDatabaseForTesting());
+  histogram_tester_.ExpectUniqueSample("WebDatabase.AutofillAccountStorage",
+                                       /*sample=*/2,  // kOnDisk_SignedOut.
+                                       /*expected_bucket_count=*/2);
 
   ASSERT_NE(nullptr, paydm);
   std::vector<const CreditCard*> cards = paydm->GetCreditCards();
@@ -300,7 +256,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
 
 // PRE_ test used to ensure the user is signed in at the time the browser starts
 // up, which is more realistic for the implicit signed-in state.
-IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
+IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest,
                        PRE_DownloadAccountStorageWithImplicitSignIn_Card) {
   ASSERT_TRUE(SetupClients());
 
@@ -314,7 +270,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
       syncer::AUTOFILL_WALLET_DATA));
 }
 
-IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
+IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest,
                        DownloadAccountStorageWithImplicitSignIn_Card) {
   ASSERT_TRUE(SetupClients());
   GetFakeServer()->SetWalletData(
@@ -345,22 +301,10 @@ IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
   // artifact of the test setup: SyncTest creates a new profile for
   // single-client tests, disregarding the existing profile that browser tests
   // already have.
-  EXPECT_TRUE(GetAccountWebDataService(0)->UsesInMemoryDatabaseForMetrics());
-  if (switches::IsImprovedSigninUIOnDesktopEnabled()) {
-    histogram_tester_.ExpectBucketCount(
-        "WebDatabase.AutofillAccountStorage",
-        /*sample=*/1,  // kInMemory_SignedInImplicitly.
-        /*expected_bucket_count=*/1);
-  } else {
-    histogram_tester_.ExpectUniqueSample(
-        "WebDatabase.AutofillAccountStorage",
-        /*sample=*/0,  // kInMemory_FlagDisabled.
-        /*expected_bucket_count=*/2);
-  }
-
-  histogram_tester_.ExpectUniqueSample(
-      "Sync.PaymentsAccountStorageUponSyncConfiguration",
-      /*sample=*/4,  // kSignedInImplicitlyWithInMemoryStorage.
+  EXPECT_TRUE(GetAccountWebDataService(0)->UsesInMemoryDatabaseForTesting());
+  histogram_tester_.ExpectBucketCount(
+      "WebDatabase.AutofillAccountStorage",
+      /*sample=*/1,  // kInMemory_SignedInImplicitly.
       /*expected_bucket_count=*/1);
 
   PaymentsDataManager* paydm = GetPaymentsDataManager(0);
@@ -384,10 +328,6 @@ IN_PROC_BROWSER_TEST_P(SingleClientWalletWithImprovedSigninUISyncTest,
   // Check directly in the DB that the account storage is now cleared.
   EXPECT_EQ(0U, GetServerCards(account_data).size());
 }
-
-INSTANTIATE_TEST_SUITE_P(Enabled,
-                         SingleClientWalletWithImprovedSigninUISyncTest,
-                         testing::Bool());
 
 // Wallet data should get cleared from the database when the user signs out and
 // different data should get downstreamed when the user signs in with a
@@ -451,7 +391,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSyncTest, EnabledByDefault) {
   // exists.
   ASSERT_TRUE(GetClient(0)->service()->GetActiveDataTypes().Has(
       syncer::AUTOFILL_WALLET_METADATA));
-  EXPECT_FALSE(GetProfileWebDataService(0)->UsesInMemoryDatabaseForMetrics());
+  EXPECT_FALSE(GetProfileWebDataService(0)->UsesInMemoryDatabaseForTesting());
 }
 
 // ChromeOS does not sign out, so the test below does not apply.
@@ -1072,7 +1012,6 @@ IN_PROC_BROWSER_TEST_F(SingleClientWalletSecondaryAccountSyncTest,
   // Simulate the user opting in to full Sync, and set first-time setup to
   // complete.
   secondary_account_helper::GrantSyncConsent(profile(), "user@email.com");
-  GetSyncService(0)->SetSyncFeatureRequested();
 #if !BUILDFLAG(IS_CHROMEOS)
   GetSyncService(0)->GetUserSettings()->SetInitialSyncFeatureSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
@@ -1145,7 +1084,6 @@ IN_PROC_BROWSER_TEST_F(
   secondary_account_helper::GrantSyncConsent(profile(), "user@email.com");
 
   // Now start actually configuring Sync.
-  GetSyncService(0)->SetSyncFeatureRequested();
   std::unique_ptr<syncer::SyncSetupInProgressHandle> setup_handle =
       GetSyncService(0)->GetSetupInProgressHandle();
 

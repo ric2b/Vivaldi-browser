@@ -8,18 +8,21 @@ import androidx.annotation.IntDef;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.build.annotations.NullMarked;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.BitSet;
 
 /** Records a histogram that tracks usage of all the CCT features of interest. */
+@NullMarked
 public class CustomTabsFeatureUsage {
     @VisibleForTesting
     public static final String CUSTOM_TABS_FEATURE_USAGE_HISTOGRAM = "CustomTabs.FeatureUsage";
 
     // NOTE: This must be kept in sync with the definition |CustomTabsFeatureUsed|
     // in tools/metrics/histograms/enums.xml.
+    // LINT.IfChange(CustomTabsFeature)
     @IntDef({
         CustomTabsFeature.CTF_SESSIONS,
         CustomTabsFeature.EXTRA_ACTION_BUTTON_BUNDLE,
@@ -83,6 +86,9 @@ public class CustomTabsFeatureUsage {
         CustomTabsFeature.EXTRA_REDIRECT_SCHEME,
         CustomTabsFeature.EXTRA_HTTPS_REDIRECT_HOST,
         CustomTabsFeature.EXTRA_HTTPS_REDIRECT_PATH,
+        CustomTabsFeature.EXTRA_OPEN_IN_BROWSER_STATE,
+        CustomTabsFeature.EXTRA_LAUNCH_HANDLER,
+        CustomTabsFeature.EXTRA_FILE_HANDLERS,
         CustomTabsFeature.COUNT
     })
     @Retention(RetentionPolicy.SOURCE)
@@ -151,13 +157,18 @@ public class CustomTabsFeatureUsage {
         int EXTRA_REDIRECT_SCHEME = 60;
         int EXTRA_HTTPS_REDIRECT_HOST = 61;
         int EXTRA_HTTPS_REDIRECT_PATH = 62;
+        int EXTRA_OPEN_IN_BROWSER_STATE = 63;
+        int EXTRA_LAUNCH_HANDLER = 64;
+        int EXTRA_FILE_HANDLERS = 65;
 
         /** Total count of entries. */
-        int COUNT = 63;
+        int COUNT = 66;
     }
 
+    // LINT.ThenChange(/tools/metrics/histograms/metadata/custom_tabs/enums.xml:CustomTabsFeatureUsed)
+
     /** Tracks whether we have written each enum or not. */
-    private BitSet mUsed = new BitSet(CustomTabsFeature.COUNT);
+    private final BitSet mUsed = new BitSet(CustomTabsFeature.COUNT);
 
     /** Logs the usage of the given feature, if enabled. */
     void log(@CustomTabsFeature int feature) {

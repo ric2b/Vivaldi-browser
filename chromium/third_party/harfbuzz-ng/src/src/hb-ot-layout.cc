@@ -131,13 +131,15 @@ hb_ot_layout_kern (const hb_ot_shape_plan_t *plan,
 		   hb_font_t *font,
 		   hb_buffer_t  *buffer)
 {
-  hb_blob_t *blob = font->face->table.kern.get_blob ();
-  const auto& kern = *font->face->table.kern;
+  auto &accel = *font->face->table.kern;
+  hb_blob_t *blob = accel.get_blob ();
 
   AAT::hb_aat_apply_context_t c (plan, font, buffer, blob);
 
   if (!buffer->message (font, "start table kern")) return;
-  kern.apply (&c);
+  c.buffer_glyph_set = accel.scratch.create_buffer_glyph_set ();
+  accel.apply (&c);
+  accel.scratch.destroy_buffer_glyph_set (c.buffer_glyph_set);
   (void) buffer->message (font, "end table kern");
 }
 #endif
@@ -1923,9 +1925,10 @@ apply_forward (OT::hb_ot_apply_context_t *c,
   while (buffer->idx < buffer->len && buffer->successful)
   {
     bool applied = false;
-    if (accel.digest.may_have (buffer->cur().codepoint) &&
-	(buffer->cur().mask & c->lookup_mask) &&
-	c->check_glyph_property (&buffer->cur(), c->lookup_props))
+    auto &cur = buffer->cur();
+    if (accel.digest.may_have (cur.codepoint) &&
+	(cur.mask & c->lookup_mask) &&
+	c->check_glyph_property (&cur, c->lookup_props))
      {
        applied = accel.apply (c, subtable_count, use_cache);
      }
@@ -1951,9 +1954,10 @@ apply_backward (OT::hb_ot_apply_context_t *c,
   hb_buffer_t *buffer = c->buffer;
   do
   {
-    if (accel.digest.may_have (buffer->cur().codepoint) &&
-	(buffer->cur().mask & c->lookup_mask) &&
-	c->check_glyph_property (&buffer->cur(), c->lookup_props))
+    auto &cur = buffer->cur();
+    if (accel.digest.may_have (cur.codepoint) &&
+	(cur.mask & c->lookup_mask) &&
+	c->check_glyph_property (&cur, c->lookup_props))
       ret |= accel.apply (c, subtable_count, false);
 
     /* The reverse lookup doesn't "advance" cursor (for good reason). */

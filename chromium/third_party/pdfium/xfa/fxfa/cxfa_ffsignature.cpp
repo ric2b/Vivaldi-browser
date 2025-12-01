@@ -25,15 +25,16 @@ bool CXFA_FFSignature::LoadWidget() {
 void CXFA_FFSignature::RenderWidget(CFGAS_GEGraphics* pGS,
                                     const CFX_Matrix& matrix,
                                     HighlightOption highlight) {
-  if (!HasVisibleStatus())
+  if (!HasVisibleStatus()) {
     return;
+  }
 
   CFX_Matrix mtRotate = GetRotateMatrix();
   mtRotate.Concat(matrix);
 
   CXFA_FFWidget::RenderWidget(pGS, mtRotate, highlight);
 
-  DrawBorder(pGS, m_pNode->GetUIBorder(), m_UIRect, mtRotate);
+  DrawBorder(pGS, node_->GetUIBorder(), uirect_, mtRotate);
   RenderCaption(pGS, mtRotate);
   DrawHighlight(pGS, mtRotate, highlight, kSquareShape);
 }
@@ -105,12 +106,15 @@ bool CXFA_FFSignature::OnChar(uint32_t nChar, Mask<XFA_FWL_KeyFlag> dwFlags) {
 
 FWL_WidgetHit CXFA_FFSignature::HitTest(const CFX_PointF& point) {
   auto* pNorm = GetNormalWidget();
-  if (pNorm && pNorm->HitTest(FWLToClient(point)) != FWL_WidgetHit::Unknown)
+  if (pNorm && pNorm->HitTest(FWLToClient(point)) != FWL_WidgetHit::Unknown) {
     return FWL_WidgetHit::Client;
-  if (!GetRectWithoutRotate().Contains(point))
+  }
+  if (!GetRectWithoutRotate().Contains(point)) {
     return FWL_WidgetHit::Unknown;
-  if (m_CaptionRect.Contains(point))
+  }
+  if (caption_rect_.Contains(point)) {
     return FWL_WidgetHit::Titlebar;
+  }
   return FWL_WidgetHit::Client;
 }
 

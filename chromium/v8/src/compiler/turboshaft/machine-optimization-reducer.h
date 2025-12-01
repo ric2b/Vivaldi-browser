@@ -1342,14 +1342,48 @@ class MachineOptimizationReducer : public Next {
       }
     }
 
-    // UntagSmi(x) + UntagSmi(x)  =>  (x, false)
-    // (where UntagSmi(x) = x >> 1   with a ShiftOutZeros shift)
     if (kind == Kind::kSignedAdd && left == right) {
       uint16_t amount;
+      // UntagSmi(x) + UntagSmi(x)  =>  (x, false)
+      // (where UntagSmi(x) = x >> 1   with a ShiftOutZeros shift)
       if (V<Word32> x; matcher_.MatchConstantShiftRightArithmeticShiftOutZeros(
                            left, &x, WordRepresentation::Word32(), &amount) &&
                        amount == 1) {
         return __ Tuple(x, __ Word32Constant(0));
+      }
+
+      // t1 = UntagSmi(x)
+      // t2 = t1 bitwise_op k
+      // t2 + t2
+      //   => x bitwise_op (k << 1)
+      // (where UntagSmi(x) = x >> 1  with a ShiftOutZeros shift)
+      WordBinopOp::Kind bitwise_op_kind;
+      if (V<Word32> t1, tk; matcher_.MatchWordBinop<Word32>(
+              left, &t1, &tk, &bitwise_op_kind, WordRepresentation::Word32())) {
+        if (V<Word32> x;
+            matcher_.MatchConstantShiftRightArithmeticShiftOutZeros(
+                t1, &x, WordRepresentation::Word32(), &amount) &&
+            amount == 1) {
+          if (int32_t k; matcher_.MatchIntegralWord32Constant(tk, &k)) {
+            switch (bitwise_op_kind) {
+              case WordBinopOp::Kind::kBitwiseAnd:
+              case WordBinopOp::Kind::kBitwiseOr:
+              case WordBinopOp::Kind::kBitwiseXor:
+                // If the topmost two bits are not identical then retagging
+                // the smi could cause an overflow, so we do not optimize that
+                // here.
+                if (((k >> 31) & 0b1) == ((k >> 30) & 0b1)) {
+                  return __ Tuple(__ WordBinop(x, __ Word32Constant(k << 1),
+                                               bitwise_op_kind,
+                                               WordRepresentation::Word32()),
+                                  __ Word32Constant(0));
+                }
+                break;
+              default:
+                break;
+            }
+          }
+        }
       }
     }
 
@@ -2068,12 +2102,11 @@ class MachineOptimizationReducer : public Next {
         break;
     }
 
-    auto MatchUnaryShuffle =
+    auto MatchShuffle =
         [this](V<Simd128> maybe_shuffle) -> const Simd128ShuffleOp* {
       if (const Simd128ShuffleOp* shuffle =
               matcher_.TryCast<Simd128ShuffleOp>(maybe_shuffle)) {
-        if (shuffle->kind == Simd128ShuffleOp::Kind::kI8x16 &&
-            shuffle->left() == shuffle->right()) {
+        if (shuffle->kind == Simd128ShuffleOp::Kind::kI8x16) {
           return shuffle;
         }
       }
@@ -2117,11 +2150,11 @@ class MachineOptimizationReducer : public Next {
       V<Simd128> operands[2] = {binop->left(), binop->right()};
       for (unsigned i = 0; i < 2; ++i) {
         V<Simd128> operand = operands[i];
-        if (const Simd128ShuffleOp* shuffle = MatchUnaryShuffle(operand)) {
+        if (const Simd128ShuffleOp* shuffle = MatchShuffle(operand)) {
           // Ensure that the input to the shuffle is also the other input to
-          // current binop.
+          // current binop. We take the left input because all of the shuffle
+          // pattern matching is specified, and will test, for it.
           V<Simd128> shuffle_in = shuffle->left();
-          DCHECK_EQ(shuffle_in, shuffle->right());
           V<Simd128> other_operand = operands[i ^ 1];
           if (shuffle_in != other_operand) {
             break;

@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/354829279): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
+
+#include <array>
 
 #ifndef UI_GFX_GEOMETRY_MATRIX3_F_H_
 #define UI_GFX_GEOMETRY_MATRIX3_F_H_
@@ -104,7 +102,7 @@ class COMPONENT_EXPORT(GEOMETRY) Matrix3F {
     return i * 3 + j;
   }
 
-  float data_[9];
+  std::array<float, 9> data_;
 };
 
 inline bool operator==(const Matrix3F& lhs, const Matrix3F& rhs) {

@@ -33,6 +33,12 @@ extern "C" {
 #endif
 
 /*
+ * Backward compatibility
+ */
+#define xmlBufferAllocScheme XML_BUFFER_ALLOC_EXACT
+#define xmlDefaultBufferSize 4096
+
+/*
  * Some of the basic types pointer to structures:
  */
 /* xmlIO.h */
@@ -58,13 +64,6 @@ typedef xmlSAXHandler *xmlSAXHandlerPtr;
 /* entities.h */
 typedef struct _xmlEntity xmlEntity;
 typedef xmlEntity *xmlEntityPtr;
-
-/**
- * BASE_BUFFER_SIZE:
- *
- * default buffer size 4000.
- */
-#define BASE_BUFFER_SIZE 4096
 
 /**
  * LIBXML_NAMESPACE_DICT:
@@ -455,6 +454,7 @@ struct _xmlAttr {
     xmlAttributeType atype;     /* the attribute type if validating */
     void            *psvi;	/* for type/PSVI information */
     struct _xmlID   *id;        /* the ID struct */
+    unsigned int     extra;     /* extra data for XPath/XSLT */
 };
 
 /**
@@ -515,7 +515,7 @@ struct _xmlNode {
     xmlNs           *nsDef;     /* namespace definitions on this node */
     void            *psvi;	/* for type/PSVI information */
     unsigned short   line;	/* line number */
-    unsigned short   extra;	/* extra data for XPath/XSLT */
+    unsigned int     extra;	/* extra data for XPath/XSLT */
 };
 
 /**
@@ -593,6 +593,7 @@ struct _xmlDoc {
 				   document */
     int             properties;	/* set of xmlDocProperties for this document
 				   set at the end of parsing */
+    unsigned int    extra;      /* extra data for XPath/XSLT */
 };
 
 
@@ -678,34 +679,17 @@ typedef void (*xmlDeregisterNodeFunc) (xmlNodePtr node);
  * Variables.
  */
 
-XML_DEPRECATED
-XMLPUBVAR const xmlBufferAllocationScheme xmlBufferAllocScheme;
-XML_DEPRECATED
-XMLPUBVAR const int xmlDefaultBufferSize;
-
-#ifdef LIBXML_THREAD_ENABLED
-/* backward compatibility */
-XML_DEPRECATED
-XMLPUBFUN const xmlBufferAllocationScheme *__xmlBufferAllocScheme(void);
-XML_DEPRECATED
-XMLPUBFUN const int *__xmlDefaultBufferSize(void);
-#endif
-
 /** DOC_DISABLE */
-#define XML_GLOBALS_TREE \
-  XML_OP(xmlRegisterNodeDefaultValue, xmlRegisterNodeFunc, XML_DEPRECATED) \
-  XML_OP(xmlDeregisterNodeDefaultValue, xmlDeregisterNodeFunc, \
-         XML_DEPRECATED)
+XML_DEPRECATED
+XMLPUBFUN xmlRegisterNodeFunc *__xmlRegisterNodeDefaultValue(void);
+XML_DEPRECATED
+XMLPUBFUN xmlDeregisterNodeFunc *__xmlDeregisterNodeDefaultValue(void);
 
-#define XML_OP XML_DECLARE_GLOBAL
-XML_GLOBALS_TREE
-#undef XML_OP
-
-#if defined(LIBXML_THREAD_ENABLED) && !defined(XML_GLOBALS_NO_REDEFINITION)
+#ifndef XML_GLOBALS_NO_REDEFINITION
   #define xmlRegisterNodeDefaultValue \
-    XML_GLOBAL_MACRO(xmlRegisterNodeDefaultValue)
+    (*__xmlRegisterNodeDefaultValue())
   #define xmlDeregisterNodeDefaultValue \
-    XML_GLOBAL_MACRO(xmlDeregisterNodeDefaultValue)
+    (*__xmlDeregisterNodeDefaultValue())
 #endif
 /** DOC_ENABLE */
 
@@ -1334,11 +1318,6 @@ XML_DEPRECATED
 XMLPUBFUN xmlDeregisterNodeFunc
             xmlThrDefDeregisterNodeDefault(xmlDeregisterNodeFunc func);
 
-XML_DEPRECATED XMLPUBFUN xmlBufferAllocationScheme
-            xmlThrDefBufferAllocScheme  (xmlBufferAllocationScheme v);
-XML_DEPRECATED XMLPUBFUN int
-            xmlThrDefDefaultBufferSize  (int v);
-
 #ifdef __cplusplus
 }
 #endif
@@ -1346,4 +1325,3 @@ XML_DEPRECATED XMLPUBFUN int
 #endif /* __XML_TREE_H__ */
 
 #endif /* XML_TREE_INTERNALS */
-

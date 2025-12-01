@@ -78,7 +78,9 @@ MailClientDatabase::MailClientDatabase()
            // Set the cache size. The page size, plus a little extra, times this
            // value, tells us how much memory the cache will use maximum.
            // 1000 * 4kB = 4MB
-           .set_cache_size(1000),
+           .set_cache_size(1000)
+           // Prime the cache.
+           .set_preload(true),
           "mail") {}
 
 MailClientDatabase::~MailClientDatabase() {}
@@ -98,9 +100,6 @@ sql::InitStatus MailClientDatabase::Init(
   // Exclude the mail db file from backups.
   base::apple::SetBackupExclusion(mail_client_name);
 #endif
-
-  // Prime the cache.
-  db_.Preload();
 
   if (!meta_table_.Init(&db_, GetCurrentVersion(), kCompatibleVersionNumber))
     return sql::INIT_FAILURE;

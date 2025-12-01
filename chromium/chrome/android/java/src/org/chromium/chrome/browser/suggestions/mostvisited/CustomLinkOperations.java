@@ -8,7 +8,7 @@ import org.chromium.build.annotations.NullMarked;
 import org.chromium.build.annotations.Nullable;
 import org.chromium.url.GURL;
 
-/** Methods to change and query custom links that exist alongside Most Visited links. */
+/** Methods to access Custom Links, which may exist alongside Most Visited links. */
 @NullMarked
 public interface CustomLinkOperations {
     /**
@@ -17,9 +17,10 @@ public interface CustomLinkOperations {
      *
      * @param name The name of the added tile.
      * @param url The URL of the added tile.
+     * @param pos The position to add tile, with null indicating add to end.
      * @return Whether the operation successfully ran.
      */
-    boolean addCustomLink(String name, @Nullable GURL url);
+    boolean addCustomLink(String name, @Nullable GURL url, @Nullable Integer pos);
 
     /**
      * Assigns a link identified by {@param keyUrl} to a custom link specified with {@param name}
@@ -42,10 +43,20 @@ public interface CustomLinkOperations {
     boolean deleteCustomLink(GURL keyUrl);
 
     /**
-     * Queries the existence of a custom link identified by {@param keyUrl}.
+     * Tests the existence of a custom link identified by {@param keyUrl}.
      *
-     * @param keyUrl The URL of an existing custom tile to query.
+     * @param keyUrl The URL to search.
      * @return Whether a custom link identified by {@param keyUrl} exists.
      */
-    boolean queryCustomLink(GURL keyUrl);
+    boolean hasCustomLink(GURL keyUrl);
+
+    /**
+     * Moves a custom link identified by {@param keyUrl} to a new position, and shift all other
+     * custom links between the old position and the new towards the former.
+     *
+     * @param keyUrl The URL of the custom link to move.
+     * @param newPos The new position for the custom link to move to.
+     * @return Whether the operation successfully ran.
+     */
+    boolean reorderCustomLink(GURL keyUrl, int newPos);
 }

@@ -86,7 +86,7 @@ void CSSPathInterpolationType::Composite(
     const InterpolationValue& value,
     double interpolation_fraction) const {
   PathInterpolationFunctions::Composite(underlying_value_owner,
-                                        underlying_fraction, *this, value);
+                                        underlying_fraction, this, value);
 }
 
 InterpolationValue CSSPathInterpolationType::MaybeConvertNeutral(
@@ -138,7 +138,7 @@ InterpolationValue CSSPathInterpolationType::MaybeConvertInherit(
 
 InterpolationValue CSSPathInterpolationType::MaybeConvertValue(
     const CSSValue& value,
-    const StyleResolverState*,
+    const StyleResolverState&,
     ConversionCheckers&) const {
   const cssvalue::CSSPathValue* path_value = nullptr;
   if (const auto* list = DynamicTo<CSSValueList>(value)) {

@@ -64,8 +64,8 @@ describe('ConsoleInsight', function() {
     const menu = await waitFor('.soft-context-menu', undefined, undefined, 'pierce');
     const items = await menu.$$('.soft-context-menu-item');
     const texts = await Promise.all(items.map(item => item.evaluate(e => (e as HTMLElement).innerText)));
-    assert(
-        !texts.some(item => item.toLowerCase().startsWith(EXPLAIN_LABEL.toLowerCase())),
+    assert.isNotOk(
+        texts.some(item => item.toLowerCase().startsWith(EXPLAIN_LABEL.toLowerCase())),
         'Context menu shows the explain option');
     await waitFor('.console-message', undefined, undefined, 'pierce');
     await waitForNone('.hover-button');
@@ -105,7 +105,7 @@ describe('ConsoleInsight', function() {
     await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
-  it('shows the hover button even if it is restriced by geography', async () => {
+  it('does not show the hover button if it is restriced by geography', async () => {
     const {target} = getBrowserAndPages();
     await setupMocks({blockedByGeo: true, enabled: true}, {enabled: true});
     await click(CONSOLE_TAB_SELECTOR);
@@ -113,7 +113,7 @@ describe('ConsoleInsight', function() {
       console.error(new Error('Unexpected error'));
     });
     await waitFor('.console-message', undefined, undefined, 'pierce');
-    await waitFor('.hover-button', undefined, undefined, 'pierce');
+    await waitForNone('.hover-button', undefined, undefined, 'pierce');
   });
 
   it('gets console message texts', async () => {

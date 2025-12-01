@@ -8275,6 +8275,375 @@ void safe_VkPhysicalDeviceCudaKernelLaunchPropertiesNV::initialize(
 }
 #endif  // VK_ENABLE_BETA_EXTENSIONS
 
+safe_VkPhysicalDeviceTileShadingFeaturesQCOM::safe_VkPhysicalDeviceTileShadingFeaturesQCOM(
+    const VkPhysicalDeviceTileShadingFeaturesQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType),
+      tileShading(in_struct->tileShading),
+      tileShadingFragmentStage(in_struct->tileShadingFragmentStage),
+      tileShadingColorAttachments(in_struct->tileShadingColorAttachments),
+      tileShadingDepthAttachments(in_struct->tileShadingDepthAttachments),
+      tileShadingStencilAttachments(in_struct->tileShadingStencilAttachments),
+      tileShadingInputAttachments(in_struct->tileShadingInputAttachments),
+      tileShadingSampledAttachments(in_struct->tileShadingSampledAttachments),
+      tileShadingPerTileDraw(in_struct->tileShadingPerTileDraw),
+      tileShadingPerTileDispatch(in_struct->tileShadingPerTileDispatch),
+      tileShadingDispatchTile(in_struct->tileShadingDispatchTile),
+      tileShadingApron(in_struct->tileShadingApron),
+      tileShadingAnisotropicApron(in_struct->tileShadingAnisotropicApron),
+      tileShadingAtomicOps(in_struct->tileShadingAtomicOps),
+      tileShadingImageProcessing(in_struct->tileShadingImageProcessing) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceTileShadingFeaturesQCOM::safe_VkPhysicalDeviceTileShadingFeaturesQCOM()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_SHADING_FEATURES_QCOM),
+      pNext(nullptr),
+      tileShading(),
+      tileShadingFragmentStage(),
+      tileShadingColorAttachments(),
+      tileShadingDepthAttachments(),
+      tileShadingStencilAttachments(),
+      tileShadingInputAttachments(),
+      tileShadingSampledAttachments(),
+      tileShadingPerTileDraw(),
+      tileShadingPerTileDispatch(),
+      tileShadingDispatchTile(),
+      tileShadingApron(),
+      tileShadingAnisotropicApron(),
+      tileShadingAtomicOps(),
+      tileShadingImageProcessing() {}
+
+safe_VkPhysicalDeviceTileShadingFeaturesQCOM::safe_VkPhysicalDeviceTileShadingFeaturesQCOM(
+    const safe_VkPhysicalDeviceTileShadingFeaturesQCOM& copy_src) {
+    sType = copy_src.sType;
+    tileShading = copy_src.tileShading;
+    tileShadingFragmentStage = copy_src.tileShadingFragmentStage;
+    tileShadingColorAttachments = copy_src.tileShadingColorAttachments;
+    tileShadingDepthAttachments = copy_src.tileShadingDepthAttachments;
+    tileShadingStencilAttachments = copy_src.tileShadingStencilAttachments;
+    tileShadingInputAttachments = copy_src.tileShadingInputAttachments;
+    tileShadingSampledAttachments = copy_src.tileShadingSampledAttachments;
+    tileShadingPerTileDraw = copy_src.tileShadingPerTileDraw;
+    tileShadingPerTileDispatch = copy_src.tileShadingPerTileDispatch;
+    tileShadingDispatchTile = copy_src.tileShadingDispatchTile;
+    tileShadingApron = copy_src.tileShadingApron;
+    tileShadingAnisotropicApron = copy_src.tileShadingAnisotropicApron;
+    tileShadingAtomicOps = copy_src.tileShadingAtomicOps;
+    tileShadingImageProcessing = copy_src.tileShadingImageProcessing;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceTileShadingFeaturesQCOM& safe_VkPhysicalDeviceTileShadingFeaturesQCOM::operator=(
+    const safe_VkPhysicalDeviceTileShadingFeaturesQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    tileShading = copy_src.tileShading;
+    tileShadingFragmentStage = copy_src.tileShadingFragmentStage;
+    tileShadingColorAttachments = copy_src.tileShadingColorAttachments;
+    tileShadingDepthAttachments = copy_src.tileShadingDepthAttachments;
+    tileShadingStencilAttachments = copy_src.tileShadingStencilAttachments;
+    tileShadingInputAttachments = copy_src.tileShadingInputAttachments;
+    tileShadingSampledAttachments = copy_src.tileShadingSampledAttachments;
+    tileShadingPerTileDraw = copy_src.tileShadingPerTileDraw;
+    tileShadingPerTileDispatch = copy_src.tileShadingPerTileDispatch;
+    tileShadingDispatchTile = copy_src.tileShadingDispatchTile;
+    tileShadingApron = copy_src.tileShadingApron;
+    tileShadingAnisotropicApron = copy_src.tileShadingAnisotropicApron;
+    tileShadingAtomicOps = copy_src.tileShadingAtomicOps;
+    tileShadingImageProcessing = copy_src.tileShadingImageProcessing;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceTileShadingFeaturesQCOM::~safe_VkPhysicalDeviceTileShadingFeaturesQCOM() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceTileShadingFeaturesQCOM::initialize(const VkPhysicalDeviceTileShadingFeaturesQCOM* in_struct,
+                                                              [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    tileShading = in_struct->tileShading;
+    tileShadingFragmentStage = in_struct->tileShadingFragmentStage;
+    tileShadingColorAttachments = in_struct->tileShadingColorAttachments;
+    tileShadingDepthAttachments = in_struct->tileShadingDepthAttachments;
+    tileShadingStencilAttachments = in_struct->tileShadingStencilAttachments;
+    tileShadingInputAttachments = in_struct->tileShadingInputAttachments;
+    tileShadingSampledAttachments = in_struct->tileShadingSampledAttachments;
+    tileShadingPerTileDraw = in_struct->tileShadingPerTileDraw;
+    tileShadingPerTileDispatch = in_struct->tileShadingPerTileDispatch;
+    tileShadingDispatchTile = in_struct->tileShadingDispatchTile;
+    tileShadingApron = in_struct->tileShadingApron;
+    tileShadingAnisotropicApron = in_struct->tileShadingAnisotropicApron;
+    tileShadingAtomicOps = in_struct->tileShadingAtomicOps;
+    tileShadingImageProcessing = in_struct->tileShadingImageProcessing;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceTileShadingFeaturesQCOM::initialize(const safe_VkPhysicalDeviceTileShadingFeaturesQCOM* copy_src,
+                                                              [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    tileShading = copy_src->tileShading;
+    tileShadingFragmentStage = copy_src->tileShadingFragmentStage;
+    tileShadingColorAttachments = copy_src->tileShadingColorAttachments;
+    tileShadingDepthAttachments = copy_src->tileShadingDepthAttachments;
+    tileShadingStencilAttachments = copy_src->tileShadingStencilAttachments;
+    tileShadingInputAttachments = copy_src->tileShadingInputAttachments;
+    tileShadingSampledAttachments = copy_src->tileShadingSampledAttachments;
+    tileShadingPerTileDraw = copy_src->tileShadingPerTileDraw;
+    tileShadingPerTileDispatch = copy_src->tileShadingPerTileDispatch;
+    tileShadingDispatchTile = copy_src->tileShadingDispatchTile;
+    tileShadingApron = copy_src->tileShadingApron;
+    tileShadingAnisotropicApron = copy_src->tileShadingAnisotropicApron;
+    tileShadingAtomicOps = copy_src->tileShadingAtomicOps;
+    tileShadingImageProcessing = copy_src->tileShadingImageProcessing;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceTileShadingPropertiesQCOM::safe_VkPhysicalDeviceTileShadingPropertiesQCOM(
+    const VkPhysicalDeviceTileShadingPropertiesQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType),
+      maxApronSize(in_struct->maxApronSize),
+      preferNonCoherent(in_struct->preferNonCoherent),
+      tileGranularity(in_struct->tileGranularity),
+      maxTileShadingRate(in_struct->maxTileShadingRate) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceTileShadingPropertiesQCOM::safe_VkPhysicalDeviceTileShadingPropertiesQCOM()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_SHADING_PROPERTIES_QCOM),
+      pNext(nullptr),
+      maxApronSize(),
+      preferNonCoherent(),
+      tileGranularity(),
+      maxTileShadingRate() {}
+
+safe_VkPhysicalDeviceTileShadingPropertiesQCOM::safe_VkPhysicalDeviceTileShadingPropertiesQCOM(
+    const safe_VkPhysicalDeviceTileShadingPropertiesQCOM& copy_src) {
+    sType = copy_src.sType;
+    maxApronSize = copy_src.maxApronSize;
+    preferNonCoherent = copy_src.preferNonCoherent;
+    tileGranularity = copy_src.tileGranularity;
+    maxTileShadingRate = copy_src.maxTileShadingRate;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceTileShadingPropertiesQCOM& safe_VkPhysicalDeviceTileShadingPropertiesQCOM::operator=(
+    const safe_VkPhysicalDeviceTileShadingPropertiesQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    maxApronSize = copy_src.maxApronSize;
+    preferNonCoherent = copy_src.preferNonCoherent;
+    tileGranularity = copy_src.tileGranularity;
+    maxTileShadingRate = copy_src.maxTileShadingRate;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceTileShadingPropertiesQCOM::~safe_VkPhysicalDeviceTileShadingPropertiesQCOM() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceTileShadingPropertiesQCOM::initialize(const VkPhysicalDeviceTileShadingPropertiesQCOM* in_struct,
+                                                                [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    maxApronSize = in_struct->maxApronSize;
+    preferNonCoherent = in_struct->preferNonCoherent;
+    tileGranularity = in_struct->tileGranularity;
+    maxTileShadingRate = in_struct->maxTileShadingRate;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceTileShadingPropertiesQCOM::initialize(const safe_VkPhysicalDeviceTileShadingPropertiesQCOM* copy_src,
+                                                                [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    maxApronSize = copy_src->maxApronSize;
+    preferNonCoherent = copy_src->preferNonCoherent;
+    tileGranularity = copy_src->tileGranularity;
+    maxTileShadingRate = copy_src->maxTileShadingRate;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkRenderPassTileShadingCreateInfoQCOM::safe_VkRenderPassTileShadingCreateInfoQCOM(
+    const VkRenderPassTileShadingCreateInfoQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), flags(in_struct->flags), tileApronSize(in_struct->tileApronSize) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkRenderPassTileShadingCreateInfoQCOM::safe_VkRenderPassTileShadingCreateInfoQCOM()
+    : sType(VK_STRUCTURE_TYPE_RENDER_PASS_TILE_SHADING_CREATE_INFO_QCOM), pNext(nullptr), flags(), tileApronSize() {}
+
+safe_VkRenderPassTileShadingCreateInfoQCOM::safe_VkRenderPassTileShadingCreateInfoQCOM(
+    const safe_VkRenderPassTileShadingCreateInfoQCOM& copy_src) {
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    tileApronSize = copy_src.tileApronSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkRenderPassTileShadingCreateInfoQCOM& safe_VkRenderPassTileShadingCreateInfoQCOM::operator=(
+    const safe_VkRenderPassTileShadingCreateInfoQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    flags = copy_src.flags;
+    tileApronSize = copy_src.tileApronSize;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkRenderPassTileShadingCreateInfoQCOM::~safe_VkRenderPassTileShadingCreateInfoQCOM() { FreePnextChain(pNext); }
+
+void safe_VkRenderPassTileShadingCreateInfoQCOM::initialize(const VkRenderPassTileShadingCreateInfoQCOM* in_struct,
+                                                            [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    flags = in_struct->flags;
+    tileApronSize = in_struct->tileApronSize;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkRenderPassTileShadingCreateInfoQCOM::initialize(const safe_VkRenderPassTileShadingCreateInfoQCOM* copy_src,
+                                                            [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    flags = copy_src->flags;
+    tileApronSize = copy_src->tileApronSize;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPerTileBeginInfoQCOM::safe_VkPerTileBeginInfoQCOM(const VkPerTileBeginInfoQCOM* in_struct,
+                                                         [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPerTileBeginInfoQCOM::safe_VkPerTileBeginInfoQCOM() : sType(VK_STRUCTURE_TYPE_PER_TILE_BEGIN_INFO_QCOM), pNext(nullptr) {}
+
+safe_VkPerTileBeginInfoQCOM::safe_VkPerTileBeginInfoQCOM(const safe_VkPerTileBeginInfoQCOM& copy_src) {
+    sType = copy_src.sType;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPerTileBeginInfoQCOM& safe_VkPerTileBeginInfoQCOM::operator=(const safe_VkPerTileBeginInfoQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPerTileBeginInfoQCOM::~safe_VkPerTileBeginInfoQCOM() { FreePnextChain(pNext); }
+
+void safe_VkPerTileBeginInfoQCOM::initialize(const VkPerTileBeginInfoQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPerTileBeginInfoQCOM::initialize(const safe_VkPerTileBeginInfoQCOM* copy_src,
+                                             [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPerTileEndInfoQCOM::safe_VkPerTileEndInfoQCOM(const VkPerTileEndInfoQCOM* in_struct,
+                                                     [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPerTileEndInfoQCOM::safe_VkPerTileEndInfoQCOM() : sType(VK_STRUCTURE_TYPE_PER_TILE_END_INFO_QCOM), pNext(nullptr) {}
+
+safe_VkPerTileEndInfoQCOM::safe_VkPerTileEndInfoQCOM(const safe_VkPerTileEndInfoQCOM& copy_src) {
+    sType = copy_src.sType;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPerTileEndInfoQCOM& safe_VkPerTileEndInfoQCOM::operator=(const safe_VkPerTileEndInfoQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPerTileEndInfoQCOM::~safe_VkPerTileEndInfoQCOM() { FreePnextChain(pNext); }
+
+void safe_VkPerTileEndInfoQCOM::initialize(const VkPerTileEndInfoQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPerTileEndInfoQCOM::initialize(const safe_VkPerTileEndInfoQCOM* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkDispatchTileInfoQCOM::safe_VkDispatchTileInfoQCOM(const VkDispatchTileInfoQCOM* in_struct,
+                                                         [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkDispatchTileInfoQCOM::safe_VkDispatchTileInfoQCOM() : sType(VK_STRUCTURE_TYPE_DISPATCH_TILE_INFO_QCOM), pNext(nullptr) {}
+
+safe_VkDispatchTileInfoQCOM::safe_VkDispatchTileInfoQCOM(const safe_VkDispatchTileInfoQCOM& copy_src) {
+    sType = copy_src.sType;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkDispatchTileInfoQCOM& safe_VkDispatchTileInfoQCOM::operator=(const safe_VkDispatchTileInfoQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkDispatchTileInfoQCOM::~safe_VkDispatchTileInfoQCOM() { FreePnextChain(pNext); }
+
+void safe_VkDispatchTileInfoQCOM::initialize(const VkDispatchTileInfoQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkDispatchTileInfoQCOM::initialize(const safe_VkDispatchTileInfoQCOM* copy_src,
+                                             [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkQueryLowLatencySupportNV::safe_VkQueryLowLatencySupportNV(const VkQueryLowLatencySupportNV* in_struct,
                                                                  [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
     : sType(in_struct->sType), pQueriedLowLatencyData(in_struct->pQueriedLowLatencyData) {
@@ -15579,6 +15948,253 @@ void safe_VkPhysicalDeviceDescriptorPoolOverallocationFeaturesNV::initialize(
     pNext = SafePnextCopy(copy_src->pNext);
 }
 
+safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM(
+    const VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), tileMemoryHeap(in_struct->tileMemoryHeap) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_MEMORY_HEAP_FEATURES_QCOM), pNext(nullptr), tileMemoryHeap() {}
+
+safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM(
+    const safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM& copy_src) {
+    sType = copy_src.sType;
+    tileMemoryHeap = copy_src.tileMemoryHeap;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM& safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::operator=(
+    const safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    tileMemoryHeap = copy_src.tileMemoryHeap;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::~safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::initialize(const VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* in_struct,
+                                                                 [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    tileMemoryHeap = in_struct->tileMemoryHeap;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM::initialize(const safe_VkPhysicalDeviceTileMemoryHeapFeaturesQCOM* copy_src,
+                                                                 [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    tileMemoryHeap = copy_src->tileMemoryHeap;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM(
+    const VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType),
+      queueSubmitBoundary(in_struct->queueSubmitBoundary),
+      tileBufferTransfers(in_struct->tileBufferTransfers) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TILE_MEMORY_HEAP_PROPERTIES_QCOM),
+      pNext(nullptr),
+      queueSubmitBoundary(),
+      tileBufferTransfers() {}
+
+safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM(
+    const safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM& copy_src) {
+    sType = copy_src.sType;
+    queueSubmitBoundary = copy_src.queueSubmitBoundary;
+    tileBufferTransfers = copy_src.tileBufferTransfers;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM& safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::operator=(
+    const safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    queueSubmitBoundary = copy_src.queueSubmitBoundary;
+    tileBufferTransfers = copy_src.tileBufferTransfers;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::~safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM() { FreePnextChain(pNext); }
+
+void safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::initialize(const VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* in_struct,
+                                                                   [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    queueSubmitBoundary = in_struct->queueSubmitBoundary;
+    tileBufferTransfers = in_struct->tileBufferTransfers;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM::initialize(
+    const safe_VkPhysicalDeviceTileMemoryHeapPropertiesQCOM* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    queueSubmitBoundary = copy_src->queueSubmitBoundary;
+    tileBufferTransfers = copy_src->tileBufferTransfers;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkTileMemoryRequirementsQCOM::safe_VkTileMemoryRequirementsQCOM(const VkTileMemoryRequirementsQCOM* in_struct,
+                                                                     [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), size(in_struct->size), alignment(in_struct->alignment) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkTileMemoryRequirementsQCOM::safe_VkTileMemoryRequirementsQCOM()
+    : sType(VK_STRUCTURE_TYPE_TILE_MEMORY_REQUIREMENTS_QCOM), pNext(nullptr), size(), alignment() {}
+
+safe_VkTileMemoryRequirementsQCOM::safe_VkTileMemoryRequirementsQCOM(const safe_VkTileMemoryRequirementsQCOM& copy_src) {
+    sType = copy_src.sType;
+    size = copy_src.size;
+    alignment = copy_src.alignment;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkTileMemoryRequirementsQCOM& safe_VkTileMemoryRequirementsQCOM::operator=(const safe_VkTileMemoryRequirementsQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    size = copy_src.size;
+    alignment = copy_src.alignment;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkTileMemoryRequirementsQCOM::~safe_VkTileMemoryRequirementsQCOM() { FreePnextChain(pNext); }
+
+void safe_VkTileMemoryRequirementsQCOM::initialize(const VkTileMemoryRequirementsQCOM* in_struct,
+                                                   [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    size = in_struct->size;
+    alignment = in_struct->alignment;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkTileMemoryRequirementsQCOM::initialize(const safe_VkTileMemoryRequirementsQCOM* copy_src,
+                                                   [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    size = copy_src->size;
+    alignment = copy_src->alignment;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkTileMemoryBindInfoQCOM::safe_VkTileMemoryBindInfoQCOM(const VkTileMemoryBindInfoQCOM* in_struct,
+                                                             [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), memory(in_struct->memory) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkTileMemoryBindInfoQCOM::safe_VkTileMemoryBindInfoQCOM()
+    : sType(VK_STRUCTURE_TYPE_TILE_MEMORY_BIND_INFO_QCOM), pNext(nullptr), memory() {}
+
+safe_VkTileMemoryBindInfoQCOM::safe_VkTileMemoryBindInfoQCOM(const safe_VkTileMemoryBindInfoQCOM& copy_src) {
+    sType = copy_src.sType;
+    memory = copy_src.memory;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkTileMemoryBindInfoQCOM& safe_VkTileMemoryBindInfoQCOM::operator=(const safe_VkTileMemoryBindInfoQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    memory = copy_src.memory;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkTileMemoryBindInfoQCOM::~safe_VkTileMemoryBindInfoQCOM() { FreePnextChain(pNext); }
+
+void safe_VkTileMemoryBindInfoQCOM::initialize(const VkTileMemoryBindInfoQCOM* in_struct,
+                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    memory = in_struct->memory;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkTileMemoryBindInfoQCOM::initialize(const safe_VkTileMemoryBindInfoQCOM* copy_src,
+                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    memory = copy_src->memory;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkTileMemorySizeInfoQCOM::safe_VkTileMemorySizeInfoQCOM(const VkTileMemorySizeInfoQCOM* in_struct,
+                                                             [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), size(in_struct->size) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkTileMemorySizeInfoQCOM::safe_VkTileMemorySizeInfoQCOM()
+    : sType(VK_STRUCTURE_TYPE_TILE_MEMORY_SIZE_INFO_QCOM), pNext(nullptr), size() {}
+
+safe_VkTileMemorySizeInfoQCOM::safe_VkTileMemorySizeInfoQCOM(const safe_VkTileMemorySizeInfoQCOM& copy_src) {
+    sType = copy_src.sType;
+    size = copy_src.size;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkTileMemorySizeInfoQCOM& safe_VkTileMemorySizeInfoQCOM::operator=(const safe_VkTileMemorySizeInfoQCOM& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    size = copy_src.size;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkTileMemorySizeInfoQCOM::~safe_VkTileMemorySizeInfoQCOM() { FreePnextChain(pNext); }
+
+void safe_VkTileMemorySizeInfoQCOM::initialize(const VkTileMemorySizeInfoQCOM* in_struct,
+                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    size = in_struct->size;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkTileMemorySizeInfoQCOM::initialize(const safe_VkTileMemorySizeInfoQCOM* copy_src,
+                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    size = copy_src->size;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
 safe_VkDisplaySurfaceStereoCreateInfoNV::safe_VkDisplaySurfaceStereoCreateInfoNV(
     const VkDisplaySurfaceStereoCreateInfoNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
     : sType(in_struct->sType), stereoType(in_struct->stereoType) {
@@ -15720,6 +16336,207 @@ void safe_VkPhysicalDeviceRawAccessChainsFeaturesNV::initialize(const safe_VkPhy
                                                                 [[maybe_unused]] PNextCopyState* copy_state) {
     sType = copy_src->sType;
     shaderRawAccessChains = copy_src->shaderRawAccessChains;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkExternalComputeQueueDeviceCreateInfoNV::safe_VkExternalComputeQueueDeviceCreateInfoNV(
+    const VkExternalComputeQueueDeviceCreateInfoNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), reservedExternalQueues(in_struct->reservedExternalQueues) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkExternalComputeQueueDeviceCreateInfoNV::safe_VkExternalComputeQueueDeviceCreateInfoNV()
+    : sType(VK_STRUCTURE_TYPE_EXTERNAL_COMPUTE_QUEUE_DEVICE_CREATE_INFO_NV), pNext(nullptr), reservedExternalQueues() {}
+
+safe_VkExternalComputeQueueDeviceCreateInfoNV::safe_VkExternalComputeQueueDeviceCreateInfoNV(
+    const safe_VkExternalComputeQueueDeviceCreateInfoNV& copy_src) {
+    sType = copy_src.sType;
+    reservedExternalQueues = copy_src.reservedExternalQueues;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkExternalComputeQueueDeviceCreateInfoNV& safe_VkExternalComputeQueueDeviceCreateInfoNV::operator=(
+    const safe_VkExternalComputeQueueDeviceCreateInfoNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    reservedExternalQueues = copy_src.reservedExternalQueues;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkExternalComputeQueueDeviceCreateInfoNV::~safe_VkExternalComputeQueueDeviceCreateInfoNV() { FreePnextChain(pNext); }
+
+void safe_VkExternalComputeQueueDeviceCreateInfoNV::initialize(const VkExternalComputeQueueDeviceCreateInfoNV* in_struct,
+                                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    reservedExternalQueues = in_struct->reservedExternalQueues;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkExternalComputeQueueDeviceCreateInfoNV::initialize(const safe_VkExternalComputeQueueDeviceCreateInfoNV* copy_src,
+                                                               [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    reservedExternalQueues = copy_src->reservedExternalQueues;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkExternalComputeQueueCreateInfoNV::safe_VkExternalComputeQueueCreateInfoNV(
+    const VkExternalComputeQueueCreateInfoNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), preferredQueue(in_struct->preferredQueue) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkExternalComputeQueueCreateInfoNV::safe_VkExternalComputeQueueCreateInfoNV()
+    : sType(VK_STRUCTURE_TYPE_EXTERNAL_COMPUTE_QUEUE_CREATE_INFO_NV), pNext(nullptr), preferredQueue() {}
+
+safe_VkExternalComputeQueueCreateInfoNV::safe_VkExternalComputeQueueCreateInfoNV(
+    const safe_VkExternalComputeQueueCreateInfoNV& copy_src) {
+    sType = copy_src.sType;
+    preferredQueue = copy_src.preferredQueue;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkExternalComputeQueueCreateInfoNV& safe_VkExternalComputeQueueCreateInfoNV::operator=(
+    const safe_VkExternalComputeQueueCreateInfoNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    preferredQueue = copy_src.preferredQueue;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkExternalComputeQueueCreateInfoNV::~safe_VkExternalComputeQueueCreateInfoNV() { FreePnextChain(pNext); }
+
+void safe_VkExternalComputeQueueCreateInfoNV::initialize(const VkExternalComputeQueueCreateInfoNV* in_struct,
+                                                         [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    preferredQueue = in_struct->preferredQueue;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkExternalComputeQueueCreateInfoNV::initialize(const safe_VkExternalComputeQueueCreateInfoNV* copy_src,
+                                                         [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    preferredQueue = copy_src->preferredQueue;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkExternalComputeQueueDataParamsNV::safe_VkExternalComputeQueueDataParamsNV(
+    const VkExternalComputeQueueDataParamsNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), deviceIndex(in_struct->deviceIndex) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkExternalComputeQueueDataParamsNV::safe_VkExternalComputeQueueDataParamsNV()
+    : sType(VK_STRUCTURE_TYPE_EXTERNAL_COMPUTE_QUEUE_DATA_PARAMS_NV), pNext(nullptr), deviceIndex() {}
+
+safe_VkExternalComputeQueueDataParamsNV::safe_VkExternalComputeQueueDataParamsNV(
+    const safe_VkExternalComputeQueueDataParamsNV& copy_src) {
+    sType = copy_src.sType;
+    deviceIndex = copy_src.deviceIndex;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkExternalComputeQueueDataParamsNV& safe_VkExternalComputeQueueDataParamsNV::operator=(
+    const safe_VkExternalComputeQueueDataParamsNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    deviceIndex = copy_src.deviceIndex;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkExternalComputeQueueDataParamsNV::~safe_VkExternalComputeQueueDataParamsNV() { FreePnextChain(pNext); }
+
+void safe_VkExternalComputeQueueDataParamsNV::initialize(const VkExternalComputeQueueDataParamsNV* in_struct,
+                                                         [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    deviceIndex = in_struct->deviceIndex;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkExternalComputeQueueDataParamsNV::initialize(const safe_VkExternalComputeQueueDataParamsNV* copy_src,
+                                                         [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    deviceIndex = copy_src->deviceIndex;
+    pNext = SafePnextCopy(copy_src->pNext);
+}
+
+safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV(
+    const VkPhysicalDeviceExternalComputeQueuePropertiesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state, bool copy_pnext)
+    : sType(in_struct->sType), externalDataSize(in_struct->externalDataSize), maxExternalQueues(in_struct->maxExternalQueues) {
+    if (copy_pnext) {
+        pNext = SafePnextCopy(in_struct->pNext, copy_state);
+    }
+}
+
+safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV()
+    : sType(VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_COMPUTE_QUEUE_PROPERTIES_NV),
+      pNext(nullptr),
+      externalDataSize(),
+      maxExternalQueues() {}
+
+safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV(
+    const safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV& copy_src) {
+    sType = copy_src.sType;
+    externalDataSize = copy_src.externalDataSize;
+    maxExternalQueues = copy_src.maxExternalQueues;
+    pNext = SafePnextCopy(copy_src.pNext);
+}
+
+safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV& safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::operator=(
+    const safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV& copy_src) {
+    if (&copy_src == this) return *this;
+
+    FreePnextChain(pNext);
+
+    sType = copy_src.sType;
+    externalDataSize = copy_src.externalDataSize;
+    maxExternalQueues = copy_src.maxExternalQueues;
+    pNext = SafePnextCopy(copy_src.pNext);
+
+    return *this;
+}
+
+safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::~safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV() {
+    FreePnextChain(pNext);
+}
+
+void safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::initialize(
+    const VkPhysicalDeviceExternalComputeQueuePropertiesNV* in_struct, [[maybe_unused]] PNextCopyState* copy_state) {
+    FreePnextChain(pNext);
+    sType = in_struct->sType;
+    externalDataSize = in_struct->externalDataSize;
+    maxExternalQueues = in_struct->maxExternalQueues;
+    pNext = SafePnextCopy(in_struct->pNext, copy_state);
+}
+
+void safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV::initialize(
+    const safe_VkPhysicalDeviceExternalComputeQueuePropertiesNV* copy_src, [[maybe_unused]] PNextCopyState* copy_state) {
+    sType = copy_src->sType;
+    externalDataSize = copy_src->externalDataSize;
+    maxExternalQueues = copy_src->maxExternalQueues;
     pNext = SafePnextCopy(copy_src->pNext);
 }
 

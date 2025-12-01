@@ -132,9 +132,9 @@ struct Bindings {
 /// Configuration options used for generating SPIR-V.
 struct Options {
     struct RangeOffsets {
-        /// The offset of the min_depth push constant
+        /// The offset of the min_depth immediate data
         uint32_t min = 0;
-        /// The offset of the max_depth push constant
+        /// The offset of the max_depth immediate data
         uint32_t max = 0;
 
         /// Reflect the fields of this class so that it can be used by tint::ForeachField()
@@ -145,7 +145,7 @@ struct Options {
     std::string remapped_entry_point_name = {};
 
     /// The bindings
-    Bindings bindings;
+    Bindings bindings = {};
 
     // BindingPoints for textures that are paired with static samplers in the
     // BGL. These BindingPoints are the only ones that are allowed to map to
@@ -158,6 +158,9 @@ struct Options {
 
     /// Set to `true` to disable software robustness that prevents out-of-bounds accesses.
     bool disable_robustness = false;
+
+    /// Set to `true` to enable integer range analysis in robustness transform.
+    bool enable_integer_range_analysis = false;
 
     /// Set to `true` to skip robustness transform on textures.
     bool disable_image_robustness = false;
@@ -198,8 +201,14 @@ struct Options {
     /// Set to `true` if the Vulkan Memory Model should be used
     bool use_vulkan_memory_model = false;
 
+    /// Set to `true` if the clamp builtin should be scalarized for vector operations
+    bool scalarize_clamp_builtin = false;
+
+    /// Set to `true` if handles should be transformed by direct variable access.
+    bool dva_transform_handle = false;
+
     /// Offsets of the minDepth and maxDepth push constants.
-    std::optional<RangeOffsets> depth_range_offsets;
+    std::optional<RangeOffsets> depth_range_offsets = std::nullopt;
 
     /// Reflect the fields of this class so that it can be used by tint::ForeachField()
     TINT_REFLECT(Options,
@@ -208,6 +217,7 @@ struct Options {
                  statically_paired_texture_binding_points,
                  strip_all_names,
                  disable_robustness,
+                 enable_integer_range_analysis,
                  disable_image_robustness,
                  disable_runtime_sized_array_index_clamping,
                  disable_workgroup_init,
@@ -220,6 +230,8 @@ struct Options {
                  polyfill_pack_unpack_4x8_norm,
                  disable_polyfill_integer_div_mod,
                  use_vulkan_memory_model,
+                 scalarize_clamp_builtin,
+                 dva_transform_handle,
                  depth_range_offsets);
 };
 

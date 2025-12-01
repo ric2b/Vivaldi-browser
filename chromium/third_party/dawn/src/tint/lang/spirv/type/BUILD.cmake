@@ -41,11 +41,14 @@
 tint_add_target(tint_lang_spirv_type lib
   lang/spirv/type/explicit_layout_array.cc
   lang/spirv/type/explicit_layout_array.h
+  lang/spirv/type/image.cc
+  lang/spirv/type/image.h
   lang/spirv/type/sampled_image.cc
   lang/spirv/type/sampled_image.h
 )
 
 tint_target_add_dependencies(tint_lang_spirv_type lib
+  tint_api_common
   tint_lang_core
   tint_lang_core_constant
   tint_lang_core_ir
@@ -71,6 +74,7 @@ tint_target_add_external_dependencies(tint_lang_spirv_type lib
 ################################################################################
 tint_add_target(tint_lang_spirv_type_test test
   lang/spirv/type/explicit_layout_array_test.cc
+  lang/spirv/type/image_test.cc
   lang/spirv/type/sampled_image_test.cc
 )
 
@@ -82,16 +86,8 @@ tint_target_add_dependencies(tint_lang_spirv_type_test test
   tint_lang_core_type
   tint_lang_core_type_test
   tint_lang_spirv_type
-  tint_lang_wgsl
-  tint_lang_wgsl_ast
-  tint_lang_wgsl_common
-  tint_lang_wgsl_features
-  tint_lang_wgsl_program
-  tint_lang_wgsl_resolver
-  tint_lang_wgsl_sem
   tint_utils
   tint_utils_containers
-  tint_utils_diagnostic
   tint_utils_ice
   tint_utils_macros
   tint_utils_math

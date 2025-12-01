@@ -4,20 +4,24 @@
 
 #include "chrome/browser/apps/app_service/publishers/chrome_app_deprecation.h"
 
+#include "base/notreached.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/extensions/extension_browsertest.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/common/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/test/browser_test.h"
+#include "extensions/test/test_extension_dir.h"
 #include "ui/message_center/message_center.h"
 
 namespace apps {
 
 using extensions::Extension;
 
-class DeprecationControllerBrowserTest
+class ChromeAppDeprecationUserInstalledAppsBrowserTest
     : public extensions::PlatformAppBrowserTest {
  protected:
   const Extension* LoadPlatformApp() {
@@ -39,8 +43,8 @@ class DeprecationControllerBrowserTest
   }
 };
 
-IN_PROC_BROWSER_TEST_F(DeprecationControllerBrowserTest,
-                       UserInstalledAppNotAllowlisted) {
+IN_PROC_BROWSER_TEST_F(ChromeAppDeprecationUserInstalledAppsBrowserTest,
+                       NotAllowlisted) {
   auto* center = message_center::MessageCenter::Get();
   auto notifications_count = center->GetNotifications().size();
 
@@ -51,8 +55,8 @@ IN_PROC_BROWSER_TEST_F(DeprecationControllerBrowserTest,
   ASSERT_TRUE(center->GetNotifications().size() == notifications_count + 1);
 }
 
-IN_PROC_BROWSER_TEST_F(DeprecationControllerBrowserTest,
-                       AllowlistedUserInstalledApp) {
+IN_PROC_BROWSER_TEST_F(ChromeAppDeprecationUserInstalledAppsBrowserTest,
+                       Allowlisted) {
   auto* center = message_center::MessageCenter::Get();
   auto notifications_count = center->GetNotifications().size();
 
@@ -64,4 +68,5 @@ IN_PROC_BROWSER_TEST_F(DeprecationControllerBrowserTest,
   RunPlatformApp(app);
   ASSERT_TRUE(center->GetNotifications().size() == notifications_count);
 }
+
 }  // namespace apps

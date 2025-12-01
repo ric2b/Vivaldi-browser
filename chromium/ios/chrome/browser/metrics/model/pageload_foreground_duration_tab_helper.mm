@@ -10,8 +10,6 @@
 #import "ios/web/public/navigation/navigation_context.h"
 #import "services/metrics/public/cpp/ukm_builders.h"
 
-WEB_STATE_USER_DATA_KEY_IMPL(PageloadForegroundDurationTabHelper)
-
 PageloadForegroundDurationTabHelper::PageloadForegroundDurationTabHelper(
     web::WebState* web_state)
     : web_state_(web_state) {
@@ -22,11 +20,8 @@ PageloadForegroundDurationTabHelper::PageloadForegroundDurationTabHelper(
   }
 }
 
-PageloadForegroundDurationTabHelper::~PageloadForegroundDurationTabHelper() {
-  NSNotificationCenter* default_center = [NSNotificationCenter defaultCenter];
-  [default_center removeObserver:foreground_notification_observer_];
-  [default_center removeObserver:background_notification_observer_];
-}
+PageloadForegroundDurationTabHelper::~PageloadForegroundDurationTabHelper() =
+    default;
 
 void PageloadForegroundDurationTabHelper::UpdateForAppWillForeground() {
   // Return early if not currently active WebState.
@@ -107,8 +102,13 @@ void PageloadForegroundDurationTabHelper::RenderProcessGone(
 void PageloadForegroundDurationTabHelper::WebStateDestroyed(
     web::WebState* web_state) {
   DCHECK_EQ(web_state_, web_state);
-  RecordUkmIfInForeground();
   DCHECK(scoped_observation_.IsObservingSource(web_state));
+  RecordUkmIfInForeground();
+  if (web_state_->IsRealized()) {
+    NSNotificationCenter* default_center = [NSNotificationCenter defaultCenter];
+    [default_center removeObserver:foreground_notification_observer_];
+    [default_center removeObserver:background_notification_observer_];
+  }
   scoped_observation_.Reset();
   web_state_ = nullptr;
 }
@@ -119,8 +119,8 @@ void PageloadForegroundDurationTabHelper::WebStateRealized(
 }
 
 void PageloadForegroundDurationTabHelper::CreateNotificationObservers() {
-  CHECK(!background_notification_observer_, base::NotFatalUntil::M125);
-  CHECK(!foreground_notification_observer_, base::NotFatalUntil::M125);
+  CHECK(!background_notification_observer_);
+  CHECK(!foreground_notification_observer_);
 
   base::RepeatingCallback<void(NSNotification*)> backgrounding_closure =
       base::IgnoreArgs<NSNotification*>(base::BindRepeating(

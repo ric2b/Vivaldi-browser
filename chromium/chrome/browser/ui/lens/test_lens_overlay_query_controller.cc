@@ -4,12 +4,21 @@
 
 #include "test_lens_overlay_query_controller.h"
 
+#include "base/base64url.h"
 #include "base/containers/span.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/protobuf_matchers.h"
 #include "components/lens/lens_features.h"
 #include "components/lens/lens_overlay_mime_type.h"
 #include "google_apis/common/api_error_codes.h"
+#include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/lens_server_proto/lens_overlay_service_deps.pb.h"
+
+using base::test::EqualsProto;
+using endpoint_fetcher::EndpointFetcher;
+using endpoint_fetcher::EndpointFetcherCallback;
+using endpoint_fetcher::EndpointResponse;
+using endpoint_fetcher::HttpMethod;
 
 namespace lens {
 
@@ -70,7 +79,6 @@ TestLensOverlayQueryController::TestLensOverlayQueryController(
                                  invocation_source,
                                  use_dark_mode,
                                  gen204_controller) {}
-
 TestLensOverlayQueryController::~TestLensOverlayQueryController() = default;
 
 void TestLensOverlayQueryController::StartQueryFlow(
@@ -97,6 +105,7 @@ void TestLensOverlayQueryController::StartQueryFlow(
 }
 
 void TestLensOverlayQueryController::SendRegionSearch(
+    base::Time query_start_time,
     lens::mojom::CenterRotatedBoxPtr region,
     lens::LensOverlaySelectionType selection_type,
     std::map<std::string, std::string> additional_search_query_params,
@@ -106,22 +115,25 @@ void TestLensOverlayQueryController::SendRegionSearch(
   last_lens_selection_type_ = selection_type;
 
   LensOverlayQueryController::SendRegionSearch(
-      std::move(region), selection_type, additional_search_query_params,
-      region_bytes);
+      query_start_time, std::move(region), selection_type,
+      additional_search_query_params, region_bytes);
 }
 
 void TestLensOverlayQueryController::SendTextOnlyQuery(
+    base::Time query_start_time,
     const std::string& query_text,
     lens::LensOverlaySelectionType lens_selection_type,
     std::map<std::string, std::string> additional_search_query_params) {
   last_queried_text_ = query_text;
   last_lens_selection_type_ = lens_selection_type;
 
-  LensOverlayQueryController::SendTextOnlyQuery(query_text, lens_selection_type,
+  LensOverlayQueryController::SendTextOnlyQuery(query_start_time, query_text,
+                                                lens_selection_type,
                                                 additional_search_query_params);
 }
 
 void TestLensOverlayQueryController::SendMultimodalRequest(
+    base::Time query_start_time,
     lens::mojom::CenterRotatedBoxPtr region,
     const std::string& query_text,
     lens::LensOverlaySelectionType multimodal_selection_type,
@@ -133,11 +145,12 @@ void TestLensOverlayQueryController::SendMultimodalRequest(
   last_lens_selection_type_ = multimodal_selection_type;
 
   LensOverlayQueryController::SendMultimodalRequest(
-      std::move(region), query_text, multimodal_selection_type,
-      additional_search_query_params, region_bitmap);
+      query_start_time, std::move(region), query_text,
+      multimodal_selection_type, additional_search_query_params, region_bitmap);
 }
 
 void TestLensOverlayQueryController::SendContextualTextQuery(
+    base::Time query_start_time,
     const std::string& query_text,
     lens::LensOverlaySelectionType lens_selection_type,
     std::map<std::string, std::string> additional_search_query_params) {
@@ -145,7 +158,8 @@ void TestLensOverlayQueryController::SendContextualTextQuery(
   last_lens_selection_type_ = lens_selection_type;
 
   LensOverlayQueryController::SendContextualTextQuery(
-      query_text, lens_selection_type, additional_search_query_params);
+      query_start_time, query_text, lens_selection_type,
+      additional_search_query_params);
 }
 
 void TestLensOverlayQueryController::ResetTestingState() {
@@ -161,17 +175,18 @@ void TestLensOverlayQueryController::ResetTestingState() {
   last_sent_page_url_ = GURL();
   num_interaction_requests_sent_ = 0;
   num_upload_chunk_requests_sent_ = 0;
+  last_cluster_info_request_ = std::nullopt;
 }
 
 std::unique_ptr<EndpointFetcher>
 TestLensOverlayQueryController::CreateEndpointFetcher(
     std::string request_string,
     const GURL& fetch_url,
-    const HttpMethod& http_method,
-    const base::TimeDelta& timeout,
+    HttpMethod http_method,
+    base::TimeDelta timeout,
     const std::vector<std::string>& request_headers,
     const std::vector<std::string>& cors_exempt_headers,
-    const UploadProgressCallback upload_progress_callback) {
+    UploadProgressCallback upload_progress_callback) {
   lens::LensOverlayServerResponse fake_server_response;
   std::string fake_server_response_string;
   google_apis::ApiErrorCode fake_server_response_code =
@@ -187,12 +202,19 @@ TestLensOverlayQueryController::CreateEndpointFetcher(
   bool is_chunk_request =
       chunk_endpoint_url.GetWithEmptyPath() == fetch_url.GetWithEmptyPath() &&
       chunk_endpoint_url.path() == fetch_url.path();
+  bool is_cluster_info_request =
+      fetch_url == GURL(lens::features::GetLensOverlayClusterInfoEndpointUrl());
 
-  if (request_string.empty()) {
+  if (is_cluster_info_request) {
     // Cluster info request.
     num_cluster_info_fetch_requests_sent_++;
     fake_server_response_string =
         fake_cluster_info_response_.SerializeAsString();
+    if (!request_string.empty()) {
+      lens::LensOverlayServerClusterInfoRequest cluster_info_request;
+      cluster_info_request.ParseFromString(request_string);
+      last_cluster_info_request_ = cluster_info_request;
+    }
   } else if (is_chunk_request) {
     // Upload chunk request.
     lens::LensOverlayUploadChunkResponse fake_response;
@@ -241,7 +263,8 @@ TestLensOverlayQueryController::CreateEndpointFetcher(
         base::as_byte_span(last_sent_page_content_data_);
     last_sent_underlying_content_type_ =
         StringToContentType(request.objects_request().payload().content_type());
-    last_sent_page_url_ = GURL(request.objects_request().payload().page_url());
+    last_sent_page_url_ =
+        GURL(request.objects_request().payload().content().webpage_url());
   } else if (request.has_objects_request()) {
     // Full image request.
     num_full_image_requests_sent_++;
@@ -328,5 +351,36 @@ void TestLensOverlayQueryController::SendSemanticEventGen204IfEnabled(
     std::optional<lens::LensOverlayRequestId> request_id) {
   last_semantic_event_ = event;
   last_semantic_event_gen204_request_id_ = request_id;
+}
+
+void TestLensOverlayQueryController::RunSuggestInputsCallback() {
+  const lens::proto::LensOverlaySuggestInputs& last_suggest_inputs =
+      suggest_inputs_for_testing();
+  if (last_suggest_inputs.encoded_request_id().empty()) {
+    LensOverlayQueryController::RunSuggestInputsCallback();
+    return;
+  }
+
+  // Decode the request id from the SuggestInputs callback.
+  lens::LensOverlayRequestId latest_request_id;
+  std::string serialized_proto;
+  EXPECT_TRUE(base::Base64UrlDecode(
+      last_suggest_inputs.encoded_request_id(),
+      base::Base64UrlDecodePolicy::DISALLOW_PADDING, &serialized_proto));
+  EXPECT_TRUE(latest_request_id.ParseFromString(serialized_proto));
+
+  // Get the current request id from the request id generator.
+  std::unique_ptr<lens::LensOverlayRequestId> current_request_id =
+      request_id_generator_for_testing()->GetCurrentRequestIdForTesting();
+  // Verifies that the last request ids passed in the SuggestInputs callback are
+  // the same as current request id in the request id generator.
+  // This is to ensure the LensOverlayController is always updated with the
+  // latest request ids.
+  EXPECT_THAT(latest_request_id, EqualsProto(*current_request_id))
+      << "The latest request id passed in the SuggestInputs callback is not "
+         "the same as the current request id in the request id generator. Did "
+         "you call RunSuggestInputsCallback() after updating the request id?";
+
+  LensOverlayQueryController::RunSuggestInputsCallback();
 }
 }  // namespace lens

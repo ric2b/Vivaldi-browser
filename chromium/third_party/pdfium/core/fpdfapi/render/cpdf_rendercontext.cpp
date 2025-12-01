@@ -28,9 +28,9 @@ CPDF_RenderContext::CPDF_RenderContext(
     CPDF_Document* pDoc,
     RetainPtr<CPDF_Dictionary> pPageResources,
     CPDF_PageImageCache* pPageCache)
-    : m_pDocument(pDoc),
-      m_pPageResources(std::move(pPageResources)),
-      m_pPageCache(pPageCache) {}
+    : document_(pDoc),
+      page_resources_(std::move(pPageResources)),
+      page_cache_(pPageCache) {}
 
 CPDF_RenderContext::~CPDF_RenderContext() = default;
 
@@ -56,18 +56,19 @@ void CPDF_RenderContext::GetBackgroundToBitmap(RetainPtr<CFX_DIBitmap> bitmap,
 
 void CPDF_RenderContext::AppendLayer(CPDF_PageObjectHolder* pObjectHolder,
                                      const CFX_Matrix& mtObject2Device) {
-  m_Layers.emplace_back(pObjectHolder, mtObject2Device);
+  layers_.emplace_back(pObjectHolder, mtObject2Device);
 }
 
 void CPDF_RenderContext::Render(CFX_RenderDevice* pDevice,
                                 const CPDF_PageObject* pStopObj,
                                 const CPDF_RenderOptions* pOptions,
                                 const CFX_Matrix* pLastMatrix) {
-  for (auto& layer : m_Layers) {
+  for (auto& layer : layers_) {
     CFX_RenderDevice::StateRestorer restorer(pDevice);
     CPDF_RenderStatus status(this, pDevice);
-    if (pOptions)
+    if (pOptions) {
       status.SetOptions(*pOptions);
+    }
     status.SetStopObject(pStopObj);
     status.SetTransparency(layer.GetObjectHolder()->GetTransparency());
     CFX_Matrix final_matrix = layer.GetMatrix();
@@ -78,17 +79,18 @@ void CPDF_RenderContext::Render(CFX_RenderDevice* pDevice,
     status.Initialize(nullptr, nullptr);
     status.RenderObjectList(layer.GetObjectHolder(), final_matrix);
     if (status.GetRenderOptions().GetOptions().bLimitedImageCache) {
-      m_pPageCache->CacheOptimization(
+      page_cache_->CacheOptimization(
           status.GetRenderOptions().GetCacheSizeLimit());
     }
-    if (status.IsStopped())
+    if (status.IsStopped()) {
       break;
+    }
   }
 }
 
 CPDF_RenderContext::Layer::Layer(CPDF_PageObjectHolder* pHolder,
                                  const CFX_Matrix& matrix)
-    : m_pObjectHolder(pHolder), m_Matrix(matrix) {}
+    : object_holder_(pHolder), matrix_(matrix) {}
 
 CPDF_RenderContext::Layer::Layer(const Layer& that) = default;
 

@@ -79,6 +79,7 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       base::Time auction_start_time,
       const std::optional<blink::AdSize>& requested_ad_size,
       uint16_t multi_bid_limit,
+      uint64_t group_by_origin_id,
       uint64_t trace_id,
       mojo::PendingAssociatedRemote<auction_worklet::mojom::GenerateBidClient>
           generate_bid_client,
@@ -100,8 +101,7 @@ class MockBidderWorklet : public auction_worklet::mojom::BidderWorklet,
       const std::optional<std::string>&
           direct_from_seller_auction_signals_header_ad_slot,
       const std::string& seller_signals_json,
-      auction_worklet::mojom::KAnonymityBidMode kanon_mode,
-      bool bid_is_kanon,
+      auction_worklet::mojom::KAnonymityStatus kanon_status,
       const GURL& browser_signal_render_url,
       double browser_signal_bid,
       const std::optional<blink::AdCurrency>& browser_signal_bid_currency,
@@ -319,6 +319,8 @@ class MockSellerWorklet : public auction_worklet::mojom::SellerWorklet {
       bool browser_signal_for_debugging_only_in_cooldown_or_lockout,
       bool browser_signal_for_debugging_only_sampling,
       const std::optional<base::TimeDelta> seller_timeout,
+      uint64_t group_by_origin_id,
+      bool allow_group_by_origin_mode,
       uint64_t trace_id,
       const url::Origin& bidder_joining_origin,
       mojo::PendingRemote<auction_worklet::mojom::ScoreAdClient>
@@ -453,8 +455,8 @@ class MockAuctionProcessManager
           pending_url_loader_factory,
       mojo::PendingRemote<auction_worklet::mojom::AuctionNetworkEventsHandler>
           auction_network_events_handler,
-      const GURL& script_source_url,
-      const std::optional<GURL>& bidding_wasm_helper_url,
+      auction_worklet::mojom::InProgressAuctionDownloadPtr script_load,
+      auction_worklet::mojom::InProgressAuctionDownloadPtr wasm_load,
       const std::optional<GURL>& trusted_bidding_signals_url,
       const std::string& trusted_bidding_signals_slot_size_param,
       const url::Origin& top_window_origin,
@@ -473,7 +475,7 @@ class MockAuctionProcessManager
           pending_url_loader_factory,
       mojo::PendingRemote<auction_worklet::mojom::AuctionNetworkEventsHandler>
           auction_network_events_handler,
-      const GURL& script_source_url,
+      auction_worklet::mojom::InProgressAuctionDownloadPtr script_load,
       const std::optional<GURL>& trusted_scoring_signals_url,
       const url::Origin& top_window_origin,
       auction_worklet::mojom::AuctionWorkletPermissionsPolicyStatePtr

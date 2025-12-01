@@ -3,7 +3,9 @@
 // found in the LICENSE file.
 
 #import <memory>
+#import <string_view>
 
+#import "base/strings/strcat.h"
 #import "base/strings/sys_string_conversions.h"
 #import "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -21,6 +23,7 @@
 #import "ios/chrome/browser/infobars/ui_bundled/banners/infobar_banner_constants.h"
 #import "ios/chrome/browser/infobars/ui_bundled/infobar_earl_grey_ui_test_util.h"
 #import "ios/chrome/browser/infobars/ui_bundled/modals/infobar_address_profile_modal_constants.h"
+#import "ios/chrome/browser/metrics/model/metrics_app_interface.h"
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/grit/ios_branded_strings.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -40,6 +43,7 @@ namespace {
 // URLs of the test pages.
 constexpr char kProfileForm[] = "/autofill_smoke_test.html";
 constexpr char kXframeFormPage[] = "/xhr_xframe_submit.html";
+constexpr char kFullAddressFormPage[] = "/full_address_form.html";
 
 // Ids of fields in the form.
 constexpr char kFormElementName[] = "form_name";
@@ -53,6 +57,20 @@ constexpr base::TimeDelta kTypingCoolDownPeriod = base::Milliseconds(50);
 
 // Email value used by the tests.
 constexpr char kEmail[] = "foo1@gmail.com";
+
+// Histogram bucket representing renderer errors.
+constexpr int kRendererErrorHistogramBucket = 8;
+
+struct FullAddressFormPageParams {
+  // True if the submission should be default prevented.
+  bool default_prevented = false;
+  // True if there should be redirection done after submitting with
+  // a parameter that can stop the submit event from being handled by Autofill.
+  bool redirect = false;
+  // True if the submission should be prevented from propagating to any other
+  // listener regardless of their positioning.
+  bool stop_immediate_propagation = false;
+};
 
 // Matcher for the banner button.
 id<GREYMatcher> BannerButtonMatcher() {
@@ -162,7 +180,16 @@ void TypeTextInXframeField(NSString* fieldID, NSString* text) {
 
 @implementation SaveProfileEGTest
 
+- (void)setUp {
+  [super setUp];
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface setupHistogramTester]);
+}
+
 - (void)tearDownHelper {
+  chrome_test_util::GREYAssertErrorNil(
+      [MetricsAppInterface releaseHistogramTester]);
+
   // Clear existing profile.
   [AutofillAppInterface clearProfilesStore];
 
@@ -201,6 +228,52 @@ void TypeTextInXframeField(NSString* fieldID, NSString* text) {
     config.features_enabled.push_back(
         autofill::features::kAutofillAcrossIframesIos);
     config.features_enabled.push_back(kAutofillFixXhrForXframe);
+  }
+
+  if ([self isRunningTest:@selector
+            (testSubmissionDetection_defaultPrevented_whenAllowed)]) {
+    config.features_enabled.push_back(kAutofillAllowDefaultPreventedSubmission);
+  }
+
+  if ([self isRunningTest:@selector
+            (testSubmissionDetection_defaultPrevented_whenNotAllowed)]) {
+    config.features_disabled.push_back(
+        kAutofillAllowDefaultPreventedSubmission);
+  }
+
+  if ([self isRunningTest:@selector(testSubmissionDetectionWithDeduping)]) {
+    config.features_enabled.push_back(kAutofillDedupeFormSubmission);
+    // Default must be prevented to allow triggering multiple submissions from
+    // the same form.
+    config.features_enabled.push_back(kAutofillAllowDefaultPreventedSubmission);
+  }
+
+  if ([self isRunningTest:@selector(testSubmissionDetectionWithoutDeduping)]) {
+    config.features_disabled.push_back(kAutofillDedupeFormSubmission);
+    // Default must be prevented to allow triggering multiple submissions from
+    // the same form.
+    config.features_enabled.push_back(kAutofillAllowDefaultPreventedSubmission);
+  }
+
+  if ([self isRunningTest:@selector(testSubmissionDetection_inCaptureMode)]) {
+    config.features_enabled.push_back(
+        kAutofillFormSubmissionEventsInCaptureMode);
+  }
+
+  if ([self
+          isRunningTest:@selector(testSubmissionDetection_notInCaptureMode)]) {
+    config.features_disabled.push_back(
+        kAutofillFormSubmissionEventsInCaptureMode);
+  }
+
+  if ([self isRunningTest:@selector(testSubmissionErrorReporting_Enabled)]) {
+    config.features_enabled.push_back(kAutofillIsolatedWorldForJavascriptIos);
+    config.features_enabled.push_back(kAutofillReportFormSubmissionErrors);
+  }
+
+  if ([self isRunningTest:@selector(testSubmissionErrorReporting_Disabled)]) {
+    config.features_enabled.push_back(kAutofillIsolatedWorldForJavascriptIos);
+    config.features_disabled.push_back(kAutofillReportFormSubmissionErrors);
   }
 
   return config;
@@ -269,6 +342,47 @@ void TypeTextInXframeField(NSString* fieldID, NSString* text) {
   // Ensure profile is saved locally.
   GREYAssertEqual(1U, [AutofillAppInterface profilesCount],
                   @"Profile should have been saved.");
+}
+
+// Loads, fills, and submits the full address form.
+- (void)loadFullAddressFormWithParams:(FullAddressFormPageParams)params {
+  // Start server.
+  GREYAssertTrue(self.testServer->Start(), @"Server did not start.");
+
+  auto makeQueryString = [](FullAddressFormPageParams params) -> std::string {
+    std::vector<std::string_view> queryParameters;
+    if (params.default_prevented) {
+      queryParameters.push_back("preventDefault");
+    }
+    if (params.redirect) {
+      queryParameters.push_back("redirectWhenSubmissionPrevented");
+    }
+    if (params.stop_immediate_propagation) {
+      queryParameters.push_back("stopImmediatePropagation");
+    }
+    return base::JoinString(queryParameters, "&");
+  };
+
+  // Get the URL for the served test page with the query parameters for setting
+  // it up.
+  const GURL baseURL = self.testServer->GetURL(kFullAddressFormPage);
+  GURL::Replacements replacements;
+  std::string query = makeQueryString(params).c_str();
+  replacements.SetQueryStr(query);
+  const GURL fullURL = baseURL.ReplaceComponents(replacements);
+
+  // Load the URL and wait for its content to be loaded.
+  [ChromeEarlGrey loadURL:fullURL];
+
+  // Call the helper function embedded in the page content to fill the form.
+  [ChromeEarlGrey evaluateJavaScriptForSideEffect:@"FillForm();"];
+}
+
+- (void)loadAndSubmitFullAddressFormWithParams:
+    (FullAddressFormPageParams)params {
+  [self loadFullAddressFormWithParams:params];
+  // Submit the form via the dedicated <button>.
+  [ChromeEarlGrey tapWebStateElementWithID:@"submit-button"];
 }
 
 // Focuses on the name field and initiates autofill on the form with the saved
@@ -697,11 +811,6 @@ void TypeTextInXframeField(NSString* fieldID, NSString* text) {
 // TODO(crbug.com/407573862): Re-enable after the test is fixed for
 // ios-fieldtrial-rel.
 - (void)DISABLED_testSaveButtonEnabledStateDependingOnRequiredFields {
-  // TODO(crbug.com/407506623): Fix EGTests on iPad.
-  if ([ChromeEarlGrey isIPadIdiom]) {
-    EARL_GREY_TEST_SKIPPED(@"Test fails on iPad currently.");
-  }
-
   [SigninEarlGreyUI signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
   [ChromeEarlGrey waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
 
@@ -724,6 +833,10 @@ void TypeTextInXframeField(NSString* fieldID, NSString* text) {
   [[EarlGrey selectElementWithMatcher:TextFieldWithLabel(streetAddressLabel)]
       performAction:grey_replaceText(@"")];
 
+  // Scroll down to show the 'Save' button.
+  [[EarlGrey selectElementWithMatcher:EditProfileBottomSheet()]
+      performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
+
   // Ensure the 'Save' button is disabled.
   [[EarlGrey selectElementWithMatcher:ModalButtonMatcher()]
       assertWithMatcher:grey_not(grey_enabled())];
@@ -737,6 +850,255 @@ void TypeTextInXframeField(NSString* fieldID, NSString* text) {
       assertWithMatcher:grey_enabled()];
 
   // Sign out.
+  [SigninEarlGrey signOut];
+}
+
+// Tests that submission is detected hence the infobar is displayed when the
+// "form" event behind the submission is `defaultPrevented` while the
+// corresponding feature allows it.
+- (void)testSubmissionDetection_defaultPrevented_whenAllowed {
+  // Sign-in so the profile can be saved into the account.
+  [SigninEarlGrey signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
+
+  // Submit the form with `defaultPrevented` not considered.
+  FullAddressFormPageParams params{.default_prevented = true, .redirect = true};
+  [self loadAndSubmitFullAddressFormWithParams:params];
+
+  // Wait on the infobar to be displayed after submission.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:YES];
+
+  // Accept the banner to save the profile.
+  [[EarlGrey selectElementWithMatcher:BannerButtonMatcher()]
+      performAction:grey_tap()];
+
+  // Wait for the save profile dialog to appear.
+  [ChromeEarlGrey waitForMatcher:ModalButtonMatcher()];
+
+  // Save the profile.
+  [[EarlGrey selectElementWithMatcher:ModalButtonMatcher()]
+      performAction:grey_tap()];
+
+  // Ensure profile is saved.
+  GREYAssertEqual(1U, [AutofillAppInterface profilesCount],
+                  @"Profile should have been saved.");
+
+  [SigninEarlGrey signOut];
+}
+
+// Tests that submission isn't detected hence the infobar isn't displayed when
+// the "form" event behind the submission is `defaultPrevented` while the
+// corresponding feature doesn't allows it.
+- (void)testSubmissionDetection_defaultPrevented_whenNotAllowed {
+  // Sign-in so the profile would be saved into the account.
+  [SigninEarlGrey signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
+
+  // Submit the form with `defaultPrevented` considered.
+  FullAddressFormPageParams params{.default_prevented = true, .redirect = true};
+  [self loadAndSubmitFullAddressFormWithParams:params];
+
+  // Make sure the infobar isn't displayed.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:NO];
+
+  [SigninEarlGrey signOut];
+}
+
+// Tests that multiple submissions on the same form are not deduped when
+// deduping is disabled where all submissions are sent over to the browser.
+- (void)testSubmissionDetectionWithoutDeduping {
+  // Submit the form with `defaultPrevented` not considered and without
+  // redirecting so the same form can be submitted multiple time.
+  FullAddressFormPageParams params{.default_prevented = true,
+                                   .redirect = false};
+  [self loadAndSubmitFullAddressFormWithParams:params];
+
+  // Wait on the infobar to be displayed after submission, meaning that
+  // submission was detected.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:YES];
+
+  // Spam submissions.
+  for (int i = 0; i < 5; ++i) {
+    [ChromeEarlGrey tapWebStateElementWithID:@"submit-button"];
+  }
+
+  // Verify that all submissions were sent over to the browser and recorded.
+  GREYAssertTrue(
+      base::test::ios::WaitUntilConditionOrTimeout(
+          base::Milliseconds(200),
+          ^{
+            NSError* error = [MetricsAppInterface
+                expectTotalCount:6
+                    forHistogram:@"Autofill.iOS.FormSubmission.OutcomeV2"];
+            return error == nil;
+          }),
+      @"Timed out waiting for all form submission events.");
+}
+
+// Tests that multiple submissions on the same form are deduped when deduping is
+// enabled where only one submission per form element is allowed when.
+- (void)testSubmissionDetectionWithDeduping {
+  // Submit the form with `defaultPrevented` not considered and without
+  // redirecting so the same form can be submitted multiple time.
+  FullAddressFormPageParams params{.default_prevented = true,
+                                   .redirect = false};
+  [self loadAndSubmitFullAddressFormWithParams:params];
+
+  // Wait on the infobar to be displayed after submission, meaning that
+  // submission was detected.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:YES];
+
+  // Spam submissions.
+  for (int i = 0; i < 5; ++i) {
+    [ChromeEarlGrey tapWebStateElementWithID:@"submit-button"];
+  }
+
+  // Wait some time so the hypothetical form submission messages would have been
+  // sent over to the browser by then.
+  base::test::ios::SpinRunLoopWithMinDelay(base::Milliseconds(200));
+
+  // Verify that only one submission was actually recorded despite triggering
+  // multiple submissions on the same form.
+  chrome_test_util::GREYAssertErrorNil([MetricsAppInterface
+      expectTotalCount:1
+          forHistogram:@"Autofill.iOS.FormSubmission.OutcomeV2"]);
+}
+
+// Tests that the submission errors that occur in the renderer are reported to
+// the browser.
+- (void)testSubmissionErrorReporting_Enabled {
+  // Inject a bug that will trigger error when handling the form submission in
+  // the renderer.
+  constexpr char kInjectedBug[] = R"(
+    // Swizzle autofillSubmissionData() with an erroring function.
+    gcrweb.gCrWeb.fill.autofillSubmissionData = function() {
+      throw new Error("Oh no, something bad happened!");
+    };
+    // This is to give a return value to make the thing handling the JS
+    // execution happy.
+    true
+  )";
+
+  // Load page without submitting the form.
+  [self loadFullAddressFormWithParams:{}];
+
+  // Inject the bug in the submission handler so it triggers an error that will
+  // be reported to the browser.
+  [ChromeEarlGrey
+      evaluateJavaScriptInIsolatedWorldForSideEffect:base::SysUTF8ToNSString(
+                                                         kInjectedBug)];
+
+  // Now that the submission handler is buggy, submit the form to trigger the
+  // error.
+  [ChromeEarlGrey tapWebStateElementWithID:@"submit-button"];
+
+  // Verify that no infobar is displayed when there is a submission error.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:NO];
+
+  // Verify that the submission error was reported and recorded.
+  GREYAssertTrue(
+      base::test::ios::WaitUntilConditionOrTimeout(
+          base::Milliseconds(200),
+          ^{
+            NSError* error = [MetricsAppInterface
+                expectUniqueSampleWithCount:1
+                                  forBucket:kRendererErrorHistogramBucket
+                               forHistogram:
+                                   @"Autofill.iOS.FormSubmission.OutcomeV2"];
+            return error == nil;
+          }),
+      @"Timed out waiting for the submission error uma record.");
+}
+
+// Tests that the submission errors that occur in the renderer are not reported
+// to the browser when the feature is disabled.
+- (void)testSubmissionErrorReporting_Disabled {
+  // Inject a bug that will trigger error when handling the form submission in
+  // the renderer.
+  constexpr char kInjectedBug[] = R"(
+    // Swizzle autofillSubmissionData() with an erroring function.
+    gcrweb.gCrWeb.fill.autofillSubmissionData = function() {
+      throw new Error("Oh no, something bad happened!");
+    };
+    // This is to give a return value to make the thing handling the JS
+    // execution happy.
+    true
+  )";
+
+  // Load page without submitting the form.
+  [self loadFullAddressFormWithParams:{}];
+
+  // Inject the bug in the submission handler so it triggers an error that will
+  // be reported to the browser.
+  [ChromeEarlGrey
+      evaluateJavaScriptInIsolatedWorldForSideEffect:base::SysUTF8ToNSString(
+                                                         kInjectedBug)];
+
+  // Now that the submission handler is buggy, submit the form to trigger the
+  // error.
+  [ChromeEarlGrey tapWebStateElementWithID:@"submit-button"];
+
+  // Verify for some time that no infobar is displayed when there is a
+  // submission error.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:NO];
+
+  // Verify that no submission error was not reported and recorded. At this
+  // point there should have been enough time to hypothetically handle the
+  // submit event if there was no error.
+  chrome_test_util::GREYAssertErrorNil([MetricsAppInterface
+      expectTotalCount:0
+          forHistogram:@"Autofill.iOS.FormSubmission.OutcomeV2"]);
+}
+
+// Tests that submission is detected hence the infobar is displayed when the
+// "form" event behind the submission has its propagation entirely stopped via
+// stopImmediatePropagation() while the form submit event listener for Autofill
+// is set in capture mode.
+- (void)testSubmissionDetection_inCaptureMode {
+  // Sign-in so the profile can be saved into the account.
+  [SigninEarlGrey signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
+
+  // Submit the form with `defaultPrevented` not considered.
+  FullAddressFormPageParams params{.redirect = true,
+                                   .stop_immediate_propagation = true};
+  [self loadAndSubmitFullAddressFormWithParams:params];
+
+  // Wait on the infobar to be displayed after submission.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:YES];
+
+  // Accept the banner to save the profile.
+  [[EarlGrey selectElementWithMatcher:BannerButtonMatcher()]
+      performAction:grey_tap()];
+
+  // Wait for the save profile dialog to appear.
+  [ChromeEarlGrey waitForMatcher:ModalButtonMatcher()];
+
+  // Save the profile.
+  [[EarlGrey selectElementWithMatcher:ModalButtonMatcher()]
+      performAction:grey_tap()];
+
+  // Ensure profile is saved.
+  GREYAssertEqual(1U, [AutofillAppInterface profilesCount],
+                  @"Profile should have been saved.");
+
+  [SigninEarlGrey signOut];
+}
+
+// Tests that submission isn't detected hence the infobar not displayed when the
+// "form" event behind the submission has its propagation entirely stopped via
+// stopImmediatePropagation() while the form submit event listener for Autofill
+// isn't set in capture mode.
+- (void)testSubmissionDetection_notInCaptureMode {
+  // Sign-in so the profile can be saved into the account.
+  [SigninEarlGrey signinWithFakeIdentity:[FakeSystemIdentity fakeIdentity1]];
+
+  // Submit the form with the submit event propagation stopped via
+  // stopImmediatePropagation().
+  FullAddressFormPageParams params{.redirect = true,
+                                   .stop_immediate_propagation = true};
+  [self loadAndSubmitFullAddressFormWithParams:params];
+
+  // Make sure the infobar isn't displayed.
+  [InfobarEarlGreyUI waitUntilInfobarBannerVisibleOrTimeout:NO];
+
   [SigninEarlGrey signOut];
 }
 

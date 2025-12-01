@@ -13,7 +13,6 @@
 #include "base/scoped_observation.h"
 #include "base/sequence_checker.h"
 #include "base/thread_annotations.h"
-#include "base/time/time.h"
 #include "base/timer/wall_clock_timer.h"
 #include "content/common/content_export.h"
 #include "services/network/public/cpp/network_connection_tracker.h"

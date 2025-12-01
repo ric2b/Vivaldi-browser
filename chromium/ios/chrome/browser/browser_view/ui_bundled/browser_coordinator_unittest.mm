@@ -9,9 +9,11 @@
 #import "components/bookmarks/test/bookmark_test_helpers.h"
 #import "components/commerce/core/mock_shopping_service.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
+#import "ios/chrome/browser/browser_view/model/browser_view_visibility_notifier_browser_agent.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_coordinator+Testing.h"
 #import "ios/chrome/browser/browser_view/ui_bundled/browser_view_controller.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_browser_agent.h"
 #import "ios/chrome/browser/download/model/download_directory_util.h"
 #import "ios/chrome/browser/download/model/external_app_util.h"
 #import "ios/chrome/browser/favicon/model/favicon_service_factory.h"
@@ -134,18 +136,15 @@ class BrowserCoordinatorTest : public PlatformTest {
         browser_.get(), TabInsertionBrowserAgent::FromBrowser(browser_.get()));
     SyncErrorBrowserAgent::CreateForBrowser(browser_.get());
     OmniboxPositionBrowserAgent::CreateForBrowser(browser_.get());
+    BrowserViewVisibilityNotifierBrowserAgent::CreateForBrowser(browser_.get());
+    DiscoverFeedVisibilityBrowserAgent::CreateForBrowser(browser_.get());
+    TestFullscreenController::CreateForBrowser(browser_.get());
 
     WebUsageEnablerBrowserAgent* enabler =
         WebUsageEnablerBrowserAgent::FromBrowser(browser_.get());
     enabler->SetWebUsageEnabled(true);
 
-    IncognitoReauthSceneAgent* reauthAgent = [[IncognitoReauthSceneAgent alloc]
-        initWithReauthModule:[[ReauthenticationModule alloc] init]];
-    [scene_state_ addAgent:reauthAgent];
-
     CommandDispatcher* dispatcher = browser_->GetCommandDispatcher();
-    [dispatcher startDispatchingToTarget:reauthAgent
-                             forProtocol:@protocol(IncognitoReauthCommands)];
 
     // Set up ApplicationCommands mock. Because ApplicationCommands conforms
     // to SettingsCommands, that needs to be mocked and dispatched
@@ -158,6 +157,13 @@ class BrowserCoordinatorTest : public PlatformTest {
                              forProtocol:@protocol(ApplicationCommands)];
     [dispatcher startDispatchingToTarget:mockSettingsCommandHandler
                              forProtocol:@protocol(SettingsCommands)];
+
+    IncognitoReauthSceneAgent* reauthAgent = [[IncognitoReauthSceneAgent alloc]
+              initWithReauthModule:[[ReauthenticationModule alloc] init]
+        applicationCommandsHandler:mockApplicationCommandHandler];
+    [scene_state_ addAgent:reauthAgent];
+    [dispatcher startDispatchingToTarget:reauthAgent
+                             forProtocol:@protocol(IncognitoReauthCommands)];
   }
 
   BrowserCoordinator* GetBrowserCoordinator() {
@@ -248,15 +254,11 @@ TEST_F(BrowserCoordinatorTest, ShowDownloadsFolder) {
 // Tests that `-showShareSheet` is leaving fullscreen and starting the share
 // coordinator.
 TEST_F(BrowserCoordinatorTest, ShowShareSheet) {
-  std::unique_ptr<TestFullscreenController> controller =
-      std::make_unique<TestFullscreenController>();
-  TestFullscreenController* controller_ptr = controller.get();
+  TestFullscreenController* controller =
+      TestFullscreenController::FromBrowser(browser_.get());
 
-  browser_->SetUserData(TestFullscreenController::UserDataKeyForTesting(),
-                        std::move(controller));
-
-  controller_ptr->EnterFullscreen();
-  ASSERT_EQ(0.0, controller_ptr->GetProgress());
+  controller->EnterFullscreen();
+  ASSERT_EQ(0.0, controller->GetProgress());
 
   id classMock = OCMClassMock([SharingCoordinator class]);
   SharingCoordinator* mockSharingCoordinator = classMock;
@@ -276,7 +278,7 @@ TEST_F(BrowserCoordinatorTest, ShowShareSheet) {
   [browser_coordinator showShareSheet];
 
   // Check that fullscreen is exited.
-  EXPECT_EQ(1.0, controller_ptr->GetProgress());
+  EXPECT_EQ(1.0, controller->GetProgress());
 
   [browser_coordinator stop];
 
@@ -288,15 +290,11 @@ TEST_F(BrowserCoordinatorTest, ShowShareSheet) {
 // SharingCoordinator with SharingParams where scenario is ShareChrome, leaving
 // fullscreen and starting the share coordinator.
 TEST_F(BrowserCoordinatorTest, ShowShareSheetForChromeApp) {
-  std::unique_ptr<TestFullscreenController> controller =
-      std::make_unique<TestFullscreenController>();
-  TestFullscreenController* controller_ptr = controller.get();
+  TestFullscreenController* controller =
+      TestFullscreenController::FromBrowser(browser_.get());
 
-  browser_->SetUserData(TestFullscreenController::UserDataKeyForTesting(),
-                        std::move(controller));
-
-  controller_ptr->EnterFullscreen();
-  ASSERT_EQ(0.0, controller_ptr->GetProgress());
+  controller->EnterFullscreen();
+  ASSERT_EQ(0.0, controller->GetProgress());
 
   id expectShareChromeScenarioArg =
       [OCMArg checkWithBlock:^BOOL(SharingParams* params) {
@@ -319,7 +317,7 @@ TEST_F(BrowserCoordinatorTest, ShowShareSheetForChromeApp) {
   [browser_coordinator showShareSheetForChromeApp];
 
   // Check that fullscreen is exited.
-  EXPECT_EQ(1.0, controller_ptr->GetProgress());
+  EXPECT_EQ(1.0, controller->GetProgress());
 
   [browser_coordinator stop];
 

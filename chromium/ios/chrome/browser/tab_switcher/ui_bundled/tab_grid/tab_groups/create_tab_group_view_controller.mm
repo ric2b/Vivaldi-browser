@@ -11,17 +11,18 @@
 #import "components/strings/grit/components_strings.h"
 #import "components/tab_groups/tab_group_color.h"
 #import "ios/chrome/browser/keyboard/ui_bundled/UIKeyCommand+Chrome.h"
+#import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
 #import "ios/chrome/browser/shared/model/web_state_list/tab_group.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/top_aligned_image_view.h"
 #import "ios/chrome/browser/shared/ui/symbols/symbols.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
-#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/grid/group_tab_info.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/create_or_edit_tab_group_view_controller_delegate.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/group_tab_view.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_group_creation_mutator.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_group_snapshots_view.h"
 #import "ios/chrome/browser/tab_switcher/ui_bundled/tab_grid/tab_groups/tab_groups_constants.h"
+#import "ios/chrome/browser/tab_switcher/ui_bundled/tab_snapshot_and_favicon.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
 #import "ios/chrome/common/ui/util/constraints_ui_util.h"
 #import "ios/chrome/grit/ios_strings.h"
@@ -115,8 +116,8 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   UIButton* _selectedButton;
   // Default color.
   tab_groups::TabGroupColorId _defaultColor;
-  // List of tab group pictures.
-  NSArray<GroupTabInfo*>* _tabGroupInfos;
+  // Array of all snapshots and favicons of the group.
+  NSArray<TabSnapshotAndFavicon*>* _tabSnapshotsAndFavicons;
   // Snapshots views container.
   UIView* _snapshotsContainer;
   // Whether it is to edit a group (vs creation).
@@ -312,7 +313,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   tab_groups::TabGroupColorId colorID =
       static_cast<tab_groups::TabGroupColorId>(_selectedButton.tag);
 
-  UIColor* defaultColor = TabGroup::ColorForTabGroupColorId(colorID);
+  UIColor* defaultColor = tab_groups::ColorForTabGroupColorId(colorID);
   _dotView = [self groupDotViewWithColor:defaultColor];
   _tabGroupTextField = [self configuredTabGroupNameTextFieldInput];
 
@@ -487,7 +488,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   [_selectedButton setSelected:YES];
   tab_groups::TabGroupColorId colorID =
       static_cast<tab_groups::TabGroupColorId>(_selectedButton.tag);
-  [_dotView setBackgroundColor:TabGroup::ColorForTabGroupColorId(colorID)];
+  [_dotView setBackgroundColor:tab_groups::ColorForTabGroupColorId(colorID)];
 }
 
 // Creates all the available color buttons.
@@ -497,7 +498,7 @@ const CGFloat kClearButtonWidthAndHeight = 40;
       tab_groups::GetTabGroupColorLabelMap();
 
   for (tab_groups::TabGroupColorId colorID :
-       TabGroup::AllPossibleTabGroupColors()) {
+       tab_groups::AllPossibleTabGroupColors()) {
     UIButton* colorButton = [[UIButton alloc] init];
     colorButton.translatesAutoresizingMaskIntoConstraints = NO;
     [colorButton setTag:static_cast<NSInteger>(colorID)];
@@ -521,13 +522,13 @@ const CGFloat kClearButtonWidthAndHeight = 40;
     UIImage* normalSymbolImage =
         DefaultSymbolWithConfiguration(kCircleFillSymbol, configuration);
     normalSymbolImage = [normalSymbolImage
-        imageWithTintColor:TabGroup::ColorForTabGroupColorId(colorID)
+        imageWithTintColor:tab_groups::ColorForTabGroupColorId(colorID)
              renderingMode:UIImageRenderingModeAlwaysOriginal];
 
     UIImage* selectedSymbolImage =
         DefaultSymbolWithConfiguration(kCircleCircleFillSymbol, configuration);
     selectedSymbolImage = [selectedSymbolImage
-        imageWithTintColor:TabGroup::ColorForTabGroupColorId(colorID)
+        imageWithTintColor:tab_groups::ColorForTabGroupColorId(colorID)
              renderingMode:UIImageRenderingModeAlwaysOriginal];
 
     [colorButton setImage:normalSymbolImage forState:UIControlStateNormal];
@@ -784,11 +785,11 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   snapshotsBackground.opaque = NO;
 
   _snapshotsView = [[TabGroupSnapshotsView alloc]
-      initWithTabGroupInfos:_tabGroupInfos
-                       size:_numberOfSelectedItems
-                      light:self.traitCollection.userInterfaceStyle ==
-                            UIUserInterfaceStyleLight
-                       cell:NO];
+      initWithTabSnapshotsAndFavicons:_tabSnapshotsAndFavicons
+                                 size:_numberOfSelectedItems
+                                light:self.traitCollection.userInterfaceStyle ==
+                                      UIUserInterfaceStyleLight
+                                 cell:NO];
 
   [snapshotsBackground addSubview:_snapshotsView];
 
@@ -868,13 +869,16 @@ const CGFloat kClearButtonWidthAndHeight = 40;
   _defaultColor = color;
 }
 
-- (void)setTabGroupInfos:(NSArray<GroupTabInfo*>*)tabGroupInfos
-    numberOfSelectedItems:(NSInteger)numberOfSelectedItems {
-  _tabGroupInfos = tabGroupInfos;
+- (void)setTabSnapshotsAndFavicons:
+            (NSArray<TabSnapshotAndFavicon*>*)tabSnapshotsAndFavicons
+             numberOfSelectedItems:(NSInteger)numberOfSelectedItems {
+  _tabSnapshotsAndFavicons = tabSnapshotsAndFavicons;
   _numberOfSelectedItems = numberOfSelectedItems;
   [_snapshotsView
-      configureTabGroupSnapshotsViewWithTabGroupInfos:tabGroupInfos
-                                                 size:_numberOfSelectedItems];
+      configureTabGroupSnapshotsViewWithTabSnapshotsAndFavicons:
+          tabSnapshotsAndFavicons
+                                                           size:
+                                                               _numberOfSelectedItems];
   [self applyConstraints];
 }
 

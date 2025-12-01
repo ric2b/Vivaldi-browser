@@ -54,17 +54,17 @@ RtpParameters CreateRtpParametersWithSsrcs(
   return params;
 }
 
-rtc::scoped_refptr<MockRtpSenderInternal> CreateMockRtpSender(
-    webrtc::MediaType media_type,
+scoped_refptr<MockRtpSenderInternal> CreateMockRtpSender(
+    MediaType media_type,
     std::initializer_list<uint32_t> ssrcs,
-    rtc::scoped_refptr<MediaStreamTrackInterface> track) {
+    scoped_refptr<MediaStreamTrackInterface> track) {
   uint32_t first_ssrc;
   if (ssrcs.size()) {
     first_ssrc = *ssrcs.begin();
   } else {
     first_ssrc = 0;
   }
-  auto sender = rtc::make_ref_counted<MockRtpSenderInternal>();
+  auto sender = make_ref_counted<MockRtpSenderInternal>();
   EXPECT_CALL(*sender, track())
       .WillRepeatedly(::testing::Return(std::move(track)));
   EXPECT_CALL(*sender, ssrc()).WillRepeatedly(::testing::Return(first_ssrc));
@@ -76,11 +76,11 @@ rtc::scoped_refptr<MockRtpSenderInternal> CreateMockRtpSender(
   return sender;
 }
 
-rtc::scoped_refptr<MockRtpReceiverInternal> CreateMockRtpReceiver(
-    webrtc::MediaType media_type,
+scoped_refptr<MockRtpReceiverInternal> CreateMockRtpReceiver(
+    MediaType media_type,
     std::initializer_list<uint32_t> ssrcs,
-    rtc::scoped_refptr<MediaStreamTrackInterface> track) {
-  auto receiver = rtc::make_ref_counted<MockRtpReceiverInternal>();
+    scoped_refptr<MediaStreamTrackInterface> track) {
+  auto receiver = make_ref_counted<MockRtpReceiverInternal>();
   EXPECT_CALL(*receiver, track())
       .WillRepeatedly(::testing::Return(std::move(track)));
   EXPECT_CALL(*receiver, media_type())
@@ -91,14 +91,12 @@ rtc::scoped_refptr<MockRtpReceiverInternal> CreateMockRtpReceiver(
   return receiver;
 }
 
-rtc::scoped_refptr<VideoTrackInterface> CreateVideoTrack(
-    const std::string& id) {
+scoped_refptr<VideoTrackInterface> CreateVideoTrack(const std::string& id) {
   return VideoTrack::Create(id, FakeVideoTrackSource::Create(false),
                             Thread::Current());
 }
 
-rtc::scoped_refptr<VideoTrackInterface> CreateMockVideoTrack(
-    const std::string& id) {
+scoped_refptr<VideoTrackInterface> CreateMockVideoTrack(const std::string& id) {
   auto track = MockVideoTrack::Create();
   EXPECT_CALL(*track, kind())
       .WillRepeatedly(::testing::Return(VideoTrack::kVideoKind));
@@ -121,26 +119,26 @@ class TrackMediaInfoMapTest : public ::testing::Test {
 
   void AddRtpSenderWithSsrcs(std::initializer_list<uint32_t> ssrcs,
                              MediaStreamTrackInterface* local_track) {
-    rtc::scoped_refptr<MockRtpSenderInternal> rtp_sender = CreateMockRtpSender(
+    scoped_refptr<MockRtpSenderInternal> rtp_sender = CreateMockRtpSender(
         local_track->kind() == MediaStreamTrackInterface::kAudioKind
-            ? webrtc::MediaType::AUDIO
-            : webrtc::MediaType::VIDEO,
-        ssrcs, rtc::scoped_refptr<MediaStreamTrackInterface>(local_track));
+            ? MediaType::AUDIO
+            : MediaType::VIDEO,
+        ssrcs, scoped_refptr<MediaStreamTrackInterface>(local_track));
     rtp_senders_.push_back(rtp_sender);
 
     if (local_track->kind() == MediaStreamTrackInterface::kAudioKind) {
-      cricket::VoiceSenderInfo voice_sender_info;
+      VoiceSenderInfo voice_sender_info;
       size_t i = 0;
       for (uint32_t ssrc : ssrcs) {
-        voice_sender_info.local_stats.push_back(cricket::SsrcSenderInfo());
+        voice_sender_info.local_stats.push_back(SsrcSenderInfo());
         voice_sender_info.local_stats[i++].ssrc = ssrc;
       }
       voice_media_info_.senders.push_back(voice_sender_info);
     } else {
-      cricket::VideoSenderInfo video_sender_info;
+      VideoSenderInfo video_sender_info;
       size_t i = 0;
       for (uint32_t ssrc : ssrcs) {
-        video_sender_info.local_stats.push_back(cricket::SsrcSenderInfo());
+        video_sender_info.local_stats.push_back(SsrcSenderInfo());
         video_sender_info.local_stats[i++].ssrc = ssrc;
       }
       video_media_info_.senders.push_back(video_sender_info);
@@ -152,24 +150,24 @@ class TrackMediaInfoMapTest : public ::testing::Test {
                                MediaStreamTrackInterface* remote_track) {
     auto rtp_receiver = CreateMockRtpReceiver(
         remote_track->kind() == MediaStreamTrackInterface::kAudioKind
-            ? webrtc::MediaType::AUDIO
-            : webrtc::MediaType::VIDEO,
-        ssrcs, rtc::scoped_refptr<MediaStreamTrackInterface>(remote_track));
+            ? MediaType::AUDIO
+            : MediaType::VIDEO,
+        ssrcs, scoped_refptr<MediaStreamTrackInterface>(remote_track));
     rtp_receivers_.push_back(rtp_receiver);
 
     if (remote_track->kind() == MediaStreamTrackInterface::kAudioKind) {
-      cricket::VoiceReceiverInfo voice_receiver_info;
+      VoiceReceiverInfo voice_receiver_info;
       size_t i = 0;
       for (uint32_t ssrc : ssrcs) {
-        voice_receiver_info.local_stats.push_back(cricket::SsrcReceiverInfo());
+        voice_receiver_info.local_stats.push_back(SsrcReceiverInfo());
         voice_receiver_info.local_stats[i++].ssrc = ssrc;
       }
       voice_media_info_.receivers.push_back(voice_receiver_info);
     } else {
-      cricket::VideoReceiverInfo video_receiver_info;
+      VideoReceiverInfo video_receiver_info;
       size_t i = 0;
       for (uint32_t ssrc : ssrcs) {
-        video_receiver_info.local_stats.push_back(cricket::SsrcReceiverInfo());
+        video_receiver_info.local_stats.push_back(SsrcReceiverInfo());
         video_receiver_info.local_stats[i++].ssrc = ssrc;
       }
       video_media_info_.receivers.push_back(video_receiver_info);
@@ -185,17 +183,17 @@ class TrackMediaInfoMapTest : public ::testing::Test {
 
  private:
   AutoThread main_thread_;
-  cricket::VoiceMediaInfo voice_media_info_;
-  cricket::VideoMediaInfo video_media_info_;
+  VoiceMediaInfo voice_media_info_;
+  VideoMediaInfo video_media_info_;
 
  protected:
-  std::vector<rtc::scoped_refptr<RtpSenderInternal>> rtp_senders_;
-  std::vector<rtc::scoped_refptr<RtpReceiverInternal>> rtp_receivers_;
+  std::vector<scoped_refptr<RtpSenderInternal>> rtp_senders_;
+  std::vector<scoped_refptr<RtpReceiverInternal>> rtp_receivers_;
   TrackMediaInfoMap map_;
-  rtc::scoped_refptr<AudioTrack> local_audio_track_;
-  rtc::scoped_refptr<AudioTrack> remote_audio_track_;
-  rtc::scoped_refptr<VideoTrackInterface> local_video_track_;
-  rtc::scoped_refptr<VideoTrackInterface> remote_video_track_;
+  scoped_refptr<AudioTrack> local_audio_track_;
+  scoped_refptr<AudioTrack> remote_audio_track_;
+  scoped_refptr<VideoTrackInterface> local_video_track_;
+  scoped_refptr<VideoTrackInterface> remote_video_track_;
 };
 
 }  // namespace

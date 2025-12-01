@@ -33,6 +33,9 @@ import org.chromium.build.annotations.Nullable;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.gms.ChromiumPlayServicesAvailability;
 
+// Vivaldi
+import org.chromium.build.BuildConfig;
+
 /**
  * Utility class for external authentication tools.
  *
@@ -197,6 +200,9 @@ public class ExternalAuthUtils {
         final int resultCode = checkGooglePlayServicesAvailable(context);
         if (resultCode == ConnectionResult.SUCCESS) return true;
         // resultCode is some kind of error.
+        // Vivaldi
+        // For automotive, don't show any error. This is a normal state for most OEMs.
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) return false;
         Log.v(TAG, "Unable to use Google Play Services: %s", describeError(resultCode));
         if (isUserRecoverableError(resultCode)) {
             Runnable errorHandlerTask =

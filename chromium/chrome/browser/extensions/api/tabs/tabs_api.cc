@@ -17,6 +17,7 @@
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/containers/contains.h"
+#include "base/containers/flat_set.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
@@ -64,7 +65,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/recently_audible_helper.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -86,6 +86,9 @@
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/split_tab_data.h"
+#include "components/tabs/public/split_tab_id.h"
+#include "components/tabs/public/tab_group.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/common/language_detection_details.h"
 #include "components/webapps/common/web_app_id.h"
@@ -509,6 +512,25 @@ void NotifyExtensionTelemetry(Profile* profile,
 #endif
 }
 
+class ScopedPinBrowserAtFront {
+ public:
+  explicit ScopedPinBrowserAtFront(Browser* browser)
+      : browser_(browser->AsWeakPtr()) {
+    old_z_order_level_ = browser_->window()->GetZOrderLevel();
+    browser_->window()->SetZOrderLevel(ui::ZOrderLevel::kFloatingWindow);
+  }
+
+  ~ScopedPinBrowserAtFront() {
+    if (browser_) {
+      browser_->window()->SetZOrderLevel(old_z_order_level_);
+    }
+  }
+
+ private:
+  base::WeakPtr<Browser> browser_;
+  ui::ZOrderLevel old_z_order_level_;
+};
+
 // Vivaldi
 ui::PageTransition HistoryExtensionTransitionToUiTransition(
     extensions::api::history::TransitionType transition) {
@@ -541,6 +563,7 @@ ui::PageTransition HistoryExtensionTransitionToUiTransition(
   // We have to return something
   return ui::PAGE_TRANSITION_LINK;
 }
+// End Vivaldi
 
 }  // namespace
 
@@ -1018,27 +1041,18 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
   if (focused) {
     new_window->window()->Show();
   } else {
-    // The new window isn't supposed to be focused. Here, instead of showing an
-    // unfocused window on top (possible on some operating systems), we show
-    // the window and then bring the old focused window back on top.
-    // We still use ShowInactive() (instead of doing a Show() followed
-    // immediately by Deactivate()) because the process of showing the window is
-    // somewhat asynchronous. This causes the immediate Deactivate() call to not
-    // work.
+    // Show an unfocused new window.
     BrowserList* const browser_list = BrowserList::GetInstance();
     Browser* last_active_browser = browser_list->GetLastActive();
-    // Check if there's a currently-active window that should re-take focus.
-    new_window->window()->ShowInactive();
 
-    // If the browser is still active, activate the last active (alive) window.
-    // It's possible that showing the new browser synchronously caused the old
-    // one to close, so we check for alive-ness.
-    // We check `active_browser->IsActive()` instead of
-    // `active_browser->window()->IsActive()` because the latter returns false
-    // if only child windows are active.
-    if (base::Contains(*browser_list, last_active_browser) &&
-        last_active_browser->IsActive()) {
-      last_active_browser->window()->Activate();
+    // On some OSes the new unfocused window is shown on top by default.
+    // ScopedPinBrowserAtFront prevents the new browser from being shown above
+    // the old active browser.
+    if (last_active_browser && last_active_browser->IsActive()) {
+      ScopedPinBrowserAtFront scoper(last_active_browser);
+      new_window->window()->ShowInactive();
+    } else {
+      new_window->window()->ShowInactive();
     }
   }
 
@@ -1729,6 +1743,20 @@ ExtensionFunction::ResponseAction TabsHighlightFunction::Run() {
     return RespondNow(Error(kNoHighlightedTabError));
   }
 
+  // Extend selection for any split tabs.
+  for (const auto& index : selection.selected_indices()) {
+    std::optional<split_tabs::SplitTabId> split_id =
+        tab_strip_model->GetSplitForTab(index);
+    if (!split_id.has_value()) {
+      continue;
+    }
+    // All the tabs in a split should be contiguous.
+    std::vector<::tabs::TabInterface*> split_tabs =
+        tab_strip_model->GetSplitData(split_id.value())->ListTabs();
+    size_t start = tab_strip_model->GetIndexOfTab(split_tabs[0]);
+    selection.AddIndexRangeToSelection(start, start + split_tabs.size() - 1);
+  }
+
   selection.set_active(active_index);
   tab_strip_model->SetSelectionFromModel(std::move(selection));
   return RespondNow(
@@ -1838,9 +1866,10 @@ ExtensionFunction::ResponseAction TabsUpdateFunction::Run() {
       return RespondNow(Error(ExtensionTabUtil::kTabStripNotEditableError));
     }
 
-    bool highlighted = *params->update_properties.highlighted;
-    if (highlighted != tab_strip->IsTabSelected(tab_index)) {
-      tab_strip->ToggleSelectionAt(tab_index);
+    if (*params->update_properties.highlighted) {
+      tab_strip->SelectTabAt(tab_index);
+    } else {
+      tab_strip->DeselectTabAt(tab_index);
     }
   }
 

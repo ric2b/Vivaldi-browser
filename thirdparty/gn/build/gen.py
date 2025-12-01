@@ -206,9 +206,13 @@ def main(argv):
                       default='../third_party/zoslib',
                       dest='zoslib_dir',
                       help=('Specify the path of ZOSLIB directory, to link ' +
-                            'with <ZOSLIB_DIR>/install/lib/libzoslib.a, and ' +
-                            'add -I<ZOSLIB_DIR>/install/include to the compile ' +
+                            'with <ZOSLIB_DIR>/lib/libzoslib.a, and ' +
+                            'add -I<ZOSLIB_DIR>/include to the compile ' +
                             'commands. See README.md for details.'))
+  args_list.add('--generate-compilation-database',
+                    action='store_true',
+                    help=('Generate compile_commands.json with ' +
+                          '`ninja -t compdb`.'))
 
   args_list.add_to_parser(parser)
   options = parser.parse_args(argv)
@@ -387,12 +391,17 @@ def WriteGenericNinja(path, static_libraries, executables,
     f.write(ninja_template)
     f.write('\n'.join(ninja_lines))
 
+  build_dir = os.path.dirname(path)
   with open(path + '.d', 'w') as f:
     f.write('build.ninja: ' +
             os.path.relpath(os.path.join(SCRIPT_DIR, 'gen.py'),
-                            os.path.dirname(path)) + ' ' +
-            os.path.relpath(template_filename, os.path.dirname(path)) + '\n')
+                            build_dir) + ' ' +
+            os.path.relpath(template_filename, build_dir) + '\n')
 
+  if options.generate_compilation_database:
+    with open(os.path.join(REPO_ROOT, 'compile_commands.json'), 'w') as f:
+      subprocess.run(
+          ['ninja', '-C', build_dir, '-t', 'compdb'], stdout=f, check=True)
 
 def WriteGNNinja(path, platform, host, options, args_list):
   if platform.is_msvc():
@@ -421,7 +430,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
       '.',
   ]
   if platform.is_zos():
-    include_dirs += [ options.zoslib_dir + '/install/include' ]
+    include_dirs += [ options.zoslib_dir + '/include' ]
 
   libs = []
 
@@ -535,7 +544,10 @@ def WriteGNNinja(path, platform, host, options, args_list):
       cflags.append('-fPIC')
       cflags.extend(['-D_BSD_SOURCE'])
     elif platform.is_zos():
+      cflags.append('-m64')
+      ldflags.append('-m64')
       cflags.append('-fzos-le-char-mode=ascii')
+      cflags.append('-Wno-unknown-pragmas')
       cflags.append('-Wno-unused-function')
       cflags.append('-D_OPEN_SYS_FILE_EXT')
       cflags.append('-DPATH_MAX=1024')
@@ -911,7 +923,7 @@ def WriteGNNinja(path, platform, host, options, args_list):
     ])
 
   if platform.is_zos():
-    libs.extend([ options.zoslib_dir + '/install/lib/libzoslib.a' ])
+    libs.extend([ options.zoslib_dir + '/lib/libzoslib.a' ])
 
   if platform.is_windows():
     static_libraries['base']['sources'].extend([

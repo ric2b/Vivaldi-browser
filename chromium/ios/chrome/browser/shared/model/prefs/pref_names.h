@@ -114,6 +114,11 @@ inline constexpr char kFirstFollowUpdateUIShownCount[] =
 inline constexpr char kFeaturePushNotificationPermissions[] =
     "push_notifications.feature_permissions";
 
+// A boolean indicating if the user has ever switched accounts via an account
+// menu triggered from a web flow.
+inline constexpr char kHasSwitchedAccountsViaWebFlow[] =
+    "ios.signin.has_switched_accounts_via_web_flow";
+
 // Prefs for persisting HttpServerProperties.
 inline constexpr char kHttpServerProperties[] = "net.http_server_properties";
 
@@ -201,6 +206,15 @@ inline constexpr char kIosBringAndroidTabsPromptDisplayed[] =
 // Integer to record the last action that a user has taken on the CPE promo.
 inline constexpr char kIosCredentialProviderPromoLastActionTaken[] =
     "ios.credential_provider_promo_last_action_taken";
+
+// The timestamp of the last time the CPE promo was displayed.
+inline constexpr char kIosCredentialProviderPromoDisplayTime[] =
+    "ios.credential_provider_promo_display_time";
+
+// The timestamp of the last time the user had a successful login with an
+// existing saved password.
+inline constexpr char kIosSuccessfulLoginWithExistingPassword[] =
+    "ios.successful_login_with_existing_password";
 
 // Boolean that is true when the CredentialProviderPromoEnabled policy is
 // enabled.
@@ -612,10 +626,6 @@ inline constexpr char kNewTabPageLocationOverride[] =
 // A boolean specifying whether HTTPS-Only Mode is enabled.
 inline constexpr char kHttpsOnlyModeEnabled[] = "ios.https_only_mode_enabled";
 
-// A boolean specifying whether Mixed Content Autoupgrading is enabled.
-inline constexpr char kMixedContentAutoupgradeEnabled[] =
-    "ios.mixed_content_autoupgrade_enabled";
-
 // An int counting the remaining number of times the autofill branding icon
 // should show inside form input accessories.
 inline constexpr char kAutofillBrandingIconAnimationRemainingCount[] =
@@ -739,6 +749,24 @@ inline constexpr char kReminderNotifications[] = "ios.notifications.reminders";
 // set.
 inline constexpr char kMigrateWidgetsPrefs[] =
     "ios.widgets.update_to_support_mim";
+
+// A boolean specifying whether provisional notifications are allowed by policy.
+inline constexpr char kProvisionalNotificationsAllowedByPolicy[] =
+    "ios.notifications.provisional.allowed_by_policy";
+
+// Timestamp tracking when the sync error infobar was dismissed the last time
+// (either explicitly swiped by the user or through the dismissal timeout).
+inline constexpr char kIosSyncInfobarErrorLastDismissedTimestamp[] =
+    "ios.sync_infobar_error.last_dismissed_timestamp";
+
+// A boolean specifying whether the glic consent form has been accepted.
+inline constexpr char kIOSGLICConsent[] = "ios.glic.consent";
+
+// A time object storing the first browser startup with a managed primary
+// identity in the personal profile after multi-profile becomes supported. Used
+// to trigger forced migration after some grace period.
+inline constexpr char kWaitingForMultiProfileForcedMigrationTimestamp[] =
+    "ios.waiting_for_multi_profile_forced_migration_timestamp";
 
 }  // namespace prefs
 

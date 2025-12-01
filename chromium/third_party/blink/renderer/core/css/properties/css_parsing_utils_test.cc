@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/css/css_math_function_value.h"
 #include "third_party/blink/renderer/core/css/css_progress_value.h"
 #include "third_party/blink/renderer/core/css/css_scroll_value.h"
+#include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
 #include "third_party/blink/renderer/core/css/css_view_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_stream.h"
@@ -24,6 +25,7 @@ namespace {
 
 using css_parsing_utils::AtDelimiter;
 using css_parsing_utils::AtIdent;
+using css_parsing_utils::ConsumeAbsoluteColor;
 using css_parsing_utils::ConsumeAngle;
 using css_parsing_utils::ConsumeIfDelimiter;
 using css_parsing_utils::ConsumeIfIdent;
@@ -46,6 +48,19 @@ TEST(CSSParsingUtilsTest, BasicShapeUseCount) {
   EXPECT_TRUE(document.IsUseCounted(feature));
 }
 
+TEST(CSSParsingUtilsTest, OverflowClipUseCount) {
+  test::TaskEnvironment task_environment;
+  auto dummy_page_holder =
+      std::make_unique<DummyPageHolder>(gfx::Size(800, 600));
+  Page::InsertOrdinaryPageForTesting(&dummy_page_holder->GetPage());
+  Document& document = dummy_page_holder->GetDocument();
+  WebDXFeature feature = WebDXFeature::kOverflowClip;
+  EXPECT_FALSE(document.IsWebDXFeatureCounted(feature));
+  document.documentElement()->setInnerHTML(
+      "<style>span { overflow: clip; }</style>");
+  EXPECT_TRUE(document.IsWebDXFeatureCounted(feature));
+}
+
 TEST(CSSParsingUtilsTest, Revert) {
   EXPECT_TRUE(css_parsing_utils::IsCSSWideKeyword(CSSValueID::kRevert));
   EXPECT_TRUE(css_parsing_utils::IsCSSWideKeyword("revert"));
@@ -53,13 +68,20 @@ TEST(CSSParsingUtilsTest, Revert) {
 
 double ConsumeAngleValue(String target) {
   CSSParserTokenStream stream(target);
-  return ConsumeAngle(stream, *MakeContext(), std::nullopt)->ComputeDegrees();
+  // This function only works on calc() expressions that can be resolved at
+  // parse time.
+  CSSToLengthConversionData conversion_data(/*element=*/nullptr);
+  return ConsumeAngle(stream, *MakeContext(), std::nullopt)
+      ->ComputeDegrees(conversion_data);
 }
 
 double ConsumeAngleValue(String target, double min, double max) {
   CSSParserTokenStream stream(target);
+  // This function only works on calc() expressions that can be resolved at
+  // parse time.
+  CSSToLengthConversionData conversion_data(/*element=*/nullptr);
   return ConsumeAngle(stream, *MakeContext(), std::nullopt, min, max)
-      ->ComputeDegrees();
+      ->ComputeDegrees(conversion_data);
 }
 
 TEST(CSSParsingUtilsTest, ConsumeAngles) {
@@ -183,10 +205,16 @@ TEST(CSSParsingUtilsTest, DashedIdent) {
 }
 
 TEST(CSSParsingUtilsTest, ConsumeAbsoluteColor) {
-  auto ConsumeColorForTest = [](String css_text, auto func) {
+  auto ConsumeColorForTest = [](String css_text) {
     CSSParserTokenStream stream(css_text);
     CSSParserContext* context = MakeContext();
-    return func(stream, *context);
+    return ConsumeColor(stream, *context,
+                        css_parsing_utils::ColorParserContext());
+  };
+  auto ConsumeAbsoluteColorForTest = [](String css_text) {
+    CSSParserTokenStream stream(css_text);
+    CSSParserContext* context = MakeContext();
+    return ConsumeAbsoluteColor(stream, *context);
   };
 
   struct {
@@ -212,11 +240,9 @@ TEST(CSSParsingUtilsTest, ConsumeAbsoluteColor) {
        nullptr},
   };
   for (auto& expectation : expectations) {
-    EXPECT_EQ(ConsumeColorForTest(expectation.css_text,
-                                  css_parsing_utils::ConsumeColor),
+    EXPECT_EQ(ConsumeColorForTest(expectation.css_text),
               expectation.consume_color_expectation);
-    EXPECT_EQ(ConsumeColorForTest(expectation.css_text,
-                                  css_parsing_utils::ConsumeAbsoluteColor),
+    EXPECT_EQ(ConsumeAbsoluteColorForTest(expectation.css_text),
               expectation.consume_absolute_color_expectation);
   }
 }

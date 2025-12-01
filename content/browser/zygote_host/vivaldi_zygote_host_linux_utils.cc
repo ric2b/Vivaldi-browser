@@ -25,19 +25,19 @@ void HandleLdPreloadEnvVar(
     base::LaunchOptions* options,
     sandbox::FlatpakSandbox::SpawnOptions* spawn_options) {
   auto env = base::Environment::Create();
-  std::string ld_preload;
+  auto ld_preload = env->GetVar(std::string(kLdPreloadEnvVar));
 
-  if (!env->GetVar(kLdPreloadEnvVar, &ld_preload))
+  if (!ld_preload.has_value())
     return;
 
-  VLOG(3) << "Propagating LD_PRELOAD into flatpak sandbox: " << ld_preload;
+  VLOG(3) << "Propagating LD_PRELOAD into flatpak sandbox: " << ld_preload.value();
 
   // Propagate LD_PRELOAD.
-  options->environment[kLdPreloadEnvVar] = ld_preload;
+  options->environment[kLdPreloadEnvVar] = ld_preload.value();
 
   // We also have to expose the path(s) in the var to the sandbox.
   for (const auto& piece : base::SplitStringPiece(
-           ld_preload, kPreloadDelimiters, base::KEEP_WHITESPACE,
+           ld_preload.value(), kPreloadDelimiters, base::KEEP_WHITESPACE,
            base::SPLIT_WANT_NONEMPTY)) {
     spawn_options->ExposePathRo(base::FilePath{piece});
   }

@@ -147,7 +147,7 @@ ExtensionsMenuMainPageView::ExtensionsMenuMainPageView(
   // This value must be the same as the `HoverButton` vertical margin.
   const int hover_button_vertical_spacing =
       chrome_layout_provider->GetDistanceMetric(
-          DISTANCE_CONTROL_LIST_VERTICAL) /
+          views::DISTANCE_CONTROL_LIST_VERTICAL) /
       2;
 
   views::LayoutProvider* layout_provider = views::LayoutProvider::Get();
@@ -400,7 +400,7 @@ ExtensionsMenuMainPageView::GetExtensionsRequestingAccessForTesting() {
   CHECK_IS_TEST();
   std::vector<extensions::ExtensionId> extensions;
   extensions.reserve(requests_entries_.size());
-  for (auto entry : requests_entries_) {
+  for (const auto& entry : requests_entries_) {
     extensions.push_back(entry.first);
   }
   return extensions;

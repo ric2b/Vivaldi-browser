@@ -17,7 +17,7 @@ namespace performance_manager::features {
 #if !BUILDFLAG(IS_ANDROID)
 BASE_FEATURE(kBackgroundTabLoadingFromPerformanceManager,
              "BackgroundTabLoadingFromPerformanceManager",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE_PARAM(size_t,
                    kBackgroundTabLoadingMinSiteEngagement,
@@ -31,32 +31,9 @@ BASE_FEATURE_PARAM(bool,
                    "restore_main_frame_state",
                    true);
 
-BASE_FEATURE(kPerformanceControlsPerformanceSurvey,
-             "PerformanceControlsPerformanceSurvey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kPerformanceControlsBatteryPerformanceSurvey,
-             "PerformanceControlsBatteryPerformanceSurvey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-// The variable was renamed to "MemorySaver" but the experiment name remains as
-// "HighEfficiency" because it is already running (crbug.com/1493843).
-BASE_FEATURE(kPerformanceControlsMemorySaverOptOutSurvey,
-             "PerformanceControlsHighEfficiencyOptOutSurvey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kPerformanceControlsBatterySaverOptOutSurvey,
-             "PerformanceControlsBatterySaverOptOutSurvey",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kPerformanceControlsPPMSurvey,
              "PerformanceControlsPPMSurvey",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-const base::FeatureParam<base::TimeDelta>
-    kPerformanceControlsBatterySurveyLookback{
-        &kPerformanceControlsBatteryPerformanceSurvey, "battery_lookback",
-        base::Days(8)};
 
 BASE_FEATURE_PARAM(base::TimeDelta,
                    kPerformanceControlsPPMSurveyMinDelay,
@@ -191,7 +168,7 @@ BASE_FEATURE(kUnthrottledTabProcessReporting,
 
 BASE_FEATURE(kPMProcessPriorityPolicy,
              "PMProcessPriorityPolicy",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const base::FeatureParam<bool> kInheritParentPriority{
     &kPMProcessPriorityPolicy, "inherit_parent_priority", true};
@@ -241,7 +218,7 @@ BASE_FEATURE_PARAM(double,
                    kFreezingHighCPUProportion,
                    &kCPUMeasurementInFreezingPolicy,
                    "freezing_high_cpu_proportion",
-                   0.25);
+                   0.05);
 BASE_FEATURE_PARAM(base::TimeDelta,
                    kFreezingVisibleProtectionTime,
                    &kCPUMeasurementInFreezingPolicy,
@@ -268,6 +245,28 @@ BASE_FEATURE(kFreezingFollowsDiscardOptOut,
 BASE_FEATURE(kRecordFreezingEligibilityUKM,
              "RecordFreezingEligibilityUKM",
              base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kInfiniteTabsFreezing,
+             "InfiniteTabsFreezing",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE_PARAM(int,
+                   kInfiniteTabsFreezing_NumProtectedTabs,
+                   &kInfiniteTabsFreezing,
+                   "num_protected_tabs",
+                   5);
+
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kInfiniteTabsFreezing_UnfreezeInterval,
+                   &kInfiniteTabsFreezing,
+                   "unfreeze_interval",
+                   base::Minutes(1));
+
+BASE_FEATURE_PARAM(base::TimeDelta,
+                   kInfiniteTabsFreezing_UnfreezeDuration,
+                   &kInfiniteTabsFreezing,
+                   "unfreeze_duration",
+                   base::Seconds(5));
 
 BASE_FEATURE(kResourceAttributionIncludeOrigins,
              "ResourceAttributionIncludeOrigins",

@@ -23,33 +23,22 @@
 namespace permissions {
 
 PermissionRequest::PermissionRequest(
-    const GURL& requesting_origin,
-    RequestType request_type,
-    bool has_gesture,
+    std::unique_ptr<PermissionRequestData> request_data,
     PermissionDecidedCallback permission_decided_callback,
-    base::OnceClosure delete_callback)
-    : data_(
-          PermissionRequestData(request_type, has_gesture, requesting_origin)),
-      permission_decided_callback_(std::move(permission_decided_callback)),
-      delete_callback_(std::move(delete_callback)) {}
-
-PermissionRequest::PermissionRequest(
-    PermissionRequestData request_data,
-    PermissionDecidedCallback permission_decided_callback,
-    base::OnceClosure delete_callback,
+    base::OnceClosure request_finished_callback,
     bool uses_automatic_embargo)
     : data_(std::move(request_data)),
       permission_decided_callback_(std::move(permission_decided_callback)),
-      delete_callback_(std::move(delete_callback)),
+      request_finished_callback_(std::move(request_finished_callback)),
       uses_automatic_embargo_(uses_automatic_embargo) {}
 
 PermissionRequest::~PermissionRequest() {
-  DCHECK(delete_callback_.is_null());
+  std::move(request_finished_callback_).Run();
 }
 
 RequestType PermissionRequest::request_type() const {
-  CHECK(data_.request_type);
-  return data_.request_type.value();
+  CHECK(data_->request_type);
+  return data_->request_type.value();
 }
 
 bool PermissionRequest::IsDuplicateOf(PermissionRequest* other_request) const {
@@ -179,11 +168,11 @@ PermissionRequest::GetDialogAnnotatedMessageText(
 #endif
 
 bool PermissionRequest::IsEmbeddedPermissionElementInitiated() const {
-  return data_.embedded_permission_element_initiated;
+  return data_->embedded_permission_element_initiated;
 }
 
 std::optional<gfx::Rect> PermissionRequest::GetAnchorElementPosition() const {
-  return data_.anchor_element_position;
+  return data_->anchor_element_position;
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -426,38 +415,35 @@ bool PermissionRequest::ShouldUseTwoOriginPrompt() const {
 void PermissionRequest::PermissionGranted(bool is_one_time) {
   std::move(permission_decided_callback_)
       .Run(CONTENT_SETTING_ALLOW, is_one_time,
-           /*is_final_decision=*/true);
+           /*is_final_decision=*/true, /*request_data=*/*data_);
 }
 
 void PermissionRequest::PermissionDenied() {
   std::move(permission_decided_callback_)
       .Run(CONTENT_SETTING_BLOCK, /*is_one_time=*/false,
-           /*is_final_decision=*/true);
+           /*is_final_decision=*/true, /*request_data=*/*data_);
 }
 
 void PermissionRequest::Cancelled(bool is_final_decision) {
   if (permission_decided_callback_) {
     permission_decided_callback_.Run(CONTENT_SETTING_DEFAULT,
-                                     /*is_one_time=*/false, is_final_decision);
+                                     /*is_one_time=*/false, is_final_decision,
+                                     /*request_data=*/*data_);
   }
 }
 
-void PermissionRequest::RequestFinished() {
-  std::move(delete_callback_).Run();
-}
-
 PermissionRequestGestureType PermissionRequest::GetGestureType() const {
-  return PermissionUtil::GetGestureType(data_.user_gesture);
+  return PermissionUtil::GetGestureType(data_->user_gesture);
 }
 
 const std::vector<std::string>&
 PermissionRequest::GetRequestedAudioCaptureDeviceIds() const {
-  return data_.requested_audio_capture_device_ids;
+  return data_->requested_audio_capture_device_ids;
 }
 
 const std::vector<std::string>&
 PermissionRequest::GetRequestedVideoCaptureDeviceIds() const {
-  return data_.requested_video_capture_device_ids;
+  return data_->requested_video_capture_device_ids;
 }
 
 ContentSettingsType PermissionRequest::GetContentSettingsType() const {
@@ -486,9 +472,19 @@ std::u16string PermissionRequest::GetPermissionNameTextFragment() const {
   return l10n_util::GetStringUTF16(message_id);
 }
 
+std::optional<PermissionHatsTriggerHelper::PreviewParametersForHats>
+PermissionRequest::get_preview_parameters() const {
+  return preview_parameters_;
+}
+
+void PermissionRequest::set_preview_parameters(
+    PermissionHatsTriggerHelper::PreviewParametersForHats preview_parmeters) {
+  preview_parameters_ = std::move(preview_parmeters);
+}
+
 void PermissionRequest::SetEmbeddedPermissionElementInitiatedForTesting(
     bool embedded_permission_element_initiated) {
-  data_.embedded_permission_element_initiated =
+  data_->embedded_permission_element_initiated =
       embedded_permission_element_initiated;
 }
 

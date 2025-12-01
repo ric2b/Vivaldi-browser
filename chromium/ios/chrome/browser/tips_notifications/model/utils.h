@@ -8,6 +8,7 @@
 #import <UserNotifications/UserNotifications.h>
 
 #import <optional>
+#import <string_view>
 #import <vector>
 
 namespace base {
@@ -58,7 +59,10 @@ enum class TipsNotificationType {
   kOmniboxPosition = 6,
   kLens = 7,
   kEnhancedSafeBrowsing = 8,
-  kMaxValue = kEnhancedSafeBrowsing,
+  kLensOverlay = 9,
+  kCPE = 10,
+  kIncognitoLock = 11,
+  kMaxValue = kIncognitoLock,
 };
 // LINT.ThenChange(/tools/metrics/histograms/metadata/ios/enums.xml)
 
@@ -81,15 +85,18 @@ bool IsProactiveTipsNotification(UNNotificationRequest* request);
 
 // Returns a userInfo dictionary pre-filled with the notification `type`.
 NSDictionary* UserInfoForTipsNotificationType(TipsNotificationType type,
-                                              bool for_reactivation);
+                                              bool for_reactivation,
+                                              std::string_view profile_name);
 
 // Returns the notification type found in a notification's userInfo dictionary.
 std::optional<TipsNotificationType> ParseTipsNotificationType(
     UNNotificationRequest* request);
 
 // Returns the notification content for a given Tips notification type.
-UNNotificationContent* ContentForTipsNotificationType(TipsNotificationType type,
-                                                      bool for_reactivation);
+UNNotificationContent* ContentForTipsNotificationType(
+    TipsNotificationType type,
+    bool for_reactivation,
+    std::string_view profile_name);
 
 // Returns the time delta used to trigger Tips notifications.
 base::TimeDelta TipsNotificationTriggerDelta(
@@ -106,13 +113,16 @@ int TipsNotificationsEnabledBitfield();
 std::vector<TipsNotificationType> TipsNotificationsTypesOrder(
     bool for_reactivation);
 
-// Returns the dismiss limit. If the user dismisses this number of Tips
-// notifications in a row, no more Tips notifications will be sent. Zero
-// indicates there should be no limit.
-int TipsNotificationsDismissLimit();
-
 // Returns the matching NotificationType for the TipsNotificationType `type`.
 NotificationType NotificationTypeForTipsNotificationType(
     TipsNotificationType type);
+
+// Returns the type of Tips Notification that is forced to be sent, via
+// experimental settings.
+std::optional<TipsNotificationType> ForcedTipsNotificationType();
+
+// Returns the trigger time (in seconds) that was set in Experimental Settings.
+// Returns 0 if it was not set.
+int TipsNotificationTriggerExperimentalSetting();
 
 #endif  // IOS_CHROME_BROWSER_TIPS_NOTIFICATIONS_MODEL_UTILS_H_

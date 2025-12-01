@@ -4,12 +4,15 @@
 
 package org.chromium.chrome.browser.ui.signin.signin_promo;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 
 import androidx.annotation.IntDef;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.ChromeSharedPreferences;
 import org.chromium.chrome.browser.profiles.Profile;
@@ -18,6 +21,7 @@ import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.services.SigninPreferencesManager;
 import org.chromium.chrome.browser.ui.signin.R;
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
+import org.chromium.chrome.browser.ui.signin.account_picker.AccountPickerBottomSheetStrings;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncHelper;
 import org.chromium.components.signin.SigninFeatureMap;
@@ -32,6 +36,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.concurrent.TimeUnit;
 
 /** {@link SigninPromoDelegate} for the History page sign-in promo. */
+@NullMarked
 public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
 
     /** Indicates the type of content the should be shown in the visible promo. */
@@ -54,7 +59,7 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
 
     @VisibleForTesting static final int MAX_IMPRESSIONS = 10;
 
-    private boolean mIsCreatedInCct;
+    private final boolean mIsCreatedInCct;
     private final String mPromoShowCountPreferenceName;
     private @PromoState int mPromoState = PromoState.NONE;
 
@@ -114,6 +119,14 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
     }
 
     @Override
+    AccountPickerBottomSheetStrings getBottomSheetStrings() {
+        return new AccountPickerBottomSheetStrings.Builder(
+                        R.string.signin_account_picker_bottom_sheet_title)
+                .setSubtitleStringId(R.string.signin_account_picker_bottom_sheet_benefits_subtitle)
+                .build();
+    }
+
+    @Override
     boolean shouldHideSecondaryButton() {
         return true;
     }
@@ -125,7 +138,7 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
 
     @Override
     String getTextForPrimaryButton(@Nullable DisplayableProfileData profileData) {
-        if (SigninFeatureMap.isEnabled(SigninFeatures.HISTORY_OPT_IN_PROMO_CTA_STRING_VARIATION)) {
+        if (SigninFeatureMap.isEnabled(SigninFeatures.HISTORY_PAGE_PROMO_CTA_STRING_VARIATION)) {
             return mContext.getString(R.string.signin_continue);
         } else {
             return mContext.getString(R.string.signin_promo_turn_on);
@@ -143,14 +156,18 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
 
     @Override
     boolean isMaxImpressionsReached() {
-        return ChromeSharedPreferences.getInstance().readInt(mPromoShowCountPreferenceName)
-                >= MAX_IMPRESSIONS;
+        return getPromoShownCount() >= MAX_IMPRESSIONS;
     }
 
     @Override
     @HistorySyncConfig.OptInMode
     int getHistoryOptInMode() {
         return HistorySyncConfig.OptInMode.REQUIRED;
+    }
+
+    @Override
+    int getPromoShownCount() {
+        return ChromeSharedPreferences.getInstance().readInt(mPromoShowCountPreferenceName);
     }
 
     private @PromoState int computePromoState() {
@@ -183,6 +200,7 @@ public class HistoryPageSigninPromoDelegate extends SigninPromoDelegate {
 
         IdentityManager identityManager =
                 IdentityServicesProvider.get().getIdentityManager(mProfile);
+        assumeNonNull(identityManager);
         if (!identityManager.hasPrimaryAccount(ConsentLevel.SIGNIN)) {
             // Hide promo for signed-out users.
             return PromoState.NONE;

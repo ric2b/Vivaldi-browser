@@ -14,6 +14,22 @@ namespace bookmarks {
 class BookmarkNode;
 }  // namespace bookmarks
 
+// Lists the different versions of the BookmarkAccountStorageMoveDialog.
+// These values are persisted to UMA. Entries should not be renumbered and
+// numeric values should never be reused.
+//
+// LINT.IfChange(BookmarkAccountStorageMoveDialogType)
+enum class BookmarkAccountStorageMoveDialogType {
+  // Dialog triggered upon a user action where the destination is specified,
+  // e.g. from a drag and drop in the bookmarks bar.
+  kDownloadOrUpload = 0,
+  // Dialog triggered by asking the user to upload the bookmark node (without
+  // specifying the destination), e.g. from the bookmark manager.
+  kUpload = 1,
+  kMaxValue = kUpload,
+};
+// LINT.ThenChange(/tools/metrics/histograms/metadata/sync/enums.xml:BookmarkAccountStorageMoveDialogType)
+
 // IDs for the button dialogs, to allow pressing them in tests.
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kBookmarkAccountStorageMoveDialogOkButton);
 DECLARE_ELEMENT_IDENTIFIER_VALUE(kBookmarkAccountStorageMoveDialogCancelButton);
@@ -27,11 +43,16 @@ DECLARE_ELEMENT_IDENTIFIER_VALUE(kBookmarkAccountStorageMoveDialogCancelButton);
 // `index`-th child of `target_folder`.
 // Must only be called if there is a signed-in account, and if `node` and
 // `target_folder` have different storages, otherwise the call will crash.
+// `dialog_type` specifies which version of the dialog should be displayed.
+// Note: In incognito mode, the dialog will be shown on top of a browser for the
+// Original Profile instead of `browser`. It will create a new browser window if
+// one doesn't exist already.
 void ShowBookmarkAccountStorageMoveDialog(
     Browser* browser,
     const bookmarks::BookmarkNode* node,
     const bookmarks::BookmarkNode* target_folder,
     size_t index,
+    BookmarkAccountStorageMoveDialogType dialog_type,
     base::OnceClosure closed_callback = base::DoNothing());
 
 #endif  // CHROME_BROWSER_UI_VIEWS_BOOKMARKS_BOOKMARK_ACCOUNT_STORAGE_MOVE_DIALOG_H_

@@ -930,16 +930,6 @@ TEST_F(AutocompleteProviderTest, SuggestionGroups) {
     // for unknown suggestion group IDs.
     EXPECT_EQ(u"", result_.GetHeaderForSuggestionGroup(kBadGroupId));
 
-    // AutocompleteResult::IsSuggestionGroupHidden() returns false for unknown
-    // suggestion group IDs.
-    EXPECT_FALSE(result_.IsSuggestionGroupHidden(GetPrefs(), kBadGroupId));
-
-    // AutocompleteResult::SetSuggestionGroupHidden() does nothing for unknown
-    // suggestion group IDs.
-    result_.SetSuggestionGroupHidden(GetPrefs(), kBadGroupId,
-                                     /*hidden=*/true);
-    EXPECT_FALSE(result_.IsSuggestionGroupHidden(GetPrefs(), kBadGroupId));
-
     // AutocompleteResult::GetSectionForSuggestionGroup() returns
     // omnibox::SECTION_DEFAULT for unknown suggestion group IDs.
     EXPECT_EQ(omnibox::SECTION_DEFAULT,
@@ -1894,6 +1884,12 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_NonPrefetch) {
 
 TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_Prefetch) {
   // Add a test provider that supports prefetch requests.
+
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures(
+      /*enabled_features=*/{omnibox::kZeroSuggestPrefetching},
+      /*disabled_features=*/{});
+
   TestProvider* provider = new TestProvider(kResultsPerProvider, u"http://a",
                                             kTestTemplateURLKeyword, client_);
   provider->set_supports_prefetch(true);
@@ -1908,7 +1904,7 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_Prefetch) {
           &AutocompleteProviderTest::CopyResults, base::Unretained(this))));
   provider->AddListener(provider_listener_.get());
 
-  AutocompleteInput input(u"", metrics::OmniboxEventProto::OTHER,
+  AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_ZPS_PREFETCH,
                           TestingSchemeClassifier());
   controller_->StartPrefetch(input);
   // Wait for StartPrefetch() to be called on the provider.
@@ -1930,6 +1926,10 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_Prefetch) {
 }
 
 TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_OngoingNonPrefetch) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures(
+      /*enabled_features=*/{omnibox::kZeroSuggestPrefetching},
+      /*disabled_features=*/{});
   // Add a test provider that supports prefetch requests.
   TestProvider* provider = new TestProvider(kResultsPerProvider, u"http://a",
                                             kTestTemplateURLKeyword, client_);
@@ -1945,7 +1945,7 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_OngoingNonPrefetch) {
           &AutocompleteProviderTest::CopyResults, base::Unretained(this))));
   provider->AddListener(provider_listener_.get());
 
-  AutocompleteInput input(u"bar", metrics::OmniboxEventProto::OTHER,
+  AutocompleteInput input(u"bar", metrics::OmniboxEventProto::NTP_ZPS_PREFETCH,
                           TestingSchemeClassifier());
   controller_->Start(input);
 
@@ -1977,6 +1977,10 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_OngoingNonPrefetch) {
 }
 
 TEST_F(AutocompleteProviderPrefetchTest, UnsupportedProvider_Prefetch) {
+  base::test::ScopedFeatureList features;
+  features.InitWithFeatures(
+      /*enabled_features=*/{omnibox::kZeroSuggestPrefetching},
+      /*disabled_features=*/{});
   // Add a test provider that does not support prefetch requests.
   TestProvider* provider = new TestProvider(kResultsPerProvider, u"http://a",
                                             kTestTemplateURLKeyword, client_);
@@ -1985,7 +1989,7 @@ TEST_F(AutocompleteProviderPrefetchTest, UnsupportedProvider_Prefetch) {
   base::RunLoop provider_run_loop;
   provider->set_closure(provider_run_loop.QuitClosure());
 
-  AutocompleteInput input(u"", metrics::OmniboxEventProto::OTHER,
+  AutocompleteInput input(u"", metrics::OmniboxEventProto::NTP_ZPS_PREFETCH,
                           TestingSchemeClassifier());
   controller_->StartPrefetch(input);
 

@@ -115,8 +115,8 @@ std::unique_ptr<GuestViewBase> AppViewGuest::Create(
 
 AppViewGuest::AppViewGuest(content::RenderFrameHost* owner_rfh)
     : GuestView<AppViewGuest>(owner_rfh),
-      app_view_guest_delegate_(base::WrapUnique(
-          ExtensionsAPIClient::Get()->CreateAppViewGuestDelegate())) {
+      app_view_guest_delegate_(
+          ExtensionsAPIClient::Get()->CreateAppViewGuestDelegate()) {
   if (app_view_guest_delegate_) {
     app_delegate_ =
         base::WrapUnique(app_view_guest_delegate_->CreateAppDelegate(
@@ -150,6 +150,7 @@ bool AppViewGuest::HandleContextMenu(
 }
 
 bool AppViewGuest::IsWebContentsCreationOverridden(
+    content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
     content::mojom::WindowContainerType window_container_type,
     const GURL& opener_url,

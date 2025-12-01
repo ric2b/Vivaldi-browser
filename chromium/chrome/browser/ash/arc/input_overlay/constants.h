@@ -10,53 +10,55 @@
 namespace arc::input_overlay {
 
 // About Json strings.
-constexpr char kMouseAction[] = "mouse_action";
-constexpr char kPrimaryClick[] = "primary_click";
-constexpr char kSecondaryClick[] = "secondary_click";
-constexpr char kHoverMove[] = "hover_move";
-constexpr char kPrimaryDragMove[] = "primary_drag_move";
-constexpr char kSecondaryDragMove[] = "secondary_drag_move";
+inline constexpr char kMouseAction[] = "mouse_action";
+inline constexpr char kPrimaryClick[] = "primary_click";
+inline constexpr char kSecondaryClick[] = "secondary_click";
+inline constexpr char kHoverMove[] = "hover_move";
+inline constexpr char kPrimaryDragMove[] = "primary_drag_move";
+inline constexpr char kSecondaryDragMove[] = "secondary_drag_move";
 
 // System version for AlphaV2+.
-constexpr char kSystemVersionAlphaV2Plus[] = "0.2";
+inline constexpr char kSystemVersionAlphaV2Plus[] = "0.2";
 
 // The coordinates number, including Axis x and y.
-constexpr int kAxisSize = 2;
+inline constexpr int kAxisSize = 2;
 
 // Total key size for ActionMoveKey.
-constexpr size_t kActionMoveKeysSize = 4;
+inline constexpr size_t kActionMoveKeysSize = 4;
 
 // Maximum of actions size.
 inline constexpr size_t kMaxActionCount = 50;
 
-constexpr char16_t kUnknownBind[] = u"?";
+inline constexpr char16_t kUnknownBind[] = u"?";
 
 // Directions from up, left, down, right.
-constexpr int kDirection[kActionMoveKeysSize][kAxisSize] = {{0, -1},
-                                                            {-1, 0},
-                                                            {0, 1},
-                                                            {1, 0}};
+inline constexpr int kDirection[kActionMoveKeysSize][kAxisSize] = {{0, -1},
+                                                                   {-1, 0},
+                                                                   {0, 1},
+                                                                   {1, 0}};
 
 // From ActionTap AlphaV2 design. There is the label offset to touch point in
 // the edit mode.
-constexpr int kOffsetToTouchPoint = -1;  // 2 - 3(kDotOutsideStrokeThickness)
+//
+// 2 - 3(kDotOutsideStrokeThickness)
+inline constexpr int kOffsetToTouchPoint = -1;
 
 // The space between EditingList and main window when EditingList is outside of
 // the game window.
-constexpr int kEditingListSpaceBetweenMainWindow = 5;
+inline constexpr int kEditingListSpaceBetweenMainWindow = 5;
 // The offset from the game window content when EditingList is inside of the
 // game window.
-constexpr int kEditingListOffsetInsideMainWindow = 24;
+inline constexpr int kEditingListOffsetInsideMainWindow = 24;
 // The offset from the action view list item to the editing list border.
-constexpr int kEditingListInsideBorderInsets = 16;
+inline constexpr int kEditingListInsideBorderInsets = 16;
 
 // Width of `EditingList`.
-constexpr int kEditingListWidth = 296;
+inline constexpr int kEditingListWidth = 296;
 // Width of `ButtonOptionsMenu` minus the triangle height.
-constexpr int kButtonOptionsMenuWidth = 296;
+inline constexpr int kButtonOptionsMenuWidth = 296;
 
 // Horizontal order inset for `ArrowContainer` and its children.
-constexpr int kArrowContainerHorizontalBorderInset = 16;
+inline constexpr int kArrowContainerHorizontalBorderInset = 16;
 
 // Arrow key move distance per key press event.
 inline constexpr int kArrowKeyMoveDistance = 2;

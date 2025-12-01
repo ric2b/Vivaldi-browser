@@ -8,15 +8,16 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.util.AttributeSet;
 
-import androidx.annotation.Nullable;
 import androidx.annotation.PluralsRes;
 import androidx.appcompat.widget.TooltipCompat;
 
-import org.chromium.base.Callback;
 import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.Initializer;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.tab_ui.TabModelDotInfo;
 import org.chromium.chrome.browser.theme.ThemeUtils;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabSwitcherDrawable;
@@ -31,13 +32,10 @@ import org.chromium.build.BuildConfig;
  * TODO(twellington): Replace with TabSwitcherButtonCoordinator so code can be shared with bottom
  * toolbar.
  */
+@NullMarked
 public class ToggleTabStackButton extends ListMenuButton implements TabSwitcherDrawable.Observer {
-    private final Callback<Integer> mTabCountSupplierObserver = this::onUpdateTabCount;
-    private final Callback<Boolean> mNotificationDotObserver = this::onUpdateNotificationDot;
     private TabSwitcherDrawable mTabSwitcherButtonDrawable;
     private ObservableSupplier<Integer> mTabCountSupplier;
-    private ObservableSupplier<Boolean> mNotificationDotSupplier;
-    private Supplier<Boolean> mIsIncognitoSupplier;
 
     public ToggleTabStackButton(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -64,12 +62,6 @@ public class ToggleTabStackButton extends ListMenuButton implements TabSwitcherD
 
     /** Called to destroy the tab stack button. */
     void destroy() {
-        if (mTabCountSupplier != null) {
-            mTabCountSupplier.removeObserver(mTabCountSupplierObserver);
-        }
-        if (mNotificationDotSupplier != null) {
-            mNotificationDotSupplier.removeObserver(mNotificationDotObserver);
-        }
         mTabSwitcherButtonDrawable.removeTabSwitcherDrawableObserver(this);
     }
 
@@ -77,30 +69,16 @@ public class ToggleTabStackButton extends ListMenuButton implements TabSwitcherD
         mTabSwitcherButtonDrawable.setTint(
                 ThemeUtils.getThemedToolbarIconTint(getContext(), brandedColorScheme));
         mTabSwitcherButtonDrawable.setNotificationBackground(brandedColorScheme);
-        if (mIsIncognitoSupplier != null) {
-            mTabSwitcherButtonDrawable.setIncognitoStatus(mIsIncognitoSupplier.get());
-        }
     }
 
     /**
      * @param tabCountSupplier A supplier used to observe the number of tabs in the current model.
-     * @param notificationDotSupplier A supplier used to observe whether to show the notification
-     *     dot.
-     * @param incognitoSupplier A supplier used to check for incongito state.
      */
-    void setSuppliers(
-            ObservableSupplier<Integer> tabCountSupplier,
-            ObservableSupplier<Boolean> notificationDotSupplier,
-            Supplier<Boolean> isIncognitoSupplier) {
+    @Initializer
+    void setSuppliers(ObservableSupplier<Integer> tabCountSupplier) {
         assert mTabCountSupplier == null : "setSuppliers should only be called once.";
 
         mTabCountSupplier = tabCountSupplier;
-        tabCountSupplier.addObserver(mTabCountSupplierObserver);
-
-        mNotificationDotSupplier = notificationDotSupplier;
-        notificationDotSupplier.addObserver(mNotificationDotObserver);
-
-        mIsIncognitoSupplier = isIncognitoSupplier;
     }
 
     @Override
@@ -143,9 +121,8 @@ public class ToggleTabStackButton extends ListMenuButton implements TabSwitcherD
      * switcher animation, setting the alpha to fade the view by the appropriate amount.
      *
      * @param canvas Canvas to draw to.
-     * @param alpha Integer (0-255) alpha level to draw at.
      */
-    public void drawTabSwitcherAnimationOverlay(Canvas canvas, int alpha) {
+    public void drawTabSwitcherAnimationOverlay(Canvas canvas) {
         int backgroundWidth = mTabSwitcherButtonDrawable.getIntrinsicWidth();
         int backgroundHeight = mTabSwitcherButtonDrawable.getIntrinsicHeight();
         int backgroundLeft =
@@ -167,13 +144,21 @@ public class ToggleTabStackButton extends ListMenuButton implements TabSwitcherD
         return mTabSwitcherButtonDrawable;
     }
 
-    private void onUpdateTabCount(int tabCount) {
-        setEnabled(tabCount >= 1);
-        mTabSwitcherButtonDrawable.updateForTabCount(tabCount, mIsIncognitoSupplier.get());
+    void updateTabCount(int tabCount, boolean isIncognito) {
+        mTabSwitcherButtonDrawable.updateForTabCount(tabCount, isIncognito);
     }
 
-    private void onUpdateNotificationDot(boolean showDot) {
-        mTabSwitcherButtonDrawable.setNotificationIconStatus(showDot);
+    void setIncognitoState(boolean incognito) {
+        mTabSwitcherButtonDrawable.setIncognitoStatus(incognito);
+        var toolbarIconRippleId =
+                incognito
+                        ? R.drawable.default_icon_background_baseline
+                        : R.drawable.default_icon_background;
+        setBackgroundResource(toolbarIconRippleId);
+    }
+
+    public void onUpdateNotificationDot(TabModelDotInfo tabModelDotInfo) {
+        mTabSwitcherButtonDrawable.setNotificationIconStatus(tabModelDotInfo.showDot);
     }
 
     /** Returns whether the button should show a notification icon. */

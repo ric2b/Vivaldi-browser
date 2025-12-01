@@ -362,8 +362,7 @@ void Renderer::ensureCapsInitialized() const
 
     // Enable KHR_texture_compression_astc_hdr
     mNativeExtensions.textureCompressionAstcHdrKHR =
-        mNativeExtensions.textureCompressionAstcLdrKHR &&
-        getFeatures().supportsTextureCompressionAstcHdr.enabled;
+        mNativeExtensions.textureCompressionAstcLdrKHR && supportsAstcHdr();
 
     // Enable EXT_compressed_ETC1_RGB8_sub_texture
     mNativeExtensions.compressedETC1RGB8SubTextureEXT =
@@ -419,7 +418,6 @@ void Renderer::ensureCapsInitialized() const
 
     // Enable EXT_base_instance
     mNativeExtensions.baseInstanceEXT       = true;
-    mNativeLimitations.baseInstanceEmulated = false;
 
     // Enable ANGLE_base_vertex_base_instance
     mNativeExtensions.baseVertexBaseInstanceANGLE              = true;
@@ -1525,9 +1523,9 @@ egl::Config GenerateDefaultConfig(DisplayVk *display,
     gl::Version maxSupportedESVersion = renderer->getMaxSupportedESVersion();
 
     // ES3 features are required to emulate ES1
-    EGLint es1Support = (maxSupportedESVersion.major >= 3 ? EGL_OPENGL_ES_BIT : 0);
-    EGLint es2Support = (maxSupportedESVersion.major >= 2 ? EGL_OPENGL_ES2_BIT : 0);
-    EGLint es3Support = (maxSupportedESVersion.major >= 3 ? EGL_OPENGL_ES3_BIT : 0);
+    EGLint es1Support = (maxSupportedESVersion >= gl::ES_3_0 ? EGL_OPENGL_ES_BIT : 0);
+    EGLint es2Support = (maxSupportedESVersion >= gl::ES_2_0 ? EGL_OPENGL_ES2_BIT : 0);
+    EGLint es3Support = (maxSupportedESVersion >= gl::ES_3_0 ? EGL_OPENGL_ES3_BIT : 0);
 
     egl::Config config;
 

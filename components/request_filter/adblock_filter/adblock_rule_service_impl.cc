@@ -48,6 +48,10 @@ RuleServiceImpl::RuleServiceImpl(
       vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking,
       base::BindRepeating(&RuleServiceImpl::OnEnableDocumentBlockingChanged,
                           base::Unretained(this)));
+  pref_change_registrar_.Add(
+      vivaldiprefs::kPrivacyBlockPingsEnabled,
+      base::BindRepeating(&RuleServiceImpl::OnPingBlockingChanged,
+                          base::Unretained(this)));
 }
 RuleServiceImpl::~RuleServiceImpl() {}
 
@@ -110,11 +114,14 @@ void RuleServiceImpl::Shutdown() {
 void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
   auto request_filter =
       std::make_unique<AdBlockRequestFilter>(weak_factory_.GetWeakPtr(), group);
+  request_filter->set_allow_blocking_documents(prefs_->GetBoolean(
+      vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking));
+  if (group == RuleGroup::kAdBlockingRules) {
+    request_filter->set_block_pings(
+        prefs_->GetBoolean(vivaldiprefs::kPrivacyBlockPingsEnabled));
+  }
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
   request_filter_registry_->AddFilter(std::move(request_filter));
-  request_filters_[static_cast<size_t>(group)]->set_allow_blocking_documents(
-      prefs_->GetBoolean(
-          vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking));
 }
 
 bool RuleServiceImpl::IsRuleGroupEnabled(RuleGroup group) const {
@@ -305,6 +312,14 @@ void RuleServiceImpl::OnEnableDocumentBlockingChanged() {
   }
 }
 
+void RuleServiceImpl::OnPingBlockingChanged() {
+  if (request_filters_[static_cast<size_t>(RuleGroup::kAdBlockingRules)]) {
+    request_filters_[static_cast<size_t>(RuleGroup::kAdBlockingRules)]
+        ->set_block_pings(
+            prefs_->GetBoolean(vivaldiprefs::kPrivacyBlockPingsEnabled));
+  }
+}
+
 std::unique_ptr<CosmeticFilter> RuleServiceImpl::MakeCosmeticFilter(
     content::RenderFrameHost* frame) {
   return std::make_unique<CosmeticFilter>(weak_factory_.GetWeakPtr(),
@@ -328,9 +343,9 @@ bool RuleServiceImpl::HasDocumentActivationForRuleSource(
     return false;
 
   auto& activations = tab_helper->GetTabActivations(group);
-  auto rule_activation =
-      activations.find(adblock_filter::RequestFilterRule::kWholeDocument);
-  if (rule_activation != activations.end()) {
+  auto rule_activation = activations.by_type.find(
+      adblock_filter::RequestFilterRule::kWholeDocument);
+  if (rule_activation != activations.by_type.end()) {
     auto& rule_data = rule_activation->second.rule_data;
     if (rule_data) {
       if (known_sources_handler_->GetPresetIdForSourceId(

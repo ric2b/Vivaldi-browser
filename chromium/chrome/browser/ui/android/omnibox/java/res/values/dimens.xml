@@ -10,7 +10,6 @@ found in the LICENSE file.
     <!-- Toolbar dimensions -->
     <dimen name="toolbar_height_no_shadow">@dimen/default_action_bar_height</dimen>
     <dimen name="toolbar_url_focus_height_increase">8dp</dimen>
-    <dimen name="toolbar_progress_bar_height">2dp</dimen>
     <dimen name="toolbar_button_width">48dp</dimen>
     <dimen name="toolbar_identity_disc_size">24dp</dimen>
     <dimen name="toolbar_url_focus_translation_x">10dp</dimen>
@@ -44,6 +43,7 @@ found in the LICENSE file.
     <dimen name="fake_search_box_lateral_padding">10dp</dimen>
     <dimen name="fake_search_box_end_padding">12dp</dimen>
     <dimen name="fake_search_box_start_padding">24dp</dimen>
+    <dimen name="fake_search_box_start_padding_with_dse_logo">6dp</dimen>
     <dimen name="incognito_badge_lateral_padding_start">4dp</dimen>
     <dimen name="incognito_badge_lateral_padding_end">4dp</dimen>
     <dimen name="location_bar_status_icon_width">24dp</dimen>
@@ -122,4 +122,7 @@ found in the LICENSE file.
     <dimen name="status_view_verbose_highlight_width">94dp</dimen>
     <dimen name="status_view_verbose_highlight_height">40dp</dimen>
     <dimen name="location_bar_status_icon_area_size">32dp</dimen>
+
+    <!-- Vivaldi -->
+    <dimen name="reload_button_margin">7dp</dimen>
 </resources>

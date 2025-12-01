@@ -117,7 +117,7 @@ class AutofillProgressDialogViews;
 class BnplTosDialog;
 class CardUnmaskOtpInputDialogViews;
 class EditAddressProfileView;
-class SaveAndFillDialogViews;
+class SaveAndFillDialog;
 class WebauthnDialogView;
 
 namespace payments {
@@ -300,16 +300,12 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   ~DialogDelegate() override;
 
   // Creates a widget at a default location.
-  // There are two variant of this method. The newer one is the unique_ptr
-  // method, which simply takes ownership of the WidgetDelegate and passes it to
-  // the created Widget. When using the unique_ptr version, it is required that
-  // delegate->owned_by_widget(). Unless you have a good reason, you should use
-  // this variant.
+  // The correct approach is for the client to own the WidgetDelegate via a
+  // unique_ptr, and for the client to own the Widget via a unique_ptr (see
+  // CLIENT_OWNS_WIDGET), and to pass the WidgetDelegate as a raw_ptr.
   //
-  // If !delegate->owned_by_widget() *or* if your WidgetDelegate subclass has a
-  // custom override of WidgetDelegate::DeleteDelegate, use the raw pointer
-  // variant instead, and please talk to one of the //ui/views owners about
-  // your use case.
+  // The unique_ptr variant is deprecated and requires calling
+  // WidgetDelegate::SetOwnedByWidget().
   static Widget* CreateDialogWidget(std::unique_ptr<WidgetDelegate> delegate,
                                     gfx::NativeWindow context,
                                     gfx::NativeView parent);
@@ -388,6 +384,8 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   void set_fixed_width(int fixed_width) { fixed_width_ = fixed_width; }
   int fixed_width() const { return fixed_width_; }
 
+  // Sets an extra view on the dialog button row. This can only be called once,
+  // because of how the view is propagated into the Dialog.
   template <typename T = View>
   T* SetExtraView(std::unique_ptr<T> extra_view) {
     T* view = extra_view.get();
@@ -591,6 +589,11 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // Returns the corner radius that is used for this dialog.
   int GetCornerRadius() const;
 
+  bool allow_vertical_buttons() const { return allow_vertical_buttons_; }
+  void set_allow_vertical_buttons(bool allow) {
+    allow_vertical_buttons_ = allow;
+  }
+
  protected:
   // Overridden from WidgetDelegate:
   ax::mojom::Role GetAccessibleWindowRole() override;
@@ -649,6 +652,15 @@ class VIEWS_EXPORT DialogDelegate : public WidgetDelegate {
   // Ownership of the views::Widget created by CreateDialogWidget().
   Widget::InitParams::Ownership ownership_of_new_widget_ =
       Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET;
+
+  // If set, allows the dialog buttons to be arranged in a vertical
+  // layout to maintain fixed dialog width. Specifically, if an extra view has
+  // been supplied (commonly a third button), and the width of the resulting
+  // row of buttons exceeds the specified `fixed_width_`, buttons are stacked
+  // in a column instead. Conventionally, three-button dialogs are designed
+  // with a width large enough to accommodate the required horizontal width.
+  // This switch is an experiment to explore an alternate approach.
+  bool allow_vertical_buttons_ = false;
 };
 
 // A DialogDelegate implementation that is-a View. Used to override GetWidget()
@@ -758,7 +770,7 @@ class VIEWS_EXPORT DialogDelegateView : public DialogDelegate, public View {
   friend class ::autofill::BnplTosDialog;
   friend class ::autofill::CardUnmaskOtpInputDialogViews;
   friend class ::autofill::EditAddressProfileView;
-  friend class ::autofill::SaveAndFillDialogViews;
+  friend class ::autofill::SaveAndFillDialog;
   friend class ::autofill::WebauthnDialogView;
   friend class ::autofill::payments::PaymentsWindowUserConsentDialogView;
   friend class ::autofill::payments::SelectBnplIssuerDialog;

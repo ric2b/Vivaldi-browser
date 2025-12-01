@@ -76,6 +76,7 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "offline_pin.icon",
     "page.icon",
     "page_chrome_refresh.icon",
+    "page_spark.icon",
     "pedal.icon",
     "price_tracking_disabled.icon",
     "price_tracking_disabled_refresh.icon",
@@ -93,6 +94,7 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "star_active.icon",
     "star_active_chrome_refresh.icon",
     "star_chrome_refresh.icon",
+    "subdirectory_arrow_right.icon",
     "summarize_auto.icon",
     "switch.icon",
     "switch_cr2023.icon",
@@ -160,6 +162,7 @@ static_library("browser") {
     "autocomplete_controller_emitter.h",
     "autocomplete_controller_metrics.cc",
     "autocomplete_controller_metrics.h",
+    "autocomplete_enums.h",
     "autocomplete_grouper_groups.cc",
     "autocomplete_grouper_groups.h",
     "autocomplete_grouper_sections.cc",
@@ -203,6 +206,8 @@ static_library("browser") {
     "enterprise_search_aggregator_provider.h",
     "enterprise_search_aggregator_suggestions_service.cc",
     "enterprise_search_aggregator_suggestions_service.h",
+    "extension_suggestion.cc",
+    "extension_suggestion.h",
     "favicon_cache.cc",
     "favicon_cache.h",
     "featured_search_provider.cc",
@@ -233,6 +238,7 @@ static_library("browser") {
     "keyword_extensions_delegate.h",
     "keyword_provider.cc",
     "keyword_provider.h",
+    "lens_suggest_inputs_utils.h",
     "local_history_zero_suggest_provider.cc",
     "local_history_zero_suggest_provider.h",
     "match_compare.h",
@@ -250,6 +256,8 @@ static_library("browser") {
     "omnibox_field_trial.h",
     "omnibox_log.cc",
     "omnibox_log.h",
+    "omnibox_logging_utils.cc",
+    "omnibox_logging_utils.h",
     "omnibox_metrics_provider.cc",
     "omnibox_metrics_provider.h",
     "omnibox_navigation_observer.h",
@@ -259,6 +267,8 @@ static_library("browser") {
     "omnibox_popup_view.h",
     "omnibox_prefs.cc",
     "omnibox_prefs.h",
+    "omnibox_text_util.cc",
+    "omnibox_text_util.h",
     "omnibox_triggered_feature_service.cc",
     "omnibox_triggered_feature_service.h",
     "omnibox_view.cc",
@@ -303,6 +313,8 @@ static_library("browser") {
     "suggestion_answer.h",
     "suggestion_group_util.cc",
     "suggestion_group_util.h",
+    "tab_group_provider.cc",
+    "tab_group_provider.h",
     "tab_matcher.cc",
     "tab_matcher.h",
     "tailored_word_break_iterator.cc",
@@ -342,6 +354,7 @@ static_library("browser") {
     "//components/lens/proto/server:proto",
     "//components/omnibox/common",
     "//components/omnibox/resources:omnibox_pedal_synonyms",
+    "//components/saved_tab_groups/public",
     "//components/security_state/core",
     "//services/data_decoder/public/cpp",
     "//third_party/metrics_proto",
@@ -378,6 +391,7 @@ static_library("browser") {
     "//components/url_formatter",
     "//components/variations",
     "//components/variations/net",
+    "//components/vector_icons",
     "//extensions/buildflags",
     "//net",
     "//services/metrics/public/cpp:metrics_cpp",
@@ -404,6 +418,7 @@ static_library("browser") {
     deps += [
       ":jni_headers",
       "//components/browser_ui/util/android",
+      "//components/saved_tab_groups/public:conversion_utils",
       "//url",
     ]
   } else {
@@ -432,17 +447,18 @@ static_library("browser") {
     deps += [ "//content/public/common" ]
   }
 
-  if (enable_extensions) {
-    deps += [
-      "//extensions/common:common_constants",
-      "//extensions/common:extension_features",
-    ]
-    sources += [
-      "omnibox_input_watcher.cc",
-      "omnibox_input_watcher.h",
-      "omnibox_suggestions_watcher.cc",
-      "omnibox_suggestions_watcher.h",
-    ]
+  if (enable_extensions_core) {
+    deps += [ "//extensions/common:common_constants" ]
+
+    if (enable_extensions) {
+      deps += [ "//extensions/common:extension_features" ]
+      sources += [
+        "omnibox_input_watcher.cc",
+        "omnibox_input_watcher.h",
+        "omnibox_suggestions_watcher.cc",
+        "omnibox_suggestions_watcher.h",
+      ]
+    }
   }
 
   if (build_with_tflite_lib) {
@@ -610,6 +626,7 @@ if (is_android) {
       "//components/cached_flags:java",
       "//components/embedder_support/android:util_java",
       "//components/omnibox/common:features_java",
+      "//components/saved_tab_groups/public:java",
       "//components/security_state/core:security_state_enums_java",
       "//third_party/android_deps:protobuf_lite_runtime_java",
       "//third_party/androidx:androidx_annotation_annotation_java",
@@ -748,6 +765,7 @@ static_library("test_support") {
     "//components/optimization_guide/proto:optimization_guide_proto",
     "//components/prefs:test_support",
     "//components/resources",
+    "//components/saved_tab_groups/test_support",
     "//components/search_engines",
     "//components/search_engines:test_support",
     "//components/sessions",
@@ -821,6 +839,7 @@ source_set("unit_tests") {
     "builtin_provider_unittest.cc",
     "calculator_provider_unittest.cc",
     "clipboard_provider_unittest.cc",
+    "contextual_search_provider_unittest.cc",
     "document_provider_unittest.cc",
     "document_suggestions_service_unittest.cc",
     "enterprise_search_aggregator_provider_unittest.cc",
@@ -847,7 +866,6 @@ source_set("unit_tests") {
     "omnibox_field_trial_unittest.cc",
     "omnibox_metrics_provider_unittest.cc",
     "omnibox_popup_selection_unittest.cc",
-    "omnibox_prefs_unittest.cc",
     "omnibox_triggered_feature_service_unittest.cc",
     "omnibox_view_unittest.cc",
     "on_device_head_model_unittest.cc",
@@ -863,6 +881,7 @@ source_set("unit_tests") {
     "shortcuts_provider_unittest.cc",
     "suggestion_answer_unittest.cc",
     "suggestion_group_unittest.cc",
+    "tab_group_provider_unittest.cc",
     "tailored_word_break_iterator_unittest.cc",
     "titled_url_match_utils_unittest.cc",
     "unscoped_extension_provider_unittest.cc",
@@ -913,6 +932,7 @@ source_set("unit_tests") {
     "//components/prefs:test_support",
     "//components/query_parser:query_parser",
     "//components/safe_browsing/core/common:common",
+    "//components/saved_tab_groups/test_support",
     "//components/search",
     "//components/search_engines",
     "//components/search_engines:test_support",

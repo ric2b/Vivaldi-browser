@@ -32,21 +32,22 @@
 #include "quiche/quic/platform/api/quic_socket_address.h"
 #include "quiche/quic/tools/fake_proof_verifier.h"
 #include "quiche/quic/tools/quic_name_lookup.h"
-#include "quiche/common/platform/api/quiche_mem_slice.h"
 #include "quiche/common/quiche_buffer_allocator.h"
+#include "quiche/common/quiche_mem_slice.h"
 #include "quiche/common/simple_buffer_allocator.h"
 
 namespace moqt::moq_chat {
 
 std::optional<MoqtAnnounceErrorReason> ChatClient::OnIncomingAnnounce(
-    const moqt::FullTrackName& track_namespace, AnnounceEvent announce_type) {
+    const moqt::FullTrackName& track_namespace,
+    std::optional<VersionSpecificParameters> parameters) {
   if (track_namespace == GetUserNamespace(my_track_name_)) {
     // Ignore ANNOUNCE for my own track.
     return std::optional<MoqtAnnounceErrorReason>();
   }
   std::optional<FullTrackName> track_name = ConstructTrackNameFromNamespace(
       track_namespace, GetChatId(my_track_name_));
-  if (announce_type == AnnounceEvent::kUnannounce) {
+  if (!parameters.has_value()) {
     std::cout << "UNANNOUNCE for " << track_namespace.ToString() << "\n";
     if (track_name.has_value() && other_users_.contains(*track_name)) {
       session_->Unsubscribe(*track_name);
@@ -58,7 +59,7 @@ std::optional<MoqtAnnounceErrorReason> ChatClient::OnIncomingAnnounce(
   if (!track_name.has_value()) {
     std::cout << "ANNOUNCE rejected, invalid namespace\n";
     return std::make_optional<MoqtAnnounceErrorReason>(
-        SubscribeErrorCode::kDoesNotExist, "Not a subscribed namespace");
+        RequestErrorCode::kTrackDoesNotExist, "Not a subscribed namespace");
   }
   if (other_users_.contains(*track_name)) {
     std::cout << "Duplicate ANNOUNCE, send OK and ignore\n";
@@ -69,10 +70,10 @@ std::optional<MoqtAnnounceErrorReason> ChatClient::OnIncomingAnnounce(
                  "do not subscribe\n";
     return std::nullopt;
   }
-  if (session_->SubscribeCurrentObject(
-          *track_name, &remote_track_visitor_,
-          MoqtSubscribeParameters{std::string(GetUsername(my_track_name_)),
-                                  std::nullopt, std::nullopt, std::nullopt})) {
+  VersionSpecificParameters subscribe_parameters(
+      AuthTokenType::kOutOfBand, std::string(GetUsername(my_track_name_)));
+  if (session_->SubscribeCurrentObject(*track_name, &remote_track_visitor_,
+                                       subscribe_parameters)) {
     ++subscribes_to_make_;
     other_users_.emplace(*track_name);
   }
@@ -165,7 +166,7 @@ void ChatClient::OnTerminalLineInput(absl::string_view input_message) {
 
 void ChatClient::RemoteTrackVisitor::OnReply(
     const FullTrackName& full_track_name,
-    std::optional<FullSequence> /*largest_id*/,
+    std::optional<Location> /*largest_id*/,
     std::optional<absl::string_view> reason_phrase) {
   auto it = client_->other_users_.find(full_track_name);
   if (it == client_->other_users_.end()) {
@@ -184,7 +185,7 @@ void ChatClient::RemoteTrackVisitor::OnReply(
 }
 
 void ChatClient::RemoteTrackVisitor::OnObjectFragment(
-    const FullTrackName& full_track_name, FullSequence /*sequence*/,
+    const FullTrackName& full_track_name, Location /*sequence*/,
     MoqtPriority /*publisher_priority*/, MoqtObjectStatus /*status*/,
     absl::string_view object, bool end_of_message) {
   if (!end_of_message) {
@@ -230,14 +231,13 @@ bool ChatClient::AnnounceAndSubscribeAnnounces() {
   std::cout << "Announcing " << GetUserNamespace(my_track_name_).ToString()
             << "\n";
   session_->Announce(GetUserNamespace(my_track_name_),
-                     std::move(announce_callback));
+                     std::move(announce_callback), VersionSpecificParameters());
 
   // Send SUBSCRIBE_ANNOUNCE. Pop 3 levels of namespace to get to {moq-chat,
   // chat-id}
   MoqtOutgoingSubscribeAnnouncesCallback subscribe_announces_callback =
       [this](FullTrackName track_namespace,
-             std::optional<SubscribeErrorCode> error,
-             absl::string_view reason) {
+             std::optional<RequestErrorCode> error, absl::string_view reason) {
         if (error.has_value()) {
           std::cout << "SUBSCRIBE_ANNOUNCES rejected, " << reason << "\n";
           session_->Error(MoqtError::kInternalError,
@@ -248,10 +248,11 @@ bool ChatClient::AnnounceAndSubscribeAnnounces() {
                   << " accepted\n";
         return;
       };
-  session_->SubscribeAnnounces(
-      GetChatNamespace(my_track_name_), std::move(subscribe_announces_callback),
-      MoqtSubscribeParameters{std::string(GetUsername(my_track_name_)),
-                              std::nullopt, std::nullopt, std::nullopt});
+  VersionSpecificParameters parameters(
+      AuthTokenType::kOutOfBand, std::string(GetUsername(my_track_name_)));
+  session_->SubscribeAnnounces(GetChatNamespace(my_track_name_),
+                               std::move(subscribe_announces_callback),
+                               parameters);
 
   while (session_is_open_ && is_syncing()) {
     RunEventLoop();

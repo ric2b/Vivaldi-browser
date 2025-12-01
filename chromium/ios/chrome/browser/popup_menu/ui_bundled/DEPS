@@ -23,8 +23,11 @@ include_rules = [
   "+ios/chrome/browser/follow/model/follow_tab_helper.h",
   "+ios/chrome/browser/follow/model/follow_util.h",
   "+ios/chrome/browser/intents/model/intents_donation_helper.h",
-  "+ios/chrome/browser/iph_for_new_chrome_user/model/tab_based_iph_browser_agent.h",
+  "+ios/chrome/browser/reader_mode/model/constants.h",
+  "+ios/chrome/browser/reader_mode/model/reader_mode_tab_helper.h",
+  "+ios/chrome/browser/bubble/model/tab_based_iph_browser_agent.h",
   "+ios/chrome/browser/lens_overlay/coordinator/lens_overlay_availability.h",
+  "+ios/chrome/browser/lens_overlay/model/lens_overlay_tab_helper.h",
   "+ios/chrome/browser/overlays/model/public/overlay_presenter.h",
   "+ios/chrome/browser/overlays/model/public/overlay_presenter_observer_bridge.h",
   "+ios/chrome/browser/overlays/model/public/overlay_request.h",
@@ -46,6 +49,7 @@ include_rules = [
   "+ios/chrome/browser/feature_engagement/model/tracker_factory.h",
   "+ios/chrome/browser/promos_manager/model/promos_manager_factory.h",
   "+ios/chrome/browser/reading_list/model/reading_list_browser_agent.h",
+  "+ios/chrome/browser/reader_mode/model/features.h",
   "+ios/chrome/browser/reading_list/model/reading_list_model_factory.h",
   "+ios/chrome/browser/search_engines/model/template_url_service_factory.h",
   "+ios/chrome/browser/signin/model/authentication_service.h",
@@ -54,13 +58,14 @@ include_rules = [
   "+ios/chrome/browser/sync/model/sync_service_factory.h",
   "+ios/chrome/browser/url_loading/model/url_loading_browser_agent.h",
   "+ios/chrome/browser/default_browser/model/utils.h",
-  "+ios/chrome/browser/iph_for_new_chrome_user/model/utils.h",
+  "+ios/chrome/browser/bubble/model/utils.h",
   "+ios/chrome/browser/segmentation_platform/model/segmentation_platform_service_factory.h",
   "+ios/chrome/browser/overlays/model/public/overlay_request_queue.h",
   "+ios/chrome/browser/overlays/model/public/web_content_area/http_auth_overlay.h",
   "+ios/chrome/browser/url_loading/model/image_search_param_generator.h",
   "+ios/chrome/browser/url_loading/model/url_loading_params.h",
-  "+ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_tile_constants.h"
+  "+ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_tile_constants.h",
+  "+ios/chrome/browser/intelligence/features/features.h"
 ]
 
 specific_include_rules = {

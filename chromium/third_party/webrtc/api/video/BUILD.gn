@@ -184,6 +184,7 @@ rtc_library("encoded_frame") {
   deps = [
     ":encoded_image",
     ":video_frame",
+    "../../common_video:frame_instrumentation_data",
     "../../modules/rtp_rtcp:rtp_video_header",
     "../../modules/video_coding:codec_globals_headers",
     "../../modules/video_coding:video_codec_interface",
@@ -349,7 +350,7 @@ rtc_source_set("video_stream_encoder") {
   ]
 }
 
-rtc_source_set("video_frame_metadata") {
+rtc_library("video_frame_metadata") {
   visibility = [ "*" ]
   sources = [
     "video_frame_metadata.cc",

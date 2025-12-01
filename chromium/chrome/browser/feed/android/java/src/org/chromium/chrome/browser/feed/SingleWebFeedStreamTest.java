@@ -65,6 +65,7 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.ui.base.WindowAndroid;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.url.JUnitTestGURLs;
 
 import java.nio.charset.StandardCharsets;
@@ -96,10 +97,11 @@ public class SingleWebFeedStreamTest {
     @Captor private ArgumentCaptor<Snackbar> mSnackbarCaptor;
     @Mock private BottomSheetController mBottomSheetController;
     @Mock private WindowAndroid mWindowAndroid;
+    @Mock private ModalDialogManager mModalDialogManager;
     @Mock private FeedSurfaceScope mSurfaceScope;
     @Mock private FeedReliabilityLogger mReliabilityLogger;
     @Mock private Supplier<ShareDelegate> mShareDelegateSupplier;
-    private StubSnackbarController mSnackbarController = new StubSnackbarController();
+    private final StubSnackbarController mSnackbarController = new StubSnackbarController();
     @Mock private Runnable mMockRunnable;
     @Mock private Callback<Boolean> mMockRefreshCallback;
     @Mock private FeedStream.ShareHelperWrapper mShareHelper;
@@ -145,6 +147,7 @@ public class SingleWebFeedStreamTest {
                 .thenReturn(LOAD_MORE_TRIGGER_LOOKAHEAD);
         when(mFeedServiceBridgeJniMock.getLoadMoreTriggerScrollDistanceDp())
                 .thenReturn(LOAD_MORE_TRIGGER_SCROLL_DISTANCE_DP);
+        when(mWindowAndroid.getModalDialogManager()).thenReturn(mModalDialogManager);
 
         mFeedStream =
                 new FeedStream(

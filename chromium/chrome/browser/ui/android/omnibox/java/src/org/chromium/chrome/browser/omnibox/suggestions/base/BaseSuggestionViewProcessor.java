@@ -11,12 +11,12 @@ import android.text.style.StyleSpan;
 
 import androidx.annotation.CallSuper;
 import androidx.annotation.DrawableRes;
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.metrics.TimingMetric;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.omnibox.MatchClassificationStyle;
 import org.chromium.chrome.browser.omnibox.OmniboxMetrics;
 import org.chromium.chrome.browser.omnibox.R;
@@ -46,11 +46,12 @@ import org.chromium.build.BuildConfig;
 import java.util.Arrays;
 
 /** A class that handles base properties and model for most suggestions. */
+@NullMarked
 public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor {
-    protected final @NonNull Context mContext;
-    protected final @NonNull SuggestionHost mSuggestionHost;
-    private final @NonNull ActionChipsProcessor mActionChipsProcessor;
-    private final @NonNull Optional<OmniboxImageSupplier> mImageSupplier;
+    protected final Context mContext;
+    protected final SuggestionHost mSuggestionHost;
+    private final ActionChipsProcessor mActionChipsProcessor;
+    private final Optional<OmniboxImageSupplier> mImageSupplier;
     private final int mDesiredFaviconWidthPx;
     private final int mDecorationImageSizePx;
     private final int mSuggestionSizePx;
@@ -61,9 +62,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param imageSupplier A mechanism to use to retrieve favicons.
      */
     public BaseSuggestionViewProcessor(
-            @NonNull Context context,
-            @NonNull SuggestionHost host,
-            @NonNull Optional<OmniboxImageSupplier> imageSupplier) {
+            Context context, SuggestionHost host, Optional<OmniboxImageSupplier> imageSupplier) {
         mContext = context;
         mSuggestionHost = host;
         mImageSupplier = imageSupplier;
@@ -109,7 +108,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param match AutocompleteMatch instance to retrieve fallback icon for
      * @return OmniboxDrawableState that can be immediately applied to suggestion view
      */
-    protected @NonNull OmniboxDrawableState getFallbackIcon(@NonNull AutocompleteMatch match) {
+    protected OmniboxDrawableState getFallbackIcon(AutocompleteMatch match) {
         int icon =
                 match.isSearchSuggestion()
                         ? R.drawable.ic_suggestion_magnifier
@@ -124,7 +123,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param decoration the OmniboxDrawableState to apply
      */
     protected void setOmniboxDrawableState(
-            @NonNull PropertyModel model, @NonNull OmniboxDrawableState decoration) {
+            PropertyModel model, @Nullable OmniboxDrawableState decoration) {
         model.set(BaseSuggestionViewProperties.ICON, decoration);
     }
 
@@ -134,7 +133,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param model Property model to update.
      * @param actions List of actions for the suggestion.
      */
-    protected void setActionButtons(@NonNull PropertyModel model, @Nullable List<Action> actions) {
+    protected void setActionButtons(PropertyModel model, @Nullable List<Action> actions) {
         model.set(BaseSuggestionViewProperties.ACTION_BUTTONS, actions);
     }
 
@@ -148,9 +147,9 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      */
     @VisibleForTesting(otherwise = VisibleForTesting.PROTECTED)
     public void setTabSwitchOrRefineAction(
-            @NonNull PropertyModel model,
-            @NonNull AutocompleteInput input,
-            @NonNull AutocompleteMatch suggestion,
+            PropertyModel model,
+            AutocompleteInput input,
+            AutocompleteMatch suggestion,
             int position) {
         @DrawableRes int icon;
         String iconString;
@@ -217,7 +216,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param suggestion Selected suggestion.
      * @param position Position of the suggestion on the list.
      */
-    protected void onSuggestionClicked(@NonNull AutocompleteMatch suggestion, int position) {
+    protected void onSuggestionClicked(AutocompleteMatch suggestion, int position) {
         mSuggestionHost.onSuggestionClicked(suggestion, position, suggestion.getUrl());
     }
 
@@ -226,7 +225,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      *
      * @param suggestion Selected suggestion.
      */
-    protected void onSuggestionLongClicked(@NonNull AutocompleteMatch suggestion) {
+    protected void onSuggestionLongClicked(AutocompleteMatch suggestion) {
         mSuggestionHost.onDeleteMatch(suggestion, suggestion.getDisplayText());
     }
 
@@ -236,7 +235,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param suggestion Selected suggestion.
      * @param position Position of the suggesiton on the list.
      */
-    protected void onSuggestionTouchDownEvent(@NonNull AutocompleteMatch suggestion, int position) {
+    protected void onSuggestionTouchDownEvent(AutocompleteMatch suggestion, int position) {
         try (TimingMetric metric = OmniboxMetrics.recordTouchDownProcessTime()) {
             mSuggestionHost.onSuggestionTouchDown(suggestion, position);
         }
@@ -244,9 +243,9 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
 
     @Override
     public void populateModel(
-            @NonNull AutocompleteInput input,
-            @NonNull AutocompleteMatch suggestion,
-            @NonNull PropertyModel model,
+            AutocompleteInput input,
+            AutocompleteMatch suggestion,
+            PropertyModel model,
             int position) {
         model.set(
                 BaseSuggestionViewProperties.ON_CLICK,
@@ -343,7 +342,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param model Model representing current suggestion.
      * @param url Target URL the suggestion points to.
      */
-    protected void fetchSuggestionFavicon(@NonNull PropertyModel model, @NonNull GURL url) {
+    protected void fetchSuggestionFavicon(PropertyModel model, GURL url) {
         mImageSupplier.ifPresent(
                 s ->
                         s.fetchFavicon(
@@ -364,7 +363,7 @@ public abstract class BaseSuggestionViewProcessor implements SuggestionProcessor
      * @param model the PropertyModel to update with retrieved image
      * @param imageUrl the URL of the image to retrieve and decode
      */
-    protected void fetchImage(@NonNull PropertyModel model, @NonNull GURL imageUrl) {
+    protected void fetchImage(PropertyModel model, GURL imageUrl) {
         mImageSupplier.ifPresent(
                 s ->
                         s.fetchImage(

@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.infobar;
 
+
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.view.ViewGroup;
@@ -32,7 +33,9 @@ import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.Features.DisableFeatures;
 import org.chromium.base.test.util.RequiresRestart;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesSettingsBridge;
 import org.chromium.chrome.browser.prefetch.settings.PreloadPagesState;
@@ -69,7 +72,7 @@ public class InfoBarContainerTest {
     // URL takes longer to load for batch tests where the activity is reused across rests
     private static final long EXTENDED_LOAD_TIMEOUT = 10L;
     private static final String MESSAGE_TEXT = "Ding dong. Woof. Translate french? Bears!";
-    private static EmbeddedTestServer sTestServer = sActivityTestRule.getTestServer();
+    private static final EmbeddedTestServer sTestServer = sActivityTestRule.getTestServer();
 
     private static final class TestListener implements SimpleConfirmInfoBarBuilder.Listener {
         public final CallbackHelper dismissedCallback = new CallbackHelper();
@@ -336,6 +339,7 @@ public class InfoBarContainerTest {
     @MediumTest
     @Feature({"Browser"})
     @RequiresRestart("crbug.com/1242720")
+    @DisableFeatures(ChromeFeatureList.FLOATING_SNACKBAR)
     public void testAddAndDismissSurfaceFlingerOverlays() throws Exception {
         final ViewGroup decorView =
                 (ViewGroup) sActivityTestRule.getActivity().getWindow().getDecorView();

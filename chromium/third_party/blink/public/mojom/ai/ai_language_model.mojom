@@ -44,6 +44,9 @@ struct AILanguageModelInstanceInfo {
 
   // The sampling params provided by the caller when creating the instance.
   AILanguageModelSamplingParams sampling_params;
+
+  // Supported prompt input types for the session.
+  array<AILanguageModelPromptType>? input_types;
 };
 
 // The role for a given prompt. See LanguageModelPromptRole in IDL.
@@ -61,8 +64,8 @@ enum AILanguageModelPromptType {
 };
 
 // The expected data type and languages specified with session creation.
-// See LanguageModelExpectedInput in IDL.
-struct AILanguageModelExpectedInput {
+// See LanguageModelExpected in IDL.
+struct AILanguageModelExpected {
   AILanguageModelPromptType type;
   array<AILanguageCode>? languages;
 };
@@ -74,25 +77,24 @@ union AILanguageModelPromptContent {
   string text;
 
   // Bitmap provided as input.
-  skia.mojom.BitmapMappedFromTrustedProcess bitmap;
+  skia.mojom.BitmapN32 bitmap;
 
   // Audio provided as input.
   on_device_model.mojom.AudioData audio;
 };
 
-// A prompt includes a role and content. See AILanguageModelPromptDict in IDL.
+// A prompt includes a role and content. See LanguageModelMessage in IDL.
 struct AILanguageModelPrompt {
   AILanguageModelPromptRole role;
-  AILanguageModelPromptContent content;
+  array<AILanguageModelPromptContent> content;
 };
 
 // This is used when creating a new AILanguageModel.
 struct AILanguageModelCreateOptions {
   AILanguageModelSamplingParams? sampling_params;
-  // This can be any arbitrary string taken from the JavaScript API.
-  string? system_prompt;
   array<AILanguageModelPrompt> initial_prompts;
-  array<AILanguageModelExpectedInput>? expected_inputs;
+  array<AILanguageModelExpected>? expected_inputs;
+  array<AILanguageModelExpected>? expected_outputs;
 };
 
 // The client interface that receives an AILanguageModel or errors from an
@@ -103,46 +105,46 @@ interface AIManagerCreateLanguageModelClient {
   // AILanguageModel, this method is called with a null pending remote.
   // It also returns the language model info if the language model is created
   // successfully.
-  OnResult(
-    pending_remote<blink.mojom.AILanguageModel> language_model_remote,
-    AILanguageModelInstanceInfo info
-  );
-  // Called when the manager cannot create an AILanguageModel.
-  OnError(AIManagerCreateClientError error);
-};
+  OnResult(pending_remote<blink.mojom.AILanguageModel> language_model_remote,
+           AILanguageModelInstanceInfo info);
 
-// The client interface that receives the number of tokens measured by the
-// AIManager.
-interface AILanguageModelMeasureInputUsageClient {
-  // Called with a created language model's mojo interface as a result for the
-  // MeasureInputUsage() method of the AIManager.
-  OnResult(uint32 number_of_tokens);
+  // Called when the manager cannot create an AILanguageModel.
+  // `quota_error_info` may provide additional info for kInitialInputTooLarge.
+  OnError(AIManagerCreateClientError error, QuotaErrorInfo? quota_error_info);
 };
 
 // A session for prompting a model with inputs to obtain streaming responses.
 interface AILanguageModel {
   // Prompts the model with arbitrary content provided via the JavaScript API.
-  Prompt(
-    array<AILanguageModelPrompt> prompts,
-    pending_remote<ModelStreamingResponder> pending_responder
-  );
+  // An optional JSON schema or regex can be provided to define structured
+  // output requirements for the response. Note that only one of the JSON schema
+  // or regex should be provided.
+  Prompt(array<AILanguageModelPrompt> prompts,
+         on_device_model.mojom.ResponseConstraint? constraint,
+         pending_remote<ModelStreamingResponder> pending_responder);
+
+  // Appends the prompts to the context, but they won't be processed yet until
+  // `Prompt()` is called. This method can be called multiple times before the
+  // `Prompt()`.
+  Append(array<AILanguageModelPrompt> prompts,
+         pending_remote<ModelStreamingResponder> client);
+
   // Creates a new session with the same configuration and existing context
   // as the current session.
-  // Note that this method is called by the `AILanguageModel.clone()` method from
-  // blink, but it is named as `Fork` instead of `Clone` to avoid confusion
+  // Note that this method is called by the `AILanguageModel.clone()` method
+  // from blink, but it is named as `Fork` instead of `Clone` to avoid confusion
   // with the "clone" term in mojo context (which indicates binding another
   // client to the same instance).
   // Similar to `AIManager.CreateLanguageModel()`, this method returns the
   // information of the created session.
-  Fork(
-    pending_remote<AIManagerCreateLanguageModelClient> client
-  );
+  Fork(pending_remote<AIManagerCreateLanguageModelClient> client);
+
   // Destroys the session.
   Destroy();
-  // Counts the number of token in the given prompt text `input` which can
-  // be an arbitrary string from the JavaScript API.
-  MeasureInputUsage(
-    string input,
-    pending_remote<AILanguageModelMeasureInputUsageClient> client
-  );
+
+  // Counts the number of token in the given prompt `input` which can
+  // be arbitrary strings or multimodal data from the JavaScript API. If it's
+  // unable to measure, the method will return null.
+  MeasureInputUsage(array<AILanguageModelPrompt> input)
+      => (uint32? number_of_tokens);
 };

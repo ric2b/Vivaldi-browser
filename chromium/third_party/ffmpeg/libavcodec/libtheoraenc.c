@@ -234,7 +234,7 @@ static av_cold int encode_init(AVCodecContext* avc_context)
         return AVERROR_EXTERNAL;
     }
 
-    h->keyframe_mask = (1 << t_info.keyframe_granule_shift) - 1;
+    h->keyframe_mask = (1 << av_ceil_log2(avc_context->gop_size)) - 1;
     /* Clear up theora_info struct */
     th_info_clear(&t_info);
 
@@ -388,9 +388,7 @@ const FFCodec ff_libtheora_encoder = {
     .init           = encode_init,
     .close          = encode_close,
     FF_CODEC_ENCODE_CB(encode_frame),
-    .p.pix_fmts     = (const enum AVPixelFormat[]){
-        AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P, AV_PIX_FMT_NONE
-    },
+    CODEC_PIXFMTS(AV_PIX_FMT_YUV420P, AV_PIX_FMT_YUV422P, AV_PIX_FMT_YUV444P),
     .color_ranges   = AVCOL_RANGE_MPEG,
     .p.wrapper_name = "libtheora",
 };

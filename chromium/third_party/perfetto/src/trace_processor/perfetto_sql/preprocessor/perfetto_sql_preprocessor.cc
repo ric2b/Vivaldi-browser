@@ -100,7 +100,7 @@ struct Frame {
         preprocessor(s),
         tokenizer(source),
         rewriter(source),
-        substituitions(&owned_substituitions) {}
+        substitutions(&owned_substitutions) {}
   Frame(const Frame&) = delete;
   Frame& operator=(const Frame&) = delete;
   Frame(Frame&&) = delete;
@@ -117,8 +117,8 @@ struct Frame {
 
   std::optional<ActiveMacro> active_macro;
 
-  base::FlatHashMap<std::string, SqlSource> owned_substituitions;
-  base::FlatHashMap<std::string, SqlSource>* substituitions;
+  base::FlatHashMap<std::string, SqlSource> owned_substitutions;
+  base::FlatHashMap<std::string, SqlSource>* substitutions;
 };
 
 struct ErrorToken {
@@ -197,8 +197,8 @@ void ExecuteSqlMacro(State* state,
       Frame::kLookupOrIgnore, state, sql_macro->sql);
   auto& macro_frame = state->stack.back();
   for (uint32_t i = 0; i < sql_macro->args.size(); ++i) {
-    macro_frame.owned_substituitions.Insert(sql_macro->args[i],
-                                            std::move(macro.args[i]));
+    macro_frame.owned_substitutions.Insert(sql_macro->args[i],
+                                           std::move(macro.args[i]));
   }
 }
 
@@ -248,6 +248,27 @@ void ExecuteApply(State* state,
   auto& apply = std::get<Apply>(macro.impl);
   if (!macro.seen_variables.empty()) {
     RewriteIntrinsicMacro(frame, name, rp);
+    return;
+  }
+  // Gross hack to detect if the argument to the macro is a variable. We cannot
+  // use macro.expanded_variables because inside functions, we can have
+  // variables which are intentionally never going to be expanded by the
+  // preprocessor. That's OK to expand, as long as the entire macro argument is
+  // itself not a variable.
+  bool is_arg_variable = false;
+  for (const auto& arg : macro.args) {
+    if (!arg.sql().empty() && arg.sql()[0] == '$') {
+      is_arg_variable = true;
+      break;
+    }
+  }
+  if (is_arg_variable) {
+    state->stack.emplace_back(
+        Frame::Rewrite{frame.tokenizer, frame.rewriter, name, rp},
+        Frame::kIgnore, state,
+        SqlSource::FromTraceProcessorImplementation(
+            macro.name + "!(" +
+            base::Join(SqlSourceVectorToString(macro.args), ", ") + ")"));
     return;
   }
   state->stack.emplace_back(
@@ -319,7 +340,7 @@ extern "C" void OnPreprocessorVariable(State* state,
   auto& frame = state->stack.back();
   if (frame.active_macro) {
     std::string name(var->ptr + 1, var->n - 1);
-    if (frame.substituitions->Find(name)) {
+    if (frame.substitutions->Find(name)) {
       frame.active_macro->expanded_variables.insert(name);
     } else {
       frame.active_macro->seen_variables.insert(name);
@@ -330,7 +351,7 @@ extern "C" void OnPreprocessorVariable(State* state,
     case Frame::kLookup:
     case Frame::kLookupOrIgnore: {
       auto* it =
-          frame.substituitions->Find(std::string(var->ptr + 1, var->n - 1));
+          frame.substitutions->Find(std::string(var->ptr + 1, var->n - 1));
       if (!it) {
         if (frame.var_handling == Frame::kLookup) {
           state->error = {GrammarTokenToTokenizerToken(*var),
@@ -396,7 +417,7 @@ extern "C" void OnPreprocessorMacroArg(State* state,
                              SqliteTokenizer::EndToken::kInclusive));
 
   auto& arg_frame = state->stack.back();
-  arg_frame.substituitions = frame.substituitions;
+  arg_frame.substitutions = frame.substitutions;
 }
 
 extern "C" void OnPreprocessorMacroEnd(State* state,

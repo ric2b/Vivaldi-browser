@@ -24,6 +24,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <stdarg.h>
+#include <signal.h>
 
 #undef HAVE_AV_CONFIG_H
 #include "libavutil/cpu.h"
@@ -47,6 +48,9 @@ struct options {
     int threads;
     int iters;
     int bench;
+    int flags;
+    int dither;
+    int unscaled;
 };
 
 struct mode {
@@ -54,19 +58,69 @@ struct mode {
     SwsDither dither;
 };
 
-const struct mode modes[] = {
-    { SWS_FAST_BILINEAR },
-    { SWS_BILINEAR },
-    { SWS_BICUBIC },
-    { SWS_X | SWS_BITEXACT },
-    { SWS_POINT },
-    { SWS_AREA | SWS_ACCURATE_RND },
-    { SWS_BICUBIC | SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP },
-    {0}, // test defaults
+const SwsFlags flags[] = {
+    0, // test defaults
+    SWS_FAST_BILINEAR,
+    SWS_BILINEAR,
+    SWS_BICUBIC,
+    SWS_X | SWS_BITEXACT,
+    SWS_POINT,
+    SWS_AREA | SWS_ACCURATE_RND,
+    SWS_BICUBIC | SWS_FULL_CHR_H_INT | SWS_FULL_CHR_H_INP,
 };
 
 static FFSFC64 prng_state;
 static SwsContext *sws[3]; /* reused between tests for efficiency */
+
+static double speedup_logavg;
+static double speedup_min = 1e10;
+static double speedup_max = 0;
+static int speedup_count;
+
+static const char *speedup_color(double ratio)
+{
+    return ratio > 1.10 ? "\033[1;32m" : /* bold green */
+           ratio > 1.02 ? "\033[32m"   : /* green */
+           ratio > 0.98 ? ""           : /* default */
+           ratio > 0.95 ? "\033[33m"   : /* yellow */
+           ratio > 0.90 ? "\033[31m"   : /* red */
+            "\033[1;31m";  /* bold red */
+}
+
+static void exit_handler(int sig)
+{
+    if (speedup_count) {
+        double ratio = exp(speedup_logavg / speedup_count);
+        printf("Overall speedup=%.3fx %s%s\033[0m, min=%.3fx max=%.3fx\n", ratio,
+               speedup_color(ratio), ratio >= 1.0 ? "faster" : "slower",
+               speedup_min, speedup_max);
+    }
+
+    exit(sig);
+}
+
+/* Estimate luma variance assuming uniform dither noise distribution */
+static float estimate_quantization_noise(enum AVPixelFormat fmt)
+{
+    const AVPixFmtDescriptor *desc = av_pix_fmt_desc_get(fmt);
+    float variance = 1.0 / 12;
+    if (desc->comp[0].depth < 8) {
+        /* Extra headroom for very low bit depth output */
+        variance *= (8 - desc->comp[0].depth);
+    }
+
+    if (desc->flags & AV_PIX_FMT_FLAG_FLOAT) {
+        return 0.0;
+    } else if (desc->flags & AV_PIX_FMT_FLAG_RGB) {
+        const float r = 0.299 / (1 << desc->comp[0].depth);
+        const float g = 0.587 / (1 << desc->comp[1].depth);
+        const float b = 0.114 / (1 << desc->comp[2].depth);
+        return (r * r + g * g + b * b) * variance;
+    } else {
+        const float y = 1.0 / (1 << desc->comp[0].depth);
+        return y * y * variance;
+    }
+}
 
 static int fmt_comps(enum AVPixelFormat fmt)
 {
@@ -77,39 +131,64 @@ static int fmt_comps(enum AVPixelFormat fmt)
     return comps;
 }
 
-static void get_mse(int mse[4], const AVFrame *a, const AVFrame *b, int comps)
+static void get_ssim(float ssim[4], const AVFrame *out, const AVFrame *ref, int comps)
 {
-    av_assert1(a->format == AV_PIX_FMT_YUVA420P);
-    av_assert1(b->format == a->format);
-    av_assert1(b->width == a->width && b->height == a->height);
+    av_assert1(out->format == AV_PIX_FMT_YUVA444P);
+    av_assert1(ref->format == out->format);
+    av_assert1(ref->width == out->width && ref->height == out->height);
 
     for (int p = 0; p < 4; p++) {
-        const int is_chroma = p == 1 || p == 2;
-        const int stride_a = a->linesize[p];
-        const int stride_b = b->linesize[p];
-        const int w = (a->width + is_chroma) >> is_chroma;
-        const int h = (a->height + is_chroma) >> is_chroma;
-        uint64_t sum = 0;
+        const int stride_a = out->linesize[p];
+        const int stride_b = ref->linesize[p];
+        const int w = out->width;
+        const int h = out->height;
 
-        if (comps & (1 << p)) {
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int d = a->data[p][y * stride_a + x] - b->data[p][y * stride_b + x];
-                    sum += d * d;
+        const int is_chroma = p == 1 || p == 2;
+        const uint8_t def = is_chroma ? 128 : 0xFF;
+        const int has_ref = comps & (1 << p);
+        double sum = 0;
+        int count = 0;
+
+        /* 4x4 SSIM */
+        for (int y = 0; y < (h & ~3); y += 4) {
+            for (int x = 0; x < (w & ~3); x += 4) {
+                const float c1 = .01 * .01 * 255 * 255 * 64;
+                const float c2 = .03 * .03 * 255 * 255 * 64 * 63;
+                int s1 = 0, s2 = 0, ss = 0, s12 = 0, var, covar;
+
+                for (int yy = 0; yy < 4; yy++) {
+                    for (int xx = 0; xx < 4; xx++) {
+                        int a = out->data[p][(y + yy) * stride_a + x + xx];
+                        int b = has_ref ? ref->data[p][(y + yy) * stride_b + x + xx] : def;
+                        s1  += a;
+                        s2  += b;
+                        ss  += a * a + b * b;
+                        s12 += a * b;
+                    }
                 }
-            }
-        } else {
-            const int ref = is_chroma ? 128 : 0xFF;
-            for (int y = 0; y < h; y++) {
-                for (int x = 0; x < w; x++) {
-                    int d = a->data[p][y * stride_a + x] - ref;
-                    sum += d * d;
-                }
+
+                var = ss * 64 - s1 * s1 - s2 * s2;
+                covar = s12 * 64 - s1 * s2;
+                sum += (2 * s1 * s2 + c1) * (2 * covar + c2) /
+                       ((s1 * s1 + s2 * s2 + c1) * (var + c2));
+                count++;
             }
         }
 
-        mse[p] = sum / (w * h);
+        ssim[p] = count ? sum / count : 0.0;
     }
+}
+
+static float get_loss(const float ssim[4])
+{
+    const float weights[3] = { 0.8, 0.1, 0.1 }; /* tuned for Y'CrCr */
+
+    float sum = 0;
+    for (int i = 0; i < 3; i++)
+        sum += weights[i] * ssim[i];
+    sum *= ssim[3]; /* ensure alpha errors get caught */
+
+    return 1.0 - sum;
 }
 
 static int scale_legacy(AVFrame *dst, const AVFrame *src, struct mode mode,
@@ -146,12 +225,25 @@ error:
 /* Runs a series of ref -> src -> dst -> out, and compares out vs ref */
 static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
                     int dst_w, int dst_h, struct mode mode, struct options opts,
-                    const AVFrame *ref, const int mse_ref[4])
+                    const AVFrame *ref, const float ssim_ref[4])
 {
     AVFrame *src = NULL, *dst = NULL, *out = NULL;
-    int mse[4], mse_sws[4], ret = -1;
+    float ssim[4], ssim_sws[4];
     const int comps = fmt_comps(src_fmt) & fmt_comps(dst_fmt);
     int64_t time, time_ref = 0;
+    int ret = -1;
+
+    /* Estimate the expected amount of loss from bit depth reduction */
+    const float c1 = 0.01 * 0.01; /* stabilization constant */
+    const float ref_var = 1.0 / 12.0; /* uniformly distributed signal */
+    const float src_var = estimate_quantization_noise(src_fmt);
+    const float dst_var = estimate_quantization_noise(dst_fmt);
+    const float out_var = estimate_quantization_noise(ref->format);
+    const float total_var = src_var + dst_var + out_var;
+    const float ssim_luma = (2 * ref_var + c1) / (2 * ref_var + total_var + c1);
+    const float ssim_expected[4] = { ssim_luma, 1, 1, 1 }; /* for simplicity */
+    const float expected_loss = get_loss(ssim_expected);
+    float loss;
 
     src = av_frame_alloc();
     dst = av_frame_alloc();
@@ -198,15 +290,24 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
         goto error;
     }
 
-    get_mse(mse, out, ref, comps);
-    printf("%s %dx%d -> %s %3dx%3d, flags=%u dither=%u, "
-           "MSE={%5d %5d %5d %5d}\n",
+    get_ssim(ssim, out, ref, comps);
+    printf("%s %dx%d -> %s %3dx%3d, flags=0x%x dither=%u, "
+           "SSIM {Y=%f U=%f V=%f A=%f}\n",
            av_get_pix_fmt_name(src->format), src->width, src->height,
            av_get_pix_fmt_name(dst->format), dst->width, dst->height,
            mode.flags, mode.dither,
-           mse[0], mse[1], mse[2], mse[3]);
+           ssim[0], ssim[1], ssim[2], ssim[3]);
 
-    if (!mse_ref) {
+    loss = get_loss(ssim);
+    if (loss - expected_loss > 1e-4 && dst_w >= ref->width && dst_h >= ref->height) {
+        int bad = loss - expected_loss > 1e-2;
+        printf("\033[1;31m  loss %g is %s by %g, expected loss %g\033[0m\n",
+               loss, bad ? "WORSE" : "worse", loss - expected_loss, expected_loss);
+        if (bad)
+            goto error;
+    }
+
+    if (!ssim_ref && sws_isSupportedInput(src->format) && sws_isSupportedOutput(dst->format)) {
         /* Compare against the legacy swscale API as a reference */
         time_ref = av_gettime_relative();
         if (scale_legacy(dst, src, mode, opts) < 0) {
@@ -219,27 +320,47 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
         if (sws_scale_frame(sws[2], out, dst) < 0)
             goto error;
 
-        get_mse(mse_sws, out, ref, comps);
-        mse_ref = mse_sws;
+        get_ssim(ssim_sws, out, ref, comps);
+
+        /* Legacy swscale does not perform bit accurate upconversions of low
+         * bit depth RGB. This artificially improves the SSIM score because the
+         * resulting error deletes some of the input dither noise. This gives
+         * it an unfair advantage when compared against a bit exact reference.
+         * Work around this by ensuring that the reference SSIM score is not
+         * higher than it theoretically "should" be. */
+        if (src_var > dst_var) {
+            const float src_loss = (2 * ref_var + c1) / (2 * ref_var + src_var + c1);
+            ssim_sws[0] = FFMIN(ssim_sws[0], src_loss);
+        }
+
+        ssim_ref = ssim_sws;
     }
 
-    for (int i = 0; i < 4; i++) {
-        if (mse[i] > mse_ref[i]) {
-            int bad = mse[i] > mse_ref[i] * 1.02 + 1;
-            printf("\033[1;31m  %s, ref MSE={%5d %5d %5d %5d}\033[0m\n",
-                   bad ? "WORSE" : "worse",
-                   mse_ref[0], mse_ref[1], mse_ref[2], mse_ref[3]);
+    if (ssim_ref) {
+        const float loss_ref = get_loss(ssim_ref);
+        if (loss - loss_ref > 1e-4) {
+            int bad = loss - loss_ref > 1e-2;
+            printf("\033[1;31m  loss %g is %s by %g, ref loss %g, "
+                   "SSIM {Y=%f U=%f V=%f A=%f}\033[0m\n",
+                   loss, bad ? "WORSE" : "worse", loss - loss_ref, loss_ref,
+                   ssim_ref[0], ssim_ref[1], ssim_ref[2], ssim_ref[3]);
             if (bad)
                 goto error;
-            break;
         }
     }
 
     if (opts.bench && time_ref) {
-        printf("  time=%"PRId64" us, ref=%"PRId64" us, speedup=%.3fx %s\n",
-                time / opts.iters, time_ref / opts.iters,
-                (double) time_ref / time,
-                time <= time_ref ? "faster" : "\033[1;33mslower\033[0m");
+        double ratio = (double) time_ref / time;
+        if (FFMIN(time, time_ref) > 100 /* don't pollute stats with low precision */) {
+            speedup_min = FFMIN(speedup_min, ratio);
+            speedup_max = FFMAX(speedup_max, ratio);
+            speedup_logavg += log(ratio);
+            speedup_count++;
+        }
+
+        printf("  time=%"PRId64" us, ref=%"PRId64" us, speedup=%.3fx %s%s\033[0m\n",
+               time / opts.iters, time_ref / opts.iters, ratio,
+               speedup_color(ratio), ratio >= 1.0 ? "faster" : "slower");
     } else if (opts.bench) {
         printf("  time=%"PRId64" us\n", time / opts.iters);
     }
@@ -251,6 +372,12 @@ static int run_test(enum AVPixelFormat src_fmt, enum AVPixelFormat dst_fmt,
     av_frame_free(&dst);
     av_frame_free(&out);
     return ret;
+}
+
+static inline int fmt_is_subsampled(enum AVPixelFormat fmt)
+{
+    return av_pix_fmt_desc_get(fmt)->log2_chroma_w != 0 ||
+           av_pix_fmt_desc_get(fmt)->log2_chroma_h != 0;
 }
 
 static int run_self_tests(const AVFrame *ref, struct options opts)
@@ -270,21 +397,39 @@ static int run_self_tests(const AVFrame *ref, struct options opts)
         dst_fmt_min = dst_fmt_max = opts.dst_fmt;
 
     for (src_fmt = src_fmt_min; src_fmt <= src_fmt_max; src_fmt++) {
+        if (opts.unscaled && fmt_is_subsampled(src_fmt))
+            continue;
         if (!sws_test_format(src_fmt, 0) || !sws_test_format(src_fmt, 1))
             continue;
         for (dst_fmt = dst_fmt_min; dst_fmt <= dst_fmt_max; dst_fmt++) {
+            if (opts.unscaled && fmt_is_subsampled(dst_fmt))
+                continue;
             if (!sws_test_format(dst_fmt, 0) || !sws_test_format(dst_fmt, 1))
                 continue;
-            for (int h = 0; h < FF_ARRAY_ELEMS(dst_h); h++)
-                for (int w = 0; w < FF_ARRAY_ELEMS(dst_w); w++)
-                    for (int m = 0; m < FF_ARRAY_ELEMS(modes); m++) {
+            for (int h = 0; h < FF_ARRAY_ELEMS(dst_h); h++) {
+                for (int w = 0; w < FF_ARRAY_ELEMS(dst_w); w++) {
+                    for (int f = 0; f < FF_ARRAY_ELEMS(flags); f++) {
+                        struct mode mode = {
+                            .flags  = opts.flags  >= 0 ? opts.flags  : flags[f],
+                            .dither = opts.dither >= 0 ? opts.dither : SWS_DITHER_AUTO,
+                        };
+
                         if (ff_sfc64_get(&prng_state) > UINT64_MAX * opts.prob)
                             continue;
 
                         if (run_test(src_fmt, dst_fmt, dst_w[w], dst_h[h],
-                                     modes[m], opts, ref, NULL) < 0)
+                                     mode, opts, ref, NULL) < 0)
                             return -1;
+
+                        if (opts.flags >= 0 || opts.unscaled)
+                            break;
                     }
+                    if (opts.unscaled)
+                        break;
+                }
+                if (opts.unscaled)
+                    break;
+            }
         }
     }
 
@@ -297,18 +442,19 @@ static int run_file_tests(const AVFrame *ref, FILE *fp, struct options opts)
     int ret;
 
     while (fgets(buf, sizeof(buf), fp)) {
-        char src_fmt_str[20], dst_fmt_str[20];
+        char src_fmt_str[21], dst_fmt_str[21];
         enum AVPixelFormat src_fmt;
         enum AVPixelFormat dst_fmt;
-        int sw, sh, dw, dh, mse[4];
+        int sw, sh, dw, dh;
+        float ssim[4];
         struct mode mode;
 
         ret = sscanf(buf,
-                     " %20s %dx%d -> %20s %dx%d, flags=%u dither=%u, "
-                     "MSE={%d %d %d %d}\n",
+                     "%20s %dx%d -> %20s %dx%d, flags=0x%x dither=%u, "
+                     "SSIM {Y=%f U=%f V=%f A=%f}\n",
                      src_fmt_str, &sw, &sh, dst_fmt_str, &dw, &dh,
                      &mode.flags, &mode.dither,
-                     &mse[0], &mse[1], &mse[2], &mse[3]);
+                     &ssim[0], &ssim[1], &ssim[2], &ssim[3]);
         if (ret != 12) {
             printf("%s", buf);
             continue;
@@ -327,7 +473,7 @@ static int run_file_tests(const AVFrame *ref, FILE *fp, struct options opts)
             opts.dst_fmt != AV_PIX_FMT_NONE && dst_fmt != opts.dst_fmt)
             continue;
 
-        if (run_test(src_fmt, dst_fmt, dw, dh, mode, opts, ref, mse) < 0)
+        if (run_test(src_fmt, dst_fmt, dw, dh, mode, opts, ref, ssim) < 0)
             return -1;
     }
 
@@ -344,6 +490,8 @@ int main(int argc, char **argv)
         .threads = 1,
         .iters   = 1,
         .prob    = 1.0,
+        .flags   = -1,
+        .dither  = -1,
     };
 
     AVFrame *rgb = NULL, *ref = NULL;
@@ -368,10 +516,18 @@ int main(int argc, char **argv)
                     "       Only test the specified source pixel format\n"
                     "   -bench <iters>\n"
                     "       Run benchmarks with the specified number of iterations. This mode also increases the size of the test images\n"
+                    "   -flags <flags>\n"
+                    "       Test with a specific combination of flags\n"
+                    "   -dither <mode>\n"
+                    "       Test with a specific dither mode\n"
+                    "   -unscaled <1 or 0>\n"
+                    "       If 1, test only conversions that do not involve scaling\n"
                     "   -threads <threads>\n"
                     "       Use the specified number of threads\n"
                     "   -cpuflags <cpuflags>\n"
                     "       Uses the specified cpuflags in the tests\n"
+                    "   -v <level>\n"
+                    "       Enable log verbosity at given level\n"
             );
             return 0;
         }
@@ -409,10 +565,18 @@ int main(int argc, char **argv)
             opts.iters = FFMAX(opts.iters, 1);
             opts.w = 1920;
             opts.h = 1080;
+        } else if (!strcmp(argv[i], "-flags")) {
+            opts.flags = strtol(argv[i + 1], NULL, 0);
+        } else if (!strcmp(argv[i], "-dither")) {
+            opts.dither = atoi(argv[i + 1]);
+        } else if (!strcmp(argv[i], "-unscaled")) {
+            opts.unscaled = atoi(argv[i + 1]);
         } else if (!strcmp(argv[i], "-threads")) {
             opts.threads = atoi(argv[i + 1]);
         } else if (!strcmp(argv[i], "-p")) {
             opts.prob = atof(argv[i + 1]);
+        } else if (!strcmp(argv[i], "-v")) {
+            av_log_set_level(atoi(argv[i + 1]));
         } else {
 bad_option:
             fprintf(stderr, "bad option or argument missing (%s) see -help\n", argv[i]);
@@ -422,6 +586,7 @@ bad_option:
 
     ff_sfc64_init(&prng_state, 0, 0, 0, 12);
     av_lfg_init(&rand, 1);
+    signal(SIGINT, exit_handler);
 
     for (int i = 0; i < 3; i++) {
         sws[i] = sws_alloc_context();
@@ -451,7 +616,7 @@ bad_option:
         goto error;
     ref->width  = opts.w;
     ref->height = opts.h;
-    ref->format = AV_PIX_FMT_YUVA420P;
+    ref->format = AV_PIX_FMT_YUVA444P;
 
     if (sws_scale_frame(sws[0], ref, rgb) < 0)
         goto error;
@@ -467,5 +632,5 @@ error:
     av_frame_free(&ref);
     if (fp)
         fclose(fp);
-    return ret;
+    exit_handler(ret);
 }

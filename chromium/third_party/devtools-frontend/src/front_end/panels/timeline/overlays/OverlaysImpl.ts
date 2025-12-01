@@ -1,6 +1,8 @@
 // Copyright 2024 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as Common from '../../../core/common/common.js';
 import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
@@ -322,7 +324,20 @@ export type TimelineOverlay = EntrySelected|EntryOutline|TimeRangeLabel|EntryLab
     TimestampMarker|CandyStripedTimeRange|TimingsMarker;
 
 export interface TimelineOverlaySetOptions {
-  updateTraceWindow: boolean;
+  /** Whether to update the trace window. Defaults to false. */
+  updateTraceWindow?: boolean;
+  /**
+   * If updateTraceWindow is true, this is the total amount of space added as margins to the
+   * side of the bounds represented by the overlays, represented as a percentage relative to
+   * the width of the overlay bounds. The space is split evenly on either side of the overlay
+   * bounds. The intention is to neatly center the overlays in the middle of the viewport, with
+   * some additional context on either side.
+   *
+   * If 0, no margins will be added, and the precise bounds defined by the overlays will be used.
+   *
+   * If not provided, 100 is used (25% margin, 50% overlays, 25% margin).
+   */
+  updateTraceWindowPercentage?: number;
 }
 
 /**
@@ -556,13 +571,12 @@ export class Overlays extends EventTarget {
   // because `overlaysContainer` doesn't have events to enable the interaction with the
   // Flamecharts beneath it.
   #updateMouseCoordinatesProgressEntriesLink(event: Event, chart: EntryChartLocation): void {
-    const mouseEvent = (event as MouseEvent);
-    this.#lastMouseOffsetX = mouseEvent.offsetX;
-    this.#lastMouseOffsetY = mouseEvent.offsetY;
-
     if (this.#entriesLinkInProgress?.state !== Trace.Types.File.EntriesLinkState.PENDING_TO_EVENT) {
       return;
     }
+    const mouseEvent = (event as MouseEvent);
+    this.#lastMouseOffsetX = mouseEvent.offsetX;
+    this.#lastMouseOffsetY = mouseEvent.offsetY;
 
     // The Overlays layer coordinates cover both Network and Main Charts, while the mousemove
     // coordinates are received from the charts individually and start from 0 for each chart.
@@ -1147,33 +1161,36 @@ export class Overlays extends EventTarget {
       const entryToWrapper = component.entryToWrapper();
 
       if (entryTo && entryToWrapper) {
-        let toEntryX = 0;
+        let toEntryX = this.xPixelForEventStartOnChart(entryTo) ?? 0;
         // If the 'to' entry is visible, set the entry Y as an arrow coordinate to point to. If not, get the canvas edge coordate to point the arrow to.
         let toEntryY = this.#yCoordinateForNotVisibleEntry(entryTo);
+        const toEntryParams = this.#positionEntryBorderOutlineType(entryTo, entryToWrapper);
 
-        if (entryToVisibility) {
-          const toEntryParams = this.#positionEntryBorderOutlineType(entryTo, entryToWrapper);
+        if (toEntryParams) {
+          const toEntryHeight = toEntryParams?.entryHeight;
+          const toEntryWidth = toEntryParams?.entryWidth;
+          const toCutOffHeight = toEntryParams?.cutOffHeight;
+          toEntryX = toEntryParams?.x;
+          toEntryY = toEntryParams?.y;
 
-          if (toEntryParams) {
-            const toEntryHeight = toEntryParams?.entryHeight;
-            const toEntryWidth = toEntryParams?.entryWidth;
-            const toCutOffHeight = toEntryParams?.cutOffHeight;
-            toEntryX = toEntryParams?.x;
-            toEntryY = toEntryParams?.y;
-
-            component.toEntryCoordinateAndDimensions = {
-              x: toEntryX,
-              y: toEntryY,
-              length: toEntryWidth,
-              height: toEntryHeight - toCutOffHeight,
-            };
-          } else {
-            // Something went if the entry is visible and we cannot get its' parameters.
-            return;
-          }
+          component.toEntryCoordinateAndDimensions = {
+            x: toEntryX,
+            y: toEntryY,
+            length: toEntryWidth,
+            height: toEntryHeight - toCutOffHeight,
+          };
+        } else {
+          // if the entry exists and we cannot get its' parameters, it is probably loaded and is off screen.
+          // In this case, assign the coordinates so we can draw the arrow in the right direction.
+          component.toEntryCoordinateAndDimensions = {
+            x: toEntryX,
+            y: toEntryY,
+          };
+          return;
         }
 
-      } else if (this.#lastMouseOffsetX && this.#lastMouseOffsetY) {
+      } else {
+        // If the 'to' entry does not exist, the link is being created.
         // The second coordinate for in progress link gets updated on mousemove
         this.#entriesLinkInProgress = overlay;
       }
@@ -1541,8 +1558,8 @@ export class Overlays extends EventTarget {
         component.callTree = callTree;
 
         component.addEventListener(
-            Components.EntryLabelOverlay.LabelAnnotationsConsentDialogVisiblityChange.eventName, e => {
-              const event = e as Components.EntryLabelOverlay.LabelAnnotationsConsentDialogVisiblityChange;
+            Components.EntryLabelOverlay.LabelAnnotationsConsentDialogVisibilityChange.eventName, e => {
+              const event = e as Components.EntryLabelOverlay.LabelAnnotationsConsentDialogVisibilityChange;
               this.dispatchEvent(new ConsentDialogVisibilityChange(event.isVisible));
             });
         component.addEventListener(Components.EntryLabelOverlay.EmptyEntryLabelRemoveEvent.eventName, () => {

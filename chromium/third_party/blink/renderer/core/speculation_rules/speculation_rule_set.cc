@@ -5,7 +5,6 @@
 #include "third_party/blink/renderer/core/speculation_rules/speculation_rule_set.h"
 
 #include "base/containers/contains.h"
-#include "base/not_fatal_until.h"
 #include "services/network/public/mojom/no_vary_search.mojom-shared.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
 #include "third_party/blink/public/mojom/speculation_rules/speculation_rules.mojom-shared.h"
@@ -435,9 +434,7 @@ SpeculationRule* ParseSpeculationRule(JSONObject* input,
   }
 
   AtomicString rule_tag;
-  if (JSONValue* tag_value = input->Get("tag");
-      tag_value &&
-      RuntimeEnabledFeatures::SpeculationRulesTagEnabled(context)) {
+  if (JSONValue* tag_value = input->Get("tag")) {
     String tag_str;
     if (!tag_value->AsString(&tag_str)) {
       SetParseErrorMessage(out_error, "Tag value must be a string.");
@@ -594,7 +591,7 @@ void SpeculationRuleSet::AddWarnings(
 // static
 SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
                                               ExecutionContext* context) {
-  CHECK(context, base::NotFatalUntil::M131);
+  CHECK(context);
   // https://wicg.github.io/nav-speculation/speculation-rules.html#parse-speculation-rules
 
   const String& source_text = source->GetSourceText();
@@ -647,19 +644,16 @@ SpeculationRuleSet* SpeculationRuleSet::Parse(Source* source,
   }
 
   WTF::String ruleset_tag;
-  if (RuntimeEnabledFeatures::SpeculationRulesTagEnabled(context)) {
-    JSONValue* tag_value = parsed->Get("tag");
-    if (tag_value) {
-      String tag_str;
-      if (!tag_value->AsString(&tag_str)) {
-        result->SetError(SpeculationRuleSetErrorType::kInvalidRulesSkipped,
-                         "Tag value must be a string.");
-      } else if (!IsValidTag(tag_str)) {
-        result->SetError(SpeculationRuleSetErrorType::kInvalidRulesSkipped,
-                         "Tag value is invalid: must be ASCII printable.");
-      } else {
-        ruleset_tag = WTF::String(tag_str);
-      }
+  if (JSONValue* tag_value = parsed->Get("tag")) {
+    String tag_str;
+    if (!tag_value->AsString(&tag_str)) {
+      result->SetError(SpeculationRuleSetErrorType::kInvalidRulesSkipped,
+                       "Tag value must be a string.");
+    } else if (!IsValidTag(tag_str)) {
+      result->SetError(SpeculationRuleSetErrorType::kInvalidRulesSkipped,
+                       "Tag value is invalid: must be ASCII printable.");
+    } else {
+      ruleset_tag = WTF::String(tag_str);
     }
   }
 

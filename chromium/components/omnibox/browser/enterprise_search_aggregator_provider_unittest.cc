@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "enterprise_search_aggregator_provider.h"
+#include "components/omnibox/browser/enterprise_search_aggregator_provider.h"
 
 #include <memory>
 #include <string>
@@ -14,10 +14,13 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/icu_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/time/time.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
@@ -28,8 +31,10 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/strings/grit/components_strings.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -45,25 +50,32 @@ class FakeEnterpriseSearchAggregatorProvider
   FakeEnterpriseSearchAggregatorProvider(AutocompleteProviderClient* client,
                                          AutocompleteProviderListener* listener)
       : EnterpriseSearchAggregatorProvider(client, listener) {}
-
   using EnterpriseSearchAggregatorProvider::CreateMatch;
   using EnterpriseSearchAggregatorProvider::EnterpriseSearchAggregatorProvider;
   using EnterpriseSearchAggregatorProvider::IsProviderAllowed;
+  using EnterpriseSearchAggregatorProvider::kNumMultipleRequests;
   using EnterpriseSearchAggregatorProvider::
       ParseEnterpriseSearchAggregatorSearchResults;
   using EnterpriseSearchAggregatorProvider::RequestCompleted;
   using EnterpriseSearchAggregatorProvider::RequestStarted;
+  using EnterpriseSearchAggregatorProvider::SearchAggregatorRequest;
+  using EnterpriseSearchAggregatorProvider::SetTimeRequestSent;
 
   using EnterpriseSearchAggregatorProvider::adjusted_input_;
   using EnterpriseSearchAggregatorProvider::done_;
   using EnterpriseSearchAggregatorProvider::matches_;
+  using EnterpriseSearchAggregatorProvider::requests_;
   using EnterpriseSearchAggregatorProvider::template_url_;
 
-  void UpdateResults(const std::optional<base::Value::Dict>& response_value,
+  void UpdateResults(const int request_index,
+                     const std::optional<base::Value::Dict>& response_value,
                      const int response_code) override {
-    EnterpriseSearchAggregatorProvider::UpdateResults(std::move(response_value),
-                                                      response_code);
-    update_results_future_.SetValue();
+    EnterpriseSearchAggregatorProvider::UpdateResults(
+        request_index, std::move(response_value), response_code);
+    // Wait until all requests are completed.
+    if (done_) {
+      update_results_future_.SetValue();
+    }
   }
 
   bool WaitForUpdateResults() { return update_results_future_.Wait(); }
@@ -107,6 +119,8 @@ const std::string kGoodJsonResponse = base::StringPrintf(
                 }
               }
             },
+            "destinationUri": "https://example.com/people/jdoe",
+            "score": 0.8,
             "dataStore": "project 1"
           }
         ],
@@ -128,6 +142,7 @@ const std::string kGoodJsonResponse = base::StringPrintf(
             },
             "destinationUri": "https://www.example.com",
             "iconUri": "https://example.com/icon.png",
+            "score": 0.4,
             "dataStore": "project2"
           }
         ]
@@ -161,13 +176,25 @@ const std::string kMissingFieldsJsonResponse = base::StringPrintf(
                   "userName": "missingDisplayName"
                 }
               }
+            },
+            "destinationUri": "https://example.com/people/jdoe"
+          },
+          {
+            "suggestion": "missingUri@example.com",
+            "document": {
+              "derivedStructData": {
+                "name": {
+                  "displayName": "John Doe",
+                  "userName": "john"
+                }
+              }
             }
           },
           {
             "document": {
               "derivedStructData": {
                 "name": {
-                  "displayName": "Missing suggestion / user name"
+                  "displayName": "Missing suggestion / user name / URI"
                 }
               }
             }
@@ -181,7 +208,8 @@ const std::string kMissingFieldsJsonResponse = base::StringPrintf(
                   "userName": "john"
                 }
               }
-            }
+            },
+            "destinationUri": "https://example.com/people/jdoe"
           }
         ],
         "contentSuggestions": [
@@ -244,10 +272,11 @@ const std::string kGoodJsonResponseImageUrls = base::StringPrintf(
                 }
               ],
               "displayPhoto": {
-                "url": "https://lh3.googleusercontent.com/some/path"
+                "url": "https://lh3.googleusercontent.com/some/path-s100"
               }
             }
           },
+          "destinationUri": "https://example.com/people/jdoe",
           "dataStore": "project 1"
         },
         {
@@ -271,6 +300,7 @@ const std::string kGoodJsonResponseImageUrls = base::StringPrintf(
               }
             }
           },
+          "destinationUri": "https://example.com/people/jdoe2",
           "dataStore": "project 1"
         },
         {
@@ -294,6 +324,7 @@ const std::string kGoodJsonResponseImageUrls = base::StringPrintf(
               }
             }
           },
+          "destinationUri": "https://example.com/people/jdoe3",
           "dataStore": "project 1"
         },
         {
@@ -317,6 +348,7 @@ const std::string kGoodJsonResponseImageUrls = base::StringPrintf(
               }
             }
           },
+          "destinationUri": "https://example.com/people/jdoe4",
           "dataStore": "project 1"
         }
       ],
@@ -327,17 +359,19 @@ const std::string kNonDictJsonResponse =
     base::StringPrintf(R"(["test","result1","result2"])");
 
 // Helper methods to dynamically generate valid responses.
-std::string CreateQueryResult(const std::string& query) {
+std::string CreateQueryResult(const std::string& query,
+                              const float score = 0.0) {
   return base::StringPrintf(
       R"(
-        {"suggestion": "%s"}
+        {"suggestion": "%s", "score": %0.1f}
         )",
-      query);
+      query, score);
 }
 std::string CreatePeopleResult(const std::string& displayName,
                                const std::string& userName,
                                const std::string& givenName,
-                               const std::string& familyName) {
+                               const std::string& familyName,
+                               const float score = 0.0) {
   return base::StringPrintf(
       R"(
         {
@@ -350,14 +384,34 @@ std::string CreatePeopleResult(const std::string& displayName,
                 "familyName": "%s"
               }
             }
-          }
+          },
+          "destinationUri": "https://example.com/people/%s",
+          "score": %0.1f
         }
-            )",
-      userName, displayName, givenName, familyName);
+        )",
+      userName, displayName, givenName, familyName, userName, score);
 }
 std::string CreateContentResult(const std::string& title,
-                                const std::string& owner_email,
-                                const std::string& url) {
+                                const std::string& url,
+                                const float score = 0.0) {
+  return base::StringPrintf(
+      R"(
+        {
+          "document": {
+            "derivedStructData": {
+              "title": "%s"
+            }
+          },
+          "destinationUri": "%s",
+          "score": %0.1f
+        }
+        )",
+      title, url, score);
+}
+
+std::string CreateContentResultWithOwnerEmail(const std::string& title,
+                                              const std::string& owner_email,
+                                              const std::string& url) {
   return base::StringPrintf(
       R"(
         {
@@ -371,6 +425,25 @@ std::string CreateContentResult(const std::string& title,
         }
         )",
       title, owner_email, url);
+}
+std::string CreateContentResultWithTypes(const std::string& title,
+                                         const std::string& url,
+                                         const std::string& mime_type,
+                                         const std::string& source_type) {
+  return base::StringPrintf(
+      R"(
+        {
+          "document": {
+            "derivedStructData": {
+              "title": "%s",
+              "mime_type": "%s",
+              "source_type": "%s"
+            }
+          },
+          "destinationUri": "%s"
+        }
+        )",
+      title, mime_type, source_type, url);
 }
 std::string CreateResponse(std::vector<std::string> queries,
                            std::vector<std::string> peoples,
@@ -426,7 +499,10 @@ class EnterpriseSearchAggregatorProviderTest : public testing::Test {
         .WillRepeatedly(Return(true));
   }
 
-  void InitFeature() { scoped_config_.Get().enabled = true; }
+  void InitFeature() {
+    scoped_config_.Get().enabled = true;
+    scoped_config_.Get().relevance_scoring_mode = "client";
+  }
 
   void InitTemplateUrlService() {
     TemplateURLData data;
@@ -434,6 +510,7 @@ class EnterpriseSearchAggregatorProviderTest : public testing::Test {
     data.SetKeyword(u"keyword");
     data.SetURL("https://www.google.com/?q={searchTerms}");
     data.suggestions_url = "https://www.google.com/complete/?q={searchTerms}";
+    data.favicon_url = GURL("https://www.google.com/favicon.ico");
     data.is_active = TemplateURLData::ActiveStatus::kTrue;
     data.featured_by_policy = true;
     data.policy_origin = TemplateURLData::PolicyOrigin::kSearchAggregator;
@@ -449,11 +526,43 @@ class EnterpriseSearchAggregatorProviderTest : public testing::Test {
   }
 
   void ParseResponse(const std::string& response_string) {
+    InitRequests();
+    StartAllRequests();
     provider_->matches_.clear();
+    for (auto& request : provider_->requests_) {
+      request.matches.clear();
+    }
+
     std::optional<base::Value::Dict> response =
         base::JSONReader::ReadDict(response_string);
     ASSERT_TRUE(response);
-    provider_->ParseEnterpriseSearchAggregatorSearchResults(*response);
+    if (omnibox_feature_configs::SearchAggregatorProvider::Get()
+            .multiple_requests) {
+      provider_->ParseEnterpriseSearchAggregatorSearchResults(2, *response);
+      provider_->ParseEnterpriseSearchAggregatorSearchResults(1, *response);
+    }
+    provider_->ParseEnterpriseSearchAggregatorSearchResults(0, *response);
+  }
+
+  void InitRequests() {
+    int num_requests = omnibox_feature_configs::SearchAggregatorProvider::Get()
+                               .multiple_requests
+                           ? provider_->kNumMultipleRequests
+                           : 1;
+    for (int i = 0; i < num_requests; ++i) {
+      EnterpriseSearchAggregatorProvider::SearchAggregatorRequest request;
+      provider_->requests_.push_back(std::move(request));
+    }
+  }
+
+  void StartAllRequests() {
+    int num_requests = omnibox_feature_configs::SearchAggregatorProvider::Get()
+                               .multiple_requests
+                           ? provider_->kNumMultipleRequests
+                           : 1;
+    for (int i = 0; i < num_requests; ++i) {
+      provider_->RequestStarted(i, nullptr);
+    }
   }
 
   std::vector<std::u16string> GetMatches() {
@@ -472,6 +581,19 @@ class EnterpriseSearchAggregatorProviderTest : public testing::Test {
     return matches;
   }
 
+  void RequestsStartAndComplete(int response_code, std::string response) {
+    int num_requests = omnibox_feature_configs::SearchAggregatorProvider::Get()
+                               .multiple_requests
+                           ? provider_->kNumMultipleRequests
+                           : 1;
+    provider_->SetTimeRequestSent();
+    for (int i = 0; i < num_requests; ++i) {
+      provider_->RequestStarted(i, nullptr);
+      provider_->RequestCompleted(i, nullptr, response_code,
+                                  std::make_unique<std::string>(response));
+    }
+  }
+
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<FakeAutocompleteProviderClient> client_;
@@ -484,10 +606,18 @@ class EnterpriseSearchAggregatorProviderTest : public testing::Test {
 
 TEST_F(EnterpriseSearchAggregatorProviderTest, CreateMatch) {
   provider_->adjusted_input_ = CreateInput(u"input", true);
-  auto primary_text_class = std::vector<ACMatchClassification>{
-      {0, ACMatchClassification::MATCH}, {5, ACMatchClassification::NONE}};
-  auto secondary_text_class =
-      std::vector<ACMatchClassification>{{0, ACMatchClassification::DIM}};
+  auto primary_text_class = [&](auto suggestion_type) {
+    return suggestion_type ==
+                   AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE
+               ? std::vector<
+                     ACMatchClassification>{{0, ACMatchClassification::NONE}}
+               : std::vector<ACMatchClassification>{
+                     {0, ACMatchClassification::MATCH},
+                     {5, ACMatchClassification::NONE}};
+  };
+  auto secondary_text_class = [&](auto suggestion_type) {
+    return std::vector<ACMatchClassification>{{0, ACMatchClassification::DIM}};
+  };
 
   auto query_match = provider_->CreateMatch(
       AutocompleteMatch::EnterpriseSearchAggregatorType::QUERY, false, {1000},
@@ -500,9 +630,13 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, CreateMatch) {
   EXPECT_EQ(query_match.enterprise_search_aggregator_type,
             AutocompleteMatch::EnterpriseSearchAggregatorType::QUERY);
   EXPECT_EQ(query_match.description, u"additional text");
-  EXPECT_EQ(query_match.description_class, secondary_text_class);
+  EXPECT_EQ(query_match.description_class,
+            secondary_text_class(
+                AutocompleteMatch::EnterpriseSearchAggregatorType::QUERY));
   EXPECT_EQ(query_match.contents, u"input title");
-  EXPECT_EQ(query_match.contents_class, primary_text_class);
+  EXPECT_EQ(query_match.contents_class,
+            primary_text_class(
+                AutocompleteMatch::EnterpriseSearchAggregatorType::QUERY));
   EXPECT_EQ(query_match.image_url.spec(), "https://example.com/image.png");
   EXPECT_EQ(query_match.icon_url.spec(), "https://example.com/icon.png");
   EXPECT_EQ(query_match.keyword, u"keyword");
@@ -514,17 +648,21 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, CreateMatch) {
   auto people_match = provider_->CreateMatch(
       AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE, true, {1000},
       "https://url.com/", "https://example.com/image.png",
-      "https://example.com/icon.png", u"input name", u"additional text",
+      "https://example.com/icon.png", u"Keyword People", u"input name",
       u"keyword https://url.com/");
   EXPECT_EQ(people_match.relevance, 1000);
   EXPECT_EQ(people_match.destination_url.spec(), "https://url.com/");
   EXPECT_EQ(people_match.fill_into_edit, u"keyword https://url.com/");
   EXPECT_EQ(people_match.enterprise_search_aggregator_type,
             AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE);
-  EXPECT_EQ(people_match.description, u"input name");
-  EXPECT_EQ(people_match.description_class, primary_text_class);
-  EXPECT_EQ(people_match.contents, u"additional text");
-  EXPECT_EQ(people_match.contents_class, secondary_text_class);
+  EXPECT_EQ(people_match.description, u"Keyword People");
+  EXPECT_EQ(people_match.description_class,
+            primary_text_class(
+                AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE));
+  EXPECT_EQ(people_match.contents, u"input name");
+  EXPECT_EQ(people_match.contents_class,
+            secondary_text_class(
+                AutocompleteMatch::EnterpriseSearchAggregatorType::PEOPLE));
   EXPECT_EQ(people_match.image_url.spec(), "https://example.com/image.png");
   EXPECT_EQ(people_match.icon_url.spec(), "https://example.com/icon.png");
   EXPECT_EQ(people_match.keyword, u"keyword");
@@ -568,7 +706,7 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, IsProviderAllowed) {
   }
 
   {
-    // The provider is only run if Google is the default search provider.
+    // The provider is run regardless of default search engine.
     TemplateURLService* turl_service = client_->GetTemplateURLService();
     TemplateURLData data;
     data.SetShortName(u"test");
@@ -577,7 +715,7 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, IsProviderAllowed) {
     TemplateURL* new_default_provider =
         turl_service->Add(std::make_unique<TemplateURL>(data));
     turl_service->SetUserSelectedDefaultSearchProvider(new_default_provider);
-    EXPECT_FALSE(provider_->IsProviderAllowed(input));
+    EXPECT_TRUE(provider_->IsProviderAllowed(input));
     TemplateURL* current_template_url =
         const_cast<TemplateURL*>((provider_->template_url_).get());
     turl_service->SetUserSelectedDefaultSearchProvider(current_template_url);
@@ -648,7 +786,8 @@ TEST_F(EnterpriseSearchAggregatorProviderTest,
 }
 
 // Test that a call to `Start()` will not send a new request if input is zero
-// suggest.
+// suggest. This test also checks that both code paths, when `multiple_requests`
+// equals true or false, work.
 TEST_F(EnterpriseSearchAggregatorProviderTest, StartCallsStopForZeroSuggest) {
   AutocompleteInput input = CreateInput(u"", false);
   input.set_focus_type(metrics::INTERACTION_FOCUS);
@@ -680,6 +819,10 @@ TEST_F(EnterpriseSearchAggregatorProviderTest,
 
 // Test response is parsed accurately.
 TEST_F(EnterpriseSearchAggregatorProviderTest, Parse) {
+  base::test::ScopedRestoreDefaultTimezone la_time("America/Los_Angeles");
+
+  scoped_config_.Get().relevance_scoring_mode = "server";
+
   provider_->adjusted_input_ = CreateInput(u"john d", true);
   ParseResponse(kGoodJsonResponse);
 
@@ -687,33 +830,39 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Parse) {
   ASSERT_EQ(matches.size(), 3u);
 
   EXPECT_EQ(matches[0].type, AutocompleteMatchType::NAVSUGGEST);
-  EXPECT_EQ(matches[0].relevance, 610);
-  EXPECT_EQ(matches[0].contents, u"john@example.com");
+  EXPECT_EQ(matches[0].relevance, 810);
+  EXPECT_EQ(matches[0].contents,
+            l10n_util::GetStringFUTF16(IDS_PERSON_SUGGESTION_DESCRIPTION,
+                                       u"keyword"));
   EXPECT_EQ(matches[0].description, u"John Doe");
   EXPECT_EQ(matches[0].destination_url,
-            GURL("https://www.google.com/?q=john%40example.com"));
+            GURL("https://example.com/people/jdoe"));
   EXPECT_EQ(matches[0].image_url, GURL("https://example.com/image.png"));
+  EXPECT_EQ(matches[0].icon_url, GURL("https://www.google.com/favicon.ico"));
   EXPECT_TRUE(PageTransitionCoreTypeIs(matches[0].transition,
                                        ui::PAGE_TRANSITION_KEYWORD));
   EXPECT_EQ(matches[0].fill_into_edit,
-            u"keyword https://www.google.com/?q=john%40example.com");
+            u"keyword https://example.com/people/jdoe");
 
   EXPECT_EQ(matches[1].type, AutocompleteMatchType::NAVSUGGEST);
-  EXPECT_EQ(matches[1].relevance, 520);
+  EXPECT_EQ(matches[1].relevance, 410);
   EXPECT_EQ(matches[1].contents, u"10/15/07 - John Doe - Google Docs");
   EXPECT_EQ(matches[1].description, u"John's doodle");
   EXPECT_EQ(matches[1].destination_url, GURL("https://www.example.com"));
+  EXPECT_EQ(matches[1].image_url, GURL());
   EXPECT_EQ(matches[1].icon_url, GURL("https://example.com/icon.png"));
   EXPECT_TRUE(PageTransitionCoreTypeIs(matches[1].transition,
                                        ui::PAGE_TRANSITION_KEYWORD));
   EXPECT_EQ(matches[1].fill_into_edit, u"keyword https://www.example.com");
 
   EXPECT_EQ(matches[2].type, AutocompleteMatchType::SEARCH_SUGGEST);
-  EXPECT_EQ(matches[2].relevance, 510);
+  EXPECT_EQ(matches[2].relevance, 0);
   EXPECT_EQ(matches[2].contents, u"John's Document 1");
   EXPECT_EQ(matches[2].description, u"");
   EXPECT_EQ(matches[2].destination_url,
             GURL("https://www.google.com/?q=John%27s+Document+1"));
+  EXPECT_EQ(matches[2].image_url, GURL());
+  EXPECT_EQ(matches[2].icon_url, GURL());
   EXPECT_TRUE(PageTransitionCoreTypeIs(matches[2].transition,
                                        ui::PAGE_TRANSITION_KEYWORD));
   EXPECT_EQ(matches[2].fill_into_edit, u"keyword John's Document 1");
@@ -727,22 +876,30 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, ParseAndModifyImageUrls) {
   ACMatches matches = provider_->matches_;
   ASSERT_EQ(matches.size(), 4u);
 
-  EXPECT_EQ(matches[0].contents, u"john@example.com");
+  EXPECT_EQ(matches[0].contents,
+            l10n_util::GetStringFUTF16(IDS_PERSON_SUGGESTION_DESCRIPTION,
+                                       u"keyword"));
   EXPECT_EQ(matches[0].description, u"John Doe");
   EXPECT_EQ(matches[0].image_url,
-            GURL("https://lh3.googleusercontent.com/some/path=s64"));
+            GURL("https://lh3.googleusercontent.com/some/path-s100=s64"));
 
-  EXPECT_EQ(matches[1].contents, u"john2@example.com");
+  EXPECT_EQ(matches[1].contents,
+            l10n_util::GetStringFUTF16(IDS_PERSON_SUGGESTION_DESCRIPTION,
+                                       u"keyword"));
   EXPECT_EQ(matches[1].description, u"John Doe2");
   EXPECT_EQ(matches[1].image_url,
             GURL("https://lh3.googleusercontent.com/some/path=s100"));
 
-  EXPECT_EQ(matches[2].contents, u"john3@example.com");
+  EXPECT_EQ(matches[2].contents,
+            l10n_util::GetStringFUTF16(IDS_PERSON_SUGGESTION_DESCRIPTION,
+                                       u"keyword"));
   EXPECT_EQ(matches[2].description, u"John Doe3");
   EXPECT_EQ(matches[2].image_url,
             GURL("https://lh3.googleusercontent.com/some/path=abc-s64"));
 
-  EXPECT_EQ(matches[3].contents, u"john4@example.com");
+  EXPECT_EQ(matches[3].contents,
+            l10n_util::GetStringFUTF16(IDS_PERSON_SUGGESTION_DESCRIPTION,
+                                       u"keyword"));
   EXPECT_EQ(matches[3].description, u"John Doe4");
   EXPECT_EQ(matches[3].image_url,
             GURL("https://lh3.googleusercontent.com/some/path=w100-h200"));
@@ -754,8 +911,7 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, ParseWithMissingFields) {
   ParseResponse(kMissingFieldsJsonResponse);
   EXPECT_THAT(
       GetMatches(),
-      testing::ElementsAre(u"https://www.google.com/?q=john%40example.com",
-                           u"https://www.missinguributlinkavailable.co.uk/",
+      testing::ElementsAre(u"https://example.com/people/jdoe",
                            u"https://www.example.com/",
                            u"https://www.google.com/?q=John%27s+Document+1"));
 }
@@ -771,10 +927,10 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, ParseWithNonDict) {
   EXPECT_CALL(*mock_listener_.get(), OnProviderUpdate(false, provider_.get()))
       .Times(1);
 
+  InitRequests();
   provider_->done_ = false;
-  provider_->RequestStarted(nullptr);
-  provider_->RequestCompleted(
-      nullptr, 200, std::make_unique<std::string>(kNonDictJsonResponse));
+  RequestsStartAndComplete(/*response_code=*/200,
+                           /*response=*/kNonDictJsonResponse);
   ASSERT_TRUE(provider_->WaitForUpdateResults());
   EXPECT_THAT(GetMatches(), testing::ElementsAre());
 }
@@ -805,10 +961,10 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, CacheMatches_ErrorResponse) {
       .Times(0);
 
   // Complete request with error, old match should be cleared.
-  provider_->RequestStarted(nullptr);
+  InitRequests();
   provider_->done_ = false;
-  provider_->RequestCompleted(nullptr, 404,
-                              std::make_unique<std::string>("bad"));
+  RequestsStartAndComplete(/*response_code=*/404,
+                           /*response=*/"bad");
   EXPECT_THAT(GetMatches(), testing::ElementsAre());
 }
 
@@ -827,10 +983,10 @@ TEST_F(EnterpriseSearchAggregatorProviderTest,
       .Times(0);
 
   // Complete request with error, old match should be cleared.
+  InitRequests();
   provider_->done_ = false;
-  provider_->RequestStarted(nullptr);
-  provider_->RequestCompleted(nullptr, 404,
-                              std::make_unique<std::string>("bad"));
+  RequestsStartAndComplete(/*response_code=*/404,
+                           /*response=*/"bad");
   EXPECT_THAT(GetMatches(), testing::ElementsAre());
 }
 
@@ -848,10 +1004,10 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, CacheMatches_EmptyResponse) {
       .Times(0);
 
   // Complete request with empty results, old match should be cleared.
+  InitRequests();
   provider_->done_ = false;
-  provider_->RequestStarted(nullptr);
-  provider_->RequestCompleted(
-      nullptr, 200, std::make_unique<std::string>(kGoodEmptyJsonResponse));
+  RequestsStartAndComplete(/*response_code=*/200,
+                           /*response=*/kGoodEmptyJsonResponse);
   ASSERT_TRUE(provider_->WaitForUpdateResults());
   EXPECT_THAT(GetMatches(), testing::ElementsAre());
 }
@@ -871,13 +1027,13 @@ TEST_F(EnterpriseSearchAggregatorProviderTest,
 
   // Complete request with non-empty results, old match should be replaced.
   provider_->done_ = false;
-  provider_->RequestStarted(nullptr);
-  provider_->RequestCompleted(nullptr, 200,
-                              std::make_unique<std::string>(kGoodJsonResponse));
+  InitRequests();
+  RequestsStartAndComplete(/*response_code=*/200,
+                           /*response=*/kGoodJsonResponse);
   ASSERT_TRUE(provider_->WaitForUpdateResults());
   EXPECT_THAT(
       GetMatches(),
-      testing::ElementsAre(u"https://www.google.com/?q=john%40example.com",
+      testing::ElementsAre(u"https://example.com/people/jdoe",
                            u"https://www.example.com/",
                            u"https://www.google.com/?q=John%27s+Document+1"));
 }
@@ -903,13 +1059,12 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, UnfeaturedKeyword) {
       .Times(0);
 
   provider_->Start(input, false);
-  provider_->RequestStarted(nullptr);
-  provider_->RequestCompleted(nullptr, 200,
-                              std::make_unique<std::string>(kGoodJsonResponse));
+  RequestsStartAndComplete(/*response_code=*/200,
+                           /*response=*/kGoodJsonResponse);
   ASSERT_TRUE(provider_->WaitForUpdateResults());
   EXPECT_EQ(provider_->matches_[0].keyword, u"unfeatured");
   EXPECT_THAT(GetMatches(), testing::ElementsAre(
-                                u"http://www.yahoo.com/john@example.com",
+                                u"https://example.com/people/jdoe",
                                 u"https://www.example.com/",
                                 u"http://www.yahoo.com/John's%20Document%201"));
 }
@@ -924,13 +1079,12 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, UnscopedMode) {
       .Times(0);
 
   provider_->Start(input, false);
-  provider_->RequestStarted(nullptr);
-  provider_->RequestCompleted(nullptr, 200,
-                              std::make_unique<std::string>(kGoodJsonResponse));
+  RequestsStartAndComplete(/*response_code=*/200,
+                           /*response=*/kGoodJsonResponse);
   ASSERT_TRUE(provider_->WaitForUpdateResults());
   EXPECT_THAT(
       GetMatches(),
-      testing::ElementsAre(u"https://www.google.com/?q=john%40example.com",
+      testing::ElementsAre(u"https://example.com/people/jdoe",
                            u"https://www.example.com/",
                            u"https://www.google.com/?q=John%27s+Document+1"));
 }
@@ -963,24 +1117,18 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
                              "familyName"),
       },
       {
-          CreateContentResult("grape-1-content", "mime_type",
-                              "https://url-grape-1/"),
-          CreateContentResult("grape-2-content", "mime_type",
-                              "https://url-grape-2/"),
-          CreateContentResult("grape-3-content", "mime_type",
-                              "https://url-grape-3/"),
-          CreateContentResult("mango-1-content", "mime_type",
-                              "https://url-mango-1/"),
-          CreateContentResult("mango-2-content", "mime_type",
-                              "https://url-mango-2/"),
-          CreateContentResult("mango-3-content", "mime_type",
-                              "https://url-mango-3/"),
+          CreateContentResult("grape-1-content", "https://url-grape-1/"),
+          CreateContentResult("grape-2-content", "https://url-grape-2/"),
+          CreateContentResult("grape-3-content", "https://url-grape-3/"),
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
       testing::ElementsAre(
-          ScoredMatch{u"https://www.google.com/?q=mango-1-people", 607},
-          ScoredMatch{u"https://www.google.com/?q=mango-2-people", 606},
+          ScoredMatch{u"https://example.com/people/mango-1-people", 607},
+          ScoredMatch{u"https://example.com/people/mango-2-people", 606},
           ScoredMatch{u"https://url-mango-1/", 517},
           ScoredMatch{u"https://url-mango-2/", 516},
           ScoredMatch{u"https://www.google.com/?q=mango-1-query", 507},
@@ -1019,30 +1167,22 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
                              "familyName"),
       },
       {
-          CreateContentResult("grape-1-content", "mime_type",
-                              "https://url-grape-1/"),
-          CreateContentResult("grape-2-content", "mime_type",
-                              "https://url-grape-2/"),
-          CreateContentResult("grape-3-content", "mime_type",
-                              "https://url-grape-3/"),
-          CreateContentResult("mango-1-content", "mime_type",
-                              "https://url-mango-1/"),
-          CreateContentResult("mango-2-content", "mime_type",
-                              "https://url-mango-2/"),
-          CreateContentResult("mango-3-content", "mime_type",
-                              "https://url-mango-3/"),
-          CreateContentResult("mango-4-content", "mime_type",
-                              "https://url-mango-4/"),
-          CreateContentResult("mango-5-content", "mime_type",
-                              "https://url-mango-5/"),
+          CreateContentResult("grape-1-content", "https://url-grape-1/"),
+          CreateContentResult("grape-2-content", "https://url-grape-2/"),
+          CreateContentResult("grape-3-content", "https://url-grape-3/"),
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
+          CreateContentResult("mango-4-content", "https://url-mango-4/"),
+          CreateContentResult("mango-5-content", "https://url-mango-5/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
       testing::ElementsAre(
-          ScoredMatch{u"https://www.google.com/?q=mango-1-people", 607},
-          ScoredMatch{u"https://www.google.com/?q=mango-2-people", 606},
-          ScoredMatch{u"https://www.google.com/?q=mango-3-people", 605},
-          ScoredMatch{u"https://www.google.com/?q=mango-4-people", 604},
+          ScoredMatch{u"https://example.com/people/mango-1-people", 607},
+          ScoredMatch{u"https://example.com/people/mango-2-people", 606},
+          ScoredMatch{u"https://example.com/people/mango-3-people", 605},
+          ScoredMatch{u"https://example.com/people/mango-4-people", 604},
           ScoredMatch{u"https://url-mango-1/", 517},
           ScoredMatch{u"https://url-mango-2/", 516},
           ScoredMatch{u"https://url-mango-3/", 515},
@@ -1054,22 +1194,16 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
 
   // Types that have less than 2 results aren't backfilled by other types.
   provider_->adjusted_input_ = CreateInput(u"mango m", false);
-  ParseResponse(
-      CreateResponse({}, {},
-                     {
-                         CreateContentResult("grape-1-content", "mime_type",
-                                             "https://url-grape-1/"),
-                         CreateContentResult("grape-2-content", "mime_type",
-                                             "https://url-grape-2/"),
-                         CreateContentResult("grape-3-content", "mime_type",
-                                             "https://url-grape-3/"),
-                         CreateContentResult("mango-1-content", "mime_type",
-                                             "https://url-mango-1/"),
-                         CreateContentResult("mango-2-content", "mime_type",
-                                             "https://url-mango-2/"),
-                         CreateContentResult("mango-3-content", "mime_type",
-                                             "https://url-mango-3/"),
-                     }));
+  ParseResponse(CreateResponse(
+      {}, {},
+      {
+          CreateContentResult("grape-1-content", "https://url-grape-1/"),
+          CreateContentResult("grape-2-content", "https://url-grape-2/"),
+          CreateContentResult("grape-3-content", "https://url-grape-3/"),
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
+      }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url-mango-1/", 517},
                                    ScoredMatch{u"https://url-mango-2/", 516}));
@@ -1077,16 +1211,13 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
   // The best 2 suggestions should be shown, even if they're not
   // the 1st 2.
   provider_->adjusted_input_ = CreateInput(u"mango mango-2 mango-3", false);
-  ParseResponse(
-      CreateResponse({}, {},
-                     {
-                         CreateContentResult("mango-1-content", "mime_type",
-                                             "https://url-mango-1/"),
-                         CreateContentResult("mango-2-content", "mime_type",
-                                             "https://url-mango-2/"),
-                         CreateContentResult("mango-3-content", "mime_type",
-                                             "https://url-mango-3/"),
-                     }));
+  ParseResponse(CreateResponse(
+      {}, {},
+      {
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
+      }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url-mango-2/", 519},
                                    ScoredMatch{u"https://url-mango-3/", 518}));
@@ -1117,25 +1248,19 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
                              "familyName"),
       },
       {
-          CreateContentResult("grape-1-content", "mime_type",
-                              "https://url-grape-1/"),
-          CreateContentResult("grape-2-content", "mime_type",
-                              "https://url-grape-2/"),
-          CreateContentResult("grape-3-content", "mime_type",
-                              "https://url-grape-3/"),
-          CreateContentResult("mango-1-content", "mime_type",
-                              "https://url-mango-1/"),
-          CreateContentResult("mango-2-content", "mime_type",
-                              "https://url-mango-2/"),
-          CreateContentResult("mango-3-content", "mime_type",
-                              "https://url-mango-3/"),
+          CreateContentResult("grape-1-content", "https://url-grape-1/"),
+          CreateContentResult("grape-2-content", "https://url-grape-2/"),
+          CreateContentResult("grape-3-content", "https://url-grape-3/"),
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
       testing::ElementsAre(
-          ScoredMatch{u"https://www.google.com/?q=mango-1-people", 607},
-          ScoredMatch{u"https://www.google.com/?q=mango-2-people", 606},
-          ScoredMatch{u"https://www.google.com/?q=mango-3-people", 605},
+          ScoredMatch{u"https://example.com/people/mango-1-people", 607},
+          ScoredMatch{u"https://example.com/people/mango-2-people", 606},
+          ScoredMatch{u"https://example.com/people/mango-3-people", 605},
           ScoredMatch{u"https://url-mango-1/", 517},
           ScoredMatch{u"https://url-mango-2/", 516},
           ScoredMatch{u"https://url-mango-3/", 515},
@@ -1171,24 +1296,18 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
                              "familyName"),
       },
       {
-          CreateContentResult("grape-1-content", "mime_type",
-                              "https://url-grape-1/"),
-          CreateContentResult("grape-2-content", "mime_type",
-                              "https://url-grape-2/"),
-          CreateContentResult("grape-3-content", "mime_type",
-                              "https://url-grape-3/"),
-          CreateContentResult("mango-1-content", "mime_type",
-                              "https://url-mango-1/"),
-          CreateContentResult("mango-2-content", "mime_type",
-                              "https://url-mango-2/"),
-          CreateContentResult("mango-3-content", "mime_type",
-                              "https://url-mango-3/"),
+          CreateContentResult("grape-1-content", "https://url-grape-1/"),
+          CreateContentResult("grape-2-content", "https://url-grape-2/"),
+          CreateContentResult("grape-3-content", "https://url-grape-3/"),
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
       testing::ElementsAre(
-          ScoredMatch{u"https://www.google.com/?q=mango-1-people", 307},
-          ScoredMatch{u"https://www.google.com/?q=mango-2-people", 306}));
+          ScoredMatch{u"https://example.com/people/mango-1-people", 307},
+          ScoredMatch{u"https://example.com/people/mango-2-people", 306}));
 
   // Scoped inputs have a higher limit of 8 matches allowed to score lower than
   // 500. Even if the 1st 2 matches score higher than 500, the remaining matches
@@ -1218,25 +1337,19 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
                              "familyName"),
       },
       {
-          CreateContentResult("grape-1-content", "mime_type",
-                              "https://url-grape-1/"),
-          CreateContentResult("grape-2-content", "mime_type",
-                              "https://url-grape-2/"),
-          CreateContentResult("grape-3-content", "mime_type",
-                              "https://url-grape-3/"),
-          CreateContentResult("mango-1-content", "mime_type",
-                              "https://url-mango-1/"),
-          CreateContentResult("mango-2-content", "mime_type",
-                              "https://url-mango-2/"),
-          CreateContentResult("mango-3-content", "mime_type",
-                              "https://url-mango-3/"),
+          CreateContentResult("grape-1-content", "https://url-grape-1/"),
+          CreateContentResult("grape-2-content", "https://url-grape-2/"),
+          CreateContentResult("grape-3-content", "https://url-grape-3/"),
+          CreateContentResult("mango-1-content", "https://url-mango-1/"),
+          CreateContentResult("mango-2-content", "https://url-mango-2/"),
+          CreateContentResult("mango-3-content", "https://url-mango-3/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
       testing::ElementsAre(
-          ScoredMatch{u"https://www.google.com/?q=mango-1-people", 307},
-          ScoredMatch{u"https://www.google.com/?q=mango-2-people", 306},
-          ScoredMatch{u"https://www.google.com/?q=mango-3-people", 305},
+          ScoredMatch{u"https://example.com/people/mango-1-people", 307},
+          ScoredMatch{u"https://example.com/people/mango-2-people", 306},
+          ScoredMatch{u"https://example.com/people/mango-3-people", 305},
           ScoredMatch{u"https://url-mango-1/", 217},
           ScoredMatch{u"https://url-mango-2/", 216},
           ScoredMatch{u"https://url-mango-3/", 215},
@@ -1244,7 +1357,85 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Limits) {
           ScoredMatch{u"https://www.google.com/?q=mango-2-query", 206}));
 }
 
-TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
+TEST_F(EnterpriseSearchAggregatorProviderTest, ServerRelevanceScoring) {
+  scoped_config_.Get().relevance_scoring_mode = "server";
+
+  provider_->adjusted_input_ = CreateInput(u"match m", true);
+  ParseResponse(CreateResponse(
+      {
+          CreateQueryResult("matchQuery", 1.0),
+          // Results that don't match the input should still be scored and
+          // returned.
+          CreateQueryResult("query", 1.0),
+          CreateQueryResult("query2", 1.0),
+          CreateQueryResult("query3", 0.8),
+      },
+      {
+          CreatePeopleResult("displayName", "matchUserName", "givenName",
+                             "familyName", 0.7),
+          // A result with a score of 0 should not be returned.
+          CreatePeopleResult("displayName", "userName", "givenName",
+                             "familyName", 0.0),
+      },
+      {
+          CreateContentResult("matchTitle", "https://url/", 0.7),
+          CreateContentResult("title", "https://url2/", 0.7),
+          CreateContentResult("title2", "https://url3/", 0.3),
+      }));
+  EXPECT_THAT(
+      GetScoredMatches(),
+      testing::ElementsAre(
+          ScoredMatch{u"https://www.google.com/?q=matchQuery", 1010},
+          ScoredMatch{u"https://www.google.com/?q=query", 1009},
+          ScoredMatch{u"https://www.google.com/?q=query2", 1008},
+          ScoredMatch{u"https://www.google.com/?q=query3", 807},
+          ScoredMatch{u"https://example.com/people/matchUserName", 710},
+          ScoredMatch{u"https://url/", 710}, ScoredMatch{u"https://url2/", 709},
+          ScoredMatch{u"https://url3/", 308}));
+}
+
+TEST_F(EnterpriseSearchAggregatorProviderTest, MixedRelevanceScoring) {
+  scoped_config_.Get().relevance_scoring_mode = "mixed";
+
+  std::string response = CreateResponse(
+      {
+          CreateQueryResult("matchQuery", 1.0),
+          CreateQueryResult("query", 1.0),
+      },
+      {
+          CreatePeopleResult("displayName", "matchUserName", "givenName",
+                             "familyName", 0.7),
+          CreatePeopleResult("displayName", "userName", "givenName",
+                             "familyName", 0.6),
+      },
+      {
+          CreateContentResult("matchTitle","https://url/", 0.7),
+          CreateContentResult("title2", "https://url2/", 0.3),
+      });
+
+  // Scoped mode should use server-provided relevance scores.
+  provider_->adjusted_input_ = CreateInput(u"match m", true);
+  ParseResponse(response);
+  EXPECT_THAT(GetScoredMatches(),
+              testing::ElementsAre(
+                  ScoredMatch{u"https://www.google.com/?q=matchQuery", 1010},
+                  ScoredMatch{u"https://www.google.com/?q=query", 1009},
+                  ScoredMatch{u"https://example.com/people/matchUserName", 710},
+                  ScoredMatch{u"https://url/", 710},
+                  ScoredMatch{u"https://example.com/people/userName", 609},
+                  ScoredMatch{u"https://url2/", 309}));
+
+  // Unscoped mode should use client-calculated relevance scores.
+  provider_->adjusted_input_ = CreateInput(u"match m", false);
+  ParseResponse(response);
+  EXPECT_THAT(GetScoredMatches(),
+              testing::ElementsAre(
+                  ScoredMatch{u"https://example.com/people/matchUserName", 610},
+                  ScoredMatch{u"https://url/", 520},
+                  ScoredMatch{u"https://www.google.com/?q=matchQuery", 510}));
+}
+
+TEST_F(EnterpriseSearchAggregatorProviderTest, LocalRelevanceScoring) {
   // Results that don't match the input should be filtered out.
   provider_->adjusted_input_ = CreateInput(u"match m", true);
   ParseResponse(CreateResponse(
@@ -1259,12 +1450,12 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
                              "familyName"),
       },
       {
-          CreateContentResult("title", "xmime_type", "https://url/"),
-          CreateContentResult("matchTitle", "xmime_type", "https://url/"),
+          CreateContentResult("title", "https://url/"),
+          CreateContentResult("matchTitle", "https://url/"),
       }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(
-                  ScoredMatch{u"https://www.google.com/?q=matchUserName", 609},
+                  ScoredMatch{u"https://example.com/people/matchUserName", 609},
                   ScoredMatch{u"https://url/", 519},
                   ScoredMatch{u"https://www.google.com/?q=matchQuery", 509},
                   FieldsAre(_, 0), FieldsAre(_, 0), FieldsAre(_, 0)));
@@ -1274,11 +1465,10 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
   ParseResponse(CreateResponse(
       {}, {},
       {
-          CreateContentResult("zero", "mime_type", "https://url-0/"),
-          CreateContentResult("zero one", "mime_type", "https://url-01/"),
-          CreateContentResult("zero one two", "mime_type", "https://url-012/"),
-          CreateContentResult("zero one two three", "mime_type",
-                              "https://url-0123/"),
+          CreateContentResult("zero", "https://url-0/"),
+          CreateContentResult("zero one", "https://url-01/"),
+          CreateContentResult("zero one two", "https://url-012/"),
+          CreateContentResult("zero one two three", "https://url-0123/"),
       }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url-0123/", 717},
@@ -1291,76 +1481,76 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
   // - If the result field repeats a word, only 1 should count.
   // - If a word appears in multiple result fields, only 1 should count.
   provider_->adjusted_input_ = CreateInput(u"one one", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one one", "one one", "https://url-1/"),
-      }));
+  ParseResponse(CreateResponse({}, {},
+                               {
+                                   CreateContentResultWithOwnerEmail(
+                                       "one one", "one one", "https://url-1/"),
+                               }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url-1/", 420}));
 
   // Each input word can match only 1 result word.
   provider_->adjusted_input_ = CreateInput(u"one one", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one oneTwo", "mime_type", "https://url/"),
-      }));
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResult("one oneTwo", "https://url/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 420}));
 
   // A result word can match multiple input words. This is just a side effect
   // of the implementation rather than intentional design.
   provider_->adjusted_input_ = CreateInput(u"one on o", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one", "mime_type", "https://url/"),
-      }));
+  ParseResponse(CreateResponse({}, {},
+                               {
+                                   CreateContentResult("one", "https://url/"),
+                               }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 620}));
 
   // Matches outside contents and description contribute less to the score.
   provider_->adjusted_input_ = CreateInput(u"one two three four five", true);
-  ParseResponse(
-      CreateResponse({}, {},
-                     {
-                         CreateContentResult("title one", "two three four five",
-                                             "https://inside/"),
-                         CreateContentResult("title", "one two three four five",
-                                             "https://outside/"),
-                     }));
+  ParseResponse(CreateResponse(
+      {}, {},
+      {
+          CreateContentResultWithOwnerEmail("title one", "two three four five",
+                                            "https://inside/"),
+          CreateContentResultWithOwnerEmail("title", "one two three four five",
+                                            "https://outside/"),
+      }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://inside/", 820},
                                    ScoredMatch{u"https://outside/", 519}));
 
   // Short input words contribute less to the score.
   provider_->adjusted_input_ = CreateInput(u"on two three four five", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one", "two three four five", "https://url/"),
-      }));
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResultWithOwnerEmail(
+                             "one", "two three four five", "https://url/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 520}));
 
   // Short input words contribute less to score, except for exact (non-prefix)
   // matches in people suggestions.
   provider_->adjusted_input_ = CreateInput(u"weak ab", true);
-  ParseResponse(
-      CreateResponse({},
-                     {
-                         {CreatePeopleResult("ab", "ab", "weak", "")},
-                         {CreatePeopleResult("abc", "abc", "weak", "")},
-                     },
-                     {
-                         CreateContentResult("ab", "weak", "https://url-ab/"),
-                         CreateContentResult("abc", "weak", "https://url-abc/"),
-                     }));
+  ParseResponse(CreateResponse(
+      {},
+      {
+          {CreatePeopleResult("ab", "ab", "weak", "")},
+          {CreatePeopleResult("abc", "abc", "weak", "")},
+      },
+      {
+          CreateContentResultWithOwnerEmail("ab", "weak", "https://url-ab/"),
+          CreateContentResultWithOwnerEmail("abc", "weak", "https://url-abc/"),
+      }));
   EXPECT_THAT(
       GetScoredMatches(),
-      testing::ElementsAre(ScoredMatch{u"https://www.google.com/?q=ab", 610},
-                           ScoredMatch{u"https://www.google.com/?q=abc", 309},
+      testing::ElementsAre(ScoredMatch{u"https://example.com/people/ab", 610},
+                           ScoredMatch{u"https://example.com/people/abc", 309},
                            ScoredMatch{u"https://url-ab/", 220},
                            ScoredMatch{u"https://url-abc/", 219}));
 
@@ -1374,23 +1564,25 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
           {CreatePeopleResult("abcd", "abcd", "weak", "")},
       },
       {
-          CreateContentResult("abc", "weak", "https://url-abc/"),
-          CreateContentResult("abcd", "weak", "https://url-abcd/"),
+          CreateContentResultWithOwnerEmail("abc", "weak", "https://url-abc/"),
+          CreateContentResultWithOwnerEmail("abcd", "weak",
+                                            "https://url-abcd/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
-      testing::ElementsAre(ScoredMatch{u"https://www.google.com/?q=abc", 610},
-                           ScoredMatch{u"https://www.google.com/?q=abcd", 609},
+      testing::ElementsAre(ScoredMatch{u"https://example.com/people/abc", 610},
+                           ScoredMatch{u"https://example.com/people/abcd", 609},
                            ScoredMatch{u"https://url-abc/", 520},
                            ScoredMatch{u"https://url-abcd/", 519}));
 
-  // Matches outside human-readable fields aren't considered in scoring.
+  // Matches outside human-readable fields (e.g. URL) aren't considered in
+  // scoring.
   provider_->adjusted_input_ = CreateInput(u"title url", true);
   ParseResponse(
       CreateResponse({}, {},
                      {
-                         CreateContentResult("title", "mime", "https://url1/"),
-                         CreateContentResult("title", "mime", "https://url2/"),
+                         CreateContentResult("title", "https://url1/"),
+                         CreateContentResult("title", "https://url2/"),
                      }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url1/", 420},
@@ -1399,99 +1591,101 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
   // Suggestions that match every input words, when there are at least 2, should
   // be scored higher.
   provider_->adjusted_input_ = CreateInput(u"one two", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one two three", "mime", "https://url/"),
-      }));
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResult("one two three", "https://url/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 1020}));
 
   // Suggestions that match every input words, when there is not at least 2,
   // should not be scored higher.
   provider_->adjusted_input_ = CreateInput(u"one", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one two three", "mime", "https://url/"),
-      }));
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResult("one two three", "https://url/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 420}));
 
   // Suggestions that match at least 2 but not all inputs words should not be
   // scored higher.
   provider_->adjusted_input_ = CreateInput(u"one two four", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("one two three", "mime", "https://url/"),
-      }));
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResult("one two three", "https://url/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 820}));
 
   // Require at least 1 strong match or 2 weak matches.
   provider_->adjusted_input_ = CreateInput(u"title", true);
-  ParseResponse(
-      CreateResponse({}, {},
-                     {
-                         CreateContentResult("title", "mime", "https://url/"),
-                     }));
+  ParseResponse(CreateResponse({}, {},
+                               {
+                                   CreateContentResult("title", "https://url/"),
+                               }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url/", 420}));
 
   // When unscoped, requires at least 1 strong match or 2 weak matches.
-  provider_->adjusted_input_ = CreateInput(u"mimeA mimeB", false);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("title", "mimeA", "https://url-1/"),
-          CreateContentResult("title", "mimeA mimeB", "https://url-2/"),
-      }));
+  provider_->adjusted_input_ = CreateInput(u"user gmail", false);
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResultWithOwnerEmail(
+                             "title", "user@example.com", "https://url-1/"),
+                         CreateContentResultWithOwnerEmail(
+                             "title", "user@gmail.com", "https://url-2/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url-2/", 219},
                                    FieldsAre(_, 0)));
 
   // When scoped, does not require at least 1 strong match or 2 weak matches.
-  provider_->adjusted_input_ = CreateInput(u"mimeA mimeB", true);
-  ParseResponse(CreateResponse(
-      {}, {},
-      {
-          CreateContentResult("title", "mimeA", "https://url-1/"),
-          CreateContentResult("title", "mimeA mimeB", "https://url-2/"),
-      }));
+  provider_->adjusted_input_ = CreateInput(u"user gmail", true);
+  ParseResponse(
+      CreateResponse({}, {},
+                     {
+                         CreateContentResultWithOwnerEmail(
+                             "title", "user@example.com", "https://url-1/"),
+                         CreateContentResultWithOwnerEmail(
+                             "title", "user@gmail.com", "https://url-2/"),
+                     }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(ScoredMatch{u"https://url-2/", 219},
                                    ScoredMatch{u"https://url-1/", 120}));
 
   // Require at least half the input words to match.
   provider_->adjusted_input_ = CreateInput(u"title x y", true);
-  ParseResponse(
-      CreateResponse({}, {},
-                     {
-                         CreateContentResult("title", "mime", "https://url/"),
-                     }));
+  ParseResponse(CreateResponse({}, {},
+                               {
+                                   CreateContentResult("title", "https://url/"),
+                               }));
   EXPECT_THAT(GetScoredMatches(), testing::ElementsAre(FieldsAre(_, 0)));
 
   // People matches should be boosted.
-  provider_->adjusted_input_ = CreateInput(u"query q", true);
+  provider_->adjusted_input_ = CreateInput(u"input i", true);
   ParseResponse(CreateResponse(
       {
-          CreateQueryResult("query"),
+          CreateQueryResult("input"),
       },
       {
-          CreatePeopleResult("displayName query", "userName", "givenName",
+          CreatePeopleResult("displayName input", "userName", "givenName",
                              "familyName"),
           CreatePeopleResult("displayName", "NoMatchUserName", "givenName",
                              "familyName"),
       },
       {
-          CreateContentResult("title query", "mime_type", "https://url/"),
+          CreateContentResult("title input", "https://url/"),
       }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(
-                  ScoredMatch{u"https://www.google.com/?q=userName", 610},
+                  ScoredMatch{u"https://example.com/people/userName", 610},
                   ScoredMatch{u"https://url/", 520},
-                  ScoredMatch{u"https://www.google.com/?q=query", 510},
+                  ScoredMatch{u"https://www.google.com/?q=input", 510},
                   FieldsAre(_, 0)));
 
   // People matches must match all input words.
@@ -1507,7 +1701,7 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
                              "familyName"),
       },
       {
-          CreateContentResult("title query", "mime_type", "https://url/"),
+          CreateContentResult("title query", "https://url/"),
       }));
   EXPECT_THAT(
       GetScoredMatches(),
@@ -1524,12 +1718,48 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Relevance) {
       },
       {},
       {
-          CreateContentResult("query", "mime_type", "https://url/"),
+          CreateContentResult("query", "https://url/"),
       }));
   EXPECT_THAT(GetScoredMatches(),
               testing::ElementsAre(
                   ScoredMatch{u"https://url/", 420},
                   ScoredMatch{u"https://www.google.com/?q=query", 410}));
+}
+
+TEST_F(EnterpriseSearchAggregatorProviderTest,
+       ContentSuggestionTypeDescriptions) {
+  provider_->adjusted_input_ = CreateInput(u"input", true);
+  ParseResponse(CreateResponse(
+      {}, {},
+      {
+          // Verifies use of MIME type.
+          CreateContentResultWithTypes("Evolution of Dance", "https://url1/",
+                                       "video/quicktime", ""),
+          // Verifies use of source type.
+          CreateContentResultWithTypes("Uh oh", "https://url2/", "",
+                                       "buganizer"),
+          // Verifies that MIME type takes precedent over source type.
+          CreateContentResultWithTypes("Same thing we do every night, Pinky",
+                                       "https://url3/", "image/png",
+                                       "salesforce"),
+      }));
+  ACMatches matches = provider_->matches_;
+  ASSERT_EQ(matches.size(), 3u);
+
+  // Verifies use of MIME type.
+  EXPECT_EQ(matches[0].contents, u"QuickTime Video");
+  EXPECT_EQ(matches[0].description, u"Evolution of Dance");
+  EXPECT_EQ(matches[0].destination_url, GURL("https://url1/"));
+
+  // Verifies use of source type.
+  EXPECT_EQ(matches[1].contents, u"Buganizer Issue");
+  EXPECT_EQ(matches[1].description, u"Uh oh");
+  EXPECT_EQ(matches[1].destination_url, GURL("https://url2/"));
+
+  // Verifies that MIME type takes precedent over source type.
+  EXPECT_EQ(matches[2].contents, u"PNG Image");
+  EXPECT_EQ(matches[2].description, u"Same thing we do every night, Pinky");
+  EXPECT_EQ(matches[2].destination_url, GURL("https://url3/"));
 }
 
 TEST_F(EnterpriseSearchAggregatorProviderTest, Logging) {
@@ -1547,7 +1777,7 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Logging) {
   {
     SCOPED_TRACE("Case: Stop() before Run().");
     base::HistogramTester histogram_tester;
-    provider_->Stop(false, false);
+    provider_->Stop(AutocompleteStopReason::kClobbered);
     histogram_tester.ExpectTotalCount(
         "Omnibox.SuggestRequestsSent.ResponseTime2.RequestState."
         "EnterpriseSearchAggregatorSuggest.Interrupted",
@@ -1562,10 +1792,13 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Logging) {
     SCOPED_TRACE("Case: Stop() before response.");
     base::HistogramTester histogram_tester;
     provider_->done_ = false;
-    provider_->RequestStarted(network::SimpleURLLoader::Create(
-        std::make_unique<network::ResourceRequest>(),
-        net::DefineNetworkTrafficAnnotation("test", "test")));
-    provider_->Stop(false, false);
+    InitRequests();
+    provider_->SetTimeRequestSent();
+    provider_->RequestStarted(
+        0, network::SimpleURLLoader::Create(
+               std::make_unique<network::ResourceRequest>(),
+               net::DefineNetworkTrafficAnnotation("test", "test")));
+    provider_->Stop(AutocompleteStopReason::kClobbered);
     histogram_tester.ExpectTotalCount(
         "Omnibox.SuggestRequestsSent.ResponseTime2.RequestState."
         "EnterpriseSearchAggregatorSuggest.Interrupted",
@@ -1580,9 +1813,9 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Logging) {
     SCOPED_TRACE("Case: Request complete ");
     base::HistogramTester histogram_tester;
     provider_->done_ = false;
-    provider_->RequestStarted(nullptr);
-    provider_->RequestCompleted(
-        nullptr, 200, std::make_unique<std::string>(kNonDictJsonResponse));
+    InitRequests();
+    RequestsStartAndComplete(/*response_code=*/200,
+                             /*response=*/kNonDictJsonResponse);
     histogram_tester.ExpectTotalCount(
         "Omnibox.SuggestRequestsSent.ResponseTime2.RequestState."
         "EnterpriseSearchAggregatorSuggest.Interrupted",
@@ -1590,7 +1823,8 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Logging) {
     histogram_tester.ExpectTotalCount(
         "Omnibox.SuggestRequestsSent.ResponseTime2.RequestState."
         "EnterpriseSearchAggregatorSuggest.Completed",
-        1);
+        scoped_config_.Get().multiple_requests ? provider_->kNumMultipleRequests
+                                               : 1);
   }
 
   // The below test case checks that number of results logged is expected.
@@ -1598,12 +1832,25 @@ TEST_F(EnterpriseSearchAggregatorProviderTest, Logging) {
     SCOPED_TRACE("Case: Parsing complete ");
     base::HistogramTester histogram_tester;
     provider_->done_ = false;
-    ParseResponse(kGoodJsonResponse);
+    provider_->requests_.clear();
 
+    InitRequests();
+    for (auto& request : provider_->requests_) {
+      request.result_count =
+          omnibox_feature_configs::SearchAggregatorProvider::Get()
+                  .multiple_requests
+              ? 1
+              : provider_->kNumMultipleRequests;
+    }
+    RequestsStartAndComplete(/*response_code=*/200,
+                             /*response=*/kNonDictJsonResponse);
+    ASSERT_TRUE(provider_->WaitForUpdateResults());
     histogram_tester.ExpectBucketCount(
         "Omnibox.SuggestRequestsSent.ResultCount."
         "EnterpriseSearchAggregatorSuggest",
         3, 1);
+
+    ParseResponse(kGoodJsonResponse);
     histogram_tester.ExpectTotalCount(
         "Omnibox.SuggestRequestsSent.ResultCount."
         "EnterpriseSearchAggregatorSuggest.Query",

@@ -48,7 +48,7 @@ source_set("autofill") {
     "//ios/chrome/browser/autofill/ui_bundled/address_editor/cells",
     "//ios/chrome/browser/autofill/ui_bundled/bottom_sheet",
     "//ios/chrome/browser/autofill/ui_bundled/cells",
-    "//ios/chrome/browser/autofill/ui_bundled/form_input_accessory:form_input_accessory",
+    "//ios/chrome/browser/autofill/ui_bundled/form_input_accessory",
     "//ios/chrome/browser/net/model:crurl",
     "//ios/chrome/browser/settings/ui_bundled:settings_root",
     "//ios/chrome/browser/settings/ui_bundled:settings_root_categories",
@@ -61,6 +61,7 @@ source_set("autofill") {
     "//ios/chrome/browser/shared/model/application_context",
     "//ios/chrome/browser/shared/model/browser",
     "//ios/chrome/browser/shared/model/profile",
+    "//ios/chrome/browser/shared/model/url:constants",
     "//ios/chrome/browser/shared/public/commands",
     "//ios/chrome/browser/shared/public/features",
     "//ios/chrome/browser/shared/ui/symbols",
@@ -90,6 +91,7 @@ source_set("constants") {
 source_set("shared_ui") {
   sources =
       [ "autofill_settings_profile_edit_table_view_controller_delegate.h" ]
+  deps = [ "//components/autofill/core/browser" ]
 }
 
 source_set("unit_tests") {
@@ -111,9 +113,11 @@ source_set("unit_tests") {
     "//components/strings",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/autofill/model",
+    "//ios/chrome/browser/autofill/model/message",
     "//ios/chrome/browser/autofill/ui_bundled:ui_type",
     "//ios/chrome/browser/autofill/ui_bundled:util",
     "//ios/chrome/browser/autofill/ui_bundled/address_editor:autofill_shared_ui",
+    "//ios/chrome/browser/net/model:crurl",
     "//ios/chrome/browser/settings/ui_bundled:settings_root",
     "//ios/chrome/browser/settings/ui_bundled:test_support",
     "//ios/chrome/browser/settings/ui_bundled/autofill/cells",
@@ -131,7 +135,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/signin/model:fake_system_identity_manager",
     "//ios/chrome/browser/signin/model:test_support",
     "//ios/chrome/browser/webdata_services/model",
-    "//ios/chrome/common/ui/reauthentication:reauthentication",
+    "//ios/chrome/common/ui/reauthentication",
     "//ios/chrome/test:test_support",
     "//ios/web/public/test",
     "//testing/gtest",

@@ -23,13 +23,13 @@ bool MessagePumpIOSForIO::FdWatchController::StopWatchingFileDescriptor() {
 
   CFFileDescriptorDisableCallBacks(fdref_.get(), callback_types_);
   if (pump_) {
-    pump_->RemoveRunLoopSource(fd_source_);
+    pump_->RemoveRunLoopSource(fd_source_.get());
   }
   fd_source_.reset();
   fdref_.reset();
   callback_types_ = 0;
   pump_.reset();
-  watcher_ = NULL;
+  watcher_ = nullptr;
   return true;
 }
 
@@ -94,20 +94,24 @@ bool MessagePumpIOSForIO::WatchFileDescriptor(int fd,
     apple::ScopedCFTypeRef<CFFileDescriptorRef> scoped_fdref(
         CFFileDescriptorCreate(kCFAllocatorDefault, fd, false, HandleFdIOEvent,
                                &source_context));
-    if (scoped_fdref == NULL) {
+    if (!scoped_fdref) {
       NOTREACHED() << "CFFileDescriptorCreate failed";
     }
 
-    CFFileDescriptorEnableCallBacks(scoped_fdref, callback_types);
+    CFFileDescriptorEnableCallBacks(scoped_fdref.get(), callback_types);
 
-    // TODO(wtc): what should the 'order' argument be?
+    // `order` is set to the same value as MessagePumpCFRunLoopBase's
+    // `work_source_`'s order. It should not be lower than the latter to avoid
+    // starving that run loop (which can happen in
+    // IOWatcherFdTest.ReadPersistent, for example).
     apple::ScopedCFTypeRef<CFRunLoopSourceRef> scoped_fd_source(
-        CFFileDescriptorCreateRunLoopSource(kCFAllocatorDefault, scoped_fdref,
-                                            0));
-    if (scoped_fd_source == NULL) {
+        CFFileDescriptorCreateRunLoopSource(kCFAllocatorDefault,
+                                            scoped_fdref.get(), /*order=*/1));
+    if (!scoped_fd_source) {
       NOTREACHED() << "CFFileDescriptorCreateRunLoopSource failed";
     }
-    CFRunLoopAddSource(run_loop(), scoped_fd_source, kCFRunLoopCommonModes);
+    CFRunLoopAddSource(run_loop(), scoped_fd_source.get(),
+                       kCFRunLoopCommonModes);
 
     // Transfer ownership of scoped_fdref and fd_source to controller.
     controller->Init(scoped_fdref.release(), callback_types,

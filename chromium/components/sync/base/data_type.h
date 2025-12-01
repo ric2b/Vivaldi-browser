@@ -309,16 +309,7 @@ constexpr DataTypeSet UserTypes() {
 }
 
 // User types which are not user-controlled.
-constexpr DataTypeSet AlwaysPreferredUserTypes() {
-  return {DEVICE_INFO,
-          USER_CONSENTS,
-          PLUS_ADDRESS,
-          PLUS_ADDRESS_SETTING,
-          SECURITY_EVENTS,
-          SEND_TAB_TO_SELF,
-          SUPERVISED_USER_SETTINGS,
-          SHARING_MESSAGE};
-}
+DataTypeSet AlwaysPreferredUserTypes();
 
 // User types which are always encrypted.
 constexpr DataTypeSet AlwaysEncryptedUserTypes() {
@@ -419,7 +410,8 @@ constexpr DataTypeSet TypesRequiringUnsyncedDataCheckOnSignout() {
       "data. The warning offers the user to either proceed with sign-out "
       "deleting any pending account data or abort, depending on the platform");
   return {syncer::BOOKMARKS,    syncer::CONTACT_INFO,    syncer::PASSWORDS,
-          syncer::READING_LIST, syncer::SAVED_TAB_GROUP, syncer::THEMES};
+          syncer::READING_LIST, syncer::SAVED_TAB_GROUP, syncer::THEMES,
+          syncer::EXTENSIONS};
 }
 
 // User types that can be encrypted, which is a subset of UserTypes() and a
@@ -478,6 +470,9 @@ const char* DataTypeToStableLowerCaseString(DataType data_type);
 
 // Returns the comma-separated string representation of `data_types`.
 std::string DataTypeSetToDebugString(DataTypeSet data_types);
+
+// Necessary for compatibility with EXPECT_EQ and the like.
+std::ostream& operator<<(std::ostream& out, DataType data_type);
 
 // Necessary for compatibility with EXPECT_EQ and the like.
 std::ostream& operator<<(std::ostream& out, DataTypeSet data_type_set);

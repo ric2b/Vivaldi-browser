@@ -62,17 +62,29 @@ interface RenderInputRouterDelegate {
   // Viz needs this to do input handling on it's side.
   StateOnTouchTransfer(TouchTransferState state);
 
-  // Notifies RenderInputRouter on the VizCompositor thread (corresponding to
-  // |frame_sink_id|), of changes to a page being mobile site optimized.
-  NotifySiteIsMobileOptimized(bool is_mobile_optimized,
-                              viz.mojom.FrameSinkId frame_sink_id);
-
-  // Notifies RenderInputRouters corresponding to |frame_sink_ids| on the
+  // Notifies RenderInputRouter corresponding to |frame_sink_id| on the
   // VizCompositor thread of changes to |force_enable_zoom| state for
   // Accessibility.
-  ForceEnableZoomStateChanged(
-    bool force_enable_zoom,
-    array<viz.mojom.FrameSinkId> frame_sink_ids);
+  ForceEnableZoomStateChanged(bool force_enable_zoom,
+                              viz.mojom.FrameSinkId frame_sink_id);
+
+  // Stops any ongoing flings for |frame_sink_id| on VizCompositorThread.
+  StopFlingingOnViz(viz.mojom.FrameSinkId frame_sink_id);
+
+  // Notifies RenderInputRouter on the VizCompositor thread (corresponding to
+  // |frame_sink_id|) to restart its input event ack timer. This might be called
+  // when the user has decided to wait in case of an unresponsive renderer or if
+  // the renderer becomes visible again.
+  RestartInputEventAckTimeoutIfNecessary(
+    viz.mojom.FrameSinkId frame_sink_id);
+
+  // Notifies RenderInputRouter on the VizCompositor thread (corresponding to
+  // |frame_sink_id|) of any visibility changes to its corresponding page.
+  NotifyVisibilityChanged(viz.mojom.FrameSinkId frame_sink_id, bool is_hidden);
+
+  // Generates a synthetic touch cancel, which results in touch events being
+  // dropped if there was an active touch sequence on Viz.
+  ResetGestureDetection(viz.mojom.FrameSinkId root_widget_frame_sink_id);
 };
 
 // Implemented by the browser, this interface defines methods that will be
@@ -81,17 +93,28 @@ interface RenderInputRouterDelegate {
 interface RenderInputRouterDelegateClient {
   // Notifies InputEventObservers in the browser of input events being handled
   // on Viz (with InputVizard).
-  NotifyObserversOfInputEvent(viz.mojom.FrameSinkId id,
-                              blink.mojom.Event event,
+  NotifyObserversOfInputEvent(blink.mojom.Event event,
                               bool dispatched_to_renderer);
 
   // Notifies InputEventObservers in the browser of input event acks being
   // handled on Viz (with InputVizard).
-  NotifyObserversOfInputEventAcks(
-      viz.mojom.FrameSinkId id, blink.mojom.InputEventResultSource ack_source,
+  NotifyObserversOfInputEventAcks(blink.mojom.InputEventResultSource ack_source,
       blink.mojom.InputEventResultState ack_result, blink.mojom.Event event);
 
   // Notifies the browser of an invalid input event source being seen on
   // the VizCompositor thread when handling input.
-  OnInvalidInputEventSource(viz.mojom.FrameSinkId id);
+  OnInvalidInputEventSource();
+
+  // Sends |DidOverscrollParams| to the browser to allow overscroll effect to
+  // request input back if it ends up consuming the input sequence.
+  StateOnOverscrollTransfer(
+    blink.mojom.DidOverscrollParams? overscroll);
+
+  // Notifies browser that the renderer is responsive after being unresponsive
+  // or has turned unresonsive to input events. For the latter, it also passes
+  // over the timestamp when an input event timed out without getting an ack
+  // from the renderer.
+  RendererInputResponsivenessChanged(
+    bool is_responsive,
+    mojo_base.mojom.TimeTicks? ack_timeout_ts);
 };

@@ -18,10 +18,14 @@ std::optional<V8GPUFeatureName::Enum> GPUSupportedFeatures::ToV8FeatureNameEnum(
           kChromiumExperimentalTimestampQueryInsidePasses;
     case wgpu::FeatureName::TextureCompressionBC:
       return V8GPUFeatureName::Enum::kTextureCompressionBc;
+    case wgpu::FeatureName::TextureCompressionBCSliced3D:
+      return V8GPUFeatureName::Enum::kTextureCompressionBcSliced3d;
     case wgpu::FeatureName::TextureCompressionETC2:
       return V8GPUFeatureName::Enum::kTextureCompressionEtc2;
     case wgpu::FeatureName::TextureCompressionASTC:
       return V8GPUFeatureName::Enum::kTextureCompressionAstc;
+    case wgpu::FeatureName::TextureCompressionASTCSliced3D:
+      return V8GPUFeatureName::Enum::kTextureCompressionAstcSliced3d;
     case wgpu::FeatureName::IndirectFirstInstance:
       return V8GPUFeatureName::Enum::kIndirectFirstInstance;
     case wgpu::FeatureName::DepthClipControl:
@@ -50,6 +54,8 @@ std::optional<V8GPUFeatureName::Enum> GPUSupportedFeatures::ToV8FeatureNameEnum(
       return V8GPUFeatureName::Enum::kChromiumExperimentalUnorm16TextureFormats;
     case wgpu::FeatureName::Snorm16TextureFormats:
       return V8GPUFeatureName::Enum::kChromiumExperimentalSnorm16TextureFormats;
+    case wgpu::FeatureName::ChromiumExperimentalSubgroupMatrix:
+      return V8GPUFeatureName::Enum::kChromiumExperimentalSubgroupMatrix;
     default:
       return std::nullopt;
   }
@@ -78,19 +84,15 @@ void GPUSupportedFeatures::AddFeatureName(const V8GPUFeatureName feature_name) {
   features_bitset_.set(static_cast<size_t>(feature_name.AsEnum()));
 }
 
-bool GPUSupportedFeatures::has(const V8GPUFeatureName::Enum feature) const {
+bool GPUSupportedFeatures::Has(const V8GPUFeatureName::Enum feature) const {
   return features_bitset_.test(static_cast<size_t>(feature));
-}
-
-bool GPUSupportedFeatures::has(const String& feature) const {
-  return features_.Contains(feature);
 }
 
 bool GPUSupportedFeatures::hasForBinding(
     ScriptState* script_state,
     const String& feature,
     ExceptionState& exception_state) const {
-  return has(feature);
+  return features_.Contains(feature);
 }
 
 GPUSupportedFeatures::IterationSource::IterationSource(

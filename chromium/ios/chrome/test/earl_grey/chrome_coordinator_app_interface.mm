@@ -10,7 +10,9 @@
 #import "components/language/ios/browser/ios_language_detection_tab_helper.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/history/ui_bundled/history_coordinator.h"
+#import "ios/chrome/browser/history/ui_bundled/stub_history_coordinator_delegate.h"
 #import "ios/chrome/browser/main/model/browser_impl.h"
+#import "ios/chrome/browser/omnibox/eg_tests/inttest/omnibox_inttest_coordinator.h"
 #import "ios/chrome/browser/popup_menu/ui_bundled/popup_menu_coordinator.h"
 #import "ios/chrome/browser/sessions/model/ios_chrome_session_tab_helper.h"
 #import "ios/chrome/browser/shared/coordinator/chrome_coordinator/chrome_coordinator.h"
@@ -247,14 +249,7 @@
   HistoryCoordinator* coordinator = [[HistoryCoordinator alloc]
       initWithBaseViewController:[self rootViewController]
                          browser:self.helper.browser];
-  // Set up a mock delegate to call the passed completion handler.
-  self.helper.mockObject =
-      OCMProtocolMock(@protocol(HistoryCoordinatorDelegate));
-  id completionCaller = [OCMArg checkWithBlock:^BOOL(void (^completion)()) {
-    completion();
-    return YES;
-  }];
-  [[self.helper.mockObject stub] closeHistoryWithCompletion:completionCaller];
+  self.helper.mockObject = [[StubHistoryCoordinatorDelegate alloc] init];
   coordinator.delegate = self.helper.mockObject;
 
   self.helper.coordinator = coordinator;
@@ -271,6 +266,14 @@
   PopupMenuCoordinator* coordinator =
       [[PopupMenuCoordinator alloc] initWithBrowser:self.helper.browser];
   coordinator.baseViewController = [self rootViewController];
+  self.helper.coordinator = coordinator;
+  [self.helper.coordinator start];
+}
+
++ (void)startOmniboxCoordinator {
+  OmniboxInttestCoordinator* coordinator = [[OmniboxInttestCoordinator alloc]
+      initWithBaseViewController:[self rootViewController]
+                         browser:self.helper.browser];
   self.helper.coordinator = coordinator;
   [self.helper.coordinator start];
 }

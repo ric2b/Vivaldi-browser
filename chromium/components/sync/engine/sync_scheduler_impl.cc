@@ -42,7 +42,6 @@ bool IsConfigRelatedUpdateOriginValue(
     case sync_pb::SyncEnums::UNKNOWN_ORIGIN:
     case sync_pb::SyncEnums::PERIODIC:
     case sync_pb::SyncEnums::GU_TRIGGER:
-    case sync_pb::SyncEnums::RETRY:
       return false;
   }
   NOTREACHED();
@@ -61,17 +60,15 @@ bool ShouldRequestEarlyExit(const SyncProtocolError& error) {
     case CLIENT_DATA_OBSOLETE:
     case DISABLED_BY_ADMIN:
     case ENCRYPTION_OBSOLETE:
-      // If we send terminate sync early then `sync_cycle_ended` notification
-      // would not be sent. If there were no actions then `ACTIONABLE_ERROR`
-      // notification wouldn't be sent either. Then the UI layer would be left
-      // waiting forever. So assert we would send something.
-      DCHECK_NE(error.action, UNKNOWN_ACTION);
       return true;
     case CONFLICT:
     case INVALID_MESSAGE:
-      NOTREACHED();
+      // These cases should not occur here, but since the error ultimately comes
+      // from the server, handle them gracefully (by not doing anything in
+      // particular).
+      return false;
   }
-  return false;
+  NOTREACHED();
 }
 
 bool IsActionableProtocolError(const SyncProtocolError& error) {
@@ -171,8 +168,6 @@ void SyncSchedulerImpl::Start(Mode mode, base::Time last_poll_time) {
 
     AdjustPolling(UPDATE_INTERVAL);  // Will kick start poll timer if needed.
 
-    // Update our current time before checking IsRetryRequired().
-    nudge_tracker_.SetSyncCycleStartTime(TimeTicks::Now());
     if (nudge_tracker_.IsSyncRequired(GetEnabledAndUnblockedTypes()) &&
         CanRunNudgeJobNow(RespectGlobalBackoff(true))) {
       TrySyncCycleJob(RespectGlobalBackoff(true));
@@ -602,8 +597,6 @@ void SyncSchedulerImpl::TrySyncCycleJobImpl(
     RespectGlobalBackoff respect_backoff) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  nudge_tracker_.SetSyncCycleStartTime(TimeTicks::Now());
-
   if (mode_ == CONFIGURATION_MODE) {
     if (pending_configure_params_) {
       SDVLOG(2) << "Found pending configure job";
@@ -637,10 +630,6 @@ void SyncSchedulerImpl::PollTimerCallback() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!syncer_->IsSyncing());
 
-  TrySyncCycleJob(RespectGlobalBackoff(true));
-}
-
-void SyncSchedulerImpl::RetryTimerCallback() {
   TrySyncCycleJob(RespectGlobalBackoff(true));
 }
 
@@ -822,14 +811,6 @@ void SyncSchedulerImpl::OnSyncProtocolError(
       observer.OnActionableProtocolError(sync_protocol_error);
     }
   }
-}
-
-void SyncSchedulerImpl::OnReceivedGuRetryDelay(const base::TimeDelta& delay) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  nudge_tracker_.SetNextRetryTime(TimeTicks::Now() + delay);
-  retry_timer_.Start(FROM_HERE, delay, this,
-                     &SyncSchedulerImpl::RetryTimerCallback);
 }
 
 void SyncSchedulerImpl::OnReceivedMigrationRequest(DataTypeSet types) {

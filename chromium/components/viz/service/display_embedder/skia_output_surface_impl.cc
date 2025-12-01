@@ -4,6 +4,8 @@
 
 #include "components/viz/service/display_embedder/skia_output_surface_impl.h"
 
+#include <inttypes.h>
+
 #include <memory>
 #include <string>
 #include <string_view>
@@ -33,6 +35,7 @@
 #include "components/viz/common/frame_sinks/copy_output_request.h"
 #include "components/viz/common/frame_sinks/copy_output_util.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
+#include "components/viz/common/resources/transferable_resource.h"
 #include "components/viz/service/debugger/viz_debugger.h"
 #include "components/viz/service/display/external_use_client.h"
 #include "components/viz/service/display/output_surface_client.h"
@@ -677,6 +680,9 @@ void SkiaOutputSurfaceImpl::MakePromiseSkImageMultiPlane(
   CHECK(!image_context->has_image());
   auto format = image_context->format();
   CHECK(format.is_multi_plane());
+  // There should be no usages of RGB matrix for color space here.
+  CHECK(color_space.GetMatrixID() != gfx::ColorSpace::MatrixID::RGB,
+        base::NotFatalUntil::M139);
   SkYUVAInfo::PlaneConfig plane_config = gpu::ToSkYUVAPlaneConfig(format);
   SkYUVAInfo::Subsampling subsampling = gpu::ToSkYUVASubsampling(format);
   // TODO(crbug.com/368870063): Implement RGB matrix support in
@@ -764,21 +770,12 @@ gpu::SyncToken SkiaOutputSurfaceImpl::ReleaseImageContexts(
 }
 
 std::unique_ptr<ExternalUseClient::ImageContext>
-SkiaOutputSurfaceImpl::CreateImageContext(
-    const gpu::Mailbox& mailbox,
-    const gpu::SyncToken& sync_token,
-    uint32_t texture_target,
-    const gfx::Size& size,
-    SharedImageFormat format,
-    bool maybe_concurrent_reads,
-    const std::optional<gpu::VulkanYCbCrInfo>& ycbcr_info,
-    sk_sp<SkColorSpace> color_space,
-    GrSurfaceOrigin origin,
-    bool raw_draw_if_possible) {
-  return std::make_unique<ImageContextImpl>(
-      mailbox, sync_token, texture_target, size, format, maybe_concurrent_reads,
-      ycbcr_info, std::move(color_space), origin,
-      /*is_for_render_pass=*/false, raw_draw_if_possible);
+SkiaOutputSurfaceImpl::CreateImageContext(const TransferableResource& resource,
+                                          bool maybe_concurrent_reads,
+                                          bool raw_draw_if_possible,
+                                          uint32_t client_id) {
+  return std::make_unique<ImageContextImpl>(resource, maybe_concurrent_reads,
+                                            raw_draw_if_possible, client_id);
 }
 
 DBG_FLAG_FBOOL("skia_gpu.swap_buffers.force_disable_makecurrent",
@@ -985,12 +982,8 @@ sk_sp<SkImage> SkiaOutputSurfaceImpl::MakePromiseSkImageFromRenderPass(
 
   auto& image_context = render_pass_image_cache_[id];
   if (!image_context) {
-    image_context = std::make_unique<ImageContextImpl>(
-        mailbox, gpu::SyncToken(), GL_TEXTURE_2D, size, format,
-        /*maybe_concurrent_reads=*/false,
-        /*ycbcr_info=*/std::nullopt, std::move(color_space),
-        kTopLeft_GrSurfaceOrigin,
-        /*is_for_render_pass=*/true);
+    image_context = std::make_unique<ImageContextImpl>(mailbox, size, format,
+                                                       std::move(color_space));
   }
   if (!image_context->has_image()) {
     // NOTE: The ColorSpace parameter is relevant only for external sampling,

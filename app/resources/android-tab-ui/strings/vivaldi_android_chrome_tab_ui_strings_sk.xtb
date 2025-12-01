@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sk">
-<translation id="2277224997687551299">Upraviť názov skupiny</translation>
 <translation id="2330212241471632770">{TABS_COUNT,plural,
           =1{Uložiť list ako záložku}
           few{Uložiť listy ako záložky}
@@ -11,8 +10,6 @@
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Zatvorené listy nájdete v časti Nedávne listy v hlavnej ponuke Vivaldi. Vaše súkromné listy nebudú k dispozícii.}
         other {Vaše zatvorené listy nájdete v časti Nedávne listy v hlavnej ponuke Vivaldi. Vaše # súkromné listy nebudú k dispozícií.}}</translation>
-<translation id="4460014764210899310">Zrušiť zoskupenie</translation>
 <translation id="4871187110787939393">Zavrieť všetky súkromné listy?</translation>
 <translation id="5494920125229734069">Vybrať všetko</translation>
-<translation id="6744956528665271406">Upraviť farbu skupiny</translation>
 </translationbundle>

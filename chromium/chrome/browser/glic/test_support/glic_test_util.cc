@@ -7,6 +7,8 @@
 #include "chrome/browser/glic/glic_pref_names.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/account_capabilities_test_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -15,8 +17,64 @@
 
 namespace glic {
 
+BrowserActivator::BrowserActivator() {
+  BrowserList::AddObserver(this);
+}
+
+BrowserActivator::~BrowserActivator() {
+  BrowserList::RemoveObserver(this);
+}
+
+void BrowserActivator::SetMode(Mode mode) {
+  mode_ = mode;
+}
+
+void BrowserActivator::OnBrowserAdded(Browser* browser) {
+  switch (mode_) {
+    case Mode::kSingleBrowser:
+      CHECK(!active_browser_) << "BrowserActivator::kSingleBrowser found "
+                                 "second active browser.";
+      break;
+    case Mode::kFirst:
+      if (active_browser_) {
+        return;
+      }
+      break;
+    case Mode::kManual:
+      return;
+  }
+
+  SetActivePrivate(browser);
+}
+
+void BrowserActivator::OnBrowserRemoved(Browser* browser) {
+  if (active_browser_.get() == browser || active_browser_.WasInvalidated()) {
+    active_lock_.reset();
+    if (mode_ == Mode::kFirst) {
+      if (!BrowserList::GetInstance()->empty()) {
+        SetActivePrivate(*BrowserList::GetInstance()->begin());
+      }
+    }
+  }
+}
+void BrowserActivator::SetActive(Browser* browser) {
+  mode_ = Mode::kManual;
+  if (!browser) {
+    active_lock_.reset();
+    active_browser_ = nullptr;
+  } else {
+    SetActivePrivate(browser);
+  }
+}
+
+void BrowserActivator::SetActivePrivate(Browser* browser) {
+  CHECK(browser);
+  active_lock_ = browser->GetBrowserView().GetWidget()->LockPaintAsActive();
+  active_browser_ = browser->AsWeakPtr();
+}
+
 void ForceSigninAndModelExecutionCapability(Profile* profile) {
-  SetFRECompletion(profile, true);
+  SetFRECompletion(profile, prefs::FreStatus::kCompleted);
   SigninWithPrimaryAccount(profile);
   SetModelExecutionCapability(profile, true);
 }
@@ -45,9 +103,9 @@ void SetModelExecutionCapability(Profile* profile, bool enabled) {
   signin::UpdateAccountInfoForAccount(identity_manager, primary_account);
 }
 
-void SetFRECompletion(Profile* profile, bool completed) {
+void SetFRECompletion(Profile* profile, prefs::FreStatus fre_status) {
   profile->GetPrefs()->SetInteger(prefs::kGlicCompletedFre,
-                                  static_cast<int>(completed));
+                                  static_cast<int>(fre_status));
 }
 
 void InvalidateAccount(Profile* profile) {

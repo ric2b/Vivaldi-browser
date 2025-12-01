@@ -259,7 +259,6 @@ TEST_F(TextureLayerTest, CheckPropertyChangeCausesCorrectBehavior) {
                                      ));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetUV(gfx::PointF(0.25f, 0.25f),
                                                gfx::PointF(0.75f, 0.75f)));
-  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetPremultipliedAlpha(false));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetBlendBackgroundColor(true));
 }
 
@@ -1092,6 +1091,19 @@ class TextureLayerChangeInvisibleMailboxTest : public LayerTreeTest,
     EXPECT_TRUE(sync_token.HasData());
     ++resource_returned_;
 
+    if (resource_returned_ == 1) {
+      // The 1st resource should be released after the 2nd is prepared.
+      EXPECT_GE(prepare_called_, 2);
+
+      // Clear the 2nd resource to let the test complete.
+      MainThreadTaskRunner()->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &TextureLayerChangeInvisibleMailboxTest::ClearTextureLayerClient,
+              base::Unretained(this)));
+      return;
+    }
+
     // The actual releasing of resources by
     // TextureLayer::TransferableResourceHolder::dtor can be done as a PostTask.
     // The test signal being used, DidPresentCompositorFrame itself is also
@@ -1103,6 +1115,8 @@ class TextureLayerChangeInvisibleMailboxTest : public LayerTreeTest,
       EndTest();
     }
   }
+
+  void ClearTextureLayerClient() { texture_layer_->ClearClient(); }
 
   void SetupTree() override {
     scoped_refptr<Layer> root = Layer::Create();
@@ -1186,11 +1200,6 @@ class TextureLayerChangeInvisibleMailboxTest : public LayerTreeTest,
         // for BeginMainFrame and hence PrepareTransferableResource to run twice
         // before DidPresentCompositorFrame due to pipelining.
         EXPECT_GE(prepare_called_, 2);
-        // So the old resource should have been returned already. This resource
-        // is returned during paint, and so does not need the same PostTask
-        // syncing as for frame 5.
-        EXPECT_EQ(1, resource_returned_);
-        texture_layer_->ClearClient();
         break;
       default:
         break;
@@ -1582,12 +1591,10 @@ class SoftwareTextureLayerSwitchTreesTest : public SoftwareTextureLayerTest {
 
   void DisplayReceivedCompositorFrameOnThread(
       const viz::CompositorFrame& frame) override {
-    if (step_ >= 0 && step_ <= 4) {
-      verified_frames_++;
-    }
+    verified_frames_++;
   }
 
-  void AfterTest() override { EXPECT_EQ(5, verified_frames_); }
+  void AfterTest() override { EXPECT_EQ(6, verified_frames_); }
 
   int step_ = 0;
   int verified_frames_ = 0;
@@ -1730,9 +1737,7 @@ class SoftwareTextureLayerMultipleResourceTest
 
   void DisplayReceivedCompositorFrameOnThread(
       const viz::CompositorFrame& frame) override {
-    if (step_ >= 0 && step_ <= 3) {
-      verified_frames_++;
-    }
+    verified_frames_++;
   }
 
   void AfterTest() override { EXPECT_EQ(4, verified_frames_); }
@@ -1808,9 +1813,7 @@ class SoftwareTextureLayerLoseFrameSinkTest : public SoftwareTextureLayerTest {
 
   void DisplayReceivedCompositorFrameOnThread(
       const viz::CompositorFrame& frame) override {
-    if (step_ >= 0 && step_ <= 2) {
-      verified_frames_++;
-    }
+    verified_frames_++;
   }
 
   void WillCommit(const CommitState& commit_state) override {
@@ -1830,7 +1833,7 @@ class SoftwareTextureLayerLoseFrameSinkTest : public SoftwareTextureLayerTest {
     EndTest();
   }
 
-  void AfterTest() override { EXPECT_EQ(3, verified_frames_); }
+  void AfterTest() override { EXPECT_EQ(4, verified_frames_); }
 
   int step_ = 0;
   int verified_frames_ = 0;

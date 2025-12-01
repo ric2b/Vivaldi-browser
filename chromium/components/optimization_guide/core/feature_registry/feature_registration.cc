@@ -45,6 +45,10 @@ const char kAutofillPredictionImprovementsEnterprisePolicyAllowed[] =
 const char kPasswordChangeSubmissionEnterprisePolicyAllowed[] =
     "optimization_guide.model_execution.password_change_submission_"
     "enterprise_policy_allowed";
+
+const char kNotificationContentDetectionEnterprisePolicyAllowed[] =
+    "optimization_guide.model_execution.notification_content_detection_"
+    "enterprise_policy_allowed";
 }  // namespace prefs
 
 namespace features {
@@ -68,20 +72,16 @@ BASE_FEATURE(kProductSpecificationsMqlsLogging,
              "ProductSpecificationsMqlsLogging",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kFormsPredictionsMqlsLogging,
-             "FormsPredictionsMqlsLogging",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kFormsAnnotationsMqlsLogging,
-             "FormsAnnotationsMqlsLogging",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BASE_FEATURE(kFormsClassificationsMqlsLogging,
              "FormsClassificationsMqlsLogging",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 BASE_FEATURE(kPasswordChangeSubmissionMqlsLogging,
              "PasswordChangeSubmissionMqlsLogging",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE(kNotificationContentDetectionMqlsLogging,
+             "NotificationContentDetectionMqlsLogging",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
 }  // namespace features
@@ -236,46 +236,40 @@ void RegisterProductSpecifications() {
 }
 
 void RegisterAutofillPredictions() {
-  EnterprisePolicyPref enterprise_policy =
-      EnterprisePolicyRegistry::GetInstance().Register(
-          prefs::kAutofillPredictionImprovementsEnterprisePolicyAllowed);
-
-  UserFeedbackCallback fp_logging_callback =
-      base::BindRepeating([](proto::LogAiDataRequest& request_proto) {
-        return request_proto.forms_predictions().quality().user_feedback();
-      });
-  auto fp_mqls_metadata = std::make_unique<MqlsFeatureMetadata>(
-      "FormsPredictions",
-      proto::LogAiDataRequest::FeatureCase::kFormsPredictions,
-      enterprise_policy, &features::kFormsPredictionsMqlsLogging,
-      fp_logging_callback);
-  MqlsFeatureRegistry::GetInstance().Register(std::move(fp_mqls_metadata));
-
-  // Forms annotations. In the same block as forms predictions since it
-  // leverages the same enterprise policy.
-  UserFeedbackCallback fa_logging_callback =
-      base::BindRepeating([](proto::LogAiDataRequest& request_proto) {
-        return request_proto.forms_annotations().quality().user_feedback();
-      });
-  auto fa_mqls_metadata = std::make_unique<MqlsFeatureMetadata>(
-      "FormsAnnotations",
-      proto::LogAiDataRequest::FeatureCase::kFormsAnnotations,
-      enterprise_policy, &features::kFormsAnnotationsMqlsLogging,
-      fa_logging_callback);
-  MqlsFeatureRegistry::GetInstance().Register(std::move(fa_mqls_metadata));
-
   MqlsFeatureRegistry::GetInstance().Register(
       std::make_unique<MqlsFeatureMetadata>(
           "FormsClassifications",
           proto::LogAiDataRequest::FeatureCase::kFormsClassifications,
-          enterprise_policy, &features::kFormsClassificationsMqlsLogging,
-          FeedbackUnspecified()));
+          EnterprisePolicyRegistry::GetInstance().Register(
+              prefs::kAutofillPredictionImprovementsEnterprisePolicyAllowed),
+          &features::kFormsClassificationsMqlsLogging, FeedbackUnspecified()));
+}
+
+void RegisterNotificationContentDetection() {
+  EnterprisePolicyPref enterprise_policy =
+      EnterprisePolicyRegistry::GetInstance().Register(
+          prefs::kNotificationContentDetectionEnterprisePolicyAllowed);
+  UserFeedbackCallback logging_callback =
+      base::BindRepeating([](proto::LogAiDataRequest& request_proto) {
+        return request_proto.notification_content_detection()
+            .quality()
+            .user_feedback();
+      });
+  auto metadata = std::make_unique<MqlsFeatureMetadata>(
+      "NotificationContentDetection",
+      proto::LogAiDataRequest::FeatureCase::kNotificationContentDetection,
+      enterprise_policy, &features::kNotificationContentDetectionMqlsLogging,
+      logging_callback);
+  MqlsFeatureRegistry::GetInstance().Register(std::move(metadata));
 }
 
 }  // anonymous namespace
 
 void RegisterGenAiFeatures(PrefRegistrySimple* pref_registry) {
   static bool features_registered = false;
+  // When adding a value here, also update:
+  // - tools/metrics/histograms/metadata/optimization_guide/histogram.xml:
+  // <variants name="LogAiDataRequestFeature">
   if (!features_registered) {
     // The registries are static and so should only be populated once for the
     // program (rather than once per profile).
@@ -286,6 +280,7 @@ void RegisterGenAiFeatures(PrefRegistrySimple* pref_registry) {
     RegisterProductSpecifications();
     RegisterAutofillPredictions();
     RegisterPasswordChangeSubmission();
+    RegisterNotificationContentDetection();
     features_registered = true;
   }
   EnterprisePolicyRegistry::GetInstance().RegisterProfilePrefs(pref_registry);

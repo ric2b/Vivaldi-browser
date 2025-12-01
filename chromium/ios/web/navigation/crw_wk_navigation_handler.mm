@@ -54,7 +54,10 @@
 
 // Vivaldi
 #import "app/vivaldi_apptools.h"
+#import "components/prefs/pref_service.h"
 #import "components/user_agent/vivaldi_user_agent.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "prefs/vivaldi_pref_names.h"
 
 using vivaldi::IsVivaldiRunning;
 // End Vivaldi
@@ -1683,6 +1686,18 @@ void LogPresentingErrorPageFailedWithError(NSError* error) {
     return;
   }
 
+  if (IsVivaldiRunning() &&
+      !self.webStateImpl->GetBrowserState()->IsOffTheRecord()) {
+    web::BrowserState* browser_state =
+      self.webStateImpl->GetBrowserState();
+    PrefService* pref_service =
+      ProfileIOS::FromBrowserState(browser_state)->GetPrefs();
+    if(pref_service
+        ->GetBoolean(vivaldiprefs::kVivaldiBlockExternalApps)) {
+      forceBlockUniversalLinks = YES;
+    }
+  } // End Vivaldi
+
   BOOL isOffTheRecord = self.webStateImpl->GetBrowserState()->IsOffTheRecord();
   decisionHandler(web::GetAllowNavigationActionPolicy(
       isOffTheRecord || forceBlockUniversalLinks));
@@ -2064,7 +2079,8 @@ void LogPresentingErrorPageFailedWithError(NSError* error) {
 - (BOOL)shouldCancelLoadForCancelledError:(NSError*)error
                           provisionalLoad:(BOOL)provisionalLoad {
   DCHECK(error.code == NSURLErrorCancelled ||
-         error.code == web::kWebKitErrorFrameLoadInterruptedByPolicyChange);
+         error.code == web::kWebKitErrorFrameLoadInterruptedByPolicyChange)
+      << base::SysNSStringToUTF8(error.description);
   // Do not cancel the load if it is for an app specific URL, as such errors
   // are produced during the app specific URL load process.
   const GURL errorURL =

@@ -4,6 +4,8 @@
 
 #include "pdf/test/test_helpers.h"
 
+#include <string_view>
+
 #include "base/base_paths.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
@@ -13,6 +15,7 @@
 #include "pdf/pdfium/pdfium_engine_exports.h"
 #include "printing/units.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/web/web_print_params.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -50,6 +53,31 @@ testing::AssertionResult MatchesPngFileImpl(
   return testing::AssertionSuccess();
 }
 
+SkBitmap RenderPdfToSkBitmap(base::span<const uint8_t> pdf_data,
+                             int page_index,
+                             const gfx::Size& size_in_points) {
+  const gfx::Rect page_rect(size_in_points);
+  SkBitmap page_bitmap;
+  page_bitmap.allocPixels(
+      SkImageInfo::Make(gfx::SizeToSkISize(page_rect.size()),
+                        kBGRA_8888_SkColorType, kPremul_SkAlphaType));
+
+  PDFiumEngineExports::RenderingSettings settings(
+      gfx::Size(printing::kPointsPerInch, printing::kPointsPerInch), page_rect,
+      /*fit_to_bounds=*/false,
+      /*stretch_to_bounds=*/false,
+      /*keep_aspect_ratio=*/true,
+      /*center_in_bounds=*/false,
+      /*autorotate=*/false, /*use_color=*/true, /*render_for_printing=*/false);
+
+  PDFiumEngineExports exports;
+  if (!exports.RenderPDFPageToBitmap(pdf_data, page_index, settings,
+                                     page_bitmap.getPixels())) {
+    ADD_FAILURE();
+  }
+  return page_bitmap;
+}
+
 }  // namespace
 
 base::FilePath GetTestDataFilePath(const base::FilePath& path) {
@@ -73,7 +101,19 @@ base::FilePath::StringType GetTestDataPathWithPlatformSuffix(
   return path.InsertBeforeExtension(kSuffix).value();
 #else
   return base::FilePath(filename).value();
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)}
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+}
+
+base::FilePath GetReferenceFilePath(
+    base::FilePath::StringViewType sub_directory,
+    std::string_view test_filename,
+    bool use_platform_suffix) {
+  if (use_platform_suffix) {
+    return base::FilePath(sub_directory)
+        .Append(GetTestDataPathWithPlatformSuffix(test_filename));
+  }
+
+  return base::FilePath(sub_directory).AppendASCII(test_filename);
 }
 
 testing::AssertionResult MatchesPngFile(
@@ -97,25 +137,19 @@ void CheckPdfRendering(base::span<const uint8_t> pdf_data,
                        int page_index,
                        const gfx::Size& size_in_points,
                        const base::FilePath& expected_png_file) {
-  const gfx::Rect page_rect(size_in_points);
-  SkBitmap page_bitmap;
-  page_bitmap.allocPixels(
-      SkImageInfo::Make(gfx::SizeToSkISize(page_rect.size()),
-                        kBGRA_8888_SkColorType, kPremul_SkAlphaType));
-
-  PDFiumEngineExports::RenderingSettings settings(
-      gfx::Size(printing::kPointsPerInch, printing::kPointsPerInch), page_rect,
-      /*fit_to_bounds=*/false,
-      /*stretch_to_bounds=*/false,
-      /*keep_aspect_ratio=*/true,
-      /*center_in_bounds=*/false,
-      /*autorotate=*/false, /*use_color=*/true, /*render_for_printing=*/false);
-
-  PDFiumEngineExports exports;
-  ASSERT_TRUE(exports.RenderPDFPageToBitmap(pdf_data, page_index, settings,
-                                            page_bitmap.getPixels()));
-
+  SkBitmap page_bitmap =
+      RenderPdfToSkBitmap(pdf_data, page_index, size_in_points);
   EXPECT_TRUE(MatchesPngFile(page_bitmap.asImage().get(), expected_png_file));
+}
+
+void CheckFuzzyPdfRendering(base::span<const uint8_t> pdf_data,
+                            int page_index,
+                            const gfx::Size& size_in_points,
+                            const base::FilePath& expected_png_file) {
+  SkBitmap page_bitmap =
+      RenderPdfToSkBitmap(pdf_data, page_index, size_in_points);
+  EXPECT_TRUE(
+      FuzzyMatchesPngFile(page_bitmap.asImage().get(), expected_png_file));
 }
 
 sk_sp<SkSurface> CreateSkiaSurfaceForTesting(const gfx::Size& size,
@@ -138,6 +172,14 @@ v8::Isolate* GetBlinkIsolate() {
 
 void SetBlinkIsolate(v8::Isolate* isolate) {
   g_isolate = isolate;
+}
+
+blink::WebPrintParams GetDefaultPrintParams() {
+  blink::WebPrintParams params;
+  params.default_page_description.size = kUSLetterSize;
+  params.printable_area_in_css_pixels = kUSLetterRect;
+  params.print_scaling_option = printing::mojom::PrintScalingOption::kNone;
+  return params;
 }
 
 }  // namespace chrome_pdf

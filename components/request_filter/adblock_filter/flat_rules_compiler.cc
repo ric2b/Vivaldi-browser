@@ -19,7 +19,6 @@ using FlatOffset = flatbuffers::Offset<T>;
 template <typename T>
 using FlatVectorOffset = FlatOffset<flatbuffers::Vector<FlatOffset<T>>>;
 
-using FlatStringOffset = FlatOffset<flatbuffers::String>;
 using FlatStringListOffset = FlatVectorOffset<flatbuffers::String>;
 
 struct OffsetVectorCompare {
@@ -79,10 +78,6 @@ uint8_t OptionsFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t options = 0;
   if (rule.modify_block)
     options |= flat::OptionFlag_MODIFY_BLOCK;
-  if (rule.party.test(RequestFilterRule::kFirstParty))
-    options |= flat::OptionFlag_FIRST_PARTY;
-  if (rule.party.test(RequestFilterRule::kThirdParty))
-    options |= flat::OptionFlag_THIRD_PARTY;
   if (rule.is_case_sensitive)
     options |= flat::OptionFlag_IS_CASE_SENSITIVE;
   return options;
@@ -148,6 +143,24 @@ flat::Modifier ModifierFromRequestFilterModifier(
   }
 }
 
+flat::Party PartyFromRequestFilterParty(const RequestFilterRule& rule) {
+  if (!rule.party) {
+    return flat::Party_ALL;
+  }
+  switch (*rule.party) {
+    case RequestFilterRule::kFirstParty:
+      return flat::Party_FIRST;
+    case RequestFilterRule::kThirdParty:
+      return flat::Party_THIRD;
+    case RequestFilterRule::kStrictFirstParty:
+      return flat::Party_STRICT_FIRST;
+    case RequestFilterRule::kStrictThirdParty:
+      return flat::Party_STRICT_THIRD;
+    case RequestFilterRule::kFirstPartyAndStrictThirdParty:
+      return flat::Party_FIRST_AND_STRICT_THIRD;
+  }
+}
+
 uint8_t ActivationTypesFromRequestFilterRule(const RequestFilterRule& rule) {
   uint8_t activation_types = 0;
   if (rule.activation_types.test(RequestFilterRule::kWholeDocument))
@@ -199,6 +212,7 @@ void AddRuleToBuffer(
     flatbuffers::FlatBufferBuilder* builder,
     const RequestFilterRule& rule,
     std::vector<FlatOffset<flat::RequestFilterRule>>* rules_offsets,
+    std::vector<FlatOffset<flat::RequestFilterRule>>* bad_rules_offsets,
     FlatStringOffsetMap* string_offset_map) {
   FlatStringListOffset domains_included_offset =
       SerializeStringList(builder, rule.included_domains, string_offset_map);
@@ -221,9 +235,9 @@ void AddRuleToBuffer(
   FlatStringOffset original_rule_text =
       builder->CreateSharedString(rule.original_rule_text);
 
-  rules_offsets->push_back(flat::CreateRequestFilterRule(
+  auto rule_offset = flat::CreateRequestFilterRule(
       *builder, DecisionFromRequestFilterRule(rule),
-      OptionsFromRequestFilterRule(rule),
+      OptionsFromRequestFilterRule(rule), PartyFromRequestFilterParty(rule),
       ResourceTypesFromRequestFilterRule(rule),
       ActivationTypesFromRequestFilterRule(rule),
       PatternTypeFromRequestFilterRule(rule),
@@ -231,7 +245,13 @@ void AddRuleToBuffer(
       ad_domains_and_query_triggers, domains_included_offset,
       domains_excluded_offset, ModifierFromRequestFilterModifier(rule),
       modifier_value_offset, pattern_offset, ngram_search_string_offset,
-      original_rule_text));
+      original_rule_text);
+
+  if (rule.bad_filter) {
+    bad_rules_offsets->push_back(rule_offset);
+  } else {
+    rules_offsets->push_back(rule_offset);
+  }
 }
 
 FlatOffset<flat::ContentInjectionRuleCore> AddContentInjectionRuleCoreToBuffer(
@@ -318,10 +338,13 @@ bool CompileFlatRules(const ParseResult& parse_result,
                       std::string& checksum) {
   flatbuffers::FlatBufferBuilder builder;
   std::vector<FlatOffset<flat::RequestFilterRule>> request_filter_rules_offsets;
+  std::vector<FlatOffset<flat::RequestFilterRule>>
+      bad_request_filter_rules_offsets;
   FlatStringOffsetMap string_offset_map;
   for (const auto& request_filter_rule : parse_result.request_filter_rules) {
     AddRuleToBuffer(&builder, request_filter_rule,
-                    &request_filter_rules_offsets, &string_offset_map);
+                    &request_filter_rules_offsets,
+                    &bad_request_filter_rules_offsets, &string_offset_map);
   }
   std::vector<FlatOffset<flat::CosmeticRule>> cosmetic_rules_offsets;
   for (const auto& cosmetic_rule : parse_result.cosmetic_rules) {
@@ -339,6 +362,7 @@ bool CompileFlatRules(const ParseResult& parse_result,
 
   FlatOffset<flat::RulesList> root_offset = flat::CreateRulesList(
       builder, builder.CreateVector(request_filter_rules_offsets),
+      builder.CreateVector(bad_request_filter_rules_offsets),
       builder.CreateVector(cosmetic_rules_offsets),
       builder.CreateVector(scriptlet_injection_rules_offsets));
 

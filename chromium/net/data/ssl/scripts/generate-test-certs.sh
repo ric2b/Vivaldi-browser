@@ -175,17 +175,6 @@ CA_NAME="req_ca_dn" \
   openssl ca \
     -batch \
     -extensions user_cert \
-    -subj "/CN=Leaf Certificate/" \
-    -startdate 00010101000000Z \
-    -enddate   00010101000000Z \
-    -in out/ok_cert.req \
-    -out out/bad_validity.pem \
-    -config ca.cnf
-
-CA_NAME="req_ca_dn" \
-  openssl ca \
-    -batch \
-    -extensions user_cert \
     -days ${CERT_LIFETIME} \
     -in out/test_names.req \
     -out out/test_names.pem \
@@ -201,8 +190,6 @@ CA_NAME="req_ca_dn" \
     > ../certificates/expired_cert.pem"
 /bin/sh -c "cat out/2048-sha256-root.key out/2048-sha256-root.pem \
     > ../certificates/root_ca_cert.pem"
-/bin/sh -c "cat out/ok_cert.key out/bad_validity.pem \
-    > ../certificates/bad_validity.pem"
 /bin/sh -c "cat out/ok_cert.key out/int/ok_cert.pem \
     out/int/2048-sha256-int.pem \
     > ../certificates/ok_cert_by_intermediate.pem"
@@ -313,22 +300,6 @@ CA_NAME="req_ca_dn" \
     -config ca.cnf
 /bin/sh -c "cat out/common_name_only.key out/common_name_only.pem \
     > ../certificates/common_name_only.pem"
-
-# Issued on 1 May 2018 (after the 30 Apr 2018 CT Requirement date)
-openssl req \
-  -config ../scripts/ee.cnf \
-  -newkey rsa:2048 \
-  -text \
-  -out out/may_2018.req
-CA_NAME="req_ca_dn" \
-  openssl ca \
-    -batch \
-    -extensions user_cert \
-    -startdate 180501000000Z \
-    -enddate   200803000000Z \
-    -in out/may_2018.req \
-    -out ../certificates/may_2018.pem \
-    -config ca.cnf
 
 ## Certificates for testing EV display (DN set with different variations)
 SUBJECT_NAME="req_ev_dn" \

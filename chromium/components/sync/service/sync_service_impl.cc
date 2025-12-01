@@ -26,8 +26,10 @@
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "components/prefs/pref_service.h"
 #include "components/signin/public/base/gaia_id_hash.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_pref_names.h"
 #include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
@@ -36,6 +38,7 @@
 #include "components/signin/public/identity_manager/primary_account_mutator.h"
 #include "components/sync/base/command_line_switches.h"
 #include "components/sync/base/data_type.h"
+#include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/features.h"
 #include "components/sync/base/stop_source.h"
 #include "components/sync/base/sync_util.h"
@@ -206,11 +209,10 @@ void MaybeClearAccountKeyedPreferences(
   if (accounts_in_cookie_jar_info.AreAccountsFresh()) {
     // Clear settings for accounts no longer in the cookie jar. On Android
     // and iOS this is done when the account is removed from the OS instead.
-    std::vector<signin::GaiaIdHash> hashes =
+    std::vector<GaiaId> gaia_ids =
         base::ToVector(signin::GetAllGaiaIdsForKeyedPreferences(
-                           identity_manager, accounts_in_cookie_jar_info),
-                       &signin::GaiaIdHash::FromGaiaId);
-    user_settings.KeepAccountSettingsPrefsOnlyForUsers(hashes);
+            identity_manager, accounts_in_cookie_jar_info));
+    user_settings.KeepAccountSettingsPrefsOnlyForUsers(gaia_ids);
   }
 #endif  // !BUILDFLAG(IS_IOS) && !BUILDFLAG(IS_ANDROID)
 }
@@ -258,7 +260,7 @@ SyncServiceImpl::SyncServiceImpl(InitParams init_params)
       sync_service_url_, MakeUserAgentForSync(channel_), url_loader_factory_);
 
   if (identity_manager_) {
-    identity_manager_->AddObserver(this);
+    identity_manager_observation_.Observe(identity_manager_);
   }
 
   observers_.emplace();
@@ -305,9 +307,6 @@ void SyncServiceImpl::RegisterTrustedVaultSyntheticFieldTrialsIfNecessary() {
 
 SyncServiceImpl::~SyncServiceImpl() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (identity_manager_) {
-    identity_manager_->RemoveObserver(this);
-  }
   // Shutdown() should have been called before destruction.
   DCHECK(!engine_);
 }
@@ -323,8 +322,6 @@ void SyncServiceImpl::Initialize(DataTypeController::TypeVector controllers) {
   user_settings_ = std::make_unique<SyncUserSettingsImpl>(
       /*delegate=*/this, &crypto_, &sync_prefs_,
       data_type_manager_->GetRegisteredDataTypes());
-
-  sync_prefs_observation_.Observe(&sync_prefs_);
 
   if (!IsLocalSyncEnabled()) {
     auth_manager_->RegisterForAuthNotifications();
@@ -350,21 +347,8 @@ void SyncServiceImpl::Initialize(DataTypeController::TypeVector controllers) {
   // *After* setting up `auth_manager_`, run pref migrations that depend on
   // the account state.
   sync_prefs_.MaybeMigratePrefsForSyncToSigninPart1(
-      GetSyncAccountStateForPrefs(),
-      signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia));
-  sync_prefs_.MaybeMigrateCustomPassphrasePref(
-      signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia));
-
-  if (!IsLocalSyncEnabled()) {
-    const bool account_info_fully_loaded =
-        auth_manager_->IsActiveAccountInfoFullyLoaded();
-    base::UmaHistogramBoolean("Sync.Startup.AccountInfoFullyLoaded2",
-                              account_info_fully_loaded);
-    if (!account_info_fully_loaded) {
-      base::UmaHistogramBoolean("Sync.Startup.SignedInWithoutAccountInfo2",
-                                IsSignedIn());
-    }
-  }
+      GetSyncAccountStateForPrefs(), GetAccountInfo().gaia);
+  sync_prefs_.MaybeMigrateCustomPassphrasePref(GetAccountInfo().gaia);
 
   // Update selected types prefs if a policy is applied.
   sync_prefs_policy_handler_ = std::make_unique<SyncPrefsPolicyHandler>(this);
@@ -378,8 +362,8 @@ void SyncServiceImpl::Initialize(DataTypeController::TypeVector controllers) {
     // removed, for historic reasons. It is unclear if this behavior is
     // optional, because it is indistinguishable from the
     // sync-reset-via-dashboard case. It can be resolved by invoking
-    // SetSyncFeatureRequested().
-    sync_prefs_.SetSyncFeatureDisabledViaDashboard();
+    // ClearSyncFeatureDisabledViaDashboard().
+    user_settings_->SetSyncFeatureDisabledViaDashboard();
 #endif  // BUILDFLAG(IS_CHROMEOS)
   } else if (HasDisableReason(DISABLE_REASON_NOT_SIGNED_IN)) {
     // On ChromeOS-Ash, signout is not possible, so it's not necessary to handle
@@ -678,6 +662,8 @@ void SyncServiceImpl::Shutdown() {
   observers_.reset();
 
   auth_manager_.reset();
+
+  identity_manager_observation_.Reset();
 }
 
 std::unique_ptr<SyncEngine> SyncServiceImpl::ResetEngine(
@@ -788,27 +774,6 @@ base::android::ScopedJavaLocalRef<jobject> SyncServiceImpl::GetJavaObject() {
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
-void SyncServiceImpl::SetSyncFeatureRequested() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-#if BUILDFLAG(IS_CHROMEOS)
-  user_settings_->ClearSyncFeatureDisabledViaDashboard();
-#endif  // BUILDFLAG(IS_CHROMEOS)
-
-  // If the Sync engine was already initialized (probably running in transport
-  // mode), just reconfigure.
-  if (engine_ && engine_->IsInitialized()) {
-    ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
-  } else {
-    // Otherwise try to start up. Note that there might still be other disable
-    // reasons remaining, in which case this will effectively do nothing.
-    TryStart();
-  }
-
-  DVLOG(2) << "Notify observers on SetSyncFeatureRequested";
-  NotifyObservers();
-}
-
 SyncUserSettings* SyncServiceImpl::GetUserSettings() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return user_settings_.get();
@@ -829,7 +794,8 @@ SyncService::DisableReasonSet SyncServiceImpl::GetDisableReasons() const {
 
   // If local sync is enabled, most disable reasons don't apply.
   if (!IsLocalSyncEnabled()) {
-    if (sync_prefs_.IsSyncClientDisabledByPolicy() || sync_disabled_by_admin_) {
+    if (user_settings_->IsSyncClientDisabledByPolicy() ||
+        sync_disabled_by_admin_) {
       result.Put(DISABLE_REASON_ENTERPRISE_POLICY);
     }
     if (!IsSignedIn()) {
@@ -1032,21 +998,11 @@ void SyncServiceImpl::OnEngineInitialized(bool success,
   crypto_.SetSyncEngine(GetAccountInfo(), engine_.get());
 
   sync_prefs_.MaybeMigratePrefsForSyncToSigninPart2(
-      signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia),
-      user_settings_->IsUsingExplicitPassphrase());
+      GetAccountInfo().gaia, user_settings_->IsUsingExplicitPassphrase());
 
   // Cache trusted vault debug info into prefs, to make it synchronously
   // available upon future profile startups.
   CacheTrustedVaultDebugInfoToPrefsFromEngine();
-
-  if (CanConfigureDataTypes(/*bypass_setup_in_progress_check=*/false)) {
-    // Datatype downloads on restart are generally due to newly supported
-    // datatypes (although it's also possible we're picking up where a failed
-    // previous configuration left off).
-    // TODO(sync): consider detecting configuration recovery and setting
-    // the reason here appropriately.
-    ConfigureDataTypeManager(CONFIGURE_REASON_NEWLY_ENABLED_DATA_TYPE);
-  }
 
   // Check for a cookie jar mismatch.
   if (identity_manager_) {
@@ -1058,8 +1014,12 @@ void SyncServiceImpl::OnEngineInitialized(bool success,
     }
   }
 
-  DVLOG(2) << "Notify on engine initialized";
-  NotifyObservers();
+  // Tentatively use a generic reason, but it may be later overridden
+  // to CONFIGURE_REASON_NEW_CLIENT. The overriding code is needed
+  // anyway in case sync setup is in progress and configuration cannot
+  // be started right away.
+  ConfigureDataTypeManager(CONFIGURE_REASON_EXISTING_CLIENT_RESTART,
+                           /*bypass_setup_in_progress_check=*/false);
 }
 
 void SyncServiceImpl::OnSyncCycleCompleted(const SyncCycleSnapshot& snapshot) {
@@ -1127,7 +1087,7 @@ void SyncServiceImpl::OnActionableProtocolError(
         // dashboard because then the cached passphrase wouldn't be useful
         // anymore.
         sync_prefs_.ClearEncryptionBootstrapTokenForAccount(
-            signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia));
+            GetAccountInfo().gaia);
       }
 
       // Security domain state might be reset, reset local state as well.
@@ -1215,18 +1175,16 @@ void SyncServiceImpl::OnConfigureDone(
 
   DVLOG(1) << "SyncServiceImpl::OnConfigureDone called with status: "
            << result.status;
-  // The possible status values:
-  //    ABORT - Configuration was aborted. This is not an error, if
-  //            initiated by user.
-  //    OK - Some or all types succeeded.
-
-  // First handle the abort case.
-  if (result.status == DataTypeManager::ABORTED) {
-    DVLOG(0) << "SyncServiceImpl sync configuration aborted";
-    return;
+  switch (result.status) {
+    case DataTypeManager::ABORTED:
+      // Configuration was aborted. This is not an error, if initiated by user.
+      DVLOG(0) << "SyncServiceImpl sync configuration aborted";
+      return;
+    case DataTypeManager::OK:
+      // Some or all types succeeded.
+      break;
   }
 
-  DCHECK_EQ(DataTypeManager::OK, result.status);
   base::UmaHistogramBoolean("Sync.ConfigureDataTypeManager.Finished",
                             is_first_time_sync_configure_);
 
@@ -1234,6 +1192,10 @@ void SyncServiceImpl::OnConfigureDone(
   // enabled, and yet we still think we require a passphrase for decryption.
   DCHECK(!user_settings_->IsPassphraseRequiredForPreferredDataTypes() ||
          user_settings_->IsEncryptedDatatypePreferred());
+
+  if (result.sync_mode == SyncMode::kFull) {
+    sync_prefs_.SetFirstSyncCompletedInFullSyncMode();
+  }
 
   DVLOG(2) << "Notify observers OnConfigureDone";
   NotifyObservers();
@@ -1277,7 +1239,8 @@ void SyncServiceImpl::SyncAuthAccountStateChanged() {
       TryStart();
       NotifyObservers();
     } else {
-      ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
+      ConfigureDataTypeManager(CONFIGURE_REASON_RECONFIGURATION,
+                               /*bypass_setup_in_progress_check=*/false);
     }
   }
 }
@@ -1289,6 +1252,17 @@ void SyncServiceImpl::SyncAuthCredentialsChanged() {
   if (auth_manager_->IsSyncPaused()) {
     sync_prefs_.SetHasCachedPersistentAuthErrorForMetrics(true);
   } else if (!auth_manager_->GetCredentials().access_token.empty()) {
+    if (!IsSyncFeatureEnabled() &&
+        sync_prefs_.HasCachedPersistentAuthErrorForMetrics()) {
+      // An auth error is being fixed while in transport mode. Record the amount
+      // of unsynced data in histograms.
+      GetTypesWithUnsyncedData(
+          TypesRequiringUnsyncedDataCheckOnSignout(),
+          base::BindOnce(
+              &SyncRecordDataTypeNumUnsyncedEntitiesFromDataCounts,
+              UnsyncedDataRecordingEvent::kOnReauthFromPendingState));
+    }
+
     // In order to conclude with certainty that there is no persistent auth
     // error, it is necessary to get an access token successfully.
     sync_prefs_.SetHasCachedPersistentAuthErrorForMetrics(false);
@@ -1365,17 +1339,8 @@ void SyncServiceImpl::MaybeRecordTrustedVaultHistograms() {
 
 void SyncServiceImpl::ReconfigureDataTypesDueToCrypto() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-
-  if (CanConfigureDataTypes(/*bypass_setup_in_progress_check=*/false)) {
-    ConfigureDataTypeManager(CONFIGURE_REASON_CRYPTO);
-  }
-
-  // Notify observers that the passphrase status may have changed, regardless of
-  // whether we triggered configuration or not. This is needed for the
-  // IsSetupInProgress() case where the UI needs to be updated to reflect that
-  // the passphrase was accepted (https://crbug.com/870256).
-  DVLOG(2) << "Notify observers on ReconfigureDataTypesDueToCrypto";
-  NotifyObservers();
+  ConfigureDataTypeManager(CONFIGURE_REASON_CRYPTO,
+                           /*bypass_setup_in_progress_check=*/false);
 }
 
 void SyncServiceImpl::PassphraseTypeChanged(PassphraseType passphrase_type) {
@@ -1389,8 +1354,7 @@ void SyncServiceImpl::PassphraseTypeChanged(PassphraseType passphrase_type) {
       GetSyncAccountStateForPrefs() ==
           SyncPrefs::SyncAccountState::kSignedInNotSyncing &&
       sync_prefs_.DoesTypeHaveDefaultValueForAccount(
-          UserSelectableType::kAutofill,
-          signin::GaiaIdHash::FromGaiaId(GetAccountInfo().gaia)) &&
+          UserSelectableType::kAutofill, GetAccountInfo().gaia) &&
       base::FeatureList::IsEnabled(kReplaceSyncPromosWithSignInPromos)) {
     GetUserSettings()->SetSelectedType(UserSelectableType::kAutofill, false);
   }
@@ -1440,6 +1404,23 @@ CoreAccountInfo SyncServiceImpl::GetSyncAccountInfoForPrefs() const {
   return GetAccountInfo();
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+void SyncServiceImpl::OnSyncFeatureDisabledViaDashboardCleared() {
+  // If the Sync engine was already initialized (probably running in transport
+  // mode), just reconfigure.
+  if (engine_ && engine_->IsInitialized()) {
+    ConfigureDataTypeManager(CONFIGURE_REASON_RECONFIGURATION,
+                             /*bypass_setup_in_progress_check=*/false);
+  } else {
+    // Otherwise try to start up. Note that there might still be other disable
+    // reasons remaining, in which case this will effectively do nothing.
+    TryStart();
+  }
+
+  NotifyObservers();
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
+
 bool SyncServiceImpl::IsSetupInProgress() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return outstanding_setup_in_progress_handles_ > 0;
@@ -1475,12 +1456,6 @@ bool SyncServiceImpl::HasCachedPersistentAuthErrorForMetrics() const {
 
 bool SyncServiceImpl::RequiresClientUpgrade() const {
   return last_actionable_error_.action == UPGRADE_CLIENT;
-}
-
-bool SyncServiceImpl::CanConfigureDataTypes(
-    bool bypass_setup_in_progress_check) const {
-  return engine_ && engine_->IsInitialized() &&
-         (bypass_setup_in_progress_check || !IsSetupInProgress());
 }
 
 std::unique_ptr<SyncSetupInProgressHandle>
@@ -1524,14 +1499,15 @@ base::Time SyncServiceImpl::GetLastSyncedTimeForDebugging() const {
   return engine_->GetLastSyncedTimeForDebugging();
 }
 
-void SyncServiceImpl::OnSelectedTypesPrefChange() {
+void SyncServiceImpl::OnSelectedTypesChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (data_type_manager_) {
     data_type_manager_->ResetDataTypeErrors();
   }
 
-  ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
+  ConfigureDataTypeManager(CONFIGURE_REASON_RECONFIGURATION,
+                           /*bypass_setup_in_progress_check=*/false);
 }
 
 SyncClient* SyncServiceImpl::GetSyncClientForTest() {
@@ -1629,19 +1605,35 @@ DataTypeSet SyncServiceImpl::GetTypesWithPendingDownloadForInitialSync() const {
   return data_type_manager_->GetTypesWithPendingDownloadForInitialSync();
 }
 
-void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
-  DCHECK(engine_);
-  DCHECK(engine_->IsInitialized());
+void SyncServiceImpl::ConfigureDataTypeManager(
+    ConfigureReason reason,
+    bool bypass_setup_in_progress_check) {
+  // Don't configure datatypes if the setup UI is still on the screen - this
+  // is to help multi-screen setting UIs (like iOS) where they don't want to
+  // start syncing data until the user is done configuring encryption options,
+  // etc. ReconfigureDatatypeManager() will get called again once the last
+  // SyncSetupInProgressHandle is released.
+  if (!engine_ || !engine_->IsInitialized() ||
+      (!bypass_setup_in_progress_check && IsSetupInProgress())) {
+    // In any case, notify the observers. Whatever triggered the reconfigure
+    // (attempt) might be interesting to them.
+    NotifyObservers();
+    return;
+  }
+
   DCHECK(!engine_->GetCacheGuid().empty());
   DVLOG(1) << "Started DataTypeManager configuration, reason: "
            << static_cast<int>(reason);
 
-  ConfigureContext configure_context = {
-      .authenticated_account_id = GetAccountInfo().account_id,
-      .cache_guid = engine_->GetCacheGuid(),
-      .sync_mode = SyncMode::kFull,
-      .reason = reason,
-      .configuration_start_time = base::Time::Now()};
+  ConfigureContext configure_context;
+  configure_context.authenticated_gaia_id = GetAccountInfo().gaia;
+  configure_context.previously_syncing_gaia_id_info =
+      DeterminePreviouslySyncingGaiaIdInfoForMetrics();
+  configure_context.cache_guid = engine_->GetCacheGuid();
+  configure_context.sync_mode = SyncMode::kFull;
+  configure_context.reason = reason;
+  configure_context.configuration_start_time = base::Time::Now();
+
   base::UmaHistogramBoolean("Sync.ConfigureDataTypeManager.IsGaiaAccountId",
                             GetAccountInfo().account_id.ToString() ==
                                 GetAccountInfo().gaia.ToString());
@@ -1653,7 +1645,8 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
     migrator_ = std::make_unique<BackendMigrator>(
         debug_identifier_, data_type_manager_.get(),
         base::BindRepeating(&SyncServiceImpl::ConfigureDataTypeManager,
-                            base::Unretained(this), CONFIGURE_REASON_MIGRATION),
+                            base::Unretained(this), CONFIGURE_REASON_MIGRATION,
+                            /*bypass_setup_in_progress_check=*/true),
         base::BindRepeating(&SyncServiceImpl::StartSyncingWithServer,
                             base::Unretained(this)));
 
@@ -1663,7 +1656,7 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
     }
   }
 
-  DCHECK(!configure_context.authenticated_account_id.empty() ||
+  DCHECK(!configure_context.authenticated_gaia_id.empty() ||
          IsLocalSyncEnabled());
   DCHECK(!configure_context.cache_guid.empty());
   DCHECK_NE(configure_context.reason, CONFIGURE_REASON_UNKNOWN);
@@ -1705,7 +1698,7 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
                                     canonical_data_type);
     }
   } else {
-    bool sync_everything = sync_prefs_.HasKeepEverythingSynced();
+    bool sync_everything = user_settings_->IsSyncEverythingEnabled();
     base::UmaHistogramBoolean("Sync.SyncEverything2", sync_everything);
 
     if (!sync_everything) {
@@ -1717,7 +1710,7 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
     }
 
 #if BUILDFLAG(IS_CHROMEOS)
-    bool sync_everything_os = sync_prefs_.IsSyncAllOsTypesEnabled();
+    bool sync_everything_os = user_settings_->IsSyncAllOsTypesEnabled();
     base::UmaHistogramBoolean("Sync.SyncEverythingOS", sync_everything_os);
     if (!sync_everything_os) {
       for (UserSelectableOsType type : user_settings_->GetSelectedOsTypes()) {
@@ -1728,6 +1721,8 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
     }
 #endif  // BUILDFLAG(IS_CHROMEOS)
   }
+
+  NotifyObservers();
 }
 
 bool SyncServiceImpl::UseTransportOnlyMode() const {
@@ -1808,7 +1803,7 @@ void SyncServiceImpl::GetEntityCountsForDebugging(
   return data_type_manager_->GetEntityCountsForDebugging(std::move(callback));
 }
 
-void SyncServiceImpl::OnSyncManagedPrefChange(bool is_sync_managed) {
+void SyncServiceImpl::OnSyncClientDisabledByPolicyChanged() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Local sync is not controlled by the "sync managed" policy, so these pref
@@ -1817,15 +1812,15 @@ void SyncServiceImpl::OnSyncManagedPrefChange(bool is_sync_managed) {
     return;
   }
 
-  if (is_sync_managed) {
+  if (user_settings_->IsSyncClientDisabledByPolicy()) {
     StopAndClear(ResetEngineReason::kEnterprisePolicy);
 #if BUILDFLAG(IS_CHROMEOS)
     // On ChromeOS Ash, sync-the-feature stays disabled even after the policy is
     // removed, for historic reasons. It is unclear if this behavior is
     // optional, because it is indistinguishable from the
     // sync-reset-via-dashboard case. It can be resolved by invoking
-    // SetSyncFeatureRequested().
-    sync_prefs_.SetSyncFeatureDisabledViaDashboard();
+    // ClearSyncFeatureDisabledViaDashboard().
+    user_settings_->SetSyncFeatureDisabledViaDashboard();
 #endif  // BUILDFLAG(IS_CHROMEOS)
   } else {
     // Sync is no longer disabled by policy. Try starting it up if appropriate.
@@ -1837,14 +1832,9 @@ void SyncServiceImpl::OnSyncManagedPrefChange(bool is_sync_managed) {
 }
 
 #if !BUILDFLAG(IS_CHROMEOS)
-void SyncServiceImpl::OnFirstSetupCompletePrefChange(
-    bool is_initial_sync_feature_setup_complete) {
-  if (engine_ && engine_->IsInitialized()) {
-    ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/false);
-    // IsSyncFeatureEnabled() likely changed, it might be time to record
-    // histograms.
-    MaybeRecordTrustedVaultHistograms();
-  }
+void SyncServiceImpl::OnInitialSyncFeatureSetupCompleted() {
+  ConfigureDataTypeManager(CONFIGURE_REASON_RECONFIGURATION,
+                           /*bypass_setup_in_progress_check=*/false);
 }
 #endif  // !BUILDFLAG(IS_CHROMEOS)
 
@@ -1893,6 +1883,12 @@ void SyncServiceImpl::OnPrimaryAccountChanged(
         identity_manager_, identity_manager_->GetAccountsInCookieJar(),
         *user_settings_);
   }
+}
+
+void SyncServiceImpl::OnIdentityManagerShutdown(
+    signin::IdentityManager* identity_manager) {
+  // Needs to be shutdown before IdentityManager.
+  NOTREACHED(base::NotFatalUntil::M142);
 }
 
 void SyncServiceImpl::OnAccountsInCookieUpdatedWithCallback(
@@ -2132,6 +2128,7 @@ void SyncServiceImpl::StopAndClear(ResetEngineReason reset_engine_reason) {
   // If the migration didn't finish before StopAndClear() was called, mark it as
   // done so it doesn't trigger again if the user signs in later.
   sync_prefs_.MarkPartialSyncToSigninMigrationFullyDone();
+  sync_prefs_.ClearFirstSyncCompletedInFullSyncMode();
 
   if (reset_engine_reason == ResetEngineReason::kNotSignedIn) {
     sync_prefs_.ClearCachedPersistentAuthErrorForMetrics();
@@ -2140,37 +2137,6 @@ void SyncServiceImpl::StopAndClear(ResetEngineReason reset_engine_reason) {
   // Also let observers know that Sync-the-feature is now fully disabled
   // (before it possibly starts up again in transport-only mode).
   DVLOG(2) << "Notify observers on StopAndClear";
-  NotifyObservers();
-}
-
-void SyncServiceImpl::ReconfigureDatatypeManager(
-    bool bypass_setup_in_progress_check) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (engine_ && engine_->IsInitialized()) {
-    DCHECK(engine_);
-    // Don't configure datatypes if the setup UI is still on the screen - this
-    // is to help multi-screen setting UIs (like iOS) where they don't want to
-    // start syncing data until the user is done configuring encryption options,
-    // etc. ReconfigureDatatypeManager() will get called again once the last
-    // SyncSetupInProgressHandle is released.
-    if (CanConfigureDataTypes(bypass_setup_in_progress_check)) {
-      ConfigureDataTypeManager(CONFIGURE_REASON_RECONFIGURATION);
-    } else {
-      DVLOG(0) << "ConfigureDataTypeManager not invoked because datatypes "
-               << "cannot be configured now";
-    }
-  } else if (HasDisableReason(DISABLE_REASON_UNRECOVERABLE_ERROR)) {
-    // There is nothing more to configure.
-    DVLOG(1) << "ConfigureDataTypeManager not invoked because of an "
-             << "Unrecoverable error.";
-  } else {
-    DVLOG(0) << "ConfigureDataTypeManager not invoked because engine is not "
-             << "initialized";
-  }
-
-  // In any case, notify the observers. Whatever triggered the reconfigure
-  // (attempt) might be interesting to them.
-  DVLOG(2) << "Notify observers on ReconfigureDatatypeManager";
   NotifyObservers();
 }
 
@@ -2270,6 +2236,47 @@ void SyncServiceImpl::RecordHistoryOptInStateOnSigninHistograms(
       user_settings_->GetSelectedTypes().Has(UserSelectableType::kHistory));
 }
 
+PreviouslySyncingGaiaIdInfoForMetrics
+SyncServiceImpl::DeterminePreviouslySyncingGaiaIdInfoForMetrics() const {
+  if (IsLocalSyncEnabled()) {
+    return PreviouslySyncingGaiaIdInfoForMetrics::kUnspecified;
+  }
+
+  // If a configuration cycle already completed in full-sync mode, return
+  // `kUnspecified` because this field is used to record metrics that are
+  // relevant immediately when the user turns sync on. Later
+  // reconfigurations, such as when the user toggles sync settings, should be
+  // excluded from metrics.
+  if (sync_prefs_.IsFirstSyncCompletedInFullSyncMode()) {
+    return PreviouslySyncingGaiaIdInfoForMetrics::kUnspecified;
+  }
+
+  // Depending on whether sync the feature is currently on or not, the gaia ID
+  // corresponding to the previous user is stored in one pref or another. That's
+  // because `kGoogleServicesLastSyncingGaiaId` is updated early, as soon as
+  // the sync consent is granted, and before the notification reaches
+  // SyncServiceImpl.
+  const GaiaId previously_syncing_gaia_id = GaiaId(
+      HasSyncConsent() ? sync_client_->GetPrefService()->GetString(
+                             prefs::kGoogleServicesSecondLastSyncingGaiaId)
+                       : sync_client_->GetPrefService()->GetString(
+                             prefs::kGoogleServicesLastSyncingGaiaId));
+
+  if (previously_syncing_gaia_id.empty()) {
+    // It is known that no previous gaia ID existed that turned sync on.
+    return PreviouslySyncingGaiaIdInfoForMetrics::
+        kSyncFeatureNeverPreviouslyTurnedOn;
+  }
+
+  const GaiaId current_gaia_id = GetAccountInfo().gaia;
+
+  return current_gaia_id == previously_syncing_gaia_id
+             ? PreviouslySyncingGaiaIdInfoForMetrics::
+                   kCurrentGaiaIdMatchesPreviousWithSyncFeatureOn
+             : PreviouslySyncingGaiaIdInfoForMetrics::
+                   kCurrentGaiaIdIfDiffersPreviousWithSyncFeatureOn;
+}
+
 const GURL& SyncServiceImpl::GetSyncServiceUrlForDebugging() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return sync_service_url_;
@@ -2291,28 +2298,25 @@ void SyncServiceImpl::OnSetupInProgressHandleDestroyed() {
 
   --outstanding_setup_in_progress_handles_;
 
-  if (engine_ && engine_->IsInitialized()) {
-    // The user closed a setup UI, and will expect their changes to actually
-    // take effect now. So we reconfigure here even if another setup UI happens
-    // to be open right now.
-    ReconfigureDatatypeManager(/*bypass_setup_in_progress_check=*/true);
-  }
-
-  DVLOG(2) << "Notify observers OnSetupInProgressHandleDestroyed";
-  NotifyObservers();
+  // The user closed a setup UI, and will expect their changes to actually
+  // take effect now. So we reconfigure here even if another setup UI happens
+  // to be open right now.
+  ConfigureDataTypeManager(CONFIGURE_REASON_RECONFIGURATION,
+                           /*bypass_setup_in_progress_check=*/true);
 }
 
 void SyncServiceImpl::GetTypesWithUnsyncedData(
     DataTypeSet requested_types,
-    base::OnceCallback<void(DataTypeSet)> callback) const {
+    base::OnceCallback<void(absl::flat_hash_map<DataType, size_t>)> callback)
+    const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // This should only be called in transport-only mode.
   CHECK(!IsSyncFeatureEnabled(), base::NotFatalUntil::M138);
   // TODO(crbug.com/40901755): Consider changing this to always guarantee an
   // asynchronous behavior, rather than invoking the callback synchronously in
   // rare cases.
-  return data_type_manager_->GetTypesWithUnsyncedData(requested_types,
-                                                      std::move(callback));
+  data_type_manager_->GetTypesWithUnsyncedData(requested_types,
+                                               std::move(callback));
 }
 
 void SyncServiceImpl::GetLocalDataDescriptions(
@@ -2362,8 +2366,6 @@ void SyncServiceImpl::TriggerLocalDataMigration(DataTypeSet types) {
 
 void SyncServiceImpl::TriggerLocalDataMigrationForItems(
     std::map<DataType, std::vector<LocalDataItemModel::DataId>> items) {
-  CHECK(switches::IsBatchUploadDesktopEnabled());
-
   for (const auto& [type, _] : items) {
     base::UmaHistogramEnumeration("Sync.BatchUpload.Requests3",
                                   syncer::DataTypeHistogramValue(type));

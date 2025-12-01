@@ -283,24 +283,6 @@ inline uint32_t vkuFormatTexelsPerBlock(VkFormat format);
 // When dealing with mulit-planar formats, need to consider using vkuGetPlaneIndex.
 inline uint32_t vkuFormatTexelBlockSize(VkFormat format);
 
-// Return size, in bytes, of one element of a VkFormat
-// Format must not be a depth, stencil, or multiplane format
-// Deprecated - Use vkuFormatTexelBlockSize - there is no "element" size in the spec
-inline uint32_t vkuFormatElementSize(VkFormat format);
-
-// Return the size in bytes of one texel of a VkFormat
-// For compressed or multi-plane, this may be a fractional number
-// Deprecated - Use vkuFormatTexelBlockSize - there is no "element" size in the spec
-inline uint32_t vkuFormatElementSizeWithAspect(VkFormat format, VkImageAspectFlagBits aspectMask);
-
-// Return the size in bytes of one texel of a VkFormat
-// Format must not be a depth, stencil, or multiplane format
-inline double vkuFormatTexelSize(VkFormat format);
-
-// Return the size in bytes of one texel of a VkFormat
-// For compressed or multi-plane, this may be a fractional number
-inline double vkuFormatTexelSizeWithAspect(VkFormat format, VkImageAspectFlagBits aspectMask);
-
 // Returns whether a VkFormat contains only 8-bit sized components
 inline bool vkuFormatIs8bit(VkFormat format);
 
@@ -1590,41 +1572,6 @@ inline enum VKU_FORMAT_COMPATIBILITY_CLASS vkuFormatCompatibilityClass(VkFormat 
 inline uint32_t vkuFormatTexelsPerBlock(VkFormat format) { return vkuGetFormatInfo(format).texels_per_block; }
 
 inline uint32_t vkuFormatTexelBlockSize(VkFormat format) { return vkuGetFormatInfo(format).texel_block_size; }
-
-// Deprecated - Use vkuFormatTexelBlockSize
-inline uint32_t vkuFormatElementSize(VkFormat format) {
-    return vkuFormatElementSizeWithAspect(format, VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
-// Deprecated - Use vkuFormatTexelBlockSize
-inline uint32_t vkuFormatElementSizeWithAspect(VkFormat format, VkImageAspectFlagBits aspectMask) {
-    // Depth/Stencil aspect have separate helper functions
-    if (aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
-        return vkuFormatStencilSize(format) / 8;
-    } else if (aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) {
-        return vkuFormatDepthSize(format) / 8;
-    } else if (vkuFormatIsMultiplane(format)) {
-        // Element of entire multiplane format is not useful,
-        // Want to get just a single plane as the lookup format
-        format = vkuFindMultiplaneCompatibleFormat(format, aspectMask);
-    }
-
-    return vkuGetFormatInfo(format).texel_block_size;
-}
-
-inline double vkuFormatTexelSize(VkFormat format) {
-    return vkuFormatTexelSizeWithAspect(format, VK_IMAGE_ASPECT_COLOR_BIT);
-}
-
-inline double vkuFormatTexelSizeWithAspect(VkFormat format, VkImageAspectFlagBits aspectMask) {
-    double texel_size = (double)(vkuFormatElementSizeWithAspect(format, aspectMask));
-    VkExtent3D block_extent = vkuFormatTexelBlockExtent(format);
-    uint32_t texels_per_block = block_extent.width * block_extent.height * block_extent.depth;
-    if (1 < texels_per_block) {
-        texel_size /= (double)(texels_per_block);
-    }
-    return texel_size;
-}
 
 inline bool vkuFormatIs8bit(VkFormat format) {
     switch (format) {

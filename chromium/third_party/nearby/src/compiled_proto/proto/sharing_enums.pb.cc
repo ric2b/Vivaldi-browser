@@ -1168,35 +1168,43 @@ bool DeviceType_IsValid(int value) {
     case 2:
     case 3:
     case 4:
+    case 5:
+    case 6:
       return true;
     default:
       return false;
   }
 }
 
-static ::PROTOBUF_NAMESPACE_ID::internal::ExplicitlyConstructed<std::string> DeviceType_strings[5] = {};
+static ::PROTOBUF_NAMESPACE_ID::internal::ExplicitlyConstructed<std::string> DeviceType_strings[7] = {};
 
 static const char DeviceType_names[] =
   "CAR"
+  "FOLDABLE"
   "LAPTOP"
   "PHONE"
   "TABLET"
-  "UNKNOWN_DEVICE_TYPE";
+  "UNKNOWN_DEVICE_TYPE"
+  "XR";
 
 static const ::PROTOBUF_NAMESPACE_ID::internal::EnumEntry DeviceType_entries[] = {
   { {DeviceType_names + 0, 3}, 4 },
-  { {DeviceType_names + 3, 6}, 3 },
-  { {DeviceType_names + 9, 5}, 1 },
-  { {DeviceType_names + 14, 6}, 2 },
-  { {DeviceType_names + 20, 19}, 0 },
+  { {DeviceType_names + 3, 8}, 5 },
+  { {DeviceType_names + 11, 6}, 3 },
+  { {DeviceType_names + 17, 5}, 1 },
+  { {DeviceType_names + 22, 6}, 2 },
+  { {DeviceType_names + 28, 19}, 0 },
+  { {DeviceType_names + 47, 2}, 6 },
 };
 
 static const int DeviceType_entries_by_number[] = {
-  4, // 0 -> UNKNOWN_DEVICE_TYPE
-  2, // 1 -> PHONE
-  3, // 2 -> TABLET
-  1, // 3 -> LAPTOP
+  5, // 0 -> UNKNOWN_DEVICE_TYPE
+  3, // 1 -> PHONE
+  4, // 2 -> TABLET
+  2, // 3 -> LAPTOP
   0, // 4 -> CAR
+  1, // 5 -> FOLDABLE
+  6, // 6 -> XR
 };
 
 const std::string& DeviceType_Name(
@@ -1205,12 +1213,12 @@ const std::string& DeviceType_Name(
       ::PROTOBUF_NAMESPACE_ID::internal::InitializeEnumStrings(
           DeviceType_entries,
           DeviceType_entries_by_number,
-          5, DeviceType_strings);
+          7, DeviceType_strings);
   (void) dummy;
   int idx = ::PROTOBUF_NAMESPACE_ID::internal::LookUpEnumName(
       DeviceType_entries,
       DeviceType_entries_by_number,
-      5, value);
+      7, value);
   return idx == -1 ? ::PROTOBUF_NAMESPACE_ID::internal::GetEmptyString() :
                      DeviceType_strings[idx].get();
 }
@@ -1218,7 +1226,7 @@ bool DeviceType_Parse(
     ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, DeviceType* value) {
   int int_value;
   bool success = ::PROTOBUF_NAMESPACE_ID::internal::LookUpEnumValue(
-      DeviceType_entries, 5, name, &int_value);
+      DeviceType_entries, 7, name, &int_value);
   if (success) {
     *value = static_cast<DeviceType>(int_value);
   }
@@ -2722,13 +2730,14 @@ bool AttachmentSourceType_IsValid(int value) {
     case 3:
     case 4:
     case 5:
+    case 6:
       return true;
     default:
       return false;
   }
 }
 
-static ::PROTOBUF_NAMESPACE_ID::internal::ExplicitlyConstructed<std::string> AttachmentSourceType_strings[6] = {};
+static ::PROTOBUF_NAMESPACE_ID::internal::ExplicitlyConstructed<std::string> AttachmentSourceType_strings[7] = {};
 
 static const char AttachmentSourceType_names[] =
   "ATTACHMENT_SOURCE_CONTEXT_MENU"
@@ -2736,6 +2745,7 @@ static const char AttachmentSourceType_names[] =
   "ATTACHMENT_SOURCE_PASTE"
   "ATTACHMENT_SOURCE_SELECT_FILES_BUTTON"
   "ATTACHMENT_SOURCE_SELECT_FOLDERS_BUTTON"
+  "ATTACHMENT_SOURCE_SHARE_ACTIVATION"
   "ATTACHMENT_SOURCE_UNKNOWN";
 
 static const ::PROTOBUF_NAMESPACE_ID::internal::EnumEntry AttachmentSourceType_entries[] = {
@@ -2744,16 +2754,18 @@ static const ::PROTOBUF_NAMESPACE_ID::internal::EnumEntry AttachmentSourceType_e
   { {AttachmentSourceType_names + 61, 23}, 4 },
   { {AttachmentSourceType_names + 84, 37}, 3 },
   { {AttachmentSourceType_names + 121, 39}, 5 },
-  { {AttachmentSourceType_names + 160, 25}, 0 },
+  { {AttachmentSourceType_names + 160, 34}, 6 },
+  { {AttachmentSourceType_names + 194, 25}, 0 },
 };
 
 static const int AttachmentSourceType_entries_by_number[] = {
-  5, // 0 -> ATTACHMENT_SOURCE_UNKNOWN
+  6, // 0 -> ATTACHMENT_SOURCE_UNKNOWN
   0, // 1 -> ATTACHMENT_SOURCE_CONTEXT_MENU
   1, // 2 -> ATTACHMENT_SOURCE_DRAG_AND_DROP
   3, // 3 -> ATTACHMENT_SOURCE_SELECT_FILES_BUTTON
   2, // 4 -> ATTACHMENT_SOURCE_PASTE
   4, // 5 -> ATTACHMENT_SOURCE_SELECT_FOLDERS_BUTTON
+  5, // 6 -> ATTACHMENT_SOURCE_SHARE_ACTIVATION
 };
 
 const std::string& AttachmentSourceType_Name(
@@ -2762,12 +2774,12 @@ const std::string& AttachmentSourceType_Name(
       ::PROTOBUF_NAMESPACE_ID::internal::InitializeEnumStrings(
           AttachmentSourceType_entries,
           AttachmentSourceType_entries_by_number,
-          6, AttachmentSourceType_strings);
+          7, AttachmentSourceType_strings);
   (void) dummy;
   int idx = ::PROTOBUF_NAMESPACE_ID::internal::LookUpEnumName(
       AttachmentSourceType_entries,
       AttachmentSourceType_entries_by_number,
-      6, value);
+      7, value);
   return idx == -1 ? ::PROTOBUF_NAMESPACE_ID::internal::GetEmptyString() :
                      AttachmentSourceType_strings[idx].get();
 }
@@ -2775,7 +2787,7 @@ bool AttachmentSourceType_Parse(
     ::PROTOBUF_NAMESPACE_ID::ConstStringParam name, AttachmentSourceType* value) {
   int int_value;
   bool success = ::PROTOBUF_NAMESPACE_ID::internal::LookUpEnumValue(
-      AttachmentSourceType_entries, 6, name, &int_value);
+      AttachmentSourceType_entries, 7, name, &int_value);
   if (success) {
     *value = static_cast<AttachmentSourceType>(int_value);
   }

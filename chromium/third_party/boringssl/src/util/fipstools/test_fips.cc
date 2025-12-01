@@ -136,8 +136,8 @@ static int run_test() {
   size_t out_len;
   uint8_t nonce[EVP_AEAD_MAX_NONCE_LENGTH];
   OPENSSL_memset(nonce, 0, sizeof(nonce));
-  EVP_AEAD_CTX aead_ctx;
-  if (!EVP_AEAD_CTX_init(&aead_ctx, EVP_aead_aes_128_gcm(), kAESKey,
+  bssl::ScopedEVP_AEAD_CTX aead_ctx;
+  if (!EVP_AEAD_CTX_init(aead_ctx.get(), EVP_aead_aes_128_gcm(), kAESKey,
                          sizeof(kAESKey), 0, NULL)) {
     printf("EVP_AEAD_CTX_init failed\n");
     return 0;
@@ -146,8 +146,8 @@ static int run_test() {
   /* AES-GCM Encryption */
   printf("About to AES-GCM seal ");
   hexdump(output, sizeof(kPlaintext));
-  if (!EVP_AEAD_CTX_seal(&aead_ctx, output, &out_len, sizeof(output), nonce,
-                         EVP_AEAD_nonce_length(EVP_aead_aes_128_gcm()),
+  if (!EVP_AEAD_CTX_seal(aead_ctx.get(), output, &out_len, sizeof(output),
+                         nonce, EVP_AEAD_nonce_length(EVP_aead_aes_128_gcm()),
                          kPlaintext, sizeof(kPlaintext), NULL, 0)) {
     printf("AES-GCM encrypt failed\n");
     return 0;
@@ -158,16 +158,14 @@ static int run_test() {
   /* AES-GCM Decryption */
   printf("About to AES-GCM open ");
   hexdump(output, out_len);
-  if (!EVP_AEAD_CTX_open(&aead_ctx, output, &out_len, sizeof(output), nonce,
-                         EVP_AEAD_nonce_length(EVP_aead_aes_128_gcm()), output,
-                         out_len, NULL, 0)) {
+  if (!EVP_AEAD_CTX_open(aead_ctx.get(), output, &out_len, sizeof(output),
+                         nonce, EVP_AEAD_nonce_length(EVP_aead_aes_128_gcm()),
+                         output, out_len, NULL, 0)) {
     printf("AES-GCM decrypt failed\n");
     return 0;
   }
   printf("  got ");
   hexdump(output, out_len);
-
-  EVP_AEAD_CTX_cleanup(&aead_ctx);
 
   DES_key_schedule des1, des2, des3;
   DES_cblock des_iv;

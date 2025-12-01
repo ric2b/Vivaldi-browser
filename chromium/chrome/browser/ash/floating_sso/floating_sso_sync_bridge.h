@@ -63,8 +63,10 @@ class FloatingSsoSyncBridge : public syncer::DataTypeSyncBridge {
   std::optional<syncer::ModelError> ApplyIncrementalSyncChanges(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
       syncer::EntityChangeList entity_changes) override;
-  std::string GetStorageKey(const syncer::EntityData& entity_data) override;
-  std::string GetClientTag(const syncer::EntityData& entity_data) override;
+  std::string GetStorageKey(
+      const syncer::EntityData& entity_data) const override;
+  std::string GetClientTag(
+      const syncer::EntityData& entity_data) const override;
   std::unique_ptr<syncer::DataBatch> GetDataForCommit(
       StorageKeyList storage_keys) override;
   std::unique_ptr<syncer::DataBatch> GetAllDataForDebugging() override;
@@ -72,9 +74,9 @@ class FloatingSsoSyncBridge : public syncer::DataTypeSyncBridge {
       const std::string& storage_key,
       const syncer::EntityData& remote_data) const override;
 
-  // Methods to notify about local changes. Made virtual for mocking in tests.
-  virtual void AddOrUpdateCookie(const sync_pb::CookieSpecifics& specifics);
-  virtual void DeleteCookie(const std::string& storage_key);
+  // Methods to notify Sync about local cookie changes on this client.
+  void AddOrUpdateCookie(const net::CanonicalCookie& cookie);
+  void DeleteCookie(const net::CanonicalCookie& cookie);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
@@ -104,6 +106,7 @@ class FloatingSsoSyncBridge : public syncer::DataTypeSyncBridge {
   void CommitToStore(std::unique_ptr<StoreWithCache::WriteBatch> batch);
   bool IsCookieInStore(const std::string& storage_key) const;
   void OnMergeFullSyncDataFinished();
+  void DeleteCookieWithKey(const std::string& storage_key);
 
   // Whether we finished reading data and metadata from disk on initial bridge
   // creation.
@@ -122,7 +125,7 @@ class FloatingSsoSyncBridge : public syncer::DataTypeSyncBridge {
 
   // Used to store cookies to be added/deleted while the store or change
   // processor are not ready.
-  std::map<std::string, sync_pb::CookieSpecifics> deferred_cookie_additions_;
+  std::map<std::string, net::CanonicalCookie> deferred_cookie_additions_;
   std::set<std::string> deferred_cookie_deletions_;
 
   // Storage keys of cookies for which we should always prefer local version

@@ -16,6 +16,7 @@
 #include "api/video/video_frame.h"
 #include "api/video_codecs/video_decoder.h"
 #include "modules/video_coding/include/video_codec_interface.h"
+#include "modules/video_coding/include/video_error_codes.h"
 #include "modules/video_coding/utility/vp8_header_parser.h"
 #include "modules/video_coding/utility/vp9_uncompressed_header_parser.h"
 #include "rtc_base/logging.h"
@@ -37,7 +38,7 @@ const int64_t kNumRtpTicksPerMillisec = 90000 / kNumMillisecsPerSec;
 
 template <typename Dst, typename Src>
 inline std::optional<Dst> cast_optional(const std::optional<Src>& value) {
-  return value ? std::optional<Dst>(rtc::dchecked_cast<Dst, Src>(*value))
+  return value ? std::optional<Dst>(dchecked_cast<Dst, Src>(*value))
                : std::nullopt;
 }
 }  // namespace

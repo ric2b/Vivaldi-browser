@@ -23,6 +23,7 @@
 #import "ios/chrome/browser/saved_tab_groups/model/ios_tab_group_sync_util.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_local_update_observer.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
+#import "ios/chrome/browser/saved_tab_groups/ui/tab_group_utils.h"
 #import "ios/chrome/browser/sessions/model/session_restoration_service_factory.h"
 #import "ios/chrome/browser/sessions/model/test_session_restoration_service.h"
 #import "ios/chrome/browser/shared/coordinator/scene/scene_state.h"
@@ -135,6 +136,15 @@ class IOSTabGroupSyncDelegateTest : public PlatformTest {
                              forProtocol:@protocol(TabGroupsCommands)];
     [dispatcher startDispatchingToTarget:mock_tab_grid_handler_
                              forProtocol:@protocol(TabGridCommands)];
+  }
+
+  ~IOSTabGroupSyncDelegateTest() override {
+    [other_scene_state_ shutdown];
+    other_scene_state_ = nil;
+    [scene_state_same_profile_ shutdown];
+    scene_state_same_profile_ = nil;
+    [scene_state_ shutdown];
+    scene_state_ = nil;
   }
 
   // Returns a vector containing the 3 distant tabs.
@@ -428,8 +438,7 @@ TEST_F(IOSTabGroupSyncDelegateTest, UpdateLocalTabGroup) {
   EXPECT_EQ(kFirstTabTitle, first_web_state->GetTitle());
   EXPECT_EQ(1, tab_group->range().count());
   EXPECT_NSEQ(tab_group->GetTitle(), @"my group");
-  EXPECT_TRUE([tab_group->GetColor()
-      isEqual:TabGroup::ColorForTabGroupColorId(TabGroupColorId::kPink)]);
+  EXPECT_EQ(TabGroupColorId::kPink, tab_group->GetColor());
 
   // Update the local group by adding 2 new tabs.
   saved_group.AddTabFromSync(second_tab);
@@ -525,8 +534,7 @@ TEST_F(IOSTabGroupSyncDelegateTest, UpdateLocalTabGroupOneTab) {
   EXPECT_EQ(kFirstTabTitle, first_web_state->GetTitle());
   EXPECT_EQ(1, tab_group->range().count());
   EXPECT_NSEQ(tab_group->GetTitle(), @"my group");
-  EXPECT_TRUE([tab_group->GetColor()
-      isEqual:TabGroup::ColorForTabGroupColorId(TabGroupColorId::kPink)]);
+  EXPECT_EQ(TabGroupColorId::kPink, tab_group->GetColor());
 }
 
 // Tests that the service correctly returns local ids.

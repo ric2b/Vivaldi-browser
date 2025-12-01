@@ -778,6 +778,19 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHTabGroupShareUpdateFeature.name == feature->name) {
+    // Allows an IPH for showing the tab group share update explanation the
+    // first time the activity bubble appears. This will only be shown once.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.trigger =
+        EventConfig("tab_group_share_update_iph_triggered",
+                    Comparator(LESS_THAN, 1), k10YearsInDays, k10YearsInDays);
+    return config;
+  }
+
   if (kIPHTabGroupCreationDialogSyncTextFeature.name == feature->name) {
     // A config that allows the sync text IPH on the TabGroupCreationDialog to
     // be shown up to 3 times total (10 year max in place of unlimited window).
@@ -955,6 +968,89 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
                     Comparator(LESS_THAN, 10), 7, 360));
     return config;
   }
+  if (kIPHAdaptiveButtonInTopToolbarCustomizationPageSummaryWebFeature.name ==
+      feature->name) {
+    // A config that allows the web page summary toolbar button IPH to be shown:
+    // * Once per day. 3 times max in 90 days
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.trigger =
+        EventConfig("adaptive_toolbar_page_summary_web_iph_trigger",
+                    Comparator(LESS_THAN, 1), 1, 360);
+    config.used = EventConfig("adaptive_toolbar_page_summary_web_used",
+                              Comparator(EQUAL, 0), 90, 360);
+    config.event_configs.insert(
+        EventConfig("adaptive_toolbar_page_summary_web_iph_trigger",
+                    Comparator(LESS_THAN, 3), 90, 360));
+    return config;
+  }
+  if (kIPHAdaptiveButtonInTopToolbarCustomizationPageSummaryPdfFeature.name ==
+      feature->name) {
+    // A config that allows the pdf page summary toolbar button IPH to be shown:
+    // * Once per day. 3 times max in 90 days
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.trigger =
+        EventConfig("adaptive_toolbar_page_summary_pdf_iph_trigger",
+                    Comparator(LESS_THAN, 1), 1, 360);
+    config.used = EventConfig("adaptive_toolbar_page_summary_pdf_used",
+                              Comparator(EQUAL, 0), 90, 360);
+    config.event_configs.insert(
+        EventConfig("adaptive_toolbar_page_summary_pdf_iph_trigger",
+                    Comparator(LESS_THAN, 3), 90, 360));
+    return config;
+  }
+  if (kIPHMenuAddToGroup.name == feature->name) {
+    // Allows an IPH for the main app menu 'Add to Group' entry:
+    // * Only once per year.
+    // * If the user has used chrome for more than 14 days.
+    // * And only if the menu option hasn't been opened in that time.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(GREATER_THAN_OR_EQUAL, 14);
+    config.session_rate = Comparator(LESS_THAN, 1);
+    config.trigger = EventConfig("menu_add_to_group_iph_triggered",
+                                 Comparator(EQUAL, 0), 360, 360);
+    config.used = EventConfig("menu_add_to_group_clicked", Comparator(EQUAL, 0),
+                              360, 360);
+    return config;
+  }
+  if (kIPHPageSummaryWebMenuFeature.name == feature->name) {
+    // A config that allows the web page summary menu item IPH to be shown:
+    // * Once per day. 3 times max in 90 days
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.trigger = EventConfig("menu_item_page_summary_web_iph_trigger",
+                                 Comparator(LESS_THAN, 1), 1, 360);
+    config.used = EventConfig("menu_item_page_summary_web_used",
+                              Comparator(EQUAL, 0), 90, 360);
+    config.event_configs.insert(
+        EventConfig("menu_item_page_summary_web_iph_trigger",
+                    Comparator(LESS_THAN, 3), 90, 360));
+    return config;
+  }
+  if (kIPHPageSummaryPdfMenuFeature.name == feature->name) {
+    // A config that allows the pdf page summary menu item IPH to be shown:
+    // * Once per day. 3 times max in 90 days
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.trigger = EventConfig("menu_item_page_summary_pdf_iph_trigger",
+                                 Comparator(LESS_THAN, 1), 1, 360);
+    config.used = EventConfig("menu_item_page_summary_pdf_used",
+                              Comparator(EQUAL, 0), 90, 360);
+    config.event_configs.insert(
+        EventConfig("menu_item_page_summary_pdf_iph_trigger",
+                    Comparator(LESS_THAN, 3), 90, 360));
+    return config;
+  }
 
   // A generic feature that always returns true.
   if (kIPHGenericAlwaysTriggerHelpUiFeature.name == feature->name) {
@@ -1126,6 +1222,21 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     config.trigger = EventConfig("tab_groups_surface_on_hide_triggered",
                                  Comparator(EQUAL, 0), 360, 360);
     config.used = EventConfig("tab_groups_surface_clicked",
+                              Comparator(EQUAL, 0), 360, 360);
+    return config;
+  }
+  if (kIPHTabSwitcherAddToGroup.name == feature->name) {
+    // Allows an IPH for the 'Add to Group' 3-dot menu entry:
+    // * Only once per year.
+    // * If the user has used chrome for more than 14 days.
+    // * And only if the menu option hasn't been opened in that time.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(GREATER_THAN_OR_EQUAL, 14);
+    config.session_rate = Comparator(LESS_THAN, 1);
+    config.trigger = EventConfig("tab_switcher_add_to_group_iph_triggered",
+                                 Comparator(EQUAL, 0), 360, 360);
+    config.used = EventConfig("tab_switcher_add_to_group_clicked",
                               Comparator(EQUAL, 0), 360, 360);
     return config;
   }
@@ -1636,6 +1747,23 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     return config;
   }
 
+  if (kIPHReadAloudPlaybackModeFeature.name == feature->name) {
+    // Show tooltip at most 3 times, once a day, but stop if user hit
+    // playback mode.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.used = EventConfig("read_aloud_playback_mode_clicked",
+                              Comparator(EQUAL, 0), 360, 360);
+    config.trigger = EventConfig("read_aloud_playback_mode_iph_trigger",
+                                 Comparator(EQUAL, 0), 1, 1);
+    config.event_configs.insert(
+        EventConfig("read_aloud_playback_mode_iph_trigger",
+                    Comparator(LESS_THAN, 3), 360, 360));
+    return config;
+  }
+
   if (kIPHAutofillDisabledVirtualCardSuggestionFeature.name == feature->name) {
     // A config that allows the virtual card disabled suggestion IPH to be shown
     // when it has been shown less than three times in last 90 days.
@@ -1734,6 +1862,23 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
         "IPH_KeyboardAccessoryBarSwiping");
     config.session_rate_impact.affected_features->push_back(
         "IPH_AutofillVirtualCardSuggestion");
+
+    return config;
+  }
+  if (kIPHTabSwitcherXR.name == feature->name) {
+    // A config that allows the card info retrieval suggestion IPH to be shown
+    // at most 3 times. IPH will not be shown once user has selected the
+    // suggestion.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.trigger =
+        EventConfig("tab_switcher_xr_iph_trigger", Comparator(LESS_THAN, 3),
+                    feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+    config.used = EventConfig("tab_switcher_xr_iph_shown", Comparator(ANY, 0),
+                              feature_engagement::kMaxStoragePeriod,
+                              feature_engagement::kMaxStoragePeriod);
 
     return config;
   }
@@ -2490,6 +2635,44 @@ std::optional<FeatureConfig> GetClientSideFeatureConfig(
     config.used =
         EventConfig(events::kSettingsOnOverflowMenuUsed, Comparator(EQUAL, 0),
                     feature_engagement::kMaxStoragePeriod,
+                    feature_engagement::kMaxStoragePeriod);
+
+    return config;
+  }
+
+  if (kIPHAutofillHomeWorkProfileSuggestionFeature.name == feature->name) {
+    // Allows an IPH for showing the home and work address suggestion. This will
+    // only be shown once.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(EQUAL, 0);
+    config.trigger =
+        EventConfig("home_work_address_create_suggestion_feature_trigger",
+                    Comparator(LESS_THAN, 1), k10YearsInDays, k10YearsInDays);
+    config.used =
+        EventConfig("home_work_address_create_suggestion_feature_used",
+                    Comparator(EQUAL, 0), k10YearsInDays, k10YearsInDays);
+
+    return config;
+  }
+
+  if (kIPHiOSSwitchAccountsWithNTPAccountParticleDiscFeature.name ==
+      feature->name) {
+    // A config that allows the NTP-identity-disc IPH to be shown to users. This
+    // will only triggered once.
+    FeatureConfig config;
+    config.valid = true;
+    config.availability = Comparator(ANY, 0);
+    config.session_rate = Comparator(ANY, 0);
+
+    constexpr char kSwitchAccountsWithAccountParticleTrigger[] =
+        "switch_accounts_with_account_particle_trigger";
+
+    // Show only once.
+    config.trigger =
+        EventConfig(kSwitchAccountsWithAccountParticleTrigger,
+                    Comparator(EQUAL, 0), feature_engagement::kMaxStoragePeriod,
                     feature_engagement::kMaxStoragePeriod);
 
     return config;

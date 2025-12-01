@@ -18,21 +18,17 @@
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/chrome_account_manager_service.h"
-#import "ios/chrome/browser/signin/model/chrome_account_manager_service_observer_bridge.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ui/base/l10n/l10n_util.h"
 
 // Mediator that handles the sync operations.
-@interface HistorySyncMediator () <ChromeAccountManagerServiceObserver,
-                                   IdentityManagerObserverBridgeDelegate>
+@interface HistorySyncMediator () <IdentityManagerObserverBridgeDelegate>
 @end
 
 @implementation HistorySyncMediator {
   raw_ptr<AuthenticationService> _authenticationService;
-  // Account manager service with observer.
+  // Account manager service.
   raw_ptr<ChromeAccountManagerService> _accountManagerService;
-  std::unique_ptr<ChromeAccountManagerServiceObserverBridge>
-      _accountManagerServiceObserver;
   raw_ptr<signin::IdentityManager> _identityManager;
   // Observer for `IdentityManager`.
   std::unique_ptr<signin::IdentityManagerObserverBridge>
@@ -59,9 +55,6 @@
   if (self) {
     _authenticationService = authenticationService;
     _accountManagerService = chromeAccountManagerService;
-    _accountManagerServiceObserver =
-        std::make_unique<ChromeAccountManagerServiceObserverBridge>(
-            self, _accountManagerService);
     _identityManager = identityManager;
     _identityManagerObserver =
         std::make_unique<signin::IdentityManagerObserverBridge>(identityManager,
@@ -76,7 +69,6 @@
 }
 
 - (void)disconnect {
-  _accountManagerServiceObserver.reset();
   _identityManagerObserver.reset();
   [_capabilitiesFetcher shutdown];
   _capabilitiesFetcher = nil;
@@ -139,22 +131,6 @@
           [_capabilitiesFetcher canShowUnrestrictedOptInsCapability]];
 }
 
-#pragma mark - ChromeAccountManagerServiceObserver
-
-- (void)identityUpdated:(id<SystemIdentity>)identity {
-  if (IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `onExtendedAccountInfoUpdated` instead.
-    return;
-  }
-  [self handleIdentityUpdated:identity];
-}
-
-- (void)onChromeAccountManagerServiceShutdown:
-    (ChromeAccountManagerService*)accountManagerService {
-  // TODO(crbug.com/40284086): Remove `[self disconnect]`.
-  [self disconnect];
-}
-
 #pragma mark - IdentityManagerObserverBridgeDelegate
 
 - (void)onPrimaryAccountChanged:
@@ -167,23 +143,15 @@
 }
 
 - (void)onExtendedAccountInfoUpdated:(const AccountInfo&)info {
-  if (!IsUseAccountListFromIdentityManagerEnabled()) {
-    // Listening to `identityUpdated` instead.
-    return;
-  }
   id<SystemIdentity> identity =
       _accountManagerService->GetIdentityOnDeviceWithGaiaID(info.gaia);
-  [self handleIdentityUpdated:identity];
-}
-
-#pragma mark - Private
-
-- (void)handleIdentityUpdated:(id<SystemIdentity>)identity {
   if ([identity isEqual:_authenticationService->GetPrimaryIdentity(
                             signin::ConsentLevel::kSignin)]) {
     [self updateAvatarImageWithIdentity:identity];
   }
 }
+
+#pragma mark - Private
 
 // Updates the avatar image for the consumer from `identity`.
 - (void)updateAvatarImageWithIdentity:(id<SystemIdentity>)identity {

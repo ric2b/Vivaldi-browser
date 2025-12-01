@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/task/thread_pool.h"
 #include "base/version.h"
+#include "chrome/updater/branded_constants.h"
 #include "chrome/updater/check_for_updates_task.h"
 #include "chrome/updater/configurator.h"
 #include "chrome/updater/persisted_data.h"
@@ -25,6 +26,7 @@
 #include "chrome/updater/update_service_impl.h"
 #include "chrome/updater/update_service_internal.h"
 #include "components/prefs/pref_service.h"
+#include "components/update_client/crx_cache.h"
 
 namespace updater {
 namespace {
@@ -150,7 +152,13 @@ class UpdateServiceInternalQualifyingImpl : public UpdateServiceInternal {
     VLOG(1) << "Qualification complete, qualified = " << qualified;
     local_prefs_->SetQualified(qualified);
     local_prefs_->GetPrefService()->CommitPendingWrite();
-    std::move(callback).Run();
+    if (qualified) {
+      config_->GetCrxCache()->RemoveAll(kQualificationAppId,
+                                        std::move(callback));
+      return;
+    }
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, std::move(callback));
   }
 
   scoped_refptr<Configurator> config_;

@@ -12,6 +12,9 @@
 #include "base/task/single_thread_task_runner.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "components/policy/core/common/policy_logger.h"
+#include "content/public/browser/browsing_data_remover.h"
 
 namespace enterprise_commands {
 
@@ -71,6 +74,8 @@ enterprise_management::RemoteCommand_Type ClearBrowsingDataJob::GetType()
 
 bool ClearBrowsingDataJob::ParseCommandPayload(
     const std::string& command_payload) {
+  VLOG_POLICY(2, REMOTE_COMMANDS)
+      << "Clear browsing data command payload: " << command_payload;
   std::optional<base::Value::Dict> root =
       base::JSONReader::ReadDict(command_payload);
   if (!root)
@@ -110,6 +115,10 @@ void ClearBrowsingDataJob::RunImpl(CallbackWithResult result_callback) {
   result_callback_ = std::move(result_callback);
 
   if (types == 0) {
+    LOG_POLICY(WARNING, REMOTE_COMMANDS)
+        << "Clear browsing data command has not specified any "
+           "data types. Please double check the payload to "
+           "make sure everything is set as required.";
     // There's nothing to clear, invoke the callback with success result and be
     // done.
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(

@@ -101,10 +101,9 @@ class IvfFileWriterEncodedCallback : public EncodedImageCallback {
 class IvfVideoFrameGeneratorTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    file_name_ =
-        webrtc::test::TempFilename(webrtc::test::OutputPath(), "test_file.ivf");
+    file_name_ = test::TempFilename(test::OutputPath(), "test_file.ivf");
   }
-  void TearDown() override { webrtc::test::RemoveFile(file_name_); }
+  void TearDown() override { test::RemoveFile(file_name_); }
 
   VideoFrame BuildFrame(FrameGeneratorInterface::VideoFrameData frame_data) {
     return VideoFrame::Builder()
@@ -121,7 +120,7 @@ class IvfVideoFrameGeneratorTest : public ::testing::Test {
             std::nullopt);
 
     VideoCodec codec_settings;
-    webrtc::test::CodecSettings(video_codec_type, &codec_settings);
+    test::CodecSettings(video_codec_type, &codec_settings);
     codec_settings.width = kWidth;
     codec_settings.height = kHeight;
     codec_settings.maxFramerate = kMaxFramerate;
@@ -225,8 +224,7 @@ TEST_F(IvfVideoFrameGeneratorTest, ScalesResolution) {
   CreateTestVideoFile(VideoCodecType::kVideoCodecVP8, CreateVp8Encoder(env_));
   IvfVideoFrameGenerator generator(env_, file_name_, /*fps_hint=*/123);
   generator.ChangeResolution(kWidth * 2, kHeight / 2);
-  rtc::scoped_refptr<VideoFrameBuffer> frame_buffer =
-      generator.NextFrame().buffer;
+  scoped_refptr<VideoFrameBuffer> frame_buffer = generator.NextFrame().buffer;
   frame_buffer = generator.NextFrame().buffer;
   ASSERT_TRUE(frame_buffer);
   EXPECT_EQ(frame_buffer->width(), kWidth * 2);

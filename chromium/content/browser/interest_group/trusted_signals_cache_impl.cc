@@ -256,7 +256,8 @@ TrustedSignalsCacheImpl::BiddingCacheKey::BiddingCacheKey(
     const url::Origin& main_frame_origin,
     network::mojom::IPAddressSpace ip_address_space,
     const url::Origin& joining_origin,
-    base::Value::Dict additional_params)
+    base::Value::Dict additional_params,
+    base::optional_ref<const std::string> buyer_tkv_signals)
     : interest_group_name(std::move(interest_group_name)),
       fetch_key(std::move(url_loader_factory),
                 frame_tree_node_id,
@@ -267,7 +268,8 @@ TrustedSignalsCacheImpl::BiddingCacheKey::BiddingCacheKey(
                 trusted_signals_url,
                 coordinator),
       joining_origin(joining_origin),
-      additional_params(std::move(additional_params)) {}
+      additional_params(std::move(additional_params)),
+      buyer_tkv_signals(buyer_tkv_signals.CopyAsOptional()) {}
 
 TrustedSignalsCacheImpl::BiddingCacheKey::BiddingCacheKey(BiddingCacheKey&&) =
     default;
@@ -281,9 +283,10 @@ TrustedSignalsCacheImpl::BiddingCacheKey::operator=(BiddingCacheKey&&) =
 bool TrustedSignalsCacheImpl::BiddingCacheKey::operator<(
     const BiddingCacheKey& other) const {
   return std::tie(interest_group_name, fetch_key, joining_origin,
-                  additional_params) <
+                  additional_params, buyer_tkv_signals) <
          std::tie(other.interest_group_name, other.fetch_key,
-                  other.joining_origin, other.additional_params);
+                  other.joining_origin, other.additional_params,
+                  other.buyer_tkv_signals);
 }
 
 struct TrustedSignalsCacheImpl::BiddingCacheEntry {
@@ -389,7 +392,8 @@ TrustedSignalsCacheImpl::ScoringCacheKey::ScoringCacheKey(
     const url::Origin& joining_origin,
     const GURL& render_url,
     const std::vector<GURL>& component_render_urls,
-    base::Value::Dict additional_params)
+    base::Value::Dict additional_params,
+    base::optional_ref<const std::string> seller_tkv_signals)
     : render_url(render_url),
       component_render_urls(component_render_urls.begin(),
                             component_render_urls.end()),
@@ -403,7 +407,8 @@ TrustedSignalsCacheImpl::ScoringCacheKey::ScoringCacheKey(
                 coordinator),
       joining_origin(joining_origin),
       interest_group_owner(interest_group_owner),
-      additional_params(std::move(additional_params)) {}
+      additional_params(std::move(additional_params)),
+      seller_tkv_signals(seller_tkv_signals.CopyAsOptional()) {}
 
 TrustedSignalsCacheImpl::ScoringCacheKey::ScoringCacheKey(ScoringCacheKey&&) =
     default;
@@ -417,10 +422,11 @@ TrustedSignalsCacheImpl::ScoringCacheKey::operator=(ScoringCacheKey&&) =
 bool TrustedSignalsCacheImpl::ScoringCacheKey::operator<(
     const ScoringCacheKey& other) const {
   return std::tie(render_url, component_render_urls, fetch_key, joining_origin,
-                  interest_group_owner, additional_params) <
+                  interest_group_owner, additional_params, seller_tkv_signals) <
          std::tie(other.render_url, other.component_render_urls,
                   other.fetch_key, other.joining_origin,
-                  other.interest_group_owner, other.additional_params);
+                  other.interest_group_owner, other.additional_params,
+                  other.seller_tkv_signals);
 }
 
 struct TrustedSignalsCacheImpl::ScoringCacheEntry {
@@ -811,9 +817,13 @@ bool TrustedSignalsCacheImpl::ReceiverRestrictions::operator==(
     const ReceiverRestrictions& other) const = default;
 
 TrustedSignalsCacheImpl::TrustedSignalsCacheImpl(
+    DataDecoderManager* data_decoder_manager,
     GetCoordinatorKeyCallback get_coordinator_key_callback)
-    : get_coordinator_key_callback_(std::move(get_coordinator_key_callback)),
-      network_partition_nonce_cache_(kNonceCacheSize) {}
+    : data_decoder_manager_(data_decoder_manager),
+      get_coordinator_key_callback_(std::move(get_coordinator_key_callback)),
+      network_partition_nonce_cache_(kNonceCacheSize) {
+  DCHECK(data_decoder_manager_);
+}
 
 TrustedSignalsCacheImpl::~TrustedSignalsCacheImpl() {
   // Clearing the LruList should delete all remaining compression group entries.
@@ -853,6 +863,7 @@ TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
     base::optional_ref<const std::vector<std::string>>
         trusted_bidding_signals_keys,
     base::Value::Dict additional_params,
+    base::optional_ref<const std::string> buyer_tkv_signals,
     int& partition_id) {
   bool is_group_by_origin =
       execution_mode ==
@@ -863,7 +874,7 @@ TrustedSignalsCacheImpl::RequestTrustedBiddingSignals(
                          : std::make_optional(interest_group_name),
       trusted_signals_url, coordinator, std::move(url_loader_factory),
       frame_tree_node_id, main_frame_origin, ip_address_space, joining_origin,
-      std::move(additional_params));
+      std::move(additional_params), buyer_tkv_signals);
 
   BiddingCacheEntryMap::iterator cache_entry_it =
       bidding_cache_entries_.find(cache_key);
@@ -965,12 +976,13 @@ TrustedSignalsCacheImpl::RequestTrustedScoringSignals(
     const GURL& render_url,
     const std::vector<GURL>& component_render_urls,
     base::Value::Dict additional_params,
+    base::optional_ref<const std::string> seller_tkv_signals,
     int& partition_id) {
   ScoringCacheKey cache_key(
       seller, trusted_signals_url, coordinator, std::move(url_loader_factory),
       frame_tree_node_id, main_frame_origin, ip_address_space,
       interest_group_owner, joining_origin, render_url, component_render_urls,
-      std::move(additional_params));
+      std::move(additional_params), seller_tkv_signals);
 
   ScoringCacheEntryMap::iterator cache_entry_it =
       scoring_cache_entries_.find(cache_key);
@@ -1256,13 +1268,16 @@ void TrustedSignalsCacheImpl::StartBiddingSignalsFetch(
       // will not retain pointers to them.
       bidding_partitions.emplace_back(
           cache_entry->partition_id, &cache_entry->interest_group_names,
-          &cache_entry->keys, &cache_key->additional_params);
+          &cache_entry->keys, &cache_key->additional_params,
+          cache_key->buyer_tkv_signals.has_value()
+              ? &cache_key->buyer_tkv_signals.value()
+              : nullptr);
     }
   }
   fetch->fetcher->FetchBiddingSignals(
-      fetch_key->url_loader_factory.get(), fetch_key->frame_tree_node_id,
-      std::move(fetch->devtools_auction_ids), fetch_key->main_frame_origin,
-      fetch_key->ip_address_space,
+      *data_decoder_manager_, fetch_key->url_loader_factory.get(),
+      fetch_key->frame_tree_node_id, std::move(fetch->devtools_auction_ids),
+      fetch_key->main_frame_origin, fetch_key->ip_address_space,
       GetNetworkPartitionNonce(fetch_key->network_partition_nonce_key),
       fetch_key->script_origin(), fetch_key->trusted_signals_url(),
       *fetch->coordinator_key, bidding_partition_map,
@@ -1302,14 +1317,16 @@ void TrustedSignalsCacheImpl::StartScoringSignalsFetch(
       // will not retain pointers to them.
       scoring_partitions.emplace_back(
           cache_entry->partition_id, &cache_key->render_url,
-          &cache_key->component_render_urls,
-          &cache_key->additional_params);
+          &cache_key->component_render_urls, &cache_key->additional_params,
+          cache_key->seller_tkv_signals.has_value()
+              ? &cache_key->seller_tkv_signals.value()
+              : nullptr);
     }
   }
   fetch->fetcher->FetchScoringSignals(
-      fetch_key->url_loader_factory.get(), fetch_key->frame_tree_node_id,
-      std::move(fetch->devtools_auction_ids), fetch_key->main_frame_origin,
-      fetch_key->ip_address_space,
+      *data_decoder_manager_, fetch_key->url_loader_factory.get(),
+      fetch_key->frame_tree_node_id, std::move(fetch->devtools_auction_ids),
+      fetch_key->main_frame_origin, fetch_key->ip_address_space,
       GetNetworkPartitionNonce(fetch_key->network_partition_nonce_key),
       fetch_key->script_origin(), fetch_key->trusted_signals_url(),
       *fetch->coordinator_key, scoring_partition_map,

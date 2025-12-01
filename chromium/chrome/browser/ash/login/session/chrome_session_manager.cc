@@ -82,7 +82,7 @@ void StartKioskSession(KioskAppId app, bool is_auto_launch = false) {
 
   CHECK_DEREF(input_method::InputMethodManager::Get())
       .GetActiveIMEState()
-      ->SetInputMethodLoginDefault();
+      ->SetInputMethodLoginDefault(/*is_in_oobe_context=*/false);
 
   // Manages its own lifetime. See ShutdownDisplayHost().
   auto* display_host = new LoginDisplayHostWebUI();
@@ -432,11 +432,7 @@ void ChromeSessionManager::Initialize(
 
   KioskCryptohomeRemover::RemoveObsoleteCryptohomes();
 
-  if (ShouldOneTimeAutoLaunchKioskApp(parsed_command_line, local_state)) {
-    VLOG(1) << "One time auto launching kiosk app";
-    KioskAppId app_id = ExtractOneTimeAutoLaunchKioskAppId(local_state);
-    StartKioskSession(app_id);
-  } else if (ShouldAutoLaunchKioskApp(parsed_command_line, local_state)) {
+  if (ShouldAutoLaunchKioskApp(parsed_command_line, local_state)) {
     VLOG(1) << "Starting Chrome with kiosk auto launch.";
     StartAutoLaunchKioskSession();
   } else if (parsed_command_line.HasSwitch(switches::kLoginManager)) {

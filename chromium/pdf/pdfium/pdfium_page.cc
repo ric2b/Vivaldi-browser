@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "base/check_op.h"
+#include "base/containers/span.h"
 #include "base/containers/to_vector.h"
 #include "base/feature_list.h"
 #include "base/functional/bind.h"
@@ -432,10 +433,6 @@ void PDFiumPage::Unload() {
   text_page_.reset();
 
   if (page_) {
-#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-    // TODO(crbug.com/360803943): Keep objects added by searchify.
-    engine_->CancelPendingSearchify(index_);
-#endif
     if (engine_->form()) {
       FORM_OnBeforeClosePage(page(), engine_->form());
     }
@@ -887,7 +884,7 @@ bool PDFiumPage::IsCharInPageBounds(int char_index,
 }
 
 std::vector<AccessibilityLinkInfo> PDFiumPage::GetLinkInfo(
-    const std::vector<AccessibilityTextRunInfo>& text_runs) {
+    base::span<const AccessibilityTextRunInfo> text_runs) {
   std::vector<AccessibilityLinkInfo> link_info;
   if (!available_)
     return link_info;
@@ -950,12 +947,19 @@ std::vector<int> PDFiumPage::GetImageObjectIndices() {
 }
 
 #if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
-SkBitmap PDFiumPage::GetImageForOcr(int page_object_index) {
+SkBitmap PDFiumPage::GetImageForOcr(int page_object_index,
+                                    int max_image_dimension) {
   FPDF_PAGE page = GetPage();
   FPDF_PAGEOBJECT page_object = FPDFPage_GetObject(page, page_object_index);
-  SkBitmap bitmap =
-      ::chrome_pdf::GetImageForOcr(engine_->doc(), page, page_object);
+  bool rotate_image_to_upright =
+      !base::FeatureList::IsEnabled(chrome_pdf::features::kPdfSearchify);
+  SkBitmap bitmap = ::chrome_pdf::GetImageForOcr(
+      engine_->doc(), page, page_object, max_image_dimension,
+      rotate_image_to_upright);
 
+  if (!rotate_image_to_upright) {
+    return bitmap;
+  }
   SkBitmapOperations::RotationAmount rotation;
   switch (FPDFPage_GetRotation(page)) {
     case 0:
@@ -988,7 +992,7 @@ bool PDFiumPage::IsPageSearchified() const {
 #endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 std::vector<AccessibilityHighlightInfo> PDFiumPage::GetHighlightInfo(
-    const std::vector<AccessibilityTextRunInfo>& text_runs) {
+    base::span<const AccessibilityTextRunInfo> text_runs) {
   std::vector<AccessibilityHighlightInfo> highlight_info;
   if (!available_)
     return highlight_info;

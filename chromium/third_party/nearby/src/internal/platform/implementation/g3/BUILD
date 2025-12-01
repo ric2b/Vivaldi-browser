@@ -62,6 +62,7 @@ cc_library(
     name = "comm",
     testonly = True,
     srcs = [
+        "awdl.cc",
         "ble.cc",
         "ble_v2.cc",
         "bluetooth_adapter.cc",
@@ -72,6 +73,7 @@ cc_library(
         "wifi_lan.cc",
     ],
     hdrs = [
+        "awdl.h",
         "ble.h",
         "ble_v2.h",
         "bluetooth_adapter.h",
@@ -88,6 +90,7 @@ cc_library(
         ":types",
         "//internal/platform:base",
         "//internal/platform:cancellation_flag",
+        "//internal/platform:mac_address",
         "//internal/platform:test_util",
         "//internal/platform:types",
         "//internal/platform:uuid",

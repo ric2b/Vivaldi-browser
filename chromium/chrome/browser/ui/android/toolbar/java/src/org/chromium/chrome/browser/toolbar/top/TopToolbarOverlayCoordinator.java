@@ -10,6 +10,8 @@ import android.graphics.RectF;
 import org.chromium.base.Callback;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.layouts.CompositorModelChangeProcessor;
@@ -28,6 +30,7 @@ import org.chromium.ui.resources.ResourceManager;
 import java.util.List;
 
 /** The public interface for the top toolbar texture component. */
+@NullMarked
 public class TopToolbarOverlayCoordinator implements SceneOverlay {
     /** The view state for this overlay. */
     private final PropertyModel mModel;
@@ -47,11 +50,12 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
             Context context,
             LayoutManager layoutManager,
             Callback<ClipDrawableProgressBar.DrawingInfo> progressInfoCallback,
-            ObservableSupplier<Tab> tabSupplier,
+            ObservableSupplier<@Nullable Tab> tabSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             Supplier<ResourceManager> resourceManagerSupplier,
             TopUiThemeColorProvider topUiThemeColorProvider,
             ObservableSupplier<Integer> bottomToolbarControlsOffsetSupplier,
+            ObservableSupplier<Boolean> suppressToolbarSceneLayerSupplier,
             int layoutsToShowOn,
             boolean isVisibilityManuallyControlled) {
         // If BCIV is enabled, we always show the hairline on the composited
@@ -86,6 +90,7 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
                         browserControlsStateProvider,
                         topUiThemeColorProvider,
                         bottomToolbarControlsOffsetSupplier,
+                        suppressToolbarSceneLayerSupplier,
                         layoutsToShowOn,
                         isVisibilityManuallyControlled);
     }
@@ -137,7 +142,7 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
     }
 
     @Override
-    public EventFilter getEventFilter() {
+    public @Nullable EventFilter getEventFilter() {
         return null;
     }
 

@@ -31,6 +31,11 @@
   self.lastTabDraggedCommand = command;
 }
 
+- (void)showAlertForLastTabRemovedFromGroup:(const TabGroup*)group
+                                      tabID:(web::WebStateID)itemID
+                                    closing:(BOOL)closing {
+}
+
 - (void)showTabGroupConfirmationForAction:(TabGroupActionType)actionType
                                 groupItem:(TabGroupItem*)tabGroupItem
                                sourceView:(UIView*)sourceView {
@@ -47,6 +52,11 @@
 }
 
 - (void)showRecentActivityForTabGroup:(base::WeakPtr<const TabGroup>)tabGroup {
+}
+
+- (void)startLeaveOrDeleteSharedGroupItem:(TabGroupItem*)tabGroupItem
+                                forAction:(TabGroupActionType)actionType
+                               sourceView:(UIView*)sourceView {
 }
 
 @end

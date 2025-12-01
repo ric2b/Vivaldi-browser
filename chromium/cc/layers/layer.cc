@@ -17,7 +17,6 @@
 #include "base/location.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
@@ -395,7 +394,7 @@ void Layer::ReplaceChild(Layer* reference, scoped_refptr<Layer> new_layer) {
   auto& inputs = inputs_.Write(*this);
   auto reference_it =
       std::ranges::find(inputs.children, reference, &scoped_refptr<Layer>::get);
-  CHECK(reference_it != inputs.children.end(), base::NotFatalUntil::M130);
+  CHECK(reference_it != inputs.children.end());
   size_t reference_index = reference_it - inputs.children.begin();
   reference->RemoveFromParent();
 
@@ -696,7 +695,7 @@ void Layer::SetBackdropFilters(const FilterOperations& filters) {
   SetNeedsCommit();
 }
 
-void Layer::SetBackdropFilterBounds(const gfx::RRectF& backdrop_filter_bounds) {
+void Layer::SetBackdropFilterBounds(const SkPath& backdrop_filter_bounds) {
   EnsureLayerTreeInputs().backdrop_filter_bounds = backdrop_filter_bounds;
 }
 

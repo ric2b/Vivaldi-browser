@@ -332,6 +332,66 @@ such as the auto update until date, first release, and more.
     <td>Yes</td>
   </tr>
   <tr>
+     <td>2022-11-03</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-cx34-flip-cx3401-12th-gen-intel/">ASUS Chromebook CX34 Flip (CX3401)</a></td>
+    <td>Mithrax</td>
+    <td>Brya</td>
+    <td>Brya</td>
+    <td>x86_64</td>
+    <td>5.15</td>
+    <td>x86_64</td>
+    <td>Alderlake-U/P/Raptorlake-U/P</td>
+    <td>Convertible</td>
+    <td></td>
+    <td>Yes</td>
+ </tr>
+  <tr>
+    <td>2021-03-19</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/uk/laptops/for-work/chromebook/asus-chromebook-enterprise-cx1-cb1400">ASUS Chromebook Enterprise CB1 (CB1400)</a></td>
+    <td>Sailfin</td>
+    <td>coral</td>
+    <td>coral</td>
+    <td>x86_64</td>
+    <td>4.4</td>
+    <td>x86_64</td>
+    <td>ApolloLake</td>
+    <td>Chromebook</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2021-03-19</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/uk/laptops/for-work/chromebook/asus-chromebook-cx1-cb1500">ASUS Chromebook CB1 (CB1500)</a></td>
+    <td>Longfin</td>
+    <td>coral</td>
+    <td>coral</td>
+    <td>x86_64</td>
+    <td>4.4</td>
+    <td>x86_64</td>
+    <td>ApolloLake</td>
+    <td>Chromebook</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+ <tr>
+    <td>2021-06-15</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-detachable-cz1-cz1000/">ASUS Chromebook Detachable CZ1</a></td>
+    <td>Katsu</td>
+    <td>Kukui</td>
+    <td>Kukui</td>
+    <td>ARM</td>
+    <td>4.19</td>
+    <td>ARM</td>
+    <td>MT8183</td>
+    <td>Detachable</td>
+    <td></td>
+    <td>Yes</td>
+ </tr>
+ <tr>
     <td>2010-12-05</td>
     <td>Google</td>
     <td><a href="/chromium-os/developer-library/reference/development/developer-information-for-chrome-os-devices/cr-48-chrome-notebook-developer-information">Cr-48</a></td>
@@ -3422,6 +3482,36 @@ such as the auto update until date, first release, and more.
     <td>Yes</td>
   </tr>
   <tr>
+    <td>2021-09-25</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/uk/laptops/for-work/all-series/asus-chromebook-flip-cx3-cb3400-11th-gen-intel/">ASUS Chromebook Flip CB3(CB3400FMA)</a></td>
+    <td>Collis</td>
+    <td>volteer</td>
+    <td>volteer</td>
+    <td>x86_64</td>
+    <td>5.4</td>
+    <td>x86_64</td>
+    <td>Tigerlake-UP4</td>
+    <td>Convertible</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2021-09-25</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-flip-cx3-cx3400-11th-gen-intel/">ASUS Chromebook Flip CX3 (CX3400FMA)</a></td>
+    <td>Collis</td>
+    <td>volteer</td>
+    <td>volteer</td>
+    <td>x86_64</td>
+    <td>5.4</td>
+    <td>x86_64</td>
+    <td>Tigerlake-UP4</td>
+    <td>Convertible</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+  <tr>
     <td>2021-09-27</td>
     <td>Asus</td>
     <td><a href="https://www.asus.com/Laptops/For-Students/Chromebook/ASUS-Chromebook-CR1-CR1100/">ASUS Chromebook CR1100</a></td>
@@ -3552,6 +3642,21 @@ such as the auto update until date, first release, and more.
     <td>5.4</td>
     <td>x86_64</td>
     <td>Jasper Lake</td>
+    <td>Convertible</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2022-06-08</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/uk/laptops/for-work/chromebook/asus-chromebook-flip-cx5-cb5601/">ASUS Chromebook Flip CB5 (CB5601FBA)</a></td>
+    <td>Felwinter</td>
+    <td>brya</td>
+    <td>brya</td>
+    <td>x86_64</td>
+    <td>5.10</td>
+    <td>x86_64</td>
+    <td>Alderlake-U/P/Raptorlake-U/P</td>
     <td>Convertible</td>
     <td></td>
     <td>Yes</td>
@@ -3924,7 +4029,7 @@ such as the auto update until date, first release, and more.
     <td>Nissa</td>
     <td>Nissa</td>
     <td>x86_64</td>
-    <td>6.1</td>
+    <td>5.15</td>
     <td>x86_64</td>
     <td>Alderlake-N</td>
     <td>Clamshell</td>
@@ -3939,7 +4044,7 @@ such as the auto update until date, first release, and more.
     <td>Nissa</td>
     <td>Nissa</td>
     <td>x86_64</td>
-    <td>6.1</td>
+    <td>5.15</td>
     <td>x86_64</td>
     <td>Alderlake-N</td>
     <td>Convertible</td>
@@ -3954,7 +4059,7 @@ such as the auto update until date, first release, and more.
     <td>Nissa</td>
     <td>Nissa</td>
     <td>x86_64</td>
-    <td>6.1</td>
+    <td>5.15</td>
     <td>x86_64</td>
     <td>Alderlake-N</td>
     <td>Clamshell</td>
@@ -3994,15 +4099,30 @@ such as the auto update until date, first release, and more.
    <tr>
     <td>2024-03-15</td>
     <td>HP</td>
-    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-chromebook-14a-nf0050nr">HP Chromebook PLUS laptop14 inch-14a-nf0050nr (CX5403)</a></td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-chromebook-14a-nf0050nr">HP Chromebook PLUS laptop14 inch-14a-nf0050nr</a></td>
     <td>Yahiko</td>
     <td>Nissa</td>
     <td>Nissa</td>
     <td>x86_64</td>
-    <td>6.1</td>
+    <td>5.15</td>
     <td>x86_64</td>
     <td>Alderlake-N</td>
     <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+   <tr>
+    <td>2024-03-18</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-chromebook-x360-14b-cd0010nr">HP Chromebook Plus x360 14b-cd0 / HP Chromebook x360 14b-cd0</a></td>
+    <td>Joxer</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>5.15</td>
+    <td>x86_64</td>
+    <td>Alderlake-N</td>
+    <td>Convertible</td>
     <td>Yes</td>
     <td>Yes</td>
   </tr>
@@ -4021,7 +4141,43 @@ such as the auto update until date, first release, and more.
     <td></td>
     <td></td>
  </tr>
-  <tr>
+ <tr>
+    <td>2024-06-18</td>
+    <td>Asus</td>
+    <td>
+      <a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cz11-flip-cz1104f">ASUS Chromebook CZ11 Flip (CZ1104F)</a>/
+      <a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cz12-flip-cz1204f">ASUS Chromebook CZ12 Flip (CZ1204F)</a>
+    </td>
+    <td>Chinchou360</td>
+    <td>staryu</td>
+    <td>corsola</td>
+    <td>aarch64</td>
+    <td>5.15</td>
+    <td>aarch64</td>
+    <td>MT8186</td>
+    <td>Convertible</td>
+    <td></td>
+    <td></td>
+ </tr>
+ <tr>
+    <td>2024-06-18</td>
+    <td>Asus</td>
+    <td>
+      <a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cz11-cz1104c">ASUS Chromebook CZ11 (CZ1104C)</a>/
+      <a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cz12-cz1204c">ASUS Chromebook CZ12 (CZ1204C)</a>
+    </td>
+    <td>Chinchou</td>
+    <td>staryu</td>
+    <td>corsola</td>
+    <td>aarch64</td>
+    <td>5.15</td>
+    <td>aarch64</td>
+    <td>MT8186</td>
+    <td>Clamshell</td>
+    <td></td>
+    <td></td>
+ </tr>
+ <tr>
     <td>2024-08-08</td>
     <td>Lenovo</td>
     <td><a href="https://pcsupport.lenovo.com/us/en/products/chromebook-laptops/lenovo-chromebooks-series/lnv-cb-duet-11m889?searchType=3&keyWordSearch=LNV%20CB%20Duet%2011M889">Lenovo Chromebook Duet (11", 9) / Lenovo Chromebook Duet EDU G2</a></td>
@@ -4081,4 +4237,304 @@ such as the auto update until date, first release, and more.
     <td>Yes</td>
     <td>Yes</td>
   </tr>
+  <tr>
+    <td>2024-12-27</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cr11-cr1104c/techspec/">ASUS Chromebook CR11 (CR1104CTA) / ASUS Chromebook CR12 (CR1204CTA)</a></td>
+    <td>Teliks</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2024-12-27</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cr11-flip-cr1104f/techspec/">ASUS Chromebook CR11 Flip (CR1104FTA) / ASUS Chromebook CR12 Flip (CR1204FTA)</a></td>
+    <td>Teliks360</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2025-03-31</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-cx14-cx1405/techspec/">ASUS Chromebook Plus CX14 (CX1405CTA) / ASUS Chromebook CX14 (CX1405CTA)</a></td>
+    <td>Teltic</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+  <tr>
+    <td>2025-04-14</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-cx15-cx1505/techspec/">ASUS Chromebook Plus CX15 (CX1505CTA) / ASUS Chromebook CX15 (CX1505CTA)</a></td>
+    <td>Telith</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+  </tr>
+
+<tr>
+    <td>2023-07-24</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-work/chromebook/asus-chromebook-plus-enterprise-cx34-cx3402/">ASUS Chromebook Plus Enterprise CB3402 (CB3402CVA, CB3402CBA)</a></td>
+    <td>Marasov</td>
+    <td>Brya</td>
+    <td>Brya</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Alder Lake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2023-07-24</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-plus-cx34-cx3402/">ASUS Chromebook Plus Enterprise CX34 (CX3402CVA, CX3402CBA)</a></td>
+    <td>Marasov</td>
+    <td>Brya</td>
+    <td>Brya</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Alder Lake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2024-05-23</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cr11-cr1104c/">ASUS Chromebook CR11 (CR1104C)</a></td>
+    <td>Anraggar</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Alder Lake N</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2024-05-23</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cr12-cr1204c/">ASUS Chromebook CR12 (CR1204C)</a></td>
+    <td>Anraggar</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Alder Lake N</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2024-05-23</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cr11-flip-cr1104f/">ASUS Chromebook CR11 Flip (CR1104F)</a></td>
+    <td>Anraggar360</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Alder Lake N</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2024-05-23</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-students/chromebook/asus-chromebook-cr12-flip-cr1204f/">ASUS Chromebook CR12 Flip (CR1204F)</a></td>
+    <td>Anraggar360</td>
+    <td>Nissa</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Alder Lake N</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2025-02-18</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-plus-cx14-cx1405/">ASUS Chromebook Plus CX14 (CX1405)</a></td>
+    <td>Awasuki</td>
+    <td>dedede</td>
+    <td>dedede</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Jasper Lake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2025-02-18</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-cx14-cx1405/">ASUS Chromebook CB14 (CB1405)</a></td>
+    <td>Awasuki</td>
+    <td>dedede</td>
+    <td>dedede</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Jasper Lake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2025-03-03</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-cx15-cx1505/">ASUS Chromebook CX15 (CX1505)</a></td>
+    <td>Awadoron</td>
+    <td>dedede</td>
+    <td>dedede</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Jasper Lake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+<tr>
+    <td>2025-03-03</td>
+    <td>Asus</td>
+    <td><a href="https://www.asus.com/laptops/for-home/chromebook/asus-chromebook-cx15-cx1505/">ASUS Chromebook CB15 (CB1505)</a></td>
+    <td>Awadoron</td>
+    <td>dedede</td>
+    <td>dedede</td>
+    <td>x86_64</td>
+    <td>6.1</td>
+    <td>x86_64</td>
+    <td>Jasper Lake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+</tr>
+
+  <tr>
+    <td>2024-12-27</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-flip-g1m-11-inch-chromebook">HP Fortis Flip G1m 11 Chromebook / HP Fortis Flip G1m 11 Chromebook Enterprise</a></td>
+    <td>Veluza</td>
+    <td>corsola</td>
+    <td>corsola</td>
+    <td>arm</td>
+    <td>5.15</td>
+    <td>arm</td>
+    <td>MT8186</td>
+    <td>Convertible</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+
+  <tr>
+    <td>2024-12-23</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-g1m-11-inch-chromebook">HP Fortis G1m 11 Chromebook / HP Fortis G1m 11 Chromebook Enterprise</a></td>
+    <td>Keldeo</td>
+    <td>corsola</td>
+    <td>corsola</td>
+    <td>arm</td>
+    <td>5.15</td>
+    <td>arm</td>
+    <td>MT8186</td>
+    <td>Clamshell</td>
+    <td></td>
+    <td>Yes</td>
+  </tr>
+
+  <tr>
+    <td>2025-01-26</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-flip-g1i-11-inch-chromebook-enterprise">HP Fortis G1i 11 Chromebook / HP Fortis G1i 11 Chromebook Enterprise</a></td>
+    <td>Domika</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+   </tr>
+
+  <tr>
+    <td>2025-02-08</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-g1i-14-inch-chromebook-enterprise">HP Fortis G1i 14 Chromebook / HP Fortis G1i 14 Chromebook Enterprise</a></td>
+    <td>Domiso</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Clamshell</td>
+    <td>Yes</td>
+    <td>Yes</td>
+   </tr>
+
+  <tr>
+    <td>2025-01-26</td>
+    <td>HP</td>
+    <td><a href="https://www.hp.com/us-en/shop/pdp/hp-fortis-flip-g1i-11-inch-chromebook-enterprise">HP Fortis Flip G1i 11 Chromebook / HP Fortis Flip G1i 11 Chromebook Enterprise</a></td>
+    <td>Domilly</td>
+    <td>Nirul</td>
+    <td>Nissa</td>
+    <td>x86_64</td>
+    <td>6.6</td>
+    <td>x86_64</td>
+    <td>Twinlake</td>
+    <td>Convertible</td>
+    <td>Yes</td>
+    <td>Yes</td>
+   </tr>
 </table>

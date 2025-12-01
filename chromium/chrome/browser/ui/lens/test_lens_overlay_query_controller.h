@@ -5,21 +5,23 @@
 #ifndef CHROME_BROWSER_UI_LENS_TEST_LENS_OVERLAY_QUERY_CONTROLLER_H_
 #define CHROME_BROWSER_UI_LENS_TEST_LENS_OVERLAY_QUERY_CONTROLLER_H_
 
+#include "base/memory/weak_ptr.h"
 #include "components/endpoint_fetcher/endpoint_fetcher.h"
 #include "lens_overlay_query_controller.h"
 
 namespace lens {
 
-class FakeEndpointFetcher : public EndpointFetcher {
+class FakeEndpointFetcher : public endpoint_fetcher::EndpointFetcher {
  public:
-  explicit FakeEndpointFetcher(EndpointResponse response);
-  void PerformRequest(EndpointFetcherCallback endpoint_fetcher_callback,
-                      const char* key) override;
+  explicit FakeEndpointFetcher(endpoint_fetcher::EndpointResponse response);
+  void PerformRequest(
+      endpoint_fetcher::EndpointFetcherCallback endpoint_fetcher_callback,
+      const char* key) override;
 
   bool disable_responding_ = false;
 
  private:
-  EndpointResponse response_;
+  endpoint_fetcher::EndpointResponse response_;
 };
 
 // Helper for testing features that use the LensOverlayQueryController.
@@ -186,14 +188,19 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
     return num_upload_chunk_requests_sent_;
   }
 
+  const std::optional<lens::LensOverlayServerClusterInfoRequest>&
+  last_cluster_info_request() const {
+    return last_cluster_info_request_;
+  }
+
   int latency_gen_204_counter(
       lens::LensOverlayGen204Controller::LatencyType latency_type) const {
     auto it = latency_gen_204_counter_.find(latency_type);
     return it == latency_gen_204_counter_.end() ? 0 : it->second;
   }
 
-  const std::optional<lens::LensOverlayRequestId>& last_latency_gen204_request_id()
-      const {
+  const std::optional<lens::LensOverlayRequestId>&
+  last_latency_gen204_request_id() const {
     return last_latency_gen204_request_id_;
   }
 
@@ -228,17 +235,20 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
       base::TimeTicks invocation_time) override;
 
   void SendRegionSearch(
+      base::Time query_start_time,
       lens::mojom::CenterRotatedBoxPtr region,
       lens::LensOverlaySelectionType selection_type,
       std::map<std::string, std::string> additional_search_query_params,
       std::optional<SkBitmap> region_bytes) override;
 
-  void SendTextOnlyQuery(const std::string& query_text,
+  void SendTextOnlyQuery(base::Time query_start_time,
+                         const std::string& query_text,
                          lens::LensOverlaySelectionType lens_selection_type,
                          std::map<std::string, std::string>
                              additional_search_query_params) override;
 
   void SendMultimodalRequest(
+      base::Time query_start_time,
       lens::mojom::CenterRotatedBoxPtr region,
       const std::string& query_text,
       lens::LensOverlaySelectionType multimodal_selection_type,
@@ -246,6 +256,7 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
       std::optional<SkBitmap> region_bitmap) override;
 
   void SendContextualTextQuery(
+      base::Time query_start_time,
       const std::string& query_text,
       lens::LensOverlaySelectionType lens_selection_type,
       std::map<std::string, std::string> additional_search_query_params)
@@ -255,14 +266,14 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
   void ResetTestingState();
 
  protected:
-  std::unique_ptr<EndpointFetcher> CreateEndpointFetcher(
+  std::unique_ptr<endpoint_fetcher::EndpointFetcher> CreateEndpointFetcher(
       std::string request_string,
       const GURL& fetch_url,
-      const HttpMethod& http_method,
-      const base::TimeDelta& timeout,
+      endpoint_fetcher::HttpMethod http_method,
+      base::TimeDelta timeout,
       const std::vector<std::string>& request_headers,
       const std::vector<std::string>& cors_exempt_headers,
-      const UploadProgressCallback upload_progress_callback) override;
+      UploadProgressCallback upload_progress_callback) override;
 
   void SendLatencyGen204IfEnabled(
       lens::LensOverlayGen204Controller::LatencyType latency_type,
@@ -280,6 +291,8 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
   void SendSemanticEventGen204IfEnabled(
       lens::mojom::SemanticEvent event,
       std::optional<lens::LensOverlayRequestId> request_id) override;
+
+  void RunSuggestInputsCallback() override;
 
   // The fake response to return for cluster info requests.
   lens::LensOverlayServerClusterInfoResponse fake_cluster_info_response_;
@@ -346,9 +359,13 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
   std::string last_sent_page_content_data_;
 
   // The Payload proto sent in the last page content upload.
+  // This is deprecated field and will soon be removed. Use
+  // last_sent_page_content_data_ directly instead.
   lens::Payload last_sent_page_content_payload_;
 
   // The last underlying content bytes sent by the query controller.
+  // This is deprecated field and will soon be removed. Use
+  // last_sent_page_content_data_ directly instead.
   base::raw_span<const uint8_t> last_sent_underlying_content_bytes_;
 
   // The last underlying content type sent by the query controller.
@@ -394,6 +411,10 @@ class TestLensOverlayQueryController : public LensOverlayQueryController {
 
   // The number of upload chunk requests sent by the query controller.
   int num_upload_chunk_requests_sent_ = 0;
+
+  // The last cluster info request received.
+  std::optional<lens::LensOverlayServerClusterInfoRequest>
+      last_cluster_info_request_;
 
   // The last encoded request id attached to a latency gen204 ping.
   std::optional<lens::LensOverlayRequestId> last_latency_gen204_request_id_;

@@ -123,62 +123,44 @@ int BN_mod_exp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p, const BIGNUM *m,
 int BN_mod_exp_mont_word(BIGNUM *rr, BN_ULONG a, const BIGNUM *p,
                          const BIGNUM *m, BN_CTX *ctx,
                          const BN_MONT_CTX *mont) {
-  BIGNUM a_bignum;
-  BN_init(&a_bignum);
-
-  int ret = 0;
-
   // BN_mod_exp_mont requires reduced inputs.
   if (bn_minimal_width(m) == 1) {
     a %= m->d[0];
   }
 
-  if (!BN_set_word(&a_bignum, a)) {
+  bssl::UniquePtr<BIGNUM> a_bignum(BN_new());
+  if (a_bignum == nullptr || !BN_set_word(a_bignum.get(), a)) {
     OPENSSL_PUT_ERROR(BN, ERR_R_INTERNAL_ERROR);
-    goto err;
+    return 0;
   }
 
-  ret = BN_mod_exp_mont(rr, &a_bignum, p, m, ctx, mont);
-
-err:
-  BN_free(&a_bignum);
-
-  return ret;
+  return BN_mod_exp_mont(rr, a_bignum.get(), p, m, ctx, mont);
 }
 
 int BN_mod_exp2_mont(BIGNUM *rr, const BIGNUM *a1, const BIGNUM *p1,
                      const BIGNUM *a2, const BIGNUM *p2, const BIGNUM *m,
                      BN_CTX *ctx, const BN_MONT_CTX *mont) {
-  BIGNUM tmp;
-  BN_init(&tmp);
-
-  int ret = 0;
-  BN_MONT_CTX *new_mont = NULL;
-
   // Allocate a montgomery context if it was not supplied by the caller.
-  if (mont == NULL) {
-    new_mont = BN_MONT_CTX_new_for_modulus(m, ctx);
-    if (new_mont == NULL) {
-      goto err;
+  bssl::UniquePtr<BN_MONT_CTX> new_mont;
+  if (mont == nullptr) {
+    new_mont.reset(BN_MONT_CTX_new_for_modulus(m, ctx));
+    if (new_mont == nullptr) {
+      return 0;
     }
-    mont = new_mont;
+    mont = new_mont.get();
   }
 
   // BN_mod_mul_montgomery removes one Montgomery factor, so passing one
   // Montgomery-encoded and one non-Montgomery-encoded value gives a
   // non-Montgomery-encoded result.
-  if (!BN_mod_exp_mont(rr, a1, p1, m, ctx, mont) ||
-      !BN_mod_exp_mont(&tmp, a2, p2, m, ctx, mont) ||
+  bssl::UniquePtr<BIGNUM> tmp(BN_new());
+  if (tmp == nullptr ||  //
+      !BN_mod_exp_mont(rr, a1, p1, m, ctx, mont) ||
+      !BN_mod_exp_mont(tmp.get(), a2, p2, m, ctx, mont) ||
       !BN_to_montgomery(rr, rr, mont, ctx) ||
-      !BN_mod_mul_montgomery(rr, rr, &tmp, mont, ctx)) {
-    goto err;
+      !BN_mod_mul_montgomery(rr, rr, tmp.get(), mont, ctx)) {
+    return 0;
   }
 
-  ret = 1;
-
-err:
-  BN_MONT_CTX_free(new_mont);
-  BN_free(&tmp);
-
-  return ret;
+  return 1;
 }

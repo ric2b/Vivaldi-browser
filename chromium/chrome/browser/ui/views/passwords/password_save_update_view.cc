@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/passwords/password_dialog_prompts.h"
 #include "chrome/browser/ui/passwords/ui_utils.h"
 #include "chrome/browser/ui/signin/promos/bubble_signin_promo_view.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/passwords/credentials_item_view.h"
@@ -81,7 +82,7 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
         .SetDefault(
             views::kMarginsKey,
             gfx::Insets::VH(ChromeLayoutProvider::Get()->GetDistanceMetric(
-                                DISTANCE_CONTROL_LIST_VERTICAL),
+                                views::DISTANCE_CONTROL_LIST_VERTICAL),
                             0));
 
     const auto titles = GetCredentialLabelsForAccountChooser(password_form);
@@ -122,7 +123,7 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
         .SetDefault(
             views::kMarginsKey,
             gfx::Insets::VH(ChromeLayoutProvider::Get()->GetDistanceMetric(
-                                DISTANCE_CONTROL_LIST_VERTICAL),
+                                views::DISTANCE_CONTROL_LIST_VERTICAL),
                             0));
 
     username_dropdown_ = username_dropdown.get();
@@ -153,10 +154,31 @@ PasswordSaveUpdateView::PasswordSaveUpdateView(
             .Then(base::BindRepeating(
                 &PasswordSaveUpdateView::CloseOrReplaceWithPromo,
                 base::Unretained(this))));
-    SetCancelCallback(base::BindOnce(
-        button_clicked, base::Unretained(this),
-        is_update_bubble_ ? &Controller::OnNoThanksClicked
-                          : &Controller::OnNeverForThisSiteClicked));
+
+    if (is_update_bubble_) {
+      SetCancelCallback(base::BindOnce(button_clicked, base::Unretained(this),
+                                       &Controller::OnNoThanksClicked));
+    } else if (base::FeatureList::IsEnabled(
+                   features::kThreeButtonPasswordSaveDialog)) {
+      // 3-button save dialog variant.
+      SetCancelCallback(base::BindOnce(button_clicked, base::Unretained(this),
+                                       &Controller::OnNotNowClicked));
+
+      extra_view_ = SetExtraView(std::make_unique<views::MdTextButton>());
+      extra_view_->SetProperty(views::kElementIdentifierKey,
+                               kExtraButtonElementId);
+      extra_view_->SetCallback(
+          base::BindOnce(button_clicked, base::Unretained(this),
+                         &Controller::OnNeverForThisSiteClicked));
+
+      // The third button will usually stretch the bubble beyond its intended
+      // width. Permit the bubble to use vertical buttons if this happens.
+      set_allow_vertical_buttons(true);
+    } else {
+      // 2-button save dialog variant.
+      SetCancelCallback(base::BindOnce(button_clicked, base::Unretained(this),
+                                       &Controller::OnNeverForThisSiteClicked));
+    }
   }
 
   SetShowIcon(true);
@@ -199,6 +221,12 @@ bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
   SetLayoutManager(std::make_unique<views::FillLayout>());
   SetShowIcon(false);
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
+  // SetExtraView is not designed to be called multiple times, so hide the
+  // extra button if it exists.
+  if (extra_view_) {
+    extra_view_->SetVisible(false);
+  }
+
   GetBubbleFrameView()->SetFootnoteView(nullptr);
   SetTitle(IDS_AUTOFILL_SIGNIN_PROMO_TITLE_PASSWORD);
 
@@ -222,7 +250,7 @@ bool PasswordSaveUpdateView::CloseOrReplaceWithPromo() {
   AnnounceBubbleChange();
 
   GetBubbleFrameView()->SetProperty(views::kElementIdentifierKey,
-                                    kPasswordBubble);
+                                    kPasswordBubbleElementId);
 
   return false;
 #else
@@ -285,11 +313,27 @@ void PasswordSaveUpdateView::UpdateBubbleUIElements() {
       controller_.IsCurrentStateUpdate() ? IDS_PASSWORD_MANAGER_UPDATE_BUTTON
                                          : IDS_PASSWORD_MANAGER_SAVE_BUTTON);
   SetButtonLabel(ui::mojom::DialogButton::kOk, ok_button_text);
-  SetButtonLabel(
-      ui::mojom::DialogButton::kCancel,
-      l10n_util::GetStringUTF16(
-          is_update_bubble_ ? IDS_PASSWORD_MANAGER_CANCEL_BUTTON
-                            : IDS_PASSWORD_MANAGER_BUBBLE_BLOCKLIST_BUTTON));
+
+  if (is_update_bubble_) {
+    SetButtonLabel(
+        ui::mojom::DialogButton::kCancel,
+        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_CANCEL_BUTTON));
+  } else if (extra_view_) {
+    // 3-button save dialog variant.
+    SetButtonLabel(
+        ui::mojom::DialogButton::kCancel,
+        l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_CANCEL_BUTTON));
+
+    extra_view_->SetText(l10n_util::GetStringUTF16(
+        IDS_PASSWORD_MANAGER_BUBBLE_BLOCKLIST_BUTTON));
+
+  } else {
+    // 2-button save dialog variant.
+    SetButtonLabel(ui::mojom::DialogButton::kCancel,
+                   l10n_util::GetStringUTF16(
+                       IDS_PASSWORD_MANAGER_BUBBLE_BLOCKLIST_BUTTON));
+  }
+
   // If the title is going to change, we should announce it to the screen
   // readers.
   bool should_announce_save_update_change =
@@ -407,4 +451,7 @@ void PasswordSaveUpdateView::TogglePasswordRevealed() {
 BEGIN_METADATA(PasswordSaveUpdateView)
 END_METADATA
 
-DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PasswordSaveUpdateView, kPasswordBubble);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PasswordSaveUpdateView,
+                                      kPasswordBubbleElementId);
+DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(PasswordSaveUpdateView,
+                                      kExtraButtonElementId);

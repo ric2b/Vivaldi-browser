@@ -23,10 +23,6 @@ BASE_FEATURE(kAssistantDebugging,
              "AssistantDebugging",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
-BASE_FEATURE(kAssistantWaitScheduling,
-             "AssistantWaitScheduling",
-             base::FEATURE_ENABLED_BY_DEFAULT);
-
 BASE_FEATURE(kEnableDspHotword,
              "EnableDspHotword",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -58,7 +54,7 @@ BASE_FEATURE(kEnableAssistantOnboarding,
 
 BASE_FEATURE(kEnableNewEntryPoint,
              "ChromeOSEnableNewEntryPoint",
-             base::FEATURE_DISABLED_BY_DEFAULT);
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 bool IsAppSupportEnabled() {
   return base::FeatureList::IsEnabled(
@@ -93,10 +89,6 @@ bool IsStereoAudioInputEnabled() {
 
 bool IsVoiceMatchDisabled() {
   return base::FeatureList::IsEnabled(kDisableVoiceMatch);
-}
-
-bool IsWaitSchedulingEnabled() {
-  return base::FeatureList::IsEnabled(kAssistantWaitScheduling);
 }
 
 bool IsLibAssistantSandboxEnabled() {

@@ -33,6 +33,7 @@ import org.hamcrest.Matchers;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.KeyUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.UrlBar;
@@ -46,7 +47,6 @@ import org.chromium.chrome.browser.toolbar.top.ToolbarLayout;
 import org.chromium.components.omnibox.AutocompleteMatch;
 import org.chromium.components.omnibox.AutocompleteResult;
 import org.chromium.components.omnibox.suggestions.OmniboxSuggestionUiType;
-import org.chromium.content_public.browser.test.util.KeyUtils;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -265,14 +265,12 @@ public class OmniboxTestUtils {
         CriteriaHelper.pollUiThread(
                 () -> {
                     OmniboxSuggestionsDropdown suggestionsDropdown =
-                            mLocationBar
-                                    .getAutocompleteCoordinator()
-                                    .getSuggestionsDropdownForTest();
-                    Criteria.checkThat(
-                            "suggestion list is null",
-                            suggestionsDropdown,
-                            Matchers.notNullValue());
+                            mAutocomplete.getSuggestionsDropdownForTest();
                     if (shown) {
+                        Criteria.checkThat(
+                                "suggestion list is null",
+                                suggestionsDropdown,
+                                Matchers.notNullValue());
                         Criteria.checkThat(
                                 "suggestion list is not shown",
                                 suggestionsDropdown.getViewGroup().isShown(),
@@ -282,6 +280,9 @@ public class OmniboxTestUtils {
                                 suggestionsDropdown.getDropdownItemViewCountForTest(),
                                 Matchers.greaterThan(0));
                     } else {
+                        // Suggestions list can't be showing if it's not constructed.
+                        if (suggestionsDropdown == null) return;
+
                         Criteria.checkThat(
                                 "suggestion list is shown",
                                 suggestionsDropdown.getViewGroup().isShown(),
@@ -358,14 +359,9 @@ public class OmniboxTestUtils {
         CriteriaHelper.pollUiThread(
                 () -> {
                     OmniboxSuggestionsDropdown dropdown =
-                            mLocationBar
-                                    .getAutocompleteCoordinator()
-                                    .getSuggestionsDropdownForTest();
+                            mAutocomplete.getSuggestionsDropdownForTest();
 
-                    ModelList currentModels =
-                            mLocationBar
-                                    .getAutocompleteCoordinator()
-                                    .getSuggestionModelListForTest();
+                    ModelList currentModels = mAutocomplete.getSuggestionModelListForTest();
                     for (int i = 0; i < currentModels.size(); i++) {
                         DropdownItemViewInfo info = (DropdownItemViewInfo) currentModels.get(i);
                         T view = (T) dropdown.getDropdownItemViewForTest(i);

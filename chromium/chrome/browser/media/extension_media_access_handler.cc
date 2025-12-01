@@ -16,6 +16,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "content/public/browser/permission_controller_delegate.h"
+#include "content/public/browser/permission_descriptor_util.h"
 #include "third_party/blink/public/common/permissions/permission_utils.h"
 
 using extensions::mojom::APIPermissionID;
@@ -87,7 +88,8 @@ bool ExtensionMediaAccessHandler::CheckMediaAccessPermission(
       return false;
     }
 
-    return delegate->GetPermissionStatusForCurrentDocument(permission, render_frame_host,
+    return delegate->GetPermissionStatusForCurrentDocument(content::PermissionDescriptorUtil::
+                     CreatePermissionDescriptorForPermissionType(permission), render_frame_host,
                /*should_include_device_status=*/false) ==
            blink::mojom::PermissionStatus::GRANTED;
   }

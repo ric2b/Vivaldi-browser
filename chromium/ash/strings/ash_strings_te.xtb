@@ -33,7 +33,7 @@
 <translation id="1094756674036064790">బ్లూటూత్‌ను ఆఫ్ చేయాలా?</translation>
 <translation id="109942774857561566">నాకు ఏమీ తోచడం లేదు</translation>
 <translation id="1104084341931202936">యాక్సెసిబిలిటీ సెట్టింగ్‌లను చూపుతుంది</translation>
-<translation id="1104621072296271835">మీ పరికరాలు కలిసికట్టుగా మరింత బాగా పనిచేస్తాయి</translation>
+<translation id="1104621072296271835">మీ డివైజ్‌లు కనెక్ట్ అయినప్పుడు మరింత బాగా పని చేస్తాయి</translation>
 <translation id="1111021433905331574">మీరు మీ కీబోర్డ్ బ్యాక్‌లైట్ రంగును సెట్టింగ్‌లు &gt; <ph name="APP_TITLE" />‌లో మార్చవచ్చు</translation>
 <translation id="1117719261843403176">మొబైల్ డేటాను టోగుల్ చేయండి. <ph name="STATE" />.</translation>
 <translation id="1122849163460178706">ట్రై చేయగల కొన్ని పనులు</translation>
@@ -78,7 +78,7 @@
 <translation id="1239161794459865856"><ph name="FEATURE_NAME" /> కనెక్ట్ చేయబడింది.</translation>
 <translation id="1240638468526743569">ఒక యాప్</translation>
 <translation id="1242198791279543032">నోటిఫికేషన్‌లు మ్యూట్ చేయబడ్డాయి</translation>
-<translation id="1242883863226959074">పరికరం</translation>
+<translation id="1242883863226959074">డివైజ్</translation>
 <translation id="1245476784081715330">చక్కగా పూర్తి చేశారు!</translation>
 <translation id="1245644940275736236">అసిస్టెంట్ పేజీకి వెళ్ళండి</translation>
 <translation id="124678866338384709">ప్రస్తుత ట్యాబ్‌ను మూసివేయండి</translation>
@@ -462,6 +462,7 @@
 <translation id="2530896289327917474">క్యారెట్ బ్రౌజింగ్‌ను ఆన్ లేదా ఆఫ్ చేస్తుంది</translation>
 <translation id="2531025035050312891">పరికరం నెమ్మదిగా ఉంది</translation>
 <translation id="2531107890083353124">ట్యాబ్‌ను లాగే సమయంలో, <ph name="KEY_ONE" />ని నొక్కండి</translation>
+<translation id="2532199152994248594">క్యాప్చర్ చేయడానికి ఏదైనా ప్రాంతాన్ని ఎంచుకోవడానికి లాగండి లేదా స్పేస్‌ను నొక్కండి</translation>
 <translation id="2545334090614121435">Homeను ట్రై చేయాలనుకుంటున్నారా? దీన్ని ఉపయోగించండి</translation>
 <translation id="254900897760075745">ఎంపిక చేసిన కంటెంట్‌ను క్లిప్‌బోర్డ్‌కు కాపీ చేయండి</translation>
 <translation id="2549711466868162843">మెరుగైన లైటింగ్</translation>
@@ -581,7 +582,6 @@
 <translation id="2949420361496057765"><ph name="MODIFIER" />ను నొక్కి, లింక్‌ను క్లిక్ చేయండి</translation>
 <translation id="2957159466053076448">మీరు ఈ ఫీచర్‌లను సెట్టింగ్‌లలో ఎప్పుడైనా ఆఫ్ చేయవచ్చు. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">డివైజ్ ఆడియో</translation>
-<translation id="2960314608273155470">క్యాప్చర్ మోడ్, ఆటోమేటిక్ సెట్టింగ్ <ph name="SOURCE" /> <ph name="TYPE" />. కీబోర్డ్ నావిగేషన్ కోసం Tabను నొక్కండి.</translation>
 <translation id="2961963223658824723">ఏదో తప్పు జరిగింది. కొన్ని క్షణాల తర్వాత మళ్లీ ట్రై చేయండి.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">మైక్రోఫోన్ యాక్సెస్‌ను ఆన్ చేయాలా?</translation>
@@ -761,6 +761,7 @@
 <translation id="3552189655002856821">Wi-Fi ఆఫ్ చేయబడింది</translation>
 <translation id="3554215588514239132">డెవలపర్ టూల్స్ ప్యానెల్‌ను చూడండి లేదా దాచండి</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> పిన్ చేయబడింది</translation>
+<translation id="3554928024630051016">ఏవైనా అదనపు USB డివైజ్‌లను జోడించడానికి, ఒకదాన్ని తీసివేసి, ఆపై కొత్తదాన్ని ప్లగ్-ఇన్ చేయడానికి ట్రై చేయండి</translation>
 <translation id="3558768885091059911">కెమెరా, మైక్రోఫోన్ యాక్సెస్‌ను ఆన్ చేయాలా?</translation>
 <translation id="3560174576767922131">వీడియోను రికార్డ్ చేయండి</translation>
 <translation id="3563775809269155755">హాట్‌స్పాట్‌ను ఎనేబుల్ చేయి</translation>
@@ -869,6 +870,7 @@
 <translation id="3861651314799684201">ఫుల్ స్క్రీన్‌ను రికార్డ్ చేయడానికి enterను నొక్కండి</translation>
 <translation id="3870197372373144624">మీ పరికరాన్ని షట్ డౌన్ చేయడానికి ట్రై చేయండి.</translation>
 <translation id="3879748587602334249">డౌన్‌లోడ్ మేనేజ‌ర్‌</translation>
+<translation id="3884007280698606545">USB పరిమితిని చేరుకున్నారు</translation>
 <translation id="3886872229787704059">ఈ రోజు తెరిచారు</translation>
 <translation id="3891340733213178823">సైన్ అవుట్ చేయడానికి Ctrl+Shift+Qని రెండుసార్లు నొక్కండి.</translation>
 <translation id="3892148308691398805">టెక్స్ట్‌ను కాపీ చేయి</translation>
@@ -1441,6 +1443,7 @@
 <translation id="5672890847723042801">యుటిలిటీలు</translation>
 <translation id="5673434351075758678">మీ సెట్టింగులను సింక్ చేసిన తర్వాత "<ph name="FROM_LOCALE" />" నుండి "<ph name="TO_LOCALE" />"కి.</translation>
 <translation id="5675363643668471212">అరలోని అంశం</translation>
+<translation id="5677022547882470786">సెర్చ్ చేయడానికి ఏదైనా ప్రాంతాన్ని ఎంచుకోవడానికి స్పేస్‌ను లాగండి లేదా నొక్కండి</translation>
 <translation id="5677928146339483299">బ్లాక్ చేయబడింది</translation>
 <translation id="5678564054339031017">వచ్చే వారాన్ని చూపించు</translation>
 <translation id="5679050765726761783">తక్కువ స్థాయి పవర్ అడాప్టర్ కనెక్ట్ చేయబడింది</translation>
@@ -1486,6 +1489,7 @@
 <translation id="5788127256798019331">Play ఫైళ్లు</translation>
 <translation id="5788535737706478207">చివరిగా మూసివేసిన ట్యాబ్‌ను లేదా విండోను తిరిగి తెరవండి</translation>
 <translation id="5790085346892983794">విజయవంతం</translation>
+<translation id="5791926618942305301">స్క్రీన్ క్యాప్చర్‌లో, <ph name="SOURCE" /> <ph name="TYPE" />‌కు సెట్ చేయండి. క్యాప్చర్ రకాన్ని ఎంచుకోవడానికి ట్యాబ్‌ను నొక్కండి. క్యాప్చర్ చేయడానికి Enterను నొక్కండి. క్యాప్చర్ చేసిన ప్రాంతాన్ని ఎంచుకోవడానికి, పాక్షిక స్క్రీన్‌షాట్‌కు సెట్ చేయండి. ఇప్పటికే యాక్టివ్‌గా లేకపోతే, ప్రాంతాన్ని ఎంచుకోవడానికి స్పేస్‌ను నొక్కండి.</translation>
 <translation id="579415080077680903">నిశ్శబ్దం</translation>
 <translation id="5802516411616338943">క్విక్ సెట్టింగ్‌లను తెరవండి</translation>
 <translation id="5804651031882187592">"లాక్ SIM" సెట్టింగ్‌ను ఆఫ్ చేయండి</translation>
@@ -1642,6 +1646,7 @@
 <translation id="6288235558961782912">మీ తల్లి/తండ్రి అనుమతితో <ph name="USER_EMAIL_ADDRESS" />ను తిరిగి యాడ్ చేయవచ్చు.</translation>
 <translation id="6291221004442998378">ఛార్జ్ కావడం లేదు</translation>
 <translation id="6298183524022479114">యాప్‌లో ఈ పరికరాన్ని అనుకూలంగా మార్చండి</translation>
+<translation id="6304076460080088478">Google Lensతో మీ స్క్రీన్‌ను సెర్చ్ చేయడానికి అజ్ఞాత విండోలను మూసివేయండి లేదా మినిమైజ్ చేయండి</translation>
 <translation id="6309219492973062892">1-8 షెల్ఫ్ చిహ్నాలను క్లిక్ లేదా ట్యాప్ చేయండి</translation>
 <translation id="6315170314923504164">Voice</translation>
 <translation id="6319058840130157106">దిగువ కుడి మూల, లాంచర్, అడ్రస్ బార్, బుక్‌మార్క్ బార్, తెరిచి ఉన్న వెబ్‌సైట్, డౌన్‌లోడ్‌ల మధ్య వెనుకకు మారండి</translation>
@@ -1770,6 +1775,7 @@
 <translation id="6700713906295497288">IME మెనూ బటన్</translation>
 <translation id="6704073473590541209">ఎంచుకున్న కుడి అంచు హ్యాండిల్‌ను జరపడానికి, బాణం గుర్తు కీలను ఉపయోగించండి</translation>
 <translation id="6706742084323792866">కీబోర్డ్‌ను పిన్ చేయండి</translation>
+<translation id="6709719156428404245">రికార్డ్ చేయడానికి ఏదైనా ప్రాంతాన్ని ఎంచుకోవడానికి లాగండి లేదా స్పేస్‌ను నొక్కండి</translation>
 <translation id="6710213216561001401">మునుపటి</translation>
 <translation id="6723839937902243910">పవర్</translation>
 <translation id="672609503628871915">కొత్తగా ఏమి ఉన్నాయో చూడండి</translation>

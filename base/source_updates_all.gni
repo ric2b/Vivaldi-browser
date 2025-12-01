@@ -1,3 +1,4 @@
+import("//vivaldi/gn/config/features.gni")
 
 update_template_instance("//base:base") {
   if (!defined(sources)) {
@@ -13,4 +14,10 @@ update_target("//base:base_static") {
     "//vivaldi/base/vivaldi_switches.cpp",
     "//vivaldi/base/vivaldi_switches.h",
   ]
+  if (vivaldi_v8_context_snapshot) {
+    if (!defined(defines)) {
+      defines = []
+    }
+    defines += [ "VIVALDI_V8_CONTEXT_SNAPSHOT" ]
+  }
 }

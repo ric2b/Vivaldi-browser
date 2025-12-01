@@ -12,8 +12,8 @@
 #include "third_party/blink/renderer/core/css/media_query_exp.h"
 #include "third_party/blink/renderer/core/css/style_recalc_change.h"
 #include "third_party/blink/renderer/core/layout/geometry/axis.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/platform/geometry/physical_size.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 
@@ -59,14 +59,18 @@ class CORE_EXPORT ContainerQueryEvaluator final
   std::optional<double> Width() const;
   std::optional<double> Height() const;
   void SetReferencedByUnit() { referenced_by_unit_ = true; }
+  bool DependsOnTreeCounting() {
+    return (unit_flags_ & MediaQueryExpValue::UnitFlags::kTreeCounting) != 0;
+  }
   bool DependsOnStyle() const { return depends_on_style_; }
   bool DependsOnStuck() const { return depends_on_stuck_; }
   bool DependsOnSnapped() const { return depends_on_snapped_; }
   bool DependsOnScrollable() const { return depends_on_scrollable_; }
+  bool DependsOnScrollDirection() const { return depends_on_scroll_direction_; }
   bool DependsOnSize() const { return depends_on_size_; }
   bool MayDependOnWritingDirection() const {
     return DependsOnSize() || DependsOnStuck() || DependsOnSnapped() ||
-           DependsOnScrollable();
+           DependsOnScrollable() || DependsOnScrollDirection();
   }
 
   enum class Change : uint8_t {
@@ -115,6 +119,13 @@ class CORE_EXPORT ContainerQueryEvaluator final
       const ComputedStyle& new_style,
       bool style_changed);
 
+  // Update which of position-try-fallbacks is used, if any. A nullopt means
+  // none of the fallbacks are applied. Otherwise, an index into the computed
+  // position-try-fallbacks.
+  StyleRecalcChange ApplyAnchoredChanges(
+      const StyleRecalcChange& child_change,
+      std::optional<wtf_size_t> try_fallback_index);
+
   // Set the pending snapped state when updating scroll snapshots.
   // ApplyScrollState() will set the snapped state from the pending snapped
   // state during style recalc.
@@ -151,6 +162,10 @@ class CORE_EXPORT ContainerQueryEvaluator final
   // computed style changes like writing direction.
   Change StyleAffectingScrollStateChanged();
 
+  // Re-evaluate the cached results and clear any results which are affected by
+  // the anchored fallback changes.
+  Change AnchoredContainerChanged(int fallback);
+
   // Update the CSSContainerValues with the new size and contained axes to be
   // used for queries.
   void UpdateContainerSize(PhysicalSize, PhysicalAxes contained_axes);
@@ -162,9 +177,17 @@ class CORE_EXPORT ContainerQueryEvaluator final
   // Update the CSSContainerValues with the new stuck state.
   void UpdateContainerSnapped(ContainerSnappedFlags snapped);
 
-  // Update the CSSContainerValues with the new overflowing state.
+  // Update the CSSContainerValues with the new scrollable state.
   void UpdateContainerScrollable(ContainerScrollableFlags scrollable_horizontal,
                                  ContainerScrollableFlags scrollable_vertical);
+
+  // Update the CSSContainerValues with the new scroll-direction state.
+  void UpdateContainerScrollDirection(
+      ContainerScrollDirection scroll_direction_horizontal,
+      ContainerScrollDirection scroll_direction_vertical);
+
+  // Update the CSSContainerValues with the new anchored fallback.
+  void UpdateAnchoredFallback(int anchored_fallback);
 
   // Re-evaluate the cached results and clear any results which are affected by
   // the ContainerStuckPhysical changes.
@@ -181,12 +204,20 @@ class CORE_EXPORT ContainerQueryEvaluator final
       ContainerScrollableFlags scrollable_horizontal,
       ContainerScrollableFlags scrollable_vertical);
 
+  // Re-evaluate the cached results and clear any results which are affected by
+  // the snapped target changes.
+  Change ScrollDirectionContainerChanged(
+      ContainerScrollDirection scroll_direction_horizontal,
+      ContainerScrollDirection scroll_direction_vertical);
+
   enum ContainerType {
     kSizeContainer,
     kStyleContainer,
     kStickyContainer,
     kSnapContainer,
     kScrollableContainer,
+    kScrollDirectionContainer,
+    kAnchoredContainer,
   };
   void ClearResults(Change change, ContainerType container_type);
 
@@ -206,9 +237,17 @@ class CORE_EXPORT ContainerQueryEvaluator final
   // which elements need to be invalidated if necessary.
   Change ComputeSnapChange() const;
 
-  // Re-evaluate cached query results after a overflowing state change and
+  // Re-evaluate cached query results after a scrollable state change and
   // return which elements need to be invalidated if necessary.
-  Change ComputeOverflowChange() const;
+  Change ComputeScrollableChange() const;
+
+  // Re-evaluate cached query results after a scroll-direction state change and
+  // return which elements need to be invalidated if necessary.
+  Change ComputeScrollDirectionChange() const;
+
+  // Re-evaluate cached query results after an anchored(fallback) change and
+  // return which elements need to be invalidated if necessary.
+  Change ComputeAnchoredChange() const;
 
   struct Result {
     // Main evaluation result.
@@ -235,6 +274,12 @@ class CORE_EXPORT ContainerQueryEvaluator final
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kNone);
   ContainerScrollableFlags scrollable_vertical_ =
       static_cast<ContainerScrollableFlags>(ContainerScrollable::kNone);
+  ContainerScrollDirection scroll_direction_horizontal_ =
+      ContainerScrollDirection::kNone;
+  ContainerScrollDirection scroll_direction_vertical_ =
+      ContainerScrollDirection::kNone;
+  int anchored_fallback_ = 0;
+
   HeapHashMap<Member<const ContainerQuery>, Result> results_;
   Member<ScrollStateQuerySnapshot> scroll_state_snapshot_;
   // The MediaQueryExpValue::UnitFlags of all queries evaluated against this
@@ -245,6 +290,7 @@ class CORE_EXPORT ContainerQueryEvaluator final
   bool depends_on_stuck_ = false;
   bool depends_on_snapped_ = false;
   bool depends_on_scrollable_ = false;
+  bool depends_on_scroll_direction_ = false;
   bool depends_on_size_ = false;
 };
 

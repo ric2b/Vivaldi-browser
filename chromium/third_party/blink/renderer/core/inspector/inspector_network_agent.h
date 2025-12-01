@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/inspector/inspected_frames.h"
 #include "third_party/blink/renderer/core/inspector/inspector_base_agent.h"
 #include "third_party/blink/renderer/core/inspector/inspector_page_agent.h"
+#include "third_party/blink/renderer/core/inspector/inspector_session_state.h"
 #include "third_party/blink/renderer/core/inspector/protocol/network.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/platform/blob/blob_data.h"
@@ -227,15 +228,47 @@ class CORE_EXPORT InspectorNetworkAgent final
 
   void DirectTCPSocketClosed(uint64_t identifier);
 
+  void DirectTCPSocketChunkSent(uint64_t identifier,
+                                base::span<const uint8_t> data);
+
+  void DirectTCPSocketChunkReceived(uint64_t identifier,
+                                    base::span<const uint8_t> data);
+
+  void DirectUDPSocketCreated(ExecutionContext*,
+                              uint64_t identifier,
+                              protocol::Network::DirectUDPSocketOptions&);
+
+  void DirectUDPSocketOpened(uint64_t identifier,
+                             const String& local_addr,
+                             uint16_t local_port,
+                             std::optional<String> remote_addr,
+                             std::optional<uint16_t> remote_port);
+
+  void DirectUDPSocketAborted(uint64_t identifier, int net_error);
+
+  void DirectUDPSocketClosed(uint64_t identifier);
+
+  void DirectUDPSocketChunkSent(uint64_t identifier,
+                                base::span<const uint8_t> data,
+                                std::optional<String> remote_addr,
+                                std::optional<uint16_t> remote_port);
+
+  void DirectUDPSocketChunkReceived(uint64_t identifier,
+                                    base::span<const uint8_t> data,
+                                    std::optional<String> remote_addr,
+                                    std::optional<uint16_t> remote_port);
+
   void SetDevToolsIds(ResourceRequest& request, const FetchInitiatorInfo&);
   void IsCacheDisabled(bool* is_cache_disabled) const;
   void ShouldApplyDevtoolsCookieSettingOverrides(
       bool* should_apply_devtools_overrides) const;
 
   // Called from frontend
-  protocol::Response enable(std::optional<int> total_buffer_size,
-                            std::optional<int> resource_buffer_size,
-                            std::optional<int> max_post_data_size) override;
+  protocol::Response enable(
+      std::optional<int> total_buffer_size,
+      std::optional<int> resource_buffer_size,
+      std::optional<int> max_post_data_size,
+      std::optional<bool> report_direct_socket_traffic) override;
   protocol::Response disable() override;
   protocol::Response setExtraHTTPHeaders(
       std::unique_ptr<protocol::Network::Headers>) override;
@@ -349,6 +382,7 @@ class CORE_EXPORT InspectorNetworkAgent final
   InspectorAgentState::Integer resource_buffer_size_;
   InspectorAgentState::Integer max_post_data_size_;
   InspectorAgentState::BooleanMap accepted_encodings_;
+  InspectorAgentState::Boolean report_direct_socket_traffic_;
 };
 
 }  // namespace blink

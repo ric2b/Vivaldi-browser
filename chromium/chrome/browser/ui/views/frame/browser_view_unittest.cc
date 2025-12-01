@@ -9,6 +9,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/actions/chrome_action_id.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/performance_controls/tab_resource_usage_tab_helper.h"
+#include "chrome/browser/ui/tabs/alert/tab_alert.h"
 #include "chrome/browser/ui/tabs/tab_activity_simulator.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -481,7 +483,7 @@ TEST_F(BrowserViewTest, DISABLED_AccessibleWindowTitle) {
 
   Tab* tab = browser_view()->tabstrip()->tab_at(0);
   TabRendererData start_media;
-  start_media.alert_state = {TabAlertState::AUDIO_PLAYING};
+  start_media.alert_state = {tabs::TabAlert::AUDIO_PLAYING};
   tab->SetData(std::move(start_media));
   EXPECT_EQ(SubBrowserName(u"about:blank - Audio playing - ", u""),
             browser_view()->GetAccessibleWindowTitleForChannelAndProfile(

@@ -16,6 +16,10 @@
 #include "src/objects/objects-inl.h"
 #include "src/objects/template-objects.h"
 
+#if DEBUG && V8_ENABLE_WEBASSEMBLY
+#include "src/wasm/canonical-types.h"
+#endif
+
 namespace v8 {
 namespace internal {
 namespace compiler {
@@ -180,10 +184,10 @@ std::ostream& operator<<(std::ostream& os, ContextAccess const& access) {
 
 
 ContextAccess const& ContextAccessOf(Operator const* op) {
-  DCHECK(op->opcode() == IrOpcode::kJSLoadContext ||
-         op->opcode() == IrOpcode::kJSLoadScriptContext ||
-         op->opcode() == IrOpcode::kJSStoreContext ||
-         op->opcode() == IrOpcode::kJSStoreScriptContext);
+  DCHECK(op->opcode() == IrOpcode::kJSLoadContextNoCell ||
+         op->opcode() == IrOpcode::kJSLoadContext ||
+         op->opcode() == IrOpcode::kJSStoreContextNoCell ||
+         op->opcode() == IrOpcode::kJSStoreContext);
   return OpParameter<ContextAccess>(op);
 }
 
@@ -695,6 +699,20 @@ ForInParameters const& ForInParametersOf(const Operator* op) {
 }
 
 #if V8_ENABLE_WEBASSEMBLY
+JSWasmCallParameters::JSWasmCallParameters(
+    const wasm::WasmModule* module, const wasm::CanonicalSig* signature,
+    int function_index, SharedFunctionInfoRef shared_fct_info,
+    wasm::NativeModule* native_module, FeedbackSource const& feedback)
+    : module_(module),
+      signature_(signature),
+      function_index_(function_index),
+      shared_fct_info_(shared_fct_info),
+      native_module_(native_module),
+      feedback_(feedback) {
+  DCHECK_NOT_NULL(module);
+  DCHECK(wasm::GetTypeCanonicalizer()->Contains(signature));
+}
+
 JSWasmCallParameters const& JSWasmCallParametersOf(const Operator* op) {
   DCHECK_EQ(IrOpcode::kJSWasmCall, op->opcode());
   return OpParameter<JSWasmCallParameters>(op);
@@ -772,7 +790,7 @@ Type JSWasmCallNode::TypeForWasmReturnType(wasm::CanonicalValueType type) {
   V(LoadMessage, Operator::kNoThrow | Operator::kNoWrite, 0, 1)          \
   V(StoreMessage, Operator::kNoRead | Operator::kNoThrow, 1, 0)          \
   V(GeneratorRestoreContinuation, Operator::kNoThrow, 1, 1)              \
-  V(GeneratorRestoreContext, Operator::kNoThrow, 1, 1)                   \
+  V(GeneratorRestoreContextNoCell, Operator::kNoThrow, 1, 1)             \
   V(GeneratorRestoreInputOrDebugPos, Operator::kNoThrow, 1, 1)           \
   V(Debugger, Operator::kNoProperties, 0, 0)                             \
   V(FulfillPromise, Operator::kNoDeopt | Operator::kNoThrow, 2, 1)       \
@@ -1108,6 +1126,14 @@ const Operator* JSOperatorBuilder::GeneratorStore(int register_count) {
       register_count);                                  // parameter
 }
 
+const Operator* JSOperatorBuilder::DetachContextCell(int index) {
+  return zone()->New<Operator1<int>>(                      // --
+      IrOpcode::kJSDetachContextCell, Operator::kNoThrow,  // opcode
+      "JSDetachContextCell",                               // name
+      2, 1, 1, 0, 1, 0,                                    // counts
+      index);                                              // parameter
+}
+
 int RegisterCountOf(Operator const* op) {
   DCHECK_EQ(IrOpcode::kJSCreateAsyncFunctionObject, op->opcode());
   return OpParameter<int>(op);
@@ -1229,25 +1255,35 @@ const Operator* JSOperatorBuilder::HasContextExtension(size_t depth) {
       depth);                                   // parameter
 }
 
-const Operator* JSOperatorBuilder::LoadContext(size_t depth, size_t index,
-                                               bool immutable) {
+const Operator* JSOperatorBuilder::LoadContextNoCell(size_t depth, size_t index,
+                                                     bool immutable) {
   ContextAccess access(depth, index, immutable);
   return zone()->New<Operator1<ContextAccess>>(  // --
-      IrOpcode::kJSLoadContext,                  // opcode
+      IrOpcode::kJSLoadContextNoCell,            // opcode
       Operator::kNoWrite | Operator::kNoThrow,   // flags
-      "JSLoadContext",                           // name
+      "JSLoadContextNoCell",                     // name
       0, 1, 0, 1, 1, 0,                          // counts
       access);                                   // parameter
 }
 
-const Operator* JSOperatorBuilder::LoadScriptContext(size_t depth,
-                                                     size_t index) {
+const Operator* JSOperatorBuilder::LoadContext(size_t depth, size_t index) {
   ContextAccess access(depth, index, false);
   return zone()->New<Operator1<ContextAccess>>(  // --
-      IrOpcode::kJSLoadScriptContext,            // opcode
+      IrOpcode::kJSLoadContext,                  // opcode
       Operator::kNoWrite | Operator::kNoThrow,   // flags
-      "JSLoadScriptContext",                     // name
+      "JSLoadContext",                           // name
       0, 1, 1, 1, 1, 1,                          // counts
+      access);                                   // parameter
+}
+
+const Operator* JSOperatorBuilder::StoreContextNoCell(size_t depth,
+                                                      size_t index) {
+  ContextAccess access(depth, index, false);
+  return zone()->New<Operator1<ContextAccess>>(  // --
+      IrOpcode::kJSStoreContextNoCell,           // opcode
+      Operator::kNoRead | Operator::kNoThrow,    // flags
+      "JSStoreContextNoCell",                    // name
+      1, 1, 1, 0, 1, 0,                          // counts
       access);                                   // parameter
 }
 
@@ -1257,17 +1293,6 @@ const Operator* JSOperatorBuilder::StoreContext(size_t depth, size_t index) {
       IrOpcode::kJSStoreContext,                 // opcode
       Operator::kNoRead | Operator::kNoThrow,    // flags
       "JSStoreContext",                          // name
-      1, 1, 1, 0, 1, 0,                          // counts
-      access);                                   // parameter
-}
-
-const Operator* JSOperatorBuilder::StoreScriptContext(size_t depth,
-                                                      size_t index) {
-  ContextAccess access(depth, index, false);
-  return zone()->New<Operator1<ContextAccess>>(  // --
-      IrOpcode::kJSStoreScriptContext,           // opcode
-      Operator::kNoRead | Operator::kNoThrow,    // flags
-      "JSStoreScriptContext",                    // name
       1, 1, 1, 0, 1, 1,                          // counts
       access);                                   // parameter
 }

@@ -30,6 +30,7 @@
 #include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -260,15 +261,6 @@ void ClickView(const views::View* view) {
   event_generator.ClickLeftButton();
 }
 
-void ClickSaveDeskAsTemplateButton() {
-  ClickView(GetSaveDeskAsTemplateButton());
-  // Wait for the template to be stored in the model.
-  WaitForSavedDeskUI();
-  // Clicking the save template button selects the newly created template's name
-  // field. We can press enter or escape or click to select out of it.
-  ui::test::EventGenerator event_generator(Shell::GetPrimaryRootWindow());
-  SendKey(ui::VKEY_RETURN, &event_generator);
-}
 
 void SelectSaveDeskAsTemplateMenuItem(int index) {
   views::MenuItemView* menu_item =
@@ -392,11 +384,6 @@ class FullRestoreAppLaunchHandlerTestBase
     ASSERT_TRUE(message_center_notification.has_value());
     EXPECT_EQ(message_center_notification.value().title(),
               l10n_util::GetStringUTF16(IDS_POLICY_DEVICE_POST_REBOOT_TITLE));
-  }
-
-  void SimulateClick(RestoreNotificationButtonIndex action_index) {
-    FullRestoreServiceFactory::GetForProfile(profile())->Click(
-        static_cast<int>(action_index), std::nullopt);
   }
 
   void ResetRestoreForTesting() { scoped_restore_for_testing_.reset(); }
@@ -652,113 +639,6 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   EXPECT_EQ(count + 2, BrowserList::GetInstance()->size());
 }
 
-// Verify the restore data is saved when the restore button is clicked and the
-// restore finishes.
-IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
-                       RestoreAndLaunchBrowserWithClickRestore) {
-  // TODO(http://b/328779923): This test tests clicking a notification that will
-  // not be shown if this feature is enabled. Remove this test once this feature
-  // can no longer be disabled.
-  if (ash::features::IsForestFeatureEnabled()) {
-    GTEST_SKIP() << "Skipping test body for Forest Feature.";
-  }
-
-  base::HistogramTester histogram_tester;
-  size_t count = BrowserList::GetInstance()->size();
-
-  // Add the chrome browser launch info.
-  SaveBrowserAppLaunchInfo(kWindowId1);
-  SaveBrowserAppLaunchInfo(kWindowId2, /*app_type_browser=*/true);
-  AppLaunchInfoSaveWaiter::Wait();
-  ::full_restore::FullRestoreSaveHandler::GetInstance()->ClearForTesting();
-
-  // Set the restore pref setting as 'Ask every time'.
-  profile()->GetPrefs()->SetInteger(
-      prefs::kRestoreAppsAndPagesPrefName,
-      static_cast<int>(RestoreOption::kAskEveryTime));
-
-  // Create FullRestoreAppLaunchHandler to simulate the system startup.
-  auto* full_restore_service =
-      FullRestoreServiceFactory::GetForProfile(profile());
-  full_restore_service->SetAppLaunchHandlerForTesting(
-      std::make_unique<FullRestoreAppLaunchHandler>(
-          profile(), /*should_init_service=*/true));
-  auto* app_launch_handler1 = full_restore_service->app_launch_handler();
-
-  app_launch_handler1->LaunchBrowserWhenReady(/*first_run_full_restore=*/false);
-  content::RunAllTasksUntilIdle();
-
-  EXPECT_TRUE(HasNotificationFor(kRestoreNotificationId));
-  SimulateClick(RestoreNotificationButtonIndex::kRestore);
-  content::RunAllTasksUntilIdle();
-
-  // Verify there is new browser launched.
-  EXPECT_EQ(count + 1, BrowserList::GetInstance()->size());
-
-  AppLaunchInfoSaveWaiter::Wait(/*allow_save*/ false);
-  ::full_restore::FullRestoreSaveHandler::GetInstance()->ClearForTesting();
-
-  // Create FullRestoreAppLaunchHandler to simulate the system startup again.
-  auto app_launch_handler2 =
-      std::make_unique<FullRestoreAppLaunchHandler>(profile());
-
-  app_launch_handler2->LaunchBrowserWhenReady(/*first_run_full_restore=*/false);
-  content::RunAllTasksUntilIdle();
-  SetShouldRestore(app_launch_handler2.get());
-  content::RunAllTasksUntilIdle();
-
-  // Verify there is a new browser launched again.
-  EXPECT_EQ(count + 2, BrowserList::GetInstance()->size());
-  histogram_tester.ExpectBucketCount(
-      "Ash.PostLoginGlanceables.HypotheticalFetchEvent.NoDelay", 0,
-      /*expected_bucket_count=*/1);
-}
-
-// Verify the restore notification is shown with post reboot notification title
-// when |kShowPostRebootNotification| pref is set.
-IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
-                       RestoreWithPostRebootTitle) {
-  // TODO(http://b/328779923): This test tests checking a notification that will
-  // not be shown if forest feature is enabled. Remove this test once forest
-  // feature can no longer be disabled.
-  if (ash::features::IsForestFeatureEnabled()) {
-    GTEST_SKIP() << "Skipping test body for Forest Feature.";
-  }
-
-  base::HistogramTester histogram_tester;
-  // Add the chrome browser launch info.
-  SaveBrowserAppLaunchInfo(kWindowId1);
-  SaveBrowserAppLaunchInfo(kWindowId2, /*app_type_browser=*/true);
-  AppLaunchInfoSaveWaiter::Wait();
-  ::full_restore::FullRestoreSaveHandler::GetInstance()->ClearForTesting();
-
-  // Set the restore pref setting as 'Ask every time'.
-  profile()->GetPrefs()->SetInteger(
-      prefs::kRestoreAppsAndPagesPrefName,
-      static_cast<int>(RestoreOption::kAskEveryTime));
-  // Set the pref for showing post reboot notification.
-  profile()->GetPrefs()->SetBoolean(prefs::kShowPostRebootNotification, true);
-
-  // Create FullRestoreAppLaunchHandler to simulate the system startup.
-  auto* full_restore_service =
-      FullRestoreServiceFactory::GetForProfile(profile());
-  full_restore_service->SetAppLaunchHandlerForTesting(
-      std::make_unique<FullRestoreAppLaunchHandler>(
-          profile(), /*should_init_service=*/true));
-  auto* app_launch_handler1 = full_restore_service->app_launch_handler();
-
-  app_launch_handler1->LaunchBrowserWhenReady(/*first_run_full_restore=*/false);
-  content::RunAllTasksUntilIdle();
-
-  EXPECT_TRUE(HasNotificationFor(kRestoreNotificationId));
-  VerifyPostRebootNotificationTitle(kRestoreNotificationId);
-  EXPECT_FALSE(HasNotificationFor(kPostRebootNotificationId));
-
-  histogram_tester.ExpectBucketCount(
-      "Ash.PostLoginGlanceables.HypotheticalFetchEvent.NoDelay", 0,
-      /*expected_bucket_count=*/1);
-}
-
 IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
                        RestoreAndNoBrowserLaunchInfo) {
   size_t count = BrowserList::GetInstance()->size();
@@ -880,7 +760,6 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
 
   ASSERT_EQ(count + 1u, BrowserList::GetInstance()->size());
 
-  // TODO(sammiequon): Check the values from the actual browser window.
   auto window = std::make_unique<aura::Window>(nullptr);
   window->Init(ui::LAYER_NOT_DRAWN);
   window->SetProperty(::app_restore::kRestoreWindowIdKey, kWindowId1);
@@ -1004,11 +883,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   ToggleOverview();
   WaitForOverviewEnterAnimation();
 
-  if (features::IsForestFeatureEnabled()) {
-    SelectSaveDeskAsTemplateMenuItem(/*index=*/1);
-  } else {
-    ClickSaveDeskAsTemplateButton();
-  }
+  SelectSaveDeskAsTemplateMenuItem(/*index=*/1);
 
   ToggleOverview();
   WaitForOverviewExitAnimation();
@@ -1058,43 +933,6 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerBrowserTest,
   EXPECT_LT(browser_from_template->window()->GetNativeWindow()->GetProperty(
                 ::app_restore::kRestoreWindowIdKey),
             -1);
-}
-
-class FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest
-    : public FullRestoreAppLaunchHandlerTestBase {
- public:
-  FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kFloatingWorkspaceV2,
-                              features::kDeskTemplateSync},
-        /*disabled_features=*/{});
-  }
-  ~FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest() override =
-      default;
-};
-
-IN_PROC_BROWSER_TEST_F(
-    FullRestoreAppLaunchHandlerWithFloatingWorkspaceBrowserTest,
-    AddAppAndNotRestoreWithFloatingWorkspaceEnabled) {
-  // Add app launch infos.
-  SaveBrowserAppLaunchInfo(kWindowId1);
-  SaveDefaultAppLaunchInfo();
-  AppLaunchInfoSaveWaiter::Wait();
-
-  size_t count = BrowserList::GetInstance()->size();
-
-  // Create FullRestoreAppLaunchHandler.
-  auto app_launch_handler =
-      std::make_unique<FullRestoreAppLaunchHandler>(profile());
-  app_launch_handler->LaunchBrowserWhenReady(/*first_run_full_restore=*/false);
-
-  CreateWebApp();
-
-  content::RunAllTasksUntilIdle();
-
-  // Verify there is no new browser launched.
-  EXPECT_EQ(count, BrowserList::GetInstance()->size());
-  EXPECT_FALSE(FindWebAppWindow());
 }
 
 class FullRestoreAppLaunchHandlerChromeAppBrowserTest
@@ -2207,11 +2045,7 @@ IN_PROC_BROWSER_TEST_F(FullRestoreAppLaunchHandlerArcAppBrowserTest,
   // Capture the active desk as a template.
   ToggleOverview();
   WaitForOverviewEnterAnimation();
-  if (features::IsForestFeatureEnabled()) {
-    SelectSaveDeskAsTemplateMenuItem(/*index=*/2);
-  } else {
-    ClickSaveDeskAsTemplateButton();
-  }
+  SelectSaveDeskAsTemplateMenuItem(/*index=*/2);
   ToggleOverview();
   WaitForOverviewExitAnimation();
 
@@ -3030,7 +2864,6 @@ IN_PROC_BROWSER_TEST_P(FullRestoreAppLaunchHandlerSystemWebAppsBrowserTest,
   int32_t window_id = window->GetProperty(::app_restore::kWindowIdKey);
 
   // Snap |window| to the left and store its window properties.
-  // TODO(sammiequon): Store and check desk id and restore bounds.
   auto* window_state = WindowState::Get(window);
   const WindowSnapWMEvent left_snap_event(WM_EVENT_SNAP_PRIMARY);
   window_state->OnWMEvent(&left_snap_event);

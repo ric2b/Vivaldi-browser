@@ -144,33 +144,25 @@ public class MyPTTest {
     @Feature({"RenderTest"})
     public void testOneTab_I_render() throws IOException {
         PageStation page = mCtaTestRule.start();
-        mRenderTestRule.render(page.getTabSwitcherButton(), "1_tab");
+        mRenderTestRule.render(page.tabSwitcherButtonElement.get(), "1_tab");
         TransitAsserts.assertFinalDestination(page);
     }
 }
 ```
 
 We need the View instance to pass to `mRenderTestRule.render()`. The View can be
-retrieved from the Element declared in `PageStation#declareElements()`:
+retrieved from the Element already declared in `PageStation`:
 
 ```java
 public class PageStation extends Station {
-    public static final ViewElement TAB_SWITCHER_BUTTON =
-             unscopedViewElement(withId(R.id.tab_switcher_button));
+    public ViewElement<ToggleTabStackButton> tabSwitcherButtonElement;
 
-+   Supplier<View> mTabSwitcherButton;
-
-    public void declareElements(Elements.Builder elements) {
+    public PageStation() {
         [...]
--       elements.declareView(TAB_SWITCHER_BUTTON);
-+       mTabSwitcherButton = elements.declareView(TAB_SWITCHER_BUTTON);
+        tabSwitcherButtonElement =
+                declareView(ToggleTabStackButton.class, withId(R.id.tab_switcher_button));
         [...]
     }
-
-+   public ImageButton getTabSwitcherButton() {
-+       assertSuppliersCanBeUsed();
-+       return (ImageButton) mTabSwitcherButton.get();
-+   }
 }
 ```
 
@@ -193,7 +185,7 @@ public class MyPTTest {
     public void testOneTab_I() {
         PageStation page = mCtaTestRule.start();
 
-        ImageButton tabSwitcherButton = page.getTabSwitcherButton();
+        ImageButton tabSwitcherButton = page.tabSwitcherButtonElement.get();
         TabSwitcherDrawable tabSwitcherDrawable = (TabSwitcherDrawable) tabSwitcherButton.getDrawable();
         assertEquals("I", tabSwitcherDrawable.getTextRenderedForTesting());
         TransitAsserts.assertFinalDestination(page);
@@ -211,7 +203,7 @@ public class MyPTTest {
         PageStation page = mCtaTestRule.start();
         NewTabPageStation ntp = page.openGenericAppMenu().openNewTab();
 
-        ImageButton tabSwitcherButton = ntp.getTabSwitcherButton();
+        ImageButton tabSwitcherButton = ntp.tabSwitcherButtonElement.get();
         TabSwitcherDrawable tabSwitcherDrawable =
                 (TabSwitcherDrawable) tabSwitcherButton.getDrawable();
         assertEquals("II", tabSwitcherDrawable.getTextRenderedForTesting());
@@ -291,7 +283,7 @@ public class MyPTTest {
         PageStation page = mCtaTestRule.startOnBlankPage();
         page = Journeys.prepareTabs(page, 5, 0, "about:blank");
 
-        ImageButton tabSwitcherButton = page.getTabSwitcherButton();
+        ImageButton tabSwitcherButton = page.tabSwitcherButtonElement.get();
         TabSwitcherDrawable tabSwitcherDrawable =
             (TabSwitcherDrawable) tabSwitcherButton.getDrawable();
         assertEquals("V", tabSwitcherDrawable.getTextRenderedForTesting());
@@ -306,7 +298,8 @@ Facilities are a way to model parts of the app without changing `Stations`. They
 are useful when the state they model is optional, or when the state is
 interesting to only a small number of tests.
 
-Let's make a `TabSwitcherButtonFacility` representing the button we're testing.
+Just for the sake of this guide, let's make a `TabSwitcherButtonFacility`
+representing the button we're testing.
 `chrome/test/android/javatests/src/org/chromium/chrome/test/transit/` is where
 Chrome's Transit Layer is located, so create `TabSwitcherButtonFacility.java`
 there:
@@ -317,20 +310,16 @@ package org.chromium.chrome.test.transit;
 [imports]
 
 public class TabSwitcherButtonFacility extends Facility<PageStation> {
-    private Supplier<View> mTabSwitcherButton;
+    public ViewElement<ToggleTabStackButton> buttonElement;
 
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        mTabSwitcherButton = elements.declareView(PageStation.TAB_SWITCHER_BUTTON);
-    }
-
-    public ImageButton getView() {
-        assertSuppliersCanBeUsed();
-        return (ImageButton) mTabSwitcherButton.get();
+    public TabSwitcherButtonFacility() {
+        buttonElement =
+                declareView(ToggleTabStackButton.class, withId(R.id.tab_switcher_button)));
     }
 
     public String getTextRendered() {
-        TabSwitcherDrawable tabSwitcherDrawable = (TabSwitcherDrawable) getView().getDrawable();
+        TabSwitcherDrawable tabSwitcherDrawable =
+                (TabSwitcherDrawable) buttonElement.get().getDrawable();
         return tabSwitcherDrawable.getTextRenderedForTesting();
     }
 }
@@ -338,9 +327,9 @@ public class TabSwitcherButtonFacility extends Facility<PageStation> {
 
 ### Create a Transition Method
 
-`TabSwitcherButtonFacility` declares a ViewElement in `declareElements()`, which
-means the Facility is considered active only after a View
-`withId(R.id.tab_switcher_button)` is fully displayed.
+`TabSwitcherButtonFacility` declares a ViewElement, which means the Facility is
+considered active only after a View `withId(R.id.tab_switcher_button)` is fully
+displayed.
 
 We then change PageStation to connect it to TabSwitcherButtonFacility through a
 synchronous transition method `focusOnTabSwitcherButton()`, which creates the
@@ -349,11 +338,6 @@ after all its Enter Conditions are met:
 
 ```java
 public class PageStation extends Station {
--   public ImageButton getTabSwitcherButton() {
--       assertSuppliersCanBeUsed();
--       return (ImageButton) mTabSwitcherButton.get();
--   }
-
 +   public TabSwitcherButtonFacility focusOnTabSwitcherButton() {
 +       return enterFacilitySync(new TabSwitcherButtonFacility(), /* trigger= */ null);
 +   }
@@ -379,39 +363,38 @@ public class MyPTTest {
 }
 ```
 
-It's debatable if the Facility is warranted here just to encapsulate the logic
-of getting the rendered text. To wait on the rendered text with a Condition,
-though, a Facility is necessary. Let's create this Condition.
+The Facility is not really warranted here just to encapsulate the logic of
+getting the rendered text. To wait on the rendered text with a Condition, you
+can subclass Condition or use SimpleConditions. For illustration, let's create a
+subclass, which is recommended for more complex Conditions:
 
 ## Adding a Custom Condition
 
 ```java
 public class TabSwitcherButtonFacility extends Facility<PageStation> {
-+   private final String mExpectedText;
-    private Supplier<View> mTabSwitcherButton;
+    public ViewElement<ToggleTabStackButton> buttonElement;
 
-+   public TabSwitcherButtonFacility(String expectedText) {
-+       mExpectedText = expectedText;
-    }
-
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        mTabSwitcherButton = elements.declareView(PageStation.TAB_SWITCHER_BUTTON);
-+       elements.declareEnterCondition(new TextRenderedCondition());
+    public TabSwitcherButtonFacility(String expectedText) {
+        buttonElement =
+                declareView(ToggleTabStackButton.class, withId(R.id.tab_switcher_button));
++       declareEnterCondition(new TextRenderedCondition(expectedText));
     }
 
 +   private class TextRenderedCondition extends Condition {
-+       public TextRenderedCondition() {
++       private final String mExpectedText;
++
++       public TextRenderedCondition(String expectedText) {
 +           super(/* isRunOnUiThread= */ true);
-+           dependOnSupplier(mTabSwitcherButton, "ButtonView");
++           dependOnSupplier(buttonElement, "ButtonView");
++           mExpectedText = expectedText;
 +       }
 +
 +       @Override
 +       protected ConditionStatus checkWithSuppliers() {
-+           ImageButton button = (ImageButton) mTabSwitcherButton.get();
++           ImageButton button = (ImageButton) buttonElement.get();
 +           TabSwitcherDrawable tabSwitcherDrawable = (TabSwitcherDrawable) button.getDrawable();
 +           String renderedText = tabSwitcherDrawable.getTextRenderedForTesting();
-+           return whether(mExpectedText.equals(renderedText), "expected=%s actual=%s", mExpectedText, renderedText);
++           return whetherEquals(mExpectedText, renderedText);
 +       }
 +
 +       @Override
@@ -439,8 +422,7 @@ assert:
 public class MyPTTest {
     public void testOneTab_I() {
         PageStation page = mCtaTestRule.startOnBlankPage();
-        TabSwitcherButtonFacility tabSwitcherButton = page.focusOnTabSwitcherButton("I");
-+       TransitAsserts.assertFinalDestination(page);
+        page.focusOnTabSwitcherButton("I");
     }
 }
 ```
@@ -464,11 +446,13 @@ case where Facilities have transition methods:
 ```java
 public class TabSwitcherButtonFacility extends Facility<PageStation> {
 +   public HubTabSwitcherStation clickToOpenHub() {
-+       return mHostStation.travelToSync(new HubTabSwitcherStation(), () -> PageStation.TAB_SWITCHER_BUTTON.perform(click()));
++       return mHostStation.travelToSync(
++               new HubTabSwitcherStation(), buttonElement.getClickTrigger());
 +   }
 +
 +   public TabSwitcherActionMenuFacility longClickToOpenActionMenu() {
-+       return mHostStation.enterFacilitySync(new TabSwitcherActionMenuFacility(), () -> PageStation.TAB_SWITCHER_BUTTON.perform(longClick()));
++       return mHostStation.enterFacilitySync(
++               new TabSwitcherActionMenuFacility(), buttonElement.getLongPressTrigger());
 +   }
 }
 ```
@@ -480,12 +464,12 @@ operation, so I won't cover it in this guide. The steps are analogous to a
 Facility:
 
 1. Create a concrete class `MyStation` the extends `Station`.
-2. Fill `declareElements()` in `MyStation` with the Elements/Conditions to
-   recognize it's active and ready to be interacted with.
+2. Use `declareView()`, `declareCondition()`, etc. in `MyStation`'s constructor
+   with the Elements/Conditions to recognize it's active and ready to be
+   interacted with.
 3. Create a transition method from somewhere in the Transit Layer to navigate to
    `MyStation` that returns an instance of `MyStation`.
-4. Add accessors for its Elements and transition methods to other
-   Stations/Facilities as necessary for tests.
+4. Add transition methods to other Stations/Facilities as necessary for tests.
 
 ## More on Public Transit
 

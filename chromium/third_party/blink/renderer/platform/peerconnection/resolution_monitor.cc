@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "third_party/blink/renderer/platform/peerconnection/resolution_monitor.h"
 
@@ -62,7 +58,7 @@ class Vp8ResolutionMonitor : public ResolutionMonitor {
 
 class Vp9ResolutionMonitor : public ResolutionMonitor {
  public:
-  Vp9ResolutionMonitor() : parser_(/*parsing_compressed_header=*/false) {}
+  Vp9ResolutionMonitor() = default;
 
   ~Vp9ResolutionMonitor() override = default;
 
@@ -247,8 +243,8 @@ class H264ResolutionMonitor : public ResolutionMonitor {
 
     std::optional<gfx::Size> resolution;
     auto buffer_span = base::span(buffer);
-    rtc::ArrayView<const uint8_t> webrtc_buffer(buffer_span.data(),
-                                                buffer_span.size());
+    webrtc::ArrayView<const uint8_t> webrtc_buffer(buffer_span.data(),
+                                                   buffer_span.size());
     std::vector<webrtc::H264::NaluIndex> nalu_indices =
         webrtc::H264::FindNaluIndices(webrtc_buffer);
     for (const auto& nalu_index : nalu_indices) {

@@ -24,7 +24,7 @@
 #include "./centipede/shared_memory_blob_sequence.h"
 #include "./common/defs.h"
 
-namespace centipede {
+namespace fuzztest::internal {
 
 namespace {
 
@@ -131,6 +131,13 @@ bool BatchResult::IsSetupFailure() const {
                  .substr(0, kSetupFailurePrefix.size()) == kSetupFailurePrefix;
 }
 
+bool BatchResult::IsSkippedTest() const {
+  constexpr std::string_view kSkippedTestPrefix = "SKIPPED TEST:";
+  return exit_code_ != EXIT_SUCCESS &&
+         std::string_view(failure_description_)
+                 .substr(0, kSkippedTestPrefix.size()) == kSkippedTestPrefix;
+}
+
 bool MutationResult::WriteHasCustomMutator(bool has_custom_mutator,
                                            BlobSequence &blobseq) {
   return blobseq.Write(
@@ -160,4 +167,4 @@ bool MutationResult::Read(size_t num_mutants, BlobSequence &blobseq) {
   return true;
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

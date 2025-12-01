@@ -15,6 +15,7 @@
 /* **************************************************************
 *  Dependencies
 ****************************************************************/
+#include <stddef.h>               /* size_t */
 #include "../common/zstd_deps.h"  /* ZSTD_memcpy, ZSTD_memset */
 #include "../common/compiler.h"
 #include "../common/bitstream.h"  /* BIT_* */
@@ -195,7 +196,7 @@ static size_t HUF_DecompressFastArgs_init(HUF_DecompressFastArgs* args, void* ds
 
     const BYTE* const istart = (const BYTE*)src;
 
-    BYTE* const oend = ZSTD_maybeNullPtrAdd((BYTE*)dst, dstSize);
+    BYTE* const oend = (BYTE*)ZSTD_maybeNullPtrAdd(dst, (ptrdiff_t)dstSize);
 
     /* The fast decoding loop assumes 64-bit little-endian.
      * This condition is false on x32.
@@ -578,7 +579,7 @@ HUF_decompress1X1_usingDTable_internal_body(
     const HUF_DTable* DTable)
 {
     BYTE* op = (BYTE*)dst;
-    BYTE* const oend = ZSTD_maybeNullPtrAdd(op, dstSize);
+    BYTE* const oend = (BYTE*)ZSTD_maybeNullPtrAdd(op, (ptrdiff_t)dstSize);
     const void* dtPtr = DTable + 1;
     const HUF_DEltX1* const dt = (const HUF_DEltX1*)dtPtr;
     BIT_DStream_t bitD;
@@ -845,7 +846,7 @@ HUF_decompress4X1_usingDTable_internal_fast(
 {
     void const* dt = DTable + 1;
     BYTE const* const ilowest = (BYTE const*)cSrc;
-    BYTE* const oend = ZSTD_maybeNullPtrAdd((BYTE*)dst, dstSize);
+    BYTE* const oend = (BYTE*)ZSTD_maybeNullPtrAdd(dst, (ptrdiff_t)dstSize);
     HUF_DecompressFastArgs args;
     {   size_t const ret = HUF_DecompressFastArgs_init(&args, dst, dstSize, cSrc, cSrcSize, DTable);
         FORWARD_IF_ERROR(ret, "Failed to init fast loop args");
@@ -1362,7 +1363,7 @@ HUF_decompress1X2_usingDTable_internal_body(
 
     /* decode */
     {   BYTE* const ostart = (BYTE*) dst;
-        BYTE* const oend = ZSTD_maybeNullPtrAdd(ostart, dstSize);
+        BYTE* const oend = (BYTE*)ZSTD_maybeNullPtrAdd(ostart, (ptrdiff_t)dstSize);
         const void* const dtPtr = DTable+1;   /* force compiler to not use strict-aliasing */
         const HUF_DEltX2* const dt = (const HUF_DEltX2*)dtPtr;
         DTableDesc const dtd = HUF_getDTableDesc(DTable);
@@ -1671,7 +1672,7 @@ HUF_decompress4X2_usingDTable_internal_fast(
     HUF_DecompressFastLoopFn loopFn) {
     void const* dt = DTable + 1;
     const BYTE* const ilowest = (const BYTE*)cSrc;
-    BYTE* const oend = ZSTD_maybeNullPtrAdd((BYTE*)dst, dstSize);
+    BYTE* const oend = (BYTE*)ZSTD_maybeNullPtrAdd(dst, (ptrdiff_t)dstSize);
     HUF_DecompressFastArgs args;
     {
         size_t const ret = HUF_DecompressFastArgs_init(&args, dst, dstSize, cSrc, cSrcSize, DTable);

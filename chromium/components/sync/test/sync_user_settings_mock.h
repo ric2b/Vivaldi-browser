@@ -49,7 +49,7 @@ class SyncUserSettingsMock : public SyncUserSettings {
   MOCK_METHOD(void, ResetSelectedType, (UserSelectableType), (override));
   MOCK_METHOD(void,
               KeepAccountSettingsPrefsOnlyForUsers,
-              (const std::vector<signin::GaiaIdHash>&),
+              (const std::vector<GaiaId>&),
               (override));
   MOCK_METHOD(UserSelectableTypeSet,
               GetRegisteredSelectableTypes,
@@ -58,6 +58,7 @@ class SyncUserSettingsMock : public SyncUserSettings {
 
 #if BUILDFLAG(IS_CHROMEOS)
   MOCK_METHOD(bool, IsSyncFeatureDisabledViaDashboard, (), (const override));
+  MOCK_METHOD(void, ClearSyncFeatureDisabledViaDashboard, (), (override));
   MOCK_METHOD(bool, IsSyncAllOsTypesEnabled, (), (const override));
   MOCK_METHOD(UserSelectableOsTypeSet,
               GetSelectedOsTypes,

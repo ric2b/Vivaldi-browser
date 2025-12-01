@@ -19,6 +19,7 @@
 #include "mojo/public/cpp/bindings/receiver_set.h"
 #include "services/webnn/public/cpp/context_properties.h"
 #include "services/webnn/public/cpp/operand_descriptor.h"
+#include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/public/mojom/webnn_error.mojom-forward.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
 #include "services/webnn/public/mojom/webnn_graph_builder.mojom.h"
@@ -30,6 +31,7 @@ namespace webnn {
 
 class WebNNConstantOperand;
 class WebNNContextImpl;
+class WebNNTensorImpl;
 
 // Services-side connection to an `MLGraphBuilder`. Responsible for managing
 // data associated with the graph builder.
@@ -64,8 +66,9 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphBuilderImpl
   struct ValidateGraphSuccessResult {
     ValidateGraphSuccessResult(
         WebNNGraphImpl::ComputeResourceInfo compute_resource_info,
-        base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
-            constant_operands);
+        base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
+            constant_operands,
+        base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands);
     ~ValidateGraphSuccessResult();
 
     ValidateGraphSuccessResult(const ValidateGraphSuccessResult&) = delete;
@@ -80,8 +83,12 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphBuilderImpl
     // Constant operands associated with this graph, which will be used during
     // graph construction. This member is only non-empty when
     // `keep_builder_resources_for_testing` is false.
-    base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+    base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
         constant_operands;
+
+    // Constant tensors associated with this graph, which will be used during
+    // graph construction.
+    base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands;
   };
 
   // Transfer ownership of this builder's resources to a returned
@@ -98,6 +105,7 @@ class COMPONENT_EXPORT(WEBNN_SERVICE) WebNNGraphBuilderImpl
  private:
   void DidCreateGraph(
       CreateGraphCallback callback,
+      mojo::PendingAssociatedRemote<mojom::WebNNGraph> remote,
       base::expected<std::unique_ptr<WebNNGraphImpl>, mojom::ErrorPtr> result);
 
   void DestroySelf();

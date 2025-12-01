@@ -13,6 +13,7 @@
 #include <string_view>
 
 #include "base/check.h"
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/containers/checked_iterators.h"
 #include "base/memory/raw_ptr_exclusion.h"
@@ -137,29 +138,6 @@ class basic_cstring_view final {
   UNSAFE_BUFFER_USAGE explicit constexpr basic_cstring_view(
       String&& ptr LIFETIME_BOUND) noexcept
       : ptr_(ptr), len_(std::char_traits<Char>::length(ptr)) {}
-
-  // Unsafe construction from a NUL-terminated pointer and length. This allows
-  // the string to contain embedded NULs. Prefer to construct cstring view from
-  // a string literal, std::string, or another cstring view.
-  //
-  // # Safety
-  // The `ptr` and `len` pair indicate a valid NUL-terminated string:
-  // * The `ptr` must not be null, and must point to a NUL-terminated string.
-  // * The `len` must be valid such that `ptr + len` gives a pointer to the
-  //   terminating NUL and is in the same allocation as `ptr`.
-  UNSAFE_BUFFER_USAGE explicit constexpr basic_cstring_view(const Char* ptr
-                                                                LIFETIME_BOUND,
-                                                            size_t len)
-      : ptr_(ptr), len_(len) {
-    // This method is marked UNSAFE_BUFFER_USAGE so we are trusting the caller
-    // to do things right, and expecting strong scrutiny at the call site, but
-    // we perform a debug check to help catch mistakes regardless.
-    //
-    // SAFETY: `ptr` points to `len` many chars and then a NUL, according to the
-    // caller of this method. So then `len` index will be in bounds and return
-    // the NUL.
-    DCHECK_EQ(UNSAFE_BUFFERS(ptr[len]), Char{0});
-  }
 
   // Returns a pointer to the NUL-terminated string, for passing to C-style APIs
   // that require `const char*` (or whatever the `Char` type is).

@@ -217,6 +217,7 @@ void CastToolbarButtonController::MaybeToggleIconVisibility() {
                 actions::ActionPinnableState::kPinnable));
       }
       // Update the toolbar button's visibility.
+      if (BrowserView::GetBrowserViewForBrowser(browser)) // temp
       if (auto* container = BrowserView::GetBrowserViewForBrowser(browser)
                                 ->toolbar()
                                 ->pinned_toolbar_actions_container()) {

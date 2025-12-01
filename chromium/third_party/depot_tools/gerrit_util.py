@@ -30,7 +30,8 @@ import urllib.parse
 from dataclasses import dataclass
 from io import StringIO
 from multiprocessing.pool import ThreadPool
-from typing import Any, Container, Dict, List, Optional
+from typing import Any, Container, Dict, Mapping
+from typing import NamedTuple, List, Optional
 from typing import Tuple, TypedDict, cast
 
 import httplib2
@@ -174,49 +175,50 @@ class SSOHelper(object):
 ssoHelper = SSOHelper()
 
 
-@functools.lru_cache(maxsize=None)
 def ShouldUseSSO(host: str, email: str) -> bool:
     """Return True if we should use SSO for the given Gerrit host and user."""
     LOGGER.debug("Determining whether we should use SSO...")
+    result = CheckShouldUseSSO(host, email)
+    LOGGER.debug("SSO=%r: %s", result.status, result.reason)
+    return result.status
+
+
+class SSOCheckResult(NamedTuple):
+    status: bool
+    reason: str
+
+
+@functools.lru_cache(maxsize=None)
+def CheckShouldUseSSO(host: str, email: str) -> SSOCheckResult:
+    """Checks if we should use SSO for the given Gerrit host and user."""
     if not newauth.Enabled():
-        LOGGER.debug("SSO=False: not opted in")
-        return False
+        return SSOCheckResult(False, 'not opted in')
     if not host.endswith('.googlesource.com'):
-        LOGGER.debug("SSO=False: non-googlesource host %r", host)
-        return False
-    if newauth.SkipSSO():
-        LOGGER.debug("SSO=False: set skip SSO config")
-        return False
+        return SSOCheckResult(False, f'non-googlesource host {host}')
     if not ssoHelper.find_cmd():
-        LOGGER.debug("SSO=False: no SSO command")
-        return False
+        return SSOCheckResult(False, 'no SSO command')
     if gclient_utils.IsEnvCog():
-        LOGGER.debug("SSO=True: in Cog")
-        return True
+        return SSOCheckResult(True, 'in Cog')
     if not email:
-        LOGGER.debug(
-            "SSO=True: email is empty or missing (and SSO command available)")
-        return True
+        return SSOCheckResult(
+            True, 'email is empty or missing (and SSO command available)')
     if email.endswith('@google.com'):
-        LOGGER.debug("SSO=True: email is google.com")
-        return True
+        return SSOCheckResult(True, 'email is @google.com')
     if not email.endswith('@chromium.org'):
-        LOGGER.debug("SSO=False: not chromium.org")
-        return False
+        return SSOCheckResult(False, 'email is not @chromium.org')
     authenticator = SSOAuthenticator()
+    records: list[EmailRecord] = []
     try:
-        records = GetAccountEmails(host, 'self', authenticator=authenticator)
+        records = GetAccountEmails(host, 'self',
+                                   authenticator=authenticator) or []
     except GerritError as e:
         if e.http_status == 400:
             # This is likely because the user doesn't have an account on the Gerrit host.
-            LOGGER.debug("SSO=False: get account emails returned 400")
-            return False
+            return SSOCheckResult(False, 'account missing on Gerrit host')
         raise
     if any(email == r['email'] for r in records):
-        LOGGER.debug("SSO=True: email is linked to google.com")
-        return True
-    LOGGER.debug("SSO=False: unlinked chromium.org")
-    return False
+        return SSOCheckResult(True, 'email is linked to @google.com email')
+    return SSOCheckResult(False, 'email is not linked to @google.com email')
 
 
 class _Authenticator(object):
@@ -273,9 +275,6 @@ class _Authenticator(object):
 
             use_new_auth = newauth.Enabled()
 
-            # Allow skipping SSOAuthenticator for local testing purposes.
-            skip_sso = newauth.SkipSSO()
-
             if use_new_auth:
                 LOGGER.debug('_Authenticator.get: using new auth stack')
                 if LuciContextAuthenticator.is_applicable():
@@ -292,10 +291,6 @@ class _Authenticator(object):
                         GitCredsAuthenticator(),
                         NoAuthenticator(),
                     ]
-                    if skip_sso:
-                        LOGGER.debug(
-                            'Authenticator.get: skipping SSOAuthenticator.')
-                        a = a[1:]
                     ret = ChainedAuthenticator(a)
                 cls._resolved = ret
                 return ret
@@ -1429,7 +1424,7 @@ def AbandonChange(host, change, msg=''):
     path = 'changes/%s/abandon' % change
     body = {'message': msg} if msg else {}
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
-    return ReadHttpJsonResponse(conn)
+    return ReadHttpJsonResponse(conn, accept_statuses=(200, 204, 409))
 
 
 def MoveChange(host, change, destination_branch):
@@ -1523,7 +1518,12 @@ def DeletePendingChangeEdit(host, change):
     ReadHttpResponse(conn, accept_statuses=[204, 404])
 
 
-def CherryPick(host, change, destination, revision='current', message=None):
+def CherryPick(host,
+               change,
+               destination,
+               revision='current',
+               message=None,
+               base=None):
     """Create a cherry-pick commit from the given change, onto the given
     destination.
     """
@@ -1531,6 +1531,8 @@ def CherryPick(host, change, destination, revision='current', message=None):
     body = {'destination': destination}
     if message:
         body['message'] = message
+    if base:
+        body['base'] = base
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
 
     # If a cherry pick fails due to a merge conflict, Gerrit returns 409.

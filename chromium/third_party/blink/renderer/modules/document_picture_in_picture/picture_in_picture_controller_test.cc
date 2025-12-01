@@ -683,7 +683,8 @@ TEST_F(PictureInPictureControllerTestWithWidget,
 
   EXPECT_NE(nullptr, PictureInPictureControllerImpl::From(GetDocument())
                          .PictureInPictureElement());
-  EXPECT_EQ(DisplayType::kVideoPictureInPicture, Video()->GetDisplayType());
+  EXPECT_EQ(WebMediaPlayer::DisplayType::kVideoPictureInPicture,
+            Video()->GetDisplayType());
 }
 
 TEST_F(PictureInPictureControllerTestWithWidget,
@@ -697,10 +698,11 @@ TEST_F(PictureInPictureControllerTestWithWidget,
   auto* pip = OpenDocumentPictureInPictureWindow(v8_scope, GetDocument(),
                                                  KURL("file://my/file.html"));
   EXPECT_TRUE(pip);
-  EXPECT_EQ(DisplayType::kInline, Video()->GetDisplayType());
+  EXPECT_EQ(WebMediaPlayer::DisplayType::kInline, Video()->GetDisplayType());
 
   pip->document()->body()->AppendChild(Video());
-  EXPECT_EQ(DisplayType::kDocumentPictureInPicture, Video()->GetDisplayType());
+  EXPECT_EQ(WebMediaPlayer::DisplayType::kDocumentPictureInPicture,
+            Video()->GetDisplayType());
 }
 
 class PictureInPictureControllerChromeClient
@@ -793,10 +795,8 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
     EXPECT_CALL(GetPipChromeClient(), SetWindowRect(_, _));
     LocalFrame::NotifyUserActivation(
         document->GetFrame(), mojom::UserActivationNotificationType::kTest);
-    document->domWindow()->resizeTo(10, 10,
-                                    IgnoreException(v8_scope.GetIsolate()));
-    document->domWindow()->resizeTo(20, 20,
-                                    IgnoreException(v8_scope.GetIsolate()));
+    document->domWindow()->resizeTo(10, 10, IGNORE_EXCEPTION);
+    document->domWindow()->resizeTo(20, 20, IGNORE_EXCEPTION);
     testing::Mock::VerifyAndClearExpectations(&GetPipChromeClient());
   }
 
@@ -806,10 +806,8 @@ TEST_F(PictureInPictureControllerTestWithChromeClient,
     EXPECT_CALL(GetPipChromeClient(), SetWindowRect(_, _));
     LocalFrame::NotifyUserActivation(
         document->GetFrame(), mojom::UserActivationNotificationType::kTest);
-    document->domWindow()->resizeBy(10, 10,
-                                    IgnoreException(v8_scope.GetIsolate()));
-    document->domWindow()->resizeBy(20, 20,
-                                    IgnoreException(v8_scope.GetIsolate()));
+    document->domWindow()->resizeBy(10, 10, IGNORE_EXCEPTION);
+    document->domWindow()->resizeBy(20, 20, IGNORE_EXCEPTION);
     testing::Mock::VerifyAndClearExpectations(&GetPipChromeClient());
   }
 

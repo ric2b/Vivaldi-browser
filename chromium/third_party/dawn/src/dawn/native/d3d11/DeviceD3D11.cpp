@@ -45,6 +45,7 @@
 #include "dawn/native/d3d11/BindGroupLayoutD3D11.h"
 #include "dawn/native/d3d11/BufferD3D11.h"
 #include "dawn/native/d3d11/CommandBufferD3D11.h"
+#include "dawn/native/d3d11/CommandRecordingContextD3D11.h"
 #include "dawn/native/d3d11/ComputePipelineD3D11.h"
 #include "dawn/native/d3d11/PhysicalDeviceD3D11.h"
 #include "dawn/native/d3d11/PipelineLayoutD3D11.h"
@@ -92,6 +93,26 @@ bool SkipDebugMessage(const D3D11_MESSAGE& message) {
         case D3D11_MESSAGE_ID_DECODERBEGINFRAME_HAZARD:
             // This is video decoder's error which must happen externally because Dawn doesn't
             // handle video directly. So ignore it.
+            return true;
+        case D3D11_MESSAGE_ID_DEVICE_DRAWINSTANCED_INSTANCEPOS_OVERFLOW:
+        case D3D11_MESSAGE_ID_DEVICE_DRAWINDEXEDINSTANCED_INSTANCEPOS_OVERFLOW:
+            // Some clients use workarounds such as packing uniform data in a 32 bits BaseInstance
+            // value to avoid needing an uniform buffer. See
+            // https://source.chromium.org/chromium/chromium/src/+/main:third_party/skia/src/gpu/graphite/dawn/DawnResourceProvider.cpp;drc=d29622dea776ec762e8a69c8c65b87f8e9ee8908;l=398
+            // for one example.
+            // The embedded data would cause BaseInstance + InstanceCount to overflow. This is not
+            // an error because the workarounds always use InstanceCount=1 and we never invoke any
+            // vertex shader at (BaseInstance + InstanceCount)-th instance.
+            // Furthermore, the behavior of overflown InstanceID is already well documented in
+            // https://learn.microsoft.com/en-us/windows/win32/direct3d11/d3d10-graphics-programming-guide-input-assembler-stage-using#instanceid
+            // i.e. it will wrap to 0.
+            return true;
+        case D3D11_MESSAGE_ID_CREATETEXTURE2D_INVALIDDIMENSIONS:
+        case D3D11_MESSAGE_ID_CREATETEXTURE2D_INVALIDARG_RETURN:
+            // External video decoder sometimes attempts to create a multiplanar texture with
+            // non-even dimensions. This is not supported by D3D11 runtime, but the error should
+            // already be handled by the call sites. Chromium's video decoder already does that so
+            // it's better we don't treat this as a fatal error.
             return true;
         default:
             return false;
@@ -267,7 +288,7 @@ ResultOrError<Ref<ShaderModuleBase>> Device::CreateShaderModuleImpl(
     const UnpackedPtr<ShaderModuleDescriptor>& descriptor,
     const std::vector<tint::wgsl::Extension>& internalExtensions,
     ShaderModuleParseResult* parseResult,
-    OwnedCompilationMessages* compilationMessages) {
+    std::unique_ptr<OwnedCompilationMessages>* compilationMessages) {
     return ShaderModule::Create(this, descriptor, internalExtensions, parseResult,
                                 compilationMessages);
 }
@@ -457,6 +478,23 @@ void Device::SetLabelImpl() {}
 
 void Device::DisposeKeyedMutex(ComPtr<IDXGIKeyedMutex> dxgiKeyedMutex) {
     // Nothing to do, the ComPtr will release the keyed mutex.
+}
+
+bool Device::ReduceMemoryUsageImpl() {
+    // D3D11 defers the deletion of resources until we call Flush().
+    // So trigger a Flush() here to force deleting any pending resources.
+    auto commandContext =
+        ToBackend(GetQueue())
+            ->GetScopedPendingCommandContext(ExecutionQueueBase::SubmitMode::Passive);
+    commandContext.Flush();
+
+    // Call Trim() to delete any internal resources created by the driver.
+    ComPtr<IDXGIDevice3> dxgiDevice3;
+    if (SUCCEEDED(mD3d11Device.As(&dxgiDevice3))) {
+        dxgiDevice3->Trim();
+    }
+
+    return false;
 }
 
 bool Device::MayRequireDuplicationOfIndirectParameters() const {

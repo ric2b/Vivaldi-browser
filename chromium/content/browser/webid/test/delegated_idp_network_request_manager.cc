@@ -43,10 +43,12 @@ void DelegatedIdpNetworkRequestManager::FetchClientMetadata(
 }
 
 void DelegatedIdpNetworkRequestManager::SendAccountsRequest(
+    const url::Origin& idp_origin,
     const GURL& accounts_url,
     const std::string& client_id,
     AccountsRequestCallback callback) {
-  delegate_->SendAccountsRequest(accounts_url, client_id, std::move(callback));
+  delegate_->SendAccountsRequest(idp_origin, accounts_url, client_id,
+                                 std::move(callback));
 }
 
 void DelegatedIdpNetworkRequestManager::SendTokenRequest(
@@ -101,6 +103,19 @@ void DelegatedIdpNetworkRequestManager::DownloadAndDecodeImage(
     const GURL& url,
     ImageCallback callback) {
   delegate_->DownloadAndDecodeImage(url, std::move(callback));
+}
+
+void DelegatedIdpNetworkRequestManager::DownloadAndDecodeCachedImage(
+    const url::Origin& idp_origin,
+    const GURL& url,
+    ImageCallback callback) {
+  delegate_->DownloadAndDecodeCachedImage(idp_origin, url, std::move(callback));
+}
+
+void DelegatedIdpNetworkRequestManager::CacheAccountPictures(
+    const url::Origin& idp_origin,
+    const std::vector<GURL>& picture_urls) {
+  delegate_->CacheAccountPictures(idp_origin, picture_urls);
 }
 
 }  // namespace content

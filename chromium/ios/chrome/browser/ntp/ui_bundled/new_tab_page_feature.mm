@@ -64,6 +64,10 @@ BASE_FEATURE(kFeedSwipeInProductHelp,
              "FeedSwipeInProductHelp",
              base::FEATURE_DISABLED_BY_DEFAULT);
 
+BASE_FEATURE(kUseFeedEligibilityService,
+             "UseFeedEligibilityService",
+             base::FEATURE_DISABLED_BY_DEFAULT);
+
 #pragma mark - Feature parameters
 
 const char kDiscoverFeedSRSReconstructedTemplatesEnabled[] =
@@ -84,9 +88,7 @@ const char kFeedSettingTimeoutThresholdAfterClearBrowsingData[] =
 const char kFeedSettingDiscoverReferrerParameter[] =
     "DiscoverReferrerParameter";
 
-// Feature parameters for `kIdentityDiscAccountMenu`.
-const char kDisableAccountMenuEllipsisParam[] =
-    "identity-disc-account-menu-without-ellipsis";
+// Feature parameter for `kIdentityDiscAccountMenu`.
 const char kShowSettingsInAccountMenuParam[] =
     "identity-disc-account-menu-with-settings-button";
 
@@ -156,21 +158,6 @@ double GetDeprecateFeedHeaderParameterValueAsDouble(
                                                    param_name, default_value);
 }
 
-bool IsIdentityDiscAccountMenuEnabled() {
-  if (AreSeparateProfilesForManagedAccountsEnabled()) {
-    return true;
-  }
-  return base::FeatureList::IsEnabled(kIdentityDiscAccountMenu);
-}
-
-bool IdentityDiscAccountMenuEnabledWithoutEllipsis() {
-  if (base::FeatureList::IsEnabled(kIdentityDiscAccountMenu)) {
-    return base::GetFieldTrialParamByFeatureAsBool(
-        kIdentityDiscAccountMenu, kDisableAccountMenuEllipsisParam, false);
-  }
-  return false;
-}
-
 bool IdentityDiscAccountMenuEnabledWithSettings() {
   if (base::FeatureList::IsEnabled(kIdentityDiscAccountMenu)) {
     return base::GetFieldTrialParamByFeatureAsBool(
@@ -188,4 +175,8 @@ FeedSwipeIPHVariation GetFeedSwipeIPHVariation() {
             static_cast<int>(FeedSwipeIPHVariation::kStaticAfterFRE)));
   }
   return FeedSwipeIPHVariation::kDisabled;
+}
+
+bool UseFeedEligibilityService() {
+  return base::FeatureList::IsEnabled(kUseFeedEligibilityService);
 }

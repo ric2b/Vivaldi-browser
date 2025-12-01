@@ -1,6 +1,6 @@
 /* ----------------------------------------------------------------------- *
  *
- *   Copyright 1996-2016 The NASM Authors - All Rights Reserved
+ *   Copyright 1996-2022 The NASM Authors - All Rights Reserved
  *   See the file AUTHORS included with the NASM distribution for
  *   the specific copyright holders.
  *
@@ -406,7 +406,7 @@ static void ieee_out(int32_t segto, const void *data,
     }
 
     /*
-     * Find the segment we are targetting.
+     * Find the segment we are targeting.
      */
     for (seg = seghead; seg; seg = seg->next)
         if (seg->index == segto)
@@ -795,6 +795,23 @@ static int32_t ieee_segment(char *name, int *bits)
             define_label(name, seg->index + 1, 0L, false);
         ieee_seg_needs_update = NULL;
 
+        /*
+         * In commit 98578071b9d71ecaa2344dd9c185237c1765041e
+         * we reworked labels significantly which in turn lead
+         * to the case where seg->name = NULL here and we get
+         * nil dereference in next segments definitions.
+         *
+         * Lets placate this case with explicit name setting
+         * if labels engine didn't set it yet.
+         *
+         * FIXME: Need to revisit this moment if such fix doesn't
+         * break anything but since IEEE 695 format is veeery
+         * old I don't expect there are many users left. In worst
+         * case this should only lead to a memory leak.
+         */
+        if (!seg->name)
+            seg->name = nasm_strdup(name);
+
         if (seg->use32)
             *bits = 32;
         else
@@ -919,7 +936,7 @@ static void ieee_write_file(void)
      * Write the section headers
      */
     seg = seghead;
-    if (!debuginfo && !strcmp(seg->name, "??LINE"))
+    if (!debuginfo && seg && !strcmp(seg->name, "??LINE"))
         seg = seg->next;
     while (seg) {
         char buf[256];
@@ -954,7 +971,7 @@ static void ieee_write_file(void)
     /*
      * write the start address if there is one
      */
-    if (ieee_entry_seg) {
+    if (ieee_entry_seg && seghead) {
         for (seg = seghead; seg; seg = seg->next)
             if (seg->index == ieee_entry_seg)
                 break;
@@ -1067,7 +1084,7 @@ static void ieee_write_file(void)
      *  put out section data;
      */
     seg = seghead;
-    if (!debuginfo && !strcmp(seg->name, "??LINE"))
+    if (!debuginfo && seg && !strcmp(seg->name, "??LINE"))
         seg = seg->next;
     while (seg) {
         if (seg->currentpos) {
@@ -1128,15 +1145,15 @@ static void ieee_write_dword(struct ieeeSection *seg, int32_t data)
     ieee_write_byte(seg, (data >> 16) & 0xFF);
     ieee_write_byte(seg, (data >> 24) & 0xFF);
 }
-static void ieee_putascii(char *format, ...)
+static void printf_func(1, 2) ieee_putascii(char *format, ...)
 {
     char buffer[256];
-    int i, l;
+    size_t i, l;
     va_list ap;
 
     va_start(ap, format);
-    vsnprintf(buffer, sizeof(buffer), format, ap);
-    l = strlen(buffer);
+    l = vsnprintf(buffer, sizeof(buffer), format, ap);
+    nasm_assert(l < sizeof(buffer));
     for (i = 0; i < l; i++)
         if ((uint8_t)buffer[i] > 31)
             checksum += buffer[i];
@@ -1193,7 +1210,7 @@ static int32_t ieee_putlr(struct ieeeFixupp *p)
  * defines two types of segments: absolute and virtual.  Note that
  * 'absolute' in this context is a different thing from the IEEE
  * definition of an absolute segment type, which is also supported. If a
- * sement is linked in virtual mode the low limit (L-var) is
+ * segment is linked in virtual mode the low limit (L-var) is
  * subtracted from each R,X, and P variable which appears in an
  * expression, so that we can have relative offsets.  Meanwhile
  * in the ABSOLUTE mode this subtraction is not done and
@@ -1304,7 +1321,7 @@ static void dbgls_cleanup(void)
  * because this routine is not bracketed in
  * the main program, this routine will be called even if there
  * is no request for debug info
- * so, we have to make sure the ??LINE segment is avaialbe
+ * so, we have to make sure the ??LINE segment is available
  * as the first segment when this debug format is selected
  */
 static void dbgls_linnum(const char *lnfname, int32_t lineno, int32_t segto)
@@ -1326,7 +1343,7 @@ static void dbgls_linnum(const char *lnfname, int32_t lineno, int32_t segto)
     }
 
     /*
-     * Find the segment we are targetting.
+     * Find the segment we are targeting.
      */
     for (seg = seghead; seg; seg = seg->next)
         if (seg->index == segto)
@@ -1464,6 +1481,9 @@ static const struct dfmt ladsoft_debug_form = {
     dbgls_init,
     dbgls_linnum,
     dbgls_deflabel,
+    NULL,                       /* .debug_smacros */
+    NULL,                       /* .debug_include */
+    NULL,                       /* .debug_mmacros */
     null_debug_directive,
     dbgls_typevalue,
     dbgls_output,

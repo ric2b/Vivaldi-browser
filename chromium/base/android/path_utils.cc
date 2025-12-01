@@ -11,7 +11,7 @@
 #include "base/files/file_path.h"
 
 // Must come after all headers that specialize FromJniType() / ToJniType().
-#include "base/base_jni/PathUtils_jni.h"
+#include "base/path_utils_jni/PathUtils_jni.h"
 
 namespace base {
 namespace android {
@@ -88,6 +88,11 @@ bool GetExternalStorageDirectory(FilePath* result) {
   FilePath storage_path(path);
   *result = storage_path;
   return true;
+}
+
+int64_t GetCacheQuotaBytes() {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_PathUtils_getCacheQuotaBytes(env);
 }
 
 }  // namespace android

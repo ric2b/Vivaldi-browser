@@ -49,19 +49,24 @@ AutofillDriverIOSFactory::AutofillDriverIOSFactory(
 }
 
 AutofillDriverIOSFactory::~AutofillDriverIOSFactory() {
-  CHECK(web_state_destroyed_, base::NotFatalUntil::M135);
+  CHECK(web_state_destroyed_);
   for (auto& observer : AutofillDriverFactory::observers()) {
     observer.OnAutofillDriverFactoryDestroyed(*this);
   }
-  base::UmaHistogramCounts1000("Autofill.NumberOfDriversPerFactory",
-                               max_drivers_);
+  if (web_state() && web_state()->IsRealized()) {
+    // Only count the max number of drivers for realized web states because
+    // unrealized web states do not have loaded frames which can heavily skew
+    // the data towards 0 frames.
+    base::UmaHistogramCounts1000("Autofill.NumberOfDriversPerFactory",
+                                max_drivers_);
+  }
 }
 
 // The AutofillClientIOS contract guarantees that WebStateDestroyed() is called
 // and that `client_` is still alive.
 void AutofillDriverIOSFactory::WebStateDestroyed(
     web::WebState* destroyed_web_state) {
-  CHECK(web_state(), base::NotFatalUntil::M135);
+  CHECK(web_state());
   if (web_state()) {
     for (const auto& [frame_id, driver] : driver_map_) {
       if (driver) {

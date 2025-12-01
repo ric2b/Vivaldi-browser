@@ -300,7 +300,9 @@ std::vector<TestUpdaterVersion> GetRealUpdaterVersions();
 
 // Sets up a real updater on the system given any (higher or lower) version of
 // `UpdaterSetup.exe` in `updater_path`.
-void SetupRealUpdater(UpdaterScope scope, const base::FilePath& updater_path);
+void SetupRealUpdater(UpdaterScope scope,
+                      const base::FilePath& updater_path,
+                      const base::Value::List& switches);
 
 // Sets up a fake updater on the system at a version higher than the test.
 void SetupFakeUpdaterHigherVersion(UpdaterScope scope);
@@ -372,7 +374,8 @@ void ExpectPolicyStatusValues(
     const std::wstring& expected_source,
     const std::wstring& expected_value,
     VARIANT_BOOL expected_has_conflict);
-void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope);
+void ExpectLegacyPolicyStatusSucceeds(UpdaterScope scope,
+                                      const base::Version& updater_version);
 
 void LegacyInstallApp(UpdaterScope scope,
                       const std::string& app_id,
@@ -507,7 +510,9 @@ void UninstallApp(UpdaterScope scope, const std::string& app_id);
 
 void RunOfflineInstall(UpdaterScope scope,
                        bool is_legacy_install,
-                       bool is_silent_install);
+                       bool is_silent_install,
+                       int installer_result,
+                       int installer_error);
 
 void RunOfflineInstallOsNotSupported(UpdaterScope scope,
                                      bool is_legacy_install,
@@ -621,6 +626,21 @@ void ExpectKSAdminFetchTag(UpdaterScope scope,
                            std::optional<UpdaterScope> store_flag,
                            std::optional<std::string> want_tag);
 
+// Expect ksadmin to fetch the specified brand code from a tag stored in the
+// `com.apple.application-instance` extended attribute of the item at the
+// specified path, or to fail to retrieve a brand code.
+//
+// Params:
+//      scope -- Picks which ksadmin binary to use.
+//    elevate -- Whether to run as root instead of the current user.
+//       path -- Path to send to ksadmin via `--print-xattr-tag-brand`.
+// want_brand -- if valid, the brand code that ksadmin is expected to
+//               successfully retrieve, which may be the empty string. If
+//               nullopt, specifies that ksadmin should return EXIT_FAILURE.
+void ExpectKSAdminXattrBrand(UpdaterScope scope,
+                             bool elevate,
+                             const base::FilePath& path,
+                             std::optional<std::string> want_brand);
 #endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace updater::test

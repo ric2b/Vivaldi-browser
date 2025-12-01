@@ -25,6 +25,7 @@
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/http_auth_manager_impl.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
+#include "components/password_manager/core/browser/one_time_passwords/otp_manager.h"
 #include "components/password_manager/core/browser/password_cross_domain_confirmation_popup_controller.h"
 #include "components/password_manager/core/browser/password_feature_manager_impl.h"
 #include "components/password_manager/core/browser/password_form_manager_for_ui.h"
@@ -42,6 +43,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "extensions/buildflags/buildflags.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(IS_ANDROID)
@@ -51,6 +53,7 @@
 #include "chrome/browser/password_manager/android/password_access_loss_warning_startup_launcher.h"
 #include "chrome/browser/password_manager/android/password_manager_error_message_delegate.h"
 #include "chrome/browser/password_manager/android/save_update_password_message_delegate.h"
+#include "components/enterprise/connectors/core/features.h"
 #include "components/password_manager/core/browser/credential_cache.h"
 #include "components/password_manager/core/browser/first_cct_page_load_passwords_ukm_recorder.h"
 #endif
@@ -93,11 +96,12 @@ class DeviceAuthenticator;
 }
 
 namespace password_manager {
-class FieldInfoManager;
-class PasswordCredentialFillerImpl;
-class WebAuthnCredentialsDelegate;
 class CredManController;
+class FieldInfoManager;
 class KeyboardReplacingSurfaceVisibilityController;
+class PasswordCredentialFillerImpl;
+class SmsOtpBackend;
+class WebAuthnCredentialsDelegate;
 }  // namespace password_manager
 
 namespace webauthn {
@@ -259,20 +263,27 @@ class ChromePasswordManagerClient
                                    const GURL& frame_url) override;
 #endif
 
-// Reporting login event is only supported on desktop platforms.
-#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS)
+// Reporting login event is supported on desktop platforms (mapped by
+// `ENTERPRISE_CONTENT_ANALYSIS`) and on the Android platform, when the
+// enterprise reporting feature flag is turned on. `IS_ANDROID` cannot be added
+// to `ENTERPRISE_CONTENT_ANALYSIS`, because the build flag is also used by
+// other features that are not yet supported on Android.
+#if BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS) || BUILDFLAG(IS_ANDROID)
   void MaybeReportEnterpriseLoginEvent(
       const GURL& url,
       bool is_federated,
       const url::SchemeHostPort& federated_origin,
       const std::u16string& login_user_name) const override;
 
-// Reporting password breach event is only supported when extensions are enabled
-// and safe browsing is available.
+  // Reporting password breach event is supported on desktop platforms (mapped
+  // by `ENTERPRISE_CONTENT_ANALYSIS`) and on the Android platform, when the
+  // enterprise reporting feature flag is turned on. `IS_ANDROID` cannot be
+  // added to `ENTERPRISE_CONTENT_ANALYSIS`, because the build flag is also used
+  // by other features that are not yet supported on Android.
   void MaybeReportEnterprisePasswordBreachEvent(
       const std::vector<std::pair<GURL, std::u16string>>& identities)
       const override;
-#endif
+#endif  // BUILDFLAG(ENTERPRISE_CONTENT_ANALYSIS) || BUILDFLAG(IS_ANDROID)
 
   ukm::SourceId GetUkmSourceId() override;
   password_manager::PasswordManagerMetricsRecorder* GetMetricsRecorder()
@@ -293,6 +304,7 @@ class ChromePasswordManagerClient
   void UpdateFormManagers() override;
   void NavigateToManagePasswordsPage(
       password_manager::ManagePasswordsReferrer referrer) override;
+  void InformPasswordChangeServiceOfOtpPresent() override;
 
 #if BUILDFLAG(IS_ANDROID)
   void NavigateToManagePasskeysPage(
@@ -308,6 +320,7 @@ class ChromePasswordManagerClient
   webauthn::WebAuthnCredManDelegate* GetWebAuthnCredManDelegateForDriver(
       password_manager::PasswordManagerDriver* driver) override;
   void MarkSharedCredentialsAsNotified(const GURL& url) override;
+  password_manager::SmsOtpBackend* GetSmsOtpBackend() const override;
 #endif  // BUILDFLAG(IS_ANDROID)
   version_info::Channel GetChannel() const override;
   void RefreshPasswordManagerSettingsIfNeeded() const override;
@@ -342,6 +355,9 @@ class ChromePasswordManagerClient
   void FrameWasScrolled() override;
   void GenerationElementLostFocus() override;
 #endif  // !BUILDFLAG(IS_ANDROID)
+
+  autofill::PasswordManagerDelegate* GetAutofillDelegate(
+      const autofill::FieldGlobalId& field_id);
 
   // Observer for PasswordGenerationPopup events. Used for testing.
   void SetTestObserver(PasswordGenerationPopupObserver* observer);
@@ -404,6 +420,10 @@ class ChromePasswordManagerClient
   // content::WebContentsObserver overrides.
   void PrimaryPageChanged(content::Page& page) override;
   void WebContentsDestroyed() override;
+  void ResourceLoadComplete(
+      content::RenderFrameHost* render_frame_host,
+      const content::GlobalRequestID& request_id,
+      const blink::mojom::ResourceLoadInfo& resource_load_info) override;
 
   // autofill::AutofillManager::Observer:
   void OnFieldTypesDetermined(autofill::AutofillManager& manager,
@@ -423,6 +443,9 @@ class ChromePasswordManagerClient
   // Checks if the current page specified in |url| fulfils the conditions for
   // the password manager to be active on it.
   bool IsPasswordManagementEnabledForCurrentPage(const GURL& url) const;
+  // Checks if the current page specified in |url| has password manager
+  // blocklisted by policy.
+  bool IsPasswordManagerForUrlDisallowedByPolicy(const GURL& url) const;
 
   // Called back by the PasswordGenerationAgent when the generation flow is
   // completed. If |ui_data| is non-empty, will create a UI to display the
@@ -438,6 +461,7 @@ class ChromePasswordManagerClient
       autofill::password_generation::PasswordGenerationType type,
       password_manager::ContentPasswordManagerDriver* driver,
       const autofill::password_generation::PasswordGenerationUIData& ui_data);
+  void MaybeShowSavePasswordPrimingPromo(const GURL& current_url) override;
 #endif  // !BUILDFLAG(IS_ANDROID)
 
   gfx::RectF TransformToRootCoordinates(
@@ -467,6 +491,7 @@ class ChromePasswordManagerClient
   password_manager::PasswordManager password_manager_;
   password_manager::PasswordFeatureManagerImpl password_feature_manager_;
   password_manager::HttpAuthManagerImpl httpauth_manager_;
+  password_manager::OtpManager otp_manager_;
 
 #if BUILDFLAG(IS_ANDROID)
   // Holds and facilitates a credential store for each origin in this tab.

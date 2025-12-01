@@ -22,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "components/policy/core/browser/policy_error_map.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/schema.h"
@@ -828,6 +829,54 @@ void SimpleDeprecatingPolicyHandler::ApplyPolicySettings(
   NOTREACHED();
 }
 
+// SingleDeprecatedPolicyToMultipleNewPolicyHandler implementation
+// -----------------------
+
+SingleDeprecatedPolicyToMultipleNewPolicyHandler::
+    SingleDeprecatedPolicyToMultipleNewPolicyHandler(
+        std::unique_ptr<NamedPolicyHandler> legacy_policy_handler,
+        std::vector<std::string> new_policy_names)
+    : legacy_policy_handler_(std::move(legacy_policy_handler)),
+      new_policy_names_(std::move(new_policy_names)) {}
+
+SingleDeprecatedPolicyToMultipleNewPolicyHandler::
+    ~SingleDeprecatedPolicyToMultipleNewPolicyHandler() = default;
+
+// ConfigurationPolicyHandler:
+bool SingleDeprecatedPolicyToMultipleNewPolicyHandler::CheckPolicySettings(
+    const PolicyMap& policies,
+    PolicyErrorMap* errors) {
+  bool new_policy_set = false;
+  for (const auto& new_policy_name : new_policy_names_) {
+    if (!policies.Get(new_policy_name)) {
+      continue;
+    }
+    new_policy_set = true;
+    if (errors && policies.Get(legacy_policy_handler_->policy_name())) {
+      errors->AddError(legacy_policy_handler_->policy_name(),
+                       IDS_POLICY_OVERRIDDEN, new_policy_name);
+    }
+  }
+
+  // If none of the policies is set, fall back to legacy one.
+  return !new_policy_set &&
+         legacy_policy_handler_->CheckPolicySettings(policies, errors);
+}
+
+void SingleDeprecatedPolicyToMultipleNewPolicyHandler::
+    ApplyPolicySettingsWithParameters(const PolicyMap& policies,
+                                      const PolicyHandlerParameters& parameters,
+                                      PrefValueMap* prefs) {
+  legacy_policy_handler_->ApplyPolicySettingsWithParameters(policies,
+                                                            parameters, prefs);
+}
+
+void SingleDeprecatedPolicyToMultipleNewPolicyHandler::ApplyPolicySettings(
+    const policy::PolicyMap& /* policies */,
+    PrefValueMap* /* prefs */) {
+  NOTREACHED();
+}
+
 // CloudOnlyPolicyHandler implementation ---------------------------------------
 
 namespace {
@@ -855,6 +904,13 @@ bool CloudOnlyPolicyHandler::CheckCloudOnlyPolicySettings(
   if (!policy) {
     return true;
   }
+
+#if BUILDFLAG(IS_ANDROID)
+  // For development and testing without a policy server.
+  if (policy->source == policy::POLICY_SOURCE_COMMAND_LINE) {
+    return true;
+  }
+#endif
 
   // If the policy source is POLICY_SOURCE_MERGED, it is still cloud-only if all
   // policy values merged into it are cloud-only.

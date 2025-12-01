@@ -2,21 +2,101 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja-KS">
 <translation id="1063263220330818888">プライベート検索</translation>
+<translation id="1097355661841455597">思てはること、早う聞きたいわ。</translation>
 <translation id="1137850887415122856">プライベートタブをロックするんやったら、Touch ID、Face ID、それかパスコード設定して。</translation>
+<translation id="1189137610071296104">タブスタックで開く</translation>
 <translation id="1310184829257917508">よそのアプリからリンク開く時プライベートタブで開くか聞く</translation>
+<translation id="1743244221910283364">変更ほかす</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {さらのスタックにタブ入れたで}
+        other {さらのスタックにタブ入れたで}}</translation>
 <translation id="207677936531967364">さらのプライベートタブページ</translation>
+<translation id="2099591136582442348">これで、あんたのデバイスからそのスタック永久にほかされるで。</translation>
+<translation id="2181990701313127304">スタック内でさらのタブ開く</translation>
+<translation id="2351280151183279120">スタックわけわけ</translation>
+<translation id="2353953000228441783">デフォルトサイトビュー</translation>
+<translation id="2394192052244849643">貼り付けて検索</translation>
+<translation id="2418705169960294134">さらのプライベートタブ</translation>
+<translation id="2565593432251168402">タブスタック作って整理整頓</translation>
+<translation id="2783161812871838616">デスクトップ版サイトリクエストする</translation>
+<translation id="2806957659107692459">スタック作る</translation>
 <translation id="2899836479226240291">デフォルトのブラウザアプリVivaldiにしたら、リンク自動的にVivaldiで開けるで。</translation>
 <translation id="3365529507898144230">写真に保存</translation>
+<translation id="3434473769478814796">貼り付けて移動</translation>
+<translation id="3463990832590571933">さらのプライベートタブで開く</translation>
 <translation id="3473652525653758699">さらのプライベートウィンドウ</translation>
 <translation id="3501504415290398157">プライベートタブのロック解除するんやったら<ph name="BIOMETRIC_AUTHENITCATION_TYPE" />使うてな。</translation>
+<translation id="353418192940651934">スタック保持する</translation>
+<translation id="3607792383367580513">翻訳</translation>
 <translation id="3692650606013198282">プライベートタブで開く</translation>
+<translation id="3873885181515160073">名前と色つけて、さらのタブスタック作る</translation>
+<translation id="3922395466317605522">メニューのカスタマイズ</translation>
 <translation id="3981599532037327317">${url} をプライベートタブで開く</translation>
 <translation id="398477389655464998">選択部分のリンクコピー</translation>
+<translation id="3993429087389909418">タブはこのデバイスで開いたままになるけど、スタックは <ph name="USER_EMAIL" /> でサインインしてるデバイス全部からほかされるで。</translation>
+<translation id="4026745073321351206">🙄 バグあった？</translation>
+<translation id="4216644171369573466">タブスタック、<ph name="GROUP_TITLE" />、メニュー。</translation>
+<translation id="4304713468139749426">パスワードマネージャー</translation>
+<translation id="4569525137269575065">スタック閉じる</translation>
+<translation id="473775607612524610">更新</translation>
 <translation id="4755216899422789286">URL、Vivaldiで開く</translation>
+<translation id="4772190485302020393">タブとスタック全部閉じる</translation>
+<translation id="4802185666270672526">デスクトップ版サイトのリクエスト隠す</translation>
+<translation id="4828571836982833289">タブスタック解除する？</translation>
+<translation id="4838250035189612538">スタックの名前変える</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1つのタブスタックが閉じて保存されたで}
+            other {{count}つのタブスタックが閉じて保存されたで}}</translation>
+<translation id="5019787757991745254">タブスタックの色 <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">タブスタック。折りたたまれてるで。</translation>
+<translation id="5217245356412073535">設定→コンテンツの設定で、デフォルトサイトビューをデスクトップに変えれるで</translation>
+<translation id="5271549068863921519">パスワード保存</translation>
+<translation id="5317780077021120954">保存</translation>
+<translation id="5385953732213322025">このサイト、アプリケーション開こうとしてるわ。これやったらプライベートモード解除されるで。</translation>
+<translation id="5431239785743546285">既読ページ</translation>
+<translation id="5521301883748677039">スタックほかす？</translation>
+<translation id="5544011153887687593">タブスタックのタブ。<ph name="TAB_INDEX_IN_GROUP" /> の <ph name="NUMBER_OF_TABS_IN_GROUP" />。</translation>
+<translation id="5614553682702429503">パスワード保存する？</translation>
+<translation id="570209299585559496">設定→コンテンツの設定で、デフォルトサイトビューをデスクトップに変えれるで</translation>
+<translation id="5719777162751096990">タブスタックに移す</translation>
+<translation id="5962477178930921574">貼り付けて検索</translation>
+<translation id="6163856768888310791">スタック解除</translation>
+<translation id="6168969409902608220">スタックに名前つける</translation>
 <translation id="6233792867654386826">入力したURLがVivaldiで開くで。</translation>
+<translation id="6478587527114893588">スタック閉じる。</translation>
+<translation id="6527405730445064713">タブスタック。展開されてるで。</translation>
+<translation id="6532106788206463496">変更保存</translation>
+<translation id="6666425778700353369">これで、<ph name="USER_EMAIL" /> でサインインしているデバイス全部からスタックほかされるで。</translation>
+<translation id="6680416467695217368">メニューのカスタマイズ</translation>
+<translation id="6695835495840050460">「さらのスタックにタブ入れる」をタップ</translation>
+<translation id="6708694844902784277">スタックほかす</translation>
 <translation id="6827597288286078054">プライベート検索</translation>
+<translation id="6851516051005285358">デスクトップ版サイトリクエストする</translation>
+<translation id="6890907822330704077">タブスタック、<ph name="GROUP_TITLE" />、<ph name="TABS_NUMBER" /> タブ。</translation>
 <translation id="7307970171564921489"><ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> でプライベートタブのロック解除する</translation>
 <translation id="7347289093190902150">プライベートタブで開く？</translation>
+<translation id="7363285031331302144">タブスタック作って、開いているタブ整理する</translation>
+<translation id="7395230742578757172">さらのタブスタックで開く</translation>
+<translation id="7424676799308869002">スタック保持する？</translation>
+<translation id="7498234416455752244">編集続ける</translation>
 <translation id="7549299604720382000">さらのプライベートタブ</translation>
+<translation id="7585610907974664408">スタック内でさらのプライベートタブ開く</translation>
+<translation id="7661319142491611883">タブスタック展開する。</translation>
+<translation id="7706213624515206557">スタック内のタブ全部出す</translation>
+<translation id="7961015016161918242">せえへん</translation>
 <translation id="8326104954595890674">さらのプライベートタブ</translation>
+<translation id="8345989863850359861">タブ閉じてスタックほかす？</translation>
+<translation id="8407986162266014185">スタックわけわけ</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {さらのスタックにタブ入れたで}
+        other {さらのスタックにタブ入れたで}}</translation>
+<translation id="8465550436083180511">タブスタック折りたたむ。</translation>
+<translation id="8685478989144570078">タブスタック</translation>
+<translation id="8756969031206844760">パスワード更新する？</translation>
+<translation id="8852861335827546438">さらのタブスタック</translation>
+<translation id="8951084872625418241">スタック内でさらのタブ開く</translation>
+<translation id="9042893549633094279">プライバシーとセキュリティ</translation>
+<translation id="9094033019050270033">パスワード更新</translation>
+<translation id="944434461715569989">スタックから出す</translation>
+<translation id="959061183386231608">タブはこのデバイスで開いたままやけど、スタックは永久にほかされるで。</translation>
 </translationbundle>

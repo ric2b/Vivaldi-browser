@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved. -->
+<grit-part>
+  <message name="IDS_PRIVACY_REPORT_HEADER_TITLE" desc="Heading of the page indicating that a page was blocked by the ad/tracker blocker">
+    Vivaldi Privacy Report
+  </message>
+  <message name="IDS_APD_PRIVACY_REPORT_TITLE" desc="Heading title indicating that a page was blocked by the ad/tracker blocker">
+   Privacy Report
+  </message>
+  <message name="IDS_APD_PRIVACY_REPORT_TITLE_DESCRIPTION" desc="Description text for Privacy Report">
+    What you do online is your business! Below you can see just how we have helped you stay protected.
+  </message>
+  <message name="IDS_APD_INTERVAL_7" desc="Option for time interval for ad/tracker blocker data lookup">
+    Last 7 days
+  </message>
+  <message name="IDS_APD_INTERVAL_1_MONTH" desc="Option for time interval for ad/tracker blocker data lookup">
+    Last 30 days
+  </message>
+  <message name="IDS_APD_INTERVAL_ALL_TIME" desc="Option for time interval for ad/tracker blocker data lookup">
+    All Time
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_TITLE" desc="Title description for Privacy Statistics">
+    Your Privacy Statistics
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_ADS_BLOCKED" desc="Title description for Privacy Statistics number of Ads Blocked">
+   Ads blocked
+  </message>
+  <message name="IDS_APD_PRIVACY_REPORT_TRACKER_BLOCKER_DISABLED_P1" desc="Description text informing that Ads and Tracker blocker is disabled">
+   Tracker and Ad Blocker is disabled.
+  </message>
+  <message name="IDS_APD_PRIVACY_REPORT_TRACKER_BLOCKER_DISABLED_P2" desc="Text informing users to enable Ads and Tracker blocker">
+   Activate the Tracker and Ad Blocker to safeguard your browsing and build your privacy stats.
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_TRACKERS_BLOCKED" desc="Title description for Privacy Statistics number of Trackers Blocked">
+    Trackers blocked
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_BANDWIDTH_SAVED" desc="Title description for Privacy Statistics amount of Data saved">
+    Data saved
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_TIME_SAVED" desc="Title description for Privacy Statistics amount of Time saved">
+    Time saved
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_DESCRIPTION" desc="Disclaimer describing that the data is only stored locally">
+    Personal Insight data is stored securely on your device and never shared with third parties.
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_DESCRIPTION_LINK" desc="Link text leading to a Learn more page">
+    Learn more
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_TITLE" desc="Text title for section about Websites and Tracker Details ">
+    Websites and Tracker Details
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_SITES_TITLE" desc="Text title for section about Websites">
+    Websites
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_TRACKERS_TITLE" desc="Text title for section about Trackers">
+    Trackers
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_SITES_ADDRESS" desc="Text title for section about Websites Address">
+    Address
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_SITES_ADS" desc="Text title for section about Ads">
+    Ads
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_SITES_TRACKERS" desc="Text title for section about Trackers">
+    Trackers
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_TRACKERS_ADS" desc="Text title for section about Ads">
+    Ads
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_TRACKERS_ADDRESS" desc="Text title for section about Address">
+    Address
+  </message>
+  <message name="IDS_APD_PRIVACY_WEBSITE_DETAILS_TRACKERS_TRACKERS" desc="Text title for section about Trackers">
+    Trackers
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_COMMITMENT_TITLE" desc="Text title for section about Privacy commitment">
+    Our Commitment to Your Privacy
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_COMMITMENT_DESCRIPTION" desc="Article section description text">
+    Join Vivaldi's stand for zero tracking and take back control of your online privacy.
+    Learn more about how we fight for user rights in the articles below.
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_1_TITLE" desc="Article headline text">
+  ‘Do-Not-Track’ privacy setting gets legal backing in Germany
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_1_DESCRIPTION" desc="Article introduction text">
+   Legislators are finally paying attention to concerns about how our digital data is tracked, collected, and stored. Find out what this game-changing ruling means and how it could affect us.
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_2_TITLE" desc="Article headline text">
+    “Wrong to turn the Internet into a surveillance economy”: Jon von Tetzchner at Web Summit 2023.
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_2_DESCRIPTION" desc="Article introduction text">
+    Is it possible to build sustainable products without spying on users? What does the future of browsing look like? Watch our CEO, Jon von Tetzchner answer these questions at Web Summit 2023.
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_3_TITLE" desc="Article headline text">
+    Alert: No Google Topics in Vivaldi.
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_3_DESCRIPTION" desc="Article introduction text">
+    Spying on people’s behavior and profiling them is wrong. That is why we have made sure that Google’s Topics is disabled in two separate ways in the Vivaldi browser.
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_4_TITLE" desc="Article headline text">
+    Manifest V3, webRequest, and ad blockers
+  </message>
+  <message name="IDS_APD_PRIVACY_ARTICLE_4_DESCRIPTION" desc="Article introduction text">
+    Vivaldi comes with its own built-in Ad and Tracker Blocker, tons of customization options, a built-in Mail and Calendar, and more. Will it follow Google’s strict reliance on Manifest V3? Vivaldi Developer, Julien Picalausa takes a deep dive into this matter.
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_LINK_LEARN_MORE" desc="Article link with possible localization">
+        https://help.vivaldi.com/android/android-privacy/android-tracker-and-ad-blocker/
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_ARTICLE_LINK_1" desc="Article link with possible localization">
+        https://vivaldi.com/blog/do-no-track-gets-legal-backing-in-germany/
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_ARTICLE_LINK_2" desc="Article link with possible localization">
+        https://vivaldi.com/blog/technology/vivaldi-browser-at-the-web-summit/
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_ARTICLE_LINK_3" desc="Article link with possible localization">
+        https://vivaldi.com/blog/news/alert-no-google-topics-in-vivaldi/
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_ARTICLE_LINK_4" desc="Article link with possible localization">
+        https://vivaldi.com/blog/manifest-v3-webrequest-and-ad-blockers/
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_NAV_BAR_TITLE" desc="Nav Bar title">
+        Vivaldi Privacy Report
+  </message>
+  <message name="IDS_APD_PRIVACY_STATISTICS_NAV_BAR_BACK" desc="Nav Bar back button title">
+        Back to Vivaldi
+  </message>
+</grit-part>

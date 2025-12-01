@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/shadow_list.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 
@@ -65,8 +66,9 @@ void MarkBoxForRelayoutAfterSplit(LayoutBoxModelObject* box) {
 void CollapseLoneAnonymousBlockChild(LayoutBox* parent, LayoutObject* child) {
   auto* child_block_flow = DynamicTo<LayoutBlockFlow>(child);
   auto* parent_block_flow = DynamicTo<LayoutBlockFlow>(parent);
-  if (!child->IsAnonymousBlock() || !child_block_flow)
+  if (!child->IsAnonymousBlockFlow() || !child_block_flow) {
     return;
+  }
   if (!parent_block_flow)
     return;
   parent_block_flow->CollapseAnonymousBlockChild(child_block_flow);
@@ -134,7 +136,7 @@ void LayoutBoxModelObject::StyleWillChange(StyleDifference diff,
     ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
   }
 
-  if (Style()) {
+  if (!RuntimeEnabledFeatures::FlowThreadLessEnabled() && Style()) {
     LayoutFlowThread* flow_thread = FlowThreadContainingBlock();
     if (flow_thread && flow_thread != this) {
       flow_thread->FlowThreadDescendantStyleWillChange(this, diff, new_style);
@@ -233,9 +235,12 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   }
 
   if (old_style && Parent()) {
-    if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock()) {
-      if (flow_thread != this) {
-        flow_thread->FlowThreadDescendantStyleDidChange(this, diff, *old_style);
+    if (!RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+      if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock()) {
+        if (flow_thread != this) {
+          flow_thread->FlowThreadDescendantStyleDidChange(this, diff,
+                                                          *old_style);
+        }
       }
     }
 
@@ -345,6 +350,18 @@ void LayoutBoxModelObject::DestroyLayer() {
   // Removing a layer may affect existence of the LocalBorderBoxProperties, so
   // we need to ensure that we update paint properties.
   SetNeedsPaintPropertyUpdate();
+}
+
+LayoutUnit LayoutBoxModelObject::OffsetWidth() const {
+  NOT_DESTROYED();
+  DCHECK(RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled());
+  return BoundingBoxRelativeToFirstFragment().size.width;
+}
+
+LayoutUnit LayoutBoxModelObject::OffsetHeight() const {
+  NOT_DESTROYED();
+  DCHECK(RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled());
+  return BoundingBoxRelativeToFirstFragment().size.height;
 }
 
 bool LayoutBoxModelObject::HasSelfPaintingLayer() const {
@@ -458,7 +475,7 @@ void LayoutBoxModelObject::UpdateFromStyle() {
   const ComputedStyle& style = StyleRef();
   SetHasBoxDecorationBackground(style.HasBoxDecorationBackground());
   SetInline(ShouldBeHandledAsInline(style));
-  SetPositionState(style.GetPosition());
+  SetPositionState(ToPositionedState(style.GetPosition()));
   SetHorizontalWritingMode(style.IsHorizontalWritingMode());
 
   const bool is_fixed_container = ComputeIsFixedContainer(style);
@@ -728,7 +745,9 @@ PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
            current && current->GetNode() != offset_parent;
            current = current->Container()) {
         // FIXME: What are we supposed to do inside SVG content?
-        reference_point += current->ColumnOffset(reference_point);
+        if (!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled()) {
+          reference_point += current->ColumnOffset(reference_point);
+        }
         if (current->IsBox()) {
           reference_point += To<LayoutBox>(current)->PhysicalLocation();
         }
@@ -758,20 +777,6 @@ PhysicalOffset LayoutBoxModelObject::AdjustedPositionRelativeTo(
   }
 
   return reference_point;
-}
-
-LayoutUnit LayoutBoxModelObject::OffsetLeft(const Element* parent) const {
-  NOT_DESTROYED();
-  // Note that LayoutInline and LayoutBox override this to pass a different
-  // startPoint to adjustedPositionRelativeTo.
-  return AdjustedPositionRelativeTo(PhysicalOffset(), parent).left;
-}
-
-LayoutUnit LayoutBoxModelObject::OffsetTop(const Element* parent) const {
-  NOT_DESTROYED();
-  // Note that LayoutInline and LayoutBox override this to pass a different
-  // startPoint to adjustedPositionRelativeTo.
-  return AdjustedPositionRelativeTo(PhysicalOffset(), parent).top;
 }
 
 LayoutUnit LayoutBoxModelObject::ComputedCSSPadding(

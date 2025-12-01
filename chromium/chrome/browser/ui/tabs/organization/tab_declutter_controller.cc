@@ -25,7 +25,7 @@
 #include "chrome/browser/ui/webui/tab_search/tab_search.mojom.h"
 #include "chrome/browser/ui/webui/tab_search/tab_search_prefs.h"
 #include "components/prefs/pref_service.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_entry.h"
 #include "url/gurl.h"
@@ -240,7 +240,7 @@ void TabDeclutterController::DeclutterTabs(
   }
 
   int duplicate_tabs_decluttered = 0;
-  for (GURL url : urls) {
+  for (const GURL& url : urls) {
     // Sort the tabs with `url` based on the last committed navigation time and
     // close all the tabs except the oldest tab.
     std::vector<std::pair<tabs::TabInterface*, base::Time>> url_matching_tabs;

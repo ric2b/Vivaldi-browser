@@ -53,7 +53,7 @@ SharingHubBubbleViewImpl::SharingHubBubbleViewImpl(
   DCHECK(anchor_view);
   DCHECK(controller);
 
-  set_background_color(ui::kColorMenuBackground);
+  SetBackgroundColor(ui::kColorMenuBackground);
   SetAccessibleTitle(l10n_util::GetStringUTF16(IDS_SHARING_HUB_TOOLTIP));
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
@@ -105,7 +105,7 @@ void SharingHubBubbleViewImpl::Init() {
 
   scroll_view_ = AddChildView(std::make_unique<views::ScrollView>());
   scroll_view_->ClipHeightTo(0, kActionButtonHeight * kMaximumButtons);
-  scroll_view_->SetBackgroundThemeColorId(ui::kColorMenuBackground);
+  scroll_view_->SetBackgroundColor(ui::kColorMenuBackground);
 
   PopulateScrollView(controller_->GetFirstPartyActions());
 }

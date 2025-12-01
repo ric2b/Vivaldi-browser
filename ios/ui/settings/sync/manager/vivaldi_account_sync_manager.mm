@@ -7,8 +7,8 @@
 #import "base/check.h"
 #import "base/strings/sys_string_conversions.h"
 #import "components/sync/base/user_selectable_type.h"
-#import "components/sync/service/sync_service.h"
 #import "components/sync/service/sync_service_observer.h"
+#import "components/sync/service/sync_service.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
@@ -144,6 +144,17 @@ NSString* avatarPlaceholder = @"person.circle.fill";
   return ResizeImage(avatar,
                   CGSize(kAvatarSize, kAvatarSize),
                   ProjectionMode::kAspectFit);
+}
+
+- (VivaldiDonationBadgeTier)donationBadgeTier {
+  NSString* donationTierString =
+      base::SysUTF8ToNSString(
+          _vivaldiAccountManager->account_info().donation_tier);
+  if (donationTierString != nil && [donationTierString length] > 0) {
+    NSUInteger badgeTier = [donationTierString integerValue];
+    return (VivaldiDonationBadgeTier)badgeTier;
+  }
+  return VivaldiDonationBadgeTierNone;
 }
 
 - (BOOL)isSyncBookmarksEnabled {

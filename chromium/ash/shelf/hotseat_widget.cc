@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/accessibility/ui/accessibility_focusable_widget_delegate.h"
 #include "ash/constants/ash_features.h"
 #include "ash/focus/focus_cycler.h"
 #include "ash/keyboard/ui/keyboard_ui_controller.h"
@@ -23,7 +24,6 @@
 #include "ash/style/system_shadow.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wm/overview/overview_controller.h"
-#include "ash/wm/overview/overview_observer.h"
 #include "base/i18n/rtl.h"
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
@@ -400,20 +400,21 @@ class HotseatWindowTargeter : public aura::WindowTargeter {
 
 }  // namespace
 
-class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
-                                    public views::WidgetDelegateView,
-                                    public views::ViewTargeterDelegate,
-                                    public OverviewObserver {
+class HotseatWidgetDelegateView : public HotseatTransitionAnimator::Observer,
+                                  public views::WidgetDelegateView,
+                                  public views::ViewTargeterDelegate,
+                                  public OverviewObserver {
  public:
-  DelegateView() {
+  HotseatWidgetDelegateView() {
     SetEventTargeter(std::make_unique<views::ViewTargeter>(this));
     SetPaintToLayer(ui::LAYER_NOT_DRAWN);
   }
 
-  DelegateView(const DelegateView&) = delete;
-  DelegateView& operator=(const DelegateView&) = delete;
+  HotseatWidgetDelegateView(const HotseatWidgetDelegateView&) = delete;
+  HotseatWidgetDelegateView& operator=(const HotseatWidgetDelegateView&) =
+      delete;
 
-  ~DelegateView() override;
+  ~HotseatWidgetDelegateView() override;
 
   // views::ViewTargetDelegate:
   View* TargetForRect(View* root, const gfx::Rect& rect) override {
@@ -460,16 +461,9 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
   // views::View:
   void OnThemeChanged() override;
 
-  // views::WidgetDelegateView:
-  bool CanActivate() const override;
-
   // OverviewObserver:
   void OnOverviewModeWillStart() override;
   void OnOverviewModeEndingAnimationComplete(bool canceled) override;
-
-  void set_focus_cycler(FocusCycler* focus_cycler) {
-    focus_cycler_ = focus_cycler;
-  }
 
   int background_blur() const {
     return translucent_background_->layer()->background_blur();
@@ -480,7 +474,6 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
   }
 
  private:
-  raw_ptr<FocusCycler, DanglingUntriaged> focus_cycler_ = nullptr;
   // A background layer that may be visible depending on HotseatState.
   raw_ptr<views::View> translucent_background_ = nullptr;
   raw_ptr<ScrollableShelfView, DanglingUntriaged> scrollable_shelf_view_ =
@@ -497,34 +490,15 @@ class HotseatWidget::DelegateView : public HotseatTransitionAnimator::Observer,
 
   // The type of highlight border.
   views::HighlightBorder::Type border_type_;
-
-  // Tracks whether the forest flag was enabled when entering overview.
-  // TODO(sammiequon): This is temporary while the secret key exists. After the
-  // secret key is removed, entering/exiting overview should never need to
-  // remove/readd blur.
-  std::optional<bool> was_forest_on_overview_enter_;
 };
 
-HotseatWidget::DelegateView::~DelegateView() {
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
-  if (overview_controller)
-    overview_controller->RemoveObserver(this);
-}
+HotseatWidgetDelegateView::~HotseatWidgetDelegateView() = default;
 
-void HotseatWidget::DelegateView::Init(
-    ScrollableShelfView* scrollable_shelf_view,
-    HotseatWidget* hotseat_widget) {
+void HotseatWidgetDelegateView::Init(ScrollableShelfView* scrollable_shelf_view,
+                                     HotseatWidget* hotseat_widget) {
   hotseat_widget_ = hotseat_widget;
   SetLayoutManager(std::make_unique<views::FillLayout>());
 
-  OverviewController* overview_controller = Shell::Get()->overview_controller();
-  if (overview_controller) {
-    overview_controller->AddObserver(this);
-    if (overview_controller->InOverviewSession() &&
-        !features::IsForestFeatureEnabled()) {
-      ++blur_lock_;
-    }
-  }
   DCHECK(scrollable_shelf_view);
   scrollable_shelf_view_ = scrollable_shelf_view;
 
@@ -551,7 +525,7 @@ void HotseatWidget::DelegateView::Init(
   shadow_->ObserveColorProviderSource(hotseat_widget);
 }
 
-void HotseatWidget::DelegateView::UpdateTranslucentBackground() {
+void HotseatWidgetDelegateView::UpdateTranslucentBackground() {
   // Update highlight border after updating the visibility of shadow.
   absl::Cleanup update_highlight_border = [this] {
     UpdateHighlightBorder(
@@ -582,7 +556,7 @@ void HotseatWidget::DelegateView::UpdateTranslucentBackground() {
   shadow_->SetContentBounds(background_bounds);
 }
 
-void HotseatWidget::DelegateView::UpdateHighlightBorder(
+void HotseatWidgetDelegateView::UpdateHighlightBorder(
     bool update_corner_radius) {
   views::HighlightBorder::Type border_type =
       shadow_->GetLayer()->visible()
@@ -600,13 +574,11 @@ void HotseatWidget::DelegateView::UpdateHighlightBorder(
   translucent_background_->SetBorder(std::move(border));
 }
 
-SkColor HotseatWidget::DelegateView::GetBackgroundColor() {
+SkColor HotseatWidgetDelegateView::GetBackgroundColor() {
   auto* widget = GetWidget();
   CHECK(widget);
   aura::Window* window = widget->GetNativeWindow();
-  // A forest session uses system-on-base.
-  if (features::IsForestFeatureEnabled() &&
-      OverviewController::Get()->InOverviewSession() &&
+  if (OverviewController::Get()->InOverviewSession() &&
       !SplitViewController::Get(window)->InSplitViewMode()) {
     return widget->GetColorProvider()->GetColor(
         cros_tokens::kCrosSysSystemOnBase);
@@ -614,7 +586,7 @@ SkColor HotseatWidget::DelegateView::GetBackgroundColor() {
   return ShelfConfig::Get()->GetDefaultShelfColor(widget);
 }
 
-void HotseatWidget::DelegateView::SetTranslucentBackground(
+void HotseatWidgetDelegateView::SetTranslucentBackground(
     const gfx::Rect& background_bounds) {
   DCHECK(HotseatWidget::ShouldShowHotseatBackground());
 
@@ -664,7 +636,7 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
     translucent_background_->SetBoundsRect(mirrored_bounds);
 }
 
-void HotseatWidget::DelegateView::SetBackgroundBlur(bool enable_blur) {
+void HotseatWidgetDelegateView::SetBackgroundBlur(bool enable_blur) {
   if (!features::IsBackgroundBlurEnabled() ||
       !chromeos::features::IsSystemBlurEnabled() || blur_lock_ > 0) {
     return;
@@ -679,7 +651,7 @@ void HotseatWidget::DelegateView::SetBackgroundBlur(bool enable_blur) {
   }
 }
 
-void HotseatWidget::DelegateView::OnHotseatTransitionAnimationWillStart(
+void HotseatWidgetDelegateView::OnHotseatTransitionAnimationWillStart(
     HotseatState from_state,
     HotseatState to_state) {
   DCHECK_LE(blur_lock_, 2);
@@ -688,7 +660,7 @@ void HotseatWidget::DelegateView::OnHotseatTransitionAnimationWillStart(
   ++blur_lock_;
 }
 
-void HotseatWidget::DelegateView::OnHotseatTransitionAnimationEnded(
+void HotseatWidgetDelegateView::OnHotseatTransitionAnimationEnded(
     HotseatState from_state,
     HotseatState to_state) {
   DCHECK_GT(blur_lock_, 0);
@@ -697,13 +669,13 @@ void HotseatWidget::DelegateView::OnHotseatTransitionAnimationEnded(
   SetBackgroundBlur(true);
 }
 
-void HotseatWidget::DelegateView::OnHotseatTransitionAnimationAborted() {
+void HotseatWidgetDelegateView::OnHotseatTransitionAnimationAborted() {
   DCHECK_GT(blur_lock_, 0);
 
   --blur_lock_;
 }
 
-void HotseatWidget::DelegateView::OnThemeChanged() {
+void HotseatWidgetDelegateView::OnThemeChanged() {
   views::WidgetDelegateView::OnThemeChanged();
 
   // Only update the background when the `scrollable_shelf_view_` is
@@ -712,36 +684,10 @@ void HotseatWidget::DelegateView::OnThemeChanged() {
     UpdateTranslucentBackground();
 }
 
-bool HotseatWidget::DelegateView::CanActivate() const {
-  // We don't want mouse clicks to activate us, but we need to allow
-  // activation when the user is using the keyboard (FocusCycler).
-  return focus_cycler_ && focus_cycler_->widget_activating() == GetWidget();
-}
+void HotseatWidgetDelegateView::OnOverviewModeWillStart() {}
 
-void HotseatWidget::DelegateView::OnOverviewModeWillStart() {
-  // Forest uses background blur in overview.
-  was_forest_on_overview_enter_ = features::IsForestFeatureEnabled();
-  if (*was_forest_on_overview_enter_) {
-    return;
-  }
-  DCHECK_LE(blur_lock_, 2);
-
-  SetBackgroundBlur(false);
-  ++blur_lock_;
-}
-
-void HotseatWidget::DelegateView::OnOverviewModeEndingAnimationComplete(
-    bool canceled) {
-  // Forest uses background blur in overview.
-  if (was_forest_on_overview_enter_.value_or(true)) {
-    was_forest_on_overview_enter_.reset();
-    return;
-  }
-  DCHECK_GT(blur_lock_, 0);
-
-  --blur_lock_;
-  SetBackgroundBlur(true);
-}
+void HotseatWidgetDelegateView::OnOverviewModeEndingAnimationComplete(
+    bool canceled) {}
 
 ////////////////////////////////////////////////////////////////////////////////
 // ScopedInStateTransition
@@ -762,7 +708,8 @@ HotseatWidget::ScopedInStateTransition::~ScopedInStateTransition() {
 ////////////////////////////////////////////////////////////////////////////////
 // HotseatWidget
 
-HotseatWidget::HotseatWidget() : delegate_view_(new DelegateView()) {
+HotseatWidget::HotseatWidget()
+    : delegate_view_(new AccessibilityFocusable<HotseatWidgetDelegateView>()) {
   ShelfConfig::Get()->AddObserver(this);
 }
 
@@ -1156,12 +1103,6 @@ void HotseatWidget::UpdateTargetBoundsForGesture(int shelf_position) {
 gfx::Size HotseatWidget::GetTranslucentBackgroundSize() const {
   DCHECK(scrollable_shelf_view_);
   return scrollable_shelf_view_->GetHotseatBackgroundBounds().size();
-}
-
-void HotseatWidget::SetFocusCycler(FocusCycler* focus_cycler) {
-  delegate_view_->set_focus_cycler(focus_cycler);
-  if (focus_cycler)
-    focus_cycler->AddWidget(this);
 }
 
 ShelfView* HotseatWidget::GetShelfView() {

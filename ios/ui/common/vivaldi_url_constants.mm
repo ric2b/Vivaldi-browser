@@ -37,6 +37,9 @@ const char vVivaldiBugReportURL[] =
 const char vVivaldiCrashReasonURL[] =
     "https://help.vivaldi.com/ios/ios-troubleshoot/error-messages-in-vivaldi-on-ios/";
 
+const char vVivaldiDonateUrl[] =
+    "https://login.vivaldi.net/profile/donations#mtm_campaign=iOS-Donate-SearchEngineSwitchDialog";
+
 // Help
 const char vVivaldiHelpCopyLinkToHightlightUrl[] =
     "https://help.vivaldi.com/ios/ios-browse/copy-link-to-highlight-on-ios/";

@@ -33,7 +33,6 @@ enum class UserSelectableType {
   kNotes,
   kSavedTabGroups,
   kPayments,
-  kSharedTabGroupData,
   kProductComparison,
   kCookies,
   kLastType = kCookies

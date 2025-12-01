@@ -291,6 +291,10 @@ void DedicatedWorker::Start() {
         /*is_top_level_navigation=*/false);
   }
 
+  if (script_request_url_.ProtocolIs("data")) {
+    GetExecutionContext()->CountUse(WebFeature::kDataUrlDedicatedWorker);
+  }
+
   factory_client_->CreateWorkerHost(
       token_, script_request_url_, credentials_mode,
       WebFetchClientSettingsObject(*outside_fetch_client_settings_object_),
@@ -350,7 +354,6 @@ void DedicatedWorker::OnScriptLoadStarted(
   ContinueStart(script_request_url_, std::move(worker_main_script_load_params),
                 network::mojom::ReferrerPolicy::kDefault,
                 Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
-                String() /* source_code */, RejectCoepUnsafeNone(false),
                 std::move(back_forward_cache_controller_host),
                 std::move(coep_reporting_observer),
                 std::move(dip_reporting_observer));
@@ -420,7 +423,6 @@ void DedicatedWorker::OnFinished(
             ? mojo::Clone(classic_script_loader_->GetContentSecurityPolicy()
                               ->GetParsedPolicies())
             : Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
-        classic_script_loader_->SourceText(), RejectCoepUnsafeNone(false),
         std::move(back_forward_cache_controller_host),
         /*coep_reporting_observer=*/mojo::NullReceiver(),
         /*dip_reporting_observer=*/mojo::NullReceiver());
@@ -438,8 +440,6 @@ void DedicatedWorker::ContinueStart(
     network::mojom::ReferrerPolicy referrer_policy,
     Vector<network::mojom::blink::ContentSecurityPolicyPtr>
         response_content_security_policies,
-    const String& source_code,
-    RejectCoepUnsafeNone reject_coep_unsafe_none,
     mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
         back_forward_cache_controller_host,
     mojo::PendingReceiver<mojom::blink::ReportingObserver>
@@ -464,7 +464,6 @@ void DedicatedWorker::ContinueStart(
                           std::move(worker_main_script_load_params),
                           std::move(referrer_policy),
                           std::move(response_content_security_policies),
-                          source_code, reject_coep_unsafe_none,
                           std::move(back_forward_cache_controller_host),
                           std::move(coep_reporting_observer),
                           std::move(dip_reporting_observer)),
@@ -474,7 +473,6 @@ void DedicatedWorker::ContinueStart(
   ContinueStartInternal(
       script_url, std::move(worker_main_script_load_params),
       std::move(referrer_policy), std::move(response_content_security_policies),
-      source_code, reject_coep_unsafe_none,
       std::move(back_forward_cache_controller_host),
       std::move(coep_reporting_observer), std::move(dip_reporting_observer));
 }
@@ -486,8 +484,6 @@ void DedicatedWorker::ContinueStartInternal(
     network::mojom::ReferrerPolicy referrer_policy,
     Vector<network::mojom::blink::ContentSecurityPolicyPtr>
         response_content_security_policies,
-    const String& source_code,
-    RejectCoepUnsafeNone reject_coep_unsafe_none,
     mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
         back_forward_cache_controller_host,
     mojo::PendingReceiver<mojom::blink::ReportingObserver>
@@ -505,8 +501,7 @@ void DedicatedWorker::ContinueStartInternal(
           std::move(coep_reporting_observer),
           std::move(dip_reporting_observer)),
       std::move(worker_main_script_load_params), options_, script_url,
-      *outside_fetch_client_settings_object_, v8_stack_trace_id_, source_code,
-      reject_coep_unsafe_none, token_,
+      *outside_fetch_client_settings_object_, v8_stack_trace_id_, token_,
       std::move(pending_dedicated_worker_host_),
       std::move(back_forward_cache_controller_host));
 }
@@ -624,8 +619,7 @@ DedicatedWorker::CreateWebWorkerFetchContext() {
     scoped_refptr<WebWorkerFetchContext> web_worker_fetch_context;
     LocalFrame* frame = window->GetFrame();
     web_worker_fetch_context =
-        frame->Client()->CreateWorkerFetchContextForPlzDedicatedWorker(
-            factory_client_.get());
+        frame->Client()->CreateWorkerFetchContext(factory_client_.get());
     web_worker_fetch_context->SetIsOnSubframe(!frame->IsOutermostMainFrame());
     return web_worker_fetch_context;
   }

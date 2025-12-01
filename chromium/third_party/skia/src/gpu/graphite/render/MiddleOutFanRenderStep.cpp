@@ -9,7 +9,6 @@
 
 #include "include/core/SkPath.h"
 #include "include/private/base/SkDebug.h"
-#include "src/base/SkEnumBitMask.h"
 #include "src/core/SkSLTypeShared.h"
 #include "src/gpu/BufferWriter.h"
 #include "src/gpu/graphite/Attribute.h"
@@ -31,15 +30,15 @@ namespace skgpu::graphite {
 MiddleOutFanRenderStep::MiddleOutFanRenderStep(bool evenOdd)
         : RenderStep(evenOdd ? RenderStepID::kMiddleOutFan_EvenOdd
                              : RenderStepID::kMiddleOutFan_Winding,
-                     Flags::kRequiresMSAA,
+                     Flags::kRequiresMSAA | Flags::kAppendVertices,
                      /*uniforms=*/{{"localToDevice", SkSLType::kFloat4x4}},
                      PrimitiveType::kTriangles,
                      evenOdd ? kEvenOddStencilPass : kWindingStencilPass,
-                     /*vertexAttrs=*/
-                            {{"position", VertexAttribType::kFloat2, SkSLType::kFloat2},
-                             {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
-                             {"ssboIndices", VertexAttribType::kUInt2, SkSLType::kUInt2}},
-                     /*instanceAttrs=*/{}) {}
+                     /*staticAttrs=*/ {},
+                     /*appendAttrs=*/
+                     {{"position", VertexAttribType::kFloat2, SkSLType::kFloat2},
+                     {"depth", VertexAttribType::kFloat, SkSLType::kFloat},
+                     {"ssboIndices", VertexAttribType::kUInt2, SkSLType::kUInt2}}) {}
 
 MiddleOutFanRenderStep::~MiddleOutFanRenderStep() {}
 

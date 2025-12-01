@@ -15,13 +15,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <openssl/asn1.h>
 #include <openssl/conf.h>
 #include <openssl/err.h>
 #include <openssl/mem.h>
 #include <openssl/obj.h>
 #include <openssl/x509.h>
 
-#include "ext_dat.h"
 #include "internal.h"
 
 
@@ -43,15 +43,55 @@ static STACK_OF(CONF_VALUE) *i2v_GENERAL_NAMES_cb(
   return i2v_GENERAL_NAMES(method, reinterpret_cast<GENERAL_NAMES *>(ext), ret);
 }
 
-const X509V3_EXT_METHOD v3_alt[] = {
-    {NID_subject_alt_name, 0, ASN1_ITEM_ref(GENERAL_NAMES), 0, 0, 0, 0, 0, 0,
-     i2v_GENERAL_NAMES_cb, v2i_subject_alt, NULL, NULL, NULL},
+const X509V3_EXT_METHOD v3_subject_alt_name = {
+    NID_subject_alt_name,
+    0,
+    ASN1_ITEM_ref(GENERAL_NAMES),
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    i2v_GENERAL_NAMES_cb,
+    v2i_subject_alt,
+    nullptr,
+    nullptr,
+    nullptr,
+};
 
-    {NID_issuer_alt_name, 0, ASN1_ITEM_ref(GENERAL_NAMES), 0, 0, 0, 0, 0, 0,
-     i2v_GENERAL_NAMES_cb, v2i_issuer_alt, NULL, NULL, NULL},
+const X509V3_EXT_METHOD v3_issuer_alt_name = {
+    NID_issuer_alt_name,
+    0,
+    ASN1_ITEM_ref(GENERAL_NAMES),
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    i2v_GENERAL_NAMES_cb,
+    v2i_issuer_alt,
+    nullptr,
+    nullptr,
+    nullptr,
+};
 
-    {NID_certificate_issuer, 0, ASN1_ITEM_ref(GENERAL_NAMES), 0, 0, 0, 0, 0, 0,
-     i2v_GENERAL_NAMES_cb, NULL, NULL, NULL, NULL},
+const X509V3_EXT_METHOD v3_certificate_issuer = {
+    NID_certificate_issuer,
+    0,
+    ASN1_ITEM_ref(GENERAL_NAMES),
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    i2v_GENERAL_NAMES_cb,
+    NULL,
+    NULL,
+    NULL,
+    NULL,
 };
 
 STACK_OF(CONF_VALUE) *i2v_GENERAL_NAMES(const X509V3_EXT_METHOD *method,

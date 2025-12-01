@@ -17,11 +17,13 @@
 #include <cstdint>
 #include <optional>
 
+// IWYU pragma: begin_exports
 #if defined(WEBRTC_POSIX)
 #include <arpa/inet.h>
 #include <sys/types.h>
 #define SOCKET_EACCES EACCES
 #endif
+// IWYU pragma: end_exports
 
 #include "api/units/timestamp.h"
 #include "rtc_base/buffer.h"
@@ -174,9 +176,11 @@ class RTC_EXPORT Socket {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace rtc {
 using ::webrtc::IsBlockingError;
 using ::webrtc::Socket;
 }  // namespace rtc
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 
 #endif  // RTC_BASE_SOCKET_H_

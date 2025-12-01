@@ -23,17 +23,21 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/bind_front.h"
+#include "absl/strings/str_cat.h"
 #include "absl/time/time.h"
 #include "connections/implementation/analytics/connection_attempt_metadata_params.h"
+#include "connections/implementation/awdl_bwu_handler.h"
 #include "connections/implementation/bluetooth_bwu_handler.h"
 #include "connections/implementation/bwu_handler.h"
 #include "connections/implementation/client_proxy.h"
 #include "connections/implementation/endpoint_channel.h"
 #include "connections/implementation/endpoint_channel_manager.h"
 #include "connections/implementation/endpoint_manager.h"
+#include "connections/implementation/flags/nearby_connections_feature_flags.h"
 #include "connections/implementation/mediums/mediums.h"
 #include "connections/implementation/offline_frames.h"
 #include "connections/implementation/service_id_constants.h"
+#include "internal/flags/nearby_flags.h"
 #ifdef NO_WEBRTC
 #include "connections/implementation/webrtc_bwu_handler_stub.h"
 #else
@@ -58,7 +62,9 @@ namespace connections {
 
 namespace {
 using ::location::nearby::connections::BandwidthUpgradeNegotiationFrame;
+using ::location::nearby::connections::MediumRole;
 using ::location::nearby::connections::OfflineFrame;
+using ::location::nearby::connections::OsInfo;
 using ::location::nearby::connections::V1Frame;
 using ::location::nearby::proto::connections::BandwidthUpgradeErrorStage;
 using ::location::nearby::proto::connections::BandwidthUpgradeResult;
@@ -102,6 +108,10 @@ BwuManager::BwuManager(
     config_.allow_upgrade_to.wifi_direct = true;
     config_.allow_upgrade_to.wifi_lan = true;
     config_.allow_upgrade_to.wifi_hotspot = true;
+    if (NearbyFlags::GetInstance().GetBoolFlag(
+            config_package_nearby::nearby_connections_feature::kEnableAwdl)) {
+      config_.allow_upgrade_to.awdl = true;
+    }
   }
   if (!handlers.empty()) {
     handlers_ = std::move(handlers);
@@ -121,6 +131,13 @@ BwuManager::~BwuManager() {
 
 void BwuManager::InitBwuHandlers() {
   // Register the supported concrete BwuMedium implementations.
+  if (config_.allow_upgrade_to.awdl) {
+    handlers_.emplace(
+        Medium::AWDL,
+        std::make_unique<AwdlBwuHandler>(
+            *mediums_,
+            absl::bind_front(&BwuManager::OnIncomingConnection, this)));
+  }
   if (config_.allow_upgrade_to.wifi_hotspot) {
     handlers_.emplace(
         Medium::WIFI_HOTSPOT,
@@ -287,6 +304,40 @@ void BwuManager::InitiateBwuForEndpoint(ClientProxy* client,
           BandwidthUpgradeErrorStage::NETWORK_AVAILABLE,
           OperationResultCode::NEARBY_GENERIC_OLD_ENDPOINT_CHANNEL_NULL);
       return;
+    }
+
+    if (is_dynamic_role_switch_enabled_ &&
+        client->GetMediumRole(endpoint_id).has_value()) {
+      MediumRole medium_role = client->GetMediumRole(endpoint_id).value();
+      if (NeedToSwitchRole(client, endpoint_id, proposed_medium, medium_role)) {
+        if (!channel
+                 ->Write(parser::ForBwuPathRequest(
+                     client->GetUpgradeMediums(endpoint_id).GetMediums(true),
+                     medium_role))
+                 .Ok()) {
+          LOG(ERROR) << "BwuManager couldn't complete the upgrade for endpoint "
+                     << endpoint_id << " to medium "
+                     << location::nearby::proto::connections::Medium_Name(
+                            proposed_medium)
+                     << " because it failed to write the "
+                        "BWU_NEGOTIATION.UPGRADE_PATH_REQUEST OfflineFrame.";
+
+          client->GetAnalyticsRecorder().OnBandwidthUpgradeError(
+              endpoint_id, BandwidthUpgradeResult::RESULT_IO_ERROR,
+              BandwidthUpgradeErrorStage::NETWORK_AVAILABLE,
+              OperationResultCode::
+                  CONNECTIVITY_GENERIC_WRITING_CHANNEL_IO_ERROR);
+          return;
+        }
+        NEARBY_LOGS(INFO)
+            << "BwuManager successfully wrote the "
+               "BANDWIDTH_UPGRADE_NEGOTIATION.UPGRADE_PATH_REQUEST "
+               "OfflineFrame while upgrading endpoint "
+            << endpoint_id << " to medium "
+            << location::nearby::proto::connections::Medium_Name(
+                   proposed_medium);
+        return;
+      }
     }
 
     std::string service_id = channel->GetServiceId();
@@ -752,7 +803,20 @@ void BwuManager::ProcessBwuPathAvailableEvent(
     return;
   }
 
+  bool abort_bwu = false;
   if (client->IsIncomingConnection(endpoint_id)) {
+    if (!is_dynamic_role_switch_enabled_) {
+      abort_bwu = true;
+    } else {
+      auto medium_role = client->GetMediumRole(endpoint_id);
+      if (medium_role.has_value() &&
+          !NeedToSwitchRole(client, endpoint_id, upgrade_medium,
+                            medium_role.value())) {
+        abort_bwu = true;
+      }
+    }
+  }
+  if (abort_bwu) {
     NEARBY_LOGS(INFO)
         << "ProcessBandwidthUpgradePathAvailableEvent ignored by Advertiser";
     return;
@@ -897,6 +961,8 @@ BwuManager::ProcessBwuPathAvailableEventInternal(
   // Get service ID from the old channel. Don't keep the old channel's shared
   // pointer in scope longer than necessary.
   std::string service_id;
+  Medium old_medium = Medium::UNKNOWN_MEDIUM;
+  bool disable_ble_scanning = false;
   {
     std::shared_ptr<EndpointChannel> old_channel =
         channel_manager_->GetChannelForEndpoint(endpoint_id);
@@ -910,11 +976,44 @@ BwuManager::ProcessBwuPathAvailableEventInternal(
           Error(OperationResultCode::NEARBY_GENERIC_OLD_ENDPOINT_CHANNEL_NULL)};
     }
     service_id = old_channel->GetServiceId();
+    old_medium = old_channel->GetMedium();
+  }
+
+  bool enable_ble_v2 = NearbyFlags::GetInstance().GetBoolFlag(
+      config_package_nearby::nearby_connections_feature::kEnableBleV2);
+  if (NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_connections_feature::
+              kEnableStopBLEScanningOnWifiUpgrade)) {
+    if (client->GetLocalOsInfo().type() ==
+            location::nearby::connections::OsInfo::APPLE &&
+        old_medium == Medium::BLE && medium == Medium::WIFI_HOTSPOT) {
+      disable_ble_scanning = true;
+      if (enable_ble_v2) {
+        NEARBY_LOGS(INFO)
+            << "For Apple OS, if upgrade from BLE_V2 to WIFI_HOTSPOT, "
+               "we need to pause "
+               "BLE_V2 scanning because it can interfere with WIFI "
+               "Hotspot scanning and connection.";
+        ble_v2_medium_.PauseMediumScanning();
+      }
+    }
   }
 
   ErrorOr<std::unique_ptr<EndpointChannel>> result =
       handler->CreateUpgradedEndpointChannel(client, service_id, endpoint_id,
                                              upgrade_path_info);
+
+  if (NearbyFlags::GetInstance().GetBoolFlag(
+          config_package_nearby::nearby_connections_feature::
+              kEnableStopBLEScanningOnWifiUpgrade)) {
+    if (disable_ble_scanning) {
+      if (enable_ble_v2) {
+        NEARBY_LOGS(INFO) << "Resume BLE_V2 scanning.";
+        ble_v2_medium_.ResumeMediumScanning();
+      }
+    }
+  }
+
   if (result.has_error() || !result.has_value()) {
     NEARBY_LOGS(ERROR) << "BwuManager failed to create an endpoint "
                           "channel to endpoint"
@@ -1387,6 +1486,9 @@ std::vector<Medium> BwuManager::StripOutUnavailableMediums(
     bool available = false;
     if (GetHandlerForMedium(m)) {
       switch (m) {
+        case Medium::AWDL:
+          available = mediums_->GetAwdl().IsAvailable();
+          break;
         case Medium::WIFI_LAN:
           available = mediums_->GetWifiLan().IsAvailable();
           break;
@@ -1521,6 +1623,25 @@ void BwuManager::AttemptToRecordBandwidthUpgradeErrorForUnknownEndpoint(
                     << BandwidthUpgradeErrorStage_Name(error_stage)
                     << ", but we don't know which endpoint was trying to "
                        "connect to us, so skipping analytics for his error.";
+}
+
+bool BwuManager::NeedToSwitchRole(
+    ClientProxy* client, const std::string& endpoint_id, Medium medium,
+    const location::nearby::connections::MediumRole& medium_role) {
+  if (GetLocalOsInfo(client).type() == OsInfo::APPLE) {
+    switch (medium) {
+      case Medium::WIFI_HOTSPOT:
+        return medium_role.support_wifi_hotspot_host();
+      default:
+        break;
+    }
+  }
+  return false;
+}
+
+const location::nearby::connections::OsInfo& BwuManager::GetLocalOsInfo(
+    ClientProxy* client) const {
+  return client->GetLocalOsInfo();
 }
 
 absl::Duration BwuManager::CalculateNextRetryDelay(

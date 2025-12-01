@@ -11,6 +11,7 @@
 #include "base/scoped_observation.h"
 #include "components/content_settings/browser/ui/cookie_controls_controller.h"
 #include "components/content_settings/browser/ui/cookie_controls_view.h"
+#include "components/content_settings/core/common/cookie_controls_state.h"
 
 namespace content_settings {
 
@@ -51,26 +52,15 @@ class CookieControlsBridge : public CookieControlsObserver {
 
   void OnEntryPointAnimated(JNIEnv* env);
 
-  static base::android::ScopedJavaLocalRef<jobject> CreateTpFeaturesList(
-      JNIEnv* env);
-
-  static void CreateTpFeatureAndAddToList(
-      JNIEnv* env,
-      base::android::ScopedJavaLocalRef<jobject> jfeatures,
-      TrackingProtectionFeature feature);
-
   // CookieControlsObserver:
-  void OnStatusChanged(
-      bool controls_visible,
-      bool protections_on,
-      CookieControlsEnforcement enforcement,
-      CookieBlocking3pcdStatus blocking_status,
-      base::Time expiration,
-      std::vector<TrackingProtectionFeature> features) override;
+  void OnStatusChanged(CookieControlsState controls_state,
+                       CookieControlsEnforcement enforcement,
+                       CookieBlocking3pcdStatus blocking_status,
+                       base::Time expiration) override;
 
   void OnCookieControlsIconStatusChanged(
       bool icon_visible,
-      bool protections_on,
+      CookieControlsState controls_state,
       CookieBlocking3pcdStatus blocking_status,
       bool should_highlight) override;
 
@@ -78,8 +68,7 @@ class CookieControlsBridge : public CookieControlsObserver {
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> jobject_;
-  bool controls_visible_ = false;
-  bool protections_on_ = false;
+  CookieControlsState controls_state_ = CookieControlsState::kHidden;
   CookieControlsEnforcement enforcement_ =
       CookieControlsEnforcement::kNoEnforcement;
   std::optional<base::Time> expiration_;

@@ -129,24 +129,6 @@ void TapMagicStackEditButton() {
       [self isRunningTest:@selector
             (testMagicStackCompactedSetUpListCompleteAllItems)]) {
     config.features_disabled.push_back(kContentPushNotifications);
-    config.features_disabled.push_back(kIOSTipsNotifications);
-    config.features_disabled.push_back(set_up_list::kSetUpListInFirstRun);
-    config.features_disabled.push_back(
-        set_up_list::kSetUpListWithoutSignInItem);
-  }
-  if ([self isRunningTest:@selector(testMVTInMagicStack)] ||
-      [self isRunningTest:@selector(testMVTInMagicStackToggleModule)]) {
-    std::string enable_mvt_arg = std::string(kMagicStack.name) + ":" +
-                                 kMagicStackMostVisitedModuleParam + "/true";
-    config.additional_args.push_back("--enable-features=" + enable_mvt_arg);
-    config.features_disabled.push_back(
-        segmentation_platform::features::
-            kSegmentationPlatformTipsEphemeralCard);
-  }
-  if ([self isRunningTest:@selector
-            (testMagicStackCompactedSetUpListCompleteAllItems_v2)]) {
-    config.features_enabled.push_back(set_up_list::kSetUpListInFirstRun);
-    config.additional_args.push_back("--SetUpListInFirstRunParam=1");
     config.features_disabled.push_back(
         set_up_list::kSetUpListWithoutSignInItem);
   }
@@ -247,13 +229,7 @@ void TapMagicStackEditButton() {
 
 // Tests the "Remove" action of the Most Visited context menu, and the "Undo"
 // action.
-// TODO(crbug.com/337064665): Test is flaky on simluator. Re-enable when fixed.
-#if TARGET_IPHONE_SIMULATOR
-#define MAYBE_testMostVisitedRemoveUndo FLAKY_testMostVisitedRemoveUndo
-#else
-#define MAYBE_testMostVisitedRemoveUndo testMostVisitedRemoveUndo
-#endif
-- (void)MAYBE_testMostVisitedRemoveUndo {
+- (void)testMostVisitedRemoveUndo {
   [self setupMostVisitedTileLongPress];
   const GURL pageURL = self.testServer->GetURL(kPageURL);
   NSString* pageTitle = base::SysUTF8ToNSString(kPageTitle);
@@ -373,94 +349,15 @@ void TapMagicStackEditButton() {
                                           kFakeAuthCancelButtonIdentifier)]
       performAction:grey_tap()];
 
-  // Verify the All Set item is shown.
-  condition = ^{
-    NSError* error = nil;
-    [[EarlGrey
-        selectElementWithMatcher:grey_allOf(grey_accessibilityID(
-                                                set_up_list::kAllSetItemID),
-                                            grey_sufficientlyVisible(), nil)]
-        assertWithMatcher:grey_sufficientlyVisible()
-                    error:&error];
-    return error == nil;
-  };
-  GREYAssert(
-      base::test::ios::WaitUntilConditionOrTimeout(base::Seconds(2), condition),
-      @"Timeout waiting for the All Set Module to show expired.");
-}
-
-// Attempts to complete the Set Up List through the Compacted Magic Stack
-// module. Tests the version of the Set Up List with the Docking, Address Bar,
-// Autofill, and Default Browser items.
-- (void)testMagicStackCompactedSetUpListCompleteAllItems_v2 {
-  [self prepareToTestSetUpListInMagicStack];
-
-  // Tap the Docking item.
-  TapView(set_up_list::kDockingItemID);
-  // Ensure the Docking promo is displayed.
-  id<GREYMatcher> dockingPromoView =
-      grey_accessibilityID(@"kDockingPromoAccessibilityId");
-  [[EarlGrey selectElementWithMatcher:dockingPromoView]
+  // Tap the notification item.
+  TapView(set_up_list::kContentNotificationItemID);
+  // Ensure the Notification opt-in screen is displayed
+  id<GREYMatcher> notificationOptInView =
+      grey_accessibilityID(@"NotificationsOptInScreenAxId");
+  [[EarlGrey selectElementWithMatcher:notificationOptInView]
       assertWithMatcher:grey_notNil()];
-  // Dismiss the Docking promo view.
-  TapSecondaryActionButton();
-
-  ConditionBlock condition = ^{
-    return [NewTabPageAppInterface setUpListItemDockingInMagicStackIsComplete];
-  };
-  GREYAssert(
-      base::test::ios::WaitUntilConditionOrTimeout(base::Seconds(2), condition),
-      @"SetUpList item Docking item not completed.");
-
-  // Tap the Address Bar item.
-  TapView(set_up_list::kAddressBarItemID);
-  id<GREYMatcher> addressBarPromoView = grey_accessibilityID(
-      first_run::kFirstRunOmniboxPositionChoiceScreenAccessibilityIdentifier);
-  [[EarlGrey selectElementWithMatcher:addressBarPromoView]
-      assertWithMatcher:grey_notNil()];
-  // Dismiss the Address Bar promo view.
+  // Dismiss Notification opt-in screen.
   TapPromoStyleSecondaryActionButton();
-
-  condition = ^{
-    return
-        [NewTabPageAppInterface setUpListItemAddressBarInMagicStackIsComplete];
-  };
-  GREYAssert(
-      base::test::ios::WaitUntilConditionOrTimeout(base::Seconds(2), condition),
-      @"SetUpList item Address Bar item not completed.");
-
-  // Completed Set Up List items last one impression
-  [ChromeEarlGrey closeAllTabs];
-  [ChromeEarlGrey openNewTab];
-  [ChromeEarlGrey closeAllTabs];
-  [ChromeEarlGrey openNewTab];
-
-  // Tap the default browser item.
-  TapView(set_up_list::kDefaultBrowserItemID);
-  // Ensure the Default Browser Promo is displayed.
-  id<GREYMatcher> defaultBrowserView = grey_accessibilityID(
-      first_run::kFirstRunDefaultBrowserScreenAccessibilityIdentifier);
-  [[EarlGrey selectElementWithMatcher:defaultBrowserView]
-      assertWithMatcher:grey_notNil()];
-  // Dismiss Default Browser Promo.
-  TapPromoStyleSecondaryActionButton();
-
-  condition = ^{
-    return [NewTabPageAppInterface
-        setUpListItemDefaultBrowserInMagicStackIsComplete];
-  };
-  GREYAssert(
-      base::test::ios::WaitUntilConditionOrTimeout(base::Seconds(2), condition),
-      @"SetUpList item Default Browser not completed.");
-
-  // Tap the autofill item.
-  TapView(set_up_list::kAutofillItemID);
-  id<GREYMatcher> CPEPromoView =
-      grey_accessibilityID(@"kCredentialProviderPromoAccessibilityId");
-  [[EarlGrey selectElementWithMatcher:CPEPromoView]
-      assertWithMatcher:grey_notNil()];
-  // Dismiss the CPE promo.
-  TapSecondaryActionButton();
 
   // Verify the All Set item is shown.
   condition = ^{
@@ -482,12 +379,6 @@ void TapMagicStackEditButton() {
 // Set Up List, returns to the Magic Stack and ensures Set Up List is not in the
 // Magic Stack anymore.
 - (void)testMagicStackEditButton {
-  // Enable customization.
-  AppLaunchConfiguration config = [self appConfigurationForTestCase];
-  config.relaunch_policy = ForceRelaunchByCleanShutdown;
-  config.features_enabled.push_back(kHomeCustomization);
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
   [self prepareToTestSetUpListInMagicStack];
   TapMagicStackEditButton();
 
@@ -521,127 +412,6 @@ void TapMagicStackEditButton() {
       selectElementWithMatcher:grey_accessibilityID(
                                    [NewTabPageAppInterface setUpListTitle])]
       assertWithMatcher:grey_notVisible()];
-}
-
-// Test that MVT navigation and removal works when the module is put in the
-// Magic Stack.
-- (void)testMVTInMagicStack {
-  self.testServer->RegisterRequestHandler(
-      base::BindRepeating(&StandardResponse));
-  GREYAssertTrue(self.testServer->Start(), @"Test server failed to start.");
-  const GURL pageURL = self.testServer->GetURL(kPageURL);
-  NSString* pageTitle = base::SysUTF8ToNSString(kPageTitle);
-
-  // Clear history and verify that the tile does not exist.
-  if (![ChromeTestCase forceRestartAndWipe]) {
-    [ChromeEarlGrey clearBrowsingHistory];
-  }
-  [ChromeEarlGrey loadURL:pageURL];
-  [ChromeEarlGrey waitForWebStateContainingText:kPageLoadedString];
-
-  // After loading URL, need to do another action before opening a new tab
-  // with the icon present.
-  [ChromeEarlGrey goBack];
-
-  [[self class] closeAllTabs];
-  [ChromeEarlGrey openNewTab];
-
-  [[EarlGrey selectElementWithMatcher:
-                 grey_accessibilityID(l10n_util::GetNSString(
-                     IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_TITLE))]
-      assertWithMatcher:grey_sufficientlyVisible()];
-
-  // Navigate to MVT
-  id<GREYMatcher> matcher =
-      grey_allOf(chrome_test_util::StaticTextWithAccessibilityLabel(pageTitle),
-                 grey_sufficientlyVisible(), nil);
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
-
-  [ChromeEarlGrey waitForWebStateContainingText:kPageLoadedString];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
-                                          pageURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-
-  [ChromeEarlGrey goBack];
-  [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_longPress()];
-
-  // Tap on remove.
-  [[EarlGrey selectElementWithMatcher:
-                 chrome_test_util::ContextMenuItemWithAccessibilityLabelId(
-                     IDS_IOS_CONTENT_SUGGESTIONS_REMOVE)]
-      performAction:grey_tap()];
-
-  // Check the tile is removed.
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_allOf(
-              chrome_test_util::StaticTextWithAccessibilityLabel(pageTitle),
-              grey_sufficientlyVisible(), nil)] assertWithMatcher:grey_nil()];
-}
-
-- (void)testMVTInMagicStackToggleModule {
-  [self setupMostVisitedTileLongPress];
-  // Tap to hide module.
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_text(l10n_util::GetNSString(
-              IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_HIDE_CARD))]
-      performAction:grey_tap()];
-  // Check the module is removed.
-  ConditionBlock condition = ^{
-    NSError* error = nil;
-    [[EarlGrey selectElementWithMatcher:
-                   grey_text(l10n_util::GetNSString(
-                       IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_TITLE))]
-        assertWithMatcher:grey_notVisible()
-                    error:&error];
-    return error == nil;
-  };
-  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
-                 base::test::ios::kWaitForUIElementTimeout, condition),
-             @"Most visited tile is not hidden.");
-
-  // Turn back on MVT.
-  TapMagicStackEditButton();
-  id<GREYMatcher> switchCell = grey_allOf(
-      grey_anyOf(grey_kindOfClassName(@"TableViewSwitchCell"),
-                 grey_kindOfClassName(@"HomeCustomizationToggleCell"), nil),
-      grey_descendant(grey_text(l10n_util::GetNSString(
-          IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_TITLE))),
-      nil);
-  id<GREYMatcher> mvtSwitchElement = grey_allOf(
-      grey_kindOfClassName(@"UISwitch"), grey_ancestor(switchCell), nil);
-  // Make sure the toggle is off, and tap it.
-  [[EarlGrey selectElementWithMatcher:mvtSwitchElement]
-      assertWithMatcher:grey_switchWithOnState(NO)];
-  [[EarlGrey selectElementWithMatcher:mvtSwitchElement]
-      performAction:grey_turnSwitchOn(YES)];
-
-  // Dismiss the menu and verify MVT visibility.
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_anyOf(
-              grey_accessibilityID(
-                  kMagicStackEditHalfSheetDoneButtonAccessibilityIdentifier),
-              grey_accessibilityID(kNavigationBarDismissButtonIdentifier), nil)]
-      performAction:grey_tap()];
-  // Swipe back to the first module, and check that it appears.
-  [[EarlGrey
-      selectElementWithMatcher:
-          grey_accessibilityID(kMagicStackScrollViewAccessibilityIdentifier)]
-      performAction:grey_swipeFastInDirection(kGREYDirectionRight)];
-  condition = ^{
-    NSError* error = nil;
-    [[EarlGrey selectElementWithMatcher:
-                   grey_text(l10n_util::GetNSString(
-                       IDS_IOS_CONTENT_SUGGESTIONS_MOST_VISITED_MODULE_TITLE))]
-        assertWithMatcher:grey_sufficientlyVisible()
-                    error:&error];
-    return error == nil;
-  };
-  GREYAssert(base::test::ios::WaitUntilConditionOrTimeout(
-                 base::test::ios::kWaitForUIElementTimeout, condition),
-             @"Most visited tile is not displayed.");
 }
 
 #pragma mark - Test utils

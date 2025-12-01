@@ -30,7 +30,7 @@ import javax.annotation.concurrent.GuardedBy;
 @NullMarked
 public class PartnerBookmarksReader {
     private static final String TAG = "PartnerBMReader";
-    private static Set<FaviconUpdateObserver> sFaviconUpdateObservers = new HashSet<>();
+    private static final Set<FaviconUpdateObserver> sFaviconUpdateObservers = new HashSet<>();
     private static final float DESIRED_FAVICON_SIZE_DP = 16.0f;
 
     /** Root bookmark id reserved for the implied root of the bookmarks */
@@ -39,7 +39,7 @@ public class PartnerBookmarksReader {
     /** ID used to indicate an invalid bookmark node. */
     static final long INVALID_BOOKMARK_ID = -1;
 
-    /** Storage for failed favicon retrieval attempts to throttle future requests. * */
+    /** Storage for failed favicon retrieval attempts to throttle future requests. */
     private @Nullable PartnerBookmarksFaviconThrottle mFaviconThrottle;
 
     // JNI c++ pointer

@@ -11,6 +11,7 @@
 #include "chrome/browser/background/glic/glic_launcher_configuration.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/glic/glic_pref_names.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/test_browser_window.h"
@@ -75,7 +76,13 @@ IN_PROC_BROWSER_TEST_F(GlicHandlerBrowserTest, UpdateShortcutSuspension) {
 }
 #endif  //  !BUILDFLAG(IS_OZONE_WAYLAND)
 
-IN_PROC_BROWSER_TEST_F(GlicHandlerBrowserTest, UpdateGlicShortcut) {
+// TODO(crbug.com/416160303): Enable the test.
+#if BUILDFLAG(IS_WIN)
+#define MAYBE_UpdateGlicShortcut DISABLED_UpdateGlicShortcut
+#else
+#define MAYBE_UpdateGlicShortcut UpdateGlicShortcut
+#endif
+IN_PROC_BROWSER_TEST_F(GlicHandlerBrowserTest, MAYBE_UpdateGlicShortcut) {
   const ui::Accelerator invalid_shortcut(ui::VKEY_A, ui::EF_NONE);
   glic_handler()->HandleSetGlicShortcut(
       base::Value::List()

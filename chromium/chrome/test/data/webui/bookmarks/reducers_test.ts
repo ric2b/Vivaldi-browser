@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import type {BookmarksPageState, FolderOpenState, NodeMap, SelectFolderAction, SelectionState, SelectItemsAction} from 'chrome://bookmarks/bookmarks.js';
-import {changeFolderOpen, clearSearch, createBookmark, createEmptyState, deselectItems, editBookmark, getDisplayedList, isShowingSearch, moveBookmark, reduceAction, removeBookmark, reorderChildren, selectFolder, setSearchResults, setSearchTerm, updateAnchor, updateFolderOpenState, updateNodes, updateSelectedFolder, updateSelection} from 'chrome://bookmarks/bookmarks.js';
+import type {BookmarksPageState, FolderOpenState, NodeMap, SelectionState, SelectItemsAction} from 'chrome://bookmarks/bookmarks.js';
+import {ACCOUNT_HEADING_NODE_ID, changeFolderOpen, clearSearch, createBookmark, createEmptyState, deselectItems, editBookmark, getDisplayedList, isShowingSearch, LOCAL_HEADING_NODE_ID, moveBookmark, reduceAction, removeBookmark, reorderChildren, ROOT_NODE_ID, selectFolder, setSearchResults, setSearchTerm, updateAnchor, updateFolderOpenState, updateNodes, updateSelection} from 'chrome://bookmarks/bookmarks.js';
 import type {Action} from 'chrome://resources/js/store.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertTrue} from 'chrome://webui-test/chai_assert.js';
 
@@ -212,12 +212,13 @@ suite('folder open state', function() {
 });
 
 suite('selected folder', function() {
-  let nodes: NodeMap;
-  let selectedFolder: string;
-  let action: SelectFolderAction;
+  let state: BookmarksPageState;
+  let action: Action;
 
   setup(function() {
-    nodes = testTree(createFolder('1', [
+    // Test selected folder using a full state.
+    state = createEmptyState();
+    state.nodes = testTree(createFolder('1', [
       createFolder(
           '2',
           [
@@ -225,43 +226,183 @@ suite('selected folder', function() {
             createFolder('4', []),
           ]),
     ]));
-
-    selectedFolder = '1';
+    state.selectedFolder = '1';
   });
 
   test('updates from selectFolder action', function() {
     action = selectFolder('2')!;
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
-    assertEquals('2', selectedFolder);
+    state = reduceAction(state, action);
+    assertEquals('2', state.selectedFolder);
   });
 
   test('updates when parent of selected folder is closed', function() {
     action = selectFolder('2')!;
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
+    state = reduceAction(state, action);
 
     action = changeFolderOpen('1', false);
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
-    assertEquals('1', selectedFolder);
+    state = reduceAction(state, action);
+    assertEquals('1', state.selectedFolder);
   });
 
   test('selects ancestor when selected folder is deleted', function() {
     action = selectFolder('3')!;
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
+    state = reduceAction(state, action);
 
     // Delete the selected folder:
-    action = removeBookmark('3', '2', 0, nodes);
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
+    action = removeBookmark('3', '2', 0, state.nodes);
+    state = reduceAction(state, action);
 
-    assertEquals('2', selectedFolder);
+    assertEquals('2', state.selectedFolder);
 
     action = selectFolder('4')!;
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
+    state = reduceAction(state, action);
 
     // Delete an ancestor of the selected folder:
-    action = removeBookmark('2', '1', 0, nodes);
-    selectedFolder = updateSelectedFolder(selectedFolder, action, nodes);
+    action = removeBookmark('2', '1', 0, state.nodes);
+    state = reduceAction(state, action);
 
-    assertEquals('1', selectedFolder);
+    assertEquals('1', state.selectedFolder);
+  });
+});
+
+
+suite('selected folder with headings', function() {
+  let state: BookmarksPageState;
+  let action: Action;
+
+  setup(function() {
+    // Test selected folder using a full state.
+    state = createEmptyState();
+    state.nodes = testTree(
+        createFolder(
+            '1', [createFolder('4', [], {syncing: true, parentId: '1'})], {
+              syncing: true,
+              folderType: chrome.bookmarks.FolderType.BOOKMARKS_BAR,
+            }),
+        createFolder(
+            '2', [],
+            {syncing: true, folderType: chrome.bookmarks.FolderType.OTHER}),
+        createFolder(
+            '3', [],
+            {syncing: true, folderType: chrome.bookmarks.FolderType.MOBILE}),
+        createFolder(
+            '11', [createFolder('14', [], {syncing: false, parentId: '11'})], {
+              syncing: false,
+              folderType: chrome.bookmarks.FolderType.BOOKMARKS_BAR,
+            }),
+        createFolder(
+            '12', [],
+            {syncing: false, folderType: chrome.bookmarks.FolderType.MOBILE}),
+        createFolder(
+            '13', [],
+            {syncing: false, folderType: chrome.bookmarks.FolderType.MANAGED}),
+    );
+    state.selectedFolder = ACCOUNT_HEADING_NODE_ID;
+  });
+
+  test('selects local heading', function() {
+    action = selectFolder(LOCAL_HEADING_NODE_ID)!;
+    state = reduceAction(state, action);
+    assertEquals(LOCAL_HEADING_NODE_ID, state.selectedFolder);
+  });
+
+  test('selects heading when parent permanent folder is removed', function() {
+    // Select a child of the account bookmark bar.
+    action = selectFolder('4')!;
+    state = reduceAction(state, action);
+
+    // Removed the account bookmark bar. The account heading should be
+    // selected.
+    action = removeBookmark('1', ROOT_NODE_ID, 0, state.nodes);
+    state = reduceAction(state, action);
+    assertEquals(ACCOUNT_HEADING_NODE_ID, state.selectedFolder);
+
+    // Select a child of the local bookmark bar.
+    action = selectFolder('14')!;
+    state = reduceAction(state, action);
+
+    // Delete the local bookmark bar. The local heading should be selected.
+    action = removeBookmark('11', ROOT_NODE_ID, 0, state.nodes);
+    state = reduceAction(state, action);
+    assertEquals(LOCAL_HEADING_NODE_ID, state.selectedFolder);
+  });
+
+  test(
+      'selection unchanged when non-parent permanent folder is removed',
+      function() {
+        // Select a child of the account bookmark bar.
+        action = selectFolder('4')!;
+        state = reduceAction(state, action);
+
+        // Removed the account mobile folder. Selection is unchanged.
+        action = removeBookmark('3', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+        assertEquals('4', state.selectedFolder);
+      });
+
+  test(
+      'selects local bookmark bar when all account folders are removed',
+      function() {
+        // Remove all account folders.
+        action = removeBookmark('1', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+        action = removeBookmark('2', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+        action = removeBookmark('3', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+
+        // The headings are also removed.
+        assertFalse(ACCOUNT_HEADING_NODE_ID in state.nodes);
+        assertFalse(LOCAL_HEADING_NODE_ID in state.nodes);
+
+        // The local bookmark bar is selected.
+        assertEquals('11', state.selectedFolder);
+      });
+
+  test(
+      'selects account bookmark bar when all local folders are removed',
+      function() {
+        // Remove all local folders.
+        action = removeBookmark('11', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+        action = removeBookmark('12', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+        action = removeBookmark('13', ROOT_NODE_ID, 0, state.nodes);
+        state = reduceAction(state, action);
+
+        // The headings are also removed.
+        assertFalse(ACCOUNT_HEADING_NODE_ID in state.nodes);
+        assertFalse(LOCAL_HEADING_NODE_ID in state.nodes);
+
+        // The account bookmark bar is selected.
+        assertEquals('1', state.selectedFolder);
+      });
+
+  test('selects bookmark bar when mobile folder is removed', function() {
+    // Select the mobile folder with heading nodes present.
+    action = selectFolder('3')!;
+    state = reduceAction(state, action);
+
+    // Remove all local folders.
+    action = removeBookmark('11', ROOT_NODE_ID, 0, state.nodes);
+    state = reduceAction(state, action);
+    action = removeBookmark('12', ROOT_NODE_ID, 0, state.nodes);
+    state = reduceAction(state, action);
+    action = removeBookmark('13', ROOT_NODE_ID, 0, state.nodes);
+    state = reduceAction(state, action);
+
+    // The headings are also removed.
+    assertFalse(ACCOUNT_HEADING_NODE_ID in state.nodes);
+    assertFalse(LOCAL_HEADING_NODE_ID in state.nodes);
+
+    // The mobile folder is still selected.
+    assertEquals('3', state.selectedFolder);
+
+    // Remove the mobile folder.
+    action = removeBookmark('3', ROOT_NODE_ID, 2, state.nodes);
+    state = reduceAction(state, action);
+    // The bookmark bar is selected.
+    assertEquals('1', state.selectedFolder);
   });
 });
 

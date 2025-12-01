@@ -39,6 +39,7 @@ chromium-metrics-reviews@google.com.
 <variants name="CertificateProvisioningScenario">
   <variant name="CertificateCreation" summary="certificate creation"/>
   <variant name="CertificateRenewal" summary="certificate renewal"/>
+  <variant name="ExistingIdentity" summary="existing identity"/>
   <variant name="Unknown" summary="unknown"/>
 </variants>
 
@@ -62,6 +63,11 @@ chromium-metrics-reviews@google.com.
   <variant name="CreateCertificate" summary="certificate creation"/>
 </variants>
 
+<variants name="ClientCertLevel">
+  <variant name="Browser" summary="browser"/>
+  <variant name="Profile" summary="profile"/>
+</variants>
+
 <variants name="ContentAnalysisProtocol">
   <variant name="Multipart"
       summary="Content analysis of user action is done with the Multipart
@@ -76,6 +82,17 @@ chromium-metrics-reviews@google.com.
       summary="Content analysis of uploaded or downloaded files."/>
   <variant name="Print" summary="Content analysis of printed pages."/>
   <variant name="Text" summary="Content analysis of pasted text."/>
+</variants>
+
+<variants name="DeepScanAccessPoint">
+  <variant name="Download" summary="Initiated from downloading 1+ file(s)"/>
+  <variant name="DragAndDrop"
+      summary="Initiated from drag-and-dropping text or 1+ file(s)"/>
+  <variant name="FileTransfer"
+      summary="Initiated from transferring 1+ file(s) in ChromeOS"/>
+  <variant name="Paste" summary="Initiated from pasting text"/>
+  <variant name="Print" summary="Initiated from printing a page"/>
+  <variant name="Upload" summary="Initiated from uploading 1+ file(s)"/>
 </variants>
 
 <variants name="Enterprise_CrdSessionType">
@@ -238,7 +255,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.AutoEnrollmentControllerTimeout"
     enum="EnterpriseAutoEnrollmentControllerTimeoutReport"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>vsavu@google.com</owner>
   <owner>igorcov@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -319,7 +336,16 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
-<histogram base="true" name="Enterprise.BrowserSigninIOS.SignedOutByPolicy"
+<histogram name="Enterprise.Boca.Spotlight.Crd.Result"
+    enum="EnterpriseCrdSessionResultCode" expires_after="2026-04-25">
+  <owner>caott@google.com</owner>
+  <owner>cros-edu-eng@google.com</owner>
+  <summary>
+    Reports success/failure when a spotlight session in Boca app is attempted.
+  </summary>
+</histogram>
+
+<histogram name="Enterprise.BrowserSigninIOS.SignedOutByPolicy"
     enum="BooleanHit" expires_after="2023-06-30">
   <owner>gujen@google.com</owner>
   <owner>goanuj@google.com</owner>
@@ -333,8 +359,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram base="true"
-    name="Enterprise.BrowserSigninIOS.SignInInterruptedByPolicy"
+<histogram name="Enterprise.BrowserSigninIOS.SignInInterruptedByPolicy"
     enum="BooleanHit" expires_after="2023-06-30">
   <owner>gujen@google.com</owner>
   <owner>goanuj@google.com</owner>
@@ -416,99 +441,121 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.CertificateStore.LevelDB.InitStatus.{Retry}"
+    units="code" expires_after="2026-02-10">
+  <owner>seblalancette@chromium.org</owner>
+  <owner>cbe-device-trust-eng@google.com</owner>
+  <summary>
+    Captures the initialization status returned after initializing {Retry} a
+    LevelDB database instance used by the managed client certificates store.
+  </summary>
+  <token key="Retry">
+    <variant name="NoRetry" summary="without retry"/>
+    <variant name="WithRetry" summary="with retry"/>
+  </token>
+</histogram>
+
 <histogram
-    name="Enterprise.ClientCertificate.Profile.CreateCertificate.Success.HasCert"
+    name="Enterprise.ClientCertificate.{Level}.CreateCertificate.Success.HasCert"
     enum="BooleanSuccess" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
-    Captures whether the HTTP response body for the Profile certificate creation
+    Captures whether the HTTP response body for the {Level} certificate creation
     request had a certificate or not.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
 </histogram>
 
-<histogram name="Enterprise.ClientCertificate.Profile.CreatePrivateKey.Source"
+<histogram name="Enterprise.ClientCertificate.{Level}.CreatePrivateKey.Source"
     enum="CertificatePrivateKeySource" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
     Captures the source of a private key creation after it was created (e.g.
     TPM-backed or not) as part of the client certificate provisioning flow for a
-    Profile.
+    {Level}.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
 </histogram>
 
-<histogram name="Enterprise.ClientCertificate.Profile.Provisioning.Error"
+<histogram name="Enterprise.ClientCertificate.{Level}.Provisioning.Error"
     enum="CertificateProvisioningError" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
     Captures a terminal error that occured when trying to provision a client
-    certificate for a Profile.
+    certificate for a {Level}.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
 </histogram>
 
-<histogram name="Enterprise.ClientCertificate.Profile.Provisioning.Store.Error"
+<histogram name="Enterprise.ClientCertificate.{Level}.Provisioning.Store.Error"
     enum="CertificateStoreError" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
     Captures a terminal store error that occured when trying to provision a
-    client certificate for a Profile.
+    client certificate for a {Level}.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
 </histogram>
 
 <histogram
-    name="Enterprise.ClientCertificate.Profile.Provisioning.{ProvisioningScenario}.Outcome"
+    name="Enterprise.ClientCertificate.{Level}.Provisioning.{ProvisioningScenario}.Outcome"
     enum="BooleanSuccess" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
     Captures whether the {ProvisioningScenario} provisioning scenario was
-    successful or not.
+    successful or not for {Level} level client certificates.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
   <token key="ProvisioningScenario" variants="CertificateProvisioningScenario"/>
 </histogram>
 
 <histogram
-    name="Enterprise.ClientCertificate.Profile.Provisioning.{ProvisioningScenario}.{ProvisioningOutcome}.Latency"
+    name="Enterprise.ClientCertificate.{Level}.Provisioning.{ProvisioningScenario}.{ProvisioningOutcome}.Latency"
     units="ms" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
     Captures how long a {ProvisioningOutcome} {ProvisioningScenario}
-    provisioning scenario took.
+    provisioning scenario took for {Level} level client certificates.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
   <token key="ProvisioningScenario" variants="CertificateProvisioningScenario"/>
   <token key="ProvisioningOutcome" variants="CertificateProvisioningOutcome"/>
 </histogram>
 
 <histogram
-    name="Enterprise.ClientCertificate.Profile.{UploadScenario}.ClientError"
+    name="Enterprise.ClientCertificate.{Level}.{UploadScenario}.ClientError"
     enum="CertificateUploadClientError" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
-    Captures a client error that occured when trying to upload a Profile's
+    Captures a client error that occured when trying to upload a {Level}'s
     public key for {UploadScenario}.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
   <token key="UploadScenario" variants="ClientCertificateUploadScenario"/>
 </histogram>
 
 <histogram
-    name="Enterprise.ClientCertificate.Profile.{UploadScenario}.UploadCode"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-08-10">
+    name="Enterprise.ClientCertificate.{Level}.{UploadScenario}.UploadCode"
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-11-09">
   <owner>seblalancette@chromium.org</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
   <summary>
-    Captures the HTTP response code for the upload of a Profile's public key for
+    Captures the HTTP response code for the upload of a {Level}'s public key for
     {UploadScenario}.
   </summary>
+  <token key="Level" variants="ClientCertLevel"/>
   <token key="UploadScenario" variants="ClientCertificateUploadScenario"/>
 </histogram>
 
 <histogram name="Enterprise.CloudExtensionRequestUpdated"
-    enum="EnterpriseCloudExtensionRequestListUpdate" expires_after="2025-10-01">
+    enum="EnterpriseCloudExtensionRequestListUpdate" expires_after="2025-12-01">
   <owner>zmin@chromium.org</owner>
   <owner>src/chrome/browser/enterprise/reporting/OWNERS</owner>
   <summary>
@@ -592,10 +639,10 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="Enterprise.DataProtection.NavigationFinished.URLVerdictSource"
-    enum="DataProtectionURLVerdictSource" expires_after="2025-03-18">
+<histogram name="Enterprise.DataProtection.URLVerdictSource"
+    enum="DataProtectionURLVerdictSource" expires_after="2026-03-18">
   <owner>alshawwa@chromium.org</owner>
-  <owner>dpr-eng@google.com</owner>
+  <owner>cbe-cep-eng@google.com</owner>
   <summary>
     Records where the realtime url lookup verdict is read from in the data
     protection navigation observer. It is logged once per navigation.
@@ -610,7 +657,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceLocalAccountPolicyInvalidations2"
-    enum="EnterprisePolicyInvalidations" expires_after="2025-08-03">
+    enum="EnterprisePolicyInvalidations" expires_after="2025-10-12">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -625,7 +672,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceLocalAccountPolicyRefresh3"
-    enum="EnterprisePolicyRefresh" expires_after="2025-06-01">
+    enum="EnterprisePolicyRefresh" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -640,7 +687,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DevicePolicyDeviceIdValidity2.{EnrollmentType}"
-    enum="EnterprisePolicyDeviceIdValidity" expires_after="2025-09-07">
+    enum="EnterprisePolicyDeviceIdValidity" expires_after="2025-11-09">
   <owner>igorcov@chromium.org</owner>
   <owner>emaxx@chromium.org</owner>
   <summary>
@@ -659,7 +706,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DevicePolicyInvalidations2"
-    enum="EnterprisePolicyInvalidations" expires_after="2025-08-03">
+    enum="EnterprisePolicyInvalidations" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -675,7 +722,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DevicePolicyRefresh3"
-    enum="EnterprisePolicyRefresh" expires_after="2025-08-03">
+    enum="EnterprisePolicyRefresh" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -690,7 +737,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceRemoteCommand.Crd.Result"
-    enum="EnterpriseCrdSessionResultCode" expires_after="2025-09-14">
+    enum="EnterpriseCrdSessionResultCode" expires_after="2025-11-16">
   <owner>macinashutosh@google.com</owner>
   <owner>chromeos-commercial-crd@google.com</owner>
   <summary>Reports success/failure when a session is attempted.</summary>
@@ -698,7 +745,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.DeviceRemoteCommand.Crd.{Enterprise_CrdSessionType}.{Enterprise_UserSessionType}.Result"
-    enum="EnterpriseCrdSessionResultCode" expires_after="2025-08-18">
+    enum="EnterpriseCrdSessionResultCode" expires_after="2025-10-19">
   <owner>macinashutosh@google.com</owner>
   <owner>chromeos-commercial-crd@google.com</owner>
   <summary>
@@ -729,7 +776,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.DeviceRemoteCommand.Executed{Enterprise_RemoteCommandType}"
-    enum="RemoteCommandExecutionStatus" expires_after="2025-08-10">
+    enum="RemoteCommandExecutionStatus" expires_after="2025-10-19">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -759,7 +806,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceRemoteCommand.Received"
-    enum="RemoteCommandReceivedStatus" expires_after="2025-08-03">
+    enum="RemoteCommandReceivedStatus" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -771,7 +818,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceRemoteCommandInvalidations"
-    enum="EnterprisePolicyInvalidations" expires_after="2025-08-03">
+    enum="EnterprisePolicyInvalidations" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -803,7 +850,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DeviceSettings.UpdatedStatus"
-    enum="DeviceSettingsStatus" expires_after="2025-07-27">
+    enum="DeviceSettingsStatus" expires_after="2025-09-28">
   <owner>rbock@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <owner>managed-devices@google.com</owner>
@@ -1099,7 +1146,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.DeviceTrust.Mac.KeychainOSStatus.{KeyType}.{Operation}"
-    enum="ErrSecOSStatus" expires_after="2026-02-10">
+    enum="MacSecurityFrameworkOSStatus" expires_after="2026-02-10">
   <owner>seblalancette@chromium.org</owner>
   <owner>hmare@google.com</owner>
   <owner>cbe-device-trust-eng@google.com</owner>
@@ -1275,7 +1322,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ActiveFileEventsCount" units="entries"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1306,7 +1353,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ClipboardReadBlocked" enum="BooleanBlocked"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1316,7 +1363,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ConfidentialContentsCount" units="entries"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>aidazolic@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1326,7 +1373,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.DataTransferControllerStarted" enum="Boolean"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1337,7 +1384,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.DataTransferReportingTimeDiff" units="ms"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>poromov@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1348,7 +1395,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.DlpPolicyPresent" enum="Boolean"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1358,7 +1405,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.DragDropBlocked" enum="BooleanBlocked"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1367,7 +1414,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.Errors.Adaptor"
-    enum="EnterpriseDlpPolicyCrOSAdaptorError" expires_after="2025-06-01">
+    enum="EnterpriseDlpPolicyCrOSAdaptorError" expires_after="2025-12-01">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1387,7 +1434,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.Errors.Fanotify"
-    enum="EnterpriseDlpPolicyCrOSFanotifyError" expires_after="2025-06-01">
+    enum="EnterpriseDlpPolicyCrOSFanotifyError" expires_after="2025-12-01">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1397,7 +1444,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.Errors.FileDatabase"
-    enum="EnterpriseDlpPolicyCrOSFileDatabaseError" expires_after="2025-06-01">
+    enum="EnterpriseDlpPolicyCrOSFileDatabaseError" expires_after="2025-12-01">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1407,7 +1454,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.Errors.FilesPolicySetup" enum="Boolean"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1417,7 +1464,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.Errors.ReportQueueNotReady" enum="Boolean"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1427,7 +1474,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FanotifyDeleteEventSupport" enum="Boolean"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1436,14 +1483,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FanotifyMarkFilesystemSupport" enum="Boolean"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>Record whether the kernel supports fanotify delete events.</summary>
 </histogram>
 
 <histogram name="Enterprise.Dlp.FileActionBlocked2"
-    enum="EnterpriseDlpPolicyFileAction" expires_after="2025-06-01">
+    enum="EnterpriseDlpPolicyFileAction" expires_after="2025-12-01">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1463,7 +1510,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FileActionWarned2"
-    enum="EnterpriseDlpPolicyFileAction" expires_after="2025-06-01">
+    enum="EnterpriseDlpPolicyFileAction" expires_after="2025-12-01">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1473,7 +1520,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FileActionWarnProceeded"
-    enum="EnterpriseDlpPolicyFileAction" expires_after="2025-07-13">
+    enum="EnterpriseDlpPolicyFileAction" expires_after="2025-09-28">
   <owner>accorsi@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1503,7 +1550,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FilesAppOpenTimedOut" enum="Boolean"
-    expires_after="2025-06-01">
+    expires_after="2025-09-28">
   <owner>aidazolic@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1513,7 +1560,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FilesBlockedCount" units="entries"
-    expires_after="2025-06-01">
+    expires_after="2025-12-01">
   <owner>ayaelattar@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1523,7 +1570,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FilesDaemonStarted" enum="Boolean"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1533,7 +1580,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FilesDefaultFileAccess"
-    enum="EnterpriseDlpFileAccessDefaultAction" expires_after="2025-08-10">
+    enum="EnterpriseDlpFileAccessDefaultAction" expires_after="2025-10-12">
   <owner>brinky@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1543,7 +1590,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.FilesUnknownAccessLevel"
-    units="EnterpriseDlpPolicyLevel" expires_after="2025-08-24">
+    units="EnterpriseDlpPolicyLevel" expires_after="2025-10-26">
   <owner>poromov@google.com</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1611,7 +1658,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ReportedBlockLevelRestriction"
-    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-09-14">
+    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-11-16">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1621,7 +1668,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ReportedEventStatus" enum="GoogleRpcCode"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1630,7 +1677,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ReportedReportLevelRestriction"
-    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-09-14">
+    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-11-16">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1640,7 +1687,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.ReportedWarnLevelRestriction"
-    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-09-01">
+    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-11-09">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1661,7 +1708,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Dlp.RestrictionConfigured"
-    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-09-07">
+    enum="EnterpriseDlpPolicyRestriction" expires_after="2025-11-09">
   <owner>poromov@chromium.org</owner>
   <owner>chromeos-dlp@google.com</owner>
   <summary>
@@ -1762,6 +1809,17 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="Enterprise.Dlp.ScreenshotWarnShutdownOverride" enum="Boolean"
+    expires_after="2025-09-01">
+  <owner>aidazolic@chromium.org</owner>
+  <owner>chromeos-dlp@google.com</owner>
+  <summary>
+    Recorded when there is a &quot;warn&quot; level Data Leak Prevention
+    evaluation for initiating capture mode, but it occurs during a shutdown
+    request, so no new warning is shown and the screenshot is silently blocked.
+  </summary>
+</histogram>
+
 <histogram name="Enterprise.Dlp.ScreenshotWarnSilentProceeded" enum="Boolean"
     expires_after="2025-09-01">
   <owner>aidazolic@chromium.org</owner>
@@ -1788,7 +1846,7 @@ chromium-metrics-reviews@google.com.
     name="Enterprise.DMServerCloudPolicyRequestStatus{EnterpriseDMServerCloudPolicyRequest}"
     enum="EnterpriseDeviceManagementStatus" expires_after="2025-12-01">
   <owner>vincb@google.com</owner>
-  <owner>zmin@google.com</owner>
+  <owner>zmin@chromium.com</owner>
   <summary>
     Records the returned status of fetching cloud policies from the dmserver.
 
@@ -1805,7 +1863,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.DMServerRequestSuccess{EnterpriseDMServerRequest}"
-    enum="EnterpriseDMServerRequestSuccess" expires_after="2025-09-14">
+    enum="EnterpriseDMServerRequestSuccess" expires_after="2025-11-16">
   <owner>rbock@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <owner>managed-devices@google.com</owner>
@@ -1935,6 +1993,11 @@ chromium-metrics-reviews@google.com.
       <owner>rbock@google.com</owner>
       <owner>zmin@chromium.org</owner>
     </variant>
+    <variant name=".UploadFmRegistrationToken"
+        summary="Upload FM Registration Token.">
+      <owner>asumaneev@google.com</owner>
+      <owner>chromeos-commercial-remote-management@google.com</owner>
+    </variant>
     <variant name=".UploadPolicyValidationReport"
         summary="Upload Policy Validation Report.">
       <owner>rbock@google.com</owner>
@@ -1979,7 +2042,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Enrollment" enum="EnterpriseEnrollmentType"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -1989,7 +2052,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentAttestationBased"
-    enum="EnterpriseEnrollmentType" expires_after="2025-08-03">
+    enum="EnterpriseEnrollmentType" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2003,7 +2066,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentForced" enum="EnterpriseEnrollmentType"
-    expires_after="2025-08-17">
+    expires_after="2025-10-19">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2013,7 +2076,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentForcedAttestationBased"
-    enum="EnterpriseEnrollmentType" expires_after="2025-08-03">
+    enum="EnterpriseEnrollmentType" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2024,7 +2087,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentForcedInitial"
-    enum="EnterpriseEnrollmentType" expires_after="2025-06-01">
+    enum="EnterpriseEnrollmentType" expires_after="2026-04-06">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2035,7 +2098,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentForcedInitialAttestationBased"
-    enum="EnterpriseEnrollmentType" expires_after="2025-08-03">
+    enum="EnterpriseEnrollmentType" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2046,7 +2109,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentForcedInitialManualFallback"
-    enum="EnterpriseEnrollmentType" expires_after="2025-06-01">
+    enum="EnterpriseEnrollmentType" expires_after="2026-04-06">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2071,7 +2134,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentNudge.PolicyFetchResult"
-    enum="EnrollmentNudgePolicyFetchResult" expires_after="2025-09-07">
+    enum="EnrollmentNudgePolicyFetchResult" expires_after="2025-11-09">
   <owner>andreydav@google.com</owner>
   <owner>rodmartin@google.com</owner>
   <owner>chromeos-commercial-identity@google.com</owner>
@@ -2093,7 +2156,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentRecovery" enum="EnterpriseEnrollmentType"
-    expires_after="2025-06-01">
+    expires_after="2026-04-06">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2133,7 +2196,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentRollbackAttestation"
-    enum="EnterpriseEnrollmentType" expires_after="2025-09-14">
+    enum="EnterpriseEnrollmentType" expires_after="2025-11-16">
   <owner>crisguerrero@chromium.org</owner>
   <owner>mpolzer@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2146,7 +2209,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentRollbackManualFallback"
-    enum="EnterpriseEnrollmentType" expires_after="2025-06-01">
+    enum="EnterpriseEnrollmentType" expires_after="2026-04-06">
   <owner>crisguerrero@chromium.org</owner>
   <owner>mpolzer@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2160,7 +2223,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTime.Cancel" units="ms"
-    expires_after="2025-06-01">
+    expires_after="2026-04-06">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2170,7 +2233,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTime.Failure" units="ms"
-    expires_after="2025-06-01">
+    expires_after="2026-04-06">
   <owner>asumaneev@google.com</owner>
   <owner>sergiyb@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2190,7 +2253,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTokenBased"
-    enum="EnterpriseEnrollmentType" expires_after="2025-06-01">
+    enum="EnterpriseEnrollmentType" expires_after="2026-04-06">
   <owner>jacksontadie@google.com</owner>
   <owner>drcrash@google.com</owner>
   <owner>cros-onboarding-team@google.com</owner>
@@ -2205,7 +2268,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.EnrollmentTokenBasedManualFallback"
-    enum="EnterpriseEnrollmentType" expires_after="2025-06-01">
+    enum="EnterpriseEnrollmentType" expires_after="2026-04-06">
   <owner>jacksontadie@google.com</owner>
   <owner>drcrash@google.com</owner>
   <owner>cros-onboarding-team@google.com</owner>
@@ -2236,7 +2299,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.ExtensibleEnterpriseSSO.Supported.Result"
-    enum="Boolean" expires_after="2025-08-01">
+    enum="Boolean" expires_after="2025-10-05">
   <owner>ydago@chromium.org</owner>
   <owner>cec-growth@google.com</owner>
   <summary>
@@ -2246,7 +2309,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.ExtensibleEnterpriseSSO.{Status}.Duration"
-    units="ms" expires_after="2025-08-01">
+    units="ms" expires_after="2025-10-05">
   <owner>ydago@chromium.org</owner>
   <owner>cec-growth@google.com</owner>
   <summary>
@@ -2258,6 +2321,18 @@ chromium-metrics-reviews@google.com.
     <variant name="Supported.Failure" summary="was unsuccessful"/>
     <variant name="Supported.Success" summary="was successful"/>
   </token>
+</histogram>
+
+<histogram name="Enterprise.FileAnalysisRequest.FileSize" units="KB"
+    expires_after="2025-11-16">
+  <owner>eliashomsi@google.com</owner>
+  <owner>nancylanxiao@google.com</owner>
+  <owner>cbe-cep-eng@google.com</owner>
+  <summary>
+    Records the size of files being scanned for a file content analysis request.
+    These requests happen for CEP to scan downloaded and uploaded files for DLP
+    rules.
+  </summary>
 </histogram>
 
 <histogram name="Enterprise.FileDownloadObfuscation.Result"
@@ -2341,8 +2416,25 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram
+    name="Enterprise.IframeDlpRulesSupport.{DeepScanAccessPoint}.UrlChainSize"
+    units="count" expires_after="2026-06-04">
+  <owner>haihan@google.com</owner>
+  <owner>nancylanxiao@google.com</owner>
+  <owner>cbe-cep-eng@google.com</owner>
+  <summary>
+    Records the size of the url chain, from the iframe where the content
+    analysis request for {DeepScanAccessPoint} was triggered from all the way to
+    the tab url, inclusive.
+
+    A size of 1 means that the action did not come from an iFrame, and the chain
+    size limit is set to `kMaxFrameUrls`.
+  </summary>
+  <token key="DeepScanAccessPoint" variants="DeepScanAccessPoint"/>
+</histogram>
+
 <histogram name="Enterprise.InstallAttributes.ValidOnEnrolledDevice"
-    enum="Boolean" expires_after="2025-06-08">
+    enum="Boolean" expires_after="2026-04-06">
   <owner>igorcov@chromium.org</owner>
   <owner>emaxx@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2354,7 +2446,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.InvalidDevicePolicyFilesStatus"
-    enum="InvalidDevicePolicyFilesStatus" expires_after="2025-08-31">
+    enum="InvalidDevicePolicyFilesStatus" expires_after="2025-11-02">
   <owner>emaxx@chromium.org</owner>
   <owner>igorcov@chromium.org</owner>
   <owner>vsavu@google.com</owner>
@@ -2490,7 +2582,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.ManagedScreensaver.ImageDownloadResult"
-    enum="ManagedScreensaverImageDownloadResult" expires_after="2025-04-20">
+    enum="ManagedScreensaverImageDownloadResult" expires_after="2026-04-15">
   <owner>mpetrisor@chromium.org</owner>
   <owner>imprivata-eng@google.com</owner>
   <summary>
@@ -2596,7 +2688,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.OnBulkDataEntry.DataSize" units="bytes"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>domfc@chromium.org</owner>
   <owner>webprotect-team@google.com</owner>
   <summary>
@@ -2643,7 +2735,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.Policies" enum="EnterprisePolicies"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>vsavu@google.com</owner>
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2681,7 +2773,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyInvalidations"
-    enum="EnterprisePolicyInvalidations" expires_after="2025-08-03">
+    enum="EnterprisePolicyInvalidations" expires_after="2025-10-05">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -2713,7 +2805,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyPromotionBannerDisplayed" enum="Boolean"
-    expires_after="2025-08-03">
+    expires_after="2025-10-05">
   <owner>austinzzr@chromium.org</owner>
   <owner>esalma@google.com</owner>
   <summary>
@@ -2723,7 +2815,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyRefresh2" enum="EnterprisePolicyRefresh"
-    expires_after="2025-06-01">
+    expires_after="2026-04-06">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -2796,7 +2888,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyUpdatePeriod.Device" units="days"
-    expires_after="2025-06-08">
+    expires_after="2026-04-06">
   <owner>rbock@google.com</owner>
   <owner>igorcov@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2816,7 +2908,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PolicyUpdatePeriod.User" units="days"
-    expires_after="2025-04-06">
+    expires_after="2026-04-06">
   <owner>rbock@google.com</owner>
   <owner>igorcov@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -2833,7 +2925,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.ProfileAffiliation.IsAffiliated" enum="Boolean"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>igorruvinov@chromium.org</owner>
   <owner>cbe-magic@google.com</owner>
   <summary>
@@ -2843,7 +2935,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.ProfileAffiliation.UnaffiliatedReason"
-    enum="EnterpriseProfileUnaffiliatedReason" expires_after="2025-08-31">
+    enum="EnterpriseProfileUnaffiliatedReason" expires_after="2025-11-02">
   <owner>igorruvinov@chromium.org</owner>
   <owner>cbe-magic@google.com</owner>
   <summary>
@@ -2897,7 +2989,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.PublicSession.SessionLength" units="minutes"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>bfranz@chromium.org</owner>
   <owner>chromeos-kiosk-eng@google.com</owner>
   <summary>
@@ -2911,7 +3003,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.RefreshTokenLoadResult" enum="Boolean"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>igorcov@chromium.org</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -2921,7 +3013,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.RegularUserSession.SessionLength" units="minutes"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>bfranz@chromium.org</owner>
   <owner>chromeos-kiosk-eng@google.com</owner>
   <summary>
@@ -2935,7 +3027,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.ReportingEvent.{EventType}.UploadSize" units="B"
-    expires_after="2025-08-14">
+    expires_after="2025-10-19">
   <owner>domfc@chromium.org</owner>
   <owner>xanth@google.com</owner>
   <owner>nancylanxiao@google.com</owner>
@@ -2973,10 +3065,10 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.ResumableRequest.{ResumableRequestCheckType}Check.{ContentAnalysisRequestType}.Duration"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>nancylanxiao@google.com</owner>
   <owner>domfc@chromium.org</owner>
-  <owner>dpr-eng@google.com</owner>
+  <owner>cbe-cep-eng@google.com</owner>
   <summary>
     Records the duration of a {ResumableRequestCheckType} check part of a
     broader {ContentAnalysisRequestType} Resumable request. It is logged once
@@ -2988,7 +3080,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.SafeSites.Latency" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>ftirelo@chromium.org</owner>
   <owner>ljjlee@google.com</owner>
   <owner>cbe-eng@google.com</owner>
@@ -3018,7 +3110,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.SecondaryGoogleAccountUsage.PolicyFetch.Status"
     enum="SecondaryGoogleAccountUsagePolicyFetchStatus"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>rodmartin@google.com</owner>
   <owner>chromeos-commercial-identity@google.com</owner>
   <summary>
@@ -3027,6 +3119,20 @@ chromium-metrics-reviews@google.com.
     This is recorded when a user account is added as a secondary account
     (in-session).
   </summary>
+</histogram>
+
+<histogram name="Enterprise.SecurityReport.User.Mode"
+    enum="SecuritySignalsMode" expires_after="2026-03-01">
+  <owner>xzonghan@chromium.org</owner>
+  <owner>cbe-device-trust-eng@google.com</owner>
+  <summary>The method of how security signals is uploaded</summary>
+</histogram>
+
+<histogram name="Enterprise.SecurityReport.User.Trigger"
+    enum="SecurityReportTrigger" expires_after="2026-03-01">
+  <owner>xzonghan@chromium.org</owner>
+  <owner>cbe-device-trust-eng@google.com</owner>
+  <summary>The source trigger of security signals-only reports</summary>
 </histogram>
 
 <histogram name="Enterprise.SkyVault.LocalStorage.Enabled"
@@ -3049,6 +3155,13 @@ chromium-metrics-reviews@google.com.
     Drive). This may cause the Files app to display incorrect folder
     information.
   </summary>
+</histogram>
+
+<histogram name="Enterprise.SkyVault.Migration.Delete.Retry" units="count"
+    expires_after="2025-10-01">
+  <owner>aidazolic@google.com</owner>
+  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
+  <summary>Recorded when SkyVault deletion of local files is retried.</summary>
 </histogram>
 
 <histogram name="Enterprise.SkyVault.Migration.Reset" enum="Boolean"
@@ -3079,18 +3192,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     Recorded when an error occurs while setting the local storage write access.
   </summary>
-</histogram>
-
-<histogram name="Enterprise.SkyVault.Migration.{CloudProvider}.Failed"
-    enum="Boolean" expires_after="2025-10-01">
-  <owner>aidazolic@google.com</owner>
-  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
-  <summary>
-    Recorded when SkyVault migration of local files to {CloudProvider} fails,
-    i.e. when at least one file couldn't be uploaded to the cloud due to a non
-    retryable error.
-  </summary>
-  <token key="CloudProvider" variants="Enterprise_SkyVaultCloudProvider"/>
 </histogram>
 
 <histogram name="Enterprise.SkyVault.Migration.{CloudProvider}.FailureDuration"
@@ -3168,20 +3269,6 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram
-    name="Enterprise.SkyVault.Migration.{CloudProvider}.WrongStateContext"
-    enum="EnterpriseSkyVaultMigrationStateErrorContext"
-    expires_after="2025-10-01">
-  <owner>aidazolic@google.com</owner>
-  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
-  <summary>
-    Recorded when an unexpected state transition happens during SkyVault
-    migration of local files to {CloudProvider}. Records the context in which
-    the wrong state error occurred.
-  </summary>
-  <token key="CloudProvider" variants="Enterprise_SkyVaultCloudProvider"/>
-</histogram>
-
-<histogram
     name="Enterprise.SkyVault.Migration.{MigrationDestination}.CleanupError"
     enum="Boolean" expires_after="2025-10-01">
   <owner>aidazolic@google.com</owner>
@@ -3238,6 +3325,52 @@ chromium-metrics-reviews@google.com.
       variants="Enterprise_SkyVaultMigrationDestination"/>
 </histogram>
 
+<histogram name="Enterprise.SkyVault.Migration.{MigrationDestination}.Failed"
+    enum="Boolean" expires_after="2025-10-01">
+  <owner>aidazolic@google.com</owner>
+  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
+  <summary>
+    Recorded when SkyVault migration to {MigrationDestination} or deletion of
+    local files fails. This means that at least one file couldn't be uploaded to
+    the cloud due to a non retryable error, in case of a cloud destination, or
+    deleted e.g. due to file permissions or other errors.
+  </summary>
+  <token key="MigrationDestination"
+      variants="Enterprise_SkyVaultMigrationDestination"/>
+</histogram>
+
+<histogram
+    name="Enterprise.SkyVault.Migration.{MigrationDestination}.ScheduledTimeInPast.InformUser"
+    enum="Boolean" expires_after="2025-10-01">
+  <owner>aidazolic@google.com</owner>
+  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
+  <summary>
+    Records whether the scheduled migration start time was in the past when
+    `InformUser()`, which shows the first dialog for {MigrationDestination}.
+    This can occur e.g. if the device was turned off for an extended period
+    after the start time was initially set in a previous session.
+  </summary>
+  <token key="MigrationDestination"
+      variants="Enterprise_SkyVaultMigrationDestination"/>
+</histogram>
+
+<histogram
+    name="Enterprise.SkyVault.Migration.{MigrationDestination}.ScheduledTimeInPast.ScheduleMigration"
+    enum="Boolean" expires_after="2025-10-01">
+  <owner>aidazolic@google.com</owner>
+  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
+  <summary>
+    Records whether the scheduled migration start time was in the past when
+    `ScheduleMigrationAndInformUser()`, which re-shows the dialog closer to the
+    migration, was called for {MigrationDestination}. This is less likely to
+    occur under normal circumstances and could indicate a bug in the code, or a
+    scenario where the function was called very close to the scheduled
+    expiration time. Frequent occurrences should be investigated.
+  </summary>
+  <token key="MigrationDestination"
+      variants="Enterprise_SkyVaultMigrationDestination"/>
+</histogram>
+
 <histogram name="Enterprise.SkyVault.Migration.{MigrationDestination}.Stopped"
     enum="Boolean" expires_after="2025-10-01">
   <owner>aidazolic@google.com</owner>
@@ -3260,6 +3393,21 @@ chromium-metrics-reviews@google.com.
     Recorded when an unexpected state transition happens during SkyVault
     migration to {MigrationDestination} or deletion of local files. Records the
     unexpected state value.
+  </summary>
+  <token key="MigrationDestination"
+      variants="Enterprise_SkyVaultMigrationDestination"/>
+</histogram>
+
+<histogram
+    name="Enterprise.SkyVault.Migration.{MigrationDestination}.WrongStateContext"
+    enum="EnterpriseSkyVaultMigrationStateErrorContext"
+    expires_after="2025-10-01">
+  <owner>aidazolic@google.com</owner>
+  <owner>src/chrome/browser/ash/policy/skyvault/OWNERS</owner>
+  <summary>
+    Recorded when an unexpected state transition happens during SkyVault
+    migration to {MigrationDestination} or deletion of local files. Records the
+    context in which the wrong state error occurred.
   </summary>
   <token key="MigrationDestination"
       variants="Enterprise_SkyVaultMigrationDestination"/>
@@ -3541,7 +3689,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserInfoFetch.HttpErrorCode"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-08-17">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2025-12-19">
   <owner>vincb@google.com</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
@@ -3554,7 +3702,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserInfoFetch.Status"
-    enum="EnterpriseUserInfoFetchStatus" expires_after="2025-08-24">
+    enum="EnterpriseUserInfoFetchStatus" expires_after="2025-12-26">
   <owner>vincb@google.com</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
@@ -3566,7 +3714,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserPolicy.Count" units="policies"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>vincb@google.com</owner>
   <owner>ftirelo@chromium.org</owner>
   <summary>
@@ -3579,7 +3727,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserPolicyChromeOS.ChildUser.OAuthTokenError"
-    enum="GoogleServiceAuthError" expires_after="2025-08-03">
+    enum="GoogleServiceAuthError" expires_after="2025-10-05">
   <owner>agawronska@chromium.org</owner>
   <owner>michaelpg@chromium.org</owner>
   <summary>Failure reason for OAuth token fetch for child user.</summary>
@@ -3600,7 +3748,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="Enterprise.UserPolicyChromeOS.ReregistrationResult"
     enum="EnterpriseUserPolicyChromeOSReregistrationResult"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>hendrich@chromium.org</owner>
   <owner>rbock@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
@@ -3610,7 +3758,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.UserRemoteCommand.Executed{Enterprise_RemoteCommandType}"
-    enum="RemoteCommandExecutionStatus" expires_after="2025-06-01">
+    enum="RemoteCommandExecutionStatus" expires_after="2025-10-19">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -3626,7 +3774,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserRemoteCommand.Received"
-    enum="RemoteCommandReceivedStatus" expires_after="2025-08-17">
+    enum="RemoteCommandReceivedStatus" expires_after="2025-10-19">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -3638,7 +3786,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Enterprise.UserRemoteCommandInvalidations"
-    enum="EnterprisePolicyInvalidations" expires_after="2025-08-17">
+    enum="EnterprisePolicyInvalidations" expires_after="2025-10-19">
   <owner>asumaneev@google.com</owner>
   <owner>chromeos-commercial-remote-management@google.com</owner>
   <summary>
@@ -3683,10 +3831,10 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.{ContentAnalysisProtocol}Request.{ContentAnalysisRequestType}.Duration"
-    units="ms" expires_after="2025-09-07">
+    units="ms" expires_after="2025-11-09">
   <owner>nancylanxiao@google.com</owner>
   <owner>domfc@chromium.org</owner>
-  <owner>dpr-eng@google.com</owner>
+  <owner>cbe-cep-eng@google.com</owner>
   <summary>
     Records the duration of scanning requests, parametrized by the protocol used
     and the type of content that's uploaded. It is logged once per user action
@@ -3699,10 +3847,10 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Enterprise.{ContentAnalysisProtocol}Request.{ContentAnalysisRequestType}.Result"
-    enum="SafeBrowsingBinaryUploadResult" expires_after="2025-09-14">
+    enum="SafeBrowsingBinaryUploadResult" expires_after="2025-11-16">
   <owner>nancylanxiao@google.com</owner>
   <owner>domfc@chromium.org</owner>
-  <owner>dpr-eng@google.com</owner>
+  <owner>cbe-cep-eng@google.com</owner>
   <summary>
     Records the result of scanning requests, parametrized by the protocol used
     and the type of content that's uploaded. It is logged once per user action
@@ -3730,7 +3878,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.AzureADJoinStatusCheckTime" units="ms"
-    expires_after="2025-07-01">
+    expires_after="2025-12-01">
   <owner>igorruvinov@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
@@ -3742,7 +3890,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.InDomain" enum="BooleanEnabled"
-    expires_after="2025-07-01">
+    expires_after="2025-12-01">
   <owner>ydago@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -3767,7 +3915,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.InvalidPolicies" enum="EnterprisePolicies"
-    expires_after="2025-07-01">
+    expires_after="2025-11-09">
   <owner>pastarmovj@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
   <summary>
@@ -3789,7 +3937,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsDomainJoined" enum="BooleanEnabled"
-    expires_after="2025-06-08">
+    expires_after="2025-12-10">
   <owner>pastarmovj@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
@@ -3799,7 +3947,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsEnterpriseUser" enum="BooleanEnabled"
-    expires_after="2025-08-24">
+    expires_after="2025-12-01">
   <owner>pastarmovj@chromium.org</owner>
   <owner>zmin@chromium.org</owner>
   <summary>
@@ -3810,7 +3958,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsFullyManaged2" enum="IsFullyManagedBoolean"
-    expires_after="2025-08-17">
+    expires_after="2025-12-01">
   <owner>twellington@google.com</owner>
   <owner>tedchcoc@chromium.org</owner>
   <summary>
@@ -3821,7 +3969,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.IsJoinedToAzureAD" enum="BooleanEnabled"
-    expires_after="2025-07-01">
+    expires_after="2025-12-01">
   <owner>igorruvinov@chromium.org</owner>
   <owner>ydago@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
@@ -3910,7 +4058,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.OSType" enum="OsSuite"
-    expires_after="2025-07-01">
+    expires_after="2025-12-01">
   <owner>ydago@chromium.org</owner>
   <owner>pastarmovj@chromium.org</owner>
   <summary>
@@ -3920,7 +4068,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="EnterpriseCheck.WindowsProfileType" enum="WindowsProfileType"
-    expires_after="2025-07-13">
+    expires_after="2025-12-01">
   <owner>wfh@chromium.org</owner>
   <owner>chrome-platform-security-core@google.com</owner>
   <summary>

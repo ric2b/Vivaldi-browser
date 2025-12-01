@@ -1,6 +1,8 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 /*
  * Copyright (C) 2007, 2008 Apple Inc.  All rights reserved.
@@ -39,6 +41,7 @@ import * as SDK from '../../core/sdk/sdk.js';
 import * as IssuesManager from '../../models/issues_manager/issues_manager.js';
 import * as Adorners from '../../ui/components/adorners/adorners.js';
 import * as CodeHighlighter from '../../ui/components/code_highlighter/code_highlighter.js';
+import * as CopyToClipboard from '../../ui/components/copy_to_clipboard/copy_to_clipboard.js';
 import * as IconButton from '../../ui/components/icon_button/icon_button.js';
 import * as IssueCounter from '../../ui/components/issue_counter/issue_counter.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -271,12 +274,16 @@ export class ElementsTreeOutline extends
     const treeElement = this.findTreeElement(node);
     if (treeElement) {
       treeElement.addIssue(issue);
-      const treeElementNodeElementsToIssue = treeElement.issuesByNodeElement;
+      const treeElementNodeElementsToIssues = treeElement.issuesByNodeElement;
       // This element could be the treeElement tags name or an attribute.
-      for (const [element, issue] of treeElementNodeElementsToIssue) {
-        this.#nodeElementToIssues.set(element, issue);
+      for (const [element, issues] of treeElementNodeElementsToIssues) {
+        this.#nodeElementToIssues.set(element, issues);
       }
     }
+  }
+
+  updateNodeElementToIssue(element: Element, issues: IssuesManager.Issue.Issue[]): void {
+    this.#nodeElementToIssues.set(element, issues);
   }
 
   private onShowHTMLCommentsChange(): void {
@@ -374,8 +381,11 @@ export class ElementsTreeOutline extends
     if (isCut && (node.isShadowRoot() || node.ancestorUserAgentShadowRoot())) {
       return;
     }
-
-    void node.copyNode();
+    void node.getOuterHTML().then(outerHTML => {
+      if (outerHTML !== null) {
+        CopyToClipboard.copyTextToClipboard(outerHTML);
+      }
+    });
     this.setClipboardData({node, isCut});
   }
 
@@ -1584,8 +1594,6 @@ export class ElementsTreeOutline extends
       void treeElement.tagTypeContext.adornersThrottler.schedule(async () => treeElement.updateScrollAdorner());
     }
   }
-
-  private static treeOutlineSymbol = Symbol('treeOutline');
 }
 
 export namespace ElementsTreeOutline {

@@ -33,11 +33,8 @@ class PersistentRepeatingTimer;
 class CONTENT_EXPORT BtmServiceImpl : public BtmService {
  public:
   using RecordBounceCallback = base::RepeatingCallback<void(
-      const GURL& url,
-      bool has_3pc_exception,
-      const GURL& final_url,
-      base::Time time,
-      bool stateful,
+      const BtmRedirectInfo& redirect,
+      const BtmRedirectChainInfo& chain,
       base::RepeatingCallback<void(const GURL&)> stateful_bounce_callback)>;
 
   BtmServiceImpl(base::PassKey<BrowserContextImpl>, BrowserContext* context);
@@ -48,14 +45,10 @@ class CONTENT_EXPORT BtmServiceImpl : public BtmService {
   base::SequenceBound<BtmStorage>* storage() { return &storage_; }
 
   void RecordBounceForTesting(
-      const GURL& url,
-      bool has_3pc_exception,
-      const GURL& final_url,
-      base::Time time,
-      bool stateful,
+      const BtmRedirectInfo& redirect,
+      const BtmRedirectChainInfo& chain,
       base::RepeatingCallback<void(const GURL&)> stateful_bounce_callback) {
-    RecordBounce(url, has_3pc_exception, final_url, time, stateful,
-                 stateful_bounce_callback);
+    RecordBounce(redirect, chain, stateful_bounce_callback);
   }
 
   BtmCookieMode GetCookieMode() const;
@@ -96,9 +89,6 @@ class CONTENT_EXPORT BtmServiceImpl : public BtmService {
   }
 
   void OnTimerFiredForTesting() { OnTimerFired(); }
-  void WaitForFileDeletionCompleteForTesting() {
-    wait_for_file_deletion_.Run();
-  }
 
   void AddObserver(Observer* observer) override;
   void RemoveObserver(const Observer* observer) override;
@@ -134,11 +124,8 @@ class CONTENT_EXPORT BtmServiceImpl : public BtmService {
       base::RepeatingCallback<void(const GURL&)> stateful_bounce_callback,
       const BtmState url_state);
   void RecordBounce(
-      const GURL& url,
-      bool has_3pc_exception,
-      const GURL& final_url,
-      base::Time time,
-      bool stateful,
+      const BtmRedirectInfo& redirect,
+      const BtmRedirectChainInfo& chain,
       base::RepeatingCallback<void(const GURL&)> stateful_bounce_callback);
   static void HandleRedirect(
       const BtmRedirectInfo& redirect,
@@ -159,10 +146,9 @@ class CONTENT_EXPORT BtmServiceImpl : public BtmService {
   // BtmService overrides:
   void RecordBrowserSignIn(std::string_view domain) override;
 
-  base::RunLoop wait_for_file_deletion_;
   raw_ptr<BrowserContext> browser_context_;
   // The persisted timer controlling how often incidental state is cleared.
-  // This timer is null if the DIPS feature isn't enabled with a valid TimeDelta
+  // This timer is null if the BTM feature isn't enabled with a valid TimeDelta
   // given for its `timer_delay` parameter.
   // See base/time/time_delta_from_string.h for how that param should be given.
   std::unique_ptr<PersistentRepeatingTimer> repeating_timer_;

@@ -222,7 +222,6 @@ test("device_unittests") {
 
   if (is_mac) {
     sources += [
-      "fido/enclave/icloud_recovery_key_mac_unittest.mm",
       "fido/mac/authenticator_unittest.mm",
       "fido/mac/browsing_data_deletion_unittest.mm",
       "fido/mac/credential_metadata_unittest.cc",
@@ -367,7 +366,6 @@ test("device_unittests") {
     ldflags = [ "-ObjC" ]
     frameworks = [
       "CoreBluetooth.framework",
-      "IOKit.framework",
       "Foundation.framework",
     ]
   }
@@ -375,6 +373,7 @@ test("device_unittests") {
   if (is_mac) {
     frameworks += [
       "IOBluetooth.framework",
+      "IOKit.framework",
       "Security.framework",
       "AuthenticationServices.framework",
     ]

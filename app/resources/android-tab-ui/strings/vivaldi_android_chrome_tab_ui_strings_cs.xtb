@@ -1,19 +1,27 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="cs">
-<translation id="2277224997687551299">Upravit název skupiny</translation>
+<translation id="1062777154504442433">Nová skupina</translation>
+<translation id="1625440863545383011">Odstranit list a ponechat skupinu</translation>
 <translation id="2330212241471632770">{TABS_COUNT,plural,
           =1{Přidat list do záložek}
           few{Přidat listy do záložek}
-          many{Přidat listy do záložek}
+          many{Přidat listů do záložek}
           other{Přidat listy do záložek}
 }</translation>
 <translation id="2947471979790858922">Vaše aktivita v těchto soukromých listech bude odstraněna z tohoto zařízení</translation>
+<translation id="3298614730029636660">Zachovat skupinu</translation>
+<translation id="354698175756845966">Upravit barvu skupiny</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Zavřené listy najdete v části„nedávné listy“ v hlavním menu Vivaldi. Váš soukromý list tam nebude.}
         other {Zavřené listy najdete v části„nedávné listy“ v hlavním menu Vivaldi. Vaše # soukromé listy tam nebudou.}}</translation>
-<translation id="4460014764210899310">Zrušit seskupení</translation>
 <translation id="4871187110787939393">Zavřít všechny soukromé listy?</translation>
 <translation id="5494920125229734069">Vybrat vše</translation>
-<translation id="6744956528665271406">Upravit barvu skupiny</translation>
+<translation id="6807841890213931603">Odebrat list a smazat skupinu</translation>
+<translation id="750227952939161636">Vaše skupiny listů se automaticky ukládají a aktualizují na všech zařízeních, na kterých jste přihlášeni</translation>
+<translation id="7640137753339219124">Smazat skupinu</translation>
+<translation id="7653857400289671414">Vaše skupiny listů se automaticky ukládají</translation>
+<translation id="8440938071054361204">Upravit název skupiny</translation>
+<translation id="8602902357364871325">Zavřít skupinu</translation>
+<translation id="8851621822786801079">Odebrat ze skupiny</translation>
 </translationbundle>

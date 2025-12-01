@@ -27,6 +27,8 @@ const char kChromeUIOfflineURL[] = "chrome://offline/";
 const char kChromeUIOnDeviceLlmInternalsURL[] =
     "chrome://on-device-llm-internals/";
 const char kChromeUIPolicyURL[] = "chrome://policy/";
+const char kChromeUIPolicyLogsURL[] = "chrome://policy/logs";
+const char kChromeUIPolicyTestURL[] = "chrome://policy/test";
 const char kChromeUISettingsURL[] = "chrome://settings/";
 const char kChromeUITermsURL[] = "chrome://terms/";
 const char kChromeUIVersionURL[] = "chrome://version/";
@@ -143,6 +145,14 @@ const char kGoogleMyAccountURL[] =
 
 const char kGoogleMyAccountDeviceActivityURL[] =
     "https://myaccount.google.com/device-activity?utm_source=chrome";
+
+const char kGoogleMyAccountHomeAddressURL[] =
+    "https://myaccount.google.com/address/"
+    "home?utm_source=chrome&utm_campaign=manage_addresses";
+
+const char kGoogleMyAccountWorkAddressURL[] =
+    "https://myaccount.google.com/address/"
+    "work?utm_source=chrome&utm_campaign=manage_addresses";
 
 const char kReadingListReferrerURL[] =
     "chrome://do_not_consider_for_most_visited/reading_list";

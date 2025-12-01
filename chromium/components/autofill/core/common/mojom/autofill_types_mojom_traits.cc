@@ -163,6 +163,7 @@ bool StructTraits<autofill::mojom::AutocompleteParsingResultDataView,
   if (!data.ReadFieldType(&out->field_type))
     return false;
   out->webauthn = data.webauthn();
+  out->webidentity = data.webidentity();
   return true;
 }
 
@@ -599,8 +600,6 @@ bool StructTraits<autofill::mojom::PasswordFormFillDataDataView,
   }
 
   out->wait_for_username = data.wait_for_username();
-  out->username_may_use_prefilled_placeholder =
-      data.username_may_use_prefilled_placeholder();
   out->notify_browser_of_successful_filling =
       data.notify_browser_of_successful_filling();
 
@@ -642,6 +641,7 @@ bool StructTraits<autofill::mojom::TriggeringFieldDataView,
     Read(autofill::mojom::TriggeringFieldDataView data,
          autofill::TriggeringField* out) {
   out->show_webauthn_credentials = data.show_webauthn_credentials();
+  out->show_identity_credentials = data.show_identity_credentials();
 
   return data.ReadElementId(&out->element_id) &&
          data.ReadTriggerSource(&out->trigger_source) &&

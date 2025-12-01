@@ -31,8 +31,15 @@ typedef void (^TabGroupActionBlock)();
 // The name of the tab group.
 @property(nonatomic, copy) NSString* tabGroupName;
 
+// The action to execute when dismissing the confirmation coordinator. Can be
+// `nil`.
+@property(nonatomic, strong) TabGroupActionBlock dismissAction;
+
 // YES to display an alert instead of an action sheet. Default is NO.
 @property(nonatomic, assign) BOOL showAsAlert;
+
+// YES if the cancel button should be available. Default is YES.
+@property(nonatomic, assign) BOOL canCancel;
 
 // Designated initializer with a parameter for anchoring the popover to a
 // UIView.

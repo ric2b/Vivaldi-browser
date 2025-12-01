@@ -1646,7 +1646,11 @@ StyleRuleFontFeature* CSSParserImpl::ConsumeFontFeatureRule(
       if (!number_value) {
         return nullptr;
       }
-      parsed_numbers.push_back(number_value->GetIntValue());
+      std::optional<double> number = number_value->GetValueIfKnown();
+      if (!number.has_value()) {
+        return nullptr;
+      }
+      parsed_numbers.push_back(ClampTo<int>(number.value()));
     }
 
     const CSSParserToken& expected_semicolon = stream.Peek();
@@ -2006,7 +2010,6 @@ StyleRuleBase* CSSParserImpl::ConsumeScopeRule(
 
 StyleRuleViewTransition* CSSParserImpl::ConsumeViewTransitionRule(
     CSSParserTokenStream& stream) {
-  CHECK(RuntimeEnabledFeatures::ViewTransitionOnNavigationEnabled());
   // NOTE: @view-transition prelude should be empty.
   wtf_size_t prelude_offset_start = stream.LookAheadOffset();
   wtf_size_t prelude_offset_end = stream.LookAheadOffset();
@@ -2558,7 +2561,8 @@ StyleRule* CSSParserImpl::ConsumeStyleRule(CSSParserTokenStream& stream,
     StringView text(stream.RemainingText(), 1);
 #ifdef ARCH_CPU_X86_FAMILY
     wtf_size_t len;
-    if (base::CPU::GetInstanceNoAllocation().has_avx2()) {
+    if (base::CPU::GetInstanceNoAllocation().has_avx2() &&
+        base::CPU::GetInstanceNoAllocation().has_pclmul()) {
       len = static_cast<wtf_size_t>(FindLengthOfDeclarationListAVX2(text));
     } else {
       len = static_cast<wtf_size_t>(FindLengthOfDeclarationList(text));
@@ -3074,8 +3078,9 @@ std::unique_ptr<Vector<KeyframeOffset>> CSSParserImpl::ConsumeKeyframeKeyList(
 
         auto stream_name = To<CSSIdentifierValue>(stream_name_percent->Item(0))
                                .ConvertTo<TimelineOffset::NamedRange>();
-        auto percent =
-            To<CSSPrimitiveValue>(stream_name_percent->Item(1)).GetFloatValue();
+        double percent =
+            To<CSSNumericLiteralValue>(stream_name_percent->Item(1))
+                .ClampedDoubleValue();
         result->push_back(KeyframeOffset(stream_name, percent / 100.0));
       }
     } else {

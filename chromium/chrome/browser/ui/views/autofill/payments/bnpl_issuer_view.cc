@@ -17,6 +17,7 @@
 #include "chrome/browser/ui/views/autofill/payments/select_bnpl_issuer_dialog.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/controls/hover_button.h"
+#include "components/autofill/core/browser/data_model/payments/bnpl_issuer.h"
 #include "components/autofill/core/browser/payments/constants.h"
 #include "components/grit/components_scaled_resources.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -24,10 +25,12 @@
 #include "ui/base/models/image_model_utils.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/color/color_id.h"
+#include "ui/color/color_variant.h"
 #include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/events/types/event_type.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_host.h"
@@ -38,8 +41,10 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/theme_tracking_image_view.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/box_layout_view.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
@@ -47,34 +52,65 @@
 
 namespace autofill::payments {
 
+using IssuerId = autofill::BnplIssuer::IssuerId;
+
 BnplIssuerView::BnplIssuerView(
     base::WeakPtr<SelectBnplIssuerDialogController> controller,
     SelectBnplIssuerDialog* issuer_dialog)
     : issuer_dialog_(issuer_dialog), controller_(controller) {
   SetOrientation(views::BoxLayout::Orientation::kVertical);
+}
+
+BnplIssuerView::~BnplIssuerView() = default;
+
+void BnplIssuerView::AddedToWidget() {
+  views::BoxLayoutView::AddedToWidget();
   auto* layout_provider = ChromeLayoutProvider::Get();
+  SetBetweenChildSpacing(layout_provider->GetDistanceMetric(
+      views::DISTANCE_RELATED_CONTROL_VERTICAL));
   int corner_radius =
       layout_provider->GetCornerRadiusMetric(views::Emphasis::kHigh);
   auto issuer_contexts = controller_->GetIssuerContexts();
   for (const auto& [issuer, eligibility] : issuer_contexts) {
     bool issuer_eligible =
         eligibility == BnplIssuerEligibilityForPage::kIsEligible;
-    int image_id = IDR_AUTOFILL_AFFIRM_UNLINKED;
-    bool issuer_linked = issuer.payment_instrument().has_value();
-    if (issuer.issuer_id() == kBnplZipIssuerId) {
-      image_id =
-          issuer_linked ? IDR_AUTOFILL_ZIP_LINKED : IDR_AUTOFILL_ZIP_UNLINKED;
-    } else if (issuer.issuer_id() == kBnplAffirmIssuerId) {
-      image_id = issuer_linked ? IDR_AUTOFILL_AFFIRM_LINKED
-                               : IDR_AUTOFILL_AFFIRM_UNLINKED;
-    } else if (issuer.issuer_id() == kBnplAfterpayIssuerId) {
-      image_id = issuer_linked ? IDR_AUTOFILL_AFTERPAY_LINKED
-                               : IDR_AUTOFILL_AFTERPAY_UNLINKED;
-    }
-    auto image_view =
-        std::make_unique<views::ImageView>(ui::ImageModel::FromImageSkia(
-            *ui::ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                image_id)));
+    const bool issuer_linked = issuer.payment_instrument().has_value();
+    const auto image_ids = [&]() -> std::pair<int, int> {
+      if (issuer_linked) {
+        switch (issuer.issuer_id()) {
+          case IssuerId::kBnplAffirm:
+            return {IDR_AUTOFILL_AFFIRM_LINKED,
+                    IDR_AUTOFILL_AFFIRM_LINKED_DARK};
+          case IssuerId::kBnplZip:
+            return {IDR_AUTOFILL_ZIP_LINKED, IDR_AUTOFILL_ZIP_LINKED_DARK};
+          case IssuerId::kBnplAfterpay:
+            return {IDR_AUTOFILL_AFTERPAY_LINKED,
+                    IDR_AUTOFILL_AFTERPAY_LINKED_DARK};
+        }
+        NOTREACHED();
+      }
+      switch (issuer.issuer_id()) {
+        case IssuerId::kBnplAffirm:
+          return {IDR_AUTOFILL_AFFIRM_UNLINKED,
+                  IDR_AUTOFILL_AFFIRM_UNLINKED_DARK};
+        case IssuerId::kBnplZip:
+          return {IDR_AUTOFILL_ZIP_UNLINKED, IDR_AUTOFILL_ZIP_UNLINKED_DARK};
+        case IssuerId::kBnplAfterpay:
+          return {IDR_AUTOFILL_AFTERPAY_UNLINKED,
+                  IDR_AUTOFILL_AFTERPAY_UNLINKED_DARK};
+      }
+      NOTREACHED();
+    }();
+
+    auto image_view = std::make_unique<views::ThemeTrackingImageView>(
+        ui::ImageModel::FromResourceId(image_ids.first),
+        ui::ImageModel::FromResourceId(image_ids.second),
+        base::BindRepeating(
+            [](views::View* view) {
+              return ui::ColorVariant(view->GetColorProvider()->GetColor(
+                  ui::kColorDialogBackground));
+            },
+            base::Unretained(this)));
     auto* image_view_ptr = image_view.get();
     auto issuer_button = std::make_unique<HoverButton>(
         views::Button::PressedCallback(base::BindRepeating(
@@ -90,6 +126,7 @@ BnplIssuerView::BnplIssuerView(
                             views::DISTANCE_UNRELATED_CONTROL_VERTICAL),
                         layout_provider->GetDistanceMetric(
                             views::DISTANCE_RELATED_LABEL_HORIZONTAL))));
+    issuer_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
     // Make the highlight with rounded corners per the mocks.
     if (auto* ink_drop = views::InkDrop::Get(issuer_button.get())) {
       ink_drop->SetCreateHighlightCallback(base::BindRepeating(
@@ -119,6 +156,8 @@ BnplIssuerView::BnplIssuerView(
                                    views::DISTANCE_RELATED_BUTTON_HORIZONTAL),
                                0, 0))
               .Build());
+      issuer_button->GetViewAccessibility().SetDescription(
+          linked_pill->GetAccessibilityDescription());
     }
     issuer_button->AddChildView(
         views::Builder<views::ImageView>()
@@ -152,12 +191,7 @@ BnplIssuerView::BnplIssuerView(
                         : kColorBnplIssuerLabelForegroundDisabled);
     AddChildView(std::move(issuer_button));
   }
-}
 
-BnplIssuerView::~BnplIssuerView() = default;
-
-void BnplIssuerView::AddedToWidget() {
-  views::BoxLayoutView::AddedToWidget();
   // TODO (crbug.com/402646513): Update color token to use a context-specific
   // token.
   SkColor background_color =
@@ -168,12 +202,14 @@ void BnplIssuerView::AddedToWidget() {
                                        background_color, std::nullopt);
     }
   }
+  CHECK(!children().empty());
+  children()[0]->RequestFocus();
 }
 
 void BnplIssuerView::IssuerSelected(BnplIssuer issuer, const ui::Event& event) {
   if (controller_) {
     issuer_dialog_->DisplayThrobber();
-    controller_->OnIssuerSelected(std::string(issuer.issuer_id()));
+    controller_->OnIssuerSelected(std::move(issuer));
   }
 }
 

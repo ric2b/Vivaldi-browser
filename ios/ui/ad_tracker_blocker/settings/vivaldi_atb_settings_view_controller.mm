@@ -6,6 +6,10 @@
 #import <UIKit/UIKit.h>
 
 #import "base/apple/foundation_util.h"
+#import "components/prefs/pref_service.h"
+#import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_cell.h"
+#import "ios/chrome/browser/shared/ui/table_view/cells/table_view_switch_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_header_footer_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/cells/table_view_text_item.h"
 #import "ios/chrome/browser/shared/ui/table_view/table_view_utils.h"
@@ -18,6 +22,7 @@
 #import "ios/ui/helpers/vivaldi_uiview_layout_helper.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
+#import "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 using l10n_util::GetNSString;
 
@@ -38,6 +43,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeGlobalSetting = kItemTypeEnumZero,
   ItemTypeExceptionSetting,
   ItemTypeSourceSetting,
+  ItemTypeStrictBlocking,
   ItemTypeHeader
 };
 
@@ -49,6 +55,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // The manager for the adblock that provides all methods and properties for
 // adblocker.
 @property(nonatomic, strong) VivaldiATBManager* adblockManager;
+// Strict blocking switch item
+@property(nonatomic, strong) TableViewSwitchItem* strictBlockingItem;
 @end
 
 @implementation VivaldiATBSettingsViewController
@@ -186,6 +194,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       toSectionWithIdentifier:SectionIdentifierSources];
   [model addItem:manageAdsSourcesItem
       toSectionWithIdentifier:SectionIdentifierSources];
+  [model addItem: [self strictBlockingItem]
+      toSectionWithIdentifier:SectionIdentifierSources];
 
   [self.tableView reloadData];
 }
@@ -305,6 +315,63 @@ typedef NS_ENUM(NSInteger, ItemType) {
   if (options.count > 0)
     [self reloadGlobalSettingModelWithOption:options];
   [self reloadExceptionAndSourceSettingsModel];
+}
+
+#pragma mark - UITableViewDataSource
+
+- (UITableViewCell*)tableView:(UITableView*)tableView
+        cellForRowAtIndexPath:(NSIndexPath*)indexPath {
+  UITableViewCell* cell = [super tableView:tableView
+                     cellForRowAtIndexPath:indexPath];
+
+  ItemType itemType = static_cast<ItemType>(
+      [self.tableViewModel itemTypeForIndexPath:indexPath]);
+
+  if (itemType == ItemTypeStrictBlocking) {
+    TableViewSwitchCell* switchCell =
+        base::apple::ObjCCastStrict<TableViewSwitchCell>(cell);
+    [switchCell.switchView addTarget:self
+                              action:@selector(strictBlockingSwitchChanged:)
+                    forControlEvents:UIControlEventValueChanged];
+  }
+  return cell;
+}
+
+#pragma mark - Private methods
+
+- (TableViewSwitchItem*)strictBlockingItem {
+  if (!_strictBlockingItem) {
+    _strictBlockingItem = [[TableViewSwitchItem alloc]
+      initWithType:ItemTypeStrictBlocking];
+    _strictBlockingItem.text =
+      l10n_util::GetNSString(
+        IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_STRICT_BLOCKING_SETTING_TITLE);
+    _strictBlockingItem.detailText =
+      l10n_util::GetNSString(
+        IDS_IOS_VIVALDI_AD_AND_TRACKER_BLOCKER_STRICT_BLOCKING_SETTING_DETAIL);
+    _strictBlockingItem.on = [self getStrictBlockingEnabled];
+    _strictBlockingItem.enabled = YES;
+    _strictBlockingItem.accessibilityTraits |= UIAccessibilityTraitButton;
+  }
+  return _strictBlockingItem;
+}
+
+- (void)strictBlockingSwitchChanged:(UISwitch*)sender {
+  [self setStrictBlockingEnabled:sender.on];
+}
+
+- (BOOL)getStrictBlockingEnabled {
+  if (!_browser)
+    return NO;
+  return _browser->GetProfile()->GetOriginalProfile()->GetPrefs()->GetBoolean(
+    vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking);
+}
+
+- (void)setStrictBlockingEnabled:(BOOL)enabled {
+  if (!_browser)
+    return;
+  _browser->GetProfile()->GetOriginalProfile()->GetPrefs()->SetBoolean(
+    vivaldiprefs::kPrivacyAdBlockerEnableDocumentBlocking, enabled);
 }
 
 @end

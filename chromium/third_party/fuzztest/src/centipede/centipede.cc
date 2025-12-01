@@ -98,9 +98,7 @@
 #include "./common/remote_file.h"
 #include "./common/status_macros.h"
 
-namespace centipede {
-
-using perf::RUsageProfiler;
+namespace fuzztest::internal {
 
 Centipede::Centipede(const Environment &env, CentipedeCallbacks &user_callbacks,
                      const BinaryInfo &binary_info,
@@ -127,7 +125,7 @@ Centipede::Centipede(const Environment &env, CentipedeCallbacks &user_callbacks,
         return Command{env_.input_filter, std::move(cmd_options)};
       }()},
       rusage_profiler_(
-          /*scope=*/perf::RUsageScope::ThisProcess(),
+          /*scope=*/RUsageScope::ThisProcess(),
           /*metrics=*/env.DumpRUsageTelemetryInThisShard()
               ? RUsageProfiler::kAllMetrics
               : RUsageProfiler::kMetricsOff,
@@ -205,6 +203,54 @@ void Centipede::CorpusFromFiles(const Environment &env, std::string_view dir) {
   CHECK_EQ(total_paths, inputs_added + inputs_ignored);
 }
 
+absl::Status Centipede::CrashesToFiles(const Environment &env,
+                                       std::string_view dir) {
+  std::vector<std::string> reproducer_dirs;
+  auto reproducer_match_status = RemoteGlobMatch(
+      WorkDir{env}.CrashReproducerDirPaths().AllShardsGlob(), reproducer_dirs);
+  if (!reproducer_match_status.ok() &&
+      !absl::IsNotFound(reproducer_match_status)) {
+    return reproducer_match_status;
+  }
+  absl::flat_hash_set<std::string> crash_ids;
+  for (const auto &reproducer_dir : reproducer_dirs) {
+    ASSIGN_OR_RETURN_IF_NOT_OK(
+        std::vector<std::string> reproducer_paths,
+        RemoteListFiles(reproducer_dir, /*recursively=*/false));
+    for (const auto &reproducer_path : reproducer_paths) {
+      std::string id = std::filesystem::path{reproducer_path}.filename();
+      if (auto [_it, inserted] = crash_ids.insert(id); !inserted) {
+        continue;
+      }
+      RETURN_IF_NOT_OK(RemoteFileCopy(
+          reproducer_path,
+          (std::filesystem::path{dir} / absl::StrCat(id, ".data")).string()));
+    }
+  }
+  std::vector<std::string> metadata_dirs;
+  auto metadata_match_status = RemoteGlobMatch(
+      WorkDir{env}.CrashMetadataDirPaths().AllShardsGlob(), metadata_dirs);
+  if (!metadata_match_status.ok() && !absl::IsNotFound(metadata_match_status)) {
+    return metadata_match_status;
+  }
+  for (const auto &metadata_dir : metadata_dirs) {
+    ASSIGN_OR_RETURN_IF_NOT_OK(
+        std::vector<std::string> metadata_paths,
+        RemoteListFiles(metadata_dir, /*recursively=*/false));
+    for (const auto &metadata_path : metadata_paths) {
+      std::string id = std::filesystem::path{metadata_path}.filename();
+      if (crash_ids.erase(id) == 0) {
+        continue;
+      }
+      RETURN_IF_NOT_OK(RemoteFileCopy(
+          metadata_path,
+          (std::filesystem::path{dir} / absl::StrCat(id, ".metadata"))
+              .string()));
+    }
+  }
+  return absl::OkStatus();
+}
+
 void Centipede::UpdateAndMaybeLogStats(std::string_view log_type,
                                        size_t min_log_level) {
   // `fuzz_start_time_ == ` means that fuzzing hasn't started yet. If so, grab
@@ -219,9 +265,9 @@ void Centipede::UpdateAndMaybeLogStats(std::string_view log_type,
 
   // NOTE: For now, this will double-count rusage in every shard on the same
   // machine. The stats reporter knows and deals with that.
-  static const auto rusage_scope = perf::RUsageScope::ThisProcess();
-  const auto rusage_timing = perf::RUsageTiming::Snapshot(rusage_scope);
-  const auto rusage_memory = perf::RUsageMemory::Snapshot(rusage_scope);
+  static const auto rusage_scope = RUsageScope::ThisProcess();
+  const auto rusage_timing = RUsageTiming::Snapshot(rusage_scope);
+  const auto rusage_memory = RUsageMemory::Snapshot(rusage_scope);
 
   namespace fd = feature_domains;
 
@@ -374,19 +420,21 @@ size_t Centipede::AddPcPairFeatures(FeatureVec &fv) {
 
 bool Centipede::RunBatch(
     const std::vector<ByteArray> &input_vec,
-    absl::Nullable<BlobFileWriter *> corpus_file,
-    absl::Nullable<BlobFileWriter *> features_file,
-    absl::Nullable<BlobFileWriter *> unconditional_features_file) {
+    BlobFileWriter *absl_nullable corpus_file,
+    BlobFileWriter *absl_nullable features_file,
+    BlobFileWriter *absl_nullable unconditional_features_file) {
   BatchResult batch_result;
   bool success = ExecuteAndReportCrash(env_.binary, input_vec, batch_result);
   CHECK_EQ(input_vec.size(), batch_result.results().size());
 
   for (const auto &extra_binary : env_.extra_binaries) {
+    if (ShouldStop()) break;
     BatchResult extra_batch_result;
     success =
         ExecuteAndReportCrash(extra_binary, input_vec, extra_batch_result) &&
         success;
   }
+  if (EarlyStopRequested()) return false;
   if (!success && env_.exit_on_crash) {
     LOG(INFO) << "--exit_on_crash is enabled; exiting soon";
     RequestEarlyStop(EXIT_FAILURE);
@@ -688,8 +736,8 @@ void Centipede::ReloadAllShardsAndWriteDistilledCorpus() {
   }
 }
 
-void Centipede::LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
-                               absl::Nonnull<BlobFileWriter *> features_file) {
+void Centipede::LoadSeedInputs(BlobFileWriter *absl_nonnull corpus_file,
+                               BlobFileWriter *absl_nonnull features_file) {
   std::vector<ByteArray> seed_inputs;
   const size_t num_seeds_available =
       user_callbacks_.GetSeeds(env_.batch_size, seed_inputs);
@@ -698,6 +746,8 @@ void Centipede::LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
                  << num_seeds_available << " > " << env_.batch_size;
   }
   if (seed_inputs.empty()) {
+    QCHECK(!env_.require_seeds)
+        << "No seeds returned and --require_seeds=true, exiting early.";
     LOG(WARNING)
         << "No seeds returned - will use the default seed of single byte {0}";
     seed_inputs.push_back({0});
@@ -705,6 +755,8 @@ void Centipede::LoadSeedInputs(absl::Nonnull<BlobFileWriter *> corpus_file,
 
   RunBatch(seed_inputs, corpus_file, features_file,
            /*unconditional_features_file=*/nullptr);
+  LOG(INFO) << "Number of input seeds available: " << num_seeds_available
+            << ", number included in corpus: " << corpus_.NumTotal();
 
   // Forcely add all seed inputs to avoid empty corpus if none of them increased
   // coverage and passed the filters.
@@ -848,14 +900,23 @@ void Centipede::ReportCrash(std::string_view binary,
     LOG(INFO).NoPrefix() << "\n";
   };
 
-  if (batch_result.IsSetupFailure()) {
-    log_execution_failure("Test Setup Failure: ");
-    LOG(FATAL) << "Terminating Centipede due to setup failure in the test.";
+  if (batch_result.IsSkippedTest()) {
+    log_execution_failure("Skipped Test: ");
+    LOG(INFO) << "Requesting early stop due to skipped test.";
+    RequestEarlyStop(EXIT_SUCCESS);
+    return;
   }
 
-  // Skip reporting only if RequestEarlyStop is called with a failure exit code.
-  // Still report if time runs out.
-  if (ShouldStop() && ExitCode() != 0) return;
+  if (batch_result.IsSetupFailure()) {
+    log_execution_failure("Test Setup Failure: ");
+    LOG(INFO) << "Requesting early stop due to setup failure in the test.";
+    RequestEarlyStop(EXIT_FAILURE);
+    return;
+  }
+
+  // Skip reporting only if RequestEarlyStop is called - still reporting if time
+  // runs out.
+  if (EarlyStopRequested()) return;
 
   if (++num_crashes_ > env_.max_num_crash_reports) return;
 
@@ -963,4 +1024,4 @@ void Centipede::ReportCrash(std::string_view binary,
                                  batch_result.failure_description()));
 }
 
-}  // namespace centipede
+}  // namespace fuzztest::internal

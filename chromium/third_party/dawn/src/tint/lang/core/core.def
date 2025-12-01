@@ -62,6 +62,7 @@ enum builtin_value {
   sample_index
   sample_mask
   clip_distances
+  subgroup_id
   subgroup_invocation_id
   subgroup_size
   @internal __point_size
@@ -239,21 +240,29 @@ enum attribute {
 enum usages {
   base
   bits
+  const_offset
+  coords
   count
   depth
+  dref
   compare_value
   elements
   exp
   height
   i
+  image
+  image_operands
   insert
   level
   location
+  lod
   num_levels
   original_value
   refz
-  samples
   result
+  sample
+  samples
+  texel
   width
   x
 }

@@ -52,7 +52,6 @@ HWDevice *filter_hw_device;
 
 char *vstats_filename;
 
-float audio_drift_threshold = 0.1;
 float dts_delta_threshold   = 10;
 float dts_error_threshold   = 3600*30;
 
@@ -1508,7 +1507,6 @@ static int opt_adrift_threshold(void *optctx, const char *opt, const char *arg)
 }
 #endif
 
-static const char *const alt_bsf[]            = { "absf", "vbsf", NULL };
 static const char *const alt_channel_layout[] = { "ch_layout", NULL};
 static const char *const alt_codec[]          = { "c", "acodec", "vcodec", "scodec", "dcodec", NULL };
 static const char *const alt_filter[]         = { "af", "vf", NULL };
@@ -1640,6 +1638,9 @@ const OptionDef options[] = {
     { "readrate_initial_burst", OPT_TYPE_DOUBLE, OPT_OFFSET | OPT_EXPERT | OPT_INPUT,
         { .off = OFFSET(readrate_initial_burst) },
         "The initial amount of input to burst read before imposing any readrate", "seconds" },
+    { "readrate_catchup",       OPT_TYPE_FLOAT, OPT_OFFSET | OPT_EXPERT | OPT_INPUT,
+        { .off = OFFSET(readrate_catchup) },
+        "Temporary readrate used to catch up if an input lags behind the specified readrate", "speed" },
     { "target",                 OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_PERFILE | OPT_EXPERT | OPT_OUTPUT,
         { .func_arg = opt_target },
         "specify target file type (\"vcd\", \"svcd\", \"dvd\", \"dv\" or \"dv50\" "
@@ -1717,6 +1718,9 @@ const OptionDef options[] = {
     { "reinit_filter",          OPT_TYPE_INT, OPT_PERSTREAM | OPT_INPUT | OPT_EXPERT,
         { .off = OFFSET(reinit_filters) },
         "reinit filtergraph on input parameter changes", "" },
+    { "drop_changed",          OPT_TYPE_INT, OPT_PERSTREAM | OPT_INPUT | OPT_EXPERT,
+        { .off = OFFSET(drop_changed) },
+        "drop frame instead of reiniting filtergraph on input parameter changes", "" },
     { "filter_complex",         OPT_TYPE_FUNC, OPT_FUNC_ARG | OPT_EXPERT,
         { .func_arg = opt_filter_complex },
         "create a complex filtergraph", "graph_description" },

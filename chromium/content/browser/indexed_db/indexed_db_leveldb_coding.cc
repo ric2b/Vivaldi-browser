@@ -186,7 +186,9 @@ void EncodeSortableDouble(double value, std::string* into) {
   CHECK(!std::isnan(value));
 
   uint64_t double_bits = 0;
-  UNSAFE_TODO(std::memcpy(&double_bits, &value, sizeof(value)));
+  base::byte_span_from_ref(double_bits)
+      .copy_from_nonoverlapping(
+          base::byte_span_from_ref(base::allow_nonunique_obj, value));
 
   // When interpreted as plain bits, negative doubles will sort in reverse, so
   // invert the bits. For positive doubles we only have to invert the sign bit
@@ -227,7 +229,8 @@ bool DecodeSortableDouble(std::string_view& data, double* output) {
     host_bits = host_bits ^ std::numeric_limits<uint64_t>::max();
   }
 
-  UNSAFE_TODO(std::memcpy(output, &host_bits, kLengthInBytes));
+  base::byte_span_from_ref(base::allow_nonunique_obj, *output)
+      .copy_from_nonoverlapping(base::byte_span_from_ref(host_bits));
   return true;
 }
 
@@ -632,7 +635,7 @@ bool DecodeIDBKeyRecursive(std::string_view* slice,
         std::unique_ptr<IndexedDBKey> key;
         if (!DecodeIDBKeyRecursive(slice, &key, recursion + 1))
           return false;
-        array.push_back(*key);
+        array.push_back(std::move(*key));
       }
       *value = std::make_unique<IndexedDBKey>(std::move(array));
       return true;
@@ -1892,6 +1895,7 @@ bool DatabaseMetaDataKey::IsValidBlobNumber(int64_t blob_number) {
   return blob_number >= kBlobNumberGeneratorInitialNumber;
 }
 
+const int64_t KeyPrefix::kInvalidId = -1;
 const int64_t DatabaseMetaDataKey::kAllBlobsNumber = 1;
 const int64_t DatabaseMetaDataKey::kBlobNumberGeneratorInitialNumber = 2;
 const int64_t DatabaseMetaDataKey::kInvalidBlobNumber = -1;
@@ -2537,8 +2541,8 @@ bool IndexDataKey::Decode(std::string_view* slice, IndexDataKey* result) {
 std::string IndexDataKey::Encode(int64_t database_id,
                                  int64_t object_store_id,
                                  int64_t index_id,
-                                 const std::string& encoded_user_key,
-                                 const std::string& encoded_primary_key,
+                                 std::string_view encoded_user_key,
+                                 std::string_view encoded_primary_key,
                                  int64_t sequence_number) {
   KeyPrefix prefix(database_id, object_store_id, index_id);
   std::string ret = prefix.Encode();

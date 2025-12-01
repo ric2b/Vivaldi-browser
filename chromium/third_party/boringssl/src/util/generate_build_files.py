@@ -677,7 +677,7 @@ if __name__ == '__main__':
       '|'.join(sorted(ALL_PLATFORMS.keys())))
   parser.add_option('--prefix', dest='prefix',
       help='For Bazel, prepend argument to all source files')
-  parser.add_option('--target-prefix', dest='target_prefix',
+  parser.add_option('--target-prefix', dest='target_prefix', default='',
       help='For Android, prepend argument to all target names')
   options, args = parser.parse_args(sys.argv[1:])
   PREFIX = options.prefix

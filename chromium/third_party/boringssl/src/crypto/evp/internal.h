@@ -174,18 +174,20 @@ OPENSSL_EXPORT int EVP_PKEY_CTX_ctrl(EVP_PKEY_CTX *ctx, int keytype, int optype,
 #define EVP_PKEY_CTRL_DH_PAD (EVP_PKEY_ALG_CTRL + 19)
 
 struct evp_pkey_ctx_st {
+  ~evp_pkey_ctx_st();
+
   // Method associated with this operation
-  const EVP_PKEY_METHOD *pmeth;
-  // Engine that implements this method or NULL if builtin
-  ENGINE *engine;
-  // Key: may be NULL
-  EVP_PKEY *pkey;
-  // Peer key for key agreement, may be NULL
-  EVP_PKEY *peerkey;
+  const EVP_PKEY_METHOD *pmeth = nullptr;
+  // Engine that implements this method or nullptr if builtin
+  ENGINE *engine = nullptr;
+  // Key: may be nullptr
+  bssl::UniquePtr<EVP_PKEY> pkey;
+  // Peer key for key agreement, may be nullptr
+  bssl::UniquePtr<EVP_PKEY> peerkey;
   // operation contains one of the |EVP_PKEY_OP_*| values.
-  int operation;
+  int operation = EVP_PKEY_OP_UNDEFINED;
   // Algorithm specific data
-  void *data;
+  void *data = nullptr;
 } /* EVP_PKEY_CTX */;
 
 struct evp_pkey_method_st {

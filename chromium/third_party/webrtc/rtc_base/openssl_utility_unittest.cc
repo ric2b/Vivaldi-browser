@@ -40,7 +40,7 @@
 #include "rtc_base/ssl_roots.h"
 #include "test/gmock.h"
 
-namespace rtc {
+namespace webrtc {
 namespace {
 // Fake P-256 key for use with the test certificates below.
 const unsigned char kFakeSSLPrivateKey[] = {
@@ -187,7 +187,7 @@ SSL* CreateSSLWithPeerCertificate(const unsigned char* cert, size_t cert_len) {
   const unsigned char* key_ptr = kFakeSSLPrivateKey;
   EVP_PKEY* key = d2i_PrivateKey(
       EVP_PKEY_EC, nullptr, &key_ptr,
-      webrtc::checked_cast<long>(arraysize(kFakeSSLPrivateKey)));  // NOLINT
+      checked_cast<long>(arraysize(kFakeSSLPrivateKey)));  // NOLINT
   RTC_CHECK(key);
 
 #ifdef OPENSSL_IS_BORINGSSL
@@ -305,4 +305,4 @@ TEST(OpenSSLUtilityTest, VerifyPeerCertMatchesHostLegacy) {
   SSL_free(ssl);
 }
 
-}  // namespace rtc
+}  // namespace webrtc

@@ -35,6 +35,21 @@ bool IsCGFloatEqual(CGFloat a, CGFloat b) {
   return std::fabs(a - b) <= std::numeric_limits<CGFloat>::epsilon();
 }
 
+bool IsActiveApplication() {
+  return NSRunningApplication.currentApplication.active;
+}
+
+bool PasteMightBlockWithPrivacyAlert() {
+  if (@available(macOS 15.4, *)) {
+    NSPasteboardAccessBehavior behavior =
+        NSPasteboard.generalPasteboard.accessBehavior;
+    return behavior == NSPasteboardAccessBehaviorDefault ||
+           behavior == NSPasteboardAccessBehaviorAsk;
+  } else {
+    return false;
+  }
+}
+
 UTType* UTTypeForServicesType(NSString* type) {
   if (!type) {
     return nil;

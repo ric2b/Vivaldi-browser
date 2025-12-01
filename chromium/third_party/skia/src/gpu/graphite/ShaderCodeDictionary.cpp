@@ -19,6 +19,7 @@
 #include "src/gpu/graphite/Renderer.h"
 #include "src/gpu/graphite/RuntimeEffectDictionary.h"
 #include "src/gpu/graphite/ShaderInfo.h"
+#include "src/gpu/graphite/UniformManager.h"
 #include "src/sksl/SkSLString.h"
 #include "src/sksl/codegen/SkSLPipelineStageCodeGenerator.h"
 #include "src/sksl/ir/SkSLVarDeclarations.h"
@@ -67,8 +68,8 @@ std::string get_mangled_uniform_name(const ShaderInfo& shaderInfo,
     } else {
         result = uniform.name() + std::string("_") + std::to_string(manglingSuffix);
     }
-    if (shaderInfo.ssboIndex()) {
-        result = get_storage_buffer_access("fs", shaderInfo.ssboIndex(), result.c_str());
+    if (shaderInfo.shadingSsboIndex()) {
+        result = get_storage_buffer_access("fs", shaderInfo.shadingSsboIndex(), result.c_str());
     }
     return result;
 }
@@ -81,8 +82,8 @@ std::string get_mangled_struct_reference(const ShaderInfo& shaderInfo,
                                          const ShaderNode* node) {
     SkASSERT(node->entry()->fUniformStructName);
     std::string result = "node_" + std::to_string(node->keyIndex()); // Field holding the struct
-    if (shaderInfo.ssboIndex()) {
-        result = get_storage_buffer_access("fs", shaderInfo.ssboIndex(), result.c_str());
+    if (shaderInfo.shadingSsboIndex()) {
+        result = get_storage_buffer_access("fs", shaderInfo.shadingSsboIndex(), result.c_str());
     }
     return result;
 }
@@ -272,6 +273,13 @@ std::string ShaderNode::invokeAndAssign(const ShaderInfo& shaderInfo,
     return outputVar;
 }
 
+// Return a name that should be used as a varying passing the result of an expression emitted by
+// this node, if the expression is being lifted from the fragment shader to the vertex shader. The
+// choice of name is arbitrary, but it must be used consistently.
+std::string ShaderNode::getExpressionVaryingName() const {
+    return get_mangled_name(this->entry()->fName, this->keyIndex()) + "_Var";
+}
+
 //--------------------------------------------------------------------------------------------------
 // ShaderCodeDictionary
 
@@ -375,12 +383,61 @@ const SkRuntimeEffect* ShaderCodeDictionary::getUserDefinedKnownRuntimeEffect(
 //--------------------------------------------------------------------------------------------------
 namespace {
 
+std::string GenerateSolidColorExpression(const ShaderInfo& shaderInfo,
+                                         const ShaderNode* node,
+                                         const ShaderSnippet::Args& args) {
+    std::string uniform =
+            get_mangled_uniform_name(shaderInfo, node->entry()->fUniforms[0], node->keyIndex());
+    return SkSL::String::printf("half4(%s)", uniform.c_str());
+}
+
+std::string GenerateSolidColorPreamble(const ShaderInfo& shaderInfo,
+                                       const ShaderNode* node) {
+    std::string code = emit_helper_declaration(node) + " {return ";
+
+    if (node->requiredFlags() & SnippetRequirementFlags::kLiftExpression) {
+        code += node->getExpressionVaryingName();
+    } else if (node->requiredFlags() & SnippetRequirementFlags::kOmitExpression) {
+        code += "half4(0)";
+    } else {
+        code += GenerateSolidColorExpression(shaderInfo, node, ShaderSnippet::kDefaultArgs);
+    }
+
+    return code + ";}";
+}
+
+//--------------------------------------------------------------------------------------------------
+
+// Generate the expression that applies a non-perspective local matrix to coordinates.
+std::string GenerateLocalMatrixExpression(const ShaderInfo& shaderInfo,
+                                          const ShaderNode* node,
+                                          const ShaderSnippet::Args& args) {
+    // NOTE: upper2x2 is a float2x2 packed in column major order into a float4
+    std::string upper2x2 =
+            get_mangled_uniform_name(shaderInfo, node->entry()->fUniforms[0], node->keyIndex());
+    std::string translation =
+            get_mangled_uniform_name(shaderInfo, node->entry()->fUniforms[1], node->keyIndex());
+    return SkSL::String::printf("float2x2(%s.xy, %s.zw)*%s + %s",
+                                upper2x2.c_str(),
+                                upper2x2.c_str(),
+                                args.fFragCoord.c_str(),
+                                translation.c_str());
+}
+
 static constexpr int kNumCoordinateManipulateChildren = 1;
 
+std::string GenerateCoordNormalizeExpression(const ShaderInfo& shaderInfo,
+                                             const ShaderNode* node,
+                                             const ShaderSnippet::Args& args) {
+    std::string uniform =
+            get_mangled_uniform_name(shaderInfo, node->entry()->fUniforms[0], node->keyIndex());
+    return SkSL::String::printf("(%s * %s)",
+                                uniform.c_str(),
+                                args.fFragCoord.c_str());
+}
+
 // Create a helper function that manipulates the coordinates passed into a child. The specific
-// manipulation is pre-determined by the code id (local matrix or clamp). This helper function meets
-// the requirements for use with GenerateDefaultExpression, so there's no need to have a separate
-// special GenerateLocalMatrixExpression.
+// manipulation is pre-determined by the code id (local matrix or clamp).
 // TODO: This is effectively GenerateComposePreamble except that 'node' is counting as the inner.
 std::string GenerateCoordManipulationPreamble(const ShaderInfo& shaderInfo,
                                               const ShaderNode* node) {
@@ -395,14 +452,23 @@ std::string GenerateCoordManipulationPreamble(const ShaderInfo& shaderInfo,
                 get_mangled_uniform_name(shaderInfo, node->entry()->fUniforms[0], node->keyIndex());
 
         if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kLocalMatrixShader) {
-            localArgs.fFragCoord = SkSL::String::printf("(%s * %s.xy01).xy",
-                                                        controlUni.c_str(),
-                                                        defaultArgs.fFragCoord.c_str());
+            if (node->requiredFlags() & SnippetRequirementFlags::kLiftExpression) {
+                localArgs.fFragCoord = node->getExpressionVaryingName();
+            } else if (!(node->requiredFlags() & SnippetRequirementFlags::kOmitExpression)) {
+                localArgs.fFragCoord = GenerateLocalMatrixExpression(shaderInfo, node, defaultArgs);
+            }
         } else if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kLocalMatrixShaderPersp) {
-            perspectiveStatement = SkSL::String::printf("float4 perspCoord = %s * %s.xy01;",
+            perspectiveStatement = SkSL::String::printf("float3 perspCoord = %s * %s.xy1;",
                                                         controlUni.c_str(),
                                                         defaultArgs.fFragCoord.c_str());
-            localArgs.fFragCoord = "perspCoord.xy / perspCoord.w";
+            localArgs.fFragCoord = "perspCoord.xy / perspCoord.z";
+        } else if (node->codeSnippetId() == (int) BuiltInCodeSnippetID::kCoordNormalizeShader) {
+            if (node->requiredFlags() & SnippetRequirementFlags::kLiftExpression) {
+                localArgs.fFragCoord = node->getExpressionVaryingName();
+            } else if (!(node->requiredFlags() & SnippetRequirementFlags::kOmitExpression)) {
+                localArgs.fFragCoord =
+                        GenerateCoordNormalizeExpression(shaderInfo, node, defaultArgs);
+            }
         } else {
             SkASSERT(node->codeSnippetId() == (int) BuiltInCodeSnippetID::kCoordClampShader);
             localArgs.fFragCoord = SkSL::String::printf("clamp(%s, %s.LT, %s.RB)",
@@ -469,8 +535,9 @@ public:
 
     std::string declareUniform(const SkSL::VarDeclaration* decl) override {
         std::string result = get_mangled_name(std::string(decl->var()->name()), fNode->keyIndex());
-        if (fShaderInfo.ssboIndex()) {
-            result = get_storage_buffer_access("fs", fShaderInfo.ssboIndex(), result.c_str());
+        if (fShaderInfo.shadingSsboIndex()) {
+            result =
+                    get_storage_buffer_access("fs", fShaderInfo.shadingSsboIndex(), result.c_str());
         }
         return result;
     }
@@ -703,14 +770,27 @@ SkSpan<const Uniform> ShaderCodeDictionary::convertUniforms(const SkRuntimeEffec
     return SkSpan<const Uniform>(uniformArray, numUniforms);
 }
 
+static bool all_sample_usages_are_passthrough(const SkRuntimeEffect* effect) {
+    for (size_t i = 0; i < effect->children().size(); ++i) {
+        if (!SkRuntimeEffectPriv::ChildSampleUsage(effect, i).isPassThrough()) {
+            return false;
+        }
+    }
+    return true;
+}
+
 ShaderSnippet ShaderCodeDictionary::convertRuntimeEffect(const SkRuntimeEffect* effect,
                                                          const char* name) {
     SkEnumBitMask<SnippetRequirementFlags> snippetFlags = SnippetRequirementFlags::kNone;
     if (effect->allowShader()) {
-        // SkRuntimeEffect::usesSampleCoords() can't be used to restrict this because it returns
-        // false when the only use is to pass the coord unmodified to a child. When children can
-        // refer to interpolated varyings directly in this case, we can refine the flags.
+        // TODO(b/412621191) Ideally we would have a way to tell exactly which children of a runtime
+        // shader are sampled with modified coords, or whether coordinates are required at all. For
+        // now we assume all runtime shaders need coordinates, and if any children are sampled with
+        // modified coords, we assume they all are.
         snippetFlags |= SnippetRequirementFlags::kLocalCoords;
+        if (all_sample_usages_are_passthrough(effect)) {
+            snippetFlags |= SnippetRequirementFlags::kPassthroughLocalCoords;
+        }
     } else if (effect->allowColorFilter()) {
         snippetFlags |= SnippetRequirementFlags::kPriorStageOutput;
     } else if (effect->allowBlender()) {
@@ -882,9 +962,15 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kSolidColorShader] = {
             /*name=*/"SolidColor",
-            /*staticFn=*/"sk_solid_shader",
+            /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
-            /*uniforms=*/{ { "color", SkSLType::kFloat4 } }
+            /*uniforms=*/{ { "color", SkSLType::kFloat4 } },
+            /*texturesAndSamplers=*/{},
+            GenerateSolidColorPreamble,
+            /*numChildren=*/0,
+            /*liftableExpression=*/GenerateSolidColorExpression,
+            /*liftableExpressionType=*/ShaderSnippet::LiftableExpressionType::kPriorStageOutput,
+            /*liftableExpressionInterpolation=*/Interpolation::kLinear
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kRGBPaintColor] = {
             /*name=*/"RGBPaintColor",
@@ -1090,16 +1176,19 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             /*name=*/"LocalMatrix",
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
-            /*uniforms=*/{ { "localMatrix", SkSLType::kFloat4x4 } },
+            /*uniforms=*/{ { "upper2x2",    SkSLType::kFloat4 },
+                           { "translation", SkSLType::kFloat2 } },
             /*texturesAndSamplers=*/{},
             GenerateCoordManipulationPreamble,
-            /*numChildren=*/kNumCoordinateManipulateChildren
+            /*numChildren=*/kNumCoordinateManipulateChildren,
+            /*liftableExpression=*/GenerateLocalMatrixExpression,
+            /*liftableExpressionType=*/ShaderSnippet::LiftableExpressionType::kLocalCoords
     };
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kLocalMatrixShaderPersp] = {
             /*name=*/"LocalMatrixShaderPersp",
             /*staticFn=*/nullptr,
             SnippetRequirementFlags::kNone,
-            /*uniforms=*/{ { "localMatrix", SkSLType::kFloat4x4 } },
+            /*uniforms=*/{ { "localMatrix", SkSLType::kFloat3x3 } },
             /*texturesAndSamplers=*/{},
             GenerateCoordManipulationPreamble,
             /*numChildren=*/kNumCoordinateManipulateChildren
@@ -1131,7 +1220,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             /*name=*/"HardwareImage",
             /*staticFn=*/"sk_hw_image_shader",
             SnippetRequirementFlags::kLocalCoords | SnippetRequirementFlags::kStoresSamplerDescData,
-            /*uniforms=*/{ { "invImgSize",            SkSLType::kFloat2 } },
+            /*uniforms=*/{},
             /*texturesAndSamplers=*/{"image"}
     };
 
@@ -1194,6 +1283,8 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "invImgSizeY",           SkSLType::kFloat2 },
                            { "invImgSizeUV",          SkSLType::kFloat2 }, // Relative to Y's texels
+                           { "subset",                SkSLType::kFloat4 },
+                           { "linearFilterUVInset",   SkSLType::kFloat2 },
                            { "channelSelectY",        SkSLType::kHalf4 },
                            { "channelSelectU",        SkSLType::kHalf4 },
                            { "channelSelectV",        SkSLType::kHalf4 },
@@ -1207,17 +1298,31 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     };
 
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kHWYUVNoSwizzleImageShader] = {
-            /*name=*/"HWYUVImage",
+            /*name=*/"HWYUVImageNoSwizzle",
             /*staticFn=*/"sk_hw_yuv_no_swizzle_image_shader",
             SnippetRequirementFlags::kLocalCoords,
             /*uniforms=*/{ { "invImgSizeY",              SkSLType::kFloat2 },
                            { "invImgSizeUV",             SkSLType::kFloat2 }, // Relative to Y space
+                           { "subset",                   SkSLType::kFloat4 },
+                           { "linearFilterUVInset",      SkSLType::kFloat2 },
                            { "yuvToRGBMatrix",           SkSLType::kHalf3x3 },
                            { "yuvToRGBXlateAlphaParams", SkSLType::kHalf4 } },
             /*texturesAndSamplers=*/ {{ "samplerY" },
                                       { "samplerU" },
                                       { "samplerV" },
                                       { "samplerA" }}
+    };
+
+    fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCoordNormalizeShader] = {
+            /*name=*/"CoordNormalize",
+            /*staticFn=*/nullptr,
+            SnippetRequirementFlags::kNone,
+            /*uniforms=*/{ { "invDimensions", SkSLType::kFloat2 } },
+            /*texturesAndSamplers=*/{},
+            GenerateCoordManipulationPreamble,
+            /*numChildren=*/kNumCoordinateManipulateChildren,
+            /*liftableExpression=*/GenerateCoordNormalizeExpression,
+            /*liftableExpressionType=*/ShaderSnippet::LiftableExpressionType::kLocalCoords
     };
 
     // Like the local matrix shader, this is a no-op if the child doesn't need coords
@@ -1336,7 +1441,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kCompose] = {
             /*name=*/"Compose",
             /*staticFn=*/nullptr,
-            SnippetRequirementFlags::kNone,
+            SnippetRequirementFlags::kPassthroughLocalCoords,
             /*uniforms=*/{},
             /*texturesAndSamplers=*/{},
             GenerateComposePreamble,
@@ -1345,7 +1450,7 @@ ShaderCodeDictionary::ShaderCodeDictionary(
     fBuiltInCodeSnippets[(int) BuiltInCodeSnippetID::kBlendCompose] = {
             /*name=*/"BlendCompose",
             /*staticFn=*/nullptr,
-            SnippetRequirementFlags::kNone,
+            SnippetRequirementFlags::kPassthroughLocalCoords,
             /*uniforms=*/{},
             /*texturesAndSamplers=*/{},
             GenerateComposePreamble,
@@ -1393,6 +1498,16 @@ ShaderCodeDictionary::ShaderCodeDictionary(
             snippet.fRequiredAlignment = offsetCalculator.requiredAlignment();
         }
     }
+
+    // Check for duplicate snippet names.
+    SkDEBUGCODE(
+        THashSet<std::string> snippetNames;
+        for (const ShaderSnippet& snippet : fBuiltInCodeSnippets) {
+            std::string name = snippet.fName;
+            SkASSERT(!snippetNames.contains(name));
+            snippetNames.add(name);
+        }
+    )
 
     this->registerUserDefinedKnownRuntimeEffects(userDefinedKnownRuntimeEffects);
 }

@@ -7,6 +7,8 @@ import * as fs from 'fs';
 import * as glob from 'glob';
 import * as os from 'os';
 import * as path from 'path';
+import yargs from 'yargs';
+import unparse from 'yargs-unparser';
 
 import {commandLineArgs} from './conductor/commandline.js';
 import {
@@ -18,13 +20,11 @@ import {
   SOURCE_ROOT,
 } from './conductor/paths.js';
 
-const yargs = require('yargs');
-const unparse = require('yargs-unparser');
 const options = commandLineArgs(yargs(process.argv.slice(2)))
                     .options('skip-ninja', {type: 'boolean', desc: 'Skip rebuilding'})
                     .options('debug-driver', {type: 'boolean', hidden: true, desc: 'Debug the driver part of tests'})
                     .options('verbose', {alias: 'v', type: 'count', desc: 'Increases the log level'})
-                    .options('bail', {alias: 'b', desc: ' bail after first test failure'})
+                    .options('bail', {type: 'boolean', alias: 'b', desc: ' bail after first test failure'})
                     .options('auto-watch', {
                       desc: 'watch changes to files and run tests automatically on file change (only for unit tests)'
                     })
@@ -38,7 +38,7 @@ const options = commandLineArgs(yargs(process.argv.slice(2)))
                     .strict()
                     .parseSync();
 
-const CONSUMED_OPTIONS = ['tests', 'skip-ninja', 'debug-driver', 'bail', 'b', 'verbose', 'v', 'watch'];
+const CONSUMED_OPTIONS = ['tests', 'skip-ninja', 'debug-driver', 'verbose', 'v', 'watch'];
 
 let logLevel = 'error';
 if (options['verbose'] === 1) {
@@ -47,12 +47,26 @@ if (options['verbose'] === 1) {
   logLevel = 'debug';
 }
 
-function forwardOptions() {
+function forwardOptions(): string[] {
   const forwardedOptions = {...options};
   for (const consume of CONSUMED_OPTIONS) {
     forwardedOptions[consume] = undefined;
   }
-  return unparse(forwardedOptions);
+
+  // @ts-expect-error yargs and unparse have slightly different types
+  const unparsed = unparse(forwardedOptions);
+  const args: string[] = [];
+  for (let i = 0; i < unparsed.length - 1; i++) {
+    if (unparsed[i].startsWith('--') && !Number.isNaN(Number(unparsed[i + 1]))) {
+      // Mocha errors on --repeat 1 as it expects --repeat=1. We assume
+      // that this is the same for all args followed by a number.
+      args.push(`${unparsed[i]}=${unparsed[i + 1]}`);
+      i++;
+    } else {
+      args.push(unparsed[i]);
+    }
+  }
+  return args;
 }
 
 function runProcess(exe: string, args: string[], options: childProcess.SpawnSyncOptionsWithStringEncoding) {
@@ -82,6 +96,8 @@ function ninja(stdio: 'inherit'|'pipe', ...args: string[]) {
   const {status, output: [, output]} = result;
   return {status, output};
 }
+
+const MOCHA_BIN_PATH = path.join(SOURCE_ROOT, 'node_modules', 'mocha', 'bin', 'mocha.js');
 
 class Tests {
   readonly suite: PathPair;
@@ -134,7 +150,7 @@ class MochaTests extends Tests {
     return super.run(
         tests,
         [
-          path.join(SOURCE_ROOT, 'node_modules', 'mocha', 'bin', 'mocha'),
+          MOCHA_BIN_PATH,
           '--config',
           path.join(this.suite.buildPath, 'mocharc.js'),
           '-u',
@@ -149,7 +165,7 @@ class MochaTests extends Tests {
 class NonHostedMochaTests extends Tests {
   override run(tests: PathPair[]) {
     const args = [
-      path.join(SOURCE_ROOT, 'node_modules', 'mocha', 'bin', 'mocha'),
+      MOCHA_BIN_PATH,
       '--config',
       path.join(this.suite.buildPath, 'mocharc.js'),
       '-u',
@@ -183,9 +199,7 @@ class ScriptsMochaTests extends Tests {
   override run(tests: PathPair[]) {
     return super.run(
         tests.map(test => ScriptPathPair.getFromPair(test)),
-        [
-          path.join(SOURCE_ROOT, 'node_modules', 'mocha', 'bin', 'mocha'),
-        ],
+        ['--experimental-strip-types', '--no-warnings=ExperimentalWarning', MOCHA_BIN_PATH, '--extension=ts,js'],
     );
   }
 

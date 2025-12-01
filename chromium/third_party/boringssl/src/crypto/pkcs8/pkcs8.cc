@@ -33,8 +33,8 @@
 
 static int pkcs12_encode_password(const char *in, size_t in_len, uint8_t **out,
                                   size_t *out_len) {
-  CBB cbb;
-  if (!CBB_init(&cbb, in_len * 2)) {
+  bssl::ScopedCBB cbb;
+  if (!CBB_init(cbb.get(), in_len * 2)) {
     return 0;
   }
 
@@ -44,22 +44,18 @@ static int pkcs12_encode_password(const char *in, size_t in_len, uint8_t **out,
   CBS_init(&cbs, (const uint8_t *)in, in_len);
   while (CBS_len(&cbs) != 0) {
     uint32_t c;
-    if (!CBS_get_utf8(&cbs, &c) || !CBB_add_ucs2_be(&cbb, c)) {
+    if (!CBS_get_utf8(&cbs, &c) || !CBB_add_ucs2_be(cbb.get(), c)) {
       OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_INVALID_CHARACTERS);
-      goto err;
+      return 0;
     }
   }
 
   // Terminate the result with a UCS-2 NUL.
-  if (!CBB_add_ucs2_be(&cbb, 0) || !CBB_finish(&cbb, out, out_len)) {
-    goto err;
+  if (!CBB_add_ucs2_be(cbb.get(), 0) || !CBB_finish(cbb.get(), out, out_len)) {
+    return 0;
   }
 
   return 1;
-
-err:
-  CBB_cleanup(&cbb);
-  return 0;
 }
 
 int pkcs12_key_gen(const char *pass, size_t pass_len, const uint8_t *salt,
@@ -305,14 +301,16 @@ int pkcs12_pbe_encrypt_init(CBB *out, EVP_CIPHER_CTX *ctx, int alg_nid,
     return 0;
   }
 
-  // See RFC 2898, appendix A.3.
-  CBB algorithm, oid, param, salt_cbb;
+  // See RFC 7292, appendix C. All our supported "PBES1" schemes are the PKCS#12
+  // schemes, which use a different KDF. The true PBES1 schemes in RFC 8018 use
+  // PBKDF1, which use a very similar PBEParameter structure, but require the
+  // salt be exactly 8 bytes.
+  CBB algorithm, param;
   if (!CBB_add_asn1(out, &algorithm, CBS_ASN1_SEQUENCE) ||
-      !CBB_add_asn1(&algorithm, &oid, CBS_ASN1_OBJECT) ||
-      !CBB_add_bytes(&oid, suite->oid, suite->oid_len) ||
+      !CBB_add_asn1_element(&algorithm, CBS_ASN1_OBJECT, suite->oid,
+                            suite->oid_len) ||
       !CBB_add_asn1(&algorithm, &param, CBS_ASN1_SEQUENCE) ||
-      !CBB_add_asn1(&param, &salt_cbb, CBS_ASN1_OCTETSTRING) ||
-      !CBB_add_bytes(&salt_cbb, salt, salt_len) ||
+      !CBB_add_asn1_octet_string(&param, salt, salt_len) ||
       !CBB_add_asn1_uint64(&param, iterations) || !CBB_flush(out)) {
     return 0;
   }
@@ -326,9 +324,7 @@ int pkcs8_pbe_decrypt(uint8_t **out, size_t *out_len, CBS *algorithm,
                       size_t in_len) {
   int ret = 0;
   uint8_t *buf = NULL;
-  ;
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
+  bssl::ScopedEVP_CIPHER_CTX ctx;
 
   CBS obj;
   const struct pbe_suite *suite = NULL;
@@ -348,7 +344,7 @@ int pkcs8_pbe_decrypt(uint8_t **out, size_t *out_len, CBS *algorithm,
     goto err;
   }
 
-  if (!suite->decrypt_init(suite, &ctx, pass, pass_len, algorithm)) {
+  if (!suite->decrypt_init(suite, ctx.get(), pass, pass_len, algorithm)) {
     OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_KEYGEN_FAILURE);
     goto err;
   }
@@ -364,8 +360,8 @@ int pkcs8_pbe_decrypt(uint8_t **out, size_t *out_len, CBS *algorithm,
   }
 
   int n1, n2;
-  if (!EVP_DecryptUpdate(&ctx, buf, &n1, in, (int)in_len) ||
-      !EVP_DecryptFinal_ex(&ctx, buf + n1, &n2)) {
+  if (!EVP_DecryptUpdate(ctx.get(), buf, &n1, in, (int)in_len) ||
+      !EVP_DecryptFinal_ex(ctx.get(), buf + n1, &n2)) {
     goto err;
   }
 
@@ -376,7 +372,6 @@ int pkcs8_pbe_decrypt(uint8_t **out, size_t *out_len, CBS *algorithm,
 
 err:
   OPENSSL_free(buf);
-  EVP_CIPHER_CTX_cleanup(&ctx);
   return ret;
 }
 
@@ -414,8 +409,7 @@ int PKCS8_marshal_encrypted_private_key(CBB *out, int pbe_nid,
   int ret = 0;
   uint8_t *plaintext = NULL, *salt_buf = NULL;
   size_t plaintext_len = 0;
-  EVP_CIPHER_CTX ctx;
-  EVP_CIPHER_CTX_init(&ctx);
+  bssl::ScopedEVP_CIPHER_CTX ctx;
 
   {
     // Generate a random salt if necessary.
@@ -447,13 +441,13 @@ int PKCS8_marshal_encrypted_private_key(CBB *out, int pbe_nid,
 
     CBB epki;
     if (!CBB_add_asn1(out, &epki, CBS_ASN1_SEQUENCE) ||
-        !pkcs12_pbe_encrypt_init(&epki, &ctx, pbe_nid, cipher,
+        !pkcs12_pbe_encrypt_init(&epki, ctx.get(), pbe_nid, cipher,
                                  (uint32_t)iterations, pass, pass_len, salt,
                                  salt_len)) {
       goto err;
     }
 
-    size_t max_out = plaintext_len + EVP_CIPHER_CTX_block_size(&ctx);
+    size_t max_out = plaintext_len + EVP_CIPHER_CTX_block_size(ctx.get());
     if (max_out < plaintext_len) {
       OPENSSL_PUT_ERROR(PKCS8, PKCS8_R_TOO_LONG);
       goto err;
@@ -464,8 +458,8 @@ int PKCS8_marshal_encrypted_private_key(CBB *out, int pbe_nid,
     int n1, n2;
     if (!CBB_add_asn1(&epki, &ciphertext, CBS_ASN1_OCTETSTRING) ||
         !CBB_reserve(&ciphertext, &ptr, max_out) ||
-        !EVP_CipherUpdate(&ctx, ptr, &n1, plaintext, plaintext_len) ||
-        !EVP_CipherFinal_ex(&ctx, ptr + n1, &n2) ||
+        !EVP_CipherUpdate(ctx.get(), ptr, &n1, plaintext, plaintext_len) ||
+        !EVP_CipherFinal_ex(ctx.get(), ptr + n1, &n2) ||
         !CBB_did_write(&ciphertext, n1 + n2) || !CBB_flush(out)) {
       goto err;
     }
@@ -476,6 +470,5 @@ int PKCS8_marshal_encrypted_private_key(CBB *out, int pbe_nid,
 err:
   OPENSSL_free(plaintext);
   OPENSSL_free(salt_buf);
-  EVP_CIPHER_CTX_cleanup(&ctx);
   return ret;
 }

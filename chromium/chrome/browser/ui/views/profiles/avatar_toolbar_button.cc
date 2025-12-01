@@ -266,44 +266,15 @@ bool AvatarToolbarButton::ShouldPaintBorder() const {
 }
 
 bool AvatarToolbarButton::ShouldBlendHighlightColor() const {
-  return this->GetWidget() && this->GetWidget()->GetCustomTheme();
+  return delegate_->ShouldBlendHighlightColor();
 }
 
-base::ScopedClosureRunner AvatarToolbarButton::ShowExplicitText(
+base::ScopedClosureRunner AvatarToolbarButton::SetExplicitButtonState(
     const std::u16string& text,
-    std::optional<std::u16string> accessibility_label) {
-  return delegate_->ShowExplicitText(text, accessibility_label);
-}
-
-void AvatarToolbarButton::ResetButtonAction() {
-  explicit_button_pressed_action_.Reset();
-  reset_button_action_button_closure_ptr_ = nullptr;
-}
-
-base::ScopedClosureRunner AvatarToolbarButton::SetExplicitButtonAction(
-    base::RepeatingClosure explicit_closure) {
-  // This logic is similar to the one in
-  // `AvatarToolbarButtonDelegate::ShowExplicitText()`.
-  // TODO(b/323516037): look into how to combine those into one struct for
-  // consistency.
-
-  // If an action was already set, enforce resetting it and invalidate the
-  // existing reset closure internally.
-  if (!explicit_button_pressed_action_.is_null()) {
-    // It is safe to run the scoped closure multiple times. It is a no-op after
-    // the first time.
-    reset_button_action_button_closure_ptr_->RunAndReset();
-  }
-
-  explicit_button_pressed_action_ = std::move(explicit_closure);
-
-  base::ScopedClosureRunner closure = base::ScopedClosureRunner(
-      base::BindRepeating(&AvatarToolbarButton::ResetButtonAction,
-                          weak_ptr_factory_.GetWeakPtr()));
-  // Keep a pointer to the current active closure in case the current action was
-  // reset from another call to `SetExplicitButtonAction()`.
-  reset_button_action_button_closure_ptr_ = &closure;
-  return closure;
+    std::optional<std::u16string> accessibility_label,
+    std::optional<base::RepeatingClosure> explicit_action) {
+  return delegate_->SetExplicitButtonState(text, std::move(accessibility_label),
+                                           std::move(explicit_action));
 }
 
 bool AvatarToolbarButton::HasExplicitButtonAction() const {
@@ -439,6 +410,15 @@ void AvatarToolbarButton::ButtonPressed(bool is_source_accelerator) {
     return;
   }
 
+#if !BUILDFLAG(IS_CHROMEOS)
+  if (browser_->window()->IsFeaturePromoActive(
+          feature_engagement::kIPHPasswordsSavePrimingPromoFeature)) {
+    browser_->window()->NotifyFeaturePromoFeatureUsed(
+        feature_engagement::kIPHPasswordsSavePrimingPromoFeature,
+        FeaturePromoFeatureUsedAction::kClosePromoIfPresent);
+  }
+#endif
+
   if (!explicit_button_pressed_action_.is_null()) {
     explicit_button_pressed_action_.Run();
     return;
@@ -484,6 +464,15 @@ bool AvatarToolbarButton::IsLabelPresentAndVisible() const {
     return false;
   }
   return label()->GetVisible() && !label()->GetText().empty();
+}
+
+void AvatarToolbarButton::UpdateButtonAction() {
+  explicit_button_pressed_action_.Reset();
+  std::optional<base::RepeatingClosure> button_action =
+      delegate_->GetButtonAction();
+  if (button_action.has_value()) {
+    explicit_button_pressed_action_ = *std::move(button_action);
+  }
 }
 
 void AvatarToolbarButton::UpdateLayoutInsets() {

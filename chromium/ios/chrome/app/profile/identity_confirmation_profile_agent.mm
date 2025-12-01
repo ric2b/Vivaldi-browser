@@ -143,7 +143,10 @@ enum class IdentityConfirmationSnackbarDecision {
     return IdentityConfirmationSnackbarDecision::kDontShowSingleAccount;
   }
 
-  if (![self isStartSurfaceWithBrowser:browser]) {
+  // For non-managed accounts, show the snackbar only on top of Bling Start.
+  if (!authenticationService->HasPrimaryIdentityManaged(
+          signin::ConsentLevel::kSignin) &&
+      ![self isStartSurfaceWithBrowser:browser]) {
     return IdentityConfirmationSnackbarDecision::kDontShowNotOnStartPage;
   }
 
@@ -224,11 +227,11 @@ enum class IdentityConfirmationSnackbarDecision {
   ManagementState managementState =
       GetManagementState(identityManager, authenticationService, prefService);
 
-  MDCSnackbarMessage* snackbarTitle = [[IdentitySnackbarMessage alloc]
-      initWithName:systemIdentity.userGivenName
-             email:systemIdentity.userEmail
-            avatar:avatar
-           managed:managementState.is_profile_managed()];
+  MDCSnackbarMessage* snackbarTitle =
+      [[IdentitySnackbarMessage alloc] initWithName:systemIdentity.userGivenName
+                                              email:systemIdentity.userEmail
+                                             avatar:avatar
+                                    managementState:managementState];
 
   CommandDispatcher* dispatcher = browser->GetCommandDispatcher();
   id<SnackbarCommands> snackbarCommandsHandler =

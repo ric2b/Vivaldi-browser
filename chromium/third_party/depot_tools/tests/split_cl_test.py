@@ -33,16 +33,26 @@ class SplitClTest(unittest.TestCase):
         footers = 'Bug: 12345'
 
         added_line = 'This CL was uploaded by git cl split.'
+        experimental_lines = ("This CL was uploaded by an experimental version "
+                              "of git cl split\n"
+                              "(https://crbug.com/389069356).")
 
         # Description without footers
         self.assertEqual(
             split_cl.AddUploadedByGitClSplitToDescription(description),
             description + added_line)
+
         # Description with footers
         self.assertEqual(
             split_cl.AddUploadedByGitClSplitToDescription(description +
                                                           footers),
             description + added_line + '\n\n' + footers)
+
+        # Description with footers and experimental flag
+        self.assertEqual(
+            split_cl.AddUploadedByGitClSplitToDescription(
+                description + footers, True),
+            description + experimental_lines + '\n\n' + footers)
 
     @mock.patch("split_cl.EmitWarning")
     def testFormatDescriptionOrComment(self, mock_emit_warning):
@@ -94,7 +104,6 @@ class SplitClTest(unittest.TestCase):
     @mock.patch("os.path.isfile")
     def testSelectReviewersForFiles(self, mock_is_file):
         mock_is_file.side_effect = self.MockIsFile
-
         owners_client = mock.Mock(SuggestOwners=self.MockSuggestOwners,
                                   EVERYONE="*")
         cl = mock.Mock(owners_client=owners_client)
@@ -106,7 +115,7 @@ class SplitClTest(unittest.TestCase):
                  ("M", os.path.join("baz", "owner3", "e.txt"))]
 
         files_split_by_reviewers = split_cl.SelectReviewersForFiles(
-            cl, "author", files, 0)
+            cl, "author", files, 0, "")
 
         self.assertEqual(3, len(files_split_by_reviewers.keys()))
         info1 = files_split_by_reviewers[tuple(["owner1", "owner2"])]
@@ -308,7 +317,7 @@ class SplitClTest(unittest.TestCase):
 
             split_cl.SplitCl(description_file, None, mock.Mock(), mock.Mock(),
                              dry_run, summarize, reviewers_override, False,
-                             False, None, None, None, None)
+                             False, None, None, None, None, None, None)
 
     # Save for re-use
     files_split_by_reviewers = {
@@ -555,7 +564,6 @@ class SplitClTest(unittest.TestCase):
             self.assertEqual(contents, "".join(written_lines))
             mock_file_write.reset_mock()
 
-
     @mock.patch("os.path.isfile", return_value=False)
     def testDirectoryTrie(self, _):
         """
@@ -590,6 +598,60 @@ class SplitClTest(unittest.TestCase):
         self.assertEqual(trie.subdirectories["a"].subdirectories["b"].prefix,
                          os.path.join("a", "b"))
 
+    @mock.patch("os.path.isfile", return_value=False)
+    def testClusterFiles(self, _):
+        """
+        Make sure ClusterFiles returns sensible results for some sample inputs.
+        """
+
+        def compareClusterOutput(clusters: list[split_cl.Bin],
+                                 file_groups: list[list[str]]):
+            """
+            Ensure that ClusterFiles grouped files the way we expected it to.
+            """
+            clustered_files = sorted([sorted(bin.files) for bin in clusters])
+            file_groups = sorted([sorted(grp) for grp in file_groups])
+            self.assertEqual(clustered_files, file_groups)
+
+        # The clustering code uses OS paths so we need to do the same here
+        path_abc = os.path.join("a", "b", "c.cc")
+        path_abd = os.path.join("a", "b", "d.h")
+        path_aefgh = os.path.join("a", "e", "f", "g", "h.hpp")
+        path_ijk = os.path.join("i", "j", "k.cc")
+        path_ilm = os.path.join("i", "l", "m.cc")
+        path_an = os.path.join("a", "n.cpp")
+        path_top = os.path.join("top.gn")
+        files = [
+            path_abc, path_abd, path_aefgh, path_ijk, path_ilm, path_an,
+            path_top
+        ]
+
+        def checkClustering(min_files, max_files, expected):
+            clusters = split_cl.ClusterFiles(False, files, min_files, max_files)
+            compareClusterOutput(clusters, expected)
+
+        # Each file gets its own cluster
+        individual_files = [[file] for file in files]
+        checkClustering(1, 1, individual_files)
+
+        # Put both entries of a/b in the same cluster, everything else alone
+        ab_together = [[path_abc, path_abd], [path_aefgh], [path_ijk],
+                       [path_ilm], [path_an], [path_top]]
+        checkClustering(1, 2, ab_together)
+        checkClustering(1, 100, ab_together)
+
+        # Groups of 2: a/b, rest of a/, all of i/.
+        a_two_groups = [[path_abc, path_abd], [path_aefgh, path_an],
+                        [path_ijk, path_ilm], [path_top]]
+        checkClustering(2, 2, a_two_groups)
+        checkClustering(3, 3, a_two_groups)
+
+        # Put all of a/ together and all of i/ together.
+        # Don't combine top-level directories with things at the root
+        by_top_level_dir = [[path_abc, path_abd, path_aefgh, path_an],
+                            [path_ijk, path_ilm], [path_top]]
+        checkClustering(3, 5, by_top_level_dir)
+        checkClustering(100, 200, by_top_level_dir)
 
 if __name__ == '__main__':
     unittest.main()

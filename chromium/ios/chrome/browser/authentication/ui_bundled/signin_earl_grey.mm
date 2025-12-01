@@ -4,9 +4,9 @@
 
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey.h"
 
+#import "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #import "components/policy/core/browser/signin/profile_separation_policies.h"
-#import "components/signin/public/base/consent_level.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "ios/chrome/browser/authentication/ui_bundled/expected_signin_histograms.h"
 #import "ios/chrome/browser/authentication/ui_bundled/signin_earl_grey_app_interface.h"
@@ -15,6 +15,9 @@
 #import "ios/chrome/browser/signin/model/fake_system_identity.h"
 #import "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
+#import "ios/chrome/test/earl_grey/chrome_matchers.h"
+#import "ios/chrome/test/earl_grey/chrome_matchers_app_interface.h"
+#import "ios/chrome/test/scoped_eg_synchronization_disabler.h"
 #import "ios/testing/earl_grey/earl_grey_test.h"
 #import "net/base/apple/url_conversions.h"
 #import "ui/base/l10n/l10n_util_mac.h"
@@ -62,6 +65,12 @@ using base::test::ios::WaitUntilConditionOrTimeout;
   return [SigninEarlGreyAppInterface isIdentityAdded:fakeIdentity];
 }
 
+- (void)setPersistentAuthErrorForAccount:(const CoreAccountId&)accountId {
+  [SigninEarlGreyAppInterface
+      setPersistentAuthErrorForAccount:base::SysUTF8ToNSString(
+                                           accountId.ToString())];
+}
+
 - (NSString*)primaryAccountGaiaID {
   return [SigninEarlGreyAppInterface primaryAccountGaiaID];
 }
@@ -79,26 +88,40 @@ using base::test::ios::WaitUntilConditionOrTimeout;
   [self verifySignedOut];
 }
 
-- (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity {
+- (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity
+    waitForSyncTransportActive:(BOOL)waitForSync {
   [SigninEarlGreyAppInterface signinWithFakeIdentity:identity];
+  [self closeManagedAccountSignInDialogIfAny:identity];
+  [self closeSwitchAndDeleteAlertIfAny];
   [self verifySignedInWithFakeIdentity:identity];
+  if (waitForSync) {
+    [ChromeEarlGrey
+        waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
+  }
+}
+
+- (void)signinWithFakeIdentity:(FakeSystemIdentity*)identity {
+  [self signinWithFakeIdentity:identity waitForSyncTransportActive:YES];
+}
+
+- (void)signinWithFakeManagedIdentityInPersonalProfile:
+            (FakeSystemIdentity*)identity
+                            waitForSyncTransportActive:(BOOL)waitForSync {
+  [SigninEarlGreyAppInterface
+      signinWithFakeManagedIdentityInPersonalProfile:identity];
+  [self closeManagedAccountSignInDialogIfAny:identity];
+  [self closeSwitchAndDeleteAlertIfAny];
+  [self verifySignedInWithFakeIdentity:identity];
+  if (waitForSync) {
+    [ChromeEarlGrey
+        waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
+  }
 }
 
 - (void)signinWithFakeManagedIdentityInPersonalProfile:
     (FakeSystemIdentity*)identity {
-  [SigninEarlGreyAppInterface
-      signinWithFakeManagedIdentityInPersonalProfile:identity];
-  [self verifySignedInWithFakeIdentity:identity];
-}
-
-- (void)signinAndWaitForSyncTransportStateActive:(FakeSystemIdentity*)identity {
-  [self signinWithFakeIdentity:identity];
-  [ChromeEarlGrey waitForSyncTransportStateActiveWithTimeout:base::Seconds(10)];
-}
-
-- (void)signInWithoutHistorySyncWithFakeIdentity:(FakeSystemIdentity*)identity {
-  [SigninEarlGreyAppInterface
-      signInWithoutHistorySyncWithFakeIdentity:identity];
+  [self signinWithFakeManagedIdentityInPersonalProfile:identity
+                            waitForSyncTransportActive:YES];
 }
 
 - (void)triggerReauthDialogWithFakeIdentity:(FakeSystemIdentity*)identity {
@@ -138,8 +161,7 @@ using base::test::ios::WaitUntilConditionOrTimeout;
       [fakeIdentity.gaiaID isEqualToString:primaryAccountGaiaID], errorStr);
 }
 
-- (void)verifyPrimaryAccountWithEmail:(NSString*)expectedEmail
-                              consent:(signin::ConsentLevel)consent {
+- (void)verifyPrimaryAccountWithEmail:(NSString*)expectedEmail {
   EG_TEST_HELPER_ASSERT_TRUE(expectedEmail.length, @"Need to give an identity");
 
   // Required to avoid any problem since the following test is not dependant
@@ -148,21 +170,20 @@ using base::test::ios::WaitUntilConditionOrTimeout;
   GREYAssert(WaitUntilConditionOrTimeout(
                  base::test::ios::kWaitForActionTimeout,
                  ^bool {
-                   NSString* primaryAccountEmail = [SigninEarlGreyAppInterface
-                       primaryAccountEmailWithConsent:consent];
+                   NSString* primaryAccountEmail =
+                       [SigninEarlGreyAppInterface primaryAccountEmail];
                    return primaryAccountEmail.length > 0;
                  }),
              @"Sign in did not complete.");
   GREYWaitForAppToIdle(@"App failed to idle");
 
   NSString* primaryAccountEmail =
-      [SigninEarlGreyAppInterface primaryAccountEmailWithConsent:consent];
+      [SigninEarlGreyAppInterface primaryAccountEmail];
 
   NSString* errorStr = [NSString
       stringWithFormat:@"Unexpected email of the signed in user [expected = "
-                       @"\"%@\", actual = \"%@\", consent %d]",
-                       expectedEmail, primaryAccountEmail,
-                       static_cast<int>(consent)];
+                       @"\"%@\", actual = \"%@\"]",
+                       expectedEmail, primaryAccountEmail];
   EG_TEST_HELPER_ASSERT_TRUE(
       [expectedEmail isEqualToString:primaryAccountEmail], errorStr);
 }
@@ -235,6 +256,16 @@ using base::test::ios::WaitUntilConditionOrTimeout;
   }
 }
 
+- (void)setUseFakeResponsesForProfileSeparationPolicyRequests {
+  [SigninEarlGreyAppInterface
+      setUseFakeResponsesForProfileSeparationPolicyRequests];
+}
+
+- (void)clearUseFakeResponsesForProfileSeparationPolicyRequests {
+  [SigninEarlGreyAppInterface
+      clearUseFakeResponsesForProfileSeparationPolicyRequests];
+}
+
 - (void)setPolicyResponseForNextProfileSeparationPolicyRequest:
     (policy::ProfileSeparationDataMigrationSettings)
         profileSeparationDataMigrationSettings {
@@ -243,9 +274,55 @@ using base::test::ios::WaitUntilConditionOrTimeout;
           profileSeparationDataMigrationSettings];
 }
 
+- (void)closeManagedAccountSignInDialogIfAny:(FakeSystemIdentity*)fakeIdentity {
+  // Don't expect a managed account dialog when the account is @gmail.com and
+  // thus definitely not managed.
+  if ([fakeIdentity.userEmail hasSuffix:@"@gmail.com"]) {
+    return;
+  }
+  // Synchronization off due to an infinite spinner, in the user consent view,
+  // under the managed consent dialog. This spinner is started by the sign-in
+  // process.
+  ScopedSynchronizationDisabler disabler;
+
+  // Verify whether there is a management dialog and interact with it to
+  // complete the sign-in flow if present.
+  id<GREYMatcher> acceptButton = [ChromeMatchersAppInterface
+      buttonWithAccessibilityLabelID:
+          IDS_IOS_MANAGED_SIGNIN_WITH_USER_POLICY_CONTINUE_BUTTON_LABEL];
+  GREYWaitForAppToIdle(@"App failed to idle");
+  BOOL hasDialog =
+      [ChromeEarlGrey testUIElementAppearanceWithMatcher:acceptButton];
+  if (hasDialog) {
+    [[EarlGrey selectElementWithMatcher:acceptButton] performAction:grey_tap()];
+  }
+}
+
+// Confirms "Switch and Delete" when the alert dialog that data will be cleared
+// is shown. This dialog is only shown when multi profiles are not available.
+// Otherwise, this does nothing.
+- (void)closeSwitchAndDeleteAlertIfAny {
+  if (![SigninEarlGrey areSeparateProfilesForManagedAccountsEnabled]) {
+    id<GREYMatcher> switchAndDeleteAlert =
+        grey_allOf(chrome_test_util::AlertAction(l10n_util::GetNSString(
+                       IDS_IOS_DATA_NOT_UPLOADED_SWITCH_DIALOG_BUTTON)),
+                   grey_sufficientlyVisible(), nil);
+    BOOL hasAlert = [ChromeEarlGrey
+        testUIElementAppearanceWithMatcher:switchAndDeleteAlert];
+    if (hasAlert) {
+      [[EarlGrey selectElementWithMatcher:switchAndDeleteAlert]
+          performAction:grey_tap()];
+    }
+  }
+}
+
 - (BOOL)areSeparateProfilesForManagedAccountsEnabled {
   return
       [SigninEarlGreyAppInterface areSeparateProfilesForManagedAccountsEnabled];
+}
+
+- (BOOL)isIdentityDiscAccountMenuEnabled {
+  return [SigninEarlGreyAppInterface isIdentityDiscAccountMenuEnabled];
 }
 
 @end

@@ -343,13 +343,8 @@
       {
         "name": "acknowledgeSwitchPrompt",
         "type": "function",
-        "description": "Acknowledge swtich prompt - depending on value of seenDialog parameter, either mark it as seen, or ignore current version for now.",
-        "parameters": [
-          {
-            "name": "seenDialog",
-            "type": "boolean"
-          }
-        ]
+        "description": "Mark current switch prompt as seen.",
+        "parameters": []
       }
     ],
     "events": [

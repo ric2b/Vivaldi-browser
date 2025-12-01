@@ -85,10 +85,15 @@ void
 hb_aat_map_builder_t::compile (hb_aat_map_t  &m)
 {
   /* Compute active features per range, and compile each. */
+  if (!features.length)
+  {
+    hb_aat_layout_compile_map (this, &m);
+    return;
+  }
 
   /* Sort features by start/end events. */
   hb_vector_t<feature_event_t> feature_events;
-  feature_events.alloc (features.length * 2 + 1, true);
+  feature_events.alloc_exact (features.length * 2 + 1);
   for (unsigned int i = 0; i < features.length; i++)
   {
     auto &feature = features.arrayZ[i];

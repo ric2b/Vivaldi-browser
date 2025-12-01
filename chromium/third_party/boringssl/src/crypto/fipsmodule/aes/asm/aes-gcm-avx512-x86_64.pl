@@ -359,6 +359,22 @@ sub _ghash_reduce {
 ___
 }
 
+# This is a specialized version of _ghash_mul that computes \a * \a, i.e. it
+# squares \a.  It skips computing MI = (a_L * a_H) + (a_H * a_L) = 0.
+sub _ghash_square {
+    my ( $a, $dst, $gfpoly, $t0, $t1 ) = @_;
+    return <<___;
+    vpclmulqdq      \$0x00, $a, $a, $t0        # LO = a_L * a_L
+    vpclmulqdq      \$0x11, $a, $a, $dst       # HI = a_H * a_H
+    vpclmulqdq      \$0x01, $t0, $gfpoly, $t1  # LO_L*(x^63 + x^62 + x^57)
+    vpshufd         \$0x4e, $t0, $t0           # Swap halves of LO
+    vpxor           $t0, $t1, $t1              # Fold LO into MI
+    vpclmulqdq      \$0x01, $t1, $gfpoly, $t0  # MI_L*(x^63 + x^62 + x^57)
+    vpshufd         \$0x4e, $t1, $t1           # Swap halves of MI
+    vpternlogd      \$0x96, $t0, $t1, $dst     # Fold MI into HI
+___
+}
+
 # void gcm_init_vpclmulqdq_avx512(u128 Htable[16], const uint64_t H[2]);
 #
 # Initialize |Htable| with powers of the GHASH subkey |H|.
@@ -418,8 +434,8 @@ $code .= _begin_func "gcm_init_vpclmulqdq_avx512", 0;
     # special needs to be done to make this happen, though: H^1 * H^1 would
     # end up with two factors of x^-1, but the multiplication consumes one.
     # So the product H^2 ends up with the desired one factor of x^-1.
-    @{[ _ghash_mul  $H_CUR_XMM, $H_CUR_XMM, $H_INC_XMM, $GFPOLY_XMM,
-                    $TMP0_XMM, $TMP1_XMM, $TMP2_XMM ]}
+    @{[ _ghash_square  $H_CUR_XMM, $H_INC_XMM, $GFPOLY_XMM,
+                       $TMP0_XMM, $TMP1_XMM ]}
 
     # Create H_CUR_YMM = [H^2, H^1] and H_INC_YMM = [H^2, H^2].
     vinserti128     \$1, $H_CUR_XMM, $H_INC_YMM, $H_CUR_YMM

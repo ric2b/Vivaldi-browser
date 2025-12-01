@@ -58,6 +58,15 @@ namespace autofill_private = extensions::api::autofill_private;
 
 namespace {
 
+bool ShouldUseNewFopDisplay() {
+#if BUILDFLAG(IS_ANDROID)
+  return false;
+#else
+  return base::FeatureList::IsEnabled(
+      autofill::features::kAutofillEnableNewFopDisplayDesktop);
+#endif
+}
+
 // Gets the string corresponding to |type| from |profile|.
 std::string GetStringFromProfile(const autofill::AutofillProfile& profile,
                                  const autofill::FieldType& type) {
@@ -71,9 +80,11 @@ autofill_private::AddressRecordType ConvertProfileRecordType(
     case autofill::AutofillProfile::RecordType::kLocalOrSyncable:
       return autofill_private::AddressRecordType::kLocalOrSyncable;
     case autofill::AutofillProfile::RecordType::kAccount:
-    case autofill::AutofillProfile::RecordType::kAccountHome:
-    case autofill::AutofillProfile::RecordType::kAccountWork:
       return autofill_private::AddressRecordType::kAccount;
+    case autofill::AutofillProfile::RecordType::kAccountHome:
+      return autofill_private::AddressRecordType::kAccountHome;
+    case autofill::AutofillProfile::RecordType::kAccountWork:
+      return autofill_private::AddressRecordType::kAccountWork;
   }
   NOTREACHED();
 }
@@ -115,64 +126,67 @@ autofill_private::AddressEntry ProfileToAddressEntry(
   return address;
 }
 
-extensions::autofill_util::CountryEntryList GenerateCountryList(
-    base::FunctionRef<bool(std::string_view)> filter_country_code) {
-  autofill::CountryComboboxModel model;
-  const variations::VariationsService* variations_service =
-      g_browser_process->variations_service();
-  model.SetCountries(
-      GeoIpCountryCode(variations_service
-                           ? variations_service->GetLatestCountry()
-                           : std::string()),
-      {}, extensions::ExtensionsBrowserClient::Get()->GetApplicationLocale());
-  const std::vector<std::unique_ptr<autofill::AutofillCountry>>& countries =
-      model.countries();
-
-  extensions::autofill_util::CountryEntryList list;
-  for (const auto& country : countries) {
-    // A null `country` means "insert a space here", so we add a country w/o a
-    // `name` or `country_code` to the list and let the UI handle it.
-    if (!country) {
-      list.emplace_back();
-      continue;
-    }
-    if (filter_country_code(country->country_code())) {
-      autofill_private::CountryEntry& entry = list.emplace_back();
-      entry.name = base::UTF16ToUTF8(country->name());
-      entry.country_code = country->country_code();
-    }
-  }
-
-  return list;
-}
-
 std::string CardNetworkToIconResourceIdString(const std::string& network) {
+  if (ShouldUseNewFopDisplay()) {
+    static constexpr auto kNetworkToResourceIdStringMap =
+        base::MakeFixedFlatMap<std::string_view, std::string_view>(
+            {{autofill::kAmericanExpressCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_AMEX"},
+             {autofill::kDiscoverCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_DISCOVER"},
+             {autofill::kDinersCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_DINERS"},
+             {autofill::kEloCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_ELO"},
+             {autofill::kJCBCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_JCB"},
+             {autofill::kMasterCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_MASTERCARD"},
+             {autofill::kMirCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_MIR"},
+             {autofill::kTroyCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_TROY"},
+             {autofill::kUnionPay,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_UNIONPAY"},
+             {autofill::kVerveCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_VERVE"},
+             {autofill::kVisaCard,
+              "chrome://theme/IDR_AUTOFILL_METADATA_CC_VISA"}});
+
+    auto it = kNetworkToResourceIdStringMap.find(network);
+    return it != kNetworkToResourceIdStringMap.end()
+               ? std::string(it->second)
+               : "chrome://theme/IDR_AUTOFILL_METADATA_CC_GENERIC";
+  }
   static constexpr auto kNetworkToResourceIdStringMap =
       base::MakeFixedFlatMap<std::string_view, std::string_view>(
           {{autofill::kDiscoverCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_DISCOVER"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_DISCOVER_OLD"},
            {autofill::kMasterCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_MASTERCARD"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_MASTERCARD_OLD"},
            {autofill::kVisaCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_VISA"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_VISA_OLD"},
            {autofill::kAmericanExpressCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_AMEX"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_AMEX_OLD"},
            {autofill::kDinersCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_DINERS"},
-           {autofill::kJCBCard, "chrome://theme/IDR_AUTOFILL_METADATA_CC_JCB"},
-           {autofill::kEloCard, "chrome://theme/IDR_AUTOFILL_METADATA_CC_ELO"},
-           {autofill::kMirCard, "chrome://theme/IDR_AUTOFILL_METADATA_CC_MIR"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_DINERS_OLD"},
+           {autofill::kJCBCard,
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_JCB_OLD"},
+           {autofill::kEloCard,
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_ELO_OLD"},
+           {autofill::kMirCard,
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_MIR_OLD"},
            {autofill::kTroyCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_TROY"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_TROY_OLD"},
            {autofill::kUnionPay,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_UNIONPAY"},
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_UNIONPAY_OLD"},
            {autofill::kVerveCard,
-            "chrome://theme/IDR_AUTOFILL_METADATA_CC_VERVE"}});
+            "chrome://theme/IDR_AUTOFILL_METADATA_CC_VERVE_OLD"}});
 
   auto it = kNetworkToResourceIdStringMap.find(network);
   return it != kNetworkToResourceIdStringMap.end()
              ? std::string(it->second)
-             : "chrome://theme/IDR_AUTOFILL_METADATA_CC_GENERIC";
+             : "chrome://theme/IDR_AUTOFILL_METADATA_CC_GENERIC_OLD";
 }
 
 autofill_private::IbanEntry IbanToIbanEntry(const autofill::Iban& iban) {
@@ -201,18 +215,25 @@ autofill_private::IbanEntry IbanToIbanEntry(const autofill::Iban& iban) {
   return iban_entry;
 }
 
-std::string PayOverTimeIssuerToIconResourceIdString(const std::string& issuer) {
-  static constexpr auto kPayOverTimeIssuerToResourceIdStringMap =
-      base::MakeFixedFlatMap<std::string_view, std::string_view>(
-          {{autofill::kBnplAffirmIssuerId,
-            "chrome://theme/IDR_AUTOFILL_AFFIRM_LINKED"},
-           {autofill::kBnplZipIssuerId,
-            "chrome://theme/IDR_AUTOFILL_ZIP_LINKED"}});
-
-  auto it = kPayOverTimeIssuerToResourceIdStringMap.find(issuer);
-  return it != kPayOverTimeIssuerToResourceIdStringMap.end()
-             ? std::string(it->second)
-             : "chrome://theme/IDR_AUTOFILL_METADATA_BNPL_GENERIC";
+std::pair<std::string, std::string> PayOverTimeIssuerToIconResourceIdString(
+    autofill::BnplIssuer::IssuerId issuer) {
+  switch (issuer) {
+    case autofill::BnplIssuer::IssuerId::kBnplAffirm:
+      return std::pair<std::string, std::string>(
+          "chrome://theme/IDR_AUTOFILL_AFFIRM_LINKED",
+          "chrome://theme/IDR_AUTOFILL_AFFIRM_LINKED_DARK");
+    case autofill::BnplIssuer::IssuerId::kBnplZip:
+      return std::pair<std::string, std::string>(
+          "chrome://theme/IDR_AUTOFILL_ZIP_LINKED",
+          "chrome://theme/IDR_AUTOFILL_ZIP_LINKED_DARK");
+    // TODO(crbug.com/408268581): Handle Afterpay issuer enum value when adding
+    // Afterpay to the BNPL flow.
+    case autofill::BnplIssuer::IssuerId::kBnplAfterpay:
+      return std::pair<std::string, std::string>(
+          "chrome://theme/IDR_AUTOFILL_METADATA_BNPL_GENERIC",
+          "chrome://theme/IDR_AUTOFILL_METADATA_BNPL_GENERIC");
+  }
+  NOTREACHED();
 }
 
 autofill_private::PayOverTimeIssuerEntry BnplIssuerToPayOverTimeIssuerEntry(
@@ -221,12 +242,16 @@ autofill_private::PayOverTimeIssuerEntry BnplIssuerToPayOverTimeIssuerEntry(
 
   autofill_private::PayOverTimeIssuerEntry issuer_entry;
 
-  issuer_entry.issuer_id = issuer.issuer_id();
+  issuer_entry.issuer_id =
+      autofill::ConvertToBnplIssuerIdString(issuer.issuer_id());
   issuer_entry.instrument_id =
       base::NumberToString(issuer.payment_instrument()->instrument_id());
   issuer_entry.display_name = base::UTF16ToUTF8(issuer.GetDisplayName());
-  issuer_entry.image_src =
+
+  std::pair<std::string, std::string> issuer_icons =
       PayOverTimeIssuerToIconResourceIdString(issuer.issuer_id());
+  issuer_entry.image_src = std::move(issuer_icons.first);
+  issuer_entry.image_src_dark = std::move(issuer_icons.second);
 
   return issuer_entry;
 }
@@ -256,15 +281,32 @@ AddressEntryList GenerateAddressList(const autofill::AddressDataManager& adm) {
   return list;
 }
 
-CountryEntryList GenerateCountryListForAccountStorage(
-    const autofill::AddressDataManager& adm) {
-  return GenerateCountryList([&](std::string_view country_code) {
-    return adm.IsCountryEligibleForAccountStorage(country_code);
-  });
-}
+CountryEntryList GenerateCountryList() {
+  autofill::CountryComboboxModel model;
+  const variations::VariationsService* variations_service =
+      g_browser_process->variations_service();
+  model.SetCountries(
+      GeoIpCountryCode(variations_service
+                           ? variations_service->GetLatestCountry()
+                           : std::string()),
+      extensions::ExtensionsBrowserClient::Get()->GetApplicationLocale());
+  const std::vector<std::unique_ptr<autofill::AutofillCountry>>& countries =
+      model.countries();
 
-CountryEntryList GenerateCountryListForProfileStorage() {
-  return GenerateCountryList([](std::string_view) { return true; });
+  extensions::autofill_util::CountryEntryList list;
+  for (const auto& country : countries) {
+    // A null `country` means "insert a space here", so we add a country w/o a
+    // `name` or `country_code` to the list and let the UI handle it.
+    if (!country) {
+      list.emplace_back();
+      continue;
+    }
+    autofill_private::CountryEntry& entry = list.emplace_back();
+    entry.name = base::UTF16ToUTF8(country->name());
+    entry.country_code = country->country_code();
+  }
+
+  return list;
 }
 
 CreditCardEntryList GenerateCreditCardList(

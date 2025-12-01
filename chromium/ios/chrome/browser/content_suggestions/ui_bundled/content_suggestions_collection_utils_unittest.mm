@@ -22,33 +22,75 @@ CGFloat kDoodleHeightNoLogo = 0;
 class ContentSuggestionsCollectionUtilsTest : public PlatformTest {
  public:
   UITraitCollection* IPadTraitCollection() {
-    UITraitCollection* horizontalRegular = [UITraitCollection
-        traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassRegular];
-    UITraitCollection* verticalRegular = [UITraitCollection
-        traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular];
-    return [UITraitCollection traitCollectionWithTraitsFromCollections:@[
-      verticalRegular, horizontalRegular
-    ]];
+    if (@available(iOS 17, *)) {
+      return [UITraitCollection
+          traitCollectionWithTraits:^(id<UIMutableTraits> mutableTraits) {
+            mutableTraits.horizontalSizeClass = UIUserInterfaceSizeClassRegular;
+            mutableTraits.verticalSizeClass = UIUserInterfaceSizeClassRegular;
+          }];
+    }
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
+    else {
+      UITraitCollection* horizontalRegular =
+          [UITraitCollection traitCollectionWithHorizontalSizeClass:
+                                 UIUserInterfaceSizeClassRegular];
+      UITraitCollection* verticalRegular = [UITraitCollection
+          traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular];
+      return [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        verticalRegular, horizontalRegular
+      ]];
+    }
+#else
+    return UITraitCollection.currentTraitCollection;
+#endif
   }
 
   UITraitCollection* IPhoneLandscapeTraitCollection() {
-    UITraitCollection* horizontalCompact = [UITraitCollection
-        traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassCompact];
-    UITraitCollection* verticalCompact = [UITraitCollection
-        traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassCompact];
-    return [UITraitCollection traitCollectionWithTraitsFromCollections:@[
-      verticalCompact, horizontalCompact
-    ]];
+    if (@available(iOS 17, *)) {
+      return [UITraitCollection
+          traitCollectionWithTraits:^(id<UIMutableTraits> mutableTraits) {
+            mutableTraits.horizontalSizeClass = UIUserInterfaceSizeClassCompact;
+            mutableTraits.verticalSizeClass = UIUserInterfaceSizeClassCompact;
+          }];
+    }
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
+    else {
+      UITraitCollection* horizontalCompact =
+          [UITraitCollection traitCollectionWithHorizontalSizeClass:
+                                 UIUserInterfaceSizeClassCompact];
+      UITraitCollection* verticalCompact = [UITraitCollection
+          traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassCompact];
+      return [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        verticalCompact, horizontalCompact
+      ]];
+    }
+#else
+    return UITraitCollection.currentTraitCollection;
+#endif
   }
 
   UITraitCollection* IPhonePortraitTraitCollection() {
-    UITraitCollection* horizontalCompact = [UITraitCollection
-        traitCollectionWithHorizontalSizeClass:UIUserInterfaceSizeClassCompact];
-    UITraitCollection* verticalRegular = [UITraitCollection
-        traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular];
-    return [UITraitCollection traitCollectionWithTraitsFromCollections:@[
-      verticalRegular, horizontalCompact
-    ]];
+    if (@available(iOS 17, *)) {
+      return [UITraitCollection
+          traitCollectionWithTraits:^(id<UIMutableTraits> mutableTraits) {
+            mutableTraits.horizontalSizeClass = UIUserInterfaceSizeClassCompact;
+            mutableTraits.verticalSizeClass = UIUserInterfaceSizeClassRegular;
+          }];
+    }
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
+    else {
+      UITraitCollection* horizontalCompact =
+          [UITraitCollection traitCollectionWithHorizontalSizeClass:
+                                 UIUserInterfaceSizeClassCompact];
+      UITraitCollection* verticalRegular = [UITraitCollection
+          traitCollectionWithVerticalSizeClass:UIUserInterfaceSizeClassRegular];
+      return [UITraitCollection traitCollectionWithTraitsFromCollections:@[
+        verticalRegular, horizontalCompact
+      ]];
+    }
+#else
+    return UITraitCollection.currentTraitCollection;
+#endif
   }
 
   bool IsIPad() {
@@ -88,8 +130,7 @@ TEST_F(ContentSuggestionsCollectionUtilsTest, doodleFrameIPhonePortrait) {
   base::FieldTrialParams large_fakebox_params = {
       {kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox, "true"}};
   scoped_feature_list.InitWithFeaturesAndParameters(
-      /*enabled_features=*/{{kHomeCustomization, {}},
-                            {kDeprecateFeedHeader, large_fakebox_params}},
+      /*enabled_features=*/{{kDeprecateFeedHeader, large_fakebox_params}},
       /*disabled_features=*/{});
   CGFloat heightLargeLogo =
       DoodleHeight(YES, NO, IPhonePortraitTraitCollection());
@@ -125,8 +166,7 @@ TEST_F(ContentSuggestionsCollectionUtilsTest, doodleFrameIPhoneLandscape) {
   base::FieldTrialParams large_fakebox_params = {
       {kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox, "true"}};
   scoped_feature_list.InitWithFeaturesAndParameters(
-      /*enabled_features=*/{{kHomeCustomization, {}},
-                            {kDeprecateFeedHeader, large_fakebox_params}},
+      /*enabled_features=*/{{kDeprecateFeedHeader, large_fakebox_params}},
       /*disabled_features=*/{});
   CGFloat heightLargeLogo =
       DoodleHeight(YES, NO, IPhonePortraitTraitCollection());
@@ -229,8 +269,7 @@ TEST_F(ContentSuggestionsCollectionUtilsTest, fakeOmniboxHeight) {
   base::FieldTrialParams large_fakebox_params = {
       {kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox, "true"}};
   scoped_feature_list.InitWithFeaturesAndParameters(
-      /*enabled_features=*/{{kHomeCustomization, {}},
-                            {kDeprecateFeedHeader, large_fakebox_params}},
+      /*enabled_features=*/{{kDeprecateFeedHeader, large_fakebox_params}},
       /*disabled_features=*/{});
   EXPECT_EQ(65, FakeOmniboxHeight());
 }
@@ -241,8 +280,7 @@ TEST_F(ContentSuggestionsCollectionUtilsTest, pinnedFakeOmniboxHeight) {
   base::FieldTrialParams large_fakebox_params = {
       {kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox, "true"}};
   scoped_feature_list.InitWithFeaturesAndParameters(
-      /*enabled_features=*/{{kHomeCustomization, {}},
-                            {kDeprecateFeedHeader, large_fakebox_params}},
+      /*enabled_features=*/{{kDeprecateFeedHeader, large_fakebox_params}},
       /*disabled_features=*/{});
   EXPECT_EQ(48, PinnedFakeOmniboxHeight());
 }
@@ -253,8 +291,7 @@ TEST_F(ContentSuggestionsCollectionUtilsTest, fakeToolbarHeighta) {
   base::FieldTrialParams large_fakebox_params = {
       {kDeprecateFeedHeaderParameterEnlargeLogoAndFakebox, "true"}};
   scoped_feature_list.InitWithFeaturesAndParameters(
-      /*enabled_features=*/{{kHomeCustomization, {}},
-                            {kDeprecateFeedHeader, large_fakebox_params}},
+      /*enabled_features=*/{{kDeprecateFeedHeader, large_fakebox_params}},
       /*disabled_features=*/{});
   EXPECT_EQ(62, FakeToolbarHeight());
 }

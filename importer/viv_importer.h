@@ -6,23 +6,23 @@
 #include <string>
 #include <vector>
 
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/utility/importer/importer.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 
 namespace password_manager {
 struct PasswordForm;
 }
 
 namespace viv_importer {
-void DetectOperaProfiles(std::vector<importer::SourceProfile>* profiles);
-void DetectThunderbirdProfiles(std::vector<importer::SourceProfile>* profiles);
+void DetectOperaProfiles(std::vector<user_data_importer::SourceProfile>* profiles);
+void DetectThunderbirdProfiles(std::vector<user_data_importer::SourceProfile>* profiles);
 }
 
 class OperaImporter : public Importer {
  public:
   OperaImporter();
 
-  void StartImport(const importer::SourceProfile& source_profile,
+  void StartImport(const user_data_importer::SourceProfile& source_profile,
                    uint16_t items,
                    ImporterBridge* bridge) override;
 
@@ -43,12 +43,12 @@ class OperaImporter : public Importer {
   bool ImportWand_ReadEntryHTML(
       std::string::iterator* buffer,
       const std::string::iterator& buffer_end,
-      std::vector<importer::ImportedPasswordForm>* passwords,
+      std::vector<user_data_importer::ImportedPasswordForm>* passwords,
       bool ignore_entry = false);
   bool ImportWand_ReadEntryAuth(
       std::string::iterator* buffer,
       const std::string::iterator& buffer_end,
-      std::vector<importer::ImportedPasswordForm>* passwords,
+      std::vector<user_data_importer::ImportedPasswordForm>* passwords,
       bool ignore_entry = false);
   bool GetMasterPasswordInfo();
 

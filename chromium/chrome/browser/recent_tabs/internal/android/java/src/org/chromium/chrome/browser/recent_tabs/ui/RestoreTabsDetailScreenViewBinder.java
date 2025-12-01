@@ -22,6 +22,7 @@ import android.widget.TextView;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.chrome.browser.recent_tabs.R;
 import org.chromium.chrome.browser.recent_tabs.RestoreTabsProperties.DetailItemType;
 import org.chromium.chrome.browser.recent_tabs.ui.RestoreTabsDetailScreenCoordinator.Delegate;
@@ -33,9 +34,9 @@ import org.chromium.ui.widget.ButtonCompat;
 
 /**
  * This class is responsible for pushing updates to the Restore Tabs detail screen view. These
- * updates are pulled from the RestoreTabsProperties when a notification of an update is
- * received.
+ * updates are pulled from the RestoreTabsProperties when a notification of an update is received.
  */
+@NullMarked
 public class RestoreTabsDetailScreenViewBinder {
     static class ViewHolder {
         final View mContentView;
@@ -136,25 +137,11 @@ public class RestoreTabsDetailScreenViewBinder {
             getChangeAllTabsSelectionStateButton(view)
                     .setOnClickListener(
                             (v) -> {
-                                getChangeAllTabsSelectionStateButton(view)
-                                        .announceForAccessibility(
-                                                view.mContentView
-                                                        .getContext()
-                                                        .getString(
-                                                                R.string
-                                                                        .restore_tabs_review_tabs_screen_change_all_tabs_selection_button_clicked_description));
                                 delegate.onChangeSelectionStateForAllTabs();
                             });
             getOpenSelectedTabsButton(view)
                     .setOnClickListener(
                             (v) -> {
-                                getOpenSelectedTabsButton(view)
-                                        .announceForAccessibility(
-                                                view.mContentView
-                                                        .getContext()
-                                                        .getString(
-                                                                R.string
-                                                                        .restore_tabs_open_tabs_button_clicked_description));
                                 delegate.onSelectedTabsChosen();
                             });
 

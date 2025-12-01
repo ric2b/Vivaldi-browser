@@ -276,27 +276,42 @@ ChromeSecurityBlockingPageFactory::CreateHttpsOnlyModeBlockingPage(
     const GURL& request_url,
     security_interstitials::https_only_mode::HttpInterstitialState
         interstitial_state,
+    std::optional<std::string> url_type_param,
     security_interstitials::HttpsOnlyModeBlockingPage::MetricsCallback
         metrics_callback) {
   std::unique_ptr<HttpsOnlyModeControllerClient> client =
-      std::make_unique<HttpsOnlyModeControllerClient>(web_contents,
-                                                      request_url);
+      std::make_unique<HttpsOnlyModeControllerClient>(
+          web_contents, request_url, CreateSettingsPageHelper());
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
-  interstitial_state.enabled_by_advanced_protection =
-      profile &&
-      safe_browsing::AdvancedProtectionStatusManagerFactory::GetForProfile(
-          profile)
-          ->IsUnderAdvancedProtection();
-  // HFM interstitial with Site Engagement heuristic is only shown if the
-  // feature flag is enabled, so update the relevant flag here.
-  interstitial_state.enabled_by_engagement_heuristic =
-      interstitial_state.enabled_by_engagement_heuristic &&
-      base::FeatureList::IsEnabled(features::kHttpsFirstModeV2ForEngagedSites);
+
+  if (url_type_param) {
+    if (*url_type_param == "advanced_protection") {
+      interstitial_state.enabled_by_advanced_protection = true;
+    } else if (*url_type_param == "site_engagement") {
+      interstitial_state.enabled_by_engagement_heuristic = true;
+    } else if (*url_type_param == "typically_secure") {
+      interstitial_state.enabled_by_typically_secure_browsing = true;
+    } else if (*url_type_param == "incognito") {
+      interstitial_state.enabled_by_incognito = true;
+    }
+  } else {
+    interstitial_state.enabled_by_advanced_protection =
+        profile &&
+        safe_browsing::AdvancedProtectionStatusManagerFactory::GetForProfile(
+            profile)
+            ->IsUnderAdvancedProtection();
+    // HFM interstitial with Site Engagement heuristic is only shown if the
+    // feature flag is enabled, so update the relevant flag here.
+    interstitial_state.enabled_by_engagement_heuristic =
+        interstitial_state.enabled_by_engagement_heuristic &&
+        base::FeatureList::IsEnabled(
+            features::kHttpsFirstModeV2ForEngagedSites);
+  }
+
   auto page =
       std::make_unique<security_interstitials::HttpsOnlyModeBlockingPage>(
           web_contents, request_url, std::move(client), interstitial_state,
-          /*use_new_interstitial=*/IsNewHttpsFirstModeInterstitialEnabled(),
           metrics_callback);
   return page;
 }
@@ -341,8 +356,9 @@ void ChromeSecurityBlockingPageFactory::OpenLoginTabForWebContents(
   Browser* browser = chrome::FindBrowserWithTab(web_contents);
 
   // If the Profile doesn't have a tabbed browser window open, do nothing.
-  if (!browser)
+  if (!browser) {
     return;
+  }
 
   SecureDnsConfig secure_dns_config =
       SystemNetworkContextManager::GetStubResolverConfigReader()
@@ -381,8 +397,9 @@ void ChromeSecurityBlockingPageFactory::OpenLoginTabForWebContents(
     captive_portal::CaptivePortalTabHelper* captive_portal_tab_helper =
         captive_portal::CaptivePortalTabHelper::FromWebContents(contents);
     if (captive_portal_tab_helper->IsLoginTab()) {
-      if (focus)
+      if (focus) {
         browser->tab_strip_model()->ActivateTabAt(i);
+      }
       return;
     }
   }

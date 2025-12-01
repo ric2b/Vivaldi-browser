@@ -376,7 +376,6 @@ class X25519MLKEM768KeyShare : public SSLKeyShare {
 };
 
 constexpr NamedGroup kNamedGroups[] = {
-    {NID_secp224r1, SSL_GROUP_SECP224R1, "P-224", "secp224r1"},
     {NID_X9_62_prime256v1, SSL_GROUP_SECP256R1, "P-256", "prime256v1"},
     {NID_secp384r1, SSL_GROUP_SECP384R1, "P-384", "secp384r1"},
     {NID_secp521r1, SSL_GROUP_SECP521R1, "P-521", "secp521r1"},
@@ -392,8 +391,6 @@ Span<const NamedGroup> NamedGroups() { return kNamedGroups; }
 
 UniquePtr<SSLKeyShare> SSLKeyShare::Create(uint16_t group_id) {
   switch (group_id) {
-    case SSL_GROUP_SECP224R1:
-      return MakeUnique<ECKeyShare>(EC_group_p224(), SSL_GROUP_SECP224R1);
     case SSL_GROUP_SECP256R1:
       return MakeUnique<ECKeyShare>(EC_group_p256(), SSL_GROUP_SECP256R1);
     case SSL_GROUP_SECP384R1:

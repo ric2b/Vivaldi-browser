@@ -5,6 +5,7 @@
 #include "chromeos/ash/components/boca/session_api/session_parser.h"
 
 #include "ash/constants/ash_features.h"
+#include "base/strings/string_number_conversions.h"
 #include "chromeos/ash/components/boca/proto/session.pb.h"
 #include "chromeos/ash/components/boca/session_api/constants.h"
 #include "google_apis/common/base_requests.h"
@@ -369,6 +370,17 @@ void ParseIndividualStudentStatusFromJson(
                       connection_param->FindString(kSpotlightConnectionCode)) {
                 view_screen_config.mutable_connection_param()
                     ->set_connection_code(*connection_code);
+              }
+            }
+            if (auto* view_screen_requester_dict =
+                    view_screen_config_dict->FindDict(kViewScreenRequester)) {
+              if (auto* service_account_dict =
+                      view_screen_requester_dict->FindDict(kServiceAccount)) {
+                if (auto* ptr = service_account_dict->FindString(kEmail)) {
+                  view_screen_config.mutable_view_screen_requester()
+                      ->mutable_service_account()
+                      ->set_email(*ptr);
+                }
               }
             }
           }

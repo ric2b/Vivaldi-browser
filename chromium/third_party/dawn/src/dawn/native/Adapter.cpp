@@ -35,9 +35,11 @@
 #include <utility>
 #include <vector>
 
+#include "dawn/common/Math.h"
 #include "dawn/common/StringViewUtils.h"
 #include "dawn/native/ChainUtils.h"
 #include "dawn/native/Device.h"
+#include "dawn/native/Error.h"
 #include "dawn/native/Instance.h"
 #include "dawn/native/PhysicalDevice.h"
 #include "partition_alloc/pointers/raw_ptr.h"
@@ -96,17 +98,14 @@ InstanceBase* AdapterBase::APIGetInstance() const {
 void AdapterBase::UpdateLimits() {
     mLimits = mPhysicalDevice->GetLimits();
 
-    // Apply the tiered limits if needed.
-    if (mUseTieredLimits) {
-        mLimits = ApplyLimitTiers(std::move(mLimits));
+    // Disable unsafe limits if needed.
+    if (!mTogglesState.IsEnabled(Toggle::AllowUnsafeAPIs)) {
+        mLimits.v1.maxImmediateSize = 0;
     }
 
-    // TODO(crbug.com/382520104): Remove DawnExperimentalSubgroupLimits.
-    // Apply the D3D12RelaxMinSubgroupSizeTo8 toggle if enabled.
-    if (mPhysicalDevice->GetBackendType() == wgpu::BackendType::D3D12 &&
-        mTogglesState.IsEnabled(Toggle::D3D12RelaxMinSubgroupSizeTo8)) {
-        mLimits.experimentalSubgroupLimits.minSubgroupSize =
-            std::max(8u, mLimits.experimentalSubgroupLimits.minSubgroupSize);
+    // Apply the tiered limits if needed.
+    if (mUseTieredLimits) {
+        ApplyLimitTiers(&mLimits);
     }
 }
 
@@ -115,71 +114,9 @@ const CombinedLimits& AdapterBase::GetLimits() const {
 }
 
 wgpu::Status AdapterBase::APIGetLimits(Limits* limits) const {
-    DAWN_ASSERT(limits != nullptr);
-    UnpackedPtr<Limits> unpacked;
-    if (mInstance->ConsumedError(ValidateAndUnpack(limits), &unpacked)) {
+    if (mInstance->ConsumedError(FillLimits(limits, mSupportedFeatures, mLimits))) {
         return wgpu::Status::Error;
     }
-
-    {
-        wgpu::ChainedStructOut* originalChain = unpacked->nextInChain;
-        **unpacked = mLimits.v1;
-        // Recover origin chain.
-        unpacked->nextInChain = originalChain;
-    }
-
-    // TODO(crbug.com/382520104): Remove DawnExperimentalSubgroupLimits.
-    if (auto* subgroupLimits = unpacked.Get<DawnExperimentalSubgroupLimits>()) {
-        mInstance->EmitDeprecationWarning(
-            "DawnExperimentalSubgroupLimits is deprecated, use AdapterPropertiesSubgroups "
-            "instead.");
-        wgpu::ChainedStructOut* originalChain = subgroupLimits->nextInChain;
-        if (!mSupportedFeatures.IsEnabled(wgpu::FeatureName::Subgroups)) {
-            // If subgroups features are not supported, return the default-initialized
-            // DawnExperimentalSubgroupLimits object, where minSubgroupSize and
-            // maxSubgroupSize are WGPU_LIMIT_U32_UNDEFINED.
-            *subgroupLimits = DawnExperimentalSubgroupLimits{};
-        } else {
-            // If adapter supports subgroups features, always return the valid subgroup limits.
-            *subgroupLimits = mLimits.experimentalSubgroupLimits;
-        }
-
-        // Recover origin chain.
-        subgroupLimits->nextInChain = originalChain;
-    }
-
-    if (auto* immediateDataLimits = unpacked.Get<DawnExperimentalImmediateDataLimits>()) {
-        wgpu::ChainedStructOut* originalChain = immediateDataLimits->nextInChain;
-        if (!mSupportedFeatures.IsEnabled(wgpu::FeatureName::ChromiumExperimentalImmediateData)) {
-            // If immediate data features are not supported, return the default-initialized
-            // DawnExperimentalImmediateDataLimits object, where maxImmediateDataByteSize is
-            // WGPU_LIMIT_U32_UNDEFINED.
-            *immediateDataLimits = DawnExperimentalImmediateDataLimits{};
-        } else {
-            // If adapter supports immediate data features, always return the valid immediate data
-            // limits.
-            *immediateDataLimits = mLimits.experimentalImmediateDataLimits;
-        }
-
-        // Recover origin chain.
-        immediateDataLimits->nextInChain = originalChain;
-    }
-
-    if (auto* texelCopyBufferRowAlignmentLimits =
-            unpacked.Get<DawnTexelCopyBufferRowAlignmentLimits>()) {
-        wgpu::ChainedStructOut* originalChain = texelCopyBufferRowAlignmentLimits->nextInChain;
-        if (!mSupportedFeatures.IsEnabled(wgpu::FeatureName::DawnTexelCopyBufferRowAlignment)) {
-            // If the feature is not enabled, minTexelCopyBufferRowAlignment is default-initialized
-            // to WGPU_LIMIT_U32_UNDEFINED.
-            *texelCopyBufferRowAlignmentLimits = DawnTexelCopyBufferRowAlignmentLimits{};
-        } else {
-            *texelCopyBufferRowAlignmentLimits = mLimits.texelCopyBufferRowAlignmentLimits;
-        }
-
-        // Recover origin chain.
-        texelCopyBufferRowAlignmentLimits->nextInChain = originalChain;
-    }
-
     return wgpu::Status::Success;
 }
 
@@ -355,38 +292,31 @@ ResultOrError<Ref<DeviceBase>> AdapterBase::CreateDeviceInternal(
     // toggles. Note that certain toggles in device toggles state may be overridden by user and
     // different from the adapter toggles state, and in this case a device may support features
     // that not supported by the adapter. We allow such toggles overriding for the convenience e.g.
-    // creating a device for internal usage with AllowUnsafeAPI enabled from an adapter that
-    // disabled AllowUnsafeAPIS.
+    // creating a device for internal usage with AllowUnsafeAPIs enabled from an adapter that
+    // disabled AllowUnsafeAPIs.
     for (wgpu::FeatureName requiredFeature : requiredFeatureSet) {
         FeatureValidationResult result =
             mPhysicalDevice->ValidateFeatureSupportedWithToggles(requiredFeature, deviceToggles);
         DAWN_INVALID_IF(!result.success, "Invalid feature required: %s",
                         result.errorMessage.c_str());
     }
-    // Validate features dependency.
-    // TODO(349125474): Decide if this validation is needed, see
-    // https://github.com/gpuweb/gpuweb/issues/4734 for detail.
-    if (requiredFeatureSet.count(wgpu::FeatureName::SubgroupsF16) > 0) {
-        DAWN_INVALID_IF((requiredFeatureSet.count(wgpu::FeatureName::Subgroups) == 0),
-                        "Feature %s must be required together with feature %s.",
-                        wgpu::FeatureName::SubgroupsF16, wgpu::FeatureName::Subgroups);
-        DAWN_INVALID_IF(requiredFeatureSet.count(wgpu::FeatureName::ShaderF16) == 0,
-                        "Feature %s must be required together with feature %s.",
-                        wgpu::FeatureName::SubgroupsF16, wgpu::FeatureName::ShaderF16);
-    }
 
     if (descriptor->requiredLimits != nullptr) {
-        // Only consider limits in RequiredLimits structure, and currently no chained structure
-        // supported.
-        DAWN_INVALID_IF(descriptor->requiredLimits->nextInChain != nullptr,
-                        "can not chain after requiredLimits.");
+        CombinedLimits requiredLimits;
+        DAWN_TRY_CONTEXT(ValidateAndUnpackLimitsIn(descriptor->requiredLimits, requiredFeatureSet,
+                                                   &requiredLimits),
+                         "Validating and unpacking descriptor->requiredLimits");
 
-        Limits supportedLimits;
-        wgpu::Status status = APIGetLimits(&supportedLimits);
-        DAWN_ASSERT(status == wgpu::Status::Success);
+        DAWN_TRY_CONTEXT(ValidateLimits(GetLimits(), requiredLimits), "validating required limits");
+    }
 
-        DAWN_TRY_CONTEXT(ValidateLimits(supportedLimits, *descriptor->requiredLimits),
-                         "validating required limits");
+    if (auto* allocatorDesc = descriptor.Get<DawnDeviceAllocatorControl>()) {
+        DAWN_INVALID_IF(!requiredFeatureSet.contains(wgpu::FeatureName::DawnDeviceAllocatorControl),
+                        "%s is not enabled.", wgpu::FeatureName::DawnDeviceAllocatorControl);
+
+        DAWN_INVALID_IF(!IsPowerOfTwo(allocatorDesc->allocatorHeapBlockSize),
+                        "allocator heap block size (%d) isn't a power of two.",
+                        allocatorDesc->allocatorHeapBlockSize);
     }
 
     return mPhysicalDevice->CreateDevice(this, descriptor, deviceToggles, std::move(lostEvent));

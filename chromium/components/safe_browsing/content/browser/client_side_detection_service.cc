@@ -98,6 +98,17 @@ void LogOnDeviceModelExecutionParse(bool success) {
       "SBClientPhishing.OnDeviceModelResponseParseSuccess", success);
 }
 
+void LogOnDeviceModelSessionAliveOnNewRequest(bool is_alive) {
+  base::UmaHistogramBoolean(
+      "SBClientPhishing.OnDeviceModelSessionAliveOnNewRequest", is_alive);
+}
+
+void LogOnDeviceModelCallbackStateOnSuccessfulResponse(bool is_alive) {
+  base::UmaHistogramBoolean(
+      "SBClientPhishing.OnDeviceModelSuccessfulResponseCallbackAlive",
+      is_alive);
+}
+
 ClientSideDetectionService::CacheState::CacheState(bool phish, base::Time time)
     : is_phishing(phish), timestamp(time) {}
 
@@ -220,6 +231,13 @@ void ClientSideDetectionService::NotifyOnDeviceModelAvailable() {
 
 bool ClientSideDetectionService::IsOnDeviceModelAvailable() {
   return on_device_model_available_;
+}
+
+void ClientSideDetectionService::LogOnDeviceModelEligibilityReason() {
+  // Delegate can be null in unit tests.
+  if (delegate_) {
+    delegate_->LogOnDeviceModelEligibilityReason();
+  }
 }
 
 void ClientSideDetectionService::SendClientReportPhishingRequest(
@@ -819,7 +837,7 @@ ClientSideDetectionService::RegisterCallbackForModelUpdates(
   return client_side_phishing_model_->RegisterCallback(callback);
 }
 
-void ClientSideDetectionService::ResetOnDeviceSession() {
+void ClientSideDetectionService::ResetOnDeviceSession(bool inquiry_complete) {
   // Because of the use of DeleteSoon below, we can't guarantee that session_
   // is still available when the callback is invoked.
   if (session_) {
@@ -829,23 +847,20 @@ void ClientSideDetectionService::ResetOnDeviceSession() {
     // crbug.com/384774788 is fixed.
     content::GetUIThreadTaskRunner({})->DeleteSoon(FROM_HERE,
                                                    std::move(session_));
+    if (!inquiry_complete) {
+      LogOnDeviceModelSessionAliveOnNewRequest(true);
+    }
   }
 }
 
 void ClientSideDetectionService::InquireOnDeviceModel(
-    ClientPhishingRequest* verdict,
     std::string rendered_texts,
     base::OnceCallback<
         void(std::optional<optimization_guide::proto::ScamDetectionResponse>)>
         callback) {
-  base::UmaHistogramBoolean(
-      "SBClientPhishing.IsOnDeviceModelAvailableAtInquiryTime",
-      IsOnDeviceModelAvailable());
-
+  // We have checked the model availability prior to calling this function, but
+  // we want to check one last time before creating a session.
   if (!IsOnDeviceModelAvailable()) {
-    // When the model is not available at the time of inquiry, we want to log
-    // the current status of the model fetch.
-    delegate_->LogOnDeviceModelEligibilityReason();
     std::move(callback).Run(std::nullopt);
     return;
   }
@@ -853,7 +868,10 @@ void ClientSideDetectionService::InquireOnDeviceModel(
   // Close off the previous session if session's model execution from a previous
   // call into InquireOnDeviceModel is still happening.
   if (session_) {
+    LogOnDeviceModelSessionAliveOnNewRequest(true);
     session_.reset();
+  } else {
+    LogOnDeviceModelSessionAliveOnNewRequest(false);
   }
 
   base::TimeTicks session_creation_start_time = base::TimeTicks::Now();
@@ -879,11 +897,10 @@ void ClientSideDetectionService::InquireOnDeviceModel(
   session_->ExecuteModel(
       *std::make_unique<ScamDetectionRequest>(request),
       base::BindRepeating(&ClientSideDetectionService::ModelExecutionCallback,
-                          weak_factory_.GetWeakPtr(), verdict));
+                          weak_factory_.GetWeakPtr()));
 }
 
 void ClientSideDetectionService::ModelExecutionCallback(
-    ClientPhishingRequest* verdict,
     optimization_guide::OptimizationGuideModelStreamingExecutionResult result) {
   if (!result.response.has_value()) {
     LogOnDeviceModelExecutionSuccessAndTime(/*success=*/false,
@@ -917,8 +934,10 @@ void ClientSideDetectionService::ModelExecutionCallback(
 
   LogOnDeviceModelExecutionParse(true);
 
-  ResetOnDeviceSession();
+  ResetOnDeviceSession(/*inquiry_complete=*/true);
 
+  LogOnDeviceModelCallbackStateOnSuccessfulResponse(
+      !!inquire_on_device_model_callback_);
   if (inquire_on_device_model_callback_) {
     std::move(inquire_on_device_model_callback_).Run(scam_detection_response);
   }

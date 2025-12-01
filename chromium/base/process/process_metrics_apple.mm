@@ -22,7 +22,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/notimplemented.h"
 #include "base/numerics/safe_math.h"
+#include "base/system/sys_info.h"
 #include "base/time/time.h"
+#include "base/trace_event/base_tracing.h"
 #include "base/types/expected.h"
 #include "build/build_config.h"
 
@@ -155,6 +157,7 @@ ProcessMetrics::GetMemoryInfo() const {
 
 base::expected<TimeDelta, ProcessCPUUsageError>
 ProcessMetrics::GetCumulativeCPUUsage() {
+  TRACE_EVENT("base", "GetCumulativeCPUUsage");
   mach_port_t task = TaskForHandle(process_);
   if (task == MACH_PORT_NULL) {
     return base::unexpected(ProcessCPUUsageError::kProcessNotFound);
@@ -250,8 +253,7 @@ size_t GetSystemCommitCharge() {
 }
 
 bool GetSystemMemoryInfo(SystemMemoryInfoKB* meminfo) {
-  NSProcessInfo* process_info = [NSProcessInfo processInfo];
-  meminfo->total = static_cast<int>(process_info.physicalMemory / 1024);
+  meminfo->total = static_cast<int>(SysInfo::AmountOfPhysicalMemory() / 1024);
 
   base::apple::ScopedMachSendRight host(mach_host_self());
   vm_statistics64_data_t vm_info;

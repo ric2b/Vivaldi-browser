@@ -48,7 +48,7 @@ set(private_headers
     "AlignedAlloc.h"
     "Alloc.h"
     "Assert.h"
-    "BitSetIterator.h"
+    "BitSetRangeIterator.h"
     "Compiler.h"
     "Constants.h"
     "ContentLessObjectCache.h"
@@ -158,7 +158,7 @@ endif ()
 
 if (DAWN_ENABLE_VULKAN)
     list(APPEND conditional_private_depends
-        Vulkan-Headers)
+        Vulkan::Headers)
 endif ()
 
 list(APPEND conditional_private_depends

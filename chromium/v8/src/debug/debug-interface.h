@@ -205,8 +205,6 @@ class V8_EXPORT_PRIVATE ScriptSource {
  */
 class V8_EXPORT_PRIVATE Script {
  public:
-  v8::Isolate* GetIsolate() const;
-
   ScriptOriginOptions OriginOptions() const;
   bool WasCompiled() const;
   bool IsEmbedded() const;
@@ -218,6 +216,7 @@ class V8_EXPORT_PRIVATE Script {
   MaybeLocal<String> Name() const;
   MaybeLocal<String> SourceURL() const;
   MaybeLocal<String> SourceMappingURL() const;
+  MaybeLocal<String> DebugId() const;
   MaybeLocal<String> GetSha256Hash() const;
   Maybe<int> ContextId() const;
   Local<ScriptSource> Source() const;
@@ -290,6 +289,9 @@ void Disassemble(base::Vector<const uint8_t> wire_bytes,
 
 V8_EXPORT_PRIVATE void GetLoadedScripts(
     Isolate* isolate, std::vector<v8::Global<Script>>& scripts);
+
+V8_EXPORT_PRIVATE std::optional<v8::ScriptOrigin> GetScriptOrigin(
+    Isolate* v8_isolate, int script_id);
 
 MaybeLocal<UnboundScript> CompileInspectorScript(Isolate* isolate,
                                                  Local<String> source);
@@ -604,7 +606,9 @@ class EphemeronTable : public v8::Object {
       v8::Local<v8::Value> value);
 
   V8_EXPORT_PRIVATE static Local<EphemeronTable> New(v8::Isolate* isolate);
-  V8_INLINE static EphemeronTable* Cast(Value* obj);
+  V8_INLINE static EphemeronTable* Cast(Value* obj) {
+    return static_cast<EphemeronTable*>(obj);
+  }
 };
 
 /**

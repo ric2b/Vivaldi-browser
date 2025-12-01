@@ -38,6 +38,15 @@ BASE_FEATURE_PARAM(int,
                    "GroupByOriginContextLimit",
                    10);
 
+BASE_FEATURE(kFledgeNumberSellerWorkletGroupByOriginContextsToKeep,
+             "FledgeSellerWorkletGroupByOriginContextsToKeep",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+BASE_FEATURE_PARAM(int,
+                   kFledgeNumberSellerWorkletGroupByOriginContextsToKeepValue,
+                   &kFledgeNumberSellerWorkletGroupByOriginContextsToKeep,
+                   "SellerGroupByOriginContextLimit",
+                   10);
+
 BASE_FEATURE(kFledgePrepareBidderContextsInAdvance,
              "FledgePrepareBidderContextsInAdvance",
              base::FEATURE_DISABLED_BY_DEFAULT);
@@ -88,10 +97,6 @@ BASE_FEATURE_PARAM(int,
 BASE_FEATURE(kFledgeSellerSignalsRequestsOneAtATime,
              "FledgeSellerSignalsRequestsOneAtATime",
              base::FEATURE_DISABLED_BY_DEFAULT);
-
-BASE_FEATURE(kFledgeSplitTrustedSignalsFetchingURL,
-             "FledgeSplitTrustedSignalsFetchingURL",
-             base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kFledgeTextConversionHelpers,
              "FledgeTextConversionHelpers",

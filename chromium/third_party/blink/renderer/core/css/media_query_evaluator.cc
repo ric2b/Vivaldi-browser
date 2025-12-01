@@ -1558,6 +1558,59 @@ static bool ScrollableMediaFeatureEval(const MediaQueryExpValue& value,
   }
 }
 
+static bool ScrollDirectionMediaFeatureEval(const MediaQueryExpValue& value,
+                                            MediaQueryOperator op,
+                                            const MediaValues& media_values) {
+  if (!value.IsValid()) {
+    return media_values.ScrollDirection();
+  }
+
+  switch (value.Id()) {
+    case CSSValueID::kNone:
+      return !media_values.ScrollDirection();
+    case CSSValueID::kAny:
+      return media_values.ScrollDirection();
+    case CSSValueID::kTop:
+      return media_values.ScrollDirectionVertical() ==
+             ContainerScrollDirection::kStart;
+    case CSSValueID::kLeft:
+      return media_values.ScrollDirectionHorizontal() ==
+             ContainerScrollDirection::kStart;
+    case CSSValueID::kBottom:
+      return media_values.ScrollDirectionVertical() ==
+             ContainerScrollDirection::kEnd;
+    case CSSValueID::kRight:
+      return media_values.ScrollDirectionHorizontal() ==
+             ContainerScrollDirection::kEnd;
+    case CSSValueID::kBlockStart:
+      return media_values.ScrollDirectionBlock() ==
+             ContainerScrollDirection::kStart;
+    case CSSValueID::kBlockEnd:
+      return media_values.ScrollDirectionBlock() ==
+             ContainerScrollDirection::kEnd;
+    case CSSValueID::kInlineStart:
+      return media_values.ScrollDirectionInline() ==
+             ContainerScrollDirection::kStart;
+    case CSSValueID::kInlineEnd:
+      return media_values.ScrollDirectionInline() ==
+             ContainerScrollDirection::kEnd;
+    case CSSValueID::kX:
+      return media_values.ScrollDirectionHorizontal() !=
+             ContainerScrollDirection::kNone;
+    case CSSValueID::kY:
+      return media_values.ScrollDirectionVertical() !=
+             ContainerScrollDirection::kNone;
+    case CSSValueID::kBlock:
+      return media_values.ScrollDirectionBlock() !=
+             ContainerScrollDirection::kNone;
+    case CSSValueID::kInline:
+      return media_values.ScrollDirectionInline() !=
+             ContainerScrollDirection::kNone;
+    default:
+      NOTREACHED();
+  }
+}
+
 static bool InvertedColorsMediaFeatureEval(const MediaQueryExpValue& value,
                                            MediaQueryOperator,
                                            const MediaValues& media_values) {
@@ -1605,6 +1658,19 @@ static bool ScriptingMediaFeatureEval(const MediaQueryExpValue& value,
     default:
       NOTREACHED();
   }
+}
+
+static bool FallbackMediaFeatureEval(const MediaQueryExpValue& value,
+                                     MediaQueryOperator op,
+                                     const MediaValues& media_values) {
+  const int fallback = media_values.AnchoredFallback();
+  if (!value.IsValid()) {
+    return fallback == 0;
+  }
+
+  float number;
+  return NumberValue(value, number, media_values) &&
+         CompareValue(fallback, ClampTo<int>(number), op);
 }
 
 static MediaQueryOperator ReverseOperator(MediaQueryOperator op) {
@@ -1660,7 +1726,8 @@ KleeneValue MediaQueryEvaluator::EvalFeature(
     return KleeneValue::kUnknown;
   }
 
-  if (CSSVariableParser::IsValidVariableName(feature.Name())) {
+  if (feature.HasStyleRange() ||
+      CSSVariableParser::IsValidVariableName(feature.Name())) {
     return EvalStyleFeature(feature, result_flags);
   }
 
@@ -1700,6 +1767,42 @@ KleeneValue MediaQueryEvaluator::EvalFeature(
   return result ? KleeneValue::kTrue : KleeneValue::kFalse;
 }
 
+namespace {
+
+unsigned ConversionFlagsToUnitFlags(
+    CSSToLengthConversionData::Flags conversion_flags) {
+  unsigned unit_flags = 0;
+
+  using Flags = CSSToLengthConversionData::Flags;
+  using Flag = CSSToLengthConversionData::Flag;
+  using UnitFlags = MediaQueryExpValue::UnitFlags;
+
+  if (conversion_flags & (static_cast<Flags>(Flag::kEm) |
+                          static_cast<Flags>(Flag::kGlyphRelative))) {
+    unit_flags |= UnitFlags::kFontRelative;
+  }
+  if (conversion_flags & (static_cast<Flags>(Flag::kRootFontRelative))) {
+    unit_flags |= UnitFlags::kRootFontRelative;
+  }
+  if (conversion_flags & static_cast<Flags>(Flag::kDynamicViewport)) {
+    unit_flags |= UnitFlags::kDynamicViewport;
+  }
+  if (conversion_flags & (static_cast<Flags>(Flag::kViewport) |
+                          static_cast<Flags>(Flag::kSmallLargeViewport))) {
+    unit_flags |= UnitFlags::kStaticViewport;
+  }
+  if (conversion_flags & static_cast<Flags>(Flag::kContainerRelative)) {
+    unit_flags |= UnitFlags::kContainer;
+  }
+  if (conversion_flags & static_cast<Flags>(Flag::kSiblingRelative)) {
+    unit_flags |= UnitFlags::kTreeCounting;
+  }
+
+  return unit_flags;
+}
+
+}  // namespace
+
 KleeneValue MediaQueryEvaluator::EvalStyleFeature(
     const MediaQueryFeatureExpNode& feature,
     MediaQueryResultFlags* result_flags) const {
@@ -1710,8 +1813,14 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
 
   const MediaQueryExpBounds& bounds = feature.Bounds();
 
-  // Style features do not support the range syntax.
-  DCHECK(!bounds.IsRange());
+  if (bounds.IsRange()) {
+    DCHECK(feature.HasStyleRange());
+    DCHECK(RuntimeEnabledFeatures::CSSContainerStyleQueriesRangeEnabled());
+    // TODO(crbug.com/408011559): Add support for container style queries
+    // ranges.
+    return KleeneValue::kFalse;
+  }
+
   DCHECK(bounds.right.op == MediaQueryOperator::kNone);
 
   Element* container = media_values_->ContainerElement();
@@ -1727,8 +1836,10 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
     return KleeneValue::kFalse;
   }
 
-  const CSSValue* query_value = StyleResolver::ComputeValue(
-      container, CSSPropertyName(property_name), query_specified);
+  CSSToLengthConversionData::Flags conversion_flags = 0;
+  const CSSValue* query_value =
+      StyleResolver::ComputeValue(container, CSSPropertyName(property_name),
+                                  query_specified, conversion_flags);
 
   if (const auto* decl_value =
           DynamicTo<CSSUnparsedDeclarationValue>(query_value)) {
@@ -1745,6 +1856,10 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
     return KleeneValue::kFalse;
   }
 
+  if (result_flags && conversion_flags != 0) {
+    result_flags->unit_flags |= ConversionFlagsToUnitFlags(conversion_flags);
+  }
+
   const CSSValue* computed_value =
       CustomProperty(property_name, *media_values_->GetDocument())
           .CSSValueFromComputedStyle(
@@ -1754,6 +1869,30 @@ KleeneValue MediaQueryEvaluator::EvalStyleFeature(
     return KleeneValue::kTrue;
   }
   return KleeneValue::kFalse;
+}
+
+KleeneValue MediaQueryEvaluator::EvalIfRange(const CSSValue& reference_value,
+                                             const CSSValue& query_value,
+                                             MediaQueryOperator op,
+                                             bool reverse_op) {
+  const CSSNumericLiteralValue* reference_numeric =
+      DynamicTo<CSSNumericLiteralValue>(reference_value);
+  const CSSNumericLiteralValue* query_numeric =
+      DynamicTo<CSSNumericLiteralValue>(query_value);
+
+  if (!reference_numeric || !query_numeric ||
+      reference_numeric->GetType() != query_numeric->GetType()) {
+    return KleeneValue::kFalse;
+  }
+
+  if (reverse_op) {
+    op = ReverseOperator(op);
+  }
+
+  return CompareDoubleValue(reference_numeric->DoubleValue(),
+                            query_numeric->DoubleValue(), op)
+             ? KleeneValue::kTrue
+             : KleeneValue::kFalse;
 }
 
 }  // namespace blink

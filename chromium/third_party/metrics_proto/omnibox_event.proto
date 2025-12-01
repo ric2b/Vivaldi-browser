@@ -14,7 +14,7 @@ package metrics;
 import "omnibox_input_type.proto";
 
 // Stores information about an omnibox interaction.
-// Next tag: 28
+// Next tag: 29
 message OmniboxEventProto {
   // The timestamp for the event, in seconds.
   // This value comes from Chromium's TimeTicks::Now(), which is an abstract
@@ -218,9 +218,16 @@ message OmniboxEventProto {
     // The searchbox in the Android Hub.
     ANDROID_HUB = 29;
 
-    // When adding new classifications, please consider adding them in
-    // chromium's chrome/browser/resources/omnibox/omnibox.html
-    // so that these new options are displayed on about:omnibox.
+    // JumpStart Omnibox feature (Android): start Chrome to Search Activity on
+    // Low End devices.
+    JUMP_START = 30;
+
+    // When adding new classifications, please update the `OmniboxPageContext`
+    // variants listed in chromium's
+    // tools/metrics/histograms/metadata/omnibox/histograms.xml and also
+    // consider adding them in chromium's
+    // chrome/browser/resources/omnibox/omnibox.html so that these new options
+    // are displayed in the chrome://omnibox debug UI.
   }
 
   optional PageClassification current_page_classification = 10;
@@ -332,10 +339,18 @@ message OmniboxEventProto {
     // the omnibox.
     CONTEXTUAL_SEARCH_PROVIDER = 33;
 
+    // A verbatim match for the input.
+    VERBATIM_MATCH = 34;
+
+    // Groups of tabs which are available (or opened) locally. These results are
+    // provided by the TabGroupsProvider. Currently only used by Android's hub
+    // search feature.
+    TAB_GROUP_PROVIDER = 35;
+
     // Vivaldi
-    BOOKMARK_NICKNAME = 34;
-    DIRECT_MATCH = 35;
-    RECENT_TYPED_HISTORY = 36;
+    BOOKMARK_NICKNAME = 36;
+    DIRECT_MATCH = 37;
+    RECENT_TYPED_HISTORY = 38;
   }
 
   // The result set displayed on the completion popup
@@ -437,6 +452,7 @@ message OmniboxEventProto {
       HISTORY_EMBEDDINGS_ANSWER = 40;   // A generated answer based on past
                                         // visits with similar embeddings to the
                                         // query.
+      TAB_GROUP = 41;                   // Tab group suggestion result.
 
       // Vivaldi
       BOOKMARK_NICKNAME = 50;
@@ -638,6 +654,18 @@ message OmniboxEventProto {
 
       // Moved to OmniboxScoringSignals proto in cl/651828883:
       optional bool is_verbatim = 27 [deprecated = true];
+      // Whether the host part of the `destination_url` associated with this
+      // suggestion matches the host part of the URL for the page the user is
+      // currently on.
+      // As such, this signal will take on the following values:
+      //   - True:  `destination_url` for this suggestion has the same host as
+      //            the current page.
+      //   - False: Current page is the NTP (any default search engine)
+      //            OR `destination_url` for this suggestion is empty
+      //            OR `destination_url` does not have the same host as the
+      //            current page.
+      //   - Unset: Otherwise (due to unexpected client-side behavior).
+      optional bool destination_host_match_for_current_page = 35;
     }
 
     optional ScoringSignals scoring_signals = 10;
@@ -690,6 +718,33 @@ message OmniboxEventProto {
 
   // Whether the Omnibox was in keyword mode, however it was entered.
   optional bool in_keyword_mode = 19;
+
+  // The type of keyword used in keyword mode. The field storing this enum is
+  // not present if not in keyword mode.
+  enum KeywordType {
+    KEYWORD_TYPE_UNSPECIFIED = 0;
+    STARTER_PACK = 1;                              // Starter pack keyword.
+    PREPOPULATED = 2;                              // Prepopulated keyword.
+    EXTENSION = 3;                                 // Keyword set by extension.
+    SEARCH_AGGREGATOR_SET_BY_POLICY = 4;           // Keyword set by search
+                                                   // aggregator policy.
+    FEATURED_SITE_SEARCH_SET_BY_POLICY = 5;        // Featured site search
+                                                   // keyword set by policy.
+    NON_FEATURED_SITE_SEARCH_SET_BY_POLICY = 6;    // Non-featured site search
+                                                   // keyword set by policy.
+    DEFAULT_SEARCH_ENGINE_SET_BY_POLICY = 7;       // Default search engine
+                                                   // keyword set by policy.
+    NON_SUBSTITUTING_SITE_SEARCH_SET_BY_USER = 8;  // Site search keyword
+                                                   // without substitution
+                                                   // set by user.
+    SUBSTITUTING_SITE_SEARCH_SET_BY_USER = 9;      // Site search keyword
+                                                   // with substitution
+                                                   // set by user.
+    DEFAULT_SEARCH_ENGINE_SET_BY_USER = 10;        // Default search engine
+                                                   // keyword set by user.
+  }
+
+  optional KeywordType keyword_type = 28;
 
   // How the Omnibox got into keyword mode. Not present if not in keyword
   // mode.

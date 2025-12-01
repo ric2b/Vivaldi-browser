@@ -18,6 +18,7 @@
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_render_view_host.h"
 #include "content/test/test_web_contents.h"
+#include "media/base/picture_in_picture_events_info.h"
 #include "media/mojo/mojom/media_player.mojom.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -145,6 +146,9 @@ class PictureInPictureMediaPlayerReceiver : public media::mojom::MediaPlayer {
   void RequestMediaRemoting() override {}
   void RequestVisibility(
       RequestVisibilityCallback request_visibility_callback) override {}
+  void RecordAutoPictureInPictureInfo(
+      const media::PictureInPictureEventsInfo::AutoPipInfo&
+          auto_picture_in_picture_info) override {}
 
  private:
   mojo::AssociatedReceiver<media::mojom::MediaPlayer> receiver_{this};

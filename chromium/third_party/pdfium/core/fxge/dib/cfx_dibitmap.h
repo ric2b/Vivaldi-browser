@@ -71,7 +71,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
     pdfium::span<const uint8_t> src = GetBuffer();
     // SAFETY: const_cast<>() doesn't change size.
     return UNSAFE_BUFFERS(
-        pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
+        pdfium::span(const_cast<uint8_t*>(src.data()), src.size()));
   }
 
   // Note that the returned scanline includes unused space at the end, if any.
@@ -79,7 +79,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
     pdfium::span<const uint8_t> src = GetScanline(line);
     // SAFETY: const_cast<>() doesn't change size.
     return UNSAFE_BUFFERS(
-        pdfium::make_span(const_cast<uint8_t*>(src.data()), src.size()));
+        pdfium::span(const_cast<uint8_t*>(src.data()), src.size()));
   }
 
   // Note that the returned scanline does not include unused space at the end,
@@ -87,7 +87,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
   template <typename T>
   pdfium::span<T> GetWritableScanlineAs(int line) {
     return fxcrt::reinterpret_span<T>(GetWritableScanline(line))
-        .first(GetWidth());
+        .first(static_cast<size_t>(GetWidth()));
   }
 
   void TakeOver(RetainPtr<CFX_DIBitmap>&& pSrcBitmap);
@@ -202,7 +202,7 @@ class CFX_DIBitmap final : public CFX_DIBBase {
                                   int src_left,
                                   int src_top);
 
-  MaybeOwned<uint8_t, FxFreeDeleter> m_pBuffer;
+  MaybeOwned<uint8_t, FxFreeDeleter> buffer_;
 };
 
 #endif  // CORE_FXGE_DIB_CFX_DIBITMAP_H_

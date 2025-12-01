@@ -15,7 +15,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ai.AiAssistantService;
 import org.chromium.chrome.browser.ai.PageSummaryButtonController;
-import org.chromium.chrome.browser.bookmarks.AddToBookmarksToolbarButtonController;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.TabBookmarker;
 import org.chromium.chrome.browser.commerce.CommerceBottomSheetContentController;
@@ -42,13 +41,13 @@ import org.chromium.chrome.browser.segmentation_platform.ContextualPageActionCon
 import org.chromium.chrome.browser.share.ShareButtonController;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.VoiceToolbarButtonController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveButtonActionMenuCoordinator;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarBehavior;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonController;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
 import org.chromium.chrome.browser.toolbar.adaptive.TranslateToolbarButtonController;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonDataProvider;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.widget.scrim.ScrimManager;
@@ -175,14 +174,6 @@ public class AdaptiveToolbarUiCoordinator {
                         AppCompatResources.getDrawable(mContext, R.drawable.ic_translate),
                         mContext.getString(R.string.menu_translate),
                         trackerSupplier);
-        AddToBookmarksToolbarButtonController addToBookmarksToolbarButtonController =
-                new AddToBookmarksToolbarButtonController(
-                        mActivityTabProvider,
-                        mContext,
-                        activityLifecycleDispatcher,
-                        tabBookmarkerSupplier,
-                        trackerSupplier,
-                        bookmarkModelSupplier);
         AdaptiveToolbarButtonController adaptiveToolbarButtonController =
                 new AdaptiveToolbarButtonController(
                         mContext,
@@ -196,7 +187,8 @@ public class AdaptiveToolbarUiCoordinator {
                         mContext,
                         mModalDialogManagerSupplier.get(),
                         mActivityTabProvider,
-                        AiAssistantService.getInstance());
+                        AiAssistantService.getInstance(),
+                        trackerSupplier);
 
         if (ChromeFeatureList.sEnableDiscountInfoApi.isEnabled()) {
             DiscountsButtonController discountsButtonController =
@@ -212,9 +204,6 @@ public class AdaptiveToolbarUiCoordinator {
 
         adaptiveToolbarButtonController.addButtonVariant(
                 AdaptiveToolbarButtonVariant.SHARE, shareButtonController);
-        adaptiveToolbarButtonController.addButtonVariant(
-                AdaptiveToolbarButtonVariant.ADD_TO_BOOKMARKS,
-                addToBookmarksToolbarButtonController);
         adaptiveToolbarButtonController.addButtonVariant(
                 AdaptiveToolbarButtonVariant.TRANSLATE, translateToolbarButtonController);
         adaptiveToolbarButtonController.addButtonVariant(
@@ -286,9 +275,19 @@ public class AdaptiveToolbarUiCoordinator {
         return mButtonDataProviders;
     }
 
+    /** Returns {@link ContextualPageActionController} used for adaptive toolbar button. */
+    public ContextualPageActionController getContextualPageActionController() {
+        return mContextualPageActionController;
+    }
+
     /** Returns {@link VoiceToolbarButtonController} used for voice search button. */
     public VoiceToolbarButtonController getVoiceToolbarButtonController() {
         return mVoiceToolbarButtonController;
+    }
+
+    /** Invokes Price Insights UI. */
+    public void runPriceInsightsAction() {
+        mAdaptiveToolbarButtonController.runPriceInsightsAction();
     }
 
     /** Destroy internally used objects. */

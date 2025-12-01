@@ -41,6 +41,8 @@ struct view_cairo_t : view_options_t, output_options_t<>
   void add_options (option_parser_t *parser)
   {
     parser->set_summary ("View text with given font.");
+    parser->set_description ("Shows image of rendering text with a given font in various formats.");
+
     view_options_t::add_options (parser);
     output_options_t::add_options (parser, helper_cairo_supported_formats);
   }
@@ -189,13 +191,15 @@ view_cairo_t::render (const font_options_t *font_opts)
       for (unsigned i = 0; i < l.num_glyphs; i++)
       {
 	hb_glyph_extents_t hb_extents;
-	hb_font_get_glyph_extents (font, l.glyphs[i].index, &hb_extents);
-	double x1 = scalbn ((double) hb_extents.x_bearing, - (int) subpixel_bits);
-	double y1 = -scalbn ((double) hb_extents.y_bearing, - (int) subpixel_bits);
-	double width = scalbn ((double) hb_extents.width, - (int) subpixel_bits);
-	double height = -scalbn ((double) hb_extents.height, - (int) subpixel_bits);
+	if (hb_font_get_glyph_extents (font, l.glyphs[i].index, &hb_extents))
+	{
+	  double x1 = scalbn ((double) hb_extents.x_bearing, - (int) subpixel_bits);
+	  double y1 = -scalbn ((double) hb_extents.y_bearing, - (int) subpixel_bits);
+	  double width = scalbn ((double) hb_extents.width, - (int) subpixel_bits);
+	  double height = -scalbn ((double) hb_extents.height, - (int) subpixel_bits);
 
-	cairo_rectangle (cr, l.glyphs[i].x + x1, l.glyphs[i].y + y1, width, height);
+	  cairo_rectangle (cr, l.glyphs[i].x + x1, l.glyphs[i].y + y1, width, height);
+	}
       }
       cairo_stroke (cr);
 

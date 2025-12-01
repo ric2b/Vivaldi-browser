@@ -313,6 +313,47 @@ most useful.
 $ autoninja -C out/Debug-iphonesimulator content_shell
 ```
 
+## Blink for tvOS builds and running
+
+Note: To build Blink for tvOS, make sure that the tvOS SDK and the tvOS
+simulator are installed on your system.
+
+Blink for tvOS is an experimental project that aims to port Blink to Apple tvOS.
+Due to platform limitations, specifically because tvOS does not support
+multi-process applications, Blink for tvOS runs in a single-process mode only.
+As a result, there is no security isolation, since all content runs within the
+same process. Therefore, it is intended solely for loading trusted content.
+Please note that this project is still under development and considered
+unstable.
+
+tvOS is an iOS-based platform, and within the Chromium project, it is treated as
+a variant of the iOS build. As such, the same setup instructions used for iOS
+also apply to tvOS.
+
+If you use the `setup-gn.py` script as described above, it will automatically
+create `out/${configuration}-appletvsimulator` and
+`out/${configuration}-appletvos` directories with the appropriate GN arguments.
+
+If you would like to set your build up manually, the following GN arguments are
+required:
+
+```
+target_os="ios"
+target_platform="tvos"
+use_blink=true
+```
+
+Currently, tvOS supports only a limited set of targets, with `content_shell`
+being the most useful one. Note that `chrome` is not a supported target.
+
+The `iossim` tool also supports tvOS via the `-x tvos` argument. You can run a
+debug build of `content_shell`:
+
+```shell
+$ out/Debug-appletvsimulator/iossim -d 'Apple TV' -s '18.4' -x tvos \
+  out/Debug-appletvsimulator/content_shell.app
+```
+
 ## Running apps from the command line
 
 Any target that is built and runs on the bots (see [below](#Troubleshooting))
@@ -324,9 +365,8 @@ command line, you can use `iossim`. For example, to run a debug build of
 $ out/Debug-iphonesimulator/iossim -i out/Debug-iphonesimulator/Chromium.app
 ```
 
-From Xcode 9 on, `iossim` no longer automatically launches the Simulator. This must now
-be done manually from within Xcode (`Xcode > Open Developer Tool > Simulator`), and
-also must be done *after* running `iossim`.
+Note that `iossim` does not automatically launch the Simulator. This must be
+done manually *after* running `iossim`.
 
 ### Passing arguments
 
@@ -434,10 +474,9 @@ build artifact, generated from the `BUILD.gn` files. Do not use it to add new
 files; instead see the procedures for [working with
 files](working_with_files.md).
 
-If you have problems building, join us in `#chromium` on `irc.freenode.net` and
-ask there. As mentioned above, be sure that the
-[waterfall](https://build.chromium.org/buildbot/waterfall/) is green and the tree
-is open before checking out. This will increase your chances of success.
+If you have problems building, you can join us on
+[Slack](https://www.chromium.org/developers/slack/) or one of our [mailing
+lists](https://www.chromium.org/developers/technical-discussion-groups/).
 
 ### Debugging
 

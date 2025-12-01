@@ -81,16 +81,16 @@ class NetworkEmulationManagerImpl : public NetworkEmulationManager {
       std::unique_ptr<CrossTrafficGenerator> generator) override;
   void StopCrossTraffic(CrossTrafficGenerator* generator) override;
 
-  absl::Nonnull<EmulatedNetworkManagerInterface*>
+  EmulatedNetworkManagerInterface* absl_nonnull
   CreateEmulatedNetworkManagerInterface(
       const std::vector<EmulatedEndpoint*>& endpoints) override;
 
   void GetStats(
-      rtc::ArrayView<EmulatedEndpoint* const> endpoints,
+      ArrayView<EmulatedEndpoint* const> endpoints,
       std::function<void(EmulatedNetworkStats)> stats_callback) override;
 
   void GetStats(
-      rtc::ArrayView<EmulatedNetworkNode* const> nodes,
+      ArrayView<EmulatedNetworkNode* const> nodes,
       std::function<void(EmulatedNetworkNodeStats)> stats_callback) override;
 
   TimeController* time_controller() override { return time_controller_.get(); }

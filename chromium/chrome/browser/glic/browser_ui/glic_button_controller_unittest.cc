@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/contextual_cueing/contextual_cueing_service.h"
 #include "chrome/browser/glic/browser_ui/glic_button_controller_delegate.h"
 #include "chrome/browser/glic/browser_ui/glic_vector_icon_manager.h"
 #include "chrome/browser/glic/glic_keyed_service.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/global_features.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_browser_process.h"
@@ -33,22 +35,25 @@ namespace {
 
 class MockGlicKeyedService : public glic::GlicKeyedService {
  public:
-  MockGlicKeyedService(content::BrowserContext* browser_context,
-                       signin::IdentityManager* identity_manager,
-                       ProfileManager* profile_manager,
-                       GlicProfileManager* glic_profile_manager)
+  MockGlicKeyedService(
+      content::BrowserContext* browser_context,
+      signin::IdentityManager* identity_manager,
+      ProfileManager* profile_manager,
+      GlicProfileManager* glic_profile_manager,
+      contextual_cueing::ContextualCueingService* contextual_cueing_service)
       : GlicKeyedService(Profile::FromBrowserContext(browser_context),
                          identity_manager,
                          profile_manager,
-                         glic_profile_manager) {}
+                         glic_profile_manager,
+                         contextual_cueing_service) {}
   MOCK_METHOD(void, TryPreload, (), (override));
 };
 
 class MockGlicButtonControllerDelegate
     : public glic::GlicButtonControllerDelegate {
  public:
-  void SetShowState(bool show) override { show_state_ = show; }
-  void SetIcon(const gfx::VectorIcon& icon) override { icon_ = &icon; }
+  void SetGlicShowState(bool show) override { show_state_ = show; }
+  void SetGlicIcon(const gfx::VectorIcon& icon) override { icon_ = &icon; }
 
   bool show_state() const { return show_state_; }
   const gfx::VectorIcon* icon() const { return icon_; }
@@ -65,7 +70,9 @@ class GlicButtonControllerTest : public testing::Test {
   void SetUp() override {
     // Enable kGlic and kTabstripComboButton by default for testing.
     scoped_feature_list_.InitWithFeatures(
-        {features::kGlic, features::kTabstripComboButton}, {});
+        {features::kGlic, features::kTabstripComboButton,
+         features::kGlicRollout},
+        {});
 
     testing_profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
@@ -75,7 +82,8 @@ class GlicButtonControllerTest : public testing::Test {
 
     mock_glic_service_ = std::make_unique<MockGlicKeyedService>(
         profile_, identity_test_environment.identity_manager(),
-        testing_profile_manager_->profile_manager(), &glic_profile_manager_);
+        testing_profile_manager_->profile_manager(), &glic_profile_manager_,
+        /*contextual_cueing_service=*/nullptr);
 
     glic_button_controller_ = std::make_unique<GlicButtonController>(
         profile_, &mock_glic_controller_delegate_, mock_glic_service_.get());
@@ -137,56 +145,6 @@ TEST_F(GlicButtonControllerTest, GlicSettings) {
       static_cast<int>(glic::prefs::SettingsPolicyState::kDisabled));
   prefs->SetBoolean(glic::prefs::kGlicPinnedToTabstrip, false);
   EXPECT_FALSE(controller_delegate()->show_state());
-}
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true. detached default true. Test that
-// when the glic window is detached, the button is shown regardless of settings
-// state.
-TEST_F(GlicButtonControllerTest, DISABLED_GlicDetachedOverridesSettings) {
-  PrefService* prefs = profile()->GetPrefs();
-  prefs->SetInteger(
-      ::prefs::kGeminiSettings,
-      static_cast<int>(glic::prefs::SettingsPolicyState::kDisabled));
-  prefs->SetBoolean(glic::prefs::kGlicPinnedToTabstrip, false);
-
-  mojom::PanelState panel_state;
-  panel_state.kind = mojom::PanelState_Kind::kAttached;
-  controller()->PanelStateChanged(panel_state, nullptr);
-  ASSERT_FALSE(controller_delegate()->show_state());
-
-  panel_state.kind = mojom::PanelState_Kind::kDetached;
-  controller()->PanelStateChanged(panel_state, nullptr);
-  EXPECT_TRUE(controller_delegate()->show_state());
-}
-
-// TODO (crbug.com/406528268): Delete or fix tests that are disabled because
-// kGlicAlwaysDetached is now default true. detached default true. Test the
-// panel state of the glic window reflects the icon state of the controller
-// delegate.
-TEST_F(GlicButtonControllerTest, DISABLED_GlicWindowPanelState) {
-  mojom::PanelState panel_state;
-
-  panel_state.kind = mojom::PanelState_Kind::kHidden;
-  const auto& hidden_icon =
-      GlicVectorIconManager::GetVectorIcon(IDR_GLIC_BUTTON_VECTOR_ICON);
-  controller()->PanelStateChanged(panel_state, nullptr);
-  EXPECT_EQ(controller_delegate()->icon()->reps.data(),
-            hidden_icon.reps.data());
-
-  const auto& attach_icon =
-      GlicVectorIconManager::GetVectorIcon(IDR_GLIC_BUTTON_VECTOR_ICON);
-  panel_state.kind = mojom::PanelState_Kind::kAttached;
-  controller()->PanelStateChanged(panel_state, nullptr);
-  EXPECT_EQ(controller_delegate()->icon()->reps.data(),
-            attach_icon.reps.data());
-
-  const auto& detach_icon =
-      GlicVectorIconManager::GetVectorIcon(IDR_GLIC_ATTACH_BUTTON_VECTOR_ICON);
-  panel_state.kind = mojom::PanelState_Kind::kDetached;
-  controller()->PanelStateChanged(panel_state, nullptr);
-  EXPECT_EQ(controller_delegate()->icon()->reps.data(),
-            detach_icon.reps.data());
 }
 
 }  // namespace glic

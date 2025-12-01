@@ -12,6 +12,7 @@
 <translation id="1910514478706885609">Ouvrir dans une nouvelle pile d’onglets</translation>
 <translation id="1925021887439448749">Saisissez une adresse Web personnalisée</translation>
 <translation id="2038563949887743358">Activer la requête pour la « version ordinateur »</translation>
+<translation id="208033313373016095">Mode lecture pour les pages Web</translation>
 <translation id="2149973817440762519">Modifier le signet</translation>
 <translation id="2306442503286132111">Signet sauvegardé dans le dossier <ph name="FOLDER_NAME" /></translation>
 <translation id="2433507940547922241">Apparence</translation>
@@ -29,10 +30,11 @@
           =1 {<ph name="BOOKMARKS_COUNT_ONE" /> signet}
           other {<ph name="BOOKMARKS_COUNT_MANY" /> signets}}</translation>
 <translation id="3076631378407175873">Copyright Vivaldi Inc. <ph name="YEAR" />. Tous droits réservés.</translation>
+<translation id="3110967157686007724">Onglet privé</translation>
 <translation id="3232293466644486101">Supprimer les données de navigation…</translation>
 <translation id="3234355010754616171">Nouvel onglet privé</translation>
 <translation id="3237087289225714896">Préchargement standard :</translation>
-<translation id="3377025655491224618">Onglet privé</translation>
+<translation id="3478414204555961127">Mode lecture</translation>
 <translation id="3504699618187058974">Piles d’onglets</translation>
 <translation id="3518985090088779359">Accepter et continuer</translation>
 <translation id="3571177741182643350">Articles non lus - Disponibles hors connexion :</translation>
@@ -114,11 +116,11 @@ Pour ajuster votre terme de recherche, appuyez longuement pour sélectionner. Po
 <translation id="8348430946834215779">Utiliser HTTPS autant que possible et recevoir un avertissement avant de charger des sites qui ne le prennent pas en charge</translation>
 <translation id="8560602726703398413">Retrouvez votre liste de lecture dans les signets</translation>
 <translation id="85991616550051997">Aller à la page d’accueil</translation>
+<translation id="8693232767599693749">Afficher le mode Lecture ?</translation>
 <translation id="8820817407110198400">Signets</translation>
 <translation id="9042893549633094279">Sécurité et vie privée</translation>
 <translation id="9063523880881406963">Désactiver la requête pour la « version ordinateur »</translation>
 <translation id="9080642952018487277">Passer en mode de navigation privée</translation>
 <translation id="930124987204876019">Supprimez l’historique, les cookies et les données des sites, vider le cache…</translation>
 <translation id="961856697154696964">Supprimer données de navigation</translation>
-<translation id="96681097142096641">Afficher la page simplifiée ?</translation>
 </translationbundle>

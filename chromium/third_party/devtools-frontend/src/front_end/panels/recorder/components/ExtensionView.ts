@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/legacy.js';
 import '../../../ui/components/icon_button/icon_button.js';
@@ -12,11 +13,7 @@ import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 import * as Extensions from '../extensions/extensions.js';
 
-import extensionViewStylesRaw from './extensionView.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const extensionViewStyles = new CSSStyleSheet();
-extensionViewStyles.replaceSync(extensionViewStylesRaw.cssText);
+import extensionViewStyles from './extensionView.css.js';
 
 const {html} = Lit;
 
@@ -63,7 +60,6 @@ export class ExtensionView extends HTMLElement {
   }
 
   connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [extensionViewStyles];
     this.#render();
   }
 
@@ -94,6 +90,7 @@ export class ExtensionView extends HTMLElement {
     // clang-format off
     Lit.render(
       html`
+        <style>${extensionViewStyles}</style>
         <div class="extension-view">
           <header>
             <div class="title">

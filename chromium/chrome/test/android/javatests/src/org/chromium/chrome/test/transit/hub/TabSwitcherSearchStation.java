@@ -11,6 +11,7 @@ import static androidx.test.espresso.matcher.ViewMatchers.withParentIndex;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.CoreMatchers.containsString;
+import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.Matchers.allOf;
 
 import static org.chromium.base.test.transit.ViewSpec.viewSpec;
@@ -20,9 +21,11 @@ import android.view.View;
 
 import org.hamcrest.Matcher;
 
-import org.chromium.base.test.transit.Elements;
 import org.chromium.base.test.transit.Station;
+import org.chromium.base.test.transit.ViewElement;
 import org.chromium.base.test.transit.ViewSpec;
+import org.chromium.chrome.browser.omnibox.UrlBar;
+import org.chromium.chrome.browser.omnibox.suggestions.base.BaseSuggestionView;
 import org.chromium.chrome.browser.searchwidget.SearchActivity;
 import org.chromium.chrome.test.R;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
@@ -31,37 +34,28 @@ import org.chromium.ui.test.util.ViewUtils;
 
 /** The base station for Hub tab switcher stations. */
 public class TabSwitcherSearchStation extends Station<SearchActivity> {
-    public static final ViewSpec URL_BAR = viewSpec(withId(R.id.url_bar));
     public static final ViewSpec SUGGESTIONS_LIST =
             viewSpec(withId(R.id.omnibox_results_container));
 
     private final boolean mIsIncognito;
     private OmniboxTestUtils mOmniboxTestUtils;
+    public ViewElement<UrlBar> urlBarElement;
 
     public TabSwitcherSearchStation(boolean isIncognito) {
         super(SearchActivity.class);
         mIsIncognito = isIncognito;
-    }
-
-    @Override
-    public void declareElements(Elements.Builder elements) {
-        super.declareElements(elements);
-        elements.declareView(URL_BAR);
+        urlBarElement = declareView(viewSpec(UrlBar.class, withId(R.id.url_bar)));
     }
 
     public boolean isIncognito() {
         return mIsIncognito;
     }
 
-    public SearchActivity getSearchActivity() {
-        return mActivityElement.get();
-    }
-
     public void focusAndDropSoftKeyboard() {
         maybeInitSearchUtils();
         mOmniboxTestUtils.requestFocus();
         mOmniboxTestUtils.checkFocus(true);
-        URL_BAR.onView().check((v, nve) -> KeyboardUtils.hideAndroidSoftKeyboard(v));
+        urlBarElement.check((v, nve) -> KeyboardUtils.hideAndroidSoftKeyboard(v));
     }
 
     public void typeInOmnibox(String query) {
@@ -81,7 +75,7 @@ public class TabSwitcherSearchStation extends Station<SearchActivity> {
                 .descendant(
                         allOf(
                                 withParentIndex(index),
-                                withClassName(containsString("BaseSuggestionView")),
+                                withClassName(equalTo(BaseSuggestionView.class.getName())),
                                 hasDescendant(
                                         allOf(
                                                 withId(R.id.line_1),
@@ -110,7 +104,7 @@ public class TabSwitcherSearchStation extends Station<SearchActivity> {
 
     private void maybeInitSearchUtils() {
         if (mOmniboxTestUtils == null) {
-            mOmniboxTestUtils = new OmniboxTestUtils(getSearchActivity());
+            mOmniboxTestUtils = new OmniboxTestUtils(getActivity());
         }
     }
 }

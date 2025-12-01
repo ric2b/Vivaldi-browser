@@ -111,7 +111,7 @@ extern "C" {
 /*------   Version   ------*/
 #define ZSTD_VERSION_MAJOR    1
 #define ZSTD_VERSION_MINOR    5
-#define ZSTD_VERSION_RELEASE  7
+#define ZSTD_VERSION_RELEASE  8
 #define ZSTD_VERSION_NUMBER  (ZSTD_VERSION_MAJOR *100*100 + ZSTD_VERSION_MINOR *100 + ZSTD_VERSION_RELEASE)
 
 /*! ZSTD_versionNumber() :
@@ -1868,14 +1868,13 @@ ZSTDLIB_STATIC_API const ZSTD_DDict* ZSTD_initStaticDDict(
 typedef void* (*ZSTD_allocFunction) (void* opaque, size_t size);
 typedef void  (*ZSTD_freeFunction) (void* opaque, void* address);
 typedef struct { ZSTD_allocFunction customAlloc; ZSTD_freeFunction customFree; void* opaque; } ZSTD_customMem;
-static
-#ifdef __GNUC__
-__attribute__((__unused__))
-#endif
-
 #if defined(__clang__) && __clang_major__ >= 5
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wzero-as-null-pointer-constant"
+#endif
+static
+#ifdef __GNUC__
+__attribute__((__unused__))
 #endif
 ZSTD_customMem const ZSTD_defaultCMem = { NULL, NULL, NULL };  /**< this constant defers to stdlib's functions */
 #if defined(__clang__) && __clang_major__ >= 5
@@ -3137,6 +3136,18 @@ typedef enum { ZSTDnit_frameHeader, ZSTDnit_blockHeader, ZSTDnit_block, ZSTDnit_
 ZSTDLIB_STATIC_API ZSTD_nextInputType_e ZSTD_nextInputType(ZSTD_DCtx* dctx);
 
 
+
+/*! ZSTD_isDeterministicBuild() :
+ * Returns 1 if the library is built using standard compilation flags,
+ * and participates in determinism guarantees with other builds of the
+ * same version.
+ * If this function returns 0, it means the library was compiled with
+ * non-standard compilation flags that change the output of the
+ * compressor.
+ * This is mainly used for Zstd's determinism test suite, which is only
+ * run when this function returns 1.
+ */
+ZSTDLIB_API int ZSTD_isDeterministicBuild(void);
 
 
 /* ========================================= */

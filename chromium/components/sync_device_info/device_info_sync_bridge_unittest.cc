@@ -17,6 +17,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/mock_callback.h"
+#include "base/test/protobuf_matchers.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -50,6 +51,7 @@
 namespace syncer {
 namespace {
 
+using base::test::EqualsProto;
 using sync_pb::DataTypeState;
 using sync_pb::DeviceInfoSpecifics;
 using sync_pb::EntitySpecifics;
@@ -86,10 +88,6 @@ const DeviceInfo::FormFactor kLocalDeviceFormFactor =
 
 MATCHER_P(HasDeviceInfo, expected, "") {
   return arg.device_info().SerializeAsString() == expected.SerializeAsString();
-}
-
-MATCHER_P(EqualsProto, expected, "") {
-  return arg.SerializeAsString() == expected.SerializeAsString();
 }
 
 MATCHER_P(ModelEqualsSpecifics, expected_specifics, "") {
@@ -681,28 +679,8 @@ class DeviceInfoSyncBridgeTest : public testing::Test,
   }
 
   std::map<std::string, DeviceInfoSpecifics> ReadAllFromStore() {
-    std::unique_ptr<DataTypeStore::RecordList> records;
-    base::RunLoop loop;
-    store()->ReadAllData(base::BindOnce(
-        [](std::unique_ptr<DataTypeStore::RecordList>* output_records,
-           base::RunLoop* loop, const std::optional<syncer::ModelError>& error,
-           std::unique_ptr<DataTypeStore::RecordList> input_records) {
-          EXPECT_FALSE(error) << error->ToString();
-          EXPECT_THAT(input_records, NotNull());
-          *output_records = std::move(input_records);
-          loop->Quit();
-        },
-        &records, &loop));
-    loop.Run();
-    std::map<std::string, DeviceInfoSpecifics> result;
-    if (records) {
-      for (const DataTypeStore::Record& record : *records) {
-        DeviceInfoSpecifics specifics;
-        EXPECT_TRUE(specifics.ParseFromString(record.value));
-        result.emplace(record.id, specifics);
-      }
-    }
-    return result;
+    return DataTypeStoreTestUtil::ReadAllDataAsProtoAndWait<
+        DeviceInfoSpecifics>(*store());
   }
 
   std::map<std::string, sync_pb::EntitySpecifics> GetAllData() {

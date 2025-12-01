@@ -4,7 +4,7 @@
 
 #import "components/autofill/ios/browser/autofill_driver_ios.h"
 
-#include <variant>
+#import <variant>
 
 #import "base/check_deref.h"
 #import "base/containers/contains.h"
@@ -17,6 +17,7 @@
 #import "base/metrics/histogram.h"
 #import "base/metrics/histogram_functions.h"
 #import "base/observer_list.h"
+#import "base/types/optional_ref.h"
 #import "components/autofill/core/browser/filling/form_filler.h"
 #import "components/autofill/core/browser/form_structure.h"
 #import "components/autofill/core/browser/foundations/autofill_driver_router.h"
@@ -268,15 +269,12 @@ void AutofillDriverIOS::ExtractForm(
   NOTIMPLEMENTED();
 }
 
-void AutofillDriverIOS::SendTypePredictionsToRenderer(
-    base::span<const raw_ptr<FormStructure, VectorExperimental>> forms) {
-  if (!base::FeatureList::IsEnabled(
-          autofill::features::test::kAutofillShowTypePredictions)) {
-    return;
-  }
-  std::vector<FormDataPredictions> preds =
-      FormStructure::GetFieldTypePredictions(forms);
+void AutofillDriverIOS::ExposeDomNodeIDs() {}
 
+void AutofillDriverIOS::SendTypePredictionsToRenderer(
+    const FormStructure& form) {
+  CHECK(base::FeatureList::IsEnabled(
+      features::test::kAutofillShowTypePredictions));
   auto callback = [](AutofillDriver& driver,
                      const std::vector<FormDataPredictions>& preds) {
     web::WebFrame* frame = cast(&driver)->web_frame();
@@ -287,9 +285,10 @@ void AutofillDriverIOS::SendTypePredictionsToRenderer(
   };
 
   if (IsAcrossIframesEnabled()) {
-    router_->SendTypePredictionsToRenderer(callback, preds);
+    router_->SendTypePredictionsToRenderer(callback,
+                                           form.GetFieldTypePredictions());
   } else {
-    callback(*this, preds);
+    callback(*this, {form.GetFieldTypePredictions()});
   }
 }
 
@@ -406,23 +405,24 @@ web::WebFrame* AutofillDriverIOS::web_frame() const {
 
 void AutofillDriverIOS::AskForValuesToFill(const FormData& form,
                                            const FieldGlobalId& field_id) {
-  auto callback = [](AutofillDriver& driver, const FormData& form,
-                     const FieldGlobalId& field_id,
-                     const gfx::Rect& bounding_box,
-                     AutofillSuggestionTriggerSource trigger_source) {
-    driver.GetAutofillManager().OnAskForValuesToFill(
-        form, field_id, bounding_box, trigger_source);
-  };
+  auto callback =
+      [](AutofillDriver& driver, const FormData& form,
+         const FieldGlobalId& field_id, const gfx::Rect& bounding_box,
+         AutofillSuggestionTriggerSource trigger_source,
+         base::optional_ref<const PasswordSuggestionRequest> request) {
+        driver.GetAutofillManager().OnAskForValuesToFill(
+            form, field_id, bounding_box, trigger_source, request);
+      };
   // The caret position is currently not extracted on iOS.
   gfx::Rect caret_bounds;
   if (IsAcrossIframesEnabled()) {
     // TODO(crbug.com/40269303): Distinguish between different trigger sources.
-    router_->AskForValuesToFill(
-        callback, *this, form, field_id, caret_bounds,
-        autofill::AutofillSuggestionTriggerSource::kiOS);
+    router_->AskForValuesToFill(callback, *this, form, field_id, caret_bounds,
+                                autofill::AutofillSuggestionTriggerSource::kiOS,
+                                std::nullopt);
   } else {
     callback(*this, form, field_id, caret_bounds,
-             autofill::AutofillSuggestionTriggerSource::kiOS);
+             autofill::AutofillSuggestionTriggerSource::kiOS, std::nullopt);
   }
 }
 
@@ -499,8 +499,10 @@ void AutofillDriverIOS::FormSubmitted(
       for (const auto& remote_token : form.child_frames()) {
         if (std::optional<LocalFrameToken> local_token =
                 driver.Resolve(remote_token.token)) {
-          FromWebStateAndLocalFrameToken(webstate_ptr, *local_token)
-              ->ClearLastInteractedForm();
+          if (AutofillDriverIOS* child_driver =
+                  FromWebStateAndLocalFrameToken(webstate_ptr, *local_token)) {
+            child_driver->ClearLastInteractedForm();
+          }
         }
       }
     }

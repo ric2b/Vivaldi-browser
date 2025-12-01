@@ -32,6 +32,7 @@
 #include "chrome/browser/status_icons/status_tray.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/testing_browser_process_platform_part.h"
+#include "components/application_locale_storage/application_locale_storage.h"
 #include "components/embedder_support/origin_trials/origin_trials_settings_storage.h"
 #include "components/metrics/metrics_service.h"
 #include "components/network_time/network_time_tracker.h"
@@ -62,15 +63,14 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/apps/platform_apps/chrome_apps_browser_api_provider.h"
-#include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
 #include "chrome/browser/ui/apps/chrome_app_window_client.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "components/storage_monitor/test_storage_monitor.h"
 #endif
 
-#if BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
-#include "chrome/browser/extensions/desktop_android/desktop_android_extensions_browser_client.h"
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+#include "chrome/browser/extensions/chrome_extensions_browser_client.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -151,10 +151,8 @@ void TestingBrowserProcess::TearDownAndDeleteInstance() {
 }
 
 TestingBrowserProcess::TestingBrowserProcess()
-    : app_locale_("en"),
-      platform_part_(std::make_unique<TestingBrowserProcessPlatformPart>()),
-      os_crypt_async_(os_crypt_async::GetTestOSCryptAsyncForTesting()) {
-}
+    : platform_part_(std::make_unique<TestingBrowserProcessPlatformPart>()),
+      os_crypt_async_(os_crypt_async::GetTestOSCryptAsyncForTesting()) {}
 
 TestingBrowserProcess::~TestingBrowserProcess() {
   EXPECT_FALSE(local_state_);
@@ -172,6 +170,12 @@ TestingBrowserProcess::~TestingBrowserProcess() {
 }
 
 void TestingBrowserProcess::Init() {
+  features_ = GlobalFeatures::CreateGlobalFeatures();
+  features_->Init();
+
+  // Assume locale is initialized to "en" during initialization.
+  features_->application_locale_storage()->Set("en");
+
   // See comment in constructor.
   if (!network::TestNetworkConnectionTracker::HasInstance()) {
     test_network_connection_tracker_ =
@@ -180,17 +184,17 @@ void TestingBrowserProcess::Init() {
         test_network_connection_tracker_.get());
   }
 
-#if BUILDFLAG(ENABLE_DESKTOP_ANDROID_EXTENSIONS)
-  extensions_browser_client_ =
-      std::make_unique<extensions::DesktopAndroidExtensionsBrowserClient>();
-  extensions::ExtensionsBrowserClient::Set(extensions_browser_client_.get());
-#elif BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   extensions_browser_client_ =
       std::make_unique<extensions::ChromeExtensionsBrowserClient>();
+  extensions_browser_client_->Init();
+  extensions::ExtensionsBrowserClient::Set(extensions_browser_client_.get());
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions_browser_client_->AddAPIProvider(
       std::make_unique<chrome_apps::ChromeAppsBrowserAPIProvider>());
   extensions::AppWindowClient::Set(ChromeAppWindowClient::GetInstance());
-  extensions::ExtensionsBrowserClient::Set(extensions_browser_client_.get());
 #endif
 
   // Make sure permissions client has been set.
@@ -458,12 +462,16 @@ TestingBrowserProcess::background_printing_manager() {
 }
 
 const std::string& TestingBrowserProcess::GetApplicationLocale() {
-  return app_locale_;
+  CHECK(features_);
+  CHECK(features_->application_locale_storage());
+  return features_->application_locale_storage()->Get();
 }
 
 void TestingBrowserProcess::SetApplicationLocale(
     const std::string& actual_locale) {
-  app_locale_ = actual_locale;
+  CHECK(features_);
+  CHECK(features_->application_locale_storage());
+  return features_->application_locale_storage()->Set(actual_locale);
 }
 
 DownloadStatusUpdater* TestingBrowserProcess::download_status_updater() {
@@ -567,8 +575,16 @@ GlobalFeatures* TestingBrowserProcess::GetFeatures() {
 }
 
 void TestingBrowserProcess::CreateGlobalFeaturesForTesting() {
+  // To replace the GlobalFeatures, shutdown the default instance first.
+  CHECK(features_);
+  features_->Shutdown();
+  features_.reset();
+
   features_ = GlobalFeatures::CreateGlobalFeatures();
   features_->Init();
+
+  // Assume locale is initialized to "en" during initialization.
+  features_->application_locale_storage()->Set("en");
 }
 
 resource_coordinator::TabManager* TestingBrowserProcess::GetTabManager() {

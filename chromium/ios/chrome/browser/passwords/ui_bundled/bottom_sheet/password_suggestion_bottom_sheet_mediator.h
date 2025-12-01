@@ -100,6 +100,14 @@ class GURL;
 - (void)setCredentialsForTesting:
     (std::vector<password_manager::CredentialUIEntry>)credentials;
 
+// Vivaldi
+// This function removes the attached passwords listener from the active
+// web state's all frame and recofuses the input field that triggers
+// the sheet in the first place. It is implemented by chromium on .mm file
+// however, we are just exposing it here to call from coordinator.
+- (void)disableBottomSheet;
+// End Vivaldi
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_PASSWORDS_BOTTOM_SHEET_PASSWORD_SUGGESTION_BOTTOM_SHEET_MEDIATOR_H_

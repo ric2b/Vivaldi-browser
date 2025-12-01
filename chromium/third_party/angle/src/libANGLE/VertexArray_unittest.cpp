@@ -46,6 +46,8 @@ TEST(VertexArrayTest, VerifyGetIndexFromDirtyBit)
             EXPECT_EQ(dirtyBit - VertexArray::DIRTY_BIT_BUFFER_DATA_0, index);
         }
         else
+        {
             ASSERT_TRUE(false);
+        }
     }
 }

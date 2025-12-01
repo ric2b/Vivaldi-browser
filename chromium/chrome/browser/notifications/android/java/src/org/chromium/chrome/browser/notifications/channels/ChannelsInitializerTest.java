@@ -321,21 +321,6 @@ public class ChannelsInitializerTest {
 
     @Test
     @Feature({"Browser", "Notifications"})
-    public void testEnsureInitialized_priceDropChannel() {
-        mChannelsInitializer.ensureInitialized(ChromeChannelDefinitions.ChannelId.PRICE_DROP);
-
-        assertThat(getChannelsIgnoringDefault(), hasSize(1));
-        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
-        assertThat(channel.getId(), is(ChromeChannelDefinitions.ChannelId.PRICE_DROP));
-        assertThat(
-                channel.getName().toString(),
-                is(mContext.getString(R.string.notification_category_price_drop)));
-        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
-        assertThat(channel.getGroup(), is(ChromeChannelDefinitions.ChannelGroupId.GENERAL));
-    }
-
-    @Test
-    @Feature({"Browser", "Notifications"})
     public void testEnsureInitialized_priceDropDefaultChannel() {
         mChannelsInitializer.ensureInitialized(
                 ChromeChannelDefinitions.ChannelId.PRICE_DROP_DEFAULT);
@@ -391,6 +376,21 @@ public class ChannelsInitializerTest {
         assertThat(
                 channel.getName().toString(),
                 is(mContext.getString(R.string.notification_category_usb)));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
+        assertThat(channel.getGroup(), is(ChromeChannelDefinitions.ChannelGroupId.GENERAL));
+    }
+
+    @Test
+    @Feature({"Browser", "Notifications"})
+    public void testEnsureInitialized_serialChannel() {
+        mChannelsInitializer.ensureInitialized(ChromeChannelDefinitions.ChannelId.SERIAL);
+
+        assertThat(getChannelsIgnoringDefault(), hasSize(1));
+        NotificationChannel channel = getChannelsIgnoringDefault().get(0);
+        assertThat(channel.getId(), is(ChromeChannelDefinitions.ChannelId.SERIAL));
+        assertThat(
+                channel.getName().toString(),
+                is(mContext.getString(R.string.notification_category_serial)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_LOW));
         assertThat(channel.getGroup(), is(ChromeChannelDefinitions.ChannelGroupId.GENERAL));
     }

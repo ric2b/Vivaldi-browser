@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="ca">
-<translation id="2277224997687551299">Edita el nom del grup</translation>
+<translation id="1062777154504442433">Nova pila de pestanyes</translation>
+<translation id="1625440863545383011">Treu la pestanya i surt de la pila</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
           =1 {Afegeix la pestanya als marcadors}
           other {Afegeix les pestanyes als marcadors}
         }</translation>
 <translation id="2947471979790858922">La teva activitat a aquestes pestanyes privades se suprimirà d'aquest dispositiu</translation>
+<translation id="3298614730029636660">Surt de la pila</translation>
+<translation id="354698175756845966">Edita el color de la pila</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Pots trobar les pestanyes tancades a Pestanyes recents sota el menú principal de Vivaldi. Les pestanyes privades no estan disponibles.}
         other {Pots trobar les pestanyes tancades a Pestanyes recents sota el menú principal de Vivaldi. Les teves # pestanyes privades no estan disponibles.}}</translation>
-<translation id="4460014764210899310">Desagrupa</translation>
 <translation id="4871187110787939393">Tancar totes les pestanyes privades?</translation>
 <translation id="5494920125229734069">Selecciona-ho tot</translation>
-<translation id="6744956528665271406">Edita el color del grup</translation>
+<translation id="6807841890213931603">Treu la pestanya i suprimeix la pila</translation>
+<translation id="750227952939161636">Les piles de pestanyes es desen automàticament i s'actualitzen entre els teus dispositius amb sessió iniciada</translation>
+<translation id="7640137753339219124">Suprimeix la pila</translation>
+<translation id="7653857400289671414">Les piles de pestanyes es desen automàticament</translation>
+<translation id="8440938071054361204">Edita el nom de la pila</translation>
+<translation id="8602902357364871325">Tanca la pila</translation>
+<translation id="8851621822786801079">Suprimeix de la pila</translation>
 </translationbundle>

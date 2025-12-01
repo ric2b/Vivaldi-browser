@@ -18,6 +18,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -115,8 +116,7 @@ ToastView::ToastView(
       image_override_(image_override),
       render_toast_over_web_contents_(render_toast_over_web_contents),
       toast_close_callback_(std::move(toast_close_callback)) {
-  set_background_color(ui::kColorToastBackgroundProminent);
-  SetPaintClientToLayer(true);
+  SetBackgroundColor(ui::kColorToastBackgroundProminent);
   SetShowCloseButton(false);
   DialogDelegate::SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   set_corner_radius(ChromeLayoutProvider::Get()->GetDistanceMetric(
@@ -210,6 +210,7 @@ void ToastView::Init() {
     action_button_->GetViewAccessibility().SetRole(ax::mojom::Role::kAlert);
     action_button_->SetProperty(views::kElementIdentifierKey,
                                 kToastActionButton);
+    action_button_->SetAppearDisabledInInactiveWidget(false);
     action_button_->SetProperty(
         views::kMarginsKey,
         GetLeftMargin(lp->GetDistanceMetric(

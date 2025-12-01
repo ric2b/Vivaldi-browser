@@ -7,6 +7,7 @@
 import collections
 import dataclasses
 import hashlib
+import math
 import os
 import re
 import tempfile
@@ -108,6 +109,27 @@ def EnsureInGitRepository():
     git.run('rev-parse')
 
 
+def GetGitInfo(repository_root, cl) -> Tuple[List[Tuple[str, str]], str, str]:
+    """
+    Get various information by running git commands.
+
+    Specifically, determine which branch we're on, which upstream we're
+    targeting, and the list of changed files (and the associated git actions)
+    that make up the CL we're splitting.
+    """
+    upstream = cl.GetCommonAncestorWithUpstream()
+    files = [(action.strip(), f)
+             for action, f in scm.GIT.CaptureStatus(repository_root, upstream)]
+
+    refactor_branch = git.current_branch()
+    assert refactor_branch, "Can't run from detached branch."
+    refactor_branch_upstream = git.upstream(refactor_branch)
+    assert refactor_branch_upstream, \
+        "Branch %s must have an upstream." % refactor_branch
+
+    return files, refactor_branch, refactor_branch_upstream
+
+
 def CreateBranchName(prefix: str, files: List[Tuple[str, str]]) -> str:
     """
     Given a sub-CL as a list of (action, file) pairs, create a unique and
@@ -197,17 +219,24 @@ def FormatDescriptionOrComment(txt, desc):
     return replaced_txt
 
 
-def AddUploadedByGitClSplitToDescription(description):
+def AddUploadedByGitClSplitToDescription(description, is_experimental=False):
     """Adds a 'This CL was uploaded by git cl split.' line to |description|.
 
     The line is added before footers, or at the end of |description| if it has
     no footers.
     """
+    if is_experimental:
+        new_lines = [
+            'This CL was uploaded by an experimental version of git cl split',
+            '(https://crbug.com/389069356).'
+        ]
+    else:
+        new_lines = ['This CL was uploaded by git cl split.']
     split_footers = git_footers.split_footers(description)
     lines = split_footers[0]
     if lines[-1] and not lines[-1].isspace():
         lines = lines + ['']
-    lines = lines + ['This CL was uploaded by git cl split.']
+    lines = lines + new_lines
     if split_footers[1]:
         lines += [''] + split_footers[1]
     return '\n'.join(lines)
@@ -294,8 +323,14 @@ def UploadCl(refactor_branch, refactor_branch_upstream, cl_description, files,
                                 publish=True)
 
 
-def GetFilesSplitByOwners(files, max_depth):
+def GetFilesSplitByOwners(files, max_depth, repository_root):
     """Returns a map of files split by OWNERS file.
+
+    Args:
+        files: List of the file paths to be grouped by the OWNERS.
+            Note that each path is relative to the repostiory root.
+        max_depth: Max depth to traverse from the repository path.
+        repository_root: Absolute path to the repository root.
 
     Returns:
         A map where keys are paths to directories containing an OWNERS file and
@@ -310,12 +345,24 @@ def GetFilesSplitByOwners(files, max_depth):
         if max_depth >= 1:
             dir_with_owners = os.path.join(
                 *dir_with_owners.split(os.path.sep)[:max_depth])
+
         # Find the closest parent directory with an OWNERS file.
-        while (dir_with_owners not in files_split_by_owners
-               and not os.path.isfile(os.path.join(dir_with_owners, 'OWNERS'))):
+        dir_with_owners = os.path.join(repository_root, dir_with_owners)
+        while dir_with_owners != repository_root:
+            if dir_with_owners in files_split_by_owners:
+                break
+            owners_path = os.path.join(dir_with_owners, 'OWNERS')
+            if os.path.isfile(owners_path):
+                break
+            if os.path.lexists(owners_path):
+                raise ClSplitParseError(
+                    f'{owners_path} exists, but is not a file')
+
             dir_with_owners = os.path.dirname(dir_with_owners)
-        files_split_by_owners.setdefault(dir_with_owners, []).append(
-            (action, path))
+
+        files_split_by_owners.setdefault(
+            os.path.relpath(dir_with_owners, start=repository_root), []).append(
+                (action, path))
     return files_split_by_owners
 
 
@@ -361,6 +408,25 @@ def LoadDescription(description_file, dry_run):
     return gclient_utils.FileRead(description_file)
 
 
+def ProcessDescription(description_file: str, dry_run: bool,
+                       target_range: bool) -> str:
+    """
+    Load the provided description, append the note about git cl split, and
+    (on a real run), validate that it contains a bug link.
+
+    Returns the loaded description, or None if the user aborted due to a
+    missing bug link.
+    """
+    description = LoadDescription(description_file, dry_run)
+
+    description = AddUploadedByGitClSplitToDescription(
+        description, is_experimental=target_range)
+
+    if not dry_run and not CheckDescriptionBugLink(description):
+        return None
+
+    return description
+
 def PrintSummary(cl_infos, refactor_branch):
     """Print a brief summary of the splitting so the user
        can review it before uploading.
@@ -387,14 +453,106 @@ def PrintSummary(cl_infos, refactor_branch):
             'The infra team reserves the right to cancel '
             'your jobs if they are overloading the CQ.\n\n'
             '(Alternatively, you can reduce the number of CLs created by '
-            'using the --max-depth option. Pass --dry-run to examine the '
+            'using the --max-depth option, or altering the arguments to '
+            '--target-range, as appropriate. Pass --dry-run to examine the '
             'CLs which will be created until you are happy with the '
             'results.)')
 
 
+def SummarizeAndValidate(dry_run: bool, summarize: bool,
+                         files: List[Tuple[str, str]], refactor_branch: str,
+                         cl_infos: List[CLInfo]) -> Tuple[List[CLInfo], str]:
+    """
+    Print a summary of the generated splitting for the user. If we're doing a
+    real run, prompt the user to confirm the splitting is acceptable, and
+    allow them to edit it if they wish.
+
+    If we're doing a real run, also save the splitting to a file so the user
+    can safely resume an aborted upload with the same splitting.
+
+    Arguments:
+    dry_run: Whether or not we're doing a dry run
+    summarize: If we're doing a dry run, should we print a concise summary first
+    files: The list of (action, file) pairs that make up the CL we're splitting
+    refactor_branch: Name of the branch we're splitting
+
+    Returns:
+    A pair of the edited cl_infos and the name of the file to which we saved
+    the splitting. If the user aborts, the edited cl_infos will be falsy.
+    """
+    if not dry_run or summarize:
+        PrintSummary(cl_infos, refactor_branch)
+
+    if dry_run:
+        return cl_infos, ""
+
+    answer = gclient_utils.AskForData(
+        'Proceed? (y/N, or i to edit interactively): ')
+
+    if answer.lower() == 'i':
+        cl_infos, saved_splitting_file = EditSplittingInteractively(
+            cl_infos, files_on_disk=files)
+    else:
+        # Save so the user can use the splitting later if they want to
+        saved_splitting_file = SaveSplittingToTempFile(cl_infos)
+        if answer.lower() != 'y':
+            return None, saved_splitting_file
+
+    # Make sure there isn't any clutter left over from a previous run
+    if not ValidateExistingBranches(refactor_branch, cl_infos):
+        return None, saved_splitting_file
+
+    return cl_infos, saved_splitting_file
+
+
+def ComputeSplitting(
+    from_file: str,
+    files: List[Tuple[str, str]],
+    target_range: Tuple[int, int],
+    max_depth: int,
+    reviewers_override: List[str],
+    expect_owners_override: bool,
+    cl,
+    repository_root: str,
+) -> List[CLInfo]:
+    """
+    Split the current CL into sub-CLs by partitioning the files and assigning
+    reviewers. The method used depends on the command-line arguments.
+
+    Arguments are the same as SplitCl, excecpt for the following:
+    cl: Changelist class instance, for calling owners methods
+    """
+    author = git.run('config', 'user.email').strip() or None
+
+    if from_file:
+        # Load a precomputed splitting
+        cl_infos = LoadSplittingFromFile(from_file, files_on_disk=files)
+    elif target_range:
+        # Use the directory-based clustering algorithm
+        min_files, max_files = target_range
+        cl_infos = GroupFilesByDirectory(cl, author, expect_owners_override,
+                                         files, min_files, max_files)
+    else:
+        # Use the default algorithm
+        files_split_by_reviewers = SelectReviewersForFiles(
+            cl, author, files, max_depth, repository_root)
+
+        cl_infos = CLInfoFromFilesAndOwnersDirectoriesDict(
+            files_split_by_reviewers)
+
+    # Note that we do this override even if the list is empty (indicating that
+    # the user requested CLs not be assigned to any reviewers).
+    if reviewers_override != None:
+        for info in cl_infos:
+            info.reviewers = set(reviewers_override)
+
+    return cl_infos
+
+
 def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
             summarize, reviewers_override, cq_dry_run, enable_auto_submit,
-            max_depth, topic, from_file, repository_root):
+            max_depth, topic, target_range, expect_owners_override, from_file,
+            repository_root):
     """"Splits a branch into smaller branches and uploads CLs.
 
     Args:
@@ -410,70 +568,39 @@ def SplitCl(description_file, comment_file, changelist, cmd_upload, dry_run,
         max_depth: The maximum directory depth to search for OWNERS files. A
             value less than 1 means no limit.
         topic: Topic to associate with split CLs.
+        repository_root: Absolute path of the repository root.
 
     Returns:
         0 in case of success. 1 in case of error.
     """
 
-    description = LoadDescription(description_file, dry_run)
-    description = AddUploadedByGitClSplitToDescription(description)
-
-    comment = gclient_utils.FileRead(comment_file) if comment_file else None
-
     EnsureInGitRepository()
-
     cl = changelist()
-    upstream = cl.GetCommonAncestorWithUpstream()
-    files = [(action.strip(), f)
-             for action, f in scm.GIT.CaptureStatus(repository_root, upstream)]
+    # Get the list of changed files, as well as the branch we're on and its
+    # upstream.
+    files, refactor_branch, refactor_branch_upstream = GetGitInfo(
+        repository_root, cl)
 
     if not files:
         Emit('Cannot split an empty CL.')
         return 1
 
-    author = git.run('config', 'user.email').strip() or None
-    refactor_branch = git.current_branch()
-    assert refactor_branch, "Can't run from detached branch."
-    refactor_branch_upstream = git.upstream(refactor_branch)
-    assert refactor_branch_upstream, \
-        "Branch %s must have an upstream." % refactor_branch
-
-    if not dry_run and not CheckDescriptionBugLink(description):
+    # Load and validate the description and comment files now, so we can error
+    # early if there's a problem with them.
+    comment = gclient_utils.FileRead(comment_file) if comment_file else None
+    description = ProcessDescription(description_file, dry_run, target_range)
+    if not description:
         return 0
 
-    if from_file:
-        cl_infos = LoadSplittingFromFile(from_file, files_on_disk=files)
-    else:
-        files_split_by_reviewers = SelectReviewersForFiles(
-            cl, author, files, max_depth)
+    cl_infos = ComputeSplitting(from_file, files, target_range, max_depth,
+                                reviewers_override, expect_owners_override, cl,
+                                repository_root)
 
-        cl_infos = CLInfoFromFilesAndOwnersDirectoriesDict(
-            files_split_by_reviewers)
-
-    # Note that we do this override even if the list is empty (indicating that
-    # the user requested CLs not be assigned to any reviewers).
-    if reviewers_override != None:
-        for info in cl_infos:
-            info.reviewers = set(reviewers_override)
-
-    if not dry_run:
-        PrintSummary(cl_infos, refactor_branch)
-        answer = gclient_utils.AskForData(
-            'Proceed? (y/N, or i to edit interactively): ')
-        if answer.lower() == 'i':
-            cl_infos, saved_splitting_file = EditSplittingInteractively(
-                cl_infos, files_on_disk=files)
-        else:
-            # Save even if we're continuing, so the user can safely resume an
-            # aborted upload with the same splitting
-            saved_splitting_file = SaveSplittingToTempFile(cl_infos)
-            if answer.lower() != 'y':
-                return 0
-            # Make sure there isn't any clutter left over from a previous run
-            if not ValidateExistingBranches(refactor_branch, cl_infos):
-                return 0
-    elif summarize:
-        PrintSummary(cl_infos, refactor_branch)
+    cl_infos, saved_splitting_file = SummarizeAndValidate(
+        dry_run, summarize, files, refactor_branch, cl_infos)
+    # If the user aborted, we're done
+    if not cl_infos:
+        return 0
 
     cls_per_reviewer = collections.defaultdict(int)
     for cl_index, cl_info in enumerate(cl_infos, 1):
@@ -531,7 +658,7 @@ def CheckDescriptionBugLink(description):
     return answer.lower() == 'y'
 
 
-def SelectReviewersForFiles(cl, author, files, max_depth):
+def SelectReviewersForFiles(cl, author, files, max_depth, repository_root):
     """Selects reviewers for passed-in files
 
     Args:
@@ -540,8 +667,10 @@ def SelectReviewersForFiles(cl, author, files, max_depth):
         files: List of files
         max_depth: The maximum directory depth to search for OWNERS files.
             A value less than 1 means no limit.
+        repository_root: Absolute path of the repository root
     """
-    info_split_by_owners = GetFilesSplitByOwners(files, max_depth)
+    info_split_by_owners = GetFilesSplitByOwners(files, max_depth,
+                                                 repository_root)
 
     info_split_by_reviewers = {}
 
@@ -762,7 +891,7 @@ def LoadSplittingFromFile(filename: str,
 
 def EditSplittingInteractively(
         cl_infos: List[CLInfo],
-        files_on_disk: List[Tuple[str, str]]) -> List[CLInfo]:
+        files_on_disk: List[Tuple[str, str]]) -> Tuple[List[CLInfo], str]:
     """
     Allow the user to edit the generated splitting using their default editor.
     Make sure the edited splitting is saved so they can retrieve it if needed.
@@ -782,6 +911,71 @@ def EditSplittingInteractively(
 ################################################################################
 # Code for the clustering-based splitting algorithm.
 ################################################################################
+
+
+def GroupFilesByDirectory(cl, author: str, expect_owners_override: bool,
+                          all_files: Tuple[str, str], min_files: int,
+                          max_files: int) -> List[CLInfo]:
+    """
+    Group the contents of |all_files| into clusters of size between |min_files|
+    and |max_files|, inclusive, based on their directory structure. Assign one
+    reviewer to each group to create a CL. If |expect_owners_override| is true,
+    consider only the directory structure of the files, ignoring ownership.
+
+    May rarely create groups with fewer than |min_files| files, or assign
+    multiple reviewers to a single CL.
+
+    Args:
+        cl: Changelist class instance, for calling owners methods
+        author: Email of person running the script; never assigned as a reviewer
+    """
+
+    # Record the actions associated with each file because the clustering
+    # algorithm just takes filenames
+    actions_by_file = {}
+    file_paths = []
+    for (action, file) in all_files:
+        actions_by_file[file] = action
+        file_paths.append(file)
+
+    reviewers_so_far = []
+    cls = []
+    # Go through the clusters by path length so that we're likely to choose
+    # top-level owners earlier
+    for (directories, files) in sorted(
+            ClusterFiles(expect_owners_override, file_paths, min_files,
+                         max_files)):
+        # Use '/' as a path separator in the branch name and the CL description
+        # and comment.
+        directories = [
+            directory.replace(os.path.sep, '/') for directory in directories
+        ]
+        files_with_actions = [(actions_by_file[file], file) for file in files]
+
+        # Try to find a reviewer. If some of the files have noparent set,
+        # we'll likely get multiple reviewers. Don't consider reviewers we've
+        # already assigned something to.
+        # FIXME: Rather than excluding existing reviewers, it would be better
+        # to just penalize them, but still choose them over reviewers who have
+        # a worse score. At the moment, owners_client doesn't support anything
+        # to do with the score.
+        reviewers = cl.owners_client.SuggestMinimalOwners(
+            files,
+            exclude=[author, cl.owners_client.EVERYONE] + reviewers_so_far)
+
+        # Retry without excluding existing reviewers if we couldn't find any.
+        # This is very unlikely since there are many fallback owners.
+        if not reviewers:
+            reviewers = cl.owners_client.SuggestMinimalOwners(
+                directories, exclude=[author, cl.owners_client.EVERYONE])
+
+        reviewers_so_far.extend(reviewers)
+        cls.append(
+            CLInfo(set(reviewers), files_with_actions,
+                   FormatDirectoriesForPrinting(directories)))
+
+    return cls
+
 
 ### Trie Code
 
@@ -864,3 +1058,137 @@ class DirectoryTrie():
         for subdir in self.subdirectories.values():
             files += subdir.ToList()
         return files
+
+
+### Clustering code
+
+# Convenience type: a "bin" represents a collection of files:
+# it tracks their prefix(es) and the list of files themselves.
+# Both elements are string lists.
+Bin = collections.namedtuple("Bin", "prefixes files")
+
+
+def PackFiles(max_size: int, files_to_pack: List[Bin]) -> List[Bin]:
+    """
+    Simple bin packing algorithm: given a list of small bins, consolidate them
+    into as few larger bins as possible, where each bin can hold at most
+    |max_size| files.
+    """
+    bins = []
+    # Guess how many bins we'll need ahead of time so we can spread things
+    # between them. We'll add more bins later if necessary
+    expected_bins_needed = math.ceil(
+        sum(len(bin.files) for bin in files_to_pack) / max_size)
+    expected_avg_bin_size = math.ceil(
+        sum(len(bin.files) for bin in files_to_pack) / expected_bins_needed)
+    for _ in range(expected_bins_needed):
+        bins.append(Bin([], []))
+
+    # Sort by number of files, decreasing
+    sorted_by_num_files = sorted(files_to_pack, key=lambda bin: -len(bin.files))
+
+    # Invariant: the least-filled bin is always the first element of |bins|
+    # This ensures we spread things between bins as much as possible.
+    for (prefixes, files) in sorted_by_num_files:
+        b = bins[0]
+        if len(b.files) + len(files) <= max_size:
+            b[0].extend(prefixes)
+            b[1].extend(files)
+        else:
+            # Since the first bin is the emptiest, if we failed to fit in
+            # that we don't need to try any others.
+
+            # If these files alone are too large, split them up into
+            # groups of size |expected_avg_bin_size|
+            if len(files) > max_size:
+                bins.extend([
+                    Bin(prefixes, files[i:i + expected_avg_bin_size])
+                    for i in range(0, len(files), expected_avg_bin_size)
+                ])
+            else:
+                bins.append(Bin(prefixes, files))
+
+        # Maintain invariant
+        bins.sort(key=lambda bin: len(bin.files))
+    return [bin for bin in bins if len(bin.files) > 0]
+
+
+def ClusterFiles(expect_owners_override: bool, files: List[str], min_files: int,
+                 max_files: int) -> List[Bin]:
+    """
+    Group the entries of |files| into clusters of size between |min_files| and
+    |max_files|, inclusive. Guarantees that the size does not exceed
+    |max_files|, but the size may rarely be less than |min_files|. If
+    |expect_owners_override| is true, don't consider ownership when clustering,
+    only directory structure.
+
+    Clustering strategy for a given directory:
+    1. Try to group each subdirectory independently
+    2. Group any remaining files as follows:
+        2a. If there are less than |min_files| files and the folder has a parent,
+            give up and let the parent folder handle it.
+        2c. Otherwise, if there are at most |max_files| files, create one
+            cluster.
+        2c. Finally, if there are more than |max_files| files, create several
+            clusters of size less than |max_files|.
+    """
+    trie = DirectoryTrie(expect_owners_override)
+    trie.AddFiles([file.split(os.path.sep) for file in files])
+    clusters: List[Bin] = []
+
+    def ClusterDirectory(current_dir: DirectoryTrie) -> List[str]:
+        """
+        Attempt to cluster the files for a directory, by grouping them into
+        Bins and appending the bins to |clusters|.
+        Returns a list of files that weren't able to be clustered (because
+        there weren't at least |min_files| files).
+        """
+        # Track all the files we need to handle in this directory
+        unclustered_files: List[Bin] = []
+
+        # Record any files that live in this directory directly
+        if len(current_dir.files) > 0:
+            unclustered_files.append(
+                Bin([current_dir.prefix], current_dir.files))
+
+        # Step 1: Try to cluster each subdirectory independently
+        for subdir in current_dir.subdirectories.values():
+            unclustered_files_in_subdir = ClusterDirectory(subdir)
+            # If not all files were submitted, record them
+            if len(unclustered_files_in_subdir) > 0:
+                unclustered_files.append(
+                    Bin([subdir.prefix], unclustered_files_in_subdir))
+
+        # A flattened list containing just the names of all unclustered files
+        unclustered_files_names_only = [
+            file for bin in unclustered_files for file in bin.files
+        ]
+
+        if len(unclustered_files_names_only) == 0:
+            return []
+
+        # Step 2a: If we don't have enough files for a cluster and it's possible
+        # to recurse upward, do so
+        if (len(unclustered_files_names_only) < min_files
+                and current_dir.has_parent):
+            return unclustered_files_names_only
+
+        # Step 2b, 2c: Create one or more clusters from the unclustered files
+        # by appending to the |clusters| variable in the outer scope
+        nonlocal clusters
+        if len(unclustered_files_names_only) <= max_files:
+            clusters.append(
+                Bin([current_dir.prefix], unclustered_files_names_only))
+        else:
+            clusters += PackFiles(max_files, unclustered_files)
+
+        return []
+
+    unclustered_paths = ClusterDirectory(trie)
+    if (len(unclustered_paths) > 0):
+        EmitWarning(
+            'Not all files were assigned to a CL!\n'
+            'This should be impossible, file a bug.\n'
+            f'{len(unclustered_paths)} Unassigned files: {unclustered_paths}')
+
+    return clusters

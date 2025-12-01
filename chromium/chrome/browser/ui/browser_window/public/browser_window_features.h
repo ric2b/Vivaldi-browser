@@ -18,22 +18,30 @@ class GlicIphController;
 #endif
 
 class Browser;
+class BrowserInstantController;
 class BrowserView;
 class BrowserWindowInterface;
 class ChromeLabsCoordinator;
+class CookieControlsBubbleCoordinator;
 class HistorySidePanelCoordinator;
+class BookmarksSidePanelCoordinator;
 class MemorySaverOptInIPHController;
 class SidePanelCoordinator;
 class SidePanelUI;
+class TabMenuModelDelegate;
 class TabSearchToolbarButtonController;
 class TabStripModel;
 class TranslateBubbleController;
 class ToastController;
 class ToastService;
-class DataSharingOpenGroupHelper;
 class DownloadToolbarUIController;
+class TabStripServiceRegister;
 
 class BrowserWindow;
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+class PdfInfoBarController;
+#endif
 
 namespace extensions {
 class ExtensionSidePanelManager;
@@ -65,6 +73,10 @@ namespace memory_saver {
 class MemorySaverBubbleController;
 }  // namespace memory_saver
 
+namespace new_tab_footer {
+class NewTabFooterController;
+}  // namespace new_tab_footer
+
 namespace tab_groups {
 class SessionServiceTabGroupSyncObserver;
 class SharedTabGroupFeedbackController;
@@ -77,7 +89,7 @@ class SendTabToSelfToolbarBubbleController;
 
 namespace vivaldi {
   class SidePanelCoordinator;
-}
+}  // namespace vivaldi
 
 // This class owns the core controllers for features that are scoped to a given
 // browser window on desktop. It can be subclassed by tests to perform
@@ -134,6 +146,16 @@ class BrowserWindowFeatures {
     return history_side_panel_coordinator_.get();
   }
 
+  BookmarksSidePanelCoordinator* bookmarks_side_panel_coordinator() {
+    return bookmarks_side_panel_coordinator_.get();
+  }
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  PdfInfoBarController* pdf_infobar_controller() {
+    return pdf_infobar_controller_.get();
+  }
+#endif
+
   // TODO(crbug.com/346158959): For historical reasons, side_panel_ui is an
   // abstract base class that contains some, but not all of the public interface
   // of SidePanelCoordinator. One of the accessors side_panel_ui() or
@@ -183,10 +205,6 @@ class BrowserWindowFeatures {
     return extension_side_panel_manager_.get();
   }
 
-  DataSharingOpenGroupHelper* data_sharing_open_group_helper() {
-    return data_sharing_open_group_helper_.get();
-  }
-
   DownloadToolbarUIController* download_toolbar_ui_controller() {
     return download_toolbar_ui_controller_.get();
   }
@@ -213,6 +231,23 @@ class BrowserWindowFeatures {
     return tab_search_toolbar_button_controller_.get();
   }
 
+  CookieControlsBubbleCoordinator* cookie_controls_bubble_coordinator() {
+    return cookie_controls_bubble_coordinator_.get();
+  }
+
+  TabMenuModelDelegate* tab_menu_model_delegate() {
+    return tab_menu_model_delegate_.get();
+  }
+
+  // Only fetch the tab_strip_service to register a pending receiver.
+  TabStripServiceRegister* tab_strip_service() {
+    return tab_strip_service_.get();
+  }
+
+  new_tab_footer::NewTabFooterController* new_tab_footer_controller() {
+    return new_tab_footer_controller_.get();
+  }
+
   // Vivaldi
   BrowserWindow* window() { return browser_window_.get(); }
 
@@ -226,6 +261,8 @@ class BrowserWindowFeatures {
  private:
   // Features that are per-browser window will each have a controller. e.g.
   // std::unique_ptr<FooFeature> foo_feature_;
+
+  std::unique_ptr<BrowserInstantController> instant_controller_;
 
   std::unique_ptr<send_tab_to_self::SendTabToSelfToolbarBubbleController>
       send_tab_to_self_toolbar_bubble_controller_;
@@ -251,6 +288,13 @@ class BrowserWindowFeatures {
 
   std::unique_ptr<HistorySidePanelCoordinator> history_side_panel_coordinator_;
 
+  std::unique_ptr<BookmarksSidePanelCoordinator>
+      bookmarks_side_panel_coordinator_;
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+  std::unique_ptr<PdfInfoBarController> pdf_infobar_controller_;
+#endif
+
   std::unique_ptr<SidePanelCoordinator> side_panel_coordinator_;
 
   std::unique_ptr<tab_groups::SessionServiceTabGroupSyncObserver>
@@ -263,8 +307,6 @@ class BrowserWindowFeatures {
   // tab-scoped extension side-panel manager.
   std::unique_ptr<extensions::ExtensionSidePanelManager>
       extension_side_panel_manager_;
-
-  std::unique_ptr<DataSharingOpenGroupHelper> data_sharing_open_group_helper_;
 
   std::unique_ptr<media_router::CastBrowserController> cast_browser_controller_;
 
@@ -290,6 +332,17 @@ class BrowserWindowFeatures {
 
   std::unique_ptr<TabSearchToolbarButtonController>
       tab_search_toolbar_button_controller_;
+
+  std::unique_ptr<CookieControlsBubbleCoordinator>
+      cookie_controls_bubble_coordinator_;
+
+  std::unique_ptr<TabMenuModelDelegate> tab_menu_model_delegate_;
+
+  std::unique_ptr<new_tab_footer::NewTabFooterController>
+      new_tab_footer_controller_;
+
+  // This is an experimental API that interacts with the TabStripModel.
+  std::unique_ptr<TabStripServiceRegister> tab_strip_service_;
 
   // Vivaldi
   std::unique_ptr<vivaldi::SidePanelCoordinator> vivaldi_side_panel_coordinator_;

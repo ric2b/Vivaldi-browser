@@ -134,29 +134,25 @@ ExtensionFunction::ResponseAction DevtoolsPrivateToggleDevtoolsFunction::Run() {
     }
   } else {
     std::string host = net::GetHostOrSpecFromURL(current_tab->GetURL());
-    // Trying to inspect the Vivaldi app using shortcuts or the menu. We fake a
-    // inspect element to get into the code path that leads to a
-    // separate window.
+    content::WebContents* contents_to_inspect = current_tab;
     if (::vivaldi::IsVivaldiApp(host) || VIVALDI_WEBUI_URL_HOST == host) {
-      DevToolsWindow::InspectElement(
-          static_cast<VivaldiBrowserWindow*>(browser->window())
-              ->web_contents()
-              ->GetPrimaryMainFrame(),
-          0, 0);
-    } else {
-      if (panelType == PanelType::kDefault) {
-        DevToolsWindow::OpenDevToolsWindow(current_tab,
-            DevToolsToggleAction::Show(),
-            DevToolsOpenedByAction::kContextMenuInspect);
-      } else if (panelType == PanelType::kInspect) {
-        DevToolsWindow::OpenDevToolsWindow(current_tab,
-            DevToolsToggleAction::Inspect(),
-            DevToolsOpenedByAction::kContextMenuInspect);
-      } else if (panelType == PanelType::kConsole) {
-        DevToolsWindow::OpenDevToolsWindow(
-            current_tab, DevToolsToggleAction::ShowConsolePanel(),
-            DevToolsOpenedByAction::kContextMenuInspect);
-      }
+      // Trying to inspect the Vivaldi app using shortcuts or the menu.
+      // Use the UI web contents
+      contents_to_inspect =
+          static_cast<VivaldiBrowserWindow*>(browser->window())->web_contents();
+    }
+    if (panelType == PanelType::kDefault) {
+      DevToolsWindow::OpenDevToolsWindow(contents_to_inspect,
+          DevToolsToggleAction::Show(),
+          DevToolsOpenedByAction::kContextMenuInspect);
+    } else if (panelType == PanelType::kInspect) {
+      DevToolsWindow::OpenDevToolsWindow(contents_to_inspect,
+          DevToolsToggleAction::Inspect(),
+          DevToolsOpenedByAction::kContextMenuInspect);
+    } else if (panelType == PanelType::kConsole) {
+      DevToolsWindow::OpenDevToolsWindow(contents_to_inspect,
+          DevToolsToggleAction::ShowConsolePanel(),
+          DevToolsOpenedByAction::kContextMenuInspect);
     }
   }
   return RespondNow(NoArguments());

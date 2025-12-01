@@ -35,11 +35,11 @@ import org.chromium.chrome.browser.sync.SyncServiceFactory;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.toolbar.ButtonData;
-import org.chromium.chrome.browser.toolbar.ButtonData.ButtonSpec;
-import org.chromium.chrome.browser.toolbar.ButtonDataImpl;
-import org.chromium.chrome.browser.toolbar.ButtonDataProvider;
 import org.chromium.chrome.browser.toolbar.adaptive.AdaptiveToolbarButtonVariant;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonData.ButtonSpec;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonDataImpl;
+import org.chromium.chrome.browser.toolbar.optional_button.ButtonDataProvider;
 import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig;
 import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.NoAccountSigninMode;
 import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.WithAccountSigninMode;
@@ -85,8 +85,8 @@ public class IdentityDiscController
     // ProfileDataCache facilitates retrieving profile picture.
     private ProfileDataCache mProfileDataCache;
 
-    private ButtonDataImpl mButtonData;
-    private ObserverList<ButtonDataObserver> mObservers = new ObserverList<>();
+    private final ButtonDataImpl mButtonData;
+    private final ObserverList<ButtonDataObserver> mObservers = new ObserverList<>();
     private boolean mNativeIsInitialized;
 
     private boolean mIsTabNtp;
@@ -121,8 +121,7 @@ public class IdentityDiscController
                                 R.string.iph_identity_disc_accessibility_text),
                         /* isEnabled= */ true,
                         AdaptiveToolbarButtonVariant.UNKNOWN,
-                        /* tooltipTextResId= */ Resources.ID_NULL,
-                        /* showBackgroundHighlight= */ true);
+                        /* tooltipTextResId= */ Resources.ID_NULL);
     }
 
     /** Registers itself to observe sign-in and sync status events. */
@@ -192,7 +191,6 @@ public class IdentityDiscController
                 AdaptiveToolbarButtonVariant.UNKNOWN,
                 buttonSpec.getActionChipLabelResId(),
                 buttonSpec.getHoverTooltipTextId(),
-                buttonSpec.shouldShowBackgroundHighlight(),
                 /* hasErrorBadge= */ mIdentityError != SyncError.NO_ERROR);
     }
 
@@ -400,13 +398,19 @@ public class IdentityDiscController
         String userName = profileData.getFullName();
         if (profileData.hasDisplayableEmailAddress()) {
             return mContext.getString(
-                    R.string.accessibility_toolbar_btn_identity_disc_with_name_and_email,
+                    mIdentityError == SyncError.NO_ERROR
+                            ? R.string.accessibility_toolbar_btn_identity_disc_with_name_and_email
+                            : R.string
+                                    .accessibility_toolbar_btn_identity_disc_error_with_name_and_email,
                     userName,
                     email);
         }
 
         return mContext.getString(
-                R.string.accessibility_toolbar_btn_identity_disc_with_name, userName);
+                mIdentityError == SyncError.NO_ERROR
+                        ? R.string.accessibility_toolbar_btn_identity_disc_with_name
+                        : R.string.accessibility_toolbar_btn_identity_disc_error_with_name,
+                userName);
     }
 
     private boolean isProfileInitialized() {

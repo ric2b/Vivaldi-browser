@@ -186,12 +186,17 @@ BASE_FEATURE(kReadAnythingPermanentAccessibility,
              base::FEATURE_DISABLED_BY_DEFAULT);
 #endif
 
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // When this feature is enabled, Chrome will register os_update_handler with
 // Omaha, to be run on OS upgrade.
-#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 BASE_FEATURE(kRegisterOsUpdateHandlerWin,
              "RegisterOsUpdateHandlerWin",
              base::FEATURE_ENABLED_BY_DEFAULT);
+// When this feature is enabled, Chrome will install the
+// platform_experience_helper.
+BASE_FEATURE(kInstallPlatformExperienceHelperWin,
+             "InstallPlatformExperienceHelperWin",
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 // When this feature is enabled, the network service will restart unsandboxed if
@@ -238,7 +243,7 @@ BASE_FEATURE(kSecretPortalKeyProviderUseForEncryption,
 // FreedesktopSecretKeyProvider. Otherwise, it will only decrypt existing data.
 BASE_FEATURE(kUseFreedesktopSecretKeyProviderForEncryption,
              "UseFreedesktopSecretKeyProviderForEncryption",
-             base::FEATURE_ENABLED_BY_DEFAULT);
+             base::FEATURE_DISABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_LINUX)
 
 // Enables migration of the network context data from `unsandboxed_data_path` to
@@ -257,11 +262,9 @@ BASE_FEATURE(kTriggerNetworkDataMigration,
 // If disabled, the blue border is not used on ChromeOS.
 //
 // Motivation:
-//  The blue border behavior used to cause problems on ChromeOS - see
-//  crbug.com/1320262 for Ash (fixed) and crbug.com/1030925 for Lacros
-//  (relatively old bug - we would like to observe whether it's still
-//  there). This flag is introduced as means of disabling this feature in case
-//  of possible future regressions.
+//  The blue border behavior used to (still does, see below) cause problems on
+//  ChromeOS - see crbug.com/1320262 (fixed). This flag is introduced as means
+//  of disabling this feature in case of possible future regressions.
 //
 // TODO(crbug.com/40198577): Remove this flag once we confirm that blue border
 // works fine on ChromeOS.
@@ -328,6 +331,11 @@ const base::FeatureParam<base::TimeDelta>
     kNoPreReadMainDllStartup_StartupDuration{&kNoPreReadMainDllStartup,
                                              "no-preread-dll-startup-time",
                                              base::Minutes(2)};
+
+// When enabled, the browser process will re-launch itself when launched with
+// an elevated linked token. The re-launched browser will use the token from
+// the Windows Shell (explorer.exe), which is typically non-elevated.
+BASE_FEATURE(kAutoDeElevate, "AutoDeElevate", base::FEATURE_ENABLED_BY_DEFAULT);
 #endif  // BUILDFLAG(IS_WIN)
 
 #if !BUILDFLAG(IS_ANDROID)

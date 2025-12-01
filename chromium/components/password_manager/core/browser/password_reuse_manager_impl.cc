@@ -22,7 +22,6 @@
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/password_manager/core/browser/password_reuse_manager_signin_notifier.h"
-#include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/signin/public/base/consent_level.h"
@@ -51,10 +50,6 @@ constexpr char kLoginAccountIdentifier[] = "Login.accountIdentifier";
 constexpr char kLoginHashedPassword[] = "Login.hashedPassword";
 constexpr char kLoginSalt[] = "Login.salt";
 #endif
-
-bool IsPasswordReuseDetectionEnabled() {
-  return base::FeatureList::IsEnabled(features::kPasswordReuseDetectionEnabled);
-}
 
 // Represents a single CheckReuse() request. Implements functionality to
 // listen to reuse events and propagate them to |consumer| on the sequence on
@@ -124,17 +119,12 @@ PasswordReuseManagerImpl::PasswordReuseManagerImpl() = default;
 PasswordReuseManagerImpl::~PasswordReuseManagerImpl() = default;
 
 void PasswordReuseManagerImpl::Shutdown() {
-  if (profile_store_) {
-    profile_store_->RemoveObserver(this);
-    profile_store_.reset();
-  }
-  if (account_store_) {
-    account_store_->RemoveObserver(this);
-    profile_store_.reset();
-  }
-  if (identity_manager_) {
-    identity_manager_->RemoveObserver(this);
-  }
+  profile_store_observation_.Reset();
+  profile_store_.reset();
+  account_store_observation_.Reset();
+  account_store_.reset();
+  identity_manager_observation_.Reset();
+  identity_manager_ = nullptr;
   if (notifier_) {
     notifier_->UnsubscribeFromSigninEvents();
   }
@@ -160,15 +150,11 @@ void PasswordReuseManagerImpl::Init(
 #if BUILDFLAG(IS_ANDROID)
   if (shared_pref_delegate) {
     shared_pref_delegate_ = std::move(shared_pref_delegate);
-    identity_manager_->AddObserver(this);
+    identity_manager_observation_.Observe(identity_manager_);
   }
 #endif
   main_task_runner_ = base::SequencedTaskRunner::GetCurrentDefault();
   DCHECK(main_task_runner_);
-
-  if (!IsPasswordReuseDetectionEnabled()) {
-    return;
-  }
 
   background_task_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
@@ -224,7 +210,7 @@ void PasswordReuseManagerImpl::CheckReuse(
 }
 
 void PasswordReuseManagerImpl::PreparePasswordHashData(
-    metrics_util::SignInState sign_in_state_for_metrics) {
+    std::optional<metrics_util::SignInState> sign_in_state_for_metrics) {
   DCHECK(main_task_runner_->RunsTasksInCurrentSequence());
   SchedulePasswordHashUpdate(sign_in_state_for_metrics);
   ScheduleEnterprisePasswordURLUpdate();
@@ -403,11 +389,11 @@ void PasswordReuseManagerImpl::ScheduleEnterprisePasswordURLUpdate() {
 }
 
 void PasswordReuseManagerImpl::RequestLoginsFromStores() {
-  profile_store_->AddObserver(this);
+  profile_store_observation_.Observe(profile_store_.get());
   profile_store_->GetAutofillableLogins(
       /*consumer=*/weak_ptr_factory_.GetWeakPtr());
   if (account_store_) {
-    account_store_->AddObserver(this);
+    account_store_observation_.Observe(account_store_.get());
     account_store_->GetAutofillableLogins(
         /*consumer=*/weak_ptr_factory_.GetWeakPtr());
     // base::Unretained() is safe because `this` outlives the subscription.
@@ -536,9 +522,6 @@ void PasswordReuseManagerImpl::OnPrimaryAccountChanged(
 void PasswordReuseManagerImpl::MaybeSavePasswordHash(
     const PasswordForm* submitted_form,
     PasswordManagerClient* client) {
-  if (!base::FeatureList::IsEnabled(features::kPasswordReuseDetectionEnabled)) {
-    return;
-  }
   // When |username_value| is empty, it's not clear whether the submitted
   // credentials are really Gaia or enterprise credentials. Don't save
   // password hash in that case.

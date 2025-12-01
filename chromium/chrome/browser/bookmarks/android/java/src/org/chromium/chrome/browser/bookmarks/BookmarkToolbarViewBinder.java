@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.bookmarks;
 
+import org.chromium.build.annotations.NullMarked;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -12,6 +13,7 @@ import org.chromium.build.BuildConfig;
 // End Vivaldi
 
 /** Responsible for binding properties to BookmarkToolbar views. */
+@NullMarked
 class BookmarkToolbarViewBinder {
     /** Binds the given property to the given model for the given view. */
     public static void bind(PropertyModel model, BookmarkToolbar bookmarkToolbar, PropertyKey key) {
@@ -81,6 +83,9 @@ class BookmarkToolbarViewBinder {
         } else if (key == BookmarkToolbarProperties.SELECTION_MODE_SHOW_MARK_UNREAD) {
             bookmarkToolbar.setSelectionShowMarkUnread(
                     model.get(BookmarkToolbarProperties.SELECTION_MODE_SHOW_MARK_UNREAD));
+        } else if (key == BookmarkToolbarProperties.NEXT_FOCUSABLE_VIEW) {
+            bookmarkToolbar.setNextFocusableView(
+                    model.get(BookmarkToolbarProperties.NEXT_FOCUSABLE_VIEW));
         } /*Vivaldi*/ else if (key == BookmarkToolbarProperties.SORT_BUTTON_VISIBLE) {
             bookmarkToolbar.setSortButtonVisible(
                     model.get(BookmarkToolbarProperties.SORT_BUTTON_VISIBLE));

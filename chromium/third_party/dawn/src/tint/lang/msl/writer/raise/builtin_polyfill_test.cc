@@ -1746,8 +1746,7 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureGather_2d_WithOffset) {
 }
 
 TEST_F(MslWriter_BuiltinPolyfillTest, TextureGather_Depth2d) {
-    auto* t =
-        b.FunctionParam("t", ty.Get<core::type::DepthTexture>(core::type::TextureDimension::k2d));
+    auto* t = b.FunctionParam("t", ty.depth_texture(core::type::TextureDimension::k2d));
     auto* s = b.FunctionParam("s", ty.sampler());
     auto* coords = b.FunctionParam("coords", ty.vec2<f32>());
     auto* func = b.Function("foo", ty.vec4<f32>());
@@ -1782,8 +1781,7 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureGather_Depth2d) {
 }
 
 TEST_F(MslWriter_BuiltinPolyfillTest, TextureGatherCompare) {
-    auto* t =
-        b.FunctionParam("t", ty.Get<core::type::DepthTexture>(core::type::TextureDimension::k2d));
+    auto* t = b.FunctionParam("t", ty.depth_texture(core::type::TextureDimension::k2d));
     auto* s = b.FunctionParam("s", ty.comparison_sampler());
     auto* coords = b.FunctionParam("coords", ty.vec2<f32>());
     auto* depth = b.FunctionParam("depth", ty.f32());
@@ -2228,8 +2226,8 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureNumLevels) {
 }
 
 TEST_F(MslWriter_BuiltinPolyfillTest, TextureNumSamples) {
-    auto* t = b.FunctionParam(
-        "t", ty.Get<core::type::MultisampledTexture>(core::type::TextureDimension::k2d, ty.f32()));
+    auto* t =
+        b.FunctionParam("t", ty.multisampled_texture(core::type::TextureDimension::k2d, ty.f32()));
     auto* func = b.Function("foo", ty.u32());
     func->SetParams({t});
     b.Append(func->Block(), [&] {
@@ -2374,8 +2372,7 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureSampleBias_Array) {
 }
 
 TEST_F(MslWriter_BuiltinPolyfillTest, TextureSampleCompare) {
-    auto* t =
-        b.FunctionParam("t", ty.Get<core::type::DepthTexture>(core::type::TextureDimension::k2d));
+    auto* t = b.FunctionParam("t", ty.depth_texture(core::type::TextureDimension::k2d));
     auto* s = b.FunctionParam("s", ty.comparison_sampler());
     auto* coords = b.FunctionParam("coords", ty.vec2<f32>());
     auto* depth = b.FunctionParam("depth", ty.f32());
@@ -2411,8 +2408,7 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureSampleCompare) {
 }
 
 TEST_F(MslWriter_BuiltinPolyfillTest, TextureSampleCompareLevel) {
-    auto* t =
-        b.FunctionParam("t", ty.Get<core::type::DepthTexture>(core::type::TextureDimension::k2d));
+    auto* t = b.FunctionParam("t", ty.depth_texture(core::type::TextureDimension::k2d));
     auto* s = b.FunctionParam("s", ty.comparison_sampler());
     auto* coords = b.FunctionParam("coords", ty.vec2<f32>());
     auto* depth = b.FunctionParam("depth", ty.f32());
@@ -2450,8 +2446,7 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureSampleCompareLevel) {
 }
 
 TEST_F(MslWriter_BuiltinPolyfillTest, TextureSampleCompareLevel_WithOffset) {
-    auto* t =
-        b.FunctionParam("t", ty.Get<core::type::DepthTexture>(core::type::TextureDimension::k2d));
+    auto* t = b.FunctionParam("t", ty.depth_texture(core::type::TextureDimension::k2d));
     auto* s = b.FunctionParam("s", ty.comparison_sampler());
     auto* coords = b.FunctionParam("coords", ty.vec2<f32>());
     auto* depth = b.FunctionParam("depth", ty.f32());
@@ -3078,7 +3073,7 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureStore_3d) {
 }
 
 // Test that we insert a fence after the store to ensure that it is ordered before the load.
-TEST_F(MslWriter_BuiltinPolyfillTest, TextureStoreToReadWriteBeforeLoad) {
+TEST_F(MslWriter_BuiltinPolyfillTest, TextureStoreToReadWriteBeforeAndAfterLoad) {
     auto format = core::TexelFormat::kRgba8Unorm;
     auto* texture_ty =
         ty.storage_texture(core::type::TextureDimension::k2d, format, core::Access::kReadWrite);
@@ -3088,17 +3083,20 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureStoreToReadWriteBeforeLoad) {
     auto* func = b.Function("foo", ty.vec4<f32>());
     func->SetParams({t, coords, value});
     b.Append(func->Block(), [&] {
+        auto* before = b.Call<vec4<f32>>(core::BuiltinFn::kTextureLoad, t, coords);
         b.Call<void>(core::BuiltinFn::kTextureStore, t, coords, value);
-        auto* result = b.Call<vec4<f32>>(core::BuiltinFn::kTextureLoad, t, coords);
-        b.Return(func, result);
+        auto* after = b.Call<vec4<f32>>(core::BuiltinFn::kTextureLoad, t, coords);
+        b.Return(func, b.Add<vec4<f32>>(before, after));
     });
 
     auto* src = R"(
 %foo = func(%t:texture_storage_2d<rgba8unorm, read_write>, %coords:vec2<i32>, %value:vec4<f32>):vec4<f32> {
   $B1: {
-    %5:void = textureStore %t, %coords, %value
-    %6:vec4<f32> = textureLoad %t, %coords
-    ret %6
+    %5:vec4<f32> = textureLoad %t, %coords
+    %6:void = textureStore %t, %coords, %value
+    %7:vec4<f32> = textureLoad %t, %coords
+    %8:vec4<f32> = add %5, %7
+    ret %8
   }
 }
 )";
@@ -3108,11 +3106,15 @@ TEST_F(MslWriter_BuiltinPolyfillTest, TextureStoreToReadWriteBeforeLoad) {
 %foo = func(%t:texture_storage_2d<rgba8unorm, read_write>, %coords:vec2<i32>, %value:vec4<f32>):vec4<f32> {
   $B1: {
     %5:vec2<u32> = convert %coords
-    %6:void = %t.write %value, %5
+    %6:vec4<f32> = %t.read %5
     %7:void = %t.fence
     %8:vec2<u32> = convert %coords
-    %9:vec4<f32> = %t.read %8
-    ret %9
+    %9:void = %t.write %value, %8
+    %10:void = %t.fence
+    %11:vec2<u32> = convert %coords
+    %12:vec4<f32> = %t.read %11
+    %13:vec4<f32> = add %6, %12
+    ret %13
   }
 }
 )";

@@ -241,7 +241,17 @@ PositionTemplate<Strategy> EndOfParagraphAlgorithm(
     }
     const ComputedStyle& style = layout_object->StyleRef();
     if (style.Visibility() != EVisibility::kVisible) {
-      next_node_iterator = nextNode();
+      if (RuntimeEnabledFeatures::
+              HandleDeletionAtStartAndEndBoundaryContainingHiddenElementEnabled()) {
+        // We should skip the children of hidden elements and
+        // place the position immediately after the anchor.
+        candidate_node = next_node_iterator;
+        candidate_type = PositionAnchorType::kAfterAnchor;
+        next_node_iterator =
+            Strategy::NextSkippingChildren(*next_node_iterator, start_block);
+      } else {
+        next_node_iterator = nextNode();
+      }
       continue;
     }
 
@@ -282,11 +292,6 @@ PositionTemplate<Strategy> EndOfParagraphAlgorithm(
     }
   }
 
-  // If start node is non-editable and we have our candidate same as start node
-  // return the last position in start node.
-  if (!start_node_is_editable && candidate_node == start_node) {
-    candidate_type = PositionAnchorType::kAfterAnchor;
-  }
   if (candidate_type == PositionAnchorType::kOffsetInAnchor)
     return PositionTemplate<Strategy>(candidate_node, candidate_offset);
 

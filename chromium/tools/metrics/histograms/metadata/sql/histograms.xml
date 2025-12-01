@@ -30,6 +30,7 @@ chromium-metrics-reviews@google.com.
   <variant name="BackgroundRequestQueue" summary="BackgroundRequestQueue"/>
   <variant name="BrowsingTopics" summary="BrowsingTopics"/>
   <variant name="CdmStorage" summary="CdmStorage"/>
+  <variant name="Chromoting" summary="Chromoting"/>
   <variant name="CollaborationMessageStorage"
       summary="CollaborationMessageStorage"/>
   <variant name="Conversions" summary="Conversions"/>
@@ -136,19 +137,6 @@ chromium-metrics-reviews@google.com.
   <token key="DatabaseTag" variants="DatabaseTag"/>
 </histogram>
 
-<histogram name="Sql.Database.Success.SqliteOpenAttempts.{DatabaseTag}"
-    units="count" expires_after="2025-11-15">
-  <owner>anthonyvd@chromium.org</owner>
-  <owner>etienneb@chromium.org</owner>
-  <summary>
-    Records the total number of calls to sqlite3_open_v2 made to successfully
-    open the database. A value of one means that the first attempt succeeded.
-    Any other value indicates that one or more retries were needed. Recorded
-    once for each successful open of a database.
-  </summary>
-  <token key="DatabaseTag" variants="DatabaseTag"/>
-</histogram>
-
 <histogram name="Sql.Database.Success.SqliteOpenTime.{DatabaseTag}"
     units="microseconds" expires_after="2025-11-15">
   <owner>anthonyvd@chromium.org</owner>
@@ -172,7 +160,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sql.Recovery.Result.{DatabaseTag}" enum="SqlRecoveryResult"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>asully@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>
   <summary>
@@ -183,7 +171,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sql.Recovery.ResultCode" enum="SqliteLoggedResultCode"
-    expires_after="2025-09-15">
+    expires_after="2025-11-16">
   <owner>asully@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>
   <summary>
@@ -238,7 +226,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Sql.Statement.{DatabaseTag}.VMSteps" units="count"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>etienneb@chromium.org</owner>
   <owner>estade@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>
@@ -250,7 +238,7 @@ chromium-metrics-reviews@google.com.
   <token key="DatabaseTag" variants="DatabaseTag"/>
 </histogram>
 
-<histogram name="Sql.vfs.SyncTime" units="ms" expires_after="2025-08-24">
+<histogram name="Sql.vfs.SyncTime" units="ms" expires_after="2025-10-26">
   <owner>etienneb@chromium.org</owner>
   <owner>estade@chromium.org</owner>
   <owner>chrome-catan@google.com</owner>

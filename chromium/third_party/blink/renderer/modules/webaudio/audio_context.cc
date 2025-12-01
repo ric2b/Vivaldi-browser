@@ -83,10 +83,23 @@ enum class AudioContextOperation {
   kMaxValue = kDelete
 };
 
+// These values are persisted to logs. Entries should not be renumbered and
+// numeric values should never be reused.
+enum class AudioContextInterruptionType {
+  kPlayAttemptWhileFrameHidden = 0,
+  kFrameHiddenWhilePlaying = 1,
+  kMaxValue = kFrameHiddenWhilePlaying
+};
+
 void RecordAudioContextOperation(AudioContextOperation operation) {
   base::UmaHistogramEnumeration("WebAudio.AudioContext.Operation", operation);
 }
 
+void RecordMediaPlaybackInterruptionType(AudioContextInterruptionType type) {
+  base::UmaHistogramEnumeration(
+      "WebAudio.AudioContext.MediaPlaybackWhileNotVisible.InterruptionType",
+      type);
+}
 const char* LatencyCategoryToString(
     WebAudioLatencyHint::AudioContextLatencyCategory category) {
   switch (category) {
@@ -268,19 +281,25 @@ AudioContext::AudioContext(LocalDOMWindow& window,
       media_device_service_(&window),
       media_device_service_receiver_(this, &window),
       should_interrupt_when_frame_is_hidden_(
-          RuntimeEnabledFeatures::
-              MediaPlaybackWhileNotVisiblePermissionPolicyEnabled() &&
           RuntimeEnabledFeatures::AudioContextInterruptedStateEnabled() &&
-          !GetExecutionContext()->IsFeatureEnabled(
-              network::mojom::PermissionsPolicyFeature::
-                  kMediaPlaybackWhileNotVisible,
-              ReportOptions::kDoNotReport)),
+          !CanPlayWhileHidden()),
       player_id_(GetNextMediaPlayerId()),
       media_player_host_(&window),
       media_player_receiver_(this, &window),
       media_player_observer_(&window) {
   RecordAudioContextOperation(AudioContextOperation::kCreate);
   SendLogMessage(__func__, GetAudioContextLogString(latency_hint, sample_rate));
+
+  if (should_interrupt_when_frame_is_hidden_) {
+    // The "media-playback-while-not-visible" permission policy default value
+    // was overridden, which means that either this frame or an ancestor frame
+    // changed the permission policy's default value. This should only happen if
+    // the MediaPlaybackWhileNotVisiblePermissionPolicyEnabled runtime flag is
+    // enabled.
+    UseCounter::Count(
+        GetExecutionContext(),
+        WebFeature::kMediaPlaybackWhileNotVisiblePermissionPolicy);
+  }
 
   destination_node_ = RealtimeAudioDestinationNode::Create(
       this, sink_descriptor_, latency_hint, sample_rate,
@@ -453,6 +472,8 @@ ScriptPromise<IDLUndefined> AudioContext::resumeContext(
                           DOMExceptionCode::kInvalidStateError,
                           "Cannot resume an interrupted AudioContext."));
   } else if (is_frame_hidden_ && should_interrupt_when_frame_is_hidden_) {
+    RecordMediaPlaybackInterruptionType(
+        AudioContextInterruptionType::kPlayAttemptWhileFrameHidden);
     StartContextInterruption();
   }
 
@@ -814,19 +835,21 @@ bool AudioContext::IsAllowedToStart(bool should_suppress_warning) const {
       DCHECK(window->GetFrame()->IsCrossOriginToOutermostMainFrame());
       if (!should_suppress_warning) {
         window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-          mojom::ConsoleMessageSource::kOther,
-          mojom::ConsoleMessageLevel::kWarning,
-          "The AudioContext was not allowed to start. It must be resumed (or "
-          "created) from a user gesture event handler. https://goo.gl/7K7WLu"));
+            mojom::blink::ConsoleMessageSource::kOther,
+            mojom::blink::ConsoleMessageLevel::kWarning,
+            "The AudioContext was not allowed to start. It must be resumed (or "
+            "created) from a user gesture event handler. "
+            "https://developer.chrome.com/blog/autoplay/#web_audio"));
       }
       break;
     case AutoplayPolicy::Type::kDocumentUserActivationRequired:
       if (!should_suppress_warning) {
         window->AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
-          mojom::ConsoleMessageSource::kOther,
-          mojom::ConsoleMessageLevel::kWarning,
-          "The AudioContext was not allowed to start. It must be resumed (or "
-          "created) after a user gesture on the page. https://goo.gl/7K7WLu"));
+            mojom::blink::ConsoleMessageSource::kOther,
+            mojom::blink::ConsoleMessageLevel::kWarning,
+            "The AudioContext was not allowed to start. It must be resumed (or "
+            "created) after a user gesture on the page. "
+            "https://developer.chrome.com/blog/autoplay/#web_audio"));
       }
       break;
   }
@@ -1282,6 +1305,8 @@ void AudioContext::FrameVisibilityChanged(
   }
 
   if (is_frame_hidden_) {
+    RecordMediaPlaybackInterruptionType(
+        AudioContextInterruptionType::kFrameHiddenWhilePlaying);
     // The frame is not rendered, so the audio context should be suspended.
     StartContextInterruption();
   } else {
@@ -1421,17 +1446,24 @@ void AudioContext::HandleRenderError() {
 
   // Implements
   // https://webaudio.github.io/web-audio-api/#error-handling-on-a-running-audio-context
-  if (ContextState() == V8AudioContextState::Enum::kRunning) {
-    // TODO(https://crbug.com/353641602): starting or stopping the renderer
-    // should happen on the render thread, but this is the current convention.
-    destination()->GetAudioDestinationHandler().StopRendering();
+  switch (ContextState()) {
+    case V8AudioContextState::Enum::kRunning:
+    case V8AudioContextState::Enum::kInterrupted:
+      // TODO(https://crbug.com/353641602): starting or stopping the renderer
+      // should happen on the render thread, but this is the current convention.
+      destination()->GetAudioDestinationHandler().StopRendering();
 
-    DispatchEvent(*Event::Create(event_type_names::kError));
-    suspended_by_user_ = false;
-    SetContextState(V8AudioContextState::Enum::kSuspended);
-  } else if (ContextState() == V8AudioContextState::Enum::kSuspended) {
-    DispatchEvent(*Event::Create(event_type_names::kError));
+      DispatchEvent(*Event::Create(event_type_names::kError));
+      suspended_by_user_ = false;
+      SetContextState(V8AudioContextState::Enum::kSuspended);
+      return;
+    case V8AudioContextState::Enum::kSuspended:
+      DispatchEvent(*Event::Create(event_type_names::kError));
+      return;
+    case V8AudioContextState::Enum::kClosed:
+      return;
   }
+  NOTREACHED();
 }
 
 void AudioContext::invoke_onrendererror_from_platform_for_testing() {
@@ -1484,6 +1516,13 @@ void AudioContext::OnMediaPlayerDisconnect() {
   media_player_host_.reset();
   media_player_observer_.reset();
   volume_multiplier_ = 1.0;
+}
+
+bool AudioContext::CanPlayWhileHidden() const {
+  return GetExecutionContext()->IsFeatureEnabled(
+      network::mojom::blink::PermissionsPolicyFeature::
+          kMediaPlaybackWhileNotVisible,
+      ReportOptions::kDoNotReport);
 }
 
 }  // namespace blink

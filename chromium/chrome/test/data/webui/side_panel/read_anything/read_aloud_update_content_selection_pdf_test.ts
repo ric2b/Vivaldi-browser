@@ -4,14 +4,16 @@
 import 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 
 import type {AppElement} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
-import {PauseActionSource} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
+import {SpeechBrowserProxyImpl, SpeechController, ToolbarEvent} from 'chrome-untrusted://read-anything-side-panel.top-chrome/read_anything.js';
 import {assertEquals, assertFalse, assertTrue} from 'chrome-untrusted://webui-test/chai_assert.js';
 import {microtasksFinished} from 'chrome-untrusted://webui-test/test_util.js';
 
-import {createApp, playFromSelectionWithMockTimer} from './common.js';
+import {createApp, emitEvent, playFromSelectionWithMockTimer} from './common.js';
+import {TestSpeechBrowserProxy} from './test_speech_browser_proxy.js';
 
 suite('ReadAloud_UpdateContentSelectionPDF', () => {
   let app: AppElement;
+  let speechController: SpeechController;
 
   // Similar to read_aloud_update_content_selection, but this tree uses
   // negative values, as some node ids, such as those for PDFs, may be negative.
@@ -87,6 +89,9 @@ suite('ReadAloud_UpdateContentSelectionPDF', () => {
     // ReadAnythingAppController, onConnected creates mojo pipes to connect to
     // the rest of the Read Anything feature, which we are not testing here.
     chrome.readingMode.onConnected = () => {};
+    SpeechBrowserProxyImpl.setInstance(new TestSpeechBrowserProxy());
+    speechController = new SpeechController();
+    SpeechController.setInstance(speechController);
 
     app = await createApp();
     document.onselectionchange = () => {};
@@ -95,10 +100,10 @@ suite('ReadAloud_UpdateContentSelectionPDF', () => {
   });
 
   test('inner html of container matches expected html', () => {
-    assertFalse(app.speechPlayingState.isSpeechActive);
-    assertFalse(app.speechPlayingState.hasSpeechBeenTriggered);
+    assertFalse(speechController.isSpeechActive());
+    assertFalse(speechController.hasSpeechBeenTriggered());
     // isSpeechTreeInitialized set in updateContent
-    assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
+    assertTrue(speechController.isSpeechTreeInitialized());
     // The expected HTML before any highlights are added.
     const expected = '<div><p>World</p><p>Friend!</p></div>';
     const innerHTML = app.$.container.innerHTML;
@@ -128,8 +133,8 @@ suite('ReadAloud_UpdateContentSelectionPDF', () => {
     });
 
     test('inner html of container matches expected html', () => {
-      assertTrue(app.speechPlayingState.isSpeechActive);
-      assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
+      assertTrue(speechController.isSpeechActive());
+      assertTrue(speechController.isSpeechTreeInitialized());
       // The expected HTML with the current highlights.
       const expected = '<div><p><span class="parent-of-highlight">' +
           '<span class="current-read-highlight">World</span>' +
@@ -148,6 +153,7 @@ suite('ReadAloud_UpdateContentSelectionPDF', () => {
     });
 
     test('container class correct', () => {
+      assertTrue(speechController.isSpeechActive());
       assertEquals(
           'user-select-disabled-when-speech-active-true',
           app.$.container.className);
@@ -158,12 +164,12 @@ suite('ReadAloud_UpdateContentSelectionPDF', () => {
   suite('While Read Aloud paused', () => {
     setup(() => {
       playFromSelectionWithMockTimer(app);
-      app.stopSpeech(PauseActionSource.BUTTON_CLICK);
+      emitEvent(app, ToolbarEvent.PLAY_PAUSE);
       return microtasksFinished();
     });
     test('inner html of container matches expected html', () => {
-      assertFalse(app.speechPlayingState.isSpeechActive);
-      assertTrue(app.speechPlayingState.isSpeechTreeInitialized);
+      assertFalse(speechController.isSpeechActive());
+      assertTrue(speechController.isSpeechTreeInitialized());
       // The expected HTML with the current highlights.
       const expected = '<div><p><span class="parent-of-highlight">' +
           '<span class="current-read-highlight">World</span>' +

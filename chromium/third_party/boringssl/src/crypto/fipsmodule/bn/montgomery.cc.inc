@@ -245,21 +245,13 @@ static int BN_from_montgomery_word(BIGNUM *ret, BIGNUM *r,
 
 int BN_from_montgomery(BIGNUM *r, const BIGNUM *a, const BN_MONT_CTX *mont,
                        BN_CTX *ctx) {
-  int ret = 0;
-  BIGNUM *t;
-
-  BN_CTX_start(ctx);
-  t = BN_CTX_get(ctx);
+  bssl::BN_CTXScope scope(ctx);
+  BIGNUM *t = BN_CTX_get(ctx);
   if (t == NULL || !BN_copy(t, a)) {
-    goto err;
+    return 0;
   }
 
-  ret = BN_from_montgomery_word(r, t, mont);
-
-err:
-  BN_CTX_end(ctx);
-
-  return ret;
+  return BN_from_montgomery_word(r, t, mont);
 }
 
 int bn_one_to_montgomery(BIGNUM *r, const BN_MONT_CTX *mont, BN_CTX *ctx) {
@@ -286,34 +278,28 @@ static int bn_mod_mul_montgomery_fallback(BIGNUM *r, const BIGNUM *a,
                                           const BIGNUM *b,
                                           const BN_MONT_CTX *mont,
                                           BN_CTX *ctx) {
-  int ret = 0;
-
-  BN_CTX_start(ctx);
+  bssl::BN_CTXScope scope(ctx);
   BIGNUM *tmp = BN_CTX_get(ctx);
   if (tmp == NULL) {
-    goto err;
+    return 0;
   }
 
   if (a == b) {
     if (!bn_sqr_consttime(tmp, a, ctx)) {
-      goto err;
+      return 0;
     }
   } else {
     if (!bn_mul_consttime(tmp, a, b, ctx)) {
-      goto err;
+      return 0;
     }
   }
 
   // reduce from aRR to aR
   if (!BN_from_montgomery_word(r, tmp, mont)) {
-    goto err;
+    return 0;
   }
 
-  ret = 1;
-
-err:
-  BN_CTX_end(ctx);
-  return ret;
+  return 1;
 }
 
 int BN_mod_mul_montgomery(BIGNUM *r, const BIGNUM *a, const BIGNUM *b,

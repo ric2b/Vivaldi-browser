@@ -68,12 +68,18 @@ class TabGroupChangeNotifier
                               tab_groups::TriggerSource source,
                               bool is_selected) = 0;
     // A tab has been updated.
-    virtual void OnTabUpdated(const tab_groups::SavedTabGroupTab& updated_tab,
+    virtual void OnTabUpdated(const tab_groups::SavedTabGroupTab& before,
+                              const tab_groups::SavedTabGroupTab& after,
                               tab_groups::TriggerSource source,
                               bool is_selected) = 0;
     // A tab was selected or deselected.
     virtual void OnTabSelectionChanged(const tab_groups::LocalTabID& tab_id,
                                        bool is_selected) = 0;
+
+    // A tab is "seen" by a local device or other device. On desktop
+    // platforms this is called when the tab enters the active state.
+    virtual void OnTabLastSeenTimeChanged(const base::Uuid& tab_id,
+                                          tab_groups::TriggerSource source) = 0;
   };
 
   ~TabGroupChangeNotifier() override;

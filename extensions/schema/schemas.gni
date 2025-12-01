@@ -17,6 +17,7 @@ schema_sources = [
   "context_menu.json",
   "devtools_private.json",
   "direct_match.json",
+  "doh_functions.json",
   "editcommand.json",
   "history_private.json",
   "omnibox_private.json",

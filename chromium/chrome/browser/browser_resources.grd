@@ -130,7 +130,8 @@
         <include name="IDR_DEVICE_EMULATOR_SHARED_STYLES_JS" file="${root_gen_dir}\chrome\browser\resources\chromeos\emulator\shared_styles.js" use_base_dir="false"  type="BINDATA" />
         <if expr="_google_chrome">
           <then>
-            <include name="IDR_GOOGLE_XKB_MANIFEST" file="resources\chromeos\input_method\google_xkb_manifest.json" type="BINDATA" />
+            <include name="IDR_GOOGLE_XKB_MANIFEST" file="${root_gen_dir}\chrome\browser\resources\chromeos\input_method\google_xkb_manifest.json" use_base_dir="false" type="BINDATA" />
+            <include name="IDR_GOOGLE_XKB_MANIFEST_V3" file="${root_gen_dir}\chrome\browser\resources\chromeos\input_method\google_xkb_manifest_v3.json" use_base_dir="false" type="BINDATA" />
           </then>
           <else>
             <include name="IDR_XKB_MANIFEST" file="resources\chromeos\input_method\xkb_manifest.json" type="BINDATA" />
@@ -215,7 +216,6 @@
 
         <include name="IDR_CHROME_URLS_DISABLED_PAGE_HTML" file="resources\chromeos\chrome_urls_disabled_page\app.html" type="BINDATA" />
         <include name="IDR_ECHO_MANIFEST" file="resources\chromeos\echo\manifest.json" type="BINDATA" />
-        <include name="IDR_INCOGNITO_NAVIGATION_BLOCKED_PAGE_HTML" file="resources\chromeos\enterprise\incognito_navigation_blocked_page\incognito_blocked.html" flattenhtml="true" type="BINDATA" />
       </if>
       <if expr="_google_chrome">
         <include name="IDR_PREF_HASH_SEED_BIN" file="resources\settings\internal\pref_hash_seed.bin" type="BINDATA" />
@@ -224,6 +224,7 @@
       <if expr="not is_android or enable_extensions_core">
         <!-- Page not available for guest. -->
         <include name="IDR_PAGE_NOT_AVAILABLE_FOR_GUEST_APP_HTML" file="resources\page_not_available_for_guest\app.html" type="BINDATA" />
+        <include name="IDR_INCOGNITO_NAVIGATION_BLOCKED_PAGE_HTML" file="resources\enterprise\incognito_navigation_blocked_page\incognito_blocked.html" flattenhtml="true" type="BINDATA" />
       </if>
       <if expr="not is_android">
         <include name="IDR_IME_WINDOW_CLOSE" file="resources\input_ime\ime_window_close.png" type="BINDATA" />
@@ -233,7 +234,6 @@
         <part file="ui/views/webid/resources/webid_resources.grdp" />
       </if>
       <if expr="chrome_root_store_cert_management_ui">
-        <include name="IDR_CERT_MANAGER_DIALOG_HTML" file="resources\certificate_manager\certificate_manager_dialog.html" type="BINDATA" />
         <include name="IDR_CERT_MANAGER_DIALOG_V2_HTML" file="resources\certificate_manager\certificate_manager_dialog_v2.html" type="BINDATA" />
       </if>
     </includes>

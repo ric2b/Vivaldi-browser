@@ -103,10 +103,10 @@ optimization_guide::AqaResponseParser::Result ParseAqaResponse(
 
 namespace optimization_guide {
 
-AqaResponseParser::AqaResponseParser(
-    const proto::OnDeviceModelExecutionOutputConfig& config)
-    : config_(config) {}
-AqaResponseParser::~AqaResponseParser() = default;
+// static
+bool AqaResponseParser::CanParse(std::string_view proto_type) {
+  return proto_type == "optimization_guide.proto.HistoryAnswerResponse";
+}
 
 void AqaResponseParser::ParseAsync(const std::string& redacted_output,
                                    ResultCallback result_callback) const {
@@ -116,18 +116,6 @@ void AqaResponseParser::ParseAsync(const std::string& redacted_output,
 bool AqaResponseParser::SuppressParsingIncompleteResponse() const {
   // AQA can only parse complete responses.
   return true;
-}
-
-AqaResponseParserFactory::AqaResponseParserFactory() = default;
-AqaResponseParserFactory::~AqaResponseParserFactory() = default;
-
-std::unique_ptr<ResponseParser> AqaResponseParserFactory::CreateParser(
-    const proto::OnDeviceModelExecutionOutputConfig& config) {
-  // Can only parse to HistoryAnswerResponse.
-  if (config.proto_type() != "optimization_guide.proto.HistoryAnswerResponse") {
-    return nullptr;
-  }
-  return std::make_unique<AqaResponseParser>(config);
 }
 
 }  // namespace optimization_guide

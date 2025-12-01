@@ -43,9 +43,12 @@
 #include "net/base/load_flags.h"
 #include "net/http/http_request_headers.h"
 #include "third_party/blink/public/common/client_hints/enabled_client_hints.h"
-#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/navigation/preloading_headers.h"
 #include "url/origin.h"
+
+#if BUILDFLAG(IS_ANDROID)
+#include "base/strings/stringprintf.h"
+#endif
 
 namespace content {
 
@@ -522,9 +525,6 @@ bool PrerenderHost::StartPrerendering() {
 }
 
 void PrerenderHost::DidStartNavigation(NavigationHandle* navigation_handle) {
-  CHECK(base::FeatureList::IsEnabled(
-      blink::features::kPrerender2MainFrameNavigation));
-
   auto* navigation_request = NavigationRequest::From(navigation_handle);
   CHECK(navigation_request->IsInPrerenderedMainFrame());
 
@@ -572,7 +572,7 @@ void PrerenderHost::ReadyToCommitNavigation(
   // ReadyToCommitNavigation is called when the headers are received.
   were_headers_received_ = true;
   for (auto& observer : observers_) {
-    observer.OnHeadersReceived();
+    observer.OnHeadersReceived(*navigation_handle);
   }
 }
 
@@ -1228,7 +1228,6 @@ void PrerenderHost::SetFailureReason(
     case PrerenderFinalStatus::kInvalidSchemeRedirect:
     case PrerenderFinalStatus::kInvalidSchemeNavigation:
     case PrerenderFinalStatus::kNavigationRequestBlockedByCsp:
-    case PrerenderFinalStatus::kMainFrameNavigation:
     case PrerenderFinalStatus::kMojoBinderPolicy:
     case PrerenderFinalStatus::kRendererProcessCrashed:
     case PrerenderFinalStatus::kRendererProcessKilled:
@@ -1495,8 +1494,7 @@ void PrerenderHost::OnWaitingForHeadersFinished(
 }
 
 bool PrerenderHost::ShouldAbortNavigationBecausePrefetchUnavailable() const {
-  CHECK(base::FeatureList::IsEnabled(
-      features::kPrerender2FallbackPrefetchSpecRules));
+  CHECK(features::UsePrefetchPrerenderIntegration());
 
   auto is_prefetch_used =
       [](const std::optional<PrefetchStatus>& prefetch_status) -> bool {

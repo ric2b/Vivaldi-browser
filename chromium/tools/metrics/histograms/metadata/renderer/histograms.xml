@@ -51,7 +51,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Renderer.BrowserLaunchToRunLoopStart" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>sky@chromium.org</owner>
   <owner>jam@chromium.org</owner>
   <summary>
@@ -141,7 +141,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.CriticalFonts.CriticalFontDelay" units="ms"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -154,7 +154,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.CriticalFonts.PreloadedFontsLoadTime" units="ms"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>iclelland@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -277,7 +277,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.DomContentLoaded" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -289,7 +289,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.DomContentLoaded.Style" units="ms"
-    expires_after="2025-05-11">
+    expires_after="2025-11-08">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -301,7 +301,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.FCP" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -313,7 +313,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.PrimaryFont.FCP.Style" units="ms"
-    expires_after="2025-05-11">
+    expires_after="2025-11-08">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -325,7 +325,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.SystemFallback.DomContentLoaded" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -340,7 +340,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Font.SystemFallback.FCP" units="ms"
-    expires_after="2025-09-14">
+    expires_after="2025-11-16">
   <owner>kojii@chromium.org</owner>
   <owner>tkent@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
@@ -352,7 +352,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.HungRendererDialog.UserAction"
-    enum="HungRendererDialogUserAction" expires_after="2025-07-28">
+    enum="HungRendererDialogUserAction" expires_after="2025-10-26">
   <owner>kerenzhu@chromium.org</owner>
   <owner>chrome-views-alerts@google.com</owner>
   <summary>
@@ -430,14 +430,14 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Layout.TextWrapBalance" units="ms"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>kojii@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>The time spent to balance lines of paragraphs.</summary>
 </histogram>
 
 <histogram name="Renderer.Layout.TextWrapPretty" units="ms"
-    expires_after="2025-07-27">
+    expires_after="2025-09-28">
   <owner>kojii@chromium.org</owner>
   <owner>layout-dev@chromium.org</owner>
   <summary>The time spent to optimize line breaks.</summary>
@@ -455,7 +455,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.PaintPreview.Capture.MainFrameSuccess"
-    enum="BooleanSuccess" expires_after="2025-08-10">
+    enum="BooleanSuccess" expires_after="2025-10-12">
   <owner>ckitagawa@chromium.org</owner>
   <owner>fredmello@chromium.org</owner>
   <owner>chrome-fdt@google.com</owner>
@@ -500,7 +500,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Preload.UnusedResource2{Trigger}" enum="ResourceType"
-    expires_after="2025-08-10">
+    expires_after="2025-10-12">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -518,7 +518,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Preload.UnusedResourceCount" units="count"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>sisidovski@chromium.org</owner>
   <owner>chrome-loading@google.com</owner>
   <summary>
@@ -529,7 +529,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.ProcessLifetime3{RendererHostedContentType}"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>fdoray@chromium.org</owner>
   <owner>olivierli@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
@@ -554,7 +554,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.RenderThreadImpl.Init" units="ms"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>jam@chromium.org</owner>
   <owner>sky@chromium.org</owner>
   <summary>
@@ -564,7 +564,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="Renderer.Unresponsive.Reason{WidgetVisibility}"
-    enum="RendererIsUnresponsiveReason" expires_after="2025-08-10">
+    enum="RendererIsUnresponsiveReason" expires_after="2025-10-12">
   <owner>pmonette@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -590,7 +590,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="Renderer.Unresponsive.{UIElementVisible}.RenderProcessHostPriority"
-    enum="RenderProcessHostPriority" expires_after="2025-08-10">
+    enum="RenderProcessHostPriority" expires_after="2025-10-12">
   <owner>pmonette@chromium.org</owner>
   <owner>catan-team@chromium.org</owner>
   <summary>
@@ -605,7 +605,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RendererScheduler.DiscreteInputResponseDuration" units="ms"
-    expires_after="2025-08-31">
+    expires_after="2025-11-02">
   <owner>shaseley@chromium.org</owner>
   <owner>speed-metrics-dev@chromium.org</owner>
   <summary>
@@ -614,7 +614,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="RendererScheduler.QueueingDuration.{Priority}Priority"
-    units="microseconds" expires_after="2025-09-14">
+    units="microseconds" expires_after="2025-11-16">
   <owner>szager@chromium.org</owner>
   <owner>paint-dev@chromium.org</owner>
   <summary>
@@ -641,9 +641,43 @@ chromium-metrics-reviews@google.com.
   </token>
 </histogram>
 
+<histogram name="RendererScheduler.RendererMain.TaskOffCpuDuration" units="ms"
+    expires_after="2025-12-25">
+  <owner>anandrv@google.com</owner>
+  <owner>clank-performance-team@google.com</owner>
+  <summary>
+    Time spent off-CPU by tasks running on the renderer main thread. Recorded
+    with 0.001 probability when a task scheduled on the main thread finishes
+    running.
+  </summary>
+</histogram>
+
+<histogram name="RendererScheduler.RendererMain.TaskOnCpuDuration" units="ms"
+    expires_after="2025-12-25">
+  <owner>anandrv@google.com</owner>
+  <owner>clank-performance-team@google.com</owner>
+  <summary>
+    Time spent on-CPU by tasks running on the renderer main thread. Recorded
+    with 0.001 probability when a task scheduled on the main thread finishes
+    running.
+  </summary>
+</histogram>
+
+<histogram name="RendererScheduler.RendererMain.TaskOnCpuPercentage" units="%"
+    expires_after="2025-12-25">
+  <owner>anandrv@google.com</owner>
+  <owner>clank-performance-team@google.com</owner>
+  <summary>
+    Records the percentage of wall time spent on-CPU by tasks running on the
+    renderer main thread. Recorded with 0.001 probability when a task scheduled
+    on the main thread finishes running.
+  </summary>
+</histogram>
+
 <histogram name="RendererScheduler.RendererMainThreadLoad6" units="%"
-    expires_after="2025-08-17">
+    expires_after="2025-10-19">
   <owner>lizeb@chromium.org</owner>
+  <owner>shaseley@chromium.org</owner>
   <summary>
     Renderer main thread load (percentage of time spent in tasks), reported in
     one second chunks.
@@ -652,6 +686,22 @@ chromium-metrics-reviews@google.com.
 
     This metric is emitted when the renderer main thread task is completed, at
     most once per second per renderer amortized.
+  </summary>
+</histogram>
+
+<histogram name="RendererScheduler.RendererMainThreadLoad6.Foreground"
+    units="%" expires_after="2025-10-19">
+  <owner>lizeb@chromium.org</owner>
+  <owner>shaseley@chromium.org</owner>
+  <summary>
+    Renderer main thread load (percentage of time spent in tasks), reported in
+    one second chunks.
+
+    See http://bit.ly/chromium-renderer-main-thread-load-metric for details.
+
+    This metric is emitted when the renderer main thread task is completed, at
+    most once per second per renderer amortized. This is only recorded when the
+    renderer was continuously in foreground for the reporting duration.
   </summary>
 </histogram>
 

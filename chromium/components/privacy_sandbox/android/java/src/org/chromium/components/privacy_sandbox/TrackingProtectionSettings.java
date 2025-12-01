@@ -30,6 +30,7 @@ import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.CustomDividerFragment;
 import org.chromium.components.browser_ui.settings.ExpandablePreferenceGroup;
 import org.chromium.components.browser_ui.settings.SearchUtils;
+import org.chromium.components.browser_ui.settings.SettingsFragment;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 import org.chromium.components.browser_ui.site_settings.AddExceptionPreference;
@@ -130,6 +131,7 @@ public class TrackingProtectionSettings extends PrivacySandboxBaseFragment
                                 getString(
                                         R.string
                                                 .website_settings_third_party_cookies_page_add_allow_exception_description),
+                                /* isEnabled= */ true,
                                 cookiesCategory,
                                 this));
     }
@@ -305,5 +307,10 @@ public class TrackingProtectionSettings extends PrivacySandboxBaseFragment
 
     private void onLearnMoreClicked() {
         getCustomTabLauncher().openUrlInCct(getContext(), LEARN_MORE_URL);
+    }
+
+    @Override
+    public @SettingsFragment.AnimationType int getAnimationType() {
+        return SettingsFragment.AnimationType.PROPERTY;
     }
 }

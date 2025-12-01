@@ -140,6 +140,7 @@ struct CookieMonsterTestTraits {
   static const int creation_time_granularity_in_ms = 0;
   static const bool supports_cookie_access_semantics = true;
   static const bool supports_partitioned_cookies = true;
+  static const bool dispatches_events_on_no_change_overwrite = true;
 };
 
 INSTANTIATE_TYPED_TEST_SUITE_P(CookieMonster,
@@ -7511,14 +7512,12 @@ TEST_F(FirstPartySetEnabledCookieMonsterTest, RecordsPeriodicFPSSizes) {
   net::SchemefulSite member4(GURL("https://member4.test"));
 
   access_delegate_->SetFirstPartySets({
-      {owner1,
-       net::FirstPartySetEntry(owner1, net::SiteType::kPrimary, std::nullopt)},
-      {member1, net::FirstPartySetEntry(owner1, net::SiteType::kAssociated, 0)},
-      {member2, net::FirstPartySetEntry(owner1, net::SiteType::kAssociated, 1)},
-      {owner2,
-       net::FirstPartySetEntry(owner2, net::SiteType::kPrimary, std::nullopt)},
-      {member3, net::FirstPartySetEntry(owner2, net::SiteType::kAssociated, 0)},
-      {member4, net::FirstPartySetEntry(owner2, net::SiteType::kAssociated, 1)},
+      {owner1, net::FirstPartySetEntry(owner1, net::SiteType::kPrimary)},
+      {member1, net::FirstPartySetEntry(owner1, net::SiteType::kAssociated)},
+      {member2, net::FirstPartySetEntry(owner1, net::SiteType::kAssociated)},
+      {owner2, net::FirstPartySetEntry(owner2, net::SiteType::kPrimary)},
+      {member3, net::FirstPartySetEntry(owner2, net::SiteType::kAssociated)},
+      {member4, net::FirstPartySetEntry(owner2, net::SiteType::kAssociated)},
   });
 
   ASSERT_TRUE(SetCookie(cm(), GURL("https://owner1.test"), kValidCookieLine));
@@ -7664,10 +7663,6 @@ TEST_F(CookieMonsterTest, SiteHasCookieInOtherPartition) {
   // method only considers partitioned cookies.
   EXPECT_THAT(cm->SiteHasCookieInOtherPartition(site, partition_key),
               testing::Optional(false));
-
-  // Should return nullopt when the partition key is nullopt.
-  EXPECT_FALSE(
-      cm->SiteHasCookieInOtherPartition(site, /*partition_key=*/std::nullopt));
 }
 
 // Test that domain cookies which shadow origin cookies are excluded when scheme

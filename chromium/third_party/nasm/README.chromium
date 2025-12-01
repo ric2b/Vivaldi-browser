@@ -1,8 +1,8 @@
 Name: Netwide Assembler
 Short Name: nasm
 URL: https://www.nasm.us/
-Version: 2.15.03rc6 / f1cf95480d9df9e7854a4be6844f86ff854e03d2
-CPEPrefix: cpe:/a:nasm:netwide_assembler:2.15.03rc6
+Version: 2.16.03 / 888d9ab55012d25059da81fed6575ef3a004726f
+CPEPrefix: cpe:/a:nasm:netwide_assembler:2.16.03
 License: 2-Clause BSD
 License File: LICENSE
 Security Critical: no
@@ -35,10 +35,11 @@ build/Release+Asserts/bin) then do the following:
 
   # Maybe use git mergetool to resolve any conflicts with local patches.
 
-  # ***DO NOT USE*** git cl upload for this part or you will spam every author
-  # who committed something upstream with a Gerrit issue... :O You must also
-  # have the correct Gerrit permissions from one of the OWNERS to do this.
-  git push origin master
+  # You must be a member of the nasm-owners Gerrit group to do the next step.
+  # You may need to follow go/looker-gob-dev-guide#set-up-change-id-hook to
+  # setup a Change-Id for the pushed change. You'll get a warning during push
+  # if you don't have the hook setup.
+  git push origin HEAD:refs/for/main
 
   # You can safely use git cl upload for all of your own modifications past this
   # point; I.e., once you have pushed all the commits from the git merge.
@@ -46,6 +47,10 @@ build/Release+Asserts/bin) then do the following:
   CC=clang CXX=clang++ CFLAGS="-std=c11 -Werror" ./autogen.sh
   CC=clang CXX=clang++ CFLAGS="-std=c11 -Werror" ./configure
   make perlreq
+
+  # Note: If make perlreq says everything is up-to-date, you may need to run
+  # "make spotless" and then rerun the autogen/configure/make steps above.
+
   ./generate_nasm_sources.py
   git add <any new .c/.h files which show up>
 
@@ -74,4 +79,3 @@ You can stop after configure. Then just follow the copy instructions above.
 
 --[ TODOS ] ------------------
 None at this time.
-

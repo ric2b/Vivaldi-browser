@@ -4,11 +4,13 @@
 
 #include "components/permissions/android/permission_prompt/permission_prompt_android.h"
 
+#include <memory>
 #include <vector>
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/resources/android/theme_resources.h"
@@ -26,6 +28,11 @@ PermissionPromptAndroid::PermissionPromptAndroid(
     Delegate* delegate)
     : web_contents_(web_contents), delegate_(delegate) {
   DCHECK(web_contents);
+  std::transform(delegate_->Requests().begin(), delegate_->Requests().end(),
+                 std::back_inserter(requests_),
+                 [](const std::unique_ptr<PermissionRequest>& request_ptr) {
+                   return request_ptr->GetWeakPtr();
+                 });
 }
 
 PermissionPromptAndroid::~PermissionPromptAndroid() = default;
@@ -117,6 +124,21 @@ PermissionPromptAndroid::GetPositiveEphemeralButtonText(
     bool is_one_time) const {
   return ConvertUTF16ToJavaString(env, std::u16string_view());
 }
+base::android::ScopedJavaLocalRef<jobjectArray>
+PermissionPromptAndroid::GetRadioButtonTexts(JNIEnv* env,
+                                             bool is_one_time) const {
+  if (!is_one_time) {
+    return base::android::ToJavaArrayOfStrings(env, base::span<std::string>());
+  }
+  if (Requests()[0]->request_type() == RequestType::kGeolocation &&
+      base::FeatureList::IsEnabled(
+          permissions::features::kApproximateGeolocationPermission)) {
+    return base::android::ToJavaArrayOfStrings(
+        env, {l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW_APPROXIMATE_GEO),
+              l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW_PRECISE_GEO)});
+  }
+  return base::android::ToJavaArrayOfStrings(env, base::span<std::string>());
+}
 
 size_t PermissionPromptAndroid::PermissionCount() const {
   return Requests().size();
@@ -124,17 +146,16 @@ size_t PermissionPromptAndroid::PermissionCount() const {
 
 ContentSettingsType PermissionPromptAndroid::GetContentSettingType(
     size_t position) const {
-  const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>& requests =
-      Requests();
+  const std::vector<base::WeakPtr<PermissionRequest>>& requests = Requests();
   CHECK_LT(position, requests.size());
   return requests[position]->GetContentSettingsType();
 }
 
 static bool IsValidMediaRequestGroup(
-    const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>&
-        requests) {
-  if (requests.size() < 2)
+    const std::vector<base::WeakPtr<PermissionRequest>>& requests) {
+  if (requests.size() < 2 || !requests[0] || !requests[1]) {
     return false;
+  }
   return ((requests[0]->request_type() == RequestType::kMicStream &&
            requests[1]->request_type() == RequestType::kCameraStream) ||
           (requests[0]->request_type() == RequestType::kCameraStream &&
@@ -142,15 +163,13 @@ static bool IsValidMediaRequestGroup(
 }
 
 void PermissionPromptAndroid::CheckValidRequestGroup(
-    const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>& requests)
-    const {
+    const std::vector<base::WeakPtr<PermissionRequest>>& requests) const {
   DCHECK_EQ(static_cast<size_t>(2u), requests.size());
   DCHECK((IsValidMediaRequestGroup(requests)));
 }
 
 int PermissionPromptAndroid::GetIconId() const {
-  const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>& requests =
-      Requests();
+  const std::vector<base::WeakPtr<PermissionRequest>>& requests = Requests();
   if (requests.size() == 1) {
     if (requests[0]->request_type() == RequestType::kStorageAccess) {
       return IDR_ANDROID_GLOBE;
@@ -163,8 +182,7 @@ int PermissionPromptAndroid::GetIconId() const {
 
 PermissionRequest::AnnotatedMessageText
 PermissionPromptAndroid::GetAnnotatedMessageText() const {
-  const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>& requests =
-      Requests();
+  const std::vector<base::WeakPtr<PermissionRequest>>& requests = Requests();
   if (requests.size() == 1) {
     return requests[0]->GetDialogAnnotatedMessageText(
         delegate_->GetEmbeddingOrigin());
@@ -173,20 +191,18 @@ PermissionPromptAndroid::GetAnnotatedMessageText() const {
 
   // We only end up here if 2 requests are combined in one prompt (which only
   // happens for Audio & Video). All other requests are handled in the if block
-  // above. For Audio and Video (which can be allowed once), only format origins
-  // bold if one time permissions are enabled.
+  // above. For Audio and Video (which can be allowed once), format origins
+  // bold.
   return PermissionRequest::GetDialogAnnotatedMessageText(
       url_formatter::FormatUrlForSecurityDisplay(
           delegate_->GetRequestingOrigin(),
           url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC),
       IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO_INFOBAR_TEXT,
-      /*format_origin_bold=*/
-      base::FeatureList::IsEnabled(permissions::features::kOneTimePermission));
+      /*format_origin_bold=*/true);
 }
 
 bool PermissionPromptAndroid::ShouldUseRequestingOriginFavicon() const {
-  const std::vector<raw_ptr<PermissionRequest, VectorExperimental>>& requests =
-      Requests();
+  const std::vector<base::WeakPtr<PermissionRequest>>& requests = Requests();
   CHECK_GT(requests.size(), 0U);
 
   return requests[0]->request_type() == RequestType::kStorageAccess;
@@ -196,9 +212,9 @@ GURL PermissionPromptAndroid::GetRequestingOrigin() const {
   return delegate_->GetRequestingOrigin();
 }
 
-const std::vector<raw_ptr<permissions::PermissionRequest, VectorExperimental>>&
+const std::vector<base::WeakPtr<permissions::PermissionRequest>>&
 PermissionPromptAndroid::Requests() const {
-  return delegate_->Requests();
+  return requests_;
 }
 
 base::android::ScopedJavaLocalRef<jintArray>
@@ -221,12 +237,6 @@ PermissionPromptAndroid::GetBoldRanges(JNIEnv* env) const {
     bolded_ranges.push_back(base::checked_cast<int>(end));
   }
   return base::android::ToJavaIntArray(env, bolded_ranges);
-}
-
-bool PermissionPromptAndroid::IsOneTimePermissionRequest() const {
-  return base::FeatureList::IsEnabled(
-             permissions::features::kOneTimePermission) &&
-         PermissionUtil::DoesSupportTemporaryGrants(GetContentSettingType(0));
 }
 
 }  // namespace permissions

@@ -44,6 +44,10 @@ namespace skgpu::graphite {
 constexpr int kMaxNumberOfCachedBufferDescSets = 1024;
 
 namespace {
+
+// Create a mock pipeline layout that has a compatible input attachment descriptor set layout and
+// push constant parameters with all other real pipeline layouts. This allows us to perform
+// once-per-renderpass operations even before a real pipeline is bound by the command buffer.
 VkPipelineLayout create_mock_layout(const VulkanSharedContext* sharedContext) {
     SkASSERT(sharedContext);
     VkPushConstantRange pushConstantRange;
@@ -51,33 +55,42 @@ VkPipelineLayout create_mock_layout(const VulkanSharedContext* sharedContext) {
     pushConstantRange.size = VulkanResourceProvider::kIntrinsicConstantSize;
     pushConstantRange.stageFlags = VulkanResourceProvider::kIntrinsicConstantStageFlags;
 
-    VkPipelineLayoutCreateInfo layoutCreateInfo;
-    memset(&layoutCreateInfo, 0, sizeof(VkPipelineLayoutCreateFlags));
+    skia_private::STArray<1, DescriptorData> inputDesc {
+            VulkanGraphicsPipeline::kInputAttachmentDescriptor};
+    VkDescriptorSetLayout setLayout;
+    DescriptorDataToVkDescSetLayout(sharedContext, inputDesc, &setLayout);
+
+    VkPipelineLayoutCreateInfo layoutCreateInfo = {};
     layoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutCreateInfo.pNext = nullptr;
-    layoutCreateInfo.flags = 0;
-    layoutCreateInfo.setLayoutCount = 0;
-    layoutCreateInfo.pSetLayouts = nullptr;
+    layoutCreateInfo.setLayoutCount = 1;
+    layoutCreateInfo.pSetLayouts = &setLayout;
     layoutCreateInfo.pushConstantRangeCount = 1;
     layoutCreateInfo.pPushConstantRanges = &pushConstantRange;
 
     VkResult result;
-    VkPipelineLayout layout;
+    VkPipelineLayout pipelineLayout;
     VULKAN_CALL_RESULT(sharedContext,
                        result,
                        CreatePipelineLayout(sharedContext->device(),
                                             &layoutCreateInfo,
                                             /*const VkAllocationCallbacks*=*/nullptr,
-                                            &layout));
-    return layout;
+                                            &pipelineLayout));
+
+    // Once the pipeline layout is created, we can clean up the VkDescriptorSetLayout.
+    VULKAN_CALL(sharedContext->interface(),
+                DestroyDescriptorSetLayout(sharedContext->device(), setLayout, nullptr));
+
+    return pipelineLayout;
 }
-} // anonymous
+
+} // anonymous namespace
+
 VulkanResourceProvider::VulkanResourceProvider(SharedContext* sharedContext,
                                                SingleOwner* singleOwner,
                                                uint32_t recorderID,
                                                size_t resourceBudget)
         : ResourceProvider(sharedContext, singleOwner, recorderID, resourceBudget)
-        , fMockPushConstantPipelineLayout(
+        , fMockPipelineLayout(
                 create_mock_layout(static_cast<const VulkanSharedContext*>(sharedContext)))
         , fUniformBufferDescSetCache(kMaxNumberOfCachedBufferDescSets) {}
 
@@ -88,10 +101,10 @@ VulkanResourceProvider::~VulkanResourceProvider() {
                                          fPipelineCache,
                                          nullptr));
     }
-    if (fMockPushConstantPipelineLayout) {
+    if (fMockPipelineLayout) {
         VULKAN_CALL(this->vulkanSharedContext()->interface(),
                     DestroyPipelineLayout(this->vulkanSharedContext()->device(),
-                                          fMockPushConstantPipelineLayout,
+                                          fMockPipelineLayout,
                                           nullptr));
     }
 }
@@ -126,7 +139,8 @@ sk_sp<GraphicsPipeline> VulkanResourceProvider::createGraphicsPipeline(
         const RenderPassDesc& renderPassDesc,
         SkEnumBitMask<PipelineCreationFlags> pipelineCreationFlags,
         uint32_t compilationID) {
-    return VulkanGraphicsPipeline::Make(this,
+    return VulkanGraphicsPipeline::Make(this->vulkanSharedContext(),
+                                        this,
                                         runtimeDict,
                                         pipelineKey,
                                         pipelineDesc,
@@ -356,25 +370,20 @@ void update_uniform_descriptor_set(SkSpan<DescriptorData> requestedDescriptors,
                     : sharedContext->vulkanCaps().maxUniformBufferRange();
             SkASSERT(bindInfo.fSize <= maxBufferRange);
 #endif
-            VkDescriptorBufferInfo bufferInfo;
-            memset(&bufferInfo, 0, sizeof(VkDescriptorBufferInfo));
+            VkDescriptorBufferInfo bufferInfo = {};
             auto vulkanBuffer = static_cast<const VulkanBuffer*>(bindInfo.fBuffer);
             bufferInfo.buffer = vulkanBuffer->vkBuffer();
             bufferInfo.offset = 0; // We always use dynamic ubos so we set the base offset to 0
             bufferInfo.range = bindInfo.fSize;
 
-            VkWriteDescriptorSet writeInfo;
-            memset(&writeInfo, 0, sizeof(VkWriteDescriptorSet));
+            VkWriteDescriptorSet writeInfo = {};
             writeInfo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            writeInfo.pNext = nullptr;
             writeInfo.dstSet = descSet;
             writeInfo.dstBinding = descriptorBindingIndex;
             writeInfo.dstArrayElement = 0;
             writeInfo.descriptorCount = requestedDescriptors[i].fCount;
             writeInfo.descriptorType = DsTypeEnumToVkDs(requestedDescriptors[i].fType);
-            writeInfo.pImageInfo = nullptr;
             writeInfo.pBufferInfo = &bufferInfo;
-            writeInfo.pTexelBufferView = nullptr;
 
             // TODO(b/293925059): Migrate to updating all the uniform descriptors with one driver
             // call. Calling UpdateDescriptorSets once to encapsulate updates to all uniform
@@ -415,45 +424,40 @@ sk_sp<VulkanDescriptorSet> VulkanResourceProvider::findOrCreateUniformBuffersDes
     return *fUniformBufferDescSetCache.insert(key, newDS);
 }
 
-
-sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPassWithKnownKey(
+sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPass(
             const RenderPassDesc& renderPassDesc,
-            bool compatibleOnly,
-            const GraphiteResourceKey& rpKey) {
+            bool compatibleOnly) {
     static constexpr Budgeted kBudgeted = Budgeted::kYes;
     static constexpr Shareable kShareable = Shareable::kYes;
+    static const ResourceType kType = GraphiteResourceKey::GenerateResourceType();
 
-    if (Resource* resource = fResourceCache->findAndRefResource(rpKey, kBudgeted, kShareable)) {
+    VulkanRenderPass::Metadata rpMetadata{renderPassDesc, compatibleOnly};
+    GraphiteResourceKey key;
+    {
+        GraphiteResourceKey::Builder builder(&key, kType, rpMetadata.keySize());
+
+        int startingIdx = 0;
+        rpMetadata.addToKey(builder, startingIdx);
+    }
+    if (Resource* resource = fResourceCache->findAndRefResource(key, kBudgeted, kShareable)) {
         return sk_sp<VulkanRenderPass>(static_cast<VulkanRenderPass*>(resource));
     }
 
     sk_sp<VulkanRenderPass> renderPass =
-                VulkanRenderPass::MakeRenderPass(this->vulkanSharedContext(),
-                                                 renderPassDesc,
-                                                 compatibleOnly);
+            VulkanRenderPass::Make(this->vulkanSharedContext(), rpMetadata);
     if (!renderPass) {
         return nullptr;
     }
 
-    fResourceCache->insertResource(renderPass.get(), rpKey, kBudgeted, kShareable);
+    fResourceCache->insertResource(renderPass.get(), key, kBudgeted, kShareable);
 
     return renderPass;
 }
 
-sk_sp<VulkanRenderPass> VulkanResourceProvider::findOrCreateRenderPass(
-        const RenderPassDesc& renderPassDesc, bool compatibleOnly) {
-    GraphiteResourceKey rpKey = VulkanRenderPass::MakeRenderPassKey(renderPassDesc, compatibleOnly);
-
-    return this->findOrCreateRenderPassWithKnownKey(renderPassDesc, compatibleOnly, rpKey);
-}
-
 VkPipelineCache VulkanResourceProvider::pipelineCache() {
     if (fPipelineCache == VK_NULL_HANDLE) {
-        VkPipelineCacheCreateInfo createInfo;
-        memset(&createInfo, 0, sizeof(VkPipelineCacheCreateInfo));
+        VkPipelineCacheCreateInfo createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-        createInfo.pNext = nullptr;
-        createInfo.flags = 0;
         createInfo.initialDataSize = 0;
         createInfo.pInitialData = nullptr;
         VkResult result;
@@ -497,7 +501,7 @@ void gather_attachment_views(skia_private::TArray<VkImageView>& attachmentViews,
 
 } // anonymous namespace
 
-sk_sp<VulkanFramebuffer> VulkanResourceProvider::createFramebuffer(
+sk_sp<VulkanFramebuffer> VulkanResourceProvider::findOrCreateFramebuffer(
         const VulkanSharedContext* context,
         VulkanTexture* colorTexture,
         VulkanTexture* resolveTexture,
@@ -509,14 +513,15 @@ sk_sp<VulkanFramebuffer> VulkanResourceProvider::createFramebuffer(
 
     VulkanTexture* mainTexture = nullptr;
     if (colorTexture) {
-        mainTexture = resolveTexture ? resolveTexture: colorTexture;
+        mainTexture = resolveTexture ? resolveTexture : colorTexture;
     } else {
         SkASSERT(depthStencilTexture);
         mainTexture = depthStencilTexture;
     }
     SkASSERT(mainTexture);
-    VulkanTexture* msaaTexture = resolveTexture ? colorTexture: nullptr;
+    VulkanTexture* msaaTexture = resolveTexture ? colorTexture : nullptr;
 
+    // First check for a cached frame buffer.
     sk_sp<VulkanFramebuffer> fb = mainTexture->getCachedFramebuffer(renderPassDesc,
                                                                     msaaTexture,
                                                                     depthStencilTexture);
@@ -528,13 +533,8 @@ sk_sp<VulkanFramebuffer> VulkanResourceProvider::createFramebuffer(
     skia_private::TArray<VkImageView> attachmentViews;
     gather_attachment_views(attachmentViews, colorTexture, resolveTexture, depthStencilTexture);
 
-    // TODO: Consider caching these in the future. If we pursue that, it may make more sense to
-    // use a compatible renderpass rather than a full one to make each frame buffer more versatile.
-    VkFramebufferCreateInfo framebufferInfo;
-    memset(&framebufferInfo, 0, sizeof(VkFramebufferCreateInfo));
+    VkFramebufferCreateInfo framebufferInfo = {};
     framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.pNext = nullptr;
-    framebufferInfo.flags = 0;
     framebufferInfo.renderPass = renderPass.renderPass();
     framebufferInfo.attachmentCount = attachmentViews.size();
     framebufferInfo.pAttachments = attachmentViews.begin();
@@ -610,17 +610,16 @@ sk_sp<VulkanYcbcrConversion> VulkanResourceProvider::findOrCreateCompatibleYcbcr
 
 sk_sp<VulkanGraphicsPipeline> VulkanResourceProvider::findOrCreateLoadMSAAPipeline(
         const RenderPassDesc& renderPassDesc) {
-    if (!renderPassDesc.fColorResolveAttachment.fTextureInfo.isValid() ||
-        !renderPassDesc.fColorAttachment.fTextureInfo.isValid()) {
+    if (renderPassDesc.fColorResolveAttachment.fFormat == TextureFormat::kUnsupported ||
+        renderPassDesc.fColorAttachment.fFormat == TextureFormat::kUnsupported) {
         SKGPU_LOG_E("Loading MSAA from resolve texture requires valid color & resolve attachment");
         return nullptr;
     }
 
     // Check to see if we already have a suitable pipeline that we can use.
-    GraphiteResourceKey renderPassKey =
-            VulkanRenderPass::MakeRenderPassKey(renderPassDesc, /*compatibleOnly=*/true);
+    VulkanRenderPass::Metadata rpMetadata{renderPassDesc, /*compatibleOnly=*/true};
     for (int i = 0; i < fLoadMSAAPipelines.size(); i++) {
-        if (renderPassKey == fLoadMSAAPipelines.at(i).first) {
+        if (rpMetadata == fLoadMSAAPipelines.at(i).first) {
             return fLoadMSAAPipelines.at(i).second;
         }
     }
@@ -636,13 +635,13 @@ sk_sp<VulkanGraphicsPipeline> VulkanResourceProvider::findOrCreateLoadMSAAPipeli
     }
 
     sk_sp<VulkanGraphicsPipeline> pipeline = VulkanGraphicsPipeline::MakeLoadMSAAPipeline(
-            this, *fLoadMSAAProgram, renderPassDesc);
+            this->vulkanSharedContext(), this, *fLoadMSAAProgram, renderPassDesc);
     if (!pipeline) {
         SKGPU_LOG_E("Failed to create MSAA load pipeline");
         return nullptr;
     }
 
-    fLoadMSAAPipelines.push_back(std::make_pair(renderPassKey, pipeline));
+    fLoadMSAAPipelines.push_back(std::make_pair(rpMetadata, pipeline));
     return pipeline;
 }
 

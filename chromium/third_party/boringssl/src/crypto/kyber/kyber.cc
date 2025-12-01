@@ -336,7 +336,7 @@ static void scalar_from_keccak_vartime(scalar *out,
 static void scalar_centered_binomial_distribution_eta_2_with_prf(
     scalar *out, const uint8_t input[33]) {
   uint8_t entropy[128];
-  static_assert(sizeof(entropy) == 2 * /*kEta=*/2 * DEGREE / 8, "");
+  static_assert(sizeof(entropy) == 2 * /*kEta=*/2 * DEGREE / 8);
   prf(entropy, sizeof(entropy), input);
 
   for (int i = 0; i < DEGREE; i += 2) {

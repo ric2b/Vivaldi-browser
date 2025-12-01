@@ -805,7 +805,7 @@ TEST_P(BindGroupTests, ThreePipelinesInSameRenderpass) {
 
 // Test that bind groups set for one pipeline are still set when the pipeline changes.
 TEST_P(BindGroupTests, BindGroupsPersistAfterPipelineChange) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
 
     utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
@@ -887,7 +887,7 @@ TEST_P(BindGroupTests, BindGroupsPersistAfterPipelineChange) {
 TEST_P(BindGroupTests, DrawThenChangePipelineAndBindGroup) {
     // TODO(anglebug.com/3032): fix failure in ANGLE/D3D11
     DAWN_SUPPRESS_TEST_IF(IsANGLE() && IsWindows());
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
 
     utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
@@ -1177,6 +1177,8 @@ TEST_P(BindGroupTests, DynamicOffsetOrder) {
 // conflict. This can happen if the backend treats dynamic bindings separately from non-dynamic
 // bindings.
 TEST_P(BindGroupTests, DynamicAndNonDynamicBindingsDoNotConflictAfterRemapping) {
+    DAWN_SUPPRESS_TEST_IF(IsWARP());
+
     auto RunTestWith = [&](bool dynamicBufferFirst) {
         uint32_t dynamicBufferBindingNumber = dynamicBufferFirst ? 0 : 1;
         uint32_t bufferBindingNumber = dynamicBufferFirst ? 1 : 0;
@@ -1340,6 +1342,8 @@ TEST_P(BindGroupTests, DynamicBindingNoneVisibility) {
 
 // Test that bind group bindings may have unbounded and arbitrary binding numbers
 TEST_P(BindGroupTests, ArbitraryBindingNumbers) {
+    DAWN_SUPPRESS_TEST_IF(IsWARP());
+
     utils::BasicRenderPass renderPass = utils::CreateBasicRenderPass(device, kRTSize, kRTSize);
 
     wgpu::ShaderModule vsModule = utils::CreateShaderModule(device, R"(
@@ -1482,7 +1486,7 @@ TEST_P(BindGroupTests, EmptyLayout) {
 // This is a regression test for crbug.com/dawn/410 which tests that it can successfully compile and
 // execute the shader.
 TEST_P(BindGroupTests, ReadonlyStorage) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
 
     utils::ComboRenderPipelineDescriptor pipelineDescriptor;
 

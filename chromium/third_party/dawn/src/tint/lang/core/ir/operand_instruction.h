@@ -100,6 +100,16 @@ class OperandInstruction : public Castable<OperandInstruction<N, R>, Instruction
         operands_.Clear();
     }
 
+    /// Replaces the results of the instruction with a single result.
+    /// @param result the new result of the instruction
+    void SetResult(ir::InstructionResult* result) override {
+        ClearResults();
+        results_.Push(result);
+        if (result) {
+            result->SetInstruction(this);
+        }
+    }
+
     /// Replaces the results of the instruction
     /// @param results the new results of the instruction
     void SetResults(VectorRef<ir::InstructionResult*> results) override {
@@ -115,8 +125,8 @@ class OperandInstruction : public Castable<OperandInstruction<N, R>, Instruction
     /// Sets the results of the instruction
     /// @param values the new result values
     template <typename... ARGS,
-              typename = std::enable_if_t<!tint::IsVectorLike<
-                  tint::traits::Decay<tint::traits::NthTypeOf<0, ARGS..., void>>>>>
+              typename = std::enable_if_t<
+                  !tint::IsVectorLike<std::decay_t<tint::traits::NthTypeOf<0, ARGS..., void>>>>>
     void SetResults(ARGS&&... values) {
         SetResults(Vector{std::forward<ARGS>(values)...});
     }
@@ -164,6 +174,20 @@ class OperandInstruction : public Castable<OperandInstruction<N, R>, Instruction
     /// out of bounds.
     const InstructionResult* Result(size_t idx) const {
         return idx < results_.Length() ? results_[idx] : nullptr;
+    }
+
+    /// @returns the instruction result
+    /// @note must only be called on instructions with exactly one result
+    InstructionResult* Result() {
+        TINT_ASSERT(results_.Length() == 1u);
+        return results_[0];
+    }
+
+    /// @returns the instruction result
+    /// @note must only be called on instructions with exactly one result
+    const InstructionResult* Result() const {
+        TINT_ASSERT(results_.Length() == 1u);
+        return results_[0];
     }
 
   protected:

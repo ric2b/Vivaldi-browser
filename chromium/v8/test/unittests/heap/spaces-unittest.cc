@@ -24,8 +24,8 @@ namespace internal {
 static Tagged<HeapObject> AllocateUnaligned(MainAllocator* allocator,
                                             SpaceWithLinearArea* space,
                                             int size) {
-  AllocationResult allocation =
-      allocator->AllocateRaw(size, kTaggedAligned, AllocationOrigin::kRuntime);
+  AllocationResult allocation = allocator->AllocateRaw(
+      size, kTaggedAligned, AllocationOrigin::kRuntime, AllocationHint());
   CHECK(!allocation.IsFailure());
   Tagged<HeapObject> filler;
   CHECK(allocation.To(&filler));
@@ -36,8 +36,8 @@ static Tagged<HeapObject> AllocateUnaligned(MainAllocator* allocator,
 static Tagged<HeapObject> AllocateUnaligned(OldLargeObjectSpace* allocator,
                                             OldLargeObjectSpace* space,
                                             int size) {
-  AllocationResult allocation =
-      allocator->AllocateRaw(space->heap()->main_thread_local_heap(), size);
+  AllocationResult allocation = allocator->AllocateRaw(
+      space->heap()->main_thread_local_heap(), size, AllocationHint());
   CHECK(!allocation.IsFailure());
   Tagged<HeapObject> filler;
   CHECK(allocation.To(&filler));
@@ -64,7 +64,7 @@ TEST_F(SpacesTest, CompactionSpaceMerge) {
   for (PageMetadata* p : *old_space) {
     // Unlink free lists from the main space to avoid reusing the memory for
     // compaction spaces.
-    old_space->UnlinkFreeListCategories(p);
+    old_space->free_list()->EvictFreeListItems(p);
   }
 
   // Cannot loop until "Available()" since we initially have 0 bytes available
@@ -78,7 +78,7 @@ TEST_F(SpacesTest, CompactionSpaceMerge) {
     Tagged<HeapObject> object =
         allocator
             .AllocateRaw(kMaxRegularHeapObjectSize, kTaggedAligned,
-                         AllocationOrigin::kGC)
+                         AllocationOrigin::kGC, AllocationHint())
             .ToObjectChecked();
     heap->CreateFillerObjectAt(object.address(), kMaxRegularHeapObjectSize);
   }

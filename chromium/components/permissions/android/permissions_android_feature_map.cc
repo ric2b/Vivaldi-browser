@@ -21,8 +21,8 @@ namespace {
 // components/permissions/features.h).
 const base::Feature* const kFeaturesExposedToJava[] = {
     &kAndroidCancelPermissionPromptOnTouchOutside,
-    &features::kOneTimePermission,
     &features::kOsAdditionalSecurityPermissionKillSwitch,
+    &features::kApproximateGeolocationPermission,
 };
 
 // static

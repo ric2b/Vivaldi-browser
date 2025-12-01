@@ -4,45 +4,99 @@
 <translation id="1063263220330818888">Məxfi axtarış</translation>
 <translation id="1097355661841455597">Fikirlərinizi dinləmək istərdik.</translation>
 <translation id="1137850887415122856">Gizli vərəqləri kilidləmək üçün Touch İD, Face İD və ya Passcode təyin edin.</translation>
+<translation id="1189137610071296104">Vərəq qrupunda açmaq</translation>
 <translation id="1310184829257917508">Digər tətbiqlərdən keçidlərin açılmasını gizli olaraq istəyin</translation>
+<translation id="1743244221910283364">Dəyişiklikləri ləğv etmək</translation>
+<translation id="2010481384079864967">{count, plural,
+        =1 {Vərəqi qrupa əlavə etmək}
+        other {Vərəqləri qrupa əlavə etmək}}</translation>
 <translation id="207677936531967364">Yeni gizli vərəq səhifəsi</translation>
+<translation id="2099591136582442348">Bu, qrupu cihazlarınızdan həmişəlik siləcək.</translation>
+<translation id="2181990701313127304">Qrupda yeni vərəq</translation>
+<translation id="2351280151183279120">Qrupu paylaşmaq</translation>
 <translation id="2353953000228441783">Standart sayt görünüşü</translation>
 <translation id="2394192052244849643">Yerləşdirin və axtarın</translation>
 <translation id="2418705169960294134">Yeni məxfi vərəq</translation>
+<translation id="2565593432251168402">Vərəqləri qrupda nizamlamaq</translation>
 <translation id="2783161812871838616">Masaüstü Sayt sorğusu</translation>
+<translation id="2806957659107692459">Qrup yaratmaq</translation>
 <translation id="2899836479226240291">Vivaldini standart veb-bələdçi təyin etməklə keçidləri brbaşa onda aça bilərsiniz.</translation>
 <translation id="3365529507898144230">Fotolarda saxlayın</translation>
 <translation id="3434473769478814796">Yerləşdirin və daxil olun</translation>
 <translation id="3463990832590571933">Yeni məxfi vərəqdə açın</translation>
 <translation id="3473652525653758699">Yeni gizli pəncərə</translation>
 <translation id="3501504415290398157">Gizli vərəqləri kiliddən çıxartmaq üçün <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> istifadə edin.</translation>
+<translation id="353418192940651934">Qrupda qalmaq</translation>
 <translation id="3607792383367580513">Tərcümə</translation>
 <translation id="3692650606013198282">Gizli olaraq açın</translation>
+<translation id="3873885181515160073">Ad və rəng təyin etməklə yeni vərəq qrupunuzu yaradın</translation>
 <translation id="3922395466317605522">Menyunu fərdiləşdirin</translation>
 <translation id="3981599532037327317">${url} keçidini gizli olaraq açın</translation>
 <translation id="398477389655464998">Keçidi vurğulamaya kopyala</translation>
+<translation id="3993429087389909418">Vərəqlər bu cihazda açıq qalacaq, lakin qruplar <ph name="USER_EMAIL" /> ilə bağlantılı bütün cihazlardan silinəcək.</translation>
 <translation id="4026745073321351206">Bir çətinliklə qarşılaşdınız?</translation>
+<translation id="4216644171369573466">VƏrəq qrupu, <ph name="GROUP_TITLE" />, Menyu.</translation>
 <translation id="4304713468139749426">Şifrə idarəedici</translation>
+<translation id="4569525137269575065">Qrupu bağlamaq</translation>
 <translation id="473775607612524610">Yenilənmələr</translation>
 <translation id="4755216899422789286">URL-ları Vivaldidə açın</translation>
+<translation id="4772190485302020393">Bütün vərəqələri və qrupları bağlamaq</translation>
 <translation id="4802185666270672526">"Masaüstü sayt" seçimini gizlətmək</translation>
+<translation id="4828571836982833289">Vərəq qrupunu ləğv edək?</translation>
+<translation id="4838250035189612538">Qrupun adını dəyişmək</translation>
+<translation id="4873540827942947151">{count, plural,
+            =1 {1 vərəq bağlandı və saxlanıldı}
+            other {{count} vərəq qrupları bağlandı və saxlanıldı}}</translation>
+<translation id="5019787757991745254">Vərəq qrupu rəngi <ph name="COLOR" /></translation>
+<translation id="5022440170224170365">Vərəq qrupu yığıldı.</translation>
 <translation id="5217245356412073535">Ayarlar &gt; Məzmun ayarlarında əsas sayt görünüşünü masaüstünə dəyişə bilərsiniz</translation>
 <translation id="5271549068863921519">Şifrəni saxlayın</translation>
 <translation id="5317780077021120954">Saxlamaq</translation>
+<translation id="5385953732213322025">Bu sayt tətbiqi açmağa cəhd edir. bu sizi məxfi rejimdən kənara çıxaracaq.</translation>
 <translation id="5431239785743546285">Oxuduğunuz səhifələr</translation>
+<translation id="5521301883748677039">Qrupu silək?</translation>
+<translation id="5544011153887687593">Vərəq qrupu rəngi. <ph name="TAB_INDEX_IN_GROUP" /> / <ph name="NUMBER_OF_TABS_IN_GROUP" />.</translation>
 <translation id="5614553682702429503">Şifrə saxlanılsın?</translation>
 <translation id="570209299585559496">Ayarlardakı məzmun ayarlarında əsas sayt görünüşün masaüstü görünüşünə dəyişə bilərsiniz</translation>
+<translation id="5719777162751096990">Vərəq qrupuna köçürmək</translation>
 <translation id="5962477178930921574">Yerləşdirin və axtarın</translation>
+<translation id="6163856768888310791">Qrupu ləğv etmək</translation>
+<translation id="6168969409902608220">Qrup adı</translation>
 <translation id="6233792867654386826">Daxil edilmiş URL-ları gizli olaraq Vivaldidə açır.</translation>
+<translation id="6478587527114893588">Qrupu bağlamaq.</translation>
+<translation id="6527405730445064713">Vərəq qrupu. Açılmış.</translation>
+<translation id="6532106788206463496">Dəyişiklikləri yadda saxlamaq</translation>
+<translation id="6666425778700353369">Bu, qrupu <ph name="USER_EMAIL" /> ilə bağlı bütün cihazlardan siləcək.</translation>
 <translation id="6680416467695217368">Menyunu fərdiləşdirin</translation>
+<translation id="6695835495840050460">"Vərəqi yeni qrupa əlavə etmək" üzərinə vurun</translation>
+<translation id="6708694844902784277">Qrupu silmək</translation>
 <translation id="6827597288286078054">Məxfi axtarış</translation>
 <translation id="6851516051005285358">Masaüstü saytı sorğusu</translation>
+<translation id="6890907822330704077">Vərəq qrupu, <ph name="GROUP_TITLE" />, <ph name="TABS_NUMBER" /> vərəqlər.</translation>
 <translation id="7307970171564921489">Gizli vərəqləri <ph name="BIOMETRIC_AUTHENITCATION_TYPE" /> ilə kiliddən çıxardın</translation>
 <translation id="7347289093190902150">Gizli olaraq açılsın?</translation>
+<translation id="7363285031331302144">Açıq vərəqlərinizi nizamlamaq üçün vərəq qrupu yaratmaq</translation>
+<translation id="7395230742578757172">Yeni vərəq qrupunda açmaq</translation>
+<translation id="7424676799308869002">Qrupda saxlayaq?</translation>
+<translation id="7498234416455752244">Düzəlişə davam etmək</translation>
 <translation id="7549299604720382000">Yeni gizli vərəqə</translation>
+<translation id="7585610907974664408">Qrupda yeni məxfi vərəq</translation>
+<translation id="7661319142491611883">Vərəq qrupunu açmaq.</translation>
+<translation id="7706213624515206557">Bütün vərəqləri vərəq qrupunda göstərmək</translation>
 <translation id="7961015016161918242">Heç vaxt</translation>
 <translation id="8326104954595890674">Yeni gizli vərəqə</translation>
+<translation id="8345989863850359861">Vərəqi ləğv edək və qrupu silək?</translation>
+<translation id="8407986162266014185">Qrupu paylaşmaq</translation>
+<translation id="8412536526999793719">{count, plural,
+        =1 {Vərəqi yeni qrupa əlavə etmək}
+        other {Vərəqləri yeni qrupa əlavə etmək}}</translation>
+<translation id="8465550436083180511">Vərəq qrupunu yığmaq.</translation>
+<translation id="8685478989144570078">Vərəq qrupları</translation>
 <translation id="8756969031206844760">Şifrə yenilənsin?</translation>
+<translation id="8852861335827546438">Yeni vərəq qrupu</translation>
+<translation id="8951084872625418241">Qrupda yeni vərəq</translation>
 <translation id="9042893549633094279">Məxfilik və təhlükəsizlik</translation>
 <translation id="9094033019050270033">Şifrəni yeniləyin</translation>
+<translation id="944434461715569989">Qrupu tərk etmək</translation>
+<translation id="959061183386231608">Vərəqlər bu cihazda açıq qalacaq, lakin qrup həmişəlik silinəcək.</translation>
 </translationbundle>

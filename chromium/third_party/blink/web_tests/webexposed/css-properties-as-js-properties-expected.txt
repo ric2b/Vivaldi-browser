@@ -127,6 +127,7 @@ bufferedRendering
 captionSide
 caretAnimation
 caretColor
+caretShape
 clear
 clip
 clipPath
@@ -270,6 +271,7 @@ interestTargetShowDelay
 interpolateSize
 isolation
 item
+itemTolerance
 justifyContent
 justifyItems
 justifySelf
@@ -314,7 +316,6 @@ masonryAutoTracks
 masonryDirection
 masonryFill
 masonryFlow
-masonrySlack
 masonryTemplateTracks
 masonryTrack
 masonryTrackEnd
@@ -499,11 +500,13 @@ textEmphasis
 textEmphasisColor
 textEmphasisPosition
 textEmphasisStyle
+textGrow
 textIndent
 textOrientation
 textOverflow
 textRendering
 textShadow
+textShrink
 textSizeAdjust
 textSpacingTrim
 textTransform

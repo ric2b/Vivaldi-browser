@@ -69,7 +69,6 @@ bool IsValidUpdateUrl(const std::string& update_url) {
 
 }  // namespace
 
-#if !BUILDFLAG(IS_ANDROID)
 // ExtensionListPolicyHandler implementation -----------------------------------
 
 ExtensionListPolicyHandler::ExtensionListPolicyHandler(const char* policy_name,
@@ -222,6 +221,9 @@ void ExtensionInstallBlockListPolicyHandler::ApplyPolicySettings(
   list_handler_.ApplyPolicySettings(policies, prefs);
 }
 
+// TODO(crbug.com/394876083): Support more extension policy handlers on desktop
+// Android.
+#if !BUILDFLAG(IS_ANDROID)
 // ExtensionURLPatternListPolicyHandler implementation -------------------------
 
 ExtensionURLPatternListPolicyHandler::ExtensionURLPatternListPolicyHandler(

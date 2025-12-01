@@ -16,6 +16,7 @@
 #include "base/time/time.h"
 #include "base/types/expected.h"
 #include "base/values.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -35,25 +36,47 @@ class TemplateURLService;
 
 class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
  public:
+  using SuggestionType = AutocompleteMatch::EnterpriseSearchAggregatorType;
+
   // Relevance along with info for `AutocompleteMatch::additional_info`.
   struct RelevanceData {
     int relevance;
     size_t strong_word_matches;
     size_t weak_word_matches;
-    std::string rule;
+    std::string source;
   };
+
+  // Holds the matches and loader for a single request.
+  struct SearchAggregatorRequest {
+    SearchAggregatorRequest();
+    ~SearchAggregatorRequest();
+
+    SearchAggregatorRequest(SearchAggregatorRequest&&);
+
+    SearchAggregatorRequest(const SearchAggregatorRequest&) = delete;
+
+    std::vector<AutocompleteMatch> matches;
+    std::unique_ptr<network::SimpleURLLoader> loader;
+    // Can't use `loader != nullptr` as a proxy for `done` because loader is
+    // null both before the request starts and after the request completes.
+    bool done = false;
+    // Only used for logging. Can't use `matches.size()` as it may contain a
+    // filtered down set of results from the response.
+    int result_count = 0;
+  };
+
+  // The number of requests to make if we are making multiple requests.
+  static const int kNumMultipleRequests = 3;
 
   EnterpriseSearchAggregatorProvider(AutocompleteProviderClient* client,
                                      AutocompleteProviderListener* listener);
 
   // AutocompleteProvider:
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
-  void Stop(bool clear_cached_results, bool due_to_user_inactivity) override;
+  void Stop(AutocompleteStopReason stop_reason) override;
 
  private:
   friend class FakeEnterpriseSearchAggregatorProvider;
-
-  using SuggestionType = AutocompleteMatch::EnterpriseSearchAggregatorType;
 
   ~EnterpriseSearchAggregatorProvider() override;
 
@@ -62,28 +85,37 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
   bool IsProviderAllowed(const AutocompleteInput& input);
 
   // Called by `debouncer_`, queued when `Start()` is called.
-  void Run();
+  void Run(const AutocompleteInput& input);
 
   // Callback for when the loader is available with a valid token. Takes
   // ownership of the loader.
-  void RequestStarted(std::unique_ptr<network::SimpleURLLoader> loader);
+  void RequestStarted(int request_index,
+                      std::unique_ptr<network::SimpleURLLoader> loader);
 
   // Called when the network request for suggestions has completed.
-  void RequestCompleted(const network::SimpleURLLoader* source,
+  // `request_index` corresponds to the type of request sent:
+  // - 0 for people suggesions
+  // - 1 for content suggestions
+  // - 2 for query suggestions.
+  void RequestCompleted(int request_index,
+                        const network::SimpleURLLoader* source,
                         int response_code,
                         std::unique_ptr<std::string> response_body);
 
   // The function updates `matches_` with data parsed from `response_value`.
   // The update is not performed if `response_value` is invalid.
   virtual void UpdateResults(
+      int request_index,
       const std::optional<base::Value::Dict>& response_value,
       int response_code);
 
   // Callback for handling parsed json from response.
-  void OnJsonParsedIsolated(base::expected<base::Value, std::string> result);
+  void OnJsonParsedIsolated(int request_index,
+                            base::expected<base::Value, std::string> result);
 
   // Parses enterprise search aggregator response JSON and updates `matches_`.
   void ParseEnterpriseSearchAggregatorSearchResults(
+      int request_index,
       const base::Value::Dict& root_val);
 
   // Helper method to parse query, people, and content suggestions and populate
@@ -109,7 +141,8 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
   //  - `match.image_url` = `icon_url` from EnterpriseSearchAggregatorSettings
   //  policy,
   //  - `match.relevance` = 1001.
-  void ParseResultList(std::set<std::u16string> input_words,
+  void ParseResultList(int request_index,
+                       std::set<std::u16string> input_words,
                        const base::Value::List* results,
                        SuggestionType suggestion_type,
                        bool is_navigation);
@@ -117,7 +150,6 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
   // Helper method to get `destination_url` based on `suggestion_type` for
   // `CreateMatch()`.
   std::string GetMatchDestinationUrl(const base::Value::Dict& result,
-                                     const TemplateURLRef& url_ref,
                                      SuggestionType suggestion_type) const;
 
   // Helper method to get `description` based on `suggestion_type` for
@@ -131,11 +163,11 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
                                SuggestionType suggestion_type) const;
 
   // Helper method to get a localized metadata string depending on which of
-  // `update_time`, `owner`, and `file_type_description` exist.
+  // `update_time`, `owner`, and `content_type_description` exist.
   std::u16string GetLocalizedContentMetadata(
       const std::u16string& update_time,
       const std::u16string& owner,
-      const std::u16string& file_type_description) const;
+      const std::u16string& content_type_description) const;
 
   // Helper method to get user-readable (e.g. 'chromium is awesome
   // document') fields that can be used to compare input similarity.
@@ -143,7 +175,10 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
   // excluded because the input matching that would be a coincidence and not
   // a sign the user wanted this suggestion. Does not return fields already
   // returned by `GetMatchDescription()` and `GetMatchContents()`.
-  std::vector<std::string> GetAdditionalScoringFields(
+  std::vector<std::string> GetStrongScoringFields(
+      const base::Value::Dict& result,
+      SuggestionType suggestion_type) const;
+  std::vector<std::string> GetWeakScoringFields(
       const base::Value::Dict& result,
       SuggestionType suggestion_type) const;
 
@@ -165,6 +200,10 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
   // interrupted or not.
   void LogResponseTime(bool interrupted);
 
+  // Helper function for logging the number of results received from the
+  // request.
+  void LogResultCounts(std::string histogram_suffix, size_t result_count);
+
   // Owned by AutocompleteController.
   const raw_ptr<AutocompleteProviderClient> client_;
 
@@ -176,10 +215,10 @@ class EnterpriseSearchAggregatorProvider : public AutocompleteProvider {
   AutocompleteInput adjusted_input_;
   raw_ptr<const TemplateURL> template_url_;
 
-  // Loader used to retrieve results.
-  std::unique_ptr<network::SimpleURLLoader> loader_;
-
   raw_ptr<TemplateURLService> template_url_service_;
+
+  // The most recent set of requests.
+  std::vector<SearchAggregatorRequest> requests_;
 
   base::WeakPtrFactory<EnterpriseSearchAggregatorProvider> weak_ptr_factory_{
       this};

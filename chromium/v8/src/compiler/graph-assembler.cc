@@ -17,6 +17,7 @@
 #include "src/compiler/linkage.h"
 #include "src/compiler/type-cache.h"
 // For TNode types.
+#include "src/compiler/allocation-builder-inl.h"
 #include "src/deoptimizer/deoptimize-reason.h"
 #include "src/objects/elements-kind.h"
 #include "src/objects/heap-number.h"
@@ -153,6 +154,16 @@ Node* GraphAssembler::SetStackPointer(Node* node) {
       graph()->NewNode(machine()->SetStackPointer(), node, effect()));
 }
 #endif
+
+TNode<HeapNumber> JSGraphAssembler::AllocateHeapNumber(Node* value) {
+  AllocationBuilder a(jsgraph(), broker(), effect(), control());
+  a.Allocate(sizeof(HeapNumber), AllocationType::kYoung, Type::OtherInternal());
+  a.Store(AccessBuilder::ForMap(), broker()->heap_number_map());
+  a.Store(AccessBuilder::ForHeapNumberValue(), value);
+  Node* new_heap_number = a.Finish();
+  UpdateEffectControlWith(new_heap_number);
+  return TNode<HeapNumber>::UncheckedCast(new_heap_number);
+}
 
 Node* GraphAssembler::LoadHeapNumberValue(Node* heap_number) {
   return Load(MachineType::Float64(), heap_number,
@@ -512,6 +523,15 @@ void JSGraphAssembler::Assert(TNode<Word32T> cond, const char* condition_string,
   AddNode(graph()->NewNode(
       common()->Assert(BranchSemantics::kMachine, condition_string, file, line),
       cond, effect(), control()));
+}
+
+void JSGraphAssembler::DetachContextCell(TNode<Object> context,
+                                         TNode<Object> new_value, int index,
+                                         FrameState frame_state) {
+  AddNode<Object>(graph()->NewNode(javascript()->DetachContextCell(index),
+                                   context, new_value, NoContextConstant(),
+                                   static_cast<Node*>(frame_state), effect(),
+                                   control()));
 }
 
 TNode<Boolean> JSGraphAssembler::NumberIsFloat64Hole(TNode<Number> value) {

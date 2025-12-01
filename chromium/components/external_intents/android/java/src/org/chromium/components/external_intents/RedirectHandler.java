@@ -53,7 +53,7 @@ public class RedirectHandler {
         final boolean mExternalIntentStartedTask;
 
         // A resolver list which includes all resolvers of |mInitialIntent|.
-        HashSet<ComponentName> mCachedResolvers = new HashSet<ComponentName>();
+        final HashSet<ComponentName> mCachedResolvers = new HashSet<ComponentName>();
 
         IntentState(
                 Intent initialIntent,
@@ -126,7 +126,7 @@ public class RedirectHandler {
 
     /** Resets |mIntentState| for the newly received Intent. */
     public void updateIntent(
-            Intent intent,
+            @Nullable Intent intent,
             boolean isCustomTabIntent,
             boolean sendToExternalApps,
             boolean externalIntentStartedTask) {

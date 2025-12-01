@@ -423,7 +423,6 @@ const EnumeratedHistogram = {
   LighthouseModeRun: 'DevTools.LighthouseModeRun',
   LighthouseCategoryUsed: 'DevTools.LighthouseCategoryUsed',
   PanelShown: 'DevTools.PanelShown',
-  PanelShownInLocation: 'DevTools.PanelShownInLocation',
   RecordingAssertion: 'DevTools.RecordingAssertion',
   RecordingCodeToggled: 'DevTools.RecordingCodeToggled',
   RecordingCopiedToClipboard: 'DevTools.RecordingCopiedToClipboard',
@@ -1105,6 +1104,14 @@ const InspectorFrontendHostImpl = class {
    */
   recordSettingAccess(settingAccessEvent) {
     DevToolsAPI.sendMessageToEmbedder('recordSettingAccess', [settingAccessEvent], null);
+  }
+
+  /**
+   * @override
+   * @param {InspectorFrontendHostAPI.FunctionCallEvent} functionCallEvent
+   */
+  recordFunctionCall(functionCallEvent) {
+    DevToolsAPI.sendMessageToEmbedder('recordFunctionCall', [functionCallEvent], null);
   }
 
   // Backward-compatible methods below this line --------------------------------------------

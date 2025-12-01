@@ -2,10 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
+#include <array>
+
 
 #include "components/omnibox/browser/shortcuts_database.h"
 
@@ -47,7 +45,8 @@ struct ShortcutsDatabaseTestInfo {
   std::string keyword;
   int days_from_now;
   int number_of_hits;
-} shortcut_test_db[] = {
+};
+auto shortcut_test_db = std::to_array<ShortcutsDatabaseTestInfo>({
     {"BD85DBA2-8C29-49F9-84AE-48E1E90880DF", "goog", "www.google.com",
      "http://www.google.com/", AutocompleteMatch::DocumentType::NONE, "Google",
      "0,1,4,0", "Google", "0,1", ui::PAGE_TRANSITION_GENERATED,
@@ -62,7 +61,7 @@ struct ShortcutsDatabaseTestInfo {
      "slashdot.org", "0,1", "Slashdot - News for nerds, stuff that matters",
      "0,0", ui::PAGE_TRANSITION_LINK, AutocompleteMatchType::HISTORY_TITLE, "",
      0, 5},
-};
+});
 
 typedef testing::Test ShortcutsDatabaseMigrationTest;
 

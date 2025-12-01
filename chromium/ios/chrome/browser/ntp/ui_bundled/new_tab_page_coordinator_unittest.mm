@@ -6,7 +6,6 @@
 
 #import "base/memory/raw_ptr.h"
 #import "base/test/metrics/histogram_tester.h"
-#import "base/test/scoped_feature_list.h"
 #import "base/test/task_environment.h"
 #import "components/commerce/core/mock_shopping_service.h"
 #import "components/metrics/metrics_state_manager.h"
@@ -15,12 +14,16 @@
 #import "components/variations/service/variations_service_client.h"
 #import "components/variations/synthetic_trial_registry.h"
 #import "ios/chrome/browser/bookmarks/model/bookmark_model_factory.h"
+#import "ios/chrome/browser/browser_view/model/browser_view_visibility_notifier_browser_agent.h"
 #import "ios/chrome/browser/commerce/model/shopping_service_factory.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_most_visited_action_item.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/cells/content_suggestions_most_visited_item.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_coordinator.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_mediator.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/content_suggestions_view_controller.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_service_factory.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_browser_agent.h"
+#import "ios/chrome/browser/discover_feed/model/discover_feed_visibility_observer.h"
 #import "ios/chrome/browser/favicon/model/ios_chrome_large_icon_service_factory.h"
 #import "ios/chrome/browser/ntp/model/new_tab_page_tab_helper.h"
 #import "ios/chrome/browser/ntp/shared/metrics/home_metrics.h"
@@ -63,7 +66,9 @@
 #import "ios/chrome/browser/toolbar/ui_bundled/public/fakebox_focuser.h"
 #import "ios/chrome/browser/url_loading/model/fake_url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_notifier_browser_agent.h"
+#import "ios/chrome/test/fakes/fake_discover_feed_eligibility_handler.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
+#import "ios/chrome/test/providers/discover_feed/test_discover_feed_service.h"
 #import "ios/chrome/test/testing_application_context.h"
 #import "ios/testing/scoped_block_swizzler.h"
 #import "ios/web/public/test/fakes/fake_navigation_context.h"
@@ -207,11 +212,6 @@ class NewTabPageCoordinatorTest : public PlatformTest {
     toolbar_delegate_ =
         OCMProtocolMock(@protocol(NewTabPageControllerDelegate));
     histogram_tester_ = std::make_unique<base::HistogramTester>();
-
-    std::vector<base::test::FeatureRef> enabled;
-    enabled.push_back(kEnableWebChannels);
-    std::vector<base::test::FeatureRef> disabled;
-    scoped_feature_list_.InitWithFeatures(enabled, disabled);
   }
 
   ProfileIOS* GetProfile() { return profile_.get(); }
@@ -233,6 +233,17 @@ class NewTabPageCoordinatorTest : public PlatformTest {
     } else {
       browser_ = std::make_unique<TestBrowser>(GetProfile());
       StartSurfaceRecentTabBrowserAgent::CreateForBrowser(browser_.get());
+      BrowserViewVisibilityNotifierBrowserAgent::CreateForBrowser(
+          browser_.get());
+      // Set up Discover feed.
+      DiscoverFeedVisibilityBrowserAgent::CreateForBrowser(browser_.get());
+      DiscoverFeedVisibilityBrowserAgent::FromBrowser(browser_.get())
+          ->SetEnabled(true);
+      TestDiscoverFeedService* test_discover_feed_service =
+          static_cast<TestDiscoverFeedService*>(
+              DiscoverFeedServiceFactory::GetForProfile(profile_.get()));
+      eligibility_handler_ =
+          test_discover_feed_service->get_eligibility_handler();
       // Create non-NTP WebState
       browser_.get()->GetWebStateList()->InsertWebState(
           CreateWebState("http://chromium.org"),
@@ -258,17 +269,11 @@ class NewTabPageCoordinatorTest : public PlatformTest {
         collectionViewLayout:[[UICollectionViewFlowLayout alloc] init]];
     fakeFeedCollectionView.translatesAutoresizingMaskIntoConstraints = NO;
     [fake_feed_view_controller_.view addSubview:fakeFeedCollectionView];
-    FeedWrapperViewController* feedWrapperViewController =
-        [[FeedWrapperViewController alloc]
-              initWithDelegate:coordinator_
-            feedViewController:fake_feed_view_controller_];
-    OCMExpect([component_factory_mock_ discoverFeedForBrowser:browser_.get()
-                                  viewControllerConfiguration:[OCMArg any]])
+    OCMStub([component_factory_mock_ discoverFeedForBrowser:browser_.get()
+                                viewControllerConfiguration:[OCMArg any]])
         .andReturn(fake_feed_view_controller_);
-    OCMStub([component_factory_mock_
-                feedWrapperViewControllerWithDelegate:[OCMArg any]
-                                   feedViewController:[OCMArg any]])
-        .andReturn(feedWrapperViewController);
+    OCMExpect([component_factory_mock_ discoverFeedForBrowser:browser_.get()
+                                  viewControllerConfiguration:[OCMArg any]]);
 
     coordinator_ =
         [[NewTabPageCoordinator alloc] initWithBrowser:browser_.get()
@@ -280,6 +285,11 @@ class NewTabPageCoordinatorTest : public PlatformTest {
     coordinator_.NTPMetricsRecorder = NTPMetricsRecorder_;
 
     InsertWebState(CreateWebStateWithURL(GURL("chrome://newtab")));
+  }
+
+  // Sets the visibility of the feed.
+  void SetFeedHeaderVisible(bool visible) {
+    eligibility_handler_.enabled = visible;
   }
 
   // Inserts a FakeWebState into the browser's WebStateList.
@@ -408,6 +418,7 @@ class NewTabPageCoordinatorTest : public PlatformTest {
   UIViewController* fake_feed_view_controller_;
   NewTabPageCoordinator* coordinator_;
   NewTabPageMetricsRecorder* NTPMetricsRecorder_;
+  FakeDiscoverFeedEligibilityHandler* eligibility_handler_;
   id component_factory_mock_;
   UIViewController* base_view_controller_;
   id application_handler_mock_;
@@ -418,7 +429,6 @@ class NewTabPageCoordinatorTest : public PlatformTest {
   id lens_handler_mock_;
   id browser_coordinator_handler_mock_;
   std::unique_ptr<base::HistogramTester> histogram_tester_;
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // Tests that the coordinator doesn't vend an IncognitoViewController VC on the
@@ -697,12 +707,10 @@ TEST_F(NewTabPageCoordinatorTest, TestSaveNTPState) {
   EXPECT_NEAR(scrollPosition, -[coordinator_.NTPViewController heightAboveFeed],
               1);
 
-  // Change the selected feed and set some scroll position.
-  [coordinator_ selectFeedType:FeedTypeFollowing];
+  // Set some scroll position.
   [coordinator_.NTPViewController
       setContentOffsetToTopOfFeedOrLess:scrollPosition + 100];
 
-  FeedType selectedFeed = coordinator_.selectedFeed;
   scrollPosition = coordinator_.NTPViewController.scrollPosition;
 
   // Navigate away from the NTP and stop the coordinator.
@@ -714,53 +722,34 @@ TEST_F(NewTabPageCoordinatorTest, TestSaveNTPState) {
   [coordinator_ didNavigateToNTPInWebState:web_state_];
 
   // Check that newly opened NTP restores saved state.
-  EXPECT_EQ(coordinator_.selectedFeed, selectedFeed);
   EXPECT_NEAR(coordinator_.NTPViewController.scrollPosition, scrollPosition, 1);
 
   [coordinator_ stop];
 }
 
-// Tests that following feed and discover feed can be selected.
-TEST_F(NewTabPageCoordinatorTest, SelectFeedType) {
-  // Following feed is only available in the US, so we need to override the
-  // VariationsService's stored permenant country to test.
-  ScopedVariationsService scoped_variations_service;
-  scoped_variations_service.Get()->OverrideStoredPermanentCountry("us");
-
+// Tests that the coordinator shows and hides the feed as expected.
+TEST_F(NewTabPageCoordinatorTest, TestShowsAndHidesFeed) {
   CreateCoordinator(/*off_the_record=*/false);
   SetupCommandHandlerMocks();
   [coordinator_ start];
-  // Simulate the view appearing.
-  [coordinator_.NTPViewController beginAppearanceTransition:YES animated:NO];
-  [coordinator_.NTPViewController endAppearanceTransition];
-  SignIn();
-  // Scroll down slightly.
-  CGFloat scrollPosition =
-      round(coordinator_.NTPViewController.scrollPosition + 100);
-  [coordinator_.NTPViewController
-      setContentOffsetToTopOfFeedOrLess:scrollPosition];
+  [coordinator_ didNavigateToNTPInWebState:web_state_];
 
-  // Expect the Following feed to be loaded, and scroll position to be
-  // maintained.
-  OCMExpect([component_factory_mock_
-                    followingFeedForBrowser:browser_.get()
-                viewControllerConfiguration:[OCMArg any]
-                                   sortType:FollowingFeedSortTypeByLatest])
-      .andReturn(fake_feed_view_controller_);
-  [coordinator_ selectFeedType:FeedTypeFollowing];
-  EXPECT_OCMOCK_VERIFY(component_factory_mock_);
-  EXPECT_EQ(coordinator_.selectedFeed, FeedTypeFollowing);
-  EXPECT_EQ(coordinator_.NTPViewController.scrollPosition, scrollPosition);
+  ASSERT_TRUE([coordinator_
+      conformsToProtocol:@protocol(DiscoverFeedVisibilityObserver)]);
+  ASSERT_TRUE([coordinator_
+      respondsToSelector:@selector(didChangeDiscoverFeedVisibility)]);
+  id<DiscoverFeedVisibilityObserver> observer =
+      static_cast<id<DiscoverFeedVisibilityObserver>>(coordinator_);
 
-  // Expect the Discover feed to be loaded, and scroll position to be
-  // maintained.
-  OCMExpect([component_factory_mock_ discoverFeedForBrowser:browser_.get()
-                                viewControllerConfiguration:[OCMArg any]])
-      .andReturn(fake_feed_view_controller_);
-  [coordinator_ selectFeedType:FeedTypeDiscover];
-  EXPECT_OCMOCK_VERIFY(component_factory_mock_);
-  EXPECT_EQ(coordinator_.selectedFeed, FeedTypeDiscover);
-  EXPECT_EQ(coordinator_.NTPViewController.scrollPosition, scrollPosition);
-
+  EXPECT_EQ(fake_feed_view_controller_.parentViewController,
+            coordinator_.feedWrapperViewController);
+  SetFeedHeaderVisible(false);
+  [observer didChangeDiscoverFeedVisibility];
+  EXPECT_NE(fake_feed_view_controller_.parentViewController,
+            coordinator_.feedWrapperViewController);
+  SetFeedHeaderVisible(true);
+  [observer didChangeDiscoverFeedVisibility];
+  EXPECT_EQ(fake_feed_view_controller_.parentViewController,
+            coordinator_.feedWrapperViewController);
   [coordinator_ stop];
 }

@@ -45,8 +45,8 @@
 #include "src/base/export-template.h"
 #include "src/codegen/assembler.h"
 #include "src/codegen/cpu-features.h"
+#include "src/codegen/jump-table-info.h"
 #include "src/codegen/label.h"
-#include "src/codegen/x64/builtin-jump-table-info-x64.h"
 #include "src/codegen/x64/constants-x64.h"
 #include "src/codegen/x64/fma-instr.h"
 #include "src/codegen/x64/register-x64.h"
@@ -205,12 +205,12 @@ class V8_EXPORT_PRIVATE Operand {
 
   // Assert that the shared {is_label_operand} and {rex} fields have the same
   // type and offset in both union variants.
-  static_assert(std::is_same<decltype(LabelOperand::is_label_operand),
-                             decltype(MemoryOperand::is_label_operand)>::value);
+  static_assert(std::is_same_v<decltype(LabelOperand::is_label_operand),
+                               decltype(MemoryOperand::is_label_operand)>);
   static_assert(offsetof(LabelOperand, is_label_operand) ==
                 offsetof(MemoryOperand, is_label_operand));
-  static_assert(std::is_same<decltype(LabelOperand::rex),
-                             decltype(MemoryOperand::rex)>::value);
+  static_assert(std::is_same_v<decltype(LabelOperand::rex),
+                               decltype(MemoryOperand::rex)>);
   static_assert(offsetof(LabelOperand, rex) == offsetof(MemoryOperand, rex));
 
   static_assert(sizeof(MemoryOperand::len) == kSystemPointerSize,
@@ -3079,7 +3079,7 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   friend class ConstPool;
 
-  BuiltinJumpTableInfoWriter builtin_jump_table_info_writer_;
+  JumpTableInfoWriter builtin_jump_table_info_writer_;
 
 #if defined(V8_OS_WIN_X64)
   std::unique_ptr<win64_unwindinfo::XdataEncoder> xdata_encoder_;

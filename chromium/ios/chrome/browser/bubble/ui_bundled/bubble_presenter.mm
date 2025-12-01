@@ -18,6 +18,7 @@
 #import "components/omnibox/browser/omnibox_event_global_tracker.h"
 #import "components/prefs/pref_service.h"
 #import "components/segmentation_platform/embedder/default_model/device_switcher_result_dispatcher.h"
+#import "ios/chrome/browser/bubble/model/utils.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_constants.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_presenter_delegate.h"
 #import "ios/chrome/browser/bubble/ui_bundled/bubble_util.h"
@@ -26,7 +27,6 @@
 #import "ios/chrome/browser/bubble/ui_bundled/gesture_iph/gesture_in_product_help_view_delegate.h"
 #import "ios/chrome/browser/bubble/ui_bundled/gesture_iph/toolbar_swipe_gesture_in_product_help_view.h"
 #import "ios/chrome/browser/feature_engagement/model/tracker_factory.h"
-#import "ios/chrome/browser/iph_for_new_chrome_user/model/utils.h"
 #import "ios/chrome/browser/ntp/shared/metrics/feed_metrics_recorder.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/model/public/overlay_presenter_observer_bridge.h"
@@ -44,7 +44,6 @@
 #import "ios/chrome/browser/shared/public/commands/toolbar_commands.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/public/features/system_flags.h"
-#import "ios/chrome/browser/shared/ui/elements/custom_highlight_button.h"
 #import "ios/chrome/browser/shared/ui/util/layout_guide_names.h"
 #import "ios/chrome/browser/shared/ui/util/named_guide.h"
 #import "ios/chrome/browser/shared/ui/util/rtl_geometry.h"
@@ -110,6 +109,8 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   BubbleViewControllerPresenter* _lensKeyboardPresenter;
   BubbleViewControllerPresenter* _lensOverlayEntrypointBubblePresenter;
   BubbleViewControllerPresenter* _settingsInOverflowMenuBubblePresenter;
+  BubbleViewControllerPresenter*
+      _switchAccountWithNTPIdentityDiscBubblePresenter;
   BubbleViewControllerPresenter* _feedSwipeBubblePresenter;
 
   // List of existing gestural IPH views.
@@ -201,9 +202,6 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
 #pragma mark - Bubble presenter methods
 
 - (void)presentDiscoverFeedMenuTipBubble {
-  BubbleArrowDirection arrowDirection = IsHomeCustomizationEnabled()
-                                            ? BubbleArrowDirectionUp
-                                            : BubbleArrowDirectionDown;
   NSString* text =
       l10n_util::GetNSStringWithFixup(IDS_IOS_DISCOVER_FEED_HEADER_IPH);
 
@@ -219,22 +217,16 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
       [menuButton.superview convertPoint:menuButton.frame.origin toView:nil];
 
   // Slightly move IPH to ensure that the bubble doesn't bleed out the screen.
-  if (IsHomeCustomizationEnabled()) {
-    discoverFeedMenuAnchor.x += menuButton.frame.size.width / 2;
-    discoverFeedMenuAnchor.y += menuButton.frame.size.height;
-  } else {
-    discoverFeedMenuAnchor.x += menuButton.frame.size.width / 3;
-  }
+  discoverFeedMenuAnchor.x += menuButton.frame.size.width / 2;
+  discoverFeedMenuAnchor.y += menuButton.frame.size.height;
 
   // If the feature engagement tracker does not consider it valid to display
   // the tip, then end early to prevent the potential reassignment of the
   // existing `discoverFeedHeaderMenuTipBubblePresenter` to nil.
   BubbleViewControllerPresenter* presenter = [self
       presentBubbleForFeature:feature_engagement::kIPHDiscoverFeedHeaderFeature
-                    direction:arrowDirection
-                    alignment:IsHomeCustomizationEnabled()
-                                  ? BubbleAlignmentTopOrLeading
-                                  : BubbleAlignmentBottomOrTrailing
+                    direction:BubbleArrowDirectionUp
+                    alignment:BubbleAlignmentTopOrLeading
                          text:text
         voiceOverAnnouncement:text
                   anchorPoint:discoverFeedMenuAnchor];
@@ -514,6 +506,48 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
   }
 }
 
+- (void)presentSwitchAccountsWithNTPAccountParticleDiscBubble {
+  if (![self canPresentBubbleWithCheckTabScrolledToTop:YES]) {
+    return;
+  }
+
+  // Only show if the user has previously used a web-triggered flow to switch
+  // accounts in Chrome.
+  // Note: This condition can't be handled by the `feature_engagement::Tracker`
+  // internally, because it's per-device while the tracker is per-profile.
+  if (!GetApplicationContext()->GetLocalState()->GetBoolean(
+          prefs::kHasSwitchedAccountsViaWebFlow)) {
+    return;
+  }
+
+  BubbleArrowDirection arrowDirection = BubbleArrowDirectionUp;
+
+  CGPoint identityDiscAnchor =
+      [self anchorPointToGuide:kNTPIdentityDiscButtonGuide
+                     direction:arrowDirection];
+
+  // The identity disc button is slightly larger than it visually appears, so
+  // move the bubble a bit closer.
+  CGFloat anchorYOffset = -8;
+
+  BubbleViewControllerPresenter* presenter = [self
+      presentBubbleForFeature:
+          feature_engagement::
+              kIPHiOSSwitchAccountsWithNTPAccountParticleDiscFeature
+                    direction:arrowDirection
+                    alignment:BubbleAlignmentBottomOrTrailing
+                         text:l10n_util::GetNSString(
+                                  IDS_IOS_SWITCH_ACCOUNTS_IPH_MESSAGE)
+        voiceOverAnnouncement:
+            l10n_util::GetNSString(
+                IDS_IOS_SWITCH_ACCOUNTS_IPH_ACCESSIBILITY_LABEL)
+                  anchorPoint:CGPoint(identityDiscAnchor.x,
+                                      identityDiscAnchor.y + anchorYOffset)];
+  if (presenter) {
+    _switchAccountWithNTPIdentityDiscBubblePresenter = presenter;
+  }
+}
+
 - (void)
     presentPullToRefreshGestureInProductHelpWithDeviceSwitcherResultDispatcher:
         (raw_ptr<segmentation_platform::DeviceSwitcherResultDispatcher>)
@@ -528,8 +562,7 @@ BOOL CanGestureInProductHelpViewFitInGuide(GestureInProductHelpView* view,
       feature_engagement::kIPHiOSPullToRefreshFeature;
   BOOL userEligibleForPullToRefreshIPH =
       deviceSwitcherResultDispatcher &&
-      iph_for_new_chrome_user::IsUserNewSafariSwitcher(
-          deviceSwitcherResultDispatcher) &&
+      IsUserNewSafariSwitcher(deviceSwitcherResultDispatcher) &&
       _engagementTracker->WouldTriggerHelpUI(pullToRefreshFeature);
   if (!userEligibleForPullToRefreshIPH) {
     return;

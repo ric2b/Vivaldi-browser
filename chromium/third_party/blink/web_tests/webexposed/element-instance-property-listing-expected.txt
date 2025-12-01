@@ -114,6 +114,7 @@ namespace http://www.w3.org/1999/xhtml
     property contains
     property contentEditable
     property currentCSSZoom
+    property customElementRegistry
     property dataset
     property dir
     property dispatchEvent
@@ -537,6 +538,7 @@ html element canvas
     property configureHighDynamicRange
     property getContext
     property height
+    property layoutSubtree
     property toBlob
     property toDataURL
     property transferControlToOffscreen
@@ -875,6 +877,12 @@ html element marquee
     property width
 html element menu
     property compact
+html element menubar
+html element menuitem
+    property checked
+    property defaultChecked
+    property disabled
+html element menulist
 html element meta
     property content
     property httpEquiv
@@ -1113,6 +1121,7 @@ html element template
     property content
     property parseparts
     property shadowRootClonable
+    property shadowRootCustomElementRegistry
     property shadowRootDelegatesFocus
     property shadowRootMode
     property shadowRootSerializable
@@ -1393,6 +1402,7 @@ namespace http://www.w3.org/2000/svg
     property containerTiming
     property contains
     property currentCSSZoom
+    property customElementRegistry
     property dataset
     property dispatchEvent
     property elementTiming
@@ -2213,6 +2223,7 @@ svg element rect
     property x
     property y
 svg element script
+    property async
     property href
     property type
 svg element set

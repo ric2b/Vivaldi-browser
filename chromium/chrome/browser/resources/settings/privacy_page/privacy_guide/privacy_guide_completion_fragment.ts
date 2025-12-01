@@ -10,10 +10,13 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import './privacy_guide_fragment_shared.css.js';
+import '../../icons.html.js';
+import '../../privacy_icons.html.js';
 import '../../settings_shared.css.js';
 
 import {I18nMixin} from 'chrome://resources/cr_elements/i18n_mixin.js';
 import {WebUiListenerMixin} from 'chrome://resources/cr_elements/web_ui_listener_mixin.js';
+import {assert} from 'chrome://resources/js/assert.js';
 import {OpenWindowProxyImpl} from 'chrome://resources/js/open_window_proxy.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -60,7 +63,7 @@ export class PrivacyGuideCompletionFragmentElement extends
         type: Boolean,
         value: () =>
             loadTimeData.getBoolean('enableAiSettingsInPrivacyGuide') &&
-            loadTimeData.getBoolean('showAdvancedFeaturesMainControl'),
+            loadTimeData.getBoolean('showAiPage'),
       },
 
       shouldShowPrivacySandbox_: {
@@ -81,13 +84,13 @@ export class PrivacyGuideCompletionFragmentElement extends
     };
   }
 
-  private isNoLinkLayout_: boolean;
-  private shouldShowAiSettings_: boolean;
-  private shouldShowPrivacySandbox_: boolean;
-  private shouldShowWaa_: boolean;
+  declare private isNoLinkLayout_: boolean;
+  declare private shouldShowAiSettings_: boolean;
+  declare private shouldShowPrivacySandbox_: boolean;
+  declare private shouldShowWaa_: boolean;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
-  private shouldShowV2AdPrivacySubLabel_: boolean;
+  declare private shouldShowV2AdPrivacySubLabel_: boolean;
   private privacySandboxBrowserProxy_: PrivacySandboxBrowserProxy =
       PrivacySandboxBrowserProxyImpl.getInstance();
 
@@ -108,7 +111,10 @@ export class PrivacyGuideCompletionFragmentElement extends
   }
 
   override focus() {
-    this.shadowRoot!.querySelector<HTMLElement>('.headline')!.focus();
+    const header = this.shadowRoot!.querySelector<HTMLElement>(
+        '.welcome-completion-header-label');
+    assert(header);
+    header.focus();
   }
 
   private onViewEnterStart_() {

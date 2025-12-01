@@ -14,6 +14,7 @@ constexpr char kTypecdServicePath[] = "/org/chromium/typecd";
 // Signals.
 constexpr char kTypecdDeviceConnected[] = "DeviceConnected";
 constexpr char kTypecdCableWarning[] = "CableWarning";
+constexpr char kTypecdUsbLimit[] = "UsbLimit";
 
 // Methods.
 constexpr char kTypecdGetAltModesMethod[] = "GetAltModes";
@@ -45,6 +46,15 @@ enum class CableWarningType {
   kInvalidTBTCable = 4,
   // USB speed is limited by the cable.
   kSpeedLimitingCable = 5,
+};
+
+enum class UsbLimitType {
+  // Reserved for generic USB limitations.
+  kOther = 0,
+  // Device has reached the maximum number of supported USB devices.
+  kDeviceLimit = 1,
+  // Device has reached the maximum number of supported USB endpoints.
+  kEndpointLimit = 2,
 };
 
 // USB-C modes supported by ChromeOS.

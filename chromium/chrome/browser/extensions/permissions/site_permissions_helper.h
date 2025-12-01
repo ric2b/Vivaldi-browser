@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_EXTENSIONS_PERMISSIONS_SITE_PERMISSIONS_HELPER_H_
 
 #include "base/memory/raw_ptr.h"
-#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "extensions/browser/permissions_manager.h"
+#include "extensions/buildflags/buildflags.h"
+
+static_assert(BUILDFLAG(ENABLE_EXTENSIONS_CORE));
 
 class Profile;
 

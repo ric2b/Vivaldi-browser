@@ -25,8 +25,6 @@
 #include "storage/browser/quota/quota_temporary_storage_evictor.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using ::blink::mojom::StorageType;
-
 namespace storage {
 
 class QuotaTemporaryStorageEvictorTest;
@@ -204,7 +202,7 @@ class QuotaTemporaryStorageEvictorTest : public testing::Test {
   BucketLocator CreateBucket(const std::string& url, bool is_default) {
     return BucketLocator(bucket_id_generator_.GenerateNextId(),
                          blink::StorageKey::CreateFromStringForTesting(url),
-                         blink::mojom::StorageType::kTemporary, is_default);
+                         is_default);
   }
 
   EvictionBucket CreateEvictionBucket(const std::string& url,

@@ -7,8 +7,10 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "extensions/browser/api/alarms/alarm_manager.h"
+#include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/api/declarative_net_request/rules_monitor_service.h"
 #include "extensions/browser/api/idle/idle_manager_factory.h"
+#include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/api/messaging/message_service.h"
 #include "extensions/browser/api/offscreen/offscreen_document_manager.h"
 #include "extensions/browser/api/power/power_api.h"
@@ -32,11 +34,9 @@
 #include "extensions/browser/api/bluetooth_socket/bluetooth_api_socket.h"
 #include "extensions/browser/api/bluetooth_socket/bluetooth_socket_event_dispatcher.h"
 #include "extensions/browser/api/content_settings/content_settings_service.h"
-#include "extensions/browser/api/declarative/rules_registry_service.h"
 #include "extensions/browser/api/feedback_private/feedback_private_api.h"
 #include "extensions/browser/api/hid/hid_connection_resource.h"
 #include "extensions/browser/api/hid/hid_device_manager.h"
-#include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/api/networking_private/networking_private_event_router_factory.h"
 #include "extensions/browser/api/printer_provider/printer_provider_api_factory.h"
 #include "extensions/browser/api/serial/serial_connection.h"
@@ -72,9 +72,11 @@ void EnsureApiBrowserContextKeyedServiceFactoriesBuilt() {
   AlarmManager::GetFactoryInstance();
   declarative_net_request::RulesMonitorService::GetFactoryInstance();
   IdleManagerFactory::GetInstance();
+  ManagementAPI::GetFactoryInstance();
   MessageService::GetFactoryInstance();
   OffscreenDocumentManager::GetFactory();
   PowerAPI::GetFactoryInstance();
+  RulesRegistryService::GetFactoryInstance();
   RuntimeAPI::GetFactoryInstance();
   SessionStorageManager::GetFactory();
   StorageFrontend::GetFactoryInstance();
@@ -115,7 +117,6 @@ void EnsureApiBrowserContextKeyedServiceFactoriesBuilt() {
   ContentSettingsService::GetFactoryInstance();
   FeedbackPrivateAPI::GetFactoryInstance();
   HidDeviceManager::GetFactoryInstance();
-  ManagementAPI::GetFactoryInstance();
 #if BUILDFLAG(IS_CHROMEOS)
   MediaPerceptionAPIManager::GetFactoryInstance();
 #endif
@@ -124,7 +125,6 @@ void EnsureApiBrowserContextKeyedServiceFactoriesBuilt() {
   NetworkingPrivateEventRouterFactory::GetInstance();
 #endif
   PrinterProviderAPIFactory::GetInstance();
-  RulesRegistryService::GetFactoryInstance();
   SystemInfoAPI::GetFactoryInstance();
   UsbDeviceManager::GetFactoryInstance();
 #if BUILDFLAG(IS_CHROMEOS)

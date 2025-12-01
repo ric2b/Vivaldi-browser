@@ -137,9 +137,10 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   // This method turns on the renderer-side accessibility engine for this
   // web contents.
   void SetBrowserAXMode(JNIEnv* env,
-                        jboolean needs_full_engine,
-                        jboolean form_controls_mode,
-                        jboolean is_screen_reader_running);
+                        jboolean is_known_screen_reader_enabled,
+                        jboolean is_complex_accessibility_service_enabled,
+                        jboolean is_form_controls_candidate,
+                        jboolean is_on_screen_mode_candidate);
 
   base::android::ScopedJavaLocalRef<jstring> GetSupportedHtmlElementTypes(
       JNIEnv* env);
@@ -200,14 +201,15 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   // Use |can_wrap_to_last_element| to specify if a backwards search can wrap
   // around to the last element. This is used to expose the last HTML element
   // upon swiping backwards into a WebView.
-  jint FindElementType(JNIEnv* env,
-                       jint start_id,
-                       const base::android::JavaParamRef<jstring>& element_type,
-                       jboolean forwards,
-                       jboolean can_wrap_to_last_element,
-                       jboolean use_default_predicate,
-                       jboolean is_talkback_enabled,
-                       jboolean is_only_talkback_enabled);
+  jint FindElementType(
+      JNIEnv* env,
+      jint start_id,
+      const base::android::JavaParamRef<jstring>& element_type_str,
+      jboolean forwards,
+      jboolean can_wrap_to_last_element,
+      jboolean use_default_predicate,
+      jboolean is_known_screen_reader_enabled,
+      jboolean is_only_one_accessibility_service_enabled);
 
   // Respond to a ACTION_[NEXT/PREVIOUS]_AT_MOVEMENT_GRANULARITY action
   // and move the cursor/selection within the given node id. We keep track
@@ -382,19 +384,16 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   void HandleContentChanged(int32_t unique_id);
   void HandleFocusChanged(int32_t unique_id);
   void HandleCheckStateChanged(int32_t unique_id);
-  void HandleDescriptionChangedPaneTitle(int32_t unique_id);
-  void HandleDescriptionChangedSubtree(int32_t unique_id);
-  void HandleStateDescriptionChanged(int32_t unique_id);
   void HandleClicked(int32_t unique_id);
   void HandleMenuOpened(int32_t unique_id);
+  void HandleWindowContentChange(int32_t unique_id, int32_t subType);
   void HandleScrollPositionChanged(int32_t unique_id);
   void HandleScrolledToAnchor(int32_t unique_id);
   void HandlePaneOpened(int32_t unique_id);
   void AnnounceLiveRegionText(const std::u16string& text);
-  void HandleTextContentChanged(int32_t unique_id);
+  void HandleActiveDescendantChanged(int32_t unique_id);
   void HandleTextSelectionChanged(int32_t unique_id);
   void HandleEditableTextChanged(int32_t unique_id);
-  void HandleImageAnnotationChanged(int32_t unique_id);
   void HandleSliderChanged(int32_t unique_id);
   void SendDelayedWindowContentChangedEvent();
   bool OnHoverEvent(const ui::MotionEventAndroid& event);
@@ -408,6 +407,10 @@ class CONTENT_EXPORT WebContentsAccessibilityAndroid
   base::WeakPtr<WebContentsAccessibilityAndroid> GetWeakPtr();
 
  private:
+  friend class MockWebContentsAccessibilityAndroid;
+
+  WebContentsAccessibilityAndroid();
+
   BrowserAccessibilityManagerAndroid* GetRootBrowserAccessibilityManager();
 
   BrowserAccessibilityAndroid* GetAXFromUniqueID(int32_t unique_id);

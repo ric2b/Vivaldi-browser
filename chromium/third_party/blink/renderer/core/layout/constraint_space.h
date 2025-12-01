@@ -17,11 +17,11 @@
 #include "third_party/blink/renderer/core/layout/geometry/bfc_offset.h"
 #include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/layout/geometry/margin_strut.h"
-#include "third_party/blink/renderer/core/layout/geometry/physical_size.h"
 #include "third_party/blink/renderer/core/layout/grid/grid_data.h"
 #include "third_party/blink/renderer/core/layout/line_clamp_data.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
 #include "third_party/blink/renderer/core/layout/table/table_constraint_space_data.h"
+#include "third_party/blink/renderer/platform/geometry/physical_size.h"
 #include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/text/writing_mode.h"
 #include "third_party/blink/renderer/platform/wtf/ref_counted.h"
@@ -156,7 +156,10 @@ class CORE_EXPORT ConstraintSpace final {
     return copy;
   }
 
-  void Trace(Visitor* visitor) const { visitor->Trace(rare_data_); }
+  void Trace(Visitor* visitor) const {
+    visitor->Trace(exclusion_space_);
+    visitor->Trace(rare_data_);
+  }
 
   // If `this` needs to be modified for a block-in-inline child, creates a clone
   // in `space`, modifies it, and returns it. Otherwise returns `*this`.

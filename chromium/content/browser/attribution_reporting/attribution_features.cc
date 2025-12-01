@@ -4,7 +4,12 @@
 
 #include "content/browser/attribution_reporting/attribution_features.h"
 
+#include "base/feature_list.h"
+
 namespace content {
-// TODO(crbug.com/384870263): Add feature flag to gate report delivery on
-// navigation.
+
+BASE_FEATURE(kAttributionReportExpiry,
+             "AttributionReportExpiry",
+             base::FEATURE_ENABLED_BY_DEFAULT);
+
 }  // namespace content

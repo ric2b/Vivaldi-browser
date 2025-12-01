@@ -207,41 +207,27 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
           return map;
         },
       },
-
-      enableAiSettingsPageRefresh_: {
-        type: Boolean,
-        value: () => loadTimeData.getBoolean('enableAiSettingsPageRefresh'),
-      },
-
-      showHistorySearchControl_: {
-        type: Boolean,
-        value() {
-          return loadTimeData.getBoolean('showHistorySearchControl');
-        },
-      },
     };
   }
 
-  prefs: any;
-  private signinAllowed_: boolean;
-  private isDasherlessProfile_: boolean;
-  syncStatus: SyncStatus|null;
-  pageVisibility: PageVisibility;
-  private authToken_: string;
-  private profileIconUrl_: string;
-  private isProfileActionable_: boolean;
-  private profileName_: string;
-  private enableAiSettingsPageRefresh_: boolean;
-  private showHistorySearchControl_: boolean;
+  declare prefs: any;
+  declare private signinAllowed_: boolean;
+  declare private isDasherlessProfile_: boolean;
+  declare syncStatus: SyncStatus|null;
+  declare pageVisibility: PageVisibility;
+  declare private authToken_: string;
+  declare private profileIconUrl_: string;
+  declare private isProfileActionable_: boolean;
+  declare private profileName_: string;
 
   // <if expr="not chromeos_ash">
-  storedAccounts: StoredAccount[]|null;
-  private shouldShowGoogleAccount_: boolean;
-  private showImportDataDialog_: boolean;
-  private showSignoutDialog_: boolean;
+  declare storedAccounts: StoredAccount[]|null;
+  declare private shouldShowGoogleAccount_: boolean;
+  declare private showImportDataDialog_: boolean;
+  declare private showSignoutDialog_: boolean;
   // </if>
 
-  private focusConfig_: FocusConfig;
+  declare private focusConfig_: FocusConfig;
 
   private syncBrowserProxy_: SyncBrowserProxy =
       SyncBrowserProxyImpl.getInstance();
@@ -307,17 +293,6 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
     return this.signinAllowed_ ?
         this.shadowRoot!.querySelector('#edit-profile')! :
         this.shadowRoot!.querySelector('#profile-row')!;
-  }
-
-  private getSyncAndGoogleServicesSubtext_(): string {
-    if (loadTimeData.getBoolean('isImprovedSettingsUIOnDesktopEnabled')) {
-      return '';
-    }
-    if (this.syncStatus && this.syncStatus.hasError &&
-        this.syncStatus.statusText) {
-      return this.syncStatus.statusText;
-    }
-    return '';
   }
 
   /**
@@ -453,10 +428,6 @@ export class SettingsPeoplePageElement extends SettingsPeoplePageElementBase {
   private isSyncing_() {
     return !!this.syncStatus &&
         this.syncStatus.signedInState === SignedInState.SYNCING;
-  }
-
-  private shouldShowHistorySearchControl_(): boolean {
-    return this.showHistorySearchControl_ && !this.enableAiSettingsPageRefresh_;
   }
 }
 

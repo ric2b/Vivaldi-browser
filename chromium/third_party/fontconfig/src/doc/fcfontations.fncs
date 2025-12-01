@@ -1,0 +1,47 @@
+/*
+ * fontconfig/doc/fcfontations.fncs
+ *
+ * Copyright © 2025 Google LLC.
+ *
+ * Permission to use, copy, modify, distribute, and sell this software and its
+ * documentation for any purpose is hereby granted without fee, provided that
+ * the above copyright notice appear in all copies and that both that
+ * copyright notice and this permission notice appear in supporting
+ * documentation, and that the name of the author(s) not be used in
+ * advertising or publicity pertaining to distribution of the software without
+ * specific, written prior permission.  The authors make no
+ * representations about the suitability of this software for any purpose.  It
+ * is provided "as is" without express or implied warranty.
+ *
+ * THE AUTHOR(S) DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE,
+ * INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS, IN NO
+ * EVENT SHALL THE AUTHOR(S) BE LIABLE FOR ANY SPECIAL, INDIRECT OR
+ * CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE,
+ * DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
+ * TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+ * PERFORMANCE OF THIS SOFTWARE.
+ */
+
+@SYNOPSIS@
+#include &lt;fontconfig.h&gt;
+#include &lt;fcfontations.h&gt;
+@RET@           unsigned int
+@FUNC@          FcFontationsQueryAll
+@TYPE1@         const FcChar8 *                 @ARG1@          file
+@TYPE2@         int%                            @ARG2@          id
+@TYPE3@         FcBlanks *                      @ARG3@          blanks
+@TYPE4@         int *                           @ARG4@          count
+@TYPE5@         FcFontSet *                     @ARG5@          set
+@PURPOSE@       compute all patterns from font file (and index)
+@DESC@
+UNSTABLE feature. Constructs patterns found in 'file'. Currently pattern is incomplete
+compared to FcFreeTypeQueryAll() and may deviate from what FreeType indexing produces.
+Not supported yet, but will follow: If id is -1, then all patterns found
+in 'file' are added to 'set'.
+Otherwise, this function works exactly like FcFreeTypeQueryAll()/FcFreeTypeQuery().
+The number of faces in 'file' is returned in 'count'.
+The number of patterns added to 'set' is returned.
+FcBlanks is deprecated, <parameter>blanks</parameter> is ignored and
+accepted only for compatibility with older code.
+@SINCE@         2.17.0
+@@

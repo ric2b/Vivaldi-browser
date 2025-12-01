@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "ui/gfx/x/connection.h"
 
 #include <xcb/xcb.h>
@@ -17,12 +12,14 @@
 
 #include "base/auto_reset.h"
 #include "base/command_line.h"
+#include "base/compiler_specific.h"
 #include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/no_destructor.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
 #include "base/threading/thread_local.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/switches.h"
@@ -100,6 +97,18 @@ Window GetWindowPropertyAsWindow(const GetPropertyResponse& value) {
     return *wm_window;
   }
   return Window::None;
+}
+
+std::map<std::string, std::string> ParseXResources(std::string_view resources) {
+  std::map<std::string, std::string> result;
+  base::StringPairs pairs;
+  base::SplitStringIntoKeyValuePairs(resources, ':', '\n', &pairs);
+  for (const auto& pair : pairs) {
+    auto key = base::TrimWhitespaceASCII(pair.first, base::TRIM_ALL);
+    auto value = base::TrimWhitespaceASCII(pair.second, base::TRIM_ALL);
+    result[std::string(key)] = std::string(value);
+  }
+  return result;
 }
 
 }  // namespace
@@ -192,7 +201,7 @@ Connection::Connection(const std::string& address)
   root_props_ = std::make_unique<PropertyCache>(
       this, default_root(),
       std::vector<Atom>{GetAtom("_NET_SUPPORTING_WM_CHECK"),
-                        GetAtom("_NET_SUPPORTED")},
+                        GetAtom("_NET_SUPPORTED"), Atom::RESOURCE_MANAGER},
       base::BindRepeating(&Connection::OnRootPropertyChanged,
                           base::Unretained(this)));
 }
@@ -265,13 +274,13 @@ bool Connection::GetWmNormalHints(Window window, SizeHints* hints) {
   if (hints32.size() != sizeof(SizeHints) / 4) {
     return false;
   }
-  memcpy(hints, hints32.data(), sizeof(*hints));
+  UNSAFE_TODO(memcpy(hints, hints32.data(), sizeof(*hints)));
   return true;
 }
 
 void Connection::SetWmNormalHints(Window window, const SizeHints& hints) {
   std::vector<uint32_t> hints32(sizeof(SizeHints) / 4);
-  memcpy(hints32.data(), &hints, sizeof(SizeHints));
+  UNSAFE_TODO(memcpy(hints32.data(), &hints, sizeof(SizeHints)));
   SetArrayProperty(window, Atom::WM_NORMAL_HINTS, Atom::WM_SIZE_HINTS, hints32);
 }
 
@@ -283,13 +292,13 @@ bool Connection::GetWmHints(Window window, WmHints* hints) {
   if (hints32.size() != sizeof(WmHints) / 4) {
     return false;
   }
-  memcpy(hints, hints32.data(), sizeof(*hints));
+  UNSAFE_TODO(memcpy(hints, hints32.data(), sizeof(*hints)));
   return true;
 }
 
 void Connection::SetWmHints(Window window, const WmHints& hints) {
   std::vector<uint32_t> hints32(sizeof(WmHints) / 4);
-  memcpy(hints32.data(), &hints, sizeof(WmHints));
+  UNSAFE_TODO(memcpy(hints32.data(), &hints, sizeof(WmHints)));
   SetArrayProperty(window, Atom::WM_HINTS, Atom::WM_HINTS, hints32);
 }
 
@@ -345,6 +354,13 @@ bool Connection::WmSupportsHint(Atom atom) const {
     return base::Contains(supported, atom);
   }
   return false;
+}
+
+const std::map<std::string, std::string> Connection::GetXResources() {
+  // Fetch the initial property value which will call `OnPropertyChanged` and
+  // populate `xresources_` if it is not already populated.
+  root_props_->Get(Atom::RESOURCE_MANAGER);
+  return xresources_;
 }
 
 Connection::Request::Request(ResponseCallback callback)
@@ -403,10 +419,11 @@ int Connection::GetFd() {
 
 bool Connection::CanSyncWithWm() const {
   // For some WMs, we don't need to experimentally sync with them to determine
-  // sync support, so we can use WmSync right away. For now, only check for
-  // Openbox since that's what is used in tests. The list may be expanded as
-  // nearly all WMs should work with WmSync.
-  if (GetWmName() == "Openbox") {
+  // sync support, so we can use WmSync right away. Openbox and GNOME Shell are
+  // used in tests. The list may be expanded as nearly all WMs should work with
+  // WmSync.
+  const std::string wm_name = GetWmName();
+  if (wm_name == "Openbox" || wm_name == "GNOME Shell") {
     return true;
   }
   return synced_with_wm_;
@@ -938,6 +955,8 @@ uint32_t Connection::GenerateIdImpl() {
 
 void Connection::OnRootPropertyChanged(Atom property,
                                        const GetPropertyResponse& value) {
+  // `root_props_` may be null during initialization, so this function should
+  // rely on `value` directly.
   Atom check_atom = GetAtom("_NET_SUPPORTING_WM_CHECK");
   if (property == check_atom) {
     // We've detected a new window manager, which may have different behavior
@@ -951,6 +970,10 @@ void Connection::OnRootPropertyChanged(Atom property,
           this, wm_window,
           std::vector<Atom>{check_atom, GetAtom("_NET_WM_NAME")});
     }
+  } else if (property == Atom::RESOURCE_MANAGER) {
+    auto xresources = PropertyCache::GetAsSpan<char>(value);
+    xresources_ =
+        ParseXResources(std::string_view(xresources.begin(), xresources.end()));
   }
 }
 
@@ -961,7 +984,7 @@ bool Connection::WmSupportsEwmh() const {
   if (!wm_props_) {
     return false;
   }
-  if (const x11::Window* wm_check = wm_props_->GetAs<Window>(check_atom)) {
+  if (const Window* wm_check = wm_props_->GetAs<Window>(check_atom)) {
     return *wm_check == wm_window;
   }
   return false;
@@ -978,7 +1001,7 @@ void Connection::OnWmSynced() {
   synced_with_wm_ = true;
 }
 
-ScopedXGrabServer::ScopedXGrabServer(x11::Connection* connection)
+ScopedXGrabServer::ScopedXGrabServer(Connection* connection)
     : connection_(connection) {
   connection_->GrabServer();
 }

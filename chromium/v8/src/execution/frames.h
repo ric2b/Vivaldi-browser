@@ -118,7 +118,6 @@ class StackHandler {
   V(EXIT, ExitFrame)                                                      \
   IF_WASM(V, WASM, WasmFrame)                                             \
   IF_WASM(V, WASM_TO_JS, WasmToJsFrame)                                   \
-  IF_WASM(V, WASM_TO_JS_FUNCTION, WasmToJsFunctionFrame)                  \
   IF_WASM(V, JS_TO_WASM, JsToWasmFrame)                                   \
   IF_WASM(V, STACK_SWITCH, StackSwitchFrame)                              \
   IF_WASM_DRUMBRAKE(V, WASM_INTERPRETER_ENTRY, WasmInterpreterEntryFrame) \
@@ -258,9 +257,7 @@ class StackFrame {
   }
 #endif  // V8_ENABLE_DRUMBRAKE
   bool is_wasm_debug_break() const { return type() == WASM_DEBUG_BREAK; }
-  bool is_wasm_to_js() const {
-    return type() == WASM_TO_JS || type() == WASM_TO_JS_FUNCTION;
-  }
+  bool is_wasm_to_js() const { return type() == WASM_TO_JS; }
   bool is_js_to_wasm() const { return type() == JS_TO_WASM; }
 #endif  // V8_ENABLE_WEBASSEMBLY
   bool is_builtin() const { return type() == BUILTIN; }
@@ -708,7 +705,6 @@ class TypedFrame : public CommonFrame {
   void Iterate(RootVisitor* v) const override;
 
   void IterateParamsOfGenericWasmToJSWrapper(RootVisitor* v) const;
-  void IterateParamsOfOptimizedWasmToJSWrapper(RootVisitor* v) const;
 
  protected:
   inline explicit TypedFrame(StackFrameIteratorBase* iterator);
@@ -1422,17 +1418,6 @@ class WasmToJsFrame : public WasmFrame {
   friend class StackFrameIteratorBase;
 };
 
-class WasmToJsFunctionFrame : public TypedFrame {
- public:
-  Type type() const override { return WASM_TO_JS_FUNCTION; }
-
- protected:
-  inline explicit WasmToJsFunctionFrame(StackFrameIteratorBase* iterator);
-
- private:
-  friend class StackFrameIteratorBase;
-};
-
 class JsToWasmFrame : public StubFrame {
  public:
   Type type() const override { return JS_TO_WASM; }
@@ -1683,12 +1668,6 @@ class StackFrameIteratorBase {
   bool first_stack_only_ = false;
   // // Current wasm stack being iterated.
   wasm::StackMemory* wasm_stack_ = nullptr;
-  // See {StackFrameIterator::NoHandles}.
-  std::optional<DisallowGarbageCollection> no_gc_;
-  union {
-    Handle<WasmContinuationObject> handle_;
-    Tagged<WasmContinuationObject> obj_;
-  } continuation_{Handle<WasmContinuationObject>::null()};
 #endif
 
   StackHandler* handler() const {
@@ -1711,12 +1690,6 @@ class StackFrameIterator : public StackFrameIteratorBase {
   V8_EXPORT_PRIVATE explicit StackFrameIterator(Isolate* isolate);
   // An iterator that iterates over a given thread's stack.
   V8_EXPORT_PRIVATE StackFrameIterator(Isolate* isolate, ThreadLocalTop* t);
-  // Use this constructor to use the stack frame iterator without a handle
-  // scope. This sets the {no_gc_} scope, and if the {continuation_} object is
-  // used, it is unhandlified.
-  struct NoHandles {};
-  V8_EXPORT_PRIVATE StackFrameIterator(Isolate* isolate, ThreadLocalTop* top,
-                                       NoHandles);
 #if V8_ENABLE_WEBASSEMBLY
   // Depending on the use case, users of the StackFrameIterator should either:
   // - Use the default constructor, which iterates the active stack and its
@@ -1745,8 +1718,6 @@ class StackFrameIterator : public StackFrameIteratorBase {
 #if V8_ENABLE_WEBASSEMBLY
   // Go to the first frame of this stack.
   void Reset(ThreadLocalTop* top, wasm::StackMemory* stack);
-  Tagged<WasmContinuationObject> continuation();
-  void set_continuation(Tagged<WasmContinuationObject> continuation);
 #endif
 
 #ifdef DEBUG
@@ -1792,10 +1763,6 @@ class V8_EXPORT_PRIVATE DebuggableStackFrameIterator {
   explicit DebuggableStackFrameIterator(Isolate* isolate);
   // Skip frames until the frame with the given id is reached.
   DebuggableStackFrameIterator(Isolate* isolate, StackFrameId id);
-  // Overloads to be used in scopes without a HandleScope.
-  DebuggableStackFrameIterator(Isolate* isolate, StackFrameIterator::NoHandles);
-  DebuggableStackFrameIterator(Isolate* isolate, StackFrameId id,
-                               StackFrameIterator::NoHandles);
 
   bool done() const { return iterator_.done(); }
   void Advance();

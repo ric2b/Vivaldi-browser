@@ -264,61 +264,6 @@ TEST_F(ContactInfoSyncBridgeTest,
             profile.usage_history().modification_date());
 }
 
-// Tests that `ApplyIncrementalSyncChanges()` ensures that at most one H/W
-// address exists after a profile addition.
-TEST_F(ContactInfoSyncBridgeTest,
-       ApplyIncrementalSyncChanges_DuplicateHomeAndWork_Add) {
-  ASSERT_TRUE(StartSyncing(/*remote_profiles=*/{}));
-
-  // Simulate that a home address exists and that a new home address with a
-  // different storage key is received from sync.
-  AutofillProfile local =
-      TestProfile(kGUID1, AutofillProfile::RecordType::kAccountHome);
-  AddAutofillProfilesToTable({local});
-
-  AutofillProfile remote =
-      TestProfile(kGUID2, AutofillProfile::RecordType::kAccountHome);
-  syncer::EntityChangeList entity_change_list;
-  entity_change_list.push_back(
-      syncer::EntityChange::CreateAdd(kGUID2, ProfileToEntity(remote)));
-  // `ApplyIncrementalSyncChanges()` returns an error if it fails.
-  EXPECT_FALSE(bridge().ApplyIncrementalSyncChanges(
-      bridge().CreateMetadataChangeList(), std::move(entity_change_list)));
-
-  // Expect that `local` still exists, but is no longer kAccountHome.
-  EXPECT_THAT(GetAllDataFromTable(),
-              UnorderedElementsAre(local.DowngradeToAccountProfile(), remote));
-}
-
-// Tests that `ApplyIncrementalSyncChanges()` ensures that at most one H/W
-// address exists after a profile gets updated to H/W.
-TEST_F(ContactInfoSyncBridgeTest,
-       ApplyIncrementalSyncChanges_DuplicateHomeAndWork_Update) {
-  ASSERT_TRUE(StartSyncing(/*remote_profiles=*/{}));
-
-  // Simulate that a home address exists and that an existing regular address
-  // gets upgraded to home.
-  AutofillProfile local_home =
-      TestProfile(kGUID1, AutofillProfile::RecordType::kAccountHome);
-  AutofillProfile local_regular =
-      TestProfile(kGUID2, AutofillProfile::RecordType::kAccountHome);
-  AddAutofillProfilesToTable({local_home, local_regular});
-
-  AutofillProfile remote =
-      TestProfile(kGUID2, AutofillProfile::RecordType::kAccountHome);
-  syncer::EntityChangeList entity_change_list;
-  entity_change_list.push_back(
-      syncer::EntityChange::CreateUpdate(kGUID2, ProfileToEntity(remote)));
-  // `ApplyIncrementalSyncChanges()` returns an error if it fails.
-  EXPECT_FALSE(bridge().ApplyIncrementalSyncChanges(
-      bridge().CreateMetadataChangeList(), std::move(entity_change_list)));
-
-  // Expect that `local_home` still exists, but is no longer kAccountHome.
-  EXPECT_THAT(
-      GetAllDataFromTable(),
-      UnorderedElementsAre(local_home.DowngradeToAccountProfile(), remote));
-}
-
 // Tests that `GetDataForCommit()` returns all local profiles of matching GUID.
 TEST_F(ContactInfoSyncBridgeTest, GetDataForCommit) {
   const AutofillProfile profile1 = TestProfile(kGUID1);
@@ -407,6 +352,25 @@ TEST_F(ContactInfoSyncBridgeTest, AutofillProfileChange_HideInAutofill) {
               Put(kGUID1, HiddenContactInfoSpecificsEqualsProfile(profile), _));
 
   bridge().AutofillProfileChanged(change);
+}
+
+// Tests that no changes for Home and Work addresses are uploaded.
+TEST_F(ContactInfoSyncBridgeTest, AutofillProfileChange_HomeAndWork) {
+  ASSERT_TRUE(StartSyncing(/*remote_profiles=*/{}));
+
+  EXPECT_CALL(mock_processor(), Put).Times(0);
+  EXPECT_CALL(mock_processor(), Delete).Times(0);
+
+  // None of these changes should trigger a write.
+  bridge().AutofillProfileChanged(AutofillProfileChange(
+      AutofillProfileChange::ADD, kGUID1,
+      TestProfile(kGUID1, AutofillProfile::RecordType::kAccountHome)));
+  bridge().AutofillProfileChanged(AutofillProfileChange(
+      AutofillProfileChange::REMOVE, kGUID1,
+      TestProfile(kGUID1, AutofillProfile::RecordType::kAccountHome)));
+  bridge().AutofillProfileChanged(AutofillProfileChange(
+      AutofillProfileChange::UPDATE, kGUID2,
+      TestProfile(kGUID2, AutofillProfile::RecordType::kAccountWork)));
 }
 
 // Tests that `ApplyDisableSyncChanges()` clears all data in AutofillTable when

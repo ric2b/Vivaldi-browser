@@ -33,9 +33,8 @@ class SavedTabGroupTab {
       std::optional<LocalTabID> local_tab_id = std::nullopt,
       std::optional<std::string> creator_cache_guid = std::nullopt,
       std::optional<std::string> last_updater_cache_guid = std::nullopt,
-      std::optional<base::Time> creation_time_windows_epoch_micros =
-          std::nullopt,
-      std::optional<base::Time> update_time_windows_epoch_micros = std::nullopt,
+      std::optional<base::Time> creation_time = std::nullopt,
+      std::optional<base::Time> update_time = std::nullopt,
       std::optional<gfx::Image> favicon = std::nullopt,
       bool is_pending_ntp = false);
   SavedTabGroupTab(const SavedTabGroupTab& other);
@@ -52,14 +51,11 @@ class SavedTabGroupTab {
   const GURL& url() const { return url_; }
   const std::u16string& title() const { return title_; }
   const std::optional<gfx::Image>& favicon() const { return favicon_; }
-  const base::Time& creation_time_windows_epoch_micros() const {
-    return creation_time_windows_epoch_micros_;
-  }
-  const base::Time& update_time_windows_epoch_micros() const {
-    return update_time_windows_epoch_micros_;
-  }
-  const base::Time& last_seen_time_windows_epoch_micros() const {
-    return last_seen_time_windows_epoch_micros_;
+  const base::Time& creation_time() const { return creation_time_; }
+  const base::Time& update_time() const { return update_time_; }
+  const base::Time& navigation_time() const { return navigation_time_; }
+  const std::optional<base::Time>& last_seen_time() const {
+    return last_seen_time_;
   }
   const std::optional<std::string>& creator_cache_guid() const {
     return creator_cache_guid_;
@@ -78,17 +74,17 @@ class SavedTabGroupTab {
   // Mutators.
   SavedTabGroupTab& SetURL(GURL url) {
     url_ = std::move(url);
-    SetUpdateTimeWindowsEpochMicros(base::Time::Now());
+    SetUpdateTime(base::Time::Now());
     return *this;
   }
   SavedTabGroupTab& SetTitle(std::u16string title) {
     title_ = std::move(title);
-    SetUpdateTimeWindowsEpochMicros(base::Time::Now());
+    SetUpdateTime(base::Time::Now());
     return *this;
   }
   SavedTabGroupTab& SetFavicon(std::optional<gfx::Image> favicon) {
     favicon_ = std::move(favicon);
-    SetUpdateTimeWindowsEpochMicros(base::Time::Now());
+    SetUpdateTime(base::Time::Now());
     return *this;
   }
   SavedTabGroupTab& SetLocalTabID(std::optional<LocalTabID> local_tab_id) {
@@ -97,7 +93,7 @@ class SavedTabGroupTab {
   }
   SavedTabGroupTab& SetPosition(size_t position) {
     position_ = position;
-    SetUpdateTimeWindowsEpochMicros(base::Time::Now());
+    SetUpdateTime(base::Time::Now());
     return *this;
   }
   SavedTabGroupTab& SetCreatorCacheGuid(
@@ -110,14 +106,16 @@ class SavedTabGroupTab {
     last_updater_cache_guid_ = std::move(cache_guid);
     return *this;
   }
-  SavedTabGroupTab& SetUpdateTimeWindowsEpochMicros(
-      base::Time update_time_windows_epoch_micros) {
-    update_time_windows_epoch_micros_ = update_time_windows_epoch_micros;
+  SavedTabGroupTab& SetUpdateTime(base::Time update_time) {
+    update_time_ = update_time;
     return *this;
   }
-  SavedTabGroupTab& SetLastSeenTimeWindowsEpochMicros(
-      base::Time last_seen_time_windows_epoch_micros) {
-    last_seen_time_windows_epoch_micros_ = last_seen_time_windows_epoch_micros;
+  SavedTabGroupTab& SetNavigationTime(base::Time navigation_time) {
+    navigation_time_ = navigation_time;
+    return *this;
+  }
+  SavedTabGroupTab& SetLastSeenTime(base::Time last_seen_time) {
+    last_seen_time_ = last_seen_time;
     return *this;
   }
   SavedTabGroupTab& SetRedirectURLChain(
@@ -185,12 +183,18 @@ class SavedTabGroupTab {
   // Atribution data for the shared tab. Applicable to shared tab groups only.
   SharedAttribution shared_attribution_;
 
-  // Timestamp for when the tab was created using windows epoch microseconds.
-  base::Time creation_time_windows_epoch_micros_;
+  // Timestamp for when the tab was created.
+  base::Time creation_time_;
 
-  // Timestamp for when the tab was last updated using windows epoch
-  // microseconds.
-  base::Time update_time_windows_epoch_micros_;
+  // Timestamp for when the tab was last updated.
+  base::Time update_time_;
+
+  // Timestamp for when the tab was last navigated. Currently set to the mtime
+  // from the metadata from remote updates. TODO(crbug.com/420739337): After
+  // per-field mtime support is added, it will be correctly set to the server
+  // timestamp of when URL field is modified. Updated locally for local
+  // navigations.
+  base::Time navigation_time_;
 
   // Timestamp of the last time a user saw the contents of this tab.
   // This value may be null if the user has never focused a tab added
@@ -200,7 +204,7 @@ class SavedTabGroupTab {
   // status for shared tab updates. As such, it is not saved to disk
   // alongside saved/shared tab group data. The account data sync bridge
   // manages syncing and saving this to disk.
-  base::Time last_seen_time_windows_epoch_micros_;
+  std::optional<base::Time> last_seen_time_;
 
   // The following fields aren't synced across devices.
 
@@ -233,7 +237,6 @@ class SavedTabGroupTabBuilder {
   SavedTabGroupTabBuilder& SetPosition(size_t position);
   SavedTabGroupTabBuilder& SetRedirectURLChain(
       const std::vector<GURL>& redirect_url_chain);
-  SavedTabGroupTabBuilder& SetLastSeenTimestamp(base::Time last_seen_time);
 
   SavedTabGroupTab Build(const SavedTabGroupTab& tab) const;
 
@@ -243,7 +246,6 @@ class SavedTabGroupTabBuilder {
  private:
   size_t position_ = 0;
   std::vector<GURL> redirect_url_chain_;
-  base::Time last_seen_time_;
 
   // Flags to indicate which properties have been set.
   bool has_position_ = false;

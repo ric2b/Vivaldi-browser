@@ -85,7 +85,7 @@ void slhdsa_wots_sign(uint8_t sig[SLHDSA_SHA2_128S_WOTS_BYTES],
                       const uint8_t pub_seed[BCM_SLHDSA_SHA2_128S_N],
                       uint8_t addr[32]) {
   // Compute checksum
-  static_assert(SLHDSA_SHA2_128S_WOTS_LEN1 == BCM_SLHDSA_SHA2_128S_N * 2, "");
+  static_assert(SLHDSA_SHA2_128S_WOTS_LEN1 == BCM_SLHDSA_SHA2_128S_N * 2);
   uint16_t csum = 0;
   for (size_t i = 0; i < BCM_SLHDSA_SHA2_128S_N; ++i) {
     csum += SLHDSA_SHA2_128S_WOTS_W - 1 - (msg[i] >> 4);
@@ -137,7 +137,7 @@ void slhdsa_wots_pk_from_sig(uint8_t pk[BCM_SLHDSA_SHA2_128S_N],
                              const uint8_t pub_seed[BCM_SLHDSA_SHA2_128S_N],
                              uint8_t addr[32]) {
   // Compute checksum
-  static_assert(SLHDSA_SHA2_128S_WOTS_LEN1 == BCM_SLHDSA_SHA2_128S_N * 2, "");
+  static_assert(SLHDSA_SHA2_128S_WOTS_LEN1 == BCM_SLHDSA_SHA2_128S_N * 2);
   uint16_t csum = 0;
   for (size_t i = 0; i < BCM_SLHDSA_SHA2_128S_N; ++i) {
     csum += SLHDSA_SHA2_128S_WOTS_W - 1 - (msg[i] >> 4);
@@ -149,7 +149,7 @@ void slhdsa_wots_pk_from_sig(uint8_t pk[BCM_SLHDSA_SHA2_128S_N],
   OPENSSL_memcpy(wots_pk_addr, addr, sizeof(wots_pk_addr));
 
   uint32_t chain_index = 0;
-  static_assert(SLHDSA_SHA2_128S_WOTS_LEN1 == BCM_SLHDSA_SHA2_128S_N * 2, "");
+  static_assert(SLHDSA_SHA2_128S_WOTS_LEN1 == BCM_SLHDSA_SHA2_128S_N * 2);
   for (size_t i = 0; i < BCM_SLHDSA_SHA2_128S_N; ++i) {
     slhdsa_wots_pk_from_sig_do_chain(tmp, addr, sig, msg[i] >> 4, pub_seed,
                                      chain_index++);

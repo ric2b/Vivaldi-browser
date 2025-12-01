@@ -14,7 +14,16 @@ import socketserver
 import time
 import subprocess
 import sys
+import json
 
+_HERE_PATH = os.path.dirname(__file__)
+_SRC_PATH = os.path.normpath(
+    os.path.join(_HERE_PATH, '..', '..', '..', '..', '..', '..'))
+sys.path.insert(0, os.path.join(_SRC_PATH, 'third_party', 'protobuf',
+                                'python'))
+
+from google.protobuf.message import DecodeError
+from google.protobuf import json_format
 
 def build(outdir: str):
     subprocess.run([
@@ -24,7 +33,6 @@ def build(outdir: str):
                    stdout=sys.stdout,
                    stderr=sys.stderr,
                    check=True)
-
 
 class RequestHandler(http.server.SimpleHTTPRequestHandler):
     directory = None
@@ -41,6 +49,29 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 self.end_headers()
                 return
         super().do_GET()
+
+    def _parse_apc(self):
+        """Deserializes AnnotatedPageContent from the request payload and
+           converts it to JSON (which is sent as a response)."""
+        try:
+            content_length = int(self.headers['Content-Length'])
+            serialized_apc = self.rfile.read(content_length)
+            import common_quality_data_pb2
+            apc = common_quality_data_pb2.AnnotatedPageContent()
+            apc.ParseFromString(serialized=serialized_apc)
+            result = json_format.MessageToJson(apc)
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+            self.wfile.write(result.encode())
+        except DecodeError:
+            self.send_error(400, 'proto could not be parsed')
+
+    def do_POST(self):
+        if self.path == '/parse-apc':
+            self._parse_apc()
+        else:
+            self.send_error(404, f'invalid path: ${self.path}')
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-cache, no-store")
@@ -67,6 +98,10 @@ def main():
                         help="Alternates between 200 and" +
                         " 404 responses, every minute",
                         action="store_true")
+    parser.add_argument('--bind-all-interfaces',
+                        help='Serves on all interfaces' +
+                        ' (by default serves only localhost)',
+                        action='store_true')
     args = parser.parse_args()
 
     RequestHandler.directory = f'{args.outdir}/gen/chrome/test/data/webui/glic'
@@ -86,7 +121,15 @@ def main():
               file=sys.stderr)
         sys.exit(1)
 
-    with socketserver.ThreadingTCPServer(("", args.port),
+    # Allows us to import generated proto bindings for common_quality_data.proto.
+    sys.path.insert(
+        0,
+        os.path.join(args.outdir, 'pyproto', 'components',
+                     'optimization_guide', 'proto', 'features'))
+
+    server_addr = '' if args.bind_all_interfaces else '127.0.0.1'
+
+    with socketserver.ThreadingTCPServer((server_addr, args.port),
                                          RequestHandler) as httpd:
         print("Server started at localhost:" + str(args.port))
         httpd.serve_forever()

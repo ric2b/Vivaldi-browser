@@ -43,7 +43,11 @@ export const UIStrings = {
   /**
    * @description Text to describe CPU processor tasks that could not be attributed to any specific source code.
    */
-  unattributed: 'Unattributed',
+  unattributed: '[unattributed]',
+  /**
+   * @description Text for the name of anonymous functions
+   */
+  anonymous: '(anonymous)',
 } as const;
 
 const str_ = i18n.i18n.registerUIStrings('models/trace/insights/ForcedReflow.ts', UIStrings);
@@ -149,7 +153,7 @@ function finalize(partialModel: PartialInsightModel<ForcedReflowInsightModel>): 
 function getBottomCallFrameForEvent(event: Types.Events.Event, traceParsedData: Handlers.Types.ParsedTrace):
     Types.Events.CallFrame|Protocol.Runtime.CallFrame|null {
   const profileStackTrace = Extras.StackTraceForEvent.get(event, traceParsedData);
-  const eventStackTrace = Helpers.Trace.getZeroIndexedStackTraceForEvent(event);
+  const eventStackTrace = Helpers.Trace.getZeroIndexedStackTraceInEventPayload(event);
 
   return profileStackTrace?.callFrames[0] ?? eventStackTrace?.[0] ?? null;
 }

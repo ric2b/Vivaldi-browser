@@ -38,6 +38,7 @@
 #include "chrome/browser/web_applications/commands/internal/callback_command.h"
 #include "chrome/browser/web_applications/commands/launch_web_app_command.h"
 #include "chrome/browser/web_applications/commands/manifest_update_check_command.h"
+#include "chrome/browser/web_applications/commands/manifest_update_check_command_v2.h"
 #include "chrome/browser/web_applications/commands/manifest_update_finalize_command.h"
 #include "chrome/browser/web_applications/commands/navigate_and_trigger_install_dialog_command.h"
 #include "chrome/browser/web_applications/commands/os_integration_synchronize_command.h"
@@ -82,13 +83,23 @@
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
+#include "components/webapps/browser/installable/ml_install_operation_tracker.h"
 #include "components/webapps/browser/web_contents/web_app_url_loader.h"
 #include "content/public/browser/storage_partition_config.h"
 #include "content/public/browser/web_contents.h"
 
-#if !BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/web_applications/isolated_web_apps/commands/cleanup_bundle_cache_command.h"
+#include "chrome/browser/web_applications/isolated_web_apps/commands/copy_bundle_to_cache_command.h"
+#include "chrome/browser/web_applications/isolated_web_apps/commands/get_bundle_cache_path_command.h"
+#include "chrome/browser/web_applications/isolated_web_apps/policy/isolated_web_app_cache_client.h"
+#else  // !BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/web_applications/jobs/link_capturing.h"
 #endif
+
+#if BUILDFLAG(IS_MAC)
+#include "chrome/browser/web_applications/commands/rewrite_diy_icons_command.h"
+#endif  // BUILDFLAG(IS_MAC)
 
 namespace web_app {
 
@@ -209,6 +220,21 @@ void WebAppCommandScheduler::ScheduleManifestUpdateCheck(
     const base::Location& location) {
   provider_->command_manager().ScheduleCommand(
       std::make_unique<ManifestUpdateCheckCommand>(
+          url, app_id, check_time, contents, std::move(callback),
+          provider_->web_contents_manager().CreateDataRetriever(),
+          provider_->web_contents_manager().CreateIconDownloader()),
+      location);
+}
+
+void WebAppCommandScheduler::ScheduleManifestUpdateCheckV2(
+    const GURL& url,
+    const webapps::AppId& app_id,
+    base::Time check_time,
+    base::WeakPtr<content::WebContents> contents,
+    ManifestUpdateCheckCommandV2::CompletedCallback callback,
+    const base::Location& location) {
+  provider_->command_manager().ScheduleCommand(
+      std::make_unique<ManifestUpdateCheckCommandV2>(
           url, app_id, check_time, contents, std::move(callback),
           provider_->web_contents_manager().CreateDataRetriever(),
           provider_->web_contents_manager().CreateIconDownloader()),
@@ -353,6 +379,43 @@ void WebAppCommandScheduler::CheckIsolatedWebAppBundleInstallability(
           &profile_.get(), bundle_metadata, std::move(callback)),
       call_location);
 }
+
+#if BUILDFLAG(IS_CHROMEOS)
+void WebAppCommandScheduler::GetIsolatedWebAppBundleCachePath(
+    const IsolatedWebAppUrlInfo& url_info,
+    const std::optional<base::Version>& version,
+    IwaCacheClient::SessionType session_type,
+    base::OnceCallback<void(base::expected<GetBundleCachePathSuccess,
+                                           GetBundleCachePathError>)> callback,
+    const base::Location& call_location) {
+  provider_->command_manager().ScheduleCommand(
+      std::make_unique<GetBundleCachePathCommand>(
+          url_info, version, session_type, std::move(callback)),
+      call_location);
+}
+
+void WebAppCommandScheduler::CopyIsolatedWebAppBundleToCache(
+    const IsolatedWebAppUrlInfo& url_info,
+    IwaCacheClient::SessionType session_type,
+    base::OnceCallback<void(CopyBundleToCacheResult)> callback,
+    const base::Location& call_location) {
+  provider_->command_manager().ScheduleCommand(
+      std::make_unique<CopyBundleToCacheCommand>(
+          url_info, session_type, *profile_, std::move(callback)),
+      call_location);
+}
+
+void WebAppCommandScheduler::CleanupIsolatedWebAppBundleCache(
+    const std::vector<web_package::SignedWebBundleId>& iwas_to_keep_in_cache,
+    IwaCacheClient::SessionType session_type,
+    base::OnceCallback<void(CleanupBundleCacheResult)> callback,
+    const base::Location& call_location) {
+  provider_->command_manager().ScheduleCommand(
+      std::make_unique<CleanupBundleCacheCommand>(
+          iwas_to_keep_in_cache, session_type, std::move(callback)),
+      call_location);
+}
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 void WebAppCommandScheduler::GetIsolatedWebAppBrowsingData(
     base::OnceCallback<void(base::flat_map<url::Origin, uint64_t>)> callback,
@@ -604,6 +667,17 @@ void WebAppCommandScheduler::SetUserDisplayMode(
       location);
 }
 
+#if BUILDFLAG(IS_MAC)
+void WebAppCommandScheduler::RewriteDiyIcons(
+    const webapps::AppId& app_id,
+    base::OnceCallback<void(RewriteIconResult)> callback,
+    const base::Location& from_here) {
+  provider_->command_manager().ScheduleCommand(
+      std::make_unique<RewriteDiyIconsCommand>(app_id, std::move(callback)),
+      from_here);
+}
+#endif  // BUILDFLAG(IS_MAC)
+
 void WebAppCommandScheduler::ScheduleDedupeInstallUrls(
     base::OnceClosure callback,
     const base::Location& location) {
@@ -645,12 +719,14 @@ void WebAppCommandScheduler::RunIconDiagnosticsForApp(
 void WebAppCommandScheduler::InstallAppFromUrl(
     const GURL& install_url,
     const std::optional<GURL>& manifest_id,
+    base::WeakPtr<content::WebContents> web_contents,
+    WebAppInstallDialogCallback dialog_callback,
     WebInstallFromUrlCommandCallback installed_callback,
     const base::Location& location) {
   provider_->command_manager().ScheduleCommand(
-      std::make_unique<WebInstallFromUrlCommand>(profile_.get(), install_url,
-                                                 manifest_id,
-                                                 std::move(installed_callback)),
+      std::make_unique<WebInstallFromUrlCommand>(
+          profile_.get(), install_url, manifest_id, web_contents,
+          std::move(dialog_callback), std::move(installed_callback)),
       location);
 }
 

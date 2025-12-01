@@ -330,7 +330,7 @@ TEST_F(IR_ValidatorTest, Function_Param_WorkgroupPlusOtherIOAnnotation) {
 
     b.Append(f->Block(), [&] { b.Return(f); });
 
-    auto res = ir::Validate(mod);
+    auto res = ir::Validate(mod, Capabilities{Capability::kAllowWorkspacePointerInputToEntryPoint});
     ASSERT_NE(res, Success);
     EXPECT_THAT(
         res.Failure().reason,
@@ -867,7 +867,7 @@ TEST_F(IR_ValidatorTest, Function_WorkgroupSize_ParamsTooSmall) {
 TEST_F(IR_ValidatorTest, Function_WorkgroupSize_OverrideWithoutAllowOverrides) {
     auto* o = b.Override(ty.u32());
     auto* f = ComputeEntryPoint();
-    f->SetWorkgroupSize({o->Result(0), o->Result(0), o->Result(0)});
+    f->SetWorkgroupSize({o->Result(), o->Result(), o->Result()});
 
     b.Append(f->Block(), [&] { b.Unreachable(); });
 
@@ -889,7 +889,7 @@ TEST_F(IR_ValidatorTest, Function_WorkgroupSize_NonRootBlockOverride) {
         o = b.Override(ty.u32());
         b.Return(f);
     });
-    f->SetWorkgroupSize({o->Result(0), o->Result(0), o->Result(0)});
+    f->SetWorkgroupSize({o->Result(), o->Result(), o->Result()});
 
     auto res = ir::Validate(mod, Capabilities{Capability::kAllowOverrides});
     ASSERT_NE(res, Success);
@@ -1059,14 +1059,11 @@ TEST_F(IR_ValidatorTest, Function_BoolOutput_via_MSV) {
     auto* f = ComputeEntryPoint();
 
     auto* v = b.Var(ty.ptr(AddressSpace::kOut, ty.bool_(), core::Access::kReadWrite));
-    IOAttributes attr;
-    attr.location = 0;
-    v->SetAttributes(attr);
+    v->SetLocation(0);
     mod.root_block->Append(v);
 
     b.Append(f->Block(), [&] {
-        b.Append(
-            mod.CreateInstruction<ir::Store>(v->Result(0), b.Constant(b.ConstantValue(false))));
+        b.Append(mod.CreateInstruction<ir::Store>(v->Result(), b.Constant(b.ConstantValue(false))));
         b.Unreachable();
     });
 
@@ -1085,15 +1082,13 @@ TEST_F(IR_ValidatorTest, Function_BoolInputWithoutFrontFacing_via_MSV) {
     auto* f = FragmentEntryPoint();
 
     auto* invalid = b.Var("invalid", AddressSpace::kIn, ty.bool_());
-    IOAttributes attr;
-    attr.location = 0;
-    invalid->SetAttributes(attr);
+    invalid->SetLocation(0);
     mod.root_block->Append(invalid);
 
     b.Append(f->Block(), [&] {
         auto* l = b.Load(invalid);
         auto* v = b.Var("v", AddressSpace::kFunction, ty.bool_());
-        v->SetInitializer(l->Result(0));
+        v->SetInitializer(l->Result());
         b.Unreachable();
     });
 
@@ -1105,6 +1100,24 @@ TEST_F(IR_ValidatorTest, Function_BoolInputWithoutFrontFacing_via_MSV) {
             R"(:5:1 error: input address space values referenced by fragment shaders can only be 'bool' if decorated with @builtin(front_facing)
 %f = @fragment func():void {
 ^^
+)")) << res.Failure();
+}
+
+TEST_F(IR_ValidatorTest, Function_EntryPoint_PtrToWorkgroup) {
+    auto* f = FragmentEntryPoint();
+    auto* p = b.FunctionParam("invalid", ty.ptr<workgroup, i32>());
+    f->AppendParam(p);
+
+    b.Append(f->Block(), [&] { b.Unreachable(); });
+
+    auto res = ir::Validate(mod);
+    ASSERT_NE(res, Success);
+    EXPECT_THAT(
+        res.Failure().reason,
+        testing::HasSubstr(
+            R"(:1:21 error: input param to entry point cannot be a ptr in the 'workgroup' address space
+%f = @fragment func(%invalid:ptr<workgroup, i32, read_write>):void {
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 )")) << res.Failure();
 }
 

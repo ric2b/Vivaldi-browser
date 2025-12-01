@@ -46,8 +46,12 @@ export enum Command {
   OPEN_BOOKMARK = 21,
   OPEN_FOLDER = 22,
 
+  OPEN_SPLIT_VIEW = 23,
+
+  OPEN_NEW_GROUP = 24,
+
   // Append new values to the end of the enum.
-  MAX_VALUE = 23,
+  MAX_VALUE = 25,
 }
 
 /**
@@ -87,8 +91,3 @@ export const BOOKMARKS_BAR_ID: string = '1';
 
 export const OPEN_CONFIRMATION_LIMIT: number = 15;
 
-/**
- * Folders that are beneath this depth will be closed by default in the folder
- * tree (where the Bookmarks Bar folder is at depth 0).
- */
-export const FOLDER_OPEN_BY_DEFAULT_DEPTH: number = 1;

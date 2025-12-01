@@ -184,7 +184,7 @@ class FakeAudioReceiveStream final : public AudioReceiveStreamInterface {
 };
 
 class FakeVideoSendStream final : public VideoSendStream,
-                                  public rtc::VideoSinkInterface<VideoFrame> {
+                                  public VideoSinkInterface<VideoFrame> {
  public:
   FakeVideoSendStream(const Environment& env,
                       VideoSendStream::Config config,
@@ -213,16 +213,16 @@ class FakeVideoSendStream final : public VideoSendStream,
     return resolution_scaling_enabled_;
   }
   bool framerate_scaling_enabled() const { return framerate_scaling_enabled_; }
-  void InjectVideoSinkWants(const rtc::VideoSinkWants& wants);
+  void InjectVideoSinkWants(const VideoSinkWants& wants);
 
-  rtc::VideoSourceInterface<VideoFrame>* source() const { return source_; }
+  VideoSourceInterface<VideoFrame>* source() const { return source_; }
   void GenerateKeyFrame(const std::vector<std::string>& rids);
   const std::vector<std::string>& GetKeyFramesRequested() const {
     return keyframes_requested_by_rid_;
   }
 
  private:
-  // rtc::VideoSinkInterface<VideoFrame> implementation.
+  // webrtc::VideoSinkInterface<VideoFrame> implementation.
   void OnFrame(const VideoFrame& frame) override;
 
   // webrtc::VideoSendStream implementation.
@@ -231,7 +231,7 @@ class FakeVideoSendStream final : public VideoSendStream,
   bool started() override { return IsSending(); }
   void AddAdaptationResource(scoped_refptr<Resource> resource) override;
   std::vector<scoped_refptr<Resource>> GetAdaptationResources() override;
-  void SetSource(rtc::VideoSourceInterface<VideoFrame>* source,
+  void SetSource(VideoSourceInterface<VideoFrame>* source,
                  const DegradationPreference& degradation_preference) override;
   VideoSendStream::Stats GetStats() override;
 
@@ -244,7 +244,7 @@ class FakeVideoSendStream final : public VideoSendStream,
   VideoSendStream::Config config_;
   VideoEncoderConfig encoder_config_;
   std::vector<VideoStream> video_streams_;
-  rtc::VideoSinkWants sink_wants_;
+  VideoSinkWants sink_wants_;
 
   bool codec_settings_set_;
   union CodecSpecificSettings {
@@ -255,7 +255,7 @@ class FakeVideoSendStream final : public VideoSendStream,
   } codec_specific_settings_;
   bool resolution_scaling_enabled_;
   bool framerate_scaling_enabled_;
-  rtc::VideoSourceInterface<VideoFrame>* source_;
+  VideoSourceInterface<VideoFrame>* source_;
   int num_swapped_frames_;
   std::optional<VideoFrame> last_frame_;
   VideoSendStream::Stats stats_;
@@ -407,7 +407,7 @@ class FakeCall final : public Call, public PacketReceiver {
 
   const std::vector<FakeFlexfecReceiveStream*>& GetFlexfecReceiveStreams();
 
-  rtc::SentPacket last_sent_packet() const { return last_sent_packet_; }
+  SentPacketInfo last_sent_packet() const { return last_sent_packet_; }
   const RtpPacketReceived& last_received_rtp_packet() const {
     return last_received_rtp_packet_;
   }
@@ -495,7 +495,7 @@ class FakeCall final : public Call, public PacketReceiver {
                           uint32_t local_ssrc) override;
   void OnUpdateSyncGroup(AudioReceiveStreamInterface& stream,
                          absl::string_view sync_group) override;
-  void OnSentPacket(const rtc::SentPacket& sent_packet) override;
+  void OnSentPacket(const SentPacketInfo& sent_packet) override;
 
   const Environment env_;
   TaskQueueBase* const network_thread_;
@@ -506,7 +506,7 @@ class FakeCall final : public Call, public PacketReceiver {
 
   NetworkState audio_network_state_;
   NetworkState video_network_state_;
-  rtc::SentPacket last_sent_packet_;
+  SentPacketInfo last_sent_packet_;
   RtpPacketReceived last_received_rtp_packet_;
   int last_sent_nonnegative_packet_id_ = -1;
   int next_stream_id_ = 665;
@@ -528,6 +528,7 @@ class FakeCall final : public Call, public PacketReceiver {
 
 // Re-export symbols from the webrtc namespace for backwards compatibility.
 // TODO(bugs.webrtc.org/4222596): Remove once all references are updated.
+#ifdef WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 namespace cricket {
 using ::webrtc::FakeAudioReceiveStream;
 using ::webrtc::FakeAudioSendStream;
@@ -536,4 +537,5 @@ using ::webrtc::FakeFlexfecReceiveStream;
 using ::webrtc::FakeVideoReceiveStream;
 using ::webrtc::FakeVideoSendStream;
 }  // namespace cricket
+#endif  // WEBRTC_ALLOW_DEPRECATED_NAMESPACES
 #endif  // MEDIA_ENGINE_FAKE_WEBRTC_CALL_H_

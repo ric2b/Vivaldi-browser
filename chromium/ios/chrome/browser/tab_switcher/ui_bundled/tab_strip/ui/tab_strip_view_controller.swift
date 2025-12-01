@@ -80,12 +80,13 @@ class TabStripViewController: UIViewController,
   public weak var dragDropHandler: TabCollectionDragDropHandler?
   /// Provides context menu for tab strip items.
   public weak var contextMenuProvider: TabStripContextMenuProvider?
-
+  /// Handles snapshots and favicons fetches.
+  public weak var snapshotAndfaviconDataSource: TabSwitcherItemSnapShotAndFaviconDataSource?
   /// Handler for tab group confirmation commands.
   public weak var tabGroupConfirmationHandler: TabGroupConfirmationCommands?
 
   /// Group cell of the closed tab. Nil if the tab is not from a group.
-  private(set) weak var closedTabGroupView: TabStripGroupCell?
+  public weak var closedTabGroupView: TabStripGroupCell?
 
   /// The LayoutGuideCenter.
   @objc public var layoutGuideCenter: LayoutGuideCenter? {
@@ -584,11 +585,13 @@ class TabStripViewController: UIViewController,
         }
       }
 
-      item.fetchFavicon { (item: TabSwitcherItem?, image: UIImage?) -> Void in
+      let completion = {
+        (item: TabSwitcherItem?, tabSnapshotAndFavicon: TabSnapshotAndFavicon?) -> Void in
         if let item = item, item == cell.item {
-          cell.setFaviconImage(image)
+          cell.setFaviconImage(tabSnapshotAndFavicon?.favicon)
         }
       }
+      self.snapshotAndfaviconDataSource?.fetchTabSnapshotAndFavicon(item, completion: completion)
     }
 
     // UICollectionViewDropPlaceholder uses a TabStripTabCell and needs the class to be

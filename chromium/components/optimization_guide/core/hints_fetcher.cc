@@ -70,6 +70,10 @@ std::string GetStringNameForRequestContext(
       return "Shopping";
     case proto::RequestContext::CONTEXT_SHOP_CARD:
       return "ShopCard";
+    case proto::RequestContext::CONTEXT_GLIC_ZERO_STATE_SUGGESTIONS:
+      return "GlicZeroStateSuggestions";
+    case proto::RequestContext::CONTEXT_GLIC_PAGE_CONTEXT:
+      return "GlicPageContext";
   }
   NOTREACHED();
 }

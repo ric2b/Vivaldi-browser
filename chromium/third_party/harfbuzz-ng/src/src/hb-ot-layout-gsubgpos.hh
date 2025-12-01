@@ -2665,6 +2665,7 @@ struct ContextFormat2_5
       case hb_ot_lookup_cache_op_t::DESTROY:
         return nullptr;
     }
+    return nullptr;
   }
 
   bool apply_cached (hb_ot_apply_context_t *c) const { return _apply (c, true); }
@@ -3914,6 +3915,7 @@ struct ChainContextFormat2_5
       case hb_ot_lookup_cache_op_t::DESTROY:
         return nullptr;
     }
+    return nullptr;
   }
 
   bool apply_cached (hb_ot_apply_context_t *c) const { return _apply (c, true); }
@@ -4898,7 +4900,7 @@ struct GSUBGPOS
 
       this->lookup_count = table->get_lookup_count ();
 
-      this->accels = (hb_atomic_ptr_t<hb_ot_layout_lookup_accelerator_t> *) hb_calloc (this->lookup_count, sizeof (*accels));
+      this->accels = (hb_atomic_t<hb_ot_layout_lookup_accelerator_t *> *) hb_calloc (this->lookup_count, sizeof (*accels));
       if (unlikely (!this->accels))
       {
 	this->lookup_count = 0;
@@ -4946,7 +4948,7 @@ struct GSUBGPOS
 
     hb_blob_ptr_t<T> table;
     unsigned int lookup_count;
-    hb_atomic_ptr_t<hb_ot_layout_lookup_accelerator_t> *accels;
+    hb_atomic_t<hb_ot_layout_lookup_accelerator_t *> *accels;
   };
 
   protected:

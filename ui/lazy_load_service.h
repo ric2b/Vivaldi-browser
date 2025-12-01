@@ -24,15 +24,16 @@ class LazyLoadService
 
   static const char kLazyLoadIsSafe[];
 
+  // Ch 138. This used to be a restore observer functiopn. To minimize the code
+  // that must be modified we just call this function directly in chrome code.
+  static void OnWillRestoreTab(content::WebContents* web_contents);
+
   // Called from shutdown service before shutting down the browser
   void Shutdown() override;
 
   // LifecycleUnitSourceObserver implementation:
   void OnLifecycleUnitCreated(
       resource_coordinator::LifecycleUnit* lifecycle_unit) override;
-
-  // SessionRestoreObserver implementation:
-  void OnWillRestoreTab(content::WebContents* web_contents) override;
 
  private:
   const raw_ptr<Profile> profile_;

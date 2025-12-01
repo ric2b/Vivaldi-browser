@@ -118,7 +118,7 @@ class EGLSurfaceTest : public ANGLETest<>
         GLenum platformType = GetParam().getRenderer();
         GLenum deviceType   = GetParam().getDeviceType();
 
-        std::vector<EGLint> displayAttributes;
+        std::vector<EGLAttrib> displayAttributes;
         displayAttributes.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
         displayAttributes.push_back(platformType);
         displayAttributes.push_back(EGL_PLATFORM_ANGLE_MAX_VERSION_MAJOR_ANGLE);
@@ -129,9 +129,9 @@ class EGLSurfaceTest : public ANGLETest<>
         displayAttributes.push_back(deviceType);
         displayAttributes.push_back(EGL_NONE);
 
-        mDisplay = eglGetPlatformDisplayEXT(EGL_PLATFORM_ANGLE_ANGLE,
-                                            reinterpret_cast<void *>(mOSWindow->getNativeDisplay()),
-                                            displayAttributes.data());
+        mDisplay = eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE,
+                                         reinterpret_cast<void *>(mOSWindow->getNativeDisplay()),
+                                         displayAttributes.data());
         ASSERT_TRUE(mDisplay != EGL_NO_DISPLAY);
 
         EGLint majorVersion, minorVersion;
@@ -416,9 +416,9 @@ class EGLSingleBufferTest : public ANGLETest<>
 
     void testSetUp() override
     {
-        EGLint dispattrs[] = {EGL_PLATFORM_ANGLE_TYPE_ANGLE, GetParam().getRenderer(), EGL_NONE};
-        mDisplay           = eglGetPlatformDisplayEXT(
-            EGL_PLATFORM_ANGLE_ANGLE, reinterpret_cast<void *>(EGL_DEFAULT_DISPLAY), dispattrs);
+        EGLAttrib dispattrs[] = {EGL_PLATFORM_ANGLE_TYPE_ANGLE, GetParam().getRenderer(), EGL_NONE};
+        mDisplay              = eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE,
+                                                      reinterpret_cast<void *>(EGL_DEFAULT_DISPLAY), dispattrs);
         ASSERT_TRUE(mDisplay != EGL_NO_DISPLAY);
         ASSERT_EGL_TRUE(eglInitialize(mDisplay, nullptr, nullptr));
         mMajorVersion = GetParam().majorVersion;
@@ -1962,6 +1962,7 @@ TEST_P(EGLSingleBufferTest, OnCreateWindowSurface)
     EXPECT_EGL_TRUE(eglMakeCurrent(mDisplay, surface, surface, context));
     ASSERT_EGL_SUCCESS() << "eglMakeCurrent failed.";
 
+    bool skipped = false;
     EGLint actualRenderbuffer;
     EXPECT_EGL_TRUE(eglQueryContext(mDisplay, context, EGL_RENDER_BUFFER, &actualRenderbuffer));
     if (actualRenderbuffer == EGL_SINGLE_BUFFER)
@@ -1989,6 +1990,7 @@ TEST_P(EGLSingleBufferTest, OnCreateWindowSurface)
     else
     {
         std::cout << "SKIP test, no EGL_SINGLE_BUFFER support." << std::endl;
+        skipped = true;
     }
 
     EXPECT_EGL_TRUE(eglMakeCurrent(mDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, context));
@@ -2001,6 +2003,55 @@ TEST_P(EGLSingleBufferTest, OnCreateWindowSurface)
 
     eglDestroyContext(mDisplay, context);
     context = EGL_NO_CONTEXT;
+    ANGLE_SKIP_TEST_IF(skipped);
+}
+
+// As of EGL 1.5, eglQueryContext(EGL_RENDER_BUFFER) returning EGL_SINGLE_BUFFER requires the EGL
+// extension EGL_KHR_mutable_render_buffer. Otherwise, something is likely going wrong in ANGLE and
+// EGL_SINGLE_BUFFER is being returned erroneously.
+TEST_P(EGLSingleBufferTest, VerifyMutableRenderBufferKHR)
+{
+    EGLConfig config = EGL_NO_CONFIG_KHR;
+    ANGLE_SKIP_TEST_IF(!chooseConfig(&config, false));
+
+    EGLContext context = EGL_NO_CONTEXT;
+    EXPECT_EGL_TRUE(createContext(config, &context));
+    ASSERT_EGL_SUCCESS() << "eglCreateContext failed.";
+
+    EGLSurface surface = EGL_NO_SURFACE;
+    OSWindow *osWindow = OSWindow::New();
+    osWindow->initialize("EGLSingleBufferTest", kWidth, kHeight);
+    EXPECT_EGL_TRUE(
+        createWindowSurface(config, osWindow->getNativeWindow(), &surface, EGL_SINGLE_BUFFER));
+    ASSERT_EGL_SUCCESS() << "eglCreateWindowSurface failed.";
+
+    EXPECT_EGL_TRUE(eglMakeCurrent(mDisplay, surface, surface, context));
+    ASSERT_EGL_SUCCESS() << "eglMakeCurrent failed.";
+
+    bool skipped = false;
+    EGLint actualRenderbuffer;
+    EXPECT_EGL_TRUE(eglQueryContext(mDisplay, context, EGL_RENDER_BUFFER, &actualRenderbuffer));
+    if (actualRenderbuffer == EGL_SINGLE_BUFFER)
+    {
+        EXPECT_TRUE(IsEGLDisplayExtensionEnabled(mDisplay, "EGL_KHR_mutable_render_buffer"));
+    }
+    else
+    {
+        std::cout << "SKIP test, no EGL_SINGLE_BUFFER support." << std::endl;
+        skipped = true;
+    }
+
+    EXPECT_EGL_TRUE(eglMakeCurrent(mDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, context));
+    ASSERT_EGL_SUCCESS() << "eglMakeCurrent - uncurrent failed.";
+
+    eglDestroySurface(mDisplay, surface);
+    surface = EGL_NO_SURFACE;
+    osWindow->destroy();
+    OSWindow::Delete(&osWindow);
+
+    eglDestroyContext(mDisplay, context);
+    context = EGL_NO_CONTEXT;
+    ANGLE_SKIP_TEST_IF(skipped);
 }
 
 TEST_P(EGLSingleBufferTest, OnSetSurfaceAttrib)

@@ -162,6 +162,10 @@ const char kVivaldiPreferTranslatePanel[] = "vivaldi.translate.prefer_panel";
 // Content Settings
 const char kVivaldiPageZoomLevel[] =
     "vivaldi.content_setting.pagezoom.level";
+
+// Privacy & Security Settings
+const char kVivaldiBlockExternalApps[] =
+    "vivaldi.privacy.block_external_apps";
 #endif
 
 #if BUILDFLAG(IS_ANDROID)

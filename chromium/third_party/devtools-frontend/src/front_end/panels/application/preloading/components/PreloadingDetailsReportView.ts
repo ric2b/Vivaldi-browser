@@ -1,6 +1,7 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../../ui/components/report_view/report_view.js';
 import '../../../../ui/components/request_link_icon/request_link_icon.js';
@@ -15,8 +16,6 @@ import * as Logs from '../../../../models/logs/logs.js';
 import * as Buttons from '../../../../ui/components/buttons/buttons.js';
 import * as LegacyWrapper from '../../../../ui/components/legacy_wrapper/legacy_wrapper.js';
 import * as RenderCoordinator from '../../../../ui/components/render_coordinator/render_coordinator.js';
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStyles from '../../../../ui/legacy/inspectorCommon.css.js';
 import * as UI from '../../../../ui/legacy/legacy.js';
 import * as Lit from '../../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../../ui/visual_logging/visual_logging.js';
@@ -51,6 +50,10 @@ const UIStrings = {
    *@description Text in details
    */
   detailsStatus: 'Status',
+  /**
+   *@description Text in details
+   */
+  detailsTargetHint: 'Target hint',
   /**
    *@description Text in details
    */
@@ -133,6 +136,16 @@ class PreloadingUIUtils {
         return i18n.i18n.lockedString('Internal error');
     }
   }
+
+  static detailedTargetHint(key: Protocol.Preload.PreloadingAttemptKey): string {
+    assertNotNullOrUndefined(key.targetHint);
+    switch (key.targetHint) {
+      case Protocol.Preload.SpeculationTargetHint.Blank:
+        return '_blank';
+      case Protocol.Preload.SpeculationTargetHint.Self:
+        return '_self';
+    }
+  }
 }
 
 export type PreloadingDetailsReportViewData = PreloadingDetailsReportViewDataInternal|null;
@@ -158,8 +171,8 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
         // Disabled until https://crbug.com/1079231 is fixed.
         // clang-format off
         Lit.render(html`
-          <style>${preloadingDetailsReportViewStyles.cssText}</style>
-          <style>${inspectorCommonStyles.cssText}</style>
+          <style>${preloadingDetailsReportViewStyles}</style>
+          <style>${UI.inspectorCommonStyles}</style>
           <div class="empty-state">
             <span class="empty-state-header">${i18nString(UIStrings.noElementSelected)}</span>
             <span class="empty-state-description">${i18nString(UIStrings.selectAnElementForMoreDetails)}</span>
@@ -178,8 +191,8 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
       // Disabled until https://crbug.com/1079231 is fixed.
       // clang-format off
       Lit.render(html`
-        <style>${preloadingDetailsReportViewStyles.cssText}</style>
-        <style>${inspectorCommonStyles.cssText}</style>
+        <style>${preloadingDetailsReportViewStyles}</style>
+        <style>${UI.inspectorCommonStyles}</style>
         <devtools-report
           .data=${{reportTitle: 'Speculative Loading Attempt'}}
           jslog=${VisualLogging.section('preloading-details')}>
@@ -188,6 +201,7 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
           ${this.#url()}
           ${this.#action(isFallbackToPrefetch)}
           ${this.#status(isFallbackToPrefetch)}
+          ${this.#targetHint()}
           ${this.#maybePrefetchFailureReason()}
           ${this.#maybePrerenderFailureReason()}
 
@@ -299,9 +313,7 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
         <devtools-report-key>${i18nString(UIStrings.detailsAction)}</devtools-report-key>
         <devtools-report-value>
           <div class="text-ellipsis" title="">
-            ${action}
-            ${maybeFellback}
-            ${maybeInspectButton}
+            ${action} ${maybeFellback} ${maybeInspectButton}
           </div>
         </devtools-report-value>
     `;
@@ -340,6 +352,23 @@ export class PreloadingDetailsReportView extends LegacyWrapper.LegacyWrapper.Wra
         <devtools-report-key>${i18nString(UIStrings.detailsFailureReason)}</devtools-report-key>
         <devtools-report-value>
           ${failureDescription}
+        </devtools-report-value>
+    `;
+  }
+
+  #targetHint(): Lit.LitTemplate {
+    assertNotNullOrUndefined(this.#data);
+    const attempt = this.#data.pipeline.getOriginallyTriggered();
+    const hasTargetHint =
+        attempt.action === Protocol.Preload.SpeculationAction.Prerender && attempt.key.targetHint !== undefined;
+    if (!hasTargetHint) {
+      return Lit.nothing;
+    }
+
+    return html`
+        <devtools-report-key>${i18nString(UIStrings.detailsTargetHint)}</devtools-report-key>
+        <devtools-report-value>
+          ${PreloadingUIUtils.detailedTargetHint(attempt.key)}
         </devtools-report-value>
     `;
   }

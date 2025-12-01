@@ -23,6 +23,7 @@
 #include "device/vr/openxr/openxr_extension_helper.h"
 #include "device/vr/openxr/openxr_graphics_binding.h"
 #include "device/vr/openxr/openxr_input_helper.h"
+#include "device/vr/openxr/openxr_layers.h"
 #include "device/vr/openxr/openxr_stage_bounds_provider.h"
 #include "device/vr/openxr/openxr_util.h"
 #include "device/vr/openxr/openxr_view_configuration.h"
@@ -1093,7 +1094,7 @@ XrResult OpenXrApiWrapper::EndFrame() {
   // Each view configuration has its own layer, which was populated in
   // GraphicsBinding::PrepareViewConfigForRender. These layers are all put into
   // XrFrameEndInfo and passed to xrEndFrame.
-  OpenXrLayers layers(local_space_, blend_mode_,
+  OpenXrLayers layers(local_space_, blend_mode_, *graphics_binding_,
                       primary_view_config_.ProjectionViews());
 
   // Gather all the layers for active secondary views.
@@ -1101,7 +1102,7 @@ XrResult OpenXrApiWrapper::EndFrame() {
     for (const auto& secondary_view_config : secondary_view_configs_) {
       const OpenXrViewConfiguration& view_config = secondary_view_config.second;
       if (view_config.Active()) {
-        layers.AddSecondaryLayerForType(view_config.Type(),
+        layers.AddSecondaryLayerForType(*graphics_binding_, view_config.Type(),
                                         view_config.ProjectionViews());
       }
     }
@@ -1200,9 +1201,11 @@ mojom::XRViewPtr OpenXrApiWrapper::CreateView(
 
   mojom::XRViewPtr view = mojom::XRView::New();
   view->eye = eye;
-  view->mojo_from_view = XrPoseToGfxTransform(xr_view.pose);
 
-  view->field_of_view = XrFovToMojomFov(xr_view.fov);
+  view->geometry = mojom::XRViewGeometry::New();
+  view->geometry->mojo_from_view = XrPoseToGfxTransform(xr_view.pose);
+
+  view->geometry->field_of_view = XrFovToMojomFov(xr_view.fov);
 
   view->viewport =
       gfx::Rect(x_offset, 0, view_config.Properties()[view_index].Width(),
@@ -1269,7 +1272,9 @@ std::vector<mojom::XRViewPtr> OpenXrApiWrapper::GetDefaultViews() const {
     view->eye = GetEyeFromIndex(i);
     view->viewport = gfx::Rect(x_offset, 0, view_properties[i].Width(),
                                view_properties[i].Height());
-    view->field_of_view = mojom::VRFieldOfView::New(45.0f, 45.0f, 45.0f, 45.0f);
+    view->geometry = mojom::XRViewGeometry::New();
+    view->geometry->field_of_view =
+        mojom::VRFieldOfView::New(45.0f, 45.0f, 45.0f, 45.0f);
 
     x_offset += view_properties[i].Width();
   }

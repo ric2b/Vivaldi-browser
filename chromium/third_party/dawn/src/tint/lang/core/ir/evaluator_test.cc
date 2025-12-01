@@ -227,6 +227,25 @@ TEST_F(IR_EvaluatorTest, ArrayBounds_DoubleNestedMidOverflowBoundsAccess) {
     EXPECT_EQ(res.Failure().reason.Str(), R"(error: index 5 out of bounds [0..4])");
 }
 
+TEST_F(IR_EvaluatorTest, ArrayBounds_NestedDynamicAndConstantInBounds) {
+    auto* arr = b.Var("arr", ty.ptr(storage, ty.array<array<array<u32, 3>, 5>, 7>()));
+    auto* x = b.Var("x", 123_i);
+    auto* inst = b.Access(ty.ptr<storage, u32>(), arr, 6_i, x, 2_i);
+    auto res = Eval(b, inst);
+    ASSERT_EQ(res, Success);
+}
+
+TEST_F(IR_EvaluatorTest, ArrayBounds_NestedDynamicAndConstantOutOfBoundsAccess) {
+    auto* arr = b.Var("arr", ty.ptr(storage, ty.array<array<array<u32, 3>, 5>, 7>()));
+    auto* x = b.Var("x", 123_i);
+    auto* inst = b.Access(ty.ptr<storage, u32>(), arr, 6_i, x, 3_i);
+    auto res = Eval(b, inst);
+
+    ASSERT_NE(res, Success);
+
+    EXPECT_EQ(res.Failure().reason.Str(), R"(error: index 3 out of bounds [0..2])");
+}
+
 TEST_F(IR_EvaluatorTest, ArrayBounds_NestedVecOverflowBoundsAccess) {
     auto* arr = b.Var("arr", ty.ptr(storage, ty.array<vec3<u32>, 7>()));
     auto* inst = b.Access(ty.ptr<storage, u32>(), arr, 3_i, 3_i);
@@ -303,7 +322,7 @@ TEST_F(IR_EvaluatorTest, Convert) {
 
 TEST_F(IR_EvaluatorTest, ConstExprIfSimple) {
     auto* constexpr_if = b.ConstExprIf(true);
-    constexpr_if->SetResults(b.InstructionResult(ty.bool_()));
+    constexpr_if->SetResult(b.InstructionResult(ty.bool_()));
     b.Append(constexpr_if->True(), [&] { b.ExitIf(constexpr_if, true); });
     b.Append(constexpr_if->False(), [&] { b.ExitIf(constexpr_if, false); });
     auto res = Eval(b, constexpr_if);

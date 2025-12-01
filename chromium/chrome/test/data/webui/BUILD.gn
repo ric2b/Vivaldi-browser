@@ -57,11 +57,13 @@ source_set("browser_tests") {
       "media_internals/media_internals_browsertest.cc",
       "metrics_internals/metrics_internals_browsertest.cc",
       "net_internals/net_internals_browsertest.cc",
+      "new_tab_footer/new_tab_footer_browsertest.cc",
       "new_tab_page/new_tab_page_a11y_browsertest.cc",
       "new_tab_page/new_tab_page_browsertest.cc",
       "optimization_guide_internals/optimization_guide_internals_browsertest.cc",
       "password_manager/password_manager_browsertest.cc",
       "password_manager_internals/password_manager_internals_browsertest.cc",
+      "privacy_sandbox/base_dialog_browsertest.cc",
       "privacy_sandbox/internals/privacy_sandbox_internals_browsertest.cc",
       "privacy_sandbox/internals/private_state_tokens/private_state_tokens_browsertest.cc",
       "privacy_sandbox/internals/related_website_sets/related_website_sets_browsertest.cc",
@@ -88,8 +90,12 @@ source_set("browser_tests") {
     ]
   }
 
-  if (enable_extensions) {
+  if (enable_extensions_core) {
     sources += [ "extensions/extensions_browsertest.cc" ]
+  }
+
+  if (enable_extensions) {
+    sources += [ "extensions_zero_state/zero_state_promo_browsertest.cc" ]
   }
 
   if (enable_webui_tab_strip) {
@@ -168,6 +174,12 @@ source_set("browser_tests") {
     sources += [ "discards/discards_browsertest.cc" ]
   }
 
+  deps = [
+    "//chrome/test:test_support",
+    "//components/commerce/core:commerce_constants",
+    "//components/webui/chrome_urls/",
+  ]
+
   if (is_win || is_mac || is_linux) {
     sources += [
       "app_home/app_home_browsertest.cc",
@@ -175,15 +187,11 @@ source_set("browser_tests") {
       "on_device_translation_internals/on_device_translation_internals_browsertest.cc",
       "whats_new/whats_new_browsertest.cc",
     ]
+
+    deps += [ "//chrome/browser/ui/webui/app_settings" ]
   }
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
-
-  deps = [
-    "//chrome/test:test_support",
-    "//components/commerce/core:commerce_constants",
-    "//components/webui/chrome_urls/",
-  ]
 
   if (!is_android) {
     deps += [
@@ -237,7 +245,7 @@ source_set("browser_tests") {
 
   if (is_chromeos) {
     deps += [
-      "//ash/webui/boca_ui",
+      "//ash/webui/boca_ui:constants",
       "//ash/webui/sanitize_ui:sanitize_ui",
       "//ash/webui/shimless_rma",
       "//ash/webui/vc_background_ui",
@@ -321,6 +329,7 @@ source_set("interactive_ui_tests") {
 
   if (!is_android) {
     deps += [
+      "//chrome/browser/ui:ui_features",
       "//components/history_clusters/core",
       "//components/password_manager/content/common",
       "//components/power_bookmarks/core:features",
@@ -357,6 +366,12 @@ grit("resources") {
     "test/data/grit/${grd_prefix}_resources_map.h",
     "${grd_prefix}_resources.pak",
   ]
+
+  grit_flags = [
+    "-E",
+    "add_filepath_to_resource_map=${load_webui_from_disk}",
+  ]
+
   output_dir = "$root_gen_dir/chrome"
 }
 
@@ -505,6 +520,7 @@ generate_grd("build_grd") {
       "metrics_internals:build_grdp",
       "mojo:build_grdp",
       "net_internals:build_grdp",
+      "new_tab_footer:build_grdp",
       "new_tab_page:build_grdp",
       "optimization_guide_internals:build_grdp",
       "password_manager:build_grdp",
@@ -553,6 +569,7 @@ generate_grd("build_grd") {
       "$target_gen_dir/mojo/resources.grdp",
       "$target_gen_dir/lens/resources.grdp",
       "$target_gen_dir/net_internals/resources.grdp",
+      "$target_gen_dir/new_tab_footer/resources.grdp",
       "$target_gen_dir/new_tab_page/resources.grdp",
       "$target_gen_dir/optimization_guide_internals/resources.grdp",
       "$target_gen_dir/password_manager/resources.grdp",
@@ -580,6 +597,11 @@ generate_grd("build_grd") {
   if (enable_extensions_core) {
     deps += [ "extensions:build_grdp" ]
     grdp_files += [ "$target_gen_dir/extensions/resources.grdp" ]
+  }
+
+  if (enable_extensions) {
+    deps += [ "extensions_zero_state:build_grdp" ]
+    grdp_files += [ "$target_gen_dir/extensions_zero_state/resources.grdp" ]
   }
 
   if (enable_print_preview && !is_chromeos) {

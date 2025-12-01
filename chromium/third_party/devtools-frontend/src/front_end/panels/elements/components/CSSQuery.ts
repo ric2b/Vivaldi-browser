@@ -1,21 +1,13 @@
 // Copyright (c) 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStylesRaw from '../../../ui/legacy/inspectorCommon.css.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
-import cssQueryStylesRaw from './cssQuery.css.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const inspectorCommonStyles = new CSSStyleSheet();
-inspectorCommonStyles.replaceSync(inspectorCommonStylesRaw.cssText);
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const cssQueryStyles = new CSSStyleSheet();
-cssQueryStyles.replaceSync(cssQueryStylesRaw.cssText);
+import cssQueryStyles from './cssQuery.css.js';
 
 const {render, html} = Lit;
 
@@ -45,13 +37,6 @@ export class CSSQuery extends HTMLElement {
     this.#render();
   }
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [
-      cssQueryStyles,
-      inspectorCommonStyles,
-    ];
-  }
-
   #render(): void {
     const queryClasses = Lit.Directives.classMap({
       query: true,
@@ -65,6 +50,8 @@ export class CSSQuery extends HTMLElement {
     `;
 
     render(html`
+      <style>${cssQueryStyles}</style>
+      <style>${UI.inspectorCommonStyles}</style>
       <div class=${queryClasses} jslog=${VisualLogging.cssRuleHeader(this.#jslogContext).track({click:true, change: true})}>
         <slot name="indent"></slot>${this.#queryPrefix ? html`<span>${this.#queryPrefix + ' '}</span>` : Lit.nothing}${this.#queryName ? html`<span>${this.#queryName + ' '}</span>` : Lit.nothing}${queryText} {
       </div>

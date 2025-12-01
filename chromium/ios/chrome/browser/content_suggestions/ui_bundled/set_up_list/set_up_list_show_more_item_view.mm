@@ -11,7 +11,6 @@
 #import "ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/set_up_list_item_view_data.h"
 #import "ios/chrome/browser/content_suggestions/ui_bundled/set_up_list/set_up_list_tap_delegate.h"
 #import "ios/chrome/browser/ntp/model/set_up_list_item_type.h"
-#import "ios/chrome/browser/segmentation_platform/model/segmented_default_browser_utils.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/shared/ui/elements/crossfade_label.h"
 #import "ios/chrome/browser/shared/ui/util/uikit_ui_util.h"
@@ -29,7 +28,9 @@ const CGFloat kExtraSpacingForSmallerCompleteIcon = 16.0f;
 const CGFloat kContentStackViewSpacing = 16.0f;
 const CGFloat kContentStackVerticalSpacing = 15.0f;
 const CGFloat kIconImageContainerWidth = 64.0f;
-const CGFloat kTryButtonWidth = 64.0f;
+const CGFloat kTryButtonMargin = 10.0f;
+const CGFloat kTryButtonMinWidth = 64.0f;
+const CGFloat kTryButtonMaxWidth = 100.0f;
 const CGFloat kTitleDescriptionSpacing = 5.0f;
 
 // Returns an NSAttributedString with strikethrough.
@@ -43,6 +44,8 @@ NSAttributedString* Strikethrough(NSString* text) {
 
 @implementation SetUpListShowMoreItemView {
   SetUpListItemViewData* _data;
+  NSLayoutConstraint* _tryButtonWidth;
+  UIButton* _tryButton;
 }
 
 - (instancetype)initWithData:(SetUpListItemViewData*)data {
@@ -121,31 +124,32 @@ NSAttributedString* Strikethrough(NSString* text) {
   [contentStack addArrangedSubview:textStack];
 
   if (!_data.complete) {
-    UIButton* tryButton = [[UIButton alloc] init];
-    tryButton.backgroundColor =
+    _tryButton = [[UIButton alloc] init];
+    _tryButton.backgroundColor =
         [UIColor colorNamed:kGroupedPrimaryBackgroundColor];
-    tryButton.titleLabel.font = PreferredFontForTextStyle(
+    _tryButton.titleLabel.font = PreferredFontForTextStyle(
         UIFontTextStyleSubheadline, UIFontWeightSemibold);
-    tryButton.titleLabel.adjustsFontForContentSizeCategory = YES;
+    _tryButton.titleLabel.adjustsFontForContentSizeCategory = YES;
+    _tryButton.titleLabel.adjustsFontSizeToFitWidth = YES;
     NSString* tryButtonTitle =
         l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_TRY_BUTTON_TEXT);
-    [tryButton setTitle:tryButtonTitle forState:UIControlStateNormal];
-    [tryButton setTitleColor:[UIColor colorNamed:kBlueColor]
-                    forState:UIControlStateNormal];
-    [tryButton addTarget:self
-                  action:@selector(tryTapped)
-        forControlEvents:UIControlEventTouchUpInside];
+    [_tryButton setTitle:tryButtonTitle forState:UIControlStateNormal];
+    [_tryButton setTitleColor:[UIColor colorNamed:kBlueColor]
+                     forState:UIControlStateNormal];
+    [_tryButton addTarget:self
+                   action:@selector(tryTapped)
+         forControlEvents:UIControlEventTouchUpInside];
     NSString* itemTitle = [self titleText];
-    tryButton.accessibilityIdentifier =
+    _tryButton.accessibilityIdentifier =
         [NSString stringWithFormat:@"%@ Try Button", itemTitle];
-    tryButton.accessibilityLabel =
+    _tryButton.accessibilityLabel =
         [NSString stringWithFormat:@"%@, %@", tryButtonTitle, itemTitle];
-    tryButton.layer.cornerRadius = 15;
-    tryButton.pointerInteractionEnabled = YES;
-    [NSLayoutConstraint activateConstraints:@[
-      [tryButton.widthAnchor constraintEqualToConstant:kTryButtonWidth],
-    ]];
-    [contentStack addArrangedSubview:tryButton];
+    _tryButton.layer.cornerRadius = 15;
+    _tryButton.pointerInteractionEnabled = YES;
+    _tryButtonWidth = [_tryButton.widthAnchor constraintEqualToConstant:0];
+    [self updateTryButtonWidth];
+    _tryButtonWidth.active = YES;
+    [contentStack addArrangedSubview:_tryButton];
     self.accessibilityHint = l10n_util::GetNSString(
         IDS_IOS_SET_UP_LIST_TRY_BUTTON_ACCESSIBILITY_HINT);
   } else {
@@ -155,6 +159,13 @@ NSAttributedString* Strikethrough(NSString* text) {
   self.isAccessibilityElement = YES;
   self.accessibilityLabel =
       [NSString stringWithFormat:@"%@, %@", title.text, description.text];
+
+  if (@available(iOS 17, *)) {
+    NSArray<UITrait>* traits = TraitCollectionSetForTraits(
+        @[ UITraitPreferredContentSizeCategory.class ]);
+    [self registerForTraitChanges:traits
+                       withAction:@selector(updateTryButtonWidth)];
+  }
 }
 
 // Creates the title label.
@@ -190,15 +201,7 @@ NSAttributedString* Strikethrough(NSString* text) {
     case SetUpListItemType::kAutofill:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_AUTOFILL_TITLE);
     case SetUpListItemType::kNotifications:
-      return IsIOSTipsNotificationsEnabled()
-                 ? l10n_util::GetNSString(
-                       IDS_IOS_SET_UP_LIST_NOTIFICATIONS_TITLE)
-                 : l10n_util::GetNSString(
-                       IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_TITLE);
-    case SetUpListItemType::kDocking:
-      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_DOCK_CHROME_TITLE);
-    case SetUpListItemType::kAddressBar:
-      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ADDRESS_BAR_TITLE);
+      return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_NOTIFICATIONS_TITLE);
     case SetUpListItemType::kAllSet:
       return l10n_util::GetNSString(IDS_IOS_SET_UP_LIST_ALL_SET_TITLE);
     case SetUpListItemType::kFollow:
@@ -234,24 +237,15 @@ NSAttributedString* Strikethrough(NSString* text) {
       return l10n_util::GetNSString(IDS_IOS_IDENTITY_DISC_SIGN_IN_PROMO_LABEL);
     case SetUpListItemType::kDefaultBrowser:
       return l10n_util::GetNSString(
-          IsSegmentedDefaultBrowserPromoEnabled()
-              ? GetSetUpListDefaultBrowserDescriptionStringID(_data.userSegment)
-              : IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SEE_MORE_DESCRIPTION);
+          IDS_IOS_SET_UP_LIST_DEFAULT_BROWSER_SEE_MORE_DESCRIPTION);
     case SetUpListItemType::kAutofill:
       return l10n_util::GetNSString(
           IDS_IOS_SET_UP_LIST_AUTOFILL_SEE_MORE_DESCRIPTION);
     case SetUpListItemType::kNotifications:
-      return IsIOSTipsNotificationsEnabled()
-                 ? l10n_util::GetNSString(
-                       IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION)
-                 : l10n_util::GetNSString(
-                       IDS_IOS_SET_UP_LIST_CONTENT_NOTIFICATION_DESCRIPTION);
-    case SetUpListItemType::kDocking:
       return l10n_util::GetNSString(
-          IDS_IOS_SET_UP_LIST_DOCK_CHROME_SHORT_DESCRIPTION);
-    case SetUpListItemType::kAddressBar:
-      return l10n_util::GetNSString(
-          IDS_IOS_SET_UP_LIST_ADDRESS_BAR_LONG_DESCRIPTION);
+          _data.priceTrackingEnabled
+              ? IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION
+              : IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION);
     case SetUpListItemType::kAllSet:
     case SetUpListItemType::kFollow:
       NOTREACHED();
@@ -262,6 +256,29 @@ NSAttributedString* Strikethrough(NSString* text) {
 - (void)tryTapped {
   [self.tapDelegate didSelectSetUpListItem:_data.type];
 }
+
+- (void)updateTryButtonWidth {
+  [_tryButton.titleLabel invalidateIntrinsicContentSize];
+  _tryButtonWidth.constant = std::clamp<CGFloat>(
+      _tryButton.titleLabel.intrinsicContentSize.width + kTryButtonMargin * 2,
+      kTryButtonMinWidth, kTryButtonMaxWidth);
+}
+
+#pragma mark - UITraitEnvironment
+
+#if !defined(__IPHONE_17_0) || __IPHONE_OS_VERSION_MIN_REQUIRED < __IPHONE_17_0
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
+  [super traitCollectionDidChange:previousTraitCollection];
+  if (@available(iOS 17, *)) {
+    return;
+  }
+  if (previousTraitCollection.preferredContentSizeCategory !=
+      self.traitCollection.preferredContentSizeCategory) {
+    [self updateTryButtonWidth];
+  }
+}
+
+#endif
 
 #pragma mark - UIAccessibility
 

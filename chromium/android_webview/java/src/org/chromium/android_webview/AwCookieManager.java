@@ -47,6 +47,16 @@ public final class AwCookieManager {
         return DefaultCookieManagerHolder.sDefaultCookieManager;
     }
 
+    /**
+     * Disable cookie partitioning (CHIPS).
+     *
+     * <p>This is a global setting, and must be called before the browser process is started and the
+     * native CookieManager is accessed the first time.
+     */
+    public static void disablePartitionedCookiesGlobal() {
+        AwCookieManagerJni.get().disablePartitionedCookies();
+    }
+
     @VisibleForTesting
     public AwCookieManager() {
         this(AwCookieManagerJni.get().getDefaultCookieManager());
@@ -261,8 +271,8 @@ public final class AwCookieManager {
 
     /** A tuple to hold a URL and Value when setting a cookie. */
     private static class UrlValue {
-        public String mUrl;
-        public String mValue;
+        public final String mUrl;
+        public final String mValue;
 
         public UrlValue(String url, String value) {
             mUrl = url;
@@ -344,5 +354,7 @@ public final class AwCookieManager {
 
         void setWorkaroundHttpSecureCookiesForTesting(
                 long nativeCookieManager, AwCookieManager caller, boolean allow);
+
+        void disablePartitionedCookies();
     }
 }

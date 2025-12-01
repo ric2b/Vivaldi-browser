@@ -15,19 +15,24 @@ import curlish
 import sys
 
 SCRIPT_DOWNLOAD_URL = ('https://raw.githubusercontent.com/chromium/'
-                       'chromium/main/tools/clang/scripts/update.py')
+                       'chromium/{}/tools/clang/scripts/update.py')
 
+
+def get_url(revision):
+    return SCRIPT_DOWNLOAD_URL.format(revision or "main")
 
 def main():
-    parser = argparse.ArgumentParser(description='Download a file.')
-    parser.add_argument('--output', help='Path to file to create/overwrite.')
+    parser = argparse.ArgumentParser(
+        description='download the clang update script')
+    parser.add_argument('--output', help='path to file to create/overwrite')
+    parser.add_argument('--revision', help='revision to download')
     args = parser.parse_args()
 
     if not args.output:
-        print('usage: download-clang-update-script.py --output=/a/b/update.py')
+        parser.print_help()
         return 1
 
-    return 0 if curlish.curlish(SCRIPT_DOWNLOAD_URL, args.output) else 1
+    return 0 if curlish.curlish(get_url(args.revision), args.output) else 1
 
 
 if __name__ == '__main__':

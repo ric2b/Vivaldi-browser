@@ -143,7 +143,9 @@ foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
   }
 
   update_template_instance(_target) {
-    outputs += extra_outputs
+    if(defined(outputs)) {
+      outputs += extra_outputs
+    }
   }
 
   grit_suffix = "_grit"

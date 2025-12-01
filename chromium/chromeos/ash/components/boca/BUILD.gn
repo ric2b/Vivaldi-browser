@@ -28,6 +28,8 @@ static_library("boca") {
     "//ash/public/cpp",
     "//ash/resources/vector_icons",
     "//base",
+    "//chromeos/ash/components/boca:spotlight_lib",
+    "//chromeos/ash/components/boca/babelorca:soda_installer",
     "//chromeos/ash/components/boca/proto",
     "//chromeos/ash/components/boca/session_api",
     "//chromeos/ash/components/channel",
@@ -35,6 +37,7 @@ static_library("boca") {
     "//chromeos/services/network_config/public/cpp",
     "//chromeos/strings:strings_grit",
     "//components/prefs",
+    "//components/session_manager/core",
     "//components/sessions:session_id",
     "//components/signin/public/identity_manager",
     "//components/user_manager",
@@ -104,6 +107,30 @@ static_library("spotlight") {
   ]
 }
 
+static_library("spotlight_lib") {
+  sources = [
+    "spotlight/fake_spotlight_oauth_token_fetcher.cc",
+    "spotlight/fake_spotlight_oauth_token_fetcher.h",
+    "spotlight/remoting_client_io_proxy.cc",
+    "spotlight/remoting_client_io_proxy.h",
+    "spotlight/spotlight_constants.h",
+    "spotlight/spotlight_frame_consumer.cc",
+    "spotlight/spotlight_frame_consumer.h",
+    "spotlight/spotlight_oauth_token_fetcher.h",
+    "spotlight/spotlight_remoting_client_manager.cc",
+    "spotlight/spotlight_remoting_client_manager.h",
+  ]
+  deps = [
+    "//ash/constants",
+    "//base",
+    "//remoting/client/common",
+    "//remoting/protocol",
+    "//services/network/public/cpp",
+    "//skia:skia_core_public_headers",
+    "//third_party/webrtc_overrides:webrtc_component",
+  ]
+}
+
 source_set("unit_tests") {
   testonly = true
 
@@ -132,6 +159,9 @@ source_set("unit_tests") {
     "//ash/constants",
     "//base",
     "//base/test:test_support",
+    "//chromeos/ash/components/boca:spotlight_lib",
+    "//chromeos/ash/components/boca/babelorca:soda_installer",
+    "//chromeos/ash/components/boca/babelorca:soda_test_support",
     "//chromeos/ash/components/boca/proto",
     "//chromeos/ash/components/boca/session_api",
     "//chromeos/ash/components/network",
@@ -144,8 +174,11 @@ source_set("unit_tests") {
     "//components/gcm_driver:test_support",
     "//components/prefs",
     "//components/prefs:test_support",
+    "//components/session_manager/core",
     "//components/signin/public/identity_manager",
     "//components/signin/public/identity_manager:test_support",
+    "//components/soda",
+    "//components/soda:constants",
     "//components/user_manager",
     "//components/user_manager:test_support",
     "//content/test:test_support",
@@ -156,6 +189,7 @@ source_set("unit_tests") {
     "//services/network/public/cpp/",
     "//testing/gmock",
     "//testing/gtest",
+    "//third_party/webrtc_overrides:webrtc_component",
     "//ui/base",
     "//ui/message_center",
     "//ui/message_center:test_support",

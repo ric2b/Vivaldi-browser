@@ -198,12 +198,6 @@ func addCompliancePolicyTests() {
 				isWPASigAlg = true
 			}
 
-			if sigalg.curve == CurveP224 {
-				// This can work in TLS 1.2, but not with TLS 1.3.
-				// For consistency it's not permitted in FIPS mode.
-				isFIPSSigAlg = false
-			}
-
 			maxVersion := uint16(VersionTLS13)
 			if hasComponent(sigalg.name, "PKCS1") {
 				if protocol == quic {

@@ -41,7 +41,7 @@ struct EntrypointInfo {
 
   const std::string site;
   ukm::SourceId source_id;
-  bool had_triggering_storage_access;
+  bool had_active_storage_access;
   bool was_referral_client_redirect;
 };
 
@@ -56,7 +56,7 @@ class InFlowSuccessorInteractionState {
   explicit InFlowSuccessorInteractionState(btm::EntrypointInfo flow_entrypoint);
   ~InFlowSuccessorInteractionState();
 
-  void RecordTriggeringStorageAccessByEntrypoint();
+  void RecordActiveStorageAccessByEntrypoint();
   void IncrementFlowIndex(size_t increment);
   void RecordSuccessorInteractionAtCurrentFlowIndex();
   bool IsAtSuccessor() const;
@@ -139,8 +139,8 @@ class CONTENT_EXPORT BtmNavigationFlowDetector
   friend class WebContentsUserData<BtmNavigationFlowDetector>;
 
   // Callback to be called by `BtmPageVisitObserver`.
-  void OnPageVisitReported(const BtmPageVisitInfo& page_visit,
-                           const BtmNavigationInfo& navigation);
+  void OnPageVisitReported(BtmPageVisitInfo page_visit,
+                           BtmNavigationInfo navigation);
 
   btm::FlowStatus FlowStatusAfterNavigation(
       bool did_most_recent_navigation_start_new_flow) const;

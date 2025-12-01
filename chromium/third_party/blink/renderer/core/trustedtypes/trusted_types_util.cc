@@ -2,13 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 
+#include "base/compiler_specific.h"
 #include "base/unguessable_token.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
@@ -18,6 +14,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_stringlegacynulltoemptystring_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedhtml_trustedscript_trustedscripturl.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_trustedscripturl_usvstring.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -126,12 +123,12 @@ String GetSamplePrefix(const char* interface_name,
   StringBuilder sample_prefix;
   if (!interface_name) {
     // No interface name? Then we have no prefix to use.
-  } else if (strcmp("eval", interface_name) == 0) {
+  } else if (UNSAFE_TODO(strcmp("eval", interface_name)) == 0) {
     // eval? Try to distinguish between eval and Function constructor.
     sample_prefix.Append(value.StartsWith(kAnonymousPrefix) ? "Function"
                                                             : "eval");
-  } else if ((strcmp("Worker", interface_name) == 0 ||
-              strcmp("SharedWorker", interface_name) == 0) &&
+  } else if ((UNSAFE_TODO(strcmp("Worker", interface_name)) == 0 ||
+              UNSAFE_TODO(strcmp("SharedWorker", interface_name)) == 0) &&
              property_name) {
     // Worker/SharedWorker constructor has nullptr as property_name.
     sample_prefix.Append(interface_name);
@@ -567,6 +564,26 @@ String TrustedTypesCheckForScript(
       return value->GetAsTrustedScript()->toString();
   }
 
+  NOTREACHED();
+}
+
+String TrustedTypesCheckForScriptURL(
+    const V8UnionTrustedScriptURLOrUSVString* value,
+    const ExecutionContext* execution_context,
+    const char* interface_name,
+    const char* property_name,
+    ExceptionState& exception_state) {
+  if (!value) {
+    return g_empty_string;
+  }
+  switch (value->GetContentType()) {
+    case V8UnionTrustedScriptURLOrUSVString::ContentType::kUSVString:
+      return TrustedTypesCheckForScriptURL(value->GetAsUSVString(),
+                                           execution_context, interface_name,
+                                           property_name, exception_state);
+    case V8UnionTrustedScriptURLOrUSVString::ContentType::kTrustedScriptURL:
+      return value->GetAsTrustedScriptURL()->toString();
+  }
   NOTREACHED();
 }
 

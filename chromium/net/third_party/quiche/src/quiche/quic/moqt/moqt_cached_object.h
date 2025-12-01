@@ -11,14 +11,14 @@
 #include "quiche/quic/moqt/moqt_messages.h"
 #include "quiche/quic/moqt/moqt_priority.h"
 #include "quiche/quic/moqt/moqt_publisher.h"
-#include "quiche/common/platform/api/quiche_mem_slice.h"
+#include "quiche/common/quiche_mem_slice.h"
 
 namespace moqt {
 
 // CachedObject is a version of PublishedObject with a reference counted
 // payload.
 struct CachedObject {
-  FullSequence sequence;
+  Location sequence;
   MoqtObjectStatus status;
   MoqtPriority publisher_priority;
   std::shared_ptr<quiche::QuicheMemSlice> payload;

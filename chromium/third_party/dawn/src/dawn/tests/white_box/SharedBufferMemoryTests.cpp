@@ -236,7 +236,7 @@ TEST_P(SharedBufferMemoryTests, CallEndAccessOnMappedBuffer) {
 // Ensure no queue usage can occur before calling BeginAccess.
 TEST_P(SharedBufferMemoryTests, EnsureNoQueueUsageBeforeBeginAccess) {
     // We can't test this invalid scenario without validation.
-    DAWN_SUPPRESS_TEST_IF(HasToggleEnabled("skip_validation"));
+    DAWN_TEST_UNSUPPORTED_IF(HasToggleEnabled("skip_validation"));
 
     wgpu::SharedBufferMemory memory =
         GetParam().mBackend->CreateSharedBufferMemory(device, kMapWriteUsages, kBufferSize);
@@ -335,6 +335,8 @@ TEST_P(SharedBufferMemoryTests, EnsureNoDuplicateBeginAccessCalls) {
 // Ensure the BeginAccessDescriptor initialized parameter preserves or clears the buffer as
 // necessary.
 TEST_P(SharedBufferMemoryTests, BeginAccessInitialization) {
+    DAWN_SUPPRESS_TEST_IF(IsWARP());  // TODO(crbug.com/407748576): Remove once bug is fixed
+
     // Create a buffer with initialized data.
     wgpu::SharedBufferMemory memory =
         GetParam().mBackend->CreateSharedBufferMemory(device, kMapWriteUsages, kBufferSize);
@@ -355,7 +357,6 @@ TEST_P(SharedBufferMemoryTests, BeginAccessInitialization) {
     memory.EndAccess(buffer, &endState);
 
     EXPECT_EQ(endState.initialized, true);
-    EXPECT_GE(endState.fenceCount, 1u);
 
     // Pass fences from the previous operation to the next BeginAccessDescriptor to ensure
     // operations are complete.

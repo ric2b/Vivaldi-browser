@@ -11,11 +11,12 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 
 import androidx.annotation.ColorInt;
-import androidx.annotation.Nullable;
 
 import org.chromium.base.Callback;
 import org.chromium.base.Token;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
@@ -37,6 +38,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /** Pushes label updates to UI for tabs. */
+@NullMarked
 public class TabLabeller extends TabObjectLabeller {
     private final Context mContext;
     private final DataSharingUIDelegate mDataSharingUiDelegate;
@@ -60,7 +62,7 @@ public class TabLabeller extends TabObjectLabeller {
         return mTabGroupIdSupplier.get() != null
                 && Objects.equals(
                         mTabGroupIdSupplier.get(), MessageUtils.extractTabGroupId(message))
-                && message.type == PersistentNotificationType.CHIP
+                && message.type == PersistentNotificationType.DIRTY_TAB
                 && getTabId(message) != Tab.INVALID_TAB_ID
                 && getTextRes(message) != Resources.ID_NULL;
     }
@@ -82,7 +84,7 @@ public class TabLabeller extends TabObjectLabeller {
         if (tabGroupId == null) return Collections.emptyList();
         LocalTabGroupId localTabGroupId = new LocalTabGroupId(tabGroupId);
         EitherGroupId eitherGroupId = EitherGroupId.createLocalId(localTabGroupId);
-        Optional<Integer> messageType = Optional.of(PersistentNotificationType.CHIP);
+        Optional<Integer> messageType = Optional.of(PersistentNotificationType.DIRTY_TAB);
         return mMessagingBackendService.getMessagesForGroup(eitherGroupId, messageType);
     }
 

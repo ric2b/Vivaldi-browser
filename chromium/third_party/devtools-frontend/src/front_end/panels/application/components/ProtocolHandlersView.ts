@@ -1,6 +1,7 @@
 // Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/icon_button/icon_button.js';
 
@@ -9,9 +10,6 @@ import * as i18n from '../../../core/i18n/i18n.js';
 import * as Platform from '../../../core/platform/platform.js';
 import * as Buttons from '../../../ui/components/buttons/buttons.js';
 import * as Input from '../../../ui/components/input/input.js';
-// inspectorCommonStyles is imported for the <select> styling that is used for the dropdown
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStyles from '../../../ui/legacy/inspectorCommon.css.js';
 import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
@@ -169,11 +167,12 @@ export class ProtocolHandlersView extends HTMLElement {
   #render(): void {
     const protocolDocLink = UI.XLink.XLink.create(
         PROTOCOL_DOCUMENT_URL, i18nString(UIStrings.protocolHandlerRegistrations), undefined, undefined, 'learn-more');
+    // inspectorCommonStyles is used for the <select> styling that is used for the dropdown
     // clang-format off
     Lit.render(html`
-      <style>${protocolHandlersViewStyles.cssText}</style>
-      <style>${inspectorCommonStyles.cssText}</style>
-      <style>${Input.textInputStylesRaw.cssText}</style>
+      <style>${protocolHandlersViewStyles}</style>
+      <style>${UI.inspectorCommonStyles}</style>
+      <style>${Input.textInputStyles}</style>
       ${this.#renderStatusMessage()}
       <div class="protocol-handlers-row">
           ${i18n.i18n.getFormatLocalizedString(str_, UIStrings.needHelpReadOur, {PH1: protocolDocLink})}

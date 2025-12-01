@@ -18,6 +18,8 @@
 #include "components/sync/engine/nigori/cryptographer.h"
 #include "components/sync/engine/nigori/keystore_keys_handler.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace syncer {
 
 DataTypeRegistry::DataTypeRegistry(
@@ -96,6 +98,20 @@ DataTypeSet DataTypeRegistry::GetConnectedTypes() const {
   DataTypeSet types;
   for (const std::unique_ptr<DataTypeWorker>& worker :
        connected_data_type_workers_) {
+    /* vivaldi */
+    // In Vivaldi, we do not want unencrypted data type to end up on the server.
+    // Historically, we did this by making sure that an encryption password was
+    // entered before initializing sync-the-feature. Unfortunately, now that
+    // sync happens in transport for some data type, user data may end up being
+    // committed immediately after user login. To prevent this from happening,
+    // we modify the return value of this method to exclude data types that we
+    // want encrypted, but aren't, to prevent them to be included in the commit.
+    if (vivaldi::IsVivaldiRunning() &&
+        EncryptableUserTypes().Has(worker->GetDataType()) &&
+        sync_encryption_handler_->GetPassphraseType() !=
+            PassphraseType::kCustomPassphrase)
+      continue;
+    /* end Vivaldi */
     types.Put(worker->GetDataType());
   }
   return types;

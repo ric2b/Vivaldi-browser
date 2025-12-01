@@ -14,24 +14,57 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/color/color_provider_key.h"
 #include "ui/display/screen.h"
+#include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/outsets.h"
 #include "ui/views/widget/native_widget.h"
 #include "ui/views/widget/widget_delegate.h"
+
+#if BUILDFLAG(IS_WIN)
+#include "chrome/installer/util/install_util.h"
+#include "chrome/installer/util/shell_util.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_tree_host.h"
+#include "ui/base/win/hwnd_metrics.h"
+#include "ui/base/win/shell.h"
+#include "ui/views/win/hwnd_util.h"
+#endif
 
 namespace glic {
 namespace {
 
 constexpr float kGlicWidgetCornerRadius = 12;
 
-bool UserResizeEnabled() {
-  return base::FeatureList::IsEnabled(features::kGlicUserResize);
+// For resizeable windows, there may be an invisible border which affects the
+// widget size. Given a target rect, this method provides the outsets which
+// should be applied in order to calculate the correct widget bounds.
+gfx::Outsets GetTargetOutsets(const gfx::Rect& bounds) {
+  gfx::Outsets outsets;
+#if BUILDFLAG(IS_WIN)
+  RECT bounds_rect = bounds.ToRECT();
+  int frame_thickness = ui::GetFrameThickness(
+      MonitorFromRect(&bounds_rect, MONITOR_DEFAULTTONEAREST),
+      /*has_caption=*/false);
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayMatching(bounds);
+  frame_thickness = frame_thickness / display.device_scale_factor();
+  // On Windows, the presence of a frame means that we need to adjust both the
+  // width and height of the widget by 2*frame thickness, and center the content
+  // horizontally.
+  outsets.set_left(frame_thickness);
+  outsets.set_right(frame_thickness);
+  outsets.set_bottom(2 * frame_thickness);
+#endif
+  return outsets;
 }
+
+}  // namespace
 
 class GlicWidgetDelegate : public views::WidgetDelegate {
  public:
   GlicWidgetDelegate() {
     SetFocusTraversesOut(true);
-    SetAccessibleTitle(l10n_util::GetStringUTF16(IDS_GLIC_WINDOW_TITLE));
     RegisterDeleteDelegateCallback(
+        RegisterDeleteCallbackPassKey(),
         base::BindOnce(&GlicWidgetDelegate::Destroy, base::Unretained(this)));
   }
 
@@ -43,16 +76,13 @@ class GlicWidgetDelegate : public views::WidgetDelegate {
  private:
   void Destroy() { delete this; }
 };
-}  // namespace
 
 void* kGlicWidgetIdentifier = &kGlicWidgetIdentifier;
 
 GlicWidget::GlicWidget(ThemeService* theme_service, InitParams params)
     : views::Widget(std::move(params)) {
-  if (UserResizeEnabled()) {
-    minimum_widget_size_ = GetInitialSize();
-    OnSizeConstraintsChanged();
-  }
+  minimum_widget_size_ = GetInitialSize();
+  OnSizeConstraintsChanged();
   theme_service_observation_.Observe(theme_service);
 }
 
@@ -72,11 +102,18 @@ std::unique_ptr<GlicWidget> GlicWidget::Create(
   views::Widget::InitParams params(
       views::Widget::InitParams::CLIENT_OWNS_WIDGET,
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  params.bounds = initial_bounds;
+  if (user_resizable) {
+    params.bounds.Outset(GetTargetOutsets(initial_bounds));
+  }
 #if BUILDFLAG(IS_WIN)
-  params.dont_show_in_taskbar = true;
+  // If floaty won't be always on top, it should appear in the taskbar and
+  // alt tab list.
+  if (!base::FeatureList::IsEnabled(features::kGlicZOrderChanges)) {
+    params.dont_show_in_taskbar = true;
+  }
   params.force_system_menu_for_frameless = true;
 #endif
-  params.bounds = initial_bounds;
   params.sublevel = ChromeWidgetSublevel::kSublevelGlic;
   // Don't change this name. This is used by other code to identify the glic
   // window. See b/404947780.
@@ -91,12 +128,12 @@ std::unique_ptr<GlicWidget> GlicWidget::Create(
   params.animation_enabled = true;
 #endif
   auto delegate = std::make_unique<GlicWidgetDelegate>();
-  delegate->SetCanResize(UserResizeEnabled() && user_resizable);
+  delegate->SetCanResize(user_resizable);
   params.delegate = delegate.release();
 
   auto widget = base::WrapUnique(new GlicWidget(
       ThemeServiceFactory::GetForProfile(profile), std::move(params)));
-
+  widget->SetMinimumSize(GetInitialSize());
   widget->SetContentsView(std::make_unique<GlicView>(
       profile, initial_bounds.size(), accelerator_delegate));
 
@@ -105,6 +142,16 @@ std::unique_ptr<GlicWidget> GlicWidget::Create(
   widget->SetNativeWindowProperty(views::kWidgetIdentifierKey,
                                   kGlicWidgetIdentifier);
 
+#if BUILDFLAG(IS_WIN)
+  HWND hwnd = widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget();
+  if (hwnd != nullptr) {
+    ui::win::PreventWindowFromPinning(hwnd);
+    if (base::FeatureList::IsEnabled(features::kGlicZOrderChanges)) {
+      ui::win::SetAppIdForWindow(
+          ShellUtil::GetBrowserModelId(InstallUtil::IsPerUserInstall()), hwnd);
+    }
+  }  // BUILDFLAG(IS_WIN)
+#endif  //
   return widget;
 }
 
@@ -125,7 +172,21 @@ void GlicWidget::SetMinimumSize(const gfx::Size& size) {
 }
 
 gfx::Size GlicWidget::GetMinimumSize() const {
-  return UserResizeEnabled() ? minimum_widget_size_ : gfx::Size();
+  return minimum_widget_size_;
+}
+
+gfx::Rect GlicWidget::VisibleToWidgetBounds(gfx::Rect visible_bounds) {
+  if (widget_delegate()->CanResize()) {
+    visible_bounds.Outset(GetTargetOutsets(visible_bounds));
+  }
+  return visible_bounds;
+}
+
+gfx::Rect GlicWidget::WidgetToVisibleBounds(gfx::Rect widget_bounds) {
+  if (widget_delegate()->CanResize()) {
+    widget_bounds.Inset(-GetTargetOutsets(widget_bounds).ToInsets());
+  }
+  return widget_bounds;
 }
 
 ui::ColorProviderKey GlicWidget::GetColorProviderKey() const {
@@ -145,6 +206,7 @@ ui::ColorProviderKey GlicWidget::GetColorProviderKey() const {
 
 void GlicWidget::OnThemeChanged() {
   NotifyColorProviderChanged();
+  ThemeChanged();
 }
 
 }  // namespace glic

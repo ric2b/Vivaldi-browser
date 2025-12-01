@@ -72,8 +72,8 @@ import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
-import org.chromium.chrome.browser.autofill.PersonalDataManager;
-import org.chromium.chrome.browser.autofill.PersonalDataManagerFactory;
+import org.chromium.chrome.browser.autofill.AutofillImageFetcher;
+import org.chromium.chrome.browser.autofill.AutofillImageFetcherFactory;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.keyboard_accessory.R;
@@ -126,7 +126,7 @@ public class KeyboardAccessoryViewTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
-    @Mock PersonalDataManager mMockPersonalDataManager;
+    @Mock AutofillImageFetcher mMockImageFetcher;
 
     private static class TestTracker implements Tracker {
         private boolean mWasDismissed;
@@ -215,7 +215,7 @@ public class KeyboardAccessoryViewTest {
     @Before
     public void setUp() throws InterruptedException {
         mActivityTestRule.startMainActivityOnBlankPage();
-        PersonalDataManagerFactory.setInstanceForTesting(mMockPersonalDataManager);
+        AutofillImageFetcherFactory.setInstanceForTesting(mMockImageFetcher);
         ThreadUtils.runOnUiThreadBlocking(
                 () -> {
                     mModel =
@@ -249,8 +249,7 @@ public class KeyboardAccessoryViewTest {
                             (view) -> {
                                 KeyboardAccessoryViewBinder.UiConfiguration uiConfiguration =
                                         KeyboardAccessoryCoordinator.createUiConfiguration(
-                                                mActivityTestRule.getActivity(),
-                                                mMockPersonalDataManager);
+                                                mActivityTestRule.getActivity(), mMockImageFetcher);
                                 view.setBarItemsAdapter(
                                         KeyboardAccessoryCoordinator.createBarItemsAdapter(
                                                 mModel.get(BAR_ITEMS), view, uiConfiguration));
@@ -327,7 +326,6 @@ public class KeyboardAccessoryViewTest {
                                                 new AutofillSuggestion.Builder()
                                                         .setLabel("Johnathan")
                                                         .setSubLabel("Smith")
-                                                        .setItemTag("")
                                                         .setSuggestionType(
                                                                 SuggestionType.ADDRESS_ENTRY)
                                                         .setFeatureForIph("")
@@ -446,7 +444,6 @@ public class KeyboardAccessoryViewTest {
                         new AutofillSuggestion.Builder()
                                 .setLabel("Create plus address")
                                 .setSubLabel("")
-                                .setItemTag("")
                                 .setSuggestionType(SuggestionType.CREATE_NEW_PLUS_ADDRESS)
                                 .setFeatureForIph("")
                                 .setApplyDeactivatedStyle(false)
@@ -487,7 +484,6 @@ public class KeyboardAccessoryViewTest {
                         new AutofillSuggestion.Builder()
                                 .setLabel("Card Info Retrieval")
                                 .setSubLabel("")
-                                .setItemTag("")
                                 .setSuggestionType(SuggestionType.CREDIT_CARD_ENTRY)
                                 .setIphDescriptionText(descriptionText)
                                 .setApplyDeactivatedStyle(false)
@@ -520,13 +516,48 @@ public class KeyboardAccessoryViewTest {
 
     @Test
     @MediumTest
+    public void testDismissesHomeAndWorkdEducationBubbleOnFilling() throws InterruptedException {
+        AutofillBarItem itemWithIph =
+                new AutofillBarItem(
+                        new AutofillSuggestion.Builder()
+                                .setLabel("Johnathan")
+                                .setSubLabel("Smith")
+                                .setSuggestionType(SuggestionType.ADDRESS_ENTRY)
+                                .setFeatureForIph("")
+                                .setApplyDeactivatedStyle(false)
+                                .build(),
+                        new Action(AUTOFILL_SUGGESTION, unused -> {}));
+        itemWithIph.setFeatureForIph(
+                FeatureConstants.KEYBOARD_ACCESSORY_HOME_WORK_PROFILE_SUGGESTION_FEATURE);
+
+        TestTracker tracker = new TestTracker();
+        TrackerFactory.setTrackerForTests(tracker);
+
+        ThreadUtils.runOnUiThreadBlocking(
+                () -> {
+                    mModel.set(VISIBLE, true);
+                    mModel.get(BAR_ITEMS).set(new BarItem[] {itemWithIph, createSheetOpener()});
+                });
+
+        onViewWaiting(withText("Johnathan"));
+        waitForHelpBubble(withText(R.string.iph_keyboard_accessory_home_work_profile_suggestion));
+        assertThat(mKeyboardAccessoryView.take().areClicksAllowedWhenObscured(), is(true));
+        onView(withText("Johnathan")).perform(click());
+
+        assertThat(tracker.wasDismissed(), is(true));
+        assertThat(
+                tracker.getLastEmittedEvent(),
+                is(EventConstants.KEYBOARD_ACCESSORY_HOME_AND_WORK_ADDRESS_AUTOFILLED));
+    }
+
+    @Test
+    @MediumTest
     public void testDismissesPasswordEducationBubbleOnFilling() throws InterruptedException {
         AutofillBarItem itemWithIph =
                 new AutofillBarItem(
                         new AutofillSuggestion.Builder()
                                 .setLabel("Johnathan")
                                 .setSubLabel("Smith")
-                                .setItemTag("")
                                 .setSuggestionType(SuggestionType.PASSWORD_ENTRY)
                                 .setFeatureForIph("")
                                 .setApplyDeactivatedStyle(false)
@@ -564,7 +595,6 @@ public class KeyboardAccessoryViewTest {
                         new AutofillSuggestion.Builder()
                                 .setLabel("Johnathan")
                                 .setSubLabel("Smith")
-                                .setItemTag("")
                                 .setSuggestionType(SuggestionType.ADDRESS_ENTRY)
                                 .setFeatureForIph("")
                                 .setApplyDeactivatedStyle(false)
@@ -600,7 +630,6 @@ public class KeyboardAccessoryViewTest {
                         new AutofillSuggestion.Builder()
                                 .setLabel("Johnathan")
                                 .setSubLabel("Smith")
-                                .setItemTag("")
                                 .setSuggestionType(SuggestionType.CREDIT_CARD_ENTRY)
                                 .setFeatureForIph("")
                                 .setApplyDeactivatedStyle(false)
@@ -668,13 +697,11 @@ public class KeyboardAccessoryViewTest {
     @Test
     @MediumTest
     public void testDismissesPaymentOfferEducationBubbleOnFilling() throws InterruptedException {
-        String itemTag = "Cashback linked";
         AutofillBarItem itemWithIph =
                 new AutofillBarItem(
                         new AutofillSuggestion.Builder()
                                 .setLabel("Johnathan")
                                 .setSubLabel("Smith")
-                                .setItemTag(itemTag)
                                 .setIconId(R.drawable.ic_offer_tag)
                                 .setSuggestionType(SuggestionType.CREDIT_CARD_ENTRY)
                                 .setFeatureForIph("")
@@ -693,7 +720,6 @@ public class KeyboardAccessoryViewTest {
                 });
 
         onViewWaiting(withText("Johnathan"));
-        waitForHelpBubble(withText(itemTag));
         assertThat(mKeyboardAccessoryView.take().areClicksAllowedWhenObscured(), is(true));
         onView(withText("Johnathan")).perform(click());
 
@@ -739,15 +765,14 @@ public class KeyboardAccessoryViewTest {
 
     @Test
     @MediumTest
-    public void testCustomIconUrlSet_imageReturnedByPersonalDataManager_customIconSetOnChipView()
+    public void testCustomIconUrlSet_imageReturnedByImageFetcher_customIconSetOnChipView()
             throws InterruptedException {
         GURL customIconUrl = mock(GURL.class);
         when(customIconUrl.isValid()).thenReturn(true);
         when(customIconUrl.getSpec()).thenReturn(CUSTOM_ICON_URL);
-        // Return the cached image when
-        // PersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable is called for the
+        // Return the cached image when AutofillImageFetcher.getImageIfAvailable is called for the
         // above url.
-        when(mMockPersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable(any(), any()))
+        when(mMockImageFetcher.getImageIfAvailable(any(), any()))
                 .thenReturn(Optional.of(TEST_CARD_ART_IMAGE));
         // Create an autofill suggestion and set the `customIconUrl`.
         AutofillBarItem customIconItem =
@@ -777,15 +802,14 @@ public class KeyboardAccessoryViewTest {
 
     @Test
     @MediumTest
-    public void testCustomIconUrlSet_imageNotCachedInPersonalDataManager_defaultIconSetOnChipView()
+    public void testCustomIconUrlSet_imageNotCachedInImageFetcher_defaultIconSetOnChipView()
             throws InterruptedException {
         GURL customIconUrl = mock(GURL.class);
         when(customIconUrl.isValid()).thenReturn(true);
         when(customIconUrl.getSpec()).thenReturn(CUSTOM_ICON_URL);
-        // Return the response of PersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable
-        // to null to indicate that the image is not present in the cache.
-        when(mMockPersonalDataManager.getCustomImageForAutofillSuggestionIfAvailable(any(), any()))
-                .thenReturn(Optional.empty());
+        // Return null to AutofillImageFetcher.getImageIfAvailable to indicate that the image is not
+        // present in the cache.
+        when(mMockImageFetcher.getImageIfAvailable(any(), any())).thenReturn(Optional.empty());
         AutofillBarItem customIconItem =
                 new AutofillBarItem(
                         getDefaultAutofillSuggestionBuilder()
@@ -854,7 +878,6 @@ public class KeyboardAccessoryViewTest {
                                                 new AutofillSuggestion.Builder()
                                                         .setLabel("Virtual Card")
                                                         .setSubLabel("Disabled")
-                                                        .setItemTag("")
                                                         .setSuggestionType(
                                                                 SuggestionType.CREDIT_CARD_ENTRY)
                                                         .setFeatureForIph("")
@@ -938,7 +961,6 @@ public class KeyboardAccessoryViewTest {
                 new AutofillSuggestion.Builder()
                         .setLabel(label)
                         .setSubLabel("Smith")
-                        .setItemTag("")
                         .setSuggestionType(SuggestionType.ADDRESS_ENTRY)
                         .setFeatureForIph("")
                         .setApplyDeactivatedStyle(false)

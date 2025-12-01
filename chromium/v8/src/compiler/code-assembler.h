@@ -490,19 +490,18 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 
     template <class A>
     operator TNode<A>() {
-      static_assert(!std::is_same<A, Tagged<MaybeObject>>::value,
+      static_assert(!std::is_same_v<A, Tagged<MaybeObject>>,
                     "Can't cast to Tagged<MaybeObject>, use explicit "
                     "conversion functions. ");
 
       static_assert(types_have_common_values<A, PreviousType>::value,
                     "Incompatible types: this cast can never succeed.");
-      static_assert(std::is_convertible<TNode<A>, TNode<MaybeObject>>::value ||
-                        std::is_convertible<TNode<A>, TNode<Object>>::value,
+      static_assert(std::is_convertible_v<TNode<A>, TNode<MaybeObject>> ||
+                        std::is_convertible_v<TNode<A>, TNode<Object>>,
                     "Coercion to untagged values cannot be "
                     "checked.");
       static_assert(
-          !FromTyped ||
-              !std::is_convertible<TNode<PreviousType>, TNode<A>>::value,
+          !FromTyped || !std::is_convertible_v<TNode<PreviousType>, TNode<A>>,
           "Unnecessary CAST: types are convertible.");
 #ifdef DEBUG
       if (v8_flags.slow_debug_code) {
@@ -610,7 +609,7 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   TNode<Smi> SmiConstant(int value);
   template <typename E>
   TNode<Smi> SmiConstant(E value)
-    requires std::is_enum<E>::value
+    requires std::is_enum_v<E>
   {
     static_assert(sizeof(E) <= sizeof(int));
     return SmiConstant(static_cast<int>(value));
@@ -699,7 +698,7 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   TNode<T> Parameter(int value,
                      const SourceLocation& loc = SourceLocation::Current()) {
     static_assert(
-        std::is_convertible<TNode<T>, TNode<Object>>::value,
+        std::is_convertible_v<TNode<T>, TNode<Object>>,
         "Parameter is only for tagged types. Use UncheckedParameter instead.");
     std::stringstream message;
     message << "Parameter " << value;
@@ -855,6 +854,7 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   void SetStackPointer(TNode<RawPtrT> ptr);
 #endif  // V8_ENABLE_WEBASSEMBLY
 
+  TNode<Object> LoadTaggedFromRootRegister(TNode<IntPtrT> offset);
   TNode<RawPtrT> LoadPointerFromRootRegister(TNode<IntPtrT> offset);
   TNode<Uint8T> LoadUint8FromRootRegister(TNode<IntPtrT> offset);
 
@@ -1297,10 +1297,9 @@ class V8_EXPORT_PRIVATE CodeAssembler {
 
   // Projections
   template <int index, class T1, class T2>
-  TNode<typename std::tuple_element<index, std::tuple<T1, T2>>::type>
-  Projection(TNode<PairT<T1, T2>> value) {
-    return UncheckedCast<
-        typename std::tuple_element<index, std::tuple<T1, T2>>::type>(
+  TNode<std::tuple_element_t<index, std::tuple<T1, T2>>> Projection(
+      TNode<PairT<T1, T2>> value) {
+    return UncheckedCast<std::tuple_element_t<index, std::tuple<T1, T2>>>(
         Projection(index, value));
   }
 
@@ -1380,6 +1379,13 @@ class V8_EXPORT_PRIVATE CodeAssembler {
   void TailCallBuiltin(Builtin id, TNode<Object> context, TArgs... args) {
     DCHECK_WITH_MSG(!Builtins::HasJSLinkage(id),
                     "Use TailCallJSBuiltin instead");
+#if V8_ENABLE_WEBASSEMBLY
+    // Tail calling from a wasm builtin to a non-wasm builtin is not supported
+    // because of stack switching. Use a call instead so that we switch to the
+    // central stack and back if needed.
+    DCHECK(!wasm::BuiltinLookup::IsWasmBuiltinId(builtin()) ||
+           wasm::BuiltinLookup::IsWasmBuiltinId(id));
+#endif
     Callable callable = Builtins::CallableFor(isolate(), id);
     TNode<Code> target = HeapConstantNoHole(callable.code());
     TailCallStub(callable.descriptor(), target, context, args...);
@@ -1433,6 +1439,12 @@ class V8_EXPORT_PRIVATE CodeAssembler {
     DCHECK(Builtins::HasJSLinkage(builtin));
     // The receiver is also passed on the stack so needs to be included.
     DCHECK_EQ(Builtins::GetStackParameterCount(builtin), 1 + sizeof...(args));
+#if V8_ENABLE_WEBASSEMBLY
+    // Unimplemented. Add code for switching to the central stack here if
+    // needed. See {CallBuiltin} for example.
+    DCHECK(!wasm::BuiltinLookup::IsWasmBuiltinId(this->builtin()) ||
+           wasm::BuiltinLookup::IsWasmBuiltinId(builtin));
+#endif
     Callable callable = Builtins::CallableFor(isolate(), builtin);
     int argc = JSParameterCount(static_cast<int>(sizeof...(args)));
     TNode<Int32T> arity = Int32Constant(argc);
@@ -1451,6 +1463,13 @@ class V8_EXPORT_PRIVATE CodeAssembler {
                          TNode<Int32T> arg_count,
                          TNode<JSDispatchHandleT> dispatch_handle) {
     DCHECK(Builtins::HasJSLinkage(id));
+#if V8_ENABLE_WEBASSEMBLY
+    // Tail calling from a wasm builtin to a JS builtin is not supported because
+    // of stack switching. Use a call instead so that we switch to the central
+    // stack and back if needed.
+    DCHECK(!wasm::BuiltinLookup::IsWasmBuiltinId(builtin()) ||
+           wasm::BuiltinLookup::IsWasmBuiltinId(id));
+#endif
     Callable callable = Builtins::CallableFor(isolate(), id);
     TNode<Code> target = HeapConstantNoHole(callable.code());
 #ifdef V8_JS_LINKAGE_INCLUDES_DISPATCH_HANDLE
@@ -1468,6 +1487,12 @@ class V8_EXPORT_PRIVATE CodeAssembler {
                       TNode<Object> function, TNode<JSAny> receiver,
                       TArgs... args) {
     DCHECK(Builtins::IsAnyCall(builtin));
+#if V8_ENABLE_WEBASSEMBLY
+    // Unimplemented. Add code for switching to the central stack here if
+    // needed. See {CallBuiltin} for example.
+    DCHECK(!wasm::BuiltinLookup::IsWasmBuiltinId(this->builtin()) ||
+           wasm::BuiltinLookup::IsWasmBuiltinId(builtin));
+#endif
     Callable callable = Builtins::CallableFor(isolate(), builtin);
     int argc = JSParameterCount(static_cast<int>(sizeof...(args)));
     TNode<Int32T> arity = Int32Constant(argc);

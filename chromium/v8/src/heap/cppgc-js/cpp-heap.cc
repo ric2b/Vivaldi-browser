@@ -610,7 +610,8 @@ void CppHeap::AttachIsolate(Isolate* isolate) {
   static_cast<CppgcPlatformAdapter*>(platform())
       ->SetIsolate(reinterpret_cast<v8::Isolate*>(isolate_));
   if (auto* heap_profiler = heap()->heap_profiler()) {
-    heap_profiler->AddBuildEmbedderGraphCallback(&CppGraphBuilder::Run, this);
+    heap_profiler->SetInternalBuildEmbedderGraphCallback(&CppGraphBuilder::Run,
+                                                         this);
     heap_profiler->set_native_move_listener(
         std::make_unique<MoveListenerImpl>(heap_profiler, this));
   }
@@ -657,8 +658,7 @@ void CppHeap::DetachIsolate() {
   sweeping_on_mutator_thread_observer_.reset();
 
   if (auto* heap_profiler = heap()->heap_profiler()) {
-    heap_profiler->RemoveBuildEmbedderGraphCallback(&CppGraphBuilder::Run,
-                                                    this);
+    heap_profiler->SetInternalBuildEmbedderGraphCallback(nullptr, nullptr);
     heap_profiler->set_native_move_listener(nullptr);
   }
   SetMetricRecorder(nullptr);
@@ -1268,13 +1268,6 @@ CppHeap::CreateCppMarkingStateForMutatorThread() {
   DCHECK(IsMarking());
   return std::make_unique<CppMarkingState>(
       marker()->To<UnifiedHeapMarker>().GetMutatorMarkingState());
-}
-
-CppHeap::PauseConcurrentMarkingScope::PauseConcurrentMarkingScope(
-    CppHeap* cpp_heap) {
-  if (cpp_heap && cpp_heap->marker()) {
-    pause_scope_.emplace(*cpp_heap->marker());
-  }
 }
 
 void CppHeap::CollectGarbage(cppgc::internal::GCConfig config) {

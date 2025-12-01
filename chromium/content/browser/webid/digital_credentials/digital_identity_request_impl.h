@@ -42,9 +42,10 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
       RenderFrameHost&,
       mojo::PendingReceiver<blink::mojom::DigitalIdentityRequest>);
 
-  // Returns the type of interstitial to show based on the request contents.
+  // Returns the type of interstitial to show based on the request contents and
+  // the origin of the request.
   static std::optional<DigitalIdentityInterstitialType> ComputeInterstitialType(
-      const url::Origin& rp_origin,
+      RenderFrameHost& render_frame_host,
       const DigitalIdentityProvider* provider,
       const std::vector<ProtocolAndParsedRequest>& parsed_requests);
 
@@ -55,14 +56,14 @@ class CONTENT_EXPORT DigitalIdentityRequestImpl
   ~DigitalIdentityRequestImpl() override;
 
   // blink::mojom::DigitalIdentityRequest:
-  void Get(std::vector<blink::mojom::DigitalCredentialRequestPtr>
+  void Get(std::vector<blink::mojom::DigitalCredentialGetRequestPtr>
                digital_credential_requests,
            blink::mojom::GetRequestFormat format,
            GetCallback) override;
 
-  void Create(
-      blink::mojom::DigitalCredentialRequestPtr digital_credential_request,
-      CreateCallback) override;
+  void Create(std::vector<blink::mojom::DigitalCredentialCreateRequestPtr>
+                  digital_credential_requests,
+              CreateCallback) override;
 
   void Abort() override;
 

@@ -87,17 +87,16 @@ cr-action-menu::part(dialog) {
 .voice-name {
   font-size: 13px;
   font-weight: 500;
+  min-width: 200px;
   max-width: 100%;
   overflow: hidden;
   padding-inline-end: 16px;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-hidden-true {
   visibility: hidden;
-}
-.item-invisible-true {
-  color: transparent;
 }
 
 .language-menu-button {

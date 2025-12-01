@@ -1,14 +1,13 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/legacy/components/data_grid/data_grid.js';
 
 import * as i18n from '../../../core/i18n/i18n.js';
 import type * as Protocol from '../../../generated/protocol.js';
-// inspectorCommonStyles is imported for the empty state styling that is used for the start view
-// eslint-disable-next-line rulesdir/es-modules-import
-import inspectorCommonStyles from '../../../ui/legacy/inspectorCommon.css.js';
+import * as UI from '../../../ui/legacy/legacy.js';
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
@@ -53,8 +52,8 @@ export class EndpointsGrid extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
-      <style>${reportingApiGridStyles.cssText}</style>
-      <style>${inspectorCommonStyles.cssText}</style>
+      <style>${reportingApiGridStyles}</style>
+      <style>${UI.inspectorCommonStyles}</style>
       <div class="reporting-container" jslog=${VisualLogging.section('endpoints')}>
         <div class="reporting-header">${i18n.i18n.lockedString('Endpoints')}</div>
         ${this.#endpoints.size > 0 ? html`

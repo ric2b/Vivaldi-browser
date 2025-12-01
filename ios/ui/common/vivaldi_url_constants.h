@@ -24,6 +24,8 @@ extern const char vVivaldiSyncStatusUrl[];
 extern const char vVivaldiBugReportURL[];
 extern const char vVivaldiCrashReasonURL[];
 
+extern const char vVivaldiDonateUrl[];
+
 // Help
 extern const char vVivaldiHelpCopyLinkToHightlightUrl[];
 extern const char vVivaldiHelpPreloadWebpagUrl[];

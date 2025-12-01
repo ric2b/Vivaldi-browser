@@ -6,18 +6,25 @@ package org.chromium.chrome.browser.toolbar.reload_button;
 
 import android.animation.ObjectAnimator;
 import android.content.res.ColorStateList;
+import android.graphics.Rect;
 import android.view.View;
 import android.widget.ImageButton;
 
+import androidx.core.graphics.Insets;
+
+import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
+import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
 import org.chromium.ui.widget.Toast;
 
 /**
- * Root component for the reload button. Exposes public API to change button's state and allows
- * consumers to react to button state changes.
+ * Root component for the reload button that maintains UI representations like stop/loading states.
+ * Exposes public API to change button's state and allows consumers to react to button state
+ * changes.
  */
 @NullMarked
 public class ReloadButtonCoordinator {
@@ -32,60 +39,58 @@ public class ReloadButtonCoordinator {
     }
 
     private final ReloadButtonMediator mMediator;
+    private final ImageButton mView;
 
     /**
      * Creates an instance of {@link ReloadButtonCoordinator}
      *
      * @param view reload button android view.
      * @param delegate that contains reload logic for reload button.
+     * @param tabSupplier a supplier that provides current active tab.
+     * @param ntpLoadingSupplier a supplier that provides loading state of content inside NTP, e.g
+     *     feed, this is not a reload state of the whole tab.
+     * @param themeColorProvider a provider that notifies about theme changes and focus tint.
      */
     public ReloadButtonCoordinator(
             ImageButton view,
             ReloadButtonCoordinator.Delegate delegate,
-            ThemeColorProvider themeColorProvider) {
+            ObservableSupplier<@Nullable Tab> tabSupplier,
+            ObservableSupplier<Boolean> ntpLoadingSupplier,
+            ObservableSupplier<Boolean> enabledSupplier,
+            ThemeColorProvider themeColorProvider,
+            boolean isWebApp) {
+        mView = view;
+
         // ThemeColorProvider might not be updated by this time. Keep existing color list.
         final ColorStateList tint =
                 themeColorProvider.getActivityFocusTint() == null
-                        ? view.getImageTintList()
+                        ? mView.getImageTintList()
                         : themeColorProvider.getActivityFocusTint();
         final var model =
                 new PropertyModel.Builder(ReloadButtonProperties.ALL_KEYS)
-                        .with(ReloadButtonProperties.ALPHA, view.getAlpha())
+                        .with(ReloadButtonProperties.ALPHA, mView.getAlpha())
                         .with(
                                 ReloadButtonProperties.IS_VISIBLE,
-                                view.getVisibility() == View.VISIBLE)
+                                mView.getVisibility() == View.VISIBLE)
                         .with(
                                 ReloadButtonProperties.CONTENT_DESCRIPTION,
-                                view.getContentDescription())
+                                mView.getContentDescription())
                         .with(ReloadButtonProperties.TINT_LIST, tint)
-                        .with(ReloadButtonProperties.DRAWABLE_LEVEL, view.getDrawable().getLevel())
+                        .with(ReloadButtonProperties.DRAWABLE_LEVEL, mView.getDrawable().getLevel())
                         .build();
         mMediator =
                 new ReloadButtonMediator(
                         model,
                         delegate,
                         themeColorProvider,
-                        (text) -> Toast.showAnchoredToast(view.getContext(), view, text),
-                        view.getResources());
-        PropertyModelChangeProcessor.create(model, view, ReloadButtonViewBinder::bind);
-    }
-
-    /**
-     * Changes button reloading state.
-     *
-     * @param isReloading indicated whether current web page is reloading.
-     */
-    public void setReloading(boolean isReloading) {
-        mMediator.setReloading(isReloading);
-    }
-
-    /**
-     * Changes reload button enabled state.
-     *
-     * @param isEnabled indicates whether the button should be enabled or disabled.
-     */
-    public void setEnabled(boolean isEnabled) {
-        mMediator.setEnabled(isEnabled);
+                        tabSupplier,
+                        ntpLoadingSupplier,
+                        enabledSupplier,
+                        (text) -> Toast.showAnchoredToast(mView.getContext(), mView, text),
+                        mView.getResources(),
+                        mView.getContext(),
+                        isWebApp);
+        PropertyModelChangeProcessor.create(model, mView, ReloadButtonViewBinder::bind);
     }
 
     /**
@@ -106,6 +111,10 @@ public class ReloadButtonCoordinator {
         mMediator.setOnKeyListener(listener);
     }
 
+    public void setBackgroundInsets(Insets insets) {
+        mMediator.setBackgroundInsets(insets);
+    }
+
     /**
      * Prepares the view for fade animation and returns an alpha animator.
      *
@@ -114,6 +123,26 @@ public class ReloadButtonCoordinator {
      */
     public ObjectAnimator getFadeAnimator(boolean shouldShow) {
         return mMediator.getFadeAnimator(shouldShow);
+    }
+
+    /**
+     * Gets an area of the button that are touchable/clickable.
+     *
+     * @return a {@link Rect} that contains touchable/clickable area.
+     */
+    public Rect getHitRect() {
+        final var rect = new Rect();
+        mView.getHitRect(rect);
+        return rect;
+    }
+
+    /**
+     * Gets visibility.
+     *
+     * @return a Boolean indicating whether view is visible or not.
+     */
+    public boolean isVisibile() {
+        return mMediator.isVisible();
     }
 
     /** Destroys current object instance. It can't be used after this call. */

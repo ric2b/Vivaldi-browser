@@ -1,17 +1,14 @@
 // Copyright (c) 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Lit from '../../../ui/lit/lit.js';
 import * as VisualLogging from '../../../ui/visual_logging/visual_logging.js';
 
 import {toHexString} from './LinearMemoryInspectorUtils.js';
-import linearMemoryViewerStylesRaw from './linearMemoryViewer.css.js';
+import linearMemoryViewerStyles from './linearMemoryViewer.css.js';
 import type {HighlightInfo} from './LinearMemoryViewerUtils.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const linearMemoryViewerStyles = new CSSStyleSheet();
-linearMemoryViewerStyles.replaceSync(linearMemoryViewerStylesRaw.cssText);
 
 const {render, html} = Lit;
 
@@ -86,7 +83,6 @@ export class LinearMemoryViewer extends HTMLElement {
 
   connectedCallback(): void {
     this.style.setProperty('--byte-group-margin', `${BYTE_GROUP_MARGIN}px`);
-    this.#shadow.adoptedStyleSheets = [linearMemoryViewerStyles];
   }
 
   disconnectedCallback(): void {
@@ -185,6 +181,7 @@ export class LinearMemoryViewer extends HTMLElement {
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
     render(html`
+      <style>${linearMemoryViewerStyles}</style>
       <div class="view" tabindex="0" @keydown=${this.#onKeyDown} jslog=${jslog}>
         ${this.#renderView()}
       </div>

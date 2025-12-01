@@ -471,7 +471,7 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
     }
   }
 
-  if (layer_tree_impl()->settings().UseLayerContextForDisplay()) {
+  if (layer_tree_impl()->settings().TreesInVizInClientProcess()) {
     // Ensure updates also propagate to the display tree on its next update.
     layer->SetNeedsPushProperties(changed_properties_);
   }
@@ -537,11 +537,13 @@ bool LayerImpl::LayerPropertyChangedNotFromPropertyTrees() const {
 
 void LayerImpl::NoteLayerPropertyChanged() {
   layer_property_changed_not_from_property_trees_ = true;
+  SetNeedsPushProperties();
   layer_tree_impl()->set_needs_update_draw_properties();
 }
 
 void LayerImpl::NoteLayerPropertyChangedFromPropertyTrees() {
   layer_property_changed_from_property_trees_ = true;
+  SetNeedsPushProperties();
   layer_tree_impl()->set_needs_update_draw_properties();
 }
 
@@ -771,7 +773,7 @@ void LayerImpl::SetNeedsPushProperties(uint8_t changed_props) {
 
   // We never push properties from the active tree unless using a LayerContext.
   if (layer_tree_impl()->IsActiveTree() &&
-      !layer_tree_impl()->settings().UseLayerContextForDisplay()) {
+      !layer_tree_impl()->settings().TreesInVizInClientProcess()) {
     return;
   }
 

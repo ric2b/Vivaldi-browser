@@ -3,13 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/features.gni")
-import("//mojo/public/tools/bindings/mojom.gni")
 import("//testing/test.gni")
-
-mojom("privacy_sandbox_notice_mojom") {
-  sources = [ "privacy_sandbox_notice.mojom" ]
-  webui_module_path = "/"
-}
 
 static_library("privacy_sandbox_prefs") {
   sources = [
@@ -18,7 +12,6 @@ static_library("privacy_sandbox_prefs") {
   ]
 
   deps = [
-    ":privacy_sandbox_notice_storage",
     ":tracking_protection_prefs",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
@@ -40,27 +33,10 @@ component("features") {
   public_deps = [ "//base" ]
 }
 
-source_set("privacy_sandbox_notice_constants") {
-  sources = [ "privacy_sandbox_notice_constants.h" ]
-
-  public_deps = [ "//base" ]
-}
-
 source_set("privacy_sandbox_survey_service") {
-  sources = [
-    "privacy_sandbox_survey_service.cc",
+  public = [
     "privacy_sandbox_survey_service.h",
   ]
-
-  deps = [
-    ":features",
-    ":privacy_sandbox_prefs",
-    "//components/keyed_service/core:core",
-    "//components/prefs",
-    "//components/signin/public/identity_manager",
-  ]
-
-  public_deps = [ "//base" ]
 }
 
 source_set("tracking_protection_onboarding") {
@@ -96,6 +72,7 @@ source_set("tracking_protection_settings") {
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/keyed_service/core:core",
+    "//components/policy/core/common",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
     "//url:url",
@@ -111,24 +88,6 @@ static_library("tracking_protection_prefs") {
   ]
 
   deps = [
-    "//components/pref_registry:pref_registry",
-    "//components/prefs",
-  ]
-
-  public_deps = [ "//base" ]
-}
-
-source_set("privacy_sandbox_notice_storage") {
-  sources = [
-    "privacy_sandbox_notice_storage.cc",
-    "privacy_sandbox_notice_storage.h",
-  ]
-
-  deps = [
-    ":features",
-    ":privacy_sandbox_notice_constants",
-    "//base",
-    "//base/version_info:version_info",
     "//components/pref_registry:pref_registry",
     "//components/prefs",
   ]
@@ -248,26 +207,9 @@ if (use_blink) {
   }
 }
 
-test("fuzz_tests") {
-  sources = [ "privacy_sandbox_notice_storage_fuzztest.cc" ]
-
-  fuzztests = [
-    "PrivacySandboxNoticeStorageFuzzTest.CheckConvertsV1SchemaSuccessfully",
-  ]
-
-  deps = [
-    ":privacy_sandbox_notice_storage",
-    "//testing/gmock",
-    "//testing/gtest",
-    "//third_party/fuzztest:fuzztest_gtest_main",
-  ]
-}
-
 source_set("unit_tests") {
   testonly = true
   sources = [
-    "privacy_sandbox_notice_storage_unittest.cc",
-    "privacy_sandbox_survey_service_unittest.cc",
     "tracking_protection_onboarding_unittest.cc",
   ]
 
@@ -275,10 +217,7 @@ source_set("unit_tests") {
 
   deps = [
     ":features",
-    ":privacy_sandbox_notice_constants",
-    ":privacy_sandbox_notice_storage",
     ":privacy_sandbox_prefs",
-    ":privacy_sandbox_survey_service",
     ":tracking_protection_onboarding",
     ":tracking_protection_prefs",
     ":tracking_protection_settings",

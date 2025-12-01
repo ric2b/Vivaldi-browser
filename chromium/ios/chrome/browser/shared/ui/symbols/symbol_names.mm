@@ -11,6 +11,7 @@ NSString* const kChromeDefaultBrowserIllustrationImage =
     @"chrome_default_browser_illustration";
 NSString* const kChromeDefaultBrowserScreenBannerImage =
     @"chrome_default_browser_screen_banner";
+NSString* const kChromeGuidedTourBannerImage = @"chrome_guided_tour_banner";
 NSString* const kChromeNotificationsOptInBannerImage =
     @"chrome_notifications_opt_in_banner";
 NSString* const kChromeNotificationsOptInBannerLandscapeImage =
@@ -41,6 +42,7 @@ NSString* const kUSPSCarrierImage = @"parcel_tracking_carrier_usps";
 #else
 NSString* const kChromiumDefaultBrowserScreenBannerImage =
     @"chromium_default_browser_screen_banner";
+NSString* const kChromiumGuidedTourBannerImage = @"chromium_guided_tour_banner";
 NSString* const kChromiumNotificationsOptInBannerImage =
     @"chromium_notifications_opt_in_banner";
 NSString* const kChromiumNotificationsOptInBannerLandscapeImage =
@@ -108,6 +110,7 @@ NSString* const kFamilylinkSymbol = @"familylink";
 NSString* const kMyDriveSymbol = @"my_drive";
 NSString* const kSharedDrivesSymbol = @"shared_drives";
 NSString* const kEllipsisSquareFillSymbol = @"ellipsis_square_fill";
+NSString* const kMagnifyingglassSparkSymbol = @"magnifyingglass_spark";
 
 // Custom symbol names which can be configured with a color palette.
 NSString* const kIncognitoCircleFillSymbol = @"incognito_circle_fill";
@@ -200,6 +203,8 @@ NSString* const kWifiSymbol = @"wifi";
 NSString* const kBookmarksSymbol = @"star";
 NSString* const kSyncErrorSymbol =
     @"exclamationmark.arrow.triangle.2.circlepath";
+NSString* const kSyncPasswordErrorSymbol =
+    @"lock.trianglebadge.exclamationmark.fill";
 NSString* const kMenuSymbol = @"ellipsis";
 NSString* const kSortSymbol = @"arrow.up.arrow.down";
 NSString* const kExpandSymbol = @"arrow.up.left.and.arrow.down.right";
@@ -290,6 +295,9 @@ NSString* const kRectangleGroupBubble = @"rectangle.3.group.bubble";
 NSString* const kHomeSymbol = @"house";
 NSString* const kWorkSymbol = @"case";
 NSString* const kShieldedEnvelope = @"envelope.badge.shield.half.filled";
+NSString* const kReaderModeSymbolPreIOS18 = @"doc.plaintext";
+NSString* const kReaderModeSymbolPostIOS18 = @"text.page";
+NSString* const kCircleBadgeFill = @"circlebadge.fill";
 
 // Names of the default symbol being non-monochrome by default. When using them,
 // you probably want to set their color to monochrome.

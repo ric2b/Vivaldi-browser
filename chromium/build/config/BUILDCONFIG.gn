@@ -279,6 +279,11 @@ if (target_os == "android") {
   _default_toolchain = "//build/toolchain/aix:$target_cpu"
 } else if (target_os == "zos") {
   _default_toolchain = "//build/toolchain/zos:$target_cpu"
+} else if (target_os == "emscripten") {
+  # Because it's too hard to remove all targets from //BUILD.gn that do not work with it.
+  assert(
+      false,
+      "emscripten is not a supported target_os. It is available only as secondary toolchain.")
 } else {
   assert(false, "Unsupported target_os: $target_os")
 }
@@ -364,6 +369,7 @@ default_compiler_configs = [
   "//build/config/compiler:runtime_library",
   "//build/config/compiler:thin_archive",
   "//build/config/compiler:thinlto_optimize_default",
+  "//build/config/compiler:tot_warnings",
   "//build/config/compiler/pgo:default_pgo_flags",
   "//build/config/coverage:default_coverage",
   "//build/config/sanitizers:default_sanitizer_flags",
@@ -440,6 +446,10 @@ if (is_win) {
   ]
 } else if (is_apple) {
   _linker_configs = [ "//build/config/apple:strip_all" ]
+} else if (is_android) {
+  # Warn whenever linking code that could unintentionally switch off
+  # branch target identification (BTI) on Arm systems.
+  _linker_configs = [ "//build/config/android:lld_branch_target_hardening" ]
 } else {
   _linker_configs = []
 }
@@ -522,6 +532,35 @@ set_defaults("rust_proc_macro") {
   configs = default_rust_proc_macro_configs
 }
 
+DEFAULT_MODULE_DEPS = [
+  "//buildtools/third_party/libc++:_Builtin_float",
+  "//buildtools/third_party/libc++:_Builtin_intrinsics",
+  "//buildtools/third_party/libc++:_Builtin_inttypes",
+  "//buildtools/third_party/libc++:_Builtin_limits",
+  "//buildtools/third_party/libc++:_Builtin_stdalign",
+  "//buildtools/third_party/libc++:_Builtin_stdarg",
+  "//buildtools/third_party/libc++:_Builtin_stdatomic",
+  "//buildtools/third_party/libc++:_Builtin_stdbool",
+  "//buildtools/third_party/libc++:_Builtin_stddef",
+  "//buildtools/third_party/libc++:_Builtin_stdint",
+  "//buildtools/third_party/libc++:_Builtin_unwind",
+  "//buildtools/third_party/libc++:std",
+  "//buildtools/third_party/libc++:std_config",
+  "//buildtools/third_party/libc++:std_core",
+  "//buildtools/third_party/libc++:std_ctype_h",
+  "//buildtools/third_party/libc++:std_errno_h",
+  "//buildtools/third_party/libc++:std_fenv_h",
+  "//buildtools/third_party/libc++:std_float_h",
+  "//buildtools/third_party/libc++:std_inttypes_h",
+  "//buildtools/third_party/libc++:std_math_h",
+  "//buildtools/third_party/libc++:std_private_mbstate_t",
+  "//buildtools/third_party/libc++:std_stdatomic_h",
+  "//buildtools/third_party/libc++:std_stdbool_h",
+  "//buildtools/third_party/libc++:std_string_h",
+  "//buildtools/third_party/libc++:std_uchar_h",
+  "//buildtools/third_party/libc++:std_wctype_h",
+]
+
 # A helper for forwarding testonly and visibility.
 # Forwarding "*" does not include variables from outer scopes (to avoid copying
 # all globals into each template invocation), so it will not pick up
@@ -557,25 +596,33 @@ foreach(_target_type,
         deps = []
       }
 
-      if (is_clang && (!defined(invoker.use_libcxx_modules) ||
-                       invoker.use_libcxx_modules)) {
-        # This is necessary for Clang modules builds.
-        deps += [
-          "//buildtools/third_party/libc++:std",
-          "//buildtools/third_party/libc++:std_config",
-          "//buildtools/third_party/libc++:std_core",
-          "//buildtools/third_party/libc++:std_ctype_h",
-          "//buildtools/third_party/libc++:std_errno_h",
-          "//buildtools/third_party/libc++:std_fenv_h",
-          "//buildtools/third_party/libc++:std_float_h",
-          "//buildtools/third_party/libc++:std_inttypes_h",
-          "//buildtools/third_party/libc++:std_math_h",
-          "//buildtools/third_party/libc++:std_private_mbstate_t",
-          "//buildtools/third_party/libc++:std_string_h",
-          "//buildtools/third_party/libc++:std_uchar_h",
-          "//buildtools/third_party/libc++:std_wctype_h",
-        ]
+      _use_libcxx_modules = true
+      if (defined(invoker.use_libcxx_modules)) {
+        _use_libcxx_modules = invoker.use_libcxx_modules
       }
+
+      if (filter_include(configs,
+                         [
+                           "//build/config/compiler:exceptions",
+                           "//build/config/compiler:rtti",
+                         ]) != []) {
+        # Exceptions and RTTI flags are incompatible with libc++ modules build.
+        # So disable modules build for such targets.
+        _use_libcxx_modules = false
+      }
+
+      if (is_clang && _use_libcxx_modules) {
+        # This is necessary for Clang modules builds.
+        deps += DEFAULT_MODULE_DEPS
+      } else if (filter_include(configs,
+                                [ "//build/config/compiler:libcxx_module" ]) !=
+                 []) {
+        configs -= [ "//build/config/compiler:libcxx_module" ]
+      }
+
+      # _use_libcxx_modules is considered unused, if is_clang = false in the
+      # above conditional.
+      not_needed([ "_use_libcxx_modules" ])
 
       # Consumed by the unsafe-buffers plugin during compile.
       #
@@ -661,28 +708,33 @@ foreach(_target_type,
         deps += [ "//build/config:${_target_type}_deps" ]
       }
 
-      if (is_clang && (!defined(invoker.use_libcxx_modules) ||
-                       invoker.use_libcxx_modules)) {
-        # These are necessary for Clang modules builds.
-        deps += [
-          "//buildtools/third_party/libc++:_Builtin_limits",
-          "//buildtools/third_party/libc++:_Builtin_stdarg",
-          "//buildtools/third_party/libc++:_Builtin_stddef",
-          "//buildtools/third_party/libc++:std",
-          "//buildtools/third_party/libc++:std_config",
-          "//buildtools/third_party/libc++:std_core",
-          "//buildtools/third_party/libc++:std_ctype_h",
-          "//buildtools/third_party/libc++:std_errno_h",
-          "//buildtools/third_party/libc++:std_fenv_h",
-          "//buildtools/third_party/libc++:std_float_h",
-          "//buildtools/third_party/libc++:std_inttypes_h",
-          "//buildtools/third_party/libc++:std_math_h",
-          "//buildtools/third_party/libc++:std_private_mbstate_t",
-          "//buildtools/third_party/libc++:std_string_h",
-          "//buildtools/third_party/libc++:std_uchar_h",
-          "//buildtools/third_party/libc++:std_wctype_h",
-        ]
+      _use_libcxx_modules = true
+      if (defined(invoker.use_libcxx_modules)) {
+        _use_libcxx_modules = invoker.use_libcxx_modules
       }
+
+      if (filter_include(configs,
+                         [
+                           "//build/config/compiler:exceptions",
+                           "//build/config/compiler:rtti",
+                         ]) != []) {
+        # Exceptions and RTTI flags are incompatible with libc++ modules build.
+        # So disable modules build for such targets.
+        _use_libcxx_modules = false
+      }
+
+      if (is_clang && _use_libcxx_modules) {
+        # These are necessary for Clang modules builds.
+        deps += DEFAULT_MODULE_DEPS
+      } else if (filter_include(configs,
+                                [ "//build/config/compiler:libcxx_module" ]) !=
+                 []) {
+        configs -= [ "//build/config/compiler:libcxx_module" ]
+      }
+
+      # _use_libcxx_modules is considered unused, if is_clang = false in the
+      # above conditional.
+      not_needed([ "_use_libcxx_modules" ])
 
       # On Android, write shared library output file to metadata. We will use
       # this information to, for instance, collect all shared libraries that

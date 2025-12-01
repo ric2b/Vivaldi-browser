@@ -98,6 +98,11 @@ void InvokeChangeProfileContinuation(ChangeProfileContinuation continuation,
   _effectView = [[UIVisualEffectView alloc] initWithEffect:nil];
   _snapshotView = [view snapshotViewAfterScreenUpdates:NO];
 
+  if (!_snapshotView) {
+    _snapshotView = [[UIView alloc] initWithFrame:view.frame];
+    _snapshotView.backgroundColor = [UIColor whiteColor];
+  }
+
   // Install the snapshot and the effect view as overlays above the UIWindow.
   // The effect initially does nothing, but it is possible to animate it by
   // setting the -effect property in an animation block.
@@ -177,7 +182,9 @@ void InvokeChangeProfileContinuation(ChangeProfileContinuation continuation,
 
 @end
 
-@interface ChangeProfileAnimator () <ProfileStateObserver, SceneStateObserver>
+@interface ChangeProfileAnimator () <ProfileStateObserver,
+                                     SceneStateAnimator,
+                                     SceneStateObserver>
 @end
 
 @implementation ChangeProfileAnimator {
@@ -216,6 +223,8 @@ void InvokeChangeProfileContinuation(ChangeProfileContinuation continuation,
   objc_setAssociatedObject(_sceneState, [self associationKey], self,
                            OBJC_ASSOCIATION_RETAIN_NONATOMIC);
 
+  _sceneState.animator = self;
+
   // Observe both the SceneState and the ProfileState to detect when the
   // profile and the UI initialisations are complete. ProfileState calls
   // -profileState:didTransitionToInitStage:fromInitStage: when adding
@@ -236,6 +245,12 @@ void InvokeChangeProfileContinuation(ChangeProfileContinuation continuation,
 
 - (void)sceneStateDidEnableUI:(SceneState*)sceneState {
   [self initialisationProgressed];
+}
+
+#pragma mark SceneStateAnimator
+
+- (void)cancelAnimation {
+  [_animation unblurWithDuration:kAnimationDuration];
 }
 
 #pragma mark Private methods
@@ -268,6 +283,8 @@ void InvokeChangeProfileContinuation(ChangeProfileContinuation continuation,
   // Stop observing the ProfileState and the SceneState.
   [profileState removeObserver:self];
   [_sceneState removeObserver:self];
+
+  _sceneState.animator = nil;
 
   // Uninstall self as an associated object for the SceneState, as the wait
   // is complete and the object not needed anymore.

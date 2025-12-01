@@ -12,6 +12,7 @@
 #include "components/autofill/core/browser/data_quality/addresses/profile_requirement_utils.h"
 #include "components/autofill/core/browser/test_utils/autofill_test_utils.h"
 #include "components/sync/service/local_data_description.h"
+#include "components/sync/test/test_matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -19,16 +20,14 @@ namespace autofill {
 
 namespace {
 
+using ::syncer::IsEmptyLocalDataDescription;
+using ::syncer::MatchesLocalDataDescription;
+using ::syncer::MatchesLocalDataItemModel;
+using ::testing::_;
 using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 using ::testing::Pointee;
 using ::testing::UnorderedElementsAre;
-
-// Compares syncer::LocalDataItemModel id with the input
-// AutofillProfile::guid().
-MATCHER_P(MatchesModelId, guid, "") {
-  return std::get<std::string>(arg.id) == guid;
-}
 
 // Compares the profile content, ignoring additional information like guid.
 MATCHER_P(MatchesProfileContent, expected, "") {
@@ -47,15 +46,6 @@ class ContactInfoLocalDataBatchUploaderTest : public testing::Test {
     return address_data_manager_;
   }
 
-  // TODO(crbug.com/373568992): Mobile information are not yet filled for
-  // autofill. When combining the data, these tests should make sure that the
-  // information is aligned between the platforms.
-  bool HasDataForMobileSet(syncer::LocalDataDescription description) const {
-    // Those info are only used on Mobile.
-    return description.item_count != 0u || description.domain_count != 0u ||
-           !description.domains.empty();
-  }
-
  private:
   TestAddressDataManager address_data_manager_;
   ContactInfoLocalDataBatchUploader uploader_{base::BindLambdaForTesting(
@@ -67,8 +57,7 @@ TEST_F(ContactInfoLocalDataBatchUploaderTest,
   base::test::TestFuture<syncer::LocalDataDescription> description;
   uploader().GetLocalDataDescription(description.GetCallback());
 
-  EXPECT_FALSE(HasDataForMobileSet(description.Get()));
-  EXPECT_THAT(description.Get().local_data_models, IsEmpty());
+  EXPECT_THAT(description.Get(), IsEmptyLocalDataDescription());
 }
 
 TEST_F(ContactInfoLocalDataBatchUploaderTest,
@@ -85,11 +74,20 @@ TEST_F(ContactInfoLocalDataBatchUploaderTest,
   base::test::TestFuture<syncer::LocalDataDescription> description;
   uploader().GetLocalDataDescription(description.GetCallback());
 
-  EXPECT_FALSE(HasDataForMobileSet(description.Get()));
-  // Order should match the use count, so `first_profile` first.
-  EXPECT_THAT(description.Get().local_data_models,
-              ElementsAre(MatchesModelId(first_profile.guid()),
-                          MatchesModelId(second_profile.guid())));
+  EXPECT_THAT(
+      description.Get(),
+      MatchesLocalDataDescription(
+          syncer::DataType::CONTACT_INFO,
+          // Order should match the use count, so `first_profile` first.
+          ElementsAre(
+              MatchesLocalDataItemModel(first_profile.guid(),
+                                        syncer::LocalDataItemModel::NoIcon(),
+                                        /*title=*/_, /*subtitle=*/_),
+              MatchesLocalDataItemModel(second_profile.guid(),
+                                        syncer::LocalDataItemModel::NoIcon(),
+                                        /*title=*/_, /*subtitle=*/_)),
+          /*item_count=*/0u, /*domains=*/IsEmpty(),
+          /*domain_count=*/0u));
 }
 
 TEST_F(ContactInfoLocalDataBatchUploaderTest,
@@ -103,8 +101,7 @@ TEST_F(ContactInfoLocalDataBatchUploaderTest,
   base::test::TestFuture<syncer::LocalDataDescription> description;
   uploader().GetLocalDataDescription(description.GetCallback());
 
-  EXPECT_FALSE(HasDataForMobileSet(description.Get()));
-  EXPECT_THAT(description.Get().local_data_models, IsEmpty());
+  EXPECT_THAT(description.Get(), IsEmptyLocalDataDescription());
 }
 
 TEST_F(ContactInfoLocalDataBatchUploaderTest, LocalProfilesOnly) {
@@ -120,10 +117,16 @@ TEST_F(ContactInfoLocalDataBatchUploaderTest, LocalProfilesOnly) {
   base::test::TestFuture<syncer::LocalDataDescription> description;
   uploader().GetLocalDataDescription(description.GetCallback());
 
-  EXPECT_FALSE(HasDataForMobileSet(description.Get()));
-  // Only `second_profile` is local and should be retrieved.
-  EXPECT_THAT(description.Get().local_data_models,
-              ElementsAre(MatchesModelId(second_profile.guid())));
+  EXPECT_THAT(
+      description.Get(),
+      MatchesLocalDataDescription(
+          syncer::DataType::CONTACT_INFO,
+          // Only `second_profile` is local and should be retrieved.
+          ElementsAre(MatchesLocalDataItemModel(
+              second_profile.guid(), syncer::LocalDataItemModel::NoIcon(),
+              /*title=*/_, /*subtitle=*/_)),
+          /*item_count=*/0u, /*domains=*/IsEmpty(),
+          /*domain_count=*/0u));
 }
 
 TEST_F(ContactInfoLocalDataBatchUploaderTest, LocalCompleteProfilesOnly) {
@@ -138,32 +141,16 @@ TEST_F(ContactInfoLocalDataBatchUploaderTest, LocalCompleteProfilesOnly) {
   base::test::TestFuture<syncer::LocalDataDescription> description;
   uploader().GetLocalDataDescription(description.GetCallback());
 
-  EXPECT_FALSE(HasDataForMobileSet(description.Get()));
-  // Only `complete_profile` should be retrieved.
-  EXPECT_THAT(description.Get().local_data_models,
-              ElementsAre(MatchesModelId(complete_profile.guid())));
-}
-
-TEST_F(ContactInfoLocalDataBatchUploaderTest,
-       LocalWithEligibleCountryProfilesOnly) {
-  // These profiles are local profiles by default.
-  AutofillProfile eligible_profile = test::GetFullProfile();
-  AddressCountryCode ineligible_country_code("IR");
-  ASSERT_FALSE(address_data_manager().IsCountryEligibleForAccountStorage(
-      ineligible_country_code.value()));
-  // This profile does not meet the minimum requirement to be retrieved.
-  AutofillProfile ineligible_profile =
-      test::GetFullProfile2(ineligible_country_code);
-  address_data_manager().AddProfile(eligible_profile);
-  address_data_manager().AddProfile(ineligible_profile);
-
-  base::test::TestFuture<syncer::LocalDataDescription> description;
-  uploader().GetLocalDataDescription(description.GetCallback());
-
-  EXPECT_FALSE(HasDataForMobileSet(description.Get()));
-  // Only `eligible_profile` should be retrieved.
-  EXPECT_THAT(description.Get().local_data_models,
-              ElementsAre(MatchesModelId(eligible_profile.guid())));
+  EXPECT_THAT(
+      description.Get(),
+      MatchesLocalDataDescription(
+          syncer::DataType::CONTACT_INFO,
+          // Only `complete_profile` should be retrieved.
+          ElementsAre(MatchesLocalDataItemModel(
+              complete_profile.guid(), syncer::LocalDataItemModel::NoIcon(),
+              /*title=*/_, /*subtitle=*/_)),
+          /*item_count=*/0u, /*domains=*/IsEmpty(),
+          /*domain_count=*/0u));
 }
 
 TEST_F(ContactInfoLocalDataBatchUploaderTest, MigrateAllLocalProfiles) {
@@ -252,39 +239,6 @@ TEST_F(ContactInfoLocalDataBatchUploaderTest,
   EXPECT_THAT(address_data_manager().GetProfilesByRecordType(
                   AutofillProfile::RecordType::kAccount),
               ElementsAre(MatchesProfileContent(complete_profile)));
-}
-
-TEST_F(ContactInfoLocalDataBatchUploaderTest,
-       MigrateWithProfilesIdsWithIneligibleCountryProfile) {
-  // These profiles are local profiles by default.
-  AutofillProfile eligible_profile = test::GetFullProfile();
-  AddressCountryCode ineligible_country_code("IR");
-  ASSERT_FALSE(address_data_manager().IsCountryEligibleForAccountStorage(
-      ineligible_country_code.value()));
-  // This profile does not meet the minimum requirement to be retrieved.
-  AutofillProfile ineligible_profile =
-      test::GetFullProfile2(ineligible_country_code);
-  address_data_manager().AddProfile(eligible_profile);
-  address_data_manager().AddProfile(ineligible_profile);
-
-  ASSERT_THAT(address_data_manager().GetProfilesByRecordType(
-                  AutofillProfile::RecordType::kLocalOrSyncable),
-              UnorderedElementsAre(Pointee(ineligible_profile),
-                                   Pointee(eligible_profile)));
-  ASSERT_THAT(address_data_manager().GetProfilesByRecordType(
-                  AutofillProfile::RecordType::kAccount),
-              IsEmpty());
-
-  uploader().TriggerLocalDataMigrationForItems(
-      {eligible_profile.guid(), ineligible_profile.guid()});
-
-  // Only `eligible_profile` migrated, `ineligible_profile` remains.
-  EXPECT_THAT(address_data_manager().GetProfilesByRecordType(
-                  AutofillProfile::RecordType::kLocalOrSyncable),
-              ElementsAre(MatchesProfileContent(ineligible_profile)));
-  EXPECT_THAT(address_data_manager().GetProfilesByRecordType(
-                  AutofillProfile::RecordType::kAccount),
-              ElementsAre(MatchesProfileContent(eligible_profile)));
 }
 
 TEST_F(ContactInfoLocalDataBatchUploaderTest,

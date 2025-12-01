@@ -31,6 +31,7 @@
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"  // nogncheck
 #include "content/browser/renderer_host/page_impl.h"
@@ -360,6 +361,18 @@ void WebViewGuest::SetContentsBounds(content::WebContents* source,
     // Store the bounds and use the last received on attach.
     last_set_bounds_.reset(new gfx::Rect(bounds));
   }
+}
+
+bool WebViewGuest::IsVivaldiRegularTab() {
+  if (IsVivaldiWebPanel()) return false;
+  if (IsVivaldiWebPageWidget()) return false;
+
+  // Try getting web contents, and tab id out of that...
+  content::WebContents *contents = web_contents();
+  if (!contents) return false;
+
+  // See if we can get a tab ID out of this.
+  return sessions::SessionTabHelper::IdForTab(contents).id() != -1;
 }
 
 bool WebViewGuest::IsVivaldiMail() {
@@ -800,7 +813,7 @@ void WebViewGuest::SetIsNavigatingAwayFromVivaldiUI(bool away) {
   is_navigating_away_from_vivaldi_ui_ = away;
 }
 
-void WebViewGuest::VivaldiCreateWebContents(
+bool WebViewGuest::VivaldiCreateWebContents(
     std::unique_ptr<GuestViewBase> owned_this,
     const base::Value::Dict& create_params,
     GuestPageCreatedCallback guestpage_created_callback) {
@@ -836,7 +849,7 @@ void WebViewGuest::VivaldiCreateWebContents(
         static_cast<content::WebContentsImpl*>(tabstrip_contents)
           ->CancelActiveAndPendingDialogs();
 
-        web_view_guest->WebContentsDestroyed();
+        delete web_view_guest;
       }
 
       parent_tab_id_ = create_params.FindInt("parent_tab_id");
@@ -858,7 +871,7 @@ void WebViewGuest::VivaldiCreateWebContents(
       std::move(guestpage_created_callback)
           .Run(std::move(owned_this), std::move(new_contents));
 
-      return;
+      return true;
 
     }
     // Should not happen that a tab-id lookup should fail.
@@ -870,7 +883,7 @@ void WebViewGuest::VivaldiCreateWebContents(
     new_contents.reset(); // Just to be on the safe side, to make sure it is nullptr
     std::move(guestpage_created_callback)
         .Run(std::move(owned_this), std::move(new_contents));
-    return;
+    return false;
   }
 
   RenderProcessHost* owner_render_process_host =
@@ -890,7 +903,7 @@ void WebViewGuest::VivaldiCreateWebContents(
                                     bad_message::WVG_PARTITION_ID_NOT_UTF8);
     std::move(guestpage_created_callback)
         .Run(std::move(owned_this), std::unique_ptr<content::WebContents>());
-    return;
+    return false;
   }
   std::string partition_domain = GetOwnerSiteURL().host();
   auto partition_config = content::StoragePartitionConfig::Create(
@@ -988,7 +1001,7 @@ void WebViewGuest::VivaldiCreateWebContents(
           std::move(guestpage_created_callback)
               .Run(std::move(owned_this),
                    std::unique_ptr<content::WebContents>());
-          return;
+          return false;
         }
         content::WebContentsImpl* contents =
             static_cast<content::WebContentsImpl*>(devtools_contents);
@@ -1096,7 +1109,16 @@ void WebViewGuest::VivaldiCreateWebContents(
       }
     }
   }
-  DCHECK(new_contents);
+
+  if (!new_contents) {
+    // A new WebViewGuest might be created if it's inspected. The tab is removed
+    // from the tabstrip so we cannot do anything.
+    std::move(guestpage_created_callback)
+        .Run(std::move(owned_this),
+             std::unique_ptr<content::WebContents>{nullptr});
+    return false;
+  }
+
   if (owner_web_contents()->IsAudioMuted()) {
     // Note: We have earlier been using
     // LastMuteMetadata::FromWebContents(owner_web_contents())->extension_id)
@@ -1125,6 +1147,7 @@ void WebViewGuest::VivaldiCreateWebContents(
 
   std::move(guestpage_created_callback)
       .Run(std::move(owned_this), std::move(new_contents));
+  return true;
 }
 
 blink::mojom::DisplayMode WebViewGuest::GetDisplayMode(

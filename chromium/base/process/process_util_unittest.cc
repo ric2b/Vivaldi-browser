@@ -94,7 +94,7 @@
 #if BUILDFLAG(IS_MAC)
 #include <mach/mach.h>
 
-#include "base/apple/mach_port_rendezvous.h"
+#include "base/apple/mach_port_rendezvous_mac.h"
 #include "base/apple/scoped_mach_port.h"
 #include "base/mac/process_requirement.h"
 #endif
@@ -945,13 +945,7 @@ TEST_F(ProcessUtilTest, GetAppOutputWithExitCode) {
   command.AppendArg("-x");
   command.AppendArg(NumberToString(kExpectedExitCode));
   command.AppendArg(kEchoMessage2);
-#if BUILDFLAG(IS_WIN)
-  // On Windows, anything that quits with a nonzero status code is handled as a
-  // "crash", so just ignore GetAppOutputWithExitCode's return value.
-  GetAppOutputWithExitCode(command, &output, &exit_code);
-#elif BUILDFLAG(IS_POSIX) || BUILDFLAG(IS_FUCHSIA)
   EXPECT_TRUE(GetAppOutputWithExitCode(command, &output, &exit_code));
-#endif
   EXPECT_EQ(kEchoMessage2, output);
   EXPECT_EQ(kExpectedExitCode, exit_code);
 }

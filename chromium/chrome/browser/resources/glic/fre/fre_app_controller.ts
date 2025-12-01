@@ -17,6 +17,17 @@ const MIN_HOLD_LOADING_TIME_MS = loadTimeData.getInteger('minLoadingTimeMs');
 // Maximum time to wait for load before showing error panel.
 const MAX_WAIT_TIME_MS = loadTimeData.getInteger('maxLoadingTimeMs');
 
+// Maximum time to wait for load before showing error panel following a
+// user-initiated reload.
+const RELOAD_MAX_WAIT_TIME_RELOAD_MS =
+    loadTimeData.getInteger('reloadMaxLoadingTimeMs');
+
+// Initial FRE width. Also used as the minimum and maximum width for FRE.
+const INITIAL_WIDTH = loadTimeData.getInteger('freInitialWidth');
+
+// Minimum height for FRE.
+const MIN_HEIGHT = 200;
+
 interface PageElementTypes {
   webviewContainer: HTMLDivElement;
 }
@@ -52,6 +63,12 @@ export class FreAppController {
   // loading UI isn't just a brief flash on screen.
   private earliestLoadingDismissTime: number|undefined;
 
+  // This is set when the "Try again" button in the error state is pressed,
+  // indicating that a different timeout value should be used for the
+  // subsequent content load. This value is reset when we the associated
+  // content load ends.
+  private useReloadTimeout = false;
+
   constructor() {
     this.onLoadCommit = this.onLoadCommit.bind(this);
     this.onContentLoad = this.onContentLoad.bind(this);
@@ -73,6 +90,18 @@ export class FreAppController {
         button.addEventListener('click', () => {
           freHandler.dismissFre();
         });
+      }
+
+      document.getElementById('reload')?.addEventListener('click', () => {
+        this.reload();
+      });
+    });
+
+    document.addEventListener('keydown', ev => {
+      if (ev.code === 'Escape') {
+        ev.stopPropagation();
+        ev.preventDefault();
+        freHandler.dismissFre();
       }
     });
 
@@ -130,11 +159,17 @@ export class FreAppController {
       FreWebUiState.kBeginLoading,
       FreWebUiState.kShowLoading,
       FreWebUiState.kFinishLoading,
-      FreWebUiState.kReady,
     ];
     if (allowedStates.includes(this.state)) {
       this.setState(FreWebUiState.kOffline);
     }
+  }
+
+  // Called when the "Try again" button is clicked.
+  reload(): void {
+    this.destroyWebview();
+    this.useReloadTimeout = true;
+    this.setState(FreWebUiState.kBeginLoading);
   }
 
   private showPanel(id: PanelId): void {
@@ -177,6 +212,7 @@ export class FreAppController {
       FreWebUiState.kError,
       {
         onEnter: () => {
+          this.useReloadTimeout = false;
           this.destroyWebview();
           this.showPanel('errorPanel');
         },
@@ -186,6 +222,7 @@ export class FreAppController {
       FreWebUiState.kOffline,
       {
         onEnter: () => {
+          this.useReloadTimeout = false;
           this.destroyWebview();
           this.showPanel('offlinePanel');
         },
@@ -195,6 +232,7 @@ export class FreAppController {
       FreWebUiState.kReady,
       {
         onEnter: () => {
+          this.useReloadTimeout = false;
           this.showPanel('guestPanel');
         },
       },
@@ -251,19 +289,35 @@ export class FreAppController {
 
   finishLoading(): void {
     // The web client is not yet ready, so wait for the remainder of
-    // `kMaxWaitTimeMs`. Switch to the error state at that time unless
-    // interrupted by `onContentLoad`, triggering the ready state.
+    // `kMaxWaitTimeMs`. If a reload initiated by the user is being processed,
+    // this max time is increased. Switch to the error state at that time
+    // unless interrupted by `onContentLoad`, triggering the ready state.
+    const timeoutValue = this.useReloadTimeout ?
+        RELOAD_MAX_WAIT_TIME_RELOAD_MS :
+        MAX_WAIT_TIME_MS;
     this.loadingTimer = setTimeout(() => {
       console.warn('Exceeded timeout in finishLoading');
       this.setState(FreWebUiState.kError);
-    }, MAX_WAIT_TIME_MS - MIN_HOLD_LOADING_TIME_MS);
+    }, timeoutValue - MIN_HOLD_LOADING_TIME_MS);
+  }
+
+  onSizeChanged(e: any): void {
+    window.resizeTo(e.newWidth, e.newHeight);
   }
 
   private createWebview(): chrome.webviewTag.WebView {
     const webview =
         document.createElement('webview') as chrome.webviewTag.WebView;
     webview.id = 'freGuestFrame';
+    // TODO(crbug.com/408475473): Update the webviewTag definition to be able to
+    // define properties rather than using setAttribute.
     webview.setAttribute('partition', 'glicfrepart');
+    webview.setAttribute('autosize', 'true');
+    webview.setAttribute('minwidth', INITIAL_WIDTH.toString());
+    webview.setAttribute('maxwidth', INITIAL_WIDTH.toString());
+    webview.setAttribute('minheight', MIN_HEIGHT.toString());
+    webview.setAttribute('maxheight', window.screen.availHeight.toString());
+
     $.webviewContainer.appendChild(webview);
 
     this.webviewEventTracker.add(
@@ -272,6 +326,8 @@ export class FreAppController {
         webview, 'contentload', this.onContentLoad.bind(this));
     this.webviewEventTracker.add(
         webview, 'newwindow', this.onNewWindow.bind(this));
+    this.webviewEventTracker.add(
+        webview, 'sizechanged', this.onSizeChanged.bind(this));
 
     return webview;
   }

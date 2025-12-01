@@ -26,8 +26,6 @@ NSString* const kVivaldiPatronBadge = @"patron";
 NSString* const kVivaldiAdvocateBadge = @"advocate";
 
 // Vivaldi.net account creation validation
-const int vUserMinimumValidAge = 16;
-const int vUserMaximumValidAge = 150;
 const unsigned long vUserMinimumPasswordLength = 12;
 const unsigned long vActivationCodeLength = 6;
 
@@ -55,7 +53,6 @@ NSString* const vErrorCodeOther = @"";
 const char vParamUsername[] = "username";
 const char vParamPassword[] = "password";
 const char vParamEmailAddress[] = "emailaddress";
-const char vParamAge[] = "age";
 const char vParamLanguage[] = "lang";
 const char vParamSubscribeNewletter[] = "newsletter";
 const char vParamActivationCode[] = "activation_code";

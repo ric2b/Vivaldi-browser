@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-BR">
-<translation id="2277224997687551299">Editar nome do grupo</translation>
+<translation id="1062777154504442433">Nova pilha de abas</translation>
+<translation id="1625440863545383011">Remover a aba e deixar a pilha</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
-          =1 {Salvar aba nos marcadores}
-          other {Salvar abas nos marcadores}
+          =1 {Salvar aba nos Marcadores}
+          other {Salvar abas nos Marcadores}
         }</translation>
 <translation id="2947471979790858922">Sua atividade nessas abas privadas será removida deste dispositivo</translation>
+<translation id="3298614730029636660">Deixar pilha</translation>
+<translation id="354698175756845966">Editar cor da pilha</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
         =1 {Você pode encontrar suas abas fechadas em Abas Recentes, no menu principal do Vivaldi. Sua aba privada não estará disponível.}
         other {Você pode encontrar suas abas fechadas em Abas Recentes, no menu principal do Vivaldi. Suas # abas privadas não estarão disponíveis.}}</translation>
-<translation id="4460014764210899310">Desagrupar</translation>
 <translation id="4871187110787939393">Fechar todas as abas privadas?</translation>
 <translation id="5494920125229734069">Selecionar tudo</translation>
-<translation id="6744956528665271406">Editar cor do grupo</translation>
+<translation id="6807841890213931603">Remover aba e excluir pilha</translation>
+<translation id="750227952939161636">Suas pilhas de abas salvam e atualizam automaticamente em todos os seus dispositivos conectados</translation>
+<translation id="7640137753339219124">Excluir pilha</translation>
+<translation id="7653857400289671414">Suas pilhas de abas salvam automaticamente</translation>
+<translation id="8440938071054361204">Editar nome da pilha</translation>
+<translation id="8602902357364871325">Fechar pilha</translation>
+<translation id="8851621822786801079">Remover da pilha</translation>
 </translationbundle>

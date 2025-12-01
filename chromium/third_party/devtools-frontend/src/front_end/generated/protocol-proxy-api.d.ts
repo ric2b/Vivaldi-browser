@@ -683,6 +683,11 @@ declare namespace ProtocolProxyApi {
      * For example, a value of '1em' is evaluated according to the computed
      * 'font-size' of the element and a value 'calc(1px + 2px)' will be
      * resolved to '3px'.
+     * If the `propertyName` was specified the `values` are resolved as if
+     * they were property's declaration. If a value cannot be parsed according
+     * to the provided property syntax, the value is parsed using combined
+     * syntax as if null `propertyName` was provided. If the value cannot be
+     * resolved even then, return the provided value without any changes.
      */
     invoke_resolveValues(params: Protocol.CSS.ResolveValuesRequest): Promise<Protocol.CSS.ResolveValuesResponse>;
 
@@ -1573,8 +1578,8 @@ declare namespace ProtocolProxyApi {
     invoke_setEmulatedVisionDeficiency(params: Protocol.Emulation.SetEmulatedVisionDeficiencyRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
-     * Overrides the Geolocation Position or Error. Omitting any of the parameters emulates position
-     * unavailable.
+     * Overrides the Geolocation Position or Error. Omitting latitude, longitude or
+     * accuracy emulates position unavailable.
      */
     invoke_setGeolocationOverride(params: Protocol.Emulation.SetGeolocationOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -1604,11 +1609,19 @@ declare namespace ProtocolProxyApi {
     invoke_setPressureSourceOverrideEnabled(params: Protocol.Emulation.SetPressureSourceOverrideEnabledRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
+     * TODO: OBSOLETE: To remove when setPressureDataOverride is merged.
      * Provides a given pressure state that will be processed and eventually be
      * delivered to PressureObserver users. |source| must have been previously
      * overridden by setPressureSourceOverrideEnabled.
      */
     invoke_setPressureStateOverride(params: Protocol.Emulation.SetPressureStateOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Provides a given pressure data set that will be processed and eventually be
+     * delivered to PressureObserver users. |source| must have been previously
+     * overridden by setPressureSourceOverrideEnabled.
+     */
+    invoke_setPressureDataOverride(params: Protocol.Emulation.SetPressureDataOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Overrides the Idle state.
@@ -1677,6 +1690,12 @@ declare namespace ProtocolProxyApi {
      * Allows overriding the automation flag.
      */
     invoke_setAutomationOverride(params: Protocol.Emulation.SetAutomationOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Allows overriding the difference between the small and large viewport sizes, which determine the
+     * value of the `svh` and `lvh` unit, respectively. Only supported for top-level frames.
+     */
+    invoke_setSmallViewportHeightDifferenceOverride(params: Protocol.Emulation.SetSmallViewportHeightDifferenceOverrideRequest): Promise<Protocol.ProtocolResponseWithError>;
 
   }
   export interface EmulationDispatcher {
@@ -2244,7 +2263,7 @@ declare namespace ProtocolProxyApi {
 
     /**
      * Sets Controls for third-party cookie access
-     * Page reload is required before the new cookie bahavior will be observed
+     * Page reload is required before the new cookie behavior will be observed
      */
     invoke_setCookieControls(params: Protocol.Network.SetCookieControlsRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -2371,6 +2390,46 @@ declare namespace ProtocolProxyApi {
      * Fired when direct_socket.TCPSocket is closed.
      */
     directTCPSocketClosed(params: Protocol.Network.DirectTCPSocketClosedEvent): void;
+
+    /**
+     * Fired when data is sent to tcp direct socket stream.
+     */
+    directTCPSocketChunkSent(params: Protocol.Network.DirectTCPSocketChunkSentEvent): void;
+
+    /**
+     * Fired when data is received from tcp direct socket stream.
+     */
+    directTCPSocketChunkReceived(params: Protocol.Network.DirectTCPSocketChunkReceivedEvent): void;
+
+    /**
+     * Fired upon direct_socket.UDPSocket creation.
+     */
+    directUDPSocketCreated(params: Protocol.Network.DirectUDPSocketCreatedEvent): void;
+
+    /**
+     * Fired when direct_socket.UDPSocket connection is opened.
+     */
+    directUDPSocketOpened(params: Protocol.Network.DirectUDPSocketOpenedEvent): void;
+
+    /**
+     * Fired when direct_socket.UDPSocket is aborted.
+     */
+    directUDPSocketAborted(params: Protocol.Network.DirectUDPSocketAbortedEvent): void;
+
+    /**
+     * Fired when direct_socket.UDPSocket is closed.
+     */
+    directUDPSocketClosed(params: Protocol.Network.DirectUDPSocketClosedEvent): void;
+
+    /**
+     * Fired when message is sent to udp direct socket stream.
+     */
+    directUDPSocketChunkSent(params: Protocol.Network.DirectUDPSocketChunkSentEvent): void;
+
+    /**
+     * Fired when message is received from udp direct socket stream.
+     */
+    directUDPSocketChunkReceived(params: Protocol.Network.DirectUDPSocketChunkReceivedEvent): void;
 
     /**
      * Fired when additional information about a requestWillBeSent event is available from the
@@ -2690,7 +2749,7 @@ declare namespace ProtocolProxyApi {
      */
     invoke_getAppId(): Promise<Protocol.Page.GetAppIdResponse>;
 
-    invoke_getAdScriptId(params: Protocol.Page.GetAdScriptIdRequest): Promise<Protocol.Page.GetAdScriptIdResponse>;
+    invoke_getAdScriptAncestryIds(params: Protocol.Page.GetAdScriptAncestryIdsRequest): Promise<Protocol.Page.GetAdScriptAncestryIdsResponse>;
 
     /**
      * Returns present frame tree structure.
@@ -3403,6 +3462,8 @@ declare namespace ProtocolProxyApi {
      */
     invoke_getAffectedUrlsForThirdPartyCookieMetadata(params: Protocol.Storage.GetAffectedUrlsForThirdPartyCookieMetadataRequest): Promise<Protocol.Storage.GetAffectedUrlsForThirdPartyCookieMetadataResponse>;
 
+    invoke_setProtectedAudienceKAnonymity(params: Protocol.Storage.SetProtectedAudienceKAnonymityRequest): Promise<Protocol.ProtocolResponseWithError>;
+
   }
   export interface StorageDispatcher {
     /**
@@ -3451,6 +3512,12 @@ declare namespace ProtocolProxyApi {
      */
     sharedStorageAccessed(params: Protocol.Storage.SharedStorageAccessedEvent): void;
 
+    /**
+     * A shared storage run or selectURL operation finished its execution.
+     * The following parameters are included in all events.
+     */
+    sharedStorageWorkletOperationExecutionFinished(params: Protocol.Storage.SharedStorageWorkletOperationExecutionFinishedEvent): void;
+
     storageBucketCreatedOrUpdated(params: Protocol.Storage.StorageBucketCreatedOrUpdatedEvent): void;
 
     storageBucketDeleted(params: Protocol.Storage.StorageBucketDeletedEvent): void;
@@ -3458,6 +3525,8 @@ declare namespace ProtocolProxyApi {
     attributionReportingSourceRegistered(params: Protocol.Storage.AttributionReportingSourceRegisteredEvent): void;
 
     attributionReportingTriggerRegistered(params: Protocol.Storage.AttributionReportingTriggerRegisteredEvent): void;
+
+    attributionReportingReportSent(params: Protocol.Storage.AttributionReportingReportSentEvent): void;
 
   }
 
@@ -3559,11 +3628,14 @@ declare namespace ProtocolProxyApi {
     invoke_sendMessageToTarget(params: Protocol.Target.SendMessageToTargetRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
-     * Controls whether to automatically attach to new targets which are considered to be related to
-     * this one. When turned on, attaches to all existing related targets as well. When turned off,
+     * Controls whether to automatically attach to new targets which are considered
+     * to be directly related to this one (for example, iframes or workers).
+     * When turned on, attaches to all existing related targets as well. When turned off,
      * automatically detaches from all currently attached targets.
      * This also clears all targets added by `autoAttachRelated` from the list of targets to watch
      * for creation of related targets.
+     * You might want to call this recursively for auto-attached targets to attach
+     * to all available targets.
      */
     invoke_setAutoAttach(params: Protocol.Target.SetAutoAttachRequest): Promise<Protocol.ProtocolResponseWithError>;
 
@@ -4219,27 +4291,60 @@ declare namespace ProtocolProxyApi {
     invoke_simulateGATTOperationResponse(params: Protocol.BluetoothEmulation.SimulateGATTOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
+     * Simulates the response from the characteristic with |characteristicId| for a
+     * characteristic operation of |type|. The |code| value follows the Error
+     * Codes from Bluetooth Core Specification Vol 3 Part F 3.4.1.1 Error Response.
+     * The |data| is expected to exist when simulating a successful read operation
+     * response.
+     */
+    invoke_simulateCharacteristicOperationResponse(params: Protocol.BluetoothEmulation.SimulateCharacteristicOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates the response from the descriptor with |descriptorId| for a
+     * descriptor operation of |type|. The |code| value follows the Error
+     * Codes from Bluetooth Core Specification Vol 3 Part F 3.4.1.1 Error Response.
+     * The |data| is expected to exist when simulating a successful read operation
+     * response.
+     */
+    invoke_simulateDescriptorOperationResponse(params: Protocol.BluetoothEmulation.SimulateDescriptorOperationResponseRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
      * Adds a service with |serviceUuid| to the peripheral with |address|.
      */
     invoke_addService(params: Protocol.BluetoothEmulation.AddServiceRequest): Promise<Protocol.BluetoothEmulation.AddServiceResponse>;
 
     /**
-     * Removes the service respresented by |serviceId| from the peripheral with
-     * |address|.
+     * Removes the service respresented by |serviceId| from the simulated central.
      */
     invoke_removeService(params: Protocol.BluetoothEmulation.RemoveServiceRequest): Promise<Protocol.ProtocolResponseWithError>;
 
     /**
      * Adds a characteristic with |characteristicUuid| and |properties| to the
-     * service represented by |serviceId| in the peripheral with |address|.
+     * service represented by |serviceId|.
      */
     invoke_addCharacteristic(params: Protocol.BluetoothEmulation.AddCharacteristicRequest): Promise<Protocol.BluetoothEmulation.AddCharacteristicResponse>;
 
     /**
      * Removes the characteristic respresented by |characteristicId| from the
-     * service respresented by |serviceId| in the peripheral with |address|.
+     * simulated central.
      */
     invoke_removeCharacteristic(params: Protocol.BluetoothEmulation.RemoveCharacteristicRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Adds a descriptor with |descriptorUuid| to the characteristic respresented
+     * by |characteristicId|.
+     */
+    invoke_addDescriptor(params: Protocol.BluetoothEmulation.AddDescriptorRequest): Promise<Protocol.BluetoothEmulation.AddDescriptorResponse>;
+
+    /**
+     * Removes the descriptor with |descriptorId| from the simulated central.
+     */
+    invoke_removeDescriptor(params: Protocol.BluetoothEmulation.RemoveDescriptorRequest): Promise<Protocol.ProtocolResponseWithError>;
+
+    /**
+     * Simulates a GATT disconnection from the peripheral with |address|.
+     */
+    invoke_simulateGATTDisconnection(params: Protocol.BluetoothEmulation.SimulateGATTDisconnectionRequest): Promise<Protocol.ProtocolResponseWithError>;
 
   }
   export interface BluetoothEmulationDispatcher {
@@ -4248,6 +4353,20 @@ declare namespace ProtocolProxyApi {
      * happened.
      */
     gattOperationReceived(params: Protocol.BluetoothEmulation.GattOperationReceivedEvent): void;
+
+    /**
+     * Event for when a characteristic operation of |type| to the characteristic
+     * respresented by |characteristicId| happened. |data| and |writeType| is
+     * expected to exist when |type| is write.
+     */
+    characteristicOperationReceived(params: Protocol.BluetoothEmulation.CharacteristicOperationReceivedEvent): void;
+
+    /**
+     * Event for when a descriptor operation of |type| to the descriptor
+     * respresented by |descriptorId| happened. |data| is expected to exist when
+     * |type| is write.
+     */
+    descriptorOperationReceived(params: Protocol.BluetoothEmulation.DescriptorOperationReceivedEvent): void;
 
   }
 

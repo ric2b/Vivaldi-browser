@@ -57,9 +57,17 @@ NSString* WidgetPromoDisabledImageName() {
 
 NSString* const kWidgetPromoID = @"WidgetPromoID";
 
+NSString* const kWidgetTrustedVaultPromoID = @"WidgetTrustedVaultPromoID";
+
 NSString* const kWidgetPromoCloseButtonID = @"WidgetPromoCloseButtonID";
 
 NSString* const kWidgetPromoImageID = @"WidgetPromoImageID";
 
+NSString* const kWidgetTrustedVaultPromoImageID =
+    @"WidgetTrustedVaultPromoImageID";
+
 const char kPasswordManagerWidgetPromoActionHistogram[] =
     "IOS.PasswordManager.WidgetPromo.Action";
+
+const char kPasswordManagerPromoWithTrustedVaultKeyRetrievalActionHistogram[] =
+    "IOS.PasswordManager.TrustedVaultKeyRetrievalPromo.Action";

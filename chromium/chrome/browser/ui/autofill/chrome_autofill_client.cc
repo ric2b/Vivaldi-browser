@@ -31,8 +31,10 @@
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/autofill/strike_database_factory.h"
 #include "chrome/browser/autofill/ui/ui_util.h"
+#include "chrome/browser/autofill/valuables_data_manager_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/device_reauth/chrome_device_authenticator_factory.h"
+#include "chrome/browser/global_features.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/keyboard_accessory/android/manual_filling_controller.h"
 #include "chrome/browser/metrics/variations/google_groups_manager_factory.h"
@@ -67,21 +69,22 @@
 #include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/common/webui_url_constants.h"
+#include "components/application_locale_storage/application_locale_storage.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/content/browser/content_identity_credential_delegate.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/data_manager/payments/payments_data_manager.h"
 #include "components/autofill/core/browser/data_manager/personal_data_manager.h"
+#include "components/autofill/core/browser/data_manager/valuables/valuables_data_manager.h"
 #include "components/autofill/core/browser/data_model/addresses/autofill_profile.h"
 #include "components/autofill/core/browser/filling/filling_product.h"
 #include "components/autofill/core/browser/form_import/form_data_importer.h"
 #include "components/autofill/core/browser/foundations/autofill_client.h"
 #include "components/autofill/core/browser/foundations/browser_autofill_manager.h"
-#include "components/autofill/core/browser/integrators/autofill_optimization_guide.h"
-#include "components/autofill/core/browser/integrators/autofill_plus_address_delegate.h"
-#include "components/autofill/core/browser/integrators/identity_credential_delegate.h"
-#include "components/autofill/core/browser/integrators/valuables/valuable_manager.h"
+#include "components/autofill/core/browser/integrators/identity_credential/identity_credential_delegate.h"
+#include "components/autofill/core/browser/integrators/optimization_guide/autofill_optimization_guide.h"
+#include "components/autofill/core/browser/integrators/plus_addresses/autofill_plus_address_delegate.h"
 #include "components/autofill/core/browser/logging/log_router.h"
 #include "components/autofill/core/browser/payments/payments_network_interface.h"
 #include "components/autofill/core/browser/single_field_fillers/single_field_fill_router.h"
@@ -168,7 +171,7 @@
 #include "chrome/browser/ui/toasts/toast_controller.h"
 #include "chrome/browser/ui/views/autofill/popup/popup_view_views.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
-#include "components/autofill/core/browser/integrators/autofill_ai_delegate.h"
+#include "components/autofill/core/browser/integrators/autofill_ai/autofill_ai_delegate.h"
 #include "components/autofill_ai/core/browser/autofill_ai_manager.h"  // nogncheck
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -379,7 +382,7 @@ base::WeakPtr<AutofillClient> ChromeAutofillClient::GetWeakPtr() {
 }
 
 const std::string& ChromeAutofillClient::GetAppLocale() const {
-  return g_browser_process->GetApplicationLocale();
+  return g_browser_process->GetFeatures()->application_locale_storage()->Get();
 }
 
 version_info::Channel ChromeAutofillClient::GetChannel() const {
@@ -454,6 +457,12 @@ PersonalDataManager& ChromeAutofillClient::GetPersonalDataManager() {
       web_contents()->GetBrowserContext()));
 }
 
+ValuablesDataManager* ChromeAutofillClient::GetValuablesDataManager() {
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+  return ValuablesDataManagerFactory::GetForProfile(profile);
+}
+
 EntityDataManager* ChromeAutofillClient::GetEntityDataManager() {
   Profile* profile =
       Profile::FromBrowserContext(web_contents()->GetBrowserContext());
@@ -490,6 +499,13 @@ AutofillPlusAddressDelegate* ChromeAutofillClient::GetPlusAddressDelegate() {
   }
   return PlusAddressServiceFactory::GetForBrowserContext(
       web_contents()->GetBrowserContext());
+}
+
+PasswordManagerDelegate* ChromeAutofillClient::GetPasswordManagerDelegate(
+    const FieldGlobalId& field_id) {
+  ChromePasswordManagerClient* client =
+      ChromePasswordManagerClient::FromWebContents(web_contents());
+  return client ? client->GetAutofillDelegate(field_id) : nullptr;
 }
 
 void ChromeAutofillClient::GetAiPageContent(GetAiPageContentCallback callback) {
@@ -536,7 +552,8 @@ AutofillAiModelExecutor* ChromeAutofillClient::GetAutofillAiModelExecutor() {
 
 IdentityCredentialDelegate*
 ChromeAutofillClient::GetIdentityCredentialDelegate() {
-  if (!base::FeatureList::IsEnabled(::features::kFedCmDelegation)) {
+  if (!(base::FeatureList::IsEnabled(::features::kFedCmDelegation) ||
+        base::FeatureList::IsEnabled(::features::kFedCmAutofill))) {
     return nullptr;
   }
 
@@ -626,10 +643,6 @@ FormDataImporter* ChromeAutofillClient::GetFormDataImporter() {
 payments::ChromePaymentsAutofillClient*
 ChromeAutofillClient::GetPaymentsAutofillClient() {
   return &payments_autofill_client_;
-}
-
-ValuableManager* ChromeAutofillClient::GetValuableManager() {
-  return &valuable_manager_;
 }
 
 StrikeDatabase* ChromeAutofillClient::GetStrikeDatabase() {
@@ -757,6 +770,13 @@ void ChromeAutofillClient::ShowAutofillSettings(
       case SuggestionType::kManageCreditCard:
       case SuggestionType::kManageIban:
         chrome::ShowSettingsSubPage(browser, chrome::kPaymentsSubPage);
+        return;
+      case SuggestionType::kManageLoyaltyCard:
+        CHECK(base::FeatureList::IsEnabled(
+            features::kAutofillEnableLoyaltyCardsFilling));
+        static constexpr std::string_view kValuableManagementUrl =
+            "https://wallet.google.com/wallet/passes";
+        ShowSingletonTab(browser, GURL(kValuableManagementUrl));
         return;
       default:
         NOTREACHED();

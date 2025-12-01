@@ -1,18 +1,15 @@
 // Copyright (c) 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../legacy/legacy.js'; // Required for <x-link>.
 
 import {html, render} from '../../lit/lit.js';
 import * as VisualLogging from '../../visual_logging/visual_logging.js';
 
-import markdownLinkStylesRaw from './markdownLink.css.js';
+import markdownLinkStyles from './markdownLink.css.js';
 import {getMarkdownLink} from './MarkdownLinksMap.js';
-
-// TODO(crbug.com/391381439): Fully migrate off of constructed style sheets.
-const markdownLinkStyles = new CSSStyleSheet();
-markdownLinkStyles.replaceSync(markdownLinkStylesRaw.cssText);
 
 export interface MarkdownLinkData {
   key: string;
@@ -30,10 +27,6 @@ export class MarkdownLink extends HTMLElement {
   #linkText = '';
   #linkUrl = '';
 
-  connectedCallback(): void {
-    this.#shadow.adoptedStyleSheets = [markdownLinkStyles];
-  }
-
   set data(data: MarkdownLinkData) {
     const {key, title} = data;
     const markdownLink = getMarkdownLink(key);
@@ -44,8 +37,10 @@ export class MarkdownLink extends HTMLElement {
 
   #render(): void {
     // clang-format off
-    const output = html`<x-link class="devtools-link" href=${this.#linkUrl} jslog=${VisualLogging.link().track({click: true})}
-    >${this.#linkText}</x-link>`;
+    const output = html`
+      <style>${markdownLinkStyles}</style>
+      <x-link class="devtools-link" href=${this.#linkUrl} jslog=${VisualLogging.link().track({click: true})}
+      >${this.#linkText}</x-link>`;
     render(output, this.#shadow, {host: this});
     // clang-format on
   }

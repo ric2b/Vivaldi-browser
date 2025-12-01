@@ -18,8 +18,11 @@ ENABLED_FILE_BACKUP="$ENABLED_FILE.backup"
 HOST_BUNDLE_NAME=@@HOST_BUNDLE_NAME@@
 HOST_SERVICE_BINARY="$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/MacOS/remoting_me2me_host_service"
 HOST_LEGACY_BUNDLE_NAME=@@HOST_LEGACY_BUNDLE_NAME@@
+NATIVE_MESSAGING_HOST_BUNDLE_NAME=@@NATIVE_MESSAGING_HOST_BUNDLE_NAME@@
+REMOTE_ASSISTANCE_HOST_BUNDLE_NAME=@@REMOTE_ASSISTANCE_HOST_BUNDLE_NAME@@
 HOST_EXE="$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/MacOS/remoting_me2me_host"
 USERS_TMP_FILE="$HOST_SERVICE_BINARY.users"
+BROKER_SERVICE_TARGET="system/org.chromium.chromoting.broker"
 
 # ksadmin moved from MacOS to Helpers in Keystone 1.2.13.112, 2019-11-12. A
 # symbolic link from the old location was left in place, but may not remain
@@ -122,12 +125,24 @@ fi
 rm -rf "$HELPERTOOLS/$HOST_LEGACY_BUNDLE_NAME"
 ln -s "$HELPERTOOLS/$HOST_BUNDLE_NAME" "$HELPERTOOLS/$HOST_LEGACY_BUNDLE_NAME"
 
+# Create symlinks to icudtl.dat for sub-bundles. They need the same file in the
+# Resources directory, so we use symlink to save space.
+rm -f "$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/MacOS/$NATIVE_MESSAGING_HOST_BUNDLE_NAME/Contents/Resources/icudtl.dat"
+ln -s "$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/Resources/icudtl.dat" \
+    "$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/MacOS/$NATIVE_MESSAGING_HOST_BUNDLE_NAME/Contents/Resources/icudtl.dat"
+rm -f "$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/MacOS/$REMOTE_ASSISTANCE_HOST_BUNDLE_NAME/Contents/Resources/icudtl.dat"
+ln -s "$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/Resources/icudtl.dat" \
+    "$HELPERTOOLS/$HOST_BUNDLE_NAME/Contents/MacOS/$REMOTE_ASSISTANCE_HOST_BUNDLE_NAME/Contents/Resources/icudtl.dat"
+
 # Load the broker service. It must be loaded unconditionally, since the ME2ME
 # native messaging host won't load it. The service is on-demand and won't be
 # started until a host process connects to
 # chromoting.agent_process_broker_mojo_ipc.
 logger Loading broker service
-launchctl load -w $BROKER_PLIST
+logger launchctl enable $BROKER_SERVICE_TARGET
+launchctl enable $BROKER_SERVICE_TARGET
+logger launchctl bootstrap system $BROKER_PLIST
+launchctl bootstrap system $BROKER_PLIST
 
 # Load the host service for each user for whom the service was unloaded in the
 # preflight script (this includes the root user, in case only the login screen

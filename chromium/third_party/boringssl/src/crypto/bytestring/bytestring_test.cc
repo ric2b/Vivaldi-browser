@@ -517,6 +517,58 @@ TEST(CBBTest, DiscardChild) {
   EXPECT_EQ(Bytes(kExpected), Bytes(buf, buf_len));
 }
 
+TEST(CBBTest, Discard) {
+  bssl::ScopedCBB cbb;
+  ASSERT_TRUE(CBB_init(cbb.get(), 0));
+  CBB_discard(cbb.get(), 0);
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 1));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 2));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 3));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 4));
+  CBB_discard(cbb.get(), 2);
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 5));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 6));
+  const uint8_t kExpected[] = {1, 2, 5, 6};
+  EXPECT_EQ(Bytes(kExpected), Bytes(CBB_data(cbb.get()), CBB_len(cbb.get())));
+  CBB child;
+  ASSERT_TRUE(CBB_add_u8_length_prefixed(cbb.get(), &child));
+  CBB_discard(&child, 0);
+  ASSERT_TRUE(CBB_add_u8(&child, 7));
+  ASSERT_TRUE(CBB_add_u8(&child, 8));
+  CBB_discard(&child, 2);
+  ASSERT_TRUE(CBB_add_u8(&child, 9));
+  ASSERT_TRUE(CBB_add_u8(&child, 10));
+  CBB_discard(&child, 1);
+  ASSERT_TRUE(CBB_flush(cbb.get()));
+  const uint8_t kExpected2[] = {1, 2, 5, 6, 1, 9};
+  EXPECT_EQ(Bytes(kExpected2), Bytes(CBB_data(cbb.get()), CBB_len(cbb.get())));
+  CBB_discard(cbb.get(), 6);
+  EXPECT_EQ(Bytes(""), Bytes(CBB_data(cbb.get()), CBB_len(cbb.get())));
+}
+
+TEST(CBBDeathTest, DiscardMisuse) {
+  bssl::ScopedCBB cbb;
+  ASSERT_TRUE(CBB_init(cbb.get(), 0));
+  // Discard too many bytes.
+  EXPECT_DEATH_IF_SUPPORTED(CBB_discard(cbb.get(), 1), "");
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 1));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 2));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 3));
+  ASSERT_TRUE(CBB_add_u8(cbb.get(), 4));
+  // Discard too many bytes.
+  EXPECT_DEATH_IF_SUPPORTED(CBB_discard(cbb.get(), 5), "");
+  CBB child;
+  ASSERT_TRUE(CBB_add_u8_length_prefixed(cbb.get(), &child));
+  // Discard from a |cbb| with an unflushed child.
+  EXPECT_DEATH_IF_SUPPORTED(CBB_discard(cbb.get(), 1), "");
+  EXPECT_DEATH_IF_SUPPORTED(CBB_discard(&child, 1), "");
+  ASSERT_TRUE(CBB_add_u8(&child, 1));
+  ASSERT_TRUE(CBB_add_u8(&child, 2));
+  ASSERT_TRUE(CBB_add_u8(&child, 3));
+  ASSERT_TRUE(CBB_add_u8(&child, 4));
+  EXPECT_DEATH_IF_SUPPORTED(CBB_discard(&child, 5), "");
+}
+
 TEST(CBBTest, Misuse) {
   bssl::ScopedCBB cbb;
   CBB child, contents;

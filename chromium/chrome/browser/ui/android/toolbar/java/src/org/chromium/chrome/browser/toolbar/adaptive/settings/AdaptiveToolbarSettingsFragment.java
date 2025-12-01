@@ -7,11 +7,12 @@ package org.chromium.chrome.browser.toolbar.adaptive.settings;
 import android.app.Activity;
 import android.os.Bundle;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionUtil;
 import org.chromium.chrome.browser.settings.ChromeBaseSettingsFragment;
 import org.chromium.chrome.browser.toolbar.R;
@@ -33,6 +34,7 @@ import org.chromium.build.BuildConfig;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Fragment that allows the user to configure toolbar shortcut preferences. */
+@NullMarked
 public class AdaptiveToolbarSettingsFragment extends ChromeBaseSettingsFragment {
     /** The key for the switch taggle on the setting page. */
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -49,12 +51,12 @@ public class AdaptiveToolbarSettingsFragment extends ChromeBaseSettingsFragment 
     public static final String ARG_UI_STATE_PREFERENCE_SELECTION = "preference_selection";
     public static final String ARG_UI_STATE_AUTO_BUTTON_CAPTION = "auto_button_caption";
 
-    private @NonNull ChromeSwitchPreference mToolbarShortcutSwitch;
-    private @NonNull RadioButtonGroupAdaptiveToolbarPreference mRadioButtonGroup;
+    private ChromeSwitchPreference mToolbarShortcutSwitch;
+    private RadioButtonGroupAdaptiveToolbarPreference mRadioButtonGroup;
     private final ObservableSupplierImpl<String> mPageTitle = new ObservableSupplierImpl<>();
 
     @Override
-    public void onCreatePreferences(Bundle bundle, String s) {
+    public void onCreatePreferences(@Nullable Bundle bundle, @Nullable String s) {
         mPageTitle.set(getString(R.string.toolbar_shortcut));
         SettingsUtils.addPreferencesFromResource(this, R.xml.adaptive_toolbar_preference);
 
@@ -76,7 +78,7 @@ public class AdaptiveToolbarSettingsFragment extends ChromeBaseSettingsFragment 
         if (BuildConfig.IS_VIVALDI) // Vivaldi VAB-10555
             mRadioButtonGroup.setCanUsePageSummary(
                     VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                            "reader_for_accessibility", false));
+                            "reader_for_accessibility", true));
         else
         mRadioButtonGroup.setCanUsePageSummary(
                 AdaptiveToolbarFeatures.isAdaptiveToolbarPageSummaryEnabled());
@@ -136,5 +138,10 @@ public class AdaptiveToolbarSettingsFragment extends ChromeBaseSettingsFragment 
 
     /*package*/ void setCanUseVoiceSearchForTesting(boolean canUseVoiceSearch) {
         mRadioButtonGroup.setCanUseVoiceSearch(false);
+    }
+
+    @Override
+    public @AnimationType int getAnimationType() {
+        return AnimationType.PROPERTY;
     }
 }

@@ -26,16 +26,12 @@
 #include "base/version.h"
 #include "base/version_info/version_info.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/bitmap_fetcher/bitmap_fetcher.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/webstore_private/extension_install_status.h"
-#include "chrome/browser/extensions/crx_installer.h"
 #include "chrome/browser/extensions/extension_allowlist.h"
-#include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/install_approval.h"
 #include "chrome/browser/extensions/install_tracker.h"
-#include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
-#include "chrome/browser/extensions/mv2_experiment_stage.h"
 #include "chrome/browser/extensions/scoped_active_install.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_observer.h"
@@ -43,13 +39,13 @@
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_browser_utils.h"
-#include "chrome/browser/ui/extensions/extensions_dialogs.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/crx_file/id_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
 #include "components/safe_browsing/core/browser/safe_browsing_metrics_collector.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -58,11 +54,9 @@
 #include "content/public/browser/gpu_feature_checker.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/browser/api/management/management_api.h"
 #include "extensions/browser/extension_dialog_auto_confirm.h"
 #include "extensions/browser/extension_function_constants.h"
 #include "extensions/browser/extension_registry.h"
-#include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/extension.h"
@@ -73,6 +67,13 @@
 #include "net/base/load_flags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "chrome/browser/extensions/manifest_v2_experiment_manager.h"
+#include "chrome/browser/extensions/mv2_experiment_stage.h"
+#include "chrome/browser/ui/extensions/extensions_dialogs.h"
+#include "extensions/browser/api/management/management_api.h"
+#endif
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
@@ -330,8 +331,7 @@ gfx::ImageSkia GetIconImage(const SkBitmap& icon, bool is_app) {
     return gfx::ImageSkia::CreateFrom1xBitmap(icon);
   }
 
-  return is_app ? extensions::util::GetDefaultAppIcon()
-                : extensions::util::GetDefaultExtensionIcon();
+  return is_app ? util::GetDefaultAppIcon() : util::GetDefaultExtensionIcon();
 }
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -443,9 +443,8 @@ WebstorePrivateBeginInstallWithManifest3Function::Run() {
   InstallTracker* tracker = InstallTracker::Get(browser_context());
   DCHECK(tracker);
   bool is_installed =
-      extensions::ExtensionRegistry::Get(browser_context())
-          ->GetExtensionById(details().id,
-                             extensions::ExtensionRegistry::EVERYTHING) !=
+      ExtensionRegistry::Get(browser_context())
+          ->GetExtensionById(details().id, ExtensionRegistry::EVERYTHING) !=
       nullptr;
   if (is_installed || tracker->GetActiveInstall(details().id)) {
     return RespondNow(
@@ -512,28 +511,6 @@ void WebstorePrivateBeginInstallWithManifest3Function::OnWebstoreParseSuccess(
     return;
   }
 
-  // Check if the supervised user is allowed to install extensions in the legacy
-  // flow. NOTE: we do not block themes.
-  if (!dummy_extension_->is_theme()) {
-    if (supervised_user::AreExtensionsPermissionsEnabled(profile_) &&
-        !supervised_user::
-            IsSupervisedUserSkipParentApprovalToInstallExtensionsEnabled()) {
-      SupervisedUserExtensionsDelegate* supervised_user_extensions_delegate =
-          ManagementAPI::GetFactoryInstance()
-              ->Get(profile_)
-              ->GetSupervisedUserExtensionsDelegate();
-      CHECK(supervised_user_extensions_delegate);
-      if (!supervised_user_extensions_delegate->CanInstallExtensions()) {
-        // Assume that the block dialog will be shown here since it was checked
-        // that extensions cannot be installed by the child user. If extensions
-        // are allowed, the install prompt will be shown before the request
-        // permission dialog is shown.
-        RequestExtensionApproval(web_contents);
-        return;
-      }
-    }
-  }
-
   // Check the management policy before the installation process begins.
   ExtensionInstallStatus install_status = GetWebstoreExtensionInstallStatus(
       id, profile_, dummy_extension_->manifest()->type(),
@@ -589,6 +566,7 @@ void WebstorePrivateBeginInstallWithManifest3Function::OnWebstoreParseFailure(
 
 void WebstorePrivateBeginInstallWithManifest3Function::RequestExtensionApproval(
     content::WebContents* web_contents) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   SupervisedUserExtensionsDelegate* supervised_user_extensions_delegate =
       ManagementAPI::GetFactoryInstance()
           ->Get(profile_)
@@ -603,6 +581,13 @@ void WebstorePrivateBeginInstallWithManifest3Function::RequestExtensionApproval(
       gfx::ImageSkia::CreateFrom1xBitmap(icon_),
       SupervisedUserExtensionParentApprovalEntryPoint::kOnWebstoreInstallation,
       std::move(extension_approval_callback));
+#else
+  // TODO(crbug.com/410616937): Support supervised user install controls on
+  // desktop Android.
+  NOTIMPLEMENTED() << "Supervised user checks not yet supported on Android.";
+  OnExtensionApprovalDone(
+      SupervisedUserExtensionsDelegate::ExtensionApprovalResult::kApproved);
+#endif
 }
 
 void WebstorePrivateBeginInstallWithManifest3Function::OnExtensionApprovalDone(
@@ -626,12 +611,18 @@ void WebstorePrivateBeginInstallWithManifest3Function::OnExtensionApprovalDone(
 
 void WebstorePrivateBeginInstallWithManifest3Function::
     OnExtensionApprovalApproved() {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   SupervisedUserExtensionsDelegate* supervised_user_extensions_delegate =
       ManagementAPI::GetFactoryInstance()
           ->Get(profile_)
           ->GetSupervisedUserExtensionsDelegate();
   CHECK(supervised_user_extensions_delegate);
   supervised_user_extensions_delegate->AddExtensionApproval(*dummy_extension_);
+#else
+  // TODO(crbug.com/410616937): Support supervised user install controls on
+  // desktop Android.
+  NOTIMPLEMENTED() << "Supervised user checks not yet supported on Android.";
+#endif
 
   HandleInstallProceed();
 }
@@ -849,7 +840,7 @@ WebstorePrivateBeginInstallWithManifest3Function::BuildResponse(
     // In the cases where they do not correspond we should add a new enum value.
     // We will need to ensure that the Webstore is entirely basing its logic on
     // the result alone before removing the error.
-    return ErrorWithArguments(
+    return ErrorWithArgumentsDoNotUse(
         BeginInstallWithManifest3::Results::Create(result), error);
   }
 
@@ -875,18 +866,22 @@ bool WebstorePrivateBeginInstallWithManifest3Function::ShouldShowFrictionDialog(
   }
 
   // Only show friction if the allowlist warnings are enabled for the profile.
-  auto* extension_system = ExtensionSystem::Get(profile);
-  return extension_system->extension_service()->allowlist()->warnings_enabled();
+  return ExtensionAllowlist::Get(profile)->warnings_enabled();
 }
 
 void WebstorePrivateBeginInstallWithManifest3Function::
     ShowInstallFrictionDialog(content::WebContents* contents) {
   friction_dialog_shown_ = true;
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   ShowExtensionInstallFrictionDialog(
       contents,
       base::BindOnce(&WebstorePrivateBeginInstallWithManifest3Function::
                          OnFrictionPromptDone,
                      this));
+#else
+  NOTIMPLEMENTED() << "ShowInstallFrictionDialog not supported on Android";
+  OnFrictionPromptDone(true);
+#endif
 }
 
 void WebstorePrivateBeginInstallWithManifest3Function::ShowInstallDialog(
@@ -947,7 +942,7 @@ void WebstorePrivateBeginInstallWithManifest3Function::
   Profile* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
 
   std::string message_from_admin =
-      extensions::ExtensionManagementFactory::GetForBrowserContext(profile)
+      ExtensionManagementFactory::GetForBrowserContext(profile)
           ->BlockedInstallMessage(extension->id());
   if (!message_from_admin.empty()) {
     blocked_by_policy_error_message_ =
@@ -957,16 +952,22 @@ void WebstorePrivateBeginInstallWithManifest3Function::
 
   gfx::ImageSkia image = GetIconImage(icon, extension->is_app());
 
-  if (extensions::ScopedTestDialogAutoConfirm::GetAutoConfirmValue() !=
-      extensions::ScopedTestDialogAutoConfirm::NONE) {
+  if (ScopedTestDialogAutoConfirm::GetAutoConfirmValue() !=
+      ScopedTestDialogAutoConfirm::NONE) {
     base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
         FROM_HERE, std::move(done_callback));
     return;
   }
 
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   ShowExtensionInstallBlockedDialog(extension->id(), extension->name(),
                                     blocked_by_policy_error_message_, image,
                                     contents, std::move(done_callback));
+#else
+  LOG(ERROR) << "Install blocked. Dialog not supported on Android. Extension: "
+             << extension->name()
+             << ", message: " << blocked_by_policy_error_message_;
+#endif
 }
 
 WebstorePrivateCompleteInstallFunction::
@@ -1220,7 +1221,7 @@ WebstorePrivateGetReferrerChainFunction::Run() {
                           : nullptr;
 
   if (!outermost_render_frame_host) {
-    return RespondNow(ErrorWithArguments(
+    return RespondNow(ErrorWithArgumentsDoNotUse(
         api::webstore_private::GetReferrerChain::Results::Create(""),
         kWebstoreUserCancelledError));
   }
@@ -1355,6 +1356,7 @@ WebstorePrivateGetMV2DeprecationStatusFunction::
 
 ExtensionFunction::ResponseAction
 WebstorePrivateGetMV2DeprecationStatusFunction::Run() {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
   ManifestV2ExperimentManager* experiment_manager =
       ManifestV2ExperimentManager::Get(browser_context());
   MV2ExperimentStage current_stage =
@@ -1379,6 +1381,12 @@ WebstorePrivateGetMV2DeprecationStatusFunction::Run() {
   return RespondNow(ArgumentList(
       api::webstore_private::GetMV2DeprecationStatus::Results::Create(
           api_status)));
+#else
+  // Android does not support Manifest V2 experiments.
+  return RespondNow(ArgumentList(
+      api::webstore_private::GetMV2DeprecationStatus::Results::Create(
+          api::webstore_private::MV2DeprecationStatus::kInactive)));
+#endif
 }
 
 }  // namespace extensions

@@ -23,6 +23,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -1198,7 +1199,7 @@ void ArcAppListPrefs::SetLastLaunchTimeInternal(const std::string& app_id) {
     const user_manager::UserManager* user_manager =
         user_manager::UserManager::Get();
     if (arc::ArcSessionManager::Get()->skipped_terms_of_service_negotiation() &&
-        !user_manager->IsLoggedInAsKioskApp() &&
+        !user_manager->IsLoggedInAsKioskChromeApp() &&
         !ash::UserSessionManager::GetInstance()->ui_shown_time().is_null()) {
       UMA_HISTOGRAM_CUSTOM_TIMES(
           "Arc.FirstAppLaunchRequest.TimeDelta",

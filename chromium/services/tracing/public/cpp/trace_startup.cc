@@ -25,7 +25,7 @@
 #include "components/tracing/common/etw_export_win.h"
 #endif
 
-#if BUILDFLAG(IS_APPLE)
+#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(IS_IOS_TVOS)
 #include "base/apple/mach_port_rendezvous.h"
 #endif
 
@@ -33,10 +33,9 @@ namespace tracing {
 namespace {
 
 #if BUILDFLAG(IS_APPLE)
-constexpr base::MachPortsForRendezvous::key_type kTraceConfigRendezvousKey =
-    'trcc';
-constexpr base::MachPortsForRendezvous::key_type kTraceBufferRendezvousKey =
-    'trbc';
+using base::shared_memory::SharedMemoryMachPortRendezvousKey;
+constexpr SharedMemoryMachPortRendezvousKey kTraceConfigRendezvousKey = 'trcc';
+constexpr SharedMemoryMachPortRendezvousKey kTraceBufferRendezvousKey = 'trbc';
 #endif
 
 constexpr uint32_t kStartupTracingTimeoutMs = 30 * 1000;  // 30 sec
@@ -47,16 +46,14 @@ using base::trace_event::TraceLog;
 }  // namespace
 
 bool g_tracing_initialized_after_featurelist = false;
+bool g_tracing_with_thread = false;
 
 bool IsTracingInitialized() {
   return g_tracing_initialized_after_featurelist;
 }
 
-void EnableStartupTracingIfNeeded() {
+void EnableStartupTracingIfNeeded(bool with_thread) {
   RegisterTracedValueProtoWriter();
-
-  // Create the PerfettoTracedProcess.
-  PerfettoTracedProcess::MaybeCreateInstance();
 
   // Initialize the client library's TrackRegistry to support trace points
   // during startup tracing. We don't setup the client library completely here
@@ -65,6 +62,20 @@ void EnableStartupTracingIfNeeded() {
   // TODO(eseckler): Make it possible to initialize client lib backends after
   // setting up the client library?
   perfetto::internal::TrackRegistry::InitializeInstance();
+
+  // Create the PerfettoTracedProcess.
+  if (with_thread) {
+    g_tracing_with_thread = true;
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
+    PerfettoTracedProcess::MaybeCreateInstanceWithThread(
+        /*will_trace_thread_restart=*/true);
+#else
+    PerfettoTracedProcess::MaybeCreateInstanceWithThread(
+        /*will_trace_thread_restart=*/false);
+#endif
+  } else {
+    PerfettoTracedProcess::MaybeCreateInstance();
+  }
 
   // Ensure TraceLog is initialized first.
   // https://crbug.com/764357
@@ -106,7 +117,9 @@ void InitTracingPostFeatureList(bool enable_consumer) {
   DCHECK(base::FeatureList::GetInstance());
 
   // Create the PerfettoTracedProcess.
-  PerfettoTracedProcess::MaybeCreateInstance();
+  if (!g_tracing_with_thread) {
+    PerfettoTracedProcess::MaybeCreateInstance();
+  }
   PerfettoTracedProcess::Get().OnThreadPoolAvailable(enable_consumer);
 #if BUILDFLAG(IS_WIN)
   tracing::EnableETWExport();

@@ -43,7 +43,13 @@ struct RequestFilterRule {
     kActivationCount
   };
 
-  enum Party { kFirstParty = 0, kThirdParty, kPartyCount };
+  enum Party {
+    kFirstParty = 0,
+    kThirdParty,
+    kStrictFirstParty,
+    kStrictThirdParty,
+    kFirstPartyAndStrictThirdParty
+  };
 
   enum AnchorType {
     kAnchorStart = 0,
@@ -68,6 +74,10 @@ struct RequestFilterRule {
   RequestFilterRule& operator=(RequestFilterRule&& request_filter_rule);
   bool operator==(const RequestFilterRule& other) const;
 
+  // Whether this rule should be used to fully eliminate an existing, equivalent
+  // rule.
+  bool bad_filter = false;
+
   // Whether a match causes the request to be modified or passed as-is.
   Decision decision = kModify;
   // Whether the rule modifies the blocked state of the request.
@@ -78,6 +88,8 @@ struct RequestFilterRule {
   // Affect whether some part of the filter run for given documents.
   std::bitset<kActivationCount> activation_types;
 
+  // For which domain and query-triggers should this ad-attribution allow rule
+  // apply.
   std::set<std::string> ad_domains_and_query_triggers;
 
   bool is_case_sensitive = false;
@@ -87,7 +99,7 @@ struct RequestFilterRule {
   // rule has no resource type associated. We keep them separate to easy
   // implementation.
   std::bitset<kExplicitTypeCount> explicit_types;
-  std::bitset<kPartyCount> party;
+  std::optional<Party> party;
   std::bitset<kAnchorTypeCount> anchor_type;
   PatternType pattern_type = kPlain;
 
@@ -101,6 +113,7 @@ struct RequestFilterRule {
   // extracted for indexing.
   std::optional<std::string> ngram_search_string;
 
+  // The text of the rule as it was before parsing. Used for logging.
   std::string original_rule_text;
 };
 

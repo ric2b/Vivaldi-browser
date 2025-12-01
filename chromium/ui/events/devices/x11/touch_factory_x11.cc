@@ -17,6 +17,7 @@
 #include "base/strings/string_split.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
+#include "ui/base/ui_base_features.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/devices/x11/device_data_manager_x11.h"
 #include "ui/events/devices/x11/device_list_cache_x11.h"
@@ -205,7 +206,7 @@ void TouchFactory::SetupXI2ForXWindow(x11::Window window) {
 
   auto* connection = x11::Connection::Get();
 
-  x11::Input::EventMask mask{};
+  x11::Input::EventMask mask{x11::Input::DeviceId::AllMaster};
   mask.mask.push_back({});
   auto* mask_data = mask.mask.data();
 
@@ -221,16 +222,11 @@ void TouchFactory::SetupXI2ForXWindow(x11::Window window) {
   SetXinputMask(mask_data, x11::Input::DeviceEvent::ButtonPress);
   SetXinputMask(mask_data, x11::Input::DeviceEvent::ButtonRelease);
   SetXinputMask(mask_data, x11::Input::DeviceEvent::Motion);
-  // HierarchyChanged and DeviceChanged allow X11EventSource to still pick up
-  // these events.
-  SetXinputMask(mask_data, x11::Input::HierarchyEvent::opcode);
-  SetXinputMask(mask_data, x11::Input::DeviceChangedEvent::opcode);
-#if BUILDFLAG(IS_CHROMEOS)
-  if (base::SysInfo::IsRunningOnChromeOS()) {
+
+  if (base::FeatureList::IsEnabled(features::kXInput2KeyEvents)) {
     SetXinputMask(mask_data, x11::Input::DeviceEvent::KeyPress);
     SetXinputMask(mask_data, x11::Input::DeviceEvent::KeyRelease);
   }
-#endif
 
   connection->xinput().XISelectEvents({window, {mask}});
   connection->Flush();

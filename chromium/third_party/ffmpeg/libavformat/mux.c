@@ -295,27 +295,6 @@ static int init_muxer(AVFormatContext *s, AVDictionary **options)
             }
         }
 
-#if FF_API_AVSTREAM_SIDE_DATA
-FF_DISABLE_DEPRECATION_WARNINGS
-        /* if the caller is using the deprecated AVStream side_data API,
-         * copy its contents to AVStream.codecpar, giving it priority
-           over existing side data in the latter */
-        for (int i = 0; i < st->nb_side_data; i++) {
-            const AVPacketSideData *sd_src = &st->side_data[i];
-            AVPacketSideData *sd_dst;
-
-            sd_dst = av_packet_side_data_new(&st->codecpar->coded_side_data,
-                                             &st->codecpar->nb_coded_side_data,
-                                             sd_src->type, sd_src->size, 0);
-            if (!sd_dst) {
-                ret = AVERROR(ENOMEM);
-                goto fail;
-            }
-            memcpy(sd_dst->data, sd_src->data, sd_src->size);
-        }
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-
         desc = avcodec_descriptor_get(par->codec_id);
         if (desc && desc->props & AV_CODEC_PROP_REORDER)
             sti->reorder = 1;
@@ -965,7 +944,6 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
     int stream_count = 0;
     int noninterleaved_count = 0;
     int ret;
-    int eof = flush;
 
     if (has_packet) {
         if ((ret = ff_interleave_add_packet(s, pkt, interleave_compare_dts)) < 0)
@@ -1024,44 +1002,6 @@ int ff_interleave_packet_per_dts(AVFormatContext *s, AVPacket *pkt,
             flush = 1;
         }
     }
-
-#if FF_API_LAVF_SHORTEST
-    if (si->packet_buffer.head &&
-        eof &&
-        (s->flags & AVFMT_FLAG_SHORTEST) &&
-        fci->shortest_end == AV_NOPTS_VALUE) {
-        AVPacket *const top_pkt = &si->packet_buffer.head->pkt;
-
-        fci->shortest_end = av_rescale_q(top_pkt->dts,
-                                         s->streams[top_pkt->stream_index]->time_base,
-                                         AV_TIME_BASE_Q);
-    }
-
-    if (fci->shortest_end != AV_NOPTS_VALUE) {
-        while (si->packet_buffer.head) {
-            PacketListEntry *pktl = si->packet_buffer.head;
-            AVPacket *const top_pkt = &pktl->pkt;
-            AVStream *const st = s->streams[top_pkt->stream_index];
-            FFStream *const sti = ffstream(st);
-            int64_t top_dts = av_rescale_q(top_pkt->dts, st->time_base,
-                                        AV_TIME_BASE_Q);
-
-            if (fci->shortest_end + 1 >= top_dts)
-                break;
-
-            si->packet_buffer.head = pktl->next;
-            if (!si->packet_buffer.head)
-                si->packet_buffer.tail = NULL;
-
-            if (sti->last_in_packet_buffer == pktl)
-                sti->last_in_packet_buffer = NULL;
-
-            av_packet_unref(&pktl->pkt);
-            av_freep(&pktl);
-            flush = 0;
-        }
-    }
-#endif
 
     if (stream_count && flush) {
         PacketListEntry *pktl = si->packet_buffer.head;

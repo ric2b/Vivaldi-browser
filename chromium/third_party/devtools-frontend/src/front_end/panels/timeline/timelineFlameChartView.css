@@ -24,7 +24,9 @@
   z-index: 2;
 
   /* if an overlay is being edited, keep it above the rest so the user is not obstructed */
-  &:has([data-user-editing-label]) {
+  /* also bump the z-index if the label is being hovered, to ensure it appears above any other labels that might obstruct it */
+  &:has([data-user-editing-label]),
+  &:hover {
     z-index: 3;
   }
 }
@@ -136,8 +138,8 @@
   contain: content;
   background-color: var(--sys-color-cdt-base-container);
   pointer-events: none;
-  padding: var(--sys-size-4);
-  border-radius: var(--sys-shape-corner-small);
+  padding: var(--sys-size-3) var(--sys-size-4);
+  border-radius: var(--sys-shape-corner-extra-small);
   white-space: nowrap;
   max-width: 80%;
   box-shadow: var(--sys-elevation-level2);

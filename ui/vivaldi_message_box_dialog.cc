@@ -230,7 +230,7 @@ VivaldiMessageBoxDialog::VivaldiMessageBoxDialog(const Config& config,
                                   base::Unretained(this),
                                   chrome::MESSAGE_BOX_RESULT_NO));
 
-  SetOwnedByWidget(true);
+  SetOwnedByWidget(OwnedByWidgetPassKey());
 
   std::u16string ok_text = config.yes_text;
   if (ok_text.empty()) {

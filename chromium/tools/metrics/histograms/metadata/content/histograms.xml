@@ -23,6 +23,7 @@ chromium-metrics-reviews@google.com.
 <histograms>
 
 <variants name="ContentAllProviderTypes">
+  <variant name="ComponentExtensionProvider"/>
   <variant name="CustomExtensionProvider"/>
   <variant name="DefaultProvider"/>
   <variant name="InstalledWebappProvider"/>
@@ -56,7 +57,7 @@ chromium-metrics-reviews@google.com.
 </variants>
 
 <histogram name="Content.Classification" enum="ContentClassification"
-    expires_after="2025-09-07">
+    expires_after="2025-11-09">
   <owner>sophey@chromium.org</owner>
   <owner>chrome-sherlock@google.com</owner>
   <summary>
@@ -181,23 +182,6 @@ chromium-metrics-reviews@google.com.
   <summary>
     Provisional notifications were turned on from the Notifications Promo.
   </summary>
-</histogram>
-
-<histogram name="ContentNotifications.Promo.SetUpList.Action"
-    enum="ContentNotificationSetUpListPromoAction" expires_after="2026-01-20">
-  <owner>scottyoder@google.com</owner>
-  <owner>bling-get-set-up@google.com</owner>
-  <summary>
-    The action taken by the user in response to the Set Up List Content
-    Notification promo.
-  </summary>
-</histogram>
-
-<histogram name="ContentNotifications.Promo.SetUpList.Event"
-    enum="ContentNotificationSetUpListPromoEvent" expires_after="2026-01-20">
-  <owner>scottyoder@google.com</owner>
-  <owner>bling-get-set-up@google.com</owner>
-  <summary>Log the Set Up List Content Notification promo events.</summary>
 </histogram>
 
 <histogram name="ContentNotifications.Promo.Snackbar.Event"
@@ -395,7 +379,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.Popups.StrongBlockerActions"
-    enum="StrongPopupBlockerAction" expires_after="2025-08-03">
+    enum="StrongPopupBlockerAction" expires_after="2025-10-05">
   <owner>csharrison@chromium.org</owner>
   <summary>
     Counts of various events related to the strong popup blocker (aka abusive
@@ -404,7 +388,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.RegularProfile.DefaultAutoVerifySetting"
-    enum="ContentSetting" expires_after="2025-08-31">
+    enum="ContentSetting" expires_after="2025-11-09">
   <owner>ryankalla@google.com</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -414,7 +398,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSettings.RegularProfile.DefaultBackgroundSyncSetting"
-    enum="ContentSetting" expires_after="2025-09-14">
+    enum="ContentSetting" expires_after="2025-11-16">
   <owner>tungnh@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>
@@ -685,7 +669,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="ContentSettings.{RegularProfileFiltered}DefaultRequestDesktopSiteSetting"
-    enum="ContentSetting" expires_after="2025-08-24">
+    enum="ContentSetting" expires_after="2025-10-26">
   <owner>shuyng@google.com</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -888,24 +872,6 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="ContentSuggestions.Feed.CanBeShown" enum="BooleanAllowed"
-    expires_after="2024-06-02">
-  <owner>harringtond@chromium.org</owner>
-  <owner>thegreenfrog@chromium.org</owner>
-  <owner>feed@chromium.org</owner>
-  <summary>
-    Whether showing the Feed is permitted. The Feed can be shown if (A) profile
-    policies allow this, (B) the FeedAblationEnabled feature is disabled, and
-    (C) the user has not turned it off in Settings.
-
-    Note that this does not denote (A) whether the Feed is visible at the time
-    the metric is emitted or (B) whether the Feed was ever visible during the
-    browser process lifetime.
-
-    iOS only. Emitted when building a MetricsLog for the current session.
-  </summary>
-</histogram>
-
 <histogram name="ContentSuggestions.Feed.ContentAgeOnLoad.BlockingRefresh"
     units="ms" expires_after="2024-01-14">
   <owner>carlosk@chromium.org</owner>
@@ -968,8 +934,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.ContentLifetime.InvalidAge" units="ms"
-    expires_after="2025-05-21">
-  <owner>birnie@google.com</owner>
+    expires_after="2026-05-21">
+  <owner>jianli@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
     Android: The invalid age lifetime of content fetched from the server.
@@ -979,8 +945,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.ContentLifetime.InvalidAgeIsPresent"
-    enum="Boolean" expires_after="2025-05-21">
-  <owner>birnie@google.com</owner>
+    enum="Boolean" expires_after="2026-05-21">
+  <owner>jianli@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
     Android: If the content lifetime of a feed response has a non zero invalid
@@ -991,8 +957,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.ContentLifetime.StaleAge" units="ms"
-    expires_after="2025-05-21">
-  <owner>birnie@google.com</owner>
+    expires_after="2026-05-21">
+  <owner>jianli@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
     Android: The stale age lifetime of content fetched from the server. Reported
@@ -1002,8 +968,8 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.ContentLifetime.StaleAgeIsPresent"
-    enum="Boolean" expires_after="2025-05-21">
-  <owner>birnie@google.com</owner>
+    enum="Boolean" expires_after="2026-05-21">
+  <owner>jianli@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
     Android: If the content lifetime of a feed response has a non zero stale age
@@ -1160,7 +1126,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.Network.Duration{NetworkEvent}"
-    units="ms" expires_after="2025-08-24">
+    units="ms" expires_after="2025-10-26">
   <owner>sczs@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -1262,7 +1228,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.RefreshTrigger"
-    enum="FeedRefreshTrigger" expires_after="2025-07-27">
+    enum="FeedRefreshTrigger" expires_after="2025-09-28">
   <owner>adamta@google.com</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -1321,7 +1287,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.UniformityFlag" enum="Boolean"
-    expires_after="2025-08-24">
+    expires_after="2025-10-26">
   <owner>ginnyhuang@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -1477,7 +1443,7 @@ chromium-metrics-reviews@google.com.
 
 <histogram
     name="ContentSuggestions.Feed.UserJourney.{Surface}.{Status}Duration"
-    units="ms" expires_after="2025-08-10">
+    units="ms" expires_after="2025-10-12">
   <owner>harringtond@chromium.org</owner>
   <owner>carlosk@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -1738,7 +1704,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.WebFeed.SortTypeWhenEngaged"
-    enum="FeedSortType" expires_after="2025-08-31">
+    enum="FeedSortType" expires_after="2025-11-02">
   <owner>adamta@google.com</owner>
   <owner>sczs@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -1749,7 +1715,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.WebFeed.UnfollowResult"
-    enum="WebFeedSubscriptionRequestStatus" expires_after="2025-07-27">
+    enum="WebFeedSubscriptionRequestStatus" expires_after="2025-09-28">
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -1816,7 +1782,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="ContentSuggestions.{FeedType}.Activity"
-    enum="FeedActivityBucket" expires_after="2025-07-27">
+    enum="FeedActivityBucket" expires_after="2025-09-28">
   <owner>guiperez@google.com</owner>
   <owner>feed@chromium.org</owner>
   <summary>

@@ -311,7 +311,7 @@ try_.builder(
     main_list_view = "try",
 )
 
-try_.orchestrator_builder(
+try_.builder(
     name = "mac14-arm64-rel",
     branch_selector = branches.selector.MAC_BRANCHES,
     description_html = "Compiles and runs MacOS 14 tests on ARM machines",
@@ -329,18 +329,46 @@ try_.orchestrator_builder(
             "mac",
         ],
     ),
-    compilator = "mac14-arm64-rel-compilator",
+    builderless = True,
+    cores = None,
+    cpu = cpu.ARM64,
+    contact_team_email = "bling-engprod@google.com",
+    main_list_view = "try",
+)
+
+try_.orchestrator_builder(
+    name = "mac15-arm64-rel",
+    branch_selector = branches.selector.MAC_BRANCHES,
+    description_html = "Compiles and runs MacOS 15 tests on ARM machines",
+    mirrors = [
+        "ci/mac-arm64-rel",
+        "ci/mac15-arm64-rel-tests",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "arm64",
+            "gpu_tests",
+            "release_try_builder",
+            "remoteexec",
+            "no_symbols",
+            "mac",
+        ],
+    ),
+    compilator = "mac15-arm64-rel-compilator",
     contact_team_email = "bling-engprod@google.com",
     main_list_view = "try",
     tryjob = try_.job(
-        experiment_percentage = 75,
+        # TODO (crbug.com/415099984): change to 100,
+        # then move out of experimental CQ after,
+        # mac15-arm64-rel replaces mac14-arm64-rel on CQ.
+        experiment_percentage = 100,
     ),
 )
 
 try_.compilator_builder(
-    name = "mac14-arm64-rel-compilator",
+    name = "mac15-arm64-rel-compilator",
     branch_selector = branches.selector.MAC_BRANCHES,
-    description_html = "compilator for mac14-arm64-rel",
+    description_html = "compilator for mac15-arm64-rel",
     cpu = cpu.ARM64,
     contact_team_email = "bling-engprod@google.com",
     # TODO (crbug.com/1245171): Revert when root issue is fixed
@@ -424,6 +452,25 @@ try_.builder(
 )
 
 try_.builder(
+    name = "mac15-x64-rel-tests",
+    branch_selector = branches.selector.MAC_BRANCHES,
+    description_html = "Runs default MacOS 15 tests on try.",
+    mirrors = [
+        "ci/Mac Builder",
+        "ci/mac15-x64-rel-tests",
+    ],
+    gn_args = gn_args.config(
+        configs = [
+            "ci/Mac Builder",
+            "release_try_builder",
+            "remoteexec",
+        ],
+    ),
+    cpu = cpu.ARM64,
+    contact_team_email = "bling-engprod@google.com",
+)
+
+try_.builder(
     name = "mac_chromium_asan_rel_ng",
     mirrors = [
         "ci/Mac ASan 64 Builder",
@@ -494,7 +541,7 @@ try_.builder(
     name = "mac_chromium_dbg_ng",
     mirrors = [
         "ci/Mac Builder (dbg)",
-        "ci/mac14-tests-dbg",
+        "ci/mac15-tests-dbg",
     ],
     gn_args = "ci/Mac Builder (dbg)",
     cpu = cpu.ARM64,
@@ -816,7 +863,7 @@ try_.gpu.optional_tests_builder(
     ),
     pool = "luci.chromium.gpu.try",
     builderless = True,
-    cpu = cpu.ARM64,
+    cpu = None,
     ssd = None,
     free_space = None,
     contact_team_email = "chrome-gpu-infra@google.com",

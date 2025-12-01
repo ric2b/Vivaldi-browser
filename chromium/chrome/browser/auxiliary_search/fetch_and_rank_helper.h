@@ -31,7 +31,9 @@ class FetchAndRankHelper : public base::RefCounted<FetchAndRankHelper> {
   // It passes a List<AuxiliarySearchDataEntry> to Java.
   FetchAndRankHelper(
       visited_url_ranking::VisitedURLRankingService* ranking_service,
-      FetchResultCallback entries_callback);
+      FetchResultCallback entries_callback,
+      const std::optional<GURL>& custom_tab_url = std::nullopt,
+      std::optional<base::Time> begin_time = std::nullopt);
 
   // Starts the service to fetch history data.
   void StartFetching();
@@ -55,6 +57,7 @@ class FetchAndRankHelper : public base::RefCounted<FetchAndRankHelper> {
  private:
   raw_ptr<visited_url_ranking::VisitedURLRankingService> ranking_service_;
   FetchResultCallback entries_callback_;
+  std::optional<GURL> custom_tab_url_;
   const visited_url_ranking::FetchOptions fetch_options_;
   const visited_url_ranking::Config config_;
 };

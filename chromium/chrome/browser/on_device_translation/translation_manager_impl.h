@@ -64,10 +64,24 @@ class TranslationManagerImpl : public base::SupportsUserData::Data,
       base::SupportsUserData* context_user_data,
       const url::Origin& origin);
 
+  std::optional<std::string> GetBestFitLanguageCode(
+      std::string requested_language);
+
+  // Returns a delay upon initial translator creation to safeguard against
+  // fingerprinting resulting from timing translator creation duration.
+  //
+  // The delay is triggered when the `availability()` of the translation
+  // evaluates to "downloadable", even though all required resources for
+  // translation have already been downloaded and available.
+  //
   // Overridden for testing.
   virtual base::TimeDelta GetTranslatorDownloadDelay();
   virtual component_updater::ComponentUpdateService*
   GetComponentUpdateService();
+
+  // Returns whether the "crash" language code is allowed. This is used for
+  // testing.
+  virtual bool CrashesAllowed();
 
   void CreateTranslatorImpl(
       mojo::PendingRemote<
@@ -75,14 +89,37 @@ class TranslationManagerImpl : public base::SupportsUserData::Data,
       const std::string& source_language,
       const std::string& target_language);
 
+  // Dictionary keys for the `INITIALIZED_TRANSLATIONS` website setting.
+  // Schema (per origin):
+  // {
+  //  ...
+  //   "<source language code>" : { "<target language code>", ... }
+  //   "en" : { "es", "fr", ... }
+  //   "ja" : { "fr", "de", ... }
+  //  ...
+  // }
+  base::Value GetInitializedTranslationsValue();
+
+  // Determine if a translator has been initialized for the given languages.
+  bool HasInitializedTranslator(const std::string& source_language,
+                                const std::string& target_language);
+
+  // Set the stored website setting value to the given dictionary of translation
+  // language pairs.
+  void SetTranslatorInitializedContentSetting(
+      base::Value initialized_translations);
+
+  // Updates the corresponding website setting to store information
+  // for the given translation language pair, as needed.
+  void SetInitializedTranslation(const std::string& source_language,
+                                 const std::string& target_language);
+
   // `blink::mojom::TranslationManager` implementation.
-  void CanCreateTranslator(blink::mojom::TranslatorLanguageCodePtr source_lang,
-                           blink::mojom::TranslatorLanguageCodePtr target_lang,
-                           CanCreateTranslatorCallback callback) override;
   void CreateTranslator(
       mojo::PendingRemote<
           blink::mojom::TranslationManagerCreateTranslatorClient> client,
-      blink::mojom::TranslatorCreateOptionsPtr options) override;
+      blink::mojom::TranslatorCreateOptionsPtr options,
+      bool add_fake_download_delay) override;
 
   void TranslationAvailable(blink::mojom::TranslatorLanguageCodePtr source_lang,
                             blink::mojom::TranslatorLanguageCodePtr target_lang,

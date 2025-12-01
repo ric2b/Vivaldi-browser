@@ -19,12 +19,13 @@
  */
 
 #include <math.h>
+#include <stddef.h>
 #include <stdint.h>
-#include <stdio.h>
 
 #include "libavutil/bswap.h"
 #include "libavutil/intreadwrite.h"
 #include "libavutil/avassert.h"
+#include "libavutil/intfloat.h"
 #include "config.h"
 #include "swscale_internal.h"
 
@@ -904,6 +905,23 @@ static void uyvyToUV_c(uint8_t *dstU, uint8_t *dstV, const uint8_t *unused0, con
     av_assert1(src1 == src2);
 }
 
+static void uyyvyyToY_c(uint8_t *dst, const uint8_t *src, const uint8_t *unused1, const uint8_t *unused2,
+                        int width, uint32_t *unused, void *opq)
+{
+    for (int i = 0; i < width; i++)
+        dst[i]  = src[3 * (i >> 1) + 1 + (i & 1)];
+}
+
+static void uyyvyyToUV_c(uint8_t *dstU, uint8_t *dstV, const uint8_t *unused0, const uint8_t *src1,
+                         const uint8_t *src2, int width, uint32_t *unused, void *opq)
+{
+    for (int i = 0; i < width; i++) {
+        dstU[i] = src1[6 * i + 0];
+        dstV[i] = src1[6 * i + 3];
+    }
+    av_assert1(src1 == src2);
+}
+
 static av_always_inline void nvXXtoUV_c(uint8_t *dst1, uint8_t *dst2,
                                         const uint8_t *src, int width)
 {
@@ -928,8 +946,9 @@ static void nv21ToUV_c(uint8_t *dstU, uint8_t *dstV,
     nvXXtoUV_c(dstV, dstU, src1, width);
 }
 
-#define p01x_uv_wrapper(bits, shift) \
-    static void p0 ## bits ## LEToUV_c(uint8_t *dstU, uint8_t *dstV,     \
+#define p01x_uv_wrapper(fmt, shift) \
+    static void fmt ## LEToUV ## _c(uint8_t *dstU,                       \
+                                       uint8_t *dstV,                    \
                                        const uint8_t *unused0,           \
                                        const uint8_t *src1,              \
                                        const uint8_t *src2, int width,   \
@@ -942,7 +961,8 @@ static void nv21ToUV_c(uint8_t *dstU, uint8_t *dstV,
         }                                                                \
     }                                                                    \
                                                                          \
-    static void p0 ## bits ## BEToUV_c(uint8_t *dstU, uint8_t *dstV,     \
+    static void fmt ## BEToUV ## _c(uint8_t *dstU,                       \
+                                       uint8_t *dstV,                    \
                                        const uint8_t *unused0,           \
                                        const uint8_t *src1,              \
                                        const uint8_t *src2, int width,   \
@@ -955,8 +975,9 @@ static void nv21ToUV_c(uint8_t *dstU, uint8_t *dstV,
         }                                                                \
     }
 
-#define p01x_wrapper(bits, shift) \
-    static void p0 ## bits ## LEToY_c(uint8_t *dst, const uint8_t *src,  \
+#define p01x_wrapper(fmt, shift) \
+    static void fmt ## LEToY ## _c(uint8_t *dst,                         \
+                                      const uint8_t *src,                \
                                       const uint8_t *unused1,            \
                                       const uint8_t *unused2, int width, \
                                       uint32_t *unused, void *opq)       \
@@ -967,7 +988,8 @@ static void nv21ToUV_c(uint8_t *dstU, uint8_t *dstV,
         }                                                                \
     }                                                                    \
                                                                          \
-    static void p0 ## bits ## BEToY_c(uint8_t *dst, const uint8_t *src,  \
+    static void fmt ## BEToY ## _c(uint8_t *dst,                         \
+                                      const uint8_t *src,                \
                                       const uint8_t *unused1,            \
                                       const uint8_t *unused2, int width, \
                                       uint32_t *unused, void *opq)       \
@@ -977,11 +999,12 @@ static void nv21ToUV_c(uint8_t *dstU, uint8_t *dstV,
             AV_WN16(dst + i * 2, AV_RB16(src + i * 2) >> shift);         \
         }                                                                \
     }                                                                    \
-    p01x_uv_wrapper(bits, shift)
+    p01x_uv_wrapper(fmt, shift)
 
-p01x_wrapper(10, 6)
-p01x_wrapper(12, 4)
-p01x_uv_wrapper(16, 0)
+p01x_wrapper(nv20, 0)
+p01x_wrapper(p010, 6)
+p01x_wrapper(p012, 4)
+p01x_uv_wrapper(p016, 0)
 
 static void bgr24ToY_c(uint8_t *_dst, const uint8_t *src, const uint8_t *unused1, const uint8_t *unused2,
                        int width, uint32_t *rgb2yuv, void *opq)
@@ -1283,6 +1306,28 @@ static av_always_inline void grayf32ToY16_c(uint8_t *_dst, const uint8_t *_src, 
     }
 }
 
+static av_always_inline void read_yaf32_gray_c(uint8_t *_dst, const uint8_t *_src, const uint8_t *unused1,
+                                               const uint8_t *unused2, int width, int is_be, uint32_t *unused)
+{
+    int i;
+    const float *src = (const float *)_src;
+    uint16_t *dst    = (uint16_t *)_dst;
+
+    for (i = 0; i < width; ++i)
+        dst[i] = lrintf(av_clipf(65535.0f * rdpx(src + i*2), 0.0f,  65535.0f));
+}
+
+static av_always_inline void read_yaf32_alpha_c(uint8_t *_dst, const uint8_t *_src, const uint8_t *unused1,
+                                                const uint8_t *unused2, int width, int is_be, uint32_t *unused)
+{
+    int i;
+    const float *src = (const float *)_src;
+    uint16_t *dst    = (uint16_t *)_dst;
+
+    for (i = 0; i < width; ++i)
+        dst[i] = lrintf(av_clipf(65535.0f * rdpx(src + i*2 + 1), 0.0f,  65535.0f));
+}
+
 #undef rdpx
 
 #define rgb9plus_planar_funcs_endian(nbits, endian_name, endian)                                    \
@@ -1363,12 +1408,93 @@ static void grayf32##endian_name##ToY16_c(uint8_t *dst, const uint8_t *src,     
                                           int width, uint32_t *unused, void *opq)                   \
 {                                                                                                   \
     grayf32ToY16_c(dst, src, unused1, unused2, width, endian, unused);                              \
+}                                                                                                   \
+static void read_yaf32##endian_name##_gray_c(uint8_t *dst, const uint8_t *src,                      \
+                                              const uint8_t *unused1, const uint8_t *unused2,       \
+                                              int width, uint32_t *unused, void *opq)               \
+{                                                                                                   \
+    read_yaf32_gray_c(dst, src, unused1, unused2, width, endian, unused);                           \
+}                                                                                                   \
+static void read_yaf32##endian_name##_alpha_c(uint8_t *dst, const uint8_t *src,                     \
+                                              const uint8_t *unused1, const uint8_t *unused2,       \
+                                              int width, uint32_t *unused, void *opq)               \
+{                                                                                                   \
+    read_yaf32_alpha_c(dst, src, unused1, unused2, width, endian, unused);                          \
 }
 
 rgbf32_funcs_endian(le, 0)
 rgbf32_funcs_endian(be, 1)
 
 #define rdpx(src) av_int2float(half2float(is_be ? AV_RB16(&src) : AV_RL16(&src), h2f_tbl))
+#define rdpx2(src) av_int2float(half2float(is_be ? AV_RB16(src) : AV_RL16(src), h2f_tbl))
+
+static av_always_inline void planar_rgbf16_to_a(uint8_t *dst, const uint8_t *src[4], int width, int is_be, int32_t *rgb2yuv, Half2FloatTables *h2f_tbl)
+{
+    int i;
+
+    for (i = 0; i < width; i++) {
+        AV_WN16(dst + 2*i, lrintf(av_clipf(65535.0f * rdpx2(src[3] + 2*i), 0.0f, 65535.0f)));
+    }
+}
+
+static av_always_inline void planar_rgbf16_to_uv(uint8_t *dstU, uint8_t *dstV, const uint8_t *src[4], int width, int is_be, int32_t *rgb2yuv, Half2FloatTables *h2f_tbl)
+{
+    int i;
+    int32_t ru = rgb2yuv[RU_IDX], gu = rgb2yuv[GU_IDX], bu = rgb2yuv[BU_IDX];
+    int32_t rv = rgb2yuv[RV_IDX], gv = rgb2yuv[GV_IDX], bv = rgb2yuv[BV_IDX];
+
+    for (i = 0; i < width; i++) {
+        int g = lrintf(av_clipf(65535.0f * rdpx2(src[0] + 2*i), 0.0f, 65535.0f));
+        int b = lrintf(av_clipf(65535.0f * rdpx2(src[1] + 2*i), 0.0f, 65535.0f));
+        int r = lrintf(av_clipf(65535.0f * rdpx2(src[2] + 2*i), 0.0f, 65535.0f));
+
+        AV_WN16(dstU + 2*i, (ru*r + gu*g + bu*b + (0x10001 << (RGB2YUV_SHIFT - 1))) >> RGB2YUV_SHIFT);
+        AV_WN16(dstV + 2*i, (rv*r + gv*g + bv*b + (0x10001 << (RGB2YUV_SHIFT - 1))) >> RGB2YUV_SHIFT);
+    }
+}
+
+static av_always_inline void planar_rgbf16_to_y(uint8_t *dst, const uint8_t *src[4], int width, int is_be, int32_t *rgb2yuv, Half2FloatTables *h2f_tbl)
+{
+    int i;
+
+    int32_t ry = rgb2yuv[RY_IDX], gy = rgb2yuv[GY_IDX], by = rgb2yuv[BY_IDX];
+
+    for (i = 0; i < width; i++) {
+        int g = lrintf(av_clipf(65535.0f * rdpx2(src[0] + 2*i), 0.0f, 65535.0f));
+        int b = lrintf(av_clipf(65535.0f * rdpx2(src[1] + 2*i), 0.0f, 65535.0f));
+        int r = lrintf(av_clipf(65535.0f * rdpx2(src[2] + 2*i), 0.0f, 65535.0f));
+
+        AV_WN16(dst + 2*i, (ry*r + gy*g + by*b + (0x2001 << (RGB2YUV_SHIFT - 1))) >> RGB2YUV_SHIFT);
+    }
+}
+
+static av_always_inline void grayf16ToY16_c(uint8_t *dst, const uint8_t *src, const uint8_t *unused1,
+                                            const uint8_t *unused2, int width, int is_be, uint32_t *unused, Half2FloatTables *h2f_tbl)
+{
+    int i;
+
+    for (i = 0; i < width; ++i){
+        AV_WN16(dst + 2*i, lrintf(av_clipf(65535.0f * rdpx2(src + 2*i), 0.0f,  65535.0f)));
+    }
+}
+
+static av_always_inline void read_yaf16_gray_c(uint8_t *_dst, const uint8_t *src, const uint8_t *unused1,
+                                               const uint8_t *unused2, int width, int is_be, uint32_t *unused, Half2FloatTables *h2f_tbl)
+{
+    uint16_t *dst = (uint16_t *)_dst;
+
+    for (int i = 0; i < width; i++)
+        dst[i] = lrintf(av_clipf(65535.0f * rdpx2(src + 4*i), 0.0f,  65535.0f));
+}
+
+static av_always_inline void read_yaf16_alpha_c(uint8_t *_dst, const uint8_t *src, const uint8_t *unused1,
+                                               const uint8_t *unused2, int width, int is_be, uint32_t *unused, Half2FloatTables *h2f_tbl)
+{
+    uint16_t *dst = (uint16_t *)_dst;
+
+    for (int i = 0; i < width; i++)
+        dst[i] = lrintf(av_clipf(65535.0f * rdpx2(src + 4*i + 2), 0.0f,  65535.0f));
+}
 
 static av_always_inline void rgbaf16ToUV_half_endian(uint16_t *dstU, uint16_t *dstV, int is_be,
                                                      const uint16_t *src, int width,
@@ -1484,6 +1610,41 @@ static av_always_inline void rgbf16ToY_endian(uint16_t *dst, const uint16_t *src
 #undef rdpx
 
 #define rgbaf16_funcs_endian(endian_name, endian)                                                         \
+static void planar_rgbf16##endian_name##_to_y(uint8_t *dst, const uint8_t *src[4],                  \
+                                                  int w, int32_t *rgb2yuv, void *opq)               \
+{                                                                                                   \
+    planar_rgbf16_to_y(dst, src, w, endian, rgb2yuv, opq);                                          \
+}                                                                                                   \
+static void planar_rgbf16##endian_name##_to_uv(uint8_t *dstU, uint8_t *dstV,                        \
+                                               const uint8_t *src[4], int w, int32_t *rgb2yuv,      \
+                                               void *opq)                                           \
+{                                                                                                   \
+    planar_rgbf16_to_uv(dstU, dstV, src, w, endian, rgb2yuv, opq);                                  \
+}                                                                                                   \
+static void planar_rgbf16##endian_name##_to_a(uint8_t *dst, const uint8_t *src[4],                  \
+                                              int w, int32_t *rgb2yuv, void *opq)                   \
+{                                                                                                   \
+    planar_rgbf16_to_a(dst, src, w, endian, rgb2yuv, opq);                                          \
+}                                                                                                   \
+static void grayf16##endian_name##ToY16_c(uint8_t *dst, const uint8_t *src,                         \
+                                          const uint8_t *unused1, const uint8_t *unused2,           \
+                                          int width, uint32_t *unused, void *opq)                   \
+{                                                                                                   \
+    grayf16ToY16_c(dst, src, unused1, unused2, width, endian, unused, opq);                         \
+}                                                                                                   \
+static void read_yaf16##endian_name##_gray_c(uint8_t *dst, const uint8_t *src,                      \
+                                            const uint8_t *unused1, const uint8_t *unused2,         \
+                                            int width, uint32_t *unused, void *opq)                 \
+{                                                                                                   \
+    read_yaf16_gray_c(dst, src, unused1, unused2, width, endian, unused, opq);                      \
+}                                                                                                   \
+static void read_yaf16##endian_name##_alpha_c(uint8_t *dst, const uint8_t *src,                     \
+                                              const uint8_t *unused1, const uint8_t *unused2,       \
+                                              int width, uint32_t *unused, void *opq)               \
+{                                                                                                   \
+    read_yaf16_alpha_c(dst, src, unused1, unused2, width, endian, unused, opq);                     \
+}                                                                                                   \
+                                                                                                    \
 static void rgbaf16##endian_name##ToUV_half_c(uint8_t *_dstU, uint8_t *_dstV, const uint8_t *unused,      \
                                               const uint8_t *src1, const uint8_t *src2,                   \
                                               int width, uint32_t *_rgb2yuv, void *opq)                   \
@@ -1576,6 +1737,9 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_UYVY422:
         *chrToYV12 = uyvyToUV_c;
         break;
+    case AV_PIX_FMT_UYYVYY411:
+        *chrToYV12 = uyyvyyToUV_c;
+        break;
     case AV_PIX_FMT_VYU444:
         *chrToYV12 = vyuToUV_c;
         break;
@@ -1618,6 +1782,10 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_GBRPF32LE:
         *readChrPlanar = planar_rgbf32le_to_uv;
         break;
+    case AV_PIX_FMT_GBRAPF16LE:
+    case AV_PIX_FMT_GBRPF16LE:
+        *readChrPlanar = planar_rgbf16le_to_uv;
+        break;
     case AV_PIX_FMT_GBRP9BE:
         *readChrPlanar = planar_rgb9be_to_uv;
         break;
@@ -1640,6 +1808,10 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_GBRAPF32BE:
     case AV_PIX_FMT_GBRPF32BE:
         *readChrPlanar = planar_rgbf32be_to_uv;
+        break;
+    case AV_PIX_FMT_GBRAPF16BE:
+    case AV_PIX_FMT_GBRPF16BE:
+        *readChrPlanar = planar_rgbf16be_to_uv;
         break;
     case AV_PIX_FMT_GBRAP:
     case AV_PIX_FMT_GBRP:
@@ -1744,10 +1916,16 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_XV48BE:
         *chrToYV12 = read_xv48be_UV_c;
         break;
+    case AV_PIX_FMT_NV20LE:
+        *chrToYV12 = nv20LEToUV_c;
+        break;
     case AV_PIX_FMT_P010LE:
     case AV_PIX_FMT_P210LE:
     case AV_PIX_FMT_P410LE:
         *chrToYV12 = p010LEToUV_c;
+        break;
+    case AV_PIX_FMT_NV20BE:
+        *chrToYV12 = nv20BEToUV_c;
         break;
     case AV_PIX_FMT_P010BE:
     case AV_PIX_FMT_P210BE:
@@ -2025,6 +2203,11 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_GBRPF32LE:
         *readLumPlanar = planar_rgbf32le_to_y;
         break;
+    case AV_PIX_FMT_GBRAPF16LE:
+        *readAlpPlanar = planar_rgbf16le_to_a;
+    case AV_PIX_FMT_GBRPF16LE:
+        *readLumPlanar = planar_rgbf16le_to_y;
+        break;
     case AV_PIX_FMT_GBRP9BE:
         *readLumPlanar = planar_rgb9be_to_y;
         break;
@@ -2052,6 +2235,11 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
         *readAlpPlanar = planar_rgbf32be_to_a;
     case AV_PIX_FMT_GBRPF32BE:
         *readLumPlanar = planar_rgbf32be_to_y;
+        break;
+    case AV_PIX_FMT_GBRAPF16BE:
+        *readAlpPlanar = planar_rgbf16be_to_a;
+    case AV_PIX_FMT_GBRPF16BE:
+        *readLumPlanar = planar_rgbf16be_to_y;
         break;
     case AV_PIX_FMT_GBRAP:
         *readAlpPlanar = planar_rgb_to_a;
@@ -2153,6 +2341,12 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_YA16BE:
         *lumToYV12 = read_ya16be_gray_c;
         break;
+    case AV_PIX_FMT_YAF16LE:
+        *lumToYV12 = read_yaf16le_gray_c;
+        break;
+    case AV_PIX_FMT_YAF16BE:
+        *lumToYV12 = read_yaf16be_gray_c;
+        break;
     case AV_PIX_FMT_VUYA:
     case AV_PIX_FMT_VUYX:
         *lumToYV12 = read_vuyx_Y_c;
@@ -2188,6 +2382,9 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
         break;
     case AV_PIX_FMT_UYVY422:
         *lumToYV12 = uyvyToY_c;
+        break;
+    case AV_PIX_FMT_UYYVYY411:
+        *lumToYV12 = uyyvyyToY_c;
         break;
     case AV_PIX_FMT_VYU444:
         *lumToYV12 = vyuToY_c;
@@ -2283,10 +2480,16 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
     case AV_PIX_FMT_BGRA64LE:
         *lumToYV12 = bgr64LEToY_c;
         break;
+    case AV_PIX_FMT_NV20LE:
+        *lumToYV12 = nv20LEToY_c;
+        break;
     case AV_PIX_FMT_P010LE:
     case AV_PIX_FMT_P210LE:
     case AV_PIX_FMT_P410LE:
         *lumToYV12 = p010LEToY_c;
+        break;
+    case AV_PIX_FMT_NV20BE:
+        *lumToYV12 = nv20BEToY_c;
         break;
     case AV_PIX_FMT_P010BE:
     case AV_PIX_FMT_P210BE:
@@ -2308,6 +2511,18 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
         break;
     case AV_PIX_FMT_GRAYF32BE:
         *lumToYV12 = grayf32beToY16_c;
+        break;
+    case AV_PIX_FMT_YAF32LE:
+        *lumToYV12 = read_yaf32le_gray_c;
+        break;
+    case AV_PIX_FMT_YAF32BE:
+        *lumToYV12 = read_yaf32be_gray_c;
+        break;
+    case AV_PIX_FMT_GRAYF16LE:
+        *lumToYV12 = grayf16leToY16_c;
+        break;
+    case AV_PIX_FMT_GRAYF16BE:
+        *lumToYV12 = grayf16beToY16_c;
         break;
     case AV_PIX_FMT_Y210LE:
         *lumToYV12 = y210le_Y_c;
@@ -2375,6 +2590,18 @@ av_cold void ff_sws_init_input_funcs(SwsInternal *c,
             break;
         case AV_PIX_FMT_YA16BE:
             *alpToYV12 = read_ya16be_alpha_c;
+            break;
+        case AV_PIX_FMT_YAF16LE:
+            *alpToYV12 = read_yaf16le_alpha_c;
+            break;
+        case AV_PIX_FMT_YAF16BE:
+            *alpToYV12 = read_yaf16be_alpha_c;
+            break;
+        case AV_PIX_FMT_YAF32LE:
+            *alpToYV12 = read_yaf32le_alpha_c;
+            break;
+        case AV_PIX_FMT_YAF32BE:
+            *alpToYV12 = read_yaf32be_alpha_c;
             break;
         case AV_PIX_FMT_VUYA:
         case AV_PIX_FMT_UYVA:

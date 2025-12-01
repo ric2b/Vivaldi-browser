@@ -30,7 +30,6 @@ public abstract class AwParameterizedTest {
                         settings.setAllowFileAccessFromFileUrls(true);
                         settings.setAllowUniversalAccessFromFileUrls(true);
                         settings.setBuiltInZoomControls(true);
-                        settings.setDatabaseEnabled(true);
                         settings.setDisplayZoomControls(false);
                         settings.setDomStorageEnabled(true);
                         settings.setImagesEnabled(false);
@@ -52,6 +51,7 @@ public abstract class AwParameterizedTest {
                         settings.setDefaultFontSize(42);
                         settings.setTextZoom(200);
                         settings.setUserAgentString("foobar");
+                        settings.setPaymentRequestEnabled(true);
                     },
                     "allMutations..true")
         };

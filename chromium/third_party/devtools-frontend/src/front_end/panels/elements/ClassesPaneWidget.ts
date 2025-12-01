@@ -1,6 +1,7 @@
 // Copyright (c) 2015 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
@@ -179,11 +180,11 @@ export class ClassesPaneWidget extends UI.Widget.Widget {
     const keys = [...classes.keys()];
     keys.sort(Platform.StringUtilities.caseInsensetiveComparator);
     for (const className of keys) {
-      const label = UI.UIUtils.CheckboxLabel.createWithStringLiteral(
-          className, classes.get(className), undefined, 'element-class', true);
-      label.classList.add('monospace');
-      label.checkboxElement.addEventListener('click', this.onClick.bind(this, className), false);
-      this.classesContainer.appendChild(label);
+      const checkbox =
+          UI.UIUtils.CheckboxLabel.createWithStringLiteral(className, classes.get(className), 'element-class', true);
+      checkbox.classList.add('monospace');
+      checkbox.addEventListener('click', this.onClick.bind(this, className), false);
+      this.classesContainer.appendChild(checkbox);
     }
   }
 

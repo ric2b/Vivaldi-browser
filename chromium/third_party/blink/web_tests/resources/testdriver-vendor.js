@@ -426,13 +426,17 @@
   }
 
   window.test_driver_internal.update_virtual_pressure_source = function(
-      source_type, sample) {
-    return internals.updateVirtualPressureSource(source_type, sample);
+      source_type, state, own_contribution_estimate = -1.0) {
+    return internals.updateVirtualPressureSource(source_type, state, own_contribution_estimate);
   }
 
   window.test_driver_internal.remove_virtual_pressure_source = function(
       source_type) {
     return internals.removeVirtualPressureSource(source_type);
+  }
+
+  window.test_driver_internal.set_protected_audience_k_anonymity = function(owner, name, hashes) {
+    return internals.setProtectedAudienceKAnonymity(owner, name, hashes);
   }
 
   // Enable automation so we don't wait for user input on unimplemented APIs

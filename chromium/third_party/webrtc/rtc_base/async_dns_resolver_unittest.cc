@@ -17,7 +17,6 @@
 #include "rtc_base/logging.h"
 #include "rtc_base/net_helpers.h"
 #include "rtc_base/socket_address.h"
-#include "rtc_base/thread.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
 #include "test/run_loop.h"
@@ -28,7 +27,7 @@ namespace {
 
 using ::testing::IsTrue;
 
-const webrtc::TimeDelta kDefaultTimeout = webrtc::TimeDelta::Millis(1000);
+const TimeDelta kDefaultTimeout = TimeDelta::Millis(1000);
 const int kPortNumber = 3027;
 
 TEST(AsyncDnsResolver, ConstructorWorks) {
@@ -64,7 +63,7 @@ TEST(AsyncDnsResolver, ResolveAfterDeleteDoesNotReturn) {
   bool done = false;
   resolver->Start(address, [&done] { done = true; });
   resolver.reset();                    // Deletes resolver.
-  Thread::Current()->SleepMs(1);       // Allows callback to execute
+  loop.Flush();                        // Allows callback to execute
   EXPECT_FALSE(done);                  // Expect no result.
 }
 

@@ -156,6 +156,7 @@ include $(SRC_PATH)/tests/fate/amrnb.mak
 include $(SRC_PATH)/tests/fate/amrwb.mak
 include $(SRC_PATH)/tests/fate/api.mak
 include $(SRC_PATH)/tests/fate/apng.mak
+include $(SRC_PATH)/tests/fate/apv.mak
 include $(SRC_PATH)/tests/fate/atrac.mak
 include $(SRC_PATH)/tests/fate/audio.mak
 include $(SRC_PATH)/tests/fate/bmp.mak
@@ -207,6 +208,7 @@ include $(SRC_PATH)/tests/fate/libavformat.mak
 include $(SRC_PATH)/tests/fate/libavutil.mak
 include $(SRC_PATH)/tests/fate/libswresample.mak
 include $(SRC_PATH)/tests/fate/libswscale.mak
+include $(SRC_PATH)/tests/fate/libpostproc.mak
 include $(SRC_PATH)/tests/fate/lossless-audio.mak
 include $(SRC_PATH)/tests/fate/lossless-video.mak
 include $(SRC_PATH)/tests/fate/matroska.mak
@@ -219,6 +221,9 @@ include $(SRC_PATH)/tests/fate/mpeg4.mak
 include $(SRC_PATH)/tests/fate/mpegps.mak
 include $(SRC_PATH)/tests/fate/mpegts.mak
 include $(SRC_PATH)/tests/fate/mxf.mak
+include $(SRC_PATH)/tests/fate/ogg-vorbis.mak
+include $(SRC_PATH)/tests/fate/ogg-flac.mak
+include $(SRC_PATH)/tests/fate/ogg-opus.mak
 include $(SRC_PATH)/tests/fate/oma.mak
 include $(SRC_PATH)/tests/fate/opus.mak
 include $(SRC_PATH)/tests/fate/pcm.mak
@@ -277,6 +282,7 @@ $(FATE_FFPROBE) $(FATE_FFMPEG_FFPROBE) $(FATE_SAMPLES_FFPROBE) $(FATE_SAMPLES_FF
 $(FATE_SAMPLES_FASTSTART): tools/qt-faststart$(EXESUF)
 $(FATE_SAMPLES_DUMP_DATA) $(FATE_SAMPLES_DUMP_DATA-yes): tools/venc_data_dump$(EXESUF)
 $(FATE_SAMPLES_SCALE_SLICE): tools/scale_slice_test$(EXESUF)
+$(FATE_SAMPLES_DUMP_STREAM_META): tests/api/api-dump-stream-meta-test$(EXESUF)
 
 ifdef SAMPLES
 FATE += $(FATE_EXTERN)

@@ -68,6 +68,14 @@ class ChromeBrowserAppMacBrowserTest : public InProcessBrowserTest {
     SetVoiceOverEnabled(VoiceOverEnabledAtStartUp());
   }
 
+  void SetUpOnMainThread() override {
+    // Enable platform activation since that is what is begin tested here.
+    content::BrowserAccessibilityState::GetInstance()
+        ->SetActivationFromPlatformEnabled(
+            /*enabled=*/true);
+    InProcessBrowserTest::SetUpOnMainThread();
+  }
+
   // Whether or not we simulate VoiceOver active before the test runs.
   virtual BOOL VoiceOverEnabledAtStartUp() { return NO; }
 
@@ -96,7 +104,8 @@ class ChromeBrowserAppMacBrowserTest : public InProcessBrowserTest {
   }
 
   bool BrowserIsInCompleteAccessibilityMode() {
-    return BrowserIsInAccessibilityMode(ui::kAXModeComplete);
+    return BrowserIsInAccessibilityMode(ui::kAXModeComplete |
+                                        ui::AXMode::kScreenReader);
   }
 
   bool BrowserIsInBasicAccessibilityMode() {
@@ -312,5 +321,6 @@ IN_PROC_BROWSER_TEST_F(ChromeBrowserAppMacBrowserMacVoiceOverEnabledTest,
 
   // Enable VoiceOver.
   EXPECT_TRUE(VoiceOverEnabled());
-  EXPECT_EQ(accessibility_state->GetAccessibilityMode(), ui::kAXModeComplete);
+  EXPECT_EQ(accessibility_state->GetAccessibilityMode(),
+            ui::kAXModeComplete | ui::AXMode::kScreenReader);
 }

@@ -1,6 +1,7 @@
 // Copyright 2023 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../../ui/legacy/components/data_grid/data_grid.js';
 
@@ -59,7 +60,7 @@ export class PreloadingMismatchedHeadersGrid extends LegacyWrapper.LegacyWrapper
     // Disabled until https://crbug.com/1079231 is fixed.
     // clang-format off
       render(html`
-        <style>${preloadingGridStyles.cssText}</style>
+        <style>${preloadingGridStyles}</style>
         <div class="preloading-container">
           <devtools-data-grid striped inline>
             <table>

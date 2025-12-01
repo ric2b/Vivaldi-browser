@@ -22,6 +22,7 @@
 #import "ios/chrome/browser/send_tab_to_self/model/send_tab_to_self_browser_agent.h"
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/browser.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/public/features/features.h"
 #import "ios/chrome/browser/signin/model/authentication_service.h"
 #import "ios/chrome/browser/signin/model/authentication_service_factory.h"
@@ -38,18 +39,33 @@ NSString* const kGuidKey = @"SendTabGuid";
 
 }  // namespace
 
+SendTabPushNotificationClient::SendTabPushNotificationClient(
+    ProfileIOS* profile)
+    : PushNotificationClient(PushNotificationClientId::kSendTab, profile) {
+  CHECK(IsMultiProfilePushNotificationHandlingEnabled());
+}
+
 SendTabPushNotificationClient::SendTabPushNotificationClient()
-    : PushNotificationClient(PushNotificationClientId::kSendTab) {}
+    : PushNotificationClient(PushNotificationClientId::kSendTab,
+                             PushNotificationClientScope::kPerProfile) {
+  CHECK(!IsMultiProfilePushNotificationHandlingEnabled());
+}
 
 SendTabPushNotificationClient::~SendTabPushNotificationClient() = default;
+
+bool SendTabPushNotificationClient::CanHandleNotification(
+    UNNotification* notification) {
+  NSDictionary* user_info = notification.request.content.userInfo;
+  return [user_info[kPushNotificationClientIdKey] intValue] ==
+         static_cast<int>(PushNotificationClientId::kSendTab);
+}
 
 bool SendTabPushNotificationClient::HandleNotificationInteraction(
     UNNotificationResponse* response) {
   NSDictionary* user_info = response.notification.request.content.userInfo;
-  DCHECK(user_info);
+  CHECK(user_info);
 
-  if ([user_info[kPushNotificationClientIdKey] intValue] !=
-      static_cast<int>(PushNotificationClientId::kSendTab)) {
+  if (!CanHandleNotification(response.notification)) {
     return false;
   }
 

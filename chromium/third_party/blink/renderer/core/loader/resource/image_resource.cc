@@ -270,24 +270,17 @@ class ImageResource::ImageResourceFactory : public NonTextResourceFactory {
   STACK_ALLOCATED();
 
  public:
-  explicit ImageResourceFactory(bool transparent_image_optimization_enabled)
-      : NonTextResourceFactory(ResourceType::kImage),
-        transparent_image_optimization_enabled_(
-            transparent_image_optimization_enabled) {}
+  ImageResourceFactory() : NonTextResourceFactory(ResourceType::kImage) {}
 
   Resource* Create(const ResourceRequest& request,
                    const ResourceLoaderOptions& options) const override {
-    if (transparent_image_optimization_enabled_ &&
-        (request.GetKnownTransparentPlaceholderImageIndex() != kNotFound)) {
+    if (request.GetKnownTransparentPlaceholderImageIndex() != kNotFound) {
       return CreateResourceForTransparentPlaceholderImage(request, options);
     }
 
     return MakeGarbageCollected<ImageResource>(
         request, options, ImageResourceContent::CreateNotStarted());
   }
-
- private:
-  const bool transparent_image_optimization_enabled_;
 };
 
 ImageResource* ImageResource::Fetch(FetchParameters& params,
@@ -319,12 +312,10 @@ ImageResource* ImageResource::Fetch(FetchParameters& params,
     params.MutableResourceRequest().SetCacheMode(
         mojom::FetchCacheMode::kOnlyIfCached);
   }
+  // End Vivaldi
 
-  auto* resource = To<ImageResource>(fetcher->RequestResource(
-      params,
-      ImageResourceFactory(
-          fetcher->IsSimplifyLoadingTransparentPlaceholderImageEnabled()),
-      nullptr));
+  auto* resource = To<ImageResource>(
+      fetcher->RequestResource(params, ImageResourceFactory(), nullptr));
 
   // If the fetch originated from user agent CSS we should mark it as a user
   // agent resource.
@@ -365,8 +356,7 @@ ImageResource* ImageResource::CreateForTest(const KURL& url) {
   request.SetPriority(WebURLRequest::Priority::kLow);
   MarkKnownTransparentPlaceholderResourceRequestIfNeeded(request);
 
-  ImageResourceFactory factory(base::FeatureList::IsEnabled(
-      features::kSimplifyLoadingTransparentPlaceholderImage));
+  ImageResourceFactory factory;
   return To<ImageResource>(
       factory.Create(request, ResourceLoaderOptions(/* world=*/nullptr)));
 }
@@ -621,8 +611,10 @@ ImageResource::PriorityFromObservers() const {
   return GetContent()->PriorityFromObservers();
 }
 
-bool ImageResource::HasNonDegenerateSizeForDecode() const {
-  return GetContent()->HasNonDegenerateSizeForDecode();
+bool ImageResource::IsAboveSpeculativeDecodeSizeThreshold() const {
+  // Images with too few pixels will not be speculatively decoded.
+  return GetContent()->MaxSize().GetCheckedArea().ValueOrDefault(0) >=
+         kSpeculativeDecodeMinImageSize;
 }
 
 void ImageResource::OnePartInMultipartReceived(

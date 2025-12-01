@@ -354,6 +354,9 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
 }
 
 - (BOOL)canDismiss {
+  if (self.mediator && ![self.mediator canDismiss]) {
+    return NO;
+  }
   if (self.folderChooserCoordinator &&
       ![self.folderChooserCoordinator canDismiss]) {
     return NO;
@@ -513,7 +516,13 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   if (_bookmarkModel->loaded() &&
       (![self isDisplayingBookmarkRoot] ||
        self.mediator.currentlyShowingSearchResults)) {
+    if (IsVivaldiRunning()) {
+      self.navigationController.toolbarHidden =
+          vivaldi_bookmark_kit::IsChildOfTrashNode(
+              _bookmarkModel.get(), self.displayedFolderNode);
+    } else {
     self.navigationController.toolbarHidden = NO;
+    } // End Vivaldi
   } else {
     self.navigationController.toolbarHidden = YES;
   }
@@ -978,7 +987,9 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
                  userAction:(const char*)userAction {
 
   if (vivaldi::IsVivaldiRunning()) {
-    if (vivaldi_bookmark_kit::IsTrash(self.displayedFolderNode)) {
+    if (vivaldi_bookmark_kit::IsTrash(self.displayedFolderNode) ||
+        vivaldi_bookmark_kit::IsChildOfTrashNode(_bookmarkModel.get(),
+                                                 self.displayedFolderNode)) {
       [self deleteBookmarkNodesVivaldi:nodes];
     } else {
       [self moveNodesToTrash:nodes];
@@ -1546,7 +1557,13 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   }
   if (![self isDisplayingBookmarkRoot] ||
       self.mediator.currentlyShowingSearchResults) {
+    if (IsVivaldiRunning()) {
+      self.navigationController.toolbarHidden =
+          vivaldi_bookmark_kit::IsChildOfTrashNode(
+              _bookmarkModel.get(), self.displayedFolderNode);
+    } else {
     self.navigationController.toolbarHidden = NO;
+    } // End Vivaldi
     [self setContextBarState:BookmarksContextBarDefault];
   } else {
     self.navigationController.toolbarHidden = YES;
@@ -2949,6 +2966,55 @@ BookmarkNodeIDSet GetBookmarkNodeIDSet(
   UIContextMenuActionProvider actionProvider;
 
   __weak BookmarksHomeViewController* weakSelf = self;
+
+  if (IsVivaldiRunning()) {
+    BOOL isTrashedItem =
+        vivaldi_bookmark_kit::IsChildOfTrashNode(_bookmarkModel.get(), node);
+
+    // For item in trash only keep move and delete option.
+    if (isTrashedItem) {
+      const int64_t nodeID = node->id();
+      actionProvider = ^(NSArray<UIMenuElement*>* suggestedActions) {
+        __strong __typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf)
+          return [UIMenu menuWithTitle:@"" children:@[]];
+
+        BrowserActionFactory* actionFactory = [[BrowserActionFactory alloc]
+            initWithBrowser:strongSelf->_browser.get()
+                   scenario:kMenuScenarioHistogramNoteEntry];
+
+        NSMutableArray<UIMenuElement*>* menuElements =
+            [[NSMutableArray alloc] init];
+
+        // Add move menu item.
+        UIAction* moveAction = [actionFactory actionToMoveFolderWithBlock:^{
+          [strongSelf moveBookmarkNodeWithIDs:{nodeID}
+                              userAction:"MobileBookmarkManagerMoveToFolder"];
+        }];
+        [menuElements addObject:moveAction];
+
+        // Add delete menu item.
+        UIAction* deleteAction = [actionFactory actionToDeleteWithBlock:^{
+          [strongSelf deleteBookmarkNodeWithID:nodeID
+                              userAction:"MobileBookmarkManagerEntryDeleted"];
+        }];
+        [menuElements addObject:deleteAction];
+        // Disable Edit and Delete if the node cannot be edited.
+        if (!canEditNode) {
+          moveAction.attributes = UIMenuElementAttributesDisabled;
+          deleteAction.attributes = UIMenuElementAttributesDisabled;
+        }
+
+        return [UIMenu menuWithTitle:@"" children:menuElements];
+      };
+
+      return
+          [UIContextMenuConfiguration configurationWithIdentifier:nil
+                                                  previewProvider:nil
+                                                actionProvider:actionProvider];
+    }
+  } // End Vivaldi
+
   if (node->is_url()) {
     actionProvider = ^(NSArray<UIMenuElement*>* suggestedActions) {
       return [weakSelf bookmarkNodeContextualMenuWithIndexPath:indexPath

@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "build/build_config.h"
@@ -345,7 +344,7 @@ void SharedImageBacking::ReleaseRef(SharedImageRepresentation* representation) {
   DCHECK(is_ref_counted_);
 
   auto found = std::ranges::find(refs_, representation);
-  CHECK(found != refs_.end(), base::NotFatalUntil::M130);
+  CHECK(found != refs_.end());
 
   // If the found representation is the first (owning) ref, free the attributed
   // memory.
@@ -471,6 +470,14 @@ gfx::Rect ClearTrackingSharedImageBacking::ClearedRectInternal() const {
 void ClearTrackingSharedImageBacking::SetClearedRectInternal(
     const gfx::Rect& cleared_rect) {
   cleared_rect_ = cleared_rect;
+}
+
+void ClearTrackingSharedImageBacking::SetClearedInternal() {
+  cleared_rect_ = gfx::Rect(size());
+}
+
+bool ClearTrackingSharedImageBacking::IsClearedInternal() const {
+  return cleared_rect_ == gfx::Rect(size());
 }
 
 scoped_refptr<gfx::NativePixmap> SharedImageBacking::GetNativePixmap() {

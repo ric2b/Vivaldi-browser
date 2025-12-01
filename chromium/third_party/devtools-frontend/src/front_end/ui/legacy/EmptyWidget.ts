@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import * as i18n from '../../core/i18n/i18n.js';
 import type * as Platform from '../../core/platform/platform.js';
 import * as VisualLogging from '../visual_logging/visual_logging.js';
@@ -48,9 +50,10 @@ const i18nString = i18n.i18n.getLocalizedString.bind(undefined, str_);
 export class EmptyWidget extends VBox {
   #headerElement: HTMLElement;
   #textElement: HTMLElement;
+  #linkElement?: HTMLElement;
 
-  constructor(header: string, text: string) {
-    super();
+  constructor(header: string, text: string, element?: HTMLElement) {
+    super(undefined, undefined, element);
     this.registerRequiredCSS(emptyWidgetStyles);
     this.element.classList.add('empty-view-scroller');
     this.contentElement = this.element.createChild('div', 'empty-state');
@@ -61,16 +64,21 @@ export class EmptyWidget extends VBox {
     this.#textElement.textContent = text;
   }
 
-  appendLink(link: Platform.DevToolsPath.UrlString): HTMLElement {
-    const learnMoreLink = XLink.create(
+  set link(link: Platform.DevToolsPath.UrlString|undefined|null) {
+    if (this.#linkElement) {
+      this.#linkElement.remove();
+    }
+    if (!link) {
+      return;
+    }
+    this.#linkElement = XLink.create(
         link,
         i18nString(UIStrings.learnMore),
         undefined,
         undefined,
         'learn-more',
     );
-    this.#textElement.insertAdjacentElement('afterend', learnMoreLink);
-    return learnMoreLink;
+    this.#textElement.insertAdjacentElement('afterend', this.#linkElement);
   }
 
   set text(text: string) {

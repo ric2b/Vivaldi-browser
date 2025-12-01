@@ -23,21 +23,6 @@ using TokenError = content::IdentityCredentialTokenError;
 // identity dialog controller with the Android frontend.
 class AccountSelectionView {
  public:
-  // This enum is used for histograms. Do not remove or modify existing values,
-  // but you may add new values at the end and increase COUNT. This enum should
-  // be kept in sync with SheetType in
-  // chrome/browser/ui/android/webid/AccountSelectionMediator.java as well as
-  // with FedCmSheetType in tools/metrics/histograms/enums.xml.
-  enum SheetType {
-    ACCOUNT_SELECTION = 0,
-    VERIFYING = 1,
-    AUTO_REAUTHN = 2,
-    SIGN_IN_TO_IDP_STATIC = 3,
-    SIGN_IN_ERROR = 4,
-    LOADING = 5,
-    COUNT = 6
-  };
-
   class Delegate {
    public:
     virtual ~Delegate() = default;
@@ -92,7 +77,6 @@ class AccountSelectionView {
       const content::RelyingPartyData& rp_data,
       const std::vector<IdentityProviderDataPtr>& idp_list,
       const std::vector<IdentityRequestAccountPtr>& accounts,
-      Account::SignInMode sign_in_mode,
       blink::mojom::RpMode rp_mode,
       const std::vector<IdentityRequestAccountPtr>& new_accounts) = 0;
 
@@ -102,7 +86,7 @@ class AccountSelectionView {
   // Returns true if it was possible to show UI. If this method could not show
   // UI and called Dismiss, returns false.
   virtual bool ShowFailureDialog(
-      const std::string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::string& idp_for_display,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
@@ -112,7 +96,7 @@ class AccountSelectionView {
   // Returns true if it was possible to show UI. If this method could not show
   // UI and called Dismiss, returns false.
   virtual bool ShowErrorDialog(
-      const std::string& rp_for_display,
+      const content::RelyingPartyData& rp_data,
       const std::string& idp_for_display,
       blink::mojom::RpContext rp_context,
       blink::mojom::RpMode rp_mode,
@@ -122,10 +106,20 @@ class AccountSelectionView {
   // Shows a loading dialog to the user. Used in the button mode, to acknowledge
   // the user interaction. Returns true if it was possible to show UI. If this
   // method could not show UI and called Dismiss, returns false.
-  virtual bool ShowLoadingDialog(const std::string& rp_for_display,
+  virtual bool ShowLoadingDialog(const content::RelyingPartyData& rp_data,
                                  const std::string& idp_for_display,
                                  blink::mojom::RpContext rp_context,
                                  blink::mojom::RpMode rp_mode) = 0;
+
+  // Shows a verifying dialog to the user. This is called after an account is
+  // selected, either by the user in the explicit authentication flow or by the
+  // browser in the auto re-authentication flow. Returns true if it was possible
+  // to show UI.
+  virtual bool ShowVerifyingDialog(const content::RelyingPartyData& rp_data,
+                                   const IdentityProviderDataPtr& idp_list,
+                                   const IdentityRequestAccountPtr& account,
+                                   Account::SignInMode sign_in_mode,
+                                   blink::mojom::RpMode rp_mode) = 0;
 
   virtual std::string GetTitle() const = 0;
   virtual std::optional<std::string> GetSubtitle() const = 0;

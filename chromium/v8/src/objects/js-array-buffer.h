@@ -314,6 +314,7 @@ class JSArrayBufferView
   DEFINE_TORQUE_GENERATED_JS_ARRAY_BUFFER_VIEW_FLAGS()
 
   inline bool WasDetached() const;
+  inline bool IsDetachedOrOutOfBounds() const;
 
   DECL_BOOLEAN_ACCESSORS(is_length_tracking)
   DECL_BOOLEAN_ACCESSORS(is_backed_by_rab)
@@ -345,7 +346,7 @@ class JSTypedArray
   ExternalArrayType type();
   V8_EXPORT_PRIVATE size_t element_size() const;
 
-  V8_EXPORT_PRIVATE Handle<JSArrayBuffer> GetBuffer();
+  V8_EXPORT_PRIVATE Handle<JSArrayBuffer> GetBuffer(Isolate* isolate);
 
   // The `DataPtr` is `base_ptr + external_pointer`, and `base_ptr` is nullptr
   // for off-heap typed arrays.
@@ -368,7 +369,6 @@ class JSTypedArray
   inline size_t GetLength() const;
   inline size_t GetByteLength() const;
   inline bool IsOutOfBounds() const;
-  inline bool IsDetachedOrOutOfBounds() const;
 
   static inline void ForFixedTypedArray(ExternalArrayType array_type,
                                         size_t* element_size,

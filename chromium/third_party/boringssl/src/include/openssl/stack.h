@@ -360,9 +360,15 @@ BSSL_NAMESPACE_END
    * positive warning. */                                                      \
   OPENSSL_MSVC_PRAGMA(warning(push))                                           \
   OPENSSL_MSVC_PRAGMA(warning(disable : 4191))                                 \
-  OPENSSL_CLANG_PRAGMA("clang diagnostic push")                                \
-  OPENSSL_CLANG_PRAGMA("clang diagnostic ignored \"-Wunknown-warning-option\"") \
-  OPENSSL_CLANG_PRAGMA("clang diagnostic ignored \"-Wcast-function-type-strict\"") \
+  OPENSSL_GNUC_CLANG_PRAGMA("GCC diagnostic push")                             \
+  OPENSSL_CLANG_PRAGMA(                                                        \
+      "clang diagnostic ignored \"-Wunknown-warning-option\"")                 \
+  OPENSSL_CLANG_PRAGMA(                                                        \
+      "clang diagnostic ignored \"-Wcast-function-type-strict\"")              \
+  /* We also disable -Wcast-qual. As part of this C-based type erasure setup,  \
+   * the wrapper macros need to cast away const in places. In C++, const_cast  \
+   * suppresses the warning, but it seemingly cannot be suppressed in C. */    \
+  OPENSSL_GNUC_CLANG_PRAGMA("GCC diagnostic ignored \"-Wcast-qual\"")          \
                                                                                \
   DECLARE_STACK_OF(name)                                                       \
                                                                                \
@@ -498,7 +504,7 @@ BSSL_NAMESPACE_END
         (OPENSSL_sk_free_func)free_func);                                      \
   }                                                                            \
                                                                                \
-  OPENSSL_CLANG_PRAGMA("clang diagnostic pop")                                 \
+  OPENSSL_GNUC_CLANG_PRAGMA("GCC diagnostic pop")                              \
   OPENSSL_MSVC_PRAGMA(warning(pop))
 
 

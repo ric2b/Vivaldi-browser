@@ -4,6 +4,7 @@
 
 #include "components/ip_protection/common/ip_protection_probabilistic_reveal_token_data_storage.h"
 
+#include <cstdint>
 #include <string>
 
 #include "base/base64.h"
@@ -78,7 +79,25 @@ class ProbabilisticRevealTokenDataStorageTest : public testing::Test {
     static const char kCountSQL[] =
         "SELECT COUNT(*) FROM tokens WHERE public_key = ?";
     sql::Statement s(db.GetUniqueStatement(kCountSQL));
-    s.BindString(0, base::Base64Encode(public_key));
+    s.BindString(0, public_key);
+    EXPECT_TRUE(s.Step());
+    return s.ColumnInt(0);
+  }
+
+  size_t CountTokenEntriesOnEpoch(sql::Database& db, std::string_view epoch) {
+    static const char kCountSQL[] =
+        "SELECT COUNT(*) FROM tokens WHERE epoch_id = ?";
+    sql::Statement s(db.GetUniqueStatement(kCountSQL));
+    s.BindString(0, epoch);
+    EXPECT_TRUE(s.Step());
+    return s.ColumnInt(0);
+  }
+
+  size_t CountTokenEntriesWithBatchSize(sql::Database& db, int64_t batch_size) {
+    static const char kCountSQL[] =
+        "SELECT COUNT(*) FROM tokens WHERE batch_size = ?";
+    sql::Statement s(db.GetUniqueStatement(kCountSQL));
+    s.BindInt64(0, batch_size);
     EXPECT_TRUE(s.Step());
     return s.ColumnInt(0);
   }
@@ -126,11 +145,11 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest,
   // [tokens], [meta].
   EXPECT_EQ(2u, sql::test::CountSQLTables(&db));
 
-  EXPECT_EQ(3, VersionFromMetaTable(db));
+  EXPECT_EQ(5, VersionFromMetaTable(db));
 
   // `version`, `u`, `e`, `epoch_id`, `expiration`, `num_tokens_with_signal`,
-  // and `public_key`.
-  EXPECT_EQ(7u, sql::test::CountTableColumns(&db, "tokens"));
+  // `public_key`, and `batch_size`.
+  EXPECT_EQ(8u, sql::test::CountTableColumns(&db, "tokens"));
 
   EXPECT_EQ(0u, CountTokenEntries(db));
 }
@@ -138,7 +157,7 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest,
 TEST_F(ProbabilisticRevealTokenDataStorageTest,
        LoadFromFile_CurrentVersion_Success) {
   ASSERT_TRUE(sql::test::CreateDatabaseFromSQL(
-      DbPath(), GetSqlFilePath("probabilistic_reveal_tokens_v3.sql")));
+      DbPath(), GetSqlFilePath("probabilistic_reveal_tokens_v5.sql")));
 
   OpenDatabase();
   // Trigger the lazy-initialization.
@@ -150,14 +169,14 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest,
   sql::Database db(sql::test::kTestTag);
   EXPECT_TRUE(db.Open(DbPath()));
   EXPECT_EQ(2u, sql::test::CountSQLTables(&db));
-  EXPECT_EQ(3, VersionFromMetaTable(db));
+  EXPECT_EQ(5, VersionFromMetaTable(db));
   EXPECT_EQ(1u, CountTokenEntries(db));
 }
 
 TEST_F(ProbabilisticRevealTokenDataStorageTest,
        LoadFromFile_VersionTooOld_Failure) {
   ASSERT_TRUE(sql::test::CreateDatabaseFromSQL(
-      DbPath(), GetSqlFilePath("probabilistic_reveal_tokens_v2.too_old.sql")));
+      DbPath(), GetSqlFilePath("probabilistic_reveal_tokens_v4.too_old.sql")));
 
   OpenDatabase();
   // Trigger the lazy-initialization.
@@ -169,14 +188,14 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest,
   sql::Database db(sql::test::kTestTag);
   EXPECT_TRUE(db.Open(DbPath()));
   EXPECT_EQ(2u, sql::test::CountSQLTables(&db));
-  EXPECT_EQ(3, VersionFromMetaTable(db));
+  EXPECT_EQ(5, VersionFromMetaTable(db));
   EXPECT_EQ(0u, CountTokenEntries(db));
 }
 
 TEST_F(ProbabilisticRevealTokenDataStorageTest,
        LoadFromFile_VersionTooNew_Failure) {
   ASSERT_TRUE(sql::test::CreateDatabaseFromSQL(
-      DbPath(), GetSqlFilePath("probabilistic_reveal_tokens_v4.too_new.sql")));
+      DbPath(), GetSqlFilePath("probabilistic_reveal_tokens_v6.too_new.sql")));
 
   OpenDatabase();
   // Trigger the lazy-initialization.
@@ -188,7 +207,7 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest,
   sql::Database db(sql::test::kTestTag);
   EXPECT_TRUE(db.Open(DbPath()));
   EXPECT_EQ(2u, sql::test::CountSQLTables(&db));
-  EXPECT_EQ(3, VersionFromMetaTable(db));
+  EXPECT_EQ(5, VersionFromMetaTable(db));
   EXPECT_EQ(0u, CountTokenEntries(db));
 }
 
@@ -208,8 +227,8 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest, StoreTokenOutcome) {
   // Store 3 tokens across two calls.
   OpenDatabase();
   outcome.tokens.emplace_back(/*version=*/1, std::string(kPRTPointSize, 'u'),
-                              std::string(kPRTPointSize, 'e'),
-                              std::string(8, '0'));
+                              std::string(kPRTPointSize, 'e'));
+  outcome.epoch_id = std::string(8, '0');
   outcome.expiration_time_seconds = 123;
   outcome.next_epoch_start_time_seconds = 456;
   outcome.num_tokens_with_signal = 100;
@@ -218,11 +237,10 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest, StoreTokenOutcome) {
 
   TryGetProbabilisticRevealTokensOutcome outcome2;
   outcome2.tokens.emplace_back(/*version=*/1, std::string(kPRTPointSize, 'u'),
-                               std::string(kPRTPointSize, 'e'),
-                               std::string(8, '0'));
+                               std::string(kPRTPointSize, 'e'));
   outcome2.tokens.emplace_back(/*version=*/1, std::string(kPRTPointSize, 'u'),
-                               std::string(kPRTPointSize, 'e'),
-                               std::string(8, '0'));
+                               std::string(kPRTPointSize, 'e'));
+  outcome2.epoch_id = std::string(8, '1');
   outcome2.expiration_time_seconds = 234;
   outcome2.next_epoch_start_time_seconds = 567;
   outcome2.num_tokens_with_signal = 200;
@@ -232,8 +250,16 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest, StoreTokenOutcome) {
 
   EXPECT_TRUE(db.Open(DbPath()));
   EXPECT_EQ(3u, CountTokenEntries(db));
-  EXPECT_EQ(1u, CountTokenEntriesOnPublicKey(db, "public_key"));
-  EXPECT_EQ(2u, CountTokenEntriesOnPublicKey(db, "public_key_2"));
+  EXPECT_EQ(1u, CountTokenEntriesOnPublicKey(
+                    db, "cHVibGljX2tleQ"));  // base64url_encode(public_key)
+  EXPECT_EQ(2u, CountTokenEntriesOnPublicKey(
+                    db, "cHVibGljX2tleV8y"));  // base64url_encode(public_key_2)
+  EXPECT_EQ(1u, CountTokenEntriesWithBatchSize(db, outcome.tokens.size()));
+  EXPECT_EQ(2u, CountTokenEntriesWithBatchSize(db, outcome2.tokens.size()));
+  EXPECT_EQ(1u, CountTokenEntriesOnEpoch(
+                    db, "MDAwMDAwMDA"));  // base64url_encode(00000000)
+  EXPECT_EQ(2u, CountTokenEntriesOnEpoch(
+                    db, "MTExMTExMTE"));  // base64url_encode(11111111)
   CloseDatabase();
 }
 
@@ -274,8 +300,8 @@ TEST_F(ProbabilisticRevealTokenDataStorageTest, OpenCorruptedDatabase) {
   // Trigger the lazy-initialization by attempting to store a token.
   TryGetProbabilisticRevealTokensOutcome outcome;
   outcome.tokens.emplace_back(/*version=*/1, std::string(kPRTPointSize, 'u'),
-                              std::string(kPRTPointSize, 'e'),
-                              std::string(8, '0'));
+                              std::string(kPRTPointSize, 'e'));
+  outcome.epoch_id = std::string(8, '0');
   outcome.expiration_time_seconds = 123;
   outcome.next_epoch_start_time_seconds = 456;
   outcome.num_tokens_with_signal = 100;

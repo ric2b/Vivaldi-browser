@@ -44,6 +44,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "remoting/host/chromeos/chromeos_enterprise_params.h"
 #include "remoting/host/chromeos/features.h"
 #include "remoting/host/chromeos/remote_support_host_ash.h"
 #include "remoting/host/chromeos/remoting_service.h"
@@ -174,6 +175,8 @@ std::ostream& operator<<(std::ostream& os,
             << ", allow_troubleshooting_tools "
             << parameters.allow_troubleshooting_tools
             << ", allow_reconnections " << parameters.allow_reconnections
+            << ", allow_remote_input " << parameters.allow_remote_input
+            << ", allow_clipboard_sync " << parameters.allow_clipboard_sync
             << "}";
 }
 
@@ -361,10 +364,14 @@ remoting::ChromeOsEnterpriseParams GetEnterpriseParameters(
   params.allow_reconnections = parameters.allow_reconnections;
   params.allow_file_transfer = parameters.allow_file_transfer;
   params.connection_dialog_required = parameters.show_confirmation_dialog;
+  params.request_origin =
+      ConvertToChromeOsEnterpriseRequestOrigin(parameters.request_origin);
   params.connection_auto_accept_timeout =
       parameters.connection_auto_accept_timeout.value_or(base::TimeDelta());
   params.maximum_session_duration =
       parameters.maximum_session_duration.value_or(base::TimeDelta());
+  params.allow_remote_input = parameters.allow_remote_input;
+  params.allow_clipboard_sync = parameters.allow_clipboard_sync;
 
   return params;
 }

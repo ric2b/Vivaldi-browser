@@ -38,7 +38,8 @@ void OpenXrGraphicsBinding::GetRequiredExtensions(
 
 OpenXrGraphicsBindingD3D11::OpenXrGraphicsBindingD3D11(
     base::WeakPtr<OpenXrPlatformHelperWindows> weak_platform_helper)
-    : texture_helper_(std::make_unique<D3D11TextureHelper>()),
+    : OpenXrGraphicsBinding(weak_platform_helper->GetExtensionEnumeration()),
+      texture_helper_(std::make_unique<D3D11TextureHelper>()),
       weak_platform_helper_(weak_platform_helper) {}
 
 OpenXrGraphicsBindingD3D11::~OpenXrGraphicsBindingD3D11() = default;
@@ -123,6 +124,11 @@ void OpenXrGraphicsBindingD3D11::ClearSwapchainImages() {
 }
 
 base::span<SwapChainInfo> OpenXrGraphicsBindingD3D11::GetSwapChainImages() {
+  return color_swapchain_images_;
+}
+
+base::span<const SwapChainInfo> OpenXrGraphicsBindingD3D11::GetSwapChainImages()
+    const {
   return color_swapchain_images_;
 }
 
@@ -217,10 +223,8 @@ void OpenXrGraphicsBindingD3D11::CreateSharedImages(
       }
     }
 
-    gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle;
-    gpu_memory_buffer_handle.type = gfx::DXGI_SHARED_HANDLE;
-    gpu_memory_buffer_handle.set_dxgi_handle(
-        gfx::DXGIHandle(base::win::ScopedHandle(shared_handle)));
+    gfx::GpuMemoryBufferHandle gpu_memory_buffer_handle{
+        gfx::DXGIHandle(base::win::ScopedHandle(shared_handle))};
 
     // TODO(crbug.com/40918787): This size is the size of the texture
     // from the OpenXr runtime, which is fine but does not work properly if the
@@ -338,7 +342,7 @@ void OpenXrGraphicsBindingD3D11::CleanupWithoutSubmit() {
   texture_helper_->CleanupNoSubmit();
 }
 
-bool OpenXrGraphicsBindingD3D11::ShouldFlipSubmittedImage() {
+bool OpenXrGraphicsBindingD3D11::ShouldFlipSubmittedImage() const {
   return IsUsingSharedImages() && !IsWebGPUSession();
 }
 
@@ -385,7 +389,8 @@ bool OpenXrGraphicsBindingD3D11::SetOverlayTexture(
   }
 
   return texture_helper_->SetOverlayTexture(
-      texture.dxgi_handle().TakeBufferHandle(), sync_token, left, right);
+      std::move(texture).dxgi_handle().TakeBufferHandle(), sync_token, left,
+      right);
 }
 
 }  // namespace device

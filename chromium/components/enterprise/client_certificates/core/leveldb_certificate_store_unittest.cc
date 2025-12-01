@@ -16,6 +16,7 @@
 #include "base/pickle.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/gmock_expected_support.h"
+#include "base/test/protobuf_matchers.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_future.h"
 #include "base/types/expected.h"
@@ -39,6 +40,8 @@
 namespace client_certificates {
 
 namespace {
+
+using base::test::EqualsProto;
 
 constexpr char kTestIdentityName[] = "identity_name";
 constexpr char kOtherTestIdentityName[] = "other_identity_name";
@@ -66,10 +69,6 @@ void PersistCertificate(client_certificates_pb::ClientIdentity& identity,
   certificate->Persist(&pickle);
   *identity.mutable_certificate() =
       std::string(pickle.data_as_char(), pickle.size());
-}
-
-MATCHER_P(EqualsProto, expected, "") {
-  return arg.SerializeAsString() == expected.SerializeAsString();
 }
 
 }  // namespace
@@ -178,15 +177,45 @@ TEST_F(LevelDbCertificateStoreTest, CreatePrivateKey_InvalidIdentityNameFail) {
   ExpectNoDatabaseEntry("");
 }
 
-// Tests that no key is returned when failing to initialize the database.
-TEST_F(LevelDbCertificateStoreTest, CreatePrivateKey_DatabaseInitFail) {
+// Tests that no key is returned when failing to initialize the database, and
+// the retry fails.
+TEST_F(LevelDbCertificateStoreTest,
+       CreatePrivateKey_DatabaseInitFail_RetryFail) {
   base::test::TestFuture<StoreErrorOr<scoped_refptr<PrivateKey>>> test_future;
   store_->CreatePrivateKey(kTestIdentityName, test_future.GetCallback());
 
   fake_db_->InitStatusCallback(InitStatus::kCorrupt);
+  fake_db_->InitStatusCallback(InitStatus::kCorrupt);
 
   EXPECT_THAT(test_future.Get(), ErrorIs(StoreError::kInvalidDatabaseState));
   ExpectNoDatabaseEntry(kTestIdentityName);
+}
+
+// Tests that no key is returned when failing to initialize the database, but
+// the retry succeeds.
+TEST_F(LevelDbCertificateStoreTest,
+       CreatePrivateKey_DatabaseInitFail_RetrySucceeds) {
+  client_certificates_pb::PrivateKey proto_key = CreateFakeProtoKey();
+
+  auto mocked_private_key = base::MakeRefCounted<StrictMock<MockPrivateKey>>();
+  EXPECT_CALL(*mocked_private_key, ToProto()).WillOnce(Return(proto_key));
+
+  EXPECT_CALL(*mock_key_factory_, CreatePrivateKey(_))
+      .WillOnce(RunOnceCallback<0>(mocked_private_key));
+
+  base::test::TestFuture<StoreErrorOr<scoped_refptr<PrivateKey>>> test_future;
+  store_->CreatePrivateKey(kTestIdentityName, test_future.GetCallback());
+
+  fake_db_->InitStatusCallback(InitStatus::kCorrupt);
+  fake_db_->InitStatusCallback(InitStatus::kOK);
+  fake_db_->GetCallback(/*success=*/true);
+  fake_db_->UpdateCallback(/*success=*/true);
+
+  EXPECT_THAT(test_future.Get(), ValueIs(mocked_private_key));
+
+  client_certificates_pb::ClientIdentity proto_identity;
+  *proto_identity.mutable_private_key() = proto_key;
+  ExpectDatabaseEntry(kTestIdentityName, proto_identity);
 }
 
 // Tests that no key is returned when failing to verify that the database
@@ -329,6 +358,7 @@ TEST_F(LevelDbCertificateStoreTest, CommitCertificate_DatabaseInitFail) {
                             test_future.GetCallback());
 
   fake_db_->InitStatusCallback(InitStatus::kCorrupt);
+  fake_db_->InitStatusCallback(InitStatus::kCorrupt);
 
   EXPECT_EQ(test_future.Get(), StoreError::kInvalidDatabaseState);
   ExpectNoDatabaseEntry(kTestIdentityName);
@@ -452,6 +482,7 @@ TEST_F(LevelDbCertificateStoreTest, CommitIdentity_DatabaseInitFail) {
   store_->CommitIdentity(kOtherTestIdentityName, kTestIdentityName, test_cert,
                          test_future.GetCallback());
 
+  fake_db_->InitStatusCallback(InitStatus::kCorrupt);
   fake_db_->InitStatusCallback(InitStatus::kCorrupt);
 
   EXPECT_EQ(test_future.Get(), StoreError::kInvalidDatabaseState);
@@ -673,6 +704,7 @@ TEST_F(LevelDbCertificateStoreTest, GetIdentity_DatabaseInitFail) {
       test_future;
   store_->GetIdentity(kTestIdentityName, test_future.GetCallback());
 
+  fake_db_->InitStatusCallback(InitStatus::kCorrupt);
   fake_db_->InitStatusCallback(InitStatus::kCorrupt);
 
   EXPECT_THAT(test_future.Get(), ErrorIs(StoreError::kInvalidDatabaseState));

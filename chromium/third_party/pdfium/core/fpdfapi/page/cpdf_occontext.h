@@ -32,17 +32,17 @@ class CPDF_OCContext final : public Retainable {
   CPDF_OCContext(CPDF_Document* pDoc, UsageType eUsageType);
   ~CPDF_OCContext() override;
 
-  bool LoadOCGStateFromConfig(const ByteString& csConfig,
+  bool LoadOCGStateFromConfig(ByteStringView config,
                               const CPDF_Dictionary* pOCGDict) const;
   bool LoadOCGState(const CPDF_Dictionary* pOCGDict) const;
   bool GetOCGVisible(const CPDF_Dictionary* pOCGDict) const;
   bool GetOCGVE(const CPDF_Array* pExpression, int nLevel) const;
   bool LoadOCMDState(const CPDF_Dictionary* pOCMDDict) const;
 
-  UnownedPtr<CPDF_Document> const m_pDocument;
-  const UsageType m_eUsageType;
+  UnownedPtr<CPDF_Document> const document_;
+  const UsageType usage_type_;
   mutable std::map<RetainPtr<const CPDF_Dictionary>, bool, std::less<>>
-      m_OGCStateCache;
+      ogcstate_cache_;
 };
 
 #endif  // CORE_FPDFAPI_PAGE_CPDF_OCCONTEXT_H_

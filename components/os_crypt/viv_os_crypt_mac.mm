@@ -43,8 +43,8 @@ bool OSCryptImpl::DeriveImportEncryptionKey(const std::string& service_name,
     return true;
 
   std::string password;
-  crypto::AppleKeychain keychain;
-  KeychainPassword encryptor_password(keychain);
+  auto keychain = crypto::AppleKeychain::DefaultKeychain();
+  KeychainPassword encryptor_password(*keychain);
   password = encryptor_password.GetPassword(service_name, account_name);
 
   if (password.empty()) {

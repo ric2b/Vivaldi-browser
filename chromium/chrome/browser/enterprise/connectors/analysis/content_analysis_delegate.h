@@ -22,6 +22,9 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/analysis_settings.h"
+#include "components/safe_browsing/content/browser/safe_browsing_navigation_observer_manager.h"
+#include "components/safe_browsing/core/browser/realtime/url_lookup_service_base.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/browser/clipboard_types.h"
 #include "url/gurl.h"
 
@@ -33,10 +36,13 @@ class WebContent;
 
 namespace enterprise_connectors {
 
-class ContentAnalysisDialog;
+class ContentAnalysisDialogController;
 class FilesRequestHandler;
 class PagePrintRequestHandler;
 class ClipboardRequestHandler;
+
+using ReferrerChain =
+    google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>;
 
 // A class that performs deep scans of data (for example malicious or sensitive
 // content checks) before allowing a page to access it.
@@ -267,6 +273,7 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase,
 
   // ContentAnalysisInfo:
   const AnalysisSettings& settings() const override;
+  signin::IdentityManager* identity_manager() const override;
   int user_action_requests_count() const override;
   std::string tab_title() const override;
   std::string user_action_id() const override;
@@ -274,6 +281,10 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase,
   std::string url() const override;
   const GURL& tab_url() const override;
   ContentAnalysisRequest::Reason reason() const override;
+  google::protobuf::RepeatedPtrField<::safe_browsing::ReferrerChainEntry>
+  referrer_chain() const override;
+  google::protobuf::RepeatedPtrField<std::string> frame_url_chain()
+      const override;
 
  protected:
   ContentAnalysisDelegate(content::WebContents* web_contents,
@@ -378,6 +389,9 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase,
   // Virtual to override in tests.
   virtual safe_browsing::BinaryUploadService* GetBinaryUploadService();
 
+  safe_browsing::SafeBrowsingNavigationObserverManager*
+  GetNavigationObserverManager() const;
+
   // Returns the content transfer method for the action. This is only used for
   // reporting and can be empty if the exact transfer method isn't supported in
   // reporting.
@@ -394,6 +408,9 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase,
   // The GURL corresponding to the page where the scan triggered.
   GURL url_;
 
+  // Parent URL chain of the frame from which the action was triggered.
+  google::protobuf::RepeatedPtrField<std::string> frame_url_chain_;
+
   // The title corresponding to the WebContents triggering the scan.
   std::string title_;
 
@@ -403,6 +420,9 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase,
   // Description of the data being scanned and the results of the scan.
   Data data_;
   Result result_;
+
+  // The tab ID of the WebContents that triggered the scan.
+  SessionID tab_id_;
 
   // Indices of warned files.
   std::vector<size_t> warned_file_indices_;
@@ -431,7 +451,7 @@ class ContentAnalysisDelegate : public ContentAnalysisDelegateBase,
   CompletionCallback callback_;
 
   // Pointer to UI when enabled.
-  raw_ptr<ContentAnalysisDialog> dialog_ = nullptr;
+  raw_ptr<ContentAnalysisDialogController> dialog_ = nullptr;
 
   // Access point to use to record UMA metrics.
   safe_browsing::DeepScanAccessPoint access_point_;

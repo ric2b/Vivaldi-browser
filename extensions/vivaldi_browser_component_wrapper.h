@@ -107,6 +107,10 @@ namespace translate {
 class TranslateUIDelegate;
 }
 
+namespace tabs {
+enum class TabAlert;
+}
+
 namespace vivaldi {
 class WindowRegistryService;
 }
@@ -299,7 +303,7 @@ class VivaldiBrowserComponentWrapper {
                                      bool& is_discarded) = 0;
   virtual void LoadTabContentsIfNecessary(
       content::WebContents* web_contents) = 0;
-  virtual std::vector<TabAlertState> GetTabAlertStatesForContents(
+  virtual std::vector<tabs::TabAlert> GetTabAlertStatesForContents(
       content::WebContents* contents) = 0;
   virtual std::unique_ptr<translate::TranslateUIDelegate>
   GetTranslateUIDelegate(content::WebContents* web_contents,

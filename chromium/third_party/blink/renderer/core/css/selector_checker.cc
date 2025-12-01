@@ -89,6 +89,7 @@
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition.h"
+#include "third_party/blink/renderer/core/view_transition/view_transition_pseudo_element_base.h"
 #include "third_party/blink/renderer/core/view_transition/view_transition_utils.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
@@ -740,8 +741,15 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
         // Generally a ::part() rule needs to be in the host’s tree scope, but
         // if (and only if) we are preceded by :host or :host(), then the rule
         // could also be in the same scope as the subject.
+        //
+        // We recognize :is(:host) and :where(:host) because the former could
+        // arise from nesting, but we don't understand the more complex cases
+        // :is(:host, #foo)::part(x), as we'd need to go down the :is() twice;
+        // once in the tree scope of the rule itself, and once more in the
+        // parent scope of the rule but somehow ignoring everything that isn't
+        // :host.
         const TreeScope& host_tree_scope =
-            next_context.selector->IsHostPseudoClass()
+            next_context.selector->IsDeeplyHostPseudoClass()
                 ? *context.tree_scope->ParentTreeScope()
                 : *context.tree_scope;
 
@@ -898,7 +906,7 @@ static bool AnyAttributeMatches(Element& element,
     DCHECK(element.CouldHaveAttribute(selector_attr))
         << element << " should have contained attribute " << selector_attr
         << ", Bloom bits on element are "
-        << element.AttributeBloomFilterForDebug();
+        << element.AttributeOrClassBloomFilterForDebug();
 #endif
 
     if (AttributeValueMatches(attribute_item, match, selector_value,
@@ -952,6 +960,16 @@ ALWAYS_INLINE bool SelectorChecker::CheckOne(
     case CSSSelector::kUniversalTag:
       return MatchesUniversalTagName(element, selector.TagQName());
     case CSSSelector::kClass:
+      if (!element.CouldHaveClass(selector.Value())) {
+#if DCHECK_IS_ON()
+        DCHECK(!element.HasClass() ||
+               !element.ClassNames().Contains(selector.Value()))
+            << element << " should have matched class " << selector.Value()
+            << ", Bloom bits on element are "
+            << element.AttributeOrClassBloomFilterForDebug();
+#endif
+        return false;
+      }
       return element.HasClass() &&
              element.ClassNames().Contains(selector.Value());
     case CSSSelector::kId:
@@ -1655,15 +1673,21 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       return IsLastOfType(element, element.TagQName());
     }
     case CSSSelector::kPseudoOnlyChild: {
-      if (IsTransitionPseudoElement(context.pseudo_id)) {
-        DCHECK(element.IsDocumentElement());
-        DCHECK(context.pseudo_argument);
+      PseudoId pseudo_id_to_check =
+          element.IsPseudoElement() ? element.GetPseudoId() : context.pseudo_id;
+      if (IsTransitionPseudoElement(pseudo_id_to_check)) {
+        DCHECK(element.IsDocumentElement() && context.pseudo_id ||
+               element.IsPseudoElement());
+        DCHECK(context.pseudo_argument || element.IsPseudoElement());
 
         auto* transition =
             ViewTransitionUtils::GetTransition(element.GetDocument());
         DCHECK(transition);
-        return transition->MatchForOnlyChild(context.pseudo_id,
-                                             *context.pseudo_argument);
+        const AtomicString& pseudo_argument = element.IsPseudoElement()
+                                                  ? element.GetPseudoArgument()
+                                                  : *context.pseudo_argument;
+        return transition->MatchForOnlyChild(pseudo_id_to_check,
+                                             pseudo_argument);
       }
 
       ContainerNode* parent = element.ParentElementOrDocumentFragment();
@@ -1721,9 +1745,8 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
           return false;
         }
       }
-      return selector.MatchNth(
-          NthIndexCache::NthChildIndex(element, selector.SelectorList(), this,
-                                       &context, NthIndexData::kLightTree));
+      return selector.MatchNth(NthIndexCache::NthChildIndex(
+          element, selector.SelectorList(), this, &context));
     case CSSSelector::kPseudoNthOfType:
       if (mode_ == kResolvingStyle) {
         if (ContainerNode* parent = element.ParentElementOrDocumentFragment()) {
@@ -1748,8 +1771,7 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
         }
       }
       return selector.MatchNth(NthIndexCache::NthLastChildIndex(
-          element, selector.SelectorList(), this, &context,
-          NthIndexData::kLightTree));
+          element, selector.SelectorList(), this, &context));
     }
     case CSSSelector::kPseudoNthLastOfType: {
       ContainerNode* parent = element.ParentElementOrDocumentFragment();
@@ -1850,7 +1872,33 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoHasInterest:
       DCHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
           element.GetDocument().GetExecutionContext()));
-      return element.HasInterest();
+      return element.GetInterestState() != Element::InterestState::kNoInterest;
+    case CSSSelector::kPseudoHasPartialInterest:
+      DCHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+          element.GetDocument().GetExecutionContext()));
+      return element.GetInterestState() ==
+                 Element::InterestState::kPartialInterest ||
+             element.GetInterestState() ==
+                 Element::InterestState::kPotentialPartialInterest;
+    case CSSSelector::kPseudoTargetOfInterest: {
+      DCHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+          element.GetDocument().GetExecutionContext()));
+      Element* invoker = element.GetInterestInvoker();
+      DCHECK(!invoker || invoker->GetInterestState() !=
+                             Element::InterestState::kNoInterest);
+      return invoker;
+    }
+    case CSSSelector::kPseudoTargetOfPartialInterest: {
+      DCHECK(RuntimeEnabledFeatures::HTMLInterestTargetAttributeEnabled(
+          element.GetDocument().GetExecutionContext()));
+      Element* invoker = element.GetInterestInvoker();
+      DCHECK(!invoker || invoker->GetInterestState() !=
+                             Element::InterestState::kNoInterest);
+      return invoker && (invoker->GetInterestState() ==
+                             Element::InterestState::kPartialInterest ||
+                         invoker->GetInterestState() ==
+                             Element::InterestState::kPotentialPartialInterest);
+    }
     case CSSSelector::kPseudoHasSlotted:
       DCHECK(RuntimeEnabledFeatures::CSSPseudoHasSlottedEnabled());
       if (auto* slot = DynamicTo<HTMLSlotElement>(element)) {
@@ -2464,7 +2512,7 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
   const CSSSelector& selector = *context.selector;
   PseudoId pseudo_id = selector.GetPseudoId(selector.GetPseudoType());
   // Only descend down the ancestors chain if matching a (real) PseudoElement.
-  if (pseudo_id != kPseudoIdNone && pseudo_id <= kLastTrackedPublicPseudoId) {
+  if (pseudo_id != kPseudoIdNone && pseudo_id <= kLastPublicPseudoId) {
     result.DescendToNextPseudoElement();
   }
   Element& element =
@@ -2520,6 +2568,9 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoDetailsContent:
       return MatchesUAShadowElement(element,
                                     shadow_element_names::kIdDetailsContent);
+    case CSSSelector::kPseudoPermissionIcon:
+      return MatchesUAShadowElement(element,
+                                    shadow_element_names::kIdPermissionIcon);
     case CSSSelector::kPseudoWebKitCustomElement:
       return MatchesUAShadowElement(element, selector.Value());
     case CSSSelector::kPseudoBlinkInternalElement:
@@ -2570,7 +2621,14 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
         return true;
       }
 
-      if (selector_pseudo_id != context.pseudo_id) {
+      // Here, and below, the IsPseudoElement check is for a new pseudo element
+      // rules matching approach, where the matching is done based on actual
+      // PseudoElement object and not Element + pseudo_id. We need to keep both
+      // versions as sometimes the matching is happening the old way and
+      // sometimes the new one.
+      PseudoId pseudo_id_to_check =
+          element.IsPseudoElement() ? element.GetPseudoId() : context.pseudo_id;
+      if (selector_pseudo_id != pseudo_id_to_check) {
         return false;
       }
       result.dynamic_pseudo = context.pseudo_id;
@@ -2581,11 +2639,14 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
       CHECK(!selector.IdentList().empty());
       const AtomicString& name_or_wildcard = selector.IdentList()[0];
 
-      // note that the pseudo_ident_list_ is the class list, and
-      // pseudo_argument_ is the name, while in the selector the IdentList() is
+      const String& pseudo_argument = element.IsPseudoElement()
+                                          ? element.GetPseudoArgument()
+                                          : pseudo_argument_;
+      // note that the pseudo_ident_list is the class list, and
+      // pseudo_argument is the name, while in the selector the IdentList() is
       // both the name and the classes.
       if (name_or_wildcard != CSSSelector::UniversalSelectorAtom() &&
-          name_or_wildcard != pseudo_argument_) {
+          name_or_wildcard != pseudo_argument) {
         return false;
       }
 
@@ -2595,13 +2656,18 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
       // element if the class list value in named elements for the
       // pseudo-element’s view-transition-name contains all of those values.
 
+      const Vector<AtomicString>& pseudo_ident_list =
+          element.IsPseudoElement()
+              ? To<ViewTransitionPseudoElementBase>(element)
+                    .ViewTransitionClassList()
+              : pseudo_ident_list_;
       // selector.IdentList() is equivalent to
       // <pt-name-selector><pt-class-selector>, as in [name, class, class, ...]
       // so we check that all of its items excluding the first one are
-      // contained in the pseudo element's classes (pseudo_ident_list_).
+      // contained in the pseudo element's classes (pseudo_ident_list).
       return std::ranges::all_of(base::span(selector.IdentList()).subspan(1ul),
                                  [&](const AtomicString& class_from_selector) {
-                                   return base::Contains(pseudo_ident_list_,
+                                   return base::Contains(pseudo_ident_list,
                                                          class_from_selector);
                                  });
     }

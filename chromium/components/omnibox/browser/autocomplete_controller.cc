@@ -45,7 +45,9 @@
 #include "components/omnibox/browser/actions/omnibox_action_in_suggest.h"
 #include "components/omnibox/browser/actions/omnibox_answer_action.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_provider.h"
+#include "components/omnibox/browser/autocomplete_enums.h"
 #include "components/omnibox/browser/autocomplete_input.h"
+#include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
@@ -68,6 +70,7 @@
 #include "components/omnibox/browser/local_history_zero_suggest_provider.h"
 #include "components/omnibox/browser/most_visited_sites_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/omnibox/browser/on_device_head_provider.h"
 #include "components/omnibox/browser/open_tab_provider.h"
 #include "components/omnibox/browser/page_classification_functions.h"
@@ -75,6 +78,7 @@
 #include "components/omnibox/browser/search_provider.h"
 #include "components/omnibox/browser/search_scoring_signals_annotator.h"
 #include "components/omnibox/browser/shortcuts_provider.h"
+#include "components/omnibox/browser/tab_group_provider.h"
 #include "components/omnibox/browser/unscoped_extension_provider.h"
 #include "components/omnibox/browser/url_scoring_signals_annotator.h"
 #include "components/omnibox/browser/voice_suggest_provider.h"
@@ -253,18 +257,6 @@ std::string ConstructAvailableAutocompletion(
   return result.str();
 }
 
-// Whether this autocomplete match type supports custom descriptions.
-bool AutocompleteMatchHasCustomDescription(const AutocompleteMatch& match) {
-  if (ui::GetDeviceFormFactor() == ui::DEVICE_FORM_FACTOR_DESKTOP &&
-      match.type == AutocompleteMatchType::CALCULATOR) {
-    return true;
-  }
-  return match.type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
-         match.type == AutocompleteMatchType::SEARCH_SUGGEST_PROFILE ||
-         match.type == AutocompleteMatchType::CLIPBOARD_TEXT ||
-         match.type == AutocompleteMatchType::CLIPBOARD_IMAGE;
-}
-
 // Returns whether this match is provided by an extension in unscoped mode.
 bool IsUnscopedExtensionMatch(const AutocompleteMatch& match) {
   return match.provider && match.provider->type() ==
@@ -281,8 +273,9 @@ AutocompleteMatch::RichAutocompletionType TopMatchRichAutocompletionType(
   // rich autocompleted. It's not sufficient to check the default match since
   // counterfactual variations will not allow rich autocompleted matches to be
   // the default match.
-  if (result.empty())
+  if (result.empty()) {
     return AutocompleteMatch::RichAutocompletionType::kNone;
+  }
 
   auto get_sort_key = [](const AutocompleteMatch& match) {
     return std::make_tuple(
@@ -317,17 +310,19 @@ bool ShouldPreserveLastDefaultMatch(
   // Don't preserve default in keyword mode to avoid e.g. the 'google.com'
   // suggestion being preserved and kicking the user out of keyword mode when
   // they type 'google.com  '.
-  if (input.prefer_keyword())
+  if (input.prefer_keyword()) {
     return false;
+  }
 
   // Preserve for all async updates, but only for longer inputs for sync
   // updates. This mitigates aggressive scoring search suggestions getting
   // 'stuck' as the default when short inputs provide low confidence.
   if (update_type == AutocompleteController::UpdateType::kSyncPassOnly ||
-      update_type == AutocompleteController::UpdateType::kSyncPass)
+      update_type == AutocompleteController::UpdateType::kSyncPass) {
     return input.text().length() >= 4;
-  else
+  } else {
     return true;
+  }
 }
 
 // Helper function to retrieve domains that will be used to find a match between
@@ -354,10 +349,37 @@ std::string EncodeURIComponent(const std::string& component) {
   return std::string(encoded.view());
 }
 
+// Returns whether contextual suggestions can be shown to the user.
+// If the page has a paywall signal, contextual suggestions cannot be shown.
+// If the page paywall signal could not be determined (this `paywall_signal` is
+// std::nullopt), a feature flag will be used to determine if contextual
+// suggestions can be shown.
+bool CanShowContextualSuggestions(std::optional<bool> paywall_signal) {
+  const auto& contextual_search_params =
+      omnibox_feature_configs::ContextualSearch::Get();
+  // If the feature flag to use the APC paywall signal is disabled, show
+  // contextual suggestions.
+  if (!contextual_search_params.use_apc_paywall_signal) {
+    return true;
+  }
+
+  // If the page has determined a signal, use it to determine if contextual
+  // suggestions should be shown.
+  if (paywall_signal.has_value()) {
+    // Negate since if `paywall_signal` is true, it means the page is paywalled
+    // and contextual suggestions should not be shown.
+    return !paywall_signal.value();
+  }
+
+  // Finally, if no signal was extracted from the page, fallback to either show
+  // or hide contextual suggestions based on the feature flag.
+  return contextual_search_params.show_suggestions_on_no_apc;
+}
+
 }  // namespace
 
 AutocompleteController::OldResult::OldResult(UpdateType update_type,
-                                             AutocompleteInput input,
+                                             const AutocompleteInput& input,
                                              AutocompleteResult* result) {
   if (result->default_match()) {
     last_default_match = *result->default_match();
@@ -613,15 +635,11 @@ AutocompleteController::AutocompleteController(
 AutocompleteController::~AutocompleteController() {
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
-
-  // The providers may have tasks outstanding that hold refs to them.  We need
-  // to ensure they won't call us back if they outlive us.  (Practically,
-  // calling Stop() should also cancel those tasks and make it so that we hold
-  // the only refs.)  We also don't want to bother notifying anyone of our
-  // result changes here, because the notification observer is in the midst of
-  // shutdown too, so we don't ask Stop() to clear `internal_result_` (and
-  // notify).
-  Stop(false);
+  // Must stop providers because they may have unowned tasks that continue to
+  // run or hold refs to them; e.g. remote requests or DB reads. Don't bother
+  // notifying observers or using `kClobbered` to clear provider caches and
+  // state, since the observers and providers are being destroyed too.
+  Stop(AutocompleteStopReason::kInteraction);
 }
 
 void AutocompleteController::AddObserver(Observer* observer) {
@@ -659,8 +677,9 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
   //   and silently ignore the observer. Audit all call paths of `::Start()` to
   //   remove this check.
   if (!input.omit_asynchronous_matches()) {
-    for (Observer& obs : observers_)
+    for (Observer& obs : observers_) {
       obs.OnStart(this, input);
+    }
   }
 
   // Must be called before `expire_timer_.Stop()`, modifying `done_`, or
@@ -760,7 +779,14 @@ void AutocompleteController::Start(const AutocompleteInput& input) {
 void AutocompleteController::StartPrefetch(const AutocompleteInput& input) {
   TRACE_EVENT1("omnibox", "AutocompleteController::StartPrefetch", "text",
                base::UTF16ToUTF8(input.text()));
-
+  if (!OmniboxFieldTrial::IsZeroSuggestPrefetchingEnabledInContext(
+          input.current_page_classification()) &&
+      !omnibox_feature_configs::OmniboxUrlSuggestionsOnFocus::Get()
+           .MostVisitedPrefetchingEnabled() &&
+      !omnibox_feature_configs::ContextualSearch::Get()
+           .IsEnabledWithPrefetch()) {
+    return;
+  }
   for (auto provider : providers_) {
     if (!ShouldRunProvider(provider.get())) {
       continue;
@@ -768,7 +794,7 @@ void AutocompleteController::StartPrefetch(const AutocompleteInput& input) {
 
     // Avoid starting a prefetch request if a non-prefetch request is in
     // progress. Though explicitly discouraged as per documentation in
-    // AutocompleteProvider::StartPrefetch(), a provider may still cancel its
+    // `AutocompleteProvider::StartPrefetch()`, a provider may still cancel its
     // in-flight non-prefetch request when a prefetch request is started. This
     // may cause the provider to never get a chance to notify the controller of
     // its status; resulting in the controller to remain in an invalid state.
@@ -781,8 +807,7 @@ void AutocompleteController::StartPrefetch(const AutocompleteInput& input) {
   }
 }
 
-void AutocompleteController::Stop(bool clear_result,
-                                  bool due_to_user_inactivity) {
+void AutocompleteController::Stop(AutocompleteStopReason stop_reason) {
   // Must be called before `expire_timer_.Stop()`, modifying `done_`, or
   // modifying `AutocompleteProvider::done_` below. If the current request has
   // not completed, and therefore has not been logged yet, will log it now.
@@ -791,19 +816,19 @@ void AutocompleteController::Stop(bool clear_result,
   metrics_.OnStop();
 
   for (const auto& provider : providers_) {
-    if (!ShouldRunProvider(provider.get()))
+    if (!ShouldRunProvider(provider.get())) {
       continue;
-    provider->Stop(clear_result, due_to_user_inactivity);
+    }
+    provider->Stop(stop_reason);
   }
-
-  UpdateResult(UpdateType::kStop);
 
   // Cancel any pending requests that may update the results. Otherwise, e.g.,
   // the user's suggestion selection may be reset.
+  UpdateResult(UpdateType::kStop);
   CancelNotifyChangedRequest();
 
   const bool non_empty_result = !internal_result_.empty();
-  if (clear_result) {
+  if (stop_reason == AutocompleteStopReason::kClobbered) {
     internal_result_.Reset();
     if (non_empty_result) {
       // Pass `notify_default_match` as false to clear only the popup and not
@@ -820,8 +845,9 @@ void AutocompleteController::DeleteMatch(const AutocompleteMatch& match) {
 
   // Delete duplicate matches attached to the main match first.
   for (const auto& duplicate_match : match.duplicate_matches) {
-    if (duplicate_match.deletable)
+    if (duplicate_match.deletable) {
       duplicate_match.provider->DeleteMatch(duplicate_match);
+    }
   }
 
   if (match.deletable) {
@@ -853,8 +879,9 @@ void AutocompleteController::OnProviderUpdate(
   // Should be called even if `sync_pass_done_` is false in order to include
   // early exited async providers. If the provider is done, will log how long
   // the provider took.
-  if (provider)
+  if (provider) {
     metrics_.OnProviderUpdate(*provider);
+  }
 
   // Providers should only call this method during the asynchronous pass.
   // There's no reason to call this during the synchronous pass, since we
@@ -862,16 +889,21 @@ void AutocompleteController::OnProviderUpdate(
   // because in the unusual case that a provider calls an asynchronous method,
   // and that method early exits by calling the callback immediately, it's not
   // necessarily a programmer error. We should just no-op.
-  if (last_update_type_ == UpdateType::kNone)
+  if (last_update_type_ == UpdateType::kNone) {
     return;
+  }
 
   // Allow some providers to trigger updates after `stop_timer_` has fired.
   // TODO(crbug.com/364303536) This is a temporary fix for allowing history
   //   embedding answers to `UpdateResults()` after `stop_timer_` has fired.
+  // TODO(crbug.com/408512535): This is a temporary fix for allowing the
+  //   contextual search provider to `UpdateResults()` after `stop_timer_` has
+  //   fired.
   bool allow_post_done_updates =
       provider &&
       (provider->type() == AutocompleteProvider::TYPE_HISTORY_EMBEDDINGS ||
        provider->type() == AutocompleteProvider::TYPE_UNSCOPED_EXTENSION ||
+       provider->type() == AutocompleteProvider::TYPE_CONTEXTUAL_SEARCH ||
        provider->type() ==
            AutocompleteProvider::TYPE_ENTERPRISE_SEARCH_AGGREGATOR);
 
@@ -884,12 +916,13 @@ void AutocompleteController::OnProviderUpdate(
 
   auto done_state = GetProviderDoneState();
 
-  if (done_state == ProviderDoneState::kAllDone)
+  if (done_state == ProviderDoneState::kAllDone) {
     UpdateResult(UpdateType::kLastAsyncPass, allow_post_done_updates);
-  else if (done_state == ProviderDoneState::kAllExceptDocDone)
+  } else if (done_state == ProviderDoneState::kAllExceptDocDone) {
     UpdateResult(UpdateType::kLastAsyncPassExceptDoc, allow_post_done_updates);
-  else if (updated_matches)
+  } else if (updated_matches) {
     UpdateResult(UpdateType::kAsyncPass, allow_post_done_updates);
+  }
 
   if (done_state == ProviderDoneState::kAllDone) {
     size_t calculator_count =
@@ -906,8 +939,9 @@ void AutocompleteController::AddProviderAndTriggeringLogs(
                "AutocompleteController::AddProviderAndTriggeringLogs");
   logs->providers_info.clear();
   for (const auto& provider : providers_) {
-    if (!ShouldRunProvider(provider.get()))
+    if (!ShouldRunProvider(provider.get())) {
       continue;
+    }
 
     // Add per-provider info, if any.
     provider->AddProviderInfo(&logs->providers_info);
@@ -1031,8 +1065,9 @@ void AutocompleteController::SetMatchDestinationURL(
 
 void AutocompleteController::GroupSuggestionsBySearchVsURL(size_t begin,
                                                            size_t end) {
-  if (begin == end)
+  if (begin == end) {
     return;
+  }
   TRACE_EVENT0("omnibox",
                "AutocompleteController::GroupSuggestionsBySearchVsURL");
   AutocompleteResult& result = const_cast<AutocompleteResult&>(this->result());
@@ -1295,6 +1330,7 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
     bookmark_provider_ = new BookmarkProvider(provider_client_.get());
     providers_.push_back(bookmark_provider_.get());
   }
+
   if (vivaldi::IsVivaldiRunning()) {
     if (provider_types & AutocompleteProvider::TYPE_BOOKMARK_NICKNAME) {
       bookmark_nickname_provider_ =
@@ -1311,9 +1347,11 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
       providers_.push_back(recent_typed_history_provider_.get());
     }
   }
+  // End Vivaldi
 
-  if (provider_types & AutocompleteProvider::TYPE_BUILTIN)
+  if (provider_types & AutocompleteProvider::TYPE_BUILTIN) {
     providers_.push_back(new BuiltinProvider(provider_client_.get()));
+  }
   if (provider_types & AutocompleteProvider::TYPE_HISTORY_QUICK) {
     history_quick_provider_ = new HistoryQuickProvider(provider_client_.get());
     providers_.push_back(history_quick_provider_.get());
@@ -1322,13 +1360,15 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
     keyword_provider_ = new KeywordProvider(provider_client_.get(), this);
     providers_.push_back(keyword_provider_.get());
   }
-  if (provider_types & AutocompleteProvider::TYPE_SHORTCUTS)
+  if (provider_types & AutocompleteProvider::TYPE_SHORTCUTS) {
     providers_.push_back(new ShortcutsProvider(provider_client_.get()));
+  }
   if (provider_types & AutocompleteProvider::TYPE_ZERO_SUGGEST) {
     zero_suggest_provider_ =
         ZeroSuggestProvider::Create(provider_client_.get(), this);
-    if (zero_suggest_provider_)
+    if (zero_suggest_provider_) {
       providers_.push_back(zero_suggest_provider_.get());
+    }
   }
   if (provider_types & AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY) {
     providers_.push_back(
@@ -1384,6 +1424,11 @@ void AutocompleteController::InitializeSyncProviders(int provider_types) {
     providers_.push_back(
         new RecentlyClosedTabsProvider(provider_client_.get(), this));
   }
+#if BUILDFLAG(IS_ANDROID)
+  if (provider_types & AutocompleteProvider::TYPE_TAB_GROUP) {
+    providers_.push_back(new TabGroupProvider(provider_client_.get()));
+  }
+#endif
 }
 
 void AutocompleteController::UpdateResult(UpdateType update_type,
@@ -1452,29 +1497,42 @@ void AutocompleteController::UpdateResult(UpdateType update_type,
     stop_timer_.Stop();
   }
 
-  if (update_type == UpdateType::kStop)
+  if (update_type == UpdateType::kStop) {
     return;
+  }
 
   OldResult old_result(update_type, input_, &internal_result_);
   AggregateNewMatches();
 
   MlRerank(old_result);
 
+  // If the entrypoints aren't visible, then Lens is active and contextual
+  // suggestions shouldn't be shown.
+  const bool is_lens_active =
+      !autocomplete_provider_client()->AreLensEntrypointsVisible();
+  const bool can_show_contextual_suggestions = CanShowContextualSuggestions(
+      autocomplete_provider_client()->IsPagePaywalled());
+  const bool mia_enabled =
+      omnibox_feature_configs::MiaZPS::Get().enabled &&
+      omnibox::IsMiaAllowedByPolicy(provider_client_->GetPrefs());
+
   if (update_type == UpdateType::kSyncPass ||
       update_type == UpdateType::kAsyncPass ||
       update_type == UpdateType::kLastAsyncPassExceptDoc) {
     internal_result_.SortAndCull(input_, template_url_service_,
-                                 triggered_feature_service_,
+                                 triggered_feature_service_, is_lens_active,
+                                 can_show_contextual_suggestions, mia_enabled,
                                  old_result.default_match_to_preserve,
-                                 provider_client_.get());
+                      /* vivaldi */  provider_client_.get());
     internal_result_.TransferOldMatches(input_,
                                         &old_result.matches_to_transfer);
   }
 
   internal_result_.SortAndCull(input_, template_url_service_,
-                               triggered_feature_service_,
+                               triggered_feature_service_, is_lens_active,
+                               can_show_contextual_suggestions, mia_enabled,
                                old_result.default_match_to_preserve,
-                               provider_client_.get());
+      /* vivaldi */ provider_client_.get());
 
   if (update_type == UpdateType::kSyncPass) {
     StartExpireTimer();
@@ -1504,17 +1562,16 @@ void AutocompleteController::UpdateResult(UpdateType update_type,
                    update_type == UpdateType::kSyncPass ||
                    update_type == UpdateType::kLastAsyncPass ||
                    update_type == UpdateType::kMatchDeletion ||
-                   (omnibox_feature_configs::DocumentProvider::Get()
-                        .ignore_when_debouncing &&
-                    update_type == UpdateType::kLastAsyncPassExceptDoc);
+                   update_type == UpdateType::kLastAsyncPassExceptDoc;
 
   RequestNotifyChanged(default_match_changed, !immediate);
 }
 
 void AutocompleteController::AggregateNewMatches() {
   for (const auto& provider : providers_) {
-    if (!ShouldRunProvider(provider.get()))
+    if (!ShouldRunProvider(provider.get())) {
       continue;
+    }
 
     // Append the new matches and conditionally set a swap bit. This logic
     // was previously within `AppendMatches` but here is the only place
@@ -1554,14 +1611,18 @@ void AutocompleteController::MlRerank(OldResult& old_result) {
     }
   }
 
-  if (internal_result_.empty())
+  if (internal_result_.empty()) {
     return;
-  if (!OmniboxFieldTrial::IsMlUrlScoringEnabled())
+  }
+  if (!OmniboxFieldTrial::IsMlUrlScoringEnabled()) {
     return;
-  if (!provider_client_->GetAutocompleteScoringModelService())
+  }
+  if (!provider_client_->GetAutocompleteScoringModelService()) {
     return;
-  if (disable_ml_)
+  }
+  if (disable_ml_) {
     return;
+  }
 
 #if BUILDFLAG(BUILD_WITH_TFLITE_LIB)
   if (OmniboxFieldTrial::GetMLConfig().piecewise_mapped_search_blending) {
@@ -1595,12 +1656,14 @@ void AutocompleteController::PostProcessMatches() {
   // Notify providers which of their matches were shown. If we end up with more
   // providers to notify, we should add `RegisterDisplayedMatches()` to the
   // `AutocompleteProvider` interface and iterate all providers here.
-  if (search_provider_)
+  if (search_provider_) {
     search_provider_->RegisterDisplayedAnswers(internal_result_);
+  }
   // `featured_search_provider_` isn't interested in "invisible" autocomplete
   // runs, e.g. when text is copied.
-  if (featured_search_provider_ && !input_.omit_asynchronous_matches())
+  if (featured_search_provider_ && !input_.omit_asynchronous_matches()) {
     featured_search_provider_->RegisterDisplayedMatches(internal_result_);
+  }
 
   // Mark the rich autocompletion feature triggered if the top match, or
   // would-be-top-match if rich autocompletion is counterfactual enabled, is
@@ -1627,24 +1690,32 @@ bool AutocompleteController::CheckWhetherDefaultMatchChanged(
         internal_result_.default_match()->associated_keyword->keyword;
   }
   // We've gotten async results. Send notification that the default match
-  // updated if fill_into_edit, associated_keyword, or keyword differ.  (The
-  // second can change if we've just started Chrome and the keyword database
-  // finishes loading while processing this request.  The third can change
-  // if we swapped from interpreting the input as a search--which gets
-  // labeled with the default search provider's keyword--to a URL.)
-  // We don't check the URL as that may change for the default match
-  // even though the fill into edit hasn't changed (see SearchProvider
-  // for one case of this).
+  // updated if:
+  //   * fill_into_edit differs.
+  //   * icon_url differs.
+  //   * associated_keyword differs.
+  //     This can change when Chrome starts and the keyword database
+  //     finishes loading while processing this request.
+  //   * keyword differs.
+  //     This can change if the interpretation of the input switches
+  //     between a search, which gets labeled with the default search
+  //     provider's keyword, to a URL.
+  // The URL is NOT checked for changes because it might be updated for the
+  // default match even if fill_into_edit remains the same (see SearchProvider
+  // for an example).
   const bool notify_default_match =
       (last_default_match.has_value() != default_is_valid) ||
       (last_default_match &&
        ((internal_result_.default_match()->fill_into_edit !=
          last_default_match->fill_into_edit) ||
+        (internal_result_.default_match()->icon_url !=
+         last_default_match->icon_url) ||
         (default_associated_keyword != last_default_associated_keyword) ||
         (internal_result_.default_match()->keyword !=
          last_default_match->keyword)));
-  if (notify_default_match)
+  if (notify_default_match) {
     last_time_default_match_changed_ = base::TimeTicks::Now();
+  }
   return notify_default_match;
 }
 
@@ -1654,10 +1725,9 @@ void AutocompleteController::AttachActions() {
     return;
   }
 
-  #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
-  // Attach the contextual search fulfillment actions in the @page keyword mode.
-  if (base::FeatureList::IsEnabled(
-          omnibox::kContextualZeroSuggestLensFulfillment) &&
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
+  if (omnibox_feature_configs::ContextualSearch::Get()
+          .contextual_zero_suggest_lens_fulfillment &&
       input_.IsZeroSuggest()) {
     internal_result_.AttachContextualSearchFulfillmentActionToMatches();
   } else if (input_.InKeywordMode()) {
@@ -1665,6 +1735,8 @@ void AutocompleteController::AttachActions() {
     const TemplateURL* keyword_turl =
         AutocompleteInput::GetSubstitutingTemplateURLForInput(
             template_url_service_, &keyword_input);
+    // Attach the contextual search fulfillment actions in the @page keyword
+    // mode.
     if (keyword_turl->starter_pack_id() == TemplateURLStarterPackData::kPage) {
       internal_result_.AttachContextualSearchFulfillmentActionToMatches();
       return;
@@ -1700,8 +1772,9 @@ void AutocompleteController::AttachActions() {
 
 void AutocompleteController::UpdateAssociatedKeywords(
     AutocompleteResult* result) {
-  if (!keyword_provider_)
+  if (!keyword_provider_) {
     return;
+  }
 
   // The keyword matching the user's input.
   std::u16string input_text_keyword = keyword_provider_->GetKeywordForText(
@@ -1709,20 +1782,28 @@ void AutocompleteController::UpdateAssociatedKeywords(
   TemplateURL* input_text_keyword_turl =
       template_url_service_->GetTemplateURLForKeyword(input_text_keyword);
 
-  // Cache added keywords to avoid showing duplicate keywords.
-  std::set<std::u16string> keywords;
+  // Cache added keywords to avoid showing the tab-to-search hint for the same
+  // keyword on different matches.
+  std::set<std::u16string> added_keywords;
 
   auto add_keyword = [&](AutocompleteMatch& match,
                          const std::u16string& keyword_text,
                          const std::u16string& keyword) {
     // There shouldn't be duplicate keywords.
-    CHECK(!keywords.count(keyword));
-    keywords.insert(keyword);
+    CHECK(!added_keywords.count(keyword));
+    added_keywords.insert(keyword);
     match.associated_keyword = std::make_unique<AutocompleteMatch>(
         keyword_provider_->CreateVerbatimMatch(keyword_text, keyword, input_));
   };
 
   for (AutocompleteMatch& match : *result) {
+    // In order to keep zero suggest UI minimal, zero suggest should never have
+    // attached keywords. The matches eligible for an associated keywords
+    // should be treated as URL suggestions.
+    if (input_.IsZeroSuggest()) {
+      return;
+    }
+
     // Clear any keyword the match may have from previous passes.
     match.associated_keyword.reset();
 
@@ -1730,17 +1811,19 @@ void AutocompleteController::UpdateAssociatedKeywords(
     // then continued typing), don't attach a keyword chip to it.
     std::u16string explicit_keyword(
         match.GetSubstitutingExplicitlyInvokedKeyword(template_url_service_));
-    if (!explicit_keyword.empty() && !keywords.count(explicit_keyword)) {
+    if (!explicit_keyword.empty()) {
       // Also prevent other matches showing a keyword chip for the keyword the
       // user is already in.
-      keywords.insert(explicit_keyword);
+      added_keywords.insert(explicit_keyword);
       continue;
     }
 
-    // When the input text matches a keyword, tab-to-search on the default
-    // match should select that keyword, even if the match inline-autocompletes
-    // to a different keyword.
-    if (!input_text_keyword.empty() && !keywords.count(input_text_keyword) &&
+    // When the input text matches a keyword, even if the match inline-
+    // autocompletes to a different keyword, offer tab-to-search keyword hint
+    // on the match, except for starter packed keywords or those featured by
+    // policy.
+    if (!input_text_keyword.empty() &&
+        !added_keywords.count(input_text_keyword) &&
         input_text_keyword_turl->starter_pack_id() == 0 &&
         !input_text_keyword_turl->featured_by_policy()) {
       add_keyword(match, input_text_keyword, input_text_keyword);
@@ -1761,8 +1844,9 @@ void AutocompleteController::UpdateAssociatedKeywords(
       continue;
     }
 
-    // Add keyword hints for typical matches.
-    if (!match_text_keyword.empty() && !keywords.count(match_text_keyword) &&
+    // Add keyword hints for non-FeaturedKeyword matches.
+    if (!match_text_keyword.empty() &&
+        !added_keywords.count(match_text_keyword) &&
         match_text_keyword_turl->starter_pack_id() == 0 &&
         !match_text_keyword_turl->featured_by_policy()) {
       add_keyword(match, match.fill_into_edit, match_text_keyword);
@@ -1781,30 +1865,37 @@ void AutocompleteController::UpdateKeywordDescriptions(
   }
 
   std::u16string last_keyword;
+  bool last_contextual = false;
   for (auto i(result->begin()); i != result->end(); ++i) {
     if (AutocompleteMatch::IsSearchType(i->type)) {
-      if (AutocompleteMatchHasCustomDescription(*i) ||
+      if (i->HasCustomDescription() || IsUnscopedExtensionMatch(*i)
 #if defined(VIVALDI_BUILD)
           // Is it no necessary that RECENT_TYPED_HISTORY contains only
           // keyword search. It can contain typed URL too and keyword can be
           // empty. So skip.
-          i->type == AutocompleteMatchType::RECENT_TYPED_HISTORY ||
+          || i->type == AutocompleteMatchType::RECENT_TYPED_HISTORY
 #endif // End Vivaldi
-          IsUnscopedExtensionMatch(*i)) {
+          ) {
         continue;
       }
       i->description.clear();
       i->description_class.clear();
       DCHECK(!i->keyword.empty());
-      if (i->keyword != last_keyword) {
+      bool is_contextual = i->IsContextualSearchSuggestion();
+      if (i->keyword != last_keyword || is_contextual != last_contextual) {
         const TemplateURL* template_url =
             i->GetTemplateURL(template_url_service_, false);
         if (template_url) {
-          // For extension keywords, just make the description the extension
-          // name -- don't assume that the normal search keyword description
-          // is applicable.
+          // The search keyword description is applied except in these cases:
+          // - For extension keywords, the description is the extension name.
+          // - For contextual search matches, the description indicates the
+          //   alternative UX because they're opened in the side panel.
           i->description = template_url->AdjustedShortNameForLocaleDirection();
-          if (template_url->type() != TemplateURL::OMNIBOX_API_EXTENSION) {
+          if (is_contextual) {
+            i->description = l10n_util::GetStringUTF16(
+                IDS_AUTOCOMPLETE_SEARCH_IN_SIDE_PANEL_DESCRIPTION);
+          } else if (template_url->type() !=
+                     TemplateURL::OMNIBOX_API_EXTENSION) {
             i->description = l10n_util::GetStringFUTF16(
                 IDS_AUTOCOMPLETE_SEARCH_DESCRIPTION, i->description);
           }
@@ -1816,6 +1907,7 @@ void AutocompleteController::UpdateKeywordDescriptions(
 #endif
 
         last_keyword = i->keyword;
+        last_contextual = is_contextual;
       }
     } else {
       last_keyword.clear();
@@ -1826,8 +1918,9 @@ void AutocompleteController::UpdateKeywordDescriptions(
 void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
   using omnibox::metrics::ChromeSearchboxStats;
 
-  if (result->empty())
+  if (result->empty()) {
     return;
+  }
 
   ChromeSearchboxStats searchbox_stats;
   searchbox_stats.set_client_name("chrome");
@@ -1944,8 +2037,9 @@ void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
     AutocompleteMatch* match = result->match_at(index);
     const TemplateURL* template_url =
         match->GetTemplateURL(template_url_service_, false);
-    if (!template_url || !match->search_terms_args)
+    if (!template_url || !match->search_terms_args) {
       continue;
+    }
 
     match->search_terms_args->searchbox_stats = searchbox_stats;
 
@@ -2010,24 +2104,25 @@ void AutocompleteController::UpdateSearchboxStats(AutocompleteResult* result) {
 // `UpdateSearchboxStats()` once we've rolled all session-related data into a
 // single `SessionData` property on matches.
 void AutocompleteController::UpdateShownInSession(AutocompleteResult* result) {
+  // Currently, `AutocompleteClassifier::Classify()` is the only place where
+  // `omit_asynchronous_matches` is set to `true`. Therefore, this check is
+  // essentially asking "Is `UpdateShownInSession()` being invoked via
+  // `AutocompleteClassifier::Classify()`?"
+  //
+  // The internal `AutocompleteResult` generated during the match
+  // classification process is not actually shown to the user in any way, so it
+  // doesn't make sense to record session-based "suggestion shown" metrics
+  // in this particular case.
+  if (input_.omit_asynchronous_matches()) {
+    return;
+  }
+
   for (auto& match : *result) {
     result->set_suggestions_shown_in_session(input_.IsZeroSuggest(), match);
   }
 
   for (auto& match : *result) {
-    const auto [zero_prefix_search_shown, zero_prefix_url_shown] =
-        result->suggestions_shown_in_session(/*is_zero_suggest=*/true);
-    match.zero_prefix_search_suggestions_shown_in_session =
-        zero_prefix_search_shown;
-    match.zero_prefix_url_suggestions_shown_in_session = zero_prefix_url_shown;
-
-    match.zero_prefix_suggestions_shown_in_session =
-        zero_prefix_search_shown || zero_prefix_url_shown;
-
-    const auto [typed_search_shown, typed_url_shown] =
-        result->suggestions_shown_in_session(/*is_zero_suggest=*/false);
-    match.typed_search_suggestions_shown_in_session = typed_search_shown;
-    match.typed_url_suggestions_shown_in_session = typed_url_shown;
+    match.session = result->session();
   }
 }
 
@@ -2036,8 +2131,9 @@ void AutocompleteController::UpdateTailSuggestPrefix(
   const auto common_prefix = result->GetCommonPrefix();
   if (!common_prefix.empty()) {
     for (auto& match : *result) {
-      if (match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL)
+      if (match.type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL) {
         match.tail_suggest_common_prefix = common_prefix;
+      }
     }
   }
 }
@@ -2060,19 +2156,22 @@ void AutocompleteController::NotifyChanged() {
 
   last_result_for_logging_ = internal_result_.GetMatchDedupComparators();
 
-  for (Observer& obs : observers_)
+  for (Observer& obs : observers_) {
     obs.OnResultChanged(this, notify_changed_default_match_);
+  }
   CancelNotifyChangedRequest();
 }
 
 void AutocompleteController::RequestNotifyChanged(bool notify_default_match,
                                                   bool delayed) {
-  if (notify_default_match)
+  if (notify_default_match) {
     notify_changed_default_match_ = true;
+  }
   notify_changed_debouncer_.RequestRun(base::BindOnce(
       &AutocompleteController::NotifyChanged, base::Unretained(this)));
-  if (!delayed)
+  if (!delayed) {
     notify_changed_debouncer_.FlushRequest();
+  }
 }
 
 void AutocompleteController::CancelNotifyChangedRequest() {
@@ -2084,12 +2183,14 @@ AutocompleteController::ProviderDoneState
 AutocompleteController::GetProviderDoneState() {
   bool doc_not_done = false;
   for (const auto& provider : providers_) {
-    if (!ShouldRunProvider(provider.get()) || provider->done())
+    if (!ShouldRunProvider(provider.get()) || provider->done()) {
       continue;
-    if (provider->type() != AutocompleteProvider::TYPE_DOCUMENT)
+    }
+    if (provider->type() != AutocompleteProvider::TYPE_DOCUMENT) {
       return ProviderDoneState::kNotDone;
-    else
+    } else {
       doc_not_done = true;
+    }
   }
   return doc_not_done ? ProviderDoneState::kAllExceptDocDone
                       : ProviderDoneState::kAllDone;
@@ -2102,12 +2203,13 @@ void AutocompleteController::StartExpireTimer() {
   // wait for the user to stop typing before they initiate a query.
   const int kExpireTimeMS = 500;
 
-  if (internal_result_.HasCopiedMatches())
+  if (internal_result_.HasCopiedMatches()) {
     expire_timer_.Start(
         FROM_HERE, base::Milliseconds(kExpireTimeMS),
         base::BindOnce(&AutocompleteController::UpdateResult,
                        base::Unretained(this), UpdateType::kExpirePass,
                        /*allow_post_done_updates=*/false));
+  }
 }
 
 void AutocompleteController::StartStopTimer() {
@@ -2118,7 +2220,7 @@ void AutocompleteController::StartStopTimer() {
 }
 
 void AutocompleteController::OnStopTimerTriggered() {
-  Stop(false, true);
+  Stop(AutocompleteStopReason::kInactivity);
   for (Observer& obs : observers_) {
     obs.OnAutocompleteStopTimerTriggered(input_);
   }
@@ -2205,8 +2307,9 @@ void AutocompleteController::RunBatchUrlScoringModel(OldResult& old_result) {
       internal_result_.matches_,
       [](const auto& match) { return match.IsMlScoringEligible(); });
 
-  if (eligible_matches_count == 0)
+  if (eligible_matches_count == 0) {
     return;
+  }
 
   // Run the model for the eligible matches. Keep a reference to those matches
   // to later redistribute their relevance scores based on the model output.
@@ -2273,8 +2376,9 @@ void AutocompleteController::RunBatchUrlScoringModel(OldResult& old_result) {
     relevance_heap.emplace(match_itr->relevance);
     prediction_and_match_itr_heap.emplace(prediction.value(),
                                           match_itr->relevance, match_itr);
-    if (match_itr->shortcut_boosted)
+    if (match_itr->shortcut_boosted) {
       boosted_shortcut_count++;
+    }
   }
 
   // Record the percentage of matches that were assigned non-null scores by
@@ -2303,8 +2407,9 @@ void AutocompleteController::RunBatchUrlScoringModel(OldResult& old_result) {
     prediction_and_match_itr_heap.pop();
   }
 
-  for (Observer& obs : observers_)
+  for (Observer& obs : observers_) {
     obs.OnMlScored(this, internal_result_);
+  }
 }
 
 void AutocompleteController::RunBatchUrlScoringModelMappedSearchBlending(
@@ -2590,8 +2695,9 @@ void AutocompleteController::
     match.relevance = scores_pool[i];
   }
 
-  for (Observer& obs : observers_)
+  for (Observer& obs : observers_) {
     obs.OnMlScored(this, internal_result_);
+  }
 }
 #endif  // BUILDFLAG(BUILD_WITH_TFLITE_LIB)
 

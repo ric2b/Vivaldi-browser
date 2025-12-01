@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--Copyright (c) 2025 Vivaldi Technologies AS. All rights reserved. -->
+<!-- Privacy Report specific resources (included from vivaldi_native_resources.grd). -->
+
+<grit-part>
+
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_FAVICON" file="../../ui/webui/privacy_report/favicon.ico" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_FILE" file="../../ui/webui/privacy_report/privacy_report.html" type="BINDATA" preprocess="true"/>
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_JS_TABS" file="../../ui/webui/privacy_report/js/tabs.js" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_BANDWIDTH_SAVED" file="../../ui/webui/privacy_report/img/bandwidth_saved.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_BANDWIDTH_SAVED_DARKMODE" file="../../ui/webui/privacy_report/img/bandwidth_saved_darkmode.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_CHEVRON_DOWN" file="../../ui/webui/privacy_report/img/chevron-down.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_CHEVRON_LEFT" file="../../ui/webui/privacy_report/img/chevron-left.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_CHEVRON_LEFT_DARKMODE" file="../../ui/webui/privacy_report/img/chevron-left-darkmode.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_CHEVRON_UP" file="../../ui/webui/privacy_report/img/chevron-up.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_CLOSE" file="../../ui/webui/privacy_report/img/close.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_CLOSE_DARKMODE" file="../../ui/webui/privacy_report/img/close-darkmode.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_REPORT_ICON_DISABLED" file="../../ui/webui/privacy_report/img/report_icon_disabled.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_REPORT_ICON_FULL" file="../../ui/webui/privacy_report/img/report_icon_full.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_REPORT_ICON_HALF" file="../../ui/webui/privacy_report/img/report_icon_half.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_DATE_RANGE_PICKER" file="../../ui/webui/privacy_report/img/date_range_picker.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_GRAPHIC_BLOCKER_SHIELD_TRACKERS" file="../../ui/webui/privacy_report/img/graphic_blocker_shield_trackers.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_GRAPHIC_BLOCKER_SHIELD_TRACKERS_DARKMODE" file="../../ui/webui/privacy_report/img/graphic_blocker_shield_trackers_darkmode.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_GRAPHIC_BLOCKER_SHIELD_TRACKERS_AND_ADS" file="../../ui/webui/privacy_report/img/graphic_blocker_shield_trackers_and_ads.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_GRAPHIC_BLOCKER_SHIELD_TRACKERS_AND_ADS_DARKMODE" file="../../ui/webui/privacy_report/img/graphic_blocker_shield_trackers_and_ads_darkmode.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_TIME_SAVED" file="../../ui/webui/privacy_report/img/time_saved.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_TIME_SAVED_DARKMODE" file="../../ui/webui/privacy_report/img/time_saved_darkmode.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_CSS_FILE" file="../../ui/webui/privacy_report/css/privacy_report.css" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_JS_FILE" file="../../ui/webui/privacy_report/js/privacy_report.js" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_NOTIFICATION" file="../../ui/webui/privacy_report/img/notification.svg" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_NO_TRACKING_HERO_1_960X540" file="../../ui/webui/privacy_report/img/No_Tracking_Hero_1_960x540.png" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_IMAGE_27" file="../../ui/webui/privacy_report/img/image_27.png" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_TOPICS_980X551_3_640X360" file="../../ui/webui/privacy_report/img/Topics_980x551_3_640x360.png" type="BINDATA" />
+  <include name="IDR_VIVALDI_PRIVACY_REPORT_IMG_860W_V3_MANIFEST_640X360" file="../../ui/webui/privacy_report/img/860w_v3_manifest_640x360.png" type="BINDATA" />
+</grit-part>

@@ -27,7 +27,6 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group_utils.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "components/sessions/content/content_serialized_navigation_builder.h"
@@ -37,6 +36,7 @@
 #include "components/sessions/core/session_constants.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/session_types.h"
+#include "components/tabs/public/tab_group.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/session_storage_namespace.h"
@@ -541,12 +541,14 @@ void SessionServiceBase::OnGotSessionCommands(
   std::vector<std::unique_ptr<sessions::SessionWindow>> valid_windows;
   SessionID active_window_id = SessionID::InvalidValue();
   std::string platform_session_id;
+  std::set<SessionID> discarded_window_ids;
 
   sessions::RestoreSessionFromCommands(commands, &valid_windows,
-                                       &active_window_id, &platform_session_id);
+                                       &active_window_id, &platform_session_id,
+                                       &discarded_window_ids);
   RemoveUnusedRestoreWindows(&valid_windows);
 
-  InitializePlatformSessionIfNeeded(platform_session_id);
+  InitializePlatformSessionIfNeeded(platform_session_id, discarded_window_ids);
 
   std::move(callback).Run(std::move(valid_windows), active_window_id,
                           read_error);
@@ -839,7 +841,8 @@ void SessionServiceBase::SetSavingEnabled(bool enabled) {
 }
 
 std::optional<std::string> SessionServiceBase::GetPlatformSessionId() {
-  InitializePlatformSessionIfNeeded(/*restored_platform_session_id=*/{});
+  InitializePlatformSessionIfNeeded(/*restored_platform_session_id=*/{},
+                                    /*discarded_window_ids=*/{});
   return platform_session_id_;
 }
 
@@ -850,7 +853,8 @@ void SessionServiceBase::SetPlatformSessionIdForTesting(const std::string& id) {
 }
 
 void SessionServiceBase::InitializePlatformSessionIfNeeded(
-    const std::string& restored_platform_session_id) {
+    const std::string& restored_platform_session_id,
+    const std::set<SessionID>& discarded_window_ids) {
 #if BUILDFLAG(IS_OZONE)
   ui::OzonePlatform* platform = ui::OzonePlatform::GetInstance();
   if (!platform->GetPlatformRuntimeProperties().supports_session_management ||
@@ -872,8 +876,15 @@ void SessionServiceBase::InitializePlatformSessionIfNeeded(
   if (actual_platform_session_id.has_value()) {
     DVLOG(1) << "Successfully initialized platform session."
              << " session_service=" << this
-             << " session_id=" << actual_platform_session_id.value();
+             << " session_id=" << actual_platform_session_id.value()
+             << " discarded_windows=" << discarded_window_ids.size();
     platform_session_id_ = std::move(actual_platform_session_id);
+
+    for (const SessionID& session_id : discarded_window_ids) {
+      session_manager->RemoveWindow(platform_session_id_.value(),
+                                    session_id.id());
+    }
+
     ScheduleCommand(sessions::CreateSetPlatformSessionIdCommand(
         platform_session_id_.value()));
   }

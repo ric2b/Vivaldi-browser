@@ -46,13 +46,18 @@ export enum PlatformFileSystemType {
 }
 
 export class PlatformFileSystem {
-  private readonly pathInternal: Platform.DevToolsPath.UrlString;
+  readonly #path: Platform.DevToolsPath.UrlString;
   #type: PlatformFileSystemType;
-  #automatic: boolean;
+  /**
+   * True if the filesystem was automatically discovered (see
+   * https://goo.gle/devtools-json-design).
+   */
+  readonly automatic: boolean;
+
   constructor(path: Platform.DevToolsPath.UrlString, type: PlatformFileSystemType, automatic: boolean) {
-    this.pathInternal = path;
+    this.#path = path;
     this.#type = type;
-    this.#automatic = automatic;
+    this.automatic = automatic;
   }
 
   getMetadata(_path: Platform.DevToolsPath.EncodedPathString): Promise<{modificationTime: Date, size: number}|null> {
@@ -68,7 +73,7 @@ export class PlatformFileSystem {
   }
 
   path(): Platform.DevToolsPath.UrlString {
-    return this.pathInternal;
+    return this.#path;
   }
 
   embedderPath(): Platform.DevToolsPath.RawPathString {
@@ -77,14 +82,6 @@ export class PlatformFileSystem {
 
   type(): PlatformFileSystemType {
     return this.#type;
-  }
-
-  /**
-   * True if the filesystem was automatically discovered (see
-   * https://goo.gle/devtools-json-design).
-   */
-  automatic(): boolean {
-    return this.#automatic;
   }
 
   async createFile(_path: Platform.DevToolsPath.EncodedPathString, _name: Platform.DevToolsPath.RawPathString|null):

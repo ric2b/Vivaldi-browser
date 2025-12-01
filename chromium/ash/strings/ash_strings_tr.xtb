@@ -462,6 +462,7 @@ Başlamak için şunları deneyebilirsin.</translation>
 <translation id="2530896289327917474">Metin imleciyle göz atmayı açma veya kapatma</translation>
 <translation id="2531025035050312891">cihaz yavaş</translation>
 <translation id="2531107890083353124">Sekmeyi sürüklerken <ph name="KEY_ONE" /> tuşuna basın</translation>
+<translation id="2532199152994248594">Arama yapılacak bir alan seçmek için sürükleyin veya boşluk tuşuna basın</translation>
 <translation id="2545334090614121435">Home tuşunu kullanmaya mı çalışıyorsunuz? Şunu kullanın:</translation>
 <translation id="254900897760075745">Seçili içeriği panoya kopyala</translation>
 <translation id="2549711466868162843">Gelişmiş Işık</translation>
@@ -581,7 +582,6 @@ Aksi takdirde yerleşik dokunmatik alan <ph name="TIMEOUT_SECONDS" /> sonra yeni
 <translation id="2949420361496057765"><ph name="MODIFIER" /> tuşunu basılı tutarken bağlantıyı tıklayın</translation>
 <translation id="2957159466053076448">Bu özellikleri dilediğiniz zaman Ayarlar'dan kapatabilirsiniz. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Cihaz sesi</translation>
-<translation id="2960314608273155470">Ekran Görüntüsü Alma Modu, varsayılan <ph name="SOURCE" /> <ph name="TYPE" />. Klavyeyle gezinmek için sekme tuşuna basın.</translation>
 <translation id="2961963223658824723">Bir sorun oluştu. Birkaç saniye sonra tekrar deneyin.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Mikrofon erişimi açılsın mı?</translation>
@@ -761,6 +761,7 @@ Aksi takdirde yerleşik dokunmatik alan <ph name="TIMEOUT_SECONDS" /> sonra yeni
 <translation id="3552189655002856821">Kablosuz bağlantı kapalı</translation>
 <translation id="3554215588514239132">Geliştirici Araçları panelini göster veya gizle</translation>
 <translation id="3554637740840164787"><ph name="ITEM_TITLE" /> sabitlendi</translation>
+<translation id="3554928024630051016">Başka USB cihazları eklemek için bir cihazı çıkarıp yenisini takmayı deneyin</translation>
 <translation id="3558768885091059911">Kamera ve mikrofon erişimi etkinleştirilsin mi?</translation>
 <translation id="3560174576767922131">Video kaydet</translation>
 <translation id="3563775809269155755">Hotspot'ı etkinleştir</translation>
@@ -868,6 +869,7 @@ Cihazınızı güç kaynağına bağlayın.</translation>
 <translation id="3861651314799684201">Tam ekran kaydı için enter tuşuna basın</translation>
 <translation id="3870197372373144624">Cihazınızı kapatmayı deneyin.</translation>
 <translation id="3879748587602334249">İndirme yöneticisi</translation>
+<translation id="3884007280698606545">USB sınırına ulaşıldı</translation>
 <translation id="3886872229787704059">Bugün açıldı</translation>
 <translation id="3891340733213178823">Oturumu kapatmak için Ctrl+ÜstKrktr+Q tuşlarına iki defa basın.</translation>
 <translation id="3892148308691398805">Metni kopyala</translation>
@@ -1440,6 +1442,7 @@ Bağlı cihaz yok.</translation>
 <translation id="5672890847723042801">Yardımcı programlar</translation>
 <translation id="5673434351075758678">Ayarlarınız senkronize edildikten sonra "<ph name="FROM_LOCALE" />" olan dil "<ph name="TO_LOCALE" />" olarak değiştirildi.</translation>
 <translation id="5675363643668471212">Raf öğesi</translation>
+<translation id="5677022547882470786">Arama yapılacak bir alan seçmek için sürükleyin veya boşluk tuşuna basın</translation>
 <translation id="5677928146339483299">Engelleniyor</translation>
 <translation id="5678564054339031017">Sonraki haftayı göster</translation>
 <translation id="5679050765726761783">Düşük güçlü bir adaptör bağlandı</translation>
@@ -1485,6 +1488,7 @@ Bağlı cihaz yok.</translation>
 <translation id="5788127256798019331">Play dosyaları</translation>
 <translation id="5788535737706478207">Kapatılan son sekmeyi veya pencereyi yeniden aç</translation>
 <translation id="5790085346892983794">Başarılı</translation>
+<translation id="5791926618942305301">Ekran görüntüsünde <ph name="SOURCE" /> <ph name="TYPE" /> olarak ayarlayın. Yakalama türünü seçmek için Sekme tuşuna basın. Çekmek için Enter tuşuna basın. Yakalama alanını seçmek için kısmi ekran görüntüsü olarak ayarlayın. Etkin değilse bölgeyi seçmek için boşluk tuşuna basın.</translation>
 <translation id="579415080077680903">Sessiz</translation>
 <translation id="5802516411616338943">Hızlı Ayarlar'ı açma</translation>
 <translation id="5804651031882187592">"SIM kilidi" ayarını devre dışı bırakın</translation>
@@ -1641,6 +1645,7 @@ Bağlı cihaz yok.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" />, bir ebeveynin izniyle daha sonra yeniden eklenebilir.</translation>
 <translation id="6291221004442998378">Şarj olmuyor</translation>
 <translation id="6298183524022479114">Bu cihazı uygulamada özelleştirin</translation>
+<translation id="6304076460080088478">Google Lens ile ekranınızda arama yapmak için gizli pencereleri kapatın veya küçültün</translation>
 <translation id="6309219492973062892">Raf simgelerine (1-8) dokunun veya tıklayın</translation>
 <translation id="6315170314923504164">Ses</translation>
 <translation id="6319058840130157106">Sağ alt köşe, Başlatıcı, adres çubuğu, yer işareti çubuğu, açık web sitesi ve indirilenler arasında geriye doğru geçiş yapın</translation>
@@ -1769,6 +1774,7 @@ Yeni yüklenmiş</translation>
 <translation id="6700713906295497288">IME menü düğmesi</translation>
 <translation id="6704073473590541209">Sağ kenar tutma yeri seçildi, taşımak için ok tuşlarını kullanın</translation>
 <translation id="6706742084323792866">PIN klavyesi</translation>
+<translation id="6709719156428404245">Kayıt yapılacak bir alan seçmek için sürükleyin veya boşluk tuşuna basın</translation>
 <translation id="6710213216561001401">Önceki</translation>
 <translation id="6723839937902243910">Güç</translation>
 <translation id="672609503628871915">Yenilikleri görüntüle</translation>

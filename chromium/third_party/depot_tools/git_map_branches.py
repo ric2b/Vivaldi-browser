@@ -34,6 +34,7 @@ from git_common import get_git_version, MIN_UPSTREAM_TRACK_GIT_VERSION, hash_one
 from git_common import get_config, run
 
 import gclient_utils
+import git_common
 import setup_color
 
 from third_party.colorama import Fore, Style
@@ -124,9 +125,11 @@ class BranchMapper(object):
         self.__current_branch = None
         self.__current_hash = None
         self.__tag_set = None
+        self.__root = None
         self.__status_info = {}
 
     def start(self):
+        self.__root = git_common.root()
         self.__branches_info = get_branches_info(
             include_tracking_status=self.verbosity >= 1)
         if (self.verbosity >= 2):
@@ -199,7 +202,7 @@ class BranchMapper(object):
         return not parent or parent in self.__gone_branches
 
     def __color_for_branch(self, branch, branch_hash):
-        if branch.startswith('origin/'):
+        if branch == self.__root or branch.startswith('origin/'):
             color = Fore.RED
         elif branch.startswith('branch-heads'):
             color = Fore.BLUE

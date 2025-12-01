@@ -270,6 +270,11 @@ declare_args() {
 
   # When true, include the Perfetto library.
   rtc_use_perfetto = false
+
+  # When true allows exports from deprecated namespaces.
+  # This will be set to false on Jun 23 2025. See bugs.webrtc.org/42232595
+  # for details.
+  rtc_allow_deprecated_namespaces = true
 }
 
 if (!build_with_mozilla) {
@@ -329,6 +334,9 @@ declare_args() {
 
   # Set this to true to disable webrtc metrics.
   rtc_disable_metrics = false
+
+  # Enables an experimental rust version of base64 for building and testing.
+  rtc_rusty_base64 = true
 }
 
 declare_args() {
@@ -376,6 +384,7 @@ if (is_mac || is_ios) {
 
 if (build_with_chromium) {
   rtc_use_perfetto = true
+  rtc_allow_deprecated_namespaces = false
 }
 
 # Global public configuration that should be applied to all WebRTC targets. You
@@ -590,6 +599,12 @@ template("rtc_source_set") {
     forward_variables_from(invoker, [ "visibility" ])
     if (!defined(visibility)) {
       visibility = webrtc_default_visibility
+    }
+
+    if (defined(invoker.sources)) {
+      nonheader_sources = filter_include(invoker.sources, [ "*.cc" ])
+      assert(nonheader_sources == [],
+             "rtc_source_set shall not contain cc files")
     }
 
     # What's your poison?

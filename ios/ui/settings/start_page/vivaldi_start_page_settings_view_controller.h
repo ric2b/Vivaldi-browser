@@ -8,6 +8,18 @@
 #import "ios/ui/settings/start_page/vivaldi_start_page_settings_consumer.h"
 
 class Browser;
+@class VivaldiStartPageSettingsViewController;
+
+// Delegate for presentation events related to
+// VivaldiStartPageSettingsViewController.
+@protocol VivaldiStartPageSettingsViewControllerPresentationDelegate
+
+// Called when the view controller is removed from its parent.
+- (void)startPageSettingsViewControllerWasRemoved:
+    (VivaldiStartPageSettingsViewController*)controller;
+
+@end
+
 
 // This class is the table view for the Start Page settings.
 @interface VivaldiStartPageSettingsViewController
@@ -16,6 +28,10 @@ class Browser;
 
 // The consumer of the start page settings mediator.
 @property(nonatomic, weak) id<VivaldiStartPageSettingsConsumer> consumer;
+
+@property(nonatomic, weak)
+    id<VivaldiStartPageSettingsViewControllerPresentationDelegate>
+        presentationDelegate;
 
 // Initializes a new VivaldiStartPageSettingsViewController. `browser` must not
 // be nil.

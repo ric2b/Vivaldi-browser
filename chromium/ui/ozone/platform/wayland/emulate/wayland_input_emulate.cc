@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
-#pragma allow_unsafe_libc_calls
-#endif
-
 #include "ui/ozone/platform/wayland/emulate/wayland_input_emulate.h"
 
 #include <ui-controls-unstable-v1-client-protocol.h>
@@ -15,19 +10,19 @@
 #include <cstdint>
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
-#include "ui/ozone/platform/wayland/host/shell_toplevel_wrapper.h"
 #include "ui/ozone/platform/wayland/host/wayland_popup.h"
 #include "ui/ozone/platform/wayland/host/wayland_toplevel_window.h"
 #include "ui/ozone/platform/wayland/host/wayland_window.h"
-#include "ui/ozone/platform/wayland/host/xdg_popup_wrapper_impl.h"
-#include "ui/ozone/platform/wayland/host/xdg_surface_wrapper_impl.h"
-#include "ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.h"
+#include "ui/ozone/platform/wayland/host/xdg_popup.h"
+#include "ui/ozone/platform/wayland/host/xdg_surface.h"
+#include "ui/ozone/platform/wayland/host/xdg_toplevel.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "ui/base/wayland/wayland_display_util.h"
@@ -146,21 +141,15 @@ void WaylandInputEmulate::EmulatePointerMotion(
 
   auto* wayland_proxy = wl::WaylandProxy::GetInstance();
 
-  xdg_surface* target_surface = nullptr;
+  struct xdg_surface* target_surface = nullptr;
   gfx::Point target_location = mouse_screen_location;
   if (widget) {
     auto* window = wayland_proxy->GetWaylandWindowForAcceleratedWidget(widget);
-    xdg_surface* xdg_surface = nullptr;
+    struct xdg_surface* xdg_surface = nullptr;
     if (auto* toplevel_window = window->AsWaylandToplevelWindow()) {
-      xdg_surface = toplevel_window->shell_toplevel()
-                        ->AsXDGToplevelWrapper()
-                        ->xdg_surface_wrapper()
-                        ->xdg_surface();
+      xdg_surface = toplevel_window->xdg_toplevel()->xdg_surface();
     } else if (auto* popup = window->AsWaylandPopup()) {
-      xdg_surface = popup->shell_popup()
-                        ->AsXDGPopupWrapper()
-                        ->xdg_surface_wrapper()
-                        ->xdg_surface();
+      xdg_surface = popup->xdg_popup()->xdg_surface();
     }
     bool screen_coordinates = false;
     if (force_use_screen_coordinates_once_) {
@@ -354,7 +343,8 @@ void WaylandInputEmulate::OnGlobal(void* data,
                                    const char* interface,
                                    uint32_t version) {
   auto* self = static_cast<WaylandInputEmulate*>(data);
-  if (strcmp(interface, "zcr_ui_controls_v1") == 0 && version >= kMinVersion) {
+  if (UNSAFE_TODO(strcmp(interface, "zcr_ui_controls_v1")) == 0 &&
+      version >= kMinVersion) {
     const wl_interface* wayland_interface =
         static_cast<const wl_interface*>(&zcr_ui_controls_v1_interface);
     self->ui_controls_ = static_cast<zcr_ui_controls_v1*>(

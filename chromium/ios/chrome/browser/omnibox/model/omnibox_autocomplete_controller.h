@@ -10,14 +10,14 @@
 #import "ios/chrome/browser/omnibox/model/autocomplete_result_wrapper_delegate.h"
 #import "ui/base/window_open_disposition.h"
 
+@protocol AutocompleteSuggestion;
 struct AutocompleteMatch;
 class AutocompleteResult;
 @class AutocompleteResultWrapper;
-class OmniboxController;
 @protocol OmniboxAutocompleteControllerDelegate;
 @protocol OmniboxAutocompleteControllerDebuggerDelegate;
+class OmniboxControllerIOS;
 @class OmniboxTextController;
-class OmniboxViewIOS;
 
 /// Controller for the omnibox autocomplete system. Handles interactions with
 /// the autocomplete system and dispatches results.
@@ -42,9 +42,8 @@ class OmniboxViewIOS;
 @property(nonatomic, assign, readonly) BOOL hasSuggestions;
 
 /// Initializes with an OmniboxController.
-- (instancetype)initWithOmniboxController:(OmniboxController*)omniboxController
-                           omniboxViewIOS:(OmniboxViewIOS*)omniboxViewIOS
-    NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithOmniboxController:
+    (OmniboxControllerIOS*)omniboxController NS_DESIGNATED_INITIALIZER;
 - (instancetype)init NS_UNAVAILABLE;
 
 /// Removes all C++ references.
@@ -78,7 +77,14 @@ class OmniboxViewIOS;
 /// Notifies of call action.
 - (void)onCallAction;
 
+/// Previews the given autocomplete suggestion.
+- (void)previewSuggestion:(id<AutocompleteSuggestion>)suggestion
+            isFirstUpdate:(BOOL)isFirstUpdate;
+
 #pragma mark - OmniboxText events
+
+/// Closes the omnibox popup.
+- (void)closeOmniboxPopup;
 
 /// Updates the popup text alignment.
 - (void)setTextAlignment:(NSTextAlignment)alignment;

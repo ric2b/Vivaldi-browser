@@ -72,6 +72,21 @@ Address AddressOf(const StackHandler* handler) {
 
 }  // namespace
 
+#if V8_ENABLE_WEBASSEMBLY
+bool IsWasmToJsWrapperCSA(Address pc) {
+  // The WasmToJsWrapper can also be called from the embedded data directly.
+  size_t builtin_size =
+      EmbeddedData::FromBlob().InstructionSizeOf(Builtin::kWasmToJsWrapperCSA);
+  Address wrapper_addr =
+      Builtins::EmbeddedEntryOf(Builtin::kWasmToJsWrapperCSA);
+  if (pc >= wrapper_addr && pc < wrapper_addr + builtin_size) {
+    return true;
+  }
+
+  return false;
+}
+#endif
+
 // Iterator that supports traversing the stack handlers of a
 // particular frame. Needs to know the top of the handler chain.
 class StackHandlerIterator {
@@ -144,13 +159,6 @@ StackFrameIterator::StackFrameIterator(Isolate* isolate, ThreadLocalTop* t)
 
 #if V8_ENABLE_WEBASSEMBLY
 StackFrameIterator::StackFrameIterator(Isolate* isolate, ThreadLocalTop* t,
-                                       NoHandles)
-    : StackFrameIteratorBase(isolate) {
-  no_gc_.emplace();
-  Reset(t);
-}
-
-StackFrameIterator::StackFrameIterator(Isolate* isolate, ThreadLocalTop* t,
                                        FirstStackOnly)
     : StackFrameIteratorBase(isolate) {
   first_stack_only_ = true;
@@ -162,12 +170,6 @@ StackFrameIterator::StackFrameIterator(Isolate* isolate,
     : StackFrameIteratorBase(isolate) {
   first_stack_only_ = true;
   Reset(isolate->thread_local_top(), stack);
-}
-#else
-StackFrameIterator::StackFrameIterator(Isolate* isolate, ThreadLocalTop* t,
-                                       NoHandles)
-    : StackFrameIteratorBase(isolate) {
-  Reset(t);
 }
 #endif
 
@@ -190,11 +192,8 @@ void StackFrameIterator::Advance() {
     // the "caller" frame (top frame of the parent stack) have frame type
     // STACK_SWITCH. We use the caller FP to distinguish them: the callee frame
     // does not have a caller fp.
-    auto parent = continuation()->parent();
-    CHECK(!IsUndefined(parent));
-    set_continuation(
-        GCSafeCast<WasmContinuationObject>(parent, isolate_->heap()));
-    wasm_stack_ = reinterpret_cast<wasm::StackMemory*>(continuation()->stack());
+    wasm_stack_ = wasm_stack()->jmpbuf()->parent;
+    CHECK_NOT_NULL(wasm_stack_);
     CHECK_EQ(wasm_stack_->jmpbuf()->state, wasm::JumpBuffer::Inactive);
     StackSwitchFrame::GetStateForJumpBuffer(wasm_stack_->jmpbuf(), &state);
     SetNewFrame(StackFrame::STACK_SWITCH, &state);
@@ -284,15 +283,7 @@ void StackFrameIterator::Reset(ThreadLocalTop* top) {
     type = ExitFrame::GetStateForFramePointer(Isolate::c_entry_fp(top), &state);
   }
 #if V8_ENABLE_WEBASSEMBLY
-  auto active_continuation = isolate_->root(RootIndex::kActiveContinuation);
-  if (!IsUndefined(active_continuation, isolate_)) {
-    auto continuation = GCSafeCast<WasmContinuationObject>(active_continuation,
-                                                           isolate_->heap());
-    if (!first_stack_only_) {
-      set_continuation(continuation);
-    }
-    wasm_stack_ = reinterpret_cast<wasm::StackMemory*>(continuation->stack());
-  }
+  wasm_stack_ = isolate_->isolate_data()->active_stack();
 #endif
   handler_ = StackHandler::FromAddress(Isolate::handler(top));
   SetNewFrame(type, &state);
@@ -338,21 +329,6 @@ void StackFrameIteratorBase::SetNewFrame(StackFrame::Type type) {
   frame_ = nullptr;
 }
 
-#if V8_ENABLE_WEBASSEMBLY
-Tagged<WasmContinuationObject> StackFrameIterator::continuation() {
-  return no_gc_.has_value() ? continuation_.obj_ : *continuation_.handle_;
-}
-
-void StackFrameIterator::set_continuation(
-    Tagged<WasmContinuationObject> continuation) {
-  if (no_gc_.has_value()) {
-    continuation_.obj_ = continuation;
-  } else {
-    continuation_.handle_ = handle(continuation, isolate_);
-  }
-}
-#endif
-
 // -------------------------------------------------------------------------
 
 void TypedFrameWithJSLinkage::Iterate(RootVisitor* v) const {
@@ -393,19 +369,6 @@ DebuggableStackFrameIterator::DebuggableStackFrameIterator(Isolate* isolate)
 DebuggableStackFrameIterator::DebuggableStackFrameIterator(Isolate* isolate,
                                                            StackFrameId id)
     : DebuggableStackFrameIterator(isolate) {
-  while (!done() && frame()->id() != id) Advance();
-}
-
-DebuggableStackFrameIterator::DebuggableStackFrameIterator(
-    Isolate* isolate, StackFrameIterator::NoHandles)
-    : iterator_(isolate, isolate->thread_local_top(),
-                StackFrameIterator::NoHandles{}) {
-  if (!done() && !IsValidFrame(iterator_.frame())) Advance();
-}
-
-DebuggableStackFrameIterator::DebuggableStackFrameIterator(
-    Isolate* isolate, StackFrameId id, StackFrameIterator::NoHandles)
-    : DebuggableStackFrameIterator(isolate, StackFrameIterator::NoHandles{}) {
   while (!done() && frame()->id() != id) Advance();
 }
 
@@ -939,12 +902,9 @@ StackFrame::Type SafeStackFrameType(StackFrame::Type candidate) {
     case StackFrame::NUMBER_OF_TYPES:
     case StackFrame::TURBOFAN_JS:
     case StackFrame::TURBOFAN_STUB_WITH_CONTEXT:
-#if V8_ENABLE_WEBASSEMBLY
-#if !V8_ENABLE_DRUMBRAKE
+#if V8_ENABLE_WEBASSEMBLY && !V8_ENABLE_DRUMBRAKE
     case StackFrame::C_WASM_ENTRY:
-#endif  // !V8_ENABLE_DRUMBRAKE
-    case StackFrame::WASM_TO_JS_FUNCTION:
-#endif  // V8_ENABLE_WEBASSEMBLY
+#endif  // V8_ENABLE_WEBASSEMBLY && !V8_ENABLE_DRUMBRAKE
       return StackFrame::NATIVE;
   }
   UNREACHABLE();
@@ -996,7 +956,8 @@ StackFrame::Type StackFrameIterator::ComputeStackFrameType(
   const intptr_t marker = Memory<intptr_t>(
       state->fp + CommonFrameConstants::kContextOrFrameTypeOffset);
   switch (lookup_result.value()->kind()) {
-    case CodeKind::BUILTIN: {
+    case CodeKind::BUILTIN:
+    case CodeKind::FOR_TESTING: {
       if (StackFrame::IsTypeMarker(marker)) break;
       return ComputeBuiltinFrameType(lookup_result.value());
     }
@@ -1032,7 +993,8 @@ StackFrame::Type StackFrameIterator::ComputeStackFrameType(
     case CodeKind::C_WASM_ENTRY:
       return StackFrame::C_WASM_ENTRY;
     case CodeKind::WASM_TO_JS_FUNCTION:
-      return StackFrame::WASM_TO_JS_FUNCTION;
+      // Should have been found by the WasmCode lookup above.
+      UNREACHABLE();
     case CodeKind::WASM_FUNCTION:
     case CodeKind::WASM_TO_CAPI_FUNCTION:
       // These never appear as on-heap Code objects.
@@ -1046,7 +1008,6 @@ StackFrame::Type StackFrameIterator::ComputeStackFrameType(
       UNREACHABLE();
 #endif  // V8_ENABLE_WEBASSEMBLY
     case CodeKind::BYTECODE_HANDLER:
-    case CodeKind::FOR_TESTING:
     case CodeKind::REGEXP:
     case CodeKind::INTERPRETED_FUNCTION:
       // Fall back to the marker.
@@ -1069,9 +1030,7 @@ StackFrame::Type StackFrameIteratorForProfiler::ComputeStackFrameType(
   // fast_c_call_caller_pc_address, for which authentication does not work.
   const Address pc = StackFrame::unauthenticated_pc(state->pc_address);
 #if V8_ENABLE_WEBASSEMBLY
-  Tagged<Code> wrapper =
-      isolate()->builtins()->code(Builtin::kWasmToJsWrapperCSA);
-  if (pc >= wrapper->instruction_start() && pc <= wrapper->instruction_end()) {
+  if (IsWasmToJsWrapperCSA(pc)) {
     return StackFrame::WASM_TO_JS;
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
@@ -1596,7 +1555,7 @@ void VisitSpillSlot(Isolate* isolate, RootVisitor* v,
       // We don't need to update smi values or full pointers.
       was_compressed = true;
       *spill_slot.location() = V8HeapCompressionScheme::DecompressTagged(
-          cage_base, static_cast<Tagged_t>(value));
+          static_cast<Tagged_t>(value));
       if (DEBUG_BOOL) {
         // Ensure that the spill slot contains correct heap object.
         Tagged<HeapObject> raw =
@@ -1631,8 +1590,8 @@ void VisitSpillSlot(Isolate* isolate, RootVisitor* v,
     if (!HAS_SMI_TAG(compressed_value)) {
       was_compressed = slot_contents <= 0xFFFFFFFF;
       // We don't need to update smi values.
-      *spill_slot.location() = V8HeapCompressionScheme::DecompressTagged(
-          cage_base, compressed_value);
+      *spill_slot.location() =
+          V8HeapCompressionScheme::DecompressTagged(compressed_value);
     }
   }
 #endif
@@ -2007,17 +1966,6 @@ void TypedFrame::IterateParamsOfGenericWasmToJSWrapper(RootVisitor* v) const {
   }
 }
 
-void TypedFrame::IterateParamsOfOptimizedWasmToJSWrapper(RootVisitor* v) const {
-  Tagged<GcSafeCode> code = GcSafeLookupCode();
-  if (code->wasm_js_tagged_parameter_count() > 0) {
-    FullObjectSlot tagged_parameter_base(&Memory<Address>(caller_sp()));
-    tagged_parameter_base += code->wasm_js_first_tagged_parameter();
-    FullObjectSlot tagged_parameter_limit =
-        tagged_parameter_base + code->wasm_js_tagged_parameter_count();
-    v->VisitRootPointers(Root::kStackRoots, nullptr, tagged_parameter_base,
-                         tagged_parameter_limit);
-  }
-}
 #endif  // V8_ENABLE_WEBASSEMBLY
 
 void TypedFrame::Iterate(RootVisitor* v) const {
@@ -2051,11 +1999,10 @@ void TypedFrame::Iterate(RootVisitor* v) const {
 #if V8_ENABLE_WEBASSEMBLY
   bool is_generic_wasm_to_js =
       code->is_builtin() && code->builtin_id() == Builtin::kWasmToJsWrapperCSA;
-  bool is_optimized_wasm_to_js = this->type() == WASM_TO_JS_FUNCTION;
+  // Optimized wasm-to-js frames map to the WasmFrame type.
+  DCHECK_NE(this->type(), WASM_TO_JS);
   if (is_generic_wasm_to_js) {
     IterateParamsOfGenericWasmToJSWrapper(v);
-  } else if (is_optimized_wasm_to_js) {
-    IterateParamsOfOptimizedWasmToJSWrapper(v);
   }
 #endif  // V8_ENABLE_WEBASSEMBLY
   DCHECK(code->is_turbofanned());
@@ -2302,10 +2249,7 @@ bool CommonFrame::HasTaggedOutgoingParams(
       wasm::GetWasmCodeManager()->LookupCode(isolate(), callee_pc());
   if (wasm_callee) return false;
 
-  Tagged<Code> wrapper =
-      isolate()->builtins()->code(Builtin::kWasmToJsWrapperCSA);
-  if (callee_pc() >= wrapper->instruction_start() &&
-      callee_pc() <= wrapper->instruction_end()) {
+  if (IsWasmToJsWrapperCSA(callee_pc())) {
     return false;
   }
   return code_lookup->has_tagged_outgoing_params();
@@ -2496,9 +2440,9 @@ void JavaScriptFrame::GetFunctions(
   DCHECK(functions->empty());
   std::vector<Tagged<SharedFunctionInfo>> raw_functions;
   GetFunctions(&raw_functions);
+  Isolate* isolate = Isolate::Current();
   for (const auto& raw_function : raw_functions) {
-    functions->push_back(
-        Handle<SharedFunctionInfo>(raw_function, function()->GetIsolate()));
+    functions->push_back(Handle<SharedFunctionInfo>(raw_function, isolate));
   }
 }
 
@@ -2811,7 +2755,8 @@ DirectHandle<StackFrameInfo>
 FrameSummary::JavaScriptFrameSummary::CreateStackFrameInfo() const {
   DirectHandle<SharedFunctionInfo> shared(function_->shared(), isolate());
   DirectHandle<Script> script(Cast<Script>(shared->script()), isolate());
-  DirectHandle<String> function_name = JSFunction::GetDebugName(function_);
+  DirectHandle<String> function_name =
+      JSFunction::GetDebugName(isolate(), function_);
   if (function_name->length() == 0 &&
       script->compilation_type() == Script::CompilationType::kEval) {
     function_name = isolate()->factory()->eval_string();
@@ -3089,7 +3034,8 @@ FrameSummaries OptimizedJSFrame::Summarize() const {
   // Delegate to JS frame in absence of deoptimization info.
   // TODO(turbofan): Revisit once we support deoptimization across the board.
   DirectHandle<Code> code(LookupCode(), isolate());
-  if (code->kind() == CodeKind::BUILTIN) {
+  if (code->kind() == CodeKind::BUILTIN ||
+      code->kind() == CodeKind::FOR_TESTING) {
     return JavaScriptFrame::Summarize();
   }
 
@@ -3581,11 +3527,7 @@ bool WasmFrame::at_to_number_conversion() const {
     return pos == 1;
   }
 
-  InnerPointerToCodeCache::InnerPointerToCodeCacheEntry* entry =
-      isolate()->inner_pointer_to_code_cache()->GetCacheEntry(callee_pc());
-  CHECK(entry->code.has_value());
-  Tagged<GcSafeCode> code = entry->code.value();
-  if (code->builtin_id() != Builtin::kWasmToJsWrapperCSA) {
+  if (!IsWasmToJsWrapperCSA(callee_pc())) {
     return false;
   }
 
@@ -4112,7 +4054,7 @@ void JavaScriptFrame::Print(StringStream* accumulator, PrintMode mode,
     if (!context.is_null()) {
       int slot_index = Context::MIN_CONTEXT_SLOTS + it->index();
       if (slot_index < context->length()) {
-        accumulator->Add("%o", context->get(slot_index));
+        accumulator->Add("%o", context->get(slot_index, kRelaxedLoad));
       } else {
         accumulator->Add(
             "// warning: missing context slot - inconsistent frame?");

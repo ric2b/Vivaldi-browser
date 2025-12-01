@@ -13,12 +13,12 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/version.h"
-#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/iwa_key_distribution_histograms.h"
-#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/iwa_key_distribution_info_provider.h"
-#include "chrome/browser/web_applications/isolated_web_apps/key_distribution/proto/key_distribution.pb.h"
 #include "chrome/browser/web_applications/isolated_web_apps/test/key_distribution/test_utils.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/component_updater/component_updater_paths.h"
+#include "components/webapps/isolated_web_apps/iwa_key_distribution_histograms.h"
+#include "components/webapps/isolated_web_apps/iwa_key_distribution_info_provider.h"
+#include "components/webapps/isolated_web_apps/proto/key_distribution.pb.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 
@@ -45,6 +45,13 @@ IwaKeyDistribution CreateValidData() {
   key_rotations.mutable_key_rotations()->emplace(kWebBundleId,
                                                  std::move(kr_info));
   *key_distribution.mutable_key_rotation_data() = std::move(key_rotations);
+
+  IwaSpecialAppPermissions special_app_permissions;
+  IwaSpecialAppPermissions::SpecialAppPermissions special_app_permissions_info;
+  special_app_permissions_info.mutable_multi_screen_capture()
+      ->set_skip_capture_started_notification(true);
+  special_app_permissions.mutable_special_app_permissions()->emplace(
+      kWebBundleId, std::move(special_app_permissions_info));
 
   return key_distribution;
 }

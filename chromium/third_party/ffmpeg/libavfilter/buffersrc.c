@@ -61,6 +61,8 @@ typedef struct BufferSourceContext {
     enum AVSampleFormat sample_fmt;
     int channels;
     AVChannelLayout ch_layout;
+    AVFrameSideData **side_data;
+    int nb_side_data;
 
     int eof;
     int64_t last_pts;
@@ -160,6 +162,17 @@ int av_buffersrc_parameters_set(AVFilterContext *ctx, AVBufferSrcParameters *par
         return AVERROR_BUG;
     }
 
+    if (param->nb_side_data > 0)
+        av_frame_side_data_free(&s->side_data, &s->nb_side_data);
+    for (int i = 0; i < param->nb_side_data; i++) {
+        int ret = av_frame_side_data_clone(&s->side_data, &s->nb_side_data,
+                                           param->side_data[i], 0);
+        if (ret < 0) {
+            av_frame_side_data_free(&s->side_data, &s->nb_side_data);
+            return ret;
+        }
+    }
+
     return 0;
 }
 
@@ -238,22 +251,6 @@ int attribute_align_arg av_buffersrc_add_frame_flags(AVFilterContext *ctx, AVFra
         if (!copy)
             return AVERROR(ENOMEM);
     }
-
-#if FF_API_INTERLACED_FRAME
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (copy->interlaced_frame)
-        copy->flags |= AV_FRAME_FLAG_INTERLACED;
-    if (copy->top_field_first)
-        copy->flags |= AV_FRAME_FLAG_TOP_FIELD_FIRST;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
-
-#if FF_API_FRAME_KEY
-FF_DISABLE_DEPRECATION_WARNINGS
-    if (copy->key_frame)
-        copy->flags |= AV_FRAME_FLAG_KEY;
-FF_ENABLE_DEPRECATION_WARNINGS
-#endif
 
     if (copy->colorspace == AVCOL_SPC_UNSPECIFIED)
         copy->colorspace = ctx->outputs[0]->colorspace;
@@ -432,6 +429,7 @@ static av_cold void uninit(AVFilterContext *ctx)
     BufferSourceContext *s = ctx->priv;
     av_buffer_unref(&s->hw_frames_ctx);
     av_channel_layout_uninit(&s->ch_layout);
+    av_frame_side_data_free(&s->side_data, &s->nb_side_data);
 }
 
 static int query_formats(const AVFilterContext *ctx,
@@ -521,6 +519,17 @@ static int config_props(AVFilterLink *link)
         break;
     default:
         return AVERROR(EINVAL);
+    }
+
+    for (int i = 0; i < c->nb_side_data; i++) {
+        int ret;
+
+        ret = av_frame_side_data_clone(&link->side_data, &link->nb_side_data,
+                                       c->side_data[i], 0);
+        if (ret < 0) {
+            av_frame_side_data_free(&link->side_data, &link->nb_side_data);
+            return ret;
+        }
     }
 
     link->time_base = c->time_base;

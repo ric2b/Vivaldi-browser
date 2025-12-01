@@ -153,6 +153,10 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
      {"disable_sample_variables",
       "Disables gl_SampleMask and related functionality which is unsupported on some platforms.",
       "https://crbug.com/dawn/673", ToggleStage::Device}},
+    {Toggle::DisableBindGroupLayoutEntryArraySize,
+     {"disable_bind_group_layout_entry_array_size",
+      "Disable uses of BindGroupLayoutEntry.bindingArraySize > 0.",
+      "https://issues.chromium.org/393558555", ToggleStage::Device}},
     {Toggle::UseD3D12SmallShaderVisibleHeapForTesting,
      {"use_d3d12_small_shader_visible_heap",
       "Enable use of a small D3D12 shader visible heap, instead of using a large one by default. "
@@ -169,6 +173,10 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::MetalEnableVertexPulling,
      {"metal_enable_vertex_pulling", "Uses vertex pulling to protect out-of-bounds reads on Metal",
       "https://crbug.com/dawn/480", ToggleStage::Device}},
+    {Toggle::DisableTextureViewBindingUsedAsExternalTexture,
+     {"disable_texture_view_binding_used_as_external_texture",
+      "Disable using a texture view for an externalTexture binding.", "http://crbug.com/398752857",
+      ToggleStage::Device}},
     {Toggle::AllowUnsafeAPIs,
      {"allow_unsafe_apis",
       "Suppresses validation errors on API entry points or parameter combinations that aren't "
@@ -454,6 +462,14 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "Use a shader based blit instead of a copy command to copy a buffer to a texture with "
       "supported format.",
       "https://crbug.com/dawn/348653642", ToggleStage::Device}},
+    {Toggle::GLUseArrayLengthFromUniform,
+     {"gl_use_array_length_from_uniform",
+      "Use arrayLengthFromUniform transform to replace arrayLength() function calls of dynamic "
+      "storage buffers."
+      "This toggle is only used for workarounds on certain devices. It has no impact on backends "
+      "which need "
+      "this transform universally (metal, d3d12)",
+      "https://crbug.com/dawn/379805731", ToggleStage::Device}},
     {Toggle::D3D11DisableCPUUploadBuffers,
      {"d3d11_disable_cpu_buffers",
       "Force disabling the usages of CPU upload buffers in the D3D11 backend.",
@@ -547,7 +563,7 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "https://crbug.com/dawn/2260", ToggleStage::Instance}},
     {Toggle::ExposeWGSLExperimentalFeatures,
      {"expose_wgsl_experimental_features",
-      "Make the Instance expose the experimental features but not the unsage ones, so that safe "
+      "Make the Instance expose the experimental features but not the unsafe ones, so that safe "
       "experimental features can be used without the need for allow_unsafe_apis",
       "https://crbug.com/dawn/2260", ToggleStage::Instance}},
     {Toggle::DisablePolyfillsOnIntegerDivisonAndModulo,
@@ -623,6 +639,23 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
     {Toggle::UseVulkanMemoryModel,
      {"use_vulkan_memory_model", "Use the Vulkan Memory Model if available.",
       "https://crbug.com/392606604", ToggleStage::Adapter}},
+    {Toggle::VulkanScalarizeClampBuiltin,
+     {"vulkan_scalarize_clamp_builtin", "Scalarize calls to the clamp builtin.",
+      "https://crbug.com/407109052", ToggleStage::Device}},
+    {Toggle::VulkanDirectVariableAccessTransformHandle,
+     {"vulkan_direct_variable_access_transform_handle",
+      "Transform handles using direct variable access.", "https://crbug.com/387000529",
+      ToggleStage::Device}},
+    {Toggle::VulkanAddWorkToEmptyResolvePass,
+     {"vulkan_add_work_to_empty_resolve_pass",
+      "Adds a small amount of work to empty render passes which perform a resolve. This toggle is "
+      "enabled by default on Qualcomm GPUs, where it is needed to force the resolve to complete.",
+      "https://crbug.com/411656647", ToggleStage::Device}},
+    {Toggle::EnableIntegerRangeAnalysisInRobustness,
+     {"enable_integer_range_analysis_in_robustness",
+      "Compute the range of the index with Integer Range Analysis in the robustness transform and "
+      "skip doing index clamping when the out of bound access cannot happen.",
+      "https://crbug.com/348701956", ToggleStage::Device}},
     {Toggle::NoWorkaroundSampleMaskBecomesZeroForAllButLastColorTarget,
      {"no_workaround_sample_mask_becomes_zero_for_all_but_last_color_target",
       "MacOS 12.0+ Intel has a bug where the sample mask is only applied for the last color "
@@ -656,6 +689,13 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
      {"d3d11_disable_fence",
       "Disable d3d11 fence. Fences are not always available on every D3D11 device.",
       "https://crbug.com/chromium/390441217", ToggleStage::Device}},
+    {Toggle::D3D11DelayFlushToGPU,
+     {"d3d11_delay_flush_to_gpu",
+      "When this toggle is enabled, Queue::Submit() might not flush the commands to GPU "
+      "immediately. A flush will happen when IDXGISwapChain::Present() is called or applications "
+      "use Instance.WaitAny() to wait for a GPU operation to finish. This toggle is intended to "
+      "reduce the fixed overhead associated with each flushing.",
+      "https://crbug.com/chromium/377716220", ToggleStage::Device}},
     {Toggle::IgnoreImportedAHardwareBufferVulkanImageSize,
      {"ignore_imported_ahardwarebuffer_vulkan_image_size",
       "Don't validate the required VkImage size against the size of the AHardwareBuffer on import. "
@@ -663,6 +703,7 @@ static constexpr ToggleEnumAndInfoList kToggleNameAndInfoList = {{
       "https://crbug.com/333424893", ToggleStage::Device}},
     // Comment to separate the }} so it is clearer what to copy-paste to add a toggle.
 }};
+
 }  // anonymous namespace
 
 void TogglesSet::Set(Toggle toggle, bool enabled) {
@@ -679,10 +720,6 @@ bool TogglesSet::Has(Toggle toggle) const {
 
 size_t TogglesSet::Count() const {
     return bitset.count();
-}
-
-TogglesSet::Iterator TogglesSet::Iterate() const {
-    return IterateBitSet(bitset);
 }
 
 TogglesState::TogglesState(ToggleStage stage) : mStage(stage) {}
@@ -731,7 +768,7 @@ TogglesState& TogglesState::InheritFrom(const TogglesState& inheritedToggles) {
     // be force-set in the result toggles state, and all toggles that are set in the inherited
     // toggles states and not required in current toggles state would be set in the result toggles
     // state.
-    for (uint32_t i : inheritedToggles.mTogglesSet.Iterate()) {
+    for (uint32_t i : inheritedToggles.mTogglesSet) {
         const Toggle& toggle = static_cast<Toggle>(i);
         DAWN_ASSERT(TogglesInfo::GetToggleInfo(toggle)->stage < mStage);
         bool isEnabled = inheritedToggles.mEnabledToggles.Has(toggle);
@@ -803,7 +840,7 @@ std::vector<const char*> TogglesState::GetEnabledToggleNames() const {
     std::vector<const char*> enabledTogglesName(mEnabledToggles.Count());
 
     uint32_t index = 0;
-    for (uint32_t i : mEnabledToggles.Iterate()) {
+    for (uint32_t i : mEnabledToggles) {
         const Toggle& toggle = static_cast<Toggle>(i);
         // All enabled toggles must be provided.
         DAWN_ASSERT(mTogglesSet.Has(toggle));
@@ -819,7 +856,7 @@ std::vector<const char*> TogglesState::GetDisabledToggleNames() const {
     std::vector<const char*> enabledTogglesName(mTogglesSet.Count() - mEnabledToggles.Count());
 
     uint32_t index = 0;
-    for (uint32_t i : mTogglesSet.Iterate()) {
+    for (uint32_t i : mTogglesSet) {
         const Toggle& toggle = static_cast<Toggle>(i);
         // Disabled toggles are those provided but not enabled.
         if (!mEnabledToggles.Has(toggle)) {

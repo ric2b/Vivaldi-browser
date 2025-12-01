@@ -126,7 +126,7 @@ export class CheckupSectionElement extends CheckupSectionElementBase {
             'reusedPasswords_, weakPasswords_)',
       },
 
-      groupCount_: {
+      passwordCount_: {
         type: Number,
         value: 0,
         observer: 'updateCheckedPasswordsText_',
@@ -134,21 +134,22 @@ export class CheckupSectionElement extends CheckupSectionElementBase {
     };
   }
 
-  focusConfig: FocusConfig;
-  private checkedPasswordsText_: string;
-  private compromisedPasswordsText_: string;
-  private reusedPasswordsText_: string;
-  private weakPasswordsText_: string;
-  private compromisedPasswordsSuggestion_: string;
-  private status_: chrome.passwordsPrivate.PasswordCheckStatus;
-  private compromisedPasswords_: chrome.passwordsPrivate.PasswordUiEntry[];
-  private weakPasswords_: chrome.passwordsPrivate.PasswordUiEntry[];
-  private isCheckRunning_: boolean;
-  private isCheckSuccessful_: boolean;
-  private bannerImage_: string;
-  private reusedPasswords_: chrome.passwordsPrivate.PasswordUiEntry[];
+  declare focusConfig: FocusConfig;
+  declare private checkedPasswordsText_: string;
+  declare private compromisedPasswordsText_: string;
+  declare private reusedPasswordsText_: string;
+  declare private weakPasswordsText_: string;
+  declare private compromisedPasswordsSuggestion_: string;
+  declare private status_: chrome.passwordsPrivate.PasswordCheckStatus;
+  declare private compromisedPasswords_:
+      chrome.passwordsPrivate.PasswordUiEntry[];
+  declare private weakPasswords_: chrome.passwordsPrivate.PasswordUiEntry[];
+  declare private isCheckRunning_: boolean;
+  declare private isCheckSuccessful_: boolean;
+  declare private bannerImage_: string;
+  declare private reusedPasswords_: chrome.passwordsPrivate.PasswordUiEntry[];
   private didCheckAutomatically_: boolean = false;
-  private groupCount_: number;
+  declare private passwordCount_: number;
 
   private statusChangedListener_: PasswordCheckStatusChangedListener|null =
       null;
@@ -186,9 +187,11 @@ export class CheckupSectionElement extends CheckupSectionElementBase {
       });
     };
 
-    this.setSavedPasswordsListener_ = _passwordList => {
-      PasswordManagerImpl.getInstance().getCredentialGroups().then(
-          groups => this.groupCount_ = groups.length);
+    this.setSavedPasswordsListener_ = passwordList => {
+      this.passwordCount_ =
+          passwordList
+              .filter(entry => !entry.federationText && !entry.isPasskey)
+              .length;
     };
 
     PasswordManagerImpl.getInstance().getPasswordCheckStatus().then(
@@ -201,8 +204,8 @@ export class CheckupSectionElement extends CheckupSectionElementBase {
     PasswordManagerImpl.getInstance().addInsecureCredentialsListener(
         this.insecureCredentialsChangedListener_);
 
-    PasswordManagerImpl.getInstance().getCredentialGroups().then(
-        groups => this.groupCount_ = groups.length);
+    PasswordManagerImpl.getInstance().getSavedPasswordList().then(
+        this.setSavedPasswordsListener_);
     PasswordManagerImpl.getInstance().addSavedPasswordListChangedListener(
         this.setSavedPasswordsListener_);
   }
@@ -293,7 +296,7 @@ export class CheckupSectionElement extends CheckupSectionElementBase {
       case CheckState.NO_PASSWORDS:
         this.checkedPasswordsText_ =
             await PluralStringProxyImpl.getInstance().getPluralString(
-                'checkedPasswords', this.groupCount_);
+                'checkedPasswords', this.passwordCount_);
         return;
       case CheckState.CANCELED:
         this.checkedPasswordsText_ = this.i18n('checkupCanceled');

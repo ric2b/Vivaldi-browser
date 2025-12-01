@@ -18,7 +18,6 @@
 #import "components/password_manager/core/browser/features/password_features.h"
 #import "components/password_manager/core/browser/password_manager_interface.h"
 #import "components/password_manager/core/browser/password_ui_utils.h"
-#import "components/password_manager/core/common/password_manager_features.h"
 #import "components/password_manager/ios/account_select_fill_data.h"
 #import "components/password_manager/ios/features.h"
 #import "components/password_manager/ios/ios_password_manager_driver_factory.h"
@@ -384,7 +383,7 @@ base::TimeDelta GetCleanupTaskPeriodMs() {
 
 - (BOOL)isPasswordFieldOnForm:(FormSuggestionProviderQuery*)formQuery
                      webFrame:(web::WebFrame*)webFrame {
-  if (![formQuery.fieldType isEqual:kObfuscatedFieldType]) {
+  if (![formQuery.fieldType isEqualToString:kObfuscatedFieldType]) {
     return NO;
   }
 
@@ -394,15 +393,11 @@ base::TimeDelta GetCleanupTaskPeriodMs() {
     return YES;
   }
 
-  bool useNewDetection = base::FeatureList::IsEnabled(
-      password_manager::features::kIOSImprovePasswordFieldDetectionForFilling);
-
   // If the new approach to detect password fields is enabled, first
   // check if the Password Manager thinks it is a password field, then fallback
   // to using Autofill if the Password Manager verdict is negative.
-  return (useNewDetection &&
-          [self isPasswordFieldFromPasswordManagerPerspective:formQuery
-                                                     webFrame:webFrame]) ||
+  return [self isPasswordFieldFromPasswordManagerPerspective:formQuery
+                                                    webFrame:webFrame] ||
          [self isPasswordFieldFromAutofillPerspective:formQuery
                                              webFrame:webFrame];
 }
@@ -454,6 +449,7 @@ base::TimeDelta GetCleanupTaskPeriodMs() {
     case autofill::FieldTypeGroup::kIban:
     case autofill::FieldTypeGroup::kStandaloneCvcField:
     case autofill::FieldTypeGroup::kAutofillAi:
+    case autofill::FieldTypeGroup::kLoyaltyCard:
       return NO;
   }
 }

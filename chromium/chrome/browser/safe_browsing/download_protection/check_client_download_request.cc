@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
@@ -145,41 +146,36 @@ void CheckClientDownloadRequest::OnDownloadUpdated(
 }
 
 // static
-bool CheckClientDownloadRequest::IsSupportedDownload(
+MayCheckDownloadResult CheckClientDownloadRequest::IsSupportedDownload(
     const download::DownloadItem& item,
-    const base::FilePath& target_path,
+    const base::FilePath& file_name,
     DownloadCheckResultReason* reason) {
   if (item.GetUrlChain().empty()) {
     *reason = REASON_EMPTY_URL_CHAIN;
-    return false;
+    return MayCheckDownloadResult::kMayNotCheckDownload;
   }
   const GURL& final_url = item.GetUrlChain().back();
   if (!final_url.is_valid() || final_url.is_empty()) {
     *reason = REASON_INVALID_URL;
-    return false;
+    return MayCheckDownloadResult::kMayNotCheckDownload;
   }
   if (!final_url.IsStandard() && !final_url.SchemeIsBlob() &&
       !final_url.SchemeIs(url::kDataScheme)) {
     *reason = REASON_UNSUPPORTED_URL_SCHEME;
-    return false;
+    return MayCheckDownloadResult::kMayNotCheckDownload;
   }
   // TODO(crbug.com/41372015): Remove duplicated counting of REMOTE_FILE
   // and LOCAL_FILE in SBClientDownload.UnsupportedScheme.*.
   if (final_url.SchemeIsFile()) {
     *reason = final_url.has_host() ? REASON_REMOTE_FILE : REASON_LOCAL_FILE;
-    return false;
+    return MayCheckDownloadResult::kMayNotCheckDownload;
   }
-  // On Android, ignore REASON_NOT_BINARY_FILE, because it is derived from
-  // FileTypePolicies, which are currently only applicable to desktop platforms.
-  // TODO(chlily): Refactor/fix FileTypePolicies and then remove this exception.
-#if !BUILDFLAG(IS_ANDROID)
   // This check should be last, so we know the earlier checks passed.
-  if (!FileTypePolicies::GetInstance()->IsCheckedBinaryFile(target_path)) {
+  if (!IsFiletypeSupportedForFullDownloadProtection(file_name)) {
     *reason = REASON_NOT_BINARY_FILE;
-    return false;
+    return MayCheckDownloadResult::kMaySendSampledPingOnly;
   }
-#endif
-  return true;
+  return MayCheckDownloadResult::kMayCheckDownload;
 }
 
 CheckClientDownloadRequest::~CheckClientDownloadRequest() {
@@ -187,9 +183,15 @@ CheckClientDownloadRequest::~CheckClientDownloadRequest() {
   item_->RemoveObserver(this);
 }
 
-bool CheckClientDownloadRequest::IsSupportedDownload(
+MayCheckDownloadResult CheckClientDownloadRequest::IsSupportedDownload(
     DownloadCheckResultReason* reason) {
-  return IsSupportedDownload(*item_, item_->GetTargetFilePath(), reason);
+  return IsSupportedDownload(*item_,
+#if BUILDFLAG(IS_ANDROID)
+                             /*file_name=*/item_->GetFileNameToReportUser(),
+#else
+                             /*file_name=*/item_->GetTargetFilePath(),
+#endif
+                             reason);
 }
 
 download::DownloadItem* CheckClientDownloadRequest::item() const {

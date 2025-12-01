@@ -86,6 +86,7 @@ import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConf
 import org.chromium.chrome.browser.ui.signin.BottomSheetSigninAndHistorySyncConfig.WithAccountSigninMode;
 import org.chromium.chrome.browser.ui.signin.SigninAndHistorySyncActivityLauncher;
 import org.chromium.chrome.browser.ui.signin.history_sync.HistorySyncConfig;
+import org.chromium.components.browser_ui.settings.SettingsCustomTabLauncher;
 import org.chromium.components.browser_ui.settings.SettingsNavigation;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -112,9 +113,6 @@ import java.util.Set;
 // TODO(crbug.com/397186266): Update the tests when updating SafetyCheckMediator itself.
 // The mediator exercises a code path checking the LOGIN_DB_DEPRECATION_ANDROID
 // flag, so it has to be set up explicitly in tests.
-@DisableFeatures({
-    ChromeFeatureList.UNIFIED_PASSWORD_MANAGER_LOCAL_PASSWORDS_ANDROID_ACCESS_LOSS_WARNING,
-})
 public class SafetyCheckMediatorTest {
     private static final String SAFETY_CHECK_INTERACTIONS_HISTOGRAM =
             "Settings.SafetyCheck.Interactions";
@@ -154,10 +152,11 @@ public class SafetyCheckMediatorTest {
     @Mock private PasswordManagerHelper.Natives mPasswordManagerHelperNativeMock;
     @Mock LoadingModalDialogCoordinator mLoadingModalDialogCoordinator;
     private FakePasswordCheckControllerFactory mPasswordCheckControllerFactory;
+    @Mock private SettingsCustomTabLauncher mSettingsCustomTabLauncher;
 
     private SafetyCheckMediator mMediator;
 
-    private boolean mUseGmsApi;
+    private final boolean mUseGmsApi;
 
     private ModalDialogManager mModalDialogManager;
 
@@ -245,11 +244,12 @@ public class SafetyCheckMediatorTest {
                 mSigninLauncher,
                 mSyncService,
                 mPrefService,
+                mHandler,
                 mPasswordStoreBridge,
                 mPasswordCheckControllerFactory,
                 PasswordManagerHelper.getForProfile(mProfile),
-                mHandler,
-                mModalDialogManagerSupplier);
+                mModalDialogManagerSupplier,
+                mSettingsCustomTabLauncher);
     }
 
     private Preference.OnPreferenceClickListener getPasswordsClickListener(

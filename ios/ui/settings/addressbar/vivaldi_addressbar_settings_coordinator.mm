@@ -7,12 +7,14 @@
 #import "ios/chrome/browser/url_loading/model/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/model/url_loading_params.h"
 #import "ios/ui/common/vivaldi_url_constants.h"
+#import "ios/ui/helpers/helpers_swift.h"
 #import "ios/ui/settings/addressbar/vivaldi_addressbar_settings_mediator.h"
 #import "ios/ui/settings/addressbar/vivaldi_addressbar_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiAddressBarSettingsCoordinator ()
+@interface VivaldiAddressBarSettingsCoordinator ()<
+    VivaldiHostingControllerPresentationDelegate>
 @property(nonatomic, strong)
     VivaldiAddressBarSettingsViewProvider* viewProvider;
 // View controller for the Address bar setting.
@@ -43,8 +45,8 @@
 
 - (void)start {
   self.viewProvider = [[VivaldiAddressBarSettingsViewProvider alloc] init];
-
-  self.viewController = [self.viewProvider makeViewController];
+  self.viewController =
+      [self.viewProvider makeViewControllerWithPresentationDelegate:self];
   self.viewController.title =
       l10n_util::GetNSString(IDS_IOS_PREFS_VIVALDI_ADDRESSBAR);
   self.viewController.navigationItem.largeTitleDisplayMode =
@@ -101,6 +103,14 @@
   params.in_incognito = self.browser->GetProfile()->IsOffTheRecord();
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
   [self handleDoneButtonTap];
+}
+
+#pragma mark - VivaldiHostingControllerPresentationDelegate
+
+- (void)hostingController:(UIViewController*)hostingController
+                didMoveTo:(UIViewController* _Nullable)parent {
+  DCHECK_EQ(self.viewController, hostingController);
+  [self stop];
 }
 
 @end

@@ -66,7 +66,7 @@ Bindings GenerateBindings(const core::ir::Module& module) {
                 group_to_next_binding_number.Add(bp->group, bp->binding + 1);
             }
 
-            auto* ptr_type = var->Result(0)->Type()->As<core::type::Pointer>();
+            auto* ptr_type = var->Result()->Type()->As<core::type::Pointer>();
 
             // Add all texture variables to the texture-builtin-from-uniform map.
             if (ptr_type->StoreType()->Is<core::type::Texture>()) {
@@ -100,7 +100,7 @@ Bindings GenerateBindings(const core::ir::Module& module) {
                 case core::AddressSpace::kUndefined:
                 case core::AddressSpace::kPixelLocal:
                 case core::AddressSpace::kPrivate:
-                case core::AddressSpace::kPushConstant:
+                case core::AddressSpace::kImmediate:
                 case core::AddressSpace::kIn:
                 case core::AddressSpace::kOut:
                 case core::AddressSpace::kFunction:

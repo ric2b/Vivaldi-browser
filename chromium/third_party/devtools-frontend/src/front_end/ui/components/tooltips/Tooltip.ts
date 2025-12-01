@@ -1,6 +1,7 @@
 // Copyright 2025 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import * as Lit from '../../lit/lit.js';
 import * as VisualLogging from '../../visual_logging/visual_logging.js';
@@ -41,6 +42,11 @@ export class Tooltip extends HTMLElement {
   #timeout: number|null = null;
   #closing = false;
   #anchorObserver: MutationObserver|null = null;
+  #openedViaHotkey = false;
+
+  get openedViaHotkey(): boolean {
+    return this.#openedViaHotkey;
+  }
 
   get open(): boolean {
     return this.matches(':popover-open');
@@ -137,7 +143,7 @@ export class Tooltip extends HTMLElement {
 
     // clang-format off
     Lit.render(html`
-      <style>${tooltipStyles.cssText}</style>
+      <style>${tooltipStyles}</style>
       <!-- Wrapping it into a container, so that the tooltip doesn't disappear when the mouse moves from the anchor to the tooltip. -->
       <div class="container">
         <slot></slot>
@@ -235,11 +241,13 @@ export class Tooltip extends HTMLElement {
   #resetClosing = (event: Event): void => {
     if ((event as ToggleEvent).newState === 'closed') {
       this.#closing = false;
+      this.#openedViaHotkey = false;
     }
   };
 
   #keyDown = (event: KeyboardEvent): void => {
     if ((event.altKey && event.key === 'ArrowDown') || (event.key === 'Escape' && this.open)) {
+      this.#openedViaHotkey = !this.open;
       this.toggle();
       event.consume(true);
     }

@@ -337,6 +337,7 @@ class WindowSurfaceVk : public SurfaceVk
     egl::Error getBufferAge(const gl::Context *context, EGLint *age) override;
 
     egl::Error setRenderBuffer(EGLint renderBuffer) override;
+    bool supportsSingleRenderBuffer() const override;
 
     bool isSharedPresentMode() const { return IsSharedPresentMode(mSwapchainPresentMode); }
 
@@ -418,7 +419,6 @@ class WindowSurfaceVk : public SurfaceVk
     void adjustSurfaceExtent(VkExtent2D *extent) const;
     // This method will invalidate the swapchain (if needed due to present returning OUT_OF_DATE, or
     // swap interval changing).  Updates the current swapchain present mode.
-    void checkForOutOfDateSwapchain(vk::Renderer *renderer, bool presentOutOfDate);
     angle::Result prepareSwapchainForAcquireNextImage(vk::ErrorContext *context);
     void createSwapchainImages(uint32_t imageCount);
     void releaseSwapchainImages(vk::Renderer *renderer);
@@ -438,16 +438,14 @@ class WindowSurfaceVk : public SurfaceVk
     void deferAcquireNextImage();
     bool skipAcquireNextSwapchainImageForSharedPresentMode() const;
 
-    angle::Result computePresentOutOfDate(vk::ErrorContext *context,
-                                          VkResult result,
-                                          bool *presentOutOfDate);
+    angle::Result checkSwapchainOutOfDate(vk::ErrorContext *context, VkResult presentResult);
     angle::Result prePresentSubmit(ContextVk *contextVk, const vk::Semaphore &presentSemaphore);
     angle::Result recordPresentLayoutBarrierIfNecessary(ContextVk *contextVk);
     angle::Result present(ContextVk *contextVk,
                           const EGLint *rects,
                           EGLint n_rects,
                           const void *pNextChain,
-                          bool *presentOutOfDate);
+                          SurfaceSwapFeedback *feedback);
 
     angle::Result cleanUpPresentHistory(vk::ErrorContext *context);
     angle::Result cleanUpOldSwapchains(vk::ErrorContext *context);

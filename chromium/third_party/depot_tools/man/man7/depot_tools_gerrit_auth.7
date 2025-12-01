@@ -1,0 +1,80 @@
+'\" t
+.\"     Title: depot_tools_gerrit_auth
+.\"    Author: [FIXME: author] [see http://www.docbook.org/tdg5/en/html/author]
+.\" Generator: DocBook XSL Stylesheets vsnapshot <http://docbook.sf.net/>
+.\"      Date: 05/07/2025
+.\"    Manual: Chromium depot_tools Manual
+.\"    Source: depot_tools fab0a429
+.\"  Language: English
+.\"
+.TH "DEPOT_TOOLS_GERRIT_A" "7" "05/07/2025" "depot_tools fab0a429" "Chromium depot_tools Manual"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
+.\" -----------------------------------------------------------------
+.\" * set default formatting
+.\" -----------------------------------------------------------------
+.\" disable hyphenation
+.nh
+.\" disable justification (adjust text to left margin only)
+.ad l
+.\" -----------------------------------------------------------------
+.\" * MAIN CONTENT STARTS HERE *
+.\" -----------------------------------------------------------------
+.SH "NAME"
+depot_tools_gerrit_auth \- Gerrit authentication for depot_tools
+.SH "DESCRIPTION"
+.sp
+The Chromium \fBdepot_tools\fR(7) suite contains many tools which may need to authenticate to Gerrit\&.
+.sp
+Gerrit uses OAuth for authentication\&. For depot_tools, OAuth is handled by \fBgit\-credential\-luci\fR\&.
+.sp
+Authentication is needed both for Gerrit API calls made by depot_tools and for operations done directly by Git (e\&.g\&., \fBgit push\fR, \fBgit fetch\fR)\&.
+.sp
+For Gerrit API calls, depot_tools uses \fBgit\-credential\-luci\fR out of the box, but for Git, you need to modify your Git configuration to use \fBgit\-credential\-luci\fR\&.
+.SH "GIT CONFIGURATION"
+.sp
+You need to configure Git to authenticate to Gerrit\&. While depot_tools can help set up the necessary configuration (\fBgit cl creds\-check\fR), you can also do it manually\&.
+.sp
+You need to add the following lines to your Git config:
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+[credential "https://chromium\&.googlesource\&.com"]
+helper =
+helper = luci
+.fi
+.if n \{\
+.RE
+.\}
+.sp
+.sp
+This tells Git to use \fBgit\-credential\-luci\fR\&. The first empty value line is needed to reset the helper list to prevent conflicts\&.
+.sp
+You should copy this for each Gerrit host you use\&.
+.sp
+For Googlers, see go/chrome\-gerrit\-auth\&.
+.SH "CREDENTIAL HELPER"
+.sp
+\fBgit\-credential\-luci\fR is a Git credential helper that can provide OAuth credentials for Gerrit\&.
+.sp
+You will need to set up your OAuth credentials first by running \fBgit\-credential\-luci login\fR\&. After that, it will be able to provide credentials to authenticate Git commands, if you have configured it according to the previous section\&.
+.sp
+\fBgit\-credential\-luci\fR only keeps one active login session at a time per OS user\&.
+.SH "CHROMIUM DEPOT_TOOLS"
+.sp
+Part of the chromium \fBdepot_tools\fR(7) suite\&. These tools are meant to assist with the development of chromium and related projects\&. Download the tools by checking out the \m[blue]\fBgit repository\fR\m[]\&\s-2\u[1]\d\s+2\&.
+.SH "NOTES"
+.IP " 1." 4
+git repository
+.RS 4
+\%https://chromium.googlesource.com/chromium/tools/depot_tools.git
+.RE

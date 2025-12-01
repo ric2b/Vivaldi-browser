@@ -9,10 +9,11 @@
 
 #include "base/check_op.h"
 #include "base/trace_event/trace_event.h"
-#include "chrome/browser/ui/tabs/split_tab_collection.h"
-#include "chrome/browser/ui/tabs/tab_group_tab_collection.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/split_tab_collection.h"
+#include "components/tabs/public/split_tab_visual_data.h"
+#include "components/tabs/public/tab_group_tab_collection.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value.h"
 
@@ -190,16 +191,16 @@ const TabGroupChange::CreateChange* TabGroupChange::GetCreateChange() const {
   return static_cast<const CreateChange*>(delta.get());
 }
 
-std::vector<tabs::TabModel*> TabGroupChange::CreateChange::GetDetachedTabs()
+std::vector<tabs::TabInterface*> TabGroupChange::CreateChange::GetDetachedTabs()
     const {
   CHECK(detached_group_);
-  return detached_group_->GetTabs();
+  return detached_group_->GetTabsRecursive();
 }
 
-std::vector<tabs::TabModel*> TabGroupChange::CloseChange::GetDetachedTabs()
+std::vector<tabs::TabInterface*> TabGroupChange::CloseChange::GetDetachedTabs()
     const {
   CHECK(detached_group_);
-  return detached_group_->GetTabs();
+  return detached_group_->GetTabsRecursive();
 }
 
 const TabGroupChange::CloseChange* TabGroupChange::GetCloseChange() const {
@@ -232,6 +233,101 @@ TabGroupChange::TabGroupChange(TabStripModel* model,
                      std::make_unique<CloseChange>(std::move(deltap))) {}
 
 ////////////////////////////////////////////////////////////////////////////////
+// SplitTabChange
+//
+SplitTabChange::SplitTabChange(TabStripModel* model,
+                               split_tabs::SplitTabId split_id,
+                               Type type,
+                               std::unique_ptr<Delta> deltap)
+    : split_id(split_id), model(model), type(type), delta(std::move(deltap)) {}
+
+SplitTabChange::AddedChange::AddedChange(
+    const std::vector<std::pair<tabs::TabInterface*, int>>& tabs,
+    SplitTabAddReason reason,
+    const split_tabs::SplitTabVisualData& visual_data)
+    : tabs_(tabs), reason_(reason), visual_data_(visual_data) {}
+SplitTabChange::AddedChange::~AddedChange() = default;
+SplitTabChange::AddedChange::AddedChange(const SplitTabChange::AddedChange&) =
+    default;
+
+SplitTabChange::VisualsChange::VisualsChange(
+    const split_tabs::SplitTabVisualData& old_visual_data,
+    const split_tabs::SplitTabVisualData& new_visual_data)
+    : old_visual_data_(old_visual_data), new_visual_data_(new_visual_data) {}
+SplitTabChange::VisualsChange::~VisualsChange() = default;
+
+SplitTabChange::ContentsChange::ContentsChange(
+    const std::vector<std::pair<tabs::TabInterface*, int>>& prev_tabs,
+    const std::vector<std::pair<tabs::TabInterface*, int>>& new_tabs)
+    : prev_tabs_(prev_tabs), new_tabs_(new_tabs) {}
+SplitTabChange::ContentsChange::~ContentsChange() = default;
+SplitTabChange::ContentsChange::ContentsChange(
+    const SplitTabChange::ContentsChange&) = default;
+
+SplitTabChange::RemovedChange::RemovedChange(
+    const std::vector<std::pair<tabs::TabInterface*, int>>& tabs,
+    SplitTabRemoveReason reason)
+    : tabs_(tabs), reason_(reason) {}
+SplitTabChange::RemovedChange::~RemovedChange() = default;
+SplitTabChange::RemovedChange::RemovedChange(
+    const SplitTabChange::RemovedChange&) = default;
+
+SplitTabChange::SplitTabChange(TabStripModel* model,
+                               split_tabs::SplitTabId split_id,
+                               AddedChange deltap)
+    : SplitTabChange(model,
+                     split_id,
+                     Type::kAdded,
+                     std::make_unique<AddedChange>(std::move(deltap))) {}
+
+SplitTabChange::SplitTabChange(TabStripModel* model,
+                               split_tabs::SplitTabId split_id,
+                               VisualsChange deltap)
+    : SplitTabChange(model,
+                     split_id,
+                     Type::kVisualsChanged,
+                     std::make_unique<VisualsChange>(std::move(deltap))) {}
+
+SplitTabChange::SplitTabChange(TabStripModel* model,
+                               split_tabs::SplitTabId split_id,
+                               ContentsChange deltap)
+    : SplitTabChange(model,
+                     split_id,
+                     Type::kContentsChanged,
+                     std::make_unique<ContentsChange>(std::move(deltap))) {}
+
+SplitTabChange::SplitTabChange(TabStripModel* model,
+                               split_tabs::SplitTabId split_id,
+                               RemovedChange deltap)
+    : SplitTabChange(model,
+                     split_id,
+                     Type::kRemoved,
+                     std::make_unique<RemovedChange>(std::move(deltap))) {}
+
+SplitTabChange::~SplitTabChange() = default;
+
+const SplitTabChange::AddedChange* SplitTabChange::GetAddedChange() const {
+  DCHECK_EQ(type, Type::kAdded);
+  return static_cast<const AddedChange*>(delta.get());
+}
+
+const SplitTabChange::VisualsChange* SplitTabChange::GetVisualsChange() const {
+  DCHECK_EQ(type, Type::kVisualsChanged);
+  return static_cast<const VisualsChange*>(delta.get());
+}
+
+const SplitTabChange::ContentsChange* SplitTabChange::GetContentsChange()
+    const {
+  DCHECK_EQ(type, Type::kContentsChanged);
+  return static_cast<const ContentsChange*>(delta.get());
+}
+
+const SplitTabChange::RemovedChange* SplitTabChange::GetRemovedChange() const {
+  DCHECK_EQ(type, Type::kRemoved);
+  return static_cast<const RemovedChange*>(delta.get());
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // TabStripModelObserver
 //
 TabStripModelObserver::TabStripModelObserver() = default;
@@ -262,25 +358,7 @@ void TabStripModelObserver::OnTabGroupAdded(
 void TabStripModelObserver::OnTabGroupWillBeRemoved(
     const tab_groups::TabGroupId& group_id) {}
 
-void TabStripModelObserver::OnSplitTabCreated(
-    std::vector<std::pair<tabs::TabInterface*, int>> tabs,
-    split_tabs::SplitTabId split_id,
-    TabStripModelObserver::SplitTabAddReason reason,
-    tabs::SplitTabLayout tab_layout) {}
-
-void TabStripModelObserver::OnSplitTabRemoved(
-    std::vector<std::pair<tabs::TabInterface*, int>> tabs,
-    split_tabs::SplitTabId split_id,
-    TabStripModelObserver::SplitTabRemoveReason reason) {}
-
-void TabStripModelObserver::OnSplitTabOrientationChanged(
-    split_tabs::SplitTabId split_id,
-    tabs::SplitTabLayout tab_layout) {}
-
-void TabStripModelObserver::OnSplitTabContentsUpdated(
-    split_tabs::SplitTabId split_id,
-    std::vector<std::pair<tabs::TabInterface*, int>> prev_tabs,
-    std::vector<std::pair<tabs::TabInterface*, int>> new_tabs) {}
+void TabStripModelObserver::OnSplitTabChanged(const SplitTabChange& change) {}
 
 void TabStripModelObserver::TabChangedAt(WebContents* contents,
                                          int index,

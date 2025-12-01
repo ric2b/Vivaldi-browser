@@ -18,6 +18,7 @@
 #include <optional>
 #include <set>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/dcheck_is_on.h"
@@ -43,7 +44,6 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/features.h"
-#include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -53,6 +53,7 @@
 #include "chrome/browser/ui/views/frame/native_browser_frame_factory.h"
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller.h"
+#include "chrome/browser/ui/views/tabs/dragging/tab_drag_controller_interactive_test_mixin.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/browser/ui/views/tabs/window_finder.h"
@@ -69,6 +70,10 @@
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "components/tabs/public/split_tab_data.h"
+#include "components/tabs/public/split_tab_id.h"
+#include "components/tabs/public/tab_group.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
@@ -557,8 +562,6 @@ void TabDragControllerTest::SetUp() {
 
 namespace {
 
-enum InputSource { INPUT_SOURCE_MOUSE = 0, INPUT_SOURCE_TOUCH = 1 };
-
 int GetDetachY(TabStrip* tab_strip) {
   return std::max(TabDragController::kTouchVerticalDetachMagnetism,
                   TabDragController::kVerticalDetachMagnetism) +
@@ -681,12 +684,13 @@ IN_PROC_BROWSER_TEST_F(TabDragControllerTest, GestureEndShouldEndDragTest) {
 }
 
 class DetachToBrowserTabDragControllerTest
-    : public TabDragControllerTest,
+    : public TabDragControllerInteractiveTestMixin<TabDragControllerTest>,
       public ::testing::WithParamInterface<
           testing::tuple<bool, bool, const char*>> {
  public:
   DetachToBrowserTabDragControllerTest() {
-    std::vector<base::test::FeatureRef> enabled_features = {};
+    std::vector<base::test::FeatureRef> enabled_features = {
+        features::kSideBySide};
     std::vector<base::test::FeatureRef> disabled_features = {
         features::kWebUITabStrip};
 
@@ -725,75 +729,15 @@ class DetachToBrowserTabDragControllerTest
 #endif  // BUILDFLAG(IS_MAC)
   }
 
-  InputSource input_source() const {
-    return strstr(std::get<2>(GetParam()), "mouse") ? INPUT_SOURCE_MOUSE
-                                                    : INPUT_SOURCE_TOUCH;
-  }
-
-#if BUILDFLAG(IS_CHROMEOS)
-  bool SendTouchEventsSync(int action, int id, const gfx::Point& location) {
-    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-    if (!ui_controls::SendTouchEventsNotifyWhenDone(
-            action, id, location.x(), location.y(), run_loop.QuitClosure())) {
-      return false;
-    }
-    run_loop.Run();
-    return true;
-  }
-#endif
-
-  gfx::NativeWindow GetWindowHint(const views::View* view) {
-    return view->GetWidget() ? view->GetWidget()->GetNativeWindow()
-                             : gfx::NativeWindow();
-  }
-
-  // The following methods update one of the mouse or touch input depending upon
-  // the InputSource.
-  bool PressInput(const gfx::Point& location,
-                  const gfx::NativeWindow window_hint,
-                  int id = 0) {
-    if (input_source() == INPUT_SOURCE_MOUSE) {
-      return ui_test_utils::SendMouseMoveSync(location, window_hint) &&
-             ui_test_utils::SendMouseEventsSync(ui_controls::LEFT,
-                                                ui_controls::DOWN, window_hint);
-    }
-#if BUILDFLAG(IS_CHROMEOS)
-    return SendTouchEventsSync(ui_controls::kTouchPress, id, location);
-#else
-    NOTREACHED();
-#endif
-  }
-
-  // Like PressInput() used together with GetCenterInScreenCoordinates(), but
-  // also automatically passes a window hint to the ui_test_utils functions
-  // used. This is sometimes needed on Wayland to ensure the mouse events are
-  // sent to the correct location.
-  bool PressInputAtCenter(const views::View* view, int id = 0) {
-    return PressInput(GetCenterInScreenCoordinates(view), GetWindowHint(view),
-                      id);
-  }
-
-  bool DragInputTo(const gfx::Point& location, gfx::NativeWindow window_hint) {
-    if (input_source() == INPUT_SOURCE_MOUSE) {
-      return ui_test_utils::SendMouseMoveSync(location, window_hint);
-    }
-#if BUILDFLAG(IS_CHROMEOS)
-    return SendTouchEventsSync(ui_controls::kTouchMove, 0, location);
-#else
-    NOTREACHED();
-#endif
-  }
-
-  // Like PressInputAtCenter(), but for DragInputTo() instead of PressInput()
-  // and with an offset applied to the view's center.
-  bool DragInputToCenter(const views::View* view, gfx::Vector2d offset = {}) {
-    return DragInputTo(GetCenterInScreenCoordinates(view) + offset,
-                       GetWindowHint(view));
+  InputSource input_source() override {
+    return strstr(std::get<2>(GetParam()), "mouse")
+               ? InputSource::INPUT_SOURCE_MOUSE
+               : InputSource::INPUT_SOURCE_TOUCH;
   }
 
   bool DragInputToAsync(const gfx::Point& location,
                         const gfx::NativeWindow window_hint) {
-    if (input_source() == INPUT_SOURCE_MOUSE) {
+    if (input_source() == InputSource::INPUT_SOURCE_MOUSE) {
       return ui_controls::SendMouseMove(location.x(), location.y(),
                                         window_hint);
     }
@@ -816,7 +760,7 @@ class DetachToBrowserTabDragControllerTest
   bool DragInputToNotifyWhenDone(const gfx::Point& location,
                                  base::OnceClosure task,
                                  const gfx::NativeWindow window_hint) {
-    if (input_source() == INPUT_SOURCE_MOUSE) {
+    if (input_source() == InputSource::INPUT_SOURCE_MOUSE) {
       return ui_controls::SendMouseMoveNotifyWhenDone(
           location.x(), location.y(), std::move(task), window_hint);
     }
@@ -838,23 +782,6 @@ class DetachToBrowserTabDragControllerTest
     gfx::Point location = GetCenterInScreenCoordinates(view) + offset;
     return DragInputToNotifyWhenDone(location, std::move(task),
                                      GetWindowHint(view));
-  }
-
-  bool ReleaseInput(int id = 0, bool async = false) {
-    if (input_source() == INPUT_SOURCE_MOUSE) {
-      return async ? ui_controls::SendMouseEvents(ui_controls::LEFT,
-                                                  ui_controls::UP)
-                   : ui_test_utils::SendMouseEventsSync(ui_controls::LEFT,
-                                                        ui_controls::UP);
-    }
-#if BUILDFLAG(IS_CHROMEOS)
-    return async ? ui_controls::SendTouchEvents(ui_controls::kTouchRelease, id,
-                                                0, 0)
-                 : SendTouchEventsSync(ui_controls::kTouchRelease, id,
-                                       gfx::Point());
-#else
-    NOTREACHED();
-#endif
   }
 
   void ReleaseInputAfterWindowDetached(int first_dragged_tab_width) {
@@ -885,7 +812,7 @@ class DetachToBrowserTabDragControllerTest
 
   bool MoveInputTo(const gfx::Point& location) {
     aura::Env::GetInstance()->SetLastMouseLocation(location);
-    if (input_source() == INPUT_SOURCE_MOUSE) {
+    if (input_source() == InputSource::INPUT_SOURCE_MOUSE) {
       return ui_test_utils::SendMouseMoveSync(location);
     }
 #if BUILDFLAG(IS_CHROMEOS)
@@ -1306,7 +1233,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   // selected.
   ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(0)));
   ASSERT_TRUE(ReleaseInput());
-  browser()->tab_strip_model()->ToggleSelectionAt(2);
+  browser()->tab_strip_model()->SelectTabAt(2);
 
   // Drag the first tab from its left edge toward the right. This should make
   // the two selected tabs join the start of Tab Group 2 (which previously held
@@ -1357,7 +1284,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   // are selected.
   ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(1)));
   ASSERT_TRUE(ReleaseInput());
-  browser()->tab_strip_model()->ToggleSelectionAt(3);
+  browser()->tab_strip_model()->SelectTabAt(3);
 
   // Dragging the fourth tab slightly to the left will result in the two
   // selected tabs joining the end of Tab Group 3.
@@ -1394,7 +1321,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   // are selected.
   ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(1)));
   ASSERT_TRUE(ReleaseInput());
-  browser()->tab_strip_model()->ToggleSelectionAt(2);
+  browser()->tab_strip_model()->SelectTabAt(2);
 
   // Dragging the third tab slightly to the left will result in the two
   // selected tabs leaving the group.
@@ -1405,6 +1332,45 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
   EXPECT_EQ("1 2 0 3", IDString(model));
   EXPECT_EQ(group_model->GetTabGroup(group1)->ListTabs(), gfx::Range(3, 4));
+}
+
+// TODO(crbug.com/333085989): Re-enable flaky tests
+#if BUILDFLAG(IS_CHROMEOS)
+#define MAYBE_RevertDragSplitTab DISABLED_RevertDragSplitTab
+#else
+#define MAYBE_RevertDragSplitTab RevertDragSplitTab
+#endif
+
+// Drag a split tab within a tabstrip and cancel the drag.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_RevertDragSplitTab) {
+  ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
+
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+  TabStripModel* model = browser()->tab_strip_model();
+  AddTabsAndResetBrowser(browser(), 3);
+  model->ActivateTabAt(0);
+  split_tabs::SplitTabId split_id =
+      model->AddToNewSplit({1}, split_tabs::SplitTabVisualData());
+  StopAnimating(tab_strip);
+
+  ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(0)));
+  ASSERT_TRUE(DragInputToCenter(tab_strip->tab_at(3)));
+
+  EXPECT_EQ("2 3 0 1", IDString(model));
+  EXPECT_EQ(model->GetSplitData(split_id)->ListTabs(),
+            std::vector<tabs::TabInterface*>(
+                {model->GetTabAtIndex(2), model->GetTabAtIndex(3)}));
+
+  ASSERT_TRUE(TabDragController::IsActive());
+
+  // Pressing escape will revert the tabs to original state before the drag.
+  ASSERT_TRUE(ui_test_utils::SendKeyPressSync(browser(), ui::VKEY_ESCAPE, false,
+                                              false, false, false));
+  EXPECT_EQ("0 1 2 3", IDString(model));
+  EXPECT_EQ(model->GetSplitData(split_id)->ListTabs(),
+            std::vector<tabs::TabInterface*>(
+                {model->GetTabAtIndex(0), model->GetTabAtIndex(1)}));
 }
 
 // Creates a browser with four tabs. The first two tabs are in Tab Group 1.
@@ -1458,7 +1424,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   tab_groups::TabGroupId group2 = model->AddToNewGroup({1});
   const tab_groups::TabGroupVisualData new_data(
       u"Foo", tab_groups::TabGroupColorId::kCyan);
-  group_model->GetTabGroup(group2)->SetVisualData(new_data);
+  model->ChangeTabGroupVisuals(group2, new_data);
   StopAnimating(tab_strip);
 
   // Dragging the tab in the first index to the tab in the second index switches
@@ -2723,7 +2689,7 @@ void DragAllStep2(DetachToBrowserTabDragControllerTest* test) {
 IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest, MAYBE_DragAll) {
   AddTabsAndResetBrowser(browser(), 1);
   TabStrip* tab_strip = GetTabStripForBrowser(browser());
-  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  browser()->tab_strip_model()->SelectTabAt(0);
   const gfx::Rect initial_bounds = browser()->window()->GetBounds();
 
   // Move to the first tab and drag it enough so that it would normally
@@ -2775,6 +2741,98 @@ void DragAllToSeparateWindowStep2(DetachToBrowserTabDragControllerTest* test,
 
 }  // namespace
 
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Flaky on Mac10.14 and Linux: https://crbug.com/1213345
+#define MAYBE_DragPinnedAndUnpinnedToSeparateWindow \
+  DISABLED_DragPinnedAndUnpinnedToSeparateWindow
+#else
+#define MAYBE_DragPinnedAndUnpinnedToSeparateWindow \
+  DragPinnedAndUnpinnedToSeparateWindow
+#endif
+
+// Creates two browsers, then drags a combination of pinned and unpinned tabs
+// from one to the other.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_DragPinnedAndUnpinnedToSeparateWindow) {
+  ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
+
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+  AddTabsAndResetBrowser(browser(), 1);
+  browser()->tab_strip_model()->SetTabPinned(0, true);
+  StopAnimating(tab_strip);
+
+  // Create another browser.
+  Browser* browser2 = CreateAnotherBrowserAndResize();
+  TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
+  TabStripModel* model2 = browser2->tab_strip_model();
+  AddTabsAndResetBrowser(browser2, 1);
+  ResetIDs(model2, 100);
+  StopAnimating(tab_strip2);
+
+  // Click the first tab and select the second tab so they are the only ones
+  // selected.
+  ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(0)));
+  ASSERT_TRUE(ReleaseInput());
+  browser()->tab_strip_model()->SelectTabAt(1);
+
+  DragTabAndNotify(tab_strip, base::BindOnce(&DragAllToSeparateWindowStep2,
+                                             this, tab_strip, tab_strip2));
+
+  // Drag to the trailing end of the tabstrip to ensure we're in a
+  // predictable spot within the strip.
+  StopAnimating(tab_strip2);
+  ASSERT_TRUE(DragInputToCenter(tab_strip2->tab_at(3)));
+  // Release mouse or touch, stopping the drag session.
+  ASSERT_TRUE(ReleaseInput());
+
+  EXPECT_EQ("0 100 101 1", IDString(model2));
+  EXPECT_TRUE(browser2->tab_strip_model()->IsTabPinned(0));
+  EXPECT_FALSE(browser2->tab_strip_model()->IsTabPinned(1));
+}
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Flaky on Mac10.14 and Linux: https://crbug.com/1213345
+#define MAYBE_DragSplitTabToSeparateWindow DISABLED_DragSplitTabToSeparateWindow
+#else
+#define MAYBE_DragSplitTabToSeparateWindow DragSplitTabToSeparateWindow
+#endif
+
+// Creates two browsers, then drags a split tab from one to the other.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_DragSplitTabToSeparateWindow) {
+  ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
+
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+  AddTabsAndResetBrowser(browser(), 1);
+  browser()->tab_strip_model()->ActivateTabAt(0);
+  split_tabs::SplitTabId split_id = browser()->tab_strip_model()->AddToNewSplit(
+      {1}, split_tabs::SplitTabVisualData());
+  StopAnimating(tab_strip);
+
+  // Create another browser.
+  Browser* browser2 = CreateAnotherBrowserAndResize();
+  TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
+  TabStripModel* model2 = browser2->tab_strip_model();
+  AddTabsAndResetBrowser(browser2, 1);
+  ResetIDs(model2, 100);
+  StopAnimating(tab_strip2);
+
+  DragTabAndNotify(tab_strip, base::BindOnce(&DragAllToSeparateWindowStep2,
+                                             this, tab_strip, tab_strip2));
+
+  // Drag to the trailing end of the tabstrip to ensure we're in a
+  // predictable spot within the strip.
+  StopAnimating(tab_strip2);
+  ASSERT_TRUE(DragInputToCenter(tab_strip2->tab_at(3)));
+  // Release mouse or touch, stopping the drag session.
+  ASSERT_TRUE(ReleaseInput());
+
+  EXPECT_EQ("100 101 0 1", IDString(model2));
+  EXPECT_EQ(
+      browser2->tab_strip_model()->GetSplitData(split_id)->ListTabs().size(),
+      2u);
+}
+
 // Flaky. http://crbug.com/1128774
 #if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 // Bulk-disabled for arm64 bot stabilization: https://crbug.com/1154345
@@ -2796,7 +2854,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   Browser* browser2 = CreateAnotherBrowserAndResize();
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 
-  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  browser()->tab_strip_model()->SelectTabAt(0);
 
   // Move to the first tab and drag it enough so that it detaches, but not
   // enough that it attaches to browser2.
@@ -2845,7 +2903,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   Browser* browser2 = CreateAnotherBrowserAndResize();
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 
-  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  browser()->tab_strip_model()->SelectTabAt(0);
 
   DragTabAndNotify(tab_strip, base::BindOnce(&DragAllToSeparateWindowStep2,
                                              this, tab_strip, tab_strip2));
@@ -2934,7 +2992,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   Browser* browser2 = CreateAnotherBrowserAndResize();
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 
-  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  browser()->tab_strip_model()->SelectTabAt(0);
 
   // Move to the first tab and drag it enough so that it detaches, but not
   // enough that it attaches to browser2.
@@ -2982,7 +3040,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   // selected.
   ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(0)));
   ASSERT_TRUE(ReleaseInput());
-  browser()->tab_strip_model()->ToggleSelectionAt(1);
+  browser()->tab_strip_model()->SelectTabAt(1);
 
   // Move to the first tab and drag it enough so that it detaches, but not
   // enough that it attaches to browser2.
@@ -3033,13 +3091,55 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 
   // Expect the group to be in browser2, but with a new tab_groups::TabGroupId.
   EXPECT_EQ("100 0 1", IDString(model2));
-  std::vector<tab_groups::TabGroupId> groups2 =
-      model2->group_model()->ListTabGroups();
-  EXPECT_EQ(1u, groups2.size());
-  EXPECT_EQ(model2->group_model()->GetTabGroup(groups2[0])->ListTabs(),
+  EXPECT_EQ(model2->group_model()->GetTabGroup(group)->ListTabs(),
             gfx::Range(1, 3));
-  EXPECT_EQ(groups2[0], group);
-  EXPECT_EQ(tab_strip2->GetGroupColorId(groups2[0]), group_color);
+  EXPECT_EQ(tab_strip2->GetGroupColorId(group), group_color);
+}
+
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+// Bulk-disabled for arm64 bot stabilization: https://crbug.com/1154345
+// Flaky on Mac10.14 and Linux: https://crbug.com/1213345
+#define MAYBE_DragGroupHeaderWithSplitToSeparateWindow \
+  DISABLED_DragGroupHeaderWithSplitToSeparateWindow
+#else
+#define MAYBE_DragGroupHeaderWithSplitToSeparateWindow \
+  DragGroupHeaderWithSplitToSeparateWindow
+#endif
+
+// Creates two browsers, then drags a group from one to the other.
+IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
+                       MAYBE_DragGroupHeaderWithSplitToSeparateWindow) {
+  ASSERT_TRUE(browser()->tab_strip_model()->SupportsTabGroups());
+
+  TabStrip* tab_strip = GetTabStripForBrowser(browser());
+  TabStripModel* model = browser()->tab_strip_model();
+  AddTabsAndResetBrowser(browser(), 1);
+  tab_groups::TabGroupId group = model->AddToNewGroup({0, 1});
+
+  model->ActivateTabAt(0);
+  model->AddToNewSplit({1}, split_tabs::SplitTabVisualData());
+
+  tab_groups::TabGroupColorId group_color = tab_strip->GetGroupColorId(group);
+  StopAnimating(tab_strip);
+
+  // Create another browser.
+  Browser* browser2 = CreateAnotherBrowserAndResize();
+  TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
+  TabStripModel* model2 = browser2->tab_strip_model();
+  StopAnimating(tab_strip2);
+
+  // Drag the group by its header into the second browser.
+  DragToDetachGroupAndNotify(tab_strip,
+                             base::BindOnce(&DragAllToSeparateWindowStep2, this,
+                                            tab_strip, tab_strip2),
+                             group);
+  ASSERT_TRUE(ReleaseInput());
+
+  // Expect the group to be in browser2.
+  EXPECT_EQ("100 0 1", IDString(model2));
+  EXPECT_EQ(model2->group_model()->GetTabGroup(group)->ListTabs(),
+            gfx::Range(1, 3));
+  EXPECT_EQ(tab_strip2->GetGroupColorId(group), group_color);
 }
 
 // Drags a tab group by the header to a new position toward the right and
@@ -3641,17 +3741,18 @@ IN_PROC_BROWSER_TEST_P(
   const TabStyle* tab_style = TabStyle::Get();
   // We must ensure that we set the bounds of the browser window such that it is
   // wide enough to allow the tab strip to expand to accommodate this tab.
-  browser()->window()->SetBounds(
-      gfx::Rect(0, 0, tab_style->GetStandardWidth() * 5, 400));
+  browser()->window()->SetBounds(gfx::Rect(
+      0, 0, tab_style->GetStandardWidth(/*is_split*/ false) * 5, 400));
 
   const int tab_strip_width = tab_strip->width();
   ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(1)));
   ASSERT_TRUE(DragInputToCenter(
-      tab_strip->tab_at(1), gfx::Vector2d(tab_style->GetStandardWidth(), 0)));
+      tab_strip->tab_at(1),
+      gfx::Vector2d(tab_style->GetStandardWidth(/*is_split*/ false), 0)));
   BrowserView::GetBrowserViewForBrowser(browser())
       ->GetWidget()
       ->LayoutRootViewIfNecessary();
-  EXPECT_EQ(tab_strip_width + tab_style->GetStandardWidth(),
+  EXPECT_EQ(tab_strip_width + tab_style->GetStandardWidth(/*is_split*/ false),
             tab_strip->width());
   ASSERT_TRUE(ReleaseInput());
 }
@@ -3699,7 +3800,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   Browser* browser2 = CreateAnotherBrowserAndResize();
   TabStrip* tab_strip2 = GetTabStripForBrowser(browser2);
 
-  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  browser()->tab_strip_model()->SelectTabAt(0);
 
   // Move to the first tab and drag it enough so that it detaches, but not
   // enough that it attaches to browser2.
@@ -3750,7 +3851,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
   // Open a second tab.
   AddTabsAndResetBrowser(browser(), 1);
   // Re-select the first one.
-  browser()->tab_strip_model()->ToggleSelectionAt(0);
+  browser()->tab_strip_model()->SelectTabAt(0);
 
   // Create another browser.
   Browser* target_browser = CreateAnotherBrowserAndResize();
@@ -3792,7 +3893,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
 IN_PROC_BROWSER_TEST_P(DetachToBrowserTabDragControllerTest,
                        DISABLED_DragDirectlyToSecondWindow) {
   // TODO(pkasting): Crashes when detaching browser.  https://crbug.com/918733
-  if (input_source() == INPUT_SOURCE_TOUCH) {
+  if (input_source() == InputSource::INPUT_SOURCE_TOUCH) {
     VLOG(1) << "Test is DISABLED for touch input.";
     return;
   }
@@ -4528,7 +4629,7 @@ IN_PROC_BROWSER_TEST_P(DetachToBrowserInSeparateDisplayTabDragControllerTest,
   // This other browser should be on the second screen (with mouse drag)
   // With the touch input the browser cannot be dragged from one screen
   // to another and the window stays on the first screen.
-  if (input_source() == INPUT_SOURCE_MOUSE) {
+  if (input_source() == InputSource::INPUT_SOURCE_MOUSE) {
     EXPECT_EQ(
         ui_test_utils::GetSecondaryDisplay(screen).id(),
         screen
@@ -5357,7 +5458,7 @@ class SelectTabDuringDragObserver : public TabStripModelObserver {
     }
     const TabStripModelChange::Move* move = change.GetMove();
     int index_to_select = move->to_index == 0 ? 1 : 0;
-    tab_strip_model->ToggleSelectionAt(index_to_select);
+    tab_strip_model->SelectTabAt(index_to_select);
   }
 };
 
@@ -5543,3 +5644,101 @@ INSTANTIATE_TEST_SUITE_P(
         /*kTearOffWebAppTabOpensWebAppWindow=*/::testing::Values(false),
         /*input_source=*/::testing::Values("mouse")));
 #endif
+
+// TODO(crbug.com/409577362) : Fix test flakiness
+#if !BUILDFLAG(IS_CHROMEOS)
+class SideBySideTabDragControllerTest
+    : public TabDragControllerInteractiveTestMixin<TabDragControllerTest> {
+ public:
+  bool IsTabInSplit(int index) {
+    return GetTabStripForBrowser(browser())->tab_at(index)->split().has_value();
+  }
+
+  void AddTabs(Browser* browser, int additional_tabs) {
+    for (int i = 0; i < additional_tabs; i++) {
+      chrome::AddSelectedTabWithURL(browser, GURL(url::kAboutBlankURL),
+                                    ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
+    }
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_{features::kSideBySide};
+};
+
+// Flaky. https://crbug.com/40748225
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#define MAYBE_DragBetweenSplitTab DISABLED_DragBetweenSplitTab
+#else
+#define MAYBE_DragBetweenSplitTab DragBetweenSplitTab
+#endif
+IN_PROC_BROWSER_TEST_F(SideBySideTabDragControllerTest,
+                       MAYBE_DragBetweenSplitTab) {
+  TabStrip* const tab_strip = GetTabStripForBrowser(browser());
+
+  AddTabs(browser(), 2);
+
+  split_tabs::SplitTabId id = split_tabs::SplitTabId::GenerateNew();
+  tab_strip->OnSplitCreated({0, 1}, id);
+  StopAnimating(tab_strip);
+
+  Tab* const last_split_tab = tab_strip->tab_at(1);
+
+  EXPECT_TRUE(IsTabInSplit(0));
+  EXPECT_TRUE(IsTabInSplit(1));
+  EXPECT_FALSE(IsTabInSplit(2));
+
+  // Drag the last tab to the middle of the split tab.
+  ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(2)));
+  ASSERT_TRUE(DragInputToCenter(last_split_tab));
+  ASSERT_TRUE(ReleaseInput());
+  StopAnimating(tab_strip);
+
+  // The last tab should return to where it was since we can't drag a tab in
+  // between a split.
+  EXPECT_FALSE(IsTabInSplit(0));
+  EXPECT_TRUE(IsTabInSplit(1));
+  EXPECT_TRUE(IsTabInSplit(2));
+}
+
+// Flaky. https://crbug.com/40748225
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
+#define MAYBE_DragBetweenMultipleSplitTabs DISABLED_DragBetweenMultipleSplitTabs
+#else
+#define MAYBE_DragBetweenMultipleSplitTabs DragBetweenMultipleSplitTabs
+#endif
+IN_PROC_BROWSER_TEST_F(SideBySideTabDragControllerTest,
+                       MAYBE_DragBetweenMultipleSplitTabs) {
+  TabStrip* const tab_strip = GetTabStripForBrowser(browser());
+
+  AddTabs(browser(), 4);
+
+  split_tabs::SplitTabId first_id = split_tabs::SplitTabId::GenerateNew();
+  tab_strip->OnSplitCreated({0, 1}, first_id);
+
+  split_tabs::SplitTabId second_id = split_tabs::SplitTabId::GenerateNew();
+  tab_strip->OnSplitCreated({2, 3}, second_id);
+
+  StopAnimating(tab_strip);
+
+  EXPECT_TRUE(IsTabInSplit(0));
+  EXPECT_TRUE(IsTabInSplit(1));
+  EXPECT_TRUE(IsTabInSplit(2));
+  EXPECT_TRUE(IsTabInSplit(3));
+  EXPECT_FALSE(IsTabInSplit(4));
+
+  // Drag the last tab in between the two sets of split tabs.
+  ASSERT_TRUE(PressInputAtCenter(tab_strip->tab_at(4)));
+  ASSERT_TRUE(DragInputToCenter(tab_strip->tab_at(2)));
+  ASSERT_TRUE(ReleaseInput());
+
+  StopAnimating(tab_strip);
+
+  // The single tab should be able to go in between the two sets of split tabs
+  // since they belong to different splits.
+  EXPECT_TRUE(IsTabInSplit(0));
+  EXPECT_TRUE(IsTabInSplit(1));
+  EXPECT_FALSE(IsTabInSplit(2));
+  EXPECT_TRUE(IsTabInSplit(3));
+  EXPECT_TRUE(IsTabInSplit(4));
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS)

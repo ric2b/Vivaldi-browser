@@ -5,10 +5,12 @@
 #include "chrome/browser/extensions/bookmarks/bookmarks_helpers.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
 #include "base/feature_list.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -40,7 +42,7 @@ void AddNodeHelper(bookmarks::BookmarkModel* model,
                    std::vector<BookmarkTreeNode>* nodes,
                    bool recurse,
                    bool only_folders) {
-  if (model->IsNodeVisible(*node)) {
+  if (node->IsVisible()) {
     nodes->push_back(
         GetBookmarkTreeNode(model, managed, node, recurse, only_folders));
   }
@@ -52,15 +54,11 @@ BookmarkTreeNode GetBookmarkTreeNode(bookmarks::BookmarkModel* model,
                                      bookmarks::ManagedBookmarkService* managed,
                                      const BookmarkNode* node,
                                      bool recurse,
-                                     bool only_folders) {
-  // The calling code should have checked this.
-  CHECK(!base::FeatureList::IsEnabled(
-            kEnforceBookmarkVisibilityOnExtensionsAPI) ||
-        model->IsNodeVisible(*node));
-
+                                     bool only_folders,
+                                     std::optional<size_t> visible_index) {
   BookmarkTreeNode bookmark_tree_node;
   PopulateBookmarkTreeNode(model, managed, node, recurse, only_folders,
-                           &bookmark_tree_node);
+                           visible_index, &bookmark_tree_node);
   return bookmark_tree_node;
 }
 
@@ -70,6 +68,7 @@ void PopulateBookmarkTreeNode(
     const bookmarks::BookmarkNode* node,
     bool recurse,
     bool only_folders,
+    std::optional<size_t> visible_index,
     api::bookmarks::BookmarkTreeNode* out_bookmark_tree_node) {
   DCHECK(out_bookmark_tree_node);
 
@@ -78,10 +77,16 @@ void PopulateBookmarkTreeNode(
   const BookmarkNode* parent = node->parent();
   if (parent) {
     out_bookmark_tree_node->parent_id = base::NumberToString(parent->id());
-    out_bookmark_tree_node->index =
-        base::FeatureList::IsEnabled(kEnforceBookmarkVisibilityOnExtensionsAPI)
-            ? GetAPIIndexOf(*model, *node)
-            : static_cast<int>(parent->GetIndexOf(node).value());
+
+    if (visible_index.has_value()) {
+      out_bookmark_tree_node->index = *visible_index;
+    } else if (!base::FeatureList::IsEnabled(
+                   kEnforceBookmarkVisibilityOnExtensionsAPI)) {
+      out_bookmark_tree_node->index =
+          base::checked_cast<int>(parent->GetIndexOf(node).value());
+    } else {
+      out_bookmark_tree_node->index = GetAPIIndexOf(*node);
+    }
   }
 
   if (!node->is_folder()) {
@@ -130,6 +135,8 @@ void PopulateBookmarkTreeNode(
       (node->type() == bookmarks::BookmarkNode::TRASH);
   out_bookmark_tree_node->theme_color =
       vivaldi_bookmark_kit::GetThemeColorForCSS(node);
+  out_bookmark_tree_node->display_url =
+      vivaldi_bookmark_kit::GetDisplayURL(node);
 
   if (bookmarks::IsDescendantOf(node, managed->managed_node())) {
     out_bookmark_tree_node->unmodifiable =
@@ -138,11 +145,16 @@ void PopulateBookmarkTreeNode(
 
   if (recurse && node->is_folder()) {
     std::vector<BookmarkTreeNode> children;
+    size_t child_visible_index = 0;
     for (const auto& child : node->children()) {
-      if (model->IsNodeVisible(*child) &&
-          (!only_folders || child->is_folder())) {
-        children.push_back(GetBookmarkTreeNode(model, managed, child.get(),
-                                               /*recurse=*/true, only_folders));
+      // Check IsVisible() here to match the logic of GetAPIIndexOf().
+      if (child->IsVisible()) {
+        if (!only_folders || child->is_folder()) {
+          children.push_back(GetBookmarkTreeNode(model, managed, child.get(),
+                                                 /*recurse=*/true, only_folders,
+                                                 child_visible_index));
+        }
+        ++child_visible_index;
       }
     }
     out_bookmark_tree_node->children = std::move(children);
@@ -216,22 +228,31 @@ void GetMetaInfo(const BookmarkNode& node,
   }
 }
 
-size_t GetAPIIndexOf(const bookmarks::BookmarkModel& model,
-                     const BookmarkNode& node) {
+size_t GetAPIIndexOf(const BookmarkNode& node) {
   CHECK(node.parent());
-  CHECK(model.IsNodeVisible(node));
 
   size_t api_index = 0;
   for (const auto& child : node.parent()->children()) {
     if (child.get() == &node) {
       return api_index;
     }
-    if (model.IsNodeVisible(*child)) {
+    if (child->IsVisible()) {
       ++api_index;
     }
   }
 
   NOTREACHED() << "node is not a child of its parent.";
+}
+
+size_t GetAPIIndexOf(const BookmarkNode& parent, size_t previous_model_index) {
+  size_t api_index = 0;
+  for (size_t ix = 0;
+       ix < std::min(parent.children().size(), previous_model_index); ++ix) {
+    if (parent.children()[ix]->IsVisible()) {
+      ++api_index;
+    }
+  }
+  return api_index;
 }
 
 }  // namespace bookmarks_helpers

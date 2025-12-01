@@ -28,11 +28,11 @@
 #include "src/tint/lang/msl/writer/printer/printer.h"
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <utility>
 
-#include "src/tint/lang/core/constant/composite.h"
 #include "src/tint/lang/core/constant/splat.h"
 #include "src/tint/lang/core/fluent_types.h"
 #include "src/tint/lang/core/ir/access.h"
@@ -42,7 +42,6 @@
 #include "src/tint/lang/core/ir/construct.h"
 #include "src/tint/lang/core/ir/continue.h"
 #include "src/tint/lang/core/ir/convert.h"
-#include "src/tint/lang/core/ir/core_binary.h"
 #include "src/tint/lang/core/ir/core_builtin_call.h"
 #include "src/tint/lang/core/ir/core_unary.h"
 #include "src/tint/lang/core/ir/discard.h"
@@ -70,6 +69,7 @@
 #include "src/tint/lang/core/ir/var.h"
 #include "src/tint/lang/core/type/array.h"
 #include "src/tint/lang/core/type/atomic.h"
+#include "src/tint/lang/core/type/binding_array.h"
 #include "src/tint/lang/core/type/bool.h"
 #include "src/tint/lang/core/type/depth_multisampled_texture.h"
 #include "src/tint/lang/core/type/depth_texture.h"
@@ -100,7 +100,6 @@
 #include "src/tint/lang/msl/type/level.h"
 #include "src/tint/lang/msl/writer/common/options.h"
 #include "src/tint/lang/msl/writer/common/printer_support.h"
-#include "src/tint/utils/containers/map.h"
 #include "src/tint/utils/macros/scoped_assignment.h"
 #include "src/tint/utils/rtti/switch.h"
 #include "src/tint/utils/text/string.h"
@@ -132,6 +131,8 @@ class Printer : public tint::TextGenerator {
                 core::ir::Capability::kAllowPointersAndHandlesInStructures,
                 core::ir::Capability::kAllowPrivateVarsInFunctions,
                 core::ir::Capability::kAllowAnyLetType,
+                core::ir::Capability::kAllowModuleScopeLets,
+                core::ir::Capability::kAllowWorkspacePointerInputToEntryPoint,
             });
         if (valid != Success) {
             return std::move(valid.Failure());
@@ -143,8 +144,14 @@ class Printer : public tint::TextGenerator {
             Line() << "using namespace metal;";
         }
 
-        // Module-scope declarations should have all been moved into the entry points.
-        TINT_ASSERT(ir_.root_block->IsEmpty());
+        // Module-scope declarations should have all been moved into the entry points with the
+        // exception of const as lets.
+
+        for (auto* inst : *ir_.root_block) {
+            auto let = inst->As<core::ir::Let>();
+            TINT_ASSERT(let);
+            EmitLet(let);
+        }
 
         // Determine which structures will need to be emitted with host-shareable memory layouts.
         FindHostShareableStructs();
@@ -278,7 +285,7 @@ class Printer : public tint::TextGenerator {
                 // Access instruction emission always dereferences the source.
                 // We only produce a pointer when extracting a pointer from a composite value.
                 return !a->Object()->Type()->Is<core::type::Pointer>() &&
-                       a->Result(0)->Type()->Is<core::type::Pointer>();
+                       a->Result()->Type()->Is<core::type::Pointer>();
             });
     }
 
@@ -399,8 +406,15 @@ class Printer : public tint::TextGenerator {
                         }
                     } else {
                         // Handle types are declared by value instead of by pointer.
+                        // In MSL the attribute for BindingArray is the same as the attribute for
+                        // the first element.
+                        auto* handle_type = param->Type();
+                        if (handle_type->Is<core::type::BindingArray>()) {
+                            handle_type = handle_type->As<core::type::BindingArray>()->ElemType();
+                        }
+
                         Switch(
-                            param->Type(),
+                            handle_type,
                             [&](const core::type::Texture*) {
                                 out << " [[texture(" << binding_point->binding << ")]]";
                             },
@@ -505,10 +519,10 @@ class Printer : public tint::TextGenerator {
                     [&](const core::ir::Binary* b) { EmitBinary(out, b); },              //
                     [&](const core::ir::CoreUnary* u) { EmitUnary(out, u); },            //
                     [&](const core::ir::Convert* b) { EmitConvert(out, b); },            //
-                    [&](const core::ir::Let* l) { out << NameOf(l->Result(0)); },        //
+                    [&](const core::ir::Let* l) { out << NameOf(l->Result()); },         //
                     [&](const core::ir::Load* l) { EmitLoad(out, l); },                  //
                     [&](const core::ir::Construct* c) { EmitConstruct(out, c); },        //
-                    [&](const core::ir::Var* var) { out << NameOf(var->Result(0)); },    //
+                    [&](const core::ir::Var* var) { out << NameOf(var->Result()); },     //
                     [&](const core::ir::Bitcast* b) { EmitBitcast(out, b); },            //
                     [&](const core::ir::Access* a) { EmitAccess(out, a); },              //
                     [&](const msl::ir::BuiltinCall* c) { EmitMslBuiltinCall(out, c); },  //
@@ -601,7 +615,7 @@ class Printer : public tint::TextGenerator {
     /// Emit a convert instruction
     /// @param c the convert instruction
     void EmitConvert(StringStream& out, const core::ir::Convert* c) {
-        EmitType(out, c->Result(0)->Type());
+        EmitType(out, c->Result()->Type());
         out << "(";
         EmitValue(out, c->Operand(0));
         out << ")";
@@ -612,7 +626,7 @@ class Printer : public tint::TextGenerator {
     void EmitVar(const core::ir::Var* v) {
         auto out = Line();
 
-        auto* ptr = v->Result(0)->Type()->As<core::type::Pointer>();
+        auto* ptr = v->Result()->Type()->As<core::type::Pointer>();
         TINT_ASSERT(ptr);
 
         auto space = ptr->AddressSpace();
@@ -631,7 +645,7 @@ class Printer : public tint::TextGenerator {
         }
 
         EmitType(out, ptr->UnwrapPtr());
-        out << " " << NameOf(v->Result(0));
+        out << " " << NameOf(v->Result());
 
         if (v->Initializer()) {
             out << " = ";
@@ -648,8 +662,17 @@ class Printer : public tint::TextGenerator {
     /// @param l the let instruction
     void EmitLet(const core::ir::Let* l) {
         auto out = Line();
-        EmitType(out, l->Result(0)->Type());
-        out << " const " << NameOf(l->Result(0)) << " = ";
+
+        if (current_function_ == nullptr) {
+            // program scope let
+            out << "constexpr constant ";
+        }
+        EmitType(out, l->Result()->Type());
+        out << " ";
+        if (current_function_ != nullptr) {
+            out << "const ";
+        }
+        out << NameOf(l->Result()) << " = ";
         EmitAndTakeAddressIfNeeded(out, l->Value());
         out << ";";
     }
@@ -869,7 +892,7 @@ class Printer : public tint::TextGenerator {
     /// Emit a bitcast instruction
     void EmitBitcast(StringStream& out, const core::ir::Bitcast* b) {
         out << "as_type<";
-        EmitType(out, b->Result(0)->Type());
+        EmitType(out, b->Result()->Type());
         out << ">(";
         EmitValue(out, b->Val());
         out << ")";
@@ -905,9 +928,9 @@ class Printer : public tint::TextGenerator {
     }
 
     void EmitCallStmt(const core::ir::Call* c) {
-        if (!c->Result(0)->IsUsed()) {
+        if (!c->Result()->IsUsed()) {
             auto out = Line();
-            EmitValue(out, c->Result(0));
+            EmitValue(out, c->Result());
             out << ";";
         }
     }
@@ -941,7 +964,7 @@ class Printer : public tint::TextGenerator {
             out << "))";
             return;
         } else if (c->Func() == msl::BuiltinFn::kConvert) {
-            EmitType(out, c->Result(0)->Type());
+            EmitType(out, c->Result()->Type());
             out << "(";
             EmitValue(out, c->Operand(0));
             out << ")";
@@ -1204,9 +1227,9 @@ class Printer : public tint::TextGenerator {
     /// Emit a constructor
     void EmitConstruct(StringStream& out, const core::ir::Construct* c) {
         Switch(
-            c->Result(0)->Type(),
+            c->Result()->Type(),
             [&](const core::type::Array*) {
-                EmitType(out, c->Result(0)->Type());
+                EmitType(out, c->Result()->Type());
                 out << "{";
                 size_t i = 0;
                 for (auto* arg : c->Args()) {
@@ -1244,7 +1267,7 @@ class Printer : public tint::TextGenerator {
                 out << "}";
             },
             [&](Default) {
-                EmitType(out, c->Result(0)->Type());
+                EmitType(out, c->Result()->Type());
                 out << "(";
                 size_t i = 0;
                 for (auto* arg : c->Args()) {
@@ -1303,6 +1326,7 @@ class Printer : public tint::TextGenerator {
             [&](const core::type::Pointer* ptr) { EmitPointerType(out, ptr); },
             [&](const core::type::Sampler*) { out << "sampler"; },  //
             [&](const core::type::Texture* tex) { EmitTextureType(out, tex); },
+            [&](const core::type::BindingArray* arr) { EmitBindingArrayType(out, arr); },
             [&](const core::type::Struct* str) {
                 out << StructName(str);
 
@@ -1406,6 +1430,17 @@ class Printer : public tint::TextGenerator {
         out << mat->Columns() << "x" << mat->Rows();
     }
 
+    /// Handles generating a binding_array declaration
+    /// @param out the output stream
+    /// @param arr the array to emit
+    void EmitBindingArrayType(StringStream& out, const core::type::BindingArray* arr) {
+        out << "array<";
+        EmitType(out, arr->ElemType());
+        out << ", ";
+        out << arr->Count()->As<core::type::ConstantArrayCount>()->value;
+        out << ">";
+    }
+
     /// Handles generating a texture declaration
     /// @param out the output stream
     /// @param tex the texture to emit
@@ -1491,7 +1526,8 @@ class Printer : public tint::TextGenerator {
         // temporary text buffer, then anything it depends on will emit to the preamble first,
         // and then it copies the text buffer into the preamble.
         TextBuffer str_buf;
-        Line(&str_buf) << "\n" << "struct " << StructName(str) << " {";
+        Line(&str_buf);
+        Line(&str_buf) << "struct " << StructName(str) << " {";
 
         bool is_host_shareable = host_shareable_structs_.Contains(str);
 
@@ -1515,13 +1551,14 @@ class Printer : public tint::TextGenerator {
 
         str_buf.IncrementIndent();
 
+        bool explicit_layout = str->StructFlags().Contains(core::type::kExplicitLayout);
         uint32_t msl_offset = 0;
         for (auto* mem : str->Members()) {
             auto out = Line(&str_buf);
             auto mem_name = NameOf(mem);
             auto ir_offset = mem->Offset();
 
-            if (is_host_shareable) {
+            if (!explicit_layout && is_host_shareable) {
                 if (DAWN_UNLIKELY(ir_offset < msl_offset)) {
                     // Unimplementable layout
                     TINT_IR_ICE(ir_) << "Structure member offset (" << ir_offset
@@ -1561,6 +1598,10 @@ class Printer : public tint::TextGenerator {
                     TINT_IR_ICE(ir_) << "unknown builtin";
                 }
                 out << " [[" << name << "]]";
+            }
+
+            if (attributes.binding_point.has_value()) {
+                out << " [[id(" << attributes.binding_point->binding << ")]]";
             }
 
             if (auto location = attributes.location) {
@@ -1622,7 +1663,7 @@ class Printer : public tint::TextGenerator {
 
             out << ";";
 
-            if (is_host_shareable) {
+            if (!explicit_layout && is_host_shareable) {
                 // Calculate new MSL offset
                 auto size_align = MslPackedTypeSizeAndAlign(ty);
                 if (DAWN_UNLIKELY(msl_offset % size_align.align)) {
@@ -1634,7 +1675,7 @@ class Printer : public tint::TextGenerator {
             }
         }
 
-        if (is_host_shareable && str->Size() != msl_offset) {
+        if (!explicit_layout && is_host_shareable && str->Size() != msl_offset) {
             add_padding(str->Size() - msl_offset, msl_offset);
         }
 

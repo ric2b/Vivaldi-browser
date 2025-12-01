@@ -203,6 +203,9 @@
       <message name="IDS_IOS_ACCOUNT_TABLE_ERROR_NEEDS_TRUSTED_VAULT_KEY_FOR_EVERYTHING_MESSAGE" desc="The error message to show in the account table when there is an error related to trusted vault key for everything. [iOS only]">
         To use and save Chromium data in your Google Account, verify it's you.
       </message>
+      <message name="IDS_IOS_ACCOUNT_TABLE_ERROR_VERIFY_ITS_YOU_MESSAGE" desc="The error message to show in the account table when there is an authentication error. [iOS only]">
+        To use and save Chromium data in your Google Account, verify it's you.
+      </message>
       <message name="IDS_IOS_APPLICATION_SHORTCUT_SET_DEFAULT_BROWSER" desc="The title of the spotlight item to set Chrome as a default browser. [Length: unlimited] [iOS only]." meaning="Spotlight item title for setting default browser.">
         Set Chromium as default browser
       </message>
@@ -378,8 +381,8 @@ Try waiting a few minutes before switching accounts. If you switch accounts now,
       <message name="IDS_IOS_ENTERPRISE_FORCED_SIGNIN_MESSAGE_WITH_LEARN_MORE" desc="Text to inform the user about the forced sign-in policy with a Learn More link that redirects to a page that gives more details. (Force Sign In) [iOS only]">
         Your organization requires you to sign in to use Chromium. <ph name="BEGIN_LINK">BEGIN_LINK</ph>Learn more<ph name="END_LINK">END_LINK</ph>
       </message>
-      <message name="IDS_IOS_ENTERPRISE_PROFILE_CREATION_SUBTITLE" desc="Message displayed in the secondary button on a screen where the user is asked to create a work profile.">
-       Signing in adds your account to Chromium for work-related browsing.
+      <message name="IDS_IOS_ENTERPRISE_SWITCH_TO_MANAGED_BROWSER_WIDE_SCREEN" desc="The snackbar message subtitle to confirm the signed-in account after a successful account switch. For enterprise users, we remind them that their browser is managed by their company, school, or organization. This string does not have line break, so terminal punctuation is required for sentence fragments. [iOS only]">
+        <ph name="EMAIL">$1<ex>johndoe@acme.com</ex></ph>. Chromium is managed.
       </message>
       <message name="IDS_IOS_ENTERPRISE_SYNC_DISABLED_MESSAGE_WITH_UNO" desc="Message displayed in a prompt when saving data (like bookmarks/reading list/passwords...) is disabled due to an enterprise policy. Related with IDS_IOS_ENTERPRISE_SYNC_DISABLED_TITLE_UNO.">
         Your organization turned off the ability to use and save Chromium data in your Google Account. New bookmarks, passwords, and more will be saved only to this device.
@@ -404,6 +407,12 @@ Try waiting a few minutes before switching accounts. If you switch accounts now,
       </message>
       <message name="IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_TITLE_IPAD" desc="Title of the screen suggesting to the user to use Chrome by default - iPad experimental version [iOS only]">
         Use Chromium for iPad by default
+      </message>
+      <message name="IDS_IOS_FIRST_RUN_GUIDED_TOUR_PROMO_TEXT" desc="The text of the screen prompting the user to learn more about the basics of the app. [iOS only]">
+          Learn the helpful Chromium basics to get you started
+      </message>
+      <message name="IDS_IOS_FIRST_RUN_GUIDED_TOUR_PROMO_TITLE" desc="Title of the screen welcoming the user to the app. [iOS only]">
+        Welcome to Chromium
       </message>
       <message name="IDS_IOS_FIRST_RUN_LAUNCH_SCREEN_ENTERPRISE" desc="The text of the launch screen presented to the user on First Run when the browser is managed [iOS only]">
         Your organization is setting up Chromium...
@@ -709,6 +718,9 @@ Things to consider:
 
 Only someone with your passphrase can read your encrypted data. The passphrase is not sent to or stored by Google. If you forget your passphrase or want to change this setting, <ph name="BEGIN_LINK">BEGIN_LINK</ph>delete the Chromium data in your account<ph name="END_LINK">END_LINK</ph>.
       </message>
+      <message name="IDS_IOS_NON_MODAL_SIGNIN_PROMO_PROMPT" desc="Infobar title for non modal signin promo.">
+        Sign in to Chromium
+      </message>
       <message name="IDS_IOS_NOTIFICATIONS_ALERT_MESSAGE" desc="Text for the Notifications UI Alert Prompt that redirects the user to the iOS notifications permission page">
         To receive notifications from Chromium, turn on notifications in your iOS Settings.
       </message>
@@ -720,6 +732,12 @@ Only someone with your passphrase can read your encrypted data. The passphrase i
       </message>
       <message name="IDS_IOS_NOTIFICATIONS_OPT_IN_TIPS_SETTINGS_TOGGLE_MESSSAGE" desc="The label for the notification opt-in toggle message for tips notifications.">
         Tips on getting the most out of Chromium.
+      </message>
+      <message name="IDS_IOS_NOTIFICATIONS_TIPS_CPE_BODY" desc="Text for the body of a Tips notification that encourages the user to enable the CPE.">
+        To easily get your saved passwords in other apps, chose Chromium for Autofill.
+      </message>
+      <message name="IDS_IOS_NOTIFICATIONS_TIPS_CPE_TITLE" desc="Text for the title of a Tips notification that encourages the user to enable the CPE.">
+        Chromium Tip: Get your passwords in any app
       </message>
       <message name="IDS_IOS_NOTIFICATIONS_TIPS_DEFAULT_BROWSER_BODY" desc="Text for the body of a Tips notification that encourages the user to set the app as their default browser">
         Use Chromium anytime you tap links in messages or other apps.
@@ -1039,29 +1057,26 @@ For more settings that use data to improve your Chromium experience, go to <ph n
       <message name="IDS_IOS_SET_UP_LIST_DESCRIPTION" desc="Description for the Set Up List - a list of tasks the user might want to complete when first using Chromium.">
           Complete these suggested actions below to get the most out of Chromium.
       </message>
-      <message name="IDS_IOS_SET_UP_LIST_DOCK_CHROME_SHORT_DESCRIPTION" desc="Description for the Set Up List item that encourages the user to add Chrome to their iOS dock (used when the Set Up List is in compact mode).">
-        Access Chromium faster from your Home Screen Dock.
-      </message>
-      <message name="IDS_IOS_SET_UP_LIST_DOCK_CHROME_TITLE" desc="Title for the Set Up List item that encourages the user to add Chrome to their iOS dock.">
-        Move Chromium to the Dock
-      </message>
       <message name="IDS_IOS_SET_UP_LIST_HIDE_MODULE_CONTEXT_MENU_TITLE" desc="Title for the long-press context menu for the Set Up List module.">
           This card shows you suggestions on how to get the most out of Chromium.
       </message>
-      <message name="IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION" desc="Short description for the Set Up List item that encourages the user to enable Chrome notifications.">
-        Keep up with content and helpful Chromium tips.
+      <message name="IDS_IOS_SET_UP_LIST_NOTIFICATIONS_DESCRIPTION" desc="Description for the Set Up List item that encourages the user to enable Chrome notifications.">
+        Keep up with price tracking updates and Chromium tips.
+      </message>
+      <message name="IDS_IOS_SET_UP_LIST_NOTIFICATIONS_SHORT_DESCRIPTION" desc="Description for the Set Up List item that encourages the user to enable Chrome notifications.">
+        Keep up with helpful Chromium tips and more.
       </message>
       <message name="IDS_IOS_SET_UP_LIST_TIPS_TITLE" desc="Title for the Set Up List (a variation that mentions Tips) - a list of tasks the user might want to complete when first using Chromium.">
         Chromium Tips
-      </message>
-      <message name="IDS_IOS_SET_UP_LIST_TITLE" desc="Title for the Set Up List - a list of tasks the user might want to complete when first using Chromium.">
-        Get the most out of Chromium
       </message>
       <message name="IDS_IOS_SHORT_PRODUCT_NAME" desc="The Chrome application short name.">
         Chromium
       </message>
       <message name="IDS_IOS_SIGNIN_ACCOUNT_NOTIFICATION_TITLE" desc="Notification title for the user's signed-in state [iOS only]">
       Signed in to Chromium
+      </message>
+      <message name="IDS_IOS_SIGNIN_GROUP_COLLABORATION_SUBTITLE" desc="Subtitle displayed to the user when they attempt to access a shared group while being signed out.">
+        Sign in to Chromium to share and join tab groups, and work together on ideas
       </message>
       <message name="IDS_IOS_SIGNIN_SHEET_LABEL_FOR_WEB_SIGNIN" desc="This string is on a sign-in page, after the user taps to sign in to a website with their Google Account. It offers to sign the user in to both the website and to Chromium with the account. It highlights the overarching user benefit of signing in to Chromium (access to data from other devices like bookmarks, passwords, history, settings, etc.). We want users to understand why signing in is beneficial, and click 'Continue as name' to sign in to their Google Account. The tone should be informative and lightweight. [iOS only]">
         Sign in to this site and Chromium to get your bookmarks and more on all your devices.

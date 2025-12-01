@@ -40,8 +40,8 @@ export class FileSuggestionElement extends CrLitElement {
     };
   }
 
-  files: File[] = [];
-  moduleName: string;
+  accessor files: File[] = [];
+  accessor moduleName: string = '';
 
   protected onFileClick_(e: Event) {
     const clickFileEvent = new Event('usage', {composed: true, bubbles: true});
@@ -50,11 +50,11 @@ export class FileSuggestionElement extends CrLitElement {
     const index = Number(currentTarget.dataset['index']);
     chrome.metricsPrivate.recordSmallCount(
         `NewTabPage.${this.moduleName}.FileClick`, index);
-    if (this.files[index].recommendationType != null) {
+    const recommendationType = this.files[index].recommendationType;
+    if (recommendationType != null) {
       chrome.metricsPrivate.recordEnumerationValue(
           `NewTabPage.${this.moduleName}.RecommendationTypeClick`,
-          this.files[index].recommendationType,
-          RecommendationType.MAX_VALUE + 1);
+          recommendationType, RecommendationType.MAX_VALUE + 1);
     }
   }
 }

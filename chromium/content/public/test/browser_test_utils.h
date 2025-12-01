@@ -21,6 +21,8 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/raw_ptr_exclusion.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/scoped_observation.h"
@@ -326,6 +328,11 @@ void OverrideLastCommittedOrigin(RenderFrameHost* render_frame_host,
 // Causes the specified web_contents to crash. Blocks until it is crashed.
 void CrashTab(WebContents* web_contents);
 
+// Causes the specified web_contents to crash after hanging. Blocks until it is
+// crashed.
+void SimulateUnresponsivePrimaryMainFrameAndWaitForExit(
+    WebContents* web_contents);
+
 // Sets up a commit interceptor to alter commits for |target_url| to change
 // their commit URL to |new_url| and origin to |new_origin|. This will happen
 // for all commits in |web_contents|.
@@ -349,8 +356,12 @@ void SimulateUnresponsiveRenderer(WebContents* web_contents,
 // RenderWidgetHostInputEventRouter and thus can target OOPIFs. If an OOPIF is
 // the intended target, ensure that its hit test data is available for routing,
 // using `WaitForHitTestData`, first.
-// Note: For simulating clicks inside a fenced frame tree, this function does
-// not work. Use `SimulateClickInFencedFrameTree` in
+//
+// Notes:
+// - Input events to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
+// - For simulating clicks inside a fenced frame tree, this function does not
+// work. Use `SimulateClickInFencedFrameTree` in
 // `content/public/test/fenced_frame_test_util.cc`
 void SimulateMouseClick(WebContents* web_contents,
                         int modifiers,
@@ -361,8 +372,12 @@ void SimulateMouseClick(WebContents* web_contents,
 // through RenderWidgetHostInputEventRouter and thus can target OOPIFs. If an
 // OOPIF is the intended target, ensure that its hit test data is available for
 // routing, using `WaitForHitTestData`, first.
-// Note: For simulating clicks inside a fenced frame tree, this function does
-// not work. Use `SimulateClickInFencedFrameTree` in
+//
+// Notes:
+// - Input events to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
+// - For simulating clicks inside a fenced frame tree, this function does not
+// work. Use `SimulateClickInFencedFrameTree` in
 // `content/public/test/fenced_frame_test_util.cc`
 void SimulateMouseClickAt(WebContents* web_contents,
                           int modifiers,
@@ -383,11 +398,17 @@ gfx::PointF GetCenterCoordinatesOfElementWithId(
 
 // Retrieves the center coordinates of the element with id |id| and simulates a
 // mouse click there using SimulateMouseClickAt().
+//
+// Note: Input events to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateMouseClickOrTapElementWithId(content::WebContents* web_contents,
                                           std::string_view id);
 
 // Simulates asynchronously a mouse enter/move/leave event. The mouse event is
 // routed through RenderWidgetHostInputEventRouter and thus can target OOPIFs.
+//
+// Note: Input events to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateMouseEvent(WebContents* web_contents,
                         blink::WebInputEvent::Type type,
                         const gfx::Point& point);
@@ -397,6 +418,9 @@ void SimulateMouseEvent(WebContents* web_contents,
                         const gfx::Point& point);
 
 // Simulate a mouse wheel event.
+//
+// Note: Input events to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateMouseWheelEvent(WebContents* web_contents,
                              const gfx::Point& point,
                              const gfx::Vector2d& delta,
@@ -417,34 +441,42 @@ void SimulateTouchscreenPinch(WebContents* web_contents,
 #endif  // !BUILDFLAG(IS_MAC)
 
 // Sends a GesturePinch Begin/Update/End sequence.
+//
+// Note: Input events to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateGesturePinchSequence(RenderWidgetHost* render_widget_host,
                                   const gfx::Point& point,
                                   float scale,
                                   blink::WebGestureDevice source_device);
-
 void SimulateGesturePinchSequence(WebContents* web_contents,
                                   const gfx::Point& point,
                                   float scale,
                                   blink::WebGestureDevice source_device);
 
 // Sends a simple, three-event (Begin/Update/End) gesture scroll.
+//
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateGestureScrollSequence(RenderWidgetHost* render_widget_host,
                                    const gfx::Point& point,
                                    const gfx::Vector2dF& delta);
-
 void SimulateGestureScrollSequence(WebContents* web_contents,
                                    const gfx::Point& point,
                                    const gfx::Vector2dF& delta);
 
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateGestureEvent(RenderWidgetHost* render_widget_host,
                           const blink::WebGestureEvent& gesture_event,
                           const ui::LatencyInfo& latency);
-
 void SimulateGestureEvent(WebContents* web_contents,
                           const blink::WebGestureEvent& gesture_event,
                           const ui::LatencyInfo& latency);
 
 // Taps the screen at |point|, using gesture Tap or TapDown.
+//
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateTapAt(WebContents* web_contents, const gfx::Point& point);
 void SimulateTapDownAt(WebContents* web_contents, const gfx::Point& point);
 
@@ -455,10 +487,15 @@ void SimulateTouchGestureAt(WebContents* web_contents,
 
 #if defined(USE_AURA)
 // Generates a TouchEvent of |event_type| at |point|.
+//
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateTouchEventAt(WebContents* web_contents,
                           ui::EventType event_type,
                           const gfx::Point& point);
 
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateLongTapAt(WebContents* web_contents, const gfx::Point& point);
 
 // Can be used to wait for the caret bounds associated with `web_contents` to
@@ -508,6 +545,9 @@ class BoundingBoxUpdateWaiter {
 #endif
 
 // Taps the screen with modifires at |point|.
+//
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateTapWithModifiersAt(WebContents* web_contents,
                                 unsigned Modifiers,
                                 const gfx::Point& point);
@@ -520,6 +560,9 @@ void SimulateTapWithModifiersAt(WebContents* web_contents,
 // or the keyboard layout.
 // If set to true, the modifiers |control|, |shift|, |alt|, and |command| are
 // pressed down first before the key event, and released after.
+//
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateKeyPress(WebContents* web_contents,
                       ui::DomKey key,
                       ui::DomCode code,
@@ -532,6 +575,9 @@ void SimulateKeyPress(WebContents* web_contents,
 // Like SimulateKeyPress(), but does not send the char (AKA keypress) event.
 // This is useful for arrow keys and other key presses that do not generate
 // characters.
+//
+// Note: Input event to a page may not work right after a page load, see
+// `SimulateEndOfPaintHoldingOnPrimaryMainFrame` for a workaround.
 void SimulateKeyPressWithoutChar(WebContents* web_contents,
                                  ui::DomKey key,
                                  ui::DomCode code,
@@ -571,6 +617,17 @@ BindFakeFrameWidgetInterfaces(RenderFrameHost* frame);
 // Set |active| state for a RenderWidgetHost associated with a given
 // RenderFrameHost
 void SimulateActiveStateForWidget(RenderFrameHost* frame, bool active);
+
+// Simulates the end of paint-holding on the primary main frame of
+// `web_contents`. Paint-holding is the browser feature to continue to show a
+// snapshot of the pre-navigation page (instead of a blank page) until the
+// renderer for the post-navigation page has pushed content to the GPU.  The
+// input events received during paint-holding should not be processed by the
+// post-navigation renderer because the users haven't yet seen the new page.
+//
+// Tests that are paint-holding agnostic need to call this method to be able to
+// send input events to a page right after the page is loaded.
+void SimulateEndOfPaintHoldingOnPrimaryMainFrame(WebContents* web_contents);
 
 // Return the value set for VisitedLinkSalt in the navigation's commit_params.
 std::optional<uint64_t> GetVisitedLinkSaltForNavigation(
@@ -2081,10 +2138,33 @@ class DevToolsInspectorLogWatcher : public DevToolsAgentHostClient {
   std::string last_media_notification() { return last_media_notification_; }
   void ClearLastMediaNotification() { last_media_notification_.clear(); }
 
+  std::string last_auto_picture_in_picture_event_info() {
+    return last_auto_picture_in_picture_event_info_;
+  }
+  void ClearLastAutoPictureInPictureEventInfo() {
+    last_auto_picture_in_picture_event_info_.clear();
+  }
+
   // DevToolsAgentHostClient:
   void DispatchProtocolMessage(DevToolsAgentHost* host,
                                base::span<const uint8_t> message) override;
   void AgentHostClosed(DevToolsAgentHost* host) override;
+
+  class DevToolsInspectorLogWatcherObserver : public base::CheckedObserver {
+   public:
+    virtual void OnLastAutoPipEventInfoSet() = 0;
+  };
+
+  void AddObserver(DevToolsInspectorLogWatcherObserver* observer) {
+    observers_.AddObserver(observer);
+  }
+  void RemoveObserver(DevToolsInspectorLogWatcherObserver* observer) {
+    observers_.RemoveObserver(observer);
+  }
+
+  // Notifies observers that the last auto picture in picture event information
+  // was set.
+  void NotifyLastAutoPipEventInfoSet();
 
  private:
   scoped_refptr<DevToolsAgentHost> host_;
@@ -2094,6 +2174,8 @@ class DevToolsInspectorLogWatcher : public DevToolsAgentHostClient {
   GURL last_url_;
   Domain domain_;
   std::string last_media_notification_;
+  std::string last_auto_picture_in_picture_event_info_;
+  base::ObserverList<DevToolsInspectorLogWatcherObserver> observers_;
 };
 
 // Static methods that simulates Mojo methods as if they were called by a
@@ -2495,6 +2577,14 @@ void SetCapturedSurfaceControllerFactoryForTesting(
 
 void InitAndEnableRenderDocumentForAllFrames(
     base::test::ScopedFeatureList* feature_list);
+
+// Returns the DOMNodeId of the node matched by the given CSS query selector,
+// or std::nullopt if no node matches.
+// Note: This method makes multiple renderer IPC calls (via the devtools
+// protocol) and waits for a result (an IPC back from the renderer) each time.
+std::optional<int> GetDOMNodeId(content::RenderFrameHost& rfh,
+                                std::string_view query_selector);
+
 }  // namespace content
 
 #endif  // CONTENT_PUBLIC_TEST_BROWSER_TEST_UTILS_H_

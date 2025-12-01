@@ -105,7 +105,7 @@ void ImageLayerBridge::SetImage(scoped_refptr<StaticBitmapImage> image) {
 
   image_ = std::move(image);
   if (image_) {
-    const bool image_is_opaque = image_->CurrentFrameKnownToBeOpaque();
+    const bool image_is_opaque = image_->IsOpaque();
     if (is_opaque_) {
       // If we in opaque mode but image might have transparency we need to
       // ensure its opacity is not used.
@@ -159,18 +159,6 @@ bool ImageLayerBridge::PrepareTransferableResource(
 
   const bool gpu_compositing = SharedGpuContext::IsGpuCompositingEnabled();
 
-  if (!gpu_compositing) {
-    // Readback if needed and retain the readback in image_ to prevent future
-    // readbacks.
-    // Note: Switching to unaccelerated may change the value of
-    // image_->IsOriginTopLeft(), so it is important to make the switch before
-    // calling IsOriginTopLeft().
-    image_ = image_->MakeUnaccelerated();
-    if (!image_) {
-      return false;
-    }
-  }
-
   if (gpu_compositing) {
     scoped_refptr<StaticBitmapImage> image_for_compositor =
         MakeAccelerated(image_, SharedGpuContext::ContextProviderWrapper());
@@ -190,23 +178,28 @@ bool ImageLayerBridge::PrepareTransferableResource(
     const gfx::Size size(image_for_compositor->width(),
                          image_for_compositor->height());
 
-    bool is_overlay_candidate =
-        shared_image->usage().Has(gpu::SHARED_IMAGE_USAGE_SCANOUT);
+    viz::TransferableResource::MetadataOverride overrides = {
+        .format = image_for_compositor->GetSharedImageFormat(),
+        .size = size,
+        .color_space = gfx::ColorSpace(),
+        .alpha_type = kPremul_SkAlphaType,
+    };
 
-    *out_resource = viz::TransferableResource::MakeGpu(
-        shared_image, shared_image->GetTextureTarget(),
-        image_for_compositor->GetSyncToken(), size,
-        image_for_compositor->GetSharedImageFormat(), is_overlay_candidate,
-        viz::TransferableResource::ResourceSource::kImageLayerBridge);
-    out_resource->origin = image_for_compositor->IsOriginTopLeft()
-                               ? kTopLeft_GrSurfaceOrigin
-                               : kBottomLeft_GrSurfaceOrigin;
+    *out_resource = viz::TransferableResource::Make(
+        shared_image,
+        viz::TransferableResource::ResourceSource::kImageLayerBridge,
+        image_for_compositor->GetSyncToken(), overrides);
 
     auto func = WTF::BindOnce(&ImageLayerBridge::ResourceReleasedGpu,
                               WrapWeakPersistent(this),
                               std::move(image_for_compositor));
     *out_release_callback = std::move(func);
   } else {
+    image_ = image_->MakeUnaccelerated();
+    if (!image_) {
+      return false;
+    }
+
     sk_sp<SkImage> sk_image =
         image_->PaintImageForCurrentFrame().GetSwSkImage();
     if (!sk_image)
@@ -242,15 +235,17 @@ bool ImageLayerBridge::PrepareTransferableResource(
       return false;
     }
 
-    *out_resource = viz::TransferableResource::MakeSoftwareSharedImage(
-        resource.shared_image, resource.sync_token, size, format,
-        viz::TransferableResource::ResourceSource::kImageLayerBridge);
-    out_resource->origin = image_->IsOriginTopLeft()
-                               ? kTopLeft_GrSurfaceOrigin
-                               : kBottomLeft_GrSurfaceOrigin;
-    out_resource->color_space = sk_image->colorSpace()
+    auto resource_color_space = sk_image->colorSpace()
                                     ? gfx::ColorSpace(*sk_image->colorSpace())
                                     : gfx::ColorSpace::CreateSRGB();
+
+    viz::TransferableResource::MetadataOverride overrides = {
+        .color_space = resource_color_space,
+    };
+    *out_resource = viz::TransferableResource::Make(
+        resource.shared_image,
+        viz::TransferableResource::ResourceSource::kImageLayerBridge,
+        resource.sync_token, overrides);
     auto func = WTF::BindOnce(&ImageLayerBridge::ResourceReleasedSoftware,
                               WrapWeakPersistent(this), std::move(resource));
     *out_release_callback = std::move(func);

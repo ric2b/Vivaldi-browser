@@ -12,6 +12,8 @@
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_coordinator.h"
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_coordinator_delegate.h"
 #import "ios/chrome/browser/account_picker/ui_bundled/account_picker_logger.h"
+#import "ios/chrome/browser/authentication/ui_bundled/continuation.h"
+#import "ios/chrome/browser/authentication/ui_bundled/signin/signin_coordinator.h"
 #import "ios/chrome/browser/photos/model/photos_service_factory.h"
 #import "ios/chrome/browser/save_to_photos/ui_bundled/save_to_photos_mediator.h"
 #import "ios/chrome/browser/save_to_photos/ui_bundled/save_to_photos_mediator_delegate.h"
@@ -125,7 +127,8 @@
   _accountPickerCoordinator = [[AccountPickerCoordinator alloc]
       initWithBaseViewController:self.baseViewController
                          browser:self.browser
-                   configuration:configuration];
+                   configuration:configuration
+                     accessPoint:signin_metrics::AccessPoint::kSaveToPhotosIos];
   _accountPickerCoordinator.delegate = self;
   _accountPickerCoordinator.logger = self;
   [_accountPickerCoordinator start];
@@ -244,28 +247,6 @@
 }
 
 #pragma mark - AccountPickerCoordinatorDelegate
-
-- (void)accountPickerCoordinator:
-            (AccountPickerCoordinator*)accountPickerCoordinator
-    openAddAccountWithCompletion:(void (^)(id<SystemIdentity>))completion {
-  id<ApplicationCommands> applicationCommandsHandler = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), ApplicationCommands);
-  ShowSigninCommand* addAccountCommand = [[ShowSigninCommand alloc]
-      initWithOperation:AuthenticationOperation::kAddAccount
-               identity:nil
-            accessPoint:signin_metrics::AccessPoint::kSaveToPhotosIos
-            promoAction:signin_metrics::PromoAction::
-                            PROMO_ACTION_NO_SIGNIN_PROMO
-             completion:^(SigninCoordinatorResult result,
-                          id<SystemIdentity> completionIdentity) {
-               if (completion) {
-                 completion(completionIdentity);
-               }
-             }];
-  [applicationCommandsHandler
-              showSignin:addAccountCommand
-      baseViewController:accountPickerCoordinator.viewController];
-}
 
 - (void)accountPickerCoordinator:
             (AccountPickerCoordinator*)accountPickerCoordinator

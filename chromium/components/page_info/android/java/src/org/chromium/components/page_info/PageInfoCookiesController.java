@@ -26,6 +26,7 @@ import org.chromium.components.browsing_data.DeleteBrowsingDataAction;
 import org.chromium.components.content_settings.CookieControlsBridge;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.components.content_settings.CookieControlsObserver;
+import org.chromium.components.content_settings.CookieControlsState;
 import org.chromium.components.embedder_support.util.Origin;
 import org.chromium.components.user_prefs.UserPrefs;
 
@@ -42,13 +43,12 @@ public class PageInfoCookiesController extends PageInfoPreferenceSubpageControll
     private @Nullable CookieControlsBridge mBridge;
     private @Nullable PageInfoCookiesSettings mSubPage;
 
-    private boolean mCookieControlsVisible;
-    private boolean mThirdPartyCookiesBlocked;
+    private int mControlsState;
     private int mEnforcement;
     private long mExpiration;
     private boolean mShouldDisplaySiteBreakageString;
     private @Nullable Website mWebsite;
-    private boolean mBlockAll3pc;
+    private final boolean mBlockAll3pc;
     private boolean mIsIncognito;
     private boolean mIsModeBUi;
     private int mDaysUntilExpirationForTesting;
@@ -108,7 +108,6 @@ public class PageInfoCookiesController extends PageInfoPreferenceSubpageControll
         var delegate = getDelegate();
         PageInfoCookiesSettings.PageInfoCookiesViewParams params =
                 new PageInfoCookiesSettings.PageInfoCookiesViewParams(
-                        /* thirdPartyCookieBlockingEnabled= */ delegate.cookieControlsShown(),
                         /* onThirdPartyCookieToggleChanged= */ this
                                 ::onThirdPartyCookieToggleChanged,
                         /* onClearCallback= */ this::onClearCookiesClicked,
@@ -122,8 +121,7 @@ public class PageInfoCookiesController extends PageInfoPreferenceSubpageControll
                         /* fixedExpirationForTesting= */ mFixedExpirationForTesting,
                         /* daysUntilExpirationForTesting= */ mDaysUntilExpirationForTesting);
         mSubPage.setParams(params, delegate);
-        mSubPage.setCookieStatus(
-                mCookieControlsVisible, mThirdPartyCookiesBlocked, mEnforcement, mExpiration);
+        mSubPage.updateState(mControlsState, mEnforcement, mExpiration);
 
         SiteSettingsCategory storageCategory =
                 SiteSettingsCategory.createFromType(
@@ -197,21 +195,15 @@ public class PageInfoCookiesController extends PageInfoPreferenceSubpageControll
 
     @Override
     public void onStatusChanged(
-            boolean controlsVisible,
-            boolean protectionsOn,
-            int enforcement,
-            int blockingStatus,
-            long expiration) {
-        mCookieControlsVisible = controlsVisible;
-        mThirdPartyCookiesBlocked = protectionsOn;
+            int controlsState, int enforcement, int blockingStatus, long expiration) {
+        mControlsState = controlsState;
         mEnforcement = enforcement;
         mExpiration = expiration;
 
         updateRowViewSubtitle();
 
         if (mSubPage != null) {
-            mSubPage.setCookieStatus(
-                    mCookieControlsVisible, mThirdPartyCookiesBlocked, mEnforcement, expiration);
+            mSubPage.updateState(mControlsState, mEnforcement, mExpiration);
         }
     }
 
@@ -234,8 +226,8 @@ public class PageInfoCookiesController extends PageInfoPreferenceSubpageControll
                     mRowView.getContext().getString(R.string.page_info_cookies_subtitle_allowed));
             return;
         }
-        if (!mCookieControlsVisible) return;
-        if (!mThirdPartyCookiesBlocked) {
+        if (mControlsState == CookieControlsState.HIDDEN) return;
+        if (mControlsState == CookieControlsState.ALLOWED3PC) {
             mRowView.updateSubtitle(
                     mRowView.getContext().getString(R.string.page_info_cookies_subtitle_allowed));
             return;

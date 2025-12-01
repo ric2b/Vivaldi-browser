@@ -97,7 +97,8 @@ struct AutocompleteMatchType {
                                        // similar embeddings to the query.
     FEATURED_ENTERPRISE_SEARCH  = 37,  // Site search engines featured by
                                        // Enterprise policy.
-    HISTORY_EMBEDDINGS_ANSWER = 38,
+    HISTORY_EMBEDDINGS_ANSWER   = 38,
+    TAB_GROUP                   = 39,  // A tab group match.
 
     // Vivaldi, make sure to keep the Vivaldi ones lasst, next to NUM_TYPES
     BOOKMARK_NICKNAME,  // A bookmark whose nickname
@@ -136,6 +137,7 @@ struct AutocompleteMatchType {
   // like it could replace |match_text|. Investigate this.
   static std::u16string ToAccessibilityLabel(
       const AutocompleteMatch& match,
+      const std::u16string& header_text,
       const std::u16string& match_text,
       size_t match_index = 0,
       size_t total_matches = 0,

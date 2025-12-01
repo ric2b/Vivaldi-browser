@@ -425,6 +425,7 @@ static U32 HUF_setMaxHeight(nodeElt* huffNode, U32 lastNonNull, U32 targetNbBits
                  * gain back half the rank.
                  */
                 U32 nBitsToDecrease = ZSTD_highbit32((U32)totalCost) + 1;
+                assert(nBitsToDecrease <= HUF_TABLELOG_MAX+1);
                 for ( ; nBitsToDecrease > 1; nBitsToDecrease--) {
                     U32 const highPos = rankLast[nBitsToDecrease];
                     U32 const lowPos = rankLast[nBitsToDecrease-1];

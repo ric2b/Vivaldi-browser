@@ -21,6 +21,8 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "chromeos/ash/components/boca/on_task/notification_constants.h"
+#include "chromeos/ash/components/boca/on_task/on_task_notifications_manager.h"
 #include "chromeos/ash/components/boca/on_task/util/mock_clock.h"
 #include "chromeos/ui/wm/window_util.h"
 #include "components/sessions/core/session_id.h"
@@ -45,18 +47,36 @@ constexpr char kSessionId2[] = "test_session_id_2";
 constexpr char kTestUrl1[] = "https://test1.com";
 constexpr char kTestUrl2[] = "https://test2.com";
 
-class OnTaskSessionManagerBrowserTest : public InProcessBrowserTest {
+// Fake delegate implementation for the `OnTaskNotificationsManager` to minimize
+// dependency on Ash UI.
+class FakeOnTaskNotificationsManagerDelegate
+    : public boca::OnTaskNotificationsManager::Delegate {
+ public:
+  FakeOnTaskNotificationsManagerDelegate() = default;
+  ~FakeOnTaskNotificationsManagerDelegate() override = default;
+
+  // OnTaskNotificationsManager::Delegate:
+  void ShowNotification(
+      std::unique_ptr<message_center::Notification> notification) override {
+    notifications_shown_.insert(notification->id());
+  }
+  void ClearNotification(const std::string& notification_id) override {
+    notifications_shown_.erase(notification_id);
+  }
+
+  bool WasNotificationShown(const std::string& id) {
+    return notifications_shown_.contains(id);
+  }
+
+ private:
+  std::set<std::string> notifications_shown_;
+};
+
+class OnTaskSessionManagerBrowserTestBase : public InProcessBrowserTest {
  protected:
-  OnTaskSessionManagerBrowserTest() {
+  OnTaskSessionManagerBrowserTestBase() {
     // Initialize the MockClock.
     boca::MockClock::Get();
-
-    // Enable Boca and consumer experience for testing purposes. This is used
-    // to set up the Boca SWA for OnTask.
-    scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{features::kBoca, features::kBocaConsumer,
-                              features::kBocaLockedModeCustomCountdownDuration},
-        /*disabled_features=*/{});
   }
 
   void SetUpOnMainThread() override {
@@ -65,7 +85,22 @@ class OnTaskSessionManagerBrowserTest : public InProcessBrowserTest {
     mock_cert_verifier_.mock_cert_verifier()->set_default_result(net::OK);
     https_server()->AddDefaultHandlers(
         InProcessBrowserTest::GetChromeTestDataDir());
+
+    // Override notification manager implementation to minimize dependency on
+    // Ash UI.
+    auto fake_notifications_delegate =
+        std::make_unique<FakeOnTaskNotificationsManagerDelegate>();
+    fake_notifications_delegate_ptr_ = fake_notifications_delegate.get();
+    GetOnTaskSessionManager()->SetNotificationManagerForTesting(
+        boca::OnTaskNotificationsManager::CreateForTest(
+            std::move(fake_notifications_delegate)));
+
     InProcessBrowserTest::SetUpOnMainThread();
+  }
+
+  void TearDownOnMainThread() override {
+    fake_notifications_delegate_ptr_ = nullptr;
+    InProcessBrowserTest::TearDownOnMainThread();
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -91,6 +126,15 @@ class OnTaskSessionManagerBrowserTest : public InProcessBrowserTest {
     return ash::FindSystemWebAppBrowser(profile(), ash::SystemWebAppType::BOCA);
   }
 
+  void VerifyNotificationShown(std::string notification_id,
+                               bool notification_shown) {
+    boca::MockClock::Get().Advance(boca::kOnTaskNotificationCountdownInterval);
+    content::RunAllTasksUntilIdle();
+    EXPECT_EQ(
+        fake_notifications_delegate_ptr_->WasNotificationShown(notification_id),
+        notification_shown);
+  }
+
   void WaitForLockedModeCountdown() {
     // Simulate the full countdown duration to ensure generating the
     // notification.
@@ -109,9 +153,28 @@ class OnTaskSessionManagerBrowserTest : public InProcessBrowserTest {
   net::EmbeddedTestServer* https_server() { return &https_server_; }
 
  private:
-  base::test::ScopedFeatureList scoped_feature_list_;
   content::ContentMockCertVerifier mock_cert_verifier_;
   net::EmbeddedTestServer https_server_{net::EmbeddedTestServer::TYPE_HTTPS};
+  raw_ptr<FakeOnTaskNotificationsManagerDelegate>
+      fake_notifications_delegate_ptr_;
+};
+
+class OnTaskSessionManagerBrowserTest
+    : public OnTaskSessionManagerBrowserTestBase {
+ protected:
+  OnTaskSessionManagerBrowserTest() {
+    // Enable Boca and consumer experience for testing purposes. This is used
+    // to set up the Boca SWA for OnTask.
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kBoca, features::kBocaConsumer,
+                              features::kBocaLockedModeCustomCountdownDuration,
+                              features::kOnDeviceSpeechRecognition,
+                              features::kBocaKeepSWAOpenOnSessionEnded},
+        /*disabled_features=*/{});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
@@ -329,6 +392,150 @@ IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
+                       ShouldSkipCountdownWhenPauseInUnlockedMode) {
+  content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Start OnTask session and spawn one tab outside the homepage tab.
+  GetOnTaskSessionManager()->OnSessionStarted(kSessionId,
+                                              ::boca::UserIdentity());
+  ::boca::Bundle bundle;
+  bundle.add_content_configs()->set_url(kTestUrl1);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  navigation_observer.Wait();
+
+  Browser* const boca_app_browser = FindBocaSystemWebAppBrowser();
+  ASSERT_THAT(boca_app_browser, NotNull());
+  ASSERT_TRUE(boca_app_browser->IsLockedForOnTask());
+  auto* const tab_strip_model = boca_app_browser->tab_strip_model();
+  ASSERT_EQ(tab_strip_model->count(), 2);
+  tab_strip_model->ActivateTabAt(1);
+  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetVisibleURL(),
+            GURL(kTestUrl1));
+
+  // Lock and pause the boca app.
+  bundle.set_locked(true);
+  bundle.set_lock_to_app_home(true);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  ASSERT_TRUE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+  EXPECT_FALSE(chromeos::wm::CanFloatWindow(
+      boca_app_browser->window()->GetNativeWindow()));
+  auto* const browser_view =
+      BrowserView::GetBrowserViewForBrowser(boca_app_browser);
+  // Wait until immersive mode is disabled in pause mode.
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return !browser_view->immersive_mode_controller()->IsEnabled();
+  }));
+  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetVisibleURL(),
+            GURL(kChromeBocaAppUntrustedIndexURL));
+
+  // Unpause the boca app.
+  bundle.set_lock_to_app_home(false);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  ASSERT_TRUE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+  EXPECT_FALSE(chromeos::wm::CanFloatWindow(
+      boca_app_browser->window()->GetNativeWindow()));
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+
+  // Unlock the Boca app to unblock test teardown that involves browser window
+  // close.
+  bundle.set_locked(false);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  EXPECT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+}
+
+IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
+                       ShouldSkipCountdownWhenPauseDuringLockedModeCountdown) {
+  content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Start OnTask session and spawn one tab outside the homepage tab.
+  GetOnTaskSessionManager()->OnSessionStarted(kSessionId,
+                                              ::boca::UserIdentity());
+  ::boca::Bundle bundle;
+  bundle.add_content_configs()->set_url(kTestUrl1);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  navigation_observer.Wait();
+
+  Browser* const boca_app_browser = FindBocaSystemWebAppBrowser();
+  ASSERT_THAT(boca_app_browser, NotNull());
+  ASSERT_TRUE(boca_app_browser->IsLockedForOnTask());
+  auto* const tab_strip_model = boca_app_browser->tab_strip_model();
+  ASSERT_EQ(tab_strip_model->count(), 2);
+  tab_strip_model->ActivateTabAt(1);
+  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetVisibleURL(),
+            GURL(kTestUrl1));
+
+  // Lock the boca app.
+  bundle.set_locked(true);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  ASSERT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+
+  // Pause the boca app.
+  bundle.set_lock_to_app_home(true);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  ASSERT_TRUE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+  EXPECT_FALSE(chromeos::wm::CanFloatWindow(
+      boca_app_browser->window()->GetNativeWindow()));
+  const auto* const browser_view =
+      BrowserView::GetBrowserViewForBrowser(boca_app_browser);
+  // Wait until immersive mode is disabled in pause mode.
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return !browser_view->immersive_mode_controller()->IsEnabled();
+  }));
+  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetVisibleURL(),
+            GURL(kChromeBocaAppUntrustedIndexURL));
+
+  // Unpause the boca app.
+  bundle.set_lock_to_app_home(false);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  ASSERT_TRUE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+  EXPECT_FALSE(chromeos::wm::CanFloatWindow(
+      boca_app_browser->window()->GetNativeWindow()));
+  EXPECT_TRUE(browser_view->immersive_mode_controller()->IsEnabled());
+
+  // Unlock the Boca app to unblock test teardown that involves browser window
+  // close.
+  bundle.set_locked(false);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  EXPECT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+}
+
+IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
+                       ShouldNotLockBocaSWAInAppReloadIfLockInProgress) {
+  content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Start OnTask session, spawn one tab outside the homepage tab and lock the
+  // boca app.
+  GetOnTaskSessionManager()->OnSessionStarted(kSessionId,
+                                              ::boca::UserIdentity());
+  ::boca::Bundle bundle;
+  bundle.add_content_configs()->set_url(kTestUrl1);
+  bundle.set_locked(true);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  navigation_observer.Wait();
+
+  // Boca should not be locked before the full countdown, and locked after the
+  // full countdown.
+  Browser* const boca_app_browser = FindBocaSystemWebAppBrowser();
+  ASSERT_THAT(boca_app_browser, NotNull());
+  ASSERT_TRUE(boca_app_browser->IsLockedForOnTask());
+  ASSERT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+  WaitForLockedModeCountdown();
+  ASSERT_TRUE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+  EXPECT_FALSE(chromeos::wm::CanFloatWindow(
+      boca_app_browser->window()->GetNativeWindow()));
+  EXPECT_TRUE(boca_app_browser->window()->IsToolbarVisible());
+
+  // Unlock the Boca app to unblock test teardown that involves browser window
+  // close.
+  bundle.set_locked(false);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  EXPECT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+}
+
+IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
                        ShouldApplyOpenNavRestrictionsToTabsOnBundleUpdated) {
   content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
   navigation_observer.StartWatchingNewWebContents();
@@ -477,7 +684,7 @@ IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
-                       ShouldCloseBocaSWAOnSessionEnd) {
+                       ShouldKeepBocaSWAOpenOnSessionEndWithFeatureEnabled) {
   const GURL boca_chrome_url = GURL(kChromeBocaAppUntrustedIndexURL);
   content::TestNavigationObserver navigation_observer(boca_chrome_url);
   navigation_observer.StartWatchingNewWebContents();
@@ -492,13 +699,15 @@ IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
   ASSERT_TRUE(boca_app_browser->IsLockedForOnTask());
   // End the session.
   GetOnTaskSessionManager()->OnSessionEnded(kSessionId);
-  // Wait until the browser actually gets closed.
-  ui_test_utils::WaitForBrowserToClose();
-  ASSERT_THAT(FindBocaSystemWebAppBrowser(), IsNull());
+
+  VerifyNotificationShown(kOnTaskSessionEndNotificationId, true);
+  VerifyNotificationShown(kOnTaskBundleContentAddedNotificationId, false);
+  VerifyNotificationShown(kOnTaskBundleContentRemovedNotificationId, false);
+  EXPECT_EQ(FindBocaSystemWebAppBrowser(), boca_app_browser);
 }
 
 IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
-                       RestoreTabsOnAppReload) {
+                       RestoreTabsSentByProviderOnAppReload) {
   content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
   navigation_observer.StartWatchingNewWebContents();
 
@@ -523,7 +732,17 @@ IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
   EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetLastCommittedURL(),
             GURL(kTestUrl2));
 
-  // Attempt an app reload and verify tabs are restored.
+  // Open a new tab that is not sent by the provider from Boca homepage.
+  tab_strip_model->ActivateTabAt(0);
+  const GURL new_url(embedded_test_server()->GetURL("/test/new_page.html"));
+  ASSERT_TRUE(ui_test_utils::NavigateToURLWithDisposition(
+      boca_app_browser, new_url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP));
+  EXPECT_EQ(tab_strip_model->GetActiveWebContents()->GetLastCommittedURL(),
+            new_url);
+  ASSERT_EQ(tab_strip_model->count(), 4);
+
+  // Attempt an app reload and verify tabs sent by the provider are restored.
   GetOnTaskSessionManager()->OnAppReloaded();
   ASSERT_EQ(tab_strip_model->count(), 3);
   tab_strip_model->ActivateTabAt(1);
@@ -578,7 +797,7 @@ IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
-                       ShouldMuteTabsAudioWhenLockOnBundleUpdated) {
+                       ShouldMuteAndUnmuteTabsAudioWhenLockAndUnlock) {
   content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
   navigation_observer.StartWatchingNewWebContents();
 
@@ -627,11 +846,78 @@ IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
   tab_strip_model->ActivateTabAt(1);
   EXPECT_FALSE(tab_strip_model->GetActiveWebContents()->IsAudioMuted());
 
-  // Tabs in other browsers are muted.
-  EXPECT_TRUE(
+  // Tabs in other browsers are unmuted.
+  EXPECT_FALSE(
       browser_1->tab_strip_model()->GetActiveWebContents()->IsAudioMuted());
-  EXPECT_TRUE(
+  EXPECT_FALSE(
       browser_2->tab_strip_model()->GetActiveWebContents()->IsAudioMuted());
+}
+
+IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerBrowserTest,
+                       ShouldRespectLatestPinStateOnBundleUpdated) {
+  content::TestNavigationObserver navigation_observer((GURL(kTestUrl1)));
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Start OnTask session and spawn one tab outside the homepage tab.
+  GetOnTaskSessionManager()->OnSessionStarted(kSessionId,
+                                              ::boca::UserIdentity());
+  ::boca::Bundle bundle;
+  bundle.add_content_configs()->set_url(kTestUrl1);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  navigation_observer.Wait();
+
+  Browser* const boca_app_browser = FindBocaSystemWebAppBrowser();
+  ASSERT_THAT(boca_app_browser, NotNull());
+  ASSERT_TRUE(boca_app_browser->IsLockedForOnTask());
+  ASSERT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+
+  // Pause and then unlock the boca app.
+  bundle.set_locked(true);
+  bundle.set_lock_to_app_home(true);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  bundle.set_locked(false);
+  bundle.set_lock_to_app_home(false);
+  GetOnTaskSessionManager()->OnBundleUpdated(bundle);
+  EXPECT_FALSE(platform_util::IsBrowserLockedFullscreen(boca_app_browser));
+}
+
+class OnTaskSessionManagerCloseSWAOnSessionEndBrowserTest
+    : public OnTaskSessionManagerBrowserTestBase {
+ protected:
+  OnTaskSessionManagerCloseSWAOnSessionEndBrowserTest() {
+    scoped_feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kBoca, features::kBocaConsumer,
+                              features::kBocaLockedModeCustomCountdownDuration,
+                              features::kOnDeviceSpeechRecognition},
+        /*disabled_features=*/{features::kBocaKeepSWAOpenOnSessionEnded});
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(OnTaskSessionManagerCloseSWAOnSessionEndBrowserTest,
+                       ShouldCloseBocaSWAOnSessionEnd) {
+  const GURL boca_chrome_url = GURL(kChromeBocaAppUntrustedIndexURL);
+  content::TestNavigationObserver navigation_observer(boca_chrome_url);
+  navigation_observer.StartWatchingNewWebContents();
+
+  // Start OnTask session.
+  GetOnTaskSessionManager()->OnSessionStarted(kSessionId,
+                                              ::boca::UserIdentity());
+  navigation_observer.Wait();
+
+  Browser* const boca_app_browser = FindBocaSystemWebAppBrowser();
+  ASSERT_THAT(boca_app_browser, NotNull());
+  ASSERT_TRUE(boca_app_browser->IsLockedForOnTask());
+  // End the session.
+  GetOnTaskSessionManager()->OnSessionEnded(kSessionId);
+  // Wait until the browser actually gets closed.
+  ui_test_utils::WaitForBrowserToClose();
+  VerifyNotificationShown(kOnTaskSessionEndNotificationId, true);
+  VerifyNotificationShown(kOnTaskBundleContentAddedNotificationId, false);
+  VerifyNotificationShown(kOnTaskBundleContentRemovedNotificationId, false);
+  ASSERT_THAT(FindBocaSystemWebAppBrowser(), IsNull());
 }
 
 }  // namespace

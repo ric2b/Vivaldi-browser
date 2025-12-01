@@ -1,6 +1,7 @@
 // Copyright 2021 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+/* eslint-disable rulesdir/no-lit-render-outside-of-view */
 
 import '../../../ui/components/expandable_list/expandable_list.js';
 
@@ -71,7 +72,7 @@ export class StackTraceRow extends HTMLElement {
     }
     Lit.render(
         html`
-      <style>${stackTraceRowStyles.cssText}</style>
+      <style>${stackTraceRowStyles}</style>
       <div class="stack-trace-row">
               <div class="stack-trace-function-name text-ellipsis" title=${this.#stackTraceRowItem.functionName}>
                 ${this.#stackTraceRowItem.functionName}
@@ -116,7 +117,7 @@ export class StackTraceLinkButton extends HTMLElement {
                                           i18nString(UIStrings.showSMoreFrames, {n: this.#hiddenCallFramesCount});
     Lit.render(
         html`
-      <style>${stackTraceLinkButtonStyles.cssText}</style>
+      <style>${stackTraceLinkButtonStyles}</style>
       <div class="stack-trace-row">
           <button class="link" @click=${() => this.#onShowAllClick()}>
             ${linkText}

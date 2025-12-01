@@ -33,6 +33,14 @@ class SweepIdentityNodes {
         node->change_input(i, input.node()->input(0).node());
       }
     }
+    // While visiting the deopt info, the iterator will clear the identity nodes
+    // automatically.
+    if (node->properties().can_lazy_deopt()) {
+      node->lazy_deopt_info()->ForEachInput([&](ValueNode* node) {});
+    }
+    if (node->properties().can_eager_deopt()) {
+      node->eager_deopt_info()->ForEachInput([&](ValueNode* node) {});
+    }
     return ProcessResult::kContinue;
   }
 };
@@ -94,7 +102,7 @@ class LoopOptimizationProcessor {
     return input->owner() != current_block;
   }
 
-  ProcessResult Process(LoadTaggedFieldForContextSlot* ltf,
+  ProcessResult Process(LoadTaggedFieldForContextSlotNoCells* ltf,
                         const ProcessingState& state) {
     DCHECK(loop_effects);
     ValueNode* object = ltf->object_input().node();
@@ -253,11 +261,11 @@ class AnyUseMarkingProcessor {
 
   void VerifyEscapeAnalysis(Graph* graph) {
 #ifdef DEBUG
-    for (auto it : graph->allocations_escape_map()) {
-      auto alloc = it.first;
+    for (const auto& it : graph->allocations_escape_map()) {
+      auto* alloc = it.first;
       DCHECK(alloc->HasBeenAnalysed());
       if (alloc->HasEscaped()) {
-        for (auto dep : it.second) {
+        for (auto* dep : it.second) {
           DCHECK(dep->HasEscaped());
         }
       }
@@ -266,8 +274,8 @@ class AnyUseMarkingProcessor {
   }
 
   void RunEscapeAnalysis(Graph* graph) {
-    for (auto it : graph->allocations_escape_map()) {
-      auto alloc = it.first;
+    for (auto& it : graph->allocations_escape_map()) {
+      auto* alloc = it.first;
       if (alloc->HasBeenAnalysed()) continue;
       // Check if all its uses are non escaping.
       if (alloc->IsEscaping()) {

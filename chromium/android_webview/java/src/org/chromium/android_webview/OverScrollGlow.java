@@ -9,14 +9,17 @@ import android.graphics.Canvas;
 import android.view.View;
 import android.widget.EdgeEffect;
 
-/** This class manages the edge glow effect when a WebView is flung or pulled beyond the edges. */
-class OverScrollGlow {
-    private View mHostView;
+import org.chromium.build.annotations.NullMarked;
 
-    private EdgeEffect mEdgeGlowTop;
-    private EdgeEffect mEdgeGlowBottom;
-    private EdgeEffect mEdgeGlowLeft;
-    private EdgeEffect mEdgeGlowRight;
+/** This class manages the edge glow effect when a WebView is flung or pulled beyond the edges. */
+@NullMarked
+class OverScrollGlow {
+    private final View mHostView;
+
+    private final EdgeEffect mEdgeGlowTop;
+    private final EdgeEffect mEdgeGlowBottom;
+    private final EdgeEffect mEdgeGlowLeft;
+    private final EdgeEffect mEdgeGlowRight;
 
     private int mOverScrollDeltaX;
     private int mOverScrollDeltaY;

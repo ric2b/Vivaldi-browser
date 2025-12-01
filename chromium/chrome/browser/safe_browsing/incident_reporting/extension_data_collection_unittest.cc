@@ -12,7 +12,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
-#include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/install_signer.h"
 #include "chrome/browser/extensions/test_extension_system.h"
 #include "chrome/browser/prefs/browser_prefs.h"
@@ -26,7 +25,9 @@
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs.h"
+#include "extensions/browser/extension_registrar.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
@@ -64,7 +65,6 @@ class ExtensionTestingProfile : public TestingProfile {
 
  private:
   raw_ptr<TestingProfile> profile_;
-  raw_ptr<extensions::ExtensionService> extension_service_;
   raw_ptr<extensions::ExtensionPrefs> extension_prefs_;
 };
 
@@ -75,7 +75,7 @@ ExtensionTestingProfile::ExtensionTestingProfile(TestingProfile* profile)
   extensions::TestExtensionSystem* test_extension_system =
       static_cast<extensions::TestExtensionSystem*>(
           extensions::ExtensionSystem::Get(profile_));
-  extension_service_ = test_extension_system->CreateExtensionService(
+  test_extension_system->CreateExtensionService(
       &command_line, base::FilePath() /* install_directory */,
       false /* autoupdate_enabled */);
   extension_prefs_ = extensions::ExtensionPrefs::Get(profile_);
@@ -100,15 +100,16 @@ void ExtensionTestingProfile::AddExtension(
                            .Set("update_url", update_url))
           .Build();
 
-  // Install the extension on the faked extension service.
-  extension_service_->AddExtension(extension.get());
+  // Install the extension.
+  auto* extension_registrar = extensions::ExtensionRegistrar::Get(profile_);
+  extension_registrar->AddExtension(extension);
 
   extension_prefs_->UpdateExtensionPref(
       extension_id, "last_update_time",
       base::Value(base::NumberToString(install_time.ToInternalValue())));
 
   if (!disable_reasons.empty()) {
-    extension_service_->DisableExtension(extension_id, disable_reasons);
+    extension_registrar->DisableExtension(extension_id, disable_reasons);
   }
 }
 

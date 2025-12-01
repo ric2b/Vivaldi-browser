@@ -58,10 +58,21 @@ bool StructTraits<viz::mojom::CompositorFrameMetadataDataView,
   out->is_handling_animation = data.is_handling_animation();
   out->send_frame_token_to_embedder = data.send_frame_token_to_embedder();
   out->min_page_scale_factor = data.min_page_scale_factor();
+  out->is_mobile_optimized = data.is_mobile_optimized();
   out->is_software = data.is_software();
   if (data.top_controls_visible_height_set()) {
     out->top_controls_visible_height.emplace(
         data.top_controls_visible_height());
+  }
+
+  if (!data.ReadPreferredFrameInterval(&out->preferred_frame_interval)) {
+    return false;
+  }
+
+  // Preferred_frame_interval must be nullopt or non-negative.
+  if (out->preferred_frame_interval &&
+      out->preferred_frame_interval->is_negative()) {
+    return false;
   }
 
   if (!data.ReadScreenshotDestination(&out->screenshot_destination)) {

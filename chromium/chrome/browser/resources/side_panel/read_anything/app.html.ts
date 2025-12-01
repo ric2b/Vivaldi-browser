@@ -12,12 +12,12 @@ export function getHtml(this: AppElement) {
 <div id="appFlexParent" @keydown="${this.onKeyDown_}">
   <div id="toolbar-container">
     <read-anything-toolbar
-        .isSpeechActive="${this.speechPlayingState.isSpeechActive}"
-        .isAudioCurrentlyPlaying="${this.speechPlayingState.isAudioCurrentlyPlaying}"
+        .isSpeechActive="${this.isSpeechActive_}"
+        .isAudioCurrentlyPlaying="${this.isAudioCurrentlyPlaying_}"
         .isReadAloudPlayable="${this.computeIsReadAloudPlayable()}"
         .selectedVoice="${this.selectedVoice_}"
         .settingsPrefs="${this.settingsPrefs_}"
-        .enabledLangs="${this.enabledLangs}"
+        .enabledLangs="${this.enabledLangs_}"
         .availableVoices="${this.availableVoices_}"
         .previewVoicePlaying="${this.previewVoicePlaying_}"
         .localeToDisplayName="${this.localeToDisplayName_}"
@@ -25,12 +25,13 @@ export function getHtml(this: AppElement) {
         @voice-language-toggle="${this.onVoiceLanguageToggle_}"
         @preview-voice="${this.onPreviewVoice_}"
         @voice-menu-close="${this.onVoiceMenuClose_}"
+        @voice-menu-open="${this.onVoiceMenuOpen_}"
         @play-pause-click="${this.onPlayPauseClick_}"
         @font-size-change="${this.onFontSizeChange_}"
         @font-change="${this.onFontChange_}"
-        @rate-change="${this.resetSpeechPostSettingChange_}"
-        @next-granularity-click="${this.playNextGranularity_}"
-        @previous-granularity-click="${this.playPreviousGranularity_}"
+        @rate-change="${this.onSpeechRateChange_}"
+        @next-granularity-click="${this.onNextGranularityClick_}"
+        @previous-granularity-click="${this.onPreviousGranularityClick_}"
         @links-toggle="${this.updateLinks_}"
         @images-toggle="${this.updateImages_}"
         @letter-spacing-change="${this.onLetterSpacingChange_}"
@@ -47,7 +48,7 @@ export function getHtml(this: AppElement) {
   <div id="containerParent" class="sp-card sp-scroller"
       ?hidden="${!this.hasContent_}">
     <div id="container"
-        class="user-select-disabled-when-speech-active-${this.speechPlayingState.isSpeechActive}">
+        class="user-select-disabled-when-speech-active-${this.isSpeechActive_}">
     </div>
     <cr-button id="docs-load-more-button" tabindex="0"
         @click="${this.onDocsLoadMoreButtonClick_}"

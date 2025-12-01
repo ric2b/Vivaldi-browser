@@ -14,9 +14,10 @@
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/dataset_dom_string_map.h"
 #include "third_party/blink/renderer/core/dom/dom_token_list.h"
+#include "third_party/blink/renderer/core/dom/explicitly_set_attr_elements_map.h"
 #include "third_party/blink/renderer/core/dom/has_invalidation_flags.h"
-#include "third_party/blink/renderer/core/dom/interest_invoker_data.h"
 #include "third_party/blink/renderer/core/dom/interest_invoker_target_data.h"
+#include "third_party/blink/renderer/core/dom/invoker_data.h"
 #include "third_party/blink/renderer/core/dom/named_node_map.h"
 #include "third_party/blink/renderer/core/dom/names_map.h"
 #include "third_party/blink/renderer/core/dom/node_rare_data.h"
@@ -102,6 +103,12 @@ bool ElementRareDataVector::HasViewTransitionGroupPseudoElement() const {
   PseudoElementData* data =
       static_cast<PseudoElementData*>(GetField(FieldId::kPseudoElementData));
   return data && data->HasViewTransitionGroupPseudoElement();
+}
+
+bool ElementRareDataVector::HasScrollButtonOrMarkerGroupPseudos() const {
+  PseudoElementData* data =
+      static_cast<PseudoElementData*>(GetField(FieldId::kPseudoElementData));
+  return data && data->HasScrollButtonOrMarkerGroupPseudos();
 }
 
 PseudoElementData::PseudoElementVector
@@ -421,17 +428,12 @@ void ElementRareDataVector::RemovePopoverData() {
   SetField(FieldId::kPopoverData, nullptr);
 }
 
-InterestInvokerData* ElementRareDataVector::GetInterestInvokerData() const {
-  return static_cast<InterestInvokerData*>(
-      GetField(FieldId::kInterestInvokerData));
+InvokerData* ElementRareDataVector::GetInvokerData() const {
+  return static_cast<InvokerData*>(GetField(FieldId::kInvokerData));
 }
-InterestInvokerData& ElementRareDataVector::EnsureInterestInvokerData() {
-  return EnsureField<InterestInvokerData>(FieldId::kInterestInvokerData);
+InvokerData& ElementRareDataVector::EnsureInvokerData() {
+  return EnsureField<InvokerData>(FieldId::kInvokerData);
 }
-void ElementRareDataVector::RemoveInterestInvokerData() {
-  SetField(FieldId::kInterestInvokerData, nullptr);
-}
-
 InterestInvokerTargetData* ElementRareDataVector::GetInterestInvokerTargetData()
     const {
   return static_cast<InterestInvokerTargetData*>(
@@ -483,6 +485,18 @@ AnchorPositionScrollData& ElementRareDataVector::EnsureAnchorPositionScrollData(
          GetAnchorPositionScrollData()->AnchoredElement() == anchored_element);
   return EnsureField<AnchorPositionScrollData>(
       FieldId::kAnchorPositionScrollData, anchored_element);
+}
+
+ExplicitlySetAttrElementsMap*
+ElementRareDataVector::GetExplicitlySetElementsForAttr() const {
+  return static_cast<ExplicitlySetAttrElementsMap*>(
+      GetField(FieldId::kExplicitlySetElementsForAttr));
+}
+
+ExplicitlySetAttrElementsMap&
+ElementRareDataVector::EnsureExplicitlySetElementsForAttr() {
+  return EnsureField<ExplicitlySetAttrElementsMap>(
+      FieldId::kExplicitlySetElementsForAttr);
 }
 
 AnchorElementObserver& ElementRareDataVector::EnsureAnchorElementObserver(

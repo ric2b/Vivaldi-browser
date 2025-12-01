@@ -26,7 +26,7 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/enterprise/connectors/analysis/clipboard_analysis_request.h"
 #include "chrome/browser/enterprise/connectors/analysis/clipboard_request_handler.h"
-#include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog.h"
+#include "chrome/browser/enterprise/connectors/analysis/content_analysis_dialog_controller.h"
 #include "chrome/browser/enterprise/connectors/analysis/content_analysis_features.h"
 #include "chrome/browser/enterprise/connectors/analysis/files_request_handler.h"
 #include "chrome/browser/enterprise/connectors/analysis/page_print_analysis_request.h"
@@ -38,22 +38,29 @@
 #include "chrome/browser/file_util_service.h"
 #include "chrome/browser/policy/dm_token_utils.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/chrome_enterprise_url_lookup_service_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/file_analysis_request.h"
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request.h"
+#include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager_factory.h"
+#include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/enterprise/buildflags/buildflags.h"
 #include "components/enterprise/common/files_scan_data.h"
 #include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/enterprise/connectors/core/analysis_settings.h"
 #include "components/enterprise/connectors/core/common.h"
+#include "components/enterprise/connectors/core/features.h"
 #include "components/enterprise/connectors/core/reporting_utils.h"
+#include "components/guest_view/browser/guest_view_base.h"
 #include "components/policy/core/common/chrome_schema.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/content/browser/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/core/browser/realtime/url_lookup_service_base.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/sessions/content/session_tab_helper.h"
 #include "components/url_matcher/url_matcher.h"
 #include "content/public/browser/web_contents.h"
 #include "crypto/secure_hash.h"
@@ -71,6 +78,9 @@ using safe_browsing::BinaryUploadService;
 namespace enterprise_connectors {
 
 namespace {
+
+// URL chain limit for nested iFrames.
+constexpr int kMaxFrameUrls = 10;
 
 // Global pointer of factory function (RepeatingCallback) used to create
 // instances of ContentAnalysisDelegate in tests.  !is_null() only in tests.
@@ -127,6 +137,39 @@ void OnPathsExpanded(
       base::BindOnce(&OnContentAnalysisComplete, std::move(files_scan_data),
                      std::move(callback)),
       access_point);
+}
+
+// Returns the list of URLs from the current frame all the way to the outermost
+// frame URL. Above the `kMaxFrameUrls` limit, we skip the rest of the chain and
+// take the outermost URL for performance considerations.
+google::protobuf::RepeatedPtrField<std::string> CollectFrameUrls(
+    content::WebContents* web_contents) {
+  google::protobuf::RepeatedPtrField<std::string> frame_urls;
+
+  if (!web_contents) {
+    return frame_urls;
+  }
+
+  content::RenderFrameHost* current_frame = web_contents->GetFocusedFrame();
+
+  // Traverse upwards and add URLs to the chain.
+  while (current_frame && frame_urls.size() < kMaxFrameUrls - 1) {
+    *frame_urls.Add() = current_frame->GetLastCommittedURL().spec();
+
+    content::RenderFrameHost* parent = current_frame->GetParent();
+    if (!parent) {
+      // Already at outermost frame.
+      return frame_urls;
+    }
+    current_frame = parent;
+  }
+
+  // If we hit the limit, collect the top frame instead.
+  if (frame_urls.size() == kMaxFrameUrls - 1 && current_frame) {
+    current_frame = current_frame->GetOutermostMainFrame();
+    *frame_urls.Add() = current_frame->GetLastCommittedURL().spec();
+  }
+  return frame_urls;
 }
 
 }  // namespace
@@ -393,11 +436,14 @@ void ContentAnalysisDelegate::CreateForWebContents(
                             : FinalContentAnalysisResult::SUCCESS;
 
     // This dialog is owned by the constrained_window code.
-    delegate_ptr->dialog_ = new ContentAnalysisDialog(
+    content::WebContents* top_web_contents =
+        guest_view::GuestViewBase::GetTopLevelWebContents(
+            web_contents->GetResponsibleWebContents());
+    delegate_ptr->dialog_ = new ContentAnalysisDialogController(
         std::move(delegate),
         delegate_ptr->data_.settings.cloud_or_local_settings
             .is_cloud_analysis(),
-        web_contents, access_point, files_count, result);
+        top_web_contents, access_point, files_count, result);
     return;
   }
 
@@ -492,11 +538,22 @@ ContentAnalysisDelegate::ContentAnalysisDelegate(
     CompletionCallback callback,
     safe_browsing::DeepScanAccessPoint access_point)
     : data_(std::move(data)),
+      tab_id_(sessions::SessionTabHelper::IdForTab(web_contents)),
       callback_(std::move(callback)),
       access_point_(access_point) {
   DCHECK(web_contents);
   profile_ = Profile::FromBrowserContext(web_contents->GetBrowserContext());
   url_ = web_contents->GetLastCommittedURL();
+  if (base::FeatureList::IsEnabled(kEnterpriseIframeDlpRulesSupport)) {
+    frame_url_chain_ = CollectFrameUrls(web_contents);
+    base::UmaHistogramCustomCounts(
+        base::JoinString(
+            {"Enterprise.IframeDlpRulesSupport",
+             safe_browsing::DeepScanAccessPointToString(access_point_),
+             "UrlChainSize"},
+            "."),
+        frame_url_chain_.size(), 1, kMaxFrameUrls, 10);
+  }
   title_ = base::UTF16ToUTF8(web_contents->GetTitle());
   user_action_id_ = base::HexEncode(base::RandBytesAsVector(128));
   page_content_type_ = web_contents->GetContentsMimeType();
@@ -776,6 +833,12 @@ BinaryUploadService* ContentAnalysisDelegate::GetBinaryUploadService() {
                                                            data_.settings);
 }
 
+safe_browsing::SafeBrowsingNavigationObserverManager*
+ContentAnalysisDelegate::GetNavigationObserverManager() const {
+  return safe_browsing::SafeBrowsingNavigationObserverManagerFactory::
+      GetForBrowserContext(profile_);
+}
+
 bool ContentAnalysisDelegate::UpdateDialog() {
   // In the case of fail-closed, show the final result UI regardless of cloud or
   // local analysis. Otherwise, only show the result for cloud analysis.
@@ -937,6 +1000,10 @@ const AnalysisSettings& ContentAnalysisDelegate::settings() const {
   return data_.settings;
 }
 
+signin::IdentityManager* ContentAnalysisDelegate::identity_manager() const {
+  return IdentityManagerFactory::GetForProfile(profile_);
+}
+
 int ContentAnalysisDelegate::user_action_requests_count() const {
   int count = data_.paths.size();
   if (data_.page.IsValid()) {
@@ -973,6 +1040,20 @@ const GURL& ContentAnalysisDelegate::tab_url() const {
 
 ContentAnalysisRequest::Reason ContentAnalysisDelegate::reason() const {
   return data_.reason;
+}
+
+google::protobuf::RepeatedPtrField<safe_browsing::ReferrerChainEntry>
+ContentAnalysisDelegate::referrer_chain() const {
+  ReferrerChain referrers;
+  GetNavigationObserverManager()->IdentifyReferrerChainByEventURL(
+      url_, tab_id_, enterprise_connectors::kReferrerUserGestureLimit,
+      &referrers);
+  return referrers;
+}
+
+google::protobuf::RepeatedPtrField<std::string>
+ContentAnalysisDelegate::frame_url_chain() const {
+  return frame_url_chain_;
 }
 
 }  // namespace enterprise_connectors

@@ -1038,7 +1038,8 @@ TEST_F(StyleCascadeTest, SelfCycleInUnusedFallback) {
   cascade.Add("--b", "10px");
   cascade.Apply();
 
-  EXPECT_FALSE(cascade.ComputedValue("--a"));
+  // No longer a cycle after https://github.com/w3c/csswg-drafts/issues/11500.
+  EXPECT_EQ("10px", cascade.ComputedValue("--a"));
   EXPECT_EQ("10px", cascade.ComputedValue("--b"));
 }
 
@@ -1210,40 +1211,46 @@ TEST_F(StyleCascadeTest, CycleMultipleFallback) {
   // Cycle:
   cascade.Add("--a", "var(--b, red)");
   cascade.Add("--b", "var(--a, var(--c, red))");
-  cascade.Add("--c", "var(--b, red)");
+  // Formerly part of a cycle, but no longer after Issue 11500 [1]:
+  cascade.Add("--c", "var(--b, pink)");
   // References to cycle:
   cascade.Add("--d", "var(--a,green)");
   cascade.Add("--e", "var(--b,green)");
+  // References to former cycle:
   cascade.Add("--f", "var(--c,green)");
   cascade.Apply();
 
   EXPECT_FALSE(cascade.ComputedValue("--a"));
   EXPECT_FALSE(cascade.ComputedValue("--b"));
-  EXPECT_FALSE(cascade.ComputedValue("--c"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--c"));
   EXPECT_EQ("green", cascade.ComputedValue("--d"));
   EXPECT_EQ("green", cascade.ComputedValue("--e"));
-  EXPECT_EQ("green", cascade.ComputedValue("--f"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--f"));
+
+  // [1] https://github.com/w3c/csswg-drafts/issues/11500
 }
 
 TEST_F(StyleCascadeTest, CycleMultipleUnusedFallback) {
   TestCascade cascade(GetDocument());
-  cascade.Add("--a", "red");
-  // Cycle:
+  cascade.Add("--a", "pink");
+  // Formerly a cycle, but no longer after Issue 11500 [1]:
   cascade.Add("--b", "var(--c, red)");
   cascade.Add("--c", "var(--a, var(--b, red) var(--d, red))");
   cascade.Add("--d", "var(--c, red)");
-  // References to cycle:
-  cascade.Add("--e", "var(--b,green)");
-  cascade.Add("--f", "var(--c,green)");
-  cascade.Add("--g", "var(--d,green)");
+  // References to former cycle:
+  cascade.Add("--e", "var(--b,red)");
+  cascade.Add("--f", "var(--c,red)");
+  cascade.Add("--g", "var(--d,red)");
   cascade.Apply();
 
-  EXPECT_FALSE(cascade.ComputedValue("--b"));
-  EXPECT_FALSE(cascade.ComputedValue("--c"));
-  EXPECT_FALSE(cascade.ComputedValue("--d"));
-  EXPECT_EQ("green", cascade.ComputedValue("--e"));
-  EXPECT_EQ("green", cascade.ComputedValue("--f"));
-  EXPECT_EQ("green", cascade.ComputedValue("--g"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--b"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--c"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--d"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--e"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--f"));
+  EXPECT_EQ("pink", cascade.ComputedValue("--g"));
+
+  // [1] https://github.com/w3c/csswg-drafts/issues/11500
 }
 
 TEST_F(StyleCascadeTest, CycleReferencedFromStandardProperty) {
@@ -1344,10 +1351,11 @@ TEST_F(StyleCascadeTest, CycleAttrNotUsedFallback) {
                         AtomicString("attr(data-foo type(*))"));
 
   cascade.Reset();
+  // No longer a cycle after https://github.com/w3c/csswg-drafts/issues/11500.
   cascade.Add("--x", "attr(data-foo type(*), attr(data-bar type(*))");
   cascade.Apply();
 
-  EXPECT_FALSE(cascade.ComputedValue("--x"));
+  EXPECT_EQ("3", cascade.ComputedValue("--x"));
 }
 
 TEST_F(StyleCascadeTest, CycleAttrWithVar) {
@@ -2308,14 +2316,14 @@ TEST_F(StyleCascadeTest, AnimationApplyFilter) {
   TestCascade cascade(GetDocument());
 
   cascade.Add("animation: test linear 10s -5s");
-  cascade.Add("color:green");
+  cascade.Add("background-color:green");
   cascade.Apply();
 
   cascade.AddInterpolations();
-  cascade.Apply(CascadeFilter(CSSProperty::kInherited, true));
+  cascade.Apply(CascadeFilter(CSSProperty::kInherited));
 
-  EXPECT_EQ("rgb(0, 128, 0)", cascade.ComputedValue("color"));
-  EXPECT_EQ("rgb(192, 192, 192)", cascade.ComputedValue("background-color"));
+  EXPECT_EQ("rgb(0, 128, 0)", cascade.ComputedValue("background-color"));
+  EXPECT_EQ("rgb(192, 192, 192)", cascade.ComputedValue("color"));
 }
 
 TEST_F(StyleCascadeTest, TransitionApplyFilter) {
@@ -2339,10 +2347,10 @@ TEST_F(StyleCascadeTest, TransitionApplyFilter) {
   cascade2.Apply();
 
   cascade2.AddInterpolations();
-  cascade2.Apply(CascadeFilter(CSSProperty::kInherited, true));
+  cascade2.Apply(CascadeFilter(CSSProperty::kInherited));
 
-  EXPECT_EQ("rgb(128, 128, 128)", cascade2.ComputedValue("color"));
-  EXPECT_EQ("rgb(192, 192, 192)", cascade2.ComputedValue("background-color"));
+  EXPECT_EQ("rgb(128, 128, 128)", cascade2.ComputedValue("background-color"));
+  EXPECT_EQ("rgb(192, 192, 192)", cascade2.ComputedValue("color"));
 }
 
 TEST_F(StyleCascadeTest, PendingKeyframeAnimation) {
@@ -3383,7 +3391,7 @@ TEST_F(StyleCascadeTest, ApplyWithFilter) {
   cascade.Add("color", "green", Origin::kAuthor);
   cascade.Add("background-color", "red", Origin::kAuthor);
   cascade.Add("display", "block", Origin::kAuthor);
-  cascade.Apply(CascadeFilter(CSSProperty::kInherited, false));
+  cascade.Apply(CascadeFilter(CSSProperty::kInherited));
   EXPECT_EQ("rgb(0, 128, 0)", cascade.ComputedValue("color"));
   EXPECT_EQ("rgb(0, 128, 0)", cascade.ComputedValue("background-color"));
   EXPECT_EQ("inline", cascade.ComputedValue("display"));
@@ -3396,7 +3404,7 @@ TEST_F(StyleCascadeTest, FilterWebkitBorderImage) {
   cascade.Add(
       "-webkit-border-image:linear-gradient(green, red) 4 / 5 / 6 round",
       Origin::kAuthor);
-  cascade.Apply(CascadeFilter(CSSProperty::kLegacyOverlapping, true));
+  cascade.Apply(CascadeFilter(CSSProperty::kNotLegacyOverlapping));
   EXPECT_EQ("linear-gradient(rgb(0, 128, 0), rgb(255, 0, 0)) 1 / 2 / 3 round",
             cascade.ComputedValue("-webkit-border-image"));
 }
@@ -3406,7 +3414,7 @@ TEST_F(StyleCascadeTest, FilterPerspectiveOrigin) {
   cascade.Add("-webkit-perspective-origin-x:10px");
   cascade.Add("-webkit-perspective-origin-y:20px");
   cascade.Add("perspective-origin:30px 40px");
-  cascade.Apply(CascadeFilter(CSSProperty::kLegacyOverlapping, false));
+  cascade.Apply(CascadeFilter(CSSProperty::kLegacyOverlapping));
   EXPECT_EQ("10px 20px", cascade.ComputedValue("perspective-origin"));
 }
 
@@ -3416,7 +3424,7 @@ TEST_F(StyleCascadeTest, FilterTransformOrigin) {
   cascade.Add("-webkit-transform-origin-y:20px");
   cascade.Add("-webkit-transform-origin-z:30px");
   cascade.Add("transform-origin:40px 50px 60px");
-  cascade.Apply(CascadeFilter(CSSProperty::kLegacyOverlapping, false));
+  cascade.Apply(CascadeFilter(CSSProperty::kLegacyOverlapping));
   EXPECT_EQ("10px 20px 30px", cascade.ComputedValue("transform-origin"));
 }
 
@@ -3571,16 +3579,16 @@ TEST_F(StyleCascadeTest, AnalyzeFlagsClean) {
 TEST_F(StyleCascadeTest, ApplyMatchResultFilter) {
   TestCascade cascade(GetDocument());
   cascade.Add("display:block");
-  cascade.Add("color:green");
+  cascade.Add("color:red");
   cascade.Add("font-size:3px");
   cascade.Apply();
 
   cascade.Reset();
   cascade.Add("display:inline");
-  cascade.Add("color:red");
-  cascade.Apply(CascadeFilter(CSSProperty::kInherited, true));
+  cascade.Add("color:green");
+  cascade.Apply(CascadeFilter(CSSProperty::kSupportsIncrementalStyle));
 
-  EXPECT_EQ("inline", cascade.ComputedValue("display"));
+  EXPECT_EQ("block", cascade.ComputedValue("display"));
   EXPECT_EQ("rgb(0, 128, 0)", cascade.ComputedValue("color"));
   EXPECT_EQ("3px", cascade.ComputedValue("font-size"));
 }
@@ -3593,10 +3601,10 @@ TEST_F(StyleCascadeTest, ApplyMatchResultAllFilter) {
 
   cascade.Reset();
   cascade.Add("all:unset");
-  cascade.Apply(CascadeFilter(CSSProperty::kInherited, true));
+  cascade.Apply(CascadeFilter(CSSProperty::kSupportsIncrementalStyle));
 
-  EXPECT_EQ("rgb(0, 128, 0)", cascade.ComputedValue("color"));
-  EXPECT_EQ("inline", cascade.ComputedValue("display"));
+  EXPECT_EQ("rgb(0, 0, 0)", cascade.ComputedValue("color"));
+  EXPECT_EQ("block", cascade.ComputedValue("display"));
 }
 
 TEST_F(StyleCascadeTest, MarkHasReferenceLonghand) {

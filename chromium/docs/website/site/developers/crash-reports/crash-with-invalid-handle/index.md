@@ -12,48 +12,31 @@ title: Crash with invalid handle
 
 ### I'm seeing frequent Chrome crashes and the stack looks like this:
 
-> \[debugger_win.cc:20 \] base::debug::BreakDebugger()
-
-> \[scoped_handle.cc:79 \] base::win::HandleTraits::CloseHandle()
-
-> \[file_win.cc:120 \] base::File::Close()
-
-> \[file_stream_context.cc:184 \] net::FileStream::Context::CloseFileImpl()
-
-> \[bind_internal.h:1169 \] base::internal::Invoker&lt;&gt;::Run()
-
-> \[sequenced_worker_pool.cc:760 \]
-> base::SequencedWorkerPool::Inner::ThreadLoop()
-
-> \[sequenced_worker_pool.cc:508 \] base::SequencedWorkerPool::Worker::Run()
-
-> \[simple_thread.cc:60 \] base::SimpleThread::ThreadMain()
-
-> \[platform_thread_win.cc:78 \] base::\`anonymous namespace'::ThreadFunc()
-
-> \[kernel32.dll + 0x0004ee1b \] BaseThreadInitThunk
-
-> \[ntdll.dll + 0x000637ea \] __RtlUserThreadStart
-
-> \[ntdll.dll + 0x000637bd \] _RtlUserThreadStart
+```none
+[debugger_win.cc:20] base::debug::BreakDebugger()
+[scoped_handle.cc:79] base::win::HandleTraits::CloseHandle()
+[file_win.cc:120] base::File::Close()
+[file_stream_context.cc:184] net::FileStream::Context::CloseFileImpl()
+[bind_internal.h:1169] base::internal::Invoker<>::Run()
+[sequenced_worker_pool.cc:760] base::SequencedWorkerPool::Inner::ThreadLoop()
+[sequenced_worker_pool.cc:508] base::SequencedWorkerPool::Worker::Run()
+[simple_thread.cc:60] base::SimpleThread::ThreadMain()
+[platform_thread_win.cc:78] base::`anonymous namespace'::ThreadFunc()
+[kernel32.dll + 0x0004ee1b] BaseThreadInitThunk
+[ntdll.dll + 0x000637ea] __RtlUserThreadStart
+[ntdll.dll + 0x000637bd] _RtlUserThreadStart
+```
 
 or like this:
 
-> \[debugger_win.cc:20 \] base::debug::BreakDebugger()
-
-> \[scoped_handle.cc:79 \] base::win::HandleTraits::CloseHandle()
-
-> \[scoped_handle.h:52 \]
-> base::win::GenericScopedHandle&lt;&gt;::~GenericScopedHandle&lt;&gt;()
-
-> \[handle_watcher.cc:271 \] mojo::common::WatcherThreadManager::StopWatching()
-
-> \[handle_watcher.cc:434 \]
-> mojo::common::HandleWatcher::SecondaryThreadWatchingState::~SecondaryThreadWatchingState()
-
-> \[chrome.dll + 0x00238a03 \]
-> mojo::common::HandleWatcher::SecondaryThreadWatchingState::\`scalar deleting
-> destructor'()
+```none
+[debugger_win.cc:20] base::debug::BreakDebugger()
+[scoped_handle.cc:79] base::win::HandleTraits::CloseHandle()
+[scoped_handle.h:52] base::win::GenericScopedHandle<>::~GenericScopedHandle<>()
+[handle_watcher.cc:271] mojo::common::WatcherThreadManager::StopWatching()
+[handle_watcher.cc:434] mojo::common::HandleWatcher::SecondaryThreadWatchingState::~SecondaryThreadWatchingState()
+[chrome.dll + 0x00238a03] mojo::common::HandleWatcher::SecondaryThreadWatchingState::`scalar deleting destructor'()
+```
 
 The relevant part is the first three lines that show that something is being
 closed and there is an intentional crash because there is an error closing that
@@ -67,28 +50,18 @@ introduced.
 
 ### I am seeing Chrome hangs with stacks like this one:
 
-> \[ntdll.dll + 0x00040da8 \] ZwWaitForSingleObject
-
-> \[KERNELBASE.dll + 0x00001128 \] WaitForSingleObjectEx
-
-> \[KERNELBASE.dll + 0x000010b3 \] WaitForSingleObject
-
-> \[platform_thread_win.cc:222 \] base::PlatformThread::Join()
-
-> \[thread.cc:135 \] base::Thread::Stop()
-
-> \[..._process_sub_thread.cc:26 \]
-> content::BrowserProcessSubThread::~BrowserProcessSubThread()
-
-> \[chrome.dll + 0x0043dcb8 \] content::BrowserProcessSubThread::\`scalar
-> deleting destructor'()
-
-> \[browser_main_loop.cc:829 \]
-> content::BrowserMainLoop::ShutdownThreadsAndCleanUp()
-
-> \[browser_main_runner.cc:146 \] content::BrowserMainRunnerImpl::Shutdown()
-
-> \[browser_main.cc:28 \] content::BrowserMain()
+```none
+[ntdll.dll + 0x00040da8] ZwWaitForSingleObject
+[KERNELBASE.dll + 0x00001128] WaitForSingleObjectEx
+[KERNELBASE.dll + 0x000010b3] WaitForSingleObject
+[platform_thread_win.cc:222] base::PlatformThread::Join()
+[thread.cc:135] base::Thread::Stop()
+[..._process_sub_thread.cc:26] content::BrowserProcessSubThread::~BrowserProcessSubThread()
+[chrome.dll + 0x0043dcb8] content::BrowserProcessSubThread::`scalar deleting destructor'()
+[browser_main_loop.cc:829] content::BrowserMainLoop::ShutdownThreadsAndCleanUp()
+[browser_main_runner.cc:146] content::BrowserMainRunnerImpl::Shutdown()
+[browser_main.cc:28] content::BrowserMain()
+```
 
 This is another manifestation of the same underlying issue: once a handle is
 corrupt, using it can do anything. If the OS detects that the handle is invalid,
@@ -105,13 +78,10 @@ that points to the code at fault.
 
 ### For users:
 
-*   Consider installing a
-            [Canary](https://www.google.com/chrome/browser/canary.html?platform=win)
-            or
-            [Dev](https://www.google.com/chrome/browser/index.html?extra=devchannel&platform=win)
-            Channel Build (Windows only. See
-            [this](/getting-involved/dev-channel) for information about what a
-            channel is and what to do before installing a new one).
+*   Consider installing a [Canary](https://www.google.com/chrome/canary/) or
+    [Dev](https://www.google.com/chrome/dev/) Channel build.  See
+    [Chrome Release Channels](/getting-involved/chrome-release-channels) for
+    information about what a channel is and what to do before installing a new one).
 *   Search your system for malware, and try removing software that
             interacts directly with Chrome by injecting DLLs. In the past we
             have seen correlation between 3rd party software loaded into Chrome
@@ -137,35 +107,20 @@ that points to the code at fault.
 
 A Canary build will generate a properly bucketed stack dump like this:
 
-> \[scoped_handle.cc:145 \] base::win::OnHandleBeingClosed()
-
-> \[close_handle_hook_win.cc:27 \] \`anonymous namespace'::CloseHandleHook()
-
-> \[shared_memory_win.cc:75 \] base::SharedMemory::~SharedMemory()
-
-> \[resource_buffer.cc:42 \] content::ResourceBuffer::~ResourceBuffer()
-
-> \[ref_counted.h:192 \] base::RefCountedThreadSafe&lt;&gt;::DeleteInternal()
-
-> \[async_resource_handler.cc:99 \]
-> content::AsyncResourceHandler::~AsyncResourceHandler()
-
-> \[chrome.dll + 0x003af3ae \] content::AsyncResourceHandler::\`scalar deleting
-> destructor'()
-
-> \[...ed_resource_handler.cc:19 \]
-> content::LayeredResourceHandler::~LayeredResourceHandler()
-
-> \[chrome.dll + 0x003aebc7 \] content::BufferedResourceHandler::\`scalar
-> deleting destructor'()
-
-> \[...ed_resource_handler.cc:19 \]
-> content::LayeredResourceHandler::~LayeredResourceHandler()
-
-> \[chrome.dll + 0x003ae5f8 \] content::ThrottlingResourceHandler::\`scalar
-> deleting destructor'()
-
-> \[resource_loader.cc:104 \] content::ResourceLoader::~ResourceLoader()
+```none
+[scoped_handle.cc:145] base::win::OnHandleBeingClosed()
+[close_handle_hook_win.cc:27] `anonymous namespace'::CloseHandleHook()
+[shared_memory_win.cc:75] base::SharedMemory::~SharedMemory()
+[resource_buffer.cc:42] content::ResourceBuffer::~ResourceBuffer()
+[ref_counted.h:192] base::RefCountedThreadSafe&lt;&gt;::DeleteInternal()
+[async_resource_handler.cc:99] content::AsyncResourceHandler::~AsyncResourceHandler()
+[chrome.dll + 0x003af3ae] content::AsyncResourceHandler::`scalar deleting destructor'()
+[...ed_resource_handler.cc:19] content::LayeredResourceHandler::~LayeredResourceHandler()
+[chrome.dll + 0x003aebc7] content::BufferedResourceHandler::`scalar deleting destructor'()
+[...ed_resource_handler.cc:19] content::LayeredResourceHandler::~LayeredResourceHandler()
+[chrome.dll + 0x003ae5f8] content::ThrottlingResourceHandler::`scalar deleting destructor'()
+[resource_loader.cc:104] content::ResourceLoader::~ResourceLoader()
+```
 
 It points to ~SharedMemory as the source of corruption. This means that said
 code is either double closing a handle somehow (most of the time it is far from

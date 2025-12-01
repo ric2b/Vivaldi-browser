@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/atomic_sequence_num.h"
-#include "base/not_fatal_until.h"
 #include "base/notreached.h"
 #include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
@@ -138,7 +137,20 @@ bool DisplayResourceProvider::IsOverlayCandidate(ResourceId id) const {
   // TODO(ericrk): We should never fail TryGetResource, but we appear to
   // be doing so on Android in rare cases. Handle this gracefully until a
   // better solution can be found. https://crbug.com/811858
-  return resource && resource->transferable.is_overlay_candidate;
+  if (!resource) {
+    return false;
+  }
+  // Agtm rendering is currently only implemented in shaders. Use the
+  // mechanism of claiming that resources which have Agtm metadata were
+  // not marked as overlays to ensure that rendering falls back to shaders
+  // on all platforms.
+  // https://crbug.com/395659818
+  if (gfx::HdrMetadataAgtm::IsEnabled()) {
+    if (resource->transferable.hdr_metadata.agtm.has_value()) {
+      return false;
+    }
+  }
+  return resource->transferable.is_overlay_candidate;
 }
 
 bool DisplayResourceProvider::IsLowLatencyRendering(ResourceId id) const {
@@ -195,6 +207,11 @@ GrSurfaceOrigin DisplayResourceProvider::GetOrigin(ResourceId id) const {
   return resource->transferable.origin;
 }
 
+SkAlphaType DisplayResourceProvider::GetAlphaType(ResourceId id) const {
+  const ChildResource* resource = GetResource(id);
+  return resource->transferable.alpha_type;
+}
+
 int DisplayResourceProvider::CreateChild(ReturnCallback return_callback,
                                          const SurfaceId& surface_id) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -210,7 +227,7 @@ int DisplayResourceProvider::CreateChild(ReturnCallback return_callback,
 
 void DisplayResourceProvider::DestroyChild(int child_id) {
   auto it = children_.find(child_id);
-  CHECK(it != children_.end(), base::NotFatalUntil::M130);
+  CHECK(it != children_.end());
   DestroyChildInternal(it, NORMAL);
 }
 
@@ -283,7 +300,7 @@ const std::unordered_map<ResourceId, ResourceId, ResourceIdHasher>&
 DisplayResourceProvider::GetChildToParentMap(int child) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   auto it = children_.find(child);
-  CHECK(it != children_.end(), base::NotFatalUntil::M130);
+  CHECK(it != children_.end());
   DCHECK(!it->second.marked_for_deletion);
   return it->second.child_to_parent_map;
 }
@@ -298,7 +315,7 @@ DisplayResourceProvider::GetResource(ResourceId id) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(id);
   auto it = resources_.find(id);
-  CHECK(it != resources_.end(), base::NotFatalUntil::M130);
+  CHECK(it != resources_.end());
   return &it->second;
 }
 

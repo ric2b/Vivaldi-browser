@@ -29,12 +29,12 @@ const size_t kEd25519SigLength = 64;
 constexpr std::string_view kAcceptSignature = "accept-signature";
 
 constexpr std::array<std::string_view, 9u> kDerivedComponents = {
-    "@authority", "@query-param", "@query", "@path",
-    "@scheme",    "@status"
+    "@authority", "@query-param", "@query",  "@method",
+    "@path",      "@scheme",      "@status", "@target-uri",
     // TODO(383409584): We should support the remaining derived components from
     // https://www.rfc-editor.org/rfc/rfc9421.html#name-derived-components:
     //
-    // "@method", "@request-target", "@target-uri",
+    // "@request-target"
 };
 
 ParameterType ParamNameToType(std::string_view name) {
@@ -274,21 +274,22 @@ std::string SerializeSignatureParams(
 }
 
 std::string SerializeDerivedComponent(
-    const GURL& request_url,
+    const net::URLRequest& url_request,
     const int response_status_code,
     const mojom::SRIMessageSignatureComponentPtr& component) {
   DCHECK(base::Contains(kDerivedComponents, component->name));
+  DCHECK(url_request.url().is_valid());
 
   if (component->name == "@authority") {
     // https://www.rfc-editor.org/rfc/rfc9421.html#name-authority
-    if (request_url.has_port()) {
-      return base::StrCat(
-          {request_url.host_piece(), ":", request_url.port_piece()});
+    if (url_request.url().has_port()) {
+      return base::StrCat({url_request.url().host_piece(), ":",
+                           url_request.url().port_piece()});
     }
-    return request_url.host();
+    return url_request.url().host();
   } else if (component->name == "@query") {
     // https://www.rfc-editor.org/rfc/rfc9421.html#name-query
-    return base::StrCat({"?", request_url.query()});
+    return base::StrCat({"?", url_request.url().query()});
   } else if (component->name == "@query-param") {
     DCHECK(component->params.size() == 2u);
     auto name_it =
@@ -298,19 +299,30 @@ std::string SerializeDerivedComponent(
                      });
     DCHECK(name_it != component->params.end() && (*name_it)->value.has_value());
     std::string param_value;
-    if (net::GetValueForKeyInQuery(request_url, *(*name_it)->value,
+    if (net::GetValueForKeyInQuery(url_request.url(), *(*name_it)->value,
                                    &param_value)) {
       return base::EscapeAllExceptUnreserved(param_value);
     }
     return std::string();
+  } else if (component->name == "@method") {
+    // https://www.rfc-editor.org/rfc/rfc9421.html#content-request-method
+    return url_request.method();
   } else if (component->name == "@path") {
     // https://www.rfc-editor.org/rfc/rfc9421.html#content-request-path
-    return request_url.path();
+    return url_request.url().path();
   } else if (component->name == "@scheme") {
-    return request_url.scheme();
+    return url_request.url().scheme();
   } else if (component->name == "@status") {
     // https://www.rfc-editor.org/rfc/rfc9421.html#content-status-code
     return base::NumberToString(response_status_code);
+  } else if (component->name == "@target-uri") {
+    // While we certainly need to clear any fragment component present in the
+    // requested URL, it's unclear whether `@target-uri` is intended to include
+    // the `userinfo` portion of a requested URL. For the moment, we'll strip
+    // those components as well, just as we do for referrers.
+    //
+    // https://datatracker.ietf.org/doc/html/rfc9421#content-target-uri
+    return url_request.url().GetAsReferrer().spec();
   }
 
   // TODO(383409584): Support additional derived components.
@@ -479,6 +491,25 @@ mojom::SRIMessageSignaturesPtr ParseSRIMessageSignaturesFromHeaders(
       continue;
     }
 
+    // Step 1.1 of the signature validation requirements punts on any signature
+    // input whose `tag`parameter is not valid for SRI. We'll do that before
+    // parsing the header's components or parameters, as it might be valid for
+    // some other scheme, and any issues we'd record would be confusing in
+    // that case. The preceding checks (does a `Signature` and
+    // `Signature-Input` pair exist for a given name, and is the component set
+    // an inner-list) should be valid for any RFC9421-based system, so we'll
+    // perform those first.
+    //
+    // https://wicg.github.io/signature-based-sri/#abstract-opdef-validating-an-integrity-signature
+    if (!std::ranges::any_of(input_entry.params, [](const auto& param) {
+      return (param.first == "tag" && param.second.is_string() &&
+          (param.second.GetString() == "ed25519-integrity" ||
+           param.second.GetString() == "sri"));
+    })) {
+      continue;
+    }
+
+    // Process the components.
     for (const auto& component : input_entry.member) {
       // If any declared component is invalid, skip the signature (but not the
       // entire header; if both valid and invalid signatures are delivered,
@@ -523,8 +554,11 @@ mojom::SRIMessageSignaturesPtr ParseSRIMessageSignaturesFromHeaders(
       } else if (param.first == "nonce" && param.second.is_string()) {
         message_signature->nonce = param.second.GetString();
       } else if (param.first == "tag" && param.second.is_string() &&
-                 param.second.GetString() == "sri") {
-        message_signature->tag = "sri";
+                 (param.second.GetString() == "ed25519-integrity" ||
+                  param.second.GetString() == "sri")) {
+        // TODO(crbug.com/419149647): Drop support for `sri` once tests are
+        // updated and OT participants have adopted the new `tag`.
+        message_signature->tag = param.second.GetString();
       } else if (param.first == "alg" || param.first == "created" ||
                  param.first == "expires" || param.first == "keyid" ||
                  param.first == "nonce" || param.first == "tag") {
@@ -573,9 +607,12 @@ mojom::SRIMessageSignaturesPtr ParseSRIMessageSignaturesFromHeaders(
 
 std::optional<std::string> ConstructSignatureBase(
     const mojom::SRIMessageSignaturePtr& signature,
-    const GURL& request_url,
+    const net::URLRequest& url_request,
     const net::HttpResponseHeaders& headers) {
-  if (!signature || !request_url.is_valid()) {
+  const GURL request_url = url_request.url();
+  DCHECK(request_url.is_valid());
+
+  if (!signature) {
     return std::nullopt;
   }
 
@@ -616,7 +653,7 @@ std::optional<std::string> ConstructSignatureBase(
         return std::nullopt;
       }
       component_value = SerializeDerivedComponent(
-          request_url, headers.response_code(), component);
+          url_request, headers.response_code(), component);
 
       //      *  If the component name does not start with an "at" (`@`)
       //         character, canonizalize the HTTP field value ... If the field
@@ -678,10 +715,13 @@ std::optional<std::string> ConstructSignatureBase(
 
 bool ValidateSRIMessageSignaturesOverHeaders(
     mojom::SRIMessageSignaturesPtr& message_signatures,
-    const GURL& request_url,
+    const net::URLRequest& url_request,
     const net::HttpResponseHeaders& headers) {
+  const GURL request_url = url_request.url();
+  DCHECK(url_request.url().is_valid());
+
   // If no signatures are present, validation automatically succeeds.
-  if (!message_signatures->signatures.size() || !request_url.is_valid()) {
+  if (!message_signatures->signatures.size()) {
     return true;
   }
 
@@ -700,7 +740,7 @@ bool ValidateSRIMessageSignaturesOverHeaders(
 
     // Generate the signature base:
     std::string signature_base =
-        ConstructSignatureBase(message_signature, request_url, headers)
+        ConstructSignatureBase(message_signature, url_request, headers)
             .value_or("");
 
     // Decode the public key, and validate that both the public key and the
@@ -736,7 +776,7 @@ bool ValidateSRIMessageSignaturesOverHeaders(
 
 std::optional<mojom::BlockedByResponseReason>
 MaybeBlockResponseForSRIMessageSignature(
-    const GURL& request_url,
+    const net::URLRequest& url_request,
     const network::mojom::URLResponseHead& response,
     const std::vector<std::string>& expected_public_keys,
     const raw_ptr<mojom::DevToolsObserver> devtools_observer,
@@ -748,14 +788,15 @@ MaybeBlockResponseForSRIMessageSignature(
     return std::nullopt;
   }
 
-  // No headers, no blocking.
+  // No headers, no URL: no blocking.
+  const GURL request_url = url_request.url();
   if (!response.headers || !request_url.is_valid()) {
     return std::nullopt;
   }
   auto parsed_headers = ParseSRIMessageSignaturesFromHeaders(*response.headers);
   bool passed_validation =
       !parsed_headers->signatures.size() ||
-      (ValidateSRIMessageSignaturesOverHeaders(parsed_headers, request_url,
+      (ValidateSRIMessageSignaturesOverHeaders(parsed_headers, url_request,
                                                *response.headers) &&
        MatchExpectedPublicKeys(parsed_headers, expected_public_keys));
 
@@ -798,7 +839,7 @@ void MaybeSetAcceptSignatureHeader(
       header << ", ";
     }
     header << "sig" << counter << "=(\"unencoded-digest\";sf);keyid=\""
-           << public_key << "\";tag=\"sri\"";
+           << public_key << "\";tag=\"ed25519-integrity\"";
     ++counter;
   }
   if (header.str().empty()) {

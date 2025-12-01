@@ -9,6 +9,8 @@
 #include <memory>
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
+#include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
@@ -21,6 +23,8 @@
 #include "extensions/common/permissions/api_permission_set.h"
 #include "extensions/common/switches.h"
 #include "extensions/strings/grit/extensions_strings.h"
+#include "net/base/mime_util.h"
+#include "third_party/blink/public/common/mime_util/mime_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #include "app/vivaldi_apptools.h"
@@ -34,6 +38,10 @@ namespace values = manifest_values;
 namespace errors = manifest_errors;
 
 namespace {
+
+BASE_FEATURE(kValidateBackgroundScriptMimeType,
+             "ValidateBackgroundScriptMimeType",
+             base::FEATURE_ENABLED_BY_DEFAULT);
 
 const char kBackground[] = "background";
 
@@ -120,7 +128,7 @@ bool BackgroundInfo::IsServiceWorkerBased(const Extension* extension) {
       .background_service_worker_script_.has_value();
 }
 
-bool BackgroundInfo::Parse(const Extension* extension, std::u16string* error) {
+bool BackgroundInfo::Parse(Extension* extension, std::u16string* error) {
   const std::string& bg_scripts_key = extension->is_platform_app() ?
       keys::kPlatformAppBackgroundScripts : keys::kBackgroundScripts;
   if (!LoadBackgroundScripts(extension, bg_scripts_key, error) ||
@@ -143,7 +151,7 @@ bool BackgroundInfo::Parse(const Extension* extension, std::u16string* error) {
   return true;
 }
 
-bool BackgroundInfo::LoadBackgroundScripts(const Extension* extension,
+bool BackgroundInfo::LoadBackgroundScripts(Extension* extension,
                                            const std::string& key,
                                            std::u16string* error) {
   const base::Value* background_scripts_value =
@@ -166,7 +174,28 @@ bool BackgroundInfo::LoadBackgroundScripts(const Extension* extension,
           errors::kInvalidBackgroundScript, base::NumberToString(i));
       return false;
     }
-    background_scripts_.push_back(background_scripts[i].GetString());
+
+    const std::string& background_script = background_scripts[i].GetString();
+
+    std::string mime_type;
+    // TODO(https://crbug.com/40059598): Remove this if-check and always
+    // validate the mime type in M139.
+    if (base::FeatureList::IsEnabled(kValidateBackgroundScriptMimeType) &&
+        (!net::GetWellKnownMimeTypeFromFile(
+             base::FilePath::FromUTF8Unsafe(background_script), &mime_type) ||
+         !blink::IsSupportedJavascriptMimeType(mime_type))) {
+      // Issue a warning and ignore this file. This is a warning and not a
+      // hard-error to preserve both backwards compatibility and potential
+      // future-compatibility if mime types change.
+      extension->AddInstallWarning(
+          InstallWarning(ErrorUtils::FormatErrorMessage(
+                             errors::kInvalidBackgroundScriptMimeType,
+                             base::NumberToString(i)),
+                         key));
+      continue;
+    }
+
+    background_scripts_.push_back(background_script);
   }
 
   return true;

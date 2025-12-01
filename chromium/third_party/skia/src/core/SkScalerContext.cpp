@@ -270,7 +270,7 @@ SkGlyph SkScalerContext::internalMakeGlyph(SkPackedGlyphID packedID, SkMask::For
 
     if (mx.computeFromPath || (fGenerateImageFromPath && !mx.neverRequestPath)) {
         SkDEBUGCODE(glyph.fAdvancesBoundsFormatAndInitialPathDone = true;)
-        this->internalGetPath(glyph, alloc);
+        this->internalGetPath(glyph, alloc, std::move(mx.generatedPath));
         const SkPath* devPath = glyph.path();
         if (devPath) {
             const bool doVert = SkToBool(fRec.fFlags & SkScalerContext::kLCD_Vertical_Flag);
@@ -391,7 +391,7 @@ static void pack4xHToMask(const SkPixmap& src, SkMaskBuilder& dst,
             dstPDelta = dstPB;
         }
 
-        const uint8_t* srcP = src.addr8(0, y);
+        const uint8_t* srcP = SkTAddOffset<const uint8_t>(src.addr(), y * src.rowBytes());
 
         // TODO: this fir filter implementation is straight forward, but slow.
         // It should be possible to make it much faster.
@@ -489,6 +489,20 @@ static void packA8ToA1(SkMaskBuilder& dstMask, const uint8_t* src, size_t srcRB)
         src += srcPad;
         dst += dstPad;
     }
+}
+
+void SkScalerContext::generateImageFromPath(const SkGlyph& glyph, void* imageBuffer) {
+    SkASSERT(glyph.setPathHasBeenCalled());
+    const SkPath* devPath = glyph.path();
+    SkASSERT_RELEASE(devPath);
+    SkMaskBuilder mask(static_cast<uint8_t*>(imageBuffer),
+                       glyph.iRect(), glyph.rowBytes(), glyph.maskFormat());
+    SkASSERT(SkMask::kARGB32_Format != mask.fFormat);
+    const bool doBGR = SkToBool(fRec.fFlags & SkScalerContext::kLCD_BGROrder_Flag);
+    const bool doVert = SkToBool(fRec.fFlags & SkScalerContext::kLCD_Vertical_Flag);
+    const bool a8LCD = SkToBool(fRec.fFlags & SkScalerContext::kGenA8FromLCD_Flag);
+    const bool hairline = glyph.pathIsHairline();
+    GenerateImageFromPath(mask, *devPath, fPreBlend, doBGR, doVert, a8LCD, hairline);
 }
 
 void SkScalerContext::GenerateImageFromPath(
@@ -739,7 +753,7 @@ void SkScalerContext::getImage(const SkGlyph& origGlyph) {
 }
 
 void SkScalerContext::getPath(SkGlyph& glyph, SkArenaAlloc* alloc) {
-    this->internalGetPath(glyph, alloc);
+    this->internalGetPath(glyph, alloc, std::nullopt);
 }
 
 sk_sp<SkDrawable> SkScalerContext::getDrawable(SkGlyph& glyph) {
@@ -757,7 +771,8 @@ void SkScalerContext::getFontMetrics(SkFontMetrics* fm) {
 
 ///////////////////////////////////////////////////////////////////////////////
 
-void SkScalerContext::internalGetPath(SkGlyph& glyph, SkArenaAlloc* alloc) {
+void SkScalerContext::internalGetPath(SkGlyph& glyph, SkArenaAlloc* alloc,
+                                      std::optional<GeneratedPath>&& generatedPath) {
     SkASSERT(glyph.fAdvancesBoundsFormatAndInitialPathDone);
 
     if (glyph.setPathHasBeenCalled()) {
@@ -770,7 +785,10 @@ void SkScalerContext::internalGetPath(SkGlyph& glyph, SkArenaAlloc* alloc) {
     bool pathModified = false;
 
     SkPackedGlyphID glyphID = glyph.getPackedID();
-    if (!generatePath(glyph, &path, &pathModified)) {
+    if (generatedPath) {
+        path = std::move(generatedPath->path);
+        pathModified = std::move(generatedPath->modified);
+    } else if (!generatePath(glyph, &path, &pathModified)) {
         glyph.setPath(alloc, (SkPath*)nullptr, hairline, pathModified);
         return;
     }
@@ -861,7 +879,7 @@ void SkScalerContextRec::getSingleMatrix(SkMatrix* m) const {
 }
 
 bool SkScalerContextRec::computeMatrices(PreMatrixScale preMatrixScale, SkVector* s, SkMatrix* sA,
-                                         SkMatrix* GsA, SkMatrix* G_inv, SkMatrix* A_out)
+                                         SkMatrix* GsA, SkMatrix* G_inv, SkMatrix* A_out) const
 {
     // A is the 'total' matrix.
     SkMatrix A;

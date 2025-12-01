@@ -7,9 +7,10 @@ import 'chrome://settings/settings.js';
 
 import {flushTasks} from 'chrome://webui-test/polymer_test_util.js';
 import {assertDeepEquals, assertEquals, assertFalse, assertGE, assertTrue} from 'chrome://webui-test/chai_assert.js';
-import type {SettingsToggleButtonElement} from 'chrome://settings/settings.js';
+import {CrSettingsPrefs, loadTimeData, ModelExecutionEnterprisePolicyValue} from 'chrome://settings/settings.js';
+import type {SettingsAiLoggingInfoBullet, SettingsPrefsElement, SettingsToggleButtonElement} from 'chrome://settings/settings.js';
 import type {CrButtonElement, SettingsAutofillAiAddOrEditDialogElement, SettingsSimpleConfirmationDialogElement, SettingsAutofillAiSectionElement} from 'chrome://settings/lazy_load.js';
-import {EntityDataManagerProxyImpl} from 'chrome://settings/lazy_load.js';
+import {AiEnterpriseFeaturePrefName, EntityDataManagerProxyImpl} from 'chrome://settings/lazy_load.js';
 import {isVisible} from 'chrome://webui-test/test_util.js';
 
 import {TestEntityDataManagerProxy} from './test_entity_data_manager_proxy.js';
@@ -20,6 +21,12 @@ const AttributeTypeDataType = chrome.autofillPrivate.AttributeTypeDataType;
 suite('AutofillAiSectionUiReflectsEligibilityStatus', function() {
   let section: SettingsAutofillAiSectionElement;
   let entityDataManager: TestEntityDataManagerProxy;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
 
   setup(function() {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
@@ -49,8 +56,15 @@ suite('AutofillAiSectionUiReflectsEligibilityStatus', function() {
     entityDataManager.setGetOptInStatusResponse(false);
 
     section = document.createElement('settings-autofill-ai-section');
+    settingsPrefs.set(
+        `prefs.${AiEnterpriseFeaturePrefName.AUTOFILL_AI}.value`,
+        ModelExecutionEnterprisePolicyValue.ALLOW);
+    section.prefs = settingsPrefs.prefs;
   });
 
+  teardown(function() {
+    CrSettingsPrefs.resetForTesting();
+  });
   interface EligibilityParamsInterface {
     // Whether the user is opted into Autofill with Ai.
     optedIn: boolean;
@@ -120,8 +134,14 @@ suite('AutofillAiSectionUiTest', function() {
   let entityDataManager: TestEntityDataManagerProxy;
   let testEntityInstance: chrome.autofillPrivate.EntityInstance;
   let testEntityTypes: chrome.autofillPrivate.EntityType[];
+  let settingsPrefs: SettingsPrefsElement;
 
-  setup(async function() {
+  suiteSetup(function() {
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
+
+  setup(function() {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
 
     entityDataManager = new TestEntityDataManagerProxy();
@@ -129,46 +149,53 @@ suite('AutofillAiSectionUiTest', function() {
 
     testEntityInstance = {
       type: {
-        typeName: 2,
-        typeNameAsString: 'Car',
-        addEntityTypeString: 'Add car',
-        editEntityTypeString: 'Edit car',
+        typeName: 1,
+        typeNameAsString: 'Driver\'s license',
+        addEntityTypeString: 'Add driver\'s license',
+        editEntityTypeString: 'Edit driver\'s license',
+        deleteEntityTypeString: 'Delete driver\'s license',
       },
       attributeInstances: [
         {
           type: {
-            typeName: 8,
-            typeNameAsString: 'Owner',
+            typeName: 5,
+            typeNameAsString: 'Name',
             dataType: AttributeTypeDataType.STRING,
           },
-          value: 'Mark Nolan',
+          value: 'John Doe',
         },
         {
           type: {
-            typeName: 10,
-            typeNameAsString: 'Registration',
+            typeName: 7,
+            typeNameAsString: 'Number',
             dataType: AttributeTypeDataType.STRING,
           },
           value: 'ABCDE123',
         },
       ],
-      guid: 'e4bbe384-ee63-45a4-8df3-713a58fdc181',
-      nickname: 'My car',
+      guid: 'd70b5bb7-49a6-4276-b4b7-b014dacdc9e6',
+      nickname: 'My license',
     };
+    // Initially not sorted alphabetically. The production code should sort them
+    // alphabetically.
     testEntityTypes = [
-      {
-        typeName: 2,
-        typeNameAsString: 'Car',
-        addEntityTypeString: 'Add car',
-        editEntityTypeString: 'Edit car',
-      },
       {
         typeName: 0,
         typeNameAsString: 'Passport',
         addEntityTypeString: 'Add passport',
         editEntityTypeString: 'Edit passport',
+        deleteEntityTypeString: 'Delete passport',
+      },
+      {
+        typeName: 2,
+        typeNameAsString: 'Car',
+        addEntityTypeString: 'Add car',
+        editEntityTypeString: 'Edit car',
+        deleteEntityTypeString: 'Delete car',
       },
     ];
+    // Initially not sorted alphabetically. The production code should sort them
+    // alphabetically.
     const testEntityInstancesWithLabels:
         chrome.autofillPrivate.EntityInstanceWithLabels[] = [
       {
@@ -181,13 +208,34 @@ suite('AutofillAiSectionUiTest', function() {
         entityInstanceLabel: 'John Doe',
         entityInstanceSubLabel: 'Passport',
       },
+      {
+        guid: 'd70b5bb7-49a6-4276-b4b7-b014dacdc9e6',
+        entityInstanceLabel: 'John Doe',
+        entityInstanceSubLabel: 'Driver\'s license',
+      },
     ];
     entityDataManager.setGetOptInStatusResponse(true);
-    entityDataManager.setGetAllEntityTypesResponse(testEntityTypes);
+    entityDataManager.setGetAllEntityTypesResponse(
+        structuredClone(testEntityTypes));
     entityDataManager.setLoadEntityInstancesResponse(
         testEntityInstancesWithLabels);
 
+    // `testEntityTypes` now contains expected values, so they should be sorted
+    // alphabetically.
+    testEntityTypes.sort(
+        (a, b) => a.typeNameAsString.localeCompare(b.typeNameAsString));
+    settingsPrefs.set(
+        `prefs.${AiEnterpriseFeaturePrefName.AUTOFILL_AI}.value`,
+        ModelExecutionEnterprisePolicyValue.ALLOW);
+  });
+
+  teardown(function() {
+    CrSettingsPrefs.resetForTesting();
+  });
+
+  async function createPage() {
     section = document.createElement('settings-autofill-ai-section');
+    section.prefs = settingsPrefs.prefs;
     document.body.appendChild(section);
     await flushTasks();
 
@@ -197,21 +245,78 @@ suite('AutofillAiSectionUiTest', function() {
     entityInstancesListElement = entityInstancesQueried;
 
     assertTrue(!!section.shadowRoot!.querySelector('#entriesHeader'));
-  });
+  }
 
-  test('testEntityInstancesLoaded', async function() {
+  test(
+      'testAutofillAiEnterpriseUserLoggingAllowedAndNonEnterpriseUserHaveNoLoggingInfoBullet',
+      async function() {
+        // Both enterprise and non enterprise users have the pref set to 0
+        // (allow).
+        settingsPrefs.set(
+            `prefs.${AiEnterpriseFeaturePrefName.AUTOFILL_AI}.value`,
+            ModelExecutionEnterprisePolicyValue.ALLOW);
+        await createPage();
+
+        const enterpriseLogginInfoBullet =
+            section.shadowRoot!.querySelector<SettingsAiLoggingInfoBullet>(
+                '#enterpriseInfoBullet');
+        assertFalse(!!enterpriseLogginInfoBullet);
+      });
+
+  test(
+      'testAutofillAiEnterpriseUserLoggingNotAllowedHaveLoggingInfoBullet',
+      async function() {
+        settingsPrefs.set(
+            `prefs.${AiEnterpriseFeaturePrefName.AUTOFILL_AI}.value`,
+            ModelExecutionEnterprisePolicyValue.ALLOW_WITHOUT_LOGGING);
+        await createPage();
+
+        const enterpriseLogginInfoBullet =
+            section.shadowRoot!.querySelector<SettingsAiLoggingInfoBullet>(
+                '#enterpriseInfoBullet');
+        assertTrue(!!enterpriseLogginInfoBullet);
+        assertEquals(
+            loadTimeData.getString(
+                'autofillAiSubpageSublabelLoggingManagedDisabled'),
+            enterpriseLogginInfoBullet.loggingManagedDisabledCustomLabel);
+      });
+
+  test(
+      'testAutofillAiEnterpriseUserDisabledHasLoggingInfoBullet',
+      async function() {
+        settingsPrefs.set(
+            `prefs.${AiEnterpriseFeaturePrefName.AUTOFILL_AI}.value`,
+            ModelExecutionEnterprisePolicyValue.DISABLE);
+        await createPage();
+
+        const enterpriseLogginInfoBullet =
+            section.shadowRoot!.querySelector<SettingsAiLoggingInfoBullet>(
+                '#enterpriseInfoBullet');
+        assertTrue(!!enterpriseLogginInfoBullet);
+        assertEquals(
+            loadTimeData.getString(
+                'autofillAiSubpageSublabelLoggingManagedDisabled'),
+            enterpriseLogginInfoBullet.loggingManagedDisabledCustomLabel);
+      });
+
+  test('testEntityInstancesLoadedAndSortedAlphabetically', async function() {
+    await createPage();
     await entityDataManager.whenCalled('loadEntityInstances');
     const listItems =
         entityInstancesListElement.querySelectorAll<HTMLElement>('.list-item');
 
     assertEquals(
-        3, listItems.length,
-        '2 entity instances and a hidden element were loaded.');
-    assertTrue(listItems[0]!.textContent!.includes('Toyota'));
+        4, listItems.length,
+        '3 entity instances and a hidden element were loaded.');
+    // The items should now also be sorted alphabetically.
+    assertTrue(listItems[0]!.textContent!.includes('John Doe'));
+    assertTrue(listItems[0]!.textContent!.includes('Driver\'s license'));
     assertTrue(listItems[1]!.textContent!.includes('John Doe'));
-    assertFalse(isVisible(listItems[2]!));
+    assertTrue(listItems[1]!.textContent!.includes('Passport'));
+    assertTrue(listItems[2]!.textContent!.includes('Toyota'));
+    assertTrue(listItems[2]!.textContent!.includes('Car'));
+    assertFalse(isVisible(listItems[3]!));
   });
-
 
   interface RemoveEntityInstanceParamsInterface {
     // Whether the user confirms the delete dialog.
@@ -227,6 +332,10 @@ suite('AutofillAiSectionUiTest', function() {
 
   removeEntityInstanceParams.forEach(
       (params) => test(params.title, async function() {
+        await createPage();
+        entityDataManager.setGetEntityInstanceByGuidResponse(
+            testEntityInstance);
+
         const actionMenuButton =
             entityInstancesListElement.querySelector<HTMLElement>(
                 '#moreButton');
@@ -246,6 +355,8 @@ suite('AutofillAiSectionUiTest', function() {
                 .querySelector<SettingsSimpleConfirmationDialogElement>(
                     '#removeEntityInstanceDialog');
         assertTrue(!!removeEntityInstanceDialog);
+        assertEquals(
+            'Delete driver\'s license', removeEntityInstanceDialog.titleText);
 
         if (params.confirmed) {
           removeEntityInstanceDialog.$.confirm.click();
@@ -255,7 +366,7 @@ suite('AutofillAiSectionUiTest', function() {
 
           assertEquals(
               1, entityDataManager.getCallCount('removeEntityInstance'));
-          assertEquals('e4bbe384-ee63-45a4-8df3-713a58fdc181', guid);
+          assertEquals('d70b5bb7-49a6-4276-b4b7-b014dacdc9e6', guid);
         } else {
           removeEntityInstanceDialog.$.cancel.click();
           await flushTasks();
@@ -281,6 +392,7 @@ suite('AutofillAiSectionUiTest', function() {
 
   addOrEditEntityInstanceDialogParams.forEach(
       (params) => test(params.title, async function() {
+        await createPage();
         if (params.add) {
           // Open the add entity instance dialog.
           const addButton = section.shadowRoot!.querySelector<HTMLElement>(
@@ -350,6 +462,7 @@ suite('AutofillAiSectionUiTest', function() {
       }));
 
   test('testAddButtonShowsEntityInstancesList', async function() {
+    await createPage();
     const addButton =
         section.shadowRoot!.querySelector<HTMLElement>('#addEntityInstance');
     assertTrue(!!addButton);
@@ -367,42 +480,51 @@ suite('AutofillAiSectionUiTest', function() {
     }
   });
 
-  test('testEntityInstancesChangedListener', async function() {
-    const newTestEntityInstancesWithLabels:
-        chrome.autofillPrivate.EntityInstanceWithLabels[] = [
-      {
-        guid: 'a521fc41-d672-4947-ab39-8bc9d49b08d2',
-        entityInstanceLabel: 'Mark Jane',
-        entityInstanceSubLabel: 'Passport',
-      },
-      {
-        guid: 'db56681d-9598-4e37-825c-7977f52fbcee',
-        entityInstanceLabel: 'Honda',
-        entityInstanceSubLabel: 'Car',
-      },
-      {
-        guid: '1a89869f-dff2-461a-8ef8-769e0e1c66f7',
-        entityInstanceLabel: 'Tom Clark',
-        entityInstanceSubLabel: 'Driver\'s license',
-      },
-    ];
+  test(
+      'testEntityInstancesChangedListenerUpdatesAndAlphabeticallySortsEntries',
+      async function() {
+        await createPage();
+        const newTestEntityInstancesWithLabels:
+            chrome.autofillPrivate.EntityInstanceWithLabels[] = [
+          {
+            guid: 'a521fc41-d672-4947-ab39-8bc9d49b08d2',
+            entityInstanceLabel: 'Tom Clark',
+            entityInstanceSubLabel: 'Passport',
+          },
+          {
+            guid: 'db56681d-9598-4e37-825c-7977f52fbcee',
+            entityInstanceLabel: 'Honda',
+            entityInstanceSubLabel: 'Car',
+          },
+          {
+            guid: '1a89869f-dff2-461a-8ef8-769e0e1c66f7',
+            entityInstanceLabel: 'Tom Clark',
+            entityInstanceSubLabel: 'Driver\'s license',
+          },
+        ];
 
-    entityDataManager.callEntityInstancesChangedListener(
-        newTestEntityInstancesWithLabels);
-    await flushTasks();
+        entityDataManager.callEntityInstancesChangedListener(
+            newTestEntityInstancesWithLabels);
+        await flushTasks();
 
-    const listItems =
-        entityInstancesListElement.querySelectorAll<HTMLElement>('.list-item');
-    assertEquals(
-        4, listItems.length,
-        'Three entity instances and a hidden element should be present.');
-    assertTrue(listItems[0]!.textContent!.includes('Mark Jane'));
-    assertTrue(listItems[1]!.textContent!.includes('Honda'));
-    assertTrue(listItems[2]!.textContent!.includes('Tom Clark'));
-    assertFalse(isVisible(listItems[3]!));
-  });
+        const listItems =
+            entityInstancesListElement.querySelectorAll<HTMLElement>(
+                '.list-item');
+        assertEquals(
+            4, listItems.length,
+            'Three entity instances and a hidden element should be present.');
+        // The items should now also be sorted alphabetically.
+        assertTrue(listItems[0]!.textContent!.includes('Honda'));
+        assertTrue(listItems[0]!.textContent!.includes('Car'));
+        assertTrue(listItems[1]!.textContent!.includes('Tom Clark'));
+        assertTrue(listItems[1]!.textContent!.includes('Driver\'s license'));
+        assertTrue(listItems[2]!.textContent!.includes('Tom Clark'));
+        assertTrue(listItems[2]!.textContent!.includes('Passport'));
+        assertFalse(isVisible(listItems[3]!));
+      });
 
   test('testEntriesDoNotDisappearAfterToggleDisabling', async function() {
+    await createPage();
     // The toggle is initially enabled (see the setup() method). Clicking it
     // sets the opt-in status to false.
     const toggle =
@@ -421,6 +543,7 @@ suite('AutofillAiSectionUiTest', function() {
   });
 
   test('testToggleIsDisabledWhenUserIsNotEligible', async function() {
+    await createPage();
     // The toggle is initially enabled (see the setup() method). Clicking it
     // sets the opt-in status to false.
     const toggle =
@@ -445,6 +568,12 @@ suite('AutofillAiSectionUiTest', function() {
 
 suite('AutofillAiSectionLongLabelsUiTest', function() {
   let section: SettingsAutofillAiSectionElement;
+  let settingsPrefs: SettingsPrefsElement;
+
+  suiteSetup(function() {
+    settingsPrefs = document.createElement('settings-prefs');
+    return CrSettingsPrefs.initialized;
+  });
 
   setup(async function() {
     document.body.innerHTML = window.trustedTypes!.emptyHTML;
@@ -455,7 +584,7 @@ suite('AutofillAiSectionLongLabelsUiTest', function() {
         chrome.autofillPrivate.EntityInstanceWithLabels[] = [
       {
         guid: 'e4bbe384-ee63-45a4-8df3-713a58fdc181',
-        entityInstanceLabel: 'Label'.repeat(100),
+        entityInstanceLabel: 'A label'.repeat(100),
         entityInstanceSubLabel: 'Car',
       },
       {
@@ -472,19 +601,33 @@ suite('AutofillAiSectionLongLabelsUiTest', function() {
     entityDataManager.setLoadEntityInstancesResponse(
         testEntityInstancesWithLabels);
 
-    section = document.createElement('settings-autofill-ai-section');
-    document.body.appendChild(section);
     await flushTasks();
   });
 
-  test('testLongLabelsHaveHiddenOverflow', function() {
+  teardown(function() {
+    CrSettingsPrefs.resetForTesting();
+  });
+
+  async function createPage() {
+    settingsPrefs.set(
+        `prefs.${AiEnterpriseFeaturePrefName.AUTOFILL_AI}.value`,
+        ModelExecutionEnterprisePolicyValue.ALLOW);
+    section = document.createElement('settings-autofill-ai-section');
+    section.prefs = settingsPrefs.prefs;
+    document.body.appendChild(section);
+
+    await flushTasks();
+  }
+
+  test('testLongLabelsHaveHiddenOverflow', async function() {
+    await createPage();
     // Contains all labels and sublabels, in order.
     const labels =
         section.shadowRoot!.querySelectorAll<HTMLElement>('.ellipses');
 
     assertEquals(6, labels.length, '3 labels + 3 sublabels should be loaded');
 
-    assertTrue(labels[0]!.textContent!.includes('Label'));
+    assertTrue(labels[0]!.textContent!.includes('A label'));
     assertGE(labels[0]!.scrollWidth, labels[0]!.offsetWidth);
     assertTrue(labels[1]!.textContent!.includes('Car'));
     assertEquals(labels[1]!.scrollWidth, labels[1]!.offsetWidth);

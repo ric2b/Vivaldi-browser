@@ -42,32 +42,44 @@ class MockMoqtSession : public MoqtSessionInterface {
   MOCK_METHOD(bool, SubscribeAbsolute,
               (const FullTrackName& name, uint64_t start_group,
                uint64_t start_object, SubscribeRemoteTrack::Visitor* visitor,
-               MoqtSubscribeParameters parameters),
+               VersionSpecificParameters parameters),
               (override));
   MOCK_METHOD(bool, SubscribeAbsolute,
               (const FullTrackName& name, uint64_t start_group,
                uint64_t start_object, uint64_t end_group,
                SubscribeRemoteTrack::Visitor* visitor,
-               MoqtSubscribeParameters parameters),
+               VersionSpecificParameters parameters),
               (override));
   MOCK_METHOD(bool, SubscribeCurrentObject,
               (const FullTrackName& name,
                SubscribeRemoteTrack::Visitor* visitor,
-               MoqtSubscribeParameters parameters),
+               VersionSpecificParameters parameters),
+              (override));
+  MOCK_METHOD(bool, SubscribeNextGroup,
+              (const FullTrackName& name,
+               SubscribeRemoteTrack::Visitor* visitor,
+               VersionSpecificParameters parameters),
+              (override));
+  MOCK_METHOD(bool, SubscribeUpdate,
+              (const FullTrackName& name, std::optional<Location> start,
+               std::optional<uint64_t> end_group,
+               std::optional<MoqtPriority> subscriber_priority,
+               std::optional<bool> forward,
+               VersionSpecificParameters parameters),
               (override));
   MOCK_METHOD(void, Unsubscribe, (const FullTrackName& name), (override));
   MOCK_METHOD(bool, Fetch,
               (const FullTrackName& name, FetchResponseCallback callback,
-               FullSequence start, uint64_t end_group,
+               Location start, uint64_t end_group,
                std::optional<uint64_t> end_object, MoqtPriority priority,
                std::optional<MoqtDeliveryOrder> delivery_order,
-               MoqtSubscribeParameters parameters),
+               VersionSpecificParameters parameters),
               (override));
   MOCK_METHOD(bool, JoiningFetch,
               (const FullTrackName& name,
                SubscribeRemoteTrack::Visitor* visitor,
                uint64_t num_previous_groups,
-               MoqtSubscribeParameters parameters),
+               VersionSpecificParameters parameters),
               (override));
   MOCK_METHOD(bool, JoiningFetch,
               (const FullTrackName& name,
@@ -75,7 +87,7 @@ class MockMoqtSession : public MoqtSessionInterface {
                FetchResponseCallback callback, uint64_t num_previous_groups,
                MoqtPriority priority,
                std::optional<MoqtDeliveryOrder> delivery_order,
-               MoqtSubscribeParameters parameters),
+               VersionSpecificParameters parameters),
               (override));
 
  private:

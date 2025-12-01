@@ -15,6 +15,7 @@
 #include "base/check_op.h"
 #include "base/location.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "base/numerics/checked_math.h"
@@ -26,6 +27,7 @@
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
 #include "components/viz/common/resources/shared_image_format_utils.h"
+#include "third_party/abseil-cpp/absl/cleanup/cleanup.h"
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_canvas_text_align.h"
@@ -38,6 +40,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_font_variant_caps.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_canvas_text_rendering.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_format.h"
+#include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_enums.h"
 #include "third_party/blink/renderer/core/canvas_interventions/canvas_interventions_helper.h"
 #include "third_party/blink/renderer/core/css/properties/computed_style_utils.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
@@ -47,6 +50,7 @@
 #include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_font_cache.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_performance_monitor.h"
+#include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context_host.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
@@ -77,11 +81,13 @@
 #include "third_party/blink/renderer/platform/graphics/canvas_deferred_paint_record.h"
 #include "third_party/blink/renderer/platform/graphics/canvas_resource_host.h"
 #include "third_party/blink/renderer/platform/graphics/flush_reason.h"
+#include "third_party/blink/renderer/platform/graphics/gpu/shared_gpu_context.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_cpp.h"
 #include "third_party/blink/renderer/platform/graphics/gpu/webgpu_mailbox_texture.h"
 #include "third_party/blink/renderer/platform/graphics/image.h"
 #include "third_party/blink/renderer/platform/graphics/image_data_buffer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_image.h"
+#include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
 #include "third_party/blink/renderer/platform/graphics/static_bitmap_image.h"
 #include "third_party/blink/renderer/platform/graphics/video_frame_image_util.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -104,15 +110,32 @@
 // IWYU pragma: no_include "base/numerics/clamped_math.h"
 
 namespace blink {
+namespace {
+
+wgpu::TextureFormat AsDawnType(const viz::SharedImageFormat& format) {
+  // NOTE: Canvas2D can be only RGBA_8888, BGRA_8888, or F16.
+  if (format == viz::SinglePlaneFormat::kRGBA_8888) {
+    return wgpu::TextureFormat::RGBA8Unorm;
+  } else if (format == viz::SinglePlaneFormat::kBGRA_8888) {
+    return wgpu::TextureFormat::BGRA8Unorm;
+  } else if (format == viz::SinglePlaneFormat::kRGBA_F16) {
+    return wgpu::TextureFormat::RGBA16Float;
+  } else {
+    return wgpu::TextureFormat::Undefined;
+  }
+}
+
+bool IsContextProviderValid() {
+  base::WeakPtr<WebGraphicsContext3DProviderWrapper> context_provider_wrapper =
+      SharedGpuContext::ContextProviderWrapper();
+  return context_provider_wrapper &&
+         !context_provider_wrapper->ContextProvider().IsContextLost();
+}
+
+}  // namespace
 
 constexpr char kDefaultFont[] = "10px sans-serif";
 const char BaseRenderingContext2D::kInheritString[] = "inherit";
-
-// After context lost, it waits |kTryRestoreContextInterval| before start the
-// restore the context. This wait needs to be long enough to avoid spamming the
-// GPU process with retry attempts and short enough to provide decent UX. It's
-// currently set to 500ms.
-const base::TimeDelta kTryRestoreContextInterval = base::Milliseconds(500);
 
 BaseRenderingContext2D::BaseRenderingContext2D(
     CanvasRenderingContextHost* canvas,
@@ -133,18 +156,8 @@ BaseRenderingContext2D::BaseRenderingContext2D(
           &BaseRenderingContext2D::TryRestoreContextEvent),
       color_params_(attrs.color_space, attrs.pixel_format, attrs.alpha) {}
 
-void BaseRenderingContext2D::OnPlaceElementStateChanged(Element& element) {
-  element.SetNeedsStyleRecalc(
-      StyleChangeType::kLocalStyleChange,
-      StyleChangeReasonForTracing::Create("placeElement"));
-}
-
 void BaseRenderingContext2D::ResetInternal() {
   Canvas2DRecorderContext::ResetInternal();
-  for (Element* element : placed_elements_.Keys()) {
-    OnPlaceElementStateChanged(*element);
-  }
-  placed_elements_.clear();
 
   // If a WebGPU transfer texture exists, we must destroy it immediately. We
   // can't allow it to continue to exist, as it would be subject to Javascript
@@ -163,74 +176,58 @@ CanvasRenderingContext2DSettings* BaseRenderingContext2D::getContextAttributes()
   return ToCanvasRenderingContext2DSettings(CreationAttributes());
 }
 
-void BaseRenderingContext2D::placeElement(Element* element,
-                                          double x,
-                                          double y,
-                                          ExceptionState& exception_state) {
+bool BaseRenderingContext2D::IsDrawElementEligible(
+    Element* element,
+    ExceptionState& exception_state) {
   HTMLCanvasElement* canvas_element = HostAsHTMLCanvasElement();
-  DCHECK(canvas_element);
+  if (!canvas_element || !canvas_element->GetDocument().View()) {
+    return false;
+  }
+
+  if (!GetOrCreatePaintCanvas()) {
+    return false;
+  }
 
   if (element->parentElement() != canvas_element) {
     exception_state.ThrowTypeError(
-        "Only immediate children of the <canvas> element can be used with "
-        "placeElement().");
-    return;
+        "Only immediate children of the <canvas> element can be passed to "
+        "drawElement().");
+    return false;
   }
 
+  if (!canvas_element->layoutSubtree()) {
+    exception_state.ThrowTypeError(
+        "<canvas> elements without layoutsubtree do not support "
+        "drawElement().");
+    return false;
+  }
+
+  if (!element->GetLayoutObject()) {
+    exception_state.ThrowTypeError(
+        "The canvas and element used with drawElement() must have been laid "
+        "out. Detached canvases are not supported, nor canvas or children that "
+        "are `display: none`.");
+    return false;
+  }
+
+  // TODO(crbug.com/413728246): Maybe we can support canvas element.
   if (IsA<HTMLCanvasElement>(element)) {
     exception_state.ThrowTypeError(
-        "<canvas> elements cannot be used with placeElement().");
-    return;
+        "<canvas> children of a <canvas> cannot be passed to drawElement().");
+    return false;
   }
 
-  cc::PaintCanvas* paint_canvas = GetOrCreatePaintCanvas();
-  if (!paint_canvas) {
-    return;
-  }
-
-  // TODO(crbug.com/380277045): Only taint for x-origin content.
-  SetOriginTaintedByContent();
-
-  if (!canvas_element->HasPlacedElements()) {
-    // If this is the first time placeElement() is called, its possible that the
-    // canvas contains fallback content that has been ignored and needs to be
-    // laid out.
-    canvas_element->SetForceReattachLayoutTree();
-    canvas_element->SetNeedsStyleRecalc(
-        StyleChangeType::kLocalStyleChange,
-        StyleChangeReasonForTracing::Create("placeElement"));
-  }
-
-  if (placed_elements_.Contains(element)) {
-    // Clear the old deferred paint record so it does not appear.
-    placed_elements_.at(element)->Clear();
-  }
-
-  scoped_refptr<CanvasDeferredPaintRecord> deferred_paint_record =
-      base::MakeRefCounted<CanvasDeferredPaintRecord>();
-
-  cc::PaintImage paint_image =
-      PaintImageBuilder::WithDefault()
-          .set_id(PaintImage::GetNextId())
-          .set_deferred_paint_record(deferred_paint_record)
-          .TakePaintImage();
-
-  placed_elements_.Set(element, deferred_paint_record);
-  deferred_paint_record->SetIsDirty(true);
-  element->SetNeedsStyleRecalc(
-      StyleChangeType::kLocalStyleChange,
-      StyleChangeReasonForTracing::Create("placeElement"));
-
-  // TODO(https://issues.chromium.org/379143301): Figure out the actual visual
-  // rect of the element.
-  WillDraw(SkIRect::MakeXYWH(0, 0, Width(), Height()),
-           CanvasPerformanceMonitor::DrawType::kOther);
-
-  paint_canvas->drawImage(paint_image, x, y);
+  return true;
 }
 
-
 void BaseRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
+  // If `need_dispatch_context_restored_` is `true`, the context has been
+  // restored already (e.g. by fixing a `kInvalidCanvasSize` context loss), but
+  // the oncontextrestored event was postponed until the oncontextlost event was
+  // dispatched first. This is happening now, so irrespective of how this
+  // function returns, `need_dispatch_context_restored_` should be cleared.
+  absl::Cleanup cleanup = [this] { need_dispatch_context_restored_ = false; };
+
   Event* event = Event::CreateCancelable(event_type_names::kContextlost);
   GetCanvasRenderingContextHost()->HostDispatchEvent(event);
 
@@ -240,12 +237,23 @@ void BaseRenderingContext2D::DispatchContextLostEvent(TimerBase*) {
     context_restorable_ = false;
   }
 
-  if (context_restorable_ &&
-      (context_lost_mode_ == CanvasRenderingContext::kRealLostContext ||
-       context_lost_mode_ == CanvasRenderingContext::kSyntheticLostContext)) {
+  if (!context_restorable_) {
+    return;
+  }
+
+  if (need_dispatch_context_restored_) {
+    // The context is already restored (an invalid canvas size was probably
+    // fixed). We can send the restored event right away.
+    dispatch_context_restored_event_timer_.StartOneShot(base::TimeDelta(),
+                                                        FROM_HERE);
+    return;
+  }
+
+  if (context_lost_mode_ == CanvasRenderingContext::kRealLostContext ||
+      context_lost_mode_ == CanvasRenderingContext::kSyntheticLostContext) {
     try_restore_context_attempt_count_ = 0;
-    try_restore_context_event_timer_.StartRepeating(kTryRestoreContextInterval,
-                                                    FROM_HERE);
+    try_restore_context_event_timer_.StartRepeating(
+        try_restore_context_interval_, FROM_HERE);
   }
 }
 
@@ -257,12 +265,92 @@ void BaseRenderingContext2D::DispatchContextRestoredEvent(TimerBase*) {
   if (context_lost_mode_ == CanvasRenderingContext::kNotLostContext) {
     return;
   }
+
+  if (!context_restorable_) {
+    return;
+  }
+
+  CanvasRenderingContextHost* host = GetCanvasRenderingContextHost();
+  if (host == nullptr) {
+    // This function can be called in a new task, via
+    // `dispatch_context_restored_event_timer_`. Abort if the host was disposed
+    // since the task was queued.
+    return;
+  }
+
+  host->ClearLayerTexture();
   ResetInternal();
   context_lost_mode_ = CanvasRenderingContext::kNotLostContext;
   Event* event(Event::Create(event_type_names::kContextrestored));
-  GetCanvasRenderingContextHost()->HostDispatchEvent(event);
+  host->HostDispatchEvent(event);
   UseCounter::Count(GetTopExecutionContext(),
                     WebFeature::kCanvasRenderingContext2DContextRestoredEvent);
+}
+
+void BaseRenderingContext2D::TryRestoreContextEvent(TimerBase* timer) {
+  const CanvasRenderingContextHost* host = GetCanvasRenderingContextHost();
+  if (host == nullptr) [[unlikely]] {
+    // The host was disposed while this callback was pending.
+    try_restore_context_event_timer_.Stop();
+    return;
+  }
+
+  DCHECK(context_lost_mode_ !=
+         CanvasRenderingContext::kWebGLLoseContextLostContext);
+
+  // The canvas was changed to an invalid size since the context was lost. We
+  // can't restore the context until the canvas is given a valid size. Abort
+  // here to avoid creating a shared GPU context we would not use.
+  if (!IsValidImageSize(host->Size()) && !host->Size().IsEmpty()) {
+    context_lost_mode_ = kInvalidCanvasSize;
+    try_restore_context_event_timer_.Stop();
+    return;
+  }
+
+  // For real context losses, we can only restore if the SharedGpuContext is
+  // ready.
+  if (context_lost_mode_ != CanvasRenderingContext::kRealLostContext ||
+      (SharedGpuContext::IsGpuCompositingEnabled() &&
+       IsContextProviderValid()) ||
+      (!SharedGpuContext::IsGpuCompositingEnabled() &&
+       SharedGpuContext::SharedImageInterfaceProvider())) {
+    RestoreGuard context_is_being_restored(*this);
+    if (GetOrCreateCanvas2DResourceProvider()) {
+      try_restore_context_event_timer_.Stop();
+      DispatchContextRestoredEvent(nullptr);
+      return;
+    }
+  }
+
+  // Retry up to `kMaxTryRestoreContextAttempts` times before giving up.
+  if (++try_restore_context_attempt_count_ > kMaxTryRestoreContextAttempts) {
+    try_restore_context_event_timer_.Stop();
+    if (on_restore_failed_callback_for_testing_) {
+      on_restore_failed_callback_for_testing_.Run();
+    }
+  }
+}
+
+void BaseRenderingContext2D::RestoreFromInvalidSizeIfNeeded() {
+  CanvasRenderingContextHost* host = GetCanvasRenderingContextHost();
+  if (!context_restorable_ || context_lost_mode_ != kInvalidCanvasSize ||
+      !host) {
+    return;
+  }
+  DCHECK(!host->ResourceProvider());
+
+  if (IsValidImageSize(host->Size())) {
+    if (dispatch_context_lost_event_timer_.IsActive()) {
+      // An oncontextlost event is still pending. We can't send the
+      // oncontextrestored right away because the oncontextlost callback could
+      // choose to prevent restoration. Thus, we need to delay queuing the
+      // restored event to after the lost event completed.
+      need_dispatch_context_restored_ = true;
+    } else {
+      dispatch_context_restored_event_timer_.StartOneShot(base::TimeDelta(),
+                                                          FROM_HERE);
+    }
+  }
 }
 
 ImageData* BaseRenderingContext2D::createImageData(
@@ -383,7 +471,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
   validate_and_create_params.default_color_space =
       GetDefaultImageDataColorSpace();
 
-  if (isContextLost() || !CanCreateCanvas2dResourceProvider()) [[unlikely]] {
+  if (isContextLost()) {
     return ImageData::ValidateAndCreate(
         sw, sh, std::nullopt, image_data_settings, validate_and_create_params,
         exception_state);
@@ -442,8 +530,7 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
   if (auto* host = GetCanvasRenderingContextHost()) {
     if (snapshot) {
       noised = CanvasInterventionsHelper::MaybeNoiseSnapshot(
-          host->RenderingContext(), GetTopExecutionContext(), snapshot,
-          host->GetRasterMode());
+          host->RenderingContext(), GetTopExecutionContext(), snapshot);
     }
   }
 
@@ -477,6 +564,10 @@ ImageData* BaseRenderingContext2D::getImageDataInternal(
         image_data_rect.bottom() > snapshot->Size().height()) {
       validate_and_create_params.zero_initialize = true;
     }
+  } else {
+    // If there's no snapshot, the buffer will not be overwritten and hence must
+    // be zero-initialized.
+    validate_and_create_params.zero_initialize = true;
   }
 
   ImageData* image_data =
@@ -543,9 +634,9 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
     return;
   }
 
-  bool hasResourceProvider = CanCreateCanvas2dResourceProvider();
-  if (!hasResourceProvider)
+  if (isContextLost() || !CanCreateCanvas2dResourceProvider()) [[unlikely]] {
     return;
+  }
 
   if (identifiability_study_helper_.ShouldUpdateBuilder()) [[unlikely]] {
     identifiability_study_helper_.UpdateBuilder(
@@ -590,28 +681,27 @@ void BaseRenderingContext2D::putImageData(ImageData* data,
 
   // WritePixels (called by PutByteArray) requires that the source and
   // destination pixel formats have the same bytes per pixel.
-  if (auto* host = GetCanvasRenderingContextHost()) {
-    SkColorType dest_color_type = host->GetRenderingContextSkColorType();
-    if (SkColorTypeBytesPerPixel(dest_color_type) !=
-        SkColorTypeBytesPerPixel(data_pixmap.colorType())) {
-      SkImageInfo converted_info =
-          data_pixmap.info().makeColorType(dest_color_type);
-      SkBitmap converted_bitmap;
-      if (!converted_bitmap.tryAllocPixels(converted_info)) {
-        exception_state.ThrowRangeError("Out of memory in putImageData");
-        return;
-      }
-      if (!converted_bitmap.writePixels(data_pixmap, 0, 0)) {
-        NOTREACHED() << "Failed to convert ImageData with writePixels.";
-      }
-
-      PutByteArray(converted_bitmap.pixmap(), source_rect, dest_offset);
-      if (GetPaintCanvas()) {
-        WillDraw(gfx::RectToSkIRect(dest_rect),
-                 CanvasPerformanceMonitor::DrawType::kImageData);
-      }
+  SkColorType dest_color_type =
+      viz::ToClosestSkColorType(GetSharedImageFormat());
+  if (SkColorTypeBytesPerPixel(dest_color_type) !=
+      SkColorTypeBytesPerPixel(data_pixmap.colorType())) {
+    SkImageInfo converted_info =
+        data_pixmap.info().makeColorType(dest_color_type);
+    SkBitmap converted_bitmap;
+    if (!converted_bitmap.tryAllocPixels(converted_info)) {
+      exception_state.ThrowRangeError("Out of memory in putImageData");
       return;
     }
+    if (!converted_bitmap.writePixels(data_pixmap, 0, 0)) {
+      NOTREACHED() << "Failed to convert ImageData with writePixels.";
+    }
+
+    PutByteArray(converted_bitmap.pixmap(), source_rect, dest_offset);
+    if (GetPaintCanvas()) {
+      WillDraw(gfx::RectToSkIRect(dest_rect),
+               CanvasPerformanceMonitor::DrawType::kImageData);
+    }
+    return;
   }
 
   PutByteArray(data_pixmap, source_rect, dest_offset);
@@ -734,7 +824,6 @@ void BaseRenderingContext2D::Trace(Visitor* visitor) const {
   visitor->Trace(dispatch_context_restored_event_timer_);
   visitor->Trace(try_restore_context_event_timer_);
   visitor->Trace(webgpu_access_texture_);
-  visitor->Trace(placed_elements_);
   CanvasRenderingContext::Trace(visitor);
   Canvas2DRecorderContext::Trace(visitor);
 }
@@ -1108,7 +1197,12 @@ void BaseRenderingContext2D::DrawTextInternal(
     location.set_x(location.x() / ClampTo<float>(width / font_width));
   }
 
-  SetTriggerForCanvasIntervention();
+  // Only fill and stroke are used for DrawTextInternal.
+  AddTriggersForCanvasIntervention(
+      paint_type == CanvasRenderingContext2DState::kFillPaintType
+          ? CanvasOperationType::kFillText
+          : CanvasOperationType::kStrokeText);
+
   Draw<OverdrawOp::kNone>(
       [font, text = std::move(text), direction, bidi_override, location,
        run_start, run_end, canvas, text_painter](
@@ -1354,15 +1448,7 @@ UniqueFontSelector* BaseRenderingContext2D::GetFontSelector() const {
 }
 
 V8GPUTextureFormat BaseRenderingContext2D::getTextureFormat() const {
-  // Query the canvas and return its actual texture format.
-  if (const CanvasRenderingContextHost* host =
-          GetCanvasRenderingContextHost()) {
-    return FromDawnEnum(AsDawnType(host->GetRenderingContextSkColorType()));
-  }
-
-  // If that did not work (e.g., the canvas host does not yet exist), we can
-  // return the preferred canvas format.
-  return FromDawnEnum(GPU::preferred_canvas_format());
+  return FromDawnEnum(AsDawnType(GetSharedImageFormat()));
 }
 
 GPUTexture* BaseRenderingContext2D::transferToGPUTexture(
@@ -1474,8 +1560,7 @@ GPUTexture* BaseRenderingContext2D::transferToGPUTexture(
     return nullptr;
   }
 
-  wgpu::TextureFormat dawn_format =
-      AsDawnType(viz::ToClosestSkColorType(client_si->format()));
+  wgpu::TextureFormat dawn_format = AsDawnType(client_si->format());
   wgpu::TextureDescriptor desc = {
       .usage = tex_usage,
       .size = {base::checked_cast<uint32_t>(client_si->size().width()),
@@ -1548,7 +1633,7 @@ void BaseRenderingContext2D::transferBackFromGPUTexture(
 
   // If the caller explicitly destroyed the WebGPU access texture, there is
   // nothing to transfer.
-  if (webgpu_access_texture_->Destroyed()) {
+  if (webgpu_access_texture_->IsDestroyed()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       "The texture has been destroyed.");
     webgpu_access_texture_ = nullptr;

@@ -5,6 +5,7 @@
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import 'chrome://resources/cr_elements/cr_shared_style.css.js';
 import '/shared/settings/prefs/prefs.js';
+import '../icons.html.js';
 
 import {PrefsMixin} from '/shared/settings/prefs/prefs_mixin.js';
 import type {CrLinkRowElement} from 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
@@ -62,9 +63,9 @@ export class SettingsPrivacySandboxPageElement extends
     };
   }
 
-  focusConfig: FocusConfig;
-  private isPrivacySandboxRestricted_: boolean;
-  private measurementLinkRowClass_: string;
+  declare focusConfig: FocusConfig;
+  declare private isPrivacySandboxRestricted_: boolean;
+  declare private measurementLinkRowClass_: string;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
 

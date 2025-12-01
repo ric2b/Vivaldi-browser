@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_list.h"
 #include "base/files/file_path.h"
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
@@ -19,10 +20,12 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/sequence_checker.h"
+#include "base/thread_annotations.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/webauthn/enclave_manager_interface.h"
 #include "chrome/browser/webauthn/local_authentication_token.h"
+#include "components/os_crypt/async/common/encryptor.h"
 #include "components/trusted_vault/trusted_vault_connection.h"
 #include "content/public/browser/global_routing_id.h"
 #include "crypto/user_verifying_key.h"
@@ -50,12 +53,6 @@ class ActiveSessionAuthController;
 }  // namespace ash
 #endif
 
-#if BUILDFLAG(IS_MAC)
-namespace device::enclave {
-class ICloudRecoveryKey;
-}  // namespace device::enclave
-#endif  // BUILDFLAG(IS_MAC)
-
 namespace network {
 class SharedURLLoaderFactory;
 }  // namespace network
@@ -79,6 +76,10 @@ namespace trusted_vault {
 struct GpmPinMetadata;
 class RecoveryKeyStoreConnection;
 class TrustedVaultAccessTokenFetcherFrontend;
+
+#if BUILDFLAG(IS_MAC)
+class ICloudRecoveryKey;
+#endif  // BUILDFLAG(IS_MAC)
 }  // namespace trusted_vault
 
 // EnclaveManager stores and manages the passkey enclave state. One instance
@@ -224,7 +225,7 @@ class EnclaveManager : public EnclaveManagerInterface {
   // immediately after enrollment while we still have the security domain secret
   // around.
   void AddICloudRecoveryKey(
-      std::unique_ptr<device::enclave::ICloudRecoveryKey> icloud_recovery_key,
+      std::unique_ptr<trusted_vault::ICloudRecoveryKey> icloud_recovery_key,
       Callback callback);
 #endif  // BUILDFLAG(IS_MAC)
   // Send a request to the enclave to delete the registration for the current
@@ -320,7 +321,7 @@ class EnclaveManager : public EnclaveManagerInterface {
   // `on_stop` when stopped. Otherwise return false.
   bool RunWhenStoppedForTesting(base::OnceClosure on_stop);
 
-  webauthn_pb::EnclaveLocalState& local_state_for_testing() const;
+  webauthn_pb::EnclaveLocalState& local_state_for_testing();
 
   // Release the cached HW and UV key references.
   void ClearCachedKeysForTesting();
@@ -334,6 +335,9 @@ class EnclaveManager : public EnclaveManagerInterface {
 
   // Toggle invariant checks.
   static void EnableInvariantChecksForTesting(bool enable);
+
+  // Check whether the GPM PIN Vault should be renewed, and do so if needed.
+  void ConsiderPinRenewalForTesting();
 
   unsigned renewal_checks_for_testing() const;
   unsigned renewal_attempts_for_testing() const;
@@ -415,6 +419,9 @@ class EnclaveManager : public EnclaveManagerInterface {
       const trusted_vault::DownloadAuthenticationFactorsRegistrationStateResult&
           state);
 
+  // Called when the OSCrypt encryptor is available.
+  void OnOsCryptReady(os_crypt_async::Encryptor encryptor, bool result);
+
   const base::FilePath file_path_;
   const raw_ptr<signin::IdentityManager> identity_manager_;
   device::NetworkContextFactory network_context_factory_;
@@ -464,7 +471,13 @@ class EnclaveManager : public EnclaveManagerInterface {
 
   base::ObserverList<Observer> observer_list_;
 
+  std::optional<os_crypt_async::Encryptor> encryptor_;
+
   SEQUENCE_CHECKER(sequence_checker_);
+
+  base::CallbackListSubscription os_crypt_subscription_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+
   base::WeakPtrFactory<EnclaveManager> weak_ptr_factory_{this};
 };
 

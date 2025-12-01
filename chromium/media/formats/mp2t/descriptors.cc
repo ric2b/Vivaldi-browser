@@ -2,13 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40285824): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "media/formats/mp2t/descriptors.h"
 
+#include <array>
 #include <vector>
 
 #include "base/check.h"
@@ -69,11 +66,11 @@ bool Descriptors::Read(BitReader* reader, int size) {
     size_t length;
     RCHECK(reader->ReadBits(8, &tag));
     RCHECK(reader->ReadBits(8, &length));
-    char data[256];
+    std::array<char, 256> data;
     for (size_t i = 0; i < length; i++) {
       RCHECK(reader->ReadBits(8, &data[i]));
     }
-    descriptors_.insert(Descriptor(tag, std::string(data, length)));
+    descriptors_.insert(Descriptor(tag, std::string(data.data(), length)));
     bits_read = reader->bits_read() - initial_bits_read;
   } while (bits_read < bits_available);
   return bits_read == bits_available;
@@ -136,7 +133,7 @@ bool Descriptors::HasCADescriptorCenc(int* ca_pid,
   uint32_t scheme_version;
   int num_systems;
   int encryption_algorithm;
-  char pssh_system_id[16];
+  std::array<char, 16> pssh_system_id;
   // TODO(dougsteed). Currently we don't check many of the following values,
   // and we only support the 'cbcs' scheme (which involves AES-CBC encryption).
   // When we flesh out this implementation to cover all of ISO/IEC 23001-9 we

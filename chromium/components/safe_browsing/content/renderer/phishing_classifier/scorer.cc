@@ -6,6 +6,7 @@
 
 #include <math.h>
 
+#include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -15,7 +16,6 @@
 #include "base/memory/shared_memory_mapping.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/not_fatal_until.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/task_traits.h"
@@ -173,8 +173,8 @@ std::string GetModelInput(const SkBitmap& bitmap,
     return std::string();
   }
 
-  CHECK_EQ(downsampled.width(), width, base::NotFatalUntil::M125);
-  CHECK_EQ(downsampled.height(), height, base::NotFatalUntil::M125);
+  CHECK_EQ(downsampled.width(), width);
+  CHECK_EQ(downsampled.height(), height);
 
   // Format as an RGB buffer for input into the model
   std::string data;
@@ -194,7 +194,7 @@ auto CreateFrameBuffer(const std::string& model_input,
                        int input_width,
                        int input_height) {
   tflite::task::vision::FrameBuffer::Plane plane{
-      reinterpret_cast<const tflite::uint8*>(model_input.data()),
+      reinterpret_cast<const uint8_t*>(model_input.data()),
       {3 * input_width, 3}};
   return tflite::task::vision::FrameBuffer::Create(
       {plane}, {input_width, input_height},

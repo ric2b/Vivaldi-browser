@@ -2,11 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/351564777): Remove this and convert code to safer constructs.
-#pragma allow_unsafe_buffers
-#endif
-
 #include "third_party/blink/renderer/platform/fonts/shaping/shape_result_bloberizer.h"
 
 #include <hb.h>
@@ -121,25 +116,25 @@ void ShapeResultBloberizer::CommitText() {
   unsigned size = to - from;
   Vector<uint32_t, 256> pending_utf8_character_index_from_character_index(size);
   if (current_text_.Is8Bit()) {
-    const LChar* latin1 = current_text_.Characters8();
+    const LChar* latin1 = UNSAFE_TODO(current_text_.Characters8());
     wtf_size_t utf8_size = pending_utf8_.size();
     for (unsigned i = from; i < to;) {
       pending_utf8_character_index_from_character_index[i - from] = utf8_size;
 
-      LChar cp = latin1[i++];
+      LChar cp = UNSAFE_TODO(latin1[i++]);
       pending_utf8_.Grow(utf8_size + U8_LENGTH(cp));
-      U8_APPEND_UNSAFE(pending_utf8_.begin(), utf8_size, cp);
+      UNSAFE_TODO(U8_APPEND_UNSAFE(pending_utf8_.begin(), utf8_size, cp));
     }
   } else {
-    const UChar* utf16 = current_text_.Characters16();
+    const UChar* utf16 = UNSAFE_TODO(current_text_.Characters16());
     wtf_size_t utf8_size = pending_utf8_.size();
     for (unsigned i = from; i < to;) {
       pending_utf8_character_index_from_character_index[i - from] = utf8_size;
 
       UChar32 cp;
-      U16_NEXT_OR_FFFD(utf16, i, current_text_length, cp);
+      UNSAFE_TODO(U16_NEXT_OR_FFFD(utf16, i, current_text_length, cp));
       pending_utf8_.Grow(utf8_size + U8_LENGTH(cp));
-      U8_APPEND_UNSAFE(pending_utf8_.begin(), utf8_size, cp);
+      UNSAFE_TODO(U8_APPEND_UNSAFE(pending_utf8_.begin(), utf8_size, cp));
     }
   }
 
@@ -152,8 +147,9 @@ void ShapeResultBloberizer::CommitText() {
   current_character_indexes_.Shrink(0);
 
   DVLOG(4) << "  CommitText appended UTF-8: \""
-           << std::string(&pending_utf8_[pending_utf8_original_size],
-                          pending_utf8_.data() + pending_utf8_.size())
+           << std::string(
+                  &pending_utf8_[pending_utf8_original_size],
+                  UNSAFE_TODO(pending_utf8_.data() + pending_utf8_.size()))
            << "\"";
   DVLOG(4) << "  CommitText UTF-8 indexes: "
            << base::span(pending_utf8_character_indexes_)
@@ -424,7 +420,7 @@ class ClusterStarts {
     if (!cluster_starts_.empty()) {
       // 'from' may point inside a cluster; the least seen index may be larger.
       DCHECK_LE(from, *cluster_starts_.begin());
-      DCHECK_LT(*(cluster_starts_.end() - 1), to);
+      DCHECK_LT(*(UNSAFE_TODO(cluster_starts_.end() - 1)), to);
     }
     cluster_starts_.push_back(to);
   }
@@ -577,46 +573,6 @@ ShapeResultBloberizer::FillGlyphsNG::FillGlyphsNG(
   if (type_ == Type::kEmitText) [[unlikely]] {
     CommitText();
   }
-}
-
-// This function is not used if TextCombineEmphasisNG flag is enabled.
-ShapeResultBloberizer::FillTextEmphasisGlyphs::FillTextEmphasisGlyphs(
-    const FontDescription& font_description,
-    const TextRunPaintInfo& run_info,
-    const ShapeResultBuffer& result_buffer,
-    const GlyphData& emphasis)
-    : ShapeResultBloberizer(font_description, Type::kNormal) {
-  gfx::PointF glyph_center =
-      emphasis.font_data->BoundsForGlyph(emphasis.glyph).CenterPoint();
-
-  float advance = 0;
-  auto results = result_buffer.results_;
-
-  if (run_info.run.Rtl()) {
-    unsigned word_offset = run_info.run.length();
-    for (unsigned j = 0; j < results.size(); j++) {
-      unsigned resolved_index = results.size() - 1 - j;
-      const Member<const ShapeResult>& word_result = results[resolved_index];
-      word_offset -= word_result->NumCharacters();
-      StringView text = run_info.run.ToStringView();
-      ClusterCallbackContext context = {this, text, emphasis, glyph_center};
-      advance = word_result->ForEachGraphemeClusters(
-          text, advance, run_info.from, run_info.to, word_offset,
-          AddEmphasisMarkToBloberizer, static_cast<void*>(&context));
-    }
-  } else {  // Left-to-right.
-    unsigned word_offset = 0;
-    for (const auto& word_result : results) {
-      StringView text = run_info.run.ToStringView();
-      ClusterCallbackContext context = {this, text, emphasis, glyph_center};
-      advance = word_result->ForEachGraphemeClusters(
-          text, advance, run_info.from, run_info.to, word_offset,
-          AddEmphasisMarkToBloberizer, static_cast<void*>(&context));
-      word_offset += word_result->NumCharacters();
-    }
-  }
-
-  advance_ = advance;
 }
 
 ShapeResultBloberizer::FillTextEmphasisGlyphsNG::FillTextEmphasisGlyphsNG(

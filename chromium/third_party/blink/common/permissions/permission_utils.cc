@@ -158,6 +158,8 @@ PermissionTypeToPermissionsPolicyFeature(PermissionType permission) {
       return network::mojom::PermissionsPolicyFeature::kFullscreen;
     case PermissionType::WEB_APP_INSTALLATION:
       return network::mojom::PermissionsPolicyFeature::kWebAppInstallation;
+    case PermissionType::LOCAL_NETWORK_ACCESS:
+      return network::mojom::PermissionsPolicyFeature::kLocalNetworkAccess;
 
     case PermissionType::PERIODIC_BACKGROUND_SYNC:
     case PermissionType::DURABLE_STORAGE:
@@ -173,8 +175,6 @@ PermissionTypeToPermissionsPolicyFeature(PermissionType permission) {
     case PermissionType::NOTIFICATIONS:
     case PermissionType::KEYBOARD_LOCK:
     case PermissionType::POINTER_LOCK:
-    // TODO(crbug.com/394009026): Add permission policy for LNA.
-    case PermissionType::LOCAL_NETWORK_ACCESS:
       return std::nullopt;
 
     case PermissionType::NUM:
@@ -204,7 +204,7 @@ const std::vector<PermissionType>& GetAllPermissionTypes() {
   return *kAllPermissionTypes;
 }
 
-std::optional<PermissionType> PermissionDescriptorToPermissionType(
+std::optional<PermissionType> MaybePermissionDescriptorToPermissionType(
     const PermissionDescriptorPtr& descriptor) {
   return PermissionDescriptorInfoToPermissionType(
       descriptor->name,
@@ -218,6 +218,27 @@ std::optional<PermissionType> PermissionDescriptorToPermissionType(
           descriptor->extension->get_clipboard()->has_user_gesture,
       descriptor->extension && descriptor->extension->is_fullscreen() &&
           descriptor->extension->get_fullscreen()->allow_without_user_gesture);
+}
+
+PermissionType PermissionDescriptorToPermissionType(
+    const PermissionDescriptorPtr& descriptor) {
+  auto permission_type_optional =
+      MaybePermissionDescriptorToPermissionType(descriptor);
+  CHECK(permission_type_optional.has_value());
+  return permission_type_optional.value();
+}
+
+std::vector<PermissionType> PermissionDescriptorToPermissionTypes(
+    const std::vector<PermissionDescriptorPtr>& descriptors) {
+  std::vector<PermissionType> permission_types;
+  permission_types.reserve(descriptors.size());
+
+  for (const auto& descriptor : descriptors) {
+    permission_types.emplace_back(
+        PermissionDescriptorToPermissionType(descriptor));
+  }
+
+  return permission_types;
 }
 
 std::optional<PermissionType> PermissionDescriptorInfoToPermissionType(
@@ -313,8 +334,16 @@ std::optional<PermissionType> PermissionDescriptorInfoToPermissionType(
       return PermissionType::WEB_APP_INSTALLATION;
     case PermissionName::LOCAL_NETWORK_ACCESS:
       return PermissionType::LOCAL_NETWORK_ACCESS;
-    default:
-      NOTREACHED();
+    case PermissionName::VR:
+      return PermissionType::VR;
+    case PermissionName::AR:
+      return PermissionType::AR;
+    case PermissionName::HAND_TRACKING:
+      return PermissionType::HAND_TRACKING;
+    case PermissionName::WEB_PRINTING:
+      return PermissionType::WEB_PRINTING;
+    case PermissionName::SMART_CARD:
+      return PermissionType::SMART_CARD;
   }
 }
 

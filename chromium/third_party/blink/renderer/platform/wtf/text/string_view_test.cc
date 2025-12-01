@@ -204,15 +204,15 @@ TEST(StringViewTest, ConstructionAtomicString8) {
   // StringView(const AtomicString&);
   ASSERT_TRUE(StringView(atom8_bit).Is8Bit());
   EXPECT_FALSE(StringView(atom8_bit).IsNull());
-  EXPECT_EQ(atom8_bit.Characters8(), StringView(atom8_bit).Characters8());
+  EXPECT_EQ(atom8_bit.Span8().data(), StringView(atom8_bit).Span8().data());
   EXPECT_EQ(atom8_bit.length(), StringView(atom8_bit).length());
   EXPECT_EQ(kChars, StringView(atom8_bit));
 
   // StringView(const AtomicString&, unsigned offset);
   ASSERT_TRUE(StringView(atom8_bit, 2).Is8Bit());
   EXPECT_FALSE(StringView(atom8_bit, 2).IsNull());
-  EXPECT_EQ(atom8_bit.Characters8() + 2,
-            StringView(atom8_bit, 2).Characters8());
+  EXPECT_EQ(atom8_bit.Span8().data() + 2,
+            StringView(atom8_bit, 2).Span8().data());
   EXPECT_EQ(3u, StringView(atom8_bit, 2).length());
   EXPECT_EQ(StringView("345"), StringView(atom8_bit, 2));
   EXPECT_EQ("345", StringView(atom8_bit, 2));
@@ -220,8 +220,8 @@ TEST(StringViewTest, ConstructionAtomicString8) {
   // StringView(const AtomicString&, unsigned offset, unsigned length);
   ASSERT_TRUE(StringView(atom8_bit, 2, 1).Is8Bit());
   EXPECT_FALSE(StringView(atom8_bit, 2, 1).IsNull());
-  EXPECT_EQ(atom8_bit.Characters8() + 2,
-            StringView(atom8_bit, 2, 1).Characters8());
+  EXPECT_EQ(atom8_bit.Span8().data() + 2,
+            StringView(atom8_bit, 2, 1).Span8().data());
   EXPECT_EQ(1u, StringView(atom8_bit, 2, 1).length());
   EXPECT_EQ(StringView("3"), StringView(atom8_bit, 2, 1));
   EXPECT_EQ("3", StringView(atom8_bit, 2, 1));
@@ -332,13 +332,6 @@ TEST(StringViewTest, SubstringContainsOnlyWhitespaceOrEmpty) {
 }
 
 TEST(StringViewTest, ConstructionLiteral8) {
-  // StringView(const LChar* chars);
-  ASSERT_TRUE(StringView(kChars8).Is8Bit());
-  EXPECT_FALSE(StringView(kChars8).IsNull());
-  EXPECT_EQ(kChars8, StringView(kChars8).Characters8());
-  EXPECT_EQ(5u, StringView(kChars8).length());
-  EXPECT_EQ(kChars, StringView(kChars8));
-
   // StringView(const char* chars);
   ASSERT_TRUE(StringView(kChars).Is8Bit());
   EXPECT_FALSE(StringView(kChars).IsNull());
@@ -463,7 +456,7 @@ TEST(StringViewTest, NullString) {
 }
 
 TEST(StringViewTest, IndexAccess) {
-  StringView view8(kChars8);
+  StringView view8(kChars);
   EXPECT_EQ('1', view8[0]);
   EXPECT_EQ('3', view8[2]);
   StringView view16(kChars16);
@@ -539,7 +532,7 @@ TEST(StringViewTest, DeprecatedEqualIgnoringCase) {
 }
 
 TEST(StringViewTest, NextCodePointOffset) {
-  StringView view8(kChars8);
+  StringView view8(kChars);
   EXPECT_EQ(1u, view8.NextCodePointOffset(0));
   EXPECT_EQ(2u, view8.NextCodePointOffset(1));
   EXPECT_EQ(5u, view8.NextCodePointOffset(4));

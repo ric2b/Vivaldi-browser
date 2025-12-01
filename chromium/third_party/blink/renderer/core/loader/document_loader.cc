@@ -60,7 +60,6 @@
 #include "third_party/blink/public/common/loader/javascript_framework_detection.h"
 #include "third_party/blink/public/common/loader/loading_behavior_flag.h"
 #include "third_party/blink/public/common/metrics/accept_language_and_content_language_usage.h"
-#include "third_party/blink/public/common/page/browsing_context_group_info.h"
 #include "third_party/blink/public/common/scheme_registry.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
@@ -374,7 +373,6 @@ struct SameSizeAsDocumentLoader
   HeapMojoRemote<mojom::blink::ContentSecurityNotifier>
       content_security_notifier_;
   scoped_refptr<SecurityOrigin> origin_to_commit;
-  AtomicString origin_calculation_debug_info;
   BlinkStorageKey storage_key;
   WebNavigationType navigation_type;
   DocumentLoadTiming document_load_timing;
@@ -443,7 +441,7 @@ struct SameSizeAsDocumentLoader
       fenced_frame_properties;
   net::StorageAccessApiStatus storage_access_api_status;
   mojom::blink::ParentResourceTimingAccess parent_resource_timing_access;
-  const std::optional<BrowsingContextGroupInfo> browsing_context_group_info;
+  const std::optional<base::UnguessableToken> browsing_context_group_token;
   const base::flat_map<mojom::blink::RuntimeFeature, bool>
       modified_runtime_features;
   AtomicString cookie_deprecation_label;
@@ -611,7 +609,7 @@ DocumentLoader::DocumentLoader(
       navigation_delivery_type_(params_->navigation_delivery_type),
       view_transition_state_(std::move(params_->view_transition_state)),
       storage_access_api_status_(params_->load_with_storage_access),
-      browsing_context_group_info_(params_->browsing_context_group_info),
+      browsing_context_group_token_(params_->browsing_context_group_token),
       modified_runtime_features_(std::move(params_->modified_runtime_features)),
       cookie_deprecation_label_(params_->cookie_deprecation_label),
       content_settings_(std::move(params_->content_settings)),
@@ -1130,7 +1128,7 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
   std::optional<SoftNavigationHeuristics::EventScope>
       soft_navigation_event_scope;
   SoftNavigationHeuristics* heuristics =
-      SoftNavigationHeuristics::From(*frame_->DomWindow());
+      frame_->DomWindow()->GetSoftNavigationHeuristics();
   if (heuristics && is_browser_initiated && !is_prerendering_) {
     if (auto* script_state = ToScriptStateForMainWorld(frame_->DomWindow())) {
       // For browser-initiated navigations, we never started the soft
@@ -2334,19 +2332,16 @@ Frame* DocumentLoader::CalculateOwnerFrame() {
 scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     Document* owner_document) {
   scoped_refptr<SecurityOrigin> origin;
-  StringBuilder debug_info_builder;
   // Whether the origin is newly created within this call, instead of copied
   // from an existing document's origin or from `origin_to_commit_`. If this is
   // true, we won't try to compare the nonce of this origin (if it's opaque) to
   // the browser-calculated origin later on.
-  bool origin_is_newly_created = false;
   if (IsPagePopupRunningInWebTest(frame_)) {
     // If we are a page popup in LayoutTests ensure we use the popup
     // owner's security origin so the tests can possibly access the
     // document via internals API.
     auto* owner_context = frame_->PagePopupOwner()->GetExecutionContext();
     origin = owner_context->GetSecurityOrigin()->IsolatedCopy();
-    debug_info_builder.Append("use_popup_owner_origin");
   } else if (owner_document && owner_document->domWindow()) {
     // Prefer taking `origin` from `owner_document` if one is available - this
     // will correctly inherit/alias `SecurityOrigin::domain_` from the
@@ -2365,19 +2360,6 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     // But origin_to_commit_ is currently cloned with IsolatedCopy() which
     // breaks aliasing...
     origin = owner_document->domWindow()->GetMutableSecurityOrigin();
-    debug_info_builder.Append("use_owner_document_origin(");
-    // Add debug information about the owner document too.
-    if (owner_document->GetFrame() == frame_->Tree().Parent()) {
-      debug_info_builder.Append("parent");
-    } else {
-      debug_info_builder.Append("opener");
-    }
-    debug_info_builder.Append(":");
-    debug_info_builder.Append(
-        owner_document->Loader()->origin_calculation_debug_info_);
-    debug_info_builder.Append(", url=");
-    debug_info_builder.Append(owner_document->Url().BaseAsString());
-    debug_info_builder.Append(")");
   } else if (origin_to_commit_) {
     // Origin to commit is specified by the browser process, it must be taken
     // and used directly. An exception is when the owner origin should be
@@ -2386,30 +2368,23 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     // non-renderer only origin bits will be the same, which will be asserted at
     // the end of this function.
     origin = origin_to_commit_;
-    debug_info_builder.Append("use_origin_to_commit");
   } else {
-    debug_info_builder.Append("use_url_with_precursor");
     // Otherwise, create an origin that propagates precursor information
     // as needed. For non-opaque origins, this creates a standard tuple
     // origin, but for opaque origins, it creates an origin with the
     // initiator origin as the precursor.
     origin = SecurityOrigin::CreateWithReferenceOrigin(url_,
                                                        requestor_origin_.get());
-    origin_is_newly_created = true;
   }
 
   if ((policy_container_->GetPolicies().sandbox_flags &
        network::mojom::blink::WebSandboxFlags::kOrigin) !=
       network::mojom::blink::WebSandboxFlags::kNone) {
-    debug_info_builder.Append(", add_sandbox[new_origin_precursor=");
     // If `origin_to_commit_` is set, don't create a new opaque origin, but just
     // use `origin_to_commit_`, which is already opaque.
     auto sandbox_origin =
         origin_to_commit_ ? origin_to_commit_ : origin->DeriveNewOpaqueOrigin();
     CHECK(sandbox_origin->IsOpaque());
-    debug_info_builder.Append(
-        sandbox_origin->GetOriginOrPrecursorOriginIfOpaque()->ToString());
-    debug_info_builder.Append("]");
 
     // If we're supposed to inherit our security origin from our
     // owner, but we're also sandboxed, the only things we inherit are
@@ -2434,20 +2409,16 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
               ->IsPotentiallyTrustworthy();
       if (is_potentially_trustworthy) {
         sandbox_origin->SetOpaqueOriginIsPotentiallyTrustworthy(true);
-        debug_info_builder.Append(", _potentially_trustworthy");
       }
     } else if (owner_document) {
       if (origin->IsPotentiallyTrustworthy()) {
         sandbox_origin->SetOpaqueOriginIsPotentiallyTrustworthy(true);
-        debug_info_builder.Append(", _potentially_trustworthy");
       }
       if (origin->CanLoadLocalResources()) {
         sandbox_origin->GrantLoadLocalResources();
-        debug_info_builder.Append(", _load_local");
       }
     }
     origin = sandbox_origin;
-    origin_is_newly_created = !origin_to_commit_;
   }
 
   if (commit_reason_ == CommitReason::kInitialization &&
@@ -2459,19 +2430,16 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
     // navigated.
     CHECK(origin->IsOpaque());
     origin->GrantUniversalAccess();
-    debug_info_builder.Append(", universal_access_webview");
   } else if (!frame_->GetSettings()->GetWebSecurityEnabled()) {
     // Web security is turned off. We should let this document access
     // every other document. This is used primary by testing harnesses for
     // web sites.
     origin->GrantUniversalAccess();
-    debug_info_builder.Append(", universal_access_no_web_security");
   } else if (origin->IsLocal()) {
     if (frame_->GetSettings()->GetAllowUniversalAccessFromFileURLs()) {
       // Some clients want local URLs to have universal access, but that
       // setting is dangerous for other clients.
       origin->GrantUniversalAccess();
-      debug_info_builder.Append(", universal_access_allow_file");
     } else if (!frame_->GetSettings()->GetAllowFileAccessFromFileURLs()) {
       // Some clients do not want local URLs to have access to other local
       // URLs.
@@ -2483,34 +2451,20 @@ scoped_refptr<SecurityOrigin> DocumentLoader::CalculateOrigin(
         // `origin_to_commit_`.
         origin_to_commit_->BlockLocalAccessFromLocalOrigin();
       }
-      debug_info_builder.Append(", universal_access_block_file");
     }
   }
 
   if (grant_load_local_resources_) {
     origin->GrantLoadLocalResources();
-    debug_info_builder.Append(", grant_load_local_resources");
   }
 
   if (origin->IsOpaque()) {
     KURL url = url_.IsEmpty() ? BlankURL() : url_;
     if (SecurityOrigin::Create(url)->IsPotentiallyTrustworthy()) {
       origin->SetOpaqueOriginIsPotentiallyTrustworthy(true);
-      debug_info_builder.Append(", is_potentially_trustworthy");
     }
   }
-  if (origin_is_newly_created) {
-    // This information will be used by the browser side to figure out if it can
-    // do browser vs renderer calculated origin equality check. Note that this
-    // information must be the last part of the debug info string.
-    // TODO(https://crbug.com/888079): Consider adding a separate boolean that
-    // tracks this instead of piggybacking `origin_calculation_debug_info_`.
-    debug_info_builder.Append(", is_newly_created");
-  }
-  origin_calculation_debug_info_ = debug_info_builder.ToAtomicString();
   if (origin_to_commit_) {
-    SCOPED_CRASH_KEY_STRING256("OriginCalc", "debug_info",
-                               origin_calculation_debug_info_.Ascii());
     SCOPED_CRASH_KEY_STRING256("OriginCalc", "url_stripped",
                                url_.StrippedForUseAsReferrer().Ascii());
     SCOPED_CRASH_KEY_BOOL("OriginCalc", "same_ptr",
@@ -2734,7 +2688,11 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
       agent->ForceOriginKeyedBecauseOfInheritance();
     }
 
-    frame_->DomWindow()->SetStorageAccessApiStatus(storage_access_api_status_);
+    // No need to sync this back to the browser, since it just came from the
+    // browser.
+    frame_->DomWindow()->SetStorageAccessApiStatus(
+        storage_access_api_status_,
+        LocalDOMWindow::StorageAccessApiNotifyEmbedder::kNone);
     inherited_has_storage_access = [this]() -> bool {
       switch (storage_access_api_status_) {
         case net::StorageAccessApiStatus::kNone:
@@ -3086,10 +3044,10 @@ void DocumentLoader::CommitNavigation() {
   // browsing context group. This can only ever happen for a top-level frame,
   // because subframes can never change browsing context group, and the
   // value is omitted by the browser process at commit time.
-  if (browsing_context_group_info_.has_value()) {
+  if (browsing_context_group_token_.has_value()) {
     CHECK(frame_->IsMainFrame());
     frame_->GetPage()->UpdateBrowsingContextGroup(
-        browsing_context_group_info_.value());
+        browsing_context_group_token_.value());
   }
 
   DidInstallNewDocument(document);
@@ -3162,6 +3120,10 @@ void DocumentLoader::CommitNavigation() {
       document_load_timing_.RedirectEnd();
 
   DCHECK(frame_->DomWindow());
+
+  if (navigation_timing_info->alpn_negotiated_protocol == "h3") {
+    CountUse(WebFeature::kHttp3);
+  }
 
   // TODO(crbug.com/1476866): We should check for protocols and not emit
   // performance timeline entries for file protocol navigations.
@@ -3273,16 +3235,6 @@ void DocumentLoader::CreateParserPostCommit() {
       window->GetOriginTrialContext()->AddFeature(
           mojom::blink::OriginTrialFeature::kTouchEventFeatureDetection);
     }
-
-#if BUILDFLAG(IS_CHROMEOS)
-    // TODO(crbug.com/371971653): Remove the force enabling of
-    // getAllScreensMedia once the feature is moved to stable in runtime enabled
-    // features.
-    if (window->GetExecutionContext()->IsIsolatedContext()) {
-      window->GetOriginTrialContext()->AddFeature(
-          mojom::blink::OriginTrialFeature::kGetAllScreensMedia);
-    }
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
     // Enable any origin trials that have been force enabled for this commit.
     window->GetOriginTrialContext()->AddForceEnabledTrials(
@@ -3557,6 +3509,18 @@ void DocumentLoader::RecordUseCountersForCommit() {
   if (response_.HttpHeaderField(http_names::kSecSessionRegistration)) {
     CountUse(WebFeature::kDeviceBoundSessionRegistered);
   }
+
+  switch (response_.DeviceBoundSessionUsage()) {
+    case network::mojom::DeviceBoundSessionUsage::kDeferred:
+      CountUse(WebFeature::kDeviceBoundSessionRequestDeferral);
+      [[fallthrough]];
+    case network::mojom::DeviceBoundSessionUsage::kInScopeNotDeferred:
+      CountUse(WebFeature::kDeviceBoundSessionRequestInScope);
+      break;
+    case network::mojom::DeviceBoundSessionUsage::kNoUsage:
+    case network::mojom::DeviceBoundSessionUsage::kUnknown:
+      break;
+  }
 }
 
 void DocumentLoader::RecordConsoleMessagesForCommit() {
@@ -3802,14 +3766,17 @@ CodeCacheHost* DocumentLoader::GetCodeCacheHost() {
 scoped_refptr<BackgroundCodeCacheHost>
 DocumentLoader::CreateBackgroundCodeCacheHost() {
   if (!pending_code_cache_host_for_background_) {
-    return nullptr;
+    // If the Document was loaded without a navigation,
+    // `pending_code_cache_host_for_background_` is not set. In that case, get
+    // the CodeCacheHost mojo handle from the frame's BrowserInterfaceBroker
+    return base::MakeRefCounted<BackgroundCodeCacheHost>(CreateCodeCacheHost());
   }
   return base::MakeRefCounted<BackgroundCodeCacheHost>(
       std::move(pending_code_cache_host_for_background_));
 }
 
 mojo::PendingRemote<mojom::blink::CodeCacheHost>
-DocumentLoader::CreateWorkerCodeCacheHost() {
+DocumentLoader::CreateCodeCacheHost() {
   if (GetDisableCodeCacheForTesting())
     return mojo::NullRemote();
   mojo::PendingRemote<mojom::blink::CodeCacheHost> pending_code_cache_host;

@@ -4,6 +4,7 @@
 
 #include "content/browser/preloading/prerenderer_impl.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/test_future.h"
 #include "content/browser/preloading/prefetch/prefetch_features.h"
@@ -131,7 +132,7 @@ class PrerendererImplBrowserTestBase : public ContentBrowserTest {
         /*eagerness=*/blink::mojom::SpeculationEagerness::kEager,
         /*no_vary_search_hint=*/nullptr,
         /*injection_type=*/blink::mojom::SpeculationInjectionType::kNone,
-        /*tags=*/std::vector<std::optional<std::string>>());
+        /*tags=*/std::vector<std::optional<std::string>>{std::nullopt});
   }
 
   std::vector<RequestPathAndSecPurposeHeader> GetObservedRequests() {

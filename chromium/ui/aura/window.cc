@@ -24,11 +24,11 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/not_fatal_until.h"
 #include "base/observer_list.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "cc/mojo_embedder/async_layer_tree_frame_sink.h"
 #include "cc/trees/layer_tree_frame_sink.h"
 #include "components/viz/common/features.h"
@@ -1149,7 +1149,7 @@ void Window::RemoveChildImpl(Window* child, Window* new_parent) {
     layer()->Remove(child->layer());
   child->parent_ = nullptr;
   auto i = std::ranges::find(children_, child);
-  CHECK(i != children_.end(), base::NotFatalUntil::M130);
+  CHECK(i != children_.end());
   children_.erase(i);
   child->OnParentChanged();
   if (layout_manager_)
@@ -1529,6 +1529,14 @@ void Window::NotifyResizeLoopStarted() {
 void Window::NotifyResizeLoopEnded() {
   for (auto& observer : observers_)
     observer.OnResizeLoopEnded(this);
+}
+
+void Window::NotifyMoveLoopStarted() {
+  observers_.Notify(&WindowObserver::OnMoveLoopStarted, this);
+}
+
+void Window::NotifyMoveLoopEnded() {
+  observers_.Notify(&WindowObserver::OnMoveLoopEnded, this);
 }
 
 void Window::OnPaintLayer(const ui::PaintContext& context) {

@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.omnibox.suggestions;
 
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.content.Context;
 import android.os.Handler;
 import android.view.KeyEvent;
@@ -35,7 +37,7 @@ import org.chromium.chrome.browser.omnibox.voice.VoiceRecognitionHandler;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tabmodel.TabWindowManager;
+import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 import org.chromium.chrome.browser.util.KeyNavigationUtil;
 import org.chromium.components.omnibox.AutocompleteMatch;
@@ -76,7 +78,7 @@ public class AutocompleteCoordinator
     private final OmniboxSuggestionsDropdownAdapter mAdapter;
     private final Optional<PreWarmingRecycledViewPool> mRecycledViewPool;
     private @Nullable OmniboxSuggestionsDropdown mDropdown;
-    private ObserverList<OmniboxSuggestionsDropdownScrollListener> mScrollListenerList =
+    private final ObserverList<OmniboxSuggestionsDropdownScrollListener> mScrollListenerList =
             new ObserverList<>();
 
     /** An observer watching for changes to the visual state of the omnibox suggestions. */
@@ -98,8 +100,8 @@ public class AutocompleteCoordinator
             OmniboxSuggestionsDropdownEmbedder dropdownEmbedder,
             UrlBarEditingTextStateProvider urlBarEditingTextProvider,
             Supplier<ModalDialogManager> modalDialogManagerSupplier,
-            Supplier<Tab> activityTabSupplier,
-            @Nullable Supplier<ShareDelegate> shareDelegateSupplier,
+            Supplier<@Nullable Tab> activityTabSupplier,
+            Supplier<ShareDelegate> shareDelegateSupplier,
             LocationBarDataProvider locationBarDataProvider,
             ObservableSupplier<Profile> profileObservableSupplier,
             Callback<Tab> bringToForegroundCallback,
@@ -219,7 +221,7 @@ public class AutocompleteCoordinator
             boolean forcePhoneStyleOmnibox) {
         return new ViewProvider<SuggestionListViewHolder>() {
             private AsyncViewProvider<ViewGroup> mAsyncProvider;
-            private List<Callback<SuggestionListViewHolder>> mCallbacks = new ArrayList<>();
+            private final List<Callback<SuggestionListViewHolder>> mCallbacks = new ArrayList<>();
             private @Nullable SuggestionListViewHolder mHolder;
 
             @Override
@@ -381,28 +383,49 @@ public class AutocompleteCoordinator
 
         boolean isShowingList = mDropdown != null && mDropdown.getViewGroup().isShown();
 
-        // List of keys used to navigate the suggestions list.
-        boolean isSelectionKey =
-                (keyCode == KeyEvent.KEYCODE_DPAD_UP)
-                        || (keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
-                        || (keyCode == KeyEvent.KEYCODE_TAB);
+        if (event.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
+            if (isShowingList) {
+                mMediator.stopAutocomplete(true);
+            } else {
+                mMediator.finishInteraction();
+            }
+            return true;
+        }
 
-        if (isShowingList && event.getKeyCode() == KeyEvent.KEYCODE_ESCAPE) {
-            mMediator.finishInteraction();
-            return true;
+        // Always handle <ENTER> key, even if the suggestions list is not showing.
+        // This allows users to navigate to the typed url or query.
+        // Try to dispatch to suggestions list, if one is showing, otherwise invoke navigation.
+        if (KeyNavigationUtil.isEnter(event)) {
+            if (isShowingList
+                    && assumeNonNull(mDropdown).getViewGroup().onKeyDown(keyCode, event)) {
+                return true;
+            }
+
+            if (mParent.getVisibility() == View.VISIBLE) {
+                mMediator.loadTypedOmniboxText(
+                        event.getEventTime(), /* openInNewTab= */ event.isAltPressed());
+                return true;
+            }
+
+            return false;
         }
-        if (isShowingList && isSelectionKey) {
+
+        // Do not attempt to interpret any navigation keys when the suggestions list is not showing.
+        if (!isShowingList) {
+            return false;
+        }
+
+        // Do not attempt to interpret non-navigaton keys.
+        // There are cases where the SPACE key may gen inappropriately routed to the
+        // Suggestion, simulating press/long press of the UI element.
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_UP)
+                || (keyCode == KeyEvent.KEYCODE_DPAD_DOWN)
+                || (keyCode == KeyEvent.KEYCODE_TAB)) {
             mMediator.allowPendingItemSelection();
-        }
-        if (isShowingList
-                && mDropdown != null
-                && mDropdown.getViewGroup().onKeyDown(keyCode, event)) {
+            assumeNonNull(mDropdown).getViewGroup().onKeyDown(keyCode, event);
             return true;
         }
-        if (KeyNavigationUtil.isEnter(event) && mParent.getVisibility() == View.VISIBLE) {
-            mMediator.loadTypedOmniboxText(event.getEventTime(), event.isAltPressed());
-            return true;
-        }
+
         return false;
     }
 

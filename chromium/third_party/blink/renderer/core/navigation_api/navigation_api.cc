@@ -272,6 +272,9 @@ void NavigationApi::UpdateForNavigation(HistoryItem& item,
     ongoing_api_method_tracker_->NotifyAboutTheCommittedToEntry(
         entries_[current_entry_index_], type);
   }
+  if (transition_) {
+    transition_->ResolveCommittedPromise();
+  }
 
   NavigateEvent* ongoing_navigate_event = ongoing_navigate_event_;
 
@@ -318,7 +321,7 @@ NavigationHistoryEntry* NavigationApi::GetEntryForRestore(
 
 // static
 void FireDisposeEventsAsync(
-    HeapVector<Member<NavigationHistoryEntry>>* disposed_entries) {
+    GCedHeapVector<Member<NavigationHistoryEntry>>* disposed_entries) {
   for (const auto& entry : *disposed_entries) {
     entry->DispatchEvent(*Event::Create(event_type_names::kDispose));
   }
@@ -370,8 +373,8 @@ void NavigationApi::SetEntriesForRestore(
 
   // |new_entries| now contains the previous entries_. Find the ones that are no
   // longer in entries_ so they can be disposed.
-  HeapVector<Member<NavigationHistoryEntry>>* disposed_entries =
-      MakeGarbageCollected<HeapVector<Member<NavigationHistoryEntry>>>();
+  GCedHeapVector<Member<NavigationHistoryEntry>>* disposed_entries =
+      MakeGarbageCollected<GCedHeapVector<Member<NavigationHistoryEntry>>>();
   for (const auto& entry : new_entries) {
     const auto& it = keys_to_indices_.find(entry->key());
     if (it == keys_to_indices_.end() || entries_[it->value] != entry)
@@ -621,7 +624,7 @@ NavigationResult* NavigationApi::traverseTo(ScriptState* script_state,
   std::optional<scheduler::TaskAttributionId> soft_navigation_task_id;
   if (script_state->World().IsMainWorld() && frame->IsOutermostMainFrame()) {
     if (SoftNavigationHeuristics* heuristics =
-            SoftNavigationHeuristics::From(*window_)) {
+            window_->GetSoftNavigationHeuristics()) {
       soft_navigation_task_id =
           heuristics->AsyncSameDocumentNavigationStarted();
     }
@@ -840,7 +843,7 @@ NavigationApi::DispatchResult NavigationApi::DispatchNavigateEvent(
   if (params->frame_load_type != WebFrameLoadType::kReplaceCurrentItem &&
       init->userInitiated() && !init->downloadRequest() &&
       init->canIntercept()) {
-    if (auto* heuristics = SoftNavigationHeuristics::From(*window_)) {
+    if (auto* heuristics = window_->GetSoftNavigationHeuristics()) {
       // If these conditions are met, create a SoftNavigationEventScope to
       // consider this a "user initiated click", and the dispatched event
       // handlers as potential soft navigation tasks.

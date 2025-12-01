@@ -46,21 +46,24 @@ void V8FunctionCallback_Wrapper(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   const FXJSE_FUNCTION_DESCRIPTOR* pFunctionInfo =
       AsFunctionDescriptor(info.Data().As<v8::External>()->Value());
-  if (!pFunctionInfo)
+  if (!pFunctionInfo) {
     return;
+  }
 
   pFunctionInfo->callbackProc(CFXJSE_HostObject::FromV8(info.This()), info);
 }
 
 void V8ConstructorCallback_Wrapper(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-  if (!info.IsConstructCall())
+  if (!info.IsConstructCall()) {
     return;
+  }
 
   const FXJSE_CLASS_DESCRIPTOR* pClassDescriptor =
       AsClassDescriptor(info.Data().As<v8::External>()->Value());
-  if (!pClassDescriptor)
+  if (!pClassDescriptor) {
     return;
+  }
 
   DCHECK_EQ(info.This()->InternalFieldCount(), 2);
   info.This()->SetAlignedPointerInInternalField(0, nullptr);
@@ -71,8 +74,9 @@ void Context_GlobalObjToString(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   const FXJSE_CLASS_DESCRIPTOR* pClassDescriptor =
       AsClassDescriptor(info.Data().As<v8::External>()->Value());
-  if (!pClassDescriptor)
+  if (!pClassDescriptor) {
     return;
+  }
 
   if (pClassDescriptor->name) {
     ByteString szStringVal =
@@ -91,8 +95,9 @@ void Context_GlobalObjToString(
 void DynPropGetterAdapter_MethodCallback(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
   v8::Local<v8::Object> hCallBackInfo = info.Data().As<v8::Object>();
-  if (hCallBackInfo->InternalFieldCount() != 2)
+  if (hCallBackInfo->InternalFieldCount() != 2) {
     return;
+  }
 
   auto* pClassDescriptor = static_cast<const FXJSE_CLASS_DESCRIPTOR*>(
       hCallBackInfo->GetAlignedPointerFromInternalField(0));
@@ -105,8 +110,9 @@ void DynPropGetterAdapter_MethodCallback(
 
   v8::Local<v8::String> hPropName =
       hCallBackInfo->GetInternalField(1).As<v8::Value>().As<v8::String>();
-  if (hPropName.IsEmpty())
+  if (hPropName.IsEmpty()) {
     return;
+  }
 
   v8::String::Utf8Value szPropName(info.GetIsolate(), hPropName);
   CJS_Result result =
@@ -119,8 +125,9 @@ void DynPropGetterAdapter_MethodCallback(
     return;
   }
 
-  if (result.HasReturn())
+  if (result.HasReturn()) {
     info.GetReturnValue().Set(result.Return());
+  }
 }
 
 std::unique_ptr<CFXJSE_Value> DynPropGetterAdapter(
@@ -282,18 +289,20 @@ CFXJSE_Class* CFXJSE_Class::Create(
     CFXJSE_Context* pContext,
     const FXJSE_CLASS_DESCRIPTOR* pClassDescriptor,
     bool bIsJSGlobal) {
-  if (!pContext || !pClassDescriptor)
+  if (!pContext || !pClassDescriptor) {
     return nullptr;
+  }
 
   CFXJSE_Class* pExistingClass =
       pContext->GetClassByName(pClassDescriptor->name);
-  if (pExistingClass)
+  if (pExistingClass) {
     return pExistingClass;
+  }
 
   v8::Isolate* pIsolate = pContext->GetIsolate();
   auto pClass = std::make_unique<CFXJSE_Class>(pContext);
-  pClass->m_szClassName = pClassDescriptor->name;
-  pClass->m_pClassDescriptor = pClassDescriptor;
+  pClass->class_name_ = pClassDescriptor->name;
+  pClass->class_descriptor_ = pClassDescriptor;
   CFXJSE_ScopeUtil_IsolateHandleRootContext scope(pIsolate);
   v8::Local<v8::FunctionTemplate> hFunctionTemplate = v8::FunctionTemplate::New(
       pIsolate, bIsJSGlobal ? nullptr : V8ConstructorCallback_Wrapper,
@@ -329,18 +338,18 @@ CFXJSE_Class* CFXJSE_Class::Create(
     fn->RemovePrototype();
     hObjectTemplate->Set(fxv8::NewStringHelper(pIsolate, "toString"), fn);
   }
-  pClass->m_hTemplate.Reset(pContext->GetIsolate(), hFunctionTemplate);
+  pClass->func_template_.Reset(pContext->GetIsolate(), hFunctionTemplate);
   CFXJSE_Class* pResult = pClass.get();
   pContext->AddClass(std::move(pClass));
   return pResult;
 }
 
 CFXJSE_Class::CFXJSE_Class(const CFXJSE_Context* pContext)
-    : m_pContext(pContext) {}
+    : context_(pContext) {}
 
 CFXJSE_Class::~CFXJSE_Class() = default;
 
 v8::Local<v8::FunctionTemplate> CFXJSE_Class::GetTemplate(
     v8::Isolate* pIsolate) {
-  return v8::Local<v8::FunctionTemplate>::New(pIsolate, m_hTemplate);
+  return v8::Local<v8::FunctionTemplate>::New(pIsolate, func_template_);
 }

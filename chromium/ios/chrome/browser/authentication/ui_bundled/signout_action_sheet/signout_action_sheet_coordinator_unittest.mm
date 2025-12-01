@@ -12,7 +12,6 @@
 #import "base/test/metrics/histogram_tester.h"
 #import "base/test/mock_callback.h"
 #import "base/test/scoped_feature_list.h"
-#import "base/test/task_environment.h"
 #import "components/prefs/pref_service.h"
 #import "components/signin/public/base/signin_metrics.h"
 #import "components/signin/public/base/signin_pref_names.h"
@@ -24,6 +23,7 @@
 #import "ios/chrome/browser/shared/model/application_context/application_context.h"
 #import "ios/chrome/browser/shared/model/browser/test/test_browser.h"
 #import "ios/chrome/browser/shared/model/prefs/pref_names.h"
+#import "ios/chrome/browser/shared/model/profile/features.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_ios.h"
 #import "ios/chrome/browser/shared/model/profile/test/test_profile_manager_ios.h"
 #import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
@@ -38,6 +38,7 @@
 #import "ios/chrome/browser/sync/model/sync_service_factory.h"
 #import "ios/chrome/test/ios_chrome_scoped_testing_local_state.h"
 #import "ios/chrome/test/scoped_key_window.h"
+#import "ios/web/public/test/web_task_environment.h"
 #import "testing/platform_test.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
@@ -124,7 +125,8 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
                               view:view_controller_.view
           forceSnackbarOverToolbar:NO
                         withSource:metricSignOut
-                        completion:^(BOOL success) {
+                        completion:^(BOOL success, SceneState* scene_state) {
+                          signout_coordinator_ = nil;
                           completion_callback_.Run(success);
                         }];
     return signout_coordinator_;
@@ -167,7 +169,7 @@ class SignoutActionSheetCoordinatorTest : public PlatformTest {
 
  protected:
   // Needed for test profile created by TestProfileIOS().
-  base::test::TaskEnvironment task_environment_;
+  web::WebTaskEnvironment task_environment_;
 
   IOSChromeScopedTestingLocalState scoped_testing_local_state_;
 
@@ -201,8 +203,10 @@ TEST_F(SignoutActionSheetCoordinatorTest,
   ON_CALL(*sync_service_mock_, GetTypesWithUnsyncedData)
       .WillByDefault(
           [](syncer::DataTypeSet requested_types,
-             base::OnceCallback<void(syncer::DataTypeSet)> callback) {
-            std::move(callback).Run(syncer::DataTypeSet());
+             base::OnceCallback<void(
+                 absl::flat_hash_map<syncer::DataType, size_t>)> callback) {
+            std::move(callback).Run(
+                absl::flat_hash_map<syncer::DataType, size_t>());
           });
   EXPECT_CALL(completion_callback_, Run);
 
@@ -223,11 +227,17 @@ TEST_F(SignoutActionSheetCoordinatorTest, ShouldShowActionSheetIfUnsyncedData) {
   ON_CALL(*sync_service_mock_, GetTypesWithUnsyncedData)
       .WillByDefault(
           [](syncer::DataTypeSet requested_types,
-             base::OnceCallback<void(syncer::DataTypeSet)> callback) {
+             base::OnceCallback<void(
+                 absl::flat_hash_map<syncer::DataType, size_t>)> callback) {
             constexpr syncer::DataTypeSet kUnsyncedTypes = {
                 syncer::BOOKMARKS, syncer::PREFERENCES};
-            std::move(callback).Run(
-                base::Intersection(kUnsyncedTypes, requested_types));
+            syncer::DataTypeSet returned_types =
+                base::Intersection(kUnsyncedTypes, requested_types);
+            absl::flat_hash_map<syncer::DataType, size_t> type_counts;
+            for (auto type : returned_types) {
+              type_counts[type] = 1u;
+            }
+            std::move(callback).Run(std::move(type_counts));
           });
   EXPECT_CALL(completion_callback_, Run);
 

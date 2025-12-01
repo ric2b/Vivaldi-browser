@@ -4,13 +4,15 @@
 
 #import "ios/chrome/browser/shared/model/browser/browser.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+#import "ios/ui/helpers/helpers_swift.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_mediator.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_prefs.h"
 #import "ios/ui/settings/appearance/vivaldi_appearance_settings_swift.h"
 #import "ui/base/l10n/l10n_util_mac.h"
 #import "vivaldi/ios/grit/vivaldi_ios_native_strings.h"
 
-@interface VivaldiAppearanceSettingsCoordinator () {
+@interface VivaldiAppearanceSettingsCoordinator ()<
+    VivaldiHostingControllerPresentationDelegate> {
   // The browser where the settings are being displayed.
   Browser* _browser;
 }
@@ -20,6 +22,8 @@
 @property (nonatomic, strong) UIViewController* presentingViewController;
 // View provider class for the appearance settings.
 @property(nonatomic, strong) VivaldiAppearanceSettingsViewProvider* viewProvider;
+// View controller for the appearance setting.
+@property(nonatomic, strong) UIViewController* viewController;
 // Mediator class for the appearance settings
 @property(nonatomic, strong) VivaldiAppearanceSettingsMediator* mediator;
 
@@ -52,13 +56,14 @@
 
 - (void)start {
   self.viewProvider = [[VivaldiAppearanceSettingsViewProvider alloc] init];
-  UIViewController* controller =
+  self.viewController =
       [VivaldiAppearanceSettingsViewProvider
           makeViewControllerWithPresentingViewControllerTrait:
-              self.presentingViewController.traitCollection];
-  controller.title =
+              self.presentingViewController.traitCollection
+                    presentationDelegate:self];
+  self.viewController.title =
       l10n_util::GetNSString(IDS_VIVALDI_IOS_APPEARANCE_SETTING_TITLE);
-  controller.navigationItem.largeTitleDisplayMode =
+  self.viewController.navigationItem.largeTitleDisplayMode =
       UINavigationItemLargeTitleDisplayModeNever;
 
   self.mediator = [[VivaldiAppearanceSettingsMediator alloc]
@@ -68,14 +73,26 @@
   self.mediator.consumer = self.viewProvider;
   self.viewProvider.settingsStateConsumer = self.mediator;
 
-  [self.baseNavigationController pushViewController:controller
+  [self.baseNavigationController pushViewController:self.viewController
                                            animated:YES];
 }
 
 - (void)stop {
   [super stop];
+  [self.mediator disconnect];
+  self.mediator = nil;
   self.viewProvider = nil;
+  self.viewController = nil;
   self.presentingViewController = nil;
 }
+
+#pragma mark - VivaldiHostingControllerPresentationDelegate
+
+- (void)hostingController:(UIViewController*)hostingController
+                didMoveTo:(UIViewController* _Nullable)parent {
+  DCHECK_EQ(self.viewController, hostingController);
+  [self stop];
+}
+
 
 @end

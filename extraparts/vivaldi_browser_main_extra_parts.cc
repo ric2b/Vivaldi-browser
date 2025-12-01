@@ -66,6 +66,8 @@
 #include "vivaldi_status/vivaldi_status_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "browser/vivaldi_browser_component_wrapper_impl.h"
+#include "browser/vivaldi_extension_handover_impl.h"
 #include "extensions/api/auto_update/auto_update_api.h"
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
@@ -100,8 +102,6 @@
 #include "extensions/vivaldi_extensions_init.h"
 #include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_rootdocument_handler.h"
-#include "browser/vivaldi_browser_component_wrapper_impl.h"
-#include "browser/vivaldi_extension_handover_impl.h"
 #endif
 
 #if BUILDFLAG(IS_LINUX)
@@ -142,6 +142,7 @@ void VivaldiBrowserMainExtraParts::
     EnsureBrowserContextKeyedServiceFactoriesBuilt() {
   vivaldi_status::VivaldiStatusFactory::GetInstance();
   translate::TranslateLanguageList::DisableUpdate();
+  vivaldi_runtime_feature::Init();
 #if !BUILDFLAG(IS_ANDROID)
   vivaldi::NotesModelFactory::GetInstance();
   calendar::CalendarServiceFactory::GetInstance();
@@ -151,7 +152,6 @@ void VivaldiBrowserMainExtraParts::
   menus::MainMenuServiceFactory::GetInstance();
   menus::ContextMenuServiceFactory::GetInstance();
   sessions::IndexServiceFactory::GetInstance();
-  vivaldi_runtime_feature::Init();
   vivaldi::permissions::VivaldiPermissionHandlerImpl::GetInstance();
 #endif
   page_actions::ServiceFactory::GetInstance();
@@ -222,7 +222,6 @@ void VivaldiBrowserMainExtraParts::
 
   VivaldiTranslateClient::LoadTranslationScript();
   SearchEnginesManagersFactory::GetInstance();
-
 }
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {

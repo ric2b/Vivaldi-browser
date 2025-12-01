@@ -58,7 +58,7 @@ public class ReadingListBackPressHandler implements BackPressHandler, Destroyabl
         mActivityTabTabObserver =
                 new ActivityTabTabObserver(mActivityTabProvider, true) {
                     @Override
-                    protected void onObservingDifferentTab(Tab tab, boolean hint) {
+                    protected void onObservingDifferentTab(@Nullable Tab tab, boolean hint) {
                         onBackPressStateChanged();
 
                         // If this tab should intercept back press, start the process of tracking
@@ -107,6 +107,14 @@ public class ReadingListBackPressHandler implements BackPressHandler, Destroyabl
         WebContents webContents = tab.getWebContents();
         if (webContents != null) webContents.dispatchBeforeUnload(false);
         return result;
+    }
+
+    @Override
+    public boolean invokeBackActionOnEscape() {
+        // Escape key presses should not close the tab even if it was opened from the reading list.
+        // We do not also implement a custom {@link BackPressHandler#handleEscPress()} since we
+        // don't want anything to happen and for the manager to move to the next priority handler.
+        return false;
     }
 
     @Override

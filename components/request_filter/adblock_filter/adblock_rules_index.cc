@@ -47,7 +47,6 @@ using FlatRulesByModifierList =
     flatbuffers::Vector<flatbuffers::Offset<flat::PrioritizedRuleList>>;
 using FlatRuleIdList = flatbuffers::Vector<flatbuffers::Offset<flat::RuleId>>;
 
-using FlatStringOffset = flatbuffers::Offset<flatbuffers::String>;
 using FlatStringList = flatbuffers::Vector<FlatStringOffset>;
 
 const size_t kMaxActivationCacheSize = 10;
@@ -115,26 +114,14 @@ struct ContentInjectionIndexTraversalResults {
   }
 };
 
-// Returns whether the request matches the third-party of the specified
-// filtering `rule`.
-bool DoesRulePartyMatch(const flat::RequestFilterRule& rule,
-                        bool is_third_party) {
-  if (is_third_party && !(rule.options() & flat::OptionFlag_THIRD_PARTY)) {
-    return false;
-  }
-  if (!is_third_party && !(rule.options() & flat::OptionFlag_FIRST_PARTY)) {
-    return false;
-  }
-
-  return true;
-}
 // Returns whether the request matches flags of the specified filtering `rule`.
 // Takes into account:
 //  - `resource_type` of the requested resource, if not *_NONE.
-//  - Whether the resource `is_third_party` w.r.t. its embedding document.
+//  - The "partyness" of the resource w.r.t. its embedding document via
+//  `party_matcher`.
 bool DoesRuleFlagsMatch(const flat::RequestFilterRule& rule,
                         flat::ResourceType resource_type,
-                        bool is_third_party) {
+                        const PartyMatcher& party_matcher) {
   DCHECK(resource_type != flat::ResourceType_NONE);
 
   if (resource_type != flat::ResourceType_ANY &&
@@ -142,7 +129,7 @@ bool DoesRuleFlagsMatch(const flat::RequestFilterRule& rule,
     return false;
   }
 
-  return DoesRulePartyMatch(rule, is_third_party);
+  return party_matcher.Run(rule.party());
 }
 
 bool DoesUrlMatchRulePattern(const flat::RequestFilterRule& rule,
@@ -300,11 +287,11 @@ bool AddActivationsFromRule(RulesIndex::ActivationResults& activations,
     if ((rule_and_source.rule->activation_types() & i) == 0)
       continue;
 
-    auto& existing = activations[flat::ActivationType(i)];
+    auto& existing = activations.by_type[flat::ActivationType(i)];
 
-    // At this stage, we have not yet checked for anything else than matches,
-    // so the type can't be anything else.
-    CHECK(existing.type == RulesIndex::ActivationResult::MATCH);
+    // At this stage, we have not yet checked the state of parents, so this must
+    // still be false.
+    CHECK(existing.from_parent == false);
 
     if (existing.rule_and_source &&
         GetRulePriority(*existing.rule_and_source->rule) >
@@ -323,7 +310,7 @@ void GetActivationsFromCandidates(
     const RulesIndex::RulesBufferMap& rule_buffers,
     const RulePatternMatcher::UrlInfo& url,
     const url::Origin& document_origin,
-    bool is_third_party,
+    const PartyMatcher& party_matcher,
     RulesIndex::ActivationResults* activations) {
   // This is used for activations. All rules are expected to be grouped
   // together, regardless of modifier.
@@ -341,7 +328,7 @@ void GetActivationsFromCandidates(
       continue;
     }
 
-    if (!DoesRulePartyMatch(rule, is_third_party)) {
+    if (!party_matcher.Run(rule.party())) {
       continue;
     }
 
@@ -367,7 +354,7 @@ std::optional<RulesIndex::RuleAndSource> FindMatchAmongCandidates(
     const RulePatternMatcher::UrlInfo& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
-    bool is_third_party,
+    const PartyMatcher& party_matcher,
     bool disable_generic_rules,
     RulesIndex::AdAttributionMatches ad_attribution_matches,
     int current_rule_priority) {
@@ -399,7 +386,7 @@ std::optional<RulesIndex::RuleAndSource> FindMatchAmongCandidates(
     if (current_rule_priority >= GetRulePriority(*rule_and_source.rule))
       return std::nullopt;
 
-    if (!DoesRuleFlagsMatch(rule, resource_type, is_third_party)) {
+    if (!DoesRuleFlagsMatch(rule, resource_type, party_matcher)) {
       continue;
     }
 
@@ -445,7 +432,7 @@ void FindModifierRulesMatchesCandidates(
     const RulePatternMatcher::UrlInfo& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
-    bool is_third_party,
+    const PartyMatcher& party_matcher,
     bool disable_generic_rules,
     RulesIndex::FoundModifiersByType& result) {
   for (const flat::PrioritizedRuleList* sorted_candidates_list :
@@ -493,7 +480,7 @@ void FindModifierRulesMatchesCandidates(
         }
       }
 
-      if (!DoesRuleFlagsMatch(rule, resource_type, is_third_party)) {
+      if (!DoesRuleFlagsMatch(rule, resource_type, party_matcher)) {
         continue;
       }
 
@@ -725,16 +712,15 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
   ActivationResults activations;
 
   RulePatternMatcher::UrlInfo url_info(*url);
-  bool is_third_party = IsThirdParty(*url, *document_origin);
+  PartyMatcher party_matcher = GetPartyMatcher(*url, *document_origin);
 
-  auto handle_matches =
-      [this, &activations, &url_info, document_origin,
-       is_third_party](const FlatRulesByModifierList* rule_list) {
-        GetActivationsFromCandidates(rule_list, rules_buffers_, url_info,
-                                     *document_origin, is_third_party,
-                                     &activations);
-        return false;
-      };
+  auto handle_matches = [this, &activations, &url_info, document_origin,
+                         party_matcher](
+                            const FlatRulesByModifierList* rule_list) {
+    GetActivationsFromCandidates(rule_list, rules_buffers_, url_info,
+                                 *document_origin, party_matcher, &activations);
+    return false;
+  };
 
   FindMatchingRuleInMap(url_info.fold_case_spec(),
                         rules_index_->activation_rules_map(), handle_matches);
@@ -742,26 +728,21 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
   // Allow everything if the frame is explicitly allowed by the user.
   if (!is_origin_wanted.Run(url ? url::Origin::Create(*url)
                                 : frame->GetLastCommittedOrigin())) {
-    activations[flat::ActivationType_DOCUMENT].type =
-        ActivationResult::ALWAYS_PASS;
-    activations[flat::ActivationType_DOCUMENT].rule_and_source = std::nullopt;
+    activations.document_exception = true;
   }
 
   // Apply relevant activation from parent frames.
   if (parent) {
     auto parent_activations = GetActivationsForFrame(is_origin_wanted, parent);
+    if (parent_activations.document_exception) {
+      activations.document_exception = true;
+    }
 
-    for (const auto& [type, parent_activation] : parent_activations) {
-      ActivationResult& local_activation = activations[type];
+    for (const auto& [type, parent_activation] : parent_activations.by_type) {
+      ActivationResult& local_activation = activations.by_type[type];
       if ((local_activation.GetDecision().value_or(flat::Decision_MODIFY) ==
-           flat::Decision_MODIFY_IMPORTANT) ||
-          local_activation.type == ActivationResult::ALWAYS_PASS)
+           flat::Decision_MODIFY_IMPORTANT))
         continue;
-
-      if (parent_activation.type == ActivationResult::ALWAYS_PASS) {
-        local_activation.type = parent_activation.type;
-        continue;
-      }
 
       CHECK(parent_activation.rule_and_source);
 
@@ -769,7 +750,7 @@ RulesIndex::ActivationResults RulesIndex::GetActivationsForFrame(
           GetRulePriority(*local_activation.rule_and_source->rule) <
               GetRulePriority(*parent_activation.rule_and_source->rule)) {
         local_activation.rule_and_source = parent_activation.rule_and_source;
-        local_activation.type = ActivationResult::PARENT;
+        local_activation.from_parent = true;
       }
     }
   }
@@ -788,7 +769,7 @@ RulesIndex::FindMatchingBeforeRequestRule(
     const GURL& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
-    bool is_third_party,
+    const PartyMatcher& party_matcher,
     bool disable_generic_rules,
     AdAttributionMatches ad_attribution_matches) {
   std::optional<RulesIndex::RuleAndSource> result = std::nullopt;
@@ -805,12 +786,12 @@ RulesIndex::FindMatchingBeforeRequestRule(
     return result;
 
   auto handle_matches = [this, &result, &url_info, document_origin,
-                         resource_type, is_third_party, disable_generic_rules,
+                         resource_type, party_matcher, disable_generic_rules,
                          ad_attribution_matches](
                             const FlatRulesByModifierList* rule_list) {
     std::optional<RulesIndex::RuleAndSource> rule_and_source =
         FindMatchAmongCandidates(rule_list, rules_buffers_, url_info,
-                                 document_origin, resource_type, is_third_party,
+                                 document_origin, resource_type, party_matcher,
                                  disable_generic_rules, ad_attribution_matches,
                                  result ? GetRulePriority(*result->rule) : -1);
     if (!rule_and_source)
@@ -835,7 +816,7 @@ RulesIndex::FoundModifiersByType RulesIndex::FindMatchingModifierRules(
     const GURL& url,
     const url::Origin& document_origin,
     flat::ResourceType resource_type,
-    bool is_third_party,
+    const PartyMatcher& party_matcher,
     bool disable_generic_rules) {
   const flat::RulesMap* rule_map = [this, category]() {
     switch (category) {
@@ -852,11 +833,11 @@ RulesIndex::FoundModifiersByType RulesIndex::FindMatchingModifierRules(
   RulePatternMatcher::UrlInfo url_info(url);
 
   auto handle_matches =
-      [this, &result, &url_info, document_origin, resource_type, is_third_party,
+      [this, &result, &url_info, document_origin, resource_type, party_matcher,
        disable_generic_rules](const FlatRulesByModifierList* rule_list) {
         FindModifierRulesMatchesCandidates(
             rule_list, rules_buffers_, url_info, document_origin, resource_type,
-            is_third_party, disable_generic_rules, result);
+            party_matcher, disable_generic_rules, result);
 
         return false;
       };

@@ -64,18 +64,20 @@ void AuctionSharedStorageHost::SharedStorageUpdate(
         method_with_options,
     auction_worklet::mojom::AuctionWorkletFunction
         source_auction_worklet_function) {
-  FrameTreeNodeId main_frame_id =
+  GlobalRenderFrameHostId main_frame_id =
       receiver_set_.current_context()
           .auction_runner_rfh->GetOutermostMainFrame()
-          ->GetFrameTreeNodeId();
+          ->GetGlobalId();
 
   storage_partition_->GetSharedStorageRuntimeManager()
       ->lock_manager()
-      .SharedStorageUpdate(std::move(method_with_options),
-                           receiver_set_.current_context().worklet_origin,
-                           AccessScope::kProtectedAudienceWorklet,
-                           main_frame_id, /*worklet_id=*/std::nullopt,
-                           base::DoNothing());
+      .SharedStorageUpdate(
+          std::move(method_with_options),
+          receiver_set_.current_context().worklet_origin,
+          AccessScope::kProtectedAudienceWorklet, main_frame_id,
+          /*worklet_ordinal_id=*/std::nullopt,
+          /*worklet_devtools_token=*/base::UnguessableToken::Null(),
+          base::DoNothing());
 
   GetContentClient()->browser()->LogWebFeatureForCurrentPage(
       receiver_set_.current_context().auction_runner_rfh,
@@ -88,18 +90,20 @@ void AuctionSharedStorageHost::SharedStorageBatchUpdate(
     const std::optional<std::string>& with_lock,
     auction_worklet::mojom::AuctionWorkletFunction
         source_auction_worklet_function) {
-  FrameTreeNodeId main_frame_id =
+  GlobalRenderFrameHostId main_frame_id =
       receiver_set_.current_context()
           .auction_runner_rfh->GetOutermostMainFrame()
-          ->GetFrameTreeNodeId();
+          ->GetGlobalId();
 
   storage_partition_->GetSharedStorageRuntimeManager()
       ->lock_manager()
-      .SharedStorageBatchUpdate(std::move(methods_with_options), with_lock,
-                                receiver_set_.current_context().worklet_origin,
-                                AccessScope::kProtectedAudienceWorklet,
-                                main_frame_id, /*worklet_id=*/std::nullopt,
-                                base::DoNothing());
+      .SharedStorageBatchUpdate(
+          std::move(methods_with_options), with_lock,
+          receiver_set_.current_context().worklet_origin,
+          AccessScope::kProtectedAudienceWorklet, main_frame_id,
+          /*worklet_ordinal_id=*/std::nullopt,
+          /*worklet_devtools_token=*/base::UnguessableToken::Null(),
+          base::DoNothing());
 
   GetContentClient()->browser()->LogWebFeatureForCurrentPage(
       receiver_set_.current_context().auction_runner_rfh,

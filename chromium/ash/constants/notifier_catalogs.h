@@ -136,7 +136,7 @@ enum class NotificationCatalogName {
   kNetworkPortalDetector = 117,
   kCrostiniPackage = 118,
   kCrostiniUpgradeAvailable = 119,
-  kFullRestore = 120,
+  // [Deprecated] kFullRestore = 120,
   kAdbSideloadingDisallowed = 121,
   kAdbSideloadingPowerwashPlanned = 122,
   kAdbSideloadingPowerwashOnReboot = 123,
@@ -214,7 +214,8 @@ enum class NotificationCatalogName {
   kDownloadImageFromLobster = 195,
   kBocaSpotlightStarted = 196,
   kFaceGazeActive = 197,
-  kMaxValue = kFaceGazeActive
+  kUsbPeripheralDeviceOrEndpointLimit = 198,
+  kMaxValue = kUsbPeripheralDeviceOrEndpointLimit
 };
 
 // A living catalog that registers system nudges.
@@ -265,7 +266,8 @@ enum class NudgeCatalogName {
   kVideoConferenceTraySidetoneEnabled = 37,
   kGraduationAppEnabled = 38,
   kSunfishLauncherNudge = 39,
-  kMaxValue = kSunfishLauncherNudge
+  kSunfishIncognitoNudge = 40,
+  kMaxValue = kSunfishIncognitoNudge
 };
 
 // A living catalog that registers toasts.

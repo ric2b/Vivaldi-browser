@@ -4,11 +4,33 @@
 
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_service_factory.h"
 
+#import "base/check.h"
+#import "ios/chrome/browser/collaboration/model/collaboration_service_factory.h"
 #import "ios/chrome/browser/collaboration/model/features.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_service.h"
 #import "ios/chrome/browser/saved_tab_groups/model/tab_group_sync_service_factory.h"
-#import "ios/chrome/browser/share_kit/model/share_kit_service_factory.h"
 #import "ios/chrome/browser/shared/model/profile/profile_ios.h"
+
+namespace {
+
+// Creates the TabGroupService from `context`.
+std::unique_ptr<KeyedService> CreateService(web::BrowserState* context) {
+  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
+  CHECK(!profile->IsOffTheRecord());
+
+  collaboration::CollaborationService* collaboration_service =
+      collaboration::CollaborationServiceFactory::GetForProfile(profile);
+  if (!IsSharedTabGroupsJoinEnabled(collaboration_service) &&
+      !IsSharedTabGroupsCreateEnabled(collaboration_service)) {
+    return nullptr;
+  }
+
+  tab_groups::TabGroupSyncService* tab_group_sync_service =
+      tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
+  return std::make_unique<TabGroupService>(profile, tab_group_sync_service);
+}
+
+}  // namespace
 
 // static
 TabGroupServiceFactory* TabGroupServiceFactory::GetInstance() {
@@ -23,28 +45,14 @@ TabGroupService* TabGroupServiceFactory::GetForProfile(ProfileIOS* profile) {
 }
 
 TabGroupServiceFactory::TabGroupServiceFactory()
-    : ProfileKeyedServiceFactoryIOS("TabGroupService",
-                                    ServiceCreation::kCreateLazily,
-                                    TestingCreation::kNoServiceForTests) {
+    : ProfileKeyedServiceFactoryIOS("TabGroupService") {
+  DependsOn(collaboration::CollaborationServiceFactory::GetInstance());
   DependsOn(tab_groups::TabGroupSyncServiceFactory::GetInstance());
-  DependsOn(ShareKitServiceFactory::GetInstance());
 }
 
 TabGroupServiceFactory::~TabGroupServiceFactory() = default;
 
 std::unique_ptr<KeyedService> TabGroupServiceFactory::BuildServiceInstanceFor(
     web::BrowserState* context) const {
-  ProfileIOS* profile = ProfileIOS::FromBrowserState(context);
-
-  if (!IsSharedTabGroupsJoinEnabled(profile) &&
-      !IsSharedTabGroupsCreateEnabled(profile)) {
-    return nullptr;
-  }
-
-  tab_groups::TabGroupSyncService* tab_group_sync_service =
-      tab_groups::TabGroupSyncServiceFactory::GetForProfile(profile);
-  ShareKitService* share_kit_service =
-      ShareKitServiceFactory::GetForProfile(profile);
-  return std::make_unique<TabGroupService>(profile, tab_group_sync_service,
-                                           share_kit_service);
+  return CreateService(context);
 }

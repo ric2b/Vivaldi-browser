@@ -41,22 +41,24 @@ import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.base.test.util.Features;
 import org.chromium.chrome.browser.IntentHandler;
-import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
+import org.chromium.chrome.browser.app.tabwindow.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowTestUtils;
-import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
 import org.chromium.chrome.browser.price_tracking.PriceTrackingFeatures;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.MockTab;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tabmodel.TabGroupMetadata;
+import org.chromium.chrome.browser.tabwindow.TabWindowManager;
 import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.ui.base.MimeTypeUtils;
 import org.chromium.ui.dragdrop.DragDropMetricUtils.UrlIntentSource;
 import org.chromium.url.JUnitTestGURLs;
 
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 /** Unit test for {@link ChromeDragAndDropBrowserDelegate}. */
 @RunWith(BaseRobolectricTestRunner.class)
@@ -258,7 +260,7 @@ public class ChromeDragAndDropBrowserDelegateUnitTest {
         var data = mDelegate.buildClipData(dropData);
         assertEquals(
                 "The browser clip data is not as expected",
-                dropData.buildTabClipDataText(),
+                dropData.buildTabClipDataText(mApplicationContext),
                 data.getItemAt(0).getText());
         assertNull("The clip data should not have intent set.", data.getItemAt(0).getIntent());
         if (isGroupDrag) {
@@ -353,7 +355,7 @@ public class ChromeDragAndDropBrowserDelegateUnitTest {
                                         dropData,
                                         mApplicationContext,
                                         sourceWindowId,
-                                        /* destWindowId= */ MultiWindowUtils.INVALID_INSTANCE_ID))
+                                        /* destWindowId= */ TabWindowManager.INVALID_WINDOW_ID))
                         : null;
         ChromeDragAndDropBrowserDelegate.setClipDataItemWithPendingIntentForTesting(item);
         return mDelegate.buildClipData(dropData);
@@ -363,26 +365,24 @@ public class ChromeDragAndDropBrowserDelegateUnitTest {
         Token tabGroupId = new Token(2L, 2L);
         String tabGroupTitle = "Regrouped tabs";
         int rootId = 1;
-        LinkedHashMap<Integer, String> tabIdsToUrls =
-                new LinkedHashMap<>(
-                        Map.ofEntries(
+        ArrayList<Entry<Integer, String>> tabIdsToUrls =
+                new ArrayList<>(
+                        List.of(
                                 Map.entry(1, "https://www.amazon.com/"),
                                 Map.entry(2, "https://www.youtube.com/"),
                                 Map.entry(3, "https://www.facebook.com/")));
 
-        TabGroupMetadata tabGroupMetadata =
-                new TabGroupMetadata(
-                        rootId,
-                        /* selectedTabId= */ rootId,
-                        /* sourceWindowId= */ MultiWindowUtils.INVALID_INSTANCE_ID,
-                        tabGroupId,
-                        tabIdsToUrls,
-                        /* tabGroupColor= */ 0,
-                        tabGroupTitle,
-                        /* mhtmlTabTitle= */ null,
-                        /* tabGroupCollapsed= */ false,
-                        /* isGroupShared= */ false,
-                        /* isIncognito= */ false);
-        return tabGroupMetadata;
+        return new TabGroupMetadata(
+                rootId,
+                /* selectedTabId= */ rootId,
+                /* sourceWindowId= */ TabWindowManager.INVALID_WINDOW_ID,
+                tabGroupId,
+                tabIdsToUrls,
+                /* tabGroupColor= */ 0,
+                tabGroupTitle,
+                /* mhtmlTabTitle= */ null,
+                /* tabGroupCollapsed= */ false,
+                /* isGroupShared= */ false,
+                /* isIncognito= */ false);
     }
 }

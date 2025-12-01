@@ -19,6 +19,7 @@
 - (NSString*)getPendingRegistrationUsername;
 - (NSString*)getPendingRegistrationEmail;
 - (void)clearPendingRegistration;
+- (void)logOutButtonPressed;
 
 @end
 

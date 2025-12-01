@@ -64,32 +64,41 @@ impl From<&Vec<u8>> for avifRWData {
     }
 }
 
+impl From<&avifRWData> for Vec<u8> {
+    fn from(data: &avifRWData) -> Vec<u8> {
+        if data.size == 0 {
+            Vec::new()
+        } else {
+            unsafe { std::slice::from_raw_parts(data.data, data.size).to_vec() }
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifRWDataRealloc(
     raw: *mut avifRWData,
     newSize: usize,
 ) -> avifResult {
-    unsafe {
-        if (*raw).size == newSize {
-            return avifResult::Ok;
-        }
-        // Ok to use size as capacity here since we use reserve_exact.
-        let mut newData: Vec<u8> = Vec::new();
-        if newData.try_reserve_exact(newSize).is_err() {
-            return avifResult::OutOfMemory;
-        }
-        if !(*raw).data.is_null() {
-            let oldData = Box::from_raw(std::slice::from_raw_parts_mut((*raw).data, (*raw).size));
-            let sizeToCopy = std::cmp::min(newSize, oldData.len());
-            newData.extend_from_slice(&oldData[..sizeToCopy]);
-        }
-        newData.resize(newSize, 0);
-        let mut b = newData.into_boxed_slice();
-        (*raw).data = b.as_mut_ptr();
-        std::mem::forget(b);
-        (*raw).size = newSize;
-        avifResult::Ok
+    let raw = deref_mut!(raw);
+    if raw.size == newSize {
+        return avifResult::Ok;
     }
+    // Ok to use size as capacity here since we use reserve_exact.
+    let mut newData: Vec<u8> = Vec::new();
+    if newData.try_reserve_exact(newSize).is_err() {
+        return avifResult::OutOfMemory;
+    }
+    if !raw.data.is_null() {
+        let oldData = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(raw.data, raw.size)) };
+        let sizeToCopy = std::cmp::min(newSize, oldData.len());
+        newData.extend_from_slice(&oldData[..sizeToCopy]);
+    }
+    newData.resize(newSize, 0);
+    let mut b = newData.into_boxed_slice();
+    raw.data = b.as_mut_ptr();
+    std::mem::forget(b);
+    raw.size = newSize;
+    avifResult::Ok
 }
 
 #[no_mangle]
@@ -108,18 +117,17 @@ pub unsafe extern "C" fn crabby_avifRWDataSet(
         } else {
             crabby_avifRWDataFree(raw);
         }
-        avifResult::Ok
     }
+    avifResult::Ok
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifRWDataFree(raw: *mut avifRWData) {
-    unsafe {
-        if (*raw).data.is_null() {
-            return;
-        }
-        let _ = Box::from_raw(std::slice::from_raw_parts_mut((*raw).data, (*raw).size));
+    let raw = deref_mut!(raw);
+    if raw.data.is_null() {
+        return;
     }
+    let _ = unsafe { Box::from_raw(std::slice::from_raw_parts_mut(raw.data, raw.size)) };
 }
 
 pub type avifIODestroyFunc = unsafe extern "C" fn(io: *mut avifIO);
@@ -213,25 +221,24 @@ unsafe extern "C" fn cioRead(
     size: usize,
     out: *mut avifROData,
 ) -> avifResult {
-    unsafe {
-        if io.is_null() {
-            return avifResult::IoError;
-        }
-        let cio = (*io).data as *mut avifCIOWrapper;
-        match (*cio).io.read(offset, size) {
-            Ok(data) => {
-                (*cio).buf.clear();
-                if (*cio).buf.try_reserve_exact(data.len()).is_err() {
-                    return avifResult::OutOfMemory;
-                }
-                (*cio).buf.extend_from_slice(data);
-            }
-            Err(_) => return avifResult::IoError,
-        }
-        (*out).data = (*cio).buf.as_ptr();
-        (*out).size = (*cio).buf.len();
-        avifResult::Ok
+    if io.is_null() {
+        return avifResult::IoError;
     }
+    let io = deref_mut!(io);
+    let cio = deref_mut!(io.data as *mut avifCIOWrapper);
+    match cio.io.read(offset, size) {
+        Ok(data) => {
+            cio.buf.clear();
+            if cio.buf.try_reserve_exact(data.len()).is_err() {
+                return avifResult::OutOfMemory;
+            }
+            cio.buf.extend_from_slice(data);
+        }
+        Err(_) => return avifResult::IoError,
+    }
+    deref_mut!(out).data = cio.buf.as_ptr();
+    deref_mut!(out).size = cio.buf.len();
+    avifResult::Ok
 }
 
 #[no_mangle]
@@ -267,7 +274,7 @@ pub unsafe extern "C" fn crabby_avifIOCreateMemoryReader(
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifIOCreateFileReader(filename: *const c_char) -> *mut avifIO {
-    let filename = unsafe { String::from(CStr::from_ptr(filename).to_str().unwrap_or("")) };
+    let filename = String::from(unsafe { CStr::from_ptr(filename) }.to_str().unwrap_or(""));
     let file_io = match DecoderFileIO::create(&filename) {
         Ok(x) => x,
         Err(_) => return std::ptr::null_mut(),

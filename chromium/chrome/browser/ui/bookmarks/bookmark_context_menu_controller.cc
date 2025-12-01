@@ -60,81 +60,83 @@ using PermanentFolderType = BookmarkParentFolder::PermanentFolderType;
 
 namespace {
 
-constexpr UserMetricsAction kBookmarkBarNewBackgroundTab(
+constexpr UserMetricsAction kBookmarkBarOpenAll(
     "BookmarkBar_ContextMenu_OpenAll");
 constexpr UserMetricsAction kBookmarkBarNewWindow(
     "BookmarkBar_ContextMenu_OpenAllInNewWindow");
 constexpr UserMetricsAction kBookmarkBarIncognito(
     "BookmarkBar_ContextMenu_OpenAllIncognito");
-constexpr UserMetricsAction kAppMenuBookmarksNewBackgroundTab(
+constexpr UserMetricsAction kBookmarkBarOpenAllInNewTabGroup(
+    "BookmarkBar_ContextMenu_OpenAllInNewTabGroup");
+constexpr UserMetricsAction kBookmarkBarOpenSplitView(
+    "BookmarkBar_ContextMenu_OpenSplitView");
+constexpr UserMetricsAction kAppMenuBookmarksOpenAll(
     "WrenchMenu_Bookmarks_ContextMenu_OpenAll");
 constexpr UserMetricsAction kAppMenuBookmarksNewWindow(
     "WrenchMenu_Bookmarks_ContextMenu_OpenAllInNewWindow");
 constexpr UserMetricsAction kAppMenuBookmarksIncognito(
     "WrenchMenu_Bookmarks_ContextMenu_OpenAllIncognito");
-constexpr UserMetricsAction kSidePanelBookmarksNewBackgroundTab(
+constexpr UserMetricsAction kAppMenuBookmarksOpenAllInNewTabGroup(
+    "WrenchMenu_Bookmarks_ContextMenu_OpenAllInNewTabGroup");
+constexpr UserMetricsAction kAppMenuBookmarksOpenSplitView(
+    "WrenchMenu_Bookmarks_ContextMenu_OpenSplitView");
+constexpr UserMetricsAction kSidePanelBookmarksOpenAll(
     "SidePanel_Bookmarks_ContextMenu_OpenAll");
 constexpr UserMetricsAction kSidePanelBookmarksNewWindow(
     "SidePanel_Bookmarks_ContextMenu_OpenAllInNewWindow");
 constexpr UserMetricsAction kSidePanelBookmarksIncognito(
     "SidePanel_Bookmarks_ContextMenu_OpenAllIncognito");
+constexpr UserMetricsAction kSidePanelBookmarksOpenAllInNewTabGroup(
+    "SidePanel_Bookmarks_ContextMenu_OpenAllInNewTabGroup");
+constexpr UserMetricsAction kSidePanelBookmarksOpenSplitView(
+    "SidePanel_Bookmarks_ContextMenu_OpenSplitView");
 
 const UserMetricsAction* GetActionForLocationAndDisposition(
-    BookmarkLaunchLocation location,
-    WindowOpenDisposition disposition) {
+    int command_id,
+    BookmarkLaunchLocation location) {
   switch (location) {
     case BookmarkLaunchLocation::kAttachedBar:
-      switch (disposition) {
-        case WindowOpenDisposition::NEW_BACKGROUND_TAB:
-          return &kBookmarkBarNewBackgroundTab;
-        case WindowOpenDisposition::NEW_WINDOW:
-          return &kBookmarkBarNewWindow;
-        case WindowOpenDisposition::OFF_THE_RECORD:
+      switch (command_id) {
+        case IDC_BOOKMARK_BAR_OPEN_ALL:
+          return &kBookmarkBarOpenAll;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_INCOGNITO:
           return &kBookmarkBarIncognito;
-        default:
-          return nullptr;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP:
+          return &kBookmarkBarOpenAllInNewTabGroup;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW:
+          return &kBookmarkBarNewWindow;
+        case IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW:
+          return &kBookmarkBarOpenSplitView;
       }
     case BookmarkLaunchLocation::kAppMenu:
-      switch (disposition) {
-        case WindowOpenDisposition::NEW_BACKGROUND_TAB:
-          return &kAppMenuBookmarksNewBackgroundTab;
-        case WindowOpenDisposition::NEW_WINDOW:
-          return &kAppMenuBookmarksNewWindow;
-        case WindowOpenDisposition::OFF_THE_RECORD:
+      switch (command_id) {
+        case IDC_BOOKMARK_BAR_OPEN_ALL:
+          return &kAppMenuBookmarksOpenAll;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_INCOGNITO:
           return &kAppMenuBookmarksIncognito;
-        default:
-          return nullptr;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP:
+          return &kAppMenuBookmarksOpenAllInNewTabGroup;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW:
+          return &kAppMenuBookmarksNewWindow;
+        case IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW:
+          return &kAppMenuBookmarksOpenSplitView;
       }
     case BookmarkLaunchLocation::kSidePanelContextMenu:
-      switch (disposition) {
-        case WindowOpenDisposition::NEW_BACKGROUND_TAB:
-          return &kSidePanelBookmarksNewBackgroundTab;
-        case WindowOpenDisposition::NEW_WINDOW:
-          return &kSidePanelBookmarksNewWindow;
-        case WindowOpenDisposition::OFF_THE_RECORD:
+      switch (command_id) {
+        case IDC_BOOKMARK_BAR_OPEN_ALL:
+          return &kSidePanelBookmarksOpenAll;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_INCOGNITO:
           return &kSidePanelBookmarksIncognito;
-        default:
-          return nullptr;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP:
+          return &kSidePanelBookmarksOpenAllInNewTabGroup;
+        case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW:
+          return &kSidePanelBookmarksNewWindow;
+        case IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW:
+          return &kSidePanelBookmarksOpenSplitView;
       }
     default:
       return nullptr;
   }
-}
-
-// Returns true if `selection` represents a permanent bookmark folder.
-bool IsSelectionPermanentBookmarkFolder(
-    const std::vector<raw_ptr<const BookmarkNode, VectorExperimental>>&
-        selection) {
-  if (selection.size() == 1) {
-    return selection[0]->is_permanent_node();
-  }
-
-  if (selection.size() == 2) {
-    return selection[0]->is_permanent_node() &&
-           selection[1]->is_permanent_node() &&
-           selection[0]->type() == selection[1]->type();
-  }
-  return false;
 }
 
 // Check selection is not empty, nodes are not null nor repeated.
@@ -235,6 +237,10 @@ void BookmarkContextMenuController::BuildMenu() {
             IDS_BOOKMARK_BAR_OPEN_IN_NEW_WINDOW);
     AddItem(IDC_BOOKMARK_BAR_OPEN_ALL_INCOGNITO,
             IDS_BOOKMARK_BAR_OPEN_INCOGNITO);
+    if (base::FeatureList::IsEnabled(features::kSideBySide)) {
+      AddItem(IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW,
+              IDS_BOOKMARK_BAR_OPEN_IN_SPLIT_VIEW);
+    }
   } else {
     int count = chrome::OpenCount(parent_window_, selection_);
     AddItem(IDC_BOOKMARK_BAR_OPEN_ALL,
@@ -256,6 +262,8 @@ void BookmarkContextMenuController::BuildMenu() {
   }
 
   AddSeparator();
+  // Permanent folders representation should show the `Rename` option, that will
+  // be disabled.
   if ((selection_.size() == 1 && selection_[0]->is_folder()) ||
       IsSelectionPermanentBookmarkFolder(selection_)) {
     AddItem(IDC_BOOKMARK_BAR_RENAME_FOLDER, IDS_BOOKMARK_BAR_RENAME_FOLDER);
@@ -334,10 +342,12 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
     case IDC_BOOKMARK_BAR_OPEN_ALL:
     case IDC_BOOKMARK_BAR_OPEN_ALL_INCOGNITO:
     case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP:
-    case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW: {
+    case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW:
+    case IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW: {
       WindowOpenDisposition initial_disposition;
       if (id == IDC_BOOKMARK_BAR_OPEN_ALL ||
-          id == IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP) {
+          id == IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP ||
+          id == IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW) {
         initial_disposition = WindowOpenDisposition::NEW_BACKGROUND_TAB;
       } else if (id == IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW) {
         initial_disposition = WindowOpenDisposition::NEW_WINDOW;
@@ -345,13 +355,20 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
         initial_disposition = WindowOpenDisposition::OFF_THE_RECORD;
       }
       const UserMetricsAction* const action =
-          GetActionForLocationAndDisposition(opened_from_, initial_disposition);
+          GetActionForLocationAndDisposition(id, opened_from_);
       if (action) {
         base::RecordAction(*action);
       }
 
+      bookmarks::OpenAllBookmarksContext context =
+          bookmarks::OpenAllBookmarksContext::kNone;
+      if (id == IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP) {
+        context = bookmarks::OpenAllBookmarksContext::kInGroup;
+      } else if (id == IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW) {
+        context = bookmarks::OpenAllBookmarksContext::kInSplit;
+      }
       chrome::OpenAllIfAllowed(browser_, selection_, initial_disposition,
-                               id == IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP);
+                               context);
       break;
     }
 
@@ -374,7 +391,8 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
       base::RecordAction(UserMetricsAction("BookmarkBar_ContextMenu_Move"));
 
       BookmarkEditor::Show(parent_window_, profile_,
-                           BookmarkEditor::EditDetails::MoveNodes(selection_),
+                           BookmarkEditor::EditDetails::MoveNodes(
+                               bookmark_service_->bookmark_model(), selection_),
                            BookmarkEditor::SHOW_TREE);
       break;
 
@@ -498,13 +516,10 @@ void BookmarkContextMenuController::ExecuteCommand(int id, int event_flags) {
     }
 
     case IDC_BOOKMARK_MANAGER: {
-      if (selection_.size() == 1 ||
-          IsSelectionPermanentBookmarkFolder(selection_)) {
-        chrome::ShowBookmarkManagerForNode(
-            browser_, BookmarkUIOperationsHelperMergedSurfaces(
-                          bookmark_service_, new_nodes_parent_.get())
-                          .GetDefaultParentForNonMergedSurfaces()
-                          ->id());
+      const bookmarks::BookmarkNode* node_to_focus =
+          ComputeNodeToFocusForBookmarkManager();
+      if (node_to_focus) {
+        chrome::ShowBookmarkManagerForNode(browser_, node_to_focus->id());
       } else {
         chrome::ShowBookmarkManager(browser_);
       }
@@ -620,6 +635,10 @@ bool BookmarkContextMenuController::IsCommandIdEnabled(int command_id) const {
     case IDC_BOOKMARK_BAR_OPEN_ALL:
     case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_TAB_GROUP:
       return chrome::HasBookmarkURLs(selection_);
+    case IDC_BOOKMARK_BAR_OPEN_SPLIT_VIEW:
+      return chrome::HasBookmarkURLs(selection_) &&
+             base::FeatureList::IsEnabled(features::kSideBySide) && browser_ &&
+             !browser_->GetActiveTabInterface()->IsSplit();
     case IDC_BOOKMARK_BAR_OPEN_ALL_NEW_WINDOW:
       return chrome::HasBookmarkURLs(selection_) &&
              incognito_avail != policy::IncognitoModeAvailability::kForced;
@@ -700,4 +719,52 @@ void BookmarkContextMenuController::BookmarkModelChanged() {
   if (delegate_) {
     delegate_->CloseMenu();
   }
+}
+
+const bookmarks::BookmarkNode*
+BookmarkContextMenuController::ComputeNodeToFocusForBookmarkManager() const {
+  // If the selection is a permanent folder then query the merged service to
+  // deduce which type of permanent node should be focused.
+  if (IsSelectionPermanentBookmarkFolder(selection_)) {
+    CHECK(new_nodes_parent_);
+    return BookmarkUIOperationsHelperMergedSurfaces(bookmark_service_,
+                                                    new_nodes_parent_.get())
+        .GetDefaultParentForNonMergedSurfaces();
+  }
+
+  // If the selection is not specific to a single selection and not tied to a
+  // pair of permanent folders then we cannot deduce a node to focus.
+  if (selection_.size() != 1) {
+    return nullptr;
+  }
+
+  // If the previously computed parent is a non permanent folder we can return
+  // it directly.
+  CHECK(new_nodes_parent_);
+  if (new_nodes_parent_->HoldsNonPermanentFolder()) {
+    return new_nodes_parent_->as_non_permanent_folder();
+  }
+
+  // The selected value is not a folder and the computed parent is a merged
+  // permanent node, the direct parent of the node selected should be focused,
+  // without relying on the merged service logic, since it may not return the
+  // real parent of the selected node.
+  CHECK(!selection_[0]->is_folder());
+  CHECK(selection_[0]->parent()->is_permanent_node());
+  return selection_[0]->parent();
+}
+
+bool IsSelectionPermanentBookmarkFolder(
+    const std::vector<raw_ptr<const BookmarkNode, VectorExperimental>>&
+        selection) {
+  if (selection.size() == 1) {
+    return selection[0]->is_permanent_node();
+  }
+
+  if (selection.size() == 2) {
+    return selection[0]->is_permanent_node() &&
+           selection[1]->is_permanent_node() &&
+           selection[0]->type() == selection[1]->type();
+  }
+  return false;
 }

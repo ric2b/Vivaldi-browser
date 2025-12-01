@@ -234,7 +234,7 @@ public interface TabGroupSyncService {
      * @param localGroupId The local ID of the group to be returned.
      * @return The associated {@link SavedTabGroup}.
      */
-    SavedTabGroup getGroup(LocalTabGroupId localGroupId);
+    @Nullable SavedTabGroup getGroup(LocalTabGroupId localGroupId);
 
     /**
      * Updates the in-memory mapping between sync and local tab group IDs.
@@ -291,7 +291,7 @@ public interface TabGroupSyncService {
      * @param syncCacheGuid A sync cache guid. Typically obtained from a tab group or tab
      *     attribution metadata.
      */
-    boolean isRemoteDevice(String syncCacheGuid);
+    boolean isRemoteDevice(@Nullable String syncCacheGuid);
 
     /**
      * Returns whether a tab group with the given `sync_tab_group_id` was previously closed on this
@@ -308,4 +308,20 @@ public interface TabGroupSyncService {
      *     associated tab group info.
      */
     void recordTabGroupEvent(EventDetails eventDetails);
+
+    /**
+     * Update the archival status of the local tab group.
+     *
+     * @param syncTabGroupId The sync ID of the tab group to be updated.
+     * @param archivalStatus Whether the tab group should be archived locally or not.
+     */
+    void updateArchivalStatus(String syncTabGroupId, boolean archivalStatus);
+
+    /**
+     * For testing only. This is needed to test shared tab groups flow without depending on real
+     * people groups from data sharing service backend.
+     *
+     * @param collaborationId Collaboration ID with which the collaboration group is associated.
+     */
+    void setCollaborationAvailableInFinderForTesting(String collaborationId);
 }

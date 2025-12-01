@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/platform/geometry/contoured_rect.h"
 #include "third_party/blink/renderer/platform/geometry/float_rounded_rect.h"
 #include "third_party/blink/renderer/platform/geometry/path.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "third_party/blink/renderer/platform/geometry/skia_geometry_utils.h"
 #include "third_party/blink/renderer/platform/geometry/stroke_data.h"
 #include "third_party/blink/renderer/platform/graphics/dark_mode_settings_builder.h"
@@ -431,10 +432,6 @@ void GraphicsContext::DrawLine(const gfx::Point& point1,
                                const cc::PaintFlags* paint_flags) {
   DCHECK(canvas_);
 
-  StrokeStyle pen_style = styled_stroke.Style();
-  if (pen_style == kNoStroke)
-    return;
-
   gfx::PointF p1 = gfx::PointF(point1);
   gfx::PointF p2 = gfx::PointF(point2);
   bool is_vertical_line = (p1.x() == p2.x());
@@ -449,6 +446,7 @@ void GraphicsContext::DrawLine(const gfx::Point& point1,
       paint_flags ? *paint_flags : ImmutableState()->StrokeFlags();
   styled_stroke.SetupPaint(&flags, {length, width, false});
 
+  const StrokeStyle pen_style = styled_stroke.Style();
   if (pen_style == kDottedStroke) {
     if (StyledStrokeData::StrokeIsDashed(width, pen_style)) {
       // When the length of the line is an odd multiple of the width, things
@@ -529,19 +527,6 @@ void GraphicsContext::DrawText(const Font& font,
                                const AutoDarkMode& auto_dark_mode) {
   DrawTextPasses([&](const cc::PaintFlags& flags) {
     DrawText(font, text_info, point, flags, node_id, auto_dark_mode);
-  });
-}
-
-// This function is not used if TextCombineEmphasisNG flag is enabled.
-void GraphicsContext::DeprecatedDrawEmphasisMarks(
-    const Font& font,
-    const TextRun& run,
-    const AtomicString& mark,
-    const gfx::PointF& point,
-    const AutoDarkMode& auto_dark_mode) {
-  DrawTextPasses([&](const cc::PaintFlags& flags) {
-    font.DeprecatedDrawEmphasisMarks(
-        canvas_, run, mark, point, DarkModeFlags(this, auto_dark_mode, flags));
   });
 }
 
@@ -684,13 +669,13 @@ cc::PaintFlags::FilterQuality GraphicsContext::ComputeFilterQuality(
   InterpolationQuality resampling;
   if (printing_) {
     resampling = kInterpolationNone;
-  } else if (image.CurrentFrameIsLazyDecoded()) {
+  } else if (image.IsLazyDecoded()) {
     resampling = GetDefaultInterpolationQuality();
   } else {
     resampling = ComputeInterpolationQuality(
         SkScalarToFloat(src.width()), SkScalarToFloat(src.height()),
         SkScalarToFloat(dest.width()), SkScalarToFloat(dest.height()),
-        image.CurrentFrameIsComplete());
+        image.FirstFrameIsComplete());
 
     if (resampling == kInterpolationNone) {
       // FIXME: This is to not break tests (it results in the filter bitmap flag
@@ -929,16 +914,25 @@ void GraphicsContext::FillDRRect(const FloatRoundedRect& outer,
                      DarkModeFlags(this, auto_dark_mode, stroke_flags));
 }
 
-void GraphicsContext::FillRectWithRoundedHole(
+void GraphicsContext::FillRectWithContouredHole(
     const gfx::RectF& rect,
-    const FloatRoundedRect& rounded_hole_rect,
+    const ContouredRect& contoured_hole_rect,
     const Color& color,
     const AutoDarkMode& auto_dark_mode) {
   cc::PaintFlags flags(ImmutableState()->FillFlags());
   flags.setColor(color.toSkColor4f());
-  canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
-                      SkRRect(rounded_hole_rect),
-                      DarkModeFlags(this, auto_dark_mode, flags));
+  const DarkModeFlags dark_mode_flags(this, auto_dark_mode, flags);
+  if (contoured_hole_rect.HasRoundCurvature()) {
+    canvas_->drawDRRect(SkRRect::MakeRect(gfx::RectFToSkRect(rect)),
+                        SkRRect(contoured_hole_rect.AsRoundedRect()),
+                        dark_mode_flags);
+  } else {
+    SkPath path;
+    CHECK(Op(SkPath::Rect(gfx::RectFToSkRect(rect)),
+             contoured_hole_rect.GetPath().GetSkPath(), kDifference_SkPathOp,
+             &path));
+    canvas_->drawPath(path, dark_mode_flags);
+  }
 }
 
 void GraphicsContext::FillEllipse(const gfx::RectF& ellipse,

@@ -285,7 +285,7 @@ class Arm64OperandConverter final : public InstructionOperandConverter {
     if (offset.from_frame_pointer()) {
       int from_sp = offset.offset() + frame_access_state()->GetSPToFPOffset();
       // Convert FP-offsets to SP-offsets if it results in better code.
-      if (!frame_access_state()->FPRelativeOnly() &&
+      if (!frame_access_state()->frame()->invalidates_sp() &&
           (Assembler::IsImmLSUnscaled(from_sp) ||
            Assembler::IsImmLSScaled(from_sp, 3))) {
         offset = FrameOffset::FromStackPointer(from_sp);
@@ -1068,10 +1068,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchPrepareTailCall:
       AssemblePrepareTailCall();
       break;
-    case kArchCallCFunctionWithFrameState:
     case kArchCallCFunction: {
-      int const num_gp_parameters = ParamField::decode(instr->opcode());
-      int const num_fp_parameters = FPParamField::decode(instr->opcode());
+      uint32_t param_counts = i.InputUint32(instr->InputCount() - 1);
+      int const num_gp_parameters = ParamField::decode(param_counts);
+      int const num_fp_parameters = FPParamField::decode(param_counts);
       Label return_location;
       SetIsolateDataSlots set_isolate_data_slots = SetIsolateDataSlots::kYes;
 #if V8_ENABLE_WEBASSEMBLY
@@ -1093,9 +1093,10 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       }
       RecordSafepoint(instr->reference_map(), pc_offset);
 
-      bool const needs_frame_state =
-          (arch_opcode == kArchCallCFunctionWithFrameState);
-      if (needs_frame_state) {
+      if (instr->HasCallDescriptorFlag(CallDescriptor::kHasExceptionHandler)) {
+        handlers_.push_back({nullptr, pc_offset});
+      }
+      if (instr->HasCallDescriptorFlag(CallDescriptor::kNeedsFrameState)) {
         RecordDeoptInfo(instr, pc_offset);
       }
 
@@ -1144,9 +1145,6 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArchComment:
       __ RecordComment(reinterpret_cast<const char*>(i.InputInt64(0)));
       break;
-    case kArchThrowTerminator:
-      unwinding_info_writer_.MarkBlockWillExit();
-      break;
     case kArchNop:
       // don't emit code for nops.
       break;
@@ -1168,6 +1166,9 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       } else {
         __ mov(i.OutputRegister(), fp);
       }
+      break;
+    case kArchRootPointer:
+      __ mov(i.OutputRegister(), kRootRegister);
       break;
 #if V8_ENABLE_WEBASSEMBLY
     case kArchStackPointer:
@@ -1264,7 +1265,14 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       auto ool = zone()->New<OutOfLineRecordWrite>(
           this, object, offset, value, mode, DetermineStubCallMode(),
           &unwinding_info_writer_);
-      __ AtomicStoreTaggedField(value, object, offset, i.TempRegister(0));
+      Register temp = i.TempRegister(0);
+      __ Add(temp, object, offset);
+      RecordTrapInfoIfNeeded(zone(), this, opcode, instr, __ pc_offset());
+      if (COMPRESS_POINTERS_BOOL) {
+        __ Stlr(value.W(), temp);
+      } else {
+        __ Stlr(value, temp);
+      }
       // Skip the write barrier if the value is a Smi. However, this is only
       // valid if the value isn't an indirect pointer. Otherwise the value will
       // be a pointer table index, which will always look like a Smi (but
@@ -1494,6 +1502,22 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ Mul(i.OutputRegister32(), i.InputRegister32(0), i.InputRegister32(1));
       break;
 #if V8_ENABLE_WEBASSEMBLY
+    case kArm64Bcax: {
+      DCHECK(CpuFeatures::IsSupported(SHA3));
+      CpuFeatureScope scope(masm(), SHA3);
+      __ Bcax(
+          i.OutputSimd128Register().V16B(), i.InputSimd128Register(0).V16B(),
+          i.InputSimd128Register(1).V16B(), i.InputSimd128Register(2).V16B());
+      break;
+    }
+    case kArm64Eor3: {
+      DCHECK(CpuFeatures::IsSupported(SHA3));
+      CpuFeatureScope scope(masm(), SHA3);
+      __ Eor3(
+          i.OutputSimd128Register().V16B(), i.InputSimd128Register(0).V16B(),
+          i.InputSimd128Register(1).V16B(), i.InputSimd128Register(2).V16B());
+      break;
+    }
     case kArm64Sadalp: {
       DCHECK_EQ(i.OutputSimd128Register(), i.InputSimd128Register(0));
       VectorFormat dst_f = VectorFormatFillQ(LaneSizeField::decode(opcode));
@@ -1881,6 +1905,22 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     case kArm64Clz32:
       __ Clz(i.OutputRegister32(), i.InputRegister32(0));
       break;
+    case kArm64Ctz: {
+      DCHECK(CpuFeatures::IsSupported(CSSC));
+
+      CpuFeatureScope scope(masm(), CSSC);
+
+      __ Ctz(i.OutputRegister64(), i.InputRegister64(0));
+      break;
+    }
+    case kArm64Ctz32: {
+      DCHECK(CpuFeatures::IsSupported(CSSC));
+
+      CpuFeatureScope scope(masm(), CSSC);
+
+      __ Ctz(i.OutputRegister32(), i.InputRegister32(0));
+      break;
+    }
     case kArm64Rbit:
       __ Rbit(i.OutputRegister64(), i.InputRegister64(0));
       break;
@@ -1927,7 +1967,7 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       break;
     case kArm64Float32Cmp:
       if (instr->InputAt(1)->IsFPRegister()) {
-        __ Fcmp(i.InputFloat32Register(0), i.InputFloat32Register(1));
+        __ Fcmp(i.InputFloat32OrFPZeroRegister(0), i.InputFloat32Register(1));
       } else {
         DCHECK(instr->InputAt(1)->IsImmediate());
         // 0.0 is the only immediate supported by fcmp instructions.
@@ -1971,12 +2011,12 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
     }
     case kArm64Float64Cmp:
       if (instr->InputAt(1)->IsFPRegister()) {
-        __ Fcmp(i.InputDoubleRegister(0), i.InputDoubleRegister(1));
+        __ Fcmp(i.InputFloat64OrFPZeroRegister(0), i.InputDoubleRegister(1));
       } else {
         DCHECK(instr->InputAt(1)->IsImmediate());
         // 0.0 is the only immediate supported by fcmp instructions.
         DCHECK_EQ(0.0, i.InputDouble(1));
-        __ Fcmp(i.InputDoubleRegister(0), i.InputDouble(1));
+        __ Fcmp(i.InputFloat64Register(0), i.InputDouble(1));
       }
       break;
     case kArm64Float64Add:
@@ -2267,10 +2307,13 @@ CodeGenerator::CodeGenResult CodeGenerator::AssembleArchInstruction(
       __ AtomicDecompressTaggedSigned(i.OutputRegister(), i.InputRegister(0),
                                       i.InputRegister(1), i.TempRegister(0));
       break;
-    case kArm64LdarDecompressTagged:
-      __ AtomicDecompressTagged(i.OutputRegister(), i.InputRegister(0),
-                                i.InputRegister(1), i.TempRegister(0));
+    case kArm64LdarDecompressTagged: {
+      const int pc_offset =
+          __ AtomicDecompressTagged(i.OutputRegister(), i.InputRegister(0),
+                                    i.InputRegister(1), i.TempRegister(0));
+      RecordTrapInfoIfNeeded(zone(), this, opcode, instr, pc_offset);
       break;
+    }
     case kArm64LdrDecodeSandboxedPointer:
       __ LoadSandboxedPointerField(i.OutputRegister(), i.MemoryOperand());
       break;
@@ -3474,7 +3517,12 @@ void CodeGenerator::AssembleArchBranch(Instruction* instr, BranchInfo* branch) {
     }
   } else {
     Condition cc = FlagsConditionToCondition(condition);
-    __ B(cc, tlabel);
+    if (CpuFeatures::IsSupported(HBC) && branch->hinted) {
+      CpuFeatureScope scope(masm(), HBC);
+      __ Bc(cc, tlabel);
+    } else {
+      __ B(cc, tlabel);
+    }
   }
   if (!branch->fallthru) __ B(flabel);  // no fallthru to flabel.
 }
@@ -3495,7 +3543,13 @@ void CodeGenerator::AssembleArchTrap(Instruction* instr,
   auto ool = zone()->New<WasmOutOfLineTrap>(this, instr);
   Label* tlabel = ool->entry();
   Condition cc = FlagsConditionToCondition(condition);
-  __ B(cc, tlabel);
+  // Assume traps aren't taken, so they're consistent.
+  if (CpuFeatures::IsSupported(HBC)) {
+    CpuFeatureScope scope(masm(), HBC);
+    __ Bc(cc, tlabel);
+  } else {
+    __ B(cc, tlabel);
+  }
 }
 #endif  // V8_ENABLE_WEBASSEMBLY
 
@@ -3511,6 +3565,24 @@ void CodeGenerator::AssembleArchBoolean(Instruction* instr,
   Condition cc = FlagsConditionToCondition(condition);
   __ Cset(reg, cc);
 }
+
+// Mnemonic  Meaning (INT)           Meaning (FP)            Condition flags
+// EQ        Equal                   Equal                   Z == 1
+// NE        Not equal               Not equal or unordered  Z == 0
+// CS or HS  Carry set               >= or unordered         C == 1
+// CC or LO  Carry clear             <                       C == 0
+// MI        Minus, negative         <                       N == 1
+// PL        Plus, positive or zero  >= or unordered         N == 0
+// VS        Overflow                Unordered               V == 1
+// VC        No overflow             Ordered                 V == 0
+// HI        Unsigned >              > or unordered          C ==1 && Z == 0
+// LS        Unsigned <=             < or equal              !(C ==1 && Z ==0)
+// GE        Signed >=               > or equal              N == V
+// LT        Signed <                < or unordered          N! = V
+// GT        Signed >=               >                       Z == 0 && N == V
+// LE        Signed <=               <= or unordered         !(Z == 0 && N == V)
+// AL        Always                  Always                  Any
+// NV        Always                  Always                  Any
 
 // Given condition, return a value for nzcv which represents it. This is used
 // for the default condition for ccmp.
@@ -3589,11 +3661,21 @@ void AssembleConditionalCompareChain(Instruction* instr, int64_t num_ccmps,
       gen->masm()->Ccmp(i.InputRegister64(compare_lhs_index),
                         i.InputOperand64(compare_rhs_index), default_flags,
                         FlagsConditionToCondition(compare_condition));
-    } else {
-      DCHECK_EQ(code, kArm64Cmp32);
+    } else if (code == kArm64Cmp32) {
       gen->masm()->Ccmp(i.InputRegister32(compare_lhs_index),
                         i.InputOperand32(compare_rhs_index), default_flags,
                         FlagsConditionToCondition(compare_condition));
+    } else if (code == kArm64Float64Cmp) {
+      gen->masm()->Fccmp(i.InputFloat64OrFPZeroRegister(compare_lhs_index),
+                         i.InputFloat64OrFPZeroRegister(compare_rhs_index),
+                         default_flags,
+                         FlagsConditionToCondition(compare_condition));
+    } else {
+      DCHECK_EQ(code, kArm64Float32Cmp);
+      gen->masm()->Fccmp(i.InputFloat32OrFPZeroRegister(compare_lhs_index),
+                         i.InputFloat32OrFPZeroRegister(compare_rhs_index),
+                         default_flags,
+                         FlagsConditionToCondition(compare_condition));
     }
   }
 }
@@ -3719,9 +3801,9 @@ void CodeGenerator::AssembleJumpTable(base::Vector<Label*> targets) {
   const size_t jump_table_size = targets.size() * kInt32Size;
   MacroAssembler::BlockPoolsScope no_pool_inbetween(masm(), jump_table_size);
   int table_pos = __ pc_offset();
-  // Store 32-bit pc-relative offsets.
   for (auto* target : targets) {
-    __ dc32(target->pos() - table_pos);
+    // Store 32-bit pc-relative offsets.
+    __ WriteJumpTableEntry(target, table_pos);
   }
 }
 

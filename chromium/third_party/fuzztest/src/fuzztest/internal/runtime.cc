@@ -40,7 +40,7 @@
 
 #include "absl/functional/bind_front.h"
 #include "absl/functional/function_ref.h"
-#include "absl/log/check.h"
+#include "absl/log/absl_check.h"
 #include "absl/random/bit_gen_ref.h"
 #include "absl/random/discrete_distribution.h"
 #include "absl/random/random.h"
@@ -94,10 +94,9 @@ constexpr size_t kValueMaxPrintLength = 2048;
 constexpr absl::string_view kTrimIndicator = " ...<value too long>";
 constexpr absl::string_view kReproducerDirName = "fuzztest_repro";
 
-std::string GetFilterForCrashingInput(absl::string_view crashing_input_path) {
-  std::vector<std::string> dirs = absl::StrSplit(crashing_input_path, '/');
-  CHECK(dirs.size() > 2) << "Invalid crashing input path!";
-  return absl::StrCat(dirs[dirs.size() - 3], "/Regression/", dirs.back());
+std::string GetFilterForCrashingInput(absl::string_view test_name,
+                                      absl::string_view crashing_input_path) {
+  return absl::StrCat(test_name, "/Regression/", Basename(crashing_input_path));
 }
 
 // Returns a reproduction command for replaying
@@ -108,7 +107,7 @@ std::string GetReproductionCommand(const Configuration* configuration,
                                    absl::string_view test_name) {
   const bool is_reproducer_in_corpus_db =
       configuration && configuration->crashing_input_to_reproduce;
-  CHECK(!reproducer_path.empty() || is_reproducer_in_corpus_db);
+  ABSL_CHECK(!reproducer_path.empty() || is_reproducer_in_corpus_db);
   if (!configuration || !configuration->reproduction_command_template) {
     absl::string_view reproducer =
         is_reproducer_in_corpus_db ? *configuration->crashing_input_to_reproduce
@@ -122,8 +121,8 @@ std::string GetReproductionCommand(const Configuration* configuration,
   }
   const std::string command_template =
       *configuration->reproduction_command_template;
-  CHECK(absl::StrContains(command_template, kTestFilterPlaceholder));
-  CHECK(absl::StrContains(command_template, kExtraArgsPlaceholder));
+  ABSL_CHECK(absl::StrContains(command_template, kTestFilterPlaceholder));
+  ABSL_CHECK(absl::StrContains(command_template, kExtraArgsPlaceholder));
   if (is_reproducer_in_corpus_db) {
     const std::string corpus_db = configuration->corpus_database;
     std::vector<std::string> extra_args = {absl::StrCat(
@@ -132,7 +131,7 @@ std::string GetReproductionCommand(const Configuration* configuration,
         command_template,
         {{kTestFilterPlaceholder,
           GetFilterForCrashingInput(
-              *configuration->crashing_input_to_reproduce)},
+              test_name, *configuration->crashing_input_to_reproduce)},
          {kExtraArgsPlaceholder, absl::StrJoin(extra_args, " ")}});
   } else {
     return absl::StrReplaceAll(
@@ -144,34 +143,12 @@ std::string GetReproductionCommand(const Configuration* configuration,
   }
 }
 
-struct ReproducerDirectory {
-  std::string path;
-  enum class Type { kUserSpecified, kTestUndeclaredOutputs };
-  Type type;
-};
-
-std::optional<ReproducerDirectory> GetReproducerDirectory() {
-  auto env = absl::NullSafeStringView(getenv("FUZZTEST_REPRODUCERS_OUT_DIR"));
-  if (!env.empty()) {
-    return ReproducerDirectory{std::string(env),
-                               ReproducerDirectory::Type::kUserSpecified};
-  }
-  env = absl::NullSafeStringView(getenv("TEST_UNDECLARED_OUTPUTS_DIR"));
-  if (!env.empty()) {
-    auto path = std::filesystem::path(std::string(env)) /
-                std::string(kReproducerDirName);
-    return ReproducerDirectory{
-        path.string(), ReproducerDirectory::Type::kTestUndeclaredOutputs};
-  }
-  return std::nullopt;
-}
-
 void PrintReproductionInstructionsForUndeclaredOutputs(
     RawSink out, absl::string_view test_name,
     absl::string_view reproducer_path) {
   absl::string_view file_name = Basename(reproducer_path);
   absl::Format(out,
-               "Reproducer file was dumped under"
+               "Reproducer file was dumped under "
                "TEST_UNDECLARED_OUTPUTS_DIR.\n");
   absl::Format(out,
                "Make a copy of it with:\n\n"
@@ -183,6 +160,31 @@ void PrintReproductionInstructionsForUndeclaredOutputs(
 absl::string_view GetSeparator() {
   return "\n================================================================="
          "\n";
+}
+
+}  // namespace
+
+ReproducerOutputLocation GetReproducerOutputLocation() {
+#ifdef FUZZTEST_USE_CENTIPEDE
+  if (std::getenv("CENTIPEDE_RUNNER_FLAGS") != nullptr) {
+    return ReproducerOutputLocation{
+        "", ReproducerOutputLocation::Type::kReportToController};
+  }
+#endif
+  auto env = absl::NullSafeStringView(getenv("FUZZTEST_REPRODUCERS_OUT_DIR"));
+  if (!env.empty()) {
+    return ReproducerOutputLocation{
+        std::string(env), ReproducerOutputLocation::Type::kUserSpecified};
+  }
+  env = absl::NullSafeStringView(getenv("TEST_UNDECLARED_OUTPUTS_DIR"));
+  if (!env.empty()) {
+    auto path = std::filesystem::path(std::string(env)) /
+                std::string(kReproducerDirName);
+    return ReproducerOutputLocation{
+        path.string(), ReproducerOutputLocation::Type::kTestUndeclaredOutputs};
+  }
+  return ReproducerOutputLocation{"",
+                                  ReproducerOutputLocation::Type::kUnspecified};
 }
 
 void PrintReproducerIfRequested(RawSink out, const FuzzTest& test,
@@ -203,26 +205,28 @@ void PrintReproducerIfRequested(RawSink out, const FuzzTest& test,
   const std::string test_name =
       absl::StrCat(test.suite_name(), ".", test.test_name());
   if (!is_reproducer_in_corpus_db) {
-    auto out_dir = GetReproducerDirectory();
-    switch (out_dir->type) {
-      case ReproducerDirectory::Type::kUserSpecified:
+    const auto out_location = GetReproducerOutputLocation();
+    switch (out_location.type) {
+      case ReproducerOutputLocation::Type::kUserSpecified:
         absl::Format(out, "Reproducer file was dumped at:\n%s\n",
                      reproducer_path);
         break;
-      case ReproducerDirectory::Type::kTestUndeclaredOutputs:
+      case ReproducerOutputLocation::Type::kTestUndeclaredOutputs:
         PrintReproductionInstructionsForUndeclaredOutputs(out, test_name,
                                                           reproducer_path);
         reproducer_path = absl::StrCat("/tmp/", kReproducerDirName, "/",
                                        Basename(reproducer_path));
         break;
+      default:
+        FUZZTEST_INTERNAL_CHECK(false,
+                                "unsupported reproducer output location type "
+                                "to print reproduction command for");
     }
   }
   absl::Format(
       out, "%s\n\n",
       GetReproductionCommand(configuration, reproducer_path, test_name));
 }
-
-}  // namespace
 
 void (*crash_handler_hook)();
 
@@ -239,11 +243,28 @@ Runtime::Runtime() {
 }
 
 // TODO(lszekeres): Return absl::StatusOr when WriteDataToDir returns StatusOr.
-std::string Runtime::DumpReproducer(absl::string_view outdir) const {
+std::string Runtime::DumpReproducer() const {
+  const auto out_location = GetReproducerOutputLocation();
+  if (out_location.type == ReproducerOutputLocation::Type::kUnspecified) {
+    absl::FPrintF(GetStderr(),
+                  "[.] No reproducer output location specified - not writing "
+                  "the reproducer file.\n");
+    return "";
+  }
+  if (out_location.type ==
+      ReproducerOutputLocation::Type::kReportToController) {
+    absl::FPrintF(GetStderr(),
+                  "[.] Reproducer will be reported to the FuzzTest controller "
+                  "- not writing the reproducer file.\n");
+    return "";
+  }
+  FUZZTEST_INTERNAL_CHECK(!out_location.dir_path.empty(),
+                          "Reproducer output directory must not be empty if "
+                          "not reporting to controller.");
   const std::string content =
       current_args_->domain.SerializeCorpus(current_args_->corpus_value)
           .ToString();
-  std::string path = WriteDataToDir(content, outdir);
+  std::string path = WriteDataToDir(content, out_location.dir_path);
   if (path.empty()) {
     absl::FPrintF(GetStderr(), "[!] Failed to write reproducer file!\n");
   }
@@ -334,9 +355,7 @@ void Runtime::PrintReport(RawSink out) const {
                    "For reproducing findings please rely on file based "
                    "reproduction.\n");
     }
-    std::optional<ReproducerDirectory> out_dir = GetReproducerDirectory();
-    const std::string reproducer_path =
-        out_dir.has_value() ? DumpReproducer(out_dir->path) : "";
+    const std::string reproducer_path = DumpReproducer();
     PrintReproducerIfRequested(out, *current_test_, current_configuration_,
                                reproducer_path);
   } else {
@@ -437,12 +456,7 @@ void Runtime::CheckWatchdogLimits() {
         absl::FormatDuration(current_configuration_->time_limit_per_input));
     watchdog_limit_exceeded_ = true;
     watchdog_spinlock_.Unlock();
-#if defined(__linux__) || defined(__APPLE__)
-    pthread_kill(reporting_thread_, SIGABRT);
-    return;
-#else
     std::abort();
-#endif
   }
   const size_t rss_usage = GetPeakRSSBytes();
   if (current_configuration_->rss_limit > 0 &&
@@ -452,12 +466,7 @@ void Runtime::CheckWatchdogLimits() {
                   rss_usage, current_configuration_->rss_limit);
     watchdog_limit_exceeded_ = true;
     watchdog_spinlock_.Unlock();
-#if defined(__linux__) || defined(__APPLE__)
-    pthread_kill(reporting_thread_, SIGABRT);
-    return;
-#else
     std::abort();
-#endif
   }
   watchdog_spinlock_.Unlock();
 #endif  // FUZZTEST_USE_CENTIPEDE
@@ -465,14 +474,14 @@ void Runtime::CheckWatchdogLimits() {
 
 void Runtime::SetCurrentTest(const FuzzTest* test,
                              const Configuration* configuration) {
-  CHECK((test != nullptr) == (configuration != nullptr));
+  ABSL_CHECK((test != nullptr) == (configuration != nullptr));
   current_test_ = test;
   current_configuration_ = configuration;
   if (configuration == nullptr) return;
   if (const auto test_time_limit = configuration->GetTimeLimitPerTest();
       test_time_limit < absl::InfiniteDuration()) {
     const absl::Status has_enough_time =
-        centipede::VerifyBazelHasEnoughTimeToRunTest(
+        fuzztest::internal::VerifyBazelHasEnoughTimeToRunTest(
             creation_time_, test_time_limit, test_counter_,
             configuration->fuzz_tests.size());
     FUZZTEST_INTERNAL_CHECK_PRECONDITION(
@@ -1032,8 +1041,7 @@ bool FuzzTestFuzzerImpl::RunInUnitTestMode(const Configuration& configuration) {
   runtime_.SetCurrentTest(&test_, &configuration);
   runtime_.EnableReporter(&stats_, [] { return absl::Now(); });
   runtime_.SetSkippingRequested(false);
-  fixture_driver_->SetUpFuzzTest();
-  [&] {
+  fixture_driver_->RunFuzzTest([&] {
     if (runtime_.skipping_requested()) {
       absl::FPrintF(GetStderr(),
                     "[.] Skipping %s per request from the test setup.\n",
@@ -1105,8 +1113,7 @@ bool FuzzTestFuzzerImpl::RunInUnitTestMode(const Configuration& configuration) {
         break;
       }
     }
-  }();
-  fixture_driver_->TearDownFuzzTest();
+  });
   runtime_.DisableReporter();
   runtime_.SetCurrentTest(nullptr, nullptr);
   return true;
@@ -1135,11 +1142,11 @@ FuzzTestFuzzerImpl::RunResult FuzzTestFuzzerImpl::RunOneInput(
   }
 
   runtime_.SetSkippingRequested(false);
-  fixture_driver_->SetUpIteration();
-  if (!runtime_.skipping_requested()) {
-    fixture_driver_->Test(std::move(untyped_args));
-  }
-  fixture_driver_->TearDownIteration();
+  fixture_driver_->RunFuzzTestIteration([&] {
+    if (!runtime_.skipping_requested()) {
+      fixture_driver_->Test(std::move(untyped_args));
+    }
+  });
   if (execution_coverage_ != nullptr) {
     execution_coverage_->SetIsTracing(false);
   }
@@ -1204,13 +1211,14 @@ bool FuzzTestFuzzerImpl::RunInFuzzingMode(int* /*argc*/, char*** /*argv*/,
   runtime_.SetCurrentTest(&test_, &configuration);
   runtime_.EnableReporter(&stats_, [] { return absl::Now(); });
   runtime_.SetSkippingRequested(false);
-  fixture_driver_->SetUpFuzzTest();
-  const bool success = [&] {
+  bool success = false;
+  fixture_driver_->RunFuzzTest([&] {
     if (runtime_.skipping_requested()) {
       absl::FPrintF(GetStderr(),
                     "[.] Skipping %s per request from the test setup.\n",
                     test_.full_name());
-      return true;
+      success = true;
+      return;
     }
     [[maybe_unused]] auto watchdog = runtime_.CreateWatchdog();
     PopulateLimits(configuration, execution_coverage_);
@@ -1219,14 +1227,15 @@ bool FuzzTestFuzzerImpl::RunInFuzzingMode(int* /*argc*/, char*** /*argv*/,
     if (ReplayInputsIfAvailable(configuration)) {
       // If ReplayInputs returns, it means the replay didn't crash.
       // We don't want to actually run the fuzzer so exit now.
-      return true;
+      success = true;
+      return;
     }
 
     if (execution_coverage_ == nullptr) {
       absl::FPrintF(
           GetStderr(),
           "\n\n[!] To fuzz, please build with --config=fuzztest.\n\n\n");
-      return false;
+      return;
     }
 
     stats_.total_edges = execution_coverage_->GetCounterMap().size();
@@ -1238,7 +1247,8 @@ bool FuzzTestFuzzerImpl::RunInFuzzingMode(int* /*argc*/, char*** /*argv*/,
           GetStderr(),
           "[*] Selected %d corpus inputs in minimization mode - exiting.\n",
           stats_.useful_inputs);
-      return true;
+      success = true;
+      return;
     }
 
     CorpusDatabase corpus_database(configuration);
@@ -1330,9 +1340,8 @@ bool FuzzTestFuzzerImpl::RunInFuzzingMode(int* /*argc*/, char*** /*argv*/,
     absl::FPrintF(GetStderr(), "\n[.] Fuzzing was terminated.\n");
     runtime_.PrintFinalStatsOnDefaultSink();
     absl::FPrintF(GetStderr(), "\n");
-    return true;
-  }();
-  fixture_driver_->TearDownFuzzTest();
+    success = true;
+  });
   runtime_.DisableReporter();
   runtime_.SetCurrentTest(nullptr, nullptr);
   return success;

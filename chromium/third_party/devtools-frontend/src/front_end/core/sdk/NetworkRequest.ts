@@ -269,9 +269,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #contentDataInternal: Promise<TextUtils.ContentData.ContentDataOrError>|null;
   #streamingContentData: Promise<TextUtils.StreamingContentData.StreamingContentDataOrError>|null;
   readonly #framesInternal: WebSocketFrame[];
-  #responseHeaderValues: {
-    [x: string]: string|undefined,
-  };
+  #responseHeaderValues: Record<string, string|undefined>;
   #responseHeadersTextInternal: string;
   #originalResponseHeaders: Protocol.Fetch.HeaderEntry[];
   #sortedOriginalResponseHeaders?: NameValue[];
@@ -281,9 +279,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   #setCookieHeaders: Protocol.Fetch.HeaderEntry[];
 
   #requestHeadersInternal: NameValue[];
-  #requestHeaderValues: {
-    [x: string]: string|undefined,
-  };
+  #requestHeaderValues: Record<string, string|undefined>;
   #remoteAddressInternal: string;
   #remoteAddressSpaceInternal: Protocol.Network.IPAddressSpace;
   #referrerPolicyInternal: Protocol.Network.RequestReferrerPolicy|null;
@@ -349,6 +345,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
   responseReceivedPromise?: Promise<void>;
   responseReceivedPromiseResolve?: () => void;
   directSocketInfo?: DirectSocketInfo;
+  readonly #directSocketChunksInternal: DirectSocketChunk[];
 
   constructor(
       requestId: string, backendRequestId: Protocol.Network.RequestId|undefined, url: Platform.DevToolsPath.UrlString,
@@ -434,6 +431,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.#wasIntercepted = false;
     this.#hasOverriddenContent = false;
     this.#hasThirdPartyCookiePhaseoutIssue = false;
+    this.#directSocketChunksInternal = [];
   }
 
   static create(
@@ -445,7 +443,7 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
         backendRequestId, backendRequestId, url, documentURL, frameId, loaderId, initiator, hasUserGesture);
   }
 
-  static createForWebSocket(
+  static createForSocket(
       backendRequestId: Protocol.Network.RequestId, requestURL: Platform.DevToolsPath.UrlString,
       initiator?: Protocol.Network.Initiator): NetworkRequest {
     return new NetworkRequest(
@@ -782,6 +780,16 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
 
   set serviceWorkerRouterInfo(x: Protocol.Network.ServiceWorkerRouterInfo) {
     this.#serviceWorkerRouterInfoInternal = x;
+  }
+
+  /**
+   * Returns true if the request was matched to a route when using the
+   * ServiceWorker static routing API.
+   */
+  hasMatchingServiceWorkerRouter(): boolean {
+    // See definitions in `browser_protocol.pdl` for justification.
+    return this.#serviceWorkerRouterInfoInternal !== undefined &&
+        this.serviceWorkerRouterInfo?.matchedSourceType !== undefined;
   }
 
   /**
@@ -1531,6 +1539,15 @@ export class NetworkRequest extends Common.ObjectWrapper.ObjectWrapper<EventType
     this.dispatchEventToListeners(Events.WEBSOCKET_FRAME_ADDED, frame);
   }
 
+  directSocketChunks(): DirectSocketChunk[] {
+    return this.#directSocketChunksInternal;
+  }
+
+  addDirectSocketChunk(chunk: DirectSocketChunk): void {
+    this.#directSocketChunksInternal.push(chunk);
+    this.dispatchEventToListeners(Events.DIRECTSOCKET_CHUNK_ADDED, chunk);
+  }
+
   eventSourceMessages(): readonly EventSourceMessage[] {
     return this.#serverSentEvents?.eventSourceMessages ?? [];
   }
@@ -1799,6 +1816,7 @@ export enum Events {
   REQUEST_HEADERS_CHANGED = 'RequestHeadersChanged',
   RESPONSE_HEADERS_CHANGED = 'ResponseHeadersChanged',
   WEBSOCKET_FRAME_ADDED = 'WebsocketFrameAdded',
+  DIRECTSOCKET_CHUNK_ADDED = 'DirectsocketChunkAdded',
   EVENT_SOURCE_MESSAGE_ADDED = 'EventSourceMessageAdded',
   TRUST_TOKEN_RESULT_ADDED = 'TrustTokenResultAdded',
 }
@@ -1810,6 +1828,8 @@ export interface EventTypes {
   [Events.REQUEST_HEADERS_CHANGED]: void;
   [Events.RESPONSE_HEADERS_CHANGED]: void;
   [Events.WEBSOCKET_FRAME_ADDED]: WebSocketFrame;
+  [Events.DIRECTSOCKET_CHUNK_ADDED]: DirectSocketChunk;
+  [Events.DIRECTSOCKET_CHUNK_ADDED]: DirectSocketChunk;
   [Events.EVENT_SOURCE_MESSAGE_ADDED]: EventSourceMessage;
   [Events.TRUST_TOKEN_RESULT_ADDED]: void;
 }
@@ -2126,4 +2146,18 @@ export interface DirectSocketInfo {
   errorMessage?: string;
   createOptions: DirectSocketCreateOptions;
   openInfo?: DirectSocketOpenInfo;
+}
+
+export interface DirectSocketChunk {
+  data: string;
+  type: DirectSocketChunkType;
+  timestamp: number;
+  // Only for bound udp socket.
+  remoteAddress?: string;
+  remotePort?: number;
+}
+
+export enum DirectSocketChunkType {
+  SEND = 'send',
+  RECEIVE = 'receive'
 }

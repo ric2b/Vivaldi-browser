@@ -19,6 +19,7 @@
 #include "base/types/expected.h"
 #include "mojo/public/cpp/base/big_buffer.h"
 #include "services/webnn/coreml/graph_builder_coreml.h"
+#include "services/webnn/public/cpp/webnn_types.h"
 #include "services/webnn/public/mojom/webnn_context_provider.mojom-forward.h"
 #include "services/webnn/public/mojom/webnn_graph.mojom.h"
 #include "services/webnn/queueable_resource_state.h"
@@ -36,16 +37,20 @@ class ContextImplCoreml;
 // https://developer.apple.com/documentation/coreml/mlmodel/3931182-compilemodel
 // Mac OS 14.0+ is required to support WebNN logical binary operators because
 // the cast operator does not support casting to uint8 prior to Mac OS 14.0.
+// Mac OS 14.4 is required to use MLComputePlan.
+// https://developer.apple.com/documentation/coreml/mlcomputeplan-1w21n
 // CoreML returns bool tensors for logical operators which need to be cast to
 // uint8 tensors to match WebNN expectations.
-class API_AVAILABLE(macos(14.0)) GraphImplCoreml final : public WebNNGraphImpl {
+class API_AVAILABLE(macos(14.4)) GraphImplCoreml final : public WebNNGraphImpl {
  public:
   static void CreateAndBuild(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       ContextImplCoreml* context,
       mojom::GraphInfoPtr graph_info,
       ComputeResourceInfo compute_resource_info,
-      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+      base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
           constant_operands,
+      base::flat_map<OperandId, WebNNTensorImpl*> constant_tensor_operands,
       mojom::CreateContextOptionsPtr context_options,
       ContextProperties context_properties,
       WebNNContextImpl::CreateGraphImplCallback callback);
@@ -88,9 +93,25 @@ class API_AVAILABLE(macos(14.0)) GraphImplCoreml final : public WebNNGraphImpl {
     // Represents the compiled and configured Core ML model. This member must be
     // set before these params are used to construct a new `GraphImplCoreml`.
     MLModel* __strong ml_model;
+
+    std::vector<mojom::Device> devices;
   };
 
-  GraphImplCoreml(ContextImplCoreml* context, std::unique_ptr<Params> params);
+  // Responsible for cleaning up disk artifacts created by the CoreML model
+  // compilation process.
+  // This also dumps model files to to `switches::kWebNNCoreMlDumpModel` if
+  // provided.
+  struct ScopedModelPath {
+    explicit ScopedModelPath(base::ScopedTempDir file_dir);
+    ~ScopedModelPath();
+    ScopedModelPath(ScopedModelPath&& other) = default;
+
+    base::ScopedTempDir file_dir;
+  };
+
+  GraphImplCoreml(mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
+                  ContextImplCoreml* context,
+                  std::unique_ptr<Params> params);
 
   static MLFeatureValue* CreateMultiArrayFeatureValueFromBytes(
       MLMultiArrayConstraint* multi_array_constraint,
@@ -100,7 +121,7 @@ class API_AVAILABLE(macos(14.0)) GraphImplCoreml final : public WebNNGraphImpl {
   static void CreateAndBuildOnBackgroundThread(
       mojom::GraphInfoPtr graph_info,
       ComputeResourceInfo compute_resource_info,
-      base::flat_map<uint64_t, std::unique_ptr<WebNNConstantOperand>>
+      base::flat_map<OperandId, std::unique_ptr<WebNNConstantOperand>>
           constant_operands,
       mojom::CreateContextOptionsPtr context_options,
       ContextProperties context_properties,
@@ -117,7 +138,16 @@ class API_AVAILABLE(macos(14.0)) GraphImplCoreml final : public WebNNGraphImpl {
       NSURL* compiled_model_url,
       NSError* error);
 
+  static void ReadComputePlan(
+      std::unique_ptr<Params> params,
+      base::OnceCallback<void(
+          base::expected<std::unique_ptr<Params>, mojom::ErrorPtr>)> callback,
+      ScopedModelPath temp_dir,
+      MLComputePlan* compute_plan,
+      NSError* compute_plan_error);
+
   static void DidCreateAndBuild(
+      mojo::PendingAssociatedReceiver<mojom::WebNNGraph> receiver,
       base::WeakPtr<WebNNContextImpl> context,
       WebNNContextImpl::CreateGraphImplCallback callback,
       base::expected<std::unique_ptr<Params>, mojom::ErrorPtr> result);
@@ -125,9 +155,8 @@ class API_AVAILABLE(macos(14.0)) GraphImplCoreml final : public WebNNGraphImpl {
   // Execute the compiled platform graph asynchronously. The inputs were
   // validated in base class so we can use them to compute directly.
   void DispatchImpl(
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_inputs,
-      const base::flat_map<std::string_view, WebNNTensorImpl*>& named_outputs)
-      override;
+      base::flat_map<std::string, WebNNTensorImpl*> named_inputs,
+      base::flat_map<std::string, WebNNTensorImpl*> named_outputs) override;
 
  private:
   class ComputeResources;

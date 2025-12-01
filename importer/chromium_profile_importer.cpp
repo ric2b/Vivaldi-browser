@@ -16,9 +16,9 @@
 #include "importer/chrome_importer_utils.h"
 #include "importer/chromium_extension_importer.h"
 
-using importer::ChromeProfileInfo;
-using importer::ImporterType;
-using importer::SourceProfile;
+using user_data_importer::ChromeProfileInfo;
+using user_data_importer::ImporterType;
+using user_data_importer::SourceProfile;
 
 ChromiumProfile::ChromiumProfile()
     : importer_type(ImporterType::TYPE_UNKNOWN) {}
@@ -44,7 +44,7 @@ ChromiumProfileImporter::ChromiumProfileImporter() {
 }
 
 ChromiumProfile ChromiumProfileImporter::GetChromeProfile(
-    ImporterType importerType) {
+    user_data_importer::ImporterType importerType) {
   ChromiumProfile prof = ChromiumProfile();
   switch (importerType) {
     case ImporterType::TYPE_CHROME:
@@ -152,9 +152,10 @@ void ChromiumProfileImporter::DetectChromiumProfiles(
       }
       chrome.user_profile_names = prof;
 
-      chrome.services_supported = importer::FAVORITES | importer::PASSWORDS |
-                                  importer::HISTORY | importer::EXTENSIONS |
-                                  importer::TABS;
+      chrome.services_supported =
+          user_data_importer::FAVORITES | user_data_importer::PASSWORDS |
+          user_data_importer::HISTORY | user_data_importer::EXTENSIONS |
+          user_data_importer::TABS;
 
       profiles->push_back(chrome);
     }

@@ -28,6 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* eslint-disable rulesdir/no-imperative-dom-api */
+
 import './Toolbar.js';
 
 import * as Common from '../../core/common/common.js';
@@ -119,8 +121,8 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
   allowTabReorder?: boolean;
   private automaticReorder?: boolean;
 
-  constructor() {
-    super(true);
+  constructor(element?: HTMLElement) {
+    super(true, undefined, element);
     this.registerRequiredCSS(tabbedPaneStyles);
     this.element.classList.add('tabbed-pane');
     this.contentElement.classList.add('tabbed-pane-shadow');
@@ -662,8 +664,7 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
     return dropDownContainer;
   }
 
-  private dropDownClicked(ev: Event): void {
-    const event = (ev as MouseEvent);
+  private dropDownClicked(event: MouseEvent): void {
     if (event.button !== 0) {
       return;
     }
@@ -673,7 +674,6 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
     }
     const rect = this.dropDownButton.getBoundingClientRect();
     const menu = new ContextMenu(event, {
-      useSoftMenu: false,
       x: rect.left,
       y: rect.bottom,
       onSoftMenuClosed: () => {
@@ -970,11 +970,10 @@ export class TabbedPane extends Common.ObjectWrapper.eventMixin<EventTypes, type
     this.automaticReorder = automatic;
   }
 
-  private keyDown(ev: Event): void {
+  private keyDown(event: KeyboardEvent): void {
     if (!this.currentTab) {
       return;
     }
-    const event = (ev as KeyboardEvent);
     let nextTabElement: (Element|null)|null = null;
     switch (event.key) {
       case 'ArrowUp':
@@ -1295,8 +1294,7 @@ export class TabbedPaneTab {
         element?.parentElement?.classList.contains('tabbed-pane-close-button') || false;
   }
 
-  private tabClicked(ev: Event): void {
-    const event = (ev as MouseEvent);
+  private tabClicked(event: MouseEvent): void {
     const middleButton = event.button === 1;
     const shouldClose = this.closeable && (middleButton || this.isCloseIconClicked(event.target as HTMLElement));
     if (!shouldClose) {
@@ -1307,16 +1305,14 @@ export class TabbedPaneTab {
     event.consume(true);
   }
 
-  private tabMouseDown(ev: Event): void {
-    const event = ev as MouseEvent;
+  private tabMouseDown(event: MouseEvent): void {
     if (this.isCloseIconClicked(event.target as HTMLElement) || event.button !== 0) {
       return;
     }
     this.tabbedPane.selectTab(this.id, true);
   }
 
-  private tabMouseUp(ev: Event): void {
-    const event = (ev as MouseEvent);
+  private tabMouseUp(event: MouseEvent): void {
     // This is needed to prevent middle-click pasting on linux when tabs are clicked.
     if (event.button === 1) {
       event.consume(true);
@@ -1382,8 +1378,7 @@ export class TabbedPaneTab {
     void contextMenu.show();
   }
 
-  private startTabDragging(ev: Event): boolean {
-    const event = (ev as MouseEvent);
+  private startTabDragging(event: MouseEvent): boolean {
     if (this.isCloseIconClicked(event.target as HTMLElement)) {
       return false;
     }
@@ -1395,8 +1390,7 @@ export class TabbedPaneTab {
     return true;
   }
 
-  private tabDragging(ev: Event): void {
-    const event = (ev as MouseEvent);
+  private tabDragging(event: MouseEvent): void {
     const tabElements = this.tabbedPane.tabsElement.childNodes;
     for (let i = 0; i < tabElements.length; ++i) {
       let tabElement: HTMLElement = (tabElements[i] as HTMLElement);

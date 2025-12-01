@@ -40,6 +40,7 @@ class SimpleURLLoader;
 namespace content {
 
 class BrowserContext;
+struct GlobalRenderFrameHostId;
 class RenderFrameHostImpl;
 class RenderProcessHost;
 class SharedStorageDocumentServiceImpl;
@@ -86,7 +87,7 @@ class CONTENT_EXPORT SharedStorageWorkletHost
       const GURL& script_source_url,
       network::mojom::CredentialsMode credentials_mode,
       blink::mojom::SharedStorageWorkletCreationMethod creation_method,
-      int worklet_id,
+      int worklet_ordinal_id,
       const std::vector<blink::mojom::OriginTrialFeature>&
           origin_trial_features,
       mojo::PendingAssociatedReceiver<blink::mojom::SharedStorageWorkletHost>
@@ -105,11 +106,13 @@ class CONTENT_EXPORT SharedStorageWorkletHost
       blink::mojom::PrivateAggregationConfigPtr private_aggregation_config,
       bool resolve_to_config,
       const std::u16string& saved_query_name,
+      base::TimeTicks start_time,
       SelectURLCallback callback) override;
   void Run(const std::string& name,
            blink::CloneableMessage serialized_data,
            bool keep_alive_after_operation,
            blink::mojom::PrivateAggregationConfigPtr private_aggregation_config,
+           base::TimeTicks start_time,
            RunCallback callback) override;
 
   // Whether there are unfinished worklet operations (i.e. `addModule()`,
@@ -161,6 +164,12 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   // gone (e.g. during keep-alive phase).
   RenderFrameHostImpl* GetFrame();
 
+  // Returns the associated main frame's GlobalRenderFrameHostId if
+  // `document_service_` is still alive. Returns the default null
+  // GlobalRenderFrameHostId if `document_service_` is gone (e.g. during
+  // keep-alive phase).
+  GlobalRenderFrameHostId GetMainFrameIdIfAvailable() const;
+
   const GURL& script_source_url() const {
     return script_source_url_;
   }
@@ -169,6 +178,8 @@ class CONTENT_EXPORT SharedStorageWorkletHost
     return creation_method_;
   }
 
+  const base::UnguessableToken& GetWorkletDevToolsTokenForTesting() const;
+
  protected:
   // virtual for testing
   virtual void OnCreateWorkletScriptLoadingFinished(
@@ -176,13 +187,17 @@ class CONTENT_EXPORT SharedStorageWorkletHost
       const std::string& error_message);
 
   virtual void OnRunOperationOnWorkletFinished(
-      base::TimeTicks start_time,
+      base::TimeTicks run_start_time,
+      base::TimeTicks execution_start_time,
+      int operation_id,
       bool success,
       const std::string& error_message);
 
   virtual void OnRunURLSelectionOperationOnWorkletFinished(
       const GURL& urn_uuid,
-      base::TimeTicks start_time,
+      base::TimeTicks select_url_start_time,
+      base::TimeTicks execution_start_time,
+      int operation_id,
       const std::string& operation_name,
       const std::u16string& saved_query_name_to_cache,
       bool script_execution_succeeded,
@@ -220,7 +235,9 @@ class CONTENT_EXPORT SharedStorageWorkletHost
 
   void OnRunURLSelectionOperationOnWorkletScriptExecutionFinished(
       const GURL& urn_uuid,
-      base::TimeTicks start_time,
+      base::TimeTicks select_url_start_time,
+      base::TimeTicks execution_start_time,
+      int operation_id,
       const std::string& operation_name,
       const std::u16string& saved_query_name_to_cache,
       bool success,
@@ -228,7 +245,9 @@ class CONTENT_EXPORT SharedStorageWorkletHost
       uint32_t index);
 
   void OnSelectURLSavedQueryFound(const GURL& urn_uuid,
-                                  base::TimeTicks start_time,
+                                  base::TimeTicks select_url_start_time,
+                                  base::TimeTicks execution_start_time,
+                                  int operation_id,
                                   const std::string& operation_name,
                                   uint32_t index);
 
@@ -248,6 +267,9 @@ class CONTENT_EXPORT SharedStorageWorkletHost
 
   // virtual for testing
   virtual base::TimeDelta GetKeepAliveTimeout() const;
+
+  // Returns `devtools_handle_->devtools_token()`.
+  const base::UnguessableToken& GetWorkletDevToolsToken() const;
 
   blink::mojom::SharedStorageWorkletService*
   GetAndConnectToSharedStorageWorkletService();
@@ -369,7 +391,12 @@ class CONTENT_EXPORT SharedStorageWorkletHost
   // A monotonically increasing ID assigned to each SharedStorageWorkletHost.
   // TODO(crbug.com/401011862): Use this ID in DevTools reporting for Shared
   // Storage.
-  int worklet_id_ = 0;
+  int worklet_ordinal_id_ = 0;
+
+  // A monotonically increasing ID assigned to each run or selectURL call.
+  // TODO(crbug.com/401011862): Use this ID in DevTools reporting for Shared
+  // Storage.
+  int next_operation_id_ = 0;
 
   // Time when worklet host is constructed.
   base::TimeTicks creation_time_;

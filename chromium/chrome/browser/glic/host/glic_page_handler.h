@@ -21,9 +21,6 @@ class WebContents;
 namespace gfx {
 class Size;
 }  // namespace gfx
-namespace extensions {
-class WebViewGuest;
-}  // namespace extensions
 
 namespace glic {
 class GlicKeyedService;
@@ -42,11 +39,6 @@ class GlicPageHandler : public glic::mojom::PageHandler {
   ~GlicPageHandler() override;
 
   content::WebContents* webui_contents() { return webui_contents_; }
-
-  // Called whenever a guest view is added to the WebContents owned by this
-  // WebUI. Because we embed only one webview, there should only ever be one
-  // guest view alive at one time within GlicPageHandler.
-  void GuestAdded(extensions::WebViewGuest* guest);
 
   void NotifyWindowIntentToShow();
 
@@ -71,6 +63,8 @@ class GlicPageHandler : public glic::mojom::PageHandler {
                     base::TimeDelta duration,
                     ResizeWidgetCallback callback) override;
 
+  void EnableDragResize(bool enabled) override;
+
   void WebUiStateChanged(glic::mojom::WebUiState new_state) override;
 
  private:
@@ -82,7 +76,6 @@ class GlicPageHandler : public glic::mojom::PageHandler {
   std::unique_ptr<GlicWebClientHandler> web_client_handler_;
   raw_ptr<content::WebContents> webui_contents_;
   raw_ptr<content::BrowserContext> browser_context_;
-  base::WeakPtr<extensions::WebViewGuest> guest_;
   mojo::Receiver<glic::mojom::PageHandler> receiver_;
   mojo::Remote<glic::mojom::Page> page_;
   mojo::Remote<glic::mojom::WebClient> web_client_;

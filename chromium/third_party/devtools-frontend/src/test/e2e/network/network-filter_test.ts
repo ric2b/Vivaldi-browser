@@ -8,9 +8,7 @@ import type {ElementHandle} from 'puppeteer-core';
 import {
   $textContent,
   clickElement,
-  disableExperiment,
   getTestServerPort,
-  setCheckBox,
   step,
   typeText,
   waitFor,
@@ -124,7 +122,7 @@ describe('The Network Tab', function() {
   });
 
   // Mac doesn't consistently respect force-cache
-  it.skipOnPlatforms(['mac'], '[crbug.com/1297070] can filter by cache status in the log view', async () => {
+  it.skipOnPlatforms(['mac'], '[crbug.com/40822085] can filter by cache status in the log view', async () => {
     await navigateToNetworkTab(`requests.html?num=5&cache=no-store&nocache=${Math.random()}`);
     await setPersistLog(true);
     await navigateToNetworkTab(`requests.html?num=3&cache=force-cache&nocache=${Math.random()}`);
@@ -285,32 +283,12 @@ describe('The Network Tab', function() {
 
 describe('The Network Tab', function() {
   beforeEach(async () => {
-    await disableExperiment('network-panel-filter-bar-redesign');
-
     await navigateToNetworkTab('empty.html');
     await setCacheDisabled(true);
     await setPersistLog(false);
   });
 
-  it('can show only third-party requests from checkbox', async () => {
-    await setCheckBox('[title="3rd-party requests"]', true);
-    await navigateToNetworkTab('third-party-resources.html');
-    await waitForSomeRequestsToAppear(1);
-
-    assert.deepEqual(await getAllRequestNames(), ['image.svg']);
-  });
-});
-
-describe('The Network Tab', function() {
-  beforeEach(async () => {
-    await reloadDevTools({enableExperiments: ['network-panel-filter-bar-redesign']});
-
-    await navigateToNetworkTab('empty.html');
-    await setCacheDisabled(true);
-    await setPersistLog(false);
-  });
-
-  it('can show only third-party requests from dropdown', async () => {
+  it('can show only third-party requests', async () => {
     await navigateToNetworkTab('third-party-resources.html');
     await waitForSomeRequestsToAppear(3);
 

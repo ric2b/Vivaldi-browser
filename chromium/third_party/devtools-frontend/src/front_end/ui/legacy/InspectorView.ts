@@ -27,6 +27,7 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+/* eslint-disable rulesdir/no-imperative-dom-api */
 
 import * as Common from '../../core/common/common.js';
 import * as Host from '../../core/host/host.js';
@@ -150,6 +151,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
   private ownerSplitWidget?: SplitWidget;
   private reloadRequiredInfobar?: Infobar;
   #selectOverrideFolderInfobar?: Infobar;
+  #resizeObserver: ResizeObserver;
 
   constructor() {
     super();
@@ -182,11 +184,10 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     closeDrawerButton.addEventListener(ToolbarButton.Events.CLICK, this.closeDrawer, this);
     this.drawerTabbedPane.addEventListener(
         TabbedPaneEvents.TabSelected,
-        (event: Common.EventTarget.EventTargetEvent<EventData>) => this.tabSelected(event.data.tabId, 'drawer'), this);
+        (event: Common.EventTarget.EventTargetEvent<EventData>) => this.tabSelected(event.data.tabId), this);
     const selectedDrawerTab = this.drawerTabbedPane.selectedTabId;
     if (this.drawerSplitWidget.showMode() !== ShowMode.ONLY_MAIN && selectedDrawerTab) {
       Host.userMetrics.panelShown(selectedDrawerTab, true);
-      Host.userMetrics.panelShownInLocation(selectedDrawerTab, 'drawer');
     }
     this.drawerTabbedPane.setTabDelegate(this.tabDelegate);
 
@@ -219,11 +220,10 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     this.tabbedPane.registerRequiredCSS(inspectorViewTabbedPaneStyles);
     this.tabbedPane.addEventListener(
         TabbedPaneEvents.TabSelected,
-        (event: Common.EventTarget.EventTargetEvent<EventData>) => this.tabSelected(event.data.tabId, 'main'), this);
+        (event: Common.EventTarget.EventTargetEvent<EventData>) => this.tabSelected(event.data.tabId), this);
     const selectedTab = this.tabbedPane.selectedTabId;
     if (selectedTab) {
       Host.userMetrics.panelShown(selectedTab, true);
-      Host.userMetrics.panelShownInLocation(selectedTab, 'main');
     }
     this.tabbedPane.setAccessibleName(i18nString(UIStrings.panels));
     this.tabbedPane.setTabDelegate(this.tabDelegate);
@@ -257,6 +257,7 @@ export class InspectorView extends VBox implements ViewLocationResolver {
       infobar.setParentView(this);
       this.attachInfobar(infobar);
     }
+    this.#resizeObserver = new ResizeObserver(this.#observedResize.bind(this));
   }
 
   static instance(opts: {
@@ -278,11 +279,24 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     inspectorViewInstance = null;
   }
 
+  #observedResize(): void {
+    const rect = this.element.getBoundingClientRect();
+    this.element.style.setProperty('--devtools-window-left', `${rect.left}px`);
+    this.element.style.setProperty('--devtools-window-right', `${window.innerWidth - rect.right}px`);
+    this.element.style.setProperty('--devtools-window-width', `${rect.width}px`);
+    this.element.style.setProperty('--devtools-window-top', `${rect.top}px`);
+    this.element.style.setProperty('--devtools-window-bottom', `${window.innerHeight - rect.bottom}px`);
+    this.element.style.setProperty('--devtools-window-height', `${rect.height}px`);
+  }
+
   override wasShown(): void {
+    this.#resizeObserver.observe(this.element);
+    this.#observedResize();
     this.element.ownerDocument.addEventListener('keydown', this.keyDownBound, false);
   }
 
   override willHide(): void {
+    this.#resizeObserver.unobserve(this.element);
     this.element.ownerDocument.removeEventListener('keydown', this.keyDownBound, false);
   }
 
@@ -408,6 +422,18 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     this.drawerSplitWidget.setResizable(!minimized);
   }
 
+  drawerSize(): number {
+    return this.drawerSplitWidget.sidebarSize();
+  }
+
+  setDrawerSize(size: number): void {
+    this.drawerSplitWidget.setSidebarSize(size);
+  }
+
+  totalSize(): number {
+    return this.drawerSplitWidget.totalSize();
+  }
+
   isDrawerMinimized(): boolean {
     return this.drawerSplitWidget.isSidebarMinimized();
   }
@@ -454,9 +480,8 @@ export class InspectorView extends VBox implements ViewLocationResolver {
     this.tabbedPane.headerResized();
   }
 
-  private tabSelected(tabId: string, location: 'main'|'drawer'): void {
+  private tabSelected(tabId: string): void {
     Host.userMetrics.panelShown(tabId);
-    Host.userMetrics.panelShownInLocation(tabId, location);
   }
 
   setOwnerSplit(splitWidget: SplitWidget): void {
@@ -647,7 +672,7 @@ function reloadDebuggedTab(): void {
 }
 
 export class ActionDelegate implements ActionDelegateInterface {
-  handleAction(context: Context, actionId: string): boolean {
+  handleAction(_context: Context, actionId: string): boolean {
     switch (actionId) {
       case 'main.toggle-drawer':
         if (InspectorView.instance().drawerVisible()) {

@@ -11,13 +11,12 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "components/component_updater/mock_component_updater_service.h"
 #include "components/optimization_guide/core/mock_optimization_guide_model_executor.h"
-#include "components/optimization_guide/proto/features/summarize.pb.h"
-#include "components/optimization_guide/proto/features/writing_assistance_api.pb.h"
 #include "components/update_client/crx_update_item.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/ai/ai_common.mojom.h"
 #include "third_party/blink/public/mojom/ai/ai_language_model.mojom.h"
 #include "third_party/blink/public/mojom/ai/ai_manager.mojom.h"
 #include "third_party/blink/public/mojom/ai/model_download_progress_observer.mojom.h"
@@ -40,7 +39,8 @@ class AITestUtils {
     MOCK_METHOD(void, OnStreaming, (const std::string& text), (override));
     MOCK_METHOD(void,
                 OnError,
-                (blink::mojom::ModelStreamingResponseStatus status),
+                (blink::mojom::ModelStreamingResponseStatus status,
+                 blink::mojom::QuotaErrorInfoPtr quota_error_info),
                 (override));
     MOCK_METHOD(void,
                 OnCompletion,
@@ -97,12 +97,32 @@ class AITestUtils {
 
     MOCK_METHOD(void,
                 OnError,
-                (blink::mojom::AIManagerCreateClientError error),
+                (blink::mojom::AIManagerCreateClientError error,
+                 blink::mojom::QuotaErrorInfoPtr quota_error_info),
                 (override));
 
    private:
     mojo::Receiver<blink::mojom::AIManagerCreateLanguageModelClient> receiver_{
         this};
+  };
+
+  class FakeMonitor {
+   public:
+    mojo::PendingRemote<blink::mojom::ModelDownloadProgressObserver>
+    BindNewPipeAndPassRemote();
+
+    void ExpectReceivedUpdate(uint64_t expected_downloaded_bytes,
+                              uint64_t expected_total_bytes);
+
+    // Same as `ExpectReceivedUpdate` except it normalizes
+    // `expected_downloaded_bytes` and `expected_total_bytes`.
+    void ExpectReceivedNormalizedUpdate(uint64_t expected_downloaded_bytes,
+                                        uint64_t expected_total_bytes);
+
+    void ExpectNoUpdate();
+
+   private:
+    AITestUtils::MockModelDownloadProgressMonitor mock_monitor_;
   };
 
   class FakeComponent {
@@ -162,33 +182,17 @@ class AITestUtils {
     mojo::Remote<blink::mojom::AIManager> GetAIManagerRemote();
     size_t GetAIManagerContextBoundObjectSetSize();
     size_t GetAIManagerDownloadProgressObserversSize();
-    void MockDownloadProgressUpdate(uint64_t downloaded_bytes,
-                                    uint64_t total_bytes);
 
     raw_ptr<MockOptimizationGuideKeyedService>
         mock_optimization_guide_keyed_service_;
     testing::NiceMock<optimization_guide::MockSession> session_;
+    AITestUtils::MockComponentUpdateService component_update_service_;
 
-   private:
     std::unique_ptr<AIManager> ai_manager_;
   };
 
   static const optimization_guide::TokenLimits& GetFakeTokenLimits();
   static const optimization_guide::proto::Any& GetFakeFeatureMetadata();
-
-  static void CheckWritingAssistanceApiRequest(
-      const google::protobuf::MessageLite& request_metadata,
-      const std::string& expected_shared_context,
-      const std::string& expected_context,
-      const optimization_guide::proto::WritingAssistanceApiOptions&
-          expected_options,
-      const std::string& expected_input);
-  static void CheckSummarizeRequest(
-      const google::protobuf::MessageLite& request_metadata,
-      const std::string& expected_shared_context,
-      const std::string& expected_context,
-      const optimization_guide::proto::SummarizeOptions& expected_options,
-      const std::string& expected_input);
 
   // Converts string language codes to AILanguageCode mojo struct.
   static std::vector<blink::mojom::AILanguageCodePtr> ToMojoLanguageCodes(

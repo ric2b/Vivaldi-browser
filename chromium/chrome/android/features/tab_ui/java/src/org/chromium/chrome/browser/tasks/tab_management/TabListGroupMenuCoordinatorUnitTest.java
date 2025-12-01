@@ -5,13 +5,17 @@
 package org.chromium.chrome.browser.tasks.tab_management;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.Activity;
+import android.content.res.Resources;
+import android.graphics.Rect;
 import android.view.View;
 
 import androidx.test.ext.junit.rules.ActivityScenarioRule;
@@ -28,7 +32,10 @@ import org.mockito.junit.MockitoRule;
 
 import org.chromium.base.Token;
 import org.chromium.base.test.BaseRobolectricTestRunner;
+import org.chromium.base.test.util.Features.DisableFeatures;
+import org.chromium.base.test.util.Features.EnableFeatures;
 import org.chromium.chrome.browser.collaboration.CollaborationServiceFactory;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab_group_sync.TabGroupSyncServiceFactory;
@@ -44,11 +51,13 @@ import org.chromium.ui.base.TestActivity;
 import org.chromium.ui.listmenu.ListMenuItemProperties;
 import org.chromium.ui.modelutil.MVCListAdapter.ModelList;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.widget.RectProvider;
 
 import java.util.List;
 
 /** Unit tests for {@link TabListGroupMenuCoordinator}. */
 @RunWith(BaseRobolectricTestRunner.class)
+@DisableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_BOTTOM_SHEET_ANDROID)
 public class TabListGroupMenuCoordinatorUnitTest {
     private static final int TAB_ID = 123;
     private static final String COLLABORATION_ID1 = "A";
@@ -73,6 +82,7 @@ public class TabListGroupMenuCoordinatorUnitTest {
     private TabListGroupMenuCoordinator mMenuCoordinator;
     private Activity mActivity;
     private View mView;
+    private SavedTabGroup mSavedTabGroup;
 
     @Before
     public void setUp() {
@@ -90,9 +100,8 @@ public class TabListGroupMenuCoordinatorUnitTest {
 
         when(mTabModel.getTabById(TAB_ID)).thenReturn(mTab);
         when(mTab.getTabGroupId()).thenReturn(TAB_GROUP_TOKEN);
-        SavedTabGroup savedTabGroup = new SavedTabGroup();
-        savedTabGroup.collaborationId = COLLABORATION_ID1;
-        when(mTabGroupSyncService.getGroup(any(LocalTabGroupId.class))).thenReturn(savedTabGroup);
+        mSavedTabGroup = new SavedTabGroup();
+        when(mTabGroupSyncService.getGroup(any(LocalTabGroupId.class))).thenReturn(mSavedTabGroup);
 
         mMenuCoordinator =
                 spy(
@@ -107,6 +116,10 @@ public class TabListGroupMenuCoordinatorUnitTest {
     private void onActivity(TestActivity activity) {
         mActivity = activity;
         mView = new View(activity);
+    }
+
+    private void setCollaborationState(boolean enabled) {
+        mSavedTabGroup.collaborationId = enabled ? COLLABORATION_ID1 : null;
     }
 
     @Test
@@ -126,11 +139,34 @@ public class TabListGroupMenuCoordinatorUnitTest {
     }
 
     @Test
+    @EnableFeatures(ChromeFeatureList.TAB_GROUP_PARITY_BOTTOM_SHEET_ANDROID)
+    public void testBuildMenuItems_WithIcons() {
+        ModelList modelList = new ModelList();
+        when(mServiceStatus.isAllowedToJoin()).thenReturn(false);
+
+        RectProvider viewRectProvider = mock();
+        when(viewRectProvider.getRect()).thenReturn(new Rect());
+
+        // Turns on mShouldShowIcons
+        mMenuCoordinator.showMenu(viewRectProvider, TAB_GROUP_TOKEN);
+        mMenuCoordinator.destroyMenuForTesting();
+        mMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_TOKEN);
+
+        for (int i = 0; i < modelList.size(); i++) {
+            PropertyModel propertyModel = modelList.get(i).model;
+            assertNotEquals(
+                    Resources.ID_NULL, propertyModel.get(ListMenuItemProperties.START_ICON_ID));
+        }
+    }
+
+    @Test
     public void testBuildMenuItems_NoDelete() {
+        setCollaborationState(true);
         ModelList modelList = new ModelList();
         mMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_TOKEN);
 
-        List<Integer> menuIds = List.of(R.id.close_tab_group, R.id.edit_group_name);
+        List<Integer> menuIds =
+                List.of(R.id.close_tab_group, R.id.edit_group_name, R.id.share_group);
         assertListMenuItemsAre(modelList, menuIds);
 
         modelList = new ModelList();
@@ -152,6 +188,7 @@ public class TabListGroupMenuCoordinatorUnitTest {
 
     @Test
     public void testBuildMenuItems_Share() {
+        setCollaborationState(true);
         ModelList modelList = new ModelList();
         when(mServiceStatus.isAllowedToCreate()).thenReturn(false);
         when(mServiceStatus.isAllowedToJoin()).thenReturn(false);
@@ -195,12 +232,13 @@ public class TabListGroupMenuCoordinatorUnitTest {
         mMenuCoordinator.buildMenuActionItems(modelList, TAB_GROUP_TOKEN);
 
         // Already shared and delete depends on collaboration service readback.
-        menuIds = List.of(R.id.close_tab_group, R.id.edit_group_name);
+        menuIds = List.of(R.id.close_tab_group, R.id.edit_group_name, R.id.share_group);
         assertListMenuItemsAre(modelList, menuIds);
     }
 
     @Test
     public void testBuildCollaborationMenuItems_Unknown() {
+        setCollaborationState(true);
         ModelList modelList = new ModelList();
         mMenuCoordinator.buildCollaborationMenuItems(modelList, MemberRole.UNKNOWN);
 
@@ -209,17 +247,22 @@ public class TabListGroupMenuCoordinatorUnitTest {
 
     @Test
     public void testBuildAllItems_Member() {
+        setCollaborationState(true);
         when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
                 .thenReturn(MemberRole.MEMBER);
 
-        mMenuCoordinator.getTabActionListener().run(mView, TAB_ID);
+        mMenuCoordinator.getTabActionListener().run(mView, TAB_ID, /* triggeringMotion= */ null);
 
         verify(mMenuCoordinator).buildMenuActionItems(any(), eq(TAB_GROUP_TOKEN));
         verify(mMenuCoordinator)
                 .buildCollaborationMenuItems(mModelListCaptor.capture(), eq(MemberRole.MEMBER));
 
         List<Integer> menuIds =
-                List.of(R.id.close_tab_group, R.id.edit_group_name, R.id.leave_group);
+                List.of(
+                        R.id.close_tab_group,
+                        R.id.edit_group_name,
+                        R.id.share_group,
+                        R.id.leave_group);
         assertListMenuItemsAre(mModelListCaptor.getValue(), menuIds);
 
         mMenuCoordinator.dismiss();
@@ -227,17 +270,22 @@ public class TabListGroupMenuCoordinatorUnitTest {
 
     @Test
     public void testBuildAllItems_Owner() {
+        setCollaborationState(true);
         when(mCollaborationService.getCurrentUserRoleForGroup(COLLABORATION_ID1))
                 .thenReturn(MemberRole.OWNER);
 
-        mMenuCoordinator.getTabActionListener().run(mView, TAB_ID);
+        mMenuCoordinator.getTabActionListener().run(mView, TAB_ID, /* triggeringMotion= */ null);
 
         verify(mMenuCoordinator).buildMenuActionItems(any(), eq(TAB_GROUP_TOKEN));
         verify(mMenuCoordinator)
                 .buildCollaborationMenuItems(mModelListCaptor.capture(), eq(MemberRole.OWNER));
 
         List<Integer> menuIds =
-                List.of(R.id.close_tab_group, R.id.edit_group_name, R.id.delete_shared_group);
+                List.of(
+                        R.id.close_tab_group,
+                        R.id.edit_group_name,
+                        R.id.share_group,
+                        R.id.delete_shared_group);
         assertListMenuItemsAre(mModelListCaptor.getValue(), menuIds);
 
         mMenuCoordinator.dismiss();

@@ -302,14 +302,13 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark - UITextViewDelegate
 
-- (BOOL)textView:(UITextView*)textView
-    shouldInteractWithURL:(NSURL*)URL
-                  inRange:(NSRange)characterRange
-              interaction:(UITextItemInteraction)interaction {
-  [self.delegate createAccountLinkPressed];
-
-  // Return NO, we don't want to try to open the URL
-  return NO;
+- (UIAction*)textView:(UITextView*)textView
+    primaryActionForTextItem:(UITextItem*)textItem
+               defaultAction:(UIAction*)defaultAction API_AVAILABLE(ios(17.0)) {
+  __weak __typeof__(self) weakSelf = self;
+  return [UIAction actionWithHandler:^(UIAction* action) {
+    [weakSelf.delegate createAccountLinkPressed];
+  }];
 }
 
 #pragma mark - TableViewTextLinkCellDelegate

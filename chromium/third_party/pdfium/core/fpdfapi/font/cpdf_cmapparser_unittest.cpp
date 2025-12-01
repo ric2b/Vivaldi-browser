@@ -5,16 +5,15 @@
 #include "core/fpdfapi/font/cpdf_cmapparser.h"
 
 #include "core/fxcrt/span.h"
-#include "core/fxcrt/span_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
 
 // Helps with default construction of the appropriate span rather than
-// writing make_span() and using span_equal() directly.
+// writing span() and using operator== directly.
 bool uint_ranges_equal(pdfium::span<const uint8_t> a,
                        pdfium::span<const uint8_t> b) {
-  return fxcrt::span_equals(a, b);
+  return a == b;
 }
 
 }  // namespace
@@ -46,31 +45,31 @@ TEST(CPDFCMapParserTest, GetCodeRange) {
   range = CPDF_CMapParser::GetCodeRange("A", "");
   EXPECT_FALSE(range.has_value());
 
-  // m_CharSize must be <= 4
+  // char_size_ must be <= 4
   range = CPDF_CMapParser::GetCodeRange("<aaaaaaaaaa>", "");
   EXPECT_FALSE(range.has_value());
 
   range = CPDF_CMapParser::GetCodeRange("<12345678>", "<87654321>");
   ASSERT_TRUE(range.has_value());
-  ASSERT_EQ(4u, range.value().m_CharSize);
+  ASSERT_EQ(4u, range.value().char_size_);
   {
     static constexpr uint8_t kLower[4] = {18, 52, 86, 120};
     static constexpr uint8_t kUpper[4] = {135, 101, 67, 33};
-    EXPECT_TRUE(uint_ranges_equal(kLower, range.value().m_Lower));
-    EXPECT_TRUE(uint_ranges_equal(kUpper, range.value().m_Upper));
+    EXPECT_TRUE(uint_ranges_equal(kLower, range.value().lower_));
+    EXPECT_TRUE(uint_ranges_equal(kUpper, range.value().upper_));
   }
 
   // Hex characters
   range = CPDF_CMapParser::GetCodeRange("<a1>", "<F3>");
   ASSERT_TRUE(range.has_value());
-  ASSERT_EQ(1u, range.value().m_CharSize);
-  EXPECT_EQ(161, range.value().m_Lower[0]);
-  EXPECT_EQ(243, range.value().m_Upper[0]);
+  ASSERT_EQ(1u, range.value().char_size_);
+  EXPECT_EQ(161, range.value().lower_[0]);
+  EXPECT_EQ(243, range.value().upper_[0]);
 
   // The second string should return 0's if it is shorter
   range = CPDF_CMapParser::GetCodeRange("<a1>", "");
   ASSERT_TRUE(range.has_value());
-  ASSERT_EQ(1u, range.value().m_CharSize);
-  EXPECT_EQ(161, range.value().m_Lower[0]);
-  EXPECT_EQ(0, range.value().m_Upper[0]);
+  ASSERT_EQ(1u, range.value().char_size_);
+  EXPECT_EQ(161, range.value().lower_[0]);
+  EXPECT_EQ(0, range.value().upper_[0]);
 }

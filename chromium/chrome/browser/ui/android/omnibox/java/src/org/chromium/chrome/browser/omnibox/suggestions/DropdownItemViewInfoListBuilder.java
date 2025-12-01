@@ -51,15 +51,16 @@ import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
 @NullMarked
 class DropdownItemViewInfoListBuilder {
     private final List<SuggestionProcessor> mPriorityOrderedSuggestionProcessors;
-    private final Supplier<Tab> mActivityTabSupplier;
+    private final Supplier<@Nullable Tab> mActivityTabSupplier;
 
     private GroupSeparatorProcessor mGroupSeparatorProcessor;
     private HeaderProcessor mHeaderProcessor;
     private @Nullable Supplier<ShareDelegate> mShareDelegateSupplier;
     private Optional<OmniboxImageSupplier> mImageSupplier;
-    private BookmarkState mBookmarkState;
+    private final BookmarkState mBookmarkState;
 
-    DropdownItemViewInfoListBuilder(Supplier<Tab> tabSupplier, BookmarkState bookmarkState) {
+    DropdownItemViewInfoListBuilder(
+            Supplier<@Nullable Tab> tabSupplier, BookmarkState bookmarkState) {
         mPriorityOrderedSuggestionProcessors = new ArrayList<>();
         mActivityTabSupplier = tabSupplier;
         mImageSupplier = Optional.empty();
@@ -78,9 +79,6 @@ class DropdownItemViewInfoListBuilder {
             Context context, SuggestionHost host, UrlBarEditingTextStateProvider textProvider) {
         assert mPriorityOrderedSuggestionProcessors.size() == 0 : "Processors already initialized.";
 
-        final Supplier<ShareDelegate> shareSupplier =
-                () -> mShareDelegateSupplier == null ? null : mShareDelegateSupplier.get();
-
         mImageSupplier =
                 OmniboxFeatures.isLowMemoryDevice()
                         ? Optional.empty()
@@ -90,7 +88,11 @@ class DropdownItemViewInfoListBuilder {
         mHeaderProcessor = new HeaderProcessor(context);
         registerSuggestionProcessor(
                 new EditUrlSuggestionProcessor(
-                        context, host, mImageSupplier, mActivityTabSupplier, shareSupplier));
+                        context,
+                        host,
+                        mImageSupplier,
+                        mActivityTabSupplier,
+                        mShareDelegateSupplier));
         registerSuggestionProcessor(
                 new AnswerSuggestionProcessor(context, host, textProvider, mImageSupplier));
         registerSuggestionProcessor(
@@ -153,7 +155,7 @@ class DropdownItemViewInfoListBuilder {
      *
      * @param shareDelegateSupplier Share facility supplier.
      */
-    void setShareDelegateSupplier(@Nullable Supplier<ShareDelegate> shareDelegateSupplier) {
+    void setShareDelegateSupplier(Supplier<ShareDelegate> shareDelegateSupplier) {
         mShareDelegateSupplier = shareDelegateSupplier;
     }
 

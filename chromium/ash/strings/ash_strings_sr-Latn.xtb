@@ -462,6 +462,7 @@ Broj povezanih uređaja je <ph name="DEVICECOUNT" />.</translation>
 <translation id="2530896289327917474">Uključite ili isključite navigaciju kursorom</translation>
 <translation id="2531025035050312891">spor uređaj</translation>
 <translation id="2531107890083353124">Dok prevlačite karticu, pritisnite <ph name="KEY_ONE" /></translation>
+<translation id="2532199152994248594">Prevucite ili pritisnite taster za razmak da biste izabrali oblast za snimanje slika</translation>
 <translation id="2545334090614121435">Pokušavate da koristite Home? Koristite</translation>
 <translation id="254900897760075745">Kopiraj izabrani sadržaj u privremenu memoriju</translation>
 <translation id="2549711466868162843">Poboljšano osvetljenje</translation>
@@ -581,7 +582,6 @@ U suprotnom će ugrađeni tačped biti ponovo omogućen za <ph name="TIMEOUT_S
 <translation id="2949420361496057765">Pritisnite <ph name="MODIFIER" /> i kliknite na link</translation>
 <translation id="2957159466053076448">Te funkcije možete da isključite u bilo kom trenutku u Podešavanjima. <ph name="LINK_TO_LEARN_MORE" /></translation>
 <translation id="295852781144570696">Zvuk uređaja</translation>
-<translation id="2960314608273155470">Režim snimanja, podrazumevana vrednost je <ph name="SOURCE" /> <ph name="TYPE" />. Pritisnite Tab za kretanje pomoću tastature.</translation>
 <translation id="2961963223658824723">Došlo je do greške. Probajte ponovo za par sekundi.</translation>
 <translation id="2963773877003373896">mod3</translation>
 <translation id="2965227184985674128">Želite da uključite pristup mikrofonu?</translation>
@@ -761,6 +761,7 @@ U suprotnom će ugrađeni tačped biti ponovo omogućen za <ph name="TIMEOUT_S
 <translation id="3552189655002856821">WiFi je isključen</translation>
 <translation id="3554215588514239132">Prikaži ili sakrij okno Alatke za programere</translation>
 <translation id="3554637740840164787">Stavka <ph name="ITEM_TITLE" /> je zakačena</translation>
+<translation id="3554928024630051016">Da biste dodali još USB uređaja, probajte da uklonite neki, pa priključite novi uređaj</translation>
 <translation id="3558768885091059911">Želite da uključite pristup kameri i mikrofonu?</translation>
 <translation id="3560174576767922131">Snimi video</translation>
 <translation id="3563775809269155755">Omogući hotspot</translation>
@@ -868,6 +869,7 @@ Priključite uređaj na napajanje.</translation>
 <translation id="3861651314799684201">Pritisnite Enter da biste snimili ceo ekran</translation>
 <translation id="3870197372373144624">Probajte da isključite uređaj.</translation>
 <translation id="3879748587602334249">Menadžer preuzimanja</translation>
+<translation id="3884007280698606545">Ograničenje za USB je dostignuto</translation>
 <translation id="3886872229787704059">Otvarano danas</translation>
 <translation id="3891340733213178823">Dvaput pritisnite Ctrl+Shift+Q da biste se odjavili.</translation>
 <translation id="3892148308691398805">Kopiraj tekst</translation>
@@ -1441,6 +1443,7 @@ Nijedan uređaj nije povezan.</translation>
 <translation id="5672890847723042801">Uslužne aplikacije</translation>
 <translation id="5673434351075758678">Sa jezika „<ph name="FROM_LOCALE" />“ na „<ph name="TO_LOCALE" />“ posle sinhronizacije uređaja.</translation>
 <translation id="5675363643668471212">Stavka na polici</translation>
+<translation id="5677022547882470786">Prevucite ili pritisnite taster za razmak da biste izabrali oblast za pretragu</translation>
 <translation id="5677928146339483299">Blokirano</translation>
 <translation id="5678564054339031017">Prikažite sledeću nedelju</translation>
 <translation id="5679050765726761783">Povezan je adapter male snage</translation>
@@ -1486,6 +1489,7 @@ Nijedan uređaj nije povezan.</translation>
 <translation id="5788127256798019331">Play datoteke</translation>
 <translation id="5788535737706478207">Ponovo otvori karticu ili prozor koji je poslednji zatvoren</translation>
 <translation id="5790085346892983794">Uspešno</translation>
+<translation id="5791926618942305301">U snimanju ekrana podesite na <ph name="SOURCE" /> <ph name="TYPE" />. Pritisnite Tab da biste izabrali tip snimanja. Pritisnite Enter da biste snimili. Da biste izabrali oblast za snimanje, podesite snimak ekrana na delimičan. Ako nije već aktivan, pritisnite taster za razmak da biste izabrali region.</translation>
 <translation id="579415080077680903">Tišina</translation>
 <translation id="5802516411616338943">Otvori Brza podešavanja</translation>
 <translation id="5804651031882187592">Isključite podešavanje Zaključaj SIM</translation>
@@ -1642,6 +1646,7 @@ Nijedan uređaj nije povezan.</translation>
 <translation id="6288235558961782912"><ph name="USER_EMAIL_ADDRESS" /> može ponovo da se doda kasnije uz dozvolu roditelja.</translation>
 <translation id="6291221004442998378">Ne puni se</translation>
 <translation id="6298183524022479114">Prilagodite ovaj uređaj u aplikaciji</translation>
+<translation id="6304076460080088478">Zatvorite ili umanjite prozore bez arhiviranja da biste pretraživali ekran pomoću Google objektiva</translation>
 <translation id="6309219492973062892">Kliknite na ikone police od 1 do 8 ili ih dodirnite</translation>
 <translation id="6315170314923504164">Glas</translation>
 <translation id="6319058840130157106">Krećite se unazad iz donjeg desnog ugla na pokretač, traku za adresu, traku sa obeleživačima, veb-sajt koji je otvoren i preuzimanja</translation>
@@ -1770,6 +1775,7 @@ Novo instaliranje</translation>
 <translation id="6700713906295497288">Dugme IME menija</translation>
 <translation id="6704073473590541209">Izabrali ste marker na desnoj ivici, koristite tastere sa strelicama za pomeranje</translation>
 <translation id="6706742084323792866">Tastatura za PIN</translation>
+<translation id="6709719156428404245">Prevucite ili pritisnite taster za razmak da biste izabrali oblast za snimanje videa</translation>
 <translation id="6710213216561001401">Prethodno</translation>
 <translation id="6723839937902243910">Energija</translation>
 <translation id="672609503628871915">Prikaži šta je novo</translation>

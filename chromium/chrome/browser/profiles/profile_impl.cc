@@ -27,7 +27,6 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
-#include "base/not_fatal_until.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -239,6 +238,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
+#include "chrome/browser/extensions/extension_special_storage_policy.h"
 #include "extensions/browser/extension_pref_store.h"
 #include "extensions/browser/extension_pref_value_map.h"
 #include "extensions/browser/extension_pref_value_map_factory.h"
@@ -246,7 +246,6 @@
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
-#include "chrome/browser/extensions/extension_special_storage_policy.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "extensions/browser/extension_prefs.h"
@@ -444,7 +443,7 @@ void ProfileImpl::RegisterProfilePrefs(
 #endif  // !BUILDFLAG(IS_ANDROID)
   registry->RegisterTimePref(prefs::kProfileCreationTime, base::Time());
 
-#if BUILDFLAG(IS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(ENABLE_PDF_INK2)
   registry->RegisterBooleanPref(prefs::kPdfAnnotationsEnabled, true);
 #endif
   registry->RegisterIntegerPref(prefs::kEnterpriseBadgingTemporarySetting, 0);
@@ -1098,7 +1097,7 @@ bool ProfileImpl::AllowsBrowserWindows() const {
 }
 
 ExtensionSpecialStoragePolicy* ProfileImpl::GetExtensionSpecialStoragePolicy() {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   if (!extension_special_storage_policy_.get()) {
     TRACE_EVENT0("browser", "ProfileImpl::GetExtensionSpecialStoragePolicy");
     extension_special_storage_policy_ =
@@ -1133,17 +1132,13 @@ void ProfileImpl::OnLocaleReady(CreateMode create_mode) {
   // the services affected by the migration are.
   // TODO(crbug.com/369297671): Remove one year after launching
   // kForceMigrateSyncingUserToSignedIn on all //chrome platforms.
-  CHECK(GetPrefs(), base::NotFatalUntil::M133);
-  CHECK(!IdentityManagerFactory::GetForProfileIfExists(this),
-        base::NotFatalUntil::M133);
-  CHECK(!SyncServiceFactory::HasSyncService(this), base::NotFatalUntil::M133);
-  CHECK(!BookmarkModelFactory::GetForBrowserContextIfExists(this),
-        base::NotFatalUntil::M133);
-  CHECK(!ProfilePasswordStoreFactory::HasStore(this),
-        base::NotFatalUntil::M133);
-  CHECK(!AccountPasswordStoreFactory::HasStore(this),
-        base::NotFatalUntil::M133);
-  CHECK(!ReadingListModelFactory::HasModel(this), base::NotFatalUntil::M133);
+  CHECK(GetPrefs());
+  CHECK(!IdentityManagerFactory::GetForProfileIfExists(this));
+  CHECK(!SyncServiceFactory::HasSyncService(this));
+  CHECK(!BookmarkModelFactory::GetForBrowserContextIfExists(this));
+  CHECK(!ProfilePasswordStoreFactory::HasStore(this));
+  CHECK(!AccountPasswordStoreFactory::HasStore(this));
+  CHECK(!ReadingListModelFactory::HasModel(this));
   browser_sync::MaybeMigrateSyncingUserToSignedIn(GetPath(), GetPrefs());
 
 #if BUILDFLAG(IS_ANDROID)
@@ -1356,7 +1351,7 @@ DownloadManagerDelegate* ProfileImpl::GetDownloadManagerDelegate() {
 }
 
 storage::SpecialStoragePolicy* ProfileImpl::GetSpecialStoragePolicy() {
-#if BUILDFLAG(ENABLE_EXTENSIONS)
+#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
   return GetExtensionSpecialStoragePolicy();
 #else
   return NULL;

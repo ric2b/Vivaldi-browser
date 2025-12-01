@@ -244,8 +244,8 @@ available as a runtime enabled feature, we recommend (but don't require) that
 you [request an Early Design Review
 from the TAG](/blink/launching-features/wide-review/#tag) and proceed to
 the “Dev Trials” stage in ChromeStatus (note also exceptions enumerated
-[here](/blink/launching-features/wide-review/#exceptions)). This will generate
-a “Ready for Developer Testing” email that you should send to
+[here](/blink/launching-features/wide-review/#exceptions)). There is a button to
+generate a “Ready for Developer Testing” email that you should send to
 [blink-dev](mailto:blink-dev@chromium.org) to notify the community they can
 try out the feature. At this point, you should consider asking [other browser
 vendors](/blink/launching-features/wide-review/) and [the web developer
@@ -445,9 +445,7 @@ owners](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/
 if there is no open/unaddressed feedback and you are still blocked on LGTMs
 after 5 days.
 
-Once you have the needed approvals, set the implementation status to "Enabled by default" in
-ChromeStatus.
-You will likely also need to land a Chromium CL to turn on the feature.
+Once you have the needed approvals, you will likely also need to land a Chromium CL to turn on the feature.
 Link to the blink-dev thread via the [Google Groups web interface](https://groups.google.com/a/chromium.org/g/blink-dev)
 in your CL's commit message to make it easy and clear to review.
 
@@ -519,9 +517,7 @@ owners](https://chromium.googlesource.com/chromium/src/+/HEAD/third_party/blink/
 if no open/unaddressed feedback and you are still blocked on LGTMs after 5
 days.)
 
-Once you have the needed approvals, set the implementation status to "Enabled by default" in
-ChromeStatus.
-You will likely also need to land a Chromium CL to turn on the feature.
+Once you have the needed approvals, you will likely also need to land a Chromium CL to turn on the feature.
 Link to the blink-dev thread via the [Google Groups web interface](https://groups.google.com/a/chromium.org/g/blink-dev)
 in your CL's commit message to make it easy and clear to review.
 
@@ -722,8 +718,7 @@ in your CL's commit message to make it easy and clear to review.
 
 #### Step 7: Disable the feature {:#disable-feature}
 
-Disable the feature by default. Update ChromeStatus to either “Disabled” or
-“Disabled with Deprecation Trial”.
+Disable the feature by default.
 
 #### Step 8: Wait for the removal to land {:#wait-for-landing}
 
@@ -744,7 +739,7 @@ the resulting notification to blink-dev. Then repeat this step.
 #### Step 9: Remove Code {:#remove-code}
 
 Once it's clear that developers are no longer relying on the disabled feature,
-remove the code, and set the ChromeStatus to “Removed.”
+remove the code.
 
 ### Web-developer-facing change to existing behavior {:#behavior-changes}
 
@@ -779,7 +774,7 @@ only for changes deemed very unlikely to break sites, and that change APIs in at
 
 Changes which extend an already exposed API to additional platforms without
 introducing new platform-specific risks may also rely just on a PSA, along with
-updating the chromestatus entry to reflect the new platform support. For example,
+updating the ChromeStatus entry to reflect the new platform support. For example,
 when simply extending an API already exposed on all desktop platforms to also be
 exposed on Android using the same implementation, a PSA is generally sufficient.
 But if the Android implementation has meaningful differences in behavior which
@@ -799,9 +794,8 @@ reasons we want to modify the current behavior.
 
 If you want developers to try out this change before shipping it (e.g.,
 to assess potential breakage), put the relevant code behind a [runtime
-enabled feature](/blink/runtime-enabled-features), and set the
-status to “Dev Trial” in ChromeStatus. This will generate a “Ready for
-Developer Testing” email that you should send to
+enabled feature](/blink/runtime-enabled-features). Then use ChromeStatus to
+generate a “Ready for Developer Testing” email that you should send to
 [blink-dev](mailto:blink-dev@chromium.org) to notify the community they
 can try out this change.
 

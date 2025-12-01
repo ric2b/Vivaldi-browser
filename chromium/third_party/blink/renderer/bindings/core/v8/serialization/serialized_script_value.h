@@ -353,20 +353,28 @@ class CORE_EXPORT SerializedScriptValue
     return static_cast<T*>(it->value.get());
   }
 
- private:
-  friend class ScriptValueSerializer;
-  friend class V8ScriptValueSerializer;
-  friend class UnpackedSerializedScriptValue;
-
   struct BufferDeleter {
     void operator()(uint8_t* buffer) { WTF::Partitions::BufferFree(buffer); }
   };
   using DataBufferPtr = base::HeapArray<uint8_t, BufferDeleter>;
 
-  SerializedScriptValue();
-  explicit SerializedScriptValue(DataBufferPtr);
+  // Takes ownership rather than copying.
+  static scoped_refptr<SerializedScriptValue> Create(
+      DataBufferPtr&& data_buffer);
 
   static DataBufferPtr AllocateBuffer(size_t);
+
+  // Called to take ownership of `data_buffer_` and destroy `this`.
+  // This enforces that there are no other references to `this`.
+  DataBufferPtr ConsumeAndTakeBuffer() &&;
+
+ private:
+  friend class ScriptValueSerializer;
+  friend class V8ScriptValueSerializer;
+  friend class UnpackedSerializedScriptValue;
+
+  SerializedScriptValue();
+  explicit SerializedScriptValue(DataBufferPtr);
 
   void SetData(DataBufferPtr data) { data_buffer_ = std::move(data); }
 

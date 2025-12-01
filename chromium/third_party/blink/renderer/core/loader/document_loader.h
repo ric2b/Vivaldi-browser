@@ -214,9 +214,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
           code_cache_host,
       CrossVariantMojoRemote<mojom::blink::CodeCacheHostInterfaceBase>
           code_cache_host_for_background) override;
-  WebString OriginCalculationDebugInfo() const override {
-    return origin_calculation_debug_info_;
-  }
   bool HasLoadedNonInitialEmptyDocument() const override;
   bool IsForDiscard() const override;
 
@@ -428,7 +425,8 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   scoped_refptr<BackgroundCodeCacheHost> CreateBackgroundCodeCacheHost();
   static void DisableCodeCacheForTesting();
 
-  mojo::PendingRemote<mojom::blink::CodeCacheHost> CreateWorkerCodeCacheHost();
+  // This method is used for workers and iframes loaded without navigation.
+  mojo::PendingRemote<mojom::blink::CodeCacheHost> CreateCodeCacheHost();
 
   HashMap<KURL, EarlyHintsPreloadEntry> GetEarlyHintsPreloadedResources();
 
@@ -701,11 +699,6 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   const scoped_refptr<SecurityOrigin> origin_to_commit_;
 
-  // Information about how `origin_to_commit_` was calculated, to help debug if
-  // it differs from the origin calculated on the browser side.
-  // TODO(https://crbug.com/1220238): Remove this.
-  AtomicString origin_calculation_debug_info_;
-
   blink::BlinkStorageKey storage_key_;
 
   WebNavigationType navigation_type_;
@@ -862,7 +855,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
 
   // Indicates which browsing context group this frame belongs to. It is only
   // set for a main frame committing in another browsing context group.
-  const std::optional<BrowsingContextGroupInfo> browsing_context_group_info_;
+  const std::optional<base::UnguessableToken> browsing_context_group_token_;
 
   // Runtime feature state override is applied to the document. They are applied
   // before JavaScript context creation (i.e. CreateParserPostCommit).

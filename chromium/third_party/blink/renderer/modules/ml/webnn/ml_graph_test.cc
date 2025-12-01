@@ -2,12 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "services/webnn/public/mojom/webnn_device.mojom-blink-forward.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_ml_transpose_options.h"
 #ifdef UNSAFE_BUFFERS_BUILD
 // TODO(crbug.com/390223051): Remove C-library calls to fix the errors.
 #pragma allow_unsafe_libc_calls
 #endif
-
-#include "third_party/blink/renderer/modules/ml/webnn/ml_graph.h"
 
 #include <limits.h>
 
@@ -66,8 +66,10 @@
 #include "third_party/blink/renderer/core/typed_arrays/dom_typed_array.h"
 #include "third_party/blink/renderer/modules/ml/ml.h"
 #include "third_party/blink/renderer/modules/ml/ml_context.h"
+#include "third_party/blink/renderer/modules/ml/webnn/ml_graph.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_builder_test_utils.h"
+#include "third_party/blink/renderer/modules/ml/webnn/ml_graph_transform/ml_graph_transformer.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_type_converter.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_graph_utils.h"
 #include "third_party/blink/renderer/modules/ml/webnn/ml_operand.h"
@@ -213,7 +215,7 @@ MLOperand* BuildGemm(V8TestingScope& scope,
                      MLGraphBuilder* builder,
                      MLOperand* a,
                      MLOperand* b,
-                     const MLGemmOptions* options = MLGemmOptions::Create()) {
+                     MLGemmOptions* options = MLGemmOptions::Create()) {
   auto* output = builder->gemm(a, b, options, scope.GetExceptionState());
   EXPECT_THAT(output, testing::NotNull());
   EXPECT_EQ(output->Kind(), webnn::mojom::blink::Operand::Kind::kOutput);
@@ -231,7 +233,7 @@ MLOperand* BuildElementWiseBinaryOperator(
     MLOperand* a,
     MLOperand* b,
     webnn::mojom::blink::ElementWiseBinary::Kind kind,
-    const MLOperatorOptions* options) {
+    MLOperatorOptions* options) {
   switch (kind) {
     case webnn::mojom::blink::ElementWiseBinary::Kind::kAdd:
       return builder->add(a, b, options, scope.GetExceptionState());
@@ -274,7 +276,7 @@ MLOperand* BuildElementWiseBinary(
     webnn::mojom::blink::ElementWiseBinary::Kind kind,
     MLOperand* a,
     MLOperand* b,
-    const MLOperatorOptions* options = MLOperatorOptions::Create()) {
+    MLOperatorOptions* options = MLOperatorOptions::Create()) {
   MLOperand* output =
       BuildElementWiseBinaryOperator(builder, scope, a, b, kind, options);
   EXPECT_THAT(output, testing::NotNull());
@@ -320,7 +322,7 @@ class MLGraphTest : public testing::Test {
 
   BuildResult BuildGraph(V8TestingScope& scope,
                          MLGraphBuilder* builder,
-                         const MLNamedOperands& named_operands) {
+                         MLNamedOperands& named_operands) {
     ScriptPromise<MLGraph> build_promise = builder->build(
         scope.GetScriptState(), named_operands, scope.GetExceptionState());
     // An empty promise will be returned if `build()` synchronously rejects.
@@ -460,8 +462,9 @@ class FakeWebNNGraphBuilder : public blink_mojom::WebNNGraphBuilder {
         std::make_unique<FakeWebNNGraph>(*helper_),
         blink_remote.InitWithNewEndpointAndPassReceiver());
 
-    std::move(callback).Run(blink_mojom::CreateGraphResult::NewGraphRemote(
-        std::move(blink_remote)));
+    auto success = blink_mojom::CreateGraphSuccess::New(
+        std::move(blink_remote), WTF::Vector<blink_mojom::Device>());
+    std::move(callback).Run(std::move(success));
   }
 
   void CreatePendingConstant(const WebNNPendingConstantToken& constant_handle,
@@ -498,6 +501,7 @@ class FakeWebNNContext : public blink_mojom::WebNNContext {
   }
 
   void CreateTensor(blink_mojom::TensorInfoPtr tensor_info,
+                    mojo_base::BigBuffer tensor_data,
                     CreateTensorCallback callback) override {
     mojo::PendingAssociatedRemote<blink_mojom::WebNNTensor> blink_remote;
     auto blink_receiver = blink_remote.InitWithNewEndpointAndPassReceiver();
@@ -551,6 +555,7 @@ class FakeWebNNContextProvider : public blink_mojom::WebNNContextProvider {
 
     webnn::ContextProperties context_properties(
         webnn::InputOperandLayout::kNchw, webnn::Resample2DAxes::kAny,
+        webnn::BatchNormalizationAxis::kAny,
         /*tensor_byte_length_limit=*/INT_MAX,
         {/*input=*/webnn::SupportedDataTypes::All(),
          /*constant=*/webnn::SupportedDataTypes::All(),
@@ -793,11 +798,12 @@ ScriptPromise<MLGraph> BuildSimpleGraph(V8TestingScope& scope,
   auto* rhs_operand = BuildInput(scope.GetScriptState(), builder, "rhs",
                                  {3, 4, 5}, V8MLOperandDataType::Enum::kFloat32,
                                  scope.GetExceptionState());
-  const MLOperatorOptions* options = MLOperatorOptions::Create();
+  MLOperatorOptions* options = MLOperatorOptions::Create();
   auto* output = builder->add(lhs_operand, rhs_operand, options,
                               scope.GetExceptionState());
   EXPECT_THAT(output, testing::NotNull());
-  return builder->build(scope.GetScriptState(), {{"output", output}},
+  MLNamedOperands named_outputs = {{"output", output}};
+  return builder->build(scope.GetScriptState(), named_outputs,
                         scope.GetExceptionState());
 }
 
@@ -896,8 +902,12 @@ TEST_F(MLGraphTest, BuildTest) {
     auto* input =
         BuildInput(scope.GetScriptState(), builder, "input", {3, 4, 5},
                    V8MLOperandDataType::Enum::kFloat32, exception_state);
+    MLNamedOperands named_outputs = {{
+        "output",
+        input,
+    }};
     auto [graph, error_name, error_message] =
-        BuildGraph(scope, builder, {{"output", input}});
+        BuildGraph(scope, builder, named_outputs);
     EXPECT_EQ(error_name, "TypeError");
     EXPECT_EQ(error_message,
               "The operand with name \"output\" is not an output operand.");
@@ -912,12 +922,13 @@ TEST_F(MLGraphTest, BuildTest) {
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* b = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
-    const MLOperatorOptions* options = MLOperatorOptions::Create();
+    MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* c = builder->add(a, b, options, exception_state);
     ASSERT_THAT(c, testing::NotNull());
 
+    MLNamedOperands named_outputs = {{"c", c}};
     auto [graph, error_name, error_message] =
-        BuildGraph(scope, builder, {{"c", c}});
+        BuildGraph(scope, builder, named_outputs);
     EXPECT_EQ(error_name, "TypeError");
     EXPECT_EQ(error_message, "The input name \"a\" is duplicated.");
   }
@@ -936,11 +947,12 @@ TEST_F(MLGraphTest, BuildTest) {
     ASSERT_THAT(builder, testing::NotNull());
     auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
-    const MLOperatorOptions* options = MLOperatorOptions::Create();
+    MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output = builder->add(a, a, options, exception_state);
     ASSERT_THAT(output, testing::NotNull());
+    MLNamedOperands named_outputs = {{"b", output}};
     auto [graph, error_name, error_message] =
-        BuildGraph(scope, builder, {{"b", output}});
+        BuildGraph(scope, builder, named_outputs);
     ASSERT_THAT(graph, testing::NotNull());
     const auto& inputs = graph->GetInputConstraints();
     EXPECT_EQ(inputs.size(), static_cast<uint32_t>(1));
@@ -962,13 +974,14 @@ TEST_F(MLGraphTest, BuildTest) {
     ASSERT_THAT(builder, testing::NotNull());
     auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
-    const MLOperatorOptions* options = MLOperatorOptions::Create();
+    MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* b = builder->relu(a, options, exception_state);
     ASSERT_THAT(b, testing::NotNull());
     auto* c = builder->sigmoid(a, options, exception_state);
     ASSERT_THAT(c, testing::NotNull());
+    MLNamedOperands named_outputs = {{"b", b}, {"c", c}};
     auto [graph, error_name, error_message] =
-        BuildGraph(scope, builder, {{"b", b}, {"c", c}});
+        BuildGraph(scope, builder, named_outputs);
     ASSERT_THAT(graph, testing::NotNull());
     const auto& inputs = graph->GetInputConstraints();
     EXPECT_EQ(inputs.size(), static_cast<uint32_t>(1));
@@ -991,8 +1004,9 @@ TEST_F(MLGraphTest, BuildTest) {
                          V8MLOperandDataType::Enum::kFloat32, exception_state);
     auto* c = BuildGemm(scope, builder, a, b);
 
+    MLNamedOperands named_outputs = {{"c", c}};
     auto [graph, error_name, error_message] =
-        BuildGraph(scope, builder, {{"c", c}});
+        BuildGraph(scope, builder, named_outputs);
     ASSERT_THAT(graph, testing::NotNull());
     const auto& inputs = graph->GetInputConstraints();
     EXPECT_EQ(inputs.size(), static_cast<uint32_t>(2));
@@ -1182,8 +1196,9 @@ TEST_F(MLGraphTest, WebNNGraphDispatchTest) {
   auto* output_operand = BuildElementWiseBinary(
       scope, builder, webnn::mojom::blink::ElementWiseBinary::Kind::kAdd,
       lhs_operand, rhs_operand);
+  MLNamedOperands named_outputs = {{"output", output_operand}};
   auto [graph, error_message, build_exception] =
-      BuildGraph(scope, builder, {{"output", output_operand}});
+      BuildGraph(scope, builder, named_outputs);
   ASSERT_THAT(graph, testing::NotNull());
 
   MLTensor* input_tensor =
@@ -1253,11 +1268,12 @@ struct SoftmaxTester {
     auto* input_operand =
         BuildInput(scope.GetScriptState(), builder, "input", input.dimensions,
                    input.data_type, scope.GetExceptionState());
-    const MLOperatorOptions* options = MLOperatorOptions::Create();
+    MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
         builder->softmax(input_operand, options, scope.GetExceptionState());
+    MLNamedOperands named_outputs = {{"output", output_operand}};
     auto [graph, error_name, error_message] =
-        helper.BuildGraph(scope, builder, {{"output", output_operand}});
+        helper.BuildGraph(scope, builder, named_outputs);
     ASSERT_THAT(graph, testing::NotNull());
 
     auto graph_info = helper.GetGraphInfo();
@@ -1267,10 +1283,9 @@ struct SoftmaxTester {
     EXPECT_TRUE(operation->is_softmax());
     EXPECT_EQ(graph_info->output_operands.size(), 1u);
     auto output_operand_id = graph_info->output_operands[0];
-    auto output_operand_iter =
-        graph_info->id_to_operand_map.find(output_operand_id);
-    ASSERT_TRUE(output_operand_iter != graph_info->id_to_operand_map.end());
-    EXPECT_EQ(output_operand_iter->value->descriptor, expected_descriptor);
+    ASSERT_LT(output_operand_id.value(), graph_info->operands.size());
+    EXPECT_EQ(graph_info->operands[output_operand_id.value()]->descriptor,
+              expected_descriptor);
   }
 };
 
@@ -1317,12 +1332,13 @@ struct CastTester {
     auto* input_operand =
         BuildInput(scope.GetScriptState(), builder, "input", input.dimensions,
                    input.data_type, scope.GetExceptionState());
-    const MLOperatorOptions* options = MLOperatorOptions::Create();
+    MLOperatorOptions* options = MLOperatorOptions::Create();
     auto* output_operand =
         builder->cast(input_operand, V8MLOperandDataType(output_data_type),
                       options, scope.GetExceptionState());
+    MLNamedOperands named_outputs = {{"output", output_operand}};
     auto [graph, error_name, error_message] =
-        helper.BuildGraph(scope, builder, {{"output", output_operand}});
+        helper.BuildGraph(scope, builder, named_outputs);
     ASSERT_THAT(graph, testing::NotNull());
 
     auto graph_info = helper.GetGraphInfo();
@@ -1336,10 +1352,9 @@ struct CastTester {
               blink_mojom::ElementWiseUnary::Kind::kCast);
     EXPECT_EQ(graph_info->output_operands.size(), 1u);
     auto output_operand_id = graph_info->output_operands[0];
-    auto output_operand_iter =
-        graph_info->id_to_operand_map.find(output_operand_id);
-    ASSERT_TRUE(output_operand_iter != graph_info->id_to_operand_map.end());
-    EXPECT_EQ(output_operand_iter->value->descriptor, expected_descriptor);
+    ASSERT_LT(output_operand_id.value(), graph_info->operands.size());
+    EXPECT_EQ(graph_info->operands[output_operand_id.value()]->descriptor,
+              expected_descriptor);
   }
 };
 
@@ -1536,6 +1551,99 @@ TEST_F(MLGraphTest, CastTester) {
                .expected_descriptor =
                    ToDescriptor(webnn::OperandDataType::kInt32, shape)}
         .Test(*this, scope, context);
+  }
+}
+
+TEST_F(MLGraphTest, MLTransformTest) {
+  V8TestingScope scope;
+  // Bind fake WebNN Context in the service for testing.
+  ScopedWebNNServiceBinder scoped_setup_binder(*this, scope);
+  MLContext* context = CreateContext(scope, MLContextOptions::Create());
+
+  {
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+
+    //   [a]
+    //   / \
+    //   \ /
+    //   add
+    //    |
+    //   [b]
+    auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
+    MLOperatorOptions* options = MLOperatorOptions::Create();
+    auto* b = builder->add(a, a, options, exception_state);
+    ASSERT_THAT(b, testing::NotNull());
+    //  Transform the graph to:
+    // [a]  [c]
+    //  \   /
+    //   \ /
+    //   add
+    //    |
+    //   [b]
+
+    auto* c =
+        BuildConstant(scope.GetScriptState(), builder, {3, 4, 5},
+                      V8MLOperandDataType::Enum::kFloat32, exception_state);
+    ASSERT_THAT(c, testing::NotNull());
+    MLGraphTransformer::Disconnect(a, b->Operator(), 1);
+    MLGraphTransformer::Connect(c, b->Operator(), 1);
+    EXPECT_EQ(b->Operator()->Inputs()[0], a);
+    EXPECT_EQ(b->Operator()->Inputs()[1], c);
+    // Build the transformed graph.
+    MLNamedOperands named_outputs = {{"b", b}};
+    auto [graph, error_name, error_message] =
+        BuildGraph(scope, builder, named_outputs);
+    ASSERT_THAT(graph, testing::NotNull());
+    const auto& inputs = graph->GetInputConstraints();
+    EXPECT_EQ(inputs.size(), static_cast<uint32_t>(1));
+    EXPECT_EQ(*inputs.at("a"), a->Descriptor());
+    const auto& outputs = graph->GetOutputConstraints();
+    EXPECT_EQ(outputs.size(), static_cast<uint32_t>(1));
+    EXPECT_EQ(*outputs.at("b"), b->Descriptor());
+  }
+
+  {
+    DummyExceptionStateForTesting exception_state;
+    auto* builder = MLGraphBuilder::Create(scope.GetScriptState(), context,
+                                           exception_state);
+    ASSERT_THAT(builder, testing::NotNull());
+    // [a] -> transpose -> [b] -> relu -> [c]
+    auto* a = BuildInput(scope.GetScriptState(), builder, "a", {3, 4, 5},
+                         V8MLOperandDataType::Enum::kFloat32, exception_state);
+    auto* transpose_options = MLTransposeOptions::Create();
+    transpose_options->setPermutation({0, 2, 1});
+    auto* b = builder->transpose(a, transpose_options, exception_state);
+    ASSERT_THAT(b, testing::NotNull());
+    auto* relu_options = MLOperatorOptions::Create();
+    auto* c = builder->relu(b, relu_options, exception_state);
+    ASSERT_THAT(c, testing::NotNull());
+
+    EXPECT_EQ(c->Shape(), std::vector<uint32_t>({3, 5, 4}));
+    // Transform the graph to:
+    // [a] -> relu -> [c]
+    MLGraphTransformer::Disconnect(a, b->Operator(), 0);
+    MLGraphTransformer::Disconnect(b, c->Operator(), 0);
+    MLGraphTransformer::Connect(a, c->Operator(), 0);
+    // update shape of c
+    auto* updated_c =
+        MLGraphTransformer::ReplaceOperandWithNewShape(c, {3, 4, 5});
+    EXPECT_EQ(updated_c->Shape(), std::vector<uint32_t>({3, 4, 5}));
+
+    // Build the transformed graph.
+    MLNamedOperands named_outputs = {{"c", updated_c}};
+    auto [graph, error_name, error_message] =
+        BuildGraph(scope, builder, named_outputs);
+    ASSERT_THAT(graph, testing::NotNull());
+    const auto& inputs = graph->GetInputConstraints();
+    EXPECT_EQ(inputs.size(), static_cast<uint32_t>(1));
+    EXPECT_EQ(*inputs.at("a"), a->Descriptor());
+    const auto& outputs = graph->GetOutputConstraints();
+    EXPECT_EQ(outputs.size(), static_cast<uint32_t>(1));
+    EXPECT_EQ(*outputs.at("c"), updated_c->Descriptor());
   }
 }
 

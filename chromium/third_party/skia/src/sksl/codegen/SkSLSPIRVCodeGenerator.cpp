@@ -2098,7 +2098,9 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
                                                 OutputStream& out) {
     const ExpressionArray& arguments = c.arguments();
     const Type& callType = c.type();
-    SpvId result = this->nextId(nullptr);
+    // Note: MatrixCompMult creates its own result ID, avoid calling nextId as it could generate a
+    // RelaxedPrecision decoration on an ID that would never be used.
+    SpvId result = kind == kMatrixCompMult_SpecialIntrinsic ? 0 : this->nextId(&callType);
     switch (kind) {
         case kAtan_SpecialIntrinsic: {
             STArray<2, SpvId> argumentIds;
@@ -2279,6 +2281,7 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
             SkASSERT(arguments[0]->type().dimensions() == SpvDim2D);
             SkASSERT(arguments[1]->type().matches(*fContext.fTypes.fUInt2));
             SkASSERT(arguments[2]->type().matches(*fContext.fTypes.fHalf4));
+            SkASSERT(!callType.hasPrecision());
 
             SpvId image = this->writeExpression(*arguments[0], out);
             SpvId coord = this->writeExpression(*arguments[1], out);
@@ -2415,6 +2418,7 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
         case kWorkgroupBarrier_SpecialIntrinsic: {
             // Both barrier types operate in the workgroup execution and memory scope and differ
             // only in memory semantics. storageBarrier() is not a device-scope barrier.
+            SkASSERT(!callType.hasPrecision());
             SpvId scopeId =
                     this->writeOpConstant(*fContext.fTypes.fUInt, (int32_t)SpvScopeWorkgroup);
             int32_t memSemMask = (kind == kStorageBarrier_SpecialIntrinsic)
@@ -2430,6 +2434,8 @@ SpvId SPIRVCodeGenerator::writeSpecialIntrinsic(const FunctionCall& c, SpecialIn
                                    out);
             break;
         }
+        default:
+            SkUNREACHABLE;
     }
     return result;
 }
@@ -4429,7 +4435,7 @@ void SPIRVCodeGenerator::writeFunctionStart(const FunctionDeclaration& f, Output
         if (fUseTextureSamplerPairs && parameter->type().isSampler()) {
             auto [texture, sampler] = this->synthesizeTextureAndSampler(*parameter);
 
-            SpvId textureId = this->nextId(nullptr);
+            SpvId textureId = this->nextId(&parameter->type());
             fVariableMap.set(texture, textureId);
 
             SpvId textureType = this->getFunctionParameterType(texture->type(), texture->layout());
@@ -4442,7 +4448,7 @@ void SPIRVCodeGenerator::writeFunctionStart(const FunctionDeclaration& f, Output
                 SkASSERT(uniformId);
                 fVariableMap.set(sampler, *uniformId);
             } else {
-                SpvId samplerId = this->nextId(nullptr);
+                SpvId samplerId = this->nextId(&parameter->type());
                 fVariableMap.set(sampler, samplerId);
 
                 SpvId samplerType =
@@ -4455,7 +4461,7 @@ void SPIRVCodeGenerator::writeFunctionStart(const FunctionDeclaration& f, Output
                 SkASSERT(uniformId);
                 fVariableMap.set(parameter, *uniformId);
             } else {
-                SpvId id = this->nextId(nullptr);
+                SpvId id = this->nextId(&parameter->type());
                 fVariableMap.set(parameter, id);
 
                 SpvId type = this->getFunctionParameterType(parameter->type(), parameter->layout());
@@ -5346,10 +5352,11 @@ void SPIRVCodeGenerator::writeInstructions(const Program& program, OutputStream&
                 if (const Analysis::Specializations* specializations =
                             fSpecializationInfo.fSpecializationMap.find(&funcDecl)) {
                     for (int i = 0; i < specializations->size(); i++) {
-                        fFunctionMap.set({&funcDecl, i}, this->nextId(nullptr));
+                        fFunctionMap.set({&funcDecl, i}, this->nextId(&funcDecl.returnType()));
                     }
                 } else {
-                    fFunctionMap.set({&funcDecl, Analysis::kUnspecialized}, this->nextId(nullptr));
+                    fFunctionMap.set({&funcDecl, Analysis::kUnspecialized},
+                                     this->nextId(&funcDecl.returnType()));
                 }
                 if (funcDecl.isMain()) {
                     main = &funcDecl;

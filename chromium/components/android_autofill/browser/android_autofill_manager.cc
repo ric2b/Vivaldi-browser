@@ -112,7 +112,8 @@ void AndroidAutofillManager::OnAskForValuesToFillImpl(
     const FormData& form,
     const FieldGlobalId& field_id,
     const gfx::Rect& caret_bounds,
-    AutofillSuggestionTriggerSource trigger_source) {
+    AutofillSuggestionTriggerSource trigger_source,
+    base::optional_ref<const PasswordSuggestionRequest> password_request) {
   auto* provider = GetAutofillProvider();
   if (!provider) {
     return;
@@ -126,7 +127,7 @@ void AndroidAutofillManager::OnAskForValuesToFillImpl(
 
   // Vivaldi
   if (auto* manager = GetBrowserAutofillManager())
-    manager->OnAskForValuesToFill(form, field_id, caret_bounds, trigger_source);
+    manager->OnAskForValuesToFill(form, field_id, caret_bounds, trigger_source, password_request);
 
   if (auto* logger = GetEventFormLogger(form.global_id(), field_id)) {
     logger->OnDidInteractWithAutofillableForm();
@@ -230,13 +231,16 @@ void AndroidAutofillManager::OnFieldTypesDetermined(AutofillManager& manager,
                                                     FormGlobalId form,
                                                     FieldTypeSource source) {
   CHECK_EQ(&manager, this);
-  if (source != FieldTypeSource::kAutofillServer) {
-    return;
-  }
-
-  forms_with_server_predictions_.insert(form);
-  if (auto* provider = GetAutofillProvider()) {
-    provider->OnServerPredictionsAvailable(*this, form);
+  switch (source) {
+    case FieldTypeSource::kAutofillAiModel:
+    case FieldTypeSource::kAutofillServer:
+      forms_with_server_predictions_.insert(form);
+      if (auto* provider = GetAutofillProvider()) {
+        provider->OnServerPredictionsAvailable(*this, form);
+      }
+      break;
+    case FieldTypeSource::kHeuristicsOrAutocomplete:
+      break;
   }
 }
 

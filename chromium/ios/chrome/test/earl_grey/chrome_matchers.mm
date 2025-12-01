@@ -244,6 +244,10 @@ id<GREYMatcher> ShowTabsButton() {
   return [ChromeMatchersAppInterface showTabsButton];
 }
 
+id<GREYMatcher> BlueDotOnShowTabsButton() {
+  return [ChromeMatchersAppInterface blueDotOnShowTabsButton];
+}
+
 id<GREYMatcher> AddToReadingListButton() {
   return [ChromeMatchersAppInterface addToReadingListButton];
 }
@@ -679,6 +683,20 @@ id<GREYMatcher> TabStripGroupCellAtIndex(unsigned int index) {
   return [ChromeMatchersAppInterface tabStripGroupCellAtIndex:index];
 }
 
+id<GREYMatcher> BlueDotOnTabStripCellAtIndex(unsigned int index) {
+  return [ChromeMatchersAppInterface blueDotOnTabStripCellAtIndex:index];
+}
+
+id<GREYMatcher> NotificationDotOnTabStripGroupCellAtIndex(unsigned int index) {
+  return [ChromeMatchersAppInterface
+      notificationDotOnTabStripGroupCellAtIndex:index];
+}
+
+id<GREYMatcher> TabGroupsPanelNotificationCellAtIndex(unsigned int index) {
+  return
+      [ChromeMatchersAppInterface tabGroupsPanelNotificationCellAtIndex:index];
+}
+
 id<GREYMatcher> TabGroupsPanelCellAtIndex(unsigned int index) {
   return [ChromeMatchersAppInterface tabGroupsPanelCellAtIndex:index];
 }
@@ -687,6 +705,20 @@ id<GREYMatcher> TabGroupsPanelCellWithName(NSString* group_name,
                                            NSInteger tab_count) {
   return [ChromeMatchersAppInterface tabGroupsPanelCellWithName:group_name
                                                           count:tab_count];
+}
+
+id<GREYMatcher> TabGroupRecentActivityCellAtIndex(unsigned int index) {
+  return [ChromeMatchersAppInterface tabGroupRecentActivityCellAtIndex:index];
+}
+
+id<GREYMatcher> TabGroupActivityLabelOnGroupCellAtIndex(unsigned int index) {
+  return [ChromeMatchersAppInterface
+      tabGroupActivityLabelOnGroupCellAtIndex:index];
+}
+
+id<GREYMatcher> TabGroupActivityLabelOnGridCellAtIndex(unsigned int index) {
+  return
+      [ChromeMatchersAppInterface tabGroupActivityLabelOnGridCellAtIndex:index];
 }
 
 id<GREYMatcher> TabGridDoneButton() {
@@ -1033,8 +1065,16 @@ id<GREYMatcher> TabGroupOverflowMenuButton() {
   return [ChromeMatchersAppInterface tabGroupOverflowMenuButton];
 }
 
-id<GREYMatcher> TabGroupBackButton() {
-  return [ChromeMatchersAppInterface tabGroupBackButton];
+id<GREYMatcher> CloseTabGroupButton() {
+  return [ChromeMatchersAppInterface closeTabGroupButton];
+}
+
+id<GREYMatcher> TabGroupActivitySummaryCell() {
+  return [ChromeMatchersAppInterface tabGroupActivitySummaryCell];
+}
+
+id<GREYMatcher> TabGroupActivitySummaryCellCloseButton() {
+  return [ChromeMatchersAppInterface tabGroupActivitySummaryCellCloseButton];
 }
 
 #pragma mark - Tab Groups Context Menus
@@ -1077,6 +1117,10 @@ id<GREYMatcher> ShareGroupButton() {
 
 id<GREYMatcher> ManageGroupButton() {
   return [ChromeMatchersAppInterface manageGroupButton];
+}
+
+id<GREYMatcher> RecentActivityButton() {
+  return [ChromeMatchersAppInterface recentActivityButton];
 }
 
 id<GREYMatcher> LeaveSharedGroupButton() {

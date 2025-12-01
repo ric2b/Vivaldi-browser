@@ -15,7 +15,6 @@
 
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
-#include "base/not_fatal_until.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "base/version.h"
@@ -60,15 +59,28 @@ class TabbedModeScopeMatcher;
 
 class WebApp {
  public:
+  // Deprecated, use the other constructor instead.
   explicit WebApp(const webapps::AppId& app_id);
+
+  // This creates a web app object, and will CHECK-fail if the arguments are
+  // invalid. To be valid, the following invariants must hold:
+  // - All GURLs and the `manifest_id` must be non-empty and valid.
+  // - `start_url`, `manifest_id` and `scope` must be same-origin.
+  // - `manifest_id` must not contain a fragment.
+  // - `scope` must not contain a query or fragment.
+  // - `scope` must be a prefix of `start_url`.
+  WebApp(const webapps::ManifestId& manifest_id,
+         const GURL& start_url,
+         const GURL& scope,
+         std::optional<webapps::AppId> parent_app_id = std::nullopt,
+         std::optional<webapps::ManifestId> parent_manifest_id = std::nullopt);
   ~WebApp();
 
   // Copyable and move-assignable to support Copy-on-Write with Commit.
   WebApp(const WebApp& web_app);
   WebApp& operator=(WebApp&& web_app);
+  WebApp(WebApp&&);
 
-  // Explicitly disallow other copy ctors and assign operators.
-  WebApp(WebApp&&) = delete;
   WebApp& operator=(const WebApp&) = delete;
 
   const webapps::AppId& app_id() const { return app_id_; }
@@ -245,9 +257,9 @@ class WebApp {
   // wins.
   const sync_pb::WebAppSpecifics& sync_proto() const {
     // Ensure the sync proto has been initialized.
-    CHECK(sync_proto_.has_start_url(), base::NotFatalUntil::M126);
-    CHECK(GURL(sync_proto_.start_url()).is_valid(), base::NotFatalUntil::M126);
-    CHECK(sync_proto_.has_relative_manifest_id(), base::NotFatalUntil::M126);
+    CHECK(sync_proto_.has_start_url());
+    CHECK(GURL(sync_proto_.start_url()).is_valid());
+    CHECK(sync_proto_.has_relative_manifest_id());
     return sync_proto_;
   }
 
@@ -299,6 +311,9 @@ class WebApp {
         const ExternalManagementConfig& external_management_config);
     ExternalManagementConfig& operator=(
         ExternalManagementConfig&& external_management_config);
+
+    friend bool operator==(const ExternalManagementConfig&,
+                           const ExternalManagementConfig&) = default;
 
     base::Value::Dict AsDebugValue() const;
 
@@ -373,10 +388,6 @@ class WebApp {
   const std::vector<blink::Manifest::RelatedApplication>& related_applications()
       const {
     return related_applications_;
-  }
-
-  const std::optional<std::string>& update_token() const {
-    return update_token_;
   }
 
   // A Web App can be installed from multiple sources simultaneously. Installs
@@ -480,7 +491,6 @@ class WebApp {
   void SetDiyAppIconsMaskedOnMac(bool diy_app_icons_masked_on_mac);
   void SetRelatedApplications(
       std::vector<blink::Manifest::RelatedApplication> related_applications);
-  void SetUpdateToken(const std::optional<std::string>& update_token);
 
   void AddPlaceholderInfoToManagementExternalConfigMap(
       WebAppManagement::Type source_type,
@@ -516,7 +526,6 @@ class WebApp {
 
   // For logging and debug purposes.
   bool operator==(const WebApp&) const;
-  bool operator!=(const WebApp&) const;
   // Used by the WebAppTest suite to cover only platform agnostic fields to
   // avoid needing multiple platform specific expectation files per test.
   // Otherwise, the same as AsDebugValue().
@@ -579,6 +588,7 @@ class WebApp {
   blink::mojom::CaptureLinks capture_links_ =
       blink::mojom::CaptureLinks::kUndefined;
   ClientData client_data_;
+  // This can be empty.
   GURL manifest_url_;
   webapps::ManifestId manifest_id_;
   // The state of the user's approval of the app's use of the File Handler API.
@@ -628,8 +638,6 @@ class WebApp {
 
   std::vector<blink::Manifest::RelatedApplication> related_applications_;
 
-  std::optional<std::string> update_token_;
-
   // New fields must be added to:
   //  - |operator==|
   //  - AsDebugValue()
@@ -673,17 +681,10 @@ std::ostream& operator<<(std::ostream& out, const WebApp& app);
 std::ostream& operator<<(
     std::ostream& out,
     const WebApp::ExternalManagementConfig& management_config);
-bool operator==(const WebApp::ExternalManagementConfig& management_config1,
-                const WebApp::ExternalManagementConfig& management_config2);
-bool operator!=(const WebApp::ExternalManagementConfig& management_config1,
-                const WebApp::ExternalManagementConfig& management_config2);
 
 namespace proto::os_state {
 
 bool operator==(const WebAppOsIntegration& os_integration_state1,
-                const WebAppOsIntegration& os_integration_state2);
-
-bool operator!=(const WebAppOsIntegration& os_integration_state1,
                 const WebAppOsIntegration& os_integration_state2);
 
 }  // namespace proto::os_state
@@ -696,8 +697,6 @@ std::vector<std::string> GetSerializedAllowedOrigins(
 
 namespace sync_pb {
 bool operator==(const WebAppSpecifics& sync_proto1,
-                const WebAppSpecifics& sync_proto2);
-bool operator!=(const WebAppSpecifics& sync_proto1,
                 const WebAppSpecifics& sync_proto2);
 }  // namespace sync_pb
 

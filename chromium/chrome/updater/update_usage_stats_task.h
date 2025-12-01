@@ -6,7 +6,9 @@
 #define CHROME_UPDATER_UPDATE_USAGE_STATS_TASK_H_
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 #include "base/functional/callback_forward.h"
 #include "base/gtest_prod_util.h"
@@ -14,6 +16,10 @@
 #include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "chrome/updater/updater_scope.h"
+
+#if BUILDFLAG(IS_WIN)
+#include <windows.h>
+#endif
 
 namespace base {
 class FilePath;
@@ -34,17 +40,39 @@ class UsageStatsProvider {
   // have usage stats enabled. This information is stored in the registry on
   // Windows, and in a crashpad database found in the `ApplicationSupport`
   // directory on MacOS.
-  virtual bool AnyAppEnablesUsageStats(UpdaterScope scope) = 0;
-  static std::unique_ptr<UsageStatsProvider> Create();
+  virtual bool AnyAppEnablesUsageStats() const = 0;
+
+  // Returns true if the updater is allowed to send detailed event logs to an
+  // external endpoint. Logging is allowed only if the following conditions are
+  // all met:
+  //    1) The updater manages an app (an `event_logging_permission_provider`)
+  //       responsible for granting the updater permission to send remote
+  //       logging events.
+  //    2) The `event_logging_permission_provider` app has usage stats enabled.
+  //    3) The updater manages no other apps. That is, the apps managed by the
+  //    updater are a subset of {Updater, Enterprise Companion App,
+  //    event_logging_permission_provider}.
+  virtual bool RemoteEventLoggingAllowed() const = 0;
+
+  static std::unique_ptr<UsageStatsProvider> Create(UpdaterScope scope);
 
  private:
+  friend class UpdateUsageStatsTaskTest;
+
+  // Creates a UsageStatsProvider that checks apps in the specified locations
+  // (install directories on MacOS and registry paths on Windows), as well as
+  // uses the specified app as an event logging permission provider. The app is
+  // identified via an appid on Windows and as the name of the application
+  // directory on MacOS.
 #if BUILDFLAG(IS_WIN)
   static std::unique_ptr<UsageStatsProvider> Create(
-      const std::wstring& system_key,
-      const std::wstring& user_key);
+      HKEY hive,
+      std::optional<std::wstring> event_logging_permission_provider,
+      std::vector<std::wstring> registry_paths);
 #elif BUILDFLAG(IS_MAC)
   static std::unique_ptr<UsageStatsProvider> Create(
-      const base::FilePath& app_directory);
+      std::optional<std::string> event_logging_permission_provider,
+      std::vector<base::FilePath> app_directories);
 #endif
 };
 

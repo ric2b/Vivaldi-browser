@@ -177,14 +177,19 @@ struct BLINK_COMMON_EXPORT
     return r.selection_start_offset;
   }
 
-  static bool opened_from_highlight(
+  static std::optional<blink::mojom::AnnotationType> annotation_type(
       const blink::UntrustworthyContextMenuParams& r) {
-    return r.opened_from_highlight;
+    return r.annotation_type;
   }
 
   static bool opened_from_interest_target(
       const blink::UntrustworthyContextMenuParams& r) {
     return r.opened_from_interest_target;
+  }
+
+  static int interest_target_node_id(
+      const blink::UntrustworthyContextMenuParams& r) {
+    return r.interest_target_node_id;
   }
 
   static std::optional<blink::mojom::FormControlType> form_control_type(

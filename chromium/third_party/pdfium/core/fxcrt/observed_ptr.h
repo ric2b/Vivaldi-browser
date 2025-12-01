@@ -33,10 +33,10 @@ class Observable {
   void NotifyObservers();
 
  protected:
-  size_t ActiveObserversForTesting() const { return m_Observers.size(); }
+  size_t ActiveObserversForTesting() const { return observers_.size(); }
 
  private:
-  std::set<ObserverIface*> m_Observers;
+  std::set<ObserverIface*> observers_;
 };
 
 // Simple case of a self-nulling pointer.
@@ -49,64 +49,53 @@ template <typename T>
 class ObservedPtr final : public Observable::ObserverIface {
  public:
   ObservedPtr() = default;
-  explicit ObservedPtr(T* pObservable) : m_pObservable(pObservable) {
-    if (m_pObservable)
-      m_pObservable->AddObserver(this);
+  explicit ObservedPtr(T* pObservable) : observable_(pObservable) {
+    if (observable_) {
+      observable_->AddObserver(this);
+    }
   }
   ObservedPtr(const ObservedPtr& that) : ObservedPtr(that.Get()) {}
   ~ObservedPtr() override {
-    if (m_pObservable)
-      m_pObservable->RemoveObserver(this);
+    if (observable_) {
+      observable_->RemoveObserver(this);
+    }
   }
   void Reset(T* pObservable = nullptr) {
-    if (m_pObservable)
-      m_pObservable->RemoveObserver(this);
-    m_pObservable = pObservable;
-    if (m_pObservable)
-      m_pObservable->AddObserver(this);
+    if (observable_) {
+      observable_->RemoveObserver(this);
+    }
+    observable_ = pObservable;
+    if (observable_) {
+      observable_->AddObserver(this);
+    }
   }
   void OnObservableDestroyed() override {
-    DCHECK(m_pObservable);
-    m_pObservable = nullptr;
+    DCHECK(observable_);
+    observable_ = nullptr;
   }
-  bool HasObservable() const { return !!m_pObservable; }
+  bool HasObservable() const { return !!observable_; }
   ObservedPtr& operator=(const ObservedPtr& that) {
     Reset(that.Get());
     return *this;
   }
-  bool operator==(const ObservedPtr& that) const {
-    return m_pObservable == that.m_pObservable;
-  }
-  bool operator!=(const ObservedPtr& that) const { return !(*this == that); }
-
-  template <typename U>
-  bool operator==(const U* that) const {
-    return Get() == that;
+  friend inline bool operator==(const ObservedPtr& lhs,
+                                const ObservedPtr& rhs) {
+    return lhs.observable_ == rhs.observable_;
   }
 
   template <typename U>
-  bool operator!=(const U* that) const {
-    return !(*this == that);
+  friend inline bool operator==(const ObservedPtr& lhs, const U* rhs) {
+    return lhs.observable_ == rhs;
   }
 
   explicit operator bool() const { return HasObservable(); }
-  T* Get() const { return m_pObservable; }
-  T& operator*() const { return *m_pObservable; }
-  T* operator->() const { return m_pObservable; }
+  T* Get() const { return observable_; }
+  T& operator*() const { return *observable_; }
+  T* operator->() const { return observable_; }
 
  private:
-  UNOWNED_PTR_EXCLUSION T* m_pObservable = nullptr;
+  UNOWNED_PTR_EXCLUSION T* observable_ = nullptr;
 };
-
-template <typename T, typename U>
-inline bool operator==(const U* lhs, const ObservedPtr<T>& rhs) {
-  return rhs == lhs;
-}
-
-template <typename T, typename U>
-inline bool operator!=(const U* lhs, const ObservedPtr<T>& rhs) {
-  return rhs != lhs;
-}
 
 }  // namespace fxcrt
 

@@ -23,6 +23,18 @@ rolldeps() {
   git add DEPS
 }
 
+rollbazel() {
+  STEP="roll-bazel" &&
+  sed -i'' -e "s!\"${EXPAT_PREVIOUS_REV}\",!\"${EXPAT_NEXT_REV}\",!" bazel/deps.json &&
+  git add bazel/deps.json
+}
+
+rolldepsgen() {
+  STEP="roll-depsgen" &&
+  sed -i'' -e "s!Version: \"${EXPAT_PREVIOUS_REV}\",!Version: \"${EXPAT_NEXT_REV}\",!" infra/bots/deps/deps_gen.go &&
+  git add infra/bots/deps/deps_gen.go
+}
+
 check_all_files_are_categorized() {
   #for each file name in ${EXPAT_GIT_DIR}/expat/lib/*.{c,h}
   #  if the file name is not present in BUILD.gn
@@ -83,6 +95,14 @@ update_expat_config_h() {
   git add "${EXPAT_BUILD_DIR}/include/expat_config/expat_config.h"
 }
 
+update_bazel_patch() {
+  STEP="Update Bazel patch" &&
+  python3 tools/generate_patches.py \
+    "${EXPAT_BUILD_DIR}/include/expat_config/expat_config.h" expat_config.h \
+    > bazel/external/expat/config_files.patch &&
+  git add bazel/external/expat/config_files.patch
+}
+
 commit() {
   STEP="commit" &&
   EXPAT_PREVIOUS_REV_SHORT=$(expr substr "${EXPAT_PREVIOUS_REV}" 1 8) &&
@@ -98,7 +118,10 @@ Disable: treat-URL-as-trailer"
 previousrev &&
 nextrev &&
 rolldeps "$@" &&
+rollbazel &&
+rolldepsgen &&
 update_expat_config_h &&
 check_all_files_are_categorized &&
+update_bazel_patch &&
 commit &&
 true || { echo "Failed step ${STEP}"; exit 1; }

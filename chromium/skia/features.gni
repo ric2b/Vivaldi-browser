@@ -15,7 +15,7 @@ declare_args() {
       (is_ios && use_blink) || (is_linux && !is_castos) || is_desktop_android
 
   # Enable experimental Skia Graphite Metal backend. Intended only for debugging
-  # on non-official developer builds.
+  # on non-official developer builds on Mac and iOS Blink.
   skia_use_metal = (is_mac || (is_ios && use_blink)) && !is_official_build
 
   # Enable gtests using SkiaRenderer on Skia Graphite.

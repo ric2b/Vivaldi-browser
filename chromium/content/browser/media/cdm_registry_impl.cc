@@ -106,16 +106,6 @@ void ReportHardwareSecureCapabilityStatusUMA(
         base::UmaHistogramBoolean(
             uma_prefix + ".Support." + media::GetCodecNameForUMA(video_codec),
             is_supported);
-
-        // When the codec is supported for hardware security, report whether
-        // clear lead is supported or not.
-        if (is_supported) {
-          bool is_clear_lead_supported =
-              video_codecs.at(video_codec).supports_clear_lead;
-          base::UmaHistogramBoolean(uma_prefix + ".ClearLeadSupport." +
-                                        media::GetCodecNameForUMA(video_codec),
-                                    is_clear_lead_supported);
-        }
       }
     }
   }
@@ -435,12 +425,8 @@ CdmRegistryImpl::GetCapability(const std::string& key_system,
     }
 
 #if BUILDFLAG(IS_WIN)
-    // Check if the GPU is disabled from gpu/config/gpu_driver_bug_list.json and
-    // if the enable faulty GPU flag is disabled. If both are disabled, HW
-    // security should not be supported.
-    if (IsMediaFoundationHardwareSecurityDisabledByGpuFeature() &&
-        !base::FeatureList::IsEnabled(
-            media::kEnableFaultyGPUForMediaFoundation)) {
+    // Check if the GPU is disabled from gpu/config/gpu_driver_bug_list.json.
+    if (IsMediaFoundationHardwareSecurityDisabledByGpuFeature()) {
       DVLOG(1) << "Hardware security not supported: GPU workarounds";
       return {std::nullopt, Status::kGpuFeatureDisabled};
     }

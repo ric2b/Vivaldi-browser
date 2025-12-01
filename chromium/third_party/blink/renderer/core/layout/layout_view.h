@@ -143,8 +143,6 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
   }
   const LayoutBox& RootBox() const;
 
-  void UpdateAfterLayout() override;
-
   // See comments for the equivalent method on LayoutObject.
   // |ancestor| can be nullptr, which will map the rect to the main frame's
   // space, even if the main frame is remote (or has intermediate remote
@@ -260,8 +258,11 @@ class CORE_EXPORT LayoutView : public LayoutBlockFlow {
   bool AffectedByResizedInitialContainingBlock(const LayoutResult&);
 
   // Update generated counters after style and layout tree update.
-  // container - The container for container queries, otherwise nullptr.
-  void UpdateCountersAfterStyleChange(LayoutObject* container = nullptr);
+  // interleaving_root - For interleaved style recalcs, this is the container
+  // for size container queries and the anchored element for fallback queries,
+  // otherwise nullptr.
+  void UpdateCountersAfterStyleChange(
+      LayoutObject* interleaving_root = nullptr);
 
   bool BackgroundIsKnownToBeOpaqueInRect(
       const PhysicalRect& local_rect) const override;

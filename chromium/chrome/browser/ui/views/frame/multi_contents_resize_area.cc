@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/views/frame/multi_contents_resize_area.h"
 
-#include "chrome/app/vector_icons/vector_icons.h"
+#include "base/i18n/rtl.h"
 #include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -13,7 +13,6 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/focus_ring.h"
@@ -21,9 +20,10 @@
 #include "ui/views/layout/flex_layout.h"
 
 namespace {
+const int kHandleCornerRadius = 2;
 const int kHandleHeight = 24;
-const int kHandleWidth = 16;
-const int kHandlePadding = 8;
+const int kHandlePadding = 6;
+const int kHandleWidth = 4;
 }  // namespace
 
 DEFINE_CLASS_ELEMENT_IDENTIFIER_VALUE(MultiContentsResizeHandle,
@@ -37,13 +37,35 @@ MultiContentsResizeHandle::MultiContentsResizeHandle() {
   SetCanProcessEventsWithinSubtree(false);
   SetFocusBehavior(FocusBehavior::ALWAYS);
   views::FocusRing::Install(this);
-  SetImage(ui::ImageModel::FromVectorIcon(
-      kDragHandleIcon, kColorSidePanelResizeAreaHandle, kHandleWidth));
   GetViewAccessibility().SetRole(ax::mojom::Role::kSlider);
   GetViewAccessibility().SetName(
       l10n_util::GetStringUTF16(IDS_ACCNAME_SPLIT_TABS_RESIZE));
   SetProperty(views::kElementIdentifierKey,
               kMultiContentsResizeHandleElementId);
+}
+
+void MultiContentsResizeHandle::UpdateVisibility(bool visible) {
+  if (visible) {
+    const SkColor resize_handle_color =
+        GetColorProvider()->GetColor(kColorSidePanelHoverResizeAreaHandle);
+    SetBackground(views::CreateRoundedRectBackground(resize_handle_color,
+                                                     kHandleCornerRadius));
+  } else {
+    SetBackground(nullptr);
+  }
+}
+
+void MultiContentsResizeHandle::AddedToWidget() {
+  GetFocusManager()->AddFocusChangeListener(this);
+}
+
+void MultiContentsResizeHandle::RemovedFromWidget() {
+  GetFocusManager()->RemoveFocusChangeListener(this);
+}
+
+void MultiContentsResizeHandle::OnWillChangeFocus(views::View* before,
+                                                  views::View* now) {
+  UpdateVisibility(now == this);
 }
 
 BEGIN_METADATA(MultiContentsResizeHandle)
@@ -65,16 +87,46 @@ MultiContentsResizeArea::MultiContentsResizeArea(
   SetPreferredSize(gfx::Size(kHandleWidth + kHandlePadding, kHandleHeight));
 }
 
+void MultiContentsResizeArea::OnGestureEvent(ui::GestureEvent* event) {
+  // If the gesture event was a double tap and was not part of a resizing event,
+  // swap the contents views.
+  if (!is_resizing() && event->type() == ui::EventType::kGestureTap &&
+      event->details().tap_count() == 2) {
+    multi_contents_view_->OnSwap();
+  }
+  ResizeArea::OnGestureEvent(event);
+}
+
+void MultiContentsResizeArea::OnMouseReleased(const ui::MouseEvent& event) {
+  // If the mouse event was a left double click and was not part of a resizing
+  // event, swap the contents views.
+  if (!is_resizing() && event.IsOnlyLeftMouseButton() &&
+      event.GetClickCount() == 2) {
+    multi_contents_view_->OnSwap();
+  }
+  ResizeArea::OnMouseReleased(event);
+}
+
 bool MultiContentsResizeArea::OnKeyPressed(const ui::KeyEvent& event) {
   const int resize_increment = 50;
   if (event.key_code() == ui::VKEY_LEFT) {
-    multi_contents_view_->OnResize(-resize_increment, true);
+    multi_contents_view_->OnResize(
+        base::i18n::IsRTL() ? resize_increment : -resize_increment, true);
     return true;
   } else if (event.key_code() == ui::VKEY_RIGHT) {
-    multi_contents_view_->OnResize(resize_increment, true);
+    multi_contents_view_->OnResize(
+        base::i18n::IsRTL() ? -resize_increment : resize_increment, true);
     return true;
   }
   return false;
+}
+
+void MultiContentsResizeArea::OnMouseMoved(const ui::MouseEvent& event) {
+  resize_handle_->UpdateVisibility(true);
+}
+
+void MultiContentsResizeArea::OnMouseExited(const ui::MouseEvent& event) {
+  resize_handle_->UpdateVisibility(false);
 }
 
 BEGIN_METADATA(MultiContentsResizeArea)

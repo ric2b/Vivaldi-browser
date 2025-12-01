@@ -6,19 +6,22 @@ package org.chromium.chrome.browser.toolbar.menu_button;
 
 import static android.view.View.LAYOUT_DIRECTION_RTL;
 
+import static org.chromium.build.NullUtil.assertNonNull;
+import static org.chromium.build.NullUtil.assumeNonNull;
+
 import android.animation.Animator;
 import android.app.Activity;
 import android.graphics.Canvas;
 import android.view.View;
-import android.view.View.OnKeyListener;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.IdRes;
-import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.chrome.browser.browser_controls.BrowserStateBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.theme.ThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonProperties.ShowBadgeProperty;
@@ -30,6 +33,7 @@ import org.chromium.ui.base.ViewUtils;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.modelutil.PropertyModelChangeProcessor;
+import org.chromium.ui.util.KeyboardNavigationListener;
 
 // Vivaldi
 import android.view.ViewGroup;
@@ -38,6 +42,7 @@ import android.view.ViewGroup;
  * Root component for the app menu button on the toolbar. Owns the MenuButton view and handles
  * changes to its visual state, e.g. showing/hiding the app update badge.
  */
+@NullMarked
 public class MenuButtonCoordinator {
     public interface SetFocusFunction {
         void setFocus(boolean focus, int reason);
@@ -46,9 +51,9 @@ public class MenuButtonCoordinator {
     private final Activity mActivity;
     private final PropertyModel mPropertyModel;
     private MenuButtonMediator mMediator;
-    private AppMenuButtonHelper mAppMenuButtonHelper;
-    private MenuButton mMenuButton;
-    private PropertyModelChangeProcessor mChangeProcessor;
+    private @Nullable AppMenuButtonHelper mAppMenuButtonHelper;
+    private @Nullable MenuButton mMenuButton;
+    private @Nullable PropertyModelChangeProcessor mChangeProcessor;
 
     /**
      * @param appMenuCoordinatorSupplier Supplier for the AppMenuCoordinator, which owns all other
@@ -79,7 +84,7 @@ public class MenuButtonCoordinator {
             Supplier<MenuButtonState> menuButtonStateSupplier,
             Runnable onMenuButtonClicked,
             @IdRes int menuButtonId) {
-        mActivity = windowAndroid.getActivity().get();
+        mActivity = assertNonNull(windowAndroid.getActivity().get());
         mMenuButton = mActivity.findViewById(menuButtonId);
         mPropertyModel =
                 new PropertyModel.Builder(MenuButtonProperties.ALL_KEYS)
@@ -93,6 +98,14 @@ public class MenuButtonCoordinator {
                                         themeColorProvider.getBrandedColorScheme()))
                         .with(MenuButtonProperties.IS_VISIBLE, true)
                         .with(MenuButtonProperties.STATE_SUPPLIER, menuButtonStateSupplier)
+                        .with(
+                                MenuButtonProperties.ON_KEY_LISTENER,
+                                new KeyboardNavigationListener() {
+                                    @Override
+                                    protected boolean handleEnterKeyPress() {
+                                        return onEnterKeyPress();
+                                    }
+                                })
                         .build();
         mMediator =
                 new MenuButtonMediator(
@@ -121,6 +134,7 @@ public class MenuButtonCoordinator {
     /**
      * Update the state of AppMenu components that need to know if the current page is loading, e.g.
      * the stop/reload button.
+     *
      * @param isLoading Whether the current page is loading.
      */
     public void updateReloadingState(boolean isLoading) {
@@ -164,6 +178,16 @@ public class MenuButtonCoordinator {
     }
 
     /**
+     * Highlights a menu item the next time the menu is opened.
+     *
+     * @param menuItemId The ID of the menu item to be highlighted.
+     */
+    @SuppressWarnings("NullAway")
+    public void highlightMenuItemOnShow(@IdRes int menuItemId) {
+        mAppMenuButtonHelper.highlightMenuItemOnShow(menuItemId);
+    }
+
+    /**
      * @return Whether the menu button is present and visible.
      */
     public boolean isVisible() {
@@ -174,7 +198,7 @@ public class MenuButtonCoordinator {
      * Get the underlying MenuButton view. Present for legacy reasons only; don't add new usages.
      */
     @Deprecated
-    public MenuButton getMenuButton() {
+    public @Nullable MenuButton getMenuButton() {
         return mMenuButton;
     }
 
@@ -186,15 +210,7 @@ public class MenuButtonCoordinator {
         mMediator.setClickable(isClickable);
     }
 
-    /**
-     * Sets the on key listener for the underlying menu button.
-     * @param onKeyListener Listener for key events.
-     */
-    public void setOnKeyListener(OnKeyListener onKeyListener) {
-        if (mMenuButton == null) return;
-        mMenuButton.setOnKeyListener(onKeyListener);
-    }
-
+    @SuppressWarnings("NullAway")
     public void destroy() {
         if (mMediator != null) {
             mMediator.destroy();
@@ -215,8 +231,7 @@ public class MenuButtonCoordinator {
         return mMediator != null ? mMediator::updateStateChanged : null;
     }
 
-    @Nullable
-    public ObservableSupplier<AppMenuButtonHelper> getMenuButtonHelperSupplier() {
+    public @Nullable ObservableSupplier<AppMenuButtonHelper> getMenuButtonHelperSupplier() {
         if (mMediator == null) return null;
         return mMediator.getMenuButtonHelperSupplier();
     }
@@ -232,13 +247,35 @@ public class MenuButtonCoordinator {
     }
 
     /**
+     * Hides menu button persistently until all tokens are released.
+     *
+     * @param token previously acquired token.
+     * @return a new token that keeps menu button hidden.
+     */
+    public int hideWithOldTokenRelease(int token) {
+        return mMediator.hideWithOldTokenRelease(token);
+    }
+
+    /**
+     * Releases menu button hide token that might cause menu button to become visible if no more
+     * tokens are held.
+     *
+     * @param token previously acquired token.
+     */
+    public void releaseHideToken(int token) {
+        mMediator.releaseHideToken(token);
+    }
+
+    /**
      * Draws the current visual state of this component for the purposes of rendering the tab
      * switcher animation, setting the alpha to fade the view by the appropriate amount.
+     *
      * @param root Root view for the menu button; used to position the canvas that's drawn on.
      * @param canvas Canvas to draw to.
      * @param alpha Integer (0-255) alpha level to draw at.
      */
     public void drawTabSwitcherAnimationOverlay(View root, Canvas canvas, int alpha) {
+        assumeNonNull(mMenuButton);
         canvas.save();
         ViewUtils.translateCanvasToView(root, mMenuButton, canvas);
         mMenuButton.drawTabSwitcherAnimationOverlay(canvas, alpha);
@@ -248,9 +285,10 @@ public class MenuButtonCoordinator {
     /**
      * Creates an animator for the MenuButton during the process offocusing or unfocusing the
      * UrlBar. The animation translate and fades the button into/out of view.
+     *
      * @return The Animator object for the MenuButton.
      * @param isFocusingUrl Whether the animation is for focusing the URL, meaning the button is
-     *         fading out of view, or un-focusing, meaning it's fading into view.
+     *     fading out of view, or un-focusing, meaning it's fading into view.
      */
     public Animator getUrlFocusingAnimator(boolean isFocusingUrl) {
         return mMediator.getUrlFocusingAnimator(
@@ -269,6 +307,7 @@ public class MenuButtonCoordinator {
      * @param backgroundResId The button background resource.
      */
     public void updateButtonBackground(@DrawableRes int backgroundResId) {
+        assumeNonNull(mMenuButton);
         mMenuButton.getImageButton().setBackgroundResource(backgroundResId);
     }
 

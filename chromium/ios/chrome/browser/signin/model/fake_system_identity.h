@@ -49,9 +49,10 @@
 - (instancetype)init NS_UNAVAILABLE;
 
 // Redeclared as readwrite.
-@property(strong, nonatomic, readwrite) NSString* userEmail;
-@property(strong, nonatomic, readwrite) NSString* userFullName;
-@property(strong, nonatomic, readwrite) NSString* userGivenName;
+@property(nonatomic, readwrite) NSString* userEmail;
+@property(nonatomic, readwrite) NSString* userFullName;
+@property(nonatomic, readwrite) NSString* userGivenName;
+@property(nonatomic, readwrite) BOOL hasValidAuth;
 
 @end
 

@@ -29,8 +29,9 @@ void RegisterSafetyHubProfilePrefs(PrefRegistrySimple* registry) {
 #endif  // !BUILDFLAG(IS_ANDROID)
   registry->RegisterDictionaryPref(
       safety_hub_prefs::kMenuNotificationsPrefsKey);
+  // Vivaldi VB-100830
   registry->RegisterBooleanPref(
-      safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled, true);
+      safety_hub_prefs::kUnusedSitePermissionsRevocationEnabled, false);
   registry->RegisterBooleanPref(
       safety_hub_prefs::kUnusedSitePermissionsRevocationMigrationCompleted,
       false);

@@ -7,7 +7,6 @@ package org.chromium.base.test.transit;
 import android.util.ArrayMap;
 
 import androidx.annotation.CallSuper;
-import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.google.errorprone.annotations.FormatMethod;
@@ -16,7 +15,12 @@ import org.chromium.base.supplier.Supplier;
 import org.chromium.base.test.transit.ConditionStatus.Status;
 import org.chromium.base.test.transit.Transition.TransitionOptions;
 import org.chromium.base.test.transit.Transition.Trigger;
+import org.chromium.build.annotations.EnsuresNonNull;
+import org.chromium.build.annotations.MonotonicNonNull;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 
+import java.util.Objects;
 import java.util.function.Function;
 
 /**
@@ -25,14 +29,17 @@ import java.util.function.Function;
  * <p>{@link ConditionWaiter} waits for multiple Conditions to be fulfilled. {@link
  * ConditionChecker} performs one-time checks for whether multiple Conditions are fulfilled.
  */
+@NullMarked
 public abstract class Condition {
-    private String mDescription;
+    private @MonotonicNonNull String mDescription;
 
     private final boolean mIsRunOnUiThread;
-    private ArrayMap<String, Supplier<?>> mDependentSuppliers;
+    private @MonotonicNonNull ArrayMap<String, Supplier<?>> mDependentSuppliers;
 
     @VisibleForTesting boolean mHasStartedMonitoringForTesting;
     @VisibleForTesting boolean mHasStoppedMonitoringForTesting;
+    protected @Nullable ConditionalState mOwnerState;
+    protected @Nullable Transition mOwnerTransition;
 
     /**
      * @param isRunOnUiThread true if the Condition should be checked on the UI Thread, false if it
@@ -41,6 +48,34 @@ public abstract class Condition {
      */
     public Condition(boolean isRunOnUiThread) {
         mIsRunOnUiThread = isRunOnUiThread;
+    }
+
+    void bindToState(ConditionalState owner) {
+        assert mOwnerState == null
+                : String.format(
+                        "Condition already bound to %s, cannot bind to %s", mOwnerState, owner);
+        assert mOwnerTransition == null
+                : String.format(
+                        "Condition already bound to %s, cannot bind to %s",
+                        mOwnerTransition, owner);
+        mOwnerState = owner;
+    }
+
+    void bindToTransition(Transition transition) {
+        assert mOwnerState == null
+                : String.format(
+                        "Condition already bound to %s, cannot bind to %s",
+                        mOwnerState, transition);
+        assert mOwnerTransition == null
+                : String.format(
+                        "Condition already bound to %s, cannot bind to %s",
+                        mOwnerTransition, transition);
+        mOwnerTransition = transition;
+    }
+
+    void assertIsBound() {
+        assert mOwnerTransition != null || mOwnerState != null
+                : String.format("Condition \"%s\" is not bound.", getDescription());
     }
 
     /**
@@ -100,6 +135,7 @@ public abstract class Condition {
      * Invalidates last description; the next time {@link #getDescription()}, it will get a new one
      * from {@link #buildDescription()}.
      */
+    @EnsuresNonNull("mDescription")
     protected void rebuildDescription() {
         mDescription = buildDescription();
         assert mDescription != null
@@ -143,7 +179,7 @@ public abstract class Condition {
         return checkWithSuppliers();
     }
 
-    private ConditionStatus checkDependentSuppliers() {
+    private @Nullable ConditionStatus checkDependentSuppliers() {
         if (mDependentSuppliers == null) {
             return null;
         }
@@ -251,6 +287,18 @@ public abstract class Condition {
     }
 
     /**
+     * {@link #checkWithSuppliers()} should return this as a convenience method to compare Objects
+     * (including Strings).
+     */
+    public static ConditionStatus whetherEquals(Object expected, Object actual) {
+        return whether(
+                Objects.equals(expected, actual),
+                "Expected: \"%s\"; Actual: \"%s\"",
+                expected,
+                actual);
+    }
+
+    /**
      * {@link #checkWithSuppliers()} should return this when it does not have information to check
      * the Condition yet.
      *
@@ -284,6 +332,16 @@ public abstract class Condition {
     public static ConditionStatus fulfilledOrAwaiting(
             boolean isFulfilled, String message, Object... args) {
         return fulfilledOrAwaiting(isFulfilled, String.format(message, args));
+    }
+
+    /** Waits for one or more Conditions using a Transition. */
+    public static CarryOn waitFor(Condition... conditions) {
+        return waitFor(TransitionOptions.DEFAULT, conditions);
+    }
+
+    /** Waits for one or more Conditions using a Transition with {@link TransitionOptions}. */
+    public static CarryOn waitFor(TransitionOptions options, Condition... conditions) {
+        return CarryOn.pickUp(CarryOn.fromConditions(conditions), options, /* trigger= */ null);
     }
 
     /** Runs |trigger| and waits for one or more Conditions using a Transition. */

@@ -49,6 +49,7 @@ void ApplyOptionsOverridesForWebContents(
   if (base::FeatureList::IsEnabled(
           features::kAnnotatedPageContentWithActionableElements)) {
     options.enable_experimental_actionable_data = true;
+    options.include_geometry = true;
   }
 }
 
@@ -233,19 +234,16 @@ void OnGotAIPageContentForFrame(
 
 }  // namespace
 
-AIPageContentResult::AIPageContentResult() = default;
+AIPageContentResult::AIPageContentResult() {
+  metadata = optimization_guide::mojom::PageMetadata::New();
+}
 AIPageContentResult::~AIPageContentResult() = default;
 AIPageContentResult::AIPageContentResult(AIPageContentResult&& other) = default;
 AIPageContentResult& AIPageContentResult::operator=(
     AIPageContentResult&& other) = default;
 
 blink::mojom::AIPageContentOptionsPtr DefaultAIPageContentOptions() {
-  auto request = blink::mojom::AIPageContentOptions::New();
-  request->include_geometry = true;
-  request->on_critical_path = true;
-  request->include_hidden_searchable_content = true;
-
-  return request;
+  return blink::mojom::AIPageContentOptions::New();
 }
 
 void GetAIPageContent(content::WebContents* web_contents,

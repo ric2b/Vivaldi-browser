@@ -9,15 +9,22 @@
  */
 #include "modules/video_coding/h26x_packet_buffer.h"
 
+#include <cstdint>
 #include <cstring>
-#include <limits>
-#include <ostream>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "api/array_view.h"
 #include "api/video/render_resolution.h"
+#include "api/video/video_codec_type.h"
+#include "api/video/video_frame_type.h"
 #include "common_video/h264/h264_common.h"
+#include "modules/rtp_rtcp/source/rtp_video_header.h"
+#include "modules/video_coding/codecs/h264/include/h264_globals.h"
+#include "rtc_base/checks.h"
+#include "rtc_base/copy_on_write_buffer.h"
 #include "rtc_base/system/unused.h"
 #include "test/gmock.h"
 #include "test/gtest.h"
@@ -82,9 +89,9 @@ class H264Packet {
   std::unique_ptr<H26xPacketBuffer::Packet> Build();
 
  private:
-  rtc::CopyOnWriteBuffer BuildFuaPayload() const;
-  rtc::CopyOnWriteBuffer BuildSingleNaluPayload() const;
-  rtc::CopyOnWriteBuffer BuildStapAPayload() const;
+  CopyOnWriteBuffer BuildFuaPayload() const;
+  CopyOnWriteBuffer BuildSingleNaluPayload() const;
+  CopyOnWriteBuffer BuildStapAPayload() const;
 
   RTPVideoHeaderH264& H264Header() {
     return std::get<RTPVideoHeaderH264>(video_header_.video_type_header);
@@ -223,20 +230,20 @@ std::unique_ptr<H26xPacketBuffer::Packet> H264Packet::Build() {
   return res;
 }
 
-rtc::CopyOnWriteBuffer H264Packet::BuildFuaPayload() const {
-  return rtc::CopyOnWriteBuffer(nalu_payloads_[0]);
+CopyOnWriteBuffer H264Packet::BuildFuaPayload() const {
+  return CopyOnWriteBuffer(nalu_payloads_[0]);
 }
 
-rtc::CopyOnWriteBuffer H264Packet::BuildSingleNaluPayload() const {
-  rtc::CopyOnWriteBuffer res;
+CopyOnWriteBuffer H264Packet::BuildSingleNaluPayload() const {
+  CopyOnWriteBuffer res;
   auto& h264_header = H264Header();
   res.AppendData(&h264_header.nalus[0].type, 1);
   res.AppendData(nalu_payloads_[0]);
   return res;
 }
 
-rtc::CopyOnWriteBuffer H264Packet::BuildStapAPayload() const {
-  rtc::CopyOnWriteBuffer res;
+CopyOnWriteBuffer H264Packet::BuildStapAPayload() const {
+  CopyOnWriteBuffer res;
 
   const uint8_t indicator = H264::NaluType::kStapA;
   res.AppendData(&indicator, 1);
@@ -341,7 +348,7 @@ std::unique_ptr<H26xPacketBuffer::Packet> H265Packet::Build() {
   res->timestamp = rtp_timestamp_;
   res->sequence_number = rtp_seq_num_;
   res->video_header.codec = kVideoCodecH265;
-  res->video_payload = rtc::CopyOnWriteBuffer();
+  res->video_payload = CopyOnWriteBuffer();
   res->video_header.is_first_packet_in_frame = first_packet_;
   for (const auto& payload : nalu_payloads_) {
     res->video_payload.AppendData(payload);
@@ -371,7 +378,7 @@ H265Packet& H265Packet::SeqNum(int64_t rtp_seq_num) {
 }
 #endif
 
-rtc::ArrayView<const uint8_t> PacketPayload(
+ArrayView<const uint8_t> PacketPayload(
     const std::unique_ptr<H26xPacketBuffer::Packet>& packet) {
   return packet->video_payload;
 }

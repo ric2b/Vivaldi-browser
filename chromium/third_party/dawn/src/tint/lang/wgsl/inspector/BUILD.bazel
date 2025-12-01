@@ -57,7 +57,6 @@ cc_library(
     "//src/tint/lang/core/type",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
-    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/program",
     "//src/tint/lang/wgsl/sem",
     "//src/tint/utils",
@@ -79,8 +78,6 @@ cc_library(
   name = "test",
   alwayslink = True,
   srcs = [
-    "inspector_builder_test.cc",
-    "inspector_builder_test.h",
     "inspector_test.cc",
   ],
   deps = [
@@ -91,11 +88,8 @@ cc_library(
     "//src/tint/lang/core/type",
     "//src/tint/lang/wgsl",
     "//src/tint/lang/wgsl/ast",
-    "//src/tint/lang/wgsl/common",
-    "//src/tint/lang/wgsl/features",
     "//src/tint/lang/wgsl/inspector",
     "//src/tint/lang/wgsl/program",
-    "//src/tint/lang/wgsl/resolver",
     "//src/tint/lang/wgsl/sem",
     "//src/tint/utils",
     "//src/tint/utils/containers",

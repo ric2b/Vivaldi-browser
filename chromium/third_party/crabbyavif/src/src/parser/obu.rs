@@ -31,13 +31,11 @@ pub struct Av1SequenceHeader {
     max_height: u32,
     bit_depth: u8,
     yuv_format: PixelFormat,
-    #[allow(unused)]
-    chroma_sample_position: ChromaSamplePosition,
     pub color_primaries: ColorPrimaries,
     pub transfer_characteristics: TransferCharacteristics,
     pub matrix_coefficients: MatrixCoefficients,
     pub yuv_range: YuvRange,
-    config: Av1CodecConfiguration,
+    pub config: Av1CodecConfiguration,
 }
 
 impl Av1SequenceHeader {
@@ -251,7 +249,8 @@ impl Av1SequenceHeader {
                 _ => {} // Not reached.
             }
             if self.config.chroma_subsampling_x == 1 && self.config.chroma_subsampling_y == 1 {
-                self.config.chroma_sample_position = bits.read(2)?.into();
+                // chroma_sample_position.
+                bits.skip(2)?;
             }
         }
         // separate_uv_delta_q

@@ -67,7 +67,7 @@ bool AudioDecoderConfig::IsValidConfig() const {
          channel_layout_ != CHANNEL_LAYOUT_UNSUPPORTED &&
          bytes_per_channel_ > 0 &&
          bytes_per_channel_ <= limits::kMaxBytesPerSample &&
-         samples_per_second_ > 0 &&
+         samples_per_second_ >= limits::kMinSampleRate &&
          samples_per_second_ <= limits::kMaxSampleRate &&
          sample_format_ != kUnknownSampleFormat &&
          seek_preroll_ >= base::TimeDelta() && codec_delay_ >= 0;
@@ -89,8 +89,7 @@ bool AudioDecoderConfig::Matches(const AudioDecoderConfig& config) const {
        config.should_discard_decoder_delay()) &&
       (target_output_channel_layout() ==
        config.target_output_channel_layout()) &&
-      (target_output_sample_format() == config.target_output_sample_format()) &&
-      (aac_extra_data() == config.aac_extra_data()));
+      (target_output_sample_format() == config.target_output_sample_format()));
 }
 
 std::string AudioDecoderConfig::AsHumanReadableString() const {
@@ -112,8 +111,7 @@ std::string AudioDecoderConfig::AsHumanReadableString() const {
     << ", target_output_channel_layout: "
     << ChannelLayoutToString(target_output_channel_layout())
     << ", target_output_sample_format: "
-    << SampleFormatToString(target_output_sample_format())
-    << ", has aac extra data: " << base::ToString(!aac_extra_data().empty());
+    << SampleFormatToString(target_output_sample_format());
   return s.str();
 }
 

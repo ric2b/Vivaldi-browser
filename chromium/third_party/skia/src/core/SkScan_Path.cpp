@@ -153,13 +153,8 @@ static void walk_edges(SkEdge* prevHead, SkPathFillType fillType,
             SkFixed newX;
 
             if (currE->fLastY == curr_y) {    // are we done with this edge?
-                if (currE->fCurveCount > 0) {
-                    if (((SkQuadraticEdge*)currE)->updateQuadratic()) {
-                        newX = currE->fX;
-                        goto NEXT_X;
-                    }
-                } else if (currE->fCurveCount < 0) {
-                    if (((SkCubicEdge*)currE)->updateCubic()) {
+                if (currE->hasNextSegment()) {
+                    if (currE->nextSegment()) {
                         SkASSERT(currE->fFirstY == curr_y + 1);
 
                         newX = currE->fX;
@@ -169,7 +164,7 @@ static void walk_edges(SkEdge* prevHead, SkPathFillType fillType,
                 remove_edge(currE);
             } else {
                 SkASSERT(currE->fLastY > curr_y);
-                newX = currE->fX + currE->fDX;
+                newX = currE->fX + currE->fDxDy;
                 currE->fX = newX;
             NEXT_X:
                 if (newX < prevX) { // ripple currE backwards until it is x-sorted
@@ -205,21 +200,17 @@ static void walk_edges(SkEdge* prevHead, SkPathFillType fillType,
 // return true if we're NOT done with this edge
 static bool update_edge(SkEdge* edge, int last_y) {
     SkASSERT(edge->fLastY >= last_y);
-    if (last_y == edge->fLastY) {
-        if (edge->fCurveCount < 0) {
-            if (((SkCubicEdge*)edge)->updateCubic()) {
-                SkASSERT(edge->fFirstY == last_y + 1);
-                return true;
-            }
-        } else if (edge->fCurveCount > 0) {
-            if (((SkQuadraticEdge*)edge)->updateQuadratic()) {
-                SkASSERT(edge->fFirstY == last_y + 1);
-                return true;
-            }
-        }
+    if (last_y != edge->fLastY) {
+        return true;
+    }
+    if (!edge->hasNextSegment()) {
         return false;
     }
-    return true;
+    if (edge->nextSegment()) {
+        SkASSERT(edge->fFirstY == last_y + 1);
+        return true;
+    }
+    return false;
 }
 
 // Unexpected conditions for which we need to return
@@ -253,13 +244,13 @@ static void walk_simple_edges(SkEdge* prevHead, SkBlitter* blitter, int start_y,
         ASSERT_RETURN(local_top <= local_bot);
 
         SkFixed left = leftE->fX;
-        SkFixed dLeft = leftE->fDX;
+        SkFixed dLeft = leftE->fDxDy;
         SkFixed rite = riteE->fX;
-        SkFixed dRite = riteE->fDX;
+        SkFixed dRite = riteE->fDxDy;
         int count = local_bot - local_top;
         ASSERT_RETURN(count >= 0);
 
-        if (0 == (dLeft | dRite)) {
+        if (dLeft == 0 && dRite == 0) {
             int L = SkFixedRoundToInt(left);
             int R = SkFixedRoundToInt(rite);
             if (L > R) {
@@ -321,10 +312,10 @@ static void walk_simple_edges(SkEdge* prevHead, SkBlitter* blitter, int start_y,
 //
 class InverseBlitter : public SkBlitter {
 public:
-    void setBlitter(SkBlitter* blitter, const SkIRect& clip, int shift) {
+    void setBlitter(SkBlitter* blitter, const SkIRect& clip) {
         fBlitter = blitter;
-        fFirstX = clip.fLeft << shift;
-        fLastX = clip.fRight << shift;
+        fFirstX = clip.fLeft;
+        fLastX = clip.fRight;
     }
     void prepost(int y, bool isStart) {
         if (isStart) {
@@ -396,19 +387,12 @@ static SkEdge* sort_edges(SkEdge* list[], int count, SkEdge** last) {
     return list[0];
 }
 
-// clipRect has not been shifted up
-void sk_fill_path(const SkPath& path, const SkIRect& clipRect, SkBlitter* blitter,
-                  int start_y, int stop_y, int shiftEdgesUp, bool pathContainedInClip) {
+static void sk_fill_path(const SkPath& path, const SkIRect& clipRect, SkBlitter* blitter,
+                         int start_y, int stop_y, bool pathContainedInClip) {
     SkASSERT(blitter);
 
-    SkIRect shiftedClip = clipRect;
-    shiftedClip.fLeft = SkLeftShift(shiftedClip.fLeft, shiftEdgesUp);
-    shiftedClip.fRight = SkLeftShift(shiftedClip.fRight, shiftEdgesUp);
-    shiftedClip.fTop = SkLeftShift(shiftedClip.fTop, shiftEdgesUp);
-    shiftedClip.fBottom = SkLeftShift(shiftedClip.fBottom, shiftEdgesUp);
-
-    SkBasicEdgeBuilder builder(shiftEdgesUp);
-    int count = builder.buildEdges(path, pathContainedInClip ? nullptr : &shiftedClip);
+    SkBasicEdgeBuilder builder;
+    int count = builder.buildEdges(path, pathContainedInClip ? nullptr : &clipRect);
     SkEdge** list = builder.edgeList();
 
     if (0 == count) {
@@ -427,10 +411,10 @@ void sk_fill_path(const SkPath& path, const SkIRect& clipRect, SkBlitter* blitte
                 rect.fBottom = stop_y;
             }
             if (!rect.isEmpty()) {
-                blitter->blitRect(rect.fLeft << shiftEdgesUp,
-                                  rect.fTop << shiftEdgesUp,
-                                  rect.width() << shiftEdgesUp,
-                                  rect.height() << shiftEdgesUp);
+                blitter->blitRect(rect.fLeft,
+                                  rect.fTop,
+                                  rect.width(),
+                                  rect.height());
             }
         }
         return;
@@ -452,21 +436,18 @@ void sk_fill_path(const SkPath& path, const SkIRect& clipRect, SkBlitter* blitte
     last->fNext = &tailEdge;
 
     // now edge is the head of the sorted linklist
-
-    start_y = SkLeftShift(start_y, shiftEdgesUp);
-    stop_y = SkLeftShift(stop_y, shiftEdgesUp);
-    if (!pathContainedInClip && start_y < shiftedClip.fTop) {
-        start_y = shiftedClip.fTop;
+    if (!pathContainedInClip && start_y < clipRect.fTop) {
+        start_y = clipRect.fTop;
     }
-    if (!pathContainedInClip && stop_y > shiftedClip.fBottom) {
-        stop_y = shiftedClip.fBottom;
+    if (!pathContainedInClip && stop_y > clipRect.fBottom) {
+        stop_y = clipRect.fBottom;
     }
 
     InverseBlitter  ib;
     PrePostProc     proc = nullptr;
 
     if (path.isInverseFillType()) {
-        ib.setBlitter(blitter, clipRect, shiftEdgesUp);
+        ib.setBlitter(blitter, clipRect);
         blitter = &ib;
         proc = PrePostInverseBlitterProc;
     }
@@ -476,7 +457,7 @@ void sk_fill_path(const SkPath& path, const SkIRect& clipRect, SkBlitter* blitte
         walk_simple_edges(&headEdge, blitter, start_y, stop_y);
     } else {
         walk_edges(&headEdge, path.getFillType(), blitter, start_y, stop_y, proc,
-                   shiftedClip.right());
+                   clipRect.right());
     }
 }
 
@@ -666,19 +647,13 @@ void SkScan::FillPath(const SkPath& path, const SkRegion& origClip,
         SkASSERT(clipper.getClipRect() == nullptr ||
                 *clipper.getClipRect() == clipPtr->getBounds());
         sk_fill_path(path, clipPtr->getBounds(), blitter, ir.fTop, ir.fBottom,
-                     0, clipper.getClipRect() == nullptr);
+                     clipper.getClipRect() == nullptr);
         if (path.isInverseFillType()) {
             sk_blit_below(blitter, ir, *clipPtr);
         }
     } else {
         // what does it mean to not have a blitter if path.isInverseFillType???
     }
-}
-
-void SkScan::FillPath(const SkPath& path, const SkIRect& ir,
-                      SkBlitter* blitter) {
-    SkRegion rgn(ir);
-    FillPath(path, rgn, blitter);
 }
 
 bool SkScan::PathRequiresTiling(const SkIRect& bounds) {
@@ -692,15 +667,15 @@ static int build_tri_edges(SkEdge edge[], const SkPoint pts[],
                            const SkIRect* clipRect, SkEdge* list[]) {
     SkEdge** start = list;
 
-    if (edge->setLine(pts[0], pts[1], clipRect, 0)) {
+    if (edge->setLine(pts[0], pts[1], clipRect)) {
         *list++ = edge;
-        edge = (SkEdge*)((char*)edge + sizeof(SkEdge));
+        edge++;
     }
-    if (edge->setLine(pts[1], pts[2], clipRect, 0)) {
+    if (edge->setLine(pts[1], pts[2], clipRect)) {
         *list++ = edge;
-        edge = (SkEdge*)((char*)edge + sizeof(SkEdge));
+        edge++;
     }
-    if (edge->setLine(pts[2], pts[0], clipRect, 0)) {
+    if (edge->setLine(pts[2], pts[0], clipRect)) {
         *list++ = edge;
     }
     return (int)(list - start);

@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/html/html_meta_element.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/core/html/html_title_element.h"
+#include "third_party/blink/renderer/modules/accessibility/ax_object-inl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_object_cache_impl.h"
 #include "third_party/blink/renderer/modules/accessibility/ax_selection.h"
@@ -22,9 +23,8 @@
 
 namespace blink {
 
-BlinkAXTreeSource::BlinkAXTreeSource(AXObjectCacheImpl& ax_object_cache,
-                                     bool is_snapshot)
-    : ax_object_cache_(ax_object_cache), is_snapshot_(is_snapshot) {}
+BlinkAXTreeSource::BlinkAXTreeSource(AXObjectCacheImpl& ax_object_cache)
+    : ax_object_cache_(ax_object_cache) {}
 
 BlinkAXTreeSource::~BlinkAXTreeSource() = default;
 
@@ -65,8 +65,11 @@ void BlinkAXTreeSource::Selection(
 
   const auto ax_selection =
       focus->IsAtomicTextField()
-          ? AXSelection::FromCurrentSelection(ToTextControl(*focus->GetNode()))
-          : AXSelection::FromCurrentSelection(*focus->GetDocument());
+          ? AXSelection::FromCurrentSelection(ToTextControl(*focus->GetNode()),
+                                              *ax_object_cache_)
+          : AXSelection::FromCurrentSelection(
+                *focus->GetDocument(), *ax_object_cache_,
+                AXSelectionBehavior::kExtendToValidRange);
   if (!ax_selection)
     return;
 
@@ -110,8 +113,9 @@ bool BlinkAXTreeSource::GetTreeData(ui::AXTreeData* tree_data) const {
   tree_data->title = document.title().Utf8();
   tree_data->url = document.Url().GetString().Utf8();
 
-  if (const AXObject* focus = GetFocusedObject())
+  if (const AXObject* focus = GetFocusedObject()) {
     tree_data->focus_id = focus->AXObjectID();
+  }
 
   bool is_selection_backward = false;
   const AXObject *anchor_object, *focus_object;
@@ -220,10 +224,6 @@ int32_t BlinkAXTreeSource::GetId(const AXObject* node) const {
 }
 
 size_t BlinkAXTreeSource::GetChildCount(const AXObject* node) const {
-  if (ShouldTruncateInlineTextBoxes() &&
-      ui::CanHaveInlineTextBoxChildren(node->RoleValue())) {
-    return 0;
-  }
   if (ax_object_cache_->GetAXMode().HasFilterFlags(ui::AXMode::kOnScreenOnly)) {
     // If kOnScreenOnly is set, we don't want to serialize children of nodes
     // that are off-screen, thus pruning the tree that is sent to
@@ -236,26 +236,20 @@ size_t BlinkAXTreeSource::GetChildCount(const AXObject* node) const {
 }
 
 AXObject* BlinkAXTreeSource::ChildAt(const AXObject* node, size_t index) const {
-  if (ShouldTruncateInlineTextBoxes()) {
-    CHECK(!ui::CanHaveInlineTextBoxChildren(node->RoleValue()));
-  }
   auto* child = node->ChildAtIncludingIgnored(static_cast<int>(index));
 
   // The child may be invalid due to issues in blink accessibility code.
   CHECK(child);
   if (child->IsDetached()) {
-    NOTREACHED(base::NotFatalUntil::M127)
-        << "Should not try to serialize an invalid child:" << "\nParent: "
-        << node->ToString().Utf8() << "\nChild: " << child->ToString().Utf8();
-    return nullptr;
+    NOTREACHED() << "Should not try to serialize an invalid child:"
+                 << "\nParent: " << node->ToString().Utf8()
+                 << "\nChild: " << child->ToString().Utf8();
   }
 
   if (!child->IsIncludedInTree()) {
-    NOTREACHED(base::NotFatalUntil::M127)
-        << "Should not receive unincluded child."
-        << "\nChild: " << child->ToString().Utf8()
-        << "\nParent: " << node->ToString().Utf8();
-    return nullptr;
+    NOTREACHED() << "Should not receive unincluded child."
+                 << "\nChild: " << child->ToString().Utf8()
+                 << "\nParent: " << node->ToString().Utf8();
   }
 
   // These should not be produced by Blink. They are only needed on Mac and
@@ -307,7 +301,7 @@ void BlinkAXTreeSource::SerializeNode(const AXObject* src,
     NOTREACHED();
   }
 
-  src->Serialize(dst, ax_object_cache_->GetAXMode(), is_snapshot_);
+  src->Serialize(dst, ax_object_cache_->GetAXMode());
 }
 
 void BlinkAXTreeSource::Trace(Visitor* visitor) const {

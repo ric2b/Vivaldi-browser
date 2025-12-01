@@ -170,7 +170,7 @@ public class Fido2CredentialRequestTest {
      * testGetAssertion_with_param as input parameters.
      */
     public static class ErrorTestParams implements ParameterProvider {
-        private static List<ParameterSet> sErrorTestParams =
+        private static final List<ParameterSet> sErrorTestParams =
                 Arrays.asList(
                         new ParameterSet()
                                 .value(
@@ -236,7 +236,7 @@ public class Fido2CredentialRequestTest {
     }
 
     public static class SameOriginTestParams implements ParameterProvider {
-        private static List<ParameterSet> sSameOriginTestParams =
+        private static final List<ParameterSet> sSameOriginTestParams =
                 Arrays.asList(
                         new ParameterSet().value(true).name("SameOrigin"),
                         new ParameterSet().value(false).name("CrossOrigin"));
@@ -327,7 +327,7 @@ public class Fido2CredentialRequestTest {
     }
 
     private static class TestAuthenticatorImplJni implements InternalAuthenticator.Natives {
-        private Fido2ApiTestHelper.AuthenticatorCallback mCallback;
+        private final Fido2ApiTestHelper.AuthenticatorCallback mCallback;
 
         TestAuthenticatorImplJni(Fido2ApiTestHelper.AuthenticatorCallback callback) {
             mCallback = callback;
@@ -346,7 +346,7 @@ public class Fido2CredentialRequestTest {
         @Override
         public void invokeGetAssertionResponse(
                 long nativeInternalAuthenticator, int status, ByteBuffer byteBuffer) {
-            mCallback.onSignResponse(
+            mCallback.onSignResponseWithStatus(
                     status,
                     byteBuffer == null
                             ? null
@@ -1372,14 +1372,16 @@ public class Fido2CredentialRequestTest {
                 () -> {
                     authenticator.getCredential(
                             mRequestOptions,
-                            (getCredentialResponse) ->
-                                    mCallback.onSignResponse(
-                                            getCredentialResponse.getGetAssertionResponse().status,
-                                            getCredentialResponse.getGetAssertionResponse()
-                                                    .credential));
+                            (getCredentialResponse) -> {
+                                Assert.assertEquals(
+                                        AuthenticatorStatus.SUCCESS,
+                                        getCredentialResponse.getGetAssertionResponse().status);
+                                mCallback.onSignResponse(
+                                        getCredentialResponse.getGetAssertionResponse().credential,
+                                        /* passwordCredential= */ null);
+                            });
                 });
         mCallback.blockUntilCalled();
-        Assert.assertEquals(mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.SUCCESS));
         Fido2ApiTestHelper.validateGetAssertionResponse(mCallback.getGetAssertionResponse());
         Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
         authenticator.close();
@@ -1410,11 +1412,14 @@ public class Fido2CredentialRequestTest {
                 () -> {
                     authenticator.getCredential(
                             mRequestOptions,
-                            (getCredentialResponse) ->
-                                    mCallback.onSignResponse(
-                                            getCredentialResponse.getGetAssertionResponse().status,
-                                            getCredentialResponse.getGetAssertionResponse()
-                                                    .credential));
+                            (getCredentialResponse) -> {
+                                Assert.assertEquals(
+                                        AuthenticatorStatus.SUCCESS,
+                                        getCredentialResponse.getGetAssertionResponse().status);
+                                mCallback.onSignResponse(
+                                        getCredentialResponse.getGetAssertionResponse().credential,
+                                        /* passwordCredential= */ null);
+                            });
                 });
         mCallback.blockUntilCalled();
 
@@ -1441,15 +1446,16 @@ public class Fido2CredentialRequestTest {
                 () -> {
                     authenticator.getCredential(
                             mRequestOptions,
-                            (getCredentialResponse) ->
-                                    mCallback.onSignResponse(
-                                            getCredentialResponse.getGetAssertionResponse().status,
-                                            getCredentialResponse.getGetAssertionResponse()
-                                                    .credential));
+                            (getCredentialResponse) -> {
+                                Assert.assertEquals(
+                                        AuthenticatorStatus.NOT_ALLOWED_ERROR,
+                                        getCredentialResponse.getGetAssertionResponse().status);
+                                mCallback.onSignResponse(
+                                        getCredentialResponse.getGetAssertionResponse().credential,
+                                        /* passwordCredential= */ null);
+                            });
                 });
         mCallback.blockUntilCalled();
-        Assert.assertEquals(
-                mCallback.getStatus(), Integer.valueOf(AuthenticatorStatus.NOT_ALLOWED_ERROR));
         Fido2ApiTestHelper.verifyRespondedBeforeTimeout(mStartTimeMs);
         authenticator.close();
     }

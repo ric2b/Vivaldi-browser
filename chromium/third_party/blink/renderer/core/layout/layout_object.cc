@@ -152,17 +152,40 @@ namespace blink {
 
 namespace {
 
+LayoutObject* FindColumnSpannerContainer(
+    const LayoutObject* spanner,
+    LayoutObject::AncestorSkipInfo* skip_info) {
+  DCHECK(RuntimeEnabledFeatures::FlowThreadLessEnabled());
+  DCHECK(spanner->IsColumnSpanAll());
+  for (LayoutObject* walker = spanner->Parent(); walker;
+       walker = walker->ContainingBlock(skip_info)) {
+    if (walker->IsMulticolContainer()) {
+      return walker;
+    }
+    if (skip_info) {
+      skip_info->Update(*walker);
+    }
+  }
+  // It's possible to end up here, because this function is also called after
+  // the object has been taken out of the tree, during destruction.
+  return nullptr;
+}
+
 template <typename Predicate>
 LayoutObject* FindAncestorByPredicate(const LayoutObject* descendant,
                                       LayoutObject::AncestorSkipInfo* skip_info,
                                       Predicate predicate) {
-  for (auto* object = descendant->Parent(); object; object = object->Parent()) {
+  for (auto* object = descendant->Parent(); object;) {
     if (predicate(object))
       return object;
     if (skip_info)
       skip_info->Update(*object);
 
     if (object->IsColumnSpanAll()) [[unlikely]] {
+      if (RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+        object = FindColumnSpannerContainer(object, skip_info);
+        continue;
+      }
       // The containing block chain goes directly from the column spanner to the
       // multi-column container.
       const auto* multicol_container =
@@ -175,6 +198,7 @@ LayoutObject* FindAncestorByPredicate(const LayoutObject* descendant,
         }
       }
     }
+    object = object->Parent();
   }
   return nullptr;
 }
@@ -309,8 +333,7 @@ struct SameSizeAsLayoutObject : public GarbageCollected<SameSizeAsLayoutObject>,
   unsigned bitfields_;
   unsigned bitfields2_;
   unsigned bitfields3_;
-  subtle::UncompressedMember<void*> uncompressed_member;
-  Member<void*> members[5];
+  Member<void*> members[6];
 #if DCHECK_IS_ON()
   bool is_destroyed_;
 #endif
@@ -547,20 +570,18 @@ void LayoutObject::MarkMayHaveAnchorQuery() {
   }
 }
 
-void LayoutObject::SetIsInsideFlowThreadIncludingDescendants(
-    bool inside_flow_thread) {
+void LayoutObject::SetIsInsideMulticolIncludingDescendants(
+    bool inside_multicol) {
   NOT_DESTROYED();
   LayoutObject* next;
   for (LayoutObject* object = this; object; object = next) {
-    // If object is a fragmentation context it already updated the descendants
-    // flag accordingly.
-    if (object->IsLayoutFlowThread()) {
+    if (inside_multicol == object->IsInsideMulticol()) {
+      // No change needed. Skip the subtree.
       next = object->NextInPreOrderAfterChildren(this);
-      continue;
+    } else {
+      object->SetIsInsideMulticol(inside_multicol);
+      next = object->NextInPreOrder(this);
     }
-    next = object->NextInPreOrder(this);
-    DCHECK_NE(inside_flow_thread, object->IsInsideFlowThread());
-    object->SetIsInsideFlowThread(inside_flow_thread);
   }
 }
 
@@ -1192,16 +1213,13 @@ PaintLayer* LayoutObject::EnclosingLayer() const {
 PaintLayer* LayoutObject::PaintingLayer(int max_depth) const {
   NOT_DESTROYED();
   auto FindContainer = [](const LayoutObject& object) -> const LayoutObject* {
-    // Column spanners paint through their multicolumn containers which can
-    // be accessed through the associated out-of-flow placeholder's parent.
-    if (object.IsColumnSpanAll())
-      return object.SpannerPlaceholder();
-    // Use ContainingBlock() instead of Parent() for floating objects to omit
-    // any self-painting layers of inline objects that don't paint the floating
-    // object. This is only needed for inline-level floats not managed by
-    // LayoutNG. LayoutNG floats are painted by the correct painting layer.
-    if (object.IsFloating() && !object.IsInLayoutNGInlineFormattingContext())
-      return object.ContainingBlock();
+    if (object.IsColumnSpanAll()) {
+      // Column spanners paint through their multicolumn containers.
+      if (!RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+        return object.SpannerPlaceholder();
+      }
+      return object.ContainerForColumnSpanner();
+    }
     // Physical fragments and fragment items for ruby-text boxes are not
     // managed by inline parents, and stored in a separated line of the IFC.
     if (object.IsInlineRubyText()) {
@@ -1320,7 +1338,8 @@ bool LayoutObject::IsFirstInlineFragmentSafe() const {
 
 LayoutFlowThread* LayoutObject::LocateFlowThreadContainingBlock() const {
   NOT_DESTROYED();
-  DCHECK(IsInsideFlowThread());
+  DCHECK(!RuntimeEnabledFeatures::FlowThreadLessEnabled());
+  DCHECK(IsInsideMulticol());
   return LayoutFlowThread::LocateFlowThreadContainingBlockOf(
       *this, LayoutFlowThread::kAnyAncestor);
 }
@@ -1766,6 +1785,13 @@ LayoutObject* LayoutObject::ContainerForFixedPosition(
   });
 }
 
+LayoutObject* LayoutObject::ContainerForColumnSpanner(
+    AncestorSkipInfo* skip_info) const {
+  NOT_DESTROYED();
+  DCHECK(RuntimeEnabledFeatures::FlowThreadLessEnabled());
+  return FindColumnSpannerContainer(this, skip_info);
+}
+
 LayoutBlock* LayoutObject::ContainingBlockForAbsolutePosition(
     AncestorSkipInfo* skip_info) const {
   NOT_DESTROYED();
@@ -2167,7 +2193,7 @@ String LayoutObject::DecoratedName() const {
   if (IsFloating()) {
     attributes.push_back("floating");
   }
-  if (SpannerPlaceholder()) {
+  if (IsColumnSpanAll()) {
     attributes.push_back("column spanner");
   }
   if (IsLayoutBlock() && IsInline()) {
@@ -2730,6 +2756,13 @@ void LayoutObject::SetStyle(const ComputedStyle* style,
     // UpdateImageObservers to keep CSSImageGeneratorValue::clients_ up-to-date.
     if (!IsText()) {
       UpdateImageObservers(old_style, style_.Get());
+      // Ditto for CSSURIValues.
+      if (HasLayer()) {
+        PaintLayer* layer = To<LayoutBoxModelObject>(*this).Layer();
+        layer->UpdateFilters({}, old_style, *style_);
+        layer->UpdateBackdropFilters(old_style, *style_);
+        layer->UpdateClipPath(old_style, *style_);
+      }
     }
     return;
   }
@@ -3478,7 +3511,8 @@ void LayoutObject::MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
     return;
 
   PhysicalOffset container_offset = OffsetFromContainer(container, mode);
-  if (IsLayoutFlowThread()) {
+  if (!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled() &&
+      IsLayoutFlowThread()) {
     // So far the point has been in flow thread coordinates (i.e. as if
     // everything in the fragmentation context lived in one tall single column).
     // Convert it to a visual point now, since we're about to escape the flow
@@ -3561,7 +3595,8 @@ void LayoutObject::MapAncestorToLocal(const LayoutBoxModelObject* ancestor,
                                     : TransformState::kFlattenTransform);
   }
 
-  if (IsLayoutFlowThread()) {
+  if (!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled() &&
+      IsLayoutFlowThread()) {
     // Descending into a flow thread. Convert to the local coordinate space,
     // i.e. flow thread coordinates.
     PhysicalOffset visual_point = transform_state.MappedPoint();
@@ -3710,6 +3745,8 @@ gfx::Transform LayoutObject::LocalToAncestorTransform(
 
 bool LayoutObject::OffsetForContainerDependsOnPoint(
     const LayoutObject* container) const {
+  NOT_DESTROYED();
+  DCHECK(!RuntimeEnabledFeatures::LayoutBoxVisualLocationEnabled());
   return IsLayoutFlowThread() ||
          (container->StyleRef().IsFlippedBlocksWritingMode() &&
           container->IsBox());
@@ -3898,8 +3935,11 @@ void LayoutObject::InsertedIntoTree() {
   if (Parent()->ChildrenInline())
     Parent()->DirtyLinesFromChangedChild(this);
 
-  if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock())
-    flow_thread->FlowThreadDescendantWasInserted(this);
+  if (!RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+    if (LayoutFlowThread* flow_thread = FlowThreadContainingBlock()) {
+      flow_thread->FlowThreadDescendantWasInserted(this);
+    }
+  }
 
   if (const Element* element = DynamicTo<Element>(GetNode());
       element && element->HasImplicitlyAnchoredElement()) {
@@ -3963,7 +4003,9 @@ void LayoutObject::WillBeRemovedFromTree() {
   if (IsOutOfFlowPositioned() && Parent()->ChildrenInline())
     Parent()->DirtyLinesFromChangedChild(this);
 
-  RemoveFromLayoutFlowThread();
+  if (!RuntimeEnabledFeatures::FlowThreadLessEnabled()) {
+    RemoveFromLayoutFlowThread();
+  }
 
   if (bitfields_.IsScrollAnchorObject()) {
     // Clear the bit first so that anchor.clear() doesn't recurse into
@@ -4008,8 +4050,10 @@ void LayoutObject::MaybeClearIsScrollAnchorObject() {
 
 void LayoutObject::RemoveFromLayoutFlowThread() {
   NOT_DESTROYED();
-  if (!IsInsideFlowThread())
+  DCHECK(!RuntimeEnabledFeatures::FlowThreadLessEnabled());
+  if (!IsInsideMulticol()) {
     return;
+  }
 
   // Sometimes we remove the element from the flow, but it's not destroyed at
   // that time.
@@ -4032,6 +4076,7 @@ void LayoutObject::RemoveFromLayoutFlowThread() {
 void LayoutObject::RemoveFromLayoutFlowThreadRecursive(
     LayoutFlowThread* layout_flow_thread) {
   NOT_DESTROYED();
+  DCHECK(!RuntimeEnabledFeatures::FlowThreadLessEnabled());
   if (const LayoutObjectChildList* children = VirtualChildren()) {
     for (LayoutObject* child = children->FirstChild(); child;
          child = child->NextSibling()) {
@@ -4045,7 +4090,7 @@ void LayoutObject::RemoveFromLayoutFlowThreadRecursive(
 
   if (layout_flow_thread && layout_flow_thread != this)
     layout_flow_thread->FlowThreadDescendantWillBeRemoved(this);
-  SetIsInsideFlowThread(false);
+  SetIsInsideMulticol(false);
   CHECK(!SpannerPlaceholder());
 }
 
@@ -4410,7 +4455,7 @@ bool LayoutObject::GetImageAnimationPolicy(
   return true;
 }
 
-InterpolationQuality LayoutObject::GetSpeculativeDecodeQuality() const {
+InterpolationQuality LayoutObject::ComputeSpeculativeDecodeQuality() const {
   NOT_DESTROYED();
   return StyleRef().GetInterpolationQuality();
 }
@@ -4858,7 +4903,7 @@ void LayoutObject::ClearPaintFlags() {
 
 bool LayoutObject::IsAllowedToModifyLayoutTreeStructure(Document& document) {
   return document.Lifecycle().StateAllowsLayoutTreeMutations() ||
-         document.GetStyleEngine().InContainerQueryStyleRecalc() ||
+         document.GetStyleEngine().InInterleavedStyleRecalc() ||
          document.GetStyleEngine().InScrollMarkersAttachment();
 }
 
@@ -4927,7 +4972,8 @@ void LayoutObject::InvalidateSelectedChildrenOnStyleChange() {
   // styling may apply to the entire subtree.
   for (LayoutObject* child = SlowFirstChild(); child;
        child = child->NextSibling()) {
-    if (!child->IsSelected()) {
+    // Anonymous objects never be IsSelected(). See SetSelectionStateIfNeeded().
+    if (!child->IsSelected() && !child->IsAnonymous()) {
       continue;
     }
     if (child->CanBeSelectionLeaf()) {

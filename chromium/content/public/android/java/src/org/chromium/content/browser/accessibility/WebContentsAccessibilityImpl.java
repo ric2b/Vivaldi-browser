@@ -66,7 +66,6 @@ import android.content.ReceiverCallNotAllowedException;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
-import android.util.Pair;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
@@ -805,9 +804,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             WebContentsAccessibilityImplJni.get()
                     .setBrowserAXMode(
                             mNativeObj,
-                            AccessibilityState.isScreenReaderEnabled(),
+                            AccessibilityState.isKnownScreenReaderEnabled(),
+                            AccessibilityState.isComplexUserInteractionServiceEnabled(),
                             AccessibilityState.isOnlyPasswordManagersEnabled(),
-                            AccessibilityState.isScreenReaderRunning());
+                            AccessibilityState.getNumberOfRunningServices() == 1);
 
             // Update the state of enabling/disabling the image descriptions feature. To enable the
             // feature, this instance must be a candidate and a screen reader must be enabled.
@@ -815,7 +815,7 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                     .setAllowImageDescriptions(
                             mNativeObj,
                             mIsImageDescriptionsCandidate
-                                    && AccessibilityState.isScreenReaderEnabled());
+                                    && AccessibilityState.isKnownScreenReaderEnabled());
 
             // Update the list of events we dispatch to enabled services.
             mEventDispatcher.updateRelevantEventTypes(
@@ -1021,7 +1021,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             if (WebContentsAccessibilityImplJni.get()
                     .populateAccessibilityNodeInfo(mNativeObj, info, virtualViewId)) {
                 // After successfully populating this node, add it to our cache then return.
-                mNodeInfoCache.put(virtualViewId, AccessibilityNodeInfoCompat.obtain(info));
+                if (!ContentFeatureMap.isEnabled(
+                        ContentFeatureList.ACCESSIBILITY_DEPRECATE_JAVA_NODE_CACHE)) {
+                    mNodeInfoCache.put(virtualViewId, AccessibilityNodeInfoCompat.obtain(info));
+                }
                 mHistogramRecorder.incrementNodeWasCreatedFromScratch();
                 mHistogramRecorder.endAccessibilityNodeInfoConstruction();
                 return info;
@@ -1471,7 +1474,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             boolean forwards,
             boolean canWrap,
             boolean setSequentialFocus) {
-        Pair<Boolean, Boolean> talkbackEnabledState = AccessibilityState.getTalkBackEnabledState();
         int id =
                 WebContentsAccessibilityImplJni.get()
                         .findElementType(
@@ -1481,8 +1483,8 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
                                 forwards,
                                 canWrap,
                                 elementType.isEmpty(),
-                                talkbackEnabledState.first,
-                                talkbackEnabledState.second);
+                                AccessibilityState.isKnownScreenReaderEnabled(),
+                                AccessibilityState.getNumberOfRunningServices() == 1);
         if (id == 0) return false;
 
         if (setSequentialFocus) {
@@ -1910,29 +1912,20 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
         if (mAccessibilityFocusId == id) {
             sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_CLICKED);
         }
-    }
 
-    @CalledByNative
-    private void handleDescriptionChangedPaneTitle(int id) {
-        // If the node is dialog, fire CONTENT_CHANGE_TYPE_PANE_TITLE event when receive
-        // DESCRIPTION_CHANGE event from Chrome. e.g. paneTitle is only relevant for dialogs
         if (isAccessibilityEnabled()) {
             AccessibilityEvent event =
                     AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-            // Check for null AccessibilityEvent, as it might be null if accessibility services are
-            // disabled.
-            if (event == null) {
-                return;
-            }
+            if (event == null) return;
 
-            event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_PANE_TITLE);
+            event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_CHECKED);
             event.setSource(mView, id);
             requestSendAccessibilityEvent(event);
         }
     }
 
     @CalledByNative
-    private void handleDescriptionChangedSubtree(int id) {
+    private void handleWindowContentChange(int id, int subType) {
         if (isAccessibilityEnabled()) {
             AccessibilityEvent event =
                     AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
@@ -1941,22 +1934,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
             if (event == null) {
                 return;
             }
-
-            event.setSource(mView, id);
-            requestSendAccessibilityEvent(event);
-        }
-    }
-
-    @CalledByNative
-    private void handleStateDescriptionChanged(int id) {
-        if (isAccessibilityEnabled()) {
-            AccessibilityEvent event =
-                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-            if (event == null) {
-                return;
+            if (subType != AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED)
+            {
+                event.setContentChangeTypes(subType);
             }
-
-            event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_STATE_DESCRIPTION);
             event.setSource(mView, id);
             requestSendAccessibilityEvent(event);
         }
@@ -1968,18 +1949,18 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
     }
 
     @CalledByNative
-    private void handleTextSelectionChanged(int id) {
-        sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED);
+    private void handleActiveDescendantChanged(int id, int activeDescendantId) {
+        if (activeDescendantId != View.NO_ID) {
+            moveAccessibilityFocusToId(activeDescendantId);
+        } else {
+            // Return focus to the node that had the event dispatched upon it.
+            moveAccessibilityFocusToId(id);
+        }
     }
 
     @CalledByNative
-    private void handleTextContentChanged(int id) {
-        AccessibilityEvent event =
-                buildAccessibilityEvent(id, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-        if (event != null) {
-            event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT);
-            requestSendAccessibilityEvent(event);
-        }
+    private void handleTextSelectionChanged(int id) {
+        sendAccessibilityEvent(id, AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED);
     }
 
     @CalledByNative
@@ -2002,21 +1983,6 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
     @CalledByNative
     private void handleContentChanged(int id) {
         sendAccessibilityEvent(id, AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-    }
-
-    @CalledByNative
-    private void handleImageAnnotationChanged(int id) {
-        if (isAccessibilityEnabled()) {
-            AccessibilityEvent event =
-                    AccessibilityEvent.obtain(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
-            if (event == null) {
-                return;
-            }
-
-            event.setContentChangeTypes(AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT);
-            event.setSource(mView, id);
-            requestSendAccessibilityEvent(event);
-        }
     }
 
     @CalledByNative
@@ -2314,9 +2280,10 @@ public class WebContentsAccessibilityImpl extends AccessibilityNodeProviderCompa
 
         void setBrowserAXMode(
                 long nativeWebContentsAccessibilityAndroid,
-                boolean screenReaderMode,
-                boolean formControlsMode,
-                boolean isScreenReaderRunning);
+                boolean isKnownScreenReaderEnabled,
+                boolean isComplexAccessibilityServiceEnabled,
+                boolean isFormControlsCandidate,
+                boolean isOnScreenModeCandidate);
 
         void disableRendererAccessibility(long nativeWebContentsAccessibilityAndroid);
 

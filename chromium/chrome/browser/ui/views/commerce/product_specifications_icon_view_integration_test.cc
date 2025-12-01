@@ -23,7 +23,7 @@
 #include "components/commerce/core/mock_shopping_service.h"
 #include "components/commerce/core/test_utils.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/tab_collections/public/tab_interface.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
 #include "ui/base/interaction/element_identifier.h"
 #include "ui/base/interaction/element_tracker.h"
@@ -56,7 +56,6 @@ class ProductSpecificationsIconViewIntegrationTest
     std::vector<base::test::FeatureRef> enabled_features = {
         commerce::kProductSpecifications};
     if (GetParam()) {
-      enabled_features.push_back(toast_features::kToastFramework);
       enabled_features.push_back(commerce::kCompareConfirmationToast);
     }
     test_features_.InitWithFeatures(enabled_features, /*disabled_features*/ {});

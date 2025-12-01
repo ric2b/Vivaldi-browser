@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import * as SDK from '../../core/sdk/sdk.js';
+import {renderElementIntoDOM} from '../../testing/DOMHelpers.js';
 import {createTarget, stubNoopSettings} from '../../testing/EnvironmentHelpers.js';
 import {describeWithMockConnection} from '../../testing/MockConnection.js';
 import * as UI from '../../ui/legacy/legacy.js';
@@ -27,8 +28,7 @@ describeWithMockConnection('ClassesPaneWidget', () => {
   const updatesUiOnEvent = (inScope: boolean) => async () => {
     SDK.TargetManager.TargetManager.instance().setScopeTarget(inScope ? target : null);
     view = new Elements.ClassesPaneWidget.ClassesPaneWidget();
-    view.markAsRoot();
-    view.show(document.body);
+    renderElementIntoDOM(view);
 
     const model = target.model(SDK.DOMModel.DOMModel);
     assert.exists(model);
@@ -37,10 +37,10 @@ describeWithMockConnection('ClassesPaneWidget', () => {
     UI.Context.Context.instance().setFlavor(SDK.DOMModel.DOMNode, node);
     sinon.stub(node, 'enclosingElementOrSelf').returns(node);
     sinon.stub(node, 'getAttribute').withArgs('class').returns(CLASS_NAMES.join(' '));
-    assert.isFalse(createCheckboxLabel.called);
+    sinon.assert.notCalled(createCheckboxLabel);
 
     model.dispatchEventToListeners(SDK.DOMModel.Events.DOMMutated, node);
-    assert.strictEqual(createCheckboxLabel.callCount, inScope ? CLASS_NAMES.length : 0);
+    sinon.assert.callCount(createCheckboxLabel, inScope ? CLASS_NAMES.length : 0);
   };
 
   it('updates UI on in scope update event', updatesUiOnEvent(true));

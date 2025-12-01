@@ -107,6 +107,14 @@ impl Default for avifDecoder {
     }
 }
 
+fn rust_decoder<'a>(decoder: *mut avifDecoder) -> &'a mut Decoder {
+    &mut deref_mut!(decoder).rust_decoder
+}
+
+fn rust_decoder_const<'a>(decoder: *const avifDecoder) -> &'a Decoder {
+    &deref_const!(decoder).rust_decoder
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDecoderCreate() -> *mut avifDecoder {
     Box::into_raw(Box::<avifDecoder>::default())
@@ -114,10 +122,7 @@ pub unsafe extern "C" fn crabby_avifDecoderCreate() -> *mut avifDecoder {
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDecoderSetIO(decoder: *mut avifDecoder, io: *mut avifIO) {
-    unsafe {
-        let rust_decoder = &mut (*decoder).rust_decoder;
-        rust_decoder.set_io(Box::new(avifIOWrapper::create(*io)));
-    }
+    rust_decoder(decoder).set_io(Box::new(avifIOWrapper::create(*deref_const!(io))));
 }
 
 #[no_mangle]
@@ -125,11 +130,8 @@ pub unsafe extern "C" fn crabby_avifDecoderSetIOFile(
     decoder: *mut avifDecoder,
     filename: *const c_char,
 ) -> avifResult {
-    unsafe {
-        let rust_decoder = &mut (*decoder).rust_decoder;
-        let filename = String::from(CStr::from_ptr(filename).to_str().unwrap_or(""));
-        to_avifResult(&rust_decoder.set_io_file(&filename))
-    }
+    let filename = String::from(unsafe { CStr::from_ptr(filename) }.to_str().unwrap_or(""));
+    rust_decoder(decoder).set_io_file(&filename).into()
 }
 
 #[no_mangle]
@@ -138,8 +140,7 @@ pub unsafe extern "C" fn crabby_avifDecoderSetIOMemory(
     data: *const u8,
     size: usize,
 ) -> avifResult {
-    let rust_decoder = unsafe { &mut (*decoder).rust_decoder };
-    to_avifResult(unsafe { &rust_decoder.set_io_raw(data, size) })
+    unsafe { rust_decoder(decoder).set_io_raw(data, size) }.into()
 }
 
 #[no_mangle]
@@ -147,9 +148,7 @@ pub unsafe extern "C" fn crabby_avifDecoderSetSource(
     decoder: *mut avifDecoder,
     source: Source,
 ) -> avifResult {
-    unsafe {
-        (*decoder).requestedSource = source;
-    }
+    deref_mut!(decoder).requestedSource = source;
     avifResult::Ok
 }
 
@@ -239,45 +238,40 @@ fn rust_decoder_to_avifDecoder(src: &Decoder, dst: &mut avifDecoder) {
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDecoderParse(decoder: *mut avifDecoder) -> avifResult {
-    unsafe {
-        let rust_decoder = &mut (*decoder).rust_decoder;
-        rust_decoder.settings = (&(*decoder)).into();
-
-        let res = rust_decoder.parse();
-        (*decoder).diag.set_from_result(&res);
-        if res.is_err() {
-            return to_avifResult(&res);
-        }
-        rust_decoder_to_avifDecoder(rust_decoder, &mut (*decoder));
-        avifResult::Ok
+    let rust_decoder = rust_decoder(decoder);
+    rust_decoder.settings = deref_const!(decoder).into();
+    let res = rust_decoder.parse();
+    deref_mut!(decoder).diag.set_from_result(&res);
+    if res.is_err() {
+        return res.into();
     }
+    rust_decoder_to_avifDecoder(rust_decoder, deref_mut!(decoder));
+    avifResult::Ok
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDecoderNextImage(decoder: *mut avifDecoder) -> avifResult {
-    unsafe {
-        let rust_decoder = &mut (*decoder).rust_decoder;
-        rust_decoder.settings = (&(*decoder)).into();
+    let rust_decoder = rust_decoder(decoder);
+    rust_decoder.settings = deref_const!(decoder).into();
 
-        let previous_decoded_row_count = rust_decoder.decoded_row_count();
+    let previous_decoded_row_count = rust_decoder.decoded_row_count();
 
-        let res = rust_decoder.next_image();
-        (*decoder).diag.set_from_result(&res);
-        let mut early_return = false;
-        if res.is_err() {
-            early_return = true;
-            if rust_decoder.settings.allow_incremental
-                && matches!(res.as_ref().err().unwrap(), AvifError::WaitingOnIo)
-            {
-                early_return = previous_decoded_row_count == rust_decoder.decoded_row_count();
-            }
+    let res = rust_decoder.next_image();
+    deref_mut!(decoder).diag.set_from_result(&res);
+    let mut early_return = false;
+    if res.is_err() {
+        early_return = true;
+        if rust_decoder.settings.allow_incremental
+            && matches!(res.as_ref().err().unwrap(), AvifError::WaitingOnIo)
+        {
+            early_return = previous_decoded_row_count == rust_decoder.decoded_row_count();
         }
-        if early_return {
-            return to_avifResult(&res);
-        }
-        rust_decoder_to_avifDecoder(rust_decoder, &mut (*decoder));
-        to_avifResult(&res)
     }
+    if early_return {
+        return res.into();
+    }
+    rust_decoder_to_avifDecoder(rust_decoder, deref_mut!(decoder));
+    res.into()
 }
 
 #[no_mangle]
@@ -285,34 +279,32 @@ pub unsafe extern "C" fn crabby_avifDecoderNthImage(
     decoder: *mut avifDecoder,
     frameIndex: u32,
 ) -> avifResult {
-    unsafe {
-        let rust_decoder = &mut (*decoder).rust_decoder;
-        rust_decoder.settings = (&(*decoder)).into();
+    let rust_decoder = rust_decoder(decoder);
+    rust_decoder.settings = deref_const!(decoder).into();
 
-        let previous_decoded_row_count = rust_decoder.decoded_row_count();
-        let image_index = (rust_decoder.image_index() + 1) as u32;
+    let previous_decoded_row_count = rust_decoder.decoded_row_count();
+    let image_index = (rust_decoder.image_index() + 1) as u32;
 
-        let res = rust_decoder.nth_image(frameIndex);
-        (*decoder).diag.set_from_result(&res);
-        let mut early_return = false;
-        if res.is_err() {
-            early_return = true;
-            if rust_decoder.settings.allow_incremental
-                && matches!(res.as_ref().err().unwrap(), AvifError::WaitingOnIo)
-            {
-                if image_index != frameIndex {
-                    early_return = false;
-                } else {
-                    early_return = previous_decoded_row_count == rust_decoder.decoded_row_count();
-                }
+    let res = rust_decoder.nth_image(frameIndex);
+    deref_mut!(decoder).diag.set_from_result(&res);
+    let mut early_return = false;
+    if res.is_err() {
+        early_return = true;
+        if rust_decoder.settings.allow_incremental
+            && matches!(res.as_ref().err().unwrap(), AvifError::WaitingOnIo)
+        {
+            if image_index != frameIndex {
+                early_return = false;
+            } else {
+                early_return = previous_decoded_row_count == rust_decoder.decoded_row_count();
             }
         }
-        if early_return {
-            return to_avifResult(&res);
-        }
-        rust_decoder_to_avifDecoder(rust_decoder, &mut (*decoder));
-        to_avifResult(&res)
     }
+    if early_return {
+        return res.into();
+    }
+    rust_decoder_to_avifDecoder(rust_decoder, deref_mut!(decoder));
+    res.into()
 }
 
 #[no_mangle]
@@ -321,21 +313,16 @@ pub unsafe extern "C" fn crabby_avifDecoderNthImageTiming(
     frameIndex: u32,
     outTiming: *mut ImageTiming,
 ) -> avifResult {
-    let rust_decoder = unsafe { &(*decoder).rust_decoder };
-    let image_timing = rust_decoder.nth_image_timing(frameIndex);
+    let image_timing = rust_decoder_const(decoder).nth_image_timing(frameIndex);
     if let Ok(timing) = image_timing {
-        unsafe {
-            *outTiming = timing;
-        }
+        *deref_mut!(outTiming) = timing;
     }
-    to_avifResult(&image_timing)
+    image_timing.into()
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDecoderDestroy(decoder: *mut avifDecoder) {
-    unsafe {
-        let _ = Box::from_raw(decoder);
-    }
+    let _ = unsafe { Box::from_raw(decoder) };
 }
 
 #[no_mangle]
@@ -343,22 +330,20 @@ pub unsafe extern "C" fn crabby_avifDecoderRead(
     decoder: *mut avifDecoder,
     image: *mut avifImage,
 ) -> avifResult {
-    unsafe {
-        let rust_decoder = &mut (*decoder).rust_decoder;
-        rust_decoder.settings = (&(*decoder)).into();
+    let rust_decoder = rust_decoder(decoder);
+    rust_decoder.settings = deref_const!(decoder).into();
 
-        let res = rust_decoder.parse();
-        if res.is_err() {
-            return to_avifResult(&res);
-        }
-        let res = rust_decoder.next_image();
-        if res.is_err() {
-            return to_avifResult(&res);
-        }
-        rust_decoder_to_avifDecoder(rust_decoder, &mut (*decoder));
-        *image = (*decoder).image_object.clone();
-        avifResult::Ok
+    let res = rust_decoder.parse();
+    if res.is_err() {
+        return res.into();
     }
+    let res = rust_decoder.next_image();
+    if res.is_err() {
+        return res.into();
+    }
+    rust_decoder_to_avifDecoder(rust_decoder, deref_mut!(decoder));
+    *deref_mut!(image) = deref_mut!(decoder).image_object.clone();
+    avifResult::Ok
 }
 
 #[no_mangle]
@@ -368,13 +353,11 @@ pub unsafe extern "C" fn crabby_avifDecoderReadMemory(
     data: *const u8,
     size: usize,
 ) -> avifResult {
-    unsafe {
-        let res = crabby_avifDecoderSetIOMemory(decoder, data, size);
-        if res != avifResult::Ok {
-            return res;
-        }
-        crabby_avifDecoderRead(decoder, image)
+    let res = unsafe { crabby_avifDecoderSetIOMemory(decoder, data, size) };
+    if res != avifResult::Ok {
+        return res;
     }
+    unsafe { crabby_avifDecoderRead(decoder, image) }
 }
 
 #[no_mangle]
@@ -383,13 +366,11 @@ pub unsafe extern "C" fn crabby_avifDecoderReadFile(
     image: *mut avifImage,
     filename: *const c_char,
 ) -> avifResult {
-    unsafe {
-        let res = crabby_avifDecoderSetIOFile(decoder, filename);
-        if res != avifResult::Ok {
-            return res;
-        }
-        crabby_avifDecoderRead(decoder, image)
+    let res = unsafe { crabby_avifDecoderSetIOFile(decoder, filename) };
+    if res != avifResult::Ok {
+        return res;
     }
+    unsafe { crabby_avifDecoderRead(decoder, image) }
 }
 
 #[no_mangle]
@@ -397,8 +378,7 @@ pub unsafe extern "C" fn crabby_avifDecoderIsKeyframe(
     decoder: *const avifDecoder,
     frameIndex: u32,
 ) -> avifBool {
-    let rust_decoder = unsafe { &(*decoder).rust_decoder };
-    to_avifBool(rust_decoder.is_keyframe(frameIndex))
+    to_avifBool(rust_decoder_const(decoder).is_keyframe(frameIndex))
 }
 
 #[no_mangle]
@@ -406,14 +386,12 @@ pub unsafe extern "C" fn crabby_avifDecoderNearestKeyframe(
     decoder: *const avifDecoder,
     frameIndex: u32,
 ) -> u32 {
-    let rust_decoder = unsafe { &(*decoder).rust_decoder };
-    rust_decoder.nearest_keyframe(frameIndex)
+    rust_decoder_const(decoder).nearest_keyframe(frameIndex)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn crabby_avifDecoderDecodedRowCount(decoder: *const avifDecoder) -> u32 {
-    let rust_decoder = unsafe { &(*decoder).rust_decoder };
-    rust_decoder.decoded_row_count()
+    rust_decoder_const(decoder).decoded_row_count()
 }
 
 #[allow(non_camel_case_types)]
@@ -425,14 +403,11 @@ pub unsafe extern "C" fn crabby_avifDecoderNthImageMaxExtent(
     frameIndex: u32,
     outExtent: *mut avifExtent,
 ) -> avifResult {
-    let rust_decoder = unsafe { &(*decoder).rust_decoder };
-    let res = rust_decoder.nth_image_max_extent(frameIndex);
+    let res = rust_decoder_const(decoder).nth_image_max_extent(frameIndex);
     if res.is_err() {
-        return to_avifResult(&res);
+        return res.into();
     }
-    unsafe {
-        *outExtent = res.unwrap();
-    }
+    *deref_mut!(outExtent) = res.unwrap();
     avifResult::Ok
 }
 

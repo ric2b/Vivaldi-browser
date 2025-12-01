@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.compositor.overlays.strip;
 
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil.FOLIO_FOOT_LENGTH_DP;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.content.Context;
@@ -32,6 +34,7 @@ import org.chromium.chrome.browser.layouts.animation.CompositorAnimator;
 import org.chromium.chrome.browser.layouts.components.VirtualView;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiThemeUtil;
+import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.ui.base.LocalizationUtils;
 import org.chromium.ui.util.ColorUtils;
@@ -105,20 +108,6 @@ public class StripLayoutTab extends StripLayoutView {
                 }
             };
 
-    /** A property for animations to use for changing the trailingMargin of the tab. */
-    public static final FloatProperty<StripLayoutTab> TRAILING_MARGIN =
-            new FloatProperty<>("trailingMargin") {
-                @Override
-                public void setValue(StripLayoutTab object, float value) {
-                    object.setTrailingMargin(value);
-                }
-
-                @Override
-                public Float get(StripLayoutTab object) {
-                    return object.getTrailingMargin();
-                }
-            };
-
     /** A property for animations to use for changing the opacity of the tab. */
     public static final FloatProperty<StripLayoutTab> OPACITY =
             new FloatProperty<>("opacity") {
@@ -143,9 +132,8 @@ public class StripLayoutTab extends StripLayoutView {
     private static final int CLOSE_BUTTON_WIDTH_DP = 24;
 
     // Strip Tab Offset Constants
-    protected static final float TOP_MARGIN_DP = 0.f; // Vivaldi
+    protected static float TOP_MARGIN_DP; // Vivaldi: This value changes according to the setting.
     private static final float FOLIO_CONTENT_OFFSET_Y = 8.f;
-    protected static final float FOLIO_FOOT_LENGTH_DP = 16.f;
 
     // Visibility Constants.
     private static final float FAVICON_WIDTH = 16.f;
@@ -158,7 +146,6 @@ public class StripLayoutTab extends StripLayoutView {
     // Close button hover highlight alpha
     private static final float CLOSE_BUTTON_HOVER_BACKGROUND_PRESSED_OPACITY = 0.12f;
     private static final float CLOSE_BUTTON_HOVER_BACKGROUND_DEFAULT_OPACITY = 0.08f;
-    @VisibleForTesting static final float DIVIDER_FOLIO_LIGHT_OPACITY = 0.2f;
 
     // Tab's ID this view refers to.
     private int mTabId;
@@ -169,6 +156,7 @@ public class StripLayoutTab extends StripLayoutView {
 
     private boolean mIsDying;
     private boolean mIsClosed;
+    private boolean mIsSelected;
     private boolean mCanShowCloseButton = true;
     private boolean mFolioAttached = true;
     private boolean mStartDividerVisible;
@@ -180,9 +168,6 @@ public class StripLayoutTab extends StripLayoutView {
     // For avoiding unnecessary accessibility description updates.
     private Optional<String> mCachedA11yDescriptionTitle = Optional.empty();
     private @StringRes int mCachedA11yTabstripIdentifierResId;
-
-    // Ideal intermediate parameters
-    private float mTrailingMargin;
 
     // Startup parameters
     private boolean mIsPlaceholder;
@@ -197,14 +182,14 @@ public class StripLayoutTab extends StripLayoutView {
     // Preallocated
     private final RectF mClosePlacement = new RectF();
 
-    private ObserverList<Observer> mObservers = new ObserverList<>();
+    private final ObserverList<Observer> mObservers = new ObserverList<>();
 
     // Vivaldi
     private boolean mIsStackStrip;
     private TabModelSelector mTabModelSelector;
-    private float mAlpha;
 
     private LayoutRenderHost mRenderHost;
+    private static float CONTENT_OFFSET_Y;
     private static final int TITLE_SPACE_OFFSET = 12;
 
     /**
@@ -212,6 +197,8 @@ public class StripLayoutTab extends StripLayoutView {
      *
      * @param context An Android context for accessing system resources.
      * @param id The id of the {@link Tab} to visually represent.
+     * @param clickHandler Handles clicks on this {@link StripLayoutTab}.
+     * @param keyboardFocusHandler Handles keyboard focus gain/loss on this {@link StripLayoutTab}.
      * @param loadTrackerCallback The {@link TabLoadTrackerCallback} to be notified of loading state
      *     changes.
      * @param updateHost The {@link LayoutRenderHost}.
@@ -221,10 +208,11 @@ public class StripLayoutTab extends StripLayoutView {
             Context context,
             int id,
             StripLayoutViewOnClickHandler clickHandler,
+            StripLayoutViewOnKeyboardFocusHandler keyboardFocusHandler,
             TabLoadTrackerCallback loadTrackerCallback,
             LayoutUpdateHost updateHost,
             boolean incognito) {
-        super(incognito, clickHandler, context);
+        super(incognito, clickHandler, keyboardFocusHandler, context);
         mTabId = id;
         mLoadTracker = new TabLoadTracker(id, loadTrackerCallback);
         mUpdateHost = updateHost;
@@ -236,6 +224,7 @@ public class StripLayoutTab extends StripLayoutView {
                         /* width= */ 0,
                         /* height= */ 0,
                         clickHandler,
+                        keyboardFocusHandler,
                         R.drawable.btn_tab_close_normal,
                         0f);
         mCloseButton.setTintResources(
@@ -282,7 +271,7 @@ public class StripLayoutTab extends StripLayoutView {
         resetCloseRect();
 
         // Vivaldi
-        mAlpha = 1.f;
+        adjustMargins();
     }
 
     /**
@@ -302,7 +291,7 @@ public class StripLayoutTab extends StripLayoutView {
     public void getVirtualViews(List<VirtualView> views) {
         if (isCollapsed() || mIsDying) return;
         super.getVirtualViews(views);
-        if (mShowingCloseButton) mCloseButton.getVirtualViews(views);
+        if (mShowingCloseButton || mIsSelected) mCloseButton.getVirtualViews(views);
     }
 
     /**
@@ -397,44 +386,7 @@ public class StripLayoutTab extends StripLayoutView {
      * @return The Android resource that represents the tab background.
      */
     public @DrawableRes int getResourceId() {
-        // Note(david@vivaldi.com): Get appropriate resources and set the opacity.
-        if (mTabModelSelector != null) {
-            int selectedTabId = mTabModelSelector.getCurrentTabId();
-            boolean isTabSelected = mTabId == selectedTabId;
-            boolean inNightMode = ColorUtils.inNightMode(mContext);
-            float backgroundTabAlpha = inNightMode ? (mIsStackStrip ? 0.25f : 0.35f) : 0.1f;
-            mAlpha = mTabId == selectedTabId ? 1.f : backgroundTabAlpha;
-            // Set close button opacity for background tabs. Only show it when setting is turned on.
-            boolean showCloseButton = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                    VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
-            mCloseButton.setOpacity(!isTabSelected && !showCloseButton ? 0.f : 1.f);
-            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled() && !mIsStackStrip) {
-                int tabCount = mTabModelSelector.getTabGroupModelFilterProvider()
-                                       .getCurrentTabGroupModelFilter()
-                                       .getRelatedTabList(mTabId)
-                                       .size();
-                if (tabCount > 1) {
-                    if (!isTabSelected) {
-                        // The opacity of the stacked tab is handled by the png. This is a special
-                        // case, due to that we apply full opacity here.
-                        mAlpha = 0.5f;
-                        if (VivaldiUtils.isTopToolbarOn())
-                            return R.drawable.bg_tabstrip_stack_tab;
-                        else
-                            return R.drawable.bg_tabstrip_stack_tab_bottom;
-                    } else {
-                        if (VivaldiUtils.isTopToolbarOn())
-                            return R.drawable.bg_tabstrip_stack_tab_active;
-                        else
-                            return R.drawable.bg_tabstrip_stack_tab_bottom_active;
-                    }
-                }
-            }
-        }
-        if (!VivaldiUtils.isTopToolbarOn())
-            return R.drawable.bg_tabstrip_tab_bottom;
-
-        if (ChromeApplicationImpl.isVivaldi()) return R.drawable.bg_tabstrip_tab;
+        if (ChromeApplicationImpl.isVivaldi()) return determineResource();
 
         if (!mFolioAttached || mIsPlaceholder) {
             return TabUiThemeUtil.getDetachedResource();
@@ -448,10 +400,6 @@ public class StripLayoutTab extends StripLayoutView {
      */
     // TODO(crbug.com/329561631) Add tint for selected tab outline.
     public @DrawableRes int getOutlineResourceId() {
-        // Note(david@vivaldi.com): Get appropriate resource when toolbar is at the bottom.
-        if (!VivaldiUtils.isTopToolbarOn())
-            return R.drawable.bg_tabstrip_background_tab_outline_bottom;
-
         return R.drawable.tab_group_outline;
     }
 
@@ -471,25 +419,14 @@ public class StripLayoutTab extends StripLayoutView {
     public @ColorInt int getTint(boolean foreground, boolean hovered) {
         // TODO(crbug.com/40888366): Avoid calculating every time. Instead, store the tab's
         //  color and only re-determine when the color could have changed (i.e. on selection).
-        if (foreground || mTabModelSelector.isIncognitoBrandedModelSelected()
-                || ColorUtils.inNightMode(mContext)) { // Vivaldi
-        return TabUiThemeUtil.getTabStripContainerColor(
-                mContext, isIncognito(), foreground, mIsPlaceholder, hovered);
-        } // Vivaldi
-
-        // Note(david@vivaldi.com): When we have a background tab we calculate the contrast here and
-        // take the color with the highest ratio.
-        Tab currentTab = mTabModelSelector.getCurrentTab();
-        if (currentTab != null) {
-            int color = currentTab.getThemeColor();
-            double ratio1 =
-                    androidx.core.graphics.ColorUtils.calculateContrast(color, Color.WHITE);
-            double ratio2 =
-                    androidx.core.graphics.ColorUtils.calculateContrast(color, Color.BLACK);
-            if (ratio1 >= ratio2) return Color.WHITE;
+        if (foreground) {
+            return TabUiThemeUtil.getTabStripSelectedTabColor(mContext, isIncognito());
+        } else if (hovered) {
+            return TabUiThemeUtil.getHoveredTabContainerColor(mContext, isIncognito());
+        } else if (mIsPlaceholder) {
+            return TabUiThemeUtil.getTabStripStartupContainerColor(mContext);
         }
-        return Color.BLACK;
-        // End Vivaldi
+        return ChromeColors.getDefaultBgColor(mContext, isIncognito());
     }
 
     /**
@@ -498,22 +435,7 @@ public class StripLayoutTab extends StripLayoutView {
     public @ColorInt int getDividerTint() {
         if (ChromeApplicationImpl.isVivaldi()) return Color.TRANSPARENT;
 
-        if (isIncognito()) {
-            return mContext.getColor(R.color.divider_line_bg_color_light);
-        }
-
-        if (!ColorUtils.inNightMode(mContext) && !isIncognito()) {
-            // This color will not be used at full opacity. We can't set this using the alpha
-            // component of the {@code @ColorInt}, since it is ignored when loading resources
-            // with a specified tint in the CC layer (instead retaining the alpha of the original
-            // image). Instead, this is reflected by setting the opacity of the divider itself.
-            // See https://crbug.com/1373634.
-            return ColorUtils.setAlphaComponentWithFloat(
-                    SemanticColorUtils.getDefaultIconColorAccent1(mContext),
-                    DIVIDER_FOLIO_LIGHT_OPACITY);
-        }
-
-        return SemanticColorUtils.getDividerLineBgColor(mContext);
+        return TabUiThemeUtil.getDividerTint(mContext, isIncognito());
     }
 
     /**
@@ -660,6 +582,7 @@ public class StripLayoutTab extends StripLayoutView {
      * @return How far to vertically offset the tab content.
      */
     public float getContentOffsetY() {
+        if (ChromeApplicationImpl.isVivaldi()) return CONTENT_OFFSET_Y;
         return FOLIO_CONTENT_OFFSET_Y - (TOP_MARGIN_DP / 2);
     }
 
@@ -800,27 +723,10 @@ public class StripLayoutTab extends StripLayoutView {
     }
 
     /**
-     * This is used to help calculate the tab's position and is not used for rendering.
-     *
-     * @param trailingMargin The trailing margin of the tab (used for margins around tab groups when
-     *     reordering, etc.).
-     */
-    public void setTrailingMargin(float trailingMargin) {
-        mTrailingMargin = trailingMargin;
-    }
-
-    /**
-     * This is used to help calculate the tab's position and is not used for rendering.
-     * @return The trailing margin of the tab.
-     */
-    public float getTrailingMargin() {
-        return mTrailingMargin;
-    }
-
-    /**
      * This is used to determine if the tab is a placeholder or not. If it is a placeholder, it will
      * show as an empty tab on the tab strip (without tab contents, such as title & favicon,
      * generated).
+     *
      * @param isPlaceholder Whether or not the tab is a placeholder used on startup.
      */
     public void setIsPlaceholder(boolean isPlaceholder) {
@@ -927,8 +833,22 @@ public class StripLayoutTab extends StripLayoutView {
         out.set(
                 Math.round((getDrawX() + FOLIO_FOOT_LENGTH_DP) * dpToPx),
                 Math.round(getDrawY() * dpToPx),
-                Math.round((getDrawX() + getWidth()) * dpToPx),
+                Math.round((getDrawX() + getWidth() - FOLIO_FOOT_LENGTH_DP) * dpToPx),
                 Math.round((getDrawY() + getHeight()) * dpToPx));
+    }
+
+    /** {@return The keyboard focus ring's offset (how far it is inside the tab outline) in DP} */
+    public int getKeyboardFocusRingOffset() {
+        return TabUiThemeUtil.getFocusRingOffset(mContext);
+    }
+
+    /** {@return The width of the keyboard focus ring stroke and tab group color line in px} */
+    public int getLineWidth() {
+        return TabUiThemeUtil.getLineWidth(mContext);
+    }
+
+    public void setIsSelected(boolean isSelected) {
+        mIsSelected = isSelected;
     }
 
     // TODO(dtrainor): Don't animate this if we're selecting or deselecting this tab.
@@ -986,11 +906,6 @@ public class StripLayoutTab extends StripLayoutView {
         mTabModelSelector = tabModelSelector;
     }
 
-    /** Vivaldi **/
-    public float getAlpha() {
-        return mAlpha;
-    }
-
     /**
      * Vivaldi: For foreground tabs the close button is always visible, for background tabs we read
      * the appropriate setting.
@@ -1018,6 +933,87 @@ public class StripLayoutTab extends StripLayoutView {
      */
     public void setRenderHost(LayoutRenderHost renderHost) {
         mRenderHost = renderHost;
+    }
+
+    /**
+     * Vivaldi: Determines the correct resource for the current tab and sets the opacity.
+     */
+    @DrawableRes
+    public int determineResource() {
+        boolean isTabInStack = false;
+        boolean isTabSelected = false;
+        boolean isTopToolbarOn = VivaldiUtils.isTopToolbarOn();
+
+        if (mTabModelSelector != null) {
+            int selectedTabId = mTabModelSelector.getCurrentTabId();
+            isTabSelected = mTabId == selectedTabId;
+
+            boolean inNightMode = ColorUtils.inNightMode(mContext);
+            float backgroundTabAlpha = inNightMode ? (mIsStackStrip ? 0.25f : 0.35f) : 0.1f;
+            if (!isForegrounded()) setContainerOpacity(isTabSelected ? 1.f : backgroundTabAlpha);
+
+            boolean showCloseButton = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
+                    VivaldiPreferences.SHOW_X_BUTTON_FOR_BACKGROUND_TABS, false);
+            mCloseButton.setOpacity((!isTabSelected && !showCloseButton) ? 0.f : 1.f);
+
+            int tabCount = mTabModelSelector.getTabGroupModelFilterProvider()
+                                   .getCurrentTabGroupModelFilter()
+                                   .getRelatedTabList(mTabId)
+                                   .size();
+            isTabInStack = tabCount > 1;
+
+            if (TabUiFeatureUtilities.isTabGroupsAndroidEnabled() && !mIsStackStrip && isTabInStack
+                    && !isTabSelected) {
+                if (!isForegrounded()) setContainerOpacity(0.5f);
+            }
+        }
+
+        adjustMargins();
+
+        if (isFloatingTabsEnabled()) {
+            return (!isTabSelected && isTabInStack && !mIsStackStrip)
+                    ? R.drawable.bg_tabstrip_stack_tab_inactive
+                    : R.drawable.bg_tabstrip_tab;
+        }
+
+        if (isTabSelected || mIsStackStrip) {
+            return isTopToolbarOn ? R.drawable.bg_tabstrip_tab_old
+                                  : R.drawable.bg_tabstrip_tab_old_bottom;
+        }
+
+        if (isTabInStack) {
+            return isTopToolbarOn ? R.drawable.bg_tabstrip_stack_tab_inactive_old
+                                  : R.drawable.bg_tabstrip_stack_tab_inactive_old_bottom;
+        }
+
+        return isTopToolbarOn ? R.drawable.bg_tabstrip_tab_old
+                              : R.drawable.bg_tabstrip_tab_old_bottom;
+    }
+
+    /**
+     * Vivaldi: Adjusts margins related to the setting.
+     */
+    private void adjustMargins() {
+        if (!isForegrounded()) {
+            final float DEFAULT_TAB_MARGIN = 3.f;
+            CONTENT_OFFSET_Y = 10.f;
+            if (isFloatingTabsEnabled()) {
+                TOP_MARGIN_DP = DEFAULT_TAB_MARGIN;
+                mBottomMargin = DEFAULT_TAB_MARGIN;
+            } else {
+                CONTENT_OFFSET_Y = VivaldiUtils.isTopToolbarOn() ? 17.f : 11.f;
+                TOP_MARGIN_DP = 0.f;
+                mBottomMargin = VivaldiUtils.isTopToolbarOn() ? 0.f : DEFAULT_TAB_MARGIN;
+            }
+        }
+    }
+
+    /**
+     * Vivaldi: Helper to receive the current state of floating tabs style.
+     */
+    private boolean isFloatingTabsEnabled() {
+        return VivaldiPreferences.getSharedPreferencesManager()
+                .readBoolean(VivaldiPreferences.ENABLE_FLOATING_TABS, true);
     }
     // End Vivaldi
 }

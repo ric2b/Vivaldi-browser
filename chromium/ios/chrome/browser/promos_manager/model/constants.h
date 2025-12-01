@@ -47,7 +47,9 @@ enum class Promo {
   StaySafeDefaultBrowser = 15,     // "Stay Safe" default browser promo.
   PostDefaultAbandonment = 16,     // Post-default browser abandonment alert.
   SigninFullscreen = 17,           // Sign-in fullscreen promo.
-  kMaxValue = SigninFullscreen,
+  WelcomeBack = 18,                // Welcome Back promo.
+  GLICPromo = 19,                  // GLIC promo.
+  kMaxValue = GLICPromo,
 };
 // LINT.ThenChange(/ios/chrome/browser/promos_manager/model/constants.cc)
 // Also update IOSPromosManagerPromo in

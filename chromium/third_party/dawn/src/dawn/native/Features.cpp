@@ -31,7 +31,6 @@
 #include <utility>
 
 #include "dawn/common/Assert.h"
-#include "dawn/common/BitSetIterator.h"
 #include "dawn/common/ityp_array.h"
 
 namespace dawn::native {
@@ -53,6 +52,10 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
      {"Support Block Compressed (BC) texture formats",
       "https://gpuweb.github.io/gpuweb/#texture-compression-bc",
       FeatureInfo::FeatureState::Stable}},
+    {Feature::TextureCompressionBCSliced3D,
+     {"Allows Block Compressed (BC) texture formats to be used with 3D dimensions",
+      "https://gpuweb.github.io/gpuweb/#texture-compression-bc-sliced-3d",
+      FeatureInfo::FeatureState::Experimental}},
     {Feature::TextureCompressionETC2,
      {"Support Ericsson Texture Compressed (ETC2/EAC) texture formats",
       "https://gpuweb.github.io/gpuweb/#texture-compression-etc2",
@@ -62,6 +65,11 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       "texture formats",
       "https://gpuweb.github.io/gpuweb/#texture-compression-astc",
       FeatureInfo::FeatureState::Stable}},
+    {Feature::TextureCompressionASTCSliced3D,
+     {"Allows Adaptable Scalable Texture Compressed (ASTC) texture formats to be used with 3D "
+      "dimensions",
+      "https://gpuweb.github.io/gpuweb/#texture-compression-astc-sliced-3d",
+      FeatureInfo::FeatureState::Experimental}},
     {Feature::TimestampQuery,
      {"Support Timestamp Query", "https://gpuweb.github.io/gpuweb/#timestamp-query",
       FeatureInfo::FeatureState::Stable}},
@@ -372,10 +380,6 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
      {"Supports the \"enable subgroups;\" directive in WGSL.",
       "https://github.com/gpuweb/gpuweb/blob/main/proposals/subgroups.md",
       FeatureInfo::FeatureState::Stable}},
-    {Feature::SubgroupsF16,
-     {"Supports the \"enable subgroups_f16;\" directive in WGSL (deprecated).",
-      "https://github.com/gpuweb/gpuweb/blob/main/proposals/subgroups.md",
-      FeatureInfo::FeatureState::Stable}},
     {Feature::CoreFeaturesAndLimits,
      {"Lifts all compatibility mode restrictions (features and limits) to core when enabled on a "
       "device.",
@@ -392,10 +396,6 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
      {"Support the \"enable clip_distances;\" directive in WGSL.",
       "https://gpuweb.github.io/gpuweb/#dom-gpufeaturename-clip-distances",
       FeatureInfo::FeatureState::Stable}},
-    {Feature::ChromiumExperimentalImmediateData,
-     {"Support the \"enable chromium_experimental_immediate_data;\" directive in WGSL.",
-      "https://github.com/gpuweb/gpuweb/blob/main/proposals/push-constants.md",
-      FeatureInfo::FeatureState::Experimental}},
     {Feature::DawnTexelCopyBufferRowAlignment,
      {"Expose the min row alignment in buffer for texel copy operations.",
       "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
@@ -408,7 +408,13 @@ static constexpr FeatureEnumAndInfo kFeatureInfo[] = {
       FeatureInfo::FeatureState::Stable}},
     {Feature::ChromiumExperimentalSubgroupMatrix,
      {"Support the \"enable chromium_experimental_subgroup_matrix;\" directive in WGSL.",
-      "https://github.com/gpuweb/gpuweb/issues/4195", FeatureInfo::FeatureState::Experimental}}};
+      "https://github.com/gpuweb/gpuweb/issues/4195", FeatureInfo::FeatureState::Experimental}},
+    {Feature::DawnDeviceAllocatorControl,
+     {"Supports configuring device allocator via DawnDeviceAllocatorControl",
+      "https://dawn.googlesource.com/dawn/+/refs/heads/main/docs/dawn/features/"
+      "dawn_device_allocator_control.md",
+      FeatureInfo::FeatureState::Experimental}}};
+
 }  // anonymous namespace
 
 void FeaturesSet::EnableFeature(Feature feature) {
@@ -446,7 +452,7 @@ void FeaturesSet::ToSupportedFeatures(SupportedFeatures* supportedFeatures) cons
     // This will be freed by wgpuSupportedFeaturesFreeMembers.
     wgpu::FeatureName* features = new wgpu::FeatureName[count];
     uint32_t index = 0;
-    for (Feature f : IterateBitSet(featuresBitSet)) {
+    for (Feature f : featuresBitSet) {
         features[index++] = ToAPI(f);
     }
     DAWN_ASSERT(index == count);

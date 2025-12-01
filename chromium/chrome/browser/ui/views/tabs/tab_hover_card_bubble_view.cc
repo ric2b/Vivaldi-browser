@@ -455,7 +455,7 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab,
       views::BubbleFrameView::PreferredArrowAdjustment::kOffset);
   GetBubbleFrameView()->set_hit_test_transparent(true);
 
-  GetBubbleFrameView()->SetCornerRadius(corner_radius_);
+  GetBubbleFrameView()->SetRoundedCorners(gfx::RoundedCornersF(corner_radius_));
 
   // Placeholder image should be used when there is no image data for the
   // given tab. Otherwise don't flash the placeholder while we wait for the
@@ -572,7 +572,7 @@ void TabHoverCardBubbleView::UpdateCardContent(const Tab* tab) {
   }
 
   title_label_->SetData({title, is_filename});
-  domain_label_->SetData({domain, false});
+  domain_label_->SetData({domain, false, gfx::ELIDE_HEAD});
 
   CollaborationMessagingRowData collaboration_messaging_data =
       GetCollaborationMessagingData(tab_data);

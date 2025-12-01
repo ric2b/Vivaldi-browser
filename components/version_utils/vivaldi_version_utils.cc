@@ -13,7 +13,8 @@ namespace vivaldi {
 
 namespace version {
 
-int CompareVivaldiMajorVersions(base::Version lhs, base::Version rhs) {
+int CompareVivaldiMajorVersions(const base::Version& lhs,
+                                const base::Version& rhs) {
   DCHECK(lhs.IsValid());
   DCHECK(rhs.IsValid());
   auto lhs_components = lhs.components();
@@ -27,35 +28,38 @@ int CompareVivaldiMajorVersions(base::Version lhs, base::Version rhs) {
   return major_lhs.CompareTo(major_rhs);
 }
 
-bool HasMajorVersionChanged(PrefService* prefs) {
-  DCHECK(prefs);
-  static std::optional<bool> version_changed;
-  if (!version_changed) {
-    const base::Version version = ::vivaldi::GetVivaldiVersion();
-    const base::Version last_seen_version =
-        base::Version(prefs->GetString(vivaldiprefs::kStartupLastSeenVersion));
-    version_changed =
-        (version.IsValid() && last_seen_version.IsValid())
-            ? CompareVivaldiMajorVersions(last_seen_version, version) != 0
-            : false;
-  }
-  return *version_changed;
+bool HasMajorVersionChanged(const base::Version& version) {
+  DCHECK(version.IsValid());
+  const base::Version static_version = ::vivaldi::GetVivaldiVersion();
+  return CompareVivaldiMajorVersions(version, version) != 0;
 }
 
-bool HasVersionChanged(PrefService* prefs) {
-  DCHECK(prefs);
-  static std::optional<bool> version_changed;
-  if (!version_changed) {
-    const base::Version version = ::vivaldi::GetVivaldiVersion();
-    const base::Version last_seen_version =
-        base::Version(prefs->GetString(vivaldiprefs::kStartupLastSeenVersion));
+bool HasVersionChanged(const base::Version& version) {
+  DCHECK(version.IsValid());
+  const base::Version static_version = ::vivaldi::GetVivaldiVersion();
+  // Version changed when the version is lower that the
+  // static version.
+  return version.CompareTo(version) < 0;
+}
 
-    // Version changed when the last seen version from prefs is lower that the
-    // static version, or pref version is invalid.
-    version_changed = !last_seen_version.IsValid() ||
-                      last_seen_version.CompareTo(version) < 0;
-  }
-  return *version_changed;
+bool HasCrashDetectionVersionChanged(PrefService* prefs) {
+  DCHECK(prefs);
+  const base::Version last_seen_version =
+      prefs->HasPrefPath(vivaldiprefs::kStartupCrashDetectionLastSeenVersion)
+          ? base::Version(prefs->GetString(
+                vivaldiprefs::kStartupCrashDetectionLastSeenVersion))
+          : base::Version();
+
+  return !last_seen_version.IsValid() || HasVersionChanged(last_seen_version);
+}
+
+void UpdateCrashDetectionVersion(PrefService* prefs) {
+  DCHECK(prefs);
+  prefs->SetString(vivaldiprefs::kStartupCrashDetectionLastSeenVersion,
+                   ::vivaldi::GetVivaldiVersionString());
+  // Make sure that the version gets written to disk before the browser is
+  // killed.
+  prefs->CommitPendingWrite();
 }
 
 }  // namespace version

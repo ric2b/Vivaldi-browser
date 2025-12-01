@@ -4,10 +4,13 @@
 
 package org.chromium.chrome.browser.tab;
 
-import androidx.annotation.Nullable;
+import androidx.annotation.ColorInt;
 
 import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.build.annotations.Nullable;
 import org.chromium.content_public.browser.NavigationHandle;
+import org.chromium.content_public.browser.WebContents;
 import org.chromium.net.NetError;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -21,18 +24,16 @@ import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
 /** Monitor changes that indicate a theme color change may be needed from tab contents. */
+@NullMarked
 public class TabThemeColorHelper extends EmptyTabObserver {
     private final Callback<Integer> mUpdateCallback;
-
-    // Vivaldi
-    private SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener;
 
     TabThemeColorHelper(Tab tab, Callback<Integer> updateCallback) {
         mUpdateCallback = updateCallback;
         tab.addObserver(this);
 
         // Vivaldi
-        mPrefsListener = (sharedPrefs, key) -> {
+        SharedPreferences.OnSharedPreferenceChangeListener mPrefsListener = (sharedPrefs, key) -> {
             if (VivaldiPreferences.UI_ACCENT_COLOR_SETTING.equals(key)) updateIfNeeded(tab, false);
         };
         ContextUtils.getAppSharedPreferences()
@@ -47,9 +48,15 @@ public class TabThemeColorHelper extends EmptyTabObserver {
             VivaldiUtils.calculateThemeColor(tab, mUpdateCallback);
             return;
         }
+        // End Vivaldi
 
-        int themeColor = tab.getThemeColor();
-        if (didWebContentsThemeColorChange) themeColor = tab.getWebContents().getThemeColor();
+        @ColorInt int themeColor = tab.getThemeColor();
+        if (didWebContentsThemeColorChange) {
+            WebContents webContents = tab.getWebContents();
+            if (webContents != null) {
+                themeColor = webContents.getThemeColor();
+            }
+        }
         mUpdateCallback.onResult(themeColor);
     }
 

@@ -45,6 +45,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.tab_activity_glue.ReparentingTask;
+import org.chromium.chrome.browser.autofill.AutofillClientProviderUtils;
 import org.chromium.chrome.browser.content.WebContentsFactory;
 import org.chromium.chrome.browser.crash.ChromePureJavaExceptionReporter;
 import org.chromium.chrome.browser.customtabs.CustomTabDelegateFactory;
@@ -55,6 +56,8 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBuilder;
 import org.chromium.chrome.browser.tab.TabDelegateFactory;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.tab.TabLoadIfNeededCaller;
+import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.components.embedder_support.util.UrlConstants;
@@ -340,7 +343,9 @@ public class WarmupManager {
             mSpareTabFinalStatus = SpareTabFinalStatus.TAB_USED;
 
             if (!initiallyHidden) {
-                spareTab.getWebContents().updateWebContentsVisibility(Visibility.VISIBLE);
+                spareTab.show(
+                        TabSelectionType.FROM_NEW,
+                        TabLoadIfNeededCaller.REQUEST_TO_SHOW_TAB_THEN_SHOW);
             }
 
             // Record the SpareTabFinalStatus once its used.
@@ -718,6 +723,7 @@ public class WarmupManager {
                     WebContentsFactory.createWebContentsWithWarmRenderer(
                             profile,
                             /* initiallyHidden= */ true,
+                            AutofillClientProviderUtils.isAutofillEnabledForCct(profile),
                             /* targetNetwork= */ NetId.INVALID);
             mObserver = new RenderProcessGoneObserver();
             mObserver.observe(mSpareWebContents);

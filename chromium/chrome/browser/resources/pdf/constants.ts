@@ -4,7 +4,7 @@
 
 // <if expr="enable_pdf_ink2 or enable_ink">
 export enum AnnotationMode {
-  NONE = 'none',
+  OFF = 'off',
   DRAW = 'draw',
   // <if expr="enable_pdf_ink2">
   TEXT = 'text',
@@ -34,30 +34,55 @@ export interface AnnotationBrush {
   size?: number;
 }
 
+export interface TextAnnotation {
+  id: number;
+  pageNumber: number;
+  text: string;
+  textAttributes: TextAttributes;
+  // Location of the text box relative to the top left corner of the page
+  // specified by pageNumber. This rect is in screen coordinates in the UI,
+  // and is in page coordinates when this annotation is sent or received in
+  // a message to/from the plugin.
+  textBoxRect: TextBoxRect;
+  // Orientation of the text in the box relative to the PDF page, in number of
+  // clockwise rotations from 0 to 3.
+  textOrientation: number;
+}
+
 export enum TextAlignment {
-  LEFT = 'LEFT',
-  CENTER = 'CENTER',
-  RIGHT = 'RIGHT',
-  JUSTIFY = 'JUSTIFY',
+  LEFT = 'left',
+  CENTER = 'center',
+  RIGHT = 'right',
 }
 
 export enum TextStyle {
   BOLD = 'bold',
   ITALIC = 'italic',
-  UNDERLINE = 'underline',
-  STRIKETHROUGH = 'strikethrough',
+}
+
+export enum TextTypeface {
+  SANS_SERIF = 'sans-serif',
+  SERIF = 'serif',
+  MONOSPACE = 'monospace',
 }
 
 export type TextStyles = {
   [key in TextStyle]: boolean
 };
 
-export interface AnnotationText {
-  font: string;
+export interface TextAttributes {
+  typeface: TextTypeface;
   size: number;
   color: Color;
   alignment: TextAlignment;
   styles: TextStyles;
+}
+
+export interface TextBoxRect {
+  height: number;
+  locationX: number;
+  locationY: number;
+  width: number;
 }
 // </if>
 

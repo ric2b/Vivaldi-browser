@@ -193,6 +193,7 @@ enum RmadComponent {
 message HardwareVerificationResult {
   bool is_compliant = 1;
   string error_str = 2;
+  bool is_skipped = 3;
 }
 
 // Defined update RO firmware status.
@@ -469,6 +470,21 @@ message UpdateDeviceInfoState {
 
   // MLB repair mode.
   bool mlb_repair = 301;
+
+  // Modifiability of Serial number field.
+  bool serial_number_modifiable = 401;
+  // Modifiability of Region field.
+  bool region_modifiable = 402;
+  // Modifiability of SKU field.
+  bool sku_modifiable = 403;
+  // Modifiability of WL field.
+  bool whitelabel_modifiable = 404;
+  // Modifiability of DRAM part number field.
+  bool dram_part_number_modifiable = 405;
+  // Modifiability of Custom-label field.
+  bool custom_label_modifiable = 406;
+  // Modifiability of Detected feature level field.
+  bool feature_level_modifiable = 407;
 }
 
 // Calibration Component and status used in all calibration-related

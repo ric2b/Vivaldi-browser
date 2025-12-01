@@ -72,6 +72,7 @@ export class SettingsClearBrowsingDataTimePicker extends
     return {
       selectedTimePeriod_: {
         type: Number,
+        observer: 'onTimePeriodSelectionChanged_',
         value: TimePeriod.LAST_HOUR,
       },
 
@@ -129,19 +130,28 @@ export class SettingsClearBrowsingDataTimePicker extends
     ];
   }
 
-  private selectedTimePeriod_: TimePeriod;
-  private defaultTimePeriodList_: TimePeriod[];
-  private allTimePeriodList_: TimePeriod[];
-  private expandedOptionList_: TimePeriodOption[];
-  private moreOptionList_: TimePeriodOption[];
+  declare private selectedTimePeriod_: TimePeriod;
+  declare private defaultTimePeriodList_: TimePeriod[];
+  declare private allTimePeriodList_: TimePeriod[];
+  declare private expandedOptionList_: TimePeriodOption[];
+  declare private moreOptionList_: TimePeriodOption[];
 
   private onTimePeriodPrefUpdated_() {
     const timePeriodValue =
         this.getPref('browser.clear_data.time_period').value;
 
-    if (timePeriodValue in TimePeriod) {
+    if (timePeriodValue in TimePeriod &&
+        timePeriodValue !== this.selectedTimePeriod_) {
       this.selectedTimePeriod_ = timePeriodValue;
     }
+  }
+
+  private onTimePeriodSelectionChanged_() {
+    // Dispatch a |selected-time-period-change| event to notify that the
+    // currently selected time period has changed due to an explicit user
+    // selection or a pref change.
+    this.dispatchEvent(new CustomEvent(
+        'selected-time-period-change', {bubbles: true, composed: true}));
   }
 
   private computeExpandedOptionList_(): TimePeriodOption[] {
@@ -192,7 +202,11 @@ export class SettingsClearBrowsingDataTimePicker extends
   }
 
   private onTimePeriodSelected_(event: DomRepeatEvent<TimePeriodOption>) {
-    this.selectedTimePeriod_ = event.model.item.value;
+    const newTimePeriod = event.model.item.value;
+
+    if (newTimePeriod !== this.selectedTimePeriod_) {
+      this.selectedTimePeriod_ = event.model.item.value;
+    }
   }
 
   private onMoreTimePeriodsButtonClick_(e: Event) {
@@ -209,6 +223,15 @@ export class SettingsClearBrowsingDataTimePicker extends
     // Stop propagation of the 'close' event so it doesn't close the outer
     // dialog.
     e.stopPropagation();
+  }
+
+  getSelectedTimePeriod(): TimePeriod {
+    return this.selectedTimePeriod_;
+  }
+
+  sendPrefChange() {
+    this.setPrefValue(
+        'browser.clear_data.time_period', this.selectedTimePeriod_);
   }
 }
 

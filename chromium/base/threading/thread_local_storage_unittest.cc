@@ -2,10 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifdef UNSAFE_BUFFERS_BUILD
-// TODO(crbug.com/40284755): Remove this and spanify to fix the errors.
-#pragma allow_unsafe_buffers
-#endif
 
 #include "base/threading/thread_local_storage.h"
 
@@ -190,7 +186,7 @@ class UseTLSDuringDestructionRunner {
 
   static base::ThreadLocalStorage::Slot slot_;
   bool teardown_works_correctly_ = false;
-  TLSState tls_states_[kKeyCount];
+  std::array<TLSState, kKeyCount> tls_states_;
 };
 
 base::ThreadLocalStorage::Slot UseTLSDuringDestructionRunner::slot_;

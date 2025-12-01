@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/static_node_list.h"
+#include "third_party/blink/renderer/core/html/html_meta_element.h"
 #include "third_party/blink/renderer/core/html/html_head_element.h"
 #include "third_party/blink/renderer/core/html/html_script_element.h"
 #include "third_party/blink/renderer/platform/json/json_parser.h"
@@ -16,6 +17,9 @@
 
 namespace blink {
 namespace {
+
+const char kIsAccessibleForFree[] = "isAccessibleForFree";
+
 bool ObjectValuePresentAndEquals(const JSONObject* object,
                                  const String& key,
                                  const String& value) {
@@ -69,12 +73,19 @@ bool ObjectValuePresentAndFalse(const JSONObject* object, const String& key) {
 
 }  // namespace
 
-PaidContent::PaidContent() {
-  paid_elements_ = MakeGarbageCollected<HeapVector<Member<Element>>>();
-}
-
 bool PaidContent::IsPaidElement(const Element* element) const {
-  for (const auto& paid_element : *paid_elements_) {
+  auto* document = &element->GetDocument();
+  if (check_microdata_.Contains(document) && check_microdata_.at(document)) {
+    for (HTMLMetaElement& meta_element :
+         Traversal<HTMLMetaElement>::ChildrenOf(*element)) {
+      auto itemprop = meta_element.FastGetAttribute(html_names::kItempropAttr);
+      if (itemprop.GetString() != kIsAccessibleForFree) {
+        continue;
+      }
+      return meta_element.Content() == "false";
+    }
+  }
+  for (const auto& paid_element : paid_elements_) {
     if (element == paid_element) {
       return true;
     }
@@ -119,10 +130,12 @@ bool PaidContent::QueryPaidElements(Document& document) {
     // and WebPage. Multiple types are supported.
 
     // check for isAccessibleForFree=false
-    if (!ObjectValuePresentAndFalse(script_obj, "isAccessibleForFree")) {
+    if (!ObjectValuePresentAndFalse(script_obj, kIsAccessibleForFree)) {
       continue;
     }
     paid_content_present = true;
+
+    bool has_part_found = false;
 
     // Check for hasPart with isAccessibleForFree=false and a cssSelector
     JSONValue* hasPart_val = script_obj->Get("hasPart");
@@ -134,23 +147,30 @@ bool PaidContent::QueryPaidElements(Document& document) {
           JSONValue* hasPart_obj_val = hasPart_array->at(j);
           if (hasPart_obj_val->GetType() == JSONValue::kTypeObject) {
             JSONObject* hasPart_obj = JSONObject::Cast(hasPart_obj_val);
-            AppendHasPartElements(document, *hasPart_obj);
+            has_part_found |= AppendHasPartElements(document, *hasPart_obj);
           }
         }
       } else if (hasPart_type == JSONValue::kTypeObject) {
         JSONObject* hasPart_obj = JSONObject::Cast(hasPart_val);
-        AppendHasPartElements(document, *hasPart_obj);
+        has_part_found |= AppendHasPartElements(document, *hasPart_obj);
       }
+    }
+
+    // Assume that pages will only use either ld+json or microdata.
+    // If ld+json hasPart exists, don't check for microdata to save
+    // the cost of checking each element.
+    if (!has_part_found) {
+      check_microdata_.Set(&document, true);
     }
     return paid_content_present;
   }
   return paid_content_present;
 }
 
-void PaidContent::AppendHasPartElements(Document& document,
+bool PaidContent::AppendHasPartElements(Document& document,
                                         JSONObject& hasPart_obj) {
   if (ObjectValuePresentAndEquals(&hasPart_obj, "@type", "WebPageElement") &&
-      ObjectValuePresentAndFalse(&hasPart_obj, "isAccessibleForFree")) {
+      ObjectValuePresentAndFalse(&hasPart_obj, kIsAccessibleForFree)) {
     JSONValue* selector_val = hasPart_obj.Get("cssSelector");
     if (selector_val && selector_val->GetType() == JSONValue::kTypeString) {
       String selector;
@@ -159,11 +179,13 @@ void PaidContent::AppendHasPartElements(Document& document,
           document.QuerySelectorAll(AtomicString(selector));
       if (elements) {
         for (unsigned j = 0; j < elements->length(); j++) {
-          paid_elements_->push_back(elements->item(j));
+          paid_elements_.push_back(elements->item(j));
         }
       }
+      return true;
     }
   }
+  return false;
 }
 
 }  // namespace blink

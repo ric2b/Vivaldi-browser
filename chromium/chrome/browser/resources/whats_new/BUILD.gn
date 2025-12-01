@@ -7,14 +7,13 @@ import("//ui/webui/resources/tools/build_webui.gni")
 build_webui("build") {
   grd_prefix = "whats_new"
   static_files = [ "whats_new.html" ]
-  non_web_component_files = [
+  ts_files = [
     "whats_new_app.html.ts",
     "whats_new_app.ts",
     "whats_new_proxy.ts",
   ]
   css_files = [ "whats_new_app.css" ]
 
-  ts_tsconfig_base = "//tools/typescript/tsconfig_base_lit_389737066.json"
   ts_composite = true
   ts_deps = [
     "//third_party/lit/v3_0:build_ts",

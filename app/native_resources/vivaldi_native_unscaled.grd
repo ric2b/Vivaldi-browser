@@ -9,8 +9,11 @@
   </outputs>
   <release seq="1" allow_pseudo="false">
     <includes>
-      <include name="VIVALDI_MANIFEST_JS" file="gen/vivaldi/vivapp/manifest.json" type="BINDATA" />
+      <if expr="not is_android and not is_ios">
+        <include name="VIVALDI_MANIFEST_JS" file="gen/vivaldi/vivapp/manifest.json" type="BINDATA" />
+      </if>
       <part file="../../ui/webui/vivaldi_game_resources.grdp" />
+      <part file="../../ui/webui/vivaldi_privacy_report_resources.grdp" />
     </includes>
   </release>
 </grit>

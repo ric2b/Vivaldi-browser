@@ -19,7 +19,6 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/not_fatal_until.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/branding_buildflags.h"
@@ -1201,8 +1200,7 @@ bool AppMenu::IsCommandEnabled(int command_id) const {
     return true;
   }
 
-  if (features::IsExtensionMenuInRootAppMenu() &&
-      command_id == IDC_EXTENSIONS_SUBMENU) {
+  if (command_id == IDC_EXTENSIONS_SUBMENU) {
     return true;
   }
 
@@ -1264,8 +1262,15 @@ bool AppMenu::GetAccelerator(int command_id,
     return false;
   }
 
-  if (command_id == IDC_CREATE_NEW_TAB_GROUP ||
-      IsTabGroupsCommand(command_id)) {
+  if (command_id == IDC_CREATE_NEW_TAB_GROUP) {
+    if (stg_everything_menu_) {
+      return stg_everything_menu_->GetAccelerator(command_id, accelerator);
+    }
+
+    return false;
+  }
+
+  if (IsTabGroupsCommand(command_id)) {
     return false;
   }
 
@@ -1659,7 +1664,7 @@ void AppMenu::CreateBookmarkMenu() {
 
 size_t AppMenu::ModelIndexFromCommandId(int command_id) const {
   auto ix = command_id_to_entry_.find(command_id);
-  CHECK(ix != command_id_to_entry_.end(), base::NotFatalUntil::M130);
+  CHECK(ix != command_id_to_entry_.end());
   return ix->second.second;
 }
 

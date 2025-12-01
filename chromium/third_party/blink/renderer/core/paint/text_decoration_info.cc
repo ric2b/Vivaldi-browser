@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/core/paint/text_paint_style.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
+#include "third_party/blink/renderer/platform/geometry/path_builder.h"
 #include "third_party/blink/renderer/platform/geometry/stroke_data.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/styled_stroke_data.h"
@@ -228,20 +229,20 @@ Path PrepareWavyStrokePath(const WavyParams& params) {
   gfx::PointF cp1{start + gfx::Vector2dF(step, +control_point_distance)};
   gfx::PointF cp2{start + gfx::Vector2dF(step, -control_point_distance)};
 
-  Path result{};
+  PathBuilder result;
   result.MoveTo(start);
 
-  result.AddBezierCurveTo(cp1, cp2, end);
+  result.CubicTo(cp1, cp2, end);
   cp1.set_x(cp1.x() + 2.f * step);
   cp2.set_x(cp2.x() + 2.f * step);
   end.set_x(end.x() + 2.f * step);
-  result.AddBezierCurveTo(cp1, cp2, end);
+  result.CubicTo(cp1, cp2, end);
   cp1.set_x(cp1.x() + 2.f * step);
   cp2.set_x(cp2.x() + 2.f * step);
   end.set_x(end.x() + 2.f * step);
-  result.AddBezierCurveTo(cp1, cp2, end);
+  result.CubicTo(cp1, cp2, end);
 
-  return result;
+  return result.Finalize();
 }
 
 cc::PaintRecord PrepareWavyTileRecord(const WavyParams& params,
@@ -343,16 +344,24 @@ void TextDecorationInfo::UpdateForDecorationIndex() {
     DCHECK(inline_context_);
     DCHECK_EQ(inline_context_->DecoratingBoxes().size(),
               AppliedDecorationCount());
-    decorating_box_ = &inline_context_->DecoratingBoxes()[decoration_index_];
-    decorating_box_style = &decorating_box_->Style();
+    bool disable_decorating_box;
+    if (static_cast<wtf_size_t>(decoration_index_) >=
+        inline_context_->DecoratingBoxes().size()) [[unlikely]] {
+      disable_decorating_box = true;
+    } else {
+      decorating_box_ = &inline_context_->DecoratingBoxes()[decoration_index_];
+      decorating_box_style = &decorating_box_->Style();
 
-    // Disable the decorating box when the baseline is central, because the
-    // decorating box doesn't produce the ideal position.
-    // https://drafts.csswg.org/css-text-decor-3/#:~:text=text%20is%20not%20aligned%20to%20the%20alphabetic%20baseline
-    // TODO(kojii): The vertical flow in alphabetic baseline may want to use the
-    // decorating box. It needs supporting the rotated coordinate system text
-    // painters use when painting vertical text.
-    if (!decorating_box_style->IsHorizontalWritingMode()) [[unlikely]] {
+      // Disable the decorating box when the baseline is central, because the
+      // decorating box doesn't produce the ideal position.
+      // https://drafts.csswg.org/css-text-decor-3/#:~:text=text%20is%20not%20aligned%20to%20the%20alphabetic%20baseline
+      // TODO(kojii): The vertical flow in alphabetic baseline may want to use
+      // the decorating box. It needs supporting the rotated coordinate system
+      // text painters use when painting vertical text.
+      disable_decorating_box = !decorating_box_style->IsHorizontalWritingMode();
+    }
+
+    if (disable_decorating_box) [[unlikely]] {
       use_decorating_box_ = false;
       decorating_box_ = nullptr;
       decorating_box_style = &target_style_;

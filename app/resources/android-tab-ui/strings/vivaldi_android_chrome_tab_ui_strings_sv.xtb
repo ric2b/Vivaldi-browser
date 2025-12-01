@@ -1,17 +1,25 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="sv">
-<translation id="2277224997687551299">Redigera gruppnamn</translation>
+<translation id="1062777154504442433">Ny flikstapel</translation>
+<translation id="1625440863545383011">Ta bort fliken och lämna stapeln</translation>
 <translation id="2330212241471632770">{TABS_COUNT, plural,
  =1 {Bokmärkesflik}
  other {Bokmärkes flikar}
  }</translation>
 <translation id="2947471979790858922">Din aktivitet på dessa privata flikar kommer att tas bort från den här enheten</translation>
+<translation id="3298614730029636660">Lämna stapel</translation>
+<translation id="354698175756845966">Redigera stapelfärg</translation>
 <translation id="3870643923290313246">{INCOGNITO_TABS_COUNT, plural,
          =1 {Du kan hitta dina stängda flikar i Senaste flikarna under Vivaldis huvudmeny. Din privata flik kommer inte att vara tillgänglig.}
          other {Du kan hitta dina stängda flikar i Senaste flikarna under Vivaldis huvudmeny. Dina # privata flikar kommer inte att vara tillgängliga.}}</translation>
-<translation id="4460014764210899310">Ta bort gruppering</translation>
 <translation id="4871187110787939393">Stäng alla privata flikar?</translation>
 <translation id="5494920125229734069">Markera alla</translation>
-<translation id="6744956528665271406">Redigera gruppfärg</translation>
+<translation id="6807841890213931603">Ta bort fliken och ta bort stapeln</translation>
+<translation id="750227952939161636">Dina flikstackar sparas och uppdateras automatiskt på alla dina inloggade enheter</translation>
+<translation id="7640137753339219124">Ta bort stapel</translation>
+<translation id="7653857400289671414">Dina flikstaplar sparas automatiskt</translation>
+<translation id="8440938071054361204">Redigera stapelnamn</translation>
+<translation id="8602902357364871325">Stäng stapel</translation>
+<translation id="8851621822786801079">Ta bort från stapel</translation>
 </translationbundle>

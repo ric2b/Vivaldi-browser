@@ -12,7 +12,6 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/logging.h"
-#include "base/not_fatal_until.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
@@ -37,8 +36,7 @@ RulesetPublisher::RulesetPublisher(
           ruleset_config)) {
   best_effort_task_runner_ =
       content::GetUIThreadTaskRunner({base::TaskPriority::BEST_EFFORT});
-  CHECK(best_effort_task_runner_->BelongsToCurrentThread(),
-        base::NotFatalUntil::M129);
+  CHECK(best_effort_task_runner_->BelongsToCurrentThread());
 }
 
 RulesetPublisher::~RulesetPublisher() = default;
@@ -56,10 +54,9 @@ void RulesetPublisher::TryOpenAndSetRulesetFile(
                                                std::move(callback));
 }
 
-void RulesetPublisher::PublishNewRulesetVersion(
-    RulesetFilePtr ruleset_data) {
-  CHECK(ruleset_data, base::NotFatalUntil::M129);
-  CHECK(ruleset_data->IsValid(), base::NotFatalUntil::M129);
+void RulesetPublisher::PublishNewRulesetVersion(RulesetFilePtr ruleset_data) {
+  CHECK(ruleset_data);
+  CHECK(ruleset_data->IsValid());
   ruleset_data_.reset();
 
   // If Ad Tagging is running, then every request does a lookup and it's
@@ -76,8 +73,9 @@ void RulesetPublisher::PublishNewRulesetVersion(
     SendRulesetToRenderProcess(ruleset_data_.get(), it.GetCurrentValue());
   }
 
-  if (!ruleset_published_callback_.is_null())
+  if (!ruleset_published_callback_.is_null()) {
     std::move(ruleset_published_callback_).Run();
+  }
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -91,15 +89,16 @@ VerifiedRulesetDealer::Handle* RulesetPublisher::GetRulesetDealer() {
 
 void RulesetPublisher::IndexAndStoreAndPublishRulesetIfNeeded(
     const UnindexedRulesetInfo& unindexed_ruleset_info) {
-  CHECK(ruleset_service_, base::NotFatalUntil::M129);
+  CHECK(ruleset_service_);
   ruleset_service_->IndexAndStoreAndPublishRulesetIfNeeded(
       unindexed_ruleset_info);
 }
 
 void RulesetPublisher::OnRenderProcessHostCreated(
     content::RenderProcessHost* rph) {
-  if (!ruleset_data_ || !ruleset_data_->IsValid())
+  if (!ruleset_data_ || !ruleset_data_->IsValid()) {
     return;
+  }
   SendRulesetToRenderProcess(ruleset_data_.get(), rph);
 }
 

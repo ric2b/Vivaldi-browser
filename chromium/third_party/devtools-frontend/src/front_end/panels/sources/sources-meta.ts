@@ -189,13 +189,15 @@ const UIStrings = {
    */
   createNewSnippet: 'Create new snippet',
   /**
-   *@description Title of an action in the sources tool to add folder to workspace
+   * @description Button in the Workspace tab of the Sources panel, used to
+   *              (manually) add a folder to the workspace.
+   */
+  addFolderManually: 'Add folder manually',
+  /**
+   * @description Title of an action in the Sources panel command menu to (manually)
+   *              add a folder to the workspace.
    */
   addFolderToWorkspace: 'Add folder to workspace',
-  /**
-   *@description Title of an action in the sources tool to add folder to workspace
-   */
-  addFolder: 'Add folder',
   /**
    *@description Title of an action in the debugger tool to previous call frame
    */
@@ -464,6 +466,18 @@ const UIStrings = {
    * @description Title of an action that navigates to the next editor in the Sources panel.
    */
   previousEditorTab: 'Previous editor',
+  /**
+   * @description Title of a setting under the Sources category in Settings. If
+   *              this option is on, the Sources panel will automatically wrap
+   *              long lines and try to avoid showing a horizontal scrollbar if
+   *              possible.
+   */
+  wordWrap: 'Word wrap',
+  /**
+   * @description Title of an action in the Sources panel that toggles the 'Word
+   *              wrap' setting.
+   */
+  toggleWordWrap: 'Toggle word wrap',
 } as const;
 const str_ = i18n.i18n.registerUIStrings('panels/sources/sources-meta.ts', UIStrings);
 const i18nLazyString = i18n.i18n.getLazilyComputedLocalizedString.bind(undefined, str_);
@@ -1706,6 +1720,34 @@ Common.Settings.registerSettingExtension({
 Common.Settings.registerSettingExtension({
   category: Common.Settings.SettingCategory.SOURCES,
   storageType: Common.Settings.SettingStorageType.SYNCED,
+  title: i18nLazyString(UIStrings.wordWrap),
+  settingName: 'sources.word-wrap',
+  settingType: Common.Settings.SettingType.BOOLEAN,
+  defaultValue: false,
+});
+
+UI.ActionRegistration.registerActionExtension({
+  category: UI.ActionRegistration.ActionCategory.SOURCES,
+  actionId: 'sources.toggle-word-wrap',
+  async loadActionDelegate() {
+    const Sources = await loadSourcesModule();
+    return new Sources.SourcesPanel.ActionDelegate();
+  },
+  title: i18nLazyString(UIStrings.toggleWordWrap),
+  contextTypes() {
+    return maybeRetrieveContextTypes(Sources => [Sources.SourcesView.SourcesView]);
+  },
+  bindings: [
+    {
+      shortcut: 'Alt+Z',
+      keybindSets: [UI.ActionRegistration.KeybindSet.VS_CODE],
+    },
+  ],
+});
+
+Common.Settings.registerSettingExtension({
+  category: Common.Settings.SettingCategory.SOURCES,
+  storageType: Common.Settings.SettingStorageType.SYNCED,
   title: i18nLazyString(UIStrings.displayVariableValuesInlineWhile),
   settingName: 'inline-variable-values',
   settingType: Common.Settings.SettingType.BOOLEAN,
@@ -1976,7 +2018,7 @@ Common.Revealer.registerRevealer({
 UI.Toolbar.registerToolbarItem({
   actionId: 'sources.add-folder-to-workspace',
   location: UI.Toolbar.ToolbarItemLocation.FILES_NAVIGATION_TOOLBAR,
-  label: i18nLazyString(UIStrings.addFolder),
+  label: i18nLazyString(UIStrings.addFolderManually),
   loadItem: undefined,
   order: undefined,
   separator: undefined,

@@ -1193,11 +1193,12 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     void invalidateCurrentDefaultUniforms();
     angle::Result invalidateCurrentTextures(const gl::Context *context, gl::Command command);
     angle::Result invalidateCurrentShaderResources(gl::Command command);
-    angle::Result invalidateCurrentShaderUniformBuffers(gl::Command command);
+    angle::Result invalidateCurrentShaderUniformBuffers();
     void invalidateGraphicsDriverUniforms();
     void invalidateDriverUniforms();
 
     angle::Result handleNoopDrawEvent() override;
+    angle::Result handleNoopMultiDrawEvent() override;
 
     // Handlers for graphics pipeline dirty bits.
     angle::Result handleDirtyGraphicsMemoryBarrier(DirtyBits::Iterator *dirtyBitsIterator,
@@ -1378,12 +1379,12 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
     // preserve the order of operations:
     //
     // - Transform feedback write (in render pass), then vertex/index read (in render pass)
-    // - Transform feedback write (in render pass), then ubo read (outside render pass)
+    // - Transform feedback write (in render pass), then ubo read (inside/outside render pass)
     // - Framebuffer attachment write (in render pass), then texture sample (outside render pass)
     //   * Note that texture sampling inside render pass would cause a feedback loop
     //
     angle::Result endRenderPassIfTransformFeedbackBuffer(const vk::BufferHelper *buffer);
-    angle::Result endRenderPassIfComputeReadAfterTransformFeedbackWrite();
+    angle::Result endRenderPassIfUniformBufferReadAfterTransformFeedbackWrite();
     angle::Result endRenderPassIfComputeAccessAfterGraphicsImageAccess();
 
     // Update read-only depth feedback loop mode.  Typically called from
@@ -1610,11 +1611,6 @@ class ContextVk : public ContextImpl, public vk::Context, public MultisampleText
 
     vk::OutsideRenderPassCommandBufferHelper *mOutsideRenderPassCommands;
     vk::RenderPassCommandBufferHelper *mRenderPassCommands;
-
-    // Allocators for the render pass command buffers. They are utilized only when shared ring
-    // buffer allocators are being used.
-    vk::SecondaryCommandMemoryAllocator mOutsideRenderPassCommandsAllocator;
-    vk::SecondaryCommandMemoryAllocator mRenderPassCommandsAllocator;
 
     // The following is used when creating debug-util markers for graphics debuggers (e.g. AGI).  A
     // given gl{Begin|End}Query command may result in commands being submitted to the outside or

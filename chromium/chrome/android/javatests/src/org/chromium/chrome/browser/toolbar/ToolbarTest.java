@@ -90,7 +90,7 @@ public class ToolbarTest {
 
     @Before
     public void setUp() throws InterruptedException {
-        BookmarkBarUtils.setSettingEnabledForTesting(true);
+        BookmarkBarUtils.setFeatureVisibleForTesting(true);
         TabbedRootUiCoordinator.setDisableTopControlsAnimationsForTesting(true);
         mActivityTestRule.startMainActivityOnBlankPage();
     }
@@ -341,7 +341,6 @@ public class ToolbarTest {
     @MediumTest
     @DisableFeatures(ChromeFeatureList.TAB_STRIP_LAYOUT_OPTIMIZATION)
     @Restriction(DeviceFormFactor.TABLET)
-    @DisabledTest(message = "crbug.com/405940642")
     public void testToggleTabStripVisibility() {
         ChromeTabbedActivity activity = mActivityTestRule.getActivity();
         int tabStripHeightResource =

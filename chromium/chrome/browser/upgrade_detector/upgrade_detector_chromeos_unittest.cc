@@ -111,9 +111,7 @@ class UpgradeDetectorChromeosTest : public ::testing::Test {
     // Fast forward to set current time to local 2am . This is done to align the
     // relaunch deadline within the default relaunch window of 2am to 4am so
     // that it is not adjusted in tests.
-    std::string env_tz;
-    if (env_->GetVar("TZ", &env_tz))
-      original_tz_ = env_tz;
+    original_tz_ = env_->GetVar("TZ");
     env_->SetVar("TZ", "UTC");
     tzset();
     FastForwardBy(base::Hours(2));
@@ -228,10 +226,10 @@ class UpgradeDetectorChromeosTest : public ::testing::Test {
                                               base::Value(std::move(value)));
   }
 
-  // Sets the browser.relaunch_superseded_release_age preference in Local State.
-  void SetRelaunchSupersededReleaseAgePref(int days) {
+  // Sets the browser.relaunch_fast_if_outdated preference in Local State.
+  void SetRelaunchFastIfOutdated(int days) {
     scoped_local_state_.Get()->SetManagedPref(
-        prefs::kRelaunchSupersededReleaseAge, base::Value(days));
+        prefs::kRelaunchFastIfOutdated, base::Value(days));
   }
 
   // Fast-forwards virtual time by |delta|.
@@ -374,10 +372,10 @@ TEST_F(UpgradeDetectorChromeosTest, TestHighAnnoyanceDeadline) {
   RunUntilIdle();
 }
 
-TEST_F(UpgradeDetectorChromeosTest, TestSupersededRelease) {
+TEST_F(UpgradeDetectorChromeosTest, RelaunchFastIfOutdated) {
   // Enable the relaunch notification policy.
   SetIsRelaunchNotificationPolicyEnabled(true /*enabled*/);
-  SetRelaunchSupersededReleaseAgePref(7);
+  SetRelaunchFastIfOutdated(7);
   SetRelaunchWindowPref(0, 0, 60 * 24);
 
   TestUpgradeDetectorChromeos upgrade_detector(GetMockClock(),

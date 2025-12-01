@@ -9,23 +9,26 @@
 #define SkBlurMaskFilterImpl_DEFINED
 
 #include "include/core/SkFlattenable.h"
-#include "include/core/SkRefCnt.h"
 #include "include/core/SkScalar.h"
 #include "include/core/SkSpan.h"
 #include "src/core/SkMask.h"
 #include "src/core/SkMaskFilterBase.h"
 
 #include <optional>
+#include <utility>
 
 class SkImageFilter;
 class SkMatrix;
+class SkPaint;
 class SkRRect;
 class SkReadBuffer;
+class SkResourceCache;
 class SkWriteBuffer;
 enum SkBlurStyle : int;
 struct SkIPoint;
 struct SkIRect;
 struct SkRect;
+template <typename T> class sk_sp;
 
 class SkBlurMaskFilterImpl : public SkMaskFilterBase {
 public:
@@ -39,8 +42,8 @@ public:
 
     void computeFastBounds(const SkRect&, SkRect*) const override;
     bool asABlur(BlurRec*) const override;
-    sk_sp<SkImageFilter> asImageFilter(const SkMatrix& ctm) const override;
-
+    std::pair<sk_sp<SkImageFilter>, bool> asImageFilter(const SkMatrix& ctm,
+                                                        const SkPaint&) const override;
 
     SkScalar computeXformedSigma(const SkMatrix& ctm) const;
     SkBlurStyle blurStyle() const {return fBlurStyle;}
@@ -51,11 +54,13 @@ private:
     FilterReturn filterRectsToNine(SkSpan<const SkRect>,
                                    const SkMatrix&,
                                    const SkIRect& clipBounds,
-                                   std::optional<NinePatch>*) const override;
+                                   std::optional<NinePatch>*,
+                                   SkResourceCache*) const override;
 
     std::optional<NinePatch> filterRRectToNine(const SkRRect&,
                                                const SkMatrix&,
-                                               const SkIRect& clipBounds) const override;
+                                               const SkIRect& clipBounds,
+                                               SkResourceCache*) const override;
 
     bool filterRectMask(SkMaskBuilder* dstM,
                         const SkRect& r,

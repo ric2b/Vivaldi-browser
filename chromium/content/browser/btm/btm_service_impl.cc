@@ -56,11 +56,6 @@ namespace content {
 
 namespace {
 
-// Controls whether the database requests are executed on a foreground sequence.
-BASE_FEATURE(kDipsOnForegroundSequence,
-             "DipsOnForegroundSequence",
-             base::FEATURE_DISABLED_BY_DEFAULT);
-
 BtmRedirectCategory ClassifyRedirect(BtmDataAccessType access,
                                      bool has_user_activation) {
   using enum BtmRedirectCategory;
@@ -133,12 +128,6 @@ inline void UmaHistogramSiteToClearDomainLength(
       site_to_clear.length());
 }
 
-void OnDeletionFinished(base::OnceClosure finished_callback,
-                        base::Time deletion_start) {
-  UmaHistogramDeletionLatency(deletion_start);
-  std::move(finished_callback).Run();
-}
-
 net::CookiePartitionKeyCollection CookiePartitionKeyCollectionForSites(
     const std::vector<std::string>& sites) {
   std::vector<net::CookiePartitionKey> keys;
@@ -181,7 +170,7 @@ class StateClearer : public BrowsingDataRemover::Observer {
   // clearing is complete.
   //
   // NOTE: This deletion task removing rows for `sites_to_clear` from the
-  // BtmStorage backend relies on the assumption that rows flagged as DIPS
+  // BtmStorage backend relies on the assumption that rows flagged as BTM
   // eligible don't have user activation time values. So even though 'remover'
   // will only clear the storage timestamps, that's sufficient to delete the
   // entire row.
@@ -300,36 +289,13 @@ BtmServiceImpl::BtmServiceImpl(base::PassKey<BrowserContextImpl>,
                                BrowserContext* context)
     : browser_context_(context) {
   DCHECK(base::FeatureList::IsEnabled(features::kBtm));
-  std::optional<base::FilePath> path_to_use;
-  base::FilePath dips_path = GetBtmFilePath(browser_context_);
+  base::FilePath btm_path = GetBtmFilePath(browser_context_);
 
-  if (browser_context_->IsOffTheRecord()) {
-    // OTR profiles should have no existing DIPS database file to be cleaned up.
-    // In fact, attempting to delete one at the path associated with the OTR
-    // profile would delete the DIPS database for the underlying regular
-    // profile.
-    wait_for_file_deletion_.Quit();
-  } else {
-    if (features::kBtmPersistedDatabaseEnabled.Get()) {
-      path_to_use = dips_path;
-      // Existing database files won't be deleted, so quit the
-      // `wait_for_file_deletion_` RunLoop.
-      wait_for_file_deletion_.Quit();
-    } else {
-      // If opening in-memory, delete any database files that may exist.
-      BtmStorage::DeleteDatabaseFiles(dips_path,
-                                      wait_for_file_deletion_.QuitClosure());
-    }
-  }
-
-  if (path_to_use.has_value()) {
-    // If opening a persisted database, use `CreateTaskRunnerForResource()` to
-    // avoid race condition during profile re-loading.
-    storage_ = base::SequenceBound<BtmStorage>(
-        CreateTaskRunnerForResource(path_to_use.value()), path_to_use);
-  } else {
-    storage_ = base::SequenceBound<BtmStorage>(CreateTaskRunner(), path_to_use);
-  }
+  storage_ =
+      browser_context_->IsOffTheRecord()
+          ? base::SequenceBound<BtmStorage>(CreateTaskRunner(), std::nullopt)
+          : base::SequenceBound<BtmStorage>(
+                CreateTaskRunnerForResource(btm_path), btm_path);
 
   repeating_timer_ = CreateTimer();
   repeating_timer_->Start();
@@ -360,13 +326,10 @@ BtmServiceImpl::~BtmServiceImpl() {
 
 /* static */
 BtmServiceImpl* BtmServiceImpl::Get(BrowserContext* context) {
-  return BrowserContextImpl::From(context)->GetDipsService();
+  return BrowserContextImpl::From(context)->GetBtmService();
 }
 
 scoped_refptr<base::SequencedTaskRunner> BtmServiceImpl::CreateTaskRunner() {
-  if (base::FeatureList::IsEnabled(kDipsOnForegroundSequence)) {
-    return base::ThreadPool::CreateSequencedTaskRunner({base::MayBlock()});
-  }
   return base::ThreadPool::CreateSequencedTaskRunner(
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::ThreadPolicy::PREFER_BACKGROUND});
@@ -374,10 +337,6 @@ scoped_refptr<base::SequencedTaskRunner> BtmServiceImpl::CreateTaskRunner() {
 
 scoped_refptr<base::SequencedTaskRunner>
 BtmServiceImpl::CreateTaskRunnerForResource(const base::FilePath& path) {
-  if (base::FeatureList::IsEnabled(kDipsOnForegroundSequence)) {
-    return base::ThreadPool::CreateSequencedTaskRunnerForResource(
-        {base::MayBlock()}, path);
-  }
   return base::ThreadPool::CreateSequencedTaskRunnerForResource(
       {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
        base::ThreadPolicy::PREFER_BACKGROUND},
@@ -411,15 +370,17 @@ void BtmServiceImpl::HandleRedirectChain(
     return;
   }
 
-  if (chain->initial_url.source_id != ukm::kInvalidSourceId) {
-    ukm::builders::DIPS_ChainBegin(chain->initial_url.source_id)
+  if (!chain->are_3pcs_generally_enabled &&
+      chain->initial_url.source_id != ukm::kInvalidSourceId) {
+    ukm::builders::BTM_ChainBegin(chain->initial_url.source_id)
         .SetChainId(chain->chain_id)
         .SetInitialAndFinalSitesSame(chain->initial_and_final_sites_same)
         .Record(ukm::UkmRecorder::Get());
   }
 
-  if (chain->final_url.source_id != ukm::kInvalidSourceId) {
-    ukm::builders::DIPS_ChainEnd(chain->final_url.source_id)
+  if (!chain->are_3pcs_generally_enabled &&
+      chain->final_url.source_id != ukm::kInvalidSourceId) {
+    ukm::builders::BTM_ChainEnd(chain->final_url.source_id)
         .SetChainId(chain->chain_id)
         .SetInitialAndFinalSitesSame(chain->initial_and_final_sites_same)
         .Record(ukm::UkmRecorder::Get());
@@ -505,21 +466,19 @@ void BtmServiceImpl::GotState(
 }
 
 void BtmServiceImpl::RecordBounce(
-    const GURL& url,
-    bool has_3pc_exception,
-    const GURL& final_url,
-    base::Time time,
-    bool stateful,
+    const BtmRedirectInfo& redirect,
+    const BtmRedirectChainInfo& chain,
     base::RepeatingCallback<void(const GURL&)> stateful_bounce_callback) {
+  const GURL& url = redirect.redirecting_url.url;
+  bool stateful = redirect.access_type > BtmDataAccessType::kRead;
+
   // If the bounced URL has a 3PC exception when embedded under the initial or
-  // final URL in the redirect,then clear the tracking site from the DIPS DB, to
-  // avoid deleting its storage. The exception overrides any bounces from
-  // non-excepted sites.
-  if (has_3pc_exception) {
-    // These records indicate sites that could've had their state deleted
-    // provided their grace period expired. But are at the moment excepted
-    // following `Are3PCAllowed()` of either `initial_url` or `final_url`.
-    bool would_be_cleared = false;
+  // final URL in the redirect, then clear the tracking site from the BTM
+  // database to avoid deleting its storage. The exception overrides any bounces
+  // from non-excepted sites.
+  if (redirect.has_3pc_exception.value()) {
+    // Check whether the site would have hypothetically been cleared.
+    bool would_be_cleared;
     switch (features::kBtmTriggeringAction.Get()) {
       case BtmTriggeringAction::kNone: {
         would_be_cleared = false;
@@ -538,15 +497,15 @@ void BtmServiceImpl::RecordBounce(
         break;
       }
     }
-    if (would_be_cleared) {
+    if (!chain.are_3pcs_generally_enabled && would_be_cleared) {
       // TODO(crbug.com/40268849): Investigate and fix the presence of empty
       // site(s) in the `site_to_clear` list. Once this is fixed remove this
       // escape.
       if (url.is_empty()) {
         UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kIgnored);
-      } else {
-        UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kExcepted);
+        return;
       }
+      UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kExcepted);
     }
 
     const std::set<std::string> site_to_clear{GetSiteForBtm(url)};
@@ -561,10 +520,12 @@ void BtmServiceImpl::RecordBounce(
   // If the bounce is stateful and not excepted by cookie settings, run the
   // callback.
   if (stateful) {
-    stateful_bounce_callback.Run(final_url);
+    stateful_bounce_callback.Run(chain.final_url.url);
   }
 
-  storage_.AsyncCall(&BtmStorage::RecordBounce).WithArgs(url, time, stateful);
+  // Record the bounce at the storage layer.
+  storage_.AsyncCall(&BtmStorage::RecordBounce)
+      .WithArgs(url, redirect.time, stateful);
 }
 
 /*static*/
@@ -577,36 +538,35 @@ void BtmServiceImpl::HandleRedirect(
   bool final_site_same = (redirect.site == chain.final_site);
   DCHECK_LT(redirect.chain_index.value(), chain.length);
 
-  ukm::builders::DIPS_Redirect(redirect.redirecting_url.source_id)
-      .SetSiteEngagementLevel(redirect.site_had_user_activation.value() ? 1 : 0)
-      .SetRedirectType(static_cast<int64_t>(redirect.redirect_type))
-      .SetCookieAccessType(static_cast<int64_t>(redirect.access_type))
-      .SetRedirectAndInitialSiteSame(initial_site_same)
-      .SetRedirectAndFinalSiteSame(final_site_same)
-      .SetInitialAndFinalSitesSame(chain.initial_and_final_sites_same)
-      .SetRedirectChainIndex(redirect.chain_index.value())
-      .SetRedirectChainLength(chain.length)
-      .SetIsPartialRedirectChain(chain.is_partial_chain)
-      .SetClientBounceDelay(
-          BucketizeBtmBounceDelay(redirect.client_bounce_delay))
-      .SetHasStickyActivation(redirect.has_sticky_activation)
-      .SetWebAuthnAssertionRequestSucceeded(
-          redirect.web_authn_assertion_request_succeeded)
-      .SetChainId(redirect.chain_id.value())
-      .Record(ukm::UkmRecorder::Get());
+  if (!chain.are_3pcs_generally_enabled) {
+    ukm::builders::BTM_Redirect(redirect.redirecting_url.source_id)
+        .SetSiteEngagementLevel(redirect.site_had_user_activation.value() ? 1
+                                                                          : 0)
+        .SetRedirectType(static_cast<int64_t>(redirect.redirect_type))
+        .SetCookieAccessType(static_cast<int64_t>(redirect.access_type))
+        .SetRedirectAndInitialSiteSame(initial_site_same)
+        .SetRedirectAndFinalSiteSame(final_site_same)
+        .SetInitialAndFinalSitesSame(chain.initial_and_final_sites_same)
+        .SetRedirectChainIndex(redirect.chain_index.value())
+        .SetRedirectChainLength(chain.length)
+        .SetIsPartialRedirectChain(chain.is_partial_chain)
+        .SetClientBounceDelay(
+            BucketizeBtmBounceDelay(redirect.client_bounce_delay))
+        .SetHasStickyActivation(redirect.has_sticky_activation)
+        .SetWebAuthnAssertionRequestSucceeded(
+            redirect.web_authn_assertion_request_succeeded)
+        .SetChainId(redirect.chain_id.value())
+        .Record(ukm::UkmRecorder::Get());
+  }
 
   if (initial_site_same || final_site_same) {
     // Don't record UMA metrics for same-site redirects.
     return;
   }
 
-  // Record this bounce in the DIPS database.
+  // Record this bounce in the BTM database.
   if (redirect.access_type != BtmDataAccessType::kUnknown) {
-    record_bounce.Run(
-        redirect.redirecting_url.url, redirect.has_3pc_exception.value(),
-        chain.final_url.url, redirect.time,
-        /*stateful=*/redirect.access_type > BtmDataAccessType::kRead,
-        stateful_bounce_callback);
+    record_bounce.Run(redirect, chain, stateful_bounce_callback);
   }
 
   BtmRedirectCategory category = ClassifyRedirect(
@@ -647,21 +607,17 @@ void BtmServiceImpl::DeleteBtmEligibleState(
     std::erase(sites_to_clear, site_ctr.first);
   }
 
-  if (sites_to_clear.empty()) {
-    UmaHistogramClearedSitesCount(GetCookieMode(), sites_to_clear.size());
-    std::move(callback).Run(std::vector<std::string>());
-    return;
-  }
-
-  UmaHistogramClearedSitesCount(GetCookieMode(), sites_to_clear.size());
-
+  std::vector<std::string> filtered_sites_to_clear;
   for (const auto& site : sites_to_clear) {
     // TODO(crbug.com/40268849): Investigate and fix the presence of empty
     // site(s) in the `site_to_clear` list. Once this is fixed remove this loop
     // escape.
     if (site.empty()) {
+      UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kIgnored);
       continue;
     }
+    UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kEnforced);
+
     const ukm::SourceId source_id = ukm::UkmRecorder::GetSourceIdForDipsSite(
         base::PassKey<BtmServiceImpl>(), site);
     ukm::builders::DIPS_Deletion(source_id)
@@ -671,63 +627,30 @@ void BtmServiceImpl::DeleteBtmEligibleState(
         // meantime).
         .SetShouldBlockThirdPartyCookies(true)
         .SetHasCookieException(false)
-        .SetIsDeletionEnabled(features::kBtmDeletionEnabled.Get())
+        .SetIsDeletionEnabled(true)
         .Record(ukm::UkmRecorder::Get());
+
+    filtered_sites_to_clear.push_back(site);
   }
 
-  if (features::kBtmDeletionEnabled.Get()) {
-    std::vector<std::string> filtered_sites_to_clear;
-
-    for (const auto& site : sites_to_clear) {
-      // TODO(crbug.com/40268849): Investigate and fix the presence of empty
-      // site(s) in the `site_to_clear` list. Once this is fixed remove this
-      // loop escape.
-      if (site.empty()) {
-        UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kIgnored);
-        continue;
-      }
-      UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kEnforced);
-      filtered_sites_to_clear.push_back(site);
-    }
-
-    base::OnceClosure finish_callback = base::BindOnce(
-        std::move(callback), std::vector<std::string>(filtered_sites_to_clear));
-    if (filtered_sites_to_clear.empty()) {
-      std::move(finish_callback).Run();
-      return;
-    }
-
-    // Perform state deletion on the filtered list of sites.
-    RunDeletionTaskOnUIThread(std::move(filtered_sites_to_clear),
-                              std::move(finish_callback));
-  } else {
-    for (const auto& site : sites_to_clear) {
-      // TODO(crbug.com/40268849): Investigate and fix the presence of empty
-      // site(s) in the `site_to_clear` list. Once this is fixed remove this
-      // loop escape.
-      if (site.empty()) {
-        UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kIgnored);
-        continue;
-      }
-      UmaHistogramDeletion(GetCookieMode(), BtmDeletionAction::kDisallowed);
-    }
-
-    base::Time deletion_start = base::Time::Now();
-    // Storage init should be finished by now, so no need to delay until then.
-    storage_.AsyncCall(&BtmStorage::RemoveRows)
-        .WithArgs(std::move(sites_to_clear))
-        .Then(base::BindOnce(
-            &OnDeletionFinished,
-            base::BindOnce(std::move(callback), std::vector<std::string>()),
-            deletion_start));
+  UmaHistogramClearedSitesCount(GetCookieMode(), sites_to_clear.size());
+  base::OnceClosure finish_callback = base::BindOnce(
+      std::move(callback), std::vector<std::string>(filtered_sites_to_clear));
+  if (filtered_sites_to_clear.empty()) {
+    std::move(finish_callback).Run();
+    return;
   }
+
+  // Perform state deletion on the filtered list of sites.
+  RunDeletionTaskOnUIThread(std::move(filtered_sites_to_clear),
+                            std::move(finish_callback));
 }
 
 void BtmServiceImpl::RunDeletionTaskOnUIThread(std::vector<std::string> sites,
                                                base::OnceClosure callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  uint64_t remove_mask = GetContentClient()->browser()->GetDipsRemoveMask();
+  uint64_t remove_mask = GetContentClient()->browser()->GetBtmRemoveMask();
 
   StateClearer::DeleteState(browser_context_->GetBrowsingDataRemover(),
                             std::move(sites), remove_mask, std::move(callback));

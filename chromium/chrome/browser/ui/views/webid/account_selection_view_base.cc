@@ -31,6 +31,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/styled_label.h"
@@ -135,14 +136,14 @@ class AccountImageView : public views::ImageView {
   void SetAccountImage(const content::IdentityRequestAccount& account,
                        int image_size,
                        std::optional<gfx::ImageSkia> idp_image = std::nullopt) {
-    avatar_ =
-        ComputeAccountCircleCroppedPicture(account, image_size, idp_image);
+    avatar_ = webid::ComputeAccountCircleCroppedPicture(account, image_size,
+                                                        idp_image);
     SetImage(ui::ImageModel::FromImageSkia(avatar_));
   }
 
   void SetDisabledOpacity() {
     avatar_ = gfx::ImageSkiaOperations::CreateTransparentImage(
-        avatar_, kDisabledAvatarOpacity);
+        avatar_, webid::kDisabledAvatarOpacity);
     SetImage(ui::ImageModel::FromImageSkia(avatar_));
   }
 
@@ -204,13 +205,13 @@ bool BrandIconImageView::SetBrandIconImage(const gfx::Image& image,
     return false;
   }
   if (should_circle_crop &&
-      image.Width() < (image_size_ / kMaskableWebIconSafeZoneRatio)) {
+      image.Width() < (image_size_ / webid::kMaskableWebIconSafeZoneRatio)) {
     return false;
   }
   const gfx::ImageSkia& original_image = image.AsImageSkia();
   gfx::ImageSkia cropped_idp_image =
       should_circle_crop
-          ? CreateCircleCroppedImage(original_image, image_size_)
+          ? webid::CreateCircleCroppedImage(original_image, image_size_)
           : gfx::ImageSkiaOperations::CreateResizedImage(
                 original_image, skia::ImageOperations::RESIZE_BEST,
                 gfx::Size(image_size_, image_size_));
@@ -239,7 +240,20 @@ AccountHoverButton::AccountHoverButton(
                   add_vertical_label_spacing,
                   footer),
       callback_(std::move(callback)),
-      button_position_(button_position) {}
+      button_position_(button_position) {
+  // HoverButton does not highlight on hover since it focuses on hover, but this
+  // class modifies that behavior, so change the InkDrop so we highlight on both
+  // focus and hover.
+  views::InkDrop::UseInkDropForFloodFillRipple(views::InkDrop::Get(this),
+                                               /*highlight_on_hover=*/true,
+                                               /*highlight_on_focus=*/true);
+}
+
+void AccountHoverButton::StateChanged(ButtonState old_state) {
+  // Do not focus on hover since it causes odd scrolling. Do this by skipping
+  // the code in HoverButton::StateChanged.
+  views::LabelButton::StateChanged(old_state);
+}
 
 void AccountHoverButton::OnPressed(const ui::Event& event) {
   // We do not disable the button which has been clicked because otherwise,
@@ -284,7 +298,9 @@ void AccountHoverButton::SetDisabledOpacity() {
   }
 
   title()->SetEnabledColor(ui::kColorLabelForegroundDisabled);
-  subtitle()->SetEnabledColor(ui::kColorLabelForegroundDisabled);
+  if (subtitle()) {
+    subtitle()->SetEnabledColor(ui::kColorLabelForegroundDisabled);
+  }
 }
 
 bool AccountHoverButton::HasDisabledOpacity() {
@@ -297,11 +313,15 @@ void AccountHoverButton::ReplaceSecondaryViewWithSpinner() {
       ->ReplaceWithSpinner();
 }
 
+void AccountHoverButton::SetCallbackForTesting(PressedCallback callback) {
+  callback_ = std::move(callback);
+}
+
 AccountSelectionViewBase::AccountSelectionViewBase(
     FedCmAccountSelectionView* owner,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    std::u16string rp_for_display)
-    : owner_(owner), rp_for_display_(rp_for_display) {}
+    const content::RelyingPartyData& rp_data)
+    : owner_(owner), rp_data_(rp_data) {}
 
 AccountSelectionViewBase::~AccountSelectionViewBase() = default;
 
@@ -323,7 +343,8 @@ std::unique_ptr<views::View> AccountSelectionViewBase::CreateAccountRow(
     bool is_modal_dialog,
     int additional_vertical_padding,
     std::optional<std::u16string> last_used_string) {
-  int avatar_size = is_modal_dialog ? kModalAvatarSize : kDesiredAvatarSize;
+  int avatar_size =
+      is_modal_dialog ? webid::kModalAvatarSize : webid::kDesiredAvatarSize;
   views::style::TextStyle account_display_name_style =
       is_modal_dialog ? views::style::STYLE_BODY_3_MEDIUM
                       : views::style::STYLE_PRIMARY;
@@ -341,8 +362,8 @@ std::unique_ptr<views::View> AccountSelectionViewBase::CreateAccountRow(
   const content::IdentityProviderData& idp_data = *account->identity_provider;
   if (clickable_position) {
     if (should_include_idp) {
-      account_image_view->SetImageSize(
-          {avatar_size + kIdpBadgeOffset, avatar_size + kIdpBadgeOffset});
+      account_image_view->SetImageSize({avatar_size + webid::kIdpBadgeOffset,
+                                        avatar_size + webid::kIdpBadgeOffset});
       account_image_view->SetAccountImage(
           *account, avatar_size,
           std::make_optional<gfx::ImageSkia>(
@@ -350,7 +371,7 @@ std::unique_ptr<views::View> AccountSelectionViewBase::CreateAccountRow(
       // Add a border at the top so that the account avatar is centered, not the
       // whole badged icon.
       account_image_view->SetBorder(views::CreateEmptyBorder(
-          gfx::Insets::TLBR(kIdpBadgeOffset, 0, 0, 0)));
+          gfx::Insets::TLBR(webid::kIdpBadgeOffset, 0, 0, 0)));
     } else {
       account_image_view->SetAccountImage(*account, avatar_size);
     }
@@ -365,18 +386,23 @@ std::unique_ptr<views::View> AccountSelectionViewBase::CreateAccountRow(
         footer = base::UTF8ToUTF16(idp_data.idp_for_display);
       }
     }
+    std::u16string title = account->is_filtered_out
+                               ? base::UTF8ToUTF16(account->display_identifier)
+                               : base::UTF8ToUTF16(account->display_name);
+    std::u16string subtitle =
+        account->is_filtered_out
+            ? l10n_util::GetStringUTF16(IDS_FILTERED_ACCOUNT_MESSAGE)
+            : base::UTF8ToUTF16(account->display_identifier);
+    if (title.empty()) {
+      // display_name is never empty. Show it if there is no display_identifier.
+      title = base::UTF8ToUTF16(account->display_name);
+    }
     // We can pass crefs to OnAccountSelected because the `observer_` owns the
     // data.
     auto row = std::make_unique<AccountHoverButton>(
         base::BindRepeating(&FedCmAccountSelectionView::OnAccountSelected,
                             base::Unretained(owner_), account),
-        std::move(account_image_view),
-        /*title=*/account->is_filtered_out
-            ? base::UTF8ToUTF16(account->display_identifier)
-            : base::UTF8ToUTF16(account->display_name),
-        /*subtitle=*/account->is_filtered_out
-            ? l10n_util::GetStringUTF16(IDS_FILTERED_ACCOUNT_MESSAGE)
-            : base::UTF8ToUTF16(account->display_identifier),
+        std::move(account_image_view), title, subtitle,
         /*secondary_view=*/
         is_modal_dialog ? std::make_unique<AccountHoverButtonSecondaryView>()
                         : nullptr,
@@ -503,7 +529,6 @@ AccountSelectionViewBase::CreateDisclosureLabel(
 std::pair<std::u16string, std::u16string>
 AccountSelectionViewBase::GetErrorDialogText(
     const std::optional<TokenError>& error,
-    const std::u16string& rp_for_display,
     const std::u16string& idp_for_display) {
   std::string code = error ? error->code : "";
   GURL url = error ? error->url : GURL();
@@ -513,14 +538,14 @@ AccountSelectionViewBase::GetErrorDialogText(
 
   if (code == kInvalidRequest) {
     summary = l10n_util::GetStringFUTF16(
-        IDS_SIGNIN_INVALID_REQUEST_ERROR_DIALOG_SUMMARY, rp_for_display,
-        idp_for_display);
+        IDS_SIGNIN_INVALID_REQUEST_ERROR_DIALOG_SUMMARY,
+        rp_data_.rp_for_display, idp_for_display);
     description = l10n_util::GetStringUTF16(
         IDS_SIGNIN_INVALID_REQUEST_ERROR_DIALOG_DESCRIPTION);
   } else if (code == kUnauthorizedClient) {
     summary = l10n_util::GetStringFUTF16(
-        IDS_SIGNIN_UNAUTHORIZED_CLIENT_ERROR_DIALOG_SUMMARY, rp_for_display,
-        idp_for_display);
+        IDS_SIGNIN_UNAUTHORIZED_CLIENT_ERROR_DIALOG_SUMMARY,
+        rp_data_.rp_for_display, idp_for_display);
     description = l10n_util::GetStringUTF16(
         IDS_SIGNIN_UNAUTHORIZED_CLIENT_ERROR_DIALOG_DESCRIPTION);
   } else if (code == kAccessDenied) {
@@ -537,7 +562,7 @@ AccountSelectionViewBase::GetErrorDialogText(
   } else if (code == kServerError) {
     summary = l10n_util::GetStringUTF16(IDS_SIGNIN_SERVER_ERROR_DIALOG_SUMMARY);
     description = l10n_util::GetStringFUTF16(
-        IDS_SIGNIN_SERVER_ERROR_DIALOG_DESCRIPTION, rp_for_display);
+        IDS_SIGNIN_SERVER_ERROR_DIALOG_DESCRIPTION, rp_data_.rp_for_display);
     // Extra description is not needed for kServerError.
     return {summary, description};
   } else {
@@ -555,7 +580,7 @@ AccountSelectionViewBase::GetErrorDialogText(
                    code == kTemporarilyUnavailable
                        ? IDS_SIGNIN_ERROR_DIALOG_TRY_OTHER_WAYS_RETRY_PROMPT
                        : IDS_SIGNIN_ERROR_DIALOG_TRY_OTHER_WAYS_PROMPT,
-                   rp_for_display);
+                   rp_data_.rp_for_display);
     return {summary, description};
   }
 

@@ -14,8 +14,14 @@ namespace client_certificates {
 
 UnexportablePrivateKey::UnexportablePrivateKey(
     std::unique_ptr<crypto::UnexportableSigningKey> key)
-    : PrivateKey(PrivateKeySource::kUnexportableKey,
-                 SSLKeyConverter::Get()->ConvertUnexportableKeySlowly(*key)),
+    : UnexportablePrivateKey(std::move(key),
+                             PrivateKeySource::kUnexportableKey) {}
+
+UnexportablePrivateKey::UnexportablePrivateKey(
+    std::unique_ptr<crypto::UnexportableSigningKey> key,
+    PrivateKeySource key_source)
+    : PrivateKey(key_source,
+                 SSLPrivateKeyFromUnexportableSigningKeySlowly(*key)),
       key_(std::move(key)) {
   CHECK(key_);
 }

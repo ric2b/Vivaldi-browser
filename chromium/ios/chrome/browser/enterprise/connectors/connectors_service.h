@@ -10,9 +10,15 @@
 #import "components/keyed_service/core/keyed_service.h"
 #import "ios/chrome/browser/enterprise/connectors/connectors_manager.h"
 
+class ProfileIOS;
+
 namespace policy {
 class UserCloudPolicyManager;
 }  // namespace policy
+
+namespace signin {
+class IdentityManager;
+}
 
 namespace enterprise_connectors {
 
@@ -22,10 +28,13 @@ namespace enterprise_connectors {
 // - OnSecurityEventEnterpriseConnectors
 class ConnectorsService : public ConnectorsServiceBase, public KeyedService {
  public:
-  ConnectorsService(bool off_the_record,
-                    PrefService* pref_service,
-                    policy::UserCloudPolicyManager* user_cloud_policy_manager);
+  ConnectorsService(ProfileIOS* profile);
   ~ConnectorsService() override;
+
+  // Returns the CBCM domain or profile domain that enables connector policies.
+  // If both set Connector policies, the CBCM domain is returned as it has
+  // precedence.
+  std::string GetManagementDomain();
 
   // ConnectorsServiceBase:
   bool IsConnectorEnabled(AnalysisConnector connector) const override;
@@ -33,6 +42,9 @@ class ConnectorsService : public ConnectorsServiceBase, public KeyedService {
   // present.
   std::optional<std::string> GetBrowserDmToken() const override;
   std::unique_ptr<ClientMetadata> BuildClientMetadata(bool is_cloud) override;
+
+  // Returns ClientMetadata populated with minimum required information
+  std::unique_ptr<ClientMetadata> GetBasicClientMetadata();
 
  protected:
   // ConnectorsServiceBase:
@@ -50,10 +62,11 @@ class ConnectorsService : public ConnectorsServiceBase, public KeyedService {
   FRIEND_TEST_ALL_PREFIXES(ConnectorsServiceTest, GetBrowserDmToken);
   FRIEND_TEST_ALL_PREFIXES(ConnectorsServiceTest, ConnectorsEnabled);
 
-  bool off_the_record_;
-  raw_ptr<PrefService> prefs_;
-  raw_ptr<policy::UserCloudPolicyManager> user_cloud_policy_manager_;
+  raw_ptr<ProfileIOS> profile_;
   std::unique_ptr<ConnectorsManager> connectors_manager_;
+  // Unowned pointer used for retrieving the management domain for connectors
+  // policies. Can be null for incognito profiles.
+  raw_ptr<signin::IdentityManager> identity_manager_;
 };
 
 }  // namespace enterprise_connectors

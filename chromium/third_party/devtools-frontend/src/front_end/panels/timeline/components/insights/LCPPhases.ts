@@ -25,8 +25,11 @@ interface PhaseData {
 export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
   static override readonly litTagName = Lit.StaticHtml.literal`devtools-performance-lcp-by-phases`;
   override internalName = 'lcp-by-phase';
-  protected override hasAskAISupport = true;
   #overlay: Overlays.Overlays.TimespanBreakdown|null = null;
+
+  protected override hasAskAiSupport(): boolean {
+    return true;
+  }
 
   #getPhaseData(): PhaseData[] {
     if (!this.model) {
@@ -189,6 +192,15 @@ export class LCPPhases extends BaseInsightComponent<LCPPhasesInsightModel> {
       </div>
     `;
     // clang-format on
+  }
+
+  override toggleTemporaryOverlays(
+      overlays: Overlays.Overlays.TimelineOverlay[]|null, options: Overlays.Overlays.TimelineOverlaySetOptions): void {
+    super.toggleTemporaryOverlays(overlays, {...options, updateTraceWindowPercentage: 0});
+  }
+
+  override getOverlayOptionsForInitialOverlays(): Overlays.Overlays.TimelineOverlaySetOptions {
+    return {updateTraceWindow: true, updateTraceWindowPercentage: 0};
   }
 
   override renderContent(): Lit.LitTemplate {

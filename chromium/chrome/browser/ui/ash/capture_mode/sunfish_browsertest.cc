@@ -98,7 +98,8 @@ IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, OpenLinksInNewTabs) {
   VerifyActiveBehavior(BehaviorType::kSunfish);
 
   // Simulate showing the panel while the session is active.
-  controller->ShowSearchResultsPanel(gfx::ImageSkia(), GURL("kTestUrl1"));
+  controller->ShowSearchResultsPanel();
+  controller->NavigateSearchResultsPanel(GURL("kTestUrl1"));
   ASSERT_TRUE(controller->IsActive());
   auto* search_results_view =
       controller->GetSearchResultsPanel()->search_results_view();
@@ -157,7 +158,8 @@ IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, OpensLinksOffTheRecord) {
   VerifyActiveBehavior(BehaviorType::kSunfish);
 
   // Simulate showing the panel while the session is active.
-  controller->ShowSearchResultsPanel(gfx::ImageSkia(), GURL("kTestUrl1"));
+  controller->ShowSearchResultsPanel();
+  controller->NavigateSearchResultsPanel(GURL("kTestUrl1"));
   ASSERT_TRUE(controller->IsActive());
   auto* search_results_view =
       controller->GetSearchResultsPanel()->search_results_view();
@@ -185,26 +187,18 @@ IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, OpensLinksOffTheRecord) {
 }
 
 IN_PROC_BROWSER_TEST_F(SunfishBrowserTest, SendSearchRequests) {
-  // Send a region search.
+  // Send a region search, simulated inside a regular capture session.
   ChromeCaptureModeDelegate* delegate = ChromeCaptureModeDelegate::Get();
-  delegate->SendRegionSearch(SkBitmap(), gfx::Rect(),
-                             base::BindRepeating([](GURL url) {}),
-                             base::DoNothing());
+  delegate->SendLensWebRegionSearch(gfx::Image(),
+                                    /*is_standalone_session=*/false,
+                                    base::BindRepeating([](GURL url) {}),
+                                    base::DoNothing(), base::DoNothing());
 
-  // Send a multimodal search.
-  delegate->SendMultimodalSearch(SkBitmap(), gfx::Rect(), "Search",
-                                 base::BindRepeating([](GURL url) {}));
-
-  // Send a region search with a new region to simulate adjusting the selected
-  // region.
-  delegate->SendRegionSearch(SkBitmap(), gfx::Rect(10, 10, 400, 400),
-                             base::BindRepeating([](GURL url) {}),
-                             base::DoNothing());
-
-  // Simulate sending a multimodal search with the adjusted region.
-  delegate->SendMultimodalSearch(SkBitmap(), gfx::Rect(10, 10, 400, 400),
-                                 "Search",
-                                 base::BindRepeating([](GURL url) {}));
+  // Send a region search, simulated inside a standalone Sunfish session.
+  delegate->SendLensWebRegionSearch(gfx::Image(),
+                                    /*is_standalone_session=*/true,
+                                    base::BindRepeating([](GURL url) {}),
+                                    base::DoNothing(), base::DoNothing());
 }
 
 // Tests that the policy can be read and set browser-side.

@@ -34,13 +34,13 @@
 #include "chrome/browser/ui/webui/settings/settings_utils.h"
 #include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_paths_internal.h"
-#include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
 
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/url_formatter/url_fixer.h"
+#include "components/user_data_importer/common/importer_data_types.h"
 
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -161,28 +161,28 @@ std::istream& safeGetline(std::istream& is, std::string& line, bool& crlf) {
 
 // These are really flags, but never sent as flags.
 static struct ImportItemToStringMapping {
-  importer::ImportItem item;
+  user_data_importer::ImportItem item;
   const char* name;
 } import_item_string_mapping[]{
     //  NOTE(julien): We explicitly do not support importing searches ( see
     //  VB-20905 )
     // clang-format off
-    {importer::FAVORITES, "favorites"},
-    {importer::PASSWORDS, "passwords"},
-    {importer::HISTORY, "history"},
-    {importer::COOKIES, "cookies"},
-    {importer::NOTES, "notes"},
-    {importer::SPEED_DIAL, "speeddial"},
-    {importer::CONTACTS, "contacts"},
-    {importer::EXTENSIONS, "extensions"},
-    {importer::TABS, "tabs"},
+    {user_data_importer::FAVORITES, "favorites"},
+    {user_data_importer::PASSWORDS, "passwords"},
+    {user_data_importer::HISTORY, "history"},
+    {user_data_importer::COOKIES, "cookies"},
+    {user_data_importer::NOTES, "notes"},
+    {user_data_importer::SPEED_DIAL, "speeddial"},
+    {user_data_importer::CONTACTS, "contacts"},
+    {user_data_importer::EXTENSIONS, "extensions"},
+    {user_data_importer::TABS, "tabs"},
     // clang-format on
 };
 
 const size_t kImportItemToStringMappingLength =
     std::size(import_item_string_mapping);
 
-const std::string ImportItemToString(importer::ImportItem item) {
+const std::string ImportItemToString(user_data_importer::ImportItem item) {
   for (size_t i = 0; i < kImportItemToStringMappingLength; i++) {
     if (item == import_item_string_mapping[i].item) {
       return import_item_string_mapping[i].name;
@@ -227,7 +227,8 @@ ImportDataAPI::ImportDataAPI(content::BrowserContext* context)
 
 ImportDataAPI::~ImportDataAPI() {}
 
-void ImportDataAPI::StartImport(const importer::SourceProfile& source_profile,
+void ImportDataAPI::StartImport(
+    const user_data_importer::SourceProfile& source_profile,
                                 uint16_t imported_items) {
   if (!imported_items)
     return;
@@ -258,7 +259,7 @@ void ImportDataAPI::ImportStarted() {
                             browser_context_);
 }
 
-void ImportDataAPI::ImportItemStarted(importer::ImportItem item) {
+void ImportDataAPI::ImportItemStarted(user_data_importer::ImportItem item) {
   import_succeeded_count_++;
   const std::string item_name = ImportItemToString(item);
 
@@ -268,7 +269,7 @@ void ImportDataAPI::ImportItemStarted(importer::ImportItem item) {
       browser_context_);
 }
 
-void ImportDataAPI::ImportItemEnded(importer::ImportItem item) {
+void ImportDataAPI::ImportItemEnded(user_data_importer::ImportItem item) {
   import_succeeded_count_--;
   const std::string item_name = ImportItemToString(item);
 
@@ -277,7 +278,7 @@ void ImportDataAPI::ImportItemEnded(importer::ImportItem item) {
       vivaldi::import_data::OnImportItemEnded::Create(item_name),
       browser_context_);
 }
-void ImportDataAPI::ImportItemFailed(importer::ImportItem item,
+void ImportDataAPI::ImportItemFailed(user_data_importer::ImportItem item,
                                      const std::string& error) {
   // Ensure we get an error at the end.
   import_succeeded_count_++;
@@ -400,82 +401,83 @@ ImportDataAPI::GetFactoryInstance() {
   return g_factory_import.Pointer();
 }
 
-ImportTypes MapImportType(const importer::ImporterType& importer_type) {
+ImportTypes MapImportType(
+    const user_data_importer::ImporterType& importer_type) {
   ImportTypes type;
   switch (importer_type) {
 #if BUILDFLAG(IS_WIN)
-    case importer::TYPE_IE:
+    case user_data_importer::TYPE_IE:
       type = vivaldi::import_data::ImportTypes::kInternetExplorer;
       break;
 #endif
-    case importer::TYPE_FIREFOX:
+    case user_data_importer::TYPE_FIREFOX:
       type = vivaldi::import_data::ImportTypes::kFirefox;
       break;
 #if BUILDFLAG(IS_MAC)
-    case importer::TYPE_SAFARI:
+    case user_data_importer::TYPE_SAFARI:
       type = vivaldi::import_data::ImportTypes::kSafari;
       break;
 #endif
-    case importer::TYPE_BOOKMARKS_FILE:
+    case user_data_importer::TYPE_BOOKMARKS_FILE:
       type = vivaldi::import_data::ImportTypes::kBookmarksFile;
       break;
 
-    case importer::TYPE_OPERA:
+    case user_data_importer::TYPE_OPERA:
       type = vivaldi::import_data::ImportTypes::kOpera;
       break;
 
-    case importer::TYPE_CHROME:
+    case user_data_importer::TYPE_CHROME:
       type = vivaldi::import_data::ImportTypes::kChrome;
       break;
 
-    case importer::TYPE_CHROMIUM:
+    case user_data_importer::TYPE_CHROMIUM:
       type = vivaldi::import_data::ImportTypes::kChromium;
       break;
 
-    case importer::TYPE_VIVALDI:
+    case user_data_importer::TYPE_VIVALDI:
       type = vivaldi::import_data::ImportTypes::kVivaldi;
       break;
 
-    case importer::TYPE_YANDEX:
+    case user_data_importer::TYPE_YANDEX:
       type = vivaldi::import_data::ImportTypes::kYandex;
       break;
 
-    case importer::TYPE_OPERA_OPIUM_BETA:
+    case user_data_importer::TYPE_OPERA_OPIUM_BETA:
       type = vivaldi::import_data::ImportTypes::kOperaOpiumBeta;
       break;
 
-    case importer::TYPE_OPERA_OPIUM_DEV:
+    case user_data_importer::TYPE_OPERA_OPIUM_DEV:
       type = vivaldi::import_data::ImportTypes::kOperaOpiumDev;
       break;
-    case importer::TYPE_BRAVE:
+    case user_data_importer::TYPE_BRAVE:
       type = vivaldi::import_data::ImportTypes::kBrave;
       break;
 #if BUILDFLAG(IS_WIN)
-    case importer::TYPE_EDGE:
+    case user_data_importer::TYPE_EDGE:
       type = vivaldi::import_data::ImportTypes::kEdge;
       break;
 #endif
-    case importer::TYPE_EDGE_CHROMIUM:
+    case user_data_importer::TYPE_EDGE_CHROMIUM:
       type = vivaldi::import_data::ImportTypes::kEdgeChromium;
       break;
 
-    case importer::TYPE_THUNDERBIRD:
+    case user_data_importer::TYPE_THUNDERBIRD:
       type = vivaldi::import_data::ImportTypes::kThunderbird;
       break;
 
-    case importer::TYPE_OPERA_OPIUM:
+    case user_data_importer::TYPE_OPERA_OPIUM:
       type = vivaldi::import_data::ImportTypes::kOperaOpium;
       break;
 
-    case importer::TYPE_ARC:
+    case user_data_importer::TYPE_ARC:
       type = vivaldi::import_data::ImportTypes::kArc;
       break;
 
-    case importer::TYPE_OPERA_GX:
+    case user_data_importer::TYPE_OPERA_GX:
       type = vivaldi::import_data::ImportTypes::kOperaGx;
       break;
 
-    case importer::TYPE_UNKNOWN:
+    case user_data_importer::TYPE_UNKNOWN:
       type = vivaldi::import_data::ImportTypes::kOperaOpium;
       break;
   }
@@ -514,7 +516,7 @@ void ImportDataGetProfilesFunction::Finished() {
   std::vector<vivaldi::import_data::ProfileItem> nodes;
   const auto appendProfileToImporter =
       [&nodes](const auto& importer_index,
-               const importer::SourceProfile& source_profile,
+               const user_data_importer::SourceProfile& source_profile,
                std::optional<int> profile_index = std::nullopt) {
         vivaldi::import_data::UserProfileItem profile;
         profile.profile_name = profile.profile_display_name =
@@ -530,7 +532,7 @@ void ImportDataGetProfilesFunction::Finished() {
 
   std::map<std::string, int> importersNamesLUT;
   for (size_t i = 0; i < api_importer_list_->count(); ++i) {
-    const importer::SourceProfile& source_profile =
+    const user_data_importer::SourceProfile& source_profile =
         api_importer_list_->GetSourceProfileAt(i);
 
     // NOTE(konrad@vivaldi.com): VB-76639 To distinguish firefox profiles
@@ -549,17 +551,22 @@ void ImportDataGetProfilesFunction::Finished() {
     profile->index = i;
     importersNamesLUT.emplace(profile->name, profile->index);
 
-    profile->history = ((browser_services & importer::HISTORY) != 0);
-    profile->favorites = ((browser_services & importer::FAVORITES) != 0);
-    profile->passwords = ((browser_services & importer::PASSWORDS) != 0);
+    profile->history = ((browser_services & user_data_importer::HISTORY) != 0);
+    profile->favorites =
+        ((browser_services & user_data_importer::FAVORITES) != 0);
+    profile->passwords =
+        ((browser_services & user_data_importer::PASSWORDS) != 0);
     profile->supports_master_password =
-        ((browser_services & importer::MASTER_PASSWORD) != 0);
-    profile->notes = ((browser_services & importer::NOTES) != 0);
-    profile->speeddial = ((browser_services & importer::SPEED_DIAL) != 0);
-    profile->email = ((browser_services & importer::EMAIL) != 0);
-    profile->contacts = ((browser_services & importer::CONTACTS) != 0);
-    profile->extensions = ((browser_services & importer::EXTENSIONS) != 0);
-    profile->tabs = ((browser_services & importer::TABS) != 0);
+        ((browser_services & user_data_importer::MASTER_PASSWORD) != 0);
+    profile->notes = ((browser_services & user_data_importer::NOTES) != 0);
+    profile->speeddial =
+        ((browser_services & user_data_importer::SPEED_DIAL) != 0);
+    profile->email = ((browser_services & user_data_importer::EMAIL) != 0);
+    profile->contacts =
+        ((browser_services & user_data_importer::CONTACTS) != 0);
+    profile->extensions =
+        ((browser_services & user_data_importer::EXTENSIONS) != 0);
+    profile->tabs = ((browser_services & user_data_importer::TABS) != 0);
 
     profile->import_type = MapImportType(source_profile.importer_type);
 
@@ -578,7 +585,8 @@ void ImportDataGetProfilesFunction::Finished() {
       profile->suggested_profile_path =
           MapSuggestedProfilePath(profile->import_type);
     }
-    if (source_profile.importer_type == importer::TYPE_BOOKMARKS_FILE) {
+    if (source_profile.importer_type ==
+        user_data_importer::TYPE_BOOKMARKS_FILE) {
       profile->dialog_type = "file";
     } else {
       profile->dialog_type = "folder";
@@ -640,32 +648,32 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   ImporterList* api_importer_list =
       ProfileSingletonFactory::getInstance()->getInstance()->getImporterList();
 
-  importer::SourceProfile source_profile =
+  user_data_importer::SourceProfile source_profile =
       api_importer_list->GetSourceProfileAt(browser_index);
   int supported_items = source_profile.services_supported;
-  int selected_items = importer::NONE;
+  int selected_items = user_data_importer::NONE;
   importer_type_ = source_profile.importer_type;
 
   if (params->types_to_import.history) {
-    selected_items |= importer::HISTORY;
+    selected_items |= user_data_importer::HISTORY;
   }
   if (params->types_to_import.favorites) {
-    selected_items |= importer::FAVORITES;
+    selected_items |= user_data_importer::FAVORITES;
   }
   if (params->types_to_import.passwords) {
-    selected_items |= importer::PASSWORDS;
+    selected_items |= user_data_importer::PASSWORDS;
   }
   if (params->types_to_import.notes) {
-    selected_items |= importer::NOTES;
+    selected_items |= user_data_importer::NOTES;
   }
   if (params->types_to_import.speeddial) {
-    selected_items |= importer::SPEED_DIAL;
+    selected_items |= user_data_importer::SPEED_DIAL;
   }
   if (params->types_to_import.extensions) {
-    selected_items |= importer::EXTENSIONS;
+    selected_items |= user_data_importer::EXTENSIONS;
   }
   if (params->types_to_import.tabs) {
-    selected_items |= importer::TABS;
+    selected_items |= user_data_importer::TABS;
   }
 
   imported_items_ = (selected_items & supported_items);
@@ -677,11 +685,11 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
   }
 
   std::u16string dialog_title;
-  if (importer_type_ == importer::TYPE_BOOKMARKS_FILE ||
-      ((importer_type_ == importer::TYPE_OPERA ||
-        importer_type_ == importer::TYPE_EDGE_CHROMIUM ||
-        importer_type_ == importer::TYPE_BRAVE ||
-        importer_type_ == importer::TYPE_VIVALDI) &&
+  if (importer_type_ == user_data_importer::TYPE_BOOKMARKS_FILE ||
+      ((importer_type_ == user_data_importer::TYPE_OPERA ||
+        importer_type_ == user_data_importer::TYPE_EDGE_CHROMIUM ||
+        importer_type_ == user_data_importer::TYPE_BRAVE ||
+        importer_type_ == user_data_importer::TYPE_VIVALDI) &&
        !params->ask_user_for_file_location)) {
     base::FilePath import_path =
         base::FilePath::FromUTF8Unsafe(params->import_path->c_str());
@@ -702,7 +710,7 @@ ExtensionFunction::ResponseAction ImportDataStartImportFunction::Run() {
 }
 
 void ImportDataStartImportFunction::StartImport(
-    const importer::SourceProfile& source_profile) {
+    const user_data_importer::SourceProfile& source_profile) {
   ImportDataAPI::GetFactoryInstance()
       ->Get(browser_context())
       ->StartImport(source_profile, imported_items_);

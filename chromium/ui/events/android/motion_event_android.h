@@ -9,6 +9,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <array>
 #include <memory>
 
 #include "base/android/scoped_java_ref.h"
@@ -36,6 +37,7 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
             jfloat pos_y_pixels,
             jfloat touch_major_pixels,
             jfloat touch_minor_pixels,
+            jfloat pressure,
             jfloat orientation_rad,
             jfloat tilt_rad,
             jint tool_type);
@@ -44,6 +46,7 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
     jfloat pos_y_pixels;
     jfloat touch_major_pixels;
     jfloat touch_minor_pixels;
+    jfloat pressure;
     jfloat orientation_rad;
     // Unlike the tilt angles in motion_event.h, this field matches the
     // MotionEvent spec because we get this values from Java.
@@ -139,11 +142,14 @@ class EVENTS_EXPORT MotionEventAndroid : public MotionEvent {
     gfx::PointF position;
     float touch_major = 0;
     float touch_minor = 0;
+    float pressure = 0;
     float orientation = 0;
     float tilt_x = 0;
     float tilt_y = 0;
     ToolType tool_type = ToolType::UNKNOWN;
-  } cached_pointers_[MAX_POINTERS_TO_CACHE];
+  };
+
+  std::array<CachedPointer, MAX_POINTERS_TO_CACHE> cached_pointers_;
 
   static ToolType FromAndroidToolType(int android_tool_type);
   static base::TimeTicks FromAndroidTime(base::TimeTicks time);

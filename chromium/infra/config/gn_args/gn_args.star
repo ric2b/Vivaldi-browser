@@ -94,6 +94,14 @@ gn_args.config(
     },
 )
 
+# This will not be the default anymore so must explicitly be set on bots.
+gn_args.config(
+    name = "android_with_static_analysis",
+    args = {
+        "android_static_analysis": "on",
+    },
+)
+
 gn_args.config(
     name = "android_low_end_secondary_toolchain",
     args = {
@@ -259,10 +267,22 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "disable_jni_multiplexing",
+    args = {
+        "enable_jni_multiplexing": False,
+    },
+)
+
+gn_args.config(
     name = "cast_receiver",
     args = {
         "enable_cast_receiver": True,
     },
+)
+
+gn_args.config(
+    name = "cast_receiver_perf_optimized",
+    args_file = "//build/config/fuchsia/perf_optimized_cast_receiver_args.gn",
 )
 
 gn_args.config(
@@ -1020,6 +1040,13 @@ gn_args.config(
 )
 
 gn_args.config(
+    name = "no_safe_browsing",
+    args = {
+        "safe_browsing_mode": 0,
+    },
+)
+
+gn_args.config(
     name = "no_siso",
     args = {
         "use_siso": False,
@@ -1169,6 +1196,14 @@ gn_args.config(
         "try_builder",
         "no_symbols",
     ],
+)
+
+gn_args.config(
+    name = "release_with_dchecks",
+    args = {
+        "is_debug": False,
+        "dcheck_always_on": True,
+    },
 )
 
 gn_args.config(

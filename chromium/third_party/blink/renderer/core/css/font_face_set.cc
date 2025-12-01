@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/platform/fonts/font.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
+#include "third_party/blink/renderer/platform/wtf/text/strcat.h"
 
 namespace blink {
 
@@ -202,11 +203,11 @@ ScriptPromise<IDLSequence<FontFace>> FontFaceSet::load(
         script_state,
         MakeGarbageCollected<DOMException>(
             DOMExceptionCode::kSyntaxError,
-            "Could not resolve '" + font_string + "' as a font."));
+            WTF::StrCat({"Could not resolve '", font_string, "' as a font."})));
   }
 
   FontFaceCache* font_face_cache = GetFontSelector()->GetFontFaceCache();
-  FontFaceArray* faces = MakeGarbageCollected<FontFaceArray>();
+  FontFaceArray faces = FontFaceArray();
   for (const FontFamily* f = &font->GetFontDescription().Family(); f;
        f = f->Next()) {
     if (f->FamilyIsGeneric()) {
@@ -215,12 +216,12 @@ ScriptPromise<IDLSequence<FontFace>> FontFaceSet::load(
     CSSSegmentedFontFace* segmented_font_face =
         font_face_cache->Get(font->GetFontDescription(), f->FamilyName());
     if (segmented_font_face) {
-      segmented_font_face->Match(text, faces);
+      segmented_font_face->Match(text, &faces);
     }
   }
 
   auto* resolver =
-      MakeGarbageCollected<LoadFontPromiseResolver>(faces, script_state);
+      MakeGarbageCollected<LoadFontPromiseResolver>(&faces, script_state);
   auto promise = resolver->Promise();
   // After this, resolver->promise() may return null.
   resolver->LoadFonts();
@@ -238,7 +239,7 @@ bool FontFaceSet::check(const String& font_string,
   if (!font) {
     exception_state.ThrowDOMException(
         DOMExceptionCode::kSyntaxError,
-        "Could not resolve '" + font_string + "' as a font.");
+        WTF::StrCat({"Could not resolve '", font_string, "' as a font."}));
     return false;
   }
 

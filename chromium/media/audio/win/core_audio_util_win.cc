@@ -5,8 +5,10 @@
 #include "media/audio/win/core_audio_util_win.h"
 
 #include <objbase.h>
-#include <comdef.h>
+
 #include <initguid.h>  // It should be before `devpkey.h`
+
+#include <comdef.h>
 #include <devpkey.h>
 #include <functiondiscoverykeys_devpkey.h>
 #include <stddef.h>
@@ -20,6 +22,7 @@
 #include "base/functional/callback.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
@@ -295,18 +298,35 @@ HRESULT GetDeviceFriendlyNameInternal(IMMDevice* device,
 
 ComPtr<IMMDeviceEnumerator> CreateDeviceEnumeratorInternal(
     bool allow_reinitialize) {
-  ComPtr<IMMDeviceEnumerator> device_enumerator;
-  HRESULT hr = ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+  // Windows AudioSrv and AudioEndpointBuilder create single global
+  // IMMDeviceEnumerator instance and uses that everywhere for the
+  // life of the process, there's no caching concerns.
+  static base::NoDestructor<ComPtr<IMMDeviceEnumerator>> device_enumerator(
+      [allow_reinitialize] {
+        ComPtr<IMMDeviceEnumerator> local_device_enumerator;
+        HRESULT hr = ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
+                                        CLSCTX_INPROC_SERVER,
+                                        IID_PPV_ARGS(&local_device_enumerator));
+        if (hr == CO_E_NOTINITIALIZED && allow_reinitialize) {
+          LOG(ERROR) << "CoCreateInstance fails with CO_E_NOTINITIALIZED";
+          // Buggy third-party DLLs can uninitialize COM out from under us.
+          // Attempt to re-initialize it.  See http://crbug.com/378465 for more
+          // details.
+          ::CoInitializeEx(nullptr,
+                           COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
+          hr = ::CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr,
                                   CLSCTX_INPROC_SERVER,
-                                  IID_PPV_ARGS(&device_enumerator));
-  if (hr == CO_E_NOTINITIALIZED && allow_reinitialize) {
-    LOG(ERROR) << "CoCreateInstance fails with CO_E_NOTINITIALIZED";
-    // Buggy third-party DLLs can uninitialize COM out from under us.  Attempt
-    // to re-initialize it.  See http://crbug.com/378465 for more details.
-    CoInitializeEx(nullptr, COINIT_MULTITHREADED | COINIT_DISABLE_OLE1DDE);
-    return CreateDeviceEnumeratorInternal(false);
-  }
-  return device_enumerator;
+                                  IID_PPV_ARGS(&local_device_enumerator));
+        }
+        if (FAILED(hr)) {
+          LOG(ERROR) << "CoCreateInstance(MMDeviceEnumerator) failed: "
+                     << std::hex << hr;
+        }
+
+        return local_device_enumerator;
+      }());
+
+  return *device_enumerator;
 }
 
 ChannelLayout GetChannelLayout(
@@ -340,7 +360,6 @@ ChannelLayout GetChannelLayout(
              << mix_format->nChannels;
     channel_layout = GuessChannelLayout(mix_format->nChannels);
   }
-  DVLOG(1) << "channel layout: " << ChannelLayoutToString(channel_layout);
 
   return channel_layout;
 }
@@ -376,7 +395,8 @@ ComPtr<IMMDevice> CreateDeviceInternal(const std::string& device_id,
   // In loopback mode, a client of WASAPI can capture the audio stream that
   // is being played by a rendering endpoint device.
   // See https://crbug.com/956526 for why we use both a DCHECK and then deal
-  // with the error here and below.
+  // with the error here and below. Also, see comments in CreateDeviceByID() for
+  // more details.
   DCHECK(!(AudioDeviceDescription::IsLoopbackDevice(device_id) &&
            data_flow != eCapture));
   if (AudioDeviceDescription::IsLoopbackDevice(device_id) &&
@@ -429,6 +449,10 @@ ComPtr<IMMDevice> CreateDeviceInternal(const std::string& device_id,
 // corresponding audio device.
 ComPtr<IMMDevice> CreateDeviceByID(const std::string& device_id,
                                    bool is_output_device) {
+  // Loopback devices are only supported for capture streams. If a loopback
+  // device is requested for a render stream, the default render device will be
+  // used instead.
+  // See https://crbug.com/956526 for more details.
   if (AudioDeviceDescription::IsLoopbackDevice(device_id)) {
     DCHECK(!is_output_device);
     return CreateDeviceInternal(AudioDeviceDescription::kDefaultDeviceId,
@@ -528,8 +552,6 @@ HRESULT GetPreferredAudioParametersInternal(IAudioClient* client,
         default_frames_per_buffer = default_period_frames;
         frames_per_buffer = default_period_frames;
       }
-      DVLOG(1) << "IAudioClient3 => min_period_frames: " << min_period_frames;
-      DVLOG(1) << "IAudioClient3 => frames_per_buffer: " << frames_per_buffer;
     }
 
     // If the call to GetSharedModeEnginePeriod() fails we fall back to
@@ -1030,9 +1052,13 @@ HRESULT CoreAudioUtil::GetPreferredAudioParameters(const std::string& device_id,
                                                    bool is_output_device,
                                                    AudioParameters* params,
                                                    bool is_offload_stream) {
-  // Loopback audio streams must be input streams.
-  DCHECK(!(AudioDeviceDescription::IsLoopbackDevice(device_id) &&
-           is_output_device));
+  // Loopback capture audio streams must be input streams. If an output device
+  // is requested for a loopback device, the default output device will be used
+  // instead. See https://crbug.com/956526 for more details.
+  // TODO(crbug.com/40947205): figure out which parameters to use for process
+  // loopback capture.
+  DCHECK(!(is_output_device &&
+           (AudioDeviceDescription::IsLoopbackDevice(device_id))));
   if (AudioDeviceDescription::IsLoopbackDevice(device_id) && is_output_device) {
     LOG(WARNING) << "Loopback device must be an input device";
     return E_FAIL;
@@ -1413,12 +1439,10 @@ std::pair<int, bool> CoreAudioUtil::GetVoiceProcessingEffectsAndCheckForAEC(
   }
 
   // Check for AEC support among the supported effects and build up the effect
-  // mask for supported voice processing effects (AEC, NS and AGC).
-  // Note that other audio effects such as beamforming, equalizer etc. are all
-  // excluded here since they are not part of the supported effects in
+  // mask for supported voice processing effects (AEC, NS, AGC, and DNS (Deep
+  // NS)). Note that other audio effects such as beamforming, equalizer etc. are
+  // all excluded here since they are not part of the supported effects in
   // AudioParameters::PlatformEffectsMask.
-  // TODO(crbug.com/399308033: should AUDIO_EFFECT_TYPE_DEEP_NOISE_SUPPRESSION
-  // be included here and if so in what format?
   int effects = AudioParameters::NO_EFFECTS;
   bool echo_cancellation_is_available = false;
   for (size_t i = 0; i < num_effects; i++) {
@@ -1434,6 +1458,9 @@ std::pair<int, bool> CoreAudioUtil::GetVoiceProcessingEffectsAndCheckForAEC(
     } else if (audio_effect.id == AUDIO_EFFECT_TYPE_NOISE_SUPPRESSION &&
                audio_effect.state == AUDIO_EFFECT_STATE_ON) {
       effect = AudioParameters::NOISE_SUPPRESSION;
+    } else if (audio_effect.id == AUDIO_EFFECT_TYPE_DEEP_NOISE_SUPPRESSION &&
+               audio_effect.state == AUDIO_EFFECT_STATE_ON) {
+      effect = AudioParameters::DEEP_NOISE_SUPPRESSION;
     } else if (audio_effect.id == AUDIO_EFFECT_TYPE_AUTOMATIC_GAIN_CONTROL &&
                audio_effect.state == AUDIO_EFFECT_STATE_ON) {
       effect = AudioParameters::AUTOMATIC_GAIN_CONTROL;

@@ -623,7 +623,7 @@ TEST_P(SurfaceTests, CopyTo) {
 
 // Test using the surface as a storage texture when supported.
 TEST_P(SurfaceTests, Storage) {
-    DAWN_SUPPRESS_TEST_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
+    DAWN_TEST_UNSUPPORTED_IF(GetSupportedLimits().maxStorageBuffersInFragmentStage < 1);
     wgpu::Surface surface = CreateTestSurface();
     wgpu::SurfaceCapabilities caps;
     surface.GetCapabilities(adapter, &caps);
@@ -657,6 +657,7 @@ TEST_P(SurfaceTests, Storage) {
 
 DAWN_INSTANTIATE_TEST(SurfaceTests,
                       D3D11Backend(),
+                      D3D11Backend({"d3d11_delay_flush_to_gpu"}),
                       D3D12Backend(),
                       MetalBackend(),
                       OpenGLBackend(),

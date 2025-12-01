@@ -46,6 +46,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.ui.accessibility.AccessibilityState;
 import org.chromium.ui.dragdrop.DragAndDropDelegateImpl.DragTargetType;
+import org.chromium.ui.util.XrUtils;
 import org.chromium.url.JUnitTestGURLs;
 
 /** Unit tests for {@link DragAndDropDelegateImpl}. */
@@ -434,10 +435,6 @@ public class DragAndDropDelegateImplUnitTest {
                 "Android.DragDrop.FromWebContent.DropInWebContent.Duration",
                 false,
                 "Only tracking drag started by mDragAndDropDelegateImpl#startDragAndDrop.");
-        assertHistogramRecorded(
-                "Android.DragDrop.FromWebContent.DropInWebContent.DistanceDip",
-                false,
-                "Only tracking drag started by mDragAndDropDelegateImpl#startDragAndDrop.");
     }
 
     @Test
@@ -457,16 +454,9 @@ public class DragAndDropDelegateImplUnitTest {
 
         mDragAndDropDelegateImpl.onDrag(
                 mContainerView, mockDragEvent(DragEvent.ACTION_DRAG_STARTED));
-        Assert.assertEquals(
-                "Recorded drag start X dp should match.",
-                DRAG_START_X_DP,
-                mDragAndDropDelegateImpl.getDragStartXDp(),
-                0.0f);
-        Assert.assertEquals(
-                "Recorded drag start Y dp should match.",
-                DRAG_START_Y_DP,
-                mDragAndDropDelegateImpl.getDragStartYDp(),
-                0.0f);
+        Assert.assertTrue(
+                "There should be an active drag process started.",
+                mDragAndDropDelegateImpl.isDragStarted());
     }
 
     @Test
@@ -645,6 +635,51 @@ public class DragAndDropDelegateImplUnitTest {
         verify(mDragAndDropPermissions).release();
     }
 
+    @Test
+    public void testStartDragAndDrop_WithAndWithoutGesturesEnabled_SupportedOnXrDevice() {
+        XrUtils.setXrDeviceForTesting(true);
+        final Bitmap shadowImage = Bitmap.createBitmap(1, 1, Bitmap.Config.ALPHA_8);
+        final DropDataAndroid dropData = DropDataAndroid.create("text", null, null, null, null);
+
+        // A11y default setting with isTouchExplorationEnabled=false and
+        // isPerformGesturesEnabled=true on XR
+        AccessibilityState.setIsTouchExplorationEnabledForTesting(false);
+        AccessibilityState.setIsPerformGesturesEnabledForTesting(true);
+        Assert.assertTrue(
+                "Drag and drop should start.", calllStartDragAndDrop(shadowImage, dropData));
+
+        // A11y setting with isTouchExplorationEnabled=true and isPerformGesturesEnabled=false on XR
+        AccessibilityState.setIsTouchExplorationEnabledForTesting(true);
+        AccessibilityState.setIsPerformGesturesEnabledForTesting(false);
+        Assert.assertTrue(
+                "Drag and drop should start.", calllStartDragAndDrop(shadowImage, dropData));
+
+        // A11y setting with isTouchExplorationEnabled=true and isPerformGesturesEnabled=true on XR
+        AccessibilityState.setIsTouchExplorationEnabledForTesting(true);
+        AccessibilityState.setIsPerformGesturesEnabledForTesting(true);
+        Assert.assertTrue(
+                "Drag and drop should start.", calllStartDragAndDrop(shadowImage, dropData));
+
+        // A11y setting with isTouchExplorationEnabled=false and isPerformGesturesEnabled=false on
+        // XR
+        AccessibilityState.setIsTouchExplorationEnabledForTesting(false);
+        AccessibilityState.setIsPerformGesturesEnabledForTesting(false);
+        Assert.assertTrue(
+                "Drag and drop should start.", calllStartDragAndDrop(shadowImage, dropData));
+    }
+
+    private boolean calllStartDragAndDrop(Bitmap shadowImage, DropDataAndroid dropData) {
+        return mDragAndDropDelegateImpl.startDragAndDrop(
+                mContainerView,
+                shadowImage,
+                dropData,
+                mContainerView.getContext(),
+                /* cursorOffsetX= */ 0,
+                /* cursorOffsetY= */ 0,
+                /* dragObjRectWidth= */ 100,
+                /* dragObjRectHeight= */ 200);
+    }
+
     private DragEvent mockDragEvent(int action) {
         DragEvent event = Mockito.mock(DragEvent.class);
         when(event.getX()).thenReturn(DRAG_START_X_DP);
@@ -675,20 +710,12 @@ public class DragAndDropDelegateImplUnitTest {
                 "Android.DragDrop.FromWebContent.DropInWebContent.Duration",
                 false,
                 "Drop outside of web content.");
-        assertHistogramRecorded(
-                "Android.DragDrop.FromWebContent.DropInWebContent.DistanceDip",
-                false,
-                "Drop outside of web content.");
     }
 
     private void assertDropInWebContentHistogramsRecorded() {
         // Verify drop inside metrics recorded.
         assertHistogramRecorded(
                 "Android.DragDrop.FromWebContent.DropInWebContent.Duration",
-                true,
-                "Drop inside web content.");
-        assertHistogramRecorded(
-                "Android.DragDrop.FromWebContent.DropInWebContent.DistanceDip",
                 true,
                 "Drop inside web content.");
 

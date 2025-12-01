@@ -39,6 +39,33 @@
 
 class BookmarkBridgeTest;
 
+// Values for a bitmask used to refer to a collection of bookmark nodes.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.bookmarks
+// GENERATED_JAVA_IS_FLAG: true
+enum BookmarkNodeMaskBit {
+  NONE = 0,
+
+  // LINT.IfChange(IndividualBits)
+  ACCOUNT_BOOKMARK_BAR = 1,
+  ACCOUNT_MOBILE = 1 << 1,
+  ACCOUNT_OTHER = 1 << 2,
+  ACCOUNT_READING_LIST = 1 << 3,
+  BOOKMARK_BAR = 1 << 4,
+  MANAGED = 1 << 5,
+  MOBILE = 1 << 6,
+  OTHER = 1 << 7,
+  READING_LIST = 1 << 8,
+  // LINT.ThenChange(:AllBits)
+
+  // LINT.IfChange(AllBits)
+  ALL = ACCOUNT_BOOKMARK_BAR | ACCOUNT_MOBILE | ACCOUNT_OTHER |
+        ACCOUNT_READING_LIST | BOOKMARK_BAR | MANAGED | MOBILE | OTHER |
+        READING_LIST,
+  // LINT.ThenChange(:IndividualBits)
+
+  ACCOUNT_AND_LOCAL_BOOKMARK_BAR = ACCOUNT_BOOKMARK_BAR | BOOKMARK_BAR,
+};
+
 // The delegate to fetch bookmarks information for the Android native
 // bookmark page. This fetches the bookmarks, title, urls, folder
 // hierarchy.
@@ -100,10 +127,10 @@ class BookmarkBridge : public ProfileObserver,
 
   void GetTopLevelFolderIds(
       JNIEnv* env,
-      jboolean j_ignore_visibility,
+      jint j_force_visible_mask,
       const base::android::JavaParamRef<jobject>& j_result_obj);
   std::vector<const bookmarks::BookmarkNode*> GetTopLevelFolderIdsImpl(
-      bool ignore_visibility);
+      BookmarkNodeMaskBit force_visible_mask);
   base::android::ScopedJavaLocalRef<jobject> GetRootFolderId(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jobject> GetMobileFolderId(JNIEnv* env);
   base::android::ScopedJavaLocalRef<jobject> GetOtherFolderId(JNIEnv* env);
@@ -357,6 +384,11 @@ class BookmarkBridge : public ProfileObserver,
                         const base::android::JavaParamRef<jobject>& obj,
                         const jlong id);
 
+  bool IsChildOfTrashNode(
+            JNIEnv* env,
+            const base::android::JavaParamRef<jobject>& obj,
+            const jlong id);
+
   // Vivaldi --->
 
  private:
@@ -425,6 +457,7 @@ class BookmarkBridge : public ProfileObserver,
   void BookmarkAllUserNodesRemoved(const std::set<GURL>& removed_urls,
                                    const base::Location& location) override;
   void BookmarkNodeChanged(const bookmarks::BookmarkNode* node) override;
+  void BookmarkNodeFaviconChanged(const bookmarks::BookmarkNode* node) override;
   void BookmarkNodeChildrenReordered(
       const bookmarks::BookmarkNode* node) override;
   void ExtensiveBookmarkChangesBeginning() override;
@@ -500,6 +533,8 @@ class BookmarkBridge : public ProfileObserver,
       identity_manager_observation_{this};
 
   bool suppress_observer_notifications_ = false;
+  base::TimeTicks load_start_time_;
+  bool loading_notification_sent_ = false;
 
   // Weak pointers for creating callbacks that won't call into a destroyed
   // object.

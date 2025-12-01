@@ -216,47 +216,6 @@ bool StatusUpdateIsPossibleAfterFailure(PrefetchStatus status) {
   }
 }
 
-void RecordPrefetchMatchingBlockedNavigationWithPrefetchHistogram(
-    const PrefetchType& prefetch_type,
-    bool blocked_until_head) {
-  if (IsSpeculationRuleType(prefetch_type.trigger_type())) {
-    base::UmaHistogramBoolean(
-        base::StrCat({"PrefetchProxy.AfterClick."
-                      "PrefetchMatchingBlockedNavigationWithPrefetch.",
-                      GetPrefetchEagernessHistogramSuffix(
-                          prefetch_type.GetEagerness())}),
-        blocked_until_head);
-  } else {
-    // TODO(crbug.com/40946257, crbug.com/40898833): Extend the metrics for
-    // embedder triggers.
-  }
-}
-
-void MaybeRecordBlockUntilHeadDuration2Histogram(
-    const PrefetchType& prefetch_type,
-    const std::optional<base::TimeDelta>& blocked_duration,
-    bool served) {
-  if (IsSpeculationRuleType(prefetch_type.trigger_type())) {
-    base::UmaHistogramTimes(
-        base::StrCat({"PrefetchProxy.AfterClick.BlockUntilHeadDuration2NoBias.",
-                      served ? "Served." : "NotServed.",
-                      GetPrefetchEagernessHistogramSuffix(
-                          prefetch_type.GetEagerness())}),
-        blocked_duration.value_or(base::Seconds(0)));
-    if (blocked_duration.has_value()) {
-      base::UmaHistogramTimes(
-          base::StrCat({"PrefetchProxy.AfterClick.BlockUntilHeadDuration2.",
-                        served ? "Served." : "NotServed.",
-                        GetPrefetchEagernessHistogramSuffix(
-                            prefetch_type.GetEagerness())}),
-          blocked_duration.value());
-    }
-  } else {
-    // TODO(crbug.com/40946257, crbug.com/40898833): Extend the metrics for
-    // embedder triggers.
-  }
-}
-
 ukm::SourceId GetUkmSourceId(RenderFrameHostImpl& rfhi) {
   // Prerendering page should not trigger prefetches.
   CHECK(
@@ -276,8 +235,7 @@ void RecordPrefetchProxyPrefetchMainframeBodyLength(int64_t body_length) {
 
 bool CalculateIsLikelyAheadOfPrerender(
     const PreloadPipelineInfoImpl& preload_pipeline_info) {
-  if (!base::FeatureList::IsEnabled(
-          features::kPrerender2FallbackPrefetchSpecRules)) {
+  if (!features::UsePrefetchPrerenderIntegration()) {
     return false;
   }
 
@@ -380,6 +338,7 @@ PrefetchContainer::PrefetchContainer(
               referring_render_frame_host.GetLastCommittedURL().spec()),
           PrefetchContainer::Key(referring_document_token, url),
           prefetch_type,
+          /*embedder_histogram_suffix=*/std::nullopt,
           referrer,
           std::move(speculation_rules_tags),
           std::move(no_vary_search_hint),
@@ -404,6 +363,7 @@ PrefetchContainer::PrefetchContainer(
     WebContents& referring_web_contents,
     const GURL& url,
     const PrefetchType& prefetch_type,
+    const std::string& embedder_histogram_suffix,
     const blink::mojom::Referrer& referrer,
     const std::optional<url::Origin>& referring_origin,
     std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
@@ -418,6 +378,7 @@ PrefetchContainer::PrefetchContainer(
               std::optional<blink::DocumentToken>(std::nullopt),
               url),
           prefetch_type,
+          embedder_histogram_suffix,
           referrer,
           /*speculation_rules_tags=*/std::nullopt,
           std::move(no_vary_search_hint),
@@ -435,12 +396,14 @@ PrefetchContainer::PrefetchContainer(
           /*should_append_variations_header=*/true) {
   CHECK(!prefetch_type_.IsRendererInitiated());
   CHECK(PrefetchBrowserInitiatedTriggersEnabled());
+  CHECK(!embedder_histogram_suffix_.value().empty());
 }
 
 PrefetchContainer::PrefetchContainer(
     BrowserContext* browser_context,
     const GURL& url,
     const PrefetchType& prefetch_type,
+    const std::string& embedder_histogram_suffix,
     const blink::mojom::Referrer& referrer,
     bool javascript_enabled,
     const std::optional<url::Origin>& referring_origin,
@@ -458,6 +421,7 @@ PrefetchContainer::PrefetchContainer(
               std::optional<blink::DocumentToken>(std::nullopt),
               url),
           prefetch_type,
+          embedder_histogram_suffix,
           referrer,
           /*speculation_rules_tags=*/std::nullopt,
           std::move(no_vary_search_hint),
@@ -476,6 +440,7 @@ PrefetchContainer::PrefetchContainer(
           should_append_variations_header) {
   CHECK(!prefetch_type_.IsRendererInitiated());
   CHECK(PrefetchBrowserInitiatedTriggersEnabled());
+  CHECK(!embedder_histogram_suffix_.value().empty());
 }
 
 PrefetchContainer::PrefetchContainer(
@@ -484,6 +449,7 @@ PrefetchContainer::PrefetchContainer(
     const std::optional<size_t>& referring_url_hash,
     const PrefetchContainer::Key& key,
     const PrefetchType& prefetch_type,
+    const std::optional<std::string>& embedder_histogram_suffix,
     const blink::mojom::Referrer& referrer,
     std::optional<SpeculationRulesTags> speculation_rules_tags,
     std::optional<net::HttpNoVarySearchData> no_vary_search_hint,
@@ -504,6 +470,7 @@ PrefetchContainer::PrefetchContainer(
       referring_url_hash_(referring_url_hash),
       key_(key),
       prefetch_type_(prefetch_type),
+      embedder_histogram_suffix_(embedder_histogram_suffix),
       referrer_(referrer),
       no_vary_search_hint_(std::move(no_vary_search_hint)),
       speculation_rules_tags_(std::move(speculation_rules_tags)),
@@ -545,6 +512,10 @@ PrefetchContainer::PrefetchContainer(
     //
     // TODO(crbug.com/40064891): Remove this once `kPrefetchReusable` is
     // launched.
+    //
+    // Note that we keep the check instead of
+    // `features::UsePrefetchPrerenderIntegration()` as `PrefetchReusable` is
+    // enabled on Desktop and the difference doesn't affect `SearchPreload2`.
     if (base::FeatureList::IsEnabled(
             features::kPrerender2FallbackPrefetchSpecRules)) {
       switch (features::kPrerender2FallbackPrefetchReusablePolicy.Get()) {
@@ -566,7 +537,7 @@ PrefetchContainer::PrefetchContainer(
 
   // Disallow prefetching ServiceWorker-controlled responses for isolated
   // network contexts.
-  if (!base::FeatureList::IsEnabled(features::kPrefetchServiceWorker) ||
+  if (!features::IsPrefetchServiceWorkerEnabled(browser_context_.get()) ||
       IsIsolatedNetworkContextRequiredForCurrentPrefetch()) {
     service_worker_state_ = PrefetchServiceWorkerState::kDisallowed;
   }
@@ -1494,8 +1465,7 @@ bool PrefetchContainer::HasPrefetchBeenConsideredToServe() const {
     return false;
   }
 
-  if (base::FeatureList::IsEnabled(
-          features::kPrerender2FallbackPrefetchSpecRules)) {
+  if (features::UsePrefetchPrerenderIntegration()) {
     // If `PrefetchResponseReader` of the initial navigation is reusable, it is
     // reusable.
     if (redirect_chain_[0]->response_reader_->is_reusable()) {
@@ -1527,8 +1497,7 @@ PrefetchContainer::ServableState PrefetchContainer::GetServableState(
     return ServableState::kShouldBlockUntilHeadReceived;
   }
 
-  if (base::FeatureList::IsEnabled(
-          features::kPrerender2FallbackPrefetchSpecRules)) {
+  if (features::UsePrefetchPrerenderIntegration()) {
     switch (load_state_) {
       case LoadState::kNotStarted:
       case LoadState::kEligible:
@@ -1835,6 +1804,13 @@ void PrefetchContainer::MakeResourceRequest(
     AddXClientDataHeader(*request.get());
   }
 
+  // `URLLoaderNetworkServiceObserver`
+  // (`request->trusted_params->url_loader_network_observer`) is NOT set here,
+  // because for prefetching request we don't want to ask users e.g. for
+  // authentication/cert errors, and instead make the prefetch fail. Because of
+  // this, `ServiceWorkerClient::GetOngoingNavigationRequestBeforeCommit()` is
+  // never called. `NavPrefetchBrowserTest` has the corresponding test coverage.
+
   resource_request_ = std::move(request);
 }
 
@@ -2050,11 +2026,10 @@ void PrefetchContainer::OnUnregisterCandidate(
                              redirect_chain_.size());
   }
 
-  RecordPrefetchMatchingBlockedNavigationWithPrefetchHistogram(
-      prefetch_type_, blocked_duration.has_value());
+  RecordPrefetchMatchingBlockedNavigationHistogram(
+      blocked_duration.has_value());
 
-  MaybeRecordBlockUntilHeadDuration2Histogram(prefetch_type_, blocked_duration,
-                                              is_served);
+  RecordBlockUntilHeadDurationHistogram(blocked_duration, is_served);
 
   // Note that `PreloadingAttemptImpl::SetIsAccurateTriggering()` is called for
   // prefetch in
@@ -2163,6 +2138,9 @@ void PrefetchContainer::NotifyPrefetchResponseReceived(
   // Ensured by the caller `PrefetchService::OnPrefetchResponseStarted()`.
   CHECK(!IsDecoy());
 
+  time_url_request_started_ = head.load_timing.request_start;
+
+  // DevTools plumbing.
   auto* ftn = FrameTreeNode::From(
       RenderFrameHostImpl::FromID(referring_render_frame_host_id_));
   // Don't emit CDP events if the trigger is not Spec Rules or the document
@@ -2170,7 +2148,6 @@ void PrefetchContainer::NotifyPrefetchResponseReceived(
   if (!ftn) {
     return;
   }
-
   devtools_instrumentation::OnPrefetchResponseReceived(ftn, RequestId(),
                                                        GetCurrentURL(), head);
 }
@@ -2235,46 +2212,7 @@ void PrefetchContainer::OnServiceWorkerStateDetermined(
   }
 }
 
-const char* PrefetchContainer::GetMetricsSuffixTriggerTypeAndEagerness() {
-  switch (prefetch_type_.trigger_type()) {
-    case PreloadingTriggerType::kSpeculationRule:
-      switch (prefetch_type_.GetEagerness()) {
-        case blink::mojom::SpeculationEagerness::kEager:
-          return "SpeculationRule_Eager";
-        case blink::mojom::SpeculationEagerness::kModerate:
-          return "SpeculationRule_Moderate";
-        case blink::mojom::SpeculationEagerness::kConservative:
-          return "SpeculationRule_Conservative";
-      }
-    case PreloadingTriggerType::kSpeculationRuleFromIsolatedWorld:
-      switch (prefetch_type_.GetEagerness()) {
-        case blink::mojom::SpeculationEagerness::kEager:
-          return "SpeculationRuleFromIsolatedWorld_Eager";
-        case blink::mojom::SpeculationEagerness::kModerate:
-          return "SpeculationRuleFromIsolatedWorld_Moderate";
-        case blink::mojom::SpeculationEagerness::kConservative:
-          return "SpeculationRuleFromIsolatedWorld_Conservative";
-      }
-    case PreloadingTriggerType::kSpeculationRuleFromAutoSpeculationRules:
-      switch (prefetch_type_.GetEagerness()) {
-        case blink::mojom::SpeculationEagerness::kEager:
-          return "SpeculationRuleFromAutoSpeculationRules_Eager";
-        case blink::mojom::SpeculationEagerness::kModerate:
-          return "SpeculationRuleFromAutoSpeculationRules_Moderate";
-        case blink::mojom::SpeculationEagerness::kConservative:
-          return "SpeculationRuleFromAutoSpeculationRules_Conservative";
-      }
-    case PreloadingTriggerType::kEmbedder:
-      // TODO(crrev.com/c/6367815): Add "_<embedder_histogram_suffix>".
-      return "Embedder";
-  }
-}
-
 void PrefetchContainer::RecordDurationFromAdded() {
-  // TODO(crrev.com/c/6367815): Update
-  // `GetMetricsSuffixTriggerTypeAndEagerness()` and remove suffix
-  // `.NoEmbedderSuffix`.
-
   if (!time_added_to_prefetch_service_.has_value()) {
     return;
   }
@@ -2286,8 +2224,8 @@ void PrefetchContainer::RecordDurationFromAdded() {
   base::UmaHistogramTimes(
       base::StrCat({
           "Prefetch.PrefetchContainer.AddedToInitialEligibility.",
-          GetMetricsSuffixTriggerTypeAndEagerness(),
-          ".NoEmbedderSuffix",
+          GetMetricsSuffixTriggerTypeAndEagerness(prefetch_type_,
+                                                  embedder_histogram_suffix_),
       }),
       time_initial_eligibility_got_.value() -
           time_added_to_prefetch_service_.value());
@@ -2299,10 +2237,23 @@ void PrefetchContainer::RecordDurationFromAdded() {
   base::UmaHistogramTimes(
       base::StrCat({
           "Prefetch.PrefetchContainer.AddedToPrefetchStarted.",
-          GetMetricsSuffixTriggerTypeAndEagerness(),
-          ".NoEmbedderSuffix",
+          GetMetricsSuffixTriggerTypeAndEagerness(prefetch_type_,
+                                                  embedder_histogram_suffix_),
       }),
       time_prefetch_started_.value() - time_added_to_prefetch_service_.value());
+
+  if (!time_url_request_started_.has_value()) {
+    return;
+  }
+
+  base::UmaHistogramTimes(base::StrCat({
+                              "Prefetch.PrefetchContainer."
+                              "AddedToURLRequestStarted.",
+                              GetMetricsSuffixTriggerTypeAndEagerness(
+                                  prefetch_type_, embedder_histogram_suffix_),
+                          }),
+                          time_url_request_started_.value() -
+                              time_added_to_prefetch_service_.value());
 
   if (!time_header_determined_successfully_.has_value()) {
     return;
@@ -2310,9 +2261,9 @@ void PrefetchContainer::RecordDurationFromAdded() {
 
   base::UmaHistogramTimes(base::StrCat({
                               "Prefetch.PrefetchContainer."
-                              "AddedToHeaderDeterminedSuccesfully.",
-                              GetMetricsSuffixTriggerTypeAndEagerness(),
-                              ".NoEmbedderSuffix",
+                              "AddedToHeaderDeterminedSuccessfully.",
+                              GetMetricsSuffixTriggerTypeAndEagerness(
+                                  prefetch_type_, embedder_histogram_suffix_),
                           }),
                           time_header_determined_successfully_.value() -
                               time_added_to_prefetch_service_.value());
@@ -2324,11 +2275,31 @@ void PrefetchContainer::RecordDurationFromAdded() {
   base::UmaHistogramTimes(base::StrCat({
                               "Prefetch.PrefetchContainer."
                               "AddedToPrefetchCompletedSuccessfully.",
-                              GetMetricsSuffixTriggerTypeAndEagerness(),
-                              ".NoEmbedderSuffix",
+                              GetMetricsSuffixTriggerTypeAndEagerness(
+                                  prefetch_type_, embedder_histogram_suffix_),
                           }),
                           time_prefetch_completed_successfully_.value() -
                               time_added_to_prefetch_service_.value());
 }
 
+void PrefetchContainer::RecordPrefetchMatchingBlockedNavigationHistogram(
+    bool blocked_until_head) {
+  base::UmaHistogramBoolean(
+      base::StrCat(
+          {"Prefetch.PrefetchMatchingBlockedNavigation.PerMatchingCandidate.",
+           GetMetricsSuffixTriggerTypeAndEagerness(
+               prefetch_type_, embedder_histogram_suffix_)}),
+      blocked_until_head);
+}
+
+void PrefetchContainer::RecordBlockUntilHeadDurationHistogram(
+    const std::optional<base::TimeDelta>& blocked_duration,
+    bool served) {
+  base::UmaHistogramTimes(
+      base::StrCat({"Prefetch.BlockUntilHeadDuration.PerMatchingCandidate.",
+                    served ? "Served." : "NotServed.",
+                    GetMetricsSuffixTriggerTypeAndEagerness(
+                        prefetch_type_, embedder_histogram_suffix_)}),
+      blocked_duration.value_or(base::Seconds(0)));
+}
 }  // namespace content

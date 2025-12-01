@@ -4,7 +4,9 @@
 
 import * as Common from '../../core/common/common.js';
 import * as i18n from '../../core/i18n/i18n.js';
+import type * as Platform from '../../core/platform/platform.js';
 import type * as Root from '../../core/root/root.js';
+import type * as AiAssistanceModel from '../../models/ai_assistance/ai_assistance.js';
 import * as UI from '../../ui/legacy/legacy.js';
 
 import type * as AiAssistance from './ai_assistance.js';
@@ -127,7 +129,7 @@ Common.Settings.registerSettingExtension({
   reloadRequired: false,
   condition: isAnyFeatureAvailable,
   disabledCondition: config => {
-    const reasons = [];
+    const reasons: Platform.UIString.LocalizedString[] = [];
     if (isGeoRestricted(config)) {
       reasons.push(i18nString(UIStrings.geoRestricted));
     }
@@ -155,7 +157,8 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isStylingAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config =>
+      isStylingAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -169,7 +172,8 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isStylingAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config =>
+      isStylingAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -183,7 +187,8 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isNetworkAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config =>
+      isNetworkAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -197,7 +202,8 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isNetworkAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config =>
+      isNetworkAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -211,7 +217,8 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isPerformanceAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config =>
+      isPerformanceAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -226,7 +233,8 @@ UI.ActionRegistration.registerActionExtension({
     return new AiAssistance.ActionDelegate();
   },
   condition: config => {
-    return isPerformanceInsightsAgentFeatureAvailable(config) && !isPolicyRestricted(config);
+    return isPerformanceInsightsAgentFeatureAvailable(config) && !isPolicyRestricted(config) &&
+        !isGeoRestricted(config);
   }
 });
 
@@ -241,7 +249,7 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isFileAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config => isFileAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
 
 UI.ActionRegistration.registerActionExtension({
@@ -255,5 +263,13 @@ UI.ActionRegistration.registerActionExtension({
     const AiAssistance = await loadAiAssistanceModule();
     return new AiAssistance.ActionDelegate();
   },
-  condition: config => isFileAgentFeatureAvailable(config) && !isPolicyRestricted(config),
+  condition: config => isFileAgentFeatureAvailable(config) && !isPolicyRestricted(config) && !isGeoRestricted(config),
 });
+
+// @ts-expect-error
+globalThis.handleExternalRequest =
+    async(prompt: string, conversationType: AiAssistanceModel.ConversationType, selector?: string): Promise<string> => {
+  const AiAssistance = await loadAiAssistanceModule();
+  const panelInstance = await AiAssistance.AiAssistancePanel.instance();
+  return await panelInstance.handleExternalRequest(prompt, conversationType, selector);
+};
